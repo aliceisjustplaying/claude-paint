@@ -29,7 +29,7 @@ pub use canvas::{Canvas, Frame};
 pub use crack::Cracks;
 pub use color::{Mix, Rgb, gradient, hex};
 pub use tree::Oak;
-pub use bristle::{Gesture, Held, Kind, Orient, Tool};
+pub use bristle::{Gesture, Held, Kind, Orient, Tool, Touch};
 pub use wet::Paint;
 pub use palette::{Mixture, Palette, Tube};
 pub use handling::Handling;

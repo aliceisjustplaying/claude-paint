@@ -44,6 +44,9 @@ pub struct Handling<'a> {
     /// evaluated at each stroke's center): a glaze goes on deeper where the
     /// brush carries more.
     pub load_at: Option<Field<'a, f32>>,
+    /// Cut in the region's edges with this brush instead of clipping: body
+    /// strokes stop short of the edge, then short strokes follow the outline.
+    pub cut_in: Option<Tool>,
     /// Pressure range (a random value in it per stroke).
     pub pressure: (f32, f32),
     pub orient: Orient,
@@ -93,6 +96,7 @@ impl<'a> Handling<'a> {
             palette: None,
             mix_jitter: 0.08,
             load_at: None,
+            cut_in: None,
         }
     }
     pub fn length(mut self, a: f32, b: f32) -> Self {
@@ -135,6 +139,11 @@ impl<'a> Handling<'a> {
     pub fn medium(mut self, medium: f32) -> Self {
         let (p, _) = self.palette.expect("medium() needs a palette: use mixed()");
         self.palette = Some((p, medium));
+        self
+    }
+    /// Cut the region's edges in with `tool` (see `cut_in`).
+    pub fn cut_in(mut self, tool: Tool) -> Self {
+        self.cut_in = Some(tool);
         self
     }
     /// Vary the load across the canvas (see `load_at`).
@@ -261,31 +270,93 @@ impl Canvas {
             } else {
                 trace(&*hd.angle, cx, cy, len, bend, &mut rng)
             };
-            let rect = footprint(&hd.tool, &pts, hd.shake, f.scale, f.w, f.h);
+            // cutting in: the body strokes stop short of the edge
+            let pts = if hd.cut_in.is_some() { trim_inside(mask, &pts, (cx, cy), hd.tool.width) } else { pts };
+            if pts.is_empty() {
+                continue;
+            }
+            let (rect, plan) = finish_plan(hd, &hd.tool, (cx, cy), pts, f.scale, (f.w, f.h), &mut rng);
             if let Some(r) = rect {
                 let (px, py) = (cx * f.scale, cy * f.scale);
                 ex = ex.max((px - r.0 as f32).max(r.2 as f32 - px) / f.scale);
                 ey = ey.max((py - r.1 as f32).max(r.3 as f32 - py) / f.scale);
             }
-            let pressure = rng.range(hd.pressure.0, hd.pressure.1);
-            let fade = rng.range(0.75, 1.05);
-            let target = (hd.color)(cx, cy);
-            let paint = match hd.palette {
-                // on the palette: mix the pile from tubes, never twice alike
-                Some((pal, medium)) => pal.remix(&pal.mix(target), hd.mix_jitter, &mut rng).paint(medium),
-                None => {
-                    let lab = to_oklab(target);
-                    let col = from_oklab([
-                        lab[0] + rng.normal() * hd.jitter.0,
-                        lab[1] + rng.normal() * hd.jitter.1,
-                        lab[2] + rng.normal() * hd.jitter.1,
-                    ]);
-                    Paint { color: col, hiding: hd.hiding, stiff: hd.stiff }
-                }
-            };
-            let load = hd.load * hd.load_at.as_ref().map_or(1.0, |f| f(cx, cy).max(0.0));
-            plans.push((cx, cy, rect, Plan { pts, pressure, fade, dip: Some(paint), load }));
+            plans.push((cx, cy, rect, plan));
         }
+        let clip = if hd.clip && hd.cut_in.is_none() { Some(mask) } else { None };
+        self.run_plans(plans, (ex, ey), gap, &hd.tool, hd, hd.ramps, clip, seed, &mut rng);
+        if let Some(edge) = &hd.cut_in {
+            self.cut_in_edges(mask, edge, hd, seed ^ 0xED6E, &mut rng);
+        }
+    }
+
+    /// Cut in the edges of `mask`: short strokes of the `tool` laid along the
+    /// region's outline, just inside it, the way a painter sharpens a form.
+    fn cut_in_edges(&mut self, mask: &Mask, tool: &Tool, hd: &Handling, seed: u64, rng: &mut Rng) {
+        let f = self.f;
+        let step = (tool.width * 0.5).max(1.0 / f.scale);
+        let inside = |p: (f32, f32)| p.0 >= 0.0 && p.1 >= 0.0 && p.0 < f.width() && p.1 < f.height() && mask.data[f.index(p.0, p.1)] >= 0.5;
+        // rings stepping inward from the edge until they meet the body
+        // strokes (which keep half their brush clear of the edge)
+        let reach = hd.tool.width * 0.5 + tool.width * 0.5;
+        let (mut plans, mut ex, mut ey) = (Vec::new(), 0.0f32, 0.0f32);
+        let lines = crate::edge::contours(mask, step);
+        let mut ring = 0;
+        loop {
+            let inset = tool.width * (0.45 + 0.8 * ring as f32);
+            if inset > reach.max(tool.width * 0.5) {
+                break;
+            }
+            for line in &lines {
+                // offset inward, split where the offset leaves the region
+                let mut runs: Vec<Vec<(f32, f32)>> = vec![vec![]];
+                for &((x, y), (nx, ny)) in line {
+                    let q = (x + nx * inset, y + ny * inset);
+                    if inside(q) {
+                        runs.last_mut().unwrap().push(q);
+                    } else if !runs.last().unwrap().is_empty() {
+                        runs.push(vec![]);
+                    }
+                }
+                for run in runs.into_iter().filter(|r| r.len() >= 2) {
+                    // overlapping strokes along the run
+                    let mut k = 0;
+                    while k + 1 < run.len() {
+                        let len = rng.range(6.0, 16.0) * tool.width.max(1.0);
+                        let (mut acc, mut j) = (0.0, k);
+                        while j + 1 < run.len() && acc < len {
+                            acc += ((run[j + 1].0 - run[j].0).powi(2) + (run[j + 1].1 - run[j].1).powi(2)).sqrt();
+                            j += 1;
+                        }
+                        let pts: Vec<(f32, f32)> = run[k..=j].to_vec();
+                        let c = pts[pts.len() / 2];
+                        let (rect, plan) = finish_plan(hd, tool, c, pts, f.scale, (f.w, f.h), rng);
+                        if let Some(r) = rect {
+                            let (px, py) = (c.0 * f.scale, c.1 * f.scale);
+                            ex = ex.max((px - r.0 as f32).max(r.2 as f32 - px) / f.scale);
+                            ey = ey.max((py - r.1 as f32).max(r.3 as f32 - py) / f.scale);
+                        }
+                        plans.push((c.0, c.1, rect, plan));
+                        if j + 1 >= run.len() {
+                            break;
+                        }
+                        // next stroke starts a third of the way back
+                        k = (k + (j - k) * 2 / 3).max(k + 1);
+                    }
+                }
+            }
+            ring += 1;
+        }
+        if !plans.is_empty() {
+            self.run_plans(plans, (ex, ey), tool.width * 4.0, tool, hd, (0.03, 0.08), None, seed, rng);
+        }
+    }
+
+    /// Paint planned strokes: group them into tiles, then paint the tiles in
+    /// four checkerboard phases, tiles within a phase in parallel.
+    #[allow(clippy::too_many_arguments)]
+    fn run_plans(&mut self, plans: Vec<(f32, f32, Option<Rect>, Plan)>, (ex, ey): (f32, f32), gap: f32, tool: &Tool, hd: &Handling, ramps: (f32, f32), clip: Option<&Mask>, seed: u64, rng: &mut Rng) {
+        let f = self.f;
         // tiles are sized per axis from the footprints: tiles painted at the
         // same time are one tile apart, so a tile at least twice the largest
         // reach keeps their pixels disjoint (long horizontal strokes get wide,
@@ -294,7 +365,7 @@ impl Canvas {
         let (tile_x, tile_y) = ((2.0 * ex + margin).max(gap * 2.0), (2.0 * ey + margin).max(gap * 2.0));
         let (tw, th) = ((f.width() / tile_x).ceil().max(1.0) as usize, (f.height() / tile_y).ceil().max(1.0) as usize);
         if std::env::var_os("PAINT_DEBUG").is_some() {
-            eprintln!("work: {} strokes, reach {ex:.0}x{ey:.0}, tiles {tw}x{th}", centers.len());
+            eprintln!("work: {} strokes, reach {ex:.0}x{ey:.0}, tiles {tw}x{th}", plans.len());
         }
         let mut tiles: Vec<Vec<Plan>> = (0..tw * th).map(|_| Vec::new()).collect();
         // pixel footprint of each tile: the union of its strokes'
@@ -329,7 +400,6 @@ impl Canvas {
         }
 
         let surf = self.surf();
-        let clip = if hd.clip { Some(mask) } else { None };
         let mut phases = [(0usize, 0usize), (1, 0), (0, 1), (1, 1)];
         for i in (1..4).rev() {
             let j = (rng.next_u64() % (i as u64 + 1)) as usize;
@@ -346,7 +416,7 @@ impl Canvas {
                 let results: Vec<crate::bristle::Bounds> = batch
                     .par_iter()
                     .map(|&ti| {
-                        let mut held = Held::new(hd.tool.clone(), seed ^ 0x5EED ^ (ti as u64).wrapping_mul(0x9E37_79B9));
+                        let mut held = Held::new(tool.clone(), seed ^ 0x5EED ^ (ti as u64).wrapping_mul(0x9E37_79B9));
                         let mut scratch = Vec::new();
                         let mut b: crate::bristle::Bounds = None;
                         for (k, p) in tiles[ti].iter().enumerate() {
@@ -361,7 +431,7 @@ impl Canvas {
                             let g = Gesture::new(p.pts.clone())
                                 .pressure(p.pressure, p.pressure * p.fade)
                                 .orient(hd.orient)
-                                .ramps(hd.ramps.0, hd.ramps.1)
+                                .ramps(ramps.0, ramps.1)
                                 .shake(hd.shake);
                             let id = first_id.wrapping_add(offsets[ti] + k as u32);
                             // SAFETY: every pixel this drag touches lies in its
@@ -391,6 +461,85 @@ impl Canvas {
             self.wet.touch(x0, y0, x1, y1);
         }
     }
+}
+
+/// Footprint and the per-stroke choices (pressure, fade, the pile of paint,
+/// the load) for a stroke along `pts` centered at `c`.
+fn finish_plan(hd: &Handling, tool: &Tool, c: (f32, f32), pts: Vec<(f32, f32)>, scale: f32, (w, h): (usize, usize), rng: &mut Rng) -> (Option<Rect>, Plan) {
+    let rect = footprint(tool, &pts, hd.shake, scale, w, h);
+    let pressure = rng.range(hd.pressure.0, hd.pressure.1);
+    let fade = rng.range(0.75, 1.05);
+    let target = (hd.color)(c.0, c.1);
+    let paint = match hd.palette {
+        // on the palette: mix the pile from tubes, never twice alike
+        Some((pal, medium)) => pal.remix(&pal.mix(target), hd.mix_jitter, rng).paint(medium),
+        None => {
+            let lab = to_oklab(target);
+            let col = from_oklab([
+                lab[0] + rng.normal() * hd.jitter.0,
+                lab[1] + rng.normal() * hd.jitter.1,
+                lab[2] + rng.normal() * hd.jitter.1,
+            ]);
+            Paint { color: col, hiding: hd.hiding, stiff: hd.stiff }
+        }
+    };
+    let load = hd.load * hd.load_at.as_ref().map_or(1.0, |f| f(c.0, c.1).max(0.0));
+    (rect, Plan { pts, pressure, fade, dip: Some(paint), load })
+}
+
+/// The part of a stroke through `c` that stays inside `mask` (≥ 0.5), pulled
+/// back by about half the brush from any edge it would cross.
+fn trim_inside(mask: &Mask, pts: &[(f32, f32)], c: (f32, f32), width: f32) -> Vec<(f32, f32)> {
+    let f = mask.f;
+    // resample the stroke at ~1 unit
+    let mut dense = vec![pts[0]];
+    for w in pts.windows(2) {
+        let d = ((w[1].0 - w[0].0).powi(2) + (w[1].1 - w[0].1).powi(2)).sqrt();
+        let n = d.ceil().max(1.0) as usize;
+        for k in 1..=n {
+            let t = k as f32 / n as f32;
+            dense.push((w[0].0 + (w[1].0 - w[0].0) * t, w[0].1 + (w[1].1 - w[0].1) * t));
+        }
+    }
+    let at = |p: (f32, f32)| p.0 >= 0.0 && p.1 >= 0.0 && p.0 < f.width() && p.1 < f.height() && mask.data[f.index(p.0, p.1)] >= 0.5;
+    // inside with half a brush of room on both sides of the path
+    let clear = width * 0.45;
+    let inside_at = |i: usize| {
+        let (a, b) = (dense[i.saturating_sub(1)], dense[(i + 1).min(dense.len() - 1)]);
+        let (dx, dy) = (b.0 - a.0, b.1 - a.1);
+        let n = (dx * dx + dy * dy).sqrt().max(1e-6);
+        let (nx, ny) = (-dy / n * clear, dx / n * clear);
+        let p = dense[i];
+        at(p) && at((p.0 + nx, p.1 + ny)) && at((p.0 - nx, p.1 - ny))
+    };
+    let ci = (0..dense.len()).min_by(|&a, &b| {
+        let da = (dense[a].0 - c.0).powi(2) + (dense[a].1 - c.1).powi(2);
+        let db = (dense[b].0 - c.0).powi(2) + (dense[b].1 - c.1).powi(2);
+        da.partial_cmp(&db).unwrap()
+    }).unwrap();
+    let (mut a, mut b) = (ci, ci);
+    if !inside_at(ci) {
+        // no room for this brush here: the cutting-in brush fills it
+        return Vec::new();
+    }
+    while a > 0 && inside_at(a - 1) {
+        a -= 1;
+    }
+    while b + 1 < dense.len() && inside_at(b + 1) {
+        b += 1;
+    }
+    let back = (width * 0.5).round() as usize;
+    if a > 0 {
+        a = (a + back).min(ci);
+    }
+    if b + 1 < dense.len() {
+        b = b.saturating_sub(back).max(ci);
+    }
+    if b <= a {
+        // too close to the edge for a stroke: a short touch at the center
+        return vec![dense[ci], dense[(ci + 1).min(dense.len() - 1)]];
+    }
+    dense[a..=b].iter().step_by(4).copied().chain(std::iter::once(dense[b])).collect()
 }
 
 /// Group tiles (in the given, deterministic order) into batches whose

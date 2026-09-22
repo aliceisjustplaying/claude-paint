@@ -299,3 +299,34 @@ fn palette_mixes_what_it_can() {
     assert_eq!(p.recipe(&p.mix(green)), Palette::friedrich_1820().recipe(&m));
 }
 
+
+/// Cutting in keeps paint within about a brush width of the region, and
+/// fills forms narrower than the body brush.
+#[test]
+fn cut_in_stays_near_the_region() {
+    let st = Style::friedrich();
+    let mut c = Canvas::new(500, 1.0, hex("#c8b89a")).with_linen(crate::surface::Linen::fine(2));
+    let (cx, cy, r) = (500.0f32, 500.0f32, 120.0f32);
+    let disc = Mask::from_fn(c.frame(), move |x, y| crate::smoothstep(0.6, -0.6, ((x - cx).powi(2) + (y - cy).powi(2)).sqrt() - r));
+    // a spire narrower than the body brush
+    let spire = Mask::from_fn(c.frame(), |x, y| if (x - 800.0).abs() < 4.0 && y > 200.0 && y < 700.0 { 1.0 } else { 0.0 });
+    let edge = Tool::round_sable(2.2);
+    c.work(&disc, &st.body().color(|_, _| hex("#303038")).cut_in(edge.clone()), 5);
+    c.work(&spire, &st.body().color(|_, _| hex("#303038")).cut_in(edge), 6);
+    let (w, s) = (c.f.w, c.f.scale);
+    let (mut total, mut far, mut spire_in) = (0.0f64, 0.0f64, 0.0f64);
+    for (i, &v) in c.wet.vol.iter().enumerate() {
+        let (x, y) = ((i % w) as f32 / s + 0.5 / s, (i / w) as f32 / s + 0.5 / s);
+        total += v as f64;
+        let d_disc = ((x - cx).powi(2) + (y - cy).powi(2)).sqrt() - r;
+        let d_spire = if y > 200.0 && y < 700.0 { (x - 800.0).abs() - 4.0 } else { f32::MAX };
+        if d_disc.min(d_spire) > 4.0 {
+            far += v as f64;
+        }
+        if d_spire < 0.0 {
+            spire_in += v as f64;
+        }
+    }
+    assert!(far < total * 0.01, "paint far outside: {:.3}%", far / total * 100.0);
+    assert!(spire_in > 0.0, "the thin spire got no paint");
+}

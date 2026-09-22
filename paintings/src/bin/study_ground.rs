@@ -7,11 +7,12 @@
 use paint::{Gesture, Held, Mask, Orient, Paint, Pigment, Style, Tool, hex};
 
 fn main() {
-    let t0 = std::time::Instant::now();
-    let o = paint::cli::opts("study_ground");
+    let o = paintings::run::Run::new("study_ground");
     let st = Style::friedrich();
     let mut c = st.prepare(o.width, 2.0, o.seed);
-    eprintln!("  ground     {:>6.2}s", t0.elapsed().as_secs_f32());
+    if o.stage(&mut c, "ground") {
+        return;
+    }
     let h = c.height();
     // band 2: thin fluid blue, laid with a soft filbert in long strokes
     let fr = c.frame();
@@ -37,6 +38,5 @@ fn main() {
     let b4 = band(0.75, 1.0);
     c.glaze(&Pigment::transparent(hex("#3b2a1c")), Some(&b4), |_, _| 2.0);
     c.relief(0.35, 0.02);
-    c.save(&o.out).unwrap();
-    paint::cli::done(&o, t0);
+    o.save(&mut c);
 }

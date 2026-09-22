@@ -4,8 +4,7 @@ use paint::{Canvas, Mix, Oak, gradient, hex};
 use paintings::figures;
 
 fn main() {
-    let t0 = std::time::Instant::now();
-    let o = paint::cli::opts("study_motifs");
+    let o = paintings::run::Run::new("study_motifs");
     let mut c = Canvas::new(o.width, 1.6, hex("#d9d2bf")).with_weave(0.9, 0.35, 1);
     let h = c.height();
     c.paint(None, 1.0, Mix::Pigment, |_, y| {
@@ -41,6 +40,5 @@ fn main() {
     figures::monk(&mut c, (800.0, gy), 44.0, robe, pale, None, 4);
 
     c.relief(0.5, 0.0);
-    c.save(&o.out).unwrap();
-    paint::cli::done(&o, t0);
+    o.save(&mut c);
 }

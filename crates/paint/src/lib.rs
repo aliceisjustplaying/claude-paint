@@ -8,7 +8,6 @@
 
 pub mod brush;
 pub mod canvas;
-pub mod cli;
 pub mod color;
 pub mod fill;
 pub mod mask;

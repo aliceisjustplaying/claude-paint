@@ -13,15 +13,14 @@
 //! Every mark is a simulated brush in wet paint or a Kubelka–Munk layer.
 
 use paint::{Fbm, Gesture, Held, Mask, Mix, Oak, Orient, Paint, Pigment, Rgb, Rng, Style, Tool, gradient, hex, smoothstep};
+use paintings::run::Finish;
 use paintings::{figures, trees};
 
 fn main() {
-    let t0 = std::time::Instant::now();
-    let o = paint::cli::opts("friedrich_moonrise_valley");
+    let o = paintings::run::Run::new("friedrich_moonrise_valley");
     let mut rng = Rng::new(o.seed);
     let seed = o.seed as u32;
     let st = Style::friedrich();
-    let lap = |label: &str| eprintln!("  {label:<10} {:>6.2}s", t0.elapsed().as_secs_f32());
 
     // ---- ground and priming
     let mut c = st.prepare(o.width, 1.4, o.seed);
@@ -53,7 +52,9 @@ fn main() {
 
     // ---- underpainting: thin brown for the values, dark below
     c.glaze(&Pigment::transparent(hex("#6a4c34")), None, |x, y| 0.25 + 2.2 * smoothstep(ledge(x) - 20.0, ledge(x) + 40.0, y) + 0.6 * smoothstep(h * 0.55, h * 0.75, y));
-    lap("ground");
+    if o.stage(&mut c, "ground") {
+        return;
+    }
 
     // ---- sky: twilight in bands, deep blue-grey above, the afterglow low
     let sky_stops: [(f32, Rgb); 7] = [
@@ -70,7 +71,9 @@ fn main() {
     let sky_angle = |x: f32, y: f32| 0.015 * drift.get(x, y * 3.0);
     c.work(&sky, &st.broad().color(sky_color).angle(sky_angle).paint(0.8, 0.8).load(0.8 * 0.8).pressure(0.7, 0.9).coverage(4.0), o.seed * 100 + 1);
     c.work(&sky, &st.broad().color(sky_color).angle(sky_angle).coverage(2.0).length(60.0, 150.0).paint(0.45, 0.5), o.seed * 100 + 2);
-    lap("sky lay");
+    if o.stage(&mut c, "sky lay") {
+        return;
+    }
     // thin cloud streaks, laid wet into the sky with a filbert and lean paint:
     // dark undersides high up, warm lit ones low in the afterglow
     let mut fil = Held::new(Tool { width: 7.0, ..Tool::filbert(7.0) }, 31);
@@ -107,9 +110,7 @@ fn main() {
         }
     }
     c.dry();
-    lap("sky");
-    if std::env::var("STOP").ok().as_deref() == Some("sky") {
-        c.save(&o.out).unwrap();
+    if o.stage(&mut c, "sky") {
         return;
     }
 
@@ -137,9 +138,7 @@ fn main() {
     let (sx, sy) = (w * 0.77, h * 0.2);
     c.drag(&mut star, &Gesture::new(vec![(sx, sy - 0.4), (sx, sy + 0.4)]).pressure(1.0, 1.0).ramps(0.0, 0.0), None);
     c.dry();
-    lap("moon");
-    if std::env::var("STOP").ok().as_deref() == Some("moon") {
-        c.save(&o.out).unwrap();
+    if o.stage(&mut c, "moon") {
         return;
     }
 
@@ -157,9 +156,7 @@ fn main() {
         let hgt = rng.range(5.0, 11.0);
         trees::spruce(&mut c, (x, ridge2(x) + hgt * 0.35), hgt, hex("#353846"), rng.next_u64());
     }
-    lap("ridges");
-    if std::env::var("STOP").ok().as_deref() == Some("ridges") {
-        c.save(&o.out).unwrap();
+    if o.stage(&mut c, "ridges") {
         return;
     }
 
@@ -236,9 +233,7 @@ fn main() {
         let layered = d + 0.25 * bands.get(x * 0.08, y * 1.5);
         (1.6 * smoothstep(0.0, 1.4, layered).powf(1.5)) * (0.85 + 0.3 * mist_n.get(x * 0.5, y * 2.0))
     });
-    lap("mist");
-    if std::env::var("STOP").ok().as_deref() == Some("mist") {
-        c.save(&o.out).unwrap();
+    if o.stage(&mut c, "mist") {
         return;
     }
 
@@ -273,9 +268,7 @@ fn main() {
             c.drag(&mut rig, &Gesture::new(vec![(x, gy), (x + lean * 0.4, gy - hg * 0.55), (x + lean, gy - hg)]).pressure(0.8, 0.1).ramps(0.02, 0.7).orient(Orient::Along), None);
         }
     }
-    lap("ledge");
-    if std::env::var("STOP").ok().as_deref() == Some("ledge") {
-        c.save(&o.out).unwrap();
+    if o.stage(&mut c, "ledge") {
         return;
     }
 
@@ -288,22 +281,19 @@ fn main() {
     oak.roots = 3;
     oak.paint(&mut c, hex("#1f1a16"), Some(hex("#3a322b")), o.seed * 100 + 40);
     c.dry();
-    lap("oak");
+    if o.stage(&mut c, "oak") {
+        return;
+    }
 
     // ---- the two companions, near the edge, looking toward the moon
     let fh = h * 0.12;
     let bx = 330.0;
     let sh = figures::man_in_cape(&mut c, (bx + 26.0, ledge(bx + 26.0) + 1.5), fh, hex("#1d201b"), hex("#110f0d"), hex("#221b15"), Some(hex("#b9a582")), o.seed * 100 + 50);
     figures::youth_in_frock(&mut c, (bx, ledge(bx) - 1.0), fh * 0.98, hex("#1e221c"), hex("#110f0d"), hex("#2a2118"), hex("#b8b09c"), Some(sh), Some(hex("#b9a582")), o.seed * 100 + 51);
-    lap("figures");
+    if o.stage(&mut c, "figures") {
+        return;
+    }
 
     // ---- finish: clear aged varnish, cracks, the surface in raking light
-    c.dry();
-    let varnish = Fbm::new(seed + 98, 3, 400.0);
-    c.glaze(&Pigment::varnish(hex("#e6d3a4")), None, |x, y| 0.4 + 0.12 * varnish.get(x, y));
-    if std::env::var("NO_CRACKS").is_err() { c.craquelure(12.0, 0.1, o.seed); }
-    c.relief(st.relief.0, st.relief.1);
-    lap("finish");
-    c.save(&o.out).unwrap();
-    paint::cli::done(&o, t0);
+    o.finish(&mut c, &Finish { cracks: Some((12.0, 0.1)), ..Finish::aged(st.relief) });
 }

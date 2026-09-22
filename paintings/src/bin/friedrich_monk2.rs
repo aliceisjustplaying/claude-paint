@@ -11,14 +11,13 @@ use paint::{
     Fbm, Gesture, Held, Mask, Mix, Orient, Paint, Pigment, Rgb, Rng, Shape, Style, Tool,
     gradient, hex, smoothstep,
 };
+use paintings::run::Finish;
 
 fn main() {
-    let t0 = std::time::Instant::now();
-    let o = paint::cli::opts("friedrich_monk2");
+    let o = paintings::run::Run::new("friedrich_monk2");
     let mut rng = Rng::new(o.seed);
     let seed = o.seed as u32;
     let st = Style::friedrich_early();
-    let lap = |label: &str| eprintln!("  {label:<10} {:>6.2}s", t0.elapsed().as_secs_f32());
 
     // ---- ground: bright reddish ground, then lighter brown priming
     let mut c = st.prepare(o.width, 1.56, o.seed);
@@ -46,7 +45,9 @@ fn main() {
 
     // ---- underpaint: thin brown glaze for the value structure, like sepia
     c.glaze(&Pigment::transparent(hex("#6e5238")), None, |_, y| 0.3 + 1.6 * smoothstep(0.4, 0.8, y / h));
-    lap("ground");
+    if o.stage(&mut c, "ground") {
+        return;
+    }
 
     // ---- sky
     let sky_stops: [(f32, Rgb); 7] = [
@@ -72,10 +73,14 @@ fn main() {
     };
     // lay-in: fuller paint so the ground is covered
     c.work(&sky, &st.broad().color(sky_color).angle(sky_angle).paint(0.8, 0.8).load(0.8 * 0.8).pressure(0.7, 0.9).coverage(4.0), o.seed * 100 + 1);
-    lap("sky lay");
+    if o.stage(&mut c, "sky lay") {
+        return;
+    }
     // second, thinner pass wet into wet to tune the transitions
     c.work(&sky, &st.broad().color(sky_color).angle(sky_angle).coverage(2.0).length(60.0, 150.0).paint(0.45, 0.5), o.seed * 100 + 2);
-    lap("sky 2");
+    if o.stage(&mut c, "sky 2") {
+        return;
+    }
     // fuse with the badger while wet
     if let Some(b) = st.blend() {
         let b = b.angle(sky_angle);
@@ -83,7 +88,9 @@ fn main() {
             c.work(&sky, &b, o.seed * 100 + 3 + k as u64);
         }
     }
-    lap("blend");
+    if o.stage(&mut c, "blend") {
+        return;
+    }
     c.dry();
 
     // glazes over the dry sky: cloud masses, pale band, mist bank
@@ -102,7 +109,9 @@ fn main() {
         let top = 0.13 + 0.05 * bank.get(x * 0.4, 0.0);
         0.55 * smoothstep(top, 0.0, d) * (0.8 + 0.2 * bank.get(x * 0.6, y))
     });
-    lap("glazes");
+    if o.stage(&mut c, "glazes") {
+        return;
+    }
 
     // ---- sea: dark body color, horizontal pulls with a smaller filbert
     let swell = Fbm::new(seed + 20, 5, 120.0);
@@ -132,7 +141,9 @@ fn main() {
     // surf along the shore
     let surf = Fbm::new(seed + 21, 4, 40.0);
     c.veil(Some(&sea), hex("#8d948c"), |x, y| 0.5 * smoothstep(5.0, 0.5, dune_top(x) - y) * smoothstep(-0.2, 0.5, surf.get(x, 0.0)));
-    lap("sea");
+    if o.stage(&mut c, "sea") {
+        return;
+    }
 
     // ---- dune: body color along the slope, drier, a bit rougher
     let sand = Fbm::new(seed + 30, 6, 140.0);
@@ -177,7 +188,9 @@ fn main() {
             let _ = clump;
         }
     }
-    lap("dune");
+    if o.stage(&mut c, "dune") {
+        return;
+    }
 
     // ---- the monk, last, written with a small sable (see paintings::figures)
     let mx = 318.0;
@@ -187,7 +200,9 @@ fn main() {
     c.glaze(&Pigment::transparent(hex("#5a5446")), Some(&shadow), |_, _| 1.2);
     c.dry();
     paintings::figures::monk(&mut c, (mx, my), s, hex("#100f0d"), hex("#9d9072"), None, o.seed * 100 + 7);
-    lap("monk");
+    if o.stage(&mut c, "monk") {
+        return;
+    }
 
     // ---- gulls: two flicks of a small sable each
     for _ in 0..9 {
@@ -202,13 +217,5 @@ fn main() {
     }
 
     // ---- finish: aged varnish, cracks, light the surface
-    c.dry();
-    let varnish = Fbm::new(seed + 98, 3, 400.0);
-    c.glaze(&Pigment::varnish(hex("#e6d3a4")), None, |x, y| 0.4 + 0.12 * varnish.get(x, y));
-    c.craquelure(12.0, 0.12, o.seed);
-    c.relief(st.relief.0, st.relief.1);
-    lap("finish");
-
-    c.save(&o.out).unwrap();
-    paint::cli::done(&o, t0);
+    o.finish(&mut c, &Finish::aged(st.relief));
 }

@@ -334,12 +334,6 @@ impl Canvas {
     /// `strength` ≈ 0.3–1.0; `gloss` adds a faint varnish sheen on ridges.
     pub fn relief(&mut self, strength: f32, gloss: f32) {
         self.dry();
-        if std::env::var("PAINT_DEBUG").is_ok() {
-            let mut v: Vec<f32> = self.film.clone();
-            v.sort_by(|a, b| a.partial_cmp(b).unwrap());
-            let q = |p: f32| v[((v.len() - 1) as f32 * p) as usize];
-            eprintln!("film quantiles 10/50/90/99: {:.2} {:.2} {:.2} {:.2}", q(0.1), q(0.5), q(0.9), q(0.99));
-        }
         let (w, h) = (self.f.w, self.f.h);
         let surf = &self.height;
         // light from the upper left at ~35° elevation

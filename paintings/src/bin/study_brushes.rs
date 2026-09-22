@@ -3,8 +3,7 @@
 use paint::{Gesture, Held, Orient, Paint, Tool, hex};
 
 fn main() {
-    let t0 = std::time::Instant::now();
-    let o = paint::cli::opts("study_brushes");
+    let o = paintings::run::Run::new("study_brushes");
     // lead-white priming on linen
     let mut c = paint::Canvas::new(o.width, 1.5, hex("#ece6d8")).with_weave(1.15, 0.7, 3);
 
@@ -139,6 +138,5 @@ fn main() {
     }
 
     c.relief(0.7, 0.04);
-    c.save(&o.out).unwrap();
-    paint::cli::done(&o, t0);
+    o.save(&mut c);
 }

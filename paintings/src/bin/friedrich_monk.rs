@@ -10,8 +10,7 @@ use paint::{
 };
 
 fn main() {
-    let t0 = std::time::Instant::now();
-    let o = paint::cli::opts("friedrich_monk");
+    let o = paintings::run::Run::new("friedrich_monk");
     let mut rng = Rng::new(o.seed);
     let seed = o.seed as u32;
 
@@ -236,6 +235,5 @@ fn main() {
     c.craquelure(12.0, 0.12, o.seed);
     c.relief(0.7, 0.03);
 
-    c.save(&o.out).unwrap();
-    paint::cli::done(&o, t0);
+    o.save(&mut c);
 }

@@ -30,20 +30,24 @@ pub struct Paint {
     pub color: Rgb,
     /// Hiding power at unit thickness: 0.05 = glaze, 0.5 = scumble, 0.92 = body.
     pub hiding: f32,
-    /// Body: how much paint a dip puts on the brush (1 = stiff tube paint,
-    /// 0.3 = a glaze thinned with lots of medium).
-    pub body: f32,
+    /// Stiffness: 0 = fluid, rich in medium (a glaze), 1 = stiff tube paint.
+    /// Sets how the paint levels as it dries (see `surface::settle`). How
+    /// much paint goes on the brush is the separate `amount` of `Held::load`.
+    pub stiff: f32,
 }
 
 impl Paint {
+    pub fn new(color: Rgb, hiding: f32, stiff: f32) -> Self {
+        Paint { color, hiding, stiff }
+    }
     pub fn body(color: Rgb) -> Self {
-        Paint { color, hiding: 0.92, body: 1.0 }
+        Paint { color, hiding: 0.92, stiff: 1.0 }
     }
     pub fn scumble(color: Rgb) -> Self {
-        Paint { color, hiding: 0.5, body: 0.6 }
+        Paint { color, hiding: 0.5, stiff: 0.6 }
     }
     pub fn glaze(color: Rgb) -> Self {
-        Paint { color, hiding: 0.07, body: 0.3 }
+        Paint { color, hiding: 0.07, stiff: 0.3 }
     }
     pub fn latent(&self) -> Latent {
         mixbox::linear_float_rgb_to_latent(&self.color)

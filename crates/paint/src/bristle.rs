@@ -249,7 +249,7 @@ impl Held {
         let full = self.full();
         for (i, b) in self.bristles.iter_mut().enumerate() {
             let k = 0.75 + 0.5 * crate::rng::hash2(i as i64, 17, 3);
-            mix_into(&mut b.vol, &mut b.lat, &mut b.hide, amount * paint.body * full * k, &lat, [paint.hiding, paint.body]);
+            mix_into(&mut b.vol, &mut b.lat, &mut b.hide, amount * full * k, &lat, [paint.hiding, paint.stiff]);
         }
     }
 

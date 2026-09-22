@@ -61,7 +61,7 @@ pub struct Style {
     pub blend_passes: usize,
     /// Pressure used when blending (light = gentle fusing).
     pub blend_pressure: f32,
-    /// Paint consistency for body passages (hiding, body).
+    /// Paint for body passages (hiding, stiffness).
     pub body_paint: (f32, f32),
     /// Paint consistency for atmospheric passages.
     pub thin_paint: (f32, f32),
@@ -152,7 +152,7 @@ impl Style {
                         .length(250.0, 600.0)
                         .coverage(3.5)
                         .pressure(0.8, 0.95)
-                        .dips(1, 1.0, 0.3)
+                        .dips(1, 1.0 * g.stiff, 0.3)
                         .jitter(0.004, 0.002)
                         .shake(0.15);
                     c.work(&all, &h, s);
@@ -171,7 +171,7 @@ impl Style {
             .paint(self.thin_paint.0, self.thin_paint.1)
             .jitter(self.jitter.0, self.jitter.1)
             .pressure(0.55, 0.8)
-            .dips(2, 0.8, 0.5)
+            .dips(2, 0.8 * self.thin_paint.1, 0.5)
             .angle_jitter(0.03)
             .ramps(0.12, 0.4)
     }
@@ -184,7 +184,7 @@ impl Style {
             .paint(self.body_paint.0, self.body_paint.1)
             .jitter(self.jitter.0 * 1.4, self.jitter.1 * 1.4)
             .pressure(0.6, 0.9)
-            .dips(2, 0.8, 0.6)
+            .dips(2, 0.8 * self.body_paint.1, 0.6)
     }
 
     /// Small forms and edges, cut in precisely.
@@ -195,7 +195,7 @@ impl Style {
             .paint(0.95, 0.8)
             .jitter(self.jitter.0, 0.0)
             .pressure(0.7, 0.95)
-            .dips(3, 0.9, 0.8)
+            .dips(3, 0.9 * 0.8, 0.8)
             .clip(true)
             .threshold(0.1)
     }

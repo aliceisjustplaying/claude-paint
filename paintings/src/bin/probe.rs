@@ -22,7 +22,7 @@ fn main() {
     for i in 0..4 {
         let y = 60.0 + i as f32 * 40.0;
         if tool != "badger" {
-            t.reload(Paint { color: hex("#b0a9a3"), hiding: 0.3, body: 0.3 }, 0.6);
+            t.reload(Paint { color: hex("#b0a9a3"), hiding: 0.3, stiff: 0.3 }, 0.6 * 0.3);
         }
         c.drag(&mut t, &Gesture::new(vec![(100.0, y), (900.0, y + 3.0)]).pressure(p, p).orient(Orient::Across), None);
     }

@@ -9,17 +9,17 @@ use paint::{Canvas, Hand, Mark, Paint, Rgb, Tool};
 pub fn spruce(c: &mut Canvas, base: (f32, f32), height: f32, color: Rgb, seed: u64) {
     let mut h = Hand::new(base, height, seed);
     h.tremor = 0.002;
-    let p = Paint { color, hiding: 0.92, body: 0.6 };
-    let mut t = h.take(Tool::round_sable, 0.014, p, 1.0);
+    let p = Paint { color, hiding: 0.92, stiff: 0.6 };
+    let mut t = h.take(Tool::round_sable, 0.014, p, 0.6);
     h.mark(c, &mut t, Mark { pts: &[(0.0, 0.0), (0.002, 0.5), (0.0, 1.0)], pressure: (0.9, 0.3), ramps: (0.0, 0.3) }, None);
-    let mut b = h.take(Tool::round_sable, 0.028, p, 1.0);
+    let mut b = h.take(Tool::round_sable, 0.028, p, 0.6);
     let tiers = 22 + (height / 12.0).min(16.0) as usize;
     let slim = h.rng.range(0.17, 0.24);
     for i in 0..tiers {
         let v = 0.96 - (i as f32 + h.rng.range(0.0, 0.6)) / tiers as f32 * 0.9;
         let reach = (0.015 + slim * (1.0 - v)) * h.rng.range(0.75, 1.1);
         if i % 3 == 0 {
-            b.reload(p, 1.0);
+            b.reload(p, 0.6);
         }
         for s in [-1.0f32, 1.0] {
             // out and down from the trunk, the tip turning a little up

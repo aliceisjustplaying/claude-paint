@@ -224,7 +224,7 @@ impl Oak {
         // thick to thin, like a painter blocking the tree in
         let mut order: Vec<&Limb> = limbs.iter().collect();
         order.sort_by(|a, b| b.w[0].partial_cmp(&a.w[0]).unwrap());
-        let paint = Paint { color: dark, hiding: 0.95, body: 0.9 };
+        let paint = Paint { color: dark, hiding: 0.95, stiff: 0.9 };
         for l in &order {
             let w0 = l.w[0];
             let w1 = *l.w.last().unwrap();
@@ -234,7 +234,7 @@ impl Oak {
                 Tool { width: w0, length: w0 * 0.5, ragged: 0.35, ..Tool::round_sable(w0) }
             };
             let mut held = Held::new(tool, rng.next_u64());
-            held.load(paint, 1.0);
+            held.load(paint, 0.9);
             // pressure sets the width: full at the base, lighter to the tip
             let p1 = (w1 / w0).clamp(0.15, 1.0);
             let g = Gesture::new(l.pts.clone()).pressure(1.0, p1).ramps(0.0, if l.depth > 2 { 0.4 } else { 0.1 }).orient(Orient::Across);
@@ -285,7 +285,7 @@ impl Oak {
                     let col = crate::color::mix(dark, lc, tone, crate::color::Mix::Pigment);
                     let tool = Tool { ragged: 0.6, ..Tool::round_sable(l.w[0] * rng.range(0.1, 0.18)) };
                     let mut held = Held::new(tool, rng.next_u64());
-                    held.load(Paint { color: col, hiding: 0.6, body: 0.4 }, rng.range(0.4, 0.8));
+                    held.load(Paint { color: col, hiding: 0.6, stiff: 0.4 }, rng.range(0.4, 0.8) * 0.4);
                     let g = Gesture::new(sub).pressure(rng.range(0.3, 0.5), rng.range(0.15, 0.3)).ramps(0.2, 0.4).orient(Orient::Across);
                     c.drag(&mut held, &g, Some(&mask));
                 }

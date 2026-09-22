@@ -91,7 +91,7 @@ fn main() {
     c.dry();
     let mut g = Held::new(Tool::filbert(30.0), 40);
     for k in 0..3 {
-        g.reload(Paint::glaze(crimson), 1.0);
+        g.reload(Paint::glaze(crimson), 1.0 * 0.3);
         let y = 215.0 + k as f32 * 22.0;
         c.drag(&mut g, &Gesture::line((180.0, y), (520.0, y)).pressure(0.6, 0.6), None);
     }
@@ -109,7 +109,7 @@ fn main() {
     }
     let mut fan = Held::new(Tool::fan(30.0), 51);
     for k in 0..14 {
-        fan.reload(Paint::scumble(if k % 2 == 0 { hex("#3d5a2a") } else { hex("#8aa050") }), 0.5);
+        fan.reload(Paint::scumble(if k % 2 == 0 { hex("#3d5a2a") } else { hex("#8aa050") }), 0.5 * 0.6);
         let x = 480.0 + k as f32 * 34.0;
         let y = 400.0 + r.range(-20.0, 20.0);
         c.drag(&mut fan, &Gesture::line((x, y + 10.0), (x + 6.0, y - 30.0)).orient(Orient::Across).pressure(0.6, 0.3), None);

@@ -18,16 +18,16 @@ use paint::{Canvas, Hand, Mark, Paint, Rgb, Tool};
 use std::f32::consts::FRAC_PI_2;
 
 fn body(color: Rgb) -> Paint {
-    Paint { color, hiding: 0.97, body: 1.0 }
+    Paint { color, hiding: 0.97, stiff: 1.0 }
 }
 
 /// Thin paint for small touches (heads, caps, collars): no impasto knobs.
 fn thin(color: Rgb) -> Paint {
-    Paint { color, hiding: 0.95, body: 0.45 }
+    Paint { color, hiding: 0.95, stiff: 0.45 }
 }
 
 fn lean(color: Rgb) -> Paint {
-    Paint { color, hiding: 0.55, body: 0.4 }
+    Paint { color, hiding: 0.55, stiff: 0.4 }
 }
 
 /// The monk: long dark habit widening a little to the hem, sloping shoulders,
@@ -64,14 +64,14 @@ pub fn monk(c: &mut Canvas, at: (f32, f32), size: f32, robe: Rgb, hair: Rgb, lig
     // let the habit set before the head goes on, so the hair stays clean
     c.dry();
     // the head: a dab of pale hair
-    let mut hb = h.take(Tool::round_sable, 0.068, thin(hair), 1.0);
+    let mut hb = h.take(Tool::round_sable, 0.068, thin(hair), 1.0 * 0.45);
     h.dab(c, &mut hb, 0.004, 0.9, 0.065, FRAC_PI_2, 1.0);
     if let Some(l) = light {
         // light from the left: a lean touch dragged down the left edge,
         // barely pressing, and one along the left shoulder
         c.dry();
         let tone = paint::color::mix(robe, l, 0.4, paint::Mix::Pigment);
-        let mut lb = h.take(Tool::round_sable, 0.025, lean(tone), 0.4);
+        let mut lb = h.take(Tool::round_sable, 0.025, lean(tone), 0.4 * 0.4);
         h.mark(c, &mut lb, Mark { pts: &[(-0.07, 0.75), (-0.074, 0.6), (-0.078, 0.45)], pressure: (0.35, 0.15), ramps: (0.15, 0.6) }, None);
         h.mark(c, &mut lb, Mark { pts: &[(-0.02, 0.83), (-0.06, 0.8)], pressure: (0.4, 0.3), ramps: (0.1, 0.4) }, None);
         h.dab(c, &mut lb, -0.02, 0.91, 0.03, FRAC_PI_2, 0.4);
@@ -85,7 +85,7 @@ fn legs(c: &mut Canvas, h: &mut Hand, trousers: Rgb, dark: Rgb, gap: f32, w: f32
     for s in [-1.0f32, 1.0] {
         h.mark(c, &mut b, Mark { pts: &[(s * gap, 0.45), (s * gap, 0.2), (s * (gap + 0.002), 0.035)], pressure: (0.95, 0.65), ramps: (0.0, 0.05) }, None);
     }
-    let mut bt = h.take(Tool::round_sable, w * 0.62, thin(dark), 1.0);
+    let mut bt = h.take(Tool::round_sable, w * 0.62, thin(dark), 1.0 * 0.45);
     for s in [-1.0f32, 1.0] {
         h.mark(c, &mut bt, Mark { pts: &[(s * (gap - 0.004), 0.02), (s * (gap + 0.024), 0.012)], pressure: (0.9, 0.6), ramps: (0.0, 0.3) }, None);
     }
@@ -117,16 +117,16 @@ pub fn man_in_cape(c: &mut Canvas, at: (f32, f32), size: f32, cape: Rgb, dark: R
     h.line(c, &mut cb, &[(-0.15, 0.37), (0.0, 0.355), (0.15, 0.37)], 0.7, 0.7);
     c.dry();
     // the hand on the stick
-    let mut hb = h.take(Tool::round_sable, 0.035, thin(dark), 0.8);
+    let mut hb = h.take(Tool::round_sable, 0.035, thin(dark), 0.8 * 0.45);
     h.dab(c, &mut hb, 0.15, 0.5, 0.03, FRAC_PI_2, 0.9);
     // head, then the beret: a wide flat dab resting on it, tipped a little
-    let mut hd = h.take(Tool::round_sable, 0.06, thin(hair), 1.0);
+    let mut hd = h.take(Tool::round_sable, 0.06, thin(hair), 1.0 * 0.45);
     h.dab(c, &mut hd, 0.0, 0.88, 0.05, FRAC_PI_2, 1.0);
-    let mut be = h.take(Tool::round_sable, 0.04, thin(dark), 1.0);
+    let mut be = h.take(Tool::round_sable, 0.04, thin(dark), 1.0 * 0.45);
     h.mark(c, &mut be, Mark { pts: &[(-0.068, 0.905), (0.0, 0.922), (0.064, 0.915)], pressure: (0.85, 0.9), ramps: (0.05, 0.2) }, None);
     if let Some(l) = rim {
         c.dry();
-        let mut lb = h.take(Tool::round_sable, 0.014, lean(paint::color::mix(dark, l, 0.5, paint::Mix::Pigment)), 0.35);
+        let mut lb = h.take(Tool::round_sable, 0.014, lean(paint::color::mix(dark, l, 0.5, paint::Mix::Pigment)), 0.35 * 0.4);
         h.mark(c, &mut lb, Mark { pts: &[(-0.1, 0.785), (-0.05, 0.842), (0.03, 0.845)], pressure: (0.4, 0.25), ramps: (0.2, 0.5) }, None);
     }
     h.p(-0.08, 0.8)
@@ -165,16 +165,16 @@ pub fn youth_in_frock(c: &mut Canvas, at: (f32, f32), size: f32, coat: Rgb, dark
     }
     c.dry();
     // white collar standing up at the neck
-    let mut wc = h.take(Tool::round_sable, 0.022, thin(collar), 0.8);
+    let mut wc = h.take(Tool::round_sable, 0.022, thin(collar), 0.8 * 0.45);
     h.mark(c, &mut wc, Mark { pts: &[(-0.03, 0.832), (0.0, 0.842), (0.03, 0.832)], pressure: (0.7, 0.7), ramps: (0.1, 0.3) }, None);
     // head, then the cap: a small flat dab resting on it
-    let mut hd = h.take(Tool::round_sable, 0.055, thin(hair), 1.0);
+    let mut hd = h.take(Tool::round_sable, 0.055, thin(hair), 1.0 * 0.45);
     h.dab(c, &mut hd, 0.0, 0.882, 0.045, FRAC_PI_2, 1.0);
-    let mut cp = h.take(Tool::round_sable, 0.036, thin(dark), 1.0);
+    let mut cp = h.take(Tool::round_sable, 0.036, thin(dark), 1.0 * 0.45);
     h.mark(c, &mut cp, Mark { pts: &[(-0.042, 0.905), (0.0, 0.918), (0.045, 0.91)], pressure: (0.85, 0.85), ramps: (0.05, 0.2) }, None);
     if let Some(l) = rim {
         c.dry();
-        let mut lb = h.take(Tool::round_sable, 0.012, lean(paint::color::mix(dark, l, 0.5, paint::Mix::Pigment)), 0.35);
+        let mut lb = h.take(Tool::round_sable, 0.012, lean(paint::color::mix(dark, l, 0.5, paint::Mix::Pigment)), 0.35 * 0.4);
         h.mark(c, &mut lb, Mark { pts: &[(-0.08, 0.775), (-0.04, 0.832)], pressure: (0.4, 0.25), ramps: (0.2, 0.5) }, None);
     }
 }

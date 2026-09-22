@@ -92,10 +92,10 @@ fn scene() -> Canvas {
     }
     c.dry();
     let land = Mask::from_fn(c.f, |_, y| if y >= h * 0.5 { 1.0 } else { 0.0 });
-    c.work(&land, &Handling::new(Tool::hog_flat(8.0)).color(|_, _| hex("#4a4034")).paint(0.9, 0.9).coverage(3.0).clip(true), 13);
+    c.work(&land, &Handling::new(Tool::hog_flat(8.0)).color(|_, _| hex("#4a4034")).paint(0.9, 0.9).load(0.8 * 0.9).coverage(3.0).clip(true), 13);
     for (i, tool) in [Tool::round_sable(2.0), Tool::fan(10.0), Tool::rigger(0.6)].into_iter().enumerate() {
         let mut held = Held::new(tool, 20 + i as u64);
-        held.load(Paint::scumble(hex("#e0d8c0")), 0.8);
+        held.load(Paint::scumble(hex("#e0d8c0")), 0.8 * 0.6);
         let y = h * (0.55 + 0.1 * i as f32);
         c.drag(&mut held, &Gesture::new(vec![(w * 0.1, y), (w * 0.5, y - 20.0), (w * 0.9, y)]).pressure(0.7, 0.3), Some(&land));
     }

@@ -71,7 +71,7 @@ fn main() {
         0.02 * (fine.get(x, y) + 0.2) - dy * 0.6
     };
     // lay-in: fuller paint so the ground is covered
-    c.work(&sky, &st.broad().color(sky_color).angle(sky_angle).paint(0.8, 0.8).pressure(0.7, 0.9).coverage(4.0), o.seed * 100 + 1);
+    c.work(&sky, &st.broad().color(sky_color).angle(sky_angle).paint(0.8, 0.8).load(0.8 * 0.8).pressure(0.7, 0.9).coverage(4.0), o.seed * 100 + 1);
     lap("sky lay");
     // second, thinner pass wet into wet to tune the transitions
     c.work(&sky, &st.broad().color(sky_color).angle(sky_angle).coverage(2.0).length(60.0, 150.0).paint(0.45, 0.5), o.seed * 100 + 2);
@@ -115,7 +115,7 @@ fn main() {
     let sea_tool = Tool { width: 6.0, ..st.body.clone() };
     c.work(
         &sea,
-        &st.body().color(sea_color).angle(|_, _| 0.0).angle_jitter(0.008).length(40.0, 130.0).coverage(4.5).paint(0.9, 0.8).threshold(0.2).clip(true),
+        &st.body().color(sea_color).angle(|_, _| 0.0).angle_jitter(0.008).length(40.0, 130.0).coverage(4.5).paint(0.9, 0.8).load(0.8 * 0.8).threshold(0.2).clip(true),
         o.seed * 100 + 4,
     );
     let _ = sea_tool;
@@ -126,7 +126,7 @@ fn main() {
         let t = 0.35 + 0.6 * rng.f().sqrt();
         let y = hz(x) + (dune_top(x) - hz(x)) * t;
         let len = rng.range(4.0, 16.0) * t;
-        sable.reload(Paint { color: hex("#8f978f"), hiding: 0.3, body: 0.4 }, 0.4);
+        sable.reload(Paint { color: hex("#8f978f"), hiding: 0.3, stiff: 0.4 }, 0.4 * 0.4);
         c.drag(&mut sable, &Gesture::new(vec![(x, y), (x + len * 0.5, y - 0.4), (x + len, y + 0.2)]).pressure(0.4, 0.2).orient(Orient::Along), Some(&sea));
     }
     // surf along the shore
@@ -150,7 +150,7 @@ fn main() {
     // a second, drier, lighter-pressure pass: dry-brush catches the tooth
     c.work(
         &dune,
-        &st.body().color(sand_color).angle(|x, _| dune_slope(x) * 0.8).angle_jitter(0.15).length(20.0, 60.0).coverage(0.6).pressure(0.3, 0.5).dips(4, 0.5, 0.9).threshold(0.3).clip(true),
+        &st.body().color(sand_color).angle(|x, _| dune_slope(x) * 0.8).angle_jitter(0.15).length(20.0, 60.0).coverage(0.6).pressure(0.3, 0.5).dips(4, 0.5 * 0.7, 0.9).threshold(0.3).clip(true),
         o.seed * 100 + 6,
     );
     if let Some(b) = st.blend() {
@@ -166,7 +166,7 @@ fn main() {
     for clump in 0..55 {
         let cx = rng.range(0.0, w);
         let cy = dune_top(cx) + rng.range(1.0, 40.0).powf(1.3).min(h - dune_top(cx) - 2.0);
-        rigger.reload(Paint { color: hex("#4f4a3a"), hiding: 0.7, body: 0.7 }, 1.0);
+        rigger.reload(Paint { color: hex("#4f4a3a"), hiding: 0.7, stiff: 0.7 }, 1.0 * 0.7);
         for _ in 0..rng.range(3.0, 8.0) as u64 {
             let x = cx + rng.range(-5.0, 5.0);
             let y = cy + rng.range(-1.0, 2.0);
@@ -196,7 +196,7 @@ fn main() {
         let sz = rng.range(1.6, 3.0);
         let tilt = rng.range(-0.4, 0.4);
         let mut b = Held::new(Tool::round_sable(0.7), rng.next_u64());
-        b.load(Paint::scumble(hex("#c8cabf")), 0.8);
+        b.load(Paint::scumble(hex("#c8cabf")), 0.8 * 0.6);
         c.drag(&mut b, &Gesture::new(vec![(x - sz, y - sz * (0.15 + tilt * 0.3)), (x - sz * 0.45, y - sz * 0.25), (x, y)]).pressure(0.3, 0.7).ramps(0.3, 0.1), None);
         c.drag(&mut b, &Gesture::new(vec![(x, y), (x + sz * 0.45, y - sz * 0.25), (x + sz, y - sz * (0.15 - tilt * 0.3))]).pressure(0.7, 0.3).ramps(0.1, 0.3), None);
     }

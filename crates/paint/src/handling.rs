@@ -30,9 +30,9 @@ pub struct Handling<'a> {
     pub color: Field<'a, Rgb>,
     /// Palette-mixing inconsistency per dip: OKLab L and a/b sd.
     pub jitter: (f32, f32),
-    /// Hiding and body of the mixed paint (see `Paint`).
+    /// Hiding and stiffness of the mixed paint (see `Paint`).
     pub hiding: f32,
-    pub body: f32,
+    pub stiff: f32,
     /// Pressure range (a random value in it per stroke).
     pub pressure: (f32, f32),
     pub orient: Orient,
@@ -67,11 +67,11 @@ impl<'a> Handling<'a> {
             color: Box::new(|_, _| [0.5; 3]),
             jitter: (0.02, 0.006),
             hiding: 0.85,
-            body: 0.8,
+            stiff: 0.8,
             pressure: (0.6, 0.9),
             orient: Orient::Across,
             dip_every: 1,
-            load: 0.8,
+            load: 0.8 * 0.8,
             wipe: 0.6,
             blender: false,
             scrub: 0,
@@ -105,9 +105,14 @@ impl<'a> Handling<'a> {
         self.jitter = (l, hue);
         self
     }
-    pub fn paint(mut self, hiding: f32, body: f32) -> Self {
+    pub fn paint(mut self, hiding: f32, stiff: f32) -> Self {
         self.hiding = hiding;
-        self.body = body;
+        self.stiff = stiff;
+        self
+    }
+    /// How much paint each trip to the palette puts on the brush (0..1 of full).
+    pub fn load(mut self, amount: f32) -> Self {
+        self.load = amount;
         self
     }
     pub fn pressure(mut self, a: f32, b: f32) -> Self {
@@ -303,7 +308,7 @@ impl Canvas {
                                     held.wipe(0.9);
                                 } else {
                                     held.wipe(hd.wipe);
-                                    held.load(Paint { color: col, hiding: hd.hiding, body: hd.body }, hd.load);
+                                    held.load(Paint { color: col, hiding: hd.hiding, stiff: hd.stiff }, hd.load);
                                 }
                             }
                             let g = Gesture::new(p.pts.clone())

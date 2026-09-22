@@ -13,6 +13,7 @@ pub mod color;
 pub mod fill;
 pub mod mask;
 pub mod noise;
+pub mod path;
 pub mod pigment;
 pub mod rng;
 pub mod shape;

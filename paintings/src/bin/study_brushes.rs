@@ -105,7 +105,7 @@ fn main() {
         let x = 40.0 + r.range(0.0, 380.0);
         let y = 340.0 + r.range(0.0, 90.0);
         let a = -0.9f32;
-        c.drag(&mut b, &Gesture::line((x, y), (x + a.cos() * 18.0, y + a.sin() * 18.0)).orient(Orient::Fixed(a + 1.5708)).pressure(0.85, 0.7), None);
+        c.drag(&mut b, &Gesture::line((x, y), (x + a.cos() * 18.0, y + a.sin() * 18.0)).orient(Orient::Fixed(a + std::f32::consts::FRAC_PI_2)).pressure(0.85, 0.7), None);
     }
     let mut fan = Held::new(Tool::fan(30.0), 51);
     for k in 0..14 {

@@ -17,7 +17,7 @@
 //! - moving bristles plough wet paint aside and ahead, so ridges and ends of
 //!   strokes build up by themselves.
 
-use crate::brush::densify;
+use crate::path::densify;
 use crate::canvas::Canvas;
 use crate::mask::Mask;
 use crate::rng::Rng;

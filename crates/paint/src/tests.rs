@@ -204,3 +204,17 @@ fn footprint_bounds_every_touched_pixel() {
         }
     }
 }
+
+#[test]
+fn clipped_plough_stays_inside_mask() {
+    let mut c = Canvas::new(400, 1.0, hex("#c8b89a"));
+    let m = Mask::from_fn(c.frame(), |x, _| if x < 500.0 { 1.0 } else { 0.0 });
+    let mut h = Held::new(Tool { push: 0.3, ..Tool::hog_flat(30.0) }, 4);
+    for k in 0..4 {
+        h.reload(Paint::body(hex("#304060")), 1.0);
+        let x = 470.0 + k as f32 * 3.0;
+        c.drag(&mut h, &Gesture::new(vec![(x, 100.0), (x, 900.0)]).pressure(1.0, 1.0), Some(&m));
+    }
+    let outside: usize = (0..c.wet.vol.len()).filter(|&i| m.data[i] == 0.0 && c.wet.vol[i] > 0.0).count();
+    assert_eq!(outside, 0);
+}

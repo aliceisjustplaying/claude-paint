@@ -721,7 +721,10 @@ unsafe fn exchange(
                         let ty = py + (ny * side * 0.75 + my * 0.45) * off;
                         if tx >= 0.0 && ty >= 0.0 && (tx as usize) < w && (ty as usize) < h {
                             let j = ty as usize * w + tx as usize;
-                            if j != i {
+                            // a clipped stroke can't push paint past its mask:
+                            // only the accepted share moves, the rest stays
+                            let m = m * clip.map_or(1.0, |c| c.data[j]);
+                            if j != i && m > 0.0 {
                                 let l = *sf.lat.add(i);
                                 let hd = *sf.hide.add(i);
                                 *sf.vol.add(i) -= m;

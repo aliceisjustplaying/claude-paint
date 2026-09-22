@@ -100,6 +100,48 @@ pub fn mix_into(rv: &mut f32, rl: &mut Latent, rh: &mut f32, v: f32, lat: &Laten
     *rv = t;
 }
 
+/// How far wet paint levels (flows out under its own surface tension) before
+/// it sets, in units. Sharp steps at stroke edges slump into gentle slopes;
+/// ridges wider than this survive.
+pub const LEVEL_UNITS: f32 = 1.5;
+
+/// Box-blurred copy of `vol` over the rect (x0, y0, x1, y1), radius `r` px.
+fn leveled(vol: &[f32], w: usize, h: usize, rect: (usize, usize, usize, usize), r: usize) -> Vec<f32> {
+    let (x0, y0, x1, y1) = rect;
+    let rw = x1 - x0;
+    let ya = y0.saturating_sub(r);
+    let yb = (y1 + r).min(h);
+    let n = (2 * r + 1) as f32;
+    let mut tmp = vec![0f32; rw * (yb - ya)];
+    tmp.par_chunks_mut(rw).enumerate().for_each(|(j, row)| {
+        let s = &vol[(ya + j) * w..(ya + j + 1) * w];
+        let mut acc = 0.0f32;
+        for k in 0..=2 * r {
+            acc += s[(x0 + k).saturating_sub(r).min(w - 1)];
+        }
+        for (i, o) in row.iter_mut().enumerate() {
+            *o = acc / n;
+            let x = x0 + i;
+            acc += s[(x + r + 1).min(w - 1)] - s[x.saturating_sub(r)];
+        }
+    });
+    let mut out = vec![0f32; rw * (y1 - y0)];
+    out.par_chunks_mut(rw).enumerate().for_each(|(j, row)| {
+        let y = y0 + j;
+        let lo = y.saturating_sub(r).max(ya);
+        let hi = (y + r).min(yb - 1);
+        let cnt = (hi - lo + 1) as f32;
+        for (i, o) in row.iter_mut().enumerate() {
+            let mut a = 0.0f32;
+            for yy in lo..=hi {
+                a += tmp[(yy - ya) * rw + i];
+            }
+            *o = a / cnt;
+        }
+    });
+    out
+}
+
 /// Relief added per unit of dried paint thickness.
 pub const RELIEF_PER_VOL: f32 = 0.12;
 
@@ -111,15 +153,25 @@ impl Canvas {
         self.surf_gen += 1;
         let w = self.f.w;
         let (x1, y1) = (x1.min(w), y1.min(self.f.h));
+        // relief: the paint levels a little before it sets
+        let r = (LEVEL_UNITS * self.f.scale).round().max(1.0) as usize;
+        let ex = (x0.saturating_sub(r), y0.saturating_sub(r), (x1 + r).min(w), (y1 + r).min(self.f.h));
+        let lev = leveled(&self.wet.vol, w, self.f.h, ex, r);
+        let ew = ex.2 - ex.0;
+        self.height[ex.1 * w..ex.3 * w].par_chunks_mut(w).zip(self.film[ex.1 * w..ex.3 * w].par_chunks_mut(w)).enumerate().for_each(|(j, (hh, ff))| {
+            for i in 0..ew {
+                let v = lev[j * ew + i];
+                hh[ex.0 + i] += v * RELIEF_PER_VOL;
+                ff[ex.0 + i] += v;
+            }
+        });
         let wet = &mut self.wet;
         let rows = self.px[y0 * w..y1 * w]
             .par_chunks_mut(w)
-            .zip(self.height[y0 * w..y1 * w].par_chunks_mut(w))
-            .zip(self.film[y0 * w..y1 * w].par_chunks_mut(w))
             .zip(wet.vol[y0 * w..y1 * w].par_chunks_mut(w))
             .zip(wet.lat[y0 * w..y1 * w].par_chunks(w))
             .zip(wet.hide[y0 * w..y1 * w].par_chunks(w));
-        rows.for_each(|(((((px, hh), ff), vv), ll), hd)| {
+        rows.for_each(|(((px, vv), ll), hd)| {
             for x in x0..x1 {
                 let v = vv[x];
                 if v < 1e-5 {
@@ -129,8 +181,6 @@ impl Canvas {
                 let c = mixbox::latent_to_linear_float_rgb(&ll[x]);
                 let pig = Pigment::with_hiding(c, hd[x].clamp(0.01, 0.99));
                 px[x] = pig.over(px[x], v);
-                hh[x] += v * RELIEF_PER_VOL;
-                ff[x] += v;
                 vv[x] = 0.0;
             }
         });

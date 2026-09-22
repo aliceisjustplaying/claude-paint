@@ -68,7 +68,7 @@ impl Style {
             body_paint: (0.8, 0.7),
             thin_paint: (0.6, 0.5),
             jitter: (0.012, 0.004),
-            relief: (0.35, 0.025),
+            relief: (0.2, 0.02),
         }
     }
 

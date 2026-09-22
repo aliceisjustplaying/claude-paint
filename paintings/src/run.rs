@@ -8,7 +8,7 @@
 //!   cargo paint <name> -- --stop sky         save right after the "sky" stage
 //!   cargo paint <name> -- --no-cracks        skip craquelure in the finish
 
-use paint::{Canvas, Fbm, Pigment, Rgb, hex};
+use paint::{Canvas, Cracks, Fbm, Pigment, Rgb, hex};
 use std::path::PathBuf;
 use std::time::Instant;
 
@@ -62,8 +62,8 @@ impl Run {
         let var = Fbm::new(self.seed as u32 + 98, 3, 400.0);
         let (base, vary) = (f.varnish_coats, f.varnish_vary);
         c.glaze(&Pigment::varnish(f.varnish), None, |x, y| base + vary * var.get(x, y));
-        if let (Some((cell, strength)), false) = (f.cracks, self.no_cracks) {
-            c.craquelure(cell, strength, self.seed);
+        if let (Some(k), false) = (f.cracks, self.no_cracks) {
+            c.crack(&Cracks { seed: k.seed.wrapping_add(self.seed), ..k });
         }
         c.relief(f.relief.0, f.relief.1);
         if !self.stage(c, "finish") {
@@ -85,8 +85,9 @@ pub struct Finish {
     /// Varnish thickness in coats, and how much it varies across the canvas.
     pub varnish_coats: f32,
     pub varnish_vary: f32,
-    /// Crack cell size (units) and darkening, if the surface has cracked.
-    pub cracks: Option<(f32, f32)>,
+    /// Craquelure, if the surface has cracked (its seed is offset by the
+    /// run's seed).
+    pub cracks: Option<Cracks>,
     /// Relief lighting strength and gloss.
     pub relief: (f32, f32),
 }
@@ -94,6 +95,6 @@ pub struct Finish {
 impl Finish {
     /// An old varnished painting.
     pub fn aged(relief: (f32, f32)) -> Self {
-        Finish { varnish: hex("#e6d3a4"), varnish_coats: 0.4, varnish_vary: 0.12, cracks: Some((12.0, 0.12)), relief }
+        Finish { varnish: hex("#e6d3a4"), varnish_coats: 0.4, varnish_vary: 0.12, cracks: Some(Cracks::aged(0)), relief }
     }
 }

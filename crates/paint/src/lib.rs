@@ -8,6 +8,7 @@
 
 pub mod canvas;
 pub mod color;
+pub mod crack;
 pub mod mask;
 pub mod noise;
 pub mod path;
@@ -25,6 +26,7 @@ pub mod hand;
 pub mod surface;
 
 pub use canvas::{Canvas, Frame};
+pub use crack::Cracks;
 pub use color::{Mix, Rgb, gradient, hex};
 pub use tree::Oak;
 pub use bristle::{Gesture, Held, Kind, Orient, Tool};

@@ -218,5 +218,7 @@ fn main() {
     }
 
     // ---- finish: aged varnish, cracks, light the surface
-    o.finish(&mut c, &Finish::aged(st.relief));
+    let ground_um = st.ground.iter().map(|g| g.um).sum();
+    let cracks = paint::Cracks { island_mm: 5.0, ground_um, dirt: 0.6, ..paint::Cracks::aged(0) };
+    o.finish(&mut c, &Finish { cracks: Some(cracks), ..Finish::aged(st.relief) });
 }

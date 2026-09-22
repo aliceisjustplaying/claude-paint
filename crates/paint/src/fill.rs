@@ -103,6 +103,7 @@ impl Canvas {
     /// Paint the region `mask` with strokes. Coverage is clipped by the mask,
     /// so give it a roughened/soft mask for painterly edges.
     pub fn fill_strokes(&mut self, mask: &Mask, sf: &StrokeFill, seed: u64) {
+        self.check_mask(mask);
         let mut rng = Rng::new(seed);
         let f = self.f;
         let gap = (sf.brush.width * sf.spacing).max(0.5);

@@ -167,6 +167,7 @@ impl Canvas {
     /// checkerboard phase can't share a pixel, so each gets its own brush and
     /// they are painted in parallel; phases run one after another.
     pub fn work(&mut self, mask: &Mask, hd: &Handling, seed: u64) {
+        self.check_mask(mask);
         let mut rng = Rng::new(seed);
         let f = self.f;
         let mean_len = 0.5 * (hd.length.0 + hd.length.1);

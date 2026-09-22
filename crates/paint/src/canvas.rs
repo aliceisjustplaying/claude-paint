@@ -40,18 +40,18 @@ impl Frame {
 }
 
 pub struct Canvas {
-    pub f: Frame,
+    pub(crate) f: Frame,
     /// Linear RGB reflectance, row major.
-    pub px: Vec<Rgb>,
+    pub(crate) px: Vec<Rgb>,
     /// Physical surface height, µm: woven linen, ground layers, paint films.
-    pub height: Vec<f32>,
+    pub(crate) height: Vec<f32>,
     /// Accumulated paint film in coats (bookkeeping).
-    pub film: Vec<f32>,
-    pub linen: Option<Linen>,
+    pub(crate) film: Vec<f32>,
+    pub(crate) linen: Option<Linen>,
     /// Physical size: millimeters per unit (the canvas is 1000 units wide).
-    pub mm_per_unit: f32,
+    pub(crate) mm_per_unit: f32,
     /// Wet paint on top of the dry picture.
-    pub wet: crate::wet::Wet,
+    pub(crate) wet: crate::wet::Wet,
     /// Bumped whenever the height changes; `base` caches the surface relief
     /// bristles feel.
     pub(crate) surf_gen: u64,
@@ -121,6 +121,35 @@ impl Canvas {
         self.film.par_iter_mut().zip(&t).for_each(|(f, &ti)| *f += ti / COAT_UM);
     }
 
+    /// Pixel dimensions and scale (for building masks).
+    pub fn frame(&self) -> Frame {
+        self.f
+    }
+
+    /// Linear RGB pixels (read-only).
+    pub fn pixels(&self) -> &[Rgb] {
+        &self.px
+    }
+
+    /// Surface height in µm (read-only). Edit it through canvas operations
+    /// so derived data (the brushes' contact surface) stays in sync.
+    pub fn surface_um(&self) -> &[f32] {
+        &self.height
+    }
+
+    /// Panics unless `m` was made for this canvas's frame.
+    #[track_caller]
+    pub(crate) fn check_mask(&self, m: &Mask) {
+        assert!(
+            m.f.w == self.f.w && m.f.h == self.f.h && m.data.len() == self.f.w * self.f.h,
+            "mask {}x{} does not match canvas {}x{}",
+            m.f.w,
+            m.f.h,
+            self.f.w,
+            self.f.h
+        );
+    }
+
     /// Canvas width in units (always 1000).
     pub fn width(&self) -> f32 {
         self.f.width()
@@ -149,6 +178,7 @@ impl Canvas {
 
     /// Like `apply`, but only where `m` > 0; `g` receives the coverage.
     pub fn apply_masked(&mut self, m: &Mask, g: impl Fn(f32, f32, Rgb, f32) -> Rgb + Sync) {
+        self.check_mask(m);
         let inv = 1.0 / self.f.scale;
         let w = self.f.w;
         self.px.par_chunks_mut(w).enumerate().for_each(|(y, row)| {
@@ -202,6 +232,9 @@ impl Canvas {
         mask: Option<&Mask>,
         thickness: impl Fn(f32, f32) -> f32 + Sync,
     ) {
+        if let Some(m) = mask {
+            self.check_mask(m);
+        }
         self.dry();
         // the glaze is mostly medium: a thin fluid film that levels and pools
         // in the hollows of the surface, so it is deeper there

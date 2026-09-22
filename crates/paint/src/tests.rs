@@ -157,3 +157,14 @@ fn km_zero_absorption_is_finite() {
     let (r2, t2) = q.layer(1.0);
     assert!((r2[0] - r[0]).abs() < 1e-3 && (t2[0] - t[0]).abs() < 1e-3);
 }
+
+#[test]
+#[should_panic(expected = "does not match canvas")]
+fn mismatched_mask_is_rejected() {
+    let mut c = Canvas::new(100, 1.0, hex("#808080"));
+    let other = Canvas::new(120, 1.0, hex("#808080"));
+    let m = Mask::from_fn(other.frame(), |_, _| 1.0);
+    let mut h = Held::new(Tool::round_sable(3.0), 1);
+    h.load(Paint::body(hex("#202020")), 1.0);
+    c.drag(&mut h, &Gesture::line((100.0, 500.0), (900.0, 500.0)), Some(&m));
+}

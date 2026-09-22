@@ -50,21 +50,21 @@ impl Paint {
     }
 }
 
-pub struct Wet {
-    pub vol: Vec<f32>,
-    pub lat: Vec<Latent>,
+pub(crate) struct Wet {
+    pub(crate) vol: Vec<f32>,
+    pub(crate) lat: Vec<Latent>,
     /// [hiding, stiffness] of the wet paint.
-    pub hide: Vec<Prop>,
+    pub(crate) hide: Vec<Prop>,
     /// Which stroke last laid paint here (a stroke barely re-picks its own paint).
-    pub stroke: Vec<u32>,
+    pub(crate) stroke: Vec<u32>,
     /// Stroke that last touched a pixel, and the film floor that stroke may
     /// not lift below (one pass lifts only part of the film).
-    pub touched: Vec<u32>,
-    pub floor: Vec<f32>,
+    pub(crate) touched: Vec<u32>,
+    pub(crate) floor: Vec<f32>,
     /// Id of the stroke being painted.
-    pub current: u32,
+    pub(crate) current: u32,
     /// Dirty bounding box in pixels (x0, y0, x1, y1), if any paint is wet.
-    pub dirty: Option<(usize, usize, usize, usize)>,
+    pub(crate) dirty: Option<(usize, usize, usize, usize)>,
 }
 
 impl Wet {

@@ -385,6 +385,13 @@ impl Surf {
 
 impl Canvas {
     pub(crate) fn surf(&mut self) -> Surf {
+        // the raw views below index 0..w*h: every buffer must be that long
+        let n = self.f.w * self.f.h;
+        let wt = &self.wet;
+        assert!(
+            [self.height.len(), self.px.len(), self.film.len(), wt.vol.len(), wt.lat.len(), wt.hide.len(), wt.stroke.len(), wt.touched.len(), wt.floor.len()].iter().all(|&l| l == n),
+            "canvas buffers out of sync with frame"
+        );
         if self.base.as_ref().map(|b| b.0) != Some(self.surf_gen) {
             let mut base = self.base.take().map(|b| b.1).unwrap_or_default();
             base.resize(self.height.len(), 0.0);
@@ -422,6 +429,9 @@ impl Canvas {
 
     /// Drag a held brush through a gesture, working the wet paint.
     pub fn drag(&mut self, held: &mut Held, g: &Gesture, clip: Option<&Mask>) {
+        if let Some(m) = clip {
+            self.check_mask(m);
+        }
         let id = self.next_stroke_ids(1);
         let surf = self.surf();
         let mut scratch = Vec::new();

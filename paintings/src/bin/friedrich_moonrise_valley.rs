@@ -26,7 +26,7 @@ fn main() {
     // ---- ground and priming
     let mut c = st.prepare(o.width, 1.4, o.seed);
     let (w, h) = (c.width(), c.height());
-    let f = c.f;
+    let f = c.frame();
 
     // ---- the lay of the land (units; y down)
     let n1 = Fbm::new(seed + 1, 5, 180.0);

@@ -14,7 +14,7 @@ fn main() {
     eprintln!("  ground     {:>6.2}s", t0.elapsed().as_secs_f32());
     let h = c.height();
     // band 2: thin fluid blue, laid with a soft filbert in long strokes
-    let fr = c.f;
+    let fr = c.frame();
     let band = |a: f32, b: f32| Mask::from_fn(fr, move |_, y| if y >= a * h && y < b * h { 1.0 } else { 0.0 });
     let b2 = band(0.25, 0.5);
     let mut fil = Held::new(Tool::filbert(30.0), 3);

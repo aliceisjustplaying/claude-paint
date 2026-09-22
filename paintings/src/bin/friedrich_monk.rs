@@ -18,7 +18,7 @@ fn main() {
     // wide format, roughly the proportions of the original, on fine linen
     let mut c = Canvas::new(o.width, 1.56, hex("#e9e2d2")).with_weave(1.15, 0.6, o.seed);
     let (w, h) = (c.width(), c.height());
-    let f = c.f;
+    let f = c.frame();
 
     // ---- geometry
     let horizon = h * 0.745; // top of the sea

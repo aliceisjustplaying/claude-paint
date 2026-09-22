@@ -23,7 +23,7 @@ fn main() {
     // ---- ground: bright reddish ground, then lighter brown priming
     let mut c = st.prepare(o.width, 1.56, o.seed);
     let (w, h) = (c.width(), c.height());
-    let f = c.f;
+    let f = c.frame();
 
     // ---- geometry
     let horizon = h * 0.745;

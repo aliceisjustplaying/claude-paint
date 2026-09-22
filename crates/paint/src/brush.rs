@@ -124,6 +124,9 @@ impl Canvas {
         seed: u64,
         clip: Option<&Mask>,
     ) {
+        if let Some(m) = clip {
+            self.check_mask(m);
+        }
         if pts.len() < 2 {
             return;
         }

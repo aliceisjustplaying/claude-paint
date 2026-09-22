@@ -320,3 +320,56 @@ fn transpose(src: &[f32], w: usize, h: usize) -> Vec<f32> {
     });
     dst
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn frame() -> Frame {
+        Frame { w: 400, h: 300, scale: 0.4 }
+    }
+
+    fn disk(r: f32) -> Mask {
+        Mask::from_fn(frame(), move |x, y| if ((x - 500.0).powi(2) + (y - 375.0).powi(2)).sqrt() < r { 1.0 } else { 0.0 })
+    }
+
+    #[test]
+    fn distance_is_euclidean_and_signed() {
+        let d = disk(200.0).distance();
+        assert!((d.sample(500.0, 375.0) - 200.0).abs() < 4.0, "center {}", d.sample(500.0, 375.0));
+        assert!((d.sample(500.0 + 250.0, 375.0) + 50.0).abs() < 4.0, "outside {}", d.sample(750.0, 375.0));
+        // diagonal: exact, not chessboard or city block
+        let q = 500.0 + 150.0 * std::f32::consts::FRAC_1_SQRT_2;
+        assert!((d.sample(q, 375.0 + 150.0 * std::f32::consts::FRAC_1_SQRT_2) - 50.0).abs() < 4.0);
+    }
+
+    #[test]
+    fn offset_grows_and_shrinks() {
+        let area = |m: &Mask| m.data.iter().sum::<f32>() / (m.f.scale * m.f.scale);
+        let m = disk(150.0);
+        let a0 = area(&m);
+        let grown = area(&m.dilate(30.0));
+        let shrunk = area(&m.erode(30.0));
+        let pi = std::f32::consts::PI;
+        assert!((a0 - pi * 150.0f32.powi(2)).abs() / a0 < 0.03);
+        assert!((grown - pi * 180.0f32.powi(2)).abs() / grown < 0.03, "{grown}");
+        assert!((shrunk - pi * 120.0f32.powi(2)).abs() / shrunk < 0.03, "{shrunk}");
+    }
+
+    #[test]
+    fn rim_band_and_soften() {
+        let m = disk(200.0);
+        let r = m.rim(20.0, 2.0);
+        assert!(r.sample(500.0 + 190.0, 375.0) > 0.9);
+        assert!(r.sample(500.0 + 150.0, 375.0) < 0.05);
+        assert!(r.sample(500.0 + 230.0, 375.0) < 0.05);
+        let b = Mask::from_fn(frame(), |x, _| x / 1000.0).band(0.3, 0.6, 0.01);
+        assert!(b.sample(450.0, 10.0) > 0.99 && b.sample(200.0, 10.0) < 0.01 && b.sample(700.0, 10.0) < 0.01);
+        // soft on the right half only
+        let s = m.soften(|x, _| if x > 500.0 { 60.0 } else { 0.0 });
+        let right = s.sample(500.0 + 200.0 + 15.0, 375.0);
+        let left = s.sample(500.0 - 200.0 - 15.0, 375.0);
+        assert!(right > 0.1 && right < 0.5, "{right}");
+        assert!(left < 0.01, "{left}");
+    }
+}

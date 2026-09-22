@@ -9,7 +9,6 @@ use crate::surface::{COAT_UM, Linen, vnoise};
 /// Fraction of a glaze layer that stays as film (the rest of the "thickness"
 /// is how deep the color reads; a glaze is mostly medium, and thin).
 const GLAZE_FILM: f32 = 0.3;
-use crate::smoothstep;
 use rayon::prelude::*;
 
 /// Pixel dimensions plus the units → pixels scale.
@@ -220,50 +219,6 @@ impl Canvas {
         self.film.par_iter_mut().zip(&t).for_each(|(f, &ti)| *f += ti / COAT_UM);
     }
 
-    /// Age cracks (craquelure): an irregular network of fine cracks, cell size
-    /// in units. Darkens slightly and cuts grooves into the relief.
-    pub fn craquelure(&mut self, cell: f32, strength: f32, seed: u64) {
-        let warp = crate::noise::Fbm::new(seed as u32 + 77, 4, cell * 3.0);
-        // where the paint film cracked: patchy, not uniform
-        let cluster = crate::noise::Fbm::new(seed as u32 + 78, 3, cell * 12.0);
-        let width = 0.012 * cell; // hairline, in units
-        let inv = 1.0 / self.f.scale;
-        let aa = 0.8 * inv; // ~1px antialias
-        let w = self.f.w;
-        let mut cracks = vec![0.0f32; w * self.f.h];
-        cracks.par_chunks_mut(w).enumerate().for_each(|(y, row)| {
-            let yu = (y as f32 + 0.5) * inv;
-            for (x, out) in row.iter_mut().enumerate() {
-                let xu = (x as f32 + 0.5) * inv;
-                let wx = xu + warp.get(xu, yu) * cell * 0.3;
-                let wy = yu + warp.get(xu + 91.0, yu - 37.0) * cell * 0.3;
-                // a crack thinner than a pixel covers only part of it
-                let line = |e: f32, wd: f32| {
-                    let wp = wd.max(aa);
-                    (1.0 - smoothstep(wp * 0.5 - aa * 0.5, wp * 0.5 + aa * 0.5, e)) * (wd / wp)
-                };
-                // main network, stretched a bit horizontally like canvas cracks
-                let (e1, a1, b1) = voronoi_edge(wx / (cell * 1.25), wy / cell, seed);
-                // each crack segment (cell pair) gets its own strength; many are faint
-                let seg1 = hash2(a1.min(b1), a1.max(b1), seed + 5).powf(1.8);
-                let c1 = line(e1 * cell, width) * seg1;
-                // finer secondary cracks inside cells, mostly faint
-                let (e2, a2, b2) = voronoi_edge(wx / (cell * 0.45), wy / (cell * 0.4), seed + 9);
-                let seg2 = hash2(a2.min(b2), a2.max(b2), seed + 6).powf(3.0) * 0.6;
-                let c2 = line(e2 * cell * 0.4, width * 0.7) * seg2;
-                let k = smoothstep(-0.3, 0.4, cluster.get(xu, yu));
-                *out = c1.max(c2) * (0.25 + 0.75 * k);
-            }
-        });
-        let s = strength;
-        self.px.par_iter_mut().zip(&cracks).for_each(|(p, c)| {
-            let k = 1.0 - s * c;
-            *p = [p[0] * k, p[1] * k, p[2] * k];
-        });
-        self.surf_gen += 1;
-        self.height.par_iter_mut().zip(&cracks).for_each(|(h, c)| *h -= c * 8.0);
-    }
-
     /// Light the surface relief (paint ridges + weave) from the upper left.
     /// `strength` ≈ 0.3–1.0; `gloss` adds a faint varnish sheen on ridges.
     pub fn relief(&mut self, strength: f32, gloss: f32) {
@@ -334,33 +289,6 @@ impl Canvas {
     }
 }
 
-
-/// Distance to the nearest Voronoi cell border (F2 - F1)/2, in cell units,
-/// plus ids of the two nearest cells (identifies the crack segment).
-fn voronoi_edge(x: f32, y: f32, seed: u64) -> (f32, i64, i64) {
-    let (ix, iy) = (x.floor() as i64, y.floor() as i64);
-    let (mut d1, mut d2) = (f32::MAX, f32::MAX);
-    let (mut id1, mut id2) = (0i64, 0i64);
-    for j in -1..=1 {
-        for i in -1..=1 {
-            let (cx, cy) = (ix + i, iy + j);
-            let px = cx as f32 + hash2(cx, cy, seed);
-            let py = cy as f32 + hash2(cx, cy, seed + 101);
-            let d = ((px - x).powi(2) + (py - y).powi(2)).sqrt();
-            let id = cx.wrapping_mul(73_856_093) ^ cy.wrapping_mul(19_349_663);
-            if d < d1 {
-                d2 = d1;
-                id2 = id1;
-                d1 = d;
-                id1 = id;
-            } else if d < d2 {
-                d2 = d;
-                id2 = id;
-            }
-        }
-    }
-    ((d2 - d1) * 0.5, id1, id2)
-}
 
 impl Canvas {
 }

@@ -295,5 +295,7 @@ fn main() {
     }
 
     // ---- finish: clear aged varnish, cracks, the surface in raking light
-    o.finish(&mut c, &Finish { cracks: Some((12.0, 0.1)), ..Finish::aged(st.relief) });
+    let ground_um = st.ground.iter().map(|g| g.um).sum();
+    let cracks = paint::Cracks { island_mm: 3.5, ground_um, dirt: 0.5, ..paint::Cracks::aged(0) };
+    o.finish(&mut c, &Finish { cracks: Some(cracks), ..Finish::aged(st.relief) });
 }

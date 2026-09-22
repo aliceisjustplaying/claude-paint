@@ -221,7 +221,9 @@ impl Canvas {
     pub fn work(&mut self, mask: &Mask, hd: &Handling, seed: u64) {
         self.check_mask(mask);
         let mut rng = Rng::new(seed);
-        let f = self.f;
+        // plan on the whole canvas (also in a crop render, so the strokes
+        // are the same ones); run_plans paints only what reaches the window
+        let f = mask.f;
         let mean_len = 0.5 * (hd.length.0 + hd.length.1);
         // one stroke per gap² of area gives coverage = width · length / gap²
         let gap = (hd.tool.width * mean_len.max(hd.tool.width) / hd.coverage.max(0.05)).sqrt().max(0.5);
@@ -293,7 +295,7 @@ impl Canvas {
     /// Cut in the edges of `mask`: short strokes of the `tool` laid along the
     /// region's outline, just inside it, the way a painter sharpens a form.
     fn cut_in_edges(&mut self, mask: &Mask, tool: &Tool, hd: &Handling, seed: u64, rng: &mut Rng) {
-        let f = self.f;
+        let f = mask.f;
         let step = (tool.width * 0.5).max(1.0 / f.scale);
         let inside = |p: (f32, f32)| p.0 >= 0.0 && p.1 >= 0.0 && p.0 < f.width() && p.1 < f.height() && mask.data[f.index(p.0, p.1)] >= 0.5;
         // rings stepping inward from the edge until they meet the body
@@ -408,7 +410,12 @@ impl Canvas {
         let mut dirty: crate::bristle::Bounds = None;
         for (px, py) in phases {
             let idx: Vec<usize> = (0..tiles.len()).filter(|&i| (i % tw) % 2 == px && (i / tw) % 2 == py && tile_rect[i].is_some()).collect();
-            let batches = disjoint_batches(&idx, &tile_rect);
+            let mut batches = disjoint_batches(&idx, &tile_rect);
+            // a crop render skips passages that miss its window (after
+            // batching, so overlapping passages keep their order)
+            for b in &mut batches {
+                b.retain(|&i| tile_rect[i].is_some_and(|r| f.clip(r).is_some()));
+            }
             if std::env::var_os("PAINT_DEBUG").is_some() {
                 eprintln!("  phase: {} tiles in {} batches", idx.len(), batches.len());
             }

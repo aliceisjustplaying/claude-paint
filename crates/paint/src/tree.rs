@@ -212,7 +212,7 @@ impl Oak {
         for l in limbs {
             shape = shape.ribbon(&l.pts, &l.w);
         }
-        Mask::from_shape(c.f, shape)
+        Mask::from_shape(c.frame(), shape)
     }
 
     /// Paint the tree with simulated brushes: every limb a single drag of a

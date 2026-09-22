@@ -11,35 +11,121 @@ use crate::surface::{COAT_UM, Linen, vnoise};
 const GLAZE_FILM: f32 = 0.3;
 use rayon::prelude::*;
 
-/// Pixel dimensions plus the units → pixels scale.
-#[derive(Clone, Copy, Debug)]
+/// The pixels a buffer holds and the units → pixels scale.
+///
+/// A buffer covers either the whole canvas or a window of it (a crop
+/// render): `w × h` pixels whose top-left pixel is (`x0`, `y0`) of the whole
+/// `full_w × full_h` canvas. Units always refer to the whole canvas
+/// (`width()` is 1000, `height()` the whole height), so a painting program
+/// is the same whatever window it is rendered in. Convert between units and
+/// buffer pixels only through the methods below.
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Frame {
+    /// Pixels held (the window).
     pub w: usize,
     pub h: usize,
     /// Pixels per unit.
     pub scale: f32,
+    /// Window origin in whole-canvas pixels (0, 0 unless cropped).
+    pub x0: usize,
+    pub y0: usize,
+    /// The whole canvas in pixels.
+    pub full_w: usize,
+    pub full_h: usize,
 }
 
 impl Frame {
     pub const WIDTH_UNITS: f32 = 1000.0;
 
+    /// A frame covering a whole canvas of `w × h` pixels.
+    pub fn new(w: usize, h: usize, scale: f32) -> Self {
+        Frame { w, h, scale, x0: 0, y0: 0, full_w: w, full_h: h }
+    }
+
+    /// Canvas width in units (always 1000, also in a window).
     pub fn width(&self) -> f32 {
         Self::WIDTH_UNITS
     }
+    /// Canvas height in units (of the whole canvas, also in a window).
     pub fn height(&self) -> f32 {
-        self.h as f32 / self.scale
+        self.full_h as f32 / self.scale
     }
-    /// Pixel index for a point in units (clamped).
+    /// Buffer index of the pixel under a point in units (clamped to the buffer).
     #[inline]
     pub fn index(&self, x: f32, y: f32) -> usize {
-        let px = ((x * self.scale) as isize).clamp(0, self.w as isize - 1) as usize;
-        let py = ((y * self.scale) as isize).clamp(0, self.h as isize - 1) as usize;
+        let px = (((x * self.scale) as isize) - self.x0 as isize).clamp(0, self.w as isize - 1) as usize;
+        let py = (((y * self.scale) as isize) - self.y0 as isize).clamp(0, self.h as isize - 1) as usize;
         py * self.w + px
+    }
+    /// Units of the center of buffer column `x` / row `y`.
+    #[inline]
+    pub fn ux(&self, x: usize) -> f32 {
+        ((x + self.x0) as f32 + 0.5) * (1.0 / self.scale)
+    }
+    #[inline]
+    pub fn uy(&self, y: usize) -> f32 {
+        ((y + self.y0) as f32 + 0.5) * (1.0 / self.scale)
+    }
+    /// The same canvas, whole (no window).
+    pub fn whole(&self) -> Frame {
+        Frame::new(self.full_w, self.full_h, self.scale)
+    }
+    /// True unless this is a window of a larger canvas.
+    pub fn is_whole(&self) -> bool {
+        self.w == self.full_w && self.h == self.full_h
+    }
+    /// A window of this canvas: whole-canvas pixels `r` = (x0, y0, x1, y1),
+    /// end-exclusive, clamped to the canvas.
+    pub fn window(&self, r: (usize, usize, usize, usize)) -> Frame {
+        let (fw, fh) = (self.full_w, self.full_h);
+        let (x0, y0) = (r.0.min(fw - 1), r.1.min(fh - 1));
+        let (x1, y1) = (r.2.clamp(x0 + 1, fw), r.3.clamp(y0 + 1, fh));
+        Frame { w: x1 - x0, h: y1 - y0, scale: self.scale, x0, y0, full_w: fw, full_h: fh }
+    }
+    /// The window as whole-canvas pixels (x0, y0, x1, y1), end-exclusive.
+    pub fn rect(&self) -> (usize, usize, usize, usize) {
+        (self.x0, self.y0, self.x0 + self.w, self.y0 + self.h)
+    }
+    /// Whole-canvas pixel rect `r` intersected with the window, in buffer
+    /// pixels; None if they don't meet.
+    pub fn clip(&self, r: (usize, usize, usize, usize)) -> Option<(usize, usize, usize, usize)> {
+        let (a, b, c, d) = self.rect();
+        let (x0, y0, x1, y1) = (r.0.max(a), r.1.max(b), r.2.min(c), r.3.min(d));
+        if x1 <= x0 || y1 <= y0 { None } else { Some((x0 - a, y0 - b, x1 - a, y1 - b)) }
+    }
+    /// Index into a whole-canvas buffer (a mask) of buffer pixel `i`.
+    #[inline]
+    pub fn whole_index(&self, i: usize) -> usize {
+        if self.is_whole() { i } else { (i / self.w + self.y0) * self.full_w + i % self.w + self.x0 }
     }
 }
 
+/// A crop render: only the window `units` = (x0, y0, x1, y1) of the canvas
+/// is painted, at full resolution, plus `margin` units around it that are
+/// painted but not saved (paint leveling, the brushes' feel of the surface
+/// and strokes crossing the edge need some context).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Crop {
+    pub units: [f32; 4],
+    pub margin: f32,
+}
+
+static CROP: std::sync::Mutex<Option<Crop>> = std::sync::Mutex::new(None);
+
+/// Make every canvas created from now on (`Canvas::new`) a crop render of
+/// `crop` (None: whole canvases). `paintings::run::Run` sets this from
+/// `--crop`, so painting programs need no changes.
+pub fn set_crop(crop: Option<Crop>) {
+    *CROP.lock().unwrap() = crop;
+}
+
 pub struct Canvas {
+    /// The pixels held: the whole canvas, or the window of a crop render.
+    /// Masks are always whole (`frame()`).
     pub(crate) f: Frame,
+    /// The part of the buffer `save` writes (buffer pixels, end-exclusive):
+    /// all of it, or the crop without its margin.
+    pub(crate) keep: (usize, usize, usize, usize),
     /// Linear RGB reflectance, row major.
     pub(crate) px: Vec<Rgb>,
     /// Physical surface height, µm: woven linen, ground layers, paint films.
@@ -58,13 +144,33 @@ pub struct Canvas {
 }
 
 impl Canvas {
-    /// `aspect` = width / height.
+    /// `aspect` = width / height. A crop render if `set_crop` asked for one.
     pub fn new(width_px: usize, aspect: f32, ground: Rgb) -> Self {
+        let crop = *CROP.lock().unwrap();
+        Self::new_window(width_px, aspect, ground, crop)
+    }
+
+    /// A canvas that holds only the window `crop` (see `Crop`), or all of it.
+    pub fn new_window(width_px: usize, aspect: f32, ground: Rgb, crop: Option<Crop>) -> Self {
         let h = (width_px as f32 / aspect).round() as usize;
-        let f = Frame { w: width_px, h, scale: width_px as f32 / Frame::WIDTH_UNITS };
-        let n = width_px * h;
+        let whole = Frame::new(width_px, h, width_px as f32 / Frame::WIDTH_UNITS);
+        let (f, keep) = match crop {
+            None => (whole, (0, 0, width_px, h)),
+            Some(c) => {
+                let s = whole.scale;
+                let px = |u: f32, m: f32| ((u + m) * s).round().max(0.0) as usize;
+                let [a, b, cc, d] = c.units;
+                let want = whole.window((px(a.min(cc), 0.0), px(b.min(d), 0.0), px(a.max(cc), 0.0), px(b.max(d), 0.0)));
+                let m = c.margin.max(0.0);
+                let f = whole.window((px(a.min(cc), -m), px(b.min(d), -m), px(a.max(cc), m), px(b.max(d), m)));
+                let k = f.clip(want.rect()).expect("crop outside the canvas");
+                (f, k)
+            }
+        };
+        let n = f.w * f.h;
         Canvas {
             f,
+            keep,
             px: vec![ground; n],
             height: vec![0.0; n],
             film: vec![0.0; n],
@@ -97,11 +203,12 @@ impl Canvas {
     pub fn prime(&mut self, color: Rgb, hiding: f32, um: f32, stiff: f32, texture: f32, seed: u64) {
         self.dry();
         let (w, h) = (self.f.w, self.f.h);
+        let (ox, oy) = (self.f.x0, self.f.y0);
         let px = self.px_mm();
         let add: Vec<f32> = (0..w * h)
             .into_par_iter()
             .map(|i| {
-                let (x, y) = ((i % w) as f32 * px, (i / w) as f32 * px);
+                let (x, y) = ((i % w + ox) as f32 * px, (i / w + oy) as f32 * px);
                 let n = 0.65 * vnoise(x / 0.3, y / 0.3, seed) + 0.35 * vnoise(x / 0.9, y / 0.9, seed + 1) - 0.5;
                 um * (1.0 + texture * 1.4 * n).max(0.0)
             })
@@ -113,8 +220,15 @@ impl Canvas {
         self.film.par_iter_mut().zip(&t).for_each(|(f, &ti)| *f += ti / COAT_UM);
     }
 
-    /// Pixel dimensions and scale (for building masks).
+    /// The whole canvas's frame, for building masks (masks always cover the
+    /// whole canvas, also in a crop render, so strokes are planned the same).
     pub fn frame(&self) -> Frame {
+        self.f.whole()
+    }
+
+    /// The pixels this canvas holds: the whole canvas or a crop window
+    /// (`pixels()` and `surface_um()` are laid out in it).
+    pub fn window(&self) -> Frame {
         self.f
     }
 
@@ -129,16 +243,17 @@ impl Canvas {
         &self.height
     }
 
-    /// Panics unless `m` was made for this canvas's frame.
+    /// Panics unless `m` was made for this canvas's (whole) frame.
     #[track_caller]
     pub(crate) fn check_mask(&self, m: &Mask) {
+        let f = self.f.whole();
         assert!(
-            m.f.w == self.f.w && m.f.h == self.f.h && m.data.len() == self.f.w * self.f.h,
-            "mask {}x{} does not match canvas {}x{}",
+            m.f == f && m.data.len() == f.w * f.h,
+            "mask {}x{} does not match canvas {}x{} (build masks with canvas.frame())",
             m.f.w,
             m.f.h,
-            self.f.w,
-            self.f.h
+            f.w,
+            f.h
         );
     }
 
@@ -159,11 +274,11 @@ impl Canvas {
 
     /// Per-pixel transform; `g(x, y, current) -> new`, x/y in units.
     pub fn apply(&mut self, g: impl Fn(f32, f32, Rgb) -> Rgb + Sync) {
-        let inv = 1.0 / self.f.scale;
-        self.px.par_chunks_mut(self.f.w).enumerate().for_each(|(y, row)| {
-            let yu = (y as f32 + 0.5) * inv;
+        let f = self.f;
+        self.px.par_chunks_mut(f.w).enumerate().for_each(|(y, row)| {
+            let yu = f.uy(y);
             for (x, p) in row.iter_mut().enumerate() {
-                *p = g((x as f32 + 0.5) * inv, yu, *p);
+                *p = g(f.ux(x), yu, *p);
             }
         });
     }
@@ -171,15 +286,16 @@ impl Canvas {
     /// Like `apply`, but only where `m` > 0; `g` receives the coverage.
     pub fn apply_masked(&mut self, m: &Mask, g: impl Fn(f32, f32, Rgb, f32) -> Rgb + Sync) {
         self.check_mask(m);
-        let inv = 1.0 / self.f.scale;
-        let w = self.f.w;
+        let f = self.f;
+        let w = f.w;
         self.px.par_chunks_mut(w).enumerate().for_each(|(y, row)| {
-            let yu = (y as f32 + 0.5) * inv;
-            let mrow = &m.data[y * w..(y + 1) * w];
+            let yu = f.uy(y);
+            let mi = f.whole_index(y * w);
+            let mrow = &m.data[mi..mi + w];
             for (x, p) in row.iter_mut().enumerate() {
                 let c = mrow[x];
                 if c > 0.0 {
-                    *p = g((x as f32 + 0.5) * inv, yu, *p, c);
+                    *p = g(f.ux(x), yu, *p, c);
                 }
             }
         });
@@ -199,13 +315,13 @@ impl Canvas {
         self.dry();
         // the glaze is mostly medium: a thin fluid film that levels and pools
         // in the hollows of the surface, so it is deeper there
-        let (w, h) = (self.f.w, self.f.h);
-        let inv = 1.0 / self.f.scale;
+        let f = self.f;
+        let (w, h) = (f.w, f.h);
         let th: Vec<f32> = (0..w * h)
             .into_par_iter()
             .map(|i| {
-                let c = mask.map_or(1.0, |m| m.data[i]);
-                if c <= 0.0 { 0.0 } else { thickness(((i % w) as f32 + 0.5) * inv, ((i / w) as f32 + 0.5) * inv).max(0.0) * c }
+                let c = mask.map_or(1.0, |m| m.data[f.whole_index(i)]);
+                if c <= 0.0 { 0.0 } else { thickness(f.ux(i % w), f.uy(i / w)).max(0.0) * c }
             })
             .collect();
         let add: Vec<f32> = th.iter().map(|t| t * COAT_UM * GLAZE_FILM).collect();
@@ -265,17 +381,21 @@ impl Canvas {
     }
 
     /// Save as an 8-bit sRGB PNG with triangular dither (prevents banding in
-    /// the long, subtle gradients Friedrich loves).
+    /// the long, subtle gradients Friedrich loves). A crop render saves just
+    /// the crop (without its margin).
     pub fn save(&mut self, path: impl AsRef<std::path::Path>) -> std::io::Result<()> {
         self.dry();
-        let (w, h) = (self.f.w, self.f.h);
+        let (bw, (kx0, ky0, kx1, ky1)) = (self.f.w, self.keep);
+        let (w, h) = (kx1 - kx0, ky1 - ky0);
+        // dither by whole-canvas pixel, so a crop matches a whole render
+        let (ox, oy) = (self.f.x0 + kx0, self.f.y0 + ky0);
         let mut buf = vec![0u8; w * h * 3];
         buf.par_chunks_mut(w * 3).enumerate().for_each(|(y, row)| {
             for x in 0..w {
-                let p = self.px[y * w + x];
+                let p = self.px[(y + ky0) * bw + x + kx0];
+                let (gx, gy) = ((x + ox) as i64, (y + oy) as i64);
                 for c in 0..3 {
-                    let d = hash2(x as i64, y as i64, c as u64 * 7 + 1)
-                        - hash2(x as i64, y as i64, c as u64 * 7 + 2);
+                    let d = hash2(gx, gy, c as u64 * 7 + 1) - hash2(gx, gy, c as u64 * 7 + 2);
                     let v = color::linear_to_srgb(p[c]) * 255.0 + d;
                     row[x * 3 + c] = v.round().clamp(0.0, 255.0) as u8;
                 }

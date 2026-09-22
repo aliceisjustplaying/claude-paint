@@ -154,7 +154,7 @@ impl Style {
                 Apply::Brush => {
                     // a broad hog brush dragged across in long horizontal
                     // strokes; stiff paste keeps the bristle marks
-                    let all = Mask::from_fn(c.f, |_, _| 1.0);
+                    let all = Mask::from_fn(c.frame(), |_, _| 1.0);
                     let hog = Tool { lay: 1.2, ragged: 0.2, ..Tool::hog_flat(40.0) };
                     let col = g.color;
                     let h = Handling::new(hog)

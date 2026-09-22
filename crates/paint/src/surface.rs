@@ -143,6 +143,7 @@ impl Canvas {
     pub(crate) fn build_support(&mut self) {
         let Some(l) = self.linen else { return };
         let (w, h) = (self.f.w, self.f.h);
+        let (ox, oy) = (self.f.x0, self.f.y0);
         let px = self.px_mm();
         let pitch = (10.0 / l.warp_per_cm).min(10.0 / l.weft_per_cm);
         let ss = ((3.0 * px / pitch).ceil() as usize).clamp(2, 6);
@@ -151,8 +152,8 @@ impl Canvas {
                 let mut acc = 0.0;
                 for j in 0..ss {
                     for i in 0..ss {
-                        let xm = (x as f32 + (i as f32 + 0.5) / ss as f32) * px;
-                        let ym = (y as f32 + (j as f32 + 0.5) / ss as f32) * px;
+                        let xm = ((x + ox) as f32 + (i as f32 + 0.5) / ss as f32) * px;
+                        let ym = ((y + oy) as f32 + (j as f32 + 0.5) / ss as f32) * px;
                         acc += linen_um(xm, ym, &l);
                     }
                 }

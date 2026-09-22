@@ -335,8 +335,15 @@ impl Gesture {
 /// of the canvas can run in parallel (see `Canvas::work`).
 #[derive(Clone, Copy)]
 pub(crate) struct Surf {
+    /// The buffers' pixels: a window (origin `ox`, `oy`, size `w` × `h`) of
+    /// the whole `fw` × `fh` canvas. Brush geometry works in whole-canvas
+    /// pixels; only buffer indices are translated.
     w: usize,
     h: usize,
+    ox: usize,
+    oy: usize,
+    fw: usize,
+    fh: usize,
     scale: f32,
     vol: *mut f32,
     lat: *mut Latent,
@@ -410,6 +417,10 @@ impl Canvas {
         Surf {
             w: self.f.w,
             h: self.f.h,
+            ox: self.f.x0,
+            oy: self.f.y0,
+            fw: self.f.full_w,
+            fh: self.f.full_h,
             scale: self.f.scale,
             vol: self.wet.vol.as_mut_ptr(),
             lat: self.wet.lat.as_mut_ptr(),
@@ -575,7 +586,32 @@ pub(crate) unsafe fn drag_on(
             b.prev[0] = Some(cur);
         }
     }
-    bounds
+    // whole-canvas pixels → buffer pixels
+    bounds.map(|(x0, y0, x1, y1)| (x0 - sf.ox, y0 - sf.oy, x1 - sf.ox, y1 - sf.oy))
+}
+
+/// How much of a capsule's contact a bristle is assumed to make outside a
+/// crop window (where there is no canvas to feel).
+const GHOST_TOUCH: f32 = 0.8;
+
+/// Summed coverage of the capsule a–b (radius rb, pixels) over rect `r`:
+/// its geometric footprint, whatever the canvas under it.
+fn capsule_cover(a: (f32, f32), b: (f32, f32), rb: f32, r: (usize, usize, usize, usize)) -> f32 {
+    let (dx, dy) = (b.0 - a.0, b.1 - a.1);
+    let seg2 = dx * dx + dy * dy;
+    let mut sum = 0.0f32;
+    for y in r.1..r.3 {
+        for x in r.0..r.2 {
+            let (px, py) = (x as f32 + 0.5, y as f32 + 0.5);
+            let t = if seg2 > 1e-8 { (((px - a.0) * dx + (py - a.1) * dy) / seg2).clamp(0.0, 1.0) } else { 0.0 };
+            let (qx, qy) = (a.0 + dx * t - px, a.1 + dy * t - py);
+            let dist = (qx * qx + qy * qy).sqrt();
+            if dist <= rb + 0.5 {
+                sum += 1.0 - smoothstep(rb * 0.5, rb + 0.5, dist);
+            }
+        }
+    }
+    sum
 }
 
 /// Smooth 1-D value noise, −1..1.
@@ -606,19 +642,33 @@ unsafe fn exchange(
     bounds: &mut Bounds,
 ) {
     unsafe {
-        let (w, h) = (sf.w, sf.h);
+        // pixel coordinates are whole-canvas ones; buffer index of (x, y) is
+        // (y - oy) * bw + x - ox
+        let (w, h) = (sf.fw, sf.fh);
+        let (ox, oy, bw_buf) = (sf.ox, sf.oy, sf.w);
         let s = sf.scale;
         let px_area = 1.0 / (s * s);
-        let x0 = ((a.0.min(b.0) - rb - 1.0).floor().max(0.0)) as usize;
-        let y0 = ((a.1.min(b.1) - rb - 1.0).floor().max(0.0)) as usize;
-        let x1 = ((a.0.max(b.0) + rb + 1.0).ceil().max(0.0) as usize).min(w);
-        let y1 = ((a.1.max(b.1) + rb + 1.0).ceil().max(0.0) as usize).min(h);
-        if x1 <= x0 || y1 <= y0 {
+        let cx0 = ((a.0.min(b.0) - rb - 1.0).floor().max(0.0)) as usize;
+        let cy0 = ((a.1.min(b.1) - rb - 1.0).floor().max(0.0)) as usize;
+        let cx1 = ((a.0.max(b.0) + rb + 1.0).ceil().max(0.0) as usize).min(w);
+        let cy1 = ((a.1.max(b.1) + rb + 1.0).ceil().max(0.0) as usize).min(h);
+        if cx1 <= cx0 || cy1 <= cy0 {
             return;
         }
         let (dx, dy) = (b.0 - a.0, b.1 - a.1);
         let seg2 = dx * dx + dy * dy;
         let seg = seg2.sqrt();
+        // a crop render holds only a window of the canvas: clip to it
+        let (x0, y0, x1, y1) = (cx0.max(ox), cy0.max(oy), cx1.min(ox + sf.w), cy1.min(oy + sf.h));
+        let windowed = (x0, y0, x1, y1) != (cx0, cy0, cx1, cy1);
+        if x1 <= x0 || y1 <= y0 {
+            // outside the window the canvas isn't there to feel: assume the
+            // bristle touched and laid paint as usual (so it arrives in the
+            // window about as spent as in a whole render), lifting none
+            let travel = (seg / s).max(rb / s * 0.5);
+            br.vol *= 1.0 - (1.0 - (-travel / tool.run).exp()) * GHOST_TOUCH;
+            return;
+        }
         let (mx, my) = if seg > 1e-4 { (dx / seg, dy / seg) } else { (0.0, 0.0) };
         let (nx, ny) = (-my, mx);
         // lowest surface height this bristle reaches down to
@@ -641,7 +691,7 @@ unsafe fn exchange(
                 }
                 let cov = 1.0 - smoothstep(rb * 0.5, rb + 0.5, dist);
                 sum_cov += cov;
-                let i = y * w + x;
+                let i = (y - oy) * bw_buf + x - ox;
                 let surf = (*sf.base.add(i) + 0.35 * *sf.vol.add(i)).min(1.5);
                 // soft hair bends down into the valleys of the weave; stiff hog
                 // bristles ride on the peaks
@@ -649,7 +699,7 @@ unsafe fn exchange(
                 let contact = smoothstep(th - give, th + 0.2, surf);
                 let mut wt = cov * contact;
                 if let Some(m) = clip {
-                    wt *= m.data[i];
+                    wt *= m.data[y * w + x];
                 }
                 wts[(y - y0) * bw + (x - x0)] = wt;
                 sum_w += wt;
@@ -665,7 +715,9 @@ unsafe fn exchange(
         // bristle skimming the weave peaks keeps most of its load
         let touch = (sum_w / sum_cov.max(1e-6)).min(1.0);
         let dep_total = br.vol * (1.0 - (-travel / tool.run).exp()) * touch;
-        let dep_per_w = dep_total / sum_w / px_area;
+        // a capsule cut by the window edge lays only the window's share there
+        let share = if windowed { sum_cov / capsule_cover(a, b, rb, (cx0, cy0, cx1, cy1)).max(1e-6) } else { 1.0 };
+        let dep_per_w = dep_total * share.min(1.0) / sum_w / px_area;
         // film splitting: a bristle in wet paint always lifts some of it, even
         // when loaded; a spent bristle drinks more
         let hunger = 0.35 + 0.65 * (1.0 - br.vol / full).clamp(0.0, 1.0).powf(1.5);
@@ -682,7 +734,7 @@ unsafe fn exchange(
                 if wt <= 0.0 {
                     continue;
                 }
-                let i = y * w + x;
+                let i = (y - oy) * bw_buf + x - ox;
                 let vol = &mut *sf.vol.add(i);
                 // one stroke lifts only part of the film
                 if *sf.touched.add(i) != id {
@@ -719,11 +771,13 @@ unsafe fn exchange(
                         let side = if (px - a.0) * nx + (py - a.1) * ny >= 0.0 { 1.0 } else { -1.0 };
                         let tx = px + (nx * side * 0.75 + mx * 0.45) * off;
                         let ty = py + (ny * side * 0.75 + my * 0.45) * off;
-                        if tx >= 0.0 && ty >= 0.0 && (tx as usize) < w && (ty as usize) < h {
-                            let j = ty as usize * w + tx as usize;
+                        // (paint pushed out of a crop window stays put)
+                        if tx >= ox as f32 && ty >= oy as f32 && (tx as usize) < w.min(ox + sf.w) && (ty as usize) < h.min(oy + sf.h) {
+                            let (tx, ty) = (tx as usize, ty as usize);
+                            let j = (ty - oy) * bw_buf + tx - ox;
                             // a clipped stroke can't push paint past its mask:
                             // only the accepted share moves, the rest stays
-                            let m = m * clip.map_or(1.0, |c| c.data[j]);
+                            let m = m * clip.map_or(1.0, |c| c.data[ty * w + tx]);
                             if j != i && m > 0.0 {
                                 let l = *sf.lat.add(i);
                                 let hd = *sf.hide.add(i);
@@ -745,7 +799,7 @@ unsafe fn exchange(
             mix_into(&mut br.vol, &mut br.lat, &mut br.hide, got_v, &got_l, got_h);
         }
         let pad = (off + 2.0) as usize;
-        grow(bounds, x0.saturating_sub(pad), y0.saturating_sub(pad), (x1 + pad).min(w), (y1 + pad).min(h));
+        grow(bounds, x0.saturating_sub(pad).max(ox), y0.saturating_sub(pad).max(oy), (x1 + pad).min(ox + sf.w), (y1 + pad).min(oy + sf.h));
     }
 }
 

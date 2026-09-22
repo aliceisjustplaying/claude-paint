@@ -893,7 +893,15 @@ fn rsegs(net: &Network, k: &Cracks) -> Vec<RSeg> {
 }
 
 /// Rasterize the network onto a w × h pixel grid of `px` mm per pixel.
+#[cfg(test)]
 pub(crate) fn raster(net: &Network, k: &Cracks, w: usize, h: usize, px: f32) -> Raster {
+    raster_window(net, k, (0, 0, w, h), px)
+}
+
+/// Rasterize the network onto the window `win` = (x0, y0, w, h) of the
+/// pixel grid (a crop render); pixel centers stay whole-canvas ones.
+pub(crate) fn raster_window(net: &Network, k: &Cracks, win: (usize, usize, usize, usize), px: f32) -> Raster {
+    let (ox, oy, w, h) = win;
     let segs = rsegs(net, k);
     let width = k.width_um * 1e-3; // mm
     let sh = 0.6 * width; // worn shoulder each side
@@ -910,8 +918,12 @@ pub(crate) fn raster(net: &Network, k: &Cracks, w: usize, h: usize, px: f32) -> 
     let nb = h.div_ceil(BAND);
     let mut bins: Vec<Vec<u32>> = vec![Vec::new(); nb];
     for (i, s) in segs.iter().enumerate() {
-        let y0 = ((s.a[1].min(s.b[1]) - reach) / px).floor().max(0.0) as usize / BAND;
-        let y1 = (((s.a[1].max(s.b[1]) + reach) / px).floor().max(0.0) as usize / BAND).min(nb - 1);
+        let (ga, gb) = (((s.a[1].min(s.b[1]) - reach) / px).floor().max(0.0) as usize, ((s.a[1].max(s.b[1]) + reach) / px).floor().max(0.0) as usize);
+        if gb < oy || ga >= oy + h {
+            continue;
+        }
+        let y0 = ga.saturating_sub(oy) / BAND;
+        let y1 = ((gb - oy) / BAND).min(nb - 1);
         for b in bins.iter_mut().take(y1 + 1).skip(y0) {
             b.push(i as u32);
         }
@@ -931,10 +943,12 @@ pub(crate) fn raster(net: &Network, k: &Cracks, w: usize, h: usize, px: f32) -> 
             let mut cup = vec![0.0f32; w * rows];
             for &si in &bins[bi] {
                 let s = &segs[si as usize];
-                let xa = ((s.a[0].min(s.b[0]) - reach) / px).floor().max(0.0) as usize;
-                let xb = (((s.a[0].max(s.b[0]) + reach) / px).ceil().max(0.0) as usize).min(w - 1);
-                let ya = (((s.a[1].min(s.b[1]) - reach) / px).floor().max(y0 as f32) as usize).max(y0);
-                let yb = (((s.a[1].max(s.b[1]) + reach) / px).ceil().max(0.0) as usize).min(y0 + rows - 1);
+                // whole-canvas pixels, clipped to this band of the window
+                let (gy0, gy1) = (oy + y0, oy + y0 + rows - 1);
+                let xa = (((s.a[0].min(s.b[0]) - reach) / px).floor().max(0.0) as usize).max(ox);
+                let xb = (((s.a[0].max(s.b[0]) + reach) / px).ceil().max(0.0) as usize).min(ox + w - 1);
+                let ya = (((s.a[1].min(s.b[1]) - reach) / px).floor().max(gy0 as f32) as usize).max(gy0);
+                let yb = (((s.a[1].max(s.b[1]) + reach) / px).ceil().max(0.0) as usize).min(gy1);
                 if ya > yb || xa > xb {
                     continue;
                 }
@@ -952,7 +966,7 @@ pub(crate) fn raster(net: &Network, k: &Cracks, w: usize, h: usize, px: f32) -> 
                         let wd = width * wf;
                         let core = band_cover(d, wd, fr);
                         let shd = band_cover(d, wd + 2.0 * sh * wf, fr);
-                        let i = (y - y0) * w + x;
+                        let i = (y - gy0) * w + x - ox;
                         cv[i] = cv[i].max(core);
                         shv[i] = shv[i].max(shd);
                         // groove: open crack at full depth, rounded shoulders shallow
@@ -975,11 +989,13 @@ impl Canvas {
     /// edges) and let grime settle in it.
     pub fn crack(&mut self, k: &Cracks) {
         self.dry();
-        let (w, h) = (self.f.w, self.f.h);
+        let f = self.f;
         let px = self.px_mm();
         let pitch = self.linen.map_or([10.0 / 14.0, 10.0 / 12.0], |l| [10.0 / l.warp_per_cm, 10.0 / l.weft_per_cm]);
-        let net = network(k, [w as f32 * px, h as f32 * px], pitch);
-        let r = raster(&net, k, w, h, px);
+        // the network grows over the whole canvas (a crop render too, so its
+        // cracks are the same ones); only the window is rasterized
+        let net = network(k, [f.full_w as f32 * px, f.full_h as f32 * px], pitch);
+        let r = raster_window(&net, k, (f.x0, f.y0, f.w, f.h), px);
         self.surf_gen += 1;
         self.height.par_iter_mut().zip(&r.dz).for_each(|(z, d)| *z += d);
         // grime: soot and dust in a little oil, dark and absorbing

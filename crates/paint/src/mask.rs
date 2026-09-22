@@ -36,14 +36,17 @@ impl Mask {
     /// Antialiased fill of a shape.
     pub fn from_shape(f: Frame, shape: Shape) -> Self {
         let mut m = Mask::empty(f);
-        if let Some(path) = shape.path() {
+        let paths = shape.paths();
+        if !paths.is_empty() {
             let mut tm = tiny_skia::Mask::new(f.w as u32, f.h as u32).unwrap();
-            tm.fill_path(
-                &path,
-                tiny_skia::FillRule::Winding,
-                true,
-                tiny_skia::Transform::from_scale(f.scale, f.scale),
-            );
+            for path in &paths {
+                tm.fill_path(
+                    path,
+                    tiny_skia::FillRule::Winding,
+                    true,
+                    tiny_skia::Transform::from_scale(f.scale, f.scale),
+                );
+            }
             for (d, s) in m.data.iter_mut().zip(tm.data()) {
                 *d = *s as f32 / 255.0;
             }

@@ -52,6 +52,10 @@ pub struct Canvas {
     /// Accumulated paint film; thick paint fills in the canvas weave.
     pub film: Vec<f32>,
     pub weave: Option<Weave>,
+    /// Wet paint on top of the dry picture.
+    pub wet: crate::wet::Wet,
+    /// Canvas tooth (bare weave height, 0..1), built on first use.
+    pub(crate) tooth: Option<Vec<f32>>,
 }
 
 impl Canvas {
@@ -60,7 +64,15 @@ impl Canvas {
         let h = (width_px as f32 / aspect).round() as usize;
         let f = Frame { w: width_px, h, scale: width_px as f32 / Frame::WIDTH_UNITS };
         let n = width_px * h;
-        Canvas { f, px: vec![ground; n], height: vec![0.0; n], film: vec![0.0; n], weave: None }
+        Canvas {
+            f,
+            px: vec![ground; n],
+            height: vec![0.0; n],
+            film: vec![0.0; n],
+            weave: None,
+            wet: crate::wet::Wet::new(n),
+            tooth: None,
+        }
     }
 
     /// Use a woven linen support. `thread` ≈ 1.0–1.6 units looks like fine linen
@@ -129,6 +141,7 @@ impl Canvas {
         mode: Mix,
         color: impl Fn(f32, f32) -> Rgb + Sync,
     ) {
+        self.dry();
         match mask {
             Some(m) => self.apply_masked(m, |x, y, p, c| color::mix(p, color(x, y), c * opacity, mode)),
             None => self.apply(|x, y, p| color::mix(p, color(x, y), opacity, mode)),
@@ -149,6 +162,7 @@ impl Canvas {
         mask: Option<&Mask>,
         thickness: impl Fn(f32, f32) -> f32 + Sync,
     ) {
+        self.dry();
         match mask {
             Some(m) => self.apply_masked(m, |x, y, p, c| pigment.over(p, thickness(x, y) * c)),
             None => self.apply(|x, y, p| pigment.over(p, thickness(x, y))),
@@ -164,6 +178,7 @@ impl Canvas {
         c: Rgb,
         density: impl Fn(f32, f32) -> f32 + Sync,
     ) {
+        self.dry();
         let g = |x: f32, y: f32, p: Rgb, cov: f32| {
             let t = 1.0 - (-density(x, y).max(0.0) * cov).exp();
             color::mix(p, c, t, Mix::Linear)
@@ -229,6 +244,7 @@ impl Canvas {
     /// Light the surface relief (paint ridges + weave) from the upper left.
     /// `strength` ≈ 0.3–1.0; `gloss` adds a faint varnish sheen on ridges.
     pub fn relief(&mut self, strength: f32, gloss: f32) {
+        self.dry();
         let (w, h) = (self.f.w, self.f.h);
         let inv = 1.0 / self.f.scale;
         let weave = self.weave;
@@ -277,7 +293,7 @@ impl Canvas {
                 let hm = (hv[0] * hv[0] + hv[1] * hv[1] + hv[2] * hv[2]).sqrt();
                 let ndh = ((n[0] * hv[0] + n[1] * hv[1] + n[2] * hv[2]) / hm).max(0.0);
                 let flat = (l[2] + 1.0) / hm;
-                let spec = gloss * (ndh.powf(60.0) - flat.powf(60.0)).max(0.0);
+                let spec = (gloss * (ndh.powf(60.0) - flat.powf(60.0)).max(0.0)).min(gloss * 0.5);
                 let p = &mut row[x];
                 for c in 0..3 {
                     p[c] = (p[c] * shade + spec).max(0.0);
@@ -288,7 +304,8 @@ impl Canvas {
 
     /// Save as an 8-bit sRGB PNG with triangular dither (prevents banding in
     /// the long, subtle gradients Friedrich loves).
-    pub fn save(&self, path: impl AsRef<std::path::Path>) -> std::io::Result<()> {
+    pub fn save(&mut self, path: impl AsRef<std::path::Path>) -> std::io::Result<()> {
+        self.dry();
         let (w, h) = (self.f.w, self.f.h);
         let mut buf = vec![0u8; w * h * 3];
         buf.par_chunks_mut(w * 3).enumerate().for_each(|(y, row)| {
@@ -311,7 +328,7 @@ impl Canvas {
 }
 
 /// Plain-weave height in 0..1 at a point (units).
-fn weave_height(x: f32, y: f32, thread: f32, seed: u64) -> f32 {
+pub(crate) fn weave_height(x: f32, y: f32, thread: f32, seed: u64) -> f32 {
     use std::f32::consts::PI;
     let u = x / thread;
     let v = y / thread;
@@ -353,4 +370,28 @@ fn voronoi_edge(x: f32, y: f32, seed: u64) -> (f32, i64, i64) {
         }
     }
     ((d2 - d1) * 0.5, id1, id2)
+}
+
+impl Canvas {
+    /// Height of the bare canvas tooth at pixel `i`, 0..1 (0.5 if no weave).
+    pub(crate) fn ensure_tooth(&mut self) {
+        if self.tooth.is_some() {
+            return;
+        }
+        let (w, h) = (self.f.w, self.f.h);
+        let inv = 1.0 / self.f.scale;
+        let mut t = vec![0.5f32; w * h];
+        if let Some(wv) = self.weave {
+            // below ~2px per thread the weave can't be resolved; blend to flat
+            let vis = smoothstep(1.2, 3.0, wv.thread * self.f.scale);
+            t.par_chunks_mut(w).enumerate().for_each(|(y, row)| {
+                let yu = (y as f32 + 0.5) * inv;
+                for (x, v) in row.iter_mut().enumerate() {
+                    let th = weave_height((x as f32 + 0.5) * inv, yu, wv.thread, wv.seed);
+                    *v = 0.5 + (th - 0.5) * vis;
+                }
+            });
+        }
+        self.tooth = Some(t);
+    }
 }

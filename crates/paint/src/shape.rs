@@ -5,6 +5,8 @@ use tiny_skia::{Path, PathBuilder};
 #[derive(Default)]
 pub struct Shape {
     pb: PathBuilder,
+    /// Independently filled parts (their windings never cancel each other).
+    parts: Vec<Path>,
 }
 
 impl Shape {
@@ -95,6 +97,60 @@ impl Shape {
         self.pb.line_to(curve[curve.len() - 1].0, bottom);
         self.pb.close();
         self
+    }
+
+    /// A tapered band along a polyline: `widths[i]` is the full width at
+    /// `pts[i]`. Built from per-segment quads plus round joints, each filled
+    /// on its own, so sharp bends never leave holes.
+    pub fn ribbon(mut self, pts: &[(f32, f32)], widths: &[f32]) -> Self {
+        let n = pts.len();
+        if n < 2 {
+            return self;
+        }
+        let wid = |i: usize| widths[i.min(widths.len() - 1)] * 0.5;
+        for i in 0..n - 1 {
+            let (a, b) = (pts[i], pts[i + 1]);
+            let (dx, dy) = (b.0 - a.0, b.1 - a.1);
+            let l = (dx * dx + dy * dy).sqrt();
+            if l < 1e-4 {
+                continue;
+            }
+            let (nx, ny) = (-dy / l, dx / l);
+            let (ha, hb) = (wid(i), wid(i + 1));
+            let mut pb = PathBuilder::new();
+            pb.move_to(a.0 + nx * ha, a.1 + ny * ha);
+            pb.line_to(b.0 + nx * hb, b.1 + ny * hb);
+            pb.line_to(b.0 - nx * hb, b.1 - ny * hb);
+            pb.line_to(a.0 - nx * ha, a.1 - ny * ha);
+            pb.close();
+            if let Some(p) = pb.finish() {
+                self.parts.push(p);
+            }
+        }
+        for i in 0..n {
+            let hw = wid(i);
+            if hw > 0.03 {
+                if let Some(p) = PathBuilder::from_circle(pts[i].0, pts[i].1, hw) {
+                    self.parts.push(p);
+                }
+            }
+        }
+        self
+    }
+
+    /// Merge another shape's parts into this one (filled independently).
+    pub fn add(mut self, other: Shape) -> Self {
+        self.parts.extend(other.paths());
+        self
+    }
+
+    /// All independently filled paths.
+    pub fn paths(self) -> Vec<Path> {
+        let mut v = self.parts;
+        if let Some(p) = self.pb.finish() {
+            v.push(p);
+        }
+        v
     }
 
     pub fn path(self) -> Option<Path> {

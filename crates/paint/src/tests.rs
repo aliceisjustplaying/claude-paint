@@ -218,3 +218,43 @@ fn clipped_plough_stays_inside_mask() {
     let outside: usize = (0..c.wet.vol.len()).filter(|&i| m.data[i] == 0.0 && c.wet.vol[i] > 0.0).count();
     assert_eq!(outside, 0);
 }
+
+/// Leveling moves wet paint, it neither destroys it nor makes it from the
+/// dry relief underneath (cases from the adversarial review).
+#[test]
+fn settle_conserves_paint() {
+    let setup = |relief: &dyn Fn(usize, usize) -> f32| {
+        let mut c = Canvas::new(101, 1.0, hex("#808080")).with_size_mm(10.1);
+        for y in 0..c.f.h {
+            for x in 0..c.f.w {
+                c.height[y * c.f.w + x] = relief(x, y);
+            }
+        }
+        c
+    };
+    let (w, h) = (101usize, 101usize);
+    let check = |name: &str, c: &mut Canvas, add: Vec<f32>, stiff: f32| {
+        let before: f32 = add.iter().sum();
+        let t = c.settle((0, 0, w, h), &add, &vec![stiff; w * h]);
+        let after: f32 = t.iter().sum();
+        assert!((after - before).abs() <= before * 0.03, "{name}: {before} -> {after}");
+        assert!(t.iter().zip(&add).all(|(&ti, &a)| ti >= 0.0 && (a > 0.0 || ti == 0.0)), "{name}: paint on dry pixels");
+    };
+    // one fluid deposit on a flat surface
+    let mut c = setup(&|_, _| 0.0);
+    let mut add = vec![0.0; w * h];
+    add[50 * w + 50] = 25.0;
+    check("isolated", &mut c, add, 0.05);
+    // a deposit in a one-pixel hole among dry 160 µm relief
+    let mut c = setup(&|x, y| if x == 50 && y == 50 { 0.0 } else { 160.0 });
+    let mut add = vec![0.0; w * h];
+    add[50 * w + 50] = 25.0;
+    check("depression", &mut c, add, 0.05);
+    // a thin uniform layer over alternating columns: pools, conserved
+    let mut c = setup(&|x, _| if x % 2 == 0 { 160.0 } else { 0.0 });
+    check("columns", &mut c, vec![5.0; w * h], 0.05);
+    // stiff paint barely moves
+    let mut c = setup(&|x, _| if x % 2 == 0 { 160.0 } else { 0.0 });
+    check("columns stiff", &mut c, vec![5.0; w * h], 1.0);
+}
+

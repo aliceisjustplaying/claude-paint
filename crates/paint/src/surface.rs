@@ -208,6 +208,29 @@ impl Canvas {
                 row[x] = (lev - old[i]).max(0.0);
             }
         });
+        // conserve paint: the leveled shape says where the wet film gathers,
+        // but only the paint that was put down can move, and only nearby.
+        // Rescale by the ratio of paint laid to paint kept, both averaged
+        // over the leveling distance, so each neighborhood keeps its volume.
+        let laid = box_blur(&box_blur(add, rw, rh, r2), rw, rh, r2);
+        let kept = box_blur(&box_blur(&out, rw, rh, r2), rw, rh, r2);
+        out.par_iter_mut().enumerate().for_each(|(i, o)| {
+            if add[i] <= 0.0 {
+                *o = 0.0;
+            } else if kept[i] > laid[i] * 1e-3 {
+                *o *= laid[i] / kept[i];
+            } else {
+                // everything drained away: nowhere to pool, keep it in place
+                *o = add[i];
+            }
+        });
+        // the local ratio is only approximately conservative (blur edges);
+        // make the total exact
+        let (sa, so): (f64, f64) = (add.iter().map(|&v| v as f64).sum(), out.iter().map(|&v| v as f64).sum());
+        if so > 0.0 {
+            let k = (sa / so) as f32;
+            out.par_iter_mut().for_each(|o| *o *= k);
+        }
         for y in 0..rh {
             for x in 0..rw {
                 let i = y * rw + x;

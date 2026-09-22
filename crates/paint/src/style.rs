@@ -13,6 +13,11 @@ use crate::handling::Handling;
 use crate::mask::Mask;
 use crate::surface::Linen;
 
+/// Mean thickness (µm) a brushed ground lays per unit of load with the
+/// priming brush and coverage used in `Style::prepare` (measured: 0.2 → 36,
+/// 0.35 → 67, 0.7 → 141 µm).
+const BRUSHED_UM_PER_LOAD: f32 = 195.0;
+
 /// How a ground layer is put on.
 #[derive(Clone, Copy, Debug)]
 pub enum Apply {
@@ -94,7 +99,7 @@ impl Style {
             ground: vec![
                 Ground { color: hex("#9a5a36"), hiding: 0.8, um: 110.0, stiff: 0.25, apply: Apply::Knife { texture: 0.35 } },
                 Ground { color: hex("#b08457"), hiding: 0.8, um: 70.0, stiff: 0.3, apply: Apply::Knife { texture: 0.3 } },
-                Ground { color: hex("#a9785a"), hiding: 0.8, um: 20.0, stiff: 0.35, apply: Apply::Brush },
+                Ground { color: hex("#a9785a"), hiding: 0.8, um: 60.0, stiff: 0.35, apply: Apply::Brush },
             ],
             broad: Tool { lay: 0.55, push: 0.03, ragged: 0.4, ..Tool::filbert(22.0) },
             body: Tool { lay: 0.7, push: 0.06, ..Tool::filbert(9.0) },
@@ -134,6 +139,9 @@ impl Style {
             .with_size_mm(self.width_mm)
             .with_linen(Linen { seed, ..self.linen });
         for (k, g) in self.ground.iter().enumerate() {
+            if g.um <= 0.0 {
+                continue;
+            }
             let s = seed * 31 + k as u64;
             match g.apply {
                 Apply::Knife { texture } => c.prime(g.color, g.hiding, g.um, g.stiff, texture, s),
@@ -152,7 +160,7 @@ impl Style {
                         .length(250.0, 600.0)
                         .coverage(3.5)
                         .pressure(0.8, 0.95)
-                        .dips(1, 1.0 * g.stiff, 0.3)
+                        .dips(1, (g.um / BRUSHED_UM_PER_LOAD).min(1.0), 0.3)
                         .jitter(0.004, 0.002)
                         .shake(0.15);
                     c.work(&all, &h, s);

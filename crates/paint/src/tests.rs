@@ -258,3 +258,21 @@ fn settle_conserves_paint() {
     check("columns stiff", &mut c, vec![5.0; w * h], 1.0);
 }
 
+
+
+/// A brushed ground lays about the thickness it asks for, and none at 0.
+#[test]
+fn brushed_ground_honors_thickness() {
+    use crate::style::{Apply, Ground};
+    let mean_um = |um: f32| {
+        let mut st = Style::friedrich();
+        st.ground = vec![Ground { color: hex("#a9785a"), hiding: 0.8, um, stiff: 0.35, apply: Apply::Brush }];
+        let c = st.prepare(300, 1.5, 3);
+        c.film.iter().sum::<f32>() / c.film.len() as f32 * crate::surface::COAT_UM
+    };
+    assert_eq!(mean_um(0.0), 0.0);
+    for want in [30.0f32, 90.0] {
+        let got = mean_um(want);
+        assert!((got - want).abs() < want * 0.2, "asked {want} µm, got {got}");
+    }
+}

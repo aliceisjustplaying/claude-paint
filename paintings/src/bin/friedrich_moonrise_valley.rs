@@ -21,6 +21,8 @@ fn main() {
     let mut rng = Rng::new(o.seed);
     let seed = o.seed as u32;
     let st = Style::friedrich();
+    // every color is mixed on the palette from Friedrich's own tube paints
+    let tube_mix = |h: &str| st.palette.mix(hex(h)).color;
 
     // ---- ground and priming
     let mut c = st.prepare(o.width, 1.4, o.seed);
@@ -83,7 +85,7 @@ fn main() {
         let len = rng.range(120.0, 380.0);
         let v = y / h;
         let col = if v < 0.3 { gradient(&[(0.0, hex("#2c3448")), (1.0, hex("#5d5f6c"))], v / 0.3, Mix::Pigment) } else { gradient(&[(0.0, hex("#8f7f7a")), (1.0, hex("#e2c69c"))], (v - 0.3) / 0.2, Mix::Pigment) };
-        fil.reload(Paint { color: col, hiding: 0.45, stiff: 0.5 }, 0.8 * 0.5);
+        fil.reload(Paint { color: st.palette.mix(col).color, hiding: 0.45, stiff: 0.5 }, 0.8 * 0.5);
         let sag = rng.range(-3.0, 3.0);
         let pts = vec![(x0, y), (x0 + len * 0.35, y + sag), (x0 + len * 0.7, y + sag * 0.5 - 1.5), (x0 + len, y - 1.0)];
         c.drag(&mut fil, &Gesture::new(pts).pressure(rng.range(0.35, 0.6), rng.range(0.2, 0.4)).ramps(0.2, 0.35).orient(Orient::Across), Some(&sky));
@@ -100,7 +102,7 @@ fn main() {
             let a = a0 + j as f32 * 0.18;
             (mx + r * a.cos(), my + r * a.sin())
         }).collect();
-        glow.reload(Paint { color: hex("#dcdad2"), hiding: 0.7, stiff: 0.4 }, 0.7 * 0.4);
+        glow.reload(Paint { color: tube_mix("#dcdad2"), hiding: 0.7, stiff: 0.4 }, 0.7 * 0.4);
         c.drag(&mut glow, &Gesture::new(pts).pressure(0.5, 0.4).ramps(0.3, 0.4).orient(Orient::Across), Some(&sky));
     }
     if let Some(b) = st.blend() {
@@ -126,15 +128,15 @@ fn main() {
         }).collect()
     };
     let mut cres = Held::new(Tool::round_sable(mr * 0.24), 42);
-    cres.load(Paint { color: hex("#e8ddb6"), hiding: 0.95, stiff: 0.8 }, 1.0 * 0.8);
+    cres.load(Paint { color: tube_mix("#e8ddb6"), hiding: 0.95, stiff: 0.8 }, 1.0 * 0.8);
     c.drag(&mut cres, &Gesture::new(arc(mr * 0.88, 1.45, 16)).pressure(0.85, 0.85).ramps(0.5, 0.5).orient(Orient::Across), None);
-    cres.reload(Paint { color: hex("#eee5c2"), hiding: 0.95, stiff: 0.8 }, 1.0 * 0.8);
+    cres.reload(Paint { color: tube_mix("#eee5c2"), hiding: 0.95, stiff: 0.8 }, 1.0 * 0.8);
     c.drag(&mut cres, &Gesture::new(arc(mr * 0.74, 0.8, 10)).pressure(0.6, 0.6).ramps(0.5, 0.5).orient(Orient::Across), None);
     let mut hi = Held::new(Tool::round_sable(mr * 0.16), 44);
-    hi.load(Paint { color: hex("#f8f2d8"), hiding: 0.97, stiff: 0.9 }, 1.0 * 0.9);
+    hi.load(Paint { color: tube_mix("#f8f2d8"), hiding: 0.97, stiff: 0.9 }, 1.0 * 0.9);
     c.drag(&mut hi, &Gesture::new(arc(mr * 0.76, 0.45, 6)).pressure(0.8, 0.8).ramps(0.4, 0.4).orient(Orient::Across), None);
     let mut star = Held::new(Tool::round_sable(1.6), 43);
-    star.load(Paint { color: hex("#f6f0d8"), hiding: 0.95, stiff: 1.0 }, 1.0 * 1.2);
+    star.load(Paint { color: tube_mix("#f6f0d8"), hiding: 0.95, stiff: 1.0 }, 1.0 * 1.2);
     let (sx, sy) = (w * 0.77, h * 0.2);
     c.drag(&mut star, &Gesture::new(vec![(sx, sy - 0.4), (sx, sy + 0.4)]).pressure(1.0, 1.0).ramps(0.0, 0.0), None);
     c.dry();
@@ -154,7 +156,7 @@ fn main() {
         let x = rng.range(0.0, w);
         let _ = i;
         let hgt = rng.range(5.0, 11.0);
-        trees::spruce(&mut c, (x, ridge2(x) + hgt * 0.35), hgt, hex("#353846"), rng.next_u64());
+        trees::spruce(&mut c, (x, ridge2(x) + hgt * 0.35), hgt, tube_mix("#353846"), rng.next_u64());
     }
     if o.stage(&mut c, "ridges") {
         return;
@@ -185,7 +187,7 @@ fn main() {
         let x0 = rng.range(-80.0, w * 0.9);
         let y = mt(x0) - rng.range(4.0, 26.0);
         let len = rng.range(90.0, 260.0);
-        wisp.reload(Paint { color: hex("#a9a29f"), hiding: 0.2, stiff: 0.25 }, 0.5 * 0.25);
+        wisp.reload(Paint { color: tube_mix("#a9a29f"), hiding: 0.2, stiff: 0.25 }, 0.5 * 0.25);
         let pts = vec![(x0, y), (x0 + len * 0.5, y + rng.range(-2.0, 2.0)), (x0 + len, y + rng.range(-2.0, 3.0))];
         c.drag(&mut wisp, &Gesture::new(pts).pressure(rng.range(0.25, 0.4), 0.15).ramps(0.4, 0.5).orient(Orient::Across), None);
     }
@@ -218,10 +220,10 @@ fn main() {
     // a church in the mist, far right: tower and spire, two sable strokes
     let (cx, cy) = (w * 0.86, mist_top + 10.0);
     let mut sp = Held::new(Tool::round_sable(3.0), 51);
-    sp.load(Paint { color: hex("#62636a"), hiding: 0.9, stiff: 0.6 }, 1.0 * 0.6);
+    sp.load(Paint { color: tube_mix("#62636a"), hiding: 0.9, stiff: 0.6 }, 1.0 * 0.6);
     c.drag(&mut sp, &Gesture::new(vec![(cx, cy), (cx, cy - 18.0)]).pressure(1.0, 1.0).ramps(0.0, 0.0), None);
     let mut sp2 = Held::new(Tool::round_sable(2.6), 52);
-    sp2.load(Paint { color: hex("#62636a"), hiding: 0.9, stiff: 0.6 }, 1.0 * 0.6);
+    sp2.load(Paint { color: tube_mix("#62636a"), hiding: 0.9, stiff: 0.6 }, 1.0 * 0.6);
     c.drag(&mut sp2, &Gesture::new(vec![(cx, cy - 17.0), (cx, cy - 31.0)]).pressure(1.0, 0.1).ramps(0.0, 0.9), None);
     c.dry();
     // the fog bank lies in level layers: a pale semi-opaque KM layer, thin at
@@ -260,7 +262,7 @@ fn main() {
     for _ in 0..40 {
         let gx = rng.range(0.0, 540.0);
         let gy = ledge(gx) + rng.range(0.5, 3.0);
-        rig.reload(Paint { color: hex("#2a241d"), hiding: 0.85, stiff: 0.6 }, 1.0 * 0.6);
+        rig.reload(Paint { color: tube_mix("#2a241d"), hiding: 0.85, stiff: 0.6 }, 1.0 * 0.6);
         for _ in 0..rng.range(2.0, 7.0) as u32 {
             let x = gx + rng.range(-4.0, 4.0);
             let hg = rng.range(3.0, 9.0);
@@ -279,7 +281,7 @@ fn main() {
     oak.lean = 0.12;
     oak.depth = 5;
     oak.roots = 3;
-    oak.paint(&mut c, hex("#1f1a16"), Some(hex("#3a322b")), o.seed * 100 + 40);
+    oak.paint(&mut c, tube_mix("#1f1a16"), Some(tube_mix("#3a322b")), o.seed * 100 + 40);
     c.dry();
     if o.stage(&mut c, "oak") {
         return;
@@ -288,8 +290,8 @@ fn main() {
     // ---- the two companions, near the edge, looking toward the moon
     let fh = h * 0.12;
     let bx = 330.0;
-    let sh = figures::man_in_cape(&mut c, (bx + 26.0, ledge(bx + 26.0) + 1.5), fh, hex("#1d201b"), hex("#110f0d"), hex("#221b15"), Some(hex("#b9a582")), o.seed * 100 + 50);
-    figures::youth_in_frock(&mut c, (bx, ledge(bx) - 1.0), fh * 0.98, hex("#1e221c"), hex("#110f0d"), hex("#2a2118"), hex("#b8b09c"), Some(sh), Some(hex("#b9a582")), o.seed * 100 + 51);
+    let sh = figures::man_in_cape(&mut c, (bx + 26.0, ledge(bx + 26.0) + 1.5), fh, tube_mix("#1d201b"), tube_mix("#110f0d"), tube_mix("#221b15"), Some(tube_mix("#b9a582")), o.seed * 100 + 50);
+    figures::youth_in_frock(&mut c, (bx, ledge(bx) - 1.0), fh * 0.98, tube_mix("#1e221c"), tube_mix("#110f0d"), tube_mix("#2a2118"), tube_mix("#b8b09c"), Some(sh), Some(tube_mix("#b9a582")), o.seed * 100 + 51);
     if o.stage(&mut c, "figures") {
         return;
     }

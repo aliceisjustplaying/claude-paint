@@ -29,3 +29,15 @@ Ideas for next
   hand-placed polygon points.
 - Oak generator (gnarled, recursive, with twig density falloff).
 - Fog that fills valleys by depth, not just by y.
+
+## Engine v1 lessons (painterly pass)
+- Flat `paint()` fills read as digital. Lay in thin (~0.85), then cover with
+  `fill_strokes`: broad wet-into-wet (pickup 0.2–0.3), then finer, then a dry
+  blender at LOW opacity (~0.3). A blender at 0.6 erases every stroke.
+- Per-stroke color jitter needs to be ~0.03 OKLab L to survive glazing; 0.015
+  disappears.
+- Craquelure: hairline (0.012 × cell), random strength per crack segment,
+  clustered. Uniform full-strength cracks look like reptile skin / dried mud.
+- Relief ~0.7 with impasto 0.3–0.45 gives visible bristle ridges at 3200px.
+- Still digital: fbm-glaze clouds look like smoke. Clouds need shape: paint
+  them as lit forms with strokes along their contours.

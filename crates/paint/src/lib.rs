@@ -52,3 +52,5 @@ pub fn smoothstep(e0: f32, e1: f32, x: f32) -> f32 {
 pub fn lerp(a: f32, b: f32, t: f32) -> f32 {
     a + (b - a) * t
 }
+#[cfg(test)]
+mod tests;

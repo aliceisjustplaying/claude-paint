@@ -162,7 +162,7 @@ impl Tool {
 }
 
 #[derive(Clone, Debug)]
-struct Bristle {
+pub(crate) struct Bristle {
     /// Root offset in the brush frame (x along the wide axis), roughly −1..1.
     rx: f32,
     ry: f32,
@@ -172,7 +172,7 @@ struct Bristle {
     bend: (f32, f32),
     seed: u64,
     prev: [Option<(f32, f32)>; 2],
-    vol: f32,
+    pub(crate) vol: f32,
     lat: Latent,
     hide: Prop,
 }
@@ -180,7 +180,7 @@ struct Bristle {
 /// A brush in the hand, with paint in its bristles.
 pub struct Held {
     pub tool: Tool,
-    bristles: Vec<Bristle>,
+    pub(crate) bristles: Vec<Bristle>,
 }
 
 impl Held {

@@ -6,17 +6,18 @@ the painter. Target: agents composing new, "original" Friedrichs by Claude
 from first principles, no reference images. (Starting tweet: models painting
 via programs, pixel by pixel, no image model, no off-the-shelf art software.)
 
-## Phase 1: five parallel workstreams (worktrees ../claude-paint-<name>, branch <name>)
+## Phase 1: six parallel workstreams (worktrees ../claude-paint-<name>, branch <name>)
 
 | stream | branch | owns (to limit conflicts) |
 |---|---|---|
 | 1 color semantics | `color` | pigment.rs, palette.rs, wet.rs, color.rs; paint choice in handling.rs `finish_plan` |
-| 2 strokes: entropy + stippling | `strokes` | handling.rs stroke planning (centers, trace, new mark kinds), style.rs presets |
+| 2 strokes: entropy, coverage, presets | `strokes` | handling.rs stroke planning (centers, trace, curvature, order), style.rs presets |
+| 6 stipple | `stipple` | new stipple.rs (Canvas::stipple), bristle.rs dab/tip behavior |
 | 3 workflow: crop renders, checkpoints | `workflow` | canvas.rs Frame (origin offset), run.rs, new checkpoint module |
 | 4 form and light for solids | `form` | new form.rs, paintings/src/rocks.rs, study bin |
 | 5 motifs out of the engine | `motifs` | tree.rs → growth primitive; paintings/src/trees.rs, figures.rs |
 
-Integrator (main session) merges into main in order 1, 2, 3, 4, 5, re-records
+Integrator (main session) merges into main in order color, strokes, stipple, workflow, form, motifs, re-records
 the golden, pushes to github.com/aliceisjustplaying/claude-paint.
 
 ## Phase 2: adversarial code review

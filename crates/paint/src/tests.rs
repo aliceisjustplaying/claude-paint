@@ -144,3 +144,16 @@ fn scene_matches_golden() {
     let want = std::fs::read_to_string(path).expect("no golden: run with UPDATE_GOLDEN=1");
     assert_eq!(got, want.trim(), "rendering changed; if intended, rerun with UPDATE_GOLDEN=1");
 }
+
+#[test]
+fn km_zero_absorption_is_finite() {
+    let p = Pigment { k: [0.0; 3], s: [1.0; 3] };
+    let (r, t) = p.layer(1.0);
+    for i in 0..3 {
+        assert!((r[i] - 0.5).abs() < 1e-5 && (t[i] - 0.5).abs() < 1e-5, "{r:?} {t:?}");
+    }
+    // continuous with the general formula just above the threshold
+    let q = Pigment { k: [1e-5; 3], s: [1.0; 3] };
+    let (r2, t2) = q.layer(1.0);
+    assert!((r2[0] - r[0]).abs() < 1e-3 && (t2[0] - t[0]).abs() < 1e-3);
+}

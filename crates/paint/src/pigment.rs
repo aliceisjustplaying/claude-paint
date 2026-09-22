@@ -77,6 +77,13 @@ impl Pigment {
             }
             let a = 1.0 + k / s;
             let b = (a * a - 1.0).max(0.0).sqrt();
+            if b < 1e-3 {
+                // (nearly) non-absorbing: the b → 0 limit of the formulas below
+                let sx = s * x;
+                r[i] = sx / (1.0 + a * sx);
+                t[i] = 1.0 / (1.0 + a * sx);
+                continue;
+            }
             let bsx = (b * s * x).min(40.0);
             let (sh, ch) = (bsx.sinh(), bsx.cosh());
             let c = a * sh + b * ch;

@@ -36,7 +36,9 @@ Engine (`crates/paint`):
   knowledge, see `notes/research/`)
 - `hand` – writing small motifs as brush gestures in a local frame
 - `pigment` – Kubelka–Munk layers (Curtis et al. 1997); `color` – Mixbox, OKLab
-- `canvas` – glazes, relief lighting, craquelure, dithered PNG out
+- `crack` – craquelure grown crack by crack from film stress (T-junctions,
+  weave-following on thin grounds, cupping, grime)
+- `canvas` – glazes, relief lighting, dithered PNG out
 - `tree` – oaks grown by rules and painted with brushes
 - `mask`, `shape`, `path`, `noise`, `rng` – geometry and randomness
 

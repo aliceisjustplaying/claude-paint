@@ -182,32 +182,14 @@ fn main() {
     }
     lap("dune");
 
-    // ---- the monk, cut in last with a small sable, vertical strokes
+    // ---- the monk, last, written with a small sable (see paintings::figures)
     let mx = 318.0;
     let my = dune_top(mx) + 3.0;
     let s = 44.0;
-    let body = Shape::new().smooth_poly(&[
-        (mx - 0.035 * s, my - 0.88 * s),
-        (mx + 0.035 * s, my - 0.88 * s),
-        (mx + 0.10 * s, my - 0.83 * s),
-        (mx + 0.125 * s, my - 0.70 * s),
-        (mx + 0.10 * s, my - 0.52 * s),
-        (mx + 0.115 * s, my - 0.25 * s),
-        (mx + 0.14 * s, my - 0.02 * s),
-        (mx + 0.05 * s, my + 0.005 * s),
-        (mx - 0.06 * s, my),
-        (mx - 0.125 * s, my - 0.01 * s),
-        (mx - 0.10 * s, my - 0.30 * s),
-        (mx - 0.095 * s, my - 0.55 * s),
-        (mx - 0.105 * s, my - 0.78 * s),
-    ]);
-    let head = Shape::new().ellipse(mx + 0.004 * s, my - 0.935 * s, 0.047 * s, 0.062 * s);
-    let monk = Mask::from_shape(f, body).union(&Mask::from_shape(f, head));
     let shadow = Mask::from_shape(f, Shape::new().ellipse(mx + 0.02 * s, my + 0.01 * s, 0.22 * s, 0.025 * s)).blur(0.8);
     c.glaze(&Pigment::transparent(hex("#5a5446")), Some(&shadow), |_, _| 1.2);
-    let robe = st.detail().color(|_, _| hex("#100f0d")).angle(|_, _| std::f32::consts::FRAC_PI_2).angle_jitter(0.05).length(8.0, 20.0).coverage(8.0).paint(0.97, 1.0).pressure(0.85, 1.0);
-    c.work(&monk, &robe, o.seed * 100 + 7);
-    c.work(&monk, &robe, o.seed * 100 + 8);
+    c.dry();
+    paintings::figures::monk(&mut c, (mx, my), s, hex("#100f0d"), hex("#9d9072"), None, o.seed * 100 + 7);
     lap("monk");
 
     // ---- gulls: two flicks of a small sable each
@@ -225,7 +207,7 @@ fn main() {
     // ---- finish: aged varnish, cracks, light the surface
     c.dry();
     let varnish = Fbm::new(seed + 98, 3, 400.0);
-    c.glaze(&Pigment::transparent(hex("#e6d3a4")), None, |x, y| 0.4 + 0.12 * varnish.get(x, y));
+    c.glaze(&Pigment::varnish(hex("#e6d3a4")), None, |x, y| 0.4 + 0.12 * varnish.get(x, y));
     c.craquelure(12.0, 0.12, o.seed);
     c.relief(st.relief.0, st.relief.1);
     lap("finish");

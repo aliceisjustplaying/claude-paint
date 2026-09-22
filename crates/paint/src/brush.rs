@@ -126,6 +126,7 @@ impl Canvas {
         if pts.len() < 2 {
             return;
         }
+        self.surf_gen += 1;
         let s = self.f.scale;
         let mut rng = Rng::new(seed);
         let mut path = densify(&pts.iter().map(|&(x, y)| (x * s, y * s)).collect::<Vec<_>>());

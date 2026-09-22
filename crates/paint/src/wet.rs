@@ -108,6 +108,7 @@ impl Canvas {
     /// thickness = volume), add its thickness to the relief, clear the wet layer.
     pub fn dry(&mut self) {
         let Some((x0, y0, x1, y1)) = self.wet.dirty.take() else { return };
+        self.surf_gen += 1;
         let w = self.f.w;
         let (x1, y1) = (x1.min(w), y1.min(self.f.h));
         let wet = &mut self.wet;

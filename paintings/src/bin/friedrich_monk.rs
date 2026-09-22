@@ -231,7 +231,7 @@ fn main() {
 
     // ---- 7. finish: aged varnish, cracks, then light the surface
     let varnish = Fbm::new(seed + 98, 3, 400.0);
-    c.glaze(&Pigment::transparent(hex("#e6d3a4")), None, |x, y| 0.4 + 0.12 * varnish.get(x, y));
+    c.glaze(&Pigment::varnish(hex("#e6d3a4")), None, |x, y| 0.4 + 0.12 * varnish.get(x, y));
     c.mottle(60.0, 0.02, seed + 99);
     c.craquelure(12.0, 0.12, o.seed);
     c.relief(0.7, 0.03);

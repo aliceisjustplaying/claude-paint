@@ -1,5 +1,9 @@
 # Friedrich notes
 
+Goal: new paintings in Friedrich's manner, composed from his vocabulary and
+method. Studies of known works (Monk by the Sea, Two Men) are exercises only,
+worked from written descriptions, never images.
+
 Working method (no reference images): light ground → brown umber underpainting
 for values → body-color sky (Mixbox pigment gradient) → thin KM glazes → very
 soft horizontal strokes → figures last → warm varnish + canvas weave.

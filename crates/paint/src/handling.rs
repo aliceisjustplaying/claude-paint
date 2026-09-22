@@ -13,6 +13,7 @@ use crate::color::{Rgb, from_oklab, to_oklab};
 use crate::mask::Mask;
 use crate::rng::Rng;
 use crate::wet::Paint;
+use rayon::prelude::*;
 
 type Field<'a, T> = Box<dyn Fn(f32, f32) -> T + Sync + 'a>;
 
@@ -142,13 +143,27 @@ impl<'a> Handling<'a> {
     }
 }
 
+/// One planned stroke.
+struct Plan {
+    pts: Vec<(f32, f32)>,
+    pressure: f32,
+    fade: f32,
+    /// Paint to dip into before this stroke (None = no trip to the palette).
+    dip: Option<Rgb>,
+}
+
 impl Canvas {
     /// Work the region `mask` with a simulated brush, stroke by stroke.
+    ///
+    /// Strokes are planned up front, then grouped into square passages
+    /// (tiles) larger than twice any stroke's reach. Passages in a 2×2
+    /// checkerboard phase can't share a pixel, so each gets its own brush and
+    /// they are painted in parallel; phases run one after another.
     pub fn work(&mut self, mask: &Mask, hd: &Handling, seed: u64) {
         let mut rng = Rng::new(seed);
         let f = self.f;
-        // one stroke per gap² of area gives coverage = width · length / gap²
         let mean_len = 0.5 * (hd.length.0 + hd.length.1);
+        // one stroke per gap² of area gives coverage = width · length / gap²
         let gap = (hd.tool.width * mean_len.max(hd.tool.width) / hd.coverage.max(0.05)).sqrt().max(0.5);
         let (cols, rows) = ((f.width() / gap).ceil() as usize + 1, (f.height() / gap).ceil() as usize + 1);
         let mut centers = Vec::new();
@@ -164,39 +179,21 @@ impl Canvas {
                 }
             }
         }
-        // painters work in passages, not scanlines or pure noise: sort centers
-        // into coarse patches, shuffle patches, shuffle within
-        let patch = gap * 8.0;
-        let mut keyed: Vec<(u64, (f32, f32))> = centers
-            .into_iter()
-            .map(|(x, y)| {
-                let key = crate::rng::hash2((x / patch) as i64, (y / patch) as i64, seed) * 1e6;
-                ((key as u64) << 20 | (rng.next_u64() & 0xFFFFF), (x, y))
-            })
-            .collect();
-        keyed.sort_by_key(|k| k.0);
+        for i in (1..centers.len()).rev() {
+            let j = (rng.next_u64() % (i as u64 + 1)) as usize;
+            centers.swap(i, j);
+        }
+        if centers.is_empty() {
+            return;
+        }
 
-        let mut held = Held::new(hd.tool.clone(), seed ^ 0x5EED);
-        let clip = if hd.clip { Some(mask) } else { None };
-        for (n, &(_, (cx, cy))) in keyed.iter().enumerate() {
-            if n % hd.dip_every == 0 {
-                if hd.blender {
-                    held.wipe(0.9);
-                } else {
-                    let lab = to_oklab((hd.color)(cx, cy));
-                    let col = from_oklab([
-                        lab[0] + rng.normal() * hd.jitter.0,
-                        lab[1] + rng.normal() * hd.jitter.1,
-                        lab[2] + rng.normal() * hd.jitter.1,
-                    ]);
-                    held.wipe(hd.wipe);
-                    held.load(Paint { color: col, hiding: hd.hiding, body: hd.body }, hd.load);
-                }
-            }
+        // plan every stroke deterministically
+        let mut plans = Vec::with_capacity(centers.len());
+        let (mut ex, mut ey) = (0.0f32, 0.0f32);
+        for &(cx, cy) in &centers {
             let len = rng.range(hd.length.0, hd.length.1);
             let bend = rng.normal() * hd.angle_jitter;
-            let pts = if hd.scrub > 0 {
-                // short zigzag across the center along the field
+            let pts: Vec<(f32, f32)> = if hd.scrub > 0 {
                 let a = (hd.angle)(cx, cy) + bend;
                 let (ca, sa) = (a.cos(), a.sin());
                 let (nx, ny) = (-sa, ca);
@@ -212,9 +209,102 @@ impl Canvas {
             } else {
                 trace(&*hd.angle, cx, cy, len, bend, &mut rng)
             };
-            let p = rng.range(hd.pressure.0, hd.pressure.1);
-            let g = Gesture::new(pts).pressure(p, p * rng.range(0.75, 1.05)).orient(hd.orient).ramps(hd.ramps.0, hd.ramps.1);
-            self.drag(&mut held, &g, clip);
+            for &(x, y) in &pts {
+                ex = ex.max((x - cx).abs());
+                ey = ey.max((y - cy).abs());
+            }
+            let pressure = rng.range(hd.pressure.0, hd.pressure.1);
+            let fade = rng.range(0.75, 1.05);
+            let lab = to_oklab((hd.color)(cx, cy));
+            let col = from_oklab([
+                lab[0] + rng.normal() * hd.jitter.0,
+                lab[1] + rng.normal() * hd.jitter.1,
+                lab[2] + rng.normal() * hd.jitter.1,
+            ]);
+            plans.push((cx, cy, Plan { pts, pressure, fade, dip: Some(col) }));
+        }
+        // tiles are sized per axis: long horizontal strokes get wide, short tiles
+        let r = crate::bristle::reach_units(&hd.tool);
+        let (tile_x, tile_y) = ((2.0 * (ex + r) + 2.0).max(gap * 2.0), (2.0 * (ey + r) + 2.0).max(gap * 2.0));
+        let (tw, th) = ((f.width() / tile_x).ceil().max(1.0) as usize, (f.height() / tile_y).ceil().max(1.0) as usize);
+        if std::env::var_os("PAINT_DEBUG").is_some() {
+            eprintln!("work: {} strokes, extent {ex:.0}x{ey:.0}, reach {r:.0}, tiles {tw}x{th}", centers.len());
+        }
+        let mut tiles: Vec<Vec<Plan>> = (0..tw * th).map(|_| Vec::new()).collect();
+        for (cx, cy, p) in plans {
+            let tx = ((cx / tile_x) as usize).min(tw - 1);
+            let ty = ((cy / tile_y) as usize).min(th - 1);
+            tiles[ty * tw + tx].push(p);
+        }
+        // trips to the palette: every `dip_every` strokes within a passage
+        for t in tiles.iter_mut() {
+            for (k, p) in t.iter_mut().enumerate() {
+                if k % hd.dip_every != 0 {
+                    p.dip = None;
+                }
+            }
+        }
+        let n_strokes: usize = tiles.iter().map(|t| t.len()).sum();
+        let first_id = self.next_stroke_ids(n_strokes as u32);
+        let mut offsets = Vec::with_capacity(tiles.len());
+        let mut acc = 0u32;
+        for t in &tiles {
+            offsets.push(acc);
+            acc += t.len() as u32;
+        }
+
+        let surf = self.surf();
+        let clip = if hd.clip { Some(mask) } else { None };
+        let mut phases = [(0usize, 0usize), (1, 0), (0, 1), (1, 1)];
+        for i in (1..4).rev() {
+            let j = (rng.next_u64() % (i as u64 + 1)) as usize;
+            phases.swap(i, j);
+        }
+        let mut dirty: crate::bristle::Bounds = None;
+        for (px, py) in phases {
+            let idx: Vec<usize> = (0..tiles.len()).filter(|&i| (i % tw) % 2 == px && (i / tw) % 2 == py && !tiles[i].is_empty()).collect();
+            let results: Vec<crate::bristle::Bounds> = idx
+                .par_iter()
+                .map(|&ti| {
+                    let mut held = Held::new(hd.tool.clone(), seed ^ 0x5EED ^ (ti as u64).wrapping_mul(0x9E37_79B9));
+                    let mut scratch = Vec::new();
+                    let mut b: crate::bristle::Bounds = None;
+                    for (k, p) in tiles[ti].iter().enumerate() {
+                        if let Some(col) = p.dip {
+                            if hd.blender {
+                                held.wipe(0.9);
+                            } else {
+                                held.wipe(hd.wipe);
+                                held.load(Paint { color: col, hiding: hd.hiding, body: hd.body }, hd.load);
+                            }
+                        }
+                        let g = Gesture::new(p.pts.clone())
+                            .pressure(p.pressure, p.pressure * p.fade)
+                            .orient(hd.orient)
+                            .ramps(hd.ramps.0, hd.ramps.1);
+                        let id = first_id.wrapping_add(offsets[ti] + k as u32);
+                        // SAFETY: tiles in one phase are ≥ tile apart and
+                        // tile ≥ 2 × reach, so no two brushes share a pixel.
+                        let r = unsafe { crate::bristle::drag_on(surf, &mut held, &g, clip, id, &mut scratch) };
+                        if let Some((a, c, d, e)) = r {
+                            b = Some(match b {
+                                None => (a, c, d, e),
+                                Some((a0, c0, d0, e0)) => (a0.min(a), c0.min(c), d0.max(d), e0.max(e)),
+                            });
+                        }
+                    }
+                    b
+                })
+                .collect();
+            for r in results.into_iter().flatten() {
+                dirty = Some(match dirty {
+                    None => r,
+                    Some((a0, c0, d0, e0)) => (a0.min(r.0), c0.min(r.1), d0.max(r.2), e0.max(r.3)),
+                });
+            }
+        }
+        if let Some((x0, y0, x1, y1)) = dirty {
+            self.wet.touch(x0, y0, x1, y1);
         }
     }
 }

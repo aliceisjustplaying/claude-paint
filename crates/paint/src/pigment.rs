@@ -37,6 +37,12 @@ impl Pigment {
         Self::with_hiding(color, 0.06)
     }
 
+    /// Aged varnish: a clear film that only absorbs (yellows), with almost
+    /// no scattering, so it warms the darks without veiling them.
+    pub fn varnish(color: Rgb) -> Self {
+        Self::with_hiding(color, 0.004)
+    }
+
     /// Semi-opaque (scumbles, thin body color).
     pub fn semi(color: Rgb) -> Self {
         Self::with_hiding(color, 0.45)

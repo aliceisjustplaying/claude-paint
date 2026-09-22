@@ -56,6 +56,10 @@ pub struct Canvas {
     pub wet: crate::wet::Wet,
     /// Canvas tooth (bare weave height, 0..1), built on first use.
     pub(crate) tooth: Option<Vec<f32>>,
+    /// Bumped whenever film or height change; `base` caches the surface
+    /// height bristles feel (tooth under film + dried relief).
+    pub(crate) surf_gen: u64,
+    pub(crate) base: Option<(u64, Vec<f32>)>,
 }
 
 impl Canvas {
@@ -72,6 +76,8 @@ impl Canvas {
             weave: None,
             wet: crate::wet::Wet::new(n),
             tooth: None,
+            surf_gen: 0,
+            base: None,
         }
     }
 
@@ -125,6 +131,7 @@ impl Canvas {
     }
 
     fn add_film(&mut self, mask: Option<&Mask>, amount: f32) {
+        self.surf_gen += 1;
         match mask {
             Some(m) => self.film.par_iter_mut().zip(&m.data).for_each(|(f, c)| *f += c * amount),
             None => self.film.par_iter_mut().for_each(|f| *f += amount),
@@ -238,6 +245,7 @@ impl Canvas {
             let k = 1.0 - s * c;
             *p = [p[0] * k, p[1] * k, p[2] * k];
         });
+        self.surf_gen += 1;
         self.height.par_iter_mut().zip(&cracks).for_each(|(h, c)| *h -= c * 0.03);
     }
 
@@ -281,6 +289,11 @@ impl Canvas {
                 let at = |xx: usize, yy: usize| surf[yy.min(h - 1) * w + xx.min(w - 1)];
                 let dx = (at(x + 1, y) - at(x.saturating_sub(1), y)) * k;
                 let dy = (at(x, y + 1) - at(x, y.saturating_sub(1))) * k;
+                // paint edges round over: soft-limit the slope so a hairline
+                // ridge doesn't shade to black on one side and white on the other
+                let g = (dx * dx + dy * dy).sqrt();
+                let lim = 1.0 / (1.0 + g / 1.2);
+                let (dx, dy) = (dx * lim, dy * lim);
                 let n = {
                     let v = [-dx, -dy, 1.0];
                     let m = (v[0] * v[0] + v[1] * v[1] + 1.0).sqrt();
@@ -293,7 +306,7 @@ impl Canvas {
                 let hm = (hv[0] * hv[0] + hv[1] * hv[1] + hv[2] * hv[2]).sqrt();
                 let ndh = ((n[0] * hv[0] + n[1] * hv[1] + n[2] * hv[2]) / hm).max(0.0);
                 let flat = (l[2] + 1.0) / hm;
-                let spec = (gloss * (ndh.powf(60.0) - flat.powf(60.0)).max(0.0)).min(gloss * 0.5);
+                let spec = (gloss * (ndh.powf(60.0) - flat.powf(60.0)).max(0.0)).min(gloss * 0.2);
                 let p = &mut row[x];
                 for c in 0..3 {
                     p[c] = (p[c] * shade + spec).max(0.0);
@@ -330,8 +343,10 @@ impl Canvas {
 /// Plain-weave height in 0..1 at a point (units).
 pub(crate) fn weave_height(x: f32, y: f32, thread: f32, seed: u64) -> f32 {
     use std::f32::consts::PI;
-    let u = x / thread;
-    let v = y / thread;
+    // threads are never quite straight: slow wander of the lines
+    let (x0, y0) = (x / thread, y / thread);
+    let u = x0 + 0.35 * ((y0 * 0.071 + seed as f32 * 0.37).sin() + 0.6 * (y0 * 0.023 + x0 * 0.011).sin());
+    let v = y0 + 0.35 * ((x0 * 0.067 + seed as f32 * 0.53).sin() + 0.6 * (x0 * 0.029 - y0 * 0.013).sin());
     let (iu, iv) = (u.floor() as i64, v.floor() as i64);
     let (fu, fv) = (u - iu as f32, v - iv as f32);
     // thread thickness irregularity (slubs) per thread

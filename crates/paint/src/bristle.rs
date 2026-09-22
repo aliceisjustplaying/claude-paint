@@ -144,7 +144,7 @@ impl Tool {
     }
 
     /// Bristle radius in units.
-    fn hair_radius(&self) -> f32 {
+    pub(crate) fn hair_radius(&self) -> f32 {
         let across = match self.kind {
             Kind::Flat => 0.36,
             Kind::Filbert => 0.6,
@@ -224,7 +224,7 @@ impl Held {
     }
 
     /// A full load's volume for one bristle.
-    fn full(&self) -> f32 {
+    pub(crate) fn full(&self) -> f32 {
         // neighbouring bristles overlap by ~hair², so each lays lay / hair²
         let track = 2.0 * self.tool.hair_radius();
         self.tool.lay.max(0.3) * track * self.tool.run / (self.tool.hair * self.tool.hair)
@@ -312,86 +312,201 @@ impl Gesture {
     }
 }
 
-impl Canvas {
-    /// Drag a held brush through a gesture, working the wet paint.
-    pub fn drag(&mut self, held: &mut Held, g: &Gesture, clip: Option<&Mask>) {
-        if g.pts.is_empty() {
-            return;
-        }
-        self.ensure_tooth();
-        let s = self.f.scale;
-        let pts: Vec<(f32, f32)> = g.pts.iter().map(|&(x, y)| (x * s, y * s)).collect();
-        let path = if pts.len() >= 2 { densify(&pts) } else { vec![pts[0], pts[0]] };
-        let mut arc = vec![0.0f32; path.len()];
-        for i in 1..path.len() {
-            let (dx, dy) = (path[i].0 - path[i - 1].0, path[i].1 - path[i - 1].1);
-            arc[i] = arc[i - 1] + (dx * dx + dy * dy).sqrt();
-        }
-        let total = arc[arc.len() - 1];
-        let tool = held.tool.clone();
-        let rb_u = tool.hair_radius();
-        let rb = (rb_u * s).max(0.55);
-        let full = held.full();
-        let step = rb.max(1.25);
-        let nsteps = ((total / step).ceil() as usize).max(1);
-        let bend_len = tool.length * (0.25 + 0.75 * (1.0 - tool.stiffness));
+/// Raw view of the wet layer and surface, so brushes working disjoint parts
+/// of the canvas can run in parallel (see `Canvas::work`).
+#[derive(Clone, Copy)]
+pub(crate) struct Surf {
+    w: usize,
+    h: usize,
+    scale: f32,
+    vol: *mut f32,
+    lat: *mut Latent,
+    hide: *mut f32,
+    stroke: *mut u32,
+    touched: *mut u32,
+    floor: *mut f32,
+    base: *const f32,
+}
+// SAFETY: callers only run brushes concurrently on pixel sets that cannot
+// overlap (tiles separated by more than the largest stroke extent).
+unsafe impl Send for Surf {}
+unsafe impl Sync for Surf {}
 
-        self.wet.current = self.wet.current.wrapping_add(1).max(1);
-        for b in &mut held.bristles {
-            b.prev = [None, None];
-            b.bend = (0.0, 0.0);
-        }
-        let mut scratch: Vec<f32> = Vec::new();
-        let mut seg = 0usize;
-        let mut last_dir = (1.0f32, 0.0f32);
-        for k in 0..=nsteps {
-            let d = (k as f32 * step).min(total);
-            while seg + 1 < path.len() - 1 && arc[seg + 1] < d {
-                seg += 1;
-            }
-            let seg_len = (arc[seg + 1] - arc[seg]).max(1e-6);
-            let f = ((d - arc[seg]) / seg_len).clamp(0.0, 1.0);
-            let (ax, ay) = path[seg];
-            let (bx, by) = path[seg + 1];
-            let hx = ax + (bx - ax) * f;
-            let hy = ay + (by - ay) * f;
-            let dir = if seg_len > 1e-3 { ((bx - ax) / seg_len, (by - ay) / seg_len) } else { last_dir };
-            last_dir = dir;
-            let u = if total > 0.0 { d / total } else { 0.5 };
-            let p = g.pressure_at(u).clamp(0.0, 1.0);
-            let theta = match g.orient {
-                Orient::Across => dir.1.atan2(dir.0) + std::f32::consts::FRAC_PI_2,
-                Orient::Along => dir.1.atan2(dir.0),
-                Orient::Fixed(a) => a,
-            };
-            let (st, ct) = theta.sin_cos();
-            let half = tool.width * 0.5 * s * (0.45 + 0.55 * p) * (1.0 + tool.splay * (p - 0.5));
-            let rate = 1.0 - (-(step / s) / (bend_len + 1e-3)).exp();
+/// Dirty pixel bounds collected by a drag.
+pub(crate) type Bounds = Option<(usize, usize, usize, usize)>;
 
-            for b in held.bristles.iter_mut() {
-                let reach = (p - b.thresh) / (1.0 - b.thresh).max(1e-3);
-                if reach <= 0.0 {
-                    b.prev = [None, None];
-                    continue;
-                }
-                // bristles wander a little across the stroke and their load pulses
-                let wv = wander(d / s / tool.width.max(2.0) * 1.3, b.seed) * tool.ragged;
-                let (ox, oy) = ((b.rx + wv * 0.12) * half, (b.ry + wv * 0.05) * half);
-                let root = (hx + ox * ct - oy * st, hy + ox * st + oy * ct);
-                // tips trail behind the motion and splay outward under pressure
-                let trail = tool.length * s * b.len * p;
-                let spread = tool.splay * p * 0.3;
-                let target = (-dir.0 * trail + (ox * ct - oy * st) * spread, -dir.1 * trail + (ox * st + oy * ct) * spread);
-                b.bend.0 += (target.0 - b.bend.0) * rate;
-                b.bend.1 += (target.1 - b.bend.1) * rate;
-                // one contact point: the belly-to-tip region of the bent bristle
-                let cur = (root.0 + b.bend.0 * 0.6, root.1 + b.bend.1 * 0.6);
-                let prev = b.prev[0].unwrap_or(cur);
-                exchange(self, b, &tool, prev, cur, rb, reach, full, clip, &mut scratch);
-                b.prev[0] = Some(cur);
+fn grow(b: &mut Bounds, x0: usize, y0: usize, x1: usize, y1: usize) {
+    *b = Some(match *b {
+        None => (x0, y0, x1, y1),
+        Some((a, c, d, e)) => (a.min(x0), c.min(y0), d.max(x1), e.max(y1)),
+    });
+}
+
+impl Surf {
+    #[inline]
+    unsafe fn add(&self, i: usize, v: f32, lat: &Latent, hide: f32) {
+        unsafe {
+            if v <= 0.0 {
+                return;
             }
+            let vol = &mut *self.vol.add(i);
+            let l = &mut *self.lat.add(i);
+            let hd = &mut *self.hide.add(i);
+            let t = *vol + v;
+            let a = v / t;
+            for k in 0..LAT {
+                l[k] += (lat[k] - l[k]) * a;
+            }
+            *hd += (hide - *hd) * a;
+            *vol = t;
         }
     }
+}
+
+impl Canvas {
+    pub(crate) fn surf(&mut self) -> Surf {
+        self.ensure_tooth();
+        if self.base.as_ref().map(|b| b.0) != Some(self.surf_gen) {
+            let tooth = self.tooth.as_ref().unwrap();
+            let mut base = self.base.take().map(|b| b.1).unwrap_or_default();
+            base.resize(tooth.len(), 0.0);
+            use rayon::prelude::*;
+            // a brush rests on local peaks: only relief relative to the
+            // surroundings matters, so high-pass the dried paint height
+            let r = (3.0 * self.f.scale).round().max(1.0) as usize;
+            let low = box_blur(&self.height, self.f.w, self.f.h, r);
+            base.par_iter_mut()
+                .zip(tooth.par_iter())
+                .zip(self.film.par_iter().zip(self.height.par_iter().zip(low.par_iter())))
+                .for_each(|((b, &t), (&film, (&hgt, &lo)))| {
+                    let fe = (-film * 0.6).exp();
+                    *b = t * fe + 0.5 * (1.0 - fe) + 2.5 * (hgt - lo);
+                });
+            self.base = Some((self.surf_gen, base));
+        }
+        Surf {
+            w: self.f.w,
+            h: self.f.h,
+            scale: self.f.scale,
+            vol: self.wet.vol.as_mut_ptr(),
+            lat: self.wet.lat.as_mut_ptr(),
+            hide: self.wet.hide.as_mut_ptr(),
+            stroke: self.wet.stroke.as_mut_ptr(),
+            touched: self.wet.touched.as_mut_ptr(),
+            floor: self.wet.floor.as_mut_ptr(),
+            base: self.base.as_ref().unwrap().1.as_ptr(),
+        }
+    }
+
+    pub(crate) fn next_stroke_ids(&mut self, n: u32) -> u32 {
+        let first = self.wet.current.wrapping_add(1).max(1);
+        self.wet.current = first.wrapping_add(n);
+        first
+    }
+
+    /// Drag a held brush through a gesture, working the wet paint.
+    pub fn drag(&mut self, held: &mut Held, g: &Gesture, clip: Option<&Mask>) {
+        let id = self.next_stroke_ids(1);
+        let surf = self.surf();
+        let mut scratch = Vec::new();
+        // SAFETY: exclusive &mut self, single brush.
+        let b = unsafe { drag_on(surf, held, g, clip, id, &mut scratch) };
+        if let Some((x0, y0, x1, y1)) = b {
+            self.wet.touch(x0, y0, x1, y1);
+        }
+    }
+}
+
+/// Largest distance (units) paint can move from the gesture's points.
+pub(crate) fn reach_units(tool: &Tool) -> f32 {
+    // half-width with splay and wander, spread, contact trail (0.6 of a
+    // bristle up to ~1.3 long), capsule radius, plough offset, margin
+    tool.width * 0.5 * (1.0 + 0.5 * tool.splay) * (1.15 + 0.3 * tool.splay) + tool.length * 0.85 + 3.0 * tool.hair_radius() + 1.5
+}
+
+/// SAFETY: no other thread may touch pixels within `reach_units` of `g`.
+pub(crate) unsafe fn drag_on(
+    sf: Surf,
+    held: &mut Held,
+    g: &Gesture,
+    clip: Option<&Mask>,
+    id: u32,
+    scratch: &mut Vec<f32>,
+) -> Bounds {
+    let mut bounds: Bounds = None;
+    if g.pts.is_empty() {
+        return bounds;
+    }
+    let s = sf.scale;
+    let pts: Vec<(f32, f32)> = g.pts.iter().map(|&(x, y)| (x * s, y * s)).collect();
+    let path = if pts.len() >= 2 { densify(&pts) } else { vec![pts[0], pts[0]] };
+    let mut arc = vec![0.0f32; path.len()];
+    for i in 1..path.len() {
+        let (dx, dy) = (path[i].0 - path[i - 1].0, path[i].1 - path[i - 1].1);
+        arc[i] = arc[i - 1] + (dx * dx + dy * dy).sqrt();
+    }
+    let total = arc[arc.len() - 1];
+    let tool = held.tool.clone();
+    let rb = (tool.hair_radius() * s).max(0.55);
+    let full = held.full();
+    let step = rb.max(1.25);
+    let nsteps = ((total / step).ceil() as usize).max(1);
+    let bend_len = tool.length * (0.25 + 0.75 * (1.0 - tool.stiffness));
+
+    for b in &mut held.bristles {
+        b.prev = [None, None];
+        b.bend = (0.0, 0.0);
+    }
+    let mut seg = 0usize;
+    let mut last_dir = (1.0f32, 0.0f32);
+    for k in 0..=nsteps {
+        let d = (k as f32 * step).min(total);
+        while seg + 1 < path.len() - 1 && arc[seg + 1] < d {
+            seg += 1;
+        }
+        let seg_len = (arc[seg + 1] - arc[seg]).max(1e-6);
+        let f = ((d - arc[seg]) / seg_len).clamp(0.0, 1.0);
+        let (ax, ay) = path[seg];
+        let (bx, by) = path[seg + 1];
+        let hx = ax + (bx - ax) * f;
+        let hy = ay + (by - ay) * f;
+        let dir = if seg_len > 1e-3 { ((bx - ax) / seg_len, (by - ay) / seg_len) } else { last_dir };
+        last_dir = dir;
+        let u = if total > 0.0 { d / total } else { 0.5 };
+        let p = g.pressure_at(u).clamp(0.0, 1.0);
+        let theta = match g.orient {
+            Orient::Across => dir.1.atan2(dir.0) + std::f32::consts::FRAC_PI_2,
+            Orient::Along => dir.1.atan2(dir.0),
+            Orient::Fixed(a) => a,
+        };
+        let (st, ct) = theta.sin_cos();
+        let half = tool.width * 0.5 * s * (0.45 + 0.55 * p) * (1.0 + tool.splay * (p - 0.5));
+        let rate = 1.0 - (-(step / s) / (bend_len + 1e-3)).exp();
+
+        for b in held.bristles.iter_mut() {
+            let reach = (p - b.thresh) / (1.0 - b.thresh).max(1e-3);
+            if reach <= 0.0 {
+                b.prev = [None, None];
+                continue;
+            }
+            // bristles wander a little across the stroke
+            let wv = wander(d / s / tool.width.max(2.0) * 1.3, b.seed) * tool.ragged;
+            let (ox, oy) = ((b.rx + wv * 0.12) * half, (b.ry + wv * 0.05) * half);
+            let root = (hx + ox * ct - oy * st, hy + ox * st + oy * ct);
+            // tips trail behind the motion and splay outward under pressure
+            let trail = tool.length * s * b.len * p;
+            let spread = tool.splay * p * 0.3;
+            let target = (-dir.0 * trail + (ox * ct - oy * st) * spread, -dir.1 * trail + (ox * st + oy * ct) * spread);
+            b.bend.0 += (target.0 - b.bend.0) * rate;
+            b.bend.1 += (target.1 - b.bend.1) * rate;
+            // one contact point: the belly-to-tip region of the bent bristle
+            let cur = (root.0 + b.bend.0 * 0.6, root.1 + b.bend.1 * 0.6);
+            let prev = b.prev[0].unwrap_or(cur);
+            unsafe { exchange(sf, b, &tool, prev, cur, rb, reach, full, clip, id, scratch, &mut bounds) };
+            b.prev[0] = Some(cur);
+        }
+    }
+    bounds
 }
 
 /// Smooth 1-D value noise, −1..1.
@@ -407,8 +522,8 @@ fn wander(t: f32, seed: u64) -> f32 {
 /// Paint exchange between one bristle and the canvas along the capsule
 /// swept from `a` to `b` (pixels).
 #[allow(clippy::too_many_arguments)]
-fn exchange(
-    c: &mut Canvas,
+unsafe fn exchange(
+    sf: Surf,
     br: &mut Bristle,
     tool: &Tool,
     a: (f32, f32),
@@ -417,134 +532,171 @@ fn exchange(
     reach: f32,
     full: f32,
     clip: Option<&Mask>,
+    id: u32,
     wts: &mut Vec<f32>,
+    bounds: &mut Bounds,
 ) {
-    let (w, h) = (c.f.w, c.f.h);
-    let s = c.f.scale;
-    let px_area = 1.0 / (s * s);
-    let x0 = ((a.0.min(b.0) - rb - 1.0).floor().max(0.0)) as usize;
-    let y0 = ((a.1.min(b.1) - rb - 1.0).floor().max(0.0)) as usize;
-    let x1 = ((a.0.max(b.0) + rb + 1.0).ceil().max(0.0) as usize).min(w);
-    let y1 = ((a.1.max(b.1) + rb + 1.0).ceil().max(0.0) as usize).min(h);
-    if x1 <= x0 || y1 <= y0 {
-        return;
-    }
-    let (dx, dy) = (b.0 - a.0, b.1 - a.1);
-    let seg2 = dx * dx + dy * dy;
-    let seg = seg2.sqrt();
-    let (mx, my) = if seg > 1e-4 { (dx / seg, dy / seg) } else { (0.0, 0.0) };
-    let (nx, ny) = (-my, mx);
-    // threshold on the surface height this bristle can reach down to
-    let th = 1.0 - reach * 1.6;
-    let tooth = c.tooth.as_ref().expect("tooth");
-
-    // pass 1: weights
-    let bw = x1 - x0;
-    wts.clear();
-    wts.resize(bw * (y1 - y0), 0.0);
-    let mut sum_w = 0.0f32;
-    for y in y0..y1 {
-        for x in x0..x1 {
-            let (px, py) = (x as f32 + 0.5, y as f32 + 0.5);
-            let t = if seg2 > 1e-8 { (((px - a.0) * dx + (py - a.1) * dy) / seg2).clamp(0.0, 1.0) } else { 0.0 };
-            let (qx, qy) = (a.0 + dx * t - px, a.1 + dy * t - py);
-            let dist = (qx * qx + qy * qy).sqrt();
-            if dist > rb + 0.5 {
-                continue;
-            }
-            let cov = 1.0 - smoothstep(rb * 0.5, rb + 0.5, dist);
-            let i = y * w + x;
-            let surf = (tooth[i] * (-c.film[i] * 0.6).exp() + 0.5 * (1.0 - (-c.film[i] * 0.6).exp())
-                + 0.35 * (c.wet.vol[i] + c.height[i] * 0.5))
-                .clamp(0.0, 1.5);
-            let contact = smoothstep(th - 0.12, th + 0.12, surf);
-            let mut wt = cov * contact;
-            if let Some(m) = clip {
-                wt *= m.data[i];
-            }
-            wts[(y - y0) * bw + (x - x0)] = wt;
-            sum_w += wt;
+    unsafe {
+        let (w, h) = (sf.w, sf.h);
+        let s = sf.scale;
+        let px_area = 1.0 / (s * s);
+        let x0 = ((a.0.min(b.0) - rb - 1.0).floor().max(0.0)) as usize;
+        let y0 = ((a.1.min(b.1) - rb - 1.0).floor().max(0.0)) as usize;
+        let x1 = ((a.0.max(b.0) + rb + 1.0).ceil().max(0.0) as usize).min(w);
+        let y1 = ((a.1.max(b.1) + rb + 1.0).ceil().max(0.0) as usize).min(h);
+        if x1 <= x0 || y1 <= y0 {
+            return;
         }
-    }
-    if sum_w <= 1e-6 {
-        return;
-    }
+        let (dx, dy) = (b.0 - a.0, b.1 - a.1);
+        let seg2 = dx * dx + dy * dy;
+        let seg = seg2.sqrt();
+        let (mx, my) = if seg > 1e-4 { (dx / seg, dy / seg) } else { (0.0, 0.0) };
+        let (nx, ny) = (-my, mx);
+        // lowest surface height this bristle reaches down to
+        let th = 1.0 - reach * 1.6;
 
-    // deposit: a share of the load, proportional to distance traveled
-    let travel = (seg / s).max(rb / s * 0.5);
-    let dep_total = br.vol * (1.0 - (-travel / tool.run).exp());
-    let dep_per_w = dep_total / sum_w / px_area; // thickness per unit weight
-    // film splitting: a bristle in contact with wet paint always lifts some of
-    // it, even when loaded; a spent bristle drinks more
-    let hunger = 0.35 + 0.65 * (1.0 - br.vol / full).clamp(0.0, 1.0).powf(1.5);
-    let push_k = tool.push * (seg / (2.0 * rb)).clamp(0.0, 1.0);
-    let off = rb + 1.0;
-
-    let mut got_v = 0.0f32;
-    let mut got_l = [0.0f32; LAT];
-    let mut got_h = 0.0f32;
-    let (blat, bhide) = (br.lat, br.hide);
-    for y in y0..y1 {
-        for x in x0..x1 {
-            let wt = wts[(y - y0) * bw + (x - x0)];
-            if wt <= 0.0 {
-                continue;
-            }
-            let i = y * w + x;
-            // pick up
-            let v = c.wet.vol[i];
-            if c.wet.touched[i] != c.wet.current {
-                c.wet.touched[i] = c.wet.current;
-                c.wet.floor[i] = v * (1.0 - tool.pickup);
-            }
-            if v > 1e-6 {
-                let own = if c.wet.stroke[i] == c.wet.current { 0.15 } else { 1.0 };
-                let take = (v * tool.pickup * wt * hunger * own).min((v - c.wet.floor[i]).max(0.0));
-                if take > 0.0 {
-                    c.wet.vol[i] -= take;
-                    let tv = take * px_area;
-                    got_v += tv;
-                    for k in 0..LAT {
-                        got_l[k] += c.wet.lat[i][k] * tv;
-                    }
-                    got_h += c.wet.hide[i] * tv;
+        // pass 1: contact weights
+        let bw = x1 - x0;
+        wts.clear();
+        wts.resize(bw * (y1 - y0), 0.0);
+        let mut sum_w = 0.0f32;
+        for y in y0..y1 {
+            for x in x0..x1 {
+                let (px, py) = (x as f32 + 0.5, y as f32 + 0.5);
+                let t = if seg2 > 1e-8 { (((px - a.0) * dx + (py - a.1) * dy) / seg2).clamp(0.0, 1.0) } else { 0.0 };
+                let (qx, qy) = (a.0 + dx * t - px, a.1 + dy * t - py);
+                let dist = (qx * qx + qy * qy).sqrt();
+                if dist > rb + 0.5 {
+                    continue;
                 }
+                let cov = 1.0 - smoothstep(rb * 0.5, rb + 0.5, dist);
+                let i = y * w + x;
+                let surf = (*sf.base.add(i) + 0.35 * *sf.vol.add(i)).min(1.5);
+                let contact = smoothstep(th - 0.12, th + 0.12, surf);
+                let mut wt = cov * contact;
+                if let Some(m) = clip {
+                    wt *= m.data[i];
+                }
+                wts[(y - y0) * bw + (x - x0)] = wt;
+                sum_w += wt;
             }
-            // deposit
-            if dep_per_w > 0.0 {
-                c.wet.add(i, dep_per_w * wt, &blat, bhide);
-                c.wet.stroke[i] = c.wet.current;
-            }
-            // plough: move paint outward from the bristle's path, and ahead
-            if push_k > 0.0 {
-                let v = c.wet.vol[i];
-                let m = v * push_k * wt;
-                if m > 1e-6 {
-                    let (px, py) = (x as f32 + 0.5, y as f32 + 0.5);
-                    let side = if (px - a.0) * nx + (py - a.1) * ny >= 0.0 { 1.0 } else { -1.0 };
-                    let tx = px + (nx * side * 0.75 + mx * 0.45) * off;
-                    let ty = py + (ny * side * 0.75 + my * 0.45) * off;
-                    if tx >= 0.0 && ty >= 0.0 && (tx as usize) < w && (ty as usize) < h {
-                        let j = ty as usize * w + tx as usize;
-                        if j != i {
-                            let l = c.wet.lat[i];
-                            let hd = c.wet.hide[i];
-                            c.wet.vol[i] -= m;
-                            c.wet.add(j, m, &l, hd);
+        }
+        if sum_w <= 1e-6 {
+            return;
+        }
+
+        // deposit: a share of the load, proportional to distance traveled
+        let travel = (seg / s).max(rb / s * 0.5);
+        let dep_total = br.vol * (1.0 - (-travel / tool.run).exp());
+        let dep_per_w = dep_total / sum_w / px_area;
+        // film splitting: a bristle in wet paint always lifts some of it, even
+        // when loaded; a spent bristle drinks more
+        let hunger = 0.35 + 0.65 * (1.0 - br.vol / full).clamp(0.0, 1.0).powf(1.5);
+        let push_k = tool.push * (seg / (2.0 * rb)).clamp(0.0, 1.0);
+        let off = rb + 1.0;
+
+        let mut got_v = 0.0f32;
+        let mut got_l = [0.0f32; LAT];
+        let mut got_h = 0.0f32;
+        let (blat, bhide) = (br.lat, br.hide);
+        for y in y0..y1 {
+            for x in x0..x1 {
+                let wt = wts[(y - y0) * bw + (x - x0)];
+                if wt <= 0.0 {
+                    continue;
+                }
+                let i = y * w + x;
+                let vol = &mut *sf.vol.add(i);
+                // one stroke lifts only part of the film
+                if *sf.touched.add(i) != id {
+                    *sf.touched.add(i) = id;
+                    *sf.floor.add(i) = *vol * (1.0 - tool.pickup);
+                }
+                let v = *vol;
+                if v > 1e-6 {
+                    let own = if *sf.stroke.add(i) == id { 0.15 } else { 1.0 };
+                    let take = (v * tool.pickup * wt * hunger * own).min((v - *sf.floor.add(i)).max(0.0));
+                    if take > 0.0 {
+                        *vol -= take;
+                        let tv = take * px_area;
+                        got_v += tv;
+                        let l = &*sf.lat.add(i);
+                        for k in 0..LAT {
+                            got_l[k] += l[k] * tv;
+                        }
+                        got_h += *sf.hide.add(i) * tv;
+                    }
+                }
+                if dep_per_w > 0.0 {
+                    sf.add(i, dep_per_w * wt, &blat, bhide);
+                    *sf.stroke.add(i) = id;
+                }
+                // plough: move paint outward from the bristle's path, and ahead
+                if push_k > 0.0 {
+                    let v = *sf.vol.add(i);
+                    let m = v * push_k * wt;
+                    if m > 1e-6 {
+                        let (px, py) = (x as f32 + 0.5, y as f32 + 0.5);
+                        let side = if (px - a.0) * nx + (py - a.1) * ny >= 0.0 { 1.0 } else { -1.0 };
+                        let tx = px + (nx * side * 0.75 + mx * 0.45) * off;
+                        let ty = py + (ny * side * 0.75 + my * 0.45) * off;
+                        if tx >= 0.0 && ty >= 0.0 && (tx as usize) < w && (ty as usize) < h {
+                            let j = ty as usize * w + tx as usize;
+                            if j != i {
+                                let l = *sf.lat.add(i);
+                                let hd = *sf.hide.add(i);
+                                *sf.vol.add(i) -= m;
+                                sf.add(j, m, &l, hd);
+                            }
                         }
                     }
                 }
             }
         }
-    }
-    br.vol = (br.vol - dep_total).max(0.0);
-    if got_v > 0.0 {
-        for k in 0..LAT {
-            got_l[k] /= got_v;
+        br.vol = (br.vol - dep_total).max(0.0);
+        if got_v > 0.0 {
+            for k in 0..LAT {
+                got_l[k] /= got_v;
+            }
+            got_h /= got_v;
+            mix_into(&mut br.vol, &mut br.lat, &mut br.hide, got_v, &got_l, got_h);
         }
-        got_h /= got_v;
-        mix_into(&mut br.vol, &mut br.lat, &mut br.hide, got_v, &got_l, got_h);
+        let pad = (off + 2.0) as usize;
+        grow(bounds, x0.saturating_sub(pad), y0.saturating_sub(pad), (x1 + pad).min(w), (y1 + pad).min(h));
     }
-    let pad = (off + 2.0) as usize;
-    c.wet.touch(x0.saturating_sub(pad), y0.saturating_sub(pad), (x1 + pad).min(w), (y1 + pad).min(h));
+}
+
+/// Separable box blur with radius `r` pixels (edges clamped).
+fn box_blur(src: &[f32], w: usize, h: usize, r: usize) -> Vec<f32> {
+    use rayon::prelude::*;
+    let mut tmp = vec![0.0f32; w * h];
+    tmp.par_chunks_mut(w).enumerate().for_each(|(y, row)| {
+        let s = &src[y * w..(y + 1) * w];
+        let mut acc = 0.0f32;
+        let n = (2 * r + 1) as f32;
+        for k in 0..=2 * r {
+            acc += s[k.saturating_sub(r).min(w - 1)];
+        }
+        for x in 0..w {
+            row[x] = acc / n;
+            let add = (x + r + 1).min(w - 1);
+            let sub = x.saturating_sub(r);
+            acc += s[add] - s[sub];
+        }
+    });
+    let mut out = vec![0.0f32; w * h];
+    // vertical pass, column blocks in parallel
+    out.par_chunks_mut(w).enumerate().for_each(|(y, row)| {
+        let y0 = y.saturating_sub(r);
+        let y1 = (y + r).min(h - 1);
+        let n = (y1 - y0 + 1) as f32;
+        for x in 0..w {
+            let mut acc = 0.0f32;
+            for yy in y0..=y1 {
+                acc += tmp[yy * w + x];
+            }
+            row[x] = acc / n;
+        }
+    });
+    out
 }

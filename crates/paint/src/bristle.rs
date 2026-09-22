@@ -209,11 +209,11 @@ impl Held {
                     }
                 };
                 // jitter roots a little so bristles don't sit on a perfect lattice
-                let (rx, ry) = (rx + rng.normal() * 0.02, ry + rng.normal() * 0.02);
+                let (rx, ry) = ((rx + rng.normal() * 0.02).clamp(-ROOT_MAX, ROOT_MAX), (ry + rng.normal() * 0.02).clamp(-ROOT_MAX, ROOT_MAX));
                 Bristle {
                     rx,
                     ry,
-                    len: 1.0 + rng.normal() * 0.15 * tool.ragged,
+                    len: (1.0 + rng.normal() * 0.15 * tool.ragged).clamp(0.4, LEN_MAX),
                     // a round brush is shaped to a point: the outer hairs are
                     // shorter and touch only under pressure, so a light touch
                     // or a lift-off gives just the tip
@@ -443,14 +443,51 @@ impl Canvas {
     }
 }
 
-/// Largest distance (units) paint can move from the gesture's points.
-pub(crate) fn reach_units(tool: &Tool) -> f32 {
-    // half-width with splay and wander, spread, contact trail (0.6 of a
-    // bristle up to ~1.3 long), capsule radius, plough offset, margin
-    tool.width * 0.5 * (1.0 + 0.5 * tool.splay) * (1.15 + 0.3 * tool.splay) + tool.length * 0.85 + 3.0 * tool.hair_radius() + 1.5 + 1.5 * (0.05 * tool.width + 0.12)
+/// Bristle roots never sit farther than this (in half-widths) from the axis.
+const ROOT_MAX: f32 = 1.2;
+/// Longest bristle relative to the tool's length.
+const LEN_MAX: f32 = 1.6;
+
+/// A pixel rectangle (x0, y0, x1, y1), end-exclusive.
+pub(crate) type Rect = (usize, usize, usize, usize);
+
+/// Every pixel `drag_on` may read or write for a gesture with these points
+/// (units), as a conservative end-exclusive rectangle clamped to the canvas.
+/// Mirrors the geometry in `drag_on`/`exchange`: the resampled path (a spline
+/// can overshoot its control points), hand shake, root offsets with wander
+/// and splay, bristle bend (it relaxes from zero toward targets bounded by
+/// the trail and spread), the capsule radius, and the plough destination.
+pub(crate) fn footprint(tool: &Tool, pts: &[(f32, f32)], shake: f32, scale: f32, w: usize, h: usize) -> Option<Rect> {
+    if pts.is_empty() {
+        return None;
+    }
+    let s = scale;
+    let px: Vec<(f32, f32)> = pts.iter().map(|&(x, y)| (x * s, y * s)).collect();
+    let path = if px.len() >= 2 { densify(&px) } else { px };
+    let (mut x0, mut y0, mut x1, mut y1) = (f32::MAX, f32::MAX, f32::MIN, f32::MIN);
+    for &(x, y) in &path {
+        x0 = x0.min(x);
+        y0 = y0.min(y);
+        x1 = x1.max(x);
+        y1 = y1.max(y);
+    }
+    let shake_px = shake.abs() * (0.05 * tool.width + 0.12) * s * 1.5;
+    let half = tool.width * 0.5 * s * (1.0 + tool.splay.abs() * 0.5);
+    let root = (ROOT_MAX + 0.12 * tool.ragged.abs()) * std::f32::consts::SQRT_2 * half;
+    let bend = tool.length * s * LEN_MAX + root * tool.splay.abs() * 0.3;
+    let rb = (tool.hair_radius() * s).max(0.55);
+    // exchange rect: capsule ± (rb + 1); plough target ≤ off from a pixel in
+    // it, off = rb + 1; bounds padding off + 2; plus rounding
+    let pad = shake_px + root + bend * 0.6 + (rb + 1.0) + 2.0 * (rb + 1.0) + 4.0;
+    if !pad.is_finite() || !x0.is_finite() || !x1.is_finite() || !y0.is_finite() || !y1.is_finite() {
+        panic!("non-finite brush footprint (gesture or tool parameters)");
+    }
+    let c = |v: f32, n: usize| (v.max(0.0) as usize).min(n);
+    let r = (c((x0 - pad).floor(), w), c((y0 - pad).floor(), h), c((x1 + pad).ceil() + 1.0, w), c((y1 + pad).ceil() + 1.0, h));
+    if r.2 <= r.0 || r.3 <= r.1 { None } else { Some(r) }
 }
 
-/// SAFETY: no other thread may touch pixels within `reach_units` of `g`.
+/// SAFETY: no other thread may touch pixels in `footprint(..)` of `g`.
 pub(crate) unsafe fn drag_on(
     sf: Surf,
     held: &mut Held,

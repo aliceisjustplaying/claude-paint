@@ -168,3 +168,39 @@ fn mismatched_mask_is_rejected() {
     h.load(Paint::body(hex("#202020")), 1.0);
     c.drag(&mut h, &Gesture::line((100.0, 500.0), (900.0, 500.0)), Some(&m));
 }
+
+/// Every pixel a drag changes lies inside its computed footprint, even with
+/// an extreme hand shake and a path whose spline overshoots its points.
+#[test]
+fn footprint_bounds_every_touched_pixel() {
+    use crate::bristle::footprint;
+    for (tool, shake, pts) in [
+        (Tool::hog_flat(30.0), 3.0, vec![(300.0, 200.0), (500.0, 200.0), (500.0, 400.0), (300.0, 400.0)]),
+        (Tool::fan(20.0), 1.0, vec![(200.0, 500.0), (800.0, 520.0)]),
+        (Tool::rigger(0.6), 2.0, vec![(500.0, 300.0), (520.0, 330.0), (480.0, 360.0)]),
+        (Tool::badger(40.0), 1.0, vec![(100.0, 700.0), (900.0, 690.0)]),
+    ] {
+        for scale in [0.1f32, 0.4] {
+            let w = (1000.0 * scale) as usize;
+            let mut c = Canvas::new(w, 1.0, hex("#c8b89a")).with_weave(1.2, 0.3, 3);
+            // wet paint everywhere to plough
+            let mut under = Held::new(Tool::filbert(60.0), 2);
+            for k in 0..12 {
+                under.reload(Paint::body(hex("#304060")), 1.0);
+                let y = 40.0 + k as f32 * 80.0;
+                c.drag(&mut under, &Gesture::new(vec![(0.0, y), (1000.0, y)]).pressure(1.0, 1.0), None);
+            }
+            let before = c.wet.vol.clone();
+            let mut h = Held::new(tool.clone(), 9);
+            h.load(Paint::body(hex("#d0c060")), 1.0);
+            c.drag(&mut h, &Gesture::new(pts.clone()).pressure(1.0, 1.0).shake(shake), None);
+            let r = footprint(&tool, &pts, shake, c.f.scale, c.f.w, c.f.h).unwrap();
+            for (i, (a, b)) in before.iter().zip(&c.wet.vol).enumerate() {
+                if a != b {
+                    let (x, y) = (i % c.f.w, i / c.f.w);
+                    assert!(x >= r.0 && x < r.2 && y >= r.1 && y < r.3, "{:?} scale {scale}: ({x},{y}) outside {r:?}", tool.kind);
+                }
+            }
+        }
+    }
+}

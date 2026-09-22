@@ -79,21 +79,6 @@ impl Wet {
         });
     }
 
-    /// Add paint to pixel `i`, mixing by volume.
-    #[inline]
-    pub fn add(&mut self, i: usize, v: f32, lat: &Latent, hide: Prop) {
-        if v <= 0.0 {
-            return;
-        }
-        let t = self.vol[i] + v;
-        let a = v / t;
-        let l = &mut self.lat[i];
-        for k in 0..LAT {
-            l[k] += (lat[k] - l[k]) * a;
-        }
-        lerp_prop(&mut self.hide[i], hide, a);
-        self.vol[i] = t;
-    }
 }
 
 /// Mix `v` of (`lat`, `hide`) into a reservoir (`rv`, `rl`, `rh`).

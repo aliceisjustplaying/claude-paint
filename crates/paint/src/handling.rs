@@ -7,7 +7,7 @@
 //! stroke, so all mixing, smearing, dry-brush and ridges come from the
 //! bristle simulation, not from blend modes.
 
-use crate::bristle::{Gesture, Held, Orient, Tool};
+use crate::bristle::{Gesture, Held, Orient, Rect, Tool, footprint};
 use crate::canvas::Canvas;
 use crate::color::{Rgb, from_oklab, to_oklab};
 use crate::mask::Mask;
@@ -197,6 +197,7 @@ impl Canvas {
 
         // plan every stroke deterministically
         let mut plans = Vec::with_capacity(centers.len());
+        // how far (units) any stroke's pixel footprint reaches from its center
         let (mut ex, mut ey) = (0.0f32, 0.0f32);
         for &(cx, cy) in &centers {
             let len = rng.range(hd.length.0, hd.length.1);
@@ -217,9 +218,11 @@ impl Canvas {
             } else {
                 trace(&*hd.angle, cx, cy, len, bend, &mut rng)
             };
-            for &(x, y) in &pts {
-                ex = ex.max((x - cx).abs());
-                ey = ey.max((y - cy).abs());
+            let rect = footprint(&hd.tool, &pts, hd.shake, f.scale, f.w, f.h);
+            if let Some(r) = rect {
+                let (px, py) = (cx * f.scale, cy * f.scale);
+                ex = ex.max((px - r.0 as f32).max(r.2 as f32 - px) / f.scale);
+                ey = ey.max((py - r.1 as f32).max(r.3 as f32 - py) / f.scale);
             }
             let pressure = rng.range(hd.pressure.0, hd.pressure.1);
             let fade = rng.range(0.75, 1.05);
@@ -229,20 +232,32 @@ impl Canvas {
                 lab[1] + rng.normal() * hd.jitter.1,
                 lab[2] + rng.normal() * hd.jitter.1,
             ]);
-            plans.push((cx, cy, Plan { pts, pressure, fade, dip: Some(col) }));
+            plans.push((cx, cy, rect, Plan { pts, pressure, fade, dip: Some(col) }));
         }
-        // tiles are sized per axis: long horizontal strokes get wide, short tiles
-        let r = crate::bristle::reach_units(&hd.tool);
-        let (tile_x, tile_y) = ((2.0 * (ex + r) + 2.0).max(gap * 2.0), (2.0 * (ey + r) + 2.0).max(gap * 2.0));
+        // tiles are sized per axis from the footprints: tiles painted at the
+        // same time are one tile apart, so a tile at least twice the largest
+        // reach keeps their pixels disjoint (long horizontal strokes get wide,
+        // short tiles)
+        let margin = 2.0 / f.scale;
+        let (tile_x, tile_y) = ((2.0 * ex + margin).max(gap * 2.0), (2.0 * ey + margin).max(gap * 2.0));
         let (tw, th) = ((f.width() / tile_x).ceil().max(1.0) as usize, (f.height() / tile_y).ceil().max(1.0) as usize);
         if std::env::var_os("PAINT_DEBUG").is_some() {
-            eprintln!("work: {} strokes, extent {ex:.0}x{ey:.0}, reach {r:.0}, tiles {tw}x{th}", centers.len());
+            eprintln!("work: {} strokes, reach {ex:.0}x{ey:.0}, tiles {tw}x{th}", centers.len());
         }
         let mut tiles: Vec<Vec<Plan>> = (0..tw * th).map(|_| Vec::new()).collect();
-        for (cx, cy, p) in plans {
+        // pixel footprint of each tile: the union of its strokes'
+        let mut tile_rect: Vec<Option<Rect>> = vec![None; tw * th];
+        for (cx, cy, rect, p) in plans {
             let tx = ((cx / tile_x) as usize).min(tw - 1);
             let ty = ((cy / tile_y) as usize).min(th - 1);
-            tiles[ty * tw + tx].push(p);
+            let t = ty * tw + tx;
+            if let Some(r) = rect {
+                tile_rect[t] = Some(match tile_rect[t] {
+                    None => r,
+                    Some(a) => (a.0.min(r.0), a.1.min(r.1), a.2.max(r.2), a.3.max(r.3)),
+                });
+                tiles[t].push(p);
+            }
         }
         // trips to the palette: every `dip_every` strokes within a passage
         for t in tiles.iter_mut() {
@@ -270,52 +285,78 @@ impl Canvas {
         }
         let mut dirty: crate::bristle::Bounds = None;
         for (px, py) in phases {
-            let idx: Vec<usize> = (0..tiles.len()).filter(|&i| (i % tw) % 2 == px && (i / tw) % 2 == py && !tiles[i].is_empty()).collect();
-            let results: Vec<crate::bristle::Bounds> = idx
-                .par_iter()
-                .map(|&ti| {
-                    let mut held = Held::new(hd.tool.clone(), seed ^ 0x5EED ^ (ti as u64).wrapping_mul(0x9E37_79B9));
-                    let mut scratch = Vec::new();
-                    let mut b: crate::bristle::Bounds = None;
-                    for (k, p) in tiles[ti].iter().enumerate() {
-                        if let Some(col) = p.dip {
-                            if hd.blender {
-                                held.wipe(0.9);
-                            } else {
-                                held.wipe(hd.wipe);
-                                held.load(Paint { color: col, hiding: hd.hiding, body: hd.body }, hd.load);
+            let idx: Vec<usize> = (0..tiles.len()).filter(|&i| (i % tw) % 2 == px && (i / tw) % 2 == py && tile_rect[i].is_some()).collect();
+            let batches = disjoint_batches(&idx, &tile_rect);
+            if std::env::var_os("PAINT_DEBUG").is_some() {
+                eprintln!("  phase: {} tiles in {} batches", idx.len(), batches.len());
+            }
+            for batch in batches {
+                let results: Vec<crate::bristle::Bounds> = batch
+                    .par_iter()
+                    .map(|&ti| {
+                        let mut held = Held::new(hd.tool.clone(), seed ^ 0x5EED ^ (ti as u64).wrapping_mul(0x9E37_79B9));
+                        let mut scratch = Vec::new();
+                        let mut b: crate::bristle::Bounds = None;
+                        for (k, p) in tiles[ti].iter().enumerate() {
+                            if let Some(col) = p.dip {
+                                if hd.blender {
+                                    held.wipe(0.9);
+                                } else {
+                                    held.wipe(hd.wipe);
+                                    held.load(Paint { color: col, hiding: hd.hiding, body: hd.body }, hd.load);
+                                }
+                            }
+                            let g = Gesture::new(p.pts.clone())
+                                .pressure(p.pressure, p.pressure * p.fade)
+                                .orient(hd.orient)
+                                .ramps(hd.ramps.0, hd.ramps.1)
+                                .shake(hd.shake);
+                            let id = first_id.wrapping_add(offsets[ti] + k as u32);
+                            // SAFETY: every pixel this drag touches lies in its
+                            // stroke footprint, inside this tile's rect; tiles in
+                            // one batch have disjoint rects; `surf()` checked the
+                            // buffers match the frame.
+                            let r = unsafe { crate::bristle::drag_on(surf, &mut held, &g, clip, id, &mut scratch) };
+                            if let Some((a, c, d, e)) = r {
+                                b = Some(match b {
+                                    None => (a, c, d, e),
+                                    Some((a0, c0, d0, e0)) => (a0.min(a), c0.min(c), d0.max(d), e0.max(e)),
+                                });
                             }
                         }
-                        let g = Gesture::new(p.pts.clone())
-                            .pressure(p.pressure, p.pressure * p.fade)
-                            .orient(hd.orient)
-                            .ramps(hd.ramps.0, hd.ramps.1)
-                            .shake(hd.shake);
-                        let id = first_id.wrapping_add(offsets[ti] + k as u32);
-                        // SAFETY: tiles in one phase are ≥ tile apart and
-                        // tile ≥ 2 × reach, so no two brushes share a pixel.
-                        let r = unsafe { crate::bristle::drag_on(surf, &mut held, &g, clip, id, &mut scratch) };
-                        if let Some((a, c, d, e)) = r {
-                            b = Some(match b {
-                                None => (a, c, d, e),
-                                Some((a0, c0, d0, e0)) => (a0.min(a), c0.min(c), d0.max(d), e0.max(e)),
-                            });
-                        }
-                    }
-                    b
-                })
-                .collect();
-            for r in results.into_iter().flatten() {
-                dirty = Some(match dirty {
-                    None => r,
-                    Some((a0, c0, d0, e0)) => (a0.min(r.0), c0.min(r.1), d0.max(r.2), e0.max(r.3)),
-                });
+                        b
+                    })
+                    .collect();
+                for r in results.into_iter().flatten() {
+                    dirty = Some(match dirty {
+                        None => r,
+                        Some((a0, c0, d0, e0)) => (a0.min(r.0), c0.min(r.1), d0.max(r.2), e0.max(r.3)),
+                    });
+                }
             }
         }
         if let Some((x0, y0, x1, y1)) = dirty {
             self.wet.touch(x0, y0, x1, y1);
         }
     }
+}
+
+/// Group tiles (in the given, deterministic order) into batches whose
+/// footprints are pairwise disjoint; tiles in a batch may run concurrently.
+fn disjoint_batches(idx: &[usize], rects: &[Option<Rect>]) -> Vec<Vec<usize>> {
+    let overlaps = |a: Rect, b: Rect| a.0 < b.2 && b.0 < a.2 && a.1 < b.3 && b.1 < a.3;
+    let mut batches: Vec<(Vec<usize>, Vec<Rect>)> = Vec::new();
+    for &ti in idx {
+        let r = rects[ti].expect("tile without footprint");
+        match batches.iter_mut().find(|(_, rs)| rs.iter().all(|&q| !overlaps(q, r))) {
+            Some((ts, rs)) => {
+                ts.push(ti);
+                rs.push(r);
+            }
+            None => batches.push((vec![ti], vec![r])),
+        }
+    }
+    batches.into_iter().map(|(ts, _)| ts).collect()
 }
 
 /// A streamline through (cx, cy) along the angle field, random direction.

@@ -108,7 +108,7 @@ impl Canvas {
             .collect();
         let sv = vec![stiff; w * h];
         let t = self.settle((0, 0, w, h), &add, &sv);
-        let pig = Pigment::with_hiding(color, hiding);
+        let pig = Pigment::masstone_hiding(color, hiding);
         self.px.par_iter_mut().zip(&t).for_each(|(p, &ti)| *p = pig.over(*p, ti / COAT_UM));
         self.film.par_iter_mut().zip(&t).for_each(|(f, &ti)| *f += ti / COAT_UM);
     }

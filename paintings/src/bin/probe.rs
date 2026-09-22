@@ -1,42 +1,32 @@
-//! Debug probe: one dark rigger stroke on a flat canvas; report pixels that
-//! came out lighter than the background (should be none).
+//! Debug probe: light badger / filbert drags over dried paint at full scale.
 use paint::{Canvas, Gesture, Held, Orient, Paint, Tool, hex};
 
 fn main() {
-    let relief = std::env::args().any(|a| a == "relief");
-    let weave = std::env::args().any(|a| a == "weave");
-    let mut c = Canvas::new(3200, 4.0, hex("#9aa3a6"));
-    if weave {
-        c = c.with_weave(0.9, 0.35, 1);
-    }
-    let bg = c.px[0];
-    for (i, w) in [0.2f32, 0.3, 0.5, 0.8].iter().enumerate() {
-        let y = 50.0 + i as f32 * 50.0;
-        let tool = Tool { width: w * 1.6, length: w * 4.0, ..Tool::rigger(*w) };
-        let mut held = Held::new(tool, 7 + i as u64);
-        held.load(Paint { color: hex("#2a2420"), hiding: 0.95, body: 0.9 }, 1.0);
-        let g = Gesture::new(vec![(100.0, y), (300.0, y + 10.0), (500.0, y - 5.0)]).pressure(1.0, 0.3).ramps(0.0, 0.4).orient(Orient::Across);
-        c.drag(&mut held, &g, None);
+    let args: Vec<String> = std::env::args().collect();
+    let tool = args.get(1).map(|s| s.as_str()).unwrap_or("badger");
+    let p: f32 = args.get(2).and_then(|s| s.parse().ok()).unwrap_or(0.4);
+    let mut c = Canvas::new(3200, 4.0, hex("#9aa3a6")).with_weave(0.9, 0.35, 1);
+    // a dried body layer
+    let mut b = Held::new(Tool::filbert(40.0), 1);
+    for i in 0..6 {
+        b.reload(Paint::body(hex("#6d6f78")), 1.0);
+        let y = 30.0 + i as f32 * 30.0;
+        c.drag(&mut b, &Gesture::new(vec![(20.0, y), (980.0, y)]).pressure(0.9, 0.9).orient(Orient::Across), None);
     }
     c.dry();
-    if relief {
-        c.relief(0.5, 0.0);
-    }
-    let lum = |p: [f32; 3]| 0.2126 * p[0] + 0.7152 * p[1] + 0.0722 * p[2];
-    let lb = lum(bg);
-    let mut n = 0;
-    let mut worst = 0.0f32;
-    let mut at = (0, 0);
-    for (i, p) in c.px.iter().enumerate() {
-        let d = lum(*p) - lb;
-        if d > 0.005 {
-            n += 1;
-            if d > worst {
-                worst = d;
-                at = (i % c.f.w, i / c.f.w);
-            }
+    // light passes on top
+    let mut t = match tool {
+        "badger" => Held::new(Tool::badger(40.0), 2),
+        _ => Held::new(Tool::filbert(9.0), 2),
+    };
+    for i in 0..4 {
+        let y = 60.0 + i as f32 * 40.0;
+        if tool != "badger" {
+            t.reload(Paint { color: hex("#b0a9a3"), hiding: 0.3, body: 0.3 }, 0.6);
         }
+        c.drag(&mut t, &Gesture::new(vec![(100.0, y), (900.0, y + 3.0)]).pressure(p, p).orient(Orient::Across), None);
     }
-    println!("bg lum {lb:.4}; lighter pixels: {n}; worst +{worst:.4} at {at:?}");
+    c.dry();
+    c.relief(0.2, 0.02);
     c.save("out/probe.png").unwrap();
 }

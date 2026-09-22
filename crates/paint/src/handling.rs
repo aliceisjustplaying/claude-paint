@@ -52,6 +52,8 @@ pub struct Handling<'a> {
     pub threshold: f32,
     /// Press-down and lift-off fractions of each stroke.
     pub ramps: (f32, f32),
+    /// Hand unsteadiness (1 = normal).
+    pub shake: f32,
 }
 
 impl<'a> Handling<'a> {
@@ -76,6 +78,7 @@ impl<'a> Handling<'a> {
             clip: false,
             threshold: 0.3,
             ramps: (0.08, 0.15),
+            shake: 1.0,
         }
     }
     pub fn length(mut self, a: f32, b: f32) -> Self {
@@ -139,6 +142,10 @@ impl<'a> Handling<'a> {
     }
     pub fn ramps(mut self, attack: f32, release: f32) -> Self {
         self.ramps = (attack, release);
+        self
+    }
+    pub fn shake(mut self, k: f32) -> Self {
+        self.shake = k;
         self
     }
 }
@@ -281,7 +288,8 @@ impl Canvas {
                         let g = Gesture::new(p.pts.clone())
                             .pressure(p.pressure, p.pressure * p.fade)
                             .orient(hd.orient)
-                            .ramps(hd.ramps.0, hd.ramps.1);
+                            .ramps(hd.ramps.0, hd.ramps.1)
+                            .shake(hd.shake);
                         let id = first_id.wrapping_add(offsets[ti] + k as u32);
                         // SAFETY: tiles in one phase are ≥ tile apart and
                         // tile ≥ 2 × reach, so no two brushes share a pixel.

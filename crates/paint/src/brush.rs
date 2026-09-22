@@ -318,8 +318,8 @@ impl Canvas {
                     }
                 };
                 if impasto > 0.0 {
-                    let h = &mut hrow[x];
-                    *h += (impasto * lp.ridge - *h) * (c * op).min(1.0);
+                    // µm of relief (legacy stamp brush)
+                    hrow[x] += impasto * lp.ridge * 60.0 * (c * op).min(1.0);
                 }
                 frow[x] += film * c;
             }

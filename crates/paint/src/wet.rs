@@ -9,10 +9,20 @@
 use crate::canvas::Canvas;
 use crate::color::Rgb;
 use crate::pigment::Pigment;
+use crate::surface::COAT_UM;
 use rayon::prelude::*;
 
 pub const LAT: usize = mixbox::LATENT_SIZE;
 pub type Latent = [f32; LAT];
+/// Paint properties mixed by volume alongside the pigment: [hiding, stiffness].
+/// Stiffness 0 = fluid, medium-rich glaze; 1 = stiff tube paint.
+pub type Prop = [f32; 2];
+
+#[inline]
+fn lerp_prop(p: &mut Prop, q: Prop, a: f32) {
+    p[0] += (q[0] - p[0]) * a;
+    p[1] += (q[1] - p[1]) * a;
+}
 
 /// A paint as squeezed from the tube and thinned with medium.
 #[derive(Clone, Copy, Debug)]
@@ -43,7 +53,8 @@ impl Paint {
 pub struct Wet {
     pub vol: Vec<f32>,
     pub lat: Vec<Latent>,
-    pub hide: Vec<f32>,
+    /// [hiding, stiffness] of the wet paint.
+    pub hide: Vec<Prop>,
     /// Which stroke last laid paint here (a stroke barely re-picks its own paint).
     pub stroke: Vec<u32>,
     /// Stroke that last touched a pixel, and the film floor that stroke may
@@ -58,7 +69,7 @@ pub struct Wet {
 
 impl Wet {
     pub fn new(n: usize) -> Self {
-        Wet { vol: vec![0.0; n], lat: vec![[0.0; LAT]; n], hide: vec![0.0; n], stroke: vec![0; n], touched: vec![0; n], floor: vec![0.0; n], current: 0, dirty: None }
+        Wet { vol: vec![0.0; n], lat: vec![[0.0; LAT]; n], hide: vec![[0.0, 0.5]; n], stroke: vec![0; n], touched: vec![0; n], floor: vec![0.0; n], current: 0, dirty: None }
     }
 
     pub fn touch(&mut self, x0: usize, y0: usize, x1: usize, y1: usize) {
@@ -70,7 +81,7 @@ impl Wet {
 
     /// Add paint to pixel `i`, mixing by volume.
     #[inline]
-    pub fn add(&mut self, i: usize, v: f32, lat: &Latent, hide: f32) {
+    pub fn add(&mut self, i: usize, v: f32, lat: &Latent, hide: Prop) {
         if v <= 0.0 {
             return;
         }
@@ -80,14 +91,14 @@ impl Wet {
         for k in 0..LAT {
             l[k] += (lat[k] - l[k]) * a;
         }
-        self.hide[i] += (hide - self.hide[i]) * a;
+        lerp_prop(&mut self.hide[i], hide, a);
         self.vol[i] = t;
     }
 }
 
 /// Mix `v` of (`lat`, `hide`) into a reservoir (`rv`, `rl`, `rh`).
 #[inline]
-pub fn mix_into(rv: &mut f32, rl: &mut Latent, rh: &mut f32, v: f32, lat: &Latent, hide: f32) {
+pub fn mix_into(rv: &mut f32, rl: &mut Latent, rh: &mut Prop, v: f32, lat: &Latent, hide: Prop) {
     if v <= 0.0 {
         return;
     }
@@ -96,94 +107,59 @@ pub fn mix_into(rv: &mut f32, rl: &mut Latent, rh: &mut f32, v: f32, lat: &Laten
     for k in 0..LAT {
         rl[k] += (lat[k] - rl[k]) * a;
     }
-    *rh += (hide - *rh) * a;
+    lerp_prop(rh, hide, a);
     *rv = t;
 }
 
-/// How far wet paint levels (flows out under its own surface tension) before
-/// it sets, in units. Sharp steps at stroke edges slump into gentle slopes;
-/// ridges wider than this survive.
-pub const LEVEL_UNITS: f32 = 1.5;
-
-/// Box-blurred copy of `vol` over the rect (x0, y0, x1, y1), radius `r` px.
-fn leveled(vol: &[f32], w: usize, h: usize, rect: (usize, usize, usize, usize), r: usize) -> Vec<f32> {
-    let (x0, y0, x1, y1) = rect;
-    let rw = x1 - x0;
-    let ya = y0.saturating_sub(r);
-    let yb = (y1 + r).min(h);
-    let n = (2 * r + 1) as f32;
-    let mut tmp = vec![0f32; rw * (yb - ya)];
-    tmp.par_chunks_mut(rw).enumerate().for_each(|(j, row)| {
-        let s = &vol[(ya + j) * w..(ya + j + 1) * w];
-        let mut acc = 0.0f32;
-        for k in 0..=2 * r {
-            acc += s[(x0 + k).saturating_sub(r).min(w - 1)];
-        }
-        for (i, o) in row.iter_mut().enumerate() {
-            *o = acc / n;
-            let x = x0 + i;
-            acc += s[(x + r + 1).min(w - 1)] - s[x.saturating_sub(r)];
-        }
-    });
-    let mut out = vec![0f32; rw * (y1 - y0)];
-    out.par_chunks_mut(rw).enumerate().for_each(|(j, row)| {
-        let y = y0 + j;
-        let lo = y.saturating_sub(r).max(ya);
-        let hi = (y + r).min(yb - 1);
-        let cnt = (hi - lo + 1) as f32;
-        for (i, o) in row.iter_mut().enumerate() {
-            let mut a = 0.0f32;
-            for yy in lo..=hi {
-                a += tmp[(yy - ya) * rw + i];
-            }
-            *o = a / cnt;
-        }
-    });
-    out
-}
-
-/// Relief added per unit of dried paint thickness.
-pub const RELIEF_PER_VOL: f32 = 0.12;
 
 impl Canvas {
-    /// Let the wet paint dry: composite it over the dry picture (Kubelka–Munk,
-    /// thickness = volume), add its thickness to the relief, clear the wet layer.
+    /// Let the wet paint dry: the film levels over the surface (thin fluid
+    /// paint pools in the hollows, stiff paint keeps its marks), then it is
+    /// composited over the dry picture with Kubelka–Munk using the settled
+    /// thickness, and the wet layer is cleared.
     pub fn dry(&mut self) {
         let Some((x0, y0, x1, y1)) = self.wet.dirty.take() else { return };
-        self.surf_gen += 1;
-        let w = self.f.w;
-        let (x1, y1) = (x1.min(w), y1.min(self.f.h));
-        // relief: the paint levels a little before it sets
-        let r = (LEVEL_UNITS * self.f.scale).round().max(1.0) as usize;
-        let ex = (x0.saturating_sub(r), y0.saturating_sub(r), (x1 + r).min(w), (y1 + r).min(self.f.h));
-        let lev = leveled(&self.wet.vol, w, self.f.h, ex, r);
-        let ew = ex.2 - ex.0;
-        self.height[ex.1 * w..ex.3 * w].par_chunks_mut(w).zip(self.film[ex.1 * w..ex.3 * w].par_chunks_mut(w)).enumerate().for_each(|(j, (hh, ff))| {
-            for i in 0..ew {
-                let v = lev[j * ew + i];
-                hh[ex.0 + i] += v * RELIEF_PER_VOL;
-                ff[ex.0 + i] += v;
-            }
-        });
-        let wet = &mut self.wet;
-        let rows = self.px[y0 * w..y1 * w]
-            .par_chunks_mut(w)
-            .zip(wet.vol[y0 * w..y1 * w].par_chunks_mut(w))
-            .zip(wet.lat[y0 * w..y1 * w].par_chunks(w))
-            .zip(wet.hide[y0 * w..y1 * w].par_chunks(w));
-        rows.for_each(|(((px, vv), ll), hd)| {
-            for x in x0..x1 {
-                let v = vv[x];
-                if v < 1e-5 {
-                    vv[x] = 0.0;
-                    continue;
+        let (w, h) = (self.f.w, self.f.h);
+        let (x1, y1) = (x1.min(w), y1.min(h));
+        let pad = ((2.0 / self.px_mm()).ceil() as usize).max(2);
+        let ex = (x0.saturating_sub(pad), y0.saturating_sub(pad), (x1 + pad).min(w), (y1 + pad).min(h));
+        let (ew, eh) = (ex.2 - ex.0, ex.3 - ex.1);
+        let mut add = vec![0.0f32; ew * eh];
+        let mut stiff = vec![0.5f32; ew * eh];
+        for y in 0..eh {
+            for x in 0..ew {
+                let i = (ex.1 + y) * w + ex.0 + x;
+                let v = self.wet.vol[i];
+                if v >= 1e-5 {
+                    add[y * ew + x] = v * COAT_UM;
+                    stiff[y * ew + x] = self.wet.hide[i][1];
                 }
-                let c = mixbox::latent_to_linear_float_rgb(&ll[x]);
-                let pig = Pigment::with_hiding(c, hd[x].clamp(0.01, 0.99));
-                px[x] = pig.over(px[x], v);
-                vv[x] = 0.0;
             }
-        });
+        }
+        let t = self.settle(ex, &add, &stiff);
+        let wet = &mut self.wet;
+        let (lat, hide) = (&wet.lat, &wet.hide);
+        self.px[ex.1 * w..ex.3 * w]
+            .par_chunks_mut(w)
+            .zip(wet.vol[ex.1 * w..ex.3 * w].par_chunks_mut(w))
+            .zip(self.film[ex.1 * w..ex.3 * w].par_chunks_mut(w))
+            .enumerate()
+            .for_each(|(j, ((px, vv), ff))| {
+                let y = ex.1 + j;
+                for x in ex.0..ex.2 {
+                    if vv[x] < 1e-5 {
+                        vv[x] = 0.0;
+                        continue;
+                    }
+                    let ti = t[j * ew + x - ex.0] / COAT_UM;
+                    let i = y * w + x;
+                    let c = mixbox::latent_to_linear_float_rgb(&lat[i]);
+                    let pig = Pigment::with_hiding(c, hide[i][0].clamp(0.01, 0.99));
+                    px[x] = pig.over(px[x], ti);
+                    ff[x] += ti;
+                    vv[x] = 0.0;
+                }
+            });
     }
 
     /// Total wet paint on the canvas (for tests / debugging).

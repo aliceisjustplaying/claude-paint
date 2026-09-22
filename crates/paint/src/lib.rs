@@ -22,6 +22,7 @@ pub mod bristle;
 pub mod handling;
 pub mod style;
 pub mod hand;
+pub mod surface;
 
 pub use brush::{Brush, Medium};
 pub use canvas::{Canvas, Frame};
@@ -31,8 +32,9 @@ pub use tree::Oak;
 pub use bristle::{Gesture, Held, Kind, Orient, Tool};
 pub use wet::Paint;
 pub use handling::Handling;
-pub use style::Style;
+pub use style::{Apply, Ground, Style};
 pub use hand::{Hand, Mark};
+pub use surface::{COAT_UM, Linen};
 pub use mask::Mask;
 pub use noise::Fbm;
 pub use pigment::Pigment;

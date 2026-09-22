@@ -22,7 +22,11 @@ use crate::canvas::Canvas;
 use crate::mask::Mask;
 use crate::rng::Rng;
 use crate::smoothstep;
-use crate::wet::{LAT, Latent, Paint, mix_into};
+use crate::wet::{LAT, Latent, Paint, Prop, mix_into};
+
+/// Relief (µm) that spans a bristle's contact range: a bristle pressed
+/// lightly touches only peaks this much above their surroundings.
+const TOOTH_UM: f32 = 60.0;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Kind {
@@ -170,7 +174,7 @@ struct Bristle {
     prev: [Option<(f32, f32)>; 2],
     vol: f32,
     lat: Latent,
-    hide: f32,
+    hide: Prop,
 }
 
 /// A brush in the hand, with paint in its bristles.
@@ -210,13 +214,21 @@ impl Held {
                     rx,
                     ry,
                     len: 1.0 + rng.normal() * 0.15 * tool.ragged,
-                    thresh: tool.ragged * rng.f().powf(1.5) * 0.55,
+                    // a round brush is shaped to a point: the outer hairs are
+                    // shorter and touch only under pressure, so a light touch
+                    // or a lift-off gives just the tip
+                    thresh: tool.ragged * rng.f().powf(1.5) * 0.55
+                        + match tool.kind {
+                            Kind::Round | Kind::Rigger => 0.6 * (rx * rx + ry * ry),
+                            Kind::Filbert => 0.3 * (rx * rx + ry * ry / 0.09),
+                            _ => 0.0,
+                        },
                     bend: (0.0, 0.0),
                     seed: i as u64 * 7919 + seed,
                     prev: [None, None],
                     vol: 0.0,
                     lat: [0.0; LAT],
-                    hide: 0.5,
+                    hide: [0.5, 0.5],
                 }
             })
             .collect();
@@ -237,7 +249,7 @@ impl Held {
         let full = self.full();
         for (i, b) in self.bristles.iter_mut().enumerate() {
             let k = 0.75 + 0.5 * crate::rng::hash2(i as i64, 17, 3);
-            mix_into(&mut b.vol, &mut b.lat, &mut b.hide, amount * paint.body * full * k, &lat, paint.hiding);
+            mix_into(&mut b.vol, &mut b.lat, &mut b.hide, amount * paint.body * full * k, &lat, [paint.hiding, paint.body]);
         }
     }
 
@@ -282,14 +294,21 @@ pub struct Gesture {
     /// Fraction of the stroke spent pressing down / lifting off.
     pub attack: f32,
     pub release: f32,
+    /// Hand unsteadiness: 1 = a normal hand, 0 = mechanically exact.
+    pub shake: f32,
 }
 
 impl Gesture {
     pub fn new(pts: Vec<(f32, f32)>) -> Self {
-        Gesture { pts, pressure: (0.8, 0.8), orient: Orient::Across, attack: 0.08, release: 0.15 }
+        Gesture { pts, pressure: (0.8, 0.8), orient: Orient::Across, attack: 0.08, release: 0.15, shake: 1.0 }
     }
     pub fn line(a: (f32, f32), b: (f32, f32)) -> Self {
         Self::new(vec![a, b])
+    }
+    /// Scale hand unsteadiness (0 = exact, 1 = normal).
+    pub fn shake(mut self, k: f32) -> Self {
+        self.shake = k;
+        self
     }
     pub fn pressure(mut self, a: f32, b: f32) -> Self {
         self.pressure = (a, b);
@@ -306,8 +325,8 @@ impl Gesture {
     }
     fn pressure_at(&self, u: f32) -> f32 {
         let base = self.pressure.0 + (self.pressure.1 - self.pressure.0) * u;
-        let a = if self.attack > 0.0 { 0.3 + 0.7 * smoothstep(0.0, self.attack, u) } else { 1.0 };
-        let r = if self.release > 0.0 { 0.2 + 0.8 * smoothstep(0.0, self.release, 1.0 - u) } else { 1.0 };
+        let a = if self.attack > 0.0 { 0.08 + 0.92 * smoothstep(0.0, self.attack, u) } else { 1.0 };
+        let r = if self.release > 0.0 { 0.05 + 0.95 * smoothstep(0.0, self.release, 1.0 - u) } else { 1.0 };
         base * a * r
     }
 }
@@ -321,7 +340,7 @@ pub(crate) struct Surf {
     scale: f32,
     vol: *mut f32,
     lat: *mut Latent,
-    hide: *mut f32,
+    hide: *mut Prop,
     stroke: *mut u32,
     touched: *mut u32,
     floor: *mut f32,
@@ -344,7 +363,7 @@ fn grow(b: &mut Bounds, x0: usize, y0: usize, x1: usize, y1: usize) {
 
 impl Surf {
     #[inline]
-    unsafe fn add(&self, i: usize, v: f32, lat: &Latent, hide: f32) {
+    unsafe fn add(&self, i: usize, v: f32, lat: &Latent, hide: Prop) {
         unsafe {
             if v <= 0.0 {
                 return;
@@ -357,7 +376,8 @@ impl Surf {
             for k in 0..LAT {
                 l[k] += (lat[k] - l[k]) * a;
             }
-            *hd += (hide - *hd) * a;
+            hd[0] += (hide[0] - hd[0]) * a;
+            hd[1] += (hide[1] - hd[1]) * a;
             *vol = t;
         }
     }
@@ -365,23 +385,19 @@ impl Surf {
 
 impl Canvas {
     pub(crate) fn surf(&mut self) -> Surf {
-        self.ensure_tooth();
         if self.base.as_ref().map(|b| b.0) != Some(self.surf_gen) {
-            let tooth = self.tooth.as_ref().unwrap();
             let mut base = self.base.take().map(|b| b.1).unwrap_or_default();
-            base.resize(tooth.len(), 0.0);
+            base.resize(self.height.len(), 0.0);
             use rayon::prelude::*;
             // a brush rests on local peaks: only relief relative to the
-            // surroundings matters, so high-pass the dried paint height
-            let r = (3.0 * self.f.scale).round().max(1.0) as usize;
-            let low = box_blur(&self.height, self.f.w, self.f.h, r);
-            base.par_iter_mut()
-                .zip(tooth.par_iter())
-                .zip(self.film.par_iter().zip(self.height.par_iter().zip(low.par_iter())))
-                .for_each(|((b, &t), (&film, (&hgt, &lo)))| {
-                    let fe = (-film * 0.6).exp();
-                    *b = t * fe + 0.5 * (1.0 - fe) + 2.5 * (hgt - lo);
-                });
+            // surroundings (within ~1.5 mm) matters. ±TOOTH_UM of relief spans
+            // the whole contact range.
+            let r = ((1.5 / self.px_mm()).round() as usize).max(1);
+            let (w, h) = (self.f.w, self.f.h);
+            let low = crate::surface::box_blur(&crate::surface::box_blur(&self.height, w, h, r), w, h, r);
+            base.par_iter_mut().zip(self.height.par_iter().zip(low.par_iter())).for_each(|(b, (&hgt, &lo))| {
+                *b = (0.5 + (hgt - lo) / (2.0 * TOOTH_UM)).clamp(-0.2, 1.3);
+            });
             self.base = Some((self.surf_gen, base));
         }
         Surf {
@@ -421,7 +437,7 @@ impl Canvas {
 pub(crate) fn reach_units(tool: &Tool) -> f32 {
     // half-width with splay and wander, spread, contact trail (0.6 of a
     // bristle up to ~1.3 long), capsule radius, plough offset, margin
-    tool.width * 0.5 * (1.0 + 0.5 * tool.splay) * (1.15 + 0.3 * tool.splay) + tool.length * 0.85 + 3.0 * tool.hair_radius() + 1.5
+    tool.width * 0.5 * (1.0 + 0.5 * tool.splay) * (1.15 + 0.3 * tool.splay) + tool.length * 0.85 + 3.0 * tool.hair_radius() + 1.5 + 1.5 * (0.05 * tool.width + 0.12)
 }
 
 /// SAFETY: no other thread may touch pixels within `reach_units` of `g`.
@@ -472,8 +488,14 @@ pub(crate) unsafe fn drag_on(
         let hy = ay + (by - ay) * f;
         let dir = if seg_len > 1e-3 { ((bx - ax) / seg_len, (by - ay) / seg_len) } else { last_dir };
         last_dir = dir;
+        // the hand is never exact: the path drifts sideways a little and the
+        // pressure breathes, both slowly along the stroke
+        let lw = (tool.width * 2.5 + 6.0) * s;
+        let hs = id as u64 * 7919;
+        let off = g.shake * (0.05 * tool.width + 0.12) * s * (wander(d / lw, hs + 1) + 0.5 * wander(d / (lw * 0.37), hs + 2));
+        let (hx, hy) = (hx - dir.1 * off, hy + dir.0 * off);
         let u = if total > 0.0 { d / total } else { 0.5 };
-        let p = g.pressure_at(u).clamp(0.0, 1.0);
+        let p = (g.pressure_at(u) * (1.0 + g.shake * 0.14 * wander(d / (lw * 0.8), hs + 3))).clamp(0.0, 1.0);
         let theta = match g.orient {
             Orient::Across => dir.1.atan2(dir.0) + std::f32::consts::FRAC_PI_2,
             Orient::Along => dir.1.atan2(dir.0),
@@ -560,6 +582,7 @@ unsafe fn exchange(
         wts.clear();
         wts.resize(bw * (y1 - y0), 0.0);
         let mut sum_w = 0.0f32;
+        let mut sum_cov = 0.0f32;
         for y in y0..y1 {
             for x in x0..x1 {
                 let (px, py) = (x as f32 + 0.5, y as f32 + 0.5);
@@ -570,9 +593,13 @@ unsafe fn exchange(
                     continue;
                 }
                 let cov = 1.0 - smoothstep(rb * 0.5, rb + 0.5, dist);
+                sum_cov += cov;
                 let i = y * w + x;
                 let surf = (*sf.base.add(i) + 0.35 * *sf.vol.add(i)).min(1.5);
-                let contact = smoothstep(th - 0.12, th + 0.12, surf);
+                // soft hair bends down into the valleys of the weave; stiff hog
+                // bristles ride on the peaks
+                let give = 0.15 + 0.45 * (1.0 - tool.stiffness).clamp(0.0, 1.0);
+                let contact = smoothstep(th - give, th + 0.2, surf);
                 let mut wt = cov * contact;
                 if let Some(m) = clip {
                     wt *= m.data[i];
@@ -587,7 +614,10 @@ unsafe fn exchange(
 
         // deposit: a share of the load, proportional to distance traveled
         let travel = (seg / s).max(rb / s * 0.5);
-        let dep_total = br.vol * (1.0 - (-travel / tool.run).exp());
+        // only the part of the footprint actually in contact takes paint: a
+        // bristle skimming the weave peaks keeps most of its load
+        let touch = (sum_w / sum_cov.max(1e-6)).min(1.0);
+        let dep_total = br.vol * (1.0 - (-travel / tool.run).exp()) * touch;
         let dep_per_w = dep_total / sum_w / px_area;
         // film splitting: a bristle in wet paint always lifts some of it, even
         // when loaded; a spent bristle drinks more
@@ -597,7 +627,7 @@ unsafe fn exchange(
 
         let mut got_v = 0.0f32;
         let mut got_l = [0.0f32; LAT];
-        let mut got_h = 0.0f32;
+        let mut got_h: Prop = [0.0, 0.0];
         let (blat, bhide) = (br.lat, br.hide);
         for y in y0..y1 {
             for x in x0..x1 {
@@ -624,7 +654,9 @@ unsafe fn exchange(
                         for k in 0..LAT {
                             got_l[k] += l[k] * tv;
                         }
-                        got_h += *sf.hide.add(i) * tv;
+                        let hp = *sf.hide.add(i);
+                        got_h[0] += hp[0] * tv;
+                        got_h[1] += hp[1] * tv;
                     }
                 }
                 if dep_per_w > 0.0 {
@@ -658,7 +690,8 @@ unsafe fn exchange(
             for k in 0..LAT {
                 got_l[k] /= got_v;
             }
-            got_h /= got_v;
+            got_h[0] /= got_v;
+            got_h[1] /= got_v;
             mix_into(&mut br.vol, &mut br.lat, &mut br.hide, got_v, &got_l, got_h);
         }
         let pad = (off + 2.0) as usize;
@@ -666,37 +699,3 @@ unsafe fn exchange(
     }
 }
 
-/// Separable box blur with radius `r` pixels (edges clamped).
-fn box_blur(src: &[f32], w: usize, h: usize, r: usize) -> Vec<f32> {
-    use rayon::prelude::*;
-    let mut tmp = vec![0.0f32; w * h];
-    tmp.par_chunks_mut(w).enumerate().for_each(|(y, row)| {
-        let s = &src[y * w..(y + 1) * w];
-        let mut acc = 0.0f32;
-        let n = (2 * r + 1) as f32;
-        for k in 0..=2 * r {
-            acc += s[k.saturating_sub(r).min(w - 1)];
-        }
-        for x in 0..w {
-            row[x] = acc / n;
-            let add = (x + r + 1).min(w - 1);
-            let sub = x.saturating_sub(r);
-            acc += s[add] - s[sub];
-        }
-    });
-    let mut out = vec![0.0f32; w * h];
-    // vertical pass, column blocks in parallel
-    out.par_chunks_mut(w).enumerate().for_each(|(y, row)| {
-        let y0 = y.saturating_sub(r);
-        let y1 = (y + r).min(h - 1);
-        let n = (y1 - y0 + 1) as f32;
-        for x in 0..w {
-            let mut acc = 0.0f32;
-            for yy in y0..=y1 {
-                acc += tmp[yy * w + x];
-            }
-            row[x] = acc / n;
-        }
-    });
-    out
-}

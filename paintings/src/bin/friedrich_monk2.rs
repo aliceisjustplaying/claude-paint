@@ -8,7 +8,7 @@
 //! figure cut in last with a small sable; varnish, cracks.
 
 use paint::{
-    Canvas, Fbm, Gesture, Held, Mask, Mix, Orient, Paint, Pigment, Rgb, Rng, Shape, Style, Tool,
+    Fbm, Gesture, Held, Mask, Mix, Orient, Paint, Pigment, Rgb, Rng, Shape, Style, Tool,
     gradient, hex, smoothstep,
 };
 
@@ -17,14 +17,11 @@ fn main() {
     let o = paint::cli::opts("friedrich_monk2");
     let mut rng = Rng::new(o.seed);
     let seed = o.seed as u32;
-    let st = Style::friedrich();
+    let st = Style::friedrich_early();
     let lap = |label: &str| eprintln!("  {label:<10} {:>6.2}s", t0.elapsed().as_secs_f32());
 
     // ---- ground: bright reddish ground, then lighter brown priming
-    let mut c = Canvas::new(o.width, 1.56, st.ground[0].0).with_weave(st.weave.0, st.weave.1, o.seed);
-    for &(col, th) in &st.ground[1..] {
-        c.glaze(&Pigment::semi(col), None, |_, _| th);
-    }
+    let mut c = st.prepare(o.width, 1.56, o.seed);
     let (w, h) = (c.width(), c.height());
     let f = c.f;
 

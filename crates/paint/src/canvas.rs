@@ -4,6 +4,11 @@ use crate::color::{self, Mix, Rgb};
 use crate::mask::Mask;
 use crate::pigment::Pigment;
 use crate::rng::hash2;
+use crate::surface::{COAT_UM, Linen, vnoise};
+
+/// Fraction of a glaze layer that stays as film (the rest of the "thickness"
+/// is how deep the color reads; a glaze is mostly medium, and thin).
+const GLAZE_FILM: f32 = 0.3;
 use crate::smoothstep;
 use rayon::prelude::*;
 
@@ -34,30 +39,21 @@ impl Frame {
     }
 }
 
-#[derive(Clone, Copy, Debug)]
-pub struct Weave {
-    /// Thread spacing in units.
-    pub thread: f32,
-    /// Relief amplitude of the bare weave.
-    pub amp: f32,
-    pub seed: u64,
-}
-
 pub struct Canvas {
     pub f: Frame,
     /// Linear RGB reflectance, row major.
     pub px: Vec<Rgb>,
-    /// Surface relief of the paint itself (brush ridges, grooves).
+    /// Physical surface height, µm: woven linen, ground layers, paint films.
     pub height: Vec<f32>,
-    /// Accumulated paint film; thick paint fills in the canvas weave.
+    /// Accumulated paint film in coats (bookkeeping).
     pub film: Vec<f32>,
-    pub weave: Option<Weave>,
+    pub linen: Option<Linen>,
+    /// Physical size: millimeters per unit (the canvas is 1000 units wide).
+    pub mm_per_unit: f32,
     /// Wet paint on top of the dry picture.
     pub wet: crate::wet::Wet,
-    /// Canvas tooth (bare weave height, 0..1), built on first use.
-    pub(crate) tooth: Option<Vec<f32>>,
-    /// Bumped whenever film or height change; `base` caches the surface
-    /// height bristles feel (tooth under film + dried relief).
+    /// Bumped whenever the height changes; `base` caches the surface relief
+    /// bristles feel.
     pub(crate) surf_gen: u64,
     pub(crate) base: Option<(u64, Vec<f32>)>,
 }
@@ -73,19 +69,56 @@ impl Canvas {
             px: vec![ground; n],
             height: vec![0.0; n],
             film: vec![0.0; n],
-            weave: None,
+            linen: None,
+            mm_per_unit: 0.7,
             wet: crate::wet::Wet::new(n),
-            tooth: None,
             surf_gen: 0,
             base: None,
         }
     }
 
-    /// Use a woven linen support. `thread` ≈ 1.0–1.6 units looks like fine linen
-    /// at 3200px. The weave shows through thin paint and is buried by thick paint.
-    pub fn with_weave(mut self, thread: f32, amp: f32, seed: u64) -> Self {
-        self.weave = Some(Weave { thread, amp, seed });
+    /// Physical width of the painting in mm (default 700).
+    pub fn with_size_mm(mut self, width_mm: f32) -> Self {
+        self.mm_per_unit = width_mm / Frame::WIDTH_UNITS;
+        self.build_support();
         self
+    }
+
+    /// Use a woven linen support.
+    pub fn with_linen(mut self, l: Linen) -> Self {
+        self.linen = Some(l);
+        self.build_support();
+        self
+    }
+
+    /// Legacy: linen with a thread spacing of `thread` units (warp), weft a
+    /// little coarser. `_amp` is ignored (the crown height is physical now).
+    pub fn with_weave(self, thread: f32, _amp: f32, seed: u64) -> Self {
+        let per_cm = 10.0 / (thread * self.mm_per_unit);
+        self.with_linen(Linen { warp_per_cm: per_cm, weft_per_cm: per_cm * 0.87, ..Linen::fine(seed) })
+    }
+
+    /// A ground layer over the whole canvas: `um` µm of paint of `color` and
+    /// `hiding`, spread with a knife or broad brush, leveled and set.
+    /// `stiff` 0..1 is its body (fluid chalk-glue ≈ 0.2, oil lead white ≈ 0.6);
+    /// `texture` 0..1 roughens it before it levels (a roller or scraped knife).
+    pub fn prime(&mut self, color: Rgb, hiding: f32, um: f32, stiff: f32, texture: f32, seed: u64) {
+        self.dry();
+        let (w, h) = (self.f.w, self.f.h);
+        let px = self.px_mm();
+        let add: Vec<f32> = (0..w * h)
+            .into_par_iter()
+            .map(|i| {
+                let (x, y) = ((i % w) as f32 * px, (i / w) as f32 * px);
+                let n = 0.65 * vnoise(x / 0.3, y / 0.3, seed) + 0.35 * vnoise(x / 0.9, y / 0.9, seed + 1) - 0.5;
+                um * (1.0 + texture * 1.4 * n).max(0.0)
+            })
+            .collect();
+        let sv = vec![stiff; w * h];
+        let t = self.settle((0, 0, w, h), &add, &sv);
+        let pig = Pigment::with_hiding(color, hiding);
+        self.px.par_iter_mut().zip(&t).for_each(|(p, &ti)| *p = pig.over(*p, ti / COAT_UM));
+        self.film.par_iter_mut().zip(&t).for_each(|(f, &ti)| *f += ti / COAT_UM);
     }
 
     /// Canvas width in units (always 1000).
@@ -170,11 +203,26 @@ impl Canvas {
         thickness: impl Fn(f32, f32) -> f32 + Sync,
     ) {
         self.dry();
-        match mask {
-            Some(m) => self.apply_masked(m, |x, y, p, c| pigment.over(p, thickness(x, y) * c)),
-            None => self.apply(|x, y, p| pigment.over(p, thickness(x, y))),
-        }
-        self.add_film(mask, 0.1);
+        // the glaze is mostly medium: a thin fluid film that levels and pools
+        // in the hollows of the surface, so it is deeper there
+        let (w, h) = (self.f.w, self.f.h);
+        let inv = 1.0 / self.f.scale;
+        let th: Vec<f32> = (0..w * h)
+            .into_par_iter()
+            .map(|i| {
+                let c = mask.map_or(1.0, |m| m.data[i]);
+                if c <= 0.0 { 0.0 } else { thickness(((i % w) as f32 + 0.5) * inv, ((i / w) as f32 + 0.5) * inv).max(0.0) * c }
+            })
+            .collect();
+        let add: Vec<f32> = th.iter().map(|t| t * COAT_UM * GLAZE_FILM).collect();
+        let sv = vec![0.05f32; w * h];
+        let t = self.settle((0, 0, w, h), &add, &sv);
+        self.px.par_iter_mut().enumerate().for_each(|(i, p)| {
+            if add[i] > 0.0 {
+                *p = pigment.over(*p, th[i] * t[i] / add[i]);
+            }
+        });
+        self.film.par_iter_mut().zip(&t).for_each(|(f, &ti)| *f += ti / COAT_UM);
     }
 
     /// Atmospheric veil (fog, haze, light): optical blend toward `c` with
@@ -246,44 +294,29 @@ impl Canvas {
             *p = [p[0] * k, p[1] * k, p[2] * k];
         });
         self.surf_gen += 1;
-        self.height.par_iter_mut().zip(&cracks).for_each(|(h, c)| *h -= c * 0.03);
+        self.height.par_iter_mut().zip(&cracks).for_each(|(h, c)| *h -= c * 8.0);
     }
 
     /// Light the surface relief (paint ridges + weave) from the upper left.
     /// `strength` ≈ 0.3–1.0; `gloss` adds a faint varnish sheen on ridges.
     pub fn relief(&mut self, strength: f32, gloss: f32) {
         self.dry();
+        if std::env::var("PAINT_DEBUG").is_ok() {
+            let mut v: Vec<f32> = self.film.clone();
+            v.sort_by(|a, b| a.partial_cmp(b).unwrap());
+            let q = |p: f32| v[((v.len() - 1) as f32 * p) as usize];
+            eprintln!("film quantiles 10/50/90/99: {:.2} {:.2} {:.2} {:.2}", q(0.1), q(0.5), q(0.9), q(0.99));
+        }
         let (w, h) = (self.f.w, self.f.h);
-        let inv = 1.0 / self.f.scale;
-        let weave = self.weave;
-        // total surface height in "units of relief"
-        let scale = self.f.scale;
-        let (height, film) = (&self.height, &self.film);
-        let mut surf = vec![0.0f32; w * h];
-        surf.par_chunks_mut(w).enumerate().for_each(|(y, row)| {
-                let yu = (y as f32 + 0.5) * inv;
-                for (x, out) in row.iter_mut().enumerate() {
-                    let i = y * w + x;
-                    let mut s = height[i];
-                    if let Some(wv) = weave {
-                        let xu = (x as f32 + 0.5) * inv;
-                        // bury the weave under thick paint; fade it if finer than ~3px
-                        let vis = smoothstep(1.5, 3.5, wv.thread * scale);
-                        s += weave_height(xu, yu, wv.thread, wv.seed) * wv.amp * vis
-                            * (-film[i] * 0.6).exp();
-                    }
-                    *out = s;
-                }
-            });
-        // light direction (upper left, raking a little)
+        let surf = &self.height;
+        // light from the upper left at ~35° elevation
         let l = {
-            let v = [-0.55f32, -0.65, 0.52];
+            let v = [-0.58f32, -0.58, 0.57];
             let n = (v[0] * v[0] + v[1] * v[1] + v[2] * v[2]).sqrt();
             [v[0] / n, v[1] / n, v[2] / n]
         };
-        // gradients in units, so relief looks the same at any resolution
-        // central difference over 2px → slope in height-per-unit
-        let k = 0.5 * self.f.scale;
+        // true slopes: µm of height per µm across (central difference)
+        let k = 0.5 / (self.px_mm() * 1000.0);
         self.px.par_chunks_mut(w).enumerate().for_each(|(y, row)| {
             for x in 0..w {
                 let at = |xx: usize, yy: usize| surf[yy.min(h - 1) * w + xx.min(w - 1)];
@@ -340,25 +373,6 @@ impl Canvas {
     }
 }
 
-/// Plain-weave height in 0..1 at a point (units).
-pub(crate) fn weave_height(x: f32, y: f32, thread: f32, seed: u64) -> f32 {
-    use std::f32::consts::PI;
-    // threads are never quite straight: slow wander of the lines
-    let (x0, y0) = (x / thread, y / thread);
-    let u = x0 + 0.35 * ((y0 * 0.071 + seed as f32 * 0.37).sin() + 0.6 * (y0 * 0.023 + x0 * 0.011).sin());
-    let v = y0 + 0.35 * ((x0 * 0.067 + seed as f32 * 0.53).sin() + 0.6 * (x0 * 0.029 - y0 * 0.013).sin());
-    let (iu, iv) = (u.floor() as i64, v.floor() as i64);
-    let (fu, fv) = (u - iu as f32, v - iv as f32);
-    // thread thickness irregularity (slubs) per thread
-    let tw = 0.7 + 0.6 * hash2(iu, iv.div_euclid(7), seed);
-    let th = 0.7 + 0.6 * hash2(iu.div_euclid(7), iv, seed + 1);
-    let over = (iu + iv).rem_euclid(2) == 0;
-    let warp = (PI * fu).sin() * tw;
-    let weft = (PI * fv).sin() * th;
-    // the thread on top humps along its length
-    let (a, b) = if over { (warp * (PI * fv).sin().sqrt(), weft * 0.5) } else { (warp * 0.5, weft * (PI * fu).sin().sqrt()) };
-    a.max(b)
-}
 
 /// Distance to the nearest Voronoi cell border (F2 - F1)/2, in cell units,
 /// plus ids of the two nearest cells (identifies the crack segment).
@@ -388,25 +402,4 @@ fn voronoi_edge(x: f32, y: f32, seed: u64) -> (f32, i64, i64) {
 }
 
 impl Canvas {
-    /// Height of the bare canvas tooth at pixel `i`, 0..1 (0.5 if no weave).
-    pub(crate) fn ensure_tooth(&mut self) {
-        if self.tooth.is_some() {
-            return;
-        }
-        let (w, h) = (self.f.w, self.f.h);
-        let inv = 1.0 / self.f.scale;
-        let mut t = vec![0.5f32; w * h];
-        if let Some(wv) = self.weave {
-            // below ~2px per thread the weave can't be resolved; blend to flat
-            let vis = smoothstep(1.2, 3.0, wv.thread * self.f.scale);
-            t.par_chunks_mut(w).enumerate().for_each(|(y, row)| {
-                let yu = (y as f32 + 0.5) * inv;
-                for (x, v) in row.iter_mut().enumerate() {
-                    let th = weave_height((x as f32 + 0.5) * inv, yu, wv.thread, wv.seed);
-                    *v = 0.5 + (th - 0.5) * vis;
-                }
-            });
-        }
-        self.tooth = Some(t);
-    }
 }

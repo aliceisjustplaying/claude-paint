@@ -12,7 +12,7 @@
 //!
 //! Every mark is a simulated brush in wet paint or a Kubelka–Munk layer.
 
-use paint::{Canvas, Fbm, Gesture, Held, Mask, Mix, Oak, Orient, Paint, Pigment, Rgb, Rng, Style, Tool, gradient, hex, smoothstep};
+use paint::{Fbm, Gesture, Held, Mask, Mix, Oak, Orient, Paint, Pigment, Rgb, Rng, Style, Tool, gradient, hex, smoothstep};
 use paintings::{figures, trees};
 
 fn main() {
@@ -24,10 +24,7 @@ fn main() {
     let lap = |label: &str| eprintln!("  {label:<10} {:>6.2}s", t0.elapsed().as_secs_f32());
 
     // ---- ground and priming
-    let mut c = Canvas::new(o.width, 1.4, st.ground[0].0).with_weave(st.weave.0, st.weave.1, o.seed);
-    for &(col, th) in &st.ground[1..] {
-        c.glaze(&Pigment::semi(col), None, |_, _| th);
-    }
+    let mut c = st.prepare(o.width, 1.4, o.seed);
     let (w, h) = (c.width(), c.height());
     let f = c.f;
 
@@ -89,6 +86,20 @@ fn main() {
         c.drag(&mut fil, &Gesture::new(pts).pressure(rng.range(0.35, 0.6), rng.range(0.2, 0.4)).ramps(0.2, 0.35).orient(Orient::Across), Some(&sky));
         let _ = i;
     }
+    // where the moon will be: while the sky is wet, a few pale touches around
+    // it, curling with the ring, which the badger then melts into a glow
+    let (mx, my, mr) = (w * 0.7, h * 0.3, 9.5);
+    let mut glow = Held::new(Tool::filbert(7.0), 33);
+    for k in 0..10 {
+        let a0 = k as f32 * 0.63 + rng.range(-0.2, 0.2);
+        let r = mr * rng.range(0.6, 2.6);
+        let pts: Vec<(f32, f32)> = (0..5).map(|j| {
+            let a = a0 + j as f32 * 0.18;
+            (mx + r * a.cos(), my + r * a.sin())
+        }).collect();
+        glow.reload(Paint { color: hex("#dcdad2"), hiding: 0.7, body: 0.4 }, 0.7);
+        c.drag(&mut glow, &Gesture::new(pts).pressure(0.5, 0.4).ramps(0.3, 0.4).orient(Orient::Across), Some(&sky));
+    }
     if let Some(b) = st.blend() {
         let b = b.angle(sky_angle);
         for k in 0..st.blend_passes {
@@ -97,42 +108,47 @@ fn main() {
     }
     c.dry();
     lap("sky");
+    if std::env::var("STOP").ok().as_deref() == Some("sky") {
+        c.save(&o.out).unwrap();
+        return;
+    }
 
     // ---- moon and evening star: after the sky is dry
-    let (mx, my, mr) = (w * 0.7, h * 0.3, 9.0);
-    // earthshine: the dark of the disk just paler than the sky
-    let mut sab = Held::new(Tool::round_sable(mr * 1.8), 41);
-    sab.load(Paint { color: hex("#8d8b8d"), hiding: 0.5, body: 0.3 }, 0.5);
-    c.drag(&mut sab, &Gesture::new(vec![(mx, my - mr * 0.1), (mx, my + mr * 0.1)]).pressure(1.0, 1.0).ramps(0.0, 0.0), None);
-    // the crescent: lit limb toward the set sun, below right; thick paint
-    let lit = std::f32::consts::FRAC_PI_4 * 0.6; // direction of the sun from the moon (y down)
-    let mut cres = Held::new(Tool::round_sable(mr * 0.5), 42);
-    cres.load(Paint { color: hex("#f4ecc8"), hiding: 0.95, body: 1.4 }, 1.0);
-    let arc: Vec<(f32, f32)> = (0..=16)
-        .map(|k| {
-            let a = lit - 1.45 + 2.9 * k as f32 / 16.0;
-            (mx + (mr - mr * 0.18) * a.cos(), my + (mr - mr * 0.18) * a.sin())
-        })
-        .collect();
-    c.drag(&mut cres, &Gesture::new(arc).pressure(0.9, 0.9).ramps(0.45, 0.45).orient(Orient::Across), None);
+    // the crescent in a few touches of thick pale paint along the lit limb
+    // (toward the set sun, below right): the limb, an inner stroke where the
+    // crescent is widest, then the brightest touch
+    let lit = 0.45f32;
+    let arc = |rad: f32, span: f32, n: usize| -> Vec<(f32, f32)> {
+        (0..=n).map(|k| {
+            let a = lit - span + 2.0 * span * k as f32 / n as f32;
+            (mx + rad * a.cos(), my + rad * a.sin())
+        }).collect()
+    };
+    let mut cres = Held::new(Tool::round_sable(mr * 0.24), 42);
+    cres.load(Paint { color: hex("#e8ddb6"), hiding: 0.95, body: 0.8 }, 1.0);
+    c.drag(&mut cres, &Gesture::new(arc(mr * 0.88, 1.45, 16)).pressure(0.85, 0.85).ramps(0.5, 0.5).orient(Orient::Across), None);
+    cres.reload(Paint { color: hex("#eee5c2"), hiding: 0.95, body: 0.8 }, 1.0);
+    c.drag(&mut cres, &Gesture::new(arc(mr * 0.74, 0.8, 10)).pressure(0.6, 0.6).ramps(0.5, 0.5).orient(Orient::Across), None);
+    let mut hi = Held::new(Tool::round_sable(mr * 0.16), 44);
+    hi.load(Paint { color: hex("#f8f2d8"), hiding: 0.97, body: 0.9 }, 1.0);
+    c.drag(&mut hi, &Gesture::new(arc(mr * 0.76, 0.45, 6)).pressure(0.8, 0.8).ramps(0.4, 0.4).orient(Orient::Across), None);
     let mut star = Held::new(Tool::round_sable(1.6), 43);
     star.load(Paint { color: hex("#f6f0d8"), hiding: 0.95, body: 1.2 }, 1.0);
     let (sx, sy) = (w * 0.77, h * 0.2);
     c.drag(&mut star, &Gesture::new(vec![(sx, sy - 0.4), (sx, sy + 0.4)]).pressure(1.0, 1.0).ramps(0.0, 0.0), None);
     c.dry();
-    // a faint halo in the damp air
-    c.glaze(&Pigment::semi(hex("#e8dcb4")), Some(&sky), |x, y| {
-        let d = ((x - mx).powi(2) + (y - my).powi(2)).sqrt();
-        0.12 * (-(d / (mr * 4.0)).powi(2)).exp() * smoothstep(mr * 0.9, mr * 1.3, d)
-    });
     lap("moon");
+    if std::env::var("STOP").ok().as_deref() == Some("moon") {
+        c.save(&o.out).unwrap();
+        return;
+    }
 
     // ---- the far ridge: cool violet, lighter at the top where it meets glow
     let ridge_color = |_x: f32, y: f32| gradient(&[(0.0, hex("#6e6f86")), (1.0, hex("#5a5c70"))], ((y - h * 0.53) / (h * 0.09)).clamp(0.0, 1.0), Mix::Pigment);
-    c.work(&far, &st.body().color(ridge_color).angle(|_, _| 0.0).angle_jitter(0.05).length(30.0, 90.0).coverage(4.0).threshold(0.2).clip(true), o.seed * 100 + 10);
+    c.work(&far, &st.body().color(ridge_color).angle(|_, _| 0.0).angle_jitter(0.05).length(30.0, 90.0).coverage(6.0).threshold(0.05).clip(true), o.seed * 100 + 10);
     // the nearer ridge, darker and bluer, with a forest edge
     let near_color = |_x: f32, y: f32| gradient(&[(0.0, hex("#44495c")), (1.0, hex("#3a3e4c"))], ((y - h * 0.6) / (h * 0.12)).clamp(0.0, 1.0), Mix::Pigment);
-    c.work(&near, &st.body().color(near_color).angle(|_, _| 0.0).angle_jitter(0.06).length(25.0, 80.0).coverage(4.0).threshold(0.2).clip(true), o.seed * 100 + 11);
+    c.work(&near, &st.body().color(near_color).angle(|_, _| 0.0).angle_jitter(0.06).length(25.0, 80.0).coverage(6.0).threshold(0.05).clip(true), o.seed * 100 + 11);
     c.dry();
     // spruce tops along the ridge line, tiny, softened by distance
     for i in 0..70 {
@@ -142,6 +158,10 @@ fn main() {
         trees::spruce(&mut c, (x, ridge2(x) + hgt * 0.35), hgt, hex("#353846"), rng.next_u64());
     }
     lap("ridges");
+    if std::env::var("STOP").ok().as_deref() == Some("ridges") {
+        c.save(&o.out).unwrap();
+        return;
+    }
 
     // ---- the valley: first the mist itself in body color, glowing with the
     // afterglow near the far side, fused with the badger and let dry
@@ -217,6 +237,10 @@ fn main() {
         (1.6 * smoothstep(0.0, 1.4, layered).powf(1.5)) * (0.85 + 0.3 * mist_n.get(x * 0.5, y * 2.0))
     });
     lap("mist");
+    if std::env::var("STOP").ok().as_deref() == Some("mist") {
+        c.save(&o.out).unwrap();
+        return;
+    }
 
     // ---- the ledge: dark earth and rock, strokes following the slope
     let slope = |x: f32| ((ledge(x + 4.0) - ledge(x - 4.0)) / 8.0).atan();
@@ -250,6 +274,10 @@ fn main() {
         }
     }
     lap("ledge");
+    if std::env::var("STOP").ok().as_deref() == Some("ledge") {
+        c.save(&o.out).unwrap();
+        return;
+    }
 
     // ---- the dead oak on the ledge, reaching out over the valley
     let mut oak = Oak::new((115.0, ledge(115.0) + 3.0), h * 0.62, o.seed * 7 + 3);

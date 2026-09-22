@@ -45,3 +45,29 @@ Ideas for next
 - Relief ~0.7 with impasto 0.3–0.45 gives visible bristle ridges at 3200px.
 - Still digital: fbm-glaze clouds look like smoke. Clouds need shape: paint
   them as lit forms with strokes along their contours.
+
+## Fundamentals plan (after research, see notes/research/)
+
+What makes a Friedrich surface, and how the engine should produce it physically:
+
+1. **Physical units.** Canvas in mm, surface height in µm, one coat of wet
+   paint = COAT_UM. Relief lighting from true normals.
+2. **Support and ground.** Plain-weave linen 10–16 threads/cm (proxy,
+   Eckersberg), warp more regular than weft. Grounds in 2–4 thin layers
+   (KÖR p.284): lower spatula layers (ocher/red earth/chalk) level the weave;
+   the top layer (lead-white-rich, or reddish-ocher as a mid-tone) carries
+   brush striations or a fine roller texture that shows through the paint.
+3. **Leveling and pooling.** Each drying layer levels by Orchard's law with a
+   yield-stress floor (oil_paint_physics.md §1). Very thin fluid paint pools
+   in the ground's valleys; composite KM with the *redistributed* thickness.
+   This gives Friedrich's dotted, strokeless gradations (CATS p.127).
+4. **Palette.** Paints mixed from his pigments: lead white, smalt (low
+   hiding, coarse specks), yellow/red ocher, vermilion, bone black, umber;
+   after ~1820 cobalt blue, chrome yellow (ALF; NG p.56).
+5. **Application.** Graphite underdrawing with ruled lines that shimmers
+   through; very thin underpainting; 1–2 paint layers; skies, mist and far
+   hills stippled; firs in short hatched strokes; grass flicked up last.
+6. **Aging.** Sequential T-junction craquelure (islands ~2–6 mm) with dirt
+   and cupped rims; several yellowed varnish layers, microcracked (milky
+   veil); abrasion exposing ground on texture peaks; Carus's dark glaze
+   toward the edges for moonlit pictures (MET p.35).

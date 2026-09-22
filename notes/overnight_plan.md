@@ -28,4 +28,5 @@ Three fresh painters, original Friedrich compositions, 1–2 h budget each.
 Then stop and evaluate with the user.
 
 ## Status log
+- Six subagents launched (color, strokes, stipple, workflow, form, motifs); shared brief copied to notes/overnight_brief.md.
 - (updated as work lands)

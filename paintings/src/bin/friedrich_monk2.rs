@@ -99,9 +99,10 @@ fn main() {
         let v = y / h;
         smoothstep(-0.25, 0.6, mass.get(x * 0.45, y * 1.6)) * (0.55 * (1.0 - smoothstep(0.1, 0.45, v)) + 0.15)
     });
-    c.veil(Some(&sky), hex("#d6d6c6"), |x, y| {
+    // a pale scumble dragged thinly over the dry band of light
+    c.glaze(&Pigment::semi(hex("#d6d6c6")), Some(&sky), |x, y| {
         let band = (-((y / h - 0.47) / 0.08).powi(2)).exp();
-        band * 0.25 * (0.7 + 0.6 * mass.get(x * 0.3 + 500.0, y))
+        band * 0.6 * (0.7 + 0.6 * mass.get(x * 0.3 + 500.0, y))
     });
     let bank = Fbm::new(seed + 12, 5, 300.0);
     c.glaze(&Pigment::semi(hex("#3a403e")), Some(&sky), |x, y| {
@@ -140,7 +141,7 @@ fn main() {
     }
     // surf along the shore
     let surf = Fbm::new(seed + 21, 4, 40.0);
-    c.veil(Some(&sea), hex("#8d948c"), |x, y| 0.5 * smoothstep(5.0, 0.5, dune_top(x) - y) * smoothstep(-0.2, 0.5, surf.get(x, 0.0)));
+    c.glaze(&Pigment::semi(hex("#8d948c")), Some(&sea), |x, y| 1.2 * smoothstep(5.0, 0.5, dune_top(x) - y) * smoothstep(-0.2, 0.5, surf.get(x, 0.0)));
     if o.stage(&mut c, "sea") {
         return;
     }

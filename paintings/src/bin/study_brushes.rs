@@ -5,7 +5,7 @@ use paint::{Gesture, Held, Orient, Paint, Tool, hex};
 fn main() {
     let o = paintings::run::Run::new("study_brushes");
     // lead-white priming on linen
-    let mut c = paint::Canvas::new(o.width, 1.5, hex("#ece6d8")).with_weave(1.15, 0.7, 3);
+    let mut c = paint::Canvas::new(o.width, 1.5, hex("#ece6d8")).with_linen(paint::Linen::fine(3));
 
     let ultramarine = hex("#1f2a78");
     let sienna = hex("#8a3b12");

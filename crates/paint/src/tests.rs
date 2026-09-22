@@ -52,7 +52,7 @@ fn load_wipe_reload() {
 #[test]
 fn drag_conserves_paint() {
     for tool in [Tool::round_sable(3.0), Tool::hog_flat(12.0), Tool::filbert(9.0), Tool::fan(14.0), Tool::rigger(0.8), Tool::badger(20.0)] {
-        let mut c = Canvas::new(400, 1.0, hex("#c8b89a")).with_weave(1.2, 0.3, 3);
+        let mut c = Canvas::new(400, 1.0, hex("#c8b89a")).with_linen(crate::surface::Linen::fine(3));
         // some wet paint to pick up
         let mut under = Held::new(Tool::filbert(20.0), 2);
         under.load(Paint::body(hex("#304060")), 1.0);
@@ -68,7 +68,7 @@ fn drag_conserves_paint() {
 
 #[test]
 fn dry_is_idempotent_and_clears_wet() {
-    let mut c = Canvas::new(300, 1.0, hex("#c8b89a")).with_weave(1.2, 0.3, 3);
+    let mut c = Canvas::new(300, 1.0, hex("#c8b89a")).with_linen(crate::surface::Linen::fine(3));
     let mut h = Held::new(Tool::filbert(20.0), 2);
     h.load(Paint::body(hex("#304060")), 1.0);
     c.drag(&mut h, &Gesture::new(vec![(200.0, 500.0), (800.0, 500.0)]), None);
@@ -182,7 +182,7 @@ fn footprint_bounds_every_touched_pixel() {
     ] {
         for scale in [0.1f32, 0.4] {
             let w = (1000.0 * scale) as usize;
-            let mut c = Canvas::new(w, 1.0, hex("#c8b89a")).with_weave(1.2, 0.3, 3);
+            let mut c = Canvas::new(w, 1.0, hex("#c8b89a")).with_linen(crate::surface::Linen::fine(3));
             // wet paint everywhere to plough
             let mut under = Held::new(Tool::filbert(60.0), 2);
             for k in 0..12 {

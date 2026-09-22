@@ -6,10 +6,8 @@
 //!
 //! Colors are linear-light RGB reflectances in 0..1.
 
-pub mod brush;
 pub mod canvas;
 pub mod color;
-pub mod fill;
 pub mod mask;
 pub mod noise;
 pub mod path;
@@ -24,10 +22,8 @@ pub mod style;
 pub mod hand;
 pub mod surface;
 
-pub use brush::{Brush, Medium};
 pub use canvas::{Canvas, Frame};
 pub use color::{Mix, Rgb, gradient, hex};
-pub use fill::StrokeFill;
 pub use tree::Oak;
 pub use bristle::{Gesture, Held, Kind, Orient, Tool};
 pub use wet::Paint;

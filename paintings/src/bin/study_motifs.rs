@@ -1,15 +1,12 @@
 //! Study sheet for the oak and Rückenfigur generators.
 
-use paint::{Canvas, Mix, Oak, gradient, hex};
+use paint::{Oak, Style, hex};
 use paintings::figures;
 
 fn main() {
     let o = paintings::run::Run::new("study_motifs");
-    let mut c = Canvas::new(o.width, 1.6, hex("#d9d2bf")).with_weave(0.9, 0.35, 1);
+    let mut c = Style::friedrich().prepare(o.width, 1.6, 1);
     let h = c.height();
-    c.paint(None, 1.0, Mix::Pigment, |_, y| {
-        gradient(&[(0.0, hex("#9aa3a6")), (1.0, hex("#e2d6b4"))], y / h, Mix::Pigment)
-    });
 
     // top row: oaks with different settings
     let ground = h * 0.5;

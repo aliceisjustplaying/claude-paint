@@ -1,6 +1,6 @@
 //! The painting surface: color, paint relief and the woven support.
 
-use crate::color::{self, Mix, Rgb};
+use crate::color::{self, Rgb};
 use crate::mask::Mask;
 use crate::pigment::Pigment;
 use crate::rng::hash2;
@@ -89,13 +89,6 @@ impl Canvas {
         self.linen = Some(l);
         self.build_support();
         self
-    }
-
-    /// Legacy: linen with a thread spacing of `thread` units (warp), weft a
-    /// little coarser. `_amp` is ignored (the crown height is physical now).
-    pub fn with_weave(self, thread: f32, _amp: f32, seed: u64) -> Self {
-        let per_cm = 10.0 / (thread * self.mm_per_unit);
-        self.with_linen(Linen { warp_per_cm: per_cm, weft_per_cm: per_cm * 0.87, ..Linen::fine(seed) })
     }
 
     /// A ground layer over the whole canvas: `um` µm of paint of `color` and
@@ -193,37 +186,6 @@ impl Canvas {
         });
     }
 
-    fn add_film(&mut self, mask: Option<&Mask>, amount: f32) {
-        self.surf_gen += 1;
-        match mask {
-            Some(m) => self.film.par_iter_mut().zip(&m.data).for_each(|(f, c)| *f += c * amount),
-            None => self.film.par_iter_mut().for_each(|f| *f += amount),
-        }
-    }
-
-    /// Opaque paint: blend a (position-dependent) color into the canvas with
-    /// coverage `mask * opacity`. This is a flat, brushless fill; prefer
-    /// `fill_strokes` for anything that should look painted.
-    pub fn paint(
-        &mut self,
-        mask: Option<&Mask>,
-        opacity: f32,
-        mode: Mix,
-        color: impl Fn(f32, f32) -> Rgb + Sync,
-    ) {
-        self.dry();
-        match mask {
-            Some(m) => self.apply_masked(m, |x, y, p, c| color::mix(p, color(x, y), c * opacity, mode)),
-            None => self.apply(|x, y, p| color::mix(p, color(x, y), opacity, mode)),
-        }
-        self.add_film(mask, 0.5 * opacity);
-    }
-
-    /// Flat color fill through a mask.
-    pub fn fill(&mut self, mask: &Mask, c: Rgb, opacity: f32, mode: Mix) {
-        self.paint(Some(mask), opacity, mode, |_, _| c);
-    }
-
     /// Kubelka–Munk glaze: a layer of `pigment` whose thickness is
     /// `thickness(x, y)` (times mask coverage, if given).
     pub fn glaze(
@@ -256,34 +218,6 @@ impl Canvas {
             }
         });
         self.film.par_iter_mut().zip(&t).for_each(|(f, &ti)| *f += ti / COAT_UM);
-    }
-
-    /// Atmospheric veil (fog, haze, light): optical blend toward `c` with
-    /// strength 1 - exp(-density).
-    pub fn veil(
-        &mut self,
-        mask: Option<&Mask>,
-        c: Rgb,
-        density: impl Fn(f32, f32) -> f32 + Sync,
-    ) {
-        self.dry();
-        let g = |x: f32, y: f32, p: Rgb, cov: f32| {
-            let t = 1.0 - (-density(x, y).max(0.0) * cov).exp();
-            color::mix(p, c, t, Mix::Linear)
-        };
-        match mask {
-            Some(m) => self.apply_masked(m, g),
-            None => self.apply(|x, y, p| g(x, y, p, 1.0)),
-        }
-    }
-
-    /// Fine, low-contrast mottling (uneven paint film / aged surface).
-    pub fn mottle(&mut self, period: f32, strength: f32, seed: u32) {
-        let n = crate::noise::Fbm::new(seed, 5, period);
-        self.apply(|x, y, p| {
-            let k = 1.0 + strength * n.get(x, y);
-            [p[0] * k, p[1] * k, p[2] * k]
-        });
     }
 
     /// Age cracks (craquelure): an irregular network of fine cracks, cell size

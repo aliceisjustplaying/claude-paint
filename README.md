@@ -1,6 +1,6 @@
 # claude-paint
 
-A small procedural painting engine in Rust. Paintings are programs; there is
+A physical oil-paint simulator in Rust. Paintings are programs; there is
 no image model and no reference imagery.
 
 The rule: work only from what is known about each painter (materials, working
@@ -8,21 +8,42 @@ method, habits of hand, recurring motifs), never from pictures. Existing works
 may be studied as exercises, but the goal is new paintings in each painter's
 manner, not copies of old ones.
 
+The second rule: first principles. Every mark is made the way a painter makes
+it: bristle brushes carrying wet paint over a primed linen surface, paint that
+levels and dries, layers composited by Kubelka–Munk optics. No flat fills, no
+optical blends pretending to be paint.
+
 ```
-cargo paint friedrich_monk              # 1000px preview → out/friedrich_monk.png
-cargo paint friedrich_monk -- --full    # 3200px        → out/friedrich_monk_full.png
-cargo test -p paint
+cargo paint friedrich_moonrise_valley               # 1000px preview → out/<name>.png
+cargo paint friedrich_moonrise_valley -- --full     # 3200px         → out/<name>_full.png
+cargo paint <name> -- --width 1600 --seed 7 --out path.png
+cargo paint <name> -- --stop sky                    # save right after a stage
+cargo paint <name> -- --no-cracks
+cargo test -p paint                                 # UPDATE_GOLDEN=1 to re-record the golden scene
 ```
 
 Engine (`crates/paint`):
-- `pigment` – Kubelka–Munk glazes (Curtis et al. 1997)
-- `color` – Mixbox pigment mixing (CC BY-NC 4.0), OKLab light mixing
-- `canvas` – paint / glaze / veil ops, canvas weave, dithered PNG out
-- `brush` – bristle strokes with paint load and dry-brush breakup
-- `mask`, `shape` – coverage masks from functions or tiny-skia paths
-- `noise` – fbm in canvas units
+- `surface` – linen weave and ground layers as a height field in µm; wet
+  layers level as they dry (Orchard's law with a yield-stress floor), thin
+  fluid paint pools in the hollows, volume is conserved
+- `wet` – the wet paint layer (volume, Mixbox pigment mix, hiding, stiffness)
+- `bristle` – simulated brushes (round, flat, filbert, fan, rigger, badger):
+  per-bristle reservoirs, bend and splay, contact with the surface relief,
+  deposit, pickup and ploughing
+- `handling` – how a painter covers an area: stroke planning, trips to the
+  palette, parallel tiles with exact pixel footprints
+- `style` – painter profiles: support, grounds, tools, handling (from sourced
+  knowledge, see `notes/research/`)
+- `hand` – writing small motifs as brush gestures in a local frame
+- `pigment` – Kubelka–Munk layers (Curtis et al. 1997); `color` – Mixbox, OKLab
+- `canvas` – glazes, relief lighting, craquelure, dithered PNG out
+- `tree` – oaks grown by rules and painted with brushes
+- `mask`, `shape`, `path`, `noise`, `rng` – geometry and randomness
 
-Canvas coordinates are units: always 1000 wide, `1000 / aspect` tall.
+Motifs written as gestures and the `Run`/`Finish` helpers live in `paintings/src`.
+
+Canvas coordinates are units: always 1000 wide, `1000 / aspect` tall; the
+physical size in mm comes from the style.
 
 Viewing renders
 ---------------

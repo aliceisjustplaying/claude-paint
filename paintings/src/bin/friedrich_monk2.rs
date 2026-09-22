@@ -72,12 +72,12 @@ fn main() {
         0.02 * (fine.get(x, y) + 0.2) - dy * 0.6
     };
     // lay-in: fuller paint so the ground is covered
-    c.work(&sky, &st.broad().color(sky_color).angle(sky_angle).paint(0.8, 0.8).load(0.8 * 0.8).pressure(0.7, 0.9).coverage(4.0), o.seed * 100 + 1);
+    c.work(&sky, &st.broad().color(sky_color).angle(sky_angle).medium(0.3).load(0.64).pressure(0.7, 0.9).coverage(4.0), o.seed * 100 + 1);
     if o.stage(&mut c, "sky lay") {
         return;
     }
     // second, thinner pass wet into wet to tune the transitions
-    c.work(&sky, &st.broad().color(sky_color).angle(sky_angle).coverage(2.0).length(60.0, 150.0).paint(0.45, 0.5), o.seed * 100 + 2);
+    c.work(&sky, &st.broad().color(sky_color).angle(sky_angle).coverage(2.0).length(60.0, 150.0).medium(0.55), o.seed * 100 + 2);
     if o.stage(&mut c, "sky 2") {
         return;
     }
@@ -125,7 +125,7 @@ fn main() {
     let sea_tool = Tool { width: 6.0, ..st.body.clone() };
     c.work(
         &sea,
-        &st.body().color(sea_color).angle(|_, _| 0.0).angle_jitter(0.008).length(40.0, 130.0).coverage(4.5).paint(0.9, 0.8).load(0.8 * 0.8).threshold(0.2).clip(true),
+        &st.body().color(sea_color).angle(|_, _| 0.0).angle_jitter(0.008).length(40.0, 130.0).coverage(4.5).medium(0.15).load(0.64).threshold(0.2).clip(true),
         o.seed * 100 + 4,
     );
     let _ = sea_tool;

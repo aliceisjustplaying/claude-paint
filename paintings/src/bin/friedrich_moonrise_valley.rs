@@ -69,8 +69,8 @@ fn main() {
     let drift = Fbm::new(seed + 10, 4, 500.0);
     let sky_color = |x: f32, y: f32| gradient(&sky_stops, (y / h + 0.012 * drift.get(x * 0.3, y)).clamp(0.0, 0.6), Mix::Pigment);
     let sky_angle = |x: f32, y: f32| 0.015 * drift.get(x, y * 3.0);
-    c.work(&sky, &st.broad().color(sky_color).angle(sky_angle).paint(0.8, 0.8).load(0.8 * 0.8).pressure(0.7, 0.9).coverage(4.0), o.seed * 100 + 1);
-    c.work(&sky, &st.broad().color(sky_color).angle(sky_angle).coverage(2.0).length(60.0, 150.0).paint(0.45, 0.5), o.seed * 100 + 2);
+    c.work(&sky, &st.broad().color(sky_color).angle(sky_angle).medium(0.3).load(0.64).pressure(0.7, 0.9).coverage(4.0), o.seed * 100 + 1);
+    c.work(&sky, &st.broad().color(sky_color).angle(sky_angle).coverage(2.0).length(60.0, 150.0).medium(0.55), o.seed * 100 + 2);
     if o.stage(&mut c, "sky lay") {
         return;
     }
@@ -173,7 +173,7 @@ fn main() {
         [base[0] * k, base[1] * k, base[2] * k]
     };
     let valley = Mask::from_fn(f, |x, y| (1.0 - soft(y - ledge(x), 0.8)) * smoothstep(mt(x) - 40.0, mt(x) + 16.0, y));
-    c.work(&valley, &st.broad().color(mist_c).angle(|_, _| 0.0).angle_jitter(0.02).length(80.0, 200.0).paint(0.85, 0.3).load(0.8 * 0.3).pressure(0.6, 0.8).coverage(3.0).clip(true), o.seed * 100 + 20);
+    c.work(&valley, &st.broad().color(mist_c).angle(|_, _| 0.0).angle_jitter(0.02).length(80.0, 200.0).medium(0.4).load(0.3).pressure(0.6, 0.8).coverage(3.0).clip(true), o.seed * 100 + 20);
     if let Some(b) = st.blend() {
         c.work(&valley, &b.angle(|_, _| 0.0), o.seed * 100 + 21);
     }

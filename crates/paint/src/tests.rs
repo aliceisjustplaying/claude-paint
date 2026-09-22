@@ -276,3 +276,26 @@ fn brushed_ground_honors_thickness() {
         assert!((got - want).abs() < want * 0.2, "asked {want} µm, got {got}");
     }
 }
+
+#[test]
+fn palette_mixes_what_it_can() {
+    use crate::palette::Palette;
+    let p = Palette::friedrich_1820();
+    // a tube's own color is reachable exactly
+    for t in &p.tubes {
+        let m = p.mix(t.color);
+        assert!(m.error < 0.01, "{}: {} ({})", t.name, m.error, p.recipe(&m));
+    }
+    // a mid gray from white and black
+    let g = p.mix([0.2, 0.2, 0.2]);
+    assert!(g.error < 0.03, "{} {}", g.error, p.recipe(&g));
+    // a saturated green is out of this palette's gamut: comes out duller
+    let green = [0.05, 0.6, 0.1];
+    let m = p.mix(green);
+    let (a, b) = (crate::color::to_oklab(green), crate::color::to_oklab(m.color));
+    assert!((b[1].hypot(b[2])) < (a[1].hypot(a[2])) * 0.8, "chroma {} vs {}", b[1].hypot(b[2]), a[1].hypot(a[2]));
+    // fractions sum to 1, deterministic
+    assert!((m.parts.iter().map(|x| x.1).sum::<f32>() - 1.0).abs() < 1e-4);
+    assert_eq!(p.recipe(&p.mix(green)), Palette::friedrich_1820().recipe(&m));
+}
+

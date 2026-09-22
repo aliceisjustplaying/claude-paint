@@ -11,6 +11,7 @@ use crate::bristle::{Gesture, Held, Orient, Rect, Tool, footprint};
 use crate::canvas::Canvas;
 use crate::color::{Rgb, from_oklab, to_oklab};
 use crate::mask::Mask;
+use crate::palette::Palette;
 use crate::rng::Rng;
 use crate::wet::Paint;
 use rayon::prelude::*;
@@ -30,9 +31,15 @@ pub struct Handling<'a> {
     pub color: Field<'a, Rgb>,
     /// Palette-mixing inconsistency per dip: OKLab L and a/b sd.
     pub jitter: (f32, f32),
-    /// Hiding and stiffness of the mixed paint (see `Paint`).
+    /// Hiding and stiffness of the paint when it isn't mixed from a
+    /// palette (see `Paint`).
     pub hiding: f32,
     pub stiff: f32,
+    /// Mix each pile from these tube paints, thinned with this fraction of
+    /// oil medium (0..1). The color field is then what the painter aims for.
+    pub palette: Option<(&'a Palette, f32)>,
+    /// How unevenly each pile is mixed: relative sd of the proportions.
+    pub mix_jitter: f32,
     /// Pressure range (a random value in it per stroke).
     pub pressure: (f32, f32),
     pub orient: Orient,
@@ -79,6 +86,8 @@ impl<'a> Handling<'a> {
             threshold: 0.3,
             ramps: (0.08, 0.15),
             shake: 1.0,
+            palette: None,
+            mix_jitter: 0.08,
         }
     }
     pub fn length(mut self, a: f32, b: f32) -> Self {
@@ -105,9 +114,26 @@ impl<'a> Handling<'a> {
         self.jitter = (l, hue);
         self
     }
+    /// A fixed paint (no palette mixing).
     pub fn paint(mut self, hiding: f32, stiff: f32) -> Self {
         self.hiding = hiding;
         self.stiff = stiff;
+        self.palette = None;
+        self
+    }
+    /// Mix every pile from `palette`'s tubes, thinned with `medium` (0..1).
+    pub fn mixed(mut self, palette: &'a Palette, medium: f32) -> Self {
+        self.palette = Some((palette, medium));
+        self
+    }
+    /// Change how much medium goes into the palette mixtures.
+    pub fn medium(mut self, medium: f32) -> Self {
+        let (p, _) = self.palette.expect("medium() needs a palette: use mixed()");
+        self.palette = Some((p, medium));
+        self
+    }
+    pub fn mix_jitter(mut self, sd: f32) -> Self {
+        self.mix_jitter = sd;
         self
     }
     /// How much paint each trip to the palette puts on the brush (0..1 of full).
@@ -161,7 +187,7 @@ struct Plan {
     pressure: f32,
     fade: f32,
     /// Paint to dip into before this stroke (None = no trip to the palette).
-    dip: Option<Rgb>,
+    dip: Option<Paint>,
 }
 
 impl Canvas {
@@ -231,13 +257,21 @@ impl Canvas {
             }
             let pressure = rng.range(hd.pressure.0, hd.pressure.1);
             let fade = rng.range(0.75, 1.05);
-            let lab = to_oklab((hd.color)(cx, cy));
-            let col = from_oklab([
-                lab[0] + rng.normal() * hd.jitter.0,
-                lab[1] + rng.normal() * hd.jitter.1,
-                lab[2] + rng.normal() * hd.jitter.1,
-            ]);
-            plans.push((cx, cy, rect, Plan { pts, pressure, fade, dip: Some(col) }));
+            let target = (hd.color)(cx, cy);
+            let paint = match hd.palette {
+                // on the palette: mix the pile from tubes, never twice alike
+                Some((pal, medium)) => pal.remix(&pal.mix(target), hd.mix_jitter, &mut rng).paint(medium),
+                None => {
+                    let lab = to_oklab(target);
+                    let col = from_oklab([
+                        lab[0] + rng.normal() * hd.jitter.0,
+                        lab[1] + rng.normal() * hd.jitter.1,
+                        lab[2] + rng.normal() * hd.jitter.1,
+                    ]);
+                    Paint { color: col, hiding: hd.hiding, stiff: hd.stiff }
+                }
+            };
+            plans.push((cx, cy, rect, Plan { pts, pressure, fade, dip: Some(paint) }));
         }
         // tiles are sized per axis from the footprints: tiles painted at the
         // same time are one tile apart, so a tile at least twice the largest
@@ -303,12 +337,12 @@ impl Canvas {
                         let mut scratch = Vec::new();
                         let mut b: crate::bristle::Bounds = None;
                         for (k, p) in tiles[ti].iter().enumerate() {
-                            if let Some(col) = p.dip {
+                            if let Some(paint) = p.dip {
                                 if hd.blender {
                                     held.wipe(0.9);
                                 } else {
                                     held.wipe(hd.wipe);
-                                    held.load(Paint { color: col, hiding: hd.hiding, stiff: hd.stiff }, hd.load);
+                                    held.load(paint, hd.load);
                                 }
                             }
                             let g = Gesture::new(p.pts.clone())

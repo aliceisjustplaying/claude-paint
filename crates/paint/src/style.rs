@@ -11,6 +11,7 @@ use crate::canvas::Canvas;
 use crate::color::{Rgb, hex};
 use crate::handling::Handling;
 use crate::mask::Mask;
+use crate::palette::Palette;
 use crate::surface::Linen;
 
 /// Mean thickness (µm) a brushed ground lays per unit of load with the
@@ -66,12 +67,14 @@ pub struct Style {
     pub blend_passes: usize,
     /// Pressure used when blending (light = gentle fusing).
     pub blend_pressure: f32,
-    /// Paint for body passages (hiding, stiffness).
-    pub body_paint: (f32, f32),
-    /// Paint consistency for atmospheric passages.
-    pub thin_paint: (f32, f32),
-    /// Palette-mixing inconsistency per dip (OKLab L, a/b).
-    pub jitter: (f32, f32),
+    /// The tube paints this painter mixes everything from.
+    pub palette: Palette,
+    /// Fraction of oil medium in the paint for body passages and for thin,
+    /// atmospheric passages.
+    pub body_medium: f32,
+    pub thin_medium: f32,
+    /// How unevenly each pile is mixed (relative sd of proportions).
+    pub mix_jitter: f32,
     /// Surface relief and gloss for the final lighting.
     pub relief: (f32, f32),
 }
@@ -108,9 +111,10 @@ impl Style {
             blender: Some(Tool { pickup: 0.15, run: 45.0, ..Tool::badger(40.0) }),
             blend_passes: 3,
             blend_pressure: 0.5,
-            body_paint: (0.8, 0.7),
-            thin_paint: (0.6, 0.5),
-            jitter: (0.012, 0.004),
+            palette: Palette::friedrich_1820(),
+            body_medium: 0.2,
+            thin_medium: 0.45,
+            mix_jitter: 0.06,
             relief: (0.2, 0.02),
         }
     }
@@ -128,6 +132,7 @@ impl Style {
                 Ground { color: hex("#c9ad8a"), hiding: 0.8, um: 70.0, stiff: 0.3, apply: Apply::Knife { texture: 0.3 } },
                 Ground { color: hex("#d8c7ab"), hiding: 0.8, um: 30.0, stiff: 0.5, apply: Apply::Roller },
             ],
+            palette: Palette::friedrich_early(),
             ..Self::friedrich()
         }
     }
@@ -172,36 +177,36 @@ impl Style {
     }
 
     /// Broad atmospheric passage (sky, fog, sea): long soft strokes, thin paint.
-    pub fn broad<'a>(&self) -> Handling<'a> {
+    pub fn broad(&self) -> Handling<'_> {
         Handling::new(self.broad.clone())
             .length(80.0, 220.0)
             .coverage(2.5)
-            .paint(self.thin_paint.0, self.thin_paint.1)
-            .jitter(self.jitter.0, self.jitter.1)
+            .mixed(&self.palette, self.thin_medium)
+            .mix_jitter(self.mix_jitter)
             .pressure(0.55, 0.8)
-            .dips(2, 0.8 * self.thin_paint.1, 0.5)
+            .dips(2, 0.4, 0.5)
             .angle_jitter(0.03)
             .ramps(0.12, 0.4)
     }
 
     /// Building a form in body color.
-    pub fn body<'a>(&self) -> Handling<'a> {
+    pub fn body(&self) -> Handling<'_> {
         Handling::new(self.body.clone())
             .length(20.0, 60.0)
             .coverage(2.5)
-            .paint(self.body_paint.0, self.body_paint.1)
-            .jitter(self.jitter.0 * 1.4, self.jitter.1 * 1.4)
+            .mixed(&self.palette, self.body_medium)
+            .mix_jitter(self.mix_jitter * 1.4)
             .pressure(0.6, 0.9)
-            .dips(2, 0.8 * self.body_paint.1, 0.6)
+            .dips(2, 0.56, 0.6)
     }
 
     /// Small forms and edges, cut in precisely.
-    pub fn detail<'a>(&self) -> Handling<'a> {
+    pub fn detail(&self) -> Handling<'_> {
         Handling::new(self.detail.clone())
             .length(4.0, 14.0)
             .coverage(3.0)
-            .paint(0.95, 0.8)
-            .jitter(self.jitter.0, 0.0)
+            .mixed(&self.palette, 0.1)
+            .mix_jitter(self.mix_jitter)
             .pressure(0.7, 0.95)
             .dips(3, 0.9 * 0.8, 0.8)
             .clip(true)
@@ -209,7 +214,7 @@ impl Style {
     }
 
     /// Clean soft blender passes over a wet passage.
-    pub fn blend<'a>(&self) -> Option<Handling<'a>> {
+    pub fn blend(&self) -> Option<Handling<'_>> {
         let t = self.blender.clone()?;
         Some(
             Handling::new(t)
@@ -228,7 +233,7 @@ impl Style {
     }
 
     /// Scumbling handling (not Friedrich's habit, for painters who use it).
-    pub fn scumble<'a>(&self) -> Handling<'a> {
-        Handling::new(self.body.clone()).scrub(3).paint(0.5, 0.5).length(10.0, 20.0).orient(Orient::Across)
+    pub fn scumble(&self) -> Handling<'_> {
+        Handling::new(self.body.clone()).scrub(3).mixed(&self.palette, 0.5).length(10.0, 20.0).orient(Orient::Across)
     }
 }

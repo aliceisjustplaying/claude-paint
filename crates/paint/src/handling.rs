@@ -40,6 +40,10 @@ pub struct Handling<'a> {
     pub palette: Option<(&'a Palette, f32)>,
     /// How unevenly each pile is mixed: relative sd of the proportions.
     pub mix_jitter: f32,
+    /// Where the painter loads the brush more or less (multiplies `load`,
+    /// evaluated at each stroke's center): a glaze goes on deeper where the
+    /// brush carries more.
+    pub load_at: Option<Field<'a, f32>>,
     /// Pressure range (a random value in it per stroke).
     pub pressure: (f32, f32),
     pub orient: Orient,
@@ -88,6 +92,7 @@ impl<'a> Handling<'a> {
             shake: 1.0,
             palette: None,
             mix_jitter: 0.08,
+            load_at: None,
         }
     }
     pub fn length(mut self, a: f32, b: f32) -> Self {
@@ -130,6 +135,11 @@ impl<'a> Handling<'a> {
     pub fn medium(mut self, medium: f32) -> Self {
         let (p, _) = self.palette.expect("medium() needs a palette: use mixed()");
         self.palette = Some((p, medium));
+        self
+    }
+    /// Vary the load across the canvas (see `load_at`).
+    pub fn load_at(mut self, f: impl Fn(f32, f32) -> f32 + Sync + 'a) -> Self {
+        self.load_at = Some(Box::new(f));
         self
     }
     pub fn mix_jitter(mut self, sd: f32) -> Self {
@@ -188,6 +198,8 @@ struct Plan {
     fade: f32,
     /// Paint to dip into before this stroke (None = no trip to the palette).
     dip: Option<Paint>,
+    /// How much of a full load that dip takes.
+    load: f32,
 }
 
 impl Canvas {
@@ -271,7 +283,8 @@ impl Canvas {
                     Paint { color: col, hiding: hd.hiding, stiff: hd.stiff }
                 }
             };
-            plans.push((cx, cy, rect, Plan { pts, pressure, fade, dip: Some(paint) }));
+            let load = hd.load * hd.load_at.as_ref().map_or(1.0, |f| f(cx, cy).max(0.0));
+            plans.push((cx, cy, rect, Plan { pts, pressure, fade, dip: Some(paint), load }));
         }
         // tiles are sized per axis from the footprints: tiles painted at the
         // same time are one tile apart, so a tile at least twice the largest
@@ -342,7 +355,7 @@ impl Canvas {
                                     held.wipe(0.9);
                                 } else {
                                     held.wipe(hd.wipe);
-                                    held.load(paint, hd.load);
+                                    held.load(paint, p.load);
                                 }
                             }
                             let g = Gesture::new(p.pts.clone())

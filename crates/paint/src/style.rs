@@ -213,6 +213,23 @@ impl Style {
             .threshold(0.1)
     }
 
+    /// A glaze or thin scumble brushed over dry paint: a soft brush, paint
+    /// that is mostly medium (`medium` ≈ 0.85–0.95 for a transparent glaze,
+    /// ≈ 0.6 for a veiling scumble), laid thinly in long strokes. Vary the
+    /// depth with `load_at`; fuse it afterwards with `blend()`.
+    pub fn glaze(&self, medium: f32) -> Handling<'_> {
+        let soft = Tool { stiffness: 0.3, lay: 0.8, pickup: 0.08, ragged: 0.2, ..Tool::filbert(self.broad.width * 1.2) };
+        Handling::new(soft)
+            .mixed(&self.palette, medium)
+            .mix_jitter(self.mix_jitter * 0.5)
+            .length(120.0, 300.0)
+            .coverage(2.5)
+            .pressure(0.5, 0.7)
+            .dips(2, 0.35, 0.5)
+            .angle_jitter(0.03)
+            .ramps(0.2, 0.4)
+    }
+
     /// Clean soft blender passes over a wet passage.
     pub fn blend(&self) -> Option<Handling<'_>> {
         let t = self.blender.clone()?;

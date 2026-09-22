@@ -236,7 +236,7 @@ impl Mixture {
         let k = (1.0 - medium).clamp(0.0, 1.0);
         // medium dilutes the pigment (less hiding per unit thickness) and makes
         // the paint flow (stiffness falls faster than hiding)
-        Paint { color: self.color, hiding: (self.hiding * (0.5 + 0.5 * k)).clamp(0.02, 0.99), stiff: self.stiff * k * k }
+        Paint { color: self.color, hiding: (self.hiding * k.powf(0.6)).clamp(0.02, 0.99), stiff: self.stiff * k * k }
     }
 }
 

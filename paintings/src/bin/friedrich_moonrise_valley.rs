@@ -12,7 +12,7 @@
 //!
 //! Every mark is a simulated brush in wet paint or a Kubelka–Munk layer.
 
-use paint::{Fbm, Gesture, Held, Mask, Mix, Oak, Orient, Paint, Pigment, Rgb, Rng, Style, Tool, gradient, hex, smoothstep};
+use paint::{Fbm, Gesture, Held, Mask, Mix, Oak, Orient, Paint, Rgb, Rng, Style, Tool, gradient, hex, smoothstep};
 use paintings::run::Finish;
 use paintings::{figures, trees};
 
@@ -53,7 +53,15 @@ fn main() {
     let rock = Mask::from_fn(f, |x, y| soft(y - ledge(x), 0.8));
 
     // ---- underpainting: thin brown for the values, dark below
-    c.glaze(&Pigment::transparent(hex("#6a4c34")), None, |x, y| 0.25 + 2.2 * smoothstep(ledge(x) - 20.0, ledge(x) + 40.0, y) + 0.6 * smoothstep(h * 0.55, h * 0.75, y));
+    // a thin brown underpainting brushed over everything for the values,
+    // loaded heavier where the land will be dark, fused, left to dry
+    let whole = Mask::from_fn(f, |_, _| 1.0);
+    let under = |x: f32, y: f32| 0.25 + 2.2 * smoothstep(ledge(x) - 20.0, ledge(x) + 40.0, y) + 0.6 * smoothstep(h * 0.55, h * 0.75, y);
+    c.work(&whole, &st.glaze(0.9).color(|_, _| hex("#6a4c34")).angle(|_, _| 0.0).load_at(under), o.seed * 100 + 90);
+    if let Some(b) = st.blend() {
+        c.work(&whole, &b, o.seed * 100 + 91);
+    }
+    c.dry();
     if o.stage(&mut c, "ground") {
         return;
     }
@@ -230,11 +238,18 @@ fn main() {
     // the tree tops, thick at their feet, drifting in horizontal bands
     let mist_n = Fbm::new(seed + 60, 5, 160.0);
     let bands = Fbm::new(seed + 61, 3, 60.0);
-    c.glaze(&Pigment::with_hiding(hex("#b4aea8"), 0.4), Some(&valley), |x, y| {
+    // scumbled on in level strokes, heavier toward the valley floor, then
+    // fused with the badger so the tree feet dissolve into it
+    let depth = |x: f32, y: f32| {
         let d = (y - mist_top + 10.0) / 60.0;
         let layered = d + 0.25 * bands.get(x * 0.08, y * 1.5);
         (1.6 * smoothstep(0.0, 1.4, layered).powf(1.5)) * (0.85 + 0.3 * mist_n.get(x * 0.5, y * 2.0))
-    });
+    };
+    c.work(&valley, &st.glaze(0.6).color(|_, _| hex("#b4aea8")).angle(|_, _| 0.0).coverage(3.5).load_at(depth), o.seed * 100 + 23);
+    if let Some(b) = st.blend() {
+        c.work(&valley, &b.angle(|_, _| 0.0), o.seed * 100 + 24);
+    }
+    c.dry();
     if o.stage(&mut c, "mist") {
         return;
     }

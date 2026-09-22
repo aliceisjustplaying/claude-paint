@@ -19,6 +19,10 @@
 //!   al. 2022). Here the film's strength steps down over a few generations:
 //!   the first, strongest-film cracks are sparse and long (primaries); later
 //!   ones subdivide the islands, and cracks arrested in tougher paint resume.
+//!   An arrested tip still breaks through to a crack just ahead of it (the
+//!   stress concentrates at a tip); a last "fatigue" pass (humidity cycling,
+//!   subcritical growth) lets free tips creep a little farther and join a
+//!   crack they reach, so most ends are T-junctions.
 //! - **Spacing.** D_r ≈ S/2 for a target spacing S. Canvas craquelure islands
 //!   are about 1–6 mm; Friedrich's centers ~2–6 mm (assumption), corners
 //!   6 ± 3 mm (Bury & Bratasz mock-up).
@@ -31,6 +35,10 @@
 //! - **Corners.** Stress concentrates at the stretcher corners (Mecklenburg
 //!   1994); cracks there run perpendicular to the diagonal within ~5–10% of
 //!   its length (Bury & Bratasz).
+//! - **Scale.** Everything is in mm: the stress grid has cells of S/6, the
+//!   crack path steps ≤ 0.25 mm (a whole number per thread pitch), and the
+//!   rasterizer gives each pixel the fraction of it the crack covers (cracks
+//!   of 50–100 µm are often narrower than a pixel).
 //! - **Geometry.** Age cracks are sharp and narrow, 50–100 µm wide (OCT: 70 µm
 //!   wide, 370 µm deep) and go through paint and ground; islands cup up at
 //!   their edges (raking light shows it); grime collects in the cracks and
@@ -68,14 +76,15 @@ pub struct Cracks {
 
 impl Cracks {
     /// A quietly aged canvas: a fine network of ~3.5 mm islands over a
-    /// medium ground, hairline cracks with some grime, slight cupping.
+    /// medium (60 µm, partly weave-bound) ground; 70 µm hairline cracks
+    /// (OCT: 70 µm) 35 µm deep after varnish, some grime, 30 µm cupping.
     pub fn aged(seed: u64) -> Self {
         Cracks {
             island_mm: 3.5,
             ground_um: 60.0,
             width_um: 70.0,
             depth_um: 35.0,
-            cupping_um: 18.0,
+            cupping_um: 30.0,
             dirt: 0.6,
             corners: true,
             seed,
@@ -407,8 +416,8 @@ impl Builder {
             (y1 * self.gx + x0, (1.0 - tx) * ty),
             (y1 * self.gx + x1, tx * ty),
         ] {
-            for c in 0..3 {
-                s[c] += self.sig[i][c] * wgt;
+            for (sc, v) in s.iter_mut().zip(self.sig[i]) {
+                *sc += v * wgt;
             }
             st += self.strength[i] * wgt;
         }
@@ -558,9 +567,9 @@ impl Builder {
                     a.acc = addv(a.acc, mul(hw, run));
                     // never step back against the heading (old error from
                     // before a turn would make notches)
-                    for c in 0..2 {
-                        if a.acc[c] * hw[c] < 0.0 {
-                            a.acc[c] = 0.0;
+                    for (e, hc) in a.acc.iter_mut().zip(hw) {
+                        if *e * hc < 0.0 {
+                            *e = 0.0;
                         }
                     }
                     let st = if (a.acc[0] / px).abs() >= (a.acc[1] / py).abs() {
@@ -601,15 +610,15 @@ impl Builder {
         first..last
     }
 
-    /// Relax the stress around segments just laid (not ahead of free tips).
-    fn relax(&mut self, segs: &[(usize, bool)]) {
+    /// Relax the stress around chords of crack just laid (`(a, b, tip)`;
+    /// `tip`: b is a free tip, and the stress ahead of it is not relaxed).
+    fn relax(&mut self, chords: &[(V2, V2, bool)]) {
         self.epoch += 1;
         let ep = self.epoch;
         self.touched.clear();
         let l = RELAX * self.s;
         let reach = RELAX_CUT * l;
-        for &(si, free_tip) in segs {
-            let (a, b) = (self.segs[si].a, self.segs[si].b);
+        for &(a, b, free_tip) in chords {
             let ab = sub(b, a);
             let l2 = dot(ab, ab);
             if l2 <= 0.0 {
@@ -621,16 +630,17 @@ impl Builder {
             let x1 = ((((a[0].max(b[0]) + reach) / self.gc - 0.5).ceil().max(0.0)) as usize).min(self.gx - 1);
             let y1 = ((((a[1].max(b[1]) + reach) / self.gc - 0.5).ceil().max(0.0)) as usize).min(self.gy - 1);
             for y in y0..=y1 {
+                let cy = (y as f32 + 0.5) * self.gc;
                 for x in x0..=x1 {
-                    let c = [(x as f32 + 0.5) * self.gc, (y as f32 + 0.5) * self.gc];
+                    let c = [(x as f32 + 0.5) * self.gc, cy];
                     let tr = dot(sub(c, a), ab) / l2;
                     if free_tip && tr > 1.0 {
                         continue;
                     }
                     let p = addv(a, mul(ab, tr.clamp(0.0, 1.0)));
                     let d = sub(c, p);
-                    let dd = dot(d, d).sqrt();
-                    if dd >= reach {
+                    let dd = dot(d, d);
+                    if dd >= reach * reach {
                         continue;
                     }
                     let i = y * self.gx + x;
@@ -646,8 +656,8 @@ impl Builder {
         }
         for &i in &self.touched {
             let i = i as usize;
-            let (d, n) = self.best[i];
-            let r = relief(d, l);
+            let (d2, n) = self.best[i];
+            let r = relief(d2.sqrt(), l);
             if r <= 0.0 {
                 continue;
             }
@@ -665,16 +675,32 @@ impl Builder {
         }
     }
 
-    /// Segments to relax after arms `ais` grew, from their ranges.
+    /// Relax around arms that just grew (their new segment ranges). The
+    /// relief reaches ~1.5 S, so the jagged path is relaxed along chords of
+    /// about half that: far cheaper, and the jags don't matter at that range.
     fn relax_arms(&mut self, grown: &[(usize, std::ops::Range<usize>)]) {
-        let mut list = Vec::new();
+        let lc = 0.5 * RELAX_CUT * RELAX * self.s;
+        let mut chords = Vec::new();
         for (ai, r) in grown {
+            if r.is_empty() {
+                continue;
+            }
             let free = self.arms[*ai].arm.end == End::Free;
+            let mut a = self.segs[r.start].a;
+            let mut run = 0.0;
             for si in r.clone() {
-                list.push((si, free && si + 1 == r.end));
+                let (sa, sb) = (self.segs[si].a, self.segs[si].b);
+                let d = sub(sb, sa);
+                run += dot(d, d).sqrt();
+                let last = si + 1 == r.end;
+                if run >= lc || last {
+                    chords.push((a, sb, free && last));
+                    a = sb;
+                    run = 0.0;
+                }
             }
         }
-        self.relax(&list);
+        self.relax(&chords);
     }
 
     fn ratio(&self, i: usize) -> f32 {
@@ -872,6 +898,11 @@ pub(crate) fn raster(net: &Network, k: &Cracks, w: usize, h: usize, px: f32) -> 
     let width = k.width_um * 1e-3; // mm
     let sh = 0.6 * width; // worn shoulder each side
     let lc = 0.18 * k.island_mm; // cupping falls off over ~10–20% of an island
+    // lift ∝ 1 / distance near the crack (research notes, E.5), reaching
+    // zero at lc; ℓ0 keeps it finite at the edge
+    let l0 = 0.06 * k.island_mm;
+    let tail = l0 / (l0 + lc);
+    let cup_profile = |d: f32| if d >= lc { 0.0 } else { (l0 / (l0 + d) - tail) / (1.0 - tail) };
     let reach = lc.max(0.5 * width + sh) + 1.5 * px;
     let fr = 0.75 * px; // tent filter radius
     // bin segments into bands of rows
@@ -927,8 +958,7 @@ pub(crate) fn raster(net: &Network, k: &Cracks, w: usize, h: usize, px: f32) -> 
                         // groove: open crack at full depth, rounded shoulders shallow
                         let g = wf * (core + 0.3 * (shd - core));
                         deep[i] = deep[i].max(g);
-                        let u = (1.0 - d / lc).max(0.0);
-                        cup[i] = cup[i].max(u * u);
+                        cup[i] = cup[i].max(cup_profile(d));
                     }
                 }
             }
@@ -1189,5 +1219,22 @@ mod tests {
         // grooves go down, cupped edges up
         let (lo, hi) = c.height.iter().zip(&before).fold((0.0f32, 0.0f32), |(lo, hi), (a, b)| (lo.min(a - b), hi.max(a - b)));
         assert!(lo < -5.0 && hi > 5.0, "dz range {lo}..{hi}");
+    }
+
+    /// `cargo test --release -p paint full_canvas_speed -- --ignored --nocapture`
+    #[test]
+    #[ignore]
+    fn full_canvas_speed() {
+        for (mm, island, ground) in [(440.0, 3.5, 240.0), (440.0, 3.5, 0.0), (1714.0, 5.0, 210.0)] {
+            let mut c = Canvas::new(3200, 1.4, [0.6, 0.55, 0.45]).with_size_mm(mm);
+            let k = Cracks { island_mm: island, ground_um: ground, ..Cracks::aged(1) };
+            let t = std::time::Instant::now();
+            let px = c.px_mm();
+            let n = network(&k, [3200.0 * px, c.f.h as f32 * px], [10.0 / 14.0, 10.0 / 12.0]);
+            let tn = t.elapsed().as_secs_f32();
+            c.crack(&k);
+            let tc = t.elapsed().as_secs_f32() - tn;
+            eprintln!("{}x{} px, {mm} mm, island {island} mm, ground {ground} µm: {} arms; network {tn:.2}s, crack() {tc:.2}s", c.f.w, c.f.h, n.arms.len());
+        }
     }
 }

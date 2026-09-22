@@ -34,7 +34,7 @@ fn panel(width_px: usize, width_mm: f32, aspect: f32, k: &Cracks, seed: u64) -> 
     let t = std::time::Instant::now();
     c.crack(k);
     eprintln!("    cracked {}x{} px ({width_mm} mm) in {:.2}s", fr.w, fr.h, t.elapsed().as_secs_f32());
-    c.relief(0.6, 0.03);
+    c.relief(1.0, 0.03);
     c
 }
 

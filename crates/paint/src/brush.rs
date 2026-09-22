@@ -127,6 +127,9 @@ impl Canvas {
         if let Some(m) = clip {
             self.check_mask(m);
         }
+        // stamps paint straight onto the dry picture: settle wet paint first
+        // so the order of work is kept
+        self.dry();
         if pts.len() < 2 {
             return;
         }

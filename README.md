@@ -74,11 +74,20 @@ Engine (`crates/paint`):
   along the sun, contact seams, mirror images in still or rippled water,
   ribbons and spacing that recede. Every `Form` in it is lit alike. It
   paints nothing: `notes/scene.md`
+- `atmos` – the air for the same sun: a physical sky (single scattering,
+  ozone, the Earth's shadow and Belt of Venus, uneven haze, haze layers,
+  overcast) sampled as paint over a camera; cloud volumes (cumulus, banks,
+  decks with breaks) lit by the sun, as fields (alpha, lit edge, belly,
+  silver lining, edge softness); receding ranges at uneven distances with
+  varied silhouettes and stratified haze. It paints nothing:
+  `notes/atmosphere.md`
 - `canvas` – glazes, relief lighting, dithered PNG out
 - `growth` – how trees grow (buds, light, vigor, pipe-model widths, decline):
   returns a skeleton of limbs, including which parts are dead wood;
   painting it is the painter's job: `notes/motifs.md`
 - `mask`, `edge`, `shape`, `path`, `noise`, `rng` – geometry and randomness
+  (`noise` also has ridged/billow octaves, domain warping, Worley cells,
+  anisotropic stretch and `uneven` spacing for anything repeated)
   (`edge` traces a mask's outline for cutting in)
 - `sched` (internal) – runs tiles of strokes in parallel without changing
   what gets painted, and skips tiles outside a crop
@@ -109,6 +118,7 @@ Notes for the painter (read before writing a painting):
 - `notes/stipple.md` – stippling
 - `notes/form.md` – solids, light, shadow and the masks they give
 - `notes/scene.md` – one world and one sun: placing things, shadows, contact, reflections, perspective
+- `notes/atmosphere.md` – sky light, clouds, haze and receding ranges
 - `notes/motifs.md` – trees, spruces, figures
 
 Viewing renders

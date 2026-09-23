@@ -2,7 +2,7 @@
 //! log, which is also the replayable program) and snapshots for undo.
 
 use crate::api::{self, Studio};
-use mlua::{Lua, StdLib, Value};
+use mlua::{Function, Lua, StdLib, Table, Value};
 use paint::{Canvas, Held, Style};
 use std::cell::RefCell;
 use std::collections::VecDeque;
@@ -29,7 +29,8 @@ struct Snap {
     setup: Option<String>,
     seed: u64,
     clock: f64,
-    globals: Vec<(Value, Value)>,
+    /// The Lua heap (heap.lua's snapshot).
+    heap: Table,
     brushes: Vec<(Rc<RefCell<Held>>, Held)>,
 }
 
@@ -42,6 +43,10 @@ pub struct Session {
     pub log: Vec<Chunk>,
     snaps: VecDeque<Snap>,
     pub undo_depth: usize,
+    /// heap.lua's snap and restore (dropped before the state is closed).
+    heap: Option<(Function, Function)>,
+    /// Time spent snapshotting and restoring the Lua heap (s), for status.
+    pub heap_secs: (f64, f64),
 }
 
 #[derive(Debug)]
@@ -64,30 +69,38 @@ impl Session {
         for k in ["dofile", "loadfile", "require", "collectgarbage"] {
             lua.globals().raw_set(k, Value::Nil)?;
         }
+        // a private debug library for heap.lua, then gone from the globals
+        unsafe {
+            mlua::ffi::luaL_requiref(state, c"debug".as_ptr(), mlua::ffi::luaopen_debug, 1);
+            mlua::ffi::lua_pop(state, 1);
+        }
+        let dbg: Table = lua.globals().get("debug")?;
+        lua.globals().raw_set("debug", Value::Nil)?;
+        let (snap_f, restore_f): (Function, Function) = lua.load(include_str!("heap.lua")).set_name("heap.lua").call(dbg)?;
         let st = Rc::new(RefCell::new(Studio::new(width)));
         api::install(&lua, st.clone())?;
-        Ok(Session { lua: ManuallyDrop::new(lua), state, st, log: Vec::new(), snaps: VecDeque::new(), undo_depth })
+        Ok(Session { lua: ManuallyDrop::new(lua), state, st, log: Vec::new(), snaps: VecDeque::new(), undo_depth, heap: Some((snap_f, restore_f)), heap_secs: (0.0, 0.0) })
     }
 
-    fn snap(&self) -> mlua::Result<Snap> {
+    fn snap(&mut self) -> mlua::Result<Snap> {
+        let t0 = Instant::now();
+        let (snap_f, _) = self.heap.as_ref().unwrap();
+        let strings = self.lua.load("return getmetatable('')").eval::<Value>().ok();
+        let heap: Table = snap_f.call((self.lua.globals(), strings))?;
+        self.heap_secs.0 += t0.elapsed().as_secs_f64();
         let mut s = self.st.borrow_mut();
-        let globals = self.lua.globals().pairs::<Value, Value>().collect::<mlua::Result<Vec<_>>>()?;
         let brushes = s.live_brushes().into_iter().map(|b| {
             let h = b.borrow().clone();
             (b, h)
         }).collect();
-        Ok(Snap { canvas: s.canvas.clone(), style: s.style.clone(), setup: s.setup.clone(), seed: s.seed, clock: s.clock, globals, brushes })
+        Ok(Snap { canvas: s.canvas.clone(), style: s.style.clone(), setup: s.setup.clone(), seed: s.seed, clock: s.clock, heap, brushes })
     }
 
-    fn restore(&self, snap: Snap) -> mlua::Result<()> {
-        let g = self.lua.globals();
-        let now = g.clone().pairs::<Value, Value>().map(|kv| kv.map(|(k, _)| k)).collect::<mlua::Result<Vec<_>>>()?;
-        for k in now {
-            g.raw_set(k, Value::Nil)?;
-        }
-        for (k, v) in snap.globals {
-            g.raw_set(k, v)?;
-        }
+    fn restore(&mut self, snap: Snap) -> mlua::Result<()> {
+        let t0 = Instant::now();
+        let (_, restore_f) = self.heap.as_ref().unwrap();
+        restore_f.call::<()>(snap.heap)?;
+        self.heap_secs.1 += t0.elapsed().as_secs_f64();
         for (b, h) in snap.brushes {
             *b.borrow_mut() = h;
         }
@@ -190,13 +203,14 @@ impl Session {
         let wet = s.canvas.as_ref().map(|c| c.wet_total() > 1e-6).unwrap_or(false);
         let secs: f64 = self.log.iter().map(|c| c.secs).sum::<f64>() + 0.0;
         format!(
-            "{} chunks · {}px · {} · clock {} min · {} · undo {} deep · painted {secs:.0}s",
+            "{} chunks · {}px · {} · clock {} min · {} · undo {} deep · painted {secs:.0}s · rollback bookkeeping {:.2}s",
             self.log.len(),
             s.width,
             s.setup.as_deref().unwrap_or("no canvas yet"),
             s.clock,
             if wet { "wet paint on the canvas" } else { "dry" },
-            self.snaps.len()
+            self.snaps.len(),
+            self.heap_secs.0 + self.heap_secs.1
         )
     }
 }
@@ -205,6 +219,7 @@ impl Drop for Session {
     fn drop(&mut self) {
         // everything holding references into the state goes first
         self.snaps.clear();
+        self.heap = None;
         let _ = self.lua.gc_collect();
         unsafe {
             ManuallyDrop::drop(&mut self.lua);
@@ -345,6 +360,27 @@ mod tests {
             b.run(c).unwrap();
         }
         assert_eq!(bits(&a), bits(&b));
+    }
+
+    #[test]
+    fn rollback_restores_tables_and_upvalues_exactly() {
+        let mut s = Session::new(W, 4).unwrap();
+        s.run(CHUNKS[0]).unwrap();
+        s.run(r##"trees = {1, 2, {x = 3}}; local n = 0; function bump() n = n + 1; return n end; setmetatable(trees, {tag = "a"})"##).unwrap();
+        // a failing chunk that edits old tables, an upvalue and a metatable
+        let e = s.run(r##"trees[1] = 99; trees[3].x = nil; trees[4] = {}; bump(); getmetatable(trees).tag = "b"; string.custom = 1; error("stop")"##).unwrap_err();
+        assert!(e.contains("stop"), "{e}");
+        s.run(r##"assert(trees[1] == 1 and trees[3].x == 3 and trees[4] == nil); assert(bump() == 1); assert(getmetatable(trees).tag == "a"); assert(string.custom == nil)"##).unwrap();
+        // undo takes the same care
+        s.run(r##"trees[2] = "changed"; bump()"##).unwrap();
+        s.undo(1).unwrap();
+        s.run(r##"assert(trees[2] == 2); assert(bump() == 2)"##).unwrap();
+        // and the live session still replays exactly
+        let mut b = Session::new(W, 0).unwrap();
+        for c in &s.log {
+            b.run(&c.src).unwrap();
+        }
+        assert_eq!(bits(&s), bits(&b));
     }
 
     #[test]

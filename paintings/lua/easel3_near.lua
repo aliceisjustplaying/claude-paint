@@ -211,3 +211,124 @@ for i = 1, 16 do
   lam:reload(mix("#5e574d", "#8a7e6a", rand()), 0.6)
   lam:stroke(wobble({{x0, y0}, {x0 + len/2, y0 + rand(-2, 2)}, {x0 + len, y0 + rand(-3, 3)}}, 1.2), {pressure={0.15, 0.45}, ramps={0.3, 0.4}})
 end
+
+--@ chunk 11 · clock 96638.71716308594
+wait(24*60)
+birch = tree{habit="birch", x=478, y=252, height=235, seed=82}
+local trunkw = brush{kind="round", width=8, point=0.4}
+local limb = brush("round", 2.2)
+local twig = brush("rigger", 0.7)
+local tw = "#5a4a45"
+-- limbs and twigs first, dark purple-brown, fine
+for i, l in ipairs(birch.limbs) do
+  if l.order >= 1 and #l.pts >= 2 then
+    local b = (l.w[1] > 1.6) and limb or twig
+    if i % 6 == 1 or b:fullness() < 0.3 then b:reload(mix(tw, "#3d3431", rand()), 0.8) end
+    local wb = (l.w[1] > 1.6) and {0.8, 0.25} or {0.55, 0.0}
+    b:stroke(l.pts, {pressure=wb, ramps={0.05, 0.6}})
+  end
+end
+-- the white trunk: a light body, a gray shadow side, black marks
+local tr = birch.limbs[1]
+trunkw:load("#e6e0d0", 1)
+trunkw:stroke(tr.pts, {pressure={0.95, 0.35}, ramps={0.02, 0.4}})
+local sh = {}
+for k, p in ipairs(tr.pts) do sh[k] = {p[1] + 0.3 * tr.w[k], p[2]} end
+local shb = brush{kind="round", width=4, point=0.5}
+shb:load("#8f8c86", 0.9)
+shb:stroke(sh, {pressure={0.8, 0.2}, ramps={0.02, 0.4}})
+-- the first order limbs out of the trunk get a white start too
+local wl = brush("round", 2.4)
+for _, l in ipairs(birch.limbs) do
+  if l.order == 1 and l.w[1] > 2 and #l.pts >= 3 then
+    wl:reload("#d8d2c4", 0.8)
+    local n = math.max(2, #l.pts // 2)
+    local pts = {}; for k = 1, n do pts[k] = l.pts[k] end
+    wl:stroke(pts, {pressure={0.8, 0.3}, ramps={0.05, 0.5}})
+  end
+end
+-- lenticels and black patches
+local mk = brush{kind="flat", width=3}
+mk:load("#1f1c1a", 0.9)
+local n = #tr.pts
+for k = 2, n - 1 do
+  local p = tr.pts[k]
+  local wdt = tr.w[k]
+  if rand() < 0.55 and wdt > 1.5 then
+    local off = rand(-0.4, 0.4) * wdt
+    local len = wdt * rand(0.3, 0.9)
+    mk:stroke({{p[1] + off - len/2, p[2] + rand(-1, 1)}, {p[1] + off + len/2, p[2] + rand(-1, 1)}}, {pressure={0.5, 0.2}, orient="along"})
+    if k % 7 == 0 then mk:reload("#1f1c1a", 0.9) end
+  end
+end
+print(#birch.limbs)
+
+--@ chunk 12 · clock 98078.71716308594
+
+wait(3*60)
+bl = birch:foliage{sun={-0.7, -0.6, 0.35}, seed=9, fill=0.5}
+print(#bl.clumps)
+local lf = brush{kind="filbert", width=2.6}
+local k = 0
+for i, c in ipairs(bl.clumps) do
+  if rand() < 0.28 then
+    local n = math.random(1, 4)
+    for j = 1, n do
+      if k % 5 == 0 then lf:reload(mix("#a77f2a", "#dcb650", clamp(c.lit or 0.5, 0, 1) * 0.8 + 0.2 * rand()), 0.8) end
+      k = k + 1
+      local x, y = c.x + randn(0, c.r * 0.5), c.y + randn(0, c.r * 0.4) + 1.5
+      lf:touch(x, y, {pressure=rand(0.35, 0.7), angle=rand(0, 3.14), drag={randn(0, 0.6), rand(0.3, 1.2)}})
+    end
+  end
+end
+print(k)
+
+--@ chunk 13 · clock 98258.71716308594
+
+dry()
+local notrock = -((rockm + boulm):shrink(1))
+local gm = (below(function(x) return 522 + 4*math.sin(x/60) end) * notrock)
+pat = noise{seed=91, octaves=5, period=70, stretch={0.05, 3}}
+pat2 = noise{seed=92, octaves=4, period=35, stretch={0.0, 2.5}}
+floorcol = function(x, y)
+  local t = smoothstep(520, 769, y)
+  local humus = mix("#6e6450", "#2e261c", smoothstep(0, 0.8, t))
+  local moss = mix("#7b8058", "#3c4526", smoothstep(0, 0.8, t))
+  local straw = mix("#a09474", "#7d6a42", smoothstep(0, 1, t))
+  local litter = mix("#8a7458", "#6b3f22", smoothstep(0, 1, t))
+  local a, b = pat:at01(x, y), pat2:at01(x, y)
+  local c = humus
+  c = mix(c, moss, smoothstep(0.55, 0.75, a) * (x < 420 and 1 or 0.5))
+  c = mix(c, straw, smoothstep(0.55, 0.8, b) * 0.8)
+  c = mix(c, litter, smoothstep(0.35, 0.15, a) * 0.7)
+  return c
+end
+work(gm, {hand="body", tool="filbert 4", length={6, 18}, coverage=4.2, medium=0.12, aim="masstone",
+  angle=function(x, y) return 0.06 * pat2(x, y) end, angle_jitter=0.25, color=floorcol})
+
+--@ chunk 14 · clock 107321.41540527344
+
+dry()
+local all = rockm + boulm
+local castm = (poly({{840, 660}, {905, 628}, {1000, 632}, {1000, 700}, {940, 712}, {850, 705}}, true):roughen(10, 25, 5, 8) - all):soften(14)
+glaze(castm, {color="#2a2119", coats=0.5, pigment="transparent"})
+local bw = noise{seed=97, octaves=3, period=50}
+local foot = (all:grow(16) - all) * mask(function(x, y)
+  local rb = (x > 320 and x < 900) and smoothstep(640, 668, y) or 0
+  local bb = (x > 110 and x < 320) and smoothstep(695, 718, y) or 0
+  return math.max(rb, bb) * (0.7 + 0.3 * bw:at01(x, y))
+end)
+glaze(foot:soften(5), {color="#241c15", coats=0.5, pigment="transparent"})
+local under = rockm * mask(function(x, y)
+  local e = smoothstep(516, 530, y) * smoothstep(590, 548, y)
+  return e * (0.75 + 0.25 * bw:at01(x * 2, y))
+end)
+glaze(under, {color="#2c2620", coats=0.3, pigment="transparent"})
+local bg = noise{seed=95, octaves=4, period=20}
+work(boulm, {hand="body", tool="filbert 3", length={4, 12}, coverage=3.8, medium=0.12, aim="masstone", angle=f:field("across"),
+  color=function(x, y)
+    local v = smoothstep(0.05, 0.95, f:value(x, y))
+    local c = gradient({{0, "#35312c"}, {0.4, "#5f584d"}, {0.75, "#8a8070"}, {1, "#b5a78b"}}, v)
+    local top = smoothstep(660, 630, y) * smoothstep(0.35, 0.65, bg:at01(x, y))
+    return mix(c, mix("#46511f", "#76803c", v), 0.8 * top)
+  end})

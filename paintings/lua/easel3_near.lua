@@ -576,3 +576,56 @@ for i = 1, 16 do
     for k = 1, 6 do hd:touch(tx - lean * k * 2.4 + rand(-1.5, 1.5), ty + k * 2.6, {pressure=rand(0.3, 0.6), angle=-1.3, drag={0, 1}}) end
   end
 end
+
+--@ chunk 19 · clock 152396.62048339844
+
+dry()
+local all = rockm + boulm
+local fgd = mask(function(x, y)
+  local d = smoothstep(560, 769, y)
+  local side = smoothstep(350, 0, x) * 0.5 + smoothstep(700, 1000, x) * 0.3
+  return clamp(d * 0.8 + side * smoothstep(520, 700, y), 0, 1)
+end) - all:shrink(1)
+glaze(fgd, {color="#2a2016", coats=0.45, pigment="transparent"})
+glaze(boulm * mask(function(x, y) return 0.5 + 0.5 * smoothstep(180, 300, x) end), {color="#2f2c27", coats=0.45, pigment="transparent"})
+glaze(rockm * f:shadow{parts={1}, soft=0.25} * mask(function(x, y) return smoothstep(780, 860, x) * 0.7 + 0.3 end), {color="#2e2d2c", coats=0.25, pigment="transparent"})
+
+--@ chunk 20 · clock 278358.19763183594
+
+wait(3*60)
+local behind = -((rockm + boulm):grow(0.5))
+local specs = {{30, 532, 105, 131}, {58, 546, 62, 132}, {96, 538, 84, 137}, {128, 556, 38, 138}, {205, 540, 56, 134}, {272, 552, 92, 135}, {300, 561, 44, 136}, {176, 566, 26, 139}}
+for k, sp in ipairs(specs) do
+  local t = tree{habit="spruce", x=sp[1], y=sp[2], height=sp[3], seed=sp[4], years=8}
+  local dark = mix("#1c251f", "#2b352c", rand())
+  local tb = brush("round", 1.6)
+  local lb = brush("rigger", 0.8)
+  for i, l in ipairs(t.limbs) do
+    if #l.pts >= 2 then
+      local b = (l.order == 0) and tb or lb
+      if i % 5 == 1 then b:reload(dark, 0.9) end
+      b:stroke(l.pts, {pressure={0.8, 0.2}, ramps={0.03, 0.5}, clip=behind})
+    end
+  end
+  local f2 = nil
+  for _, l in ipairs(t.limbs) do
+    if l.order == 1 and #l.pts >= 2 then
+      local w, pts = {}, {}
+      for j = 1, #l.pts do local u = (j-1)/#l.pts; w[j] = 1.5 + 4.5 * (1 - u) * (0.7 + 0.6 * rand()); pts[j] = {l.pts[j][1], l.pts[j][2] + 3 * u * u} end
+      local r = ribbon(pts, w)
+      f2 = f2 and (f2 + r) or r
+    end
+  end
+  if f2 then
+    local cx = sp[1]
+    work(f2:roughen(2, 4, k, 0.6) * behind, {hand="hatch", tool="round 1.2", length={2, 5}, coverage=2.6,
+      color=function(x, y) return mix(dark, "#3f4c3a", (x < cx and 0.4 or 0.05) + 0.2 * rand()) end,
+      angle=function(x, y) return (x < cx and 2.55 or 0.6) + 0.3 * math.sin(y / 5) end, angle_jitter=0.5})
+  end
+  local g = brush("rigger", 0.8)
+  for j = 1, 14 do
+    if j % 5 == 1 then g:reload(mix("#5d5536", "#8d7d52", rand()), 0.7) end
+    local x = sp[1] + randn(0, sp[3] * 0.15); local y = sp[2] + rand(-1, 4); local h = rand(4, 11)
+    g:stroke({{x, y}, {x + randn(0, 0.3) * h, y - h}}, {pressure={0.6, 0}, ramps={0.05, 0.7}})
+  end
+end

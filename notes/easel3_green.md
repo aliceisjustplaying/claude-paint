@@ -119,7 +119,19 @@ What it draws on (from knowledge, no pictures consulted):
     a noise patch field and scaled with depth. The first pass was
     invisible (touches too small and too light); the second read as polka
     dots and red dashes; the third is subtle.
-19. Varnish, relief, final renders.
+19. **Stones remodeled:** filbert strokes along the form's fall and across
+    directions, then a `blend` so the wet paint fuses into a hard surface.
+    At 3200 the first version was a bristly haystack.
+20. **Cloud shadows over the plain: tried and abandoned.** A brush glaze
+    with `color_over` smeared the whole plain (it repaints every stroke,
+    even where the function returns `under`). A pure `glaze()` with the
+    shade field as mask came out as thin horizontal strips and seemed to
+    lift the distant groves. Undone.
+21. **A village church far off** among the left-hand groves: pale walls in
+    the sun, red roofs, a slate spire, trees in front, all hazed. It gives
+    the eye somewhere to go across the plain (and the church spire on the
+    horizon is one of his recurring motifs).
+22. Varnish, relief, final renders.
 
 ## HOW THE EASEL FELT
 
@@ -225,6 +237,14 @@ things.
     the crown. Workaround: fill ribbons with `work` (as for the trunk).
 18. **The clock jumped again**, from 46,849 to 78,556 minutes on a chunk
     that only did `wait(24*60); varnish(); relief()`.
+20. **A brush glaze with `color_over` is not a no-op where it returns
+    `under`.** Every stroke is still laid, dragging and flattening dry
+    texture underneath: a cloud-shadow pass wiped the plain's fields and
+    half a sheep. Workaround: the `glaze()` function with a mask (though
+    that looked wrong in a different way, and I dropped the idea).
+21. **Undoing a failed experiment costs a replay if a chunk follows it.**
+    Removing the varnish chunk to keep painting meant close, edit and a
+    100 s replay; there's no "unvarnish" step.
 19. **Scratch sessions write into `paintings/lua/`.** My `oakstudy` session
     wrote `paintings/lua/oakstudy.lua` in the shared repo; I moved it to
     my scratch directory.

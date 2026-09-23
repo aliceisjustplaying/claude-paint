@@ -153,7 +153,7 @@ impl Species {
             voids: 0.55,
             void_size: 0.3,
             depth: 0.8,
-            scaffold: (3, 6),
+            scaffold: (2, 4),
             trunk: 0.075,
             twig_w: 0.55,
             smooth: 1,
@@ -265,7 +265,7 @@ impl Species {
     pub fn birch() -> Self {
         Species {
             name: "birch".into(),
-            leader: 0.8,
+            leader: 0.6,
             pipe: 2.4,
             step: 0.022,
             density: 0.45,
@@ -804,6 +804,10 @@ impl Tree {
                     bias = mul(unit([rng.normal(), rng.normal() * 0.6, rng.normal()]), 0.9);
                 }
                 dir = unit(add(dir, bias));
+                // no shoot turns more than about 55 degrees in one step (no curls)
+                if n.parent != ROOT && dot(dir, n.dir) < 0.57 {
+                    dir = unit(add(dir, mul(n.dir, 0.9)));
+                }
                 // no growing back into the trunk's foot or through the ground
                 if dir[1] > 0.6 && !pollard {
                     dir[1] = 0.6;
@@ -921,13 +925,14 @@ impl Tree {
             if m < 2 || l.order == 0 {
                 continue;
             }
-            let sprout = |rng: &mut Rng, at: usize, k: f32, limbs: &mut Vec<Limb>| {
+            let sprout = |rng: &mut Rng, at: usize, k: f32, side: f32, limbs: &mut Vec<Limb>| {
                 let p = l.pts[at];
                 let q = l.pts[at.saturating_sub(1).min(m - 2)];
                 let q2 = l.pts[(at.max(1)).min(m - 1)];
                 let base = if at == 0 { (q2.0 - p.0, q2.1 - p.1) } else { (p.0 - q.0, p.1 - q.1) };
                 let bl = (base.0 * base.0 + base.1 * base.1).sqrt().max(1e-6);
-                let mut a = base.1.atan2(base.0) + rng.normal() * sp.twig_spread;
+                // off to one side of the limb (a fishbone, not a starburst), or on along it
+                let mut a = base.1.atan2(base.0) + if side == 0.0 { rng.normal() * 0.25 * sp.twig_spread } else { side * sp.twig_spread * rng.range(0.45, 1.0) + rng.normal() * 0.12 };
                 let segs = 3;
                 let tl = sp.twig_len * d * rng.range(0.6, 1.3) * k;
                 let mut pts = vec![p];
@@ -953,13 +958,16 @@ impl Tree {
             };
             // at the tip
             let k = (sp.twigs + rng.f()) as usize;
-            for _ in 0..k {
-                sprout(&mut rng, m - 1, 1.0, &mut limbs);
+            for j in 0..k {
+                let at = if j == 0 { m - 1 } else { (m - 1).saturating_sub(j).max(1) };
+                let side = if j == 0 { 0.0 } else if j % 2 == 1 { 1.0 } else { -1.0 };
+                sprout(&mut rng, at, if j == 0 { 1.0 } else { 0.85 }, side, &mut limbs);
             }
             // along the thin wood
             for at in 1..m - 1 {
                 if l.w[at] < twig_w * sp.leafy_w * 1.6 && rng.chance(sp.twig_along) {
-                    sprout(&mut rng, at, 0.8, &mut limbs);
+                    let side = if rng.chance(0.5) { 1.0 } else { -1.0 };
+                    sprout(&mut rng, at, 0.8, side, &mut limbs);
                 }
             }
         }

@@ -563,7 +563,29 @@ fn mask_opt(v: Value) -> Result<Option<Rc<Mask>>> {
     }
 }
 
+thread_local! {
+    /// The Lua state (to collect garbage) and the mask bytes made since the
+    /// last collection: Lua doesn't see how big a mask is (29 MB at 3200px),
+    /// so without this a loop of mask operations piles up gigabytes.
+    static GC: RefCell<(Option<mlua::WeakLua>, usize)> = const { RefCell::new((None, 0)) };
+}
+const GC_EVERY_BYTES: usize = 400 << 20;
+
 fn wrap(m: Mask) -> M {
+    let bytes = m.data.len() * 4;
+    let lua = GC.with(|g| {
+        let mut g = g.borrow_mut();
+        g.1 += bytes;
+        if g.1 > GC_EVERY_BYTES {
+            g.1 = 0;
+            g.0.as_ref().and_then(|w| w.try_upgrade())
+        } else {
+            None
+        }
+    });
+    if let Some(l) = lua {
+        let _ = l.gc_collect();
+    }
     M(Rc::new(m))
 }
 
@@ -981,6 +1003,7 @@ fn tree(lua: &Lua, st: &S, o: Table) -> Result<Table> {
 // ---------------------------------------------------------------- setup
 
 pub fn install(lua: &Lua, st: S) -> Result<()> {
+    GC.with(|g| *g.borrow_mut() = (Some(lua.weak()), 0));
     let g = lua.globals();
 
     // output goes to the chunk's reply

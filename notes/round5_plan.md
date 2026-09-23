@@ -65,3 +65,4 @@ spectral) is split into single-defect fixes the loops pull in.
 - Rest of round 5: tool-oak, tool-rock (+ grain fix if clean) land; one more loop
   per painting (near: rock + stump patch; green: oak); panel judging; stop and
   show before/after with the score history.
+- loop2-grain merged (round 2): grain gone, dashes fixed at the source (priming brush ploughed the paste into sharp ridges); golden re-recorded. All paintings change: next panel batch re-renders previous versions.

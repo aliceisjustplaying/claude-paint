@@ -105,7 +105,7 @@ bare = tree_in{crown=moved(oak.crown), trunk=moved(OAKTRUNK), species="oak", sea
 print(bare)
 -- the fine twigs lighter and thinner than the limbs: the crown's lace against the sky
 paint_wood(bare, {twig="#554e45", fine=0.55, tip=0.04})
-bare:paint(brush("round", bare.touch_w * 0.7), {color="#6e5234", every=4})
+bare:paint(brush("round", bare.touch_w * 0.7), {color="#6e5234", every=4, share=0.4})
 
 --@ chunk 7 · clock 1440
 -- a beech: a tall dome, smooth gray trunk, rising limbs, level sprays

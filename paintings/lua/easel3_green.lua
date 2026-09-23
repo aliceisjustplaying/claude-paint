@@ -287,3 +287,34 @@ work(fgm - pathm:shrink(2), {hand="body", tool="filbert 5", length={10, 30}, cov
   color=function(x, y, u) local t = fgt(x, y); return mix(mix("#5d7230", "#6a7a36", gn:at01(x, y)), mix("#3c4a24", "#4a4a28", gn:at01(y, x)), t) end})
 work(fgm * pathm, {hand="body", tool="filbert 4", length={6, 16}, coverage=2.5, medium=0.18, angle=-0.6,
   color=function(x, y) return mix("#7f7650", "#5e5638", fgt(x, y)) end})
+
+--@ chunk 21 · clock 41929.6328125
+wait(4*60)
+local en = noise{seed=88, octaves=4, period=90}
+local tufts = sward{region=below(function(x) return 528 + 30 * en(x, 0) end):roughen(14, 40, 3, 10) - pathm:shrink(3), horizon=HZ, near=H, height=34, flowers=0.04, seed=21,
+  wind={lean=0.12, gust=0.25, period=180, seed=4}}
+local g = brush("rigger", 0.7)
+local greens = {"#56702c", "#7a8e3a", "#3e5226", "#8e9a4c", "#6a7a34", "#a39a5a"}
+local n = 0
+for i, t in ipairs(tufts) do
+  if i % 4 == 1 then
+    local c = greens[1 + (i // 4) % #greens]
+    c = shift(color(c), -0.13 * smoothstep(570, 690, t.y), 0.002, 0.008 * smoothstep(570, 690, t.y))
+    g:reload(c, 0.7)
+  end
+  local p = clamp(0.25 + 0.5 * t.scale, 0.2, 0.9)
+  for _, bl in ipairs(t.blades) do
+    g:stroke(bl, {pressure={p, 0.0}, ramps={0.05, 0.7}})
+    n = n + 1
+  end
+end
+local f = brush("round", 1.2)
+local k = 0
+for _, t in ipairs(tufts) do
+  if t.flower then
+    if k % 6 == 0 then f:reload(({"#e6e0c8", "#d6b43a", "#b9c2dc", "#c9d27a"})[1 + t.flower.kind % 4], 0.8) end
+    f:touch(t.flower.x, t.flower.y, {pressure=clamp(t.flower.r / 2, 0.2, 0.8)})
+    k = k + 1
+  end
+end
+print(#tufts, "tufts", n, "blades", k, "flowers")

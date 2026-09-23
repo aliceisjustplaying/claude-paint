@@ -45,4 +45,5 @@ Then stop and evaluate with the user.
 - color merged: masstone semantics, Canvas::aim / Palette::aim, handlings aim by default; matched marks ΔE ~0.003 (was ~0.045). Stipple stream should switch to Canvas::aim at merge.
 - strokes merged (hand-like geometry, passages/sweep order, coverage past edges, presets as vocabulary); golden re-recorded after color+strokes.
 - stipple merged; paint_for switched to Palette::aim / Paint::aimed / Canvas::under. Sky stipple reads smooth and grainy with no direction. Open: mist stippled over a dark ridge is an opaque gray grainy wall (aiming a veil reaches the target fully; needs a veil/density-to-contrast handling); ridge silhouette lumpy.
+- workflow done (crop renders ~close, checkpoints byte-exact, run_ordered scheduler, Palette::mix order-independence fix); resumed the workflow agent to merge main into its branch (Frame/crop across new modules, unify levelize + run_ordered).
 - (updated as work lands)

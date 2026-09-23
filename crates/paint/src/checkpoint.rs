@@ -3,12 +3,17 @@
 //!
 //! The state is everything later painting depends on: the frame (and crop
 //! window), the dry picture (color, surface relief, film), the support
-//! (linen, physical size), the wet layer (volume, pigment mix, hiding and
-//! stiffness, dirty box) and the stroke counter. Not stored, because nothing
-//! later reads them: the per-pixel stroke ids and film floors of past
-//! strokes (a new stroke has a new id) and the brushes' contact surface
-//! (derived from the relief and rebuilt on demand). Restoring is exact: a
-//! resumed run paints bit-for-bit what an uninterrupted one does.
+//! (linen, physical size), the wet layer (volume, pigment mix, scattering,
+//! stiffness and drying rate, dirty box), the stroke counter and the
+//! per-pixel ids of the last stroke to lay or touch paint there (`wait`
+//! reads them to tell which films were worked), the clock and the drying
+//! state (see `drying`). Not stored, because nothing later reads them: the
+//! film floors of past strokes and the brushes' contact surface (derived
+//! from the relief and rebuilt on demand). Restoring is exact: a resumed run
+//! paints bit-for-bit what an uninterrupted one does.
+//!
+//! Version 2 (`PAINTCK2`) added the drying rate, stroke ids, clock and
+//! drying state; version 1 files are refused (re-run to checkpoint again).
 //!
 //! Format: little-endian binary, `MAGIC`, then a free-form UTF-8 header
 //! (length-prefixed; the caller's key=value lines), then the canvas. If you
@@ -19,7 +24,7 @@ use crate::surface::Linen;
 use crate::wet::LAT;
 use std::io::{self, Read, Write};
 
-const MAGIC: &[u8; 8] = b"PAINTCK1";
+const MAGIC: &[u8; 8] = b"PAINTCK2";
 
 fn put_u64(w: &mut impl Write, v: u64) -> io::Result<()> {
     w.write_all(&v.to_le_bytes())
@@ -118,6 +123,24 @@ impl Canvas {
         put_all(w, wt.vol.iter().copied())?;
         put_all(w, wt.lat.iter().flat_map(|l| *l))?;
         put_all(w, wt.hide.iter().flat_map(|h| *h))?;
+        put_all(w, wt.stroke.iter().map(|&v| f32::from_bits(v)))?;
+        put_all(w, wt.touched.iter().map(|&v| f32::from_bits(v)))?;
+        let ck = &wt.clock;
+        put_u64(w, ck.now.to_bits())?;
+        put_u64(w, ck.mark as u64)?;
+        match ck.tacky {
+            None => put_u64(w, 0)?,
+            Some((a, b, c, d)) => {
+                put_u64(w, 1)?;
+                for v in [a, b, c, d] {
+                    put_u64(w, v as u64)?;
+                }
+            }
+        }
+        put_u64(w, u64::from(!ck.px.is_empty()))?;
+        if !ck.px.is_empty() {
+            put_all(w, ck.px.iter().flat_map(|p| [p.cure, p.lev, p.seen, p.sub, p.srate]))?;
+        }
         Ok(())
     }
 
@@ -190,10 +213,35 @@ impl Canvas {
         wet.vol = get_all(r, n)?;
         let lat = get_all(r, n * LAT)?;
         wet.lat = lat.as_chunks::<LAT>().0.to_vec();
-        let hide = get_all(r, n * 2)?;
-        wet.hide = hide.as_chunks::<2>().0.to_vec();
+        let hide = get_all(r, n * 3)?;
+        wet.hide = hide.as_chunks::<3>().0.to_vec();
+        wet.stroke = get_all(r, n)?.into_iter().map(f32::to_bits).collect();
+        wet.touched = get_all(r, n)?.into_iter().map(f32::to_bits).collect();
         wet.current = current;
         wet.dirty = dirty;
+        let now = f64::from_bits(get_u64(r)?);
+        let mark = get_u64(r)? as u32;
+        let tacky = match get_u64(r)? {
+            0 => None,
+            _ => {
+                let mut d = [0usize; 4];
+                for v in d.iter_mut() {
+                    *v = usize::try_from(get_u64(r)?).map_err(|_| bad("checkpoint tacky box is invalid"))?;
+                }
+                if !(d[0] <= d[2] && d[2] <= w && d[1] <= d[3] && d[3] <= h) {
+                    return Err(bad("checkpoint tacky box is invalid"));
+                }
+                Some((d[0], d[1], d[2], d[3]))
+            }
+        };
+        if !now.is_finite() {
+            return Err(bad("checkpoint clock is invalid"));
+        }
+        let px = match get_u64(r)? {
+            0 => Vec::new(),
+            _ => get_all(r, n * 5)?.as_chunks::<5>().0.iter().map(|q| crate::drying::Px { cure: q[0], lev: q[1], seen: q[2], sub: q[3], srate: q[4] }).collect(),
+        };
+        wet.clock = crate::drying::Clock { now, px, mark, tacky };
         c.wet = wet;
         Ok((c, header))
     }

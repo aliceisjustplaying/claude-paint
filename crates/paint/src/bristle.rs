@@ -296,7 +296,7 @@ impl Held {
                     prev: [None, None],
                     vol: 0.0,
                     lat: [0.0; LAT],
-                    hide: [0.5, 0.5],
+                    hide: [0.5, 0.5, 1.0],
                 }
             })
             .collect();
@@ -318,7 +318,7 @@ impl Held {
         let scatter = paint.scatter();
         for (i, b) in self.bristles.iter_mut().enumerate() {
             let k = 0.75 + 0.5 * crate::rng::hash2(i as i64, 17, 3);
-            mix_into(&mut b.vol, &mut b.lat, &mut b.hide, amount * full * k, &lat, [scatter, paint.stiff]);
+            mix_into(&mut b.vol, &mut b.lat, &mut b.hide, amount * full * k, &lat, [scatter, paint.stiff, paint.drying]);
         }
     }
 
@@ -443,6 +443,9 @@ pub(crate) struct Surf {
     touched: *mut u32,
     floor: *mut f32,
     base: *const f32,
+    /// Drying state (null until the canvas has waited): how open or tacky
+    /// the paint under a bristle is (see `drying::feel`).
+    dry: *const crate::drying::Px,
 }
 // SAFETY: callers only run brushes concurrently on pixel sets that cannot
 // overlap (tiles separated by more than the largest stroke extent).
@@ -474,8 +477,9 @@ impl Surf {
             for k in 0..LAT {
                 l[k] += (lat[k] - l[k]) * a;
             }
-            hd[0] += (hide[0] - hd[0]) * a;
-            hd[1] += (hide[1] - hd[1]) * a;
+            for k in 0..hd.len() {
+                hd[k] += (hide[k] - hd[k]) * a;
+            }
             *vol = t;
         }
     }
@@ -520,6 +524,7 @@ impl Canvas {
             touched: self.wet.touched.as_mut_ptr(),
             floor: self.wet.floor.as_mut_ptr(),
             base: self.base.as_ref().unwrap().1.as_ptr(),
+            dry: if self.wet.clock.px.len() == n { self.wet.clock.px.as_ptr() } else { std::ptr::null() },
         }
     }
 
@@ -806,6 +811,7 @@ unsafe fn exchange(
         wts.resize(bw * (y1 - y0), 0.0);
         let mut sum_w = 0.0f32;
         let mut sum_cov = 0.0f32;
+        let mut sum_tack = 0.0f32;
         for y in y0..y1 {
             for x in x0..x1 {
                 let (px, py) = (x as f32 + 0.5, y as f32 + 0.5);
@@ -832,11 +838,18 @@ unsafe fn exchange(
                 }
                 wts[(y - y0) * bw + (x - x0)] = wt;
                 sum_w += wt;
+                if !sf.dry.is_null() {
+                    let p = *sf.dry.add(i);
+                    sum_tack += wt * crate::drying::feel(*sf.vol.add(i), p.cure, p.sub).1;
+                }
             }
         }
         if sum_w <= 1e-6 {
             return;
         }
+        // a tacky surface grabs: it pulls paint off the bristle faster, in
+        // patches as the bristle sticks and slips
+        let tack = sum_tack / sum_w;
 
         // deposit: a share of the load, proportional to distance traveled
         let travel = (seg / s).max(rb / s * 0.5);
@@ -846,6 +859,16 @@ unsafe fn exchange(
         let dep_total = match dep {
             None => br.vol * (1.0 - (-travel / tool.run).exp()) * touch,
             Some(v) => v.min(br.vol * 0.5) * touch,
+        };
+        let dep_total = if tack > 0.0 {
+            let g = crate::drying::grab(tack) * crate::drying::stick(b.0, b.1, rb, br.seed, tack);
+            let d = match dep {
+                None => br.vol * (1.0 - (-travel * g / tool.run).exp()) * touch,
+                Some(_) => dep_total * g,
+            };
+            d.min(br.vol * 0.9)
+        } else {
+            dep_total
         };
         // a capsule cut by the window edge lays only the window's share there
         let share = if windowed { sum_cov / capsule_cover(a, b, rb, (cx0, cy0, cx1, cy1)).max(1e-6) } else { 1.0 };
@@ -858,7 +881,7 @@ unsafe fn exchange(
 
         let mut got_v = 0.0f32;
         let mut got_l = [0.0f32; LAT];
-        let mut got_h: Prop = [0.0, 0.0];
+        let mut got_h: Prop = [0.0; 3];
         let (blat, bhide) = (br.lat, br.hide);
         for y in y0..y1 {
             for x in x0..x1 {
@@ -874,9 +897,12 @@ unsafe fn exchange(
                     *sf.floor.add(i) = *vol * (1.0 - tool.pickup);
                 }
                 let v = *vol;
+                // paint that is setting is stiff: it comes up and moves less
+                let fl = if sf.dry.is_null() { 1.0 } else { crate::drying::fluid((*sf.dry.add(i)).cure) };
                 if v > 1e-6 {
                     let own = if *sf.stroke.add(i) == id { 0.15 } else { 1.0 };
-                    let take = (v * tool.pickup * wt * hunger * own).min((v - *sf.floor.add(i)).max(0.0));
+                    let lift = if fl < 1.0 { 0.3 + 0.7 * fl } else { 1.0 };
+                    let take = (v * tool.pickup * wt * hunger * own * lift).min((v - *sf.floor.add(i)).max(0.0));
                     if take > 0.0 {
                         *vol -= take;
                         let tv = take * px_area;
@@ -886,8 +912,9 @@ unsafe fn exchange(
                             got_l[k] += l[k] * tv;
                         }
                         let hp = *sf.hide.add(i);
-                        got_h[0] += hp[0] * tv;
-                        got_h[1] += hp[1] * tv;
+                        for k in 0..hp.len() {
+                            got_h[k] += hp[k] * tv;
+                        }
                     }
                 }
                 if dep_per_w > 0.0 {
@@ -897,7 +924,7 @@ unsafe fn exchange(
                 // plough: move paint outward from the bristle's path, and ahead
                 if push_k > 0.0 {
                     let v = *sf.vol.add(i);
-                    let m = v * push_k * wt;
+                    let m = v * push_k * wt * fl;
                     if m > 1e-6 {
                         let (px, py) = (x as f32 + 0.5, y as f32 + 0.5);
                         let side = if (px - a.0) * nx + (py - a.1) * ny >= 0.0 { 1.0 } else { -1.0 };
@@ -928,8 +955,9 @@ unsafe fn exchange(
             for k in 0..LAT {
                 got_l[k] /= got_v;
             }
-            got_h[0] /= got_v;
-            got_h[1] /= got_v;
+            for g in &mut got_h {
+                *g /= got_v;
+            }
             mix_into(&mut br.vol, &mut br.lat, &mut br.hide, got_v, &got_l, got_h);
         }
         let pad = (off + 2.0) as usize;

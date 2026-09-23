@@ -163,6 +163,8 @@ impl Server {
                 }
                 let ins: Vec<String> = src.into_iter().collect();
                 let r = self.s.splice(n, remove, &ins)?;
+                // the live 3200 crops follow the new log
+                self.sync_crops();
                 let what = if drop { "dropped" } else if insert { "inserted before" } else { "replaced" };
                 keep_undone(&self.name, n, &format!("{what} by edit"), &r.removed)?;
                 let note = self.save_log()?;

@@ -58,7 +58,9 @@ Read all three before you start.
      to combine, e.g. `--mode value,squint`;
    - `--dried` (alias `--wet`): wet paint as it will look once it has
      leveled and dried; `--relief` also lights the brushwork from the upper
-     left; `--size N` for the longest side.
+     left; `--size N` for the longest side;
+   - `--grid`, `--probe x,y`, `--show` and `--scale 3.2` help you place
+     marks by eye (next section).
 
    The plain look shows what is on the canvas now: the dry picture with wet
    paint on it as laid.
@@ -80,6 +82,78 @@ Read all three before you start.
    See [Editing a chunk](#editing-a-chunk).
 7. **Time-lapse.** `easel frames on` saves a JPEG after every chunk in
    `out/easel/<name>/frames/`.
+
+## Looking by eye
+
+You place every mark by coordinates, so read them off the picture instead
+of estimating them from a JPEG, and see where a shape will land before you
+paint it.
+
+```sh
+$E look --grid                      # labeled grid in canvas units (step picked from the zoom)
+$E look --crop 560,480,720,600 --grid 10     # zoomed in: a 10-unit grid, labels at the edges
+$E look --probe "412,380;300,520"   # what is there: numbered crosses on the image, and per point
+# probe 2 (300, 520): #5a593c · OKLab L 0.458 a -0.013 b +0.043 · open, wet 88 µm · v: ground, 20.6 m away at X -3.9 Y -0.0 Z 20.7 m
+$E try '                            # run a chunk, see its overlay, roll it back (not logged)
+sheep = {{612,560},{640,548},{668,552},{680,566},{660,578},{626,578}}
+show(sheep, {closed=true, label="sheep"})'
+$E look                             # the polygon, its numbered vertices and the label over the canvas
+$E look --crop 560,500,720,610 --scale 3.2   # that window as it looks at 3200 px
+```
+
+- **`--grid [step]`** draws major and minor lines with the major values
+  along the top and left edges, and the steps in the lower left corner
+  (`GRID 20 / 4 UNITS`). It works on crops, mirrored looks (the labels
+  still give true x) and `--scale` looks.
+- **`--probe x,y[;x,y...]`** reports the color there (hex and OKLab), the
+  drying stage, the wet film in µm and, if a global holds a view (`v =
+  w:view()`) or a world, what the eye sees there: sky, ground, water or
+  body N, its distance and the point in meters. It also marks the points on
+  the image.
+- **`probe(x, y [, view])`** is the same in Lua. It returns `{x, y, color,
+  hex, L, a, b, value, drying, wet_um, world, what, body, at, dist, lit}`
+  (the world fields only with a view or world: the one passed, else the
+  first global holding a view, by name, else one holding a world). It also
+  marks its point (P1, P2...) in the next look.
+- **`show(...)`** draws an overlay on the next looks. It never paints.
+  It returns its first argument, so `work(show(m), {...})` paints the mask
+  and shows its outline.
+  - `show(mask, {color=, label=})`: the region, tinted by coverage and
+    outlined at its 0.5 level.
+  - `show(points, {closed=, label=, color=, dots=, numbers=})`: a polyline
+    (a polygon with `closed=true`) with numbered vertices (up to 40), so
+    you can say "move point 4 left 6".
+  - `show(points, {width=8})` or `{brush=b, pressure=0.6}`: the band a
+    stroke of that width lays along the path (`width` may be one per
+    point), with its center line.
+  - `show(x, y, "label")`: one point. `show()` clears the overlay.
+- **Which overlay you see.** The first `show()` or `probe()` in a chunk (or
+  a `try`) replaces the overlay; a chunk that shows nothing leaves it.
+  `look --show off` hides it, `--show on` shows it again, `--show` toggles
+  and `--show clear` drops it. Every look that draws one says so.
+- **`easel try '<lua>'`** (also `-f file`, `-`, `--look`) runs a chunk
+  exactly as `do` would (it gets the same chunk number, so the same
+  seeds), keeps what it printed and showed, then rolls everything back: the
+  canvas, your globals, the brushes and the clock. It is not logged and
+  your undo snapshots stay. Use it to preview shapes and probes and to
+  print positions (`w:spot`, `v:at` tables) without a chunk to undo later.
+- **show() in the log.** A `show()` or `probe()` inside a chunk you `do`
+  is logged with the chunk. In a replay (`easel run`, `easel check`, a
+  reopened session) `show()` draws nothing and `probe()` only returns its
+  table, so the painting replays exactly as if they weren't there.
+- **`--crop x0,y0,x1,y1 --scale 3.2`** renders that window as it looks on
+  a 3200 px canvas (`--scale 3200` works too): the real grain of a figure
+  45 units tall. The easel keeps a session painting a slightly larger
+  window (30 units more on each side) at that width in the background and
+  follows your log chunk by chunk, undos included. The first look at a new
+  window replays the whole log once, which takes about as long as a replay
+  at 1000 px. The look waits up to `--wait 90` seconds, then shows the
+  latest state it has (it says how many chunks behind) or tells you to
+  look again. After that, a look only waits for the chunks you ran since
+  the last one, and any crop inside a kept window is immediate. Two
+  windows are kept. The grid, probes and overlays work on these looks.
+  A chunk that reads the canvas outside the window (`sample`, `probe`) sees
+  less there than the live session does, as with `easel run --crop`.
 
 ## How chunks behave
 
@@ -655,7 +729,11 @@ close, copy it back and open again to paint on from your edit.
 - `canvas{}` (the primed linen) ≈ 3 s; a broad sky pass with a blend
   ≈ 6 s; a body passage ≈ 1–1.5 s; a stipple pass ≈ 0.2 s; hundreds of
   brush strokes along tree limbs ≈ 0.05 s
-- `look` ≈ 0.04 s, `look --dried` ≈ 0.3 s
+- `look` ≈ 0.04 s, `look --dried` ≈ 0.3 s; `--grid`, `--probe` and
+  overlays add under 0.1 s
+- `look --scale 3.2` on a new window: about a replay of the log at
+  1000 px (masks stay whole-canvas at 3200); after that, only the chunks
+  run since the last look, at crop cost
 - replaying the example: 18–29 s at 1000px (see notes/easel.md for 3200px)
 - creating Lua tables and closures costs about 15% more than in plain Lua
   (the easel numbers them for `pairs`); arithmetic is unaffected
@@ -680,5 +758,6 @@ close, copy it back and open again to paint on from your edit.
 - A table that once held object keys and then lost them all may keep an
   order that depends on the process until it grows again. Build a fresh
   table if you rely on its `pairs` order.
-- Sessions paint the whole canvas. `easel run --crop` renders a window
-  of a finished program.
+- Sessions paint the whole canvas. `look --crop ... --scale 3.2` keeps a
+  window painted at 3200 px that follows the session; `easel run --crop`
+  renders a window of a finished program.

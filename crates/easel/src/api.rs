@@ -45,11 +45,13 @@ pub struct Studio {
     /// The last world view made (`w:view()`): what `visible=`, `behind=` and
     /// `at=` resolve against (depth.rs).
     pub view: Option<crate::world::ViewU>,
+    /// Paint only this window of the canvas (a `look --scale` crop session).
+    pub crop: Option<paint::Crop>,
 }
 
 impl Studio {
     pub fn new(width: usize) -> Self {
-        Studio { width, canvas: None, style: None, setup: None, seed: 1, chunk: 0, calls: 0, clock: 0.0, clock0: 0.0, rng: Rng::new(1), brushes: Vec::new(), out: String::new(), field_secs: 0.0, view: None }
+        Studio { width, canvas: None, style: None, setup: None, seed: 1, chunk: 0, calls: 0, clock: 0.0, clock0: 0.0, rng: Rng::new(1), brushes: Vec::new(), out: String::new(), field_secs: 0.0, view: None, crop: None }
     }
 
     /// Start chunk `n`: its randomness depends only on the seed and `n`.
@@ -1392,7 +1394,8 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
                 }
                 let seed = o.get::<Option<u64>>("seed")?.unwrap_or(1);
                 let width = st.borrow().width;
-                let c = sty.prepare(width, aspect, seed);
+                let crop = st.borrow().crop;
+                let c = if crop.is_some() { sty.prepare_window(width, aspect, seed, crop) } else { sty.prepare(width, aspect, seed) };
                 let h = c.height();
                 let pal = Pal(Rc::new(sty.palette.clone()));
                 {
@@ -1720,6 +1723,8 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
     crate::form::install(lua, st.clone())?;
     crate::world::install(lua, st.clone())?;
     draw_pencil::install(lua, st.clone())?;
+    // looking by eye: show() overlays and probe() (look.rs)
+    crate::look::install(lua, st.clone())?;
 
     // trees
     {

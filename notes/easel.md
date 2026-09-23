@@ -436,10 +436,9 @@ collisions until it rehashes).
 3. **Drying, felt.** `wait` now runs the engine's drying model (merged
    from main at the end of round 2) and `drying(x, y)` reports the stage;
    the looks could show it (a `--mode drying` map of open/tacky/dry).
-4. **Detail at full resolution, live.** A session holding a `--crop`
-   window at 3200px, resumed from a checkpoint of the chunks so far,
-   would let a painter work Friedrich's small particulars at their real
-   grain. The engine's Frame and crop machinery already supports it.
+4. **Detail at full resolution, live.** Done in round 4 (`look --crop
+   ... --scale 3.2`, see below); resuming crop sessions from checkpoints
+   instead of a first full replay is still open.
 5. **Rollback, last gaps.** Coroutines; a restore that rebuilds changed
    string-keyed tables in their original insertion order, so `pairs` order
    holds (object-keyed tables are already sorted).
@@ -468,3 +467,24 @@ collisions until it rehashes).
 - **Timing**: edit at chunk 5 of 30 took 30.0 s, against 47.4 s to reopen
   and 62.1 s for `easel run`. Undone code is kept in
   `out/easel/<name>/undone.lua`.
+
+## Round 4: looking by eye
+
+Details, design and tests in `notes/lookaid.md`; the painter's guide is
+the README's "Looking by eye" section.
+
+- `look --grid [step]`: a labeled grid in canvas units (on crops, mirrored
+  and `--scale` looks too).
+- `look --probe x,y;...` and `probe(x, y [, view])`: color (hex, OKLab),
+  drying stage, wet film (µm) and, with a view or world in a global, what
+  the eye sees there and how far away.
+- `show(mask | points | path with width= or brush= | x, y)`: an overlay for
+  the next looks, never paint. Logged with its chunk, a no-op in replay.
+  `look --show on|off|clear`.
+- `easel try '<lua>'`: run a chunk, keep its prints and overlay, roll it
+  back (not logged; undo snapshots kept).
+- `look --crop x0,y0,x1,y1 --scale 3.2`: the window at 3200 px from a
+  background session that follows the log chunk by chunk (undos included).
+  The first look at a window pays a full replay once.
+- Crop sessions paint their window through `Studio.crop` and
+  `Style::prepare_window`, not the process-wide `paint::set_crop`.

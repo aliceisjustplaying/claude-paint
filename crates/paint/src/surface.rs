@@ -26,7 +26,12 @@ pub const COAT_UM: f32 = 25.0;
 /// Surface tension of drying oil, N/m.
 const SIGMA: f32 = 0.035;
 /// Time the paint levels before it has set enough to stop, s.
-const SET_TIME: f32 = 900.0;
+pub(crate) const SET_TIME: f32 = 900.0;
+/// Thinnest layer `settle` treats as paint, µm (a ten-thousandth of a µm:
+/// numerically nothing, far below any film). Heights are ~10² µm, where an
+/// f32 resolves ~10⁻⁵ µm, so a deposit below this is lost in rounding and
+/// its leveled share would be float residue.
+const ADD_EPS_UM: f32 = 1e-4;
 
 /// Plain-weave linen.
 #[derive(Clone, Copy, Debug)]
@@ -59,7 +64,7 @@ fn rheology(stiff: f32) -> (f32, f32) {
 
 /// Decay factor and frozen amplitude (µm) for a band of wavelength λ (m) in
 /// a wet film of thickness h (m).
-fn level_band(lambda: f32, h: f32, eta: f32, tau_y: f32) -> (f32, f32) {
+fn level_band(lambda: f32, h: f32, eta: f32, tau_y: f32, set_time: f32) -> (f32, f32) {
     if h < 5e-8 {
         return (1.0, f32::INFINITY);
     }
@@ -72,7 +77,7 @@ fn level_band(lambda: f32, h: f32, eta: f32, tau_y: f32) -> (f32, f32) {
     } else {
         (2.0 * eta * lambda / (2.0 * pi * SIGMA), tau_y * lambda * lambda / (4.0 * pi * pi * SIGMA))
     };
-    ((-SET_TIME / tau).exp(), a_c * 1e6)
+    ((-set_time / tau).exp(), a_c * 1e6)
 }
 
 /// Shrink a band coefficient by leveling, down to the yield floor.
@@ -169,6 +174,22 @@ impl Canvas {
     /// field and returns the redistributed thickness (µm) per pixel of `rect`:
     /// thin fluid paint gathers in the valleys and thins on the peaks.
     pub(crate) fn settle(&mut self, rect: (usize, usize, usize, usize), add: &[f32], stiff: &[f32]) -> Vec<f32> {
+        let sets = vec![SET_TIME; add.len()];
+        self.settle_for(rect, add, stiff, &sets)
+    }
+
+    /// `settle`, with each pixel's paint leveling for its own time `sets`
+    /// (s): how long it stayed fluid (see `drying`).
+    pub(crate) fn settle_for(&mut self, rect: (usize, usize, usize, usize), add: &[f32], stiff: &[f32], sets: &[f32]) -> Vec<f32> {
+        // far below any film is nothing at all (see ADD_EPS_UM): zero it so
+        // float residue can't pose as paint in the ratios below
+        let clean: Vec<f32>;
+        let add = if add.iter().any(|&a| a > 0.0 && a < ADD_EPS_UM) {
+            clean = add.iter().map(|&a| if a < ADD_EPS_UM { 0.0 } else { a }).collect();
+            &clean[..]
+        } else {
+            add
+        };
         let (x0, y0, x1, y1) = rect;
         let (rw, rh) = (x1 - x0, y1 - y0);
         let w = self.f.w;
@@ -200,8 +221,8 @@ impl Canvas {
                 }
                 let hm = a * 1e-6;
                 let (eta, ty) = rheology(stiff[i]);
-                let (k1, c1) = level_band(lam1, hm, eta, ty);
-                let (k2, c2) = level_band(lam2, hm, eta, ty);
+                let (k1, c1) = level_band(lam1, hm, eta, ty, sets[i]);
+                let (k2, c2) = level_band(lam2, hm, eta, ty, sets[i]);
                 let d1 = shrink(s[i] - l1[i], k1, c1);
                 let d2 = shrink(l1[i] - l2[i], k2, c2);
                 let lev = l2[i] + d1 + d2;
@@ -216,10 +237,13 @@ impl Canvas {
         let laid = box_blur(&box_blur(add, rw, rh, r2), rw, rh, r2);
         let kept = box_blur(&box_blur(&out, rw, rh, r2), rw, rh, r2);
         out.par_iter_mut().enumerate().for_each(|(i, o)| {
+            // (a ratio of blur residues is not a ratio: it can overflow and
+            // turn 0 × ∞ into NaN, which then paints full masstone)
+            let r = laid[i] / kept[i];
             if add[i] <= 0.0 {
                 *o = 0.0;
-            } else if kept[i] > laid[i] * 1e-3 {
-                *o *= laid[i] / kept[i];
+            } else if kept[i] > laid[i] * 1e-3 && r.is_finite() && (*o * r).is_finite() {
+                *o *= r;
             } else {
                 // everything drained away: nowhere to pool, keep it in place
                 *o = add[i];
@@ -228,7 +252,8 @@ impl Canvas {
         // the local ratio is only approximately conservative (blur edges);
         // make the total exact
         let (sa, so): (f64, f64) = (add.iter().map(|&v| v as f64).sum(), out.iter().map(|&v| v as f64).sum());
-        if so > 0.0 {
+        debug_assert!(so.is_finite(), "settle: non-finite film");
+        if so > 0.0 && so.is_finite() {
             let k = (sa / so) as f32;
             out.par_iter_mut().for_each(|o| *o *= k);
         }

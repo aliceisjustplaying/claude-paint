@@ -468,3 +468,35 @@ stipple(bars, {width=2.2, color=function(x, y) return mix(skycol(x, y), "#7d7084
 --@ chunk 27 · clock 45631.58203125
 
 blend(bars:grow(2), {angle=0, length={15, 40}, coverage=2, clip=bars:grow(3)})
+
+--@ chunk 28 · clock 45631.58203125
+
+-- the roots flare into the turf: a low swelling of bark, then grass over the spikes
+local g = brush("rigger", 0.6)
+local function tuft_band(cx, cy, rx, ry, h, seed)
+  local reg = ellipse(cx, cy, rx, ry)
+  local ts = sward{region=reg, horizon=HZ, near=H, height=h, flowers=0.0, seed=seed, thin=0.0, wind={lean=0.22, gust=0.3, period=140, seed=2}}
+  for i, t in ipairs(ts) do
+    if i % 3 == 1 then g:reload(({"#34322a", "#403c30", "#2a2923", "#4c4736"})[1 + (i // 3) % 4], 0.7) end
+    for _, bl in ipairs(t.blades) do g:stroke(bl, {pressure={clamp(0.2 + 0.5 * t.scale, 0.15, 0.8), 0.0}, ramps={0.05, 0.7}}) end
+  end
+  return #ts
+end
+print(tuft_band(118, 522, 40, 9, 30, 91), tuft_band(118, 524, 34, 6, 24, 96), tuft_band(508, 516, 30, 5, 18, 92), tuft_band(128, 667, 60, 6, 40, 93), tuft_band(190, 674, 26, 5, 34, 94), tuft_band(905, 676, 36, 6, 40, 95))
+-- heather: stiff little sprigs over the patches
+local hs = brush("rigger", 0.5)
+local n = 0
+for i = 1, 1400 do
+  local x, y = rand(0, 1000), rand(528, 714)
+  if heath:at(x, y) > 0.5 then
+    local s = 0.6 + 1.6 * (y - 520) / 194
+    if n % 10 == 0 then hs:reload(mix(({"#46353a", "#3b2f2c", "#524047"})[1 + n % 3], "#1f1a19", 0.5 * smoothstep(560, 714, y)), 0.7) end
+    local a = -math.pi / 2 + randn(0.15, 0.35)
+    local L = rand(3, 7) * s
+    local tip = {x + math.cos(a) * L, y + math.sin(a) * L}
+    hs:stroke({{x, y}, tip}, {pressure={0.5, 0.1}})
+    hs:stroke({{x + math.cos(a) * L * 0.5, y + math.sin(a) * L * 0.5}, {tip[1] + L * 0.3, tip[2] + L * 0.2}}, {pressure={0.35, 0.05}})
+    n = n + 1
+  end
+end
+print(n)

@@ -281,6 +281,38 @@ function share a shape, and tiers come out as symmetric chevrons [r4 near]. Vary
 
 *Ceiling:* stones read as loaves, eggs or stacked masonry; snow on stone reads as blotches or lichen.
 
+**Rocks from a drawing: `rock{}` (use this before building a rock from ellipsoids and cuts).**
+Draw the silhouette as `outline{pts=..., char="broken"}` ("firm" for a sure contour).
+Mark corners with `"c"`. Draw the main cracks as point lists. Then
+`r = rock{outline=o, cracks={...}, kind="granite"|"sandstone"|"chalk", sun=..., seed=}`.
+It infers the planes, lights them and gives masks and fields [rocks_in study,
+`paintings/lua/rocks_in.lua`, `paint_rock` in chunk 2]:
+1. Take the color from `r:value()` through a five-stop gradient anchored on
+   `r:levels(0.03, 0.97)`. Mix in `P.bounce` by `r:reflected()` and `P.core` by
+   `r:core()`.
+2. Lay the whole mass (filbert 4, coverage 3.2, medium 0.25) and then `r:lit(0.2)`
+   stiffer (medium 0.12). Both go `angle=r:field("plane")`, so the strokes change
+   direction at every plane break.
+3. `blend(r:shadow(0.3), ...)` only. Blending the whole rock gave back the pale
+   smooth loaf.
+4. Stroke every line in `r.seams` once with a round brush (`pressure={0.8, 0.2}`,
+   `clip=r:mask()`). Short `detail` strokes over `r:cracks()` came out as dotted
+   lines, and the sandstone read as a crate.
+5. Glaze `r:cast()` (0.3 coats) and `r:contact()` (0.35), each times a mask of
+   your panel or ground, because the cast shadow reaches far under a low sun.
+
+What decided the look:
+- **Draw the outline lopsided.** My first erratic, drawn as a symmetric dome with
+  a crack down the middle, was a loaf with a seam. A high shoulder, a broken back
+  and a crack running off at an angle made it a stone.
+- **Draw a sandstone ledge with a flat top and a stepped flank.** A domed outline
+  gives a bedded loaf.
+- **Under a low sun over snow, give the light a strong bounce from below.** Use
+  `sun={from={-1, -0.14}, front=0.3, bounce=0.55, bounce_from={0.3, 1, 0.45}}`.
+  With the default bounce the shadow side was the critics' "flat purple half".
+- **Snow:** `r:snow{amount=0.7, depth=3}:blur(2):map(...)`, painted in masstone.
+  It still shows dark flecks at 1000 px (unsolved).
+
 - **An ellipsoid alone is an egg or a loaf.** What reads as stone: one mass, turned,
   roughened at two scales, cut by two or three fracture planes, e.g.
   ```lua

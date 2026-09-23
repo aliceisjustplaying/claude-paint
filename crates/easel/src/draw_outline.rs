@@ -38,6 +38,14 @@ pub(crate) fn outline_path(v: &AnyUserData) -> Option<(Vec<(f32, f32)>, bool)> {
     Some((l.pts.clone(), l.closed))
 }
 
+/// The corners of an outline value's first line (points), for tools that
+/// build on a drawn outline's corners (rocks).
+pub(crate) fn outline_corners(v: &AnyUserData) -> Option<Vec<(f32, f32)>> {
+    let o = v.borrow::<OutlineU>().ok()?;
+    let l = o.o.lines.first()?;
+    Some(l.corners.iter().filter_map(|&i| l.pts.get(i).copied()).collect())
+}
+
 const CHARS: &str = "firm, searching, broken, soft";
 
 /// The character from `char=`, `amount=` and `lobe=` (units), and the hand's

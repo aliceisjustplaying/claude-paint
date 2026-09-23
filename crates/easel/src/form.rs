@@ -352,7 +352,7 @@ impl UserData for FormU {
     }
 }
 
-fn light_of(t: &Table) -> Result<Light> {
+pub(crate) fn light_of(t: &Table) -> Result<Light> {
     check_keys(t, &["from", "front", "ambient", "bounce", "bounce_from", "penumbra", "reach", "thickness", "across_parts"], "light")?;
     let (fx, fy) = pair(t, "from")?.unwrap_or((-1.0, -0.7));
     let mut l = Light::new((fx, fy), num(t, "front")?.unwrap_or(0.5));

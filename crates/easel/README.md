@@ -617,6 +617,7 @@ from)`, plus `wood:floor()` and `wood:mask()` (everything). Numbers:
 works like `f:paint`. `wood.rows` builds a table of every tree, so read it
 once, not inside a color function.
 
+<<<<<<< HEAD
 ### Broadleaved trees grown into a drawn crown
 
 `tree{habit="oak"}` grows a tree from buds, and you can't choose its
@@ -763,6 +764,138 @@ run from far to near: `g:trees()`, `g:tree(i)` (a tree value with `haze`
 and `scale`), `g:haze(i)`, `g:scale(i)`, `g:shadow()`, `g:mask()`,
 `g.count` and `g.horizon`. The study is `paintings/lua/trees_in.lua`.
 
+||||||| 862fe6a
+=======
+### Rocks from a drawn outline
+
+Don't build a rock from ellipsoids and cuts. Draw its silhouette as an
+`outline{}` (`char="broken"` for a weathered stone, `"firm"` for a sure
+contour), and draw any cracks or plane lines you see inside it. `rock{}`
+infers a solid behind the drawing:
+
+- **the mass:** the outline inflated into a pillow, round for granite and
+  boxy for sandstone and chalk. It turns away at your line;
+- **planes:** cut into the mass, rim planes along the outline's spans
+  (arrises run in from its corners) and face planes over the inside (upper
+  ones turned to the sky, lower ones to the ground);
+- **your lines:** each one splits a fracture into two planes facing
+  different ways, and each crack also cuts a groove;
+- **joints:** grown from the outline's concave corners;
+- **by kind:** bedding for sandstone, flutes for chalk.
+
+The rock is lit with your sun, and every point gets its light and shadow
+family, core shadow and reflected light. The tool traces shadows over the
+rock itself (cracks and overhangs are occluded) and onto the ground it
+stands on. Since the planes are many, the terminator steps along their
+arrises; it doesn't run down one seam.
+
+```lua
+-- an erratic in snow under a low sun
+E = outline{pts={{584,328,"c"},{592,288},{612,244,"c"},{652,212},{704,194,"c"},{752,202},{790,220,"c"},
+                 {834,232},{872,262,"c"},{898,298},{904,326,"c"},{830,336},{710,340}}, char="broken", seed=4}
+r = rock{outline=E, cracks={{{706,198},{722,232},{736,256},{744,298}}}, kind="granite", seed=7,
+  sun={from={-1, -0.14}, front=0.3, ambient=0.25, bounce=0.55, bounce_from={0.3, 1, 0.45}}}  -- snow bounces a lot
+print(r)   -- rock(granite, 320x147, R 71, 30 planes (8 sizable), 2 lines (1 grown), lit 43%)
+local m, v, core, refl = r:mask(), r:value(), r:core(), r:reflected()
+local lo, hi = r:levels(0.03, 0.97)          -- anchor the value scale on this rock's own range
+local P = {core="#2c2c34", shadow="#4c4e5a", half="#7c7a80", light="#b09a88", top="#d6b89a", bounce="#8a90a4"}
+local function col(x, y)
+  local c = gradient({{0, P.core}, {0.3, P.shadow}, {0.55, P.half}, {0.85, P.light}, {1, P.top}}, smoothstep(lo, hi, v:at(x, y)))
+  return mix(mix(c, P.bounce, 0.55 * refl:at(x, y)), P.core, 0.45 * core:at(x, y))
+end
+-- 1. the whole mass thin, down each plane (one direction per plane: the breaks show in the strokes)
+work(m, {hand="body", tool="filbert 4", color=col, angle=r:field("plane"), length={6, 16}, coverage=3.2, medium=0.25, clip=m})
+-- 2. the lit planes again in stiffer paint; 3. fuse the shadow side a little
+work(r:lit(0.2), {hand="body", tool="filbert 3", color=col, angle=r:field("plane"), length={5, 14}, coverage=2.4, medium=0.12, clip=m, hug=false})
+blend(r:shadow(0.3), {angle=r:field("plane"), coverage=1.2})
+-- 4. every crack and joint as one stroke along its line
+local rb = brush("round", 1.3)
+for i, s in ipairs(r.seams) do
+  if i % 3 == 1 then rb:reload("#26252c", 0.8) end
+  rb:stroke(s.pts, {pressure={s.grown and 0.55 or 0.8, 0.2}, ramps={0.15, 0.45}, shake=0.5, clip=m})
+end
+-- 5. seat it: the shadow it casts on the snow and the dark seam at its foot
+glaze(r:cast():blur(1.2), {color="#6a7090", coats=0.27})
+glaze(r:contact(), {color="#2c2a2a", coats=0.3})
+-- 6. snow on the faces that turn up, with a cap standing over the top edge
+local sn = r:snow{amount=0.7, depth=3, seed=3}:blur(2):map(function(x) return smoothstep(0.3, 0.6, x) end)
+local bv = v:blur(3)
+work(sn, {hand="body", tool="filbert 3", length={4, 12}, coverage=5, medium=0.1, aim="masstone", angle=r:field("across"),
+  color=function(x, y) return mix("#8e96ae", "#efe3cf", smoothstep(lo, hi, bv:at(x, y) + 0.1)) end})
+```
+
+A sandstone outcrop: draw a flat top and a stepped flank, and draw the
+main joints. The tool adds the beds (each weathers back toward its base,
+so it overhangs and shades the bed below), the bed joints and more
+vertical joints. `r.seams` holds all of them for stroking.
+
+```lua
+LEDGE = {{36,650,"c"},{44,580},{58,520,"c"},{92,500,"c"},{120,462,"c"},{240,452},{330,456,"c"},{352,482,"c"},
+         {410,488,"c"},{436,540,"c"},{452,560,"c"},{462,610},{470,656,"c"},{300,664},{150,662}}
+s = rock{outline=outline{pts=LEDGE, char="firm", seed=12}, kind="sandstone", sun={-1, -0.5, 0.3}, seed=21,
+  cracks={{{210,455},{206,520},{214,600},{208,655}}, {{360,465},{372,540},{366,600}}}}
+print(s)   -- rock(sandstone, 434x213, R 106, 34 planes (11 sizable), 12 lines (10 grown), lit 42%)
+-- then paint it as above, with warm colors; stroke r.seams for the joints and bed joints
+```
+
+`rock{outline=, cracks=, planes=, kind=, sun=, seed=}`:
+- `outline`: a closed `outline{}` or points. Its corners (marked `"c"` or
+  found on the line) split the rim into planes. `corners=` adds more.
+- `cracks` and `planes`: lists of lines (an `outline{open=true}` or
+  points). A crack is a joint with a groove. A plane line is an arris
+  where two planes meet (no groove).
+- `kind`: `"granite"` (or `"erratic"`), `"sandstone"` or `"chalk"`.
+- `sun`: a direction `{x, y, z}` toward the sun, a light table as for
+  `form{}` (`from=, front=, ambient=, bounce=, bounce_from=, penumbra=`) or
+  a `world{}`, whose sun it uses.
+- Override the kind's numbers:
+  - `round`: arris rounding (fraction of R, the inradius). 0.035 for
+    granite, 0.02 for fresh sandstone.
+  - `facets`: face planes.
+  - `profile`: the mass. 2 is round, 4 is boxy.
+  - `sink={lo, hi}`: how deep planes cut; deeper cuts make bigger planes.
+  - `tilt={lo, hi}`: how far planes turn.
+  - `bulge`.
+  - `bed`: bed thickness in units (0: none), with `bed_tilt` and
+    `bed_recess`.
+  - `crack_depth`, `crack_width`.
+  - `joints`: the share of concave corners that grow a joint.
+  - `lumps`, `grain`, `flutes`.
+  - `ground`: the ground's foreshortening, z per unit down. Smaller means
+    you look down on it more, and the cast shadow comes out taller.
+
+What you get:
+- Masks:
+  - `r:mask()`, exactly your line.
+  - `r:lit(soft)` and `r:shadow(soft)`, the light and shadow families.
+  - `r:halftone()`, `r:core()` (the core shadow just past the terminator)
+    and `r:reflected()` (reflected light in the shadow family).
+  - `r:value()`, the light as one value, 0..1. It is darkened by
+    occlusion. Use `v:at(x, y)` in color functions.
+  - `r:occlusion()` and `r:cracks()`.
+  - `r:up(lo, hi)`, the faces turned up to the sky (the "upper face" mask).
+  - `r:snow{amount=, depth=, seed=}`, up faces broken by noise, plus a cap
+    over the top edge.
+  - `r:plane(i)` and `r:arrises()` (convex breaks).
+  - `r:contact{inside=, outside=}`, the seam at the foot and the contact
+    shadow under it.
+  - `r:cast()`, the rock's shadow on the ground around it.
+- Fields for `work{angle=}`: `r:field("plane")` (down each plane: one
+  direction per plane), `"fall"`, `"across"`, `"crack"` (along the nearest
+  seam or bed joint) and `"bed"`.
+- Numbers:
+  - `r:levels(lo, hi)`, the rock's values at those quantiles.
+  - `r:sample(x, y)`: `{n, z, plane, turn, direct, cast, bounce, sky,
+    value, lit, core, reflected, ao, crack, up}`.
+  - `r:bend(x, y, span)`, `r.r`, `r.bounds`, `r.base` and `r.foot` (the
+    outline's stretch on the ground).
+  - `r.planes`: `{kind, n, fall, turn, value, up, area}` per plane.
+  - `r.seams`: `{pts, crack, grown}` for every drawn, grown and bed line.
+
+It costs about 0.1–0.5 s per rock at 1000 px. Each mask costs 4 bytes per
+pixel, like any mask.
+
+>>>>>>> tool-rock
 ### Meadows
 
 ```lua

@@ -4,7 +4,15 @@
 //! A `Style` is data: a support and ground, a tool kit and handling
 //! parameters for the kinds of passage a painting is made of (sky, body of a
 //! form, detail, line, blending). Paintings ask the style for a `Handling`
-//! and supply only geometry and color.
+//! and supply geometry and color.
+//!
+//! The handling presets (`broad`, `body`, `detail`, `hatch`, `glaze`,
+//! `blend`) are a vocabulary of techniques with this painter's tools, not
+//! finished recipes: each has a hand (strokes arc, wander, break off, press
+//! unevenly) but no direction or look of its own. The painter decides which
+//! way strokes run (`angle`), whether they criss-cross (`cross`), how much
+//! they bow (`curve`), wander (`drift`) and in what order an area is worked
+//! (`order`, `sweep`).
 
 use crate::bristle::{Orient, Tool};
 use crate::canvas::Canvas;
@@ -15,9 +23,9 @@ use crate::palette::Palette;
 use crate::surface::Linen;
 
 /// Mean thickness (µm) a brushed ground lays per unit of load with the
-/// priming brush and coverage used in `Style::prepare` (measured: 0.2 → 36,
-/// 0.35 → 67, 0.7 → 141 µm).
-const BRUSHED_UM_PER_LOAD: f32 = 195.0;
+/// priming brush and coverage used in `Style::prepare` (measured: asking 30
+/// µm lays 28, asking 90 lays 97).
+const BRUSHED_UM_PER_LOAD: f32 = 318.0;
 
 /// How a ground layer is put on.
 #[derive(Clone, Copy, Debug)]
@@ -27,7 +35,9 @@ pub enum Apply {
     Knife { texture: f32 },
     /// Rolled on: a fine, even orange-peel texture.
     Roller,
-    /// Brushed with a broad hog brush in horizontal strokes: striations stay.
+    /// Brushed with a broad hog brush, mostly across the canvas but by hand:
+    /// long overlapping strokes that wander and cross a little; the bristle
+    /// striations stay.
     Brush,
 }
 
@@ -152,8 +162,10 @@ impl Style {
                 Apply::Knife { texture } => c.prime(g.color, g.hiding, g.um, g.stiff, texture, s),
                 Apply::Roller => c.prime(g.color, g.hiding, g.um, g.stiff, 0.8, s),
                 Apply::Brush => {
-                    // a broad hog brush dragged across in long horizontal
-                    // strokes; stiff paste keeps the bristle marks
+                    // a broad hog brush pulled across in long strokes, band
+                    // by band, the arm swinging: the strokes run mostly
+                    // across the canvas but wander, bow and cross a little,
+                    // and stiff paste keeps the bristle marks
                     let all = Mask::from_fn(c.f, |_, _| 1.0);
                     let hog = Tool { lay: 1.2, ragged: 0.2, ..Tool::hog_flat(40.0) };
                     let col = g.color;
@@ -161,7 +173,13 @@ impl Style {
                         .color(move |_, _| col)
                         .paint(g.hiding, g.stiff)
                         .angle(|_, _| 0.0)
-                        .angle_jitter(0.02)
+                        .angle_jitter(0.04)
+                        .curve(0.04, 0.3)
+                        .drift(0.25, 450.0)
+                        .cross(0.1)
+                        .tail(0.1)
+                        .broken(0.1)
+                        .swell(0.12)
                         .length(250.0, 600.0)
                         .coverage(3.5)
                         .pressure(0.8, 0.95)
@@ -176,7 +194,10 @@ impl Style {
         c
     }
 
-    /// Broad atmospheric passage (sky, fog, sea): long soft strokes, thin paint.
+    /// Broad atmospheric passage (sky, fog, sea): long soft strokes of thin
+    /// paint swung from the elbow, so they bow into long arcs and their
+    /// direction wanders across the passage. Give it a direction (`angle`);
+    /// the default is across the canvas.
     pub fn broad(&self) -> Handling<'_> {
         Handling::new(self.broad.clone())
             .length(80.0, 220.0)
@@ -185,11 +206,18 @@ impl Style {
             .mix_jitter(self.mix_jitter)
             .pressure(0.55, 0.8)
             .dips(2, 0.4, 0.5)
-            .angle_jitter(0.03)
+            .angle_jitter(0.06)
+            .curve(0.06, 0.25)
+            .drift(0.22, 350.0)
+            .tail(0.15)
+            .broken(0.08)
+            .swell(0.18)
             .ramps(0.12, 0.4)
     }
 
-    /// Building a form in body color.
+    /// Building a form in body color: shorter strokes from the wrist, more
+    /// bowed and broken, the direction wandering from patch to patch. Point
+    /// them along the form (`angle`).
     pub fn body(&self) -> Handling<'_> {
         Handling::new(self.body.clone())
             .length(20.0, 60.0)
@@ -198,6 +226,12 @@ impl Style {
             .mix_jitter(self.mix_jitter * 1.4)
             .pressure(0.6, 0.9)
             .dips(2, 0.56, 0.6)
+            .angle_jitter(0.12)
+            .curve(0.08, 0.3)
+            .drift(0.3, 150.0)
+            .tail(0.15)
+            .broken(0.1)
+            .swell(0.22)
     }
 
     /// Small forms and edges, cut in precisely.
@@ -211,6 +245,33 @@ impl Style {
             .dips(3, 0.9 * 0.8, 0.8)
             .clip(true)
             .threshold(0.1)
+            .curve(0.04, 0.2)
+            .drift(0.1, 60.0)
+            .tail(0.1)
+            .broken(0.0)
+            .swell(0.2)
+    }
+
+    /// Short hatched strokes side by side, "like a closely woven textile"
+    /// [NG pp.49–50]: conifers, grass, the texture of a far slope. One
+    /// family of short, nearly straight strokes laid passage by passage; give
+    /// them their direction (`angle`), or `cross` them.
+    pub fn hatch(&self) -> Handling<'_> {
+        Handling::new(Tool { width: self.detail.width * 1.2, ..self.detail.clone() })
+            .length(5.0, 12.0)
+            .coverage(2.5)
+            .mixed(&self.palette, 0.15)
+            .mix_jitter(self.mix_jitter)
+            .pressure(0.6, 0.9)
+            .dips(4, 0.7, 0.7)
+            .angle_jitter(0.1)
+            .curve(0.03, 0.1)
+            .drift(0.15, 40.0)
+            .tail(0.08)
+            .broken(0.0)
+            .swell(0.15)
+            .clump(0.5)
+            .ramps(0.05, 0.3)
     }
 
     /// A glaze or thin scumble brushed over dry paint: a soft brush, paint
@@ -229,11 +290,18 @@ impl Style {
             .coverage(2.5)
             .pressure(0.5, 0.7)
             .dips(2, 0.35, 0.5)
-            .angle_jitter(0.03)
+            .angle_jitter(0.05)
+            .curve(0.05, 0.25)
+            .drift(0.2, 350.0)
+            .tail(0.12)
+            .broken(0.06)
+            .swell(0.18)
             .ramps(0.2, 0.4)
     }
 
-    /// Clean soft blender passes over a wet passage.
+    /// Clean soft blender passes over a wet passage: light crossing strokes
+    /// (± 0.2 rad to `angle`), worked top to bottom so the blender never
+    /// drags paint back up a gradient (change with `order`/`sweep`).
     pub fn blend(&self) -> Option<Handling<'_>> {
         let t = self.blender.clone()?;
         Some(
@@ -243,7 +311,12 @@ impl Style {
                 .pressure(self.blend_pressure * 0.8, self.blend_pressure)
                 .dips(3, 0.0, 0.9)
                 .blender()
-                .angle_jitter(0.02),
+                .angle_jitter(0.05)
+                .cross(0.2)
+                .curve(0.06, 0.3)
+                .drift(0.2, 300.0)
+                .broken(0.0)
+                .sweep(std::f32::consts::FRAC_PI_2),
         )
     }
 

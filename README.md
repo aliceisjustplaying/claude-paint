@@ -30,7 +30,9 @@ Engine (`crates/paint`):
 - `bristle` – simulated brushes (round, flat, filbert, fan, rigger, badger):
   per-bristle reservoirs, bend and splay, contact with the surface relief,
   deposit, pickup and ploughing
-- `handling` – how a painter covers an area: stroke planning, trips to the
+- `handling` – how a painter covers an area: hand-like stroke planning (arcs,
+  criss-cross, drift, dabs, broken strokes, pressure swell; see
+  `notes/strokes.md`), passage-by-passage or swept order, trips to the
   palette, parallel tiles with exact pixel footprints
 - `style` – painter profiles: support, grounds, tools, handling (from sourced
   knowledge, see `notes/research/`)

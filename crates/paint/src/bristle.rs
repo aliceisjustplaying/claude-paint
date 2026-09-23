@@ -297,11 +297,15 @@ pub struct Gesture {
     pub release: f32,
     /// Hand unsteadiness: 1 = a normal hand, 0 = mechanically exact.
     pub shake: f32,
+    /// Pressure swell along the stroke: multipliers at evenly spaced knots
+    /// from start to end, interpolated smoothly (empty = none). A hand
+    /// presses harder and lighter as it travels.
+    pub swell: Vec<f32>,
 }
 
 impl Gesture {
     pub fn new(pts: Vec<(f32, f32)>) -> Self {
-        Gesture { pts, pressure: (0.8, 0.8), orient: Orient::Across, attack: 0.08, release: 0.15, shake: 1.0 }
+        Gesture { pts, pressure: (0.8, 0.8), orient: Orient::Across, attack: 0.08, release: 0.15, shake: 1.0, swell: Vec::new() }
     }
     pub fn line(a: (f32, f32), b: (f32, f32)) -> Self {
         Self::new(vec![a, b])
@@ -324,8 +328,26 @@ impl Gesture {
         self.release = release;
         self
     }
+    /// Vary the pressure along the stroke (see `swell`).
+    pub fn swell(mut self, knots: Vec<f32>) -> Self {
+        self.swell = knots;
+        self
+    }
+    fn swell_at(&self, u: f32) -> f32 {
+        let k = &self.swell;
+        match k.len() {
+            0 => 1.0,
+            1 => k[0],
+            n => {
+                let t = u.clamp(0.0, 1.0) * (n - 1) as f32;
+                let i = (t as usize).min(n - 2);
+                let s = smoothstep(0.0, 1.0, t - i as f32);
+                k[i] + (k[i + 1] - k[i]) * s
+            }
+        }
+    }
     fn pressure_at(&self, u: f32) -> f32 {
-        let base = self.pressure.0 + (self.pressure.1 - self.pressure.0) * u;
+        let base = (self.pressure.0 + (self.pressure.1 - self.pressure.0) * u) * self.swell_at(u);
         let a = if self.attack > 0.0 { 0.08 + 0.92 * smoothstep(0.0, self.attack, u) } else { 1.0 };
         let r = if self.release > 0.0 { 0.05 + 0.95 * smoothstep(0.0, self.release, 1.0 - u) } else { 1.0 };
         base * a * r

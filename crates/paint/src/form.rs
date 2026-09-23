@@ -258,7 +258,8 @@ impl Sdf {
         let (sr, cr) = roll.sin_cos();
         // body → view: roll · pitch · yaw (row vectors of the matrix)
         let ry = [[cy, 0.0, -sy], [0.0, 1.0, 0.0], [sy, 0.0, cy]];
-        let rp = [[1.0, 0.0, 0.0], [0.0, cp, -sp], [0.0, sp, cp]];
+        // the top (−y) comes toward the viewer (+z)
+        let rp = [[1.0, 0.0, 0.0], [0.0, cp, sp], [0.0, -sp, cp]];
         let rr = [[cr, -sr, 0.0], [sr, cr, 0.0], [0.0, 0.0, 1.0]];
         let mul = |a: [V3; 3], b: [V3; 3]| {
             let mut m = [[0.0f32; 3]; 3];
@@ -382,13 +383,23 @@ impl Sdf {
                 b
             }
             Sdf::Subtract(a, _, _) => a.aabb(),
-            Sdf::Turn { body, c, .. } => {
+            Sdf::Turn { body, c, m } => {
                 let (lo, hi) = body.aabb();
-                // a sphere around the body's box, about the pivot
-                let r = [lo, hi, [lo[0], hi[1], lo[2]], [hi[0], lo[1], hi[2]]].iter().map(|q| len(sub(*q, *c))).fold(0.0f32, f32::max)
-                    .max(len(sub(hi, *c)))
-                    .max(len(sub(lo, *c)));
-                ([c[0] - r, c[1] - r, c[2] - r], [c[0] + r, c[1] + r, c[2] + r])
+                if lo.iter().chain(hi.iter()).any(|v| v.abs() >= 1e6) {
+                    // unbounded (a bare half-space): stays unbounded
+                    return ([-1e6; 3], [1e6; 3]);
+                }
+                // the body's box turned: bound all eight of its corners
+                let (mut a, mut b) = ([f32::INFINITY; 3], [f32::NEG_INFINITY; 3]);
+                for k in 0..8 {
+                    let q = sub([if k & 1 == 0 { lo[0] } else { hi[0] }, if k & 2 == 0 { lo[1] } else { hi[1] }, if k & 4 == 0 { lo[2] } else { hi[2] }], *c);
+                    for i in 0..3 {
+                        let v = c[i] + dot(m[i], q);
+                        a[i] = a[i].min(v);
+                        b[i] = b[i].max(v);
+                    }
+                }
+                (a, b)
             }
             Sdf::Rough { body, amp, .. } => {
                 let (lo, hi) = body.aabb();
@@ -419,28 +430,84 @@ impl Solid for Sdf {
         let (lo, hi) = self.aabb();
         [lo[0], lo[1], hi[0], hi[1]]
     }
-    /// Orthographic sphere tracing along the line of sight (−z).
+    /// Along the line of sight (−z): exact for a bare ellipsoid, otherwise
+    /// sphere tracing. Where tracing crawls (a thin body seen near its edge,
+    /// where the distance estimate is poor), it goes on in steps of at
+    /// least `MIN_STEP` units and bisects the crossing, so running out of
+    /// steps is never taken for a miss; only passing the back of the bounds
+    /// is.
     fn hit(&self, x: f32, y: f32) -> Option<Hit> {
+        if let Sdf::Ellipsoid { c, r } = self {
+            return ellipsoid_hit(*c, *r, x, y);
+        }
+        const MIN_STEP: f32 = 0.25;
         let (lo, hi) = self.aabb();
         let (z_front, z_back) = (hi[2] + 1.0, lo[2] - 1.0);
         let eps = 0.02;
-        let mut z = z_front;
-        for _ in 0..160 {
+        let found = |z: f32| {
+            let p = [x, y, z];
+            let (_, facet) = self.eval(p);
+            Some(Hit { z, n: self.normal(p, 0.08), facet })
+        };
+        let (mut z, mut prev) = (z_front, z_front);
+        let mut steps = 0u32;
+        loop {
             let (d, _) = self.eval([x, y, z]);
-            if d < eps {
-                // refine: step back and forth once
-                let z1 = z + d;
-                let p = [x, y, z1];
-                let (_, facet) = self.eval(p);
-                return Some(Hit { z: z1, n: self.normal(p, 0.08), facet });
+            if d < eps && d >= 0.0 {
+                // refine along the ray (Newton on the distance): a distance
+                // bound far from Euclidean (a thin ellipsoid) stops short
+                let (mut zr, mut dr) = (z, d);
+                for _ in 0..4 {
+                    if dr.abs() < 1e-4 {
+                        break;
+                    }
+                    let h = 0.05;
+                    let g = (self.eval([x, y, zr + h]).0 - self.eval([x, y, zr - h]).0) / (2.0 * h);
+                    if g < 1e-4 {
+                        break;
+                    }
+                    let zn = zr - (dr / g).clamp(-4.0, 4.0);
+                    let dn = self.eval([x, y, zn]).0;
+                    if dn.abs() >= dr.abs() {
+                        break;
+                    }
+                    (zr, dr) = (zn, dn);
+                }
+                return found(zr);
             }
-            z -= (d * 0.8).max(eps * 0.5);
+            if d < 0.0 {
+                // stepped through the surface: bisect back to it
+                let (mut a, mut b) = (prev, z);
+                for _ in 0..24 {
+                    let m = 0.5 * (a + b);
+                    if self.eval([x, y, m]).0 < 0.0 { b = m } else { a = m }
+                }
+                return found(0.5 * (a + b));
+            }
+            steps += 1;
+            // the distance bound first; after 160 steps it is crawling, so
+            // guard the step
+            let min = if steps < 160 { eps * 0.5 } else { MIN_STEP };
+            prev = z;
+            z -= (d * 0.8).max(min);
             if z < z_back {
                 return None;
             }
         }
-        None
     }
+}
+
+/// The front of an axis-aligned ellipsoid on the line of sight through
+/// (x, y), in closed form.
+fn ellipsoid_hit(c: V3, r: V3, x: f32, y: f32) -> Option<Hit> {
+    let (u, v) = ((x - c[0]) as f64 / r[0] as f64, (y - c[1]) as f64 / r[1] as f64);
+    let e = 1.0 - u * u - v * v;
+    if e < 0.0 {
+        return None;
+    }
+    let z = c[2] + (r[2] as f64 * e.sqrt()) as f32;
+    let q = [x - c[0], y - c[1], z - c[2]];
+    Some(Hit { z, n: unit([q[0] / (r[0] * r[0]), q[1] / (r[1] * r[1]), q[2] / (r[2] * r[2])]), facet: 0 })
 }
 
 /// Any relief over the canvas: `f(x, y)` gives the height toward the viewer
@@ -726,12 +793,6 @@ impl Form {
         }
     }
 
-    #[inline]
-    fn px(&self, i: usize) -> (f32, f32) {
-        let inv = 1.0 / self.f.scale;
-        (((i % self.f.w) as f32 + 0.5) * inv, ((i / self.f.w) as f32 + 0.5) * inv)
-    }
-
     /// Add a solid at distance `dist` from the viewer (any unit the painter
     /// likes, used only for aerial perspective). Where it is nearer than what
     /// is already there, it hides it. Returns its part id (1, 2, …).
@@ -755,26 +816,31 @@ impl Form {
             return id;
         }
         let inv = 1.0 / f.scale;
-        let bw = px1 - px0;
-        let hits: Vec<Option<(Hit, f32)>> = (0..bw * (py1 - py0))
-            .into_par_iter()
-            .map(|k| {
-                let (x, y) = (((px0 + k % bw) as f32 + 0.5) * inv, ((py0 + k / bw) as f32 + 0.5) * inv);
-                s.hit(x, y).map(|h| (h, dist(x, y, h.z)))
-            })
-            .collect();
-        for (k, h) in hits.into_iter().enumerate() {
-            if let Some((h, d)) = h {
-                let i = (py0 + k / bw) * f.w + px0 + k % bw;
-                if h.z > self.z[i] {
-                    self.z[i] = h.z;
-                    self.n[i] = h.n;
-                    self.part[i] = id;
-                    self.facet[i] = h.facet;
-                    self.dist[i] = d;
+        // row by row, straight into the buffers: no frame-sized scratch
+        let rows = py0 * f.w..py1 * f.w;
+        let w = f.w;
+        self.z[rows.clone()]
+            .par_chunks_mut(w)
+            .zip(self.n[rows.clone()].par_chunks_mut(w))
+            .zip(self.part[rows.clone()].par_chunks_mut(w))
+            .zip(self.facet[rows.clone()].par_chunks_mut(w))
+            .zip(self.dist[rows].par_chunks_mut(w))
+            .enumerate()
+            .for_each(|(r, ((((zr, nr), pr), fr), dr))| {
+                let y = ((py0 + r) as f32 + 0.5) * inv;
+                for px in px0..px1 {
+                    let x = (px as f32 + 0.5) * inv;
+                    if let Some(h) = s.hit(x, y) {
+                        if h.z > zr[px] {
+                            zr[px] = h.z;
+                            nr[px] = h.n;
+                            pr[px] = id;
+                            fr[px] = h.facet;
+                            dr[px] = dist(x, y, h.z);
+                        }
+                    }
                 }
-            }
-        }
+            });
         self.light = None;
         id
     }
@@ -795,13 +861,14 @@ impl Form {
         let zmax = self.z.iter().cloned().fold(f32::NEG_INFINITY, f32::max);
         let step = 1.0 / f.scale;
         let (z, part) = (&self.z, &self.part);
-        let cast: Vec<f32> = (0..f.w * f.h)
-            .into_par_iter()
-            .map(|i| {
+        let inv = 1.0 / f.scale;
+        // in place: no second frame-sized buffer
+        self.cast.par_iter_mut().enumerate().for_each(|(i, out)| {
+            *out = {
                 if part[i] == 0 {
-                    return 0.0;
-                }
-                let (x, y) = self.px(i);
+                    0.0
+                } else {
+                let (x, y) = (((i % f.w) as f32 + 0.5) * inv, ((i / f.w) as f32 + 0.5) * inv);
                 let z0 = z[i] + 0.3;
                 let mut t = step * 1.5;
                 let mut occl = 0.0f32;
@@ -828,9 +895,9 @@ impl Form {
                     t += step;
                 }
                 crate::smoothstep(0.0, 1.0, occl)
-            })
-            .collect();
-        self.cast = cast;
+                }
+            };
+        });
         self.light = Some(l);
     }
 
@@ -894,9 +961,9 @@ impl Form {
     /// (evaluated at the nearest point inside): crisp near, lost in haze far
     /// off, softer where the form turns away than where a plane breaks.
     pub fn silhouette(&self, parts: &[PartId], soft: impl Fn(&Sample) -> f32 + Sync) -> Mask {
-        let inside = self.mask(|s| if parts.contains(&s.part) { 1.0 } else { 0.0 });
+        let inside: Vec<bool> = self.part.par_iter().map(|p| *p != 0 && parts.contains(p)).collect();
         let f = self.f;
-        inside.soften(|x, y| self.sample_i(f.index(x, y)).map_or(0.0, |s| soft(&s)))
+        crate::mask::soften_region(f, inside, |x, y| self.sample_i(f.index(x, y)).map_or(0.0, |s| soft(&s)))
     }
 
     /// Hard edges inside the form: plane breaks (normals turning by more
@@ -1065,6 +1132,93 @@ mod tests {
         assert!(form.shade(900.0, 380.0).cast < 0.1);
         let sil = form.silhouette(&[2], |_| 0.0);
         assert!(sil.sample(400.0, 350.0) > 0.99 && sil.sample(300.0, 350.0) < 0.01);
+    }
+
+    /// Every interior line of sight through a thin ellipsoid (10:1, 20:1)
+    /// hits it, at the analytic front surface; turned, it is still seen.
+    #[test]
+    fn thin_ellipsoids_keep_their_surface() {
+        for rx in [10.0f32, 5.0] {
+            let c = [500.0, 350.0, 0.0];
+            let r = [rx, 100.0, 100.0];
+            let bare = Sdf::ellipsoid(c, r);
+            // the same body turned by nothing goes through the traced path
+            let traced = Sdf::ellipsoid(c, r).turn(c, 0.0, 0.0, 0.0);
+            let mut misses = (0, 0);
+            for ix in -95..96 {
+                for iy in -95..96 {
+                    let (x, y) = (ix as f32 * rx / 100.0, iy as f32);
+                    let e = (x / rx).powi(2) + (y / 100.0).powi(2);
+                    if e >= 0.95 {
+                        continue;
+                    }
+                    let front = 100.0 * (1.0 - e).sqrt();
+                    match bare.hit(500.0 + x, 350.0 + y) {
+                        Some(h) => assert!((h.z - front).abs() < 0.05, "rx {rx} ({x},{y}): z {} vs {front}", h.z),
+                        None => misses.0 += 1,
+                    }
+                    match traced.hit(500.0 + x, 350.0 + y) {
+                        Some(h) => assert!((h.z - front).abs() < 0.1, "rx {rx} ({x},{y}) traced: z {} vs {front}", h.z),
+                        None => misses.1 += 1,
+                    }
+                }
+            }
+            assert_eq!(misses, (0, 0), "rx {rx}: misses (analytic, traced)");
+        }
+        // the reviewer's pixel: the analytic front is z = 23.108446
+        let h = Sdf::ellipsoid([500.0, 350.0, 0.0], [5.0, 100.0, 100.0]).hit(495.25, 329.0).unwrap();
+        assert!((h.z - 23.108446).abs() < 1e-3, "{}", h.z);
+        assert!(h.n[0] < -0.9, "{:?}", h.n);
+    }
+
+    /// Turned about a pivot outside the body, the solid stays inside its
+    /// bounds, so `Form::add` doesn't clip it.
+    #[test]
+    fn turning_about_an_outside_pivot_keeps_the_body_in_bounds() {
+        let s = Sdf::block([500.0, 350.0, 0.0], [20.0; 3], 0.0).turn([600.0, 350.0, -100.0], std::f32::consts::FRAC_PI_4, 0.0, 0.0);
+        let b = s.bounds();
+        let direct = s.hit(450.5, 350.5).expect("the turned block is there");
+        assert!(b[0] <= 450.0 && b[2] >= 451.0, "bounds {b:?}");
+        let mut form = Form::new(Frame::new(1000, 700, 1.0));
+        let id = form.add(&s, 1.0);
+        let got = form.sample(450.5, 350.5).expect("clipped by the bounds");
+        assert_eq!(got.part, id);
+        assert!((got.z - direct.z).abs() < 1e-3);
+        // every pixel the solid covers is in the form
+        for y in 330..370 {
+            for x in 420..500 {
+                let (px, py) = (x as f32 + 0.5, y as f32 + 0.5);
+                assert_eq!(s.hit(px, py).is_some(), form.sample(px, py).is_some(), "({px},{py})");
+            }
+        }
+    }
+
+    /// The documented turn contract, on the basis vectors: positive yaw
+    /// brings the right side toward the viewer, positive pitch the top,
+    /// positive roll turns the right side down (clockwise, y down).
+    #[test]
+    fn turn_follows_its_contract() {
+        let a = 0.5f32;
+        let body_to_view = |s: Sdf, b: V3| -> V3 {
+            let Sdf::Turn { m, .. } = s else { unreachable!() };
+            [dot(m[0], b), dot(m[1], b), dot(m[2], b)]
+        };
+        let unit_ball = || Sdf::ellipsoid([0.0; 3], [1.0; 3]);
+        let right = body_to_view(unit_ball().turn([0.0; 3], a, 0.0, 0.0), [1.0, 0.0, 0.0]);
+        assert!(right[2] > 0.4, "yaw: {right:?}");
+        let top = body_to_view(unit_ball().turn([0.0; 3], 0.0, a, 0.0), [0.0, -1.0, 0.0]);
+        assert!(top[2] > 0.4 && top[1] < 0.0, "pitch: {top:?}");
+        let right = body_to_view(unit_ball().turn([0.0; 3], 0.0, 0.0, a), [1.0, 0.0, 0.0]);
+        assert!(right[1] > 0.4 && right[2].abs() < 1e-6, "roll: {right:?}");
+        // the reviewer's probe: a ball above the pivot, pitched a quarter
+        // turn, comes round to the front
+        let s = Sdf::ellipsoid([0.0, -10.0, 0.0], [1.0; 3]).turn([0.0; 3], 0.0, std::f32::consts::FRAC_PI_2, 0.0);
+        let h = s.hit(0.0, 0.0).expect("in front of the pivot");
+        assert!((h.z - 11.0).abs() < 0.1, "{}", h.z);
+        // and a pitched block shows its top face (facet 4) above its front
+        let b = Sdf::block([0.0; 3], [40.0, 40.0, 40.0], 0.0).turn([0.0; 3], 0.0, 0.4, 0.0);
+        assert_eq!(b.hit(0.0, -22.0).map(|h| h.facet), Some(4));
+        assert_eq!(b.hit(0.0, 0.0).map(|h| h.facet), Some(5));
     }
 
     #[test]

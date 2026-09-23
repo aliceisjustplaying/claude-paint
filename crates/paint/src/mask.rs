@@ -154,16 +154,7 @@ impl Mask {
     /// Signed distance in pixels (+ inside), and for every pixel the index of
     /// the nearest pixel inside the region (itself when inside).
     pub(crate) fn signed_distance_px(&self) -> (Vec<f32>, Vec<u32>) {
-        let (w, h) = (self.f.w, self.f.h);
-        let inside: Vec<bool> = self.data.iter().map(|&v| v >= 0.5).collect();
-        let (d_in, near_in) = edt(&inside, w, h);
-        let outside: Vec<bool> = inside.iter().map(|&b| !b).collect();
-        let (d_out, _) = edt(&outside, w, h);
-        let sd = (0..w * h)
-            .into_par_iter()
-            .map(|i| if inside[i] { d_out[i].sqrt() - 0.5 } else { 0.5 - d_in[i].sqrt() })
-            .collect();
-        (sd, near_in)
+        signed_distance_region(self.f, &self.data.par_iter().map(|&v| v >= 0.5).collect::<Vec<bool>>())
     }
 
     /// Grow the region by `d` units (shrink it if negative), with an
@@ -208,57 +199,111 @@ impl Mask {
     /// the nearest point inside, so a silhouette can be hard in one place and
     /// lost in the next. The ramp is centered on the old edge.
     pub fn soften(&self, width: impl Fn(f32, f32) -> f32 + Sync) -> Mask {
-        let (sd, near) = self.signed_distance_px();
-        let f = self.f;
-        let inv = 1.0 / f.scale;
-        let data = (0..f.w * f.h)
-            .into_par_iter()
-            .map(|i| {
-                let j = near[i] as usize;
-                if j == u32::MAX as usize {
-                    return 0.0;
-                }
-                let (x, y) = (((j % f.w) as f32 + 0.5) * inv, ((j / f.w) as f32 + 0.5) * inv);
-                let s = (width(x, y) * f.scale).max(1.0);
-                crate::smoothstep(-0.5 * s, 0.5 * s, sd[i])
-            })
-            .collect();
-        Mask { f, data }
+        let inside: Vec<bool> = self.data.par_iter().map(|&v| v >= 0.5).collect();
+        soften_region(self.f, inside, width)
     }
+}
+
+/// Signed distance in pixels (+ inside) to the edge of a region given pixel
+/// by pixel, and each pixel's nearest pixel inside (u32::MAX if none).
+/// Working memory beyond the region: four w·h buffers of 4 bytes (the two
+/// results, the column pass and its nearest rows), shared by both passes.
+pub(crate) fn signed_distance_region(f: Frame, inside: &[bool]) -> (Vec<f32>, Vec<u32>) {
+    let (w, h) = (f.w, f.h);
+    let n = w * h;
+    let mut col = vec![0.0f32; n];
+    let mut sd = vec![0.0f32; n];
+    // squared distance from the inside to the nearest outside pixel
+    edt_into(&|i| !inside[i], w, h, &mut col, None, &mut sd, None, &|_, d2, _| d2);
+    // then from the outside to the nearest inside pixel, combined in place
+    let mut col_arg = vec![0u32; n];
+    let mut near = vec![0u32; n];
+    edt_into(&|i| inside[i], w, h, &mut col, Some(&mut col_arg), &mut sd, Some(&mut near), &|i, d_in, d_out| {
+        if inside[i] { d_out.sqrt() - 0.5 } else { 0.5 - d_in.sqrt() }
+    });
+    (sd, near)
+}
+
+/// `Mask::soften` for a region given pixel by pixel.
+pub(crate) fn soften_region(f: Frame, inside: Vec<bool>, width: impl Fn(f32, f32) -> f32 + Sync) -> Mask {
+    let (mut sd, near) = signed_distance_region(f, &inside);
+    drop(inside);
+    let inv = 1.0 / f.scale;
+    // the mask replaces the distances in place
+    sd.par_iter_mut().zip(near.par_iter()).for_each(|(v, &j)| {
+        *v = if j == u32::MAX {
+            0.0
+        } else {
+            let j = j as usize;
+            let (x, y) = (((j % f.w) as f32 + 0.5) * inv, ((j / f.w) as f32 + 0.5) * inv);
+            let s = (width(x, y) * f.scale).max(1.0);
+            crate::smoothstep(-0.5 * s, 0.5 * s, *v)
+        };
+    });
+    Mask { f, data: sd }
 }
 
 /// Exact squared Euclidean distance transform (Felzenszwalb & Huttenlocher,
 /// "Distance Transforms of Sampled Functions", 2012), in pixels², to the
-/// nearest `seed` pixel, plus that pixel's index (u32::MAX if there is none).
-pub(crate) fn edt(seed: &[bool], w: usize, h: usize) -> (Vec<f32>, Vec<u32>) {
+/// nearest pixel where `seed(i)`. For every pixel `i`, `d[i]` becomes
+/// `combine(i, d², d[i])` (d² is f32::MAX if there is no seed), and if
+/// `idx` is given it gets the nearest seed's index (u32::MAX if none).
+///
+/// Buffers are the caller's so passes can share them: `col` (w·h) holds the
+/// column pass, `col_arg` (w·h) its nearest rows, needed only with `idx`.
+/// Column distances are whole pixels², exact in f32 up to 4096² px frames.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn edt_into(
+    seed: &(dyn Fn(usize) -> bool + Sync),
+    w: usize,
+    h: usize,
+    col: &mut [f32],
+    mut col_arg: Option<&mut [u32]>,
+    d: &mut [f32],
+    idx: Option<&mut [u32]>,
+    combine: &(dyn Fn(usize, f32, f32) -> f32 + Sync),
+) {
     const BIG: f64 = 1e20;
     // columns first (on the transposed grid so rows are contiguous)
-    let mut col_d = vec![0.0f64; w * h];
-    let mut col_arg = vec![0u32; w * h];
-    col_d.par_chunks_mut(h).zip(col_arg.par_chunks_mut(h)).enumerate().for_each(|(x, (d, arg))| {
-        let f: Vec<f64> = (0..h).map(|y| if seed[y * w + x] { 0.0 } else { BIG }).collect();
-        edt1(&f, d, arg);
-    });
+    let column = |x: usize, c: &mut [f32], a: Option<&mut [u32]>| {
+        let f: Vec<f64> = (0..h).map(|y| if seed(y * w + x) { 0.0 } else { BIG }).collect();
+        let mut dd = vec![0.0f64; h];
+        let mut arg = vec![0u32; h];
+        edt1(&f, &mut dd, &mut arg);
+        for y in 0..h {
+            c[y] = dd[y] as f32;
+        }
+        if let Some(a) = a {
+            a.copy_from_slice(&arg);
+        }
+    };
+    match col_arg.as_deref_mut() {
+        Some(ca) => col.par_chunks_mut(h).zip(ca.par_chunks_mut(h)).enumerate().for_each(|(x, (c, a))| column(x, c, Some(a))),
+        None => col.par_chunks_mut(h).enumerate().for_each(|(x, c)| column(x, c, None)),
+    }
+    let (col, ca): (&[f32], Option<&[u32]>) = (col, col_arg.as_deref());
     // then rows over the column results
-    let mut out_d = vec![0.0f32; w * h];
-    let mut out_i = vec![0u32; w * h];
-    out_d.par_chunks_mut(w).zip(out_i.par_chunks_mut(w)).enumerate().for_each(|(y, (d, idx))| {
-        let f: Vec<f64> = (0..w).map(|x| col_d[x * h + y]).collect();
+    let row = |y: usize, dr: &mut [f32], ir: Option<&mut [u32]>| {
+        let f: Vec<f64> = (0..w).map(|x| col[x * h + y] as f64).collect();
         let mut dd = vec![0.0f64; w];
         let mut arg = vec![0u32; w];
         edt1(&f, &mut dd, &mut arg);
+        let empty = |x: usize| dd[x] >= BIG * 0.5;
         for x in 0..w {
-            let qx = arg[x] as usize;
-            if dd[x] >= BIG * 0.5 {
-                d[x] = f32::MAX;
-                idx[x] = u32::MAX;
-            } else {
-                d[x] = dd[x] as f32;
-                idx[x] = (col_arg[qx * h + y] as usize * w + qx) as u32;
+            let i = y * w + x;
+            dr[x] = combine(i, if empty(x) { f32::MAX } else { dd[x] as f32 }, dr[x]);
+        }
+        if let (Some(ir), Some(ca)) = (ir, ca) {
+            for x in 0..w {
+                let qx = arg[x] as usize;
+                ir[x] = if empty(x) { u32::MAX } else { (ca[qx * h + y] as usize * w + qx) as u32 };
             }
         }
-    });
-    (out_d, out_i)
+    };
+    match idx {
+        Some(ix) => d.par_chunks_mut(w).zip(ix.par_chunks_mut(w)).enumerate().for_each(|(y, (dr, ir))| row(y, dr, Some(ir))),
+        None => d.par_chunks_mut(w).enumerate().for_each(|(y, dr)| row(y, dr, None)),
+    }
 }
 
 /// 1-D squared distance transform of `f` (lower envelope of parabolas);
@@ -341,6 +386,28 @@ mod tests {
         // diagonal: exact, not chessboard or city block
         let q = 500.0 + 150.0 * std::f32::consts::FRAC_1_SQRT_2;
         assert!((d.sample(q, 375.0 + 150.0 * std::f32::consts::FRAC_1_SQRT_2) - 50.0).abs() < 4.0);
+    }
+
+    /// The shared-buffer transform against brute force on a ragged region.
+    #[test]
+    fn signed_distance_matches_brute_force() {
+        let f = Frame::new(37, 23, 1.0);
+        let m = Mask::from_fn(f, |x, y| if ((x * 0.37).sin() + (y * 0.53).cos() + (x * y * 0.01).sin()) > 0.6 { 1.0 } else { 0.0 });
+        let (sd, near) = m.signed_distance_px();
+        let inside: Vec<bool> = m.data.iter().map(|&v| v >= 0.5).collect();
+        assert!(inside.iter().any(|&b| b) && inside.iter().any(|&b| !b));
+        for i in 0..f.w * f.h {
+            let (x, y) = ((i % f.w) as f32, (i / f.w) as f32);
+            let nearest = |want: bool| {
+                (0..f.w * f.h).filter(|&j| inside[j] == want).map(|j| ((j % f.w) as f32 - x).powi(2) + ((j / f.w) as f32 - y).powi(2)).fold(f32::MAX, f32::min)
+            };
+            let want = if inside[i] { nearest(false).sqrt() - 0.5 } else { 0.5 - nearest(true).sqrt() };
+            assert!((sd[i] - want).abs() < 1e-4, "{i}: {} vs {want}", sd[i]);
+            let j = near[i] as usize;
+            assert!(inside[j]);
+            let dj = ((j % f.w) as f32 - x).powi(2) + ((j / f.w) as f32 - y).powi(2);
+            assert!((dj - nearest(true)).abs() < 1e-3);
+        }
     }
 
     #[test]

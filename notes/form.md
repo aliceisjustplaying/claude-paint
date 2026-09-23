@@ -14,9 +14,9 @@ The engine still paints nothing: the rock and range motifs live in
 
 - `crates/paint/src/form.rs` (new)
   - **`Form`** is a depth buffer over the canvas. Each pixel stores the nearest solid's `z` (units toward the viewer), its exact normal, a part id, a facet id and a distance.
-  - **`Sdf`** describes 3-D bodies as signed distance functions, sphere-traced orthographically:
+  - **`Sdf`** describes 3-D bodies as signed distance functions, sphere-traced orthographically (a bare `ellipsoid` is hit in closed form). When tracing crawls, as it does near the edge of a thin body, it continues in steps of at least 0.25 units and bisects the crossing, so running out of steps is never reported as a miss. A hit is then refined along the ray with a few Newton steps, which keeps depth accurate even where the distance estimate is poor (tested at 10:1 and 20:1 ellipsoids).
     - masses: `ellipsoid` and `block` (a rounded box whose faces are facets 1–6);
-    - operations: `.turn(c, yaw, pitch, roll)`, `.cut(at, n, facet, round)` (a fracture plane that becomes its own facet), `.rough(amp, period, seed, ridged)` (weathering, soft lumps or pitted grain), `union` and `subtract`.
+    - operations: `.turn(c, yaw, pitch, roll)` (positive yaw brings the right side toward the viewer, positive pitch the top, so we look down on it; positive roll turns it clockwise; tested on the basis vectors; bounds come from all eight turned corners, so a pivot outside the body is safe), `.cut(at, n, facet, round)` (a fracture plane that becomes its own facet), `.rough(amp, period, seed, ridged)` (weathering, soft lumps or pitted grain), `union` and `subtract`.
   - **`Ridge`** is a mountain face or cliff below a crest line.
     - The face leans back (`lean`) and flattens at the foot.
     - Gullies start just under the crest and follow the fall lines back to it, so they fan out from the peaks. Downhill, fine gullies merge into wider ones.
@@ -105,7 +105,14 @@ What I saw, judged as a painter:
 - Cast shadows are traced in screen space over the depth buffer. Occluders more than `Light::thickness` in front are ignored, but a thin solid far in front can still shadow things far behind it. Use `across_parts(false)` for distant layers.
 - `Ridge` is a bas-relief: it has no overhangs. Its fall lines are estimated from the smoothed crest, not integrated, so gullies on complex crests only roughly follow the true fall lines.
 - There is no hydraulic erosion. Gullies are merged fixed-scale noise, which reads well at a distance, but a close range would benefit from a real drainage network.
-- `Form` stores ~28 bytes per pixel (≈190 MB at 3200px). Build one form per motif and drop it after painting.
+- **Memory.** Build one form per motif and drop it after painting. A `Form` is always whole-canvas: `Form::new(c.frame())` in a `--crop` render is as big as in a whole one. Measured with a counting allocator on a 3200×2133 frame (3:2, 6.8 Mpx):
+  - persistent: 28 bytes/px, **191 MB**;
+  - `add`/`add_at`: nothing extra. Hits are written row by row straight into the buffers (it used to collect a frame-sized `Vec<Option<(Hit, f32)>>`: peak 382 MB);
+  - `light`: nothing extra. Shadows are traced in place;
+  - `silhouette` (and `Mask::soften/offset/rim/distance`): +17 bytes/px during the distance transform (a region bitmap, the column pass, its nearest rows, the result and the nearest-inside index; the two passes share their buffers), **307 MB peak** with the form. It used to be 423 MB;
+  - every mask the form returns: +4 bytes/px (27 MB) for as long as the painter keeps it.
+  - So budget **≈45 bytes/px at peak per live form**, plus the masks you keep: ≈310 MB at 3200px for 3:2, ≈350 MB for 4:3 (7.7 Mpx), ≈460 MB for a 1:1 3200² canvas. That comes on top of the canvas itself and any other motif's masks.
+- Pitch sign fixed (it used to tip the top *away*, against the documented contract). `rocks::outcrop` now pitches the whole stack about its foot by 0.32 rad, so the beds show their tops as intended. Pitching each block about its own center broke the stack apart.
 - Next: a `Form::simplify(radius)` normal blur (the painter's squint) so color fields can follow the big planes while texture is added on purpose; lit-rim helpers for contre-jour; snow and vegetation lying on up-facing planes (`s.shade.sky`, `s.n[1]`) as a documented pattern; and use the rocks in a real composition (the Cross in the Mountains rock, the Wanderer's crags).
 - `mask.rs:106` (`mul`) and `box_rows` clippy warnings predate this stream.
 

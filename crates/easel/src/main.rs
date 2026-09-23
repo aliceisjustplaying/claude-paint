@@ -18,12 +18,8 @@ mod depth;
 mod edit;
 mod draw_outline;
 mod draw_firs;
-<<<<<<< HEAD
 mod draw_trees;
-||||||| 862fe6a
-=======
 mod draw_rocks;
->>>>>>> tool-rock
 mod look;
 mod session;
 

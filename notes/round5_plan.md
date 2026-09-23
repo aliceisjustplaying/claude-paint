@@ -51,3 +51,4 @@ spectral) is split into single-defect fixes the loops pull in.
 - r4 free done: dolmen AGAIN (same motif as r3 free): convergence on motif, not just mood.
 - Loop 1 scored: near +3 (23->26), green +2 (18->20), anchor -1. Sketchbook updated. Loop 2 started 18:58: loop2-near (drift puffs), loop2-grain (horizontal wood-grain ground streaks; tool). loop1-halo still running; green loop 2 waits for it.
 - Loop 2 critic2: l2_near 22 vs l1_near 19 in-batch (+3), but anchor fell 27->24 and l1_near 26->19 across batches: single-critic absolute scale is noisy (±4-7). Rule from now: 3 independent critics per batch, median; decisions on in-batch deltas vs anchors.
+- loop1-halo merged: halos were an engine bug (contact level averaged thick paint into its thin neighbors; now a running median). Golden re-recorded.

@@ -1379,7 +1379,7 @@ impl Foliage {
         let th = v.atan2(u);
         let h = crate::rng::hash2(k as i64, 17, self.seed);
         let h2 = crate::rng::hash2(k as i64, 29, self.seed);
-        let lobe = 1.0 + self.ragged * 0.32 * (0.6 * (3.0 * th + h * 6.283).sin() + 0.4 * (5.0 * th + h2 * 6.283).sin());
+        let lobe = 1.0 + self.ragged * 0.32 * (0.6 * (3.0 * th + h * std::f32::consts::TAU).sin() + 0.4 * (5.0 * th + h2 * std::f32::consts::TAU).sin());
         (1.0 - crate::smoothstep(lobe * 0.5, lobe * 1.1, d), dx / c.r, dy / (c.r * c.squash))
     }
 

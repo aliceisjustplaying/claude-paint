@@ -149,8 +149,8 @@ fn main() {
         c.dry();
         // and the shadows of clouds drifting over the meadow: long soft bands
         let ncs = Fbm::new(seed as u32 + 14, 3, 260.0);
-        let clouds = move |x: f32, y: f32| smoothstep(0.52, 0.68, ncs.get01(x * 0.5, y * 3.0));
-        c.work(&meadow, &st.glaze(0.85).color(|_, _| hex("#34452e")).angle(|_, _| 0.0).load_at(move |x, y| 2.2 * shadow.sample(x, y) + 0.9 * clouds(x, y)), seed * 100 + 21);
+        let clouds = move |x: f32, y: f32| smoothstep(0.5, 0.75, ncs.get01(x * 0.5, y * 3.0));
+        c.work(&meadow, &st.glaze(0.85).color(|_, _| hex("#34452e")).angle(|_, _| 0.0).load_at(move |x, y| 2.2 * shadow.sample(x, y) + 0.45 * clouds(x, y)), seed * 100 + 21);
         c.dry();
     }
 
@@ -158,7 +158,7 @@ fn main() {
     if o.stage("hedge", &mut c, &mut rng) {
         let greens = Greens { shade: hex("#34422f"), mid: hex("#56673a"), light: hex("#8c9750"), sun: hex("#aeab68") };
         for (i, fo) in hedge_leaves.iter().enumerate() {
-            leaves(&mut c, pal, fo, &greens, 0.9, seed * 100 + 40 + i as u64);
+            leaves(&mut c, &st, pal, fo, &greens, 0.5, seed * 100 + 40 + i as u64);
         }
         c.dry();
     }
@@ -171,7 +171,7 @@ fn main() {
         let wood = Skeleton { limbs: oak.limbs.iter().filter(|l| l.order <= 1 || l.w[0] > 2.0).cloned().collect(), ..oak.clone() };
         trees::tree(&mut c, &wood, &bark, &TreeHand { light_from: (SUN.0, SUN.1), finest: 0.4, ..Default::default() }, seed * 100 + 50);
         let greens = Greens { shade: hex("#2e3d2a"), mid: hex("#56692f"), light: hex("#93a14a"), sun: hex("#c4bf6c") };
-        leaves(&mut c, pal, &oak_leaves, &greens, 1.0, seed * 100 + 51);
+        leaves(&mut c, &st, pal, &oak_leaves, &greens, 0.6, seed * 100 + 51);
         c.dry();
     }
 
@@ -198,9 +198,15 @@ fn mixc(a: Rgb, b: Rgb, t: f32) -> Rgb {
 
 /// A leaf mass, dark to light, in leaf-sized touches. `detail` scales the
 /// number of touches.
-fn leaves(c: &mut Canvas, pal: &Palette, fo: &paint::Foliage, g: &Greens, detail: f32, seed: u64) {
+fn leaves(c: &mut Canvas, st: &Style, pal: &Palette, fo: &paint::Foliage, g: &Greens, detail: f32, seed: u64) {
     let f = c.frame();
     let mask = fo.mask(f);
+    // 0. the mass laid in: short hatched strokes cut to the leaves, the
+    // color following the light the clumps catch; the sky left in the gaps
+    let lit = fo.lit(f);
+    let (sh, md) = (g.shade, g.mid);
+    let hatch = st.hatch().mixed(pal, 0.3).color(move |x, y| mixc(sh, md, lit.sample(x, y) * 0.9)).angle(|_, _| -1.1).cross(0.7).length(3.0, 8.0).clip(true).threshold(0.45);
+    c.work(&mask, &hatch, seed ^ 0x9a55);
     let mut rng = Rng::new(seed);
     let grain = fo.grain();
     let clumps = fo.back_to_front();
@@ -221,7 +227,7 @@ fn leaves(c: &mut Canvas, pal: &Palette, fo: &paint::Foliage, g: &Greens, detail
     let tip = (grain * 0.55).max(1.0);
     let mut dark = Held::new(Tool { ragged: 0.4, ..Tool::round_sable(tip) }, rng.next_u64());
     for cl in &clumps {
-        let n = ((cl.r * cl.r * cl.squash / (tip * tip) * 1.4 * detail) as usize).max(2);
+        let n = ((cl.r * cl.r * cl.squash / (tip * tip) * 0.8 * detail) as usize).max(1);
         for _ in 0..n {
             let Some((x, y)) = pick(&mut rng, cl, (0.0, 0.0), 0.5) else { continue };
             let want = mixc(g.shade, g.mid, cl.lit * 0.8 + rng.normal() * 0.08);
@@ -277,22 +283,22 @@ fn grass(c: &mut Canvas, pal: &Palette, tufts: &[paint::Tuft], ground: &dyn Fn(f
         // patches, as gusts go over)
         let lit = (0.35 + 0.5 * sheen.get(t.at.0, t.at.1 * 3.0) + 0.2 * rng.normal() - 0.25 * t.lush).clamp(0.0, 1.0);
         let want = if lit < 0.55 {
-            mixc([g[0] * 0.6, g[1] * 0.68, g[2] * 0.6], g, lit / 0.55)
+            mixc([g[0] * 0.42, g[1] * 0.5, g[2] * 0.42], g, lit / 0.55)
         } else {
-            mixc(g, mixc(g, hex("#b9b36e"), 0.6), (lit - 0.55) / 0.45)
+            mixc(g, mixc(g, hex("#c2bb74"), 0.8), (lit - 0.55) / 0.45)
         };
         let bw = (t.height * 0.07).clamp(0.3, 1.4);
         held.tool = Tool { length: bw * 5.0, ..Tool::rigger(bw) };
-        let p = c.aim(pal, want, t.at, t.height * 0.3, 0.3, 1.0);
+        let p = c.aim(pal, want, t.at, t.height * 0.3, 0.15, 1.2);
         for b in &t.blades {
-            held.reload(p, 0.7);
+            held.reload(p, 0.9);
             let pts: Vec<(f32, f32)> = (0..=4).map(|k| {
                 let s = k as f32 / 4.0;
                 let (a, m, e) = (b[0], b[1], b[2]);
                 let q = |i: usize| -> f32 { let (a, m, e) = ([a.0, a.1][i], [m.0, m.1][i], [e.0, e.1][i]); (1.0 - s) * (1.0 - s) * a + 2.0 * s * (1.0 - s) * m + s * s * e };
                 (q(0), q(1))
             }).collect();
-            c.drag(&mut held, &Gesture::new(pts).pressure(0.8, 0.1).ramps(0.05, 0.6).orient(Orient::Across), None);
+            c.drag(&mut held, &Gesture::new(pts).pressure(0.9, 0.15).ramps(0.05, 0.5).orient(Orient::Across), None);
         }
         if let Some(fl) = t.flower {
             let col = match fl.kind { 0 => hex("#ece8d8"), 1 => hex("#e0bb2a"), _ => hex("#c0452c") };

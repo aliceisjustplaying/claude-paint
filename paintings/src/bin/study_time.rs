@@ -103,18 +103,20 @@ fn main() {
     blend(&mut c, panel(0, 4), join, 100);
     c.wait(30.0);
     say(&c, t0, "30 min", &[("light", top(1))]);
+    assert_eq!(c.drying_at(top(1).0, top(1).1), Stage::Open, "the light field is open at 30 min");
     blend(&mut c, panel(1, 4), join, 200);
     c.wait(150.0);
     say(&c, t0, "3 h", &[("light", top(2)), ("umber", bot(0)), ("slate", bot(2))]);
-    // (a single-pixel check: below ~800px each pixel averages film thickness
-    // over a larger area and thin films read as further along; see notes/drying.md)
-    if c.drying_at(top(2).0, top(2).1) != Stage::Tacky {
-        eprintln!("note: stage at (top(2).0, top(2).1) is {:?}, expected {:?} (resolution-dependent at low widths)", c.drying_at(top(2).0, top(2).1), Stage::Tacky);
-    }
+    // (the same at any width: a film dries by its thickness over a few
+    // millimeters, `drying::FILM_MM`, not per pixel)
+    assert_eq!(c.drying_at(top(2).0, top(2).1), Stage::Tacky, "the light field is tacky at 3 h");
+    assert_eq!(c.drying_at(bot(0).0, bot(0).1), Stage::Tacky, "the umber is tacky at 3 h");
+    assert_eq!(c.drying_at(bot(2).0, bot(2).1), Stage::Open, "the slate (bone black) is still open at 3 h");
     blend(&mut c, panel(2, 4), join, 300);
     scumble(&mut c, panel(0, 3), BOT, 400);
     c.wait(21.0 * 60.0);
     say(&c, t0, "next day", &[("light", top(3)), ("umber", bot(1)), ("slate", bot(2))]);
+    assert_eq!([top(3), bot(1), bot(2)].map(|p| c.drying_at(p.0, p.1)), [Stage::Dry, Stage::Dry, Stage::Tacky], "next day: light and umber dry, slate tacky");
     blend(&mut c, panel(3, 4), join, 500);
     scumble(&mut c, panel(1, 3), BOT, 600);
     // the glaze: a pale veil over the slate with a long Gaussian falloff,

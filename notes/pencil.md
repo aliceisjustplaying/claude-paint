@@ -83,7 +83,8 @@ b:line(pts, {pressure={0.55, 0.7, 0.5}, smooth=false})   -- a firm line; corners
 b:hatch(poly(shadow), {angle=-1.1, pressure=0.35})       -- spacing=, length= (units)
 erase(pts, {strength=0.9, width=9})   -- or erase(mask, {strength=})
 fix()                                 -- or fix(mask)
-drawing_mask()                        -- guide for painting into the hidden drawing
+drawing_guide()                       -- the drawn lines (unbroken, whole canvas): paint into this
+drawing_mask()                        -- the graphite deposit itself (grainy; window only in a crop)
 b.worn  b:width()  b:sharpen()
 ```
 
@@ -103,7 +104,7 @@ live canvas exactly"):
    load 0.3), then 7. blended
 8. right half: body color (medium 0.15, load 0.9, coverage 4)
 9. dry; the tree painted over its hidden drawing: trunk along the drawn
-   coordinates, limbs into `drawing_mask():band(0.55, 1, 0.1):grow(1.2)`
+   coordinates, limbs into `drawing_guide():band(0.7, 1, 0.1):grow(1.2)` (was `drawing_mask():band(0.55, 1, 0.1)`, which beaded)
 
 Images (`notes/pencil/`):
 - `drawing_1000.jpg`, `drawing_3200_crop.jpg`: the drawing alone (chunks
@@ -125,7 +126,53 @@ eraser lifts most but leaves a ghost; fixed drawing can't be lifted; a glaze
 seals it; thin paint shows a line while body color hides it; no drawing
 means no change; points wear, soft ones faster.
 
+## Review 4 fixes (branch `fix4-engine`)
+
+- **The drawing guide (#1, the beaded tree).** `Canvas::drawing_guide()`
+  (Lua `drawing_guide()`) is the drawing as geometry. Every `draw` also
+  lays its line into a whole-canvas buffer, and a crop render gets all of
+  it too. The value is the coverage the lead would lay on a perfectly
+  smooth ground in one pass (its rate and cap at the pressure), with no
+  tooth, no grain and no wet paint to skip. It reads on the same scale
+  as `drawing_mask`: 1 on a firm line, about 0.5 on a light 2H line, 0
+  at zero pressure. The line is at least two pixels wide, so it samples
+  unbroken. The eraser lifts it (by up to 85% per pass at full strength)
+  and fixative sets its floor. Paint over the drawing leaves it alone.
+  `drawing_mask()` is still the physical deposit, broken by the tooth and
+  the grain, and known only in the window of a crop. Its doc now says so
+  and points to the guide for planning. `guide_is_the_same_in_a_crop`
+  paints into the guide on a whole canvas and on a crop: the retained
+  pixels differ by less than 1e-3. With `drawing_mask` the same test
+  differs by 0.73 over all 10,000 pixels.
+- `paintings/lua/pencil.lua` chunk 9 paints the limbs into
+  `drawing_guide():band(0.7, 1, 0.1):grow(1.2)`. The band keeps the firm
+  2B and HB lines and drops the light 2H search. The beads are gone:
+  compare `notes/pencil/tree_beaded_before_1000.jpg` with
+  `tree_guide_1000.jpg`. `painted_1000.jpg` is re-rendered.
+- **Checkpoints (#2).** Format `PAINTCK6` stores the drawing: every cell
+  (`a`, `r`, `lift`, `floor`, `film`), the guide and the guide's floor.
+  `PAINTCK5` files are refused (re-run to checkpoint again).
+  `drawing_survives_a_checkpoint` erases, redraws and paints into the
+  guide after resuming. The result is bit-identical to the run without
+  the checkpoint.
+- **Zero pressure (#7).** The deposit is multiplied by
+  `touch(p) = smoothstep(0, 0.12, p)`: nothing at 0, rising continuously,
+  unchanged from 0.12 up, so existing drawings at ordinary pressure are
+  identical. A lift-off profile (`{0.8, 0}`) fades out to nothing.
+- **Grades (#9).** `softness` takes ASCII digits then `H`/`B`. Anything
+  else (`é`, emoji, `1.5B`, `+2B`) is `None`, not a panic.
+
 ## Known issues and next steps
+
+- The guide ignores sealing. After paint has gone over a line, the eraser
+  can't lift it from the picture, but it still lifts it from the guide.
+  Sealing depends on the paint film, which a crop render doesn't hold
+  outside its window, and the guide has to be the same in a crop.
+- The guide is as wide as the point (at least two pixels). It doesn't
+  taper as the line lifts off, only fades, so limbs painted into it end
+  bluntly. A painter who wants tapered ends can multiply by a ribbon.
+- Memory: the guide is 4 bytes per whole-canvas pixel (8 once fixative
+  is used), on top of the 20 bytes per window pixel of the cells.
 
 - **No `look --mode drawing`.** `look.rs` belongs to the lookaid stream.
   `Canvas::drawing_view()` is ready. The hook is about six lines: a
@@ -133,9 +180,6 @@ means no change; points wear, soft ones faster.
   `parse`, and `if v.drawing { c.drawing_view() } else ...` where `look`
   picks its pixels. Until then, `drawing_mask()` and `look --crop` do the
   job.
-- **Checkpoints don't store the bookkeeping.** A resumed canvas keeps the
-  drawn pixels, but `erase` and `fix` do nothing to drawing made before the
-  checkpoint. The easel's undo clones the canvas, so it is unaffected.
 - **Sheen** is only in the flake reflectance. `relief()` doesn't give soft
   graphite its raking-light shine.
 - **Wet paint doesn't pick up loose graphite.** Real unfixed graphite grays

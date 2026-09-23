@@ -59,6 +59,9 @@ Engine (`crates/paint`):
 - `style` – painter profiles: support, grounds, tools, handling (from sourced
   knowledge, see `notes/research/`)
 - `hand` – writing small motifs as brush gestures in a local frame
+- `graphite` – the underdrawing: graphite grades and black chalk dragged over
+  the ground's tooth, in the picture under the paint (thin paint shows it,
+  body color hides it), a kneaded eraser and fixative: `notes/pencil.md`
 - `pigment` – Kubelka–Munk layers (Curtis et al. 1997); `color` – Mixbox, OKLab
 - `crack` – craquelure grown crack by crack from film stress (T-junctions,
   weave-following on thin grounds, cupping, grime)

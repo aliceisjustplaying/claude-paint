@@ -311,9 +311,14 @@ What still reads as digital or weak:
   with a dotted dark rim at the cap edge (friction 20).
 - **The figure** is a legible silhouette but crude at 3200px: legs are two
   sticks.
-- **Color:** the late mauve-rose band fixed the sky's grayness, but the
-  snow still lacks that color: its shadows should carry more violet from
-  the sky. The final veil helped the edges; it didn't deepen the color.
+- **Color:** the late mauve-rose band fixed the sky's grayness, and the
+  snow's shadow colors were moved toward lavender at the end; it is still
+  a cool, gray picture more than a colored one. The final veil helped the
+  edges; it didn't deepen the color.
+
+Time: first complete painting with a full render at ~33 minutes; final
+renders at ~53 minutes (clock 02:26 → 03:19). Full 3200px render: 71–83 s;
+1000px: 15–22 s; 3200px crops: 8–13 s.
 - **No underdrawing.** Friedrich's graphite/ink underdrawing, sometimes
   visible through thin paint [CATS p.132; NG pp.49, 58], is absent; with
   more time I'd rule the ruin and draw the oak in a lean dark line first

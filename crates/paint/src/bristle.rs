@@ -147,6 +147,25 @@ impl Tool {
         }
     }
 
+    /// Small soft round for stippling: a short, full, blunt-pointed tuft of
+    /// soft hair (sable or fitch) used with the tip, touch after touch. Few
+    /// modeled hairs (a pressed tip is one patch; see `Touch`), little
+    /// ploughing, moderate pickup so touches into wet paint fuse.
+    pub fn stippler(width: f32) -> Self {
+        Tool {
+            bristles: 36,
+            length: width * 0.8,
+            stiffness: 0.3,
+            hair: 1.2,
+            lay: 0.9,
+            pickup: 0.12,
+            push: 0.02,
+            splay: 0.4,
+            ragged: 0.2,
+            ..Self::base(Kind::Round, width)
+        }
+    }
+
     /// Bristle radius in units.
     pub(crate) fn hair_radius(&self) -> f32 {
         let across = match self.kind {
@@ -594,7 +613,7 @@ pub(crate) unsafe fn drag_on(
             // one contact point: the belly-to-tip region of the bent bristle
             let cur = (root.0 + b.bend.0 * 0.6, root.1 + b.bend.1 * 0.6);
             let prev = b.prev[0].unwrap_or(cur);
-            unsafe { exchange(sf, b, &tool, prev, cur, rb, reach, full, clip, id, scratch, &mut bounds) };
+            unsafe { exchange(sf, b, &tool, prev, cur, rb, reach, full, None, clip, id, scratch, &mut bounds) };
             b.prev[0] = Some(cur);
         }
     }
@@ -612,7 +631,9 @@ fn wander(t: f32, seed: u64) -> f32 {
 }
 
 /// Paint exchange between one bristle and the canvas along the capsule
-/// swept from `a` to `b` (pixels).
+/// swept from `a` to `b` (pixels). A moving bristle deposits in proportion
+/// to the distance it travels; `dep` instead fixes the volume (units² ×
+/// coats) it would lay on full contact (a touch: film splitting).
 #[allow(clippy::too_many_arguments)]
 unsafe fn exchange(
     sf: Surf,
@@ -623,6 +644,7 @@ unsafe fn exchange(
     rb: f32,
     reach: f32,
     full: f32,
+    dep: Option<f32>,
     clip: Option<&Mask>,
     id: u32,
     wts: &mut Vec<f32>,
@@ -662,7 +684,10 @@ unsafe fn exchange(
                 if dist > rb + 0.5 {
                     continue;
                 }
-                let cov = 1.0 - smoothstep(rb * 0.5, rb + 0.5, dist);
+                // a moving bristle has a crisp track; in a pressed tip (fixed
+                // deposit) paint wicks between the hairs, so each hair's
+                // contact fades out and neighbors sum to one smooth patch
+                let cov = if dep.is_some() { 1.0 - smoothstep(0.0, rb, dist) } else { 1.0 - smoothstep(rb * 0.5, rb + 0.5, dist) };
                 sum_cov += cov;
                 let i = y * w + x;
                 let surf = (*sf.base.add(i) + 0.35 * *sf.vol.add(i)).min(1.5);
@@ -687,7 +712,10 @@ unsafe fn exchange(
         // only the part of the footprint actually in contact takes paint: a
         // bristle skimming the weave peaks keeps most of its load
         let touch = (sum_w / sum_cov.max(1e-6)).min(1.0);
-        let dep_total = br.vol * (1.0 - (-travel / tool.run).exp()) * touch;
+        let dep_total = match dep {
+            None => br.vol * (1.0 - (-travel / tool.run).exp()) * touch,
+            Some(v) => v.min(br.vol * 0.5) * touch,
+        };
         let dep_per_w = dep_total / sum_w / px_area;
         // film splitting: a bristle in wet paint always lifts some of it, even
         // when loaded; a spent bristle drinks more
@@ -772,3 +800,173 @@ unsafe fn exchange(
     }
 }
 
+
+/// One touch of the brush: the tip pressed straight down onto the canvas
+/// and lifted again, the hand drifting by `drag` and rolling the handle by
+/// `twist` while the hairs are down. The mark of a stippling brush, a
+/// dabbing sable, the point of a round.
+///
+/// Pressed vertically, the hairs don't trail: the belly flattens and the
+/// tips slide outward, so the contact patch grows with pressure (the
+/// outer hairs of a pointed round only land under pressure) and shrinks
+/// again on the lift. The hairs of a pressed tip lie against each other and
+/// the paint between them bridges the gaps, so the patch is continuous, not
+/// one dot per hair. Each hair deposits by film splitting: about half of the
+/// paint film on its contact face stays on the canvas, a set thickness per
+/// load (not a share per distance, as in a stroke), and it lifts some of
+/// the wet paint under it, so touches into wet paint blend and dirty the brush.
+#[derive(Clone, Copy, Debug)]
+pub struct Touch {
+    /// Where the tip lands (units).
+    pub at: (f32, f32),
+    /// Peak pressure 0..1: harder presses give bigger, fuller marks.
+    pub pressure: f32,
+    /// Movement of the hand while the hairs are down (units).
+    pub drag: (f32, f32),
+    /// Roll of the handle while down (radians).
+    pub twist: f32,
+    /// Direction of the brush's wide axis (radians; flats and filberts).
+    pub angle: f32,
+}
+
+impl Touch {
+    pub fn at(x: f32, y: f32) -> Self {
+        Touch { at: (x, y), pressure: 0.6, drag: (0.0, 0.0), twist: 0.0, angle: 0.0 }
+    }
+    pub fn pressure(mut self, p: f32) -> Self {
+        self.pressure = p;
+        self
+    }
+    pub fn drag(mut self, dx: f32, dy: f32) -> Self {
+        self.drag = (dx, dy);
+        self
+    }
+    pub fn twist(mut self, a: f32) -> Self {
+        self.twist = a;
+        self
+    }
+    pub fn angle(mut self, a: f32) -> Self {
+        self.angle = a;
+        self
+    }
+}
+
+/// Thickness (coats, relative to the tool's `lay`) a fully loaded tip
+/// leaves where it is pressed flat.
+const TOUCH_FILM: f32 = 1.0;
+/// Steps through press, hold and lift.
+const TOUCH_STEPS: usize = 4;
+
+/// Area of the bristle roots' layout in the brush frame (half-width units²).
+fn root_area(kind: Kind) -> f32 {
+    use std::f32::consts::PI;
+    match kind {
+        Kind::Round | Kind::Rigger | Kind::Blender => PI,
+        Kind::Filbert => PI * 0.3,
+        Kind::Flat => 2.0 * 0.36,
+        Kind::Fan => 0.4,
+    }
+}
+
+/// Half-width of the pressed tip (pixels) at pressure `p`.
+fn touch_half(tool: &Tool, p: f32, s: f32) -> f32 {
+    tool.width * 0.5 * s * (0.45 + 0.55 * p) * (1.0 + tool.splay * (p - 0.5))
+}
+
+/// Contact radius of one hair in a pressed tip (pixels): at least the hair,
+/// and wide enough that the fading contacts of neighbors overlap (paint
+/// bridges the gaps). The floor is only as wide as a pixel needs to be
+/// sampled: a coarse render must not make small marks bigger (and fainter).
+fn touch_rb(tool: &Tool, p: f32, s: f32) -> f32 {
+    let spacing = touch_half(tool, p, s) * (root_area(tool.kind) / tool.bristles.max(1) as f32).sqrt();
+    (tool.hair_radius() * s).max(1.4 * spacing).max(0.75)
+}
+
+/// Every pixel `touch_on` may read or write for `t`, as a conservative
+/// end-exclusive rectangle clamped to the canvas (see `footprint`).
+pub(crate) fn touch_footprint(tool: &Tool, t: &Touch, scale: f32, w: usize, h: usize) -> Option<Rect> {
+    let s = scale;
+    let p = t.pressure.clamp(0.0, 1.0);
+    let half = tool.width * 0.5 * s * (1.0 + tool.splay.abs() * 0.5);
+    let reach = half * ROOT_MAX * std::f32::consts::SQRT_2 * (1.0 + 0.3 * tool.splay.abs()) * (1.0 + 0.5 * (LEN_MAX - 1.0));
+    let rb = touch_rb(tool, p, s);
+    let pad = reach + 3.0 * (rb + 1.0) + 4.0;
+    let (x0, y0) = (t.at.0 * s + t.drag.0.min(0.0) * s, t.at.1 * s + t.drag.1.min(0.0) * s);
+    let (x1, y1) = (t.at.0 * s + t.drag.0.max(0.0) * s, t.at.1 * s + t.drag.1.max(0.0) * s);
+    if !pad.is_finite() || !x0.is_finite() || !x1.is_finite() || !y0.is_finite() || !y1.is_finite() {
+        panic!("non-finite touch footprint (touch or tool parameters)");
+    }
+    let c = |v: f32, n: usize| (v.max(0.0) as usize).min(n);
+    let r = (c((x0 - pad).floor(), w), c((y0 - pad).floor(), h), c((x1 + pad).ceil() + 1.0, w), c((y1 + pad).ceil() + 1.0, h));
+    if r.2 <= r.0 || r.3 <= r.1 { None } else { Some(r) }
+}
+
+impl Canvas {
+    /// Touch the canvas with the tip of a held brush (see `Touch`).
+    pub fn touch(&mut self, held: &mut Held, t: &Touch, clip: Option<&Mask>) {
+        if let Some(m) = clip {
+            self.check_mask(m);
+        }
+        let id = self.next_stroke_ids(1);
+        let surf = self.surf();
+        let mut scratch = Vec::new();
+        // SAFETY: exclusive &mut self, single brush.
+        let b = unsafe { touch_on(surf, held, t, clip, id, &mut scratch) };
+        if let Some((x0, y0, x1, y1)) = b {
+            self.wet.touch(x0, y0, x1, y1);
+        }
+    }
+}
+
+/// SAFETY: no other thread may touch pixels in `touch_footprint(..)` of `t`.
+pub(crate) unsafe fn touch_on(sf: Surf, held: &mut Held, t: &Touch, clip: Option<&Mask>, id: u32, scratch: &mut Vec<f32>) -> Bounds {
+    let mut bounds: Bounds = None;
+    let s = sf.scale;
+    let tool = held.tool.clone();
+    let full = held.full();
+    let p = t.pressure.clamp(0.0, 1.0);
+    let (cx, cy) = (t.at.0 * s, t.at.1 * s);
+    let (dx, dy) = (t.drag.0 * s, t.drag.1 * s);
+    let rb = touch_rb(&tool, p, s);
+    let dlen = (dx * dx + dy * dy).sqrt();
+    let steps = (TOUCH_STEPS + (dlen / rb.max(1.0)).ceil() as usize).min(64);
+    // press, hold, lift
+    let at = |k: usize| {
+        let u = (k as f32 + 0.5) / steps as f32;
+        (u, p * (std::f32::consts::PI * u).sin().max(0.0).sqrt())
+    };
+    let reach_of = |b: &Bristle, pk: f32| (pk - b.thresh) / (1.0 - b.thresh).max(1e-3);
+    // each hair stands for spacing² of the patch; over the touch it lays
+    // TOUCH_FILM·lay coats there at full load, spread over the steps it is down
+    let spacing_u = touch_half(&tool, p, s) / s * (root_area(tool.kind) / held.bristles.len().max(1) as f32).sqrt();
+    // a lighter press squeezes less paint out of the tip
+    let film = TOUCH_FILM * tool.lay * spacing_u * spacing_u * (0.4 + 0.6 * p);
+    let sums: Vec<f32> = held.bristles.iter().map(|b| (0..steps).map(|k| reach_of(b, at(k).1).max(0.0)).sum()).collect();
+    for b in &mut held.bristles {
+        b.prev = [None, None];
+    }
+    for k in 0..steps {
+        let (u, pk) = at(k);
+        let half = touch_half(&tool, pk, s);
+        let theta = t.angle + t.twist * u;
+        let (st, ct) = theta.sin_cos();
+        let (hx, hy) = (cx + dx * u, cy + dy * u);
+        for (bi, b) in held.bristles.iter_mut().enumerate() {
+            let reach = reach_of(b, pk);
+            if reach <= 0.0 {
+                b.prev[0] = None;
+                continue;
+            }
+            // tips slide outward as the belly flattens; longer hairs farther
+            let spread = (1.0 + tool.splay * pk * 0.3) * (1.0 + 0.5 * (b.len - 1.0));
+            let (ox, oy) = (b.rx * half * spread, b.ry * half * spread);
+            let cur = (hx + ox * ct - oy * st, hy + ox * st + oy * ct);
+            let prev = b.prev[0].unwrap_or(cur);
+            let fill = (b.vol / full).min(1.0);
+            let v = film * fill * reach / sums[bi].max(1e-6);
+            unsafe { exchange(sf, b, &tool, prev, cur, rb, reach, full, Some(v), clip, id, scratch, &mut bounds) };
+            b.prev[0] = Some(cur);
+        }
+    }
+    bounds
+}

@@ -879,4 +879,66 @@ mod tests {
             assert!(hit > 0, "island at ({a}, {b}) was skipped");
         }
     }
+
+    /// A veil stippled around dark motifs (the region cut out of it with a
+    /// small gap) reaches its tone right up to the gap, not only out in the
+    /// open: no pale halo matting the motifs in (amnesia 3, easel3_free: the
+    /// sea veil left a 3–6 unit rim of the old, paler sea around the stones,
+    /// the figure and the trunk).
+    #[test]
+    fn veil_reaches_its_tone_up_to_dark_motifs() {
+        let st = crate::style::Style::friedrich();
+        let mut c = Canvas::new_window(2000, 4.0, hex("#8a8894"), None).with_size_mm(440.0);
+        let f = c.frame();
+        // dark bars and blocks, like trunks, a figure and standing stones
+        let bars: Vec<(f32, f32, f32, f32)> = (0..9)
+            .map(|k| {
+                let x = 60.0 + k as f32 * 105.0;
+                let w = [6.0, 14.0, 30.0][k % 3];
+                (x, 40.0, x + w, 60.0 + 40.0 * (k % 4) as f32 + 110.0)
+            })
+            .collect();
+        // distance (units) outside the nearest bar, 0 inside
+        let dist = |x: f32, y: f32| {
+            bars.iter()
+                .map(|&(x0, y0, x1, y1)| {
+                    let (dx, dy) = ((x0 - x).max(x - x1).max(0.0), (y0 - y).max(y - y1).max(0.0));
+                    (dx * dx + dy * dy).sqrt()
+                })
+                .fold(f32::MAX, f32::min)
+        };
+        let dark = Mask::from_fn(f, |x, y| if dist(x, y) <= 0.0 { 1.0 } else { 0.0 });
+        let ink = Stipple::new(Tool::stippler(3.0)).paint(1.0, 0.4).color(|_, _| hex("#24221e")).coverage(|_, _| 8.0).aim(false).fade(0.0).clip(true);
+        c.stipple(&dark, &ink, 1);
+        c.dry();
+        // laid in thick body paint: a plateau ~0.6 mm proud of the thin
+        // field (the stones in easel3_free stand ~650 µm above the sea)
+        for (hg, &m) in c.height.iter_mut().zip(&dark.data) {
+            *hg += 600.0 * m;
+        }
+        c.surf_gen += 1;
+        // the veil: the field minus the motifs grown by 1.5 units, clipped
+        let veil = Mask::from_fn(f, |x, y| if dist(x, y) > 1.5 && (20.0..230.0).contains(&y) { 1.0 } else { 0.0 });
+        let before: Vec<f32> = c.pixels().iter().map(|p| to_oklab(*p)[0]).collect();
+        let sp = Stipple::new(Tool::stippler(2.2)).mixed(&st.palette, 0.5).color(|_, _| hex("#4a5068")).coverage(|_, _| 2.6).pressure(0.4, 0.8).dips(20, 0.35, 0.6).clip(true);
+        c.stipple(&veil, &sp, 9);
+        c.dry();
+        // mean darkening at a distance band from the motifs, inside the veil
+        let drop = |d0: f32, d1: f32| {
+            let (mut s, mut n) = (0.0, 0);
+            for (i, p) in c.pixels().iter().enumerate() {
+                let (x, y) = (((i % f.w) as f32 + 0.5) / f.scale, ((i / f.w) as f32 + 0.5) / f.scale);
+                let d = dist(x, y);
+                if d >= d0 && d < d1 && (30.0..220.0).contains(&y) && veil.data[i] >= 1.0 {
+                    s += before[i] - to_oklab(*p)[0];
+                    n += 1;
+                }
+            }
+            s / n as f32
+        };
+        let (near, far) = (drop(1.5, 4.0), drop(12.0, 40.0));
+        println!("veil darkening: {near:.4} near the motifs, {far:.4} in the open");
+        assert!(far > 0.05, "the veil didn't darken the field: {far}");
+        assert!(near > 0.8 * far, "pale halo: the veil darkens {near:.4} next to the motifs vs {far:.4} in the open");
+    }
 }

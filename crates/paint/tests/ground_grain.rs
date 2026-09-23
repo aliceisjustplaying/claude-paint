@@ -153,3 +153,41 @@ fn save_ground_crops() {
         c.save(format!("{dir}/{name}.png")).unwrap();
     }
 }
+
+/// Diagnostic: bare-ground pixels in a thin broad sky (as the easel's
+/// `hand="broad"` lays it) over each ground, with and without blending.
+#[test]
+#[ignore]
+fn sky_bares_ground() {
+    use paint::{Mask, hex};
+    let base = Style::friedrich();
+    let old_like = Style { ground: base.ground[..2].to_vec(), ..base.clone() };
+    for (name, st) in [("knives only", old_like), ("friedrich", base.clone())] {
+        for blend in [false, true] {
+            let crop = Crop { units: [400.0, 100.0, 560.0, 260.0], margin: 40.0 };
+            let mut c = st.prepare_window(3200, 1.3, 23, Some(crop));
+            let sky = Mask::from_fn(c.frame(), |_, _| 1.0);
+            c.work(&sky, &base.broad().color(|_, _| hex("#d9dcd6")).angle(|_, _| 0.0).coverage(4.5).medium(0.3), 11);
+            if blend {
+                if let Some(b) = base.blend() {
+                    c.work(&sky, &b, 12);
+                }
+            }
+            c.dry();
+            let f = c.window();
+            let pad = (40.0 * 3.2) as usize;
+            let mut n = 0;
+            let mut tot = 0;
+            for y in pad..f.h - pad {
+                for x in pad..f.w - pad {
+                    let p = c.pixels()[y * f.w + x];
+                    tot += 1;
+                    if p[0] - p[2] > 0.12 {
+                        n += 1;
+                    }
+                }
+            }
+            eprintln!("{name:12} blend {blend:5}: {n} of {tot} px bare");
+        }
+    }
+}

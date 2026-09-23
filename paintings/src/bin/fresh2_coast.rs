@@ -748,8 +748,8 @@ fn main() {
         // a brig hull-down on the horizon to the right, her sails catching
         // the light from below the horizon; a far sail to the left
         let hull = c.aim(&sea_pal, hex("#2e3038"), (770.0, HORIZON), 1.0, 0.15, 1.5);
-        let mut b = held(Tool::round_sable(1.6), hull, 0.6, 81);
-        stroke(&mut c, &mut b, &[(757.0, HORIZON - 0.6), (768.0, HORIZON - 1.2), (781.0, HORIZON - 0.8)], 0.7, 0.6, (0.05, 0.1), None);
+        let mut b = held(Tool::round_sable(1.1), hull, 0.6, 81);
+        stroke(&mut c, &mut b, &[(758.5, HORIZON - 1.4), (768.0, HORIZON - 1.0), (780.0, HORIZON - 1.5)], 0.6, 0.55, (0.1, 0.15), None);
         // masts
         let mast = c.aim(&sea_pal, hex("#3a3940"), (770.0, HORIZON - 15.0), 0.5, 0.15, 1.5);
         let mut m = held(Tool::rigger(0.35), mast, 0.5, 82);
@@ -758,17 +758,55 @@ fn main() {
         stroke(&mut c, &mut m, &[(774.0, HORIZON - 1.0), (774.1, HORIZON - 27.0)], 0.6, 0.3, (0.02, 0.3), None);
         m.reload(mast, 0.5);
         stroke(&mut c, &mut m, &[(781.0, HORIZON - 1.2), (791.0, HORIZON - 6.0)], 0.5, 0.3, (0.02, 0.3), None);
-        // sails: stacked squares on each mast, shaded on the left, lit warm on the right
-        for (mx, top, n) in [(765.0f32, 29.0f32, 4), (774.0, 25.0, 4)] {
-            for s in 0..n {
-                let y0 = HORIZON - top + s as f32 * (top - 5.0) / n as f32;
-                let hh = (top - 5.0) / n as f32 * 0.85;
-                let w = 3.2 + s as f32 * 0.9;
-                for (side, col) in [(-1.0f32, hex("#9c948f")), (1.0, hex("#e9d4b0"))] {
-                    let p = c.aim(&sky_pal, col, (mx + side * w * 0.5, y0 + hh * 0.5), 1.0, 0.1, 1.5);
-                    let mut sb = held(Tool::round_sable(w * 0.8), p, 0.55, 83 + s as u64);
-                    stroke(&mut c, &mut sb, &[(mx + side * w * 0.45, y0), (mx + side * w * 0.5, y0 + hh)], 0.55, 0.5, (0.1, 0.1), None);
+        // sails: on each mast four square sails, one above the other, each a
+        // trapezoid a little narrower than the one below; the light from
+        // below the horizon on the right catches their right halves
+        let sail = move |x: f32, y: f32| -> f32 {
+            let mut m = 0.0f32;
+            for (mx, top) in [(765.0f32, 29.0f32), (774.0, 25.0)] {
+                for q in 0..4 {
+                    let span = (top - 5.0) / 4.0;
+                    let y0 = HORIZON - top + q as f32 * span + 0.35;
+                    let y1 = y0 + span - 0.5;
+                    if y < y0 || y > y1 {
+                        continue;
+                    }
+                    let t = (y - y0) / (y1 - y0);
+                    let w = (1.4 + q as f32 * 0.75) * (0.85 + 0.15 * t) * (1.0 + 0.06 * (t * 3.14).sin());
+                    m = m.max(1.0 - smoothstep(w - 0.3, w + 0.2, (x - mx).abs()));
                 }
+            }
+            m
+        };
+        let sail_m = Mask::from_fn(f, sail);
+        // (earths only: from the sky family the thin edges of the sails
+        // showed the chrome yellow as orange rims)
+        let sail_pal = pal.only(&["lead white", "pale smalt", "yellow ochre", "raw umber"]);
+        let sails = paint::Handling::new(Tool::round_sable(0.8))
+            .mixed(&sail_pal, 0.12)
+            .by_masstone()
+            .color(|x, _| {
+                let mx = if x < 769.5 { 765.0 } else { 774.0 };
+                mix(hex("#948d8c"), hex("#e0cdb0"), smoothstep(-0.6, 0.9, x - mx), Mix::Light)
+            })
+            .angle(|_, _| 0.0)
+            .angle_jitter(0.1)
+            .length(1.2, 3.5)
+            .coverage(5.0)
+            .pressure(0.6, 0.8)
+            .dips(6, 0.6, 0.6)
+            .clip(true)
+            .threshold(0.2);
+        c.work(&sail_m, &sails, 84);
+        // yards: a dark hairline at the head of each sail
+        let mut yd = held(Tool::rigger(0.25), mast, 0.4, 85);
+        for (mx, top) in [(765.0f32, 29.0f32), (774.0, 25.0)] {
+            for q in 0..4 {
+                let span = (top - 5.0) / 4.0;
+                let y0 = HORIZON - top + q as f32 * span + 0.3;
+                let w = 1.5 + q as f32 * 0.75;
+                yd.reload(mast, 0.3);
+                stroke(&mut c, &mut yd, &[(mx - w, y0 + 0.2), (mx + w, y0)], 0.4, 0.4, (0.05, 0.05), None);
             }
         }
         // the far sail
@@ -901,9 +939,9 @@ fn main() {
         let (fx, fy, fh) = woman;
         let hand = paint::Hand::new((fx, fy), fh, 170);
         let gown = pal.paint(hex("#27231f"), 0.12);
-        let shawl = pal.paint(hex("#4b2b24"), 0.12);
-        let hair = pal.paint(hex("#3a2a1f"), 0.1);
-        let skin = pal.paint(hex("#b58f75"), 0.1);
+        let shawl = pal.only(&["red earth", "raw umber", "bone black"]).paint(hex("#3c2621"), 0.12);
+        let hair = earth_pal.paint(hex("#2c231c"), 0.1);
+        let skin = earth_pal.paint(hex("#6a5647"), 0.1);
         let rim = pal.paint(hex("#c9a37c"), 0.1);
         let p = |u: f32, v: f32| hand.p(u, v);
         // skirt: strokes from the waist down, flaring to the hem
@@ -932,8 +970,15 @@ fn main() {
         stroke(&mut c, &mut sh, &[p(-0.075, 0.8), p(-0.03, 0.7), p(0.0, 0.6)], 0.85, 0.5, (0.02, 0.2), None);
         sh.reload(shawl, 0.6);
         stroke(&mut c, &mut sh, &[p(0.075, 0.8), p(0.03, 0.7), p(0.0, 0.6)], 0.85, 0.5, (0.02, 0.2), None);
-        sh.reload(shawl, 0.6);
-        stroke(&mut c, &mut sh, &[p(-0.07, 0.805), p(0.0, 0.815), p(0.07, 0.805)], 0.8, 0.8, (0.05, 0.05), None);
+        sh.reload(shawl, 0.5);
+        stroke(&mut c, &mut sh, &[p(-0.065, 0.8), p(0.0, 0.81), p(0.065, 0.8)], 0.55, 0.55, (0.05, 0.05), None);
+        // folds: one darker, one catching a little of the light on the right
+        let fold_d = earth_pal.paint(hex("#1c1916"), 0.2);
+        let fold_l = earth_pal.paint(hex("#3d3731"), 0.2);
+        let mut fd = held(Tool::round_sable(0.014 * fh), fold_d, 0.4, 180);
+        stroke(&mut c, &mut fd, &[p(-0.02, 0.5), p(-0.035, 0.25), p(-0.06, 0.03)], 0.5, 0.3, (0.2, 0.3), None);
+        let mut fl = held(Tool::round_sable(0.014 * fh), fold_l, 0.4, 181);
+        stroke(&mut c, &mut fl, &[p(0.045, 0.52), p(0.07, 0.28), p(0.1, 0.04)], 0.45, 0.3, (0.2, 0.4), None);
         // neck and head, hair gathered in a knot on the crown
         let mut nk = held(Tool::round_sable(0.03 * fh), skin, 0.5, 175);
         stroke(&mut c, &mut nk, &[p(0.0, 0.815), p(0.0, 0.855)], 0.7, 0.7, (0.05, 0.05), None);
@@ -1006,14 +1051,20 @@ fn main() {
             let ((bx, by), _, lean) = poles[i];
             let w = 4.2 - i as f32 * 0.5;
             let d = 0.02 * lean;
-            sh = sh.ribbon(&[(bx, by - 0.5), (bx - d * 20.0, by + 18.0), (bx - d * 40.0, by + 36.0), (bx - d * 55.0, by + 50.0)], &[w, w * 0.8, w * 0.5, w * 0.15]);
+            sh = sh.add(paint::Shape::new().ribbon(&[(bx, by - 0.5), (bx - d * 20.0, by + 18.0), (bx - d * 40.0, by + 36.0), (bx - d * 55.0, by + 50.0)], &[w, w * 0.8, w * 0.5, w * 0.15]));
         }
         let (fx, fy, fh) = woman;
-        sh = sh.ribbon(&[(fx, fy - 0.5), (fx, fy + 10.0), (fx + 0.5, fy + 20.0), (fx + 0.5, fy + 27.0)], &[0.2 * fh, 0.17 * fh, 0.1 * fh, 0.03 * fh]);
+        sh = sh.add(paint::Shape::new().ribbon(&[(fx, fy - 0.5), (fx, fy + 10.0), (fx + 0.5, fy + 20.0), (fx + 0.5, fy + 27.0)], &[0.2 * fh, 0.17 * fh, 0.1 * fh, 0.03 * fh]));
         for &(x, y, s) in &stones {
-            sh = sh.ribbon(&[(x - s * 0.55, y + s * 0.1), (x, y + s * 0.16), (x + s * 0.5, y + s * 0.08)], &[s * 0.12, s * 0.2, s * 0.08]);
+            sh = sh.add(paint::Shape::new().ribbon(&[(x - s * 0.55, y + s * 0.1), (x, y + s * 0.16), (x + s * 0.5, y + s * 0.08)], &[s * 0.12, s * 0.2, s * 0.08]));
         }
-        let sh_m = Mask::from_shape(f, sh).blur(1.6);
+        // each ribbon its own part: ribbons built into one path left a
+        // stray rectangle outline in the fill
+        // threshold after the blur: the blur leaves float residue (~1e-7)
+        // over the whole rectangle below and right of the shapes, and
+        // `Canvas::glaze` lays film wherever the mask is above zero, which
+        // later drew that rectangle as a hard edge (FRICTION)
+        let sh_m = Mask::from_shape(f, sh).blur(1.6).map(|v| if v < 0.004 { 0.0 } else { v });
         let umber = shade_pal.mix(hex("#2e2924")).paint(0.85).pigment();
         c.glaze(&umber, Some(&sh_m), |_, _| 1.4);
     }
@@ -1042,12 +1093,19 @@ fn main() {
     if o.stage("glaze", &mut c, &mut rng) {
         // a last thin warm veil to knit the foreground, darker toward the
         // bottom edge and the corners (Friedrich's advice to Carus)
-        let umber = pal.mix(hex("#4a3a2c")).paint(0.9);
-        let pig = umber.pigment();
-        c.glaze(&pig, None, move |x, y| {
-            let edge = smoothstep(560.0, h, y) * 0.5 + 0.35 * smoothstep(300.0, 0.0, x) * smoothstep(500.0, h, y) + 0.2 * smoothstep(700.0, 1000.0, x) * smoothstep(560.0, h, y);
-            edge * 0.9
-        });
+        // (brushed: a `Canvas::glaze` film here drew a sharp rectangle,
+        // the box of the last strokes, in the sand; see FRICTION)
+        let edge = move |x: f32, y: f32| smoothstep(560.0, h, y) * 0.5 + 0.35 * smoothstep(300.0, 0.0, x) * smoothstep(500.0, h, y) + 0.2 * smoothstep(700.0, 1000.0, x) * smoothstep(560.0, h, y);
+        let veil_m = Mask::from_fn(f, move |x, y| smoothstep(0.02, 0.08, edge(x, y)));
+        let veil = st
+            .glaze(0.9)
+            .palette(&shade_pal)
+            .color(|_, _| hex("#4a3a2c"))
+            .load_at(move |x, y| (edge(x, y) * 1.6).min(1.0))
+            .angle(|_, _| 0.0)
+            .coverage(2.5);
+        c.work(&veil_m, &veil, 300);
+        c.dry();
     }
 
     let mut fin = Finish::aged(st.relief);

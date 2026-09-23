@@ -602,3 +602,20 @@ mod canvas_tests {
         assert!(body.error < 0.05, "body color covers: {}", body.error);
     }
 }
+
+#[cfg(test)]
+mod probe {
+    use super::*;
+    use crate::color::hex;
+    #[test]
+    #[ignore]
+    fn probe_overshoot() {
+        let pal = Palette::friedrich_early();
+        let (want, under) = (hex("#5b6f99"), hex("#d8c7ab"));
+        for (label, m) in [("mix", pal.mix(want)), ("aim1", pal.aim(want, under, 0.45, 1.0)), ("aim2", pal.aim(want, under, 0.45, 2.0))] {
+            let p = m.paint(0.45);
+            let e: Vec<String> = [0.25f32, 0.5, 1.0, 2.0, 4.0, 50.0].iter().map(|&x| format!("{x}:{:.3}", dist(to_oklab(p.over(under, x)), to_oklab(want)))).collect();
+            println!("{label:5} hide {:.2} {} | {}", p.hiding, e.join(" "), pal.recipe(&m));
+        }
+    }
+}

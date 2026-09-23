@@ -151,6 +151,14 @@ impl<'a> Handling<'a> {
         self.aim = self.aim.or(Some(DEFAULT_AIM_COATS));
         self
     }
+    /// Mix from another palette, keeping the medium: e.g. the few paints set
+    /// out for one passage, `palette.only(&["lead white", "smalt"])`, so
+    /// neighboring piles stay in one family.
+    pub fn palette(mut self, palette: &'a Palette) -> Self {
+        let (_, medium) = self.palette.expect("palette() needs a palette already: use mixed()");
+        self.palette = Some((palette, medium));
+        self
+    }
     /// Mix piles to the color field as masstone, without looking at the
     /// canvas (the paint's own color, laid thick; see `Palette::mix`).
     pub fn by_masstone(mut self) -> Self {

@@ -7,7 +7,7 @@
 set -e
 src=$1
 out=$2
-dir=${TMPDIR:-~/tmp}
+dir=${TMPDIR:-$HOME/tmp}
 tmp=$(mktemp -p "$dir" peek.XXXXXX)
 cp "$src" "$tmp.png"
 if [ -n "$6" ]; then

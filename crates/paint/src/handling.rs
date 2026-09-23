@@ -1240,6 +1240,42 @@ mod tests {
         }
     }
 
+    /// `Style::blend()` fuses a masked passage without dragging its wet
+    /// paint across the mask's edge (amnesia 2, coast #5, mountains #14);
+    /// `.clip(false)` still fuses across it on purpose.
+    #[test]
+    fn blender_stays_in_its_region() {
+        use crate::color::hex;
+        let st = crate::style::Style::friedrich();
+        let run = |clip: Option<bool>| {
+            let mut c = Canvas::new(200, 1.0, hex("#d8d0c0"));
+            let f = c.frame();
+            // a wet dark passage below y = 500, a dry light one above
+            let below = Mask::from_fn(f, |_, y| if y >= 500.0 { 1.0 } else { 0.0 });
+            c.work(&below, &Handling::new(Tool::filbert(30.0)).color(|_, _| hex("#2a2a30")).coverage(3.0).clip(true), 1);
+            let before = c.pixels().to_vec();
+            let mut b = st.blend().unwrap();
+            if let Some(on) = clip {
+                b = b.clip(on);
+            }
+            c.work(&below, &b, 2);
+            c.dry();
+            // how much darker the light passage got, just above the edge
+            let mut worst = 0.0f32;
+            for (i, p) in c.pixels().iter().enumerate() {
+                let y = (i / f.w) as f32 / f.scale;
+                if y < 495.0 && y > 440.0 {
+                    worst = worst.max(to_oklab(before[i])[0] - to_oklab(*p)[0]);
+                }
+            }
+            worst
+        };
+        let (inside, across) = (run(None), run(Some(false)));
+        println!("blend: light passage darkened by {inside:.4} (default), {across:.4} (clip(false))");
+        assert!(inside < 0.01, "the default blender dragged dark paint out of its region: {inside}");
+        assert!(across > 0.05, "clip(false) should still fuse across the edge: {across}");
+    }
+
     /// A dark body passage through a mask over the light ground: (share of
     /// pixels still reading as ground (L within 0.12 of it) in a 5-unit band
     /// inside the mask's edges, the band's L above the interior's, the share

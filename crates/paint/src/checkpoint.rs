@@ -14,8 +14,9 @@
 //!
 //! Version 2 (`PAINTCK2`) added the drying rate, stroke ids, clock and
 //! drying state; version 3 (`PAINTCK3`) adds the canvas's ground thickness
-//! (for craquelure fitted to the ground). Older files are refused (re-run to
-//! checkpoint again).
+//! (for craquelure fitted to the ground); version 4 (`PAINTCK4`) adds each
+//! wet pixel's paint coverage (pointed-tip marks). Older files are refused
+//! (re-run to checkpoint again).
 //!
 //! Format: little-endian binary, `MAGIC`, then a free-form UTF-8 header
 //! (length-prefixed; the caller's key=value lines), then the canvas. If you
@@ -26,7 +27,7 @@ use crate::surface::Linen;
 use crate::wet::LAT;
 use std::io::{self, Read, Write};
 
-const MAGIC: &[u8; 8] = b"PAINTCK3";
+const MAGIC: &[u8; 8] = b"PAINTCK4";
 
 fn put_u64(w: &mut impl Write, v: u64) -> io::Result<()> {
     w.write_all(&v.to_le_bytes())
@@ -144,6 +145,7 @@ impl Canvas {
             put_all(w, ck.px.iter().flat_map(|p| [p.cure, p.lev, p.seen, p.sub, p.srate]))?;
         }
         put_f32(w, self.ground_um)?;
+        put_all(w, wt.cover.iter().copied())?;
         Ok(())
     }
 
@@ -247,6 +249,7 @@ impl Canvas {
         wet.clock = crate::drying::Clock { now, px, mark, tacky };
         let ground_um = get_f32(r)?;
         c.ground_um = if ground_um.is_finite() { ground_um.max(0.0) } else { 0.0 };
+        wet.cover = get_all(r, n)?;
         c.wet = wet;
         Ok((c, header))
     }

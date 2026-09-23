@@ -45,12 +45,12 @@ Friedrich painted in oil on fine, plain-weave linen that he bought already prime
 | Ochers and earths (goethite, hematite) | [ALF p.348]; [CATS p.127] | Yellow and red earths |
 | Vermilion/cinnabar | *Abbey* sky layer [NPJ25]; violet sky layer of *The Cross in the Mountains* (1807/08) [KÖR fig. 6] | Small admixture in pinks and violets |
 | Red iron oxide | Pale mauve sky of *Winter Landscape* [NG p.56] | A few particles |
-| Bone black | Grass in *Winter Landscape* [NG p.56] | |
+| Bone black | Grass in *Winter Landscape* [NG p.56] (with smalt, Naples yellow, ochre and possibly Prussian blue) | |
 | Naples yellow | Grass in *Winter Landscape* [NG p.56] | *Disputed:* XRF found no antimony in the areas it tested [ALF p.349] |
 | Prussian blue | "Possibly" in *Winter Landscape* grass [NG p.56]; cape in *Man and Woman Contemplating the Moon* (1818/24), inferred from K and Fe [ALF Table 2] | |
 | Cobalt blue | Paintings from 1818/24 on [ALF]; "almost entirely replaced smalt… after about 1820" [NG p.56] | |
 | Chrome yellow (lead chromate) | 1817 and 1818/24 [ALF] | Cadmium yellow in the 1817 painting is probably a later retouching [ALF p.349] |
-| Green pigments | "a few… green" pigments [CATS p.127] | Not identified. Green earth is *unconfirmed* |
+| Green pigments | "a few… green" pigments [CATS p.127]; copper greens and green earth in Dresden paintings [MÄD p.102] | Mostly mixed greens (Prussian blue, smalt or cobalt + ochre, Naples yellow or chrome yellow); Rinmann's green rare, c.1819–23. See §9 |
 | Copper blues | No copper detected, which excludes azurite in the areas tested [ALF p.348] | Natural or synthetic ultramarine was *not reported* |
 
 ## 5. Binding media and additives
@@ -81,6 +81,73 @@ Friedrich painted in oil on fine, plain-weave linen that he bought already prime
 - **Lining damage.** The 1906 wax-resin lining of *Monk* and *Abbey* left lumps, iron marks and ground and paint damage [SMB-blog]. Restoration (2013–16) found about 97% (*Monk*) and 98% (*Abbey*) of the original paint surviving [SMB-blog].
 - **Craquelure.** *The Sea of Ice* has an elongated "ear-of-grain-shaped" craquelure, probably from pressure on the back [HH]. No quantitative crack study of a Friedrich painting was found. **Generic mechanics:** corner cracks form perpendicular to the diagonal within about 5–10% of the diagonal length. A mock-up corner showed about 6 ± 3 mm crack spacing. Central cracks come from isotropic drying shrinkage of the oil paint [NPJ24].
 - **Pentimenti** (the painter's own changes). Few in *Winter Landscape* [NG p.49]. The turned figure in *Monk* is a rare case [ART; CATS p.129].
+
+## 9. Greens
+
+*Same conventions as sections 1–8: source keys in brackets, full URLs in the source list below. "Unverified" means I could not see the primary text myself.*
+
+**Bottom line.** Friedrich's greens were mostly **mixed on the palette** from his blues and yellows. He also used two or three true green pigments sparingly. The Dresden team (14 paintings) writes, in my translation, that "the palette was very sparing" but his greens show a "lush variety" ("üppige Vielfalt"). They list the true greens as "copper-containing pigments and green earth." He "often mixed his green from blue and yellow," using Prussian blue "very often" and smalt and cobalt blue as well. The yellow part came from yellow ocher, Naples yellow or chrome yellow [MÄD p.102]. Green passages often have "several (up to four) layers of different greens" stacked on top of each other [MÄD p.102].
+
+### Available greens and dates
+
+| Green | Date and availability | Source |
+|---|---|---|
+| Green earth (*Grüne Erde*, terre verte) | Ancient. Continental painters' manuals mention it through the 19th century (for example Field 1835). "Saxon Earth" appears among its trade names, and "Bohemian earth" was a grade | [AP1 pp.143–144, 147] |
+| Verdigris / copper resinate | Old. "Rarely found in eighteenth- and nineteenth-century paintings" [AP2 p.132]. Around 1816 it was still made as green "varnishes" (verdigris heated into varnish) [AP2 p.149] | [AP2] |
+| Scheele's green (copper arsenite) | "Introduced in 1778"; "use as an artist's pigment is little documented" [AP3 p.221]. Turner used it from c.1806–07 [AP3 p.256] | [AP3] |
+| Schweinfurt/emerald green | Sattler and Russ in Schweinfurt produced it from **1814**. It stayed a trade secret until Liebig published the method in 1822 [AP3 p.222]. Winsor & Newton sold it from 1832 [AP3 p.223]. The earliest easel finds in the AP3 table date from c.1832 [AP3 p.259] | [AP3; WEB-em] |
+| Rinmann's green (cobalt-zinc oxide) | Rinmann, **1780**; "poor tinting strength and high cost… kept it in limited use" | [WEB-co] |
+| Chromium oxide (opaque) | Vergnaud (1831) says it was "rarely used because of its high price." Kühn's earliest finds are three paintings from 1845–50 | [AP3 p.275] |
+| Viridian | Pannetier made it c.1838. Guignet patented it in 1859. The earliest finds are 1863 | [AP3 pp.274–275; CL-vir] |
+| "Green cinnabar" / *Zinnobergrün* / chrome green (chrome yellow + Prussian blue) | Appeared "shortly after" chrome yellow; the name "green cinnabar" is recorded by 1842 [AP1 p.189; AP3 pp.203–204]. Chrome yellow was "only produced commercially in Germany from 1820" [MÄD p.102], so a German tube is plausible only after about 1820 (*inferred*). Field (1835) called these mixtures "unfit for fine art" [FIELD p.129] | |
+
+### Evidence in Friedrich's paintings
+
+- **Winter Landscape (London, c.1811), grass.** The grass has no true green pigment: "smalt, Naples yellow, bone black, ochre and possibly Prussian blue in varying proportions" [NG p.56]. Section 4 omits the smalt; it should be added to the grass list.
+- **Dresden, 14 paintings.** Copper greens and green earth were used; mixtures were frequent (see the bottom line above) [MÄD p.102]. The abstract does not say which paintings or dates contain green earth. *Gap.*
+- **Bohemian Landscape with the Milleschauer (1808, Dresden)** [CDF-M]. XRF found Cu plus As, and SEM-EDX placed both in the same layer. Spectroscopy found no intact copper arsenite, so the authors assume a "degraded form" of Scheele's or Schweinfurt green [MÄD p.102]. *Single object.* **My inference:** since 1808 predates Schweinfurt green (1814), this would be Scheele's green unless the layer is a later addition.
+- **Rinmann's green, rare.** Found by the Doerner Institut on *Riesengebirgslandschaft mit aufsteigendem Nebel* (c.1819/20) [PIN], by SPSG on *Ländliche ebene Gegend* (c.1822/23) and in Dresden on *Hünengrab im Herbst* (c.1820) [MÄD p.102 n.3; CDF-H]. The SPSG/Hannover study says his mixed greens were supplemented by "the rarely detectable Rinmann's green and a copper green" [MOST-abs].
+- **Unverified (search-tool summary of the Most 2024 PDF, which I could not open; page not seen).** In *Ländliche ebene Gegend*, Rinmann's green reportedly lies in a light, pastose top layer applied in short dabs or zigzags over a yellow-green layer. An arsenic-free copper green reportedly appears in the green reflections of boats in *Ansicht eines Hafens*. Check these before use.
+- **Berlin, four paintings.** XRF covered only blue and yellow areas. "No Cu was detected in any investigated area" means blue areas only, not greens [ALF pp.346, 348].
+- **A cautionary misattribution.** *Landschaft mit kahlem Baum* was de-attributed partly because its leaves are cobalt blue mixed with chrome yellow, which were anachronistic for 1798/99 [MÄD p.102]. The pigment date rule works as a real test.
+- **No green data found** for *Hill and Ploughed Field*, *Meadows near Greifswald*, *Morning in the Riesengebirge*, *Chalk Cliffs*, *Lone Tree* or *Summer*. The ZKK 2024–25 issues are paywalled; page not seen.
+
+### How he painted foliage and grass
+
+- **Order.** Trees were painted "on the already painted sky" [ALF p.346]. Grass came last, as "fine upturning" strokes over the finished snow [NG p.56].
+- **Strokes.** Firs are "short, hatched strokes" [NG pp.49–50]. The SPSG study notes that he modeled paint while it was still wet ("die noch nicht getrocknete Farbe modellierte") [MOST-abs]. In *Woman before the Setting Sun* the grass blades are straight, made with "a stiff, inflexible paint brush" and probably applied last. The author calls them "entirely unique in Friedrich's oeuvre" [UCL pp.116–117].
+- **Drawing habits.** His foliage drawings use "small strokes and hooks" and "jagged lines." He noted distance and viewpoint on the sheet [KH, publisher excerpt; exact page uncertain]. He studied grasses and plants in dated pencil sketches (1799, 1806–07) [KSW].
+- **Contemporaries.** Carus mocked painters who "confound all the specific forms of tree growth in an imaginary substance that they call 'foliage'" [CAR p.137]. Field's rule for landscape greens was to mix them from the yellows of the foreground and the blues of the sky, because they "harmonize better… and impart homogeneity" [FIELD p.128]. For Goethe, green is yellow and blue balanced, a color on which "the eye and the mind repose" [GOE §802].
+
+### Properties for simulation
+
+Hex = oil masstone estimate. Hiding runs 0 (transparent) to 1 (opaque). Tint is tinting strength relative to an average of 1.0. Stiffness runs 0 to 1. Basis: S = sourced, P = proxy, A = assumption.
+
+| Pigment | Masstone | Hiding | Tint | Stiffness | Basis and aging |
+|---|---|---|---|---|---|
+| Green earth | #3A4843 | 0.2 | 0.3 | 0.35 | Hex P: Munsell 7.5G/2.9/1.5 over white [AP1 Table 1, p.146], converted by me. "Relatively translucent"; tint and hiding "poor" (S) [AP1 p.146]; "not much body" [FIELD p.129]. Oil uptake is 80–100% (Bohemian vs. Verona) [AP1 p.147], so stiffness is A. Stable; can darken as oil penetrates [AP1 p.146] |
+| Verdigris (in oil) | #3F7F6A | 0.25 | 1.0 | 0.4 | Hex A. "Poor hiding power in oil" (S) [AP2 p.132]. Dries rapidly; blackens in "moist and impure air" [FIELD p.130] |
+| Copper resinate glaze | #2F5A32, aging to #5A4A28 | 0.05 | 0.8 | 0.1 | A. Brown discoloration from "photocatalytic reaction" (S) [AP2 p.151] |
+| Scheele's/emerald green | #1FA57A | 0.7 | 0.8 | 0.6 | Measured color in parchment size is #00C285 (clipped) [AP3 p.226]; the oil value is darker (P) [AP3 p.227]. "Good hiding power" (S) [AP3 p.226]; "rather opaque"; works "difficultly in oil, and dries badly" [FIELD p.130]. Blackens with hydrogen sulfide [AP3 p.227] |
+| Rinmann's green | #5F8F76 | 0.35 | 0.4 | 0.5 | Hex A. "Semi-transparent", "poor tinting strength" (S) [WEB-co]; "not very powerful" [FIELD p.129]. Permanent |
+| Prussian blue | #172440 | 0.35 | 4.0 | 0.45 | Hex A. Refractive index 1.56, "transparent… useful for glazing" [AP3 p.197]. Tint "high" (S): "half an ounce will tint 20 pounds of lead white" [AP3 p.196]. Fades in light and recovers in the dark [AP3 p.199] |
+| Chrome green mixture (*Zinnobergrün*) | #3F6E35 | 0.75 | 1.5 | 0.5 | A. Model it as a palette mix of chrome yellow and Prussian blue |
+
+### Recommendation for the simulator palette
+
+**Early (pre-1820).** Add **Prussian blue** (S: "sehr häufig" in greens [MÄD p.102]; "possibly" in grass [NG p.56]) and **green earth** (S [MÄD p.102], dates unassigned). By default, build greens by mixing: smalt or Prussian blue + ochre or Naples yellow + bone black [NG p.56]. **Optional:** a "copper green" tube, flagged rare.
+
+**Post-1820.** Keep the early additions. Cobalt blue + chrome yellow mixes become possible with tubes you already have. Add **Rinmann's green** as a rare tube (three objects, c.1819–1823).
+
+**Leave out:**
+- Viridian (1859/1863) and chromium oxide (1845+) [AP3 p.275]
+- Emerald green as a standard tube: it was secret until 1822 and poor in oil [AP3 p.222; FIELD p.130]. Keep at most a "degraded Cu-As green" special case (single object)
+- A ready-made *Zinnobergrün* tube: there is no Friedrich evidence, so mix it instead
+- Sap green: "totally useless" in oil [FIELD p.131]
+
+Rendering: allow up to four stacked green layers [MÄD p.102]. Paint foliage after the sky and grass last.
+
+**In the simulator** (`Palette::friedrich_early_greens`, `friedrich_1820_greens`, `copper_green`; notes/green.md): Prussian blue and green earth join both periods, Rinmann's green the post-1820 one, copper green as an optional rare tube. The base palettes are kept without them (the aimed search picked Prussian blue for skies).
 
 ## Implications for a simulator
 
@@ -128,4 +195,18 @@ Values are **sourced** (S), **proxy** from contemporaries or generic studies (P)
 - **[HH]** *The Sea of Ice* GigaPixel commentary (Hamburger Kunsthalle). https://cdfriedrich.de/gigapixel/
 - **[MET]** Rewald, S., *Caspar David Friedrich: Moonwatchers*, Met 2001. https://resources.metmuseum.org/resources/metpublications/pdf/Caspar_David_Friedrich_Moonwatchers.pdf
 - **[NPJ24]** "Development of craquelure patterns in paintings on canvas," *npj Heritage Science* (2024). https://www.nature.com/articles/s40494-024-01493-x
+- **[MÄD]** Mäder, Körber, Hohenstein, Fuhrmann, Stege, Wagner and Birkholz, "Caspar David Friedrich: Befunde über seine Farbmittel im Gemäldebestand der SKD," *METALLA* Sonderheft 13 (2025), pp.101–103. https://metalla.org/index.php/METALLA/en/issue/download/393/75 (DOI 10.46586/metalla.v.2025.i13)
+- **[MOST-abs]** Most et al. 2024, abstract (DataCite). https://api.datacite.org/dois/10.25360/01-2024-00012 (full text behind a bot check; not accessed)
+- **[AP1]** Feller (ed.), *Artists' Pigments* vol. 1 (1986): Grissom, "Green Earth"; Kühn and Curran, "Chrome Yellow." https://www.nga.gov/sites/default/files/migrate_images/content/dam/ngaweb/research/publications/pdfs/artists-pigments-vol1.pdf
+- **[AP2]** Roy (ed.), vol. 2 (1993): Kühn, "Verdigris and Copper Resinate." https://www.nga.gov/sites/default/files/migrate_images/content/dam/ngaweb/research/publications/pdfs/artists-pigments-vol2.pdf
+- **[AP3]** FitzHugh (ed.), vol. 3 (1997): Fiedler and Bayard, "Emerald Green and Scheele's Green"; Newman, "Chromium Oxide Greens"; "Prussian Blue." https://www.nga.gov/sites/default/files/migrate_images/content/dam/ngaweb/research/publications/pdfs/artists-pigments-vol3.pdf
+- **[FIELD]** Field, *Chromatography* (1835), pp.128–131. https://archive.org/details/chromatographyor00fieluoft
+- **[GOE]** Goethe, *Theory of Colours*, trans. Eastlake (1840), §§801–802. https://www.gutenberg.org/ebooks/50572
+- **[CAR]** Carus, *Nine Letters on Landscape Painting*, trans. Britt (Getty 2002). https://humanities-web.s3.us-east-2.amazonaws.com/german/prod/2021-01/Carus%2C%20Carl%20Gustav%20-%20Nine%20Letters%20on%20Landscape%20Painting%20-%20letters%207-9%20%281%29.pdf
+- **[UCL]** Clinger, PhD thesis, UCL 2007. https://discovery.ucl.ac.uk/id/eprint/1349952/1/498373.pdf
+- **[KH]** Kuhlmann-Hodick and Ziegler, "Observations on Friedrich's Nature Studies…," SKD 2024 catalog (same excerpt URL as [KÖR]).
+- **[KSW]** Orth, "Caspar David Friedrichs Wiesenblumenstück," Klassik Stiftung Weimar blog, 2025. https://blog.klassik-stiftung.de/caspar-david-friedrichs-wiesenblumenstueck/
+- **[WEB-em]** https://www.webexhibits.org/pigments/indiv/history/emerald.html ; **[WEB-co]** https://www.webexhibits.org/pigments/indiv/overview/cogreen.html
+- **[CL-vir]** ColourLex, Viridian. https://colourlex.com/project/viridian/
+- **[CDF-M]** https://cdfriedrich.de/chronik/boehmische-landschaft-mit-dem-milleschauer/ ; **[CDF-H]** https://cdfriedrich.de/chronik/huenengrab-im-herbst/ ; **[PIN]** https://www.sammlung.pinakothek.de/de/artwork/53470X8x9e
 - **Not accessed (bot protection; not used for claims, listed for follow-up):** Most et al. 2024, SPSG/Hannover study of 14 paintings, https://doi.org/10.25360/01-2024-00012 ; Conserva 1/2014 article on *Segelschiff*, https://ahnp.ub.uni-heidelberg.de/journals/conserva/article/view/106747 ; *Zeitschrift für Kunsttechnologie und Konservierung* 37(2)/38(1), 2024–25 (48 paintings) [SKD].

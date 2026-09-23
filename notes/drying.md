@@ -230,3 +230,13 @@ covers:
   `st.glaze()` plus `wait`.
 - Stroke ids are compared against a watermark without wraparound handling
   (4 billion strokes).
+
+## Known issue: drying stage is resolution-dependent at low widths
+Found during integration (round 3): `study_time` at 400px reports "light
+Setting, slate Setting" at 3 h where 1000px and 2000px both report "light
+Tacky, slate Open". Pre-existing in the drying merge (checked at cbe0cd8).
+Likely cause: a pixel's film thickness (which sets its drying rate) is the
+average over the pixel, so at coarse widths thin and thick paint blend into
+one intermediate thickness. The study now reports the difference instead of
+asserting. For the review: drying rates should be computed from thickness at
+a fixed physical scale, not per pixel.

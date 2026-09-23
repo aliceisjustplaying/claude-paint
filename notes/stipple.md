@@ -183,6 +183,33 @@ The new tests live in `stipple.rs` (the shared `tests.rs` is untouched):
   20-unit stippler, 2-unit coverage bands at several offsets and separated
   radius-4 islands all get touches
 
+## Fade and relative color (round 3, branch `fixes-paint`)
+Amnesia round 2 (coast #9, mountains #10): a stipple lighter than its field,
+or a mist over a dark, read as salt or static where it thinned.
+- **`fade(k)`, default 1.** Where coverage `c` < 1, each load of touches is
+  aimed `min(1, c)^k` of the way from what it sits on to `color`, so the
+  touches fade into the field as they thin out. This also applies with
+  `aim(false)`. `fade(0.0)` restores constant contrast, for deliberate
+  specks. Test `thin_stipple_fades_instead_of_salt` measures the sd of L
+  where coverage is 0.18–0.48: a pale stipple over a mid-blue sky drops from
+  0.0149 to 0.0058, and a mist fringe over a dark (`aim(false)`) from 0.0433
+  to 0.0120. Where coverage is ≥ 1 the tone is unchanged.
+- **`color_over(|x, y, under| ..)`**: the look wanted, relative to what the
+  canvas shows where a load of touches lands (judged before the pass), e.g.
+  a shadow on snow: `.color_over(|_, _, u| shift(u, -0.06, 0.0, -0.03))`.
+- Dips judge the underlayer with `Canvas::judge_under` (a median), not a
+  mean, so a speck under a dip's centroid doesn't decide its pile.
+
+The `paint_for` workaround described above was replaced earlier by
+`Palette::aim` (the code calls it; the old text is kept for history).
+
+Evidence: `study_stipple` at 1000px, base vs this branch:
+`~/tmp/fixes-paint-3f815331/study/study_stipple_{base,new}.jpg`
+and the mist fringe crop `fringe_cmp.jpg` (base on top). There are fewer
+isolated pale specks in the dark above the mist, and the tone thins more
+gradually. The dense body of the mist is still grainy up close; stipple
+over a dark still reads best as a light veil laid by brush and fused.
+
 ## Known issues / next
 
 - **Color:** replace the `paint_for` workaround with the color stream's API.
@@ -190,10 +217,10 @@ The new tests live in `stipple.rs` (the shared `tests.rs` is untouched):
   pale specks. The palette's recipe switches make visible seams in a
   stippled gradient (I saw one in the mist when its color varied with y; the
   study now uses one mist color).
-- **Coupling tone to density:** where a lighter pass thins out, its dots
-  should approach the local tone (Friedrich's transitions are imperceptible).
-  A `color` that depends on coverage does this today by hand. A built-in
-  "contrast falls with coverage" option would be better.
+- **Coupling tone to density:** built in since round 3 as `fade` (see
+  "Fade and relative color" below). A true veil mode (each touch carrying a
+  share of the step) was tried and dropped: thin touches stack with Poisson
+  noise and read *noisier* than opaque ones at coverage 3.
 - **Stipple size in mm:** mark sizes are in canvas units, so a 1714 mm Monk
   needs a smaller `width` than a 440 mm canvas. A `Stipple::mark_mm` helper
   would help.

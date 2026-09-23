@@ -147,6 +147,45 @@ Knobs on `Handling` (all builder methods): `curve(bow, wave)`, `cross(angle)`,
 - `study_ground` after: `ground_after.png`. The top ground's striations
   wander and bow, and thin paint pools in them in wavy rather than ruled lines.
 
+## Edges, blending and relative color (round 3, branch `fixes-paint`)
+- **`hug` (default on):** stroke centers seeded just outside a region
+  (within half a brush, across the stroke direction) move onto its edge,
+  plus a quarter brush further in when unclipped. The edge gets as many
+  strokes as the inside. Before, it got half, and a thin clipped band
+  (coast #3's horizon) kept pale slivers of what was under it.
+- **Carried in (unclipped, not blenders):** a stroke seeded outside the
+  region that crosses its edge at more than 30° is kept. It is trimmed to
+  the part inside plus a quarter brush and pulled from the edge inward, so
+  the brush goes down at the edge fully loaded.
+  `.hug(false)` turns both off (the old placement).
+- Test `edges_are_covered_like_the_inside`; over six seeds
+  (`probe_edges_over_seeds`), the share of a 5-unit edge band still reading
+  as ground: body pass, 60-unit band unclipped 0.012 → 0.002; disk
+  unclipped 0.012 → 0.0008; clipped cases unchanged (≈ 0.002); a 15-unit
+  clipped band under the broad brush 0.13 → 0.02 (unclipped 0.29 → 0.015).
+  Paint reaching past an unclipped edge is denser within a brush width;
+  beyond it (12–30 units) it is about the same (disk 0.14 → 0.18 share of
+  pixels darkened, band 0.002 → 0.008).
+- **`Style::blend()` is clipped** to the mask it works (soft where the mask
+  is soft). A badger no longer drags wet paint across a passage's edge
+  (coast #5, mountains #14), where later passages showed it in their gaps
+  (mountains #9). To fuse across an edge on purpose, give it a mask that
+  spans the edge, or `.clip(false)`. Test `blender_stays_in_its_region`:
+  the light passage above a blended dark one darkens by 0.0000 L (0.58
+  with `clip(false)`).
+- **`color_over(|x, y, under| ..)`:** a color field relative to the
+  canvas. `under` is what is under the stroke before the pass (judged along
+  it, as the aim does), so it's deterministic and in a crop judged by what
+  the crop holds. `paint::shift(c, dl, da, db)` moves a color in OKLab:
+  `st.body().color_over(|_, _, u| shift(u, -0.08, 0.0, -0.03))` is "the snow
+  here, darker and bluer". Test `color_over_sees_the_canvas` checks this over
+  a snow field from bright to dull: ΔL −0.073 to −0.077 (strokes) and
+  −0.050 to −0.063 (stipple), bluer at both ends.
+- Ground flecks *inside* dark passages (mountains #3) come from the bristle
+  model ploughing paint off the weave's peaks, not from placement. They
+  vanish at coverage ≈ 4 and under a dark underpainting (bristle.rs; not
+  changed here).
+
 ## Known issues / next
 - Isolated bare-ground flecks and short scraped "comets" remain in lay-ins;
   they show in the old ruler panel too and come from the bristle model (a

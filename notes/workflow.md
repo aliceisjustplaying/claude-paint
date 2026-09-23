@@ -421,7 +421,11 @@ whatever stands in front of it (mountains #9).
 
 ## Open bugs
 
-### A gesture with a NaN point lays one dab and says nothing (coast #17)
+### Fixed: a gesture with a NaN point laid one dab and said nothing (coast #17)
+
+Fixed after merging `tip`: `Gesture::validate` and `Touch::validate` reject
+non-finite numbers, and `drag_on`/`touch_on` (every painting path) panic
+with e.g. "Gesture point 10 is not finite: (505.5, NaN)". The history:
 
 **Symptom** (coast painter): an 11-point U-shaped `drag` (a coil of rope,
 `Tool::rigger(0.5)`) laid nothing, while straight strokes nearby did.

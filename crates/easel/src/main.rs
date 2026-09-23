@@ -11,6 +11,7 @@
 mod api;
 mod form;
 mod world;
+mod depth;
 mod look;
 mod session;
 

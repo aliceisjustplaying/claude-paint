@@ -94,6 +94,10 @@ pub struct Handling<'a> {
     pub scrub: usize,
     /// Clip bristle contact to the mask (crisp, cut-in edges).
     pub clip: bool,
+    /// A hard limit no bristle paints outside of, whatever `clip` says: the
+    /// part of a region that is seen (not hidden by a figure or a stone in
+    /// front of it), while strokes still overshoot the region's own edges.
+    pub limit: Option<std::sync::Arc<Mask>>,
     /// Look and fill: after the strokes, dab paint into the bare spots the
     /// strokes left in the region (see `fill`). `None`: on when the pass
     /// means to cover (coverage ≥ `FILL_FROM`, a loaded brush, not a
@@ -171,6 +175,7 @@ impl<'a> Handling<'a> {
             blender: false,
             scrub: 0,
             clip: false,
+            limit: None,
             fill: None,
             hug: true,
             threshold: 0.3,
@@ -425,6 +430,11 @@ impl<'a> Handling<'a> {
     /// Hug the region's edges (default on): a painter carries a passage to
     /// its edge as fully as through its middle. Off: stroke centers fall only
     /// inside the region, and coverage halves along its edges.
+    /// Never paint outside `m` (see `limit`).
+    pub fn limit(mut self, m: std::sync::Arc<Mask>) -> Self {
+        self.limit = Some(m);
+        self
+    }
     pub fn hug(mut self, on: bool) -> Self {
         self.hug = on;
         self
@@ -582,7 +592,16 @@ impl Canvas {
         if plans.is_empty() {
             return;
         }
-        let clip = if hd.clip && hd.cut_in.is_none() { Some(mask) } else { None };
+        let limited;
+        let clip = match (&hd.limit, hd.clip && hd.cut_in.is_none()) {
+            (Some(l), true) => {
+                limited = mask.clone().mul(l);
+                Some(&limited)
+            }
+            (Some(l), false) => Some(&**l),
+            (None, true) => Some(mask),
+            (None, false) => None,
+        };
         let before = self.wet.current;
         self.run_plans(plans, (ex, ey), gap, &hd.tool, hd, hd.ramps, clip, seed, &mut rng);
         if hd.fills() {
@@ -741,7 +760,7 @@ impl Canvas {
             ring += 1;
         }
         if !plans.is_empty() {
-            self.run_plans(plans, (ex, ey), tool.width * 4.0, tool, hd, (0.03, 0.08), None, seed, rng);
+            self.run_plans(plans, (ex, ey), tool.width * 4.0, tool, hd, (0.03, 0.08), hd.limit.as_deref(), seed, rng);
         }
     }
 

@@ -51,26 +51,10 @@ fn the_same_curve_with_finite_points_lays_paint() {
     assert!(laid(pts[..=5].iter().rev().copied().collect()) > 20);
 }
 
-/// What the painter saw: next to nothing. `drag_on` sums the arc length
-/// of the resampled path, which is NaN; `nsteps = (total / step).ceil() as
-/// usize` is then 0 (NaN casts to 0), `.max(1)` makes it 1, and
-/// `(k * step).min(total)` ignores the NaN: the brush takes a single step
-/// at the start and lifts. One dab of a fine rigger (12 pixels at 1000px,
-/// against 106 for the whole U).
+/// What the painter saw was next to nothing: `drag_on` summed a NaN arc
+/// length, `nsteps` cast to 0 then 1, and the brush took one step and lifted
+/// (12 pixels at 1000px against 106). Now the gesture is rejected loudly.
 #[test]
-fn a_nan_point_lays_only_the_first_step() {
-    let nan = laid(coil(500.0, 372.0, 12.0, 2.3));
-    let mut pts = coil(500.0, 372.0, 12.0, 2.3);
-    pts[10].1 = 373.3;
-    let whole = laid(pts);
-    assert!(nan * 5 < whole, "NaN coil {nan} px, finite coil {whole} px");
-}
-
-/// The fix to apply (in bristle.rs, after the `tip` stream lands): a drag
-/// through a non-finite point should fail loudly, like an invalid `Tool`
-/// does, and name the point.
-#[test]
-#[ignore = "fix belongs in bristle.rs (Canvas::drag / footprint); apply after merging `tip`"]
 #[should_panic(expected = "point 10")]
 fn a_nan_point_is_an_error() {
     laid(coil(500.0, 372.0, 12.0, 2.3));

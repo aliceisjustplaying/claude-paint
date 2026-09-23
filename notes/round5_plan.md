@@ -55,3 +55,4 @@ spectral) is split into single-defect fixes the loops pull in.
 - Loop 3 near and loop 2 green started 19:22 on the halo-fixed engine. Next batch must re-render previous versions with the current engine for fair comparison. loop2-grain still running.
 - Loop 3 scored: near +1 (21->22), green 0 (17; halos from cut-out masks + scribbles). Loop 4 started 19:51: loop4-near, loop3-green, tool-firs (firs/woods grown into drawn envelopes). loop2-grain still running.
 - loop2-grain: grain gone (coarse anisotropy 7.4-8.5 -> 2.2-2.8) but new 1-px orange dotted contours in thin skies at 3200 and strong swirl; NOT merged; resumed to fix the dashes' root cause and calm the swirl.
+- tool-firs merged: firs grown into drawn envelopes + receding fir woods (easel fir{}, fir_wood{}); sketchbook §5 recipe.

@@ -29,6 +29,7 @@ struct Snap {
     setup: Option<String>,
     seed: u64,
     clock: f64,
+    clock0: f64,
     /// The Lua heap (heap.lua's snapshot).
     heap: Table,
     brushes: Vec<(Rc<RefCell<Held>>, Held)>,
@@ -93,7 +94,7 @@ impl Session {
             let h = b.borrow().clone();
             (b, h)
         }).collect();
-        Ok(Snap { canvas: s.canvas.clone(), style: s.style.clone(), setup: s.setup.clone(), seed: s.seed, clock: s.clock, heap, brushes })
+        Ok(Snap { canvas: s.canvas.clone(), style: s.style.clone(), setup: s.setup.clone(), seed: s.seed, clock: s.clock, clock0: s.clock0, heap, brushes })
     }
 
     fn restore(&mut self, snap: Snap) -> mlua::Result<()> {
@@ -110,6 +111,7 @@ impl Session {
         s.setup = snap.setup;
         s.seed = snap.seed;
         s.clock = snap.clock;
+        s.clock0 = snap.clock0;
         Ok(())
     }
 
@@ -350,7 +352,7 @@ mod tests {
             }
         }
         assert_eq!(a.log.len(), CHUNKS.len());
-        assert_eq!(a.st.borrow().clock, 90.0);
+        assert_eq!(a.st.borrow().clock, 90.0, "painting minutes since canvas{{}}");
         // the log replays to the same canvas, bit for bit
         let prog = a.program("t");
         let chunks = parse_program(&prog);
@@ -388,6 +390,10 @@ mod tests {
         let mut s = Session::new(W, 4).unwrap();
         s.run(CHUNKS[0]).unwrap();
         s.run(r##"b = brush("round", 4); b:load("#303830", 0.9)"##).unwrap();
+        // every verb is where the guide says (no module shadows another)
+        s.run(r##"for _, v in ipairs{"relief", "varnish", "cracks", "terrain", "ridge", "form", "wait", "dry", "drying", "work", "stipple", "glaze", "blend", "tree"} do assert(type(_G[v]) == "function", v) end"##).unwrap();
+        s.run(r##"assert(wait(30) == 30 and clock() == 30)"##).unwrap();
+        s.undo(2).unwrap();
         let before = bits(&s);
         s.run("full0 = b:fullness(); b:stroke({100, 300, 400, 320}); assert(b:fullness() < full0)").unwrap();
         assert_ne!(before, bits(&s));

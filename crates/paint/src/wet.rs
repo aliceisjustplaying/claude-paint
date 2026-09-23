@@ -233,6 +233,7 @@ impl Canvas {
     /// What the painter sees, pixel by pixel over the window: the dry
     /// picture with any wet paint on it (at its laid thickness).
     pub fn seen(&self) -> Vec<Rgb> {
+        use rayon::prelude::*;
         (0..self.px.len()).into_par_iter().map(|i| self.look_px(i)).collect()
     }
 

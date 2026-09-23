@@ -276,14 +276,13 @@ fn main() {
             let d1 = ((x - mx + ux * mr * 0.55).powi(2) + (y - my + uy * mr * 0.55).powi(2)).sqrt();
             (1.0 - smoothstep(mr - 0.6, mr + 0.4, d0)) * smoothstep(mr * 0.98, mr * 1.08, d1)
         });
-        // a faint halo stippled first
-        let halo = Stipple::new(Tool::stippler(1.4))
-            .mixed(&sky_pal, 0.6)
-            .color(move |x, y| lift(sky_col(x, y), 0.05))
-            .coverage(move |x, y| 1.6 * (1.0 - smoothstep(mr, mr * 3.2, ((x - mx).powi(2) + (y - my).powi(2)).sqrt())))
-            .dips(20, 0.3, 0.6);
-        let halo_m = Mask::from_fn(f, move |x, y| if ((x - mx).powi(2) + (y - my).powi(2)).sqrt() < mr * 3.5 { 1.0 } else { 0.0 });
-        c.stipple(&halo_m, &halo, 41);
+        // a faint halo: a scumble of lead white, thinnest at its edge (a
+        // stippled halo read as salt around the moon at 3200px)
+        let white = sky_pal.paint(hex("#f1ece0"), 0.9).pigment();
+        c.glaze(&white, None, move |x, y| {
+            let d = ((x - mx).powi(2) + (y - my).powi(2)).sqrt() / mr;
+            0.35 * (-(d / 2.6).powi(2)).exp()
+        });
         let hd = paint::Handling::new(Tool::round_sable(1.8))
             .mixed(&sky_pal, 0.08)
             .color(|_, _| hex("#f6efd8"))
@@ -704,9 +703,9 @@ fn main() {
                 .by_masstone()
                 .angle(|x, y| form.edge_angle(x, y, 2.5 * sc))
                 .length(4.0 * sc, 12.0 * sc)
-                .coverage(0.5)
-                .pressure(0.4, 0.7)
-                .dips(3, 0.5, 0.7)
+                .coverage(0.25)
+                .pressure(0.35, 0.6)
+                .dips(3, 0.4, 0.7)
                 .clip(true)
                 .threshold(0.3);
             c.work(&joints, &hd, seed + 3);
@@ -1093,19 +1092,13 @@ fn main() {
     if o.stage("glaze", &mut c, &mut rng) {
         // a last thin warm veil to knit the foreground, darker toward the
         // bottom edge and the corners (Friedrich's advice to Carus)
-        // (brushed: a `Canvas::glaze` film here drew a sharp rectangle,
-        // the box of the last strokes, in the sand; see FRICTION)
-        let edge = move |x: f32, y: f32| smoothstep(560.0, h, y) * 0.5 + 0.35 * smoothstep(300.0, 0.0, x) * smoothstep(500.0, h, y) + 0.2 * smoothstep(700.0, 1000.0, x) * smoothstep(560.0, h, y);
-        let veil_m = Mask::from_fn(f, move |x, y| smoothstep(0.02, 0.08, edge(x, y)));
-        let veil = st
-            .glaze(0.9)
-            .palette(&shade_pal)
-            .color(|_, _| hex("#4a3a2c"))
-            .load_at(move |x, y| (edge(x, y) * 1.6).min(1.0))
-            .angle(|_, _| 0.0)
-            .coverage(2.5);
-        c.work(&veil_m, &veil, 300);
-        c.dry();
+        // (a smooth film: brushed with the glaze handling, its horizontal
+        // strokes showed as wood grain across the boulder at 3200px)
+        let umber = shade_pal.mix(hex("#4a3a2c")).paint(0.9).pigment();
+        c.glaze(&umber, None, move |x, y| {
+            let edge = smoothstep(560.0, h, y) * 0.5 + 0.35 * smoothstep(300.0, 0.0, x) * smoothstep(500.0, h, y) + 0.2 * smoothstep(700.0, 1000.0, x) * smoothstep(560.0, h, y);
+            edge * 0.9
+        });
     }
 
     let mut fin = Finish::aged(st.relief);

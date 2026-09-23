@@ -108,7 +108,26 @@ What it draws on in Friedrich (from general knowledge of his work and
 
 ## FRICTION
 
-(Workaround in each item.)
+(Workaround in each item. Items 0a and 0b cost the most time.)
+
+0a. **`Mask::blur` leaves float residue that `Canvas::glaze` treats as
+    coverage, and it surfaces later as a hard rectangle.** The reflections
+    are a `Shape` of ribbons, `Mask::from_shape(..).blur(1.6)`, glazed with
+    `Canvas::glaze(.., Some(&mask), ..)`. The blur is a running-sum box blur
+    (`box_rows`), so after the first shape each row and column carries a
+    tiny nonzero residue to the canvas edge. `glaze` only skips pixels where
+    the mask is `<= 0.0`, so it laid film (and settled it) over a whole
+    rectangle from the first ribbon's corner to the bottom-right edge. That
+    is invisible at the time. It showed as a gray rectangle outline only
+    after the **next** stage's veil pooled over it and `finish` lit the
+    relief, so it took five stop-at-stage renders to find. The last one
+    removed the reflections glaze, and the rectangle went with it.
+    *Workaround:* threshold after blurring
+    (`.map(|v| if v < 0.004 { 0.0 } else { v })`). *Engine fix:* zero tiny
+    values in `blur`, or a threshold in `glaze`/`work` masks.
+0b. **Pale smears under the horizon were sky paint left uncovered.** See
+    items 3 and 4. Three renders chased "stray piles" before a 3200px crop
+    showed the cream sky showing through the sea's top edge.
 
 1. **Aimed light touches over a cool dark turn saturated orange or salmon.**
    `Canvas::aim` for a small light mark over the blue-gray sea (swell
@@ -181,6 +200,29 @@ What it draws on in Friedrich (from general knowledge of his work and
 12. **Dark block-in on a silhouette left pale holes** (sand showing through)
     at `coverage 3, threshold 0.2`. *Workaround:* coverage 4.5, threshold
     0.1.
+13. **Thin darks with lead white in them go milky over a darker field.**
+    Cast shadows mixed as a dark gray from the earth family (white, black,
+    umber) and laid thin over the sand came out lighter and bluer than the
+    sand. That is correct KM (the turbid-medium effect), but `Canvas::aim`
+    doesn't warn about it, and the preview (`Paint::over`) is something you
+    have to think to call. *Workaround:* a shade family of raw umber and
+    bone black only (transparent darks), as a painter would glaze a
+    shadow.
+14. **Low-load filbert strokes bead into ladders at 3200px.** Long faint
+    shadows brushed with a filbert at load 0.35 turned into rows of dots.
+    *Workaround:* build the shapes as a `Shape` of ribbons and lay one
+    `Canvas::glaze` through the mask (see 0a).
+15. **Mixed darks and lights show their strongest tube at thin edges.**
+    The shawl (full palette) got red rims and the sails (sky family) got
+    chrome-yellow rims wherever the mark thins out. *Workaround:* earth-only
+    families for small motifs (`pal.only(&["red earth", "raw umber",
+    "bone black"])`; lead white, pale smalt, ochre and umber for sails).
+16. **Checkpoints are all stale after any edit above the first stage.**
+    Palette families, masks and color fields live above the stages (the
+    rules say so), so tuning one of them forces a whole re-render. It
+    costs 20 s at 1000px and is fine here, but it discourages hoisting
+    shared fields. A per-stage fingerprint of only what the stage uses
+    isn't possible with plain closures; I just accepted it.
 
 ## Critique
 

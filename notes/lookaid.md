@@ -110,6 +110,16 @@ painting.
   the earlier state) and a crop inside the kept window equal a fresh crop
   replay bit for bit.
 
+## Study
+
+`paintings/lua/lookaid.lua`: an evening field with a world, then a chunk
+that shows a sheep polygon, a pond ellipse and a brush path, probes the
+pond (ground, 20.6 m away) and paints the path in the probed color. It
+replays in about 23 s at 1000 px (`easel run paintings/lua/lookaid.lua
+--look`), the shows doing nothing. Run the last chunk with `easel try` in
+a session to see them. A live session over it passed `easel check` after
+CLI probes and a chunk that painted from `probe()`.
+
 ## Evidence
 
 (`out/` is not committed; these come from `paintings/lua/lookaid_demo.lua`

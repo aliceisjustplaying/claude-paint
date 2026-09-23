@@ -287,7 +287,14 @@ pub struct Limb {
     /// `pts` where it does.
     pub parent: Option<usize>,
     pub at: usize,
+    /// Dead wood all along, from where it springs. A limb can also die
+    /// part way: see `dead_from`.
     pub dead: bool,
+    /// Index into `pts` from which the limb is dead wood to its tip (the
+    /// top of a stag-headed leader, a live limb's dead end): segments
+    /// `pts[i]..pts[i + 1]` with `i >= dead_from` are dead. 0 when `dead`;
+    /// `pts.len()` when it is alive throughout.
+    pub dead_from: usize,
     /// Ends in a break (jagged, blunt) rather than a growing tip.
     pub broken: bool,
     /// A buttress root running into the ground.
@@ -300,6 +307,10 @@ impl Limb {
     }
     pub fn is_empty(&self) -> bool {
         self.pts.len() < 2
+    }
+    /// Whether the segment from `pts[i]` to `pts[i + 1]` is dead wood.
+    pub fn dead_at(&self, i: usize) -> bool {
+        i >= self.dead_from
     }
     /// Direction of travel at point `i` (unit).
     pub fn dir(&self, i: usize) -> (f32, f32) {
@@ -720,8 +731,16 @@ impl<'a> Grower<'a> {
                     let mut j = i;
                     let keep = if self.rng.chance(0.5) { 1 } else { 2 };
                     for _ in 1..keep {
-                        match self.nodes[j].kids.iter().copied().max_by(|&a, &b| self.nodes[a].wood.total_cmp(&self.nodes[b].wood)) {
-                            Some(k) => j = k,
+                        match self.nodes[j].kids.iter().copied().filter(|&k| self.nodes[k].alive).max_by(|&a, &b| self.nodes[a].wood.total_cmp(&self.nodes[b].wood)) {
+                            Some(k) => {
+                                // the claw goes on through its strongest
+                                // twig; the others are lost
+                                let kids = std::mem::replace(&mut self.nodes[j].kids, vec![k]);
+                                for s in kids.into_iter().filter(|&s| s != k) {
+                                    self.kill(s);
+                                }
+                                j = k;
+                            }
                             None => break,
                         }
                     }
@@ -776,22 +795,11 @@ impl<'a> Grower<'a> {
         }
     }
 
-    fn skeleton(mut self, h: &Habit, base: (f32, f32), height: f32, seed: u64) -> Skeleton {
-        let max_y0 = self.live().map(|i| self.nodes[i].p.y).fold(1e-3, f32::max);
-        self.decline(max_y0);
-        let max_y = self.live().map(|i| self.nodes[i].p.y).fold(1e-3, f32::max);
-        let s = height / max_y;
-        let trunk_w = h.trunk * height;
-        let tip_w = (h.twig * height).min(trunk_w * 0.5);
-        // Leonardo: w^k = Σ w_child^k from equal tips gives w = tip·N^(1/k);
-        // k is whatever makes N tips add up to the trunk
-        let pk = (self.nodes[0].wood.max(2.0).ln() / (trunk_w / tip_w).ln()).clamp(1.2, 3.5);
-        let tip_w = trunk_w / self.nodes[0].wood.powf(1.0 / pk);
-        let width = |wood: f32| tip_w * wood.powf(1.0 / pk);
-        let proj = |p: V3| (base.0 + p.x * s, base.1 - p.y * s);
-        let mut limbs: Vec<Limb> = vec![];
-        // limbs follow the thickest path through each fork (a little in
-        // favor of going straight on)
+    /// The limbs as chains of nodes, parents first: each follows the
+    /// thickest path through every fork (a little in favor of going
+    /// straight on). A limb's chain starts at the node it springs from.
+    fn chains(&self) -> Vec<Chain> {
+        let mut out: Vec<Chain> = vec![];
         let mut queue: std::collections::VecDeque<(usize, Option<usize>, usize, u32)> = std::collections::VecDeque::new();
         queue.push_back((0, None, 0, 0));
         while let Some((start, parent, at, order)) = queue.pop_front() {
@@ -808,13 +816,33 @@ impl<'a> Grower<'a> {
                     score(a).total_cmp(&score(b))
                 });
                 for k in self.nodes[j].kids.iter().copied().filter(|&k| self.nodes[k].alive && Some(k) != next) {
-                    queue.push_back((k, Some(limbs.len()), chain.len() - 1, order + 1));
+                    queue.push_back((k, Some(out.len()), chain.len() - 1, order + 1));
                 }
                 match next {
                     Some(k) => j = k,
                     None => break,
                 }
             }
+            out.push(Chain { nodes: chain, start, parent, at, order });
+        }
+        out
+    }
+
+    fn skeleton(mut self, h: &Habit, base: (f32, f32), height: f32, seed: u64) -> Skeleton {
+        let max_y0 = self.live().map(|i| self.nodes[i].p.y).fold(1e-3, f32::max);
+        self.decline(max_y0);
+        let max_y = self.live().map(|i| self.nodes[i].p.y).fold(1e-3, f32::max);
+        let s = height / max_y;
+        let trunk_w = h.trunk * height;
+        let tip_w = (h.twig * height).min(trunk_w * 0.5);
+        // Leonardo: w^k = Σ w_child^k from equal tips gives w = tip·N^(1/k);
+        // k is whatever makes N tips add up to the trunk
+        let pk = (self.nodes[0].wood.max(2.0).ln() / (trunk_w / tip_w).ln()).clamp(1.2, 3.5);
+        let tip_w = trunk_w / self.nodes[0].wood.powf(1.0 / pk);
+        let width = |wood: f32| tip_w * wood.powf(1.0 / pk);
+        let proj = |p: V3| (base.0 + p.x * s, base.1 - p.y * s);
+        let mut limbs: Vec<Limb> = vec![];
+        for Chain { nodes: chain, start, parent, at, order } in self.chains() {
             let tip = *chain.last().unwrap();
             let mut pts = vec![];
             let mut z = vec![];
@@ -838,8 +866,13 @@ impl<'a> Grower<'a> {
                     *wi *= 1.0 + h.flare * (-y / (trunk_w * 0.8)).exp();
                 }
             }
-            let dead = self.nodes[start].dead || (start != 0 && self.nodes[chain[1.min(chain.len() - 1)]].dead);
-            limbs.push(Limb { pts, z, w, order, parent, at, dead, broken: self.nodes[tip].broken, root: false });
+            // the internode ending at chain[k + 1] is segment k; death
+            // spreads outward, so along a limb it is dead from some point on
+            let seg_dead: Vec<bool> = chain.windows(2).map(|p| self.nodes[p[1]].dead).collect();
+            let dead_from = seg_dead.iter().position(|&d| d).unwrap_or(pts.len());
+            debug_assert!(seg_dead[dead_from.min(seg_dead.len())..].iter().all(|&d| d), "live wood beyond dead wood");
+            let dead = dead_from == 0;
+            limbs.push(Limb { pts, z, w, order, parent, at, dead, dead_from, broken: self.nodes[tip].broken, root: false });
         }
         // stubs of branches shed long ago
         let mut rng = Rng::new(seed ^ 0x51ab);
@@ -868,6 +901,7 @@ impl<'a> Grower<'a> {
                 parent: Some(li),
                 at: pi,
                 dead: true,
+                dead_from: 0,
                 broken: true,
                 root: false,
             });
@@ -881,10 +915,19 @@ impl<'a> Grower<'a> {
             let y0 = base.1 - trunk_w * rng.range(0.15, 0.35);
             let pts = vec![(x0, y0), (x0 + side * l * 0.5 * a.cos(), y0 + l * 0.5 * a.sin() * 0.8), (x0 + side * l * a.cos(), y0 + l * a.sin())];
             let w0 = trunk_w * rng.range(0.4, 0.6);
-            limbs.push(Limb { pts, z: vec![0.0; 3], w: vec![w0, w0 * 0.55, w0 * 0.2], order: 1, parent: Some(0), at: 0, dead: false, broken: false, root: true });
+            limbs.push(Limb { pts, z: vec![0.0; 3], w: vec![w0, w0 * 0.55, w0 * 0.2], order: 1, parent: Some(0), at: 0, dead: false, dead_from: 3, broken: false, root: true });
         }
         Skeleton { limbs, base, height, pipe: pk }
     }
+}
+
+/// One limb's nodes (see `Grower::chains`).
+struct Chain {
+    nodes: Vec<usize>,
+    start: usize,
+    parent: Option<usize>,
+    at: usize,
+    order: u32,
 }
 
 fn nearest(limbs: &[Limb], p: (f32, f32)) -> (usize, usize) {
@@ -928,6 +971,64 @@ mod tests {
                     }
                 }
             }
+        }
+    }
+
+    /// A dying tree as the grower left it (what `skeleton` starts from).
+    fn declined(h: &Habit, seed: u64) -> Grower<'_> {
+        let mut g = Grower::new(h, seed).run();
+        let max_y = g.live().map(|i| g.nodes[i].p.y).fold(1e-3, f32::max);
+        g.decline(max_y);
+        g
+    }
+
+    /// Every exported segment carries its internode's live/dead state: the
+    /// stag-headed top of a live leader is dead wood.
+    #[test]
+    fn limbs_keep_the_dead_wood_along_them() {
+        let h = Habit::dead_oak();
+        let mut part_dead = 0;
+        for seed in [2, 7, 11] {
+            let g = declined(&h, seed);
+            let chains = g.chains();
+            let s = h.grow((0.0, 0.0), 400.0, seed);
+            for (i, c) in chains.iter().enumerate() {
+                let l = &s.limbs[i];
+                assert_eq!(l.pts.len(), c.nodes.len());
+                for k in 0..c.nodes.len() - 1 {
+                    assert_eq!(l.dead_at(k), g.nodes[c.nodes[k + 1]].dead, "seed {seed} limb {i} segment {k}");
+                }
+                assert_eq!(l.dead, l.dead_from == 0);
+                part_dead += (l.dead_from > 0 && l.dead_from < l.pts.len()) as usize;
+            }
+            if seed == 7 {
+                // the reviewer's case: 20 of the leader's 55 nodes are dead
+                let trunk = &s.limbs[0];
+                assert!(!trunk.dead && trunk.dead_from < trunk.pts.len(), "{} of {}", trunk.dead_from, trunk.pts.len());
+                assert_eq!(trunk.pts.len() - 1 - trunk.dead_from, (1..chains[0].nodes.len()).filter(|&k| g.nodes[chains[0].nodes[k]].dead).count());
+            }
+        }
+        assert!(part_dead > 0);
+    }
+
+    /// Dead wood keeps claws of at most two internodes past the width set
+    /// by `decay`: no side shoots survive on a claw.
+    #[test]
+    fn dead_claws_are_short() {
+        let h = Habit::dead_oak();
+        for seed in [2, 7, 11, 23, 54, 61] {
+            let g = declined(&h, seed);
+            let thin = 1.0 + h.decay * h.decay * 0.025 * g.nodes[0].wood;
+            let is_thin_dead = |i: usize| g.nodes[i].dead && g.nodes[i].wood < thin;
+            let mut deepest = 0;
+            for i in g.live().filter(|&i| i > 0 && is_thin_dead(i) && !is_thin_dead(g.nodes[i].parent)) {
+                let mut stack = vec![(i, 1)];
+                while let Some((j, d)) = stack.pop() {
+                    deepest = deepest.max(d);
+                    stack.extend(g.nodes[j].kids.iter().filter(|&&k| g.nodes[k].alive).map(|&k| (k, d + 1)));
+                }
+            }
+            assert!(deepest <= 2, "seed {seed}: a thin dead subtree {deepest} deep");
         }
     }
 

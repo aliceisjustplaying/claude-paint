@@ -61,8 +61,7 @@ impl Default for TreeHand {
 pub fn tree(c: &mut Canvas, sk: &Skeleton, bark: &Bark, hand: &TreeHand, seed: u64) -> Mask {
     let mut rng = Rng::new(seed);
     for l in sk.limbs.iter().filter(|l| !l.is_empty()) {
-        let p = if l.dead { bark.dead.unwrap_or(bark.dark) } else { bark.dark };
-        limb(c, l, p, hand, &mut rng);
+        limb(c, l, bark.dark, bark.dead.unwrap_or(bark.dark), hand, &mut rng);
     }
     // splinters at the breaks, then (once the dark is dry) the light
     for l in sk.limbs.iter().filter(|l| l.broken && !l.is_empty()) {
@@ -108,8 +107,10 @@ fn brush_for(w: f32) -> Tool {
     }
 }
 
-/// One limb, base to tip, in as many brushes as its taper needs.
-fn limb(c: &mut Canvas, l: &Limb, paint: Paint, hand: &TreeHand, rng: &mut Rng) {
+/// One limb, base to tip, in as many brushes as its taper needs; where it
+/// dies part way (`Limb::dead_from`) a new section starts in `dead` paint,
+/// set down into the wet end of the live one.
+fn limb(c: &mut Canvas, l: &Limb, live: Paint, dead: Paint, hand: &TreeHand, rng: &mut Rng) {
     let n = l.pts.len();
     let w: Vec<f32> = l.w.iter().map(|w| w.max(hand.finest)).collect();
     let arc = cumulative(&l.pts);
@@ -119,7 +120,7 @@ fn limb(c: &mut Canvas, l: &Limb, paint: Paint, hand: &TreeHand, rng: &mut Rng) 
     for i in 1..n {
         let a = *cuts.last().unwrap();
         let run = brush_for(w[a]).run * 0.7;
-        if (w[i] < w[a] * 0.4 || arc[i] - arc[a] > run) && i + 1 < n {
+        if (w[i] < w[a] * 0.4 || arc[i] - arc[a] > run || i == l.dead_from) && i + 1 < n {
             cuts.push(i);
         }
     }
@@ -152,6 +153,7 @@ fn limb(c: &mut Canvas, l: &Limb, paint: Paint, hand: &TreeHand, rng: &mut Rng) 
         } else {
             ((arc[b0] - arc[b]) / total).clamp(0.02, 0.5)
         };
+        let paint = if l.dead_at(a) { dead } else { live };
         let mut held = Held::new(tool, rng.next_u64());
         // the finest twigs are only indicated: a lean, dry touch, so the
         // outer crown reads as a haze of twigs rather than a solid mass
@@ -181,7 +183,7 @@ fn splinter(c: &mut Canvas, l: &Limb, bark: &Bark, rng: &mut Rng) {
     if w < 0.8 {
         return;
     }
-    let paint = if l.dead { bark.dead.unwrap_or(bark.dark) } else { bark.dark };
+    let paint = if l.dead_at(n - 2) { bark.dead.unwrap_or(bark.dark) } else { bark.dark };
     let k = 3 + (rng.f() * 2.0) as usize;
     let long = (rng.f() * k as f32) as usize;
     for i in 0..k {
@@ -275,7 +277,7 @@ pub fn grown_spruce(c: &mut Canvas, sk: &Skeleton, needles: Paint, seed: u64) ->
     let mut rng = Rng::new(seed);
     let hand = TreeHand::default();
     for l in sk.limbs.iter().filter(|l| !l.is_empty()) {
-        limb(c, l, needles, &hand, &mut rng);
+        limb(c, l, needles, needles, &hand, &mut rng);
     }
     // needles hang from every limb but the stem: short drooping strokes
     // along it, longer toward the stem where the shoots are older

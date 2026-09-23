@@ -69,3 +69,4 @@ spectral) is split into single-defect fixes the loops pull in.
 - End of round 5: run git-filter-repo --replace-text on ALL branches (local + GitHub) to scrub the name from history; verify 'git log --all -p | grep -ci <name>' == 0; force-push all branches; re-clone/prune worktrees. (user approved)
 - loop2-grain merged (round 2): grain gone, dashes fixed at the source (priming brush ploughed the paste into sharp ridges); golden re-recorded. All paintings change: next panel batch re-renders previous versions.
 - tool-oak merged (bare oak excellent; leafy crowns torn-paper holes; field trees still lollipops).
+- tool-rock merged (erratic reads as stone with a diagonal arris; shadow flank still flat; snow flecks open). No agents running now: HANDOFF to the M3 Pro.

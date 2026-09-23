@@ -113,6 +113,11 @@ fn main() {
     };
     let air = &air;
 
+    let billow = Fbm::new(75, 4, 60.0);
+    let billow = &billow;
+    let sea_top = move |x: f32| near_crest(x) + 44.0 + 22.0 * smoothstep(900.0, 450.0, x) + 14.0 * billow.get(x, 0.0);
+    let sea_top = &sea_top;
+
     // ---------------------------------------------------------------- stages
     if o.stage("drawing", &mut c, &mut rng) {
         // the pencil drawing: range lines, the knoll, the tor and the figure,
@@ -166,6 +171,11 @@ fn main() {
             .clip(true)
             .threshold(0.3);
         c.work(&low, &hd, 91);
+        // and a cool violet-gray under the far and middle ranges, so no warm
+        // ground specks through their stipple
+        let ranges = Mask::from_fn(f, |x, y| smoothstep(far_crest(x) + 3.0, far_crest(x) + 8.0, y) * (1.0 - smoothstep(near_crest(x) + 2.0, near_crest(x) + 6.0, y)));
+        let hd = st.broad().color(move |x, y| mix(hex("#9894a2"), hex("#77798a"), smoothstep(far_crest(x), near_crest(x), y), Mix::Pigment)).by_masstone().angle(|_, _| 0.0).angle_jitter(0.05).length(50.0, 140.0).coverage(3.0).medium(0.55).clip(true).threshold(0.3);
+        c.work(&ranges, &hd, 92);
         c.dry();
     }
 
@@ -317,25 +327,33 @@ fn main() {
         let hd = st.body().color(ncol).angle(|x, y| form.fall(x, y)).angle_jitter(0.15).length(7.0, 22.0).coverage(3.2).medium(0.3).tool_width(4.5).clip(true).threshold(0.2);
         c.work(&sil, &hd, 231);
         // the woods: short hatching, upright, "like a closely woven textile"
-        let wm = Mask::from_fn(f, move |x, y| forest(x, y)).mul(&sil);
+        let wm = Mask::from_fn(f, move |x, y| forest(x, y) * (1.0 - smoothstep(sea_top(x) - 12.0, sea_top(x) + 4.0, y))).mul(&sil);
         let hatch = st.hatch().color(move |x, y| mix(ncol(x, y), hex("#1f2528"), 0.2, Mix::Pigment)).angle(|_, _| -1.5).cross(0.15).length(2.5, 6.0).coverage(1.6).tool_width(1.3).clip(true);
         c.work(&wm, &hatch, 232);
         c.dry();
         // spruce tips along the crest where the wood reaches it
         let mut r = Rng::new(233);
-        let mut b = Held::new(Tool::round_sable(1.1), 234);
+        let mut b = Held::new(Tool::round_sable(0.7), 234);
         let mut x = 0.0;
         while x < w {
-            x += r.range(1.6, 3.4);
+            // spruces stand in groups, with gaps
+            x += if r.chance(0.15) { r.range(4.0, 12.0) } else { r.range(1.2, 3.0) };
             let yc = near_crest(x);
             if forest(x, yc + 2.0) < 0.5 {
                 continue;
             }
-            let tall = r.range(3.0, 7.5);
+            let tall = r.range(2.5, 8.0) * if r.chance(0.1) { 1.5 } else { 1.0 };
             let col = mix(ncol(x, yc + 3.0), hex("#2a3134"), 0.3, Mix::Pigment);
             b.load(pal.paint(col, 0.2), 0.5);
-            let g = Gesture::new(vec![(x, yc + 2.0), (x + r.normal() * 0.2, yc - tall * 0.6), (x + r.normal() * 0.2, yc - tall)]).pressure(0.7, 0.1).ramps(0.0, 0.7).shake(0.3);
+            // a narrow cone: the stem lifted to a point, and two short
+            // flicks of boughs either side low down
+            let g = Gesture::new(vec![(x, yc + 2.0), (x + r.normal() * 0.15, yc - tall * 0.6), (x + r.normal() * 0.15, yc - tall)]).pressure(0.8, 0.0).ramps(0.0, 0.85).shake(0.3);
             c.drag(&mut b, &g, None);
+            for sd in [-1.0f32, 1.0] {
+                let yy = yc - tall * r.range(0.1, 0.4);
+                let reach = tall * r.range(0.18, 0.3);
+                c.drag(&mut b, &Gesture::new(vec![(x, yy - reach * 0.6), (x + sd * reach, yy)]).pressure(0.6, 0.1).ramps(0.0, 0.6).shake(0.3), None);
+            }
         }
         c.dry();
         // mist at the foot of the near range, coming up out of the valley
@@ -350,10 +368,6 @@ fn main() {
     // the sea of mist filling the valley below the near range, right of the
     // knoll: bright on top where the dawn reaches it, its upper edge
     // breaking into banks against the dark woods
-    let billow = Fbm::new(75, 4, 60.0);
-    let billow = &billow;
-    let sea_top = move |x: f32| near_crest(x) + 44.0 + 22.0 * smoothstep(900.0, 450.0, x) + 14.0 * billow.get(x, 0.0);
-    let sea_top = &sea_top;
     let sea = move |x: f32, y: f32| {
         // dense at its top surface, where the dawn lights it; thinner and
         // streaked lower down, where the woods show through
@@ -438,9 +452,9 @@ fn main() {
                 continue;
             }
             let sz = r.range(1.5, 4.5) * (1.0 + y / h);
-            b.load(pal.paint(hex("#2a2826"), 0.2), 0.6);
+            b.load(pal.paint(hex("#1b1917"), 0.2), 0.6);
             c.drag(&mut b, &Gesture::new(vec![(x - sz, y), (x, y + sz * 0.2), (x + sz, y)]).pressure(0.8, 0.7).shake(0.4), None);
-            t.load(pal.paint(hex("#77705f"), 0.15), 0.5);
+            t.load(pal.paint(hex("#555045"), 0.2), 0.35);
             c.drag(&mut t, &Gesture::new(vec![(x - sz * 0.8, y - sz * 0.3), (x - sz * 0.1, y - sz * 0.55), (x + sz * 0.5, y - sz * 0.35)]).pressure(0.6, 0.2).ramps(0.1, 0.5).shake(0.4), None);
         }
         c.dry();
@@ -483,8 +497,8 @@ fn main() {
     }
 
     if o.stage("slope trees", &mut c, &mut rng) {
-        // lower down the knoll's right flank, spruces going down into the
-        // mist; the mist climbs the flank and swallows their feet
+        // lower down the knoll's right flank, smaller spruces going down
+        // toward the mist
         let mut r = Rng::new(401);
         let mut x = 585.0;
         let mut i = 0;
@@ -495,14 +509,9 @@ fn main() {
             x += r.range(9.0, 26.0);
             i += 1;
         }
-        let climb = move |x: f32, y: f32| {
-            let d = y - knoll(x);
-            let up = smoothstep(560.0, 780.0, x) * smoothstep(-10.0, 60.0, d);
-            (up * sea(x, y.max(sea_top(x) + 5.0)).max(0.5) * (0.6 + 0.4 * billow.get01(x * 0.6, y * 2.0))).clamp(0.0, 1.0)
-        };
-        let cm = Mask::from_fn(f, move |x, y| if climb(x, y) > 0.03 { 1.0 } else { 0.0 });
-        let m = Stipple::new(Tool::stippler(2.4)).mixed(pal, 0.65).color(sea_col).coverage(move |x, y| 2.6 * climb(x, y)).pressure(0.5, 0.85).dips(16, 0.35, 0.6).aim(false);
-        c.stipple(&cm, &m, 420);
+        // (I tried mist lapping up over the flank here, stippled and then
+        // brushed; both turned the dark flank into mottled lichen. The dark
+        // knoll stays crisp against the fog.)
         c.dry();
     }
 
@@ -529,7 +538,7 @@ fn main() {
                 let near_top = 1.0 - smoothstep(0.0, 40.0, y - y0);
                 let len = r.range(3.0, 8.0) * (1.0 + 0.8 * smoothstep(0.0, 180.0, y - y0));
                 let lean = r.normal() * 0.35 + 0.25;
-                let col = if r.chance(0.35 * near_top * near_top) { hex("#8a7d58") } else if r.chance(0.5) { mix(hex("#4c4630"), hex("#6d6440"), r.range(0.0, 1.0), Mix::Pigment) } else { hex("#15130f") };
+                let col = if r.chance(0.35 * near_top * near_top) { hex("#8a7d58") } else if r.chance(0.5) { mix(mix(hex("#302c20"), hex("#4a4430"), r.range(0.0, 1.0), Mix::Pigment), hex("#5a5238"), near_top, Mix::Pigment) } else { hex("#15130f") };
                 if n % 6 == 0 {
                     b.load(pal.paint(col, 0.15), 0.5);
                 } else {
@@ -540,6 +549,22 @@ fn main() {
                 let midp = (x + lean.sin() * len * 0.45 + r.normal() * 0.3, y - lean.cos() * len * 0.5);
                 c.drag(&mut b, &Gesture::new(vec![(x, y), midp, tip]).pressure(0.8, 0.05).ramps(0.0, 0.6).shake(0.5), None);
             }
+        }
+        // tufts on the skyline of the knoll: backlit, dark against the
+        // mist, rooted just below the edge and breaking it, in clumps
+        let mut x = 0.0;
+        let tufts = Fbm::new(365, 3, 25.0);
+        while x < 800.0 {
+            x += r.range(0.4, 1.6);
+            if tufts.get01(x, 0.0) < 0.45 || (x - tor_base.0).abs() < 60.0 {
+                continue;
+            }
+            let y = knoll(x) + r.range(0.5, 2.5);
+            let len = r.range(2.0, 6.5) * (0.6 + tufts.get01(x, 9.0));
+            let lean = r.normal() * 0.3 + 0.2;
+            b.load(pal.paint(if r.chance(0.2) { hex("#6a5f42") } else { hex("#1f1c16") }, 0.15), 0.4);
+            let tip = (x + lean.sin() * len, y - lean.cos() * len);
+            c.drag(&mut b, &Gesture::new(vec![(x, y), (x + lean.sin() * len * 0.4, y - len * 0.5), tip]).pressure(0.8, 0.0).ramps(0.0, 0.7).shake(0.5), None);
         }
         c.dry();
     }
@@ -704,7 +729,7 @@ fn wanderer(c: &mut paint::Canvas, pal: &paint::Palette, (x, y): (f32, f32), s: 
     let coat = pal.paint(hex("#1e2422"), 0.15);
     let coat_lit = pal.paint(hex("#3c4540"), 0.15);
     let trousers = pal.paint(hex("#2b2622"), 0.15);
-    let hair = pal.paint(hex("#3a2a1e"), 0.15);
+    let hair = pal.paint(hex("#2a2019"), 0.15);
     let skin = pal.paint(hex("#b08a6c"), 0.1);
     let rim = pal.paint(hex("#c9b58f"), 0.1);
     let p = |u: f32, v: f32| (x + u * s, y - v * s);

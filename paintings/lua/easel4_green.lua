@@ -263,3 +263,60 @@ work(FIG, {hand="body", tool="round 1", length={1.5, 4}, coverage=3, medium=0.15
   color=function(px, py) return mix("#2e3136", "#23211f", (py - y + 52)/52) end})
 local lit = fig:band(1.2, 0.5) * FIG * rect(0, 0, x - 1, 714)
 work(lit, {hand="detail", tool="round 0.8", length={1, 3}, coverage=2, medium=0.15, angle=1.5, color="#5a5a58", clip=lit})
+
+--@ chunk 15 · clock 7500
+wait(24*60)
+-- the oak's shadow on the brow, falling right and away
+local shn = noise{seed=51, period=18}
+local osh = (poly({{205,496},{240,486},{300,480},{360,478},{410,482},{400,494},{330,500},{260,504},{215,504}}, true)
+  * HILL):roughen(5, 16, 7, 3) - STONE - FIG
+work(osh, {hand="body", tool="filbert 4", length={8, 20}, coverage=2.6, angle=0.05, medium=0.35,
+  color_over={shift={-0.075, -0.004, -0.02}}})
+-- the stone's cast shadow on the grass, to its right
+local ssh = (ellipse(500, 504, 42, 6):roughen(2, 8, 3, 2) * HILL) - STONE
+work(ssh, {hand="body", tool="filbert 3", length={6, 14}, coverage=2.5, angle=0.1, medium=0.35, color_over={shift={-0.08, -0.004, -0.02}}})
+-- the near hill falls into a cooler, darker band toward the bottom edge
+local low = HILL * mask(function(x, y) return smoothstep(560, 714, y + 30*shn(x, y)) end)
+work(low, {hand="glaze", tool="filbert 8", length={20, 50}, coverage=2, angle=0.1, medium=0.8, color_over={shift={-0.06, -0.006, -0.012}}})
+-- the stone: cracks, a darker belly, lichen
+local belly = STONE * mask(function(x, y) return smoothstep(484, 504, y) end)
+work(belly, {hand="glaze", tool="round 2", length={3, 8}, coverage=2, angle=0, medium=0.8, color_over={shift={-0.08, 0, -0.01}}})
+local crack = brush("rigger", 0.5)
+crack:load("#2c2a27", 0.8)
+for _, c in ipairs({{{404,470},{414,476},{420,486},{419,496}}, {{452,460},{448,470},{455,478}}, {{386,484},{396,486}}, {{430,496},{442,493},{452,499}}}) do
+  crack:stroke(c, {pressure={0.7, 0.2}, ramps={0.1, 0.4}, shake=0.6})
+end
+stipple(STONE * fs:lit{parts={1}}, {width=1.4, color="#b9b27a", coverage=function(x, y) return 0.08 + 0.12*(sn and 0 or 0) end, cluster={0.3, 4}, fade=0, medium=0.4})
+stipple(STONE, {width=1.1, color="#5e6a4a", coverage=function(x, y) return 0.06 end, cluster={0.5, 5}, fade=0, medium=0.4})
+
+--@ chunk 16 · clock 8940
+wait(6*60)
+local tufts = sward{region=HILL:shrink(2), horizon=430, near=H + 60, height=34, flowers=0.06, seed=7, smallest=1.2,
+  wind={lean=0.12, gust=0.2, period=180, seed=3}}
+local g = brush("rigger", 0.7)
+local sunlit = {"#8c9a48", "#7a8c3e", "#9aa252", "#6b7f36"}
+local shaded = {"#4a5c2c", "#3f5128", "#56683a", "#34452a"}
+local n = 0
+for i, t in ipairs(tufts) do
+  if i % 3 == 1 then
+    local x, y = t.x, t.y
+    local dark = y > 600 and (i % 2 == 0) or (i % 5 == 0)
+    local pal4 = dark and shaded or sunlit
+    g:reload(pal4[1 + (i // 3) % 4], 0.7)
+  end
+  local p = clamp(0.25 + 0.55 * t.scale, 0.2, 0.95)
+  for _, bl in ipairs(t.blades) do
+    g:stroke(bl, {pressure={p, 0.0}, ramps={0.05, 0.7}})
+    n = n + 1
+  end
+end
+local f = brush("round", 1.2)
+local k = 0
+for _, t in ipairs(tufts) do
+  if t.flower then
+    if k % 5 == 0 then f:reload(({"#ece6cf", "#d8b43a", "#9aa6c8", "#ece6cf", "#c9a13a"})[1 + t.flower.kind % 5], 0.8) end
+    f:touch(t.flower.x, t.flower.y, {pressure=clamp(t.flower.r / 2, 0.2, 0.8)})
+    k = k + 1
+  end
+end
+print(#tufts, "tufts", n, "blades", k, "flowers")

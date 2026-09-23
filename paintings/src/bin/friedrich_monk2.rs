@@ -200,7 +200,7 @@ fn main() {
     let shadow = Mask::from_shape(f, Shape::new().ellipse(mx + 0.02 * s, my + 0.01 * s, 0.22 * s, 0.025 * s)).blur(0.8);
     c.glaze(&Pigment::transparent(hex("#5a5446")), Some(&shadow), |_, _| 1.2);
     c.dry();
-    paintings::figures::monk(&mut c, (mx, my), s, hex("#100f0d"), hex("#9d9072"), None, o.seed * 100 + 7);
+    paintings::figures::monk(&mut c, (mx, my), s, paint::Paint { hiding: 0.97, stiff: 1.0, ..st.palette.paint(hex("#100f0d"), 0.0) }, st.palette.paint(hex("#9d9072"), 0.1), None, o.seed * 100 + 7);
     if o.stage(&mut c, "monk") {
         return;
     }

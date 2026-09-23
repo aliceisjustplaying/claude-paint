@@ -276,3 +276,33 @@ work(head - cap, {hand="detail", tool="round 1.2", color="#3a302b", angle=math.p
 -- the afterglow catching his right shoulder and cap edge
 local rim = figure * mask(function(x, y) return (x > FX + 3.5 and y < FY - 20) and 1 or 0 end)
 work(rim, {hand="detail", tool="round 1", color="#57493d", angle=math.pi / 2, length={3, 7}, coverage=1.5, clip=figure})
+
+--@ chunk 18 · clock 45631.58203125
+
+MX, MY, MR = 772, 158, 10.5
+-- lit side faces the sun, down and to the left
+local ang = math.atan(430 - MY, SUNX - MX)
+local ox, oy = -math.cos(ang) * MR * 0.62, -math.sin(ang) * MR * 0.62
+local disc = ellipse(MX, MY, MR, MR)
+crescent = (disc - ellipse(MX + ox, MY + oy, MR * 1.03, MR * 1.03)):soften(0.35)
+glaze(ellipse(MX, MY, 60, 60):blur(25), {color="#c7c3ae", coats=0.10, pigment="semi"})
+stipple(crescent, {width=1.4, color="#efe7c6", coverage=5, pressure={0.5, 0.9}, dips={30, 0.6, 0.3}, aim=false, medium=0.2, clip=crescent, fade=0})
+-- earthshine, barely there
+stipple(disc - crescent:grow(0.6), {width=1.2, color="#5f6b8a", coverage=1.0, pressure={0.3, 0.6}, aim=false, medium=0.4, clip=disc, fade=0.8})
+-- the evening star
+local st = brush("round", 1.6); st:load("#f3efdc", 0.9); st:touch(583, 296, {pressure=0.75}); st:touch(583.3, 296.2, {pressure=0.5})
+-- two small sails on the horizon
+local sb = brush("round", 1.2)
+local function sail(x, h, lean)
+  local m = poly({{x, HZ + 1.5}, {x - 0.35 * h, HZ + 1.5}, {x - 0.05 * h + lean, HZ - h}, {x + 0.12 * h, HZ - 0.3 * h}}, false):soften(0.3)
+  work(m, {hand="detail", tool="round 1", color="#3b3a44", angle=math.pi / 2, length={2, 5}, coverage=3, clip=m})
+  sb:reload("#2f2f38", 0.6); sb:stroke({{x - 0.45 * h, HZ + 1.8}, {x + 0.2 * h, HZ + 1.8}}, {pressure={0.4, 0.4}})
+end
+sail(836, 15, 1.5); sail(905, 9, 0.8)
+
+--@ chunk 19 · clock 45631.58203125
+
+local star = ellipse(604, 232, 1.5, 1.5)
+stipple(star:grow(0.5), {width=1.3, color="#fbf8ea", coverage=6, pressure={0.6, 0.9}, aim=false, medium=0.15, fade=0, clip=star:grow(0.6)})
+local fleck = ellipse(942, 316, 5, 3)
+stipple(fleck, {width=1.6, color=skycol, coverage=3, pressure={0.4, 0.8}, medium=0.4, pal=skypal, clip=fleck:grow(1)})

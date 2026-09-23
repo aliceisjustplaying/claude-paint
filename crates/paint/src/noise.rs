@@ -310,18 +310,33 @@ impl Worley {
     pub fn get(&self, x: f32, y: f32) -> Cell {
         let (u, v) = (x / self.period, y / self.period);
         let (ci, cj) = (u.floor() as i32, v.floor() as i32);
+        let (fu, fv) = (u - ci as f32, v - cj as f32);
         let (mut f1, mut f2, mut id, mut at) = (f32::MAX, f32::MAX, 0u32, (0.0, 0.0));
-        for dj in -1..=1 {
-            for di in -1..=1 {
-                let p = self.point(ci + di, cj + dj, 0);
-                let d = ((p[0] - u).powi(2) + (p[1] - v).powi(2)).sqrt();
-                if d < f1 {
-                    f2 = f1;
-                    f1 = d;
-                    id = hash3(ci + di, cj + dj, 0, self.seed ^ 0xABCD);
-                    at = (p[0] * self.period, p[1] * self.period);
-                } else if d < f2 {
-                    f2 = d;
+        // a feature lies anywhere in its cell, so one two or three cells
+        // away can be nearer than the 3×3 block's: search out to 7×7,
+        // skipping cells that cannot come nearer than the second-nearest
+        for ring in 0..=3i32 {
+            for dj in -ring..=ring {
+                for di in -ring..=ring {
+                    if di.abs().max(dj.abs()) != ring {
+                        continue;
+                    }
+                    if ring > 1 {
+                        let (gx, gy) = (gap(fu, di), gap(fv, dj));
+                        if gx * gx + gy * gy >= f2 * f2 {
+                            continue;
+                        }
+                    }
+                    let p = self.point(ci + di, cj + dj, 0);
+                    let d = ((p[0] - u).powi(2) + (p[1] - v).powi(2)).sqrt();
+                    if d < f1 {
+                        f2 = f1;
+                        f1 = d;
+                        id = hash3(ci + di, cj + dj, 0, self.seed ^ 0xABCD);
+                        at = (p[0] * self.period, p[1] * self.period);
+                    } else if d < f2 {
+                        f2 = d;
+                    }
                 }
             }
         }
@@ -331,17 +346,42 @@ impl Worley {
     pub fn f1_3(&self, p: [f32; 3]) -> f32 {
         let q = [p[0] / self.period, p[1] / self.period, p[2] / self.period];
         let c = [q[0].floor() as i32, q[1].floor() as i32, q[2].floor() as i32];
+        let fr = [q[0] - c[0] as f32, q[1] - c[1] as f32, q[2] - c[2] as f32];
         let mut f1 = f32::MAX;
-        for dk in -1..=1 {
-            for dj in -1..=1 {
-                for di in -1..=1 {
-                    let f = self.point(c[0] + di, c[1] + dj, c[2] + dk);
-                    let d = (f[0] - q[0]).powi(2) + (f[1] - q[1]).powi(2) + (f[2] - q[2]).powi(2);
-                    f1 = f1.min(d);
+        // the nearest feature is within √3 of the point: out to 5×5×5,
+        // the 3×3×3 block first, then the outer shell where it could be nearer
+        for outer in [false, true] {
+            for dk in -2..=2i32 {
+                for dj in -2..=2i32 {
+                    for di in -2..=2i32 {
+                        if (di.abs().max(dj.abs()).max(dk.abs()) > 1) != outer {
+                            continue;
+                        }
+                        if outer {
+                            let (gx, gy, gz) = (gap(fr[0], di), gap(fr[1], dj), gap(fr[2], dk));
+                            if gx * gx + gy * gy + gz * gz >= f1 {
+                                continue;
+                            }
+                        }
+                        let f = self.point(c[0] + di, c[1] + dj, c[2] + dk);
+                        let d = (f[0] - q[0]).powi(2) + (f[1] - q[1]).powi(2) + (f[2] - q[2]).powi(2);
+                        f1 = f1.min(d);
+                    }
                 }
             }
         }
         f1.sqrt()
+    }
+}
+
+/// Least distance along one axis from a point at fraction `f` (0..1) of its
+/// cell to the cell `d` cells over.
+#[inline]
+fn gap(f: f32, d: i32) -> f32 {
+    match d {
+        0 => 0.0,
+        d if d > 0 => d as f32 - f,
+        d => f - (d + 1) as f32,
     }
 }
 
@@ -489,5 +529,52 @@ mod tests {
         let (mn, mx) = gaps.iter().fold((f32::MAX, 0.0f32), |a, &g| (a.0.min(g), a.1.max(g)));
         assert!(gaps.iter().all(|&g| g > 0.0));
         assert!(mx > 2.0 * mn, "gaps {gaps:?}");
+    }
+
+    /// Worley finds the nearest and second-nearest features even when they
+    /// lie two cells away (features sit anywhere in their cell): checked
+    /// against a brute-force 7×7 (2-D) and 5×5×5 (3-D) search.
+    #[test]
+    fn worley_finds_the_true_nearest_features() {
+        fn wide(w: &Worley, x: f32, y: f32) -> Cell {
+            let (u, v) = (x / w.period, y / w.period);
+            let (ci, cj) = (u.floor() as i32, v.floor() as i32);
+            let mut all: Vec<(f32, u32, (f32, f32))> = vec![];
+            for dj in -3..=3 {
+                for di in -3..=3 {
+                    let p = w.point(ci + di, cj + dj, 0);
+                    let d = ((p[0] - u).powi(2) + (p[1] - v).powi(2)).sqrt();
+                    all.push((d, hash3(ci + di, cj + dj, 0, w.seed ^ 0xABCD), (p[0] * w.period, p[1] * w.period)));
+                }
+            }
+            all.sort_by(|a, b| a.0.total_cmp(&b.0));
+            Cell { f1: all[0].0, f2: all[1].0, id: all[0].1, at: all[0].2 }
+        }
+        // the review's counterexample: a feature two cells away is nearest
+        let w = Worley::new(15, 1.0);
+        let c = w.get(-0.029999733, 0.7669997);
+        assert_eq!(c.id, 409115953, "{c:?}");
+        assert!((c.f1 - 1.1241378).abs() < 1e-5, "{c:?}");
+        for seed in 0..40u32 {
+            let w = Worley::new(seed, 1.0);
+            for i in 0..400 {
+                let (x, y) = (rand01(i, 1, seed) * 20.0 - 10.0, rand01(i, 2, seed) * 20.0 - 10.0);
+                let (a, b) = (w.get(x, y), wide(&w, x, y));
+                assert_eq!(a.id, b.id, "seed {seed} ({x},{y})");
+                assert!((a.f1 - b.f1).abs() < 1e-6 && (a.f2 - b.f2).abs() < 1e-6, "seed {seed} ({x},{y}) {a:?} {b:?}");
+                let p = [x, y, rand01(i, 3, seed) * 20.0 - 10.0];
+                let c = [p[0].floor() as i32, p[1].floor() as i32, p[2].floor() as i32];
+                let mut f1 = f32::MAX;
+                for dk in -2..=2 {
+                    for dj in -2..=2 {
+                        for di in -2..=2 {
+                            let f = w.point(c[0] + di, c[1] + dj, c[2] + dk);
+                            f1 = f1.min((f[0] - p[0]).powi(2) + (f[1] - p[1]).powi(2) + (f[2] - p[2]).powi(2));
+                        }
+                    }
+                }
+                assert!((w.f1_3(p) - f1.sqrt()).abs() < 1e-6, "3-D seed {seed} {p:?}");
+            }
+        }
     }
 }

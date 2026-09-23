@@ -86,6 +86,12 @@ pub struct Stipple<'a> {
     /// press less (smaller, fainter marks), so a veil feathers out instead
     /// of ending in isolated specks. 0 = off, 1 = pressure ∝ coverage.
     pub feather: f32,
+    /// Contrast falls with density: where the coverage is thin (< 1) each
+    /// touch is aimed that much nearer to what it sits on, `min(1, c)^fade`
+    /// of the way from the underlayer to `color`. A lighter stipple thinning
+    /// out over a field then fades into it instead of ending in salt. 0 = off
+    /// (every touch aims at `color`, for deliberate specks); default 1.
+    pub fade: f32,
     /// Clip the hairs' contact to the mask.
     pub clip: bool,
     /// Aim the paint at the result on the canvas (default). Off: the paint
@@ -115,6 +121,7 @@ impl<'a> Stipple<'a> {
             cluster: 0.15,
             clump: None,
             feather: 0.6,
+            fade: 1.0,
             clip: false,
             aim: true,
         }
@@ -191,6 +198,20 @@ impl<'a> Stipple<'a> {
         self.clip = on;
         self
     }
+    /// Contrast falls where the coverage thins (see `fade`; 0 = off).
+    pub fn fade(mut self, k: f32) -> Self {
+        self.fade = k.max(0.0);
+        self
+    }
+    /// The look one load of touches aims at, where the canvas looks `seen`,
+    /// the passage should look `want` and the coverage is `c`.
+    fn touch_target(&self, want: Rgb, seen: Rgb, c: f32) -> Rgb {
+        let t = if self.fade > 0.0 { c.clamp(0.0, 1.0).powf(self.fade) } else { 1.0 };
+        if t >= 1.0 {
+            return want;
+        }
+        crate::color::from_oklab(crate::color::lerp3(to_oklab(seen), to_oklab(want), t))
+    }
     pub fn aim(mut self, on: bool) -> Self {
         self.aim = on;
         self
@@ -221,9 +242,10 @@ impl<'a> Stipple<'a> {
     /// the `aim_km` workaround.
     fn paint_for(&self, want: Rgb, seen: Rgb, coverage: f32, memo: &mut Memo, rng: &mut Rng) -> Paint {
         let coats = self.touch_coats() * coverage.max(1.0);
+        let aim = self.aim;
         match self.palette {
             Some((pal, medium0)) => {
-                if !self.aim {
+                if !aim {
                     return pal.remix(&pal.mix(want), self.mix_jitter, rng).paint(medium0);
                 }
                 // aim at the look over what's there (Palette::aim); if the
@@ -265,7 +287,7 @@ impl<'a> Stipple<'a> {
             None => {
                 let lab = to_oklab(want);
                 let col = from_oklab([lab[0] + rng.normal() * self.jitter.0, lab[1] + rng.normal() * self.jitter.1, lab[2] + rng.normal() * self.jitter.1]);
-                if self.aim { Paint::aimed(col, seen, coats, self.hiding, self.stiff) } else { Paint::new(col, self.hiding, self.stiff) }
+                if aim { Paint::aimed(col, seen, coats, self.hiding, self.stiff) } else { Paint::new(col, self.hiding, self.stiff) }
             }
         }
     }
@@ -460,6 +482,7 @@ impl Canvas {
                         Some(g) => g(x, y, seen),
                         None => (sp.color)(x, y),
                     };
+                    let want = sp.touch_target(want, seen, cv);
                     *d = sp.paint_for(want, seen, cv, &mut memo, &mut Rng::new(prng.next_u64()));
                 }
             }
@@ -701,6 +724,48 @@ mod tests {
             assert!(got[k] <= want[k] + 0.01 && got[k] >= seen[k].min(want[k]) - 0.01, "{got:?}");
             assert!(got[k] <= lightest[k] + 1e-3);
         }
+    }
+
+    /// Speckle of a stipple over a flat field: (std of L, mean L lift) over
+    /// x in `xs`. Coverage runs 0 → `cmax` across the canvas.
+    fn speckle(field: Rgb, want: Rgb, cmax: f32, xs: std::ops::Range<f32>, set: impl Fn(Stipple) -> Stipple) -> (f32, f32) {
+        let st = crate::style::Style::friedrich();
+        let mut c = Canvas::new(400, 1.0, field);
+        let f = c.frame();
+        let before = to_oklab(field)[0];
+        let sp = set(Stipple::new(Tool::stippler(3.0)).mixed(&st.palette, 0.45).color(move |_, _| want).coverage(move |x, _| cmax * x / 1000.0));
+        c.stipple(&Mask::full(f), &sp, 4);
+        c.dry();
+        let ls: Vec<f32> = c.pixels().iter().enumerate().filter(|(i, _)| xs.contains(&((i % f.w) as f32 / f.scale))).map(|(_, p)| to_oklab(*p)[0]).collect();
+        let n = ls.len() as f32;
+        let m = ls.iter().sum::<f32>() / n;
+        ((ls.iter().map(|l| (l - m).powi(2)).sum::<f32>() / n).sqrt(), m - before)
+    }
+
+    /// A lighter stipple thinning out over a field fades into it instead of
+    /// ending in salt, aimed or not, over a mid tone or a dark (amnesia 2,
+    /// coast #9, mountains #10).
+    #[test]
+    fn thin_stipple_fades_instead_of_salt() {
+        // a pale stipple thinning out over a mid-blue sky
+        let (sky, pale) = (hex("#7d8fae"), hex("#b8c2d2"));
+        let (salt, lift0) = speckle(sky, pale, 1.2, 150.0..400.0, |s| s.fade(0.0));
+        let (faded, lift1) = speckle(sky, pale, 1.2, 150.0..400.0, |s| s);
+        println!("thin pale stipple (coverage 0.18-0.48): L sd {salt:.4} -> {faded:.4}, lift {lift0:+.4} -> {lift1:+.4}");
+        assert!(faded < 0.6 * salt, "thin stipple still salty: {faded} vs {salt}");
+        assert!(lift1 > 0.0, "it still lifts the tone: {lift1}");
+        // where it is dense, it reaches the same tone
+        let (_, dense0) = speckle(sky, pale, 1.2, 900.0..1000.0, |s| s.fade(0.0));
+        let (_, dense1) = speckle(sky, pale, 1.2, 900.0..1000.0, |s| s);
+        assert!((dense0 - dense1).abs() < 0.3 * dense0.abs(), "dense tone {dense0} vs {dense1}");
+        // the thin fringe of a pale mist over a dark, masstone-mixed (aim
+        // off, as mountains #10 did): pale dots on the dark fade out instead
+        let (dark, mist) = (hex("#2c3038"), hex("#9aa0a8"));
+        let (dots, l0) = speckle(dark, mist, 1.2, 150.0..400.0, |s| s.aim(false).fade(0.0));
+        let (fringe, l1) = speckle(dark, mist, 1.2, 150.0..400.0, |s| s.aim(false));
+        println!("mist fringe over dark (coverage 0.18-0.48): L sd {dots:.4} -> {fringe:.4}, lift {l0:+.4} -> {l1:+.4}");
+        assert!(fringe < 0.6 * dots, "mist fringe still static: {fringe} vs {dots}");
+        assert!(l1 > 0.0, "the fringe still lifts the dark: {l1}");
     }
 
     fn stipple_scene() -> Canvas {

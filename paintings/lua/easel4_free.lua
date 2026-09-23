@@ -217,3 +217,115 @@ for k, off in ipairs({-0.22, 0.2}) do
   local rm = ribbon(rp, {9, 7, 5, 3.4, 2.2, 1.2}):roughen(1.6, 10, 80 + k, 1.2) * pathm
   work(rm, {hand="detail", tool="round 2.5", color_over={shift={-0.035, 0, -0.006}}, angle=-0.7, length={6, 18}, coverage=1.6, broken=0.4, pal=landpal})
 end
+
+--@ chunk 12 · clock 2760
+wait(6*60)
+hn = noise{seed=91, octaves=4, period=40}
+hn2 = noise{seed=92, octaves=3, period=120}
+heathcol = function(x, y)
+  local t = clamp((y - HZ)/238, 0, 1)
+  local a = mix("#2d2624", "#3e3629", hn:at01(x, y))
+  a = mix(a, "#46362f", 0.5*hn2:at01(x, y))
+  return mix(mix(a, "#554c52", 0.55*(1 - t)^3), "#221e1b", 0.3*t)
+end
+local notpath = -(pathm:shrink(6))
+local turn = noise{seed=93, period=10}
+local far = (ground * above(function(x) return 530 end)) * notpath
+work(far, {hand="hatch", tool="round 1.4", length={2, 5}, coverage=2.4, color=heathcol,
+  angle=function(x, y) return -1.5708 + 0.6*turn(x, y) end, angle_jitter=0.5, medium=0.15, pal=landpal})
+local near = (ground * below(function(x) return 520 end)) * notpath
+work(near, {hand="hatch", tool="round 2.2", length={4, 11}, coverage=2.6, color=heathcol,
+  angle=function(x, y) return -1.5708 + 0.7*turn(x, y) end, angle_jitter=0.5, medium=0.15, pal=landpal})
+
+--@ chunk 13 · clock 3120
+wait(6*60)
+rockA = outline{{58,668,"c"},{66,634},{92,612,"c"},{130,604},{168,614,"c"},{190,640},{196,668,"c"},{130,676}, char="broken", seed=101}
+rockB = outline{{182,672,"c"},{190,652},{214,644,"c"},{240,650},{252,672,"c"}, char="broken", seed=102}
+rockC = outline{{818,622,"c"},{826,606},{848,600,"c"},{866,608},{872,624,"c"}, char="broken", seed=103}
+local rn = noise{seed=104, octaves=5, period=12}
+for _, o in ipairs({{rockA, 604, 72}, {rockB, 644, 28}, {rockC, 600, 24}}) do
+  local m = o[1]:mask()
+  local top, h = o[2], o[3]
+  local col = function(x, y)
+    local u = smoothstep(0, 1, (y - top) / (h * 0.8) + 0.25*rn(x, y))
+    return mix(mix("#57535a", "#4a4546", rn:at01(x*2, y)), mix("#262220", "#302a27", rn:at01(x, y)), u)
+  end
+  work(m, {hand="body", tool="filbert 4", color=col, angle=function(x, y) return 0.2 + 0.9*rn(x, y) end,
+    length={4, 12}, coverage=3.6, medium=0.15, pal=landpal, clip=m})
+  work(m:shrink(1.5), {hand="detail", tool="round 1.4", color_over={shift={-0.04, 0, -0.005}}, angle=function(x, y) return 1.2 + rn(x, y) end,
+    length={3, 8}, coverage=0.8, broken=0.5, pal=landpal, clip=m})
+end
+-- lichen flecks on the big stone
+stipple(rockA:mask():shrink(3) * above(function(x) return 640 end), {width=1.4, color="#57584a", coverage=0.35, pressure={0.3, 0.6}, fade=0, aim=false, pal=landpal})
+-- junipers on the right flat, dark columns
+junipers = {}
+for i, j in ipairs({{722,470,26,9},{738,474,16,7},{930,468,20,8}}) do
+  local x, y, h, r = j[1], j[2], j[3], j[4]
+  local o = outline{{x - r, y}, {x - r*0.8, y - h*0.5}, {x - r*0.3, y - h*0.95}, {x + r*0.2, y - h}, {x + r*0.7, y - h*0.55}, {x + r, y}, char="soft", lobe=3, seed=110 + i}
+  junipers[i] = o
+  local m = o:mask()
+  work(m, {hand="hatch", tool="round 1.2", color=function(x, y) return mix("#23241f", "#2f2e28", rn:at01(x, y)) end,
+    angle=-1.3, angle_jitter=0.7, length={2, 5}, coverage=3, medium=0.15, pal=landpal, clip=m:grow(0.8)})
+end
+
+--@ chunk 14 · clock 3480
+wait(4*60)
+local region = below(function(x) return HZ + 60 end) - pathm:shrink(10)
+local tufts = sward{region=region, horizon=HZ, near=H, height=34, flowers=0, seed=14, thin=0.55,
+  wind={lean=0.25, gust=0.25, period=180, seed=3}}
+local g = brush("rigger", 0.8)
+local cols = {"#2a2420", "#3a3128", "#332a26", "#4a3f33"}
+local n = 0
+for i, t in ipairs(tufts) do
+  if i % 4 == 1 then g:reload(cols[1 + (i // 4) % #cols], 0.75, {pal=landpal}) end
+  local p = clamp(0.25 + 0.55 * t.scale, 0.2, 0.95)
+  for _, bl in ipairs(t.blades) do g:stroke(bl, {pressure={p, 0.0}, ramps={0.05, 0.7}}); n = n + 1 end
+end
+-- pale tips catching the sky on the nearest tufts
+local tip = brush("rigger", 0.6)
+local k = 0
+for i, t in ipairs(tufts) do
+  if t.scale > 0.45 and i % 3 == 0 then
+    if k % 8 == 0 then tip:reload(mix("#7c7068", "#8f8278", rand()), 0.6, {pal=landpal}) end
+    local bl = t.blades[1 + (i % #t.blades)]
+    local a, b, c = bl[1], bl[2], bl[3]
+    tip:stroke({{lerp(a[1], c[1], 0.55), lerp(a[2], c[2], 0.55)}, b, c}, {pressure={0.35, 0.0}, ramps={0.1, 0.8}})
+    k = k + 1
+  end
+end
+-- grass and heather along the mound's crest against the sky
+local cg = brush("rigger", 0.5)
+cg:reload("#2c2624", 0.8, {pal=landpal})
+local m = 0
+for x = 150, 700, 1.3 do
+  local y = mound(x) + rand(0.5, 2.5)
+  if y < HZ - 1 and rand() < 0.55 then
+    local h = rand(1.5, 5.5)
+    local lean = randn(0.15, 0.35)
+    if m % 25 == 0 then cg:reload("#2c2624", 0.8, {pal=landpal}) end
+    cg:stroke({{x, y}, {x + lean*h*0.4, y - h*0.6}, {x + lean*h, y - h}}, {pressure={0.55, 0.0}, ramps={0.05, 0.7}})
+    m = m + 1
+  end
+end
+print(#tufts, "tufts", n, "blades", k, "tips", m, "crest blades")
+
+--@ chunk 15 · clock 3720
+-- the wanderer on the crest, from behind, in a long coat and a low cap, with a staff
+FX = 292; FY = mound(FX) + 2
+local function P(dx, dy) return {FX + dx, FY + dy} end
+man = body_of{spine={P(0,-2.5), P(0.2,-8), P(0.4,-14), P(0.5,-17.4), P(0.6,-19.6)}, widths={7.0,5.8,6.2,2.2,2.9},
+  limbs={{P(-1.4,-3), P(-1.6,0.4), widths={1.4,1.2}}, {P(1.3,-3), P(1.8,0.3), widths={1.4,1.2}},
+         {P(2.6,-14.5), P(3.8,-10.5), P(4.3,-7.5), widths={1.7,1.4,1.1}}}, char="firm", seed=121}
+man_m = man:mask() + ellipse(FX + 0.6, FY - 21.1, 2.3, 0.85)
+work(man_m, {hand="detail", tool="round 1", color="#1f1b1b", angle=1.5708, length={1, 4}, coverage=4, medium=0.12, pal=landpal, clip=man_m:grow(0.3)})
+local st = brush("round", 0.7); st:load("#1f1b1b", 0.9, {pal=landpal})
+st:stroke({P(5.2, 0.5), P(5.0, -9), P(4.5, -19)}, {pressure={0.6, 0.45}})
+-- two ravens going home
+local rv = brush("round", 0.9)
+for _, r in ipairs({{548,196,1.0,0.1},{571,183,0.8,-0.15}}) do
+  local x, y, s, t = r[1], r[2], r[3], r[4]
+  rv:reload("#1c1a1b", 0.9, {pal=landpal})
+  rv:stroke({{x - 5*s, y - 2.2*s + t}, {x - 2.2*s, y - 0.6*s}, {x, y}}, {pressure={0.1, 0.7}, ramps={0.4, 0.1}})
+  rv:stroke({{x, y}, {x + 2.4*s, y - 1.4*s}, {x + 5.2*s, y - 1.8*s - t}}, {pressure={0.7, 0.1}, ramps={0.1, 0.4}})
+  rv:touch(x, y + 0.2, {pressure=0.6})
+end

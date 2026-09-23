@@ -208,7 +208,7 @@ pub enum Sdf {
     Inter(Vec<Sdf>, f32),
     Subtract(Box<Sdf>, Box<Sdf>, f32),
     Turn { body: Box<Sdf>, c: V3, m: [V3; 3] },
-    Rough { body: Box<Sdf>, amp: f32, period: f32, noise: Perlin, ridged: bool },
+    Rough { body: Box<Sdf>, amp: f32, period: f32, noise: Box<Perlin>, ridged: bool },
     Facet(Box<Sdf>, u16),
 }
 
@@ -276,7 +276,7 @@ impl Sdf {
     /// at `period`. `ridged` makes sharp-lipped pits and crests (granite
     /// grain, eroded sandstone) instead of soft lumps.
     pub fn rough(self, amp: f32, period: f32, seed: u32, ridged: bool) -> Sdf {
-        Sdf::Rough { body: Box::new(self), amp, period, noise: Perlin::new(seed), ridged }
+        Sdf::Rough { body: Box::new(self), amp, period, noise: Box::new(Perlin::new(seed)), ridged }
     }
     /// Tag the whole body as facet `id`.
     pub fn facet(self, id: u16) -> Sdf {
@@ -1082,20 +1082,5 @@ mod tests {
         let vals: Vec<f32> = (0..200).map(|k| form.shade(300.0 + k as f32 * 2.0, 450.0).direct).collect();
         let (lo, hi) = vals.iter().fold((1.0f32, 0.0f32), |a, &v| (a.0.min(v), a.1.max(v)));
         assert!(hi - lo > 0.3, "{lo}..{hi}");
-    }
-}
-#[cfg(test)]
-mod probe {
-    use super::*;
-    #[test]
-    #[ignore]
-    fn probe_ridge() {
-        let r = Ridge::new(0.0, 1000.0, |x| 200.0 + (x - 500.0).abs() * 0.5, 400.0, 3).gullies(40.0, 0.5);
-        for k in 0..60 {
-            let y = 320.0 + k as f32 * 0.5;
-            let h = r.hit(300.0, y).unwrap();
-            let (z, _) = r.height(300.0, y).unwrap();
-            println!("{y:.1} z={z:.3} n=({:.3},{:.3},{:.3})", h.n[0], h.n[1], h.n[2]);
-        }
     }
 }

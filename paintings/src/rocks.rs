@@ -171,7 +171,8 @@ pub fn boulder(form: &mut Form, r: Rect, horizon: f32, seed: u32) -> PartId {
 /// 1–6 (see `Sdf::block`), fresh breaks 10+.
 pub fn outcrop(form: &mut Form, r: Rect, seed: u32) -> Vec<PartId> {
     let s = r.w;
-    let blocks: [((f32, f32), (f32, f32, f32), f32, f32, f32); 7] = [
+    type Bed = ((f32, f32), (f32, f32, f32), f32, f32, f32);
+    let blocks: [Bed; 7] = [
         // (center u,v), (size w,h,d as fractions of s), z, yaw, roll
         ((0.5, 0.62), (0.56, 0.36, 0.14), -0.1, 0.25, 0.0),  // recessed core
         ((0.47, 0.8), (0.64, 0.16, 0.18), 0.0, 0.3, 0.01),   // base bed
@@ -477,6 +478,7 @@ fn dark_of(x: f32, y: f32, form: &Form, color: &(dyn Fn(f32, f32, &Sample) -> Rg
 /// shadowed gullies; mist gathering at the feet. `color` is the painter's
 /// stone color before the air; `mist(x, y, k)` how much valley mist lies in
 /// front of range `k` (0 nearest) there.
+#[allow(clippy::too_many_arguments)]
 pub fn paint_ranges(c: &mut Canvas, st: &Style, form: &Form, ids: &[PartId], air: &Air, color: &(dyn Fn(f32, f32, &Sample) -> Rgb + Sync), mist: &(dyn Fn(f32, f32, usize) -> f32 + Sync), scale: f32, seed: u64) {
     let light = form.lighting().expect("light the form first");
     for (k, &id) in ids.iter().enumerate().rev() {
@@ -559,7 +561,7 @@ pub fn paint_ranges(c: &mut Canvas, st: &Style, form: &Form, ids: &[PartId], air
         c.dry();
         // mist at the foot: a thin veil in the air's color, lying level,
         // then fused
-        let veil = Mask::from_fn(c.frame(), |x, y| mist(x, y)).mul(&sil.dilate(4.0 * scale));
+        let veil = Mask::from_fn(c.frame(), mist).mul(&sil.dilate(4.0 * scale));
         let hd = paint::Handling::new(Tool { width: 14.0 * scale, lay: 0.7, ..st.broad.clone() })
             .mixed(&st.palette, 0.6)
             .mix_jitter(st.mix_jitter * 0.5)
@@ -570,7 +572,7 @@ pub fn paint_ranges(c: &mut Canvas, st: &Style, form: &Form, ids: &[PartId], air
             .coverage(1.6)
             .pressure(0.4, 0.6)
             .dips(2, 0.35, 0.6)
-            .load_at(|x, y| mist(x, y))
+            .load_at(mist)
             .threshold(0.15);
         c.work(&veil, &hd, seed + 10 * k as u64 + 3);
         if let Some(b) = st.blend() {

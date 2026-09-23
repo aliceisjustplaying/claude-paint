@@ -261,55 +261,94 @@ impl Drop for Session {
 /// `next` an order that doesn't: the order the program created them in.
 /// (Relative order is all that counts, so objects made by failed chunks,
 /// snapshots or mlua itself do no harm.)
+///
+/// Every block carries a 16-byte header: the serial and how to find it. A
+/// table or closure pointer is its block, so its serial sits just before
+/// it; a userdata or thread pointer lies inside its block, so those blocks
+/// are also listed by address.
 pub struct Serials {
     next: Cell<i64>,
-    /// block address -> (serial, size)
-    live: RefCell<BTreeMap<usize, (i64, usize)>>,
+    /// userdata and thread blocks: user address -> (serial, size)
+    inner: RefCell<BTreeMap<usize, (i64, usize)>>,
 }
 
-const ALIGN: usize = 16;
+const HDR: usize = 16;
+const PLAIN: i64 = 0;
+const AT_START: i64 = 1;
+const LISTED: i64 = 2;
+
+fn layout(size: usize) -> Layout {
+    // SAFETY (for callers): 16 is a power of two and Lua's sizes are far from isize::MAX
+    unsafe { Layout::from_size_align_unchecked(size + HDR, HDR) }
+}
 
 unsafe extern "C" fn counting_alloc(ud: *mut c_void, ptr: *mut c_void, osize: usize, nsize: usize) -> *mut c_void {
     use mlua::ffi::{LUA_TFUNCTION, LUA_TTABLE, LUA_TTHREAD, LUA_TUSERDATA};
     // SAFETY: `ud` is the session's boxed Serials, which outlives the state;
-    // Lua passes the block's true size as `osize` whenever `ptr` is a block.
+    // Lua passes the block's true size as `osize` whenever `ptr` is a block,
+    // and every block has the header this function put before it.
     unsafe {
         let h = &*(ud as *const Serials);
-        if nsize == 0 {
-            if !ptr.is_null() {
-                h.live.borrow_mut().remove(&(ptr as usize));
-                std::alloc::dealloc(ptr as *mut u8, Layout::from_size_align_unchecked(osize, ALIGN));
-            }
-            return std::ptr::null_mut();
-        }
         if ptr.is_null() {
-            let p = std::alloc::alloc(Layout::from_size_align_unchecked(nsize, ALIGN));
+            if nsize == 0 {
+                return std::ptr::null_mut();
+            }
+            let b = std::alloc::alloc(layout(nsize));
+            if b.is_null() {
+                return b as *mut c_void;
+            }
             // a new object: `osize` is its type
-            if !p.is_null() && matches!(osize as i32, LUA_TTABLE | LUA_TFUNCTION | LUA_TUSERDATA | LUA_TTHREAD) {
-                let n = h.next.get();
+            let kind = match osize as i32 {
+                LUA_TTABLE | LUA_TFUNCTION => AT_START,
+                LUA_TUSERDATA | LUA_TTHREAD => LISTED,
+                _ => PLAIN,
+            };
+            let mut n = 0;
+            if kind != PLAIN {
+                n = h.next.get();
                 h.next.set(n + 1);
-                h.live.borrow_mut().insert(p as usize, (n, nsize));
+            }
+            let hd = b as *mut i64;
+            *hd = n;
+            *hd.add(1) = kind;
+            let p = b.add(HDR);
+            if kind == LISTED {
+                h.inner.borrow_mut().insert(p as usize, (n, nsize));
             }
             return p as *mut c_void;
         }
-        // objects are never reallocated, only arrays and buffers
-        std::alloc::realloc(ptr as *mut u8, Layout::from_size_align_unchecked(osize, ALIGN), nsize) as *mut c_void
+        let b = (ptr as *mut u8).sub(HDR);
+        if nsize == 0 {
+            if *(b as *const i64).add(1) == LISTED {
+                h.inner.borrow_mut().remove(&(ptr as usize));
+            }
+            std::alloc::dealloc(b, layout(osize));
+            return std::ptr::null_mut();
+        }
+        // only arrays and buffers are reallocated, never objects
+        let nb = std::alloc::realloc(b, layout(osize), nsize + HDR);
+        if nb.is_null() { nb as *mut c_void } else { nb.add(HDR) as *mut c_void }
     }
 }
 
 impl Serials {
-    /// `id(v)`: the serial of an object (the block holding a userdata's
-    /// memory), nil for values and library C functions.
+    /// `id(v)`: the serial of a table, closure, userdata or thread; nil for
+    /// values and light C functions (library functions have no block).
     fn id_fn(&self, lua: &Lua) -> mlua::Result<Function> {
         let me = self as *const Serials;
         lua.create_function(move |_, v: Value| {
             let p = v.to_pointer() as usize;
-            if p == 0 {
-                return Ok(None);
-            }
-            // SAFETY: the Serials outlive the state, so this function
-            let live = unsafe { &*me }.live.borrow();
-            Ok(live.range(..=p).next_back().filter(|(a, (_, len))| p < *a + *len).map(|(_, (n, _))| *n))
+            Ok(match &v {
+                Value::Function(f) if f.info().what == "C" && f.info().num_upvalues == 0 => None,
+                // SAFETY: a live table or closure is a block with a header
+                Value::Table(_) | Value::Function(_) => Some(unsafe { *((p - HDR) as *const i64) }),
+                Value::UserData(_) | Value::Thread(_) => {
+                    // SAFETY: the Serials outlive the state, so this function
+                    let inner = unsafe { &*me }.inner.borrow();
+                    inner.range(..=p).next_back().filter(|(a, (_, len))| p < *a + *len).map(|(_, (n, _))| *n)
+                }
+                _ => None,
+            })
         })
     }
 }
@@ -322,7 +361,7 @@ impl Serials {
 /// (see `Serials`).
 fn fixed_lua(libs: StdLib) -> mlua::Result<(Lua, *mut mlua::ffi::lua_State, Box<Serials>)> {
     use mlua::ffi;
-    let serials = Box::new(Serials { next: Cell::new(1), live: RefCell::new(BTreeMap::new()) });
+    let serials = Box::new(Serials { next: Cell::new(1), inner: RefCell::new(BTreeMap::new()) });
     unsafe {
         let ud = &*serials as *const Serials as *mut c_void;
         let state = ffi::lua_newstate(counting_alloc, ud, ffi::luaL_makeseed_(std::ptr::null_mut()));
@@ -545,6 +584,10 @@ mod tests {
         let first: String = (1..=64).map(|i| format!("{i},")).collect();
         assert!(a.starts_with(&first), "object keys in creation order: {a}");
         assert!(a.contains("first 1,second 2,n 64"), "{a}");
+        // library functions have no serial: they go by name, after objects
+        let mut s = Session::replay(W).unwrap();
+        s.run("local t = {[math.sin] = 1, [math.cos] = 2, [string.rep] = 3, [{}] = 4, x = 5}; local o = {}; for k, v in pairs(t) do o[#o + 1] = v end; print(table.concat(o, ','))").unwrap();
+        assert_eq!(s.st.borrow().out.trim_end(), "5,4,2,1,3");
     }
 
     #[test]

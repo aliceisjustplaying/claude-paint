@@ -27,6 +27,7 @@ pub mod shape;
 pub mod spectral;
 pub mod growth;
 pub mod fir;
+pub mod broadleaf;
 pub mod wet;
 pub mod bristle;
 pub mod handling;

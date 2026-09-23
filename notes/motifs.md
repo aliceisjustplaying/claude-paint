@@ -47,14 +47,21 @@ tree models for image synthesis", projected onto the picture plane:
 - **Decline (dead oak):** branches die with a probability that rises
   toward the top, and the leader's top dies (stag-headed). Dead wood loses
   twigs below a width set by `decay`, leaving short claws of one or two
-  internodes. Dead limbs break (`breakage`, a quarter as often for live
+  internodes. A two-internode claw goes on through its strongest twig
+  only; the others are lost with everything beyond it (a test checks that
+  no thin dead subtree is deeper than two). Dead limbs break (`breakage`, a quarter as often for live
   limbs) at a random point along them, and are flagged `broken`.
 - **Skeleton:** limbs are read the way the eye reads them. Each one
   follows the thickest path through every fork, slightly favoring
   straight on, so a sympodial limb is one zig-zag polyline. Each `Limb`
   has `pts`, `z` (depth), `w`, `order`, `parent` + `at` (the index on the
-  parent where it springs), `dead`, `broken` and `root`. Limbs are
-  ordered parents first. `Skeleton::mask/tips/bounds` are provided.
+  parent where it springs), `dead`, `dead_from`, `broken` and `root`.
+  A limb can die part way. The top of a stag-headed leader is dead while
+  its foot lives, so `dead_from` is the index into `pts` from which it is
+  dead wood to the tip (`dead_at(i)` for segment `pts[i]..pts[i + 1]`). `dead`
+  means dead from where it springs (`dead_from == 0`); a limb alive
+  throughout has `dead_from == pts.len()`. A test checks every segment
+  against the grown nodes. Limbs are ordered parents first. `Skeleton::mask/tips/bounds` are provided.
 - Species are data: `Habit::oak()`, `dead_oak()`, `birch()`, `spruce()`
   are the same code with different numbers. Individual trees vary by
   field (`Habit { lean: 0.12, decay: 0.45, ..Habit::dead_oak() }`).
@@ -70,7 +77,9 @@ tree models for image synthesis", projected onto the picture plane:
   off over 1.5 limb-widths, so there is no joint. (A soft attack there
   lifts wet paint and leaves a gap. I found that on a trunk and fixed it.)
   Pressure is solved from the width at each end, from the footprint model
-  in `bristle::drag_on`. Round sables are used above 1.6 units, riggers
+  in `bristle::drag_on`. Where a limb dies part way, a new section starts
+  at `dead_from` in `Bark::dead`, set down into the wet end of the live
+  one, so the dead top of a leader is dead bark with no joint. Round sables are used above 1.6 units, riggers
   below. Live tips lift off to a point. Broken ends stop short and split
   into 3–4 splinters, one longer than the rest, with a touch of pale wood
   on the break (`Bark::wood`). The finest twigs are lean and dry (a haze,
@@ -127,7 +136,8 @@ let bark = Bark {
 };
 let mask = trees::tree(&mut c, &oak, &bark, &TreeHand { light_from: (0.7, -0.7), ..Default::default() }, seed);
 // your own habit: perches, snow on limbs, crows...
-for l in oak.limbs.iter().filter(|l| l.order <= 2 && !l.dead) { /* l.pts, l.w, l.dir(i) */ }
+// live wood only: `!l.dead` alone would keep a leader's dead top
+for l in oak.limbs.iter().filter(|l| l.order <= 2 && l.dead_from > 0) { /* l.pts[..=l.dead_from.min(l.pts.len() - 1)], l.w, l.dir(i) */ }
 let perches = oak.tips();
 
 let sp = Habit::spruce().grow((x, y), 180.0, seed);

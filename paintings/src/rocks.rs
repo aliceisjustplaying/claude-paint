@@ -182,6 +182,10 @@ pub fn outcrop(form: &mut Form, r: Rect, seed: u32) -> Vec<PartId> {
         ((0.29, 0.39), (0.12, 0.1, 0.1), -0.03, 0.6, -0.1),   // a block perched on top
         ((0.14, 0.87), (0.13, 0.08, 0.1), 0.08, 0.7, 0.18),   // fallen block in front
     ];
+    // seen from above: the whole outcrop tips its top toward us about its
+    // foot (each block about its own center would break the stack apart)
+    let (fx, fy) = r.at(0.5, 0.88);
+    let foot = [fx, fy, 0.0];
     let mut parts = vec![];
     for (k, &((u, v), (w, h, d), z, yaw, roll)) in blocks.iter().enumerate() {
         let (cx, cy) = r.at(u, v);
@@ -189,11 +193,12 @@ pub fn outcrop(form: &mut Form, r: Rect, seed: u32) -> Vec<PartId> {
         let size = [w * s, h * r.h / r.w * s * 1.0, d * s];
         let round = size[0].min(size[1]) * 0.2;
         // beds sag and swell: soft lumps break the straight edges first
-        let mut b = Sdf::block(c, size, round).turn(c, yaw, 0.32, roll).rough(s * 0.01, s * 0.12, seed + 40 + k as u32, false);
+        let mut b = Sdf::block(c, size, round).turn(c, yaw, 0.0, roll).rough(s * 0.01, s * 0.12, seed + 40 + k as u32, false);
         // one corner broken off along a joint
         if k % 2 == 1 {
             b = b.cut([c[0] - size[0] * 0.42, c[1] - size[1] * 0.35, c[2] + size[2] * 0.3], [-1.0, -0.6, 0.8], 10 + k as u16, round * 0.3);
         }
+        let b = b.turn(foot, 0.0, 0.32, 0.0);
         let b = b.rough(s * 0.0015, s * 0.03, seed + k as u32, true);
         parts.push(form.add(&b, 0.5));
     }

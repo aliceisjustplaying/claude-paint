@@ -283,8 +283,8 @@ fn main() {
         let fcol = move |x: f32, y: f32| match form.sample(x, y).filter(|s| s.part == id_far) {
             // a cool violet silhouette against the glow, a step darker
             // than the sky behind it
-            Some(s) => range_col(x, y, &s, hex("#5d577c"), hex("#8b82a4"), 13.0),
-            None => mix(hex("#8b84a2"), air(x, y), 0.2, Mix::Light),
+            Some(s) => range_col(x, y, &s, hex("#5e5a78"), hex("#8c86a0"), 13.0),
+            None => mix(hex("#8c87a0"), air(x, y), 0.2, Mix::Light),
         };
         let fcol = &fcol;
         let hd = st.body().palette(violet).color(fcol).angle(|x, y| form.fall(x, y)).angle_jitter(0.15).length(8.0, 26.0).coverage(3.0).medium(0.4).tool_width(5.0).clip(true).threshold(0.2);

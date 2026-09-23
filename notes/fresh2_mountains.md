@@ -262,6 +262,24 @@ What it draws on in Friedrich (from knowledge, no pictures):
     it. A tiny `Canvas::probe(label, pts)` that logs the look at a few
     points after every `work` in debug runs would have saved this.
 
+16. **Palette families cut both ways, and nothing tells you which tube a
+    speck came from.** Orange specks in the ranges at 3200px could have
+    been bare pink ground or a vermilion-heavy pile from mixing jitter. I
+    couldn't tell which: `Canvas` keeps no record of which pile laid a
+    pixel. I did both fixes (a fuller cool underpainting and a red-free
+    family), and the specks went. But the red-free family also made the
+    far range a neutral gray, reading as snow: Friedrich's violets need
+    smalt plus cinnabar [KÖR fig. 6]. The far range now has its own
+    "violet" family with vermilion back in, and no specks came back, so
+    the culprit was probably the bare ground all along. A debug layer
+    ("which stroke/pile made this pixel") would settle such questions in
+    one look.
+17. **Timings** on the shared machine: 1000px whole ≈ 25–30 s. 3200px
+    whole ≈ 95–125 s. 3200px crop of 350×120 units ≈ 30 s, and 4–10 s
+    resumed from a late stage. The crop plus resume loop is what made
+    detail work possible. Checkpoints for whole 3200px renders would be
+    about 440 MB per stage, so I only checkpointed crops and previews.
+
 ## Critique (to be updated)
 
 (after the full render)

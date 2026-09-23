@@ -46,6 +46,16 @@ fn lift(c: Rgb, dl: f32) -> Rgb {
     from_oklab(l)
 }
 
+/// A glaze thickness a painter would actually lay: nothing below a trace.
+/// `Canvas::glaze` levels even 1e-7 coats and scales the pigment by the
+/// leveled film over the film laid, a ratio that float residue in the
+/// leveling blurs can blow up on near-zero deposits: tiny tails of a
+/// Gaussian or a smoothstep drew black strokes and hard rectangles
+/// (FRICTION 0a).
+fn trace(v: f32) -> f32 {
+    if v < 0.01 { 0.0 } else { v }
+}
+
 fn main() {
     let o = Run::new("fresh2_coast");
     let st = Style::friedrich();
@@ -281,7 +291,7 @@ fn main() {
         let white = sky_pal.paint(hex("#f1ece0"), 0.9).pigment();
         c.glaze(&white, None, move |x, y| {
             let d = ((x - mx).powi(2) + (y - my).powi(2)).sqrt() / mr;
-            0.35 * (-(d / 2.6).powi(2)).exp()
+            trace(0.35 * (-(d / 2.6).powi(2)).exp())
         });
         let hd = paint::Handling::new(Tool::round_sable(1.8))
             .mixed(&sky_pal, 0.08)
@@ -1065,7 +1075,7 @@ fn main() {
         // later drew that rectangle as a hard edge (FRICTION)
         let sh_m = Mask::from_shape(f, sh).blur(1.6).map(|v| if v < 0.004 { 0.0 } else { v });
         let umber = shade_pal.mix(hex("#2e2924")).paint(0.85).pigment();
-        c.glaze(&umber, Some(&sh_m), |_, _| 1.4);
+        c.glaze(&umber, Some(&sh_m), |_, _| 1.4);  // (mask thresholded above)
     }
 
     if o.stage("gulls", &mut c, &mut rng) {
@@ -1097,7 +1107,7 @@ fn main() {
         let umber = shade_pal.mix(hex("#4a3a2c")).paint(0.9).pigment();
         c.glaze(&umber, None, move |x, y| {
             let edge = smoothstep(560.0, h, y) * 0.5 + 0.35 * smoothstep(300.0, 0.0, x) * smoothstep(500.0, h, y) + 0.2 * smoothstep(700.0, 1000.0, x) * smoothstep(560.0, h, y);
-            edge * 0.9
+            trace(edge * 0.9)
         });
     }
 

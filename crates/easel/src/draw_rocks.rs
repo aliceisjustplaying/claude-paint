@@ -141,7 +141,7 @@ fn light_of(v: &Value) -> Result<Light> {
 
 const KINDS: &str = "granite (or erratic), sandstone, chalk";
 const ROCK_KEYS: &[&str] = &[
-    "outline", "cracks", "planes", "corners", "kind", "sun", "seed", "round", "facets", "steep", "tilt", "bulge", "bed", "bed_tilt", "bed_recess", "crack_depth", "crack_width", "joints", "lumps",
+    "outline", "cracks", "planes", "corners", "kind", "sun", "seed", "round", "facets", "profile", "sink", "tilt", "bulge", "bed", "bed_tilt", "bed_recess", "crack_depth", "crack_width", "joints", "lumps",
     "grain", "flutes", "ground",
 ];
 
@@ -153,11 +153,11 @@ fn rock(st: &S, o: Table) -> Result<RockU> {
     macro_rules! over {
         ($($f:ident),*) => {$( if let Some(v) = num(&o, stringify!($f))? { spec.$f = v; } )*};
     }
-    over!(round, bulge, bed, bed_tilt, bed_recess, crack_depth, crack_width, joints, lumps, grain, flutes, ground);
+    over!(round, profile, bulge, bed, bed_tilt, bed_recess, crack_depth, crack_width, joints, lumps, grain, flutes, ground);
     if let Some(n) = o.get::<Option<usize>>("facets")? {
         spec.facets = n.min(40);
     }
-    for (k, slot) in [("steep", &mut spec.steep), ("tilt", &mut spec.tilt)] {
+    for (k, slot) in [("sink", &mut spec.sink), ("tilt", &mut spec.tilt)] {
         if let Some(v) = o.get::<Option<Vec<f32>>>(k)? {
             *slot = (v.first().copied().unwrap_or(slot.0), v.get(1).copied().unwrap_or(slot.1));
         }

@@ -27,12 +27,8 @@ pub mod shape;
 pub mod spectral;
 pub mod growth;
 pub mod fir;
-<<<<<<< HEAD
 pub mod broadleaf;
-||||||| 862fe6a
-=======
 pub mod rock;
->>>>>>> tool-rock
 pub mod wet;
 pub mod bristle;
 pub mod handling;

@@ -617,7 +617,6 @@ from)`, plus `wood:floor()` and `wood:mask()` (everything). Numbers:
 works like `f:paint`. `wood.rows` builds a table of every tree, so read it
 once, not inside a color function.
 
-<<<<<<< HEAD
 ### Broadleaved trees grown into a drawn crown
 
 `tree{habit="oak"}` grows a tree from buds, and you can't choose its
@@ -764,8 +763,7 @@ run from far to near: `g:trees()`, `g:tree(i)` (a tree value with `haze`
 and `scale`), `g:haze(i)`, `g:scale(i)`, `g:shadow()`, `g:mask()`,
 `g.count` and `g.horizon`. The study is `paintings/lua/trees_in.lua`.
 
-||||||| 862fe6a
-=======
+
 ### Rocks from a drawn outline
 
 Don't build a rock from ellipsoids and cuts. Draw its silhouette as an
@@ -895,7 +893,6 @@ What you get:
 It costs about 0.1–0.5 s per rock at 1000 px. Each mask costs 4 bytes per
 pixel, like any mask.
 
->>>>>>> tool-rock
 ### Meadows
 
 ```lua

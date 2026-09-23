@@ -20,6 +20,10 @@
 //! D  aged varnish (`Finish::aged`'s #e6d3a4) at 0, 0.4, 1, 2, 4 coats
 //!    over a dark, a dark green, a deep blue, a mid sky, lead white;
 //!    RGB-KM strip over spectral strip
+//! F  the same questions with *pigment-shaped* spectra (`shape_of`: each
+//!    tube's known spectral shape, fitted to its masstone): each block is
+//!    Mixbox · spectral KM on the spectral.js basis · spectral KM shaped;
+//!    mixes as in A/B, then glazes (0.5, 1, 2, 4 coats) and varnish
 //!
 //!   cargo paint study_spectral
 
@@ -109,6 +113,50 @@ fn hexs(c: Rgb) -> String {
     format!("#{:02x}{:02x}{:02x}", q(c[0]), q(c[1]), q(c[2]))
 }
 
+/// A tube's spectral shape (masstone reflectance, relative), written down
+/// from what is known of the pigment's absorption; `spectral::fit_shape`
+/// scales it to the tube's masstone. Approximations from pigment knowledge
+/// (qualitative features, not measured curves):
+/// - smalt: Co²⁺ in glass, three absorption bands near 540, 590 and 640 nm,
+///   reflecting blue and the deep red (its violet cast);
+/// - Prussian blue: a broad reflectance maximum near 450–490 nm, strong
+///   broad absorption over 580–720 nm (the intervalence band near 700);
+/// - chrome yellow: a sharp absorption edge near 500–520 nm;
+/// - yellow ochre (goethite): a gradual edge 480–580 nm, a shoulder near
+///   650 nm;
+/// - vermilion: a very sharp edge near 590–600 nm;
+/// - raw umber: low, rising slowly to the red;
+/// - green earth (celadonite/glaucophane): a weak, broad maximum near
+///   500–550 nm, Fe²⁺ absorption toward the red;
+/// - lead white: flat, dropping a little in the violet.
+fn shape_of(name: &str) -> Option<spectral::Spectrum> {
+    let c = spectral::curve;
+    Some(match name {
+        "smalt" | "pale smalt" => c(&[(380.0, 0.4), (470.0, 0.4), (520.0, 0.12), (540.0, 0.07), (565.0, 0.1), (590.0, 0.05), (615.0, 0.08), (640.0, 0.05), (670.0, 0.12), (700.0, 0.25), (750.0, 0.4)]),
+        "Prussian blue" => c(&[(380.0, 0.05), (420.0, 0.07), (460.0, 0.09), (490.0, 0.08), (530.0, 0.05), (580.0, 0.025), (640.0, 0.012), (700.0, 0.01), (750.0, 0.02)]),
+        "chrome yellow" => c(&[(380.0, 0.06), (470.0, 0.06), (495.0, 0.12), (515.0, 0.35), (535.0, 0.62), (560.0, 0.8), (750.0, 0.85)]),
+        "yellow ochre" => c(&[(380.0, 0.06), (450.0, 0.08), (500.0, 0.12), (540.0, 0.25), (580.0, 0.45), (620.0, 0.5), (655.0, 0.46), (700.0, 0.5), (750.0, 0.55)]),
+        "vermilion" => c(&[(380.0, 0.05), (560.0, 0.05), (585.0, 0.15), (605.0, 0.5), (630.0, 0.65), (750.0, 0.7)]),
+        "raw umber" => c(&[(380.0, 0.04), (500.0, 0.06), (600.0, 0.1), (700.0, 0.14), (750.0, 0.16)]),
+        "green earth" => c(&[(380.0, 0.08), (450.0, 0.12), (510.0, 0.17), (545.0, 0.17), (590.0, 0.13), (640.0, 0.1), (700.0, 0.09), (750.0, 0.1)]),
+        "lead white" => c(&[(380.0, 0.8), (420.0, 0.88), (460.0, 0.9), (750.0, 0.92)]),
+        _ => return None,
+    })
+}
+
+/// Tube `i` as a spectral paint: shaped (`shape_of`) or on the basis.
+fn spec_tube(p: &Palette, i: usize, shaped: bool) -> SpectralPigment {
+    let t = &p.tubes[i];
+    match shape_of(t.name).filter(|_| shaped) {
+        Some(sh) => SpectralPigment::from_masstone_spectrum(&spectral::fit_shape(t.color, &sh), scat(p, i)),
+        None => SpectralPigment::masstone(t.color, scat(p, i)),
+    }
+}
+
+fn spec_mix(p: &Palette, parts: &[(usize, f32)], shaped: bool) -> SpectralPigment {
+    SpectralPigment::mix(&parts.iter().map(|&(i, f)| (spec_tube(p, i, shaped), f * p.tubes[i].strength)).collect::<Vec<_>>())
+}
+
 /// A glaze or film, both ways.
 struct Film {
     rgb: Pigment,
@@ -131,6 +179,10 @@ impl Film {
     }
 }
 
+fn varnish_rgb() -> Pigment {
+    Pigment::varnish(hex("#e6d3a4"))
+}
+
 /// Films laid in order over `sub`, each `x` coats: (RGB-KM, spectral).
 fn stack(sub: Rgb, films: &[(&Film, f32)]) -> (Rgb, Rgb) {
     let mut r = sub;
@@ -145,7 +197,7 @@ fn stack(sub: Rgb, films: &[(&Film, f32)]) -> (Rgb, Rgb) {
 fn main() {
     let o = paintings::run::Run::new("study_spectral");
     let p = tubes();
-    let mut c = Canvas::new(o.width, 1000.0 / 1300.0, [0.5; 3]);
+    let mut c = Canvas::new(o.width, 1000.0 / 1380.0, [0.5; 3]);
     let mut cells: Vec<(f32, f32, f32, f32, Rgb)> = Vec::new();
     let mut y = 10.0;
     let (x0, cw) = (10.0, 980.0 / 11.0);
@@ -240,6 +292,83 @@ fn main() {
         }
         eprintln!("{line}");
         y += 34.0;
+    }
+    // ---- F: pigment-shaped spectra
+    eprintln!("\n[F] pigment-shaped spectra: Mixbox | spectral basis | spectral shaped");
+    y += 10.0;
+    let fpairs = [("Prussian blue", "yellow ochre"), ("Prussian blue", "chrome yellow"), ("smalt", "yellow ochre"), ("smalt", "chrome yellow"), ("smalt", "lead white"), ("Prussian blue", "lead white"), ("smalt", "green earth"), ("vermilion", "lead white")];
+    for (a, b) in fpairs {
+        let (ia, ib) = (idx(&p, a), idx(&p, b));
+        let rows: Vec<Vec<Rgb>> = (0..3)
+            .map(|how| {
+                (0..11)
+                    .map(|k| {
+                        let f = k as f32 / 10.0;
+                        let parts = [(ia, 1.0 - f), (ib, f)];
+                        match how {
+                            0 => masstone(&p, &parts, How::Mixbox),
+                            1 => spec_mix(&p, &parts, false).masstone_color(),
+                            _ => spec_mix(&p, &parts, true).masstone_color(),
+                        }
+                    })
+                    .collect()
+            })
+            .collect();
+        for row in &rows {
+            for (k, &col) in row.iter().enumerate() {
+                cells.push((x0 + k as f32 * cw, y, cw - 2.0, 11.0, col));
+            }
+            y += 12.0;
+        }
+        y += 6.0;
+        let d: f32 = (1..10).map(|k| de(rows[1][k], rows[2][k])).fold(0.0, f32::max);
+        let dm: f32 = (1..10).map(|k| de(rows[0][k], rows[2][k])).fold(0.0, f32::max);
+        let picks: Vec<String> = [2usize, 5, 8].iter().map(|&k| format!("{:.1}: {} {} | {} {}", k as f32 / 10.0, hexs(rows[1][k]), lch(rows[1][k]), hexs(rows[2][k]), lch(rows[2][k]))).collect();
+        eprintln!("  {a} → {b}: shaped vs basis max ΔE {d:.3}, shaped vs Mixbox {dm:.3}\n     {}", picks.join("\n     "));
+    }
+    // glazes and varnish with shaped spectra
+    let sh = |n: &str| spectral::fit_shape(p.tubes[idx(&p, n)].color, &shape_of(n).unwrap());
+    let ochre_s = sh("yellow ochre");
+    let chrome_s = sh("chrome yellow");
+    let sky_s = spec_mix(&p, &[(idx(&p, "smalt"), 0.45), (idx(&p, "lead white"), 0.55)], true);
+    let sky_b = spec_mix(&p, &[(idx(&p, "smalt"), 0.45), (idx(&p, "lead white"), 0.55)], false);
+    let glaze_of = |n: &str, medium: f32, shaped: bool| spec_tube(&p, idx(&p, n), shaped).scaled(1.0 - medium);
+    // madder: two alizarin/purpurin bands near 510 and 540 nm, rose over white
+    let madder_shape = spectral::curve(&[(380.0, 0.45), (420.0, 0.4), (460.0, 0.3), (495.0, 0.14), (515.0, 0.08), (530.0, 0.1), (545.0, 0.07), (570.0, 0.15), (600.0, 0.55), (640.0, 0.8), (750.0, 0.85)]);
+    let madder_w = spectral::fit_shape(hex("#d8768a"), &madder_shape);
+    let madder_s = SpectralPigment::from_appearance_spectra(&madder_w, &madder_w.map(|v| v * 0.06));
+    // aged varnish: absorption rising steeply below ~500 nm
+    let varn_shape = spectral::curve(&[(380.0, 0.3), (420.0, 0.45), (460.0, 0.62), (500.0, 0.78), (540.0, 0.86), (600.0, 0.9), (750.0, 0.92)]);
+    let varn_w = spectral::fit_shape(hex("#e6d3a4"), &varn_shape);
+    let varn_s = SpectralPigment::from_appearance_spectra(&varn_w, &varn_w.map(|v| v * 0.004));
+    let dark_green = spec_mix(&p, &[(idx(&p, "Prussian blue"), 0.3), (idx(&p, "yellow ochre"), 0.5), (idx(&p, "raw umber"), 0.2)], true);
+    let dark_green_b = spec_mix(&p, &[(idx(&p, "Prussian blue"), 0.3), (idx(&p, "yellow ochre"), 0.5), (idx(&p, "raw umber"), 0.2)], false);
+    type Case<'a> = (&'a str, Rgb, spectral::Spectrum, Rgb, &'a Pigment, SpectralPigment, SpectralPigment);
+    let rgb_madder = &madder.rgb;
+    let rgb_varn = &varnish_rgb();
+    let ums = Pigment::masstone(p.tubes[idx(&p, "raw umber")].color, scat(&p, idx(&p, "raw umber")) * 0.1);
+    let prs = Pigment::masstone(p.tubes[idx(&p, "Prussian blue")].color, scat(&p, idx(&p, "Prussian blue")) * 0.2);
+    let cases: Vec<Case> = vec![
+        ("madder over yellow ochre", ochre, ochre_s, ochre, rgb_madder, madder.spec, madder_s),
+        ("Prussian blue glaze over chrome yellow", chrome, chrome_s, chrome, &prs, glaze_of("Prussian blue", 0.8, false), glaze_of("Prussian blue", 0.8, true)),
+        ("umber glaze over smalt sky", sky_b.masstone_color(), sky_s.masstone_spectrum(), sky_b.masstone_color(), &ums, glaze_of("raw umber", 0.9, false), glaze_of("raw umber", 0.9, true)),
+        ("varnish over smalt sky", sky_b.masstone_color(), sky_s.masstone_spectrum(), sky_b.masstone_color(), rgb_varn, varnish.spec, varn_s),
+        ("varnish over a Prussian-ochre dark green", dark_green_b.masstone_color(), dark_green.masstone_spectrum(), dark_green_b.masstone_color(), rgb_varn, varnish.spec, varn_s),
+    ];
+    for (name, sub_rgb, sub_shaped, sub_basis, rgbf, basisf, shapedf) in cases {
+        let mut line = format!("  {name:42}");
+        let bsub = spectral::from_rgb(sub_basis);
+        for (k, &x) in [0.0f32, 0.5, 1.0, 2.0, 4.0].iter().enumerate() {
+            let r = if x == 0.0 { sub_rgb } else { rgbf.over(sub_rgb, x) };
+            let b = spectral::to_rgb(&basisf.over_spectrum(&bsub, x));
+            let s2 = spectral::to_rgb(&shapedf.over_spectrum(&sub_shaped, x));
+            for (j, col) in [r, b, s2].into_iter().enumerate() {
+                cells.push((x0 + k as f32 * cw * 2.0, y + j as f32 * 12.0, 2.0 * cw - 2.0, 11.0, col));
+            }
+            line += &format!(" {x}: {}|{}|{} Δ{:.3}", hexs(r), hexs(b), hexs(s2), de(b, s2));
+        }
+        eprintln!("{line}");
+        y += 42.0;
     }
     eprintln!("sheet height used: {y:.0} of {:.0}", c.height());
 

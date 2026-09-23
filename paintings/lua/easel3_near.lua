@@ -332,3 +332,98 @@ work(boulm, {hand="body", tool="filbert 3", length={4, 12}, coverage=3.8, medium
     local top = smoothstep(660, 630, y) * smoothstep(0.35, 0.65, bg:at01(x, y))
     return mix(c, mix("#46511f", "#76803c", v), 0.8 * top)
   end})
+
+--@ chunk 15 · clock 130865.54431152344
+wait(24*60)
+local gp = noise{seed=101, octaves=4, period=90, stretch={0.0, 2.5}}
+local patches = mask(function(x, y) return smoothstep(0.5, 0.62, gp:at01(x, y) + 0.12 * smoothstep(600, 769, y)) end)
+local region = (below(function(x) return 530 end) - (rockm + boulm):shrink(3)) * patches
+local tufts = sward{region=region, horizon=470, near=H, height=30, flowers=0, seed=14, spacing=2.6, thin=0.5,
+  wind={lean=0.1, gust=0.2, period=180, seed=3}}
+local g = brush("rigger", 0.7)
+local straws = {"#9c8a5c", "#b3a06a", "#7f7446", "#6c6a3c", "#8e8a52", "#5d5a34", "#c2ae78", "#4a4a2c"}
+local n = 0
+local keep = -((rockm + boulm):grow(1))
+for i, t in ipairs(tufts) do
+  if i % 2 == 1 then
+    local base = straws[1 + (i // 2) % #straws]
+    local under = sample(t.x, t.y, 2)
+    g:reload(mix(under, base, 0.12 + 0.35 * rand() * rand()), 0.7)
+  end
+  local p = clamp(0.2 + 0.45 * t.scale, 0.2, 0.8)
+  for _, bl in ipairs(t.blades) do
+    g:stroke(bl, {pressure={p, 0.0}, ramps={0.05, 0.7}, clip=keep})
+    n = n + 1
+  end
+end
+print(#tufts, "tufts", n, "blades", region:area())
+
+--@ chunk 16 · clock 132305.54431152344
+wait(3*60)
+rusts = {"#6e3d20", "#83492a", "#94592f", "#5c3520", "#a2683a", "#4f3322"}
+function frond(x, y, len, ang, bend, col, scale)
+  local pts = {}
+  local n = 12
+  for i = 0, n do
+    local t = i / n
+    pts[#pts+1] = {x + len * t * math.cos(ang + bend * t * 0.6), y + len * t * math.sin(ang + bend * t * 0.6)}
+  end
+  local r = brush("rigger", 1.1 * scale)
+  r:load(shift(color(col), -0.1, 0, 0), 0.8)
+  r:stroke(pts, {pressure={0.85, 0.1}, ramps={0.05, 0.6}})
+  local p = brush{kind="round", width=2.8 * scale, point=0.5}
+  local q = brush{kind="filbert", width=2.2 * scale}
+  p:load(col, 0.9); q:load(shift(color(col), 0.05, 0, 0.01), 0.9)
+  for i = 3, n do
+    local a, b = pts[i-1], pts[i]
+    local dx, dy = b[1] - a[1], b[2] - a[2]
+    local d = math.sqrt(dx*dx + dy*dy) + 1e-6
+    local ux, uy = dx / d, dy / d
+    local nx, ny = -uy, ux
+    local t = i / n
+    local pl = len * 0.42 * (1 - t) ^ 0.7 * (0.8 + 0.4 * rand())
+    for side = -1, 1, 2 do
+      if rand() < 0.9 then
+        local droop = 0.3 * pl
+        local sx, sy = b[1], b[2]
+        local ex, ey = sx + side * nx * pl + ux * pl * 0.3, sy + side * ny * pl + uy * pl * 0.3 + droop
+        p:stroke({{sx, sy}, {(sx + ex) / 2, (sy + ey) / 2 + droop * 0.2}, {ex, ey}}, {pressure={0.8, 0.1}, ramps={0.1, 0.6}})
+        -- pinnules: small dabs along the pinna
+        local m = math.floor(pl / (2.5 * scale))
+        for j = 1, m do
+          local u = j / (m + 1)
+          local cx, cy = lerp(sx, ex, u), lerp(sy, ey, u) + droop * 0.2 * math.sin(u * math.pi)
+          local s2 = (1 - u) * 0.6 + 0.2
+          q:touch(cx + side * ux * 1.2, cy + 1.5 * scale, {pressure=clamp(0.3 + 0.5 * s2, 0.2, 0.8), angle=math.atan(ny, nx) + side * 0.6, drag={ux * 0.5, 1.2}})
+        end
+        if p:fullness() < 0.3 then p:reload(col, 0.9) end
+        if q:fullness() < 0.3 then q:reload(shift(color(col), 0.05 * rand(), 0, 0.01), 0.9) end
+      end
+    end
+  end
+end
+local groups = {
+  {335, 672, 9, 90, -1}, {880, 670, 12, 100, 1}, {965, 700, 8, 95, 1},
+  {40, 760, 9, 140, 1}, {150, 772, 5, 120, -1}, {590, 775, 6, 110, -1}, {740, 772, 6, 100, 1}, {20, 610, 5, 60, 1}}
+-- dark masses under the groups
+local dm = nil
+for _, g in ipairs(groups) do
+  local e = ellipse(g[1], g[2] - g[4] * 0.2, g[4] * 0.7, g[4] * 0.3)
+  dm = dm and (dm + e) or e
+end
+dm = dm:roughen(10, 18, 4, 4) * below(function(x) return 560 end)
+work(dm - (rockm + boulm), {hand="hatch", tool="round 2.5", length={5, 14}, coverage=2.5, medium=0.15, angle=function(x, y) return -1.2 + 0.8 * math.sin(x / 13) end, angle_jitter=0.6,
+  color=function(x, y) return mix("#3a2518", "#5a3620", rand()) end})
+local nf = 0
+for gi, g in ipairs(groups) do
+  for k = 1, g[3] do
+    local x = g[1] + randn(0, g[4] * 0.45)
+    local y = g[2] + randn(0, 10)
+    local up = -math.pi/2 + randn(0, 0.45) + 0.35 * g[5]
+    local scale = clamp((y - 540) / 200, 0.5, 1.3)
+    local col = rusts[1 + (gi * 7 + k) % #rusts]
+    frond(x, y, g[4] * rand(0.6, 1.1) * scale, up, (rand() < 0.5 and 1 or -1) * rand(0.9, 1.9), col, scale)
+    nf = nf + 1
+  end
+end
+print(nf, "fronds")

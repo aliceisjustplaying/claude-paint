@@ -48,4 +48,5 @@ Then stop and evaluate with the user.
 - workflow done (crop renders ~close, checkpoints byte-exact, run_ordered scheduler, Palette::mix order-independence fix); resumed the workflow agent to merge main into its branch (Frame/crop across new modules, unify levelize + run_ordered).
 - workflow merged (fast-forward, 47d333b): one scheduler (sched::run_ordered), crop-aware stipple/aim, per-pile forked RNG; 50 tests pass.
 - monk2 archived to paintings/archive/, monk figure removed.
+- Review (gpt-6-astra, medium): 13 distinct findings (notes/review/). review-sched hit a content filter at the very end but had written its report. Three fixers launched: fix-optics, fix-sched, fix-form.
 - (updated as work lands)

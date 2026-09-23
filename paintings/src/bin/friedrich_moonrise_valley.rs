@@ -313,7 +313,6 @@ fn main() {
     }
 
     // ---- finish: clear aged varnish, cracks, the surface in raking light
-    let ground_um = st.ground.iter().map(|g| g.um).sum();
-    let cracks = paint::Cracks { island_mm: 3.5, ground_um, dirt: 0.4, ..paint::Cracks::aged(0) };
-    o.finish(&mut c, &mut rng, &Finish { cracks: Some(cracks), ..Finish::aged(st.relief) });
+    // (the aged craquelure fits itself to this canvas's ground and paint)
+    o.finish(&mut c, &mut rng, &Finish::aged(st.relief));
 }

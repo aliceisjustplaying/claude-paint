@@ -500,3 +500,17 @@ for i = 1, 1400 do
   end
 end
 print(n)
+
+--@ chunk 29 · clock 45631.58203125
+
+glaze(fgsil:grow(1), {color="#1d1b17", coats=0.3, pigment="transparent"})
+
+--@ chunk 30 · clock 45631.58203125
+
+local sb = brush("round", 1.0)
+sb:load("#1c1b1a", 0.8)
+sb:stroke({{FX + 8.2, FY - 25}, {FX + 10.6, FY - 12}, {FX + 12.8, FY + 0.5}}, {pressure={0.55, 0.45}, ramps={0.05, 0.1}})
+
+--@ chunk 31 · clock 45631.58203125
+
+dry(); varnish{color="#e6d3a4", coats=0.3, vary=0.1}; relief()

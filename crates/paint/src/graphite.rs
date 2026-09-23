@@ -74,16 +74,23 @@ pub fn softness(grade: &str) -> Option<f32> {
         "F" => return Some(-0.5),
         _ => {}
     }
-    let (num, last) = g.split_at(g.len().checked_sub(1)?);
+    // "2H", "B": ASCII digits then H or B (anything else, accented letters
+    // and emoji included, is not a grade)
+    let (num, sign) = if let Some(n) = g.strip_suffix('H') {
+        (n, -1.0)
+    } else if let Some(n) = g.strip_suffix('B') {
+        (n, 1.0)
+    } else {
+        return None;
+    };
+    if !num.bytes().all(|b| b.is_ascii_digit()) {
+        return None;
+    }
     let n: f32 = if num.is_empty() { 1.0 } else { num.parse().ok()? };
     if !(1.0..=9.0).contains(&n) {
         return None;
     }
-    match last {
-        "H" => Some(-n),
-        "B" => Some(n),
-        _ => None,
-    }
+    Some(sign * n)
 }
 
 impl Lead {
@@ -148,11 +155,32 @@ struct Cell {
     film: f32,
 }
 
-/// The loose drawing on a canvas: what was laid where, so it can be lifted.
+/// The loose drawing on a canvas: what was laid where, so it can be lifted,
+/// and the guide: where the lines were drawn, over the whole canvas.
 #[derive(Clone)]
 pub struct Drawing {
+    /// The deposit, per pixel of the window (the canvas's optical buffers).
     cells: Vec<Cell>,
+    /// The drawn lines as geometry, per pixel of the whole canvas (not just
+    /// the window of a crop render): 1 on a line drawn with ordinary
+    /// pressure, fading as the pressure goes to zero. Independent of the
+    /// tooth, the grain and wet paint, so it is the same in a crop render
+    /// and a whole one.
+    guide: Vec<f32>,
+    /// What fixative bound of the guide: the eraser can't lift below this.
+    guide_floor: Option<Vec<f32>>,
 }
+
+/// How much of the point touches at pressure `p`: none at 0, rising
+/// smoothly to all of it at 0.12 and above (a line laid with no pressure
+/// lays nothing; a lifting stroke fades out instead of stopping short).
+pub fn touch(p: f32) -> f32 {
+    let t = (p / 0.12).clamp(0.0, 1.0);
+    t * t * (3.0 - 2.0 * t)
+}
+
+/// What the eraser takes of the guide per pass at full strength.
+const GUIDE_LIFT: f32 = 0.85;
 
 /// A line to draw: a dense path (units) with the pressure at every point.
 #[derive(Clone, Debug, Default)]
@@ -408,8 +436,65 @@ pub fn hatch_marks(m: &Mask, angle: f32, spacing: f32, length: f32, pressure: f3
 }
 
 impl Drawing {
-    fn new(n: usize) -> Self {
-        Drawing { cells: vec![Cell { film: -1.0, ..Cell::default() }; n] }
+    fn new(n: usize, whole: usize) -> Self {
+        Drawing { cells: vec![Cell { film: -1.0, ..Cell::default() }; n], guide: vec![0.0; whole], guide_floor: None }
+    }
+
+    /// Serialized as f32s: the window's cells (a, r, lift, floor, film), the
+    /// guide (whole canvas), then 0 or 1 and the guide's floor.
+    pub(crate) fn to_f32s(&self) -> impl Iterator<Item = f32> + '_ {
+        let cells = self.cells.iter().flat_map(|c| [c.a, c.r, c.lift, c.floor, c.film]);
+        let floor = std::iter::once(if self.guide_floor.is_some() { 1.0 } else { 0.0 }).chain(self.guide_floor.iter().flatten().copied());
+        cells.chain(self.guide.iter().copied()).chain(floor)
+    }
+
+    /// The inverse of `to_f32s`, reading with `get(count)`; `n` window
+    /// pixels, `whole` canvas pixels. None if the data is inconsistent.
+    pub(crate) fn from_f32s<E>(n: usize, whole: usize, mut get: impl FnMut(usize) -> Result<Vec<f32>, E>) -> Result<Option<Self>, E> {
+        let raw = get(n * 5)?;
+        let cells: Vec<Cell> = raw.as_chunks::<5>().0.iter().map(|q| Cell { a: q[0], r: q[1], lift: q[2], floor: q[3], film: q[4] }).collect();
+        let guide = get(whole)?;
+        let has_floor = get(1)?[0];
+        let guide_floor = if has_floor == 1.0 { Some(get(whole)?) } else { None };
+        let ok = |v: f32| v.is_finite() && (0.0..=1.0).contains(&v);
+        let valid = (has_floor == 0.0 || has_floor == 1.0)
+            && cells.iter().all(|c| ok(c.a) && ok(c.r) && ok(c.lift) && ok(c.floor) && c.film.is_finite())
+            && guide.iter().chain(guide_floor.iter().flatten()).all(|&v| ok(v));
+        Ok(valid.then_some(Drawing { cells, guide, guide_floor }))
+    }
+}
+
+/// Lay a mark's line into the guide (a whole-canvas buffer of frame `wf`):
+/// the path with its width `wid` (units; at least two pixels, so it samples
+/// as an unbroken line), as firm as the point touches.
+fn guide_line(g: &mut [f32], wf: crate::canvas::Frame, pts: &[(f32, f32)], wid: &[f32], pressure: &[f32]) {
+    let pxu = 1.0 / wf.scale;
+    for i in 0..pts.len() - 1 {
+        let (a, b) = (pts[i], pts[i + 1]);
+        let (ta, tb) = (touch(pressure[i]), touch(pressure[i + 1]));
+        if ta <= 0.0 && tb <= 0.0 {
+            continue;
+        }
+        let hw = 0.5 * wid[i].max(wid[i + 1]).max(2.0 * pxu) + pxu;
+        let to_px = |u: f32, n: usize| ((u * wf.scale).floor().max(0.0) as usize).min(n);
+        let (px0, px1) = (to_px(a.0.min(b.0) - hw, wf.w), (to_px(a.0.max(b.0) + hw, wf.w) + 1).min(wf.w));
+        let (py0, py1) = (to_px(a.1.min(b.1) - hw, wf.h), (to_px(a.1.max(b.1) + hw, wf.h) + 1).min(wf.h));
+        let (dx, dy) = (b.0 - a.0, b.1 - a.1);
+        let l2 = (dx * dx + dy * dy).max(1e-12);
+        for y in py0..py1 {
+            let yu = wf.uy(y);
+            for x in px0..px1 {
+                let xu = wf.ux(x);
+                let t = (((xu - a.0) * dx + (yu - a.1) * dy) / l2).clamp(0.0, 1.0);
+                let d = ((xu - a.0 - t * dx).powi(2) + (yu - a.1 - t * dy).powi(2)).sqrt();
+                let w = (wid[i] + (wid[i + 1] - wid[i]) * t).max(2.0 * pxu);
+                let v = (0.5 - (d - 0.5 * w) / pxu).clamp(0.0, 1.0) * (ta + (tb - ta) * t);
+                let k = y * wf.w + x;
+                if v > g[k] {
+                    g[k] = v;
+                }
+            }
+        }
     }
 }
 
@@ -420,8 +505,8 @@ impl Canvas {
     }
 
     fn drawing_mut(&mut self) -> &mut Drawing {
-        let n = self.px.len();
-        self.drawing.get_or_insert_with(|| Box::new(Drawing::new(n)))
+        let (n, whole) = (self.px.len(), self.f.full_w * self.f.full_h);
+        self.drawing.get_or_insert_with(|| Box::new(Drawing::new(n, whole)))
     }
 
     /// Radius (px) over which the point rides on the tops of the ground.
@@ -432,7 +517,9 @@ impl Canvas {
     /// Draw one line with `lead` along the mark (units), the point having
     /// drawn `worn_mm` since it was sharpened. Returns the mm drawn (the
     /// point wears by that much). Wet paint doesn't take graphite: the line
-    /// skips it.
+    /// skips it. The deposit fades to nothing as the pressure goes to zero
+    /// (`touch`). The line also goes into the drawing's guide (see
+    /// `drawing_guide`), over the whole canvas even in a crop render.
     pub fn draw(&mut self, lead: &Lead, mark: &Mark, worn_mm: f32, seed: u64) -> f32 {
         let pts = &mark.pts;
         if pts.len() < 2 {
@@ -472,6 +559,7 @@ impl Canvas {
                 }
             }
         }
+        guide_line(&mut self.drawing_mut().guide, f.whole(), pts, &wid, &mark.pressure);
         // one deposit per pixel: the nearest pass of the line over it
         hits.sort_unstable_by(|p, q| p.0.cmp(&q.0).then(q.1.total_cmp(&p.1)));
         hits.dedup_by_key(|h| h.0);
@@ -516,7 +604,7 @@ impl Canvas {
                 let contact = (-depth.max(0.0) / bite).exp();
                 let (gx, gy) = ((i % f.w + f.x0) as i64, (i / f.w + f.y0) as i64);
                 let grain = 1.0 - crumble * hash2(gx, gy, seed);
-                let dep = (lead.rate * contact * cov * grain).clamp(0.0, 1.0);
+                let dep = (lead.rate * contact * cov * grain * touch(p)).clamp(0.0, 1.0);
                 let cap = lead.cap * (0.55 + 0.45 * p);
                 let da = (cap - c.a).max(0.0) * dep;
                 if da <= 0.0 {
@@ -538,10 +626,19 @@ impl Canvas {
     /// A kneaded eraser pressed and rolled over `m` (coverage 0..1): lifts
     /// loose drawing (not fixed, not painted over) by up to `strength` 0..1
     /// of what is there, better from the tops of the tooth than from the
-    /// hollows, and never quite all of it.
+    /// hollows, and never quite all of it. It lifts the guide too (see
+    /// `drawing_guide`), wherever it goes.
     pub fn erase(&mut self, m: &Mask, strength: f32) {
         self.check_mask(m);
         let Some(d) = self.drawing.as_mut() else { return };
+        let st = strength.clamp(0.0, 1.0);
+        for (k, g) in d.guide.iter_mut().enumerate() {
+            let mv = m.data[k].min(1.0);
+            if mv > 0.0 && *g > 0.0 {
+                let floor = d.guide_floor.as_ref().map_or(0.0, |fl| fl[k]);
+                *g = (*g * (1.0 - (st * mv * GUIDE_LIFT).min(0.97))).max(floor.min(*g));
+            }
+        }
         let f = self.f;
         let rt = (0.35 / (self.mm_per_unit / f.scale)).round().max(1.0) as isize;
         let (w, h) = (f.w as isize, f.h as isize);
@@ -582,11 +679,22 @@ impl Canvas {
                 c.floor = c.a;
             }
         }
+        let fl = d.guide_floor.get_or_insert_with(|| vec![0.0; d.guide.len()]);
+        for (k, (v, g)) in fl.iter_mut().zip(&d.guide).enumerate() {
+            if m.is_none_or(|m| m.data[k] > 0.5) {
+                *v = *g;
+            }
+        }
     }
 
-    /// The drawing as a mask of the whole canvas: 1 on a firm line, fading
-    /// with the deposit (0.5 of a pixel covered or more reads as 1). Includes
-    /// drawing that paint has since covered, until something is drawn over it.
+    /// The graphite deposit as a mask: 1 on a firm line, fading with the
+    /// deposit (0.5 of a pixel covered or more reads as 1). Includes drawing
+    /// that paint has since covered, until something is drawn over it.
+    ///
+    /// It is the physical deposit, broken by the tooth and the grain of the
+    /// lead, and it is known only where the canvas holds pixels: in a crop
+    /// render it is zero outside the window. To paint into the drawing (a
+    /// mask to plan strokes with) use `drawing_guide`.
     pub fn drawing_mask(&self) -> Mask {
         let whole = self.f.whole();
         let mut m = Mask::empty(whole);
@@ -597,6 +705,22 @@ impl Canvas {
             }
         }
         m
+    }
+
+    /// The drawing as geometry: where the lines were drawn, over the whole
+    /// canvas (a crop render has all of it too). 1 on a line drawn with
+    /// ordinary pressure (at least two pixels wide), fading as the pressure goes
+    /// to zero; lifted by the eraser (never below what fixative bound).
+    /// Unlike `drawing_mask` it follows the line continuously, not the
+    /// grain of the deposit, and paint over the drawing doesn't change it.
+    /// This is the mask to paint into the drawing with:
+    /// `work(&c.drawing_guide().dilate(1.0), ...)`.
+    pub fn drawing_guide(&self) -> Mask {
+        let whole = self.f.whole();
+        match &self.drawing {
+            Some(d) => Mask { f: whole, data: d.guide.clone() },
+            None => Mask::empty(whole),
+        }
     }
 
     /// The drawing alone, as it would look on a white ground (the pixels of
@@ -665,6 +789,114 @@ mod tests {
         assert_eq!(softness("F"), Some(-0.5));
         assert_eq!(softness("12B"), None);
         assert_eq!(softness("2X"), None);
+        // not a grade, and never a panic (review 4 #9: "é" split mid-char)
+        for g in ["é", "éB", "2é", "Bé", "🙂", "2🙂", "", " ", "+2B", "1.5B", "0B", "HH"] {
+            assert_eq!(softness(g), None, "{g:?}");
+            assert!(Lead::pencil(g).is_none());
+        }
+    }
+
+    fn flat() -> Canvas {
+        Canvas::new_window(400, 1.5, [0.8; 3], None).with_size_mm(440.0)
+    }
+
+    /// Darkening laid by one 2B line at pressure `p` on a flat ground.
+    fn laid(p: &[f32]) -> (Canvas, f32) {
+        let mut c = flat();
+        let m = hand_line(&[(100.0, 100.0), (900.0, 100.0)], p, false, true, 0.0, 5);
+        c.draw(&Lead::pencil("2B").unwrap(), &m, 0.0, 9);
+        let dark: f32 = c.pixels().iter().map(|q| 0.8 - q[0]).sum();
+        (c, dark)
+    }
+
+    /// Review 4 #7: no pressure, no line; the deposit fades continuously to
+    /// nothing as the pressure goes to zero, and a lifting stroke fades out.
+    #[test]
+    fn zero_pressure_lays_nothing() {
+        let (c, dark) = laid(&[0.0]);
+        assert!(dark == 0.0 && c.drawing_mask().data.iter().all(|&v| v == 0.0), "p=0 laid {dark}");
+        assert!(c.drawing_guide().data.iter().all(|&v| v == 0.0));
+        let ds: Vec<f32> = [0.005, 0.02, 0.05, 0.1, 0.2, 0.4].iter().map(|&p| laid(&[p]).1).collect();
+        assert!(ds.windows(2).all(|w| w[0] < w[1]), "monotone in pressure: {ds:?}");
+        assert!(ds[0] < 0.01 * ds[5] && ds[1] < 0.1 * ds[5], "continuous toward zero: {ds:?}");
+        // a stroke lifting off: nothing at its end
+        let (c, _) = laid(&[0.8, 0.0]);
+        let f = c.window();
+        let col = |x: f32| (0..f.h).map(|y| 0.8 - c.pixels()[y * f.w + (x * f.scale) as usize][0]).sum::<f32>();
+        assert!(col(899.6) < 1e-4 && col(880.0) < col(700.0) && col(700.0) < col(300.0), "lift-off {} {} {} {}", col(899.6), col(880.0), col(700.0), col(300.0));
+    }
+
+    /// The guide is the drawn line: continuous along it where the deposit
+    /// breaks up into the grain (the beaded limbs of `pencil.lua`); lifted
+    /// by the eraser, kept by fixative, unchanged by paint over it.
+    #[test]
+    fn guide_follows_the_line() {
+        let mut c = Style { width_mm: 440.0, ..Style::friedrich_early() }.prepare(1000, 1.4, 11);
+        let m = hand_line(&[(779.0, 420.0), (812.0, 398.0), (838.0, 366.0), (858.0, 330.0)], &[0.5, 0.2], true, false, 0.15 / 0.44, 5);
+        c.draw(&Lead::pencil("2B").unwrap(), &m, 400.0, 9);
+        let (g, dm) = (c.drawing_guide(), c.drawing_mask());
+        let on: Vec<(f32, f32)> = m.pts.iter().map(|p| (g.sample(p.0, p.1), dm.sample(p.0, p.1))).collect();
+        assert!(on.iter().all(|s| s.0 > 0.75), "guide breaks along the line: {:?}", on.iter().map(|s| s.0).fold(1.0, f32::min));
+        assert!(on.iter().any(|s| s.1 < 0.55), "the deposit itself is beaded (the test shows the difference)");
+        // off the line: nothing
+        assert_eq!(g.sample(700.0, 300.0), 0.0);
+        let glaze = Pigment::masstone_hiding(hex("#b8c4cc"), 0.98);
+        c.glaze(&glaze, None, |_, _| 4.0);
+        assert!(c.drawing_guide().data == g.data, "paint doesn't move the guide");
+        let f = c.frame();
+        let left = Mask::from_fn(f, |x, _| if x < 820.0 { 1.0 } else { 0.0 });
+        c.fix_drawing(Some(&left));
+        c.erase(&Mask::full(f), 1.0);
+        let e = c.drawing_guide();
+        let near = |x: f32| *m.pts.iter().min_by(|p, q| (p.0 - x).abs().total_cmp(&(q.0 - x).abs())).unwrap();
+        let (kept, lifted) = (near(790.0), near(850.0));
+        assert!(e.sample(kept.0, kept.1) == g.sample(kept.0, kept.1), "fixed part kept");
+        let v = e.sample(lifted.0, lifted.1);
+        assert!(v < 0.2 && v > 0.0, "loose part lifted, a ghost left: {v}");
+    }
+
+    fn crop_draw(c: &mut Canvas) {
+        for y in (150..550).step_by(20) {
+            let m = hand_line(&[(50.0, y as f32), (950.0, y as f32)], &[0.8], false, true, 0.0, 5);
+            c.draw(&Lead::chalk(), &m, 200.0, 9);
+        }
+        let k = hand_line(&[(200.0, 600.0), (480.0, 320.0), (800.0, 640.0)], &[0.6, 0.1], true, false, 0.0, 6);
+        c.draw(&Lead::pencil("2B").unwrap(), &k, 0.0, 10);
+    }
+
+    /// Review 4 #1: painting into the drawing in a crop render paints what a
+    /// whole render does (the guide has the whole drawing; the deposit mask
+    /// doesn't, so it changed every stroke's random stream).
+    #[test]
+    fn guide_is_the_same_in_a_crop() {
+        use crate::bristle::Tool;
+        use crate::canvas::Crop;
+        use crate::handling::Handling;
+        let mut a = Canvas::new_window(500, 1.4, [0.8; 3], None).with_size_mm(440.0);
+        let mut b = Canvas::new_window(500, 1.4, [0.8; 3], Some(Crop { units: [400.0, 250.0, 600.0, 450.0], margin: 80.0 })).with_size_mm(440.0);
+        crop_draw(&mut a);
+        crop_draw(&mut b);
+        let (ga, gb) = (a.drawing_guide(), b.drawing_guide());
+        assert!(ga.data == gb.data, "the guide is the whole drawing in a crop too");
+        let hd = Handling::new(Tool::round_sable(4.0)).length(10.0, 20.0).coverage(2.0).color(|_, _| [0.08, 0.12, 0.18]).hug(false).clip(false).fill(false);
+        a.work(&ga.dilate(4.0), &hd, 77);
+        b.work(&gb.dilate(4.0), &hd, 77);
+        a.dry();
+        b.dry();
+        let f = b.window();
+        let (mut n, mut max) = (0, 0.0f32);
+        for (i, p) in b.pixels().iter().enumerate() {
+            let (x, y) = (f.ux(i % f.w), f.uy(i / f.w));
+            if !(400.0..600.0).contains(&x) || !(250.0..450.0).contains(&y) {
+                continue;
+            }
+            let q = a.pixels()[f.whole_index(i)];
+            n += 1;
+            for k in 0..3 {
+                max = max.max((p[k] - q[k]).abs());
+            }
+        }
+        assert!(n > 5000 && max < 1e-3, "crop and whole differ by {max} over {n} pixels");
     }
 
     /// Softer grades and more pressure lay darker lines; chalk is darkest.

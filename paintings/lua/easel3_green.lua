@@ -498,3 +498,95 @@ for i, t in ipairs(tufts) do
   for _, bl in ipairs(t.blades) do gg:stroke(bl, {pressure={clamp(0.2 + 0.5 * t.scale, 0.2, 0.8), 0}, ramps={0.05, 0.7}}) end
 end
 print(#tufts, "tufts")
+
+--@ chunk 27 · clock 45409.6328125
+wait(24*60)
+-- push the farthest groves back into the air
+local farg = grovem * mask(function(x, y) return 1 - smoothstep(404, 420, y) end)
+glaze(farg:blur(0.8), {color="#a7b1bb", coats=0.35, pigment="semi"})
+-- single trees between the groves: a poplar, a pair of limes, a round pear tree, so the rows aren't all one shape
+local singles = {{566, 403, 6, 24, "poplar"}, {588, 404, 5, 21, "poplar"}, {252, 407, 9, 14, "round"}, {268, 408, 7, 11, "round"},
+  {772, 416, 10, 20, "round"}, {60, 419, 6, 26, "poplar"}, {842, 412, 8, 12, "round"}}
+local sm = nil
+local smlit = nil
+for _, t in ipairs(singles) do
+  local x, y, r, h, kind = t[1], t[2], t[3], t[4], t[5]
+  local m
+  if kind == "poplar" then m = ellipse(x, y - h * 0.55, r * 0.5, h * 0.55) else m = ellipse(x, y - h * 0.5 - r * 0.2, r, h * 0.5) end
+  m = m:roughen(0.8, 3)
+  sm = sm and (sm + m) or m
+  local l = m * ellipse(x - r * 0.5, y - h * 0.7, r * 0.8, h * 0.45)
+  smlit = smlit and (smlit + l) or l
+  local st = brush("round", 0.8); st:load("#3d3a33", 0.8)
+  st:stroke({{x, y}, {x, y - h * 0.3}}, {pressure={0.7, 0.4}})
+end
+local hz = function(y, base) local far = 1 - smoothstep(HZ + 4, HZ + 48, y); return mix(base, mix("#8697a8", "#b4bcc4", 0.3), 0.15 + 0.5 * far) end
+local turn = noise{seed=78, period=5}
+work(sm, {hand="hatch", tool="round 1.0", length={1.2, 3}, coverage=2.6, angle=function(x, y) return 1.57 + 0.8 * turn(x, y) end,
+  color=function(x, y) return hz(y, "#2c3b2a") end})
+work(smlit, {hand="hatch", tool="round 0.9", length={1, 2.5}, coverage=1.6, angle=function(x, y) return 1.57 + 0.8 * turn(x, y) end,
+  color=function(x, y) return hz(y, "#5e723c") end})
+
+--@ chunk 28 · clock 46849.6328125
+print(stones:part(500, 650), stones:part(150, 684))
+
+--@ chunk 29 · clock 46849.6328125
+local patch = noise{seed=202, octaves=3, period=70}
+local depth = function(y) return clamp((y - 480) / 230, 0.2, 1.1) end
+local offpath = function(x, y) return pathm:at(x, y) < 0.1 and (stones:part(x, y) or 0) == 0 end
+-- sorrel: thin stems with rust-red seed spikes
+local stem = brush("rigger", 1.1)
+local seed = brush("round", 2.2)
+for i = 1, 70 do
+  local x, y = rand(10, 990), rand(560, 712)
+  if offpath(x, y) and patch(x, y) > 0.1 then
+    local s = depth(y)
+    local h = rand(28, 50) * s
+    local lean = randn(0.04, 0.12)
+    local top = {x + lean * h, y - h}
+    stem:reload(i % 2 == 0 and "#56663a" or "#6a6a3c", 0.8)
+    stem:stroke({{x, y}, {x + lean * h * 0.4, y - h * 0.5}, top}, {pressure={0.9, 0.4}})
+    seed:reload(mix(mix("#7a3a26", "#8e5a34", rand()), "#6a6a3c", 0.25), 0.85)
+    for k = 0, 5 do
+      local t = k / 5
+      seed:touch(top[1] + lean * 6 * t * s + randn(0, 0.6), top[2] + (t * 9 - 1) * s, {pressure=0.6 + 0.35 * s})
+    end
+  end
+end
+-- seed-headed grasses leaning in the breeze, straw-light in the sun
+local sg = brush("rigger", 0.9)
+for i = 1, 90 do
+  local x, y = rand(10, 990), rand(540, 712)
+  if offpath(x, y) then
+    local s = depth(y)
+    local h = rand(30, 55) * s
+    local lean = randn(0.18, 0.1)
+    sg:reload(mix("#a39a5a", "#c2b77c", rand()), 0.7)
+    local mid = {x + lean * h * 0.35, y - h * 0.55}
+    local top = {x + lean * h, y - h}
+    sg:stroke({{x, y}, mid, top}, {pressure={0.85, 0.1}, ramps={0.05, 0.6}})
+    for k = 1, 4 do
+      local t = 0.62 + k * 0.08
+      local px, py = x + lean * h * t, y - h * t
+      sg:stroke({{px, py}, {px + 2.5 * s, py - 1.5 * s}}, {pressure={0.7, 0}})
+    end
+  end
+end
+-- buttercups and clover low in the sward
+local bc = brush("round", 2.4)
+for i = 1, 260 do
+  local x, y = rand(0, 1000), rand(530, 712)
+  if offpath(x, y) and patch(x * 1.3, y + 50) > 0.25 then
+    local s = depth(y)
+    if i % 3 == 0 then
+      bc:reload(mix("#e2dccb", "#d9b8c0", rand()), 0.8)
+      bc:touch(x, y, {pressure=0.6 + 0.35 * s}); bc:touch(x + 1.2 * s, y - 0.8 * s, {pressure=0.5 + 0.3 * s})
+    else
+      bc:reload(mix(mix("#d6b632", "#e8cc58", rand()), "#9a9a40", 0.2), 0.85)
+      bc:touch(x, y - rand(3, 12) * s, {pressure=0.65 + 0.35 * s})
+    end
+  end
+end
+
+--@ chunk 30 · clock 46849.6328125
+wait(24*60); varnish{color="#e6d3a4", coats=0.3, vary=0.1}; relief()

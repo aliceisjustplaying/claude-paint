@@ -94,6 +94,8 @@ pub struct Stipple<'a> {
     pub fade: f32,
     /// Clip the hairs' contact to the mask.
     pub clip: bool,
+    /// A hard limit no touch paints outside of, whatever `clip` says.
+    pub limit: Option<std::sync::Arc<Mask>>,
     /// Aim the paint at the result on the canvas (default). Off: the paint
     /// is simply mixed to `color`.
     pub aim: bool,
@@ -123,6 +125,7 @@ impl<'a> Stipple<'a> {
             feather: 0.6,
             fade: 1.0,
             clip: false,
+            limit: None,
             aim: true,
         }
     }
@@ -196,6 +199,11 @@ impl<'a> Stipple<'a> {
     }
     pub fn clip(mut self, on: bool) -> Self {
         self.clip = on;
+        self
+    }
+    /// Never paint outside `m` (see `limit`).
+    pub fn limit(mut self, m: std::sync::Arc<Mask>) -> Self {
+        self.limit = Some(m);
         self
     }
     /// Contrast falls where the coverage thins (see `fade`; 0 = off).
@@ -498,7 +506,16 @@ impl Canvas {
         }
         let t_plan = t0.elapsed().as_secs_f32();
 
-        let clip = if sp.clip { Some(mask) } else { None };
+        let limited;
+        let clip = match (&sp.limit, sp.clip) {
+            (Some(l), true) => {
+                limited = mask.clone().mul(l);
+                Some(&limited)
+            }
+            (Some(l), false) => Some(&**l),
+            (None, true) => Some(mask),
+            (None, false) => None,
+        };
         let surf = self.surf();
         let mut rng = Rng::new(seed ^ 0xFA5E);
         let mut phases = [(0usize, 0usize), (1, 0), (0, 1), (1, 1)];

@@ -59,6 +59,8 @@ struct Recipe {
     visibility: Option<f32>,
     backdrop: Option<f32>,
     bodies: Vec<(Spot, Sdf, bool)>,
+    /// Motifs painted by hand, at a depth (depth.rs).
+    layers: Vec<(String, Arc<Mask>, paint::scene::LayerDepth)>,
 }
 
 impl Recipe {
@@ -88,6 +90,9 @@ impl Recipe {
             } else {
                 w.place(*spot, sdf.clone());
             }
+        }
+        for (name, m, d) in &self.layers {
+            w.layer(name, (**m).clone(), *d);
         }
         w
     }
@@ -142,8 +147,8 @@ fn sdf_of(v: &Value) -> Result<Sdf> {
 /// A view and the world it borrows, kept alive together.
 pub struct ViewBox {
     // declared first: dropped before the world it borrows
-    view: View<'static>,
-    world: Arc<World>,
+    pub(crate) view: View<'static>,
+    pub(crate) world: Arc<World>,
     /// Form parts: the visible bodies (a proxy casts shadow but has no part).
     parts: usize,
 }
@@ -245,6 +250,7 @@ impl UserData for ViewU {
             }
             Ok(wrap(Mask { f, data }))
         });
+        crate::depth::view_methods(m);
     }
 }
 
@@ -469,6 +475,15 @@ impl UserData for WorldU {
         // w:place(spot, body) / w:proxy(spot, body) -> the new world, the body's number
         m.add_method("place", |_, w, (s, b): (Value, Value)| place(w, spot_of(&s)?, sdf_of(&b)?, false));
         m.add_method("proxy", |_, w, (s, b): (Value, Value)| place(w, spot_of(&s)?, sdf_of(&b)?, true));
+        // w:layer(name, mask, depth) -> the new world, the layer's number (depth.rs)
+        m.add_method("layer", |_, w, (name, mask, depth): (Value, Value, Value)| {
+            let (name, mask, d) = crate::depth::layer_args(&w.w, &name, &mask, &depth)?;
+            let mut r = (*w.recipe).clone();
+            r.layers.push((name, Arc::new(mask), d));
+            let n = r.layers.len();
+            let world = Arc::new(r.build());
+            Ok((WorldU { recipe: Arc::new(r), w: world }, n))
+        });
         // w:ribbon({{X, Z}, ...}, width_m or function(t) -> m): a path on the ground
         m.add_method("ribbon", |lua, w, (p, width): (Value, Value)| {
             let pts = points(&p)?;
@@ -503,7 +518,12 @@ impl UserData for WorldU {
             let view: View<'static> = unsafe { std::mem::transmute::<View<'_>, View<'static>>(v) };
             crate::api::note_bytes(f.w * f.h * 40);
             let parts = w.w.bodies.iter().filter(|b| b.visible).count();
-            Ok(ViewU(Arc::new(ViewBox { view, world: w.w.clone(), parts })))
+            let vu = ViewU(Arc::new(ViewBox { view, world: w.w.clone(), parts }));
+            // the view depth options (visible=, behind=, at=) use by default
+            if let Some(st) = lua.app_data_ref::<S>() {
+                st.borrow_mut().view = Some(vu.clone());
+            }
+            Ok(vu)
         });
         // w:sky{haze=, uneven={amount, period_m, seed}, layer={alt, thick, density, uneven, seed},
         //       overcast=, fill=, altitude=, cell=6, exposure=, balance=}
@@ -629,7 +649,7 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
             }
             None => None,
         };
-        let mut r = Recipe { view, horizon, eye, fov, ground: None, water, sun, visibility: num(&o, "visibility")?, backdrop: num(&o, "backdrop")?, bodies: Vec::new() };
+        let mut r = Recipe { view, horizon, eye, fov, ground: None, water, sun, visibility: num(&o, "visibility")?, backdrop: num(&o, "backdrop")?, bodies: Vec::new(), layers: Vec::new() };
         if let Some(gf) = o.get::<Option<Function>>("ground")? {
             // sample over the view: X/Z across, log Z along
             let cam = r.build();

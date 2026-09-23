@@ -32,6 +32,8 @@ struct Snap {
     seed: u64,
     clock: f64,
     clock0: f64,
+    /// The last world view made (depth options resolve against it).
+    view: Option<crate::world::ViewU>,
     /// The Lua heap (heap.lua's snapshot).
     heap: Table,
     brushes: Vec<(Rc<RefCell<Held>>, Held)>,
@@ -116,7 +118,7 @@ impl Session {
             let h = b.borrow().clone();
             (b, h)
         }).collect();
-        Ok(Snap { canvas: s.canvas.clone(), style: s.style.clone(), setup: s.setup.clone(), seed: s.seed, clock: s.clock, clock0: s.clock0, heap, brushes })
+        Ok(Snap { canvas: s.canvas.clone(), style: s.style.clone(), setup: s.setup.clone(), seed: s.seed, clock: s.clock, clock0: s.clock0, view: s.view.clone(), heap, brushes })
     }
 
     fn restore(&mut self, snap: Snap) -> mlua::Result<()> {
@@ -134,6 +136,7 @@ impl Session {
         s.seed = snap.seed;
         s.clock = snap.clock;
         s.clock0 = snap.clock0;
+        s.view = snap.view;
         Ok(())
     }
 

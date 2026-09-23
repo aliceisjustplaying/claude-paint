@@ -128,9 +128,11 @@ fn limb(c: &mut Canvas, l: &Limb, paint: Paint, hand: &TreeHand, rng: &mut Rng) 
         let (a, b) = (cuts[k], cuts[k + 1]);
         let first = k == 0;
         let last = k + 2 == cuts.len();
-        // start a point early and end a point late so strokes overlap wet
-        let a0 = if first { a } else { a - 1 };
-        let b0 = if last { b } else { (b + 1).min(n - 1) };
+        // start early and end late (a limb's width or more) so the strokes
+        // overlap wet and the change of brush does not show
+        let ov = w[a] * 1.5;
+        let a0 = if first { a } else { (0..a).rev().find(|&i| arc[a] - arc[i] >= ov).unwrap_or(0) };
+        let b0 = if last { b } else { (b + 1..n).find(|&i| arc[i] - arc[b] >= ov).unwrap_or(n - 1) };
         let pts: Vec<(f32, f32)> = l.pts[a0..=b0].to_vec();
         if pts.len() < 2 {
             continue;
@@ -138,7 +140,9 @@ fn limb(c: &mut Canvas, l: &Limb, paint: Paint, hand: &TreeHand, rng: &mut Rng) 
         let tool = brush_for(w[a]);
         let splay = tool.splay;
         let total = (arc[b0] - arc[a0]).max(1e-3);
-        let attack = if first { 0.0 } else { ((arc[a] - arc[a0]) / total).clamp(0.02, 0.5) };
+        // the next brush sets down at full pressure inside the wider wet
+        // stroke (a soft attack there would lift paint, not lay it)
+        let attack = 0.0;
         // pressure from the width at each end (linear between is close
         // enough within one section); a live tip is lifted off to a point
         let p0 = 1.0;
@@ -149,9 +153,10 @@ fn limb(c: &mut Canvas, l: &Limb, paint: Paint, hand: &TreeHand, rng: &mut Rng) 
             ((arc[b0] - arc[b]) / total).clamp(0.02, 0.5)
         };
         let mut held = Held::new(tool, rng.next_u64());
-        // light twigs: sub-finest wood painted with less paint
-        let thin = (l.w[a] / hand.finest).clamp(0.35, 1.0);
-        held.load(paint, 0.9 * thin);
+        // the finest twigs are only indicated: a lean, dry touch, so the
+        // outer crown reads as a haze of twigs rather than a solid mass
+        let thin = (l.w[a] / (2.0 * hand.finest)).clamp(0.2, 1.0);
+        held.load(Paint { hiding: paint.hiding * (0.4 + 0.6 * thin), ..paint }, 0.9 * thin.sqrt());
         let g = Gesture::new(pts).pressure(p0, p1).ramps(attack, release).orient(Orient::Across).shake(0.6);
         c.drag(&mut held, &g, None);
     }
@@ -293,7 +298,8 @@ pub fn grown_spruce(c: &mut Canvas, sk: &Skeleton, needles: Paint, seed: u64) ->
             let p = (l.pts[i - 1].0 + (l.pts[i].0 - l.pts[i - 1].0) * f, l.pts[i - 1].1 + (l.pts[i].1 - l.pts[i - 1].1) * f);
             let d = l.dir(i);
             let u = t / total;
-            let len = h * 0.022 * (1.15 - 0.7 * u) * rng.range(0.6, 1.2) / (1.0 + 0.4 * (l.order - 1) as f32);
+            // shorter on short (young, high) limbs, so the top is a spire
+            let len = (h * 0.022).min(total * 0.45) * (1.15 - 0.7 * u) * rng.range(0.6, 1.2) / (1.0 + 0.4 * (l.order - 1) as f32);
             // hang down and a little outward
             let out = d.0.signum();
             let e = (p.0 + out * len * 0.35 + rng.normal() * len * 0.1, p.1 + len);

@@ -123,6 +123,9 @@ pub struct Habit {
     pub tropism: [f32; 4],
     /// How strongly shoots turn toward the least shade.
     pub photo: f32,
+    /// Shade tolerance: the shadow at which a bud gets no light (oak and
+    /// birch need light, spruce grows on in shade).
+    pub shade: f32,
     /// How much a shoot wanders, per internode.
     pub wander: f32,
     /// 0 = a round crown, 1 = grown in the picture plane only.
@@ -166,19 +169,20 @@ impl Habit {
             branch_angle: 1.0,
             divergence: 2.51,
             node_buds: 1,
-            tip_buds: (2, 2),
-            abort: 0.35,
+            tip_buds: (2, 1),
+            abort: 0.5,
             bud_life: 2,
             dormant: 0.03,
             tropism: [0.2, 0.0, -0.03, -0.06],
             photo: 0.45,
-            wander: 0.35,
+            shade: 3.2,
+            wander: 0.16,
             flat: 0.55,
             shed: 0.15,
             stub: 0.5,
-            trunk: 0.075,
+            trunk: 0.06,
             twig: 0.0012,
-            flare: 0.45,
+            flare: 0.25,
             roots: 3,
             lean: 0.0,
             decline: 0.0,
@@ -190,7 +194,7 @@ impl Habit {
     /// Friedrich's dead oak: the same oak long dead, stag-headed, the fine
     /// wood gone, big limbs broken.
     pub fn dead_oak() -> Self {
-        Habit { decline: 0.8, decay: 0.8, breakage: 0.45, ..Self::oak() }
+        Habit { decline: 0.8, decay: 0.6, breakage: 0.35, ..Self::oak() }
     }
 
     /// A birch: slender, a clear leader, fine twigs hanging from the outer
@@ -211,13 +215,14 @@ impl Habit {
             dormant: 0.0,
             tropism: [0.6, 0.12, -0.25, -0.5],
             photo: 0.3,
+            shade: 3.0,
             wander: 0.18,
             flat: 0.5,
             shed: 0.14,
             stub: 0.5,
             trunk: 0.03,
             twig: 0.0008,
-            flare: 0.2,
+            flare: 0.1,
             roots: 0,
             lean: 0.0,
             decline: 0.0,
@@ -244,6 +249,7 @@ impl Habit {
             dormant: 0.0,
             tropism: [1.2, -0.03, -0.1, -0.2],
             photo: 0.08,
+            shade: 6.0,
             wander: 0.08,
             flat: 0.4,
             shed: 0.08,
@@ -422,8 +428,6 @@ impl Grid {
     }
 }
 
-/// Full exposure: shadow at which a bud gets no light.
-const SAT: f32 = 4.0;
 
 struct Grower<'a> {
     h: &'a Habit,
@@ -489,7 +493,7 @@ impl<'a> Grower<'a> {
             let own = if self.nodes[i].born + 3 >= self.year { 1.0 } else { 0.0 };
             for b in self.nodes[i].buds.iter_mut() {
                 let s = self.grid.at(p.add(b.dir.mul(0.7)));
-                b.q = (1.0 - (s - own).max(0.0) / SAT).clamp(0.0, 1.0);
+                b.q = (1.0 - (s - own).max(0.0) / h.shade).clamp(0.0, 1.0);
             }
         }
         // terminal buds abort now and then; lateral buds die when old
@@ -940,21 +944,3 @@ mod tests {
     }
 }
 
-#[cfg(test)]
-mod debug {
-    use super::*;
-    #[test]
-    #[ignore]
-    fn stats() {
-        for (name, h) in [("oak", Habit::oak()), ("birch", Habit::birch()), ("spruce", Habit::spruce())] {
-            let mut g = Grower::new(&h, 7);
-            for y in 1..=h.years {
-                g.year = y;
-                g.step();
-                let live = g.live().count();
-                let buds: usize = g.live().map(|i| g.nodes[i].buds.len()).sum();
-                eprintln!("{name} y{y}: nodes {live} buds {buds} Q {:.1} v {:.1} wood {} stubs {}", g.nodes[0].q, g.nodes[0].v, g.nodes[0].wood, g.stubs.len());
-            }
-        }
-    }
-}

@@ -19,8 +19,8 @@ fn main() {
     let h = c.height();
     // paints mixed on the palette
     let bark = Bark {
-        dark: pal.mix(hex("#241e19")).paint(0.1),
-        dead: Some(pal.mix(hex("#302a24")).paint(0.1)),
+        dark: pal.mix(hex("#241e19")).paint(0.3),
+        dead: Some(pal.mix(hex("#302a24")).paint(0.3)),
         light: Some(pal.mix(hex("#8f846f")).paint(0.35)),
         wood: Some(pal.mix(hex("#b3a384")).paint(0.2)),
     };

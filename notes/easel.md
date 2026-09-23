@@ -206,7 +206,7 @@ immutable, so rollback never needs to repair it:
 - `body.ellipsoid`/`block`/`half_space` with `:turn :cut :rough :facet`,
   `+` and `-`;
 - `ridge{}`, over a crest function or points;
-- `relief{}`, a Lua height function sampled on a grid;
+- `terrain{}` (the engine's `Relief`), a Lua height function sampled on a grid;
 - `form{ {solid, dist=}, ..., light={...} }` builds and lights the depth
   buffer in one call;
 - queries: `sample`, `shade`, `value`, `lit_at`, `part`, `dist`, `fall`,
@@ -251,14 +251,27 @@ ground flecks: orange in the skies, pale in the dark knoll. There are more
 of them at 3200px, and the ridge strokes look blocky. The fixes-paint
 stream is working on this; the easel only passes `coverage` through.
 
+**Second merge of main (drying, scene).** It was clean apart from one import
+my `Canvas::seen` needed. `wait(minutes)` is now the engine's
+`Canvas::wait`, so it's no longer a placeholder. `dry()` and `wait` return
+the clock, and `clock()` counts from `canvas{}` (the canvas's own clock
+also includes the weeks its grounds dried). The new verb `drying(x, y)`
+reports the stage. The merge also exposed a name clash I had made: the form
+module's `relief{}` solid builder had replaced the finishing verb
+`relief()`, and the example's last chunk failed on replay. The builder is
+now `terrain{}`, and a test runs the finishing verbs. The example and rocks
+renders change with the new engine (drying levels films differently), but
+each still replays byte-identically: live `save` and `easel run` gave
+identical PNGs, and `check` matched.
+
 ## Next
 
 1. **Form, deeper.** `Form::simplify` (the painter's squint over normals),
    lit-rim helpers for contre-jour, and a gallery of `rocks.rs`-style
    motifs rewritten in Lua.
-2. **A drying model behind `wait`.** Open, tacky and touch-dry states per
-   pixel from the film's age and medium, so wet-into-wet, scumbling on
-   tacky paint and glazing on touch-dry paint follow from the clock.
+2. **Drying, felt.** `wait` now runs the engine's drying model (merged
+   from main at the end of round 2) and `drying(x, y)` reports the stage;
+   the looks could show it (a `--mode drying` map of open/tacky/dry).
 3. **Detail at full resolution, live.** A session holding a `--crop`
    window at 3200px, resumed from a checkpoint of the chunks so far,
    would let a painter work Friedrich's small particulars at their real

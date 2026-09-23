@@ -18,8 +18,6 @@ use std::rc::{Rc, Weak};
 
 /// Grid spacing (units) that painter fields are sampled on.
 pub const FIELD_STEP: f32 = 2.0;
-/// `wait(minutes)` at or above this dries the canvas (placeholder model).
-pub const DRY_AFTER_MIN: f64 = 60.0;
 
 pub struct Studio {
     pub width: usize,
@@ -32,8 +30,10 @@ pub struct Studio {
     pub chunk: u64,
     /// Engine calls made in this chunk, for automatic seeds.
     pub calls: u64,
-    /// Painting time in minutes (advanced by `wait`).
+    /// Painting time in minutes since `canvas{}` (advanced by `wait` and
+    /// `dry`; the canvas's own clock also counts the grounds drying).
     pub clock: f64,
+    pub clock0: f64,
     pub rng: Rng,
     pub brushes: Vec<Weak<RefCell<Held>>>,
     pub out: String,
@@ -43,7 +43,7 @@ pub struct Studio {
 
 impl Studio {
     pub fn new(width: usize) -> Self {
-        Studio { width, canvas: None, style: None, setup: None, seed: 1, chunk: 0, calls: 0, clock: 0.0, rng: Rng::new(1), brushes: Vec::new(), out: String::new(), field_secs: 0.0 }
+        Studio { width, canvas: None, style: None, setup: None, seed: 1, chunk: 0, calls: 0, clock: 0.0, clock0: 0.0, rng: Rng::new(1), brushes: Vec::new(), out: String::new(), field_secs: 0.0 }
     }
 
     /// Start chunk `n`: its randomness depends only on the seed and `n`.
@@ -1090,6 +1090,8 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
                     let mut s = st.borrow_mut();
                     s.seed = seed;
                     s.rng = Rng::new(mixseed(seed, s.chunk, 0xC0FFEE));
+                    s.clock0 = c.clock();
+                    s.clock = 0.0;
                     s.canvas = Some(c);
                     s.style = Some(Rc::new(sty));
                     s.setup = Some(format!("style={name:?}, aspect={aspect}, seed={seed}"));
@@ -1245,20 +1247,37 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
         let st1 = st.clone();
         g.set("dry", lua.create_function(move |_, ()| {
             let mut s = st1.borrow_mut();
-            s.canvas.as_mut().ok_or_else(no_canvas)?.dry();
-            Ok(())
+            let c = s.canvas.as_mut().ok_or_else(no_canvas)?;
+            c.dry();
+            let now = c.clock() - s.clock0;
+            s.clock = now;
+            Ok(now)
         })?)?;
+        // wait(minutes): the paint ages where it lies (the engine's drying
+        // model: open, setting, tacky, touch-dry by pigment, film and oil)
         let st1 = st.clone();
         g.set("wait", lua.create_function(move |_, minutes: f64| {
             if minutes.is_nan() || minutes < 0.0 {
                 return err("wait(minutes): want >= 0");
             }
             let mut s = st1.borrow_mut();
-            s.clock += minutes;
-            if minutes >= DRY_AFTER_MIN {
-                s.canvas.as_mut().ok_or_else(no_canvas)?.dry();
-            }
-            Ok(s.clock)
+            let c = s.canvas.as_mut().ok_or_else(no_canvas)?;
+            c.wait(minutes as f32);
+            let now = c.clock() - s.clock0;
+            s.clock = now;
+            Ok(now)
+        })?)?;
+        // drying(x, y): "open", "setting", "tacky" or "dry"
+        let st1 = st.clone();
+        g.set("drying", lua.create_function(move |_, (x, y): (f32, f32)| {
+            let s = st1.borrow();
+            let c = s.canvas.as_ref().ok_or_else(no_canvas)?;
+            Ok(match c.drying_at(x, y) {
+                paint::Stage::Open => "open",
+                paint::Stage::Setting => "setting",
+                paint::Stage::Tacky => "tacky",
+                paint::Stage::Dry => "dry",
+            })
         })?)?;
         let st1 = st.clone();
         g.set("clock", lua.create_function(move |_, ()| Ok(st1.borrow().clock))?)?;

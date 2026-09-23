@@ -65,7 +65,7 @@ fn body_of(v: &Value) -> Result<Arc<Sdf>> {
     match v {
         Value::UserData(u) => match &*u.borrow::<SolidU>()? {
             SolidU::Body(b) => Ok(b.clone()),
-            _ => err("want a body (body.ellipsoid, body.block); ridges and reliefs don't combine"),
+            _ => err("want a body (body.ellipsoid, body.block); ridges and terrain don't combine"),
         },
         o => err(format!("want a body, got {}", o.type_name())),
     }
@@ -74,7 +74,7 @@ fn body_of(v: &Value) -> Result<Arc<Sdf>> {
 fn solid_of(v: &Value) -> Result<SolidU> {
     match v {
         Value::UserData(u) => Ok(u.borrow::<SolidU>()?.clone()),
-        o => err(format!("want a solid (body.ellipsoid, body.block, ridge{{}}, relief{{}}), got {}", o.type_name())),
+        o => err(format!("want a solid (body.ellipsoid, body.block, ridge{{}}, terrain{{}}), got {}", o.type_name())),
     }
 }
 
@@ -113,7 +113,7 @@ impl UserData for SolidU {
             let kind = match s {
                 SolidU::Body(_) => "body",
                 SolidU::Ridge(_) => "ridge",
-                SolidU::Relief(_) => "relief",
+                SolidU::Relief(_) => "terrain",
             };
             Ok(format!("{kind}(bounds {:.0}, {:.0}, {:.0}, {:.0})", b[0], b[1], b[2], b[3]))
         });
@@ -123,7 +123,7 @@ impl UserData for SolidU {
 fn body_of_self(s: &SolidU) -> Result<Arc<Sdf>> {
     match s {
         SolidU::Body(b) => Ok(b.clone()),
-        _ => err("only bodies turn, cut, weather and combine"),
+        _ => err("only bodies turn, cut, weather and combine (not ridges or terrain)"),
     }
 }
 
@@ -425,12 +425,13 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
         Ok(SolidU::Ridge(Arc::new(r)))
     })?)?;
 
-    // relief{area={x0, y0, x1, y1}, height=function(x, y) return z (or nil) end, step=1, facet=0}
-    g.set("relief", lua.create_function(|_, o: Table| {
-        check_keys(&o, &["area", "height", "step", "facet"], "relief")?;
+    // terrain{area={x0, y0, x1, y1}, height=function(x, y) return z (or nil) end, step=1, facet=0}
+    // (the engine's Relief; `relief()` is the finishing verb)
+    g.set("terrain", lua.create_function(|_, o: Table| {
+        check_keys(&o, &["area", "height", "step", "facet"], "terrain")?;
         let a: Vec<f32> = o.get("area")?;
         if a.len() != 4 {
-            return err("relief: area = {x0, y0, x1, y1}");
+            return err("terrain: area = {x0, y0, x1, y1}");
         }
         let area = [a[0].min(a[2]), a[1].min(a[3]), a[0].max(a[2]), a[1].max(a[3])];
         let h: mlua::Function = o.get("height")?;

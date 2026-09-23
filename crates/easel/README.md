@@ -251,7 +251,7 @@ slab = body.block({600, 600, 0}, {200, 40, 80}, 3)          -- center, size, rou
 range = ridge{crest=function(x) return 330 - 60*math.sin(x/170) end, depth=320, seed=7,
   lean={0.9, 0.7}, gullies={45, 0.5}, fan=1, base=560, z0=-600}   -- also strata={spacing, step, tilt}
 -- any height field: z (toward you) or nil where there's no surface
-dune = relief{area={0, 500, 1000, 714}, height=function(x, y) return 20*math.sin(x/60) end}
+dune = terrain{area={0, 500, 1000, 714}, height=function(x, y) return 20*math.sin(x/60) end}
 
 -- the lit depth buffer: parts are numbered in order (1, 2, ...)
 f = form{ {range, dist={2.0, 0}}, {rock, dist=0.3},          -- dist: number or {at, per_z} (aerial perspective)
@@ -283,9 +283,10 @@ it. A form costs 28 bytes per pixel (20 MB at 1000px, 190 MB at 3200px).
 ### Time and finishing
 
 ```lua
-dry()                 -- the wet paint levels and dries now
-wait(minutes)         -- advance the painting clock; returns it
-clock()
+wait(minutes)         -- time passes: the paint ages where it lies; returns the clock
+dry()                 -- wait until every film is touch-dry; returns the clock
+clock()               -- painting minutes since canvas{}
+drying(x, y)          -- "open", "setting", "tacky" or "dry" there
 varnish{color="#e6d3a4", coats=0.4, vary=0.12}
 cracks{dirt=0.4, vary=1, veil=0.5}          -- craquelure, fitted to this canvas's ground;
                                              -- also island_mm, ground_um, width_um (default:
@@ -293,12 +294,13 @@ cracks{dirt=0.4, vary=1, veil=0.5}          -- craquelure, fitted to this canvas
 relief(strength, gloss)                      -- light the surface relief (style default)
 ```
 
-`wait` is a placeholder for a real drying model: `wait(m)` with m ≥ 60
-dries everything, like `dry()`, and a shorter wait only moves the clock. The
-clock is written into the log at every chunk, so time is already part of
-the program. Wet-into-wet only happens while paint is wet: paint the sky,
-`blend` it in the same chunk or the next, then `wait(24*60)` before you
-paint over it.
+`wait` runs the engine's drying model: each pixel's paint goes from open
+(workable, blends and lifts) through setting (stiff, barely blends) to
+tacky (set, grabs the brush) and touch-dry, at a pace set by its pigments,
+film thickness and oil. So a chunk can work wet into wet (no wait), come
+back to tacky paint (`wait(180)`) or paint over a dry layer
+(`wait(24*60)`). The clock is written into the log at every chunk, so time
+is part of the program.
 
 ## Replay
 

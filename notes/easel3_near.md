@@ -105,7 +105,17 @@ smalt, cobalt, ochre, umber and red earth.
 16. **Last things.** Four crows far off. (A try at faint morning cloud wisps
     was invisible; undone.) Fallen birch leaves on the ledges and floor. A
     faint dark glaze toward the edges, `dry()`, a thin warm varnish,
-    `relief()`.
+    `relief()`. First full render (about 10 minutes for both sizes).
+17. **Refining after the first render.** I undid the varnish chunk and went
+    on. The rock's straight base line: two tries at fallen blocks at its
+    foot (sugar cubes in a row, then concrete slabs) were undone. What worked
+    was more bracken along the foot, over a dark rust mass, plus taller grass.
+    The 3200px render showed the sky holes in the wood as bright paper holes
+    and the birch's lenticels as an even ladder of dashes. A transparent
+    gray-green glaze over the wood interior toned the holes and, as a bonus,
+    brought up the spire shapes of the trees behind. The birch got irregular
+    black patches, a dark foot and knots where limbs leave the trunk. Then
+    the edge glaze, varnish and relief again.
 
 ## HOW THE EASEL FELT
 
@@ -205,7 +215,13 @@ cracks), I was writing a procedural generator on the spot.
 11. **The foliage stipple for sparse leaves read as pollen.** `stipple` with
     low coverage spreads even single dots. Workaround: explicit dabs on a
     random subset of `foliage().clumps`.
-12. **Invisible subtle passes.** A stipple of cloud wisps close to the sky
+12. **Small solids by hand look manufactured.** Fallen blocks drawn as
+    three polygons (top, front, side) with a lit top read as sugar cubes,
+    then as concrete slabs. A `form` body would light them properly, but a
+    new form costs a full-canvas depth buffer and I had no quick way to add
+    a few small solids to the existing one. Workaround: covered the base
+    with bracken instead.
+13. **Invisible subtle passes.** A stipple of cloud wisps close to the sky
     value didn't show at all. It's hard to judge small value steps from a
     1000px JPEG; I undid it rather than guess.
 
@@ -218,12 +234,14 @@ the weathering streaks that make the rock read as old stone. At 3200px the
 bracken and the grass tufts hold up as particular things.
 
 What doesn't: the rock is still too architectural. Its beds are
-rectangular and its base is a straight horizontal line, so from across the
-room it can read as a stack of giant masonry blocks rather than a natural
-crag. Friedrich's rocks have much more irregular, fissured, particular
+rectangular, and its base is a straight line that I could only hide behind
+a band of bracken, so from across the room it can read as a stack of giant
+masonry blocks rather than a natural crag. Friedrich's rocks have much more irregular, fissured, particular
 silhouettes. The surface under the streaks is still a noise mottle, not
-drawn stone. The spruces are flat dark cutouts with pixel-sharp sky holes;
-Friedrich's are dark too, but you can read every tier. The middle floor
+drawn stone. The front spruces are flat dark cutouts (the glazed wood
+interior behind them now has some depth); Friedrich's are dark too, but
+you can read every tier. The bracken along the foot is a continuous band
+where clumps with gaps would be truer. The middle floor
 between the wood and the rock is vague. The foreground is murky rather than
 dark-and-particular: the details are there at 3200px but little of it
 catches light. The boulder is still an egg. The composition is honest but

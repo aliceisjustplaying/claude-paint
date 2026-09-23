@@ -291,6 +291,11 @@ impl Canvas {
         [acc[0] / k, acc[1] / k, acc[2] / k]
     }
 
+    /// Wet paint film at a point (units), µm: 0 where the paint is dry.
+    pub fn wet_um(&self, x: f32, y: f32) -> f32 {
+        self.wet.vol[self.f.index(x, y)] * crate::surface::COAT_UM
+    }
+
     /// Total wet paint on the canvas (for tests / debugging).
     pub fn wet_total(&self) -> f64 {
         self.wet.vol.iter().map(|&v| v as f64).sum::<f64>() / (self.f.scale as f64 * self.f.scale as f64)

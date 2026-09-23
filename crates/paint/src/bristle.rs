@@ -743,6 +743,7 @@ pub(crate) unsafe fn drag_on(
     id: u32,
     scratch: &mut Vec<f32>,
 ) -> Bounds {
+    g.assert_valid();
     let mut bounds: Bounds = None;
     if g.pts.is_empty() {
         return bounds;
@@ -1352,6 +1353,7 @@ impl Canvas {
 /// and `held.tool` must pass `Tool::validate` (accesses are clamped to that
 /// footprint too, as in `drag_on`).
 pub(crate) unsafe fn touch_on(sf: Surf, held: &mut Held, t: &Touch, clip: Option<&Mask>, id: u32, scratch: &mut Vec<f32>) -> Bounds {
+    t.assert_valid();
     let mut bounds: Bounds = None;
     let s = sf.scale;
     let tool = held.tool.clone();
@@ -1533,5 +1535,50 @@ mod tip_tests {
         feed(&mut h.bristles, 0.3);
         let after: f64 = h.bristles.iter().map(|b| b.vol as f64).sum();
         assert!((after - before).abs() < before * 1e-5);
+    }
+}
+
+
+impl Gesture {
+    /// Check that every number in the gesture is finite: a NaN point would
+    /// otherwise make the brush take one step and lift, silently (a NaN arc
+    /// length casts to zero steps). E.g. `sin(PI).powf(0.8)` is NaN in f32.
+    pub fn validate(&self) -> Result<(), String> {
+        if let Some((i, p)) = self.pts.iter().enumerate().find(|(_, p)| !(p.0.is_finite() && p.1.is_finite())) {
+            return Err(format!("Gesture point {i} is not finite: ({}, {})", p.0, p.1));
+        }
+        let nums = [("pressure.0", self.pressure.0), ("pressure.1", self.pressure.1), ("attack", self.attack), ("release", self.release), ("shake", self.shake)];
+        if let Some((name, v)) = nums.iter().find(|(_, v)| !v.is_finite()) {
+            return Err(format!("Gesture {name} is not finite: {v}"));
+        }
+        if let Some((i, v)) = self.swell.iter().enumerate().find(|(_, v)| !v.is_finite()) {
+            return Err(format!("Gesture swell knot {i} is not finite: {v}"));
+        }
+        Ok(())
+    }
+
+    #[track_caller]
+    pub(crate) fn assert_valid(&self) {
+        if let Err(e) = self.validate() {
+            panic!("{e}");
+        }
+    }
+}
+
+impl Touch {
+    /// Check that every number in the touch is finite (see `Gesture::validate`).
+    pub fn validate(&self) -> Result<(), String> {
+        let nums = [("at.x", self.at.0), ("at.y", self.at.1), ("pressure", self.pressure), ("drag.x", self.drag.0), ("drag.y", self.drag.1), ("twist", self.twist), ("angle", self.angle)];
+        match nums.iter().find(|(_, v)| !v.is_finite()) {
+            Some((name, v)) => Err(format!("Touch {name} is not finite: {v}")),
+            None => Ok(()),
+        }
+    }
+
+    #[track_caller]
+    pub(crate) fn assert_valid(&self) {
+        if let Err(e) = self.validate() {
+            panic!("{e}");
+        }
     }
 }

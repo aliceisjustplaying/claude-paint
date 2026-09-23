@@ -58,14 +58,20 @@ use std::f32::consts::PI;
 /// Earth's radius and the top of the atmosphere (m) (Bruneton 2017).
 pub const EARTH_R: f32 = 6_360_000.0;
 const TOP_R: f32 = 6_420_000.0;
-/// Rayleigh scattering at sea level for R, G, B (680, 550, 440 nm), per m.
-const RAYLEIGH: Rgb = [5.802e-6, 13.558e-6, 33.1e-6];
+/// Rayleigh scattering at sea level, per m, for R, G, B sampled at the
+/// dominant wavelengths of the sRGB primaries (611, 549, 464 nm): Bruneton's
+/// 680/550/440 nm values scaled by λ⁻⁴. (At 680/440 nm a low sun comes out
+/// too red and twilight too purple: the red channel then misses both the
+/// Rayleigh loss and the ozone Chappuis band, which peaks near 600 nm.)
+const RAYLEIGH: Rgb = [8.90e-6, 13.66e-6, 26.76e-6];
 const RAYLEIGH_H: f32 = 8000.0;
 /// Mie (haze) scattering at sea level, per m; extinction is scattering / 0.9.
 const MIE: f32 = 3.996e-6;
 const MIE_H: f32 = 1200.0;
-/// Ozone absorption (Chappuis bands) per m at the layer's peak.
-const OZONE: Rgb = [0.650e-6, 1.881e-6, 0.085e-6];
+/// Ozone absorption (Chappuis bands) per m at the layer's peak, at the
+/// same wavelengths: Bruneton's 550 nm value (1.881e-6) scaled by the
+/// band's shape (≈1.5× at 611 nm near the peak, ≈0.07× at 464 nm).
+const OZONE: Rgb = [2.8e-6, 1.881e-6, 0.14e-6];
 
 #[inline]
 fn dot(a: V3, b: V3) -> f32 {
@@ -337,7 +343,7 @@ impl Sky {
     /// (cosine-weighted over the upper hemisphere): the light that the
     /// sky itself sheds on the air, which is what lights the Earth's
     /// shadow and the deep-twilight sky.
-    fn dome(&self) -> Rgb {
+    pub fn dome(&self) -> Rgb {
         *self.dome.get_or_init(|| {
             let mut sum = [0.0f32; 3];
             let mut w = 0.0;
@@ -657,8 +663,8 @@ impl Cloud {
         self.wind = (angle, stretch.max(1.0));
         self
     }
-    /// Holes in a deck (a break in an overcast): Worley cells `period` m
-    /// across, opened by `amount` (0..1).
+    /// Breaks in a deck: a fraction `amount` (0..1) of the Worley cells
+    /// `period` m across opens a hole of its own size (0.35–0.75 of a cell).
     pub fn breaks(mut self, period: f32, amount: f32) -> Self {
         self.breaks = Some((period, amount));
         self
@@ -739,8 +745,13 @@ impl Cloud {
                 let n = Octaves::new(s + 9, 5, heap * 1.6, crate::noise::Fold::Plain).get_lod(u, v, lod) * 0.5 + 0.5;
                 let mut c = n - (1.0 - self.cover);
                 if let Some((per, amt)) = self.breaks {
-                    let cell = Worley::new(s + 11, per).get(along, across);
-                    c -= amt * (1.0 - cell.f1).max(0.0).powi(2) * 1.5;
+                    // a fraction `amt` of the cells opens a hole about its
+                    // feature point, each its own size
+                    let cell = Worley::new(s + 11, per).get(u * 0.8 + 0.2 * along, v);
+                    if cell.rand() < amt {
+                        let size = 0.35 + 0.4 * ((cell.rand() * 7.3).fract());
+                        c -= 1.5 * (1.0 - cell.f1 / size).max(0.0).powf(0.7);
+                    }
                 }
                 // thickest in the middle of the layer, thinner where cover is thin
                 let prof = 1.0 - (2.0 * y - 1.0).abs();
@@ -805,11 +816,14 @@ impl Clouds {
         let skyr = &sky.sky;
         // light from the sky above onto a cloud's top, and bounced up from
         // the ground into its belly
-        let zenith = skyr.radiance([0.0, 1.0, 0.0]);
-        let upper = plus(scale(zenith, 0.5), scale(skyr.radiance(crate::form::unit([0.0, 0.3, 1.0])), 0.5));
+        // the dome's mean light (single scattered plus the fill), a little
+        // brighter than the sky overhead
+        let upper = scale(skyr.dome(), 1.0 + skyr.fill);
         let sun_here = skyr.sunlight();
         let ground = scale(plus(scale(sun_here, l[1].max(0.0) / PI), scale(upper, 0.5)), self.ground);
         let fw = self.forward;
+        // the sun's flux onto a level cloud top (from below after sunset)
+        let slab = l[1].abs().max(0.08).sqrt();
         type Px = (f32, f32, f32, f32, f32, Rgb);
         let px: Vec<Px> = (0..nx * ny)
             .into_par_iter()
@@ -830,7 +844,11 @@ impl Clouds {
                     return (0.0, 0.0, 0.0, 0.0, 0.0, [0.0; 3]);
                 }
                 let mu = dot(d, l);
-                let phase = (0.75 * hg(mu, fw) + 0.25 * hg(mu, -0.25)) * 4.0 * PI;
+                // multiple scattering by octaves (Wrenninge et al. 2013):
+                // each octave reaches deeper (optical depth × b^i), carries
+                // less (a^i) and scatters less forward (g × c^i)
+                let oct: [(f32, f32, f32); 2] = [(1.0, 1.0, 1.0), (0.5, 0.5, 0.5)];
+                let phases: Vec<f32> = oct.iter().map(|&(_, _, c)| (0.75 * hg(mu, fw * c) + 0.25 * hg(mu, -0.25 * c)) * 4.0 * PI).collect();
                 let n = 64usize;
                 let dt = (t1 - t0) / n as f32;
                 let (mut tr, mut sun_iso, mut sun_ph, mut amb, mut dsum, mut wsum) = (1.0f32, 0.0f32, 0.0f32, 0.0f32, 0.0f32, 0.0f32);
@@ -867,12 +885,15 @@ impl Clouds {
                         s *= 2.0;
                     }
                     let direct = (-tau).exp();
-                    // powder: the inside of a cloud's lit edge gets light
-                    // scattered in from its neighbors
-                    let powder = 1.0 - 0.5 * (-2.0 * sigma * 60.0).exp();
                     let a = tr * (1.0 - (-sigma * dt).exp());
                     sun_iso += a * direct;
-                    sun_ph += a * direct * phase * powder;
+                    for (o, &(ka, kb, _)) in oct.iter().enumerate() {
+                        sun_ph += a * ka * (-tau * kb).exp() * phases[o];
+                    }
+                    // light diffused through the cloud (two-stream transmission,
+                    // 1 / (1 + 0.75 (1 − g) τ), g ≈ 0.85): what lights a deck's
+                    // underside and a heap's belly, neutral in color
+                    sun_ph += a * 1.2 * slab / (1.0 + 0.75 * 0.15 * tau);
                     amb += a * (-up * 0.5).exp();
                     dsum += a * t;
                     wsum += a;
@@ -1162,6 +1183,9 @@ impl RangeLayer {
     /// Crest height (m above the datum) at world X, before the Earth's curvature.
     pub fn height(&self, x: f32, lod: f32) -> f32 {
         let mut h = self.floor * (0.6 + 0.4 * Fbm::new(self.seed + 21, 2, 4.0 * self.z.max(1000.0) * 0.4).get01(x, 1.3));
+        // the flanks wander: masses are sampled through a warp at their own scale
+        let hm0 = self.masses.iter().map(|m| m.h).fold(0.0, f32::max).max(1.0);
+        let x = x + self.rough * 3.0 * hm0 * Fbm::new(self.seed + 23, 3, hm0 * 2.5).get(x, 0.7);
         // masses overlap by a soft maximum: notches where two meet
         let k = 0.04 * self.masses.iter().map(|m| m.h).fold(1.0, f32::max);
         for m in &self.masses {
@@ -1293,17 +1317,31 @@ impl Ranges {
             } else {
                 (-hw, hw)
             };
-            let nm = 1 + (r(4) * (2.0 + 2.5 * irr)) as usize;
-            let xs = uneven(nm + 2, a, b, irr, 0.4 * irr, s + 10 + k as u32);
+            // masses sized from their height (flanks of ~10–35°): a peak's
+            // half-width is 1.4–2.5 heights, a plateau's 3–5; as many as
+            // fill the span, placed unevenly (some overlap, some leave gaps)
+            let width_of = |kind: Silhouette, q: f32| match kind {
+                Silhouette::Peak => 1.4 + 1.1 * q,
+                Silhouette::Dome => 2.5 + 1.5 * q,
+                Silhouette::Plateau => 3.0 + 2.0 * q,
+                Silhouette::Saddle => 3.0 + 1.5 * q,
+                Silhouette::Cliff => 2.5 + 1.5 * q,
+            };
+            let typical = if irr <= 0.0 { 2.0 } else { 3.0 };
+            // masses overlap: about one per 1.6 heights of span (fewer on a
+            // range that is all plateau, more on a jagged one)
+            let fill = (b - a) / (2.0 * h_top * 1.6);
+            let nm = ((fill * (0.7 + 0.6 * r(4) * irr)).round() as usize).clamp(1, 12);
+            let xs = uneven(nm + 2, a, b, irr, 0.5 * irr, s + 10 + k as u32);
+            let xs = &xs[1..=nm];
             let mut masses = vec![];
-            for j in 0..nm {
-                let (l, rr) = (xs[j], xs[j + 2]);
-                let x = 0.5 * (xs[j + 1] + (l + rr) * 0.5);
+            let main = ((r(6) * nm as f32) as usize).min(nm - 1);
+            for (j, &x) in xs.iter().enumerate() {
                 let q = |i: i32| rand01(k as i32 * 31 + j as i32, i, s + 5);
                 let kind = if irr <= 0.0 { Silhouette::Peak } else { self.kinds[(q(1) * self.kinds.len() as f32) as usize % self.kinds.len()] };
-                let big = if j == ((r(6) * nm as f32) as usize).min(nm - 1) { 1.0 } else { 0.35 + 0.55 * q(2) };
-                let h = h_top * if irr <= 0.0 { 1.0 } else { big };
-                let half = ((rr - l) * (0.55 + 0.5 * q(3) * irr)).max(h * 1.2);
+                let big = if j == main { 1.0 } else { 0.3 + 0.6 * q(2) };
+                let h = h_top * if irr <= 0.0 { 0.9 + 0.1 * q(2) } else { big };
+                let half = h * if irr <= 0.0 { typical } else { width_of(kind, q(3)) };
                 masses.push(Mass { x, half, h, kind, lean: (q(4) * 2.0 - 1.0) * irr, at: q(5) * 2.0 - 1.0 });
             }
             let skew = (r(7) * 2.0 - 1.0) * 0.25 * self.oblique * irr;
@@ -1312,9 +1350,9 @@ impl Ranges {
                 z,
                 skew,
                 masses,
-                floor: h_top * (0.08 + 0.12 * r(8)),
+                floor: h_top * if irr <= 0.0 { 0.3 } else { 0.15 + 0.35 * r(8) },
                 detail: Octaves::ridged(s + 40 + k as u32, 6, (h_top * 3.0).max(200.0)),
-                rough: 0.06 + 0.06 * irr,
+                rough: 0.08 + 0.14 * irr,
                 seed: s + 100 + k as u32,
             });
         }

@@ -194,6 +194,9 @@ pub struct Canvas {
     /// bristles feel.
     pub(crate) surf_gen: u64,
     pub(crate) base: Option<(u64, Vec<f32>)>,
+    /// Loose graphite and chalk on the picture (None until something is
+    /// drawn): `graphite`.
+    pub(crate) drawing: Option<Box<crate::graphite::Drawing>>,
 }
 
 impl Canvas {
@@ -233,6 +236,7 @@ impl Canvas {
             wet: crate::wet::Wet::new(n),
             surf_gen: 0,
             base: None,
+            drawing: None,
         }
     }
 

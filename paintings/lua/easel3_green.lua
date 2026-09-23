@@ -591,4 +591,31 @@ for i = 1, 260 do
 end
 
 --@ chunk 30 · clock 46849.6328125
+wait(24*60)
+-- a village church far off among the trees: pale walls in the sun, a slate spire; everything hazed
+local haze1 = function(c) return mix(c, "#aab3bd", 0.45) end
+local cx, gy = 262, 404
+local nave = rect(cx - 12, gy - 7, 13, 7)
+local tower = rect(cx + 1, gy - 15, 4.2, 15)
+local spire = poly({{cx + 0.6, gy - 15}, {cx + 3.1, gy - 29}, {cx + 5.6, gy - 15}})
+local roof = poly({{cx - 12.5, gy - 7}, {cx - 10.5, gy - 11}, {cx + 1, gy - 11}, {cx + 1, gy - 7}})
+local houses = rect(cx - 30, gy - 5, 8, 5) + rect(cx + 10, gy - 4.5, 7, 4.5) + rect(cx + 22, gy - 4, 6, 4)
+local hroofs = poly({{cx - 31, gy - 5}, {cx - 26, gy - 9}, {cx - 21, gy - 5}}) + poly({{cx + 9.5, gy - 4.5}, {cx + 13.5, gy - 8}, {cx + 17.5, gy - 4.5}})
+  + poly({{cx + 21.5, gy - 4}, {cx + 25, gy - 7}, {cx + 28.5, gy - 4}})
+local d = {hand="detail", tool="round 0.8", length={1, 3}, coverage=3, medium=0.15}
+local function paint(m, c, a) local o = {}; for k, v in pairs(d) do o[k] = v end; o.color = haze1(c); o.angle = a or 1.57; work(m, o) end
+paint(nave + houses, "#d8d0bc")
+paint(tower, "#d2cab6")
+paint((nave + houses + tower) * mask(function(x, y) return 1 end) * rect(cx + 3, gy - 16, 3, 16), "#9c968a")
+paint(roof + hroofs, "#8e5f4a", 0)
+paint(spire, "#56606c")
+-- trees in front of the village, low and round
+local fm = nil
+for _, t in ipairs({{cx - 18, 3.2}, {cx - 4, 2.6}, {cx + 8, 3.0}, {cx + 19, 2.4}, {cx - 38, 3.4}}) do
+  local e = ellipse(t[1], gy - t[2] * 0.7, t[2] * 1.3, t[2]):roughen(0.5, 2)
+  fm = fm and (fm + e) or e
+end
+work(fm, {hand="hatch", tool="round 0.9", length={1, 2.5}, coverage=2.4, angle=1.2, color=haze1("#35462f")})
+
+--@ chunk 31 · clock 85684.08203125
 wait(24*60); varnish{color="#e6d3a4", coats=0.3, vary=0.1}; relief()

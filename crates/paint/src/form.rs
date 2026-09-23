@@ -292,7 +292,7 @@ impl Sdf {
         let m = mul(rr, mul(rp, ry));
         Sdf::Turn { body: Box::new(self), c, m }
     }
-    /// Weather the surface: displace it in and out by up to about `amp`
+    /// Weather the surface: displace it in and out by about `amp`
     /// units of 3-D fractal noise whose largest features are `period` units
     /// across (a few units of `amp` on a rock tens of units across).
     /// `ridged` makes sharp-lipped pits and crests (granite

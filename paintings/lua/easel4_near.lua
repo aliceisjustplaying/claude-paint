@@ -335,3 +335,71 @@ for i, t in ipairs(tufts) do
   end
 end
 print(#tufts, "tufts", n, "blades")
+
+--@ chunk 16 · clock 138322.21484375
+wait(3*60)
+-- the pale blotches low in the wood: darkened back into the trees
+local blot = woodm * rect(0, 280, 680, 40) * mask(function(x, y) return smoothstep(0.35, 0.55, sample(x, y, 1).L) end):grow(2)
+work(blot, {hand="hatch", tool="round 1.8", length={3, 7}, coverage=3, clip=woodm, angle=0.3, angle_jitter=0.5, color="#222b26"})
+-- snow drifted round the stump's foot
+local sd = outline{{70,712},{88,700},{104,706},{122,698},{140,705},{160,699},{178,712}, open=true, char="soft", lobe=6, amount=1.2, seed=101}
+local sdm = sd:below(H) * mask(function(x, y) return smoothstep(66, 92, x) * smoothstep(182, 156, x) * smoothstep(742, 722, y) end)
+work(sdm, {hand="body", tool="filbert 3", length={4, 12}, coverage=3, hug=false, medium=0.15, angle=0.02,
+  color=function(x, y) return mix("#ece4d4", "#b5b7c6", smoothstep(118, 150, x)) end})
+-- dead bracken: rust-brown fronds bent over near the stump and at the stone's foot
+local fr = brush("rigger", 1.1)
+local pin = brush("round", 1.5)
+local function frond(x, y, len, ang, bend, seed)
+  local pts = {}
+  for k = 0, 6 do
+    local t = k / 6
+    pts[#pts + 1] = {x + len * t * math.cos(ang) + bend * len * t * t, y + len * t * math.sin(ang) + 0.5 * bend * len * t * t}
+  end
+  fr:reload(({"#7a4e2c", "#8c5d33", "#6a4a32"})[1 + seed % 3], 0.8)
+  fr:stroke(pts, {pressure={0.6, 0.1}, ramps={0.05, 0.6}, shake=0.4})
+  pin:reload(({"#8a5a30", "#9c6a3a", "#6f4a2e"})[1 + seed % 3], 0.8)
+  for k = 2, 6 do
+    local p, q = pts[k], pts[k - 1]
+    local dx, dy = p[1] - q[1], p[2] - q[2]
+    local l = math.sqrt(dx * dx + dy * dy)
+    local nx, ny = -dy / l, dx / l
+    local pl = len * 0.26 * (1 - (k - 2) / 6)
+    for _, s in ipairs{-1, 1} do
+      pin:stroke({p, {p[1] + s * nx * pl + dx * 0.3, p[2] + s * ny * pl + dy * 0.3 + 0.25 * pl}}, {pressure={0.55, 0.05}, ramps={0.1, 0.5}, shake=0.3})
+    end
+  end
+end
+frond(160, 708, 70, -1.2, 0.5, 1)
+frond(174, 714, 58, -0.7, 0.4, 2)
+frond(62, 718, 62, -1.9, -0.4, 3)
+frond(186, 506, 36, -1.0, 0.45, 4)
+frond(202, 510, 30, -0.5, 0.35, 5)
+frond(578, 508, 32, -2.2, -0.4, 6)
+frond(820, 600, 46, -1.3, 0.4, 7)
+-- fallen spruce twigs and a birch twig lying on the snow
+local tw = brush("rigger", 0.6)
+for i = 1, 9 do
+  local x, y = rand(230, 900), rand(560, 750)
+  if not (x > 90 and x < 160 and y > 540) then
+    tw:reload(i % 3 == 0 and "#3a302a" or "#2a2622", 0.8)
+    local a = rand(-0.5, 0.5); local L = rand(10, 24) * (0.6 + (y - 560) / 380)
+    local p1 = {x, y}; local p2 = {x + L * math.cos(a), y + L * math.sin(a) * 0.4}
+    tw:stroke({p1, {(p1[1] + p2[1]) / 2, (p1[2] + p2[2]) / 2 + rand(-1.5, 1.5)}, p2}, {pressure={0.6, 0.2}, shake=0.6})
+    tw:stroke({{(p1[1] + p2[1]) / 2, (p1[2] + p2[2]) / 2}, {(p1[1] + p2[1]) / 2 + L * 0.25, (p1[2] + p2[2]) / 2 - L * 0.18}}, {pressure={0.4, 0.05}})
+  end
+end
+
+--@ chunk 17 · clock 138502.21484375
+local sd = mask(function(x, y) return smoothstep(60, 90, x) * smoothstep(190, 160, x) * smoothstep(750, 725, y) * smoothstep(680, 700, y) end) - stm:shrink(1)
+blend(sd, {angle=0.03, clip=-stm})
+
+--@ chunk 18 · clock 138502.21484375
+dry()
+local lie = noise{seed=111, period=6}
+local ytops = mask(function(x, y) return ysm:at(x, y) * (1 - ysm:at(x, y - 2.5)) end) * mask(function(x, y) return smoothstep(0.3, 0.6, lie:at01(x, y)) * (0.35 + 0.65 * smoothstep(760, 660, x)) end)
+stipple(ytops, {width=1.5, color=function(x, y) return mix("#f0e8d6", "#aeb0c0", smoothstep(690, 760, x)) end,
+  coverage=2.2, pressure={0.4, 0.8}, drag={1, 0}, aim=false, medium=0.15, fade=0})
+print(ytops:area())
+
+--@ chunk 19 · clock 157809.263671875
+wait(24*60); varnish{color="#e6d3a4", coats=0.3, vary=0.1}; relief()

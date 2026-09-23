@@ -8,6 +8,13 @@ round 3 (`notes/amnesia3/`), [r4 ...] round 4 with the drawing tools (`easel4_gr
 `easel4_near`). Add what you learn in the same form: what to do, the recipe, what goes
 wrong.
 
+**These are the best techniques so far, not the best possible.** Every
+recipe is a floor to beat. Each section names its **ceiling**: where the
+best recipe still reads as schematic or digital. If a passage of yours still
+reads digital, don't settle for the recipe: try something new, and if the
+critic scores it better, replace the entry (don't keep both). Pitfalls stay:
+they only prevent bad results.
+
 ---
 
 ## 1. Working order and time
@@ -39,6 +46,8 @@ wrong.
   `relief(0.14)` was safe [r3 free].
 
 ## 2. Skies and air
+
+*Ceiling:* skies read as smooth, even gradients ("too neat") and impasto cumulus reads lumpy; nobody has yet painted a Friedrich sky with real structure (banks, breaks, an uneven glow) that also reads as paint.
 
 - **The sky is two thin layers, the second stippled over the first once it's set.** This
   is the move that most often made a sky read as Friedrich's rather than as scrubbed paint
@@ -102,6 +111,8 @@ wrong.
 
 ## 4. Distance and ranges
 
+*Ceiling:* ranges still read as parallel bands or boxy crests; far woods as hedges of repeated round blobs.
+
 - **`w:ranges` can come out boxy** (crenellated crests) [r3 green]. Hand crests are
   reliable: noise plus a Gaussian dome or two, e.g. `HZ - 16 - 10*n:at01(x,0) -
   44*math.exp(-((x-770)/105)^2)`, masked with `below(crest):roughen(0.8, 9)`, body strokes
@@ -123,6 +134,8 @@ wrong.
   green].
 
 ## 5. Trees
+
+*Ceiling:* oaks come out as umbrella/savanna crowns or "broccoli"; spruce tiers as regular chevrons; field trees as identical balls; wood interiors as flat black masses. No painter has yet drawn a tree with its structure, only built one from parameters.
 
 **Spruces (the stock generator gives a forest spruce with a bare trunk).**
 `tree{habit="spruce"}` is a tall forest tree; `years=14` gave a lollipop [r4 near]. What
@@ -183,6 +196,8 @@ function share a shape, and tiers come out as symmetric chevrons [r4 near]. Vary
 
 ## 6. Rocks and stones
 
+*Ceiling:* stones read as loaves, eggs or stacked masonry; snow on stone reads as blotches or lichen.
+
 - **An ellipsoid alone is an egg or a loaf.** What reads as stone: one mass, turned,
   roughened at two scales, cut by two or three fracture planes, e.g.
   ```lua
@@ -218,6 +233,8 @@ function share a shape, and tiers come out as symmetric chevrons [r4 near]. Vary
 
 ## 7. Snow
 
+*Ceiling:* snow fields are flat and empty; lit snow under a low sun came out lilac until overruled by hand.
+
 - **Snow on the ground from the view's light, remapped.** At an 11° sun, lit flat snow is
   only 0.37 to 0.49 in `v:at(x,y).shade.value`. Probe first, then `mix(blue_gray,
   warm_white, smoothstep(0.3, 0.5, lit))`, graying with distance. Use only `p.what ==
@@ -241,6 +258,8 @@ function share a shape, and tiers come out as symmetric chevrons [r4 near]. Vary
   laid over it.
 
 ## 8. Grass and foreground particulars
+
+*Ceiling:* foregrounds are the dullest passages in every round (a barcode of upright dashes, a smooth band with sparse incident); Friedrich's are dark but drawn, every tuft particular.
 
 The foreground is where every round fell shortest of Friedrich. Budget real time for it.
 
@@ -274,6 +293,8 @@ The foreground is where every round fell shortest of Friedrich. Budget real time
   sparser and duller than you think.
 
 ## 9. Figures
+
+*Ceiling:* figures are stiff, symmetric silhouettes, sometimes cut-out looking at 3200.
 
 - **Size figures to the motifs around them.** A world-correct 1.75 m man near the viewer
   was taller than the stones [r3 free].

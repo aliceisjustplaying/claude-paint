@@ -88,7 +88,7 @@ const SEASONS: &str = "spring, summer, autumn, late_autumn, winter";
 const SPECIES_KEYS: &[&str] = &[
     "step", "density", "influence", "kill", "up", "out", "crook", "kink", "inertia", "shell", "voids", "void_size", "depth", "girth", "twig_w", "twigs", "twig_len",
     "twig_spread", "twig_droop", "twig_zig", "twig_along", "clump", "squash", "hang", "fill", "ragged", "leafiness", "leafy_w", "touch", "touch_w", "hook", "droop",
-    "flat", "touches", "marcescent", "scaffold", "smooth",
+    "flat", "touches", "marcescent", "scaffold", "smooth", "pipe", "leader",
 ];
 
 fn species_of(o: &Table, name: &str) -> Result<Species> {
@@ -97,7 +97,7 @@ fn species_of(o: &Table, name: &str) -> Result<Species> {
         ($($f:ident),*) => {$( if let Some(v) = num(o, stringify!($f))? { s.$f = v; } )*};
     }
     over!(step, density, influence, kill, up, out, crook, kink, inertia, shell, voids, void_size, depth, twig_w, twigs, twig_len, twig_spread, twig_droop, twig_zig, twig_along,
-        clump, squash, hang, fill, ragged, leafiness, leafy_w, touch, touch_w, hook, droop, flat, touches, marcescent);
+        clump, squash, hang, fill, ragged, leafiness, leafy_w, touch, touch_w, hook, droop, flat, touches, marcescent, pipe, leader);
     if let Some(v) = num(o, "girth")? {
         s.trunk = v;
     }

@@ -80,3 +80,4 @@ Key question for the user: how the easel FEELS to the agent.
 - surface merged: ground flecks gone (body cov 2.5: 1.49% -> 0.00% bare; broad: 10.96% -> 0.01%) via painter's look-and-fill dabs (.fill(false) to let the ground show); aim at a mark's mean look (Marks::Blunt/Pointed), light-over-dark bound 0.035 at 750px; drying at fixed 1.25 mm scale. Meadow sky flecks gone. ALL ROUND 3 STREAMS MERGED. Next: review.
 - review round 3 launched on aa38957 (easel, physics, geometry; neutral brief).
 - 17 review findings (notes/review3/). First fixer launch failed transiently (all three at 11:33:36, no sessions); relaunched without thinking override.
+- all 17 round-3 review findings fixed and merged (fix3-physics PAINTCK5, fix3-geometry, fix3-easel); 120 paint + 10 easel tests; cross-process replay identical.

@@ -148,8 +148,8 @@ fn main() {
             .color(under_col)
             .by_masstone()
             .angle(|_, _| 0.0)
-            .coverage(3.0)
-            .medium(0.55)
+            .coverage(5.0)
+            .medium(0.5)
             .clip(true);
         c.work(&land_m, &up, 9);
         c.dry();
@@ -184,12 +184,14 @@ fn main() {
 
     if o.stage("sky stipple", &mut c, &mut rng) {
         // dry: a finer, lighter stipple, denser toward the glow
-        let glow = move |x: f32, y: f32| lift(sky_col(x, y), 0.015 + 0.03 * smoothstep(200.0, HORIZON, y));
+        // barely lighter than the field: where the pass thins out, lighter dots
+        // stand alone and read as salt
+        let glow = move |x: f32, y: f32| lift(sky_col(x, y), 0.006 + 0.022 * smoothstep(220.0, HORIZON, y));
         let s2 = Stipple::new(Tool::stippler(1.7))
             .mixed(&sky_pal, 0.5)
             .color(glow)
-            .coverage(move |x, y| 0.4 + 1.8 * smoothstep(120.0, HORIZON, y) * (0.6 + 0.4 * (-((x - SUN_X) / 380.0).powi(2)).exp()))
-            .pressure(0.45, 0.8)
+            .coverage(move |x, y| 0.9 + 1.4 * smoothstep(120.0, HORIZON, y) * (0.6 + 0.4 * (-((x - SUN_X) / 380.0).powi(2)).exp()))
+            .pressure(0.5, 0.85)
             .dips(24, 0.35, 0.6);
         c.stipple(&sky_m, &s2, 21);
         c.dry();
@@ -305,6 +307,11 @@ fn main() {
             .broad()
             .palette(&sea_pal)
             .color(sea_col)
+            // by masstone: aimed, a stroke is judged by the canvas under its
+            // center, and a stroke centered on a fleck of bare ground mixes
+            // a blue-white pile that dries pale where it runs on
+            .by_masstone()
+            .mix_jitter(0.015)
             .angle(|_, _| 0.0)
             .angle_jitter(0.015)
             .curve(0.015, 0.2)
@@ -312,6 +319,11 @@ fn main() {
             .length(90.0, 260.0)
             .coverage(4.0)
             .medium(0.35)
+            // calm water: whole, level strokes. With the preset's short
+            // dabs and broken strokes this dark lay-in grew pale comets
+            // (FRICTION in notes/fresh2_coast.md)
+            .tail(0.0)
+            .broken(0.0)
             .clip(true);
         c.work(&sea_m, &lay, 51);
         // fuse with a narrower badger kept inside the water (a 40-unit
@@ -348,7 +360,8 @@ fn main() {
                     continue;
                 }
                 let under = c.under(xs + l * 0.5, ym, 3.0);
-                let dark = r.chance(0.55);
+                // far off, the swell only darkens: a light band there reads as a scrape
+                let dark = t < 0.2 || r.chance(0.55);
                 let path = (-((xs + l * 0.5 - SUN_X) / (40.0 + 150.0 * t)).powi(2)).exp();
                 let want = if dark { lift(under, -0.03 - 0.02 * t) } else { mix(lift(under, 0.05), hex("#d8cdb4"), 0.25 * path, Mix::Light) };
                 // mixed by masstone: an aimed thin light over the cool sea
@@ -401,6 +414,7 @@ fn main() {
             .body()
             .palette(&earth_pal)
             .color(beach_col)
+            .by_masstone()
             .angle(|x, _| -0.02 + 0.04 * (x / 260.0).sin())
             .angle_jitter(0.05)
             .length(40.0, 120.0)
@@ -421,7 +435,7 @@ fn main() {
             let mut m = 0.0f32;
             for &(px, _, rx, ry) in &pools {
                 let py = shore(px.clamp(0.0, 999.0)) + 14.0 + ry * 2.0;
-                let d = ((x - px) / rx).powi(2) + ((y - py) / ry).powi(2) + 0.35 * pn.get(x, y * 3.0);
+                let d = ((x - px) / rx).powi(2) + ((y - py) / ry).powi(2) + 0.6 * pn.get(x, y * 3.0) + 0.3 * (x / 7.0 + px).sin();
                 m = m.max(1.0 - smoothstep(0.8, 1.0, d));
             }
             m
@@ -429,11 +443,11 @@ fn main() {
         let pool_col = move |x: f32, y: f32| {
             // what the pool mirrors: the sky low over the horizon, a little dimmer
             let refl = sky_col(x, HORIZON - 6.0 - 2.0 * (y - 560.0).max(0.0));
-            lift(mix(refl, hex("#8f8c88"), 0.35, Mix::Light), -0.09)
+            lift(mix(refl, hex("#a39a8c"), 0.45, Mix::Light), -0.07)
         };
         let pool = st
             .detail()
-            .palette(&sky_pal)
+            .palette(&earth_pal)
             .color(pool_col)
             .angle(|_, _| 0.0)
             .angle_jitter(0.01)
@@ -524,12 +538,16 @@ fn main() {
         // shallows on the right. The light comes low from the right and from
         // behind: the masses stay dark, their tops and right shoulders catch it
         let mut form = Form::new(f);
-        let big = Sdf::ellipsoid([188.0, 606.0, 0.0], [128.0, 64.0, 70.0])
-            .turn([188.0, 606.0, 0.0], 0.25, 0.15, 0.06)
-            .rough(9.0, 110.0, 3, false)
-            .cut([240.0, 560.0, 20.0], [0.45, -1.0, 0.2], 10, 5.0)
-            .cut([90.0, 590.0, 0.0], [-1.0, -0.3, 0.35], 11, 4.0)
-            .rough(1.2, 18.0, 4, true);
+        // a glacial erratic: a rounded block of granite, broader than high,
+        // its top worn to a low dome, one end broken off in a sloping face
+        let big = Sdf::block([186.0, 618.0, 0.0], [232.0, 100.0, 150.0], 44.0)
+            .union(Sdf::ellipsoid([165.0, 584.0, 0.0], [112.0, 40.0, 70.0]), 26.0)
+            .turn([186.0, 618.0, 0.0], 0.32, 0.22, 0.09)
+            .rough(11.0, 95.0, 3, false)
+            .cut([272.0, 575.0, 30.0], [0.8, -0.55, 0.35], 10, 6.0)
+            .cut([84.0, 596.0, 0.0], [-1.0, -0.2, 0.3], 11, 5.0)
+            .rough(4.0, 30.0, 9, false)
+            .rough(1.4, 14.0, 4, true);
         let big_id = form.add(&big, 0.3);
         let low = Sdf::ellipsoid([352.0, 655.0, 40.0], [30.0, 13.0, 22.0])
             .turn([352.0, 655.0, 40.0], -0.3, 0.2, 0.1)
@@ -593,13 +611,14 @@ fn main() {
                 .mixed(&earth_pal, 0.3)
                 .color(|x, y| lift(col(x, y), -0.06))
                 .angle(ang)
-                .angle_jitter(0.2)
-                .length(10.0 * sc, 30.0 * sc)
-                .coverage(3.0)
-                .pressure(0.6, 0.9)
-                .dips(2, 0.56, 0.6)
+                .angle_jitter(0.3)
+                .curve(0.12, 0.4)
+                .length(8.0 * sc, 24.0 * sc)
+                .coverage(4.5)
+                .pressure(0.65, 0.95)
+                .dips(2, 0.6, 0.6)
                 .clip(true)
-                .threshold(0.2);
+                .threshold(0.1);
             c.work(&sil, &hd, seed);
             // the lit planes in stiffer, lighter paint
             let lit = form.mask(|s| if s.part == id { s.shade.lit(0.15) } else { 0.0 }).mul(&sil);
@@ -628,16 +647,16 @@ fn main() {
             c.dry();
             // crevices and lichen: dark cracks along the concave breaks,
             // then scattered pale-ochre lichen spots on the sky-facing top
-            let joints = form.edges(0.8, 3.0 * sc, 2.5 * sc).mul(&Mask::from_fn(f, |x, y| smoothstep(0.3, 0.7, -form.bend(x, y, 2.5 * sc)))).mul(&sil.erode(1.5));
+            let joints = form.edges(1.2, 5.0 * sc, 6.0 * sc).mul(&Mask::from_fn(f, |x, y| smoothstep(0.5, 0.9, -form.bend(x, y, 6.0 * sc)))).mul(&sil.erode(3.0));
             let hd = paint::Handling::new(Tool::round_sable(1.4 * sc))
                 .mixed(pal, 0.15)
                 .color(|_, _| hex("#1d1a17"))
                 .by_masstone()
                 .angle(|x, y| form.edge_angle(x, y, 2.5 * sc))
                 .length(4.0 * sc, 12.0 * sc)
-                .coverage(0.8)
-                .pressure(0.5, 0.8)
-                .dips(3, 0.6, 0.7)
+                .coverage(0.5)
+                .pressure(0.4, 0.7)
+                .dips(3, 0.5, 0.7)
                 .clip(true)
                 .threshold(0.3);
             c.work(&joints, &hd, seed + 3);
@@ -740,26 +759,30 @@ fn main() {
         c.work(&net_m, &veil, 91);
         // folds: darker verticals where the net bunches
         let mut r = Rng::new(92);
-        let fold = pal.paint(hex("#2a2622"), 0.3);
-        let mut b = held(Tool::round_sable(1.2), fold, 0.5, 93);
+        let fold = pal.paint(hex("#2f2a25"), 0.6);
+        let mut b = held(Tool { lay: 0.5, ..Tool::rigger(0.7) }, fold, 0.4, 93);
         let mut x = rail0.0 + 2.0;
         while x < rail1.0 - 2.0 {
-            b.reload(fold, 0.45);
+            b.reload(fold, 0.35);
             let top = rail_y(x) + 1.0;
             let bot = hem(x) - r.range(0.0, 8.0);
             let sway = r.range(-2.0, 2.0);
-            stroke(&mut c, &mut b, &[(x, top), (x + sway * 0.4, (top + bot) * 0.5), (x + sway, bot)], r.range(0.4, 0.7), 0.2, (0.05, 0.5), Some(&net_m));
-            x += r.range(2.5, 7.0);
+            stroke(&mut c, &mut b, &[(x, top), (x + sway * 0.4, (top + bot) * 0.5), (x + sway, bot)], r.range(0.3, 0.55), 0.15, (0.05, 0.6), Some(&net_m));
+            x += r.range(3.5, 9.0);
         }
         // the mesh: fine diagonal lines, lean
         let mesh = pal.paint(hex("#302b26"), 0.45);
         let mut fine = held(Tool::rigger(0.3), mesh, 0.35, 94);
-        for k in 0..28 {
+        // the mesh: two families of fine lines, each bellied a little
+        // where the folds gather, starting above the rope so none begin in
+        // the open
+        for k in 0..64 {
             fine.reload(mesh, 0.3);
             let s = if k % 2 == 0 { 1.0 } else { -1.0 };
-            let x0 = rail0.0 + (k as f32 / 28.0) * (rail1.0 - rail0.0) + r.range(-3.0, 3.0);
-            let y0 = rail_y(x0) + 2.0;
-            stroke(&mut c, &mut fine, &[(x0, y0), (x0 + s * 30.0, y0 + 60.0), (x0 + s * 55.0, y0 + 140.0)], 0.35, 0.3, (0.1, 0.2), Some(&net_m));
+            let x0 = rail0.0 - 50.0 + (k as f32 / 64.0) * (rail1.0 - rail0.0 + 100.0) + r.range(-2.0, 2.0);
+            let y0 = 300.0;
+            let belly = r.range(-3.0, 3.0);
+            stroke(&mut c, &mut fine, &[(x0, y0), (x0 + s * 45.0 + belly, y0 + 60.0), (x0 + s * 95.0, y0 + 130.0)], 0.3, 0.3, (0.0, 0.0), Some(&net_m));
         }
         c.dry();
         // the poles: weathered spars, dark, their right side catching the glow
@@ -895,25 +918,26 @@ fn main() {
         // upturning strokes laid last [NG p.56], dark against the sand, a
         // few dry pale blades catching the light
         let mut r = Rng::new(200);
-        let stones: [(f32, f32, f32); 7] = [(612.0, 688.0, 11.0), (640.0, 694.0, 6.0), (772.0, 676.0, 14.0), (806.0, 684.0, 7.0), (905.0, 702.0, 16.0), (470.0, 700.0, 8.0), (60.0, 700.0, 12.0)];
+        let stones: [(f32, f32, f32); 8] = [(612.0, 684.0, 20.0), (646.0, 692.0, 11.0), (772.0, 670.0, 26.0), (812.0, 681.0, 13.0), (905.0, 700.0, 30.0), (470.0, 699.0, 14.0), (520.0, 668.0, 9.0), (700.0, 650.0, 7.0)];
         for (i, &(x, y, s)) in stones.iter().enumerate() {
             let i = i as u64;
-            let dark = c.aim(&earth_pal, hex("#2b2723"), (x, y), s, 0.15, 1.5);
-            let mut b = held(Tool::filbert(s * 0.55), dark, 0.6, 2000 + i);
-            stroke(&mut c, &mut b, &[(x - s * 0.5, y + s * 0.05), (x, y + s * 0.12), (x + s * 0.5, y)], 0.9, 0.8, (0.1, 0.2), None);
+            let dark = c.aim(&earth_pal, hex("#3a352e"), (x, y), s, 0.15, 1.5);
+            // flat stones, half sunk: wide low strokes
+            let mut b = held(Tool::filbert(s * 0.32), dark, 0.6, 2000 + i);
+            stroke(&mut c, &mut b, &[(x - s * 0.55, y + s * 0.04), (x, y + s * 0.08), (x + s * 0.55, y)], 0.9, 0.8, (0.1, 0.2), None);
             b.reload(dark, 0.5);
-            stroke(&mut c, &mut b, &[(x - s * 0.4, y - s * 0.12), (x + s * 0.1, y - s * 0.2), (x + s * 0.45, y - s * 0.1)], 0.8, 0.7, (0.1, 0.2), None);
+            stroke(&mut c, &mut b, &[(x - s * 0.45, y - s * 0.08), (x + s * 0.1, y - s * 0.13), (x + s * 0.5, y - s * 0.06)], 0.8, 0.7, (0.1, 0.2), None);
             // the lit top, back and right
             let lit = earth_pal.paint(hex("#8f806c"), 0.15);
             let mut lb = held(Tool::round_sable(s * 0.14), lit, 0.45, 2100 + i);
-            stroke(&mut c, &mut lb, &[(x - s * 0.1, y - s * 0.3), (x + s * 0.2, y - s * 0.3), (x + s * 0.48, y - s * 0.14)], 0.55, 0.3, (0.2, 0.5), None);
+            stroke(&mut c, &mut lb, &[(x - s * 0.2, y - s * 0.2), (x + s * 0.2, y - s * 0.21), (x + s * 0.52, y - s * 0.09)], 0.55, 0.3, (0.2, 0.5), None);
             // a thin shadow toward us
             let under = c.under(x, y + s * 0.4, 2.0);
             let sp = c.aim(&earth_pal, lift(under, -0.08), (x, y + s * 0.3), 2.0, 0.4, 0.8);
             let mut sb = held(Tool { lay: 0.5, ..Tool::filbert(s * 0.3) }, sp, 0.35, 2200 + i);
             stroke(&mut c, &mut sb, &[(x - s * 0.3, y + s * 0.25), (x - s * 0.9, y + s * 0.5)], 0.5, 0.2, (0.05, 0.5), None);
         }
-        let tufts: [(f32, f32, f32, usize); 7] = [(34.0, 632.0, 26.0, 26), (58.0, 640.0, 18.0, 14), (302.0, 612.0, 14.0, 12), (948.0, 660.0, 30.0, 30), (985.0, 668.0, 22.0, 18), (880.0, 706.0, 20.0, 16), (12.0, 690.0, 34.0, 30)];
+        let tufts: [(f32, f32, f32, usize); 8] = [(30.0, 634.0, 40.0, 40), (62.0, 642.0, 26.0, 22), (300.0, 614.0, 18.0, 14), (946.0, 664.0, 46.0, 50), (984.0, 672.0, 34.0, 30), (872.0, 708.0, 30.0, 24), (14.0, 694.0, 50.0, 46), (560.0, 606.0, 10.0, 8)];
         let dark = earth_pal.paint(hex("#34322a"), 0.2);
         let olive = earth_pal.paint(hex("#4d4a36"), 0.2);
         let pale = earth_pal.paint(hex("#9a8b68"), 0.2);
@@ -922,7 +946,7 @@ fn main() {
             for j in 0..n {
                 let pick = r.f();
                 let pnt = if pick < 0.45 { dark } else if pick < 0.8 { olive } else { pale };
-                let mut b = held(Tool::rigger(r.range(0.35, 0.6)), pnt, 0.45, 2300 + k);
+                let mut b = held(Tool::rigger(r.range(0.4, 0.8) * (0.6 + hgt / 50.0)), pnt, 0.5, 2300 + k);
                 k += 1;
                 let bx = x + r.normal() * hgt * 0.18;
                 let by = y + r.range(-1.5, 1.5);
@@ -945,12 +969,12 @@ fn main() {
         // a few gulls, late touches: small bent strokes, dark against the
         // glow, pale against the upper sky
         let mut r = Rng::new(190);
-        let gulls = [(352.0, 262.0, 6.0), (378.0, 248.0, 4.5), (318.0, 281.0, 3.8), (560.0, 300.0, 3.2), (880.0, 244.0, 4.0)];
+        let gulls = [(352.0, 262.0, 8.5), (381.0, 247.0, 6.5), (318.0, 282.0, 5.5), (562.0, 300.0, 4.2), (884.0, 246.0, 5.0)];
         for (i, &(x, y, s)) in gulls.iter().enumerate() {
             let under = c.under(x, y, s);
             let want = lift(under, -0.3);
             let p = c.aim(&sky_pal, want, (x, y), 0.5, 0.1, 1.5);
-            let mut b = held(Tool::round_sable(0.45 + s * 0.06), p, 0.5, 191 + i as u64);
+            let mut b = held(Tool::round_sable(0.5 + s * 0.04), p, 0.5, 191 + i as u64);
             let tilt = r.normal() * 0.15;
             let wing = |sx: f32| -> Vec<(f32, f32)> {
                 vec![(x, y), (x + sx * s * 0.45, y - s * (0.28 + tilt * sx)), (x + sx * s, y - s * (0.05 + tilt * sx))]

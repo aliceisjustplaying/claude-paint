@@ -84,7 +84,7 @@ fn main() {
         if l >= 0.0 {
             mix(base, hex("#e4ddcf"), 0.6 * l, Mix::Light)
         } else {
-            mix(base, hex("#9095a8"), 0.6 * -l, Mix::Light)
+            mix(base, hex("#948fab"), 0.6 * -l, Mix::Light)
         }
     };
 
@@ -425,7 +425,7 @@ fn main() {
         let lee_m = Mask::from_fn(f, |x, y| if lee_cov(x, y) > 0.02 { 1.0 } else { 0.0 }).mul(&snow_m);
         let lee_s = Stipple::new(Tool::stippler(2.3))
             .mixed(pal, 0.45)
-            .color(move |x, y| mix(snow_col(x, y), hex("#868ca3"), 0.34, Mix::Light))
+            .color(move |x, y| mix(snow_col(x, y), hex("#8a86a4"), 0.34, Mix::Light))
             .coverage(lee_cov)
             .pressure(0.45, 0.85)
             .drag(1.5, Some(0.0))

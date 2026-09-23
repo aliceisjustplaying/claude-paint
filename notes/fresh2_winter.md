@@ -123,6 +123,12 @@ the snow stage, **lee bands** (broken bands of blue shadow below low drift
 crests, stippled, thin far off and wide near). The spruces got a stippled
 shaded footing.
 
+Last: the sky gradient got a mauve-rose band between the slate zenith and
+the straw glow (dusk after sunset in winter), and a **far** stage before the
+ridge: a second, paler range behind the wooded ridge, higher on the left,
+stippled a little darker and cooler than the sky and fading into the glow at
+its foot (a plane of depth the single ridge lacked).
+
 Later additions to earlier stages: thin stratus bands low in the glow
 (stippled, no strokes); the moon's glow stippled; the crescent filled with
 ~260 short arc-wise touches clipped to the crescent mask (sharp horns);
@@ -298,16 +304,16 @@ What still reads as digital or weak:
   Friedrich's firs ("short hatched strokes" [NG pp.49–50]); I painted them
   with drooping gesture strokes rather than hatching.
 - **The ridge** is a uniform blue-gray band with a mottled stipple texture
-  ("granite" at 3200px) and a hard top line; it wants a few far trees or a
-  second, paler range for depth.
+  ("granite" at 3200px) and a hard top line. The paler far range behind it
+  now gives a second plane, but both top edges are harder than distance
+  and mist would allow.
 - **The stones** look like little cakes (white top, dark flat underside)
   with a dotted dark rim at the cap edge (friction 20).
 - **The figure** is a legible silhouette but crude at 3200px: legs are two
   sticks.
-- **Color:** the painting is a little gray overall; Friedrich's winter dusk
-  would have a stronger mauve-rose band above the straw glow and more
-  violet in the snow shadows. The final veil helped the edges; it didn't
-  deepen the color.
+- **Color:** the late mauve-rose band fixed the sky's grayness, but the
+  snow still lacks that color: its shadows should carry more violet from
+  the sky. The final veil helped the edges; it didn't deepen the color.
 - **No underdrawing.** Friedrich's graphite/ink underdrawing, sometimes
   visible through thin paint [CATS p.132; NG pp.49, 58], is absent; with
   more time I'd rule the ruin and draw the oak in a lean dark line first

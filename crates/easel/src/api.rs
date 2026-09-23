@@ -16,6 +16,9 @@ use paint::{Canvas, Cracks, Fbm, Frame, Gesture, Handling, Held, Kind, Mask, Ord
 use std::cell::RefCell;
 use std::rc::{Rc, Weak};
 
+#[path = "draw_pencil.rs"]
+mod draw_pencil;
+
 /// Grid spacing (units) that painter fields are sampled on.
 pub const FIELD_STEP: f32 = 2.0;
 
@@ -1351,7 +1354,7 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
             "canvas",
             lua.create_function(move |lua, o: Option<Table>| {
                 let o = o.unwrap_or(lua.create_table()?);
-                check_keys(&o, &["style", "aspect", "seed", "palette"], "canvas")?;
+                check_keys(&o, &["style", "aspect", "seed", "palette", "size"], "canvas")?;
                 if st.borrow().canvas.is_some() {
                     return err("the canvas is already set up (canvas{} is the first chunk; undo back past it to change it)");
                 }
@@ -1364,6 +1367,13 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
                 let palname = o.get::<Option<String>>("palette")?;
                 if let Some(pn) = &palname {
                     sty.palette = palette_named(pn)?;
+                }
+                // size: the painting's width in mm (the style's by default)
+                if let Some(mm) = num(&o, "size")? {
+                    if !(50.0..=5000.0).contains(&mm) {
+                        return err("size: the canvas width in mm, 50 to 5000");
+                    }
+                    sty.width_mm = mm;
                 }
                 let aspect = num(&o, "aspect")?.unwrap_or(1.4);
                 if !(0.2..=5.0).contains(&aspect) {
@@ -1382,9 +1392,10 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
                     s.clock = 0.0;
                     s.canvas = Some(c);
                     s.style = Some(Rc::new(sty));
+                    let sz = num(&o, "size")?.map(|mm| format!(", size={mm}")).unwrap_or_default();
                     s.setup = Some(match &palname {
-                        Some(pn) => format!("style={name:?}, palette={pn:?}, aspect={aspect}, seed={seed}"),
-                        None => format!("style={name:?}, aspect={aspect}, seed={seed}"),
+                        Some(pn) => format!("style={name:?}, palette={pn:?}, aspect={aspect}, seed={seed}{sz}"),
+                        None => format!("style={name:?}, aspect={aspect}, seed={seed}{sz}"),
                     });
                 }
                 let gl = lua.globals();
@@ -1697,6 +1708,7 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
 
     crate::form::install(lua, st.clone())?;
     crate::world::install(lua, st.clone())?;
+    draw_pencil::install(lua, st.clone())?;
 
     // trees
     {

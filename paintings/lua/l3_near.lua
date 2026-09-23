@@ -1,5 +1,5 @@
--- easel session "l2_near": a painting replayed chunk by chunk.
---   easel run paintings/lua/l2_near.lua [--width 3200]
+-- easel session "l3_near": a painting replayed chunk by chunk.
+--   easel run paintings/lua/l3_near.lua [--width 3200]
 -- Each "--@ chunk" line starts one chunk as it was run at the easel (clock = painting minutes).
 
 --@ chunk 1 · clock 0
@@ -204,7 +204,7 @@ stipple(tops, {width=1.1, color=function(x, y) return mix("#a9aaa8", "#d6d0c0", 
   coverage=1.2, pressure={0.3, 0.6}, drag={1, 0}, aim=false, medium=0.2, fade=0})
 print(tops:area())
 
---@ chunk 9 · clock 30910.60546875
+--@ chunk 9 · clock 30910.8671875
 -- the erratic: gray granite, warm where the low sun takes it, cold violet-gray in its own shadow
 local f = v.form
 stonem = v:visible("bodies")
@@ -219,7 +219,7 @@ end
 work(stonem, {hand="body", tool="filbert 4", length={6, 18}, coverage=3.6, clip=stonem, medium=0.15,
   angle=f:field("fall"), angle_jitter=0.4, color=granite})
 
---@ chunk 10 · clock 30910.60546875
+--@ chunk 10 · clock 30910.8671875
 dry()
 local f = v.form
 -- the shadow flank pulled together: a cool violet-gray scumbled over it, down the plane
@@ -244,7 +244,7 @@ stipple(lich, {width=1.4, color=function(x, y) local _, _, _, r = lc:at(x, y); r
   coverage=1.1, pressure={0.3, 0.6}, aim=false, medium=0.15, fade=0.5})
 print(lich:area())
 
---@ chunk 11 · clock 54420.900390625
+--@ chunk 11 · clock 54556.580078125
 dry()
 local f = v.form
 -- the first snow lying on the top: a thin continuous sheet where the surface faces up,
@@ -307,16 +307,35 @@ blend(footd, {angle=0.02, clip=cliptop})
 blend(footd, {angle=0.08, clip=cliptop, coverage=2})
 print(cap:area(), footd:area())
 
---@ chunk 12 · clock 110066.142578125
+--@ chunk 12 · clock 111432.091796875
 wait(24*60)
 -- the young spruce, dense to the ground, its boughs weighed down a little by snow
 yspr = spruce{x=709, top=56, base=492, halfw=104, seed=71, droop=1.35, thick=1.15, lean=0.012}
+-- no two whorls alike: a spruce in the open grows lopsided, some boughs long and sweeping,
+-- some short or snapped, left and right of one whorl rarely the same, the whorls unevenly spaced
+local asym = noise{seed=73, period=70}
+for i, b in ipairs(yspr.branches) do
+  local ax, ay = b.pts[1][1], b.pts[1][2]
+  local f = clamp(1 + 0.3 * asym(ay, b.s * 60) + randn(0, 0.2), 0.5, 1.4)
+  if rand() < 0.1 and b.t > 0.2 then f = f * rand(0.35, 0.55) end   -- snapped or stunted
+  local sag = randn(0, 0.12)
+  for k = 2, #b.pts do
+    local p = b.pts[k]
+    local dx, dy = (p[1] - ax) * f, (p[2] - ay) * f
+    p[1] = ax + dx; p[2] = ay + dy + sag * math.abs(dx)
+  end
+  b.f = f
+end
+local tier = (492 - 56) / 22
+local m = ribbon(yspr.axis, math.max(1.5, 104 * 0.06))
+for _, b in ipairs(yspr.branches) do m = m + ribbon(b.pts, b.w) end
+yspr.mask = m:roughen(3.2, 6, 71, 0.4)
 local notstone = -v:visible("bodies"):grow(1)
 ysm = yspr.mask * notstone
 local turn = noise{seed=72, period=10}
+local dark = function(x, y) return shift(mix("#1b2620", "#26342a", smoothstep(60, 480, y)), 0.02 * turn(x, y), 0, 0) end
 work(ysm, {hand="hatch", tool="round 1.8", length={3, 8}, coverage=3.4, clip=ysm, medium=0.18,
-  angle=function(x, y) return (x < 709 and 2.75 or 0.4) + 0.35 * turn(x, y) end, angle_jitter=0.45,
-  color=function(x, y) return shift(mix("#1b2620", "#26342a", smoothstep(60, 480, y)), 0.02 * turn(x, y), 0, 0) end})
+  angle=function(x, y) return (x < 709 and 2.75 or 0.4) + 0.35 * turn(x, y) end, angle_jitter=0.45, color=dark})
 -- the boughs drawn out, then the needles at their tips catching the low light on the left
 local rb = brush("rigger", 1.1)
 for i, b in ipairs(yspr.branches) do
@@ -325,10 +344,39 @@ for i, b in ipairs(yspr.branches) do
 end
 rb:reload("#2a2420", 0.9)
 rb:stroke(yspr.axis, {pressure={0.15, 0.8}, ramps={0.4, 0.1}, clip=notstone})
+-- the curtain: short branchlets hanging from every bough in short hatched strokes, so the
+-- underside of a tier is a fringe, not a clean chevron edge
+local hb = brush("round", 1.2)
+local nh = 0
+for i, b in ipairs(yspr.branches) do
+  if not b.front then
+    local p1, p4 = b.pts[1], b.pts[#b.pts]
+    local L = math.abs(p4[1] - p1[1])
+    local cnt = math.floor(L / 3.2)
+    for k = 1, cnt do
+      local t = rand(0.2, 0.97)
+      -- a point along the bough (piecewise between its points)
+      local seg = t * (#b.pts - 1)
+      local j = math.min(#b.pts - 1, math.floor(seg) + 1)
+      local u = seg - (j - 1)
+      local a, c = b.pts[j], b.pts[j + 1]
+      local x, y = a[1] + (c[1] - a[1]) * u, a[2] + (c[2] - a[2]) * u
+      local hl = tier * rand(0.2, 0.55) * (0.6 + 0.6 * t)
+      if nh % 7 == 0 then hb:reload(nh % 14 == 0 and "#18211c" or "#223029", 0.75) end
+      nh = nh + 1
+      local sw = b.s * rand(-0.5, 1.5)
+      hb:stroke({{x, y + 1}, {x + sw * 0.5, y + hl * 0.6}, {x + sw, y + hl}}, {pressure={0.75, 0.05}, ramps={0.05, 0.6}, clip=notstone})
+    end
+  end
+end
+-- ragged needle tips spilling past the edge: short strokes that let the silhouette go
+work(ysm:rim(4, 1), {hand="hatch", tool="round 1.2", length={2, 5}, coverage=1.3, hug=false, clip=notstone, medium=0.2,
+  angle=function(x, y) return (x < 709 and 2.3 or 0.85) + 0.6 * turn(x, y) end, angle_jitter=0.8, color=dark})
 local lit = ysm * mask(function(x, y) return smoothstep(700, 640, x) end)
 work(lit, {hand="hatch", tool="round 1.2", length={2, 5}, coverage=1.1, clip=ysm, angle=2.8, angle_jitter=0.5, color="#4d5a3a"})
+print(nh, "branchlets")
 
---@ chunk 13 · clock 111506.142578125
+--@ chunk 13 · clock 112872.091796875
 -- the stump of a birch, snapped off by a storm: white bark, black scars, a jagged top
 stump = outline{{94,712,"c"},{97,660},{100,612},{93,574,"c"},{104,560,"c"},{113,571},{122,556,"c"},{129,566},{139,545,"c"},{146,572},{150,630},{156,712,"c"}, char="broken", seed=81}
 stm = stump:mask()
@@ -337,7 +385,10 @@ work(stm, {hand="body", tool="filbert 3", length={4, 12}, coverage=3.5, clip=stm
   color=function(x, y) return gradient({{0, "#e9e2d2"}, {0.45, "#d6d0c4"}, {0.8, "#9a9aa6"}, {1, "#7c7d8a"}}, sx(x)) end})
 -- the splintered wood of the break, warm and raw
 local brk = stm * above(function(x) return 578 + 0.2 * (x - 94) end)
-work(brk, {hand="detail", tool="round 1.4", length={3, 9}, coverage=2.5, clip=stm, angle=-math.pi/2, color="#9c7a52"})
+-- the break weathered silver-gray, as a snag goes after a winter or two: only a little raw
+-- brown left deep in the splits, darker on the side turned from the sun
+work(brk, {hand="detail", tool="round 1.4", length={3, 9}, coverage=2.5, clip=stm, angle=-math.pi/2,
+  color=function(x, y) return shift(gradient({{0, "#a39a8a"}, {0.5, "#857d70"}, {1, "#5f5a54"}}, sx(x)), 0, 0.004, 0.006 * smoothstep(575, 560, y)) end})
 -- the black lenticels and scars, across the trunk; darker toward the root
 local bb = brush("round", 1.6)
 for i = 1, 26 do
@@ -351,16 +402,13 @@ local contour = brush("round", 1.3)
 contour:load("#4a4644", 0.8)
 stump:paint(contour, {pressure=0.7, clip=stm:grow(0.8), dip={"#4a4644", 0.7}, every=3})
 
---@ chunk 14 · clock 111506.142578125
+--@ chunk 14 · clock 112872.091796875
 -- shadows of the spruce and the stump, from the same low sun
 local sp = w:spot(709, 492)
 local w2 = w:proxy(sp, body.ellipsoid(sp:p(0, 1.6, 0), sp:size(0.75, 1.6, 0.75)))
-local st = w:spot(125, 712)
-w2 = w2:proxy(st, body.block(st:p(0, 0.55, 0), st:size(0.36, 1.1, 0.36), st:m(0.05)))
 vs = w2:view()
 -- a shadow on snow is not a flat stripe: it deepens on the rises that face the sun, pales in the
 -- troughs already turned from it, and its edge is scalloped by the drifts it crosses
-local ang = w:shadow_angle(500, 640)
 local ripple = noise{seed=141, period=22, stretch={0.02, 4}}
 local slow = noise{seed=142, period=110}
 local mod = mask(function(x, y)
@@ -368,13 +416,45 @@ local mod = mask(function(x, y)
   local lit = (p and p.what == "ground" and p.shade) and p.shade.value or 0.4
   return clamp(0.35 + 0.5 * smoothstep(0.3, 0.5, lit) + 0.3 * ripple(x, y) + 0.2 * slow(x, y), 0.15, 1.1)
 end)
+-- the erratic is sunk in the ground, not an egg lying on it: no shadow under a belly in
+-- front of its lit face, only the contact shade below
+local belly = mask(function(x, y)
+  local b = footat(x); if not b then return 0 end
+  return smoothstep(b - 6, b + 1, y) * smoothstep(606, 575, x)
+end)
 local cs = vs:cast_shadow{soft=2.2}
-glaze(cs * mod * -stm * -v:visible("bodies"), {color="#6a7090", coats=0.36, view=vs})
+glaze(cs * mod * -stm * -v:visible("bodies") * -belly, {color="#6a7090", coats=0.36, view=vs})
+-- the stump's shadow: the stump is 0.6 m, so at an 11 degree sun it reaches ~3 m to the right
+-- and away; under the veiled sun its penumbra outgrows a 23 cm stump, so it is dark and
+-- crisp at the foot, widens and fades out long before it would end
+STSH = {{114, 713.4}, {254, 693.6}, {382, 675.5}, {498, 659.1}, {604, 644.1}, {702, 630.2}, {810, 615}}
+local function shy(x)
+  for k = 2, #STSH do
+    local a, b = STSH[k - 1], STSH[k]
+    if x <= b[1] then return a[2] + (b[2] - a[2]) * (x - a[1]) / (b[1] - a[1]), (x - 114) / 696 end
+  end
+  return STSH[#STSH][2], 1
+end
+local wob = noise{seed=143, period=28}
+local wob2 = noise{seed=144, period=9}
+stsh = mask(function(x, y)
+  if x < 110 or x > 800 then return 0 end
+  local yc, t = shy(x)
+  yc = yc - 1.5 + 2.2 * wob(x, 0) + 0.6 * wob2(x, y)
+  local hw = 6.5 + 7 * t
+  local soft = 1 + 9 * t
+  local d = math.abs(y - yc)
+  local across = 1 - smoothstep(hw - soft * 0.5, hw + soft * 0.5, d)
+  local along = (1 - smoothstep(0.08, 0.62, t)) * smoothstep(122, 140, x)
+  return across * along
+end) - stm
+glaze(stsh * mod, {color="#62688a", coats=0.42})
 -- the contact shade runs up into the crease over the drift (the snow tucks under the stone
 -- there), so the stone sits in it instead of floating over a stripe
 glaze(vs:contact_shadow{reach=0.14}:blur(1.5) * -stm, {color="#4a4a58", coats=0.22, view=vs})
+print(stsh:area())
 
---@ chunk 15 · clock 131127.404296875
+--@ chunk 15 · clock 132464.623046875
 -- dry grass standing through the first snow: straw, rust and gray, in upturning strokes laid last
 local patch = noise{seed=91, period=90}
 local keep = below(function(x) return 372 end) * mask(function(x, y) return smoothstep(0.5, 0.7, patch:at01(x, y)) end)
@@ -394,7 +474,7 @@ for i, t in ipairs(tufts) do
 end
 print(#tufts, "tufts", n, "blades")
 
---@ chunk 16 · clock 131127.404296875
+--@ chunk 16 · clock 132464.623046875
 wait(3*60)
 -- the pale blotches low in the wood: darkened back into the trees
 local blot = woodm * rect(0, 280, 680, 40) * mask(function(x, y) return smoothstep(0.35, 0.55, sample(x, y, 1).L) end):grow(2)
@@ -447,19 +527,23 @@ for i = 1, 9 do
   end
 end
 
---@ chunk 17 · clock 131307.404296875
+--@ chunk 17 · clock 132644.623046875
 local sd = mask(function(x, y) return smoothstep(60, 90, x) * smoothstep(190, 160, x) * smoothstep(750, 725, y) * smoothstep(680, 700, y) end) - stm:shrink(1)
 blend(sd, {angle=0.03, clip=-stm})
 
---@ chunk 18 · clock 131307.404296875
+--@ chunk 18 · clock 132644.623046875
 dry()
+-- snow lies on some boughs, not on every tier: in lumps where a bough is broad and flat enough to
+-- hold it, mostly on the sun side, shaken off elsewhere; never a rim along the whole tier
 local lie = noise{seed=111, period=6}
-local ytops = mask(function(x, y) return ysm:at(x, y) * (1 - ysm:at(x, y - 2.5)) end) * mask(function(x, y) return smoothstep(0.3, 0.6, lie:at01(x, y)) * (0.35 + 0.65 * smoothstep(760, 660, x)) end)
-stipple(ytops, {width=1.5, color=function(x, y) return mix("#f0e8d6", "#aeb0c0", smoothstep(690, 760, x)) end,
-  coverage=2.2, pressure={0.4, 0.8}, drag={1, 0}, aim=false, medium=0.15, fade=0})
+local patch = noise{seed=112, period=26, stretch={0.05, 3}}
+local ytops = mask(function(x, y) return ysm:at(x, y) * (1 - ysm:at(x, y - 2.5)) end) * mask(function(x, y)
+  return smoothstep(0.3, 0.6, lie:at01(x, y)) * smoothstep(0.4, 0.56, patch:at01(x, y)) * (0.25 + 0.75 * smoothstep(760, 650, x)) end)
+stipple(ytops, {width=1.6, color=function(x, y) return mix("#e8e0cf", "#a4a7b6", smoothstep(680, 760, x)) end,
+  coverage=2.0, pressure={0.4, 0.8}, drag={1, 0}, aim=false, medium=0.15, fade=0})
 print(ytops:area())
 
---@ chunk 19 · clock 151413.568359375
+--@ chunk 19 · clock 151838.54296875
 -- retouch: the hollow in front of the big stone lit again, a thin veil only
 local tw = noise{seed=121, period=18}
 local lipbot = function(x) return (footat(x) or 505) + 10 end
@@ -468,7 +552,7 @@ work(front, {hand="body", tool="filbert 4", length={8, 22}, coverage=2.2, medium
   color_over=function(x, y, under) return shift(mix(under, "#e6ddca", 0.5), 0.012 * tw(x, y), 0, 0) end})
 blend(front, {angle=0.02})
 
---@ chunk 20 · clock 151413.568359375
+--@ chunk 20 · clock 151838.54296875
 -- the wood's interior drawn: a back row of spruces a step grayer and cooler than the edge trees,
 -- their tiers catching a little sky light, and the trunks standing in the snow at the foot
 local nostone = -v:visible("bodies"):grow(3)
@@ -500,7 +584,7 @@ for i, tx in ipairs(uneven(26, 8, 600, 0.7, 0.4, 13)) do
 end
 print(n, "back branches")
 
---@ chunk 21 · clock 151413.568359375
+--@ chunk 21 · clock 151838.54296875
 wait(24*60)
 -- the wood opened: under the crowns you see in between the trunks to the dim snow of the
 -- wood's floor, and the air of the wood deepens behind the edge trees
@@ -543,5 +627,15 @@ for i, tx in ipairs(uneven(44, 6, 620, 0.75, 0.5, 177)) do
 end
 print(airm:area(), deep:area(), n, "boughs")
 
---@ chunk 22 · clock 152853.568359375
+--@ chunk 22 · clock 153278.54296875
+-- the white specks inside the wood read as screen noise, not snow on boughs under a low sun:
+-- hatched back into the dark wherever they aren't on an edge tree's silhouette against the sky
+local inner = woodm:shrink(7) * below(function(x) return 20 end) * above(function(x) return 306 end) - ysm:grow(3)
+local pale = inner * mask(function(x, y) return smoothstep(0.34, 0.46, sample(x, y, 0.8).L) end):grow(1.8)
+local turn = noise{seed=221, period=14}
+work(pale, {hand="hatch", tool="round 1.6", length={2, 6}, coverage=3, clip=inner, medium=0.2, angle=function(x, y) return 0.3 + 0.25 * turn(x, y) end,
+  angle_jitter=0.5, color=function(x, y) return shift(mix("#1f2824", "#2c3630", smoothstep(40, 300, y)), 0.012 * turn(x, y), 0, 0) end})
+print(pale:area())
+
+--@ chunk 23 · clock 153278.54296875
 wait(24*60); varnish{color="#e6d3a4", coats=0.3, vary=0.1}; relief()

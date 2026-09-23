@@ -42,3 +42,17 @@ and snow (the brushed ground), even craquelure density.
 In-batch delta near loop 2 vs loop 1: +3 (+3, +2, +2 per critic). Single
 critics drift by up to ±7 across batches (loop 1 near scored 26 in loop 1,
 19 here), so from now: three critics per batch, medians, in-batch deltas.
+
+## Loop 3 (three critics; previous versions re-rendered with the halo-fixed engine; raw: notes/review_scores_loop3_raw.md)
+
+| painting | version | 3a | 3b | 3c | **median** | worst defect (majority) |
+|---|---|---|---|---|---|---|
+| near | loop 3 rework | 21 | 22 | 22 | **22** | black template-fir wood block, no recession; boulder split lit/shadow on a hard seam in an icing-like rim |
+| near | loop 2 (re-rendered) | 19 | 21 | 21 | 21 | uncaused diagonal shadow band |
+| green | loop 2 rework | 17 | 17 | 17 | **17** | glowing halos around trunk, rock, figure, hedge; embossed dash/loop scribbles in the grass (paint 2) |
+| green | loop 1 (re-rendered) | 17 | 17 | 17 | 17 | cartoon cumulus, saturated greens |
+| coast | anchor | 23 | 23 | 23 | 23 | empty foreground |
+
+Deltas: near +1 (all three critics), green 0 (better sky, worse surface).
+Running near: 22 (loop 0) → loop 1 → loop 2 → loop 3, each step positive in
+its own batch.

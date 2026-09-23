@@ -451,6 +451,24 @@ The foreground is where every round fell shortest of Friedrich. Budget real time
 | The live 3200 crop timing out under load | Retry later, or `easel run --crop` in the background [r4 near] |
 | Scratch study sessions write `paintings/lua/<name>.lua` | Move study logs to your scratch dir afterward [r3 green] |
 
+- **Never cut motifs out of a veil or glaze with a grown mask** (`-(fig:grow(1.5))`): the
+  ring between the grown mask and the painted motif keeps the old paint and reads as a
+  glowing halo (loop 2 green: paint score 2 of 10). Use the world's depth instead:
+  `glaze(area, {..., behind={"figure", "bodies"}})` or `visible="ground"` (register
+  hand-painted motifs with `w:layer(name, mask, depth)`). If you must cut, cut with the
+  motif's exact mask, not a grown one. [loop 2 green, loop 3 critics]
+- **Hundreds of short broken strokes along an edge read as embossed scribbles** at 3200
+  (loop 2 green's ~900 crown-edge strokes and grass loops); fewer, drawn, varied marks
+  beat many generated ones. [loop 3 critics]
+- **Check a proxy's size against the painted motif**: proxy/body sizes are radii
+  (`s:size` takes half-sizes), so a proxy written at full size casts a shadow twice as
+  long and wide; check with `w:height(x, y, 1)`. [loop 3 near]
+- **A small caster's shadow at a low sun, drawn by hand**, when `cast_shadow` starts too
+  far from a small proxy: `w:project` the sun direction from the foot, glaze a mask with
+  half-width `6.5 + 7t`, edge `1 + 9t`, fade `1 - smoothstep(0.08, 0.62, t)` along it.
+  An ellipsoid boulder shades the ground under its own lit belly: subtract below its foot
+  line there. [loop 3 near, +1]
+
 ## 14. Habits of looking
 
 - **Look after every chunk** (`easel do --look`). A third of round 3's chunks were undone;

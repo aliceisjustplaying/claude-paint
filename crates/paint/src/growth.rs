@@ -1099,6 +1099,16 @@ pub struct Leafing {
     /// Leaves crowd toward the ends of shoots: clumps near a tip are up to
     /// `1 + tip` times bigger.
     pub tip: f32,
+    /// Short leafy shoots along older live wood (spur shoots, epicormic
+    /// sprigs), as a share of the young wood's density, on limbs thinner
+    /// than `inner_w` × the trunk: fills the crown's shell instead of
+    /// leaving leaves only at the ends of bare limbs.
+    pub inner: f32,
+    pub inner_w: f32,
+    /// Extra clumps around each live shoot tip: a modeled tip stands for a
+    /// cluster of real twigs the model does not grow (see `Habit::twig`),
+    /// each with its leaves. Mean count per tip.
+    pub spray: f32,
 }
 
 impl Leafing {
@@ -1109,29 +1119,29 @@ impl Leafing {
     /// Pedunculate oak: leaves bunched at the shoot ends around the bud
     /// cluster, in irregular lobed masses with sky between them.
     pub fn oak() -> Self {
-        Leafing { years: 2, clump: 0.038, spacing: 1.2, squash: 0.75, droop: 0.15, fill: 0.8, ragged: 0.55, bare: 0.12, tip: 0.5 }
+        Leafing { years: 3, clump: 0.024, spacing: 1.0, squash: 0.75, droop: 0.15, fill: 0.8, ragged: 0.55, bare: 0.12, tip: 0.5, inner: 0.45, inner_w: 0.3, spray: 2.5 }
     }
     /// Silver birch: small leaves along long hanging twigs, an airy crown
     /// the light passes through.
     pub fn birch() -> Self {
-        Leafing { years: 2, clump: 0.024, spacing: 1.0, squash: 1.35, droop: 0.7, fill: 0.5, ragged: 0.35, bare: 0.18, tip: 0.2 }
+        Leafing { years: 3, clump: 0.018, spacing: 1.0, squash: 1.35, droop: 0.7, fill: 0.5, ragged: 0.35, bare: 0.18, tip: 0.2, inner: 0.25, inner_w: 0.2, spray: 1.5 }
     }
     /// Beech: two-ranked leaves on level sprays, layered, dense (deep shade).
     pub fn beech() -> Self {
-        Leafing { years: 3, clump: 0.042, spacing: 0.9, squash: 0.45, droop: 0.2, fill: 0.95, ragged: 0.25, bare: 0.05, tip: 0.25 }
+        Leafing { years: 3, clump: 0.028, spacing: 0.9, squash: 0.45, droop: 0.2, fill: 0.95, ragged: 0.25, bare: 0.05, tip: 0.25, inner: 0.6, inner_w: 0.35, spray: 2.0 }
     }
     /// Black alder: dense, dark, evenly spread foliage.
     pub fn alder() -> Self {
-        Leafing { years: 3, clump: 0.034, spacing: 0.9, squash: 0.85, droop: 0.1, fill: 0.9, ragged: 0.3, bare: 0.06, tip: 0.2 }
+        Leafing { years: 3, clump: 0.024, spacing: 0.9, squash: 0.85, droop: 0.1, fill: 0.9, ragged: 0.3, bare: 0.06, tip: 0.2, inner: 0.6, inner_w: 0.35, spray: 2.0 }
     }
     /// White willow: narrow leaves in loose, hanging streamers.
     pub fn willow() -> Self {
-        Leafing { years: 2, clump: 0.03, spacing: 1.0, squash: 1.6, droop: 0.45, fill: 0.6, ragged: 0.45, bare: 0.1, tip: 0.3 }
+        Leafing { years: 3, clump: 0.022, spacing: 1.0, squash: 1.6, droop: 0.45, fill: 0.6, ragged: 0.45, bare: 0.1, tip: 0.3, inner: 0.35, inner_w: 0.25, spray: 1.5 }
     }
     /// Spruce: needles on several years of shoots, in flat dense sprays
     /// hanging from the limbs.
     pub fn spruce() -> Self {
-        Leafing { years: 6, clump: 0.02, spacing: 0.8, squash: 0.5, droop: 0.35, fill: 0.9, ragged: 0.3, bare: 0.04, tip: 0.1 }
+        Leafing { years: 7, clump: 0.02, spacing: 0.8, squash: 0.5, droop: 0.35, fill: 0.9, ragged: 0.3, bare: 0.04, tip: 0.1, inner: 0.0, inner_w: 0.0, spray: 0.5 }
     }
 }
 
@@ -1195,6 +1205,7 @@ impl Skeleton {
                 _ => i,
             };
         }
+        let trunk_w = self.limbs.first().map_or(1.0, |l| l.w[0]);
         if leaf.years > 0 && r0 > 0.0 {
             for (li, l) in self.limbs.iter().enumerate() {
                 if l.root || l.is_empty() || (l.order >= 2 && rng.chance(leaf.bare)) {
@@ -1214,11 +1225,17 @@ impl Skeleton {
                         break;
                     }
                     let seg = arc[i + 1] - arc[i];
-                    if l.age[i + 1] >= leaf.years || seg <= 1e-6 {
+                    let young = l.age[i + 1] < leaf.years;
+                    let sprigs = !young && leaf.inner > 0.0 && l.w[i] < leaf.inner_w * trunk_w;
+                    if !(young || sprigs) || seg <= 1e-6 {
                         next = next.max(arc[i + 1]);
                         continue;
                     }
                     while next < arc[i + 1] {
+                        if !young && !rng.chance(leaf.inner) {
+                            next += r0 * leaf.spacing * rng.range(0.7, 1.3);
+                            continue;
+                        }
                         let t = ((next - arc[i]) / seg).clamp(0.0, 1.0);
                         let (a, b) = (l.pts[i], l.pts[i + 1]);
                         let d = ((b.0 - a.0) / seg, (b.1 - a.1) / seg);
@@ -1246,6 +1263,22 @@ impl Skeleton {
                             mass: mass[li],
                         });
                         next += r0 * leaf.spacing * rng.range(0.7, 1.3);
+                    }
+                }
+                // the unmodeled twigs around a live tip, each with leaves
+                let last = l.pts.len() - 1;
+                if l.dead_from >= last && !l.broken && l.age[last] < leaf.years && leaf.spray > 0.0 {
+                    let d = l.dir(last);
+                    let k = (leaf.spray + rng.f()).floor() as usize;
+                    for _ in 0..k {
+                        let r = r0 * rng.range(0.6, 1.0) * (1.0 + leaf.tip);
+                        let reach = r0 * rng.range(0.6, 1.8);
+                        let side = rng.normal();
+                        let x = l.pts[last].0 + d.0 * reach * 0.6 - d.1 * side * reach;
+                        let y = l.pts[last].1 + d.1 * reach * 0.6 + d.0 * side * reach + leaf.droop * r * leaf.squash;
+                        let z = l.z[last] + rng.normal() * reach;
+                        let tilt = rng.normal() * 0.2;
+                        clumps.push(Clump { at: (x, y), z, r, squash: leaf.squash * rng.range(0.85, 1.15), tilt, fill: (leaf.fill * rng.range(0.85, 1.1)).min(1.0), lit: 0.0, shade: 0.0, limb: li, mass: mass[li] });
                     }
                 }
             }
@@ -1347,7 +1380,7 @@ impl Foliage {
         let h = crate::rng::hash2(k as i64, 17, self.seed);
         let h2 = crate::rng::hash2(k as i64, 29, self.seed);
         let lobe = 1.0 + self.ragged * 0.32 * (0.6 * (3.0 * th + h * 6.283).sin() + 0.4 * (5.0 * th + h2 * 6.283).sin());
-        (1.0 - crate::smoothstep(lobe * 0.75, lobe, d), dx / c.r, dy / (c.r * c.squash))
+        (1.0 - crate::smoothstep(lobe * 0.5, lobe * 1.1, d), dx / c.r, dy / (c.r * c.squash))
     }
 
     /// Pixel ranges (buffer coordinates) a clump can touch in frame `f`.
@@ -1418,7 +1451,7 @@ impl Foliage {
                     if c > 0.5 {
                         let w = (1.0 - u * u - v * v).max(0.0).sqrt();
                         let local = (u * s.0 + v * s.1 + w * s.2).clamp(-1.0, 1.0);
-                        val[py * f.w + px] = (lit * (0.7 + 0.45 * local)).clamp(0.0, 1.0);
+                        val[py * f.w + px] = (lit * (0.82 + 0.25 * local)).clamp(0.0, 1.0);
                     }
                 }
             }

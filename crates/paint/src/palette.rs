@@ -163,8 +163,8 @@ impl Palette {
     /// Friedrich before ~1820: lead white, smalt (semi-transparent cobalt
     /// glass, weak, in several grades), ochres and earths, vermilion, umber,
     /// bone black (notes/research/friedrich_materials.md §4: CATS p.127,
-    /// NG pp.51–56, ALF p.348). Naples yellow and Prussian blue are uncertain
-    /// and left out.
+    /// NG pp.51–56, ALF p.348). Naples yellow is left out. For greens,
+    /// see `friedrich_early_greens`.
     pub fn friedrich_early() -> Self {
         Palette::new(
             "Friedrich, early",
@@ -182,13 +182,68 @@ impl Palette {
     }
 
     /// Friedrich from ~1820: cobalt blue and chrome yellow join the palette
-    /// and largely replace smalt (ALF pp.341, 348–349; NG p.56).
+    /// and largely replace smalt (ALF pp.341, 348–349; NG p.56). For
+    /// greens, see `friedrich_1820_greens`.
     pub fn friedrich_1820() -> Self {
         let mut t = Palette::friedrich_early().tubes;
         t.retain(|t| t.name != "smalt");
         t.push(tube("cobalt blue", "#2f55a8", 0.55, 0.6, 0.8));
         t.push(tube("chrome yellow", "#e8b21c", 0.9, 0.7, 1.0));
         Palette::new("Friedrich, after 1820", t)
+    }
+
+    /// The tubes Friedrich added for his greens
+    /// (notes/research/friedrich_materials.md §9): Prussian blue, which he
+    /// used "very often" to mix greens with ochre, Naples yellow or chrome
+    /// yellow, and green earth, one of his few true green pigments
+    /// [MÄD p.102]. Masstones and numbers are documented approximations:
+    /// Prussian blue transparent and very strong [AP3 pp.196–197] (tinting
+    /// strength 3, below the sourced "very high", because Mixbox's latent
+    /// already carries some of a dark pigment's strength); green earth
+    /// translucent, weak, short of body [AP1 p.146; FIELD p.129], its
+    /// masstone from Munsell 7.5G/2.9/1.5 [AP1 Table 1].
+    pub fn green_tubes() -> Vec<Tube> {
+        vec![tube("Prussian blue", "#172440", 0.35, 0.45, 3.0), tube("green earth", "#3a4843", 0.2, 0.35, 0.3)]
+    }
+
+    /// `friedrich_early` with his green tubes (`green_tubes`), for green
+    /// passages: meadows, foliage, summer. Kept apart from the base palette
+    /// because the aimed search would otherwise pick very strong Prussian
+    /// blue for skies (the sky ramp's miss halves but its recipes seam; and
+    /// his skies are smalt or cobalt [ALF; NPJ25]). Set out a sky family
+    /// with `only` when painting a sky from this palette.
+    pub fn friedrich_early_greens() -> Self {
+        Palette::friedrich_early().with(Palette::green_tubes()).named("Friedrich, early, greens")
+    }
+
+    /// `friedrich_1820` with his green tubes and Rinmann's green
+    /// (cobalt-zinc oxide: semi-transparent, weak, permanent [WEB-co]),
+    /// found, rarely, in paintings of c.1819–23 [MÄD p.102 n.3].
+    pub fn friedrich_1820_greens() -> Self {
+        let mut t = Palette::green_tubes();
+        t.push(tube("Rinmann's green", "#5f8f76", 0.35, 0.5, 0.4));
+        Palette::friedrich_1820().with(t).named("Friedrich, after 1820, greens")
+    }
+
+    /// The same tubes under another name.
+    pub fn named(self, name: &'static str) -> Palette {
+        Palette { name, ..self }
+    }
+
+    /// A copper green (verdigris ground in oil): one of the "copper-containing"
+    /// true greens found in Friedrich's Dresden paintings [MÄD p.102], used
+    /// sparingly; not in the standard palettes (add it with `with`).
+    /// Masstone and numbers are assumptions; "poor hiding power in oil"
+    /// [AP2 p.132] (notes/research/friedrich_materials.md §9).
+    pub fn copper_green() -> Tube {
+        tube("copper green", "#3f7f6a", 0.25, 0.4, 1.0)
+    }
+
+    /// This palette with more tubes (a rare paint for one passage).
+    pub fn with(&self, extra: Vec<Tube>) -> Palette {
+        let mut t = self.tubes.clone();
+        t.extend(extra);
+        Palette::new(self.name, t)
     }
 
     /// Masstone, scattering per coat and stiffness of a mixture.
@@ -639,5 +694,26 @@ mod canvas_tests {
         assert!(c.wet.vol[i] > 0.0);
         let laid = c.wet.hide[i][0];
         assert!((laid - p.scatter()).abs() <= 1e-3 * p.scatter(), "wet S {laid} vs paint S {}", p.scatter());
+    }
+}
+
+#[cfg(test)]
+mod green_tests {
+    use super::*;
+    use crate::color::hex;
+
+    /// The green palettes reach summer greens the base palettes can only
+    /// approach, by mixing (Prussian blue with the yellows), as he did.
+    #[test]
+    fn greens_are_mixed_closer() {
+        for want in [hex("#4f6331"), hex("#2e3d2a"), hex("#93a14a"), hex("#6d7e3e")] {
+            let (base, green) = (Palette::friedrich_1820(), Palette::friedrich_1820_greens());
+            let (a, b) = (base.mix(want), green.mix(want));
+            println!("{:?}: base {:.3} ({}) greens {:.3} ({})", want, a.error, base.recipe(&a), b.error, green.recipe(&b));
+            assert!(b.error <= a.error + 1e-4);
+        }
+        let early = Palette::friedrich_early_greens();
+        assert_eq!(early.tubes.len(), Palette::friedrich_early().tubes.len() + 2);
+        assert!(Palette::friedrich_1820().with(vec![Palette::copper_green()]).tubes.iter().any(|t| t.name == "copper green"));
     }
 }

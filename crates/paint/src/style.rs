@@ -22,10 +22,14 @@ use crate::mask::Mask;
 use crate::palette::Palette;
 use crate::surface::Linen;
 
-/// Mean thickness (µm) a brushed ground lays per unit of load with the
-/// priming brush and coverage used in `Style::prepare` (measured: asking 30
-/// µm lays 28, asking 90 lays 97).
-const BRUSHED_UM_PER_LOAD: f32 = 318.0;
+/// Mean thickness (µm) a brushed ground (`brush_ground`) lays for a load of
+/// the priming brush: about `BRUSHED_UM_AT_FULL * load^BRUSHED_EXP`
+/// (measured: load 0.160 lays 37.8 µm, 0.279 lays 73.7, 0.386 lays 111.3;
+/// a fuller brush leaves fewer gaps for the filling dabs to close, and
+/// laying off takes a thin film along with it, so the thickness grows a
+/// little faster than the load).
+const BRUSHED_UM_AT_FULL: f32 = 364.0;
+const BRUSHED_EXP: f32 = 1.24;
 
 /// How a ground layer is put on.
 #[derive(Clone, Copy, Debug)]
@@ -35,9 +39,10 @@ pub enum Apply {
     Knife { texture: f32 },
     /// Rolled on: a fine, even orange-peel texture.
     Roller,
-    /// Brushed with a broad hog brush, mostly across the canvas but by hand:
-    /// long overlapping strokes that wander and cross a little; the bristle
-    /// striations stay.
+    /// Brushed with a broad hog brush as a primer does it: spread in crossing
+    /// strokes whose direction drifts over the canvas, then laid off with
+    /// light passes of the clean brush; fine, broken bristle striations
+    /// stay (see `brush_ground`).
     Brush,
 }
 
@@ -172,32 +177,7 @@ impl Style {
                 Apply::Knife { texture } => c.prime(g.color, g.hiding, g.um, g.stiff, texture, s),
                 Apply::Roller => c.prime(g.color, g.hiding, g.um, g.stiff, 0.8, s),
                 Apply::Brush => {
-                    // a broad hog brush pulled across in long strokes, band
-                    // by band, the arm swinging: the strokes run mostly
-                    // across the canvas but wander, bow and cross a little,
-                    // and stiff paste keeps the bristle marks
-                    let all = Mask::from_fn(c.frame(), |_, _| 1.0);
-                    let hog = Tool { lay: 1.2, ragged: 0.2, ..Tool::hog_flat(40.0) };
-                    let col = g.color;
-                    let h = Handling::new(hog)
-                        .color(move |_, _| col)
-                        .paint(g.hiding, g.stiff)
-                        .angle(|_, _| 0.0)
-                        .angle_jitter(0.04)
-                        .curve(0.04, 0.3)
-                        .drift(0.25, 450.0)
-                        .cross(0.1)
-                        .tail(0.1)
-                        .broken(0.1)
-                        .swell(0.12)
-                        .length(250.0, 600.0)
-                        .coverage(3.5)
-                        .pressure(0.8, 0.95)
-                        .dips(1, (g.um / BRUSHED_UM_PER_LOAD).min(1.0), 0.3)
-                        .jitter(0.004, 0.002)
-                        .shake(0.15);
-                    c.work(&all, &h, s);
-                    c.dry();
+                    brush_ground(&mut c, g, s);
                     // (`prime` counts its own layers)
                     c.ground_um += g.um;
                 }
@@ -205,7 +185,68 @@ impl Style {
         }
         c
     }
+}
 
+/// A brushed top ground, put on as a primer brushes out lead white in oil
+/// (see notes/loop2_grain.md): the paste is first spread with a broad hog
+/// brush in crossing strokes whose direction wanders over the canvas, then
+/// laid off while wet with light passes of the unloaded brush held low, which
+/// skim rather than plough, level the spreading's stroke edges and leave
+/// only fine, broken bristle striations. (Before loop 2 the paste went on in
+/// long, full, parallel strokes that set with their edge ridges a few mm
+/// apart: a horizontal wood-grain under every thin sky. Ploughed ridges
+/// were tall, sharp crests that thin sky paint drained off, leaving
+/// one-pixel lines of bare ground.)
+fn brush_ground(c: &mut Canvas, g: &Ground, s: u64) {
+    let all = Mask::from_fn(c.frame(), |_, _| 1.0);
+    let hog = Tool { lay: 1.2, ragged: 0.2, ..Tool::hog_flat(40.0) };
+    let col = g.color;
+    // the direction the primer works in drifts over the canvas, patch by
+    // patch (~90 units = 40 mm; up to ±0.7 rad, across on average)
+    let turn = move |x: f32, y: f32| 1.4 * (crate::surface::vnoise(x / 90.0, y / 90.0, s ^ 0x9e37) - 0.5);
+    // the paste is pushed a little ahead of the bristles, not ploughed
+    // into ridges (a hog's own push, 0.3, piled it 2x as thick at the
+    // stroke edges: tall sharp crests the thin sky drained off)
+    let spread = Handling::new(Tool { push: 0.15, ..hog.clone() })
+        .color(move |_, _| col)
+        .paint(g.hiding, g.stiff)
+        .angle(turn)
+        .angle_jitter(0.15)
+        .cross(0.5)
+        .curve(0.04, 0.3)
+        .drift(0.25, 300.0)
+        .tail(0.1)
+        .broken(0.1)
+        .swell(0.12)
+        .length(100.0, 250.0)
+        .coverage(3.5)
+        .pressure(0.8, 0.95)
+        .dips(1, (g.um / BRUSHED_UM_AT_FULL).powf(1.0 / BRUSHED_EXP).min(1.0), 0.3)
+        .jitter(0.004, 0.002)
+        .shake(0.15);
+    c.work(&all, &spread, s);
+    // laying off: the clean brush drawn lightly through the wet paste, held
+    // low so it skims the paste and barely pushes it
+    let lay_off = Handling::new(Tool { push: 0.03, ..hog })
+        .blender()
+        .angle(turn)
+        .angle_jitter(0.12)
+        .cross(0.15)
+        .curve(0.06, 0.4)
+        .drift(0.3, 250.0)
+        .tail(0.2)
+        .broken(0.3)
+        .swell(0.25)
+        .length(120.0, 380.0)
+        .coverage(3.5)
+        .pressure(0.35, 0.55)
+        .dips(2, 0.0, 0.8)
+        .shake(0.3);
+    c.work(&all, &lay_off, s + 7);
+    c.dry();
+}
+
+impl Style {
     /// Broad atmospheric passage (sky, fog, sea): long soft strokes of thin
     /// paint swung from the elbow, so they bow into long arcs and their
     /// direction wanders across the passage. Give it a direction (`angle`);

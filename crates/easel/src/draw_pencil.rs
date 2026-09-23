@@ -146,7 +146,7 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
                 let s = st1.borrow();
                 mm_per_unit(s.canvas.as_ref().ok_or_else(|| mlua::Error::runtime("no canvas yet: call canvas{} first"))?)
             };
-            let wander = get("wander")?.unwrap_or(1.2 / mmu).max(0.0);
+            let wander = get("wander")?.unwrap_or(2.0 / mmu).max(0.0);
             let smooth = o.as_ref().map(|o| o.get::<Option<bool>>("smooth")).transpose()?.flatten().unwrap_or(true);
             let tremor = tremor_units(&st1, o.as_ref())?;
             let seed = match &o {

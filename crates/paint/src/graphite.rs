@@ -268,6 +268,8 @@ pub fn sketch_marks(pts: &[(f32, f32)], pressure: f32, passes: usize, wander: f3
     for k in 0..passes.max(1) {
         let ps = seed.wrapping_add(k as u64 * 7919);
         let amp = wander * rng.range(0.6, 1.2);
+        // each pass is its own guess: a little to one side, bowed its own way
+        let side = wander * rng.range(-0.6, 0.6);
         let press = pressure * if k == 0 { 0.75 } else { rng.range(0.85, 1.15) };
         // start and end: short of the ends or past them
         let a0 = rng.range(-0.04, 0.06) * total;
@@ -288,7 +290,7 @@ pub fn sketch_marks(pts: &[(f32, f32)], pressure: f32, passes: usize, wander: f3
             for j in 0..n {
                 let a = lo + (hi - lo) * j as f32 / (n - 1) as f32;
                 let (pt, nm) = point_at(&base, &s, a);
-                let d = amp * (2.0 * vnoise(a / 45.0, k as f32 * 3.1, ps) - 1.0) + tremor * (vnoise(a / 4.0, 1.7, ps + 1) - 0.5);
+                let d = side + amp * (2.0 * vnoise(a / 45.0, k as f32 * 3.1, ps) - 1.0) + tremor * (vnoise(a / 4.0, 1.7, ps + 1) - 0.5);
                 p.push((pt.0 + nm.0 * d, pt.1 + nm.1 * d));
             }
             let sp = arclen(&p);

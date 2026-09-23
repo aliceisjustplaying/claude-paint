@@ -71,6 +71,13 @@ any one picture):
     (the dark foreground band); light scumbled back onto the stone's lit top; one
     very light cloud shadow over the empty right half of the near valley (the first
     try was two dark ponds); varnish and relief.
+15. Last, inserted before the varnish with `easel edit 22 --insert`: 1,100-odd long,
+    curving blades through the dark foreground band (sunlit tips, dark stalks, uneven
+    lengths), plantain rosettes and a few flowers. This did more for the picture
+    than any other single chunk: the barcode became a meadow.
+
+Final log: 23 chunks, painting clock about 73 days (mostly glazes waiting for dry
+paint). Full render at 3200 px: 316 s.
 
 ## How the easel felt
 
@@ -151,8 +158,8 @@ river lead to. The foreground's dark band and the hazed distance give real depth
 and the sky is a believable summer morning. The oak is the best passage: gnarled,
 lit from the left, with sky through the crown.
 
-Weaknesses, harshly: the grass is a uniform barcode of short upright dashes, not
-meadow. The field trees are identical balls with identical shadows, scattered like
+Weaknesses, harshly: the middle of the hill is still a uniform barcode of short
+upright dashes (the `sward`); only the near band became meadow. The field trees are identical balls with identical shadows, scattered like
 stamps. The stone is a pale smooth loaf without the granite's weight, cracks or lichen
 (they're there but too small to read). The thistle and seeding grass are thin
 diagrams. The small round cloudlets in the upper sky are leftovers of the cloud model

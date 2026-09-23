@@ -22,16 +22,16 @@ fn brush_volume(h: &Held) -> f64 {
 fn mix_into_is_volume_weighted() {
     let a = mixbox::linear_float_rgb_to_latent(&[0.8, 0.1, 0.1]);
     let b = mixbox::linear_float_rgb_to_latent(&[0.1, 0.1, 0.8]);
-    let (mut v, mut l, mut p) = (1.0f32, a, [0.2f32, 0.4]);
-    mix_into(&mut v, &mut l, &mut p, 3.0, &b, [0.6, 0.8]);
+    let (mut v, mut l, mut p) = (1.0f32, a, [0.2f32, 0.4, 1.0]);
+    mix_into(&mut v, &mut l, &mut p, 3.0, &b, [0.6, 0.8, 2.0]);
     assert!((v - 4.0).abs() < 1e-6);
     for k in 0..l.len() {
         assert!((l[k] - (0.25 * a[k] + 0.75 * b[k])).abs() < 1e-5);
     }
-    assert!((p[0] - 0.5).abs() < 1e-6 && (p[1] - 0.7).abs() < 1e-6);
+    assert!((p[0] - 0.5).abs() < 1e-6 && (p[1] - 0.7).abs() < 1e-6 && (p[2] - 1.75).abs() < 1e-6);
     // zero or negative volume is a no-op
     let before = (v, l, p);
-    mix_into(&mut v, &mut l, &mut p, 0.0, &a, [0.0, 0.0]);
+    mix_into(&mut v, &mut l, &mut p, 0.0, &a, [0.0, 0.0, 0.0]);
     assert_eq!(before, (v, l, p));
 }
 

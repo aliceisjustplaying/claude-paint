@@ -42,6 +42,7 @@ pub fn mix(a: Paint, b: Paint, t: f32) -> Paint {
         color: paint::color::mix(a.color, b.color, t, Mix::Pigment),
         scatter: a.scatter + (b.scatter - a.scatter) * t,
         stiff: a.stiff + (b.stiff - a.stiff) * t,
+        drying: a.drying + (b.drying - a.drying) * t,
     }
 }
 

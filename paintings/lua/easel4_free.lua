@@ -32,3 +32,62 @@ for _, o in ipairs({cap, up1, up2, up3, fall}) do for _, p in ipairs(o:paths()) 
 b:line(town, {pressure=0.4, smooth=false})
 b:line({{655,448},{653,458},{651,470}}, {pressure=0.5})
 b:line({{659,448},{660,458},{661,470}}, {pressure=0.5})
+
+--@ chunk 3 · clock 0
+skypal = pal:only{"lead white", "pale smalt", "cobalt blue", "yellow ochre", "chrome yellow", "vermilion", "red earth", "raw umber"}
+skyn = noise{seed=31, octaves=4, period=300, stretch={0.05, 5}}
+sky = function(x, y)
+  local t = clamp(y / HZ, 0, 1)
+  local c = gradient({{0,"#44537a"},{0.28,"#6c7f9f"},{0.52,"#a4b0b0"},{0.72,"#d6cf9f"},{0.88,"#eac284"},{1,"#df9f73"}}, t + 0.03*skyn(x, y))
+  local g = math.exp(-((x - 610)/360)^2)
+  return shift(c, -0.07*(1 - g)*t, 0, -0.01*(1-g)*t)
+end
+skym = above(function(x) return mound(x) + 10 end)
+work(skym, {hand="broad", color=sky, angle=function(x, y) return 0.02*skyn(x, y) end, coverage=4.2, medium=0.3, pal=skypal})
+blend(skym, {angle=0})
+
+--@ chunk 4 · clock 0
+
+stipple(skym, {width=3.2, color=sky, coverage=3.5, pressure={0.45, 0.8}, dips={20, 0.4, 0.6}, medium=0.45, pal=skypal})
+blend(skym, {angle=0, coverage=2})
+
+--@ chunk 5 · clock 0
+local bars = {
+  {pts={{-30,322},{80,316},{210,313},{330,318},{450,315},{540,321}}, w={2,7,11,6,9,1}},
+  {pts={{440,356},{520,349},{640,347},{730,351},{860,346},{1030,342}}, w={1,5,9,12,7,4}},
+  {pts={{150,384},{240,380},{330,382},{430,385}}, w={1,4,5,1}},
+  {pts={{690,398},{780,392},{900,394},{1030,397}}, w={1,6,8,5}},
+  {pts={{-30,412},{60,408},{170,410},{250,413}}, w={3,5,3,1}},
+  {pts={{560,262},{640,258},{720,262}}, w={1,3,1}},
+}
+clouds = nil
+for i, b in ipairs(bars) do
+  local m = ribbon(b.pts, b.w):roughen(3.5, 22, 40+i, 2):soften(1.5)
+  clouds = clouds and (clouds + m) or m
+end
+work(clouds, {hand="broad", color=function(x, y) return mix("#948597", "#b28c88", clamp((y-300)/110,0,1)) end,
+  angle=function(x, y) return 0.03*skyn(x*3, y) end, coverage=2.2, medium=0.4, length={30, 90}, pal=skypal, clip=clouds:grow(2)})
+local under = mask(function(x, y) return clamp(clouds:at(x, y) - clouds:at(x, y + 3), 0, 1) end):soften(1)
+work(under, {hand="detail", tool="round 1.4", angle=0, length={12, 40}, coverage=1.4, broken=0.4,
+  color=function(x, y) return mix("#e3a888", "#f0cc98", math.exp(-((x-610)/300)^2)) end, pal=skypal})
+blend(clouds:grow(3), {angle=0, coverage=1.2})
+
+--@ chunk 6 · clock 0
+wait(24*60)
+landpal = pal:only{"lead white", "pale smalt", "cobalt blue", "yellow ochre", "red earth", "raw umber", "bone black", "vermilion"}
+-- a far wood line on the left and a lower one beyond the town
+woodL = outline{{-20,HZ+2},{30,HZ-7},{90,HZ-9},{150,HZ-5},{200,HZ-2},{230,HZ+2}, open=true, char="soft", lobe=7, seed=12}
+woodR = outline{{670,HZ+2},{700,HZ-5},{760,HZ-6},{790,HZ-3},{800,HZ+1}, open=true, char="soft", lobe=6, seed=13}
+woodF = outline{{905,HZ+2},{940,HZ-4},{1020,HZ-5}, open=true, char="soft", lobe=5, seed=14}
+local woods = (woodL:below(HZ+6) + woodR:below(HZ+6) + woodF:below(HZ+6))
+work(woods, {hand="body", color=function(x, y) return mix("#6f6878", "#7d6f78", math.exp(-((x-610)/300)^2)) end,
+  angle=0, length={4, 14}, coverage=3, medium=0.25, pal=landpal, clip=woods})
+ground = below(function(x) return mound(x) end):roughen(1.2, 14, 3, 0.8)
+gn = noise{seed=17, octaves=5, period=110, stretch={0.0, 3}}
+groundcol = function(x, y)
+  local bump = clamp((HZ + 3 - mound(x)) / 14, 0, 1)
+  local t = math.max(clamp((y - HZ)/238, 0, 1), 0.3 * bump)
+  local c = gradient({{0,"#5e5660"},{0.08,"#4e4749"},{0.3,"#3d3834"},{1,"#2a2620"}}, t + 0.05*gn(x, y))
+  return c
+end
+work(ground, {hand="body", color=groundcol, angle=function(x, y) return 0.06*gn(x, y) end, length={20, 70}, coverage=3.4, medium=0.2, pal=landpal, clip=ground})

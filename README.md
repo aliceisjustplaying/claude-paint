@@ -53,15 +53,50 @@ Engine (`crates/paint`):
 - `pigment` – Kubelka–Munk layers (Curtis et al. 1997); `color` – Mixbox, OKLab
 - `crack` – craquelure grown crack by crack from film stress (T-junctions,
   weave-following on thin grounds, cupping, grime)
+- `palette` – the painter's tubes and mixing on the palette; what a paint's
+  color means (masstone vs. the look on the canvas): `notes/color.md`
+- `stipple` – many small touches of a brush tip (Friedrich's skies, mist,
+  distant hills), each simulated through the bristles: `notes/stipple.md`
+- `form` – the painter's model of a solid: a depth buffer of bodies (`Sdf`
+  ellipsoids and blocks, turned, cut and weathered), reliefs and mountain
+  faces (`Ridge`), lit with cast shadows. It gives per-point planes, light
+  and shadow families, fall lines and masks for parts, facets, silhouettes
+  and edges. It paints nothing: `notes/form.md`
 - `canvas` – glazes, relief lighting, dithered PNG out
-- `growth` – how trees grow (buds, light, vigor, pipe-model widths, decline): returns a skeleton; painting it is the painter's job
-- `mask`, `shape`, `path`, `noise`, `rng` – geometry and randomness
+- `growth` – how trees grow (buds, light, vigor, pipe-model widths, decline):
+  returns a skeleton of limbs, including which parts are dead wood;
+  painting it is the painter's job: `notes/motifs.md`
+- `mask`, `edge`, `shape`, `path`, `noise`, `rng` – geometry and randomness
+  (`edge` traces a mask's outline for cutting in)
+- `sched` (internal) – runs tiles of strokes in parallel without changing
+  what gets painted, and skips tiles outside a crop
 - `checkpoint` – the complete canvas state to a file and back (resuming)
 
 Motifs written as gestures and the `Run`/`Finish` helpers live in `paintings/src`.
 
 Canvas coordinates are units: always 1000 wide, `1000 / aspect` tall; the
 physical size in mm comes from the style.
+
+Two frames: `c.frame()` is the **whole canvas**. Build every mask and
+`Form` on it (painting with a mask of any other size panics).
+`c.window()` is the pixels the canvas actually holds, which is the whole
+canvas or a `--crop` window. Masks and Forms stay whole-canvas in a crop,
+so stroke planning and randomness match a whole render. The cost is that their memory and build time scale with the
+canvas, not the crop. A 3200px Form costs ≈190 MB to keep and ≈310 MB at
+peak (3:2); build one per motif and drop it after painting
+(`notes/form.md`, Memory).
+
+Handlings mixed from a palette aim at the *look* on the canvas by default
+(`Aim::Laid`), judged over what is already there. Glazes (`Style::glaze`)
+and fixed paints use the paint's *masstone* instead (`notes/color.md`).
+
+Notes for the painter (read before writing a painting):
+- `notes/workflow.md` – stages, crops, checkpoints, resuming, speed
+- `notes/strokes.md` – how handlings plan strokes
+- `notes/color.md` – what a color means: masstone, aimed mixing, hiding
+- `notes/stipple.md` – stippling
+- `notes/form.md` – solids, light, shadow and the masks they give
+- `notes/motifs.md` – trees, spruces, figures
 
 Viewing renders
 ---------------

@@ -370,7 +370,7 @@ impl Canvas {
                 }
                 let t = thickness(f.ux(i % w), f.uy(i / w)).max(0.0) * c;
                 // (a NaN request is no glaze)
-                if !(t > 0.0) {
+                if t.is_nan() || t <= 0.0 {
                     return 0.0;
                 }
                 let um = t * COAT_UM * GLAZE_FILM;

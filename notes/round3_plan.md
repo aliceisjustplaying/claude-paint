@@ -77,3 +77,4 @@ Key question for the user: how the easel FEELS to the agent.
 - easel-3 (final merge + bindings for everything) and surface (flecks in darks, aim at a mark's average look, drying at a physical scale) running.
 - easel merged (a2a5ada): Lua 5.5 (fixed hash seed via CFLAGS for replay), bindings for everything, painter's guide; meadow/rocks/example replay byte-identically at 1000 and 3200.
 - tried the easel myself: open/do/look/undo/rollback all work; value view shows ground flecks through a coverage-4 broad sky (surface stream's item 1).
+- surface merged: ground flecks gone (body cov 2.5: 1.49% -> 0.00% bare; broad: 10.96% -> 0.01%) via painter's look-and-fill dabs (.fill(false) to let the ground show); aim at a mark's mean look (Marks::Blunt/Pointed), light-over-dark bound 0.035 at 750px; drying at fixed 1.25 mm scale. Meadow sky flecks gone. ALL ROUND 3 STREAMS MERGED. Next: review.

@@ -69,20 +69,37 @@ impl Mask {
         self
     }
 
-    /// Break up the edge with noise: the 0.5 contour gets pushed around by
-    /// `amount` (0..1) of fbm at the given period, then re-sharpened to `edge` softness.
-    pub fn roughen(mut self, seed: u32, period: f32, amount: f32, edge: f32) -> Self {
+    /// Break up the edge with noise. All three lengths are canvas units:
+    /// the edge (the mask's 0.5 contour) moves in and out by up to about
+    /// `amount` units (fbm with features of `period` units), and the new
+    /// edge ramps from 0 to 1 over `edge` units, centered on it (0 = as
+    /// crisp as a pixel allows). Works the same on a hard mask (a `Shape`)
+    /// and a soft one: the old ramp is replaced, not added to. Away from the
+    /// edge nothing changes: a pixel farther than `amount + edge` from it
+    /// keeps its side (0 stays 0, 1 stays 1).
+    ///
+    /// ```ignore
+    /// // a bank that wanders ±3 units every ~25 units, edge 1.5 units soft
+    /// let bank = Mask::from_shape(f, brook).roughen(7, 25.0, 3.0, 1.5);
+    /// ```
+    pub fn roughen(self, seed: u32, period: f32, amount: f32, edge: f32) -> Self {
         let n = Fbm::new(seed, 5, period);
-        let inv = 1.0 / self.f.scale;
-        let w = self.f.w;
-        self.data.par_chunks_mut(w).enumerate().for_each(|(y, row)| {
+        let (mut sd, _) = self.signed_distance_px();
+        let (f, s) = (self.f, self.f.scale);
+        let inv = 1.0 / s;
+        // half the ramp, pixels; a pixel at least, so the edge stays antialiased
+        let half = (edge * s * 0.5).max(0.5);
+        let shift = amount * s;
+        sd.par_chunks_mut(f.w).zip(self.data.par_chunks(f.w)).enumerate().for_each(|(y, (row, old))| {
             let yu = (y as f32 + 0.5) * inv;
-            for (x, v) in row.iter_mut().enumerate() {
-                let d = *v + n.get((x as f32 + 0.5) * inv, yu) * amount;
-                *v = crate::smoothstep(0.5 - edge, 0.5 + edge, d);
+            for (x, (d, &v)) in row.iter_mut().zip(old).enumerate() {
+                // next to the edge, an antialiased mask places it within the pixel
+                let d0 = if d.abs() < 1.0 && v > 0.0 && v < 1.0 { v - 0.5 } else { *d };
+                let dd = d0 + n.get((x as f32 + 0.5) * inv, yu) * shift;
+                *d = crate::smoothstep(-half, half, dd);
             }
         });
-        self
+        Mask { f, data: sd }
     }
 
     pub fn map(mut self, g: impl Fn(f32) -> f32 + Sync) -> Self {
@@ -408,6 +425,43 @@ mod tests {
             let dj = ((j % f.w) as f32 - x).powi(2) + ((j / f.w) as f32 - y).powi(2);
             assert!((dj - nearest(true)).abs() < 1e-3);
         }
+    }
+
+    /// `roughen` moves a hard edge by canvas units, the same at any
+    /// resolution, and leaves the rest of the mask alone (winter #10, #16:
+    /// it used to do nothing to a hard mask, and an `edge` of 1 turned 0
+    /// into 0.16 everywhere).
+    #[test]
+    fn roughen_moves_hard_edges_in_units() {
+        let rect = |scale: f32| Mask::from_fn(Frame::new((1000.0 * scale) as usize, (750.0 * scale) as usize, scale), |x, y| if (300.0..700.0).contains(&x) && (200.0..500.0).contains(&y) { 1.0 } else { 0.0 });
+        for scale in [0.4, 1.0] {
+            let m = rect(scale).roughen(3, 30.0, 6.0, 1.0);
+            // far from the edge nothing changes
+            assert_eq!(m.sample(500.0, 350.0), 1.0);
+            assert_eq!(m.sample(100.0, 100.0), 0.0);
+            assert!(m.data.iter().all(|&v| (0.0..=1.0).contains(&v)));
+            // along the old edge the contour now wanders: some points of the
+            // left edge ended up outside, some band beyond it inside
+            let (mut moved_in, mut moved_out, mut far) = (0, 0, 0.0f32);
+            for k in 0..300 {
+                let y = 200.0 + k as f32;
+                // where did the edge go on this row?
+                let e = (0..400).map(|i| 285.0 + i as f32 * 0.075).find(|&x| m.sample(x, y) >= 0.5).unwrap();
+                if e < 299.0 { moved_out += 1 }
+                if e > 301.0 { moved_in += 1 }
+                far = far.max((e - 300.0).abs());
+            }
+            assert!(moved_in > 20 && moved_out > 20, "scale {scale}: {moved_in} in, {moved_out} out");
+            assert!(far > 3.0 && far < 9.0, "scale {scale}: edge moved {far} units, amount is 6 (fbm is roughly ±1)");
+        }
+        // the same amount of change at both resolutions
+        let area = |m: &Mask| m.data.iter().sum::<f32>() / (m.f.scale * m.f.scale);
+        let changed = |s: f32| {
+            let (a, b) = (rect(s), rect(s).roughen(3, 30.0, 6.0, 1.0));
+            a.data.iter().zip(&b.data).map(|(p, q)| (p - q).abs()).sum::<f32>() / (s * s) / area(&a)
+        };
+        let (lo, hi) = (changed(0.4), changed(1.0));
+        assert!((lo - hi).abs() < 0.25 * hi, "{lo} vs {hi}");
     }
 
     #[test]

@@ -21,7 +21,8 @@ cargo paint <name> -- --full --crop 280,440,460,580 # just that window (units) a
                                                     #   → out/<name>_full_crop.png (--margin 40)
 cargo paint <name> -- --ckpt                        # checkpoint after every stage
 cargo paint <name> -- --resume mist                 # start from the "mist" checkpoint
-cargo paint <name> -- --stop sky                    # save right after a stage
+cargo paint <name> -- --stop sky                    # save right after a stage ("far_range" = "far range")
+cargo paint <name> -- --resume mist --stale-ok --ckpt  # use a stale checkpoint and adopt it
 cargo paint <name> -- --no-cracks
 cargo test -p paint                                 # UPDATE_GOLDEN=1 to re-record the golden scene
 ```
@@ -33,7 +34,10 @@ machine: 86–145 s for the whole canvas, 14 s cropped, 1.6 s cropped and
 resumed from "mist". Paintings
 are written in stages (`if o.stage("sky", &mut c, &mut rng) { ... }`, see
 `paintings/src/run.rs`). A crop closely matches the same region of a whole
-render; a resume is exact. Details and limits: `notes/workflow.md`.
+render; a resume is exact. A checkpoint goes stale when the code up to
+the end of its stage's block changes (setup written after the block, for
+later stages, doesn't count; tag a line `// ckpt: from <stage>` when it has
+to sit higher). Details and limits: `notes/workflow.md`.
 
 Engine (`crates/paint`):
 - `surface` – linen weave and ground layers as a height field in µm; wet

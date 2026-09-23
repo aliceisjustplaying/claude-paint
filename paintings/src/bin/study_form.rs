@@ -173,7 +173,7 @@ fn top_of(form: &Form, x: f32, y: f32, part: u16) -> f32 {
 fn ranges(c: &mut Canvas, st: &Style, r: Rect, gris: bool) {
     let mut form = Form::new(c.frame());
     let ids = rocks::ranges(&mut form, r, 41);
-    form.light(Light::new((-1.0, -0.6), 0.35).penumbra(0.06).ambient(0.2).across_parts(false));
+    form.light(Light::new((-1.0, -0.6), 0.5).penumbra(0.06).ambient(0.28).across_parts(false));
     if gris {
         return grisaille(c, &form, r);
     }
@@ -190,11 +190,11 @@ fn ranges(c: &mut Canvas, st: &Style, r: Rect, gris: bool) {
     };
     // valley mist lying in front of each range's foot, where the next
     // range rises (the range's own base line is hidden behind it)
-    let feet = [r.y + r.h * 1.05, r.y + r.h * 0.7, r.y + r.h * 0.53];
+    let feet = [r.y + r.h * 1.05, r.y + r.h * 0.64, r.y + r.h * 0.5];
     let fog = Fbm::new(47, 3, 60.0 * k);
     let mist = move |x: f32, y: f32, i: usize| {
         let foot = feet[i.min(2)];
-        0.85 * smoothstep(foot - r.h * 0.13, foot, y + fog.get(x, y) * r.h * 0.04)
+        0.85 * smoothstep(foot - r.h * 0.17, foot, y + fog.get(x, y) * r.h * 0.05)
     };
     rocks::paint_ranges(c, st, &form, &ids, &air, &col, &mist, k, 410);
 }

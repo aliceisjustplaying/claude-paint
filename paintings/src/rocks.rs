@@ -146,7 +146,9 @@ pub fn boulder(form: &mut Form, r: Rect, horizon: f32, seed: u32) -> PartId {
     let (cx, base) = r.at(0.5, 0.86);
     let (rx, ry, rz) = (r.w * 0.3, r.h * 0.33, r.w * 0.24);
     let zg = (base - horizon) * 0.12;
-    let c = [cx, base - ry * 0.8, zg - rz * 0.25];
+    // centered at the depth of the ground it stands on, so the ground
+    // behind it stays behind and the ground in front hides its foot
+    let c = [cx, base - ry * 0.8, zg + rz * 0.05];
     let at = |u: f32, v: f32, w: f32| [c[0] + u * rx, c[1] + v * ry, c[2] + w * rz];
     // a lumpy mass first (weathering rounds a block into a boulder), then
     // the breaks, which are younger than the rounding and cut it cleanly
@@ -389,20 +391,20 @@ pub fn paint_solid(c: &mut Canvas, st: &Style, form: &Form, sd: &Solid) {
         .threshold(0.35);
     c.work(&lit, &hd, sd.seed + 2);
 
-    // 4. fuse the turning halftones where the form rounds, never across a
-    //    break (a soft clean brush along the form)
-    let breaks = form.edges(0.55, 3.0 * sc, 1.2 * sc).dilate(2.0 * sc);
+    // 4. fuse each plane with a soft clean brush along it, and the turning
+    //    halftones where the form rounds; never across a break
+    let breaks = form.edges(0.7, 3.0 * sc, 2.0 * sc).dilate(2.5 * sc);
     let turning = form
-        .mask(|s| if parts.contains(&s.part) { smoothstep(-0.25, 0.0, s.shade.turn) * (1.0 - smoothstep(0.25, 0.5, s.shade.turn)) } else { 0.0 })
+        .mask(|s| if parts.contains(&s.part) { 0.6 + 0.4 * smoothstep(-0.25, 0.0, s.shade.turn) * (1.0 - smoothstep(0.25, 0.5, s.shade.turn)) } else { 0.0 })
         .mul(&sil.erode(2.0 * sc))
         .subtract(&breaks);
-    let soft = paint::Handling::new(Tool { pickup: 0.15, ..Tool::badger(10.0 * sc) })
+    let soft = paint::Handling::new(Tool { pickup: 0.15, ..Tool::badger(9.0 * sc) })
         .blender()
-        .angle(|x, y| form.across(x, y))
+        .angle(|x, y| stroke_angle(form, x, y))
         .angle_jitter(0.1)
         .length(10.0 * sc, 25.0 * sc)
-        .coverage(1.5)
-        .pressure(0.2, 0.3)
+        .coverage(1.6)
+        .pressure(0.22, 0.32)
         .dips(3, 0.0, 0.9)
         .clip(true)
         .threshold(0.4);
@@ -411,11 +413,13 @@ pub fn paint_solid(c: &mut Canvas, st: &Style, form: &Form, sd: &Solid) {
     // 5. accents: dark joints and crevices where the surface folds in, thin
     //    strokes of a pointed brush along them
     if sd.accents > 0.0 {
-        let sp = 1.2 * sc;
+        // only the big breaks: judged over a few units, so the grain of the
+        // stone doesn't count
+        let sp = 2.5 * sc;
         let cracks = form
             .mask(|s| if parts.contains(&s.part) { 1.0 } else { 0.0 })
-            .mul(&form.edges(0.5, 2.5 * sc, sp))
-            .mul(&Mask::from_fn(f, |x, y| smoothstep(0.1, 0.45, -form.bend(x, y, sp))))
+            .mul(&form.edges(0.8, 3.0 * sc, sp))
+            .mul(&Mask::from_fn(f, |x, y| smoothstep(0.3, 0.7, -form.bend(x, y, sp))))
             .mul(&sil.erode(1.0 * sc));
         let crev = |x: f32, y: f32| {
             let base = full(x, y);
@@ -445,9 +449,9 @@ pub fn paint_solid(c: &mut Canvas, st: &Style, form: &Form, sd: &Solid) {
         .mix_jitter(st.mix_jitter)
         .color(full)
         .angle(|x, y| stroke_angle(form, x, y))
-        .angle_jitter(0.2)
-        .length(5.0 * sc, 12.0 * sc)
-        .coverage(0.7)
+        .angle_jitter(0.3)
+        .length(8.0 * sc, 20.0 * sc)
+        .coverage(0.3)
         .pressure(0.5, 0.8)
         .dips(2, 0.8, 0.8)
         .clip(true)

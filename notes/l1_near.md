@@ -57,3 +57,15 @@ Renders: `out/l1_near.png` (1000) and `out/l1_near_full.png` (3200).
 - **Pitfall: an under-hiding pass over a rough stone speckles.** Thin paint (filbert,
   medium 0.4 to 0.45) over the stone's pitted relief showed the dark grain through as
   white lace. The flat 6 at load 0.8 with two blends covered it.
+
+## Checked at 3200 (out/l1_near_full.png), what's still weak
+
+- The drift tongues read as separate rounded white mounds ("cotton puffs") with a faint
+  pale halo just below the foot, where the drift's 1–5-unit lower fade meets the field.
+  They're less embossed than the old rims but still too white and too distinct. Next
+  try: only 35% of the top color (lean more on the field sample), no lower fade at all
+  (stop at `b`), and let the field's cast/contact shade run up under them.
+- The snow cap now reads as a continuous sheet with holes. That fixes the lichen dabs.
+- The wood interior's back row is barely visible even at 3200: a texture, not trees.
+  It needs about 2x the value step (#3c4844 range) to count, which risks gray fog.
+- The shadow band varies along its length at 1000 px but is still a clean-edged band.

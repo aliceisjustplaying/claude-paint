@@ -1,0 +1,5 @@
+Q1 l1_near (loop1)
+Q2 easel4_near (r4, loop0=22)
+Q3 l1_green (loop1)
+Q4 fresh2_coast (r2, loop0=28, anchor)
+Q5 easel4_green (r4, loop0=19)

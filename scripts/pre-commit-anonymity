@@ -1,0 +1,12 @@
+#!/bin/sh
+# Anonymity guard: this project is published under the pseudonym "alice".
+# Rejects any commit whose added lines contain the owner's real name (the
+# pattern is stored encoded so this file doesn't contain it).
+# Install: cp scripts/pre-commit-anonymity .git/hooks/pre-commit
+PAT=$(printf 'c2FyYWg=' | base64 -d)
+if git diff --cached -U0 | grep '^+' | grep -v '^+++' | grep -qi "$PAT"; then
+  echo "pre-commit: the staged changes contain a forbidden name." >&2
+  echo "Write paths as ~/... or \$HOME/... (never the absolute home path)." >&2
+  git diff --cached -U0 | grep '^+' | grep -v '^+++' | grep -ni "$PAT" | head -5 >&2
+  exit 1
+fi

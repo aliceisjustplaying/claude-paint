@@ -1,0 +1,8 @@
+P1 claude-paint-amnesia-winter/out/fresh2_winter_full.png
+P2 claude-paint/out/easel3_green_full.png
+P3 claude-paint/out/easel3_free_full.png
+P4 claude-paint-easel4-green/out/easel4_green_full.png
+P5 claude-paint-easel4-near/out/easel4_near_full.png
+P6 claude-paint-amnesia-mountains/out/fresh2_mountains_full.png
+P7 claude-paint-amnesia-coast/out/fresh2_coast_full.png
+P8 claude-paint/out/easel3_near_full.png

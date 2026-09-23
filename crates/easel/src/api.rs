@@ -1733,12 +1733,8 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
     crate::look::install(lua, st.clone())?;
     crate::draw_outline::install(lua, st.clone())?;
     crate::draw_firs::install(lua, st.clone())?;
-<<<<<<< HEAD
     crate::draw_trees::install(lua, st.clone())?;
-||||||| 862fe6a
-=======
     crate::draw_rocks::install(lua, st.clone())?;
->>>>>>> tool-rock
 
     // trees
     {

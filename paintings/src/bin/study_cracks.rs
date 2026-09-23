@@ -44,14 +44,15 @@ fn main() {
     let aspect = 4.0 / 3.0;
     let ph = (pw as f32 / aspect).round() as usize;
     let s = o.seed;
-    let base = Cracks { corners: false, island_mm: 3.0, ..Cracks::aged(s) };
+    // the calibration panels: even aging, no varnish veil
+    let base = Cracks { corners: false, island_mm: Some(3.0), vary: 0.0, veil: 0.0, ..Cracks::aged(s) };
     let panels = [
-        panel(pw, 50.0, aspect, &Cracks { ground_um: 0.0, ..base }, s),
-        panel(pw, 50.0, aspect, &Cracks { ground_um: 50.0, ..base }, s),
-        panel(pw, 50.0, aspect, &Cracks { ground_um: 200.0, ..base }, s),
-        panel(pw, 160.0, aspect, &Cracks { island_mm: 2.0, ground_um: 150.0, corners: true, ..base }, s),
-        panel(pw, 160.0, aspect, &Cracks { island_mm: 4.0, ground_um: 150.0, corners: true, ..base }, s),
-        panel(pw, 160.0, aspect, &Cracks { island_mm: 6.0, ground_um: 150.0, corners: true, ..base }, s),
+        panel(pw, 50.0, aspect, &Cracks { ground_um: Some(0.0), ..base }, s),
+        panel(pw, 50.0, aspect, &Cracks { ground_um: Some(50.0), ..base }, s),
+        panel(pw, 50.0, aspect, &Cracks { ground_um: Some(200.0), ..base }, s),
+        panel(pw, 160.0, aspect, &Cracks { island_mm: Some(2.0), ground_um: Some(150.0), corners: true, ..base }, s),
+        panel(pw, 160.0, aspect, &Cracks { island_mm: Some(4.0), ground_um: Some(150.0), corners: true, ..base }, s),
+        panel(pw, 160.0, aspect, &Cracks { island_mm: Some(6.0), ground_um: Some(150.0), corners: true, ..base }, s),
     ];
     let gap = (pw / 60).max(2);
     let (w, h) = (3 * pw + 2 * gap, 2 * ph + gap);

@@ -90,7 +90,6 @@ impl Canvas {
         }
         put_f32(w, f.scale)?;
         put_f32(w, self.mm_per_unit)?;
-        put_f32(w, self.ground_um)?;
         match self.linen {
             None => put_u64(w, 0)?,
             Some(l) => {
@@ -119,6 +118,7 @@ impl Canvas {
         put_all(w, wt.vol.iter().copied())?;
         put_all(w, wt.lat.iter().flat_map(|l| *l))?;
         put_all(w, wt.hide.iter().flat_map(|h| *h))?;
+        put_f32(w, self.ground_um)?;
         Ok(())
     }
 
@@ -132,7 +132,6 @@ impl Canvas {
         let [w, h, x0, y0, full_w, full_h, k0, k1, k2, k3] = u;
         let scale = get_f32(r)?;
         let mm_per_unit = get_f32(r)?;
-        let ground_um = get_f32(r)?;
         let linen = match get_u64(r)? {
             0 => None,
             _ => {
@@ -181,7 +180,6 @@ impl Canvas {
         c.f = f;
         c.keep = (k0, k1, k2, k3);
         c.mm_per_unit = mm_per_unit;
-        c.ground_um = if ground_um.is_finite() { ground_um } else { 0.0 };
         c.linen = linen;
         c.surf_gen = surf_gen;
         c.base = None;
@@ -195,6 +193,8 @@ impl Canvas {
         wet.lat = lat.as_chunks::<LAT>().0.to_vec();
         let hide = get_all(r, n * 2)?;
         wet.hide = hide.as_chunks::<2>().0.to_vec();
+        let ground_um = get_f32(r)?;
+        c.ground_um = if ground_um.is_finite() { ground_um.max(0.0) } else { 0.0 };
         wet.current = current;
         wet.dirty = dirty;
         c.wet = wet;

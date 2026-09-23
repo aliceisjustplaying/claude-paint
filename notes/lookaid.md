@@ -128,6 +128,15 @@ and a live session on `notes/amnesia3/easel3_near.lua`.)
   fallen-block polygon, not painted.
 - `target/easel-look-test/aided.jpg`: the test's mirrored crop with
   every aid.
+- `out/easel/lookaid_near/look-0003.jpg`: the birch at 3200 px from the
+  live session (window 400,20,560,250). First look at the window: 560 s of
+  background painting for 26 chunks on the busy machine (the look itself
+  waited 316 s after two earlier short looks started it).
+- `out/easel/lookaid_near/look-0004.jpg` → `-0005.jpg`: a twig previewed
+  with `try` + `show(twig, {brush=b})` on a 10/2 grid at 3200 px, then
+  painted with `do` (chunk 27, 0.07 s). The next `--scale 3.2` look was
+  current in 0.21 s: the crop session had painted chunk 27 in the
+  background. The twig lies on the previewed points.
 
 ## Known issues
 
@@ -143,6 +152,9 @@ and a live session on `notes/amnesia3/easel3_near.lua`.)
   the shows, which replay as no-ops).
 - `show(mask)` outlines the 0.5 level only; a very soft mask shows mostly
   as tint.
+- `show(points)` draws straight segments; a brush stroke through the
+  same points is smoothed by the engine, so it curves a little between
+  them (see look-0005).
 
 ## Next
 

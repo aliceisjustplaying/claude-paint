@@ -206,6 +206,103 @@ fn footprint_bounds_every_touched_pixel() {
     }
 }
 
+/// Tools that aren't physically possible are rejected before they can paint:
+/// their strokes could leave the footprints the parallel scheduler relies on
+/// (a negative length made the bend diverge; review finding).
+#[test]
+fn invalid_tools_are_rejected() {
+    let t = Tool::round_sable(10.0);
+    let bad: Vec<(&str, Tool)> = vec![
+        ("length<0", Tool { length: -1.0, ..t.clone() }),
+        ("length nan", Tool { length: f32::NAN, ..t.clone() }),
+        ("width 0", Tool { width: 0.0, ..t.clone() }),
+        ("width inf", Tool { width: f32::INFINITY, ..t.clone() }),
+        ("stiffness>1", Tool { stiffness: 1.5, ..t.clone() }),
+        ("stiffness<0", Tool { stiffness: -0.1, ..t.clone() }),
+        ("bristles 0", Tool { bristles: 0, ..t.clone() }),
+        ("hair 0", Tool { hair: 0.0, ..t.clone() }),
+        ("run 0", Tool { run: 0.0, ..t.clone() }),
+        ("lay<0", Tool { lay: -1.0, ..t.clone() }),
+        ("pickup>1", Tool { pickup: 2.0, ..t.clone() }),
+        ("push<0", Tool { push: -0.1, ..t.clone() }),
+        ("splay<0", Tool { splay: -3.0, ..t.clone() }),
+        ("ragged<0", Tool { ragged: -1.0, ..t.clone() }),
+    ];
+    for (name, tool) in &bad {
+        assert!(tool.validate().is_err(), "{name} accepted");
+    }
+    for tool in [Tool::round_sable(1.0), Tool::hog_flat(8.0), Tool::filbert(4.0), Tool::fan(9.0), Tool::rigger(0.6), Tool::badger(30.0), Tool::stippler(2.0)] {
+        tool.validate().unwrap();
+    }
+    // every painting entry point refuses them (before touching the canvas)
+    let neg = Tool { length: -1.0, ..t };
+    let entry = |f: &dyn Fn(&mut Canvas)| {
+        let mut c = Canvas::new(100, 1.0, hex("#c8b89a"));
+        let r = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| f(&mut c)));
+        assert!(r.is_err_and(|e| e.downcast_ref::<String>().is_some_and(|s| s.contains("length >= 0"))));
+    };
+    entry(&|c| {
+        let mut h = Held::new(neg.clone(), 1);
+        h.load(Paint::body(hex("#304060")), 1.0);
+        c.drag(&mut h, &Gesture::line((400.0, 500.0), (500.0, 500.0)), None);
+    });
+    entry(&|c| c.touch(&mut Held::new(neg.clone(), 1), &crate::bristle::Touch::at(500.0, 500.0), None));
+    entry(&|c| c.work(&Mask::from_fn(c.frame(), |_, _| 1.0), &Handling::new(neg.clone()), 1));
+    entry(&|c| c.work(&Mask::from_fn(c.frame(), |_, _| 1.0), &Handling::new(Tool::filbert(10.0)).cut_in(neg.clone()), 1));
+    entry(&|c| c.stipple(&Mask::from_fn(c.frame(), |_, _| 1.0), &crate::stipple::Stipple::new(neg.clone()), 1));
+}
+
+/// Extreme but valid tools (very long, limp or stiff hairs, wide splay,
+/// ragged, a single bristle, fine or coarse hair) stay in their footprint:
+/// every pixel a drag or touch visits (stroke id) or changes.
+#[test]
+fn footprint_bounds_extreme_valid_tools() {
+    use crate::bristle::{Touch, footprint};
+    let base = Tool::round_sable(10.0);
+    let tools = [
+        Tool { length: 200.0, stiffness: 0.0, ..base.clone() },
+        Tool { length: 200.0, stiffness: 1.0, ..base.clone() },
+        Tool { length: 0.0, ..base.clone() },
+        Tool { splay: 6.0, ragged: 4.0, ..base.clone() },
+        Tool { bristles: 1, hair: 8.0, ..base.clone() },
+        Tool { hair: 0.01, push: 1.0, pickup: 1.0, ..Tool::hog_flat(25.0) },
+        Tool { length: 150.0, splay: 3.0, ..Tool::rigger(2.0) },
+    ];
+    for tool in tools {
+        tool.validate().unwrap();
+        let w = 300;
+        let mut c = Canvas::new(w, 1.0, hex("#c8b89a"));
+        let mut under = Held::new(Tool::filbert(60.0), 2);
+        for k in 0..12 {
+            under.reload(Paint::body(hex("#304060")), 1.0);
+            let y = 40.0 + k as f32 * 80.0;
+            c.drag(&mut under, &Gesture::new(vec![(0.0, y), (1000.0, y)]).pressure(1.0, 1.0), None);
+        }
+        let check = |c: &Canvas, before: &[f32], r: (usize, usize, usize, usize), what: &str| {
+            // (the stroke's id is one below the counter next_stroke_ids leaves)
+            let id = c.wet.current - 1;
+            for i in 0..c.wet.vol.len() {
+                if c.wet.touched[i] == id || c.wet.stroke[i] == id || before[i] != c.wet.vol[i] {
+                    let (x, y) = (i % c.f.w, i / c.f.w);
+                    assert!(x >= r.0 && x < r.2 && y >= r.1 && y < r.3, "{what} {tool:?}: ({x},{y}) outside {r:?}");
+                }
+            }
+        };
+        let pts = vec![(400.0, 500.0), (600.0, 450.0), (650.0, 650.0)];
+        let before = c.wet.vol.clone();
+        let mut h = Held::new(tool.clone(), 9);
+        h.load(Paint::body(hex("#d0c060")), 1.0);
+        c.drag(&mut h, &Gesture::new(pts.clone()).pressure(1.0, 1.0).shake(2.0), None);
+        let r = footprint(&tool, &pts, 2.0, c.f.scale, c.f.w, c.f.h).unwrap();
+        check(&c, &before, r, "drag");
+        let before = c.wet.vol.clone();
+        let t = Touch::at(300.0, 300.0).pressure(1.0).drag(30.0, -20.0).twist(2.0);
+        c.touch(&mut h, &t, None);
+        let r = crate::bristle::touch_footprint(&tool, &t, c.f.scale, c.f.w, c.f.h).unwrap();
+        check(&c, &before, r, "touch");
+    }
+}
+
 #[test]
 fn clipped_plough_stays_inside_mask() {
     let mut c = Canvas::new(400, 1.0, hex("#c8b89a"));

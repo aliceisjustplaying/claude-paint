@@ -126,7 +126,7 @@ impl Canvas {
         let header = read_header(r)?;
         let mut u = [0usize; 10];
         for v in u.iter_mut() {
-            *v = get_u64(r)? as usize;
+            *v = usize::try_from(get_u64(r)?).map_err(|_| bad("checkpoint frame is invalid"))?;
         }
         let [w, h, x0, y0, full_w, full_h, k0, k1, k2, k3] = u;
         let scale = get_f32(r)?;
@@ -142,12 +142,37 @@ impl Canvas {
         let current = get_u64(r)? as u32;
         let dirty = match get_u64(r)? {
             0 => None,
-            _ => Some((get_u64(r)? as usize, get_u64(r)? as usize, get_u64(r)? as usize, get_u64(r)? as usize)),
+            _ => {
+                let mut d = [0usize; 4];
+                for v in d.iter_mut() {
+                    *v = usize::try_from(get_u64(r)?).map_err(|_| bad("checkpoint dirty box is invalid"))?;
+                }
+                Some((d[0], d[1], d[2], d[3]))
+            }
         };
-        if w == 0 || h == 0 || x0 + w > full_w || y0 + h > full_h || w * h > 1 << 30 {
+        // geometry is checked before anything is allocated or indexed: a
+        // corrupt file is an error here, not a panic later
+        let fits = |o: usize, n: usize, full: usize| o.checked_add(n).is_some_and(|e| e <= full);
+        let n = w.checked_mul(h).filter(|&n| n > 0 && n <= 1 << 30);
+        let Some(n) = n.filter(|_| fits(x0, w, full_w) && fits(y0, h, full_h)) else {
             return Err(bad("checkpoint frame is invalid"));
+        };
+        if !(k0 < k2 && k2 <= w && k1 < k3 && k3 <= h) {
+            return Err(bad("checkpoint crop bounds are invalid"));
         }
-        let n = w * h;
+        if let Some((a, b, c, d)) = dirty
+            && !(a <= c && c <= w && b <= d && d <= h)
+        {
+            return Err(bad("checkpoint dirty box is invalid"));
+        }
+        if !(scale.is_finite() && scale > 0.0 && mm_per_unit.is_finite() && mm_per_unit > 0.0) {
+            return Err(bad("checkpoint scale is invalid"));
+        }
+        if let Some(l) = linen
+            && ![l.warp_per_cm, l.weft_per_cm, l.crown_um, l.slubs].iter().all(|v| v.is_finite())
+        {
+            return Err(bad("checkpoint linen is invalid"));
+        }
         let f = Frame { w, h, scale, x0, y0, full_w, full_h };
         // a 1-pixel canvas, then every field replaced
         let mut c = Canvas::new_window(1, 1.0, [0.0; 3], None);
@@ -171,5 +196,92 @@ impl Canvas {
         wet.dirty = dirty;
         c.wet = wet;
         Ok((c, header))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::io::Cursor;
+
+    // offsets in a checkpoint with an empty header and no linen
+    const W: usize = 16;
+    const X0: usize = 32;
+    const KEEP: usize = 64;
+    const SCALE: usize = 96;
+    const MM: usize = 100;
+    const DIRTY: usize = 128;
+
+    fn set(b: &mut [u8], pos: usize, v: u64) {
+        b[pos..pos + 8].copy_from_slice(&v.to_le_bytes());
+    }
+
+    fn load(b: Vec<u8>) -> io::Result<Canvas> {
+        Canvas::read_state(&mut Cursor::new(b)).map(|(c, _)| c)
+    }
+
+    fn rejected(b: Vec<u8>, what: &str) {
+        match load(b) {
+            Ok(_) => panic!("{what}: accepted"),
+            Err(e) => assert_eq!(e.kind(), io::ErrorKind::InvalidData, "{what}: {e}"),
+        }
+    }
+
+    fn original() -> Vec<u8> {
+        let c = Canvas::new_window(2, 1.0, [0.1; 3], None);
+        let mut b = Vec::new();
+        c.write_state(&mut b, "").unwrap();
+        b
+    }
+
+    #[test]
+    fn round_trip() {
+        let mut c = load(original()).unwrap();
+        c.wet.touch(0, 0, 2, 1);
+        let mut b = Vec::new();
+        c.write_state(&mut b, "x=1\n").unwrap();
+        let (d, h) = Canvas::read_state(&mut Cursor::new(b)).unwrap();
+        assert_eq!((h.as_str(), d.keep, d.wet.dirty), ("x=1\n", (0, 0, 2, 2), Some((0, 0, 2, 1))));
+    }
+
+    /// Corrupt geometry is an error when loading, not a panic later (cases
+    /// from the review: keep past the buffer, an overflowing frame).
+    #[test]
+    fn malformed_geometry_is_invalid_data() {
+        let o = original();
+        let mut b = o.clone();
+        set(&mut b, KEEP + 16, 3);
+        rejected(b, "keep x1 past the buffer");
+        let mut b = o.clone();
+        set(&mut b, KEEP, 2);
+        rejected(b, "empty keep");
+        let mut b = o.clone();
+        set(&mut b, W, u64::MAX);
+        set(&mut b, X0, 1);
+        rejected(b, "overflowing frame");
+        let mut b = o.clone();
+        set(&mut b, W, 1 << 32);
+        set(&mut b, W + 8, 1 << 32);
+        rejected(b, "overflowing area");
+        for (v, what) in [(f32::NAN, "nan"), (0.0, "zero"), (-1.0, "negative"), (f32::INFINITY, "infinite")] {
+            for (pos, field) in [(SCALE, "scale"), (MM, "mm per unit")] {
+                let mut b = o.clone();
+                b[pos..pos + 4].copy_from_slice(&v.to_le_bytes());
+                rejected(b, &format!("{what} {field}"));
+            }
+        }
+        for rect in [[0u64, 0, 3, 3], [1, 0, 0, 2], [0, 0, 2, u64::MAX]] {
+            let mut b = o.clone();
+            set(&mut b, DIRTY, 1);
+            let r: Vec<u8> = rect.iter().flat_map(|v| v.to_le_bytes()).collect();
+            b.splice(DIRTY + 8..DIRTY + 8, r);
+            rejected(b, &format!("dirty {rect:?}"));
+        }
+        // a valid dirty box still loads
+        let mut b = o.clone();
+        set(&mut b, DIRTY, 1);
+        let r: Vec<u8> = [0u64, 0, 2, 2].iter().flat_map(|v| v.to_le_bytes()).collect();
+        b.splice(DIRTY + 8..DIRTY + 8, r);
+        assert_eq!(load(b).unwrap().wet.dirty, Some((0, 0, 2, 2)));
     }
 }

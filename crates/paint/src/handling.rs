@@ -390,6 +390,10 @@ impl Canvas {
     /// checkerboard phase can't share a pixel, so each gets its own brush and
     /// they are painted in parallel; phases run one after another.
     pub fn work(&mut self, mask: &Mask, hd: &Handling, seed: u64) {
+        hd.tool.assert_valid();
+        if let Some(t) = &hd.cut_in {
+            t.assert_valid();
+        }
         self.check_mask(mask);
         let mut rng = Rng::new(seed);
         // plan on the whole canvas (also in a crop render, so the strokes

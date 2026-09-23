@@ -445,3 +445,26 @@ for i, t in ipairs(ft) do
   for _, bl in ipairs(t.blades) do g:stroke(bl, {pressure={clamp(0.2 + 0.5 * t.scale, 0.15, 0.7), 0.0}, ramps={0.05, 0.7}}) end
 end
 print(#ft)
+
+--@ chunk 26 · clock 45631.58203125
+
+local cn = noise{seed=71, octaves=4, period=40, stretch={0.0, 6}}
+local function streak(x0, x1, y, th, tilt, seed)
+  local pts, ws = {}, {}
+  local n = 14
+  for k = 0, n do
+    local t = k / n
+    local x = lerp(x0, x1, t)
+    pts[#pts+1] = {x, y + tilt * (x - x0) + 3 * cn(x, y + seed)}
+    ws[#ws+1] = th * math.sin(math.pi * t)^0.6 * (0.4 + 1.0 * cn:at01(x * 2, seed))
+  end
+  return ribbon(pts, ws):roughen(2, 14, seed, 3):blur(1.5)
+end
+local front = (oakA:mask() + oakB:mask()):grow(1) + stonesil:grow(1)
+bars = (streak(520, 1000, 350, 7, -0.012, 1) + streak(640, 1010, 372, 4.5, -0.004, 2) + streak(-10, 300, 386, 4, 0.006, 3)) - front
+stipple(bars, {width=2.2, color=function(x, y) return mix(skycol(x, y), "#7d7084", 0.35) end, coverage=function(x, y) return 2.4 * bars:at(x, y) end,
+  pressure={0.4, 0.8}, dips={20, 0.35, 0.6}, medium=0.5, pal=skypal, clip=bars})
+
+--@ chunk 27 · clock 45631.58203125
+
+blend(bars:grow(2), {angle=0, length={15, 40}, coverage=2, clip=bars:grow(3)})

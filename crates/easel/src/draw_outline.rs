@@ -30,6 +30,14 @@ fn pts_table(lua: &Lua, pts: &[(f32, f32)]) -> Result<Table> {
     Ok(t)
 }
 
+/// The drawn line of an outline value (its first line), for other tools
+/// that take an outline where they take points.
+pub(crate) fn outline_path(v: &AnyUserData) -> Option<(Vec<(f32, f32)>, bool)> {
+    let o = v.borrow::<OutlineU>().ok()?;
+    let l = o.o.lines.first()?;
+    Some((l.pts.clone(), l.closed))
+}
+
 const CHARS: &str = "firm, searching, broken, soft";
 
 /// The character from `char=`, `amount=` and `lobe=` (units), and the hand's

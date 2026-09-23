@@ -42,4 +42,5 @@ Then stop and evaluate with the user.
 - Six subagents launched (color, strokes, stipple, workflow, form, motifs); shared brief copied to notes/overnight_brief.md.
 - motifs merged (5ec3808): growth.rs skeletons; open: spruce reads as araucaria, not Friedrich's drooping spire; oak twig tips tuft into pom-poms at 1000px; ridge bands on thick limbs.
 - form merged: ranges read well (gullies, layered haze); rocks solid but covered in uniform crumpled-foil dab texture, outcrop still loaf-like; orange ground specks in skies (coverage); 3200px dashes.
+- color merged: masstone semantics, Canvas::aim / Palette::aim, handlings aim by default; matched marks ΔE ~0.003 (was ~0.045). Stipple stream should switch to Canvas::aim at merge.
 - (updated as work lands)

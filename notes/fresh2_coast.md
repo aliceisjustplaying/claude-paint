@@ -93,8 +93,9 @@ What it draws on in Friedrich (from general knowledge of his work and
 11. **poles**: the net first: a thin masstone veil over a mask hung from a
     sagging rope, lean fold lines, and two families of rigger mesh lines.
     Then the poles in two loads each (the second set down in the wet end of
-    the first), a lit edge on the sunward side, the rope, lashings and cork
-    floats.
+    the first), a lit edge on the sunward side, the rope, lashings,
+    weathering (grayer patches, dark knots), a peg through the third pole
+    with a coil of rope hanging from it, and cork floats.
 12. **figure**: gestures in a `Hand` frame: skirt strokes flaring to the
     hem, bodice, sleeves, shawl to a point down the back, neck, head and
     hair knot; two gown folds; a small rim of light on the head and right
@@ -238,7 +239,33 @@ What it draws on in Friedrich (from general knowledge of his work and
     chrome-yellow rims wherever the mark thins out. *Workaround:* earth-only
     families for small motifs (`pal.only(&["red earth", "raw umber",
     "bone black"])`; lead white, pale smalt, ochre and umber for sails).
-16. **Checkpoints are all stale after any edit above the first stage.**
+16. **A flat underpainting shows through dry-brushed stroke ends.** Dark,
+    bristle-textured blots in the middle of the sea turned out to be the
+    flat blue-gray underpainting where lay-in strokes ran dry at their
+    ends. First I blamed the swell, then the blender, then stray piles;
+    finding it took a debug save after the lay-in. This is physical and
+    documented behavior. *Workaround:* underpaint from the sea's own color
+    field, a little darker. There's no engine fix; the lesson is to
+    underpaint in the passage's own tones.
+17. **A curved multi-point `drag` with a fine brush laid nothing, and I
+    couldn't find out why.** A coil of rope hung on a peg on the third pole:
+    each loop an 11-point U with a rigger (0.45–0.5) or a round sable (0.75)
+    at pressure 0.55–0.7. The pixels stayed untouched sky in every variant,
+    and the brush's fullness dropped 0.001 against 0.02 for a straight
+    stroke nearby. Hypotheses I tested and ruled out: loops wrapped round
+    the wet pole; a start on the wet peg; a start on the dry peg's ridge
+    (`c.dry()` first, then a start in open air under it); the stroke
+    direction. The same shapes (V, U, hook, L) deposit normally on a fresh
+    `Canvas` (a scratch probe binary, deleted). The only split half that
+    painted ran from the loop's bottom up to its left end. *Workaround:*
+    each loop as 10 straight 2-point segments, alternate ones first, with a
+    `c.dry()` between the two passes. It cost about 20 minutes and I never
+    found the cause, so it's worth a proper engine repro: canvas state after
+    the poles stage, `Tool::rigger(0.5)`, the points in the program.
+18. **The Read tool lagged new files by 30–60 s** late in the session
+    (images written by `scripts/peek` returned ENOENT until then). That's
+    not the engine, but it slowed the looking loop.
+19. **Checkpoints are all stale after any edit above the first stage.**
     Palette families, masks and color fields live above the stages (the
     rules say so), so tuning one of them forces a whole re-render. It
     costs 20 s at 1000px and is fine here, but it discourages hoisting
@@ -247,4 +274,44 @@ What it draws on in Friedrich (from general knowledge of his work and
 
 ## Critique
 
-(Written after the full render; see the end of this file.)
+What works:
+- **The big design reads as Friedrich.** A huge graded sky over a thin
+  dark sea, a ruled horizon, a few hard verticals, a small still figure
+  seen from behind and a crescent over the coming sun. At 1000px it has
+  his quiet, and the eye goes horizon, then figure, then moon, then net.
+- **The sky** is the best passage. It goes from a lemon glow through rose
+  to slate with no visible strokes, and the dry stipple gives it grain up
+  close without salt. The stratus bars with lit undersides are simple and
+  right for the hour.
+- **The erratic** at 3200px reads as a heavy granite block, dark against
+  the light, its top and right shoulder catching the glow. It is seated in
+  the sand, has no egg shape and no pumice pits.
+- **Particular details hold at full size:** mesh and folds in the net, the
+  cork floats, the lashings, marram tufts in upturned strokes, half-sunk
+  stones, the brig's stacked sails lit on one side, gulls, the wrack line.
+- **Physically consistent light.** The sun is below the horizon, so there
+  are no cast shadows, only faint reflections on the damp sand. The moon's
+  lit limb faces the sun.
+
+What is weak (judged harshly):
+- **The beach is still the dullest passage:** a smooth brown gradient with
+  sparse incident. Friedrich's foregrounds are dark but *drawn*, with
+  every tuft and stone particular. Mine thin out in the middle of the
+  sand. The ripple fields are almost invisible at 1000px.
+- **The boulder is a little too big and too square** for the picture. It
+  pulls weight to the lower left, and its left end is a flat dark slab
+  with little modeling.
+- **The poles are still rather uniform:** the same dark rod with the same
+  thin lit edge. The weathering touches barely read at 1000px. The peg and
+  rope coil on the third pole give it a purpose, but the coil is a little
+  schematic up close (straight segments).
+- **The figure** is a correct silhouette but generic. The shawl's V reads
+  more as a collar than as cloth, and the figure has no weight shift.
+- **Small digital tells remain:** a few orange flecks where the ground
+  shows through the sand and far sea (bare ground under both the
+  underpainting and the lay-in); faint gray blotches in the mid sky where
+  the first stipple's recipes change; the crescent's edge is a little too
+  clean-cut; the net's rope and lashings are graphic black lines.
+- **The sea** is calm and right in tone, but at 3200px its lay-in is a bit
+  slick. It has little of the fine horizontal texture a stippled or
+  hatched Friedrich sea has.

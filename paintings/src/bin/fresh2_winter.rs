@@ -124,28 +124,44 @@ fn main() {
 
     // ----------------------------------------------------------------- moon
     let moon = (668.0f32, 118.0f32);
+    // the crescent: the lit disc less the dark one, lit toward the lower
+    // right where the sun has gone down
+    let (mr, dark_off) = (10.5f32, (-4.2f32, -3.4f32));
+    let crescent = Mask::from_shape(f, Shape::new().circle(moon.0, moon.1, mr)).subtract(&Mask::from_shape(f, Shape::new().circle(moon.0 + dark_off.0, moon.1 + dark_off.1, mr * 0.97)));
     if o.stage("moon", &mut c, &mut rng) {
-        // a thin crescent, lit from the lower right (the sun is below the
-        // horizon to the right of it): a few strokes of a small round along
-        // the arc, heavy in the middle, lifted off at the horns
-        let r = 11.5;
-        let paint = pal.mix(hex("#eee6c8")).paint(0.15).with_hiding(0.9);
-        let mut b = Held::new(Tool::round_sable(2.6), rng.next_u64());
-        for k in 0..3 {
-            b.reload(paint, 0.8);
-            let inset = k as f32 * 0.9;
-            let pts: Vec<(f32, f32)> = (0..=12)
-                .map(|i| {
-                    let a = -0.55 + (i as f32 / 12.0) * 2.5; // lower-right half
-                    let rr = r - 1.0 - inset;
-                    (moon.0 + rr * a.cos() * 0.98, moon.1 + rr * a.sin())
-                })
-                .collect();
-            let g = Gesture::new(pts).pressure(0.35, 0.35).swell(vec![0.4, 1.0, 1.25, 1.0, 0.4]).ramps(0.2, 0.3).shake(0.2);
-            c.drag(&mut b, &g, None);
+        // a faint glow around it first, stippled: fine touches a little
+        // lighter than the sky, thinning out with distance
+        let glow_m = Mask::from_fn(f, |x, y| if ((x - moon.0).powi(2) + (y - moon.1).powi(2)).sqrt() < 60.0 { 1.0 } else { 0.0 });
+        let glow = Stipple::new(Tool::stippler(1.3))
+            .mixed(pal, 0.5)
+            .color(move |x, y| {
+                let d = ((x - moon.0).powi(2) + (y - moon.1).powi(2)).sqrt();
+                let mut l = to_oklab(sky_col(x, y));
+                l[0] += 0.045 * (-(d / 30.0).powi(2)).exp();
+                from_oklab(l)
+            })
+            .coverage(move |x, y| {
+                let d = ((x - moon.0).powi(2) + (y - moon.1).powi(2)).sqrt();
+                1.8 * (1.0 - smoothstep(12.0, 58.0, d))
+            })
+            .pressure(0.4, 0.75)
+            .dips(20, 0.35, 0.6);
+        c.stipple(&glow_m, &glow, 17);
+        c.dry();
+        // the crescent filled with small touches of a round, clipped to its
+        // shape so the horns come to points
+        let paint = pal.mix(hex("#efe8cc")).paint(0.12).with_hiding(0.93);
+        let mut b = Held::new(Tool::round_sable(1.6), rng.next_u64());
+        for k in 0..70 {
+            if k % 10 == 0 {
+                b.reload(paint, 0.7);
+            }
+            let a = rng.range(-0.9, 2.5);
+            let rr = mr * rng.range(0.55, 0.95);
+            let p = (moon.0 + rr * a.cos(), moon.1 + rr * a.sin());
+            c.drag(&mut b, &Gesture::new(vec![p, (p.0 - 1.4 * a.sin(), p.1 + 1.4 * a.cos())]).pressure(0.8, 0.6).ramps(0.1, 0.3), Some(&crescent));
         }
         c.dry();
-        // the faint earthshine of the dark part is left as sky
     }
 
     // ------------------------------------------------------------- distance
@@ -170,8 +186,8 @@ fn main() {
 
     // the ruined choir: gable wall with a tall lancet, a lower side wall
     // with two narrow ones, the tops broken
-    let ruin_shape = || -> Shape {
-        let top = [
+    let ruin_top = || -> Vec<(f32, f32)> {
+        vec![
             (462.0, 452.0),
             (462.0, 392.0),
             (466.0, 385.0),
@@ -194,9 +210,9 @@ fn main() {
             (556.0, 407.0),
             (560.0, 415.0),
             (562.0, 452.0),
-        ];
-        Shape::new().poly(&top)
+        ]
     };
+    let ruin_shape = || -> Shape { Shape::new().poly(&ruin_top()) };
     let lancet = |cx: f32, w: f32, y0: f32, y1: f32| -> Shape {
         // a pointed arch: straight jambs, two arcs meeting at the apex
         let mut pts = vec![(cx - w / 2.0, y1), (cx - w / 2.0, y0 + w * 0.9)];
@@ -225,6 +241,48 @@ fn main() {
         };
         let hd = st.detail().color(col).angle(|_, _| -std::f32::consts::FRAC_PI_2).angle_jitter(0.15).length(4.0, 12.0).coverage(3.5).medium(0.2);
         c.work(&ruin_m, &hd, 31);
+        c.dry();
+        // weathering: stone patched lighter and darker, broken courses
+        let weather = Fbm::new(41, 3, 14.0);
+        let patches = ruin_m.clone().mul_fn(|x, y| smoothstep(0.1, 0.4, weather.get(x, y * 0.7).abs()));
+        let hd = st.detail().color(|x, y| if weather.get(x, y * 0.7) > 0.0 { hex("#76737d") } else { hex("#696873") }).angle(|_, _| 0.0).length(2.0, 6.0).coverage(0.8).medium(0.45).clip(true);
+        c.work(&patches, &hd, 32);
+        let course = pal.mix(hex("#5c5c68")).paint(0.3).with_hiding(0.5);
+        let mut b = Held::new(st.line_tool(0.35), rng.next_u64());
+        for _ in 0..16 {
+            let y = rng.range(392.0, 448.0);
+            let x0 = rng.range(462.0, 555.0);
+            let len = rng.range(4.0, 14.0);
+            b.reload(course, 0.4);
+            c.drag(&mut b, &Gesture::new(vec![(x0, y), (x0 + len, y + rng.normal() * 0.3)]).pressure(0.5, 0.3).ramps(0.2, 0.3), Some(&ruin_m));
+        }
+        // the reveals: the inner face of each lancet's left jamb catches
+        // the afterglow, a thin lighter strip
+        let reveal = pal.mix(hex("#8c8790")).paint(0.2);
+        for (cx, w, y0, y1) in [(489.0f32, 15.0f32, 376.0f32, 438.0f32), (535.0, 5.5, 408.0, 436.0), (550.0, 5.0, 414.0, 436.0)] {
+            let mut b = Held::new(Tool::round_sable((w * 0.12).max(0.6)), rng.next_u64());
+            b.load(reveal, 0.6);
+            let x = cx + w / 2.0 + w * 0.08;
+            c.drag(&mut b, &Gesture::new(vec![(x, y1), (x, y0 + w * 0.9), (cx + w * 0.2, y0 + w * 0.15)]).pressure(0.7, 0.4).ramps(0.1, 0.4), Some(&ruin_m));
+        }
+        // snow on the broken tops and the sills: thin pale lines where the
+        // wall's top is near level
+        let snow = pal.mix(hex("#cfcbc6")).paint(0.15).with_hiding(0.9);
+        let tops = ruin_top();
+        let mut b = Held::new(Tool::round_sable(1.0), rng.next_u64());
+        for w in tops.windows(2) {
+            let (a, e) = (w[0], w[1]);
+            let (dx, dy) = (e.0 - a.0, e.1 - a.1);
+            if dx.abs() < 1.0 || (dy / dx).abs() > 1.1 || rng.f() < 0.2 {
+                continue;
+            }
+            b.reload(snow, 0.5);
+            c.drag(&mut b, &Gesture::new(vec![(a.0, a.1 + 0.5), (e.0, e.1 + 0.5)]).pressure(0.55, 0.45).ramps(0.2, 0.3), None);
+        }
+        for (cx, w, y1) in [(489.0f32, 15.0f32, 438.0f32), (535.0, 5.5, 436.0), (550.0, 5.0, 436.0)] {
+            b.reload(snow, 0.4);
+            c.drag(&mut b, &Gesture::new(vec![(cx - w / 2.0, y1 - 0.3), (cx + w / 2.0, y1 - 0.1)]).pressure(0.5, 0.4).ramps(0.2, 0.3), None);
+        }
         c.dry();
     }
 
@@ -272,6 +330,7 @@ fn main() {
                 (0.35 * gx).clamp(-0.35, 0.35)
             })
             .length(25.0, 80.0)
+            .mix_jitter(0.03)
             .coverage(2.2)
             .medium(0.18)
             .load_at(move |_, y| 0.7 + 0.5 * smoothstep(HORIZON, h, y));
@@ -326,7 +385,7 @@ fn main() {
         let ice = |x: f32, y: f32| -> Rgb {
             let d = ((y - HORIZON) / (h - HORIZON)).clamp(0.0, 1.0);
             let refl = sky_col(x, HORIZON * (0.97 - 0.45 * d));
-            mix(refl, hex("#6f7280"), 0.18 + 0.15 * d, Mix::Pigment)
+            mix(mix(refl, hex("#9aa0b2"), 0.5, Mix::Light), hex("#5a5f6e"), 0.3 + 0.2 * d, Mix::Pigment)
         };
         let hd = st.detail().color(ice).angle(|_, _| 0.0).angle_jitter(0.12).length(5.0, 18.0).coverage(3.0).medium(0.25).clip(true);
         c.work(&brook_m, &hd, 61);
@@ -334,7 +393,9 @@ fn main() {
         // open water in a few reaches: black, with the sky's light in a
         // thin streak down its middle
         let open = Fbm::new(19, 2, 55.0);
-        let open_m = brook_m.clone().mul_fn(|x, y| smoothstep(0.3, 0.4, open.get(x, y * 1.5)) * smoothstep(480.0, 520.0, y)).blur(0.6);
+        // an open lead down the middle of the ice, never bank to bank
+        let lead_w: Vec<f32> = brook_w.iter().map(|w| w * 0.4).collect();
+        let open_m = Mask::from_shape(f, Shape::new().ribbon(&brook, &lead_w)).mul_fn(|x, y| smoothstep(0.22, 0.34, open.get(x, y * 1.5)) * smoothstep(480.0, 520.0, y)).roughen(29, 8.0, 0.35, 0.08).mul(&brook_m);
         let water = |x: f32, y: f32| mix(hex("#34373f"), sky_col(x, HORIZON * 0.8), 0.22, Mix::Pigment);
         let hd = st.detail().color(water).angle(|_, _| 0.0).length(4.0, 14.0).coverage(3.0).medium(0.2).clip(true);
         c.work(&open_m, &hd, 62);
@@ -387,7 +448,7 @@ fn main() {
     .grow(oak_base, ev("OAK_H", 390.0), ev("OAK_SEED", 44.0) as u64 + o.seed);
     // gnarl: old oak wood doesn't run smooth, it kinks every few inches. One
     // displacement field for every point, so twigs stay where they spring
-    let oak = gnarl(oak, 1.3, 9.0, 71);
+    let oak = prune(gnarl(oak, 1.3, 9.0, 71));
     if o.stage("oak", &mut c, &mut rng) {
         let dark = pal.mix(hex("#2b2622")).paint(0.25);
         let dead = pal.mix(hex("#3b3531")).paint(0.25);
@@ -430,8 +491,9 @@ fn main() {
         let coat = pal.mix(hex("#2a2729")).paint(0.15);
         let hat = pal.mix(hex("#1e1c1c")).paint(0.15);
         let skin = pal.mix(hex("#8f7a6a")).paint(0.15);
-        let shadow = pal.mix(hex("#8d91a4")).paint(0.2);
-        walker_fig(&mut c, walker, 34.0, coat, hat, skin, shadow, &mut rng);
+        let shadow = pal.mix(hex("#6e7387")).paint(0.2);
+        let rim = pal.mix(hex("#9c8b78")).paint(0.15);
+        walker_fig(&mut c, walker, 34.0, coat, hat, skin, shadow, rim, &mut rng);
         c.dry();
     }
 
@@ -496,7 +558,7 @@ fn main() {
     let fin = Finish {
         // thin, walnut-oil paint on a 140 µm chalk ground: fine cracks, not
         // weave-bound, little grime (a well-kept small picture)
-        cracks: Some(paint::Cracks { island_mm: 3.0, ground_um: 140.0, width_um: 45.0, depth_um: 22.0, cupping_um: 15.0, dirt: 0.3, corners: true, seed: 0 }),
+        cracks: Some(paint::Cracks { island_mm: 2.6, ground_um: 140.0, width_um: 18.0, depth_um: 9.0, cupping_um: 6.0, dirt: 0.12, corners: true, seed: 0 }),
         varnish_coats: 0.3,
         ..Finish::aged(st.relief)
     };
@@ -540,7 +602,8 @@ fn wood(c: &mut paint::Canvas, sk: &paint::Skeleton, live: Paint, dead: Paint, f
     // buttress roots are under the snow, and low sprouts off the bole are
     // left out (they read as a boot at this size)
     let foot = sk.base.1 - sk.height * 0.12;
-    for l in sk.limbs.iter().filter(|l| !l.is_empty() && !l.root && !(l.order == 1 && l.pts[0].1 > foot)) {
+    let _ = foot;
+    for l in sk.limbs.iter().filter(|l| !l.is_empty()) {
         let n = l.pts.len();
         let w: Vec<f32> = l.w.iter().map(|w| w.max(finest)).collect();
         let arc = arclen(&l.pts);
@@ -572,6 +635,37 @@ fn wood(c: &mut paint::Canvas, sk: &paint::Skeleton, live: Paint, dead: Paint, f
             c.drag(&mut held, &Gesture::new(pts).pressure(1.0, p1).ramps(0.0, release).shake(0.7), None);
         }
     }
+}
+
+/// The tree stands in snow: buttress roots are under it, and low sprouts
+/// off the bole (and everything growing from them) are left out; they read
+/// as a boot at this size. Parent indices are remapped.
+fn prune(mut sk: paint::Skeleton) -> paint::Skeleton {
+    let foot = sk.base.1 - sk.height * 0.12;
+    let mut gone = vec![false; sk.limbs.len()];
+    for i in 0..sk.limbs.len() {
+        let l = &sk.limbs[i];
+        gone[i] = l.root || (l.order == 1 && l.pts[0].1 > foot) || l.parent.is_some_and(|p| gone[p]);
+    }
+    let mut map = vec![usize::MAX; sk.limbs.len()];
+    let mut k = 0;
+    for i in 0..gone.len() {
+        if !gone[i] {
+            map[i] = k;
+            k += 1;
+        }
+    }
+    let limbs = std::mem::take(&mut sk.limbs);
+    sk.limbs = limbs
+        .into_iter()
+        .enumerate()
+        .filter(|(i, _)| !gone[*i])
+        .map(|(_, mut l)| {
+            l.parent = l.parent.map(|p| map[p]);
+            l
+        })
+        .collect();
+    sk
 }
 
 /// Kink a skeleton's limbs with a displacement field of short period,
@@ -678,25 +772,26 @@ fn spruce(c: &mut paint::Canvas, base: (f32, f32), ht: f32, needles: Paint, snow
         }
     }
     c.dry();
-    // snow on the tiers
-    let mut sb = Held::new(Tool::round_sable((ht * 0.018).max(0.6)), rng.next_u64());
-    for (k, &(sx, sy, ex, ey)) in tier_pts.iter().enumerate() {
+    // snow on the tiers: clumps lying on the upper side of a branch, flat
+    // on top, ragged below, not on every tier; more on the lit (left) side
+    let mut sb = Held::new(Tool::round_sable((ht * 0.014).max(0.5)), rng.next_u64());
+    for &(sx, sy, ex, ey) in tier_pts.iter() {
         let v = (sy - top) / ht;
-        if rng.f() < 0.25 + 0.2 * (1.0 - v) {
+        let left = ex < sx;
+        if rng.f() < 0.35 + 0.25 * (1.0 - v) + if left { 0.0 } else { 0.2 } {
             continue;
         }
-        let left = ex < sx;
-        let p = if left || rng.f() < 0.3 { snow } else { snow_sh };
-        if k % 2 == 0 {
-            sb.reload(p, 0.6);
-        } else {
-            sb.load(p, 0.4);
+        let p = if left { snow } else { snow_sh };
+        sb.reload(p.with_hiding(0.85), rng.range(0.35, 0.6));
+        let lerp = |t: f32| (sx + (ex - sx) * t, sy + (ey - sy) * t * t - 0.4 - ht * 0.005);
+        let clumps = 1 + (rng.f() * 2.5) as usize;
+        for _ in 0..clumps {
+            let t = rng.range(0.2, 0.85);
+            let len = rng.range(0.1, 0.3);
+            let (p0, p1) = (lerp(t), lerp((t + len).min(0.95)));
+            let sag = rng.range(0.3, 0.9);
+            c.drag(&mut sb, &Gesture::new(vec![p0, ((p0.0 + p1.0) * 0.5, (p0.1 + p1.1) * 0.5 + sag * 0.5), p1]).pressure(rng.range(0.5, 0.9), rng.range(0.2, 0.5)).ramps(0.15, 0.5).shake(0.8), None);
         }
-        let a = rng.range(0.15, 0.35);
-        let b = rng.range(0.6, 0.95);
-        let lerp = |t: f32| (sx + (ex - sx) * t, sy + (ey - sy) * t * t - 0.6 - ht * 0.006);
-        let pts = vec![lerp(a), lerp((a + b) * 0.5), lerp(b)];
-        c.drag(&mut sb, &Gesture::new(pts).pressure(0.8, 0.5).ramps(0.2, 0.35).shake(0.6), None);
     }
     // snow at the foot, covering the stem's base
     let mut fb = Held::new(Tool::filbert((ht * 0.05).max(2.0)), rng.next_u64());
@@ -706,12 +801,12 @@ fn spruce(c: &mut paint::Canvas, base: (f32, f32), ht: f32, needles: Paint, snow
 
 /// A man seen from behind walking away up the brook: long dark coat,
 /// a cap, a stick; his shadow a short blue smear on the snow.
-fn walker_fig(c: &mut paint::Canvas, at: (f32, f32), size: f32, coat: Paint, hat: Paint, skin: Paint, shadow: Paint, rng: &mut Rng) {
+fn walker_fig(c: &mut paint::Canvas, at: (f32, f32), size: f32, coat: Paint, hat: Paint, skin: Paint, shadow: Paint, rim: Paint, rng: &mut Rng) {
     let mut hd = paint::Hand::new(at, size, rng.next_u64());
     hd.tremor = 0.004;
     // shadow first, falling toward the viewer and right (the glow is behind)
-    let mut s = hd.take(Tool::filbert, 0.12, shadow, 0.5);
-    hd.mark(c, &mut s, paint::Mark { pts: &[(-0.05, 0.0), (0.25, -0.04), (0.5, -0.07)], pressure: (0.6, 0.2), ramps: (0.1, 0.5) }, None);
+    let mut s = hd.take(Tool::round_sable, 0.07, shadow, 0.7);
+    hd.mark(c, &mut s, paint::Mark { pts: &[(-0.06, 0.005), (0.15, -0.02), (0.38, -0.05)], pressure: (0.9, 0.3), ramps: (0.05, 0.6) }, None);
     // legs: one striding back (lower), one forward, boots dark
     let mut b = hd.take(Tool::round_sable, 0.07, coat, 0.7);
     hd.line(c, &mut b, &[(-0.035, 0.34), (-0.05, 0.16), (-0.06, 0.01)], 0.9, 0.7);
@@ -739,7 +834,13 @@ fn walker_fig(c: &mut paint::Canvas, at: (f32, f32), size: f32, coat: Paint, hat
     // the stick: a rigger line from the hand to the snow ahead
     let mut r = hd.take(Tool::rigger, 0.018, hat, 0.8);
     hd.mark(c, &mut r, paint::Mark { pts: &[(0.17, 0.52), (0.21, 0.26), (0.25, 0.0)], pressure: (0.8, 0.6), ramps: (0.05, 0.1) }, None);
-    // the lit edge of the left shoulder and back, catching the afterglow
+    // the hat's brim, a little wider than the crown
+    hb.reload(hat, 0.6);
+    hd.mark(c, &mut hb, paint::Mark { pts: &[(-0.075, 0.905), (0.0, 0.9), (0.08, 0.905)], pressure: (0.5, 0.5), ramps: (0.2, 0.2) }, None);
+    // the edge of the left shoulder and back catching the afterglow: a
+    // lean touch, broken by the tooth of the coat's paint
+    let mut rb = hd.take(Tool::round_sable, 0.025, rim, 0.3);
+    hd.mark(c, &mut rb, paint::Mark { pts: &[(-0.095, 0.78), (-0.1, 0.66), (-0.115, 0.5)], pressure: (0.6, 0.2), ramps: (0.2, 0.6) }, None);
     let _ = rng;
 }
 

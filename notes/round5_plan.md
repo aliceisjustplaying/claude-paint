@@ -45,3 +45,4 @@ spectral) is split into single-defect fixes the loops pull in.
    better."
 - PAUSED 17:31 (user's usage limit): painter4-free and spectral interrupted. Resume with subagent_resume on their session files (see ~/.pi/agent/sessions/--Users-USER-src-a-claude-paint-easel4-free--/ and ...-spectral--/), message: continue where you left off.
 - RESUMED 18:32: painter4-free and spectral.
+- Loop 0 (baseline): blind critic scoring 8 paintings (r2 x3, r3 x3, r4 green/near) shuffled as P1..P8; key in scratch judge0_key.txt.

@@ -209,11 +209,14 @@ pub fn view_methods<M: UserDataMethods<ViewU>>(m: &mut M) {
 
 // ---------------------------------------------------------------- pass options
 
+/// A pass's seed mask and its hard limit.
+pub type Restricted = (Option<Rc<Mask>>, Option<Arc<Mask>>);
+
 /// Apply `visible=`, `behind=` and `at=` to a pass: the mask it seeds
 /// strokes in (None: the whole canvas, for `glaze(nil, ...)`) and a hard
 /// limit no bristle may cross (strokes still overshoot the region's own
 /// edges, but never into what is in front). Unchanged if none is given.
-pub fn restrict(st: &S, o: &Table, m: Option<Rc<Mask>>) -> Result<(Option<Rc<Mask>>, Option<Arc<Mask>>)> {
+pub fn restrict(st: &S, o: &Table, m: Option<Rc<Mask>>) -> Result<Restricted> {
     let (vis, beh, at) = (o.get::<Value>("visible")?, o.get::<Value>("behind")?, o.get::<Value>("at")?);
     if vis.is_nil() && beh.is_nil() && at.is_nil() {
         return Ok((m, None));

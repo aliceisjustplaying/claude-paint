@@ -178,9 +178,9 @@ w = w:proxy(s, body.ellipsoid(s:p(-1.3, 10.5, 0), s:size(5, 4, 4.6)))
 w = w:proxy(s, body.block(s:p(0, 3, 0), s:size(0.5, 3, 0.5), s:m(0.2)))
 v = w:view()
 local sa = w:shadow_angle(OX, OY + 2) or 0
-local sh = (v:shadows() * v:land()):roughen(5, 18, 3, 3):soften(3)
+local sh = (v:shadows() * v:land()):roughen(7, 26, 3, 5):soften(5)
 work(sh, {hand="body", tool="filbert 3", length={5, 14}, coverage=3, angle=sa, angle_jitter=0.3,
-  color_over={shift={-0.065, -0.004, -0.018}}})
+  color_over={shift={-0.055, -0.004, -0.016}}})
 
 --@ chunk 16 · clock 40189.6328125
 wait(3*60)
@@ -322,7 +322,7 @@ print(#tufts, "tufts", n, "blades", k, "flowers")
 --@ chunk 22 · clock 42169.6328125
 local cn = noise{seed=93, octaves=3, period=26}
 crest1b = function(x) return crest1(x) + 1.4 * cn(x, 0) end
-local cut = mask(function(x, y) local c = crest1b(x); return (y < c + 0.6 and y > c - 22) and 1 or 0 end):soften(0.7)
+local cut = mask(function(x, y) local c = crest1b(x); return (y < c + 0.6 and y > c - 22 and x > 545) and 1 or 0 end):soften(0.7)
 work(cut, {hand="detail", tool="round 2", length={10, 26}, coverage=2.2, angle=0, medium=0.35, pal=skypal,
   color=function(x, y) return sample(x, crest1(x) - 26, 4) end})
 blend(cut:grow(2) * above(function(x) return crest1b(x) - 1 end), {angle=0})
@@ -459,3 +459,6 @@ for i = 1, 18 do
     for k = 1, 6 do ya:touch(x + randn(0, 2.2), y - h + randn(0, 0.9), {pressure=0.5}) end
   end
 end
+
+--@ chunk 26 · clock 43969.6328125
+wait(24*60); varnish{color="#e6d3a4", coats=0.3, vary=0.1}; relief()

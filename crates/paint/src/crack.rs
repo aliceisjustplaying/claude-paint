@@ -1250,7 +1250,7 @@ impl Canvas {
     /// finer than the crazing, as their mean haze where it is coarser.
     fn varnish_veil(&mut self, k: &Cracks, px: f32) {
         let f = self.f;
-        let patches = Fbm::new(k.seed as u32 ^ 0x81, 3, 90.0);
+        let patches = Fbm::new(k.seed as u32 ^ 0x81, 5, 120.0).with_persistence(0.6);
         let cell = VEIL_CELL;
         let scatter_w = 0.04; // mm: the lit edge zone of a microcrack
         let mean = (2.0 * scatter_w / cell).min(1.0);
@@ -1261,7 +1261,7 @@ impl Canvas {
             let gy = (y + f.y0) as f32 * px + 0.5 * px;
             for (x, p) in row.iter_mut().enumerate() {
                 let gx = (x + f.x0) as f32 * px + 0.5 * px;
-                let patch = crate::smoothstep(0.08, 0.4, patches.get(gx, gy)) * k.veil;
+                let patch = crate::smoothstep(0.0, 0.45, patches.get(gx, gy)) * k.veil;
                 if patch <= 0.0 {
                     continue;
                 }
@@ -1284,8 +1284,10 @@ impl Canvas {
 const SLOT: f32 = 0.35;
 /// Spacing of varnish microcracks, mm.
 const VEIL_CELL: f32 = 0.3;
-/// How far a fully crazed varnish patch veils the paint toward milky gray.
-const VEIL: f32 = 0.5;
+/// How far a lit microcrack edge veils the paint toward milky gray; a fully
+/// crazed patch averages ~1.3% (a surface bloom: a percent or two of
+/// diffuse light, visible over darks, lost over lights).
+const VEIL: f32 = 0.05;
 
 /// Distance (in cells) from (x, y) to the nearest edge of a jittered
 /// Voronoi tessellation (half the gap between the nearest two sites).

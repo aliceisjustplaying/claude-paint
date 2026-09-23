@@ -98,11 +98,11 @@ impl Lead {
             // clay-rich hard leads lay a pale silvery gray; soft ones a dark
             // gray (graphite is never black: its sheen keeps it gray)
             flake: 0.30 - 0.25 * t.powf(0.8),
-            rate: (0.3 * 1.22f32.powf(s)).min(0.9),
+            rate: (0.8 * 1.1f32.powf(s)).min(1.0),
             cap: (0.64 + 0.035 * s).clamp(0.35, 0.92),
             point_mm: 0.32 + 0.04 * s.max(0.0),
             blunt_mm: 4000.0 * 0.72f32.powf(s),
-            bite_um: 40.0 * 1.1f32.powf(s),
+            bite_um: 90.0 * 1.1f32.powf(s),
             crumble: 0.2 + 0.03 * s.max(0.0),
         }
     }
@@ -115,7 +115,7 @@ impl Lead {
     /// Natural black chalk: carbon black in clay. Deep, matte, broad and
     /// crumbly; it wears fast.
     pub fn chalk() -> Lead {
-        Lead { medium: Medium::Chalk, soft: 6.0, flake: 0.022, rate: 0.75, cap: 0.93, point_mm: 0.9, blunt_mm: 350.0, bite_um: 60.0, crumble: 0.5 }
+        Lead { medium: Medium::Chalk, soft: 6.0, flake: 0.022, rate: 1.0, cap: 0.93, point_mm: 0.9, blunt_mm: 350.0, bite_um: 150.0, crumble: 0.5 }
     }
 
     /// Width of the line (mm) after `worn_mm` of drawing since sharpening.
@@ -489,6 +489,11 @@ impl Canvas {
         // how far each pixel lies below the tops the point rides on (µm)
         let depths: Vec<f32> = hits.iter().map(|&(i, _, _)| top(i) - height[i]).collect();
         let lift = lead.lift();
+        // a pixel coarser than the weave's threads holds tops of its own
+        // (its averaged height overstates how far the point is from them)
+        // and averages many crumbs of the deposit
+        let sub = (0.15 / self.px_mm()).min(1.0);
+        let (depth_k, crumble) = (sub.powf(0.6), lead.crumble * sub.sqrt());
         self.drawing_mut();
         let film = std::mem::take(&mut self.film);
         let wetv: Vec<bool> = hits.iter().map(|&(i, _, _)| self.wet.vol[i] > 1e-5).collect();
@@ -504,12 +509,12 @@ impl Canvas {
                     // bare, or painted over since: a new drawing on top
                     *c = Cell { film: film[i], ..Cell::default() };
                 }
-                let depth = depths[k];
-                let bite = lead.bite_um * (0.08 + 0.92 * p.powf(1.5));
+                let depth = depths[k] * depth_k;
+                let bite = lead.bite_um * p.powf(1.2) + 3.0;
                 let contact = (-depth.max(0.0) / bite).exp();
                 let (gx, gy) = ((i % f.w + f.x0) as i64, (i / f.w + f.y0) as i64);
-                let grain = 1.0 - lead.crumble * hash2(gx, gy, seed);
-                let dep = (lead.rate * p.powf(0.7) * contact * cov * grain).clamp(0.0, 1.0);
+                let grain = 1.0 - crumble * hash2(gx, gy, seed);
+                let dep = (lead.rate * contact * cov * grain).clamp(0.0, 1.0);
                 let cap = lead.cap * (0.55 + 0.45 * p);
                 let da = (cap - c.a).max(0.0) * dep;
                 if da <= 0.0 {

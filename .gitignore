@@ -1,2 +1,4 @@
 target/
 out/*.png
+out/*.ckpt
+out/*.ckpt.part

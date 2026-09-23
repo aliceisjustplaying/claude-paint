@@ -8,6 +8,14 @@ impl Rng {
         Rng(seed ^ 0x9E37_79B9_7F4A_7C15)
     }
 
+    /// The generator's whole state (to checkpoint it) and back.
+    pub fn state(&self) -> u64 {
+        self.0
+    }
+    pub fn from_state(state: u64) -> Self {
+        Rng(state)
+    }
+
     pub fn next_u64(&mut self) -> u64 {
         self.0 = self.0.wrapping_add(0x9E37_79B9_7F4A_7C15);
         let mut z = self.0;

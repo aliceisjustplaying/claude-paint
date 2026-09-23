@@ -131,11 +131,14 @@ impl Palette {
     /// The closest mixture of up to three tubes to `target` (linear RGB).
     pub fn mix(&self, target: Rgb) -> Mixture {
         let lab = to_oklab(target);
-        let key = [(lab[0] * 400.0) as i32, (lab[1] * 400.0) as i32, (lab[2] * 400.0) as i32];
+        let key = lab.map(|v| (v * 400.0).floor() as i32);
         if let Some(m) = self.cache.lock().unwrap().get(&key) {
             return m.clone();
         }
-        let m = self.search(lab);
+        // search for the bucket's center, so the answer depends only on the
+        // key and not on which color happened to fill the bucket first (a
+        // resumed or cropped run must mix what an uninterrupted one does)
+        let m = self.search(key.map(|k| (k as f32 + 0.5) / 400.0));
         self.cache.lock().unwrap().insert(key, m.clone());
         m
     }

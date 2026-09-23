@@ -10,9 +10,6 @@ fn main() {
     let o = paintings::run::Run::new("study_ground");
     let st = Style::friedrich();
     let mut c = st.prepare(o.width, 2.0, o.seed);
-    if o.stage(&mut c, "ground") {
-        return;
-    }
     let h = c.height();
     // band 2: thin fluid blue, laid with a soft filbert in long strokes
     let fr = c.frame();

@@ -7,6 +7,7 @@
 //! Colors are linear-light RGB reflectances in 0..1.
 
 pub mod canvas;
+pub mod checkpoint;
 pub mod color;
 pub mod crack;
 pub mod mask;
@@ -25,7 +26,7 @@ pub mod style;
 pub mod hand;
 pub mod surface;
 
-pub use canvas::{Canvas, Frame};
+pub use canvas::{Canvas, Crop, Frame, set_crop};
 pub use crack::Cracks;
 pub use color::{Mix, Rgb, gradient, hex};
 pub use tree::Oak;

@@ -190,11 +190,13 @@ impl Style {
 /// A brushed top ground, put on as a primer brushes out lead white in oil
 /// (see notes/loop2_grain.md): the paste is first spread with a broad hog
 /// brush in crossing strokes whose direction wanders over the canvas, then
-/// laid off while wet with light passes of the unloaded brush, mostly across
-/// but by hand, which level the ridges the spreading left at the stroke
-/// edges and leave only fine, broken bristle striations. (Before loop 2 the
-/// paste went on in long, full, parallel strokes that set with their edge
-/// ridges a few mm apart: a horizontal wood-grain under every thin sky.)
+/// laid off while wet with light passes of the unloaded brush held low, which
+/// skim rather than plough, level the spreading's stroke edges and leave
+/// only fine, broken bristle striations. (Before loop 2 the paste went on in
+/// long, full, parallel strokes that set with their edge ridges a few mm
+/// apart: a horizontal wood-grain under every thin sky. Ploughed ridges
+/// were tall, sharp crests that thin sky paint drained off, leaving
+/// one-pixel lines of bare ground.)
 fn brush_ground(c: &mut Canvas, g: &Ground, s: u64) {
     let all = Mask::from_fn(c.frame(), |_, _| 1.0);
     let hog = Tool { lay: 1.2, ragged: 0.2, ..Tool::hog_flat(40.0) };

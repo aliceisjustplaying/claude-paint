@@ -1,5 +1,5 @@
--- easel session "easel4_near": a painting replayed chunk by chunk.
---   easel run paintings/lua/easel4_near.lua [--width 3200]
+-- easel session "l1_near": a painting replayed chunk by chunk.
+--   easel run paintings/lua/l1_near.lua [--width 3200]
 -- Each "--@ chunk" line starts one chunk as it was run at the easel (clock = painting minutes).
 
 --@ chunk 1 · clock 0
@@ -238,29 +238,54 @@ print(lich:area())
 --@ chunk 11 · clock 53965.13671875
 dry()
 local f = v.form
--- the first snow lying on the top: wherever the surface faces up, broken by the grain of the stone
-local lie = noise{seed=61, period=14, warp={30, 8}}
-cap = stonem * f:mask(function(s) return smoothstep(-0.55, -0.8, s.n[2]) end) * mask(function(x, y) return smoothstep(0.3, 0.55, lie:at01(x, y)) end)
-cap = cap:roughen(2, 8, 62, 0.6) * stonem
-work(cap, {hand="body", tool="filbert 3", length={4, 12}, coverage=3.4, clip=cap, medium=0.12, angle=0.05, angle_jitter=0.3,
-  color=function(x, y) local val = f:value(x, y) or 0.5; return mix("#b4b6c4", "#f3ebd8", smoothstep(0.35, 0.75, val)) end})
--- snow drifted against the foot of both stones: a soft irregular lip hiding where rock meets ground
-local drift = outline{{170,496},{210,484},{250,492},{300,480},{350,490},{400,486},{450,494},{500,483},{550,490},{590,480},{612,492}, open=true, char="soft", lobe=12, amount=1.2, seed=63}
-local drift2 = outline{{605,552},{640,543},{690,549},{725,542},{752,553}, open=true, char="soft", lobe=8, amount=1.0, seed=64}
-local p1, p2 = drift:path(1), drift2:path(1)
-local w1, w2 = {}, {}
-for k = 1, #p1 do w1[k] = 16 + 8 * math.sin(k * 1.7) end
-for k = 1, #p2 do w2[k] = 12 + 5 * math.sin(k * 2.3) end
-local sh1, sh2 = {}, {}
-for k, p in ipairs(p1) do sh1[k] = {p[1], p[2] + 9} end
-for k, p in ipairs(p2) do sh2[k] = {p[1], p[2] + 7} end
-footd = (ribbon(sh1, w1) + ribbon(sh2, w2)):roughen(2.5, 10, 66, 1.5)
-local tw = noise{seed=65, period=25}
-work(footd, {hand="body", tool="filbert 3", length={5, 14}, coverage=3.0, clip=footd, medium=0.15, angle=0.02,
+-- the first snow lying on the top: a thin continuous sheet where the surface faces up,
+-- torn open only where the grain of the stone breaks through
+local lie = noise{seed=61, period=22, warp={30, 8}}
+cap = stonem * f:mask(function(s) return smoothstep(-0.5, -0.8, s.n[2]) end) * mask(function(x, y) return smoothstep(0.18, 0.42, lie:at01(x, y)) end)
+cap = cap:roughen(2, 10, 62, 0.8) * stonem
+work(cap, {hand="body", tool="filbert 4", length={6, 16}, coverage=2.6, clip=cap, medium=0.32, load=0.6, angle=0.05, angle_jitter=0.25,
+  color=function(x, y) local val = f:value(x, y) or 0.5; return mix("#b0b3c2", "#efe7d5", smoothstep(0.35, 0.75, val)) end})
+blend(cap, {angle=0.05, clip=cap})
+-- snow drifted against the foot of both stones: the field itself banking up the stone,
+-- thin paint that fades into the snow in front and creeps up the rock in uneven tongues
+local m = v:visible("bodies")
+FOOT = {}
+for x = 180, 760, 2 do
+  local b
+  for y = 600, 300, -1 do if m:at(x, y) > 0.5 then b = y; break end end
+  FOOT[x] = b
+end
+function footat(x)
+  local x0 = 2 * (x // 2)
+  local a, b = FOOT[x0], FOOT[x0 + 2]
+  if not a or not b then return nil end
+  return a + (b - a) * (x - x0) / 2
+end
+local hn = noise{seed=63, period=70}
+local hn2 = noise{seed=64, period=11}
+local fn = noise{seed=65, period=60}
+function drifth(x) return math.max(0, 3 + 26 * hn(x, 0) + 4 * hn2(x, 0) - (x > 606 and 4 or 0)) end
+local function reach(x) return 12 + 10 * fn:at01(x, 0) end
+footd = mask(function(x, y)
+  local b = footat(x); if not b then return 0 end
+  local top = b - drifth(x)
+  return smoothstep(top - 1, top + 1.5, y) * (1 - smoothstep(b + 1, b + 5, y)) * smoothstep(0.5, 2.5, drifth(x))
+end):roughen(1.6, 7, 66, 0.9)
+local cliptop = mask(function(x, y) local b = footat(x); if not b then return 1 end; return smoothstep(b - drifth(x) - 1, b - drifth(x) + 1.5, y) end):roughen(1.6, 7, 66, 0.9)
+local tw = noise{seed=67, period=25}
+work(footd, {hand="body", tool="flat 6", length={10, 24}, coverage=3.6, medium=0.3, load=0.8, angle=0.02, hug=false, clip=cliptop,
   color=function(x, y)
-    local c = sample(x, y + 26, 4)
-    return shift(c, 0.03 + 0.015 * tw(x, y), 0, 0.004)
+    local b = footat(x) or y
+    local shade = x < 606 and smoothstep(546, 598, x) or (0.5 + 0.3 * smoothstep(630, 700, x))
+    local top = mix("#eee6d4", "#a7abbe", shade)
+    local c = mix(top, shift(top, -0.05, 0, -0.018), smoothstep(b - 3, b + 8, y))
+    local field = shift(sample(x, b + 9, 3), 0.015, 0, 0)
+    c = mix(c, field, 0.55)
+    return shift(c, 0.012 * tw(x, y), 0, 0)
   end})
+blend(footd, {angle=0.02, clip=cliptop})
+blend(footd, {angle=0.1, clip=cliptop, coverage=2})
+print(cap:area(), footd:area())
 
 --@ chunk 12 · clock 113222.265625
 wait(24*60)
@@ -313,10 +338,21 @@ local w2 = w:proxy(sp, body.ellipsoid(sp:p(0, 1.6, 0), sp:size(0.75, 1.6, 0.75))
 local st = w:spot(125, 712)
 w2 = w2:proxy(st, body.block(st:p(0, 0.55, 0), st:size(0.36, 1.1, 0.36), st:m(0.05)))
 vs = w2:view()
-glaze(vs:cast_shadow{soft=2.2} * -stm * -v:visible("bodies"), {color="#6a7090", coats=0.32, view=vs})
-glaze(vs:contact_shadow{reach=0.18} * -stm, {color="#4a4a58", coats=0.32, view=vs})
+-- a shadow on snow is not a flat stripe: it deepens on the rises that face the sun, pales in the
+-- troughs already turned from it, and its edge is scalloped by the drifts it crosses
+local ang = w:shadow_angle(500, 640)
+local ripple = noise{seed=141, period=22, stretch={0.02, 4}}
+local slow = noise{seed=142, period=110}
+local mod = mask(function(x, y)
+  local p = v:at(x, y)
+  local lit = (p and p.what == "ground" and p.shade) and p.shade.value or 0.4
+  return clamp(0.35 + 0.5 * smoothstep(0.3, 0.5, lit) + 0.3 * ripple(x, y) + 0.2 * slow(x, y), 0.15, 1.1)
+end)
+local cs = vs:cast_shadow{soft=2.2}
+glaze(cs * mod * -stm * -v:visible("bodies"), {color="#6a7090", coats=0.36, view=vs})
+glaze(vs:contact_shadow{reach=0.18} * -stm * -footd:grow(2), {color="#4a4a58", coats=0.32, view=vs})
 
---@ chunk 15 · clock 138322.21484375
+--@ chunk 15 · clock 134372.8359375
 -- dry grass standing through the first snow: straw, rust and gray, in upturning strokes laid last
 local patch = noise{seed=91, period=90}
 local keep = below(function(x) return 372 end) * mask(function(x, y) return smoothstep(0.5, 0.7, patch:at01(x, y)) end)
@@ -336,7 +372,7 @@ for i, t in ipairs(tufts) do
 end
 print(#tufts, "tufts", n, "blades")
 
---@ chunk 16 · clock 138322.21484375
+--@ chunk 16 · clock 134372.8359375
 wait(3*60)
 -- the pale blotches low in the wood: darkened back into the trees
 local blot = woodm * rect(0, 280, 680, 40) * mask(function(x, y) return smoothstep(0.35, 0.55, sample(x, y, 1).L) end):grow(2)
@@ -389,11 +425,11 @@ for i = 1, 9 do
   end
 end
 
---@ chunk 17 · clock 138502.21484375
+--@ chunk 17 · clock 134552.8359375
 local sd = mask(function(x, y) return smoothstep(60, 90, x) * smoothstep(190, 160, x) * smoothstep(750, 725, y) * smoothstep(680, 700, y) end) - stm:shrink(1)
 blend(sd, {angle=0.03, clip=-stm})
 
---@ chunk 18 · clock 138502.21484375
+--@ chunk 18 · clock 134552.8359375
 dry()
 local lie = noise{seed=111, period=6}
 local ytops = mask(function(x, y) return ysm:at(x, y) * (1 - ysm:at(x, y - 2.5)) end) * mask(function(x, y) return smoothstep(0.3, 0.6, lie:at01(x, y)) * (0.35 + 0.65 * smoothstep(760, 660, x)) end)
@@ -401,22 +437,46 @@ stipple(ytops, {width=1.5, color=function(x, y) return mix("#f0e8d6", "#aeb0c0",
   coverage=2.2, pressure={0.4, 0.8}, drag={1, 0}, aim=false, medium=0.15, fade=0})
 print(ytops:area())
 
---@ chunk 19 · clock 157809.263671875
--- retouch: the snow lips at the stones' feet scumbled clean; the small stone's lies in the spruce's shadow
+--@ chunk 19 · clock 154137.9609375
+-- retouch: the hollow in front of the big stone lit again, a thin veil only
 local tw = noise{seed=121, period=18}
-work(footd:shrink(0.5), {hand="body", tool="filbert 3", length={5, 14}, coverage=3.4, medium=0.2, clip=footd, angle=0.02,
-  color_over=function(x, y, under)
-    local shade = math.max(smoothstep(548, 600, x) * (1 - smoothstep(600, 612, x)), y > 525 and (0.55 + 0.35 * smoothstep(630, 700, x)) or 0)
-    local snow = mix("#e9e1cf", "#a4a8bb", shade)
-    return shift(mix(under, snow, 0.8), 0.015 * tw(x, y), 0, 0)
-  end})
--- the hollow in front of the big stone lit again: only a thin crease of shade stays under the lip
-local lipbot = function(x) return 505 + 4 * math.sin(x / 23) end
-local front = mask(function(x, y) return smoothstep(lipbot(x) + 3, lipbot(x) + 12, y) * smoothstep(572, 530, y) * smoothstep(180, 225, x) * smoothstep(600, 520, x) end)
-work(front, {hand="body", tool="filbert 4", length={8, 22}, coverage=3.4, medium=0.2, angle=0.03, hug=false,
-  color_over=function(x, y, under) return shift(mix(under, "#e6ddca", 0.7), 0.012 * tw(x, y), 0, 0) end})
+local lipbot = function(x) return (footat(x) or 505) + 10 end
+local front = mask(function(x, y) return smoothstep(lipbot(x) + 3, lipbot(x) + 14, y) * smoothstep(572, 530, y) * smoothstep(180, 225, x) * smoothstep(600, 520, x) end)
+work(front, {hand="body", tool="filbert 4", length={8, 22}, coverage=2.2, medium=0.4, load=0.5, angle=0.03, hug=false,
+  color_over=function(x, y, under) return shift(mix(under, "#e6ddca", 0.5), 0.012 * tw(x, y), 0, 0) end})
+blend(front, {angle=0.02})
 
-blend(front + footd, {angle=0.02})
+--@ chunk 20 · clock 154137.9609375
+-- the wood's interior drawn: a back row of spruces a step grayer and cooler than the edge trees,
+-- their tiers catching a little sky light, and the trunks standing in the snow at the foot
+local nostone = -v:visible("bodies"):grow(3)
+local inside = woodm:shrink(5) * below(function(x) return 60 end) * above(function(x) return 338 end) * nostone
+local xs = uneven(22, 10, 560, 0.7, 0.45, 9)
+local back = {}
+for k, ex in ipairs(xs) do
+  local tp = 70 + 0.42 * ex + rand(-30, 40)
+  back[#back + 1] = spruce{x=ex, top=tp, base=352, halfw=(352 - tp) * rand(0.2, 0.3), seed=150 + k, droop=rand(0.8, 1.2), lean=randn(0, 0.01)}
+end
+local rb = brush("rigger", 0.9)
+local n = 0
+for k, e in ipairs(back) do
+  rb:reload(k % 2 == 0 and "#2d3834" or "#313c38", 0.6)
+  for _, b in ipairs(e.branches) do
+    if rand() < 0.6 then
+    n = n + 1
+    if n % 5 == 0 then rb:reload(k % 2 == 0 and "#2d3834" or "#333e3a", 0.55) end
+    rb:stroke(b.pts, {pressure={0.45, 0.05}, ramps={0.05, 0.6}, clip=inside})
+    end
+  end
+end
+-- trunks at the foot of the wood, between the lowest boughs
+local tb = brush("round", 1.6)
+for i, tx in ipairs(uneven(26, 8, 600, 0.7, 0.4, 13)) do
+  if i % 4 == 1 then tb:reload(i % 8 == 1 and "#2a2622" or "#3b3630", 0.8) end
+  local y0 = 318 + rand(-12, 10)
+  tb:stroke({{tx, y0}, {tx + randn(0, 0.6), 349}}, {pressure={0.3, 0.8}, ramps={0.3, 0.1}, clip=woodm * below(function(x) return 300 end) * above(function(x) return 352 end) * nostone})
+end
+print(n, "back branches")
 
---@ chunk 20 · clock 157809.263671875
+--@ chunk 21 · clock 154137.9609375
 wait(24*60); varnish{color="#e6d3a4", coats=0.3, vary=0.1}; relief()

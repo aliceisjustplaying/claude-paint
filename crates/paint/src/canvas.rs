@@ -57,6 +57,12 @@ impl Frame {
         let py = (((y * self.scale) as isize) - self.y0 as isize).clamp(0, self.h as isize - 1) as usize;
         py * self.w + px
     }
+    /// True if the point (units) falls on a pixel this buffer holds.
+    #[inline]
+    pub fn holds(&self, x: f32, y: f32) -> bool {
+        let (px, py) = ((x * self.scale).floor(), (y * self.scale).floor());
+        px >= self.x0 as f32 && py >= self.y0 as f32 && px < (self.x0 + self.w) as f32 && py < (self.y0 + self.h) as f32
+    }
     /// Units of the center of buffer column `x` / row `y`.
     #[inline]
     pub fn ux(&self, x: usize) -> f32 {
@@ -229,7 +235,7 @@ impl Canvas {
             .collect();
         let sv = vec![stiff; w * h];
         let t = self.settle((0, 0, w, h), &add, &sv);
-        let pig = Pigment::with_hiding(color, hiding);
+        let pig = Pigment::masstone_hiding(color, hiding);
         self.px.par_iter_mut().zip(&t).for_each(|(p, &ti)| *p = pig.over(*p, ti / COAT_UM));
         self.film.par_iter_mut().zip(&t).for_each(|(f, &ti)| *f += ti / COAT_UM);
     }

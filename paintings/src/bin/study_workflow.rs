@@ -36,7 +36,7 @@ fn paint(width: usize, crop: Option<Crop>, seed: u64) -> Canvas {
     let mut rng = Rng::new(seed);
     for _ in 0..40 {
         let x = rng.range(0.0, w);
-        paintings::trees::spruce(&mut c, (x, ridge(x) + 2.0), rng.range(12.0, 30.0), hex("#1d2024"), rng.next_u64());
+        paintings::trees::spruce(&mut c, (x, ridge(x) + 2.0), rng.range(12.0, 30.0), Paint { hiding: 0.92, stiff: 0.6, ..st.palette.paint(hex("#1d2024"), 0.0) }, rng.next_u64());
     }
     let mut rig = Held::new(st.line_tool(0.5), 5);
     for _ in 0..120 {

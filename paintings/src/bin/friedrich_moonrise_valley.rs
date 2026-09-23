@@ -12,7 +12,7 @@
 //!
 //! Every mark is a simulated brush in wet paint or a Kubelka–Munk layer.
 
-use paint::{Fbm, Gesture, Held, Mask, Mix, Oak, Orient, Paint, Rgb, Rng, Style, Tool, gradient, hex, smoothstep};
+use paint::{Fbm, Gesture, Habit, Held, Mask, Mix, Orient, Paint, Rgb, Rng, Style, Tool, gradient, hex, smoothstep};
 use paintings::run::Finish;
 use paintings::{figures, trees};
 
@@ -164,7 +164,7 @@ fn main() {
             let x = rng.range(0.0, w);
             let _ = i;
             let hgt = rng.range(5.0, 11.0);
-            trees::spruce(&mut c, (x, ridge2(x) + hgt * 0.35), hgt, tube_mix("#353846"), rng.next_u64());
+            trees::spruce(&mut c, (x, ridge2(x) + hgt * 0.35), hgt, Paint { hiding: 0.92, stiff: 0.6, ..st.palette.paint(hex("#353846"), 0.0) }, rng.next_u64());
         }
     }
 
@@ -222,7 +222,7 @@ fn main() {
             let depth = ((y - mist_top) / 90.0).clamp(0.0, 1.0);
             let hgt = 26.0 + 40.0 * depth + rng.range(-6.0, 10.0);
             let col = gradient(&[(0.0, hex("#565a62")), (1.0, hex("#23272a"))], depth, Mix::Pigment);
-            trees::spruce(&mut c, (*x, *y), hgt, col, rng.next_u64());
+            trees::spruce(&mut c, (*x, *y), hgt, Paint { hiding: 0.92, stiff: 0.6, ..st.palette.paint(col, 0.0) }, rng.next_u64());
         }
         // a church in the mist, far right: tower and spire, two sable strokes
         let (cx, cy) = (w * 0.86, mist_top + 10.0);
@@ -286,14 +286,17 @@ fn main() {
     }
 
     if o.stage("oak", &mut c, &mut rng) {
-        // ---- the dead oak on the ledge, reaching out over the valley
-        let mut oak = Oak::new((115.0, ledge(115.0) + 3.0), h * 0.62, o.seed * 7 + 3);
-        oak.gnarl = 0.85;
-        oak.broken = 0.3;
-        oak.lean = 0.12;
-        oak.depth = 5;
-        oak.roots = 3;
-        oak.paint(&mut c, tube_mix("#1f1a16"), Some(tube_mix("#3a322b")), o.seed * 100 + 40);
+        // ---- the dead oak on the ledge, reaching out over the valley: grown
+        // (the engine knows how oaks grow and die), painted limb by limb from
+        // the trunk out, light from the afterglow on the right
+        let oak = Habit { lean: 0.12, decay: 0.45, ..Habit::dead_oak() }.grow((115.0, ledge(115.0) + 3.0), h * 0.62, o.seed * 7 + 3);
+        let bark = trees::Bark {
+            dark: st.palette.paint(hex("#1f1a16"), 0.25),
+            dead: Some(st.palette.paint(hex("#26211c"), 0.25)),
+            light: Some(st.palette.paint(hex("#4a4034"), 0.35)),
+            wood: Some(st.palette.paint(hex("#5d5244"), 0.3)),
+        };
+        trees::tree(&mut c, &oak, &bark, &trees::TreeHand { light_from: (0.7, -0.7), ..Default::default() }, o.seed * 100 + 40);
         c.dry();
     }
 
@@ -301,8 +304,12 @@ fn main() {
         // ---- the two companions, near the edge, looking toward the moon
         let fh = h * 0.12;
         let bx = 330.0;
-        let sh = figures::man_in_cape(&mut c, (bx + 26.0, ledge(bx + 26.0) + 1.5), fh, tube_mix("#1d201b"), tube_mix("#110f0d"), tube_mix("#221b15"), Some(tube_mix("#b9a582")), o.seed * 100 + 50);
-        figures::youth_in_frock(&mut c, (bx, ledge(bx) - 1.0), fh * 0.98, tube_mix("#1e221c"), tube_mix("#110f0d"), tube_mix("#2a2118"), tube_mix("#b8b09c"), Some(sh), Some(tube_mix("#b9a582")), o.seed * 100 + 51);
+        // paints mixed on the palette as the old code did: stiff body color for
+        // the clothes, a lean light for the rim
+        let body = |hx: &str| Paint { hiding: 0.97, stiff: 1.0, ..st.palette.paint(hex(hx), 0.0) };
+        let rim = st.palette.paint(hex("#b9a582"), 0.2);
+        let sh = figures::man_in_cape(&mut c, (bx + 26.0, ledge(bx + 26.0) + 1.5), fh, body("#1d201b"), body("#110f0d"), body("#221b15"), Some(rim), o.seed * 100 + 50);
+        figures::youth_in_frock(&mut c, (bx, ledge(bx) - 1.0), fh * 0.98, body("#1e221c"), body("#110f0d"), body("#2a2118"), body("#b8b09c"), Some(sh), Some(rim), o.seed * 100 + 51);
     }
 
     // ---- finish: clear aged varnish, cracks, the surface in raking light

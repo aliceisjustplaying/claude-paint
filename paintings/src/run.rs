@@ -349,14 +349,24 @@ impl Run {
         std::fs::rename(&tmp, path)
     }
 
-    /// Finish the painting (see `Finish`) and save it. Ends the last stage.
+    /// End the last stage (for programs that finish without `finish`):
+    /// its checkpoint, `--stop`, and the check that `--resume` found its stage.
     #[track_caller]
-    pub fn finish(&self, c: &mut Canvas, f: &Finish) {
-        let loc = Location::caller();
+    pub fn end(&self, c: &mut Canvas) {
+        self.end_at(c, Location::caller());
+    }
+
+    fn end_at(&self, c: &mut Canvas, loc: &Location) {
         self.end_stage(c, None, loc);
         if let Some((target, _)) = &self.st.borrow().pending {
             die(&format!("--resume {target}: this painting has no stage by that name (stages: {})", self.st.borrow().names.join(", ")));
         }
+    }
+
+    /// Finish the painting (see `Finish`) and save it. Ends the last stage.
+    #[track_caller]
+    pub fn finish(&self, c: &mut Canvas, f: &Finish) {
+        self.end_at(c, Location::caller());
         self.st.borrow_mut().current = Some(("finish".into(), true));
         c.dry();
         let var = Fbm::new(self.seed as u32 + 98, 3, 400.0);

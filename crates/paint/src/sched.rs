@@ -48,13 +48,24 @@ pub(crate) fn run_ordered<T: Send, W: Fn(usize) -> T + Sync>(order: &[usize], re
     let r: Vec<Rect> = order.iter().map(|&i| rects[i].expect("tile without footprint")).collect();
     let mut succ = vec![Vec::new(); n];
     let mut count = vec![0usize; n];
+    // rects no wider (taller) than cw (ch) can only overlap if their corners
+    // lie in neighboring cells of that size: look only there
+    let cw = r.iter().map(|q| q.2 - q.0).max().unwrap_or(1).max(1);
+    let ch = r.iter().map(|q| q.3 - q.1).max().unwrap_or(1).max(1);
+    let mut seen: std::collections::HashMap<(usize, usize), Vec<usize>> = std::collections::HashMap::new();
     for j in 0..n {
-        for i in 0..j {
-            if overlaps(r[i], r[j]) {
-                succ[i].push(j);
-                count[j] += 1;
+        let (cx, cy) = (r[j].0 / cw, r[j].1 / ch);
+        for gy in cy.saturating_sub(1)..=cy + 1 {
+            for gx in cx.saturating_sub(1)..=cx + 1 {
+                for &i in seen.get(&(gx, gy)).map_or(&[][..], |v| v.as_slice()) {
+                    if overlaps(r[i], r[j]) {
+                        succ[i].push(j);
+                        count[j] += 1;
+                    }
+                }
             }
         }
+        seen.entry((cx, cy)).or_default().push(j);
     }
     let ctx = Ctx {
         order,

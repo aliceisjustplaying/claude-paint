@@ -320,3 +320,172 @@ for _, t in ipairs(tufts) do
   end
 end
 print(#tufts, "tufts", n, "blades", k, "flowers")
+
+--@ chunk 17 · clock 9300
+-- the village farther into the morning haze
+glaze(VILLAGE:grow(1.5):soften(1), {color=sk:airlight(706), coats=0.35, pigment="semi"})
+-- single field trees and their shadows in the near valley, right
+local tb = brush("round", 1.6)
+local trees = {{590, 420}, {602, 424}, {842, 452}, {905, 440}, {760, 402}, {690, 385}, {955, 470}, {520, 398}, {880, 404}, {866, 407}, {728, 362}, {415, 404}, {60, 395}, {98, 402}}
+for i, t in ipairs(trees) do
+  local x, y = t[1], t[2]
+  local r = (1.5 + (y - 340) * 0.07) * rand(0.75, 1.3)
+  local sh = ellipse(x + r*1.3, y + 1, r*1.1, r*0.35)
+  work(sh, {hand="detail", tool="round 1.2", length={2, 4}, coverage=2, angle=0, color_over={shift={-0.08, -0.005, -0.015}}, medium=0.3})
+  local cr = ellipse(x, y - r*0.9, r*0.85, r*0.95):roughen(r*0.2, r*0.7, i, 0.5)
+  work(cr, {hand="hatch", tool="round 1.2", length={1.5, 3}, coverage=2.6, angle=function(px,py) return 2.2*fnz(px*5,py*5) end, color="#34462a", medium=0.25})
+  local lit = cr * ellipse(x - r*0.35, y - r*1.25, r*0.55, r*0.55)
+  work(lit, {hand="detail", tool="round 1", length={1, 2.5}, coverage=2, angle=0.5, color="#62783c", medium=0.25})
+end
+-- a pale lane winding down to the river
+local lp = {}
+for _, c in ipairs({{296, 460}, {322, 440}, {312, 418}, {340, 398}, {400, 381}, {446, 366}, {478, 354}}) do
+  local p = w:to_ground(c[1], c[2]); lp[#lp+1] = {p[1], p[3]}
+end
+local lane = w:ribbon(lp, 3.5)
+work(lane - WOOD, {hand="detail", tool="round 1.2", length={3, 8}, coverage=2.4, angle=0, color=function(x, y)
+  local p = w:to_ground(x, y); local Z = p and p[3] or 800; return mix("#b7a87e", sk:airlight(x), w:aerial(Z)*0.8) end, medium=0.25})
+
+--@ chunk 18 · clock 50904.140625
+wait(12*60)
+-- the lane: darker, greener, less even
+local lp = {}
+for _, c in ipairs({{296, 460}, {322, 440}, {312, 418}, {340, 398}, {400, 381}, {446, 366}, {478, 354}}) do
+  local p = w:to_ground(c[1], c[2]); lp[#lp+1] = {p[1], p[3]}
+end
+LANE = w:ribbon(lp, 4.5)
+work(LANE - WOOD, {hand="glaze", tool="round 2", length={3, 8}, coverage=2, angle=0, medium=0.7, hug=false,
+  color_over={shift={-0.08, -0.012, -0.004}}})
+-- the stone: a warmer, darker granite
+work(STONE, {hand="glaze", tool="round 2", length={3, 8}, coverage=2.2, angle=0.3, medium=0.75, color_over={shift={-0.07, 0.002, 0.008}}})
+-- fine grass on the brow around the figure and the stone
+local g = brush("rigger", 0.5)
+local brow = (HILL * rect(170, 466, 400, 50)) - STONE - FIG
+local gn = noise{seed=61, period=20}
+for i = 1, 900 do
+  local x, y = rand(170, 570), rand(470, 516)
+  if brow:at(x, y) > 0.5 then
+    if i % 12 == 1 then g:reload(({"#7f8f40", "#5c7032", "#95a050", "#4a5c2c"})[1 + (i // 12) % 4], 0.6) end
+    local h = 2 + (y - 466) * 0.12 + rand(0, 2)
+    local lean = randn(0.1, 0.25)
+    g:stroke({{x, y}, {x + lean*h*0.5, y - h*0.55}, {x + lean*h, y - h}}, {pressure={0.4, 0}, ramps={0.05, 0.7}})
+  end
+end
+-- a stand of tall seeding grass at the lower left
+local st = brush("rigger", 0.8)
+for i = 1, 70 do
+  local x = 20 + rand(0, 150) + 30*math.sin(i)
+  local y = 714 + rand(-8, 10)
+  local h = rand(70, 150)
+  local lean = randn(0.15, 0.15)
+  local tip = {x + lean*h, y - h}
+  if i % 8 == 1 then st:reload(({"#8e9448", "#6f7c3a", "#a6a061", "#58683a"})[1 + (i // 8) % 4], 0.8) end
+  st:stroke({{x, y}, {x + lean*h*0.4, y - h*0.5}, tip}, {pressure={0.55, 0.05}, ramps={0.05, 0.7}})
+  if i % 3 == 0 then
+    local hb = brush("round", 1.1); hb:load(({"#b9a86a", "#9a8f55", "#c7b884"})[1 + i % 3], 0.8)
+    for j = 0, 5 do
+      local t = j / 6
+      hb:touch(tip[1] - lean*h*0.12*t + randn(0, 1.2), tip[2] + h*0.12*t, {pressure=0.45, drag={0.2, 1}, angle=1.4})
+    end
+  end
+end
+-- a thistle at the lower right
+local tx, ty = 846, 714
+local stem = brush("round", 1.8); stem:load("#56643a", 0.9)
+local heads = {}
+for _, s in ipairs({{{tx, ty}, {tx + 4, ty - 60}, {tx - 2, ty - 120}}, {{tx + 3, ty - 50}, {tx + 18, ty - 84}, {tx + 26, ty - 106}}, {{tx + 1, ty - 80}, {tx - 16, ty - 98}, {tx - 24, ty - 110}}}) do
+  stem:stroke(s, {pressure={0.8, 0.4}, ramps={0.05, 0.3}})
+  heads[#heads + 1] = s[#s]
+end
+local lf = brush("round", 2.2)
+for j = 1, 9 do
+  lf:reload(j % 2 == 0 and "#4e6036" or "#6c7d48", 0.8)
+  local sy = ty - 10 - j * 9
+  local dir = (j % 2 == 0) and 1 or -1
+  lf:stroke({{tx + 2, sy}, {tx + dir*14, sy - 6 + randn(0, 2)}, {tx + dir*24, sy + 2 + randn(0, 3)}}, {pressure={0.9, 0.05}, ramps={0.1, 0.6}, shake=1.5})
+end
+for _, hd in ipairs(heads) do
+  local hb = brush("round", 3); hb:load("#5a6a3c", 0.9)
+  hb:touch(hd[1], hd[2] + 3, {pressure=0.9})
+  local pb = brush("rigger", 0.6); pb:load("#9a5f86", 0.9)
+  for k = 1, 9 do pb:stroke({{hd[1] + randn(0, 1.5), hd[2]}, {hd[1] + randn(0, 4), hd[2] - rand(4, 8)}}, {pressure={0.6, 0.1}}) end
+end
+-- small stones in the grass
+local sb = brush("round", 2.4)
+for _, s in ipairs({{520, 510, 3}, {531, 512, 2}, {372, 505, 2.5}, {612, 572, 4}, {300, 598, 5}, {690, 640, 3}}) do
+  sb:reload("#8d8677", 0.8); sb:touch(s[1], s[2], {pressure=0.8, drag={s[3], 0}})
+  sb:reload("#4a4640", 0.6); sb:touch(s[1] + s[3]*0.4, s[2] + 1, {pressure=0.5, drag={s[3]*0.8, 0}})
+end
+
+--@ chunk 19 · clock 51624.140625
+wait(24*60)
+-- the thistle, restated dark against the light grass, larger
+local tx, ty = 852, 718
+local stem = brush("round", 2.4)
+local heads = {}
+local stems = {{{tx, ty}, {tx + 5, ty - 90}, {tx - 3, ty - 178}}, {{tx + 4, ty - 80}, {tx + 24, ty - 128}, {tx + 36, ty - 158}},
+               {{tx + 1, ty - 118}, {tx - 22, ty - 142}, {tx - 34, ty - 160}}, {{tx + 3, ty - 60}, {tx + 30, ty - 82}, {tx + 44, ty - 104}}}
+for _, s in ipairs(stems) do
+  stem:reload("#2f3a24", 0.9)
+  stem:stroke(s, {pressure={0.9, 0.45}, ramps={0.05, 0.3}})
+  heads[#heads + 1] = s[#s]
+end
+local lf = brush("round", 3)
+for j = 1, 11 do
+  local sy = ty - 8 - j * 11
+  local dir = (j % 2 == 0) and 1 or -1
+  local L = 30 - j * 1.4
+  local pts = {{tx + 3, sy}, {tx + dir*L*0.35, sy - 8 + randn(0, 2)}, {tx + dir*L*0.7, sy - 2 + randn(0, 2)}, {tx + dir*L, sy + 6 + randn(0, 3)}}
+  lf:reload("#34422a", 0.9)
+  lf:stroke(pts, {pressure={1, 0.05}, ramps={0.1, 0.6}, shake=2})
+  local e = brush("rigger", 0.6); e:load("#8c9a5a", 0.8)
+  e:stroke({{pts[1][1], pts[1][2] - 2}, {pts[2][1], pts[2][2] - 2}, {pts[3][1], pts[3][2] - 1}}, {pressure={0.5, 0.1}, shake=1.2})
+  -- spines
+  local sp = brush("rigger", 0.4); sp:load("#c8c3a0", 0.6)
+  for q = 2, 4 do sp:stroke({{pts[q][1], pts[q][2]}, {pts[q][1] + dir*3, pts[q][2] - 3}}, {pressure={0.4, 0}}) end
+end
+for _, hd in ipairs(heads) do
+  local hb = brush("round", 4); hb:load("#3e4a2c", 0.9)
+  hb:touch(hd[1], hd[2] + 4, {pressure=0.9, drag={0, 2}})
+  local lit = brush("round", 1.2); lit:load("#7d8a50", 0.8); lit:touch(hd[1] - 2, hd[2] + 3, {pressure=0.6})
+  local pb = brush("rigger", 0.7); pb:load("#8e4d7a", 0.95)
+  for k = 1, 14 do pb:stroke({{hd[1] + randn(0, 1.8), hd[2] + 1}, {hd[1] + randn(0, 5), hd[2] - rand(5, 10)}}, {pressure={0.7, 0.1}}) end
+  local pl = brush("rigger", 0.5); pl:load("#c690b4", 0.9)
+  for k = 1, 5 do pl:stroke({{hd[1] - 1 + randn(0, 1), hd[2]}, {hd[1] - 2 + randn(0, 3), hd[2] - rand(5, 9)}}, {pressure={0.5, 0.1}}) end
+end
+-- seeding grass at the lower left, pale straw against the dark band
+local st = brush("rigger", 0.9)
+for i = 1, 55 do
+  local x = 15 + rand(0, 170)
+  local y = 716 + rand(-6, 8)
+  local h = rand(80, 170)
+  local lean = randn(0.12, 0.14)
+  local tip = {x + lean*h, y - h}
+  if i % 5 == 1 then st:reload(({"#b3a76a", "#8f8c4e", "#c4b886", "#6f7a42"})[1 + (i // 5) % 4], 0.85) end
+  st:stroke({{x, y}, {x + lean*h*0.35, y - h*0.5}, tip}, {pressure={0.6, 0.05}, ramps={0.05, 0.7}})
+  if i % 2 == 0 then
+    local hb = brush("round", 1.3); hb:load(({"#cdbf8a", "#a89a60", "#d9cfa4"})[1 + i % 3], 0.9)
+    for j = 0, 6 do
+      local t = j / 7
+      hb:touch(tip[1] - lean*h*0.14*t + randn(0, 1.4), tip[2] + h*0.14*t, {pressure=0.5, drag={0.2, 1.4}, angle=1.4})
+    end
+  end
+end
+
+--@ chunk 20 · clock 53064.140625
+local gn = noise{seed=71, octaves=3, period=140}
+local band = HILL * mask(function(x, y) return 0.85 * smoothstep(520, 714, y + 40*gn(x, y)) end)
+glaze(band, {color="#26331f", coats=0.55, pigment="transparent"})
+local lane_near = LANE * rect(280, 395, 80, 70)
+glaze(lane_near, {color="#5f6a3c", coats=0.5, pigment="semi"})
+-- light back on the stone's sunlit top
+local top = STONE * fs:lit{parts={1}, soft=0.1} * mask(function(x, y) return smoothstep(505, 470, y) end)
+work(top, {hand="scumble", tool="round 2", length={3, 8}, coverage=2, angle=fs:field("across"), medium=0.35, clip=STONE,
+  color=function(x, y) return mix("#a39a86", "#c4b89c", smoothstep(0.3, 0.9, fs:value(x, y) or 0.5)) end})
+
+--@ chunk 21 · clock 64733.267578125
+local cs = (ellipse(760, 462, 230, 42):roughen(22, 90, 5, 18) + ellipse(560, 404, 120, 16):roughen(10, 60, 6, 10)) * below(function(x) return HZ + 40 end) - HILL - WOOD
+glaze(cs:blur(18), {color="#55655a", coats=0.16, pigment="transparent"})
+
+--@ chunk 22 · clock 100524.224609375
+wait(24*60); varnish{color="#e6d3a4", coats=0.3, vary=0.1}; relief()

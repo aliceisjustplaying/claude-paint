@@ -81,3 +81,4 @@ Key question for the user: how the easel FEELS to the agent.
 - review round 3 launched on aa38957 (easel, physics, geometry; neutral brief).
 - 17 review findings (notes/review3/). First fixer launch failed transiently (all three at 11:33:36, no sessions); relaunched without thinking override.
 - all 17 round-3 review findings fixed and merged (fix3-physics PAINTCK5, fix3-geometry, fix3-easel); 120 paint + 10 easel tests; cross-process replay identical.
+- amnesia round 3 launched 13:12 at the easel: easel3-free, easel3-green, easel3-near (worktrees ../claude-paint-easel3-*; no moonrise, figures, study_scene, motifs notes, round notes).

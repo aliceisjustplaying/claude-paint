@@ -29,7 +29,12 @@ every color and mark.
     Quilez (<https://iquilezles.org/articles/warp/>).
   - `Aniso`: stretching along a direction (wind, bedding).
   - `Worley`: cellular noise returning `f1`, `f2`, `edge()`, a stable cell
-    `id`/`rand()` and the feature point, plus `f1_3` in 3-D.
+    `id`/`rand()` and the feature point, plus `f1_3` in 3-D. A feature lies
+    anywhere in its cell, so the search runs past the 3×3 block (to 7×7 in
+    2-D, 5×5×5 in 3-D), skipping cells whose nearest corner is already
+    farther than F2 (F1 in 3-D). The 3×3 search missed nearer features two
+    cells away (tested against brute force:
+    `worley_finds_the_true_nearest_features`).
   - Hand irregularity: `uneven(n, lo, hi, irregular, clump, seed)` gives
     lognormal gaps grouped into clumps. `vary(v, amount, i, seed)` and
     `rand01` are stable per-key randomness.
@@ -61,7 +66,10 @@ every color and mark.
       <https://www.atoptics.org.uk/fza60.htm>).
     - Single scattering alone leaves the shadow black, so a *fill* scatters
       the dome's own mean light (`Sky::dome`) isotropically. This lights the
-      shadow blue-gray, as skylight does.
+      shadow blue-gray, as skylight does. `dome` is cached with the
+      parameters it was computed from (sun, haze, g, uneven, alt, layers),
+      so changing a public field such as `sky.sun` after sampling gives the
+      same sky as a fresh one (tested: `sky_dome_follows_field_changes`).
     - Knobs:
       - `haze(k)`;
       - `uneven(amount, period_m, seed)`: aerosol density wanders from place
@@ -94,7 +102,15 @@ every color and mark.
       `wind(angle, stretch)`, `breaks(period, fraction)` (holes in a fraction
       of Worley cells, each its own size), `heap`, `reach`.
   - **`Clouds::field(&sky_field, &world, cell)`** marches every view ray
-    through the volumes and lights them with the one sun:
+    through the volumes and lights them with the one sun. The march covers
+    only the spans where the ray is inside some cloud's box, each piece
+    with the finest step of the clouds over it (64 steps across each
+    cloud's own span), and skips the gaps between them. It used to spread
+    64 samples over the whole range from the nearest to the farthest cloud,
+    so a distant bank could make a near heap fall between samples and
+    vanish (tested: `a_distant_cloud_does_not_hide_a_near_one`). In
+    study_sky the top panel's big heap now shows its flat dark base and
+    paler sunlit towers where it was a rounded dark lump. The march:
     - Beer–Lambert toward the sun (the lit edge);
     - a two-lobe Henyey–Greenstein phase with multiple-scattering octaves
       (Wrenninge et al. 2013, "Oz: The Great and Volumetric") for the silver
@@ -256,8 +272,8 @@ Judged against the user's words, honestly:
   `balance` help. A painter's exposure (the glow bleached, the shadows
   lifted) may want a local tone curve.
 - **Cost.** The sky is cheap (a 6-unit grid, a fraction of a second). Cloud
-  fields march 64 steps per 2-unit cell with light and sky marches: ~2–10 s
-  per panel at 1000px. Use a coarser `cell` for large decks.
+  fields march 64 steps per cloud crossed, per 2-unit cell, with light and
+  sky marches: ~2–10 s per panel at 1000px. Use a coarser `cell` for large decks.
 - **Ranges.**
   - Masses are analytic profiles plus noise. Next: carve masses with
     `Worley` ridges (arêtes and cirques), vary crest detail per mass kind

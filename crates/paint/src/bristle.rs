@@ -62,6 +62,15 @@ pub struct Tool {
     pub splay: f32,
     /// Unevenness of bristle lengths (ragged edges, broken marks).
     pub ragged: f32,
+    /// How finely the hairs converge to a point: 0 = a blunt tuft (hog,
+    /// flat, stippler), 1 = a fine point (round sable, rigger). A pointed
+    /// tuft is a cone: pressed lightly only the point touches (a hairline),
+    /// pressed harder the belly spreads (width grows with pressure), and on
+    /// the lift the mark draws down to a point. Its loaded tip wets the
+    /// weave's valleys (a continuous line, not dry-brush dots), paint runs
+    /// down from the belly to the tip as the tip lays it, and a tip run dry
+    /// loses its point and splits. See `notes/tip.md`.
+    pub point: f32,
 }
 
 impl Tool {
@@ -79,12 +88,13 @@ impl Tool {
             push: 0.1,
             splay: 0.3,
             ragged: 0.25,
+            point: 0.0,
         }
     }
 
     /// Soft pointed round: smooth, precise, little ploughing. Friedrich's detail brush.
     pub fn round_sable(width: f32) -> Self {
-        Tool { stiffness: 0.2, pickup: 0.1, push: 0.05, splay: 0.45, ragged: 0.15, ..Self::base(Kind::Round, width) }
+        Tool { stiffness: 0.2, pickup: 0.1, push: 0.05, splay: 0.45, ragged: 0.15, point: 1.0, ..Self::base(Kind::Round, width) }
     }
 
     /// Stiff hog-bristle flat: square marks, strong ridges, broken edges.
@@ -127,6 +137,7 @@ impl Tool {
             push: 0.02,
             splay: 0.6,
             ragged: 0.1,
+            point: 1.0,
             ..Self::base(Kind::Rigger, width)
         }
     }
@@ -184,6 +195,7 @@ impl Tool {
             ("push", self.push),
             ("splay", self.splay),
             ("ragged", self.ragged),
+            ("point", self.point),
         ];
         if let Some((k, v)) = finite.iter().find(|(_, v)| !v.is_finite()) {
             return Err(format!("tool {k} = {v} is not finite"));
@@ -200,6 +212,7 @@ impl Tool {
             ("push in 0..=1", (0.0..=1.0).contains(&self.push)),
             ("splay >= 0", self.splay >= 0.0),
             ("ragged >= 0", self.ragged >= 0.0),
+            ("point in 0..=1", (0.0..=1.0).contains(&self.point)),
         ];
         match checks.iter().find(|(_, ok)| !ok) {
             Some((rule, _)) => Err(format!("invalid tool: want {rule} ({self:?})")),
@@ -213,6 +226,33 @@ impl Tool {
         if let Err(e) = self.validate() {
             panic!("{e}");
         }
+    }
+
+    /// Width (units) of the mark a loaded brush makes at pressure `p`, from
+    /// the same geometry the bristles use (a lower bound of about two
+    /// hairs: the finest line the point draws). For a pointed tool it grows
+    /// roughly in proportion to the pressure; a blunt one starts wide.
+    pub fn mark_width(&self, p: f32) -> f32 {
+        let p = p.clamp(0.0, 1.0);
+        let half = self.width * 0.5 * (0.45 + 0.55 * p) * (1.0 + self.splay * (p - 0.5)) * cone(self, p, 1.0);
+        // the outermost hair that touches, at its root radius
+        let rho = if self.point > 0.0 { lerp_f(1.0, (p / P_FULL).min(1.0).sqrt(), self.point) } else { 1.0 };
+        (2.0 * half * rho).max(2.0 * self.hair_radius())
+    }
+
+    /// The pressure at which the brush makes a mark `width` units wide
+    /// (see `mark_width`), clamped to 0..1.
+    pub fn pressure_for(&self, width: f32) -> f32 {
+        let (mut lo, mut hi) = (0.0f32, 1.0f32);
+        for _ in 0..30 {
+            let m = 0.5 * (lo + hi);
+            if self.mark_width(m) < width {
+                lo = m;
+            } else {
+                hi = m;
+            }
+        }
+        0.5 * (lo + hi)
     }
 
     /// Bristle radius in units.
@@ -285,12 +325,26 @@ impl Held {
                     // a round brush is shaped to a point: the outer hairs are
                     // shorter and touch only under pressure, so a light touch
                     // or a lift-off gives just the tip
-                    thresh: tool.ragged * rng.f().powf(1.5) * 0.55
-                        + match tool.kind {
-                            Kind::Round | Kind::Rigger => 0.6 * (rx * rx + ry * ry),
-                            Kind::Filbert => 0.3 * (rx * rx + ry * ry / 0.09),
-                            _ => 0.0,
-                        },
+                    thresh: {
+                        let noise = tool.ragged * rng.f().powf(1.5) * 0.55;
+                        let blunt = noise
+                            + match tool.kind {
+                                Kind::Round | Kind::Rigger => 0.6 * (rx * rx + ry * ry),
+                                Kind::Filbert => 0.3 * (rx * rx + ry * ry / 0.09),
+                                _ => 0.0,
+                            };
+                        if tool.point > 0.0 {
+                            // a pointed tuft is graded: the hairs at root
+                            // radius ρ end on the cone, P_FULL·ρ² up from the
+                            // point, so the touching share grows with the
+                            // pressure; unevenness grows outward (a clean point)
+                            let r2 = rx * rx + ry * ry;
+                            let pointed = P_FULL * r2 + noise * r2.sqrt() * 0.5;
+                            lerp_f(blunt, pointed, tool.point)
+                        } else {
+                            blunt
+                        }
+                    },
                     bend: (0.0, 0.0),
                     seed: i as u64 * 7919 + seed,
                     prev: [None, None],
@@ -442,6 +496,7 @@ pub(crate) struct Surf {
     stroke: *mut u32,
     touched: *mut u32,
     floor: *mut f32,
+    cover: *mut f32,
     base: *const f32,
 }
 // SAFETY: callers only run brushes concurrently on pixel sets that cannot
@@ -487,7 +542,7 @@ impl Canvas {
         let n = self.f.w * self.f.h;
         let wt = &self.wet;
         assert!(
-            [self.height.len(), self.px.len(), self.film.len(), wt.vol.len(), wt.lat.len(), wt.hide.len(), wt.stroke.len(), wt.touched.len(), wt.floor.len()].iter().all(|&l| l == n),
+            [self.height.len(), self.px.len(), self.film.len(), wt.vol.len(), wt.lat.len(), wt.hide.len(), wt.stroke.len(), wt.touched.len(), wt.floor.len(), wt.cover.len()].iter().all(|&l| l == n),
             "canvas buffers out of sync with frame"
         );
         if self.base.as_ref().map(|b| b.0) != Some(self.surf_gen) {
@@ -519,6 +574,7 @@ impl Canvas {
             stroke: self.wet.stroke.as_mut_ptr(),
             touched: self.wet.touched.as_mut_ptr(),
             floor: self.wet.floor.as_mut_ptr(),
+            cover: self.wet.cover.as_mut_ptr(),
             base: self.base.as_ref().unwrap().1.as_ptr(),
         }
     }
@@ -543,6 +599,70 @@ impl Canvas {
         if let Some((x0, y0, x1, y1)) = b {
             self.wet.touch(x0, y0, x1, y1);
         }
+    }
+}
+
+/// Pressure at which a pointed tuft's whole belly is down.
+const P_FULL: f32 = 0.85;
+/// Distance (in tool widths) over which paint runs down from the belly of a
+/// pointed tuft to its tip (e-folding): capillary feed.
+const FEED_WIDTHS: f32 = 2.0;
+
+fn lerp_f(a: f32, b: f32, t: f32) -> f32 {
+    a + (b - a) * t
+}
+
+/// How the hairs of a pointed tuft gather toward the point at pressure `p`:
+/// a factor on their spread (1 = at their belly positions). A cohesive
+/// (wet) tuft is a cone, so the spread goes with the square root of the
+/// pressure and, with the graded hair lengths, the mark's width with the
+/// pressure itself; a dry tuft (`coh` → 0) no longer holds its point.
+fn cone(tool: &Tool, p: f32, coh: f32) -> f32 {
+    if tool.point <= 0.0 {
+        return 1.0;
+    }
+    lerp_f(1.0, (p.max(0.0) / P_FULL).min(1.0).sqrt(), tool.point * coh)
+}
+
+/// Cohesion of a pointed tuft from its load: wet hairs cling into a point,
+/// hairs run dry spring apart (the point splits).
+fn cohesion(held: &Held, full: f32) -> f32 {
+    if held.tool.point <= 0.0 {
+        return 1.0;
+    }
+    let n = held.bristles.len().max(1) as f32;
+    let fill = held.bristles.iter().map(|b| b.vol).sum::<f32>() / (full * n);
+    smoothstep(0.02, 0.2, fill)
+}
+
+/// Capillary feed: paint in a soft tuft runs from full hairs to spent ones
+/// (the belly feeds the tip). Moves the share `k` of every hair's paint into
+/// a common pool and shares it out evenly; volume is conserved exactly and
+/// colors mix through the tuft.
+fn feed(bristles: &mut [Bristle], k: f32) {
+    if k <= 0.0 || bristles.is_empty() {
+        return;
+    }
+    let (mut tv, mut lat, mut hide) = (0.0f32, [0.0f32; LAT], [0.0f32; 2]);
+    for b in bristles.iter() {
+        tv += b.vol;
+        for (l, bl) in lat.iter_mut().zip(&b.lat) {
+            *l += bl * b.vol;
+        }
+        hide[0] += b.hide[0] * b.vol;
+        hide[1] += b.hide[1] * b.vol;
+    }
+    if tv <= 1e-12 {
+        return;
+    }
+    for l in &mut lat {
+        *l /= tv;
+    }
+    hide = [hide[0] / tv, hide[1] / tv];
+    let share = k * tv / bristles.len() as f32;
+    for b in bristles.iter_mut() {
+        b.vol *= 1.0 - k;
+        mix_into(&mut b.vol, &mut b.lat, &mut b.hide, share, &lat, hide);
     }
 }
 
@@ -627,7 +747,9 @@ pub(crate) unsafe fn drag_on(
     }
     let total = arc[arc.len() - 1];
     let tool = held.tool.clone();
-    let rb = (tool.hair_radius() * s).max(0.55);
+    // a pointed tool's hairs are drawn at their true size, however far
+    // below a pixel (see `strip_cover`)
+    let rb = (tool.hair_radius() * s).max(if tool.point > 0.0 { FINE_RB } else { 0.55 });
     let full = held.full();
     let step = rb.max(1.25);
     let nsteps = ((total / step).ceil() as usize).max(1);
@@ -640,6 +762,9 @@ pub(crate) unsafe fn drag_on(
     }
     let mut seg = 0usize;
     let mut last_dir = (1.0f32, 0.0f32);
+    // capillary feed per step (a share per distance, so any resolution
+    // feeds the tip alike)
+    let feed_k = tool.point * (1.0 - (-(step / s) / (FEED_WIDTHS * tool.width).max(0.3)).exp());
     for k in 0..=nsteps {
         let d = (k as f32 * step).min(total);
         while seg + 1 < path.len() - 1 && arc[seg + 1] < d {
@@ -667,11 +792,31 @@ pub(crate) unsafe fn drag_on(
             Orient::Fixed(a) => a,
         };
         let (st, ct) = theta.sin_cos();
-        let half = tool.width * 0.5 * s * (0.45 + 0.55 * p) * (1.0 + tool.splay * (p - 0.5));
+        let coh = cohesion(held, full);
+        let half = tool.width * 0.5 * s * (0.45 + 0.55 * p) * (1.0 + tool.splay * (p - 0.5)) * cone(&tool, p, coh);
         // bend relaxes toward its target: a rate in 0..1 keeps it a blend of
         // targets, within the reach `footprint` allows for
         let rate = (1.0 - (-(step / s) / (bend_len.max(0.0) + 1e-3)).exp()).clamp(0.0, 1.0);
 
+        // a pointed tuft gathers its touching hairs over each other: each
+        // covers only its share of the contact's width (see `exchange`)
+        let excl = if tool.point > 0.0 {
+            let (mut lo, mut hi, mut n) = (f32::MAX, f32::MIN, 0usize);
+            for b in held.bristles.iter() {
+                if p > b.thresh {
+                    let wv = wander(d / s / tool.width.max(2.0) * 1.3, b.seed) * tool.ragged;
+                    let (ox, oy) = ((b.rx + wv * 0.12) * half, (b.ry + wv * 0.05) * half);
+                    // across the direction of travel
+                    let q = (ox * ct - oy * st) * -dir.1 + (ox * st + oy * ct) * dir.0;
+                    lo = lo.min(q);
+                    hi = hi.max(q);
+                    n += 1;
+                }
+            }
+            if n > 0 { ((hi - lo + 2.0 * rb) / (n as f32 * 2.0 * rb)).min(1.0) } else { 1.0 }
+        } else {
+            1.0
+        };
         for b in held.bristles.iter_mut() {
             let reach = (p - b.thresh) / (1.0 - b.thresh).max(1e-3);
             if reach <= 0.0 {
@@ -691,9 +836,10 @@ pub(crate) unsafe fn drag_on(
             // one contact point: the belly-to-tip region of the bent bristle
             let cur = (root.0 + b.bend.0 * 0.6, root.1 + b.bend.1 * 0.6);
             let prev = b.prev[0].unwrap_or(cur);
-            unsafe { exchange(sf, b, &tool, prev, cur, rb, reach, full, None, clip, id, scratch, &mut bounds, lim) };
+            unsafe { exchange(sf, b, &tool, prev, cur, rb, reach, full, None, excl, clip, id, scratch, &mut bounds, lim) };
             b.prev[0] = Some(cur);
         }
+        feed(&mut held.bristles, feed_k);
     }
     // whole-canvas pixels → buffer pixels
     bounds.map(|(x0, y0, x1, y1)| (x0 - sf.ox, y0 - sf.oy, x1 - sf.ox, y1 - sf.oy))
@@ -705,7 +851,7 @@ const GHOST_TOUCH: f32 = 0.8;
 
 /// Summed coverage of the capsule a–b (radius rb, pixels) over rect `r`:
 /// its geometric footprint, whatever the canvas under it.
-fn capsule_cover(a: (f32, f32), b: (f32, f32), rb: f32, r: (usize, usize, usize, usize)) -> f32 {
+fn capsule_cover(a: (f32, f32), b: (f32, f32), rb: f32, fine: bool, r: (usize, usize, usize, usize)) -> f32 {
     let (dx, dy) = (b.0 - a.0, b.1 - a.1);
     let seg2 = dx * dx + dy * dy;
     let mut sum = 0.0f32;
@@ -715,12 +861,44 @@ fn capsule_cover(a: (f32, f32), b: (f32, f32), rb: f32, r: (usize, usize, usize,
             let t = if seg2 > 1e-8 { (((px - a.0) * dx + (py - a.1) * dy) / seg2).clamp(0.0, 1.0) } else { 0.0 };
             let (qx, qy) = (a.0 + dx * t - px, a.1 + dy * t - py);
             let dist = (qx * qx + qy * qy).sqrt();
-            if dist <= rb + 0.5 {
+            if fine {
+                sum += fine_cover(a, b, rb, px, py);
+            } else if dist <= rb + 0.5 {
                 sum += 1.0 - smoothstep(rb * 0.5, rb + 0.5, dist);
             }
         }
     }
     sum
+}
+
+/// Smallest hair radius (pixels) a pointed tool is drawn with.
+const FINE_RB: f32 = 0.02;
+
+/// Share of a pixel covered by a hair's track of radius `rb` (pixels) whose
+/// center line passes `dist` from the pixel center: the overlap of the
+/// pixel's span with the track's, box filtered. Summed across the track it
+/// is its width, wherever the track falls between pixel centers, so a track
+/// finer than a pixel lays the same paint per length on any grid (no dark
+/// dots where it happens to hit a pixel center, no beads at full size).
+fn strip_cover(dist: f32, rb: f32) -> f32 {
+    ((dist + 0.5).min(rb) - (dist - 0.5).max(-rb)).clamp(0.0, 1.0)
+}
+
+/// Share of the pixel centered at (`px`, `py`) covered by a pointed tool's
+/// hair moving from `a` to `b` (pixels): its track, 2·`rb` wide, box
+/// filtered across (`strip_cover`) and along. The track ends square, so a
+/// hair's successive steps tile its path without overlapping, and the paint
+/// a step lays per pixel doesn't depend on where the pixel centers fall.
+/// A hair that doesn't move covers a square 2·`rb` wide.
+fn fine_cover(a: (f32, f32), b: (f32, f32), rb: f32, px: f32, py: f32) -> f32 {
+    let (dx, dy) = (b.0 - a.0, b.1 - a.1);
+    let seg = (dx * dx + dy * dy).sqrt();
+    let (ux, uy, lo, hi) = if seg > 1e-4 { (dx / seg, dy / seg, 0.0, seg) } else { (1.0, 0.0, -rb, rb) };
+    let (rx, ry) = (px - a.0, py - a.1);
+    let t = rx * ux + ry * uy;
+    let q = ry * ux - rx * uy;
+    let along = ((t + 0.5).min(hi) - (t - 0.5).max(lo)).clamp(0.0, 1.0);
+    along * strip_cover(q.abs(), rb)
 }
 
 /// Smooth 1-D value noise, −1..1.
@@ -748,6 +926,7 @@ unsafe fn exchange(
     reach: f32,
     full: f32,
     dep: Option<f32>,
+    excl: f32,
     clip: Option<&Mask>,
     id: u32,
     wts: &mut Vec<f32>,
@@ -797,8 +976,15 @@ unsafe fn exchange(
         }
         let (mx, my) = if seg > 1e-4 { (dx / seg, dy / seg) } else { (0.0, 0.0) };
         let (nx, ny) = (-my, mx);
-        // lowest surface height this bristle reaches down to
-        let th = 1.0 - reach * 1.6;
+        // a pointed tool's moving hair covers pixels by the exact share of
+        // its track in them (see `strip_cover`)
+        let fine = tool.point > 0.0 && dep.is_none();
+        // lowest surface height this bristle reaches down to. The loaded tip
+        // of a pointed soft brush carries a bead of paint that wets the
+        // weave's valleys as well as its peaks, however lightly it is
+        // pressed (fluid paint more than stiff); run dry, it skims the peaks
+        let wick = if tool.point > 0.0 { tool.point * smoothstep(0.03, 0.35, br.vol / full) * (1.0 - 0.35 * br.hide[1].clamp(0.0, 1.0)) } else { 0.0 };
+        let th = 1.0 - reach.max(wick) * 1.6;
 
         // pass 1: contact weights
         let bw = x1 - x0;
@@ -812,13 +998,21 @@ unsafe fn exchange(
                 let t = if seg2 > 1e-8 { (((px - a.0) * dx + (py - a.1) * dy) / seg2).clamp(0.0, 1.0) } else { 0.0 };
                 let (qx, qy) = (a.0 + dx * t - px, a.1 + dy * t - py);
                 let dist = (qx * qx + qy * qy).sqrt();
-                if dist > rb + 0.5 {
-                    continue;
-                }
                 // a moving bristle has a crisp track; in a pressed tip (fixed
                 // deposit) paint wicks between the hairs, so each hair's
                 // contact fades out and neighbors sum to one smooth patch
-                let cov = if dep.is_some() { 1.0 - smoothstep(0.0, rb, dist) } else { 1.0 - smoothstep(rb * 0.5, rb + 0.5, dist) };
+                let cov = if fine {
+                    fine_cover(a, b, rb, px, py)
+                } else if dist > rb + 0.5 {
+                    continue;
+                } else if dep.is_some() {
+                    1.0 - smoothstep(0.0, rb, dist)
+                } else {
+                    1.0 - smoothstep(rb * 0.5, rb + 0.5, dist)
+                };
+                if cov <= 0.0 {
+                    continue;
+                }
                 sum_cov += cov;
                 let i = (y - oy) * bw_buf + x - ox;
                 let surf = (*sf.base.add(i) + 0.35 * *sf.vol.add(i)).min(1.5);
@@ -848,13 +1042,16 @@ unsafe fn exchange(
             Some(v) => v.min(br.vol * 0.5) * touch,
         };
         // a capsule cut by the window edge lays only the window's share there
-        let share = if windowed { sum_cov / capsule_cover(a, b, rb, (cx0, cy0, cx1, cy1)).max(1e-6) } else { 1.0 };
+        let share = if windowed { sum_cov / capsule_cover(a, b, rb, fine, (cx0, cy0, cx1, cy1)).max(1e-6) } else { 1.0 };
         let dep_per_w = dep_total * share.min(1.0) / sum_w / px_area;
         // film splitting: a bristle in wet paint always lifts some of it, even
         // when loaded; a spent bristle drinks more
         let hunger = 0.35 + 0.65 * (1.0 - br.vol / full).clamp(0.0, 1.0).powf(1.5);
         let push_k = tool.push * (seg / (2.0 * rb)).clamp(0.0, 1.0);
-        let off = rb + 1.0;
+        // ploughed paint lands just outside the track: the next pixel, or for
+        // a pointed tool (shared bilinearly, below) a hair's width away, the
+        // same distance at any resolution
+        let off = if fine { 2.0 * rb } else { rb + 1.0 };
 
         let mut got_v = 0.0f32;
         let mut got_l = [0.0f32; LAT];
@@ -891,6 +1088,11 @@ unsafe fn exchange(
                     }
                 }
                 if dep_per_w > 0.0 {
+                    // the share of the pixel this paint covers: its contact
+                    // (a fine hair's own share of the tuft's width, where
+                    // the hairs of a gathered point lie over each other)
+                    let cv = &mut *sf.cover.add(i);
+                    *cv = if fine { ((if *sf.vol.add(i) < 1e-6 { 0.0 } else { *cv }) + wt * excl).min(1.0) } else { 1.0 };
                     sf.add(i, dep_per_w * wt, &blat, bhide);
                     *sf.stroke.add(i) = id;
                 }
@@ -903,20 +1105,45 @@ unsafe fn exchange(
                         let side = if (px - a.0) * nx + (py - a.1) * ny >= 0.0 { 1.0 } else { -1.0 };
                         let tx = px + (nx * side * 0.75 + mx * 0.45) * off;
                         let ty = py + (ny * side * 0.75 + my * 0.45) * off;
-                        // (paint pushed out of a crop window stays put)
-                        let inside = tx >= ox as f32 && ty >= oy as f32 && (tx as usize) < w.min(ox + sf.w) && (ty as usize) < h.min(oy + sf.h);
-                        debug_assert!(!inside || (tx >= lim.0 as f32 && ty >= lim.1 as f32 && (tx as usize) < lim.2 && (ty as usize) < lim.3), "plough target outside the stroke footprint {lim:?}");
-                        if inside && tx >= lim.0 as f32 && ty >= lim.1 as f32 && (tx as usize) < lim.2 && (ty as usize) < lim.3 {
-                            let (tx, ty) = (tx as usize, ty as usize);
-                            let j = (ty - oy) * bw_buf + tx - ox;
-                            // a clipped stroke can't push paint past its mask:
-                            // only the accepted share moves, the rest stays
-                            let m = m * clip.map_or(1.0, |c| c.data[ty * w + tx]);
-                            if j != i && m > 0.0 {
-                                let l = *sf.lat.add(i);
-                                let hd = *sf.hide.add(i);
-                                *sf.vol.add(i) -= m;
-                                sf.add(j, m, &l, hd);
+                        // where the paint goes: the pixel under the target,
+                        // or for a pointed tool's fine hairs, shared
+                        // bilinearly by the four pixels around it (a hair
+                        // finer than a pixel would otherwise leave a ridge
+                        // of dots along its track where rounding lands it)
+                        let mut to = [(0.0f32, 0.0f32, 0.0f32); 4];
+                        let n_to = if fine {
+                            let (gx, gy) = (tx - 0.5, ty - 0.5);
+                            let (fx, fy) = (gx - gx.floor(), gy - gy.floor());
+                            let (bx, by) = (gx.floor() + 0.5, gy.floor() + 0.5);
+                            to = [(bx, by, (1.0 - fx) * (1.0 - fy)), (bx + 1.0, by, fx * (1.0 - fy)), (bx, by + 1.0, (1.0 - fx) * fy), (bx + 1.0, by + 1.0, fx * fy)];
+                            4
+                        } else {
+                            to[0] = (tx, ty, 1.0);
+                            1
+                        };
+                        for &(tx, ty, share) in &to[..n_to] {
+                            if share <= 0.0 {
+                                continue;
+                            }
+                            // (paint pushed out of a crop window stays put)
+                            let inside = tx >= ox as f32 && ty >= oy as f32 && (tx as usize) < w.min(ox + sf.w) && (ty as usize) < h.min(oy + sf.h);
+                            debug_assert!(!inside || (tx >= lim.0 as f32 && ty >= lim.1 as f32 && (tx as usize) < lim.2 && (ty as usize) < lim.3), "plough target outside the stroke footprint {lim:?}");
+                            if inside && tx >= lim.0 as f32 && ty >= lim.1 as f32 && (tx as usize) < lim.2 && (ty as usize) < lim.3 {
+                                let (tx, ty) = (tx as usize, ty as usize);
+                                let j = (ty - oy) * bw_buf + tx - ox;
+                                // a clipped stroke can't push paint past its mask:
+                                // only the accepted share moves, the rest stays
+                                let m = m * share * clip.map_or(1.0, |c| c.data[ty * w + tx]);
+                                if j != i && m > 0.0 {
+                                    let l = *sf.lat.add(i);
+                                    let hd = *sf.hide.add(i);
+                                    // the paint moved covers its share of
+                                    // the pixel it came from
+                                    let cj = &mut *sf.cover.add(j);
+                                    *cj = if fine { ((if *sf.vol.add(j) < 1e-6 { 0.0 } else { *cj }) + m / v.max(1e-9) * *sf.cover.add(i)).min(1.0) } else { 1.0 };
+                                    *sf.vol.add(i) -= m;
+                                    sf.add(j, m, &l, hd);
+                                }
                             }
                         }
                     }
@@ -1006,8 +1233,9 @@ fn root_area(kind: Kind) -> f32 {
 }
 
 /// Half-width of the pressed tip (pixels) at pressure `p`.
+/// A pointed tip gathers toward its point (see `cone`).
 fn touch_half(tool: &Tool, p: f32, s: f32) -> f32 {
-    tool.width * 0.5 * s * (0.45 + 0.55 * p) * (1.0 + tool.splay * (p - 0.5))
+    tool.width * 0.5 * s * (0.45 + 0.55 * p) * (1.0 + tool.splay * (p - 0.5)) * cone(tool, p, 1.0)
 }
 
 /// Contact radius of one hair in a pressed tip (pixels): at least the hair,
@@ -1110,10 +1338,109 @@ pub(crate) unsafe fn touch_on(sf: Surf, held: &mut Held, t: &Touch, clip: Option
             let prev = b.prev[0].unwrap_or(cur);
             let fill = (b.vol / full).min(1.0);
             let v = film * fill * reach / sums[bi].max(1e-6);
-            unsafe { exchange(sf, b, &tool, prev, cur, rb, reach, full, Some(v), clip, id, scratch, &mut bounds, lim) };
+            unsafe { exchange(sf, b, &tool, prev, cur, rb, reach, full, Some(v), 1.0, clip, id, scratch, &mut bounds, lim) };
             b.prev[0] = Some(cur);
         }
     }
     // whole-canvas pixels → buffer pixels
     bounds.map(|(x0, y0, x1, y1)| (x0 - sf.ox, y0 - sf.oy, x1 - sf.ox, y1 - sf.oy))
+}
+
+#[cfg(test)]
+mod tip_tests {
+    use super::*;
+    use crate::color::hex;
+
+    const BG: &str = "#e8e0d0";
+    const INK: &str = "#1a1612";
+
+    /// A narrow strip of a Friedrich-sized canvas (440 mm wide) with one
+    /// mark of dark body paint on it, dried.
+    fn canvas(px: usize, linen: bool, tool: Tool, g: &Gesture) -> Canvas {
+        let mut c = Canvas::new(px, 4.0, hex(BG)).with_size_mm(440.0);
+        if linen {
+            c = c.with_linen(crate::surface::Linen::fine(3));
+        }
+        let mut h = Held::new(tool, 3);
+        h.load(Paint::body(hex(INK)), 1.0);
+        c.drag(&mut h, g, None);
+        c.dry();
+        c
+    }
+
+    /// Darkness of pixel (x, y): 0 = ground, 1 = the paint's masstone.
+    fn dark(c: &Canvas, x: usize, y: usize) -> f32 {
+        let lum = |p: [f32; 3]| 0.2126 * p[0] + 0.7152 * p[1] + 0.0722 * p[2];
+        let (lb, ld) = (lum(hex(BG)), lum(hex(INK)));
+        (lb - lum(c.px[y * c.f.w + x])) / (lb - ld)
+    }
+
+    /// Ink across the mark (units: the width of a fully dark track) between
+    /// x0 and x1 (units), averaged along it.
+    fn ink(c: &Canvas, x0: f32, x1: f32) -> f32 {
+        let s = c.f.scale;
+        let (a, b) = ((x0 * s) as usize, (x1 * s) as usize);
+        let mut sum = 0.0;
+        for y in 0..c.f.h {
+            for x in a..b {
+                sum += dark(c, x, y);
+            }
+        }
+        sum / s / (b - a) as f32
+    }
+
+    #[test]
+    fn pointed_marks_are_resolution_independent() {
+        let g = Gesture::line((50.0, 120.0), (450.0, 122.0)).pressure(0.4, 0.4).ramps(0.05, 0.1).shake(0.0);
+        for tool in [Tool::rigger(0.5), Tool::round_sable(1.6)] {
+            let lo = ink(&canvas(500, false, tool.clone(), &g), 100.0, 400.0);
+            let hi = ink(&canvas(1600, false, tool.clone(), &g), 100.0, 400.0);
+            assert!((lo / hi - 1.0).abs() < 0.2, "{:?}: ink width {lo} at 500px, {hi} at 1600px", tool.kind);
+            // and about as wide as the brush says
+            let w = tool.mark_width(0.4);
+            assert!(hi > 0.6 * w && hi < 2.0 * w, "{:?}: ink width {hi}, mark_width {w}", tool.kind);
+        }
+    }
+
+    #[test]
+    fn pointed_width_follows_pressure_and_tapers() {
+        let t = Tool::round_sable(3.0);
+        assert!(t.mark_width(0.1) < 0.25 * t.mark_width(0.9), "{} vs {}", t.mark_width(0.1), t.mark_width(0.9));
+        assert!((t.mark_width(t.pressure_for(1.5)) - 1.5).abs() < 0.01);
+        let at = |p: f32| ink(&canvas(800, false, t.clone(), &Gesture::line((50.0, 120.0), (450.0, 120.0)).pressure(p, p).shake(0.0)), 150.0, 350.0);
+        let (a, b, c) = (at(0.1), at(0.4), at(0.8));
+        assert!(a < 0.5 * b && b < 0.7 * c, "ink width at pressure .1/.4/.8: {a} {b} {c}");
+        // a flick lifted off draws down to a point
+        let f = canvas(800, false, t.clone(), &Gesture::line((50.0, 120.0), (450.0, 120.0)).pressure(0.8, 0.0).ramps(0.05, 0.8).shake(0.0));
+        let (root, mid, tip) = (ink(&f, 80.0, 120.0), ink(&f, 230.0, 270.0), ink(&f, 400.0, 430.0));
+        assert!(root > mid && mid > tip && tip < 0.3 * root, "flick ink root {root}, middle {mid}, tip {tip}");
+        // a blunt stippler of the same kind keeps its old footprint
+        assert_eq!(Tool::stippler(2.0).point, 0.0);
+    }
+
+    /// A light hairline on linen at full size is a line, not a row of beads
+    /// on the weave's peaks.
+    #[test]
+    fn hairline_on_linen_is_continuous() {
+        let c = canvas(1600, true, Tool::rigger(0.5), &Gesture::line((50.0, 120.0), (450.0, 120.0)).pressure(0.25, 0.25).ramps(0.05, 0.1).shake(0.0));
+        let s = c.f.scale;
+        let (y0, y1) = (((120.0 - 2.0) * s) as usize, ((120.0 + 2.0) * s) as usize);
+        let cols: Vec<f32> = ((150.0 * s) as usize..(350.0 * s) as usize).map(|x| (y0..y1).map(|y| dark(&c, x, y)).sum::<f32>()).collect();
+        let mean = cols.iter().sum::<f32>() / cols.len() as f32;
+        let gaps = cols.iter().filter(|&&v| v < 0.3 * mean).count();
+        assert!(mean > 0.1 && gaps == 0, "mean column ink {mean}, {gaps} gaps of {}", cols.len());
+    }
+
+    #[test]
+    fn feed_conserves_paint() {
+        let mut h = Held::new(Tool::round_sable(2.0), 1);
+        h.load(Paint::body(hex(INK)), 1.0);
+        for (i, b) in h.bristles.iter_mut().enumerate() {
+            b.vol *= (i % 5) as f32 / 4.0;
+        }
+        let before: f64 = h.bristles.iter().map(|b| b.vol as f64).sum();
+        feed(&mut h.bristles, 0.3);
+        let after: f64 = h.bristles.iter().map(|b| b.vol as f64).sum();
+        assert!((after - before).abs() < before * 1e-5);
+    }
 }

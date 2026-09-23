@@ -168,6 +168,11 @@ pub(crate) struct Wet {
     /// not lift below (one pass lifts only part of the film).
     pub(crate) touched: Vec<u32>,
     pub(crate) floor: Vec<f32>,
+    /// Share of the pixel the wet paint covers (1 = all of it). Only the
+    /// hairs of a pointed tool, finer than a pixel, lay paint over part of
+    /// one; `dry` composites that paint at its real thickness over that
+    /// share, so a hairline looks alike at any resolution.
+    pub(crate) cover: Vec<f32>,
     /// Id of the stroke being painted.
     pub(crate) current: u32,
     /// Dirty bounding box in pixels (x0, y0, x1, y1), if any paint is wet.
@@ -176,7 +181,7 @@ pub(crate) struct Wet {
 
 impl Wet {
     pub fn new(n: usize) -> Self {
-        Wet { vol: vec![0.0; n], lat: vec![[0.0; LAT]; n], hide: vec![[0.0, 0.5]; n], stroke: vec![0; n], touched: vec![0; n], floor: vec![0.0; n], current: 0, dirty: None }
+        Wet { vol: vec![0.0; n], lat: vec![[0.0; LAT]; n], hide: vec![[0.0, 0.5]; n], stroke: vec![0; n], touched: vec![0; n], floor: vec![0.0; n], cover: vec![1.0; n], current: 0, dirty: None }
     }
 
     pub fn touch(&mut self, x0: usize, y0: usize, x1: usize, y1: usize) {
@@ -203,6 +208,18 @@ pub fn mix_into(rv: &mut f32, rl: &mut Latent, rh: &mut Prop, v: f32, lat: &Late
     *rv = t;
 }
 
+
+/// `coats` of `pig` over `under`, laid over the share `cover` of a pixel:
+/// the paint sits there `coats / cover` thick and the rest of the pixel
+/// shows `under` (area-weighted in linear light, as the eye averages it).
+fn over_share(pig: Pigment, under: Rgb, coats: f32, cover: f32) -> Rgb {
+    if cover >= 1.0 {
+        return pig.over(under, coats);
+    }
+    let c = cover.max(0.01);
+    let o = pig.over(under, coats / c);
+    [under[0] + (o[0] - under[0]) * c, under[1] + (o[1] - under[1]) * c, under[2] + (o[2] - under[2]) * c]
+}
 
 impl Canvas {
     /// Let the wet paint dry: the film levels over the surface (thin fluid
@@ -235,20 +252,23 @@ impl Canvas {
             .par_chunks_mut(w)
             .zip(wet.vol[ex.1 * w..ex.3 * w].par_chunks_mut(w))
             .zip(self.film[ex.1 * w..ex.3 * w].par_chunks_mut(w))
+            .zip(wet.cover[ex.1 * w..ex.3 * w].par_chunks_mut(w))
             .enumerate()
-            .for_each(|(j, ((px, vv), ff))| {
+            .for_each(|(j, (((px, vv), ff), cv))| {
                 let y = ex.1 + j;
                 for x in ex.0..ex.2 {
                     if vv[x] < 1e-5 {
                         vv[x] = 0.0;
+                        cv[x] = 1.0;
                         continue;
                     }
                     let ti = t[j * ew + x - ex.0] / COAT_UM;
                     let i = y * w + x;
                     let c = mixbox::latent_to_linear_float_rgb(&lat[i]);
-                    px[x] = Pigment::masstone(c, hide[i][0]).over(px[x], ti);
+                    px[x] = over_share(Pigment::masstone(c, hide[i][0]), px[x], ti, cv[x]);
                     ff[x] += ti;
                     vv[x] = 0.0;
+                    cv[x] = 1.0;
                 }
             });
     }
@@ -261,7 +281,7 @@ impl Canvas {
             return self.px[i];
         }
         let c = mixbox::latent_to_linear_float_rgb(&self.wet.lat[i]);
-        Pigment::masstone(c, self.wet.hide[i][0]).over(self.px[i], v)
+        over_share(Pigment::masstone(c, self.wet.hide[i][0]), self.px[i], v, self.wet.cover[i])
     }
 
     /// What is on the canvas around (`x`, `y`) within radius `r` (units),

@@ -535,3 +535,61 @@ fn strokes_bow_unless_ruled() {
     let ruler = bows(&Handling::new(Tool::filbert(10.0)).ruler());
     assert!(hand > 0.03 && ruler < 1e-3, "median bow: hand {hand}, ruler {ruler}");
 }
+
+/// Diagnostic: what the pixels a thin blended sky leaves bare had before
+/// the bake (wet volume, cover, relief), against the rest.
+#[test]
+#[ignore]
+fn diag_sky_bare_pixels() {
+    use crate::canvas::Crop;
+    let base = Style::friedrich();
+    let crop = Crop { units: [400.0, 100.0, 560.0, 260.0], margin: 40.0 };
+    let mut c = base.prepare_window(3200, 1.3, 23, Some(crop));
+    let h0 = c.height.clone();
+    if let Ok(t) = std::env::var("DIAG_PX") {
+        let t: usize = t.parse().unwrap();
+        let w = c.f.w;
+        eprintln!("ground height around {t} (rows):");
+        for dy in -4i64..=4 {
+            let row: Vec<String> = (-6i64..=6).map(|dx| format!("{:4.0}", h0[(t as i64 + dy * w as i64 + dx) as usize])).collect();
+            eprintln!("  {}", row.join(" "));
+        }
+        let fr: Vec<String> = (-6i64..=6).map(|dx| format!("{:4.1}", c.film[(t as i64 + dx) as usize] * 25.0)).collect();
+        eprintln!("  ground films µm on its row: {}", fr.join(" "));
+    }
+    let sky = Mask::from_fn(c.frame(), |_, _| 1.0);
+    c.work(&sky, &base.broad().color(|_, _| hex("#d9dcd6")).angle(|_, _| 0.0).coverage(4.5).medium(0.3), 11);
+    let vol_a = c.wet.vol.clone();
+    if let Some(b) = base.blend() {
+        c.work(&sky, &b, 12);
+    }
+    let (vol, cover) = (c.wet.vol.clone(), c.wet.cover.clone());
+    let base_rel = { let _ = c.surf(); c.base.as_ref().unwrap().1.clone() };
+    c.dry();
+    let f = c.f;
+    let pad = (40.0 * 3.2) as usize;
+    let mut bare = Vec::new();
+    let mut all = Vec::new();
+    for y in pad..f.h - pad {
+        for x in pad..f.w - pad {
+            let i = y * f.w + x;
+            let p = c.px[i];
+            let rec = (vol_a[i], vol[i], cover[i], base_rel[i], c.height[i] - h0[i]);
+            if p[0] - p[2] > 0.12 {
+                if bare.len() < 3 || rec.4 == 0.0 && bare.len() < 40 { eprintln!("bare px index {i} rec {rec:?}"); }
+                bare.push(rec)
+            } else { all.push(rec) }
+        }
+    }
+    let mean = |v: &[(f32, f32, f32, f32, f32)], k: usize| v.iter().map(|r| [r.0, r.1, r.2, r.3, r.4][k]).sum::<f32>() / v.len().max(1) as f32;
+    for (name, v) in [("bare", &bare), ("rest", &all)] {
+        eprintln!("{name:5} n {:6}: vol after broad {:.4} after blend {:.4} cover {:.3} base {:.3} film um {:.3}",
+            v.len(), mean(v, 0), mean(v, 1), mean(v, 2), mean(v, 3), mean(v, 4));
+    }
+    let zero = bare.iter().filter(|r| r.1 < 1e-5).count();
+    let lowc = bare.iter().filter(|r| r.2 < 0.5).count();
+    eprintln!("bare with no wet paint: {zero}; with cover < 0.5: {lowc}");
+    for r in bare.iter().take(12) {
+        eprintln!("  {r:?}");
+    }
+}

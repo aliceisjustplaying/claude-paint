@@ -16,6 +16,7 @@ mod form;
 mod world;
 mod depth;
 mod edit;
+mod draw_outline;
 mod look;
 mod session;
 

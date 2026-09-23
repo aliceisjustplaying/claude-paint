@@ -31,6 +31,7 @@ pub mod handling;
 pub mod stipple;
 pub mod style;
 pub mod hand;
+pub mod outline;
 pub mod surface;
 
 pub use canvas::{Canvas, Crop, Frame, set_crop};
@@ -45,6 +46,7 @@ pub use handling::{Aim, Handling, Order};
 pub use stipple::Stipple;
 pub use style::{Apply, Ground, Style};
 pub use hand::{Hand, Mark};
+pub use outline::{Bone, Character, Outline};
 pub use surface::{COAT_UM, Linen};
 pub use mask::Mask;
 pub use form::{Form, Light, Ridge, Relief, Sdf, Shade, Solid};

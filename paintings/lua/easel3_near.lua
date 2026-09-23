@@ -629,3 +629,96 @@ for k, sp in ipairs(specs) do
     g:stroke({{x, y}, {x + randn(0, 0.3) * h, y - h}}, {pressure={0.6, 0}, ramps={0.05, 0.7}})
   end
 end
+
+--@ chunk 21 · clock 278538.19763183594
+
+dry()
+-- dark weathering streaks, running down from the ledges
+local sn = noise{seed=141, octaves=4, period=40, stretch={1.5708, 6}}
+local streaks = rockm:shrink(3) * mask(function(x, y)
+  local s = smoothstep(0.6, 0.8, sn:at01(x, y))
+  local fromtop = 0
+  if y > 250 and y < 400 then fromtop = smoothstep(400, 260, y) end
+  if y > 405 and y < 520 then fromtop = math.max(fromtop, smoothstep(520, 415, y)) end
+  if y > 540 and y < 670 then fromtop = math.max(fromtop, 0.6 * smoothstep(670, 545, y)) end
+  return s * (0.3 + 0.7 * fromtop)
+end)
+glaze(streaks, {color="#34302a", coats=0.4, pigment="transparent"})
+-- lichen rosettes, clustered
+local cl = worley{seed=142, period=45}
+local lb = brush("round", 2.2)
+local n = 0
+for i = 1, 900 do
+  local x, y = rand(265, 915), rand(240, 670)
+  if rockm:at(x, y) > 0.9 then
+    local f1, f2, edge, r = cl:at(x, y)
+    if r < 0.45 and rand() < 0.55 then
+      local lit = f:value(x, y)
+      local c = (r < 0.15) and mix("#a88f3e", "#c9ad5a", rand()) or mix("#9ea08c", "#c6c7b3", rand())
+      c = mix(c, "#5b5a4e", 0.5 * (1 - smoothstep(0.3, 0.8, lit)))
+      if n % 6 == 0 then lb:reload(c, 0.7) end
+      n = n + 1
+      lb:touch(x, y, {pressure=rand(0.25, 0.65), twist=rand(0, 1), drag={randn(0, 0.4), randn(0, 0.4)}})
+    end
+  end
+end
+-- pits in the undercut
+local pb = brush("round", 2.6)
+for i = 1, 70 do
+  local x, y = rand(330, 900), rand(528, 575)
+  if rockm:at(x, y) > 0.9 then
+    pb:reload("#2c2823", 0.8)
+    pb:touch(x, y, {pressure=rand(0.3, 0.7)})
+  end
+end
+-- the boulder: moss on its crown, lichen on its flank
+local bm = noise{seed=143, octaves=4, period=16}
+work(boulm:shrink(2) * mask(function(x, y) return smoothstep(665, 628, y) * smoothstep(0.4, 0.6, bm:at01(x, y)) end), {hand="hatch", tool="round 1.6", length={2, 5}, coverage=3, medium=0.12,
+  angle=function(x, y) return -1.57 + bm(x * 3, y * 3) end, angle_jitter=0.8, color=function(x, y) return mix("#3d4520", "#6d7534", bm:at01(x * 2, y * 2)) end})
+print(n)
+
+--@ chunk 22 · clock 291138.29431152344
+
+wait(12*60)
+glaze(boulm:shrink(1) * mask(function(x, y) return smoothstep(670, 630, y) end), {color="#3a3a26", coats=0.35, pigment="transparent"})
+-- a few crows far off over the wood
+local cb = brush("round", 1.3)
+for i, c in ipairs({{742, 168, 5.0, 0.1}, {781, 150, 4.2, -0.15}, {806, 181, 3.6, 0.2}, {852, 142, 3.0, 0.0}}) do
+  local x, y, s, tilt = c[1], c[2], c[3], c[4]
+  cb:reload("#34322f", 0.9)
+  cb:stroke({{x - s * 1.6, y - s * 0.3 + tilt * s}, {x - s * 0.7, y - s * 0.55}, {x, y}}, {pressure={0.1, 0.6}, ramps={0.4, 0.1}})
+  cb:stroke({{x, y}, {x + s * 0.8, y - s * 0.6}, {x + s * 1.7, y - s * 0.2 - tilt * s}}, {pressure={0.6, 0.1}, ramps={0.1, 0.4}})
+  cb:touch(x, y + 0.3, {pressure=0.5})
+end
+-- fallen birch leaves on the ledges and the floor
+local lf = brush{kind="filbert", width=2.4}
+local k = 0
+for i = 1, 140 do
+  local x, y
+  if i <= 25 then
+    local p = tops[math.random(1, #tops)]
+    x, y = p[1] + rand(-3, 3), p[2] + rand(0, 4)
+  else
+    x, y = rand(10, 990), rand(560, 765)
+  end
+  if (i <= 25) or ((rockm + boulm):at(x, y) < 0.1) then
+    local sc = (i <= 25) and 0.7 or clamp((y - 540) / 180, 0.4, 1.3)
+    if k % 5 == 0 then lf:reload(mix(mix("#a8822e", "#d0aa48", rand()), "#6e5a2a", (y > 690) and 0.35 or 0), 0.8) end
+    k = k + 1
+    lf:touch(x, y, {pressure=clamp(0.35 * sc + rand(0, 0.25), 0.2, 0.8), angle=rand(0, 3.14), drag={randn(0, 0.8) * sc, randn(0, 0.4) * sc}})
+  end
+end
+print(k)
+
+--@ chunk 23 · clock 291858.29431152344
+
+dry()
+local vig = mask(function(x, y)
+  local dx = (x - 560) / 560
+  local dy = (y - 400) / 420
+  return clamp((dx * dx + dy * dy - 0.45) * 0.9, 0, 1)
+end)
+glaze(vig, {color="#3a2e22", coats=0.18, pigment="transparent"})
+dry()
+varnish{color="#e6d3a4", coats=0.35, vary=0.1}
+relief()

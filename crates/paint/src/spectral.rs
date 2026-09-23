@@ -156,6 +156,94 @@ pub fn mix_ks(colors: &[(Rgb, f32)]) -> Rgb {
     to_rgb(&r)
 }
 
+/// A spectrum through control points (nm, value), linear between them and
+/// flat beyond the ends. For writing down a pigment's known spectral shape.
+pub fn curve(points: &[(f32, f32)]) -> Spectrum {
+    std::array::from_fn(|i| {
+        let l = wavelength(i);
+        if l <= points[0].0 {
+            return points[0].1;
+        }
+        for w in points.windows(2) {
+            if l <= w[1].0 {
+                let t = (l - w[0].0) / (w[1].0 - w[0].0).max(1e-6);
+                return w[0].1 + (w[1].1 - w[0].1) * t;
+            }
+        }
+        points[points.len() - 1].1
+    })
+}
+
+/// A masstone spectrum with the *shape* of `shape` (its bands, edges and
+/// shoulders) and the color `rgb`: `shape`'s K/S scaled per wavelength by
+/// exp(a + b·u + c·u²), u running −1..1 over 380–750 nm, with (a, b, c)
+/// solved so the spectrum's color is `rgb`. The smooth scaling keeps the
+/// narrow features (smalt's cobalt bands, chrome yellow's sharp edge) where
+/// the shape puts them. Falls back to `from_rgb` if the fit fails.
+pub fn fit_shape(rgb: Rgb, shape: &Spectrum) -> Spectrum {
+    let base: Spectrum = shape.map(ks);
+    let make = |p: [f32; 3]| -> Spectrum {
+        std::array::from_fn(|i| {
+            let u = (wavelength(i) - 565.0) / 185.0;
+            km(base[i] * (p[0] + p[1] * u + p[2] * u * u).exp()).max(R_MIN)
+        })
+    };
+    let lg = |c: Rgb| c.map(|v| (v.max(0.0) + 1e-4).ln());
+    let want = lg(rgb);
+    let res = |p: [f32; 3]| -> [f32; 3] {
+        let g = lg(to_rgb(&make(p)));
+        std::array::from_fn(|k| g[k] - want[k])
+    };
+    let mut p = [0.0f32; 3];
+    let mut r = res(p);
+    for _ in 0..40 {
+        let e = r.iter().map(|v| v * v).sum::<f32>();
+        if e < 1e-10 {
+            break;
+        }
+        // Jacobian by finite differences, then a damped Newton step
+        let mut j = [[0.0f32; 3]; 3];
+        for q in 0..3 {
+            let mut pq = p;
+            pq[q] += 1e-3;
+            let rq = res(pq);
+            for k in 0..3 {
+                j[k][q] = (rq[k] - r[k]) / 1e-3;
+            }
+        }
+        let Some(d) = solve3(j, r) else { break };
+        let mut step = 1.0;
+        loop {
+            let pn = std::array::from_fn(|q| p[q] - step * d[q]);
+            let rn = res(pn);
+            if rn.iter().map(|v| v * v).sum::<f32>() < e || step < 1e-3 {
+                p = pn;
+                r = rn;
+                break;
+            }
+            step *= 0.5;
+        }
+    }
+    let out = make(p);
+    let got = to_rgb(&out);
+    if (0..3).all(|k| (got[k] - rgb[k]).abs() < 2e-3 + 0.01 * rgb[k]) { out } else { from_rgb(rgb) }
+}
+
+fn solve3(m: [[f32; 3]; 3], b: [f32; 3]) -> Option<[f32; 3]> {
+    let det = |m: [[f32; 3]; 3]| m[0][0] * (m[1][1] * m[2][2] - m[1][2] * m[2][1]) - m[0][1] * (m[1][0] * m[2][2] - m[1][2] * m[2][0]) + m[0][2] * (m[1][0] * m[2][1] - m[1][1] * m[2][0]);
+    let d = det(m);
+    if d.abs() < 1e-12 {
+        return None;
+    }
+    Some(std::array::from_fn(|q| {
+        let mut mq = m;
+        for k in 0..3 {
+            mq[k][q] = b[k];
+        }
+        det(mq) / d
+    }))
+}
+
 /// A paint layer with absorption and scattering per wavelength, per coat:
 /// the engine's `Pigment` with a spectrum in place of three channels.
 #[derive(Clone, Copy, Debug)]
@@ -186,6 +274,15 @@ impl SpectralPigment {
         let mut p = SpectralPigment { k: [0.0; N], s: [0.0; N] };
         for i in 0..N {
             (p.k[i], p.s[i]) = ks_from_appearance(w[i], b[i]);
+        }
+        p
+    }
+
+    /// A film named by its look over white and over black, given as spectra.
+    pub fn from_appearance_spectra(on_white: &Spectrum, on_black: &Spectrum) -> Self {
+        let mut p = SpectralPigment { k: [0.0; N], s: [0.0; N] };
+        for i in 0..N {
+            (p.k[i], p.s[i]) = ks_from_appearance(on_white[i], on_black[i]);
         }
         p
     }
@@ -339,6 +436,20 @@ mod tests {
                     assert!(close(sp.over(sub, x), rg.over(sub, x), 2e-3), "gray {g} over {sub:?} × {x}");
                 }
             }
+        }
+    }
+
+    /// A fitted shape keeps its color and its features.
+    #[test]
+    fn fitted_shapes_hit_their_color() {
+        // smalt-like: blue, three cobalt bands, red tail
+        let shape = curve(&[(380.0, 0.4), (470.0, 0.4), (520.0, 0.12), (540.0, 0.07), (565.0, 0.1), (590.0, 0.05), (615.0, 0.08), (640.0, 0.05), (670.0, 0.12), (700.0, 0.25), (750.0, 0.4)]);
+        for c in ["#5a6e9e", "#8d9bb8", "#2f55a8"] {
+            let c = hex(c);
+            let r = fit_shape(c, &shape);
+            assert!(close(to_rgb(&r), c, 3e-3), "{c:?}: {:?}", to_rgb(&r));
+            // the band at 590 stays deeper than its shoulders
+            assert!(r[21] < r[19] && r[21] < r[23], "{r:?}");
         }
     }
 

@@ -427,3 +427,69 @@ for gi, g in ipairs(groups) do
   end
 end
 print(nf, "fronds")
+
+--@ chunk 17 · clock 132485.54431152344
+wait(12*60)
+tops = {}
+for x = 262, 918, 3 do
+  for y = 150, 700 do if rockm:at(x, y) > 0.5 then tops[#tops+1] = {x, y}; break end end
+end
+local mz = noise{seed=111, octaves=4, period=30}
+-- moss cushions along the top, thicker where the stone is flat, hanging a little over the edge
+local cush = nil
+for i, p in ipairs(tops) do
+  local th = 3 + 7 * mz:at01(p[1], 0)
+  if mz:at01(p[1], 50) > 0.55 then
+    local e = ellipse(p[1], p[2] + th * 0.3, 4 + 3 * mz:at01(p[1], 9), th * 0.7)
+    cush = cush and (cush + e) or e
+  end
+end
+cush = cush:roughen(2, 6, 11, 0.8)
+work(cush, {hand="hatch", tool="round 1.8", length={2, 5}, coverage=3, medium=0.12, angle=function(x, y) return -1.57 + 0.9 * mz(x * 3, y * 3) end, angle_jitter=0.8,
+  color=function(x, y) return mix("#3b3f24", "#6a6d3a", smoothstep(-0.3, 0.7, mz(x * 2, y * 2)) * (x < 700 and 0.9 or 0.5)) end})
+-- mossy streaks where water runs from the ledges
+local streak = nil
+for _, xs in ipairs({{350, 262, 60}, {455, 252, 80}, {610, 255, 50}, {720, 308, 70}, {800, 310, 55}, {300, 380, 60}}) do
+  local r = ribbon({{xs[1], xs[2]}, {xs[1] + rand(-4, 4), xs[2] + xs[3] * 0.5}, {xs[1] + rand(-6, 6), xs[2] + xs[3]}}, {6, 3.5, 0.5})
+  streak = streak and (streak + r) or r
+end
+glaze((streak:roughen(3, 8, 3, 3):soften(2) * rockm), {color="#3d3b2e", coats=0.3, pigment="transparent"})
+-- dry grass and heather standing on the top, against the sky
+local g = brush("rigger", 0.9)
+local straws = {"#8d7d52", "#a8955f", "#6f6440", "#b9a46e", "#5d5536"}
+for i, p in ipairs(tops) do
+  if mz:at01(p[1], 50) > 0.45 and rand() < 0.6 then
+    if i % 3 == 1 then g:reload(straws[1 + i % #straws], 0.7) end
+    for k = 1, math.random(2, 5) do
+      local h = rand(8, 24) * (0.6 + 0.8 * mz:at01(p[1], 90))
+      local lean = randn(0.15, 0.35)
+      local x0, y0 = p[1] + rand(-2, 2), p[2] + rand(1, 4)
+      g:stroke({{x0, y0}, {x0 + lean * h * 0.4, y0 - h * 0.6}, {x0 + lean * h, y0 - h}}, {pressure={0.6, 0}, ramps={0.05, 0.7}})
+    end
+  end
+end
+local hb = brush("rigger", 1.1)
+for _, hx in ipairs({372, 395, 548, 575, 690, 745, 782, 810}) do
+  local yt = 0
+  for _, p in ipairs(tops) do if math.abs(p[1] - hx) < 2 then yt = p[2] end end
+  hb:reload(mix("#3a2e2c", "#5e4546", rand()), 0.8)
+  for k = 1, 9 do
+    local a = -math.pi/2 + randn(0, 0.55)
+    local l = rand(8, 20)
+    local x0 = hx + rand(-4, 4)
+    hb:stroke({{x0, yt + 3}, {x0 + math.cos(a) * l * 0.5, yt + 3 + math.sin(a) * l * 0.5}, {x0 + math.cos(a) * l, yt + 3 + math.sin(a) * l}}, {pressure={0.7, 0.05}, ramps={0.05, 0.6}})
+  end
+  local hd = brush("round", 2.2)
+  hd:reload(mix("#5a3f4a", "#7d5a5e", rand()), 0.7)
+  for k = 1, 14 do hd:touch(hx + randn(0, 7), yt - rand(2, 16), {pressure=rand(0.3, 0.6)}) end
+end
+-- the birch roots over the edge
+local rb = brush{kind="round", width=3.2, point=0.5}
+for _, rt in ipairs({{{474, 252}, {462, 258}, {448, 270}, {440, 290}, {436, 315}}, {{482, 252}, {494, 259}, {505, 272}, {510, 292}}, {{478, 253}, {476, 266}, {472, 282}}, {{470, 252}, {450, 254}, {428, 262}, {425, 275}}}) do
+  rb:reload("#6d6154", 0.9)
+  rb:stroke(rt, {pressure={0.8, 0.15}, ramps={0.05, 0.6}, shake=0.5})
+  local hl = {}
+  for k, p in ipairs(rt) do hl[k] = {p[1] - 0.8, p[2] - 0.8} end
+  local lb = brush("rigger", 0.8); lb:load("#b3a58e", 0.7)
+  lb:stroke(hl, {pressure={0.5, 0.05}, ramps={0.05, 0.6}})
+end

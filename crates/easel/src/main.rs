@@ -9,6 +9,7 @@
 //! See crates/easel/README.md.
 
 mod api;
+mod form;
 mod look;
 mod session;
 

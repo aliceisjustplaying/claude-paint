@@ -73,9 +73,9 @@ pub fn mixseed(a: u64, b: u64, c: u64) -> u64 {
     z ^ (z >> 31)
 }
 
-type S = Rc<RefCell<Studio>>;
+pub(crate) type S = Rc<RefCell<Studio>>;
 
-fn err<T>(msg: impl Into<String>) -> Result<T> {
+pub(crate) fn err<T>(msg: impl Into<String>) -> Result<T> {
     Err(mlua::Error::runtime(msg.into()))
 }
 
@@ -134,7 +134,7 @@ pub fn rgb_of(v: &Value) -> Result<Rgb> {
 
 /// A painter field sampled on a grid in canvas units.
 #[derive(Clone)]
-struct Grid<const N: usize> {
+pub(crate) struct Grid<const N: usize> {
     x0: f32,
     y0: f32,
     step: f32,
@@ -160,7 +160,7 @@ impl<const N: usize> Grid<N> {
 }
 
 /// Box (units) a field is needed in: the mask's support grown by `pad`.
-fn support(m: Option<&Mask>, f: Frame, pad: f32) -> (f32, f32, f32, f32) {
+pub(crate) fn support(m: Option<&Mask>, f: Frame, pad: f32) -> (f32, f32, f32, f32) {
     let (w, h) = (f.width(), f.height());
     let Some(m) = m else { return (0.0, 0.0, w, h) };
     let (mut x0, mut y0, mut x1, mut y1) = (usize::MAX, usize::MAX, 0, 0);
@@ -196,7 +196,7 @@ fn sample<const N: usize>(st: &S, fun: &Function, b: (f32, f32, f32, f32), conv:
     Ok(Grid { x0: b.0, y0: b.1, step, nx, ny, v })
 }
 
-type FieldBox<T> = Box<dyn Fn(f32, f32) -> T + Sync>;
+pub(crate) type FieldBox<T> = Box<dyn Fn(f32, f32) -> T + Sync>;
 
 fn color_field(st: &S, v: &Value, b: (f32, f32, f32, f32)) -> Result<FieldBox<Rgb>> {
     if let Value::Function(f) = v {
@@ -208,7 +208,7 @@ fn color_field(st: &S, v: &Value, b: (f32, f32, f32, f32)) -> Result<FieldBox<Rg
     }
 }
 
-fn scalar_field(st: &S, v: &Value, b: (f32, f32, f32, f32), what: &str) -> Result<FieldBox<f32>> {
+pub(crate) fn scalar_field(st: &S, v: &Value, b: (f32, f32, f32, f32), what: &str) -> Result<FieldBox<f32>> {
     match v {
         Value::Function(f) => {
             let what = what.to_string();
@@ -234,6 +234,12 @@ fn scalar_field(st: &S, v: &Value, b: (f32, f32, f32, f32), what: &str) -> Resul
 /// Angles are interpolated as directions (cos, sin), so a field that wraps
 /// through ±π stays smooth.
 fn angle_field(st: &S, v: &Value, b: (f32, f32, f32, f32)) -> Result<FieldBox<f32>> {
+    // a form's own field (f:field("fall")): read natively, no grid
+    if let Value::UserData(u) = v
+        && let Ok(fu) = u.borrow::<crate::form::FieldU>()
+    {
+        return Ok(fu.angle(0.0));
+    }
     if let Value::Function(f) = v {
         let g = sample::<2>(st, f, b, |r| {
             let a = match r {
@@ -254,12 +260,12 @@ fn angle_field(st: &S, v: &Value, b: (f32, f32, f32, f32)) -> Result<FieldBox<f3
 
 // ---------------------------------------------------------------- tables
 
-fn num(t: &Table, k: &str) -> Result<Option<f32>> {
+pub(crate) fn num(t: &Table, k: &str) -> Result<Option<f32>> {
     t.get::<Option<f32>>(k)
 }
 
 /// A pair from {a, b} or a single number (both the same).
-fn pair(t: &Table, k: &str) -> Result<Option<(f32, f32)>> {
+pub(crate) fn pair(t: &Table, k: &str) -> Result<Option<(f32, f32)>> {
     match t.get::<Value>(k)? {
         Value::Nil => Ok(None),
         Value::Number(n) => Ok(Some((n as f32, n as f32))),
@@ -270,7 +276,7 @@ fn pair(t: &Table, k: &str) -> Result<Option<(f32, f32)>> {
 }
 
 /// Points from {{x, y}, ...} or {x1, y1, x2, y2, ...}.
-fn points(v: &Value) -> Result<Vec<(f32, f32)>> {
+pub(crate) fn points(v: &Value) -> Result<Vec<(f32, f32)>> {
     let Value::Table(t) = v else { return err("points: want {{x, y}, ...} or {x1, y1, x2, y2, ...}") };
     let mut out = Vec::new();
     match t.get::<Value>(1)? {
@@ -291,7 +297,7 @@ fn points(v: &Value) -> Result<Vec<(f32, f32)>> {
     Ok(out)
 }
 
-fn check_keys(t: &Table, allowed: &[&str], what: &str) -> Result<()> {
+pub(crate) fn check_keys(t: &Table, allowed: &[&str], what: &str) -> Result<()> {
     for kv in t.clone().pairs::<Value, Value>() {
         let (k, _) = kv?;
         if let Value::String(s) = &k {
@@ -476,7 +482,7 @@ fn style(st: &S) -> Result<Rc<Style>> {
     st.borrow().style.clone().ok_or_else(no_canvas)
 }
 
-fn frame(st: &S) -> Result<Frame> {
+pub(crate) fn frame(st: &S) -> Result<Frame> {
     Ok(st.borrow().canvas.as_ref().ok_or_else(no_canvas)?.frame())
 }
 
@@ -550,7 +556,7 @@ impl UserData for Pal {
 #[derive(Clone)]
 pub struct M(pub Rc<Mask>);
 
-fn mask_of(v: &Value) -> Result<Rc<Mask>> {
+pub(crate) fn mask_of(v: &Value) -> Result<Rc<Mask>> {
     match v {
         Value::UserData(u) => Ok(u.borrow::<M>()?.0.clone()),
         o => err(format!("want a mask, got {} (make one with mask(fn), ellipse, poly, rect, below, ribbon, everywhere)", o.type_name())),
@@ -571,8 +577,13 @@ thread_local! {
 }
 const GC_EVERY_BYTES: usize = 400 << 20;
 
-fn wrap(m: Mask) -> M {
-    let bytes = m.data.len() * 4;
+pub(crate) fn wrap(m: Mask) -> M {
+    note_bytes(m.data.len() * 4);
+    M(Rc::new(m))
+}
+
+/// Count memory handed to Lua values; collect garbage every `GC_EVERY_BYTES`.
+pub(crate) fn note_bytes(bytes: usize) {
     let lua = GC.with(|g| {
         let mut g = g.borrow_mut();
         g.1 += bytes;
@@ -586,7 +597,6 @@ fn wrap(m: Mask) -> M {
     if let Some(l) = lua {
         let _ = l.gc_collect();
     }
-    M(Rc::new(m))
 }
 
 impl UserData for M {
@@ -649,7 +659,7 @@ fn eval_mask(f: Frame, g: &Function) -> Result<Mask> {
     Ok(Mask { f, data })
 }
 
-fn curve_of(v: &Value, w: f32) -> Result<Vec<(f32, f32)>> {
+pub(crate) fn curve_of(v: &Value, w: f32) -> Result<Vec<(f32, f32)>> {
     match v {
         Value::Function(f) => {
             let n = 250;
@@ -844,7 +854,7 @@ fn work(st: &S, mask: Rc<Mask>, o: Table, preset: Option<&str>) -> Result<()> {
     Ok(())
 }
 
-trait FromLuaValue: Sized {
+pub(crate) trait FromLuaValue: Sized {
     fn from_lua_value(v: Value) -> Result<Self>;
 }
 impl FromLuaValue for f32 {
@@ -857,7 +867,7 @@ impl FromLuaValue for f32 {
     }
 }
 
-fn seed_of(st: &S, o: &Table) -> Result<u64> {
+pub(crate) fn seed_of(st: &S, o: &Table) -> Result<u64> {
     Ok(match o.get::<Option<u64>>("seed")? {
         Some(s) => s,
         None => st.borrow_mut().auto_seed(),
@@ -1308,6 +1318,8 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
             Ok(())
         })?)?;
     }
+
+    crate::form::install(lua, st.clone())?;
 
     // trees
     {

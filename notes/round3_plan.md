@@ -75,3 +75,4 @@ Key question for the user: how the easel FEELS to the agent.
 - tip merged (coverage-aware baking ported into drying's bake; PAINTCK4). Coast #17 fix applied (non-finite gesture/touch rejected). fixes-paint merged; LAID_PER_LOAD_ROUND re-measured for the tip (4.0); open: aim at a mark's thickness-weighted mean look; flecks in darks from bristle model remain; drying stage resolution-dependent below ~800px.
 - atmosphere merged: sky fields are the win (off-center morning glow, overcast break, twilight Belt of Venus from scattering); study painting weak (dark pasted cumulus, cone peaks, straight range foot on the sea).
 - easel-3 (final merge + bindings for everything) and surface (flecks in darks, aim at a mark's average look, drying at a physical scale) running.
+- easel merged (a2a5ada): Lua 5.5 (fixed hash seed via CFLAGS for replay), bindings for everything, painter's guide; meadow/rocks/example replay byte-identically at 1000 and 3200.

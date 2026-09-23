@@ -82,6 +82,15 @@ pub fn gradient(stops: &[(f32, Rgb)], t: f32, mode: Mix) -> Rgb {
 }
 
 // OKLab (Björn Ottosson, https://bottosson.github.io/posts/oklab/)
+/// `c` moved in OKLab: `dl` lighter (negative: darker), `da` toward red
+/// (negative: green), `db` toward yellow (negative: blue). For relative
+/// colors, e.g. "the snow here, darker and bluer":
+/// `shift(under, -0.06, 0.0, -0.03)`.
+pub fn shift(c: Rgb, dl: f32, da: f32, db: f32) -> Rgb {
+    let l = to_oklab(c);
+    from_oklab([(l[0] + dl).clamp(0.0, 1.0), l[1] + da, l[2] + db])
+}
+
 pub fn to_oklab(c: Rgb) -> Rgb {
     let l = 0.4122214708 * c[0] + 0.5363325363 * c[1] + 0.0514459929 * c[2];
     let m = 0.2119034982 * c[0] + 0.6806995451 * c[1] + 0.1073969566 * c[2];

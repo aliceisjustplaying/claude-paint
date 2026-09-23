@@ -1584,8 +1584,18 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
             let b = support(m.as_deref(), f, 4.0);
             let th = scalar_field(&st1, &o.get::<Option<Value>>("coats")?.unwrap_or(Value::Number(0.5)), b, "coats")?;
             let mut s = st1.borrow_mut();
-            s.canvas.as_mut().ok_or_else(no_canvas)?.glaze(&pig, m.as_deref(), th);
-            Ok(())
+            let c = s.canvas.as_mut().ok_or_else(no_canvas)?;
+            // a glaze goes over dry paint: the painter waits for what is
+            // under it to dry first, and that time passes on the clock
+            c.glaze(&pig, m.as_deref(), th);
+            let now = c.clock() - s.clock0;
+            let waited = now - s.clock;
+            if waited > 0.5 {
+                let note = format!("glaze: waited {} for the paint under it to dry (clock {:.0} min)\n", span(waited), now);
+                s.out.push_str(&note);
+            }
+            s.clock = now;
+            Ok(now)
         })?)?;
     }
 
@@ -1699,4 +1709,16 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
     // silence unused warnings for kinds referenced only in docs
     let _ = Kind::Round;
     Ok(())
+}
+
+
+/// A painting-time span in words: "40 min", "5.2 h", "9.8 days".
+pub(crate) fn span(minutes: f64) -> String {
+    if minutes < 90.0 {
+        format!("{minutes:.0} min")
+    } else if minutes < 48.0 * 60.0 {
+        format!("{:.1} h", minutes / 60.0)
+    } else {
+        format!("{:.1} days", minutes / (24.0 * 60.0))
+    }
 }

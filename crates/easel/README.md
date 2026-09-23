@@ -465,6 +465,16 @@ back to tacky paint (`wait(180)`) or paint over a dry layer
 (`wait(24*60)`). The clock is written into the log at every chunk, so time
 is part of the program.
 
+A day isn't always enough: thick, oily or slow-drying paint (bone black,
+lakes, heavy body color) can stay open for weeks of painting time. Check
+with `drying(x, y)` before painting over a passage, or call `dry()`.
+
+`glaze` goes over dry paint, so it first waits until everything under it is
+touch-dry; that time passes on the clock and the easel says so
+(`glaze: waited 9.8 days for the paint under it to dry`). Any other time the
+canvas spends (a finishing verb drying the paint first) is also reported at
+the end of the chunk, so the clock you see is always the canvas's.
+
 ## Replay
 
 ```sh
@@ -477,7 +487,11 @@ This runs the chunks in order in a fresh session and writes
 width you painted at, the PNG is byte-identical to `easel save` from the live
 session. At 3200px it is the full render: the same program at a finer grain.
 The file is plain Lua with chunk markers (`--@ chunk N · clock M`), so you
-can edit it by hand and replay. If you do, keep the markers.
+can edit it by hand and replay. If you do, keep the markers, and edit it
+with the session closed: a live session writes the log after every chunk.
+If it finds the file was edited while it was open, it keeps your version as
+`<name>.edited-N.lua` next to it (and says so) instead of overwriting it;
+close, copy it back and open again to paint on from your edit.
 
 ## Costs (1000px, busy 10-core machine)
 

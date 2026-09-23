@@ -19,7 +19,7 @@ use crate::surface::Linen;
 use crate::wet::LAT;
 use std::io::{self, Read, Write};
 
-const MAGIC: &[u8; 8] = b"PAINTCK1";
+const MAGIC: &[u8; 8] = b"PAINTCK2";
 
 fn put_u64(w: &mut impl Write, v: u64) -> io::Result<()> {
     w.write_all(&v.to_le_bytes())
@@ -118,6 +118,7 @@ impl Canvas {
         put_all(w, wt.vol.iter().copied())?;
         put_all(w, wt.lat.iter().flat_map(|l| *l))?;
         put_all(w, wt.hide.iter().flat_map(|h| *h))?;
+        put_all(w, wt.cover.iter().copied())?;
         Ok(())
     }
 
@@ -192,6 +193,7 @@ impl Canvas {
         wet.lat = lat.as_chunks::<LAT>().0.to_vec();
         let hide = get_all(r, n * 2)?;
         wet.hide = hide.as_chunks::<2>().0.to_vec();
+        wet.cover = get_all(r, n)?;
         wet.current = current;
         wet.dirty = dirty;
         c.wet = wet;

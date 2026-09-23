@@ -18,7 +18,7 @@ darkened every ~8 px island edge and the preview looked like crazed glass
    them in (`Cracks::fit`):
    - **Ground:** from the canvas. `Canvas::prime` and brushed style grounds
      add their thickness to `Canvas::ground_um()`, and the value is kept in
-     checkpoints (format bumped to `PAINTCK2`). With 240 µm the weave
+     checkpoints (appended at the end of the state, format bumped to `PAINTCK2`). With 240 µm the weave
      coupling is 0 (de Willigen: thick grounds give smooth, curved cracks),
      so there is no grid.
    - **Island size:** proportional to the layer thickness. Channel cracks
@@ -91,8 +91,8 @@ Cracks::aged(0).fit(240.0)       // the recipe with every None filled in
 
 Breaking change: `island_mm`, `ground_um` and `width_um` are now
 `Option<f32>`, and there are new fields `vary` and `veil`. I updated
-`friedrich_moonrise_valley` (now plain `Finish::aged`), `study_workflow`,
-`study_cracks` is unchanged in shape. The archived `paintings/fresh2/*.rs`
+`friedrich_moonrise_valley` (now plain `Finish::aged`), `study_workflow`
+and `study_cracks` (its calibration panels pin `vary: 0`, `veil: 0`). The archived `paintings/fresh2/*.rs`
 set these fields by hand and would need `Some(..)`, but they are not built.
 
 ## Evidence

@@ -27,6 +27,57 @@ use crate::wet::{LAT, Latent, Paint, Prop, mix_into};
 /// Relief (µm) that spans a bristle's contact range: a bristle pressed
 /// lightly touches only peaks this much above their surroundings.
 const TOOTH_UM: f32 = 60.0;
+/// The level a brush rests on around each pixel: the median height within
+/// about `r` px either side (a running median along the rows, then along the
+/// columns), smoothed a little. The weave and brush-mark relief, a tooth or
+/// so either side, sits about its median as it did about the old mean. A
+/// step of thick paint no longer lifts the level of the thin paint beside
+/// it: a plain mean (two box blurs of radius r) made the thin side read as a
+/// valley ~2r wide that no bristle reached, so a veil or glaze laid up to a
+/// thick dark motif stopped short of it and left a pale halo (amnesia 3,
+/// easel3_free: the stones, the figure and the trunk looked matted in).
+/// Only the corner right at the foot of the step is missed.
+pub(crate) fn contact_level(height: &[f32], w: usize, h: usize, r: usize) -> Vec<f32> {
+    use rayon::prelude::*;
+    // a window about as wide as the old kernel's reach
+    let rm = (3 * r).div_ceil(2).max(1);
+    let rows = |src: &[f32], w: usize| -> Vec<f32> {
+        let mut out = vec![0.0f32; src.len()];
+        out.par_chunks_mut(w).zip(src.par_chunks(w)).for_each(|(o, s)| running_median(s, rm, o));
+        out
+    };
+    let t = transpose(&rows(height, w), w, h);
+    let m = transpose(&rows(&t, h), h, w);
+    crate::surface::box_blur(&m, w, h, (r / 3).max(1))
+}
+
+/// Median of `s[i - r ..= i + r]` (edges repeated) into `out[i]`.
+fn running_median(s: &[f32], r: usize, out: &mut [f32]) {
+    let n = s.len();
+    let at = |i: isize| s[i.clamp(0, n as isize - 1) as usize];
+    let mut win: Vec<f32> = (-(r as isize)..=r as isize).map(at).collect();
+    win.sort_by(f32::total_cmp);
+    for (i, o) in out.iter_mut().enumerate() {
+        *o = win[r];
+        let (gone, come) = (at(i as isize - r as isize), at(i as isize + r as isize + 1));
+        let k = win.partition_point(|v| v.total_cmp(&gone).is_lt());
+        win.remove(k);
+        let k = win.partition_point(|v| v.total_cmp(&come).is_lt());
+        win.insert(k, come);
+    }
+}
+
+fn transpose(src: &[f32], w: usize, h: usize) -> Vec<f32> {
+    use rayon::prelude::*;
+    let mut dst = vec![0.0; w * h];
+    dst.par_chunks_mut(h).enumerate().for_each(|(x, col)| {
+        for (y, c) in col.iter_mut().enumerate() {
+            *c = src[y * w + x];
+        }
+    });
+    dst
+}
+
 /// How far into the tooth's range the paint a fully loaded hair carries
 /// reaches ahead of the hair (see `exchange`).
 const WET_REACH: f32 = 0.5;
@@ -562,7 +613,7 @@ impl Canvas {
             // the whole contact range.
             let r = ((1.5 / self.px_mm()).round() as usize).max(1);
             let (w, h) = (self.f.w, self.f.h);
-            let low = crate::surface::box_blur(&crate::surface::box_blur(&self.height, w, h, r), w, h, r);
+            let low = contact_level(&self.height, w, h, r);
             base.par_iter_mut().zip(self.height.par_iter().zip(low.par_iter())).for_each(|(b, (&hgt, &lo))| {
                 *b = (0.5 + (hgt - lo) / (2.0 * TOOTH_UM)).clamp(-0.2, 1.3);
             });

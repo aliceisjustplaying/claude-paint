@@ -188,3 +188,32 @@ local m = cap:mask()
 local top = mask(function(x, y) return clamp(m:at(x, y) - m:at(x, y - 4), 0, 1) end):soften(0.6) * m * below(function(x) return 360 end) * above(function(x) return 392 end)
 work(top, {hand="detail", tool="round 1.2", color=function(x, y) return mix("#4b4850", "#5d5862", sn:at01(x, y)) end,
   angle=0.08, angle_jitter=0.5, length={4, 10}, coverage=1.6, medium=0.2, pal=landpal, clip=m, broken=0.5})
+
+--@ chunk 10 · clock 2160
+local tp = {}
+for _, p in ipairs(town) do tp[#tp+1] = {p[1], p[2]} end
+tp[#tp+1] = {904, HZ + 3}; tp[#tp+1] = {800, HZ + 3}
+townm = poly(tp):roughen(0.4, 4, 3, 0.3)
+work(townm, {hand="detail", tool="round 1.2", color="#5d5462", angle=1.5708, length={2, 6}, coverage=3, medium=0.2, pal=landpal, clip=townm})
+-- the crescent: lit toward the sun, down and to the left
+MX, MY, MR = 762, 128, 8.5
+local disc = ellipse(MX, MY, MR, MR)
+moon = (disc - ellipse(MX + 3.6, MY - 2.4, MR * 0.93, MR * 0.93)):soften(0.35)
+work(moon, {hand="detail", tool="round 1", color="#f4ecd2", angle=2.3, length={2, 5}, coverage=3.5, medium=0.2, pal=skypal, clip=moon:grow(0.4)})
+
+--@ chunk 11 · clock 2160
+wait(10*60)
+trail = {{410,720},{470,660},{560,610},{628,568},{640,530},{616,500},{604,480},{622,464},{612,450},{590,442}}
+local tw = {150, 118, 84, 56, 36, 24, 15, 9, 5, 3}
+pathm = ribbon(trail, tw):roughen(3, 18, 71, 2.5)
+local pn = noise{seed=72, octaves=4, period=24, stretch={0.9, 3}}
+work(pathm, {hand="body", tool="filbert 4", color=function(x, y)
+    local t = clamp((y - 440)/260, 0, 1)
+    return mix(mix("#5f5753", "#3b352f", t), "#2c2823", 0.45*pn:at01(x, y)) end,
+  angle=function(x, y) return -0.7 + 0.35*pn(x, y) end, length={6, 22}, coverage=3.2, medium=0.18, pal=landpal, clip=pathm})
+for k, off in ipairs({-0.22, 0.2}) do
+  local rp = {}
+  for i = 1, 6 do local p = trail[i]; rp[i] = {p[1] + off*tw[i] + randn(0, 2), p[2] + randn(0, 2)} end
+  local rm = ribbon(rp, {9, 7, 5, 3.4, 2.2, 1.2}):roughen(1.6, 10, 80 + k, 1.2) * pathm
+  work(rm, {hand="detail", tool="round 2.5", color_over={shift={-0.035, 0, -0.006}}, angle=-0.7, length={6, 18}, coverage=1.6, broken=0.4, pal=landpal})
+end

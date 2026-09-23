@@ -209,6 +209,9 @@ struct Server {
     name: String,
     s: Session,
     frames: bool,
+    /// The log text as the easel last wrote (or read) it: if the file on
+    /// disk differs, someone edited it by hand and it must not be clobbered.
+    written: Option<String>,
 }
 
 fn serve(args: &[String]) -> Result<(), String> {
@@ -218,7 +221,9 @@ fn serve(args: &[String]) -> Result<(), String> {
     let mut s = Session::new(width, undo).map_err(|e| format!("easel: fatal: {e}"))?;
     // resume from the log
     let lp = log_path(&name);
+    let mut written = None;
     if let Ok(text) = std::fs::read_to_string(&lp) {
+        written = Some(text.clone());
         let chunks = parse_program(&text);
         let t0 = Instant::now();
         for (i, c) in chunks.iter().enumerate() {
@@ -233,7 +238,7 @@ fn serve(args: &[String]) -> Result<(), String> {
     let _ = std::fs::remove_file(&sock);
     let l = UnixListener::bind(&sock).map_err(|e| format!("easel: fatal: bind {}: {e}", sock.display()))?;
     let _ = std::io::stdout().flush();
-    let mut srv = Server { name, s, frames: false };
+    let mut srv = Server { name, s, frames: false, written };
     for conn in l.incoming() {
         let Ok(mut conn) = conn else { continue };
         let mut req = Vec::new();
@@ -262,10 +267,38 @@ fn serve(args: &[String]) -> Result<(), String> {
 }
 
 impl Server {
-    fn save_log(&self) -> Result<(), String> {
+    /// Write the session log. If the file was edited by hand since the
+    /// easel last wrote it, the hand-edited version is kept beside it
+    /// (`<name>.edited-N.lua`) and a note says so: the live session can't
+    /// take in edits to chunks it has already painted (close, then reopen to
+    /// replay the edited file).
+    fn save_log(&mut self) -> Result<String, String> {
         let p = log_path(&self.name);
         std::fs::create_dir_all(p.parent().unwrap()).map_err(|e| e.to_string())?;
-        std::fs::write(&p, self.s.program(&self.name)).map_err(|e| e.to_string())
+        let mut note = String::new();
+        if let Ok(disk) = std::fs::read_to_string(&p)
+            && self.written.as_deref() != Some(disk.as_str())
+        {
+            let mut k = 1;
+            let kept = loop {
+                let q = p.with_file_name(format!("{}.edited-{k}.lua", self.name));
+                if !q.exists() {
+                    break q;
+                }
+                k += 1;
+            };
+            std::fs::write(&kept, &disk).map_err(|e| e.to_string())?;
+            note = format!(
+                "note: {} was edited outside the session; your edited version is kept as {} (the session's own log is in {}). To paint from the edited version: easel close, copy it back, easel open.\n",
+                p.display(),
+                kept.display(),
+                p.display()
+            );
+        }
+        let text = self.s.program(&self.name);
+        std::fs::write(&p, &text).map_err(|e| e.to_string())?;
+        self.written = Some(text);
+        Ok(note)
     }
 
     fn look(&self, args: &[String], path: Option<PathBuf>) -> Result<String, String> {
@@ -289,9 +322,10 @@ impl Server {
                 let r = self.s.run(payload);
                 match r {
                     Ok(ran) => {
-                        self.save_log()?;
+                        let note = self.save_log()?;
                         let n = self.s.log.len();
-                        let mut out = ran.out;
+                        let mut out = note;
+                        out.push_str(&ran.out);
                         let fields = if ran.field_secs > 0.005 { format!(" (Lua fields {:.2}s)", ran.field_secs) } else { String::new() };
                         out.push_str(&format!("ok · chunk {n} · {:.2}s{fields} · {}\n", ran.secs, self.s.status().split(" · ").skip(3).collect::<Vec<_>>().join(" · ")));
                         if self.frames {
@@ -310,8 +344,8 @@ impl Server {
             "undo" => {
                 let n: usize = args.first().map(|a| a.parse().map_err(|_| "undo [n]")).transpose()?.unwrap_or(1);
                 self.s.undo(n)?;
-                self.save_log()?;
-                Ok(format!("undid {n} · {}\n", self.s.status()))
+                let note = self.save_log()?;
+                Ok(format!("{note}undid {n} · {}\n", self.s.status()))
             }
             "log" => Ok(self.s.program(&self.name)),
             "save" => {
@@ -343,8 +377,8 @@ impl Server {
                 }
             }
             "close" => {
-                self.save_log()?;
-                Ok(format!("closed; the session is in {}\n", log_path(&self.name).display()))
+                let note = self.save_log()?;
+                Ok(format!("{note}closed; the session is in {}\n", log_path(&self.name).display()))
             }
             o => Err(format!("unknown command {o:?}")),
         }

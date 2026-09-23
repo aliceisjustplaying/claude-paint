@@ -228,3 +228,34 @@ while y < 575 do
   y = y + 1.2 + d * 0.055 + rand(0, 1)
 end
 print(n)
+
+--@ chunk 15 · clock 3150
+
+print(clock())
+wait(120)
+pathpts = {{820, 714}, {735, 668}, {690, 628}, {640, 596}, {590, 566}, {545, 546}, {512, 532}}
+pathm = ribbon(pathpts, {34, 26, 20, 15, 11, 7, 4}):roughen(2.5, 14, 8, 2.5) * landm
+work(pathm, {hand="body", tool="filbert 3", color=function(x, y) return mix("#5b5644", "#4a4638", smoothstep(530, 714, y) * 0.5 + 0.4 * gn:at01(x * 3, y * 3)) end,
+  angle=function(x, y) return -0.6 + 0.35 * gn(x * 2, y * 2) end, length={5, 16}, coverage=2.6, medium=0.18, clip=pathm})
+heath = mask(function(x, y) return (gn:at01(x * 1.3, y * 1.9) > 0.6 and y > 540) and 1 or 0 end):roughen(4, 16, 11, 5) * landm - pathm:grow(3)
+stipple(heath, {width=2.2, color=function(x, y) return mix("#3f3431", "#302827", smoothstep(530, 714, y)) end, coverage=1.8,
+  pressure={0.4, 0.8}, dips={16, 0.35, 0.6}, medium=0.2, fade=1})
+
+--@ chunk 16 · clock 45631.58203125
+
+local region = (landm * below(function(x) return moundtop(x) - 2 end) + landm * mask(function(x, y) return (x < 150 or x > 500) and 1 or 0 end)) - pathm:shrink(2)
+tufts = sward{region=region, horizon=HZ, near=H, height=36, flowers=0.0, seed=4, thin=0.3, patch=0.6, patch_size=110,
+  wind={lean=0.22, gust=0.3, period=140, seed=2}}
+local g = brush("rigger", 0.7)
+local cols = {"#48463a", "#565240", "#393a2e", "#625c45", "#302f26", "#4f4a3a"}
+local n = 0
+for i, t in ipairs(tufts) do
+  if i % 3 == 1 then
+    local c = cols[1 + (i // 3) % #cols]
+    local near = smoothstep(520, 714, t.y)
+    g:reload(mix(c, "#24231d", 0.45 * near), 0.7)
+  end
+  local p = clamp(0.2 + 0.55 * t.scale, 0.15, 0.9)
+  for _, bl in ipairs(t.blades) do g:stroke(bl, {pressure={p, 0.0}, ramps={0.05, 0.7}}); n = n + 1 end
+end
+print(#tufts, n)

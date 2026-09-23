@@ -488,4 +488,43 @@ local cs = (ellipse(760, 462, 230, 42):roughen(22, 90, 5, 18) + ellipse(560, 404
 glaze(cs:blur(18), {color="#55655a", coats=0.16, pigment="transparent"})
 
 --@ chunk 22 · clock 100524.224609375
+-- long, curving blades through the dark foreground band: sunlit tips and dark stalks, uneven lengths
+local g = brush("rigger", 0.8)
+local gn = noise{seed=81, octaves=3, period=90}
+local cols = {"#7d8d44", "#2f3d24", "#9aa25a", "#3c4b2a", "#6a7a3a", "#253220"}
+local n = 0
+for i = 1, 1400 do
+  local x = rand(-10, 1010)
+  local y = rand(560, 722)
+  if HILL:at(x, math.min(y, 713)) > 0.5 and not (x > 830 and x < 900 and y > 540) then
+    local depth = (y - 540) / 180
+    local h = (8 + 34 * depth) * rand(0.5, 1.6) * (1 + 0.4*gn(x, y))
+    local lean = 0.25*gn(x*0.5, 0) + randn(0, 0.22)
+    local curl = randn(0, 0.25)
+    if i % 7 == 1 then g:reload(cols[1 + (i // 7) % #cols], 0.75) end
+    g:stroke({{x, y}, {x + lean*h*0.4, y - h*0.5}, {x + (lean + curl)*h, y - h}}, {pressure={clamp(0.35 + 0.5*depth, 0.3, 0.9), 0}, ramps={0.05, 0.75}})
+    n = n + 1
+  end
+end
+-- plantain rosettes and clover in the grass below the brow
+local lb = brush("round", 2)
+for _, p in ipairs({{560, 600}, {690, 626}, {420, 650}, {150, 610}, {960, 660}, {330, 688}}) do
+  for k = 0, 5 do
+    local a = -math.pi + k * math.pi / 5 + randn(0, 0.15)
+    local L = rand(10, 18)
+    lb:reload(k % 2 == 0 and "#4d6130" or "#6b7f3e", 0.8)
+    lb:stroke({{p[1], p[2]}, {p[1] + math.cos(a)*L*0.5, p[2] + math.sin(a)*L*0.25 - 2}, {p[1] + math.cos(a)*L, p[2] + math.sin(a)*L*0.35}}, {pressure={0.4, 1.0, 0.1}, ramps={0.3, 0.5}})
+  end
+end
+local fb = brush("round", 1.3)
+for i = 1, 40 do
+  local x, y = rand(20, 980), rand(540, 700)
+  if HILL:at(x, y) > 0.5 then
+    fb:reload(({"#efe9d4", "#e0c24a", "#efe9d4", "#b7a0c8"})[1 + i % 4], 0.8)
+    fb:touch(x, y, {pressure=0.5 + 0.3*(y - 540)/160})
+  end
+end
+print(n, "blades")
+
+--@ chunk 23 · clock 100524.224609375
 wait(24*60); varnish{color="#e6d3a4", coats=0.3, vary=0.1}; relief()

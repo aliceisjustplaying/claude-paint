@@ -528,4 +528,24 @@ bury(128, 672, 70, 9, 34, 101); bury(192, 678, 30, 6, 28, 102); bury(905, 680, 4
 
 --@ chunk 32 · clock 45631.58203125
 
-dry(); varnish{color="#e6d3a4", coats=0.3, vary=0.1}; relief()
+-- the figure: slope the shoulders by painting the sea back into the square corners
+local bgL, bgR = sample(FX - 8, FY - 47, 1.5), sample(FX + 8, FY - 47, 1.5)
+local cornerL = poly({{FX - 6.4, FY - 45}, {FX - 2.2, FY - 45.6}, {FX - 2.6, FY - 44.3}, {FX - 6.8, FY - 40.5}}, false)
+local cornerR = poly({{FX + 6.2, FY - 45}, {FX + 2.4, FY - 45.6}, {FX + 2.8, FY - 44.3}, {FX + 6.6, FY - 40.5}}, false)
+stipple(cornerL, {width=0.9, color=bgL, coverage=5, pressure={0.5, 0.8}, aim=false, medium=0.2, fade=0, clip=cornerL})
+stipple(cornerR, {width=0.9, color=bgR, coverage=5, pressure={0.5, 0.8}, aim=false, medium=0.2, fade=0, clip=cornerR})
+-- a collar and a narrow warm edge down his right side, one continuous stroke
+local rb = brush("rigger", 0.45)
+rb:load("#6a5642", 0.5)
+rb:stroke({{FX + 2.8, FY - 44.2}, {FX + 6.2, FY - 40.8}, {FX + 7.1, FY - 33}, {FX + 7.9, FY - 22}, {FX + 8.6, FY - 13}}, {pressure={0.45, 0.2}, ramps={0.1, 0.4}})
+local cb = brush("round", 1.0); cb:load("#16171b", 0.8)
+cb:stroke({{FX - 2.6, FY - 44.8}, {FX, FY - 45.6}, {FX + 2.6, FY - 44.8}}, {pressure={0.6, 0.6}})
+-- the dead oak roots into the turf, like the big oak
+local g = brush("rigger", 0.6)
+local ts = sward{region=ellipse(508, 516, 26, 7), horizon=HZ, near=H, height=24, flowers=0.0, seed=97, thin=0.0, wind={lean=0.22, gust=0.3, period=140, seed=2}}
+for i, t in ipairs(ts) do
+  if i % 3 == 1 then g:reload(({"#34322a", "#403c30", "#2a2923", "#4c4736"})[1 + (i // 3) % 4], 0.7) end
+  for _, bl in ipairs(t.blades) do g:stroke(bl, {pressure={clamp(0.2 + 0.5 * t.scale, 0.15, 0.8), 0.0}, ramps={0.05, 0.7}}) end
+end
+-- heather: knock the purple stains back toward the dune
+glaze(heath:blur(3), {color="#3a3a2c", coats=0.18, pigment="semi"})

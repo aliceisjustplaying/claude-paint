@@ -594,7 +594,7 @@ impl Tree {
     }
 
     fn grow_local(crown: &[(f32, f32)], trunk: Option<&[(f32, f32)]>, sp: &Species, season: &Season, sun: V3, seed: u64) -> Tree {
-        let mut rng = Rng::new(seed ^ 0x0a47_2ee);
+        let mut rng = Rng::new(seed ^ 0x00a4_72ee);
         let crown = if crown.len() < 12 { soften(crown, 3) } else { crown.to_vec() };
         let (x0, y0, x1, y1) = crown.iter().fold((f32::MAX, f32::MAX, f32::MIN, f32::MIN), |b, p| (b.0.min(p.0), b.1.min(p.1), b.2.max(p.0), b.3.max(p.1)));
         let hc = (y1 - y0).max(4.0);
@@ -652,8 +652,8 @@ impl Tree {
         let fork_y = nodes[nt - 1].p[1];
         let in_crown: Vec<usize> = (0..nt - 1).filter(|&i| nodes[i].p[1] < y1 - 0.02 * hc && nodes[i].p[1] > fork_y).collect();
         if pollard {
-            for i in nt.saturating_sub(3)..nt {
-                nodes[i].grow = true;
+            for n in &mut nodes[nt.saturating_sub(3)..nt] {
+                n.grow = true;
             }
         } else if !in_crown.is_empty() {
             let k = rng.range(sp.scaffold.0 as f32, sp.scaffold.1 as f32 + 1.0) as usize;

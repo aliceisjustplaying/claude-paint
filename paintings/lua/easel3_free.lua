@@ -552,4 +552,53 @@ glaze(heath:blur(3), {color="#3a3a2c", coats=0.18, pigment="semi"})
 
 --@ chunk 33 · clock 45631.58203125
 
+seaband2 = noise{seed=14, octaves=4, period=160, stretch={0.0, 30}}
+seacol2 = function(x, y)
+  local d = math.max(y - HZ, 0)
+  local refl = skycol(x, HZ - d * 2.2 - 10)
+  local dark = mix("#303a58", "#1f2535", smoothstep(0, 120, d))
+  local k = 0.36 - 0.24 * smoothstep(0, 110, d) + 0.05 * seaband2(x, y)
+  local dx = (x - SUNX) / 220
+  k = k + 0.14 * math.exp(-dx * dx) * (1 - smoothstep(0, 90, d))
+  return mix(dark, refl, clamp(k, 0, 1))
+end
+local veil = gclip * mask(function(x, y) return smoothstep(HZ + 3, HZ + 14, y) end)
+stipple(veil, {width=2.2, color=seacol2, coverage=2.6, pressure={0.4, 0.8}, dips={20, 0.35, 0.6}, medium=0.5, clip=veil})
+
+--@ chunk 34 · clock 45631.58203125
+
+local veil = gclip * mask(function(x, y) return smoothstep(HZ + 2, HZ + 12, y) end)
+blend(veil, {angle=0, angle_jitter=0.003, length={80, 200}, coverage=2, clip=veil})
+
+--@ chunk 35 · clock 45631.58203125
+wait(240)
+
+
+local lt, dk = brush("rigger", 0.9), brush("round", 1.6)
+local y = HZ + 1.5
+local n = 0
+while y < 575 do
+  local d = y - HZ
+  local cnt = math.floor(rand(0.6, 3) + d * 0.02)
+  for j = 1, cnt do
+    local x = (math.random() < 0.5) and randn(SUNX, 200) or rand(-40, 1040)
+    local len = rand(6, 45) * (0.5 + d / 90) * (math.random() < 0.15 and 2.2 or 1)
+    local glow = math.exp(-((x - SUNX) / 230)^2)
+    local yy = y + randn(0, 0.4)
+    if math.random() < 0.45 + 0.3 * glow then
+      local c = mix(seacol(x, yy), skycol(x, HZ - d * 2.2 - 10), 0.45 + 0.3 * glow)
+      if n % 4 == 0 then lt:reload(c, rand(0.3, 0.6)) end
+      lt:stroke({{x, yy}, {x + len * 0.5, yy + randn(0, 0.3)}, {x + len, yy}}, {pressure={0.1, 0.35 + 0.3 * d / 100}, ramps={0.4, 0.4}, clip=gclip})
+    else
+      if n % 4 == 1 then dk:reload(mix(seacol(x, yy), "#1b2030", 0.45), 0.6) end
+      dk:stroke({{x, yy}, {x + len * 0.5, yy + randn(0, 0.3)}, {x + len, yy}}, {pressure={0.1, 0.3 + 0.4 * d / 100}, ramps={0.4, 0.4}, clip=gclip})
+    end
+    n = n + 1
+  end
+  y = y + 1.2 + d * 0.055 + rand(0, 1)
+end
+print(n)
+
+--@ chunk 36 · clock 99678.07006835938
+
 dry(); varnish{color="#e6d3a4", coats=0.3, vary=0.1}; relief(0.14)

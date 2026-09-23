@@ -63,7 +63,9 @@ paints nothing. The study that shows it paints with brushes.
     distance from the caster (tested). Low sun on uneven ground also lets a
     bank shade the hollow behind it. `cast(W, n)` works at any world point.
     Solids and ground both use it, so a pole's shadow on the boulder and
-    the boulder's shadow on the sand come from the same sun.
+    the boulder's shadow on the sand come from the same sun. The march's
+    step is capped at 0.5 m at any distance (a caster past ~250 m used to
+    panic the clamp; tested: `a_distant_caster_does_not_panic_the_shadow_march`).
   - **Contact.** `occlusion(W, n, reach, with_ground)` is SDF ambient
     occlusion. `View::contact(reach)` masks the dark seam where solids and
     proxies meet the ground: on the ground around them and on the solid
@@ -76,7 +78,12 @@ paints nothing. The study that shows it paints with brushes.
     `fresnel` (Schlick for water: small looking down at near water, large
     toward the horizon) and `travel` (how far the ray ran, for blurring).
     Things that aren't modeled, such as a far shore, are taken to stand on
-    a screen at `backdrop` meters. `View::reflections(&[bodies])` is the
+    a screen at `backdrop` meters. Water beyond the backdrop (the screen is
+    behind the reflected ray there) mirrors the canvas about the horizon
+    instead, so the far shore's reflection runs on under it; before, the
+    ray ran backward and sampled the water itself (tested:
+    `reflections_beyond_the_backdrop_run_forward`).
+    `View::reflections(&[bodies])` is the
     mask of where bodies show in the water.
   - **Perspective helpers.** `ribbon(&[(X, Z)], |t| width_m)` returns a
     `Shape`: a path or brook on the ground that narrows and foreshortens by
@@ -86,8 +93,14 @@ paints nothing. The study that shows it paints with brushes.
     direction a shadow runs at a point, for stroking shadows.
   - **`View`** (`world.view(c.frame())`) holds a `form: Form` of the
     visible bodies (all of `form`'s fields and masks work). A body's parts
-    below the ground or water seen in front of it are hidden, so a sunk
-    boulder or a pole in a pond has a true waterline. The form is lit by
+    behind the ground or water seen in front of them, or below the ground or
+    water where they stand, are hidden, so a sunk boulder or a pole in a
+    pond has a true waterline (tested: `sunk_surfaces_stay_below_the_waterline`).
+    Bodies hide each other by world depth (`Form::add_nearest`), not by
+    each body's own form `z`: every body is drawn in its own spot's
+    projection, so form `z` values of two bodies do not compare (tested:
+    `overlapping_bodies_are_ordered_by_world_depth`). Form `z` is still
+    kept for each body's own shading and silhouettes. The form is lit by
     `light_given` with the world-traced cast shadows. `at(x, y) -> Point`
     gives what is there (`What::Sky/Ground/Water/Body(id)/Off`), the world
     point, the normal (form frame), the depth and the `Shade`. Masks:

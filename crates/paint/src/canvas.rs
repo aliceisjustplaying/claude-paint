@@ -103,14 +103,26 @@ impl Frame {
     /// tabulated at every pixel column's center of the whole canvas, so a
     /// mask that calls it for every pixel evaluates it once per column.
     /// Exact: at any other x it calls `g`.
-    pub fn per_column<G: Fn(f32) -> f32 + Sync>(&self, g: G) -> impl Fn(f32) -> f32 + Sync {
+    ///
+    /// It returns a reference, which is `Copy`: the same profile can go into
+    /// a mask closure and any number of `move` color closures, and is called
+    /// as `ridge(x)`. The table (4 bytes per pixel column) and `g` live for
+    /// the rest of the program, so make profiles once, not per stroke.
+    ///
+    /// ```ignore
+    /// let n = Fbm::new(3, 4, 200.0);                     // Copy too
+    /// let ridge = f.per_column(move |x| 420.0 + 30.0 * n.get(x, 0.0));
+    /// let land = Mask::from_fn(f, move |x, y| if y > ridge(x) { 1.0 } else { 0.0 });
+    /// let color = move |x: f32, y: f32| if y - ridge(x) < 20.0 { lit } else { shade };
+    /// ```
+    pub fn per_column<'a, G: Fn(f32) -> f32 + Sync + 'a>(&self, g: G) -> &'a (impl Fn(f32) -> f32 + Sync + 'a) {
         let (n, scale) = (self.full_w, self.scale);
         let inv = 1.0 / scale;
         let table: Vec<f32> = (0..n).into_par_iter().map(|i| g((i as f32 + 0.5) * inv)).collect();
-        move |x: f32| {
+        Box::leak(Box::new(move |x: f32| {
             let i = (x * scale - 0.5).round();
             if i >= 0.0 && (i as usize) < n && (i + 0.5) * inv == x { table[i as usize] } else { g(x) }
-        }
+        }))
     }
 
     /// Index into a whole-canvas buffer (a mask) of buffer pixel `i`.

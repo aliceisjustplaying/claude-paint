@@ -20,6 +20,17 @@ via programs, pixel by pixel, no image model, no off-the-shelf art software.)
 Integrator (main session) merges into main in order color, strokes, stipple, workflow, form, motifs, re-records
 the golden, pushes to github.com/aliceisjustplaying/claude-paint.
 
+## Decontamination (user, before sleep)
+monk2 (a study of Monk by the Sea) was painted by copying one known picture
+too closely, and Moonrise leans on Two Men Contemplating the Moon. Neither
+may steer the engine. At merge time: move monk2 out of the build into
+paintings/archive/ (not built, not a regression target); the monk figure
+leaves the shared motifs. Amnesia painters get a worktree with no existing
+painting programs (monk2, moonrise, fresh/ removed) and read only README,
+research notes and engine docs, not notes/friedrich.md or git history.
+Engine quality is judged on study sheets and new compositions, never on
+likeness to a known painting.
+
 ## Phase 2: adversarial code review
 openai-codex/gpt-6-astra subagents, medium effort, fast off. Fix findings.
 

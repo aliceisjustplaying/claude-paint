@@ -383,14 +383,15 @@ impl Run {
     /// otherwise it is caught when the run ends).
     fn check_stage_flags(&self) {
         let (names, dynamic) = self.declared();
-        if dynamic {
-            return;
-        }
         for (flag, v) in [("--stop", &self.stop), ("--resume", &self.resume)] {
             if let Some(v) = v
                 && !names.iter().any(|n| key(n) == key(v))
             {
-                die(&format!("{flag} {v}: this painting has no stage by that name (stages: {})", list(&names)));
+                if dynamic {
+                    eprintln!("warning: {flag} {v}: not among the stages named in the source ({}); some are named at run time, so it is checked as the run goes", list(&names));
+                } else {
+                    die(&format!("{flag} {v}: this painting has no stage by that name (stages: {})", list(&names)));
+                }
             }
         }
     }
@@ -645,7 +646,7 @@ fn hexs(b: &[u8]) -> String {
 }
 
 fn unhex(s: &str) -> Option<Vec<u8>> {
-    if s.len() % 2 != 0 || !s.is_ascii() {
+    if !s.len().is_multiple_of(2) || !s.is_ascii() {
         return None;
     }
     (0..s.len() / 2).map(|i| u8::from_str_radix(&s[2 * i..2 * i + 2], 16).ok()).collect()

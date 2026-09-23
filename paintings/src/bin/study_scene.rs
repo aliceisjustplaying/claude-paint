@@ -19,8 +19,8 @@
 
 use paint::color::{Mix, mix};
 use paint::form::Sample;
-use paint::scene::{BodyId, Sun, View, Water, World};
-use paint::{Canvas, Fbm, Mask, Rgb, Sdf, Shape, Style, Tool, hex, smoothstep};
+use paint::scene::{BodyId, Sun, Water, World};
+use paint::{Canvas, Fbm, Mask, Rgb, Sdf, Style, Tool, hex, smoothstep};
 use paintings::figures::{self, Gown, WomanPose};
 use paintings::rocks::{self, Stone};
 
@@ -229,6 +229,9 @@ fn paint_panel(c: &mut Canvas, st: &Style, r: [f32; 4], l: &Light, seed: u64) {
     let w = &sc.world;
     let view = w.view(f);
     let k = 1.0;
+    // strokes are seeded a little past a passage's edge: their colors come
+    // from just inside the panel
+    let inside = move |x: f32, y: f32| (x.clamp(r[0] + 0.5, r[0] + r[2] - 0.5), y.clamp(r[1] + 0.5, r[1] + r[3] - 0.5));
     let hills = Fbm::new(seed as u32 + 5, 4, 1.0);
 
     // 1. the sky, level strokes, fused
@@ -261,6 +264,7 @@ fn paint_panel(c: &mut Canvas, st: &Style, r: [f32; 4], l: &Light, seed: u64) {
     //    angle lets it, over the water's own dark body; level strokes
     let water = view.water();
     let mirrored = |x: f32, y: f32| -> Rgb {
+        let (x, y) = inside(x, y);
         let Some(m) = view.mirror(x, y) else { return l.water };
         let (sx, sy) = m.src;
         let seen = if m.body.is_some() {
@@ -281,6 +285,7 @@ fn paint_panel(c: &mut Canvas, st: &Style, r: [f32; 4], l: &Light, seed: u64) {
     let land = view.land();
     let grain = Fbm::new(seed as u32 + 9, 3, 25.0);
     let sand = |x: f32, y: f32| -> Rgb {
+        let (x, y) = inside(x, y);
         let p = view.at(x, y);
         let lit = if w.sun.up() { smoothstep(0.0, 0.12, p.shade.turn) } else { 0.0 };
         let base = mix(l.sand_shade, l.sand_lit, lit, Mix::Pigment);
@@ -311,6 +316,7 @@ fn paint_panel(c: &mut Canvas, st: &Style, r: [f32; 4], l: &Light, seed: u64) {
         let shade = mix(l.sand_shade, l.sand_lit, 0.2, Mix::Pigment);
         let view = &view;
         let dark = move |x: f32, y: f32| {
+            let (x, y) = inside(x, y);
             let p = view.at(x, y);
             let wet = 1.0 - smoothstep(0.02, 0.1, w.ground_at(p.at[0], p.at[2]));
             mix(shade, mix(shade, l.water, 0.4, Mix::Pigment), wet, Mix::Pigment)
@@ -355,6 +361,7 @@ fn paint_panel(c: &mut Canvas, st: &Style, r: [f32; 4], l: &Light, seed: u64) {
     //    broken by the ripples
     let refl = view.reflections(&[]);
     let mcol = |x: f32, y: f32| -> Rgb {
+        let (x, y) = inside(x, y);
         let Some(m) = view.mirror(x, y) else { return l.water };
         let seen = match m.body {
             Some(b) if b == sc.boulder => stone.at(&m.shade),
@@ -408,11 +415,6 @@ impl Scene {
     fn new_in(r: [f32; 4], l: &Light) -> Scene {
         build(r, l.sun, l.ripple)
     }
-}
-
-#[allow(dead_code)]
-fn outline(v: &View, s: Shape) -> Mask {
-    Mask::from_shape(v.f, s)
 }
 
 fn main() {

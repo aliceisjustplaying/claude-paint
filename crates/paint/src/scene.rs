@@ -867,11 +867,9 @@ impl<'w> View<'w> {
     pub fn at(&self, x: f32, y: f32) -> Point {
         let w = self.world;
         let light = w.light();
-        if let Some(s) = self.form.sample(x, y) {
-            if let Some(b) = self.body_at(s.part) {
-                let at = w.bodies[b].spot.world([x, y, s.z]);
-                return Point { what: What::Body(b), at, n: s.n, dist: at[2], shade: s.shade };
-            }
+        if let Some((s, b)) = self.form.sample(x, y).and_then(|s| self.body_at(s.part).map(|b| (s, b))) {
+            let at = w.bodies[b].spot.world([x, y, s.z]);
+            return Point { what: What::Body(b), at, n: s.n, dist: at[2], shade: s.shade };
         }
         if !w.sees(x, y) {
             return Point { what: What::Off, at: [0.0; 3], n: [0.0, 0.0, 1.0], dist: f32::INFINITY, shade: Shade::default() };

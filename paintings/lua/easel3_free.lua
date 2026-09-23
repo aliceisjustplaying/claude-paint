@@ -513,4 +513,19 @@ sb:stroke({{FX + 8.2, FY - 25}, {FX + 10.6, FY - 12}, {FX + 12.8, FY + 0.5}}, {p
 
 --@ chunk 31 · clock 45631.58203125
 
+local g = brush("rigger", 0.7)
+local function bury(cx, cy, rx, ry, h, seed)
+  local base = sample(cx - rx - 14, cy + 8, 4)
+  local base2 = sample(cx + rx + 14, cy + 6, 4)
+  local ts = sward{region=ellipse(cx, cy, rx, ry), horizon=HZ, near=H, height=h, flowers=0.0, seed=seed, thin=0.0, wind={lean=0.25, gust=0.35, period=120, seed=5}}
+  for i, t in ipairs(ts) do
+    if i % 2 == 1 then g:reload(mix(mix(base, base2, rand()), "#3a372c", rand(0, 0.35)), 0.8) end
+    for _, bl in ipairs(t.blades) do g:stroke(bl, {pressure={clamp(0.25 + 0.6 * t.scale, 0.2, 0.9), 0.0}, ramps={0.05, 0.7}}) end
+  end
+  print(base:hex(), base2:hex(), #ts)
+end
+bury(128, 672, 70, 9, 34, 101); bury(192, 678, 30, 6, 28, 102); bury(905, 680, 44, 7, 32, 103)
+
+--@ chunk 32 · clock 45631.58203125
+
 dry(); varnish{color="#e6d3a4", coats=0.3, vary=0.1}; relief()

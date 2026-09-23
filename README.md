@@ -65,7 +65,9 @@ Engine (`crates/paint`):
 - `canvas` – glazes, relief lighting, dithered PNG out
 - `growth` – how trees grow (buds, light, vigor, pipe-model widths, decline):
   returns a skeleton of limbs, including which parts are dead wood;
-  painting it is the painter's job: `notes/motifs.md`
+  leaves as lit clumps on the young wood (`Skeleton::foliage`: masks,
+  light, sky gaps) and meadow tufts in perspective and wind (`Sward`);
+  painting them is the painter's job: `notes/motifs.md`, `notes/green.md`
 - `mask`, `edge`, `shape`, `path`, `noise`, `rng` – geometry and randomness
   (`edge` traces a mask's outline for cutting in)
 - `sched` (internal) – runs tiles of strokes in parallel without changing
@@ -97,6 +99,7 @@ Notes for the painter (read before writing a painting):
 - `notes/stipple.md` – stippling
 - `notes/form.md` – solids, light, shadow and the masks they give
 - `notes/motifs.md` – trees, spruces, figures
+- `notes/green.md` – greens on the palette, foliage, meadows
 
 Viewing renders
 ---------------

@@ -73,3 +73,35 @@ sprint: bounded single-subject mark-making studies instead; (5) the owner's
 eye decides, critics are diagnostic. Rejected: Gemini's idea to benchmark
 Friedrich's actual masterpieces (copying). The next plan is those three
 experiments, in order, before more loops.
+
+## Round 6 plan: the mark-making lab (high level, agreed with the owner)
+
+**The measuring stick is the owner's eye: does it look good?** Not "does it
+look like a Friedrich", not a critic total. Critics (panel: Gemini 3.8 Flash
++ gpt-6-astra) are diagnostic only: they name defects, they don't decide.
+
+**Principles** (from the owner's review and both advisors, notes/advice/):
+- *Mark economy*: say as much as possible with as few marks as possible.
+  A crown is a dark mass, a few unequal lights, a couple of branches and
+  sky holes, not 30,000 touches ("confetti").
+- *Edges and value families across objects*: decide edges between things
+  (found, soft, lost); group darks with darks and lights with lights across
+  objects (the rock's shadow side, its cast shadow and the wood behind read
+  as one dark shape). Objects must meet their surroundings, not be finished
+  alone inside their own masks ("pasted on", halos, the rock's pale base
+  strip, the stump's rectangle).
+- *A hand in time*: a stroke costs the time a hand takes to make it; a
+  painter works in sessions (a few hours, a couple of times a day) and paint
+  sets between them. Economy and wet/dry timing then come from physics, not
+  rules. Friedrich over days or weeks is fine; so is a fast alla prima day.
+- *Real wet-on-wet*: open paint must blend, drag and soften at contours;
+  the sketchbook's "dry() before any passage" default goes (it likely makes
+  the cutout look). Dry and tacky stay tools for when they're wanted.
+- *Quiet surface*: the relief lighting currently embosses every stroke
+  ("embossed plastic", "grooves"); Friedrich's surface is thin and smooth.
+- Structure tools (fir, tree_in, rock) stay as SCAFFOLDS (placement,
+  silhouette, major branching, light), not as things to trace in full. The
+  bare oak is promising but "too computationally fractal" with twigs
+  floating in the air: fix connectivity, fewer and more deliberate twigs.
+- Never copy existing paintings or benchmark against them.
+

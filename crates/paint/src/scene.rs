@@ -1189,11 +1189,15 @@ struct Patch {
 /// (soft at its edges) and its distance (m). Masks from it are
 /// front-to-back composites, so the soft edge of a figure over the sea
 /// hides the sea exactly as much as it covers it, and nothing is ever
-/// subtracted twice. Build with `View::depths`.
+/// subtracted twice. Pixels outside the world's `view` (another panel of
+/// the canvas) have no stack: every mask is 0 there. Build with
+/// `View::depths`.
 pub struct Depths {
     pub f: Frame,
-    /// Depth of the ground or water seen (infinite: sky).
+    /// Depth of the ground or water seen (infinite: sky, or off the view).
     surface: Vec<f32>,
+    /// Whether the pixel lies in the world's view.
+    inview: Vec<bool>,
     water: Vec<bool>,
     bodies: Vec<Option<Patch>>,
     layers: Vec<(Vec<f32>, LayerDepth)>,
@@ -1208,6 +1212,7 @@ impl Depths {
         let f = view.f;
         let inv = 1.0 / f.scale;
         let surface = view.depth.clone();
+        let inview: Vec<bool> = (0..f.w * f.h).map(|i| world.sees(((i % f.w) as f32 + 0.5) * inv, ((i / f.w) as f32 + 0.5) * inv)).collect();
         let water: Vec<bool> = (0..f.w * f.h)
             .into_par_iter()
             .map(|i| {
@@ -1233,7 +1238,7 @@ impl Depths {
                 (cov, l.depth)
             })
             .collect();
-        Depths { f, surface, water, bodies, layers }
+        Depths { f, surface, inview, water, bodies, layers }
     }
 
     /// A body's coverage and depth: one ray per pixel, four at its edges.
@@ -1285,9 +1290,13 @@ impl Depths {
         Some(Patch { x0, y0, w, h, cov, dep })
     }
 
-    /// The things seen at pixel `i`, nearest first: (depth m, coverage, thing).
+    /// The things seen at pixel `i`, nearest first: (depth m, coverage,
+    /// thing). Empty off the world's view (not sky: nothing of this world).
     pub fn stack(&self, i: usize, out: &mut Vec<Seen>) {
         out.clear();
+        if !self.inview[i] {
+            return;
+        }
         let (px, py) = (i % self.f.w, i / self.f.w);
         for (b, p) in self.bodies.iter().enumerate() {
             let Some(p) = p else { continue };
@@ -1347,12 +1356,16 @@ impl Depths {
         }
         out
     }
-    /// A mask from any rule over each pixel's stack (nearest first).
+    /// A mask from any rule over each pixel's stack (nearest first); 0 off
+    /// the world's view, whatever the rule says.
     pub fn map(&self, g: impl Fn(&[Seen]) -> f32 + Sync) -> Mask {
         let f = self.f;
         let data = (0..f.w * f.h)
             .into_par_iter()
             .map_init(Vec::new, |buf, i| {
+                if !self.inview[i] {
+                    return 0.0;
+                }
                 self.stack(i, buf);
                 g(buf).clamp(0.0, 1.0)
             })
@@ -1377,21 +1390,26 @@ impl Depths {
             v
         })
     }
-    /// Everything in front of what `sel` picks, where it is: the parts of
-    /// it that are hidden, and by how much.
+    /// Where what `sel` picks is hidden, and by how much: the share of the
+    /// pixel it would cover if nothing else were there (the selected
+    /// things composited front to back: their union), less the share of it
+    /// that is seen (`visible`). So a selected thing of coverage 0.25
+    /// behind an opaque one gives 0.25, not 1; and with several selected
+    /// things it counts every one, a far one hidden behind something
+    /// between them included. 0 where nothing selected is.
     pub fn front(&self, sel: &(dyn Fn(Thing) -> bool + Sync)) -> Mask {
         self.map(|s| {
-            let Some(d) = s.iter().filter(|e| sel(e.2)).map(|e| e.0).reduce(f32::min) else { return 0.0 };
-            let mut t = 1.0;
-            for &(dk, c, th) in s {
-                if dk >= d {
-                    break;
+            // (union alone, seen share)
+            let (mut ta, mut t, mut all, mut seen) = (1.0, 1.0, 0.0, 0.0);
+            for &(_, c, th) in s {
+                if sel(th) {
+                    all += c * ta;
+                    seen += c * t;
+                    ta *= 1.0 - c;
                 }
-                if !sel(th) {
-                    t *= 1.0 - c;
-                }
+                t *= 1.0 - c;
             }
-            1.0 - t
+            (all - seen).max(0.0)
         })
     }
     /// Where a pass that lies just behind what `sel` picks would show: not
@@ -1493,6 +1511,16 @@ impl View<'_> {
     /// `World::sky_occlusion`), and on the visible bodies the sky hidden by
     /// the ground and the other bodies, near the ground. It is darkest in
     /// the crease and falls off smoothly with distance, with no edge.
+    ///
+    /// `by` picks the casters, not the receivers. The ground part is the
+    /// sky the `by` bodies hide. On a body, the part of it within `reach`
+    /// m of the ground is shaded by the ground itself and by the other `by`
+    /// bodies, whatever `by` picks: a body's foot is always in contact with
+    /// the ground it stands on (with `by` picking nothing this is all that
+    /// remains). Every share is weighted by how much of that surface is
+    /// seen, so it never darkens the sky, a layer (a figure painted by hand
+    /// and registered with `World::layer`) or anything in front of the
+    /// shaded surface.
     pub fn occlusion(&self, reach: f32, by: &(dyn Fn(BodyId) -> bool + Sync)) -> Mask {
         let w = self.world;
         let d = self.depths();
@@ -1751,6 +1779,68 @@ mod tests {
         // the stone's silhouette is soft over a pixel, not stair-stepped
         let partial = vis.data.iter().filter(|c| **c > 0.05 && **c < 0.95).count();
         assert!(partial > 20, "{partial}");
+    }
+
+    /// Review 4 #3: `front` weighs by the selected coverage and counts
+    /// every selected thing, the ones between unselected ones included.
+    #[test]
+    fn front_weighs_coverage_and_every_selected_thing() {
+        let f = Frame::new(100, 70, 0.1);
+        let mut w = World::new([0.0, 0.0, 1000.0, 700.0], 300.0, 1.6);
+        w.layer("front", Mask::full(f), LayerDepth::At(5.0));
+        let i = w.layer("selected", Mask::from_fn(f, |_, _| 0.25), LayerDepth::At(10.0));
+        let v = w.view(f);
+        let d = v.depths();
+        let fr = d.front(&|t| t == Thing::Layer(i)).sample(500.0, 100.0);
+        assert!((fr - 0.25).abs() < 1e-5, "only 0.25 is there to hide: {fr}");
+        let mut w = World::new([0.0, 0.0, 1000.0, 700.0], 300.0, 1.6);
+        let a = w.layer("selected near", Mask::from_fn(f, |_, _| 0.25), LayerDepth::At(5.0));
+        w.layer("occluder", Mask::full(f), LayerDepth::At(7.0));
+        let b = w.layer("selected far", Mask::full(f), LayerDepth::At(10.0));
+        let v = w.view(f);
+        let d = v.depths();
+        let sel = |t| t == Thing::Layer(a) || t == Thing::Layer(b);
+        let (vis, fr) = (d.visible(&sel).sample(500.0, 100.0), d.front(&sel).sample(500.0, 100.0));
+        assert!((vis - 0.25).abs() < 1e-5 && (fr - 0.75).abs() < 1e-5, "visible {vis} hidden {fr}");
+        // seen and hidden add up to the selected union; nothing hidden when
+        // the occluder is behind
+        let mut w = World::new([0.0, 0.0, 1000.0, 700.0], 300.0, 1.6);
+        let a = w.layer("near", Mask::from_fn(f, |_, _| 0.5), LayerDepth::At(5.0));
+        w.layer("behind", Mask::full(f), LayerDepth::At(30.0));
+        let v = w.view(f);
+        let fr = v.depths().front(&|t| t == Thing::Layer(a)).sample(500.0, 100.0);
+        assert!(fr.abs() < 1e-6, "{fr}");
+    }
+
+    /// Review 4 #4: off a world's panel is not its sky: no stack, and no
+    /// mask lets a pass paint there.
+    #[test]
+    fn off_the_panel_is_nothing() {
+        let f = Frame::new(100, 70, 0.1);
+        let mut w = World::new([0.0, 0.0, 500.0, 700.0], 300.0, 1.6);
+        let l = w.layer("veil", Mask::full(f), LayerDepth::At(8.0));
+        let v = w.view(f);
+        let d = v.depths();
+        assert!(matches!(v.at(750.0, 100.0).what, What::Off));
+        let (on, off) = ((250.0, 100.0), (750.0, 100.0));
+        for (name, m) in [
+            ("visible sky", d.visible(&|t| t == Thing::Sky)),
+            ("visible layer", d.visible(&|t| t == Thing::Layer(l))),
+            ("behind layer", d.behind(&|t| t == Thing::Layer(l))),
+            ("behind nothing", d.behind(&|_| false)),
+            ("at_depth", d.at_depth(5.0)),
+            ("between", d.between(0.0, f32::INFINITY)),
+            ("front", d.front(&|t| t == Thing::Sky)),
+        ] {
+            assert_eq!(m.sample(off.0, off.1), 0.0, "{name} off the panel");
+            assert_eq!(m.sample(off.0 + 200.0, 600.0), 0.0, "{name} off the panel, low");
+            let _ = m.sample(on.0, on.1);
+        }
+        assert!(d.visible(&|t| t == Thing::Sky).sample(on.0, 50.0) == 0.0, "the veil covers the sky on the panel");
+        assert!(d.visible(&|t| t == Thing::Layer(l)).sample(on.0, on.1) > 0.99);
+        assert!(d.at_depth(5.0).sample(on.0, on.1) > 0.99 && d.behind(&|_| false).sample(on.0, on.1) > 0.99);
+        assert!(d.seen_at(off.0, off.1).is_empty() && d.at(off.0, off.1).is_empty());
+        assert!(!d.seen_at(on.0, on.1).is_empty());
     }
 
     #[test]

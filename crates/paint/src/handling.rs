@@ -94,6 +94,11 @@ pub struct Handling<'a> {
     pub scrub: usize,
     /// Clip bristle contact to the mask (crisp, cut-in edges).
     pub clip: bool,
+    /// Look and fill: after the strokes, dab paint into the bare spots the
+    /// strokes left in the region (see `fill`). `None`: on when the pass
+    /// means to cover (coverage ≥ `FILL_FROM`, a loaded brush, not a
+    /// blender or a scrub).
+    pub fill: Option<bool>,
     /// Hug the region's edges: strokes seeded just outside it (within half a
     /// brush) are moved onto its edge, so coverage doesn't thin there
     /// (default on; see `hug`).
@@ -166,6 +171,7 @@ impl<'a> Handling<'a> {
             blender: false,
             scrub: 0,
             clip: false,
+            fill: None,
             hug: true,
             threshold: 0.3,
             ramps: (0.08, 0.15),
@@ -403,6 +409,19 @@ impl<'a> Handling<'a> {
         self.clip = on;
         self
     }
+    /// Look and fill (default: on for a pass that means to cover). Strokes
+    /// placed by hand leave gaps between them where the ground shows; a
+    /// painter covering a passage sees them and dabs paint in. `false`
+    /// leaves them (broken color, a lay-in that lets the ground breathe);
+    /// `true` fills them at any coverage.
+    pub fn fill(mut self, on: bool) -> Self {
+        self.fill = Some(on);
+        self
+    }
+    /// Whether this pass fills the gaps its strokes leave (see `fill`).
+    pub fn fills(&self) -> bool {
+        self.fill.unwrap_or(self.coverage >= FILL_FROM && self.load >= FILL_LOAD && !self.blender && self.scrub == 0)
+    }
     /// Hug the region's edges (default on): a painter carries a passage to
     /// its edge as fully as through its middle. Off: stroke centers fall only
     /// inside the region, and coverage halves along its edges.
@@ -438,6 +457,11 @@ struct Plan {
     /// The passage this stroke belongs to: moving on to another passage is
     /// always a trip to the palette.
     passage: u32,
+    /// Take a fresh brush for this stroke (its own, seeded by where the
+    /// stroke starts).
+    fresh: bool,
+    /// Its stroke id, if fixed in advance (see `fill_gaps`); else the next.
+    id: Option<u32>,
 }
 
 impl Canvas {
@@ -559,9 +583,103 @@ impl Canvas {
             return;
         }
         let clip = if hd.clip && hd.cut_in.is_none() { Some(mask) } else { None };
+        let before = self.wet.current;
         self.run_plans(plans, (ex, ey), gap, &hd.tool, hd, hd.ramps, clip, seed, &mut rng);
+        if hd.fills() {
+            self.fill_gaps(mask, hd, before, clip, seed);
+        }
         if let Some(edge) = &hd.cut_in {
             self.cut_in_edges(mask, edge, hd, seed ^ 0xED6E, &mut rng);
+        }
+    }
+
+    /// Look and fill: find the bare spots the pass (strokes with ids above
+    /// `before`) left inside the region and lay a short stroke through each,
+    /// as a painter covering a passage does. The spots are gathered on a grid
+    /// of cells half a brush wide (units, so any resolution fills the same
+    /// spots); a cell is filled when its bare area is at least 0.5% of a
+    /// brush width squared, and it is filled once: this is one look, not a
+    /// loop. Deterministic (its own random stream), and it sees only the
+    /// pixels the canvas holds (a crop's margin is wider than a fill stroke
+    /// reaches).
+    fn fill_gaps(&mut self, mask: &Mask, hd: &Handling, before: u32, clip: Option<&Mask>, seed: u64) {
+        let f = self.f;
+        let w = hd.tool.width.max(0.3);
+        let cell = (0.5 * w).max(1.5 / f.scale);
+        let (cw, ch) = ((f.width() / cell).ceil() as usize, (f.height() / cell).ceil() as usize);
+        // per cell: bare pixels and their summed position
+        let mut acc: std::collections::BTreeMap<usize, (u32, f32, f32)> = std::collections::BTreeMap::new();
+        let thr = hd.threshold.max(0.5);
+        for y in 0..f.h {
+            let uy = f.uy(y);
+            for x in 0..f.w {
+                let i = y * f.w + x;
+                let bare = self.wet.stroke[i] <= before || self.wet.vol[i] < FILL_BARE;
+                if !bare {
+                    continue;
+                }
+                let ux = f.ux(x);
+                if mask_at(mask, ux, uy) < thr {
+                    continue;
+                }
+                let k = ((uy / cell) as usize).min(ch - 1) * cw + ((ux / cell) as usize).min(cw - 1);
+                let e = acc.entry(k).or_insert((0, 0.0, 0.0));
+                e.0 += 1;
+                e.1 += ux;
+                e.2 += uy;
+            }
+        }
+        let px_area = 1.0 / (f.scale * f.scale);
+        let least = (0.005 * w * w).max(1.5 * px_area);
+        let drift = crate::noise::Fbm::new((seed as u32) ^ 0xD21F, 3, hd.drift.1);
+        let len = (0.5 * hd.length.0).clamp(w, 2.0 * w);
+        // Everything about a dab follows from its cell alone, so a crop
+        // (which sees only some cells) paints the same dabs where it looks:
+        // its randomness, its brush (`fresh`), its stroke id (one reserved
+        // per cell of the region's bounding box, whether or not it is
+        // filled) and the tiles (sized for any dab, not for these).
+        let (bx0, by0, bx1, by1) = mask_cells(mask, thr, cell, cw, ch);
+        let span = (bx1 + 1 - bx0) * (by1 + 1 - by0);
+        let first = if bx1 >= bx0 && by1 >= by0 { self.next_stroke_ids(span as u32) } else { 0 };
+        let reach = {
+            // a straight dab's footprint (units), plus room for its bow
+            const X: f32 = 1.0e4;
+            let r = footprint(&hd.tool, &[(X - 0.5 * len, X), (X + 0.5 * len, X)], hd.shake, 1.0, 1 << 16, 1 << 16);
+            r.map_or(len, |r| (X - r.0 as f32).max(r.2 as f32 - X).max(X - r.1 as f32).max(r.3 as f32 - X)) + 0.15 * len
+        };
+        let (mut plans, ex, ey) = (Vec::new(), reach, reach);
+        for (key, (n, sx, sy)) in acc {
+            if n as f32 * px_area < least {
+                continue;
+            }
+            let (kx, ky) = (key % cw, key / cw);
+            if kx < bx0 || kx > bx1 || ky < by0 || ky > by1 {
+                continue;
+            }
+            let mut rng = Rng::new(seed ^ 0xF111_0F11 ^ (key as u64).wrapping_mul(0x9E37_79B9_7F4A_7C15));
+            let c = (sx / n as f32, sy / n as f32);
+            let bend = rng.normal() * hd.angle_jitter;
+            let pts = hand_trace(hd, &drift, c.0, c.1, len, bend, &mut rng);
+            let (rect, mut plan) = finish_plan(self, hd, &hd.tool, c, pts, &mut rng);
+            // a dab takes a touch of paint (as in `work`), on a brush of its
+            // own: what one fill dab leaves on the brush can't change
+            // another's (a crop sees only some of them)
+            plan.load *= (len / hd.length.0.max(1e-3)).clamp(0.25, 1.0);
+            plan.fresh = true;
+            // (its own passage: a trip to the palette for every dab)
+            plan.passage = 0x8000_0000 | key as u32;
+            plan.id = Some(first.wrapping_add(((ky - by0) * (bx1 + 1 - bx0) + kx - bx0) as u32));
+            plans.push((c.0, c.1, rect, plan));
+        }
+        if std::env::var_os("PAINT_DEBUG").is_some() {
+            let n = f.w * f.h;
+            let a = (0..n).filter(|&i| self.wet.stroke[i] <= before).count();
+            let b = (0..n).filter(|&i| self.wet.vol[i] < FILL_BARE).count();
+            eprintln!("fill: {} strokes; of {n} px, {a} untouched by the pass, {b} thin", plans.len());
+        }
+        if !plans.is_empty() {
+            let mut rng = Rng::new(seed ^ 0xF111);
+            self.run_plans(plans, (ex, ey), w * 2.0, &hd.tool, hd, hd.ramps, clip, seed ^ 0xF111, &mut rng);
         }
     }
 
@@ -672,13 +790,15 @@ impl Canvas {
                 }
             }
         }
-        let n_strokes: usize = tiles.iter().map(|t| t.len()).sum();
-        let first_id = self.next_stroke_ids(n_strokes as u32);
+        // (strokes with ids fixed in advance don't take new ones)
+        let free = |t: &Vec<Plan>| t.iter().filter(|p| p.id.is_none()).count() as u32;
+        let n_strokes: u32 = tiles.iter().map(free).sum();
+        let first_id = if n_strokes > 0 { self.next_stroke_ids(n_strokes) } else { 0 };
         let mut offsets = Vec::with_capacity(tiles.len());
         let mut acc = 0u32;
         for t in &tiles {
             offsets.push(acc);
-            acc += t.len() as u32;
+            acc += free(t);
         }
 
         let surf = self.surf();
@@ -693,7 +813,15 @@ impl Canvas {
             let mut held = Held::new(tool.clone(), seed ^ 0x5EED ^ (ti as u64).wrapping_mul(0x9E37_79B9));
             let mut scratch = Vec::new();
             let mut b: crate::bristle::Bounds = None;
-            for (k, p) in tiles[ti].iter().enumerate() {
+            let mut k = 0u32;
+            for p in tiles[ti].iter() {
+                let id = p.id.unwrap_or_else(|| {
+                    k += 1;
+                    first_id.wrapping_add(offsets[ti] + k - 1)
+                });
+                if p.fresh {
+                    held = Held::new(tool.clone(), seed ^ 0xF4E5 ^ (p.pts[0].0.to_bits() as u64) << 20 ^ p.pts[0].1.to_bits() as u64);
+                }
                 if let Some(paint) = p.dip {
                     if hd.blender {
                         held.wipe(0.9);
@@ -708,7 +836,6 @@ impl Canvas {
                     .ramps(ramps.0, ramps.1)
                     .shake(hd.shake)
                     .swell(p.swell.clone());
-                let id = first_id.wrapping_add(offsets[ti] + k as u32);
                 // SAFETY: every pixel this drag touches lies in its stroke
                 // footprint, inside this tile's rect; run_ordered never runs
                 // tiles with overlapping rects at once; `surf()` checked the
@@ -764,7 +891,7 @@ fn finish_plan(cv: &Canvas, hd: &Handling, tool: &Tool, c: (f32, f32), pts: Vec<
         // on the palette: mix the pile from tubes, never twice alike
         Some((pal, medium)) => {
             let m = match under {
-                Some((u, coats)) => pal.aim(target, u, medium, coats),
+                Some((u, coats)) => pal.aim_for(target, u, medium, coats, crate::palette::Marks::of(tool)),
                 None => pal.mix(target),
             };
             // the pile's mixing jitter draws from its own generator: how many
@@ -788,7 +915,7 @@ fn finish_plan(cv: &Canvas, hd: &Handling, tool: &Tool, c: (f32, f32), pts: Vec<
         }
     };
     let load = hd.load * load_k;
-    (rect, Plan { pts, pressure, fade, dip: Some(paint), load, swell: Vec::new(), passage: 0 })
+    (rect, Plan { pts, pressure, fade, dip: Some(paint), load, swell: Vec::new(), passage: 0, fresh: false, id: None })
 }
 
 /// Coats a handling lays where its strokes land (the `Aim::Laid` estimate).
@@ -982,8 +1109,48 @@ fn carry_in(mask: &Mask, pts: &[(f32, f32)], c: (f32, f32), width: f32, threshol
 
 /// Share of the length tail that is short dabs (the rest are long sweeps).
 const DAB_SHARE: f32 = 0.6;
+/// A pass whose coverage is at least this means to cover its region: it
+/// fills the gaps its strokes leave (see `Handling::fill`). Below it the
+/// strokes lie side by side with ground between them, as asked.
+pub const FILL_FROM: f32 = 1.5;
+/// Least load (share of a full brush) for filling: a nearly dry brush is
+/// dry-brushing on purpose.
+const FILL_LOAD: f32 = 0.25;
+/// Film (coats) under which a pixel of the region reads as bare.
+const FILL_BARE: f32 = 0.04;
 
 /// Mask value at a point; the region continues past the canvas edges.
+/// The cells (of size `cell` units, `cw` × `ch` over the whole canvas)
+/// holding the region's pixels at or above `thr`, as an inclusive box
+/// (x0, y0, x1, y1); empty (x1 < x0) if there are none.
+fn mask_cells(mask: &Mask, thr: f32, cell: f32, cw: usize, ch: usize) -> (usize, usize, usize, usize) {
+    use rayon::prelude::*;
+    let mf = mask.f;
+    let rows: Vec<Option<(usize, usize)>> = mask
+        .data
+        .par_chunks(mf.w)
+        .map(|row| {
+            let a = row.iter().position(|&v| v >= thr)?;
+            let b = row.iter().rposition(|&v| v >= thr)?;
+            Some((a, b))
+        })
+        .collect();
+    let (mut x0, mut y0, mut x1, mut y1) = (usize::MAX, usize::MAX, 0, 0);
+    for (y, r) in rows.iter().enumerate() {
+        if let Some((a, b)) = r {
+            x0 = x0.min(*a);
+            x1 = x1.max(*b);
+            y0 = y0.min(y);
+            y1 = y1.max(y);
+        }
+    }
+    if x0 == usize::MAX {
+        return (1, 1, 0, 0);
+    }
+    let c = |px: usize, n: usize| (((px as f32 + 0.5) / mf.scale / cell) as usize).min(n - 1);
+    (c(x0, cw), c(y0, ch), c(x1, cw), c(y1, ch))
+}
+
 fn mask_at(mask: &Mask, x: f32, y: f32) -> f32 {
     mask.data[mask.f.index(x, y)]
 }
@@ -1040,7 +1207,7 @@ fn place(hd: &Handling, f: Frame, gap: f32, mean_len: f32, seed: u64, rng: &mut 
                     for _ in 0..n {
                         // rows stay near their line (so neighbors overlap and
                         // no ground shows between them); anywhere along a row
-                        let (u, v) = ((i as f32 + rng.f()) * along + ou, (j as f32 + 0.5 + 0.7 * (rng.f() - 0.5)) * across + ov);
+                        let (u, v) = ((i as f32 + 0.5 + 0.7 * (rng.f() - 0.5)) * along + ou, (j as f32 + 0.5 + 0.7 * (rng.f() - 0.5)) * across + ov);
                         let (x, y) = (pcx + u * ca - v * sa, pcy + u * sa + v * ca);
                         if x < sx || x >= sx + side || y < sy || y >= sy + side {
                             continue;
@@ -1211,17 +1378,17 @@ mod tests {
     /// ground showing through it) land in the color asked for: no salmon or
     /// orange piles (amnesia 2, coast #1/#2, winter #14). Returns (share of
     /// marked pixels pushed warm, mean a/b miss, mean L miss).
-    fn light_over_dark(pal_names: Option<&[&str]>, tool: &str) -> (f32, f32, f32) {
+    fn light_over_dark(pal_names: Option<&[&str]>, tool: &str, w: usize) -> (f32, f32, f32) {
         use crate::color::hex;
         let st = crate::style::Style::friedrich();
         let pal = match pal_names {
             Some(n) => st.palette.only(n),
             None => st.palette.clone(),
         };
-        let mut c = st.prepare(500, 1.0, 5);
+        let mut c = st.prepare(w, 1.0, 5);
         let all = Mask::full(c.frame());
         // a dark sand lay-in, thin enough that the ground flecks through
-        c.work(&all, &st.body().color(|_, _| hex("#3a3128")).by_masstone().coverage(1.6), 1);
+        c.work(&all, &st.body().color(|_, _| hex("#3a3128")).by_masstone().coverage(1.6).fill(false), 1);
         c.dry();
         let (px0, f0) = (c.pixels().to_vec(), c.film.clone());
         let want = hex("#9a8f80");
@@ -1259,23 +1426,80 @@ mod tests {
             }
         }
         let n = idx.len() as f32;
+        // (the marks' mean look, as seen at a distance, vs the target)
+        let mut acc = [0.0f32; 3];
+        let mut sl = 0.0f32;
+        for &i in &idx {
+            for k in 0..3 {
+                acc[k] += c.pixels()[i][k] / n;
+            }
+            if c.film[i] - f0[i] > 2.0 {
+                sl += to_oklab(c.pixels()[i])[0] - wl[0];
+            }
+        }
+        println!("  mean look L miss {:+.3}, body signed L miss {:+.3}", to_oklab(acc)[0] - wl[0], sl / nb.max(1) as f32);
         (warm as f32 / n, ab / n, dl / nb.max(1) as f32)
+    }
+
+    /// How a sparse pass's film is spread over its marks' area, in units of
+    /// the expected thickness (`laid_coats`): the share of the marked area
+    /// in log2 bins centered at 1/8 .. 8 (for `AIM_MARKS` in palette.rs).
+    /// `cargo test --release -p paint probe_mark_thickness -- --ignored --nocapture`
+    #[test]
+    #[ignore]
+    fn probe_mark_thickness() {
+        use crate::color::hex;
+        let st = crate::style::Style::friedrich();
+        for w in [500usize, 1000, 2000] {
+            for tool in ["detail", "body", "broad"] {
+                let mut c = st.prepare(w, 1.0, 5);
+                let all = Mask::full(c.frame());
+                let f0 = c.film.clone();
+                let h = match tool {
+                    "detail" => st.detail(),
+                    "broad" => st.broad(),
+                    _ => st.body(),
+                }
+                .color(move |_, _| hex("#9a8f80"))
+                .coverage(0.3)
+                .clip(false);
+                let lc = h.laid_coats();
+                c.work(&all, &h, 2);
+                c.dry();
+                let mut bins = [0.0f32; 7];
+                let mut n = 0.0;
+                for i in 0..f0.len() {
+                    let t = (c.film[i] - f0[i]) / lc;
+                    if t > 1.0 / 16.0 {
+                        let b = (t.log2().round() + 3.0).clamp(0.0, 6.0) as usize;
+                        bins[b] += 1.0;
+                        n += 1.0;
+                    }
+                }
+                let sh: Vec<String> = bins.iter().map(|b| format!("{:.3}", b / n)).collect();
+                println!("{w}px {tool:6} laid {lc:.2}: shares at 1/8..8 × laid: [{}]", sh.join(", "));
+            }
+        }
     }
 
     #[test]
     fn light_marks_over_a_dark_stay_in_hue() {
-        for (label, names, tool) in [("full/detail", None, "detail"), ("full/body", None, "body"), ("earth/detail", Some(&["lead white", "yellow ochre", "raw umber", "bone black", "red earth"][..]), "detail")] {
-            let (warm, ab, dl) = light_over_dark(names, tool);
+        // pointed detail marks are judged at 750px: at 500px a fine mark's
+        // body is mostly pixels it only partly covers, which show the dark
+        // beside it (the body's L miss: -0.043 at 500px, -0.027 at 750,
+        // -0.020 at 1000, -0.009 at 2000), a sampling effect, not the pile.
+        // (Unsigned: 0.030 at 750px, 0.024 at 1000px; 1000px would allow
+        // 0.025 but takes minutes in a debug build.)
+        for (label, names, tool, w) in [("full/detail", None, "detail", 750), ("full/body", None, "body", 500), ("earth/detail", Some(&["lead white", "yellow ochre", "raw umber", "bone black", "red earth"][..]), "detail", 750)] {
+            let (warm, ab, dl) = light_over_dark(names, tool, w);
             println!("{label}: warm share {warm:.3}, mean a/b miss {ab:.4}, mean L miss {dl:.3}");
             assert!(warm < 0.05, "{label}: {warm:.3} of the marks dried warm");
             assert!(ab < 0.02, "{label}: marks off hue by {ab:.4}");
             // (the old thickness estimate, 0.3 coats for marks that lay 1–2,
-            // overshot: 0.049–0.050 L too light)
-            // pointed detail marks keep a thin semi-transparent rim even in
-            // their body at test resolution (500px), so they get a looser
-            // bound; the open fix is to aim at the thickness-weighted mean
-            // look of a mark (notes/fixes_paint.md, "after the tip merge")
-            let bound = if tool == "detail" { 0.05 } else { 0.025 };
+            // overshot: 0.049–0.050 L too light; aiming at one thickness
+            // instead of the mark's mean look, see `palette::Marks`, needed
+            // 0.05 for pointed marks)
+            let bound = if tool == "detail" { 0.035 } else { 0.025 };
             assert!(dl < bound, "{label}: marks off value by {dl:.3}");
         }
     }

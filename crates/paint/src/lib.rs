@@ -39,7 +39,7 @@ pub use growth::{Clump, Flower, Foliage, Habit, Leafing, Limb, Skeleton, Sward, 
 pub use bristle::{Gesture, Held, Kind, Orient, Tool, Touch};
 pub use wet::Paint;
 pub use drying::Stage;
-pub use palette::{Mixture, Palette, Tube};
+pub use palette::{Marks, Mixture, Palette, Tube};
 pub use handling::{Aim, Handling, Order};
 pub use stipple::Stipple;
 pub use style::{Apply, Ground, Style};

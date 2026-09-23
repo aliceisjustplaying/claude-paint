@@ -53,6 +53,13 @@ const THICK: f32 = 0.7;
 const FAT: f32 = 0.6;
 /// How much faster a tacky surface pulls paint off a brush [E].
 const GRAB: f32 = 2.0;
+/// Spread (sd, mm) of the patch over which a film's thickness sets its
+/// drying rate. A film skins over as a whole: the bristle ridges and
+/// furrows of a brushstroke (a fraction of a mm) don't dry on their own
+/// clocks, a stroke and its neighbors do. It also keeps the rate the same at
+/// any resolution: a coarse pixel averages thin and thick paint, a fine one
+/// sees them apart; both are judged over the same few millimeters [E].
+pub const FILM_MM: f32 = 1.25;
 
 /// Relative drying rates of the period pigments ground in oil (1 = average;
 /// higher dries faster). From Mayer's comparative list (fast: lead white,
@@ -210,14 +217,15 @@ impl Canvas {
         // age the open films
         if let Some((x0, y0, x1, y1)) = self.wet.dirty {
             let (x1, y1) = (x1.min(w), y1.min(self.f.h));
+            let th = self.film_thickness((x0, y0, x1, y1));
+            let bw = x1 - x0;
             let wet = &mut self.wet;
             let (vol, hide) = (&wet.vol, &wet.hide);
             wet.clock.px[y0 * w..y1 * w].par_chunks_mut(w).enumerate().for_each(|(j, row)| {
                 for x in x0..x1 {
                     let i = (y0 + j) * w + x;
-                    let v = vol[i];
-                    if v >= 1e-5 {
-                        row[x].cure += dt * rate(v, hide[i][1], hide[i][2]);
+                    if vol[i] >= 1e-5 {
+                        row[x].cure += dt * rate(th[j * bw + x - x0], hide[i][1], hide[i][2]);
                     }
                 }
             });
@@ -249,6 +257,51 @@ impl Canvas {
         self.wet.clock.now += dt as f64;
     }
 
+    /// The open film's thickness (coats) as it dries, for each pixel of the
+    /// buffer box `b` (end-exclusive, row major): the mean thickness of the
+    /// wet paint around it, over `FILM_MM` (a double box filter; bare pixels
+    /// don't count, so a film's edge isn't judged thinner than its body).
+    /// Pixels without wet paint get 0.
+    fn film_thickness(&self, b: (usize, usize, usize, usize)) -> Vec<f32> {
+        let (w, h) = (self.f.w, self.f.h);
+        let (x0, y0, x1, y1) = (b.0, b.1, b.2.min(w), b.3.min(h));
+        if x1 <= x0 || y1 <= y0 {
+            return Vec::new();
+        }
+        // two box passes of radius r have a spread (sd) of √(2r(r+1)/3)
+        // pixels: pick r for FILM_MM
+        let q = FILM_MM / self.px_mm();
+        let r = ((0.5 * ((1.0 + 6.0 * q * q).sqrt() - 1.0)).round() as usize).max(1);
+        let pad = 2 * r;
+        let (ex0, ey0, ex1, ey1) = (x0.saturating_sub(pad), y0.saturating_sub(pad), (x1 + pad).min(w), (y1 + pad).min(h));
+        let (ew, eh) = (ex1 - ex0, ey1 - ey0);
+        let vol = &self.wet.vol;
+        let mut v = vec![0.0f32; ew * eh];
+        let mut m = vec![0.0f32; ew * eh];
+        for y in 0..eh {
+            for x in 0..ew {
+                let a = vol[(ey0 + y) * w + ex0 + x];
+                if a >= 1e-5 {
+                    v[y * ew + x] = a;
+                    m[y * ew + x] = 1.0;
+                }
+            }
+        }
+        let blur = |f: &[f32]| crate::surface::box_blur(&crate::surface::box_blur(f, ew, eh, r), ew, eh, r);
+        let (bv, bm) = (blur(&v), blur(&m));
+        let bw = x1 - x0;
+        let mut out = vec![0.0f32; bw * (y1 - y0)];
+        for y in y0..y1 {
+            for x in x0..x1 {
+                let k = (y - ey0) * ew + x - ex0;
+                if m[k] > 0.0 {
+                    out[(y - y0) * bw + x - x0] = bv[k] / bm[k].max(1e-6);
+                }
+            }
+        }
+        out
+    }
+
     /// Where the paint at a point (units) is in drying.
     pub fn drying_at(&self, x: f32, y: f32) -> Stage {
         let i = self.f.index(x, y);
@@ -277,15 +330,18 @@ impl Canvas {
         if let Some((x0, y0, x1, y1)) = self.wet.dirty {
             let (w, h) = (self.f.w, self.f.h);
             let (x1, y1) = (x1.min(w), y1.min(h));
+            let th = self.film_thickness((x0, y0, x1, y1));
+            let bw = x1 - x0;
             let (vol, hide, px) = (&self.wet.vol, &self.wet.hide, &self.wet.clock.px);
             left = (y0..y1)
                 .into_par_iter()
                 .map(|y| {
                     let mut m = 0.0f32;
-                    for i in y * w + x0..y * w + x1 {
+                    for x in x0..x1 {
+                        let i = y * w + x;
                         if vol[i] >= 1e-5 {
                             let c = px.get(i).map_or(0.0, |p| p.cure);
-                            m = m.max((1.0 - c).max(0.0) / rate(vol[i], hide[i][1], hide[i][2]));
+                            m = m.max((1.0 - c).max(0.0) / rate(th[(y - y0) * bw + x - x0], hide[i][1], hide[i][2]));
                         }
                     }
                     m
@@ -353,6 +409,7 @@ impl Canvas {
         let mut sets = vec![SET_TIME; ew * eh];
         // cure per minute of each film that bakes (for its tack afterwards)
         let mut rates = vec![0.0f32; if all { 0 } else { ew * eh }];
+        let th = if all { Vec::new() } else { self.film_thickness(ex) };
         let mut any = false;
         let cp = &self.wet.clock.px;
         for y in 0..eh {
@@ -367,7 +424,7 @@ impl Canvas {
                         sets[k] = p.lev;
                     }
                     if !all {
-                        rates[k] = rate(v, self.wet.hide[i][1], self.wet.hide[i][2]);
+                        rates[k] = rate(th[k], self.wet.hide[i][1], self.wet.hide[i][2]);
                     }
                     any = true;
                 }
@@ -611,6 +668,59 @@ mod tests {
             c.dry();
         }
         assert!(a.px == b.px && a.height == b.height && a.film == b.film && a.clock() == b.clock());
+    }
+
+    /// Share of a field's pixels at each stage after `wait` minutes, for the
+    /// same physical film on a canvas `px` wide: lead white in brush
+    /// furrows 0.6 mm apart (1 ± 0.8 coats), each pixel holding the mean of
+    /// the film over its area (as a brush's deposit does).
+    fn stage_shares(px: usize, wait: f32) -> [f32; 4] {
+        let mut c = Canvas::new(px, 1.0, hex("#c8b89a")).with_size_mm(440.0);
+        let f = c.f;
+        let mm = c.mm_per_unit;
+        let lat = lead_white().latent();
+        let (x0, y0, x1, y1) = (f.index(300.0, 300.0) % f.w, f.index(300.0, 300.0) / f.w, f.index(700.0, 700.0) % f.w, f.index(700.0, 700.0) / f.w);
+        let k = std::f32::consts::TAU / 0.6;
+        for y in y0..y1 {
+            for x in x0..x1 {
+                // the furrows' mean over the pixel's span (mm)
+                let (a, b) = (f.ux(x) * mm - 0.5 * c.px_mm(), f.ux(x) * mm + 0.5 * c.px_mm());
+                let t = 1.0 + 0.8 * ((k * a).cos() - (k * b).cos()) / (k * (b - a));
+                let i = y * f.w + x;
+                c.wet.vol[i] = t;
+                c.wet.lat[i] = lat;
+                c.wet.hide[i] = [0.85, 0.8, drier::LEAD_WHITE];
+                c.wet.stroke[i] = 1;
+            }
+        }
+        c.wet.current = 1;
+        c.wet.dirty = Some((x0, y0, x1, y1));
+        c.wait(wait);
+        let mut n = [0.0f32; 4];
+        let mut total = 0.0;
+        for j in 0..40 {
+            for i in 0..60 {
+                let s = c.drying_at(330.0 + i as f32 * 5.7, 330.0 + j as f32 * 8.3);
+                n[s as usize] += 1.0;
+                total += 1.0;
+            }
+        }
+        n.map(|v| v / total)
+    }
+
+    /// A film dries by its thickness over a few millimeters, so a coarse
+    /// render (each pixel averaging ridges and furrows) and a fine one (the
+    /// furrows apart) reach the same stages at the same times. (Judged per
+    /// pixel, the fine render's thin furrows set early and its ridges late:
+    /// 13% of its field was already tacky at 90 min and 17% still setting at
+    /// 150 min, where the coarse render's was uniform.)
+    #[test]
+    fn stages_dont_depend_on_resolution() {
+        for wait in [30.0, 90.0, 150.0] {
+            let (lo, hi) = (stage_shares(400, wait), stage_shares(1200, wait));
+            let off = lo.iter().zip(&hi).map(|(a, b)| (a - b).abs()).fold(0.0f32, f32::max);
+            assert!(off < 0.1, "at {wait} min, stage shares (open, setting, tacky, dry) {lo:?} at 400px vs {hi:?} at 1200px");
+        }
     }
 
     #[test]

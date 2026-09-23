@@ -158,7 +158,17 @@ pub enum FieldKind {
     Edge,
 }
 
-impl UserData for FieldU {}
+impl UserData for FieldU {
+    fn add_methods<M: UserDataMethods<Self>>(m: &mut M) {
+        m.add_meta_method(MetaMethod::ToString, |_, fu, ()| {
+            Ok(match fu.kind {
+                FieldKind::Fall => "field(fall)".to_string(),
+                FieldKind::Across => "field(across)".to_string(),
+                FieldKind::Edge => format!("field(edge, span {})", fu.span),
+            })
+        });
+    }
+}
 
 impl FieldU {
     /// The field as a closure the engine's threads can call. Off the form it

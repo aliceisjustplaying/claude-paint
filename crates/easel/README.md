@@ -1,7 +1,7 @@
 # The easel
 
 A live painting session for agents. The canvas stays alive in a background
-process; you send it Lua chunks one shell command at a time, look at the
+process; you send it Lua 5.5 chunks one shell command at a time, look at the
 result as a small JPEG and carry on. Every chunk that succeeds is appended to
 `paintings/lua/<name>.lua`. That file is the painting: `easel run` repaints it
 from scratch, byte for byte the same at the same width, or at 3200px for the
@@ -32,8 +32,9 @@ $E run paintings/lua/dusk.lua --width 3200    # the full render → out/lua/dusk
 ```
 
 `paintings/lua/example.lua` is a whole small study made this way: an evening
-sky, a distant ridge, mist and a spruce on a knoll, in ten chunks. Read it
-before you start.
+sky, a distant ridge, mist and a spruce on a knoll, in ten chunks.
+`paintings/lua/rocks.lua` models a boulder and a mountain range as solids
+and paints them from their light and shadow. Read both before you start.
 
 ## The loop
 
@@ -59,8 +60,9 @@ before you start.
    The plain look shows what is on the canvas now: the dry picture with wet
    paint on it as laid.
 4. **Keep or undo.** A chunk that fails changes nothing: the canvas, your
-   variables, the paint in your brushes and the clock go back to how they
-   were before it, and it isn't logged. `easel undo [n]` takes back the last
+   variables (including anything it changed inside tables and closures
+   from earlier chunks), the paint in your brushes and the clock go back to
+   how they were before it, and it isn't logged. `easel undo [n]` takes back the last
    n successful chunks (up to `--undo`, 8 by default; each snapshot costs
    about 50 MB at 1000px).
 5. **Step back.** `easel log` prints the program so far. `easel status`
@@ -82,8 +84,17 @@ before you start.
   seed and the chunk number. `work`, `stipple`, `brush` and `tree` pick their
   own seeds the same way (pass `seed=` to fix one). A replay therefore paints
   the same thing, and a failed chunk doesn't shift the randomness of the next.
-- **No OS access.** `io`, `os`, `require`, `dofile` and `loadfile` are not
-  available. `print` goes to the reply.
+- **No OS access.** `io`, `os`, `debug`, `require`, `dofile`, `loadfile`
+  and `collectgarbage` are not available. `print` goes to the reply.
+- **Lua 5.5.** Numbers are integers or floats (`7 // 2` is 3, `7 / 2` is
+  3.5; `math.type` tells them apart), and whole numbers from the easel (`W`,
+  `H`) are integers. Bitwise operators are built in (`a & b`, `1 << 4`);
+  there is no `bit` library and no global `unpack` (use `table.unpack`).
+  Loop variables are read-only: `for i = 1, 3 do i = i + 1 end` is an
+  error. Don't write `global` declarations: one `global x` switches its
+  chunk to strict mode, and then even `print` must be declared. Plain
+  assignment (`x = 1`) makes a global, as in older Lua. `pairs` walks a
+  table in the same order in every session and every replay.
 - **Colors** are `"#rrggbb"` strings, `rgb(r, g, b)` (0–255 sRGB) or color
   values from `mix`, `gradient`, `sample` and `pal:mix`. A color value has
   `.r .g .b` (linear), `.value` (luminance), `.L` (OKLab lightness),
@@ -137,7 +148,8 @@ below(function(x) return 420 + 20*math.sin(x/90) end)  -- under a curve (or a po
 above(curve)                                           -- over it
 ribbon(points, widths)    ribbon(points, 3)            -- a band along a line
 m + n   m * n   m - n   -m                             -- union, intersect, subtract, invert
-m:roughen(units, period, seed)   -- push the edge in and out by about `units`
+m:roughen(units, period, seed, edge)  -- push the edge in and out by about `units`
+                                      -- (noise of `period` units), new edge `edge` units soft
 m:soften(units)   m:blur(units)
 m:grow(units)     m:shrink(units)   m:offset(units)
 m:rim(width, soft)                -- the inside strip along the edge
@@ -221,6 +233,53 @@ The skeleton says how the tree grew. Painting it is up to you: stroke
 the limbs with brushes sized by `l.w`, build foliage masks from
 `ribbon(l.pts, widths)`, and so on.
 
+### Form: solids, light and shade
+
+Model what you paint as solids, light them, then let their planes decide
+your colors, stroke directions and edges. Form paints nothing itself.
+Coordinates are canvas units, with z pointing toward you.
+
+```lua
+-- bodies: a mass, turned, weathered, broken by fracture planes; + and - combine
+rock = body.ellipsoid({330, 560, 60}, {150, 105, 110})      -- center, radii
+  :turn({330, 560, 60}, 0.3, 0.1, -0.12)                    -- yaw (right side toward you), pitch (top toward you), roll
+  :rough(15, 150, 1)                                        -- amp, period, seed, ridged?
+  :cut({330, 480, 60}, {-0.35, -1, 0.45}, 10, 4)            -- at, outward normal, facet id, round
+  :rough(0.9, 25, 2, true)                                  -- pitted grain
+slab = body.block({600, 600, 0}, {200, 40, 80}, 3)          -- center, size, round
+-- a mountain face below a crest line (a function of x, or points)
+range = ridge{crest=function(x) return 330 - 60*math.sin(x/170) end, depth=320, seed=7,
+  lean={0.9, 0.7}, gullies={45, 0.5}, fan=1, base=560, z0=-600}   -- also strata={spacing, step, tilt}
+-- any height field: z (toward you) or nil where there's no surface
+dune = relief{area={0, 500, 1000, 714}, height=function(x, y) return 20*math.sin(x/60) end}
+
+-- the lit depth buffer: parts are numbered in order (1, 2, ...)
+f = form{ {range, dist={2.0, 0}}, {rock, dist=0.3},          -- dist: number or {at, per_z} (aerial perspective)
+  light={from={-1, -0.7}, front=0.5, ambient=0.2, penumbra=0.05} }  -- front < 0: contre-jour
+  -- light also takes bounce, bounce_from={x,y,z}, reach, thickness, across_parts
+
+f:sample(x, y)      -- nil off the form, else {part, facet, z, n, dist, fall, across, lit, shade={turn, direct, cast, bounce, sky, value}}
+f:shade(x, y)  f:value(x, y)  f:lit_at(x, y, soft)  f:part(x, y)  f:dist(x, y, far)
+f:fall(x, y)  f:across(x, y)  f:bend(x, y, span)  f:edge_angle(x, y, span)
+aerial(dist, visibility)     -- how much of a color the air replaces, 0..1
+
+-- masks
+f:parts_mask{2}                                   -- where a part is in front
+f:lit{parts={2}, soft=0.12}   f:shadow{parts={2}} -- the light and shadow families
+f:silhouette{parts={1}, soft=0.6, haze={3, 4}}    -- edge soft + 3·aerial(dist, 4)² units wide
+f:edges{turn=0.8, step=3, span=2.5, concave=true} -- plane breaks and overlaps (concave: only hollows)
+f:mask(function(s) return s.shade.sky end)        -- any rule (serial, ~0.5 s at 1000px; s is reused)
+
+-- stroke directions straight from the form (no grid): down the planes, around them, along breaks
+work(f:silhouette{parts={2}} * f:shadow{parts={2}}, {hand="body", color=function(x, y)
+  return mix("#3e3a36", "#8a8070", f:value(x, y)) end, angle=f:field("fall")})
+f:field("across")   f:field("edge", 2.5)
+```
+
+Place solids in depth with z: a ridge's face leans toward you at its foot,
+so set its `z0` back (e.g. `z0=-600`) or it will hide the rocks in front of
+it. A form costs 28 bytes per pixel (20 MB at 1000px, 190 MB at 3200px).
+
 ### Time and finishing
 
 ```lua
@@ -228,7 +287,9 @@ dry()                 -- the wet paint levels and dries now
 wait(minutes)         -- advance the painting clock; returns it
 clock()
 varnish{color="#e6d3a4", coats=0.4, vary=0.12}
-cracks{island_mm=3.5, dirt=0.6}             -- craquelure (slow at 3200px)
+cracks{dirt=0.4, vary=1, veil=0.5}          -- craquelure, fitted to this canvas's ground;
+                                             -- also island_mm, ground_um, width_um (default:
+                                             -- from the ground), depth_um, cupping_um, corners
 relief(strength, gloss)                      -- light the surface relief (style default)
 ```
 
@@ -260,13 +321,16 @@ can edit it by hand and replay. If you do, keep the markers.
   brush strokes along tree limbs ≈ 0.05 s
 - `look` ≈ 0.04 s, `look --dried` ≈ 0.3 s
 - replaying the example: 18–29 s at 1000px (see notes/easel.md for 3200px)
+- rollback bookkeeping ≈ 1 µs per live Lua table per chunk (a tree's 4,000
+  tables: under 5 ms)
 
 ## Limits
 
-- A chunk that changes a table defined in an earlier chunk and then fails
-  or is undone leaves that change in place: globals and brushes are rolled
-  back, but not the insides of tables. `easel check` detects this; the
-  log is the truth, so close and reopen to rebuild from it.
-- `form` (solids, light and shade) is not exposed yet.
+- Rollback restores everything reachable from your globals: tables, their
+  metatables and the variables your functions close over. A coroutine
+  suspended across chunks is not restored. After a rollback that restored a
+  table the failed chunk had changed, `pairs` over that table may visit keys
+  in a different order than a replay would; `easel check` detects this, and
+  `ipairs` and numeric loops are unaffected.
 - Sessions paint the whole canvas. `easel run --crop` renders a window
   of a finished program.

@@ -39,6 +39,8 @@ pub const LAID_PER_LOAD_FILBERT: f32 = 1.3;
 pub const LAID_PER_LOAD_ROUND: f32 = 2.2;
 
 type Field<'a, T> = Box<dyn Fn(f32, f32) -> T + Sync + 'a>;
+/// A color field that sees the canvas: (x, y, what is under the stroke).
+pub(crate) type OverField<'a> = Box<dyn Fn(f32, f32, Rgb) -> Rgb + Sync + 'a>;
 
 pub struct Handling<'a> {
     pub tool: Tool,
@@ -51,6 +53,9 @@ pub struct Handling<'a> {
     pub angle_jitter: f32,
     /// Color mixed on the palette for a stroke centered at a point.
     pub color: Field<'a, Rgb>,
+    /// A color relative to what is on the canvas (see `color_over`); when
+    /// set, it replaces `color`.
+    pub color_over: Option<OverField<'a>>,
     /// Palette-mixing inconsistency per dip: OKLab L and a/b sd.
     pub jitter: (f32, f32),
     /// Hiding and stiffness of the paint when it isn't mixed from a
@@ -147,6 +152,7 @@ impl<'a> Handling<'a> {
             angle: Box::new(|_, _| 0.0),
             angle_jitter: 0.08,
             color: Box::new(|_, _| [0.5; 3]),
+            color_over: None,
             jitter: (0.02, 0.006),
             hiding: 0.85,
             stiff: 0.8,
@@ -281,6 +287,20 @@ impl<'a> Handling<'a> {
     }
     pub fn color(mut self, f: impl Fn(f32, f32) -> Rgb + Sync + 'a) -> Self {
         self.color = Box::new(f);
+        self.color_over = None;
+        self
+    }
+    /// A color that sees the canvas: `f(x, y, under)` gets what is on the
+    /// canvas under each stroke (dry picture and wet paint, judged along the
+    /// stroke as the aim does, before this pass lays anything) and returns
+    /// the color wanted there: "the snow as it actually is here, darker and
+    /// bluer" is `color_over(|_, _, u| shift(u, -0.06, 0.0, -0.03))`.
+    /// Deterministic: every stroke is judged against the canvas as it was
+    /// before the pass, whatever order the strokes are painted in. In a crop
+    /// render, strokes are judged by the part of the canvas the crop holds
+    /// (as `Aim::Laid` is).
+    pub fn color_over(mut self, f: impl Fn(f32, f32, Rgb) -> Rgb + Sync + 'a) -> Self {
+        self.color_over = Some(Box::new(f));
         self
     }
     pub fn jitter(mut self, l: f32, hue: f32) -> Self {
@@ -724,7 +744,6 @@ fn finish_plan(cv: &Canvas, hd: &Handling, tool: &Tool, c: (f32, f32), pts: Vec<
     let rect = footprint(tool, &pts, hd.shake, f.scale, f.full_w, f.full_h);
     let pressure = rng.range(hd.pressure.0, hd.pressure.1);
     let fade = rng.range(0.75, 1.05);
-    let target = (hd.color)(c.0, c.1);
     let load_k = hd.load_at.as_ref().map_or(1.0, |f| f(c.0, c.1).max(0.0));
     // aiming at the result: what the stroke will sit on, and how thick
     let aim = hd.aim.unwrap_or(if hd.palette.is_some() { Aim::Laid } else { Aim::Masstone });
@@ -733,7 +752,12 @@ fn finish_plan(cv: &Canvas, hd: &Handling, tool: &Tool, c: (f32, f32), pts: Vec<
         Aim::Laid => Some(laid_coats(hd, load_k)),
         Aim::Coats(x) => Some(x),
     };
-    let under = coats.map(|x| (stroke_under(cv, &pts, tool.width * 0.5), x));
+    let seen = (coats.is_some() || hd.color_over.is_some()).then(|| stroke_under(cv, &pts, tool.width * 0.5));
+    let target = match (&hd.color_over, seen) {
+        (Some(g), Some(u)) => g(c.0, c.1, u),
+        _ => (hd.color)(c.0, c.1),
+    };
+    let under = coats.zip(seen).map(|(x, u)| (u, x));
     let paint = match hd.palette {
         // on the palette: mix the pile from tubes, never twice alike
         Some((pal, medium)) => {
@@ -1237,6 +1261,46 @@ mod tests {
             // (the old thickness estimate, 0.3 coats for marks that lay 1–2,
             // overshot: 0.049–0.050 L too light)
             assert!(dl < 0.025, "{label}: marks off value by {dl:.3}");
+        }
+    }
+
+    /// `color_over` sees the canvas: "the snow here, darker and bluer" over
+    /// a snow field that runs from bright to dull comes out darker and bluer
+    /// than the snow at both ends, strokes and stipple alike (amnesia 2,
+    /// winter #18: a shadow mixed from the painter's own snow field dried
+    /// lighter than the real, dimmer snow).
+    #[test]
+    fn color_over_sees_the_canvas() {
+        use crate::color::{hex, shift};
+        let st = crate::style::Style::friedrich();
+        let mut c = Canvas::new(200, 1.0, hex("#b0a898"));
+        let f = c.frame();
+        c.apply(|x, _, _| crate::color::lerp3(hex("#e8ecf0"), hex("#8e949c"), x / 1000.0));
+        let before = c.pixels().to_vec();
+        let top = Mask::from_fn(f, |_, y| if y < 480.0 { 1.0 } else { 0.0 });
+        let bottom = Mask::from_fn(f, |_, y| if y > 520.0 { 1.0 } else { 0.0 });
+        let dl = -0.08;
+        c.work(&top, &st.body().color_over(move |_, _, u| shift(u, dl, 0.0, -0.03)).coverage(3.0).clip(true), 1);
+        let sp = crate::stipple::Stipple::new(Tool::stippler(4.0)).mixed(&st.palette, 0.4).color_over(move |_, _, u| shift(u, dl, 0.0, -0.03)).coverage(|_, _| 3.0).clip(true);
+        c.stipple(&bottom, &sp, 2);
+        c.dry();
+        for (name, ys) in [("strokes", 100.0..460.0), ("stipple", 540.0..900.0)] {
+            for xs in [50.0..250.0, 750.0..950.0] {
+                let (mut dsum, mut bsum, mut n) = (0.0f32, 0.0f32, 0);
+                for (i, p) in c.pixels().iter().enumerate() {
+                    let (x, y) = ((i % f.w) as f32 / f.scale, (i / f.w) as f32 / f.scale);
+                    if xs.contains(&x) && ys.contains(&y) {
+                        let (a, b) = (to_oklab(*p), to_oklab(before[i]));
+                        dsum += a[0] - b[0];
+                        bsum += a[2] - b[2];
+                        n += 1;
+                    }
+                }
+                let (d, db) = (dsum / n as f32, bsum / n as f32);
+                println!("{name} x {xs:?}: ΔL {d:+.3} Δb {db:+.3}");
+                assert!(d < 0.5 * dl && d > 2.0 * dl, "{name} at x {xs:?}: ΔL {d} (asked {dl})");
+                assert!(db < -0.01, "{name} at x {xs:?}: not bluer ({db})");
+            }
         }
     }
 

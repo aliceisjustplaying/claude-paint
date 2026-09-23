@@ -52,6 +52,9 @@ pub struct Stipple<'a> {
     /// What the painter wants to see at a point, on the canvas (the paint is
     /// mixed so that a touch there dries to this; see `paint_for`).
     pub color: Field<'a, Rgb>,
+    /// A color relative to what is on the canvas (see `color_over`); when
+    /// set, it replaces `color`.
+    pub color_over: Option<crate::handling::OverField<'a>>,
     /// Mix each pile from these tubes, thinned with this fraction of medium.
     pub palette: Option<(&'a Palette, f32)>,
     /// Hiding and stiffness of the paint without a palette.
@@ -97,6 +100,7 @@ impl<'a> Stipple<'a> {
             pressure: (0.4, 0.75),
             coverage: Box::new(|_, _| 1.0),
             color: Box::new(|_, _| [0.5; 3]),
+            color_over: None,
             palette: None,
             hiding: 0.4,
             stiff: 0.3,
@@ -125,6 +129,16 @@ impl<'a> Stipple<'a> {
     }
     pub fn color(mut self, f: impl Fn(f32, f32) -> Rgb + Sync + 'a) -> Self {
         self.color = Box::new(f);
+        self.color_over = None;
+        self
+    }
+    /// A color that sees the canvas: `f(x, y, under)` gets what is on the
+    /// canvas where a load of touches will land (judged before the pass, see
+    /// `Canvas::judge_under`) and returns the look wanted there, e.g. a cast
+    /// shadow on snow as "the snow here, darker and bluer":
+    /// `color_over(|_, _, u| shift(u, -0.06, 0.0, -0.03))`.
+    pub fn color_over(mut self, f: impl Fn(f32, f32, Rgb) -> Rgb + Sync + 'a) -> Self {
+        self.color_over = Some(Box::new(f));
         self
     }
     /// Mix every pile from `palette`'s tubes, thinned with `medium` (0..1).
@@ -441,7 +455,12 @@ impl Canvas {
                     let (x, y, cv) = p.aim_at;
                     // (a fresh generator per dip, so a recipe's draws can't shift the
                     // rest; see `finish_plan`)
-                    *d = sp.paint_for((sp.color)(x, y), self.under(x, y, sp.tool.width * 0.6), cv, &mut memo, &mut Rng::new(prng.next_u64()));
+                    let seen = self.judge_under(x, y, sp.tool.width * 0.6);
+                    let want = match &sp.color_over {
+                        Some(g) => g(x, y, seen),
+                        None => (sp.color)(x, y),
+                    };
+                    *d = sp.paint_for(want, seen, cv, &mut memo, &mut Rng::new(prng.next_u64()));
                 }
             }
         }

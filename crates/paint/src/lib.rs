@@ -31,7 +31,7 @@ pub mod surface;
 
 pub use canvas::{Canvas, Crop, Frame, set_crop};
 pub use crack::Cracks;
-pub use color::{Mix, Rgb, gradient, hex};
+pub use color::{Mix, Rgb, gradient, hex, shift};
 pub use growth::{Habit, Limb, Skeleton};
 pub use bristle::{Gesture, Held, Kind, Orient, Tool, Touch};
 pub use wet::Paint;

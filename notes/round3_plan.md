@@ -58,3 +58,4 @@ green, a close study); stop and evaluate.
 - Batch 1 (easel, tip, cracks) and batch 2 (drying, scene, fixes-paint, fixes-ux) running. Batch 3 (atmosphere, green) waits for batch 1.
 - cracks merged: organic web fitted to the ground (was a brick grid); open: cracks invisible in darks, density still even across skies.
 - fixes-ux merged (stage UX, Copy fields, roughen units, form docs). Coast #17 = NaN gesture point: reject non-finite points in bristle.rs after tip merges (test crates/paint/tests/curved_drag_nan.rs, ignored).
+- easel v1 done (LuaJIT via mlua 0.10: read brief before the Lua 5.5 edit). Resumed as easel-2: switch to Lua 5.5/mlua 0.12, merge main, expose form, exact rollback.

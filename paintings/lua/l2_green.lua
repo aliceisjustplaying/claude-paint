@@ -1,5 +1,5 @@
--- easel session "l1_green": a painting replayed chunk by chunk.
---   easel run paintings/lua/l1_green.lua [--width 3200]
+-- easel session "l2_green": a painting replayed chunk by chunk.
+--   easel run paintings/lua/l2_green.lua [--width 3200]
 -- Each "--@ chunk" line starts one chunk as it was run at the easel (clock = painting minutes).
 
 --@ chunk 1 · clock 0
@@ -380,7 +380,7 @@ local lane = w:ribbon(lp, 3.5)
 work(lane - WOOD, {hand="detail", tool="round 1.2", length={3, 8}, coverage=2.4, angle=0, color=function(x, y)
   local p = w:to_ground(x, y); local Z = p and p[3] or 800; return mix("#b7a87e", sk:airlight(x), w:aerial(Z)*0.8) end, medium=0.25})
 
---@ chunk 18 · clock 50904.140625
+--@ chunk 18 · clock 50973.75
 wait(12*60)
 -- the lane: darker, greener, less even
 local lp = {}
@@ -451,7 +451,7 @@ for _, s in ipairs({{520, 510, 3}, {531, 512, 2}, {372, 505, 2.5}, {612, 572, 4}
   sb:reload("#4a4640", 0.6); sb:touch(s[1] + s[3]*0.4, s[2] + 1, {pressure=0.5, drag={s[3]*0.8, 0}})
 end
 
---@ chunk 19 · clock 51624.140625
+--@ chunk 19 · clock 51693.75
 wait(24*60)
 -- the thistle, restated dark against the light grass, larger
 local tx, ty = 852, 718
@@ -506,7 +506,7 @@ for i = 1, 55 do
   end
 end
 
---@ chunk 20 · clock 53064.140625
+--@ chunk 20 · clock 53133.75
 local gn = noise{seed=71, octaves=3, period=140}
 local band = HILL * mask(function(x, y) return 0.85 * smoothstep(520, 714, y + 40*gn(x, y)) end)
 glaze(band, {color="#26331f", coats=0.55, pigment="transparent"})
@@ -517,11 +517,11 @@ local top = STONE * fs:lit{parts={1}, soft=0.1} * mask(function(x, y) return smo
 work(top, {hand="scumble", tool="round 2", length={3, 8}, coverage=2, angle=fs:field("across"), medium=0.35, clip=STONE,
   color=function(x, y) return mix("#a39a86", "#c4b89c", smoothstep(0.3, 0.9, fs:value(x, y) or 0.5)) end})
 
---@ chunk 21 · clock 64922.8408203125
+--@ chunk 21 · clock 64992.4501953125
 local cs = (ellipse(760, 462, 230, 42):roughen(22, 90, 5, 18) + ellipse(560, 404, 120, 16):roughen(10, 60, 6, 10)) * below(function(x) return HZ + 40 end) - HILL - WOOD
 glaze(cs:blur(18), {color="#55655a", coats=0.16, pigment="transparent"})
 
---@ chunk 22 · clock 100747.1259765625
+--@ chunk 22 · clock 100816.7353515625
 -- long, curving blades through the dark foreground band: sunlit tips and dark stalks, uneven lengths
 local g = brush("rigger", 0.8)
 local gn = noise{seed=81, octaves=3, period=90}
@@ -560,7 +560,7 @@ for i = 1, 40 do
 end
 print(n, "blades")
 
---@ chunk 23 · clock 100747.1259765625
+--@ chunk 23 · clock 100816.7353515625
 -- the plain: fuse the dash-rows a little and cut the sugary greens with a thin muted veil
 OAKALL = oak:mask():grow(2) + CROWN:grow(3)
 local keep = HILL:grow(1) + WOOD:grow(1) + FIELDTREES:grow(1.5) + VILLAGE:grow(1.5) + OAKALL + FIG:grow(3) + STONE:grow(3)
@@ -574,7 +574,7 @@ work(PLAIN, {hand="glaze", tool="filbert 4", length={6, 16}, coverage=1.6, angle
   end})
 print("plain", PLAIN:area())
 
---@ chunk 24 · clock 100747.1259765625
+--@ chunk 24 · clock 100816.7353515625
 -- mute the sugary yellow-green of the near hill toward an olive earth green, heaviest where it is lit
 local hn2 = noise{seed=93, octaves=3, period=120}
 local hillg = (HILL - FIG:grow(2) - STONE:grow(2) - OAKALL) * mask(function(x, y) return 0.75 + 0.25*hn2:at01(x, y) end)
@@ -584,7 +584,7 @@ local cm = (cl:mask{alpha={0.25, 0.9}} * above(function(x) return HZ - 30 end) -
 glaze(cm, {color="#aeb6bd", coats=0.4, pigment="semi"})
 print("ok")
 
---@ chunk 25 · clock 111626.87890625
+--@ chunk 25 · clock 111723.3642578125
 -- the wanderer: a hat brim, a head under it, a lit left flank of the coat, a staff; so he is a man, not a hooded blob
 local x, y, k = 348, 488, 1.3
 local function F(dx, dy) return {x + k*dx, y + k*dy} end
@@ -618,5 +618,125 @@ for i = 1, 26 do
   if STONE:at(px, py) > 0.5 then ml:reload(i % 2 == 0 and "#4f5a38" or "#6b6a46", 0.6); ml:touch(px, py, {pressure=0.5, drag={rand(1, 3), -0.5}}) end
 end
 
---@ chunk 26 · clock 118428.42529296875
+--@ chunk 26 · clock 118524.91064453125
+-- a stilled sky: the puffy cumulus overpainted into long, low banks; slate above, a warm glow low over the village
+local function crest(x) local m = HZ for _, l in ipairs(rs) do local c = l:crest(x); if c and c < m then m = c end end return m end
+local sn = noise{seed=101, octaves=4, period=140, stretch={0.0, 7}}
+local sn2 = noise{seed=102, octaves=3, period=60, stretch={0.02, 5}}
+function calmsky(x, y)
+  local t = clamp(y / (HZ - 20), 0, 1)
+  local c = gradient({{0, "#6f7f90"}, {0.35, "#8e9ba5"}, {0.7, "#bdbdb0"}, {1, "#dccfae"}}, t)
+  local glow = math.exp(-((x - 700)/380)^2) * smoothstep(0.45, 1, t)
+  c = mix(c, "#e8d6ac", 0.45*glow)
+  -- long banks: darker, violet-gray, heaviest in the middle sky
+  local b = smoothstep(0.15, 0.55, sn:at01(x, y)) * (1 - smoothstep(0.75, 0.95, t)) * smoothstep(0.05, 0.3, t)
+  c = mix(c, shift(c, -0.09, 0.004, -0.012), 0.6*b)
+  -- lit undersides of the banks toward the glow
+  local e = smoothstep(0.55, 0.75, sn2:at01(x, y)) * smoothstep(0.4, 0.8, t) * (1 - smoothstep(0.9, 1, t))
+  return mix(c, "#e9dcbc", 0.35*e)
+end
+SKYM = mask(function(x, y) return 1 - smoothstep(crest(x) - 8, crest(x) - 1, y) end) - OAKALL:grow(1)
+local skyclip = SKYM - OAKALL:grow(1)
+work(SKYM, {hand="body", color_over=function(x, y, under) return mix(under, calmsky(x, y), 0.82) end, angle=function(x, y) return 0.02*math.sin(x/200) end,
+  length={30, 90}, coverage=3.4, medium=0.3, pal=SKYPAL, clip=skyclip})
+blend(SKYM, {angle=0, clip=skyclip})
+-- close the old pale sky left in the gap around the crown, right up to the leaves
+local ring = (OAKALL:grow(3) - CROWN - oak:mask()) * SKYM:grow(2)
+local ringclip = ring - CROWN:shrink(0.5) - oak:mask()
+work(ring, {hand="detail", tool="round 2", length={3, 8}, coverage=3.2, medium=0.3, pal=SKYPAL, angle=0, clip=ringclip,
+  color_over=function(x, y, under) return mix(under, calmsky(x, y), 0.85) end})
+print("ring", ring:area())
+
+--@ chunk 27 · clock 118524.91064453125
+-- the oak's crown restated clump by clump: each clump a mass with a shadowed underside and a lit cap
+-- of hooked leaf strokes toward the low sun (upper left), so the crown has structure, not one flat blob
+local dkb, mdb, ltb = brush("round", 1.8), brush("round", 1.6), brush("round", 1.3)
+local n, used = 0, 0
+local cs = lv.clumps
+for i, c in ipairs(cs) do
+  if c.r > 3.5 and CROWN:at(c.x, c.y) > 0.3 then
+    used = used + 1
+    local r = c.r * 0.9
+    -- shadowed underside: a few short strokes along the lower right arc
+    if i % 4 == 1 or dkb:fullness() < 0.3 then dkb:reload(mix("#1c2419", "#253020", rand(0, 1)), 0.8) end
+    for k = 1, 3 do
+      local a = rand(0.2, 2.6)
+      local px, py = c.x + math.cos(a)*r*0.7, c.y + math.sin(a)*r*0.55
+      dkb:stroke({{px - r*0.25, py}, {px, py + r*0.08}, {px + r*0.25, py - r*0.02}}, {pressure={0.6, 0.1}, ramps={0.1, 0.6}, clip=CROWN})
+      n = n + 1
+    end
+    -- lit cap: hooked leaf strokes on the upper-left of the clump, fewer where the clump is in shade
+    local lit = clamp(c.lit or 0.3, 0, 1)
+    local cnt = math.floor(2 + 7*lit)
+    local b = lit > 0.45 and ltb or mdb
+    if i % 3 == 1 or b:fullness() < 0.3 then
+      local col = lit > 0.45 and mix("#5d6a37", "#77804a", rand(0, 1)) or mix("#34422a", "#46532f", rand(0, 1))
+      b:reload(col, 0.75)
+    end
+    for k = 1, cnt do
+      local a = -math.pi*0.5 - 0.9 + rand(-0.9, 0.9)
+      local d = r * rand(0.25, 0.85)
+      local px, py = c.x + math.cos(a)*d, c.y + math.sin(a)*d*0.7
+      local L = rand(2.5, 4.5) * (0.7 + 0.3*c.r/10)
+      local ang = a + math.pi*0.5 + randn(0, 0.35)
+      local hook = randn(0, 0.9)
+      b:stroke({{px, py}, {px + math.cos(ang)*L*0.5, py + math.sin(ang)*L*0.5}, {px + math.cos(ang + hook*0.6)*L, py + math.sin(ang + hook*0.6)*L}},
+        {pressure={0.7, 0.05}, ramps={0.1, 0.7}})
+      n = n + 1
+    end
+  end
+end
+-- break the silhouette and close the pale rim: hooked strokes outward along the crown's edge
+local rim = CROWN:rim(4, 1)
+local hb = brush("round", 1.4)
+local k = 0
+for i = 1, 5000 do
+  local x, y = rand(0, 380), rand(90, 360)
+  if rim:at(x, y) > 0.5 and k < 900 then
+    local up = y < 250
+    if k % 8 == 0 then hb:reload(up and (rand(0,1) < 0.5 and "#4d5a31" or "#2a3522") or "#222b1c", 0.7) end
+    local dx, dy = x - 215, y - 250
+    local dn = math.sqrt(dx*dx + dy*dy) + 1e-6
+    local ang = math.atan(dy, dx) + randn(0, 0.6)
+    local L = rand(2.5, 5)
+    local hook = randn(0, 0.8)
+    hb:stroke({{x, y}, {x + math.cos(ang)*L*0.5, y + math.sin(ang)*L*0.5}, {x + math.cos(ang + hook)*L, y + math.sin(ang + hook)*L}},
+      {pressure={0.7, 0.05}, ramps={0.1, 0.7}})
+    k = k + 1
+  end
+end
+print("clumps used", used, "strokes", n, "rim", k)
+
+--@ chunk 28 · clock 118524.91064453125
+-- the crown as one mass in the low light: lit upper left, a transparent shade deepening to the lower right
+local cn = noise{seed=111, octaves=3, period=50}
+local shade = CROWN * mask(function(x, y) return smoothstep(-0.1, 0.9, ((x - 120)/240 + (y - 140)/200)*0.7 + 0.2*cn(x, y)) end)
+glaze(shade:blur(4), {color="#1b2419", coats=0.5, pigment="transparent"})
+-- the wanderer stands ON the brow: a dark crease at his feet and a short cast shadow falling right, like the oak's and the stone's
+local fx, fy = 348, 488
+local cast = (ellipse(fx + 12, fy + 0.8, 13, 1.8):roughen(0.8, 5, 3, 1) + ellipse(fx + 1, fy, 5, 1.4)) - FIG
+glaze(cast:blur(1), {color="#26301f", coats=0.6, pigment="transparent"})
+-- the stone seated in the turf: a contact crease along its foot, darkest in the middle
+local foot = mask(function(x, y) local b = 503 + 3*math.sin(x/11) return smoothstep(6, 0, math.abs(y - b)) * smoothstep(372, 395, x) * (1 - smoothstep(470, 486, x)) end) - FIG:grow(1)
+glaze(foot:blur(1.5), {color="#232a1c", coats=0.55, pigment="transparent"})
+-- grass blades over his boots and the stone's foot, so neither sits on the ground like a sticker
+local g = brush("rigger", 0.5)
+for i = 1, 160 do
+  local x = (i <= 40) and rand(fx - 7, fx + 8) or rand(374, 486)
+  local y = (i <= 40) and (fy + rand(-0.5, 2.5)) or (503 + 3*math.sin(x/11) + rand(-1, 3))
+  if i % 8 == 1 then g:reload(({"#5f6a38", "#3b4727", "#747b44", "#2f3a22"})[1 + (i // 8) % 4], 0.6) end
+  local h = rand(2.5, 6)
+  local lean = randn(0.1, 0.3)
+  g:stroke({{x, y}, {x + lean*h*0.5, y - h*0.55}, {x + lean*h, y - h}}, {pressure={0.45, 0}, ramps={0.05, 0.7}})
+end
+print("cast", cast:area(), "foot", foot:area())
+
+--@ chunk 29 · clock 133667.92138671875
+-- the land under the evening sky: a transparent warm umber glaze, light on the far plain, heavier toward us,
+-- so the noon greens sink into one stilled light and the glow over the village is the brightest thing
+local ln = noise{seed=121, octaves=3, period=160}
+local land = mask(function(x, y) return smoothstep(HZ - 2, HZ + 6, y) * (0.3 + 0.7*smoothstep(300, 640, y + 25*ln(x, y))) end)
+glaze(land, {color="#4f4a33", coats=0.42, pigment="transparent"})
+
+--@ chunk 30 · clock 134695.46948242188
 wait(24*60); varnish{color="#e6d3a4", coats=0.3, vary=0.1}; relief()

@@ -417,7 +417,8 @@ impl Canvas {
                     .enumerate()
                     .map(|(k, &(x, y))| {
                         let cv = cov(x, y);
-                        let dip = (k % sp.dip_every == 0).then(|| sp.paint_for((sp.color)(x, y), self.seen_around(x, y, sp.tool.width * 0.6), cv, &mut rng));
+                        // the paint is chosen below, in order
+                        let dip = (k % sp.dip_every == 0).then_some(Paint { color: [0.0; 3], hiding: cv, stiff: 0.0 });
                         let a = sp.drag_angle.map_or(rng.range(0.0, std::f32::consts::TAU), |a| a + rng.normal() * 0.2);
                         let len = sp.drag * rng.range(0.4, 1.6);
                         let touch = Touch {
@@ -433,6 +434,18 @@ impl Canvas {
                     .collect()
             })
             .collect();
+        // trips to the palette, one passage after another (the palette's
+        // mixing cache makes the result depend on the order of requests)
+        let mut plans = plans;
+        let mut prng = Rng::new(seed ^ 0xD1B);
+        for t in plans.iter_mut() {
+            for p in t.iter_mut() {
+                if let Some(d) = p.dip.as_mut() {
+                    let (x, y) = p.touch.at;
+                    *d = sp.paint_for((sp.color)(x, y), self.seen_around(x, y, sp.tool.width * 0.6), d.hiding, &mut prng);
+                }
+            }
+        }
         let n: usize = plans.iter().map(|t| t.len()).sum();
         let first_id = self.next_stroke_ids(n as u32);
         let mut offsets = Vec::with_capacity(plans.len());
@@ -497,5 +510,214 @@ impl Canvas {
         if std::env::var_os("PAINT_DEBUG").is_some() {
             eprintln!("stipple: {n} touches, reach {reach:.1}, tiles {tw}x{th} ({tile:.0} units), plan {t_plan:.2}s, total {:.2}s", t0.elapsed().as_secs_f32());
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::bristle::{Gesture, Kind};
+    use crate::color::hex;
+
+    fn brush_volume(h: &Held) -> f64 {
+        h.bristles.iter().map(|b| b.vol as f64).sum()
+    }
+
+    fn tools() -> Vec<Tool> {
+        vec![Tool::stippler(2.0), Tool::round_sable(8.0), Tool::hog_flat(12.0), Tool::filbert(9.0), Tool::fan(14.0), Tool::rigger(0.8), Tool::badger(20.0)]
+    }
+
+    /// Wet paint to pick up, over the middle of the canvas.
+    fn wet_canvas(w: usize) -> Canvas {
+        let mut c = Canvas::new(w, 1.0, hex("#c8b89a")).with_linen(crate::surface::Linen::fine(3));
+        let mut under = Held::new(Tool::filbert(60.0), 2);
+        for k in 0..12 {
+            under.reload(Paint::body(hex("#304060")), 1.0);
+            let y = 40.0 + k as f32 * 80.0;
+            c.drag(&mut under, &Gesture::new(vec![(0.0, y), (1000.0, y)]).pressure(1.0, 1.0), None);
+        }
+        c
+    }
+
+    /// A touch neither creates nor destroys paint.
+    #[test]
+    fn touch_conserves_paint() {
+        let mut c = wet_canvas(400);
+        for (k, tool) in tools().into_iter().enumerate() {
+            let mut h = Held::new(tool.clone(), 5);
+            h.load(Paint::scumble(hex("#d0c060")), 0.8);
+            let before = c.wet_total() + brush_volume(&h);
+            let t = Touch::at(200.0 + 90.0 * k as f32, 500.0).pressure(0.9).drag(3.0, -2.0).twist(0.6);
+            c.touch(&mut h, &t, None);
+            let after = c.wet_total() + brush_volume(&h);
+            assert!((after - before).abs() <= before * 2e-3, "{:?}: {before} -> {after}", tool.kind);
+        }
+    }
+
+    /// Every pixel a touch changes lies inside its footprint.
+    #[test]
+    fn touch_footprint_bounds_every_touched_pixel() {
+        for scale in [0.1f32, 0.4, 1.0] {
+            let w = (1000.0 * scale) as usize;
+            let mut c = wet_canvas(w);
+            for tool in tools() {
+                let before = c.wet.vol.clone();
+                let mut h = Held::new(tool.clone(), 9);
+                h.load(Paint::body(hex("#d0c060")), 1.0);
+                let t = Touch::at(503.0, 497.0).pressure(1.0).drag(-4.0, 6.0).twist(1.5).angle(0.7);
+                c.touch(&mut h, &t, None);
+                let r = touch_footprint(&tool, &t, c.f.scale, c.f.w, c.f.h).unwrap();
+                for (i, (a, b)) in before.iter().zip(&c.wet.vol).enumerate() {
+                    if a != b {
+                        let (x, y) = (i % c.f.w, i / c.f.w);
+                        assert!(x >= r.0 && x < r.2 && y >= r.1 && y < r.3, "{:?} scale {scale}: ({x},{y}) outside {r:?}", tool.kind);
+                    }
+                }
+            }
+        }
+    }
+
+    /// Thickness laid by one touch on a smooth canvas, per pixel.
+    fn one_touch(tool: &Tool, width_px: usize, p: f32) -> (Canvas, f32) {
+        let mut c = Canvas::new(width_px, 1.0, hex("#c8b89a"));
+        let mut h = Held::new(tool.clone(), 3);
+        h.load(Paint::scumble(hex("#304060")), 0.8);
+        c.touch(&mut h, &Touch::at(500.0, 500.0).pressure(p), None);
+        let s = c.f.scale;
+        (c, s)
+    }
+
+    /// A pressed round tip lays one continuous patch, fullest in the middle:
+    /// no dot per hair (frogspawn) and no hollow ring.
+    #[test]
+    fn touch_is_one_solid_patch() {
+        for tool in [Tool::round_sable(8.0), Tool::stippler(3.0)] {
+            let (c, s) = one_touch(&tool, 3200, 0.8);
+            let (cx, cy) = (500.0 * s, 500.0 * s);
+            let at = |x: f32, y: f32| c.wet.vol[(y as usize) * c.f.w + x as usize];
+            let peak = c.wet.vol.iter().cloned().fold(0.0f32, f32::max);
+            // radius of the patch: farthest pixel with a tenth of the peak
+            let mut rmax = 0.0f32;
+            for (i, &v) in c.wet.vol.iter().enumerate() {
+                if v > 0.1 * peak {
+                    let (x, y) = ((i % c.f.w) as f32 + 0.5 - cx, (i / c.f.w) as f32 + 0.5 - cy);
+                    rmax = rmax.max((x * x + y * y).sqrt());
+                }
+            }
+            assert!(rmax > 2.0, "{:?}: no patch", tool.kind);
+            // the inner half is filled everywhere
+            let n = 64;
+            let mut min_in = f32::MAX;
+            for k in 0..n {
+                let a = k as f32 / n as f32 * std::f32::consts::TAU;
+                for rr in [0.0, 0.25, 0.5] {
+                    min_in = min_in.min(at(cx + a.cos() * rr * rmax, cy + a.sin() * rr * rmax));
+                }
+            }
+            assert!(min_in > 0.3 * peak, "{:?}: holes inside the patch ({min_in} vs peak {peak})", tool.kind);
+            // no hollow: the middle is at least as full as the rim
+            let rim: f32 = (0..n).map(|k| { let a = k as f32 / n as f32 * std::f32::consts::TAU; at(cx + a.cos() * 0.7 * rmax, cy + a.sin() * 0.7 * rmax) }).sum::<f32>() / n as f32;
+            let mid: f32 = (0..n).map(|k| { let a = k as f32 / n as f32 * std::f32::consts::TAU; at(cx + a.cos() * 0.15 * rmax, cy + a.sin() * 0.15 * rmax) }).sum::<f32>() / n as f32;
+            assert!(mid >= rim, "{:?}: hollow ring (middle {mid} < rim {rim})", tool.kind);
+        }
+    }
+
+    /// The same touch at 1000 and 3200 px lays the same paint over the same
+    /// area (in canvas units).
+    #[test]
+    fn touch_is_resolution_independent() {
+        for tool in [Tool::stippler(2.0), Tool::stippler(4.0), Tool::round_sable(8.0)] {
+            let stats = |w: usize| {
+                let (c, s) = one_touch(&tool, w, 0.7);
+                let px = 1.0 / (s * s);
+                let vol: f32 = c.wet.vol.iter().sum::<f32>() * px;
+                let mean_t = vol / c.wet.vol.iter().filter(|&&v| v > 1e-4).count() as f32 / px;
+                // area holding half the paint (robust to the soft rim)
+                let mut v: Vec<f32> = c.wet.vol.iter().cloned().filter(|&v| v > 0.0).collect();
+                v.sort_by(|a, b| b.partial_cmp(a).unwrap());
+                let (mut acc, mut n) = (0.0, 0);
+                for x in &v {
+                    acc += x * px;
+                    n += 1;
+                    if acc >= vol * 0.5 {
+                        break;
+                    }
+                }
+                (vol, n as f32 * px, mean_t)
+            };
+            let (v1, a1, _) = stats(1000);
+            let (v3, a3, _) = stats(3200);
+            assert!((v1 / v3 - 1.0).abs() < 0.15, "{:?} w{}: volume {v1} vs {v3}", tool.kind, tool.width);
+            // (a coarse pixel grid can only resolve an area to about a pixel)
+            assert!((a1 - a3).abs() < 0.35 * a3 + 1.0, "{:?} w{}: area {a1} vs {a3}", tool.kind, tool.width);
+        }
+    }
+
+    #[test]
+    fn aim_km_reaches_reachable_targets() {
+        let seen = hex("#5a6878");
+        for want in [hex("#7d8fae"), hex("#9aa3a8"), hex("#6a7488")] {
+            let c = aim_km(want, seen, 0.5, 0.6);
+            let got = Pigment::with_hiding(c, 0.5).over(seen, 0.6);
+            for k in 0..3 {
+                assert!((got[k] - want[k]).abs() < 0.01, "{want:?}: {got:?}");
+            }
+        }
+    }
+
+    fn stipple_scene() -> Canvas {
+        let st = crate::style::Style::friedrich();
+        let mut c = st.prepare(300, 1.5, 7);
+        let m = Mask::from_fn(c.f, |x, y| crate::smoothstep(100.0, 300.0, x) * (1.0 - crate::smoothstep(400.0, 450.0, y)));
+        let sp = Stipple::new(Tool::stippler(4.0)).mixed(&st.palette, 0.5).color(|_, y| if y < 200.0 { hex("#7d8fae") } else { hex("#e0d4b0") }).coverage(|x, _| x / 500.0).drag(1.0, None);
+        c.stipple(&m, &sp, 3);
+        c.dry();
+        c
+    }
+
+    fn fp(c: &Canvas) -> u64 {
+        let mut h = 0xcbf2_9ce4_8422_2325u64;
+        for v in c.px.iter().flatten().chain(c.height.iter()) {
+            for b in v.to_bits().to_le_bytes() {
+                h ^= b as u64;
+                h = h.wrapping_mul(0x100_0000_01b3);
+            }
+        }
+        h
+    }
+
+    #[test]
+    fn stipple_is_deterministic_across_thread_counts() {
+        let a = rayon::ThreadPoolBuilder::new().num_threads(1).build().unwrap().install(|| fp(&stipple_scene()));
+        let b = rayon::ThreadPoolBuilder::new().num_threads(4).build().unwrap().install(|| fp(&stipple_scene()));
+        assert_eq!(a, b);
+    }
+
+    /// Denser coverage covers more of the canvas, and nothing is painted
+    /// outside the region.
+    #[test]
+    fn stipple_follows_coverage_and_mask() {
+        let mut c = Canvas::new(400, 1.0, hex("#c8b89a")).with_linen(crate::surface::Linen::fine(3));
+        let m = Mask::from_fn(c.f, |x, _| if (100.0..900.0).contains(&x) { 1.0 } else { 0.0 });
+        let sp = Stipple::new(Tool::stippler(5.0)).color(|_, _| hex("#304060")).coverage(|x, _| if x < 500.0 { 0.4 } else { 2.0 }).aim(false).feather(0.0);
+        c.stipple(&m, &sp, 5);
+        let frac = |x0: f32, x1: f32| {
+            let (a, b) = ((x0 * c.f.scale) as usize, (x1 * c.f.scale) as usize);
+            let mut n = 0;
+            let mut hit = 0;
+            for y in 0..c.f.h {
+                for x in a..b {
+                    n += 1;
+                    if c.wet.vol[y * c.f.w + x] > 0.02 {
+                        hit += 1;
+                    }
+                }
+            }
+            hit as f32 / n as f32
+        };
+        let (thin, dense, outside) = (frac(150.0, 450.0), frac(550.0, 850.0), frac(0.0, 80.0) + frac(920.0, 1000.0));
+        assert!(dense > thin * 1.5 && dense > 0.6, "coverage: thin {thin}, dense {dense}");
+        assert!(outside == 0.0, "painted outside the region: {outside}");
+        let _ = Kind::Round;
     }
 }

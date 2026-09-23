@@ -664,7 +664,7 @@ unsafe fn exchange(
                 // a moving bristle has a crisp track; in a pressed tip (fixed
                 // deposit) paint wicks between the hairs, so each hair's
                 // contact fades out and neighbors sum to one smooth patch
-                let cov = if dep.is_some() { 1.0 - smoothstep(0.0, rb + 0.5, dist) } else { 1.0 - smoothstep(rb * 0.5, rb + 0.5, dist) };
+                let cov = if dep.is_some() { 1.0 - smoothstep(0.0, rb, dist) } else { 1.0 - smoothstep(rb * 0.5, rb + 0.5, dist) };
                 sum_cov += cov;
                 let i = y * w + x;
                 let surf = (*sf.base.add(i) + 0.35 * *sf.vol.add(i)).min(1.5);
@@ -852,11 +852,11 @@ fn touch_half(tool: &Tool, p: f32, s: f32) -> f32 {
 
 /// Contact radius of one hair in a pressed tip (pixels): at least the hair,
 /// and wide enough that the fading contacts of neighbors overlap (paint
-/// bridges the gaps).
+/// bridges the gaps). The floor is only as wide as a pixel needs to be
+/// sampled: a coarse render must not make small marks bigger (and fainter).
 fn touch_rb(tool: &Tool, p: f32, s: f32) -> f32 {
-    let rb0 = (tool.hair_radius() * s).max(0.55);
     let spacing = touch_half(tool, p, s) * (root_area(tool.kind) / tool.bristles.max(1) as f32).sqrt();
-    rb0.max(1.4 * spacing)
+    (tool.hair_radius() * s).max(1.4 * spacing).max(0.75)
 }
 
 /// Every pixel `touch_on` may read or write for `t`, as a conservative
@@ -866,7 +866,7 @@ pub(crate) fn touch_footprint(tool: &Tool, t: &Touch, scale: f32, w: usize, h: u
     let p = t.pressure.clamp(0.0, 1.0);
     let half = tool.width * 0.5 * s * (1.0 + tool.splay.abs() * 0.5);
     let reach = half * ROOT_MAX * std::f32::consts::SQRT_2 * (1.0 + 0.3 * tool.splay.abs()) * (1.0 + 0.5 * (LEN_MAX - 1.0));
-    let rb = touch_rb(tool, p, s).max((tool.hair_radius() * s).max(0.55));
+    let rb = touch_rb(tool, p, s);
     let pad = reach + 3.0 * (rb + 1.0) + 4.0;
     let (x0, y0) = (t.at.0 * s + t.drag.0.min(0.0) * s, t.at.1 * s + t.drag.1.min(0.0) * s);
     let (x1, y1) = (t.at.0 * s + t.drag.0.max(0.0) * s, t.at.1 * s + t.drag.1.max(0.0) * s);

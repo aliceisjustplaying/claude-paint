@@ -46,8 +46,8 @@ fn main() {
 
     // knolls: the oak's to the left, the spruces' rise to the right
     let knoll = |x: f32, y: f32| -> f32 {
-        let a = 30.0 * (-((x - 250.0) / 200.0).powi(2) - ((y - 600.0) / 55.0).powi(2)).exp();
-        let b = 20.0 * (-((x - 810.0) / 170.0).powi(2) - ((y - 545.0) / 40.0).powi(2)).exp();
+        let a = 42.0 * (-((x - 262.0) / 190.0).powi(2) - ((y - 612.0) / 50.0).powi(2)).exp();
+        let b = 26.0 * (-((x - 810.0) / 160.0).powi(2) - ((y - 556.0) / 36.0).powi(2)).exp();
         a + b
     };
     let drift = Fbm::new(9, 4, 150.0);
@@ -66,7 +66,7 @@ fn main() {
         // contre-jour: the glow is beyond the horizon, so a face that falls
         // toward the viewer (gy < 0) is turned from it and in shade; a face
         // turned to the left catches the afterglow
-        (1.5 * gy + 0.6 * gx).clamp(-1.0, 1.0)
+        (2.0 * gy + 0.7 * gx).clamp(-1.0, 1.0)
     };
     let sky_col = |_x: f32, y: f32| -> Rgb {
         let t = (y / HORIZON).clamp(0.0, 1.0);
@@ -79,7 +79,7 @@ fn main() {
     let snow_col = |x: f32, y: f32| -> Rgb {
         let d = ((y - HORIZON) / (h - HORIZON)).clamp(0.0, 1.0);
         // far snow takes the horizon's warmth; near snow is cooler, bluer
-        let base = gradient(&[(0.0, hex("#d7d2c6")), (0.25, hex("#c8c7c6")), (0.6, hex("#b8bac2")), (1.0, hex("#aeb0bb"))], d, Mix::Light);
+        let base = gradient(&[(0.0, hex("#d7d2c6")), (0.25, hex("#c9c8c6")), (0.6, hex("#b5b7c0")), (1.0, hex("#a2a5b3"))], d, Mix::Light);
         let l = snow_lit(x, y);
         if l >= 0.0 {
             mix(base, hex("#e4ddcf"), 0.6 * l, Mix::Light)
@@ -128,9 +128,9 @@ fn main() {
         // a thin crescent, lit from the lower right (the sun is below the
         // horizon to the right of it): a few strokes of a small round along
         // the arc, heavy in the middle, lifted off at the horns
-        let r = 8.5;
+        let r = 11.5;
         let paint = pal.mix(hex("#eee6c8")).paint(0.15).with_hiding(0.9);
-        let mut b = Held::new(Tool::round_sable(2.2), rng.next_u64());
+        let mut b = Held::new(Tool::round_sable(2.6), rng.next_u64());
         for k in 0..3 {
             b.reload(paint, 0.8);
             let inset = k as f32 * 0.9;
@@ -282,65 +282,112 @@ fn main() {
     // ---------------------------------------------------------------- brook
     // a frozen brook winding from the foreground back toward the ruin
     let brook: Vec<(f32, f32)> = vec![
-        (668.0, 735.0),
-        (640.0, 690.0),
-        (596.0, 655.0),
-        (566.0, 632.0),
-        (578.0, 604.0),
-        (560.0, 578.0),
-        (528.0, 556.0),
-        (522.0, 534.0),
-        (540.0, 516.0),
-        (527.0, 498.0),
-        (510.0, 484.0),
-        (503.0, 470.0),
-        (498.0, 460.0),
+        (735.0, 740.0),
+        (662.0, 716.0),
+        (575.0, 700.0),
+        (528.0, 682.0),
+        (546.0, 661.0),
+        (612.0, 644.0),
+        (636.0, 626.0),
+        (604.0, 609.0),
+        (548.0, 597.0),
+        (523.0, 583.0),
+        (538.0, 569.0),
+        (576.0, 558.0),
+        (586.0, 546.0),
+        (561.0, 536.0),
+        (530.0, 527.0),
+        (521.0, 516.0),
+        (535.0, 506.0),
+        (547.0, 497.0),
+        (535.0, 488.0),
+        (516.0, 480.0),
+        (509.0, 472.0),
+        (512.0, 464.0),
+        (506.0, 457.0),
     ];
-    let brook_w: Vec<f32> = brook.iter().map(|p| 2.0 + 30.0 * ((p.1 - HORIZON) / (h - HORIZON)).clamp(0.0, 1.0).powf(1.6)).collect();
+    // world width shrinks with distance; on the picture a reach running
+    // across is foreshortened, a reach running into depth is not
+    let brook_w: Vec<f32> = (0..brook.len())
+        .map(|i| {
+            let p = brook[i];
+            let (a, b) = (brook[i.saturating_sub(1)], brook[(i + 1).min(brook.len() - 1)]);
+            let (dx, dy) = (b.0 - a.0, b.1 - a.1);
+            let l = (dx * dx + dy * dy).sqrt().max(1e-3);
+            let d = ((p.1 - HORIZON) / (h - HORIZON)).clamp(0.0, 1.0);
+            let fs = 0.12 + 0.3 * d;
+            (1.5 + 40.0 * d.powf(1.5)) * ((dy / l).abs() + fs * (dx / l).abs()).min(1.0) + 0.8
+        })
+        .collect();
     let brook_m = Mask::from_shape(f, Shape::new().ribbon(&brook, &brook_w)).mul(&snow_m);
     if o.stage("brook", &mut c, &mut rng) {
-        // the ice: the sky's mauve and straw mirrored dully, darker and
-        // greener where it is thin; strokes level
+        // the ice: the sky near the horizon mirrored dully (you see the sky
+        // low down in ice seen at a slant), grayed; strokes level
         let ice = |x: f32, y: f32| -> Rgb {
             let d = ((y - HORIZON) / (h - HORIZON)).clamp(0.0, 1.0);
-            let refl = sky_col(x, HORIZON * (0.95 - 0.7 * d));
-            mix(refl, hex("#5d6270"), 0.35 + 0.2 * d, Mix::Pigment)
+            let refl = sky_col(x, HORIZON * (0.97 - 0.45 * d));
+            mix(refl, hex("#6f7280"), 0.18 + 0.15 * d, Mix::Pigment)
         };
-        let hd = st.detail().color(ice).angle(|_, _| 0.0).angle_jitter(0.1).length(6.0, 22.0).coverage(3.0).medium(0.25).clip(true);
+        let hd = st.detail().color(ice).angle(|_, _| 0.0).angle_jitter(0.12).length(5.0, 18.0).coverage(3.0).medium(0.25).clip(true);
         c.work(&brook_m, &hd, 61);
         c.dry();
-        // open black water along the far bank under the overhang of snow:
-        // a broken dark line with a rigger, thickest in the foreground
-        let dark = pal.mix(hex("#2a2b30")).paint(0.15);
-        let mut b = Held::new(st.line_tool(1.2), rng.next_u64());
+        // open water in a few reaches: black, with the sky's light in a
+        // thin streak down its middle
+        let open = Fbm::new(19, 2, 55.0);
+        let open_m = brook_m.clone().mul_fn(|x, y| smoothstep(0.3, 0.4, open.get(x, y * 1.5)) * smoothstep(480.0, 520.0, y)).blur(0.6);
+        let water = |x: f32, y: f32| mix(hex("#34373f"), sky_col(x, HORIZON * 0.8), 0.22, Mix::Pigment);
+        let hd = st.detail().color(water).angle(|_, _| 0.0).length(4.0, 14.0).coverage(3.0).medium(0.2).clip(true);
+        c.work(&open_m, &hd, 62);
+        c.dry();
+        // the far bank: snow overhanging the ice casts a thin blue-gray
+        // shadow line along the upper edge, broken
+        let edge = pal.mix(hex("#5d6172")).paint(0.2);
+        let mut b = Held::new(st.line_tool(1.0), rng.next_u64());
         for i in 0..brook.len() - 1 {
-            let (a, e) = (brook[i], brook[i + 1]);
-            let w = brook_w[i];
-            if rng.f() < 0.2 {
+            if rng.f() < 0.25 {
                 continue;
             }
-            b.reload(dark, 0.7);
-            let off = -0.42 * w;
-            let pts = vec![(a.0, a.1 + off * 0.3 - 0.2 * w), ((a.0 + e.0) * 0.5 + rng.normal() * 0.8, (a.1 + e.1) * 0.5 - 0.25 * w), (e.0, e.1 - 0.2 * brook_w[i + 1])];
-            let pw = (0.25 + 0.03 * w).min(0.9);
-            c.drag(&mut b, &Gesture::new(pts).pressure(pw, pw * 0.7).ramps(0.2, 0.4), None);
-        }
-        // the near bank: a lip of snow, bluish in its own shadow
-        let lip = pal.mix(hex("#a9adbb")).paint(0.15);
-        let mut b = Held::new(Tool::round_sable(2.0), rng.next_u64());
-        for i in 0..brook.len() - 1 {
             let (a, e) = (brook[i], brook[i + 1]);
             let (wa, we) = (brook_w[i], brook_w[i + 1]);
-            b.reload(lip, 0.6);
-            let pts = vec![(a.0, a.1 + 0.45 * wa), (e.0, e.1 + 0.45 * we)];
-            c.drag(&mut b, &Gesture::new(pts).pressure(0.3 + 0.02 * wa, 0.3).ramps(0.3, 0.3), None);
+            // the upper side of the ribbon
+            let (dx, dy) = (e.0 - a.0, e.1 - a.1);
+            let l = (dx * dx + dy * dy).sqrt().max(1e-3);
+            let mut nrm = (-dy / l, dx / l);
+            if nrm.1 > 0.0 {
+                nrm = (-nrm.0, -nrm.1);
+            }
+            let t0 = rng.range(0.0, 0.3);
+            let t1 = rng.range(0.7, 1.0);
+            let pa = (a.0 + dx * t0 + nrm.0 * wa * 0.45, a.1 + dy * t0 + nrm.1 * wa * 0.45);
+            let pe = (a.0 + dx * t1 + nrm.0 * we * 0.45, a.1 + dy * t1 + nrm.1 * we * 0.45);
+            let d = ((a.1 - HORIZON) / (h - HORIZON)).clamp(0.0, 1.0);
+            b.tool = st.line_tool(0.5 + 1.6 * d);
+            b.reload(edge, 0.7);
+            c.drag(&mut b, &Gesture::new(vec![pa, ((pa.0 + pe.0) * 0.5 + rng.normal() * 0.6, (pa.1 + pe.1) * 0.5 + rng.normal() * 0.4), pe]).pressure(0.7, 0.5).ramps(0.2, 0.4), None);
         }
+        // snow drifted over the ice here and there
+        let crust = Fbm::new(23, 3, 30.0);
+        let crust_m = brook_m.clone().mul_fn(|x, y| smoothstep(0.15, 0.35, crust.get(x * 0.7, y * 2.0)));
+        let sn = Stipple::new(Tool::stippler(2.4)).mixed(pal, 0.3).color(move |x, y| snow_col(x, y)).coverage(|_, _| 1.4).pressure(0.5, 0.9).drag(2.0, Some(0.0)).dips(12, 0.5, 0.5).aim(false);
+        c.stipple(&crust_m, &sn, 63);
         c.dry();
     }
 
     // ------------------------------------------------------------------ oak
     let oak_base = (262.0, 598.0);
-    let oak = paint::Habit { lean: -0.06, decay: 0.5, years: 26, ..paint::Habit::dead_oak() }.grow(oak_base, 345.0, 40 + o.seed);
+    let ev = |k: &str, d: f32| std::env::var(k).ok().and_then(|v| v.parse().ok()).unwrap_or(d);
+    let oak = paint::Habit {
+        lean: ev("OAK_LEAN", -0.06),
+        decline: ev("OAK_DECLINE", 0.6),
+        decay: ev("OAK_DECAY", 0.3),
+        breakage: ev("OAK_BREAK", 0.25),
+        years: ev("OAK_YEARS", 26.0) as u32,
+        ..paint::Habit::dead_oak()
+    }
+    .grow(oak_base, ev("OAK_H", 390.0), ev("OAK_SEED", 44.0) as u64 + o.seed);
+    // gnarl: old oak wood doesn't run smooth, it kinks every few inches. One
+    // displacement field for every point, so twigs stay where they spring
+    let oak = gnarl(oak, 1.3, 9.0, 71);
     if o.stage("oak", &mut c, &mut rng) {
         let dark = pal.mix(hex("#2b2622")).paint(0.25);
         let dead = pal.mix(hex("#3b3531")).paint(0.25);
@@ -352,10 +399,10 @@ fn main() {
         let snow_sh = pal.mix(hex("#aeb1bf")).paint(0.12).with_hiding(0.9);
         limb_snow(&mut c, &oak, snow, snow_sh, &mut rng);
         // snow heaped at the foot, blue in the trunk's shadow
-        let mut b = Held::new(Tool::filbert(6.0), rng.next_u64());
-        for k in 0..7 {
-            b.reload(if k % 2 == 0 { snow } else { snow_sh }, 0.6);
-            let x0 = oak_base.0 - 18.0 + k as f32 * 6.0 + rng.normal() * 2.0;
+        let mut b = Held::new(Tool::filbert(4.0), rng.next_u64());
+        for k in 0..5 {
+            b.reload(if k % 2 == 0 { snow.with_hiding(0.7) } else { snow_sh.with_hiding(0.6) }, 0.35);
+            let x0 = oak_base.0 - 14.0 + k as f32 * 6.0 + rng.normal() * 2.0;
             let y0 = oak_base.1 + 1.5 + rng.normal() * 1.2;
             c.drag(&mut b, &Gesture::new(vec![(x0, y0), (x0 + 9.0, y0 - 0.5 + rng.normal())]).pressure(0.6, 0.4).ramps(0.2, 0.4), None);
         }
@@ -384,7 +431,7 @@ fn main() {
         let hat = pal.mix(hex("#1e1c1c")).paint(0.15);
         let skin = pal.mix(hex("#8f7a6a")).paint(0.15);
         let shadow = pal.mix(hex("#8d91a4")).paint(0.2);
-        walker_fig(&mut c, walker, 30.0, coat, hat, skin, shadow, &mut rng);
+        walker_fig(&mut c, walker, 34.0, coat, hat, skin, shadow, &mut rng);
         c.dry();
     }
 
@@ -411,25 +458,28 @@ fn main() {
         // dry grasses and reeds laid over the finished snow in fine upturning
         // strokes [NG p.56]: tufts along the brook, at the foot of the knoll
         // and across the foreground, bigger toward the viewer
-        let tufts = Fbm::new(77, 3, 60.0);
+        let tufts = Fbm::new(77, 3, 150.0);
         let hues = [pal.mix(hex("#5b4c38")).paint(0.2), pal.mix(hex("#766246")).paint(0.2), pal.mix(hex("#3e342a")).paint(0.2), pal.mix(hex("#8a7a5c")).paint(0.2)];
         let mut b = Held::new(st.line_tool(0.8), rng.next_u64());
         let mut placed = 0;
-        for _ in 0..3200 {
+        for _ in 0..6000 {
             let x = rng.range(-10.0, 1010.0);
             let y = rng.range(HORIZON + 30.0, h + 5.0);
             let d = ((y - HORIZON) / (h - HORIZON)).clamp(0.0, 1.0);
             // near the brook
             let near_brook = brook.iter().zip(&brook_w).map(|(p, w)| ((p.0 - x).powi(2) + (p.1 - y).powi(2)).sqrt() - w * 0.5).fold(f32::MAX, f32::min);
-            let p = 0.05 + 0.6 * smoothstep(0.0, 1.0, tufts.get01(x, y) * 1.6 - 0.5) * d + 0.5 * (1.0 - smoothstep(4.0, 20.0, near_brook)) + 0.4 * smoothstep(0.82, 1.0, d);
-            if rng.f() > p * 0.35 || brook_m.sample(x, y) > 0.3 || (x - oak_base.0).abs() < 8.0 && (y - oak_base.1).abs() < 5.0 {
+            // patches where the snow lies thin over a rise, the brook's
+            // banks, and the near foreground; almost nothing far away
+            let patch = smoothstep(0.62, 0.8, tufts.get01(x * 0.6, y * 2.4));
+            let p = 0.004 + 1.4 * patch * (0.2 + 0.8 * d) + 0.7 * (1.0 - smoothstep(2.0, 14.0, near_brook)) * (0.3 + 0.7 * d) + 0.5 * smoothstep(0.85, 1.0, d) * tufts.get01(x * 3.0, 5.0);
+            if rng.f() > p * 0.5 || brook_m.sample(x, y) > 0.3 || (x - oak_base.0).abs() < 8.0 && (y - oak_base.1).abs() < 5.0 {
                 continue;
             }
             placed += 1;
-            let blades = 3 + (rng.f() * 6.0) as usize;
+            let blades = 2 + (rng.f() * 5.0) as usize;
             let tall = (4.0 + 22.0 * d.powf(1.4)) * rng.range(0.6, 1.3);
             let paint = hues[(rng.f() * hues.len() as f32) as usize % hues.len()];
-            b.tool = st.line_tool(0.35 + 0.7 * d);
+            b.tool = st.line_tool(0.3 + 0.5 * d);
             b.reload(paint, 0.6);
             for _ in 0..blades {
                 let lean = rng.normal() * 0.3 + 0.08;
@@ -486,7 +536,11 @@ fn arclen(pts: &[(f32, f32)]) -> Vec<f32> {
 /// thins; the new brush sets down in the last one's wet end. Twigs finer
 /// than `finest` are painted at that width, starved.
 fn wood(c: &mut paint::Canvas, sk: &paint::Skeleton, live: Paint, dead: Paint, finest: f32, rng: &mut Rng) {
-    for l in sk.limbs.iter().filter(|l| !l.is_empty()) {
+    // buttress roots are under the snow
+    // buttress roots are under the snow, and low sprouts off the bole are
+    // left out (they read as a boot at this size)
+    let foot = sk.base.1 - sk.height * 0.12;
+    for l in sk.limbs.iter().filter(|l| !l.is_empty() && !l.root && !(l.order == 1 && l.pts[0].1 > foot)) {
         let n = l.pts.len();
         let w: Vec<f32> = l.w.iter().map(|w| w.max(finest)).collect();
         let arc = arclen(&l.pts);
@@ -520,6 +574,22 @@ fn wood(c: &mut paint::Canvas, sk: &paint::Skeleton, live: Paint, dead: Paint, f
     }
 }
 
+/// Kink a skeleton's limbs with a displacement field of short period,
+/// fading out at the foot so the trunk stands in its own snow.
+fn gnarl(mut sk: paint::Skeleton, amp: f32, period: f32, seed: u32) -> paint::Skeleton {
+    let nx = Fbm::new(seed, 2, period);
+    let ny = Fbm::new(seed + 1, 2, period);
+    let base = sk.base;
+    for l in &mut sk.limbs {
+        for (i, p) in l.pts.iter_mut().enumerate() {
+            let up = smoothstep(0.0, 40.0, base.1 - p.1);
+            let a = amp * up * (0.6 + 0.4 * (l.w[i] / 4.0).min(1.0));
+            *p = (p.0 + a * nx.get(p.0, p.1), p.1 + a * ny.get(p.0, p.1));
+        }
+    }
+    sk
+}
+
 /// Snow along the tops of limbs: where a limb runs within ~50° of level,
 /// a thin pale line sits on its upper edge, lit where it faces the
 /// afterglow (left) and blue-gray where it doesn't; broken where wind took it.
@@ -529,7 +599,11 @@ fn limb_snow(c: &mut paint::Canvas, sk: &paint::Skeleton, snow: Paint, shade: Pa
         let mut run: Vec<(f32, f32)> = Vec::new();
         let mut widths: Vec<f32> = Vec::new();
         let flush = |c: &mut paint::Canvas, run: &mut Vec<(f32, f32)>, widths: &mut Vec<f32>, rng: &mut Rng| {
-            if run.len() >= 2 {
+            let long = run.len() >= 2 && {
+                let a = arclen(run);
+                a[a.len() - 1] > 3.0 * widths.iter().cloned().fold(0.0, f32::max)
+            };
+            if long {
                 let wm = widths.iter().sum::<f32>() / widths.len() as f32;
                 let tw = (wm * 0.55).clamp(0.35, 3.5);
                 let mut b = Held::new(if tw > 1.4 { Tool::round_sable(tw) } else { Tool::rigger(tw) }, rng.next_u64());
@@ -625,9 +699,9 @@ fn spruce(c: &mut paint::Canvas, base: (f32, f32), ht: f32, needles: Paint, snow
         c.drag(&mut sb, &Gesture::new(pts).pressure(0.8, 0.5).ramps(0.2, 0.35).shake(0.6), None);
     }
     // snow at the foot, covering the stem's base
-    let mut fb = Held::new(Tool::filbert((ht * 0.1).max(3.0)), rng.next_u64());
-    fb.load(snow_sh, 0.6);
-    c.drag(&mut fb, &Gesture::new(vec![(x - ht * 0.14, y + 1.0), (x + ht * 0.14, y + 0.5)]).pressure(0.5, 0.4).ramps(0.3, 0.4), None);
+    let mut fb = Held::new(Tool::filbert((ht * 0.05).max(2.0)), rng.next_u64());
+    fb.load(snow_sh.with_hiding(0.6), 0.4);
+    c.drag(&mut fb, &Gesture::new(vec![(x - ht * 0.08, y + 0.8), (x + ht * 0.1, y + 0.3)]).pressure(0.45, 0.3).ramps(0.3, 0.5), None);
 }
 
 /// A man seen from behind walking away up the brook: long dark coat,
@@ -676,13 +750,17 @@ fn crow(c: &mut paint::Canvas, at: (f32, f32), size: f32, paint: Paint, flying: 
     let mut b = Held::new(Tool::round_sable(size * 0.32), rng.next_u64());
     b.load(paint, 0.8);
     if flying {
+        // a thin shallow M: each wing pulled out from the body to a lifted
+        // tip, a fine brush, the body a touch at the middle
         let s = size;
-        let dip = rng.range(0.1, 0.3) * s;
-        c.drag(&mut b, &Gesture::new(vec![(x - s, y - dip), (x - s * 0.45, y - s * 0.3), (x, y)]).pressure(0.3, 0.9).ramps(0.1, 0.0), None);
+        let mut w = Held::new(Tool::round_sable(size * 0.16), rng.next_u64());
+        let up = rng.range(0.25, 0.45) * s;
+        for side in [-1.0f32, 1.0] {
+            w.load(paint, 0.8);
+            c.drag(&mut w, &Gesture::new(vec![(x, y), (x + side * s * 0.45, y - up), (x + side * s, y - up * 0.55)]).pressure(1.0, 0.25).ramps(0.0, 0.5), None);
+        }
         b.load(paint, 0.5);
-        c.drag(&mut b, &Gesture::new(vec![(x, y), (x + s * 0.5, y - s * 0.35), (x + s * 1.05, y - dip * 0.6)]).pressure(0.9, 0.3).ramps(0.0, 0.3), None);
-        b.load(paint, 0.5);
-        c.drag(&mut b, &Gesture::new(vec![(x - s * 0.1, y + s * 0.05), (x + s * 0.25, y + s * 0.1)]).pressure(0.9, 0.6).ramps(0.0, 0.3), None);
+        c.drag(&mut b, &Gesture::new(vec![(x - s * 0.08, y + s * 0.02), (x + s * 0.1, y + s * 0.08)]).pressure(0.7, 0.5).ramps(0.0, 0.3), None);
     } else {
         let s = size;
         let lean = rng.normal() * 0.15;

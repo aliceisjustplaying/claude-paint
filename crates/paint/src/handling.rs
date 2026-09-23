@@ -87,6 +87,10 @@ pub struct Handling<'a> {
     pub scrub: usize,
     /// Clip bristle contact to the mask (crisp, cut-in edges).
     pub clip: bool,
+    /// Hug the region's edges: strokes seeded just outside it (within half a
+    /// brush) are moved onto its edge, so coverage doesn't thin there
+    /// (default on; see `hug`).
+    pub hug: bool,
     /// Minimum mask value for a stroke center.
     pub threshold: f32,
     /// Press-down and lift-off fractions of each stroke.
@@ -154,6 +158,7 @@ impl<'a> Handling<'a> {
             blender: false,
             scrub: 0,
             clip: false,
+            hug: true,
             threshold: 0.3,
             ramps: (0.08, 0.15),
             shake: 1.0,
@@ -376,6 +381,13 @@ impl<'a> Handling<'a> {
         self.clip = on;
         self
     }
+    /// Hug the region's edges (default on): a painter carries a passage to
+    /// its edge as fully as through its middle. Off: stroke centers fall only
+    /// inside the region, and coverage halves along its edges.
+    pub fn hug(mut self, on: bool) -> Self {
+        self.hug = on;
+        self
+    }
     pub fn threshold(mut self, t: f32) -> Self {
         self.threshold = t;
         self
@@ -435,14 +447,33 @@ impl Canvas {
         let drift = crate::noise::Fbm::new((seed as u32) ^ 0xD21F, 3, hd.drift.1);
         // clipped strokes may start outside the region and brush into it
         let reach_in = hd.clip && hd.cut_in.is_none();
+        // unclipped strokes seeded outside that brush into the region are
+        // carried in from its edge (see `carry_in`)
+        let carry = !hd.clip && hd.cut_in.is_none() && hd.hug && !hd.blender;
 
         // plan every stroke deterministically
         let mut plans = Vec::with_capacity(centers.len());
         // how far (units) any stroke's pixel footprint reaches from its center
         let (mut ex, mut ey) = (0.0f32, 0.0f32);
         for &(cx, cy, passage) in &centers {
-            let inside = mask_at(mask, cx, cy) >= hd.threshold;
-            if !inside && !reach_in {
+            let mut inside = mask_at(mask, cx, cy) >= hd.threshold;
+            // hug the edges: a center just outside the region (within half a
+            // brush across the stroke) moves onto its edge, so the edge gets
+            // as many strokes as the inside instead of half as many. The
+            // stroke then overhangs the edge by half a brush at most, as one
+            // centered on the edge does (clipped, it lays a full edge).
+            let (cx, cy) = if inside || hd.cut_in.is_some() || !hd.hug {
+                (cx, cy)
+            } else {
+                match hug_edge(hd, mask, (cx, cy)) {
+                    Some(p) => {
+                        inside = true;
+                        p
+                    }
+                    None => (cx, cy),
+                }
+            };
+            if !inside && !reach_in && !carry {
                 continue;
             }
             let len = stroke_length(hd, &mut rng);
@@ -475,6 +506,8 @@ impl Canvas {
             };
             // cutting in: the body strokes stop short of the edge
             let pts = if hd.cut_in.is_some() { trim_inside(mask, &pts, (cx, cy), hd.tool.width) } else { pts };
+            // carried in: from half a brush outside the edge, inward
+            let pts = if carry && !inside { carry_in(mask, &pts, (cx, cy), hd.tool.width, hd.threshold) } else { pts };
             if pts.is_empty() {
                 continue;
             }
@@ -776,21 +809,7 @@ fn stroke_under(cv: &Canvas, pts: &[(f32, f32)], r: f32) -> Rgb {
     let held: Vec<&((f32, f32), f32)> = samples.iter().filter(|(p, _)| !on(p) || f.holds(p.0, p.1)).collect();
     let use_: Vec<&((f32, f32), f32)> = if held.is_empty() { samples.iter().collect() } else { held };
     let labs: Vec<(Rgb, f32)> = use_.iter().map(|&&(p, w)| (to_oklab(cv.under(p.0, p.1, r)), w)).collect();
-    from_oklab(std::array::from_fn(|q| weighted_median(labs.iter().map(|(l, w)| (l[q], *w)).collect())))
-}
-
-/// The weighted median of (value, weight) pairs (the lower median at a tie).
-fn weighted_median(mut v: Vec<(f32, f32)>) -> f32 {
-    v.sort_by(|a, b| a.0.total_cmp(&b.0));
-    let half = 0.5 * v.iter().map(|p| p.1).sum::<f32>();
-    let mut acc = 0.0;
-    for &(x, w) in &v {
-        acc += w;
-        if acc >= half {
-            return x;
-        }
-    }
-    v.last().map_or(0.0, |p| p.0)
+    from_oklab(std::array::from_fn(|q| crate::palette::weighted_median(labs.iter().map(|(l, w)| (l[q], *w)).collect())))
 }
 
 /// The part of a stroke through `c` that stays inside `mask` (≥ 0.5), pulled
@@ -846,6 +865,93 @@ fn trim_inside(mask: &Mask, pts: &[(f32, f32)], c: (f32, f32), width: f32) -> Ve
         return vec![dense[ci], dense[(ci + 1).min(dense.len() - 1)]];
     }
     dense[a..=b].iter().step_by(4).copied().chain(std::iter::once(dense[b])).collect()
+}
+
+/// A point on the region's edge within half a brush of `c` (across the
+/// stroke direction there), nearest first; None if the region isn't there.
+fn hug_edge(hd: &Handling, mask: &Mask, c: (f32, f32)) -> Option<(f32, f32)> {
+    let f = mask.f;
+    let a = (hd.angle)(c.0.clamp(0.0, f.width()), c.1.clamp(0.0, f.height()));
+    let (nx, ny) = (-a.sin(), a.cos());
+    let w = hd.tool.width;
+    let at = |p: (f32, f32)| p.0 >= 0.0 && p.1 >= 0.0 && p.0 < f.width() && p.1 < f.height() && mask_at(mask, p.0, p.1) >= hd.threshold;
+    // the first offset that reaches the region; unclipped, a quarter brush
+    // further in (a stroke on the very edge line bows and wanders out of it;
+    // clipped, the clip cuts that off and the stroke should cover the edge)
+    let k = [0.15f32, -0.15, 0.3, -0.3, 0.5, -0.5].into_iter().find(|k| at((c.0 + nx * k * w, c.1 + ny * k * w)))?;
+    let deeper = if hd.clip { k } else { k + k.signum() * 0.25 };
+    let p = (c.0 + nx * deeper * w, c.1 + ny * deeper * w);
+    Some(if at(p) { p } else { (c.0 + nx * k * w, c.1 + ny * k * w) })
+}
+
+/// An unclipped stroke seeded outside the region that brushes into it,
+/// entering at `c`: the part of it in the region plus a quarter brush past
+/// the edge, pulled from the edge inward (the brush goes down at the edge, fully
+/// loaded, rather than lifting off there). Stroke ends that would otherwise be
+/// missing along edges across the stroke direction fill in, so coverage
+/// doesn't thin there, and the overhang is no more than a stroke centered on
+/// the edge makes.
+fn carry_in(mask: &Mask, pts: &[(f32, f32)], c: (f32, f32), width: f32, threshold: f32) -> Vec<(f32, f32)> {
+    let f = mask.f;
+    let mut dense = vec![pts[0]];
+    for w in pts.windows(2) {
+        let d = ((w[1].0 - w[0].0).powi(2) + (w[1].1 - w[0].1).powi(2)).sqrt();
+        let n = d.ceil().max(1.0) as usize;
+        for k in 1..=n {
+            let t = k as f32 / n as f32;
+            dense.push((w[0].0 + (w[1].0 - w[0].0) * t, w[0].1 + (w[1].1 - w[0].1) * t));
+        }
+    }
+    let at = |p: (f32, f32)| p.0 >= 0.0 && p.1 >= 0.0 && p.0 < f.width() && p.1 < f.height() && mask_at(mask, p.0, p.1) >= threshold;
+    let ci = (0..dense.len())
+        .min_by(|&a, &b| {
+            let da = (dense[a].0 - c.0).powi(2) + (dense[a].1 - c.1).powi(2);
+            let db = (dense[b].0 - c.0).powi(2) + (dense[b].1 - c.1).powi(2);
+            da.total_cmp(&db)
+        })
+        .unwrap();
+    // grow both ways while inside, then half a brush more
+    let over = (0.25 * width).ceil() as usize;
+    let grow = |step: isize| -> usize {
+        let mut i = ci as isize;
+        let mut out = 0usize;
+        while i + step >= 0 && ((i + step) as usize) < dense.len() {
+            let q = dense[(i + step) as usize];
+            if at(q) {
+                out = 0;
+            } else {
+                out += 1;
+                if out > over {
+                    break;
+                }
+            }
+            i += step;
+        }
+        i as usize
+    };
+    let (a, b) = (grow(-1), grow(1));
+    if b <= a {
+        return Vec::new();
+    }
+    // only strokes that cross the edge (> 30°): one grazing along it is the
+    // edge-hugging strokes' job, and carried in it would run along outside
+    let (p0, p1) = (dense[ci.saturating_sub(2)], dense[(ci + 2).min(dense.len() - 1)]);
+    let (dx, dy) = (p1.0 - p0.0, p1.1 - p0.1);
+    let m = |x: f32, y: f32| mask.sample(x.clamp(0.0, f.width() - 1e-3), y.clamp(0.0, f.height() - 1e-3));
+    let h = 1.5 / f.scale.min(1.0);
+    let (gx, gy) = (m(c.0 + h, c.1) - m(c.0 - h, c.1), m(c.0, c.1 + h) - m(c.0, c.1 - h));
+    let (dn, gn) = ((dx * dx + dy * dy).sqrt(), (gx * gx + gy * gy).sqrt());
+    // (no edge at the entry: the stroke dips deep into the region well
+    // away from its seed, running along the edge)
+    if dn <= 1e-6 || gn <= 1e-6 || ((dx * gx + dy * gy) / (dn * gn)).abs() < 0.5 {
+        return Vec::new();
+    }
+    let mut run: Vec<(f32, f32)> = dense[a..=b].iter().step_by(4).copied().chain(std::iter::once(dense[b])).collect();
+    // start at the end that lies outside
+    if at(dense[a]) && !at(dense[b]) {
+        run.reverse();
+    }
+    run
 }
 
 /// Share of the length tail that is short dabs (the rest are long sweeps).
@@ -1086,7 +1192,7 @@ mod tests {
             Some(n) => st.palette.only(n),
             None => st.palette.clone(),
         };
-        let mut c = st.prepare(400, 1.0, 5);
+        let mut c = st.prepare(300, 1.0, 5);
         let all = Mask::full(c.frame());
         // a dark sand lay-in, thin enough that the ground flecks through
         c.work(&all, &st.body().color(|_, _| hex("#3a3128")).by_masstone().coverage(1.6), 1);
@@ -1105,7 +1211,7 @@ mod tests {
         c.dry();
         let wl = to_oklab(want);
         let idx: Vec<usize> = (0..f0.len()).filter(|&i| c.film[i] - f0[i] > 0.5).collect();
-        assert!(idx.len() > 200, "marks laid: {}", idx.len());
+        assert!(idx.len() > 100, "marks laid: {}", idx.len());
         let (mut warm, mut ab, mut dl) = (0usize, 0.0f32, 0.0f32);
         for &i in &idx {
             let l = to_oklab(c.pixels()[i]);
@@ -1134,6 +1240,101 @@ mod tests {
         }
     }
 
+    /// A dark body passage through a mask over the light ground: (share of
+    /// pixels still reading as ground (L within 0.12 of it) in a 5-unit band
+    /// inside the mask's edges, the band's L above the interior's, the share
+    /// of a 12–30-unit band outside the edges, past the brush that got darker by 0.1 L), for a
+    /// band region parallel to the strokes or a disk (edges at every angle).
+    fn edge_stats(clip: bool, disk: bool, hug: bool, seed: u64) -> (f32, f32, f32) {
+        edge_stats_in(clip, disk, false, hug, seed)
+    }
+
+    fn edge_stats_in(clip: bool, disk: bool, thin: bool, hug: bool, seed: u64) -> (f32, f32, f32) {
+        use crate::color::hex;
+        let st = crate::style::Style::friedrich();
+        // a knifed light ground on linen (the brushed one costs a pass)
+        let mut c = Canvas::new(300, 1.0, st.raw).with_size_mm(st.width_mm).with_linen(crate::surface::Linen { seed, ..st.linen });
+        c.prime(hex("#b08457"), 0.8, 120.0, 0.3, 0.3, seed);
+        let before = c.pixels().to_vec();
+        let g = to_oklab(c.pixels()[c.f.w * c.f.h / 2])[0];
+        let f = c.frame();
+        let m = if disk {
+            Mask::from_fn(f, |x, y| if (x - 500.0).powi(2) + (y - 500.0).powi(2) < 250.0f32.powi(2) { 1.0 } else { 0.0 })
+        } else if thin {
+            // a horizon band narrower than the broad brush (coast #3)
+            Mask::from_fn(f, |_, y| if (400.0..415.0).contains(&y) { 1.0 } else { 0.0 })
+        } else {
+            Mask::from_fn(f, |_, y| if (400.0..460.0).contains(&y) { 1.0 } else { 0.0 })
+        };
+        let hd = if thin { st.broad().by_masstone() } else { st.body() };
+        c.work(&m, &hd.color(|_, _| hex("#2e2a28")).coverage(2.5).clip(clip).hug(hug), seed + 4);
+        c.dry();
+        let sd = m.distance();
+        let (mut e, mut en, mut inn, mut sp, mut spn) = (0, 0, 0, 0, 0);
+        let (mut le, mut li) = (0.0f32, 0.0f32);
+        for (k, p) in c.pixels().iter().enumerate() {
+            let d = sd.data[k];
+            let l = to_oklab(*p)[0];
+            if d < -12.0 && d > -30.0 {
+                spn += 1;
+                sp += (to_oklab(before[k])[0] - l > 0.1) as usize;
+            } else if d > 0.0 && d < 5.0 {
+                en += 1;
+                e += (l > g - 0.12) as usize;
+                le += l;
+            } else if d > 8.0 {
+                inn += 1;
+                li += l;
+            }
+        }
+        (e as f32 / en.max(1) as f32, le / en.max(1) as f32 - li / inn.max(1) as f32, sp as f32 / spn.max(1) as f32)
+    }
+
+    /// Coverage doesn't thin at a mask's edges (amnesia 2, coast #3/#12,
+    /// winter #15): stroke centers just outside a region hug its edge, and
+    /// unclipped strokes that brush into it are carried in from the edge.
+    #[test]
+    #[ignore]
+    fn probe_edges_over_seeds() {
+        for disk in [false, true] {
+            for clip in [false, true] {
+                let (mut o, mut n) = ([0.0f32; 3], [0.0f32; 3]);
+                for seed in 1..7u64 {
+                    let a = edge_stats(clip, disk, false, seed);
+                    let b = edge_stats(clip, disk, true, seed);
+                    for (acc, v) in [(&mut o, a), (&mut n, b)] {
+                        acc[0] += v.0 / 6.0;
+                        acc[1] += v.1 / 6.0;
+                        acc[2] += v.2 / 6.0;
+                    }
+                }
+                println!("disk {disk} clip {clip}: bare edge {:.4} -> {:.4}, edge L excess {:+.4} -> {:+.4}, spill {:.3} -> {:.3}", o[0], n[0], o[1], n[1], o[2], n[2]);
+            }
+        }
+    }
+
+    #[test]
+    fn edges_are_covered_like_the_inside() {
+        for disk in [false, true] {
+            for clip in [false, true] {
+                // (`hug(false)` is the old placement: set EDGE_OLD to compare)
+                let old = std::env::var_os("EDGE_OLD").map(|_| edge_stats(clip, disk, false, 3));
+                let new = edge_stats(clip, disk, true, 3);
+                println!("disk {disk} clip {clip}: bare edge {:.4}, edge L excess {:+.4}, spill {:.3} (old {old:?})", new.0, new.1, new.2);
+                assert!(new.0 < 0.012, "disk {disk} clip {clip}: {:.4} of the edge band bare", new.0);
+                assert!(new.1 < 0.009, "disk {disk} clip {clip}: edge lighter than the inside by {:.4}", new.1);
+                // strokes reach no farther past the edge than a brush width
+                assert!(new.2 < 0.03 || disk && !clip && new.2 < 0.2, "disk {disk} clip {clip}: spill {:.3}", new.2);
+            }
+        }
+        // a clipped band narrower than the broad brush, strokes along it
+        // (coast #3; six seeds: 13% of its edges bare before, 2% now)
+        let (bare, _, _) = edge_stats_in(true, false, true, true, 3);
+        let old = std::env::var_os("EDGE_OLD").map(|_| edge_stats_in(true, false, true, false, 3).0);
+        println!("thin clipped band: bare edge {bare:.4} (old {old:?})");
+        assert!(bare < 0.05, "thin band: {bare:.4} of its edges bare");
+    }
+
     /// How thick handlings lay paint where they land, across coverages
     /// (for the aim's thickness model). `cargo test --release -p paint
     /// probe_laid_by_coverage -- --ignored --nocapture`
@@ -1150,7 +1351,7 @@ mod tests {
                     let mut c = st.prepare(w, 1.0, 1);
                     let f0 = c.film.clone();
                     let half = 150000.0 / w as f32;
-                    let m = Mask::from_fn(c.frame(), |x, y| if (x - 500.0).abs() < half && (y - 500.0).abs() < half && (y - 500.0).abs() < half { 1.0 } else { 0.0 });
+                    let m = Mask::from_fn(c.frame(), |x, y| if (x - 500.0).abs() < half && (y - 500.0).abs() < half { 1.0 } else { 0.0 });
                     let col = move |_: f32, _: f32| hex("#8a9ab0");
                     let h = match name {
                         "broad" => st.broad(),

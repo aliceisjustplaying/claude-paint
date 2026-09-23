@@ -42,12 +42,8 @@ Tool work merged in round 5 (all with tests, in the easel guide
 3. Show the user before/after (round 4 originals in notes/amnesia4/ vs the
    final loops) with the score history. The user is "of two minds" about
    structure tools (they grow shapes; they don't paint): judge by output.
-4. **Scrub the git history** of the owner's real name with
-   `git filter-repo --replace-text` on all branches, verify
-   `git log --all -p | grep -ci <name>` is 0, force-push (user approved; do
-   it when no agents run). The pre-commit hook in `.git/hooks/pre-commit`
-   blocks new occurrences; hooks are NOT cloned: install it on the new
-   machine with `cp scripts/pre-commit-anonymity .git/hooks/pre-commit`.
+4. ~~Scrub the git history~~: done (see Round 6, step 0). Hooks are NOT
+   cloned: install `scripts/pre-commit-anonymity` on every new clone.
 
 ## Setting up the new machine
 ```sh
@@ -127,10 +123,12 @@ look like a Friedrich", not a critic total. Critics (panel: Gemini 3.8 Flash
 - Never copy existing paintings or benchmark against them.
 
 **Order of work** (small steps, the owner looks at each):
-0. On the new machine: clone, build, install `scripts/pre-commit-anonymity`,
-   and (if not yet done) scrub the owner's name from git history with
-   `git filter-repo --replace-text` on all branches, verify zero matches,
-   force-push.
+0. On the new machine: clone, build, install `scripts/pre-commit-anonymity`
+   (`cp scripts/pre-commit-anonymity .git/hooks/pre-commit`). The history
+   scrub is DONE (2026-09-23 evening): all 18 branches rewritten with
+   `git filter-repo --replace-text`, 0 matches in a fresh mirror clone of
+   GitHub, main's tree unchanged; any clone made before that date has the
+   old history: re-clone.
 1. **Relief A/B** (no repainting): replay the best near and green logs with
    relief off / low / current; the owner picks. Make the winner the default.
 2. **Hand in time**: each stroke/touch/stipple advances the easel clock by a

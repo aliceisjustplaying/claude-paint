@@ -22,7 +22,8 @@ painting, and time (drying) as a first-class verb.
 |---|---|---|
 | time: open/tacky/touch-dry model, `wait(minutes)`; glaze near-zero cutoff | `drying` | wet.rs, surface.rs, canvas.rs dry/glaze |
 | scene: one world, one sun, ground plane + horizon, contact and cast shadows, reflections | `scene` | new scene.rs (uses form.rs) |
-| fixes from the amnesia friction list | `fixes` | handling.rs, stipple.rs, mask.rs, style.rs, palette.rs aim, run.rs stage UX |
+| fixes (paint): aim along the stroke, coverage at mask edges, blender clipping, canvas-aware color fields, stipple contrast | `fixes-paint` | handling.rs, stipple.rs, style.rs, palette.rs aim |
+| fixes (UX): stage names/--stop/staleness, closure ergonomics, roughen units, Sdf docs, curved-drag bug diagnosis | `fixes-ux` | run.rs stage code, noise.rs, canvas per_column, mask.rs roughen, form.rs docs |
 
 ## Batch 3 (after batch 1)
 | atmosphere: sky light structure, cloud volumes, noise toolkit (warp etc.), irregular spacing | `atmosphere` | new atmos.rs, noise.rs |
@@ -36,3 +37,4 @@ free; others steered off twilight/moon/Rückenfigur, e.g. daylight, summer
 green, a close study); stop and evaluate.
 
 ## Status log
+- Easel uses Lua 5.5 (mlua 0.12 `lua55` + `vendored`; Lua 5.5.1 is current), user's choice.

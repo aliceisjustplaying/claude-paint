@@ -9,14 +9,17 @@
 //!
 //! How the solid is inferred (all in canvas units, z toward the viewer):
 //!
-//! - the outline is split into spans at its corners (the drawn ones, the
-//!   sharp turns found on the line, and long spans split again). Each span
-//!   carries a **rim plane** that rises steeply inward from the silhouette,
-//!   so the rock turns away at its edge. Where two rim planes meet, an arris
-//!   runs in from the corner (the hips of a roof);
-//! - a few **face planes** turned toward the viewer cut the top: upper ones
-//!   tilt toward the sky, lower ones toward the ground, all a little away
-//!   from the middle (a convex mass), with random turns;
+//! - the outline is inflated into a **mass**: a pillow whose height grows
+//!   with the distance from the drawn line, round for granite, boxy (steep
+//!   walls, a flat top) for sandstone and chalk. It turns away at the
+//!   silhouette;
+//! - **planes** are cut into the mass: each is tangent to it at a site,
+//!   sunk a little and turned a little, so it holds a patch around its site
+//!   and the patches meet in arrises. Rim planes sit along the outline's
+//!   spans (split at its corners, the drawn ones and the sharp turns found
+//!   on the line), so arrises run in from the corners; face planes spread
+//!   over the inside, upper ones turned to the sky, lower ones to the
+//!   ground;
 //! - each drawn **crack** or **plane line** seeds a pair of planes that
 //!   meet on it (a fracture: the two sides face different ways) and, for a
 //!   crack, a groove along it: a V joint with walls of different pitch and a
@@ -85,10 +88,13 @@ pub struct RockSpec {
     pub round: f32,
     /// Face planes turned toward the viewer (more: a more broken surface).
     pub facets: usize,
-    /// Slope of the rim planes (dz per unit inward), min..max: how steeply
-    /// the rock turns away at its silhouette.
-    pub steep: (f32, f32),
-    /// Tilt of the face planes (tangent), min..max.
+    /// The mass's profile across its outline: 2 a round pillow (granite),
+    /// 4 a box with a flat top and steep walls (sandstone, chalk).
+    pub profile: f32,
+    /// How deep each plane is sunk into the mass (fraction of its height),
+    /// min..max: deeper cuts give bigger planes.
+    pub sink: (f32, f32),
+    /// How far each plane is turned from the mass's own slope (tangent), min..max.
     pub tilt: (f32, f32),
     /// Height of the crown over the outline's plane (fraction of R).
     pub bulge: f32,
@@ -117,9 +123,10 @@ impl RockSpec {
         RockSpec {
             kind: RockKind::Granite,
             round: 0.09,
-            facets: 6,
-            steep: (1.8, 3.2),
-            tilt: (0.3, 1.15),
+            facets: 8,
+            profile: 2.2,
+            sink: (0.05, 0.14),
+            tilt: (0.2, 0.7),
             bulge: 0.8,
             bed: 0.0,
             bed_tilt: 0.0,
@@ -137,13 +144,14 @@ impl RockSpec {
         RockSpec {
             kind: RockKind::Sandstone,
             round: 0.025,
-            facets: 4,
-            steep: (3.0, 5.5),
-            tilt: (0.15, 0.7),
+            facets: 6,
+            profile: 4.0,
+            sink: (0.03, 0.09),
+            tilt: (0.1, 0.4),
             bulge: 0.6,
             bed: -1.0, // from the size
             bed_tilt: 0.03,
-            bed_recess: 0.09,
+            bed_recess: 0.16,
             crack_depth: 0.16,
             crack_width: 2.4,
             joints: 0.9,
@@ -157,9 +165,10 @@ impl RockSpec {
         RockSpec {
             kind: RockKind::Chalk,
             round: 0.03,
-            facets: 5,
-            steep: (2.6, 5.0),
-            tilt: (0.1, 0.6),
+            facets: 6,
+            profile: 3.5,
+            sink: (0.03, 0.09),
+            tilt: (0.1, 0.4),
             bulge: 0.55,
             bed: 0.0,
             bed_tilt: 0.0,
@@ -169,7 +178,7 @@ impl RockSpec {
             joints: 0.4,
             lumps: 0.02,
             grain: 0.006,
-            flutes: 0.035,
+            flutes: 0.02,
             ground: 4.0,
         }
     }
@@ -213,21 +222,23 @@ pub struct Plane {
     pub g: P,
     /// Unit normal (x right, y down, z toward the viewer).
     pub n: V3,
-    /// For fracture planes: the line's middle, its direction and half length.
-    along: Option<(P, P, f32)>,
+    /// Where the plane holds: within `radius` of the segment a..b (a face:
+    /// a point; a fracture: its line); beyond, it lifts away so it never
+    /// cuts the far side of the rock.
+    reach: Option<(P, P, f32)>,
 }
 
 impl Plane {
     fn new(kind: PlaneKind, at: P, h: f32, g: P) -> Plane {
-        Plane { kind, at, h, g, n: unit([g.0, g.1, 1.0]), along: None }
+        Plane { kind, at, h, g, n: unit([g.0, g.1, 1.0]), reach: None }
     }
     #[inline]
     fn z(&self, x: f32, y: f32) -> f32 {
         let mut z = self.h - self.g.0 * (x - self.at.0) - self.g.1 * (y - self.at.1);
-        if let Some((m, d, half)) = self.along {
-            let a = ((x - m.0) * d.0 + (y - m.1) * d.1).abs() - half;
-            if a > 0.0 {
-                z += 2.5 * a;
+        if let Some((a, b, rad)) = self.reach {
+            let e = seg((x, y), a, b).0 - rad;
+            if e > 0.0 {
+                z += 3.0 * e * e / (e + 0.25 * rad);
             }
         }
         z
@@ -319,7 +330,7 @@ impl RockSample {
     }
     /// Reflected light in the shadow family, 0..1.
     pub fn reflected(&self) -> f32 {
-        (1.0 - self.shade.lit(0.12)) * smoothstep(0.1, 0.5, self.shade.bounce) * (1.0 - 0.7 * self.ao)
+        (1.0 - self.shade.lit(0.12)) * smoothstep(0.25, 0.65, self.shade.bounce) * (1.0 - 0.7 * self.ao)
     }
 }
 
@@ -543,72 +554,88 @@ impl Rock {
                 s = e;
             }
         }
-        let (s_lo, s_hi) = spec.steep;
+        // the mass: the outline inflated into a rounded (granite) or boxy
+        // (sandstone, chalk) pillow; every plane is cut tangent to it
+        let bulge = spec.bulge * r;
+        let pw = spec.profile.max(1.2);
+        let prof = |d: f32| -> f32 {
+            let t = (d / r).clamp(0.0, 1.0);
+            bulge * (1.0 - (1.0 - t).powf(pw)).max(0.0).powf(1.0 / pw)
+        };
+        let mass: Vec<f32> = dist.iter().zip(&inside).map(|(d, i)| if *i { prof(*d) } else { 0.0 }).collect();
+        let mass_at = |x: f32, y: f32| -> f32 {
+            let (i, j) = (((x - x0) / step).round() as isize, ((y - y0) / step).round() as isize);
+            if i < 0 || j < 0 || i >= nx as isize || j >= ny as isize {
+                return 0.0;
+            }
+            mass[j as usize * nx + i as usize]
+        };
+        let slope_at = |x: f32, y: f32| -> P {
+            let e = (r * 0.06).max(step * 2.0);
+            ((mass_at(x + e, y) - mass_at(x - e, y)) / (2.0 * e), (mass_at(x, y + e) - mass_at(x, y - e)) / (2.0 * e))
+        };
+        let (t_lo, t_hi) = spec.tilt;
+        let (k_lo, k_hi) = spec.sink;
+        let half_h = (bh * 0.5).max(1.0);
+        // a plane tangent to the mass at `site`, sunk `sink`·bulge, turned by a jitter and a bias
+        let cut = |rng: &mut Rng, kind: PlaneKind, site: P, sink: f32, jitter: f32, bias: P| -> Plane {
+            let gb = slope_at(site.0, site.1);
+            let a = rng.range(0.0, 2.0 * PI);
+            let mut g = (-gb.0 + jitter * a.cos() + bias.0, -gb.1 + jitter * a.sin() + bias.1);
+            if spec.kind != RockKind::Granite {
+                // walls: faces square to the view in x, tops turned up
+                g.0 *= 0.8;
+            }
+            Plane::new(kind, site, mass_at(site.0, site.1) - sink * bulge, g)
+        };
         let mut planes: Vec<Plane> = Vec::new();
         for &(a, b) in &spans {
             let len = (b + m - a) % m;
             let mid = (a + len / 2) % m;
             let o = outward(mid, (len / 2).max(1));
-            let s = rng.range(s_lo, s_hi);
-            // the rim plane passes a little outside the span's farthest point
-            let reach = (0..=len).map(|k| {
-                let p = poly[(a + k) % m];
-                (p.0 - poly[mid].0) * o.0 + (p.1 - poly[mid].1) * o.1
-            }).fold(f32::MIN, f32::max);
-            let base = (poly[mid].0 + o.0 * reach, poly[mid].1 + o.1 * reach);
-            // a face turned down to the ground stands steeper
-            let s = if o.1 > 0.5 { s * 1.3 } else { s };
-            planes.push(Plane::new(PlaneKind::Rim, base, 0.0, (o.0 * s, o.1 * s)));
-        }
-
-        // face planes: sites spread over the inside, far from each other
-        let bulge = spec.bulge * r;
-        let (t_lo, t_hi) = spec.tilt;
-        let half_h = (bh * 0.5).max(1.0);
-        let face = |rng: &mut Rng, site: P, bias: P| -> Plane {
-            let d = d_at(site.0, site.1).max(r * 0.1);
-            let hgt = bulge * (0.5 + 0.5 * (d / r).sqrt()) * rng.range(0.9, 1.08);
-            let v = ((site.1 - center.1) / half_h).clamp(-1.0, 1.0);
-            let a = rng.range(0.0, 2.0 * PI);
-            let t = rng.range(t_lo, t_hi);
-            let mut g = (t * a.cos(), t * a.sin());
-            // upper faces turn to the sky, lower ones to the ground; all a little outward
-            g.1 += if v < 0.0 { 0.9 * v * t_hi } else { 0.45 * v * t_hi };
-            g.0 += 0.5 * (site.0 - center.0) / r * t_hi;
-            if spec.kind != RockKind::Granite {
-                // walls: faces mostly square to the view, tops turned up
-                g.0 *= 0.7;
+            let inset = r * rng.range(0.1, 0.2);
+            let site = (poly[mid].0 - o.0 * inset, poly[mid].1 - o.1 * inset);
+            if d_at(site.0, site.1) <= 0.0 {
+                continue;
             }
-            g = (g.0 + bias.0, g.1 + bias.1);
-            Plane::new(PlaneKind::Face, site, hgt, g)
-        };
+            // a face turned down to the ground; one turned up to the sky
+            let bias = if o.1 > 0.5 { (0.0, 0.4 * t_hi) } else if o.1 < -0.5 { (0.0, -0.3 * t_hi) } else { (0.0, 0.0) };
+            let sink = rng.range(k_lo, k_hi) * 0.5;
+            let jit = rng.range(t_lo, t_hi) * 0.6;
+            planes.push(cut(&mut rng, PlaneKind::Rim, site, sink, jit, bias));
+        }
+        // face planes: sites spread over the inside, far from each other
         let mut sites: Vec<P> = Vec::new();
         let mut tries = 0;
-        while sites.len() < spec.facets && tries < 400 {
+        while sites.len() < spec.facets && tries < 600 {
             tries += 1;
             let p = (rng.range(bounds.0, bounds.2), rng.range(bounds.1, bounds.3));
             let d = d_at(p.0, p.1);
-            if d < r * 0.25 {
+            if d < r * 0.3 {
                 continue;
             }
             let near = sites.iter().map(|s| ((s.0 - p.0).powi(2) + (s.1 - p.1).powi(2)).sqrt()).fold(f32::MAX, f32::min);
-            if near < r * 0.75 * (1.0 - tries as f32 / 500.0) {
+            if near < r * 0.7 * (1.0 - tries as f32 / 700.0) {
                 continue;
             }
             sites.push(p);
         }
-        // a top face: the sky-facing plane every boulder has
+        // the top: the sky-facing plane every boulder has
         if spec.kind != RockKind::Chalk {
-            let top = (center.0 + rng.normal() * r * 0.3, bounds.1 + (center.1 - bounds.1) * 0.55);
+            let top = (center.0 + rng.normal() * r * 0.3, bounds.1 + (center.1 - bounds.1) * 0.5);
             if d_at(top.0, top.1) > r * 0.2 {
-                let lift = -rng.range(0.6, 1.2) * t_hi;
-                let mut p = face(&mut rng, top, (0.0, lift));
-                p.h *= 0.97;
-                planes.push(p);
+                let lift = -rng.range(0.5, 1.0) * t_hi;
+                let sink = rng.range(k_lo, k_hi);
+                planes.push(cut(&mut rng, PlaneKind::Face, top, sink, t_lo, (0.0, lift)));
             }
         }
-        for s in &sites {
-            planes.push(face(&mut rng, *s, (0.0, 0.0)));
+        for st in &sites {
+            let v = ((st.1 - center.1) / half_h).clamp(-1.0, 1.0);
+            // upper faces turn to the sky, lower ones to the ground
+            let bias = (0.0, if v < 0.0 { 0.6 * v * t_hi } else { 0.3 * v * t_hi });
+            let sink = rng.range(k_lo, k_hi);
+            let jit = rng.range(t_lo, t_hi);
+            planes.push(cut(&mut rng, PlaneKind::Face, *st, sink, jit, bias));
         }
 
         // the drawn lines, and joints from the outline's concave corners
@@ -676,7 +703,6 @@ impl Rock {
 
         // the base height before the lines (min of planes, soft)
         let k_round = (spec.round * r).max(step * 0.5);
-        let edge_w = (spec.round * r * 2.0).max(step * 2.0);
         let soft_min = |vals: &mut dyn Iterator<Item = (usize, f32)>| -> (f32, usize) {
             let mut best = (f32::MAX, 0usize);
             let mut all: [(usize, f32); 96] = [(0, 0.0); 96];
@@ -693,28 +719,23 @@ impl Rock {
             let s: f32 = all[..n].iter().map(|(_, v)| (-(v - best.0) / k_round).exp()).sum();
             (best.0 - k_round * s.ln(), best.1)
         };
-        let base_at = |planes: &[Plane], x: f32, y: f32| -> f32 { soft_min(&mut planes.iter().enumerate().map(|(i, p)| (i, p.z(x, y)))).0 };
 
-        // each line seeds a pair of planes meeting on it
-        for s in &seams {
-            let (a, b) = (s.pts[0], *s.pts.last().unwrap());
+        // each line seeds a pair of planes meeting on it: the two sides of
+        // a fracture face different ways
+        for sm in &seams {
+            let (a, b) = (sm.pts[0], *sm.pts.last().unwrap());
             let (dx, dy) = (b.0 - a.0, b.1 - a.1);
             let len = (dx * dx + dy * dy).sqrt().max(1e-3);
-            let d = (dx / len, dy / len);
-            let nrm = (-d.1, d.0);
-            let mid = ((a.0 + b.0) * 0.5, (a.1 + b.1) * 0.5);
-            if d_at(mid.0, mid.1) <= 0.0 {
-                continue;
-            }
-            let h = base_at(&planes, mid.0, mid.1) * if s.crack { 0.99 } else { 1.02 };
-            let v = ((mid.1 - center.1) / half_h).clamp(-1.0, 1.0);
-            let g0 = (0.3 * (mid.0 - center.0) / r * t_hi + rng.normal() * 0.2, if v < 0.0 { 0.7 * v * t_hi } else { 0.3 * v * t_hi });
-            let (ka, kb) = (rng.range(0.3, 0.95) * t_hi, rng.range(0.3, 0.95) * t_hi);
-            for (sgn, k) in [(1.0, ka), (-1.0, kb)] {
-                let g = (g0.0 + sgn * nrm.0 * k, g0.1 + sgn * nrm.1 * k);
-                let mut p = Plane::new(PlaneKind::Fracture, mid, h, g);
-                p.along = Some((mid, d, len * 0.5));
-                planes.push(p);
+            let nrm = (-dy / len, dx / len);
+            let mid = sm.pts[sm.pts.len() / 2];
+            for (sgn, k) in [(1.0, rng.range(0.35, 1.0)), (-1.0, rng.range(0.35, 1.0))] {
+                let site = (mid.0 + sgn * nrm.0 * r * 0.2, mid.1 + sgn * nrm.1 * r * 0.2);
+                if d_at(site.0, site.1) <= r * 0.05 {
+                    continue;
+                }
+                let bias = (sgn * nrm.0 * k * t_hi, sgn * nrm.1 * k * t_hi);
+                let sink = rng.range(k_lo, k_hi) * if sm.crack { 1.0 } else { 0.7 };
+                planes.push(cut(&mut rng, PlaneKind::Fracture, site, sink, t_lo * 0.5, bias));
             }
         }
 
@@ -783,26 +804,13 @@ impl Rock {
                 }
                 let (x, y) = at(k % nx, k / nx);
                 let d = dist[k];
-                let (mut h, mut id) = soft_min(&mut planes.iter().enumerate().map(|(i, p)| (i, p.z(x, y))));
-                // the rim turns away at the silhouette
-                let e = if d < edge_w { edge_w * (1.0 - (1.0 - d / edge_w).powi(2)).max(0.0).sqrt() } else { edge_w + 4.0 * (d - edge_w) };
+                let (mut h, id) = soft_min(&mut planes.iter().enumerate().map(|(i, p)| (i, p.z(x, y))));
+                // where no plane cuts it, the mass itself: rounded, turning away at the silhouette
                 {
-                    // soft minimum of the planes and the rim's turn
+                    let e = mass[k];
                     let lo = h.min(e);
-                    let s = (-(h - lo) / k_round).exp() + (-(e - lo) / k_round).exp();
-                    let before = h;
-                    h = lo - k_round * s.ln();
-                    if e < before {
-                        // the edge band belongs to the nearest rim plane
-                        let mut best = (f32::MAX, id);
-                        for (i, p) in planes.iter().enumerate().filter(|(_, p)| p.kind == PlaneKind::Rim) {
-                            let z = p.z(x, y);
-                            if z < best.0 {
-                                best = (z, i);
-                            }
-                        }
-                        id = best.1;
-                    }
+                    let sum = (-(h - lo) / k_round).exp() + (-(e - lo) / k_round).exp();
+                    h = lo - k_round * sum.ln();
                 }
                 let mut crack = 0.0f32;
                 for g in &grooves {
@@ -820,17 +828,18 @@ impl Rock {
                 }
                 if bed > 0.0 {
                     let (u, i) = bed_of(x, y);
-                    let pillow = (2.0 * u - 1.0).powi(2);
-                    let rec = spec.bed_recess * r * (0.55 * pillow.powf(2.5) + 0.45 * bed_recess[i]);
+                    // each bed weathers back toward its base (an overhang
+                    // over the joint below) and rounds at its top edge
+                    let rec = spec.bed_recess * r * (0.2 * (1.0 - u).powi(8) + 0.6 * u.powf(2.5) + 0.7 * bed_recess[i]);
                     h -= rec * smoothstep(0.0, r * 0.2, d);
                     let joint = (1.0 - (u.min(1.0 - u) * (beds[(i + 1).min(beds.len() - 1)] - beds[i])) / (spec.crack_width * 0.8)).max(0.0);
                     crack = crack.max(joint * 0.8 * smoothstep(0.0, r * 0.1, d));
                 }
                 if spec.flutes > 0.0 {
                     // vertical rain flutes: stretched ridged noise
-                    let per = (r * 0.09).max(4.0);
-                    let f = 1.0 - flute.get(x / per, y / (per * 9.0)).abs();
-                    h -= spec.flutes * r * f * f * smoothstep(0.0, r * 0.15, d);
+                    let per = (r * 0.16).max(6.0);
+                    let f = (1.0 - flute.get(x / per, y / (per * 14.0)).abs()).powi(3);
+                    h -= spec.flutes * r * f * smoothstep(0.0, r * 0.15, d);
                 }
                 h += spec.lumps * r * lumps.get(x, y) * smoothstep(0.0, r * 0.2, d);
                 h += spec.grain * r * grain.get(x, y);
@@ -1456,5 +1465,74 @@ mod tests {
         assert!(right > 0.5 && left < 0.1, "{right} {left}");
         let s = r.snow(f, 0.6, 4.0, 1);
         assert!(s.data[240 * 600 + 280] > 0.3 || s.data[222 * 600 + 280] > 0.3);
+    }
+}
+
+#[cfg(test)]
+mod look {
+    use super::*;
+
+    /// A grisaille of a rock for looking (writes ROCK_LOOK/rock_look.ppm):
+    /// `ROCK_LOOK=dir cargo test -p paint --lib rock::look -- --ignored`.
+    #[test]
+    #[ignore]
+    fn grisaille() {
+        let Ok(dir) = std::env::var("ROCK_LOOK") else { return };
+        let (w, h) = (1200usize, 500usize);
+        let f = Frame { w, h, scale: 1.0, x0: 0, y0: 0, full_w: w, full_h: h };
+        // an erratic, a sandstone ledge, a chalk stack
+        let blob = |cx: f32, cy: f32, rx: f32, ry: f32, seed: u64| -> Vec<P> {
+            let mut rng = Rng::new(seed);
+            let k = 11;
+            let mut key: Vec<P> = (0..k).map(|i| {
+                let a = PI + i as f32 / k as f32 * 2.0 * PI;
+                let rr = rng.range(0.8, 1.1);
+                (cx + rx * rr * a.cos(), (cy + ry * rr * a.sin()).min(cy + ry * 0.55))
+            }).collect();
+            key.push(key[0]);
+            let mut v = Vec::new();
+            for wn in key.windows(2) {
+                for q in 0..12 {
+                    let t = q as f32 / 12.0;
+                    v.push((wn[0].0 + (wn[1].0 - wn[0].0) * t, wn[0].1 + (wn[1].1 - wn[0].1) * t));
+                }
+            }
+            v
+        };
+        let sun = Light::new((-1.0, -0.55), 0.4).ambient(0.2).bounce(0.3, [0.45, 0.8, 0.3]);
+        let rocks = [
+            Rock::grow(&blob(200.0, 280.0, 170.0, 150.0, 1), &[], &[vec![(210.0, 150.0), (225.0, 250.0), (205.0, 340.0)]], &[], &RockSpec::granite(), sun, 3),
+            Rock::grow(&blob(600.0, 280.0, 190.0, 130.0, 2), &[], &[], &[], &RockSpec::sandstone(), sun, 4),
+            Rock::grow(&blob(1000.0, 260.0, 150.0, 170.0, 3), &[], &[], &[], &RockSpec::chalk(), sun, 5),
+        ];
+        let mut img = vec![[90u8, 100, 110]; w * h];
+        for r in &rocks {
+            let cast = r.cast(f);
+            for (i, c) in cast.data.iter().enumerate() {
+                if *c > 0.0 {
+                    let p = &mut img[i];
+                    for q in 0..3 {
+                        p[q] = (p[q] as f32 * (1.0 - 0.5 * c)) as u8;
+                    }
+                }
+            }
+            let sil = r.mask(f);
+            let v = r.value(f);
+            let core = r.core(f);
+            let refl = r.reflected(f);
+            for i in 0..w * h {
+                if sil.data[i] > 0.0 {
+                    let g = (v.data[i] * 235.0 + 10.0) * sil.data[i] + img[i][0] as f32 * (1.0 - sil.data[i]);
+                    // reflected light warm, core shadow cool (for looking only)
+                    img[i] = [(g + 25.0 * refl.data[i]).min(255.0) as u8, g as u8, (g + 20.0 * core.data[i]).min(255.0) as u8];
+                }
+            }
+            println!("{:?} planes {} lit {:.2} r {:.0}", r.kind, r.planes.len(), r.lit_share(), r.r);
+        }
+        let mut out = format!("P6 {w} {h} 255\n").into_bytes();
+        for p in &img {
+            out.extend_from_slice(p);
+        }
+        std::fs::write(format!("{dir}/rock_look.ppm"), out).unwrap();
     }
 }

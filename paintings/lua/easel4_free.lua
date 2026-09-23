@@ -91,3 +91,81 @@ groundcol = function(x, y)
   return c
 end
 work(ground, {hand="body", color=groundcol, angle=function(x, y) return 0.06*gn(x, y) end, length={20, 70}, coverage=3.4, medium=0.2, pal=landpal, clip=ground})
+
+--@ chunk 7 · clock 1440
+wait(12*60)
+bark = "#2b2624"
+oakm = nil
+local thin = {}
+for i, l in ipairs(oak.limbs) do
+  if #l.pts >= 2 then
+    if l.w[1] >= 2.6 then
+      local w = {} for k = 1, #l.w do w[k] = l.w[k] * 1.05 end
+      local r = ribbon(l.pts, w)
+      oakm = oakm and (oakm + r) or r
+    else thin[#thin+1] = l end
+  end
+end
+-- flare the foot into the mound
+local fx, fy = oak.limbs[1].pts[1][1], oak.limbs[1].pts[1][2]
+oakm = oakm + poly({{fx-26, fy+4}, {fx-12, fy-10}, {fx+12, fy-12}, {fx+28, fy+5}}, true)
+oakm = oakm:roughen(0.9, 7, 21, 0.4)
+local dir = noise{seed=9, period=30}
+work(oakm, {hand="body", tool="filbert 3", color=function(x, y) return mix("#2a2523", "#352e2a", clamp((fy - y)/300, 0, 1)) end,
+  angle=function(x, y) return 1.5708 + 0.5*dir(x, y) end, length={5, 16}, coverage=3.4, medium=0.15, pal=landpal, clip=oakm})
+local limb, twig = brush("round", 1.8), brush("rigger", 0.8)
+for i, l in ipairs(thin) do
+  local b = (l.w[1] > 1.1) and limb or twig
+  if i % 5 == 1 or b:fullness() < 0.3 then b:reload(bark, 0.9, {pal=landpal}) end
+  b:stroke(l.pts, {pressure={clamp(0.35 + l.w[1]/3, 0.3, 1), 0.15}, ramps={0.03, 0.5}, shake=0.4})
+end
+print(#thin, "thin limbs")
+
+--@ chunk 8 · clock 2160
+work(oakm:shrink(0.6), {hand="body", tool="round 2", color="#2e2825", angle=1.5708, angle_jitter=0.6, length={3, 9}, coverage=2, medium=0.12, pal=landpal, clip=oakm})
+-- side branches: zigzag, elbowed, forking into hooked twigs
+local cx = oak.limbs[1].pts[1][1]
+local br = brush("round", 2.6); local tw = brush("round", 1.3)
+local nb = 0
+local function jag(b, x, y, ang, len, depth, pr)
+  local pts = {{x, y}}
+  local segs = math.random(3, 5)
+  local a = ang
+  for s = 1, segs do
+    a = a + randn(0, 0.45)
+    if math.random() < 0.25 then a = a + (math.random() < 0.5 and -0.8 or 0.8) end
+    local sl = len / segs * rand(0.6, 1.4)
+    x = x + sl * math.cos(a); y = y + sl * math.sin(a)
+    pts[#pts+1] = {x, y}
+  end
+  if b:fullness() < 0.3 then b:reload(bark, 0.9, {pal=landpal}) end
+  b:stroke(pts, {pressure={pr, pr*0.25}, ramps={0.02, 0.7}, shake=0.3})
+  nb = nb + 1
+  if depth > 0 then
+    local k = math.random(1, 3)
+    for j = 1, k do
+      local p = pts[math.random(math.max(2, #pts - 2), #pts)]
+      jag(tw, p[1], p[2], a + rand(-0.9, 0.9) - 0.25, len * rand(0.35, 0.6), depth - 1, pr * 0.7)
+    end
+  end
+end
+br:reload(bark, 0.9, {pal=landpal}); tw:reload(bark, 0.9, {pal=landpal})
+for i, l in ipairs(oak.limbs) do
+  if l.order >= 1 and l.order <= 2 and #l.pts >= 4 and l.w[1] > 1.5 then
+    local n = math.max(2, math.floor(#l.pts / 3))
+    for j = 1, n do
+      local k = math.random(2, #l.pts - 1)
+      local p = l.pts[k]
+      if p[2] < 330 then
+        local out = (p[1] < cx) and math.pi or 0
+        local ang = out + (out == 0 and -1 or 1) * rand(0.2, 1.1)
+        if math.random() < 0.3 then jag(br, p[1], p[2], ang, rand(5, 10), 0, 0.95) else jag(br, p[1], p[2], ang, rand(18, 44), 2, 0.8) end
+      end
+    end
+  end
+end
+-- twig brushes at the tips
+for _, t in ipairs(oak.tips) do
+  for j = 1, math.random(2, 4) do jag(tw, t[1], t[2], -1.5708 + rand(-1.3, 1.3), rand(8, 18), 2, 0.6) end
+end
+print(nb, "branches and twigs")

@@ -6,7 +6,7 @@ use mlua::{Function, Lua, StdLib, Table, Value};
 use paint::{Canvas, Held, Style};
 use std::alloc::Layout;
 use std::cell::{Cell, RefCell};
-use std::collections::{BTreeMap, VecDeque};
+use std::collections::BTreeMap;
 use std::ffi::c_void;
 use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
@@ -46,8 +46,15 @@ pub struct Session {
     state: *mut mlua::ffi::lua_State,
     pub st: Rc<RefCell<Studio>>,
     pub log: Vec<Chunk>,
-    snaps: VecDeque<Snap>,
+    /// Snapshots by the number of chunks run before them: the last
+    /// `undo_depth` (undo) and up to `keep` older ones on a grid whose
+    /// spacing doubles as the log grows (checkpoints to edit from). All in
+    /// memory: a snapshot holds the Lua heap, which can't be written out.
+    snaps: BTreeMap<usize, Snap>,
     pub undo_depth: usize,
+    /// Checkpoints kept beyond the undo snapshots.
+    pub keep: usize,
+    spacing: usize,
     /// A disposable replay (`easel run`, `check`): no snapshots, since a
     /// failure ends it. A live session always snapshots before a chunk,
     /// even at undo depth 0, so a failure can roll back.
@@ -60,6 +67,18 @@ pub struct Session {
     _serials: Box<Serials>,
     /// Time spent snapshotting and restoring the Lua heap (s), for status.
     pub heap_secs: (f64, f64),
+}
+
+/// What `splice` did.
+#[derive(Debug)]
+pub struct Spliced {
+    /// The code of the chunks taken out.
+    pub removed: Vec<String>,
+    /// The checkpoint it replayed from (chunks run before it).
+    pub from: usize,
+    /// Chunks run.
+    pub replayed: usize,
+    pub secs: f64,
 }
 
 #[derive(Debug)]
@@ -95,7 +114,7 @@ impl Session {
         let prelude: (Function, Table) = lua.load(include_str!("prelude.lua")).set_name("prelude.lua").call((id, getmt))?;
         let st = Rc::new(RefCell::new(Studio::new(width)));
         api::install(&lua, st.clone())?;
-        Ok(Session { lua: ManuallyDrop::new(lua), state, st, log: Vec::new(), snaps: VecDeque::new(), undo_depth, replay: false, heap: Some((snap_f, restore_f)), prelude: Some(prelude), _serials: serials, heap_secs: (0.0, 0.0) })
+        Ok(Session { lua: ManuallyDrop::new(lua), state, st, log: Vec::new(), snaps: BTreeMap::new(), undo_depth, keep: 0, spacing: 1, replay: false, heap: Some((snap_f, restore_f)), prelude: Some(prelude), _serials: serials, heap_secs: (0.0, 0.0) })
     }
 
     /// A session that replays a program: a failed chunk ends it, so it
@@ -121,23 +140,48 @@ impl Session {
         Ok(Snap { canvas: s.canvas.clone(), style: s.style.clone(), setup: s.setup.clone(), seed: s.seed, clock: s.clock, clock0: s.clock0, view: s.view.clone(), heap, brushes })
     }
 
-    fn restore(&mut self, snap: Snap) -> mlua::Result<()> {
+    /// Put everything back as it was at `snap`, which stays usable (heap.lua
+    /// restores from its copy without changing it).
+    fn restore(&mut self, snap: &Snap) -> mlua::Result<()> {
         let t0 = Instant::now();
         let (_, restore_f) = self.heap.as_ref().unwrap();
-        restore_f.call::<()>(snap.heap)?;
+        restore_f.call::<()>(snap.heap.clone())?;
         self.heap_secs.1 += t0.elapsed().as_secs_f64();
-        for (b, h) in snap.brushes {
-            *b.borrow_mut() = h;
+        for (b, h) in &snap.brushes {
+            *b.borrow_mut() = h.clone();
         }
         let mut s = self.st.borrow_mut();
-        s.canvas = snap.canvas;
-        s.style = snap.style;
-        s.setup = snap.setup;
+        s.canvas = snap.canvas.clone();
+        s.style = snap.style.clone();
+        s.setup = snap.setup.clone();
         s.seed = snap.seed;
         s.clock = snap.clock;
         s.clock0 = snap.clock0;
-        s.view = snap.view;
+        s.view = snap.view.clone();
         Ok(())
+    }
+
+    /// Keep the undo snapshots and the checkpoint grid; drop the rest.
+    fn retain(&mut self) {
+        let ring = self.log.len().saturating_sub(self.undo_depth);
+        if self.keep == 0 {
+            self.snaps.retain(|&k, _| k >= ring);
+            return;
+        }
+        loop {
+            let sp = self.spacing;
+            self.snaps.retain(|&k, _| k >= ring || k % sp == 0);
+            if self.snaps.range(..ring).count() <= self.keep {
+                break;
+            }
+            self.spacing *= 2;
+        }
+    }
+
+    /// The chunk counts snapshots are kept at (undo and checkpoints).
+    #[cfg(test)]
+    pub fn checkpoints(&self) -> Vec<usize> {
+        self.snaps.keys().copied().collect()
     }
 
     /// Run one chunk. On error nothing it did survives (canvas, globals,
@@ -190,39 +234,101 @@ impl Session {
         };
         if let Some(e) = fail {
             if let Some(snap) = snap {
-                self.restore(snap).map_err(|e| e.to_string())?;
+                self.restore(&snap).map_err(|e| e.to_string())?;
             }
             let mut msg = out;
             msg.push_str(&e);
             return Err(msg);
         }
-        if let Some(snap) = snap.filter(|_| self.undo_depth > 0) {
-            self.snaps.push_back(snap);
-        }
-        while self.snaps.len() > self.undo_depth {
-            self.snaps.pop_front();
+        if let Some(snap) = snap.filter(|_| self.undo_depth > 0 || self.keep > 0) {
+            self.snaps.insert(self.log.len(), snap);
         }
         self.log.push(Chunk { src, clock, secs });
+        self.retain();
         Ok(Ran { out, secs, field_secs })
     }
 
-    /// Take back the last `n` chunks.
-    pub fn undo(&mut self, n: usize) -> Result<(), String> {
+    /// Take back the last `n` chunks; returns their code (so the easel can
+    /// keep it). Instant within the undo snapshots; further back it replays
+    /// from the nearest checkpoint.
+    pub fn undo(&mut self, n: usize) -> Result<Vec<String>, String> {
         if n == 0 {
-            return Ok(());
+            return Ok(Vec::new());
         }
-        if n > self.log.len() {
-            return Err(format!("only {} chunks to undo", self.log.len()));
+        let len = self.log.len();
+        if n > len {
+            return Err(format!("only {len} chunks to undo"));
         }
-        if n > self.snaps.len() {
-            return Err(format!("can undo at most {} chunks (snapshots kept: open with --undo N for more)", self.snaps.len()));
+        if let Some(snap) = self.snaps.remove(&(len - n)) {
+            let r = self.restore(&snap).map_err(|e| e.to_string());
+            self.snaps.insert(len - n, snap);
+            r?;
+            let gone: Vec<String> = self.log.drain(len - n..).map(|c| c.src).collect();
+            self.snaps.retain(|&k, _| k <= len - n);
+            self.retain();
+            return Ok(gone);
         }
-        let mut snap = None;
-        for _ in 0..n {
-            snap = self.snaps.pop_back();
-            self.log.pop();
+        if self.snaps.range(..len - n).next().is_none() {
+            return Err(format!("can undo at most {} chunks (snapshots kept: open with --undo N or --checkpoints N for more)", self.snaps.range(..len).count()));
         }
-        self.restore(snap.unwrap()).map_err(|e| e.to_string())
+        self.splice(len - n + 1, n, &[]).map(|r| r.removed)
+    }
+
+    /// Replace chunks `at..at+remove` (1-based) with `insert` and replay
+    /// everything after them from the nearest checkpoint before `at`: edit
+    /// a chunk in place (`remove` 1, one chunk in), insert before it
+    /// (`remove` 0) or drop it (nothing in). If any chunk fails, the session
+    /// is left exactly as it was.
+    pub fn splice(&mut self, at: usize, remove: usize, insert: &[String]) -> Result<Spliced, String> {
+        let len = self.log.len();
+        if at == 0 || at > len + 1 {
+            return Err(format!("chunk {at}: the log has chunks 1 to {len}"));
+        }
+        if at + remove > len + 1 {
+            return Err(format!("chunks {at} to {}: the log has {len}", at + remove - 1));
+        }
+        let t0 = Instant::now();
+        // where to start from: the nearest snapshot at or before the change
+        let Some(base) = self.snaps.range(..at).next_back().map(|(k, _)| *k) else {
+            return Err("no checkpoint to replay from (open with --checkpoints N)".into());
+        };
+        // everything needed to put the session back if a chunk fails
+        let now = self.snap().map_err(|e| e.to_string())?;
+        let old_log = std::mem::take(&mut self.log);
+        let later = self.snaps.split_off(&(base + 1));
+        let spacing = self.spacing;
+        let srcs: Vec<String> = old_log[base..at - 1]
+            .iter()
+            .map(|c| c.src.clone())
+            .chain(insert.iter().cloned())
+            .chain(old_log[at - 1 + remove..].iter().map(|c| c.src.clone()))
+            .collect();
+        self.log = old_log[..base].iter().map(|c| Chunk { src: c.src.clone(), clock: c.clock, secs: c.secs }).collect();
+        let mut fail = None;
+        let from = self.snaps.remove(&base).expect("the base checkpoint");
+        let r = self.restore(&from);
+        self.snaps.insert(base, from);
+        match r {
+            Err(e) => fail = Some(e.to_string()),
+            Ok(()) => {
+                for (i, src) in srcs.iter().enumerate() {
+                    if let Err(e) = self.run(src) {
+                        fail = Some(format!("chunk {} failed:\n{e}", base + i + 1));
+                        break;
+                    }
+                }
+            }
+        }
+        if let Some(e) = fail {
+            self.restore(&now).map_err(|e| e.to_string())?;
+            self.log = old_log;
+            self.snaps.retain(|&k, _| k <= base);
+            self.snaps.extend(later);
+            self.spacing = spacing;
+            return Err(format!("{e}\n(nothing changed: the session is as it was before the edit)"));
+        }
+        let removed = old_log[at - 1..at - 1 + remove].iter().map(|c| c.src.clone()).collect();
+        Ok(Spliced { removed, from: base, replayed: srcs.len(), secs: t0.elapsed().as_secs_f64() })
     }
 
     pub fn canvas(&self) -> Option<std::cell::Ref<'_, Canvas>> {
@@ -248,13 +354,17 @@ impl Session {
         let wet = s.canvas.as_ref().map(|c| c.wet_total() > 1e-6).unwrap_or(false);
         let secs: f64 = self.log.iter().map(|c| c.secs).sum::<f64>() + 0.0;
         format!(
-            "{} chunks · {}px · {} · clock {} min · {} · undo {} deep · painted {secs:.0}s · rollback bookkeeping {:.2}s",
+            "{} chunks · {}px · {} · clock {} min · {} · undo {} deep · checkpoints at {} · painted {secs:.0}s · rollback bookkeeping {:.2}s",
             self.log.len(),
             s.width,
             s.setup.as_deref().unwrap_or("no canvas yet"),
             s.clock,
             if wet { "wet paint on the canvas" } else { "dry" },
-            self.snaps.len(),
+            self.snaps.range(self.log.len().saturating_sub(self.undo_depth)..).count(),
+            {
+                let k: Vec<String> = self.snaps.range(..self.log.len().saturating_sub(self.undo_depth)).map(|(k, _)| k.to_string()).collect();
+                if k.is_empty() { "none".to_string() } else { k.join(",") }
+            },
             self.heap_secs.0 + self.heap_secs.1
         )
     }
@@ -507,6 +617,73 @@ mod tests {
             b.run(c).unwrap();
         }
         assert_eq!(bits(&a), bits(&b));
+    }
+
+    fn replayed(chunks: &[&str]) -> Vec<u32> {
+        replayed_clock(chunks).0
+    }
+    fn replayed_clock(chunks: &[&str]) -> (Vec<u32>, f64) {
+        let mut r = Session::replay(W).unwrap();
+        for c in chunks {
+            r.run(c).unwrap();
+        }
+        let clock = r.st.borrow().clock;
+        (bits(&r), clock)
+    }
+
+    const MORE: [&str; 4] = [
+        r##"n = (n or 0) + 1; b:load("#8a4030", 0.8); b:stroke({{200, 200}, {600, 260}})"##,
+        r##"n = n + 1; stipple(ellipse(500, 300, 200, 80), {width=3, color="#e0d8c0", coverage=1.2})"##,
+        r##"n = n + 1; wait(30); b:stroke({{100, 100}, {rand(700, 900), 500}})"##,
+        r##"assert(n == 3, n); glaze(ellipse(300, 400, 150, 100), {color="#402a20", coats=0.3})"##,
+    ];
+
+    #[test]
+    fn edit_a_chunk_in_place_from_a_checkpoint() {
+        let mut s = Session::new(W, 2).unwrap();
+        s.keep = 2;
+        let all: Vec<&str> = CHUNKS.iter().chain(MORE.iter()).copied().collect();
+        for c in &all {
+            s.run(c).unwrap();
+        }
+        assert_eq!(s.log.len(), 8);
+        // undo ring: 6, 7; checkpoints on a grid below it
+        let cp = s.checkpoints();
+        assert!(cp.contains(&6) && cp.contains(&7) && cp.len() <= 4, "{cp:?}");
+        // replace chunk 5 (a stroke): the log and the canvas are as if it
+        // had been painted that way
+        let new5 = r##"n = (n or 0) + 1; b:load("#304a70", 0.8); b:stroke({{200, 300}, {600, 360}})"##;
+        let r = s.splice(5, 1, &[new5.to_string()]).unwrap();
+        assert_eq!(r.removed, vec![MORE[0].to_string()]);
+        assert!(r.from <= 4 && r.replayed == 8 - r.from, "{r:?}");
+        let mut want = all.clone();
+        want[4] = new5;
+        assert_eq!(bits(&s), replayed(&want));
+        assert_eq!(s.log.iter().map(|c| c.src.as_str()).collect::<Vec<_>>(), want);
+        assert_eq!(s.st.borrow().clock, replayed_clock(&want).1);
+        // an edit that fails changes nothing, and undo still works after it
+        let before = bits(&s);
+        let e = s.splice(6, 1, &["n = n + 1; error('no')".to_string()]).unwrap_err();
+        assert!(e.contains("no") && e.contains("nothing changed"), "{e}");
+        let e = s.splice(5, 1, &["n = 7".to_string()]).unwrap_err();
+        assert!(e.contains("chunk 8 failed"), "a later chunk's assert: {e}");
+        assert_eq!(before, bits(&s));
+        assert_eq!(s.log.iter().map(|c| c.src.as_str()).collect::<Vec<_>>(), want);
+        s.run("assert(n == 3)").unwrap();
+        s.undo(1).unwrap();
+        assert_eq!(before, bits(&s));
+        // insert before chunk 8 and drop it again
+        s.splice(8, 0, &["n = n - 1; n = n + 1".to_string()]).unwrap();
+        assert_eq!(s.log.len(), 9);
+        let gone = s.splice(8, 1, &[]).unwrap().removed;
+        assert_eq!(gone, vec!["n = n - 1; n = n + 1".to_string()]);
+        assert_eq!(s.log.len(), 8);
+        assert_eq!(before, bits(&s), "same chunks, same numbers: the same canvas");
+        // undo past the undo ring replays from a checkpoint
+        let gone = s.undo(5).unwrap();
+        assert_eq!(gone.len(), 5);
+        assert_eq!(bits(&s), replayed(&want[..3]));
+        s.run("assert(n == nil and b ~= nil)").unwrap();
     }
 
     #[test]

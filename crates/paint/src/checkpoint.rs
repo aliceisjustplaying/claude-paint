@@ -54,7 +54,7 @@ fn put_all(w: &mut impl Write, v: impl Iterator<Item = f32>) -> io::Result<()> {
 fn get_all(r: &mut impl Read, n: usize) -> io::Result<Vec<f32>> {
     let mut bytes = vec![0u8; n * 4];
     r.read_exact(&mut bytes)?;
-    Ok(bytes.chunks_exact(4).map(|b| f32::from_le_bytes([b[0], b[1], b[2], b[3]])).collect())
+    Ok(bytes.as_chunks::<4>().0.iter().map(|b| f32::from_le_bytes(*b)).collect())
 }
 
 fn bad(msg: &str) -> io::Error {
@@ -158,15 +158,15 @@ impl Canvas {
         c.surf_gen = surf_gen;
         c.base = None;
         let px = get_all(r, n * 3)?;
-        c.px = px.chunks_exact(3).map(|p| [p[0], p[1], p[2]]).collect();
+        c.px = px.as_chunks::<3>().0.to_vec();
         c.height = get_all(r, n)?;
         c.film = get_all(r, n)?;
         let mut wet = crate::wet::Wet::new(n);
         wet.vol = get_all(r, n)?;
         let lat = get_all(r, n * LAT)?;
-        wet.lat = lat.chunks_exact(LAT).map(|l| std::array::from_fn(|k| l[k])).collect();
+        wet.lat = lat.as_chunks::<LAT>().0.to_vec();
         let hide = get_all(r, n * 2)?;
-        wet.hide = hide.chunks_exact(2).map(|p| [p[0], p[1]]).collect();
+        wet.hide = hide.as_chunks::<2>().0.to_vec();
         wet.current = current;
         wet.dirty = dirty;
         c.wet = wet;

@@ -14,7 +14,6 @@ use crate::mask::Mask;
 use crate::palette::Palette;
 use crate::rng::Rng;
 use crate::wet::Paint;
-use rayon::prelude::*;
 
 type Field<'a, T> = Box<dyn Fn(f32, f32) -> T + Sync + 'a>;
 
@@ -407,62 +406,57 @@ impl Canvas {
             let j = (rng.next_u64() % (i as u64 + 1)) as usize;
             phases.swap(i, j);
         }
-        let mut dirty: crate::bristle::Bounds = None;
+        // the painting order: phases, then batches of disjoint tiles
+        let mut order = Vec::new();
         for (px, py) in phases {
             let idx: Vec<usize> = (0..tiles.len()).filter(|&i| (i % tw) % 2 == px && (i / tw) % 2 == py && tile_rect[i].is_some()).collect();
-            let mut batches = disjoint_batches(&idx, &tile_rect);
-            // a crop render skips passages that miss its window (after
-            // batching, so overlapping passages keep their order)
-            for b in &mut batches {
-                b.retain(|&i| tile_rect[i].is_some_and(|r| f.clip(r).is_some()));
-            }
+            let batches = disjoint_batches(&idx, &tile_rect);
             if std::env::var_os("PAINT_DEBUG").is_some() {
                 eprintln!("  phase: {} tiles in {} batches", idx.len(), batches.len());
             }
-            for batch in batches {
-                let results: Vec<crate::bristle::Bounds> = batch
-                    .par_iter()
-                    .map(|&ti| {
-                        let mut held = Held::new(tool.clone(), seed ^ 0x5EED ^ (ti as u64).wrapping_mul(0x9E37_79B9));
-                        let mut scratch = Vec::new();
-                        let mut b: crate::bristle::Bounds = None;
-                        for (k, p) in tiles[ti].iter().enumerate() {
-                            if let Some(paint) = p.dip {
-                                if hd.blender {
-                                    held.wipe(0.9);
-                                } else {
-                                    held.wipe(hd.wipe);
-                                    held.load(paint, p.load);
-                                }
-                            }
-                            let g = Gesture::new(p.pts.clone())
-                                .pressure(p.pressure, p.pressure * p.fade)
-                                .orient(hd.orient)
-                                .ramps(ramps.0, ramps.1)
-                                .shake(hd.shake);
-                            let id = first_id.wrapping_add(offsets[ti] + k as u32);
-                            // SAFETY: every pixel this drag touches lies in its
-                            // stroke footprint, inside this tile's rect; tiles in
-                            // one batch have disjoint rects; `surf()` checked the
-                            // buffers match the frame.
-                            let r = unsafe { crate::bristle::drag_on(surf, &mut held, &g, clip, id, &mut scratch) };
-                            if let Some((a, c, d, e)) = r {
-                                b = Some(match b {
-                                    None => (a, c, d, e),
-                                    Some((a0, c0, d0, e0)) => (a0.min(a), c0.min(c), d0.max(d), e0.max(e)),
-                                });
-                            }
-                        }
-                        b
-                    })
-                    .collect();
-                for r in results.into_iter().flatten() {
-                    dirty = Some(match dirty {
-                        None => r,
-                        Some((a0, c0, d0, e0)) => (a0.min(r.0), c0.min(r.1), d0.max(r.2), e0.max(r.3)),
+            // a crop render skips passages that miss its window
+            order.extend(batches.into_iter().flatten().filter(|&i| tile_rect[i].is_some_and(|r| f.clip(r).is_some())));
+        }
+        let paint_tile = |ti: usize| {
+            let mut held = Held::new(tool.clone(), seed ^ 0x5EED ^ (ti as u64).wrapping_mul(0x9E37_79B9));
+            let mut scratch = Vec::new();
+            let mut b: crate::bristle::Bounds = None;
+            for (k, p) in tiles[ti].iter().enumerate() {
+                if let Some(paint) = p.dip {
+                    if hd.blender {
+                        held.wipe(0.9);
+                    } else {
+                        held.wipe(hd.wipe);
+                        held.load(paint, p.load);
+                    }
+                }
+                let g = Gesture::new(p.pts.clone())
+                    .pressure(p.pressure, p.pressure * p.fade)
+                    .orient(hd.orient)
+                    .ramps(ramps.0, ramps.1)
+                    .shake(hd.shake);
+                let id = first_id.wrapping_add(offsets[ti] + k as u32);
+                // SAFETY: every pixel this drag touches lies in its stroke
+                // footprint, inside this tile's rect; run_ordered never runs
+                // tiles with overlapping rects at once; `surf()` checked the
+                // buffers match the frame.
+                let r = unsafe { crate::bristle::drag_on(surf, &mut held, &g, clip, id, &mut scratch) };
+                if let Some((a, c, d, e)) = r {
+                    b = Some(match b {
+                        None => (a, c, d, e),
+                        Some((a0, c0, d0, e0)) => (a0.min(a), c0.min(c), d0.max(d), e0.max(e)),
                     });
                 }
             }
+            b
+        };
+        // tiles run in parallel wherever that can't change the result
+        let mut dirty: crate::bristle::Bounds = None;
+        for r in crate::sched::run_ordered(&order, &tile_rect, paint_tile).into_iter().flatten() {
+            dirty = Some(match dirty {
+                None => r,
+                Some((a0, c0, d0, e0)) => (a0.min(r.0), c0.min(r.1), d0.max(r.2), e0.max(r.3)),
+            });
         }
         if let Some((x0, y0, x1, y1)) = dirty {
             self.wet.touch(x0, y0, x1, y1);

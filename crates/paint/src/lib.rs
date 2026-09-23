@@ -17,6 +17,7 @@ pub mod edge;
 pub mod palette;
 pub mod pigment;
 pub mod rng;
+mod sched;
 pub mod shape;
 pub mod tree;
 pub mod wet;

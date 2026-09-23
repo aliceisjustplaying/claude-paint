@@ -399,6 +399,7 @@ impl Builder {
         // humidity, old restorations), over some centimeters
         let uneven = Fbm::new(seed as u32 ^ 0x54, 3, 60.0);
         let bars = stretcher(size);
+        let wob = Fbm::new(seed as u32 ^ 0x55, 2, 40.0);
         let cells: Vec<([f32; 3], f32)> = (0..gx * gy)
             .into_par_iter()
             .map(|i| {
@@ -409,10 +410,10 @@ impl Builder {
                     // the stretcher bars: the canvas over a bar is held and
                     // cracks less; along a bar's inner edge it flexes, and
                     // cracks run parallel to the edge (a stress across it)
-                    let (over, edge) = bars.at(p, s);
+                    let (over, edge) = bars.at(p, s, &wob);
                     m *= 1.0 - 0.15 * vary * over;
                     t = [m, m, 0.0];
-                    let e = 0.5 * vary;
+                    let e = 0.35 * vary;
                     t[0] += e * edge[0];
                     t[1] += e * edge[1];
                 }
@@ -909,26 +910,31 @@ fn stretcher(size: V2) -> Stretcher {
 impl Stretcher {
     /// At p: (how far p lies over a bar 0..1, stress across the nearest
     /// inner bar edge as (σxx, σyy) extra, relative to the mean stress).
-    fn at(&self, p: V2, s: f32) -> (f32, [f32; 2]) {
+    /// The line where the canvas flexes wanders (the canvas was restretched,
+    /// the bar edge is worn and rounded) and is a band some islands wide.
+    fn at(&self, p: V2, s: f32, wob: &Fbm) -> (f32, [f32; 2]) {
         let (w, h, b) = (self.size[0], self.size[1], self.bar);
-        let band = 0.35 * s;
+        let band = 0.8 * s;
         let ridge = |d: f32| (-(d / band).powi(2)).exp();
-        // distance to the inner edges: x-bars (left, right, crosses) give
-        // a stress along x
-        let mut dx = [p[0] - b, w - b - p[0]].map(f32::abs).into_iter().fold(f32::MAX, f32::min);
-        let mut dy = [p[1] - b, h - b - p[1]].map(f32::abs).into_iter().fold(f32::MAX, f32::min);
-        let mut over = if p[0] < b || p[0] > w - b || p[1] < b || p[1] > h - b { 1.0 } else { 0.0 };
+        // the flex line: a little inside the bar edge, wandering ±0.6 S
+        let bx = b + 0.6 * s * wob.get(0.0, p[1]);
+        let by = b + 0.6 * s * wob.get(p[0], 500.0);
+        let bx2 = b + 0.6 * s * wob.get(250.0, p[1]);
+        let by2 = b + 0.6 * s * wob.get(p[0], 750.0);
+        // x-bars (left, right, crosses) give a stress along x
+        let mut dx = (p[0] - bx).abs().min((w - bx2 - p[0]).abs());
+        let mut dy = (p[1] - by).abs().min((h - by2 - p[1]).abs());
+        let inside = crate::smoothstep(0.0, 0.5 * s, p[0] - b).min(crate::smoothstep(0.0, 0.5 * s, w - b - p[0])).min(crate::smoothstep(0.0, 0.5 * s, p[1] - b)).min(crate::smoothstep(0.0, 0.5 * s, h - b - p[1]));
+        let mut over = 1.0 - inside;
         for &c in &self.cx {
-            dx = dx.min((p[0] - (c - 0.5 * b)).abs()).min((p[0] - (c + 0.5 * b)).abs());
-            if (p[0] - c).abs() < 0.5 * b {
-                over = 1.0;
-            }
+            let o = wob.get(c, p[1]) * 0.6 * s;
+            dx = dx.min((p[0] - (c - 0.5 * b) - o).abs()).min((p[0] - (c + 0.5 * b) - o).abs());
+            over = over.max(1.0 - crate::smoothstep(0.5 * b - 0.5 * s, 0.5 * b, (p[0] - c).abs()));
         }
         for &c in &self.cy {
-            dy = dy.min((p[1] - (c - 0.5 * b)).abs()).min((p[1] - (c + 0.5 * b)).abs());
-            if (p[1] - c).abs() < 0.5 * b {
-                over = 1.0;
-            }
+            let o = wob.get(p[0], c) * 0.6 * s;
+            dy = dy.min((p[1] - (c - 0.5 * b) - o).abs()).min((p[1] - (c + 0.5 * b) - o).abs());
+            over = over.max(1.0 - crate::smoothstep(0.5 * b - 0.5 * s, 0.5 * b, (p[1] - c).abs()));
         }
         (over, [ridge(dx), ridge(dy)])
     }

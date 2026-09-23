@@ -199,6 +199,17 @@ fn sample<const N: usize>(st: &S, fun: &Function, b: (f32, f32, f32, f32), conv:
 pub(crate) type FieldBox<T> = Box<dyn Fn(f32, f32) -> T + Sync>;
 
 fn color_field(st: &S, v: &Value, b: (f32, f32, f32, f32)) -> Result<FieldBox<Rgb>> {
+    // a sky or clouds: read natively on the engine's threads
+    if let Value::UserData(u) = v {
+        if let Ok(s) = u.borrow::<crate::world::SkyU>() {
+            let s = s.0.clone();
+            return Ok(Box::new(move |x, y| s.at(x, y)));
+        }
+        if let Ok(c) = u.borrow::<crate::world::CloudsU>() {
+            let (sky, cf) = (c.sky.clone(), c.field.clone());
+            return Ok(Box::new(move |x, y| cf.color(&sky, x, y)));
+        }
+    }
     if let Value::Function(f) = v {
         let g = sample::<3>(st, f, b, |r| rgb_of(&r))?;
         Ok(Box::new(move |x, y| g.get(x, y)))
@@ -209,6 +220,13 @@ fn color_field(st: &S, v: &Value, b: (f32, f32, f32, f32)) -> Result<FieldBox<Rg
 }
 
 pub(crate) fn scalar_field(st: &S, v: &Value, b: (f32, f32, f32, f32), what: &str) -> Result<FieldBox<f32>> {
+    // a noise: read natively (0..1)
+    if let Value::UserData(u) = v
+        && let Ok(n) = u.borrow::<Noise>()
+    {
+        let n = n.clone();
+        return Ok(Box::new(move |x, y| n.get01(x, y)));
+    }
     match v {
         Value::Function(f) => {
             let what = what.to_string();
@@ -348,7 +366,7 @@ fn tool_of(v: &Value) -> Result<Tool> {
             macro_rules! over {
                 ($($f:ident),*) => {$( if let Some(v) = num(t, stringify!($f))? { tool.$f = v; } )*};
             }
-            over!(length, stiffness, hair, run, lay, pickup, push, splay, ragged);
+            over!(length, stiffness, hair, run, lay, pickup, push, splay, ragged, point);
             if let Some(b) = t.get::<Option<usize>>("bristles")? {
                 tool.bristles = b;
             }
@@ -410,6 +428,9 @@ impl UserData for Brush {
             Ok(())
         });
         m.add_method("fullness", |_, b, ()| Ok(b.held.borrow().fullness()));
+        // pointed tips: how wide a mark at this pressure, what pressure for this width
+        m.add_method("mark_width", |_, b, p: f32| Ok(b.held.borrow().tool.mark_width(p)));
+        m.add_method("pressure_for", |_, b, w: f32| Ok(b.held.borrow().tool.pressure_for(w)));
         // b:stroke(points, {pressure=, ramps=, orient=, shake=, swell=, clip=})
         m.add_method("stroke", |_, b, (pts, o): (Value, Option<Table>)| {
             let pts = points(&pts)?;
@@ -521,11 +542,42 @@ impl UserData for PaintU {
     }
 }
 
+const PALETTES: &str = "friedrich_1820, friedrich_early, friedrich_1820_greens, friedrich_early_greens";
+
+pub(crate) fn palette_named(name: &str) -> Result<Palette> {
+    Ok(match name {
+        "friedrich_1820" | "friedrich" => Palette::friedrich_1820(),
+        "friedrich_early" => Palette::friedrich_early(),
+        "friedrich_1820_greens" | "greens" => Palette::friedrich_1820_greens(),
+        "friedrich_early_greens" => Palette::friedrich_early_greens(),
+        o => return err(format!("palette {o:?}: {PALETTES}")),
+    })
+}
+
+/// Tubes a palette can be given (`pal:with{...}`).
+fn extra_tube(name: &str) -> Result<paint::Tube> {
+    let mut all = Palette::green_tubes();
+    all.push(Palette::copper_green());
+    all.extend(Palette::friedrich_1820().tubes);
+    all.extend(Palette::friedrich_early().tubes);
+    all.into_iter().find(|t| t.name == name).ok_or_else(|| mlua::Error::runtime(format!("no tube {name:?} (extra tubes: prussian blue, green earth, Rinmann's green, copper green; see pal:tubes())")))
+}
+
 #[derive(Clone)]
 pub struct Pal(pub Rc<Palette>);
 impl UserData for Pal {
     fn add_methods<M: UserDataMethods<Self>>(m: &mut M) {
         m.add_method("tubes", |_, p, ()| Ok(p.0.tubes.iter().map(|t| t.name.to_string()).collect::<Vec<_>>()));
+        // pal:with{"copper green"}: this palette and more tubes
+        m.add_method("with", |_, p, names: Vec<String>| {
+            let mut extra = Vec::new();
+            for n in &names {
+                if !p.0.tubes.iter().any(|t| t.name == n) {
+                    extra.push(extra_tube(n)?);
+                }
+            }
+            Ok(Pal(Rc::new(p.0.with(extra))))
+        });
         m.add_method("only", |_, p, names: Vec<String>| {
             for n in &names {
                 if !p.0.tubes.iter().any(|t| t.name == n) {
@@ -674,12 +726,61 @@ pub(crate) fn curve_of(v: &Value, w: f32) -> Result<Vec<(f32, f32)>> {
 
 // ---------------------------------------------------------------- noise
 
-pub struct Noise(Fbm);
+#[derive(Clone, Copy)]
+pub enum NoiseKind {
+    Fbm(Fbm),
+    Octaves(paint::noise::Octaves),
+}
+
+/// A noise field: fBm, ridged or billowed octaves, optionally seen through
+/// a domain warp and stretched along a direction.
+#[derive(Clone, Copy)]
+pub struct Noise {
+    kind: NoiseKind,
+    warp: Option<paint::noise::Warp>,
+    stretch: Option<paint::noise::Aniso>,
+}
+
+impl Noise {
+    fn get(&self, x: f32, y: f32) -> f32 {
+        let (mut x, mut y) = (x, y);
+        if let Some(a) = &self.stretch {
+            (x, y) = a.at(x, y);
+        }
+        if let Some(w) = &self.warp {
+            (x, y) = w.at(x, y);
+        }
+        match &self.kind {
+            NoiseKind::Fbm(f) => f.get(x, y),
+            NoiseKind::Octaves(o) => o.get(x, y),
+        }
+    }
+    fn get01(&self, x: f32, y: f32) -> f32 {
+        match (&self.kind, &self.warp, &self.stretch) {
+            (NoiseKind::Fbm(f), None, None) => f.get01(x, y),
+            _ => (self.get(x, y) * 0.5 + 0.5).clamp(0.0, 1.0),
+        }
+    }
+}
+
 impl UserData for Noise {
     fn add_methods<M: UserDataMethods<Self>>(m: &mut M) {
-        m.add_meta_method(MetaMethod::Call, |_, n, (x, y): (f32, f32)| Ok(n.0.get(x, y)));
-        m.add_method("at", |_, n, (x, y): (f32, f32)| Ok(n.0.get(x, y)));
-        m.add_method("at01", |_, n, (x, y): (f32, f32)| Ok(n.0.get01(x, y)));
+        m.add_meta_method(MetaMethod::Call, |_, n, (x, y): (f32, f32)| Ok(n.get(x, y)));
+        m.add_method("at", |_, n, (x, y): (f32, f32)| Ok(n.get(x, y)));
+        m.add_method("at01", |_, n, (x, y): (f32, f32)| Ok(n.get01(x, y)));
+    }
+}
+
+pub struct WorleyU(paint::noise::Worley);
+impl UserData for WorleyU {
+    fn add_methods<M: UserDataMethods<Self>>(m: &mut M) {
+        // c:at(x, y) -> f1, f2, edge, rand: distances to the nearest two cell
+        // points (units), how near a cell edge (0 on it), and a stable 0..1 per cell
+        m.add_method("at", |_, w, (x, y): (f32, f32)| {
+            let c = w.0.get(x, y);
+            Ok((c.f1, c.f2, c.edge(), c.rand()))
+        });
+        m.add_meta_method(MetaMethod::Call, |_, w, (x, y): (f32, f32)| Ok(w.0.get(x, y).f1));
     }
 }
 
@@ -688,7 +789,7 @@ impl UserData for Noise {
 const WORK_KEYS: &[&str] = &[
     "hand", "tool", "length", "coverage", "angle", "angle_jitter", "color", "jitter", "medium", "pal", "aim", "load_at", "cut_in", "pressure",
     "orient", "dips", "blender", "scrub", "clip", "threshold", "ramps", "shake", "curve", "cross", "drift", "tail", "broken", "swell", "clump",
-    "order", "mix_jitter", "seed", "ruler", "paint", "load",
+    "order", "mix_jitter", "seed", "ruler", "paint", "load", "color_over", "hug",
 ];
 
 fn work(st: &S, mask: Rc<Mask>, o: Table, preset: Option<&str>) -> Result<()> {
@@ -732,12 +833,20 @@ fn work(st: &S, mask: Rc<Mask>, o: Table, preset: Option<&str>) -> Result<()> {
         h = h.angle_jitter(a);
     }
     match o.get::<Value>("color")? {
-        Value::Nil if hand != "blend" => return err("work: needs a color (a \"#rrggbb\", a color, or function(x, y) returning one)"),
+        Value::Nil if hand != "blend" && o.get::<Value>("color_over")?.is_nil() => {
+            return err("work: needs a color (a \"#rrggbb\", a color, or function(x, y) returning one) or color_over")
+        }
         Value::Nil => {}
         v => h.color = color_field(st, &v, b)?,
     }
     if let Some((l, hue)) = pair(&o, "jitter")? {
         h = h.jitter(l, hue);
+    }
+    if let Some(co) = over_field(st, &o, b)? {
+        h = h.color_over(co);
+    }
+    if let Some(on) = o.get::<Option<bool>>("hug")? {
+        h = h.hug(on);
     }
     if let Value::Boolean(false) = pal_v {
         h.palette = None;
@@ -875,8 +984,43 @@ pub(crate) fn seed_of(st: &S, o: &Table) -> Result<u64> {
 }
 
 const STIPPLE_KEYS: &[&str] = &[
-    "tool", "width", "pressure", "coverage", "color", "medium", "pal", "aim", "dips", "drag", "twist", "cluster", "feather", "clip", "jitter", "mix_jitter", "seed", "paint",
+    "tool", "width", "pressure", "coverage", "color", "medium", "pal", "aim", "dips", "drag", "twist", "cluster", "feather", "clip", "jitter", "mix_jitter", "seed", "paint", "color_over", "fade",
 ];
+
+type OverBox = Box<dyn Fn(f32, f32, Rgb) -> Rgb + Sync>;
+
+/// `color_over`: {shift={dL, da, db}} (native: relative to whatever the
+/// stroke lands on) or function(x, y, under) -> color (sampled every 2 units,
+/// with `under` what is on the canvas there before this pass).
+fn over_field(st: &S, o: &Table, b: (f32, f32, f32, f32)) -> Result<Option<OverBox>> {
+    match o.get::<Value>("color_over")? {
+        Value::Nil => Ok(None),
+        Value::Table(t) => {
+            let sh: Vec<f32> = t.get("shift")?;
+            let (dl, da, db) = (sh.first().copied().unwrap_or(0.0), sh.get(1).copied().unwrap_or(0.0), sh.get(2).copied().unwrap_or(0.0));
+            Ok(Some(Box::new(move |_, _, u| paint::shift(u, dl, da, db))))
+        }
+        Value::Function(f) => {
+            let t0 = std::time::Instant::now();
+            let step = FIELD_STEP;
+            let nx = (((b.2 - b.0) / step).ceil() as usize + 1).max(2);
+            let ny = (((b.3 - b.1) / step).ceil() as usize + 1).max(2);
+            let mut v = Vec::with_capacity(nx * ny);
+            for j in 0..ny {
+                for i in 0..nx {
+                    let (x, y) = (b.0 + i as f32 * step, b.1 + j as f32 * step);
+                    let under = st.borrow().canvas.as_ref().ok_or_else(no_canvas)?.under(x, y, step * 0.5);
+                    let r: Value = f.call((x, y, Col(under)))?;
+                    v.push(rgb_of(&r)?);
+                }
+            }
+            st.borrow_mut().field_secs += t0.elapsed().as_secs_f64();
+            let g = Grid::<3> { x0: b.0, y0: b.1, step, nx, ny, v };
+            Ok(Some(Box::new(move |x, y, _| g.get(x, y))))
+        }
+        o => err(format!("color_over: want {{shift={{dL, da, db}}}} or function(x, y, under), got {}", o.type_name())),
+    }
+}
 
 fn stipple(st: &S, mask: Rc<Mask>, o: Table) -> Result<()> {
     check_keys(&o, STIPPLE_KEYS, "stipple")?;
@@ -898,7 +1042,8 @@ fn stipple(st: &S, mask: Rc<Mask>, o: Table) -> Result<()> {
         sp = sp.paint(h, s);
     }
     match o.get::<Value>("color")? {
-        Value::Nil => return err("stipple: needs a color"),
+        Value::Nil if o.get::<Value>("color_over")?.is_nil() => return err("stipple: needs a color or color_over"),
+        Value::Nil => {}
         v => sp.color = color_field(st, &v, b)?,
     }
     if let Some(v) = o.get::<Option<Value>>("coverage")? {
@@ -939,6 +1084,12 @@ fn stipple(st: &S, mask: Rc<Mask>, o: Table) -> Result<()> {
     if let Some(j) = num(&o, "mix_jitter")? {
         sp = sp.mix_jitter(j);
     }
+    if let Some(co) = over_field(st, &o, b)? {
+        sp = sp.color_over(co);
+    }
+    if let Some(k) = num(&o, "fade")? {
+        sp = sp.fade(k);
+    }
     sp.tool.validate().map_err(mlua::Error::runtime)?;
     let seed = seed_of(st, &o)?;
     let mut s = st.borrow_mut();
@@ -959,14 +1110,20 @@ fn pigment_of(kind: Option<&str>, c: Rgb) -> Result<Pigment> {
 // ---------------------------------------------------------------- trees
 
 fn tree(lua: &Lua, st: &S, o: Table) -> Result<Table> {
-    check_keys(&o, &["habit", "x", "y", "height", "seed"], "tree")?;
-    let habit = match o.get::<Option<String>>("habit")?.or(o.get::<Option<String>>(1)?).as_deref().unwrap_or("oak") {
+    check_keys(&o, &["habit", "x", "y", "height", "seed", "years"], "tree")?;
+    let mut habit = match o.get::<Option<String>>("habit")?.or(o.get::<Option<String>>(1)?).as_deref().unwrap_or("oak") {
         "oak" => Habit::oak(),
         "dead_oak" | "dead oak" => Habit::dead_oak(),
         "birch" => Habit::birch(),
         "spruce" => Habit::spruce(),
-        h => return err(format!("habit {h:?}: oak, dead_oak, birch or spruce")),
+        "beech" => Habit::beech(),
+        "alder" => Habit::alder(),
+        "willow" => Habit::willow(),
+        h => return err(format!("habit {h:?}: oak, dead_oak, birch, spruce, beech, alder or willow")),
     };
+    if let Some(y) = o.get::<Option<u32>>("years")? {
+        habit.years = y;
+    }
     let (x, y, height) = (o.get::<f32>("x")?, o.get::<f32>("y")?, o.get::<f32>("height")?);
     let seed = seed_of(st, &o)?;
     let sk = Rc::new(habit.grow((x, y), height, seed));
@@ -1000,12 +1157,136 @@ fn tree(lua: &Lua, st: &S, o: Table) -> Result<Table> {
     t.set("bounds", lua.create_sequence_from([bb.0, bb.1, bb.2, bb.3])?)?;
     let (st2, sk2) = (st.clone(), sk.clone());
     t.set("mask", lua.create_function(move |_, _: Variadic<Value>| Ok(wrap(sk2.mask(frame(&st2)?))))?)?;
+    // t:foliage{sun={x, y, z}, seed=, winter=false, years=, clump=, spacing=, squash=, droop=,
+    //           fill=, ragged=, bare=, tip=, inner=, inner_w=, spray=}
+    let (st2, sk2) = (st.clone(), sk.clone());
+    t.set("foliage", lua.create_function(move |lua, (_, o): (Value, Option<Table>)| foliage(lua, &st2, &sk2, o))?)?;
     Ok(t)
+}
+
+fn foliage(lua: &Lua, st: &S, sk: &paint::Skeleton, o: Option<Table>) -> Result<Table> {
+    let mut leaf = sk.leaf;
+    let mut sun = (-0.55, -0.75, 0.35);
+    let mut seed = None;
+    if let Some(o) = &o {
+        check_keys(o, &["sun", "seed", "winter", "years", "clump", "spacing", "squash", "droop", "fill", "ragged", "bare", "tip", "inner", "inner_w", "spray"], "foliage")?;
+        if let Some(v) = o.get::<Option<Vec<f32>>>("sun")? {
+            sun = (v.first().copied().unwrap_or(-0.55), v.get(1).copied().unwrap_or(-0.75), v.get(2).copied().unwrap_or(0.35));
+        }
+        seed = o.get::<Option<u64>>("seed")?;
+        if o.get::<Option<bool>>("winter")?.unwrap_or(false) {
+            leaf.years = 0;
+        }
+        if let Some(y) = o.get::<Option<u32>>("years")? {
+            leaf.years = y;
+        }
+        macro_rules! over {
+            ($($f:ident),*) => {$( if let Some(v) = num(o, stringify!($f))? { leaf.$f = v; } )*};
+        }
+        over!(clump, spacing, squash, droop, fill, ragged, bare, tip, inner, inner_w, spray);
+    }
+    let seed = match seed {
+        Some(s) => s,
+        None => st.borrow_mut().auto_seed(),
+    };
+    let fo = Rc::new(sk.foliage_with(&leaf, sun, seed));
+    let t = lua.create_table()?;
+    let clumps = lua.create_table()?;
+    for (i, c) in fo.back_to_front().into_iter().enumerate() {
+        let ct = lua.create_table()?;
+        ct.set("at", vec![c.at.0, c.at.1])?;
+        ct.set("x", c.at.0)?;
+        ct.set("y", c.at.1)?;
+        ct.set("z", c.z)?;
+        ct.set("r", c.r)?;
+        ct.set("squash", c.squash)?;
+        ct.set("tilt", c.tilt)?;
+        ct.set("fill", c.fill)?;
+        ct.set("lit", c.lit)?;
+        ct.set("shade", c.shade)?;
+        ct.set("limb", c.limb + 1)?;
+        ct.set("mass", c.mass + 1)?;
+        clumps.set(i + 1, ct)?;
+    }
+    t.set("clumps", clumps)?;
+    let b = fo.bounds();
+    t.set("bounds", vec![b.0, b.1, b.2, b.3])?;
+    t.set("grain", fo.grain())?;
+    let (s1, f1) = (st.clone(), fo.clone());
+    t.set("mask", lua.create_function(move |_, _: Variadic<Value>| Ok(wrap(f1.mask(frame(&s1)?))))?)?;
+    let (s1, f1) = (st.clone(), fo.clone());
+    t.set("lit", lua.create_function(move |_, _: Variadic<Value>| Ok(wrap(f1.lit(frame(&s1)?))))?)?;
+    let (s1, f1) = (st.clone(), fo.clone());
+    t.set("envelope", lua.create_function(move |_, (_, reach): (Value, Option<f32>)| Ok(wrap(f1.envelope(frame(&s1)?, reach.unwrap_or(6.0)))))?)?;
+    let (s1, f1) = (st.clone(), fo.clone());
+    t.set("gaps", lua.create_function(move |_, (_, reach): (Value, Option<f32>)| Ok(wrap(f1.gaps(frame(&s1)?, reach.unwrap_or(6.0)))))?)?;
+    Ok(t)
+}
+
+// ---------------------------------------------------------------- meadows
+
+/// sward{region=mask, horizon=, near=, height=, spacing=, thin=, smallest=, blades={lo, hi},
+///       fan=, curl=, flowers=, kinds=, patch=, patch_size=, wind={lean=, gust=, period=, seed=}, seed=}
+fn sward(lua: &Lua, st: &S, o: Table) -> Result<Table> {
+    check_keys(&o, &["region", "horizon", "near", "height", "spacing", "thin", "smallest", "blades", "fan", "curl", "flowers", "kinds", "patch", "patch_size", "wind", "seed"], "sward")?;
+    let region = mask_of(&o.get::<Value>("region")?)?;
+    let mut sw = paint::Sward::default();
+    macro_rules! over {
+        ($($f:ident),*) => {$( if let Some(v) = num(&o, stringify!($f))? { sw.$f = v; } )*};
+    }
+    over!(horizon, near, height, spacing, thin, smallest, fan, curl, flowers, patch, patch_size);
+    if let Some(k) = o.get::<Option<u32>>("kinds")? {
+        sw.kinds = k;
+    }
+    if let Some(b) = o.get::<Option<Vec<u32>>>("blades")? {
+        sw.blades = (b.first().copied().unwrap_or(3), b.get(1).copied().unwrap_or(7));
+    }
+    if let Some(w) = o.get::<Option<Table>>("wind")? {
+        check_keys(&w, &["lean", "gust", "period", "seed"], "wind")?;
+        sw.wind.lean = num(&w, "lean")?.unwrap_or(sw.wind.lean);
+        sw.wind.gust = num(&w, "gust")?.unwrap_or(sw.wind.gust);
+        sw.wind.period = num(&w, "period")?.unwrap_or(sw.wind.period);
+        sw.wind.seed = w.get::<Option<u64>>("seed")?.unwrap_or(sw.wind.seed);
+    }
+    let seed = seed_of(st, &o)?;
+    let tufts = sw.grow(&region, seed);
+    let out = lua.create_table()?;
+    for (i, tf) in tufts.iter().enumerate() {
+        let t = lua.create_table()?;
+        t.set("x", tf.at.0)?;
+        t.set("y", tf.at.1)?;
+        t.set("scale", tf.scale)?;
+        t.set("height", tf.height)?;
+        t.set("lean", tf.lean)?;
+        t.set("lush", tf.lush)?;
+        let blades = lua.create_table()?;
+        for (k, b) in tf.blades.iter().enumerate() {
+            blades.set(k + 1, vec![vec![b[0].0, b[0].1], vec![b[1].0, b[1].1], vec![b[2].0, b[2].1]])?;
+        }
+        t.set("blades", blades)?;
+        if let Some(fl) = &tf.flower {
+            let ft = lua.create_table()?;
+            ft.set("x", fl.at.0)?;
+            ft.set("y", fl.at.1)?;
+            ft.set("r", fl.r)?;
+            ft.set("kind", fl.kind)?;
+            t.set("flower", ft)?;
+        }
+        out.set(i + 1, t)?;
+    }
+    Ok(out)
 }
 
 // ---------------------------------------------------------------- setup
 
+/// The whole canvas's frame, for userdata methods that only get `lua`.
+pub(crate) fn current_frame(lua: &Lua) -> Result<Frame> {
+    let st = lua.app_data_ref::<S>().ok_or_else(|| mlua::Error::runtime("no studio"))?;
+    frame(&st)
+}
+
 pub fn install(lua: &Lua, st: S) -> Result<()> {
+    lua.set_app_data(st.clone());
     GC.with(|g| *g.borrow_mut() = (Some(lua.weak()), 0));
     let g = lua.globals();
 
@@ -1067,16 +1348,20 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
             "canvas",
             lua.create_function(move |lua, o: Option<Table>| {
                 let o = o.unwrap_or(lua.create_table()?);
-                check_keys(&o, &["style", "aspect", "seed"], "canvas")?;
+                check_keys(&o, &["style", "aspect", "seed", "palette"], "canvas")?;
                 if st.borrow().canvas.is_some() {
                     return err("the canvas is already set up (canvas{} is the first chunk; undo back past it to change it)");
                 }
                 let name: String = o.get::<Option<String>>("style")?.unwrap_or_else(|| "friedrich".into());
-                let sty = match name.as_str() {
+                let mut sty = match name.as_str() {
                     "friedrich" => Style::friedrich(),
                     "friedrich_early" => Style::friedrich_early(),
                     o => return err(format!("style {o:?}: friedrich or friedrich_early")),
                 };
+                let palname = o.get::<Option<String>>("palette")?;
+                if let Some(pn) = &palname {
+                    sty.palette = palette_named(pn)?;
+                }
                 let aspect = num(&o, "aspect")?.unwrap_or(1.4);
                 if !(0.2..=5.0).contains(&aspect) {
                     return err("aspect: width / height, between 0.2 and 5");
@@ -1094,7 +1379,10 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
                     s.clock = 0.0;
                     s.canvas = Some(c);
                     s.style = Some(Rc::new(sty));
-                    s.setup = Some(format!("style={name:?}, aspect={aspect}, seed={seed}"));
+                    s.setup = Some(match &palname {
+                        Some(pn) => format!("style={name:?}, palette={pn:?}, aspect={aspect}, seed={seed}"),
+                        None => format!("style={name:?}, aspect={aspect}, seed={seed}"),
+                    });
                 }
                 let gl = lua.globals();
                 // whole numbers as Lua integers (so `print(H)` says 714, not 714.0)
@@ -1129,16 +1417,72 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
     g.set("smoothstep", lua.create_function(|_, (a, b, x): (f32, f32, f32)| Ok(paint::smoothstep(a, b, x)))?)?;
     g.set("lerp", lua.create_function(|_, (a, b, t): (f32, f32, f32)| Ok(paint::lerp(a, b, t)))?)?;
     g.set("clamp", lua.create_function(|_, (x, a, b): (f32, Option<f32>, Option<f32>)| Ok(x.clamp(a.unwrap_or(0.0), b.unwrap_or(1.0))))?)?;
+    // noise{seed=, octaves=, period=, persistence=, kind="fbm"|"ridged"|"billow",
+    //       warp={period, amount, twice}, stretch={angle, k}}
     g.set("noise", lua.create_function(|_, o: Option<Table>| {
-        let (seed, oct, period, pers) = match &o {
-            None => (1, 4, 200.0, 0.5),
-            Some(o) => {
-                check_keys(o, &["seed", "octaves", "period", "persistence"], "noise")?;
-                (o.get::<Option<u32>>("seed")?.unwrap_or(1), o.get::<Option<usize>>("octaves")?.unwrap_or(4), num(o, "period")?.unwrap_or(200.0), o.get::<Option<f64>>("persistence")?.unwrap_or(0.5))
+        let o = match o {
+            None => return Ok(Noise { kind: NoiseKind::Fbm(Fbm::new(1, 4, 200.0)), warp: None, stretch: None }),
+            Some(o) => o,
+        };
+        check_keys(&o, &["seed", "octaves", "period", "persistence", "kind", "warp", "stretch"], "noise")?;
+        let (seed, oct, period) = (o.get::<Option<u32>>("seed")?.unwrap_or(1), o.get::<Option<usize>>("octaves")?.unwrap_or(4), num(&o, "period")?.unwrap_or(200.0));
+        let pers = o.get::<Option<f64>>("persistence")?;
+        use paint::noise::{Fold, Octaves};
+        let kind = match o.get::<Option<String>>("kind")?.as_deref().unwrap_or("fbm") {
+            "fbm" => NoiseKind::Fbm(Fbm::new(seed, oct, period).with_persistence(pers.unwrap_or(0.5))),
+            k @ ("ridged" | "billow" | "plain") => {
+                let fold = match k {
+                    "ridged" => Fold::Ridged,
+                    "billow" => Fold::Billow,
+                    _ => Fold::Plain,
+                };
+                let mut n = Octaves::new(seed, oct, period, fold);
+                if let Some(p) = pers {
+                    n = n.persistence(p as f32);
+                }
+                NoiseKind::Octaves(n)
+            }
+            k => return err(format!("noise kind {k:?}: fbm, ridged, billow or plain")),
+        };
+        let warp = match o.get::<Option<Table>>("warp")? {
+            None => None,
+            Some(t) => {
+                let mut w = paint::noise::Warp::new(seed.wrapping_add(17), t.get(1)?, t.get(2)?);
+                if t.get::<Option<bool>>(3)?.unwrap_or(false) {
+                    w = w.twice();
+                }
+                Some(w)
             }
         };
-        Ok(Noise(Fbm::new(seed, oct, period).with_persistence(pers)))
+        let stretch = pair(&o, "stretch")?.map(|(a, k)| paint::noise::Aniso::new(a, k));
+        Ok(Noise { kind, warp, stretch })
     })?)?;
+    // worley{seed=, period=, jitter=}: cells (stones, cracked mud, clumps)
+    g.set("worley", lua.create_function(|_, o: Option<Table>| {
+        let (seed, period, jitter) = match &o {
+            None => (1, 40.0, None),
+            Some(o) => {
+                check_keys(o, &["seed", "period", "jitter"], "worley")?;
+                (o.get::<Option<u32>>("seed")?.unwrap_or(1), num(o, "period")?.unwrap_or(40.0), num(o, "jitter")?)
+            }
+        };
+        let mut w = paint::noise::Worley::new(seed, period);
+        if let Some(j) = jitter {
+            w = w.jitter(j);
+        }
+        Ok(WorleyU(w))
+    })?)?;
+    // uneven(n, lo, hi, irregular?, clump?, seed?): n positions between lo and hi,
+    // spaced as a hand spaces them (lognormal gaps, grouped in clumps)
+    g.set("uneven", lua.create_function(|_, (n, lo, hi, irr, clump, seed): (usize, f32, f32, Option<f32>, Option<f32>, Option<u32>)| {
+        Ok(paint::noise::uneven(n, lo, hi, irr.unwrap_or(0.6), clump.unwrap_or(0.3), seed.unwrap_or(1)))
+    })?)?;
+    // shift(color, dL, da, db): the same color moved in OKLab (darker, bluer, ...)
+    g.set("shift", lua.create_function(|_, (c, dl, da, db): (Value, f32, Option<f32>, Option<f32>)| {
+        Ok(Col(paint::shift(rgb_of(&c)?, dl, da.unwrap_or(0.0), db.unwrap_or(0.0))))
+    })?)?;
+    // palette(name): a set of tubes
+    g.set("palette", lua.create_function(|_, name: String| Ok(Pal(Rc::new(palette_named(&name)?))))?)?;
 
     // looking at the canvas
     {
@@ -1339,11 +1683,14 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
     }
 
     crate::form::install(lua, st.clone())?;
+    crate::world::install(lua, st.clone())?;
 
     // trees
     {
         let st1 = st.clone();
         g.set("tree", lua.create_function(move |lua, o: Table| tree(lua, &st1, o))?)?;
+        let st1 = st.clone();
+        g.set("sward", lua.create_function(move |lua, o: Table| sward(lua, &st1, o))?)?;
     }
 
     // silence unused warnings for kinds referenced only in docs

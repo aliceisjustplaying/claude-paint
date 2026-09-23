@@ -51,7 +51,7 @@ impl ReliefGrid {
     }
 }
 
-fn v3(v: &Value, what: &str) -> Result<V3> {
+pub(crate) fn v3(v: &Value, what: &str) -> Result<V3> {
     match v {
         Value::Table(t) => {
             let z: Option<f32> = t.get(3)?;
@@ -71,7 +71,7 @@ fn body_of(v: &Value) -> Result<Arc<Sdf>> {
     }
 }
 
-fn solid_of(v: &Value) -> Result<SolidU> {
+pub(crate) fn solid_of(v: &Value) -> Result<SolidU> {
     match v {
         Value::UserData(u) => Ok(u.borrow::<SolidU>()?.clone()),
         o => err(format!("want a solid (body.ellipsoid, body.block, ridge{{}}, terrain{{}}), got {}", o.type_name())),
@@ -137,16 +137,32 @@ fn solid_bounds(s: &SolidU) -> [f32; 4] {
 
 // ---------------------------------------------------------------- the form
 
+/// Anything that holds a lit form: a standalone `Form` or a scene's view.
+pub trait FormHolder: Send + Sync {
+    fn form(&self) -> &Form;
+}
+impl FormHolder for Form {
+    fn form(&self) -> &Form {
+        self
+    }
+}
+
 /// A lit depth buffer of solids.
 pub struct FormU {
-    form: Arc<Form>,
-    parts: u16,
+    pub src: Arc<dyn FormHolder>,
+    pub parts: u16,
+}
+
+impl FormU {
+    fn f(&self) -> &Form {
+        self.src.form()
+    }
 }
 
 /// A direction field read straight from a form (no grid): see `f:field`.
 #[derive(Clone)]
 pub struct FieldU {
-    pub form: Arc<Form>,
+    pub form: Arc<dyn FormHolder>,
     pub kind: FieldKind,
     pub span: f32,
 }
@@ -175,17 +191,20 @@ impl FieldU {
     /// is `fallback` (0 = left to right).
     pub fn angle(&self, fallback: f32) -> Box<dyn Fn(f32, f32) -> f32 + Sync> {
         let (form, kind, span) = (self.form.clone(), self.kind, self.span);
-        Box::new(move |x, y| match kind {
-            FieldKind::Fall => form.sample(x, y).map_or(fallback, |s| s.fall()),
-            FieldKind::Across => form.sample(x, y).map_or(fallback, |s| s.across()),
-            FieldKind::Edge => {
-                if form.sample(x, y).is_some() { form.edge_angle(x, y, span) } else { fallback }
+        Box::new(move |x, y| {
+            let form = form.form();
+            match kind {
+                FieldKind::Fall => form.sample(x, y).map_or(fallback, |s| s.fall()),
+                FieldKind::Across => form.sample(x, y).map_or(fallback, |s| s.across()),
+                FieldKind::Edge => {
+                    if form.sample(x, y).is_some() { form.edge_angle(x, y, span) } else { fallback }
+                }
             }
         })
     }
 }
 
-fn shade_table(lua: &Lua, s: &Shade) -> Result<Table> {
+pub(crate) fn shade_table(lua: &Lua, s: &Shade) -> Result<Table> {
     let t = lua.create_table()?;
     t.set("turn", s.turn)?;
     t.set("direct", s.direct)?;
@@ -224,7 +243,7 @@ impl UserData for FormU {
         f.add_field_method_get("parts", |_, fu| Ok(fu.parts));
     }
     fn add_methods<M: UserDataMethods<Self>>(m: &mut M) {
-        m.add_method("sample", |lua, fu, (x, y): (f32, f32)| match fu.form.sample(x, y) {
+        m.add_method("sample", |lua, fu, (x, y): (f32, f32)| match fu.f().sample(x, y) {
             None => Ok(Value::Nil),
             Some(s) => {
                 let t = lua.create_table()?;
@@ -232,15 +251,15 @@ impl UserData for FormU {
                 Ok(Value::Table(t))
             }
         });
-        m.add_method("shade", |lua, fu, (x, y): (f32, f32)| shade_table(lua, &fu.form.shade(x, y)));
-        m.add_method("lit_at", |_, fu, (x, y, soft): (f32, f32, Option<f32>)| Ok(fu.form.shade(x, y).lit(soft.unwrap_or(0.12))));
-        m.add_method("value", |_, fu, (x, y): (f32, f32)| Ok(fu.form.shade(x, y).value));
-        m.add_method("fall", |_, fu, (x, y): (f32, f32)| Ok(fu.form.fall(x, y)));
-        m.add_method("across", |_, fu, (x, y): (f32, f32)| Ok(fu.form.across(x, y)));
-        m.add_method("part", |_, fu, (x, y): (f32, f32)| Ok(fu.form.part(x, y)));
-        m.add_method("dist", |_, fu, (x, y, far): (f32, f32, Option<f32>)| Ok(fu.form.dist(x, y, far.unwrap_or(1e9))));
-        m.add_method("bend", |_, fu, (x, y, span): (f32, f32, Option<f32>)| Ok(fu.form.bend(x, y, span.unwrap_or(2.5))));
-        m.add_method("edge_angle", |_, fu, (x, y, span): (f32, f32, Option<f32>)| Ok(fu.form.edge_angle(x, y, span.unwrap_or(2.5))));
+        m.add_method("shade", |lua, fu, (x, y): (f32, f32)| shade_table(lua, &fu.f().shade(x, y)));
+        m.add_method("lit_at", |_, fu, (x, y, soft): (f32, f32, Option<f32>)| Ok(fu.f().shade(x, y).lit(soft.unwrap_or(0.12))));
+        m.add_method("value", |_, fu, (x, y): (f32, f32)| Ok(fu.f().shade(x, y).value));
+        m.add_method("fall", |_, fu, (x, y): (f32, f32)| Ok(fu.f().fall(x, y)));
+        m.add_method("across", |_, fu, (x, y): (f32, f32)| Ok(fu.f().across(x, y)));
+        m.add_method("part", |_, fu, (x, y): (f32, f32)| Ok(fu.f().part(x, y)));
+        m.add_method("dist", |_, fu, (x, y, far): (f32, f32, Option<f32>)| Ok(fu.f().dist(x, y, far.unwrap_or(1e9))));
+        m.add_method("bend", |_, fu, (x, y, span): (f32, f32, Option<f32>)| Ok(fu.f().bend(x, y, span.unwrap_or(2.5))));
+        m.add_method("edge_angle", |_, fu, (x, y, span): (f32, f32, Option<f32>)| Ok(fu.f().edge_angle(x, y, span.unwrap_or(2.5))));
         // f:field("fall" | "across" | "edge", span?): an angle field for work{angle=}
         m.add_method("field", |_, fu, (kind, span): (String, Option<f32>)| {
             let kind = match kind.as_str() {
@@ -249,7 +268,7 @@ impl UserData for FormU {
                 "edge" => FieldKind::Edge,
                 o => return err(format!("field {o:?}: \"fall\", \"across\" or \"edge\"")),
             };
-            Ok(FieldU { form: fu.form.clone(), kind, span: span.unwrap_or(2.5) })
+            Ok(FieldU { form: fu.src.clone(), kind, span: span.unwrap_or(2.5) })
         });
         // masks
         m.add_method("parts_mask", |_, fu, parts: Value| {
@@ -259,7 +278,7 @@ impl UserData for FormU {
                 Value::Nil => (1..=fu.parts).collect(),
                 o => return err(format!("parts_mask: want a part or a list, got {}", o.type_name())),
             };
-            Ok(wrap(fu.form.mask(|s| if ps.contains(&s.part) { 1.0 } else { 0.0 })))
+            Ok(wrap(fu.f().mask(|s| if ps.contains(&s.part) { 1.0 } else { 0.0 })))
         });
         // f:lit{parts=, soft=}: the light family; f:shadow{...}: the rest
         m.add_method("lit", |_, fu, o: Option<Table>| {
@@ -268,7 +287,7 @@ impl UserData for FormU {
             }
             let ps = parts_of(o.as_ref(), fu.parts)?;
             let soft = o.as_ref().map(|o| num(o, "soft")).transpose()?.flatten().unwrap_or(0.12);
-            Ok(wrap(fu.form.mask(|s| if ps.contains(&s.part) { s.shade.lit(soft) } else { 0.0 })))
+            Ok(wrap(fu.f().mask(|s| if ps.contains(&s.part) { s.shade.lit(soft) } else { 0.0 })))
         });
         m.add_method("shadow", |_, fu, o: Option<Table>| {
             if let Some(o) = &o {
@@ -276,7 +295,7 @@ impl UserData for FormU {
             }
             let ps = parts_of(o.as_ref(), fu.parts)?;
             let soft = o.as_ref().map(|o| num(o, "soft")).transpose()?.flatten().unwrap_or(0.12);
-            Ok(wrap(fu.form.mask(|s| if ps.contains(&s.part) { 1.0 - s.shade.lit(soft) } else { 0.0 })))
+            Ok(wrap(fu.f().mask(|s| if ps.contains(&s.part) { 1.0 - s.shade.lit(soft) } else { 0.0 })))
         });
         // f:silhouette{parts=, soft=0.4, haze={k, visibility}}: the outline, its
         // edge soft + k·aerial(dist, visibility)² units wide
@@ -287,7 +306,7 @@ impl UserData for FormU {
             let ps = parts_of(o.as_ref(), fu.parts)?;
             let soft = o.as_ref().map(|o| num(o, "soft")).transpose()?.flatten().unwrap_or(0.4);
             let haze = o.as_ref().map(|o| pair(o, "haze")).transpose()?.flatten();
-            Ok(wrap(fu.form.silhouette(&ps, |s| match haze {
+            Ok(wrap(fu.f().silhouette(&ps, |s| match haze {
                 Some((k, vis)) => soft + k * aerial(s.dist, vis).powi(2),
                 None => soft,
             })))
@@ -302,10 +321,10 @@ impl UserData for FormU {
                 span = num(o, "span")?.unwrap_or(span);
                 concave = o.get::<Option<bool>>("concave")?.unwrap_or(false);
             }
-            let mut e = fu.form.edges(turn, step, span);
+            let mut e = fu.f().edges(turn, step, span);
             if concave {
                 let f = e.f;
-                let form = fu.form.clone();
+                let form = fu.f();
                 let hollow = Mask::from_fn(f, |x, y| paint::smoothstep(0.3, 0.7, -form.bend(x, y, span)));
                 e = e.mul(&hollow);
             }
@@ -314,13 +333,13 @@ impl UserData for FormU {
         // f:mask(function(s) ... end): any rule over samples, at every pixel
         // on the form (serial; `s` is reused: copy what you keep)
         m.add_method("mask", |lua, fu, g: mlua::Function| {
-            let f = fu.form.f;
+            let f = fu.f().f;
             let mut data = vec![0.0f32; f.w * f.h];
             let t = lua.create_table()?;
             let inv = 1.0 / f.scale;
             for y in 0..f.h {
                 for x in 0..f.w {
-                    if let Some(s) = fu.form.sample((x as f32 + 0.5) * inv, (y as f32 + 0.5) * inv) {
+                    if let Some(s) = fu.f().sample((x as f32 + 0.5) * inv, (y as f32 + 0.5) * inv) {
                         fill_sample(lua, &t, &s)?;
                         let v: f32 = g.call(t.clone())?;
                         data[y * f.w + x] = v.clamp(0.0, 1.0);
@@ -493,7 +512,7 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
             form.light(light_of(&l)?);
         }
         crate::api::note_bytes(f.w * f.h * 28);
-        Ok(FormU { form: Arc::new(form), parts })
+        Ok(FormU { src: Arc::new(form), parts })
     })?)?;
 
     g.set("aerial", lua.create_function(|_, (d, vis): (f32, f32)| Ok(aerial(d, vis)))?)?;

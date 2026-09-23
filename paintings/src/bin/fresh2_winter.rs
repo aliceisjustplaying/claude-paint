@@ -71,7 +71,7 @@ fn main() {
     let sky_col = |_x: f32, y: f32| -> Rgb {
         let t = (y / HORIZON).clamp(0.0, 1.0);
         gradient(
-            &[(0.0, hex("#7b7f92")), (0.3, hex("#9c9ba8")), (0.58, hex("#bdb3b3")), (0.8, hex("#d6c9b3")), (0.93, hex("#e1d6ba")), (1.0, hex("#ddd5bf"))],
+            &[(0.0, hex("#7b7f92")), (0.3, hex("#9c9aa9")), (0.56, hex("#c0aeb2")), (0.72, hex("#d2bfb4")), (0.84, hex("#dccbb2")), (0.94, hex("#e3d7b9")), (1.0, hex("#ddd5bf"))],
             t,
             Mix::Light,
         )
@@ -199,7 +199,25 @@ fn main() {
         c.dry();
     }
 
+    // a far range behind the wooded ridge, only a pale blue-violet shape in
+    // the mist, higher on the left
+    let far_n = Fbm::new(13, 4, 180.0);
+    let far = f.per_column(|x| HORIZON - 40.0 - 18.0 * smoothstep(620.0, 80.0, x) + 9.0 * far_n.get(x, 0.0) + 3.0 * far_n.get(x * 3.0, 4.0));
+    let far_m = Mask::from_fn(f, |x, y| smoothstep(far(x) - 0.8, far(x) + 0.8, y) * (1.0 - smoothstep(ridge(x) + 2.0, ridge(x) + 4.0, y)));
+
     // ------------------------------------------------------------- distance
+    if o.stage("far", &mut c, &mut rng) {
+        // stippled, aimed a little darker and cooler than the sky behind it,
+        // fading into the glow at its foot
+        let fc = |x: f32, y: f32| -> Rgb {
+            let t = smoothstep(far(x), HORIZON - 8.0, y);
+            mix(mix(sky_col(x, y), hex("#8e8ea3"), 0.42, Mix::Light), sky_col(x, y), 0.55 * t, Mix::Light)
+        };
+        let fs = Stipple::new(Tool::stippler(1.8)).mixed(pal, 0.45).color(fc).coverage(|_, _| 2.4).pressure(0.5, 0.85).dips(20, 0.4, 0.6);
+        c.stipple(&far_m, &fs, 18);
+        c.dry();
+    }
+
     if o.stage("ridge", &mut c, &mut rng) {
         // the wooded ridge: a flat blue-gray band, short level hatching,
         // darker at its crest where the trees stand against the sky
@@ -750,8 +768,8 @@ fn main() {
             crow(&mut c, (p.0, p.1 - 0.5), 5.0, black, false, &mut rng);
         }
         // two in flight toward the ruin
-        crow(&mut c, (418.0, 300.0), 6.0, black, true, &mut rng);
-        crow(&mut c, (447.0, 318.0), 4.5, black, true, &mut rng);
+        crow(&mut c, (418.0, 300.0), 7.5, black, true, &mut rng);
+        crow(&mut c, (447.0, 318.0), 5.5, black, true, &mut rng);
     }
 
     // --------------------------------------------------------------- stones

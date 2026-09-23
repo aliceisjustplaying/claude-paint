@@ -112,6 +112,17 @@ is built outside the stages; every stage only paints.
     gray-brown, heaviest in the lower corners, never zero anywhere.
 15. **finish**: varnish, and cracks retuned for this ground (see friction).
 
+Also, between the figure and the fence: **tracks** (the walker's
+footprints, paired oval hollows along a path on the brook's right bank,
+sized and spaced in perspective, from his feet to the lower right edge);
+**stones** (four field stones in the lower left, each an irregular clipped
+mass in dark stone colors from a stone family palette, lit on its left
+shoulder, a snow cap clipped to its upper part down to a wavy line, snow
+stippled against its foot and a stippled shadow toward the viewer); and in
+the snow stage, **lee bands** (broken bands of blue shadow below low drift
+crests, stippled, thin far off and wide near). The spruces got a stippled
+shaded footing.
+
 Later additions to earlier stages: thin stratus bands low in the glow
 (stippled, no strokes); the moon's glow stippled; the crescent filled with
 ~260 short arc-wise touches clipped to the crescent mask (sharp horns);
@@ -231,10 +242,73 @@ line, with a soft blue cast shadow toward the viewer.
     round puddle). *Workaround:* a stippled shadow whose coverage falls off
     across and along a line, so it softens by density, like Friedrich's
     mist.
-19. **`--stop` after a resumed stage and the stage's own output are hard
+19. **Colors derived from my own color field drift from what is actually
+    on the canvas, and stipple/handling color closures can't look.** The
+    oak's and the stones' shadows were mixed as "the snow, bluer"
+    (`mix(snow_col, blue, 0.4)`), but after the lay-in, body, lee bands and
+    seam passes the real snow down there is darker than `snow_col`, so the
+    "shadows" came out *lighter* than the snow (pale halos round the stones,
+    a pale stripe from the oak). The closures run while the canvas is
+    borrowed, so they can't sample it. *Workaround:* sample the canvas beside
+    the motif *before* the pass (`c.sample` either side) and mix from that.
+    A relative color in `Stipple`/`Handling` ("what is under, 0.05 darker and
+    bluer") would be the painter's actual intention; `Canvas::aim` covers
+    the paint side of this but not the target.
+20. **Clipped edges of thick paint are outlined by the raking light.** The
+    moon and the stones' snow caps, painted through a clip mask, get a thin
+    dark dotted line along the edge at 3200px: the film steps up at the clip
+    and `relief` shades the step. Thinning the paint (more medium, less
+    load) cured the moon; it only reduced it on the stones. A real painter
+    wouldn't leave a cliff-edge of paint at a stencil line; a soft-edged
+    clip (paint thinning over the last half-unit of the mask) would avoid it.
+21. **`--stop` after a resumed stage and the stage's own output are hard
     to tell apart.** `--resume sky --stop sky` repainted the sky (8.6 s)
     instead of saying there is nothing to do. Minor.
 
 ## Critique
 
-(at the end)
+What works:
+- **The big design reads as Friedrich:** a low horizon under a wide, still,
+  stippled dusk sky; a single dark stag-headed oak against the afterglow; the
+  ruined choir small and central in the mist; the evergreens set against
+  the dead tree; one small figure seen from behind, walking into the
+  picture. At 1000px it is a calm, cold, legible picture with no digital
+  banding in the sky.
+- **The sky** is the best passage: lay-in, badger, two stipple passes and
+  faint stipple stratus give a luminous grain with no stroke direction, and
+  the moon's glow is built the same way.
+- **The oak** is a real grown tree (bud-based growth) gnarled by my
+  displacement field, with snow on the upper side of the level limbs, bark
+  streaks and a cool rim; it stands in the snow, cut by it.
+- **Particular details at 3200px:** snow on the ruin's broken tops and
+  sills, lit window reveals, crows in flight as thin Ms, the figure's cap,
+  stick and rim light, footprints trailing to the viewer, a broken rail
+  hanging into the snow, snow caps on the posts.
+
+What still reads as digital or weak:
+- **The snowfield is too even and too pale in the middle distance.** The
+  body pass's soft blotches read more as fog than as a snow surface; the
+  lee bands help at 3200px but read as dotted lines at some depths. Real
+  snow at dusk would carry more of the sky's color and more drift form.
+- **The brook is still somewhat "road".** Its meanders are too regular a
+  zig-zag and its width too constant along each reach; the snow crust on
+  the ice reads as cotton at 3200px.
+- **The spruces are stacks of horizontal dabs.** Better than the first
+  polka dots, but they lack the dense, dark, closely hatched mass of
+  Friedrich's firs ("short hatched strokes" [NG pp.49–50]); I painted them
+  with drooping gesture strokes rather than hatching.
+- **The ridge** is a uniform blue-gray band with a mottled stipple texture
+  ("granite" at 3200px) and a hard top line; it wants a few far trees or a
+  second, paler range for depth.
+- **The stones** look like little cakes (white top, dark flat underside)
+  with a dotted dark rim at the cap edge (friction 20).
+- **The figure** is a legible silhouette but crude at 3200px: legs are two
+  sticks.
+- **Color:** the painting is a little gray overall; Friedrich's winter dusk
+  would have a stronger mauve-rose band above the straw glow and more
+  violet in the snow shadows. The final veil helped the edges; it didn't
+  deepen the color.
+- **No underdrawing.** Friedrich's graphite/ink underdrawing, sometimes
+  visible through thin paint [CATS p.132; NG pp.49, 58], is absent; with
+  more time I'd rule the ruin and draw the oak in a lean dark line first
+  and let it shimmer through.

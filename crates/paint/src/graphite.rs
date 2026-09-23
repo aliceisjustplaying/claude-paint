@@ -162,10 +162,10 @@ pub struct Drawing {
     /// The deposit, per pixel of the window (the canvas's optical buffers).
     cells: Vec<Cell>,
     /// The drawn lines as geometry, per pixel of the whole canvas (not just
-    /// the window of a crop render): 1 on a line drawn with ordinary
-    /// pressure, fading as the pressure goes to zero. Independent of the
-    /// tooth, the grain and wet paint, so it is the same in a crop render
-    /// and a whole one.
+    /// the window of a crop render): the coverage each line would lay on a
+    /// perfectly smooth ground (the lead's rate and cap at the pressure),
+    /// with no tooth, no grain and no wet paint to skip, so it is continuous
+    /// along the line and the same in a crop render and a whole one.
     guide: Vec<f32>,
     /// What fixative bound of the guide: the eraser can't lift below this.
     guide_floor: Option<Vec<f32>>,
@@ -466,9 +466,11 @@ impl Drawing {
 
 /// Lay a mark's line into the guide (a whole-canvas buffer of frame `wf`):
 /// the path with its width `wid` (units; at least two pixels, so it samples
-/// as an unbroken line), as firm as the point touches.
-fn guide_line(g: &mut [f32], wf: crate::canvas::Frame, pts: &[(f32, f32)], wid: &[f32], pressure: &[f32]) {
+/// as an unbroken line), laying what `lead` lays on a smooth ground.
+fn guide_line(g: &mut [f32], wf: crate::canvas::Frame, lead: &Lead, pts: &[(f32, f32)], wid: &[f32], pressure: &[f32]) {
     let pxu = 1.0 / wf.scale;
+    // (pixel, coverage, pressure); one pass per pixel, the nearest
+    let mut hits: Vec<(usize, f32, f32)> = Vec::new();
     for i in 0..pts.len() - 1 {
         let (a, b) = (pts[i], pts[i + 1]);
         let (ta, tb) = (touch(pressure[i]), touch(pressure[i + 1]));
@@ -488,13 +490,19 @@ fn guide_line(g: &mut [f32], wf: crate::canvas::Frame, pts: &[(f32, f32)], wid: 
                 let t = (((xu - a.0) * dx + (yu - a.1) * dy) / l2).clamp(0.0, 1.0);
                 let d = ((xu - a.0 - t * dx).powi(2) + (yu - a.1 - t * dy).powi(2)).sqrt();
                 let w = (wid[i] + (wid[i + 1] - wid[i]) * t).max(2.0 * pxu);
-                let v = (0.5 - (d - 0.5 * w) / pxu).clamp(0.0, 1.0) * (ta + (tb - ta) * t);
-                let k = y * wf.w + x;
-                if v > g[k] {
-                    g[k] = v;
+                let cov = (0.5 - (d - 0.5 * w) / pxu).clamp(0.0, 1.0);
+                if cov > 0.0 {
+                    hits.push((y * wf.w + x, cov, pressure[i] + (pressure[i + 1] - pressure[i]) * t));
                 }
             }
         }
+    }
+    hits.sort_unstable_by(|p, q| p.0.cmp(&q.0).then(q.1.total_cmp(&p.1)));
+    hits.dedup_by_key(|h| h.0);
+    for (k, cov, p) in hits {
+        let dep = (lead.rate * cov * touch(p)).clamp(0.0, 1.0);
+        let cap = lead.cap * (0.55 + 0.45 * p);
+        g[k] += (cap - g[k]).max(0.0) * dep;
     }
 }
 
@@ -559,7 +567,7 @@ impl Canvas {
                 }
             }
         }
-        guide_line(&mut self.drawing_mut().guide, f.whole(), pts, &wid, &mark.pressure);
+        guide_line(&mut self.drawing_mut().guide, f.whole(), lead, pts, &wid, &mark.pressure);
         // one deposit per pixel: the nearest pass of the line over it
         hits.sort_unstable_by(|p, q| p.0.cmp(&q.0).then(q.1.total_cmp(&p.1)));
         hits.dedup_by_key(|h| h.0);
@@ -708,17 +716,19 @@ impl Canvas {
     }
 
     /// The drawing as geometry: where the lines were drawn, over the whole
-    /// canvas (a crop render has all of it too). 1 on a line drawn with
-    /// ordinary pressure (at least two pixels wide), fading as the pressure goes
-    /// to zero; lifted by the eraser (never below what fixative bound).
-    /// Unlike `drawing_mask` it follows the line continuously, not the
-    /// grain of the deposit, and paint over the drawing doesn't change it.
-    /// This is the mask to paint into the drawing with:
-    /// `work(&c.drawing_guide().dilate(1.0), ...)`.
+    /// canvas (a crop render has all of it too), at least two pixels wide.
+    /// It reads like `drawing_mask` would on a perfectly smooth ground: 1 on
+    /// a firm line (0.5 of a pixel covered or more), about 0.5 on a light
+    /// 2H line, fading to nothing as the pressure goes to zero. The eraser
+    /// lifts it (never below what fixative bound); paint over the drawing
+    /// doesn't change it. Unlike `drawing_mask` it follows each line
+    /// continuously instead of breaking up in the tooth and the grain.
+    /// This is the mask to paint into the drawing with, e.g. its firm lines:
+    /// `work(&c.drawing_guide().band(0.7, 1.0, 0.1), ...)`.
     pub fn drawing_guide(&self) -> Mask {
         let whole = self.f.whole();
         match &self.drawing {
-            Some(d) => Mask { f: whole, data: d.guide.clone() },
+            Some(d) => Mask { f: whole, data: d.guide.iter().map(|a| (a / 0.5).min(1.0)).collect() },
             None => Mask::empty(whole),
         }
     }
@@ -840,6 +850,13 @@ mod tests {
         assert!(on.iter().any(|s| s.1 < 0.55), "the deposit itself is beaded (the test shows the difference)");
         // off the line: nothing
         assert_eq!(g.sample(700.0, 300.0), 0.0);
+        // a light 2H line reads fainter than a firm 2B one (band picks)
+        let mut c2 = Style { width_mm: 440.0, ..Style::friedrich_early() }.prepare(1000, 1.4, 11);
+        c2.draw(&Lead::pencil("2H").unwrap(), &hand_line(&[(100.0, 100.0), (400.0, 100.0)], &[0.3], false, true, 0.0, 1), 0.0, 1);
+        c2.draw(&Lead::pencil("2B").unwrap(), &hand_line(&[(100.0, 200.0), (400.0, 200.0)], &[0.6], false, true, 0.0, 1), 0.0, 1);
+        let g2 = c2.drawing_guide();
+        let (light, firm) = (g2.sample(250.0, 100.0), g2.sample(250.0, 200.0));
+        assert!(light > 0.3 && light < 0.65 && firm == 1.0, "2H {light} 2B {firm}");
         let glaze = Pigment::masstone_hiding(hex("#b8c4cc"), 0.98);
         c.glaze(&glaze, None, |_, _| 4.0);
         assert!(c.drawing_guide().data == g.data, "paint doesn't move the guide");

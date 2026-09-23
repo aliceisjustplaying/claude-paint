@@ -25,3 +25,4 @@ Take your time; quality over speed; look at every render before merging.
 - 12 review-4 findings (notes/review4/). Launch failures (twice today) were MY bug: spawning subagents in the same parallel batch as the Bash that creates their worktree, so cwd didn't exist yet. Always create worktrees in an earlier step.
 - fix4-easel merged (5 findings).
 - fix4-engine merged; all 12 review-4 findings fixed. Beaded tree fixed via drawing_guide(). 143 paint + 27 easel tests. Next: amnesia round 4.
+- amnesia round 4 launched 16:51: easel4-free/green/near, same briefs as round 3 plus a paragraph on the drawing tools and a 'could you draw?' question.

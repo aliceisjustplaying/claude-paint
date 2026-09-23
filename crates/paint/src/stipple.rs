@@ -206,11 +206,21 @@ impl<'a> Stipple<'a> {
     /// When `Palette` gains its substrate-aware "aim at the result on the
     /// canvas" API (color stream), call that here (with `coats`) instead of
     /// the `aim_km` workaround.
-    fn paint_for(&self, want: Rgb, seen: Rgb, coverage: f32, rng: &mut Rng) -> Paint {
+    fn paint_for(&self, want: Rgb, seen: Rgb, coverage: f32, memo: &mut Memo, rng: &mut Rng) -> Paint {
         let coats = self.touch_coats() * coverage.max(1.0);
         match self.palette {
             Some((pal, medium0)) => {
-                let (target, medium) = if self.aim {
+                // (the aim is costly; the painter remembers a recipe for a
+                // tone over a tone)
+                // (steps of ~0.5–0.8 % in OKLab: below what a painter mixes for)
+                let q = |c: Rgb, k: f32| {
+                    let l = to_oklab(c);
+                    [(l[0] * k).round() as i32, (l[1] * k).round() as i32, (l[2] * k).round() as i32]
+                };
+                let key = (q(want, 200.0), q(seen, 120.0), (coats * 20.0).round() as i32);
+                let (target, medium) = if let Some(&v) = memo.get(&key) {
+                    v
+                } else if self.aim {
                     // WORKAROUND (until the color stream lands): invert KM for
                     // the paint's own hiding, mix, and correct once for the
                     // hiding of the mixture the palette actually gives. If the
@@ -235,6 +245,7 @@ impl<'a> Stipple<'a> {
                             break;
                         }
                     }
+                    memo.insert(key, (best.1, best.2));
                     (best.1, best.2)
                 } else {
                     (want, medium0)
@@ -256,6 +267,8 @@ impl<'a> Stipple<'a> {
         }
     }
 }
+
+type Memo = std::collections::HashMap<([i32; 3], [i32; 3], i32), (Rgb, f32)>;
 
 /// WORKAROUND for the missing substrate-aware palette API: the paint color
 /// (its appearance at one coat over white, as `Paint::color` means) whose
@@ -284,6 +297,9 @@ struct Plan {
     touch: Touch,
     /// Paint to dip into first (None = keep going with what's on the brush).
     dip: Option<Paint>,
+    /// Where the touches this dip serves are centered, and their coverage:
+    /// the painter mixes for that spot.
+    aim_at: (f32, f32, f32),
     rect: Rect,
 }
 
@@ -408,17 +424,37 @@ impl Canvas {
             .enumerate()
             .map(|(ti, pts)| {
                 let mut rng = Rng::new(seed ^ 0x7111E ^ (ti as u64).wrapping_mul(0xD1B5_4A32_D192_ED03));
-                let mut pts = pts.clone();
-                for i in (1..pts.len()).rev() {
-                    let j = (rng.next_u64() % (i as u64 + 1)) as usize;
-                    pts.swap(i, j);
-                }
+                // the hand works through the passage in small patches, row
+                // by row, back and forth, dabbing about at random within a
+                // patch; a load serves about one patch, so each pile of paint
+                // lands where it was mixed for
+                let cell = (g * (sp.dip_every as f32).sqrt()).max(sp.tool.width * 2.0);
+                let (tx0, ty0) = ((ti % tw) as f32 * tile, (ti / tw) as f32 * tile);
+                let mut keyed: Vec<(u64, (f32, f32))> = pts
+                    .iter()
+                    .map(|&(x, y)| {
+                        let row = ((y - ty0) / cell).max(0.0) as u64;
+                        let col = ((x - tx0) / cell).max(0.0) as u64;
+                        let col = if row.is_multiple_of(2) { col } else { 1_000 - col.min(1_000) };
+                        ((row << 40) | (col << 24) | (rng.next_u64() & 0xFF_FFFF), (x, y))
+                    })
+                    .collect();
+                keyed.sort_by_key(|k| k.0);
+                let pts: Vec<(f32, f32)> = keyed.into_iter().map(|k| k.1).collect();
                 pts.iter()
                     .enumerate()
                     .map(|(k, &(x, y))| {
                         let cv = cov(x, y);
                         // the paint is chosen below, in order
-                        let dip = (k % sp.dip_every == 0).then_some(Paint { color: [0.0; 3], hiding: cv, stiff: 0.0 });
+                        let dip = (k % sp.dip_every == 0).then_some(Paint { color: [0.0; 3], hiding: 0.0, stiff: 0.0 });
+                        let aim_at = if dip.is_some() {
+                            let grp = &pts[k..(k + sp.dip_every).min(pts.len())];
+                            let (sx, sy) = grp.iter().fold((0.0, 0.0), |a, p| (a.0 + p.0, a.1 + p.1));
+                            let (mx, my) = (sx / grp.len() as f32, sy / grp.len() as f32);
+                            (mx, my, cov(mx, my).max(cv * 0.5))
+                        } else {
+                            (x, y, cv)
+                        };
                         let a = sp.drag_angle.map_or(rng.range(0.0, std::f32::consts::TAU), |a| a + rng.normal() * 0.2);
                         let len = sp.drag * rng.range(0.4, 1.6);
                         let touch = Touch {
@@ -429,7 +465,7 @@ impl Canvas {
                             angle: rng.range(0.0, std::f32::consts::TAU),
                         };
                         let rect = touch_footprint(&sp.tool, &touch, f.scale, f.w, f.h).unwrap_or((0, 0, 0, 0));
-                        Plan { touch, dip, rect }
+                        Plan { touch, dip, aim_at, rect }
                     })
                     .collect()
             })
@@ -437,15 +473,18 @@ impl Canvas {
         // trips to the palette, one passage after another (the palette's
         // mixing cache makes the result depend on the order of requests)
         let mut plans = plans;
+        let t_geom = t0.elapsed().as_secs_f32();
         let mut prng = Rng::new(seed ^ 0xD1B);
+        let mut memo = std::collections::HashMap::new();
         for t in plans.iter_mut() {
             for p in t.iter_mut() {
                 if let Some(d) = p.dip.as_mut() {
-                    let (x, y) = p.touch.at;
-                    *d = sp.paint_for((sp.color)(x, y), self.seen_around(x, y, sp.tool.width * 0.6), d.hiding, &mut prng);
+                    let (x, y, cv) = p.aim_at;
+                    *d = sp.paint_for((sp.color)(x, y), self.seen_around(x, y, sp.tool.width * 0.6), cv, &mut memo, &mut prng);
                 }
             }
         }
+        let n_memo = memo.len();
         let n: usize = plans.iter().map(|t| t.len()).sum();
         let first_id = self.next_stroke_ids(n as u32);
         let mut offsets = Vec::with_capacity(plans.len());
@@ -508,7 +547,7 @@ impl Canvas {
             self.wet.touch(x0, y0, x1, y1);
         }
         if std::env::var_os("PAINT_DEBUG").is_some() {
-            eprintln!("stipple: {n} touches, reach {reach:.1}, tiles {tw}x{th} ({tile:.0} units), plan {t_plan:.2}s, total {:.2}s", t0.elapsed().as_secs_f32());
+            eprintln!("stipple: {n} touches, reach {reach:.1}, tiles {tw}x{th} ({tile:.0} units), plan {t_geom:.2}s + paint {:.2}s ({} recipes), total {:.2}s", t_plan - t_geom, n_memo, t0.elapsed().as_secs_f32());
         }
     }
 }

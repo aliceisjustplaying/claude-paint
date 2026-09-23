@@ -69,7 +69,7 @@ fn main() {
     let s2 = Stipple::new(Tool::stippler(1.6))
         .mixed(pal, 0.5)
         .color(glow)
-        .coverage(|_, y| 0.6 + 1.6 * smoothstep(60.0, HORIZON, y))
+        .coverage(|_, y| 2.2 * smoothstep(100.0, HORIZON, y))
         .pressure(0.5, 0.85)
         .dips(24, 0.35, 0.6);
     c.stipple(&pass2_m, &s2, 13);
@@ -92,12 +92,12 @@ fn main() {
     let valley = h - 70.0;
     let mist_cov = move |x: f32, y: f32| {
         let up = (valley - y) / 150.0 + 0.35 * banks.get(x * 0.6, y * 2.5);
-        (1.0 - smoothstep(0.0, 1.0, up)) * 5.0
+        (1.0 - smoothstep(0.0, 1.0, up)) * 3.0
     };
     let mist_m = ridge_m.clone().mul_fn(|x, _| smoothstep(STRIP0, STRIP0 + 4.0, x));
     let mist = Stipple::new(Tool::stippler(2.2))
         .mixed(pal, 0.7)
-        .color(|_, y| mix(hex("#b7bcc0"), hex("#cfcbbd"), smoothstep(valley - 150.0, valley, y), Mix::Light))
+        .color(|_, _| hex("#c3c4bf"))
         .coverage(mist_cov)
         .pressure(0.5, 0.85)
         .dips(16, 0.3, 0.7)

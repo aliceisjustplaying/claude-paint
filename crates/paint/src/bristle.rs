@@ -916,7 +916,8 @@ pub(crate) unsafe fn touch_on(sf: Surf, held: &mut Held, t: &Touch, clip: Option
     // each hair stands for spacing² of the patch; over the touch it lays
     // TOUCH_FILM·lay coats there at full load, spread over the steps it is down
     let spacing_u = touch_half(&tool, p, s) / s * (root_area(tool.kind) / held.bristles.len().max(1) as f32).sqrt();
-    let film = TOUCH_FILM * tool.lay * spacing_u * spacing_u;
+    // a lighter press squeezes less paint out of the tip
+    let film = TOUCH_FILM * tool.lay * spacing_u * spacing_u * (0.4 + 0.6 * p);
     let sums: Vec<f32> = held.bristles.iter().map(|b| (0..steps).map(|k| reach_of(b, at(k).1).max(0.0)).sum()).collect();
     for b in &mut held.bristles {
         b.prev = [None, None];

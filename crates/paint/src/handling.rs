@@ -94,6 +94,11 @@ pub struct Handling<'a> {
     pub scrub: usize,
     /// Clip bristle contact to the mask (crisp, cut-in edges).
     pub clip: bool,
+    /// Look and fill: after the strokes, dab paint into the bare spots the
+    /// strokes left in the region (see `fill`). `None`: on when the pass
+    /// means to cover (coverage ≥ `FILL_FROM`, a loaded brush, not a
+    /// blender or a scrub).
+    pub fill: Option<bool>,
     /// Hug the region's edges: strokes seeded just outside it (within half a
     /// brush) are moved onto its edge, so coverage doesn't thin there
     /// (default on; see `hug`).
@@ -166,6 +171,7 @@ impl<'a> Handling<'a> {
             blender: false,
             scrub: 0,
             clip: false,
+            fill: None,
             hug: true,
             threshold: 0.3,
             ramps: (0.08, 0.15),
@@ -403,6 +409,19 @@ impl<'a> Handling<'a> {
         self.clip = on;
         self
     }
+    /// Look and fill (default: on for a pass that means to cover). Strokes
+    /// placed by hand leave gaps between them where the ground shows; a
+    /// painter covering a passage sees them and dabs paint in. `false`
+    /// leaves them (broken color, a lay-in that lets the ground breathe);
+    /// `true` fills them at any coverage.
+    pub fn fill(mut self, on: bool) -> Self {
+        self.fill = Some(on);
+        self
+    }
+    /// Whether this pass fills the gaps its strokes leave (see `fill`).
+    pub fn fills(&self) -> bool {
+        self.fill.unwrap_or(self.coverage >= FILL_FROM && self.load >= FILL_LOAD && !self.blender && self.scrub == 0)
+    }
     /// Hug the region's edges (default on): a painter carries a passage to
     /// its edge as fully as through its middle. Off: stroke centers fall only
     /// inside the region, and coverage halves along its edges.
@@ -559,9 +578,78 @@ impl Canvas {
             return;
         }
         let clip = if hd.clip && hd.cut_in.is_none() { Some(mask) } else { None };
+        let before = self.wet.current;
         self.run_plans(plans, (ex, ey), gap, &hd.tool, hd, hd.ramps, clip, seed, &mut rng);
+        if hd.fills() {
+            self.fill_gaps(mask, hd, before, clip, seed);
+        }
         if let Some(edge) = &hd.cut_in {
             self.cut_in_edges(mask, edge, hd, seed ^ 0xED6E, &mut rng);
+        }
+    }
+
+    /// Look and fill: find the bare spots the pass (strokes with ids above
+    /// `before`) left inside the region and lay a short stroke through each,
+    /// as a painter covering a passage does. The spots are gathered on a grid
+    /// of cells half a brush wide (units, so any resolution fills the same
+    /// spots); a cell is filled when its bare area is at least 2% of a
+    /// brush width squared, and it is filled once: this is one look, not a
+    /// loop. Deterministic (its own random stream), and it sees only the
+    /// pixels the canvas holds (a crop's margin is wider than a fill stroke
+    /// reaches).
+    fn fill_gaps(&mut self, mask: &Mask, hd: &Handling, before: u32, clip: Option<&Mask>, seed: u64) {
+        let f = self.f;
+        let w = hd.tool.width.max(0.3);
+        let cell = (0.5 * w).max(1.5 / f.scale);
+        let (cw, ch) = ((f.width() / cell).ceil() as usize, (f.height() / cell).ceil() as usize);
+        // per cell: bare pixels and their summed position
+        let mut acc: std::collections::BTreeMap<usize, (u32, f32, f32)> = std::collections::BTreeMap::new();
+        let thr = hd.threshold.max(0.5);
+        for y in 0..f.h {
+            let uy = f.uy(y);
+            for x in 0..f.w {
+                let i = y * f.w + x;
+                let bare = self.wet.stroke[i] <= before || self.wet.vol[i] < FILL_BARE;
+                if !bare {
+                    continue;
+                }
+                let ux = f.ux(x);
+                if mask_at(mask, ux, uy) < thr {
+                    continue;
+                }
+                let k = ((uy / cell) as usize).min(ch - 1) * cw + ((ux / cell) as usize).min(cw - 1);
+                let e = acc.entry(k).or_insert((0, 0.0, 0.0));
+                e.0 += 1;
+                e.1 += ux;
+                e.2 += uy;
+            }
+        }
+        let px_area = 1.0 / (f.scale * f.scale);
+        let least = (0.02 * w * w).max(1.5 * px_area);
+        let mut rng = Rng::new(seed ^ 0xF111_0F11);
+        let drift = crate::noise::Fbm::new((seed as u32) ^ 0xD21F, 3, hd.drift.1);
+        let len = (0.5 * hd.length.0).clamp(w, 2.0 * w);
+        let (mut plans, mut ex, mut ey) = (Vec::new(), 0.0f32, 0.0f32);
+        for (_, (n, sx, sy)) in acc {
+            if n as f32 * px_area < least {
+                continue;
+            }
+            let c = (sx / n as f32, sy / n as f32);
+            let bend = rng.normal() * hd.angle_jitter;
+            let pts = hand_trace(hd, &drift, c.0, c.1, len, bend, &mut rng);
+            let (rect, plan) = finish_plan(self, hd, &hd.tool, c, pts, &mut rng);
+            if let Some(r) = rect {
+                let (px, py) = (c.0 * f.scale, c.1 * f.scale);
+                ex = ex.max((px - r.0 as f32).max(r.2 as f32 - px) / f.scale);
+                ey = ey.max((py - r.1 as f32).max(r.3 as f32 - py) / f.scale);
+            }
+            plans.push((c.0, c.1, rect, plan));
+        }
+        if std::env::var_os("PAINT_DEBUG").is_some() {
+            eprintln!("fill: {} strokes", plans.len());
+        }
+        if !plans.is_empty() {
+            self.run_plans(plans, (ex, ey), w * 2.0, &hd.tool, hd, hd.ramps, clip, seed ^ 0xF111, &mut rng);
         }
     }
 
@@ -982,6 +1070,15 @@ fn carry_in(mask: &Mask, pts: &[(f32, f32)], c: (f32, f32), width: f32, threshol
 
 /// Share of the length tail that is short dabs (the rest are long sweeps).
 const DAB_SHARE: f32 = 0.6;
+/// A pass whose coverage is at least this means to cover its region: it
+/// fills the gaps its strokes leave (see `Handling::fill`). Below it the
+/// strokes lie side by side with ground between them, as asked.
+pub const FILL_FROM: f32 = 1.5;
+/// Least load (share of a full brush) for filling: a nearly dry brush is
+/// dry-brushing on purpose.
+const FILL_LOAD: f32 = 0.25;
+/// Film (coats) under which a pixel of the region reads as bare.
+const FILL_BARE: f32 = 0.12;
 
 /// Mask value at a point; the region continues past the canvas edges.
 fn mask_at(mask: &Mask, x: f32, y: f32) -> f32 {
@@ -1040,7 +1137,7 @@ fn place(hd: &Handling, f: Frame, gap: f32, mean_len: f32, seed: u64, rng: &mut 
                     for _ in 0..n {
                         // rows stay near their line (so neighbors overlap and
                         // no ground shows between them); anywhere along a row
-                        let (u, v) = ((i as f32 + rng.f()) * along + ou, (j as f32 + 0.5 + 0.7 * (rng.f() - 0.5)) * across + ov);
+                        let (u, v) = ((i as f32 + 0.5 + 0.7 * (rng.f() - 0.5)) * along + ou, (j as f32 + 0.5 + 0.7 * (rng.f() - 0.5)) * across + ov);
                         let (x, y) = (pcx + u * ca - v * sa, pcy + u * sa + v * ca);
                         if x < sx || x >= sx + side || y < sy || y >= sy + side {
                             continue;

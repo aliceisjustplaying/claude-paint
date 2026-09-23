@@ -65,7 +65,8 @@ Read all three before you start.
 4. **Keep or undo.** A chunk that fails changes nothing: the canvas, your
    variables (including anything it changed inside tables and closures
    from earlier chunks), the paint in your brushes and the clock go back to
-   how they were before it, and it isn't logged. `easel undo [n]` takes back the last
+   how they were before it, and it isn't logged. This holds at any
+   `--undo`, including `--undo 0`. `easel undo [n]` takes back the last
    n successful chunks (up to `--undo`, 8 by default; each snapshot costs
    about 50 MB at 1000px).
 5. **Step back.** `easel log` prints the program so far. `easel status`
@@ -96,8 +97,16 @@ Read all three before you start.
   Loop variables are read-only: `for i = 1, 3 do i = i + 1 end` is an
   error. Don't write `global` declarations: one `global x` switches its
   chunk to strict mode, and then even `print` must be declared. Plain
-  assignment (`x = 1`) makes a global, as in older Lua. `pairs` walks a
-  table in the same order in every session and every replay.
+  assignment (`x = 1`) makes a global, as in older Lua.
+- **`pairs` and `next` walk a table in the same order in every session and
+  every replay.** A table keyed only by strings, numbers and booleans walks
+  in Lua's own order. A table with any other key (a table, function, mask
+  or other easel value) walks in a fixed order instead: booleans, numbers,
+  strings (each ascending), then the other keys in the order your program
+  created them. That costs a sort per walk, so for a big collection of
+  objects a list and `ipairs` is still the better choice.
+- **`string.gmatch` iterators survive rollback.** An iterator kept in a
+  global resumes where it was before a failed or undone chunk.
 - **Colors** are `"#rrggbb"` strings, `rgb(r, g, b)` (0–255 sRGB) or color
   values from `mix`, `gradient`, `sample` and `pal:mix`. A color value has
   `.r .g .b` (linear), `.value` (luminance), `.L` (OKLab lightness),
@@ -376,6 +385,7 @@ v:sky()  v:land()  v:water()  v:shadows()  v:contact(0.25)  v:reflections()  v:b
 v:at(x, y)      -- {what="sky"|"ground"|"water"|"body", body, at={X, Y, Z}, n, dist, shade, lit}
 v:mirror(x, y)  -- what calm water shows there: {body, src={x, y}, shade, fresnel, travel} or nil
 v.form          -- the bodies as a form: v.form:lit{parts={v:part(stone)}}, v.form:field("fall"), ...
+                -- (v.form.parts counts visible bodies only; v:part(proxy) is 0)
 w:to_ground(x, y)  w:project(X, Y, Z)  w:scale_at(Z)  w:aerial(Z)  w:shadow_angle(x, y)  w:sun_canvas()
 w:ribbon({{-2.6, 4.5}, {-1.6, 8.6}, {-0.4, 9.7}}, 1.1)   -- a path on the ground (width m) as a mask
 w:recede({2, 6}, {0.3, 4}, 8)                             -- spots stepping away: posts, footprints
@@ -476,6 +486,8 @@ can edit it by hand and replay. If you do, keep the markers.
   brush strokes along tree limbs ≈ 0.05 s
 - `look` ≈ 0.04 s, `look --dried` ≈ 0.3 s
 - replaying the example: 18–29 s at 1000px (see notes/easel.md for 3200px)
+- creating Lua tables and closures costs about 15% more than in plain Lua
+  (the easel numbers them for `pairs`); arithmetic is unaffected
 - rollback bookkeeping ≈ 1 µs per live Lua table per chunk (a tree's 4,000
   tables: under 5 ms; a meadow of 9,000 tufts kept in a global: 0.1 s). Keep
   big lists `local` when later chunks don't need them.
@@ -484,10 +496,14 @@ can edit it by hand and replay. If you do, keep the markers.
 ## Limits
 
 - Rollback restores everything reachable from your globals: tables, their
-  metatables and the variables your functions close over. A coroutine
-  suspended across chunks is not restored. After a rollback that restored a
-  table the failed chunk had changed, `pairs` over that table may visit keys
-  in a different order than a replay would; `easel check` detects this, and
-  `ipairs` and numeric loops are unaffected.
+  metatables, the variables your functions close over and `gmatch`
+  iterators. A coroutine suspended across chunks is not restored. After a
+  rollback that restored a string-keyed table the failed chunk had changed,
+  `pairs` over that table may visit keys in a different order than a replay
+  would; `easel check` detects this, and `ipairs`, numeric loops and tables
+  with object keys are unaffected.
+- A table that once held object keys and then lost them all may keep an
+  order that depends on the process until it grows again. Build a fresh
+  table if you rely on its `pairs` order.
 - Sessions paint the whole canvas. `easel run --crop` renders a window
   of a finished program.

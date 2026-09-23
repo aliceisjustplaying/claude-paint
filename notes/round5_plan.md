@@ -48,3 +48,4 @@ spectral) is split into single-defect fixes the loops pull in.
 - Loop 0 (baseline): blind critic scoring 8 paintings (r2 x3, r3 x3, r4 green/near) shuffled as P1..P8; key in scratch judge0_key.txt.
 - Loop 1 started 18:42: loop1-green and loop1-near rework the r4 paintings against the critic's defects (25 min, sketchbook); loop1-halo fixes the pale halos (tool). Then re-judge with anchors.
 - spectral merged as optional module (not integrated; verdict in notes/spectral.md).
+- r4 free done: dolmen AGAIN (same motif as r3 free): convergence on motif, not just mood.

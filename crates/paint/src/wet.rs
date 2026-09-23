@@ -5,8 +5,9 @@
 //! masstone (mixing is linear in latent space, weighted by volume) and its
 //! Kubelka–Munk scattering per coat (mixed linearly by volume, as K and S mix
 //! in the two-constant KM model; absorption follows from masstone and S).
-//! Brushes exchange paint with this layer. `Canvas::dry` bakes it into the
-//! dry picture with Kubelka–Munk.
+//! Brushes exchange paint with this layer. It ages as the painting's clock
+//! runs (`Canvas::wait`, see `drying`); `Canvas::dry` waits until it is
+//! touch-dry, baking it into the dry picture with Kubelka–Munk.
 //!
 //! **What a paint's color means.** `Paint::color` is its *masstone*: the
 //! color the paint has laid thick, which is also how it looks laid over
@@ -22,20 +23,20 @@
 use crate::canvas::Canvas;
 use crate::color::{Rgb, luminance};
 use crate::pigment::{Pigment, hiding_of, scatter_for};
-use crate::surface::COAT_UM;
-use rayon::prelude::*;
 
 pub const LAT: usize = mixbox::LATENT_SIZE;
 pub type Latent = [f32; LAT];
 /// Paint properties mixed by volume alongside the pigment: [KM scattering per
-/// coat, stiffness].
-/// Stiffness 0 = fluid, medium-rich glaze; 1 = stiff tube paint.
-pub type Prop = [f32; 2];
+/// coat, stiffness, drying rate].
+/// Stiffness 0 = fluid, medium-rich glaze; 1 = stiff tube paint. Drying rate
+/// relative to average paint (see `drying::drier`).
+pub type Prop = [f32; 3];
 
 #[inline]
 fn lerp_prop(p: &mut Prop, q: Prop, a: f32) {
-    p[0] += (q[0] - p[0]) * a;
-    p[1] += (q[1] - p[1]) * a;
+    for k in 0..3 {
+        p[k] += (q[k] - p[k]) * a;
+    }
 }
 
 /// A paint as squeezed from the tube and thinned with medium.
@@ -55,6 +56,11 @@ pub struct Paint {
     /// Sets how the paint levels as it dries (see `surface::settle`). How
     /// much paint goes on the brush is the separate `amount` of `Held::load`.
     pub stiff: f32,
+    /// How fast it dries, relative to average paint (1): lead white and
+    /// umber about 2, bone black and lakes 0.3–0.4 (`drying::drier`). With
+    /// film thickness and fat (low `stiff`) it sets how long the paint stays
+    /// open (see `Canvas::wait`).
+    pub drying: f32,
 }
 
 impl Paint {
@@ -62,11 +68,11 @@ impl Paint {
     /// ratio: over black ÷ over white; 0.05 = glaze, 0.5 = scumble,
     /// 0.92 = body).
     pub fn new(color: Rgb, hiding: f32, stiff: f32) -> Self {
-        Paint { color, scatter: scatter_for(luminance(color), hiding), stiff }
+        Paint { color, scatter: scatter_for(luminance(color), hiding), stiff, drying: 1.0 }
     }
     /// A paint of masstone `color` that scatters `scatter` per coat.
     pub fn km(color: Rgb, scatter: f32, stiff: f32) -> Self {
-        Paint { color, scatter, stiff }
+        Paint { color, scatter, stiff, drying: 1.0 }
     }
     pub fn body(color: Rgb) -> Self {
         Paint::new(color, 0.92, 1.0)
@@ -82,6 +88,11 @@ impl Paint {
     /// This paint with stiffness `stiff`.
     pub fn with_stiff(self, stiff: f32) -> Self {
         Paint { stiff, ..self }
+    }
+    /// This paint drying at `rate` relative to average paint (see
+    /// `drying::drier`: lead white 2, bone black 0.4).
+    pub fn with_drying(self, rate: f32) -> Self {
+        Paint { drying: rate, ..self }
     }
     /// Hiding power of one coat (contrast ratio), derived from the
     /// scattering; for reporting (it rounds to 1 for strong scatterers).
@@ -138,7 +149,7 @@ impl Paint {
             }
         }
         let (color, scatter) = fit(0.5 * (lo + hi));
-        Paint { color, scatter, stiff }
+        Paint { color, scatter, stiff, drying: 1.0 }
     }
     pub fn latent(&self) -> Latent {
         mixbox::linear_float_rgb_to_latent(&self.color)
@@ -161,7 +172,7 @@ impl Paint {
 pub(crate) struct Wet {
     pub(crate) vol: Vec<f32>,
     pub(crate) lat: Vec<Latent>,
-    /// [hiding, stiffness] of the wet paint.
+    /// [scattering, stiffness, drying rate] of the wet paint.
     pub(crate) hide: Vec<Prop>,
     /// Which stroke last laid paint here (a stroke barely re-picks its own paint).
     pub(crate) stroke: Vec<u32>,
@@ -173,11 +184,13 @@ pub(crate) struct Wet {
     pub(crate) current: u32,
     /// Dirty bounding box in pixels (x0, y0, x1, y1), if any paint is wet.
     pub(crate) dirty: Option<(usize, usize, usize, usize)>,
+    /// The painting's clock and how far each film has dried (`drying`).
+    pub(crate) clock: crate::drying::Clock,
 }
 
 impl Wet {
     pub fn new(n: usize) -> Self {
-        Wet { vol: vec![0.0; n], lat: vec![[0.0; LAT]; n], hide: vec![[0.0, 0.5]; n], stroke: vec![0; n], touched: vec![0; n], floor: vec![0.0; n], current: 0, dirty: None }
+        Wet { vol: vec![0.0; n], lat: vec![[0.0; LAT]; n], hide: vec![[0.0, 0.5, 1.0]; n], stroke: vec![0; n], touched: vec![0; n], floor: vec![0.0; n], current: 0, dirty: None, clock: Default::default() }
     }
 
     pub fn touch(&mut self, x0: usize, y0: usize, x1: usize, y1: usize) {
@@ -206,54 +219,6 @@ pub fn mix_into(rv: &mut f32, rl: &mut Latent, rh: &mut Prop, v: f32, lat: &Late
 
 
 impl Canvas {
-    /// Let the wet paint dry: the film levels over the surface (thin fluid
-    /// paint pools in the hollows, stiff paint keeps its marks), then it is
-    /// composited over the dry picture with Kubelka–Munk using the settled
-    /// thickness, and the wet layer is cleared.
-    pub fn dry(&mut self) {
-        let Some((x0, y0, x1, y1)) = self.wet.dirty.take() else { return };
-        let (w, h) = (self.f.w, self.f.h);
-        let (x1, y1) = (x1.min(w), y1.min(h));
-        let pad = ((2.0 / self.px_mm()).ceil() as usize).max(2);
-        let ex = (x0.saturating_sub(pad), y0.saturating_sub(pad), (x1 + pad).min(w), (y1 + pad).min(h));
-        let (ew, eh) = (ex.2 - ex.0, ex.3 - ex.1);
-        let mut add = vec![0.0f32; ew * eh];
-        let mut stiff = vec![0.5f32; ew * eh];
-        for y in 0..eh {
-            for x in 0..ew {
-                let i = (ex.1 + y) * w + ex.0 + x;
-                let v = self.wet.vol[i];
-                if v >= 1e-5 {
-                    add[y * ew + x] = v * COAT_UM;
-                    stiff[y * ew + x] = self.wet.hide[i][1];
-                }
-            }
-        }
-        let t = self.settle(ex, &add, &stiff);
-        let wet = &mut self.wet;
-        let (lat, hide) = (&wet.lat, &wet.hide);
-        self.px[ex.1 * w..ex.3 * w]
-            .par_chunks_mut(w)
-            .zip(wet.vol[ex.1 * w..ex.3 * w].par_chunks_mut(w))
-            .zip(self.film[ex.1 * w..ex.3 * w].par_chunks_mut(w))
-            .enumerate()
-            .for_each(|(j, ((px, vv), ff))| {
-                let y = ex.1 + j;
-                for x in ex.0..ex.2 {
-                    if vv[x] < 1e-5 {
-                        vv[x] = 0.0;
-                        continue;
-                    }
-                    let ti = t[j * ew + x - ex.0] / COAT_UM;
-                    let i = y * w + x;
-                    let c = mixbox::latent_to_linear_float_rgb(&lat[i]);
-                    px[x] = Pigment::masstone(c, hide[i][0]).over(px[x], ti);
-                    ff[x] += ti;
-                    vv[x] = 0.0;
-                }
-            });
-    }
-
     /// What the painter sees at pixel `i`: the dry picture with any wet paint
     /// on it (at its laid thickness, before it levels).
     pub(crate) fn look_px(&self, i: usize) -> Rgb {

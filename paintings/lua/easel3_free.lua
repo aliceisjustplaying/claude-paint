@@ -201,7 +201,7 @@ seaclip = seam - landm:grow(1)
 glaze(seaclip * mask(function(x, y) return smoothstep(HZ - 10, HZ + 120, y) end), {color="#2a3350", coats=0.16, pigment="transparent"})
 
 --@ chunk 14 · clock 3150
-gclip = seaclip - (oakA:mask() + oakB:mask()):grow(1.5) - stonesil:grow(1)
+gclip = seaclip - (oakA:mask() + oakB:mask()):grow(1.5) - stonesil:grow(1) - below(function(x) return moundtop(x) - 2 end) * mask(function(x, y) return (x > 120 and x < 540) and 1 or 0 end)
 
 
 local lt, dk = brush("rigger", 0.9), brush("round", 1.6)

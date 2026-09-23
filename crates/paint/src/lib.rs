@@ -24,6 +24,7 @@ pub mod pigment;
 pub mod rng;
 mod sched;
 pub mod shape;
+pub mod spectral;
 pub mod growth;
 pub mod wet;
 pub mod bristle;

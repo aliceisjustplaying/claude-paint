@@ -52,6 +52,42 @@ pub fn scatter_for(r: f32, hiding: f32) -> f32 {
     (0.5 * (lo + hi)).exp()
 }
 
+/// K and S of one channel (or one wavelength) of a unit layer that
+/// reflects `rw` over white and `rb` over black.
+#[inline]
+pub(crate) fn ks_from_appearance(rw: f32, rb: f32) -> (f32, f32) {
+    let rw = rw.clamp(0.004, 0.996);
+    let rb = rb.clamp(0.001, rw - 0.002);
+    let a = 0.5 * (rw + (rb - rw + 1.0) / rb);
+    let b = (a * a - 1.0).max(1e-8).sqrt();
+    let z = (b * b - (a - rw) * (a - 1.0)) / (b * (1.0 - rw));
+    let arcoth = 0.5 * ((z + 1.0) / (z - 1.0).max(1e-8)).ln();
+    let s = (arcoth / b).max(0.0);
+    (s * (a - 1.0), s)
+}
+
+/// Reflectance and transmittance of one channel (or one wavelength) of a
+/// layer with absorption `k` and scattering `s` per coat, `x` coats thick
+/// (`x` > 0).
+#[inline]
+pub(crate) fn layer1(k: f32, s: f32, x: f32) -> (f32, f32) {
+    if s < 1e-6 {
+        // pure absorber
+        return (0.0, (-k * x).exp());
+    }
+    let a = 1.0 + k / s;
+    let b = (a * a - 1.0).max(0.0).sqrt();
+    if b < 1e-3 {
+        // (nearly) non-absorbing: the b → 0 limit of the formulas below
+        let sx = s * x;
+        return (sx / (1.0 + a * sx), 1.0 / (1.0 + a * sx));
+    }
+    let bsx = (b * s * x).min(40.0);
+    let (sh, ch) = (bsx.sinh(), bsx.cosh());
+    let c = a * sh + b * ch;
+    (sh / c, b / c)
+}
+
 #[derive(Clone, Copy, Debug)]
 pub struct Pigment {
     pub k: Rgb,
@@ -64,14 +100,7 @@ impl Pigment {
         let mut k = [0.0; 3];
         let mut s = [0.0; 3];
         for i in 0..3 {
-            let rw = on_white[i].clamp(0.004, 0.996);
-            let rb = on_black[i].clamp(0.001, rw - 0.002);
-            let a = 0.5 * (rw + (rb - rw + 1.0) / rb);
-            let b = (a * a - 1.0).max(1e-8).sqrt();
-            let z = (b * b - (a - rw) * (a - 1.0)) / (b * (1.0 - rw));
-            let arcoth = 0.5 * ((z + 1.0) / (z - 1.0).max(1e-8)).ln();
-            s[i] = (arcoth / b).max(0.0);
-            k[i] = s[i] * (a - 1.0);
+            (k[i], s[i]) = ks_from_appearance(on_white[i], on_black[i]);
         }
         Pigment { k, s }
     }
@@ -138,27 +167,7 @@ impl Pigment {
             return ([0.0; 3], [1.0; 3]);
         }
         for i in 0..3 {
-            let (k, s) = (self.k[i], self.s[i]);
-            if s < 1e-6 {
-                // pure absorber
-                r[i] = 0.0;
-                t[i] = (-k * x).exp();
-                continue;
-            }
-            let a = 1.0 + k / s;
-            let b = (a * a - 1.0).max(0.0).sqrt();
-            if b < 1e-3 {
-                // (nearly) non-absorbing: the b → 0 limit of the formulas below
-                let sx = s * x;
-                r[i] = sx / (1.0 + a * sx);
-                t[i] = 1.0 / (1.0 + a * sx);
-                continue;
-            }
-            let bsx = (b * s * x).min(40.0);
-            let (sh, ch) = (bsx.sinh(), bsx.cosh());
-            let c = a * sh + b * ch;
-            r[i] = sh / c;
-            t[i] = b / c;
+            (r[i], t[i]) = layer1(self.k[i], self.s[i], x);
         }
         (r, t)
     }

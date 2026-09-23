@@ -13,13 +13,15 @@
 //!
 //! Things are named by body number (from `w:place`/`w:proxy`), layer name,
 //! `"ground"`, `"water"`, `"surface"` (both), `"sky"`, `"bodies"`,
-//! `"layers"`, or a list of these.
+//! `"layers"`, or a list of these. `visible=`, `v:visible` and `behind=`
+//! also take masks (alone or in a list): a mask is a thing in front of
+//! everything.
 
 use crate::api::{S, check_keys, err, mask_of, num, wrap};
 use crate::world::{SpotU, ViewU};
 use mlua::{Result, Table, UserDataMethods, Value};
 use paint::Mask;
-use paint::scene::{LayerDepth, Thing, World};
+use paint::scene::{Depths, LayerDepth, Thing, World};
 use std::rc::Rc;
 use std::sync::Arc;
 
@@ -98,6 +100,39 @@ fn pick(w: &World, v: &Value, out: &mut Vec<Pick>) -> Result<()> {
     Ok(())
 }
 
+/// Split a selection into masks and the names (numbers, strings) around
+/// them, lists flattened.
+fn split_masks(v: &Value, masks: &mut Vec<Rc<Mask>>, names: &mut Vec<Value>) -> Result<()> {
+    match v {
+        Value::Table(t) => {
+            for x in t.sequence_values::<Value>() {
+                split_masks(&x?, masks, names)?;
+            }
+        }
+        x if mask_of(x).is_ok() => masks.push(mask_of(x)?),
+        x => names.push(x.clone()),
+    }
+    Ok(())
+}
+
+/// Where a selection is seen. A mask in it is a thing in front of
+/// everything (as in `behind=`): it is seen wherever it is, and it hides
+/// the named things behind it, so the union is `1 - (1 - m)(1 - seen)`.
+fn visible_of(w: &World, d: &Depths, v: &Value) -> Result<Mask> {
+    let (mut masks, mut names) = (Vec::new(), Vec::new());
+    split_masks(v, &mut masks, &mut names)?;
+    let mut picks = Vec::new();
+    for x in &names {
+        pick(w, x, &mut picks)?;
+    }
+    let s = Sel(picks);
+    let mut out = d.visible(&|t| s.has(t));
+    for m in &masks {
+        out = out.invert().mul(&(**m).clone().invert()).invert();
+    }
+    Ok(out)
+}
+
 fn sel_of(w: &World, v: &Value) -> Result<Sel> {
     let mut out = Vec::new();
     pick(w, v, &mut out)?;
@@ -135,10 +170,7 @@ pub(crate) fn layer_depth(w: &World, v: &Value) -> Result<LayerDepth> {
 /// Depth masks on a view (registered from world.rs).
 pub fn view_methods<M: UserDataMethods<ViewU>>(m: &mut M) {
     // v:visible(x): where x is seen (less whatever is in front of it)
-    m.add_method("visible", |_, v, x: Value| {
-        let s = sel_of(&v.0.world, &x)?;
-        Ok(wrap(v.0.view.depths().visible(&|t| s.has(t))))
-    });
+    m.add_method("visible", |_, v, x: Value| Ok(wrap(visible_of(&v.0.world, v.0.view.depths(), &x)?)));
     // v:front(x): what hides x, where x is
     m.add_method("front", |_, v, x: Value| {
         let s = sel_of(&v.0.world, &x)?;
@@ -233,8 +265,7 @@ pub fn restrict(st: &S, o: &Table, m: Option<Rc<Mask>>) -> Result<Restricted> {
     let w = &view.0.world;
     let d = view.0.view.depths();
     if !vis.is_nil() {
-        let s = sel_of(w, &vis)?;
-        out = out.mul(&d.visible(&|t| s.has(t)));
+        out = out.mul(&visible_of(w, d, &vis)?);
     }
     if !beh.is_nil() {
         // a mask is a thing in front of everything; names go by depth
@@ -348,6 +379,33 @@ v = w:view()"##;
             r.run(&c.src).unwrap();
         }
         assert_eq!(s.canvas().unwrap().seen(), r.canvas().unwrap().seen());
+    }
+
+    // review 4 (drawing), finding 10: visible= takes masks and mixed lists,
+    // as documented; a mask is a thing in front of everything (as in behind=)
+    #[test]
+    fn visible_takes_masks_and_mixed_lists() {
+        let mut s = Session::replay(240).unwrap();
+        s.run(SETUP).unwrap();
+        s.run(r#"fx, fy = fs.x, fs.y - fs:m(1.2)"#).unwrap();
+        s.run(r#"box = rect(100, 100, 50, 50)
+                 local m = v:visible(box)
+                 assert(m:at(125, 125) == 1 and m:at(300, 125) == 0)
+                 -- a mixed list: the box, and the water where it is seen
+                 local mix = v:visible({box, "water"})
+                 assert(mix:at(125, 125) == 1)
+                 assert(mix:at(fx - 120, fy) > 0.99, mix:at(fx - 120, fy))
+                 assert(mix:at(fx, fy) < 0.01, "the figure hides the water")
+                 assert(mix:at(300, 125) == 0, "sky")"#)
+            .unwrap();
+        let (fx, fy): (f32, f32) = s.lua.load("return fx, fy").eval().unwrap();
+        let (inside, sky, water) = (px(&s, 125.0, 125.0), px(&s, 300.0, 125.0), px(&s, fx - 120.0, fy));
+        s.run(r##"glaze(nil, {color="#402010", coats=0.5, visible=box})"##).unwrap();
+        assert_ne!(inside, px(&s, 125.0, 125.0), "the box is glazed");
+        assert_eq!(sky, px(&s, 300.0, 125.0), "nothing else is");
+        s.run(r##"glaze(nil, {color="#402010", coats=0.5, visible={box, "water"}})"##).unwrap();
+        assert_ne!(water, px(&s, fx - 120.0, fy), "the water is glazed too");
+        assert_eq!(sky, px(&s, 300.0, 125.0));
     }
 
     #[test]

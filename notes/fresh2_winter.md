@@ -6,8 +6,11 @@ Scratch: `~/tmp/fresh2-winter-1a51242f/`.
 
 ## Composition and why
 
-A small upright-landscape canvas (45 × 32.5 cm, the size of the London
-*Winter Landscape* [RSC p.42]), aspect 1.385.
+A small landscape-format canvas (45 × 32.5 cm, the size of the London
+*Winter Landscape* [RSC p.42]), aspect 1.385. Motif references below that
+carry no source key (Eldena, Oybin, the winter pendants, beret-wearing
+figures) are from my general knowledge of his work, not from
+`notes/research/`; I used no images.
 
 - **Low horizon, a lot of sky.** Friedrich's winter pictures give most of the
   field to a pale, still sky; the land is a thin band. The horizon here sits at
@@ -15,7 +18,9 @@ A small upright-landscape canvas (45 × 32.5 cm, the size of the London
 - **Dusk after snow.** A cool slate-violet zenith falling through mauve-gray to
   a pale straw band at the horizon (the *Winter Landscape* sky is "pale mauve",
   red iron oxide particles in lead white and smalt [NG p.56]). A thin crescent
-  moon, high and off-center.
+  moon, high and off-center, its lit side turned down-left toward the
+  afterglow that also lights the snow and the left edges of the oak, the
+  fence posts and the figure. A few thin stratus bands low in the glow.
 - **Distance.** A long low wooded ridge, blue-gray and dissolved in mist at its
   foot, and against it the ruined choir of a Gothic church, its tall lancet
   open to the sky: the church-in-mist of the winter pictures, a ruin as in the
@@ -28,8 +33,12 @@ A small upright-landscape canvas (45 × 32.5 cm, the size of the London
 - **Right.** A small group of young spruces on a rise, snow in their tiers
   (spruce as the evergreen hope set against the dead oak, as in the winter
   pendants).
-- **Figure.** One small dark figure with a stick, seen from behind, walking
-  along the brook toward the ruin.
+- **Figure.** One small dark figure with a stick and a flat cap, seen from
+  behind, walking along the brook toward the ruin; his footprints trail
+  back to the lower right edge of the picture, where the viewer stands.
+- **Fence.** An old paling fence running back from the right foreground,
+  posts leaning, one broken, rails sagging or fallen: depth, and a
+  man-made thing gone to ruin like the choir.
 - **Foreground.** Snow, with dry grasses and reeds flicked up over the finished
   snow ("fine upturning strokes laid over the finished snow" [NG p.56]) and
   slight impasto in the lit foreground snow [NG p.50].
@@ -205,7 +214,24 @@ line, with a soft blue cast shadow toward the viewer.
     spots at 3200px. *Workaround:* `palette(&pal.only([lead white, bone
     black, pale smalt, raw umber]))`, a stone family, as notes/color.md
     suggests.
-16. **`--stop` after a resumed stage and the stage's own output are hard
+16. **A hard mask's edge sits right where the snow is thinnest.** The
+    ruin polygon ended exactly on the snow line; the detail strokes, clipped,
+    pile a darker rim along the clip edge, and the snow lay-in (soft-edged
+    there) left it showing as a dotted line of dark dashes at 3200px. Found
+    it with `--full --crop ... --stop ruin|mist|snow` and a contact sheet.
+    *Workaround:* the ruin's foot runs below the snow line and its mask
+    fades out there, so nothing painted has an edge where the snow is thin.
+    Generally: a clipped `work` darkens its own boundary; a painter would
+    carry the paint past the line and cut back with the next passage.
+17. **`roughen` does nothing to a hard mask.** It moves the 0.5 contour
+    by `amount · noise`; a shape mask is 0/1 with a one-pixel ramp, so the
+    brook's banks stayed ruler-clean. *Workaround:* `.blur(1.5)` first.
+18. **Cast shadows on snow as strokes look like boards.** A filbert
+    shadow from the oak's foot was a hard-edged blue slab (and before that a
+    round puddle). *Workaround:* a stippled shadow whose coverage falls off
+    across and along a line, so it softens by density, like Friedrich's
+    mist.
+19. **`--stop` after a resumed stage and the stage's own output are hard
     to tell apart.** `--resume sky --stop sky` repainted the sky (8.6 s)
     instead of saying there is nothing to do. Minor.
 

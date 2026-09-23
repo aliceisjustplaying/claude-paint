@@ -612,9 +612,10 @@ fn main() {
             let (t, d) = along(x, y);
             if d < sw * (1.0 + 0.8 * t) + 3.0 && y > oak_base.1 - 2.0 { 1.0 } else { 0.0 }
         });
+        let here = mix(c.sample(oak_base.0 - 30.0, oak_base.1 + 30.0), c.sample(oak_base.0 + 70.0, oak_base.1 + 30.0), 0.5, Mix::Light);
         let shadow = Stipple::new(Tool::stippler(1.6))
             .mixed(pal, 0.45)
-            .color(move |x, y| mix(snow_col(x, y), hex("#838aa0"), 0.45, Mix::Light))
+            .color(move |_, _| mix(here, hex("#737a93"), 0.35, Mix::Light))
             .coverage(move |x, y| {
                 let (t, d) = along(x, y);
                 2.4 * (1.0 - smoothstep(0.3, 1.0, d / (sw * (1.0 + 0.8 * t)))) * (1.0 - smoothstep(0.35, 1.0, t))
@@ -632,7 +633,12 @@ fn main() {
         let drift_s = Stipple::new(Tool::stippler(1.5))
             .mixed(pal, 0.3)
             .color(move |x, _| mix(snow_col(x, oak_base.1 - 6.0), hex("#dcd8cf"), 0.35, Mix::Light))
-            .coverage(move |x, y| 3.0 * smoothstep(drift_top(x) - 1.0, drift_top(x) + 1.5, y))
+            .coverage(move |x, y| {
+                // thickest against the bole, feathered out to both sides and below
+                let ends = 1.0 - smoothstep(0.55 * w0, 1.35 * w0, (x - oak_base.0).abs());
+                let below = 1.0 - smoothstep(oak_base.1 + 1.0, oak_base.1 + 6.0, y);
+                3.0 * smoothstep(drift_top(x) - 1.0, drift_top(x) + 1.5, y) * ends * below
+            })
             .pressure(0.55, 0.9)
             .dips(16, 0.5, 0.5)
             .aim(false);
@@ -746,6 +752,100 @@ fn main() {
         // two in flight toward the ruin
         crow(&mut c, (418.0, 300.0), 6.0, black, true, &mut rng);
         crow(&mut c, (447.0, 318.0), 4.5, black, true, &mut rng);
+    }
+
+    // --------------------------------------------------------------- stones
+    // a few field stones breaking through the snow in the lower left: dark
+    // lumps built of short strokes, snow lying on their tops, a blue shadow
+    // at their foot toward the viewer
+    let stones = [(112.0f32, 676.0f32, 26.0f32), (165.0, 694.0, 14.0), (62.0, 703.0, 18.0), (196.0, 664.0, 9.0)];
+    // each stone: an irregular low mass (flat at the bottom where it sits in
+    // the snow), and the snow lying on it down to a wavy line
+    let stone_outline = |x: f32, y: f32, r: f32, k: usize| -> Vec<(f32, f32)> {
+        let n = Fbm::new(300 + k as u32, 2, 1.0);
+        (0..16)
+            .map(|i| {
+                let a = std::f32::consts::PI * (1.0 + i as f32 / 15.0); // left, over the top, right
+                let rr = r * (0.75 + 0.3 * n.get(i as f32 * 0.37, 0.5));
+                (x + rr * a.cos(), y + 0.62 * rr * a.sin())
+            })
+            .collect()
+    };
+    let stone_ms: Vec<Mask> = stones.iter().enumerate().map(|(k, &(x, y, r))| Mask::from_shape(f, Shape::new().smooth_poly(&stone_outline(x, y, r, k)))).collect();
+    if o.stage("stones", &mut c, &mut rng) {
+        let stone_pal = pal.only(&["lead white", "bone black", "raw umber", "yellow ochre", "pale smalt"]);
+        for (k, &(x, y, r)) in stones.iter().enumerate() {
+            let m = &stone_ms[k];
+            // the snow as it actually is here (after all the passes over it),
+            // sampled either side: the shadow and the banked snow are judged
+            // against it, not against my color field
+            let lf = c.sample(x - r * 1.6, y + r * 0.1);
+            let rt = c.sample(x + r * 1.6, y + r * 0.1);
+            let here = mix(lf, rt, 0.5, Mix::Light);
+            // the stone's shadow on the snow, toward the viewer: stippled
+            let sh_m = Mask::from_fn(f, move |px, py| {
+                let dx = (px - x - r * 0.25) / (r * 1.1);
+                let dy = (py - y - r * 0.12) / (r * 0.28);
+                if dx * dx + dy * dy < 1.0 && py > y - 1.0 { 1.0 } else { 0.0 }
+            });
+            let sh = Stipple::new(Tool::stippler(1.4))
+                .mixed(pal, 0.4)
+                .color(move |_, _| mix(here, hex("#6f768f"), 0.35, Mix::Light))
+                .coverage(move |px, py| {
+                    let dx = (px - x - r * 0.25) / (r * 1.1);
+                    let dy = (py - y - r * 0.12) / (r * 0.28);
+                    2.4 * (1.0 - smoothstep(0.3, 1.0, (dx * dx + dy * dy).sqrt()))
+                })
+                .pressure(0.45, 0.85)
+                .dips(20, 0.4, 0.6);
+            c.stipple(&sh_m, &sh, 90 + k as u64);
+            // the mass: dark, lighter on the left shoulder, strokes down
+            // its sides
+            let body = st
+                .detail()
+                .palette(&stone_pal)
+                .color(move |px, py| {
+                    let lit = smoothstep(x + r * 0.2, x - r * 0.7, px) * smoothstep(y + r * 0.1, y - r * 0.4, py);
+                    mix(hex("#4a4540"), hex("#766c63"), 0.8 * lit, Mix::Light)
+                })
+                .angle(move |px, _| if px < x { 1.9 } else { 1.25 })
+                .angle_jitter(0.3)
+                .length(r * 0.2, r * 0.5)
+                .coverage(3.5)
+                .medium(0.15);
+            c.work(m, &body, 95 + k as u64);
+            c.dry();
+            // snow on its top down to a wavy line, lit on the left
+            let wav = Fbm::new(400 + k as u32, 2, r * 0.6);
+            let cap_line = move |px: f32| y - r * 0.2 + r * 0.12 * wav.get(px, 3.0) - r * 0.1 * ((px - x) / r).powi(2);
+            // a little past the stone's own edge, so no rim of it shows
+            let cap = m.dilate(0.9).mul_fn(move |px, py| 1.0 - smoothstep(cap_line(px) - 0.4, cap_line(px) + 0.4, py));
+            let snowcap = st
+                .detail()
+                .color(move |px, _| mix(hex("#dcd8cf"), hex("#a8adbd"), smoothstep(x - r * 0.3, x + r * 0.9, px), Mix::Light))
+                .angle(|_, _| 0.0)
+                .angle_jitter(0.3)
+                .length(r * 0.3, r * 0.7)
+                .coverage(3.0)
+                .medium(0.35)
+                .load(0.6);
+            c.work(&cap, &snowcap, 96 + k as u64);
+            // snow banked against its foot: stippled in the field's color, so
+            // the stone sits in the snow rather than on it
+            let foot_m = Mask::from_fn(f, move |px, py| {
+                let dx = (px - x) / (r * 1.2);
+                if dx.abs() < 1.0 && (py - y).abs() < r * 0.14 + 1.5 { 1.0 } else { 0.0 }
+            });
+            let foot = Stipple::new(Tool::stippler(1.3))
+                .mixed(pal, 0.35)
+                .color(move |_, _| here)
+                .coverage(move |px, py| 2.6 * smoothstep(y - r * 0.12, y + r * 0.02, py) * (1.0 - smoothstep(0.7, 1.0, ((px - x) / (r * 1.2)).abs())))
+                .pressure(0.5, 0.9)
+                .dips(16, 0.4, 0.6)
+                .aim(false);
+            c.stipple(&foot_m, &foot, 97 + k as u64);
+            c.dry();
+        }
     }
 
     // ---------------------------------------------------------------- fence

@@ -712,6 +712,66 @@ print(k)
 
 --@ chunk 23 · clock 291858.29431152344
 
+wait(12*60)
+local groups = {{470, 682, 5, 80, 1}, {600, 690, 6, 90, -1}, {735, 684, 5, 75, 1}, {395, 690, 3, 60, -1}}
+local dm = nil
+for _, g in ipairs(groups) do
+  local e = ellipse(g[1], g[2] - g[4] * 0.15, g[4] * 0.6, g[4] * 0.22)
+  dm = dm and (dm + e) or e
+end
+dm = dm:roughen(8, 16, 7, 4)
+work(dm, {hand="hatch", tool="round 2.2", length={4, 12}, coverage=2.2, medium=0.15, angle=function(x, y) return -1.2 + 0.8 * math.sin(x / 11) end, angle_jitter=0.6,
+  color=function(x, y) return mix("#35231a", "#553520", rand()) end})
+for gi, g in ipairs(groups) do
+  for k = 1, g[3] do
+    local x = g[1] + randn(0, g[4] * 0.4)
+    local y = g[2] + randn(0, 6)
+    local up = -math.pi/2 + randn(0, 0.45) + 0.35 * g[5]
+    local scale = clamp((y - 540) / 200, 0.5, 1.3)
+    frond(x, y, g[4] * rand(0.7, 1.1) * scale, up, (rand() < 0.5 and 1 or -1) * rand(0.9, 1.9), rusts[1 + (gi * 5 + k) % #rusts], scale)
+  end
+end
+local g = brush("rigger", 0.9)
+for i = 1, 90 do
+  local x = rand(330, 900); local y = 672 + rand(0, 20)
+  if i % 4 == 1 then g:reload(mix("#5d5536", "#b3a06a", rand()), 0.7) end
+  local h = rand(16, 40); local lean = randn(0.1, 0.3)
+  g:stroke({{x, y}, {x + lean * h * 0.35, y - h * 0.6}, {x + lean * h, y - h}}, {pressure={0.65, 0}, ramps={0.05, 0.7}})
+end
+
+--@ chunk 24 · clock 303130.86657714844
+
+dry()
+glaze(woodm:soften(3), {color="#4b5650", coats=0.35, pigment="transparent"})
+-- birch bark: irregular black patches, a dark foot, knots where limbs leave
+local tr = birch.limbs[1]
+local n = #tr.pts
+local pb = brush{kind="round", width=3, point=0.5}
+local fl = brush{kind="flat", width=2}
+for k = 2, n - 1 do
+  local p = tr.pts[k]; local wdt = tr.w[k]
+  local u = (k - 1) / n
+  if rand() < 0.35 and wdt > 1.2 then
+    fl:reload("#1c1a18", 0.9)
+    local off = rand(-0.5, 0.5) * wdt
+    local len = wdt * rand(0.15, 0.6)
+    fl:stroke({{p[1] + off - len / 2, p[2] + rand(-0.8, 0.8)}, {p[1] + off + len / 2, p[2] + rand(-0.8, 0.8)}}, {pressure={rand(0.2, 0.6), 0.1}, orient="along"})
+  end
+  if u < 0.12 then
+    pb:reload(mix("#1f1c1a", "#4a443d", u / 0.12), 0.9)
+    pb:touch(p[1] + rand(-0.4, 0.4) * wdt, p[2], {pressure=0.6, drag={0, rand(0.5, 1.5)}})
+  end
+end
+for _, l in ipairs(birch.limbs) do
+  if l.order == 1 and l.w[1] > 1.4 and rand() < 0.7 then
+    local p = l.pts[1]
+    pb:reload("#1c1a18", 0.9)
+    pb:touch(p[1] + rand(-1, 1), p[2] + rand(0, 2), {pressure=rand(0.4, 0.7), drag={rand(-1, 1), rand(0.5, 1.2)}, twist=0.3})
+  end
+end
+
+--@ chunk 25 · clock 314623.72595214844
+
 dry()
 local vig = mask(function(x, y)
   local dx = (x - 560) / 560

@@ -320,6 +320,13 @@ impl Palette {
         (mixbox::latent_to_linear_float_rgb(&lat), sct, stf)
     }
 
+    /// The pile knifed from these parts (tube index, fraction by volume;
+    /// fractions sum to 1), mixed the way the palette mixes: its masstone,
+    /// scattering and stiffness (`error` is 0).
+    pub fn pile(&self, parts: Vec<(usize, f32)>) -> Mixture {
+        self.mixture(parts, 0.0)
+    }
+
     fn mixture(&self, parts: Vec<(usize, f32)>, error: f32) -> Mixture {
         let (color, scatter, stiff) = self.eval(&parts);
         Mixture { hiding: hiding_of(luminance(color), scatter), parts, color, scatter, stiff, error }

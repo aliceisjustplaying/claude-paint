@@ -172,7 +172,7 @@ wait(24*60)
 OX, OY = 430, 486
 w = world{horizon=HZ, eye=6, fov=50, sun={azimuth=-112, elevation=54}, ground=knollg}
 oak = tree{habit="oak", x=OX, y=OY, height=300, seed=17, years=34}
-oakleaves = oak:foliage{sun={-0.75, -0.6, 0.3}, seed=17}
+oakleaves = oak:foliage{sun={-0.75, -0.6, 0.3}, seed=17, clump=0.04, spray=2}
 local s = w:spot(OX, OY)
 w = w:proxy(s, body.ellipsoid(s:p(-1.3, 10.5, 0), s:size(5, 4, 4.6)))
 w = w:proxy(s, body.block(s:p(0, 3, 0), s:size(0.5, 3, 0.5), s:m(0.2)))
@@ -184,81 +184,102 @@ work(sh, {hand="body", tool="filbert 3", length={5, 14}, coverage=3, angle=sa, a
 
 --@ chunk 16 · clock 40189.6328125
 wait(3*60)
+-- limbs, then the trunk and main limbs as ribbons at their widths, lit flank on the sun side
 local trunk, limb, twig = brush("round", 4.5), brush("round", 1.8), brush("rigger", 0.7)
 for i, l in ipairs(oak.limbs) do
   if #l.pts >= 2 then
     local b = (l.order == 0) and trunk or ((l.w[1] > 1.0) and limb or twig)
     local c = l.dead and "#6e675c" or "#3a332b"
     if i % 5 == 1 or b:fullness() < 0.3 then b:reload(c, 0.9) end
-    local p = (l.order == 0) and {1.0, 0.55} or {0.85, 0.2}
-    b:stroke(l.pts, {pressure=p, ramps={0.03, 0.5}, shake=0.6})
+    b:stroke(l.pts, {pressure=(l.order == 0) and {1.0, 0.55} or {0.85, 0.2}, ramps={0.03, 0.5}, shake=0.6})
   end
 end
-local turn = noise{seed=71, period=10}
-oakway = function(x, y) return 2.4 * turn(x, y) end
-local crown = oakleaves:mask()
-local lit = oakleaves:lit()
-local yy = function(y) return clamp((y - 180) / 300, 0, 1) end
-work(crown, {hand="hatch", tool="round 1.8", length={3, 7}, coverage=2.4, angle=oakway, angle_jitter=0.7,
-  color=function(x, y) return mix("#3c4e2c", "#32422a", yy(y)) end})
-work(crown - lit:grow(1), {hand="hatch", tool="round 1.5", length={2.5, 6}, coverage=2.0, angle=oakway, angle_jitter=0.7,
-  color=function(x, y) return mix("#27331f", "#1f2a1c", yy(y)) end})
-work(lit * crown, {hand="hatch", tool="round 1.3", length={2, 5}, coverage=2.0, angle=oakway, angle_jitter=0.7,
-  color=function(x, y) return mix("#667f38", "#556d31", yy(y)) end})
-
---@ chunk 17 · clock 40369.6328125
-local l = oak.limbs[1]; print(#l.pts, l.w[1], l.w[#l.w], l.pts[1][1], l.pts[1][2], l.pts[#l.pts][1], l.pts[#l.pts][2]); local c=0; for _, m in ipairs(oak.limbs) do if m.order==1 then c=c+1; if c<6 then print("o1", m.w[1], #m.pts) end end end
-
---@ chunk 18 · clock 40369.6328125
 local wood, woodlit = nil, nil
 for _, l in ipairs(oak.limbs) do
   if #l.pts >= 2 and l.w[1] > 1.6 then
     local ws, lp, lw = {}, {}, {}
     for k = 1, #l.pts do
-      ws[k] = math.max(0.6, l.w[k] * 0.95)
+      ws[k] = math.max(0.6, l.w[k] * 1.05)
       lp[k] = {l.pts[k][1] - ws[k] * 0.22, l.pts[k][2]}
-      lw[k] = ws[k] * 0.45
+      lw[k] = ws[k] * 0.42
     end
-    local r = ribbon(l.pts, ws)
-    wood = wood and (wood + r) or r
-    local rl = ribbon(lp, lw)
-    woodlit = woodlit and (woodlit + rl) or rl
+    wood = wood and (wood + ribbon(l.pts, ws)) or ribbon(l.pts, ws)
+    woodlit = woodlit and (woodlit + ribbon(lp, lw)) or ribbon(lp, lw)
   end
 end
-oakwood = wood:roughen(0.6, 4)
-oakwoodlit = woodlit * oakwood
+oakwood = wood:roughen(0.7, 4)
 local bn = noise{seed=5, period=6, stretch={1.5, 4}}
 work(oakwood, {hand="body", tool="round 1.6", length={3, 9}, coverage=3, angle=function(x, y) return 1.5 + 0.3 * bn(x, y) end,
-  color=function(x, y) return mix("#2c2721", "#3d352c", bn:at01(x, y)) end})
-work(oakwoodlit, {hand="detail", tool="round 1.2", length={2, 6}, coverage=2.2, angle=function(x, y) return 1.5 + 0.4 * bn(x, y) end,
-  color=function(x, y) return mix("#6b6558", "#8c8472", bn:at01(x * 1.3, y)) end})
+  color=function(x, y) return mix("#2a2520", "#3b342b", bn:at01(x, y)) end})
+work(woodlit * oakwood, {hand="detail", tool="round 1.2", length={2, 6}, coverage=2.2, angle=function(x, y) return 1.5 + 0.4 * bn(x, y) end,
+  color=function(x, y) return mix("#686255", "#8b8371", bn:at01(x * 1.3, y)) end})
+
+--@ chunk 17 · clock 40369.6328125
+local l = oak.limbs[1]; print(#l.pts, l.w[1], l.w[#l.w], l.pts[1][1], l.pts[1][2], l.pts[#l.pts][1], l.pts[#l.pts][2]); local c=0; for _, m in ipairs(oak.limbs) do if m.order==1 then c=c+1; if c<6 then print("o1", m.w[1], #m.pts) end end end
+
+--@ chunk 18 · clock 40369.6328125
+OSKY = cl; OB = oak.bounds; OTOP = oak.bounds[2]
+DEAD1 = {{OX - 32, OY - 240}, {OX - 30, OY - 270}, {OX - 36, OY - 296}, {OX - 31, OY - 322}, {OX - 35, OY - 342}, {OX - 32, OY - 356}}
+DEADB = {
+  {{OX - 35, OY - 300}, {OX - 48, OY - 312}, {OX - 55, OY - 328}, {OX - 66, OY - 334}},
+  {{OX - 33, OY - 336}, {OX - 22, OY - 346}, {OX - 17, OY - 360}},
+  {{OX - 50, OY - 315}, {OX - 48, OY - 327}},
+  {{OX + 48, OY - 232}, {OX + 62, OY - 252}, {OX + 67, OY - 270}, {OX + 78, OY - 280}},
+  {{OX + 64, OY - 256}, {OX + 76, OY - 257}}}
 
 --@ chunk 19 · clock 40369.6328125
 wait(2*60)
+-- leaves: a warm mid layer, the shadow masses, the lit masses; soft, uneven edges
+local turn = noise{seed=71, period=9}
+oakway = function(x, y) return 2.6 * turn(x, y) end
 local crown = oakleaves:mask()
-local lit = oakleaves:lit()
-local yy = function(y) return clamp((y - 180) / 300, 0, 1) end
-local keep = crown * (oakwood:shrink(0.5) * mask(function(x, y) return y > 420 and 1 or 0 end)):map(function(v) return 1 - v end)
-work(keep - lit:grow(1), {hand="hatch", tool="round 1.4", length={2.5, 5}, coverage=1.3, angle=oakway, angle_jitter=0.8,
-  color=function(x, y) return mix("#2a3621", "#212b1c", yy(y)) end})
-work(lit * keep, {hand="hatch", tool="round 1.2", length={2, 4.5}, coverage=1.4, angle=oakway, angle_jitter=0.8,
-  color=function(x, y) return mix("#6e883c", "#5b7433", yy(y)) end})
--- the sun's touches: small, uneven, on the lit tops
-local hl = lit * crown * mask(function(x, y) return 1 - yy(y) * 0.7 end)
-stipple(hl:shrink(1.5), {width=1.6, color="#9aae5c", coverage=function(x, y) return 0.9 end, pressure={0.35, 0.8},
-  dips={14, 0.4, 0.7}, aim=false, medium=0.3, fade=1, drag={1, -0.4}, twist=0.6})
--- dead snags through the top of the crown
-local snag = brush("round", 1.6)
-snag:load("#5f594f", 0.9)
-snag:stroke({{392, 214}, {388, 196}, {394, 176}, {389, 160}}, {pressure={0.9, 0.1}, ramps={0.05, 0.7}, shake=0.8})
-snag:stroke({{391, 190}, {377, 178}, {371, 167}}, {pressure={0.6, 0.05}, ramps={0.05, 0.7}})
-snag:stroke({{394, 176}, {404, 168}, {406, 158}}, {pressure={0.5, 0.0}, ramps={0.05, 0.7}})
-snag:reload("#5f594f", 0.8)
-snag:stroke({{482, 262}, {498, 246}, {503, 230}, {514, 221}}, {pressure={0.75, 0.05}, ramps={0.05, 0.7}, shake=0.8})
-snag:stroke({{500, 240}, {510, 243}}, {pressure={0.4, 0.0}})
-local tip = brush("rigger", 0.6)
-tip:load("#8c8578", 0.7)
-tip:stroke({{390, 212}, {387, 195}, {392, 177}}, {pressure={0.5, 0.2}, ramps={0.05, 0.6}})
+local lit = oakleaves:lit() * crown
+local yy = function(y) return clamp((y - OTOP) / 300, 0, 1) end
+local cn = noise{seed=72, octaves=3, period=40}
+work(crown, {hand="hatch", tool="round 1.8", length={3, 7}, coverage=2.4, angle=oakway, angle_jitter=0.8, hug=false,
+  color=function(x, y) return mix("#3e5230", "#34462c", yy(y) + 0.3 * cn(x, y)) end})
+work(crown - lit, {hand="hatch", tool="round 1.6", length={2.5, 6}, coverage=2.2, angle=oakway, angle_jitter=0.8, hug=false,
+  color=function(x, y) return mix(mix("#26331f", "#1e2a1d", yy(y)), "#2a3a33", 0.35 * cn:at01(y, x)) end})
+work(lit, {hand="hatch", tool="round 1.4", length={2, 5}, coverage=2.0, angle=oakway, angle_jitter=0.8, hug=false,
+  color=function(x, y) return mix(mix("#6a833a", "#587131", yy(y)), "#7d8a3e", 0.4 * cn:at01(x, y)) end})
+-- leaf marks round the silhouette: small hooked strokes that break the edge
+local rim = crown:rim(5, 1)
+local lf = brush("round", 1.4)
+local n = 0
+for i = 1, 9000 do
+  local x, y = rand(OB[1] - 6, OB[3] + 6), rand(OB[2] - 6, OB[4])
+  if rim:at(x, y) > 0.5 then
+    n = n + 1
+    if n % 12 == 1 then
+      local litv = lit:at(x, y)
+      lf:reload(litv > 0.5 and mix("#6a833a", "#88964a", rand()) or mix("#243020", "#3a4c2c", rand()), 0.8)
+    end
+    local a = oakway(x, y) + randn(0, 0.6)
+    local len = rand(2.5, 5)
+    local hook = randn(0, 0.8)
+    lf:stroke({{x, y}, {x + len * 0.6 * math.cos(a), y + len * 0.6 * math.sin(a)},
+      {x + len * math.cos(a + hook), y + len * math.sin(a + hook)}}, {pressure={0.7, 0.05}, ramps={0.1, 0.6}})
+  end
+end
+-- sky back into the holes of the crown
+work(oakleaves:gaps(6) * crown:grow(2) - oakwood:grow(2), {hand="detail", tool="round 1.4", length={2, 4}, coverage=2, color=OSKY, angle=0.3, pal=skypal})
+-- the sun's touches on the lit tops
+stipple((lit * mask(function(x, y) return 1 - yy(y) * 0.8 end)):shrink(1.5), {width=1.5, color="#a0b060", coverage=function(x, y) return 0.8 end,
+  pressure={0.35, 0.8}, dips={14, 0.4, 0.7}, aim=false, medium=0.3, fade=1, drag={1, -0.4}, twist=0.6})
+print(n, "leaf marks")
+-- the old oak's dead crown: a broken limb and snags rising above the leaves, silver-gray in the sun
+local taper = function(pts, w0, w1) local ws = {}; for k = 1, #pts do ws[k] = lerp(w0, w1, (k - 1) / math.max(1, #pts - 1)) end; return ws end
+local dead = ribbon(DEAD1, taper(DEAD1, 4.2, 1.4))
+local deadlit = ribbon((function() local o = {}; for k, p in ipairs(DEAD1) do o[k] = {p[1] - 1.0, p[2]} end; return o end)(), taper(DEAD1, 1.8, 0.6))
+for bi, br in ipairs(DEADB) do
+  local w0 = (bi == 1 or bi == 4) and 2.2 or 1.3
+  dead = dead + ribbon(br, taper(br, w0, 0.5))
+  local o = {}; for k, p in ipairs(br) do o[k] = {p[1] - 0.5, p[2] - 0.4} end
+  deadlit = deadlit + ribbon(o, taper(br, w0 * 0.4, 0.25))
+end
+oakdead = dead:roughen(0.3, 3)
+work(oakdead, {hand="detail", tool="round 1", length={2, 6}, coverage=3.2, angle=1.5, color="#4f4a42", medium=0.1})
+work(deadlit * oakdead, {hand="detail", tool="round 0.8", length={2, 5}, coverage=2.6, angle=1.5, color="#a29b8d", medium=0.1})
 
 --@ chunk 20 · clock 40489.6328125
 wait(24*60)
@@ -322,7 +343,7 @@ print(#tufts, "tufts", n, "blades", k, "flowers")
 --@ chunk 22 · clock 42169.6328125
 local cn = noise{seed=93, octaves=3, period=26}
 crest1b = function(x) return crest1(x) + 1.4 * cn(x, 0) end
-local cut = mask(function(x, y) local c = crest1b(x); return (y < c + 0.6 and y > c - 22 and x > 545) and 1 or 0 end):soften(0.7)
+local cut = mask(function(x, y) local c = crest1b(x); return (y < c + 0.6 and y > c - 22) and smoothstep(540, 610, x) or 0 end):soften(0.7)
 work(cut, {hand="detail", tool="round 2", length={10, 26}, coverage=2.2, angle=0, medium=0.35, pal=skypal,
   color=function(x, y) return sample(x, crest1(x) - 26, 4) end})
 blend(cut:grow(2) * above(function(x) return crest1b(x) - 1 end), {angle=0})
@@ -460,5 +481,3 @@ for i = 1, 18 do
   end
 end
 
---@ chunk 26 · clock 43969.6328125
-wait(24*60); varnish{color="#e6d3a4", coats=0.3, vary=0.1}; relief()

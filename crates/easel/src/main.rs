@@ -3,12 +3,15 @@
 //!   easel open <name> [--width 1000] [--undo 8]   start (or reattach to) a session
 //!   easel do '<lua>' | -f chunk.lua | -            run a chunk on the live canvas
 //!   easel look [--crop x0,y0,x1,y1] [--mode value|squint|mirror] [--dried] [--relief]
+//!              [--grid [step]] [--probe x,y;...] [--show on|off|clear] [--scale 3.2]
+//!   easel try '<lua>'                              run a chunk, keep its show()s, roll it back
 //!   easel undo [n] | log | status | save [path] | frames on|off | check | close
 //!   easel run paintings/lua/<name>.lua [--width 3200] [--out path] [--crop ...]
 //!
 //! See crates/easel/README.md.
 
 mod api;
+mod crop;
 mod form;
 mod world;
 mod look;
@@ -26,6 +29,8 @@ const USAGE: &str = "easel: a live painting session (see crates/easel/README.md)
   easel open <name> [--width 1000] [--undo 8]   start or reattach; replays paintings/lua/<name>.lua if it exists
   easel do '<lua>'  |  easel do -f chunk.lua  |  easel do - (stdin)     [--look] also looks afterwards
   easel look [--crop x0,y0,x1,y1] [--mode value,squint,mirror] [--dried] [--relief] [--size 1000]
+             [--grid [step]] [--probe x,y;x,y] [--show on|off|clear] [--scale 3.2 [--wait 90]]
+  easel try '<lua>' | -f file | -  run a chunk to see its show()/probe()/print, then roll it back (not logged) [--look]
   easel undo [n]      take back the last n chunks (default 1)
   easel log           the session so far (= paintings/lua/<name>.lua)
   easel status        chunks, clock, wet or dry
@@ -63,7 +68,7 @@ fn main() -> ExitCode {
             println!("{USAGE}");
             Ok(())
         }
-        "do" | "look" | "undo" | "log" | "status" | "save" | "frames" | "check" | "close" => client(&cmd, &rest, name),
+        "do" | "try" | "look" | "undo" | "log" | "status" | "save" | "frames" | "check" | "close" => client(&cmd, &rest, name),
         o => Err(format!("unknown command {o:?}\n\n{USAGE}")),
     };
     match r {
@@ -127,7 +132,7 @@ fn client(cmd: &str, args: &[String], name: Option<String>) -> Result<(), String
     let name = current(name)?;
     let mut args = args.to_vec();
     let mut payload = Vec::new();
-    if cmd == "do" {
+    if cmd == "do" || cmd == "try" {
         let look = if let Some(i) = args.iter().position(|a| a == "--look") {
             args.remove(i);
             true
@@ -212,6 +217,8 @@ struct Server {
     /// The log text as the easel last wrote (or read) it: if the file on
     /// disk differs, someone edited it by hand and it must not be clobbered.
     written: Option<String>,
+    /// Full-resolution crop windows following the log (`look --scale`).
+    crops: crop::Crops,
 }
 
 fn serve(args: &[String]) -> Result<(), String> {
@@ -238,7 +245,8 @@ fn serve(args: &[String]) -> Result<(), String> {
     let _ = std::fs::remove_file(&sock);
     let l = UnixListener::bind(&sock).map_err(|e| format!("easel: fatal: bind {}: {e}", sock.display()))?;
     let _ = std::io::stdout().flush();
-    let mut srv = Server { name, s, frames: false, written };
+    look::begin(&s.lua, "resume");
+    let mut srv = Server { name, s, frames: false, written, crops: crop::Crops::default() };
     for conn in l.incoming() {
         let Ok(mut conn) = conn else { continue };
         let mut req = Vec::new();
@@ -301,28 +309,85 @@ impl Server {
         Ok(note)
     }
 
-    fn look(&self, args: &[String], path: Option<PathBuf>) -> Result<String, String> {
+    fn look(&mut self, args: &[String], path: Option<PathBuf>) -> Result<String, String> {
         let v = look::View::parse(args)?;
+        let mut out = String::new();
+        if let Some(cmd) = &v.show {
+            out.push_str(&look::show_cmd(&self.s.lua, cmd));
+        }
         let relief = self.s.st.borrow().style.as_ref().map(|s| s.relief).unwrap_or((0.5, 0.1));
+        let t0 = Instant::now();
         let c = self.s.canvas().ok_or("no canvas yet: easel do 'canvas{style=\"friedrich\", aspect=1.4, seed=1}'")?;
+        // probes read the live canvas (and the world in the globals)
+        for (i, &(x, y)) in v.probes.iter().enumerate() {
+            let t = look::probe_at(&self.s.lua, &c, x, y, None).and_then(|t| look::probe_text(&t)).map_err(|e| e.to_string())?;
+            out.push_str(&format!("probe {} {t}\n", i + 1));
+        }
+        let (marks, from) = look::marks(&self.s.lua);
+        if !marks.is_empty() {
+            out.push_str(&format!("overlay: {} marks from {from} (look --show off hides them, --show clear drops them)\n", marks.len()));
+        }
         let dir = session_dir(&self.name);
         let path = path.unwrap_or_else(|| {
             let n = std::fs::read_dir(&dir).map(|d| d.filter_map(|e| e.ok()).filter(|e| e.file_name().to_string_lossy().starts_with("look-")).count()).unwrap_or(0);
             dir.join(format!("look-{:04}.jpg", n + 1))
         });
-        let t0 = Instant::now();
-        let (w, h) = look::look(&c, relief, &v, &path)?;
-        Ok(format!("{} ({w}x{h}, {:.2}s)\n", path.display(), t0.elapsed().as_secs_f64()))
+        let width = v.scale.map(|s| (s * 1000.0).round() as usize).filter(|&w| w != self.s.st.borrow().width);
+        let (w, h) = match (width, v.crop) {
+            (Some(width), Some(crop)) => {
+                let hgt = c.frame().height();
+                drop(c);
+                let log: Vec<String> = self.s.log.iter().map(|c| c.src.clone()).collect();
+                let got = self.crops.get(width, crop, hgt, &log, v.wait)?;
+                out.push_str(&got.note);
+                look::look(&got.canvas, got.relief, &v, &marks, &path)?
+            }
+            _ => look::look(&c, relief, &v, &marks, &path)?,
+        };
+        out.push_str(&format!("{} ({w}x{h}, {:.2}s)\n", path.display(), t0.elapsed().as_secs_f64()));
+        Ok(out)
+    }
+
+    /// Run a chunk as `do` does, in a live session.
+    fn run_chunk(&mut self, payload: &str, from: &str) -> Result<session::Ran, String> {
+        look::begin(&self.s.lua, from);
+        // a session making its canvas must not race a crop session making its own
+        let _g = if self.s.canvas().is_none() { Some(crop::CANVAS_LOCK.lock().unwrap_or_else(|e| e.into_inner())) } else { None };
+        self.s.run(payload)
+    }
+
+    fn sync_crops(&mut self) {
+        let log: Vec<String> = self.s.log.iter().map(|c| c.src.clone()).collect();
+        self.crops.sync(&log);
     }
 
     fn handle(&mut self, cmd: &str, args: &[String], payload: &str) -> Result<String, String> {
         match cmd {
             "status" => Ok(format!("{}\n", self.s.status())),
+            "try" => {
+                // run it to see what it shows and prints, then take it back:
+                // one extra undo level so no older snapshot is dropped
+                let depth = self.s.undo_depth;
+                self.s.undo_depth = depth + 1;
+                let r = self.run_chunk(payload, "try");
+                let r = r.and_then(|ran| self.s.undo(1).map(|_| ran));
+                self.s.undo_depth = depth;
+                let ran = r.map_err(|e| format!("{e}\n(nothing changed)"))?;
+                let mut out = ran.out;
+                let (marks, _) = look::marks(&self.s.lua);
+                out.push_str(&format!("tried ({:.2}s): rolled back, not logged; {} overlay marks for the next look\n", ran.secs, marks.len()));
+                if args.iter().any(|a| a == "--look") {
+                    out.push_str(&self.look(&[], None)?);
+                }
+                Ok(out)
+            }
             "do" => {
-                let r = self.s.run(payload);
+                let from = format!("chunk {}", self.s.log.len() + 1);
+                let r = self.run_chunk(payload, &from);
                 match r {
                     Ok(ran) => {
                         let note = self.save_log()?;
+                        self.sync_crops();
                         let n = self.s.log.len();
                         let mut out = note;
                         out.push_str(&ran.out);
@@ -344,6 +409,7 @@ impl Server {
             "undo" => {
                 let n: usize = args.first().map(|a| a.parse().map_err(|_| "undo [n]")).transpose()?.unwrap_or(1);
                 self.s.undo(n)?;
+                self.sync_crops();
                 let note = self.save_log()?;
                 Ok(format!("{note}undid {n} · {}\n", self.s.status()))
             }
@@ -429,7 +495,7 @@ fn run(args: &[String]) -> Result<(), String> {
     if args.iter().any(|a| a == "--look") {
         let relief = s.st.borrow().style.as_ref().map(|s| s.relief).unwrap_or((0.5, 0.1));
         let jpg = out.with_extension("jpg");
-        let (w, h) = look::look(&c, relief, &look::View::default(), &jpg)?;
+        let (w, h) = look::look(&c, relief, &look::View::default(), &[], &jpg)?;
         println!("{} ({w}x{h})", jpg.display());
     }
     Ok(())

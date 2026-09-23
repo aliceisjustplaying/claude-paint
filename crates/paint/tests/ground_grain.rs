@@ -101,25 +101,24 @@ fn only(st: &Style, g: Vec<Ground>) -> Style {
 /// The brushed top ground is not a field of parallel horizontal ridges: a
 /// primer's hand still favors the across direction a little, but its
 /// relief runs every way. At 1200 px the knife-spread layers under it
-/// measure 1.05 fine and 1.04 coarse; the brushed ground 1.74 and 2.2
+/// measure 1.05 fine and 1.04 coarse; the brushed ground 1.53 and 1.80
 /// (before loop 2: 2.63 and 5.6, the wood-grain). At 3200 px
-/// (`print_ground_grain`, 3 seeds) it is 2.1–2.6 and 2.5–3.6 (before:
-/// 3.6–4.1 and 7.4–8.5).
+/// (`print_ground_grain`, seeds 1, 23, 5) it is 2.0–2.4 and 2.2–2.8
+/// (before: 3.6–4.1 and 7.4–8.5; linen + knives 1.5 and 2.5).
 #[test]
 fn friedrich_ground_has_no_horizontal_grain() {
     let st = Style::friedrich();
     let knives = only(&st, st.ground[..2].to_vec());
     // (1200 px keeps it quick in the debug profile; the full-resolution
     // numbers are in `print_ground_grain`)
-    for seed in [1u64] {
-        let under = surface_grain(&knives, 1200, seed);
-        let g = surface_grain(&st, 1200, seed);
-        eprintln!("seed {seed}: knives {under:?}\n        friedrich {g:?}");
-        assert!(g.fine < 2.2, "seed {seed}: horizontal striations dominate: {g:?}");
-        assert!(g.coarse < 3.5, "seed {seed}: horizontal ridges (wood-grain): {g:?} vs knives {under:?}");
-        // but the brush marks are still there to show through thin paint
-        assert!(g.rms > 1.2 * under.rms, "seed {seed}: the brushed ground lost its striations: {g:?} vs knives {under:?}");
-    }
+    let seed = 1u64;
+    let under = surface_grain(&knives, 1200, seed);
+    let g = surface_grain(&st, 1200, seed);
+    eprintln!("seed {seed}: knives {under:?}\n        friedrich {g:?}");
+    assert!(g.fine < 2.2, "seed {seed}: horizontal striations dominate: {g:?}");
+    assert!(g.coarse < 3.0, "seed {seed}: horizontal ridges (wood-grain): {g:?} vs knives {under:?}");
+    // but the brush marks are still there to show through thin paint
+    assert!(g.rms > 1.2 * under.rms, "seed {seed}: the brushed ground lost its striations: {g:?} vs knives {under:?}");
 }
 
 /// Diagnostic: the grain of each ground stack at full resolution.

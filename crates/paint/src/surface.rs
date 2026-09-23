@@ -32,9 +32,6 @@ pub(crate) const SET_TIME: f32 = 900.0;
 /// f32 resolves ~10⁻⁵ µm, so a deposit below this is lost in rounding and
 /// its leveled share would be float residue.
 const ADD_EPS_UM: f32 = 1e-4;
-/// Share of the paint laid that stays on a crest the leveled film stands
-/// below (see `settle_for`).
-const CREST_FILM: f32 = 0.2;
 
 /// Plain-weave linen.
 #[derive(Clone, Copy, Debug)]
@@ -229,14 +226,8 @@ impl Canvas {
                 let d1 = shrink(s[i] - l1[i], k1, c1);
                 let d2 = shrink(l1[i] - l2[i], k2, c2);
                 let lev = l2[i] + d1 + d2;
-                // the wet film can move sideways but not dig into what's
-                // under it, and it never drains a crest bare: the flow off a
-                // crest goes as the film's thickness cubed, so it stalls as
-                // the film thins and a residue stays (without it the crest's
-                // rim, where the leveled surface meets the old one, drained
-                // to nothing while a wide drained crest keeps its paint
-                // below: one-pixel rings of bare ground round every ridge)
-                row[x] = (lev - old[i]).max(CREST_FILM * a);
+                // the wet film can move sideways but not dig into what's under it
+                row[x] = (lev - old[i]).max(0.0);
             }
         });
         // conserve paint: the leveled shape says where the wet film gathers,

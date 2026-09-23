@@ -551,6 +551,7 @@ end
 glaze(heath:blur(3), {color="#3a3a2c", coats=0.18, pigment="semi"})
 
 --@ chunk 33 · clock 45631.58203125
+gclip = gclip - figure:grow(1.5) - ribbon({{FX + 8.2, FY - 25}, {FX + 10.6, FY - 12}, {FX + 12.8, FY + 0.5}}, 2.5)
 
 seaband2 = noise{seed=14, octaves=4, period=160, stretch={0.0, 30}}
 seacol2 = function(x, y)
@@ -600,5 +601,23 @@ end
 print(n)
 
 --@ chunk 36 · clock 99678.07006835938
+
+local cornerL = poly({{FX - 6.4, FY - 45}, {FX - 2.2, FY - 45.6}, {FX - 2.6, FY - 44.3}, {FX - 6.8, FY - 40.5}}, false):grow(0.3)
+local cornerR = poly({{FX + 6.2, FY - 45}, {FX + 2.4, FY - 45.6}, {FX + 2.8, FY - 44.3}, {FX + 6.6, FY - 40.5}}, false):grow(0.3)
+local coatm = (figure * mask(function(x, y) return y > FY - 45.2 and 1 or 0 end) - cornerL - cornerR):shrink(0.25)
+work(coatm, {hand="detail", tool="round 1.4", color=function(x, y) return mix("#22242a", "#1a1b1f", smoothstep(FY - 45, FY, y)) end,
+  angle=math.pi / 2, angle_jitter=0.15, length={3, 8}, coverage=4.5, medium=0.12, clip=coatm})
+local capm = ellipse(FX + 0.3, FY - 52.2, 4.0, 2.4)
+work(capm, {hand="detail", tool="round 1", color="#1b1c21", angle=0, length={2, 5}, coverage=4, clip=capm})
+local rb = brush("rigger", 0.4)
+rb:load("#5e4d3d", 0.45)
+rb:stroke({{FX + 3.0, FY - 44.0}, {FX + 6.0, FY - 40.6}, {FX + 6.9, FY - 33}, {FX + 7.7, FY - 22}, {FX + 8.4, FY - 13}}, {pressure={0.4, 0.15}, ramps={0.1, 0.4}, clip=coatm:grow(0.4)})
+
+--@ chunk 37 · clock 99678.07006835938
+
+local ring = (figure:grow(1.8) - figure:grow(0.15)) * seaclip - stonesil:grow(0.5) - (oakA:mask() + oakB:mask()):grow(0.5)
+stipple(ring, {width=0.9, color=seacol2, coverage=4, pressure={0.4, 0.8}, dips={30, 0.4, 0.5}, medium=0.45, fade=0, clip=ring})
+
+--@ chunk 38 · clock 99678.07006835938
 
 dry(); varnish{color="#e6d3a4", coats=0.3, vary=0.1}; relief(0.14)

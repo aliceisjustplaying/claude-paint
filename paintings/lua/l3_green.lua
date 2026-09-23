@@ -1,5 +1,5 @@
--- easel session "l2_green": a painting replayed chunk by chunk.
---   easel run paintings/lua/l2_green.lua [--width 3200]
+-- easel session "l3_green": a painting replayed chunk by chunk.
+--   easel run paintings/lua/l3_green.lua [--width 3200]
 -- Each "--@ chunk" line starts one chunk as it was run at the easel (clock = painting minutes).
 
 --@ chunk 1 · clock 0
@@ -562,8 +562,9 @@ print(n, "blades")
 
 --@ chunk 23 · clock 100816.7353515625
 -- the plain: fuse the dash-rows a little and cut the sugary greens with a thin muted veil
+-- (motifs cut with their exact masks: a grown cut-out leaves an unveiled ring that reads as a halo)
 OAKALL = oak:mask():grow(2) + CROWN:grow(3)
-local keep = HILL:grow(1) + WOOD:grow(1) + FIELDTREES:grow(1.5) + VILLAGE:grow(1.5) + OAKALL + FIG:grow(3) + STONE:grow(3)
+local keep = HILL + WOOD + FIELDTREES + VILLAGE + OAKWOOD + CROWN + FIG + STONE
 PLAIN = below(function(x) return HZ + 1 end) - keep
 local vn = noise{seed=91, octaves=3, period=60, stretch={0, 3}}
 work(PLAIN, {hand="glaze", tool="filbert 4", length={6, 16}, coverage=1.6, angle=function(x, y) return 0.02*math.sin(x/120) end, medium=0.75, load=0.35, clip=PLAIN,
@@ -576,15 +577,16 @@ print("plain", PLAIN:area())
 
 --@ chunk 24 · clock 100816.7353515625
 -- mute the sugary yellow-green of the near hill toward an olive earth green, heaviest where it is lit
+-- cut out only the exact figure, stone and painted oak wood (OAKWOOD: oak:mask() is wider than the paint): no grown ring left in the old yellow-green
 local hn2 = noise{seed=93, octaves=3, period=120}
-local hillg = (HILL - FIG:grow(2) - STONE:grow(2) - OAKALL) * mask(function(x, y) return 0.75 + 0.25*hn2:at01(x, y) end)
+local hillg = (HILL - FIG - STONE - OAKWOOD) * mask(function(x, y) return 0.75 + 0.25*hn2:at01(x, y) end)
 glaze(hillg, {color="#6d6a4c", coats=0.32, pigment="semi"})
 -- quiet the cumulus: a veil of the sky's own blue-gray over the clouds, so they sit back into a calm sky
-local cm = (cl:mask{alpha={0.25, 0.9}} * above(function(x) return HZ - 30 end) - OAKALL):blur(8)
+local cm = (cl:mask{alpha={0.25, 0.9}} * above(function(x) return HZ - 30 end)):blur(8) - oak:mask() - CROWN
 glaze(cm, {color="#aeb6bd", coats=0.4, pigment="semi"})
 print("ok")
 
---@ chunk 25 · clock 111723.3642578125
+--@ chunk 25 · clock 111957.0087890625
 -- the wanderer: a hat brim, a head under it, a lit left flank of the coat, a staff; so he is a man, not a hooded blob
 local x, y, k = 348, 488, 1.3
 local function F(dx, dy) return {x + k*dx, y + k*dy} end
@@ -618,7 +620,7 @@ for i = 1, 26 do
   if STONE:at(px, py) > 0.5 then ml:reload(i % 2 == 0 and "#4f5a38" or "#6b6a46", 0.6); ml:touch(px, py, {pressure=0.5, drag={rand(1, 3), -0.5}}) end
 end
 
---@ chunk 26 · clock 118524.91064453125
+--@ chunk 26 · clock 118498.6943359375
 -- a stilled sky: the puffy cumulus overpainted into long, low banks; slate above, a warm glow low over the village
 local function crest(x) local m = HZ for _, l in ipairs(rs) do local c = l:crest(x); if c and c < m then m = c end end return m end
 local sn = noise{seed=101, octaves=4, period=140, stretch={0.0, 7}}
@@ -647,7 +649,7 @@ work(ring, {hand="detail", tool="round 2", length={3, 8}, coverage=3.2, medium=0
   color_over=function(x, y, under) return mix(under, calmsky(x, y), 0.85) end})
 print("ring", ring:area())
 
---@ chunk 27 · clock 118524.91064453125
+--@ chunk 27 · clock 118498.6943359375
 -- the oak's crown restated clump by clump: each clump a mass with a shadowed underside and a lit cap
 -- of hooked leaf strokes toward the low sun (upper left), so the crown has structure, not one flat blob
 local dkb, mdb, ltb = brush("round", 1.8), brush("round", 1.6), brush("round", 1.3)
@@ -707,7 +709,7 @@ for i = 1, 5000 do
 end
 print("clumps used", used, "strokes", n, "rim", k)
 
---@ chunk 28 · clock 118524.91064453125
+--@ chunk 28 · clock 118498.6943359375
 -- the crown as one mass in the low light: lit upper left, a transparent shade deepening to the lower right
 local cn = noise{seed=111, octaves=3, period=50}
 local shade = CROWN * mask(function(x, y) return smoothstep(-0.1, 0.9, ((x - 120)/240 + (y - 140)/200)*0.7 + 0.2*cn(x, y)) end)
@@ -717,7 +719,7 @@ local fx, fy = 348, 488
 local cast = (ellipse(fx + 12, fy + 0.8, 13, 1.8):roughen(0.8, 5, 3, 1) + ellipse(fx + 1, fy, 5, 1.4)) - FIG
 glaze(cast:blur(1), {color="#26301f", coats=0.6, pigment="transparent"})
 -- the stone seated in the turf: a contact crease along its foot, darkest in the middle
-local foot = mask(function(x, y) local b = 503 + 3*math.sin(x/11) return smoothstep(6, 0, math.abs(y - b)) * smoothstep(372, 395, x) * (1 - smoothstep(470, 486, x)) end) - FIG:grow(1)
+local foot = mask(function(x, y) local b = 503 + 3*math.sin(x/11) return smoothstep(6, 0, math.abs(y - b)) * smoothstep(372, 395, x) * (1 - smoothstep(470, 486, x)) end) - FIG
 glaze(foot:blur(1.5), {color="#232a1c", coats=0.55, pigment="transparent"})
 -- grass blades over his boots and the stone's foot, so neither sits on the ground like a sticker
 local g = brush("rigger", 0.5)
@@ -731,12 +733,43 @@ for i = 1, 160 do
 end
 print("cast", cast:area(), "foot", foot:area())
 
---@ chunk 29 · clock 133667.92138671875
+--@ chunk 29 · clock 133182.501953125
 -- the land under the evening sky: a transparent warm umber glaze, light on the far plain, heavier toward us,
 -- so the noon greens sink into one stilled light and the glow over the village is the brightest thing
 local ln = noise{seed=121, octaves=3, period=160}
 local land = mask(function(x, y) return smoothstep(HZ - 2, HZ + 6, y) * (0.3 + 0.7*smoothstep(300, 640, y + 25*ln(x, y))) end)
 glaze(land, {color="#4f4a33", coats=0.42, pigment="transparent"})
 
---@ chunk 30 · clock 134695.46948242188
+--@ chunk 30 · clock 134210.0499267578
+-- the pale fringe around the boulder's top (unclipped pale stone strokes that overshot): paint the plain and turf
+-- back up to the stone's exact edge, each touch in the ground color sampled farther out along the same ray
+local cx, cy = 432, 486
+local band = (STONE:grow(7):soften(2) - STONE) * mask(function(x, y) return 1 - smoothstep(498, 506, y) end)
+local out = function(x, y)
+  local dx, dy = x - cx, (y - cy) * 1.5
+  local d = math.sqrt(dx*dx + dy*dy) + 1e-6
+  return sample(x + 11*dx/d, y + 11*dy/d/1.5, 2.5)
+end
+work(band, {hand="detail", tool="round 1.6", length={2, 6}, coverage=3, medium=0.25, angle=function(x, y) return 0.05*math.sin(x/9) end,
+  color=out, hug=false, clip=-STONE, pal=pal})
+print("band", band:area())
+
+--@ chunk 31 · clock 134210.0499267578
+-- the yellow-green glow around the oak's trunk and roots at 3200 (the late glazes stop short beside the thick trunk
+-- paint): paint the turf and the plain back up to the wood's exact edge, each touch in the color sampled
+-- farther out along the direction away from the wood (the distance field's gradient)
+local D = OAKWOOD:distance()
+local band = (OAKWOOD:grow(7):soften(2) - OAKWOOD) * mask(function(x, y) return smoothstep(330, 350, y) end)
+local out = function(x, y)
+  local gx = D:at(x + 1.5, y) - D:at(x - 1.5, y)
+  local gy = D:at(x, y + 1.5) - D:at(x, y - 1.5)
+  local g = math.sqrt(gx*gx + gy*gy)
+  if g < 1e-6 then return sample(x, y + 10, 2.5) end
+  return sample(x - 11*gx/g, y - 11*gy/g, 2.5)
+end
+work(band, {hand="detail", tool="round 1.6", length={2, 6}, coverage=3, medium=0.25, angle=function(x, y) return 0.05*math.sin(x/9) end,
+  color=out, hug=false, clip=-OAKWOOD, pal=pal})
+print("band", band:area())
+
+--@ chunk 32 · clock 134210.0499267578
 wait(24*60); varnish{color="#e6d3a4", coats=0.3, vary=0.1}; relief()

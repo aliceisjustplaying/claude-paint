@@ -121,3 +121,169 @@ work(grovem, {hand="hatch", tool="round 1.2", length={1.5, 3.5}, coverage=2.6, a
   color=function(x, y) return grovecol(x, y, "#28382a") end})
 work(grovelit, {hand="hatch", tool="round 1.0", length={1.2, 3}, coverage=1.6, angle=function(x, y) return 1.6 + 1.5 * turn(x, y) end,
   color=function(x, y) return grovecol(x, y, "#5c6f3b") end})
+
+--@ chunk 11 · clock 38749.6328125
+
+for _, hab in ipairs({"oak", "dead_oak"}) do
+  local t = tree{habit=hab, x=430, y=484, height=300, seed=17}
+  local dead = 0
+  for _, l in ipairs(t.limbs) do if l.dead then dead = dead + 1 end end
+  print(hab, #t.limbs, "dead", dead, table.concat(t.bounds, ","))
+end
+
+--@ chunk 12 · clock 38749.6328125
+
+for _, sd in ipairs({3, 17, 29, 44, 58}) do
+  for _, yr in ipairs({80, 160}) do
+    local t = tree{habit="oak", x=430, y=484, height=300, seed=sd, years=yr}
+    local dead = 0
+    for _, l in ipairs(t.limbs) do if l.dead then dead = dead + 1 end end
+    local b = t.bounds
+    print(sd, yr, #t.limbs, dead, math.floor(b[3]-b[1]), math.floor(b[4]-b[2]))
+  end
+end
+
+--@ chunk 13 · clock 38749.6328125
+
+for _, sd in ipairs({3, 17, 29, 44}) do
+  for _, yr in ipairs({250, 400}) do
+    local t = tree{habit="oak", x=430, y=484, height=300, seed=sd, years=yr}
+    local dead = 0
+    for _, l in ipairs(t.limbs) do if l.dead then dead = dead + 1 end end
+    local b = t.bounds
+    print(sd, yr, #t.limbs, dead, math.floor(b[3]-b[1]), math.floor(b[4]-b[2]), math.floor(b[1]))
+  end
+end
+
+--@ chunk 14 · clock 38749.6328125
+
+for _, sd in ipairs({17, 29, 44}) do
+  for _, yr in ipairs({24, 34, 44}) do
+    local t = tree{habit="oak", x=430, y=484, height=300, seed=sd, years=yr}
+    local dead = 0
+    for _, l in ipairs(t.limbs) do if l.dead then dead = dead + 1 end end
+    local b = t.bounds
+    print(sd, yr, #t.limbs, dead, math.floor(b[3]-b[1]), math.floor(b[4]-b[2]), math.floor(b[1]))
+  end
+end
+
+--@ chunk 15 · clock 38749.6328125
+wait(24*60)
+OX, OY = 430, 486
+w = world{horizon=HZ, eye=6, fov=50, sun={azimuth=-112, elevation=54}, ground=knollg}
+oak = tree{habit="oak", x=OX, y=OY, height=300, seed=17, years=34}
+oakleaves = oak:foliage{sun={-0.75, -0.6, 0.3}, seed=17}
+local s = w:spot(OX, OY)
+w = w:proxy(s, body.ellipsoid(s:p(-1.3, 10.5, 0), s:size(5, 4, 4.6)))
+w = w:proxy(s, body.block(s:p(0, 3, 0), s:size(0.5, 3, 0.5), s:m(0.2)))
+v = w:view()
+local sa = w:shadow_angle(OX, OY + 2) or 0
+local sh = (v:shadows() * v:land()):roughen(5, 18, 3, 3):soften(3)
+work(sh, {hand="body", tool="filbert 3", length={5, 14}, coverage=3, angle=sa, angle_jitter=0.3,
+  color_over={shift={-0.065, -0.004, -0.018}}})
+
+--@ chunk 16 · clock 40189.6328125
+wait(3*60)
+local trunk, limb, twig = brush("round", 4.5), brush("round", 1.8), brush("rigger", 0.7)
+for i, l in ipairs(oak.limbs) do
+  if #l.pts >= 2 then
+    local b = (l.order == 0) and trunk or ((l.w[1] > 1.0) and limb or twig)
+    local c = l.dead and "#6e675c" or "#3a332b"
+    if i % 5 == 1 or b:fullness() < 0.3 then b:reload(c, 0.9) end
+    local p = (l.order == 0) and {1.0, 0.55} or {0.85, 0.2}
+    b:stroke(l.pts, {pressure=p, ramps={0.03, 0.5}, shake=0.6})
+  end
+end
+local turn = noise{seed=71, period=10}
+oakway = function(x, y) return 2.4 * turn(x, y) end
+local crown = oakleaves:mask()
+local lit = oakleaves:lit()
+local yy = function(y) return clamp((y - 180) / 300, 0, 1) end
+work(crown, {hand="hatch", tool="round 1.8", length={3, 7}, coverage=2.4, angle=oakway, angle_jitter=0.7,
+  color=function(x, y) return mix("#3c4e2c", "#32422a", yy(y)) end})
+work(crown - lit:grow(1), {hand="hatch", tool="round 1.5", length={2.5, 6}, coverage=2.0, angle=oakway, angle_jitter=0.7,
+  color=function(x, y) return mix("#27331f", "#1f2a1c", yy(y)) end})
+work(lit * crown, {hand="hatch", tool="round 1.3", length={2, 5}, coverage=2.0, angle=oakway, angle_jitter=0.7,
+  color=function(x, y) return mix("#667f38", "#556d31", yy(y)) end})
+
+--@ chunk 17 · clock 40369.6328125
+local l = oak.limbs[1]; print(#l.pts, l.w[1], l.w[#l.w], l.pts[1][1], l.pts[1][2], l.pts[#l.pts][1], l.pts[#l.pts][2]); local c=0; for _, m in ipairs(oak.limbs) do if m.order==1 then c=c+1; if c<6 then print("o1", m.w[1], #m.pts) end end end
+
+--@ chunk 18 · clock 40369.6328125
+local wood, woodlit = nil, nil
+for _, l in ipairs(oak.limbs) do
+  if #l.pts >= 2 and l.w[1] > 1.6 then
+    local ws, lp, lw = {}, {}, {}
+    for k = 1, #l.pts do
+      ws[k] = math.max(0.6, l.w[k] * 0.95)
+      lp[k] = {l.pts[k][1] - ws[k] * 0.22, l.pts[k][2]}
+      lw[k] = ws[k] * 0.45
+    end
+    local r = ribbon(l.pts, ws)
+    wood = wood and (wood + r) or r
+    local rl = ribbon(lp, lw)
+    woodlit = woodlit and (woodlit + rl) or rl
+  end
+end
+oakwood = wood:roughen(0.6, 4)
+oakwoodlit = woodlit * oakwood
+local bn = noise{seed=5, period=6, stretch={1.5, 4}}
+work(oakwood, {hand="body", tool="round 1.6", length={3, 9}, coverage=3, angle=function(x, y) return 1.5 + 0.3 * bn(x, y) end,
+  color=function(x, y) return mix("#2c2721", "#3d352c", bn:at01(x, y)) end})
+work(oakwoodlit, {hand="detail", tool="round 1.2", length={2, 6}, coverage=2.2, angle=function(x, y) return 1.5 + 0.4 * bn(x, y) end,
+  color=function(x, y) return mix("#6b6558", "#8c8472", bn:at01(x * 1.3, y)) end})
+
+--@ chunk 19 · clock 40369.6328125
+wait(2*60)
+local crown = oakleaves:mask()
+local lit = oakleaves:lit()
+local yy = function(y) return clamp((y - 180) / 300, 0, 1) end
+local keep = crown * (oakwood:shrink(0.5) * mask(function(x, y) return y > 420 and 1 or 0 end)):map(function(v) return 1 - v end)
+work(keep - lit:grow(1), {hand="hatch", tool="round 1.4", length={2.5, 5}, coverage=1.3, angle=oakway, angle_jitter=0.8,
+  color=function(x, y) return mix("#2a3621", "#212b1c", yy(y)) end})
+work(lit * keep, {hand="hatch", tool="round 1.2", length={2, 4.5}, coverage=1.4, angle=oakway, angle_jitter=0.8,
+  color=function(x, y) return mix("#6e883c", "#5b7433", yy(y)) end})
+-- the sun's touches: small, uneven, on the lit tops
+local hl = lit * crown * mask(function(x, y) return 1 - yy(y) * 0.7 end)
+stipple(hl:shrink(1.5), {width=1.6, color="#9aae5c", coverage=function(x, y) return 0.9 end, pressure={0.35, 0.8},
+  dips={14, 0.4, 0.7}, aim=false, medium=0.3, fade=1, drag={1, -0.4}, twist=0.6})
+-- dead snags through the top of the crown
+local snag = brush("round", 1.6)
+snag:load("#5f594f", 0.9)
+snag:stroke({{392, 214}, {388, 196}, {394, 176}, {389, 160}}, {pressure={0.9, 0.1}, ramps={0.05, 0.7}, shake=0.8})
+snag:stroke({{391, 190}, {377, 178}, {371, 167}}, {pressure={0.6, 0.05}, ramps={0.05, 0.7}})
+snag:stroke({{394, 176}, {404, 168}, {406, 158}}, {pressure={0.5, 0.0}, ramps={0.05, 0.7}})
+snag:reload("#5f594f", 0.8)
+snag:stroke({{482, 262}, {498, 246}, {503, 230}, {514, 221}}, {pressure={0.75, 0.05}, ramps={0.05, 0.7}, shake=0.8})
+snag:stroke({{500, 240}, {510, 243}}, {pressure={0.4, 0.0}})
+local tip = brush("rigger", 0.6)
+tip:load("#8c8578", 0.7)
+tip:stroke({{390, 212}, {387, 195}, {392, 177}}, {pressure={0.5, 0.2}, ramps={0.05, 0.6}})
+
+--@ chunk 20 · clock 40489.6328125
+wait(24*60)
+-- a sandy track from the lower right, rising to pass left of the oak's foot
+pathpts = {{800, 720}, {720, 660}, {640, 612}, {575, 570}, {520, 535}, {478, 508}, {440, 492}, {395, 480}, {340, 470}, {290, 462}}
+pathw = {48, 40, 32, 25, 19, 14, 11, 8, 6, 5}
+pathm = ribbon(pathpts, pathw):roughen(2.5, 10, 5, 1):soften(1.5)
+local pn = noise{seed=61, octaves=4, period=20}
+work(pathm, {hand="body", tool="filbert 4", length={6, 18}, coverage=3, medium=0.15,
+  angle=function(x, y) return -0.65 + 0.2 * pn(x, y) end,
+  color=function(x, y) local c = mix(mix("#7f7650", "#968a60", pn:at01(x, y)), "#5f6e33", 0.3 + 0.3 * pn:at01(y, x)); return mix(c, "#9c9f7c", smoothstep(560, 470, y) * 0.4) end})
+-- ruts: two darker lines along it
+local rut = brush("round", 2.2)
+for side = -1, 1, 2 do
+  local pts = {}
+  for k, p in ipairs(pathpts) do pts[k] = {p[1] + side * pathw[k] * 0.22, p[2] + side * pathw[k] * 0.12} end
+  rut:reload("#7d6c4d", 0.7)
+  rut:stroke(pts, {pressure={0.7, 0.15}, ramps={0.02, 0.5}, shake=1.5})
+end
+-- the foreground bank under a passing cloud's shade: deeper, warmer greens laid in body
+local fgt = function(x, y) return smoothstep(585, 700, y + 30 * pn(x * 0.25, 7)) end
+fgm = mask(function(x, y) return fgt(x, y) > 0.02 and 1 or 0 end)
+local gn = noise{seed=63, octaves=4, period=35}
+work(fgm - pathm:shrink(2), {hand="body", tool="filbert 5", length={10, 30}, coverage=3, medium=0.18,
+  angle=function(x, y) return 0.06 * gn(x, y) end,
+  color=function(x, y, u) local t = fgt(x, y); return mix(mix("#5d7230", "#6a7a36", gn:at01(x, y)), mix("#3c4a24", "#4a4a28", gn:at01(y, x)), t) end})
+work(fgm * pathm, {hand="body", tool="filbert 4", length={6, 16}, coverage=2.5, medium=0.18, angle=-0.6,
+  color=function(x, y) return mix("#7f7650", "#5e5638", fgt(x, y)) end})

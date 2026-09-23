@@ -1,3 +1,10 @@
 [alias]
 # cargo paint <painting> [-- --full | --width N | --seed N]
 paint = "run --release -q -p paintings --bin"
+
+[env]
+# Lua 5.5 seeds its string hash (so `pairs` order) and table.sort's pivots
+# from the clock and ASLR; a painting must replay identically, so the easel
+# builds Lua with a fixed seed. Only lua-src compiles C in this workspace.
+# (Session::new checks it and refuses to run without it.)
+CFLAGS = "-Dluai_makeseed()=0x5eedu"

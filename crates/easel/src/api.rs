@@ -592,17 +592,10 @@ fn wrap(m: Mask) -> M {
 impl UserData for M {
     fn add_methods<M_: UserDataMethods<Self>>(m: &mut M_) {
         m.add_method("blur", |_, a, r: f32| Ok(wrap((*a.0).clone().blur(r))));
-        // m:roughen(units, period?, seed?): push the edge in and out by up
-        // to about `units` with fractal noise of the given period
-        m.add_method("roughen", |_, a, (amount, period, seed): (f32, Option<f32>, Option<u32>)| {
-            let n = Fbm::new(seed.unwrap_or(1), 5, period.unwrap_or(40.0));
-            let mut d = a.0.distance();
-            let (w, s) = (d.f.w, d.f.scale);
-            for (i, v) in d.data.iter_mut().enumerate() {
-                let (x, y) = (((i % w) as f32 + 0.5) / s, ((i / w) as f32 + 0.5) / s);
-                *v = ((*v + amount * n.get(x, y)) * s + 0.5).clamp(0.0, 1.0);
-            }
-            Ok(wrap(d))
+        // m:roughen(units, period?, seed?, edge?): the edge moves in and out
+        // by up to about `units` (noise of `period` units), ramping over `edge`
+        m.add_method("roughen", |_, a, (amount, period, seed, edge): (f32, Option<f32>, Option<u32>, Option<f32>)| {
+            Ok(wrap((*a.0).clone().roughen(seed.unwrap_or(1), period.unwrap_or(40.0), amount, edge.unwrap_or(0.0))))
         });
         // m:soften(units): a soft edge that many units wide
         m.add_method("soften", |_, a, w: f32| Ok(wrap(a.0.soften(move |_, _| w))));
@@ -1092,10 +1085,12 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
                     s.setup = Some(format!("style={name:?}, aspect={aspect}, seed={seed}"));
                 }
                 let gl = lua.globals();
-                gl.set("W", 1000.0)?;
-                gl.set("H", h)?;
+                // whole numbers as Lua integers (so `print(H)` says 714, not 714.0)
+                let hv = if h.fract() == 0.0 { Value::Integer(h as i64) } else { Value::Number(h as f64) };
+                gl.set("W", 1000)?;
+                gl.set("H", hv.clone())?;
                 gl.set("pal", pal)?;
-                Ok(h)
+                Ok(hv)
             })?,
         )?;
     }
@@ -1286,11 +1281,15 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
             let mut s = st1.borrow_mut();
             let mut k = Cracks::aged(s.seed);
             if let Some(o) = &o {
-                check_keys(o, &["island_mm", "ground_um", "width_um", "depth_um", "cupping_um", "dirt", "corners", "seed"], "cracks")?;
+                check_keys(o, &["island_mm", "ground_um", "width_um", "depth_um", "cupping_um", "dirt", "corners", "vary", "veil", "seed"], "cracks")?;
+                // unset: fitted to this canvas's ground (Cracks::aged)
+                k.island_mm = num(o, "island_mm")?.or(k.island_mm);
+                k.ground_um = num(o, "ground_um")?.or(k.ground_um);
+                k.width_um = num(o, "width_um")?.or(k.width_um);
                 macro_rules! over {
                     ($($f:ident),*) => {$( if let Some(v) = num(o, stringify!($f))? { k.$f = v; } )*};
                 }
-                over!(island_mm, ground_um, width_um, depth_um, cupping_um, dirt);
+                over!(depth_um, cupping_um, dirt, vary, veil);
                 if let Some(c) = o.get::<Option<bool>>("corners")? {
                     k.corners = c;
                 }

@@ -16,6 +16,11 @@ use crate::rng::Rng;
 use crate::wet::Paint;
 use rayon::prelude::*;
 
+/// Thickness (coats) palette-mixed handlings aim at unless told otherwise:
+/// a broad passage lays about 1.1 coats at its median (see the
+/// `probe_laid_thickness` test in wet.rs).
+pub const DEFAULT_AIM_COATS: f32 = 1.0;
+
 type Field<'a, T> = Box<dyn Fn(f32, f32) -> T + Sync + 'a>;
 
 pub struct Handling<'a> {
@@ -138,8 +143,18 @@ impl<'a> Handling<'a> {
         self
     }
     /// Mix every pile from `palette`'s tubes, thinned with `medium` (0..1).
+    /// The color field is the look wanted on the canvas: piles are aimed at
+    /// it over what is already there, expecting one coat (change with
+    /// `aim`, or mix by masstone with `by_masstone`).
     pub fn mixed(mut self, palette: &'a Palette, medium: f32) -> Self {
         self.palette = Some((palette, medium));
+        self.aim = self.aim.or(Some(DEFAULT_AIM_COATS));
+        self
+    }
+    /// Mix piles to the color field as masstone, without looking at the
+    /// canvas (the paint's own color, laid thick; see `Palette::mix`).
+    pub fn by_masstone(mut self) -> Self {
+        self.aim = None;
         self
     }
     /// Aim every pile at the look wanted on the canvas, expecting paint laid

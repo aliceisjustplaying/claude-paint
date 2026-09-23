@@ -78,9 +78,12 @@ impl Paint {
         Paint::solve(want, under, coats, hiding, stiff)
     }
     fn solve(want: Rgb, under: Rgb, coats: f32, hiding: f32, stiff: f32) -> Self {
+        // the scattering follows from the masstone's luminance and the
+        // hiding, the masstone from the scattering: iterate to the fixed point
         let mut m = want;
-        for _ in 0..4 {
+        for _ in 0..24 {
             let s = scatter_for(luminance(m), hiding);
+            let prev = m;
             for c in 0..3 {
                 let (mut lo, mut hi) = (0.002f32, 0.995f32);
                 for _ in 0..30 {
@@ -92,6 +95,9 @@ impl Paint {
                     }
                 }
                 m[c] = 0.5 * (lo + hi);
+            }
+            if (0..3).all(|c| (m[c] - prev[c]).abs() < 1e-4) {
+                break;
             }
         }
         Paint { color: m, hiding, stiff }

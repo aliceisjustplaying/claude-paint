@@ -18,12 +18,11 @@ fn main() {
 
     // top row: the men
     let gy = h * 0.46;
-    figures::monk(&mut c, (110.0, gy), fh, body("#14120f"), thin("#a8986f"), None, 1);
     let sh = figures::man_in_cape(&mut c, (400.0, gy), fh, body("#3a3f33"), body("#15130f"), thin("#2a2119"), Some(rim), 2);
     figures::youth_in_frock(&mut c, (335.0, gy - 8.0), fh * 0.99, body("#394034"), body("#15130f"), thin("#33281c"), body("#d6cfbd"), Some(sh), Some(rim), 3);
     figures::wanderer(&mut c, (640.0, gy), fh, body("#2c3230"), body("#15130f"), thin("#6b5234"), 0.06, Some(rim), 5);
-    // the monk again, small, as he is in the painting (44 units)
-    figures::monk(&mut c, (860.0, gy), 44.0, body("#14120f"), thin("#a8986f"), None, 4);
+    // the wanderer again, small, as a figure in a landscape (44 units)
+    figures::wanderer(&mut c, (860.0, gy), 44.0, body("#2c3230"), body("#15130f"), thin("#6b5234"), 0.06, Some(rim), 4);
 
     // bottom row: women in the three poses, with and without a shawl
     let gy = h * 0.96;

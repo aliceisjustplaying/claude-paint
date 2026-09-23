@@ -3,9 +3,6 @@
 //! Local coordinates: `u` across (+ = the figure's right, which is also the
 //! viewer's right since they face away), `v` up from the feet, both in figure
 //! heights. Sources for what they look like:
-//! - Monk by the Sea: "a single figure, dressed in a long garment ... turned
-//!   almost completely away from the viewer"; "the long blond hair and round
-//!   skull" (https://en.wikipedia.org/wiki/The_Monk_by_the_Sea).
 //! - Two Men Contemplating the Moon: "The man on the right is wearing a
 //!   grey-green cape and the black beret of the altdeutsche Tracht and has a
 //!   stick in his right hand. The man on the left is somewhat higher on the
@@ -44,54 +41,6 @@ pub fn mix(a: Paint, b: Paint, t: f32) -> Paint {
         color: paint::color::mix(a.color, b.color, t, Mix::Pigment),
         hiding: a.hiding + (b.hiding - a.hiding) * t,
         stiff: a.stiff + (b.stiff - a.stiff) * t,
-    }
-}
-
-/// The monk: long dark habit widening a little to the hem, sloping shoulders,
-/// right arm raised with the hand to the face (the elbow shows at his side),
-/// round head of pale hair. `light` is a lean rim touched on the lit side.
-pub fn monk(c: &mut Canvas, at: (f32, f32), size: f32, robe: Paint, hair: Paint, light: Option<Paint>, seed: u64) {
-    let mut h = Hand::new(at, size, seed);
-    let p = body(robe);
-    let mut b = h.take(Tool::round_sable, 0.075, p, 1.0);
-    // the habit: four long strokes from the shoulders down, pressing harder
-    // toward the hem so it widens; outer strokes lean out a little
-    for (i, (u0, u1)) in [(-0.045f32, -0.075f32), (0.045, 0.08), (-0.014, -0.025), (0.016, 0.028)].iter().enumerate() {
-        if i % 2 == 0 {
-            b.reload(p, 1.0);
-        }
-        let mid = (u0 + u1) * 0.5 + h.rng.normal() * 0.004;
-        h.mark(c, &mut b, Mark { pts: &[(*u0, 0.82), (mid, 0.45), (*u1, 0.02)], pressure: (0.65, 1.0), ramps: (0.05, 0.06) }, None);
-    }
-    // and over it once more, lighter, to close the grooves between the hairs
-    for (u0, u1) in [(-0.03f32, -0.05f32), (0.03, 0.055), (0.0, 0.0)] {
-        b.reload(p, 1.0);
-        h.mark(c, &mut b, Mark { pts: &[(u0, 0.8), (u1, 0.03)], pressure: (0.6, 0.85), ramps: (0.1, 0.1) }, None);
-    }
-    b.reload(p, 1.0);
-    // shoulders: one stroke across, dropping at both ends
-    h.line(c, &mut b, &[(-0.085, 0.76), (-0.04, 0.825), (0.04, 0.825), (0.085, 0.76)], 0.7, 0.7);
-    // raised right arm: out to the elbow and back in toward the face
-    h.line(c, &mut b, &[(0.06, 0.79), (0.115, 0.69), (0.085, 0.61)], 0.75, 0.55);
-    // hem: firm across the bottom
-    h.line(c, &mut b, &[(-0.095, 0.03), (0.0, 0.015), (0.105, 0.03)], 0.8, 0.8);
-    // the hood gathered at the nape
-    let mut nb = h.take(Tool::round_sable, 0.04, p, 0.8);
-    h.dab(c, &mut nb, 0.0, 0.845, 0.03, 0.0, 0.8);
-    // let the habit set before the head goes on, so the hair stays clean
-    c.dry();
-    // the head: a dab of pale hair
-    let mut hb = h.take(Tool::round_sable, 0.068, thin(hair), 1.0 * 0.45);
-    h.dab(c, &mut hb, 0.004, 0.9, 0.065, FRAC_PI_2, 1.0);
-    if let Some(l) = light {
-        // light from the left: a lean touch dragged down the left edge,
-        // barely pressing, and one along the left shoulder
-        c.dry();
-        let tone = mix(robe, l, 0.4);
-        let mut lb = h.take(Tool::round_sable, 0.025, lean(tone), 0.4 * 0.4);
-        h.mark(c, &mut lb, Mark { pts: &[(-0.07, 0.75), (-0.074, 0.6), (-0.078, 0.45)], pressure: (0.35, 0.15), ramps: (0.15, 0.6) }, None);
-        h.mark(c, &mut lb, Mark { pts: &[(-0.02, 0.83), (-0.06, 0.8)], pressure: (0.4, 0.3), ramps: (0.1, 0.4) }, None);
-        h.dab(c, &mut lb, -0.02, 0.91, 0.03, FRAC_PI_2, 0.4);
     }
 }
 

@@ -200,8 +200,9 @@ fn brush_ground(c: &mut Canvas, g: &Ground, s: u64) {
     let hog = Tool { lay: 1.2, ragged: 0.2, ..Tool::hog_flat(40.0) };
     let col = g.color;
     // the direction the primer works in drifts over the canvas, patch by
-    // patch (up to ±0.7 rad, mostly across)
-    let turn = move |x: f32, y: f32| 1.4 * (crate::surface::vnoise(x / 260.0, y / 260.0, s ^ 0x9e37) - 0.5);
+    // patch (a hand's reach, ~150 units = 66 mm; up to ±1.1 rad, across
+    // on average)
+    let turn = move |x: f32, y: f32| 2.2 * (crate::surface::vnoise(x / 150.0, y / 150.0, s ^ 0x9e37) - 0.5);
     let spread = Handling::new(hog.clone())
         .color(move |_, _| col)
         .paint(g.hiding, g.stiff)

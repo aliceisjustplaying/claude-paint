@@ -237,6 +237,9 @@ impl Body {
 /// Everything the scene shares: camera, ground, water, sun, sky, air and the
 /// bodies standing in it.
 pub struct World {
+    /// The part of the canvas this world is seen in: [x, y, w, h] (units).
+    /// Outside it there is nothing (other panels of a sheet).
+    pub view: [f32; 4],
     /// Eye height above the ground datum (m).
     pub eye: f32,
     /// The horizon's canvas y (units): eye level.
@@ -274,6 +277,7 @@ impl World {
     /// painter.
     pub fn new(view: [f32; 4], horizon: f32, eye: f32) -> Self {
         let mut w = World {
+            view,
             eye,
             horizon,
             cx: view[0] + view[2] * 0.5,
@@ -368,6 +372,11 @@ impl World {
         }
         Some((self.cx + self.focal * w[0] / w[2], self.horizon + self.focal * (self.eye - w[1]) / w[2]))
     }
+    /// True if a canvas point lies in this world's view.
+    pub fn sees(&self, x: f32, y: f32) -> bool {
+        let v = self.view;
+        x >= v[0] && y >= v[1] && x < v[0] + v[2] && y < v[1] + v[3]
+    }
     /// Unit direction of the line of sight through a canvas point (world).
     pub fn ray(&self, x: f32, y: f32) -> V3 {
         unit([(x - self.cx) / self.focal, -(y - self.horizon) / self.focal, 1.0])
@@ -383,6 +392,9 @@ impl World {
     /// The point of the ground (or water) seen at a canvas point, None where
     /// the line of sight goes to the sky.
     pub fn to_ground(&self, x: f32, y: f32) -> Option<V3> {
+        if !self.sees(x, y) {
+            return None;
+        }
         let dy = y - self.horizon;
         let at = |z: f32| ((x - self.cx) * z / self.focal, self.eye - dy * z / self.focal);
         if self.ground.is_none() {
@@ -451,6 +463,21 @@ impl World {
     /// distance `z` (m).
     pub fn aerial(&self, z: f32) -> f32 {
         crate::form::aerial(z, self.visibility)
+    }
+    /// The canvas angle (radians, y down) along which a shadow runs over the
+    /// ground at a canvas point: away from the sun, foreshortened by the
+    /// ground. Stroke shadows this way. None in the sky or with the sun down.
+    pub fn shadow_angle(&self, x: f32, y: f32) -> Option<f32> {
+        if !self.sun.up() {
+            return None;
+        }
+        let g = self.to_ground(x, y)?;
+        let d = self.sun.dir();
+        let h = (d[0] * d[0] + d[2] * d[2]).sqrt().max(1e-4);
+        let step = 0.05 * g[2].max(1.0);
+        let (qx, qz) = (g[0] - d[0] / h * step, (g[2] - d[2] / h * step).max(0.3));
+        let (a, b) = (self.project(g)?, self.project([qx, self.surface(qx, qz), qz])?);
+        Some((b.1 - a.1).atan2(b.0 - a.0))
     }
     /// Where the sun (or the glow over it) is on the canvas, if ahead.
     pub fn sun_canvas(&self) -> Option<(f32, f32)> {
@@ -576,7 +603,7 @@ impl World {
             norm += wt;
             wt *= 0.7;
         }
-        (occ / norm * 1.6).clamp(0.0, 1.0)
+        (occ / norm * 1.2).clamp(0.0, 1.0)
     }
 
     /// The first body a ray (world, unit direction) meets within `reach` m:
@@ -661,6 +688,24 @@ impl World {
         out
     }
 
+    /// A `Form` of the given bodies alone (visible or proxies), lit by this
+    /// world's sun with its cast shadows: the light side of a figure the
+    /// painter writes with gestures, from the same sun as everything else.
+    /// Part ids follow the order given (1, 2, …).
+    pub fn form_of(&self, f: Frame, bodies: &[BodyId]) -> Form {
+        let mut form = Form::new(f);
+        let mut spots = Vec::new();
+        for &b in bodies {
+            form.add(&self.bodies[b].sdf, self.bodies[b].spot.at[2]);
+            spots.push(self.bodies[b].spot);
+        }
+        form.light_given(self.light(), |x, y, s| {
+            let w = spots[s.part as usize - 1].world([x, y, s.z]);
+            self.cast(w, to_world(s.n))
+        });
+        form
+    }
+
     /// See the world over a canvas frame (build it on `c.frame()`).
     pub fn view(&self, f: Frame) -> View<'_> {
         View::new(self, f)
@@ -672,6 +717,8 @@ impl World {
 /// What is seen at a canvas point.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum What {
+    /// Outside the world's view (another panel).
+    Off,
     Sky,
     Ground,
     Water,
@@ -716,6 +763,7 @@ pub struct Mirror {
 /// Solids placed in a world, as the `Form` sees them: their sunk parts are
 /// hidden by the ground in front of them.
 struct Placed<'a> {
+    world: &'a World,
     body: &'a Body,
     depth: &'a [f32],
     f: Frame,
@@ -726,6 +774,9 @@ impl Solid for Placed<'_> {
         self.body.sdf.bounds()
     }
     fn hit(&self, x: f32, y: f32) -> Option<Hit> {
+        if !self.world.sees(x, y) {
+            return None;
+        }
         let h = self.body.sdf.hit(x, y)?;
         let w = self.body.spot.world([x, y, h.z]);
         let zg = self.depth[self.f.index(x, y)];
@@ -770,7 +821,7 @@ impl<'w> View<'w> {
         // bodies' ids follow the painter's order
         for (i, b) in world.bodies.iter().enumerate() {
             if b.visible {
-                let p = Placed { body: b, depth: &depth, f };
+                let p = Placed { world, body: b, depth: &depth, f };
                 let spot = b.spot;
                 parts[i] = form.add_at(&p, &move |x, y, z| spot.world([x, y, z])[2]);
             }
@@ -821,6 +872,9 @@ impl<'w> View<'w> {
                 let at = w.bodies[b].spot.world([x, y, s.z]);
                 return Point { what: What::Body(b), at, n: s.n, dist: at[2], shade: s.shade };
             }
+        }
+        if !w.sees(x, y) {
+            return Point { what: What::Off, at: [0.0; 3], n: [0.0, 0.0, 1.0], dist: f32::INFINITY, shade: Shade::default() };
         }
         let i = self.f.index(x, y);
         let z = self.depth[i];
@@ -884,7 +938,7 @@ impl<'w> View<'w> {
                 let hgt = p.at[1] - w.surface(p.at[0], p.at[2]);
                 if hgt > reach * 3.0 { 0.0 } else { w.occlusion(p.at, to_world(p.n), reach, true) }
             }
-            What::Sky => 0.0,
+            What::Sky | What::Off => 0.0,
         })
     }
 

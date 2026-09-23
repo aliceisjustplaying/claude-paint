@@ -168,6 +168,7 @@ pub fn set_crop(crop: Option<Crop>) {
     *CROP.lock().unwrap() = crop;
 }
 
+#[derive(Clone)]
 pub struct Canvas {
     /// The pixels held: the whole canvas, or the window of a crop render.
     /// Masks are always whole (`frame()`).

@@ -153,6 +153,49 @@ resolution test fails (1.50 against 1.01).
 - `Style::detail()` and `line_tool` are a round sable and a rigger, so
   handlings built on them get the pointed model too.
 
+## Round 3 review fixes (branch `fix3-physics`)
+
+- **Exact coverage on the pixel lattice** (review3 physics #3).
+  `fine_cover` rotated the pixel into the hair's track coordinates and
+  multiplied two box overlaps. That treated the axis-aligned pixel as a
+  square turned with the hair, so a diagonal track's coverage didn't
+  conserve area. A 0.02-px-radius track 45° across covered 4.0 px² at one
+  position and 8.0 px² shifted half a pixel, where its true area is 5.66
+  px². Deposited volume was normalized and stayed correct. Coverage drives
+  compositing, though, so the darkness a mark laid depended on where it
+  fell between pixel centers. Now `fine_cover` is the exact area of the
+  track (a rectangle 2·rb wide with square ends) inside the axis-aligned
+  pixel: Sutherland–Hodgman clipping and a shoelace sum, with a fast path
+  for axis-aligned tracks and an early exit for pixels out of reach.
+  Tests: `fine_cover_conserves_area_on_the_lattice` checks radii 0.02 to
+  0.6, seven angles, three lengths and five sub-pixel offsets, all within
+  0.2% of the track's area. `translated_pointed_marks_look_alike` checks a
+  rigger and a round sable along a diagonal and an oblique, shifted by
+  four sub-pixel offsets, each darkening the canvas within 5% of the
+  unshifted mark. Before the fix, a rigger diagonal shifted one unit
+  (half a pixel) darkened it 26.0 against 13.0.
+- **Sub-1% cover weighs its true area** (review3 physics #5).
+  `wet::over_share` used `cover.max(0.01)` as the blend weight, so a hair's
+  edge over 0.1% of a pixel darkened it as if it covered 1%. Opaque dark
+  paint at cover 0.001 over white gave 0.9901 instead of 0.99901. Now the
+  true positive cover is the weight. Zero cover shows the underlayer, and
+  the thickness over the share is capped at 10⁴ coats, far past hiding, so
+  a vanishing share stays finite. Test: `sub_percent_cover_keeps_its_area`.
+- **`Paint::with_hiding` keeps the drying rate** (review3 physics #4). It
+  rebuilt the paint with `Paint::new`, so `.with_drying(0.3).with_hiding(0.5)`
+  dried at 1. Now it changes only the scattering. Test:
+  `with_hiding_keeps_the_other_fields` (either builder order gives the
+  same paint).
+- **Golden re-recorded.** The golden scene drags a round sable and a
+  rigger.
+- **Visible change** (1000px `study_tip`): 1911 pixels change by more than
+  2 of 255 levels and 71 by more than 8, all along hairlines (bird wings,
+  twigs, the signature curves). Mean brightness is unchanged (164.575 both).
+  Diagonal stretches of a hairline are a little more even and no longer
+  bead where they cross pixel diagonals.
+  `notes/tip/r3fix_hairlines_before_after.jpg` shows the S-curves at 4×
+  (before above, after below). The difference is slight at this scale.
+
 ## Open issues
 
 - **Remaining grain.** Wide marks made of several strokes at mid pressure

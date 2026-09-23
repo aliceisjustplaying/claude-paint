@@ -9,9 +9,11 @@ local next, type, rawset, rawequal, select = next, type, rawset, rawequal, selec
 -- Everything reachable from the roots through tables (keys, values,
 -- metatables) and Lua functions (upvalues): each table's contents and
 -- metatable, each function's upvalues. Userdata are the engine's and are
--- immutable (brushes are restored by the session).
-local function snap(...)
+-- immutable (brushes are restored by the session). `skip` lists private
+-- objects (prelude.lua's caches) that are neither walked nor restored.
+local function snap(skip, ...)
   local tabs, funs, seen = {}, {}, {}
+  for i = 1, #skip do seen[skip[i]] = true end
   local stack, n = {}, 0
   local function push(v)
     local t = type(v)

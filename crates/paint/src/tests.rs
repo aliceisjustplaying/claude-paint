@@ -369,8 +369,9 @@ fn brushed_ground_honors_thickness() {
         c.film.iter().sum::<f32>() / c.film.len() as f32 * crate::surface::COAT_UM
     };
     assert_eq!(mean_um(0.0), 0.0);
-    for want in [30.0f32, 90.0] {
-        let got = mean_um(want);
+    let got: Vec<(f32, f32)> = [30.0f32, 60.0, 90.0].iter().map(|&w| (w, mean_um(w))).collect();
+    eprintln!("brushed ground (asked, laid µm): {got:?}");
+    for (want, got) in got {
         assert!((got - want).abs() < want * 0.2, "asked {want} µm, got {got}");
     }
 }

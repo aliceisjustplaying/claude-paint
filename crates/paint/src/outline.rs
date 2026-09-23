@@ -74,6 +74,11 @@ pub struct Character {
     /// much it varies along the edge (0..1: 1 = lost in places).
     pub edge: f32,
     pub edge_var: f32,
+    /// Multiplier on every displacement amplitude (wobble, facets and
+    /// notches, lobe height, restatement drift, overshoot), set by
+    /// `amount`. Applied when the line is drawn, so setting a lobe or a
+    /// facet after `amount` is still scaled by it (0: a clean curve).
+    pub irregularity: f32,
 }
 
 impl Character {
@@ -100,6 +105,7 @@ impl Character {
             ramps: (0.08, 0.2),
             edge: 0.0,
             edge_var: 0.0,
+            irregularity: 1.0,
         }
     }
 
@@ -187,15 +193,24 @@ impl Character {
         })
     }
 
-    /// The same hand, more (k > 1) or less (k < 1) irregular.
+    /// The same hand, more (k > 1) or less (k < 1) irregular: multiplies
+    /// `irregularity`, so it scales lobes and facets set before or after
+    /// it alike.
     pub fn amount(mut self, k: f32) -> Self {
-        let k = k.max(0.0);
+        self.irregularity *= k.max(0.0);
+        self
+    }
+
+    /// The amplitudes as drawn: `irregularity` multiplied in (and reset to 1).
+    pub fn applied(mut self) -> Self {
+        let k = self.irregularity.max(0.0);
         self.wobble *= k;
         self.facet_amp *= k;
         self.lobe_height *= k;
         self.restate_off *= k;
         self.overshoot_len *= k;
         self.notch = (self.notch * k).min(1.0);
+        self.irregularity = 1.0;
         self
     }
 }
@@ -542,7 +557,7 @@ impl Outline {
             }
             // a hand's "straight" line from corner to corner bows a little
             let mut brng = Rng::new(seed ^ 0xB0B0_5EED);
-            let bow = 0.025 * (ch.wobble / 0.01).min(2.0);
+            let bow = 0.025 * (ch.applied().wobble / 0.01).min(2.0);
             for span in spans.iter_mut().filter(|s| s.len() == 2) {
                 let (a, b) = (span[0], span[1]);
                 let k = brng.normal() * bow;
@@ -730,6 +745,7 @@ impl Outline {
 
     /// The hand at work on dense plans: displace, weigh, plan strokes.
     fn from_plans(plans: Vec<Plan>, ch: Character, seed: u64, scale: f32, step: f32) -> Outline {
+        let drawn = ch.applied();
         let mut rng = Rng::new(seed ^ 0xD1B54A32D192ED03);
         let mut lines = Vec::new();
         for (li, plan) in plans.into_iter().enumerate() {
@@ -737,17 +753,26 @@ impl Outline {
                 continue;
             }
             let s32 = (seed as u32).wrapping_add(li as u32 * 7919);
-            lines.push(hand_line(plan, &ch, s32, scale, step, &mut rng));
+            lines.push(hand_line(plan, &drawn, s32, scale, step, &mut rng));
         }
         let mut strokes = Vec::new();
         for l in &lines {
-            plan_strokes(l, &ch, scale, step, &mut rng, &mut strokes);
+            plan_strokes(l, &drawn, scale, step, &mut rng, &mut strokes);
         }
         Outline { lines, strokes, ch, scale, seed }
     }
 
+    /// True if this outline has lines and none of them is closed (so it
+    /// bounds no region: use `below` or `above`). An outline with no lines
+    /// at all (an inset that consumed its shape) is not open: its `mask` is
+    /// empty.
+    pub fn is_open(&self) -> bool {
+        !self.lines.is_empty() && !self.lines.iter().any(|l| l.closed)
+    }
+
     /// The region inside the closed lines, its edge exactly the drawn line,
     /// softened as the character says (in places, if `edge_var` > 0).
+    /// Empty if there are none (an inset deeper than the shape is thick).
     pub fn mask(&self, f: Frame) -> Mask {
         let mut s = Shape::new();
         for l in self.lines.iter().filter(|l| l.closed) {
@@ -1070,7 +1095,8 @@ fn hand_line(plan: Plan, ch: &Character, seed: u32, scale: f32, step: f32, rng: 
                     (w[1] - w[0]) * ch.lobe_height * height * (0.35 * rng.normal()).exp() * g
                 })
                 .collect();
-            layers.push((ks, hs));
+            let bs = lobe_troughs(&hs, closed);
+            layers.push((ks, hs, bs));
         }
         layers
     });
@@ -1083,17 +1109,47 @@ fn hand_line(plan: Plan, ch: &Character, seed: u32, scale: f32, step: f32, rng: 
             // quiet runs and broken stretches, not an even tear
             d += knot_value(ks, vs, s) * (0.5 + 1.1 * env.get(s)).clamp(0.08, 1.8) * fit(i, ch.facet * scale);
         }
-        for (ks, hs) in lobes.iter().flatten() {
-            let j = ks.partition_point(|&x| x <= s).clamp(1, ks.len() - 1);
-            let u = ((s - ks[j - 1]) / (ks[j] - ks[j - 1]).max(1e-6)).clamp(0.0, 1.0);
-            let h = hs[j - 1] * fit(i, ch.lobe * scale);
-            d += h * ((PI * u).sin().max(0.0).powf(0.6) - 0.55);
+        for (ks, hs, bs) in lobes.iter().flatten() {
+            d += lobe_offset(ks, hs, bs, s) * fit(i, ch.lobe * scale);
         }
         out.push((pts[i].0 + nrm[i].0 * d, pts[i].1 + nrm[i].1 * d));
         let p = ch.pressure * (1.0 + ch.pressure_var * press.get(s)) + ch.underside * nrm[i].1.max(0.0);
         pressure.push(p.clamp(0.05, 1.0));
     }
     Line { pts: out, pressure, closed, corners }
+}
+
+/// The dips between lobes of heights `hs` (one per interval between
+/// knots): each knot's dip is shared by the lobes on either side (0.55 of
+/// their mean height below the curve), so the line is continuous where
+/// lobes of different heights meet; on a closed line the first and last
+/// knot (the same point) share one.
+fn lobe_troughs(hs: &[f32], closed: bool) -> Vec<f32> {
+    let m = hs.len();
+    if m == 0 {
+        return vec![0.0];
+    }
+    let mut bs = Vec::with_capacity(m + 1);
+    let ends = if closed { 0.5 * (hs[0] + hs[m - 1]) } else { hs[0] };
+    bs.push(-0.55 * ends);
+    for k in 1..m {
+        bs.push(-0.55 * 0.5 * (hs[k - 1] + hs[k]));
+    }
+    bs.push(if closed { -0.55 * ends } else { -0.55 * hs[m - 1] });
+    bs
+}
+
+/// Displacement at arc length `s` of the lobes on knots `ks`: the dips
+/// `bs` joined straight, and on each interval a rounded bulge of height
+/// `hs` that vanishes at both ends (so equal neighbors give the old
+/// `h·(sin(πu)^0.6 − 0.55)` exactly and unequal ones meet without a step).
+fn lobe_offset(ks: &[f32], hs: &[f32], bs: &[f32], s: f32) -> f32 {
+    if hs.is_empty() {
+        return 0.0;
+    }
+    let j = ks.partition_point(|&x| x <= s).clamp(1, ks.len() - 1);
+    let u = ((s - ks[j - 1]) / (ks[j] - ks[j - 1]).max(1e-6)).clamp(0.0, 1.0);
+    bs[j - 1] + (bs[j] - bs[j - 1]) * u + hs[j - 1] * (PI * u).sin().max(0.0).powf(0.6)
 }
 
 /// Plan how a hand draws a line: strokes between lifts, gaps and overlaps,
@@ -1301,6 +1357,96 @@ mod tests {
         let grown = o.offset(1.0, 0.0);
         let shrunk = o.offset(-1.0, 0.0);
         assert!(a(&grown) > a(&o) && a(&shrunk) < a(&o), "{} {} {}", a(&shrunk), a(&o), a(&grown));
+    }
+
+    /// Review 4 #8: lobes of different heights meet without a step, and a
+    /// closed line's lobes meet across its seam.
+    #[test]
+    fn lobes_are_continuous_at_joins_and_the_seam() {
+        let ks = [0.0, 10.0, 20.0, 30.0, 40.0];
+        let hs = [2.0, 4.0, 1.0, 3.0];
+        for closed in [false, true] {
+            let bs = lobe_troughs(&hs, closed);
+            for &k in &ks[1..4] {
+                let (a, b) = (lobe_offset(&ks, &hs, &bs, k - 1e-4), lobe_offset(&ks, &hs, &bs, k + 1e-4));
+                assert!((a - b).abs() < 0.02, "closed {closed}: step {} at knot {k}", (a - b).abs());
+            }
+            // the rounded bulge still rises well above the dips
+            assert!(lobe_offset(&ks, &hs, &bs, 15.0) - lobe_offset(&ks, &hs, &bs, 10.0) > 3.0);
+        }
+        let bs = lobe_troughs(&hs, true);
+        let (first, last) = (lobe_offset(&ks, &hs, &bs, 0.0), lobe_offset(&ks, &hs, &bs, 40.0 - 1e-4));
+        assert!((first - last).abs() < 0.02, "seam step {}", (first - last).abs());
+        // equal heights: the old shape
+        let (hq, bq) = ([2.0; 4], lobe_troughs(&[2.0; 4], false));
+        for u in [0.1f32, 0.37, 0.5, 0.8] {
+            let want = 2.0 * ((PI * u).sin().powf(0.6) - 0.55);
+            assert!((lobe_offset(&ks, &hq, &bq, 10.0 + 10.0 * u) - want).abs() < 1e-5);
+        }
+        // a whole soft closed line: no step between neighbors bigger than
+        // the rounded lobes' own slope allows
+        let pts: Vec<P> = (0..24).map(|i| {
+            let a = i as f32 / 24.0 * TAU;
+            (500.0 + 200.0 * a.cos(), 400.0 + 150.0 * a.sin())
+        }).collect();
+        let o = Outline::draw(&pts, &[], true, Character { wobble: 0.0, ..Character::soft() }, 4, None);
+        let l = &o.lines[0].pts;
+        let n = l.len();
+        let steps: Vec<f32> = (0..n).map(|i| dist(l[i], l[(i + 1) % n])).collect();
+        let mut sorted = steps.clone();
+        sorted.sort_by(f32::total_cmp);
+        let med = sorted[n / 2];
+        assert!(steps.iter().all(|&d| d < 12.0 * med), "max step {} vs median {med}", sorted[n - 1]);
+    }
+
+    /// Review 4 #6: `amount` scales lobes and facets however they were set,
+    /// before it or after it; 0 is a clean curve.
+    #[test]
+    fn amount_scales_lobes_set_after_it() {
+        let line = [(100.0, 200.0), (300.0, 200.0), (500.0, 200.0)];
+        let dev = |ch: Character| {
+            let o = Outline::draw(&line, &[], false, ch, 1, None);
+            o.lines[0].pts.iter().map(|p| (p.1 - 200.0).abs()).fold(0.0, f32::max)
+        };
+        // the binding's order: amount, then an explicit lobe (default height)
+        let lobed = |k: f32| {
+            let mut ch = Character::firm().amount(k);
+            ch.lobe = 24.0 / 100.0;
+            if ch.lobe_height == 0.0 {
+                ch.lobe_height = 0.35;
+            }
+            ch
+        };
+        let mut soft0 = Character::soft().amount(0.0);
+        soft0.lobe = 0.2;
+        assert!(dev(soft0) < 1e-3, "soft, amount 0, explicit lobe: {}", dev(soft0));
+        assert!(dev(lobed(0.0)) < 1e-3, "firm, amount 0, explicit lobe: {}", dev(lobed(0.0)));
+        let (half, full) = (dev(lobed(0.5)), dev(lobed(1.0)));
+        assert!(half > 0.3 && full > 1.5 * half, "amount scales an explicit lobe: {half} vs {full}");
+        // the order doesn't matter
+        let mut after = Character::firm();
+        after.lobe = 0.24;
+        after.lobe_height = 0.35;
+        let before = after.amount(0.5);
+        assert_eq!(dev(before), dev(lobed(0.5)));
+    }
+
+    /// Review 4 #5: an inset that consumes a closed shape is empty, not
+    /// open: its mask is empty (so `o:mask() - o:inset(d):mask()` keeps the
+    /// shape). A drawn open line is open.
+    #[test]
+    fn consumed_inset_is_an_empty_region() {
+        let sq = [(100.0, 100.0), (110.0, 100.0), (110.0, 110.0), (100.0, 110.0)];
+        let o = Outline::draw(&sq, &[true; 4], true, Character::firm().amount(0.0), 1, None);
+        let f = Frame::new(400, 300, 0.4);
+        let inset = o.offset(-7.0, 0.4);
+        assert!(inset.lines.is_empty() && !inset.is_open(), "{} lines", inset.lines.len());
+        assert!(inset.mask(f).data.iter().all(|&v| v == 0.0));
+        let rim = o.mask(f).subtract(&inset.mask(f));
+        assert!(rim.data == o.mask(f).data);
+        assert!(!o.is_open() && !o.offset(-2.0, 0.4).is_open() && !o.offset(-2.0, 0.4).lines.is_empty());
+        let open = Outline::draw(&[(0.0, 400.0), (1000.0, 390.0)], &[], false, Character::soft(), 2, None);
+        assert!(open.is_open());
     }
 
     #[test]

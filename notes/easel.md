@@ -5,8 +5,9 @@ this note covers the design, how it felt to paint with it and what to do next.
 
 ## What landed
 
-- `crates/easel`, binary `easel`: LuaJIT 2.1 embedded with mlua 0.10
-  (`features = ["luajit", "vendored"]`; builds on macOS arm64 in about 20 s).
+- `crates/easel`, binary `easel`: first LuaJIT 2.1 with mlua 0.10; since
+  round 2, Lua 5.5.1 with mlua 0.12 (`features = ["lua55", "vendored"]`),
+  built with a fixed hash seed (see Round 2).
 - A background session per painting, reached over a unix socket
   (`out/easel/<name>/sock`). The commands are `open`, `do`, `look`, `undo`,
   `log`, `status`, `save`, `frames`, `check` and `close`.
@@ -154,11 +155,107 @@ Evidence: `out/lua/example_3200.png` (full render),
 `paintings/lua/example.lua` (the session itself). `out/` is not committed:
 rerun `easel run paintings/lua/example.lua --width 3200 --look`.
 
+## Round 2 (integrator follow-ups)
+
+**Lua 5.5.1.** The easel now embeds Lua 5.5.1 through mlua 0.12
+(`features = ["lua55", "vendored"]`, lua-src 551.0.2). What changed for
+painters:
+- integer and float subtypes (`W` and `H` are integers now, so `print(H)`
+  says 714);
+- no `bit` library (the operators are built in) and no global `unpack`;
+- loop variables are read-only;
+- one `global` declaration makes its whole chunk strict. The guide says to
+  use plain assignment.
+
+The port found a determinism trap. Lua 5.4+ seeds its string hash per
+state, and on macOS mlua 0.12 passes `arc4random()` as that seed
+(`mlua-sys/src/lua55/lauxlib.rs`, `luaL_makeseed`). So `pairs` order
+changed from process to process: the same probe table walked in three
+different orders in three runs. `table.sort` also randomizes its pivots
+from Lua's own `luaL_makeseed`. The fix has two parts:
+- Lua is built with `CFLAGS=-Dluai_makeseed()=0x5eedu` (`.cargo/config.toml`;
+  only lua-src compiles C in this workspace);
+- the easel creates its states with C's `luaL_newstate` and hands them to
+  mlua (`Lua::get_or_init_from_ptr`), closing them itself on drop.
+
+`Session::new` compares a probe order against the recorded one and refuses
+to run if the build lost the flag. With the fix, a session resumed from the
+log in one process and `easel run` in another wrote byte-identical PNGs of
+the example, and `easel check` matched.
+
+Speed at 1000px (same machine, both binaries run back to back):
+
+| | LuaJIT 2.1 | Lua 5.5.1 |
+|---|---|---|
+| per-pixel mask calling a noise userdata | 0.12–0.23 s | 0.24 s |
+| per-pixel plain mask | 0.06–0.09 s | 0.06 s |
+| whole-canvas field grid (glaze thickness) | 0.03–0.04 s | 0.03 s |
+| 10⁷ iterations of `s = s + math.sin(i*0.001)*0.5` | 0.04 s | 0.59–0.72 s |
+
+Callbacks cost about the same under both, because the Rust/Lua boundary
+dominates. Pure Lua arithmetic is about 15× slower without the JIT, which
+matters only for painters who compute heavily in Lua.
+
+**Merged main.** The engine's `Mask::roughen` is now in units, so the
+easel's workaround is gone and `m:roughen(units, period, seed, edge)` calls
+it. `cracks{}` follows `Cracks::aged`: the island size, ground and opening
+are fitted to the canvas unless given, and `vary` and `veil` are new.
+
+**Form.** The Lua surface is described in the README; everything in it is
+immutable, so rollback never needs to repair it:
+- `body.ellipsoid`/`block`/`half_space` with `:turn :cut :rough :facet`,
+  `+` and `-`;
+- `ridge{}`, over a crest function or points;
+- `relief{}`, a Lua height function sampled on a grid;
+- `form{ {solid, dist=}, ..., light={...} }` builds and lights the depth
+  buffer in one call;
+- queries: `sample`, `shade`, `value`, `lit_at`, `part`, `dist`, `fall`,
+  `across`, `bend`, `edge_angle`;
+- masks: `parts_mask`, `lit`, `shadow`, `silhouette{soft, haze}`,
+  `edges{concave}` and `mask(fn(s))`;
+- `f:field("fall"|"across"|"edge")`, which `work{angle=}` reads natively on
+  the engine's threads, with no grid.
+
+`paintings/lua/rocks.lua` is the demo: a boulder and a range painted by
+light and shadow families, strokes down the fall lines and dark accents in
+the boulder's concave breaks. One thing a painter will trip on: a `ridge`
+leans toward the viewer at its foot, so it hides a rock in front of it
+unless its `z0` is set back. My first try did exactly that; the README
+now says so.
+
+**Exact rollback.** The shallow copy of the globals is replaced by
+`heap.lua`. Before each chunk it walks everything reachable from `_G` and
+the string metatable: tables (keys, values, metatables) and the upvalues of
+Lua functions. It records each table's contents and each function's
+upvalues. On failure or undo, it writes back only the tables whose
+contents changed, in place (so object identity holds), and resets the
+upvalues. Anything the failed chunk created becomes unreachable. It uses a
+private copy of the `debug` library, taken out of the globals. Replaying
+the log into a fresh VM with painting as no-ops was not sound: verbs return
+values chunks branch on (`sample`, `b:fullness()`, trees).
+
+Cost, measured with `status`: about 1 µs per live table per chunk. The
+example session (a tree's roughly 4,000 limb tables) spent 0.02 s on
+bookkeeping over its ten chunks, and rolling back a chunk that edited a
+limb took about 0.01 s. With 100,000 small tables, a snapshot takes about
+0.09 s, and a snapshot plus restore about 0.13 s. Memory is one shallow
+copy of each table per undo level.
+
+Tests cover a failing chunk that mutates old tables, an upvalue, a
+metatable and `string`; undo of a table edit and an upvalue bump; and exact
+replay afterwards. The remaining limits are coroutines suspended across
+chunks, and `pairs` order over a table that was rewritten during a rollback.
+
+**Coverage (not this stream).** The example and rocks renders show bare
+ground flecks: orange in the skies, pale in the dark knoll. There are more
+of them at 3200px, and the ridge strokes look blocky. The fixes-paint
+stream is working on this; the easel only passes `coverage` through.
+
 ## Next
 
-1. **Form.** Expose `Form`, `Sdf`, `Ridge`, `Light` and `Shade` (build a
-   solid, light it, then query `shade(x, y)`, `fall(x, y)` and part
-   masks). I left this out to land the rest.
+1. **Form, deeper.** `Form::simplify` (the painter's squint over normals),
+   lit-rim helpers for contre-jour, and a gallery of `rocks.rs`-style
+   motifs rewritten in Lua.
 2. **A drying model behind `wait`.** Open, tacky and touch-dry states per
    pixel from the film's age and medium, so wet-into-wet, scumbling on
    tacky paint and glazing on touch-dry paint follow from the clock.
@@ -166,8 +263,8 @@ rerun `easel run paintings/lua/example.lua --width 3200 --look`.
    window at 3200px, resumed from a checkpoint of the chunks so far,
    would let a painter work Friedrich's small particulars at their real
    grain. The engine's Frame and crop machinery already supports it.
-4. **Complete rollback.** Deep-snapshot tables reachable from globals,
-   or rebuild the Lua state by replaying in the background after an undo.
+4. **Rollback, last gaps.** Coroutines; a restore that rebuilds changed
+   tables in their original insertion order, so `pairs` order holds.
 5. **Motif helpers in Lua.** Tufts, needles and grass as small gesture
    libraries in Lua (`paintings/lua/lib/`), loaded by a sandboxed
    `use "trees"` whose text is inlined into the log so replay stays

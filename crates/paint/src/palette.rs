@@ -69,6 +69,8 @@ struct Cand {
 }
 
 type AimKey = [i32; 8];
+/// Score of a pile: (parts, masstone, scattering) → OKLab miss.
+type Score<'a> = &'a dyn Fn(&[(usize, f32)], Rgb, f32) -> f32;
 
 pub struct Palette {
     pub name: &'static str,
@@ -272,7 +274,7 @@ impl Palette {
     }
 
     /// Refine proportions by coordinate descent with shrinking steps.
-    fn refine(&self, mut parts: Vec<(usize, f32)>, score: &dyn Fn(&[(usize, f32)], Rgb, f32) -> f32) -> (Vec<(usize, f32)>, f32) {
+    fn refine(&self, mut parts: Vec<(usize, f32)>, score: Score) -> (Vec<(usize, f32)>, f32) {
         let sc = |p: &[(usize, f32)]| {
             let (c, s, _) = self.eval(p);
             score(p, c, s)
@@ -346,6 +348,12 @@ impl Palette {
     /// Aimed paint: `aim` then thin it (see `aim`).
     pub fn paint_for(&self, want: Rgb, under: Rgb, medium: f32, coats: f32) -> Paint {
         self.aim(want, under, medium, coats).paint(medium)
+    }
+
+    /// Number of cached (masstone mixes, aimed mixes): each is one search
+    /// (~0.1 ms for an aim); for measuring cost.
+    pub fn cache_sizes(&self) -> (usize, usize) {
+        (self.cache.lock().unwrap().len(), self.aims.lock().unwrap().len())
     }
 
     /// Human-readable recipe, e.g. "lead white 0.72 + yellow ochre 0.20 + raw umber 0.08".
@@ -600,22 +608,5 @@ mod canvas_tests {
         // the full palette thick, as body color, can
         let body = pal.aim(want, dark, 0.1, 2.0);
         assert!(body.error < 0.05, "body color covers: {}", body.error);
-    }
-}
-
-#[cfg(test)]
-mod probe {
-    use super::*;
-    use crate::color::hex;
-    #[test]
-    #[ignore]
-    fn probe_overshoot() {
-        let pal = Palette::friedrich_early();
-        let (want, under) = (hex("#5b6f99"), hex("#d8c7ab"));
-        for (label, m) in [("mix", pal.mix(want)), ("aim1", pal.aim(want, under, 0.45, 1.0)), ("aim2", pal.aim(want, under, 0.45, 2.0))] {
-            let p = m.paint(0.45);
-            let e: Vec<String> = [0.25f32, 0.5, 1.0, 2.0, 4.0, 50.0].iter().map(|&x| format!("{x}:{:.3}", dist(to_oklab(p.over(under, x)), to_oklab(want)))).collect();
-            println!("{label:5} hide {:.2} {} | {}", p.hiding, e.join(" "), pal.recipe(&m));
-        }
     }
 }

@@ -93,15 +93,13 @@ impl Pigment {
 
     /// The masstone R∞ of this pigment: what an infinitely thick layer looks like.
     pub fn masstone_color(&self) -> Rgb {
-        let mut r = [0.0; 3];
-        for i in 0..3 {
+        std::array::from_fn(|i| {
             if self.s[i] < 1e-9 {
-                continue;
+                return 0.0;
             }
             let a = 1.0 + self.k[i] / self.s[i];
-            r[i] = a - (a * a - 1.0).max(0.0).sqrt();
-        }
-        r
+            a - (a * a - 1.0).max(0.0).sqrt()
+        })
     }
 
     /// A transparent glazing pigment (hides very little).

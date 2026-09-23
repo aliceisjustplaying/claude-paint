@@ -43,7 +43,7 @@ fn main() {
     let mut dab = |c: &mut paint::Canvas, p: Paint, x: f32, y: f32, seed: u64| {
         let mut b = Held::new(Tool { ragged: 0.2, ..Tool::round_sable(5.0) }, seed);
         b.load(p, 0.5);
-        let a = rng.range(0.0, 6.28);
+        let a = rng.range(0.0, std::f32::consts::TAU);
         c.drag(&mut b, &Gesture::new(vec![(x, y), (x + a.cos() * 1.5, y + a.sin() * 1.5)]).pressure(0.7, 0.5).ramps(0.1, 0.4), None);
     };
     let mut pts = Vec::new();
@@ -98,7 +98,7 @@ fn main() {
     let sky2_c = move |_: f32, y: f32| gradient(&sky2, (y - 580.0) / 420.0, Mix::Light);
     let col = |x0: f32| Mask::from_fn(f, move |x, y| if y >= 580.0 && x >= x0 && x < x0 + 333.0 { 1.0 } else { 0.0 });
     for (k, (x0, how)) in [(0.0, 0), (333.0, 1), (666.0, 2)].into_iter().enumerate() {
-        let hd = st.broad().color(sky2_c).coverage(3.0).clip(true).threshold(0.5);
+        let hd = st.broad().color(sky2_c).coverage(5.0).load(0.6).clip(true).threshold(0.5);
         let hd = match how {
             0 => hd.by_masstone(),
             1 => hd,
@@ -133,6 +133,7 @@ fn main() {
         }
         eprintln!("{line}");
     }
+    eprintln!("palette searches (masstone, aimed): {:?}", pal.cache_sizes());
     c.relief(0.3, 0.02);
     o.save(&mut c);
 }

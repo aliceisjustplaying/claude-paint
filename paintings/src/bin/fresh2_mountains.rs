@@ -259,7 +259,7 @@ fn main() {
     // ------------------------------------------------------------- ranges
     let mut form = Form::new(f);
     let far = Ridge::new(0.0, w, |x| far_crest(x), 140.0, 61).lean(1.1, 0.8).gullies(14.0, 0.45).fan(1.0).z0(-600.0);
-    let mid = Ridge::new(0.0, w, |x| mid_crest(x), 150.0, 62).lean(0.95, 0.8).gullies(30.0, 0.4).fan(1.0).z0(-300.0);
+    let mid = Ridge::new(0.0, w, |x| mid_crest(x), 150.0, 62).lean(0.95, 0.8).gullies(46.0, 0.28).fan(1.0).z0(-300.0);
     let near = Ridge::new(0.0, w, |x| near_crest(x), 280.0, 63).lean(0.8, 0.8).gullies(34.0, 0.5).fan(1.0).z0(-100.0);
     let id_far = form.add_at(&far, &|_, _, _| 4.0);
     let id_mid = form.add_at(&mid, &|_, _, _| 2.4);
@@ -311,6 +311,8 @@ fn main() {
         c.dry();
     }
 
+    let buttress = Fbm::new(64, 3, 70.0);
+    let buttress = &buttress;
     if o.stage("mid range", &mut c, &mut rng) {
         let sil = form.silhouette(&[id_mid], |_| 0.8);
         let mcol = move |x: f32, y: f32| match form.sample(x, y).filter(|s| s.part == id_mid) {
@@ -318,8 +320,14 @@ fn main() {
                 // spurs catch the sky, gullies stay in shadow
                 let b = form.bend(x, y, 2.0);
                 let base = range_col(x, y, &s, hex("#394058"), hex("#62667c"), 8.0);
-                let base = mix(base, hex("#3c4158"), smoothstep(0.05, 0.3, -b) * 0.5, Mix::Pigment);
-                mix(base, hex("#8a8a9c"), smoothstep(0.05, 0.3, b) * 0.35, Mix::Pigment)
+                let base = mix(base, hex("#3c4158"), smoothstep(0.05, 0.3, -b) * 0.25, Mix::Pigment);
+                let base = mix(base, hex("#8a8a9c"), smoothstep(0.05, 0.3, b) * 0.18, Mix::Pigment);
+                // the big buttresses and hollows of the ridge, irregular,
+                // widening downhill: what the eye reads at this distance
+                let d = (y - mid_crest(x)).max(0.0);
+                let bt = buttress.get(x + 0.25 * d * buttress.get(x * 0.3, 7.0), 3.0);
+                let base = mix(base, hex("#7c7e92"), smoothstep(0.1, 0.5, bt) * 0.35 * smoothstep(0.0, 12.0, d), Mix::Pigment);
+                mix(base, hex("#343a50"), smoothstep(0.1, 0.5, -bt) * 0.3 * smoothstep(0.0, 12.0, d), Mix::Pigment)
             }
             None => hex("#6c6e84"),
         };

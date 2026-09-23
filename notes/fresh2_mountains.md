@@ -280,6 +280,75 @@ What it draws on in Friedrich (from knowledge, no pictures):
     detail work possible. Checkpoints for whole 3200px renders would be
     about 440 MB per stage, so I only checkpointed crops and previews.
 
-## Critique (to be updated)
+18. **A `--stale-ok` resume doesn't refresh the checkpoint it resumed
+    from.** Once the prefix of stage X has changed, every later `--resume
+    X` needs `--stale-ok` again, even with `--ckpt`, until a full run
+    repaints X. Harmless, but it trains you to pass `--stale-ok` by reflex,
+    which defeats the check that exists to protect you (item 4).
 
-(after the full render)
+## Critique
+
+Judged at 1000px and in 3200px crops (the last full render is
+`out/fresh2_mountains_full.png`).
+
+What works:
+- **The value structure and the dawn.** A dark near stage, a bright
+  empty middle (the fog), then three ranges stepping back: dark wooded
+  near range, cool blue-gray mid range, grayed violet far range and
+  Schneekoppe against a lemon glow that cools through rose into gray-blue.
+  It reads as contre-jour before sunrise, the air thickening with
+  distance. That is the Friedrich structure, and it came from values, not
+  from detail.
+- **The fog sea.** Brushed thin, fused, then stippled, with lit billow
+  tops and cool hollows. It lies flat, glows and has a torn upper edge
+  against the dark woods. At 3200px it is paint: soft stipple over a
+  smooth lay-in.
+- **The Rückenfigur.** The wanderer by the tor is small, dark and sharp,
+  with a thin warm rim on his right side. He is the one hard silhouette,
+  which is how Friedrich uses his figures.
+- **The particular details:** the crescent with pointed horns turned
+  toward the hidden sun, the chapel nub on the Schneekoppe, the four birds,
+  the spruce tips along the near crest, the backlit tufts breaking the
+  knoll's skyline, the dead spruce among the living. They carry the "no
+  gradation of detail by significance" feeling at 3200px.
+- **Surface.** The craquelure is now an isotropic web of the right scale,
+  the varnish warms everything a little, and the stippled sky has the
+  grainy-smooth, strokeless look that Friedrich's pooled thin paint
+  should have.
+
+What doesn't (harshly):
+- **The mid range reads as a curtain.** Strokes down the fall lines plus
+  `Ridge` gullies make regular vertical streaks. From across the room
+  it's a flat-topped wall hung with drapery, not a mountain ridge with
+  spurs. Stippling more helped, but the underlying strokes are too
+  regular. A real ridge's gullies are irregular in spacing, depth and
+  length.
+- **The knoll is a big, quiet, slightly too smooth dome.** The lower left
+  third is mostly dark olive with ragged mats, heather and a few stones.
+  It's dark enough to be right, but its silhouette is a clean curve
+  except where the tufts break it, and its surface lacks the
+  particularity (bilberry, a gray lichened stone, a bent grass stem
+  lit by the sky) that Friedrich puts right under our feet. The
+  foreground outcrop helps weight the corner but is barely legible.
+- **The tor and the figure are small** for the size of the dark stage.
+  They're right for Friedrich's scale, but the tor is still a slightly
+  soft, loaf-edged lump at 3200px. Real woolsack granite has sharper
+  horizontal joints and a flatter bed-and-cushion rhythm.
+- **Some handling still reads digital at 3200px:**
+  - the woods' hatching along the near range (a regular field of
+    dashes where the veil thins);
+  - the needle hatches of the spruces bead into rounded dabs;
+  - the crest tufts are short, blunt marks rather than hair-fine blades;
+  - the stippled mist at the far range's foot is granular ("granite")
+    at full size.
+- **The clouds are good but minimal.** Two thin stratus bands and a wisp.
+  A Friedrich dawn would have more considered cloud drawing.
+- **The foreground's orange-brown touches** (a few bare-ground or umber
+  flecks) read at 3200px as dead leaves. That's fine, but it's luck, not
+  intent.
+
+If I had another session: irregular hand-drawn gullies on the mid range
+(my own fall-line strokes from a drainage pattern, not noise), a
+bilberry-and-lichen pass on the knoll, sharper horizontal joints on the
+tor, and needle strokes for the spruces that overlap and droop rather
+than dab.

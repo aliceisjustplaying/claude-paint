@@ -382,6 +382,35 @@ fn main() {
             .aim(false);
         c.stipple(&seam, &st_seam, 54);
         c.dry();
+        // the lie of the snow: broken bands of blue shadow in the lee of
+        // low drifts, running across the field, thin far off and wider near,
+        // stippled so they have no stroke edge
+        let lee = Fbm::new(57, 3, 120.0);
+        let lines: [(f32, f32, f32); 7] = [(478.0, 3.0, 0.0), (497.0, 4.0, 1.3), (521.0, 5.0, 2.1), (556.0, 7.0, 3.7), (598.0, 8.0, 0.8), (648.0, 10.0, 5.2), (700.0, 12.0, 2.9)];
+        let lee_cov = move |x: f32, y: f32| -> f32 {
+            let mut v = 0.0f32;
+            for (k, &(y0, amp, ph)) in lines.iter().enumerate() {
+                let d = ((y0 - HORIZON) / (h - HORIZON)).clamp(0.0, 1.0);
+                let cy = y0 + amp * (x / (180.0 + 60.0 * k as f32) + ph).sin() + 3.0 * lee.get(x * 0.5, k as f32 * 30.0);
+                let th = 2.0 + 11.0 * d * d;
+                // the shadow lies below the crest line and fades downward
+                let t = (y - cy) / th;
+                let across = if t < 0.0 { 1.0 - smoothstep(0.0, 0.25, -t) } else { 1.0 - smoothstep(0.2, 1.0, t) };
+                let along = smoothstep(0.45, 0.7, lee.get01(x * 0.9, 100.0 + k as f32 * 40.0));
+                v = v.max(across * along);
+            }
+            2.2 * v
+        };
+        let lee_m = Mask::from_fn(f, |x, y| if lee_cov(x, y) > 0.02 { 1.0 } else { 0.0 }).mul(&snow_m);
+        let lee_s = Stipple::new(Tool::stippler(2.3))
+            .mixed(pal, 0.45)
+            .color(move |x, y| mix(snow_col(x, y), hex("#868ca3"), 0.34, Mix::Light))
+            .coverage(lee_cov)
+            .pressure(0.45, 0.85)
+            .drag(1.5, Some(0.0))
+            .dips(20, 0.4, 0.6);
+        c.stipple(&lee_m, &lee_s, 55);
+        c.dry();
     }
 
     // ---------------------------------------------------------------- brook
@@ -442,7 +471,7 @@ fn main() {
         let open = Fbm::new(19, 2, 55.0);
         // an open lead down the middle of the ice, never bank to bank
         let lead_w: Vec<f32> = brook_w.iter().map(|w| w * 0.4).collect();
-        let open_m = Mask::from_shape(f, Shape::new().ribbon(&brook, &lead_w)).mul_fn(|x, y| smoothstep(0.22, 0.34, open.get(x, y * 1.5)) * smoothstep(480.0, 520.0, y)).roughen(29, 8.0, 0.35, 0.08).mul(&brook_m);
+        let open_m = Mask::from_shape(f, Shape::new().ribbon(&brook, &lead_w)).blur(1.2).mul_fn(|x, y| smoothstep(0.22, 0.34, open.get(x, y * 1.5)) * smoothstep(480.0, 520.0, y)).roughen(29, 4.0, 0.5, 0.08).mul(&brook_m);
         let water = |x: f32, y: f32| mix(hex("#34373f"), sky_col(x, HORIZON * 0.8), 0.22, Mix::Pigment);
         let hd = st.detail().color(water).angle(|_, _| 0.0).length(4.0, 14.0).coverage(3.0).medium(0.2).clip(true);
         c.work(&open_m, &hd, 62);
@@ -508,7 +537,7 @@ fn main() {
         let mut fb = Held::new(Tool::round_sable(w0 * 0.45), rng.next_u64());
         for side in [-1.0f32, 1.0] {
             fb.reload(dark, 0.8);
-            c.drag(&mut fb, &Gesture::new(vec![(oak_base.0 + side * w0 * 0.25, oak_base.1 - w0 * 2.2), (oak_base.0 + side * w0 * 0.45, oak_base.1 - w0 * 0.9), (oak_base.0 + side * w0 * 0.72, oak_base.1 + 1.0)]).pressure(0.85, 0.55).ramps(0.0, 0.2), Some(&above));
+            c.drag(&mut fb, &Gesture::new(vec![(oak_base.0 + side * w0 * 0.25, oak_base.1 - w0 * 1.5), (oak_base.0 + side * w0 * 0.4, oak_base.1 - w0 * 0.6), (oak_base.0 + side * w0 * 0.58, oak_base.1 + 1.0)]).pressure(0.8, 0.5).ramps(0.0, 0.2), Some(&above));
         }
         c.dry();
         // bark: on the bole and the big limbs, lean broken strokes along the
@@ -636,6 +665,41 @@ fn main() {
         let shadow = pal.mix(hex("#6e7387")).paint(0.2);
         let rim = pal.mix(hex("#9c8b78")).paint(0.15);
         walker_fig(&mut c, walker, 34.0, coat, hat, skin, shadow, rim, &mut rng);
+        c.dry();
+    }
+
+    // ------------------------------------------------------------- tracks
+    // his footprints behind him: small blue-gray hollows, left and right,
+    // coming up from the foreground along the brook's bank, bigger and
+    // further apart toward the viewer
+    if o.stage("tracks", &mut c, &mut rng) {
+        let hollow = pal.mix(hex("#7f859b")).paint(0.3).with_hiding(0.8);
+        let track: Vec<(f32, f32)> = vec![(walker.0 + 1.0, walker.1 + 3.0), (628.0, 603.0), (668.0, 622.0), (690.0, 648.0), (715.0, 675.0), (752.0, 700.0), (795.0, 732.0)];
+        let arc = arclen(&track);
+        let total = arc[arc.len() - 1];
+        let mut b = Held::new(Tool::round_sable(1.2), rng.next_u64());
+        let mut t = 0.0f32;
+        let mut k = 0;
+        while t < total {
+            let i = arc.iter().position(|&a| a >= t).unwrap_or(track.len() - 1).max(1);
+            let u = ((t - arc[i - 1]) / (arc[i] - arc[i - 1]).max(1e-3)).clamp(0.0, 1.0);
+            let p = (track[i - 1].0 + (track[i].0 - track[i - 1].0) * u, track[i - 1].1 + (track[i].1 - track[i - 1].1) * u);
+            let d = ((p.1 - HORIZON) / (h - HORIZON)).clamp(0.0, 1.0);
+            let size = 1.0 + 4.2 * d * d;
+            let (dx, dy) = (track[i].0 - track[i - 1].0, track[i].1 - track[i - 1].1);
+            let l = (dx * dx + dy * dy).sqrt().max(1e-3);
+            let side = if k % 2 == 0 { 1.0 } else { -1.0 };
+            let q = (p.0 - dy / l * size * 0.9 * side + rng.normal() * size * 0.12, p.1 + dx / l * size * 0.3 * side + rng.normal() * size * 0.08);
+            // a boot's hollow seen at a slant: longer across than deep
+            b.tool = Tool::round_sable(size * 0.55);
+            if k % 6 == 0 {
+                b.reload(hollow, 0.5);
+            }
+            let tilt = rng.normal() * 0.15;
+            c.drag(&mut b, &Gesture::new(vec![(q.0 - size * 0.5, q.1 - tilt * size), (q.0, q.1 + size * 0.08), (q.0 + size * 0.5, q.1 + tilt * size)]).pressure(0.8, 0.55).ramps(0.15, 0.35), None);
+            t += size * 1.9 * rng.range(0.75, 1.3);
+            k += 1;
+        }
         c.dry();
     }
 

@@ -331,3 +331,60 @@ fn cut_in_stays_near_the_region() {
     assert!(far < total * 0.01, "paint far outside: {:.3}%", far / total * 100.0);
     assert!(spire_in > 0.0, "the thin spire got no paint");
 }
+
+/// Largest and mean color difference of `c` (a crop render) to the same
+/// pixels of `whole` over the kept crop, and the largest height difference.
+fn crop_diff(c: &Canvas, whole: &Canvas) -> (f32, f32, f32) {
+    let (f, k) = (c.f, c.keep);
+    let (mut mx, mut sum, mut hmx, mut n) = (0.0f32, 0.0f64, 0.0f32, 0usize);
+    for y in k.1..k.3 {
+        for x in k.0..k.2 {
+            let (i, j) = (y * f.w + x, (y + f.y0) * whole.f.w + x + f.x0);
+            for ch in 0..3 {
+                let d = (c.px[i][ch] - whole.px[j][ch]).abs();
+                mx = mx.max(d);
+                sum += d as f64;
+            }
+            hmx = hmx.max((c.height[i] - whole.height[j]).abs());
+            n += 3;
+        }
+    }
+    (mx, (sum / n as f64) as f32, hmx)
+}
+
+/// A canvas with linen, a knife ground, then (`strokes`) a pass of short
+/// hog strokes and a pass of long ones, whole or cropped.
+fn crop_scene(crop: Option<crate::canvas::Crop>, strokes: usize) -> Canvas {
+    let st = Style::friedrich();
+    let mut c = Canvas::new_window(400, 1.4, st.raw, crop).with_size_mm(st.width_mm).with_linen(crate::surface::Linen { seed: 1, ..st.linen });
+    c.prime(st.ground[0].color, 0.8, 110.0, 0.25, 0.35, 5);
+    let all = Mask::from_fn(c.frame(), |_, _| 1.0);
+    if strokes >= 1 {
+        c.work(&all, &Handling::new(Tool::hog_flat(12.0)).color(|x, _| if x < 450.0 { hex("#a9785a") } else { hex("#50607a") }).paint(0.8, 0.4).length(20.0, 40.0).coverage(2.0), 7);
+        c.dry();
+    }
+    if strokes >= 2 {
+        c.work(&all, &Handling::new(Tool::filbert(20.0)).color(|_, y| if y < 300.0 { hex("#6a4c34") } else { hex("#c9b48e") }).paint(0.5, 0.4).length(150.0, 300.0).coverage(1.5), 8);
+        c.dry();
+    }
+    c.relief(0.5, 0.05);
+    c
+}
+
+/// A crop render is the same picture as the whole render there: the
+/// support and grounds exactly, brushwork closely (strokes are planned on
+/// the whole canvas; outside the window a brush can only be estimated, see
+/// notes/workflow.md), and the difference falls as the margin grows.
+#[test]
+fn crop_matches_whole() {
+    use crate::canvas::Crop;
+    let crop = |m: f32| Some(Crop { units: [300.0, 250.0, 460.0, 400.0], margin: m });
+    let (w0, c0) = (crop_scene(None, 0), crop_scene(crop(12.0), 0));
+    let d0 = crop_diff(&c0, &w0);
+    assert!(d0.0 < 1e-5 && d0.2 < 0.01, "linen + ground differ: {d0:?}");
+    let w2 = crop_scene(None, 2);
+    let near = crop_diff(&crop_scene(crop(20.0), 2), &w2);
+    let far = crop_diff(&crop_scene(crop(120.0), 2), &w2);
+    eprintln!("crop vs whole (color max, mean, height max µm): margin 20 {near:?}, margin 120 {far:?}");
+    assert!(near.1 < 0.005 && far.1 < 0.0015 && far.1 < near.1 && far.0 < near.0, "crop drifts from the whole render: {near:?} {far:?}");
+}

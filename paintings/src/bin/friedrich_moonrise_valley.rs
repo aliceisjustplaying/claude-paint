@@ -46,6 +46,8 @@ fn main() {
         let steps = 22.0 * smoothstep(392.0, 404.0, x) + 55.0 * smoothstep(438.0, 452.0, x) + 70.0 * smoothstep(505.0, 522.0, x) + 90.0 * smoothstep(575.0, 600.0, x);
         h * 0.745 + 6.0 * n3.get(x, 0.0) + 2.5 * n4.get(x, 0.0) + steps - 10.0 * (-((x - 130.0) / 90.0).powi(2)).exp()
     };
+    // the masks ask for these at every pixel: evaluate once per column
+    let (ridge1, ridge2, ledge) = (f.per_column(ridge1), f.per_column(ridge2), f.per_column(ledge));
     let soft = |d: f32, e: f32| smoothstep(-e, e, d);
     let sky = Mask::from_fn(f, |x, y| 1.0 - soft(y - ridge1(x), 0.6));
     let far = Mask::from_fn(f, |x, y| soft(y - ridge1(x), 0.6) * (1.0 - soft(y - ridge2(x), 0.6)));
@@ -172,7 +174,7 @@ fn main() {
         // the top of the fog is uneven: it climbs the foot of the near ridge in
         // soft tongues, so the ridge dissolves into it rather than sitting on it
         let mt_n = Fbm::new(seed + 62, 4, 200.0);
-        let mt = |x: f32| mist_top - 4.0 + 16.0 * mt_n.get(x, 0.0);
+        let mt = f.per_column(|x: f32| mist_top - 4.0 + 16.0 * mt_n.get(x, 0.0));
         let mist_c = |x: f32, y: f32| {
             let t = ((y - mist_top) / (h * 0.32)).clamp(0.0, 1.0);
             let base = gradient(&[(0.0, hex("#bdb4aa")), (0.35, hex("#a9a3a0")), (1.0, hex("#72706f"))], t, Mix::Pigment);

@@ -93,6 +93,20 @@ impl Frame {
         let (x0, y0, x1, y1) = (r.0.max(a), r.1.max(b), r.2.min(c), r.3.min(d));
         if x1 <= x0 || y1 <= y0 { None } else { Some((x0 - a, y0 - b, x1 - a, y1 - b)) }
     }
+    /// A function of x (a horizon, a ridge line, the top of a ledge)
+    /// tabulated at every pixel column's center of the whole canvas, so a
+    /// mask that calls it for every pixel evaluates it once per column.
+    /// Exact: at any other x it calls `g`.
+    pub fn per_column<G: Fn(f32) -> f32 + Sync>(&self, g: G) -> impl Fn(f32) -> f32 + Sync {
+        let (n, scale) = (self.full_w, self.scale);
+        let inv = 1.0 / scale;
+        let table: Vec<f32> = (0..n).into_par_iter().map(|i| g((i as f32 + 0.5) * inv)).collect();
+        move |x: f32| {
+            let i = (x * scale - 0.5).round();
+            if i >= 0.0 && (i as usize) < n && (i + 0.5) * inv == x { table[i as usize] } else { g(x) }
+        }
+    }
+
     /// Index into a whole-canvas buffer (a mask) of buffer pixel `i`.
     #[inline]
     pub fn whole_index(&self, i: usize) -> usize {

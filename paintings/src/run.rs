@@ -384,7 +384,7 @@ impl Run {
 /// gives paint leveling, the brushes' feel for the surface and strokes
 /// entering the window their context (see notes/workflow.md for how the
 /// difference to a whole render falls with it).
-pub const DEFAULT_MARGIN: f32 = 12.0;
+pub const DEFAULT_MARGIN: f32 = 40.0;
 
 fn ago(s: u64) -> String {
     match s {

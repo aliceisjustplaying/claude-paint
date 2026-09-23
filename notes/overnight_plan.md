@@ -43,4 +43,6 @@ Then stop and evaluate with the user.
 - motifs merged (5ec3808): growth.rs skeletons; open: spruce reads as araucaria, not Friedrich's drooping spire; oak twig tips tuft into pom-poms at 1000px; ridge bands on thick limbs.
 - form merged: ranges read well (gullies, layered haze); rocks solid but covered in uniform crumpled-foil dab texture, outcrop still loaf-like; orange ground specks in skies (coverage); 3200px dashes.
 - color merged: masstone semantics, Canvas::aim / Palette::aim, handlings aim by default; matched marks ΔE ~0.003 (was ~0.045). Stipple stream should switch to Canvas::aim at merge.
+- strokes merged (hand-like geometry, passages/sweep order, coverage past edges, presets as vocabulary); golden re-recorded after color+strokes.
+- stipple merged; paint_for switched to Palette::aim / Paint::aimed / Canvas::under. Sky stipple reads smooth and grainy with no direction. Open: mist stippled over a dark ridge is an opaque gray grainy wall (aiming a veil reaches the target fully; needs a veil/density-to-contrast handling); ridge silhouette lumpy.
 - (updated as work lands)

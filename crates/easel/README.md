@@ -493,6 +493,130 @@ work(leaves:mask(), {hand="hatch", tool="round 1.6", length={3, 7}, coverage=2.6
 work(leaves:lit() * leaves:mask(), {hand="hatch", tool="round 1.3", length={2, 5}, coverage=2.2, angle=way, color="#6a843b"})
 ```
 
+### Firs and fir woods
+
+`tree{habit="spruce"}` grows a forest tree from buds, and you can't
+say what shape it takes. `fir{}` works the other way round: you draw the
+silhouette and a spruce grows into it. It gets a leader, whorls of 3–6
+boughs a year seen in projection (so tiers come out uneven), short
+interwhorl boughs, boughs that sag and lift at the tip with their tips on
+your line, gaps in runs, broken and dead lower boughs, stubs on a bare
+trunk and sometimes a crooked or dead top. Needles hang from each bough as
+a pad, thin above it and deep below. The fir also gives you the short
+hatched strokes a pointed brush lays on each pad (Friedrich's firs are
+"short, hatched strokes"), each with how much it faces the light.
+
+```lua
+SPIRE = {{520,112},{528,170},{540,240},{552,330},{566,420},{580,492,"c"},{548,505},{520,500},
+         {492,506},{462,494,"c"},{478,420},{494,330},{505,240},{512,170}}
+f = fir{envelope=outline{pts=SPIRE, char="soft", seed=3}, foot={521, 540}, habit="spire", seed=5}
+print(f)   -- fir(spire, 428 tall, 168 boughs (6 dead, 11 broken), 986 strokes, tier 13.8, hatch 2.35)
+local nd = f:needles()
+-- 1. a dark hatched body under everything, clipped to the needle mask (its edge is the strokes' fringe)
+work(nd, {hand="hatch", tool="round 1.8", length={3, 7}, coverage=2.6, clip=nd,
+  angle=function(x, y) return 1.57 + 0.5 * clamp((f.foot[1] - x) / 12, -1, 1) end, color="#1f2924"})
+-- (a continuous angle: one that flips at the stem leaves a seam of thin cover there)
+-- 2. the stem and boughs with a rigger (dead ones gray)
+local rb = brush("rigger", 1.2)
+for i, b in ipairs(f.boughs) do
+  if i % 6 == 1 or b.dead then rb:reload(b.dead and "#6a655d" or "#1d211e", 0.8) end
+  rb:stroke(b.pts, {pressure={0.7, 0.05}, ramps={0.05, 0.6}})
+end
+f:paint(brush("rigger", 0.6), {color="#77716a", kind="twig"})
+-- 3. the hatched shoots: shaded ones, half-lit ones, then the few that catch the light
+local hb = brush("round", f.hatch)
+f:paint(hb, {color="#18211d", lit={0, 0.5}})
+f:paint(hb, {color="#34402f", lit={0.5, 0.7}})
+f:paint(brush("round", f.hatch * 0.8), {color="#667052", lit={0.7, 1}, every=6})
+```
+
+`fir{envelope=, foot=, habit=, seed=, sun=}`: `envelope` is a closed
+`outline{}` or a point list (apex at the top; the lowest point is the
+crown's base). `foot={x, y}` is where the trunk meets the ground (default:
+just under the crown). Without an envelope, give `x=, y=` (the foot),
+`height=` and `width=` for a made-up one. `sun` points toward the sun, as
+for foliage. Habits:
+
+| habit | the tree |
+|---|---|
+| `spire` (default) | tall and dense, fairly regular, lower boughs hanging |
+| `old` (or `ragged`) | gaps, broken and dead boughs, needles in tufts, crooked or dead top |
+| `young` | dense to the ground, boughs rising, few years |
+| `storm` | windward boughs short, all swept leeward (`wind=-0.8` blows left) |
+
+Override any of the habit's numbers: `tiers` (whorls, about), `whorl={min,
+max}` (boughs per whorl), `inter`, `fill={min, max}` (reach toward the
+envelope), `gap`, `broken`, `dead_below` (share of the crown), `crook`,
+`kink`, `rise={top, base}` (radians), `droop`, `upturn`, `pad` (needle depth
+per tier), `clumpy`, `bare_inner`, `wind`, `trunk`, `dead_top`.
+
+What you get: `f.boughs` (back to front: `{pts, w, pad={{above, below}...},
+z, side, t, dead, broken, minor}`), `f.leader` (`{pts, w, dead_from}`,
+foot to apex), `f.apex`, `f.foot`, `f.crown_base`, `f.tier` (whorl
+spacing), `f.hatch` (a good brush width), `f.bounds`, `f.envelope`.
+Masks: `f:needles()`, `f:wood()` (stem and boughs), `f:trunk()` (the
+bare trunk under the crown), `f:mask()` (all), `f:lit(from)` (needles
+facing the light, default 0.55), `f:shade(from)`, `f:gaps(reach)` (sky
+through the crown). Strokes: `f:strokes{kind=, lit={lo, hi}, z={lo, hi}}`
+returns `{pts, w, lit, z, kind, bough}`. `kind` is `"under"` (shoots
+hanging from a bough), `"top"` (along its upper face) or `"twig"` (on
+dead boughs). `f:paint(brush, {color=, lit=, kind=, z=, every=10,
+load=0.8, pressure={0.75, 0.05}, ramps=, shake=, clip=, fit=true})` lays
+them, back to front. `color` may be `function(stroke)`. `fit` presses the
+pointed brush to each stroke's width. It returns the count. `lit` ranges
+are half open, so `{0, 0.5}` and `{0.5, 1}` split the strokes.
+
+**A wood.** Draw the wood's skyline, give the line its feet stand on,
+and `fir_wood` places firs in rows. The front row's tops reach your line
+(a few fall short, one pokes above). The rows behind are smaller, stand
+higher toward the horizon, are more numerous and carry more air. The
+lower trunks stand bare, so the foot of the wood shows trunks and floor,
+not one black block.
+
+```lua
+WOODTOP = {{-10,150},{50,132},{110,158},{170,146},{230,176},{290,214},{340,262},{385,320},{420,392},{445,455}}
+wood = fir_wood{skyline=outline{pts=WOODTOP, open=true, char="soft", lobe=14, seed=31}, foot=516,
+                depth=4, count=13, seed=32}
+print(wood)  -- fir_wood(4 rows: 13 trees scale 1.00 haze 0.00 | 20 trees scale 0.67 haze 0.33 | ...)
+local air = "#a4a7a1"
+local function row(r)                -- far rows first; each paler by its haze
+  local h, s, nd = wood:haze(r), wood:scale(r), wood:needles(r)
+  work(nd, {hand="hatch", tool=string.format("round %.1f", math.max(0.9, 1.8 * s)), length={2, 7 * s + 1}, coverage=2.4,
+    clip=nd, angle=1.57, angle_jitter=0.5, color=mix("#1f2924", air, 0.62 * h)})
+  local rb = brush("rigger", math.max(0.5, 1.4 * s))
+  for n, f in ipairs(wood:trees(r)) do
+    if n % 5 == 1 then rb:reload(mix("#221f1b", air, 0.6 * h), 0.85) end
+    rb:stroke(f.leader.pts, {pressure={0.9, 0.2}, ramps={0.02, 0.3}})
+  end
+  if r <= 2 then                      -- hatched shoots on the near rows
+    local hb = brush("round", 2.2 * s + 0.3)
+    wood:paint(hb, r, {color=mix("#161e1a", air, 0.6 * h), lit={0, 0.55}})
+    wood:paint(hb, r, {color=mix("#3a4533", air, 0.6 * h), lit={0.55, 1}, every=6})
+  end
+end
+row(4); row(3)
+local fl = wood:floor():roughen(7, 22, 34, 3)   -- the dim floor between the trunks
+work(fl, {hand="body", coverage=3, clip=fl, angle=1.5, hug=false,
+  color=function(x, y) return mix("#2a302d", "#555c5a", smoothstep(485, 518, y)) end})
+row(2); row(1)
+```
+
+`fir_wood{skyline=, foot=, depth=4, count=12, horizon=, recede=0.5, air=0.4,
+width={0.2, 0.32}, mix={spire=0.7, old=0.18, young=0.12}, bare={0.06, 0.18},
+sun=, seed=}`: `skyline` is an open `outline{}` or points, left to right.
+`foot` is a y or a line. `depth` is the number of rows and `count` the
+trees in the front row. Each row back is `1 + r*recede` times farther. Its
+`haze` is `1 - exp(-r*air)`. `horizon` is the eye level, where the rows'
+feet converge (default: a little above the foot). `width` is the crown
+width as a share of height and `bare` the bare trunk under it. Rows count
+from 1 (the front). Masks per row: `wood:needles(r)`, `wood:wood(r)`,
+`wood:all(r)`, `wood:visible(r)` (less the rows in front), `wood:lit(r,
+from)`, plus `wood:floor()` and `wood:mask()` (everything). Numbers:
+`wood:haze(r)`, `wood:scale(r)`, `wood.depth`, `wood.horizon`. Trees:
+`wood:trees(r)` (fir values, as above). `wood:paint(brush, r, {...})`
+works like `f:paint`. `wood.rows` builds a table of every tree, so read it
+once, not inside a color function.
+
 ### Meadows
 
 ```lua

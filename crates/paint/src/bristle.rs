@@ -1636,6 +1636,27 @@ mod cover_tests {
         (thin, bare)
     }
 
+    /// A loaded brush covers a passage it means to cover: no flecks of the
+    /// ground in a dark body passage at coverage 2.5 (they were the gaps
+    /// the strokes' hand placement left, 1.5% of the area; broad 11%); a
+    /// nearly dry brush at light pressure still breaks up (dry brush).
+    #[test]
+    fn loaded_passage_covers() {
+        let st = Style::friedrich_early();
+        let dark = |_: f32, _: f32| hex("#2c2925");
+        let body = || st.body().color(dark).clip(true).threshold(0.5).coverage(2.5);
+        let broad = || st.broad().color(dark).clip(true).threshold(0.5).coverage(2.5);
+        let (_, bare) = bare_share(500, &body(), 5);
+        let (_, bare_broad) = bare_share(500, &broad(), 5);
+        let (_, gaps) = bare_share(500, &broad().fill(false), 5);
+        let h = body().pressure(0.15, 0.3);
+        let (_, dry) = bare_share(500, &Handling { load: 0.1, ..h }, 5);
+        println!("bare: body {:.2}%, broad {:.2}% ({:.2}% without looking), dry brush {:.1}%", 100.0 * bare, 100.0 * bare_broad, 100.0 * gaps, 100.0 * dry);
+        assert!(bare < 0.002 && bare_broad < 0.002, "a loaded passage at coverage 2.5 shows bare ground: body {:.2}%, broad {:.2}%", 100.0 * bare, 100.0 * bare_broad);
+        assert!(gaps > 0.005, "without looking the strokes leave gaps: {gaps}");
+        assert!(dry > 0.1, "dry brush at light pressure should break up: {dry}");
+    }
+
     /// Where do bare flecks in a dark body passage come from?
     /// `cargo test --release -p paint probe_bare -- --ignored --nocapture`
     #[test]

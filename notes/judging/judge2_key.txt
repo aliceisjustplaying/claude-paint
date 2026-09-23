@@ -1,0 +1,3 @@
+R1 coast anchor (loop0 28, loop1 27)
+R2 l2_near (loop2)
+R3 l1_near (loop1 26)

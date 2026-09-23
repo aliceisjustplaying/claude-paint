@@ -1,0 +1,5 @@
+S1 l2_near re-rendered (halo-fixed engine)
+S2 l1_green re-rendered
+S3 coast anchor
+S4 l3_near (loop3)
+S5 l2_green (loop2)

@@ -188,7 +188,10 @@ fn sample<const N: usize>(st: &S, fun: &Function, b: (f32, f32, f32, f32), conv:
     let mut v = Vec::with_capacity(nx * ny);
     for j in 0..ny {
         for i in 0..nx {
-            let r: Value = fun.call((b.0 + i as f32 * step, b.1 + j as f32 * step))?;
+            // nodes past the box (the last row and column) sample just inside
+            // it: a field is never asked about the canvas's own edge or beyond
+            let (x, y) = ((b.0 + i as f32 * step).min(b.2 - 0.01).max(b.0), (b.1 + j as f32 * step).min(b.3 - 0.01).max(b.1));
+            let r: Value = fun.call((x, y))?;
             v.push(conv(r)?);
         }
     }
@@ -1008,7 +1011,7 @@ fn over_field(st: &S, o: &Table, b: (f32, f32, f32, f32)) -> Result<Option<OverB
             let mut v = Vec::with_capacity(nx * ny);
             for j in 0..ny {
                 for i in 0..nx {
-                    let (x, y) = (b.0 + i as f32 * step, b.1 + j as f32 * step);
+                    let (x, y) = ((b.0 + i as f32 * step).min(b.2 - 0.01).max(b.0), (b.1 + j as f32 * step).min(b.3 - 0.01).max(b.1));
                     let under = st.borrow().canvas.as_ref().ok_or_else(no_canvas)?.under(x, y, step * 0.5);
                     let r: Value = f.call((x, y, Col(under)))?;
                     v.push(rgb_of(&r)?);

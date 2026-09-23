@@ -30,3 +30,15 @@ subjects are harder. Most worst defects are craft.
 Deltas within the batch: near +3, green +2; anchor drift -1. Tool issues
 named: halos (loop1-halo running), horizontal wood-grain streaking over sky
 and snow (the brushed ground), even craquelure density.
+
+## Loop 2 (three critics, same batch of three, shuffled; raw: notes/review_scores_loop2_raw.md)
+
+| painting | version | critic 2 | 2b | 2c | **median** | worst defect (majority) |
+|---|---|---|---|---|---|---|
+| near | loop 2 rework | 22 | 23 | 20 | **22** | shadow band across the foreground with no caster; formula firs with a white edge on every tier |
+| near | loop 1 (same batch) | 19 | 21 | 18 | 19 | cotton-ball snow lumps; forest a flat wall |
+| coast | anchor | 24 | 23 | 23 | 23 | empty foreground; schematic net poles |
+
+In-batch delta near loop 2 vs loop 1: +3 (+3, +2, +2 per critic). Single
+critics drift by up to ±7 across batches (loop 1 near scored 26 in loop 1,
+19 here), so from now: three critics per batch, medians, in-batch deltas.

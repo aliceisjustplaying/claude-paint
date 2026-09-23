@@ -40,4 +40,5 @@ Then stop and evaluate with the user.
 
 ## Status log
 - Six subagents launched (color, strokes, stipple, workflow, form, motifs); shared brief copied to notes/overnight_brief.md.
+- motifs merged (5ec3808): growth.rs skeletons; open: spruce reads as araucaria, not Friedrich's drooping spire; oak twig tips tuft into pom-poms at 1000px; ridge bands on thick limbs.
 - (updated as work lands)

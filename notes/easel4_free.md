@@ -102,8 +102,34 @@ picture):
     What stayed: 58 tufts of dry grass (about one blade in seven faintly lit),
     pebbles along the track and a fallen, weathered branch. Varnish again.
 
-Time: about 90 minutes from the first command to the final render; 19 chunks
-in the log, about a dozen undone or replaced on the way.
+13. **Second refinement pass** (with `easel edit`, from 3200 px crops).
+    - The oak's twigs had curled into loops, then into long smooth whips.
+      `stroke` always splines through its points, so I painted each twig
+      segment as its own short stroke. That gives angular, elbowed "small
+      strokes and hooks." I also added bark fissures and faint glow on the
+      trunk's right edge. The foot blob became root spurs.
+    - I dropped the sky veil: its masked stipple left speckle fringes
+      around the crown.
+    - The stones are repainted with strokes following their planes, a light
+      blend, fine grain, a lit top plane on the capstone, a dark underside and
+      cracks. Later I added two lower back stones inside the chamber so the
+      glow shows only in slivers and it reads as a chamber, not a table.
+    - `relief(0.08)` instead of the style's default 0.2
+      (`crates/paint/src/style.rs:128`). At 0.2 the random short strokes read
+      as worms at 3200 px. Friedrich's films were "gossamer-thin" [CATS p.127].
+    - The foreground rocks are repainted as angular erratics with a top plane,
+      a mid-tone left facet, a crack, grass over their feet and lichen. I also
+      lightened the foreground glaze (0.6 → 0.42) so the particulars read.
+    - Puddles in the wheel ruts reflect the sky (warm far away, cool gray-blue
+      up close) and give the foreground its only lights. Grass leans over the
+      track's edges.
+    - Junipers got pointed tops: their lobed tops had read as hatted figures.
+    - Tried and dropped: a stippled mist band (read as specks, then as a flat
+      road) and banded veils over the midground (read as ploughed stripes).
+
+Time: about 45 minutes of active painting (16:51–17:33, then paused by a usage
+limit); final renders at 18:33. 20 chunks in the log; about twenty chunks were
+undone, dropped or replaced on the way (`out/easel/easel4_free/undone.lua`).
 
 ## HOW THE EASEL FELT
 
@@ -166,9 +192,12 @@ stopped by `clip=`, not by the mask itself.
    had 65 limbs and read as a sapling. *Workaround:* I picked seed 11 for its
    silhouette and wrote a zigzag branch-and-twig generator (1155 strokes).
    Some of its twigs curl into loops, which oak twigs don't do.
-5. **The look file isn't always there when `look` returns.** Four times,
-   reading the printed JPEG path right away gave ENOENT; a second later it
-   was there. *Workaround:* `sleep 1–2` after `look`.
+5. **Stroke has no `smooth=false`.** Pencil `line` keeps corners, but
+   `brush:stroke` always splines, so twigs and cracks come out as rubbery
+   curves. *Workaround:* one stroke per segment, with pressure carried over.
+   (Separately, my own file reader often failed to see a fresh look JPEG
+   for 10–20 s. The same thing happened with `scripts/peek` output, so that's
+   my harness, not the easel.)
 6. **Many small masks cost full-canvas time.** 38 heather clumps (an
    ellipse, a roughen, two `work` calls each) took 35 s. *Workaround:* I cut
    them. Stamping small shapes by brush would be cheaper.
@@ -180,7 +209,16 @@ stopped by `clip=`, not by the mask itself.
    the near mound in the far haze. *Workaround:* a hand-written "bump" term.
 9. **The pencil barely shows on the red-brown `friedrich` ground at 1000px.**
    It was usable only in crops.
-10. **`glaze` jumps the clock by weeks** (28.8 days here) to dry what's under
+10. **`easel show N` output can't be fed back to `easel edit N`**: it
+    includes the `--@ chunk` header, which `edit` rejects. *Workaround:*
+    `grep -v '^--@'`.
+11. **Relief at the style default makes random short strokes look like
+    worms** at 3200 px (sky striations are lovely, but stones and heath aren't).
+    *Workaround:* `relief(0.08)`.
+12. **Atmospheric passes over a finished ground are hard.** Mist and banded
+    veils either vanished into specks or became flat, ruled strips. I found
+    no easy way to lay a soft, patchy, horizontal veil. I dropped both.
+13. **`glaze` jumps the clock by weeks** (28.8 days here) to dry what's under
     it. That's correct, but it's a surprise when all you wanted was a veil.
 
 ## Critique
@@ -194,16 +232,18 @@ reads as a dead oak at a glance. The cloud bars are level and thin as he
 paints them.
 
 What doesn't:
-- **The foreground is still too empty and too even.** Friedrich would have
-  filled it with particular plants and stones in a clear order. Mine is a dark
-  hatched field with a few tufts, a pale stick and two gray domes. The rocks
-  are rounded blobs, not granite with planes and cracks.
-- **The path is the most digital thing in the picture.** It's a smooth ribbon
-  of even width with parallel ruts, still a little too light near the bottom.
-- **The oak's twigs** curl into loops in places. The trunk is a smooth tube
-  with almost no bark or hollows, and the foot is a blob.
-- **The upper sky** still has soft dark smudges that aren't clouds, and there
-  are pale scumbled patches at its left and right edges.
+- **The foreground is still too empty.** Friedrich would fill it with
+  particular plants and stones in a clear order. Mine is a dark hatched field
+  with sky puddles, a few tufts, a pale branch and three erratics. The
+  puddles are the best idea in it. The rocks have planes now but still read
+  as soft lumps at 1000 px.
+- **The midground heath is one even brown.** Both attempts to break it up
+  (mist, bands) failed and were dropped.
+- **The path** is still a smooth ribbon of even width; its edges are too clean.
+- **The oak** is now convincing in the crown (elbowed twigs). The trunk is
+  still a fairly smooth tube.
+- **The dolmen**, squinted, still has a hint of a hut with two windows.
+- **The upper sky** still has soft dark smudges that aren't clouds.
 - **The mound** is a perfect smooth dome; its edge is too clean at close range.
 - **The ravens** are too small to read at 1000px.
 - The stones and figure are all right as silhouettes. At 3200px the figure

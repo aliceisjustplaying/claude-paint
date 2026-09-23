@@ -122,11 +122,11 @@ impl RockSpec {
     pub fn granite() -> Self {
         RockSpec {
             kind: RockKind::Granite,
-            round: 0.09,
-            facets: 8,
+            round: 0.035,
+            facets: 13,
             profile: 2.2,
-            sink: (0.05, 0.14),
-            tilt: (0.2, 0.7),
+            sink: (0.12, 0.3),
+            tilt: (0.4, 1.1),
             bulge: 0.8,
             bed: 0.0,
             bed_tilt: 0.0,
@@ -134,8 +134,8 @@ impl RockSpec {
             crack_depth: 0.1,
             crack_width: 2.0,
             joints: 0.6,
-            lumps: 0.045,
-            grain: 0.01,
+            lumps: 0.035,
+            grain: 0.005,
             flutes: 0.0,
             ground: 4.0,
         }
@@ -295,6 +295,7 @@ pub struct Rock {
     gnx: usize,
     gny: usize,
     gcast: Vec<f32>,
+    hmin: f32,
     seed: u64,
 }
 
@@ -615,7 +616,7 @@ impl Rock {
                 continue;
             }
             let near = sites.iter().map(|s| ((s.0 - p.0).powi(2) + (s.1 - p.1).powi(2)).sqrt()).fold(f32::MAX, f32::min);
-            if near < r * 0.7 * (1.0 - tries as f32 / 700.0) {
+            if near < r * 0.55 * (1.0 - tries as f32 / 700.0) {
                 continue;
             }
             sites.push(p);
@@ -633,7 +634,9 @@ impl Rock {
             let v = ((st.1 - center.1) / half_h).clamp(-1.0, 1.0);
             // upper faces turn to the sky, lower ones to the ground
             let bias = (0.0, if v < 0.0 { 0.6 * v * t_hi } else { 0.3 * v * t_hi });
-            let sink = rng.range(k_lo, k_hi);
+            // a few deep cuts (the big planes), many shallow ones (facets on them)
+            let q = rng.f();
+            let sink = k_lo + (k_hi - k_lo) * q * q;
             let jit = rng.range(t_lo, t_hi);
             planes.push(cut(&mut rng, PlaneKind::Face, *st, sink, jit, bias));
         }
@@ -843,7 +846,7 @@ impl Rock {
                 }
                 h += spec.lumps * r * lumps.get(x, y) * smoothstep(0.0, r * 0.2, d);
                 h += spec.grain * r * grain.get(x, y);
-                (h.max(0.0), id as u16, crack)
+                (h, id as u16, crack)
             })
             .collect();
         let mut h: Vec<f32> = hs.iter().map(|v| v.0).collect();
@@ -855,19 +858,32 @@ impl Rock {
             }
         }
 
-        // normals: central differences, one-sided at the edge (outside: z 0)
-        let hz = |i: isize, j: isize| -> f32 {
-            if i < 0 || j < 0 || i >= nx as isize || j >= ny as isize {
-                return 0.0;
+        // normals: central differences, one-sided at the edge (the drawn
+        // line is the silhouette: a plane may run out through it)
+        let hz = |i: isize, j: isize| -> Option<f32> {
+            if i < 0 || j < 0 || i >= nx as isize || j >= ny as isize || !inside[j as usize * nx + i as usize] {
+                return None;
             }
-            h[j as usize * nx + i as usize]
+            Some(h[j as usize * nx + i as usize])
+        };
+        let diff = |a: Option<f32>, c: f32, b: Option<f32>| -> f32 {
+            match (a, b) {
+                (Some(a), Some(b)) => (b - a) / (2.0 * step),
+                (None, Some(b)) => (b - c) / step,
+                (Some(a), None) => (c - a) / step,
+                _ => 0.0,
+            }
         };
         let n: Vec<V3> = (0..nx * ny)
             .into_par_iter()
             .map(|k| {
+                if !inside[k] {
+                    return [0.0, 0.0, 1.0];
+                }
                 let (i, j) = ((k % nx) as isize, (k / nx) as isize);
-                let dx = (hz(i + 1, j) - hz(i - 1, j)) / (2.0 * step);
-                let dy = (hz(i, j + 1) - hz(i, j - 1)) / (2.0 * step);
+                let c = h[k];
+                let dx = diff(hz(i - 1, j), c, hz(i + 1, j));
+                let dy = diff(hz(i, j - 1), c, hz(i, j + 1));
                 unit([-dx, -dy, 1.0])
             })
             .collect();
@@ -913,7 +929,10 @@ impl Rock {
         };
         let r1 = ((r * 0.05 / step).round() as usize).max(2);
         let r2 = ((r * 0.18 / step).round() as usize).max(3);
-        let (b1, b2) = (blur(&h, r1), blur(&h, r2));
+        // outside the rock, far below it: the silhouette is not a cavity
+        let floor = h.iter().zip(&inside).filter(|(_, i)| **i).map(|(v, _)| *v).fold(f32::MAX, f32::min) - r;
+        let hf: Vec<f32> = h.iter().zip(&inside).map(|(v, i)| if *i { *v } else { floor }).collect();
+        let (b1, b2) = (blur(&hf, r1), blur(&hf, r2));
         let ao: Vec<f32> = (0..nx * ny)
             .into_par_iter()
             .map(|k| {
@@ -970,6 +989,7 @@ impl Rock {
             gnx: 0,
             gny: 0,
             gcast: Vec::new(),
+            hmin: 0.0,
             seed,
         };
         rock.relight(light, spec.ground);
@@ -990,6 +1010,7 @@ impl Rock {
         }
         let (sx, sy) = (lx / lxy, ly / lxy);
         let rise = lz / lxy;
+        self.hmin = self.h.iter().zip(&self.inside).filter(|(_, i)| **i).map(|(v, _)| *v).fold(0.0f32, f32::min);
         let hmax = self.h.iter().cloned().fold(0.0f32, f32::max);
         let step = self.step;
         let pen = l.penumbra;
@@ -1009,7 +1030,7 @@ impl Rock {
         // over the ground: a coarser grid reaching away from the sun
         let b = self.bounds;
         let size = (b.2 - b.0).max(b.3 - b.1);
-        let reach = if rise > 0.02 { (hmax / rise).min(size * 2.5) } else { size * 2.5 };
+        let reach = if rise > 0.02 { ((hmax - self.hmin) / rise).min(size * 2.5) } else { size * 2.5 };
         let gstep = (self.step * 2.0).max(0.5);
         let gx0 = b.0.min(b.0 - sx * reach) - size * 0.05;
         let gx1 = b.2.max(b.2 - sx * reach) + size * 0.05;
@@ -1042,7 +1063,7 @@ impl Rock {
         let far = (self.bounds.2 - self.bounds.0) + (self.bounds.3 - self.bounds.1) + 4.0 * hmax.max(1.0);
         while t < far * 2.0 {
             let ray = z0 + rise * t;
-            if rise >= 0.0 && ray > hmax {
+            if rise >= 0.0 && ray > if ground { hmax - self.hmin } else { hmax } {
                 break;
             }
             let (qx, qy) = (x + sx * t, y + sy * t);
@@ -1053,7 +1074,8 @@ impl Rock {
             if i >= 0.0 && j >= 0.0 && (i as usize) < self.nx && (j as usize) < self.ny {
                 let k = j as usize * self.nx + i as usize;
                 if self.inside[k] {
-                    let hq = self.h[k];
+                    // on the ground, the rock stands on it: its lowest point at z 0
+                    let hq = if ground { self.h[k] - self.hmin } else { self.h[k] };
                     let hgt = hq - ray;
                     if !ground || ray > -hq {
                         let o = 0.5 + 0.5 * hgt / (pen * t + 0.3);
@@ -1362,6 +1384,21 @@ impl Rock {
         v
     }
 
+    /// The rock's light values (as `RockSample::value`) at the `lo` and `hi`
+    /// quantiles: where to anchor a painter's value scale.
+    pub fn levels(&self, lo: f32, hi: f32) -> (f32, f32) {
+        let mut v: Vec<f32> = (0..self.nx * self.ny)
+            .filter(|k| self.inside[*k])
+            .map(|k| (self.light.shade(self.n[k], self.cast[k]).value * (1.0 - 0.65 * self.ao[k])).clamp(0.0, 1.0))
+            .collect();
+        if v.is_empty() {
+            return (0.0, 1.0);
+        }
+        v.sort_by(|a, b| a.partial_cmp(b).unwrap());
+        let q = |t: f32| v[((v.len() - 1) as f32 * t.clamp(0.0, 1.0)) as usize];
+        (q(lo), q(hi))
+    }
+
     /// The share of the rock (by grid cells) in the light family.
     pub fn lit_share(&self) -> f32 {
         let (mut lit, mut all) = (0.0f32, 0.0f32);
@@ -1462,7 +1499,8 @@ mod tests {
         let c = r.cast(f);
         let right = c.data[395 * 600 + 430];
         let left = c.data[395 * 600 + 70];
-        assert!(right > 0.5 && left < 0.1, "{right} {left}");
+        let row: Vec<String> = (0..12).map(|k| format!("{:.2}", c.data[395 * 600 + 380 + k * 15])).collect();
+        assert!(right > 0.5 && left < 0.1, "{right} {left} {row:?}");
         let s = r.snow(f, 0.6, 4.0, 1);
         assert!(s.data[240 * 600 + 280] > 0.3 || s.data[222 * 600 + 280] > 0.3);
     }
@@ -1503,7 +1541,20 @@ mod look {
         let rocks = [
             Rock::grow(&blob(200.0, 280.0, 170.0, 150.0, 1), &[], &[vec![(210.0, 150.0), (225.0, 250.0), (205.0, 340.0)]], &[], &RockSpec::granite(), sun, 3),
             Rock::grow(&blob(600.0, 280.0, 190.0, 130.0, 2), &[], &[], &[], &RockSpec::sandstone(), sun, 4),
-            Rock::grow(&blob(1000.0, 260.0, 150.0, 170.0, 3), &[], &[], &[], &RockSpec::chalk(), sun, 5),
+            {
+                // the study's erratic, doubled in size and moved
+                let key = [(92.0, 318.0), (98.0, 276.0), (124.0, 228.0), (170.0, 196.0), (226.0, 182.0), (292.0, 188.0), (340.0, 214.0), (378.0, 254.0), (396.0, 300.0), (388.0, 326.0), (300.0, 332.0), (200.0, 334.0), (92.0, 318.0)];
+                let mut v = Vec::new();
+                for wn in key.windows(2) {
+                    for q in 0..10 {
+                        let t = q as f32 / 10.0;
+                        v.push((700.0 + 1.4 * (wn[0].0 + (wn[1].0 - wn[0].0) * t - 92.0), -40.0 + 1.4 * (wn[0].1 + (wn[1].1 - wn[0].1) * t)));
+                    }
+                }
+                let crack: Vec<P> = [(214.0, 190.0), (236.0, 222.0), (262.0, 262.0), (270.0, 300.0)].iter().map(|p| (700.0 + 1.4 * (p.0 - 92.0), -40.0 + 1.4 * p.1)).collect();
+                let sun2 = Light::new((-1.0, -0.5), 0.25).ambient(0.2).bounce(0.3, [0.6, 0.8, 0.3]);
+                Rock::grow(&v, &[], &[crack], &[], &RockSpec::granite(), sun2, 7)
+            },
         ];
         let mut img = vec![[90u8, 100, 110]; w * h];
         for r in &rocks {

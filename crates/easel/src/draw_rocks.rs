@@ -309,6 +309,8 @@ impl UserData for RockU {
             t.set("up", s.up())?;
             Ok(Value::Table(t))
         });
+        // r:levels(lo=0.05, hi=0.95): the rock's values at those quantiles (anchor a value scale)
+        m.add_method("levels", |_, r, (lo, hi): (Option<f32>, Option<f32>)| Ok(r.r.levels(lo.unwrap_or(0.05), hi.unwrap_or(0.95))));
         m.add_method("bend", |_, r, (x, y, span): (f32, f32, Option<f32>)| Ok(r.r.bend(x, y, span.unwrap_or(2.0))));
         m.add_meta_method(MetaMethod::ToString, |_, r, ()| {
             let k = &r.r;

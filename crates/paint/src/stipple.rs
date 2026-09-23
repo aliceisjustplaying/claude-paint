@@ -251,7 +251,7 @@ impl<'a> Stipple<'a> {
             None => {
                 let lab = to_oklab(want);
                 let col = from_oklab([lab[0] + rng.normal() * self.jitter.0, lab[1] + rng.normal() * self.jitter.1, lab[2] + rng.normal() * self.jitter.1]);
-                if self.aim { Paint::aimed(col, seen, coats, self.hiding, self.stiff) } else { Paint { color: col, hiding: self.hiding, stiff: self.stiff } }
+                if self.aim { Paint::aimed(col, seen, coats, self.hiding, self.stiff) } else { Paint::new(col, self.hiding, self.stiff) }
             }
         }
     }
@@ -301,21 +301,33 @@ impl Canvas {
         let inv = 1.0 / f.scale;
         let (ux0, uy0, ux1, uy1) = (bx0 as f32 * inv, by0 as f32 * inv, bx1 as f32 * inv, by1 as f32 * inv);
         let cov = |x: f32, y: f32| ((sp.coverage)(x, y) * mask.data[f.index(x, y)]).max(0.0);
-        // the densest coverage asked for sets the grid
-        let probe = (sp.tool.width * 3.0).max(4.0);
-        let (pw, ph) = (((ux1 - ux0) / probe).ceil() as usize + 1, ((uy1 - uy0) / probe).ceil() as usize + 1);
-        let dmax = (0..pw * ph)
-            .into_par_iter()
-            .map(|k| {
-                let (x, y) = (ux0 + (k % pw) as f32 * probe, uy0 + (k / pw) as f32 * probe);
-                let mut m = 0.0f32;
-                for (dx, dy) in [(0.0, 0.0), (0.5, 0.0), (0.0, 0.5), (0.5, 0.5)] {
-                    m = m.max(cov(x + dx * probe, y + dy * probe));
-                }
-                m
-            })
-            .reduce(|| 0.0, f32::max)
-            * 1.15;
+        // the densest coverage asked for sets the grid. Sample it at mask
+        // pixels no more than a unit (or half a tool width) apart, so a
+        // small region or a narrow band of coverage can't fall between the
+        // samples; if they still find nothing, look at every mask pixel
+        // before calling the region empty.
+        let peak = |step: usize| {
+            (by0..by1)
+                .into_par_iter()
+                .filter(|y| (y - by0) % step == 0)
+                .map(|y| {
+                    let row = &mask.data[y * f.w..(y + 1) * f.w];
+                    let mut m = 0.0f32;
+                    for x in (bx0..bx1).step_by(step) {
+                        if row[x] > 0.0 {
+                            m = m.max(cov((x as f32 + 0.5) * inv, (y as f32 + 0.5) * inv));
+                        }
+                    }
+                    m
+                })
+                .reduce(|| 0.0, f32::max)
+        };
+        let step = ((sp.tool.width * 0.5).min(1.0) * f.scale).floor().max(1.0) as usize;
+        let mut dmax = peak(step);
+        if dmax <= 1e-4 && step > 1 {
+            dmax = peak(1);
+        }
+        let dmax = dmax * 1.15;
         if dmax <= 1e-4 {
             return;
         }
@@ -393,7 +405,7 @@ impl Canvas {
                     .map(|(k, &(x, y))| {
                         let cv = cov(x, y);
                         // the paint is chosen below, in order
-                        let dip = (k % sp.dip_every == 0).then_some(Paint { color: [0.0; 3], hiding: 0.0, stiff: 0.0 });
+                        let dip = (k % sp.dip_every == 0).then_some(Paint::km([0.0; 3], 0.0, 0.0));
                         let aim_at = if dip.is_some() {
                             let grp = &pts[k..(k + sp.dip_every).min(pts.len())];
                             let (sx, sy) = grp.iter().fold((0.0, 0.0), |a, p| (a.0 + p.0, a.1 + p.1));
@@ -726,5 +738,44 @@ mod tests {
         assert!(dense > thin * 1.5 && dense > 0.6, "coverage: thin {thin}, dense {dense}");
         assert!(outside == 0.0, "painted outside the region: {outside}");
         let _ = Kind::Round;
+    }
+
+    /// Small, narrow and scattered regions get stippled however they sit on
+    /// any probe lattice (reviews: a radius-10 disk with a 20-unit stippler,
+    /// and a 2-unit band at y 100 vs y 102, came out empty).
+    #[test]
+    fn small_and_narrow_regions_are_not_skipped() {
+        // compact disk narrower than the old probe spacing
+        let mut c = Canvas::new_window(1000, 1.0, [0.5; 3], None);
+        let mask = Mask::from_fn(c.frame(), |x, y| if (x - 500.0).powi(2) + (y - 500.0).powi(2) < 100.0 { 1.0 } else { 0.0 });
+        let sp = Stipple::new(Tool::stippler(20.0)).coverage(|_, _| 10.0).aim(false).color(|_, _| [0.1; 3]);
+        c.stipple(&mask, &sp, 123);
+        assert!(c.wet_total() > 0.0, "radius-10 disk, 20-unit stippler: wet_total {}", c.wet_total());
+
+        // a narrow coverage band, wherever it falls
+        for lo in [100.0f32, 101.0, 102.0, 103.5] {
+            let mut c = Canvas::new_window(400, 2.0, [0.1; 3], None);
+            let m = Mask::full(c.frame());
+            let sp = Stipple::new(Tool::stippler(2.0))
+                .coverage(move |_, y| if y >= lo && y < lo + 2.0 { 10.0 } else { 0.0 })
+                .color(|_, _| [0.8; 3])
+                .aim(false);
+            c.stipple(&m, &sp, 7);
+            c.dry();
+            let changed = c.pixels().iter().filter(|p| **p != [0.1; 3]).count();
+            assert!(changed > 1000, "band [{lo}, {}): {changed} pixels changed", lo + 2.0);
+        }
+
+        // separated islands, each smaller than the old probe spacing
+        let mut c = Canvas::new_window(1000, 1.0, [0.5; 3], None);
+        let isl = [(101.0f32, 97.0f32), (333.0, 251.0), (470.0, 520.0)];
+        let mask = Mask::from_fn(c.frame(), |x, y| if isl.iter().any(|&(a, b)| (x - a).powi(2) + (y - b).powi(2) < 16.0) { 1.0 } else { 0.0 });
+        let sp = Stipple::new(Tool::stippler(6.0)).coverage(|_, _| 3.0).aim(false).color(|_, _| [0.1; 3]);
+        c.stipple(&mask, &sp, 5);
+        c.dry();
+        for &(a, b) in &isl {
+            let hit = (-6..=6).flat_map(|dy| (-6..=6).map(move |dx| (dx, dy))).filter(|&(dx, dy)| c.pixels()[((b as i32 + dy) * 1000 + a as i32 + dx) as usize] != [0.5; 3]).count();
+            assert!(hit > 0, "island at ({a}, {b}) was skipped");
+        }
     }
 }

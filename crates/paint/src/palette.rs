@@ -368,8 +368,9 @@ impl Mixture {
         let k = (1.0 - medium).clamp(0.0, 1.0);
         // medium dilutes the pigment: K and S per coat fall with the pigment
         // concentration, the masstone stays; the paint flows (stiffness
-        // falls faster than hiding)
-        Paint { color: self.color, hiding: hiding_of(luminance(self.color), self.scatter * k.max(1e-3)), stiff: self.stiff * k * k }
+        // falls faster than hiding). The paint carries S itself: hiding
+        // rounds to 1 for strong scatterers and would lose it.
+        Paint::km(self.color, self.scatter * k.max(1e-3), self.stiff * k * k)
     }
 }
 
@@ -552,7 +553,7 @@ mod canvas_tests {
                 new = (new.0.max(a), new.1.max(b));
                 // the old meaning: the same pile, its masstone read as its look over white
                 let m = pal.mix(want).paint(medium);
-                let q = Paint::tint(m.color, m.hiding, m.stiff);
+                let q = Paint::tint(m.color, m.hiding(), m.stiff);
                 let (a, b) = dab(&mut c, q, (x + 60.0, y), 80 + k);
                 old = (old.0.max(a), old.1.max(b));
                 k += 1;
@@ -608,5 +609,35 @@ mod canvas_tests {
         // the full palette thick, as body color, can
         let body = pal.aim(want, dark, 0.1, 2.0);
         assert!(body.error < 0.05, "body color covers: {}", body.error);
+    }
+
+    /// Brush paint keeps a mixture's scattering, even when it rounds to
+    /// hiding 1 (the review's repro: opaque neutral tubes mixed to 0.1).
+    #[test]
+    fn mixture_to_paint_preserves_scattering() {
+        let pal = Palette::new("opaque neutral tubes", vec![
+            Tube { name: "white", color: [0.99; 3], hiding: 0.99, stiff: 0.5, strength: 1.0 },
+            Tube { name: "black", color: [0.01; 3], hiding: 0.99, stiff: 0.5, strength: 1.0 },
+        ]);
+        for (target, medium) in [([0.1; 3], 0.0), ([0.1; 3], 0.5), ([0.6; 3], 0.0), ([0.6; 3], 0.9)] {
+            let m = pal.mix(target);
+            let p = m.paint(medium);
+            let s = m.scatter * (1.0 - medium);
+            assert!((p.scatter() - s).abs() <= 1e-4 * s, "S {} thinned {s} → paint S {}", m.scatter, p.scatter());
+            let expected = Pigment::masstone(m.color, s).over([1.0; 3], 0.1);
+            let got = p.over([1.0; 3], 0.1);
+            assert!((expected[0] - got[0]).abs() < 1e-3, "{target:?} medium {medium}: expected {expected:?} got {got:?}");
+            assert!((p.hiding() - hiding_of(luminance(m.color), s)).abs() < 1e-4, "hiding is reported from S");
+        }
+        // and the brush lays that scattering into the wet layer
+        let p = pal.mix([0.1; 3]).paint(0.0);
+        let mut c = Canvas::new(100, 1.0, [1.0; 3]);
+        let mut b = crate::bristle::Held::new(crate::bristle::Tool::round_sable(14.0), 1);
+        b.load(p, 0.7);
+        c.drag(&mut b, &crate::bristle::Gesture::new(vec![(50.0, 50.0), (53.0, 52.0)]).pressure(0.8, 0.6), None);
+        let i = (0..c.wet.vol.len()).max_by(|&a, &b| c.wet.vol[a].total_cmp(&c.wet.vol[b])).unwrap();
+        assert!(c.wet.vol[i] > 0.0);
+        let laid = c.wet.hide[i][0];
+        assert!((laid - p.scatter()).abs() <= 1e-3 * p.scatter(), "wet S {laid} vs paint S {}", p.scatter());
     }
 }

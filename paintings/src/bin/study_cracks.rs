@@ -22,7 +22,7 @@ fn panel(width_px: usize, width_mm: f32, aspect: f32, k: &Cracks, seed: u64) -> 
     let b3 = band(0.5, 0.72);
     let mut hog = Held::new(Tool::hog_flat(60.0), seed + 3);
     for i in 0..6 {
-        hog.reload(Paint { color: hex("#e3dccb"), hiding: 0.85, stiff: 0.9 }, 0.8);
+        hog.reload(Paint::new(hex("#e3dccb"), 0.85, 0.9), 0.8);
         let y = h * (0.52 + 0.035 * i as f32);
         c.drag(&mut hog, &Gesture::new(vec![(0.0, y), (500.0, y + 4.0), (1000.0, y)]).pressure(0.8, 0.8).orient(Orient::Across), Some(&b3));
     }

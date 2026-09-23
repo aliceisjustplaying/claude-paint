@@ -42,6 +42,11 @@ A touch is a vertical press/hold/lift (4 steps, more if the hand drifts):
 **`stipple.rs` (new): `Stipple` builder + `Canvas::stipple(mask, &Stipple, seed)`.**
 - *Placement:* a jittered grid sized so that the densest coverage keeps every
   cell, thinned by `coverage(x, y) × mask` and optionally clumped (fbm).
+  The densest coverage is sampled at mask pixels no more than a unit (or
+  half a tool width) apart, and at every mask pixel if that finds nothing.
+  It used to be probed on a lattice 3 tool widths apart, and a small disk
+  or a narrow band of coverage could fall between the probes and be skipped
+  (`small_and_narrow_regions_are_not_skipped` below).
 - *Order:* each passage (tile) is worked in small patches, row by row and
   back and forth, dabbing at random within a patch. One load serves about one
   patch, and each dip's paint is aimed at the centroid of the touches it
@@ -174,6 +179,9 @@ The new tests live in `stipple.rs` (the shared `tests.rs` is untouched):
 - `aim_km_reaches_reachable_targets`
 - `stipple_is_deterministic_across_thread_counts`
 - `stipple_follows_coverage_and_mask`
+- `small_and_narrow_regions_are_not_skipped`: a radius-10 disk with a
+  20-unit stippler, 2-unit coverage bands at several offsets and separated
+  radius-4 islands all get touches
 
 ## Known issues / next
 

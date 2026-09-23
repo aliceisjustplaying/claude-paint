@@ -21,7 +21,7 @@
 
 use crate::canvas::Canvas;
 use crate::color::{Rgb, luminance};
-use crate::pigment::{Pigment, scatter_for};
+use crate::pigment::{Pigment, hiding_of, scatter_for};
 use crate::surface::COAT_UM;
 use rayon::prelude::*;
 
@@ -39,13 +39,18 @@ fn lerp_prop(p: &mut Prop, q: Prop, a: f32) {
 }
 
 /// A paint as squeezed from the tube and thinned with medium.
+///
+/// It carries its Kubelka–Munk scattering `scatter` directly, so a mixture
+/// handed to the brush keeps the S it was scored with, however opaque it is
+/// (hiding saturates near 1 and can't carry a large S). Name paints by
+/// hiding with `Paint::new`/`with_hiding`; `hiding()` reports it back.
 #[derive(Clone, Copy, Debug)]
 pub struct Paint {
     /// Masstone, linear RGB: the paint's color laid thick (and over itself).
     pub color: Rgb,
-    /// Hiding power of one coat: its look over black divided by over white
-    /// (contrast ratio). 0.05 = glaze, 0.5 = scumble, 0.92 = body.
-    pub hiding: f32,
+    /// Kubelka–Munk scattering per coat (flat across channels; absorption
+    /// follows from it and the masstone). See `pigment::scatter_for`.
+    pub scatter: f32,
     /// Stiffness: 0 = fluid, rich in medium (a glaze), 1 = stiff tube paint.
     /// Sets how the paint levels as it dries (see `surface::settle`). How
     /// much paint goes on the brush is the separate `amount` of `Held::load`.
@@ -53,14 +58,35 @@ pub struct Paint {
 }
 
 impl Paint {
+    /// A paint of masstone `color` whose one coat hides `hiding` (contrast
+    /// ratio: over black ÷ over white; 0.05 = glaze, 0.5 = scumble,
+    /// 0.92 = body).
     pub fn new(color: Rgb, hiding: f32, stiff: f32) -> Self {
-        Paint { color, hiding, stiff }
+        Paint { color, scatter: scatter_for(luminance(color), hiding), stiff }
+    }
+    /// A paint of masstone `color` that scatters `scatter` per coat.
+    pub fn km(color: Rgb, scatter: f32, stiff: f32) -> Self {
+        Paint { color, scatter, stiff }
     }
     pub fn body(color: Rgb) -> Self {
-        Paint { color, hiding: 0.92, stiff: 1.0 }
+        Paint::new(color, 0.92, 1.0)
     }
     pub fn scumble(color: Rgb) -> Self {
-        Paint { color, hiding: 0.5, stiff: 0.6 }
+        Paint::new(color, 0.5, 0.6)
+    }
+    /// This paint with its scattering set so one coat hides `hiding`
+    /// (the masstone stays).
+    pub fn with_hiding(self, hiding: f32) -> Self {
+        Paint::new(self.color, hiding, self.stiff)
+    }
+    /// This paint with stiffness `stiff`.
+    pub fn with_stiff(self, stiff: f32) -> Self {
+        Paint { stiff, ..self }
+    }
+    /// Hiding power of one coat (contrast ratio), derived from the
+    /// scattering; for reporting (it rounds to 1 for strong scatterers).
+    pub fn hiding(&self) -> f32 {
+        hiding_of(luminance(self.color), self.scatter)
     }
     /// A transparent glaze that tints a white ground to `tint` at one coat.
     pub fn glaze(tint: Rgb) -> Self {
@@ -78,13 +104,17 @@ impl Paint {
         Paint::solve(want, under, coats, hiding, stiff)
     }
     fn solve(want: Rgb, under: Rgb, coats: f32, hiding: f32, stiff: f32) -> Self {
-        // the scattering follows from the masstone's luminance and the
-        // hiding, the masstone from the scattering: iterate to the fixed point
-        let mut m = want;
-        for _ in 0..24 {
-            let s = scatter_for(luminance(m), hiding);
-            let prev = m;
-            for c in 0..3 {
+        // For a trial masstone luminance `l` the scattering is fixed
+        // (`scatter_for(l, hiding)`) and each channel's masstone follows by
+        // bisection. The answer is a root of `luminance(m(l)) − l`, which is
+        // ≥ 0 at the darkest masstone and ≤ 0 at the lightest, so bisecting
+        // on `l` always converges (a plain fixed-point iteration can
+        // oscillate and stop far from it). Whatever `l` it lands on, the
+        // paint carries the scattering its channels were solved with, so
+        // its look over `under` is exact wherever the target is reachable.
+        let fit = |l: f32| -> (Rgb, f32) {
+            let s = scatter_for(l, hiding);
+            let m = std::array::from_fn(|c| {
                 let (mut lo, mut hi) = (0.002f32, 0.995f32);
                 for _ in 0..30 {
                     let mid = 0.5 * (lo + hi);
@@ -94,24 +124,32 @@ impl Paint {
                         hi = mid;
                     }
                 }
-                m[c] = 0.5 * (lo + hi);
-            }
-            if (0..3).all(|c| (m[c] - prev[c]).abs() < 1e-4) {
-                break;
+                0.5 * (lo + hi)
+            });
+            (m, s)
+        };
+        let (mut lo, mut hi) = (0.002f32, 0.995f32);
+        for _ in 0..24 {
+            let mid = 0.5 * (lo + hi);
+            if luminance(fit(mid).0) > mid {
+                lo = mid;
+            } else {
+                hi = mid;
             }
         }
-        Paint { color: m, hiding, stiff }
+        let (color, scatter) = fit(0.5 * (lo + hi));
+        Paint { color, scatter, stiff }
     }
     pub fn latent(&self) -> Latent {
         mixbox::linear_float_rgb_to_latent(&self.color)
     }
-    /// Kubelka–Munk scattering per coat.
+    /// Kubelka–Munk scattering per coat (the `scatter` field).
     pub fn scatter(&self) -> f32 {
-        scatter_for(luminance(self.color), self.hiding)
+        self.scatter
     }
     /// The paint as a Kubelka–Munk layer (per coat).
     pub fn pigment(&self) -> Pigment {
-        Pigment::masstone(self.color, self.scatter())
+        Pigment::masstone(self.color, self.scatter)
     }
     /// What `coats` of this paint look like laid over `under`.
     pub fn over(&self, under: Rgb, coats: f32) -> Rgb {
@@ -293,5 +331,29 @@ mod tests {
             let p = |q: f32| d[((d.len() - 1) as f32 * q) as usize];
             println!("{name:14} coats p10 {:.2} p50 {:.2} p90 {:.2} mean {:.2}", p(0.1), p(0.5), p(0.9), d.iter().sum::<f32>() / d.len() as f32);
         }
+    }
+
+    /// `Paint::aimed` reaches any target made by a paint of the same hiding
+    /// (the review's repro: masstone 0.8, hiding 0.92, 0.1 coats over black),
+    /// across lightening targets, thin films and substrates.
+    #[test]
+    fn aimed_reaches_targets_made_by_the_same_model() {
+        use crate::wet::Paint;
+        let mut worst = (0.0f32, String::new());
+        for hiding in [0.07, 0.3, 0.5, 0.92] {
+            for under in [[0.0; 3], [1.0; 3], [0.2, 0.3, 0.45], [0.7, 0.5, 0.3]] {
+                for coats in [0.1, 0.3, 0.6, 1.0, 2.5] {
+                    for m in [[0.8; 3], [0.95, 0.9, 0.8], [0.05, 0.1, 0.3], [0.5, 0.2, 0.1], [0.3; 3]] {
+                        let want = Paint::new(m, hiding, 0.5).over(under, coats);
+                        let got = Paint::aimed(want, under, coats, hiding, 0.5).over(under, coats);
+                        let e = (0..3).map(|c| (want[c] - got[c]).abs()).fold(0.0, f32::max);
+                        if e > worst.0 {
+                            worst = (e, format!("m {m:?} hiding {hiding} under {under:?} coats {coats}: want {want:?} got {got:?}"));
+                        }
+                    }
+                }
+            }
+        }
+        assert!(worst.0 < 2e-3, "worst miss {}: {}", worst.0, worst.1);
     }
 }

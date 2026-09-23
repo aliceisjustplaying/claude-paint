@@ -96,7 +96,7 @@ fn main() {
             let len = rng.range(120.0, 380.0);
             let v = y / h;
             let col = if v < 0.3 { gradient(&[(0.0, hex("#2c3448")), (1.0, hex("#5d5f6c"))], v / 0.3, Mix::Pigment) } else { gradient(&[(0.0, hex("#8f7f7a")), (1.0, hex("#e2c69c"))], (v - 0.3) / 0.2, Mix::Pigment) };
-            fil.reload(Paint { color: st.palette.mix(col).color, hiding: 0.45, stiff: 0.5 }, 0.8 * 0.5);
+            fil.reload(Paint::new(st.palette.mix(col).color, 0.45, 0.5), 0.8 * 0.5);
             let sag = rng.range(-3.0, 3.0);
             let pts = vec![(x0, y), (x0 + len * 0.35, y + sag), (x0 + len * 0.7, y + sag * 0.5 - 1.5), (x0 + len, y - 1.0)];
             c.drag(&mut fil, &Gesture::new(pts).pressure(rng.range(0.35, 0.6), rng.range(0.2, 0.4)).ramps(0.2, 0.35).orient(Orient::Across), Some(&sky));
@@ -112,7 +112,7 @@ fn main() {
                 let a = a0 + j as f32 * 0.18;
                 (mx + r * a.cos(), my + r * a.sin())
             }).collect();
-            glow.reload(Paint { color: tube_mix("#dcdad2"), hiding: 0.7, stiff: 0.4 }, 0.7 * 0.4);
+            glow.reload(Paint::new(tube_mix("#dcdad2"), 0.7, 0.4), 0.7 * 0.4);
             c.drag(&mut glow, &Gesture::new(pts).pressure(0.5, 0.4).ramps(0.3, 0.4).orient(Orient::Across), Some(&sky));
         }
         if let Some(b) = st.blend() {
@@ -137,15 +137,15 @@ fn main() {
             }).collect()
         };
         let mut cres = Held::new(Tool::round_sable(mr * 0.24), 42);
-        cres.load(Paint { color: tube_mix("#e8ddb6"), hiding: 0.95, stiff: 0.8 }, 1.0 * 0.8);
+        cres.load(Paint::new(tube_mix("#e8ddb6"), 0.95, 0.8), 1.0 * 0.8);
         c.drag(&mut cres, &Gesture::new(arc(mr * 0.88, 1.45, 16)).pressure(0.85, 0.85).ramps(0.5, 0.5).orient(Orient::Across), None);
-        cres.reload(Paint { color: tube_mix("#eee5c2"), hiding: 0.95, stiff: 0.8 }, 1.0 * 0.8);
+        cres.reload(Paint::new(tube_mix("#eee5c2"), 0.95, 0.8), 1.0 * 0.8);
         c.drag(&mut cres, &Gesture::new(arc(mr * 0.74, 0.8, 10)).pressure(0.6, 0.6).ramps(0.5, 0.5).orient(Orient::Across), None);
         let mut hi = Held::new(Tool::round_sable(mr * 0.16), 44);
-        hi.load(Paint { color: tube_mix("#f8f2d8"), hiding: 0.97, stiff: 0.9 }, 1.0 * 0.9);
+        hi.load(Paint::new(tube_mix("#f8f2d8"), 0.97, 0.9), 1.0 * 0.9);
         c.drag(&mut hi, &Gesture::new(arc(mr * 0.76, 0.45, 6)).pressure(0.8, 0.8).ramps(0.4, 0.4).orient(Orient::Across), None);
         let mut star = Held::new(Tool::round_sable(1.6), 43);
-        star.load(Paint { color: tube_mix("#f6f0d8"), hiding: 0.95, stiff: 1.0 }, 1.0 * 1.2);
+        star.load(Paint::new(tube_mix("#f6f0d8"), 0.95, 1.0), 1.0 * 1.2);
         let (sx, sy) = (w * 0.77, h * 0.2);
         c.drag(&mut star, &Gesture::new(vec![(sx, sy - 0.4), (sx, sy + 0.4)]).pressure(1.0, 1.0).ramps(0.0, 0.0), None);
         c.dry();
@@ -164,7 +164,7 @@ fn main() {
             let x = rng.range(0.0, w);
             let _ = i;
             let hgt = rng.range(5.0, 11.0);
-            trees::spruce(&mut c, (x, ridge2(x) + hgt * 0.35), hgt, Paint { hiding: 0.92, stiff: 0.6, ..st.palette.paint(hex("#353846"), 0.0) }, rng.next_u64());
+            trees::spruce(&mut c, (x, ridge2(x) + hgt * 0.35), hgt, st.palette.paint(hex("#353846"), 0.0).with_hiding(0.92).with_stiff(0.6), rng.next_u64());
         }
     }
 
@@ -194,7 +194,7 @@ fn main() {
             let x0 = rng.range(-80.0, w * 0.9);
             let y = mt(x0) - rng.range(4.0, 26.0);
             let len = rng.range(90.0, 260.0);
-            wisp.reload(Paint { color: tube_mix("#a9a29f"), hiding: 0.2, stiff: 0.25 }, 0.5 * 0.25);
+            wisp.reload(Paint::new(tube_mix("#a9a29f"), 0.2, 0.25), 0.5 * 0.25);
             let pts = vec![(x0, y), (x0 + len * 0.5, y + rng.range(-2.0, 2.0)), (x0 + len, y + rng.range(-2.0, 3.0))];
             c.drag(&mut wisp, &Gesture::new(pts).pressure(rng.range(0.25, 0.4), 0.15).ramps(0.4, 0.5).orient(Orient::Across), None);
         }
@@ -222,15 +222,15 @@ fn main() {
             let depth = ((y - mist_top) / 90.0).clamp(0.0, 1.0);
             let hgt = 26.0 + 40.0 * depth + rng.range(-6.0, 10.0);
             let col = gradient(&[(0.0, hex("#565a62")), (1.0, hex("#23272a"))], depth, Mix::Pigment);
-            trees::spruce(&mut c, (*x, *y), hgt, Paint { hiding: 0.92, stiff: 0.6, ..st.palette.paint(col, 0.0) }, rng.next_u64());
+            trees::spruce(&mut c, (*x, *y), hgt, st.palette.paint(col, 0.0).with_hiding(0.92).with_stiff(0.6), rng.next_u64());
         }
         // a church in the mist, far right: tower and spire, two sable strokes
         let (cx, cy) = (w * 0.86, mist_top + 10.0);
         let mut sp = Held::new(Tool::round_sable(3.0), 51);
-        sp.load(Paint { color: tube_mix("#62636a"), hiding: 0.9, stiff: 0.6 }, 1.0 * 0.6);
+        sp.load(Paint::new(tube_mix("#62636a"), 0.9, 0.6), 1.0 * 0.6);
         c.drag(&mut sp, &Gesture::new(vec![(cx, cy), (cx, cy - 18.0)]).pressure(1.0, 1.0).ramps(0.0, 0.0), None);
         let mut sp2 = Held::new(Tool::round_sable(2.6), 52);
-        sp2.load(Paint { color: tube_mix("#62636a"), hiding: 0.9, stiff: 0.6 }, 1.0 * 0.6);
+        sp2.load(Paint::new(tube_mix("#62636a"), 0.9, 0.6), 1.0 * 0.6);
         c.drag(&mut sp2, &Gesture::new(vec![(cx, cy - 17.0), (cx, cy - 31.0)]).pressure(1.0, 0.1).ramps(0.0, 0.9), None);
         c.dry();
         // the fog bank lies in level layers: a pale semi-opaque KM layer, thin at
@@ -275,7 +275,7 @@ fn main() {
         for _ in 0..40 {
             let gx = rng.range(0.0, 540.0);
             let gy = ledge(gx) + rng.range(0.5, 3.0);
-            rig.reload(Paint { color: tube_mix("#2a241d"), hiding: 0.85, stiff: 0.6 }, 1.0 * 0.6);
+            rig.reload(Paint::new(tube_mix("#2a241d"), 0.85, 0.6), 1.0 * 0.6);
             for _ in 0..rng.range(2.0, 7.0) as u32 {
                 let x = gx + rng.range(-4.0, 4.0);
                 let hg = rng.range(3.0, 9.0);
@@ -306,7 +306,7 @@ fn main() {
         let bx = 330.0;
         // paints mixed on the palette as the old code did: stiff body color for
         // the clothes, a lean light for the rim
-        let body = |hx: &str| Paint { hiding: 0.97, stiff: 1.0, ..st.palette.paint(hex(hx), 0.0) };
+        let body = |hx: &str| st.palette.paint(hex(hx), 0.0).with_hiding(0.97).with_stiff(1.0);
         let rim = st.palette.paint(hex("#b9a582"), 0.2);
         let sh = figures::man_in_cape(&mut c, (bx + 26.0, ledge(bx + 26.0) + 1.5), fh, body("#1d201b"), body("#110f0d"), body("#221b15"), Some(rim), o.seed * 100 + 50);
         figures::youth_in_frock(&mut c, (bx, ledge(bx) - 1.0), fh * 0.98, body("#1e221c"), body("#110f0d"), body("#2a2118"), body("#b8b09c"), Some(sh), Some(rim), o.seed * 100 + 51);

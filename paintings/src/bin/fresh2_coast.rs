@@ -174,8 +174,8 @@ fn main() {
             .color(under_col)
             .by_masstone()
             .angle(|_, _| 0.0)
-            .coverage(5.0)
-            .medium(0.5)
+            .coverage(6.5)
+            .medium(0.4)
             .clip(true);
         c.work(&land_m, &up, 9);
         c.dry();
@@ -524,8 +524,8 @@ fn main() {
                     }
                     let under = c.under(x + l * 0.5, yy, 1.5);
                     // the crest faces the sky; the trough just below it
-                    let crest = earth_pal.paint(mix(lift(under, 0.035), hex("#a39c90"), 0.12, Mix::Light), 0.4);
-                    let trough = earth_pal.paint(lift(under, -0.04), 0.4);
+                    let crest = earth_pal.paint(mix(lift(under, 0.05), hex("#a39c90"), 0.15, Mix::Light), 0.4);
+                    let trough = earth_pal.paint(lift(under, -0.055), 0.4);
                     let w = 0.4 + 1.2 * persp;
                     let bow = r.range(-0.06, 0.06) * l;
                     let pts = [(x, yy), (x + l * 0.5, yy + bow), (x + l, yy + r.normal() * 0.3)];
@@ -934,6 +934,56 @@ fn main() {
             for k in 0..3 {
                 let yy = y - 2.0 + k as f32 * 1.6;
                 stroke(&mut c, &mut lb, &[(x - 3.0, yy - 0.8), (x + 3.0, yy + 0.8)], 0.6, 0.6, (0.1, 0.1), None);
+            }
+        }
+        // weathering: a few paler, grayer patches and dark knots up each pole
+        for i in 0..3 {
+            let ((_, by), ty, _) = poles[i];
+            let w = 4.6 - i as f32 * 0.5;
+            for q in 0..7 {
+                let y = ty + 12.0 + (by - ty - 30.0) * (q as f32 + r.f()) / 7.0;
+                let x = pole_at(i, y);
+                if r.chance(0.5) {
+                    let gray = earth_pal.paint(hex("#5d564e"), 0.3);
+                    let mut gb = held(Tool { lay: 0.5, ..Tool::round_sable(w * 0.35) }, gray, 0.35, 170 + (i * 10 + q) as u64);
+                    let l = r.range(6.0, 18.0);
+                    stroke(&mut c, &mut gb, &[(x + w * 0.05, y), (x + w * 0.1, y + l)], 0.4, 0.2, (0.3, 0.5), None);
+                } else {
+                    let knot = earth_pal.paint(hex("#1b1815"), 0.1);
+                    let mut kb = held(Tool::round_sable(w * 0.4), knot, 0.5, 190 + (i * 10 + q) as u64);
+                    c.touch(&mut kb, &Touch::at(x + r.range(-0.3, 0.3) * w, y).pressure(0.5), None);
+                }
+            }
+        }
+        // the third pole: a peg driven through it, and a coil of rope hung on
+        // the peg, its loops sagging
+        // high enough that the coil hangs against the sky, not the dark sea
+        let (px, py) = (pole_at(2, 372.0), 372.0);
+        let peg = earth_pal.paint(hex("#2a2520"), 0.15);
+        let mut pb = held(Tool::round_sable(1.3), peg, 0.5, 210);
+        stroke(&mut c, &mut pb, &[(px - 3.0, py + 0.5), (px + 8.0, py - 0.8)], 0.7, 0.6, (0.05, 0.1), None);
+        c.dry();
+        let rope = earth_pal.paint(hex("#3a3129"), 0.2);
+        for loop_i in 0..5 {
+            let mut lb = held(Tool::rigger(0.5), rope, 0.55, 211 + loop_i);
+            // hung from the peg's outer end, clear of the pole (wrapped round
+            // the wet pole the loops merged into it)
+            let drop = 11.0 + loop_i as f32 * 1.5 + r.range(-1.0, 1.0);
+            let half = 2.0 + loop_i as f32 * 0.3;
+            let off = r.range(-0.4, 0.4);
+            let pts: Vec<(f32, f32)> = (0..=10).map(|k| {
+                let a = std::f32::consts::PI * k as f32 / 10.0;
+                (px + 5.5 + off - half * a.cos(), py + 1.3 + drop * a.sin().powf(0.8))
+            }).collect();
+            // short straight segments, alternate ones first, dried between:
+            // a single curved drag through these points laid nothing at all,
+            // wherever it started (FRICTION)
+            for parity in 0..2 {
+                for k in (parity..10).step_by(2) {
+                    lb.reload(rope, 0.5);
+                    stroke(&mut c, &mut lb, &[pts[k], pts[k + 1]], 0.7, 0.7, (0.0, 0.0), None);
+                }
+                c.dry();
             }
         }
         // a line of cork floats along the hem of the net

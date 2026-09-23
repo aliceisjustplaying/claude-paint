@@ -105,3 +105,6 @@ look like a Friedrich", not a critic total. Critics (panel: Gemini 3.8 Flash
   floating in the air: fix connectivity, fewer and more deliberate twigs.
 - Never copy existing paintings or benchmark against them.
 
+
+
+Note: a mirror of the PRE-scrub history is kept on the old machine at `~/tmp/paint-overnight-*/scrub/backup.git` (owner: keep it; never push from it).

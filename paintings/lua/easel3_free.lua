@@ -306,3 +306,111 @@ local star = ellipse(604, 232, 1.5, 1.5)
 stipple(star:grow(0.5), {width=1.3, color="#fbf8ea", coverage=6, pressure={0.6, 0.9}, aim=false, medium=0.15, fade=0, clip=star:grow(0.6)})
 local fleck = ellipse(942, 316, 5, 3)
 stipple(fleck, {width=1.6, color=skycol, coverage=3, pressure={0.4, 0.8}, medium=0.4, pal=skypal, clip=fleck:grow(1)})
+
+--@ chunk 20 · clock 45631.58203125
+
+-- foam and wet sand along the water edge, broken
+local fb, wb = brush("rigger", 0.8), brush("round", 1.4)
+local x = 505
+local n = 0
+while x < 1000 do
+  local len = rand(8, 40)
+  local x2 = math.min(x + len, 1000)
+  local pts = {}
+  for k = 0, 4 do local xx = lerp(x, x2, k / 4); pts[#pts+1] = {xx, shoreY(xx) - 1.5 + randn(0, 0.3)} end
+  if math.random() < 0.7 then
+    if n % 3 == 0 then fb:reload(mix("#a9a79a", "#7d7f84", rand()), 0.6) end
+    fb:stroke(pts, {pressure={0.2, 0.55}, ramps={0.3, 0.4}, clip=seaclip:grow(2)})
+  end
+  local wpts = {}
+  for k, p in ipairs(pts) do wpts[k] = {p[1], p[2] + 2.2} end
+  if n % 3 == 1 then wb:reload("#3a3a34", 0.6) end
+  wb:stroke(wpts, {pressure={0.3, 0.6}, ramps={0.3, 0.4}})
+  x = x2 + rand(2, 25); n = n + 1
+end
+-- darker toward the edges and the bottom
+local edge = mask(function(x, y)
+  local b = smoothstep(560, 714, y)
+  local l = (1 - smoothstep(0, 260, x)) * smoothstep(480, 714, y)
+  local r = smoothstep(820, 1000, x) * smoothstep(540, 714, y) * 0.7
+  return clamp(b + 0.6 * l + r, 0, 1)
+end)
+glaze(edge, {color="#1c1914", coats=0.28, pigment="transparent"})
+local top = mask(function(x, y) return (1 - smoothstep(0, 120, y)) * 0.8 end)
+glaze(top, {color="#2c3350", coats=0.12, pigment="transparent"})
+
+--@ chunk 21 · clock 45631.58203125
+
+glaze(landm * mask(function(x, y) return 0.5 + 0.5 * smoothstep(520, 640, y) end), {color="#26241c", coats=0.16, pigment="transparent"})
+
+--@ chunk 22 · clock 45631.58203125
+
+local pt = sward{region=pathm:grow(4), horizon=HZ, near=H, height=26, flowers=0.0, seed=12, thin=0.8, patch=0.7, patch_size=40,
+  wind={lean=0.22, gust=0.3, period=140, seed=2}}
+local g = brush("rigger", 0.7)
+for i, t in ipairs(pt) do
+  local near = smoothstep(540, 714, t.y)
+  if i % 3 == 1 then g:reload(mix(({"#34322a", "#3d3a2f", "#2b2a23"})[1 + (i // 3) % 3], "#1e1c17", 0.5 * near), 0.7) end
+  local p = clamp(0.2 + 0.55 * t.scale, 0.15, 0.9)
+  for _, bl in ipairs(t.blades) do g:stroke(bl, {pressure={p, 0.0}, ramps={0.05, 0.7}}) end
+end
+
+--@ chunk 23 · clock 45631.58203125
+
+local function stone(c, r, s, yaw, cut)
+  local b = body.ellipsoid(c, r):turn(c, yaw, 0.1, 0):rough(0.14 * r[1], 0.8 * r[1], s)
+  if cut then b = b:cut({c[1], c[2] - 0.6 * r[2], c[3]}, {0.2, -1, 0.35}, s * 3, 3) end
+  return b
+end
+fg = form{ {stone({128, 652, 0}, {44, 22, 30}, 71, 0.3, true) + stone({190, 672, 10}, {17, 10, 12}, 72, -0.4, false)}, {stone({905, 668, 0}, {26, 13, 18}, 73, 0.2, true)},
+  light={from={0.4, -1}, front=-0.1, ambient=0.3, penumbra=0.1} }
+local clipg = above(function(x) return 700 + 3 * gn(x, 9) end)
+fgsil = fg:silhouette{parts={1, 2}, soft=0.4}:roughen(0.8, 12, 5, 0.5) * mask(function(x, y) local fy = (x < 400) and 664 or 674; return 1 - smoothstep(fy - 2, fy + 4, y) end)
+work(fgsil, {hand="body", tool="filbert 3", color=function(x, y) return mix("#1e1d1a", "#3a3833", smoothstep(0.1, 0.9, fg:value(x, y))) end,
+  angle=fg:field("across"), length={6, 18}, coverage=4.5, medium=0.12, clip=fgsil})
+stipple(fgsil * fg:mask(function(s) return clamp((s.shade.sky or 0) * 1.5 - 0.5, 0, 1) end), {width=1.6, color="#56565a", coverage=1.8,
+  pressure={0.35, 0.7}, medium=0.3, clip=fgsil})
+
+--@ chunk 24 · clock 45631.58203125
+
+local ft = sward{region=landm * below(function(x) return 628 end), horizon=HZ, near=H, height=58, flowers=0.0, seed=33, thin=0.78, patch=0.5, patch_size=90,
+  wind={lean=0.25, gust=0.35, period=120, seed=5}}
+local g = brush("rigger", 0.9)
+for i, t in ipairs(ft) do
+  if i % 3 == 1 then g:reload(({"#1d1b17", "#23211c", "#2b2922", "#191815"})[1 + (i // 3) % 4], 0.75) end
+  local p = clamp(0.25 + 0.6 * t.scale, 0.2, 0.95)
+  for _, bl in ipairs(t.blades) do g:stroke(bl, {pressure={p, 0.0}, ramps={0.05, 0.7}}) end
+end
+-- dry stalks and seed heads catching the last of the sky
+local sk2, hd = brush("rigger", 0.7), brush("round", 1.3)
+local xs = uneven(26, 20, 980, 0.7, 0.5, 6)
+local n = 0
+for i, x0 in ipairs(xs) do
+  local y0 = rand(640, 712)
+  local h = rand(45, 110) * (0.6 + 0.4 * (y0 - 600) / 114)
+  local lean = randn(0.12, 0.12)
+  local top = {x0 + lean * h + randn(0, 3), y0 - h}
+  local mid = {x0 + lean * h * 0.45 + randn(0, 2), y0 - h * 0.55}
+  sk2:reload(mix("#6a634f", "#4a4538", rand()), 0.7)
+  sk2:stroke({{x0, y0}, mid, top}, {pressure={0.75, 0.25}, ramps={0.05, 0.3}, shake=0.5})
+  local kind = i % 3
+  if kind == 0 then           -- an umbel: spokes and a flat head
+    for s = 1, 7 do
+      local a = -math.pi / 2 + (s - 4) * 0.28 + randn(0, 0.06)
+      local L = rand(6, 10)
+      sk2:stroke({top, {top[1] + math.cos(a) * L, top[2] + math.sin(a) * L}}, {pressure={0.35, 0.15}})
+      hd:reload("#6a624c", 0.5); hd:touch(top[1] + math.cos(a) * L, top[2] + math.sin(a) * L - 0.5, {pressure=0.35})
+    end
+  elseif kind == 1 then       -- a thistle or knapweed knob
+    hd:reload("#2a2622", 0.8); hd:touch(top[1], top[2], {pressure=0.8}); hd:touch(top[1] + 0.6, top[2] - 1.2, {pressure=0.6})
+    hd:reload("#5b4a4a", 0.4); hd:touch(top[1], top[2] - 2.2, {pressure=0.4})
+  else                        -- a grass panicle
+    for s = 1, 5 do
+      local py = top[2] + s * 3.2
+      local px = top[1] - lean * s * 3
+      sk2:stroke({{px, py}, {px + (s % 2 == 0 and 5 or -5), py - 3}}, {pressure={0.3, 0.05}})
+    end
+  end
+  n = n + 1
+end
+print(#ft, n)

@@ -347,4 +347,57 @@ end)
 glaze(vig, {color="#2e2622", coats=0.4})
 
 --@ chunk 18 · clock 46703.06640625
+local fgn = noise{seed=131, octaves=3, period=60}
+local busy = pathm:grow(2) + rockA:mask():grow(3) + rockB:mask():grow(3) + rockC:mask():grow(3)
+-- tufts of dry grass: fine upturning strokes, a few blades lit by the sky
+local g = brush("rigger", 0.7)
+local tuftn = 0
+local centers = {{90,590},{330,600},{420,660},{700,640},{860,680},{950,600},{40,690},{250,690}}
+for i = 1, 70 do
+  local c = centers[1 + i % #centers]
+  local x, y = c[1] + randn(0, 38), c[2] + randn(0, 16)
+  if busy:at(x, y) < 0.1 then
+    local s = 0.55 + (y - 540) / 170
+    local nb = math.random(7, 16)
+    for k = 1, nb do
+      local lit = math.random() < 0.15
+      if k == 1 or k % 5 == 0 then g:reload(lit and mix("#4a413b", "#5c5148", rand()) or "#2a2320", 0.6, {pal=landpal}) end
+      local h = rand(9, 26) * s
+      local a = -1.5708 + randn(0, 0.32) + 0.12
+      local bx = x + randn(0, 2.2 * s)
+      local bend = randn(0, 0.25)
+      g:stroke({{bx, y}, {bx + math.cos(a) * h * 0.5, y + math.sin(a) * h * 0.5},
+        {bx + math.cos(a + bend) * h, y + math.sin(a + bend) * h}}, {pressure={clamp(0.45 * s, 0.3, 0.8), 0}, ramps={0.05, 0.75}})
+    end
+    tuftn = tuftn + 1
+  end
+end
+-- pebbles along the track
+local pb = brush("round", 1.5)
+for i = 1, 60 do
+  local t = rand(0.05, 0.75)
+  local j = 1 + math.floor(t * (#trail - 1))
+  local p, q = trail[j], trail[j + 1]
+  local u = t * (#trail - 1) - (j - 1)
+  local x, y = lerp(p[1], q[1], u), lerp(p[2], q[2], u)
+  local side = (math.random() < 0.5) and -1 or 1
+  local w = lerp(({150,118,84,56,36,24,15,9,5,3})[j], ({150,118,84,56,36,24,15,9,5,3})[j+1], u)
+  x = x + side * w * rand(0.3, 0.55)
+  if i % 6 == 1 then pb:reload(mix("#5d5650", "#77706a", rand()), 0.7, {pal=landpal}) end
+  pb:touch(x, y, {pressure=clamp((y - 440) / 400, 0.15, 0.6), drag={1, 0}})
+end
+-- a fallen oak branch in the grass
+local fb = brush("round", 3.6); fb:load("#453d38", 0.9, {pal=landpal})
+fb:stroke({{246,646},{272,640},{300,637},{334,628}}, {pressure={0.9, 0.35}, shake=0.4})
+local ft = brush("round", 1.2); ft:load("#3f3833", 0.9, {pal=landpal})
+ft:stroke({{272,640},{280,630},{286,626}}, {pressure={0.6, 0.05}})
+ft:stroke({{300,637},{312,642},{318,641}}, {pressure={0.5, 0.05}})
+ft:stroke({{318,632},{322,622},{330,618}}, {pressure={0.5, 0.05}})
+local fl = brush("round", 0.9); fl:load("#5d554e", 0.6, {pal=landpal})
+fl:stroke({{258,641.4},{280,637.0},{306,633.4},{330,625.5}}, {pressure={0.4, 0.2}})
+print(tuftn, "tufts")
+local fd = brush("round", 1.2); fd:load("#1c1716", 0.8, {pal=landpal})
+fd:stroke({{250,647.6},{272,642},{300,639.2},{332,630.4}}, {pressure={0.6, 0.25}})
+
+--@ chunk 19 · clock 46703.06640625
 wait(24*60); varnish{color="#e6d3a4", coats=0.3, vary=0.1}; relief()

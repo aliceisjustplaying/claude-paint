@@ -16,6 +16,7 @@ pub mod noise;
 pub mod path;
 pub mod edge;
 pub mod form;
+pub mod graphite;
 pub mod scene;
 pub mod atmos;
 pub mod palette;
@@ -51,6 +52,7 @@ pub use scene::{Spot, Sun, View, Water, World};
 pub use atmos::{Cloud, Clouds, Haze, Ranges, Sky, SkyField};
 pub use noise::Fbm;
 pub use pigment::Pigment;
+pub use graphite::{Lead, Medium};
 pub use rng::Rng;
 pub use shape::Shape;
 

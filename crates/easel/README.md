@@ -127,6 +127,9 @@ Read all three before you start.
 canvas{style="friedrich", aspect=1.4, seed=7}   -- the first chunk; returns H
 -- styles: "friedrich" (after 1820), "friedrich_early". Sets W, H and pal.
 canvas{style="friedrich", palette="friedrich_1820_greens", aspect=1.5, seed=11}
+canvas{style="friedrich_early", size=440, aspect=1.4, seed=11}   -- size: the width in mm
+-- (the style's by default: 440 after 1820, 1714 for the early grounds). Pencil
+-- lines are fractions of a mm, so they read at 1000px on a small canvas.
 -- palettes: friedrich_1820, friedrich_early, and the same with _greens (adds
 -- Prussian blue, green earth and, after 1820, Rinmann's green) for summer
 palette("friedrich_early_greens")            -- any palette by name
@@ -218,6 +221,61 @@ A flick that ends in a hairline is a stroke whose pressure falls to 0:
 
 A brush keeps its paint across strokes and chunks: several strokes from one
 load run dry naturally. `orient` is `"across"`, `"along"` or a fixed angle.
+
+### Drawing: pencil, chalk and eraser
+
+Draw the composition on the ground before you paint, the way Friedrich did:
+graphite pencils of different hardness and black chalk, often a faint first
+pass and then a bolder one, the straights against a ruler. The drawing lies
+in the picture under the paint: thin paint lets it show through (as in his
+early works), and body color hides it.
+
+```lua
+h = pencil("2H")                  -- or pencil{grade="2H"}: 9H..H, F, HB, B..9B
+b = pencil{grade="2B"}
+c = chalk()                       -- black chalk: deep, matte, broad, crumbly
+h:sketch(pts, {pressure=0.3})     -- a searching line: a few light passes, each its own guess
+                                  -- (passes=3, wander= units, smooth=true)
+b:line(pts, {pressure={0.5, 0.7, 0.4}})   -- one firm line through the points (smooth=false keeps corners)
+h:rule({0, 432}, {1000, 432}, {pressure=0.3})   -- straight, against a ruler
+b:hatch(mask, {angle=-1.1, pressure=0.35})     -- short parallel strokes (spacing=, length= in units)
+b:width()   b.worn   b:sharpen()  -- the point blunts as you draw (soft leads fast); lines widen
+erase(pts, {strength=0.9, width=9}) -- a kneaded eraser along a path, or erase(mask, {strength=})
+fix()                             -- fixative (or fix(mask)): the eraser no longer lifts it
+drawing_mask()                    -- where the drawing is, 1 on a firm line, also under paint
+```
+
+How it behaves: the point rides on the tops of the canvas weave, and
+pressure lets it reach into the hollows, so a light line is a broken line
+of grain and a heavy one fills in. Soft leads lay darker, glossier gray;
+hard ones lay a pale silver gray. Graphite doesn't take on wet paint. The
+eraser lifts most of a line, and better from the tops than the hollows. A
+ghost stays behind, as on a real canvas. Once paint has gone over the
+drawing, it is sealed. Look at the drawing with `look --crop` (it is fine
+work).
+
+A worked example (from `paintings/lua/pencil.lua`):
+
+```lua
+h2 = pencil("2H")                                  -- first pass: light and searching
+h2:rule({0, 432}, {1000, 432}, {pressure=0.3})
+h2:sketch(ROCK, {pressure=0.3})
+b = pencil("2B")                                   -- second pass: firm (the top came out too high)
+b:line(WRONG, {pressure={0.55, 0.7, 0.6, 0.5}})
+-- next chunk, after a look: lift the wrong top and redraw it
+erase(top_of_wrong, {strength=0.9, width=9})
+b:line(ROCK, {pressure={0.55, 0.7, 0.6, 0.5}, smooth=false})
+b:hatch(poly(shadow_side), {angle=-1.1, pressure=0.35})
+fix()
+-- thin, translucent paint, blended: the drawing shimmers through
+work(rock * LEFT, {hand="body", color="#8d8a80", medium=0.6, load=0.3, coverage=2.2, paint={0.3, 0.3}, clip=LEFT})
+blend(LEFT, {angle=0.04, clip=LEFT})
+-- body color hides it; paint the next thing into the hidden drawing
+work(rock * RIGHT, {hand="body", color="#8d8a80", medium=0.15, load=0.9, coverage=4, clip=RIGHT})
+dry()
+local firm = drawing_mask():band(0.55, 1, 0.1):grow(1.2) * rect(660, 290, 240, 190)
+work(firm, {hand="detail", tool="round 2", color="#3b342c", coverage=3, length={4, 10}})
+```
 
 ### Covering areas
 

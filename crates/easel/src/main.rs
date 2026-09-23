@@ -351,8 +351,6 @@ impl Server {
     /// Run a chunk as `do` does, in a live session.
     fn run_chunk(&mut self, payload: &str, from: &str) -> Result<session::Ran, String> {
         look::begin(&self.s.lua, from);
-        // a session making its canvas must not race a crop session making its own
-        let _g = if self.s.canvas().is_none() { Some(crop::CANVAS_LOCK.lock().unwrap_or_else(|e| e.into_inner())) } else { None };
         self.s.run(payload)
     }
 
@@ -365,14 +363,8 @@ impl Server {
         match cmd {
             "status" => Ok(format!("{}\n", self.s.status())),
             "try" => {
-                // run it to see what it shows and prints, then take it back:
-                // one extra undo level so no older snapshot is dropped
-                let depth = self.s.undo_depth;
-                self.s.undo_depth = depth + 1;
-                let r = self.run_chunk(payload, "try");
-                let r = r.and_then(|ran| self.s.undo(1).map(|_| ran));
-                self.s.undo_depth = depth;
-                let ran = r.map_err(|e| format!("{e}\n(nothing changed)"))?;
+                // run it to see what it shows and prints, then take it back
+                let ran = look::try_chunk(&mut self.s, payload).map_err(|e| format!("{e}\n(nothing changed)"))?;
                 let mut out = ran.out;
                 let (marks, _) = look::marks(&self.s.lua);
                 out.push_str(&format!("tried ({:.2}s): rolled back, not logged; {} overlay marks for the next look\n", ran.secs, marks.len()));

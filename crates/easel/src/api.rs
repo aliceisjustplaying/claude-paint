@@ -39,11 +39,13 @@ pub struct Studio {
     pub out: String,
     /// Time spent evaluating Lua fields in this chunk (s).
     pub field_secs: f64,
+    /// Paint only this window of the canvas (a `look --scale` crop session).
+    pub crop: Option<paint::Crop>,
 }
 
 impl Studio {
     pub fn new(width: usize) -> Self {
-        Studio { width, canvas: None, style: None, setup: None, seed: 1, chunk: 0, calls: 0, clock: 0.0, clock0: 0.0, rng: Rng::new(1), brushes: Vec::new(), out: String::new(), field_secs: 0.0 }
+        Studio { width, canvas: None, style: None, setup: None, seed: 1, chunk: 0, calls: 0, clock: 0.0, clock0: 0.0, rng: Rng::new(1), brushes: Vec::new(), out: String::new(), field_secs: 0.0, crop: None }
     }
 
     /// Start chunk `n`: its randomness depends only on the seed and `n`.
@@ -1371,7 +1373,8 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
                 }
                 let seed = o.get::<Option<u64>>("seed")?.unwrap_or(1);
                 let width = st.borrow().width;
-                let c = sty.prepare(width, aspect, seed);
+                let crop = st.borrow().crop;
+                let c = if crop.is_some() { sty.prepare_window(width, aspect, seed, crop) } else { sty.prepare(width, aspect, seed) };
                 let h = c.height();
                 let pal = Pal(Rc::new(sty.palette.clone()));
                 {

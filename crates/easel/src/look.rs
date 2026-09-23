@@ -8,6 +8,7 @@
 //! do nothing but return what they were given, so a chunk that shows things
 //! replays exactly as if it didn't.
 
+use crate::session::{Ran, Session};
 use crate::api::{Col, S, check_keys, err, frame, mask_of, num, points, rgb_of};
 use mlua::{AnyUserData, Lua, ObjectLike, Result, Table, Value, Variadic};
 use paint::color::{linear_to_srgb, luminance, srgb_to_linear, to_oklab};
@@ -186,6 +187,19 @@ pub fn begin(lua: &Lua, from: &str) {
     m.fresh = true;
     m.probes = 0;
     m.from = from.to_string();
+}
+
+/// Run a chunk to see what it shows, probes and prints, then take it back:
+/// the canvas, the globals, the brushes and the clock are as before, the
+/// log doesn't have it, and the undo stack keeps every snapshot it had.
+pub fn try_chunk(s: &mut Session, src: &str) -> std::result::Result<Ran, String> {
+    begin(&s.lua, "try");
+    let depth = s.undo_depth;
+    // one extra level, so the try's own snapshot doesn't push out the oldest
+    s.undo_depth = depth + 1;
+    let r = s.run(src).and_then(|ran| s.undo(1).map(|_| ran));
+    s.undo_depth = depth;
+    r
 }
 
 /// The overlay to draw (none if hidden).
@@ -742,7 +756,7 @@ fn draw_grid(img: &mut Img, m: &Map, step: f32, fs: i64) {
     while k * major <= vb {
         let (_, oy) = m.to(0.0, k * major);
         let y = oy.round() as i64 + 3;
-        if y > last && y < img.h as i64 - 7 * fs {
+        if y > last && y < img.h as i64 - 16 * fs {
             img.text(2, y, &fmt_units(k * major), fs, lab);
             last = y + 9 * fs;
         }
@@ -898,7 +912,9 @@ pub fn look(c: &Canvas, relief_default: (f32, f32), v: &View, marks: &[Mark], ou
         }
         (ow, oh, img)
     } else {
-        let k = (size / long).max(1);
+        // round the enlargement up while the image stays within 1.6 × size
+        let up = size.div_ceil(long);
+        let k = if long * up * 5 <= size * 8 { up } else { (size / long).max(1) };
         let (ow, oh) = (cw * k, ch * k);
         let img = (0..ow * oh).map(|i| px[(y0 - wy0 + (i / ow) / k) * f.w + x0 - wx0 + (i % ow) / k]).collect();
         (ow, oh, img)
@@ -976,4 +992,152 @@ fn blur(img: &[Rgb], w: usize, h: usize, r: f32) -> Vec<Rgb> {
         }
     }
     a
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::session::{Session, root};
+
+    const W: usize = 160;
+
+    fn bits(c: &Canvas) -> Vec<u32> {
+        c.seen().iter().flat_map(|p| p.map(f32::to_bits)).chain(c.surface_um().iter().map(|v| v.to_bits())).collect()
+    }
+
+    const SETUP: [&str; 3] = [
+        r##"canvas{style="friedrich", aspect=1.5, seed=3}"##,
+        r##"HZ = 300
+           work(above(function(x) return HZ end), {hand="broad", color=function(x, y) return mix("#6f84a8", "#e0d4b0", y/HZ) end, angle=0, coverage=2})"##,
+        r##"w = world{horizon=HZ, eye=1.7, fov=50, sun={azimuth=-120, elevation=30}}
+           v = w:view()
+           b = brush("round", 4); b:load("#303830", 0.9); b:stroke({{100, 450}, {700, 400}})"##,
+    ];
+
+    fn live(undo: usize) -> Session {
+        let mut s = Session::new(W, undo).unwrap();
+        for (i, c) in SETUP.iter().enumerate() {
+            begin(&s.lua, &format!("chunk {}", i + 1));
+            s.run(c).unwrap();
+        }
+        s
+    }
+
+    const SHOWS: &str = r##"
+        m = show(ellipse(400, 300, 100))
+        pts = show({{50, 50}, {250, 200}, {450, 100}}, {closed=true, label="sheep", color="#00ff00"})
+        show(150, 200, "oak")
+        p = probe(250, 437)
+        assert(p.hex:sub(1, 1) == "#" and p.L > 0 and p.drying == "open" and p.wet_um > 0, p.hex)
+        assert(p.what == "ground" and p.dist > 0 and p.world == "v", tostring(p.what))
+        q = probe(250, 100, v)
+        assert(q.what == "sky")
+        show({{50, 500}, {700, 500}}, {width=30})
+        show({{50, 500}, {700, 500}}, {brush=b, label="stroke"})
+        print(#pts, p.hex)"##;
+
+    #[test]
+    fn show_and_probe_leave_the_canvas_and_the_replay_alone() {
+        let mut s = live(4);
+        let before = bits(&s.canvas().unwrap());
+        begin(&s.lua, "chunk 4");
+        s.run(SHOWS).unwrap();
+        assert_eq!(before, bits(&s.canvas().unwrap()), "showing and probing paint nothing");
+        let (marks, from) = marks(&s.lua);
+        assert_eq!((marks.len(), from.as_str()), (9, "chunk 4"), "region, polygon, point, 2 probe crosses, 2 x (band + path)");
+        // the next chunk's show() replaces the overlay; a chunk without one keeps it
+        begin(&s.lua, "chunk 5");
+        s.run("x = 1").unwrap();
+        assert_eq!(super::marks(&s.lua).0.len(), 9);
+        begin(&s.lua, "chunk 6");
+        s.run("show(10, 10)").unwrap();
+        assert_eq!(super::marks(&s.lua).0.len(), 1);
+        assert_eq!(show_cmd(&s.lua, "off"), "overlay hidden (1 marks)\n");
+        assert!(super::marks(&s.lua).0.is_empty());
+        show_cmd(&s.lua, "toggle");
+        assert_eq!(super::marks(&s.lua).0.len(), 1);
+        show_cmd(&s.lua, "clear");
+        assert!(super::marks(&s.lua).0.is_empty());
+        // the log (shows and all) replays to the same canvas, and a replay keeps no overlay
+        let mut r = Session::replay(W).unwrap();
+        for c in &s.log {
+            r.run(&c.src).unwrap();
+        }
+        assert_eq!(bits(&s.canvas().unwrap()), bits(&r.canvas().unwrap()));
+        assert!(r.lua.app_data_ref::<Marks>().is_none_or(|m| m.items.is_empty()));
+        // bad arguments fail the chunk (so nothing is logged) in a live session and a replay alike
+        for bad in ["show({{1, 2}}, {width=3})", "show(everywhere(), {colour='#fff'})", "show('x')", "probe(-5, 10)"] {
+            assert!(s.run(bad).is_err(), "{bad}");
+            assert!(r.run(bad).is_err(), "{bad}");
+        }
+    }
+
+    #[test]
+    fn try_rolls_back_and_keeps_the_overlay() {
+        let mut s = live(2);
+        let before = bits(&s.canvas().unwrap());
+        let (n, clock) = (s.log.len(), s.st.borrow().clock);
+        let ran = try_chunk(&mut s, r##"t = 1; b:load("#ff0000"); b:stroke({{0, 0}, {150, 100}}); wait(60); show({{0, 0}, {150, 100}}); print("tried")"##).unwrap();
+        assert!(ran.out.contains("tried"));
+        assert_eq!(before, bits(&s.canvas().unwrap()), "the tried stroke is gone");
+        assert_eq!((s.log.len(), s.st.borrow().clock), (n, clock));
+        assert_eq!(marks(&s.lua).0.len(), 1, "its overlay stays for the next look");
+        s.run("assert(t == nil)").unwrap();
+        s.undo(1).unwrap();
+        // both undo snapshots survived the try
+        s.undo(1).unwrap();
+        assert_eq!(s.log.len(), n - 1);
+        // a failing try changes nothing either
+        let e = try_chunk(&mut s, "u = 2; error('stop')").unwrap_err();
+        assert!(e.contains("stop"));
+        s.run("assert(u == nil)").unwrap();
+    }
+
+    #[test]
+    fn looks_draw_the_aids_without_touching_the_canvas() {
+        let mut s = live(1);
+        begin(&s.lua, "chunk 4");
+        s.run(SHOWS).unwrap();
+        let dir = root().join("target/easel-look-test");
+        let c = s.canvas().unwrap().clone();
+        let before = bits(&c);
+        let (ms, _) = marks(&s.lua);
+        let plain = dir.join("plain.jpg");
+        let aided = dir.join("aided.jpg");
+        let v = View::parse(&[]).unwrap();
+        assert_eq!(look(&c, (0.5, 0.1), &v, &[], &plain).unwrap(), (1120, 749), "enlarged 7x (rounded up)");
+        let args: Vec<String> = ["--grid", "100", "--probe", "250,450;500,150", "--crop", "100,50,600,500", "--mirror"].iter().map(|s| s.to_string()).collect();
+        let v = View::parse(&args).unwrap();
+        assert_eq!((v.grid, v.probes.len()), (Some(100.0), 2));
+        let (w, h) = look(&c, (0.5, 0.1), &v, &ms, &aided).unwrap();
+        assert_eq!((w, h), (1040, 936), "a 500 x 450 unit crop at 0.16 px/unit (80 x 72 px), enlarged 13x (rounded up)");
+        assert_eq!(before, bits(&c));
+        assert_eq!(before, bits(&s.canvas().unwrap()));
+        assert!(View::parse(&["--scale".into(), "3.2".into()]).is_err(), "--scale needs --crop");
+        assert_eq!(View::parse(&["--crop".into(), "0,0,10,10".into(), "--scale".into(), "3200".into()]).unwrap().scale, Some(3.2));
+    }
+
+    #[test]
+    fn a_crop_session_follows_the_log_through_undo() {
+        let log: Vec<String> = SETUP.iter().map(|c| c.trim_end().to_string()).collect();
+        let mut crops = crate::crop::Crops::default();
+        let crop = [200.0, 150.0, 600.0, 450.0];
+        let two = crops.get(320, crop, 666.7, &log[..2], 300.0).unwrap();
+        let three = crops.get(320, crop, 666.7, &log, 300.0).unwrap();
+        assert!(three.note.contains("current"), "{}", three.note);
+        assert_eq!(three.canvas.window().scale, 0.32);
+        assert!(three.canvas.window().w < 320, "a window, not the whole canvas");
+        assert_ne!(bits(&two.canvas), bits(&three.canvas));
+        // the live session undid a chunk: the crop session undoes it too
+        let back = crops.get(320, crop, 666.7, &log[..2], 300.0).unwrap();
+        assert_eq!(bits(&two.canvas), bits(&back.canvas));
+        // and following the log matches painting the window from scratch
+        let again = crops.get(320, [250.0, 200.0, 550.0, 400.0], 666.7, &log, 300.0).unwrap();
+        let mut fresh = Session::replay(320).unwrap();
+        fresh.st.borrow_mut().crop = Some(paint::Crop { units: [170.0, 120.0, 630.0, 480.0], margin: 40.0 });
+        for c in &log {
+            fresh.run(c).unwrap();
+        }
+        assert_eq!(bits(&again.canvas), bits(&fresh.canvas().unwrap()));
+    }
 }

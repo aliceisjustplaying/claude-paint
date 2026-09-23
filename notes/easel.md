@@ -362,6 +362,71 @@ turns a green shadow teal quickly; −0.012 is plenty.
   rollback bookkeeping per chunk, reaching 0.7 s by the last chunk; keep
   big lists `local` when later chunks don't need them.
 
+## Round 3 review fixes
+
+The four findings in notes/review3/r3_review_easel.md are fixed. Each one has
+a regression test that failed before its fix and passes after it.
+
+1. **`--undo 0` disabled failure rollback.** `Session::run` used undo depth 0
+   to recognize a disposable replay, so a live `--undo 0` session kept a
+   failed chunk's paint and globals. Replays are now `Session::replay(width)`
+   (used by `easel run` and `check`). A live session always snapshots before a
+   chunk and keeps that snapshot only if `undo_depth > 0`. Test:
+   `live_session_without_undo_still_rolls_back`.
+2. **Object-keyed `pairs` differed between processes.** Lua hashes tables,
+   functions and userdata by address. That order changes from process to
+   process, and it also moves string keys that collide with those objects.
+   The fix has two parts:
+   - The easel creates its Lua state with its own allocator
+     (`lua_newstate(counting_alloc, …)`), which writes a 16-byte header before
+     every block. For tables and closures, the header holds a creation serial.
+     Userdata and threads also get a serial, and because their pointers lie
+     inside the block, they are also kept in a small address map.
+   - `prelude.lua` replaces `pairs` and `next`. A table keyed only by strings,
+     numbers and booleans still walks in Lua's own order (the C `next`), so
+     existing paintings are unchanged. A table with any other key walks in a
+     fixed order: booleans, numbers, strings, objects by serial, then library
+     C functions by name. `next` caches each table's order for the length of
+     a traversal, and the cache is cleared before every chunk. Heap snapshots
+     skip the cache.
+
+   Only relative serial order matters. Objects created by failed chunks, by
+   snapshots or by mlua shift the numbers but never reorder the objects a
+   successful chunk created. Tests: `object_keys_walk_in_creation_order`
+   (two sessions in one process) and `tests/determinism.rs` (three `easel
+   run` processes, identical output and PNG bytes).
+   `plain_tables_keep_lua_order` checks the fast path against stock Lua
+   with the same seed.
+   Cost: an allocation-only microbenchmark (200,000 kept tables, 1 million
+   temporary tables and closures, 300,000 strings) took 0.29–0.33 s against
+   0.25–0.27 s with Lua's allocator. My first version kept every object in a
+   `BTreeMap` and took 0.6 s.
+3. **`string.gmatch` state lived in C.** `prelude.lua` reimplements it on top
+   of `string.find`, with its position in upvalues, which the heap snapshot
+   restores. It follows 5.5's `gmatch_aux`: a leading `^` is literal, an
+   empty match can't end where the last match ended, and `init` is handled
+   the way `posrelatI` handles it, including values past the end. Tests:
+   `gmatch_iterators_roll_back` (a failure and an undo) and `gmatch_matches_lua`
+   (15 cases against stock Lua). No other library in the sandbox keeps state
+   in C that a painter can hold onto: `ipairs`, `next` and `utf8.codes` are
+   stateless, `math.random` is reseeded every chunk, and coroutine, io and os
+   aren't loaded.
+4. **A view's form counted proxies.** `ViewBox` now counts visible bodies,
+   matching `View::new`, which only numbers those. Test:
+   `view_form_counts_visible_parts_only` (a proxy-only world and a
+   visible/proxy/visible world).
+
+Evidence (scratch dir `~/tmp/fix3-easel-0f194e93`): `repros.log`
+reruns the reviewer's `--undo 0` and gmatch sessions. The failed glaze is gone,
+`print(a)` gives 1, the iterator gives `red` again and `check` matches. In
+`check1000.log` (first allocator) and `check1000b.log` (final), example, rocks and meadow are resumed live at 1000px and
+`easel check` reports "replay matches the live canvas exactly" for all three.
+Each live `save` is byte-identical to `easel run`.
+
+Remaining limits: coroutines; a string-keyed table rewritten by a rollback;
+a table that held object keys and lost them (its layout keeps the old
+collisions until it rehashes).
+
 ## Next
 
 1. **Rollback cost for big heaps.** Snapshot only tables that changed since the last chunk (a write barrier via proxies), or treat tables produced by `sward{}`/`tree{}` as frozen.
@@ -376,7 +441,8 @@ turns a green shadow teal quickly; −0.012 is plenty.
    would let a painter work Friedrich's small particulars at their real
    grain. The engine's Frame and crop machinery already supports it.
 5. **Rollback, last gaps.** Coroutines; a restore that rebuilds changed
-   tables in their original insertion order, so `pairs` order holds.
+   string-keyed tables in their original insertion order, so `pairs` order
+   holds (object-keyed tables are already sorted).
 6. **Motif helpers in Lua.** Tufts, needles and grass as small gesture
    libraries in Lua (`paintings/lua/lib/`), loaded by a sandboxed
    `use "trees"` whose text is inlined into the log so replay stays

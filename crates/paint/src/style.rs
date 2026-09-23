@@ -188,6 +188,8 @@ impl Style {
                         .shake(0.15);
                     c.work(&all, &h, s);
                     c.dry();
+                    // (`prime` counts its own layers)
+                    c.ground_um += g.um;
                 }
             }
         }

@@ -222,33 +222,52 @@ fn smin(a: f32, b: f32, k: f32) -> (f32, f32) {
 }
 
 impl Sdf {
-    /// An ellipsoid centered at `c` with radii `r`.
+    /// An ellipsoid centered at `c` (units; y down, z toward the viewer)
+    /// with radii `r`: half extents, so it spans `c ± r` on each axis (unlike
+    /// `block`, whose `size` is the whole extent).
     pub fn ellipsoid(c: V3, r: V3) -> Sdf {
         Sdf::Ellipsoid { c, r }
     }
-    /// A box centered at `c`, `size` wide/tall/deep, edges rounded by `round`.
+    /// A box centered at `c` (units; y down, z toward the viewer). `size` is
+    /// the **whole** extent, width, height and depth, not half of it: it
+    /// spans `c ± size / 2`, so its top face is at `y = c[1] - size[1] / 2`
+    /// and its foot at `c[1] + size[1] / 2` (to sit a block on ground at
+    /// `y = g`, put `c[1] = g - size[1] / 2`, or lower to sink it in).
+    /// `round` (units) rounds its edges and corners; at most half the
+    /// smallest size, and it rounds inside the extent without growing it.
     /// Its faces are facets 1 right, 2 left, 3 bottom, 4 top, 5 front, 6 back
     /// (in the block's own frame, so they follow it when turned).
+    ///
+    /// ```ignore
+    /// // a tor 120 wide and 80 tall, standing on the turf line at y = 600
+    /// let tor = Sdf::block([400.0, 600.0 - 40.0, 0.0], [120.0, 80.0, 90.0], 12.0);
+    /// ```
     pub fn block(c: V3, size: V3, round: f32) -> Sdf {
         Sdf::Block { c, half: [size[0] * 0.5, size[1] * 0.5, size[2] * 0.5], round }
     }
-    /// Everything behind the plane through `at` whose outward normal is `n`.
+    /// Everything behind the plane through the point `at` (units) whose
+    /// outward normal is `n` (any length; it is normalized).
     pub fn half_space(at: V3, n: V3) -> Sdf {
         Sdf::Plane { at, n: unit(n) }
     }
-    /// Split off everything beyond the plane through `at` facing `n` (a
-    /// fracture plane); the new face becomes facet `facet`. `round` rounds
-    /// the new edges (weathered arrises; 0 = fresh break).
+    /// Split off everything beyond the plane through the point `at` (units)
+    /// facing `n` (a fracture plane); the new face becomes facet `facet`.
+    /// `round` (units) rounds the new edges (weathered arrises; 0 = fresh
+    /// break).
     pub fn cut(self, at: V3, n: V3, facet: u16, round: f32) -> Sdf {
         Sdf::Inter(vec![self, Sdf::Facet(Box::new(Sdf::half_space(at, n)), facet)], round)
     }
+    /// Both bodies as one. `smooth` (units) fuses them with a fillet about
+    /// that wide where they meet (0 = a sharp crease).
     pub fn union(self, o: Sdf, smooth: f32) -> Sdf {
         Sdf::Union(vec![self, o], smooth)
     }
+    /// This body with `o` carved out of it; `smooth` (units) rounds the
+    /// edge of the hollow (0 = sharp).
     pub fn subtract(self, o: Sdf, smooth: f32) -> Sdf {
         Sdf::Subtract(Box::new(self), Box::new(o), smooth)
     }
-    /// Rotate about `c`: `yaw` turns it about the vertical (positive turns
+    /// Rotate about the point `c` (units; usually the body's center): `yaw` turns it about the vertical (positive turns
     /// its right side toward the viewer), `pitch` tips its top toward the
     /// viewer (so we look down on it), `roll` leans it in the picture plane
     /// (positive clockwise). Radians.
@@ -273,8 +292,10 @@ impl Sdf {
         let m = mul(rr, mul(rp, ry));
         Sdf::Turn { body: Box::new(self), c, m }
     }
-    /// Weather the surface: displace it by 3-D fractal noise of `amp` units
-    /// at `period`. `ridged` makes sharp-lipped pits and crests (granite
+    /// Weather the surface: displace it in and out by about `amp`
+    /// units of 3-D fractal noise whose largest features are `period` units
+    /// across (a few units of `amp` on a rock tens of units across).
+    /// `ridged` makes sharp-lipped pits and crests (granite
     /// grain, eroded sandstone) instead of soft lumps.
     pub fn rough(self, amp: f32, period: f32, seed: u32, ridged: bool) -> Sdf {
         Sdf::Rough { body: Box::new(self), amp, period, noise: Box::new(Perlin::new(seed)), ridged }
@@ -510,8 +531,10 @@ fn ellipsoid_hit(c: V3, r: V3, x: f32, y: f32) -> Option<Hit> {
     Some(Hit { z, n: unit([q[0] / (r[0] * r[0]), q[1] / (r[1] * r[1]), q[2] / (r[2] * r[2])]), facet: 0 })
 }
 
-/// Any relief over the canvas: `f(x, y)` gives the height toward the viewer
-/// and a facet id, or None where there is nothing. Normals come from its
+/// Any relief over the canvas: `f(x, y)` (canvas units) gives the height
+/// toward the viewer (z, units) and a facet id, or None where there is
+/// nothing. `area` is [x0, y0, x1, y1] in units: the only part of the
+/// canvas where `f` is asked. Normals come from its
 /// slopes (central differences, 0.3 units).
 pub struct Relief<F: Fn(f32, f32) -> Option<(f32, u16)> + Sync> {
     pub area: [f32; 4],
@@ -589,8 +612,12 @@ pub struct Ridge {
 }
 
 impl Ridge {
-    /// A ridge from x0 to x1 whose crest is `crest(x)`, reaching `depth`
-    /// units below it.
+    /// A ridge from `x0` to `x1` (units) whose crest line is at
+    /// `y = crest(x)` (units, y down; sampled once per unit), and whose face
+    /// reaches `depth` units below the crest at every x, whatever stands in
+    /// front of it (mask it where a nearer passage covers it). `seed` picks
+    /// its spurs and gullies. Defaults: `lean(0.8, 0.6)`, gullies every 40
+    /// units carved 0.35 deep, `fan(1.0)`, no strata, `z0(0.0)`.
     pub fn new(x0: f32, x1: f32, crest: impl Fn(f32) -> f32, depth: f32, seed: u32) -> Self {
         let n = (x1 - x0).ceil().max(1.0) as usize + 1;
         let crest: Vec<f32> = (0..n).map(|i| crest(x0 + i as f32)).collect();
@@ -616,29 +643,39 @@ impl Ridge {
             wander: Fbm::new(seed + 13, 2, 1.0),
         }
     }
+    /// How the face leans back (dz/dy, no units; see the `lean` field) and
+    /// how much more it leans at the foot.
     pub fn lean(mut self, lean: f32, foot: f32) -> Self {
         self.lean = lean;
         self.foot = foot;
         self
     }
+    /// Gullies `spacing` units apart just under the crest (they widen
+    /// downhill), carved `carve` × their spacing deep.
     pub fn gullies(mut self, spacing: f32, carve: f32) -> Self {
         self.gully = spacing;
         self.carve = carve;
         self
     }
+    /// 1: gullies follow the fall line; 0: they run straight down.
     pub fn fan(mut self, f: f32) -> Self {
         self.fan = f;
         self
     }
+    /// Ledges `spacing` units apart down the face, each stepping `step`
+    /// units in z, tilted `tilt` (dy/dx: 0.1 drops 1 unit every 10 across).
     pub fn strata(mut self, spacing: f32, step: f32, tilt: f32) -> Self {
         self.strata = Some((spacing, step, tilt));
         self
     }
+    /// Add `z` units toward the viewer to the whole face (to place it in
+    /// front of or behind other solids in the same `Form`).
     pub fn z0(mut self, z: f32) -> Self {
         self.z0 = z;
         self
     }
-    /// The face stops at this level line (a beach, a lake, a valley floor).
+    /// The face stops at the level line `y` (units): a beach, a lake, a
+    /// valley floor.
     pub fn base(mut self, y: f32) -> Self {
         self.base = Some(y);
         self
@@ -778,6 +815,9 @@ pub struct Form {
 }
 
 impl Form {
+    /// An empty form over the whole canvas: pass `c.frame()` (not
+    /// `c.window()`, even in a crop render). All positions and sizes given to
+    /// solids are canvas units, like masks.
     pub fn new(f: Frame) -> Self {
         let n = f.w * f.h;
         Form {

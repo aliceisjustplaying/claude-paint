@@ -476,7 +476,11 @@ pub struct Finish {
 }
 
 impl Finish {
-    /// An old varnished painting.
+    /// An old varnished painting. Its craquelure (`Cracks::aged`) fits
+    /// itself to the canvas when it cracks: islands and weave coupling from
+    /// the ground the canvas was primed with, openings from the island
+    /// size, density and opening from the paint under each crack, and a few
+    /// patches of milky, microcracked varnish.
     pub fn aged(relief: (f32, f32)) -> Self {
         Finish { varnish: hex("#e6d3a4"), varnish_coats: 0.4, varnish_vary: 0.12, cracks: Some(Cracks::aged(0)), relief }
     }

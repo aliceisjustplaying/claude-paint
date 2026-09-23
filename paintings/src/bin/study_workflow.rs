@@ -50,8 +50,7 @@ fn paint(width: usize, crop: Option<Crop>, seed: u64) -> Canvas {
     let fin = Finish::aged(st.relief);
     let var = Fbm::new(seed as u32 + 98, 3, 400.0);
     c.glaze(&paint::Pigment::varnish(fin.varnish), None, |x, y| fin.varnish_coats + fin.varnish_vary * var.get(x, y));
-    let ground_um = st.ground.iter().map(|g| g.um).sum();
-    c.crack(&paint::Cracks { ground_um, seed, ..paint::Cracks::aged(0) });
+    c.crack(&paint::Cracks { seed, ..paint::Cracks::aged(0) });
     c.relief(fin.relief.0, fin.relief.1);
     c
 }

@@ -152,6 +152,9 @@ pub struct Canvas {
     pub(crate) height: Vec<f32>,
     /// Accumulated paint film in coats (bookkeeping).
     pub(crate) film: Vec<f32>,
+    /// Total thickness of the ground layers primed so far, µm (what
+    /// `Cracks::aged` fits its craquelure to).
+    pub(crate) ground_um: f32,
     pub(crate) linen: Option<Linen>,
     /// Physical size: millimeters per unit (the canvas is 1000 units wide).
     pub(crate) mm_per_unit: f32,
@@ -194,6 +197,7 @@ impl Canvas {
             px: vec![ground; n],
             height: vec![0.0; n],
             film: vec![0.0; n],
+            ground_um: 0.0,
             linen: None,
             mm_per_unit: 0.7,
             wet: crate::wet::Wet::new(n),
@@ -238,6 +242,12 @@ impl Canvas {
         let pig = Pigment::masstone_hiding(color, hiding);
         self.px.par_iter_mut().zip(&t).for_each(|(p, &ti)| *p = pig.over(*p, ti / COAT_UM));
         self.film.par_iter_mut().zip(&t).for_each(|(f, &ti)| *f += ti / COAT_UM);
+        self.ground_um += um;
+    }
+
+    /// Total thickness of the ground layers primed on this canvas, µm.
+    pub fn ground_um(&self) -> f32 {
+        self.ground_um
     }
 
     /// The whole canvas's frame, for building masks (masks always cover the

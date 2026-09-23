@@ -42,11 +42,14 @@ pub struct Studio {
     pub out: String,
     /// Time spent evaluating Lua fields in this chunk (s).
     pub field_secs: f64,
+    /// The last world view made (`w:view()`): what `visible=`, `behind=` and
+    /// `at=` resolve against (depth.rs).
+    pub view: Option<crate::world::ViewU>,
 }
 
 impl Studio {
     pub fn new(width: usize) -> Self {
-        Studio { width, canvas: None, style: None, setup: None, seed: 1, chunk: 0, calls: 0, clock: 0.0, clock0: 0.0, rng: Rng::new(1), brushes: Vec::new(), out: String::new(), field_secs: 0.0 }
+        Studio { width, canvas: None, style: None, setup: None, seed: 1, chunk: 0, calls: 0, clock: 0.0, clock0: 0.0, rng: Rng::new(1), brushes: Vec::new(), out: String::new(), field_secs: 0.0, view: None }
     }
 
     /// Start chunk `n`: its randomness depends only on the seed and `n`.
@@ -795,11 +798,12 @@ impl UserData for WorleyU {
 const WORK_KEYS: &[&str] = &[
     "hand", "tool", "length", "coverage", "angle", "angle_jitter", "color", "jitter", "medium", "pal", "aim", "load_at", "cut_in", "pressure",
     "orient", "dips", "blender", "scrub", "clip", "threshold", "ramps", "shake", "curve", "cross", "drift", "tail", "broken", "swell", "clump",
-    "order", "mix_jitter", "seed", "ruler", "paint", "load", "color_over", "hug",
+    "order", "mix_jitter", "seed", "ruler", "paint", "load", "color_over", "hug", "visible", "behind", "at", "view",
 ];
 
 fn work(st: &S, mask: Rc<Mask>, o: Table, preset: Option<&str>) -> Result<()> {
     check_keys(&o, WORK_KEYS, "work")?;
+    let (mask, limit) = crate::depth::restrict_mask(st, &o, mask)?;
     let sty = style(st)?;
     let f = frame(st)?;
     let hand: String = o.get::<Option<String>>("hand")?.unwrap_or_else(|| preset.unwrap_or("body").to_string());
@@ -962,6 +966,9 @@ fn work(st: &S, mask: Rc<Mask>, o: Table, preset: Option<&str>) -> Result<()> {
         }
         v => h = h.sweep(f32::from_lua_value(v)?),
     }
+    if let Some(l) = limit {
+        h = h.limit(l);
+    }
     h.tool.validate().map_err(mlua::Error::runtime)?;
     let seed = seed_of(st, &o)?;
     let mut s = st.borrow_mut();
@@ -990,7 +997,7 @@ pub(crate) fn seed_of(st: &S, o: &Table) -> Result<u64> {
 }
 
 const STIPPLE_KEYS: &[&str] = &[
-    "tool", "width", "pressure", "coverage", "color", "medium", "pal", "aim", "dips", "drag", "twist", "cluster", "feather", "clip", "jitter", "mix_jitter", "seed", "paint", "color_over", "fade",
+    "tool", "width", "pressure", "coverage", "color", "medium", "pal", "aim", "dips", "drag", "twist", "cluster", "feather", "clip", "jitter", "mix_jitter", "seed", "paint", "color_over", "fade", "visible", "behind", "at", "view",
 ];
 
 type OverBox = Box<dyn Fn(f32, f32, Rgb) -> Rgb + Sync>;
@@ -1030,6 +1037,7 @@ fn over_field(st: &S, o: &Table, b: (f32, f32, f32, f32)) -> Result<Option<OverB
 
 fn stipple(st: &S, mask: Rc<Mask>, o: Table) -> Result<()> {
     check_keys(&o, STIPPLE_KEYS, "stipple")?;
+    let (mask, limit) = crate::depth::restrict_mask(st, &o, mask)?;
     let f = frame(st)?;
     let tool = match o.get::<Option<Value>>("tool")? {
         Some(t) => tool_of(&t)?,
@@ -1095,6 +1103,9 @@ fn stipple(st: &S, mask: Rc<Mask>, o: Table) -> Result<()> {
     }
     if let Some(k) = num(&o, "fade")? {
         sp = sp.fade(k);
+    }
+    if let Some(l) = limit {
+        sp = sp.limit(l);
     }
     sp.tool.validate().map_err(mlua::Error::runtime)?;
     let seed = seed_of(st, &o)?;
@@ -1588,8 +1599,8 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
         // glaze(mask or nil, {color=, coats=number|fn, pigment=})
         let st1 = st.clone();
         g.set("glaze", lua.create_function(move |_, (m, o): (Value, Table)| {
-            check_keys(&o, &["color", "coats", "pigment"], "glaze")?;
-            let m = mask_opt(m)?;
+            check_keys(&o, &["color", "coats", "pigment", "visible", "behind", "at", "view"], "glaze")?;
+            let m = crate::depth::restrict(&st1, &o, mask_opt(m)?)?.0;
             let f = frame(&st1)?;
             let pig = pigment_of(o.get::<Option<String>>("pigment")?.as_deref(), rgb_of(&o.get::<Value>("color")?)?)?;
             let b = support(m.as_deref(), f, 4.0);

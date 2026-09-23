@@ -267,6 +267,9 @@ pub struct World {
     /// How far the ground runs (m) before it is the horizon.
     pub far: f32,
     pub bodies: Vec<Body>,
+    /// Motifs the painter paints by hand, registered at a depth so the
+    /// world knows what is in front of what (see `Layer`).
+    pub layers: Vec<Layer>,
 }
 
 impl World {
@@ -292,6 +295,7 @@ impl World {
             backdrop: 600.0,
             far: 20000.0,
             bodies: Vec::new(),
+            layers: Vec::new(),
         };
         w.set_fov(view[2], 45.0);
         w
@@ -804,6 +808,8 @@ pub struct View<'w> {
     ground_cast: Vec<f32>,
     /// Form part of each body (0: a proxy).
     parts: Vec<PartId>,
+    /// What lies behind what at every pixel, built on first use.
+    depths: std::sync::OnceLock<Depths>,
 }
 
 impl<'w> View<'w> {
@@ -855,7 +861,7 @@ impl<'w> View<'w> {
                 world.cast(w, world.ground_normal(w[0], w[2]))
             })
             .collect();
-        View { world, f, form, depth, ground_cast, parts }
+        View { world, f, form, depth, ground_cast, parts, depths: std::sync::OnceLock::new() }
     }
 
     /// The form part of a body (0 for a proxy).
@@ -1017,6 +1023,517 @@ impl Point {
     /// The form sample for a body point.
     pub fn sample(&self, part: PartId) -> Sample {
         Sample { part, facet: 0, z: 0.0, n: self.n, dist: self.dist, shade: self.shade }
+    }
+}
+
+// ------------------------------------------------------------------ depth
+
+/// How deep a painter's layer lies.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum LayerDepth {
+    /// At a fixed distance (m): a figure at its spot's depth (`spot.at[2]`).
+    At(f32),
+    /// On the ground or the water, at whatever depth that is seen at each
+    /// pixel: a path, a patch of heather, a glint on the sea.
+    Ground,
+}
+
+/// A motif the painter paints by hand (a figure written with gestures, a
+/// drawn tree, a boat), registered as a canvas mask at a depth, so the
+/// world knows what it hides and what hides it.
+#[derive(Clone)]
+pub struct Layer {
+    pub name: String,
+    pub mask: Mask,
+    pub depth: LayerDepth,
+}
+
+/// One thing seen along a line of sight.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum Thing {
+    Sky,
+    Ground,
+    Water,
+    Body(BodyId),
+    Layer(usize),
+}
+
+impl World {
+    /// Register a motif painted by hand at a depth (see `Layer`). Returns
+    /// its index; masks name it as `Thing::Layer(index)`.
+    pub fn layer(&mut self, name: &str, mask: Mask, depth: LayerDepth) -> usize {
+        self.layers.push(Layer { name: name.to_string(), mask, depth });
+        self.layers.len() - 1
+    }
+    /// The layer called `name` (the last one, if several share it).
+    pub fn layer_named(&self, name: &str) -> Option<usize> {
+        self.layers.iter().rposition(|l| l.name == name)
+    }
+
+    /// `cast` with a penumbra of your choosing (the shadow edge's width per
+    /// meter from the caster) and only the bodies `casters` picks. The
+    /// terrain shades too if `terrain`. 0 lit, 1 in full shadow.
+    pub fn cast_soft(&self, w: V3, n: V3, penumbra: f32, casters: &(dyn Fn(BodyId) -> bool + Sync), terrain: bool) -> f32 {
+        if !self.sun.up() {
+            return 0.0;
+        }
+        let l = self.sun.dir();
+        let o = add(w, n, 0.01);
+        let k = penumbra.max(1e-3);
+        let mut res = 1.0f32;
+        for (i, b) in self.bodies.iter().enumerate() {
+            if !casters(i) {
+                continue;
+            }
+            // the soft shadow reaches past the body by the penumbra's width
+            let Some((t0, t1)) = b.span(o, l, 0.3 + k * 8.0) else { continue };
+            let mut t = t0.max(0.02);
+            let mut steps = 0;
+            while t < t1 && steps < 200 {
+                let d = b.dist(add(o, l, t));
+                if d < 1e-3 {
+                    return 1.0;
+                }
+                res = res.min(d / (k * t));
+                if res < 0.005 {
+                    return 1.0;
+                }
+                t += d.clamp((0.004 + 0.002 * t).min(0.5), 0.5);
+                steps += 1;
+            }
+        }
+        if terrain && self.ground.is_some() && l[1] < 0.5 {
+            let mut t = 0.3;
+            while t < 60.0 {
+                let p = add(o, l, t);
+                let h = p[1] - self.ground_at(p[0], p[2]);
+                if h < 0.0 {
+                    return 1.0;
+                }
+                res = res.min(h / (k * t * 4.0));
+                t *= 1.25;
+            }
+        }
+        1.0 - crate::smoothstep(0.0, 1.0, res.clamp(0.0, 1.0))
+    }
+
+    /// How much of the sky (0..1, cosine-weighted) the bodies `by` (and the
+    /// ground, if `with_ground`) hide from a world point with normal `n`
+    /// (world), counting only what lies within `reach` m. Occluders fade out
+    /// toward `reach`, so the darkening falls off smoothly with distance:
+    /// about 0.5 in the crease where a stone meets flat ground, nothing a
+    /// reach away. This is the contact shadow and the dark under an overhang.
+    pub fn sky_occlusion(&self, w: V3, n: V3, reach: f32, by: &(dyn Fn(BodyId) -> bool + Sync), with_ground: bool) -> f32 {
+        let reach = reach.max(1e-3);
+        let near: Vec<&Body> = self
+            .bodies
+            .iter()
+            .enumerate()
+            .filter(|(i, b)| {
+                by(*i) && {
+                    let q = [w[0] - b.center[0], w[1] - b.center[1], w[2] - b.center[2]];
+                    dot(q, q).sqrt() < b.radius + reach
+                }
+            })
+            .map(|(_, b)| b)
+            .collect();
+        if near.is_empty() && !with_ground {
+            return 0.0;
+        }
+        // a frame around the normal
+        let t1 = unit(if n[1].abs() < 0.9 { [n[2], 0.0, -n[0]] } else { [0.0, -n[2], n[1]] });
+        let t2 = [n[1] * t1[2] - n[2] * t1[1], n[2] * t1[0] - n[0] * t1[2], n[0] * t1[1] - n[1] * t1[0]];
+        let o = add(w, n, 0.01 * reach + 0.005);
+        const DIRS: usize = 16;
+        let mut seen = 0.0;
+        for k in 0..DIRS {
+            // cosine-weighted directions on the hemisphere (a Fibonacci spiral)
+            let u = (k as f32 + 0.5) / DIRS as f32;
+            let (r, up) = (u.sqrt(), (1.0 - u).sqrt());
+            let (s, c) = (k as f32 * 2.399_963).sin_cos();
+            let d = unit([t1[0] * r * c + t2[0] * r * s + n[0] * up, t1[1] * r * c + t2[1] * r * s + n[1] * up, t1[2] * r * c + t2[2] * r * s + n[2] * up]);
+            let mut vis = 1.0f32;
+            let mut t = 0.04 * reach;
+            while t < reach {
+                let q = add(o, d, t);
+                let mut dist = near.iter().map(|b| b.dist(q)).fold(f32::INFINITY, f32::min);
+                if with_ground {
+                    dist = dist.min(q[1] - self.surface(q[0], q[2]));
+                }
+                // a cone of half-angle ~27°; what lies near the reach counts less
+                let fade = crate::smoothstep(0.45 * reach, reach, t);
+                vis = vis.min((dist / (0.5 * t)).max(fade).clamp(0.0, 1.0));
+                if vis <= 0.0 {
+                    break;
+                }
+                t += dist.clamp(0.03 * reach, 0.25 * reach);
+            }
+            seen += vis;
+        }
+        1.0 - seen / DIRS as f32
+    }
+}
+
+/// Coverage and depth of one body over the pixels it may cover.
+struct Patch {
+    x0: usize,
+    y0: usize,
+    w: usize,
+    h: usize,
+    cov: Vec<f32>,
+    dep: Vec<f32>,
+}
+
+/// What lies behind what at every pixel: the ground or water (or sky),
+/// every visible body (not proxies: they are never seen) and every layer, each with its coverage
+/// (soft at its edges) and its distance (m). Masks from it are
+/// front-to-back composites, so the soft edge of a figure over the sea
+/// hides the sea exactly as much as it covers it, and nothing is ever
+/// subtracted twice. Build with `View::depths`.
+pub struct Depths {
+    pub f: Frame,
+    /// Depth of the ground or water seen (infinite: sky).
+    surface: Vec<f32>,
+    water: Vec<bool>,
+    bodies: Vec<Option<Patch>>,
+    layers: Vec<(Vec<f32>, LayerDepth)>,
+}
+
+/// One entry of a pixel's stack: depth (m), coverage, thing.
+pub type Seen = (f32, f32, Thing);
+
+impl Depths {
+    fn new(view: &View) -> Self {
+        let world = view.world;
+        let f = view.f;
+        let inv = 1.0 / f.scale;
+        let surface = view.depth.clone();
+        let water: Vec<bool> = (0..f.w * f.h)
+            .into_par_iter()
+            .map(|i| {
+                if !surface[i].is_finite() || world.water.is_none() {
+                    return false;
+                }
+                let (x, y) = (((i % f.w) as f32 + 0.5) * inv, ((i / f.w) as f32 + 0.5) * inv);
+                world.to_ground(x, y).is_some_and(|p| world.is_water(p[0], p[2]))
+            })
+            .collect();
+        // proxies are stand-ins (their shadow and reflection): what is seen of a
+        // figure written with gestures is the layer its outline is registered as
+        let bodies = world.bodies.iter().map(|b| if b.visible { Self::patch(world, b, f) } else { None }).collect();
+        let layers = world
+            .layers
+            .iter()
+            .map(|l| {
+                let cov = if l.mask.f.w == f.w && l.mask.f.h == f.h {
+                    l.mask.data.clone()
+                } else {
+                    (0..f.w * f.h).map(|i| l.mask.sample(((i % f.w) as f32 + 0.5) * inv, ((i / f.w) as f32 + 0.5) * inv)).collect()
+                };
+                (cov, l.depth)
+            })
+            .collect();
+        Depths { f, surface, water, bodies, layers }
+    }
+
+    /// A body's coverage and depth: one ray per pixel, four at its edges.
+    fn patch(world: &World, b: &Body, f: Frame) -> Option<Patch> {
+        let [bx0, by0, bx1, by1] = b.sdf.bounds();
+        let v = world.view;
+        let (ux0, uy0, ux1, uy1) = (bx0.max(v[0]), by0.max(v[1]), bx1.min(v[0] + v[2]), by1.min(v[1] + v[3]));
+        let px = |u: f32, n: usize| ((u * f.scale).max(0.0) as usize).min(n);
+        let (x0, y0) = (px(ux0.floor(), f.w).saturating_sub(1), px(uy0.floor(), f.h).saturating_sub(1));
+        let (x1, y1) = ((px(ux1, f.w) + 2).min(f.w), (px(uy1, f.h) + 2).min(f.h));
+        if x1 <= x0 || y1 <= y0 {
+            return None;
+        }
+        let (w, h) = (x1 - x0, y1 - y0);
+        let inv = 1.0 / f.scale;
+        let probe = |x: f32, y: f32| -> Option<f32> {
+            let hit = b.sdf.hit(x, y)?;
+            let p = b.spot.world([x, y, hit.z]);
+            // sunk below the ground or water where it stands: hidden
+            if p[1] < world.surface(p[0], p[2]) - 0.002 {
+                return None;
+            }
+            Some(p[2])
+        };
+        let center: Vec<Option<f32>> = (0..w * h).into_par_iter().map(|k| probe(((x0 + k % w) as f32 + 0.5) * inv, ((y0 + k / w) as f32 + 0.5) * inv)).collect();
+        let (cov, dep): (Vec<f32>, Vec<f32>) = (0..w * h)
+            .into_par_iter()
+            .map(|k| {
+                let (i, j) = (k % w, k / w);
+                let c = center[k];
+                let at = |a: isize, b: isize| -> bool {
+                    let (ii, jj) = (i as isize + a, j as isize + b);
+                    ii >= 0 && jj >= 0 && (ii as usize) < w && (jj as usize) < h && center[jj as usize * w + ii as usize].is_some()
+                };
+                let me = c.is_some();
+                if at(-1, 0) == me && at(1, 0) == me && at(0, -1) == me && at(0, 1) == me {
+                    return c.map_or((0.0, f32::INFINITY), |d| (1.0, d));
+                }
+                let (mut n, mut s) = (0, 0.0);
+                for (ox, oy) in [(0.25, 0.25), (0.75, 0.25), (0.25, 0.75), (0.75, 0.75)] {
+                    if let Some(d) = probe(((x0 + i) as f32 + ox) * inv, ((y0 + j) as f32 + oy) * inv) {
+                        n += 1;
+                        s += d;
+                    }
+                }
+                if n == 0 { (0.0, f32::INFINITY) } else { (n as f32 / 4.0, s / n as f32) }
+            })
+            .unzip();
+        Some(Patch { x0, y0, w, h, cov, dep })
+    }
+
+    /// The things seen at pixel `i`, nearest first: (depth m, coverage, thing).
+    pub fn stack(&self, i: usize, out: &mut Vec<Seen>) {
+        out.clear();
+        let (px, py) = (i % self.f.w, i / self.f.w);
+        for (b, p) in self.bodies.iter().enumerate() {
+            let Some(p) = p else { continue };
+            if px >= p.x0 && py >= p.y0 && px < p.x0 + p.w && py < p.y0 + p.h {
+                let k = (py - p.y0) * p.w + (px - p.x0);
+                if p.cov[k] > 1e-4 {
+                    out.push((p.dep[k], p.cov[k], Thing::Body(b)));
+                }
+            }
+        }
+        let s = self.surface[i];
+        for (l, (cov, d)) in self.layers.iter().enumerate() {
+            let c = cov[i];
+            if c > 1e-4 {
+                let z = match d {
+                    LayerDepth::At(z) => *z,
+                    // just in front of the ground it lies on
+                    LayerDepth::Ground => {
+                        if s.is_finite() { s - 0.01 } else { f32::MAX }
+                    }
+                };
+                out.push((z, c.min(1.0), Thing::Layer(l)));
+            }
+        }
+        let what = if !s.is_finite() {
+            Thing::Sky
+        } else if self.water[i] {
+            Thing::Water
+        } else {
+            Thing::Ground
+        };
+        out.push((s, 1.0, what));
+        out.sort_by(|a, b| a.0.total_cmp(&b.0));
+    }
+    /// The stack at a canvas point.
+    pub fn at(&self, x: f32, y: f32) -> Vec<Seen> {
+        let mut v = Vec::new();
+        self.stack(self.pixel(x, y), &mut v);
+        v
+    }
+    fn pixel(&self, x: f32, y: f32) -> usize {
+        let px = ((x * self.f.scale) as isize).clamp(0, self.f.w as isize - 1) as usize;
+        let py = ((y * self.f.scale) as isize).clamp(0, self.f.h as isize - 1) as usize;
+        py * self.f.w + px
+    }
+    /// How much of each thing is seen at a canvas point, nearest first:
+    /// (thing, depth m, share of the pixel 0..1).
+    pub fn seen_at(&self, x: f32, y: f32) -> Vec<(Thing, f32, f32)> {
+        let mut t = 1.0;
+        let mut out = Vec::new();
+        for (d, c, th) in self.at(x, y) {
+            if t <= 1e-5 {
+                break;
+            }
+            out.push((th, d, c * t));
+            t *= 1.0 - c;
+        }
+        out
+    }
+    /// A mask from any rule over each pixel's stack (nearest first).
+    pub fn map(&self, g: impl Fn(&[Seen]) -> f32 + Sync) -> Mask {
+        let f = self.f;
+        let data = (0..f.w * f.h)
+            .into_par_iter()
+            .map_init(Vec::new, |buf, i| {
+                self.stack(i, buf);
+                g(buf).clamp(0.0, 1.0)
+            })
+            .collect();
+        Mask { f, data }
+    }
+    /// Where the things `sel` picks are seen: their coverage less whatever
+    /// lies in front of them. `visible(|t| t == Thing::Ground)` is the
+    /// ground not covered by any body or layer.
+    pub fn visible(&self, sel: &(dyn Fn(Thing) -> bool + Sync)) -> Mask {
+        self.map(|s| {
+            let (mut t, mut v) = (1.0, 0.0);
+            for &(_, c, th) in s {
+                if sel(th) {
+                    v += c * t;
+                }
+                t *= 1.0 - c;
+                if t < 1e-6 {
+                    break;
+                }
+            }
+            v
+        })
+    }
+    /// Everything in front of what `sel` picks, where it is: the parts of
+    /// it that are hidden, and by how much.
+    pub fn front(&self, sel: &(dyn Fn(Thing) -> bool + Sync)) -> Mask {
+        self.map(|s| {
+            let Some(d) = s.iter().filter(|e| sel(e.2)).map(|e| e.0).reduce(f32::min) else { return 0.0 };
+            let mut t = 1.0;
+            for &(dk, c, th) in s {
+                if dk >= d {
+                    break;
+                }
+                if !sel(th) {
+                    t *= 1.0 - c;
+                }
+            }
+            1.0 - t
+        })
+    }
+    /// Where a pass that lies just behind what `sel` picks would show: not
+    /// where it is, and not where anything in front of it is. 1 where it
+    /// isn't at all.
+    pub fn behind(&self, sel: &(dyn Fn(Thing) -> bool + Sync)) -> Mask {
+        self.map(|s| {
+            let Some(d) = s.iter().filter(|e| sel(e.2)).map(|e| e.0).reduce(f32::max) else { return 1.0 };
+            let mut t = 1.0;
+            for &(dk, c, _) in s {
+                if dk > d {
+                    break;
+                }
+                t *= 1.0 - c;
+            }
+            t
+        })
+    }
+    /// Where a pass lying `z` m away would show: everything nearer (ground
+    /// included) hides it.
+    pub fn at_depth(&self, z: f32) -> Mask {
+        self.map(|s| {
+            let mut t = 1.0;
+            for &(dk, c, _) in s {
+                if dk >= z {
+                    break;
+                }
+                t *= 1.0 - c;
+            }
+            t
+        })
+    }
+    /// Whatever is seen between `near` and `far` m.
+    pub fn between(&self, near: f32, far: f32) -> Mask {
+        self.map(|s| {
+            let (mut t, mut v) = (1.0, 0.0);
+            for &(dk, c, _) in s {
+                if dk >= near && dk <= far {
+                    v += c * t;
+                }
+                t *= 1.0 - c;
+            }
+            v
+        })
+    }
+}
+
+impl View<'_> {
+    /// What lies behind what at every pixel (traced on first use, ~0.1–0.5
+    /// s at 1000px; 12 bytes per pixel plus the bodies' patches).
+    pub fn depths(&self) -> &Depths {
+        self.depths.get_or_init(|| Depths::new(self))
+    }
+
+    /// Cast shadows on the ground and water where they are seen, softer
+    /// than the world's own by `soft` (1: the sun's penumbra and the haze;
+    /// 2: twice as wide), from the bodies `casters` picks. The penumbra grows
+    /// with distance from the caster, so a shadow is crisp at a stone's foot
+    /// and soft at its far end, as in nature. Figures and motifs registered
+    /// as layers hide it where they stand in front.
+    pub fn soft_shadows(&self, soft: f32, casters: &(dyn Fn(BodyId) -> bool + Sync)) -> Mask {
+        let w = self.world;
+        if !w.sun.up() {
+            return Mask::empty(self.f);
+        }
+        let k = w.penumbra * soft.max(0.05);
+        let d = self.depths();
+        let f = self.f;
+        let inv = 1.0 / f.scale;
+        let data = (0..f.w * f.h)
+            .into_par_iter()
+            .map_init(Vec::new, |buf, i| {
+                if !self.depth[i].is_finite() {
+                    return 0.0;
+                }
+                d.stack(i, buf);
+                let mut t = 1.0;
+                let mut seen = 0.0;
+                for &(_, c, th) in buf.iter() {
+                    if matches!(th, Thing::Ground | Thing::Water) {
+                        seen = t;
+                        break;
+                    }
+                    t *= 1.0 - c;
+                }
+                if seen <= 1e-4 {
+                    return 0.0;
+                }
+                let (x, y) = (((i % f.w) as f32 + 0.5) * inv, ((i / f.w) as f32 + 0.5) * inv);
+                let Some(p) = w.to_ground(x, y) else { return 0.0 };
+                seen * w.cast_soft(p, w.ground_normal(p[0], p[2]), k, casters, true)
+            })
+            .collect();
+        Mask { f, data }
+    }
+
+    /// The contact shadow: the sky the bodies `by` hide from the ground and
+    /// water within `reach` m, where the ground is seen (see
+    /// `World::sky_occlusion`), and on the visible bodies the sky hidden by
+    /// the ground and the other bodies, near the ground. It is darkest in
+    /// the crease and falls off smoothly with distance, with no edge.
+    pub fn occlusion(&self, reach: f32, by: &(dyn Fn(BodyId) -> bool + Sync)) -> Mask {
+        let w = self.world;
+        let d = self.depths();
+        let f = self.f;
+        let inv = 1.0 / f.scale;
+        let data = (0..f.w * f.h)
+            .into_par_iter()
+            .map_init(Vec::new, |buf, i| {
+                let (x, y) = (((i % f.w) as f32 + 0.5) * inv, ((i / f.w) as f32 + 0.5) * inv);
+                d.stack(i, buf);
+                let mut t = 1.0;
+                let mut v = 0.0;
+                for &(_, c, th) in buf.iter() {
+                    let share = c * t;
+                    if share > 1e-4 {
+                        match th {
+                            Thing::Ground | Thing::Water => {
+                                if let Some(p) = w.to_ground(x, y) {
+                                    v += share * w.sky_occlusion(p, w.ground_normal(p[0], p[2]), reach, by, false);
+                                }
+                            }
+                            Thing::Body(b) if self.parts[b] != 0 => {
+                                if let Some(s) = self.form.sample(x, y).filter(|s| s.part == self.parts[b]) {
+                                    let p = w.bodies[b].spot.world([x, y, s.z]);
+                                    if p[1] - w.surface(p[0], p[2]) < reach {
+                                        v += share * w.sky_occlusion(p, to_world(s.n), reach, &|o| o != b && by(o), true);
+                                    }
+                                }
+                            }
+                            _ => {}
+                        }
+                    }
+                    t *= 1.0 - c;
+                    if t < 1e-4 {
+                        break;
+                    }
+                }
+                v
+            })
+            .collect();
+        Mask { f, data }
     }
 }
 
@@ -1189,6 +1706,91 @@ mod tests {
         assert!(m.travel > 0.0, "{}", m.travel);
         assert!(m.at[1] > 0.0 && m.at[2] > p[2], "{:?}", m.at);
         assert!(m.src.1 < w.horizon, "{:?}", m.src);
+    }
+
+
+    #[test]
+    fn depth_masks_know_what_is_in_front() {
+        // a sea from 20 m out, a boulder at 12 m, a painted figure at 9 m
+        // standing in front of the boulder's left half
+        let mut w = world().ground(|_, z| if z > 20.0 { -1.0 } else { 0.1 }).water(Water::new(0.0));
+        let s = w.spot_at(0.0, 12.0);
+        let stone = w.place(s, Sdf::ellipsoid(s.p(0.0, 0.3, 0.0), s.size(1.2, 0.8, 1.0)));
+        let fs = w.spot_at(-0.6, 9.0);
+        let f = Frame::new(500, 350, 0.5);
+        let fig = Mask::from_shape(f, Shape::new().rect(fs.x - fs.m(0.25), fs.y - fs.m(1.7), fs.m(0.5), fs.m(1.7)));
+        let li = w.layer("figure", fig, LayerDepth::At(fs.at[2]));
+        let v = w.view(f);
+        let d = v.depths();
+        let is = |t: Thing| move |x: Thing| x == t;
+        // the stone is hidden where the figure stands in front of it
+        let vis = d.visible(&is(Thing::Body(stone)));
+        let (fx, fy) = (fs.x, s.y - s.m(0.4));
+        assert!(vis.sample(fx, fy) < 0.01, "{}", vis.sample(fx, fy));
+        assert!(vis.sample(s.x + s.m(0.6), fy) > 0.99);
+        let front = d.front(&is(Thing::Body(stone)));
+        assert!(front.sample(fx, fy) > 0.99 && front.sample(s.x + s.m(0.6), fy) < 0.01);
+        // a sea veil painted behind the figure keeps off it; one behind
+        // the stone keeps off the stone and the figure over it
+        let sea_y = w.project([0.0, 0.0, 60.0]).unwrap().1;
+        let behind_fig = d.behind(&is(Thing::Layer(li)));
+        assert!(behind_fig.sample(fx, fy) < 0.01 && behind_fig.sample(fx + 150.0, sea_y) > 0.99);
+        let behind_stone = d.behind(&is(Thing::Body(stone)));
+        assert!(behind_stone.sample(s.x + s.m(0.6), fy) < 0.01 && behind_stone.sample(fx, fy) < 0.01);
+        // the water, uncovered, is the water less the figure's shoulders over it
+        let water = d.visible(&is(Thing::Water));
+        let head = (fs.x, fs.y - fs.m(1.2));
+        assert!(head.1 > w.horizon && head.1 < w.project([0.0, 0.0, 20.0]).unwrap().1, "the head is over the sea");
+        assert!(water.sample(head.0, head.1) < 0.01 && water.sample(head.0 - 150.0, head.1) > 0.99);
+        // a pass at 15 m: hidden by the stone and the figure, not by the far sea
+        let at = d.at_depth(15.0);
+        assert!(at.sample(fx, fy) < 0.01 && at.sample(s.x + s.m(0.6), fy) < 0.01 && at.sample(fx + 150.0, sea_y) > 0.99);
+        // between 8 and 13 m: the figure and the stone, not the sky
+        let mid = d.between(8.0, 13.0);
+        assert!(mid.sample(fx, fy) > 0.99 && mid.sample(fx, 50.0) < 0.01);
+        // the stone's silhouette is soft over a pixel, not stair-stepped
+        let partial = vis.data.iter().filter(|c| **c > 0.05 && **c < 0.95).count();
+        assert!(partial > 20, "{partial}");
+    }
+
+    #[test]
+    fn soft_shadows_fall_off_without_rings() {
+        let mut w = world().sun(Sun::deg(-80.0, 20.0));
+        let s = w.spot_at(0.0, 10.0);
+        let pole = w.place(s, Sdf::block(s.p(0.0, 1.0, 0.0), s.size(0.3, 2.0, 0.3), s.m(0.02)));
+        let v = w.view(Frame::new(500, 350, 0.5));
+        let all = |_: BodyId| true;
+        let (sharp, soft) = (v.soft_shadows(1.0, &all), v.soft_shadows(3.0, &all));
+        // across the shadow near its foot and far out: the edge widens with
+        // distance, and more with `soft`
+        let d = w.sun.dir();
+        let back = -d[2] / -d[0];
+        let edge = |m: &Mask, dist: f32| {
+            let n = (0..400).filter(|k| {
+                let z = 10.0 + dist * back + (*k as f32 - 200.0) * 0.005;
+                let (x, y) = w.project([dist, 0.0, z]).unwrap();
+                let c = m.sample(x, y);
+                c > 0.05 && c < 0.95
+            });
+            n.count()
+        };
+        assert!(edge(&sharp, 4.0) > edge(&sharp, 0.8), "{} {}", edge(&sharp, 4.0), edge(&sharp, 0.8));
+        assert!(edge(&soft, 4.0) > edge(&sharp, 4.0), "{} {}", edge(&soft, 4.0), edge(&sharp, 4.0));
+        // the contact shadow: darkest at the foot, falling off smoothly
+        // (monotone, no step) and nothing a reach away or in the sky
+        let occ = v.occlusion(0.6, &|b| b == pole);
+        let prof: Vec<f32> = (0..60).map(|k| {
+            let (x, y) = w.project([-0.16 - k as f32 * 0.012, 0.0, 9.84]).unwrap();
+            occ.sample(x, y)
+        }).collect();
+        assert!(prof[0] > 0.2, "{prof:?}");
+        assert!(prof[59] < 0.02, "{prof:?}");
+        for p in prof.windows(2) {
+            assert!(p[1] <= p[0] + 0.03, "not monotone: {prof:?}");
+            assert!(p[0] - p[1] < 0.12, "a step: {prof:?}");
+        }
+        assert_eq!(occ.sample(s.x, 20.0), 0.0);
+        assert!(occ.sample(s.x, s.y - s.m(1.95)) < 0.05, "not up the pole");
     }
 
     #[test]

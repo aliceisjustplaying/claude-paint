@@ -87,7 +87,39 @@ What it draws on (from knowledge, no pictures consulted):
     grass blades growing up over the boulders' feet; a thistle with silvery
     leaves and purple heads, dock leaves at its foot, and white yarrow
     umbels through the near grass.
-12. `wait(24*60); varnish{coats=0.3}; relief()`.
+12. `wait(24*60); varnish{coats=0.3}; relief()`: first complete render
+    (1000px and 3200px).
+
+### Refinement (after the first full render)
+
+13. **Rebuilt the oak** in a scratch session (`oakstudy`, three trees side
+    by side on a flat sky): same skeleton, but `foliage{clump=0.04,
+    spray=2}` gives a broad, dense, rounded crown instead of the clumpy
+    savanna one. New painting order: limbs and trunk ribbons *first*, so
+    leaves cover them and they show only in the holes; leaf layers with
+    `hug=false` so edges thin out; about 740 small hooked leaf strokes
+    around the silhouette's rim (lit ones light, shade ones dark); sky put
+    back into `gaps(6)` with the clouds object as the color (so the holes
+    are exactly the sky behind them); sun touches stippled on the lit
+    tops. The dead crown is filled ribbons (a broken main snag and side
+    snags rising 40 units above the leaves, dark with a silver-gray lit
+    flank). I transplanted all this into chunks 15–19 of the log by hand
+    and replayed.
+14. **The oak's shadow**, from four proxy lobes instead of one ellipsoid,
+    laid as short upright hatch strokes (the grass it falls on), so its
+    edge is made of blades. It no longer reads as a pond.
+15. **The crest cut-in** fades in with `smoothstep(540, 610, x)` instead of
+    stopping at a hard vertical seam, which only showed at 3200px.
+16. **A sparse `sward`** (`thin=0.75`) in front of the grass band, so the
+    grass doesn't start on a line.
+17. **Groves:** the farthest ones glazed back into the air; seven single
+    trees (two poplars, round limes and pear trees) break the rows.
+18. **Meadow particulars:** sorrel with rust seed spikes, seed-headed
+    grasses leaning in the breeze, buttercups and clover, all clustered by
+    a noise patch field and scaled with depth. The first pass was
+    invisible (touches too small and too light); the second read as polka
+    dots and red dashes; the third is subtle.
+19. Varnish, relief, final renders.
 
 ## HOW THE EASEL FELT
 
@@ -116,6 +148,10 @@ tries each time. The clock readout (43,000+ painting minutes) became
 meaningless. Tiny details (thistle, yarrow, figure) are the hardest: at
 1000px a unit is a pixel, and small strokes vanish into same-valued grass
 unless you exaggerate size and value.
+
+The best working habit I found was a **scratch session**: three oaks side
+by side on a flat sky, iterated in seconds, then transplanted into the
+log. That is a painter's study sheet, and it felt right.
 
 **Compared with writing a program:** much better feedback, much worse
 drawing. A plain program would have given me neither the paint's behavior
@@ -150,7 +186,10 @@ things.
    stipple with `fade=1`.
 8. **The oak skeleton is savanna-like:** long bare limbs and a flat,
    clumpy "broccoli" crown, with a thin stroked trunk unless you fill it
-   yourself from `l.w`.
+   yourself from `l.w`. `years` isn't age in any sense I could guess
+   (80–400 gave 6–10 limbs). Workaround: `foliage{clump=0.04, spray=2}`
+   fills the crown (0.1 is enormous; `clump` is a fraction of tree
+   height), found by trial in a scratch session.
 9. **`sward` regions start on a visible line** unless the region is noisy
    and roughened; even then it reads as a band.
 
@@ -174,40 +213,50 @@ things.
     a cut-in color and aiming with the sky palette worked, but the laid
     color came out a touch lighter than the surrounding sky (a faint
     band).
-
+15. **`form:part(x, y)` returns 0 off the form, not nil**, so my "not on a
+    stone" test rejected everything and a whole chunk painted nothing
+    (0.00 s, no error). A painter gets no warning that a chunk laid no
+    paint. Workaround: `(part or 0) == 0`.
+16. **Touches at low pressure lay almost nothing.** Flowers at
+    `pressure=0.3` with a 1.4 brush were invisible at 1000px; I needed
+    0.6–1.0 and a 2.4 brush.
+17. **Brush strokes run dry early.** A long dead snag stroked from one
+    load put most of its paint in the first few units and vanished above
+    the crown. Workaround: fill ribbons with `work` (as for the trunk).
+18. **The clock jumped again**, from 46,849 to 78,556 minutes on a chunk
+    that only did `wait(24*60); varnish(); relief()`.
+19. **Scratch sessions write into `paintings/lua/`.** My `oakstudy` session
+    wrote `paintings/lua/oakstudy.lua` in the shared repo; I moved it to
+    my scratch directory.
 ## Critique
 
-At 1000px it reads as a bright, clear summer landscape: a lone oak on a
-common, a plain of fields and groves, a blue dome on the horizon, a
-shepherd and sheep. The sky is the best passage: layered, cool at the top,
-warm and pale near the horizon, with soft cumulus over the range. The
-distant dome is convincing after the cut-in, and the haze at the range
-feet works.
+At 1000px it reads as a bright, clear summer day on a common: a broad old
+oak in full leaf with a dead crown, a shepherd in its shade, sheep, a
+worn track, a plain of fields and groves and a blue dome on the horizon.
+The best passages are the sky (layered, cool at the top, warm and pale at
+the horizon, soft cumulus over the range), the dome after the cut-in,
+and, after the rebuild, the oak: a dense, rounded crown with broken
+edges, sky holes, a lit side and a silver dead snag. The track and the
+bladed shadow now sit in the grass.
 
-It is not yet a Friedrich. Honestly:
-- **The oak is wrong for him.** It's a tall, lanky tree with a flat,
-  clumpy "broccoli" crown on long bare limbs, closer to a savanna tree than
-  his gnarled, dense, broken-crowned oaks. The dead snags are too thin to
-  carry the meaning. The leaf masses have crisp cut-out edges.
-- **The composition is too casual.** Friedrich's lone trees stand with a
-  near-symmetrical gravity; mine is off-center with nothing answering it,
-  and the track is a pale, even ribbon that reads as a path in a video
-  game.
-- **The oak's shadow** is a flat oval disk that reads almost as a pond.
-- **The groves** are rows of identical round bushes, too dark and too
-  regular for their distance: the most "digital" passage.
-- **The grass** starts on a band and reads as a uniform field of stripes
-  at 1000px, rather than the fine upturning strokes over a finished
-  ground; the far half of the meadow is smooth lay-in with no incident.
-- **Foreground particulars** exist (lichened boulders, thistle, dock,
-  yarrow, pebbles) but are few and small for Friedrich's standard. His
-  foregrounds reward close looking everywhere; mine reward it in three
-  spots.
-- **Palette:** the greens are a little too uniformly yellow-green and
-  saturated; his summer greens are cooler and more varied, with
-  blue-green darks.
+Where it falls short of Friedrich, honestly:
+- **Composition.** His lone trees have near-symmetrical gravity and a
+  deliberate emptiness; mine is a pleasant, slightly casual arrangement.
+  The track leads in diagonally, the dome answers the oak, but the right
+  half of the middle ground is empty without meaning it.
+- **Greens.** Too uniformly yellow-green and saturated in the meadow. His
+  summer greens are cooler and more varied, with blue-green darks. The
+  near meadow at 1000px reads as a field of vertical stripes.
+- **The groves** are still the most mechanical passage: rows of round
+  crowns, varied only a little by the single trees.
+- **Particulars.** There are boulders with lichen, a thistle, dock,
+  yarrow, sorrel, seed grasses, buttercups, clover and pebbles, but they
+  are small and few by his standard. The thistle is spindly. His
+  foregrounds reward close looking everywhere; mine do in patches.
+- **The oak's leaf masses** are still stippled-looking inside at 3200px
+  (hatch dabs), rather than drawn with his "small strokes and hooks."
+- **The figure and sheep** are serviceable but stiff: masks filled with
+  strokes, not drawn.
 
-With another hour I'd rebuild the oak (thicker, rounder, darker masses
-with hooked leaf strokes at the edges instead of clipped masks), vary the
-groves, break up the shadow, and fill the foreground with many more
-particulars.
+It is recognizably a green-season daylight landscape in a Romantic
+German key, but not yet a picture that could pass for his.

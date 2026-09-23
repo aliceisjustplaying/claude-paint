@@ -128,7 +128,11 @@ $E look --crop 560,500,720,610 --scale 3.2   # that window as it looks at 3200 p
     point), with its center line.
   - `show(x, y, "label")`: one point. `show()` clears the overlay.
 - **Which overlay you see.** The first `show()` or `probe()` in a chunk (or
-  a `try`) replaces the overlay; a chunk that shows nothing leaves it.
+  a `try`) replaces the overlay; a chunk that shows nothing leaves it, and
+  `look` still names the run that made it (`from chunk 12`, `from try`).
+  An edit replays its chunks the same way, from the overlay the chunks
+  before them left; a failed edit leaves the overlay as it was, and undo
+  leaves it alone.
   `look --show off` hides it, `--show on` shows it again, `--show` toggles
   and `--show clear` drops it. Every look that draws one says so.
 - **`easel try '<lua>'`** (also `-f file`, `-`, `--look`) runs a chunk
@@ -388,9 +392,10 @@ sheep = body_of{spine={{100,500}, {109,499}, {119,499}, {125,503}, {127,507}}, w
 
 `outline{pts... or pts=, char=, seed=, closed=, open=true, corners=, corner_angle=60,
 size=, amount=, lobe=, edge=}`: `closed` is the default with three or more
-points; `amount` scales the irregularity (0 = a clean curve); `lobe` sets
-the lobe width in units (a tree line: `lobe=24`); `edge` the mask's soft
-edge in units (0 = crisp); `size` the scale the hand works at (default: from
+points; `amount` scales the irregularity, lobes set with `lobe=` included
+(0 = a clean curve, whatever else is set); `lobe` sets the lobe width in
+units (a tree line: `lobe=24`); `edge` the mask's soft edge in units (0 =
+crisp); `size` the scale the hand works at (default: from
 the points' extent). An open line's outside is on its left (up, for a line
 drawn left to right): lobes and chips go that way.
 
@@ -399,7 +404,9 @@ the silhouette of a skeleton (widths are full widths). Limbs join the spine
 smoothly over `blend` times their width; a limb that starts outside the
 spine reaches into it. Lobes and chips shrink where the body is thin.
 
-Methods: `o:mask()` (closed), `o:below(bottom)`, `o:above()` (open lines),
+Methods: `o:mask()` (closed; an outline with no line left, such as an
+inset deeper than the shape, gives an empty mask, so `m - o:inset(d):mask()`
+keeps the whole shape), `o:below(bottom)`, `o:above()` (open lines),
 `o:band(width, taper)` (a band along the line; `taper` 1 follows the
 pressure), `o:inset(d)`, `o:offset(d)` (a parallel outline, redrawn by the
 same hand), `o:paint(brush, {pressure=1, shake=0.3, ramps=, clip=, dip={color,
@@ -620,12 +627,15 @@ glaze(nil, {color="#8a8f98", coats=0.3, at=400})       -- mist 400 m off: all ne
 
 Things are named by body number (from `w:place`), layer name, `"ground"`,
 `"water"`, `"surface"` (both), `"sky"`, `"bodies"`, `"layers"` or a
-list. `behind=` also takes a mask. Pass `view=v` to use another view.
+list. `visible=` and `behind=` also take a mask, alone or in the list
+(`visible={boat, "water"}`): a mask is a thing in front of everything, so
+`visible=m` is `m` and a list is `m` plus what of the rest is seen around
+it. Pass `view=v` to use another view.
 
 The same as masks, with soft edges composited front to back:
 
 ```lua
-v:visible(x)        -- where x is seen: its coverage less what is in front
+v:visible(x)        -- where x is seen: its coverage less what is in front (x may hold masks)
 v:visible("ground") -- the ground not covered by any body or layer
 v:front(x)          -- what hides x, where x is
 v:behind(x)         -- where a pass lying just behind x shows
@@ -755,7 +765,13 @@ and an edit near the end is almost instant. `undo` past the undo snapshots
 now works too: it replays from a checkpoint.
 
 Code taken out of the log by `undo` or `edit` is kept in
-`out/easel/<name>/undone.lua`, so undo never throws work away. Inserting
+`out/easel/<name>/undone.lua`, so undo never throws work away. Each entry's
+header ends with the code's length (`--@ undone 3 · was chunk 5 · undone ·
+214 bytes`) and the code is read by that length, so a chunk that holds
+header-like lines (in a long string or a comment) comes back whole. Files
+from before the lengths still read as they did. If you edit the file by
+hand, keep the lengths right (an entry whose length doesn't fit is read
+up to the next header line). Inserting
 or dropping a chunk renumbers the ones after it, and their random choices
 (`rand`, automatic seeds) change with the number.
 

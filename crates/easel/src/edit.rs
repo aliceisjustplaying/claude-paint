@@ -24,18 +24,59 @@ fn undone_path(name: &str) -> PathBuf {
 
 /// The undone file's entries: (header, code).
 fn undone_entries(name: &str) -> Vec<(String, String)> {
-    let text = std::fs::read_to_string(undone_path(name)).unwrap_or_default();
-    let mut out: Vec<(String, String)> = Vec::new();
-    for l in text.lines() {
-        if let Some(h) = l.strip_prefix(UNDONE) {
-            out.push((h.trim().to_string(), String::new()));
-        } else if let Some((_, c)) = out.last_mut() {
-            c.push_str(l);
-            c.push('\n');
-        }
+    parse_undone(&std::fs::read_to_string(undone_path(name)).unwrap_or_default())
+}
+
+/// One entry of the undone file: a header line that ends in the code's
+/// length, then exactly that many bytes of code and a blank line. The code
+/// is taken by length, never by looking for the next header, so a chunk
+/// may hold lines that look like headers (in a long string or a comment).
+fn undone_entry(n: usize, chunk: usize, why: &str, src: &str) -> String {
+    format!("{UNDONE} {n} · was chunk {chunk} · {why} · {} bytes\n{src}\n\n", src.len())
+}
+
+/// The code length at the end of a header (`... · 123 bytes`), and the
+/// header without it.
+fn header_len(h: &str) -> Option<(&str, usize)> {
+    let (head, n) = h.strip_suffix(" bytes")?.rsplit_once(" · ")?;
+    Some((head, n.parse().ok()?))
+}
+
+/// Parse the undone file. Entries written before headers carried the
+/// length (easel before review 4) run to the next header line; they are
+/// read as they always were.
+fn parse_undone(text: &str) -> Vec<(String, String)> {
+    let mut out = Vec::new();
+    let mut i = 0;
+    // skip anything before the first header
+    while i < text.len() && !text[i..].starts_with(UNDONE) {
+        i = text[i..].find('\n').map_or(text.len(), |k| i + k + 1);
     }
-    for (_, c) in out.iter_mut() {
-        *c = c.trim_end().to_string();
+    while i < text.len() {
+        let eol = text[i..].find('\n').map_or(text.len(), |k| i + k);
+        let h = text[i + UNDONE.len()..eol].trim();
+        let body = (eol + 1).min(text.len());
+        if let Some((head, n)) = header_len(h)
+            && let Some(end) = body.checked_add(n)
+            && text.is_char_boundary(end)
+        {
+            out.push((head.to_string(), text[body..end].to_string()));
+            i = end;
+            // the blank line after the code
+            for _ in 0..2 {
+                if text[i..].starts_with('\n') {
+                    i += 1;
+                }
+            }
+            continue;
+        }
+        // an old entry: its code runs to the next header line
+        let mut end = body;
+        while end < text.len() && !text[end..].starts_with(UNDONE) {
+            end = text[end..].find('\n').map_or(text.len(), |k| end + k + 1);
+        }
+        out.push((h.to_string(), text[body..end].trim_end().to_string()));
+        i = end;
     }
     out
 }
@@ -47,11 +88,14 @@ pub fn keep_undone(name: &str, first: usize, why: &str, srcs: &[String]) -> Resu
     }
     let p = undone_path(name);
     std::fs::create_dir_all(p.parent().unwrap()).map_err(|e| e.to_string())?;
-    let mut n = undone_entries(name).len();
     let mut text = std::fs::read_to_string(&p).unwrap_or_default();
+    let mut n = parse_undone(&text).len();
+    if !text.is_empty() && !text.ends_with('\n') {
+        text.push('\n');
+    }
     for (i, s) in srcs.iter().enumerate() {
         n += 1;
-        text.push_str(&format!("{UNDONE} {n} · was chunk {} · {why}\n{s}\n\n", first + i));
+        text.push_str(&undone_entry(n, first + i, why, s));
     }
     std::fs::write(&p, text).map_err(|e| e.to_string())
 }
@@ -187,5 +231,57 @@ impl Server {
             }
             o => Err(format!("unknown command {o:?}")),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // review 4 (session), finding 1: the code is taken by length, so lines
+    // that look like headers stay inside it
+    #[test]
+    fn undone_entries_round_trip_whatever_the_code_holds() {
+        let codes = [
+            "message = [[first line\n--@ undone this is painting text, not an archive delimiter\nlast line]]\nprint(message)",
+            "--[[\n--@ undone 3 · was chunk 9 · undone · 12 bytes\n]]\nx = 1",
+            "s = [==[\n\n--@ undone\n\n]==]",
+            "-- ünïcödé · and a trailing blank line\n\n",
+            "y = 2",
+        ];
+        let mut text = String::new();
+        for (i, c) in codes.iter().enumerate() {
+            text.push_str(&undone_entry(i + 1, i + 4, "undone", c));
+        }
+        let e = parse_undone(&text);
+        assert_eq!(e.len(), codes.len());
+        for (i, (h, c)) in e.iter().enumerate() {
+            assert_eq!(c, codes[i]);
+            assert_eq!(h, &format!("{} · was chunk {} · undone", i + 1, i + 4));
+        }
+    }
+
+    // files written before the lengths still read as they did, and new
+    // entries follow them
+    #[test]
+    fn old_undone_files_still_read() {
+        let mut text = "--@ undone 1 · was chunk 3 · undone\nx = 1\nprint(x)\n\n--@ undone 2 · was chunk 4 · replaced by edit\ny = 2\n\n".to_string();
+        text.push_str(&undone_entry(3, 5, "undone", "--@ undone look-alike\nz = 3"));
+        let e = parse_undone(&text);
+        let got: Vec<(&str, &str)> = e.iter().map(|(h, c)| (h.as_str(), c.as_str())).collect();
+        assert_eq!(
+            got,
+            [
+                ("1 · was chunk 3 · undone", "x = 1\nprint(x)"),
+                ("2 · was chunk 4 · replaced by edit", "y = 2"),
+                ("3 · was chunk 5 · undone", "--@ undone look-alike\nz = 3"),
+            ]
+        );
+        // a length that doesn't fit (a hand-edited file) falls back to the old reading
+        let bad = "--@ undone 1 · was chunk 3 · undone · 999 bytes\nx = 1\n\n--@ undone 2 · was chunk 4 · undone · 5 bytes\ny = 2\n\n";
+        let e = parse_undone(bad);
+        assert_eq!(e.len(), 2);
+        assert_eq!((e[0].1.as_str(), e[1].1.as_str()), ("x = 1", "y = 2"));
+        assert!(parse_undone("").is_empty());
     }
 }

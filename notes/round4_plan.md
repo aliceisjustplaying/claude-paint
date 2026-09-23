@@ -23,3 +23,4 @@ Take your time; quality over speed; look at every render before merging.
 - depth, lookaid, outline merged (conflicts in easel api.rs/main.rs/README resolved; crops follow edits). Live check: try/show/probe/grid/edit/show N/check all work together. 134 paint + 17+1 easel tests. Next: review round 4.
 - review round 4 launched on 3ef92aa (session, drawing).
 - 12 review-4 findings (notes/review4/). Launch failures (twice today) were MY bug: spawning subagents in the same parallel batch as the Bash that creates their worktree, so cwd didn't exist yet. Always create worktrees in an earlier step.
+- fix4-easel merged (5 findings).

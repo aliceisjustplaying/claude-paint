@@ -53,7 +53,7 @@ if o.stage("sky", &mut c, &mut rng) {
     c.work(&sky, ...);                                      // skipped when resuming later
 }
 if o.stage("land", &mut c, &mut rng) { ... }
-o.finish(&mut c, &Finish::aged(st.relief));
+o.finish(&mut c, &mut rng, &Finish::aged(st.relief)); // or o.end(&mut c, &mut rng)
 ```
 
 - `stage(name, c, state)` begins a stage and ends the previous one. Ending a
@@ -64,6 +64,11 @@ o.finish(&mut c, &Finish::aged(st.relief));
   run, resumed or not, so keep it to masks, fields and constants. Anything a
   stage hands to later stages must travel in the canvas or in the `Keep`
   state (usually the painting's `Rng`; `()` and pairs also implement `Keep`).
+  Pass the same `Keep` value to `end` or `finish`: they close the last stage,
+  and its checkpoint saves that state like any other (they used to save it
+  empty, so resuming the last stage lost the RNG and appending a stage after
+  it panicked). `Keep::restore` checks the saved length and returns an error;
+  a checkpoint whose state doesn't fit is refused with a message.
 - **Migration** for other streams' paintings: the old
   `if o.stage(&mut c, "x") { return; }` came after a stage's code. Now put
   `if o.stage("x", &mut c, &mut rng) {` before that code and `}` where the old
@@ -163,12 +168,22 @@ window (`sample` clamps to it).
 - **Validation**: a checkpoint must match name, width, seed and crop.
   `--resume` also refuses it if any of these changed since it was saved: the
   painting's source up to the end of that stage (the lines before the next
-  `stage`/`finish` call, found with `#[track_caller]`), `paintings/src/*.rs`
-  or `crates/paint/src/*.rs`. The error names what changed. `--stale-ok`
+  `stage`/`end`/`finish` call, found with `#[track_caller]`), `paintings/src/*.rs`
+  or `crates/paint/src/*.rs`. The error names what changed. The prefix only
+  covers a stage's body when the ending call comes later in the same file.
+  A `stage` call inside a loop is ended by itself on the next iteration
+  (`study_form`'s panels), so the prefix would miss the body entirely; there,
+  and whenever the calls sit in different files, both files are hashed whole
+  and any edit to the painting makes the checkpoint stale. `--stale-ok`
   uses the checkpoint anyway. Edits after the stage are what resuming is
   for, and they are allowed.
-- Not covered: helper functions below `main` in the painting file, and code
-  between stage blocks that paints (a rule, not checked).
+- Not covered: helper functions below `main` in the painting file (except
+  for loop stages, which hash the whole file), and code between stage blocks
+  that paints (a rule, not checked).
+- **Loading** checks the geometry before allocating: frame arithmetic is
+  checked for overflow, the crop (`keep`) and dirty boxes must be ordered and
+  inside the buffer, and the scale and mm per unit finite and positive. A
+  corrupt file is an `InvalidData` error, not a panic when saving later.
 
 ### A bug found by exactness: `Palette::mix` depended on history
 
@@ -205,7 +220,16 @@ Wins taken, all with bit-identical output (golden unchanged; moonrise at
 - `sched::run_ordered`: `Canvas::work` used to wait at each of the four
   phase barriers. Now a tile starts as soon as every earlier tile whose
   footprint overlaps it has finished. Tiles with disjoint footprints commute
-  exactly, so the result is the one-by-one order's. The mist stage (resumed,
+  exactly, so the result is the one-by-one order's. That rests on every
+  stroke staying inside its footprint, which holds only for physically
+  possible tools (a negative `length` made the bristle bend diverge far
+  outside it). So `drag`, `touch`, `work` (and its cut-in tool) and `stipple`
+  first check `Tool::validate`: finite fields, positive width, hair and run,
+  at least one bristle, non-negative length, lay, splay and raggedness, and
+  stiffness, pickup and push within 0..1. The bend relaxation rate is clamped
+  to 0..1, and `drag_on`/`touch_on` clamp every pixel access to the stroke's
+  own footprint as a second line of defense; debug builds assert the clamp
+  never cuts anything. The mist stage (resumed,
   3 runs alternating with the old binary): 3.63 s against 3.9 s. The gain is
   limited by how few tiles there are and by this machine's load. I expect,
   but didn't measure, a larger effect on an idle machine and for passes of

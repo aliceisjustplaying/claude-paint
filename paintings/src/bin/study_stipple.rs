@@ -104,7 +104,7 @@ fn main() {
         c.dry();
     }
 
-    run.end(&mut c);
+    run.end(&mut c, &mut ());
     c.relief(st.relief.0, st.relief.1);
     run.save(&mut c);
 }

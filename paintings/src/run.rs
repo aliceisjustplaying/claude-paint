@@ -25,13 +25,14 @@
 //!     c.work(&sky, ...);                          // skipped when resuming later
 //! }
 //! if o.stage("land", &mut c, &mut rng) { ... }
-//! o.finish(&mut c, &Finish::aged(st.relief));
+//! o.finish(&mut c, &mut rng, &Finish::aged(st.relief));
 //! ```
 //!
 //! Rules for stages: paint only inside stage blocks (code between them runs
 //! on every run, resumed or not, so keep it to masks, fields and constants);
 //! state that a stage hands to later ones travels in the canvas or in the
-//! `Keep` value passed to `stage` (usually the painting's `Rng`).
+//! `Keep` value passed to `stage` (usually the painting's `Rng`; pass the
+//! same one to `end` or `finish`, which close the last stage).
 //!
 //! Checkpoints (`--ckpt`) go to `out/<stem>.<stage>.ckpt` (stem of the output
 //! file). One holds the whole canvas state after its stage, wet paint
@@ -39,8 +40,14 @@
 //! the code that produced it: the painting's source up to the end of that
 //! stage, the helpers in `paintings/src` and the engine. `--resume` refuses a
 //! checkpoint whose code has changed since (pass `--stale-ok` to use it
-//! anyway); changes after the stage are what resuming is for. Helper
-//! functions defined below `main` in the painting file are not covered.
+//! anyway); changes after the stage are what resuming is for. "Up to the end
+//! of the stage" is the source before the call that ends it (the next
+//! `stage`, `end` or `finish`) when that call comes later in the same file;
+//! otherwise (a `stage` call in a loop, which ends itself on the next
+//! iteration, or calls in different files) the stage's body can't be told
+//! apart by position, and the whole of both files is hashed: any edit to
+//! the painting then makes that checkpoint stale. Helper functions defined
+//! below `main` in the painting file are not covered by the prefix hash.
 
 use paint::{Canvas, Cracks, Crop, Fbm, Pigment, Rgb, Rng, hex};
 use std::cell::RefCell;
@@ -52,22 +59,28 @@ use std::time::Instant;
 /// checkpoints).
 pub trait Keep {
     fn keep(&self) -> Vec<u8>;
-    fn restore(&mut self, b: &[u8]);
+    /// Restore from bytes `keep` wrote; an error (leaving `self` as it was)
+    /// if they can't be its.
+    fn restore(&mut self, b: &[u8]) -> Result<(), String>;
 }
 
 impl Keep for () {
     fn keep(&self) -> Vec<u8> {
         Vec::new()
     }
-    fn restore(&mut self, _: &[u8]) {}
+    fn restore(&mut self, b: &[u8]) -> Result<(), String> {
+        if b.is_empty() { Ok(()) } else { Err(format!("{} bytes of state where none was kept", b.len())) }
+    }
 }
 
 impl Keep for Rng {
     fn keep(&self) -> Vec<u8> {
         self.state().to_le_bytes().to_vec()
     }
-    fn restore(&mut self, b: &[u8]) {
-        *self = Rng::from_state(u64::from_le_bytes(b[..8].try_into().expect("rng state")));
+    fn restore(&mut self, b: &[u8]) -> Result<(), String> {
+        let b: [u8; 8] = b.try_into().map_err(|_| format!("{} bytes of state for an Rng (want 8)", b.len()))?;
+        *self = Rng::from_state(u64::from_le_bytes(b));
+        Ok(())
     }
 }
 
@@ -79,10 +92,16 @@ impl<A: Keep, B: Keep> Keep for (A, B) {
         v.extend(self.1.keep());
         v
     }
-    fn restore(&mut self, b: &[u8]) {
-        let n = u64::from_le_bytes(b[..8].try_into().unwrap()) as usize;
-        self.0.restore(&b[8..8 + n]);
-        self.1.restore(&b[8 + n..]);
+    fn restore(&mut self, b: &[u8]) -> Result<(), String> {
+        let (n, rest) = b.split_first_chunk::<8>().ok_or("state too short for a pair")?;
+        let n = usize::try_from(u64::from_le_bytes(*n)).ok().filter(|&n| n <= rest.len()).ok_or("pair state is malformed")?;
+        let (a, b) = rest.split_at(n);
+        // restore both or neither
+        let old = self.0.keep();
+        self.0.restore(a)?;
+        self.1.restore(b).inspect_err(|_| {
+            let _ = self.0.restore(&old);
+        })
     }
 }
 
@@ -106,9 +125,9 @@ pub struct Run {
 
 #[derive(Default)]
 struct Stages {
-    /// The stage in progress and whether it is being painted (false: skipped
-    /// on the way to the resume point).
-    current: Option<(String, bool)>,
+    /// The stage in progress, whether it is being painted (false: skipped
+    /// on the way to the resume point) and where it began.
+    current: Option<(String, bool, &'static Location<'static>)>,
     t_prev: f32,
     /// A loaded checkpoint not yet reached: its stage and header.
     pending: Option<(String, Header)>,
@@ -164,16 +183,35 @@ fn slug(stage: &str) -> String {
     stage.replace([' ', '/'], "_")
 }
 
-/// Hash of a source file's lines before `line` (the code that ran before).
-fn hash_prefix(loc: &Location) -> String {
-    let p = root().join(loc.file());
-    let text = std::fs::read_to_string(&p).or_else(|_| std::fs::read_to_string(loc.file())).unwrap_or_default();
+fn read_source(file: &str) -> String {
+    std::fs::read_to_string(root().join(file)).or_else(|_| std::fs::read_to_string(file)).unwrap_or_default()
+}
+
+/// Hash of the painting code of a stage that began at `start` and ends at
+/// `end`: the source lines before `end` if `end` comes later in the same
+/// file (straight-line stages: that covers the stage's body and everything
+/// before it). Otherwise the position of the ending call says nothing about
+/// what the body was (a stage in a loop ends at its own call on the next
+/// iteration), so both files are hashed whole.
+fn hash_src(start: &Location, end: &Location) -> String {
+    hash_src_with((start.file(), start.line()), (end.file(), end.line()), read_source)
+}
+
+fn hash_src_with(start: (&str, u32), end: (&str, u32), read: impl Fn(&str) -> String) -> String {
     let mut h = 0xcbf2_9ce4_8422_2325u64;
-    for l in text.lines().take(loc.line().saturating_sub(1) as usize) {
-        fnv(&mut h, l.as_bytes());
-        fnv(&mut h, b"\n");
+    if start.0 == end.0 && end.1 > start.1 {
+        for l in read(end.0).lines().take(end.1 as usize - 1) {
+            fnv(&mut h, l.as_bytes());
+            fnv(&mut h, b"\n");
+        }
+        return format!("{h:016x}");
     }
-    format!("{h:016x}")
+    fnv(&mut h, b"whole\n");
+    for f in [start.0, end.0] {
+        fnv(&mut h, f.as_bytes());
+        fnv(&mut h, read(f).as_bytes());
+    }
+    format!("w{h:016x}")
 }
 
 fn crop_text(c: &Option<Crop>) -> String {
@@ -185,7 +223,10 @@ fn crop_text(c: &Option<Crop>) -> String {
 
 impl Run {
     pub fn new(name: &str) -> Self {
-        let args: Vec<String> = std::env::args().collect();
+        Self::from_args(name, std::env::args().collect())
+    }
+
+    fn from_args(name: &str, args: Vec<String>) -> Self {
         let get = |flag: &str| args.iter().position(|a| a == flag).and_then(|i| args.get(i + 1));
         let has = |flag: &str| args.iter().any(|a| a == flag);
         let full = has("--full");
@@ -258,19 +299,20 @@ impl Run {
     #[track_caller]
     pub fn stage(&self, name: &str, c: &mut Canvas, state: &mut dyn Keep) -> bool {
         let loc = Location::caller();
-        self.end_stage(c, Some(state), loc);
+        self.end_stage(c, state, loc);
         let mut st = self.st.borrow_mut();
         if st.names.iter().any(|n| n == name) {
             die(&format!("two stages are named \"{name}\""));
         }
         st.names.push(name.to_string());
         let paint = st.pending.is_none();
-        st.current = Some((name.to_string(), paint));
+        st.current = Some((name.to_string(), paint, loc));
         paint
     }
 
-    fn end_stage(&self, c: &mut Canvas, state: Option<&mut dyn Keep>, loc: &Location) {
-        let Some((name, painted)) = self.st.borrow_mut().current.take() else { return };
+    fn end_stage(&self, c: &mut Canvas, state: &mut dyn Keep, loc: &Location) {
+        let Some((name, painted, start)) = self.st.borrow_mut().current.take() else { return };
+        let src = hash_src(start, loc);
         let t = self.t0.elapsed().as_secs_f32();
         if !painted {
             let pending = self.st.borrow_mut().pending.take();
@@ -283,7 +325,7 @@ impl Run {
             // the resume point: the code that painted the checkpoint must be
             // the code we have now
             let mut stale = Vec::new();
-            if h.get("src") != hash_prefix(loc) {
+            if h.get("src") != src {
                 stale.push(format!("the painting's code up to the end of stage \"{name}\""));
             }
             if h.get("lib") != hash_dir(&root().join("paintings/src")) {
@@ -300,8 +342,9 @@ impl Run {
                     die(&format!("{msg}. Re-run with --ckpt to refresh it, or pass --stale-ok to use it anyway."));
                 }
             }
-            if let Some(s) = state {
-                s.restore(&unhex(h.get("state")));
+            let bytes = unhex(h.get("state")).unwrap_or_else(|| die(&format!("checkpoint \"{name}\": its saved state is not hex")));
+            if let Err(e) = state.restore(&bytes) {
+                die(&format!("checkpoint \"{name}\": can't restore the painting's state ({e}). Re-run with --ckpt to refresh it."));
             }
             let age = h.get("saved").parse::<u64>().ok().and_then(|s| std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).ok().map(|n| n.as_secs().saturating_sub(s)));
             eprintln!("  {name:<10}   (in checkpoint) resumed{}", age.map_or(String::new(), |a| format!(", saved {} ago", ago(a))));
@@ -318,10 +361,10 @@ impl Run {
                 ("width".into(), self.width.to_string()),
                 ("seed".into(), self.seed.to_string()),
                 ("crop".into(), crop_text(&self.crop)),
-                ("src".into(), hash_prefix(loc)),
+                ("src".into(), src),
                 ("lib".into(), hash_dir(&root().join("paintings/src"))),
                 ("engine".into(), hash_dir(&root().join("crates/paint/src"))),
-                ("state".into(), state.map_or(String::new(), |s| hexs(&s.keep()))),
+                ("state".into(), hexs(&state.keep())),
                 ("saved".into(), std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_secs()).to_string()),
             ]);
             let path = self.ckpt_path(&name);
@@ -350,24 +393,27 @@ impl Run {
     }
 
     /// End the last stage (for programs that finish without `finish`):
-    /// its checkpoint, `--stop`, and the check that `--resume` found its stage.
+    /// its checkpoint (with `state`, the `Keep` value the stages share),
+    /// `--stop`, and the check that `--resume` found its stage.
     #[track_caller]
-    pub fn end(&self, c: &mut Canvas) {
-        self.end_at(c, Location::caller());
+    pub fn end(&self, c: &mut Canvas, state: &mut dyn Keep) {
+        self.end_at(c, state, Location::caller());
     }
 
-    fn end_at(&self, c: &mut Canvas, loc: &Location) {
-        self.end_stage(c, None, loc);
+    fn end_at(&self, c: &mut Canvas, state: &mut dyn Keep, loc: &Location) {
+        self.end_stage(c, state, loc);
         if let Some((target, _)) = &self.st.borrow().pending {
             die(&format!("--resume {target}: this painting has no stage by that name (stages: {})", self.st.borrow().names.join(", ")));
         }
     }
 
-    /// Finish the painting (see `Finish`) and save it. Ends the last stage.
+    /// Finish the painting (see `Finish`) and save it. Ends the last stage
+    /// (see `end`).
     #[track_caller]
-    pub fn finish(&self, c: &mut Canvas, f: &Finish) {
-        self.end_at(c, Location::caller());
-        self.st.borrow_mut().current = Some(("finish".into(), true));
+    pub fn finish(&self, c: &mut Canvas, state: &mut dyn Keep, f: &Finish) {
+        let loc = Location::caller();
+        self.end_at(c, state, loc);
+        self.st.borrow_mut().current = Some(("finish".into(), true, loc));
         c.dry();
         let var = Fbm::new(self.seed as u32 + 98, 3, 400.0);
         let (base, vary) = (f.varnish_coats, f.varnish_vary);
@@ -408,8 +454,11 @@ fn hexs(b: &[u8]) -> String {
     b.iter().map(|x| format!("{x:02x}")).collect()
 }
 
-fn unhex(s: &str) -> Vec<u8> {
-    (0..s.len() / 2).filter_map(|i| u8::from_str_radix(&s[2 * i..2 * i + 2], 16).ok()).collect()
+fn unhex(s: &str) -> Option<Vec<u8>> {
+    if s.len() % 2 != 0 || !s.is_ascii() {
+        return None;
+    }
+    (0..s.len() / 2).map(|i| u8::from_str_radix(&s[2 * i..2 * i + 2], 16).ok()).collect()
 }
 
 /// How a painting is finished: aged varnish (a clear, yellowing film,
@@ -430,5 +479,109 @@ impl Finish {
     /// An old varnished painting.
     pub fn aged(relief: (f32, f32)) -> Self {
         Finish { varnish: hex("#e6d3a4"), varnish_coats: 0.4, varnish_vary: 0.12, cracks: Some(Cracks::aged(0)), relief }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A stage in a loop is ended by its own call on the next iteration:
+    /// its fingerprint must cover its body (review finding: editing only the
+    /// loop body left the first iteration's checkpoint "fresh").
+    #[test]
+    fn loop_stages_hash_their_body() {
+        let src = |body: &str| format!("fn main() {{\n    for name in [\"first\", \"last\"] {{\n        if o.stage(name, &mut c, &mut ()) {{\n            {body}\n        }}\n    }}\n    o.end(&mut c, &mut ());\n}}\n");
+        let (a, b) = (src("c.apply(|_, _, _| [0.2; 3]);"), src("c.apply(|_, _, p| [p[0] + 0.3; 3]);"));
+        let hash = |text: &str, start: u32, end: u32| hash_src_with(("p.rs", start), ("p.rs", end), |_| text.to_string());
+        // "first" begins and ends at line 3; "last" ends at `end` on line 7
+        assert_ne!(hash(&a, 3, 3), hash(&b, 3, 3));
+        assert_ne!(hash(&a, 3, 7), hash(&b, 3, 7));
+        // straight-line stages still only hash what comes before their end
+        let c = format!("{a}// a later stage\n");
+        assert_eq!(hash(&a, 3, 7), hash(&c, 3, 7));
+        // ... and a stage ending in another file hashes both whole
+        let two = |x: &str| hash_src_with(("p.rs", 3), ("q.rs", 1), |f| if f == "p.rs" { x.to_string() } else { String::new() });
+        assert_ne!(two(&a), two(&b));
+    }
+
+    #[test]
+    fn keep_restore_checks_lengths() {
+        let mut r = Rng::new(3);
+        r.next_u64();
+        let mut q = Rng::new(9);
+        q.restore(&r.keep()).unwrap();
+        assert_eq!(q.state(), r.state());
+        assert!(q.restore(&[]).is_err());
+        assert!(q.restore(&[0; 9]).is_err());
+        assert!(().restore(&[1]).is_err());
+        let mut pair = (Rng::new(1), Rng::new(2));
+        let kept = (r.clone(), Rng::new(5)).keep();
+        pair.restore(&kept).unwrap();
+        assert_eq!((pair.0.state(), pair.1.state()), (r.state(), Rng::new(5).state()));
+        let before = pair.0.state();
+        assert!(pair.restore(&kept[..kept.len() - 1]).is_err());
+        assert_eq!(pair.0.state(), before, "a failed restore changes nothing");
+        let mut long = kept.clone();
+        long[..8].copy_from_slice(&u64::MAX.to_le_bytes());
+        assert!(pair.restore(&long).is_err());
+        assert_eq!(unhex("0a1"), None);
+        assert_eq!(unhex("zz"), None);
+        assert_eq!(unhex("0aff"), Some(vec![10, 255]));
+    }
+
+    fn run(dir: &Path, args: &[&str]) -> Run {
+        let mut a = vec!["test".to_string(), "--width".into(), "4".into(), "--ckpt".into()];
+        a.extend(args.iter().map(|s| s.to_string()));
+        let mut o = Run::from_args("keep_test", a);
+        o.stem = dir.join("keep_test");
+        o
+    }
+
+    /// `end` (and `finish`) save the last stage's `Keep` state, and resuming
+    /// from it restores it, also when a stage has been appended since (it
+    /// used to be saved empty, and restoring then panicked).
+    #[test]
+    fn last_stage_keeps_its_state() {
+        let base = std::env::var_os("TMPDIR").map(PathBuf::from).unwrap_or_else(|| root().join("target"));
+        let dir = base.join(format!("run_keep_test_{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let painted = {
+            let o = run(&dir, &[]);
+            let mut rng = Rng::new(o.seed);
+            let mut c = o.canvas(|| Canvas::new_window(o.width, 1.0, [0.1; 3], None));
+            for name in ["a", "last"] {
+                if o.stage(name, &mut c, &mut rng) {
+                    rng.next_u64();
+                }
+            }
+            o.end(&mut c, &mut rng);
+            rng.state()
+        };
+        let text = paint::checkpoint::read_header(&mut std::fs::File::open(o_path(&dir, "last")).unwrap()).unwrap();
+        let st = Header::parse(&text);
+        assert_eq!(st.get("state"), hexs(&painted.to_le_bytes()));
+        // resumed (the code positions differ here, hence --stale-ok)
+        let o = run(&dir, &["--resume", "last", "--stale-ok"]);
+        let mut rng = Rng::new(o.seed);
+        let mut c = o.canvas(|| unreachable!());
+        for name in ["a", "last"] {
+            assert!(!o.stage(name, &mut c, &mut rng));
+        }
+        o.end(&mut c, &mut rng);
+        assert_eq!(rng.state(), painted);
+        // a stage appended after the old last one
+        let o = run(&dir, &["--resume", "last", "--stale-ok"]);
+        let mut rng = Rng::new(o.seed);
+        let mut c = o.canvas(|| unreachable!());
+        for name in ["a", "last"] {
+            assert!(!o.stage(name, &mut c, &mut rng));
+        }
+        assert!(o.stage("new", &mut c, &mut rng));
+        assert_eq!(rng.state(), painted);
+    }
+
+    fn o_path(dir: &Path, stage: &str) -> PathBuf {
+        dir.join(format!("keep_test.{stage}.ckpt"))
     }
 }

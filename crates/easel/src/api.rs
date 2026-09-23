@@ -269,6 +269,12 @@ fn angle_field(st: &S, v: &Value, b: (f32, f32, f32, f32)) -> Result<FieldBox<f3
     {
         return Ok(fu.angle(0.0));
     }
+    // a rock's field (r:field("plane")): read natively too
+    if let Value::UserData(u) = v
+        && let Ok(fu) = u.borrow::<crate::draw_rocks::RockFieldU>()
+    {
+        return Ok(fu.angle(0.0));
+    }
     if let Value::Function(f) = v {
         let g = sample::<2>(st, f, b, |r| {
             let a = match r {
@@ -1727,6 +1733,7 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
     crate::look::install(lua, st.clone())?;
     crate::draw_outline::install(lua, st.clone())?;
     crate::draw_firs::install(lua, st.clone())?;
+    crate::draw_rocks::install(lua, st.clone())?;
 
     // trees
     {

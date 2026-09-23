@@ -18,6 +18,7 @@ mod depth;
 mod edit;
 mod draw_outline;
 mod draw_firs;
+mod draw_rocks;
 mod look;
 mod session;
 

@@ -1,0 +1,317 @@
+# fresh2_coast: *Morning on the Shore at Arkona*
+
+An original picture in the manner of Caspar David Friedrich, painted from
+knowledge only (no reference images). Program:
+`paintings/src/bin/fresh2_coast.rs`. Renders: `out/fresh2_coast.png`
+(1000px) and `out/fresh2_coast_full.png` (3200px).
+
+## The picture and why
+
+The Baltic shore on Rügen just before sunrise. The horizon is ruled a
+little above the middle (y 408 of 714). The sea is flat and dark under a sky
+that climbs from a pale lemon glow at the horizon, through rose and pearl,
+to a cool slate blue at the top. A waning crescent hangs over the place where
+the sun will rise. Its lit limb is turned down toward the sun below the
+horizon, which is where it would be at that hour. Low bars of violet-gray
+stratus lie over the glow, and their undersides catch the light. On the
+beach, left of center, stand three fishermen's poles; a net hangs drying on
+a rope between two of them. A big glacial erratic lies in the left
+foreground, with a smaller stone beside it. A woman in a dark high-waisted
+gown and a dull red shawl stands at the water's edge, right of center, with
+her back to us, looking toward the glow and a brig hull-down on the horizon.
+A far sail and a few gulls are the only other life. Tide pools in the damp
+sand hold the sky. Marram grass, flat stones and pebbles fill the dark
+foreground.
+
+What it draws on in Friedrich (from general knowledge of his work and
+`notes/research/friedrich_materials.md`):
+- **Emptiness and horizontals.** A huge sky over a thin band of sea and
+  shore, as in the Baltic pictures. Nearly everything is level, and the few
+  verticals (poles, figure, masts) are cut sharply against it.
+- **The Rückenfigur.** A single small figure seen from behind, a stand-in
+  for the viewer, looking at something we can't fully see: the sun that
+  hasn't risen yet.
+- **The moon and ships as quiet symbols.** A crescent and a departing or
+  arriving sail. Friedrich's coast pictures often pair a figure with ships.
+- **Poles and nets.** Fishing gear on the shore gives a humble, particular
+  subject and a strong vertical rhythm. It is not a copy of any
+  composition I know.
+- **The erratic.** Rügen's beaches are strewn with glacial boulders, and
+  Friedrich drew them often.
+- **Technique:** a warm, multi-layer ground; a graphite underdrawing (horizon
+  ruled, poles, boulder and figure outlined) left to shimmer through; a very
+  thin underpainting [CATS p.127]; a sky laid in thin and then stippled in
+  two passes, wet and dry [NG p.56]; thin paint elsewhere; details last:
+  grass in "fine upturning" strokes over the finished sand [NG p.56] and the
+  gulls added at the end (like the gulls added to the finished *Monk*
+  [CATS p.130]); a dark glaze toward the bottom edge and corners (his advice
+  to Carus [MET p.35]); aged varnish and craquelure. Palette: the post-1820
+  one (lead white, pale smalt, cobalt, yellow ochre, red earth, vermilion,
+  raw umber, bone black, chrome yellow), used as **families**. The sky,
+  sea and earth passages each mix only from their own subset.
+
+## Working method, stage by stage
+
+1. **drawing**: a rigger with a lean gray "graphite" paint: the ruled
+   horizon, the poles, the boulder's contour and the figure.
+2. **underpainting**: the sea in a dull blue-gray and the shore in umber,
+   thin and by masstone. Added after the first renders showed the orange
+   ground flickering through every gap (see FRICTION).
+3. **sky**: `broad()` lay-in (coverage 4.2, medium 0.4) with long,
+   near-level arcs, a shade duller than the target; a light badger pass;
+   then a stipple (stippler 3.2) into the wet paint, aimed at the sky's own
+   colors.
+4. **sky stipple**: dry; a finer stipple (1.7), barely lighter than the
+   field and denser toward the glow.
+5. **clouds**: stratus bars as hand-placed filbert drags aimed at a
+   violet-gray over the sky, and a warm round-sable line on each underside.
+   Softened along their length with a small badger.
+6. **moon**: a faint halo scumbled on as a radial lead-white glaze (a
+   stippled halo read as salt), then the crescent mask worked with a small
+   round in stiff lead white, by masstone.
+7. **sea**: a masstone `broad()` lay-in, dark at the horizon and lighter
+   and warmer toward the shore, with a path of light under the sun. The far
+   band is laid by hand in level rows. A narrow badger fuses it inside the
+   water only. Then the swell: faint darker and lighter strokes that crowd
+   together toward the horizon. Glitter under the glow: thin, lean
+   horizontal dashes. Last, the horizon ruled in short sable strokes.
+8. **shore**: a masstone body lay-in (damp gray sand near the water, drier
+   ochre, the foreground sinking into shadow) and a light fusing; tide pools
+   holding the low sky; ripple marks (light crests, dark troughs, bowed and
+   in perspective); a broken lip of foam; the wrack line; pebbles, each a
+   dark touch with a light touch on the top.
+9. **rocks**: a `Form` with the erratic (a rounded `block` fused with an
+   ellipsoid, turned, roughened, cut at one end), a low stone and a group in
+   the shallows. The light is low and from behind to the right
+   (`Light::new((0.85, -0.35), -0.25)`). Order: shadows on the sand first;
+   then per stone a dark block-in down the planes (coverage 4.5), the lit
+   planes in stiffer lighter paint, a light fuse and accents only in the
+   big concave breaks; then lichen touches on the sky-facing top and
+   reflections of the far stones.
+10. **ships**: a brig hull-down (hull, two masts, stacked sails shaded on
+    the left and warm on the right) and a far sail.
+11. **poles**: the net first: a thin masstone veil over a mask hung from a
+    sagging rope, lean fold lines, and two families of rigger mesh lines.
+    Then the poles in two loads each (the second set down in the wet end of
+    the first), a lit edge on the sunward side, the rope, lashings,
+    weathering (grayer patches, dark knots), a peg through the third pole
+    with a coil of rope hanging from it, and cork floats.
+12. **figure**: gestures in a `Hand` frame: skirt strokes flaring to the
+    hem, bodice, sleeves, shawl to a point down the back, neck, head and
+    hair knot; two gown folds; a small rim of light on the head and right
+    shoulder.
+13. **foreground**: flat half-sunk stones (dark wide strokes, a matte
+    lighter top) and marram tufts in upturned rigger strokes (dark, olive,
+    a few pale).
+14. **reflections**: the sun hasn't risen, so there are no cast shadows.
+    The damp sand holds faint, short reflections of the poles and the
+    woman, straight down and fading, and the stones darken where they sit.
+    It is all one transparent umber glaze (raw umber and black only)
+    through a mask of tapered ribbons.
+15. **gulls**: bent two-stroke wings, aimed darker than the sky under them.
+16. **glaze**: a thin umber veil deepening toward the bottom edge and
+    corners (a smooth `Canvas::glaze`; brushed, it streaked the boulder like
+    wood grain). Then `finish` with varnish, a finer craquelure freed of the
+    weave (`ground_um` 140, 5 mm islands, 32 µm hairlines, little grime)
+    and raking light.
+
+## FRICTION
+
+(Workaround in each item. Items 0a and 0b cost the most time.)
+
+0a. **`Mask::blur` leaves float residue that `Canvas::glaze` treats as
+    coverage, and it surfaces later as a hard rectangle.** The reflections
+    are a `Shape` of ribbons, `Mask::from_shape(..).blur(1.6)`, glazed with
+    `Canvas::glaze(.., Some(&mask), ..)`. The blur is a running-sum box blur
+    (`box_rows`), so after the first shape each row and column carries a
+    tiny nonzero residue to the canvas edge. `glaze` only skips pixels where
+    the mask is `<= 0.0`, so it laid film (and settled it) over a whole
+    rectangle from the first ribbon's corner to the bottom-right edge. That
+    is invisible at the time. It showed as a gray rectangle outline only
+    after the **next** stage's veil pooled over it and `finish` lit the
+    relief, so it took five stop-at-stage renders to find. The last one
+    removed the reflections glaze, and the rectangle went with it.
+    *Workaround:* threshold after blurring
+    (`.map(|v| if v < 0.004 { 0.0 } else { v })`).
+    **The same bug, worse, without any mask:** a moon halo glazed with
+    thickness `0.35·exp(-(d/2.6r)²)` is tiny but positive out to about 255
+    units. The next preview had heavy black net strokes, black dots near
+    the brig and a pale rectangle across the upper right. I think the
+    mechanism is in `surface::settle` and `Canvas::glaze`: the glaze scales
+    the pigment by `t[i] / add[i]` (film after leveling ÷ film laid), and
+    `settle` rescales each pixel by `laid / kept` from running-sum blurs.
+    For deposits around 1e-7 coats, float residue in those blurs dominates
+    both ratios, so near-zero deposits come out thick, and the height field
+    they leave then throws later strokes. I didn't instrument the engine to
+    prove this; the evidence is that clamping every glaze thickness below
+    0.01 coats to exactly 0 (`trace()` in the program) removed it. Smoothstep
+    ramps give such values too. *Engine fix:* ignore deposits below a floor
+    in `glaze` and `settle`, and zero residue in `box_rows`/`box_blur`.
+0b. **Pale smears under the horizon were sky paint left uncovered.** See
+    items 3 and 4. Three renders chased "stray piles" before a 3200px crop
+    showed the cream sky showing through the sea's top edge.
+
+1. **Aimed light touches over a cool dark turn saturated orange or salmon.**
+   `Canvas::aim` for a small light mark over the blue-gray sea (swell
+   highlights, glitter) or the dark sand (pebble tops) picked piles heavy
+   in ochre or red. Thin lead white over dark reads blue (turbid-medium
+   effect), and the search "fixes" that with the complement. Where the
+   stroke then lays thicker than expected it dries as an orange fleck. At
+   1000px the sea and beach were dotted with them. *Workaround:* mix those
+   marks by masstone (`Palette::paint`), and use palette families without
+   reds for sea and earth (`Palette::only`).
+2. **Bare ground shows through lay-ins, and aim then overcompensates.**
+   With the Friedrich ground (warm orange-brown), a `broad()` lay-in at
+   coverage 4 still leaves gaps and scraped places. Worse, an aimed stroke
+   is judged by the canvas under its **center**: a stroke centered on a
+   bare fleck mixes a blue-white pile to cancel the orange, and that pile
+   dries pale where it runs on over covered paint. *Workaround:* a thin
+   underpainting stage (historically right anyway) and masstone lay-ins for
+   sea and beach.
+3. **Coverage thins out at a mask's edge, so a hard edge needs hand
+   work.** The sea lay-in, and even a dedicated narrow `Handling` band
+   along the horizon, left pale slivers of the sky paint (laid a few units
+   past the horizon) just under the horizon. Stroke centers don't reach the
+   top edge of a thin band, and with `clip(true)` the strokes don't spill
+   into it. It took three renders to see that the "pale smears" were sky
+   paint and not stray piles. *Workaround:* stop the sky mask at the
+   horizon and lay the top 15 units of the sea by hand in level rows of
+   explicit drags. An "edge-hugging" option for `work` (seed centers on
+   the edge contour, as `cut_in` does for a separate tool) would help.
+4. **`tail` and `broken` in a dark broad lay-in.** With them switched off
+   the sea came out clean in one test. They also change every random draw,
+   so I couldn't separate them from item 3 in the time. Switching off
+   either one alone moved the pale slivers rather than removing them.
+   Changing any knob reshuffles the whole pass, which makes A/B debugging
+   of a handling hard. *Workaround:* `tail(0.0).broken(0.0)` for calm
+   water (it wants whole level strokes anyway).
+5. **A blender drags paint across a boundary it isn't clipped to.** The
+   stock `blend()` badger (40 units wide) swept level over the sea dragged
+   the dark horizon band up into the dry sky as smudges. *Workaround:* a
+   16-unit badger with `clip(true)` over a mask that starts 5 units below
+   the horizon.
+6. **Handling color fields can't read the canvas.** `c.work` borrows the
+   canvas mutably, so a `color` closure can't call `c.under` (e.g. "darken
+   whatever sand is here" for cast shadows). *Workaround:* hoist the
+   beach's color function out of its stage and reuse it, letting
+   `Aim::Laid` judge against the canvas. A `color_over(|x, y, under| …)`
+   field would be natural.
+7. **Wide variable-closure capture.** `Frame::per_column` returns a
+   non-`Copy` closure, and every `move` color closure then consumes it.
+   *Workaround:* `let shore = &shore;` (minor, but every painting will hit
+   it).
+8. **Stock craquelure at 1000px reads as a grid laid over the picture.**
+   `Cracks::aged` hairlines are sub-pixel at 1000px but drawn a full pixel
+   dark. *Workaround:* a custom `Cracks` (4.5 mm islands, 45 µm, dirt 0.3).
+9. **Stipple lighter than the field reads as salt where it thins.** This
+   matches the stipple notes. *Workaround:* lift only 0.006–0.028 L above
+   the field and keep a coverage floor of 0.9 everywhere.
+10. **Small motifs by gesture are fiddly without feedback.** The net took
+    three tries: a solid veil reads as a flag; dark round-sable fold lines
+    bead into tassels at 3200px; a dark net over the dark sea vanishes.
+    What worked: a short net hung against the sky, lean rigger folds, and
+    mesh lines started above the rope so none begin in the open. No
+    engine fix is implied; these were painter's lessons, but each cost a
+    full render cycle.
+11. **Form: an ellipsoid boulder reads as an egg or potato, and a
+    union with a small lobe reads as a turtle's head.** A rounded `block`
+    fused with a flat ellipsoid on top, turned and roughened at three
+    scales, reads as a granite erratic. `form.edges` at the default fine
+    span turned the ridged grain into hundreds of black pits (pumice).
+    *Workaround:* accents only for turns ≥ 1.2 over a 6-unit span.
+12. **Dark block-in on a silhouette left pale holes** (sand showing through)
+    at `coverage 3, threshold 0.2`. *Workaround:* coverage 4.5, threshold
+    0.1.
+13. **Thin darks with lead white in them go milky over a darker field.**
+    Cast shadows mixed as a dark gray from the earth family (white, black,
+    umber) and laid thin over the sand came out lighter and bluer than the
+    sand. That is correct KM (the turbid-medium effect), but `Canvas::aim`
+    doesn't warn about it, and the preview (`Paint::over`) is something you
+    have to think to call. *Workaround:* a shade family of raw umber and
+    bone black only (transparent darks), as a painter would glaze a
+    shadow.
+14. **Low-load filbert strokes bead into ladders at 3200px.** Long faint
+    shadows brushed with a filbert at load 0.35 turned into rows of dots.
+    *Workaround:* build the shapes as a `Shape` of ribbons and lay one
+    `Canvas::glaze` through the mask (see 0a).
+15. **Mixed darks and lights show their strongest tube at thin edges.**
+    The shawl (full palette) got red rims and the sails (sky family) got
+    chrome-yellow rims wherever the mark thins out. *Workaround:* earth-only
+    families for small motifs (`pal.only(&["red earth", "raw umber",
+    "bone black"])`; lead white, pale smalt, ochre and umber for sails).
+16. **A flat underpainting shows through dry-brushed stroke ends.** Dark,
+    bristle-textured blots in the middle of the sea turned out to be the
+    flat blue-gray underpainting where lay-in strokes ran dry at their
+    ends. First I blamed the swell, then the blender, then stray piles;
+    finding it took a debug save after the lay-in. This is physical and
+    documented behavior. *Workaround:* underpaint from the sea's own color
+    field, a little darker. There's no engine fix; the lesson is to
+    underpaint in the passage's own tones.
+17. **A curved multi-point `drag` with a fine brush laid nothing, and I
+    couldn't find out why.** A coil of rope hung on a peg on the third pole:
+    each loop an 11-point U with a rigger (0.45–0.5) or a round sable (0.75)
+    at pressure 0.55–0.7. The pixels stayed untouched sky in every variant,
+    and the brush's fullness dropped 0.001 against 0.02 for a straight
+    stroke nearby. Hypotheses I tested and ruled out: loops wrapped round
+    the wet pole; a start on the wet peg; a start on the dry peg's ridge
+    (`c.dry()` first, then a start in open air under it); the stroke
+    direction. The same shapes (V, U, hook, L) deposit normally on a fresh
+    `Canvas` (a scratch probe binary, deleted). The only split half that
+    painted ran from the loop's bottom up to its left end. *Workaround:*
+    each loop as 10 straight 2-point segments, alternate ones first, with a
+    `c.dry()` between the two passes. It cost about 20 minutes and I never
+    found the cause, so it's worth a proper engine repro: canvas state after
+    the poles stage, `Tool::rigger(0.5)`, the points in the program.
+18. **The Read tool lagged new files by 30–60 s** late in the session
+    (images written by `scripts/peek` returned ENOENT until then). That's
+    not the engine, but it slowed the looking loop.
+19. **Checkpoints are all stale after any edit above the first stage.**
+    Palette families, masks and color fields live above the stages (the
+    rules say so), so tuning one of them forces a whole re-render. It
+    costs 20 s at 1000px and is fine here, but it discourages hoisting
+    shared fields. A per-stage fingerprint of only what the stage uses
+    isn't possible with plain closures; I just accepted it.
+
+## Critique
+
+What works:
+- **The big design reads as Friedrich.** A huge graded sky over a thin
+  dark sea, a ruled horizon, a few hard verticals, a small still figure
+  seen from behind and a crescent over the coming sun. At 1000px it has
+  his quiet, and the eye goes horizon, then figure, then moon, then net.
+- **The sky** is the best passage. It goes from a lemon glow through rose
+  to slate with no visible strokes, and the dry stipple gives it grain up
+  close without salt. The stratus bars with lit undersides are simple and
+  right for the hour.
+- **The erratic** at 3200px reads as a heavy granite block, dark against
+  the light, its top and right shoulder catching the glow. It is seated in
+  the sand, has no egg shape and no pumice pits.
+- **Particular details hold at full size:** mesh and folds in the net, the
+  cork floats, the lashings, marram tufts in upturned strokes, half-sunk
+  stones, the brig's stacked sails lit on one side, gulls, the wrack line.
+- **Physically consistent light.** The sun is below the horizon, so there
+  are no cast shadows, only faint reflections on the damp sand. The moon's
+  lit limb faces the sun.
+
+What is weak (judged harshly):
+- **The beach is still the dullest passage:** a smooth brown gradient with
+  sparse incident. Friedrich's foregrounds are dark but *drawn*, with
+  every tuft and stone particular. Mine thin out in the middle of the
+  sand. The ripple fields are almost invisible at 1000px.
+- **The boulder is a little too big and too square** for the picture. It
+  pulls weight to the lower left, and its left end is a flat dark slab
+  with little modeling.
+- **The poles are still rather uniform:** the same dark rod with the same
+  thin lit edge. The weathering touches barely read at 1000px. The peg and
+  rope coil on the third pole give it a purpose, but the coil is a little
+  schematic up close (straight segments).
+- **The figure** is a correct silhouette but generic. The shawl's V reads
+  more as a collar than as cloth, and the figure has no weight shift.
+- **Small digital tells remain:** a few orange flecks where the ground
+  shows through the sand and far sea (bare ground under both the
+  underpainting and the lay-in); faint gray blotches in the mid sky where
+  the first stipple's recipes change; the crescent's edge is a little too
+  clean-cut; the net's rope and lashings are graphic black lines.
+- **The sea** is calm and right in tone, but at 3200px its lay-in is a bit
+  slick. It has little of the fine horizontal texture a stippled or
+  hatched Friedrich sea has.

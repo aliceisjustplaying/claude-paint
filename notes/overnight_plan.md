@@ -51,4 +51,4 @@ Then stop and evaluate with the user.
 - Review (gpt-6-astra, medium): 13 distinct findings (notes/review/). review-sched hit a content filter at the very end but had written its report. Three fixers launched: fix-optics, fix-sched, fix-form.
 - All review fixes merged (fix-sched, fix-optics, fix-form); 66 tests pass.
 - Amnesia round 2 launched: winter, coast, mountains (same themes as round 1 for comparison); worktrees ../claude-paint-amnesia-<theme>, no existing paintings, brief in notes/amnesia_brief.md.
-- (updated as work lands)
+- Amnesia round 2 done: all three painters finished in 54–57 min (winter, coast, mountains). Programs in paintings/fresh2/, notes + previews in notes/amnesia2/, synthesis in notes/amnesia2.md. STOPPED here for evaluation with the user.

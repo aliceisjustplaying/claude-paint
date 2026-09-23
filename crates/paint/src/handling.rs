@@ -891,7 +891,7 @@ fn finish_plan(cv: &Canvas, hd: &Handling, tool: &Tool, c: (f32, f32), pts: Vec<
         // on the palette: mix the pile from tubes, never twice alike
         Some((pal, medium)) => {
             let m = match under {
-                Some((u, coats)) => pal.aim(target, u, medium, coats),
+                Some((u, coats)) => pal.aim_for(target, u, medium, coats, crate::palette::Marks::of(tool)),
                 None => pal.mix(target),
             };
             // the pile's mixing jitter draws from its own generator: how many
@@ -1378,17 +1378,17 @@ mod tests {
     /// ground showing through it) land in the color asked for: no salmon or
     /// orange piles (amnesia 2, coast #1/#2, winter #14). Returns (share of
     /// marked pixels pushed warm, mean a/b miss, mean L miss).
-    fn light_over_dark(pal_names: Option<&[&str]>, tool: &str) -> (f32, f32, f32) {
+    fn light_over_dark(pal_names: Option<&[&str]>, tool: &str, w: usize) -> (f32, f32, f32) {
         use crate::color::hex;
         let st = crate::style::Style::friedrich();
         let pal = match pal_names {
             Some(n) => st.palette.only(n),
             None => st.palette.clone(),
         };
-        let mut c = st.prepare(500, 1.0, 5);
+        let mut c = st.prepare(w, 1.0, 5);
         let all = Mask::full(c.frame());
         // a dark sand lay-in, thin enough that the ground flecks through
-        c.work(&all, &st.body().color(|_, _| hex("#3a3128")).by_masstone().coverage(1.6), 1);
+        c.work(&all, &st.body().color(|_, _| hex("#3a3128")).by_masstone().coverage(1.6).fill(false), 1);
         c.dry();
         let (px0, f0) = (c.pixels().to_vec(), c.film.clone());
         let want = hex("#9a8f80");
@@ -1426,23 +1426,80 @@ mod tests {
             }
         }
         let n = idx.len() as f32;
+        // (the marks' mean look, as seen at a distance, vs the target)
+        let mut acc = [0.0f32; 3];
+        let mut sl = 0.0f32;
+        for &i in &idx {
+            for k in 0..3 {
+                acc[k] += c.pixels()[i][k] / n;
+            }
+            if c.film[i] - f0[i] > 2.0 {
+                sl += to_oklab(c.pixels()[i])[0] - wl[0];
+            }
+        }
+        println!("  mean look L miss {:+.3}, body signed L miss {:+.3}", to_oklab(acc)[0] - wl[0], sl / nb.max(1) as f32);
         (warm as f32 / n, ab / n, dl / nb.max(1) as f32)
+    }
+
+    /// How a sparse pass's film is spread over its marks' area, in units of
+    /// the expected thickness (`laid_coats`): the share of the marked area
+    /// in log2 bins centered at 1/8 .. 8 (for `AIM_MARKS` in palette.rs).
+    /// `cargo test --release -p paint probe_mark_thickness -- --ignored --nocapture`
+    #[test]
+    #[ignore]
+    fn probe_mark_thickness() {
+        use crate::color::hex;
+        let st = crate::style::Style::friedrich();
+        for w in [500usize, 1000, 2000] {
+            for tool in ["detail", "body", "broad"] {
+                let mut c = st.prepare(w, 1.0, 5);
+                let all = Mask::full(c.frame());
+                let f0 = c.film.clone();
+                let h = match tool {
+                    "detail" => st.detail(),
+                    "broad" => st.broad(),
+                    _ => st.body(),
+                }
+                .color(move |_, _| hex("#9a8f80"))
+                .coverage(0.3)
+                .clip(false);
+                let lc = h.laid_coats();
+                c.work(&all, &h, 2);
+                c.dry();
+                let mut bins = [0.0f32; 7];
+                let mut n = 0.0;
+                for i in 0..f0.len() {
+                    let t = (c.film[i] - f0[i]) / lc;
+                    if t > 1.0 / 16.0 {
+                        let b = (t.log2().round() + 3.0).clamp(0.0, 6.0) as usize;
+                        bins[b] += 1.0;
+                        n += 1.0;
+                    }
+                }
+                let sh: Vec<String> = bins.iter().map(|b| format!("{:.3}", b / n)).collect();
+                println!("{w}px {tool:6} laid {lc:.2}: shares at 1/8..8 × laid: [{}]", sh.join(", "));
+            }
+        }
     }
 
     #[test]
     fn light_marks_over_a_dark_stay_in_hue() {
-        for (label, names, tool) in [("full/detail", None, "detail"), ("full/body", None, "body"), ("earth/detail", Some(&["lead white", "yellow ochre", "raw umber", "bone black", "red earth"][..]), "detail")] {
-            let (warm, ab, dl) = light_over_dark(names, tool);
+        // pointed detail marks are judged at 750px: at 500px a fine mark's
+        // body is mostly pixels it only partly covers, which show the dark
+        // beside it (the body's L miss: -0.043 at 500px, -0.027 at 750,
+        // -0.020 at 1000, -0.009 at 2000), a sampling effect, not the pile.
+        // (Unsigned: 0.030 at 750px, 0.024 at 1000px; 1000px would allow
+        // 0.025 but takes minutes in a debug build.)
+        for (label, names, tool, w) in [("full/detail", None, "detail", 750), ("full/body", None, "body", 500), ("earth/detail", Some(&["lead white", "yellow ochre", "raw umber", "bone black", "red earth"][..]), "detail", 750)] {
+            let (warm, ab, dl) = light_over_dark(names, tool, w);
             println!("{label}: warm share {warm:.3}, mean a/b miss {ab:.4}, mean L miss {dl:.3}");
             assert!(warm < 0.05, "{label}: {warm:.3} of the marks dried warm");
             assert!(ab < 0.02, "{label}: marks off hue by {ab:.4}");
             // (the old thickness estimate, 0.3 coats for marks that lay 1–2,
-            // overshot: 0.049–0.050 L too light)
-            // pointed detail marks keep a thin semi-transparent rim even in
-            // their body at test resolution (500px), so they get a looser
-            // bound; the open fix is to aim at the thickness-weighted mean
-            // look of a mark (notes/fixes_paint.md, "after the tip merge")
-            let bound = if tool == "detail" { 0.05 } else { 0.025 };
+            // overshot: 0.049–0.050 L too light; aiming at one thickness
+            // instead of the mark's mean look, see `palette::Marks`, needed
+            // 0.05 for pointed marks)
+            let bound = if tool == "detail" { 0.035 } else { 0.025 };
             assert!(dl < bound, "{label}: marks off value by {dl:.3}");
         }
     }

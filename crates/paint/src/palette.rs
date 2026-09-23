@@ -68,7 +68,7 @@ struct Cand {
     scatter: f32,
 }
 
-type AimKey = [i32; 8];
+type AimKey = [i32; 9];
 /// Score of a pile: (parts, masstone, scattering) → OKLab miss.
 type Score<'a> = &'a dyn Fn(&[(usize, f32)], Rgb, f32) -> f32;
 
@@ -122,7 +122,44 @@ const AIM_THIN: (f32, f32) = (0.25, 0.3);
 /// (masstone) costs this much per unit of OKLab a/b distance from the look
 /// wanted. Aim may still push a pile's hue against the underlayer, but only
 /// where that buys a real improvement in the look.
-const AIM_FAMILY: f32 = 0.12;
+const AIM_FAMILY: f32 = 0.25;
+/// How a mark's area is spread over thicknesses (× the expected one,
+/// share of the area), as the eye averages it at viewing distance: the
+/// aim makes this mean look (in linear light) the look wanted. Measured by
+/// `handling::tests::probe_mark_thickness` (sparse marks, Friedrich ground,
+/// 1000px): a blunt brush (filbert, flat) lays most of its mark near 1–2×,
+/// a pointed one (round sable, rigger) a thick core with thin, semi-
+/// transparent edges and tails (half its area at ½× or less), which over a
+/// dark dry darker than the core.
+const MARKS_BLUNT: [(f32, f32); 6] = [(0.125, 0.04), (0.25, 0.045), (0.5, 0.1), (1.0, 0.29), (2.0, 0.46), (4.0, 0.065)];
+const MARKS_POINTED: [(f32, f32); 5] = [(0.125, 0.13), (0.25, 0.14), (0.5, 0.21), (1.0, 0.37), (2.0, 0.15)];
+/// Weight of the per-thickness spread (`AIM_SPREAD`) next to the mean look:
+/// it keeps a pile from looking right on average only by being far off
+/// at every thickness (and neighboring targets on one recipe).
+const AIM_ROBUST: f32 = 0.35;
+
+/// The shape of the marks an aimed pile will make (see `Palette::aim_for`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Marks {
+    /// A blunt brush: most of the mark near the expected thickness.
+    Blunt,
+    /// A pointed brush: a thick core, thin edges and tails.
+    Pointed,
+}
+
+impl Marks {
+    /// The marks a tool makes.
+    pub fn of(tool: &crate::bristle::Tool) -> Self {
+        if tool.point > 0.0 { Marks::Pointed } else { Marks::Blunt }
+    }
+    fn spread(self) -> &'static [(f32, f32)] {
+        match self {
+            Marks::Blunt => &MARKS_BLUNT,
+            Marks::Pointed => &MARKS_POINTED,
+        }
+    }
+}
+
 /// How many of the best candidates at the expected thickness are judged in
 /// full (spread, thin edge and family).
 const AIM_SHORTLIST: usize = 48;
@@ -319,11 +356,20 @@ impl Palette {
     /// piles that look right however thick the brush lays them; this also
     /// keeps neighboring targets from flipping between recipes. Targets no
     /// pile can reach (a light glaze over a dark ground) come out as the
-    /// nearest the painter could get. `error` is the OKLab miss at `coats`.
+    /// nearest the painter could get. `error` is the OKLab miss of the
+    /// mark's mean look (see `aim_for`).
     pub fn aim(&self, want: Rgb, under: Rgb, medium: f32, coats: f32) -> Mixture {
+        self.aim_for(want, under, medium, coats, Marks::Blunt)
+    }
+
+    /// `aim` for the marks of a particular brush: the mean look over the
+    /// mark (its thick core and thin edges, `Marks`) is what should come out
+    /// as `want`. A pointed brush's light marks over a dark get a lighter
+    /// pile than a filbert's, since their thin edges dry darker.
+    pub fn aim_for(&self, want: Rgb, under: Rgb, medium: f32, coats: f32, marks: Marks) -> Mixture {
         let (wl, ul) = (to_oklab(want), to_oklab(under));
         let q = |v: f32, s: f32| (v * s).round() as i32;
-        let key: AimKey = [q(wl[0], Q_WANT), q(wl[1], Q_WANT), q(wl[2], Q_WANT), q(ul[0], Q_UNDER), q(ul[1], Q_UNDER), q(ul[2], Q_UNDER), q(coats.max(0.0), Q_COATS), q(medium.clamp(0.0, 1.0), Q_MEDIUM)];
+        let key: AimKey = [q(wl[0], Q_WANT), q(wl[1], Q_WANT), q(wl[2], Q_WANT), q(ul[0], Q_UNDER), q(ul[1], Q_UNDER), q(ul[2], Q_UNDER), q(coats.max(0.0), Q_COATS), q(medium.clamp(0.0, 1.0), Q_MEDIUM), marks as i32];
         if let Some(m) = self.aims.lock().unwrap().get(&key) {
             return m.clone();
         }
@@ -332,9 +378,23 @@ impl Palette {
         let coats = (key[6] as f32 / Q_COATS).max(1.0 / Q_COATS);
         let dil = 1.0 - key[7] as f32 / Q_MEDIUM;
         let look = |c: Rgb, s: f32, x: f32| to_oklab(Pigment::masstone(c, s * dil).over(under, x));
+        // the mark's mean look: its area at each thickness, averaged in
+        // linear light (as the eye does at viewing distance)
+        let spread_of = marks.spread();
+        let mean = |c: Rgb, s: f32| {
+            let pg = Pigment::masstone(c, s * dil);
+            let mut acc = [0.0f32; 3];
+            for &(t, w) in spread_of {
+                let l = pg.over(under, coats * t);
+                for k in 0..3 {
+                    acc[k] += w * l[k];
+                }
+            }
+            to_oklab(acc)
+        };
         let ul = to_oklab(under);
         let robust = |p: &[(usize, f32)], c: Rgb, s: f32| {
-            let spread = AIM_SPREAD.iter().map(|&(t, w)| w * dist(look(c, s, coats * t), wl)).sum::<f32>();
+            let spread = dist(mean(c, s), wl) + AIM_ROBUST * AIM_SPREAD.iter().map(|&(t, w)| w * dist(look(c, s, coats * t), wl)).sum::<f32>();
             let thin = AIM_THIN.1 * seg_dist(look(c, s, coats * AIM_THIN.0), ul, wl);
             let m = to_oklab(c);
             let family = AIM_FAMILY * ((m[1] - wl[1]).powi(2) + (m[2] - wl[2]).powi(2)).sqrt();
@@ -342,13 +402,13 @@ impl Palette {
         };
         // coarse: every candidate at the expected thickness; the best few
         // judged over the spread of thicknesses; then refine the proportions
-        let mut first: Vec<(f32, usize)> = self.cands.iter().enumerate().map(|(i, c)| (dist(look(c.color, c.scatter, coats), wl), i)).collect();
+        let mut first: Vec<(f32, usize)> = self.cands.iter().enumerate().map(|(i, c)| (dist(mean(c.color, c.scatter), wl), i)).collect();
         let n = first.len().min(AIM_SHORTLIST);
         first.select_nth_unstable_by(n - 1, |a, b| a.0.total_cmp(&b.0));
         let best = first[..n].iter().map(|&(_, i)| (robust(&self.cands[i].parts, self.cands[i].color, self.cands[i].scatter), i)).min_by(|a, b| a.0.total_cmp(&b.0)).unwrap();
         let (parts, _) = self.refine(self.cands[best.1].parts.clone(), &robust);
         let (c, s, _) = self.eval(&parts);
-        let m = self.mixture(parts, dist(look(c, s, coats), wl));
+        let m = self.mixture(parts, dist(mean(c, s), wl));
         self.aims.lock().unwrap().insert(key, m.clone());
         m
     }

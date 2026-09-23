@@ -49,3 +49,4 @@ spectral) is split into single-defect fixes the loops pull in.
 - Loop 1 started 18:42: loop1-green and loop1-near rework the r4 paintings against the critic's defects (25 min, sketchbook); loop1-halo fixes the pale halos (tool). Then re-judge with anchors.
 - spectral merged as optional module (not integrated; verdict in notes/spectral.md).
 - r4 free done: dolmen AGAIN (same motif as r3 free): convergence on motif, not just mood.
+- Loop 1 scored: near +3 (23->26), green +2 (18->20), anchor -1. Sketchbook updated. Loop 2 started 18:58: loop2-near (drift puffs), loop2-grain (horizontal wood-grain ground streaks; tool). loop1-halo still running; green loop 2 waits for it.

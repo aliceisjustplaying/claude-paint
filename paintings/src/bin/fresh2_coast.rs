@@ -55,6 +55,9 @@ fn main() {
     // sand, stones and wood: earths, white and black, no reds (aimed light
     // touches over a cool field otherwise reach for vermilion)
     let earth_pal = pal.only(&["lead white", "yellow ochre", "raw umber", "bone black", "pale smalt"]);
+    // shadows on the sand: transparent darks only. A gray with lead white in
+    // it, laid thin over darker sand, goes milky and lighter, not darker
+    let shade_pal = pal.only(&["raw umber", "bone black"]);
     let mut rng = Rng::new(o.seed ^ 0xC0A57);
     let mut c = o.canvas(|| st.prepare(o.width, ASPECT, o.seed));
     let f = c.frame();
@@ -110,6 +113,9 @@ fn main() {
         rail_y(x) + 22.0 + 42.0 * (std::f32::consts::PI * t).sin().powf(0.7) + 7.0 * net_n.get(x, 1.0) + 3.0 * (x / 3.1).sin()
     };
     let hem = &hem;
+
+    // flat stones in the near sand (x, y, size)
+    let stones: [(f32, f32, f32); 8] = [(612.0, 684.0, 20.0), (646.0, 692.0, 11.0), (772.0, 670.0, 26.0), (812.0, 681.0, 13.0), (905.0, 700.0, 30.0), (470.0, 699.0, 14.0), (520.0, 668.0, 9.0), (700.0, 650.0, 7.0)];
 
     // the woman at the water's edge
     let woman = (664.0, 553.0, 58.0);
@@ -377,27 +383,27 @@ fn main() {
             let n = 1 + (r.f() * 3.0) as usize;
             for _ in 0..n {
                 let xs = r.range(-60.0, 960.0);
-                let l = r.range(60.0, 260.0) * (0.5 + t);
+                let l = r.range(90.0, 300.0) * (0.5 + t);
                 let ym = y + r.range(-1.0, 1.0);
                 if ym > shore(xs.clamp(0.0, 999.0)) - 4.0 {
                     continue;
                 }
                 let under = c.under(xs + l * 0.5, ym, 3.0);
                 // far off, the swell only darkens: a light band there reads as a scrape
-                let dark = t < 0.2 || r.chance(0.55);
+                let dark = t < 0.2 || (t < 0.6 && r.chance(0.55));
                 let path = (-((xs + l * 0.5 - SUN_X) / (40.0 + 150.0 * t)).powi(2)).exp();
-                let want = if dark { lift(under, -0.03 - 0.02 * t) } else { mix(lift(under, 0.05), hex("#d8cdb4"), 0.25 * path, Mix::Light) };
+                let want = if dark { lift(under, -0.018 - 0.012 * t) } else { mix(lift(under, 0.05), hex("#d8cdb4"), 0.25 * path, Mix::Light) };
                 // mixed by masstone: an aimed thin light over the cool sea
                 // comes out salmon (the pile fights the blue of thin white)
                 let p = sea_pal.paint(want, 0.3);
-                let w = 0.8 + 2.5 * t;
-                let mut b = held(Tool { lay: 0.6, ..Tool::filbert(w) }, p, 0.3, 5300 + k);
+                let w = 0.8 + 1.8 * t;
+                let mut b = held(Tool { lay: 0.45, ..Tool::filbert(w) }, p, 0.3, 5300 + k);
                 k += 1;
                 let pts: Vec<(f32, f32)> = (0..5).map(|i| {
                     let s = i as f32 / 4.0;
                     (xs + s * l, ym + (s * 5.0 + xs).sin() * 0.3 * w)
                 }).collect();
-                stroke(&mut c, &mut b, &pts, 0.45, 0.3, (0.25, 0.35), Some(&sea_m));
+                stroke(&mut c, &mut b, &pts, 0.4, 0.25, (0.35, 0.45), Some(&sea_m));
             }
         }
         // glitter under the glow: short pale dashes, denser and brighter
@@ -466,7 +472,7 @@ fn main() {
         let pool_col = move |x: f32, y: f32| {
             // what the pool mirrors: the sky low over the horizon, a little dimmer
             let refl = sky_col(x, HORIZON - 6.0 - 2.0 * (y - 560.0).max(0.0));
-            lift(mix(refl, hex("#a39a8c"), 0.45, Mix::Light), -0.07)
+            lift(mix(refl, hex("#8c8579"), 0.6, Mix::Light), -0.1)
         };
         let pool = st
             .detail()
@@ -483,23 +489,41 @@ fn main() {
         // sky-facing crests, a darker trough under each
         let mut r = Rng::new(65);
         let mut k = 0u64;
-        for _ in 0..420 {
-            let y = r.range(578.0, h - 3.0);
-            let x = r.range(-5.0, 1005.0);
+        // in fields: a run of parallel crests, each a long faint bowed
+        // stroke, the fields spaced out in perspective
+        let mut y = 574.0f32;
+        while y < h - 3.0 {
             let persp = ((y - 560.0) / (h - 560.0)).clamp(0.0, 1.0);
-            if pool_m.sample(x, y) > 0.1 {
-                continue;
+            let x0 = r.range(-40.0, 900.0);
+            let span = r.range(80.0, 260.0) * (0.6 + persp);
+            let crests = 2 + (r.f() * 4.0) as usize;
+            let gap = 1.2 + 4.5 * persp;
+            for q in 0..crests {
+                let yy = y + q as f32 * gap;
+                let mut x = x0 + r.range(-10.0, 10.0);
+                while x < x0 + span {
+                    let l = (14.0 + 40.0 * persp) * r.range(0.6, 1.3);
+                    if pool_m.sample(x + l * 0.5, yy) > 0.1 {
+                        x += l;
+                        continue;
+                    }
+                    let under = c.under(x + l * 0.5, yy, 1.5);
+                    // the crest faces the sky; the trough just below it
+                    let crest = earth_pal.paint(mix(lift(under, 0.035), hex("#a39c90"), 0.12, Mix::Light), 0.4);
+                    let trough = earth_pal.paint(lift(under, -0.04), 0.4);
+                    let w = 0.4 + 1.2 * persp;
+                    let bow = r.range(-0.06, 0.06) * l;
+                    let pts = [(x, yy), (x + l * 0.5, yy + bow), (x + l, yy + r.normal() * 0.3)];
+                    let mut b = held(Tool { lay: 0.5, ..Tool::round_sable(w) }, crest, 0.3, 6400 + k);
+                    stroke(&mut c, &mut b, &pts, 0.4, 0.2, (0.35, 0.5), None);
+                    let pts2: Vec<(f32, f32)> = pts.iter().map(|&(a, b2)| (a + 1.0, b2 + w * 0.9)).collect();
+                    let mut b = held(Tool { lay: 0.5, ..Tool::round_sable(w * 0.8) }, trough, 0.3, 9400 + k);
+                    stroke(&mut c, &mut b, &pts2, 0.35, 0.15, (0.35, 0.5), None);
+                    k += 1;
+                    x += l * r.range(0.9, 1.3);
+                }
             }
-            let l = (5.0 + 26.0 * persp) * r.range(0.6, 1.3);
-            let bow = r.range(-0.12, 0.12) * l;
-            let light = r.chance(0.5);
-            let under = c.under(x, y, 1.5);
-            let want = if light { mix(lift(under, 0.05 + 0.02 * (1.0 - persp)), hex("#a9a092"), 0.15, Mix::Light) } else { lift(under, -0.05) };
-            let p = if light { earth_pal.paint(want, 0.3) } else { c.aim(&earth_pal, want, (x, y), 1.0, 0.35, 0.8) };
-            let w = 0.5 + 1.8 * persp;
-            let mut b = held(Tool { lay: 0.55, ..Tool::round_sable(w) }, p, 0.35, 6400 + k);
-            k += 1;
-            stroke(&mut c, &mut b, &[(x - l * 0.5, y), (x, y + bow * 0.3), (x + l * 0.5, y + 0.05 * l * r.normal())], 0.45, 0.25, (0.3, 0.5), None);
+            y += r.range(4.0, 10.0) * (0.5 + 2.5 * persp);
         }
         // the lap of the water: a thin line of foam, broken, and the thin
         // sheet of wet sand just above it reflecting the glow
@@ -525,28 +549,31 @@ fn main() {
             stroke(&mut c, &mut b, &pts, r.range(0.3, 0.55), r.range(0.1, 0.3), (0.3, 0.5), None);
         }
         // the wrack line: dark seaweed strewn along the last high water
-        for i in 0..140 {
+        for i in 0..90 {
             let x = r.range(-5.0, 1005.0);
             let y = shore(x.clamp(0.0, 999.0)) + 18.0 + 6.0 * (x / 90.0).sin() + r.normal() * 2.5;
-            let l = r.range(2.0, 9.0);
+            let l = r.range(4.0, 14.0);
             let under = c.under(x, y, 2.0);
             let p = c.aim(&earth_pal, mix(under, hex("#2f2a22"), 0.55, Mix::Pigment), (x, y), 1.0, 0.2, 1.0);
-            let mut b = held(Tool::round_sable(r.range(0.8, 1.6)), p, 0.45, 6500 + i);
-            let a = r.normal() * 0.4;
-            stroke(&mut c, &mut b, &[(x, y), (x + l * a.cos(), y + l * a.sin() * 0.4)], 0.6, 0.3, (0.1, 0.4), None);
+            let mut b = held(Tool::round_sable(r.range(0.5, 1.1)), p, 0.4, 6500 + i);
+            let a = r.normal() * 0.35;
+            let kink = r.normal() * 1.2;
+            stroke(&mut c, &mut b, &[(x, y), (x + l * 0.5 * a.cos(), y + l * 0.5 * a.sin() * 0.4 + kink), (x + l * a.cos(), y + l * a.sin() * 0.4)], 0.5, 0.15, (0.2, 0.5), None);
         }
         // pebbles and small stones on the foreground sand: each a dark dab
         // with a light touch on its sunward (right) top
-        for i in 0..260 {
-            let y = r.range(585.0, h - 4.0);
-            let x = r.range(-5.0, 1005.0);
+        let clusters: Vec<(f32, f32)> = (0..14).map(|_| (r.range(0.0, 1000.0), r.range(590.0, h - 10.0))).collect();
+        for i in 0..130 {
+            let (cx, cy) = clusters[(r.f() * clusters.len() as f32) as usize % clusters.len()];
+            let y = (cy + r.normal() * 8.0).clamp(585.0, h - 3.0);
+            let x = cx + r.normal() * 30.0;
             let persp = (y - 560.0) / (h - 560.0);
             let s = (0.8 + 3.6 * persp * persp) * r.range(0.5, 1.4);
             let under = c.under(x, y, s);
             let p = c.aim(&earth_pal, lift(mix(under, hex("#3b3630"), 0.5, Mix::Pigment), -0.03), (x, y), s, 0.2, 1.2);
             let mut b = held(Tool::round_sable(s * 1.2), p, 0.5, 6800 + i);
             c.touch(&mut b, &Touch::at(x, y).pressure(r.range(0.5, 0.9)).drag(s * 0.4, 0.0), None);
-            if r.chance(0.7) {
+            if s > 2.2 && r.chance(0.6) {
                 let under = c.under(x + s * 0.3, y - s * 0.3, s * 0.4);
                 let p = earth_pal.paint(mix(lift(under, 0.1), hex("#b3a590"), 0.3, Mix::Light), 0.15);
                 let mut b = held(Tool::round_sable(s * 0.55), p, 0.5, 7100 + i);
@@ -790,7 +817,7 @@ fn main() {
             let top = rail_y(x) + 1.0;
             let bot = hem(x) - r.range(0.0, 8.0);
             let sway = r.range(-2.0, 2.0);
-            stroke(&mut c, &mut b, &[(x, top), (x + sway * 0.4, (top + bot) * 0.5), (x + sway, bot)], r.range(0.3, 0.55), 0.15, (0.05, 0.6), Some(&net_m));
+            stroke(&mut c, &mut b, &[(x, top), (x + sway * 0.4, (top + bot) * 0.5), (x + sway, bot)], r.range(0.25, 0.45), 0.02, (0.05, 0.85), Some(&net_m));
             x += r.range(3.5, 9.0);
         }
         // the mesh: fine diagonal lines, lean
@@ -849,8 +876,8 @@ fn main() {
         // lashings: a few small dark turns where the rail crosses the poles
         for (i, x) in [(0usize, pole_at(0, 318.0)), (1, pole_at(1, 324.0))] {
             let y = rail_y(x);
-            let lp = pal.paint(hex("#221e1a"), 0.1);
-            let mut lb = held(Tool::round_sable(1.0), lp, 0.5, 140 + i as u64);
+            let lp = pal.paint(hex("#2a2520"), 0.2);
+            let mut lb = held(Tool::round_sable(0.6), lp, 0.4, 140 + i as u64);
             for k in 0..3 {
                 let yy = y - 2.0 + k as f32 * 1.6;
                 stroke(&mut c, &mut lb, &[(x - 3.0, yy - 0.8), (x + 3.0, yy + 0.8)], 0.6, 0.6, (0.1, 0.1), None);
@@ -863,15 +890,6 @@ fn main() {
             let p = c.aim(&earth_pal, hex("#5a4632"), (x, y), 1.2, 0.1, 1.5);
             let mut fb = held(Tool::round_sable(2.2), p, 0.5, 150 + k);
             c.touch(&mut fb, &Touch::at(x, y).pressure(0.6).drag(1.0, 0.0), None);
-        }
-        // their shadows and reflections on the damp sand: the light is behind
-        // them, so the shadows fall toward us, long and faint
-        for i in 0..3 {
-            let ((bx, by), _, _) = poles[i];
-            let under = c.under(bx, by + 10.0, 2.0);
-            let p = c.aim(&earth_pal, lift(under, -0.08), (bx, by + 10.0), 2.0, 0.4, 0.7);
-            let mut sb = held(Tool { lay: 0.5, ..Tool::filbert(3.0) }, p, 0.35, 160 + i as u64);
-            stroke(&mut c, &mut sb, &[(bx, by + 1.0), (bx - 10.0, by + 40.0), (bx - 22.0, by + 95.0)], 0.5, 0.15, (0.05, 0.6), None);
         }
         c.dry();
     }
@@ -928,11 +946,6 @@ fn main() {
         stroke(&mut c, &mut rb, &[p(0.028, 0.935), p(0.036, 0.9)], 0.4, 0.2, (0.1, 0.4), None);
         rb.reload(rim, 0.25);
         stroke(&mut c, &mut rb, &[p(0.055, 0.81), p(0.078, 0.795), p(0.09, 0.75)], 0.35, 0.15, (0.1, 0.6), None);
-        // her shadow on the sand, falling toward us and to the left
-        let under = c.under(fx, fy + 6.0, 3.0);
-        let sp = c.aim(&earth_pal, lift(under, -0.07), (fx, fy + 6.0), 3.0, 0.4, 0.7);
-        let mut sb = held(Tool { lay: 0.5, ..Tool::filbert(0.12 * fh) }, sp, 0.35, 179);
-        stroke(&mut c, &mut sb, &[(fx, fy + 0.5), (fx - 8.0, fy + 18.0), (fx - 16.0, fy + 40.0)], 0.5, 0.15, (0.05, 0.6), None);
         c.dry();
     }
 
@@ -941,24 +954,18 @@ fn main() {
         // upturning strokes laid last [NG p.56], dark against the sand, a
         // few dry pale blades catching the light
         let mut r = Rng::new(200);
-        let stones: [(f32, f32, f32); 8] = [(612.0, 684.0, 20.0), (646.0, 692.0, 11.0), (772.0, 670.0, 26.0), (812.0, 681.0, 13.0), (905.0, 700.0, 30.0), (470.0, 699.0, 14.0), (520.0, 668.0, 9.0), (700.0, 650.0, 7.0)];
         for (i, &(x, y, s)) in stones.iter().enumerate() {
             let i = i as u64;
-            let dark = c.aim(&earth_pal, hex("#3a352e"), (x, y), s, 0.15, 1.5);
+            let dark = earth_pal.paint(hex("#4a4339"), 0.2);
             // flat stones, half sunk: wide low strokes
             let mut b = held(Tool::filbert(s * 0.32), dark, 0.6, 2000 + i);
             stroke(&mut c, &mut b, &[(x - s * 0.55, y + s * 0.04), (x, y + s * 0.08), (x + s * 0.55, y)], 0.9, 0.8, (0.1, 0.2), None);
             b.reload(dark, 0.5);
             stroke(&mut c, &mut b, &[(x - s * 0.45, y - s * 0.08), (x + s * 0.1, y - s * 0.13), (x + s * 0.5, y - s * 0.06)], 0.8, 0.7, (0.1, 0.2), None);
             // the lit top, back and right
-            let lit = earth_pal.paint(hex("#8f806c"), 0.15);
-            let mut lb = held(Tool::round_sable(s * 0.14), lit, 0.45, 2100 + i);
+            let lit = earth_pal.paint(hex("#6a6256"), 0.25);
+            let mut lb = held(Tool::round_sable(s * 0.18), lit, 0.55, 2100 + i);
             stroke(&mut c, &mut lb, &[(x - s * 0.2, y - s * 0.2), (x + s * 0.2, y - s * 0.21), (x + s * 0.52, y - s * 0.09)], 0.55, 0.3, (0.2, 0.5), None);
-            // a thin shadow toward us
-            let under = c.under(x, y + s * 0.4, 2.0);
-            let sp = c.aim(&earth_pal, lift(under, -0.08), (x, y + s * 0.3), 2.0, 0.4, 0.8);
-            let mut sb = held(Tool { lay: 0.5, ..Tool::filbert(s * 0.3) }, sp, 0.35, 2200 + i);
-            stroke(&mut c, &mut sb, &[(x - s * 0.3, y + s * 0.25), (x - s * 0.9, y + s * 0.5)], 0.5, 0.2, (0.05, 0.5), None);
         }
         let tufts: [(f32, f32, f32, usize); 8] = [(30.0, 634.0, 40.0, 40), (62.0, 642.0, 26.0, 22), (300.0, 614.0, 18.0, 14), (946.0, 664.0, 46.0, 50), (984.0, 672.0, 34.0, 30), (872.0, 708.0, 30.0, 24), (14.0, 694.0, 50.0, 46), (560.0, 606.0, 10.0, 8)];
         let dark = earth_pal.paint(hex("#34322a"), 0.2);
@@ -986,6 +993,29 @@ fn main() {
             }
         }
         c.dry();
+    }
+
+    if o.stage("reflections", &mut c, &mut rng) {
+        // the sun is still below the horizon: no cast shadows, but the damp
+        // sand holds faint reflections of the poles and the woman, straight
+        // down, short and fading; the stones only darken where they sit.
+        // One transparent umber glaze over a soft mask (brushed with a
+        // filbert, these beaded into ladders at 3200px)
+        let mut sh = paint::Shape::new();
+        for i in 0..3 {
+            let ((bx, by), _, lean) = poles[i];
+            let w = 4.2 - i as f32 * 0.5;
+            let d = 0.02 * lean;
+            sh = sh.ribbon(&[(bx, by - 0.5), (bx - d * 20.0, by + 18.0), (bx - d * 40.0, by + 36.0), (bx - d * 55.0, by + 50.0)], &[w, w * 0.8, w * 0.5, w * 0.15]);
+        }
+        let (fx, fy, fh) = woman;
+        sh = sh.ribbon(&[(fx, fy - 0.5), (fx, fy + 10.0), (fx + 0.5, fy + 20.0), (fx + 0.5, fy + 27.0)], &[0.2 * fh, 0.17 * fh, 0.1 * fh, 0.03 * fh]);
+        for &(x, y, s) in &stones {
+            sh = sh.ribbon(&[(x - s * 0.55, y + s * 0.1), (x, y + s * 0.16), (x + s * 0.5, y + s * 0.08)], &[s * 0.12, s * 0.2, s * 0.08]);
+        }
+        let sh_m = Mask::from_shape(f, sh).blur(1.6);
+        let umber = shade_pal.mix(hex("#2e2924")).paint(0.85).pigment();
+        c.glaze(&umber, Some(&sh_m), |_, _| 1.4);
     }
 
     if o.stage("gulls", &mut c, &mut rng) {
@@ -1023,6 +1053,6 @@ fn main() {
     let mut fin = Finish::aged(st.relief);
     // a finer, cleaner craquelure than the stock one: at 1000px the stock
     // network reads as a grid laid over the picture
-    fin.cracks = Some(paint::Cracks { island_mm: 4.5, width_um: 45.0, depth_um: 22.0, cupping_um: 18.0, dirt: 0.3, ..paint::Cracks::aged(0) });
+    fin.cracks = Some(paint::Cracks { island_mm: 5.0, ground_um: 140.0, width_um: 32.0, depth_um: 14.0, cupping_um: 12.0, dirt: 0.2, ..paint::Cracks::aged(0) });
     o.finish(&mut c, &mut rng, &fin);
 }

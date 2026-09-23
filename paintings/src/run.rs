@@ -11,7 +11,19 @@
 //!   cargo paint <name> -- --stop sky         save right after the "sky" stage
 //!   cargo paint <name> -- --ckpt             save a checkpoint after every stage
 //!   cargo paint <name> -- --resume mist      start from the "mist" checkpoint
+//!   cargo paint <name> -- --resume mist --stop mist
+//!                                            save the "mist" checkpoint as an image
+//!   cargo paint <name> -- --resume mist --stale-ok --ckpt
+//!                                            use a stale checkpoint and adopt it
 //!   cargo paint <name> -- --no-cracks        skip craquelure in the finish
+//!
+//! Stage names on the command line match whatever the case, and spaces,
+//! underscores and hyphens are the same (`--stop far_range` stops at "far
+//! range"). A `--stop` or `--resume` naming no stage is an error that lists
+//! the stages (before painting, when the painting names its stages with
+//! string literals; otherwise when the run ends). `--stop` at the stage a
+//! run resumes from saves that checkpoint as it is; at a stage before it,
+//! it is an error.
 //!
 //! A painting is written as stages; each stage's painting goes inside its
 //! block, so a resumed run can skip it:
@@ -24,30 +36,49 @@
 //! if o.stage("sky", &mut c, &mut rng) {
 //!     c.work(&sky, ...);                          // skipped when resuming later
 //! }
+//! let land = Mask::from_fn(c.frame(), ...);       // setup for "land": doesn't
+//!                                                 // make "sky" stale
 //! if o.stage("land", &mut c, &mut rng) { ... }
 //! o.finish(&mut c, &mut rng, &Finish::aged(st.relief));
 //! ```
 //!
 //! Rules for stages: paint only inside stage blocks (code between them runs
-//! on every run, resumed or not, so keep it to masks, fields and constants);
-//! state that a stage hands to later ones travels in the canvas or in the
-//! `Keep` value passed to `stage` (usually the painting's `Rng`; pass the
-//! same one to `end` or `finish`, which close the last stage).
+//! on every run, resumed or not, so keep it to masks, fields and constants,
+//! and don't draw from the `Keep` state there: a resumed run would draw from
+//! a different one); state that a stage hands to later ones travels in the
+//! canvas or in the `Keep` value passed to `stage` (usually the painting's
+//! `Rng`; pass the same one to `end` or `finish`, which close the last
+//! stage). Geometry built from random draws between stages takes its own
+//! `Rng::new(o.seed + k)`.
 //!
 //! Checkpoints (`--ckpt`) go to `out/<stem>.<stage>.ckpt` (stem of the output
 //! file). One holds the whole canvas state after its stage, wet paint
-//! included, plus the `Keep` state, the width, seed and crop, and hashes of
-//! the code that produced it: the painting's source up to the end of that
-//! stage, the helpers in `paintings/src` and the engine. `--resume` refuses a
-//! checkpoint whose code has changed since (pass `--stale-ok` to use it
-//! anyway); changes after the stage are what resuming is for. "Up to the end
-//! of the stage" is the source before the call that ends it (the next
-//! `stage`, `end` or `finish`) when that call comes later in the same file;
-//! otherwise (a `stage` call in a loop, which ends itself on the next
-//! iteration, or calls in different files) the stage's body can't be told
-//! apart by position, and the whole of both files is hashed: any edit to
-//! the painting then makes that checkpoint stale. Helper functions defined
-//! below `main` in the painting file are not covered by the prefix hash.
+//! included, plus the `Keep` state, the width, seed and crop, and
+//! fingerprints of the code that produced it. `--resume` refuses a
+//! checkpoint whose code has changed since (`--stale-ok` uses it anyway;
+//! with `--ckpt` as well, it also rewrites the checkpoint's fingerprints for
+//! the current code, so the next resume needs no `--stale-ok`).
+//!
+//! What counts as "the code that produced it" (the staleness model):
+//! - the engine (`crates/paint/src`) and the helpers in `paintings/src`
+//!   (not `bin`), whole: any edit there makes every checkpoint stale;
+//! - in the painting's file, for a stage written `if o.stage(..) { .. }`:
+//!   everything up to the closing brace of that block (its body and all
+//!   that ran before it), and everything after the item that holds it
+//!   (helper functions below `main`). Code after the block, between it and
+//!   the next stage, is setup for later stages and doesn't count;
+//! - minus code the painter marks as mattering only from a later stage on:
+//!   a line ending in `// ckpt: from <stage>`, or the lines between a
+//!   `// ckpt: from <stage>` line and a `// ckpt: end` line. Stages before
+//!   <stage> leave them out; <stage> and later ones count them. That is the
+//!   painter's word (a tagged constant a sky stage does read makes a stale
+//!   sky look fresh); a tag naming no stage is an error.
+//!
+//! A stage call not directly followed by its block falls back to the old
+//! rule: the source before the call that ends the stage, or both files
+//! whole when that call is elsewhere (a `stage` in a loop is ended by
+//! itself on the next iteration; its block is found, so this is rare).
+//! Comments count as code here: editing one makes the stage stale.
 
 mod source;
 

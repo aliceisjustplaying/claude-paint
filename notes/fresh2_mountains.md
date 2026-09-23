@@ -199,6 +199,22 @@ What it draws on in Friedrich (from knowledge, no pictures):
     useful for composition and value only; I judged all handling in
     3200px crops.
 
+14. **`Style::blend()` isn't clipped, so fusing a masked passage smears
+    it across the mask's edge.** Every badger pass over the fog (valley
+    mist, near-range veil) dragged wet pale paint below the fog's mask onto
+    the bare area where the knoll would go, and the knoll's body color
+    later showed it in its gaps as pale blue flakes. That's physically what
+    a badger does, but a painter fusing a cut passage keeps the blender
+    inside it. *Workaround:* `.clip(true)` on every blend pass (5 of them).
+    The preset should inherit the passage's clipping, or at least say it
+    doesn't in its doc.
+15. **Judging values is harder than it should be.** I spent a while
+    debugging a "pale" foreground rock that was sRGB 45–98 painted over
+    turf of about 30. The engine was right; the value relation was wrong.
+    Probing `c.under()` after each pass and reading the PNG pixels found
+    it. A tiny `Canvas::probe(label, pts)` that logs the look at a few
+    points after every `work` in debug runs would have saved this.
+
 ## Critique (to be updated)
 
 (after the full render)

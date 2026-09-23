@@ -844,6 +844,17 @@ impl Form {
     /// `dist(x, y, z)` (a ground plane running back, a ridge whose foot is
     /// nearer than its crest).
     pub fn add_at(&mut self, s: &dyn Solid, dist: &(dyn Fn(f32, f32, f32) -> f32 + Sync)) -> PartId {
+        self.add_by(s, dist, false)
+    }
+
+    /// Like `add_at`, but what hides what is decided by `dist` (nearer
+    /// wins), not by the solid's own `z`: for solids each drawn in its own
+    /// projection (a scene's bodies), whose `z` values do not compare.
+    pub fn add_nearest(&mut self, s: &dyn Solid, dist: &(dyn Fn(f32, f32, f32) -> f32 + Sync)) -> PartId {
+        self.add_by(s, dist, true)
+    }
+
+    fn add_by(&mut self, s: &dyn Solid, dist: &(dyn Fn(f32, f32, f32) -> f32 + Sync), by_dist: bool) -> PartId {
         self.parts += 1;
         let id = self.parts;
         let f = self.f;
@@ -871,12 +882,17 @@ impl Form {
                 for px in px0..px1 {
                     let x = (px as f32 + 0.5) * inv;
                     if let Some(h) = s.hit(x, y) {
-                        if h.z > zr[px] {
+                        let d = if by_dist { Some(dist(x, y, h.z)) } else { None };
+                        let nearer = match d {
+                            Some(d) => pr[px] == 0 || d < dr[px],
+                            None => h.z > zr[px],
+                        };
+                        if nearer {
                             zr[px] = h.z;
                             nr[px] = h.n;
                             pr[px] = id;
                             fr[px] = h.facet;
-                            dr[px] = dist(x, y, h.z);
+                            dr[px] = d.unwrap_or_else(|| dist(x, y, h.z));
                         }
                     }
                 }

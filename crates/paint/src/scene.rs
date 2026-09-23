@@ -564,7 +564,8 @@ impl World {
                 if res < 0.01 {
                     return 1.0;
                 }
-                t += d.clamp(0.004 + 0.002 * t, 0.5);
+                // the minimum step grows with distance, but never past the cap
+                t += d.clamp((0.004 + 0.002 * t).min(0.5), 0.5);
                 steps += 1;
             }
         }
@@ -780,8 +781,9 @@ impl Solid for Placed<'_> {
         let h = self.body.sdf.hit(x, y)?;
         let w = self.body.spot.world([x, y, h.z]);
         let zg = self.depth[self.f.index(x, y)];
-        // behind the ground or water seen at this point: sunk, hidden
-        if w[2] > zg + 0.005 {
+        // behind the ground or water seen at this point, or below the ground
+        // or water where it stands: sunk, hidden
+        if w[2] > zg + 0.005 || w[1] < self.world.surface(w[0], w[2]) - 0.002 {
             return None;
         }
         Some(h)
@@ -817,13 +819,14 @@ impl<'w> View<'w> {
             .collect();
         let mut form = Form::new(f);
         let mut parts = vec![0; world.bodies.len()];
-        // far to near is not needed (the depth buffer sorts), but the
+        // far to near is not needed (the depth buffer sorts by world depth:
+        // each body's form z is in its own spot's projection), but the
         // bodies' ids follow the painter's order
         for (i, b) in world.bodies.iter().enumerate() {
             if b.visible {
                 let p = Placed { world, body: b, depth: &depth, f };
                 let spot = b.spot;
-                parts[i] = form.add_at(&p, &move |x, y, z| spot.world([x, y, z])[2]);
+                parts[i] = form.add_nearest(&p, &move |x, y, z| spot.world([x, y, z])[2]);
             }
         }
         let body_of: Vec<BodyId> = {
@@ -970,7 +973,8 @@ impl<'w> View<'w> {
             return Some(Mirror { body: Some(b), src, at: hit, n: nf, shade, fresnel, travel });
         }
         // the far shore and the sky, taken to stand on the backdrop
-        let (src, travel, at) = if r[2] > 1e-4 {
+        // (only ahead of the ray: water beyond the backdrop sees the sky)
+        let (src, travel, at) = if r[2] > 1e-4 && w.backdrop > p[2] {
             let t = (w.backdrop - p[2]) / r[2];
             let q = add(p, r, t);
             (w.project(q).unwrap_or((x, y)), t, q)
@@ -1121,6 +1125,70 @@ mod tests {
         let near = v.mirror(foot.0 + 60.0, w.project([0.0, 0.0, 9.5]).unwrap().1).unwrap();
         let far = v.mirror(foot.0 + 60.0, w.project([0.0, 0.0, 100.0]).unwrap().1).unwrap();
         assert!(far.fresnel > near.fresnel * 2.0, "{} vs {}", far.fresnel, near.fresnel);
+    }
+
+    #[test]
+    fn a_distant_caster_does_not_panic_the_shadow_march() {
+        // at 310 m the march's growing minimum step used to pass its 0.5 m cap
+        let mut w = world().sun(Sun::deg(0.0, 1.0));
+        let s = w.spot_at(0.0, 310.0);
+        w.place(s, Sdf::block(s.p(0.0, 5.5, 0.0), s.size(2.0, 12.0, 2.0), 0.0));
+        let c = w.cast([0.0, 0.0, 10.0], [0.0, 1.0, 0.0]);
+        assert!((0.0..=1.0).contains(&c), "{c}");
+    }
+
+    #[test]
+    fn overlapping_bodies_are_ordered_by_world_depth() {
+        // A (anchored at 10 m, 0.1 m deep) is seen in front of B (anchored at
+        // 10.1 m, 1 m deep, so its front face is at 9.6 m): B's face is nearer
+        let mut w = world();
+        let a = w.spot_at(0.0, 10.0);
+        let b = w.spot_at(0.0, 10.1);
+        let sa = Sdf::block(a.p(0.0, 1.0, 0.0), a.size(1.0, 2.0, 0.1), 0.0);
+        let sb = Sdf::block(b.p(0.0, 1.0, 0.0), b.size(1.0, 2.0, 1.0), 0.0);
+        let (x, y) = (501.0, 365.0);
+        let da = a.world([x, y, sa.hit(x, y).unwrap().z])[2];
+        let db = b.world([x, y, sb.hit(x, y).unwrap().z])[2];
+        assert!(db < da, "{db} vs {da}");
+        w.place(a, sa);
+        let ib = w.place(b, sb);
+        let v = w.view(Frame::new(500, 350, 0.5));
+        let p = v.at(x, y);
+        assert_eq!(p.what, What::Body(ib));
+        assert!((p.dist - db).abs() < 0.01, "{} vs {db}", p.dist);
+    }
+
+    #[test]
+    fn sunk_surfaces_stay_below_the_waterline() {
+        let mut w = world().ground(|_, _| -1.0).water(Water::new(0.0));
+        let s = w.spot_at(0.0, 10.0);
+        w.place(s, Sdf::block(s.p(0.0, 0.0, 0.0), s.size(1.0, 2.0, 2.0), 0.0));
+        let v = w.view(Frame::new(500, 350, 0.5));
+        for yy in 0..40 {
+            for xx in -20..=20 {
+                let (x, y) = (s.x + xx as f32 * 0.5, s.y - 10.0 + yy as f32 * 0.5);
+                let p = v.at(x, y);
+                if let What::Body(_) = p.what {
+                    assert!(p.at[1] >= w.surface(p.at[0], p.at[2]) - 0.01, "({x},{y}) {:?}", p.at);
+                }
+            }
+        }
+        // the part above the water is still seen
+        assert!(matches!(v.at(s.x, s.y - s.m(0.5)).what, What::Body(_)));
+    }
+
+    #[test]
+    fn reflections_beyond_the_backdrop_run_forward() {
+        let w = world().ground(|_, _| -1.0).water(Water::new(0.0));
+        assert!(w.backdrop < 1000.0);
+        let v = w.view(Frame::new(100, 70, 0.1));
+        let (x, y) = w.project([0.0, 0.0, 1000.0]).unwrap();
+        let p = w.to_ground(x, y).unwrap();
+        assert!(p[2] > w.backdrop, "{p:?}");
+        let m = v.mirror(x, y).unwrap();
+        assert!(m.travel > 0.0, "{}", m.travel);
+        assert!(m.at[1] > 0.0 && m.at[2] > p[2], "{:?}", m.at);
+        assert!(m.src.1 < w.horizon, "{:?}", m.src);
     }
 
     #[test]

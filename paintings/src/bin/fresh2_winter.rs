@@ -220,7 +220,7 @@ fn main() {
     // with two narrow ones, the tops broken
     let ruin_top = || -> Vec<(f32, f32)> {
         vec![
-            (462.0, 452.0),
+            (462.0, 462.0),
             (462.0, 392.0),
             (466.0, 385.0),
             (470.0, 388.0),
@@ -241,7 +241,7 @@ fn main() {
             (551.0, 408.0),
             (556.0, 407.0),
             (560.0, 415.0),
-            (562.0, 452.0),
+            (562.0, 462.0),
         ]
     };
     let ruin_shape = || -> Shape { Shape::new().poly(&ruin_top()) };
@@ -262,7 +262,9 @@ fn main() {
     let ruin_m = Mask::from_shape(f, ruin_shape())
         .subtract(&Mask::from_shape(f, lancet(489.0, 15.0, 376.0, 438.0)))
         .subtract(&Mask::from_shape(f, lancet(535.0, 5.5, 408.0, 436.0)))
-        .subtract(&Mask::from_shape(f, lancet(550.0, 5.0, 414.0, 436.0)));
+        .subtract(&Mask::from_shape(f, lancet(550.0, 5.0, 414.0, 436.0)))
+        // the foot fades out under the snow: no painted edge to show through
+        .mul_fn(|_, y| 1.0 - smoothstep(446.0, 455.0, y));
     if o.stage("ruin", &mut c, &mut rng) {
         // one flat dusky tone, a touch darker than the ridge, cooler at the
         // foot where the mist will lie; the gable face a hair lighter
@@ -274,12 +276,7 @@ fn main() {
         let hd = st.detail().color(col).angle(|_, _| -std::f32::consts::FRAC_PI_2).angle_jitter(0.15).length(4.0, 12.0).coverage(3.5).medium(0.2);
         c.work(&ruin_m, &hd, 31);
         c.dry();
-        // weathering: stone patched lighter and darker, broken courses
-        let weather = Fbm::new(41, 3, 14.0);
-        let patches = ruin_m.clone().mul_fn(|x, y| smoothstep(0.1, 0.4, weather.get(x, y * 0.7).abs()));
-        let stone_pal = pal.only(&["lead white", "bone black", "pale smalt", "raw umber"]);
-        let hd = st.detail().palette(&stone_pal).color(|x, y| if weather.get(x, y * 0.7) > 0.0 { hex("#74727b") } else { hex("#6a6973") }).angle(|_, _| 0.0).length(2.0, 6.0).coverage(0.6).medium(0.5).clip(true);
-        c.work(&patches, &hd, 32);
+        // weathering: broken courses of masonry, faint
         let course = pal.mix(hex("#5c5c68")).paint(0.3).with_hiding(0.5);
         let mut b = Held::new(st.line_tool(0.35), rng.next_u64());
         for _ in 0..16 {
@@ -427,7 +424,8 @@ fn main() {
             (1.5 + 40.0 * d.powf(1.5)) * ((dy / l).abs() + fs * (dx / l).abs()).min(1.0) + 0.8
         })
         .collect();
-    let brook_m = Mask::from_shape(f, Shape::new().ribbon(&brook, &brook_w)).mul(&snow_m);
+    // the banks are snow, not a ruled edge
+    let brook_m = Mask::from_shape(f, Shape::new().ribbon(&brook, &brook_w)).blur(1.5).roughen(37, 4.0, 0.45, 0.1).mul(&snow_m);
     if o.stage("brook", &mut c, &mut rng) {
         // the ice: the sky near the horizon mirrored dully (you see the sky
         // low down in ice seen at a slant), grayed; strokes level
@@ -503,14 +501,14 @@ fn main() {
         let dead = pal.mix(hex("#3b3531")).paint(0.25);
         // the snow line cuts the bole: nothing of the wood below it
         let sl = Fbm::new(88, 2, 12.0);
-        let above = Mask::from_fn(f, |x, y| 1.0 - smoothstep(-0.4, 0.4, y - (oak_base.1 - 1.0 + 1.6 * sl.get(x, 0.0))));
+        let above = Mask::from_fn(f, |x, y| 1.0 - smoothstep(-0.4, 0.4, y - (oak_base.1 - 1.0 + 2.8 * sl.get(x, 0.0) + 1.2 * sl.get(x * 4.0, 5.0))));
         wood(&mut c, &oak, dark, dead, 0.3, Some(&above), &mut rng);
         // the foot flares into the ground (the roots are under the snow)
         let w0 = oak.limbs[0].w[0];
         let mut fb = Held::new(Tool::round_sable(w0 * 0.45), rng.next_u64());
         for side in [-1.0f32, 1.0] {
             fb.reload(dark, 0.8);
-            c.drag(&mut fb, &Gesture::new(vec![(oak_base.0 + side * w0 * 0.2, oak_base.1 - w0 * 1.0), (oak_base.0 + side * w0 * 0.42, oak_base.1 - w0 * 0.3), (oak_base.0 + side * w0 * 0.65, oak_base.1 + 0.5)]).pressure(0.8, 0.3).ramps(0.0, 0.4), Some(&above));
+            c.drag(&mut fb, &Gesture::new(vec![(oak_base.0 + side * w0 * 0.25, oak_base.1 - w0 * 2.2), (oak_base.0 + side * w0 * 0.45, oak_base.1 - w0 * 0.9), (oak_base.0 + side * w0 * 0.72, oak_base.1 + 1.0)]).pressure(0.85, 0.55).ramps(0.0, 0.2), Some(&above));
         }
         c.dry();
         // bark: on the bole and the big limbs, lean broken strokes along the
@@ -564,9 +562,47 @@ fn main() {
         // its shadow, soft, falling toward the viewer and a little right
         // (the light is the glow behind it)
         let shade = pal.mix(hex("#8e93a7")).paint(0.3).with_hiding(0.6);
-        let mut sb = Held::new(Tool::filbert(oak.limbs[0].w[0] * 0.8), rng.next_u64());
-        sb.load(shade, 0.45);
-        c.drag(&mut sb, &Gesture::new(vec![(oak_base.0, oak_base.1 + 1.5), (oak_base.0 + 10.0, oak_base.1 + 16.0), (oak_base.0 + 26.0, oak_base.1 + 38.0)]).pressure(0.7, 0.25).ramps(0.1, 0.6), None);
+        let _ = shade;
+        // stippled: dense at the foot, thinning and widening as it runs out
+        let (s0, s1) = ((oak_base.0 + 1.0, oak_base.1 + 1.0), (oak_base.0 + 38.0, oak_base.1 + 86.0));
+        let sw = oak.limbs[0].w[0] * 0.28;
+        let along = move |x: f32, y: f32| -> (f32, f32) {
+            let (dx, dy) = (s1.0 - s0.0, s1.1 - s0.1);
+            let l2 = dx * dx + dy * dy;
+            let t = (((x - s0.0) * dx + (y - s0.1) * dy) / l2).clamp(0.0, 1.0);
+            let (px, py) = (s0.0 + dx * t, s0.1 + dy * t);
+            (t, ((x - px).powi(2) + (y - py).powi(2)).sqrt())
+        };
+        let sh_m = Mask::from_fn(f, move |x, y| {
+            let (t, d) = along(x, y);
+            if d < sw * (1.0 + 0.8 * t) + 3.0 && y > oak_base.1 - 2.0 { 1.0 } else { 0.0 }
+        });
+        let shadow = Stipple::new(Tool::stippler(1.6))
+            .mixed(pal, 0.45)
+            .color(move |x, y| mix(snow_col(x, y), hex("#838aa0"), 0.45, Mix::Light))
+            .coverage(move |x, y| {
+                let (t, d) = along(x, y);
+                2.4 * (1.0 - smoothstep(0.3, 1.0, d / (sw * (1.0 + 0.8 * t)))) * (1.0 - smoothstep(0.35, 1.0, t))
+            })
+            .pressure(0.45, 0.85)
+            .dips(20, 0.4, 0.6);
+        c.stipple(&sh_m, &shadow, 71);
+        c.dry();
+        // snow drifted over the foot, its top wavy: stippled in the lit
+        // snow's color so it has no stroke edge
+        let dn_o = Fbm::new(93, 2, 6.0);
+        let dn = &dn_o;
+        let drift_top = move |x: f32| oak_base.1 - 3.5 + 2.5 * dn.get(x, 1.0) + 0.02 * (x - oak_base.0).powi(2) / w0;
+        let drift_m = Mask::from_fn(f, move |x, y| if (x - oak_base.0).abs() < w0 * 1.4 && y > drift_top(x) - 2.0 && y < oak_base.1 + 6.0 { 1.0 } else { 0.0 });
+        let drift_s = Stipple::new(Tool::stippler(1.5))
+            .mixed(pal, 0.3)
+            .color(move |x, _| mix(snow_col(x, oak_base.1 - 6.0), hex("#dcd8cf"), 0.35, Mix::Light))
+            .coverage(move |x, y| 3.0 * smoothstep(drift_top(x) - 1.0, drift_top(x) + 1.5, y))
+            .pressure(0.55, 0.9)
+            .dips(16, 0.5, 0.5)
+            .aim(false);
+        c.stipple(&drift_m, &drift_s, 72);
+        c.dry();
         // a little snow thrown up against the foot on the lit side
         let snow_lip = pal.mix(hex("#d3cfc8")).paint(0.15).with_hiding(0.8);
         let mut b = Held::new(Tool::round_sable(2.0), rng.next_u64());
@@ -1008,13 +1044,15 @@ fn walker_fig(c: &mut paint::Canvas, at: (f32, f32), size: f32, coat: Paint, hat
     hd.tremor = 0.004;
     // shadow first, falling toward the viewer and right (the glow is behind)
     let mut s = hd.take(Tool::round_sable, 0.07, shadow, 0.7);
-    hd.mark(c, &mut s, paint::Mark { pts: &[(-0.06, 0.005), (0.15, -0.02), (0.38, -0.05)], pressure: (0.9, 0.3), ramps: (0.05, 0.6) }, None);
+    hd.mark(c, &mut s, paint::Mark { pts: &[(0.0, 0.01), (0.1, -0.15), (0.22, -0.38)], pressure: (0.9, 0.2), ramps: (0.05, 0.6) }, None);
     // legs: one striding back (lower), one forward, boots dark
     let mut b = hd.take(Tool::round_sable, 0.07, coat, 0.7);
     let mut lb = hd.take(Tool::round_sable, 0.05, coat, 0.7);
-    hd.line(c, &mut lb, &[(-0.03, 0.3), (-0.045, 0.14), (-0.06, 0.01)], 0.9, 0.75);
+    // the near leg straight under him, the far one stepping away (higher
+    // on the canvas, a little out), its heel lifted
+    hd.line(c, &mut lb, &[(-0.025, 0.3), (-0.045, 0.14), (-0.06, -0.005)], 0.9, 0.8);
     lb.reload(coat, 0.7);
-    hd.line(c, &mut lb, &[(0.035, 0.3), (0.045, 0.16), (0.05, 0.04)], 0.9, 0.75);
+    hd.line(c, &mut lb, &[(0.03, 0.3), (0.05, 0.17), (0.075, 0.05)], 0.85, 0.6);
     // the coat: shoulders to hem in several strokes, widening, the hem swinging
     let mut cb = hd.take(Tool::round_sable, 0.11, coat, 0.8);
     for (u0, u1) in [(-0.07, -0.12), (-0.02, -0.03), (0.03, 0.05), (0.075, 0.11)] {
@@ -1030,16 +1068,18 @@ fn walker_fig(c: &mut paint::Canvas, at: (f32, f32), size: f32, coat: Paint, hat
     // head: a dab of dark hair under a cap (seen from behind), a hint of neck
     let mut sk = hd.take(Tool::round_sable, 0.05, skin, 0.5);
     hd.dab(c, &mut sk, 0.0, 0.83, 0.03, std::f32::consts::FRAC_PI_2, 0.7);
-    let mut hb = hd.take(Tool::round_sable, 0.1, hat, 0.8);
-    hd.mark(c, &mut hb, paint::Mark { pts: &[(-0.035, 0.87), (0.0, 0.905), (0.04, 0.88)], pressure: (1.0, 1.0), ramps: (0.0, 0.2) }, None);
-    hb.reload(hat, 0.7);
-    hd.mark(c, &mut hb, paint::Mark { pts: &[(-0.045, 0.93), (0.0, 0.955), (0.05, 0.925)], pressure: (0.8, 0.6), ramps: (0.1, 0.3) }, None);
+    // the head, dark hair at the nape, under a flat cap worn a little
+    // aslant (an old-German beret)
+    let mut hb = hd.take(Tool::round_sable, 0.075, hat, 0.8);
+    hd.mark(c, &mut hb, paint::Mark { pts: &[(-0.01, 0.84), (0.0, 0.875)], pressure: (1.0, 0.9), ramps: (0.0, 0.2) }, None);
+    let mut cap = hd.take(Tool::round_sable, 0.04, hat, 0.8);
+    hd.mark(c, &mut cap, paint::Mark { pts: &[(-0.075, 0.9), (-0.02, 0.918), (0.04, 0.915), (0.08, 0.895)], pressure: (0.7, 0.8), ramps: (0.1, 0.3) }, None);
+    cap.reload(hat, 0.7);
+    hd.mark(c, &mut cap, paint::Mark { pts: &[(-0.045, 0.915), (0.0, 0.94), (0.045, 0.925)], pressure: (0.9, 0.7), ramps: (0.1, 0.3) }, None);
     // the stick: a rigger line from the hand to the snow ahead
     let mut r = hd.take(Tool::rigger, 0.018, hat, 0.8);
     hd.mark(c, &mut r, paint::Mark { pts: &[(0.17, 0.52), (0.21, 0.26), (0.25, 0.0)], pressure: (0.8, 0.6), ramps: (0.05, 0.1) }, None);
     // the hat's brim, a little wider than the crown
-    hb.reload(hat, 0.6);
-    hd.mark(c, &mut hb, paint::Mark { pts: &[(-0.075, 0.905), (0.0, 0.9), (0.08, 0.905)], pressure: (0.5, 0.5), ramps: (0.2, 0.2) }, None);
     // the edge of the left shoulder and back catching the afterglow: a
     // lean touch, broken by the tooth of the coat's paint
     let mut rb = hd.take(Tool::round_sable, 0.025, rim, 0.3);

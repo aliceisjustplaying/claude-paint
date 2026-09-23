@@ -93,7 +93,23 @@ is built outside the stages; every stage only paints.
 12. **grasses**: rigger flicks, fine upturning strokes laid last over the
     snow [NG p.56], placed in patches (fbm threshold), along the brook's
     banks and in the near foreground.
-13. **finish**: varnish, and cracks retuned for this ground (see friction).
+13. **fence**: an old paling fence running back from the right foreground,
+    posts spaced and sized in perspective, leaning, one broken short, rails
+    sagging or gone, one hanging down into the snow; a lit left edge; flat
+    snow caps and snow on the rails; snow drifted against the feet.
+14. **veil**: Friedrich's advice to Carus, a dark glaze over the whole
+    picture except the moon, darker toward the edges [MET PDF p.35]. Very
+    thin here (it is advice for moonlight pictures; this is dusk), cool
+    gray-brown, heaviest in the lower corners, never zero anywhere.
+15. **finish**: varnish, and cracks retuned for this ground (see friction).
+
+Later additions to earlier stages: thin stratus bands low in the glow
+(stippled, no strokes); the moon's glow stippled; the crescent filled with
+~260 short arc-wise touches clipped to the crescent mask (sharp horns);
+weathering, courses, lit reveals and snow on the ledges of the ruin; a
+stippled seam where the far snow meets the ridge's foot; bark streaks and a
+cool rim on the oak's bole and big limbs; the oak clipped at a wavy snow
+line, with a soft blue cast shadow toward the viewer.
 
 ## FRICTION
 
@@ -171,7 +187,25 @@ is built outside the stages; every stage only paints.
     the final veil glaze has a thickness that is never 0 anywhere. The
     engine should treat thickness below a small epsilon as 0 *before*
     settling, or scale the floor with the requested thickness.
-12. **`--stop` after a resumed stage and the stage's own output are hard
+13. **A round brush's end overshoots the limb's base.** The trunk is
+    dragged from `sk.base` with a big round, whose footprint reaches half a
+    width past the first point, so the tree hung below the snow line in a
+    rounded dark stub. Covering it with snow strokes after the fact failed
+    twice (sampled colors didn't match the snow around: a blue cushion,
+    then two white blobs). *Workaround:* `wood()` takes a clip mask, and
+    the oak is painted through a wavy "above the snow line" mask, which is
+    how a painter thinks of it: the snow cuts the bole.
+14. **`per_column` closures aren't `Copy`,** so a mask closure and a
+    `move` color closure can't both use the same profile (`snow_top`) without
+    a `let stp = &snow_top;` dance. Minor Rust friction, but it bites in
+    every stage that uses a profile twice.
+15. **Weathering patches came out reddish.** A detail pass aimed at a
+    cool violet-gray over the ruin picked red earth into some piles (the
+    full palette trades recipes near the target), giving rusty leopard
+    spots at 3200px. *Workaround:* `palette(&pal.only([lead white, bone
+    black, pale smalt, raw umber]))`, a stone family, as notes/color.md
+    suggests.
+16. **`--stop` after a resumed stage and the stage's own output are hard
     to tell apart.** `--resume sky --stop sky` repainted the sky (8.6 s)
     instead of saying there is nothing to do. Minor.
 

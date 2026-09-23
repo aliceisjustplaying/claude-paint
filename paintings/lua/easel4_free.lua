@@ -329,3 +329,22 @@ for _, r in ipairs({{548,196,1.0,0.1},{571,183,0.8,-0.15}}) do
   rv:stroke({{x, y}, {x + 2.4*s, y - 1.4*s}, {x + 5.2*s, y - 1.8*s - t}}, {pressure={0.7, 0.1}, ramps={0.1, 0.4}})
   rv:touch(x, y + 0.2, {pressure=0.6})
 end
+
+--@ chunk 16 · clock 3720
+wait(24*60)
+local keep = mask(function(x, y) if y > 300 then return 0 end; local c = sample(x, y); return c.value > 0.1 and 1 or 0 end):shrink(2.5):soften(1)
+skyveil = keep - ellipse(MX, MY, 16, 16)
+stipple(skyveil, {width=3.0, color=sky, coverage=function(x, y) return 1.6 * (1 - smoothstep(180, 300, y)) end, pressure={0.4, 0.7},
+  dips={20, 0.35, 0.6}, medium=0.5, pal=skypal, feather=0.6})
+
+--@ chunk 17 · clock 5160
+local vig = mask(function(x, y)
+  local fg = smoothstep(HZ + 20, H + 40, y)
+  local ex = math.max(0, math.abs(x - 560) / 560 - 0.5) / 0.5
+  local ey = math.max(0, (120 - y) / 120)
+  return clamp(0.6 * fg + 0.25 * ex^2 * smoothstep(HZ - 80, HZ + 60, y) + 0.12 * ey^2 + 0.08 * ex^2, 0, 1)
+end)
+glaze(vig, {color="#2e2622", coats=0.4})
+
+--@ chunk 18 · clock 46703.06640625
+wait(24*60); varnish{color="#e6d3a4", coats=0.3, vary=0.1}; relief()

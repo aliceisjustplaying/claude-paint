@@ -549,3 +549,7 @@ for i, t in ipairs(ts) do
 end
 -- heather: knock the purple stains back toward the dune
 glaze(heath:blur(3), {color="#3a3a2c", coats=0.18, pigment="semi"})
+
+--@ chunk 33 · clock 45631.58203125
+
+dry(); varnish{color="#e6d3a4", coats=0.3, vary=0.1}; relief(0.14)

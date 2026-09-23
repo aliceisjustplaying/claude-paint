@@ -617,6 +617,152 @@ from)`, plus `wood:floor()` and `wood:mask()` (everything). Numbers:
 works like `f:paint`. `wood.rows` builds a table of every tree, so read it
 once, not inside a color function.
 
+### Broadleaved trees grown into a drawn crown
+
+`tree{habit="oak"}` grows a tree from buds, and you can't choose its
+shape. `tree_in{}` works the other way round: you draw the crown's
+silhouette and the trunk, and an oak, beech, lime, birch or pollard willow
+grows into it by space colonization (Runions et al. 2007). Attraction
+points fill the crown in depth, thinned by a low noise so the crown has
+its own gaps where limb masses part. The trunk runs on into the crown as
+a leader, and only a few nodes on it sprout, so the scaffold limbs come
+from the trunk. Each step bends by the species' habit: an oak grows
+crooked and level, with sympodial kinks that persist down a limb; a beech
+rises smooth. Widths follow the pipe model down to the trunk, which flares
+at the foot. Fine twigs come at the tips and along the thin wood. They
+hang from a birch and fan off an oak like a fishbone. Leaves come as clumps
+on the leafy twigs, sized by species and season, and each clump carries
+the hooked touches a pointed brush lays on it. Each clump is lit by where
+it faces on the crown and shaded by the clumps between it and the sun.
+The same crown and seed grow the same wood in every season and anywhere
+on the canvas.
+
+```lua
+WORLD = world{horizon=452, sun={azimuth=-125, elevation=38}}
+OAK = {{70,236},{96,192},{140,170},{178,150},{226,160},{262,150},{300,178},{330,214},{346,262,"c"},{334,318},
+       {310,352},{322,392,"c"},{270,410},{220,402},{178,416},{130,404},{84,396,"c"},{50,366},{38,318},{52,272}}
+oak = tree_in{crown=outline{pts=OAK, char="soft", seed=5}, trunk={{196,592},{192,520},{187,452}},
+              species="oak", season="summer", sun=WORLD, seed=7}
+print(oak)  -- tree_in(oak, summer, crown 286 tall, 3055 limbs (2460 twigs), 4941 clumps, 29462 touches, ...)
+-- 1. the wood: stout wood as filled body paint, a lit flank on the trunk, the rest pressed to width
+local thick = oak:wood(3.5)                      -- where the wood is at least 3.5 wide
+work(thick, {hand="body", tool="round 2", length={4, 12}, coverage=3.5, angle=1.5, clip=thick, color="#3b342c"})
+local stout = oak:wood(7)
+work(stout * mask(function(x, y) return 1 - stout:at(x + 1.8, y + 1) end),
+     {hand="body", tool="round 1.4", coverage=2.5, angle=1.5, clip=thick, color="#7d7566"})
+oak:paint_wood(brush("round", 2.4), {color="#3b342c", min=1.2, max=3.5})
+oak:paint_wood(brush("rigger", 0.9), {color="#3b342c", max=1.2})
+-- 2. the leaves' body from the light on them (deep shade inside, lit masses toward the sun)
+local lv, L = oak:leaves(), oak:light()
+local turn = noise{seed=9, period=9}
+work(lv, {hand="hatch", tool="round 1.6", length={3, 6}, coverage=2.4, clip=lv, hug=false,
+  angle=function(x, y) return 2.4 * turn(x, y) end, angle_jitter=0.8,
+  color=function(x, y) local v = L:at(x, y)
+    return mix(mix("#222b1d", "#35412a", smoothstep(0.1, 0.45, v)), "#5c6a3a", smoothstep(0.5, 0.85, v)) end})
+-- 3. sky into the crown's gaps first, so the touches break their edges
+local gp = oak:gaps()
+work(gp, {hand="detail", tool="round 1.4", color=sky, clip=gp, coverage=2})
+-- 4. the hooked touches, shade to light; front shade masses catch the sky
+local b = brush("round", oak.touch_w)
+oak:paint(b, {color="#263020", lit={0, 0.4}})
+oak:paint(b, {color="#4a5446", lit={0.15, 0.4}, depth={0.25, 1}, share=0.5})
+oak:paint(b, {color="#46522e", lit={0.4, 0.6}})
+oak:paint(brush("round", oak.touch_w * 0.9), {color="#6f7c45", lit={0.6, 0.78}})
+oak:paint(brush("round", oak.touch_w * 0.8), {color="#98a060", lit={0.78, 1}, every=6})
+
+-- the same oak bare: same crown, trunk and seed (moved 322 right), season="winter"
+local function moved(pts) local o = {} for i, p in ipairs(pts) do o[i] = {p[1] + 322, p[2]} end return o end
+bare = tree_in{crown=moved(oak.crown), trunk={{518,592},{514,520},{509,452}}, species="oak", season="winter", sun=WORLD, seed=7}
+-- wood as above, then the fine twigs thinner and lighter: the crown's lace against the sky
+bare:paint_wood(brush("rigger", 0.55), {color="#554e45", max=1.2, pressure=0.04})
+bare:paint(brush("round", bare.touch_w * 0.7), {color="#6e5234", share=0.4})   -- the few dead leaves an oak keeps
+```
+
+`tree_in{crown=, trunk=, species=, season=, sun=, seed=, ...}`: `crown` is
+a closed `outline{}` or points. With fewer than 12 points the corners are
+rounded. `trunk` runs from the foot up, as points or an open outline. If
+it stops short, a crooked leader carries it on into the crown. A single
+point is the foot. Without a trunk, one is made under the crown. `sun` is
+`{x, y, z}` toward the sun (x right, y down, z to you) or a `world{}`,
+whose sun is used. The default is the upper left, a little in front.
+
+| species | habit |
+|---|---|
+| `oak` (default) | broad crown of crooked, level limbs, sympodial zigzags, 2–4 scaffold limbs, lobed leaf masses with sky between |
+| `beech` | smooth rising limbs, level sprays (flat touches), dense |
+| `lime` (or `linden`) | a dense dome, leaves to the shell, many fine limbs |
+| `birch` | a leading stem, thin limbs, long hanging twigs, small airy clumps |
+| `willow` (or `pollard`) | a short thick trunk ending in a head, straight rods rising from it |
+
+| season | leaves |
+|---|---|
+| `spring` | 80% of the leaves, small clumps |
+| `summer` (default) | all |
+| `autumn` | about 60%, fallen in patches (whole twigs bare), turned (`turn` per clump and touch) |
+| `late_autumn` | about 30%, all turned |
+| `winter` | bare, but for a few dead leaves low in an oak or beech (`dead=true`) |
+
+`leaf=` (0..1) and `turn=` override the season. Any species number can be
+overridden: growth `step`, `density`, `influence`, `kill`, `up`, `out`,
+`crook`, `kink`, `inertia`, `shell`, `voids`, `void_size` and `depth`.
+Wood: `scaffold={min, max}`, `girth` (trunk width per crown height),
+`twig_w`, `smooth`, `pipe` and `leader` (how far the trunk runs on into the crown). Twigs: `twigs`, `twig_len`, `twig_spread`,
+`twig_droop`, `twig_zig` and `twig_along`. Leaves: `clump`, `squash`,
+`hang`, `fill`, `ragged`, `leafiness` and `leafy_w`. Touches: `touch`,
+`touch_w`, `hook`, `droop`, `flat`, `touches` and `marcescent`.
+
+What you get:
+- **Values.** `t.limbs` (trunk first: `{pts, w, z, order, parent,
+  twig}`), `t.clumps` (back to front: `{x, y, z, depth, r, squash, tilt,
+  fill, lit, shade, turn, dead, limb}`, depth from -1 at the back to 1 at
+  the front), `t.foot`, `t.fork`, `t.height`, `t.step`, `t.grain` (mean
+  clump radius), `t.touch_w` (a good pointed-brush width), `t.bounds`,
+  `t.crown`, `t.species` and `t.season`.
+- **Masks.** `t:leaves()` or `t:leaves{depth={lo, hi}, lit={lo, hi},
+  turn=, dead=}` (clumps by depth or light), `t:light()` (0..1 on the
+  leaves), `t:lit(from)` and `t:shade(from)` (default 0.55), `t:gaps(reach)`
+  (sky through the crown), `t:wood()` or `t:wood(lo, hi)` (the wood where
+  it is that wide, so `t:wood(7)` is the trunk and stout limb bases),
+  `t:trunk()`, `t:mask()` and `t:crown_mask()`.
+- **Touches.** `t:touches{lit=, depth=, turn=, dead=}` gives `{pts, w, lit,
+  z, depth, turn, dead, clump}`. `t:paint(brush, {color=, lit=, depth=,
+  turn=, dead=, share=1, every=10, load=0.8, pressure={0.75, 0.05},
+  ramps=, shake=, clip=, fit=true})` lays them back to front, with the
+  pointed brush pressed to each touch's width. `color` may be
+  `function(touch)` (autumn: mix by `touch.turn`). `share` lays a
+  deterministic part of them. The `lit` ranges are half open.
+- **Wood strokes.** `t:paint_wood(brush, {color=, min=, max=, twigs=true,
+  every=5, pressure=, ...})` strokes every limb whose base width is in
+  `[min, max)`, pressed from its base width to its tip.
+
+**Field trees in depth.** Draw a few crowns and `tree_group` grows them
+where you drew them. It adds `count` more trees behind, made from your
+crowns: flipped, stretched, reshaped, some tall and narrow. The added trees
+are smaller, stand higher toward the horizon and carry more air.
+
+```lua
+field = tree_group{crowns={F1, F2, F3}, trunks={{{592,481},{590,460}}, {{651,483},{651,464}}, {{416,488},{418,468}}},
+                   species={"oak", "lime", "oak"}, count=6, horizon=452, spread=0.8, sun=WORLD, seed=19}
+glaze(field:shadow():blur(1.5), {color="#4d5539", coats=0.25})   -- one faint shadow per tree
+for i, t in ipairs(field:trees()) do                                -- far to near
+  local lv, L, h = t:leaves(), t:light(), t.haze
+  t:paint_wood(brush("round", 1.2), {color=mix("#2f2a24", air, 0.55 * h), min=0.8})
+  work(lv, {hand="hatch", tool="round 1.2", length={1.5, 3.5}, coverage=2.4, clip=lv, hug=false, angle_jitter=1.2,
+    color=function(x, y) return mix(mix("#27301f", "#56623a", smoothstep(0.3, 0.8, L:at(x, y))), air, 0.7 * h) end})
+  t:paint(brush("round", math.max(0.8, t.touch_w)), {color=mix("#6d7746", air, 0.6 * h), lit={0.6, 1}, share=0.7})
+end
+```
+
+`tree_group{crowns=, trunks=, species= (a name or a list, one per crown),
+season=, foot=, count=3, horizon=, recede=1.5, air=0.5, spread=0.5,
+narrow=0.3, sun=, seed=}`: `foot` is the y the drawn trees stand on if no
+trunks are given. The added trees stand `1 + u*recede` times farther off,
+with `haze = 1 - exp(-(d - 1)*air)`. They spread `spread` times the drawn
+span to each side, and a share `narrow` are drawn tall and narrow. Trees
+run from far to near: `g:trees()`, `g:tree(i)` (a tree value with `haze`
+and `scale`), `g:haze(i)`, `g:scale(i)`, `g:shadow()`, `g:mask()`,
+`g.count` and `g.horizon`. The study is `paintings/lua/trees_in.lua`.
+
 ### Meadows
 
 ```lua

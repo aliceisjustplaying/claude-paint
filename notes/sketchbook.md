@@ -137,6 +137,35 @@ they only prevent bad results.
 
 *Ceiling:* oaks come out as umbrella/savanna crowns or "broccoli"; spruce tiers as regular chevrons; field trees as identical balls; wood interiors as flat black masses. No painter has yet drawn a tree with its structure, only built one from parameters.
 
+**Broadleaves from a drawing: `tree_in{}` and `tree_group{}` (THE TOOL TO USE for oak,
+beech, lime, birch and willow; use it before `tree{}`/`t:foliage{}` or a hand-built crown).**
+Draw the crown as an `outline{}`, lopsided and lobed (a symmetric blob grows a
+lollipop), and the trunk from the foot up. Then
+`t = tree_in{crown=o, trunk={{x,foot},...}, species="oak"|"beech"|"lime"|"birch"|"willow",
+season="summer"|"spring"|"autumn"|"late_autumn"|"winter", sun=WORLD, seed=}` grows the limbs
+from the trunk into your crown, with the crown's own gaps, leaf clumps on the twigs and hooked
+touches on the clumps [trees_in study, `paintings/lua/trees_in.lua`]. Paint it in this order:
+1. Wood: `work(t:wood(3.5), {hand="body", tool="round 2", ...})`. Put the lit flank only on
+   `t:wood(7)`, since a flank on thin limbs turns them into pale lines. Then
+   `t:paint_wood(brush("round", 2.4), {min=1.2, max=3.5})` and `brush("rigger", 0.9), {max=1.2}`.
+2. The leaves' body: `work(t:leaves(), {hand="hatch", tool="round 1.6", hug=false, clip=...})`,
+   colored from `L = t:light()`: `mix(mix("#222b1d", "#35412a", smoothstep(0.1, 0.45, v)),
+   "#5c6a3a", smoothstep(0.5, 0.85, v))`. A single body color gives one dark blob.
+3. Sky into `t:gaps()` **before** the touches, or the holes keep hard cut-out edges.
+4. Touches, `b = brush("round", t.touch_w)`: `lit={0, 0.4}` `#263020`; `lit={0.15, 0.4},
+   depth={0.25, 1}, share=0.5` in a cool `#4a5446` (the front shade masses catch the sky);
+   `lit={0.4, 0.6}` `#46522e`; `lit={0.6, 0.78}` `#6f7c45`; `lit={0.78, 1}` `#98a060`, `every=6`.
+
+A bare tree: the same crown, trunk and seed with `season="winter"` grow the same wood (even
+moved across the canvas). Stroke the twigs `rigger 0.55`, `pressure=0.04`, a shade lighter than
+the limbs. Paint only `share=0.4` of the dead leaves an oak keeps, or they read as burrs.
+Field trees: draw 2–3 different crowns (a broad low one, a tall narrow one) with short
+trunks, then `tree_group{crowns=, trunks=, species={...}, count=6, horizon=HZ, spread=0.8}`.
+Paint far to near with `t.haze`, and lay one `g:shadow():blur(1.5)` glaze at 0.25. Don't
+`roughen` the shadow: it breaks into speckles.
+*Still weak* [trees_in study]: sky holes have crisp torn-paper edges at 3200; a beech's
+leader reads as a gray pole through its crown; a birch's white stem runs high into the crown.
+
 **Firs from a drawing: `fir{}` and `fir_wood{}` (use these before hand-building a spruce).**
 Draw the silhouette as an `outline{}` (apex, flanks, the crown's base) and
 `fir{envelope=o, foot={x, y}, habit="spire"|"old"|"young"|"storm", seed=}` grows

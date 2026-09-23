@@ -53,3 +53,4 @@ spectral) is split into single-defect fixes the loops pull in.
 - Loop 2 critic2: l2_near 22 vs l1_near 19 in-batch (+3), but anchor fell 27->24 and l1_near 26->19 across batches: single-critic absolute scale is noisy (±4-7). Rule from now: 3 independent critics per batch, median; decisions on in-batch deltas vs anchors.
 - loop1-halo merged: halos were an engine bug (contact level averaged thick paint into its thin neighbors; now a running median). Golden re-recorded.
 - Loop 3 near and loop 2 green started 19:22 on the halo-fixed engine. Next batch must re-render previous versions with the current engine for fair comparison. loop2-grain still running.
+- Loop 3 scored: near +1 (21->22), green 0 (17; halos from cut-out masks + scribbles). Loop 4 started 19:51: loop4-near, loop3-green, tool-firs (firs/woods grown into drawn envelopes). loop2-grain still running.

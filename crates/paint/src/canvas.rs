@@ -9,7 +9,24 @@ use crate::surface::{COAT_UM, Linen, vnoise};
 /// Fraction of a glaze layer that stays as film (the rest of the "thickness"
 /// is how deep the color reads; a glaze is mostly medium, and thin).
 const GLAZE_FILM: f32 = 0.3;
+/// Thinnest glaze film that forms, µm. A film has to be at least about as
+/// thick as its pigment particles and the oil they sit in; glazing pigments
+/// (lakes, earths, smalt fines) run ~0.2–2 µm, so below ~1 µm there is no
+/// continuous film, only a trace wiped into the tooth. Thinner requests fade
+/// out smoothly from `MIN_FILM_UM` to half of it (no cut, so no edge).
+pub const MIN_FILM_UM: f32 = 1.0;
 use rayon::prelude::*;
+
+/// Film that forms from a request of `um` µm: all of it above `MIN_FILM_UM`,
+/// fading smoothly (C¹) to nothing at half of it.
+#[inline]
+pub(crate) fn formed_film(um: f32) -> f32 {
+    if um >= MIN_FILM_UM {
+        um
+    } else {
+        um * crate::smoothstep(0.5 * MIN_FILM_UM, MIN_FILM_UM, um)
+    }
+}
 
 /// The pixels a buffer holds and the units → pixels scale.
 ///
@@ -345,7 +362,14 @@ impl Canvas {
     }
 
     /// Kubelka–Munk glaze: a layer of `pigment` whose thickness is
-    /// `thickness(x, y)` (times mask coverage, if given).
+    /// `thickness(x, y)` (times mask coverage, if given), in coats.
+    ///
+    /// The glaze is mostly medium: its film is `GLAZE_FILM` of a coat per
+    /// coat of color depth, and a film thinner than `MIN_FILM_UM` does not
+    /// form (it fades out smoothly below it). So a long soft falloff, or a
+    /// blurred mask's float residue, ends where the film gives out, softly,
+    /// not at the last nonzero float. It dries at once (a glaze over dry
+    /// paint; see `drying` for wet paint and time).
     pub fn glaze(
         &mut self,
         pigment: &Pigment,
@@ -364,7 +388,17 @@ impl Canvas {
             .into_par_iter()
             .map(|i| {
                 let c = mask.map_or(1.0, |m| m.data[f.whole_index(i)]);
-                if c <= 0.0 { 0.0 } else { thickness(f.ux(i % w), f.uy(i / w)).max(0.0) * c }
+                if c <= 0.0 {
+                    return 0.0;
+                }
+                let t = thickness(f.ux(i % w), f.uy(i / w)).max(0.0) * c;
+                // (a NaN request is no glaze)
+                if t.is_nan() || t <= 0.0 {
+                    return 0.0;
+                }
+                let um = t * COAT_UM * GLAZE_FILM;
+                let formed = formed_film(um);
+                if formed >= um { t } else { t * formed / um }
             })
             .collect();
         let add: Vec<f32> = th.iter().map(|t| t * COAT_UM * GLAZE_FILM).collect();
@@ -452,6 +486,83 @@ impl Canvas {
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use crate::color::hex;
+    use crate::mask::Mask;
+    use crate::pigment::Pigment;
+    use crate::style::Style;
 
-impl Canvas {
+    /// Largest channel change per distance band (40 units) from `at`.
+    fn change_by_distance(c: &super::Canvas, before: &[crate::color::Rgb], at: (f32, f32)) -> Vec<f32> {
+        let f = c.f;
+        let mut bins = vec![0.0f32; 16];
+        for i in 0..c.px.len() {
+            let d = ((f.ux(i % f.w) - at.0).powi(2) + (f.uy(i / f.w) - at.1).powi(2)).sqrt();
+            let e = (0..3).map(|k| (c.px[i][k] - before[i][k]).abs()).fold(0.0, f32::max);
+            assert!(c.px[i].iter().all(|v| v.is_finite()) && c.height[i].is_finite(), "non-finite pixel at d {d}");
+            let b = ((d / 40.0) as usize).min(15);
+            bins[b] = bins[b].max(e);
+        }
+        bins
+    }
+
+    /// Amnesia friction 2 (winter #11): a glaze with a long Gaussian falloff
+    /// is tiny but positive far out (down to f32 denormals). It used to
+    /// settle to NaN there and paint the glaze's full masstone in a ring
+    /// ending where `exp` underflows: a hard pale edge. Now the change falls
+    /// off monotonically with the thickness and is invisible in the tail.
+    #[test]
+    fn glaze_long_falloff_has_no_edge() {
+        let st = Style::friedrich();
+        let mut c = st.prepare(300, 1.5, 3);
+        let before = c.px.clone();
+        let at = (500.0f32, 300.0f32);
+        c.glaze(&Pigment::transparent(hex("#e8e0c0")), None, move |x, y| {
+            let d = ((x - at.0).powi(2) + (y - at.1).powi(2)).sqrt();
+            0.35 * (-(d / 38.0).powi(2)).exp()
+        });
+        let bins = change_by_distance(&c, &before, at);
+        assert!(bins[0] > 2.0 / 255.0, "the glaze shows at its center: {bins:?}");
+        for b in 3..bins.len() {
+            assert!(bins[b] < 0.5 / 255.0, "visible glaze in the tail at band {b}: {bins:?}");
+        }
+    }
+
+    /// Amnesia friction 2 (coast #0a): a blurred mask leaves float residue
+    /// out to the canvas edges; a glaze through it must not lay a rectangle.
+    #[test]
+    fn glaze_through_blurred_mask_leaves_no_rectangle() {
+        let st = Style::friedrich();
+        let mut c = st.prepare(300, 1.5, 4);
+        let before = c.px.clone();
+        let m = Mask::from_fn(c.frame(), |x, y| if (x - 300.0).abs() < 20.0 && (y - 200.0).abs() < 60.0 { 1.0 } else { 0.0 }).blur(1.6);
+        let residue = m.data.iter().filter(|&&v| v > 0.0 && v < 1e-3).count();
+        c.glaze(&Pigment::transparent(hex("#3a2a1a")), Some(&m), |_, _| 1.2);
+        let f = c.f;
+        let mut far = 0.0f32;
+        for i in 0..c.px.len() {
+            let (x, y) = (f.ux(i % f.w), f.uy(i / f.w));
+            assert!(c.px[i].iter().all(|v| v.is_finite()) && c.height[i].is_finite());
+            if (x - 300.0).abs() > 60.0 || (y - 200.0).abs() > 100.0 {
+                far = far.max((0..3).map(|k| (c.px[i][k] - before[i][k]).abs()).fold(0.0, f32::max));
+            }
+        }
+        assert!(far < 0.5 / 255.0, "glaze outside the blurred mask: {far} ({residue} residue pixels)");
+    }
+
+    /// The film fades in smoothly below the minimum (no step, no overshoot).
+    #[test]
+    fn formed_film_is_smooth_and_monotone() {
+        let mut last = 0.0f32;
+        for k in 0..=400 {
+            let um = k as f32 * 0.005;
+            let f = super::formed_film(um);
+            assert!(f >= last - 1e-7 && f <= um + 1e-7, "{um}: {f}");
+            assert!(f - last < 0.02, "step at {um}");
+            last = f;
+        }
+        assert_eq!(super::formed_film(0.2), 0.0);
+        assert_eq!(super::formed_film(3.0), 3.0);
+    }
 }

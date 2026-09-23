@@ -59,3 +59,6 @@ green, a close study); stop and evaluate.
 - cracks merged: organic web fitted to the ground (was a brick grid); open: cracks invisible in darks, density still even across skies.
 - fixes-ux merged (stage UX, Copy fields, roughen units, form docs). Coast #17 = NaN gesture point: reject non-finite points in bristle.rs after tip merges (test crates/paint/tests/curved_drag_nan.rs, ignored).
 - easel v1 done (LuaJIT via mlua 0.10: read brief before the Lua 5.5 edit). Resumed as easel-2: switch to Lua 5.5/mlua 0.12, merge main, expose form, exact rollback.
+- drying merged (checkpoint PAINTCK3 combines drying state + cracks' ground; resume verified byte-identical).
+- scene merged: one sun, shadows/contact/reflections consistent in all three study panels. Its 'glaze at thickness 5 wipes to ground' report doesn't reproduce on main after drying's settle NaN fix (probe: glaze darkens toward its own color).
+- atmosphere launched (sky light model, cloud volumes, noise toolkit, ranges that don't read as waves). Running: tip, fixes-paint, green, easel-2, atmosphere.

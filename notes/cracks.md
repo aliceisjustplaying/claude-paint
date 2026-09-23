@@ -18,7 +18,7 @@ darkened every ~8 px island edge and the preview looked like crazed glass
    them in (`Cracks::fit`):
    - **Ground:** from the canvas. `Canvas::prime` and brushed style grounds
      add their thickness to `Canvas::ground_um()`, and the value is kept in
-     checkpoints (appended at the end of the state, format bumped to `PAINTCK2`). With 240 µm the weave
+     checkpoints (appended at the end of the state, format bumped to `PAINTCK2`; after merging with drying it is `PAINTCK3`). With 240 µm the weave
      coupling is 0 (de Willigen: thick grounds give smooth, curved cracks),
      so there is no grid.
    - **Island size:** proportional to the layer thickness. Channel cracks

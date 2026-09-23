@@ -44,6 +44,9 @@ Engine (`crates/paint`):
   layers level as they dry (Orchard's law with a yield-stress floor), thin
   fluid paint pools in the hollows, volume is conserved
 - `wet` – the wet paint layer (volume, Mixbox pigment mix, hiding, stiffness)
+- `drying` – time: `c.wait(minutes)` ages each pixel's wet paint (open,
+  setting, tacky, touch-dry) by pigment, thickness and fat; brushes feel
+  the stage; `c.dry()` waits until all is touch-dry: `notes/drying.md`
 - `bristle` – simulated brushes (round, flat, filbert, fan, rigger, badger):
   per-bristle reservoirs, bend and splay, contact with the surface relief,
   deposit, pickup and ploughing
@@ -66,6 +69,11 @@ Engine (`crates/paint`):
   faces (`Ridge`), lit with cast shadows. It gives per-point planes, light
   and shadow families, fall lines and masks for parts, facets, silhouettes
   and edges. It paints nothing: `notes/form.md`
+- `scene` – one world, one sun: a camera (horizon, ground plane, scale at
+  depth), ground and water, bodies placed on the ground, cast shadows traced
+  along the sun, contact seams, mirror images in still or rippled water,
+  ribbons and spacing that recede. Every `Form` in it is lit alike. It
+  paints nothing: `notes/scene.md`
 - `canvas` – glazes, relief lighting, dithered PNG out
 - `growth` – how trees grow (buds, light, vigor, pipe-model widths, decline):
   returns a skeleton of limbs, including which parts are dead wood;
@@ -102,6 +110,7 @@ Notes for the painter (read before writing a painting):
 - `notes/color.md` – what a color means: masstone, aimed mixing, hiding
 - `notes/stipple.md` – stippling
 - `notes/form.md` – solids, light, shadow and the masks they give
+- `notes/scene.md` – one world and one sun: placing things, shadows, contact, reflections, perspective
 - `notes/motifs.md` – trees, spruces, figures
 
 Viewing renders

@@ -12,6 +12,7 @@ mod api;
 mod form;
 mod world;
 mod depth;
+mod edit;
 mod look;
 mod session;
 
@@ -24,10 +25,15 @@ use std::time::{Duration, Instant};
 
 const USAGE: &str = "easel: a live painting session (see crates/easel/README.md)
 
-  easel open <name> [--width 1000] [--undo 8]   start or reattach; replays paintings/lua/<name>.lua if it exists
+  easel open <name> [--width 1000] [--undo 8] [--checkpoints 6]   start or reattach; replays paintings/lua/<name>.lua if it exists
   easel do '<lua>'  |  easel do -f chunk.lua  |  easel do - (stdin)     [--look] also looks afterwards
   easel look [--crop x0,y0,x1,y1] [--mode value,squint,mirror] [--dried] [--relief] [--size 1000]
-  easel undo [n]      take back the last n chunks (default 1)
+  easel undo [n]      take back the last n chunks (default 1); their code is kept (easel undone)
+  easel show N        print chunk N's code
+  easel edit N '<lua>' | -f chunk.lua | -    replace chunk N and replay from it (from the nearest checkpoint)
+        [--insert] put it before chunk N instead   [--drop] remove chunk N   [--undone K] use undone chunk K's code   [--look]
+  easel undone [K]    list the chunks undone or replaced (or print K's code)
+  easel redo [K]      run undone chunk K (default: the latest) again as a new chunk
   easel log           the session so far (= paintings/lua/<name>.lua)
   easel status        chunks, clock, wet or dry
   easel save [path]   the canvas as a PNG (default out/easel/<name>/<name>.png)
@@ -65,6 +71,7 @@ fn main() -> ExitCode {
             Ok(())
         }
         "do" | "look" | "undo" | "log" | "status" | "save" | "frames" | "check" | "close" => client(&cmd, &rest, name),
+        "edit" | "show" | "undone" | "redo" => edit::client(&cmd, &rest, name),
         o => Err(format!("unknown command {o:?}\n\n{USAGE}")),
     };
     match r {
@@ -161,6 +168,7 @@ fn open(args: &[String]) -> Result<(), String> {
     valid_name(&name)?;
     let width: usize = flag(args, "--width").map(|w| w.parse().map_err(|_| "--width N")).transpose()?.unwrap_or(1000);
     let undo: usize = flag(args, "--undo").map(|w| w.parse().map_err(|_| "--undo N")).transpose()?.unwrap_or(8);
+    let keep: usize = flag(args, "--checkpoints").map(|w| w.parse().map_err(|_| "--checkpoints N")).transpose()?.unwrap_or(edit::CHECKPOINTS);
     let dir = session_dir(&name);
     std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
     std::fs::write(root().join("out/easel/current"), &name).map_err(|e| e.to_string())?;
@@ -173,7 +181,7 @@ fn open(args: &[String]) -> Result<(), String> {
     let exe = std::env::current_exe().map_err(|e| e.to_string())?;
     use std::os::unix::process::CommandExt;
     std::process::Command::new(exe)
-        .args(["serve", &name, "--width", &width.to_string(), "--undo", &undo.to_string()])
+        .args(["serve", &name, "--width", &width.to_string(), "--undo", &undo.to_string(), "--checkpoints", &keep.to_string()])
         .stdin(std::process::Stdio::null())
         .stdout(log.try_clone().map_err(|e| e.to_string())?)
         .stderr(log)
@@ -220,6 +228,7 @@ fn serve(args: &[String]) -> Result<(), String> {
     let width: usize = flag(args, "--width").and_then(|w| w.parse().ok()).unwrap_or(1000);
     let undo: usize = flag(args, "--undo").and_then(|w| w.parse().ok()).unwrap_or(8);
     let mut s = Session::new(width, undo).map_err(|e| format!("easel: fatal: {e}"))?;
+    s.keep = flag(args, "--checkpoints").and_then(|w| w.parse().ok()).unwrap_or(edit::CHECKPOINTS);
     // resume from the log
     let lp = log_path(&name);
     let mut written = None;
@@ -344,7 +353,9 @@ impl Server {
             "look" => self.look(args, None),
             "undo" => {
                 let n: usize = args.first().map(|a| a.parse().map_err(|_| "undo [n]")).transpose()?.unwrap_or(1);
-                self.s.undo(n)?;
+                let len = self.s.log.len();
+                let gone = self.s.undo(n)?;
+                edit::keep_undone(&self.name, len + 1 - gone.len(), "undone", &gone)?;
                 let note = self.save_log()?;
                 Ok(format!("{note}undid {n} · {}\n", self.s.status()))
             }
@@ -381,6 +392,7 @@ impl Server {
                 let note = self.save_log()?;
                 Ok(format!("{note}closed; the session is in {}\n", log_path(&self.name).display()))
             }
+            "edit" | "show" | "undone" | "redo" => self.handle_edit(cmd, args, payload),
             o => Err(format!("unknown command {o:?}")),
         }
     }

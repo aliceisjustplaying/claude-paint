@@ -336,6 +336,21 @@ What doesn't, yet:
   regularly;
 - bare-ground flecks remain (the coverage issue).
 
+**At 3200px** (`easel run paintings/lua/meadow.lua --width 3200`, 114 s)
+the meadow reads much sparser than in the 1000px preview. Tufts are laid
+out in canvas units, so there are as many at both sizes, but a
+pointed-rigger blade is a hairline a few pixels wide at 3200. The preview
+promises a denser sward than the full render delivers. A painter should
+check a `--crop` at 3200 before trusting the preview; the motif side
+could scale `spacing` or blade width with resolution. The hazed horizon
+band also shows dotted strokes at full size, and the bare-ground flecks
+are larger.
+
+**Replay exactness after the merge:** example, rocks and meadow are each
+byte-identical between a live session resumed from its log and
+`easel run` in another process, at 1000px and at 3200px. At 3200px the
+live resumes took 81, 60 and 208 s and the runs 87, 92 and 114 s.
+
 Two feel notes. The perspective helpers catch scale mistakes at once: my
 first beech spot was 11.5 m away, where 18 m is 1,671 units, and `print(s)`
 showed it before anything was painted. And `color_over` with a b shift

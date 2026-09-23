@@ -154,38 +154,83 @@ fn save_ground_crops() {
     }
 }
 
-/// Diagnostic: bare-ground pixels in a thin broad sky (as the easel's
-/// `hand="broad"` lays it) over each ground, with and without blending.
+/// The top ground as it was brushed before loop 2 (long parallel strokes
+/// across the canvas), for comparison.
+fn old_brushed(width: usize, seed: u64, crop: Crop) -> paint::Canvas {
+    use paint::{Handling, Mask, Tool};
+    let st = Style::friedrich();
+    let g = st.ground[2];
+    let mut c = Style { ground: st.ground[..2].to_vec(), ..st.clone() }.prepare_window(width, 1.3, seed, Some(crop));
+    let all = Mask::from_fn(c.frame(), |_, _| 1.0);
+    let hog = Tool { lay: 1.2, ragged: 0.2, ..Tool::hog_flat(40.0) };
+    let h = Handling::new(hog)
+        .color(move |_, _| g.color)
+        .paint(g.hiding, g.stiff)
+        .angle(|_, _| 0.0)
+        .angle_jitter(0.04)
+        .curve(0.04, 0.3)
+        .drift(0.25, 450.0)
+        .cross(0.1)
+        .tail(0.1)
+        .broken(0.1)
+        .swell(0.12)
+        .length(250.0, 600.0)
+        .coverage(3.5)
+        .pressure(0.8, 0.95)
+        .dips(1, (g.um / 318.0).min(1.0), 0.3)
+        .jitter(0.004, 0.002)
+        .shake(0.15);
+    c.work(&all, &h, seed * 31 + 2);
+    c.dry();
+    c
+}
+
+/// Pixels of bare (saturated) ground under a thin broad sky, blended as
+/// the style blends it, on a prepared canvas.
+fn sky_bare(mut c: paint::Canvas, margin: f32) -> usize {
+    use paint::{Mask, hex};
+    let base = Style::friedrich();
+    let sky = Mask::from_fn(c.frame(), |_, _| 1.0);
+    c.work(&sky, &base.broad().color(|_, _| hex("#d9dcd6")).angle(|_, _| 0.0).coverage(4.5).medium(0.3), 11);
+    if let Some(b) = base.blend() {
+        c.work(&sky, &b, 12);
+    }
+    c.dry();
+    let f = c.window();
+    let pad = (margin * 3.2) as usize;
+    let mut n = 0;
+    for y in pad..f.h - pad {
+        for x in pad..f.w - pad {
+            let p = c.pixels()[y * f.w + x];
+            if p[0] - p[2] > 0.12 {
+                n += 1;
+            }
+        }
+    }
+    n
+}
+
+/// A thin blended sky (as the easel's `hand="broad"` lays it) leaves
+/// about as few pixels of bare ground over the new brushed ground as over
+/// the old one: three seeds at 3200 px, old 98 in all, new 164 (before the
+/// fix, 883, as one-pixel dotted contours along the ridges the priming
+/// brush had ploughed up). What is left are thin spots in the sky's own
+/// strokes, not ridge crests (see `tests::diag_sky_bare_pixels`). Ignored:
+/// ~1 min in release, far longer in debug; run with
+/// `cargo test --release -p paint --test ground_grain -- --ignored sky_bares --nocapture`.
 #[test]
 #[ignore]
 fn sky_bares_ground() {
-    use paint::{Mask, hex};
-    let base = Style::friedrich();
-    let old_like = Style { ground: base.ground[..2].to_vec(), ..base.clone() };
-    for (name, st) in [("knives only", old_like), ("friedrich", base.clone())] {
-        for blend in [false, true] {
-            let crop = Crop { units: [400.0, 100.0, 560.0, 260.0], margin: 40.0 };
-            let mut c = st.prepare_window(3200, 1.3, 23, Some(crop));
-            let sky = Mask::from_fn(c.frame(), |_, _| 1.0);
-            c.work(&sky, &base.broad().color(|_, _| hex("#d9dcd6")).angle(|_, _| 0.0).coverage(4.5).medium(0.3), 11);
-            if let (true, Some(b)) = (blend, base.blend()) {
-                c.work(&sky, &b, 12);
-            }
-            c.dry();
-            let f = c.window();
-            let pad = (40.0 * 3.2) as usize;
-            let mut n = 0;
-            let mut tot = 0;
-            for y in pad..f.h - pad {
-                for x in pad..f.w - pad {
-                    let p = c.pixels()[y * f.w + x];
-                    tot += 1;
-                    if p[0] - p[2] > 0.12 {
-                        n += 1;
-                    }
-                }
-            }
-            eprintln!("{name:12} blend {blend:5}: {n} of {tot} px bare");
-        }
+    let crop = Crop { units: [400.0, 100.0, 560.0, 260.0], margin: 40.0 };
+    let st = Style::friedrich();
+    let (mut old, mut new) = (0, 0);
+    for seed in [23u64, 1, 5] {
+        let o = sky_bare(old_brushed(3200, seed, crop), 40.0);
+        let n = sky_bare(st.prepare_window(3200, 1.3, seed, Some(crop)), 40.0);
+        eprintln!("seed {seed:2}: bare px old ground {o:4}, new ground {n:4}");
+        old += o;
+        new += n;
     }
+    eprintln!("total: old {old}, new {new}");
+    assert!(new <= 2 * old + 20, "the thin sky leaves bare ground along the new ground's ridges: {new} px vs {old} on the old ground");
 }

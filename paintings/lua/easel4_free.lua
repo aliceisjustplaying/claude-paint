@@ -108,7 +108,7 @@ for i, l in ipairs(oak.limbs) do
 end
 -- flare the foot into the mound
 local fx, fy = oak.limbs[1].pts[1][1], oak.limbs[1].pts[1][2]
-oakm = oakm + poly({{fx-26, fy+4}, {fx-12, fy-10}, {fx+12, fy-12}, {fx+28, fy+5}}, true)
+oakm = oakm + poly({{fx-24, fy+2}, {fx-15, fy-1}, {fx-11, fy-9}, {fx-9, fy-16}, {fx+9, fy-17}, {fx+11, fy-8}, {fx+16, fy-1}, {fx+25, fy+3}, {fx+8, fy+1}, {fx, fy+3}, {fx-8, fy+1}}, true)
 oakm = oakm:roughen(0.9, 7, 21, 0.4)
 local dir = noise{seed=9, period=30}
 work(oakm, {hand="body", tool="filbert 3", color=function(x, y) return mix("#2a2523", "#352e2a", clamp((fy - y)/300, 0, 1)) end,
@@ -379,7 +379,7 @@ local vig = mask(function(x, y)
 end)
 glaze(vig, {color="#2e2622", coats=0.4})
 
---@ chunk 17 · clock 46384.40625
+--@ chunk 17 · clock 47293.31640625
 local fgn = noise{seed=131, octaves=3, period=60}
 local busy = pathm:grow(2) + rockA:mask():grow(3) + rockB:mask():grow(3) + rockC:mask():grow(3)
 -- tufts of dry grass: fine upturning strokes, a few blades lit by the sky
@@ -432,5 +432,69 @@ print(tuftn, "tufts")
 local fd = brush("round", 1.2); fd:load("#1c1716", 0.8, {pal=landpal})
 fd:stroke({{250,647.6},{272,642},{300,639.2},{332,630.4}}, {pressure={0.6, 0.25}})
 
---@ chunk 18 · clock 46384.40625
+--@ chunk 18 · clock 47293.31640625
+-- where the track runs, point and direction at a fraction t of its length
+TW = {150, 118, 84, 56, 36, 24, 15, 9, 5, 3}
+function track(t, off)
+  local n = #trail
+  local f = t * (n - 1)
+  local j = math.min(n - 1, 1 + math.floor(f))
+  local u = f - (j - 1)
+  local p, q = trail[j], trail[j + 1]
+  local w = lerp(TW[j], TW[j + 1], u)
+  local dx, dy = q[1] - p[1], q[2] - p[2]
+  local L = math.sqrt(dx*dx + dy*dy)
+  local nx, ny = -dy / L, dx / L
+  local x, y = lerp(p[1], q[1], u), lerp(p[2], q[2], u)
+  return x + nx * off * w, y + ny * off * w, math.atan(dy, dx), w
+end
+-- puddles in the ruts: the sky in them, the glow far off, the higher sky near
+local pud = nil
+for i, s in ipairs({{0.05, -0.2, 30, 4.2}, {0.1, 0.2, 20, 3.0}, {0.17, -0.19, 13, 2.0}, {0.27, 0.19, 8, 1.3}, {0.34, -0.18, 5, 0.9}}) do
+  local x, y, a, w = track(s[1], s[2])
+  local rx, ry = s[3], s[4]
+  local pts = {}
+  for k = 0, 11 do
+    local th = k / 12 * 2 * math.pi
+    local r = 1 + 0.22 * math.sin(3 * th + i) + 0.1 * math.cos(5 * th)
+    local ex, ey = rx * r * math.cos(th), ry * r * math.sin(th)
+    local tilt = 0.12 * math.sin(a)
+    pts[#pts + 1] = {x + ex, y + ey + ex * tilt}
+  end
+  local m = poly(pts, true):roughen(0.8, 5, 150 + i, 0.5)
+  pud = pud and (pud + m) or m
+end
+puddles = pud
+work(pud:grow(1.2) - pud, {hand="detail", tool="round 1.2", color="#1f1a17", angle=0, length={2, 6}, coverage=2, pal=landpal})
+work(pud, {hand="broad", tool="flat 3", color=function(x, y)
+    local t = clamp((y - 540) / 150, 0, 1)
+    return mix("#a28a72", "#5f6778", t) end, angle=0, length={4, 12}, coverage=3, medium=0.3, pal=skypal, clip=pud})
+blend(pud, {angle=0, clip=pud})
+-- one bright streak of the glow in the farthest pools
+local gl = brush("round", 0.8)
+for i, s in ipairs({{0.3, 0.2}, {0.36, -0.2}, {0.2, -0.2}}) do
+  local x, y = track(s[1], s[2])
+  gl:reload("#e2c18f", 0.6, {pal=skypal})
+  gl:stroke({{x - 3, y - 0.3}, {x + 3, y + 0.2}}, {pressure={0.4, 0.2}, clip=pud})
+end
+-- grass leaning over the edges of the track and along its crown between the ruts
+local g = brush("rigger", 0.7)
+local n = 0
+for i = 1, 260 do
+  local t = rand(0.0, 0.7)
+  local edge = ({-0.5, 0.5, 0.0})[1 + i % 3]
+  local off = edge + randn(0, edge == 0 and 0.05 or 0.04)
+  local x, y, a, w = track(t, off)
+  if pud:at(x, y) < 0.1 then
+    local s = clamp((y - 440) / 250, 0.15, 1.1)
+    local h = rand(5, 16) * s
+    local lean = (edge < 0 and 0.35 or (edge > 0 and -0.35 or 0)) + randn(0, 0.3)
+    if n % 6 == 0 then g:reload(({"#3a322b", "#4a4037", "#2a231f"})[1 + (n // 6) % 3], 0.7, {pal=landpal}) end
+    g:stroke({{x, y}, {x + lean * h * 0.4, y - h * 0.6}, {x + lean * h, y - h}}, {pressure={clamp(0.5 * s + 0.15, 0.2, 0.8), 0}, ramps={0.05, 0.7}})
+    n = n + 1
+  end
+end
+print(n, "blades")
+
+--@ chunk 19 · clock 47293.31640625
 wait(24*60); varnish{color="#e6d3a4", coats=0.3, vary=0.1}; relief(0.08)

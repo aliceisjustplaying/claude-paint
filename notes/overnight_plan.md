@@ -46,4 +46,6 @@ Then stop and evaluate with the user.
 - strokes merged (hand-like geometry, passages/sweep order, coverage past edges, presets as vocabulary); golden re-recorded after color+strokes.
 - stipple merged; paint_for switched to Palette::aim / Paint::aimed / Canvas::under. Sky stipple reads smooth and grainy with no direction. Open: mist stippled over a dark ridge is an opaque gray grainy wall (aiming a veil reaches the target fully; needs a veil/density-to-contrast handling); ridge silhouette lumpy.
 - workflow done (crop renders ~close, checkpoints byte-exact, run_ordered scheduler, Palette::mix order-independence fix); resumed the workflow agent to merge main into its branch (Frame/crop across new modules, unify levelize + run_ordered).
+- workflow merged (fast-forward, 47d333b): one scheduler (sched::run_ordered), crop-aware stipple/aim, per-pile forked RNG; 50 tests pass.
+- monk2 archived to paintings/archive/, monk figure removed.
 - (updated as work lands)

@@ -15,7 +15,9 @@
 //! Version 2 (`PAINTCK2`) added the drying rate, stroke ids, clock and
 //! drying state; version 3 (`PAINTCK3`) adds the canvas's ground thickness
 //! (for craquelure fitted to the ground); version 4 (`PAINTCK4`) adds each
-//! wet pixel's paint coverage (pointed-tip marks). Older files are refused
+//! wet pixel's paint coverage (pointed-tip marks); version 5 (`PAINTCK5`)
+//! adds each open film's neighborhood thickness (it sets the film's drying
+//! rate until the film is worked again). Older files are refused
 //! (re-run to checkpoint again).
 //!
 //! Format: little-endian binary, `MAGIC`, then a free-form UTF-8 header
@@ -27,7 +29,7 @@ use crate::surface::Linen;
 use crate::wet::LAT;
 use std::io::{self, Read, Write};
 
-const MAGIC: &[u8; 8] = b"PAINTCK4";
+const MAGIC: &[u8; 8] = b"PAINTCK5";
 
 fn put_u64(w: &mut impl Write, v: u64) -> io::Result<()> {
     w.write_all(&v.to_le_bytes())
@@ -142,7 +144,7 @@ impl Canvas {
         }
         put_u64(w, u64::from(!ck.px.is_empty()))?;
         if !ck.px.is_empty() {
-            put_all(w, ck.px.iter().flat_map(|p| [p.cure, p.lev, p.seen, p.sub, p.srate]))?;
+            put_all(w, ck.px.iter().flat_map(|p| [p.cure, p.lev, p.seen, p.sub, p.srate, p.th]))?;
         }
         put_f32(w, self.ground_um)?;
         put_all(w, wt.cover.iter().copied())?;
@@ -244,7 +246,7 @@ impl Canvas {
         }
         let px = match get_u64(r)? {
             0 => Vec::new(),
-            _ => get_all(r, n * 5)?.as_chunks::<5>().0.iter().map(|q| crate::drying::Px { cure: q[0], lev: q[1], seen: q[2], sub: q[3], srate: q[4] }).collect(),
+            _ => get_all(r, n * 6)?.as_chunks::<6>().0.iter().map(|q| crate::drying::Px { cure: q[0], lev: q[1], seen: q[2], sub: q[3], srate: q[4], th: q[5] }).collect(),
         };
         wet.clock = crate::drying::Clock { now, px, mark, tacky };
         let ground_um = get_f32(r)?;

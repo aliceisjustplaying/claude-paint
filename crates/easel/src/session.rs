@@ -2,12 +2,13 @@
 //! log, which is also the replayable program) and snapshots for undo.
 
 use crate::api::{self, Studio};
-use mlua::{Lua, LuaOptions, StdLib, Value};
+use mlua::{Lua, StdLib, Value};
 use paint::{Canvas, Held, Style};
 use std::cell::RefCell;
 use std::collections::VecDeque;
 use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
+use std::mem::ManuallyDrop;
 use std::rc::Rc;
 use std::time::Instant;
 
@@ -33,7 +34,10 @@ struct Snap {
 }
 
 pub struct Session {
-    pub lua: Lua,
+    /// Closed by hand in `drop`: the state is created with a fixed hash seed
+    /// (see `fixed_lua`), which mlua doesn't own.
+    pub lua: ManuallyDrop<Lua>,
+    state: *mut mlua::ffi::lua_State,
     pub st: Rc<RefCell<Studio>>,
     pub log: Vec<Chunk>,
     snaps: VecDeque<Snap>,
@@ -49,15 +53,20 @@ pub struct Ran {
 
 impl Session {
     pub fn new(width: usize, undo_depth: usize) -> mlua::Result<Self> {
-        let libs = StdLib::TABLE | StdLib::STRING | StdLib::MATH | StdLib::BIT | StdLib::JIT;
-        let lua = Lua::new_with(libs, LuaOptions::default())?;
+        if !hash_seed_fixed() {
+            return Err(mlua::Error::runtime(
+                "this Lua was built with a random hash seed, so `pairs` order would differ between runs and replays would not be exact; build with CFLAGS=\"-Dluai_makeseed()=0x5eedu\" (see .cargo/config.toml)",
+            ));
+        }
+        let libs = StdLib::TABLE | StdLib::STRING | StdLib::MATH | StdLib::UTF8;
+        let (lua, state) = fixed_lua(libs)?;
         // no file or OS access for paintings
         for k in ["dofile", "loadfile", "require", "collectgarbage"] {
             lua.globals().raw_set(k, Value::Nil)?;
         }
         let st = Rc::new(RefCell::new(Studio::new(width)));
         api::install(&lua, st.clone())?;
-        Ok(Session { lua, st, log: Vec::new(), snaps: VecDeque::new(), undo_depth, })
+        Ok(Session { lua: ManuallyDrop::new(lua), state, st, log: Vec::new(), snaps: VecDeque::new(), undo_depth })
     }
 
     fn snap(&self) -> mlua::Result<Snap> {
@@ -190,6 +199,67 @@ impl Session {
             self.snaps.len()
         )
     }
+}
+
+impl Drop for Session {
+    fn drop(&mut self) {
+        // everything holding references into the state goes first
+        self.snaps.clear();
+        let _ = self.lua.gc_collect();
+        unsafe {
+            ManuallyDrop::drop(&mut self.lua);
+            mlua::ffi::lua_close(self.state);
+        }
+    }
+}
+
+/// A Lua state with the hash seed Lua's own `luaL_newstate` gives it, which
+/// is constant when Lua is built with `-Dluai_makeseed()=...` (see
+/// .cargo/config.toml). mlua 0.12 seeds its states from `arc4random` on
+/// macOS, so `pairs` order (and the layout of any hash table) would differ
+/// between a live session and its replay.
+fn fixed_lua(libs: StdLib) -> mlua::Result<(Lua, *mut mlua::ffi::lua_State)> {
+    use mlua::ffi;
+    unsafe {
+        let state = ffi::luaL_newstate();
+        if state.is_null() {
+            return Err(mlua::Error::runtime("could not create a Lua state"));
+        }
+        ffi::luaL_requiref(state, c"_G".as_ptr(), ffi::luaopen_base, 1);
+        ffi::lua_pop(state, 1);
+        let lua = Lua::get_or_init_from_ptr(state).clone();
+        lua.load_std_libs(libs)?;
+        Ok((lua, state))
+    }
+}
+
+/// The order a fresh Lua walks a table of string keys in: fixed when Lua
+/// is built with a constant `luai_makeseed`, different run to run otherwise.
+pub fn hash_probe() -> String {
+    let probe = || -> mlua::Result<String> {
+        let (lua, state) = fixed_lua(StdLib::NONE)?;
+        let t = lua.create_table()?;
+        for i in 0..32 {
+            t.set(format!("k{}", i * 7919), i)?;
+        }
+        let mut o = String::new();
+        for kv in t.pairs::<String, i64>() {
+            o.push_str(&kv?.1.to_string());
+            o.push(',');
+        }
+        drop(t);
+        drop(lua);
+        unsafe { mlua::ffi::lua_close(state) };
+        Ok(o)
+    };
+    probe().unwrap_or_default()
+}
+
+/// `hash_probe()` with the seed in .cargo/config.toml.
+const HASH_PROBE: &str = "31,24,5,8,28,22,12,6,19,26,4,20,1,3,30,11,0,15,14,10,9,17,7,27,2,18,13,21,16,29,23,25,";
+
+fn hash_seed_fixed() -> bool {
+    hash_probe() == HASH_PROBE
 }
 
 /// Lua errors carry a traceback; the painter needs the first lines.

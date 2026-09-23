@@ -53,6 +53,10 @@ fn main() -> ExitCode {
         "open" => open(&rest),
         "serve" => serve(&rest),
         "run" => run(&rest),
+        "hash-probe" => {
+            println!("{}", session::hash_probe());
+            Ok(())
+        }
         "help" | "-h" | "--help" => {
             println!("{USAGE}");
             Ok(())

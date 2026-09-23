@@ -389,6 +389,32 @@ impl Canvas {
             return;
         }
         let t = self.settle_for(ex, &add, &stiff, &sets);
+        // wet paint closes pinholes: a pixel's share of paint is at least
+        // what the two neighbors on opposite sides of it both hold (bare
+        // neighbors hold none), so the gaps between the hairs of a wide
+        // pointed-tool mark fill as it levels, while a hairline (bare on
+        // either side) keeps its share (see `wet::over_share`)
+        let cover: Vec<f32> = {
+            let wet = &self.wet;
+            // (two passes: a gap two pixels wide closes too)
+            let mut cv: Vec<f32> = (ex.1..ex.3).flat_map(|y| (ex.0..ex.2).map(move |x| if wet.vol[y * w + x] >= 1e-5 { wet.cover[y * w + x] } else { 0.0 })).collect();
+            for _ in 0..2 {
+                let prev = cv.clone();
+                let held = |x: usize, y: usize| prev[(y - ex.1) * ew + x - ex.0];
+                for y in ex.1 + 1..ex.3.saturating_sub(1) {
+                    for x in ex.0 + 1..ex.2.saturating_sub(1) {
+                        let c = held(x, y);
+                        if c >= 1.0 || c <= 0.0 {
+                            continue;
+                        }
+                        // bridged between two opposite neighbors, any direction
+                        let across = [((x - 1, y), (x + 1, y)), ((x, y - 1), (x, y + 1)), ((x - 1, y - 1), (x + 1, y + 1)), ((x + 1, y - 1), (x - 1, y + 1))];
+                        cv[(y - ex.1) * ew + x - ex.0] = across.iter().fold(c, |m, &(a, b)| m.max(held(a.0, a.1).min(held(b.0, b.1))));
+                    }
+                }
+            }
+            cv
+        };
         let wet = &mut self.wet;
         let (lat, hide) = (&wet.lat, &wet.hide);
         let add = &add;
@@ -396,14 +422,16 @@ impl Canvas {
             .par_chunks_mut(w)
             .zip(wet.vol[ex.1 * w..ex.3 * w].par_chunks_mut(w))
             .zip(self.film[ex.1 * w..ex.3 * w].par_chunks_mut(w))
+            .zip(wet.cover[ex.1 * w..ex.3 * w].par_chunks_mut(w))
             .enumerate()
-            .for_each(|(j, ((px, vv), ff))| {
+            .for_each(|(j, (((px, vv), ff), cv))| {
                 let y = ex.1 + j;
                 for x in ex.0..ex.2 {
                     let k = j * ew + x - ex.0;
                     if vv[x] < 1e-5 {
                         if all {
                             vv[x] = 0.0;
+                            cv[x] = 1.0;
                         }
                         continue;
                     }
@@ -413,9 +441,10 @@ impl Canvas {
                     let ti = t[k] / COAT_UM;
                     let i = y * w + x;
                     let c = mixbox::latent_to_linear_float_rgb(&lat[i]);
-                    px[x] = Pigment::masstone(c, hide[i][0]).over(px[x], ti);
+                    px[x] = crate::wet::over_share(Pigment::masstone(c, hide[i][0]), px[x], ti, cover[k]);
                     ff[x] += ti;
                     vv[x] = 0.0;
+                    cv[x] = 1.0;
                 }
             });
         if wet.clock.px.is_empty() {

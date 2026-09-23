@@ -49,7 +49,9 @@ Engine (`crates/paint`):
   the stage; `c.dry()` waits until all is touch-dry: `notes/drying.md`
 - `bristle` – simulated brushes (round, flat, filbert, fan, rigger, badger):
   per-bristle reservoirs, bend and splay, contact with the surface relief,
-  deposit, pickup and ploughing
+  deposit, pickup and ploughing; pointed rounds and riggers (`Tool::point`)
+  paint a hairline with the point, spread with pressure and lift off to a
+  point, the same at any resolution (`notes/tip.md`)
 - `handling` – how a painter covers an area: hand-like stroke planning (arcs,
   criss-cross, drift, dabs, broken strokes, pressure swell; see
   `notes/strokes.md`), passage-by-passage or swept order, trips to the
@@ -109,6 +111,7 @@ Notes for the painter (read before writing a painting):
 - `notes/strokes.md` – how handlings plan strokes
 - `notes/color.md` – what a color means: masstone, aimed mixing, hiding
 - `notes/stipple.md` – stippling
+- `notes/tip.md` – pointed brushes: hairlines, flicks, width from pressure
 - `notes/form.md` – solids, light, shadow and the masks they give
 - `notes/scene.md` – one world and one sun: placing things, shadows, contact, reflections, perspective
 - `notes/motifs.md` – trees, spruces, figures

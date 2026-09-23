@@ -16,3 +16,17 @@
 Reading: same-brief pairs are flat (green 20→19, near 22→22): the user's
 "sideways". Minimal twilight scenes score highest; greenery and close
 subjects are harder. Most worst defects are craft.
+
+## Loop 1 (critic1, five judged together, shuffled; raw: notes/review_scores_loop1_raw.md)
+
+| painting | version | friedrich | paint | drawing | light | detail | total | worst defect |
+|---|---|---|---|---|---|---|---|---|
+| near | loop 1 rework | 5 | 5 | 5 | 6 | 5 | **26** | drift at the boulder's base: 5 evenly spaced identical puffs (craft) |
+| near | round 4 (same batch) | 5 | 4 | 4 | 5 | 5 | 23 | torn-paper snow ribbon at the base |
+| green | loop 1 rework | 4 | 4 | 3 | 5 | 4 | **20** | pale halos around boulder, figure, trunk; figure no ground contact |
+| green | round 4 (same batch) | 3 | 4 | 3 | 4 | 4 | 18 | identical ball trees with identical shadows |
+| coast | anchor (loop 0: 28) | 7 | 5 | 5 | 7 | 3 | 27 | empty foreground beach |
+
+Deltas within the batch: near +3, green +2; anchor drift -1. Tool issues
+named: halos (loop1-halo running), horizontal wood-grain streaking over sky
+and snow (the brushed ground), even craquelure density.

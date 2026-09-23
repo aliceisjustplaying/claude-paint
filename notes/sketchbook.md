@@ -194,6 +194,10 @@ function share a shape, and tiers come out as symmetric chevrons [r4 near]. Vary
   black patches irregularly with knots where limbs leave; an even ladder of lenticels
   reads as dashes [r3 near].
 
+- **Field trees as groups** (beat "identical balls"): 1–5 trees per group, each crown
+  drawn separately, ~30% tall and narrow, one faint uneven shadow per group, muted
+  olive fading with distance. [loop 1 green]
+
 ## 6. Rocks and stones
 
 *Ceiling:* stones read as loaves, eggs or stacked masonry; snow on stone reads as blotches or lichen.
@@ -256,6 +260,19 @@ function share a shape, and tiers come out as symmetric chevrons [r4 near]. Vary
   coats=0.32})`. At 0.5 coats they were too heavy [r4 near]. Filbert strokes on snow look
   like boards [r2 winter]. A low sun gives a ruler-straight band, so break it with grass
   laid over it.
+
+- **Snow against a stone's foot** (beat "embossed rims"; loop 1 near +3). Build the
+  drift from the stone's real foot line, not an even ribbon: scan the stone mask every
+  2 units for its lowest point; drift height `max(0, 3 + 26*hn + 4*hn2)` (two noises) so
+  it vanishes in places; color it 55% from the field just below; lay it thin (`flat 6`,
+  coverage 3.6, medium 0.3) and blend twice. Take the drift out of `contact_shadow`
+  (`* -footd:grow(2)`) or the stone floats. *Ceiling:* still reads as separate evenly
+  spaced puffs; vary spacing and merge them. [loop 1 near]
+- *Pitfall:* `roughen()` on a soft cast-shadow mask turns its soft edge into hard
+  blocks: vary a soft mask by multiplying, not roughening. Noise stretched along a long
+  ground shadow makes vertical curtains: stretch near horizontal (`stretch={0.02, 4}`).
+  Thin filbert paint (medium 0.4–0.45) over a rough stone lets the dark grain show
+  through as white lace. [loop 1 near]
 
 ## 8. Grass and foreground particulars
 
@@ -393,6 +410,12 @@ The foreground is where every round fell shortest of Friedrich. Budget real time
 - **Narrow body passes build impasto.** Two body passes on a 20-unit trunk reached 1.5 mm
   of paint. Friedrich's films are thin. Lower `load` and `coverage` on small areas [r4
   green].
+
+- **Veil that takes color out without flattening texture** (loop 1 green +2, light 4→5).
+  Thin glaze strokes, fenced to the area, pulling what's under them 40% toward its own
+  gray plus ~12% `#7b7a5a`; for a big lit lawn one glaze `#6d6a4c` at 0.32 coats.
+  *Pitfall:* the same veil in heavy long strokes erased the plain and spilled onto
+  motifs: keep veils thin, short-stroked, and cut every motif out. [loop 1 green]
 
 ## 13. Pitfalls that cost the most time
 

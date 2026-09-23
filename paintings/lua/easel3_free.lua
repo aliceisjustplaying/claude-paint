@@ -201,7 +201,7 @@ seaclip = seam - landm:grow(1)
 glaze(seaclip * mask(function(x, y) return smoothstep(HZ - 10, HZ + 120, y) end), {color="#2a3350", coats=0.16, pigment="transparent"})
 
 --@ chunk 14 · clock 3150
-gclip = seaclip - (oakA:mask() + oakB:mask()):grow(1.5)
+gclip = seaclip - (oakA:mask() + oakB:mask()):grow(1.5) - stonesil:grow(1)
 
 
 local lt, dk = brush("rigger", 0.9), brush("round", 1.6)
@@ -259,3 +259,20 @@ for i, t in ipairs(tufts) do
   for _, bl in ipairs(t.blades) do g:stroke(bl, {pressure={p, 0.0}, ramps={0.05, 0.7}}); n = n + 1 end
 end
 print(#tufts, n)
+
+--@ chunk 17 · clock 45631.58203125
+
+FX, FY = 452, 512           -- where his feet are
+local s = 1.0
+local coat = poly({{FX - 5.5, FY - 44}, {FX - 7.2, FY - 36}, {FX - 8.4, FY - 22}, {FX - 9.6, FY - 12}, {FX - 1, FY - 11},
+  {FX + 8.8, FY - 12.5}, {FX + 8.0, FY - 24}, {FX + 7.0, FY - 37}, {FX + 5.2, FY - 44}, {FX, FY - 45.5}}, true)
+local head = ellipse(FX + 0.3, FY - 49.5, 3.7, 4.3)
+local cap = ellipse(FX + 0.3, FY - 52.2, 4.0, 2.4)
+local legs = ribbon({{FX - 3.2, FY - 12}, {FX - 3.6, FY}}, 3.0) + ribbon({{FX + 3.0, FY - 12}, {FX + 3.4, FY - 0.5}}, 3.0)
+figure = (coat + head + cap + legs):soften(0.4)
+work(figure, {hand="detail", tool="round 2", color=function(x, y) return mix("#23252b", "#1b1c20", smoothstep(FY - 50, FY, y)) end,
+  angle=math.pi / 2, length={3, 8}, coverage=4, medium=0.12, clip=figure})
+work(head - cap, {hand="detail", tool="round 1.2", color="#3a302b", angle=math.pi / 2, length={2, 4}, coverage=3, clip=head - cap})
+-- the afterglow catching his right shoulder and cap edge
+local rim = figure * mask(function(x, y) return (x > FX + 3.5 and y < FY - 20) and 1 or 0 end)
+work(rim, {hand="detail", tool="round 1", color="#57493d", angle=math.pi / 2, length={3, 7}, coverage=1.5, clip=figure})

@@ -1,9 +1,9 @@
 # easel3_free: Dolmen on the Baltic Shore at Evening
 
-Session: 2026-09-23, 13:13 to about 13:50 BST (wall clock). Canvas `style="friedrich"`,
-palette `friedrich_1820`, aspect 1.4, seed 23. 36 chunks in
+Session: 2026-09-23, 13:13 to about 14:00 BST (wall clock). Canvas `style="friedrich"`,
+palette `friedrich_1820`, aspect 1.4, seed 23. 38 chunks in
 `paintings/lua/easel3_free.lua`; `easel check` reports "replay matches the live
-canvas exactly (36 chunks, 43.2s)". Renders: `out/easel3_free.png` (1000px) and
+canvas exactly (38 chunks, 50.5s)". Renders: `out/easel3_free.png` (1000px) and
 `out/easel3_free_full.png` (3200px).
 
 ## The picture and why
@@ -84,17 +84,25 @@ What it draws on (from knowledge only, no pictures looked at):
     the capstone, fissures and very sparse lichen.
 12. **Cloud wisps (26–27).** Three thin streaks stippled low in the glow,
     clipped behind trees and stones, then blended.
-13. **Finish (30, 32, 33).** A walking stick. After a 3200 render: I sloped
+13. **Touch-ups (30, 32).** A walking stick. After a 3200 render: I sloped
     the figure's square shoulders by stippling sampled sea color into the
     corners, gave him a collar and one continuous warm edge, sank the dead
     oak's roots in grass and glazed the purple heather back toward the dune
-    (chunk 32). Then `dry(); varnish{color="#e6d3a4", coats=0.3, vary=0.1};
-    relief(0.14)`.
-14. **Sea, second pass (33–36).** The sea was the weakest passage, so I undid
+    (chunk 32). A varnish went on here and was later undone.
+14. **Sea, second pass (33–35).** The sea was the weakest passage, so I undid
     the varnish and stippled a veil of a smoother sea gradient over it (the
     same fix that worked in the sky), blended it while wet with long
     horizontal strokes, let it set and laid fresh, sparser glints gathered
-    toward the glow. Then the final varnish again.
+    toward the glow.
+15. **Figure rescue and finish (33, 36–38).** The 3200 render showed that the sea veil,
+    its blend and the new glints had painted over the figure, because
+    `gclip` never excluded him. His coat came out pale gray and his cap was
+    gone. The 1000px look hid it, and I hadn't cropped him after the veil. I
+    edited chunk 33 to subtract the figure and stick from `gclip`, replayed,
+    repainted the coat dark (keeping the sloped shoulders), re-laid the cap
+    and a thin warm edge, and stippled sea color into the ring the exclusion
+    left. Chunk 38 is the finish: `dry(); varnish{color="#e6d3a4", coats=0.3,
+    vary=0.1}; relief(0.14)`.
 
 ## HOW THE EASEL FELT
 
@@ -207,9 +215,14 @@ subtract by hand.
 14. **`look --crop` can't magnify more than the whole-pixel limit** of 1000px
     for wide crops (a 550-unit crop came back at 1:1). *Workaround:* crops
     500 units wide or less, and 3200 renders via `scripts/peek`.
+    Related: the 1000px view is not a reliable proxy for 3200 in stippled
+    passages. The sea veil looked smooth at 1000, but at 3200 some cloudiness
+    still shows through near the figure.
 15. My own mistakes, for the record: I redid the mound without its x-limit,
     so a dark strip ran across the sea. I forgot to clip glints out of stones
-    and then out of the barrow. And I ran one scratch edit with bare
+    and then out of the barrow. I let the sea veil paint over the figure
+    (the same kind of mistake: every new pass needs every earlier motif
+    subtracted from its mask by hand). And I ran one scratch edit with bare
     `python3` instead of `uv`.
 
 ## Honest critique
@@ -235,7 +248,8 @@ What doesn't:
   and lichen are subtle, and the underside shadow is a little blotchy.
 - **The path is still a slightly too even ribbon.**
 - **The figure is schematic.** After the fix the shoulders slope, but the
-  coat is still a simple bell and at 3200 he looks like a cut-out.
+  coat is still a simple bell and at 3200 he looks like a cut-out. A faint
+  pale mist hangs around him at 3200, left over from the rescue.
 - **The heather was purple stains;** it's toned back now but still reads as
   patches more than as plants.
 - **The composition is somewhat stagey:** two trees bracketing a central

@@ -86,7 +86,7 @@ fn main() {
         let dry = gradient(&[(0.0, hex("#8c7c62")), (0.45, hex("#6f604a")), (1.0, hex("#3a332b"))], ((y - 575.0) / (h - 575.0)).clamp(0.0, 1.0), Mix::Pigment);
         mix(wet, dry, smoothstep(10.0, 40.0, d), Mix::Light)
     };
-    let sky_m = Mask::from_fn(f, |_, y| 1.0 - smoothstep(HORIZON + 4.0, HORIZON + 10.0, y));
+    let sky_m = Mask::from_fn(f, |_, y| 1.0 - smoothstep(HORIZON + 0.5, HORIZON + 3.0, y));
     let sea_m = Mask::from_fn(f, |x, y| smoothstep(HORIZON - 3.0, HORIZON + 1.0, y) * (1.0 - smoothstep(shore(x) + 2.0, shore(x) + 8.0, y)));
     let beach_m = Mask::from_fn(f, |x, y| smoothstep(shore(x) - 5.0, shore(x) + 1.0, y));
 
@@ -326,6 +326,29 @@ fn main() {
             .broken(0.0)
             .clip(true);
         c.work(&sea_m, &lay, 51);
+        // the far water cut in along the horizon with its own narrow, level
+        // pass: a broad lay-in thins out at the top edge of its region and
+        // leaves the sky paint under it showing in pale slivers
+        let far_m = Mask::from_fn(f, |_, y| smoothstep(HORIZON - 1.5, HORIZON + 0.5, y) * (1.0 - smoothstep(HORIZON + 14.0, HORIZON + 20.0, y)));
+        // (the handling's stroke centers don't reach the band's top edge,
+        // so it is laid by hand: level rows, each a few long strokes)
+        let mut r = Rng::new(54);
+        let mut k = 0u64;
+        let mut y = HORIZON + 1.2;
+        while y < HORIZON + 16.0 {
+            let mut x = -20.0 + r.range(0.0, 60.0);
+            while x < 1010.0 {
+                let l = r.range(90.0, 200.0);
+                let col = sea_col(x + l * 0.5, y);
+                let p = sea_pal.paint(col, 0.3);
+                let mut b = held(Tool { lay: 0.8, ..Tool::filbert(4.5) }, p, 0.55, 5400 + k);
+                k += 1;
+                let pts: Vec<(f32, f32)> = (0..5).map(|i| (x + l * i as f32 / 4.0, y + r.normal() * 0.15)).collect();
+                stroke(&mut c, &mut b, &pts, 0.8, 0.7, (0.03, 0.1), Some(&far_m));
+                x += l * r.range(0.8, 0.95);
+            }
+            y += r.range(2.0, 3.0);
+        }
         // fuse with a narrower badger kept inside the water (a 40-unit
         // badger swept level drags the dark horizon band up into the sky)
         let sea_blend_m = sea_m.clone().mul_fn(|_, y| smoothstep(HORIZON + 5.0, HORIZON + 14.0, y));

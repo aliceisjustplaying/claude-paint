@@ -39,7 +39,7 @@ Engine (`crates/paint`):
 - `crack` – craquelure grown crack by crack from film stress (T-junctions,
   weave-following on thin grounds, cupping, grime)
 - `canvas` – glazes, relief lighting, dithered PNG out
-- `tree` – oaks grown by rules and painted with brushes
+- `growth` – how trees grow (buds, light, vigor, pipe-model widths, decline): returns a skeleton; painting it is the painter's job
 - `mask`, `shape`, `path`, `noise`, `rng` – geometry and randomness
 
 Motifs written as gestures and the `Run`/`Finish` helpers live in `paintings/src`.

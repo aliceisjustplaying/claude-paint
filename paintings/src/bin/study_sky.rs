@@ -99,10 +99,6 @@ fn foot(w: &World, z: f32) -> f32 {
     w.horizon + w.focal * (w.eye + RangeLayer::curvature(z)) / z
 }
 
-fn panel_mask(c: &Canvas, r: [f32; 4]) -> Mask {
-    Mask::from_fn(c.frame(), move |x, y| if x >= r[0] && y >= r[1] && x < r[0] + r[2] && y < r[1] + r[3] { 1.0 } else { 0.0 })
-}
-
 /// The ranges' form: one Ridge per layer, nearer in front, lit by the sun.
 fn range_form(c: &Canvas, w: &World, layers: &[RangeLayer]) -> (Form, Vec<u16>) {
     let mut form = Form::new(c.frame());
@@ -237,8 +233,11 @@ fn paint_sea(c: &mut Canvas, st: &Style, w: &World, sf: &SkyField, air: &Haze, k
         let s = mix(deep, m, fres, Mix::Light);
         mix(s, sf.airlight(x), air.loss(w.eye, z, 0.0, 0.0), Mix::Light)
     };
-    let hd = st.body().color(col).angle(|_, _| 0.0).angle_jitter(0.04).length(15.0, 60.0).coverage(3.4).clip(true).threshold(0.3);
+    let hd = st.broad().color(col).angle(|_, _| 0.0).angle_jitter(0.03).length(30.0, 110.0).coverage(3.4).medium(0.35).clip(true).threshold(0.3);
     c.work(&sea, &hd, seed);
+    if let Some(b) = st.blend() {
+        c.work(&sea, &b.clip(true).angle(|_, _| 0.0).angle_jitter(0.03), seed + 2);
+    }
     // far water: level stipple, so the horizon is made of touches, not a rule
     let far = Mask::from_fn(f, |x, y| if w.sees(x, y) && y >= hz - 1.5 { 1.0 - smoothstep(hz + 3.0, hz + 18.0, y) } else { 0.0 });
     let sp = Stipple::new(Tool::stippler(1.8)).mixed(pal, 0.5).color(col).coverage(|_, _| 1.6).pressure(0.4, 0.75).drag(1.5, Some(0.0)).dips(18, 0.35, 0.6).clip(true);
@@ -311,8 +310,8 @@ fn paint_compare(c: &mut Canvas, st: &Style, y0: f32, seed: u64) {
         let w = World::new(r, r[1] + r[3] * 0.72, EYE).fov(r[2], 40.0).sun(sun).visibility(30_000.0);
         let sf = SkyField::new(Sky::new(sun).haze(2.5).uneven(0.5, 30_000.0, 11), &w, 6.0);
         let cf = Clouds::new(vec![]).field(&sf, &w, 4.0);
-        let air = Haze::new(30_000.0).height(900.0).mist(120.0, 5.0, 80.0, 7);
-        let rs = Ranges::new(2_500.0, 50_000.0, 6, 23).heights(300.0, 1600.0);
+        let air = Haze::new(60_000.0).height(900.0).mist(120.0, 5.0, 80.0, 7);
+        let rs = Ranges::new(2_500.0, 45_000.0, 7, 23).heights(260.0, 2600.0);
         let layers = if old { rs.regular(&w) } else { rs.build(&w) };
         paint_sky(c, st, &w, &sf, &cf, r, seed + 1000 * i as u64);
         paint_sea(c, st, &w, &sf, &air, Kind::Morning, r, seed + 1000 * i as u64 + 100);
@@ -346,7 +345,6 @@ fn main() {
                 continue;
             }
             paint_panel(&mut c, &st, r, p, 1000 * (i as u64 + 1));
-            let _ = panel_mask(&c, r);
         }
     }
     if only.as_deref().is_none_or(|n| n == "ranges") && o.stage("ranges", &mut c, &mut ()) && !diag {

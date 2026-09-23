@@ -1193,9 +1193,13 @@ impl RangeLayer {
             let d = (h - v).abs();
             h = h.max(v) + if d < k { (k - d).powi(2) / (4.0 * k) * 0.3 } else { 0.0 };
         }
-        // crest detail: ridged, finer where the range is nearer (lod)
+        // crest detail at two scales, ridged (sharp crests, broad notches):
+        // sub-summits and shoulders the size of a mass's flank, then
+        // crags; finer ones only where the range is near enough (lod)
         let hm = self.masses.iter().map(|m| m.h).fold(0.0, f32::max).max(self.floor);
-        h + self.rough * hm * (self.detail.get_lod(x, 0.5, lod) - 0.5) * smoothstep(0.0, hm * 0.3, h)
+        let big = self.detail.get_lod(x * 2.5, 0.5, lod * 2.5) - 0.5;
+        let fine = self.detail.get_lod(x * 12.0, 3.5, lod * 12.0) - 0.5;
+        h + self.rough * (1.2 * h.max(self.floor) * big + 0.12 * hm * fine * (0.3 + big.abs() * 2.0)) * smoothstep(0.0, hm * 0.3, h)
     }
     /// World X seen at canvas x on this range (solving for its skew).
     pub fn world_x(&self, w: &World, x: f32) -> f32 {

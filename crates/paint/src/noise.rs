@@ -66,8 +66,10 @@ impl Fbm {
 // All are `Copy` and cheap to make, like `Fbm`.
 
 /// Per-octave Perlin sources, shared like `Fbm`'s tables.
+type OctaveCache = Mutex<HashMap<(u32, usize), &'static [Perlin]>>;
+
 fn octave_tables(seed: u32, octaves: usize) -> &'static [Perlin] {
-    static CACHE: OnceLock<Mutex<HashMap<(u32, usize), &'static [Perlin]>>> = OnceLock::new();
+    static CACHE: OnceLock<OctaveCache> = OnceLock::new();
     let mut m = CACHE.get_or_init(Default::default).lock().unwrap_or_else(|e| e.into_inner());
     m.entry((seed, octaves)).or_insert_with(|| {
         let v: Vec<Perlin> = (0..octaves).map(|i| Perlin::new(seed.wrapping_mul(7919).wrapping_add(i as u32 * 1013))).collect();
@@ -373,7 +375,7 @@ pub fn uneven(n: usize, lo: f32, hi: f32, irregular: f32, clump: f32, seed: u32)
         let mut k = (r(0, 8) * group as f32) as usize;
         for (i, g) in gaps.iter_mut().enumerate() {
             k += 1;
-            let between = k % group == 0 || r(i, 7) < 0.15;
+            let between = k.is_multiple_of(group) || r(i, 7) < 0.15;
             *g *= if between { 1.0 + 2.5 * clump } else { 1.0 - 0.7 * clump };
         }
     }

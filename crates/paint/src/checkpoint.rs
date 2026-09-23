@@ -7,7 +7,7 @@
 //! stiffness and drying rate, dirty box), the stroke counter and the
 //! per-pixel ids of the last stroke to lay or touch paint there (`wait`
 //! reads them to tell which films were worked), the clock and the drying
-//! state (see `drying`). Not stored, because nothing later reads them: the
+//! state (see `drying`), and the pencil drawing if there is one. Not stored, because nothing later reads them: the
 //! film floors of past strokes and the brushes' contact surface (derived
 //! from the relief and rebuilt on demand). Restoring is exact: a resumed run
 //! paints bit-for-bit what an uninterrupted one does.
@@ -17,7 +17,10 @@
 //! (for craquelure fitted to the ground); version 4 (`PAINTCK4`) adds each
 //! wet pixel's paint coverage (pointed-tip marks); version 5 (`PAINTCK5`)
 //! adds each open film's neighborhood thickness (it sets the film's drying
-//! rate until the film is worked again). Older files are refused
+//! rate until the film is worked again); version 6 (`PAINTCK6`) adds the
+//! drawing (`graphite::Drawing`): every cell of the deposit (coverage,
+//! flake reflectance, lift, fixed floor, film when drawn) and the
+//! whole-canvas guide with its fixed floor. Older files are refused
 //! (re-run to checkpoint again).
 //!
 //! Format: little-endian binary, `MAGIC`, then a free-form UTF-8 header
@@ -29,7 +32,7 @@ use crate::surface::Linen;
 use crate::wet::LAT;
 use std::io::{self, Read, Write};
 
-const MAGIC: &[u8; 8] = b"PAINTCK5";
+const MAGIC: &[u8; 8] = b"PAINTCK6";
 
 fn put_u64(w: &mut impl Write, v: u64) -> io::Result<()> {
     w.write_all(&v.to_le_bytes())
@@ -148,6 +151,13 @@ impl Canvas {
         }
         put_f32(w, self.ground_um)?;
         put_all(w, wt.cover.iter().copied())?;
+        match &self.drawing {
+            None => put_u64(w, 0)?,
+            Some(d) => {
+                put_u64(w, 1)?;
+                put_all(w, d.to_f32s())?;
+            }
+        }
         Ok(())
     }
 
@@ -253,6 +263,15 @@ impl Canvas {
         c.ground_um = if ground_um.is_finite() { ground_um.max(0.0) } else { 0.0 };
         wet.cover = get_all(r, n)?;
         c.wet = wet;
+        c.drawing = match get_u64(r)? {
+            0 => None,
+            1 => {
+                let whole = full_w.checked_mul(full_h).filter(|&m| m <= 1 << 31).ok_or_else(|| bad("checkpoint frame is invalid"))?;
+                let d = crate::graphite::Drawing::from_f32s(n, whole, |k| get_all(r, k))?;
+                Some(Box::new(d.ok_or_else(|| bad("checkpoint drawing is invalid"))?))
+            }
+            _ => return Err(bad("checkpoint drawing flag is invalid")),
+        };
         Ok((c, header))
     }
 }
@@ -300,6 +319,46 @@ mod tests {
         c.write_state(&mut b, "x=1\n").unwrap();
         let (d, h) = Canvas::read_state(&mut Cursor::new(b)).unwrap();
         assert_eq!((h.as_str(), d.keep, d.wet.dirty), ("x=1\n", (0, 0, 2, 2), Some((0, 0, 2, 1))));
+    }
+
+    /// Review 4 #2: a resumed canvas keeps its drawing: the deposit (so the
+    /// eraser and fixative still act on it and `drawing_mask` has it) and
+    /// the guide, bit for bit; erasing, redrawing and painting into the
+    /// drawing after resuming does what it does without the checkpoint.
+    #[test]
+    fn drawing_survives_a_checkpoint() {
+        use crate::bristle::Tool;
+        use crate::graphite::hand_line;
+        use crate::handling::Handling;
+        use crate::{Lead, Mask};
+        let mut c = Canvas::new_window(300, 1.5, [0.8; 3], None).with_size_mm(440.0);
+        let lead = Lead::pencil("2B").unwrap();
+        c.draw(&lead, &hand_line(&[(100.0, 100.0), (900.0, 100.0)], &[0.8], false, true, 0.0, 5), 0.0, 9);
+        c.draw(&lead, &hand_line(&[(100.0, 300.0), (900.0, 300.0)], &[0.8], false, true, 0.0, 6), 0.0, 10);
+        let f = c.frame();
+        c.fix_drawing(Some(&Mask::from_fn(f, |_, y| if y > 200.0 { 1.0 } else { 0.0 })));
+        let mut b = Vec::new();
+        c.write_state(&mut b, "").unwrap();
+        let (mut r, _) = Canvas::read_state(&mut Cursor::new(b)).unwrap();
+        assert!(r.has_drawing() && r.drawing_mask().data == c.drawing_mask().data && r.drawing_guide().data == c.drawing_guide().data);
+        assert!(r.drawing_view() == c.drawing_view());
+        let hd = Handling::new(Tool::round_sable(4.0)).length(10.0, 20.0).coverage(2.0).color(|_, _| [0.08, 0.12, 0.18]).hug(false).clip(false).fill(false);
+        for k in [&mut c, &mut r] {
+            let snap = k.pixels().to_vec();
+            k.erase(&Mask::full(f), 1.0);
+            assert!(k.pixels() != &snap[..], "the loose line lifts");
+            k.draw(&lead, &hand_line(&[(100.0, 200.0), (900.0, 200.0)], &[0.6], false, true, 0.0, 7), 0.0, 11);
+            let g = k.drawing_guide().dilate(3.0);
+            k.work(&g, &hd, 77);
+        }
+        assert!(r.pixels() == c.pixels(), "resumed painting differs");
+        assert!(r.drawing_mask().data == c.drawing_mask().data && r.drawing_guide().data == c.drawing_guide().data);
+        // a corrupt drawing is refused
+        let mut b = Vec::new();
+        c.write_state(&mut b, "").unwrap();
+        let at = b.len() - 4 * (300 * 200 + 1) - 4;
+        b[at..at + 4].copy_from_slice(&f32::NAN.to_le_bytes());
+        rejected(b, "nan in the guide");
     }
 
     /// Corrupt geometry is an error when loading, not a panic later (cases

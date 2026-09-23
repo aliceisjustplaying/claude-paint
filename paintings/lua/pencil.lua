@@ -107,8 +107,10 @@ tr:load("#3b342c", 1)
 tr:stroke({{771, 592}, {769, 520}, {776, 462}}, {pressure={0.85, 0.7}, ramps={0.02, 0.1}})
 tr:reload("#3b342c", 1)
 tr:stroke({{776, 470}, {771, 402}, {781, 332}}, {pressure={0.7, 0.3}, ramps={0.05, 0.5}})
--- ... and the limbs painted into the firm lines of the hidden drawing
-local firm = drawing_mask():band(0.55, 1, 0.1):grow(1.2) * rect(660, 290, 240, 190) * RIGHT
+-- ... and the limbs painted into the firm lines of the hidden drawing: the guide is the drawn
+-- line itself (unbroken, not the grain of the deposit); band() keeps the firm 2B/HB lines, not
+-- the light 2H search
+local firm = drawing_guide():band(0.7, 1, 0.1):grow(1.2) * rect(660, 290, 240, 190) * RIGHT
 print(string.format("firm drawing in the crown: %.0f sq units", firm:area()))
 work(firm, {hand="detail", tool="round 2", color="#3b342c", coverage=3, length={4, 10},
   angle=function(x, y) return (x < 772) and 0.9 or -0.9 end})

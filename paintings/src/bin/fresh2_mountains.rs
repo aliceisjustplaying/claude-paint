@@ -198,7 +198,7 @@ fn main() {
             .clip(true);
         c.work(&sky_m, &lay, 101);
         if let Some(b) = st.blend() {
-            c.work(&sky_m, &b.angle(|_, _| 0.0), 102);
+            c.work(&sky_m, &b.clip(true).angle(|_, _| 0.0), 102);
         }
         // first stipple into the wet lay-in: it breaks the strokes
         let s1 = Stipple::new(Tool::stippler(3.0)).mixed(pal, 0.45).color(sky).coverage(|_, _| 2.0).pressure(0.5, 0.85).dips(20, 0.4, 0.5);
@@ -240,7 +240,7 @@ fn main() {
         let lay = st.glaze(0.6).color(ccol).aim(0.6).angle(|_, _| 0.0).angle_jitter(0.02).length(40.0, 120.0).coverage(2.5).tool_width(9.0).load_at(|x, y| cloud(x, y)).clip(true).threshold(0.12);
         c.work(&cm_soft, &lay, 113);
         if let Some(b) = st.blend() {
-            c.work(&cm_soft, &b.angle(|_, _| 0.0).pressure(0.25, 0.35).length(40.0, 120.0).threshold(0.05), 114);
+            c.work(&cm_soft, &b.clip(true).angle(|_, _| 0.0).pressure(0.25, 0.35).length(40.0, 120.0).threshold(0.05), 114);
         }
         c.dry();
         let s3 = Stipple::new(Tool::stippler(2.4)).mixed(pal, 0.55).color(ccol).coverage(move |x, y| 1.6 * cloud(x, y)).pressure(0.45, 0.8).drag(0.9, Some(0.0)).dips(18, 0.35, 0.6);
@@ -251,7 +251,7 @@ fn main() {
     // ------------------------------------------------------------- ranges
     let mut form = Form::new(f);
     let far = Ridge::new(0.0, w, |x| far_crest(x), 140.0, 61).lean(1.1, 0.8).gullies(14.0, 0.45).fan(1.0).z0(-600.0);
-    let mid = Ridge::new(0.0, w, |x| mid_crest(x), 150.0, 62).lean(0.95, 0.8).gullies(22.0, 0.5).fan(1.0).z0(-300.0);
+    let mid = Ridge::new(0.0, w, |x| mid_crest(x), 150.0, 62).lean(0.95, 0.8).gullies(30.0, 0.4).fan(1.0).z0(-300.0);
     let near = Ridge::new(0.0, w, |x| near_crest(x), 280.0, 63).lean(0.8, 0.8).gullies(34.0, 0.5).fan(1.0).z0(-100.0);
     let id_far = form.add_at(&far, &|_, _, _| 4.0);
     let id_mid = form.add_at(&mid, &|_, _, _| 2.4);
@@ -304,8 +304,14 @@ fn main() {
     if o.stage("mid range", &mut c, &mut rng) {
         let sil = form.silhouette(&[id_mid], |_| 0.8);
         let mcol = move |x: f32, y: f32| match form.sample(x, y).filter(|s| s.part == id_mid) {
-            Some(s) => range_col(x, y, &s, hex("#4f5470"), hex("#8c8a98"), 6.0),
-            None => hex("#7c7e92"),
+            Some(s) => {
+                // spurs catch the sky, gullies stay in shadow
+                let b = form.bend(x, y, 2.0);
+                let base = range_col(x, y, &s, hex("#394058"), hex("#62667c"), 8.0);
+                let base = mix(base, hex("#3c4158"), smoothstep(0.05, 0.3, -b) * 0.5, Mix::Pigment);
+                mix(base, hex("#8a8a9c"), smoothstep(0.05, 0.3, b) * 0.35, Mix::Pigment)
+            }
+            None => hex("#6c6e84"),
         };
         let mcol = &mcol;
         let hd = st.body().color(mcol).angle(|x, y| form.fall(x, y)).angle_jitter(0.12).length(8.0, 28.0).coverage(3.0).medium(0.35).tool_width(5.0).clip(true).threshold(0.2);
@@ -316,10 +322,10 @@ fn main() {
         // mist at its foot, rising in front of the near range's crest
         let foot = |x: f32| near_crest(x) + 6.0;
         let mm = Mask::from_fn(f, move |x, y| if y < foot(x) + 10.0 && y > mid_crest(x) - 20.0 { 1.0 } else { 0.0 });
-        let m = Stipple::new(Tool::stippler(2.4)).mixed(pal, 0.7).color(move |x, y| mix(air(x, y), hex("#ece2cc"), 0.25, Mix::Light)).coverage(move |x, y| 3.0 * mist_at(x, y, foot(x), 45.0)).pressure(0.5, 0.85).dips(16, 0.3, 0.7).aim(false);
+        let m = Stipple::new(Tool::stippler(2.4)).mixed(pal, 0.7).color(move |x, y| mix(air(x, y), hex("#ece2cc"), 0.25, Mix::Light)).coverage(move |x, y| 2.4 * mist_at(x, y, foot(x), 26.0)).pressure(0.5, 0.85).dips(16, 0.3, 0.7).aim(false);
         c.stipple(&mm, &m, 223);
         if let Some(b) = st.blend() {
-            c.work(&mm, &b.angle(|_, _| 0.0).pressure(0.22, 0.3).coverage(2.0).length(50.0, 140.0), 224);
+            c.work(&mm, &b.clip(true).angle(|_, _| 0.0).pressure(0.22, 0.3).coverage(2.0).length(50.0, 140.0), 224);
         }
         c.dry();
     }
@@ -383,7 +389,7 @@ fn main() {
         let hd = st.broad().color(move |x, y| mix(air(x, y), hex("#e9dfca"), 0.2, Mix::Light)).by_masstone().angle(|_, _| 0.0).angle_jitter(0.03).length(50.0, 150.0).coverage(3.0).medium(0.6).load_at(dens).clip(true).threshold(0.05).tool_width(12.0);
         c.work(&mm, &hd, 235);
         if let Some(b) = st.blend() {
-            c.work(&mm, &b.angle(|_, _| 0.0).pressure(0.25, 0.35).coverage(2.5).length(50.0, 140.0), 236);
+            c.work(&mm, &b.clip(true).angle(|_, _| 0.0).pressure(0.25, 0.35).coverage(2.5).length(50.0, 140.0), 236);
         }
         c.dry();
     }
@@ -417,7 +423,7 @@ fn main() {
         let hd = st.broad().color(sea_col).angle(|_, _| 0.0).angle_jitter(0.04).curve(0.03, 0.3).length(60.0, 180.0).coverage(3.0).medium(0.5).load_at(move |x, y| sea(x, y)).dips(1, 0.5, 0.6).clip(true).threshold(0.5);
         c.work(&sm, &hd, 251);
         if let Some(b) = st.blend() {
-            c.work(&sm, &b.angle(|_, _| 0.0).pressure(0.3, 0.4), 252);
+            c.work(&sm, &b.clip(true).angle(|_, _| 0.0).pressure(0.3, 0.4), 252);
         }
         c.dry();
         // then stippled, the banks built by density at the upper edge
@@ -477,14 +483,18 @@ fn main() {
             let sz = r.range(1.5, 4.5) * (1.0 + y / h);
             b.load(pal.paint(hex("#1b1917"), 0.2), 0.6);
             c.drag(&mut b, &Gesture::new(vec![(x - sz, y), (x, y + sz * 0.2), (x + sz, y)]).pressure(0.8, 0.7).shake(0.4), None);
-            t.load(pal.paint(hex("#555045"), 0.2), 0.35);
+            t.load(pal.paint(hex("#433f37"), 0.2), 0.35);
             c.drag(&mut t, &Gesture::new(vec![(x - sz * 0.8, y - sz * 0.3), (x - sz * 0.1, y - sz * 0.55), (x + sz * 0.5, y - sz * 0.35)]).pressure(0.6, 0.2).ramps(0.1, 0.5).shake(0.4), None);
         }
         c.dry();
     }
 
     if o.stage("tor", &mut c, &mut rng) {
-        paint_tor(&mut c, &st, tor_base, knoll_m.clone(), &knoll_col, 311);
+        let (bx, by) = tor_base;
+        paint_granite(&mut c, &st, &tor(bx, by), 0.3, 1.0, 1.0, &|_| by, knoll_m.clone(), knoll_col, 311);
+        // the outcrop in the near foreground, rising out of the turf
+        let seat = move |x: f32| h - 14.0 + 10.0 * (x / 60.0).sin() + 0.08 * x;
+        paint_granite(&mut c, &st, &outcrop(h), 0.05, 2.2, 0.0, &seat, knoll_m.clone(), knoll_col, 312);
     }
 
     // knieholz: low dark mats of dwarf pine on the knoll's shoulders
@@ -642,21 +652,39 @@ impl ToolWidth for paint::Handling<'_> {
 /// Riesengebirge "woolsack" weathering, rounded at the edges, split by
 /// joints. Contre-jour: dark, with a thin light along the edges that face
 /// the dawn.
-fn paint_tor(c: &mut paint::Canvas, st: &Style, (bx, by): (f32, f32), ground: Mask, ground_col: &(dyn Fn(f32, f32) -> Rgb + Sync), seed: u64) {
-    let pal = &st.palette;
-    let f = c.frame();
-    let mut form = Form::new(f);
+/// The tor: weathered granite blocks stacked, the typical Riesengebirge
+/// "woolsack" weathering, rounded at the edges, split by joints.
+fn tor(bx: f32, by: f32) -> Sdf {
     let z = 0.0;
     // sizes are whole extents; the lowest blocks are sunk into the turf
     let low = Sdf::block([bx + 6.0, by - 9.0, z], [106.0, 32.0, 46.0], 7.0).turn([bx, by, z], 0.22, 0.2, 0.02).rough(2.6, 26.0, 1, false);
     let mid = Sdf::block([bx + 9.0, by - 36.0, z - 3.0], [66.0, 24.0, 38.0], 6.0).turn([bx, by - 36.0, z], -0.15, 0.28, -0.06).rough(2.2, 20.0, 2, false);
     let top = Sdf::block([bx + 16.0, by - 55.0, z - 5.0], [38.0, 16.0, 26.0], 6.0).turn([bx + 16.0, by - 55.0, z], 0.25, 0.25, 0.1).rough(1.6, 14.0, 3, false);
     let side = Sdf::block([bx - 54.0, by - 4.0, z + 8.0], [32.0, 19.0, 26.0], 6.0).turn([bx - 54.0, by, z], 0.45, 0.2, -0.16).rough(1.6, 14.0, 4, false);
-    let split = Sdf::half_space([bx - 14.0, by - 10.0, z], [1.0, -0.15, 0.1]);
     let low = low.cut([bx - 14.0, by - 10.0, z + 20.0], [0.3, -1.0, 0.25], 10, 3.0);
-    let rock = low.union(mid, 2.5).union(top, 2.0).union(side, 2.0).rough(0.6, 5.0, 5, true);
-    let _ = split;
-    let id = form.add(&rock, 0.3);
+    low.union(mid, 2.5).union(top, 2.0).union(side, 2.0).rough(0.6, 5.0, 5, true)
+}
+
+/// A low granite outcrop breaking through the turf in the near foreground,
+/// cut by the frame: two broad slabs and a split boulder.
+fn outcrop(h: f32) -> Sdf {
+    let z = 60.0;
+    let a = Sdf::block([50.0, h - 14.0, z], [220.0, 64.0, 110.0], 26.0).turn([50.0, h, z], 0.3, 0.22, -0.08).rough(7.0, 45.0, 11, false);
+    let b = Sdf::block([178.0, h - 2.0, z + 10.0], [100.0, 38.0, 64.0], 16.0).turn([178.0, h, z], -0.25, 0.2, 0.06).rough(5.0, 32.0, 12, false);
+    let b = b.cut([200.0, h - 20.0, z + 30.0], [1.0, -0.3, 0.4], 11, 2.0);
+    a.union(b, 3.0).rough(0.8, 6.0, 13, true)
+}
+
+/// Paint a granite solid in contre-jour: dark, with light only on the
+/// planes that face the dawn sky; joints drawn in; its foot tucked back
+/// into the turf along `seat(x)` (the ground line it rises from). `k`
+/// scales the brushes (1 = the tor).
+#[allow(clippy::too_many_arguments)]
+fn paint_granite(c: &mut paint::Canvas, st: &Style, rock: &Sdf, dist: f32, k: f32, sheen: f32, seat: &(dyn Fn(f32) -> f32 + Sync), ground: Mask, ground_col: &(dyn Fn(f32, f32) -> Rgb + Sync), seed: u64) {
+    let pal = &st.palette;
+    let f = c.frame();
+    let mut form = Form::new(f);
+    let id = form.add(rock, dist);
     form.light(Light::new((0.7, -0.55), -0.25).ambient(0.32).penumbra(0.08));
     let form = &form;
     let sil = form.silhouette(&[id], |_| 0.35);
@@ -671,27 +699,29 @@ fn paint_tor(c: &mut paint::Canvas, st: &Style, (bx, by): (f32, f32), ground: Ma
             let base = mix(dark, lit, s.shade.lit(0.15) * 0.85 + 0.1 * v, Mix::Pigment);
             // lichen on the tops
             let up = smoothstep(-0.2, -0.7, s.n[1]) * smoothstep(0.5, 0.75, lichen.get01(x, y));
-            mix(base, hex("#5e6048"), up * 0.6, Mix::Pigment)
+            let base = mix(base, hex("#5e6048"), up * 0.6, Mix::Pigment);
+            // a near rock in contre-jour is darker than a far one
+            mix(base, hex("#15130f"), (1.0 - sheen) * 0.8 * (1.0 - 0.5 * s.shade.direct), Mix::Pigment)
         }
         None => ground_col(x, y),
     };
     let fall = |x: f32, y: f32| form.fall(x, y);
     // dark lay-in down the planes
-    let hd = paint::Handling::new(Tool { width: 3.2, ..st.body.clone() }).mixed(pal, 0.3).color(&col).angle(fall).angle_jitter(0.2).length(4.0, 12.0).coverage(3.2).pressure(0.6, 0.9).dips(2, 0.55, 0.6).clip(true).threshold(0.2);
+    let hd = paint::Handling::new(Tool { width: 3.2 * k, ..st.body.clone() }).mixed(pal, 0.3).color(&col).angle(fall).angle_jitter(0.2).length(4.0 * k, 12.0 * k).coverage(3.2).pressure(0.6, 0.9).dips(2, 0.55, 0.6).clip(true).threshold(0.2);
     c.work(&sil, &hd, seed);
     // the lit planes and edges, stiffer
     let lit = form.mask(|s| if s.part == id { s.shade.lit(0.12) } else { 0.0 }).mul(&sil);
-    let hd = paint::Handling::new(Tool { width: 1.8, lay: 1.1, ..st.body.clone() }).mixed(pal, 0.15).color(&col).angle(fall).angle_jitter(0.15).length(2.5, 8.0).coverage(2.4).pressure(0.6, 0.9).dips(2, 0.6, 0.7).clip(true).threshold(0.3);
+    let hd = paint::Handling::new(Tool { width: 1.8 * k, lay: 1.1, ..st.body.clone() }).mixed(pal, 0.15).color(&col).angle(fall).angle_jitter(0.15).length(2.5 * k, 8.0 * k).coverage(2.4).pressure(0.6, 0.9).dips(2, 0.6, 0.7).clip(true).threshold(0.3);
     c.work(&lit, &hd, seed + 1);
     // joints: dark lines where the blocks meet
-    let sp = 1.5;
+    let sp = 1.5 * k;
     let joints = Mask::from_fn(f, |x, y| if form.part(x, y) == id { smoothstep(0.2, 0.6, -form.bend(x, y, sp)) } else { 0.0 }).mul(&sil.erode(0.8));
-    let hd = paint::Handling::new(Tool::round_sable(0.9)).mixed(pal, 0.15).color(|_, _| hex("#1a1817")).angle(|x, y| form.edge_angle(x, y, sp)).angle_jitter(0.1).length(2.0, 6.0).coverage(1.0).pressure(0.5, 0.8).dips(3, 0.6, 0.8).clip(true).threshold(0.35);
+    let hd = paint::Handling::new(Tool::round_sable(0.9 * k)).mixed(pal, 0.15).color(|_, _| hex("#1a1817")).angle(|x, y| form.edge_angle(x, y, sp)).angle_jitter(0.1).length(2.0 * k, 6.0 * k).coverage(1.0).pressure(0.5, 0.8).dips(3, 0.6, 0.8).clip(true).threshold(0.35);
     c.work(&joints, &hd, seed + 2);
     c.dry();
     // the tor sits in the ground: tuck the knoll's color back over its foot
-    let foot = Mask::from_fn(f, move |x, y| smoothstep(by - 5.0, by + 2.0, y) * if (x - bx).abs() < 70.0 { 1.0 } else { 0.0 }).mul(&ground);
-    let hd = st.body().color(ground_col).angle(|_, _| 0.0).length(6.0, 16.0).coverage(1.5).tool_width(3.0).clip(true);
+    let foot = Mask::from_fn(f, move |x, y| if form.part(x, y) == id || form.part(x, y - 6.0) == id { smoothstep(seat(x) - 5.0, seat(x) + 2.0, y) } else { 0.0 }).mul(&ground);
+    let hd = st.body().color(ground_col).angle(|_, _| 0.0).length(6.0 * k, 16.0 * k).coverage(1.5).tool_width(3.0 * k).clip(true);
     c.work(&foot, &hd, seed + 3);
     c.dry();
 }

@@ -162,6 +162,43 @@ What it draws on in Friedrich (from knowledge, no pictures):
    (grazing light on a silhouette edge) as its own term. Contre-jour
    painting is all rim.
 
+9. **Hidden layers leak through every later passage, and the only way to
+   find out is a 3200px render.** The pale chips in the dark knoll at
+   3200px were fog: my valley-mist mask (a density field) was nonzero under
+   the whole lower left, so the fog was painted under the knoll, and every
+   gap in the knoll's body color showed it. At 1000px they were a few white
+   pixels that I took for ground flecks (item 3). The painter's rule
+   "don't lay light paint where dark will go" has to be enforced by hand in
+   every mask (`off_knoll`). Finding the stage took `--resume X --stop Y`
+   bisection on crop checkpoints, which worked well.
+10. **Stipple as a veil over dark reads as static at 3200px.** A mist
+    stippled with `aim(false)` over a dark range is a field of pale dots and
+    hollow rings on the dark ("frogspawn" at the fringe). Stippling breaks
+    strokes over *light* passages beautifully, but over dark ones every dot
+    stands alone. A badger pass over the wet stipple barely helped.
+    *Workaround:* mist over dark passages is a brushed veil (broad,
+    `by_masstone`, medium 0.6, density through `load_at`), badger-fused.
+    Stipple stays in the sky and over already-light fog.
+11. **The aged crack preset contradicts the style's ground.**
+    `Cracks::aged` assumes a 60 µm ground, so the cracks follow the weave
+    and form a rectilinear grid. `Style::friedrich` primes 240 µm (110 +
+    70 + 60). The finish should take `ground_um` from the style. 
+    *Workaround:* `ground_um: st.ground.iter().map(|g| g.um).sum()`. The
+    network became an isotropic web.
+12. **Small marks become blobs at 3200px.** A spruce tip or a bird made
+    with a 0.7-unit round (2 px at 3200) comes out as a rounded peg or a
+    bean, not a point or a wing: the round splays under pressure and ends
+    in a blunt cap. *Workaround:* riggers (0.3–0.4) lifted to zero
+    pressure with long release ramps. There is no pointed-tip model; a
+    real sable round comes to a point when lifted.
+13. **Preview and full render are different paintings.** Masks at a
+    different resolution accept different stroke centers, so the RNG and
+    every later mark diverge (notes/workflow.md). In practice the
+    composition holds, but the look of every detail (specks, tick
+    fields, dot textures) only shows at 3200px. The 1000px preview is
+    useful for composition and value only; I judged all handling in
+    3200px crops.
+
 ## Critique (to be updated)
 
 (after the full render)

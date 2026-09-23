@@ -37,7 +37,9 @@ work(nd, {hand="hatch", tool="round 1.8", length={3, 7}, coverage=2.6, clip=nd, 
 -- 2. the stem and boughs where they show
 local rb = brush("rigger", 1.2)
 rb:load("#2a2622", 0.9)
-rb:stroke(spire.leader.pts, {pressure={0.9, 0.15}, ramps={0.02, 0.2}})
+local bare = {}
+for _, p in ipairs(spire.leader.pts) do if p[2] > spire.crown_base - spire.tier then bare[#bare + 1] = p end end
+rb:stroke(bare, {pressure={0.9, 0.6}, ramps={0.02, 0.2}})  -- the stem only where it shows, under the crown
 for i, b in ipairs(spire.boughs) do
   if i % 6 == 1 then rb:reload(b.dead and "#5b5650" or "#1d211e", 0.8) end
   rb:stroke(b.pts, {pressure={0.7, 0.05}, ramps={0.05, 0.6}})

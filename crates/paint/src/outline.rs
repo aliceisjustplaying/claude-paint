@@ -80,7 +80,7 @@ impl Character {
     /// A sure contour: little wobble, long strokes, slight overshoots.
     pub fn firm() -> Self {
         Character {
-            wobble: 0.006,
+            wobble: 0.009,
             wobble_period: 0.3,
             facet: 0.0,
             facet_amp: 0.0,
@@ -435,6 +435,21 @@ fn knots(rng: &mut Rng, total: f32, mean: f32) -> Vec<f32> {
     s
 }
 
+/// Knots with lognormal spacing (median `mean`, spread `sigma`).
+fn knots_ln(rng: &mut Rng, total: f32, mean: f32, sigma: f32) -> Vec<f32> {
+    let mut s = vec![0.0];
+    let mut x = 0.0;
+    loop {
+        x += mean * (sigma * rng.normal()).exp().clamp(0.3, 3.0);
+        if x >= total - mean * 0.4 {
+            break;
+        }
+        s.push(x);
+    }
+    s.push(total);
+    s
+}
+
 /// Piecewise-linear interpolation of knot values.
 fn knot_value(ks: &[f32], vs: &[f32], s: f32) -> f32 {
     let i = ks.partition_point(|&k| k <= s).clamp(1, ks.len() - 1);
@@ -538,6 +553,15 @@ impl Outline {
                 }
                 spans.push(span);
             }
+            // a hand's "straight" line from corner to corner bows a little
+            let mut brng = Rng::new(seed ^ 0xB0B0_5EED);
+            let bow = 0.025 * (ch.wobble / 0.01).min(2.0);
+            for span in spans.iter_mut().filter(|s| s.len() == 2) {
+                let (a, b) = (span[0], span[1]);
+                let k = brng.normal() * bow;
+                let mid = (0.5 * (a.0 + b.0) - (b.1 - a.1) * k, 0.5 * (a.1 + b.1) + (b.0 - a.0) * k);
+                span.insert(1, mid);
+            }
             let mut pts = Vec::new();
             let mut corners = Vec::new();
             for span in &spans {
@@ -561,11 +585,49 @@ impl Outline {
     /// width. Every limb is a smooth curve through its points, as wide as
     /// `widths` there.
     pub fn body(limbs: &[Bone], blend: f32, ch: Character, seed: u64, size: Option<f32>) -> Outline {
+        // a limb that starts outside the spine reaches into it (a leg drawn
+        // a little below the belly still joins the body)
+        let limbs: Vec<Bone> = limbs
+            .iter()
+            .enumerate()
+            .map(|(k, l)| {
+                let mut l = l.clone();
+                let spine = &limbs[0];
+                if k == 0 || l.pts.is_empty() || spine.pts.is_empty() {
+                    return l;
+                }
+                let r = l.widths.first().copied().unwrap_or(1.0) * 0.5;
+                let s0 = l.pts[0];
+                // nearest point of the spine's center line and its radius there
+                let mut best = (f32::MAX, s0, 0.0);
+                for i in 0..spine.pts.len() {
+                    let a = spine.pts[i];
+                    let b = spine.pts[(i + 1).min(spine.pts.len() - 1)];
+                    let (wa, wb) = (spine.widths.get(i).or(spine.widths.last()).copied().unwrap_or(1.0), spine.widths.get(i + 1).or(spine.widths.last()).copied().unwrap_or(1.0));
+                    let (bx, by) = (b.0 - a.0, b.1 - a.1);
+                    let h = (((s0.0 - a.0) * bx + (s0.1 - a.1) * by) / (bx * bx + by * by).max(1e-12)).clamp(0.0, 1.0);
+                    let c = (a.0 + bx * h, a.1 + by * h);
+                    let d = dist(s0, c);
+                    if d < best.0 {
+                        best = (d, c, 0.5 * (wa + (wb - wa) * h));
+                    }
+                }
+                let (d, c, rs) = best;
+                if d > rs - r * 0.5 && d > 1e-4 {
+                    let reach = d - rs + r;
+                    let u = ((c.0 - s0.0) / d, (c.1 - s0.1) / d);
+                    l.pts.insert(0, (s0.0 + u.0 * reach, s0.1 + u.1 * reach));
+                    let w0 = l.widths.first().copied().unwrap_or(1.0);
+                    l.widths.insert(0, w0);
+                }
+                l
+            })
+            .collect();
         // each limb as a chain of short tapered capsules
         let mut caps: Vec<Vec<(P, P, f32, f32)>> = Vec::new();
         let mut min_r = f32::MAX;
         let mut all = Vec::new();
-        for l in limbs {
+        for l in &limbs {
             if l.pts.is_empty() {
                 continue;
             }
@@ -976,10 +1038,23 @@ fn hand_line(plan: Plan, ch: &Character, seed: u32, scale: f32, step: f32, rng: 
         (ks, vs)
     });
     // lobes: rounded bulges with pinched dips between
+    // (two sizes: crowns and the smaller masses on them; sizes lognormal,
+    // the big ones taller in groups)
     let lobes = (ch.lobe > 0.0).then(|| {
-        let ks = knots(rng, total, ch.lobe * scale);
-        let hs: Vec<f32> = ks.windows(2).map(|w| (w[1] - w[0]) * ch.lobe_height * rng.range(0.5, 1.3)).collect();
-        (ks, hs)
+        let group = Along::new(seed.wrapping_add(303), 2, ch.lobe * scale * 4.0, total, closed);
+        let mut layers = Vec::new();
+        for (size, height) in [(1.0f32, 1.0f32), (0.32, 0.8)] {
+            let ks = knots_ln(rng, total, ch.lobe * scale * size, 0.45);
+            let hs: Vec<f32> = ks
+                .windows(2)
+                .map(|w| {
+                    let g = if size == 1.0 { (1.0 + 0.6 * group.get(0.5 * (w[0] + w[1]))).max(0.2) } else { 1.0 };
+                    (w[1] - w[0]) * ch.lobe_height * height * (0.35 * rng.normal()).exp() * g
+                })
+                .collect();
+            layers.push((ks, hs));
+        }
+        layers
     });
     let mut out = Vec::with_capacity(n);
     let mut pressure = Vec::with_capacity(n);
@@ -989,7 +1064,7 @@ fn hand_line(plan: Plan, ch: &Character, seed: u32, scale: f32, step: f32, rng: 
         if let Some((ks, vs)) = &facet {
             d += knot_value(ks, vs, s);
         }
-        if let Some((ks, hs)) = &lobes {
+        for (ks, hs) in lobes.iter().flatten() {
             let j = ks.partition_point(|&x| x <= s).clamp(1, ks.len() - 1);
             let u = ((s - ks[j - 1]) / (ks[j] - ks[j - 1]).max(1e-6)).clamp(0.0, 1.0);
             let h = hs[j - 1];

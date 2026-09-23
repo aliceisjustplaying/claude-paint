@@ -11,6 +11,7 @@
 mod api;
 mod form;
 mod world;
+mod draw_outline;
 mod look;
 mod session;
 

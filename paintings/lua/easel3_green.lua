@@ -318,3 +318,144 @@ for _, t in ipairs(tufts) do
   end
 end
 print(#tufts, "tufts", n, "blades", k, "flowers")
+
+--@ chunk 22 · clock 42169.6328125
+local cn = noise{seed=93, octaves=3, period=26}
+crest1b = function(x) return crest1(x) + 1.4 * cn(x, 0) end
+local cut = mask(function(x, y) local c = crest1b(x); return (y < c + 0.6 and y > c - 22) and 1 or 0 end):soften(0.7)
+work(cut, {hand="detail", tool="round 2", length={10, 26}, coverage=2.2, angle=0, medium=0.35, pal=skypal,
+  color=function(x, y) return sample(x, crest1(x) - 26, 4) end})
+blend(cut:grow(2) * above(function(x) return crest1b(x) - 1 end), {angle=0})
+
+--@ chunk 23 · clock 42169.6328125
+wait(3*60)
+-- a shepherd leaning on his staff in the oak's shade, back to us, looking out
+local fx, fy = 462, 492
+local coat = poly({{fx - 4.5, fy - 2}, {fx - 5.5, fy - 16}, {fx - 4, fy - 25}, {fx - 1.5, fy - 28}, {fx + 2.5, fy - 28},
+  {fx + 4.5, fy - 24}, {fx + 5.2, fy - 15}, {fx + 4.2, fy - 2}}, true)
+local legs = rect(fx - 3, fy - 3, 2, 3.5) + rect(fx + 0.8, fy - 3, 2, 3.5)
+local head = ellipse(fx + 0.4, fy - 31, 2.6, 3.0)
+local hat = ellipse(fx + 0.4, fy - 33.2, 4.4, 1.3) + ellipse(fx + 0.4, fy - 35, 2.4, 2.0)
+work(coat + legs, {hand="detail", tool="round 1.2", length={2, 6}, coverage=3, angle=1.57, color="#2d2a2c"})
+work(head, {hand="detail", tool="round 1", length={1, 3}, coverage=3, angle=0.5, color="#4a3a2e"})
+work(hat, {hand="detail", tool="round 1", length={2, 5}, coverage=3, angle=0, color="#1f1c1c"})
+-- the sun catches his left shoulder and sleeve
+work(coat * rect(fx - 6, fy - 28, 3.5, 20), {hand="detail", tool="round 0.9", length={2, 5}, coverage=1.5, angle=1.5, color="#55505a"})
+local staff = brush("round", 0.9)
+staff:load("#3a3026", 0.9)
+staff:stroke({{fx + 6, fy + 1}, {fx + 7.5, fy - 18}, {fx + 8.5, fy - 38}}, {pressure={0.8, 0.7}, ramps={0.02, 0.1}})
+-- sheep grazing on the lit common, off to the left of the track
+local sheep = {{352, 505, 1.0, 1}, {378, 511, 1.05, -1}, {331, 516, 1.1, 1}, {300, 509, 0.95, 1}, {395, 500, 0.9, -1}}
+for _, sp in ipairs(sheep) do
+  local x, y, s, d = sp[1], sp[2], sp[3] * 1.15, sp[4]
+  local body = ellipse(x, y - 6 * s, 7 * s, 3.8 * s):roughen(0.5, 2)
+  local headm = ellipse(x + d * 8.2 * s, y - 3.6 * s, 2.3 * s, 1.7 * s)
+  local shade = body * mask(function(px, py) return (py > y - 5.8 * s or px * d > (x + 3 * s) * d) and 1 or 0 end)
+  work(body, {hand="detail", tool="round 1.1", length={1.5, 4}, coverage=3, angle=0, color="#c2bca6"})
+  work(shade, {hand="detail", tool="round 1", length={1.5, 3.5}, coverage=2.2, angle=0, color="#8a8674"})
+  work(headm, {hand="detail", tool="round 0.9", length={1, 3}, coverage=3, angle=0.4 * d, color="#4e463a"})
+  local lg = brush("round", 0.7)
+  lg:load("#3b362e", 0.9)
+  for _, lx in ipairs({-5, -2, 3, 6}) do lg:stroke({{x + lx * s, y - 3 * s}, {x + lx * s, y + 1.5 * s}}, {pressure={0.55, 0.45}}) end
+end
+
+--@ chunk 24 · clock 42349.6328125
+wait(24*60)
+local r1 = body.ellipsoid({150, 684, 40}, {58, 30, 40}):turn({150, 684, 40}, 0.4, 0.15, -0.08):rough(5, 45, 3):rough(0.8, 9, 4, true)
+local r2 = body.ellipsoid({214, 694, 60}, {26, 16, 20}):turn({214, 694, 60}, -0.3, 0.1, 0.1):rough(3, 30, 5):rough(0.6, 7, 6, true)
+local r3 = body.ellipsoid({92, 700, 30}, {22, 13, 16}):rough(2.5, 25, 7):rough(0.5, 6, 8, true)
+stones = form{ {r1, dist=0.05}, {r2, dist=0.05}, {r3, dist=0.05},
+  light={from={-1, -0.75}, front=0.45, ambient=0.25, penumbra=0.08} }
+local sn = noise{seed=101, octaves=4, period=8}
+local stonecol = function(x, y)
+  local v = stones:value(x, y)
+  local c = mix("#45423c", "#a69d88", smoothstep(0.08, 0.85, v))
+  return shift(c, 0.035 * sn(x, y), 0.004 * sn(y, x), 0.01 * sn(x * 1.3, y))
+end
+local all = stones:silhouette{parts={1, 2, 3}, soft=0.5} * above(function(x) return 704 end)
+work(all * stones:shadow{parts={1, 2, 3}}, {hand="body", tool="round 1.6", length={3, 9}, coverage=3.2, color=stonecol, angle=stones:field("fall")})
+work(all * stones:lit{parts={1, 2, 3}, soft=0.1}, {hand="body", tool="round 1.4", length={3, 8}, coverage=3.2, color=stonecol, angle=stones:field("across")})
+work(stones:edges{concave=true} * all, {hand="detail", tool="round 0.8", color="#2e2b27", angle=stones:field("edge"), coverage=1.2})
+-- lichen specks on the lit tops
+stipple(all * stones:lit{parts={1, 2, 3}, soft=0.1}:shrink(3), {width=1.1, color="#c8c49a", coverage=function(x, y) return 0.35 end,
+  pressure={0.3, 0.6}, aim=false, fade=0, medium=0.2})
+-- pebbles on the track
+local pb = brush("round", 1.4)
+for i = 1, 26 do
+  local t = rand(0.05, 0.55)
+  local k = 1 + math.floor(t * (#pathpts - 1))
+  local a, b = pathpts[k], pathpts[k + 1]
+  local f = t * (#pathpts - 1) - (k - 1)
+  local x = lerp(a[1], b[1], f) + randn(0, pathw[k] * 0.25)
+  local y = lerp(a[2], b[2], f) + randn(0, 3)
+  local sz = clamp((y - 480) / 180, 0.25, 1.4)
+  pb:reload(mix("#6d665a", "#bdb49c", rand()), 0.7)
+  pb:touch(x, y, {pressure=0.3 + 0.4 * sz, drag={1, 0}})
+end
+
+--@ chunk 25 · clock 43789.6328125
+wait(3*60)
+local g = brush("rigger", 0.8)
+-- blades growing up over the boulder's foot
+for i = 1, 120 do
+  local x = rand(70, 250)
+  local base = 700 + rand(-2, 12)
+  if i % 6 == 1 then g:reload(({"#4a5e2a", "#6e7e36", "#3a4a22", "#8c9048"})[1 + (i // 6) % 4], 0.7) end
+  local h = rand(8, 22)
+  local lean = randn(0.05, 0.25)
+  g:stroke({{x, base}, {x + lean * h * 0.4, base - h * 0.55}, {x + lean * h, base - h}}, {pressure={0.75, 0}, ramps={0.05, 0.7}})
+end
+-- a thistle in the right foreground, big enough to count, with a dock at its foot
+local S = 2.1
+local tx, ty = 900, 716
+local st = brush("round", 2.4)
+st:load("#2c3520", 0.95)
+st:stroke({{tx, ty}, {tx - 2*S, ty - 30*S}, {tx + 1*S, ty - 58*S}}, {pressure={0.9, 0.55}, shake=0.8})
+st:reload("#2c3520", 0.9)
+st:stroke({{tx - 1*S, ty - 34*S}, {tx + 9*S, ty - 44*S}, {tx + 12*S, ty - 52*S}}, {pressure={0.7, 0.35}})
+st:stroke({{tx - 1*S, ty - 22*S}, {tx - 10*S, ty - 32*S}, {tx - 13*S, ty - 41*S}}, {pressure={0.7, 0.35}})
+local lf = brush("round", 2.6)
+for _, L in ipairs({{-1, -12, -17, -9, 1}, {1, -18, 16, -12, -1}, {0, -40, -10, -37, 1}, {1, -8, 15, 1, -1}, {0, -28, 12, -30, 1}}) do
+  lf:reload("#62705a", 0.9)
+  local x0, y0 = tx + L[1]*S, ty + L[2]*S
+  local pts = {{x0, y0}}
+  for k = 1, 6 do
+    local t = k / 6
+    pts[#pts + 1] = {x0 + L[3]*S*t, y0 + L[4]*S*t + L[5] * 2.2 * ((k % 2 == 0) and 1 or -1)}
+  end
+  lf:stroke(pts, {pressure={0.95, 0.05}, ramps={0.1, 0.6}, shake=0.5})
+  local hi = brush("rigger", 0.6); hi:load("#a9b39a", 0.7)
+  hi:stroke({pts[1], pts[3], pts[5]}, {pressure={0.5, 0.1}})
+end
+local fl = brush("round", 2.2)
+for _, h in ipairs({{tx + 1*S, ty - 60*S}, {tx + 12*S, ty - 54*S}, {tx - 13*S, ty - 43*S}}) do
+  fl:reload("#56643a", 0.95)
+  fl:touch(h[1], h[2] + 3, {pressure=0.95}); fl:touch(h[1] + 1, h[2] + 4.5, {pressure=0.8})
+  local tuft = brush("rigger", 0.8)
+  tuft:load("#8e4f8a", 0.95)
+  for k = -3, 3 do
+    tuft:stroke({{h[1] + k * 0.7, h[2] + 1}, {h[1] + k * 1.6, h[2] - 5}}, {pressure={0.8, 0.2}})
+  end
+end
+local dk = brush("filbert", 5)
+for _, D in ipairs({{858, 712, -0.8}, {872, 708, -1.5}, {846, 714, -0.25}, {884, 713, -2.3}}) do
+  dk:reload("#3d5028", 0.95)
+  local a = D[3]
+  dk:stroke({{D[1], D[2]}, {D[1] + 20 * math.cos(a), D[2] + 20 * math.sin(a)}, {D[1] + 40 * math.cos(a + 0.15), D[2] + 40 * math.sin(a + 0.15)}},
+    {pressure={0.95, 0.05}, ramps={0.15, 0.6}, swell={0.7, 1.3, 0.4}})
+  local rib = brush("rigger", 0.6); rib:load("#7f8a58", 0.7)
+  rib:stroke({{D[1], D[2]}, {D[1] + 34 * math.cos(a + 0.1), D[2] + 34 * math.sin(a + 0.1)}}, {pressure={0.5, 0.05}})
+end
+-- yarrow umbels scattered through the near grass
+local ya = brush("round", 1.6)
+for i = 1, 18 do
+  local x, y = rand(20, 980), rand(600, 700)
+  if pathm:at(x, y) < 0.2 then
+    local stem = brush("rigger", 0.9)
+    stem:load("#556438", 0.8)
+    local h = rand(22, 38) * (y - 480) / 220
+    stem:stroke({{x, y}, {x + randn(0, 1), y - h}}, {pressure={0.6, 0.3}})
+    ya:reload("#e3dfcf", 0.8)
+    for k = 1, 6 do ya:touch(x + randn(0, 2.2), y - h + randn(0, 0.9), {pressure=0.5}) end
+  end
+end

@@ -262,3 +262,23 @@ Judged as a painter:
   a fused penumbra; quieter stone grain and gown light
 - `5551785` scene: clippy; study_scene colors from inside the panel;
   previews in `notes/scene`
+
+## Round 4: depth masks (branch `depth`, see notes/depth.md)
+
+- **`Depths`** (`view.depths()`, built on first use) gives, per pixel,
+  what is seen nearest first: ground, water or sky, each visible body and
+  each painter **layer**, with coverage and meters. Proxies are left out:
+  they are never seen. Masks are front-to-back composites with soft
+  edges: `visible`, `front`, `behind`, `at_depth`, `between`, `seen_at`.
+- **Layers**: `World::layer(name, mask, LayerDepth::At(m) | Ground)`
+  registers a motif painted by hand (a figure, a boat) at a depth.
+- **Soft shadows**: `View::soft_shadows(soft, casters)` has a penumbra
+  that grows with distance and `soft`. `View::occlusion(reach, by)`
+  cone-traces the sky the bodies hide, fading out toward `reach`, for a
+  contact shadow with no edge. Both are weighted by how much ground is
+  seen. `World::cast_soft` and `World::sky_occlusion` are the pointwise
+  versions.
+- This answers the 3200px weak spot above ("a fairly even gray band with
+  a firm edge"): `soft` widens the penumbra where a painter wants it.
+- **Cost**: 12 bytes per pixel plus each body's patch (8 bytes per pixel
+  of its bounds). Tracing takes 0.1–0.5 s at 1000px.

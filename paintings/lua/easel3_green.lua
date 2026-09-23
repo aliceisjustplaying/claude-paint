@@ -398,8 +398,10 @@ local stonecol = function(x, y)
   return shift(c, 0.035 * sn(x, y), 0.004 * sn(y, x), 0.01 * sn(x * 1.3, y))
 end
 local all = stones:silhouette{parts={1, 2, 3}, soft=0.5} * above(function(x) return 704 end)
-work(all * stones:shadow{parts={1, 2, 3}}, {hand="body", tool="round 1.6", length={3, 9}, coverage=3.2, color=stonecol, angle=stones:field("fall")})
-work(all * stones:lit{parts={1, 2, 3}, soft=0.1}, {hand="body", tool="round 1.4", length={3, 8}, coverage=3.2, color=stonecol, angle=stones:field("across")})
+work(all * stones:shadow{parts={1, 2, 3}}, {hand="body", tool="filbert 3", length={5, 14}, coverage=3.2, color=stonecol, angle=stones:field("fall")})
+work(all * stones:lit{parts={1, 2, 3}, soft=0.1}, {hand="body", tool="filbert 3", length={5, 12}, coverage=3.2, color=stonecol, angle=stones:field("across")})
+-- fuse the wet stone paint so it reads as one hard surface, not bristles
+blend(all:shrink(1), {angle=stones:field("across")})
 work(stones:edges{concave=true} * all, {hand="detail", tool="round 0.8", color="#2e2b27", angle=stones:field("edge"), coverage=1.2})
 -- lichen specks on the lit tops
 stipple(all * stones:lit{parts={1, 2, 3}, soft=0.1}:shrink(3), {width=1.1, color="#c8c49a", coverage=function(x, y) return 0.35 end,

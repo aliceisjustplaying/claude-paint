@@ -81,3 +81,16 @@ All work is merged into main except the per-loop painter branches
 (`loop*-near`, `loop*-green`), whose logs and notes are copied into
 `notes/loops/`, and the amnesia branches (`amnesia-*`, `easel3-*`,
 `easel4-*`), archived in `notes/amnesia2/3/4`.
+
+## Update: second opinions (read notes/advice/astra.md and gemini.md)
+The owner felt progress went sideways since round 2–3. Both advisors
+(gpt-6-astra, Gemini 3.8 Flash) agree: (1) A/B the paint relief lighting on
+identical paintings first (cheap, the owner judges); (2) mark economy:
+masses, edges and a few accents instead of painting every generated detail
+(keep structure for placement and branching: the bare oak is the evidence);
+(3) test wet/tacky/open interaction: the sketchbook's "dry() before any
+passage" likely causes the pasted-on cutout look; (4) no full Bob Ross
+sprint: bounded single-subject mark-making studies instead; (5) the owner's
+eye decides, critics are diagnostic. Rejected: Gemini's idea to benchmark
+Friedrich's actual masterpieces (copying). The next plan is those three
+experiments, in order, before more loops.

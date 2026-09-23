@@ -597,7 +597,7 @@ impl Canvas {
     /// `before`) left inside the region and lay a short stroke through each,
     /// as a painter covering a passage does. The spots are gathered on a grid
     /// of cells half a brush wide (units, so any resolution fills the same
-    /// spots); a cell is filled when its bare area is at least 2% of a
+    /// spots); a cell is filled when its bare area is at least 0.5% of a
     /// brush width squared, and it is filled once: this is one look, not a
     /// loop. Deterministic (its own random stream), and it sees only the
     /// pixels the canvas holds (a crop's margin is wider than a fill stroke
@@ -630,7 +630,7 @@ impl Canvas {
             }
         }
         let px_area = 1.0 / (f.scale * f.scale);
-        let least = (0.02 * w * w).max(1.5 * px_area);
+        let least = (0.005 * w * w).max(1.5 * px_area);
         let drift = crate::noise::Fbm::new((seed as u32) ^ 0xD21F, 3, hd.drift.1);
         let len = (0.5 * hd.length.0).clamp(w, 2.0 * w);
         // Everything about a dab follows from its cell alone, so a crop

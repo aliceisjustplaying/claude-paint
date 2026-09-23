@@ -122,7 +122,7 @@ const AIM_THIN: (f32, f32) = (0.25, 0.3);
 /// (masstone) costs this much per unit of OKLab a/b distance from the look
 /// wanted. Aim may still push a pile's hue against the underlayer, but only
 /// where that buys a real improvement in the look.
-const AIM_FAMILY: f32 = 0.25;
+const AIM_FAMILY: f32 = 0.28;
 /// How a mark's area is spread over thicknesses (× the expected one,
 /// share of the area), as the eye averages it at viewing distance: the
 /// aim makes this mean look (in linear light) the look wanted. Measured by
@@ -136,7 +136,7 @@ const MARKS_POINTED: [(f32, f32); 5] = [(0.125, 0.13), (0.25, 0.14), (0.5, 0.21)
 /// Weight of the per-thickness spread (`AIM_SPREAD`) next to the mean look:
 /// it keeps a pile from looking right on average only by being far off
 /// at every thickness (and neighboring targets on one recipe).
-const AIM_ROBUST: f32 = 0.35;
+const AIM_ROBUST: f32 = 0.5;
 
 /// The shape of the marks an aimed pile will make (see `Palette::aim_for`).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

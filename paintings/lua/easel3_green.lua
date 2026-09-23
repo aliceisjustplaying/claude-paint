@@ -174,13 +174,17 @@ w = world{horizon=HZ, eye=6, fov=50, sun={azimuth=-112, elevation=54}, ground=kn
 oak = tree{habit="oak", x=OX, y=OY, height=300, seed=17, years=34}
 oakleaves = oak:foliage{sun={-0.75, -0.6, 0.3}, seed=17, clump=0.04, spray=2}
 local s = w:spot(OX, OY)
-w = w:proxy(s, body.ellipsoid(s:p(-1.3, 10.5, 0), s:size(5, 4, 4.6)))
+w = w:proxy(s, body.ellipsoid(s:p(-1.5, 10, 0), s:size(5.2, 3.8, 4.6)):rough(0.5, 3, 4))
+w = w:proxy(s, body.ellipsoid(s:p(-6, 8.2, 0.8), s:size(2.6, 2.1, 2.4)))
+w = w:proxy(s, body.ellipsoid(s:p(4.6, 7.6, -0.6), s:size(2.7, 2.3, 2.6)))
+w = w:proxy(s, body.ellipsoid(s:p(-0.8, 13.6, 0.4), s:size(3, 1.8, 2.8)))
 w = w:proxy(s, body.block(s:p(0, 3, 0), s:size(0.5, 3, 0.5), s:m(0.2)))
 v = w:view()
 local sa = w:shadow_angle(OX, OY + 2) or 0
-local sh = (v:shadows() * v:land()):roughen(7, 26, 3, 5):soften(5)
-work(sh, {hand="body", tool="filbert 3", length={5, 14}, coverage=3, angle=sa, angle_jitter=0.3,
-  color_over={shift={-0.055, -0.004, -0.016}}})
+local sh = (v:shadows() * v:land()):roughen(4, 10, 3, 1):soften(1.5)
+-- the shade laid as the grass it falls on: short upright strokes, so its edge is made of blades
+work(sh, {hand="hatch", tool="round 1.3", length={2.5, 6}, coverage=3.4, angle=-1.5, angle_jitter=0.35,
+  color_over={shift={-0.06, -0.004, -0.017}}})
 
 --@ chunk 16 · clock 40189.6328125
 wait(3*60)
@@ -481,3 +485,16 @@ for i = 1, 18 do
   end
 end
 
+--@ chunk 26 · clock 43969.6328125
+wait(24*60)
+local sh = (v:shadows() * v:land())
+-- scattered tufts in front of the grass band, so it doesn't start on a line
+local tufts = sward{region=mask(function(x, y) return (y > 470 and y < 560) and 1 or 0 end) - pathm:grow(1) - sh:grow(4),
+  horizon=HZ, near=H, height=34, thin=0.75, seed=31, wind={lean=0.12, gust=0.25, period=180, seed=4}}
+local gg = brush("rigger", 0.6)
+local greens = {"#56702c", "#7a8e3a", "#3e5226", "#8e9a4c", "#6a7a34"}
+for i, t in ipairs(tufts) do
+  if i % 4 == 1 then gg:reload(greens[1 + (i // 4) % #greens], 0.7) end
+  for _, bl in ipairs(t.blades) do gg:stroke(bl, {pressure={clamp(0.2 + 0.5 * t.scale, 0.2, 0.8), 0}, ramps={0.05, 0.7}}) end
+end
+print(#tufts, "tufts")

@@ -127,6 +127,11 @@ pub struct Species {
     pub touches: f32,
     /// Share of winter clumps kept as dead leaves (young oak, beech).
     pub marcescent: f32,
+    /// How far the trunk goes on into the crown as a leader (share of the
+    /// crown's height from its base) if the drawn trunk stops short.
+    pub leader: f32,
+    /// Pipe-model exponent (higher: limbs stay stouter against the trunk).
+    pub pipe: f32,
 }
 
 impl Species {
@@ -139,8 +144,8 @@ impl Species {
             density: 0.55,
             influence: 7.0,
             kill: 1.6,
-            up: -0.05,
-            out: 0.4,
+            up: -0.12,
+            out: 0.7,
             crook: 0.45,
             kink: 0.1,
             inertia: 0.35,
@@ -152,11 +157,11 @@ impl Species {
             trunk: 0.075,
             twig_w: 0.55,
             smooth: 1,
-            twigs: 2.6,
-            twig_len: 1.3,
+            twigs: 3.2,
+            twig_len: 1.8,
             twig_spread: 0.9,
             twig_droop: 0.0,
-            twig_zig: 0.6,
+            twig_zig: 0.45,
             twig_along: 0.35,
             clump: 0.026,
             squash: 0.72,
@@ -171,7 +176,9 @@ impl Species {
             droop: 0.25,
             flat: 0.1,
             touches: 7.0,
-            marcescent: 0.05,
+            marcescent: 0.025,
+            leader: 0.3,
+            pipe: 2.7,
         }
     }
     /// Beech: smooth gray limbs rising in a fan, level layered sprays, a
@@ -179,6 +186,8 @@ impl Species {
     pub fn beech() -> Self {
         Species {
             name: "beech".into(),
+            leader: 0.22,
+            pipe: 2.5,
             up: 0.35,
             out: 0.15,
             crook: 0.12,
@@ -216,6 +225,8 @@ impl Species {
     pub fn lime() -> Self {
         Species {
             name: "lime".into(),
+            leader: 0.55,
+            pipe: 2.4,
             density: 0.7,
             up: 0.3,
             out: 0.1,
@@ -254,6 +265,8 @@ impl Species {
     pub fn birch() -> Self {
         Species {
             name: "birch".into(),
+            leader: 0.8,
+            pipe: 2.4,
             step: 0.022,
             density: 0.45,
             up: 0.45,
@@ -297,6 +310,8 @@ impl Species {
     pub fn willow() -> Self {
         Species {
             name: "willow".into(),
+            leader: 0.0,
+            pipe: 2.6,
             step: 0.026,
             density: 0.5,
             influence: 8.0,
@@ -547,6 +562,38 @@ impl Tree {
     /// third of the way into it). `sun` points toward the sun (x right, y
     /// down, z toward the viewer).
     pub fn grow(crown: &[(f32, f32)], trunk: Option<&[(f32, f32)]>, sp: &Species, season: &Season, sun: V3, seed: u64) -> Tree {
+        // grown in the crown's own frame (quantized), so the same crown
+        // drawn elsewhere grows the same tree
+        let ox = crown.iter().map(|p| p.0).fold(f32::MAX, f32::min).floor();
+        let oy = crown.iter().map(|p| p.1).fold(f32::MAX, f32::min).floor();
+        let q = |p: &(f32, f32)| (((p.0 - ox) * 64.0).round() / 64.0, ((p.1 - oy) * 64.0).round() / 64.0);
+        let c: Vec<(f32, f32)> = crown.iter().map(q).collect();
+        let t: Option<Vec<(f32, f32)>> = trunk.map(|t| t.iter().map(q).collect());
+        let mut tree = Self::grow_local(&c, t.as_deref(), sp, season, sun, seed);
+        tree.shift(ox, oy);
+        tree
+    }
+
+    fn shift(&mut self, dx: f32, dy: f32) {
+        let m = |p: &mut (f32, f32)| {
+            p.0 += dx;
+            p.1 += dy;
+        };
+        for l in &mut self.limbs {
+            l.pts.iter_mut().for_each(m);
+        }
+        for c in &mut self.clumps {
+            m(&mut c.at);
+        }
+        for t in &mut self.touches {
+            t.pts.iter_mut().for_each(m);
+        }
+        self.crown.iter_mut().for_each(m);
+        m(&mut self.foot);
+        m(&mut self.fork);
+    }
+
+    fn grow_local(crown: &[(f32, f32)], trunk: Option<&[(f32, f32)]>, sp: &Species, season: &Season, sun: V3, seed: u64) -> Tree {
         let mut rng = Rng::new(seed ^ 0x0a47_2ee);
         let crown = if crown.len() < 12 { soften(crown, 3) } else { crown.to_vec() };
         let (x0, y0, x1, y1) = crown.iter().fold((f32::MAX, f32::MAX, f32::MIN, f32::MIN), |b, p| (b.0.min(p.0), b.1.min(p.1), b.2.max(p.0), b.3.max(p.1)));
@@ -571,6 +618,21 @@ impl Tree {
                 vec![foot, top]
             }
         };
+        // the drawn trunk goes on into the crown as a crooked leader
+        let mut trunk_line = trunk_line;
+        let want_top = y1 - sp.leader * hc;
+        let top = *trunk_line.last().unwrap();
+        if !pollard && top.1 > want_top + d {
+            let (bx, by) = (cx + rng.normal() * 0.05 * wc, want_top);
+            let k = ((top.1 - by) / (2.5 * d)).ceil().max(1.0) as usize;
+            let prev = trunk_line[trunk_line.len().saturating_sub(2)];
+            let lean = (top.0 - prev.0) / (prev.1 - top.1).abs().max(1.0);
+            for i in 1..=k {
+                let t = i as f32 / k as f32;
+                let x = lerp(top.0 + lean * (top.1 - by) * t, bx, t * t) + rng.normal() * sp.crook * d * 0.8;
+                trunk_line.push((x, lerp(top.1, by, t)));
+            }
+        }
         let foot = trunk_line[0];
         let tpts = resample(&trunk_line, d);
         let mut nodes: Vec<Node> = Vec::new();
@@ -644,7 +706,7 @@ impl Tree {
                 rng.range(-1.0, 1.0)
             };
             let z = zs * zmax;
-            let v = voids.get(x + 0.6 * z, y - 0.3 * z);
+            let v = voids.get(x - x0 + 0.6 * z, y - y0 - 0.3 * z);
             if sp.voids > 0.0 && rng.f() < smoothstep(0.35 - sp.voids * 0.6, 0.35, -v) * sp.voids * 1.6 {
                 continue;
             }
@@ -785,7 +847,7 @@ impl Tree {
         // widths: the pipe model from equal twigs down, remapped so the
         // trunk has the species' width
         let n = nodes.len();
-        let pexp = 2.3f32;
+        let pexp = sp.pipe;
         let mut wp = vec![0.0f32; n];
         for i in (0..n).rev() {
             if wp[i] == 0.0 {
@@ -799,7 +861,15 @@ impl Tree {
         let wraw: Vec<f32> = wp.iter().map(|v| v.powf(1.0 / pexp)).collect();
         let target = (sp.trunk * hc).max(twig_w * 2.0);
         let g = if wraw[0] > twig_w * 1.01 { (target / twig_w).ln() / (wraw[0] / twig_w).ln() } else { 1.0 };
-        let width: Vec<f32> = wraw.iter().map(|&w| twig_w * (w / twig_w).max(1.0).powf(g)).collect();
+        let mut width: Vec<f32> = wraw.iter().map(|&w| twig_w * (w / twig_w).max(1.0).powf(g)).collect();
+        // the trunk tapers up from a flared foot
+        let tlen = nodes[nt - 1].p[1] - nodes[0].p[1];
+        for (i, w) in width.iter_mut().enumerate().take(nt) {
+            let t = ((nodes[i].p[1] - nodes[0].p[1]) / tlen.min(-1.0)).clamp(0.0, 1.0);
+            let flare = 1.0 + 0.55 * (-t * 16.0).exp();
+            let floor = if nodes[i].p[1] > y1 - 0.05 * hc { target * (1.0 - 0.3 * t) } else { 0.0 };
+            *w = w.max(floor) * flare;
+        }
 
         // limbs: follow the thickest child through each fork
         let mut kids: Vec<Vec<usize>> = vec![vec![]; n];
@@ -927,7 +997,7 @@ impl Tree {
                         }
                         if !season.winter {
                             // leaves fall in patches (whole twigs bare), not evenly
-                            let k = 0.5 + 0.4 * keep.get(x, y) + 0.3 * (rng.f() - 0.5);
+                            let k = 0.5 + 0.4 * keep.get(x - x0, y - y0) + 0.3 * (rng.f() - 0.5);
                             if season.leaf < 1.0 && k > season.leaf {
                                 continue;
                             }
@@ -941,7 +1011,7 @@ impl Tree {
                         let along = if along > PI / 2.0 { along - PI } else if along < -PI / 2.0 { along + PI } else { along };
                         let tilt = if sp.squash < 1.0 { along * 0.4 } else { 0.0 } + rng.normal() * 0.15;
                         let outer = (edge_dist(&crown, cx2, cy2) / (0.25 * wc)).min(1.0);
-                        let turn = if dead_keep { 1.0 } else { (season.turn * (0.55 + 0.45 * (1.0 - outer) + 0.35 * keep.get(y, x))).clamp(0.0, 1.0) };
+                        let turn = if dead_keep { 1.0 } else { (season.turn * (0.55 + 0.45 * (1.0 - outer) + 0.35 * keep.get(y - y0, x - x0))).clamp(0.0, 1.0) };
                         clumps.push(Clump {
                             at: (cx2, cy2),
                             z: zz + rng.normal() * 0.3 * r,
@@ -1138,9 +1208,31 @@ impl Tree {
         shape
     }
 
-    /// Trunk, limbs and twigs of width in [lo, hi) (at the limb's base).
+    /// The wood where it is between `lo` and `hi` wide: runs of each limb,
+    /// so `wood(6, inf)` is the trunk and the stout lower limbs, not their
+    /// thin ends.
     pub fn wood(&self, f: Frame, lo: f32, hi: f32) -> Mask {
-        Mask::from_shape(f, self.wood_shape(Shape::new(), |l| l.w[0] >= lo && l.w[0] < hi))
+        let mut shape = Shape::new();
+        for l in &self.limbs {
+            let n = l.pts.len();
+            let mut i = 0;
+            while i < n {
+                if !(l.w[i] >= lo && l.w[i] < hi) {
+                    i += 1;
+                    continue;
+                }
+                let s = i;
+                while i < n && l.w[i] >= lo && l.w[i] < hi {
+                    i += 1;
+                }
+                // one point past the run on each side keeps the joins
+                let (a, b) = (s.saturating_sub(1), (i + 1).min(n));
+                if b - a >= 2 {
+                    shape = shape.ribbon(&l.pts[a..b], &l.w[a..b]);
+                }
+            }
+        }
+        Mask::from_shape(f, shape)
     }
 
     pub fn trunk(&self, f: Frame) -> Mask {
@@ -1376,6 +1468,13 @@ mod tests {
         let aut = Tree::grow(&c, Some(&tr), &Species::oak(), &Season::named("autumn").unwrap(), [-0.5, -0.7, 0.3], 3);
         let win = Tree::grow(&c, Some(&tr), &Species::oak(), &Season::named("winter").unwrap(), [-0.5, -0.7, 0.3], 3);
         assert_eq!(sum.limbs.len(), win.limbs.len(), "the same wood in every season");
+        // the same crown drawn elsewhere grows the same tree
+        let moved: Vec<(f32, f32)> = c.iter().map(|p| (p.0 + 322.0, p.1 + 7.0)).collect();
+        let tr2 = [(827.0, 567.0), (820.0, 337.0)];
+        let win2 = Tree::grow(&moved, Some(&tr2), &Species::oak(), &Season::named("winter").unwrap(), [-0.5, -0.7, 0.3], 3);
+        assert_eq!(win.limbs.len(), win2.limbs.len());
+        let (a, b) = (win.limbs[5].pts[1], win2.limbs[5].pts[1]);
+        assert!((a.0 + 322.0 - b.0).abs() < 0.01 && (a.1 + 7.0 - b.1).abs() < 0.01, "{a:?} {b:?}");
         assert!(aut.clumps.len() < sum.clumps.len() * 8 / 10);
         assert!(win.clumps.len() < sum.clumps.len() / 10);
         assert!(win.clumps.iter().all(|c| c.dead));

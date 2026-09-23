@@ -385,7 +385,7 @@ fn main() {
         let ice = |x: f32, y: f32| -> Rgb {
             let d = ((y - HORIZON) / (h - HORIZON)).clamp(0.0, 1.0);
             let refl = sky_col(x, HORIZON * (0.97 - 0.45 * d));
-            mix(mix(refl, hex("#9aa0b2"), 0.5, Mix::Light), hex("#5a5f6e"), 0.3 + 0.2 * d, Mix::Pigment)
+            mix(mix(refl, hex("#9aa0b2"), 0.5, Mix::Light), hex("#555a69"), 0.42 + 0.22 * d, Mix::Pigment)
         };
         let hd = st.detail().color(ice).angle(|_, _| 0.0).angle_jitter(0.12).length(5.0, 18.0).coverage(3.0).medium(0.25).clip(true);
         c.work(&brook_m, &hd, 61);
@@ -459,13 +459,15 @@ fn main() {
         let snow = pal.mix(hex("#dcd9d3")).paint(0.12).with_hiding(0.95);
         let snow_sh = pal.mix(hex("#aeb1bf")).paint(0.12).with_hiding(0.9);
         limb_snow(&mut c, &oak, snow, snow_sh, &mut rng);
-        // snow heaped at the foot, blue in the trunk's shadow
-        let mut b = Held::new(Tool::filbert(4.0), rng.next_u64());
-        for k in 0..5 {
-            b.reload(if k % 2 == 0 { snow.with_hiding(0.7) } else { snow_sh.with_hiding(0.6) }, 0.35);
-            let x0 = oak_base.0 - 14.0 + k as f32 * 6.0 + rng.normal() * 2.0;
-            let y0 = oak_base.1 + 1.5 + rng.normal() * 1.2;
-            c.drag(&mut b, &Gesture::new(vec![(x0, y0), (x0 + 9.0, y0 - 0.5 + rng.normal())]).pressure(0.6, 0.4).ramps(0.2, 0.4), None);
+        // the trunk stands in the snow: a low drift laid across its foot in
+        // the snow's own color, a little bluer on the shadow side
+        let mut b = Held::new(Tool::filbert(5.0), rng.next_u64());
+        for k in 0..4 {
+            let x0 = oak_base.0 - 16.0 + k as f32 * 8.0 + rng.normal() * 1.5;
+            let y0 = oak_base.1 - 1.0 + rng.normal() * 0.8;
+            let col = mix(snow_col(x0, y0 + 4.0), hex("#9ea3b5"), if k >= 2 { 0.3 } else { 0.0 }, Mix::Light);
+            b.reload(pal.mix(col).paint(0.2).with_hiding(0.95), 0.5);
+            c.drag(&mut b, &Gesture::new(vec![(x0, y0 + 1.5), (x0 + 5.0, y0 - 0.8), (x0 + 11.0, y0 + 1.2)]).pressure(0.7, 0.5).ramps(0.2, 0.4), None);
         }
         c.dry();
     }
@@ -515,6 +517,86 @@ fn main() {
         crow(&mut c, (447.0, 318.0), 4.5, black, true, &mut rng);
     }
 
+    // ---------------------------------------------------------------- fence
+    // an old paling fence running back from the right foreground: posts
+    // leaning this way and that, one broken, rails sagging or gone; snow
+    // on every top
+    let posts: Vec<(f32, f32, f32)> = {
+        let mut v = Vec::new();
+        let (a, e) = ((975.0f32, 716.0f32), (705.0f32, 588.0f32));
+        let n = 8;
+        for i in 0..n {
+            // spacing shrinks with distance
+            let t = 1.0 - (1.0 - i as f32 / (n - 1) as f32).powf(1.0);
+            let t = 1.0 - (1.0 - t) * (1.0 - t * 0.35);
+            let p = (a.0 + (e.0 - a.0) * t, a.1 + (e.1 - a.1) * t);
+            let d = ((p.1 - HORIZON) / (h - HORIZON)).clamp(0.0, 1.0);
+            v.push((p.0, p.1, 13.0 + 52.0 * d.powf(2.0)));
+        }
+        v
+    };
+    if o.stage("fence", &mut c, &mut rng) {
+        let wood_p = pal.mix(hex("#3a332e")).paint(0.2);
+        let lit = pal.mix(hex("#857563")).paint(0.2).with_hiding(0.7);
+        let snow = pal.mix(hex("#dad7d0")).paint(0.12).with_hiding(0.95);
+        let mut tops: Vec<(f32, f32)> = Vec::new();
+        for (i, &(x, y, ht)) in posts.iter().enumerate().rev() {
+            let broken = i == 3;
+            let ht = if broken { ht * 0.45 } else { ht * rng.range(0.85, 1.1) };
+            let lean = rng.normal() * 0.08 + 0.03;
+            let w = ht * 0.085;
+            let top = (x + lean * ht, y - ht);
+            let mut b = Held::new(Tool { ragged: 0.4, ..Tool::round_sable(w) }, rng.next_u64());
+            b.load(wood_p, 0.8);
+            c.drag(&mut b, &Gesture::new(vec![(x, y + w * 0.4), (x + lean * ht * 0.5 + rng.normal() * 0.3, y - ht * 0.5), top]).pressure(0.95, if broken { 0.8 } else { 0.7 }).ramps(0.0, 0.08).shake(0.5), None);
+            // the left edge catches the afterglow
+            let mut lb = Held::new(Tool::round_sable((w * 0.25).max(0.4)), rng.next_u64());
+            lb.load(lit, 0.35);
+            let off = -w * 0.3;
+            c.drag(&mut lb, &Gesture::new(vec![(x + off, y - ht * 0.15), (top.0 + off, top.1 + w * 0.6)]).pressure(0.5, 0.3).ramps(0.3, 0.3), None);
+            // snow cap
+            let mut sb = Held::new(Tool::round_sable(w * 0.9), rng.next_u64());
+            sb.load(snow, 0.6);
+            c.drag(&mut sb, &Gesture::new(vec![(top.0 - w * 0.55, top.1 + w * 0.2), (top.0, top.1 - w * 0.25), (top.0 + w * 0.55, top.1 + w * 0.25)]).pressure(0.8, 0.6).ramps(0.1, 0.3), None);
+            tops.push(top);
+        }
+        tops.reverse();
+        // rails: between some posts, one rail a little below the tops,
+        // sagging; one hangs broken from a post
+        for i in 0..posts.len() - 1 {
+            if i == 2 || i == 5 {
+                continue;
+            }
+            let (a, e) = (tops[i], tops[i + 1]);
+            let ha = posts[i].2;
+            let he = posts[i + 1].2;
+            let (a, e) = ((a.0, a.1 + ha * 0.25), (e.0, e.1 + he * 0.25));
+            let w = (ha * 0.04).max(0.5);
+            let sag = ha * 0.04;
+            let mut b = Held::new(Tool::round_sable(w), rng.next_u64());
+            b.load(wood_p, 0.8);
+            let m = ((a.0 + e.0) * 0.5, (a.1 + e.1) * 0.5 + sag);
+            c.drag(&mut b, &Gesture::new(vec![a, m, e]).pressure(0.9, 0.7).ramps(0.05, 0.1).shake(0.4), None);
+            let mut sb = Held::new(Tool::rigger(w * 0.7), rng.next_u64());
+            sb.load(snow, 0.6);
+            let up = w * 0.55;
+            c.drag(&mut sb, &Gesture::new(vec![(a.0, a.1 - up), (m.0, m.1 - up), (e.0, e.1 - up)]).pressure(0.6, 0.5).ramps(0.2, 0.2), None);
+        }
+        // the broken rail: from the 3rd post down into the snow
+        let (a, ha) = (tops[2], posts[2].2);
+        let mut b = Held::new(Tool::round_sable((ha * 0.04).max(0.5)), rng.next_u64());
+        b.load(wood_p, 0.8);
+        c.drag(&mut b, &Gesture::new(vec![(a.0, a.1 + ha * 0.25), (a.0 - ha * 0.4, a.1 + ha * 0.6), (a.0 - ha * 0.75, posts[2].1 - 1.0)]).pressure(0.9, 0.7).ramps(0.05, 0.3), None);
+        // snow drifted against the posts' feet
+        for &(x, y, ht) in &posts {
+            let col = snow_col(x, y);
+            let mut sb = Held::new(Tool::filbert(ht * 0.12), rng.next_u64());
+            sb.load(pal.mix(col).paint(0.2), 0.5);
+            c.drag(&mut sb, &Gesture::new(vec![(x - ht * 0.12, y + 0.5), (x + ht * 0.02, y - ht * 0.03), (x + ht * 0.14, y + 0.7)]).pressure(0.7, 0.5).ramps(0.2, 0.4), None);
+        }
+        c.dry();
+    }
+
     // --------------------------------------------------------------- grasses
     if o.stage("grasses", &mut c, &mut rng) {
         // dry grasses and reeds laid over the finished snow in fine upturning
@@ -553,6 +635,24 @@ fn main() {
             }
         }
         eprintln!("  grasses: {placed} tufts");
+    }
+
+    // ----------------------------------------------------------------- veil
+    // Friedrich's advice to Carus: a dark glaze over the whole picture
+    // except the moon, growing darker toward the edges [MET PDF p.35]. Here
+    // very thin, cool-brown, heaviest in the lower corners; never zero
+    // anywhere (see FRICTION: a glaze's edge where the thickness reaches 0
+    // shows as a line)
+    if o.stage("veil", &mut c, &mut rng) {
+        let (cx, cy) = (520.0f32, 400.0f32);
+        c.glaze(&paint::Pigment::with_hiding(hex("#8e8a8a"), 0.04), None, |x, y| {
+            let dx = (x - cx) / 620.0;
+            let dy = (y - cy) / 420.0;
+            let r = (dx * dx + dy * dy).sqrt();
+            let m = ((x - moon.0).powi(2) + (y - moon.1).powi(2)).sqrt();
+            let away = smoothstep(10.0, 70.0, m);
+            (0.06 + 0.5 * smoothstep(0.45, 1.3, r) + 0.18 * smoothstep(HORIZON + 80.0, h, y)) * (0.75 + 0.25 * away)
+        });
     }
 
     let fin = Finish {
@@ -778,7 +878,7 @@ fn spruce(c: &mut paint::Canvas, base: (f32, f32), ht: f32, needles: Paint, snow
     for &(sx, sy, ex, ey) in tier_pts.iter() {
         let v = (sy - top) / ht;
         let left = ex < sx;
-        if rng.f() < 0.35 + 0.25 * (1.0 - v) + if left { 0.0 } else { 0.2 } {
+        if rng.f() < 0.15 + 0.25 * (1.0 - v) + if left { 0.0 } else { 0.15 } {
             continue;
         }
         let p = if left { snow } else { snow_sh };

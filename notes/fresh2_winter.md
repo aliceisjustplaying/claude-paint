@@ -150,6 +150,30 @@ is built outside the stages; every stage only paints.
    dragged in two arcs pressed into blobs at 1000px. *Workaround:* a finer
    brush (0.16×) for the wings, pulled out from the body and lifted at the
    tips.
+10. **`Mask::roughen`'s `edge` is in mask-value units, and a big one
+    leaks over the whole canvas.** I passed `edge = 1.0` thinking "units";
+    `smoothstep(0.5 - 1, 0.5 + 1, 0)` is 0.16, so the "open water" mask was
+    0.16 everywhere and `work` painted dark water over the entire picture.
+    No warning; I found it by stopping after each stage and sampling pixels.
+    *Workaround:* `edge 0.08`, then `.mul(&brook_m)` to be sure. The doc
+    could say "(mask-value units, ~0.05–0.2)", or `roughen` could keep
+    zero at zero.
+11. **A glaze with a long soft falloff draws a hard line where its
+    thickness underflows to 0.** I glazed a moon glow with
+    `0.35·exp(-(d/38)²)`. `Canvas::glaze` settles the film and applies it
+    wherever the requested thickness is > 0; the leveled film has a floor,
+    so every pixel with a nonzero request (out to ~360 units, where `exp`
+    underflows) gets a visible veil (~15 levels) and the ones beyond get
+    none. Result: a pale right-angled line across the sky and down the
+    snow, the boundary of `exp` underflow in f32 cut into tiles. Took a
+    stage-by-stage bisection and a `NO_GLAZE` switch to find. *Workaround:*
+    the moon's glow is now stippled (which is Friedrich's way anyway), and
+    the final veil glaze has a thickness that is never 0 anywhere. The
+    engine should treat thickness below a small epsilon as 0 *before*
+    settling, or scale the floor with the requested thickness.
+12. **`--stop` after a resumed stage and the stage's own output are hard
+    to tell apart.** `--resume sky --stop sky` repainted the sky (8.6 s)
+    instead of saying there is nothing to do. Minor.
 
 ## Critique
 

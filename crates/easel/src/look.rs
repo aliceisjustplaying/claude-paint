@@ -98,7 +98,7 @@ impl View {
                     if is_num(args.get(i + 1)) {
                         let s: f32 = args[i + 1].parse().unwrap();
                         i += 1;
-                        if !(s > 0.0) {
+                        if s.is_nan() || s <= 0.0 {
                             return Err("--grid step: want > 0 units".into());
                         }
                         v.grid = Some(s);
@@ -321,7 +321,7 @@ fn show(lua: &Lua, st: &S, args: Variadic<Value>) -> Result<Value> {
                 if pts.len() < 2 || !(ws.len() == 1 || ws.len() == pts.len()) {
                     return err("show: a path with width= needs >= 2 points and one width (or one per point)");
                 }
-                if ws.iter().any(|w| !(*w > 0.0)) {
+                if ws.iter().any(|w| w.is_nan() || *w <= 0.0) {
                     return err("show: width= wants > 0 units");
                 }
             }
@@ -602,9 +602,9 @@ impl Img {
         self.rect(x, y, x + w, y + h, INK, 0.62);
         for (i, ch) in s.chars().enumerate() {
             let g = glyph(ch);
-            for row in 0..5 {
+            for (row, bits) in g.iter().enumerate() {
                 for col in 0..3 {
-                    if g[row] & (4 >> col) != 0 {
+                    if bits & (4 >> col) != 0 {
                         let (gx, gy) = (x + fs + (i as i64 * 4 + col as i64) * fs, y + fs + row as i64 * fs);
                         self.rect(gx, gy, gx + fs, gy + fs, c, 1.0);
                     }

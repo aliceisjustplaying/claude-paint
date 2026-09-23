@@ -493,3 +493,86 @@ for _, rt in ipairs({{{474, 252}, {462, 258}, {448, 270}, {440, 290}, {436, 315}
   local lb = brush("rigger", 0.8); lb:load("#b3a58e", 0.7)
   lb:stroke(hl, {pressure={0.5, 0.05}, ramps={0.05, 0.6}})
 end
+
+--@ chunk 18 · clock 133205.54431152344
+wait(24*60)
+-- stones on the floor
+local st = brush("filbert", 3)
+local stones = {}
+for i = 1, 16 do
+  local x, y
+  if i <= 10 then x, y = rand(320, 900), rand(668, 700) else x, y = rand(20, 980), rand(690, 765) end
+  local r = (2.5 + 8 * rand() ^ 2) * clamp((y - 540) / 170, 0.5, 1.4)
+  if (rockm + boulm):at(x, y) < 0.1 then stones[#stones+1] = {x, y, r} end
+end
+for _, s in ipairs(stones) do
+  local x, y, r = s[1], s[2], s[3]
+  local pts = {}
+  local nv = math.random(5, 7)
+  local a0 = rand(0, 6.28)
+  for k = 1, nv do
+    local a = a0 + (k - 1) * 6.283 / nv + rand(-0.3, 0.3)
+    local rr = r * rand(0.7, 1.15)
+    pts[k] = {x + math.cos(a) * rr * 1.35, y + math.sin(a) * rr * 0.7}
+  end
+  local e = poly(pts):soften(0.6)
+  glaze(ellipse(x + r * 0.8, y + r * 0.5, r * 1.5, r * 0.45):soften(r * 0.3) - e, {color="#231b14", coats=0.5, pigment="transparent"})
+  local lc = mix("#7f7663", "#a99c80", rand())
+  work(e, {hand="detail", tool="filbert 2", length={2, 5}, coverage=3.5, medium=0.12, aim="masstone", angle=0.1,
+    color=function(px, py) local v = smoothstep(y + r * 0.3, y - r * 0.6, py) * smoothstep(x + r * 1.2, x - r * 0.8, px) return mix("#35302a", lc, v) end})
+end
+-- a fallen dead spruce branch across the front
+local br = {{30, 760}, {78, 748}, {112, 746}, {150, 734}, {196, 731}, {232, 720}, {262, 719}, {300, 711}, {338, 712}, {372, 704}, {405, 706}}
+local w1 = brush{kind="round", width=7, point=0.4}
+w1:load("#4f473e", 1)
+w1:stroke(br, {pressure={0.95, 0.35}, ramps={0.02, 0.5}, shake=1.2, swell={1, 0.8, 1.15, 0.85, 1, 0.9}})
+local hl = {}
+for k, p in ipairs(br) do hl[k] = {p[1] + 0.5, p[2] - 2.0 * (1 - k / #br) - 1.0} end
+local w2 = brush{kind="round", width=3, point=0.5}
+w2:load("#a79d89", 0.7)
+w2:stroke(hl, {pressure={0.6, 0.15}, ramps={0.05, 0.5}, swell={1, 0.4, 1, 0.3, 0.9}})
+local tw = brush("rigger", 1)
+for k = 1, 24 do
+  local u = rand(0.05, 0.95)
+  local i = 1 + math.floor(u * (#br - 1))
+  local a, b = br[i], br[i + 1]
+  local t = rand()
+  local x, y = lerp(a[1], b[1], t), lerp(a[2], b[2], t)
+  local ang = (rand() < 0.5 and -1 or 1) * rand(0.5, 1.3) - 0.2
+  local l = rand(10, 34) * (1 - 0.5 * u)
+  local c = mix("#4a423a", "#978c79", rand())
+  tw:reload(c, 0.8)
+  local mx, my = x + math.cos(ang) * l * 0.5, y - math.abs(math.sin(ang)) * l * 0.5 * (ang < 0 and 1 or -0.4)
+  local ex, ey = x + math.cos(ang) * l, y - math.abs(math.sin(ang)) * l * (ang < 0 and 1 or -0.4)
+  tw:stroke({{x, y}, {mx, my}, {ex, ey}}, {pressure={0.8, 0.1}, ramps={0.05, 0.5}})
+  if rand() < 0.5 then
+    local sx = lerp(x, ex, 0.6); local sy = lerp(y, ey, 0.6)
+    tw:stroke({{sx, sy}, {sx + rand(-6, 6), sy - rand(3, 9)}}, {pressure={0.6, 0}, ramps={0.05, 0.6}})
+  end
+end
+-- dry grass in front of the rock foot, breaking its line
+local g = brush("rigger", 0.9)
+local straws = {"#8d7d52", "#a8955f", "#6f6440", "#b9a46e", "#5d5536", "#4d4630"}
+for i = 1, 150 do
+  local x = rand(300, 910)
+  local y = 668 + rand(0, 26)
+  if i % 4 == 1 then g:reload(straws[1 + i % #straws], 0.7) end
+  local h = rand(10, 30)
+  local lean = randn(0.1, 0.3)
+  g:stroke({{x, y}, {x + lean * h * 0.35, y - h * 0.6}, {x + lean * h, y - h}}, {pressure={0.65, 0}, ramps={0.05, 0.7}})
+end
+-- seed stalks in the foreground
+local sk = brush("rigger", 0.8)
+local hd = brush{kind="filbert", width=2.2}
+for i = 1, 16 do
+  local x, y = rand(20, 980), rand(730, 769)
+  if (rockm + boulm):at(x, y) < 0.1 then
+    local h = rand(45, 95)
+    local lean = randn(0.12, 0.2)
+    local tx, ty = x + lean * h, y - h
+    sk:reload(mix("#8b7a4e", "#b4a06b", rand()), 0.8)
+    sk:stroke({{x, y}, {x + lean * h * 0.3, y - h * 0.55}, {tx, ty}}, {pressure={0.7, 0.2}, ramps={0.05, 0.5}})
+    hd:reload(mix("#7d6a44", "#a58f5e", rand()), 0.8)
+    for k = 1, 6 do hd:touch(tx - lean * k * 2.4 + rand(-1.5, 1.5), ty + k * 2.6, {pressure=rand(0.3, 0.6), angle=-1.3, drag={0, 1}}) end
+  end
+end

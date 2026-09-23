@@ -175,8 +175,25 @@ pub struct Sky {
     pub overcast: f32,
     /// Altitude of the eye above sea level (m).
     pub alt: f32,
-    /// The dome's mean single-scattered radiance (computed once).
-    dome: std::sync::OnceLock<Rgb>,
+    /// The dome's mean single-scattered radiance, cached with the
+    /// parameters it was computed from (the fields are public: a painter
+    /// may change `sun` or `haze` after sampling, and the cache follows).
+    dome: DomeCache,
+}
+
+/// The dome radiance cache: the first value lock-free, a later one (after
+/// the parameters changed) behind a lock. Keyed by `Sky::dome_key`.
+#[derive(Default)]
+struct DomeCache {
+    first: std::sync::OnceLock<(u64, Rgb)>,
+    later: std::sync::Mutex<Option<(u64, Rgb)>>,
+}
+
+impl Clone for DomeCache {
+    fn clone(&self) -> Self {
+        let later = *self.later.lock().unwrap_or_else(|e| e.into_inner());
+        DomeCache { first: self.first.clone(), later: std::sync::Mutex::new(later) }
+    }
 }
 
 impl Sky {
@@ -193,12 +210,12 @@ impl Sky {
             fill: 0.35,
             overcast: 0.0,
             alt: 2.0,
-            dome: std::sync::OnceLock::new(),
+            dome: DomeCache::default(),
         }
     }
     /// Haze amount (1 clear, 3 hazy, 6 very hazy).
     pub fn haze(mut self, h: f32) -> Self {
-        self.dome = std::sync::OnceLock::new();
+        self.dome = DomeCache::default();
         self.haze = h.max(0.0);
         self
     }
@@ -206,7 +223,7 @@ impl Sky {
     /// (0..1) over features about `period` meters across. The glow round
     /// the sun and the brightness along the horizon become uneven.
     pub fn uneven(mut self, amount: f32, period: f32, seed: u32) -> Self {
-        self.dome = std::sync::OnceLock::new();
+        self.dome = DomeCache::default();
         self.uneven = amount.clamp(0.0, 1.0);
         self.uneven_noise = Warp::new(seed, period * 0.7, period * 0.4);
         self.uneven_fbm = Fbm::new(seed + 1, 3, period);
@@ -215,7 +232,7 @@ impl Sky {
     /// A layer of haze at `alt` m, `thick` m deep, `density` times the
     /// sea-level haze, varying by ±`uneven` across the country.
     pub fn layer(mut self, alt: f32, thick: f32, density: f32, uneven: f32, seed: u32) -> Self {
-        self.dome = std::sync::OnceLock::new();
+        self.dome = DomeCache::default();
         self.layers.push(Layer { alt, thick, density, uneven, noise: Fbm::new(seed + 77, 3, 25_000.0) });
         self
     }
@@ -230,7 +247,7 @@ impl Sky {
     }
     /// Eye altitude above sea level (m), for mountain views.
     pub fn altitude(mut self, m: f32) -> Self {
-        self.dome = std::sync::OnceLock::new();
+        self.dome = DomeCache::default();
         self.alt = m.max(0.5);
         self
     }
@@ -344,22 +361,58 @@ impl Sky {
     /// sky itself sheds on the air, which is what lights the Earth's
     /// shadow and the deep-twilight sky.
     pub fn dome(&self) -> Rgb {
-        *self.dome.get_or_init(|| {
-            let mut sum = [0.0f32; 3];
-            let mut w = 0.0;
-            for (el, n) in [(80.0f32, 1usize), (50.0, 8), (22.0, 12), (6.0, 12)] {
-                let e = el.to_radians();
-                for i in 0..n {
-                    let az = i as f32 / n as f32 * std::f32::consts::TAU + 0.3;
-                    let d = [az.sin() * e.cos(), e.sin(), az.cos() * e.cos()];
-                    let c = self.single(d, None);
-                    let k = e.sin() * e.cos().max(0.2);
-                    sum = plus(sum, scale(c, k));
-                    w += k;
-                }
+        let key = self.dome_key();
+        let (k0, v0) = *self.dome.first.get_or_init(|| (key, self.dome_now()));
+        if k0 == key {
+            return v0;
+        }
+        let mut later = self.dome.later.lock().unwrap_or_else(|e| e.into_inner());
+        match *later {
+            Some((k, v)) if k == key => v,
+            _ => {
+                let v = self.dome_now();
+                *later = Some((key, v));
+                v
             }
-            scale(sum, 1.0 / w)
-        })
+        }
+    }
+
+    /// What the dome radiance depends on, hashed: every public parameter
+    /// single scattering reads (the noise fields are private and set only
+    /// by builders, which reset the cache).
+    fn dome_key(&self) -> u64 {
+        let mut h: u64 = 0xcbf2_9ce4_8422_2325;
+        let mut eat = |x: f32| {
+            h ^= x.to_bits() as u64;
+            h = h.wrapping_mul(0x0000_0100_0000_01b3);
+        };
+        for x in [self.sun.azimuth, self.sun.elevation, self.haze, self.g, self.uneven, self.alt] {
+            eat(x);
+        }
+        eat(self.layers.len() as f32);
+        for l in &self.layers {
+            for x in [l.alt, l.thick, l.density, l.uneven] {
+                eat(x);
+            }
+        }
+        h
+    }
+
+    fn dome_now(&self) -> Rgb {
+        let mut sum = [0.0f32; 3];
+        let mut w = 0.0;
+        for (el, n) in [(80.0f32, 1usize), (50.0, 8), (22.0, 12), (6.0, 12)] {
+            let e = el.to_radians();
+            for i in 0..n {
+                let az = i as f32 / n as f32 * std::f32::consts::TAU + 0.3;
+                let d = [az.sin() * e.cos(), e.sin(), az.cos() * e.cos()];
+                let c = self.single(d, None);
+                let k = e.sin() * e.cos().max(0.2);
+                sum = plus(sum, scale(c, k));
+                w += k;
+            }
+        }
+        scale(sum, 1.0 / w)
     }
 
     /// Single scattering along one line of sight (plus the fill).
@@ -833,73 +886,85 @@ impl Clouds {
                 if d[1] <= 0.0 {
                     return (0.0, 0.0, 0.0, 0.0, 0.0, [0.0; 3]);
                 }
-                let (mut t0, mut t1) = (f32::MAX, 0.0f32);
-                for c in &self.clouds {
-                    if let Some((a, b)) = c.span(eye, d) {
-                        t0 = t0.min(a);
-                        t1 = t1.max(b);
-                    }
-                }
-                if t1 <= t0 {
+                // each cloud's span along the ray, with the step that
+                // resolves it (64 samples across it); gaps between clouds
+                // are skipped, so a distant bank cannot coarsen the march
+                // through a near heap
+                let spans: Vec<(f32, f32, f32)> = self.clouds.iter().filter_map(|c| c.span(eye, d)).filter(|(a, b)| b > a).map(|(a, b)| (a, b, (b - a) / 64.0)).collect();
+                if spans.is_empty() {
                     return (0.0, 0.0, 0.0, 0.0, 0.0, [0.0; 3]);
                 }
+                let mut cuts: Vec<f32> = spans.iter().flat_map(|&(a, b, _)| [a, b]).collect();
+                cuts.sort_by(f32::total_cmp);
+                cuts.dedup();
+                // the occupied pieces between cuts and the finest step over each
+                let pieces: Vec<(f32, f32, f32)> = cuts
+                    .windows(2)
+                    .filter_map(|w| {
+                        let m = 0.5 * (w[0] + w[1]);
+                        let step = spans.iter().filter(|&&(a, b, _)| a <= m && m <= b).map(|s| s.2).fold(f32::MAX, f32::min);
+                        (step < f32::MAX).then_some((w[0], w[1], step))
+                    })
+                    .collect();
                 let mu = dot(d, l);
                 // multiple scattering by octaves (Wrenninge et al. 2013):
                 // each octave reaches deeper (optical depth × b^i), carries
                 // less (a^i) and scatters less forward (g × c^i)
                 let oct: [(f32, f32, f32); 2] = [(1.0, 1.0, 1.0), (0.5, 0.5, 0.5)];
                 let phases: Vec<f32> = oct.iter().map(|&(_, _, c)| (0.75 * hg(mu, fw * c) + 0.25 * hg(mu, -0.25 * c)) * 4.0 * PI).collect();
-                let n = 64usize;
-                let dt = (t1 - t0) / n as f32;
                 let (mut tr, mut sun_iso, mut sun_ph, mut amb, mut dsum, mut wsum) = (1.0f32, 0.0f32, 0.0f32, 0.0f32, 0.0f32, 0.0f32);
                 let mut sun_col = [0.0f32; 3];
                 let mut got_col = false;
-                for k in 0..n {
-                    let t = t0 + (k as f32 + 0.5) * dt;
-                    let p = add(eye, d, t);
-                    let lod = t * cell / world.focal;
-                    let sigma = self.density(p, lod);
-                    if sigma <= 0.0 {
-                        continue;
-                    }
-                    if !got_col {
-                        sun_col = skyr.sunlight_at(p);
-                        got_col = true;
-                    }
-                    // toward the sun through the clouds: 6 steps, longer and longer
-                    let mut tau = 0.0;
-                    let mut s = 30.0f32;
-                    let mut q = p;
-                    for _ in 0..6 {
-                        q = add(q, l, s);
-                        tau += self.density(q, lod.max(s * 0.3)) * s;
-                        s *= 1.8;
-                    }
-                    // the sky light from above, shaded by the cloud over it
-                    let mut up = 0.0;
-                    let mut s = 60.0f32;
-                    let mut q = p;
-                    for _ in 0..3 {
-                        q = add(q, [0.0, 1.0, 0.0], s);
-                        up += self.density(q, lod.max(s * 0.3)) * s;
-                        s *= 2.0;
-                    }
-                    let direct = (-tau).exp();
-                    let a = tr * (1.0 - (-sigma * dt).exp());
-                    sun_iso += a * direct;
-                    for (o, &(ka, kb, _)) in oct.iter().enumerate() {
-                        sun_ph += a * ka * (-tau * kb).exp() * phases[o];
-                    }
-                    // light diffused through the cloud (two-stream transmission,
-                    // 1 / (1 + 0.75 (1 − g) τ), g ≈ 0.85): what lights a deck's
-                    // underside and a heap's belly, neutral in color
-                    sun_ph += a * 1.2 * slab / (1.0 + 0.75 * 0.15 * tau);
-                    amb += a * (-up * 0.5).exp();
-                    dsum += a * t;
-                    wsum += a;
-                    tr *= (-sigma * dt).exp();
-                    if tr < 0.005 {
-                        break;
+                'march: for &(t0, t1, step) in &pieces {
+                    let n = ((t1 - t0) / step - 1e-3).ceil().max(1.0) as usize;
+                    let dt = (t1 - t0) / n as f32;
+                    for k in 0..n {
+                        let t = t0 + (k as f32 + 0.5) * dt;
+                        let p = add(eye, d, t);
+                        let lod = t * cell / world.focal;
+                        let sigma = self.density(p, lod);
+                        if sigma <= 0.0 {
+                            continue;
+                        }
+                        if !got_col {
+                            sun_col = skyr.sunlight_at(p);
+                            got_col = true;
+                        }
+                        // toward the sun through the clouds: 6 steps, longer and longer
+                        let mut tau = 0.0;
+                        let mut s = 30.0f32;
+                        let mut q = p;
+                        for _ in 0..6 {
+                            q = add(q, l, s);
+                            tau += self.density(q, lod.max(s * 0.3)) * s;
+                            s *= 1.8;
+                        }
+                        // the sky light from above, shaded by the cloud over it
+                        let mut up = 0.0;
+                        let mut s = 60.0f32;
+                        let mut q = p;
+                        for _ in 0..3 {
+                            q = add(q, [0.0, 1.0, 0.0], s);
+                            up += self.density(q, lod.max(s * 0.3)) * s;
+                            s *= 2.0;
+                        }
+                        let direct = (-tau).exp();
+                        let a = tr * (1.0 - (-sigma * dt).exp());
+                        sun_iso += a * direct;
+                        for (o, &(ka, kb, _)) in oct.iter().enumerate() {
+                            sun_ph += a * ka * (-tau * kb).exp() * phases[o];
+                        }
+                        // light diffused through the cloud (two-stream transmission,
+                        // 1 / (1 + 0.75 (1 − g) τ), g ≈ 0.85): what lights a deck's
+                        // underside and a heap's belly, neutral in color
+                        sun_ph += a * 1.2 * slab / (1.0 + 0.75 * 0.15 * tau);
+                        amb += a * (-up * 0.5).exp();
+                        dsum += a * t;
+                        wsum += a;
+                        tr *= (-sigma * dt).exp();
+                        if tr < 0.005 {
+                            break 'march;
+                        }
                     }
                 }
                 let alpha = 1.0 - tr;
@@ -1499,5 +1564,47 @@ mod tests {
                 }
             }
         }
+    }
+
+    /// The dome radiance follows the public fields even after it was
+    /// sampled: moving the sun below the horizon gives the fresh twilight.
+    #[test]
+    fn sky_dome_follows_field_changes() {
+        let mut sky = Sky::new(Sun::deg(0.0, 30.0));
+        let _ = sky.dome();
+        sky.sun = Sun::deg(0.0, -3.0);
+        let fresh = Sky::new(sky.sun);
+        assert_eq!(sky.dome(), fresh.dome());
+        assert_eq!(sky.radiance([0.0, 1.0, 0.0]), fresh.radiance([0.0, 1.0, 0.0]));
+        // and back again (the first value is still cached) and on a clone
+        sky.sun = Sun::deg(0.0, 30.0);
+        assert_eq!(sky.clone().dome(), Sky::new(sky.sun).dome());
+        sky.haze = 4.0;
+        assert_eq!(sky.dome(), Sky::new(sky.sun).haze(4.0).dome());
+    }
+
+    /// A distant cloud bank (here even an empty one) must not coarsen the
+    /// march so much that a near heap drops out between samples.
+    #[test]
+    fn a_distant_cloud_does_not_hide_a_near_one() {
+        let w = World::new([0.0, 0.0, 100.0, 100.0], 100.0, 2.0).fov(100.0, 50.0).sun(Sun::deg(0.0, 30.0));
+        let sf = SkyField::new(Sky::new(w.sun), &w, 10.0);
+        let near = Cloud::cumulus(0.0, 1000.0, 450.0, 100.0, 100.0, 5);
+        let empty = Cloud::bank(-10000.0, 10000.0, 50000.0, 1000.0, 20000.0, 30000.0, 3).density(0.0);
+        let far = Cloud::bank(-10000.0, 10000.0, 50000.0, 1000.0, 20000.0, 30000.0, 3);
+        let a = Clouds::new(vec![near]).field(&sf, &w, 5.0);
+        let b = Clouds::new(vec![near, empty]).field(&sf, &w, 5.0);
+        let c = Clouds::new(vec![near, far]).field(&sf, &w, 5.0);
+        assert!(a.alpha(50.0, 50.0) > 0.5, "{}", a.alpha(50.0, 50.0));
+        let mut worst = 0.0f32;
+        for y in 0..100 {
+            for x in 0..100 {
+                let (x, y) = (x as f32, y as f32);
+                worst = worst.max((a.alpha(x, y) - b.alpha(x, y)).abs());
+                // a real bank behind only adds cover
+                assert!(c.alpha(x, y) >= a.alpha(x, y) - 1e-3, "({x},{y}) {} < {}", c.alpha(x, y), a.alpha(x, y));
+            }
+        }
+        assert!(worst < 1e-4, "{worst}");
     }
 }

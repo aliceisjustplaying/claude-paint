@@ -926,20 +926,68 @@ fn strip_cover(dist: f32, rb: f32) -> f32 {
 }
 
 /// Share of the pixel centered at (`px`, `py`) covered by a pointed tool's
-/// hair moving from `a` to `b` (pixels): its track, 2·`rb` wide, box
-/// filtered across (`strip_cover`) and along. The track ends square, so a
-/// hair's successive steps tile its path without overlapping, and the paint
-/// a step lays per pixel doesn't depend on where the pixel centers fall.
-/// A hair that doesn't move covers a square 2·`rb` wide.
+/// hair moving from `a` to `b` (pixels): the area of its track, a rectangle
+/// 2·`rb` wide with square ends, inside the (axis-aligned) pixel. Exact, so
+/// the shares of all pixels sum to the track's area however it lies across
+/// the lattice (a diagonal track shifted half a pixel covers what it did),
+/// and a hair's successive steps tile its path without overlapping: the
+/// paint a step lays and the area it darkens don't depend on where the
+/// pixel centers fall. A hair that doesn't move covers a square 2·`rb` wide.
 fn fine_cover(a: (f32, f32), b: (f32, f32), rb: f32, px: f32, py: f32) -> f32 {
     let (dx, dy) = (b.0 - a.0, b.1 - a.1);
     let seg = (dx * dx + dy * dy).sqrt();
     let (ux, uy, lo, hi) = if seg > 1e-4 { (dx / seg, dy / seg, 0.0, seg) } else { (1.0, 0.0, -rb, rb) };
+    // the pixel center in track coordinates: along `t`, across `q`
     let (rx, ry) = (px - a.0, py - a.1);
     let t = rx * ux + ry * uy;
     let q = ry * ux - rx * uy;
-    let along = ((t + 0.5).min(hi) - (t - 0.5).max(lo)).clamp(0.0, 1.0);
-    along * strip_cover(q.abs(), rb)
+    // (the pixel reaches √½ from its center in any direction)
+    const R: f32 = std::f32::consts::FRAC_1_SQRT_2;
+    if q.abs() > rb + R || t < lo - R || t > hi + R {
+        return 0.0;
+    }
+    // axis-aligned track: a product of spans
+    if ux.abs() < 1e-6 || uy.abs() < 1e-6 {
+        return strip_cover(q.abs(), rb) * ((t + 0.5).min(hi) - (t - 0.5).max(lo)).clamp(0.0, 1.0);
+    }
+    // the track's corners relative to the pixel center, clipped to the
+    // pixel (Sutherland–Hodgman against its four sides), shoelace area
+    let (nx, ny) = (-uy, ux);
+    let corner = |s: f32, r: f32| (a.0 - px + ux * s + nx * r, a.1 - py + uy * s + ny * r);
+    let mut poly = [(0.0f32, 0.0f32); 8];
+    let mut n = 4;
+    poly[..4].copy_from_slice(&[corner(lo, -rb), corner(hi, -rb), corner(hi, rb), corner(lo, rb)]);
+    for side in 0..4 {
+        // inside: sign·coordinate ≤ ½ along x (sides 0, 1) or y (2, 3)
+        let (axis, sign) = (side / 2, if side % 2 == 0 { 1.0f32 } else { -1.0 });
+        let d = |p: (f32, f32)| sign * if axis == 0 { p.0 } else { p.1 } - 0.5;
+        let mut out = [(0.0f32, 0.0f32); 8];
+        let mut m = 0;
+        for k in 0..n {
+            let (p, q) = (poly[k], poly[(k + 1) % n]);
+            let (dp, dq) = (d(p), d(q));
+            if dp <= 0.0 {
+                out[m] = p;
+                m += 1;
+            }
+            if (dp <= 0.0) != (dq <= 0.0) && m < 8 {
+                let s = dp / (dp - dq);
+                out[m] = (p.0 + (q.0 - p.0) * s, p.1 + (q.1 - p.1) * s);
+                m += 1;
+            }
+        }
+        n = m;
+        if n < 3 {
+            return 0.0;
+        }
+        poly = out;
+    }
+    let mut area = 0.0f32;
+    for k in 0..n {
+        let (p, q) = (poly[k], poly[(k + 1) % n]);
+        area += p.0 * q.1 - q.0 * p.1;
+    }
+    (0.5 * area.abs()).clamp(0.0, 1.0)
 }
 
 /// Smooth 1-D value noise, −1..1.
@@ -1487,6 +1535,62 @@ mod tip_tests {
         assert!(root > mid && mid > tip && tip < 0.3 * root, "flick ink root {root}, middle {mid}, tip {tip}");
         // a blunt stippler of the same kind keeps its old footprint
         assert_eq!(Tool::stippler(2.0).point, 0.0);
+    }
+
+    /// A hair's track covers its own area of the pixel lattice, however it
+    /// lies across the pixels: diagonal and oblique tracks keep their area
+    /// under sub-pixel translation (a track 45° across used to count twice
+    /// its area when shifted half a pixel, and nothing like it at others).
+    #[test]
+    fn fine_cover_conserves_area_on_the_lattice() {
+        let total = |a: (f32, f32), b: (f32, f32), rb: f32| {
+            let mut s = 0.0f64;
+            for y in 0..240 {
+                for x in 0..240 {
+                    s += fine_cover(a, b, rb, x as f32 + 0.5, y as f32 + 0.5) as f64;
+                }
+            }
+            s as f32
+        };
+        for rb in [0.02f32, 0.15, 0.6] {
+            for deg in [0.0f32, 17.0, 30.0, 45.0, 71.0, 90.0, 135.0] {
+                let (c, s) = (deg.to_radians().cos(), deg.to_radians().sin());
+                for len in [0.3f32, 3.7, 100.0] {
+                    let want = 2.0 * rb * len;
+                    for off in [(0.0f32, 0.0f32), (0.0, 0.5), (0.25, 0.1), (0.5, 0.5), (0.37, 0.81)] {
+                        let a = (100.0 + off.0, 20.0 + off.1);
+                        let b = (a.0 + c * len, a.1 + s * len);
+                        let got = total(a, b, rb);
+                        assert!((got / want - 1.0).abs() < 2e-3, "rb {rb}, {deg}°, length {len}, offset {off:?}: covers {got}, track area {want}");
+                    }
+                }
+            }
+            // a hair that doesn't move covers its square
+            let got = total((30.3, 30.6), (30.3, 30.6), rb);
+            assert!((got / (4.0 * rb * rb) - 1.0).abs() < 2e-3, "still hair rb {rb}: {got}");
+        }
+    }
+
+    /// The same diagonal or oblique pointed mark, shifted by part of a pixel,
+    /// darkens the canvas by the same amount (its look follows its paint,
+    /// not where it falls between pixel centers).
+    #[test]
+    fn translated_pointed_marks_look_alike() {
+        for (tool, p) in [(Tool::rigger(0.5), 0.3), (Tool::round_sable(1.6), 0.15)] {
+            for (dx, dy) in [(200.0f32, 200.0f32), (240.0, 90.0)] {
+                let total = |off: (f32, f32)| {
+                    let (a, b) = ((100.0 + off.0, 10.0 + off.1), (100.0 + dx + off.0, 10.0 + dy + off.1));
+                    let c = canvas(500, false, tool.clone(), &Gesture::line(a, b).pressure(p, p).ramps(0.05, 0.1).shake(0.0));
+                    (0..c.f.h).flat_map(|y| (0..c.f.w).map(move |x| (x, y))).map(|(x, y)| dark(&c, x, y)).sum::<f32>()
+                };
+                let base = total((0.0, 0.0));
+                // (a pixel is 2 units here)
+                for off in [(0.0, 1.0), (0.5, 0.2), (1.0, 1.0), (0.74, 1.62)] {
+                    let got = total(off);
+                    assert!((got / base - 1.0).abs() < 0.05, "{:?} along ({dx}, {dy}) shifted {off:?}: darkness {got} vs {base}", tool.kind);
+                }
+            }
+        }
     }
 
     /// A light hairline on linen at full size is a line, not a row of beads

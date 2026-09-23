@@ -166,20 +166,34 @@ window (`sample` clamps to it).
   ("sky lay"), gives a byte-identical PNG. Checked for mist and "sky lay" at
   1000px and for mist in the 3200px crop.
 - **Validation**: a checkpoint must match name, width, seed and crop.
-  `--resume` also refuses it if any of these changed since it was saved: the
-  painting's source up to the end of that stage (the lines before the next
-  `stage`/`end`/`finish` call, found with `#[track_caller]`), `paintings/src/*.rs`
-  or `crates/paint/src/*.rs`. The error names what changed. The prefix only
-  covers a stage's body when the ending call comes later in the same file.
-  A `stage` call inside a loop is ended by itself on the next iteration
-  (`study_form`'s panels), so the prefix would miss the body entirely; there,
-  and whenever the calls sit in different files, both files are hashed whole
-  and any edit to the painting makes the checkpoint stale. `--stale-ok`
-  uses the checkpoint anyway. Edits after the stage are what resuming is
-  for, and they are allowed.
-- Not covered: helper functions below `main` in the painting file (except
-  for loop stages, which hash the whole file), and code between stage blocks
-  that paints (a rule, not checked).
+  `--resume` also refuses it if the code that produced it has changed since
+  it was saved. The error names what changed. The staleness model (since
+  the `fixes-ux` round; before it, a stage hashed every line before the
+  *next* stage call, so setup for a later stage staled the earlier one):
+  - the engine (`crates/paint/src`) and `paintings/src` helpers (recursive,
+    without `bin`), whole;
+  - in the painting's file: every line up to the closing brace of the
+    stage's own `if o.stage(..) { .. }` block (found by a small lexer that
+    skips comments and literals), plus everything after the top-level item
+    that holds it (helper functions below `main`, which the old prefix
+    missed). Code between blocks after the stage's block is setup for later
+    stages and doesn't count;
+  - lines tagged for a later stage are left out: a line ending in
+    `// ckpt: from <stage>`, or the lines between a `// ckpt: from <stage>`
+    line and a `// ckpt: end` line. Stages before `<stage>` ignore them;
+    `<stage>` and later ones count them. A tag naming no stage is an error.
+    Only plain `//` comments are tags (not doc comments or strings).
+  - A stage call not directly followed by its block falls back to the old
+    rule (the lines before the ending call, or both files whole).
+
+  Sound as far as the stage rules hold: code between blocks may build
+  masks, fields and geometry but must not paint or draw from the `Keep`
+  state (a resumed run draws from a fresh one there, so that was never
+  byte-exact anyway). A tag is the painter's word; it is not checked.
+  `--stale-ok` uses a stale checkpoint anyway; `--stale-ok --ckpt` also
+  rewrites its fingerprints for the current code (header key `adopted`
+  holds the original save time), so the next `--resume` needs no flag.
+  Without `--ckpt` it says it didn't refresh and how to.
 - **Loading** checks the geometry before allocating: frame arithmetic is
   checked for overflow, the crop (`keep`) and dirty boxes must be ordered and
   inside the buffer, and the scale and mm per unit finite and positive. A
@@ -350,3 +364,86 @@ are computed over the whole canvas, like masks.
 
 Resuming stays byte-identical: moonrise from "sky lay" (wet), "mist" and
 "figures", and study_stipple from "pass 1".
+
+## Fixes from amnesia round 2 (branch `fixes-ux`)
+
+From the painters' friction lists (notes/amnesia2.md items 9, 10, 11, 12).
+Resume is still byte-exact (study_stipple at 400px: whole vs resumed from
+"pass 1", `cmp` identical); golden unchanged.
+
+**Stage names and flags** (`paintings/src/run.rs`):
+- Names match by `run::key`: case, spaces, underscores, hyphens and
+  slashes don't matter. `--stop far_range` stops at "far range" (it
+  used to run to the end without a word), and `--resume "Far Range"`
+  finds `out/<stem>.far_range.ckpt`.
+- `Run::new` is `#[track_caller]` and reads the painting's own file for its
+  `.stage("literal", ..)` calls. An unknown `--stop` or `--resume` is an
+  error before anything is painted, and it lists the stages. With a stage
+  named by a variable (study_form's loop), the check happens when the run
+  ends instead: `end`/`finish` refuse to finish a run whose `--stop`
+  never matched. A missing checkpoint lists the ones saved for this run.
+- `--resume X --stop X` saves X's checkpoint as an image and stops
+  ("nothing painted"). It used to repaint to the end. `--stop` at a stage
+  before the resume point is an error.
+- Staleness: see the model under Checkpoints above. Painter's view: build
+  a later stage's geometry right before that stage (after the earlier
+  block), or tag it `// ckpt: from <stage>` where it has to sit at the top.
+  `--stale-ok --ckpt` adopts the checkpoint.
+- Tests: `run::tests::{stop_and_resume_names, unknown_stage_fails_early,
+  stale_ok_refreshes_with_ckpt, stage_fingerprint_model}` and
+  `run::source::tests` (lexer, blocks, tags). Under `cfg(test)`, `die`
+  and `--stop` panic instead of exiting, so the flows are testable.
+
+**Closures** (winter #13, coast #7, mountains #6): `Fbm` is `Copy`. Its
+octave tables are built once per (seed, octaves, persistence) and shared
+(leaked, about 1 KB per octave), and its output is unchanged (tested against
+the noise crate). `Frame::per_column` returns `&'a impl Fn(f32) -> f32`, a
+`Copy` reference: it is still called `ridge(x)`, and its table lives for the
+rest of the program. A `move` closure that captures only these is `Copy`
+too, so one profile or noise can feed a mask and any number of color
+closures with no `let n = &n;`. `Mask` and `Form` are still not `Copy`
+(capture `&mask`).
+
+**`Mask::roughen`** (winter #10, #16): `amount` and `edge` are now canvas
+units. The contour moves by about `amount` units (fbm, `period` units), and
+the new edge ramps over `edge` units. It works through the signed distance
+to the 0.5 contour, so a hard `Shape` mask roughens like a soft one. Pixels
+farther than `amount + edge` from the edge keep their value. The old
+behavior (mask-value units, a no-op on hard masks, `edge = 1` turned 0 into
+0.16 everywhere) is gone. No built painting used it. Test:
+`mask::tests::roughen_moves_hard_edges_in_units` (at two resolutions).
+
+**form.rs docs**: `Sdf::block`'s `size` is the whole extent (it spans
+`c ± size/2`; an example seats a tor on the turf line), and
+`Sdf::ellipsoid`'s `r` is radii. Every constructor and `Ridge` builder now
+states its units. The docs also say `Ridge` reaches `depth` below its crest
+whatever stands in front of it (mountains #9).
+
+## Open bugs
+
+### A gesture with a NaN point lays one dab and says nothing (coast #17)
+
+**Symptom** (coast painter): an 11-point U-shaped `drag` (a coil of rope,
+`Tool::rigger(0.5)`) laid nothing, while straight strokes nearby did.
+
+**Cause**: the painter's points. `paintings/fresh2/fresh2_coast.rs` builds
+`y = py + 1.3 + drop * a.sin().powf(0.8)` for `a = PI * k / 10`. In f32,
+`PI.sin()` is −8.7e-8, so `powf(0.8)` is NaN at k = 10. The only half
+that painted (bottom to left end) was the only one without the last point.
+**Engine side** (bristle.rs, `drag_on`): the arc length `total` is NaN,
+`nsteps = ((total / step).ceil() as usize).max(1)` is 1 (NaN casts to 0),
+and `(k * step).min(total)` ignores the NaN. So the brush takes a single
+step at the start and lifts: 12 pixels at 1000px, against 106 for the same
+U with a finite last point. `footprint` doesn't catch it either, since
+`f32::min`/`max` skip NaN. `Tool::validate` checks the tool but nothing
+checks the gesture.
+
+**Fix to apply after merging `tip`** (bristle.rs is that stream's file):
+in `Canvas::drag` (and `touch`/`Touch`, and in `Canvas::work`'s planned
+gestures via `footprint_checked`), reject non-finite points the way an
+invalid `Tool` is rejected. Panic with the point's index and value, e.g.
+`"Gesture point 10 is not finite: (505.5, NaN)"`. Also check that
+`pressure`, `attack`, `release` and `swell` are finite. Repro:
+`crates/paint/tests/curved_drag_nan.rs`. Three tests pin the diagnosis,
+and `a_nan_point_is_an_error` is `#[ignore]`d (it expects the panic to
+mention "point 10"). Un-ignore it with the fix.

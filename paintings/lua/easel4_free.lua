@@ -230,6 +230,20 @@ local under = mask(function(x, y) return clamp(m:at(x, y) - m:at(x, y + 4), 0, 1
 work(under, {hand="detail", tool="round 1.4", color="#221e1d", angle=0.05, length={4, 12}, coverage=1.8, pal=landpal, clip=m})
 
 --@ chunk 10 · clock 2160
+-- the chamber's back wall: two lower stones behind the uprights, glow only in slivers above them
+local front = cap:mask() + up1:mask() + up2:mask() + up3:mask()
+local bk1 = outline{{531,422,"c"},{532,413},{539,408,"c"},{549,409},{555,414},{556,422,"c"}, char="broken", seed=181}
+local bk2 = outline{{566,431,"c"},{567,420},{574,414,"c"},{583,413},{589,417,"c"},{590,432,"c"}, char="broken", seed=182}
+local sn = noise{seed=183, octaves=4, period=10}
+for _, o in ipairs({bk1, bk2}) do
+  local m = o:mask() - front
+  work(m, {hand="body", tool="filbert 2", color=function(x, y) return mix("#282322", "#312b29", sn:at01(x, y)) end,
+    angle=1.5, angle_jitter=0.3, length={3, 8}, coverage=3.2, medium=0.15, pal=landpal, clip=m})
+  local top = mask(function(x, y) return clamp(m:at(x, y) - m:at(x, y - 2.5), 0, 1) end):soften(0.5) * m
+  work(top, {hand="detail", tool="round 1", color="#3e393c", angle=0.1, length={3, 7}, coverage=1.4, broken=0.4, pal=landpal, clip=m})
+end
+
+--@ chunk 11 · clock 2160
 local tp = {}
 for _, p in ipairs(town) do tp[#tp+1] = {p[1], p[2]} end
 tp[#tp+1] = {904, HZ + 3}; tp[#tp+1] = {800, HZ + 3}
@@ -241,7 +255,7 @@ local disc = ellipse(MX, MY, MR, MR)
 moon = (disc - ellipse(MX + 3.6, MY - 2.4, MR * 0.93, MR * 0.93)):soften(0.35)
 work(moon, {hand="detail", tool="round 1", color="#f4ecd2", angle=2.3, length={2, 5}, coverage=3.5, medium=0.2, pal=skypal, clip=moon:grow(0.4)})
 
---@ chunk 11 · clock 2160
+--@ chunk 12 · clock 2160
 wait(10*60)
 trail = {{410,720},{470,660},{560,610},{628,568},{640,530},{616,500},{604,480},{622,464},{612,450},{590,442}}
 local tw = {150, 118, 84, 56, 36, 24, 15, 9, 5, 3}
@@ -258,7 +272,7 @@ for k, off in ipairs({-0.22, 0.2}) do
   work(rm, {hand="detail", tool="round 2.5", color_over={shift={-0.035, 0, -0.006}}, angle=-0.7, length={6, 18}, coverage=1.6, broken=0.4, pal=landpal})
 end
 
---@ chunk 12 · clock 2760
+--@ chunk 13 · clock 2760
 wait(6*60)
 hn = noise{seed=91, octaves=4, period=40}
 hn2 = noise{seed=92, octaves=3, period=120}
@@ -277,7 +291,7 @@ local near = (ground * below(function(x) return 520 end)) * notpath
 work(near, {hand="hatch", tool="round 2.2", length={4, 11}, coverage=2.6, color=heathcol,
   angle=function(x, y) return -1.5708 + 0.7*turn(x, y) end, angle_jitter=0.5, medium=0.15, pal=landpal})
 
---@ chunk 13 · clock 3120
+--@ chunk 14 · clock 3120
 wait(6*60)
 rockA = outline{{50,672,"c"},{55,650},{68,630,"c"},{96,613},{126,606,"c"},{160,609},{183,621,"c"},{194,645},{199,672,"c"}, char="broken", seed=101}
 rockB = outline{{190,673,"c"},{195,658},{210,648,"c"},{232,647},{246,656,"c"},{254,673,"c"}, char="broken", seed=102}
@@ -331,7 +345,7 @@ for i, j in ipairs({{722,471,24,6},{733,473,15,5},{930,469,19,5.5}}) do
     angle=-1.3, angle_jitter=0.7, length={2, 5}, coverage=3, medium=0.15, pal=landpal, clip=m:grow(0.8)})
 end
 
---@ chunk 14 · clock 3480
+--@ chunk 15 · clock 3480
 wait(4*60)
 local region = below(function(x) return HZ + 60 end) - pathm:shrink(10)
 local tufts = sward{region=region, horizon=HZ, near=H, height=34, flowers=0, seed=14, thin=0.55,
@@ -372,7 +386,7 @@ for x = 150, 700, 1.3 do
 end
 print(#tufts, "tufts", n, "blades", k, "tips", m, "crest blades")
 
---@ chunk 15 · clock 3720
+--@ chunk 16 · clock 3720
 -- the wanderer on the crest, from behind, in a long coat and a low cap, with a staff
 FX = 292; FY = mound(FX) + 2
 local function P(dx, dy) return {FX + dx, FY + dy} end
@@ -393,7 +407,7 @@ for _, r in ipairs({{548,196,1.0,0.1},{571,183,0.8,-0.15}}) do
   rv:touch(x, y + 0.2, {pressure=0.6})
 end
 
---@ chunk 16 · clock 3720
+--@ chunk 17 · clock 3720
 local vig = mask(function(x, y)
   local fg = smoothstep(HZ + 20, H + 40, y)
   local ex = math.max(0, math.abs(x - 560) / 560 - 0.5) / 0.5
@@ -402,7 +416,7 @@ local vig = mask(function(x, y)
 end)
 glaze(vig, {color="#2e2622", coats=0.4})
 
---@ chunk 17 · clock 41762.49609375
+--@ chunk 18 · clock 40112.05078125
 local fgn = noise{seed=131, octaves=3, period=60}
 local busy = pathm:grow(2) + rockA:mask():grow(3) + rockB:mask():grow(3) + rockC:mask():grow(3)
 -- tufts of dry grass: fine upturning strokes, a few blades lit by the sky
@@ -455,7 +469,7 @@ print(tuftn, "tufts")
 local fd = brush("round", 1.2); fd:load("#1c1716", 0.8, {pal=landpal})
 fd:stroke({{250,647.6},{272,642},{300,639.2},{332,630.4}}, {pressure={0.6, 0.25}})
 
---@ chunk 18 · clock 41762.49609375
+--@ chunk 19 · clock 40112.05078125
 -- where the track runs, point and direction at a fraction t of its length
 TW = {150, 118, 84, 56, 36, 24, 15, 9, 5, 3}
 function track(t, off)
@@ -519,5 +533,5 @@ for i = 1, 260 do
 end
 print(n, "blades")
 
---@ chunk 19 · clock 41762.49609375
+--@ chunk 20 · clock 40112.05078125
 wait(24*60); varnish{color="#e6d3a4", coats=0.3, vary=0.1}; relief(0.08)

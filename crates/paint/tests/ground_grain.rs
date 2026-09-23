@@ -101,9 +101,9 @@ fn only(st: &Style, g: Vec<Ground>) -> Style {
 /// The brushed top ground is not a field of parallel horizontal ridges: a
 /// primer's hand still favors the across direction a little, but its
 /// relief runs every way. At 1200 px the knife-spread layers under it
-/// measure 1.05 fine and 1.04 coarse; the brushed ground 1.53 and 1.80
+/// measure 1.05 fine and 1.04 coarse; the brushed ground 1.29 and 1.61
 /// (before loop 2: 2.63 and 5.6, the wood-grain). At 3200 px
-/// (`print_ground_grain`, seeds 1, 23, 5) it is 2.0–2.4 and 2.2–2.8
+/// (`print_ground_grain`, seeds 1, 23, 5) it is 1.73–1.76 and 2.04–2.50
 /// (before: 3.6–4.1 and 7.4–8.5; linen + knives 1.5 and 2.5).
 #[test]
 fn friedrich_ground_has_no_horizontal_grain() {

@@ -1725,6 +1725,7 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
     draw_pencil::install(lua, st.clone())?;
     // looking by eye: show() overlays and probe() (look.rs)
     crate::look::install(lua, st.clone())?;
+    crate::draw_outline::install(lua, st.clone())?;
 
     // trees
     {

@@ -134,7 +134,7 @@ impl RockSpec {
             crack_depth: 0.1,
             crack_width: 2.0,
             joints: 0.6,
-            lumps: 0.035,
+            lumps: 0.06,
             grain: 0.005,
             flutes: 0.0,
             ground: 4.0,
@@ -151,7 +151,7 @@ impl RockSpec {
             bulge: 0.6,
             bed: -1.0, // from the size
             bed_tilt: 0.03,
-            bed_recess: 0.16,
+            bed_recess: 0.26,
             crack_depth: 0.16,
             crack_width: 2.4,
             joints: 0.9,
@@ -833,7 +833,7 @@ impl Rock {
                     let (u, i) = bed_of(x, y);
                     // each bed weathers back toward its base (an overhang
                     // over the joint below) and rounds at its top edge
-                    let rec = spec.bed_recess * r * (0.2 * (1.0 - u).powi(8) + 0.6 * u.powf(2.5) + 0.7 * bed_recess[i]);
+                    let rec = spec.bed_recess * r * (0.25 * (1.0 - u).powi(8) + 0.9 * u.powi(3) + 0.8 * bed_recess[i]);
                     h -= rec * smoothstep(0.0, r * 0.2, d);
                     let joint = (1.0 - (u.min(1.0 - u) * (beds[(i + 1).min(beds.len() - 1)] - beds[i])) / (spec.crack_width * 0.8)).max(0.0);
                     crack = crack.max(joint * 0.8 * smoothstep(0.0, r * 0.1, d));
@@ -944,6 +944,38 @@ impl Rock {
                 (1.0 - (-(c1 + c2)).exp()).max(crack[k] * 0.7).min(1.0)
             })
             .collect();
+
+        // the bed joints as lines too (for painting them as strokes and for
+        // `along_crack`): traced across the rock where the bed coordinate
+        // crosses each joint
+        let mut seams = seams;
+        if bed > 0.0 {
+            for (bi, _) in beds.iter().enumerate().skip(1) {
+                let mut run: Vec<P> = Vec::new();
+                let mut x = bounds.0;
+                while x <= bounds.2 {
+                    // the y where the bed coordinate equals this joint, found by bisection
+                    let (mut ya, mut yb) = (bounds.1 - bed, bounds.3 + bed);
+                    for _ in 0..24 {
+                        let ym = 0.5 * (ya + yb);
+                        let (_, i) = bed_of(x, ym);
+                        if i >= bi { yb = ym } else { ya = ym }
+                    }
+                    let y = 0.5 * (ya + yb);
+                    if d_at(x, y) > spec.crack_width {
+                        run.push((x, y));
+                    } else if run.len() >= 3 {
+                        seams.push(Seam { pts: std::mem::take(&mut run), crack: true, grown: true });
+                    } else {
+                        run.clear();
+                    }
+                    x += (r * 0.04).max(step * 2.0);
+                }
+                if run.len() >= 3 {
+                    seams.push(Seam { pts: run, crack: true, grown: true });
+                }
+            }
+        }
 
         // the foot: the lower stretch of the outline, facing down
         let base = bounds.3;
@@ -1297,7 +1329,7 @@ impl Rock {
             if x < b.0 - depth * 2.0 || x > b.2 + depth * 2.0 || y < b.1 - depth * 2.0 || y > b.3 {
                 return 0.0;
             }
-            let brk = 0.25 * nz.get(x, y) + 0.12 * fine.get(x, y);
+            let brk = 0.2 * nz.get(x, y) + 0.05 * fine.get(x, y);
             match self.sample(x, y) {
                 Some(s) if self.inside_at(x, y) => {
                     let up = s.up() + brk - 0.4 * s.crack;

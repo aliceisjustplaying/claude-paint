@@ -65,3 +65,4 @@ spectral) is split into single-defect fixes the loops pull in.
 - Rest of round 5: tool-oak, tool-rock (+ grain fix if clean) land; one more loop
   per painting (near: rock + stump patch; green: oak); panel judging; stop and
   show before/after with the score history.
+- Anonymity: user requires no real name anywhere in the repo. Working tree scrubbed (home paths -> ~), pre-commit hook in the shared hooks dir rejects it, briefs updated. Git HISTORY still contains it (422 lines in old notes): needs a history rewrite + force-push when no agents are running (ask user).

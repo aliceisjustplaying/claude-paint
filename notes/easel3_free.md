@@ -1,9 +1,9 @@
 # easel3_free: Dolmen on the Baltic Shore at Evening
 
-Session: 2026-09-23, 13:13 to about 13:45 BST (wall clock). Canvas `style="friedrich"`,
-palette `friedrich_1820`, aspect 1.4, seed 23. 33 chunks in
+Session: 2026-09-23, 13:13 to about 13:50 BST (wall clock). Canvas `style="friedrich"`,
+palette `friedrich_1820`, aspect 1.4, seed 23. 36 chunks in
 `paintings/lua/easel3_free.lua`; `easel check` reports "replay matches the live
-canvas exactly (33 chunks)". Renders: `out/easel3_free.png` (1000px) and
+canvas exactly (36 chunks, 43.2s)". Renders: `out/easel3_free.png` (1000px) and
 `out/easel3_free_full.png` (3200px).
 
 ## The picture and why
@@ -90,6 +90,11 @@ What it draws on (from knowledge only, no pictures looked at):
     oak's roots in grass and glazed the purple heather back toward the dune
     (chunk 32). Then `dry(); varnish{color="#e6d3a4", coats=0.3, vary=0.1};
     relief(0.14)`.
+14. **Sea, second pass (33–36).** The sea was the weakest passage, so I undid
+    the varnish and stippled a veil of a smoother sea gradient over it (the
+    same fix that worked in the sky), blended it while wet with long
+    horizontal strokes, let it set and laid fresh, sparser glints gathered
+    toward the glow. Then the final varnish again.
 
 ## HOW THE EASEL FELT
 
@@ -140,7 +145,12 @@ subtract by hand.
    `wait(10)` added exactly 1 and 10. Everything was dry by then, so it did
    no harm here, but it would wreck any wet-into-wet plan made after a glaze.
    *Workaround:* none needed this time; I only noticed it from the
-   `ok · clock` line.
+   `ok · clock` line. A later case points at a cause: after I undid a
+   `dry(); varnish{}` chunk that had ended at clock 99438, the clock went back
+   to 45631, but the next `wait(240)` landed on 99678, which is exactly
+   99438 + 240. So undo appears to restore the easel's clock but not the
+   time the canvas has already seen, and `glaze` may advance canvas time
+   the same way. I didn't read the source to confirm.
 2. **`work()` strokes overshoot the mask unless you pass `clip=`.** With the
    default `hug=true`, strokes reach past a hard silhouette, so the stones'
    outline looked like stacked plates and the sea's first pass bumped up over
@@ -213,9 +223,10 @@ be dwarfed but still readable. The palette stays within Friedrich's
 post-1820 tubes.
 
 What doesn't:
-- **The sea is the weakest passage.** Its base still has soft, cloudy
-  blotches from the first blended pass, and the glints are a bit regular. A
-  calm Baltic at dusk should be a smoother gradation.
+- **The sea is better but still plain.** The second pass removed the cloudy
+  blotches, and it now reads as calm water. But it's a flat band with no
+  swell or current lines, and a faint grain from the stipple veil shows
+  near the horizon at 3200.
 - **The foreground is dark but generic.** The particulars (stalks, umbels,
   sunk stones) are there at 3200 but hard to find at normal size. There's a
   faint band where the near grass layer begins (y≈628). Friedrich would have

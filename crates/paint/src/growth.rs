@@ -39,6 +39,8 @@
 
 use crate::canvas::Frame;
 use crate::mask::Mask;
+use crate::noise::Fbm;
+use rayon::prelude::*;
 use crate::rng::Rng;
 use crate::shape::Shape;
 use std::f32::consts::PI;
@@ -154,6 +156,8 @@ pub struct Habit {
     /// Probability a dead limb has broken off somewhere along it; a quarter
     /// of that for live limbs (storms).
     pub breakage: f32,
+    /// How the species carries its leaves (see `Skeleton::foliage`).
+    pub leaf: Leafing,
 }
 
 impl Habit {
@@ -188,6 +192,7 @@ impl Habit {
             decline: 0.0,
             decay: 0.0,
             breakage: 0.08,
+            leaf: Leafing::oak(),
         }
     }
 
@@ -228,6 +233,7 @@ impl Habit {
             decline: 0.0,
             decay: 0.0,
             breakage: 0.03,
+            leaf: Leafing::birch(),
         }
     }
 
@@ -262,6 +268,115 @@ impl Habit {
             decline: 0.0,
             decay: 0.0,
             breakage: 0.0,
+            leaf: Leafing::spruce(),
+        }
+    }
+
+    /// A beech: smooth grey bole, a broad dome; leaves two-ranked
+    /// (distichous) on long level sprays, layered, casting deep shade, so
+    /// it tolerates shade and keeps inner limbs longer.
+    pub fn beech() -> Self {
+        Habit {
+            years: 24,
+            apical: 0.57,
+            vigor: 2.2,
+            shoot_max: 4,
+            shorten: 0.88,
+            branch_angle: 0.85,
+            divergence: PI,
+            node_buds: 1,
+            tip_buds: (1, 1),
+            abort: 0.1,
+            bud_life: 2,
+            dormant: 0.01,
+            tropism: [0.35, 0.08, -0.08, -0.12],
+            photo: 0.35,
+            shade: 4.5,
+            wander: 0.1,
+            flat: 0.5,
+            shed: 0.1,
+            stub: 0.5,
+            trunk: 0.045,
+            twig: 0.001,
+            flare: 0.3,
+            roots: 2,
+            lean: 0.0,
+            decline: 0.0,
+            decay: 0.0,
+            breakage: 0.03,
+            leaf: Leafing::beech(),
+        }
+    }
+
+    /// A black alder (of wet meadows and ditches): a clear stem through a
+    /// narrow oval crown, limbs spreading at a wide angle, dense dark
+    /// foliage.
+    pub fn alder() -> Self {
+        Habit {
+            years: 20,
+            apical: 0.68,
+            vigor: 2.2,
+            shoot_max: 4,
+            shorten: 0.8,
+            branch_angle: 1.05,
+            divergence: 2.09,
+            node_buds: 1,
+            tip_buds: (1, 1),
+            abort: 0.05,
+            bud_life: 2,
+            dormant: 0.02,
+            tropism: [0.9, 0.05, -0.04, -0.08],
+            photo: 0.3,
+            shade: 3.6,
+            wander: 0.14,
+            flat: 0.5,
+            shed: 0.14,
+            stub: 0.5,
+            trunk: 0.035,
+            twig: 0.001,
+            flare: 0.15,
+            roots: 1,
+            lean: 0.0,
+            decline: 0.0,
+            decay: 0.0,
+            breakage: 0.05,
+            leaf: Leafing::alder(),
+        }
+    }
+
+    /// A white willow (of meadow ditches and banks): low control, limbs
+    /// rising steeply from a short leaning bole, the young shoots long,
+    /// their ends arching over; narrow leaves in loose streamers.
+    pub fn willow() -> Self {
+        Habit {
+            years: 18,
+            apical: 0.52,
+            vigor: 2.6,
+            shoot_max: 5,
+            shorten: 0.9,
+            branch_angle: 0.55,
+            divergence: 2.4,
+            node_buds: 1,
+            tip_buds: (2, 1),
+            abort: 0.25,
+            bud_life: 2,
+            dormant: 0.06,
+            tropism: [0.4, 0.3, 0.05, -0.3],
+            photo: 0.35,
+            shade: 3.0,
+            wander: 0.2,
+            flat: 0.55,
+            shed: 0.14,
+            stub: 0.5,
+            trunk: 0.06,
+            twig: 0.0009,
+            flare: 0.25,
+            roots: 1,
+            lean: 0.1,
+            decline: 0.0,
+            decay: 0.0,
+            breakage: 0.12,
+            leaf: Leafing::willow(),
         }
     }
 
@@ -299,6 +414,9 @@ pub struct Limb {
     pub broken: bool,
     /// A buttress root running into the ground.
     pub root: bool,
+    /// Age in years of the wood at each point (the internode ending
+    /// there): leaves grow on the young wood (`Leafing::years`).
+    pub age: Vec<u32>,
 }
 
 impl Limb {
@@ -331,6 +449,8 @@ pub struct Skeleton {
     pub height: f32,
     /// The pipe-model exponent the widths follow (Leonardo's rule).
     pub pipe: f32,
+    /// The species' leafing (from `Habit::leaf`), for `foliage`.
+    pub leaf: Leafing,
 }
 
 impl Skeleton {
@@ -847,7 +967,9 @@ impl<'a> Grower<'a> {
             let mut pts = vec![];
             let mut z = vec![];
             let mut w = vec![];
+            let mut age = vec![];
             for (ci, &nd) in chain.iter().enumerate() {
+                age.push(self.year.saturating_sub(self.nodes[nd].born));
                 pts.push(proj(self.nodes[nd].p));
                 z.push(self.nodes[nd].p.z * s);
                 // width of the internode leaving this point
@@ -872,7 +994,7 @@ impl<'a> Grower<'a> {
             let dead_from = seg_dead.iter().position(|&d| d).unwrap_or(pts.len());
             debug_assert!(seg_dead[dead_from.min(seg_dead.len())..].iter().all(|&d| d), "live wood beyond dead wood");
             let dead = dead_from == 0;
-            limbs.push(Limb { pts, z, w, order, parent, at, dead, dead_from, broken: self.nodes[tip].broken, root: false });
+            limbs.push(Limb { pts, z, w, order, parent, at, dead, dead_from, broken: self.nodes[tip].broken, root: false, age });
         }
         // stubs of branches shed long ago
         let mut rng = Rng::new(seed ^ 0x51ab);
@@ -904,6 +1026,7 @@ impl<'a> Grower<'a> {
                 dead_from: 0,
                 broken: true,
                 root: false,
+                age: vec![h.years; 2],
             });
         }
         // buttress roots running out into the ground
@@ -915,9 +1038,9 @@ impl<'a> Grower<'a> {
             let y0 = base.1 - trunk_w * rng.range(0.15, 0.35);
             let pts = vec![(x0, y0), (x0 + side * l * 0.5 * a.cos(), y0 + l * 0.5 * a.sin() * 0.8), (x0 + side * l * a.cos(), y0 + l * a.sin())];
             let w0 = trunk_w * rng.range(0.4, 0.6);
-            limbs.push(Limb { pts, z: vec![0.0; 3], w: vec![w0, w0 * 0.55, w0 * 0.2], order: 1, parent: Some(0), at: 0, dead: false, dead_from: 3, broken: false, root: true });
+            limbs.push(Limb { pts, z: vec![0.0; 3], w: vec![w0, w0 * 0.55, w0 * 0.2], order: 1, parent: Some(0), at: 0, dead: false, dead_from: 3, broken: false, root: true, age: vec![h.years; 3] });
         }
-        Skeleton { limbs, base, height, pipe: pk }
+        Skeleton { limbs, base, height, pipe: pk, leaf: h.leaf }
     }
 }
 
@@ -945,6 +1068,605 @@ fn nearest(limbs: &[Limb], p: (f32, f32)) -> (usize, usize) {
 
 fn dist(a: (f32, f32), b: (f32, f32)) -> f32 {
     ((a.0 - b.0).powi(2) + (a.1 - b.1).powi(2)).sqrt()
+}
+
+// ---------------------------------------------------------------------------
+// Leaves
+
+/// How a species carries its leaves, as numbers (botany, not paint). Leaves
+/// grow on the young wood: each clump stands for a spray or bunch of leaves
+/// on one short length of twig. See `Skeleton::foliage`.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Leafing {
+    /// Wood younger than this (years) carries leaves; 0 = bare (winter).
+    pub years: u32,
+    /// Radius of one clump / tree height.
+    pub clump: f32,
+    /// Distance between clumps along leafy wood, in clump radii.
+    pub spacing: f32,
+    /// Height / width of a clump: flat sprays < 1 (beech), hanging
+    /// streamers > 1 (birch, willow).
+    pub squash: f32,
+    /// How far a clump hangs below its twig, in clump radii.
+    pub droop: f32,
+    /// How solid a clump is (0 airy, sky through it .. 1 none).
+    pub fill: f32,
+    /// Irregularity of a clump's outline (0 round .. 1 lobed).
+    pub ragged: f32,
+    /// Share of leafy twigs carrying no leaves (browsed, broken, dying
+    /// back): the holes where sky shows through a crown.
+    pub bare: f32,
+    /// Leaves crowd toward the ends of shoots: clumps near a tip are up to
+    /// `1 + tip` times bigger.
+    pub tip: f32,
+}
+
+impl Leafing {
+    /// Bare: winter, or a dead tree.
+    pub fn none() -> Self {
+        Leafing { years: 0, ..Self::oak() }
+    }
+    /// Pedunculate oak: leaves bunched at the shoot ends around the bud
+    /// cluster, in irregular lobed masses with sky between them.
+    pub fn oak() -> Self {
+        Leafing { years: 2, clump: 0.038, spacing: 1.2, squash: 0.75, droop: 0.15, fill: 0.8, ragged: 0.55, bare: 0.12, tip: 0.5 }
+    }
+    /// Silver birch: small leaves along long hanging twigs, an airy crown
+    /// the light passes through.
+    pub fn birch() -> Self {
+        Leafing { years: 2, clump: 0.024, spacing: 1.0, squash: 1.35, droop: 0.7, fill: 0.5, ragged: 0.35, bare: 0.18, tip: 0.2 }
+    }
+    /// Beech: two-ranked leaves on level sprays, layered, dense (deep shade).
+    pub fn beech() -> Self {
+        Leafing { years: 3, clump: 0.042, spacing: 0.9, squash: 0.45, droop: 0.2, fill: 0.95, ragged: 0.25, bare: 0.05, tip: 0.25 }
+    }
+    /// Black alder: dense, dark, evenly spread foliage.
+    pub fn alder() -> Self {
+        Leafing { years: 3, clump: 0.034, spacing: 0.9, squash: 0.85, droop: 0.1, fill: 0.9, ragged: 0.3, bare: 0.06, tip: 0.2 }
+    }
+    /// White willow: narrow leaves in loose, hanging streamers.
+    pub fn willow() -> Self {
+        Leafing { years: 2, clump: 0.03, spacing: 1.0, squash: 1.6, droop: 0.45, fill: 0.6, ragged: 0.45, bare: 0.1, tip: 0.3 }
+    }
+    /// Spruce: needles on several years of shoots, in flat dense sprays
+    /// hanging from the limbs.
+    pub fn spruce() -> Self {
+        Leafing { years: 6, clump: 0.02, spacing: 0.8, squash: 0.5, droop: 0.35, fill: 0.9, ragged: 0.3, bare: 0.04, tip: 0.1 }
+    }
+}
+
+/// One clump of leaves: an ellipse on the picture plane with depth.
+#[derive(Clone, Copy, Debug)]
+pub struct Clump {
+    /// Center (canvas units) and depth (units, + toward the viewer).
+    pub at: (f32, f32),
+    pub z: f32,
+    /// Half width (units); half height is `r * squash`.
+    pub r: f32,
+    pub squash: f32,
+    /// Rotation of the clump's width axis from horizontal (radians).
+    pub tilt: f32,
+    /// How solid (see `Leafing::fill`).
+    pub fill: f32,
+    /// Light the clump catches, 0 (deep in shade) .. 1 (full sun on the
+    /// sunward face of the crown).
+    pub lit: f32,
+    /// Shadow cast on it by clumps between it and the sun (0 none .. 1).
+    pub shade: f32,
+    /// The limb whose twig carries it, and the main limb (order ≤ 1) that
+    /// carries that: the mass it belongs to, as the eye groups a crown.
+    pub limb: usize,
+    pub mass: usize,
+}
+
+/// A tree's leaves: clumps of leaves on the young wood, lit by the sun.
+/// Geometry, not paint: `mask` is where leaves are (with the holes where
+/// sky shows through), `lit` how much light each part catches, `gaps` the
+/// holes inside the crown. The painter decides what to do with them.
+#[derive(Clone, Debug)]
+pub struct Foliage {
+    pub clumps: Vec<Clump>,
+    /// Unit vector toward the sun (canvas axes: x right, y down, z toward
+    /// the viewer).
+    pub sun: (f32, f32, f32),
+    pub ragged: f32,
+    seed: u64,
+}
+
+impl Skeleton {
+    /// The leaves the species carries (`Habit::leaf`), lit from `sun`
+    /// (toward the sun, canvas axes: x right, y down, z toward the viewer;
+    /// normalized here). Only live wood carries leaves.
+    pub fn foliage(&self, sun: (f32, f32, f32), seed: u64) -> Foliage {
+        self.foliage_with(&self.leaf, sun, seed)
+    }
+
+    /// Foliage with another leafing (a thinner crown in drought, a sparse
+    /// autumn, a hedge clipped dense).
+    pub fn foliage_with(&self, leaf: &Leafing, sun: (f32, f32, f32), seed: u64) -> Foliage {
+        let mut rng = Rng::new(seed ^ 0xf011_a6e5);
+        let r0 = leaf.clump * self.height;
+        let mut clumps = vec![];
+        let n = self.limbs.len();
+        let mut mass = vec![0usize; n];
+        for (i, l) in self.limbs.iter().enumerate() {
+            mass[i] = match l.parent {
+                Some(p) if l.order > 1 => mass[p],
+                _ => i,
+            };
+        }
+        if leaf.years > 0 && r0 > 0.0 {
+            for (li, l) in self.limbs.iter().enumerate() {
+                if l.root || l.is_empty() || (l.order >= 2 && rng.chance(leaf.bare)) {
+                    continue;
+                }
+                let arc = {
+                    let mut a = vec![0.0f32; l.pts.len()];
+                    for i in 1..l.pts.len() {
+                        a[i] = a[i - 1] + dist(l.pts[i - 1], l.pts[i]);
+                    }
+                    a
+                };
+                let total = *arc.last().unwrap();
+                let mut next = rng.range(0.0, 1.0) * r0 * leaf.spacing;
+                for i in 0..l.pts.len() - 1 {
+                    if l.dead_at(i) {
+                        break;
+                    }
+                    let seg = arc[i + 1] - arc[i];
+                    if l.age[i + 1] >= leaf.years || seg <= 1e-6 {
+                        next = next.max(arc[i + 1]);
+                        continue;
+                    }
+                    while next < arc[i + 1] {
+                        let t = ((next - arc[i]) / seg).clamp(0.0, 1.0);
+                        let (a, b) = (l.pts[i], l.pts[i + 1]);
+                        let d = ((b.0 - a.0) / seg, (b.1 - a.1) / seg);
+                        let to_tip = total - next;
+                        let r = r0 * rng.range(0.7, 1.25) * (1.0 + leaf.tip * (-to_tip / (3.0 * r0)).exp());
+                        let off = rng.normal() * 0.35 * r;
+                        let x = a.0 + (b.0 - a.0) * t - d.1 * off;
+                        let y = a.1 + (b.1 - a.1) * t + d.0 * off + leaf.droop * r * leaf.squash;
+                        let z = l.z[i] + (l.z[i + 1] - l.z[i]) * t + rng.normal() * 0.3 * r;
+                        // flat sprays lie partly along their twig; hanging
+                        // ones hang
+                        let along = d.1.atan2(d.0);
+                        let along = if along > PI / 2.0 { along - PI } else if along < -PI / 2.0 { along + PI } else { along };
+                        let tilt = if leaf.squash < 1.0 { along * 0.35 } else { 0.0 } + rng.normal() * 0.12;
+                        clumps.push(Clump {
+                            at: (x, y),
+                            z,
+                            r,
+                            squash: leaf.squash * rng.range(0.85, 1.15),
+                            tilt,
+                            fill: (leaf.fill * rng.range(0.85, 1.1)).min(1.0),
+                            lit: 0.0,
+                            shade: 0.0,
+                            limb: li,
+                            mass: mass[li],
+                        });
+                        next += r0 * leaf.spacing * rng.range(0.7, 1.3);
+                    }
+                }
+            }
+        }
+        let mut f = Foliage { clumps, sun: norm3(sun), ragged: leaf.ragged, seed };
+        f.light();
+        f
+    }
+}
+
+fn norm3(v: (f32, f32, f32)) -> (f32, f32, f32) {
+    let l = (v.0 * v.0 + v.1 * v.1 + v.2 * v.2).sqrt().max(1e-6);
+    (v.0 / l, v.1 / l, v.2 / l)
+}
+
+impl Foliage {
+    /// Light on each clump: its facing on the crown's envelope (the sunward
+    /// side of the crown is lit, the far side and the inside dark), dimmed
+    /// by the clumps between it and the sun.
+    fn light(&mut self) {
+        let n = self.clumps.len();
+        if n == 0 {
+            return;
+        }
+        let s = self.sun;
+        let wsum: f32 = self.clumps.iter().map(|c| c.r * c.r).sum();
+        let mean = |f: &dyn Fn(&Clump) -> f32| self.clumps.iter().map(|c| f(c) * c.r * c.r).sum::<f32>() / wsum;
+        let (cx, cy, cz) = (mean(&|c| c.at.0), mean(&|c| c.at.1), mean(&|c| c.z));
+        let rmax = self.clumps.iter().map(|c| c.r).fold(0.0, f32::max);
+        let sx = (mean(&|c| (c.at.0 - cx).powi(2))).sqrt() * 1.7 + rmax;
+        let sy = (mean(&|c| (c.at.1 - cy).powi(2))).sqrt() * 1.7 + rmax;
+        let sz = (mean(&|c| (c.z - cz).powi(2))).sqrt() * 1.7 + rmax;
+        let pos: Vec<(f32, f32, f32)> = self.clumps.iter().map(|c| (c.at.0, c.at.1, c.z)).collect();
+        for i in 0..n {
+            let c = self.clumps[i];
+            let v = ((c.at.0 - cx) / sx, (c.at.1 - cy) / sy, (c.z - cz) / sz);
+            let m = (v.0 * v.0 + v.1 * v.1 + v.2 * v.2).sqrt().max(1e-6);
+            let facing = 0.5 + 0.5 * (v.0 * s.0 + v.1 * s.1 + v.2 * s.2) / m;
+            let outer = crate::smoothstep(0.15, 0.85, m);
+            // clumps between this one and the sun
+            let mut through = 1.0f32;
+            for (j, pj) in pos.iter().enumerate() {
+                if j == i {
+                    continue;
+                }
+                let d = (pj.0 - pos[i].0, pj.1 - pos[i].1, pj.2 - pos[i].2);
+                let t = d.0 * s.0 + d.1 * s.1 + d.2 * s.2;
+                if t <= 0.5 * c.r {
+                    continue;
+                }
+                let perp2 = d.0 * d.0 + d.1 * d.1 + d.2 * d.2 - t * t;
+                let rj = self.clumps[j].r;
+                if perp2 < rj * rj * 0.8 {
+                    through *= 1.0 - 0.45 * self.clumps[j].fill;
+                }
+            }
+            let shade = 1.0 - through;
+            self.clumps[i].shade = shade;
+            self.clumps[i].lit = (facing.powf(1.3) * (0.4 + 0.6 * outer) * (1.0 - 0.8 * shade)).clamp(0.0, 1.0);
+        }
+    }
+
+    /// Clumps from the back (far from the viewer) to the front.
+    pub fn back_to_front(&self) -> Vec<&Clump> {
+        let mut v: Vec<&Clump> = self.clumps.iter().collect();
+        v.sort_by(|a, b| a.z.total_cmp(&b.z));
+        v
+    }
+
+    /// Bounding box (x0, y0, x1, y1) of the clumps, units.
+    pub fn bounds(&self) -> (f32, f32, f32, f32) {
+        let mut b = (f32::MAX, f32::MAX, f32::MIN, f32::MIN);
+        for c in &self.clumps {
+            let (rx, ry) = (c.r * 1.4, c.r * c.squash * 1.4);
+            b = (b.0.min(c.at.0 - rx), b.1.min(c.at.1 - ry), b.2.max(c.at.0 + rx), b.3.max(c.at.1 + ry));
+        }
+        b
+    }
+
+    /// Mean clump radius (units): the scale of the leaf masses.
+    pub fn grain(&self) -> f32 {
+        if self.clumps.is_empty() {
+            return 1.0;
+        }
+        self.clumps.iter().map(|c| c.r).sum::<f32>() / self.clumps.len() as f32
+    }
+
+    /// Coverage (0..1) of clump `k` at (x, y) before its fill: 1 inside its
+    /// lobed outline, soft over the last quarter of its radius; and the
+    /// point in the clump's own frame (u, v in radii).
+    fn cover(&self, k: usize, x: f32, y: f32) -> (f32, f32, f32) {
+        let c = &self.clumps[k];
+        let (dx, dy) = (x - c.at.0, y - c.at.1);
+        let (ct, st) = (c.tilt.cos(), c.tilt.sin());
+        let u = (dx * ct + dy * st) / c.r;
+        let v = (-dx * st + dy * ct) / (c.r * c.squash);
+        let d = (u * u + v * v).sqrt();
+        let th = v.atan2(u);
+        let h = crate::rng::hash2(k as i64, 17, self.seed);
+        let h2 = crate::rng::hash2(k as i64, 29, self.seed);
+        let lobe = 1.0 + self.ragged * 0.32 * (0.6 * (3.0 * th + h * 6.283).sin() + 0.4 * (5.0 * th + h2 * 6.283).sin());
+        (1.0 - crate::smoothstep(lobe * 0.75, lobe, d), dx / c.r, dy / (c.r * c.squash))
+    }
+
+    /// Pixel ranges (buffer coordinates) a clump can touch in frame `f`.
+    fn px_box(&self, f: &Frame, k: usize) -> Option<(usize, usize, usize, usize)> {
+        let c = &self.clumps[k];
+        let rr = c.r * c.squash.max(1.0) * (1.0 + self.ragged * 0.35);
+        let x0 = ((c.at.0 - rr) * f.scale).floor() as isize - f.x0 as isize;
+        let x1 = ((c.at.0 + rr) * f.scale).ceil() as isize - f.x0 as isize;
+        let y0 = ((c.at.1 - rr) * f.scale).floor() as isize - f.y0 as isize;
+        let y1 = ((c.at.1 + rr) * f.scale).ceil() as isize - f.y0 as isize;
+        let (x0, y0) = (x0.max(0), y0.max(0));
+        let (x1, y1) = (x1.min(f.w as isize - 1), y1.min(f.h as isize - 1));
+        (x1 >= x0 && y1 >= y0).then_some((x0 as usize, y0 as usize, x1 as usize, y1 as usize))
+    }
+
+    /// Where the leaves are: 1 on leaves, 0 on sky, with the holes of an
+    /// airy clump and the gaps between clumps (a leaf-sized noise breaks
+    /// the edge of every partly covered place into leaves and sky).
+    pub fn mask(&self, f: Frame) -> Mask {
+        let mut cov = vec![0.0f32; f.w * f.h];
+        for k in 0..self.clumps.len() {
+            let Some((x0, y0, x1, y1)) = self.px_box(&f, k) else { continue };
+            let fill = self.clumps[k].fill;
+            for py in y0..=y1 {
+                let y = (py + f.y0) as f32 / f.scale + 0.5 / f.scale;
+                for px in x0..=x1 {
+                    let x = (px + f.x0) as f32 / f.scale + 0.5 / f.scale;
+                    let (c, _, _) = self.cover(k, x, y);
+                    if c > 0.0 {
+                        let i = py * f.w + px;
+                        cov[i] = 1.0 - (1.0 - cov[i]) * (1.0 - c * fill);
+                    }
+                }
+            }
+        }
+        let leaf = Fbm::new(self.seed as u32 ^ 0x1eaf, 3, (self.grain() * 0.45).max(0.5));
+        let inv = 1.0 / f.scale;
+        let data = cov
+            .par_iter()
+            .enumerate()
+            .map(|(i, &c)| {
+                if c <= 0.0 {
+                    return 0.0;
+                }
+                let (x, y) = (((i % f.w) + f.x0) as f32 * inv, ((i / f.w) + f.y0) as f32 * inv);
+                crate::smoothstep(0.4, 0.6, c + 0.35 * leaf.get(x, y))
+            })
+            .collect();
+        Mask { f, data }
+    }
+
+    /// Light on the leaves (0..1; 0 off them): each clump's `lit`, the front
+    /// clump over the ones behind, rounded like a small ball of leaves (its
+    /// sunward side lighter, its underside darker).
+    pub fn lit(&self, f: Frame) -> Mask {
+        let mut val = vec![0.0f32; f.w * f.h];
+        let s = self.sun;
+        let mut order: Vec<usize> = (0..self.clumps.len()).collect();
+        order.sort_by(|&a, &b| self.clumps[a].z.total_cmp(&self.clumps[b].z));
+        for k in order {
+            let Some((x0, y0, x1, y1)) = self.px_box(&f, k) else { continue };
+            let lit = self.clumps[k].lit;
+            for py in y0..=y1 {
+                let y = (py + f.y0) as f32 / f.scale + 0.5 / f.scale;
+                for px in x0..=x1 {
+                    let x = (px + f.x0) as f32 / f.scale + 0.5 / f.scale;
+                    let (c, u, v) = self.cover(k, x, y);
+                    if c > 0.5 {
+                        let w = (1.0 - u * u - v * v).max(0.0).sqrt();
+                        let local = (u * s.0 + v * s.1 + w * s.2).clamp(-1.0, 1.0);
+                        val[py * f.w + px] = (lit * (0.7 + 0.45 * local)).clamp(0.0, 1.0);
+                    }
+                }
+            }
+        }
+        Mask { f, data: val }.mul(&self.mask(f))
+    }
+
+    /// The crown's outline with its holes closed (the leaves' mask grown and
+    /// shrunk by `reach` units).
+    pub fn envelope(&self, f: Frame, reach: f32) -> Mask {
+        self.mask(f).dilate(reach).erode(reach)
+    }
+
+    /// Holes inside the crown where sky shows through (`envelope` minus the
+    /// leaves).
+    pub fn gaps(&self, f: Frame, reach: f32) -> Mask {
+        let m = self.mask(f);
+        m.dilate(reach).erode(reach).subtract(&m)
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Ground cover
+
+/// Wind over a meadow: how far grass leans (radians from upright, + to
+/// the right), in gusts.
+#[derive(Clone, Copy, Debug)]
+pub struct Wind {
+    /// Mean lean (radians, + right).
+    pub lean: f32,
+    /// Gusts: lean varies by up to about this much from place to place.
+    pub gust: f32,
+    /// Size of a gust (units).
+    pub period: f32,
+    pub seed: u64,
+}
+
+impl Wind {
+    pub fn calm() -> Self {
+        Wind { lean: 0.0, gust: 0.08, period: 120.0, seed: 1 }
+    }
+    /// Lean at (x, y), radians.
+    pub fn at(&self, x: f32, y: f32) -> f32 {
+        self.lean + self.gust * (value_noise(x / self.period, y / self.period, self.seed) * 0.7 + value_noise(x * 2.3 / self.period, y * 2.3 / self.period, self.seed ^ 0x77) * 0.3)
+    }
+}
+
+/// Smooth value noise in about [-1, 1].
+fn value_noise(x: f32, y: f32, seed: u64) -> f32 {
+    let (xi, yi) = (x.floor(), y.floor());
+    let (tx, ty) = (x - xi, y - yi);
+    let (sx, sy) = (tx * tx * (3.0 - 2.0 * tx), ty * ty * (3.0 - 2.0 * ty));
+    let h = |i: f32, j: f32| crate::rng::hash2(i as i64, j as i64, seed) * 2.0 - 1.0;
+    let a = h(xi, yi) + (h(xi + 1.0, yi) - h(xi, yi)) * sx;
+    let b = h(xi, yi + 1.0) + (h(xi + 1.0, yi + 1.0) - h(xi, yi + 1.0)) * sx;
+    a + (b - a) * sy
+}
+
+/// A meadow or grassy bank as a set of seeded tufts on a ground plane seen
+/// in perspective: near the viewer tall tufts of many blades, toward the
+/// horizon fewer and smaller ones, until they are too small to be marks.
+/// Geometry, not paint: `grow` returns tufts (blades as curves, flower
+/// heads) and the painter paints them.
+#[derive(Clone, Copy, Debug)]
+pub struct Sward {
+    /// Canvas y of the horizon (marks shrink to nothing there) and of the
+    /// near edge where they have full size.
+    pub horizon: f32,
+    pub near: f32,
+    /// Tuft height at `near` (units).
+    pub height: f32,
+    /// Mean distance between tufts at `near` (units).
+    pub spacing: f32,
+    /// How fast marks thin out toward the horizon: the spacing grows as
+    /// `scale^-thin` (0 = as many marks per area far as near, only smaller).
+    pub thin: f32,
+    /// No mark shorter than this (units): below it the painter paints the
+    /// ground's tone, not tufts.
+    pub smallest: f32,
+    /// Blades per tuft near the viewer (fewer far away).
+    pub blades: (u32, u32),
+    /// Fan of the blades in a tuft (radians).
+    pub fan: f32,
+    /// How much blades bend over at the tip, with the wind (radians).
+    pub curl: f32,
+    /// Share of tufts carrying a flower head, where flowers grow.
+    pub flowers: f32,
+    /// Kinds of flowers (each grows in its own patches); `Flower::kind`.
+    pub kinds: u32,
+    /// Patchiness: tufts crowd in lush patches and thin in poor ones
+    /// (0 even .. 1 strongly patchy), over `patch_size` units.
+    pub patch: f32,
+    pub patch_size: f32,
+    pub wind: Wind,
+}
+
+impl Default for Sward {
+    fn default() -> Self {
+        Sward {
+            horizon: 400.0,
+            near: 666.0,
+            height: 14.0,
+            spacing: 4.0,
+            thin: 0.5,
+            smallest: 0.6,
+            blades: (3, 7),
+            fan: 0.7,
+            curl: 0.35,
+            flowers: 0.04,
+            kinds: 3,
+            patch: 0.6,
+            patch_size: 90.0,
+            wind: Wind::calm(),
+        }
+    }
+}
+
+/// A flower head on a tuft's tallest blade.
+#[derive(Clone, Copy, Debug)]
+pub struct Flower {
+    pub at: (f32, f32),
+    pub r: f32,
+    pub kind: u32,
+}
+
+/// One tuft of grass: blades from a common foot.
+#[derive(Clone, Debug)]
+pub struct Tuft {
+    /// Foot (canvas units).
+    pub at: (f32, f32),
+    /// Perspective scale there (1 at `near`, 0 at the horizon).
+    pub scale: f32,
+    pub height: f32,
+    /// Lean (radians from upright, + right).
+    pub lean: f32,
+    /// Blades as quadratic curves: foot, control point, tip (units).
+    pub blades: Vec<[(f32, f32); 3]>,
+    pub flower: Option<Flower>,
+    /// How lush the patch is here (0..1).
+    pub lush: f32,
+}
+
+impl Sward {
+    /// Perspective scale at canvas height `y`: 0 at the horizon, 1 at
+    /// `near` (more below it).
+    pub fn scale_at(&self, y: f32) -> f32 {
+        ((y - self.horizon) / (self.near - self.horizon)).max(0.0)
+    }
+
+    /// Tufts inside `region` (the ground to cover, ≥ 0.5), far ones first
+    /// (paint them in this order). Deterministic by seed; the tufts are
+    /// scattered with a minimum distance (no rows, no clumps of darts) and
+    /// crowd in lush patches.
+    pub fn grow(&self, region: &Mask, seed: u64) -> Vec<Tuft> {
+        let f = region.f;
+        let mut rng = Rng::new(seed ^ 0x5a4d);
+        // bounds of the region
+        let (mut bx0, mut by0, mut bx1, mut by1) = (f32::MAX, f32::MAX, f32::MIN, f32::MIN);
+        for (i, &v) in region.data.iter().enumerate() {
+            if v >= 0.5 {
+                let (x, y) = (((i % f.w) + f.x0) as f32 / f.scale, ((i / f.w) + f.y0) as f32 / f.scale);
+                bx0 = bx0.min(x);
+                bx1 = bx1.max(x);
+                by0 = by0.min(y);
+                by1 = by1.max(y);
+            }
+        }
+        if bx1 < bx0 {
+            return vec![];
+        }
+        let by0 = by0.max(self.horizon + 1e-3);
+        let smin = self.scale_at(by0).max(1e-3);
+        let smax = self.scale_at(by1).max(smin);
+        let cell = |s: f32| self.spacing * s.max(1e-3).powf(-self.thin);
+        let cmin = cell(smax);
+        let n = ((bx1 - bx0) * (by1 - by0) / (cmin * cmin) * 1.6) as usize;
+        let lush_at = |x: f32, y: f32| {
+            let p = 0.5 + 0.5 * (value_noise(x / self.patch_size, y / (self.patch_size * 0.4), seed ^ 0x11) * 0.7 + value_noise(x * 3.1 / self.patch_size, y * 3.1 / (self.patch_size * 0.4), seed ^ 0x13) * 0.3);
+            (1.0 - self.patch + self.patch * 1.6 * p).clamp(0.0, 1.0)
+        };
+        // a hash grid for the minimum distance
+        let g = cmin * 0.5;
+        let gw = (((bx1 - bx0) / g).ceil() as usize).max(1) + 1;
+        let gh = (((by1 - by0) / g).ceil() as usize).max(1) + 1;
+        let mut grid: Vec<Vec<(f32, f32)>> = vec![vec![]; gw * gh];
+        let mut tufts = vec![];
+        for _ in 0..n {
+            let (x, y) = (rng.range(bx0, bx1), rng.range(by0, by1));
+            let u = rng.f();
+            let s = self.scale_at(y);
+            if s <= 0.0 || region.sample(x, y) < 0.5 {
+                continue;
+            }
+            let lush = lush_at(x, y);
+            let c = cell(s);
+            if u > (cmin / c).powi(2) * (0.35 + 0.65 * lush) {
+                continue;
+            }
+            let rmin = 0.55 * c;
+            let (gx, gy) = (((x - bx0) / g) as isize, ((y - by0) / g) as isize);
+            let k = (rmin / g).ceil() as isize;
+            let mut near = false;
+            'outer: for j in (gy - k).max(0)..=(gy + k).min(gh as isize - 1) {
+                for i in (gx - k).max(0)..=(gx + k).min(gw as isize - 1) {
+                    if grid[j as usize * gw + i as usize].iter().any(|q| (q.0 - x).powi(2) + (q.1 - y).powi(2) < rmin * rmin) {
+                        near = true;
+                        break 'outer;
+                    }
+                }
+            }
+            if near {
+                continue;
+            }
+            let height = self.height * s * rng.range(0.6, 1.3) * (0.6 + 0.6 * lush);
+            if height < self.smallest {
+                continue;
+            }
+            grid[gy as usize * gw + gx as usize].push((x, y));
+            let lean = self.wind.at(x, y) + rng.normal() * 0.12;
+            let nb = ((rng.range(self.blades.0 as f32, self.blades.1 as f32 + 1.0)) * (0.35 + 0.65 * s.min(1.0))).floor().max(1.0) as usize;
+            let dir = |a: f32| (a.sin(), -a.cos());
+            let mut blades = vec![];
+            let mut tallest = (0.0f32, (x, y - height));
+            for b in 0..nb {
+                let fan = if nb > 1 { (b as f32 / (nb - 1) as f32 - 0.5) * self.fan } else { 0.0 };
+                let a = lean + fan + rng.normal() * 0.1;
+                let len = height * rng.range(0.55, 1.0);
+                let foot = (x + rng.normal() * height * 0.06, y);
+                let d0 = dir(a * 0.7);
+                let bend = a + self.curl * (a.signum() * a.abs().min(0.6) / 0.6) * rng.range(0.5, 1.2);
+                let d1 = dir(bend);
+                let ctrl = (foot.0 + d0.0 * len * 0.55, foot.1 + d0.1 * len * 0.55);
+                let tip = (ctrl.0 + d1.0 * len * 0.5, ctrl.1 + d1.1 * len * 0.5);
+                if len > tallest.0 {
+                    tallest = (len, tip);
+                }
+                blades.push([foot, ctrl, tip]);
+            }
+            let bloom = 0.5 + 0.5 * value_noise(x / (self.patch_size * 0.6), y / (self.patch_size * 0.25), seed ^ 0xf1);
+            let flower = (self.kinds > 0 && rng.chance(self.flowers * 2.5 * crate::smoothstep(0.45, 0.85, bloom))).then(|| {
+                let kn = 0.5 + 0.5 * value_noise(x / (self.patch_size * 0.8), y / (self.patch_size * 0.3), seed ^ 0xf3);
+                Flower { at: tallest.1, r: (height * rng.range(0.05, 0.09)).max(self.smallest * 0.3), kind: ((kn * self.kinds as f32) as u32).min(self.kinds - 1) }
+            });
+            tufts.push(Tuft { at: (x, y), scale: s, height, lean, blades, flower, lush });
+        }
+        tufts.sort_by(|a, b| a.at.1.total_cmp(&b.at.1));
+        tufts
+    }
 }
 
 #[cfg(test)]
@@ -1042,6 +1764,71 @@ mod tests {
             let p = &s.limbs[l.parent.unwrap()];
             assert!(l.w[0] <= p.w[l.at] * 1.3 + 1e-3, "{} > {} (order {} broken {} dead {} at {}/{} parent order {})", l.w[0], p.w[l.at], l.order, l.broken, l.dead, l.at, p.pts.len(), p.order);
         }
+    }
+    /// Leaves grow on live young wood only, spread over the crown with sky
+    /// between them, and the sunward side of the crown is lit.
+    #[test]
+    fn foliage_on_live_young_wood() {
+        let f = Frame::new(500, 500, 0.5);
+        for h in [Habit::oak(), Habit::birch(), Habit::beech(), Habit::alder(), Habit::willow()] {
+            let sk = h.grow((500.0, 950.0), 700.0, 5);
+            let sun = (-0.7, -0.6, 0.4);
+            let fo = sk.foliage(sun, 3);
+            let fo2 = sk.foliage(sun, 3);
+            assert_eq!(fo.clumps.len(), fo2.clumps.len());
+            assert!(fo.clumps.len() > 40, "{:?}: {} clumps", h.leaf, fo.clumps.len());
+            for c in &fo.clumps {
+                let l = &sk.limbs[c.limb];
+                assert!(!l.dead && !l.root);
+                assert!((0.0..=1.0).contains(&c.lit) && (0.0..=1.0).contains(&c.shade));
+            }
+            // sunward (left, upper) clumps catch more light than the far side
+            let cx = fo.clumps.iter().map(|c| c.at.0).sum::<f32>() / fo.clumps.len() as f32;
+            let side = |left: bool| {
+                let v: Vec<f32> = fo.clumps.iter().filter(|c| (c.at.0 < cx) == left).map(|c| c.lit).collect();
+                v.iter().sum::<f32>() / v.len().max(1) as f32
+            };
+            assert!(side(true) > side(false) + 0.05, "{} vs {}", side(true), side(false));
+            // leaves with sky between them
+            let m = fo.mask(f);
+            let env = m.clone().dilate(fo.grain() * 1.5).erode(fo.grain() * 1.5);
+            let (leaf, hull) = (m.data.iter().sum::<f32>(), env.data.iter().sum::<f32>());
+            let open = 1.0 - leaf / hull;
+            assert!(open > 0.02 && open < 0.6, "{:?}: sky through the crown {open}", h.leaf);
+            let lit = fo.lit(f);
+            assert!(lit.data.iter().zip(&m.data).all(|(l, m)| *l <= m + 1e-6));
+        }
+        // a dead oak's dead limbs are bare; winter is bare
+        let sk = Habit::dead_oak().grow((500.0, 950.0), 700.0, 7);
+        let fo = sk.foliage((-1.0, -1.0, 0.3), 1);
+        assert!(fo.clumps.iter().all(|c| !sk.limbs[c.limb].dead));
+        assert!(sk.foliage_with(&Leafing::none(), (0.0, -1.0, 0.0), 1).clumps.is_empty());
+    }
+
+    /// Tufts recede: smaller and fewer per area toward the horizon, far
+    /// ones first, leaning with the wind.
+    #[test]
+    fn sward_recedes() {
+        let f = Frame::new(500, 333, 0.5);
+        let region = Mask::from_fn(f, |_, y| if y > 420.0 { 1.0 } else { 0.0 });
+        let sw = Sward { horizon: 400.0, near: 666.0, wind: Wind { lean: 0.3, gust: 0.05, period: 100.0, seed: 2 }, ..Sward::default() };
+        let t = sw.grow(&region, 9);
+        let t2 = sw.grow(&region, 9);
+        assert_eq!(t.len(), t2.len());
+        assert!(t.len() > 500, "{}", t.len());
+        assert!(t.windows(2).all(|w| w[0].at.1 <= w[1].at.1), "far first");
+        let band = |y0: f32, y1: f32| {
+            let v: Vec<&Tuft> = t.iter().filter(|q| q.at.1 >= y0 && q.at.1 < y1).collect();
+            (v.len() as f32 / (y1 - y0), v.iter().map(|q| q.height).sum::<f32>() / v.len().max(1) as f32)
+        };
+        let (far_n, far_h) = band(440.0, 480.0);
+        let (near_n, near_h) = band(610.0, 650.0);
+        assert!(far_h < 0.5 * near_h, "heights {far_h} {near_h}");
+        assert!(far_n < near_n, "marks per area {far_n} {near_n}");
+        let mean_lean = t.iter().map(|q| q.lean).sum::<f32>() / t.len() as f32;
+        assert!((mean_lean - 0.3).abs() < 0.1, "{mean_lean}");
+        assert!(t.iter().any(|q| q.flower.is_some()));
+        assert!(t.iter().all(|q| q.height >= sw.smallest && !q.blades.is_empty()));
     }
 }
 

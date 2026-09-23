@@ -62,3 +62,4 @@ green, a close study); stop and evaluate.
 - drying merged (checkpoint PAINTCK3 combines drying state + cracks' ground; resume verified byte-identical).
 - scene merged: one sun, shadows/contact/reflections consistent in all three study panels. Its 'glaze at thickness 5 wipes to ground' report doesn't reproduce on main after drying's settle NaN fix (probe: glaze darkens toward its own color).
 - atmosphere launched (sky light model, cloud volumes, noise toolkit, ranges that don't read as waves). Running: tip, fixes-paint, green, easel-2, atmosphere.
+- green merged: sourced greens + palettes, foliage clumps, Sward. Weak painting: savanna umbrella oak (young-oak habit), leaf masses as flat cut-outs at 3200px, uniform round light dabs. Follow-up after tip: mature oak habit; foliage edges as pointed-tip hooked marks.

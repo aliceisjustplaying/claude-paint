@@ -279,6 +279,7 @@ impl Canvas {
     /// touch's reach, and passages in a 2×2 checkerboard phase are painted in
     /// parallel, each with its own brush.
     pub fn stipple(&mut self, mask: &Mask, sp: &Stipple, seed: u64) {
+        sp.tool.assert_valid();
         self.check_mask(mask);
         // plan on the whole canvas (a crop render plans the same touches)
         let f = mask.f;

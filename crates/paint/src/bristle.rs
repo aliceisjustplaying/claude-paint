@@ -166,6 +166,55 @@ impl Tool {
         }
     }
 
+    /// Check that the tool describes a physically possible brush: finite
+    /// parameters, a positive width, hair size and load run, at least one
+    /// bristle, no negative length, lay, splay or raggedness, and stiffness,
+    /// pickup and push within 0..1. The fields are public, so every painting
+    /// entry point checks this (see `assert_valid`): the stroke footprints
+    /// the parallel scheduler relies on are only bounds for such tools.
+    pub fn validate(&self) -> Result<(), String> {
+        let finite = [
+            ("width", self.width),
+            ("length", self.length),
+            ("stiffness", self.stiffness),
+            ("hair", self.hair),
+            ("run", self.run),
+            ("lay", self.lay),
+            ("pickup", self.pickup),
+            ("push", self.push),
+            ("splay", self.splay),
+            ("ragged", self.ragged),
+        ];
+        if let Some((k, v)) = finite.iter().find(|(_, v)| !v.is_finite()) {
+            return Err(format!("tool {k} = {v} is not finite"));
+        }
+        let checks = [
+            ("width > 0", self.width > 0.0),
+            ("bristles >= 1", self.bristles >= 1),
+            ("length >= 0", self.length >= 0.0),
+            ("stiffness in 0..=1", (0.0..=1.0).contains(&self.stiffness)),
+            ("hair > 0", self.hair > 0.0),
+            ("run > 0", self.run > 0.0),
+            ("lay >= 0", self.lay >= 0.0),
+            ("pickup in 0..=1", (0.0..=1.0).contains(&self.pickup)),
+            ("push in 0..=1", (0.0..=1.0).contains(&self.push)),
+            ("splay >= 0", self.splay >= 0.0),
+            ("ragged >= 0", self.ragged >= 0.0),
+        ];
+        match checks.iter().find(|(_, ok)| !ok) {
+            Some((rule, _)) => Err(format!("invalid tool: want {rule} ({self:?})")),
+            None => Ok(()),
+        }
+    }
+
+    /// Panic unless `validate` accepts the tool (painting entry points).
+    #[track_caller]
+    pub(crate) fn assert_valid(&self) {
+        if let Err(e) = self.validate() {
+            panic!("{e}");
+        }
+    }
+
     /// Bristle radius in units.
     pub(crate) fn hair_radius(&self) -> f32 {
         let across = match self.kind {
@@ -482,6 +531,7 @@ impl Canvas {
 
     /// Drag a held brush through a gesture, working the wet paint.
     pub fn drag(&mut self, held: &mut Held, g: &Gesture, clip: Option<&Mask>) {
+        held.tool.assert_valid();
         if let Some(m) = clip {
             self.check_mask(m);
         }
@@ -511,8 +561,13 @@ pub(crate) type Rect = (usize, usize, usize, usize);
 /// and splay, bristle bend (it relaxes from zero toward targets bounded by
 /// the trail and spread), the capsule radius, and the plough destination.
 pub(crate) fn footprint(tool: &Tool, pts: &[(f32, f32)], shake: f32, scale: f32, w: usize, h: usize) -> Option<Rect> {
+    footprint_checked(tool, pts, shake, scale, w, h).unwrap_or_else(|| panic!("non-finite brush footprint (gesture or tool parameters)"))
+}
+
+/// `footprint`, or None if it isn't finite.
+fn footprint_checked(tool: &Tool, pts: &[(f32, f32)], shake: f32, scale: f32, w: usize, h: usize) -> Option<Option<Rect>> {
     if pts.is_empty() {
-        return None;
+        return Some(None);
     }
     let s = scale;
     let px: Vec<(f32, f32)> = pts.iter().map(|&(x, y)| (x * s, y * s)).collect();
@@ -533,14 +588,23 @@ pub(crate) fn footprint(tool: &Tool, pts: &[(f32, f32)], shake: f32, scale: f32,
     // it, off = rb + 1; bounds padding off + 2; plus rounding
     let pad = shake_px + root + bend * 0.6 + (rb + 1.0) + 2.0 * (rb + 1.0) + 4.0;
     if !pad.is_finite() || !x0.is_finite() || !x1.is_finite() || !y0.is_finite() || !y1.is_finite() {
-        panic!("non-finite brush footprint (gesture or tool parameters)");
+        return None;
     }
     let c = |v: f32, n: usize| (v.max(0.0) as usize).min(n);
     let r = (c((x0 - pad).floor(), w), c((y0 - pad).floor(), h), c((x1 + pad).ceil() + 1.0, w), c((y1 + pad).ceil() + 1.0, h));
-    if r.2 <= r.0 || r.3 <= r.1 { None } else { Some(r) }
+    Some(if r.2 <= r.0 || r.3 <= r.1 { None } else { Some(r) })
 }
 
-/// SAFETY: no other thread may touch pixels in `footprint(..)` of `g`.
+/// The rectangle a stroke must stay in (whole-canvas pixels), for
+/// `exchange`: its planned footprint, or nothing at all.
+fn limit(r: Option<Option<Rect>>) -> Rect {
+    r.flatten().unwrap_or((0, 0, 0, 0))
+}
+
+/// SAFETY: no other thread may touch pixels in `footprint(..)` of `g`, and
+/// `held.tool` must pass `Tool::validate`. (Defense in depth: every pixel
+/// access is clamped to that footprint, and debug builds assert that the
+/// clamp never cuts anything.)
 pub(crate) unsafe fn drag_on(
     sf: Surf,
     held: &mut Held,
@@ -568,6 +632,7 @@ pub(crate) unsafe fn drag_on(
     let step = rb.max(1.25);
     let nsteps = ((total / step).ceil() as usize).max(1);
     let bend_len = tool.length * (0.25 + 0.75 * (1.0 - tool.stiffness));
+    let lim = limit(footprint_checked(&tool, &g.pts, g.shake, s, sf.fw, sf.fh));
 
     for b in &mut held.bristles {
         b.prev = [None, None];
@@ -603,7 +668,9 @@ pub(crate) unsafe fn drag_on(
         };
         let (st, ct) = theta.sin_cos();
         let half = tool.width * 0.5 * s * (0.45 + 0.55 * p) * (1.0 + tool.splay * (p - 0.5));
-        let rate = 1.0 - (-(step / s) / (bend_len + 1e-3)).exp();
+        // bend relaxes toward its target: a rate in 0..1 keeps it a blend of
+        // targets, within the reach `footprint` allows for
+        let rate = (1.0 - (-(step / s) / (bend_len.max(0.0) + 1e-3)).exp()).clamp(0.0, 1.0);
 
         for b in held.bristles.iter_mut() {
             let reach = (p - b.thresh) / (1.0 - b.thresh).max(1e-3);
@@ -624,7 +691,7 @@ pub(crate) unsafe fn drag_on(
             // one contact point: the belly-to-tip region of the bent bristle
             let cur = (root.0 + b.bend.0 * 0.6, root.1 + b.bend.1 * 0.6);
             let prev = b.prev[0].unwrap_or(cur);
-            unsafe { exchange(sf, b, &tool, prev, cur, rb, reach, full, None, clip, id, scratch, &mut bounds) };
+            unsafe { exchange(sf, b, &tool, prev, cur, rb, reach, full, None, clip, id, scratch, &mut bounds, lim) };
             b.prev[0] = Some(cur);
         }
     }
@@ -685,6 +752,7 @@ unsafe fn exchange(
     id: u32,
     wts: &mut Vec<f32>,
     bounds: &mut Bounds,
+    lim: Rect,
 ) {
     unsafe {
         // pixel coordinates are whole-canvas ones; buffer index of (x, y) is
@@ -715,6 +783,16 @@ unsafe fn exchange(
                 None => br.vol * (1.0 - (1.0 - (-travel / tool.run).exp()) * GHOST_TOUCH),
                 Some(v) => (br.vol - v.min(br.vol * 0.5) * GHOST_TOUCH).max(0.0),
             };
+            return;
+        }
+        // never outside the stroke's footprint: the scheduler runs strokes
+        // whose footprints don't overlap at once
+        debug_assert!(
+            x0 >= lim.0 && y0 >= lim.1 && x1 <= lim.2 && y1 <= lim.3,
+            "bristle contact ({x0},{y0},{x1},{y1}) outside the stroke footprint {lim:?}"
+        );
+        let (x0, y0, x1, y1) = (x0.max(lim.0), y0.max(lim.1), x1.min(lim.2), y1.min(lim.3));
+        if x1 <= x0 || y1 <= y0 {
             return;
         }
         let (mx, my) = if seg > 1e-4 { (dx / seg, dy / seg) } else { (0.0, 0.0) };
@@ -826,7 +904,9 @@ unsafe fn exchange(
                         let tx = px + (nx * side * 0.75 + mx * 0.45) * off;
                         let ty = py + (ny * side * 0.75 + my * 0.45) * off;
                         // (paint pushed out of a crop window stays put)
-                        if tx >= ox as f32 && ty >= oy as f32 && (tx as usize) < w.min(ox + sf.w) && (ty as usize) < h.min(oy + sf.h) {
+                        let inside = tx >= ox as f32 && ty >= oy as f32 && (tx as usize) < w.min(ox + sf.w) && (ty as usize) < h.min(oy + sf.h);
+                        debug_assert!(!inside || (tx >= lim.0 as f32 && ty >= lim.1 as f32 && (tx as usize) < lim.2 && (ty as usize) < lim.3), "plough target outside the stroke footprint {lim:?}");
+                        if inside && tx >= lim.0 as f32 && ty >= lim.1 as f32 && (tx as usize) < lim.2 && (ty as usize) < lim.3 {
                             let (tx, ty) = (tx as usize, ty as usize);
                             let j = (ty - oy) * bw_buf + tx - ox;
                             // a clipped stroke can't push paint past its mask:
@@ -942,6 +1022,11 @@ fn touch_rb(tool: &Tool, p: f32, s: f32) -> f32 {
 /// Every pixel `touch_on` may read or write for `t`, as a conservative
 /// end-exclusive rectangle clamped to the canvas (see `footprint`).
 pub(crate) fn touch_footprint(tool: &Tool, t: &Touch, scale: f32, w: usize, h: usize) -> Option<Rect> {
+    touch_footprint_checked(tool, t, scale, w, h).unwrap_or_else(|| panic!("non-finite touch footprint (touch or tool parameters)"))
+}
+
+/// `touch_footprint`, or None if it isn't finite.
+fn touch_footprint_checked(tool: &Tool, t: &Touch, scale: f32, w: usize, h: usize) -> Option<Option<Rect>> {
     let s = scale;
     let p = t.pressure.clamp(0.0, 1.0);
     let half = tool.width * 0.5 * s * (1.0 + tool.splay.abs() * 0.5);
@@ -951,16 +1036,17 @@ pub(crate) fn touch_footprint(tool: &Tool, t: &Touch, scale: f32, w: usize, h: u
     let (x0, y0) = (t.at.0 * s + t.drag.0.min(0.0) * s, t.at.1 * s + t.drag.1.min(0.0) * s);
     let (x1, y1) = (t.at.0 * s + t.drag.0.max(0.0) * s, t.at.1 * s + t.drag.1.max(0.0) * s);
     if !pad.is_finite() || !x0.is_finite() || !x1.is_finite() || !y0.is_finite() || !y1.is_finite() {
-        panic!("non-finite touch footprint (touch or tool parameters)");
+        return None;
     }
     let c = |v: f32, n: usize| (v.max(0.0) as usize).min(n);
     let r = (c((x0 - pad).floor(), w), c((y0 - pad).floor(), h), c((x1 + pad).ceil() + 1.0, w), c((y1 + pad).ceil() + 1.0, h));
-    if r.2 <= r.0 || r.3 <= r.1 { None } else { Some(r) }
+    Some(if r.2 <= r.0 || r.3 <= r.1 { None } else { Some(r) })
 }
 
 impl Canvas {
     /// Touch the canvas with the tip of a held brush (see `Touch`).
     pub fn touch(&mut self, held: &mut Held, t: &Touch, clip: Option<&Mask>) {
+        held.tool.assert_valid();
         if let Some(m) = clip {
             self.check_mask(m);
         }
@@ -975,7 +1061,9 @@ impl Canvas {
     }
 }
 
-/// SAFETY: no other thread may touch pixels in `touch_footprint(..)` of `t`.
+/// SAFETY: no other thread may touch pixels in `touch_footprint(..)` of `t`,
+/// and `held.tool` must pass `Tool::validate` (accesses are clamped to that
+/// footprint too, as in `drag_on`).
 pub(crate) unsafe fn touch_on(sf: Surf, held: &mut Held, t: &Touch, clip: Option<&Mask>, id: u32, scratch: &mut Vec<f32>) -> Bounds {
     let mut bounds: Bounds = None;
     let s = sf.scale;
@@ -985,6 +1073,7 @@ pub(crate) unsafe fn touch_on(sf: Surf, held: &mut Held, t: &Touch, clip: Option
     let (cx, cy) = (t.at.0 * s, t.at.1 * s);
     let (dx, dy) = (t.drag.0 * s, t.drag.1 * s);
     let rb = touch_rb(&tool, p, s);
+    let lim = limit(touch_footprint_checked(&tool, t, s, sf.fw, sf.fh));
     let dlen = (dx * dx + dy * dy).sqrt();
     let steps = (TOUCH_STEPS + (dlen / rb.max(1.0)).ceil() as usize).min(64);
     // press, hold, lift
@@ -1021,7 +1110,7 @@ pub(crate) unsafe fn touch_on(sf: Surf, held: &mut Held, t: &Touch, clip: Option
             let prev = b.prev[0].unwrap_or(cur);
             let fill = (b.vol / full).min(1.0);
             let v = film * fill * reach / sums[bi].max(1e-6);
-            unsafe { exchange(sf, b, &tool, prev, cur, rb, reach, full, Some(v), clip, id, scratch, &mut bounds) };
+            unsafe { exchange(sf, b, &tool, prev, cur, rb, reach, full, Some(v), clip, id, scratch, &mut bounds, lim) };
             b.prev[0] = Some(cur);
         }
     }

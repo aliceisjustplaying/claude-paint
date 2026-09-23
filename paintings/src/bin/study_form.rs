@@ -229,7 +229,7 @@ fn main() {
             }
         }
     }
-    o.end(&mut c);
+    o.end(&mut c, &mut ());
     c.relief(0.25, 0.02);
     o.save(&mut c);
 }

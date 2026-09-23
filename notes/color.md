@@ -77,19 +77,27 @@ st.glaze(0.9).color(umber)             // glazes mix by masstone (depth is load_
 st.broad().palette(&family)            // swap in a paint family, keep the medium
 ```
 
-- `Aim::Laid` (the default with a palette) expects
-  `1.1 × coverage × load × load_at` coats, clamped to 0.3–6. The 1.1 comes
-  from `wet::tests::probe_laid_thickness` (median film: broad 1.16 coats at
-  coverage 2.5 and load 0.4; body 1.71 at 2.5 and 0.56; detail 4.1; glaze
-  0.58). Fixed-paint handlings (`.paint(hiding, stiff)`, e.g. the brushed
-  ground) stay `Aim::Masstone` unless you call `.aim(coats)`.
+- `Aim::Laid` (the default with a palette) expects `Handling::laid_coats()`
+  × `load_at` coats: one stroke's film per unit of load (1.3 for filberts,
+  2.2 for rounds and riggers) times how many strokes overlap at a point that
+  gets paint, `c / (1 − e^−c)` for coverage `c`. The constants come from
+  `handling::tests::probe_laid_by_coverage` (median film where paint
+  landed, coverage 0.2–4, load 0.3 and 0.7). The old estimate,
+  `1.1 × coverage × load` floored at 0.3, expected 0.3 coats from sparse
+  marks that lay 1–1.7, so aimed piles overshot (see "Aim over contrasting
+  paint" below). Fixed-paint handlings (`.paint(hiding, stiff)`, e.g. the
+  brushed ground) stay `Aim::Masstone` unless you call `.aim(coats)`.
 - `Style::glaze` is `by_masstone()`. When a veil was aimed, aim compensated
   away the depth the painter varies with `load_at`, and the moonrise mist
   covered its spruces. Add `.aim(coats)` if you want a glaze aimed at a look.
-- **Robust judging.** A pile is scored over 0.5×, 1× and 2× the expected
-  thickness (weights ¼, ½, ¼; `AIM_SPREAD`), because a stroke lays paint
-  thin at its edges and thick where it starts. This favors piles that look
-  right however the brush lays them.
+- **Robust judging.** A pile is scored over 0.5×, 1×, 2× and 4× the
+  expected thickness (weights 0.2, 0.45, 0.25, 0.1; `AIM_SPREAD`), because a
+  stroke lays paint thin at its edges and thick where it starts. The 4× point
+  stands for the pile's own color where it lands thick. Two more terms: the
+  thin edge (0.25×) should lie on the way from the underlayer to the look
+  wanted (`AIM_THIN`: no red rim, no milky veil), and the pile's masstone
+  pays 0.12 per unit of a/b distance from the look wanted (`AIM_FAMILY`:
+  keep the pile in the family of the color asked for).
 - **Out-of-reach targets** come out as the nearest the painter can get, and
   `Mixture::error` reports the miss at the expected thickness. A transparent
   glaze cannot bring a dark up to a pale target. A lead-white or ochre veil
@@ -127,6 +135,37 @@ let p = c.aim(&pal, from_oklab(l), (x, y), r, 0.6, 0.6);
 `under` includes wet paint, so dots over a wet passage are judged against it.
 `Canvas::aim` takes `&self` and the palette caches behind a `Mutex`, so it is
 safe to call when planning marks in parallel (results are order-independent).
+
+## Aim over contrasting paint (round 3, branch `fixes-paint`)
+Amnesia round 2 (coast #1, #2, #13, #15; winter #14): thin light marks over
+cool darks dried orange or salmon; a fleck of bare ground under a stroke
+skewed its pile; thin edges showed their strongest tube; lead-white darks
+went milky. Four changes:
+- **The thickness model matches what marks lay** (`Handling::laid_coats`,
+  above). This was the largest error. Sparse marks were aimed as 0.3-coat
+  films and then laid 1–1.7 coats, so the pile over-compensated for the
+  dark.
+- **Judged along the stroke, robustly.** `stroke_under` samples nine discs
+  evenly along the path, weights them toward the start (where a loaded
+  brush lays most) and takes a weighted median per OKLab channel. The old
+  one averaged a few points in linear light, where one light fleck among
+  dark samples pulls the mean far toward it. `Canvas::aim` (hand marks) now
+  uses `Canvas::judge_under(x, y, r)`: the median of nine sub-discs across
+  the mark. `Canvas::under` is still the plain mean.
+- **Judged thick and at the thin edge** (`AIM_SPREAD`, `AIM_THIN`, above).
+- **Kept in the family of the color wanted** (`AIM_FAMILY`). Example from
+  `palette::tests::probe_contrast_aims`: a light touch `#9a8f80` over dark
+  sand `#3a3128` at 0.3 coats was lead white + red earth, masstone a +0.053
+  (salmon); now it is lead white + raw umber, a +0.011.
+
+Tests: `palette::tests::contrasting_aims_stay_in_family` (three light-over-dark
+cases at 0.3–1 coats: masstone and 4× look within 0.025 a/b of the target)
+and `handling::tests::light_marks_over_a_dark_stay_in_hue` (sparse detail and
+body marks over a dark sand lay-in with ground flecks: mean L miss 0.008–0.010,
+down from 0.049–0.050 under the old estimate; a/b miss ≤ 0.0054).
+
+Relative colors: `Handling::color_over` and `Stipple::color_over` hand the
+closure what is under the stroke. See `notes/strokes.md` and `notes/fixes_paint.md`.
 
 ## Tests (crates/paint)
 - `palette::canvas_tests::matched_marks_disappear` (a): dabs aimed at the
@@ -201,9 +240,11 @@ safe to call when planning marks in parallel (results are order-independent).
 - Mixing is inconsistent between palette and wet layer. The palette weights
   Mixbox by tinting strength; the wet layer (brush ↔ canvas) weights by
   volume. A strength per wet pixel would make them agree.
-- `Aim::Laid`'s thickness estimate is a single constant. The detail preset
-  lays ~4 coats vs a predicted 2.5, and dry-brush much less. Measuring each
-  tool's laid film once would be better.
+- `Aim::Laid`'s thickness estimate is a constant per brush kind (see above).
+  The glaze tool lays about half of the filbert figure; glazes mix by
+  masstone, so it only matters with `.aim(coats)`. Round brushes lay more
+  per load as coverage rises (2.0 → 3.4). If the pointed-tip brush changes
+  deposit, rerun `probe_laid_by_coverage`.
 - `Canvas::under` samples before a pass. Strokes in a pass don't see each
   other's wet paint while being planned; the thickness estimate covers the
   stacking.

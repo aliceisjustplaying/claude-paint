@@ -91,6 +91,8 @@ Handlings mixed from a palette aim at the *look* on the canvas by default
 and fixed paints use the paint's *masstone* instead (`notes/color.md`).
 
 Notes for the painter (read before writing a painting):
+- `crates/easel/README.md` – the easel: paint live in Lua, one chunk at a time,
+  looking as you go; the session is saved as a replayable program
 - `notes/workflow.md` – stages, crops, checkpoints, resuming, speed
 - `notes/strokes.md` – how handlings plan strokes
 - `notes/color.md` – what a color means: masstone, aimed mixing, hiding

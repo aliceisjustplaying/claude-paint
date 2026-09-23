@@ -22,6 +22,10 @@ is both the mask's edge and the path a brush follows.
     in broken stretches between quiet ones (rock), or rounded lobes in two
     sizes with lognormal widths, taller in groups (foliage, wool, a wood).
     Closed lines take their noise around a circle, so there is no seam.
+    Lobes of different heights share the dip where they meet, and a closed
+    line's first and last lobes share one, so the line has no step at a
+    join or at the seam (review 4, #8). Each lobe is a rounded bulge over
+    a baseline running straight from dip to dip.
   - Strokes: the hand lifts at corners and every so often between them. It
     leaves small gaps or overlaps the last stroke, sometimes runs past a
     corner (bending off a little), drifts slightly off the line and restates
@@ -87,7 +91,7 @@ pinna = body_of{spine={{px,py}, mid, tip}, widths={w*0.7, w, w*0.25}, char="soft
 
 Characters: `firm` (the default for `outline`), `searching`, `broken` and
 `soft` (the default for `body_of`). Options: `amount=` (irregularity
-×; 0 = a clean curve), `lobe=` (units), `edge=` (the mask's soft edge in
+×; 0 = a clean curve, also with an explicit `lobe=`), `lobe=` (units), `edge=` (the mask's soft edge in
 units; 0 = crisp), `size=` (the hand's scale), `corners=` (indices, `true`
 or `false`), `corner_angle=`, `closed=`/`open=`. Methods: `mask`, `below`,
 `above`, `band(w, taper)`, `inset(d)`, `offset(d)`, `paint(brush, {...})`,
@@ -148,6 +152,21 @@ What I saw, judged as a painter would:
   and the soft lobes become pinnules. It reads as dead bracken, not as a
   fishbone of strokes (the version with pinnae as single strokes did look
   like a fishbone).
+
+### Engine API changes (review 4)
+
+- `Character::irregularity` (1 by default) is the amplitude multiplier.
+  `Character::amount(k)` multiplies it and no longer rewrites the
+  amplitudes, so a lobe or facet set after `amount` is scaled too
+  (`amount=0` with `lobe=24` is a clean curve, #6).
+  `Character::applied()` returns the amplitudes as drawn. Outputs for
+  existing characters are unchanged: the same products are formed in the
+  same order.
+- `Outline::is_open()`: true if the outline has lines and none is closed.
+  An inset that consumes the shape has no lines. It is not open, and its
+  `mask` is empty, so `o:mask() - o:inset(d):mask()` keeps the shape
+  (#5). The Lua `:mask()` guard should test `is_open()` instead of "has
+  no closed line"; that binding is the easel fixer's.
 
 ## Known issues
 

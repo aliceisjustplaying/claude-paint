@@ -227,7 +227,7 @@ pub(crate) fn scalar_field(st: &S, v: &Value, b: (f32, f32, f32, f32), what: &st
     if let Value::UserData(u) = v
         && let Ok(n) = u.borrow::<Noise>()
     {
-        let n = n.clone();
+        let n = *n;
         return Ok(Box::new(move |x, y| n.get01(x, y)));
     }
     match v {

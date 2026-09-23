@@ -34,7 +34,7 @@ for i, ch in ipairs({"firm", "searching", "broken"}) do
   local m = o:mask()
   work(m, {hand="body", color=function(x, y) return mix("#a8a190", "#5e5a50", (y - 90)/170) end, angle=0.3, length={8, 25}, coverage=3, clip=m})
   -- a lit rim just inside the top edge: the mask minus its inset
-  local rim = (m - o:inset(7):mask()) * rect(0, 0, 1000, 150)
+  local rim = (m - o:inset(7):mask()) * rect(0, 0, 1000, 130):blur(25)
   work(rim, {hand="detail", color="#c4bba6", angle=0.2, length={4, 12}, coverage=2, clip=rim})
   line:load("#2e2b26", 0.9)
   o:paint(line, {pressure=1, dip={"#2e2b26", 0.8}, every=4})
@@ -53,18 +53,17 @@ work(rect(0, 425, 1000, 16), {hand="broad", color="#8e8c68", angle=0, coverage=2
 local function sheep(x, y, s, d, graze, seed)
   local function P(u, v) return {x + d*u*s, y + v*s} end
   local head = graze and {P(12, -4), P(14.5, 0)} or {P(12, -10), P(15, -9)}
-  local o = body_of{spine={P(-13, -7), P(-4, -8), P(6, -8), head[1], head[2]}, widths={8*s, 10*s, 8.5*s, 3.6*s, 2.4*s},
+  local spine, widths = {P(-13, -7), P(-4, -8), P(6, -8), head[1], head[2]}, {8*s, 10*s, 8.5*s, 3.6*s, 2.4*s}
+  local o = body_of{spine=spine, widths=widths,
     limbs={{P(-10, -5), P(-10.5, 2), widths={1.3*s, 0.9*s}}, {P(-7, -5), P(-7.3, 2.2), widths={1.3*s, 0.9*s}},
            {P(4, -5), P(4.4, 1.8), widths={1.2*s, 0.9*s}}, {P(7, -5), P(7.6, 2), widths={1.2*s, 0.9*s}}},
     char="soft", seed=seed}
+  -- the fleece: the same spine without the head, a little fuller
+  local fleece = body_of{spine={spine[1], spine[2], spine[3]}, widths={8.4*s, 10.4*s, 9*s}, char="soft", seed=seed + 50}:mask() * o:mask()
   local m = o:mask()
-  work(m, {hand="body", color=function(px, py) return mix("#dcd6c2", "#8d8878", (py - y + 12*s)/(9*s)) end, angle=0, length={3, 8}, coverage=3, tool="round 2.5", clip=m})
-  -- legs and head darker: the mask cut by two rectangles
-  local legs = m * rect(x - 16*s, y - 4.2*s, 32*s, 8*s)
-  local hx = d > 0 and x + 9.5*s or x - 20*s
-  local headm = m * rect(hx, y - 14*s, 10.5*s, 16*s)
-  local dark = legs + headm
+  local dark = m - fleece
   work(dark, {hand="body", color="#3d3830", angle=1.5, length={3, 8}, coverage=3, tool="round 1.5", clip=dark})
+  work(fleece, {hand="body", color=function(px, py) return mix("#dcd6c2", "#8d8878", (py - y + 12*s)/(9*s)) end, angle=0, length={3, 8}, coverage=3, tool="round 2.5", clip=fleece})
   local lb = brush{kind="round", width=1.6}
   lb:load("#3a362e", 0.9)
   o:paint(lb, {pressure=0.7, dip={"#3a362e", 0.8}, every=3})

@@ -57,3 +57,11 @@ spectral) is split into single-defect fixes the loops pull in.
 - loop2-grain: grain gone (coarse anisotropy 7.4-8.5 -> 2.2-2.8) but new 1-px orange dotted contours in thin skies at 3200 and strong swirl; NOT merged; resumed to fix the dashes' root cause and calm the swirl.
 - tool-firs merged: firs grown into drawn envelopes + receding fir woods (easel fir{}, fir_wood{}); sketchbook §5 recipe.
 - Loop 5 started 20:37: loop5-near (repaint wood/spruce with fir tools, from loop 3), tool-oak (trees grown into drawn crowns), tool-rock (rocks from drawn outlines). loop2-grain-2 still on the dashes (and glaze dotted loops over turf are the same family).
+- User (after loop 5): critics should be a PANEL of google/gemini-3.8-flash and
+  openai-codex/gpt-6-astra (better vision than Claude); 2 + 2 per batch, medians
+  overall and per family. Also: user is "of two minds" about structure tools
+  (fir/oak/rock grow into drawn outlines; they don't paint, the painter does):
+  finish this round, look at the output, decide then.
+- Rest of round 5: tool-oak, tool-rock (+ grain fix if clean) land; one more loop
+  per painting (near: rock + stump patch; green: oak); panel judging; stop and
+  show before/after with the score history.

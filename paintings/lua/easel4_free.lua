@@ -205,16 +205,29 @@ up3 = outline{{588,400,"c"},{607,399,"c"},{615,414},{612,437,"c"},{592,438,"c"},
 fall = outline{{627,442,"c"},{636,430},{656,425,"c"},{671,431},{677,442,"c"}, char="broken", seed=9}
 stones = {cap, up1, up2, up3, fall}
 local sn = noise{seed=44, octaves=5, period=14}
+local planes = {0.08, 1.5, 1.55, 1.45, 0.15}
 for i, o in ipairs(stones) do
   local m = o:mask()
-  local base = (o == up2) and "#262221" or "#312d2b"
-  work(m, {hand="body", tool="filbert 3", color=function(x, y) return mix(base, "#3d3734", 0.7*sn:at01(x, y)) end,
-    angle=function(x, y) return 0.4 + 1.2*sn(x, y) end, length={3, 9}, coverage=3.4, medium=0.15, pal=landpal, clip=m})
+  local base = (o == up2) and "#262221" or "#302c2a"
+  work(m, {hand="body", tool="filbert 3", color=function(x, y) return mix(base, "#3b3532", 0.6*sn:at01(x, y)) end,
+    angle=planes[i], angle_jitter=0.25, length={5, 14}, coverage=3.4, medium=0.15, pal=landpal, clip=m})
+  blend(m:shrink(1), {angle=planes[i], clip=m, coverage=1.2})
+  stipple(m:shrink(0.8), {width=0.9, color="#4b4648", coverage=0.5, pressure={0.2, 0.5}, fade=0, aim=false, pal=landpal, clip=m})
+  stipple(m:shrink(0.8), {width=0.9, color="#1b1817", coverage=0.4, pressure={0.2, 0.5}, fade=0, aim=false, pal=landpal, clip=m})
 end
 local m = cap:mask()
-local top = mask(function(x, y) return clamp(m:at(x, y) - m:at(x, y - 4), 0, 1) end):soften(0.6) * m * below(function(x) return 360 end) * above(function(x) return 392 end)
-work(top, {hand="detail", tool="round 1.2", color=function(x, y) return mix("#4b4850", "#5d5862", sn:at01(x, y)) end,
-  angle=0.08, angle_jitter=0.5, length={4, 10}, coverage=1.6, medium=0.2, pal=landpal, clip=m, broken=0.5})
+-- the capstone's top plane, a band lit by the zenith, fading down into the front face
+local top = mask(function(x, y) return clamp(m:at(x, y) - m:at(x, y - 7), 0, 1) end):soften(1.2) * m
+work(top, {hand="body", tool="filbert 2", color=function(x, y) return mix("#48454b", "#57525a", sn:at01(x, y)) end,
+  angle=0.08, angle_jitter=0.2, length={5, 14}, coverage=2, medium=0.2, pal=landpal, clip=m})
+blend(top:grow(1.5), {angle=0.08, clip=m, coverage=1})
+-- cracks and the shadowed underside of the capstone
+local ck = brush("round", 0.8); ck:load("#191615", 0.9, {pal=landpal})
+ck:stroke({{548,371},{551,380},{549,389},{553,398}}, {pressure={0.5, 0.2}, shake=0.5})
+ck:stroke({{590,372},{596,381},{594,388}}, {pressure={0.4, 0.1}, shake=0.5})
+ck:stroke({{595,405},{598,418},{596,430}}, {pressure={0.4, 0.1}, shake=0.5})
+local under = mask(function(x, y) return clamp(m:at(x, y) - m:at(x, y + 4), 0, 1) end):soften(1) * m
+work(under, {hand="detail", tool="round 1.4", color="#221e1d", angle=0.05, length={4, 12}, coverage=1.8, pal=landpal, clip=m})
 
 --@ chunk 10 · clock 2160
 local tp = {}
@@ -366,7 +379,7 @@ local vig = mask(function(x, y)
 end)
 glaze(vig, {color="#2e2622", coats=0.4})
 
---@ chunk 17 · clock 48492.05859375
+--@ chunk 17 · clock 46384.40625
 local fgn = noise{seed=131, octaves=3, period=60}
 local busy = pathm:grow(2) + rockA:mask():grow(3) + rockB:mask():grow(3) + rockC:mask():grow(3)
 -- tufts of dry grass: fine upturning strokes, a few blades lit by the sky
@@ -419,5 +432,5 @@ print(tuftn, "tufts")
 local fd = brush("round", 1.2); fd:load("#1c1716", 0.8, {pal=landpal})
 fd:stroke({{250,647.6},{272,642},{300,639.2},{332,630.4}}, {pressure={0.6, 0.25}})
 
---@ chunk 18 · clock 48492.05859375
-wait(24*60); varnish{color="#e6d3a4", coats=0.3, vary=0.1}; relief()
+--@ chunk 18 · clock 46384.40625
+wait(24*60); varnish{color="#e6d3a4", coats=0.3, vary=0.1}; relief(0.08)

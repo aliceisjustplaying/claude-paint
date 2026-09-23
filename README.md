@@ -69,6 +69,11 @@ Engine (`crates/paint`):
   faces (`Ridge`), lit with cast shadows. It gives per-point planes, light
   and shadow families, fall lines and masks for parts, facets, silhouettes
   and edges. It paints nothing: `notes/form.md`
+- `scene` – one world, one sun: a camera (horizon, ground plane, scale at
+  depth), ground and water, bodies placed on the ground, cast shadows traced
+  along the sun, contact seams, mirror images in still or rippled water,
+  ribbons and spacing that recede. Every `Form` in it is lit alike. It
+  paints nothing: `notes/scene.md`
 - `canvas` – glazes, relief lighting, dithered PNG out
 - `growth` – how trees grow (buds, light, vigor, pipe-model widths, decline):
   returns a skeleton of limbs, including which parts are dead wood;
@@ -103,6 +108,7 @@ Notes for the painter (read before writing a painting):
 - `notes/color.md` – what a color means: masstone, aimed mixing, hiding
 - `notes/stipple.md` – stippling
 - `notes/form.md` – solids, light, shadow and the masks they give
+- `notes/scene.md` – one world and one sun: placing things, shadows, contact, reflections, perspective
 - `notes/motifs.md` – trees, spruces, figures
 
 Viewing renders

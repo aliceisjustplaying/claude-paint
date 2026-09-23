@@ -279,29 +279,52 @@ work(near, {hand="hatch", tool="round 2.2", length={4, 11}, coverage=2.6, color=
 
 --@ chunk 13 · clock 3120
 wait(6*60)
-rockA = outline{{58,668,"c"},{66,634},{92,612,"c"},{130,604},{168,614,"c"},{190,640},{196,668,"c"},{130,676}, char="broken", seed=101}
-rockB = outline{{182,672,"c"},{190,652},{214,644,"c"},{240,650},{252,672,"c"}, char="broken", seed=102}
-rockC = outline{{818,622,"c"},{826,606},{848,600,"c"},{866,608},{872,624,"c"}, char="broken", seed=103}
+rockA = outline{{50,672,"c"},{55,650},{68,630,"c"},{96,613},{126,606,"c"},{160,609},{183,621,"c"},{194,645},{199,672,"c"}, char="broken", seed=101}
+rockB = outline{{190,673,"c"},{195,658},{210,648,"c"},{232,647},{246,656,"c"},{254,673,"c"}, char="broken", seed=102}
+rockC = outline{{818,623,"c"},{823,610},{840,602,"c"},{860,604},{870,614,"c"},{874,624,"c"}, char="broken", seed=103}
 local rn = noise{seed=104, octaves=5, period=12}
-for _, o in ipairs({{rockA, 604, 72}, {rockB, 644, 28}, {rockC, 600, 24}}) do
-  local m = o[1]:mask()
-  local top, h = o[2], o[3]
-  local col = function(x, y)
-    local u = smoothstep(0, 1, (y - top) / (h * 0.8) + 0.25*rn(x, y))
-    return mix(mix("#57535a", "#4a4546", rn:at01(x*2, y)), mix("#262220", "#302a27", rn:at01(x, y)), u)
+local rocks = {
+  {o=rockA, top={{60,640},{70,628},{96,612},{126,605},{160,608},{184,620},{188,630},{150,632},{110,636},{80,640}}, left={{50,672},{55,648},{70,628},{80,640},{84,672}}, crack={{128,636},{131,648},{128,660},{131,671}}},
+  {o=rockB, top={{195,660},{210,647},{232,646},{247,656},{230,659},{210,661}}, left={{190,673},{195,658},{205,660},{207,673}}, crack={{226,660},{228,672}}},
+  {o=rockC, top={{822,612},{840,601},{860,603},{870,613},{850,614},{832,615}}, left={{818,623},{823,610},{830,614},{832,624}}, crack={{848,614},{849,623}}},
+}
+for _, r in ipairs(rocks) do
+  local m = r.o:mask()
+  work(m, {hand="body", tool="filbert 3", color=function(x, y) return mix("#262120", "#2f2926", rn:at01(x, y)) end,
+    angle=1.45, angle_jitter=0.2, length={4, 12}, coverage=3.4, medium=0.15, pal=landpal, clip=m})
+  local lf = poly(r.left, true) * m
+  work(lf, {hand="body", tool="filbert 2", color="#36302d", angle=1.2, angle_jitter=0.2, length={4, 10}, coverage=2.4, medium=0.15, pal=landpal, clip=m})
+  local tp = poly(r.top, true):soften(1.5) * m
+  local y0 = r.top[3][2]
+  work(tp, {hand="body", tool="filbert 2", color=function(x, y) return mix("#5a5560", "#433f45", clamp((y - y0) / 24, 0, 1)) end,
+    angle=0.1, angle_jitter=0.2, length={5, 14}, coverage=2.6, medium=0.18, pal=landpal, clip=m})
+  blend(m:shrink(1), {angle=0.1, clip=m, coverage=1})
+  stipple(m:shrink(0.8), {width=0.9, color="#57525a", coverage=0.35, pressure={0.2, 0.5}, fade=0, aim=false, pal=landpal, clip=m})
+  stipple(m:shrink(0.8), {width=0.9, color="#181514", coverage=0.35, pressure={0.2, 0.5}, fade=0, aim=false, pal=landpal, clip=m})
+  local ck = brush("round", 0.9); ck:load("#161312", 0.9, {pal=landpal})
+  ck:stroke(r.crack, {pressure={0.55, 0.15}, shake=0.6})
+  -- grass over the foot
+  local g = brush("rigger", 0.7)
+  local pts = r.o:paths()[1]
+  local k = 0
+  for i = 1, #pts, 2 do
+    local p = pts[i]
+    if p[2] > r.top[1][2] + 8 and rand() < 0.7 then
+      if k % 6 == 0 then g:reload(k % 12 == 0 and "#3d342c" or "#221c19", 0.7, {pal=landpal}) end
+      local h = rand(4, 11)
+      local lean = randn(0, 0.35)
+      g:stroke({{p[1] + rand(-2, 2), p[2] + rand(1, 3)}, {p[1] + lean * h * 0.4, p[2] - h * 0.5}, {p[1] + lean * h, p[2] - h}}, {pressure={0.5, 0}, ramps={0.05, 0.7}})
+      k = k + 1
+    end
   end
-  work(m, {hand="body", tool="filbert 4", color=col, angle=function(x, y) return 0.2 + 0.9*rn(x, y) end,
-    length={4, 12}, coverage=3.6, medium=0.15, pal=landpal, clip=m})
-  work(m:shrink(1.5), {hand="detail", tool="round 1.4", color_over={shift={-0.04, 0, -0.005}}, angle=function(x, y) return 1.2 + rn(x, y) end,
-    length={3, 8}, coverage=0.8, broken=0.5, pal=landpal, clip=m})
 end
--- lichen flecks on the big stone
-stipple(rockA:mask():shrink(3) * above(function(x) return 640 end), {width=1.4, color="#57584a", coverage=0.35, pressure={0.3, 0.6}, fade=0, aim=false, pal=landpal})
+-- lichen on the big stone's lit top
+stipple(poly(rocks[1].top, true) * rockA:mask():shrink(3), {width=1.2, color="#5f6250", coverage=0.25, pressure={0.3, 0.6}, fade=0, aim=false, pal=landpal})
 -- junipers on the right flat, dark columns
 junipers = {}
-for i, j in ipairs({{722,470,26,9},{738,474,16,7},{930,468,20,8}}) do
+for i, j in ipairs({{722,471,24,6},{733,473,15,5},{930,469,19,5.5}}) do
   local x, y, h, r = j[1], j[2], j[3], j[4]
-  local o = outline{{x - r, y}, {x - r*0.8, y - h*0.5}, {x - r*0.3, y - h*0.95}, {x + r*0.2, y - h}, {x + r*0.7, y - h*0.55}, {x + r, y}, char="soft", lobe=3, seed=110 + i}
+  local o = outline{{x - r, y}, {x - r*0.9, y - h*0.4}, {x - r*0.45, y - h*0.8}, {x, y - h, "c"}, {x + r*0.5, y - h*0.72}, {x + r*0.95, y - h*0.35}, {x + r, y}, char="soft", lobe=2, seed=110 + i}
   junipers[i] = o
   local m = o:mask()
   work(m, {hand="hatch", tool="round 1.2", color=function(x, y) return mix("#23241f", "#2f2e28", rn:at01(x, y)) end,
@@ -375,11 +398,11 @@ local vig = mask(function(x, y)
   local fg = smoothstep(HZ + 20, H + 40, y)
   local ex = math.max(0, math.abs(x - 560) / 560 - 0.5) / 0.5
   local ey = math.max(0, (120 - y) / 120)
-  return clamp(0.6 * fg + 0.25 * ex^2 * smoothstep(HZ - 80, HZ + 60, y) + 0.12 * ey^2 + 0.08 * ex^2, 0, 1)
+  return clamp(0.42 * fg + 0.25 * ex^2 * smoothstep(HZ - 80, HZ + 60, y) + 0.12 * ey^2 + 0.08 * ex^2, 0, 1)
 end)
 glaze(vig, {color="#2e2622", coats=0.4})
 
---@ chunk 17 · clock 47293.31640625
+--@ chunk 17 · clock 41762.49609375
 local fgn = noise{seed=131, octaves=3, period=60}
 local busy = pathm:grow(2) + rockA:mask():grow(3) + rockB:mask():grow(3) + rockC:mask():grow(3)
 -- tufts of dry grass: fine upturning strokes, a few blades lit by the sky
@@ -432,7 +455,7 @@ print(tuftn, "tufts")
 local fd = brush("round", 1.2); fd:load("#1c1716", 0.8, {pal=landpal})
 fd:stroke({{250,647.6},{272,642},{300,639.2},{332,630.4}}, {pressure={0.6, 0.25}})
 
---@ chunk 18 · clock 47293.31640625
+--@ chunk 18 · clock 41762.49609375
 -- where the track runs, point and direction at a fraction t of its length
 TW = {150, 118, 84, 56, 36, 24, 15, 9, 5, 3}
 function track(t, off)
@@ -468,7 +491,7 @@ puddles = pud
 work(pud:grow(1.2) - pud, {hand="detail", tool="round 1.2", color="#1f1a17", angle=0, length={2, 6}, coverage=2, pal=landpal})
 work(pud, {hand="broad", tool="flat 3", color=function(x, y)
     local t = clamp((y - 540) / 150, 0, 1)
-    return mix("#a28a72", "#5f6778", t) end, angle=0, length={4, 12}, coverage=3, medium=0.3, pal=skypal, clip=pud})
+    return mix("#9a846e", "#565c6b", t) end, angle=0, length={4, 12}, coverage=3, medium=0.3, pal=skypal, clip=pud})
 blend(pud, {angle=0, clip=pud})
 -- one bright streak of the glow in the farthest pools
 local gl = brush("round", 0.8)
@@ -496,5 +519,5 @@ for i = 1, 260 do
 end
 print(n, "blades")
 
---@ chunk 19 · clock 47293.31640625
+--@ chunk 19 · clock 41762.49609375
 wait(24*60); varnish{color="#e6d3a4", coats=0.3, vary=0.1}; relief(0.08)

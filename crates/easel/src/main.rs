@@ -10,6 +10,7 @@
 
 mod api;
 mod form;
+mod world;
 mod look;
 mod session;
 

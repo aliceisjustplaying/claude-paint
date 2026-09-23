@@ -1,5 +1,5 @@
--- easel session "l3_near": a painting replayed chunk by chunk.
---   easel run paintings/lua/l3_near.lua [--width 3200]
+-- easel session "l4_near": a painting replayed chunk by chunk.
+--   easel run paintings/lua/l4_near.lua [--width 3200]
 -- Each "--@ chunk" line starts one chunk as it was run at the easel (clock = painting minutes).
 
 --@ chunk 1 · clock 0
@@ -638,4 +638,33 @@ work(pale, {hand="hatch", tool="round 1.6", length={2, 6}, coverage=3, clip=inne
 print(pale:area())
 
 --@ chunk 23 · clock 153278.54296875
+dry()
+-- the wood recedes: the edge runs away from me down to the clearing, and the air of the winter
+-- afternoon lies between; the far end of the wood goes grayer and bluer, the near corner keeps its
+-- near-black, and a low mist hangs among the trunks at the foot so the wood doesn't stand on the
+-- snow like a cut-out
+local wm = woodm * -ysm * -v:visible("bodies")
+local air = noise{seed=231, period=60, warp={40, 12}}
+local haze = function(x, y) return mix("#67717a", "#8d959c", smoothstep(150, 350, y)) end
+wveil = function(x, y)
+  local far = smoothstep(120, 640, x)
+  local foot = smoothstep(270, 350, y)
+  return clamp((0.06 + 0.46 * far ^ 1.3 + 0.32 * foot) * (0.8 + 0.4 * air:at01(x, y)), 0, 0.7)
+end
+work(wm, {hand="body", tool="round 2", length={4, 11}, medium=0.45, load=0.55, coverage=2.6, hug=false, angle=math.pi/2, angle_jitter=0.3, clip=wm,
+  color_over=function(x, y, under) return mix(under, haze(x, y), wveil(x, y)) end})
+print(wm:area())
+
+--@ chunk 24 · clock 169389.970703125
+-- the veil fused while wet, so the air lies over the wood as one film, not as flecks
+blend(woodm * -ysm * -v:visible("bodies"), {angle=math.pi/2, angle_jitter=0.2, clip=woodm * -ysm * -v:visible("bodies")})
+
+--@ chunk 25 · clock 169389.970703125
+dry()
+-- the bank at the stone foot faces me, away from a sun low on the left and behind: it is not lit
+-- as brightly as the open field, so it and the snow caught in the grain of the stone low down go a
+-- half-step down and cooler, and the white rim round the foot goes out
+glaze(footd:blur(2.5), {color="#8a8fa8", coats=0.26})
+
+--@ chunk 26 · clock 189924.08203125
 wait(24*60); varnish{color="#e6d3a4", coats=0.3, vary=0.1}; relief()

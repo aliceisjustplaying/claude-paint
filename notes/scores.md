@@ -56,3 +56,18 @@ critics drift by up to ±7 across batches (loop 1 near scored 26 in loop 1,
 Deltas: near +1 (all three critics), green 0 (better sky, worse surface).
 Running near: 22 (loop 0) → loop 1 → loop 2 → loop 3, each step positive in
 its own batch.
+
+## Loop 4 (three critics; raw: notes/review_scores_loop4_raw.md)
+
+| painting | version | 4a | 4b | 4c | **median** | worst defect (majority) |
+|---|---|---|---|---|---|---|
+| green | loop 3 rework | 20 | 20 | 22 | **20** | the oak: umbrella/topiary of stamped foliage blobs; generic foreground |
+| green | loop 2 | 18 | 18 | 20 | 18 | glowing halos (cut-out masks) |
+| near | loop 4 rework | 23 | 20 | 20 | **20** | the wood a vertically streaked smear; boulder seam and white rim |
+| near | loop 3 | 24 | 20 | 19 | 20 | boulder seam; stamped fir; hard snow ledge under the wood |
+| coast | anchor | 26 | 23 | 25 | 25 | even craquelure like a filter (old round-2 cracks) |
+
+Deltas: green +2 (all three); near 0 (split: -1, 0, +1): loop 4 REJECTED,
+loop 3 stays near's best. Craft-only loops on near are flattening (+3, +3,
++1, 0): its remaining defects (loaf boulder with a seam, the wood, the fir)
+are tool-level. Green's remaining worst: the oak (topiary) = tool-level too.

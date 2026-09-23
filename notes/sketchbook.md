@@ -500,6 +500,20 @@ The foreground is where every round fell shortest of Friedrich. Budget real time
   An ellipsoid boulder shades the ground under its own lit belly: subtract below its foot
   line there. [loop 3 near, +1]
 
+- **Removing halos from an existing log** (loop 3 green +2): replace every `- X:grow(n)`
+  in veil and glaze masks with `- X` (the exact motif mask); blur a veil's mask first and
+  cut the motifs after the blur, never before. `oak:mask()` is larger than the painted
+  wood: cut with the painted limbs' own mask. Close a remaining fringe with a small-brush
+  repaint just outside the motif (round 1.6, lengths 2–6, coverage 3, medium 0.25,
+  `clip=-M`), each stroke's color sampled ~11 units farther out. Check halos at 3200: they
+  can be clean at 1000. [loop 3 green]
+- *Pitfall:* at 3200 a `glaze()` over heavily stroked turf pools into dotted loops and
+  dashes (a tool issue being fixed); a brush veil with `color_over` over a detailed area
+  blurs the detail away. [loop 3 green]
+- *Tried and rejected (loop 4 near, 0):* a distance-graded veil + wet blend over a black
+  wood gave air but smeared it into vertical streaks and lost the trunks. Use `fir_wood{}`
+  instead (section 5).
+
 ## 14. Habits of looking
 
 - **Look after every chunk** (`easel do --look`). A third of round 3's chunks were undone;

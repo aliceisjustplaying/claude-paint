@@ -239,6 +239,15 @@ function share a shape, and tiers come out as symmetric chevrons [r4 near]. Vary
   crown width 0.18–0.32 of height, some twin spires. *Pitfall (critics):* symmetric
   stacked tiers with a white edge on every tier read as a Christmas card; Friedrich's
   firs are short hatched strokes. [loop 2 near, loop 2 critics]
+- **Replacing a hand-made wood with `fir_wood{}` in an existing log** (loop 5 near, +1):
+  reuse the old skyline, give it a wavy foot line and keep the old mask's name
+  (`woodm = wood:mask()`) so later chunks still run; then drop every chunk that patched
+  the old interior. Snow at a wood's foot without a ledge: the foot outline's
+  `below(H)` with a noise-varied fade depth (`392 + 26*n`, ±18), colored with the wood's
+  cool cast shade mixed into the sampled field; snow on the wood only on sun-side
+  strokes of the front row: `wood:paint(b, 1, {kind="top", lit={0.62, 1}, every=5})`.
+  [loop 5 near]
+
 ## 6. Rocks and stones
 
 *Ceiling:* stones read as loaves, eggs or stacked masonry; snow on stone reads as blotches or lichen.

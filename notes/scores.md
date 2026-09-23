@@ -71,3 +71,15 @@ Deltas: green +2 (all three); near 0 (split: -1, 0, +1): loop 4 REJECTED,
 loop 3 stays near's best. Craft-only loops on near are flattening (+3, +3,
 +1, 0): its remaining defects (loaf boulder with a seam, the wood, the fir)
 are tool-level. Green's remaining worst: the oak (topiary) = tool-level too.
+
+## Loop 5 (three critics; raw: notes/review_scores_loop5_raw.md)
+
+| painting | version | 5a | 5b | 5c | **median** | worst defect (majority) |
+|---|---|---|---|---|---|---|
+| near | loop 5 (fir_wood{}, fir{}) | 19 | 22 | 22 | **22** | pale rectangular snow patch around the stump with a hard edge (all three); boulder seam; shadows disagree |
+| near | loop 3 (best) | 17 | 24 | 21 | 21 | flat black-green wood block; Christmas-tree fir |
+| coast | anchor | 24 | 26 | 26 | 26 | even crackle overlay; stamped pebbles; schematic net |
+
+Delta near +1 (split: +2, -2, +1): loop 5 accepted as near's best; the fir
+tools' wood reads "better drawn". Next for near: the stump's rect() patch
+(craft), the boulder (waits for tool-rock).

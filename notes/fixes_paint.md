@@ -75,6 +75,8 @@ All three studies are at 1000px, base (06e24b4) vs this branch, in
 - Ground flecks *inside* dark passages come from the bristle model
   ploughing paint off the weave's peaks (bristle.rs, not changed here).
   They go away at coverage ≈ 4 or over a dark underpainting.
+  (Later measured otherwise: they are gaps between strokes, fixed by the
+  look-and-fill pass; see notes/surface.md §1.)
 - More paint lands within a brush width past an unclipped edge (more
   strokes near the edge). Beyond a brush width it is about unchanged.
   Hidden-layer leaks (mountains #9) are less likely with full edges and a
@@ -105,6 +107,6 @@ All three studies are at 1000px, base (06e24b4) vs this branch, in
   light paint over a dark dry darker, as they physically do). The test now
   judges value on the body of marks (> 2 coats) at 500px with a 0.05 bound
   for pointed detail marks (0.025 for body).
-- **Open**: the aim picks one pile for one expected thickness. A painter at
+- **Open** (done in notes/surface.md §2, `Palette::aim_for`): the aim picks one pile for one expected thickness. A painter at
   viewing distance sees a mark's average look; aim at the thickness-weighted
   mean appearance over the mark's expected thickness distribution instead.

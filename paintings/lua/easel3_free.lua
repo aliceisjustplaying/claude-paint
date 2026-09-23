@@ -169,3 +169,62 @@ local function paint_tree(t, dark, mid)
   return n
 end
 print(paint_tree(oakA, "#27241f", "#3d3830"), paint_tree(oakB, "#2c2924", "#433e36"))
+
+--@ chunk 12 · clock 3150
+
+local tw = brush("rigger", 0.5)
+local n = 0
+for ti, t in ipairs({oakA, oakB}) do
+  for i, l in ipairs(t.limbs) do
+    if l.order >= 2 and #l.pts >= 2 and l.w[#l.w] < 1.0 then
+      local k = (ti == 1) and 3 or 2
+      for j = 1, k do
+        local p = l.pts[math.max(1, #l.pts - math.random(0, math.min(3, #l.pts - 1)))]
+        local q = l.pts[#l.pts]
+        local a = math.atan(q[2] - l.pts[1][2], q[1] - l.pts[1][1]) + randn(0, 0.7)
+        local len = rand(5, 14) * (ti == 1 and 1 or 0.8)
+        local mid = {p[1] + math.cos(a) * len * 0.5 + randn(0, 1), p[2] + math.sin(a) * len * 0.5 + randn(0, 1)}
+        local a2 = a + randn(0, 0.6)
+        local tip = {mid[1] + math.cos(a2) * len * 0.5, mid[2] + math.sin(a2) * len * 0.5}
+        if n % 12 == 0 then tw:reload("#35312b", 0.8) end
+        tw:stroke({p, mid, tip}, {pressure={0.55, 0.0}, ramps={0.05, 0.7}, clip=behind})
+        n = n + 1
+      end
+    end
+  end
+end
+print(n)
+
+--@ chunk 13 · clock 3150
+
+seaclip = seam - landm:grow(1)
+glaze(seaclip * mask(function(x, y) return smoothstep(HZ - 10, HZ + 120, y) end), {color="#2a3350", coats=0.16, pigment="transparent"})
+
+--@ chunk 14 · clock 3150
+gclip = seaclip - (oakA:mask() + oakB:mask()):grow(1.5)
+
+
+local lt, dk = brush("rigger", 0.9), brush("round", 1.6)
+local y = HZ + 1.5
+local n = 0
+while y < 575 do
+  local d = y - HZ
+  local cnt = math.floor(rand(2, 5) + d * 0.03)
+  for j = 1, cnt do
+    local x = rand(-40, 1040)
+    local len = rand(6, 45) * (0.5 + d / 90) * (math.random() < 0.15 and 2.2 or 1)
+    local glow = math.exp(-((x - SUNX) / 230)^2)
+    local yy = y + randn(0, 0.4)
+    if math.random() < 0.45 + 0.3 * glow then
+      local c = mix(seacol(x, yy), skycol(x, HZ - d * 2.2 - 10), 0.45 + 0.3 * glow)
+      if n % 4 == 0 then lt:reload(c, rand(0.3, 0.6)) end
+      lt:stroke({{x, yy}, {x + len * 0.5, yy + randn(0, 0.3)}, {x + len, yy}}, {pressure={0.1, 0.35 + 0.3 * d / 100}, ramps={0.4, 0.4}, clip=gclip})
+    else
+      if n % 4 == 1 then dk:reload(mix(seacol(x, yy), "#1b2030", 0.45), 0.6) end
+      dk:stroke({{x, yy}, {x + len * 0.5, yy + randn(0, 0.3)}, {x + len, yy}}, {pressure={0.1, 0.3 + 0.4 * d / 100}, ramps={0.4, 0.4}, clip=gclip})
+    end
+    n = n + 1
+  end
+  y = y + 1.2 + d * 0.055 + rand(0, 1)
+end
+print(n)

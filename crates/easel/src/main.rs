@@ -506,3 +506,113 @@ fn run(args: &[String]) -> Result<(), String> {
     }
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    //! The live server's command path (`Server::handle`), where the overlay
+    //! store is live and taken-out code goes to the undone file.
+    use super::*;
+
+    /// Removes a test session's log and directory, before and after.
+    struct Scratch(String);
+    impl Drop for Scratch {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_file(log_path(&self.0));
+            let _ = std::fs::remove_dir_all(session_dir(&self.0));
+        }
+    }
+
+    fn server(name: &str) -> (Server, Scratch) {
+        let g = Scratch(format!("test-{name}"));
+        let _ = std::fs::remove_file(log_path(&g.0));
+        let _ = std::fs::remove_dir_all(session_dir(&g.0));
+        let mut s = Session::new(160, 8).unwrap();
+        s.keep = edit::CHECKPOINTS;
+        look::begin(&s.lua, "resume");
+        let mut srv = Server { name: g.0.clone(), s, frames: false, written: None, crops: crop::Crops::default() };
+        srv.handle("do", &[], "canvas{aspect=1.4, seed=1}").unwrap();
+        (srv, g)
+    }
+
+    fn overlay(srv: &Server) -> (Vec<String>, String) {
+        let (m, from) = look::marks(&srv.s.lua);
+        (m.iter().map(|m| m.label.clone().unwrap_or_default()).collect(), from)
+    }
+
+    fn a(s: &str) -> Vec<String> {
+        s.split_whitespace().map(|s| s.to_string()).collect()
+    }
+
+    // review 4 (session), finding 1: code with lines that look like the undone
+    // file's headers (in a long string, in a comment) comes back intact
+    #[test]
+    fn undone_code_round_trips_marker_like_lines() {
+        let (mut srv, _g) = server("undone-markers");
+        let chunk = "message = [[first line\n--@ undone this is painting text, not an archive delimiter\n--@ undone 9 · was chunk 1 · undone · 3 bytes\nlast line]]\n--[[\n--@ undone 2 · was chunk 7 · undone\n]]\nprint(#message)";
+        srv.handle("do", &[], chunk).unwrap();
+        srv.handle("do", &[], "x = 1").unwrap();
+        srv.handle("undo", &a("2"), "").unwrap();
+        let list = srv.handle("undone", &[], "").unwrap();
+        assert_eq!(list.lines().filter(|l| l.contains(" · was chunk ")).count(), 2, "two entries:\n{list}");
+        assert_eq!(srv.handle("undone", &a("1"), "").unwrap(), format!("{chunk}\n"));
+        assert_eq!(srv.handle("undone", &a("2"), "").unwrap(), "x = 1\n");
+        // redo runs it again, whole
+        let long = chunk.split_once("[[").unwrap().1.split_once("]]").unwrap().0;
+        let out = srv.handle("redo", &a("1"), "").unwrap();
+        assert!(out.contains(&format!("{}\n", long.len())), "{out}");
+        assert_eq!(srv.s.log[1].src, chunk);
+        // and edit --undone puts it in place of a chunk
+        srv.handle("do", &[], "y = 2").unwrap();
+        srv.handle("edit", &a("3 --undone 1"), "").unwrap();
+        assert_eq!(srv.s.log[2].src, chunk);
+        // the replaced chunk is kept as entry 3, after both
+        assert_eq!(srv.handle("undone", &a("3"), "").unwrap(), "y = 2\n");
+        assert!(srv.handle("check", &[], "").is_ok());
+    }
+
+    // finding 2: an edit replays its chunks as `do` ran them (each one's
+    // first show() replaces the overlay), not piling their marks up
+    #[test]
+    fn an_edit_replays_the_overlay_chunk_by_chunk() {
+        let (mut srv, _g) = server("edit-overlay");
+        srv.handle("do", &[], r#"show(100, 100, "old")"#).unwrap();
+        srv.handle("do", &[], r#"show(200, 100, "latest")"#).unwrap();
+        assert_eq!(overlay(&srv), (vec!["latest".to_string()], "chunk 3".to_string()));
+        srv.handle("edit", &a("2"), r#"show(100, 200, "replacement")"#).unwrap();
+        assert_eq!(overlay(&srv), (vec!["latest".to_string()], "chunk 3".to_string()));
+        // the last chunk shows nothing: the overlay is the one before it, and says so
+        srv.handle("edit", &a("3"), "x = 1").unwrap();
+        assert_eq!(overlay(&srv), (vec!["replacement".to_string()], "chunk 2".to_string()));
+        let look = srv.handle("look", &a("--size 100"), "").unwrap();
+        assert!(look.contains("overlay: 1 marks from chunk 2"), "{look}");
+    }
+
+    // a failed edit changes nothing, the overlay included
+    #[test]
+    fn a_failed_edit_leaves_the_overlay_as_it_was() {
+        let (mut srv, _g) = server("failed-edit-overlay");
+        srv.handle("do", &[], r#"show(100, 100, "original")"#).unwrap();
+        let e = srv.handle("edit", &a("2"), r#"show(900, 900, "failed replacement"); error("stop")"#).unwrap_err();
+        assert!(e.contains("nothing changed"), "{e}");
+        assert_eq!(overlay(&srv), (vec!["original".to_string()], "chunk 2".to_string()));
+        // a replayed chunk after the edited one fails
+        srv.handle("do", &[], r#"show(300, 300, "third"); assert(not flag, "flagged")"#).unwrap();
+        let e = srv.handle("edit", &a("2"), r#"show(1, 1, "new"); flag = true"#).unwrap_err();
+        assert!(e.contains("flagged") && e.contains("nothing changed"), "{e}");
+        assert_eq!(overlay(&srv), (vec!["third".to_string()], "chunk 3".to_string()));
+    }
+
+    // the overlay keeps the label of the run that made it
+    #[test]
+    fn the_overlay_keeps_its_origin() {
+        let (mut srv, _g) = server("overlay-origin");
+        srv.handle("do", &[], r#"show(100, 100, "two")"#).unwrap();
+        srv.handle("do", &[], "x = 1").unwrap();
+        assert_eq!(overlay(&srv).1, "chunk 2");
+        srv.handle("try", &[], r#"show(100, 100, "tried")"#).unwrap();
+        srv.handle("do", &[], "y = 1").unwrap();
+        assert_eq!(overlay(&srv), (vec!["tried".to_string()], "try".to_string()));
+        let look = srv.handle("look", &a("--size 100"), "").unwrap();
+        assert!(look.contains("overlay: 1 marks from try"), "{look}");
+    }
+}

@@ -45,9 +45,8 @@ fn character(o: &Table, pts: &[(f32, f32)], default: &str) -> Result<(Character,
             hand_scale(((x1 - x0).powi(2) + (y1 - y0).powi(2)).sqrt())
         }
     };
-    if let Some(k) = num(o, "amount")? {
-        ch = ch.amount(k);
-    }
+    // explicit options first, then amount= scales them with the rest (so
+    // amount=0 is a clean curve whatever lobe= says)
     if let Some(l) = num(o, "lobe")? {
         if l <= 0.0 {
             ch.lobe = 0.0;
@@ -63,6 +62,9 @@ fn character(o: &Table, pts: &[(f32, f32)], default: &str) -> Result<(Character,
         if ch.edge_var == 0.0 {
             ch.edge_var = 0.5;
         }
+    }
+    if let Some(k) = num(o, "amount")? {
+        ch = ch.amount(k);
     }
     Ok((ch, scale))
 }
@@ -214,7 +216,9 @@ impl UserData for OutlineU {
     }
     fn add_methods<M: UserDataMethods<Self>>(m: &mut M) {
         m.add_method("mask", |_, o, ()| {
-            if !o.o.lines.iter().any(|l| l.closed) {
+            // no lines at all (an inset that ate the shape) is an empty mask;
+            // lines with none closed have no inside
+            if !o.o.lines.is_empty() && !o.o.lines.iter().any(|l| l.closed) {
                 return err("outline:mask(): this line is open; use :below() or :above() (or closed=true)");
             }
             Ok(wrap(o.o.mask(frame(&o.st)?)))
@@ -333,4 +337,51 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
     let s1 = st.clone();
     g.set("body_of", lua.create_function(move |_, o: Table| body_of(&s1, o))?)?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::session::Session;
+
+    fn run(src: &str) -> Result<String, String> {
+        let mut s = Session::replay(200).unwrap();
+        s.run(r#"canvas{aspect=1.4, seed=11}"#).unwrap();
+        s.run(src).map(|r| r.out)
+    }
+
+    // review 4 (drawing), finding 5: an inset that eats a closed shape is an
+    // empty outline, and its mask is empty (so a rim keeps the whole shape)
+    #[test]
+    fn an_inset_that_consumes_the_shape_masks_nothing() {
+        run(r#"local o = outline{{100,100},{110,100},{110,110},{100,110}, corners=true, amount=0, edge=0, seed=1}
+               local inset = o:inset(7)
+               assert(#inset:paths() == 0, #inset:paths())
+               local m = inset:mask()
+               assert(m:area() == 0, m:area())
+               local rim = o:mask() - m
+               assert(math.abs(rim:area() - o:mask():area()) < 1e-3, rim:area())"#)
+        .unwrap();
+        // a nonempty open line still has no inside
+        let e = run(r#"outline{{100,100},{200,120},{300,100}, closed=false}:mask()"#).unwrap_err();
+        assert!(e.contains("this line is open"), "{e}");
+    }
+
+    // finding 6: explicit character options come before amount=, so
+    // amount=0 is a clean curve whatever lobe= says
+    #[test]
+    fn amount_zero_is_clean_even_with_explicit_lobes() {
+        run(r#"local function dev(o) local m = 0 for _, p in ipairs(o:path()) do m = math.max(m, math.abs(p[2] - 200)) end return m end
+               for _, ch in ipairs({"soft", "firm"}) do
+                 local clean = outline{{100,200},{500,200}, char=ch, amount=0, edge=0, seed=1}
+                 local lobed = outline{{100,200},{500,200}, char=ch, amount=0, lobe=24, edge=0, seed=1}
+                 assert(dev(clean) < 0.01, ch .. " clean " .. dev(clean))
+                 assert(dev(lobed) < 0.01, ch .. " lobed " .. dev(lobed))
+                 -- amount scales the explicit lobes: 1 shows them, 2 doubles them
+                 local one = outline{{100,200},{500,200}, char=ch, amount=1, lobe=24, edge=0, seed=1}
+                 local two = outline{{100,200},{500,200}, char=ch, amount=2, lobe=24, edge=0, seed=1}
+                 assert(dev(one) > 2, ch .. " one " .. dev(one))
+                 assert(dev(two) > dev(one) * 1.3, ch .. " two " .. dev(two) .. " one " .. dev(one))
+               end"#)
+        .unwrap();
+    }
 }

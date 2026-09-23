@@ -37,6 +37,10 @@ struct Snap {
     /// The Lua heap (heap.lua's snapshot).
     heap: Table,
     brushes: Vec<(Rc<RefCell<Held>>, Held)>,
+    /// The overlay as it stood (a live session's only). Only an edit goes
+    /// back to it, since it replays the chunks after the snapshot: undo and
+    /// a failed chunk leave the overlay as it is (a `try` shows through it).
+    marks: Option<crate::look::Marks>,
 }
 
 pub struct Session {
@@ -137,7 +141,7 @@ impl Session {
             let h = b.borrow().clone();
             (b, h)
         }).collect();
-        Ok(Snap { canvas: s.canvas.clone(), style: s.style.clone(), setup: s.setup.clone(), seed: s.seed, clock: s.clock, clock0: s.clock0, view: s.view.clone(), heap, brushes })
+        Ok(Snap { canvas: s.canvas.clone(), style: s.style.clone(), setup: s.setup.clone(), seed: s.seed, clock: s.clock, clock0: s.clock0, view: s.view.clone(), heap, brushes, marks: crate::look::saved(&self.lua) })
     }
 
     /// Put everything back as it was at `snap`, which stays usable (heap.lua
@@ -271,7 +275,11 @@ impl Session {
         if self.snaps.range(..len - n).next().is_none() {
             return Err(format!("can undo at most {} chunks (snapshots kept: open with --undo N or --checkpoints N for more)", self.snaps.range(..len).count()));
         }
-        self.splice(len - n + 1, n, &[]).map(|r| r.removed)
+        // undo leaves the overlay alone, however far back it goes
+        let marks = crate::look::saved(&self.lua);
+        let r = self.splice(len - n + 1, n, &[]).map(|r| r.removed);
+        crate::look::restore(&self.lua, marks);
+        r
     }
 
     /// Replace chunks `at..at+remove` (1-based) with `insert` and replay
@@ -294,6 +302,7 @@ impl Session {
         };
         // everything needed to put the session back if a chunk fails
         let now = self.snap().map_err(|e| e.to_string())?;
+        let marks = crate::look::saved(&self.lua);
         let old_log = std::mem::take(&mut self.log);
         let later = self.snaps.split_off(&(base + 1));
         let spacing = self.spacing;
@@ -307,11 +316,17 @@ impl Session {
         let mut fail = None;
         let from = self.snaps.remove(&base).expect("the base checkpoint");
         let r = self.restore(&from);
+        // the overlay the chunks before the change left, for the replayed
+        // ones to replace as they did when they ran
+        crate::look::rewind(&self.lua, from.marks.clone());
         self.snaps.insert(base, from);
         match r {
             Err(e) => fail = Some(e.to_string()),
             Ok(()) => {
                 for (i, src) in srcs.iter().enumerate() {
+                    // in a live session each replayed chunk's first show()
+                    // replaces the overlay, as when it ran
+                    crate::look::begin_replayed(&self.lua, &format!("chunk {}", base + i + 1));
                     if let Err(e) = self.run(src) {
                         fail = Some(format!("chunk {} failed:\n{e}", base + i + 1));
                         break;
@@ -321,6 +336,7 @@ impl Session {
         }
         if let Some(e) = fail {
             self.restore(&now).map_err(|e| e.to_string())?;
+            crate::look::restore(&self.lua, marks);
             self.log = old_log;
             self.snaps.retain(|&k, _| k <= base);
             self.snaps.extend(later);

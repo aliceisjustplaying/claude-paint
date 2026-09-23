@@ -168,10 +168,8 @@ fn sky_bares_ground() {
             let mut c = st.prepare_window(3200, 1.3, 23, Some(crop));
             let sky = Mask::from_fn(c.frame(), |_, _| 1.0);
             c.work(&sky, &base.broad().color(|_, _| hex("#d9dcd6")).angle(|_, _| 0.0).coverage(4.5).medium(0.3), 11);
-            if blend {
-                if let Some(b) = base.blend() {
-                    c.work(&sky, &b, 12);
-                }
+            if let (true, Some(b)) = (blend, base.blend()) {
+                c.work(&sky, &b, 12);
             }
             c.dry();
             let f = c.window();

@@ -83,3 +83,9 @@ Renders: `out/l3_near.png` (1000) and `out/l3_near_full.png` (3200).
 - The belly-free snow in front of the boulder is now an even light field. It could use a
   faint cool undulation.
 - The sky's horizontal "wood grain" striation is untouched (probably the tool).
+- At 3200 (out/l3_near_full.png) the hanging branchlets under the spruce's bough tips read
+  as dark drips or icicles. They should be fewer near the tips (`t` up to ~0.8, not 0.97),
+  shorter and angled outward along the bough, not straight down. *Pitfall candidate:*
+  near-vertical short strokes hanging off a dark silhouette against the sky read as drips.
+- The x ≈ 187 seam is plain at 3200 beside the stump (a straight vertical tone step from the
+  boulder's foot to the bottom edge). It's the next thing to fix: a veil blended across it.

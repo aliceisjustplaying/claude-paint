@@ -198,6 +198,16 @@ function share a shape, and tiers come out as symmetric chevrons [r4 near]. Vary
   drawn separately, ~30% tall and narrow, one faint uneven shadow per group, muted
   olive fading with distance. [loop 1 green]
 
+- **Opening a black wood at its foot** (loop 2 near): a low horizontal band of dim,
+  shaded floor (`#323b38`→`#6b706f`) at the wood's foot, near-black trunks (round 3.2)
+  with low boughs (round 1.4) over it, and a thin veil in vertical columns higher up
+  for air between the back trees. *Pitfall:* pale vertical patches read as ghosts.
+  Paint trunks with pressure rising toward the TOP, or they end in points.
+- **Breaking a wood-edge comb** (loop 2 near): treetops `randn(0, 30)` around the drawn
+  line (not ±12), one tree ~55 units above the rest, a few young ones 25–60 lower,
+  crown width 0.18–0.32 of height, some twin spires. *Pitfall (critics):* symmetric
+  stacked tiers with a white edge on every tier read as a Christmas card; Friedrich's
+  firs are short hatched strokes. [loop 2 near, loop 2 critics]
 ## 6. Rocks and stones
 
 *Ceiling:* stones read as loaves, eggs or stacked masonry; snow on stone reads as blotches or lichen.
@@ -261,13 +271,20 @@ function share a shape, and tiers come out as symmetric chevrons [r4 near]. Vary
   like boards [r2 winter]. A low sun gives a ruler-straight band, so break it with grass
   laid over it.
 
-- **Snow against a stone's foot** (beat "embossed rims"; loop 1 near +3). Build the
-  drift from the stone's real foot line, not an even ribbon: scan the stone mask every
-  2 units for its lowest point; drift height `max(0, 3 + 26*hn + 4*hn2)` (two noises) so
-  it vanishes in places; color it 55% from the field just below; lay it thin (`flat 6`,
-  coverage 3.6, medium 0.3) and blend twice. Take the drift out of `contact_shadow`
-  (`* -footd:grow(2)`) or the stone floats. *Ceiling:* still reads as separate evenly
-  spaced puffs; vary spacing and merge them. [loop 1 near]
+- **Snow banked against a stone** (beat loop 1's drift; loop 2 near +3). Shape ONE continuous
+  bank with a hand-drawn envelope where the wind would pile it (sums of gaussians, e.g.
+  `4 + 13*G(222,48) + 6*G(430,60) + 5*G(590,16)`, minus where the lee shades it), plus small
+  noise at periods ~95, 19, 6; deep on the windward side, almost gone in the shade. Color
+  it from the snow field itself (`sample(x, base+12, 3)`), with a slightly darker, cooler
+  line where it tucks under the rock. *Pitfall:* noise clipped at zero (`3 + 26*noise`)
+  gives evenly spaced puffs ("cotton balls"). *Ceiling:* the lip is still fairly even
+  along the front; let the rock meet the snow directly in places. [loop 2 near]
+- **Contact shade runs over the snow at the stone's foot, not around it.** Cutting the
+  drift out of `contact_shadow` leaves a lit gap above a floating dark stripe; instead
+  `v:contact_shadow{reach=0.14}:blur(1.5) * -stone` at ~0.22 coats. [loop 2 near]
+- *Pitfall (critics):* a long shadow band across the foreground needs a visible caster
+  and must agree with the other shadows; an unexplained band "contradicts the boulder's
+  own shadow". [loop 2 critics]
 - *Pitfall:* `roughen()` on a soft cast-shadow mask turns its soft edge into hard
   blocks: vary a soft mask by multiplying, not roughening. Noise stretched along a long
   ground shadow makes vertical curtains: stretch near horizontal (`stretch={0.02, 4}`).

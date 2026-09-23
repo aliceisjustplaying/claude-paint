@@ -325,7 +325,9 @@ b:hatch(mask, {angle=-1.1, pressure=0.35})     -- short parallel strokes (spacin
 b:width()   b.worn   b:sharpen()  -- the point blunts as you draw (soft leads fast); lines widen
 erase(pts, {strength=0.9, width=9}) -- a kneaded eraser along a path, or erase(mask, {strength=})
 fix()                             -- fixative (or fix(mask)): the eraser no longer lifts it
-drawing_mask()                    -- where the drawing is, 1 on a firm line, also under paint
+drawing_mask()                    -- where the graphite is (grainy, as laid), 1 on a firm line, also under paint
+drawing_guide()                   -- the drawn lines themselves (continuous, whole canvas even in crops):
+                                  -- paint INTO your drawing with this, e.g. drawing_guide():band(0.7, 1, 0.1)
 ```
 
 How it behaves: the point rides on the tops of the canvas weave, and
@@ -356,7 +358,7 @@ blend(LEFT, {angle=0.04, clip=LEFT})
 -- body color hides it; paint the next thing into the hidden drawing
 work(rock * RIGHT, {hand="body", color="#8d8a80", medium=0.15, load=0.9, coverage=4, clip=RIGHT})
 dry()
-local firm = drawing_mask():band(0.55, 1, 0.1):grow(1.2) * rect(660, 290, 240, 190)
+local firm = drawing_guide():band(0.7, 1, 0.1):grow(1.2) * rect(660, 290, 240, 190)
 work(firm, {hand="detail", tool="round 2", color="#3b342c", coverage=3, length={4, 10}})
 ```
 

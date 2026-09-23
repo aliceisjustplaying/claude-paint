@@ -105,9 +105,27 @@ const Q_COATS: f32 = 16.0;
 const Q_MEDIUM: f32 = 50.0;
 /// Thicknesses (× the expected one) and weights at which an aimed pile is
 /// judged: a stroke lays paint thinner at its edges and in dry-brush, thicker
-/// where it starts; a pile that only looks right at exactly one thickness
-/// would show every change of thickness (and every change of recipe).
-const AIM_SPREAD: [(f32, f32); 3] = [(0.5, 0.25), (1.0, 0.5), (2.0, 0.25)];
+/// where it starts (a stroke's film runs from about 0.6× its median to 2.5×
+/// at the 90th percentile, `handling::tests::probe_laid_by_coverage`); a
+/// pile that only looks right at exactly one thickness would show every
+/// change of thickness (and every change of recipe). The 4× point stands
+/// for the pile's own color where it lands thick: a light mark over a dark
+/// mixed from lead white and red earth hits its target at the expected
+/// thickness and dries salmon wherever it lays thicker.
+const AIM_SPREAD: [(f32, f32); 4] = [(0.5, 0.2), (1.0, 0.45), (2.0, 0.25), (4.0, 0.1)];
+/// Thin edges (this × the expected thickness) should lie on the way from
+/// the underlayer to the look wanted: a pile whose thin film swings off
+/// that line (a red rim, a milky blue veil) is penalized by its distance
+/// from it, with this weight.
+const AIM_THIN: (f32, f32) = (0.25, 0.3);
+/// A painter keeps a pile in the family of the color wanted: its own color
+/// (masstone) costs this much per unit of OKLab a/b distance from the look
+/// wanted. Aim may still push a pile's hue against the underlayer, but only
+/// where that buys a real improvement in the look.
+const AIM_FAMILY: f32 = 0.12;
+/// How many of the best candidates at the expected thickness are judged in
+/// full (spread, thin edge and family).
+const AIM_SHORTLIST: usize = 48;
 
 impl Palette {
     pub fn new(name: &'static str, tubes: Vec<Tube>) -> Self {
@@ -314,11 +332,18 @@ impl Palette {
         let coats = (key[6] as f32 / Q_COATS).max(1.0 / Q_COATS);
         let dil = 1.0 - key[7] as f32 / Q_MEDIUM;
         let look = |c: Rgb, s: f32, x: f32| to_oklab(Pigment::masstone(c, s * dil).over(under, x));
-        let robust = |p: &[(usize, f32)], c: Rgb, s: f32| AIM_SPREAD.iter().map(|&(t, w)| w * dist(look(c, s, coats * t), wl)).sum::<f32>() + parsimony(p);
+        let ul = to_oklab(under);
+        let robust = |p: &[(usize, f32)], c: Rgb, s: f32| {
+            let spread = AIM_SPREAD.iter().map(|&(t, w)| w * dist(look(c, s, coats * t), wl)).sum::<f32>();
+            let thin = AIM_THIN.1 * seg_dist(look(c, s, coats * AIM_THIN.0), ul, wl);
+            let m = to_oklab(c);
+            let family = AIM_FAMILY * ((m[1] - wl[1]).powi(2) + (m[2] - wl[2]).powi(2)).sqrt();
+            spread + thin + family + parsimony(p)
+        };
         // coarse: every candidate at the expected thickness; the best few
         // judged over the spread of thicknesses; then refine the proportions
         let mut first: Vec<(f32, usize)> = self.cands.iter().enumerate().map(|(i, c)| (dist(look(c.color, c.scatter, coats), wl), i)).collect();
-        let n = first.len().min(24);
+        let n = first.len().min(AIM_SHORTLIST);
         first.select_nth_unstable_by(n - 1, |a, b| a.0.total_cmp(&b.0));
         let best = first[..n].iter().map(|&(_, i)| (robust(&self.cands[i].parts, self.cands[i].color, self.cands[i].scatter), i)).min_by(|a, b| a.0.total_cmp(&b.0)).unwrap();
         let (parts, _) = self.refine(self.cands[best.1].parts.clone(), &robust);
@@ -434,9 +459,26 @@ impl Canvas {
     /// (units): the pile from `pal` that, thinned with `medium` and laid
     /// `coats` thick over what is on the canvas there, looks `want`. See
     /// `Palette::aim`. Cheap enough to call per mark (results are cached).
+    /// The underlayer is judged robustly (`Canvas::judge_under`): a fleck of
+    /// bare ground inside the mark doesn't skew the pile.
     #[allow(clippy::too_many_arguments)]
     pub fn aim(&self, pal: &Palette, want: Rgb, (x, y): (f32, f32), r: f32, medium: f32, coats: f32) -> Paint {
-        pal.paint_for(want, self.under(x, y, r), medium, coats)
+        pal.paint_for(want, self.judge_under(x, y, r), medium, coats)
+    }
+
+    /// What a mark of radius `r` at (`x`, `y`) sits on, as a painter judges
+    /// it: the typical color there, not the average. Nine sub-discs across
+    /// the mark, combined by a median per OKLab channel, so a fleck of bare
+    /// ground or a stray speck (which a mean in linear light lets dominate a
+    /// dark passage) doesn't decide the pile. `Canvas::under` is the plain
+    /// mean.
+    pub fn judge_under(&self, x: f32, y: f32, r: f32) -> Rgb {
+        let q = 0.5 * r;
+        let labs: Vec<(Rgb, f32)> = [(0.0, 0.0), (-q, 0.0), (q, 0.0), (0.0, -q), (0.0, q), (-q, -q), (q, -q), (-q, q), (q, q)]
+            .iter()
+            .map(|&(dx, dy)| (to_oklab(self.under(x + dx, y + dy, 0.5 * r)), if dx == 0.0 && dy == 0.0 { 1.5 } else { 1.0 }))
+            .collect();
+        crate::color::from_oklab(std::array::from_fn(|c| weighted_median(labs.iter().map(|(l, w)| (l[c], *w)).collect())))
     }
 }
 
@@ -453,6 +495,28 @@ fn parsimony(parts: &[(usize, f32)]) -> f32 {
 
 fn dist(a: Rgb, b: Rgb) -> f32 {
     ((a[0] - b[0]).powi(2) + (a[1] - b[1]).powi(2) + (a[2] - b[2]).powi(2)).sqrt()
+}
+
+/// The weighted median of (value, weight) pairs (the lower one at a tie).
+pub(crate) fn weighted_median(mut v: Vec<(f32, f32)>) -> f32 {
+    v.sort_by(|a, b| a.0.total_cmp(&b.0));
+    let half = 0.5 * v.iter().map(|p| p.1).sum::<f32>();
+    let mut acc = 0.0;
+    for &(x, w) in &v {
+        acc += w;
+        if acc >= half {
+            return x;
+        }
+    }
+    v.last().map_or(0.0, |p| p.0)
+}
+
+/// Distance from `p` to the segment `a`–`b` (OKLab).
+fn seg_dist(p: Rgb, a: Rgb, b: Rgb) -> f32 {
+    let d = [b[0] - a[0], b[1] - a[1], b[2] - a[2]];
+    let dd = d[0] * d[0] + d[1] * d[1] + d[2] * d[2];
+    let t = if dd > 1e-12 { (((p[0] - a[0]) * d[0] + (p[1] - a[1]) * d[1] + (p[2] - a[2]) * d[2]) / dd).clamp(0.0, 1.0) } else { 0.0 };
+    dist(p, [a[0] + d[0] * t, a[1] + d[1] * t, a[2] + d[2] * t])
 }
 
 #[cfg(test)]
@@ -514,6 +578,59 @@ mod tests {
         }
         // one-coat look: the aimed choice is at least twice as smooth as masstone mixing
         assert!(aim[1] < 0.5 * mix[1], "{aim:?} vs {mix:?}");
+    }
+
+    /// What aim picks for contrasting marks (the amnesia-2 cases): the
+    /// recipe and its look at a spread of thicknesses, in OKLab.
+    /// `cargo test --release -p paint probe_contrast_aims -- --ignored --nocapture`
+    #[test]
+    #[ignore]
+    fn probe_contrast_aims() {
+        let full = Palette::friedrich_1820();
+        let sea = full.only(&["lead white", "pale smalt", "cobalt blue", "raw umber", "bone black", "yellow ochre"]);
+        let lift = |c: Rgb, dl: f32| { let mut l = to_oklab(c); l[0] += dl; from_oklab(l) };
+        let cases = [
+            ("glint on sea", hex("#3d4a5c"), lerp3(to_oklab(lift(hex("#3d4a5c"), 0.12)), to_oklab(hex("#d8cdb4")), 0.3)),
+            ("pebble top", hex("#4a3f33"), to_oklab(hex("#7a6d5c"))),
+            ("stone patch", hex("#6d6a70"), to_oklab(hex("#8a8590"))),
+            ("shadow on sand", hex("#b8a888"), to_oklab(hex("#8a8680"))),
+            ("bright glint", hex("#3d4a5c"), to_oklab(hex("#d8cdb4"))),
+            ("glint, fleck", { let (a, b) = (hex("#3d4a5c"), hex("#a9785a")); std::array::from_fn(|i| 0.8 * a[i] + 0.2 * b[i]) }, lerp3(to_oklab(lift(hex("#3d4a5c"), 0.12)), to_oklab(hex("#d8cdb4")), 0.3)),
+            ("light on dark sand", hex("#3a3128"), to_oklab(hex("#9a8f80"))),
+        ];
+        for (name, under, want) in cases {
+            let want = from_oklab(want);
+            for (pn, pal) in [("full", &full), ("sea", &sea)] {
+                for coats in [0.3, 1.0, 2.0] {
+                    let m = pal.aim(want, under, 0.3, coats);
+                    let p = m.paint(0.3);
+                    let f = |c: Rgb| { let l = to_oklab(c); format!("({:.2} {:+.3} {:+.3})", l[0], l[1], l[2]) };
+                    let looks: Vec<String> = [0.25, 0.5, 1.0, 2.0, 4.0].iter().map(|&t| f(p.over(under, coats * t))).collect();
+                    println!("{name:15} {pn:4} coats {coats:.1}: err {:.3} [{}] masstone {} looks {} | want {} under {}", m.error, pal.recipe(&m), f(m.color), looks.join(" "), f(want), f(under));
+                }
+            }
+        }
+    }
+
+    /// A light touch over a dark, aimed thin, stays in the family of the
+    /// color asked for: its pile is not a salmon (lead white + red earth,
+    /// masstone a +0.053 before) that only matches at exactly the expected
+    /// thickness and dries pink wherever the brush lays more.
+    #[test]
+    fn contrasting_aims_stay_in_family() {
+        let pal = Palette::friedrich_1820();
+        for (under, want) in [(hex("#3a3128"), hex("#9a8f80")), (hex("#3d4a5c"), hex("#b8b4a8")), (hex("#4a3f33"), hex("#7a6d5c"))] {
+            let wl = to_oklab(want);
+            for coats in [0.3, 0.6, 1.0] {
+                let m = pal.aim(want, under, 0.3, coats);
+                let ml = to_oklab(m.color);
+                let fam = ((ml[1] - wl[1]).powi(2) + (ml[2] - wl[2]).powi(2)).sqrt();
+                let thick = to_oklab(m.paint(0.3).over(under, 4.0 * coats));
+                let thick_ab = ((thick[1] - wl[1]).powi(2) + (thick[2] - wl[2]).powi(2)).sqrt();
+                assert!(fam < 0.025 && thick_ab < 0.025, "{want:?} over {under:?} at {coats}: {} masstone ab off {fam:.3}, 4x ab off {thick_ab:.3}", pal.recipe(&m));
+                assert!(m.error < 0.03, "{}: error {}", pal.recipe(&m), m.error);
+            }
+        }
     }
 
     #[test]

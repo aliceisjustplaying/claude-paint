@@ -304,6 +304,13 @@ impl Style {
     /// Clean soft blender passes over a wet passage: light crossing strokes
     /// (± 0.2 rad to `angle`), worked top to bottom so the blender never
     /// drags paint back up a gradient (change with `order`/`sweep`).
+    ///
+    /// The blender stays inside the region it is given (`clip(true)`, soft
+    /// where the mask is soft): a painter fusing a cut passage keeps the
+    /// badger inside it, and an unclipped badger drags wet paint across the
+    /// mask's edge, where later passages show it in their gaps. To fuse
+    /// across an edge on purpose (softening a horizon), give it a mask that
+    /// spans the edge, or `.clip(false)`.
     pub fn blend(&self) -> Option<Handling<'_>> {
         let t = self.blender.clone()?;
         Some(
@@ -318,6 +325,7 @@ impl Style {
                 .curve(0.06, 0.3)
                 .drift(0.2, 300.0)
                 .broken(0.0)
+                .clip(true)
                 .sweep(std::f32::consts::FRAC_PI_2),
         )
     }

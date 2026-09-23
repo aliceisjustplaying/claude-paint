@@ -171,7 +171,7 @@ impl Session {
     pub fn status(&self) -> String {
         let s = self.st.borrow();
         let wet = s.canvas.as_ref().map(|c| c.wet_total() > 1e-6).unwrap_or(false);
-        let secs: f64 = self.log.iter().map(|c| c.secs).sum();
+        let secs: f64 = self.log.iter().map(|c| c.secs).sum::<f64>() + 0.0;
         format!(
             "{} chunks · {}px · {} · clock {} min · {} · undo {} deep · painted {secs:.0}s",
             self.log.len(),

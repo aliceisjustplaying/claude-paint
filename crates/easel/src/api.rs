@@ -570,9 +570,20 @@ fn wrap(m: Mask) -> M {
 impl UserData for M {
     fn add_methods<M_: UserDataMethods<Self>>(m: &mut M_) {
         m.add_method("blur", |_, a, r: f32| Ok(wrap((*a.0).clone().blur(r))));
-        m.add_method("roughen", |_, a, (amount, period, seed, edge): (f32, Option<f32>, Option<u32>, Option<f32>)| {
-            Ok(wrap((*a.0).clone().roughen(seed.unwrap_or(1), period.unwrap_or(40.0), amount, edge.unwrap_or(0.5))))
+        // m:roughen(units, period?, seed?): push the edge in and out by up
+        // to about `units` with fractal noise of the given period
+        m.add_method("roughen", |_, a, (amount, period, seed): (f32, Option<f32>, Option<u32>)| {
+            let n = Fbm::new(seed.unwrap_or(1), 5, period.unwrap_or(40.0));
+            let mut d = a.0.distance();
+            let (w, s) = (d.f.w, d.f.scale);
+            for (i, v) in d.data.iter_mut().enumerate() {
+                let (x, y) = (((i % w) as f32 + 0.5) / s, ((i / w) as f32 + 0.5) / s);
+                *v = ((*v + amount * n.get(x, y)) * s + 0.5).clamp(0.0, 1.0);
+            }
+            Ok(wrap(d))
         });
+        // m:soften(units): a soft edge that many units wide
+        m.add_method("soften", |_, a, w: f32| Ok(wrap(a.0.soften(move |_, _| w))));
         m.add_method("offset", |_, a, d: f32| Ok(wrap(a.0.offset(d))));
         m.add_method("grow", |_, a, d: f32| Ok(wrap(a.0.dilate(d))));
         m.add_method("shrink", |_, a, d: f32| Ok(wrap(a.0.erode(d))));

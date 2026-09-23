@@ -25,6 +25,8 @@ reads as digital, and don't merge anything I haven't looked at.
 - Easel must use Lua 5.5 (mlua 0.12 `lua55` + `vendored`); switch at merge if needed.
 - Coast #17 (curved drag lays nothing) may need a bristle.rs fix after `tip` merges.
 - Reviews: openai-codex/gpt-6-astra, thinking medium, fast off.
+- Create worktrees in a step BEFORE spawning subagents into them (parallel batch = cwd missing = exit 1).
+- Python: always `uv run --python ~/tmp/paint-overnight-8ce44b40/.venv/bin/python python`, never bare python3.
 - Amnesia worktrees from round 2 (../claude-paint-amnesia-*) hold full-res PNGs; keep.
 
 ## Batch 1 (running)

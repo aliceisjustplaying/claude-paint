@@ -317,12 +317,13 @@ What works:
   should have.
 
 What doesn't (harshly):
-- **The mid range reads as a curtain.** Strokes down the fall lines plus
-  `Ridge` gullies make regular vertical streaks. From across the room
-  it's a flat-topped wall hung with drapery, not a mountain ridge with
-  spurs. Stippling more helped, but the underlying strokes are too
-  regular. A real ridge's gullies are irregular in spacing, depth and
-  length.
+- **The mid range was a curtain; now it's quieter but generic.** Strokes
+  down the fall lines plus regular `Ridge` gullies made even vertical
+  streaks: a flat-topped wall hung with drapery. I made the gullies fewer
+  and shallower (46 units, carve 0.28), halved the spur/gully contrast and
+  added large irregular buttresses (noise, widening downhill). It now
+  reads as a soft, distant ridge, but a generic one. The gullies are
+  still noise, not a drainage pattern.
 - **The knoll is a big, quiet, slightly too smooth dome.** The lower left
   third is mostly dark olive with ragged mats, heather and a few stones.
   It's dark enough to be right, but its silhouette is a clean curve
@@ -347,8 +348,8 @@ What doesn't (harshly):
   flecks) read at 3200px as dead leaves. That's fine, but it's luck, not
   intent.
 
-If I had another session: irregular hand-drawn gullies on the mid range
-(my own fall-line strokes from a drainage pattern, not noise), a
+If I had another session: gullies on the mid range drawn from a real
+drainage pattern (my own fall-line strokes, not noise), a
 bilberry-and-lichen pass on the knoll, sharper horizontal joints on the
 tor, and needle strokes for the spruces that overlap and droop rather
 than dab.

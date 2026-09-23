@@ -90,7 +90,7 @@ mod tests {
         copy(&mask);
         copy(&color);
         let m = crate::Mask::from_fn(f, mask);
-        assert!(m.data.iter().any(|&v| v == 1.0) && m.data.iter().any(|&v| v == 0.0));
+        assert!(m.data.contains(&1.0) && m.data.contains(&0.0));
         // exact at column centers and off them
         assert_eq!(ridge(2.5), 300.0 + 40.0 * n.get(2.5, 0.0));
         assert_eq!(ridge(3.1), 300.0 + 40.0 * n.get(3.1, 0.0));

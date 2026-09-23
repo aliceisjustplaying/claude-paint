@@ -488,3 +488,45 @@ the README's "Looking by eye" section.
   The first look at a window pays a full replay once.
 - Crop sessions paint their window through `Studio.crop` and
   `Style::prepare_window`, not the process-wide `paint::set_crop`.
+
+## Round 4 review fixes (branch `fix4-easel`)
+
+From `notes/review4/r4_review_session.md` (#1, #2) and the Lua-binding
+parts of `notes/review4/r4_review_drawing.md` (#5, #6, #10). Each review
+reproduction is a regression test that failed before the fix.
+
+- **Undone archive** (`edit.rs`): each entry's header ends with the code's
+  length (`--@ undone 3 · was chunk 5 · undone · 214 bytes`) and
+  `parse_undone` takes exactly that many bytes, so header-like lines inside
+  long strings or comments no longer split an entry. Old files (no
+  lengths) read as before, and an entry whose length doesn't fit (a
+  hand-edited file) falls back to the old reading. Tests:
+  `edit::tests::*` (round trip, old files) and the server-path
+  `tests::undone_code_round_trips_marker_like_lines` (do, undo, undone,
+  redo, edit --undone, check).
+- **Overlay during edits** (`session.rs`, `look.rs`): every snapshot
+  carries the overlay. `splice` rewinds to its base checkpoint's overlay
+  and calls `look::begin_replayed` before each replayed chunk, so the
+  overlay after an edit is what a live run of the new log leaves. A failed
+  edit restores the overlay with the rest of the session. Undo, including
+  undo past the ring (a splice), leaves the overlay alone, as `try`
+  needs. `begin` no longer relabels the overlay: the label moves to the
+  new run only when that run shows something, so a kept `try` overlay
+  still says `from try`. Tests: the `tests` module in `main.rs`, which
+  drives `Server::handle` (the path where the overlay store is live).
+- **Empty outline masks** (`draw_outline.rs`): `o:mask()` on an outline
+  with no lines (an inset that consumes the shape) returns an empty mask;
+  a nonempty open line still errors. No engine change: `Outline::mask`
+  already handled no lines.
+- **`amount=` after explicit options** (`draw_outline.rs` `character`):
+  `lobe=` and `edge=` apply first, then `Character::amount` scales them
+  with the rest, so `amount=0` is a clean curve with `lobe=` set and
+  `amount` scales explicit lobes. No saved painting combines them, so no
+  output changes. No engine change.
+- **`visible=` takes masks** (`depth.rs` `visible_of`): the pass option
+  and `v:visible` take masks alone or in mixed (nested) lists. A mask is a
+  thing in front of everything, as in `behind=`: `visible=m` is `m`, and a
+  list is `1 - (1 - m)(1 - seen(names))`.
+
+`easel check` matches on example, depth, outline and lookaid (resumed
+from copies of their logs at 1000 px, release build).

@@ -106,7 +106,11 @@ is untouched (it belongs to fixes-paint).
   - methods:
     - `mask(frame)`: leaves = 1, with sky holes; a leaf-sized noise breaks
       every partly covered place into leaves and sky
-    - `lit(frame)`: front clump over back, each slightly rounded
+    - `lit(frame)`: front clump over back, each slightly rounded; a clump
+      covers what is behind it by its `fill` (the same share as in `mask`),
+      so an airy clump in front lets the light of the leaves behind show
+      through instead of overwriting it (tested:
+      `transparent_foliage_keeps_the_light_behind`)
     - `envelope(frame, reach)` and `gaps(frame, reach)`: the holes inside
       the crown
     - `back_to_front()`, `bounds()`, `grain()`

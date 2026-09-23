@@ -1434,26 +1434,44 @@ impl Foliage {
 
     /// Light on the leaves (0..1; 0 off them): each clump's `lit`, the front
     /// clump over the ones behind, rounded like a small ball of leaves (its
-    /// sunward side lighter, its underside darker).
+    /// sunward side lighter, its underside darker). A clump covers the ones
+    /// behind by its `fill`, as in `mask`: an airy clump in front lets the
+    /// light of the leaves behind show through its holes.
     pub fn lit(&self, f: Frame) -> Mask {
         let mut val = vec![0.0f32; f.w * f.h];
+        // how much of each pixel the clumps so far cover (front over back)
+        let mut cov = vec![0.0f32; f.w * f.h];
         let s = self.sun;
         let mut order: Vec<usize> = (0..self.clumps.len()).collect();
         order.sort_by(|&a, &b| self.clumps[a].z.total_cmp(&self.clumps[b].z));
         for k in order {
             let Some((x0, y0, x1, y1)) = self.px_box(&f, k) else { continue };
-            let lit = self.clumps[k].lit;
+            let (lit, fill) = (self.clumps[k].lit, self.clumps[k].fill);
+            if fill <= 0.0 {
+                continue;
+            }
             for py in y0..=y1 {
                 let y = (py + f.y0) as f32 / f.scale + 0.5 / f.scale;
                 for px in x0..=x1 {
                     let x = (px + f.x0) as f32 / f.scale + 0.5 / f.scale;
                     let (c, u, v) = self.cover(k, x, y);
-                    if c > 0.5 {
+                    // the clump's edge is crisp (as the leaves' is); its
+                    // body covers what is behind by its fill
+                    let a = fill * crate::smoothstep(0.4, 0.6, c);
+                    if a > 0.0 {
                         let w = (1.0 - u * u - v * v).max(0.0).sqrt();
                         let local = (u * s.0 + v * s.1 + w * s.2).clamp(-1.0, 1.0);
-                        val[py * f.w + px] = (lit * (0.82 + 0.25 * local)).clamp(0.0, 1.0);
+                        let i = py * f.w + px;
+                        val[i] = val[i] * (1.0 - a) + a * (lit * (0.82 + 0.25 * local)).clamp(0.0, 1.0);
+                        cov[i] = cov[i] * (1.0 - a) + a;
                     }
                 }
+            }
+        }
+        // the light of the leaves seen, whatever share of the pixel they cover
+        for (v, c) in val.iter_mut().zip(&cov) {
+            if *c > 0.0 {
+                *v /= *c;
             }
         }
         Mask { f, data: val }.mul(&self.mask(f))
@@ -1863,5 +1881,35 @@ mod tests {
         assert!(t.iter().any(|q| q.flower.is_some()));
         assert!(t.iter().all(|q| q.height >= sw.smallest && !q.blades.is_empty()));
     }
-}
 
+    /// A see-through clump in front does not paint its light over the lit
+    /// leaves behind it: light composites by the same fill as the leaves.
+    #[test]
+    fn transparent_foliage_keeps_the_light_behind() {
+        let f = Frame::new(100, 100, 1.0);
+        let sk = Habit { years: 1, ..Habit::oak() }.grow((50.0, 90.0), 30.0, 1);
+        let mut fo = sk.foliage((0.0, 0.0, 1.0), 1);
+        let mut c = fo.clumps[0];
+        (c.at, c.r, c.squash, c.tilt, c.fill, c.lit, c.z) = ((50.5, 50.5), 10.0, 1.0, 0.0, 1.0, 1.0, 0.0);
+        fo.clumps = vec![c];
+        let before = fo.lit(f).sample(50.5, 50.5);
+        assert!(before > 0.9, "{before}");
+        // an empty clump in front: nothing changes
+        let mut front = c;
+        (front.z, front.fill, front.lit) = (1.0, 0.0, 0.0);
+        fo.clumps.push(front);
+        assert_eq!(fo.mask(f).sample(50.5, 50.5), 1.0);
+        assert!((fo.lit(f).sample(50.5, 50.5) - before).abs() < 1e-4, "{}", fo.lit(f).sample(50.5, 50.5));
+        // a half-filled dark clump in front: half the light
+        fo.clumps[1].fill = 0.5;
+        let half = fo.lit(f).sample(50.5, 50.5);
+        assert!((half - 0.5 * before).abs() < 0.02, "{half} vs {before}");
+        // a fully filled one hides it
+        fo.clumps[1].fill = 1.0;
+        assert!(fo.lit(f).sample(50.5, 50.5) < 0.01);
+        // and a lone airy clump keeps its own light (not dimmed by its fill)
+        fo.clumps = vec![Clump { fill: 0.7, ..c }];
+        let airy = fo.lit(f).sample(50.5, 50.5);
+        assert!(airy == 0.0 || (airy - before).abs() < 1e-4, "{airy}");
+    }
+}

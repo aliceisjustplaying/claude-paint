@@ -414,3 +414,34 @@ for i, x0 in ipairs(xs) do
   n = n + 1
 end
 print(#ft, n)
+
+--@ chunk 25 · clock 45631.58203125
+
+-- contact shadow under the capstone
+local under = df:mask(function(s) return clamp(s.n[2] * 2.2 - 0.5, 0, 1) end) * mask(function(x, y) return 1 - smoothstep(438, 450, y) end)
+glaze(under * stonesil, {color="#141311", coats=0.25, pigment="transparent"})
+-- fissures
+local fb = brush("rigger", 0.55)
+local cracks = {{200, 425, 0.35, 26}, {262, 404, 0.1, 40}, {345, 398, -0.05, 34}, {395, 404, 0.25, 22}, {430, 415, 1.3, 14},
+  {236, 462, 1.45, 30}, {298, 452, 1.6, 20}, {312, 478, 1.2, 16}, {404, 462, 1.75, 24}, {176, 503, 0.2, 12}}
+for i, c in ipairs(cracks) do
+  local x, y, a, L = c[1], c[2], c[3], c[4]
+  local pts = {{x, y}}
+  for k = 1, 4 do a = a + randn(0, 0.35); x = x + math.cos(a) * L / 4; y = y + math.sin(a) * L / 4; pts[#pts+1] = {x, y} end
+  if i % 3 == 1 then fb:reload("#141311", 0.7) end
+  fb:stroke(pts, {pressure={0.6, 0.1}, ramps={0.1, 0.5}, clip=stonesil:shrink(1)})
+end
+-- lichen on the faces that look up at the sky
+local up = stonesil:shrink(1.5) * df:mask(function(s) return clamp((s.shade.sky or 0) * 1.6 - 0.7, 0, 1) end)
+local ln = noise{seed=61, octaves=3, period=7}
+stipple(up, {width=1.1, color=function(x, y) return ln(x, y) > 0.2 and "#555749" or "#574e3b" end,
+  coverage=function(x, y) return 0.9 * smoothstep(0.35, 0.75, ln:at01(x, y)) end, pressure={0.3, 0.6}, aim=false, medium=0.25, fade=0, clip=up})
+-- grass over the stone feet
+local feet = mask(function(x, y) local m = moundtop(x); return (x > 150 and x < 490 and y > m - 4 and y < 520) and 1 or 0 end)
+local ft = sward{region=feet, horizon=HZ, near=H, height=16, flowers=0.0, seed=44, thin=0.2, wind={lean=0.22, gust=0.3, period=140, seed=2}}
+local g = brush("rigger", 0.55)
+for i, t in ipairs(ft) do
+  if i % 3 == 1 then g:reload(({"#3a382c", "#474331", "#2e2d25", "#57513c"})[1 + (i // 3) % 4], 0.7) end
+  for _, bl in ipairs(t.blades) do g:stroke(bl, {pressure={clamp(0.2 + 0.5 * t.scale, 0.15, 0.7), 0.0}, ramps={0.05, 0.7}}) end
+end
+print(#ft)

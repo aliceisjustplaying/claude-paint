@@ -14,8 +14,8 @@ levels and dries, layers composited by Kubelka–Munk optics. No flat fills, no
 optical blends pretending to be paint.
 
 ```
-cargo paint friedrich_moonrise_valley               # 1000px preview → out/<name>.png
-cargo paint friedrich_moonrise_valley -- --full     # 3200px         → out/<name>_full.png
+cargo paint study_stipple                          # 1000px preview → out/<name>.png
+cargo paint study_stipple -- --full         # 3200px         → out/<name>_full.png
 cargo paint <name> -- --width 1600 --seed 7 --out path.png
 cargo paint <name> -- --full --crop 280,440,460,580 # just that window (units) at 3200px
                                                     #   → out/<name>_full_crop.png (--margin 40)

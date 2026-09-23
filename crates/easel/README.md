@@ -1,0 +1,272 @@
+# The easel
+
+A live painting session for agents. The canvas stays alive in a background
+process; you send it Lua chunks one shell command at a time, look at the
+result as a small JPEG and carry on. Every chunk that succeeds is appended to
+`paintings/lua/<name>.lua`. That file is the painting: `easel run` repaints it
+from scratch, byte for byte the same at the same width, or at 3200px for the
+full render.
+
+The engine underneath is the claude-paint oil-paint simulator (see the
+repository README): every mark is made by simulated bristles carrying paint,
+and layers combine by Kubelka–Munk optics. The easel paints nothing on its own.
+You choose the motifs, colors, brushes and order.
+
+## Quick start
+
+```sh
+cargo build --release -p easel          # once; the binary is target/release/easel
+E=target/release/easel
+
+$E open dusk                            # start a session (1000px wide by default)
+$E do 'canvas{style="friedrich", aspect=1.4, seed=7}'
+$E do --look '
+HZ = 470
+sky = function(x, y) return gradient({{0,"#5d7396"},{0.6,"#9fabb8"},{1,"#e9d6a6"}}, y/HZ) end
+work(above(function(x) return HZ + 15 end), {hand="broad", color=sky, angle=0, coverage=4.5})'
+# prints: ok · chunk 2 · 5.98s · ... and the path of a JPEG: read it
+$E look --mode value,squint             # judge the values
+$E undo                                 # didn't like it
+$E close                                # the session stays in paintings/lua/dusk.lua
+$E run paintings/lua/dusk.lua --width 3200    # the full render → out/lua/dusk_3200.png
+```
+
+`paintings/lua/example.lua` is a whole small study made this way: an evening
+sky, a distant ridge, mist and a spruce on a knoll, in ten chunks. Read it
+before you start.
+
+## The loop
+
+1. **Open.** `easel open <name> [--width 1000] [--undo 8]` starts a
+   background session, or reattaches if it's already running. If
+   `paintings/lua/<name>.lua` exists, the session replays it first, so you
+   can close, come back and go on painting. Other commands use the session you
+   opened last (or `-s <name>`, or `EASEL_SESSION`).
+2. **Paint a chunk.** `easel do '<lua>'`, `easel do -f chunk.lua` or
+   `easel do -` (stdin). The reply is whatever the chunk `print`ed, then
+   `ok · chunk N · seconds · clock · wet/dry`. Add `--look` to also get a
+   look in the same command.
+3. **Look.** `easel look` prints the path of a ≤1000px JPEG (100–250 KB):
+   - `--crop x0,y0,x1,y1` a window in canvas units, enlarged by whole
+     pixels so you see the real grain;
+   - `--mode value` (grayscale), `squint` (blurred: big shapes and values
+     only), `mirror` (flipped: fresh eyes on the drawing); comma-separate
+     to combine, e.g. `--mode value,squint`;
+   - `--dried` (alias `--wet`): wet paint as it will look once it has
+     leveled and dried; `--relief` also lights the brushwork from the upper
+     left; `--size N` for the longest side.
+
+   The plain look shows what is on the canvas now: the dry picture with wet
+   paint on it as laid.
+4. **Keep or undo.** A chunk that fails changes nothing: the canvas, your
+   variables, the paint in your brushes and the clock go back to how they
+   were before it, and it isn't logged. `easel undo [n]` takes back the last
+   n successful chunks (up to `--undo`, 8 by default; each snapshot costs
+   about 50 MB at 1000px).
+5. **Step back.** `easel log` prints the program so far. `easel status`
+   gives a one-line summary. `easel save [path]` writes a PNG. `easel check`
+   replays the log in a fresh session and confirms it matches the live
+   canvas exactly.
+6. **Time-lapse.** `easel frames on` saves a JPEG after every chunk in
+   `out/easel/<name>/frames/`.
+
+## How chunks behave
+
+- **Globals persist, locals don't.** Each chunk is its own Lua chunk. Write
+  `sky = ...` to use `sky` later; `local sky = ...` lives only in that chunk.
+- **Units.** The canvas is 1000 units wide and `1000 / aspect` tall (`W`
+  and `H` after `canvas{}`), y pointing down, whatever the pixel width.
+  Angles are radians, 0 = left to right, π/2 = downward.
+- **Randomness is deterministic.** `math.random`, `rand(a, b)` and
+  `randn(mean, sd)` are reseeded at the start of every chunk from the canvas
+  seed and the chunk number. `work`, `stipple`, `brush` and `tree` pick their
+  own seeds the same way (pass `seed=` to fix one). A replay therefore paints
+  the same thing, and a failed chunk doesn't shift the randomness of the next.
+- **No OS access.** `io`, `os`, `require`, `dofile` and `loadfile` are not
+  available. `print` goes to the reply.
+- **Colors** are `"#rrggbb"` strings, `rgb(r, g, b)` (0–255 sRGB) or color
+  values from `mix`, `gradient`, `sample` and `pal:mix`. A color value has
+  `.r .g .b` (linear), `.value` (luminance), `.L` (OKLab lightness),
+  `:mix(other, t, mode)` and `:hex()`.
+- **Fields.** Wherever an option takes a function of `(x, y)` (a color, an
+  angle, a coverage), it's sampled every 2 units over the area being painted
+  and interpolated. That's fine for gradients and noise but not for
+  single-pixel detail; use masks for hard edges. Mask functions
+  (`mask(fn)`) run at every pixel. Both cost about 0.1 s at 1000px.
+- **Engine errors are rolled back too.** A mistyped option name is an
+  error that lists the valid options.
+
+## API reference
+
+### Canvas and palette
+
+```lua
+canvas{style="friedrich", aspect=1.4, seed=7}   -- the first chunk; returns H
+-- styles: "friedrich" (after 1820), "friedrich_early". Sets W, H and pal.
+print(pal)                                   -- the tubes
+pal:tubes()                                  -- list of tube names
+local blues = pal:only{"lead white", "pale smalt", "cobalt blue"}
+local c, recipe, err = pal:mix("#6f84a8")    -- nearest masstone the tubes reach
+local c2 = pal:aim("#9fb0c0", sample(500, 200), 0.3, 1.0)  -- want, over, medium, coats
+local p = pal:paint("#445566", 0.2)          -- a Paint (color, medium)
+paint("#445566", {raw=true, hiding=0.5, stiff=0.3})        -- a paint not mixed from tubes
+```
+
+### Colors and helpers
+
+```lua
+mix("#334455", "#887766", t, "light")        -- modes: "light" (OKLab, default), "pigment", "linear"
+gradient({{0, "#5d7396"}, {0.6, "#9fabb8"}, {1, "#e9d6a6"}}, t)
+rgb(120, 130, 140)   color("#aabbcc")
+smoothstep(a, b, x)  lerp(a, b, t)  clamp(x, lo, hi)
+n = noise{seed=3, octaves=5, period=260, persistence=0.5}
+n(x, y)              -- about -1..1        n:at01(x, y)  -- 0..1
+sample(x, y, r)      -- what's on the canvas there (wet paint included)
+```
+
+### Masks
+
+Masks are coverage maps of the whole canvas. Operations return new masks.
+
+```lua
+everywhere()
+mask(function(x, y) return y < 300 and 1 or 0 end)    -- any function, 0..1
+ellipse(cx, cy, rx, ry)   rect(x, y, w, h)
+poly({{x, y}, ...})       poly(pts, true)              -- true: smoothed
+below(function(x) return 420 + 20*math.sin(x/90) end)  -- under a curve (or a point list)
+above(curve)                                           -- over it
+ribbon(points, widths)    ribbon(points, 3)            -- a band along a line
+m + n   m * n   m - n   -m                             -- union, intersect, subtract, invert
+m:roughen(units, period, seed)   -- push the edge in and out by about `units`
+m:soften(units)   m:blur(units)
+m:grow(units)     m:shrink(units)   m:offset(units)
+m:rim(width, soft)                -- the inside strip along the edge
+m:distance()                      -- signed distance in units (+ inside): a field
+m:band(lo, hi, soft)              -- turn a field back into a mask
+m:times(fn or mask)  m:map(function(v) return v^2 end)
+m:at(x, y)   m:area()
+```
+
+Points are `{{x, y}, {x, y}, ...}` or a flat `{x1, y1, x2, y2, ...}`.
+
+### The hand: brushes and strokes
+
+```lua
+b = brush("round", 3)        -- kinds: round, flat, filbert, fan, rigger, badger, stippler
+b = brush{kind="filbert", width=8, stiffness=0.5}      -- also: length, hair, run, lay,
+                                                       -- pickup, push, splay, ragged, bristles
+b:load("#2a3040", 0.9)       -- mix it from pal (masstone) and dip: amount 0..1 of a full load
+b:load("#9fb0c0", 0.6, {at={500, 300}, coats=0.8})     -- aim at the look over what's there
+b:load(color, 0.8, {medium=0.4, pal=blues})
+b:reload(color, amount)      -- wipe most of the old paint, then load
+b:wipe(0.85)                 -- on the rag
+b:fullness()                 -- paint left, 0..1
+b:stroke({{100, 500}, {300, 520}, {500, 510}},
+  {pressure={0.9, 0.3}, ramps={0.05, 0.4}, orient="across", shake=1, swell={1, 1.3, 0.8}, clip=m})
+b:touch(x, y, {pressure=0.6, drag={1, 0}, twist=0.2, angle=0.3, clip=m})
+```
+
+A brush keeps its paint across strokes and chunks: several strokes from one
+load run dry naturally. `orient` is `"across"`, `"along"` or a fixed angle.
+
+### Covering areas
+
+```lua
+work(mask, {hand="body", color=..., angle=0, ...})
+```
+
+`hand` picks a preset from the style, which you then adjust:
+`broad` (long soft passes: skies, fog, water), `body` (form in body color,
+the default), `detail` (small, cut in), `hatch` (short strokes side by side:
+conifers, grass), `glaze` (thin veils; `medium` 0.6–0.95), `scumble`,
+`blend` (a clean blender fusing wet paint). Options:
+
+| option | meaning |
+|---|---|
+| `color` | required: a color or `function(x, y)` returning one: the look you want on the canvas |
+| `angle` | stroke direction, a number or `function(x, y)` |
+| `tool` | `"filbert 8"`, `{kind=, width=}` or a brush |
+| `length` | `{min, max}` stroke length in units |
+| `coverage` | layers of strokes over each point (2–5) |
+| `medium` | oil medium in the paint, 0..1 (thin 0.25, body 0.15) |
+| `pal` | a palette (e.g. `pal:only{...}`), or `false` for unmixed paint |
+| `aim` | `"laid"` (default: aim at the look over what's there), `"masstone"`, or a number of coats |
+| `pressure`, `ramps` | `{start, end}` pressure; attack and release fractions |
+| `dips` | `{every, load, wipe}`: strokes per trip to the palette |
+| `load`, `load_at` | load per dip; a field that varies it |
+| `angle_jitter`, `curve` (`{bow, wave}`), `cross`, `drift` (`{amount, scale}`), `tail`, `broken`, `swell`, `clump` | the hand's irregularity |
+| `order` | `"passages"`, `"scatter"`, `"down"`, `"across"` or a sweep angle |
+| `orient`, `shake`, `clip`, `threshold`, `cut_in` (a tool), `scrub`, `blender`, `ruler`, `jitter`, `mix_jitter`, `paint` (`{hiding, stiff}`), `seed` | as in the engine's `Handling` |
+
+```lua
+blend(mask, {angle=0})                    -- = work(mask, {hand="blend", ...})
+stipple(mask, {width=2.4, color="#cfccc2", coverage=function(x, y) ... end,
+  pressure={0.5, 0.9}, dips={16, 0.35, 0.7}, aim=false, medium=0.6,
+  drag={1, 0}, twist=0.3, cluster={0.2, 5}, feather=0.6, clip=false})
+glaze(mask_or_nil, {color="#8a6a3a", coats=0.4, pigment="transparent"})   -- or semi, opaque, varnish
+```
+
+### Trees
+
+```lua
+t = tree{habit="spruce", x=310, y=500, height=210, seed=4}  -- oak, dead_oak, birch, spruce
+for _, l in ipairs(t.limbs) do
+  -- l.pts {{x,y},...}, l.w (width per point), l.z, l.order (0 trunk, 1 limbs, ...),
+  -- l.parent (index), l.at, l.dead, l.dead_from, l.broken, l.root
+end
+t.tips   t.bounds   t:mask()
+```
+
+The skeleton says how the tree grew. Painting it is up to you: stroke
+the limbs with brushes sized by `l.w`, build foliage masks from
+`ribbon(l.pts, widths)`, and so on.
+
+### Time and finishing
+
+```lua
+dry()                 -- the wet paint levels and dries now
+wait(minutes)         -- advance the painting clock; returns it
+clock()
+varnish{color="#e6d3a4", coats=0.4, vary=0.12}
+cracks{island_mm=3.5, dirt=0.6}             -- craquelure (slow at 3200px)
+relief(strength, gloss)                      -- light the surface relief (style default)
+```
+
+`wait` is a placeholder for a real drying model: `wait(m)` with m ≥ 60
+dries everything, like `dry()`, and a shorter wait only moves the clock. The
+clock is written into the log at every chunk, so time is already part of
+the program. Wet-into-wet only happens while paint is wet: paint the sky,
+`blend` it in the same chunk or the next, then `wait(24*60)` before you
+paint over it.
+
+## Replay
+
+```sh
+easel run paintings/lua/<name>.lua [--width 3200] [--out path.png]
+          [--crop x0,y0,x1,y1] [--margin 40] [--look]
+```
+
+This runs the chunks in order in a fresh session and writes
+`out/lua/<name>_<width>.png`; `--look` also writes a JPEG next to it. At the
+width you painted at, the PNG is byte-identical to `easel save` from the live
+session. At 3200px it is the full render: the same program at a finer grain.
+The file is plain Lua with chunk markers (`--@ chunk N · clock M`), so you
+can edit it by hand and replay. If you do, keep the markers.
+
+## Costs (1000px, busy 10-core machine)
+
+- `canvas{}` (the primed linen) ≈ 3 s; a broad sky pass with a blend
+  ≈ 6 s; a body passage ≈ 1–1.5 s; a stipple pass ≈ 0.2 s; hundreds of
+  brush strokes along tree limbs ≈ 0.05 s
+- `look` ≈ 0.04 s, `look --dried` ≈ 0.3 s
+- replaying the example: 18–29 s at 1000px (see notes/easel.md for 3200px)
+
+## Limits
+
+- A chunk that changes a table defined in an earlier chunk and then fails
+  or is undone leaves that change in place: globals and brushes are rolled
+  back, but not the insides of tables. `easel check` detects this; the
+  log is the truth, so close and reopen to rebuild from it.
+- `form` (solids, light and shade) is not exposed yet.
+- Sessions paint the whole canvas. `easel run --crop` renders a window
+  of a finished program.

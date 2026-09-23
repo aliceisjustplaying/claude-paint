@@ -40,6 +40,7 @@ pub struct Session {
     pub undo_depth: usize,
 }
 
+#[derive(Debug)]
 pub struct Ran {
     pub out: String,
     pub secs: f64,
@@ -100,9 +101,10 @@ impl Session {
         if src.trim().is_empty() {
             return Err("empty chunk".into());
         }
-        let snap = self.snap().map_err(|e| e.to_string())?;
+        // a replay (undo depth 0) needs no snapshot: a failure ends it
+        let snap = if self.undo_depth > 0 { Some(self.snap().map_err(|e| e.to_string())?) } else { None };
         let n = self.log.len() as u64 + 1;
-        let clock = snap.clock;
+        let clock = self.st.borrow().clock;
         self.st.borrow_mut().begin(n);
         let t0 = Instant::now();
         let chunk = self.lua.load(src.as_str()).set_name(format!("chunk {n}"));
@@ -117,13 +119,19 @@ impl Session {
             Ok(Err(e)) => Some(clean_error(&e.to_string())),
             Err(p) => Some(format!("engine panic: {}", p.downcast_ref::<String>().cloned().or(p.downcast_ref::<&str>().map(|s| s.to_string())).unwrap_or_default())),
         };
+        // masks and brushes hold memory Lua can't see: collect between chunks
+        let _ = self.lua.gc_collect();
         if let Some(e) = fail {
-            self.restore(snap).map_err(|e| e.to_string())?;
+            if let Some(snap) = snap {
+                self.restore(snap).map_err(|e| e.to_string())?;
+            }
             let mut msg = out;
             msg.push_str(&e);
             return Err(msg);
         }
-        self.snaps.push_back(snap);
+        if let Some(snap) = snap {
+            self.snaps.push_back(snap);
+        }
         while self.snaps.len() > self.undo_depth {
             self.snaps.pop_front();
         }
@@ -220,4 +228,68 @@ pub fn parse_program(text: &str) -> Vec<String> {
 pub fn root() -> PathBuf {
     let r = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
     r.canonicalize().unwrap_or(r)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const W: usize = 160;
+
+    fn bits(s: &Session) -> Vec<u32> {
+        s.canvas().unwrap().seen().iter().flat_map(|p| p.map(f32::to_bits)).collect()
+    }
+
+    const CHUNKS: [&str; 4] = [
+        r##"canvas{style="friedrich", aspect=1.5, seed=2}"##,
+        r##"sky = above(function(x) return 300 + 20*math.sin(x/80) end)
+           work(sky, {hand="broad", color=function(x, y) return mix("#6f84a8", "#e0d4b0", y/300) end, angle=0, coverage=2})"##,
+        r##"b = brush("round", 4); b:load("#303830", 0.9)
+           for i = 1, 5 do b:stroke({{100 + i*60, 500}, {130 + i*60 + rand(-10, 10), 420}}) end"##,
+        r##"wait(90); stipple(below(function(x) return 380 end), {width=3, color="#c8c6bc", coverage=1.5})"##,
+    ];
+
+    #[test]
+    fn replay_is_exact_and_failures_roll_back() {
+        let mut a = Session::new(W, 4).unwrap();
+        for (i, c) in CHUNKS.iter().enumerate() {
+            a.run(c).unwrap();
+            if i == 1 {
+                // a failing chunk that painted and set globals first changes nothing
+                let before = bits(&a);
+                let e = a.run(r##"junk = 1; b0 = brush("flat", 6); b0:load("#ff0000"); b0:stroke({0, 0, 900, 600}); work(everywhere(), {colour="#fff"})"##).unwrap_err();
+                assert!(e.contains("unknown option \"colour\""), "{e}");
+                assert_eq!(before, bits(&a));
+                assert!(a.run("assert(junk == nil and b0 == nil)").is_ok());
+                a.undo(1).unwrap();
+            }
+        }
+        assert_eq!(a.log.len(), CHUNKS.len());
+        assert_eq!(a.st.borrow().clock, 90.0);
+        // the log replays to the same canvas, bit for bit
+        let prog = a.program("t");
+        let chunks = parse_program(&prog);
+        assert_eq!(chunks, CHUNKS.iter().map(|c| c.trim_end().to_string()).collect::<Vec<_>>());
+        let mut b = Session::new(W, 0).unwrap();
+        for c in &chunks {
+            b.run(c).unwrap();
+        }
+        assert_eq!(bits(&a), bits(&b));
+    }
+
+    #[test]
+    fn undo_restores_canvas_and_brush() {
+        let mut s = Session::new(W, 4).unwrap();
+        s.run(CHUNKS[0]).unwrap();
+        s.run(r##"b = brush("round", 4); b:load("#303830", 0.9)"##).unwrap();
+        let before = bits(&s);
+        s.run("full0 = b:fullness(); b:stroke({100, 300, 400, 320}); assert(b:fullness() < full0)").unwrap();
+        assert_ne!(before, bits(&s));
+        s.undo(1).unwrap();
+        assert_eq!(before, bits(&s));
+        s.run("assert(full0 == nil); print(b:fullness())").unwrap();
+        let full: f32 = s.st.borrow().out.trim().parse().unwrap();
+        assert!(full > 0.5, "the brush got its paint back: {full}");
+        assert!(s.undo(5).is_err());
+    }
 }

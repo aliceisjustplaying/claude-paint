@@ -60,3 +60,4 @@ green, a close study); stop and evaluate.
 - fixes-ux merged (stage UX, Copy fields, roughen units, form docs). Coast #17 = NaN gesture point: reject non-finite points in bristle.rs after tip merges (test crates/paint/tests/curved_drag_nan.rs, ignored).
 - easel v1 done (LuaJIT via mlua 0.10: read brief before the Lua 5.5 edit). Resumed as easel-2: switch to Lua 5.5/mlua 0.12, merge main, expose form, exact rollback.
 - drying merged (checkpoint PAINTCK3 combines drying state + cracks' ground; resume verified byte-identical).
+- scene merged: one sun, shadows/contact/reflections consistent in all three study panels. Its 'glaze at thickness 5 wipes to ground' report doesn't reproduce on main after drying's settle NaN fix (probe: glaze darkens toward its own color).

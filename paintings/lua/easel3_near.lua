@@ -134,3 +134,80 @@ for k, sp in ipairs(specs) do
     end,
     angle=function(x, y) return (x < cx and 2.55 or 0.6) + 0.35*math.sin(y/7) end, angle_jitter=0.55})
 end
+
+--@ chunk 8 · clock 38574.35546875
+
+dry()
+stainn = noise{seed=31, octaves=5, period=60, stretch={1.5708, 4}}
+grain = noise{seed=32, octaves=4, period=18}
+lich = worley{seed=33, period=14}
+stone = function(x, y)
+  local v = smoothstep(0.08, 0.9, f:value(x, y))
+  local c = gradient({{0, "#4d4842"}, {0.35, "#7a7163"}, {0.7, "#aa9b80"}, {1, "#d6c6a3"}}, v)
+  local s = stainn:at01(x, y)
+  c = mix(c, "#3f3d38", 0.5 * smoothstep(0.6, 0.9, s))
+  c = mix(c, "#6a7253", 0.4 * smoothstep(560, 690, y) * grain:at01(x, y))
+  return shift(c, 0.035 * grain(x, y), 0, 0)
+end
+local faces = rockm * f:lit{parts={1}, soft=0.1}
+local shade = rockm * f:shadow{parts={1}, soft=0.1}
+work(shade, {hand="body", tool="filbert 4", color=stone, angle=f:field("fall"), length={5, 16}, coverage=3.6, medium=0.12, angle_jitter=0.3})
+work(faces, {hand="body", tool="filbert 4", color=stone, angle=function(x, y) return 0.04 + 0.1*grain(x, y) end, length={5, 18}, coverage=3.6, medium=0.12})
+work(boulm, {hand="body", tool="filbert 3", color=function(x, y) return mix(stone(x, y), "#687056", 0.35*grain:at01(x*2, y)) end, angle=f:field("across"), length={4, 12}, coverage=3.6, medium=0.12})
+
+--@ chunk 9 · clock 69048.79296875
+
+dry()
+local smooth = function(x, y)
+  local v = smoothstep(0.08, 0.9, f:value(x, y))
+  return gradient({{0, "#4f4a44"}, {0.35, "#7b7264"}, {0.7, "#a99a80"}, {1, "#d2c2a0"}}, v)
+end
+stipple(rockm:shrink(2), {width=2.2, color=smooth, coverage=1.8, pressure={0.4, 0.8}, dips={20, 0.35, 0.7}, medium=0.3, fade=0.6})
+stipple(boulm:shrink(2), {width=2, color=function(x, y) return mix(smooth(x, y), "#6b7258", 0.3) end, coverage=1.8, pressure={0.4, 0.8}, dips={20, 0.35, 0.7}, medium=0.3})
+
+--@ chunk 10 · clock 95568.83984375
+dry()
+wob = noise{seed=41, octaves=3, period=25}
+function wobble(pts, amp)
+  local out = {}
+  for i = 1, #pts - 1 do
+    local a, b = pts[i], pts[i+1]
+    local steps = math.max(2, math.floor(math.sqrt((b[1]-a[1])^2 + (b[2]-a[2])^2) / 5))
+    for s = 0, steps - 1 do
+      local t = s / steps
+      local x, y = lerp(a[1], b[1], t), lerp(a[2], b[2], t)
+      out[#out+1] = {x + amp*wob(x, y+50), y + amp*wob(x+99, y)}
+    end
+  end
+  out[#out+1] = pts[#pts]
+  return out
+end
+function crack(pts, w, col, press, amp)
+  local b = brush{kind="round", width=w, point=0.35}
+  b:load(col, 0.95)
+  b:stroke(wobble(pts, amp or 2.5), {pressure=press or {0.7, 0.2}, ramps={0.08, 0.4}, shake=0.6, swell={1, 1.5, 0.7, 1.3, 0.9}})
+end
+local D, D2, L = "#2b2723", "#3d3832", "#d9c9a6"
+crack({{305, 398}, {420, 402}, {540, 404}, {640, 404}}, 6, D, {0.7, 0.45})
+crack({{648, 410}, {760, 412}, {850, 408}}, 5.5, D, {0.7, 0.4})
+crack({{300, 390}, {420, 393}, {560, 395}}, 3, L, {0.5, 0.2}, 1.5)
+crack({{641, 272}, {637, 320}, {643, 360}, {639, 402}}, 6.5, D, {0.8, 0.5})
+crack({{649, 300}, {647, 350}, {651, 400}}, 2.6, L, {0.4, 0.1}, 1.5)
+crack({{325, 262}, {400, 250}, {500, 246}, {600, 252}, {680, 268}}, 3.2, L, {0.55, 0.2}, 2)
+crack({{655, 303}, {720, 299}, {800, 304}, {840, 312}}, 3, L, {0.5, 0.2}, 2)
+crack({{262, 500}, {300, 512}, {420, 520}, {600, 526}, {820, 530}}, 3, "#bfae8c", {0.5, 0.2}, 2)
+crack({{470, 560}, {466, 600}, {472, 640}, {468, 675}}, 4.2, D, {0.7, 0.3})
+crack({{612, 565}, {618, 610}, {612, 650}}, 3, D2, {0.6, 0.1})
+crack({{770, 560}, {774, 610}, {768, 668}}, 4, D, {0.7, 0.3})
+crack({{540, 410}, {536, 450}, {545, 490}, {541, 518}}, 3, D2, {0.6, 0.1})
+crack({{742, 414}, {746, 470}, {739, 526}}, 4, D, {0.7, 0.25})
+crack({{420, 262}, {428, 310}, {421, 360}, {426, 398}}, 3.4, D2, {0.6, 0.15})
+crack({{560, 250}, {556, 300}, {563, 340}}, 2.6, D2, {0.55, 0.05})
+crack({{870, 420}, {878, 480}, {872, 540}, {880, 610}}, 3.4, "#25221f", {0.6, 0.2})
+local lam = brush{kind="round", width=2, point=0.5}
+for i = 1, 16 do
+  local y0 = ({440, 462, 478, 590, 612, 636, 300, 330, 358})[1 + (i-1) % 9] + rand(-4, 4)
+  local x0 = rand(320, 620); local len = rand(60, 180)
+  lam:reload(mix("#5e574d", "#8a7e6a", rand()), 0.6)
+  lam:stroke(wobble({{x0, y0}, {x0 + len/2, y0 + rand(-2, 2)}, {x0 + len, y0 + rand(-3, 3)}}, 1.2), {pressure={0.15, 0.45}, ramps={0.3, 0.4}})
+end

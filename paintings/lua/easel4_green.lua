@@ -115,3 +115,151 @@ end) - river
 work(hedge, {hand="hatch", tool="round 1.6", length={2, 5}, coverage=2.5, angle=function(x,y) return 2.2*fnz(x*3,y*3) end, medium=0.25,
   color=function(x, y) local p = w:to_ground(x, y); local Z = p and p[3] or 3000
     return mix("#34472a", sk:airlight(x), clamp(w:aerial(Z)*0.9, 0, 0.85)) end})
+
+--@ chunk 9 · clock 2880
+local s = w:spot(706, 318); local u = s.x and w:height(s.x, s.y, 1) or 0.8
+print("units/m", u, s)
+local air = sk:airlight(706)
+local function hz(c) return mix(c, air, 0.42) end
+local walls, roofs, shade = nil, nil, nil
+local function add(a, m) if a then return a + m else return m end end
+local hs = {{648, 321, 12, 7, 6}, {664, 320, 10, 6, 6}, {678, 319, 14, 7, 7}, {730, 319, 12, 7, 6}, {746, 320, 10, 6, 5}, {760, 321, 13, 7, 6}, {688, 320, 9, 6, 5}}
+for _, h in ipairs(hs) do
+  local x, b, wd, ht, rf = h[1], h[2], h[3]*u, h[4]*u, h[5]*u
+  walls = add(walls, rect(x, b - ht, wd, ht))
+  shade = add(shade, rect(x + wd*0.62, b - ht, wd*0.38, ht))
+  roofs = add(roofs, poly({{x - 1, b - ht}, {x + wd*0.2, b - ht - rf}, {x + wd*0.8, b - ht - rf}, {x + wd + 1, b - ht}}))
+end
+-- church: nave and tower with spire
+local cx, cb = 706, 318
+local nave = rect(cx - 2, cb - 11*u, 26*u, 11*u)
+local tower = rect(cx - 5*u, cb - 30*u, 7*u, 30*u)
+local spire = poly({{cx - 5.6*u, cb - 30*u}, {cx - 1.5*u, cb - 50*u}, {cx - 1.2*u, cb - 50*u}, {cx + 2.6*u, cb - 30*u}})
+local naveroof = poly({{cx + 2*u, cb - 11*u}, {cx + 5*u, cb - 18*u}, {cx + 24*u, cb - 18*u}, {cx + 26*u, cb - 11*u}})
+CHURCH = nave + tower + spire + naveroof
+VILLAGE = walls + roofs + CHURCH
+work(walls + nave + tower, {hand="detail", tool="round 1.2", length={1.5, 4}, coverage=3, angle=1.57, color=hz("#d9ccaa"), medium=0.2})
+work(shade + rect(cx + 0.5*u, cb - 30*u, 1.5*u, 30*u), {hand="detail", tool="round 1", length={1.5, 3}, coverage=2.5, angle=1.57, color=hz("#8d8a82"), medium=0.2})
+work(roofs + naveroof, {hand="detail", tool="round 1.2", length={1.5, 4}, coverage=3, angle=0, color=hz("#8a4f38"), medium=0.2})
+work(spire, {hand="detail", tool="round 1", length={1.5, 3}, coverage=3, angle=1.57, color=hz("#4d5a5e"), medium=0.2})
+-- a few trees among the houses
+local tm = nil
+for _, t in ipairs({{642, 318, 6}, {700, 316, 5}, {722, 317, 6}, {770, 318, 7}, {658, 316, 4}}) do
+  tm = add(tm, ellipse(t[1], t[2] - t[3]*0.6, t[3]*0.8, t[3]*0.7):roughen(1.2, 4, t[1]))
+end
+tm = tm - CHURCH
+work(tm, {hand="hatch", tool="round 1.2", length={1.5, 3}, coverage=2.6, angle=function(x,y) return 2.2*fnz(x*4,y*4) end, color=hz("#3a4b2c"), medium=0.2})
+
+--@ chunk 10 · clock 2880
+BROW2 = {{-12,466},{80,457},{170,461},{260,471},{350,485},{420,489},{500,497},{580,515},{660,540},{740,566},{830,589},{920,604},{1012,612}}
+hillo = outline{pts=BROW2, open=true, char="soft", lobe=5, amount=0.6, seed=12}
+HILL = hillo:below(H + 20)
+hn = noise{seed=21, octaves=5, period=70}
+function hillc(x, y)
+  local d = y - (466 + (x/1000)*140)
+  local c = gradient({{0, "#8f9a4c"}, {0.25, "#76883e"}, {0.6, "#566b30"}, {1, "#44572a"}}, clamp(d/220, 0, 1))
+  return shift(c, 0.035*hn(x, y), 0.004*hn(x+300, y), 0.01*hn(x, y+500))
+end
+work(HILL, {hand="body", length={12, 34}, coverage=3.5, color=hillc, medium=0.2,
+  angle=function(x, y) return 0.12 + 0.35*hn(x*0.5, y*0.5) end})
+
+--@ chunk 11 · clock 2880
+wait(120)
+local wn = noise{seed=33, octaves=3, period=110}
+local top = {}
+local x = -12
+while x < 1030 do
+  local by = 466 + (x/1000)*146
+  local g = wn:at01(x, 0)
+  local rise = (g < 0.24) and (5 + 12*g) or (24 + 110*(g - 0.24)^1.3 + rand(0, 18))
+  rise = rise * (0.75 + 0.5*smoothstep(200, 900, x))
+  top[#top+1] = {x, by - rise}
+  x = x + rand(14, 30)
+end
+woodo = outline{pts=top, open=true, char="soft", lobe=11, amount=1.2, seed=41}
+WOOD = woodo:below(H + 20) - HILL:grow(1)
+local tn = noise{seed=44, period=14}
+work(WOOD, {hand="hatch", tool="round 2", length={3, 7}, coverage=3, angle=function(x,y) return 2.4*tn(x,y) end, medium=0.2,
+  color=function(x, y) return mix("#2a3825", "#3b4a31", wn:at01(x*3, y*3)) end})
+local cells = worley{seed=8, period=16}
+local lit = WOOD * mask(function(x, y)
+  local f1, f2, edge, r = cells:at(x + 5, y + 6)
+  local g = cells:at(x, y)
+  return smoothstep(0.3, 0.05, (f1 or 1)) * (r > 0.25 and 1 or 0.3)
+end)
+work(lit, {hand="hatch", tool="round 1.5", length={2, 4}, coverage=2.2, angle=function(x,y) return 2.4*tn(x+9,y) end, medium=0.2,
+  color=function(x, y) return mix("#51663a", "#6c7f45", wn:at01(x, y)) end})
+
+--@ chunk 12 · clock 3000
+wait(180)
+oak = tree{habit="oak", x=215, y=494, height=380, seed=3}
+lv = oak:foliage{sun={-0.7, -0.6, 0.4}, seed=3}
+local thick
+for _, l in ipairs(oak.limbs) do
+  if #l.pts >= 2 and l.w[1] >= 3 then
+    local r = ribbon(l.pts, l.w)
+    thick = thick and (thick + r) or r
+  end
+end
+OAKWOOD = thick
+local bn = noise{seed=5, period=6, stretch={1.5, 3}}
+work(thick, {hand="body", tool="round 2", length={4, 12}, coverage=3.5, medium=0.2, angle=1.5,
+  color=function(x, y) return shift(mix("#3b342c", "#2c2823", smoothstep(300, 490, y)), 0.03*bn(x, y), 0, 0) end, clip=thick})
+local litside = thick * mask(function(x, y) return 1 - OAKWOOD:at(x - 3.5, y + 1.5) end)
+work(litside, {hand="detail", tool="round 1.2", length={3, 9}, coverage=2.4, medium=0.2, angle=1.5,
+  color=function(x, y) return shift("#8a8270", 0.04*bn(x, y), 0, 0) end, clip=litside})
+local limb, twig = brush("round", 1.8), brush("rigger", 0.6)
+for i, l in ipairs(oak.limbs) do
+  if #l.pts >= 2 and l.w[1] < 3 then
+    local b = (l.w[1] > 1.0) and limb or twig
+    if i % 5 == 1 or b:fullness() < 0.3 then b:reload("#3a342d", 0.9) end
+    b:stroke(l.pts, {pressure={clamp(0.35 + 0.25*l.w[1], 0.3, 0.95), 0.15}, ramps={0.03, 0.5}})
+  end
+end
+
+--@ chunk 13 · clock 3180
+wait(24*60)
+-- the trunk again, over the set hill, so the green no longer muddies it
+local lower = OAKWOOD * rect(0, 330, 1000, 200)
+work(lower, {hand="body", tool="round 2", length={4, 10}, coverage=3, medium=0.15, angle=1.5, load=0.9,
+  color=function(x, y) return mix("#3d362d", "#2a2621", smoothstep(380, 494, y)) end, clip=lower})
+local ll = lower * mask(function(x, y) return 1 - OAKWOOD:at(x - 3.5, y + 1.5) end)
+work(ll, {hand="detail", tool="round 1.2", length={3, 8}, coverage=2.4, medium=0.15, angle=1.5, color="#857c68", clip=ll})
+local turn = noise{seed=7, period=9}
+local way = function(x, y) return 2.4 * turn(x, y) end
+CROWN = lv:mask()
+work(CROWN, {hand="hatch", tool="round 1.8", length={3, 7}, coverage=2.6, angle=way, angle_jitter=0.6, medium=0.2,
+  color=function(x, y) return mix("#26321f", "#2f3c25", (y - 120)/300) end})
+work(CROWN * lv:lit():soften(2), {hand="hatch", tool="round 1.5", length={2, 6}, coverage=2.2, angle=way, angle_jitter=0.6, medium=0.2,
+  color=function(x, y) return mix("#4a5e2e", "#3f5229", (y - 120)/300) end})
+
+--@ chunk 14 · clock 4620
+wait(2*24*60)
+stone = body.ellipsoid({432, 486, 40}, {56, 36, 42}):turn({432, 486, 40}, 0.4, 0.15, -0.08):rough(5, 60, 3)
+  :cut({432, 458, 40}, {-0.3, -1, 0.4}, 10, 3):cut({470, 480, 40}, {1, -0.3, 0.3}, 11, 3):rough(0.8, 12, 4, true)
+fs = form{ {stone, dist=0.1}, light={from={-1, -0.75}, front=0.4, ambient=0.25, penumbra=0.06} }
+local seen = fs:silhouette{parts={1}, soft=0.4} * above(function(x) return 506 + 3*math.sin(x/7) end)
+STONE = seen
+local sn = noise{seed=12, period=8}
+local function stonec(x, y, lt, dk)
+  local v = fs:value(x, y) or 0.4
+  return shift(mix(dk, lt, smoothstep(0.08, 0.85, v)), 0.035*sn(x, y), 0.004*sn(x+40, y), 0.008*sn(x, y+40))
+end
+work(seen * fs:shadow{parts={1}}, {hand="body", tool="round 2.5", length={4, 12}, coverage=3.2, medium=0.2, angle=fs:field("fall"),
+  color=function(x, y) return stonec(x, y, "#77736a", "#3f3d3a") end})
+work(seen * fs:lit{parts={1}}, {hand="body", tool="round 2.5", length={4, 12}, coverage=3.2, medium=0.2, angle=fs:field("across"),
+  color=function(x, y) return stonec(x, y, "#b4ab95", "#716b60") end})
+work(fs:edges{concave=true} * seen, {hand="detail", tool="round 1", color="#2f2c29", angle=fs:field("edge"), coverage=1.4, medium=0.2})
+-- the wanderer on the brow, back to us, looking out over the valley
+local x, y, k = 348, 488, 1.3
+local function F(dx, dy) return {x + k*dx, y + k*dy} end
+fig = body_of{spine={F(0, -37), F(0, -33), F(0.5, -24), F(1, -13)}, widths={4.2*k, 7.5*k, 7.2*k, 9.5*k},
+  limbs={{F(-2, -13), F(-2.2, -6), F(-2.4, 0), widths={2.6*k, 2.2*k, 2*k}}, {F(2.2, -13), F(2.8, -6), F(3.2, 0), widths={2.6*k, 2.2*k, 2*k}},
+         {F(-3.5, -33), F(-4.6, -26), F(-4, -20), widths={2.4*k, 2.1*k, 1.7*k}}, {F(3.6, -33), F(4.4, -26), F(5.6, -21), widths={2.4*k, 2.1*k, 1.7*k}},
+         {F(-0.2, -39.5), F(0.2, -40), widths={5.8*k, 5.8*k}}},
+  blend=0.5, char="firm", seed=31}
+FIG = fig:mask()
+work(FIG, {hand="body", tool="round 1", length={1.5, 4}, coverage=3, medium=0.15, angle=1.5, clip=FIG,
+  color=function(px, py) return mix("#2e3136", "#23211f", (py - y + 52)/52) end})
+local lit = fig:band(1.2, 0.5) * FIG * rect(0, 0, x - 1, 714)
+work(lit, {hand="detail", tool="round 0.8", length={1, 3}, coverage=2, medium=0.15, angle=1.5, color="#5a5a58", clip=lit})

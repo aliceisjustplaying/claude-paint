@@ -268,7 +268,7 @@ fn spans(poly: &[(f32, f32)], y: f32) -> Vec<(f32, f32)> {
         }
     }
     xs.sort_by(f32::total_cmp);
-    xs.chunks_exact(2).map(|c| (c[0], c[1])).collect()
+    xs.as_chunks::<2>().0.iter().map(|c| (c[0], c[1])).collect()
 }
 
 /// The span at `y` holding `x` (or the nearest one).
@@ -696,7 +696,7 @@ pub fn envelope_for(habit: &str, apex: (f32, f32), base: f32, halfw: f32, seed: 
     let mut left = side(-1.0, &mut rng);
     left.reverse();
     let mut pts = right;
-    pts.extend(left.into_iter().skip(0));
+    pts.extend(left);
     pts.pop(); // the apex again
     pts
 }

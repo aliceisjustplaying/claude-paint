@@ -237,6 +237,9 @@ things.
     the crown. Workaround: fill ribbons with `work` (as for the trunk).
 18. **The clock jumped again**, from 46,849 to 78,556 minutes on a chunk
     that only did `wait(24*60); varnish(); relief()`.
+19. **Scratch sessions write into `paintings/lua/`.** My `oakstudy` session
+    wrote `paintings/lua/oakstudy.lua` in the shared repo; I moved it to
+    my scratch directory.
 20. **A brush glaze with `color_over` is not a no-op where it returns
     `under`.** Every stroke is still laid, dragging and flattening dry
     texture underneath: a cloud-shadow pass wiped the plain's fields and
@@ -245,9 +248,7 @@ things.
 21. **Undoing a failed experiment costs a replay if a chunk follows it.**
     Removing the varnish chunk to keep painting meant close, edit and a
     100 s replay; there's no "unvarnish" step.
-19. **Scratch sessions write into `paintings/lua/`.** My `oakstudy` session
-    wrote `paintings/lua/oakstudy.lua` in the shared repo; I moved it to
-    my scratch directory.
+
 ## Critique
 
 At 1000px it reads as a bright, clear summer day on a common: a broad old
@@ -262,8 +263,10 @@ bladed shadow now sit in the grass.
 Where it falls short of Friedrich, honestly:
 - **Composition.** His lone trees have near-symmetrical gravity and a
   deliberate emptiness; mine is a pleasant, slightly casual arrangement.
-  The track leads in diagonally, the dome answers the oak, but the right
-  half of the middle ground is empty without meaning it.
+  The track leads in diagonally, the dome answers the oak and the far
+  church gives the left a small goal, but the right half of the middle
+  ground is empty without meaning it. The cloud shadows I tried for it
+  failed.
 - **Greens.** Too uniformly yellow-green and saturated in the meadow. His
   summer greens are cooler and more varied, with blue-green darks. The
   near meadow at 1000px reads as a field of vertical stripes.

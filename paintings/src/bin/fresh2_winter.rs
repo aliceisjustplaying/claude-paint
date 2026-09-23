@@ -150,8 +150,9 @@ fn main() {
     // ----------------------------------------------------------------- moon
     let moon = (668.0f32, 118.0f32);
     // the crescent: the lit disc less the dark one, lit toward the lower
-    // right where the sun has gone down
-    let (mr, dark_off) = (10.5f32, (-4.2f32, -3.4f32));
+    // left, where the sun has gone down (the afterglow that lights the snow
+    // and the left edges of everything)
+    let (mr, dark_off) = (10.5f32, (4.2f32, -3.4f32));
     let crescent = Mask::from_shape(f, Shape::new().circle(moon.0, moon.1, mr)).subtract(&Mask::from_shape(f, Shape::new().circle(moon.0 + dark_off.0, moon.1 + dark_off.1, mr * 0.97)));
     if o.stage("moon", &mut c, &mut rng) {
         // a faint glow around it first, stippled: fine touches a little
@@ -175,18 +176,20 @@ fn main() {
         c.dry();
         // the crescent filled with small touches of a round, clipped to its
         // shape so the horns come to points
-        let paint = pal.mix(hex("#efe8cc")).paint(0.12).with_hiding(0.93);
+        // thinner than body paint: a thick clipped rim casts a dark line
+        // under the raking light
+        let paint = pal.mix(hex("#efe8cc")).paint(0.3).with_hiding(0.93);
         let mut b = Held::new(Tool::round_sable(1.3), rng.next_u64());
         let mut k = 0;
         while k < 260 {
-            let a = rng.range(-1.2, 2.8);
+            let a = rng.range(0.3, 4.3);
             let rr = mr * rng.range(0.4, 1.0);
             let p = (moon.0 + rr * a.cos(), moon.1 + rr * a.sin());
             if crescent.sample(p.0, p.1) < 0.5 {
                 continue;
             }
             if k % 15 == 0 {
-                b.reload(paint, 0.7);
+                b.reload(paint, 0.45);
             }
             k += 1;
             // short strokes along the arc
@@ -512,6 +515,9 @@ fn main() {
 
     // ------------------------------------------------------------------ oak
     let oak_base = (262.0, 598.0);
+    // the oak's habit can be varied from the environment (OAK_SEED, ...) to
+    // try trees without editing: `OAK_SEED=41 cargo paint fresh2_winter --
+    // --resume brook --stale-ok --stop oak --out ...` (see the notes)
     let ev = |k: &str, d: f32| std::env::var(k).ok().and_then(|v| v.parse().ok()).unwrap_or(d);
     let oak = paint::Habit {
         lean: ev("OAK_LEAN", -0.06),

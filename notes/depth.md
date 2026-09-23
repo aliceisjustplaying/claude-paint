@@ -24,11 +24,19 @@ Branch `depth`. This stream answers two complaints from amnesia round 3
   a figure written with gestures is its layer. Masks are front-to-back
   composites, so a soft edge hides exactly as much as it covers:
   - `visible(sel)`: coverage less whatever is in front
-  - `front(sel)`: what hides it, where it is
+  - `front(sel)`: how much of it is hidden, where it is: the selected
+    things' union coverage (as if nothing else were there) less their
+    visible share. A 0.25-coverage layer behind an opaque one gives 0.25,
+    not 1. With several selected things every one counts, including a far
+    one hidden behind something between them (review 4, #3)
   - `behind(sel)`: where a pass lying just behind it shows
   - `at_depth(z)`: where a pass `z` m off shows
   - `between(a, b)`: whatever is seen between `a` and `b` m
   - `seen_at(x, y)`: each thing's share of the pixel
+  - Off the world's `view` (another panel of the canvas) a pixel has no
+    stack. It isn't sky: `stack` and `seen_at` are empty, and every mask
+    above is 0 there, so `visible="sky"`, `behind=` and `at=` can't paint
+    into another panel (review 4, #4)
 - **Layers**: `World::layer(name, mask, LayerDepth::At(m) | Ground)`. A
   motif painted by hand is registered at a depth, so the world knows what
   it hides and what hides it.
@@ -39,8 +47,17 @@ Branch `depth`. This stream answers two complaints from amnesia round 3
     `World::sky_occlusion`: a 16-direction, cosine-weighted cone trace of
     the sky hidden within `reach`. Occluders fade out toward `reach`, so
     it falls off smoothly with distance and has no edge.
-  - Both are weighted by how much of the ground is seen. They never
-    darken the sky (no ring above a stone) or a figure standing in front.
+  - Both are weighted by how much of the surface they fall on is seen.
+    They never darken the sky (no ring above a stone) or a layer (a
+    figure painted by hand) standing in front.
+  - `from=` (`by` in Rust) picks the casters, not the receivers. The cast
+    shadow falls only on the ground and the water. The contact shadow has
+    two parts. On the ground and water it is the sky the `from` bodies
+    hide. On each visible body it is the sky hidden near its foot, by the
+    ground and the other `from` bodies. That part stays even with a
+    `from` that picks nothing, because a body always touches the ground
+    it stands on. To keep a body clean, mask it out of the glaze
+    (`- v:visible(n)`) (review 4, contact-shadow note)
   - `World::cast_soft` is `cast` with the penumbra and casters as
     parameters (`cast` itself is unchanged).
 - **`Handling::limit` and `Stipple::limit`** (additive, in handling.rs and

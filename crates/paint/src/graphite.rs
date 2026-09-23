@@ -76,12 +76,9 @@ pub fn softness(grade: &str) -> Option<f32> {
     }
     // "2H", "B": ASCII digits then H or B (anything else, accented letters
     // and emoji included, is not a grade)
-    let (num, sign) = if let Some(n) = g.strip_suffix('H') {
-        (n, -1.0)
-    } else if let Some(n) = g.strip_suffix('B') {
-        (n, 1.0)
-    } else {
-        return None;
+    let (num, sign) = match g.strip_suffix('H') {
+        Some(n) => (n, -1.0),
+        None => (g.strip_suffix('B')?, 1.0),
     };
     if !num.bytes().all(|b| b.is_ascii_digit()) {
         return None;

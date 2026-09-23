@@ -194,3 +194,144 @@ tops = mask(function(x, y) return woodm:at(x, y) * (1 - woodm:at(x, y - 2.2)) en
 stipple(tops, {width=1.1, color=function(x, y) return mix("#a9aaa8", "#d6d0c0", smoothstep(0, 360, y)) end,
   coverage=1.2, pressure={0.3, 0.6}, drag={1, 0}, aim=false, medium=0.2, fade=0})
 print(tops:area())
+
+--@ chunk 9 · clock 31789.59375
+-- the erratic: gray granite, warm where the low sun takes it, cold violet-gray in its own shadow
+local f = v.form
+stonem = v:visible("bodies")
+local mott = noise{seed=51, period=35, warp={50, 20}}
+local fine = noise{seed=52, period=8}
+function granite(x, y)
+  local val = f:value(x, y) or 0.4
+  local c = gradient({{0, "#3e3f48"}, {0.3, "#5d5c62"}, {0.55, "#8a847a"}, {0.8, "#b9ad98"}, {1, "#d2c3a6"}}, clamp(val * 1.05, 0, 1))
+  c = shift(c, 0.035 * mott(x, y) + 0.015 * fine(x, y), 0.004 * mott(x + 90, y), 0.006 * mott(x, y + 70))
+  return c
+end
+work(stonem, {hand="body", tool="filbert 4", length={6, 18}, coverage=3.6, clip=stonem, medium=0.15,
+  angle=f:field("fall"), angle_jitter=0.4, color=granite})
+
+--@ chunk 10 · clock 31789.59375
+dry()
+local f = v.form
+-- the shadow flank pulled together: a cool violet-gray scumbled over it, down the plane
+local sh = f:shadow{parts={1, 2}, soft=0.15} * stonem
+work(sh, {hand="scumble", tool="filbert 5", length={10, 26}, coverage=2.2, clip=stonem, angle=f:field("fall"),
+  color_over=function(x, y, under) return mix(under, "#4b4a55", 0.55) end})
+-- fissures: where the planes break into hollows, and the fracture I drew on the top
+local cr = f:edges{turn=0.7, step=3, span=2.5, concave=true} * stonem:shrink(3)
+work(cr, {hand="detail", tool="round 1.4", length={4, 12}, coverage=1.6, clip=stonem, angle=f:field("edge"), color="#2e2c2f"})
+local fb = brush("round", 1.6)
+fb:load("#34302f", 0.8)
+fb:stroke({{302,340},{330,346},{362,353},{396,352},{430,350},{468,344},{500,337}}, {pressure={0.2, 0.7, 0.5, 0.15}, ramps={0.2, 0.3}, shake=1.2})
+fb:reload("#2f2c30", 0.8)
+fb:stroke({{541,340},{546,372},{552,402},{561,436},{566,466},{570,492}}, {pressure={0.5, 0.8, 0.3}, ramps={0.1, 0.4}, shake=1.5})
+fb:stroke({{553,410},{540,432},{532,461}}, {pressure={0.4, 0.05}, ramps={0.1, 0.6}, shake=1})
+fb:stroke({{250,430},{276,436},{300,452},{318,478}}, {pressure={0.1, 0.45, 0.05}, ramps={0.3, 0.4}, shake=1.2})
+-- lichen: crusts of pale gray-green and ochre on the lit face
+local lc = worley{seed=55, period=9}
+local lz = noise{seed=56, period=60}
+local lich = stonem:shrink(2) * mask(function(x, y) local _, _, e, r = lc:at(x, y); return smoothstep(0.1, 0.35, lz:at01(x, y)) * (r < 0.35 and 1 or 0) end)
+stipple(lich, {width=1.4, color=function(x, y) local _, _, _, r = lc:at(x, y); return r < 0.15 and "#a9a77f" or "#8f8f78" end,
+  coverage=1.1, pressure={0.3, 0.6}, aim=false, medium=0.15, fade=0.5})
+print(lich:area())
+
+--@ chunk 11 · clock 53965.13671875
+dry()
+local f = v.form
+-- the first snow lying on the top: wherever the surface faces up, broken by the grain of the stone
+local lie = noise{seed=61, period=14, warp={30, 8}}
+cap = stonem * f:mask(function(s) return smoothstep(-0.55, -0.8, s.n[2]) end) * mask(function(x, y) return smoothstep(0.3, 0.55, lie:at01(x, y)) end)
+cap = cap:roughen(2, 8, 62, 0.6) * stonem
+work(cap, {hand="body", tool="filbert 3", length={4, 12}, coverage=3.4, clip=cap, medium=0.12, angle=0.05, angle_jitter=0.3,
+  color=function(x, y) local val = f:value(x, y) or 0.5; return mix("#b4b6c4", "#f3ebd8", smoothstep(0.35, 0.75, val)) end})
+-- snow drifted against the foot of both stones: a soft irregular lip hiding where rock meets ground
+local drift = outline{{170,496},{210,484},{250,492},{300,480},{350,490},{400,486},{450,494},{500,483},{550,490},{590,480},{612,492}, open=true, char="soft", lobe=12, amount=1.2, seed=63}
+local drift2 = outline{{605,552},{640,543},{690,549},{725,542},{752,553}, open=true, char="soft", lobe=8, amount=1.0, seed=64}
+local p1, p2 = drift:path(1), drift2:path(1)
+local w1, w2 = {}, {}
+for k = 1, #p1 do w1[k] = 16 + 8 * math.sin(k * 1.7) end
+for k = 1, #p2 do w2[k] = 12 + 5 * math.sin(k * 2.3) end
+local sh1, sh2 = {}, {}
+for k, p in ipairs(p1) do sh1[k] = {p[1], p[2] + 9} end
+for k, p in ipairs(p2) do sh2[k] = {p[1], p[2] + 7} end
+footd = (ribbon(sh1, w1) + ribbon(sh2, w2)):roughen(2.5, 10, 66, 1.5)
+local tw = noise{seed=65, period=25}
+work(footd, {hand="body", tool="filbert 3", length={5, 14}, coverage=3.0, clip=footd, medium=0.15, angle=0.02,
+  color=function(x, y)
+    local c = sample(x, y + 26, 4)
+    return shift(c, 0.03 + 0.015 * tw(x, y), 0, 0.004)
+  end})
+
+--@ chunk 12 · clock 113222.265625
+wait(24*60)
+-- the young spruce, dense to the ground, its boughs weighed down a little by snow
+yspr = spruce{x=709, top=56, base=492, halfw=104, seed=71, droop=1.35, thick=1.15, lean=0.012}
+local notstone = -v:visible("bodies"):grow(1)
+ysm = yspr.mask * notstone
+local turn = noise{seed=72, period=10}
+work(ysm, {hand="hatch", tool="round 1.8", length={3, 8}, coverage=3.4, clip=ysm, medium=0.18,
+  angle=function(x, y) return (x < 709 and 2.75 or 0.4) + 0.35 * turn(x, y) end, angle_jitter=0.45,
+  color=function(x, y) return shift(mix("#1b2620", "#26342a", smoothstep(60, 480, y)), 0.02 * turn(x, y), 0, 0) end})
+-- the boughs drawn out, then the needles at their tips catching the low light on the left
+local rb = brush("rigger", 1.1)
+for i, b in ipairs(yspr.branches) do
+  if i % 5 == 1 then rb:reload("#18211c", 0.8) end
+  rb:stroke(b.pts, {pressure={0.9, 0.05}, ramps={0.05, 0.6}, clip=notstone})
+end
+rb:reload("#2a2420", 0.9)
+rb:stroke(yspr.axis, {pressure={0.15, 0.8}, ramps={0.4, 0.1}, clip=notstone})
+local lit = ysm * mask(function(x, y) return smoothstep(700, 640, x) end)
+work(lit, {hand="hatch", tool="round 1.2", length={2, 5}, coverage=1.1, clip=ysm, angle=2.8, angle_jitter=0.5, color="#4d5a3a"})
+
+--@ chunk 13 · clock 114662.265625
+-- the stump of a birch, snapped off by a storm: white bark, black scars, a jagged top
+stump = outline{{94,712,"c"},{97,660},{100,612},{93,574,"c"},{104,560,"c"},{113,571},{122,556,"c"},{129,566},{139,545,"c"},{146,572},{150,630},{156,712,"c"}, char="broken", seed=81}
+stm = stump:mask()
+local sx = function(x) return clamp((x - 94) / 62, 0, 1) end
+work(stm, {hand="body", tool="filbert 3", length={4, 12}, coverage=3.5, clip=stm, medium=0.15, angle=math.pi/2, angle_jitter=0.2,
+  color=function(x, y) return gradient({{0, "#e9e2d2"}, {0.45, "#d6d0c4"}, {0.8, "#9a9aa6"}, {1, "#7c7d8a"}}, sx(x)) end})
+-- the splintered wood of the break, warm and raw
+local brk = stm * above(function(x) return 578 + 0.2 * (x - 94) end)
+work(brk, {hand="detail", tool="round 1.4", length={3, 9}, coverage=2.5, clip=stm, angle=-math.pi/2, color="#9c7a52"})
+-- the black lenticels and scars, across the trunk; darker toward the root
+local bb = brush("round", 1.6)
+for i = 1, 26 do
+  local y = rand(585, 705)
+  local x0 = rand(95, 130)
+  local len = rand(4, 16) * (1 + smoothstep(640, 705, y))
+  if i % 4 == 1 then bb:reload(i % 8 == 1 and "#1e1c1c" or "#35302e", 0.8) end
+  bb:stroke({{x0, y}, {x0 + len * 0.5, y + randn(0, 0.6)}, {x0 + len, y + randn(0, 1)}}, {pressure={0.2, 0.8, 0.1}, ramps={0.3, 0.4}, clip=stm, shake=0.5})
+end
+local contour = brush("round", 1.3)
+contour:load("#4a4644", 0.8)
+stump:paint(contour, {pressure=0.7, clip=stm:grow(0.8), dip={"#4a4644", 0.7}, every=3})
+
+--@ chunk 14 · clock 114662.265625
+-- shadows of the spruce and the stump, from the same low sun
+local sp = w:spot(709, 492)
+local w2 = w:proxy(sp, body.ellipsoid(sp:p(0, 1.6, 0), sp:size(0.75, 1.6, 0.75)))
+local st = w:spot(125, 712)
+w2 = w2:proxy(st, body.block(st:p(0, 0.55, 0), st:size(0.36, 1.1, 0.36), st:m(0.05)))
+vs = w2:view()
+glaze(vs:cast_shadow{soft=2.2} * -stm * -v:visible("bodies"), {color="#6a7090", coats=0.32, view=vs})
+glaze(vs:contact_shadow{reach=0.18} * -stm, {color="#4a4a58", coats=0.32, view=vs})
+
+--@ chunk 15 · clock 138322.21484375
+-- dry grass standing through the first snow: straw, rust and gray, in upturning strokes laid last
+local patch = noise{seed=91, period=90}
+local keep = below(function(x) return 372 end) * mask(function(x, y) return smoothstep(0.5, 0.7, patch:at01(x, y)) end)
+  - v:visible("bodies"):grow(2) - stm:grow(1) - ysm:grow(2)
+local tufts = sward{region=keep, horizon=HZ, near=H, height=34, thin=0.55, seed=92, flowers=0,
+  wind={lean=0.22, gust=0.25, period=140, seed=3}}
+local g = brush("rigger", 0.7)
+local straws = {"#8a7a5c", "#6f6150", "#a39473", "#5a4f44", "#7f7462"}
+local n = 0
+local pick = noise{seed=93, period=6}
+for i, t in ipairs(tufts) do
+  if pick:at01(t.x, t.y) > 0.62 or t.scale > 0.75 and pick:at01(t.x, t.y) > 0.45 then
+  if i % 3 == 1 then g:reload(straws[1 + (i // 3) % #straws], 0.7) end
+  local p = clamp(0.2 + 0.5 * t.scale, 0.15, 0.8)
+  for _, bl in ipairs(t.blades) do g:stroke(bl, {pressure={p, 0.0}, ramps={0.05, 0.7}}); n = n + 1 end
+  end
+end
+print(#tufts, "tufts", n, "blades")

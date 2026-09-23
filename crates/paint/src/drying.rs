@@ -162,10 +162,16 @@ pub(crate) struct Px {
     pub sub: f32,
     /// Its cure per minute.
     pub srate: f32,
+    /// Thickness (coats) of the open film's neighborhood, judged when the
+    /// film was last worked (see `Canvas::film_thickness`). It stays fixed
+    /// while the film dries untouched, so its neighbors setting (and leaving
+    /// the wet layer) doesn't change its rate: a wait split into many short
+    /// ones dries it exactly as one long one does.
+    pub th: f32,
 }
 
 impl Px {
-    pub const FRESH: Px = Px { cure: 0.0, lev: SET_TIME, seen: 0.0, sub: 1.0, srate: 0.0 };
+    pub const FRESH: Px = Px { cure: 0.0, lev: SET_TIME, seen: 0.0, sub: 1.0, srate: 0.0, th: 0.0 };
 }
 
 /// The clock and the drying state of the wet layer.
@@ -217,15 +223,14 @@ impl Canvas {
         // age the open films
         if let Some((x0, y0, x1, y1)) = self.wet.dirty {
             let (x1, y1) = (x1.min(w), y1.min(self.f.h));
-            let th = self.film_thickness((x0, y0, x1, y1));
-            let bw = x1 - x0;
             let wet = &mut self.wet;
             let (vol, hide) = (&wet.vol, &wet.hide);
             wet.clock.px[y0 * w..y1 * w].par_chunks_mut(w).enumerate().for_each(|(j, row)| {
                 for x in x0..x1 {
                     let i = (y0 + j) * w + x;
                     if vol[i] >= 1e-5 {
-                        row[x].cure += dt * rate(th[j * bw + x - x0], hide[i][1], hide[i][2]);
+                        let p = &mut row[x];
+                        p.cure += dt * rate(p.th, hide[i][1], hide[i][2]);
                     }
                 }
             });
@@ -330,7 +335,9 @@ impl Canvas {
         if let Some((x0, y0, x1, y1)) = self.wet.dirty {
             let (w, h) = (self.f.w, self.f.h);
             let (x1, y1) = (x1.min(w), y1.min(h));
-            let th = self.film_thickness((x0, y0, x1, y1));
+            // (never waited: judge each film's thickness now, as the first
+            // `wait` would)
+            let th = if self.wet.clock.px.is_empty() { self.film_thickness((x0, y0, x1, y1)) } else { Vec::new() };
             let bw = x1 - x0;
             let (vol, hide, px) = (&self.wet.vol, &self.wet.hide, &self.wet.clock.px);
             left = (y0..y1)
@@ -340,8 +347,8 @@ impl Canvas {
                     for x in x0..x1 {
                         let i = y * w + x;
                         if vol[i] >= 1e-5 {
-                            let c = px.get(i).map_or(0.0, |p| p.cure);
-                            m = m.max((1.0 - c).max(0.0) / rate(th[(y - y0) * bw + x - x0], hide[i][1], hide[i][2]));
+                            let (c, t) = px.get(i).map_or((0.0, th.get((y - y0) * bw + x - x0).copied().unwrap_or(0.0)), |p| (p.cure, p.th));
+                            m = m.max((1.0 - c).max(0.0) / rate(t, hide[i][1], hide[i][2]));
                         }
                     }
                     m
@@ -373,8 +380,14 @@ impl Canvas {
         };
         let w = self.f.w;
         let (x1, y1) = (x1.min(w), y1.min(self.f.h));
+        let mark = self.wet.clock.mark;
+        // a worked film's thickness is judged afresh over the paint that's
+        // wet around it now; an untouched one keeps its own (see `Px::th`)
+        let fresh = |wet: &crate::wet::Wet, i: usize| wet.touched[i] > mark || wet.stroke[i] > mark || wet.clock.px[i].th <= 0.0;
+        let any = (y0..y1).any(|y| (x0..x1).any(|x| self.wet.vol[y * w + x] >= 1e-5 && fresh(&self.wet, y * w + x)));
+        let th = if any { self.film_thickness((x0, y0, x1, y1)) } else { Vec::new() };
+        let bw = x1 - x0;
         let wet = &mut self.wet;
-        let mark = wet.clock.mark;
         let (vol, touched, stroke) = (&wet.vol, &wet.touched, &wet.stroke);
         wet.clock.px[y0 * w..y1 * w].par_chunks_mut(w).enumerate().for_each(|(j, row)| {
             for x in x0..x1 {
@@ -382,12 +395,16 @@ impl Canvas {
                 let v = vol[i];
                 let p = &mut row[x];
                 if v < 1e-5 {
-                    (p.cure, p.lev, p.seen) = (0.0, SET_TIME, 0.0);
+                    (p.cure, p.lev, p.seen, p.th) = (0.0, SET_TIME, 0.0, 0.0);
                     continue;
                 }
-                if touched[i] > mark || stroke[i] > mark {
+                let worked = touched[i] > mark || stroke[i] > mark;
+                if worked {
                     p.cure *= p.seen.min(v) / v;
                     p.lev = SET_TIME * fluid(p.cure);
+                }
+                if worked || p.th <= 0.0 {
+                    p.th = th[j * bw + x - x0];
                 }
                 p.seen = v;
             }
@@ -409,7 +426,6 @@ impl Canvas {
         let mut sets = vec![SET_TIME; ew * eh];
         // cure per minute of each film that bakes (for its tack afterwards)
         let mut rates = vec![0.0f32; if all { 0 } else { ew * eh }];
-        let th = if all { Vec::new() } else { self.film_thickness(ex) };
         let mut any = false;
         let cp = &self.wet.clock.px;
         for y in 0..eh {
@@ -423,8 +439,8 @@ impl Canvas {
                     if let Some(p) = cp.get(i) {
                         sets[k] = p.lev;
                     }
-                    if !all {
-                        rates[k] = rate(th[k], self.wet.hide[i][1], self.wet.hide[i][2]);
+                    if !all && let Some(p) = cp.get(i) {
+                        rates[k] = rate(p.th, self.wet.hide[i][1], self.wet.hide[i][2]);
                     }
                     any = true;
                 }
@@ -528,7 +544,7 @@ impl Canvas {
                         p.srate = rates[k];
                         span = Some(span.map_or((x, x + 1), |(a, _)| (a, x + 1)));
                     }
-                    (p.cure, p.lev, p.seen) = (0.0, SET_TIME, 0.0);
+                    (p.cure, p.lev, p.seen, p.th) = (0.0, SET_TIME, 0.0, 0.0);
                 }
                 span
             })
@@ -737,5 +753,77 @@ mod tests {
         let a = rayon::ThreadPoolBuilder::new().num_threads(1).build().unwrap().install(run);
         let b = rayon::ThreadPoolBuilder::new().num_threads(4).build().unwrap().install(run);
         assert!(a == b);
+    }
+
+    /// A film of alternating thin fast-drying and thick slow-drying stripes
+    /// (review round 3): its thin stripes set long before its thick ones.
+    fn striped_film() -> Canvas {
+        let mut c = Canvas::new(20, 1.0, [0.5; 3]).with_size_mm(20.0);
+        let p = Paint::body([0.2; 3]);
+        for y in 0..20 {
+            for x in 0..20 {
+                let i = y * 20 + x;
+                let thin = x % 2 == 0;
+                c.wet.vol[i] = if thin { 0.2 } else { 4.0 };
+                c.wet.lat[i] = p.latent();
+                c.wet.hide[i] = [p.scatter, 1.0, if thin { 2.0 } else { 0.4 }];
+                c.wet.stroke[i] = 1;
+            }
+        }
+        c.wet.current = 1;
+        c.wet.dirty = Some((0, 0, 20, 20));
+        c
+    }
+
+    /// Checking back often doesn't change the physics: `wait(7000)` and 70
+    /// waits of 100 minutes dry a heterogeneous film to the same stages (the
+    /// thick stripes used to lose their thin neighbors from the thickness
+    /// they dry by as those set, and ended tacky instead of dry).
+    #[test]
+    fn splitting_a_wait_changes_nothing() {
+        let (mut a, mut b) = (striped_film(), striped_film());
+        a.wait(7000.0);
+        for _ in 0..70 {
+            b.wait(100.0);
+        }
+        let i = 10 * 20 + 11;
+        let (sa, sb) = (a.wet.clock.px[i].sub.min(1.0), b.wet.clock.px[i].sub.min(1.0));
+        assert!((sa - sb).abs() < 1e-3, "slow stripe's cure: one wait {sa}, split {sb}");
+        for y in 0..20 {
+            for x in 0..20 {
+                let (ux, uy) = (x as f32 * 50.0 + 25.0, y as f32 * 50.0 + 25.0);
+                assert_eq!(a.drying_at(ux, uy), b.drying_at(ux, uy), "at pixel ({x}, {y})");
+            }
+        }
+        assert_eq!(a.drying_at(575.0, 525.0), Stage::Dry);
+    }
+
+    /// The same for two ordinary brushstrokes of fast and slow paint on
+    /// linen, checked back every 30 minutes for 50 hours: the same stage
+    /// everywhere, the same picture within rounding (films bake in
+    /// different groups, so leveling differs a little) and the same time to
+    /// dry out. (Before: 145 pixels at different stages and 8846 vs 12054
+    /// minutes to dry.)
+    #[test]
+    fn splitting_a_wait_changes_nothing_under_the_brush() {
+        let mut a = Canvas::new(180, 1.0, hex("#c8b89a")).with_linen(Linen::fine(3));
+        for (y, col, d, seed) in [(400.0, "#e8e4d8", 2.0, 1), (420.0, "#405070", 0.4, 2)] {
+            let mut h = Held::new(Tool::filbert(40.0), seed);
+            h.load(Paint::body(hex(col)).with_drying(d), 1.0);
+            a.drag(&mut h, &Gesture::new(vec![(150.0, y), (850.0, y)]).pressure(0.9, 0.9), None);
+        }
+        let mut b = canvas_copy(&a);
+        a.wait(3000.0);
+        for _ in 0..100 {
+            b.wait(30.0);
+        }
+        let f = a.f;
+        let off = (0..f.w * f.h).filter(|&i| a.drying_at(f.ux(i % f.w), f.uy(i / f.w)) != b.drying_at(f.ux(i % f.w), f.uy(i / f.w))).count();
+        assert_eq!(off, 0, "pixels at different stages");
+        a.dry();
+        b.dry();
+        assert!((a.clock() - b.clock()).abs() < 1e-3 * a.clock(), "time to dry: {} vs {}", a.clock(), b.clock());
+        let d = a.px.iter().zip(&b.px).flat_map(|(p, q)| (0..3).map(move |k| (p[k] - q[k]).abs())).fold(0.0f32, f32::max);
+        assert!(d < 1e-3, "picture differs by {d}");
     }
 }

@@ -163,7 +163,7 @@ pub struct Mark {
 }
 
 /// The overlay a live session keeps between looks (Lua app data).
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub struct Marks {
     pub items: Vec<Mark>,
     /// Set before each chunk: the chunk's first show() replaces the overlay.
@@ -173,6 +173,9 @@ pub struct Marks {
     pub hidden: bool,
     /// Which run made the overlay ("chunk 12", "try").
     pub from: String,
+    /// The run under way: it becomes `from` when it replaces the overlay
+    /// (a run that shows nothing leaves the overlay and its label alone).
+    running: String,
     probes: usize,
 }
 
@@ -186,7 +189,43 @@ pub fn begin(lua: &Lua, from: &str) {
     m.live = true;
     m.fresh = true;
     m.probes = 0;
-    m.from = from.to_string();
+    m.running = from.to_string();
+}
+
+/// The overlay as it stands (None: not a live session), to put back with
+/// `restore` when an edit fails.
+pub fn saved(lua: &Lua) -> Option<Marks> {
+    lua.app_data_ref::<Marks>().map(|m| m.clone())
+}
+
+pub fn restore(lua: &Lua, m: Option<Marks>) {
+    match m {
+        Some(m) => {
+            lua.set_app_data(m);
+        }
+        None => {
+            lua.remove_app_data::<Marks>();
+        }
+    }
+}
+
+/// An edit goes back to a checkpoint's overlay (in a live session; a
+/// checkpoint from before the session went live had none: empty).
+pub fn rewind(lua: &Lua, m: Option<Marks>) {
+    if !is_live(lua) {
+        return;
+    }
+    let m = m.filter(|m| m.live).unwrap_or_else(|| Marks { live: true, ..Marks::default() });
+    lua.set_app_data(m);
+}
+
+/// Before each chunk an edit replays: in a live session it starts a run as
+/// `do` does, so the chunk's first show() replaces the overlay; elsewhere
+/// (a replay, a crop session) nothing.
+pub fn begin_replayed(lua: &Lua, from: &str) {
+    if is_live(lua) {
+        begin(lua, from);
+    }
 }
 
 /// Run a chunk to see what it shows, probes and prints, then take it back:
@@ -247,6 +286,7 @@ fn push(lua: &Lua, mk: impl FnOnce(usize) -> Mark) {
         m.items.clear();
         m.hidden = false;
         m.fresh = false;
+        m.from = m.running.clone();
     }
     let n = m.items.len();
     m.items.push(mk(n));
@@ -266,6 +306,7 @@ fn show(lua: &Lua, st: &S, args: Variadic<Value>) -> Result<Value> {
                 let mut m = lua.app_data_mut::<Marks>().unwrap();
                 m.items.clear();
                 m.fresh = false;
+                m.from = m.running.clone();
             }
             Ok(Value::Nil)
         }

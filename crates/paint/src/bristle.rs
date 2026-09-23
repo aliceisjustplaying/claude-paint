@@ -706,7 +706,11 @@ fn footprint_checked(tool: &Tool, pts: &[(f32, f32)], shake: f32, scale: f32, w:
     let rb = (tool.hair_radius() * s).max(0.55);
     // exchange rect: capsule ± (rb + 1); plough target ≤ off from a pixel in
     // it, off = rb + 1; bounds padding off + 2; plus rounding
-    let pad = shake_px + root + bend * 0.6 + (rb + 1.0) + 2.0 * (rb + 1.0) + 4.0;
+    // a pointed tool's hairs lay tracks up to the tool's half-width wide
+    // (a wet tuft bridging between its hairs, see `drag_on`), ploughing up
+    // to twice that away
+    let bridge = if tool.point > 0.0 { 3.0 * half } else { 0.0 };
+    let pad = shake_px + root + bend * 0.6 + (rb + 1.0) + 2.0 * (rb + 1.0) + bridge + 4.0;
     if !pad.is_finite() || !x0.is_finite() || !x1.is_finite() || !y0.is_finite() || !y1.is_finite() {
         return None;
     }
@@ -764,6 +768,13 @@ pub(crate) unsafe fn drag_on(
     let mut last_dir = (1.0f32, 0.0f32);
     // capillary feed per step (a share per distance, so any resolution
     // feeds the tip alike)
+    // (the widest a track may be, bounded in `footprint`)
+    let half_max = tool.width * 0.5 * s * (1.0 + tool.splay * 0.5);
+    // per hair: the radius (pixels) of the track it lays this step
+    let mut excl = vec![rb; held.bristles.len()];
+    let mut shift = vec![0.0f32; held.bristles.len()];
+    let mut contact: Vec<Option<((f32, f32), f32)>> = vec![None; held.bristles.len()];
+    let mut order: Vec<(f32, usize)> = Vec::with_capacity(held.bristles.len());
     let feed_k = tool.point * (1.0 - (-(step / s) / (FEED_WIDTHS * tool.width).max(0.3)).exp());
     for k in 0..=nsteps {
         let d = (k as f32 * step).min(total);
@@ -798,29 +809,12 @@ pub(crate) unsafe fn drag_on(
         // targets, within the reach `footprint` allows for
         let rate = (1.0 - (-(step / s) / (bend_len.max(0.0) + 1e-3)).exp()).clamp(0.0, 1.0);
 
-        // a pointed tuft gathers its touching hairs over each other: each
-        // covers only its share of the contact's width (see `exchange`)
-        let excl = if tool.point > 0.0 {
-            let (mut lo, mut hi, mut n) = (f32::MAX, f32::MIN, 0usize);
-            for b in held.bristles.iter() {
-                if p > b.thresh {
-                    let wv = wander(d / s / tool.width.max(2.0) * 1.3, b.seed) * tool.ragged;
-                    let (ox, oy) = ((b.rx + wv * 0.12) * half, (b.ry + wv * 0.05) * half);
-                    // across the direction of travel
-                    let q = (ox * ct - oy * st) * -dir.1 + (ox * st + oy * ct) * dir.0;
-                    lo = lo.min(q);
-                    hi = hi.max(q);
-                    n += 1;
-                }
-            }
-            if n > 0 { ((hi - lo + 2.0 * rb) / (n as f32 * 2.0 * rb)).min(1.0) } else { 1.0 }
-        } else {
-            1.0
-        };
-        for b in held.bristles.iter_mut() {
+        // where each touching hair meets the canvas this step
+        for (bi, b) in held.bristles.iter_mut().enumerate() {
             let reach = (p - b.thresh) / (1.0 - b.thresh).max(1e-3);
             if reach <= 0.0 {
                 b.prev = [None, None];
+                contact[bi] = None;
                 continue;
             }
             // bristles wander a little across the stroke
@@ -834,9 +828,45 @@ pub(crate) unsafe fn drag_on(
             b.bend.0 += (target.0 - b.bend.0) * rate;
             b.bend.1 += (target.1 - b.bend.1) * rate;
             // one contact point: the belly-to-tip region of the bent bristle
-            let cur = (root.0 + b.bend.0 * 0.6, root.1 + b.bend.1 * 0.6);
-            let prev = b.prev[0].unwrap_or(cur);
-            unsafe { exchange(sf, b, &tool, prev, cur, rb, reach, full, None, excl, clip, id, scratch, &mut bounds, lim) };
+            contact[bi] = Some(((root.0 + b.bend.0 * 0.6, root.1 + b.bend.1 * 0.6), reach));
+        }
+        // the track each hair of a pointed tuft lays (see `exchange`): the
+        // touching hairs lie over and beside each other, so each covers its
+        // own share of the contact's width, from halfway to its neighbor on
+        // one side to halfway to the one on the other, across the direction
+        // of travel (a round tuft has more hairs over its middle than its
+        // edges). In a wet tuft the paint between the hairs bridges wider
+        // gaps too, so the shares tile the whole mark; a dry one leaves the
+        // gaps open (a split, streaky mark)
+        if tool.point > 0.0 {
+            order.clear();
+            for (bi, ct) in contact.iter().enumerate() {
+                excl[bi] = rb;
+                shift[bi] = 0.0;
+                if let Some(((cx, cy), _)) = ct {
+                    order.push(((cx - hx) * -dir.1 + (cy - hy) * dir.0, bi));
+                }
+            }
+            order.sort_by(|a, b| a.0.total_cmp(&b.0));
+            let n = order.len();
+            let bridge = |g: f32| g.min(rb) + (g - g.min(rb)) * coh;
+            for k in 0..n {
+                let lo = bridge(if k > 0 { 0.5 * (order[k].0 - order[k - 1].0) } else { rb });
+                let hi = bridge(if k + 1 < n { 0.5 * (order[k + 1].0 - order[k].0) } else { rb });
+                // (the floor is far below a hair, and physical, so no
+                // resolution adds to it however many hairs lie stacked)
+                excl[order[k].1] = (0.5 * (lo + hi)).clamp((0.01 * rb).max(1e-4), half_max.max(rb));
+                shift[order[k].1] = (0.5 * (hi - lo)).clamp(-half_max, half_max);
+            }
+        }
+        for (bi, b) in held.bristles.iter_mut().enumerate() {
+            let Some((cur, reach)) = contact[bi] else { continue };
+            // a pointed tool's hair that has just come down lays its share
+            // of the step it came down in (its neighbors' tracks tile with it)
+            let prev = b.prev[0].unwrap_or(if tool.point > 0.0 && k > 0 { (cur.0 - dir.0 * step, cur.1 - dir.1 * step) } else { cur });
+            let (rk, sh) = if tool.point > 0.0 { (excl[bi], shift[bi]) } else { (rb, 0.0) };
+            let (sx, sy) = (-dir.1 * sh, dir.0 * sh);
+            unsafe { exchange(sf, b, &tool, (prev.0 + sx, prev.1 + sy), (cur.0 + sx, cur.1 + sy), rk, reach, full, None, 1.0, clip, id, scratch, &mut bounds, lim) };
             b.prev[0] = Some(cur);
         }
         feed(&mut held.bristles, feed_k);
@@ -982,8 +1012,8 @@ unsafe fn exchange(
         // lowest surface height this bristle reaches down to. The loaded tip
         // of a pointed soft brush carries a bead of paint that wets the
         // weave's valleys as well as its peaks, however lightly it is
-        // pressed (fluid paint more than stiff); run dry, it skims the peaks
-        let wick = if tool.point > 0.0 { tool.point * smoothstep(0.03, 0.35, br.vol / full) * (1.0 - 0.35 * br.hide[1].clamp(0.0, 1.0)) } else { 0.0 };
+        // pressed; run dry, it skims the peaks
+        let wick = if tool.point > 0.0 { tool.point * smoothstep(0.02, 0.25, br.vol / full) } else { 0.0 };
         let th = 1.0 - reach.max(wick) * 1.6;
 
         // pass 1: contact weights
@@ -1139,8 +1169,9 @@ unsafe fn exchange(
                                     let hd = *sf.hide.add(i);
                                     // the paint moved covers its share of
                                     // the pixel it came from
+                                    // (its film there thins but still covers it)
                                     let cj = &mut *sf.cover.add(j);
-                                    *cj = if fine { ((if *sf.vol.add(j) < 1e-6 { 0.0 } else { *cj }) + m / v.max(1e-9) * *sf.cover.add(i)).min(1.0) } else { 1.0 };
+                                    *cj = if fine { ((if *sf.vol.add(j) < 1e-6 { 0.0 } else { *cj }) + (m / v.max(1e-9)).min(1.0) * *sf.cover.add(i)).min(1.0) } else { 1.0 };
                                     *sf.vol.add(i) -= m;
                                     sf.add(j, m, &l, hd);
                                 }
@@ -1429,6 +1460,38 @@ mod tip_tests {
         let mean = cols.iter().sum::<f32>() / cols.len() as f32;
         let gaps = cols.iter().filter(|&&v| v < 0.3 * mean).count();
         assert!(mean > 0.1 && gaps == 0, "mean column ink {mean}, {gaps} gaps of {}", cols.len());
+    }
+
+    /// Ink width (units) of straight marks at two resolutions, for tuning.
+    #[test]
+    #[ignore]
+    fn probe_ink_width() {
+        for (name, tool) in [("rigger .5", Tool::rigger(0.5)), ("sable 1.6", Tool::round_sable(1.6)), ("sable 3", Tool::round_sable(3.0))] {
+            for p in [0.1, 0.4, 0.7, 0.9] {
+                let g = Gesture::line((50.0, 120.0), (450.0, 122.0)).pressure(p, p).ramps(0.05, 0.1).shake(0.0);
+                let lo = ink(&canvas(1000, false, tool.clone(), &g), 100.0, 400.0);
+                let hi = ink(&canvas(3200, false, tool.clone(), &g), 100.0, 400.0);
+                println!("{name:10} p {p:.1}: ink width {lo:.3} at 1000px, {hi:.3} at 3200px; mark_width {:.3}", tool.mark_width(p));
+            }
+        }
+    }
+
+    #[test]
+    #[ignore]
+    fn probe_patch() {
+        // TIP_OUT=path.png TIP_P=0.8 cargo test --release -p paint probe_patch -- --ignored
+        let out = std::env::var("TIP_OUT").unwrap_or_else(|_| "patch.png".into());
+        let mut c = Canvas::new(3200, 4.0, hex(BG)).with_size_mm(440.0).with_linen(crate::surface::Linen::fine(3));
+        let mut h = Held::new(Tool::round_sable(5.6), 3);
+        let mut rng = crate::rng::Rng::new(4);
+        for k in 0..14 {
+            h.reload(Paint::body(hex(INK)), 1.0);
+            let y = 60.0 + k as f32 * 3.0;
+            let pr: f32 = std::env::var("TIP_P").ok().and_then(|v| v.parse().ok()).unwrap_or(0.7);
+            c.drag(&mut h, &Gesture::new(vec![(60.0, y + rng.range(-1.0, 1.0)), (120.0, y + 2.0), (180.0, y + rng.range(-1.0, 1.0))]).pressure(pr * 0.6, pr).ramps(0.05, 0.1), None);
+        }
+        c.dry();
+        c.save(std::path::Path::new(&out)).unwrap();
     }
 
     #[test]

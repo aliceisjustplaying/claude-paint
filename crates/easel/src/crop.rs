@@ -14,11 +14,6 @@ use std::sync::mpsc::{Receiver, Sender, TryRecvError, channel};
 use std::sync::{Arc, Condvar, Mutex};
 use std::time::{Duration, Instant};
 
-/// Held while a session makes its canvas: `paint::set_crop` is process-wide
-/// and read when a canvas is made, so the live session and a crop session
-/// must not make theirs at the same time.
-pub static CANVAS_LOCK: Mutex<()> = Mutex::new(());
-
 /// Extra units painted around the asked window (so a nearby look reuses
 /// the same session) and the margin painted but never shown.
 const PAD: f32 = 30.0;
@@ -164,7 +159,11 @@ fn follow(width: usize, window: [f32; 4], rx: Receiver<Vec<String>>, shared: Arc
         let mut s = match sess.take() {
             Some(s) => s,
             None => match Session::new(width, UNDO) {
-                Ok(s) => s,
+                Ok(s) => {
+                    // its canvas{} makes a canvas holding only the window
+                    s.st.borrow_mut().crop = Some(Crop { units: window, margin: MARGIN });
+                    s
+                }
                 Err(e) => {
                     lock.lock().unwrap().error = Some(e.to_string());
                     cv.notify_all();
@@ -176,15 +175,7 @@ fn follow(width: usize, window: [f32; 4], rx: Receiver<Vec<String>>, shared: Arc
         while ran.len() < target.len() {
             let src = target[ran.len()].clone();
             let t0 = Instant::now();
-            let r = if s.canvas().is_none() {
-                let _g = CANVAS_LOCK.lock().unwrap_or_else(|e| e.into_inner());
-                paint::set_crop(Some(Crop { units: window, margin: MARGIN }));
-                let r = s.run(&src);
-                paint::set_crop(None);
-                r
-            } else {
-                s.run(&src)
-            };
+            let r = s.run(&src);
             if let Err(e) = r {
                 let mut sh = lock.lock().unwrap();
                 sh.error = Some(format!("chunk {}: {}", ran.len() + 1, e.lines().last().unwrap_or("")));

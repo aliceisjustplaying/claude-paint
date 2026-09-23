@@ -150,7 +150,17 @@ impl Style {
     /// A primed canvas as this painter bought or made it: linen of the
     /// painter's usual kind and physical size, and the ground layers.
     pub fn prepare(&self, width_px: usize, aspect: f32, seed: u64) -> Canvas {
-        let mut c = Canvas::new(width_px, aspect, self.raw)
+        self.prepare_on(Canvas::new(width_px, aspect, self.raw), seed)
+    }
+
+    /// `prepare`, holding only the window `crop` (a crop render), whatever
+    /// `set_crop` says.
+    pub fn prepare_window(&self, width_px: usize, aspect: f32, seed: u64, crop: Option<crate::canvas::Crop>) -> Canvas {
+        self.prepare_on(Canvas::new_window(width_px, aspect, self.raw, crop), seed)
+    }
+
+    fn prepare_on(&self, c: Canvas, seed: u64) -> Canvas {
+        let mut c = c
             .with_size_mm(self.width_mm)
             .with_linen(Linen { seed, ..self.linen });
         for (k, g) in self.ground.iter().enumerate() {

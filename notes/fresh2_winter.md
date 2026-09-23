@@ -62,8 +62,10 @@ is built outside the stages; every stage only paints.
    wet lay-in with a 2.6-unit stippler aimed at the sky's own tones; dried;
    a finer (1.5) lighter stipple that thickens toward the horizon for the
    glow. The gradient is slate-violet → mauve-gray → straw.
-2. **moon**: a crescent in three strokes of a small round along the lit arc,
-   swelling in the middle, lifted at the horns.
+2. **moon**: a stippled glow, then the crescent (a disc less an offset disc,
+   lit toward the afterglow at lower left) filled with ~260 short arc-wise
+   touches of a small round, clipped to the crescent so the horns come to
+   points.
 3. **ridge**: the far wooded ridge in short level hatching (`hatch()`),
    bluer at the crest, lighter at the foot; the tree line broken by tiny
    upward stipple drags along the crest.
@@ -213,7 +215,7 @@ line, with a soft blue cast shadow toward the viewer.
     the final veil glaze has a thickness that is never 0 anywhere. The
     engine should treat thickness below a small epsilon as 0 *before*
     settling, or scale the floor with the requested thickness.
-13. **A round brush's end overshoots the limb's base.** The trunk is
+12. **A round brush's end overshoots the limb's base.** The trunk is
     dragged from `sk.base` with a big round, whose footprint reaches half a
     width past the first point, so the tree hung below the snow line in a
     rounded dark stub. Covering it with snow strokes after the fact failed
@@ -221,17 +223,17 @@ line, with a soft blue cast shadow toward the viewer.
     then two white blobs). *Workaround:* `wood()` takes a clip mask, and
     the oak is painted through a wavy "above the snow line" mask, which is
     how a painter thinks of it: the snow cuts the bole.
-14. **`per_column` closures aren't `Copy`,** so a mask closure and a
+13. **`per_column` closures aren't `Copy`,** so a mask closure and a
     `move` color closure can't both use the same profile (`snow_top`) without
     a `let stp = &snow_top;` dance. Minor Rust friction, but it bites in
     every stage that uses a profile twice.
-15. **Weathering patches came out reddish.** A detail pass aimed at a
+14. **Weathering patches came out reddish.** A detail pass aimed at a
     cool violet-gray over the ruin picked red earth into some piles (the
     full palette trades recipes near the target), giving rusty leopard
     spots at 3200px. *Workaround:* `palette(&pal.only([lead white, bone
     black, pale smalt, raw umber]))`, a stone family, as notes/color.md
     suggests.
-16. **A hard mask's edge sits right where the snow is thinnest.** The
+15. **A hard mask's edge sits right where the snow is thinnest.** The
     ruin polygon ended exactly on the snow line; the detail strokes, clipped,
     pile a darker rim along the clip edge, and the snow lay-in (soft-edged
     there) left it showing as a dotted line of dark dashes at 3200px. Found
@@ -240,15 +242,15 @@ line, with a soft blue cast shadow toward the viewer.
     fades out there, so nothing painted has an edge where the snow is thin.
     Generally: a clipped `work` darkens its own boundary; a painter would
     carry the paint past the line and cut back with the next passage.
-17. **`roughen` does nothing to a hard mask.** It moves the 0.5 contour
+16. **`roughen` does nothing to a hard mask.** It moves the 0.5 contour
     by `amount · noise`; a shape mask is 0/1 with a one-pixel ramp, so the
     brook's banks stayed ruler-clean. *Workaround:* `.blur(1.5)` first.
-18. **Cast shadows on snow as strokes look like boards.** A filbert
+17. **Cast shadows on snow as strokes look like boards.** A filbert
     shadow from the oak's foot was a hard-edged blue slab (and before that a
     round puddle). *Workaround:* a stippled shadow whose coverage falls off
     across and along a line, so it softens by density, like Friedrich's
     mist.
-19. **Colors derived from my own color field drift from what is actually
+18. **Colors derived from my own color field drift from what is actually
     on the canvas, and stipple/handling color closures can't look.** The
     oak's and the stones' shadows were mixed as "the snow, bluer"
     (`mix(snow_col, blue, 0.4)`), but after the lay-in, body, lee bands and
@@ -260,14 +262,14 @@ line, with a soft blue cast shadow toward the viewer.
     A relative color in `Stipple`/`Handling` ("what is under, 0.05 darker and
     bluer") would be the painter's actual intention; `Canvas::aim` covers
     the paint side of this but not the target.
-20. **Clipped edges of thick paint are outlined by the raking light.** The
+19. **Clipped edges of thick paint are outlined by the raking light.** The
     moon and the stones' snow caps, painted through a clip mask, get a thin
     dark dotted line along the edge at 3200px: the film steps up at the clip
     and `relief` shades the step. Thinning the paint (more medium, less
     load) cured the moon; it only reduced it on the stones. A real painter
     wouldn't leave a cliff-edge of paint at a stencil line; a soft-edged
     clip (paint thinning over the last half-unit of the mask) would avoid it.
-21. **`--stop` after a resumed stage and the stage's own output are hard
+20. **`--stop` after a resumed stage and the stage's own output are hard
     to tell apart.** `--resume sky --stop sky` repainted the sky (8.6 s)
     instead of saying there is nothing to do. Minor.
 
@@ -308,7 +310,7 @@ What still reads as digital or weak:
   now gives a second plane, but both top edges are harder than distance
   and mist would allow.
 - **The stones** look like little cakes (white top, dark flat underside)
-  with a dotted dark rim at the cap edge (friction 20).
+  with a dotted dark rim at the cap edge (friction 19).
 - **The figure** is a legible silhouette but crude at 3200px: legs are two
   sticks.
 - **Color:** the late mauve-rose band fixed the sky's grayness, and the

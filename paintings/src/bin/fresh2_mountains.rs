@@ -283,7 +283,7 @@ fn main() {
         let fcol = &fcol;
         let hd = st.body().palette(cool).color(fcol).angle(|x, y| form.fall(x, y)).angle_jitter(0.15).length(8.0, 26.0).coverage(3.0).medium(0.4).tool_width(5.0).clip(true).threshold(0.2);
         c.work(&sil, &hd, 201);
-        let sp = Stipple::new(Tool::stippler(2.2)).mixed(cool, 0.5).color(fcol).coverage(|_, _| 2.0).pressure(0.45, 0.8).dips(18, 0.4, 0.5).clip(true);
+        let sp = Stipple::new(Tool::stippler(2.2)).mixed(cool, 0.5).color(fcol).coverage(|_, _| 2.6).pressure(0.45, 0.8).dips(18, 0.4, 0.5).clip(true);
         c.stipple(&sil, &sp, 202);
         c.dry();
     }
@@ -320,7 +320,7 @@ fn main() {
         let mcol = &mcol;
         let hd = st.body().palette(cool).color(mcol).angle(|x, y| form.fall(x, y)).angle_jitter(0.12).length(8.0, 28.0).coverage(3.0).medium(0.35).tool_width(5.0).clip(true).threshold(0.2);
         c.work(&sil, &hd, 221);
-        let sp = Stipple::new(Tool::stippler(2.0)).mixed(cool, 0.45).color(mcol).coverage(|_, _| 1.4).pressure(0.45, 0.8).dips(18, 0.4, 0.5).clip(true);
+        let sp = Stipple::new(Tool::stippler(2.0)).mixed(cool, 0.45).color(mcol).coverage(|_, _| 2.4).pressure(0.45, 0.8).dips(18, 0.4, 0.5).clip(true);
         c.stipple(&sil, &sp, 222);
         c.dry();
         // mist at its foot, rising in front of the near range's crest
@@ -615,6 +615,37 @@ fn main() {
             // set down lightly at the root, pressed into the blade, lifted off
             c.drag(&mut fine, &Gesture::new(vec![(x, y), (x + lean.sin() * len * 0.4, y - len * 0.5), tip]).pressure(0.7, 0.0).swell(vec![0.4, 1.0, 0.7]).ramps(0.4, 0.6).shake(0.5), None);
         }
+        c.dry();
+    }
+
+    if o.stage("moon", &mut c, &mut rng) {
+        // the old moon, a thin waning crescent, rising ahead of the sun: its
+        // lit limb turned down toward the light still below the ranges
+        let m = (452.0f32, 118.0f32);
+        let r = 8.0f32;
+        let to_sun = (SUN.1 - m.1).atan2(SUN.0 - m.0);
+        // the lune: the disc less the same disc moved away from the sun
+        let off = 0.42 * r;
+        let (ix, iy) = (m.0 - off * to_sun.cos(), m.1 - off * to_sun.sin());
+        let lune_m = Mask::from_fn(f, move |x, y| {
+            let d0 = ((x - m.0).powi(2) + (y - m.1).powi(2)).sqrt();
+            let d1 = ((x - ix).powi(2) + (y - iy).powi(2)).sqrt();
+            (1.0 - smoothstep(r - 0.35, r + 0.35, d0)) * smoothstep(r - 0.35, r + 0.35, d1)
+        });
+        // filled with a small sable, strokes running round the limb, clipped
+        // to the lune so the horns come to points
+        let hd = st
+            .detail()
+            .color(|_, _| hex("#ebe4cd"))
+            .medium(0.35)
+            .angle(move |x, y| (y - m.1).atan2(x - m.0) + std::f32::consts::FRAC_PI_2)
+            .angle_jitter(0.05)
+            .length(2.0, 5.0)
+            .coverage(3.2)
+            .tool_width(1.0)
+            .clip(true)
+            .threshold(0.3);
+        c.work(&lune_m, &hd, 381);
         c.dry();
     }
 

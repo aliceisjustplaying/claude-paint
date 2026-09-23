@@ -74,8 +74,16 @@ in fine upturning strokes over the finished snow (NG p.56).
     undid it and blended only the stump's snow. Then snow on the young spruce's boughs,
     stippled on each bough's upper face and heaviest on the sunward side.
 15. `wait(24*60); varnish{coats=0.3}; relief()`.
+16. After the first 3200 render: `easel edit 19 --insert` put a retouch before the
+    varnish. The 3200 detail showed black squiggles crusted into the snow lips and the
+    big stone sitting on a bright roll over a dark hollow, as if on a cushion. A ring
+    glaze to kill a pale halo round the small stone doubled the shadow into a dark
+    outline, and a `scumble` left a dry-brush lattice. Four `edit`s later (each a
+    2–6 s replay from the checkpoint) the answer was plain body color and a blend: the
+    lips repainted, the small stone's lip in the spruce's shade, and the hollow in front
+    of the big stone lit again except for a thin crease.
 
-19 chunks. About 16 more chunks were tried and undone, or rolled back by `try`.
+20 chunks. About 16 more chunks were tried and undone, or rolled back by `try`.
 
 ## HOW THE EASEL FELT
 
@@ -149,7 +157,15 @@ and every non-trivial mark (a snowy bough, a frond) became a small geometry prob
 10. **`size` for bodies is radii**; my first boulder was twice the intended size (the
     README does say "center, radii" for `body.ellipsoid`, but `s:size` reads like full
     size).
-11. **`blend` smears everything inside the region, including small details laid
+11. **`scumble` is a dry-brush hand.** Over a smooth snow passage it lays a lattice
+    of broken strokes. I wanted "a veil of paint over what's there". *Workaround:*
+    `body` with `color_over`, then `blend`.
+12. **The world's light and the picture disagreed** in front of the big stone. The
+    first snow pass (from `v:at` shade) plus the contact glaze left a dark band under
+    the stone that reads as a hole, though the sun is behind my left shoulder. I
+    overpainted it by hand (chunk 19). *Workaround:* judge the model's result like any
+    other reference, and overrule it.
+13. **`blend` smears everything inside the region, including small details laid
     earlier** (bracken went orange across the foot). That's physically fair. It was my
     mistake, but it's easy to make when the region is a grown mask.
 
@@ -161,6 +177,9 @@ snow-capped erratic sits between them. The value structure is strong in the squi
 dark left mass, pale field, a dark vertical right of center. The spruce with snow on
 its boughs is the best passage. The varnish pulls the palette into a winter-afternoon
 warmth.
+
+`easel edit N --insert` before the varnish was the best tool of the session. Retouching
+under a finished varnish chunk cost seconds, not a replay.
 
 What doesn't:
 - **The stump** is a white post with a flat top of raw wood and a dab of snow. It has

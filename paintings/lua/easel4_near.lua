@@ -402,4 +402,21 @@ stipple(ytops, {width=1.5, color=function(x, y) return mix("#f0e8d6", "#aeb0c0",
 print(ytops:area())
 
 --@ chunk 19 · clock 157809.263671875
+-- retouch: the snow lips at the stones' feet scumbled clean; the small stone's lies in the spruce's shadow
+local tw = noise{seed=121, period=18}
+work(footd:shrink(0.5), {hand="body", tool="filbert 3", length={5, 14}, coverage=3.4, medium=0.2, clip=footd, angle=0.02,
+  color_over=function(x, y, under)
+    local shade = math.max(smoothstep(548, 600, x) * (1 - smoothstep(600, 612, x)), y > 525 and (0.55 + 0.35 * smoothstep(630, 700, x)) or 0)
+    local snow = mix("#e9e1cf", "#a4a8bb", shade)
+    return shift(mix(under, snow, 0.8), 0.015 * tw(x, y), 0, 0)
+  end})
+-- the hollow in front of the big stone lit again: only a thin crease of shade stays under the lip
+local lipbot = function(x) return 505 + 4 * math.sin(x / 23) end
+local front = mask(function(x, y) return smoothstep(lipbot(x) + 3, lipbot(x) + 12, y) * smoothstep(572, 530, y) * smoothstep(180, 225, x) * smoothstep(600, 520, x) end)
+work(front, {hand="body", tool="filbert 4", length={8, 22}, coverage=3.4, medium=0.2, angle=0.03, hug=false,
+  color_over=function(x, y, under) return shift(mix(under, "#e6ddca", 0.7), 0.012 * tw(x, y), 0, 0) end})
+
+blend(front + footd, {angle=0.02})
+
+--@ chunk 20 · clock 157809.263671875
 wait(24*60); varnish{color="#e6d3a4", coats=0.3, vary=0.1}; relief()

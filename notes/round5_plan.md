@@ -17,7 +17,7 @@ paintings must improve. "Tight OODA loops are important."
 1. Observe: a painter reworks ONE benchmark painting at the easel for
    20–30 min, reading the craft sketchbook first (notes/sketchbook.md:
    techniques, never pictures).
-2. Orient: a blind judge scores it (rubric below) and names the ONE
+2. Orient: THREE blind critics score it (median; rubric below) and name the ONE
    costliest defect.
 3. Decide: craft (sketchbook note) or tool/physics (one small fix).
 4. Act: the fix (< 30 min), merged immediately; next loop.
@@ -50,3 +50,4 @@ spectral) is split into single-defect fixes the loops pull in.
 - spectral merged as optional module (not integrated; verdict in notes/spectral.md).
 - r4 free done: dolmen AGAIN (same motif as r3 free): convergence on motif, not just mood.
 - Loop 1 scored: near +3 (23->26), green +2 (18->20), anchor -1. Sketchbook updated. Loop 2 started 18:58: loop2-near (drift puffs), loop2-grain (horizontal wood-grain ground streaks; tool). loop1-halo still running; green loop 2 waits for it.
+- Loop 2 critic2: l2_near 22 vs l1_near 19 in-batch (+3), but anchor fell 27->24 and l1_near 26->19 across batches: single-critic absolute scale is noisy (±4-7). Rule from now: 3 independent critics per batch, median; decisions on in-batch deltas vs anchors.

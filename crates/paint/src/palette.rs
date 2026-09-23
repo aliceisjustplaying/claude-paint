@@ -404,9 +404,26 @@ impl Canvas {
     /// (units): the pile from `pal` that, thinned with `medium` and laid
     /// `coats` thick over what is on the canvas there, looks `want`. See
     /// `Palette::aim`. Cheap enough to call per mark (results are cached).
+    /// The underlayer is judged robustly (`Canvas::judge_under`): a fleck of
+    /// bare ground inside the mark doesn't skew the pile.
     #[allow(clippy::too_many_arguments)]
     pub fn aim(&self, pal: &Palette, want: Rgb, (x, y): (f32, f32), r: f32, medium: f32, coats: f32) -> Paint {
-        pal.paint_for(want, self.under(x, y, r), medium, coats)
+        pal.paint_for(want, self.judge_under(x, y, r), medium, coats)
+    }
+
+    /// What a mark of radius `r` at (`x`, `y`) sits on, as a painter judges
+    /// it: the typical color there, not the average. Nine sub-discs across
+    /// the mark, combined by a median per OKLab channel, so a fleck of bare
+    /// ground or a stray speck (which a mean in linear light lets dominate a
+    /// dark passage) doesn't decide the pile. `Canvas::under` is the plain
+    /// mean.
+    pub fn judge_under(&self, x: f32, y: f32, r: f32) -> Rgb {
+        let q = 0.5 * r;
+        let labs: Vec<(Rgb, f32)> = [(0.0, 0.0), (-q, 0.0), (q, 0.0), (0.0, -q), (0.0, q), (-q, -q), (q, -q), (-q, q), (q, q)]
+            .iter()
+            .map(|&(dx, dy)| (to_oklab(self.under(x + dx, y + dy, 0.5 * r)), if dx == 0.0 && dy == 0.0 { 1.5 } else { 1.0 }))
+            .collect();
+        crate::color::from_oklab(std::array::from_fn(|c| weighted_median(labs.iter().map(|(l, w)| (l[c], *w)).collect())))
     }
 }
 
@@ -423,6 +440,20 @@ fn parsimony(parts: &[(usize, f32)]) -> f32 {
 
 fn dist(a: Rgb, b: Rgb) -> f32 {
     ((a[0] - b[0]).powi(2) + (a[1] - b[1]).powi(2) + (a[2] - b[2]).powi(2)).sqrt()
+}
+
+/// The weighted median of (value, weight) pairs (the lower one at a tie).
+pub(crate) fn weighted_median(mut v: Vec<(f32, f32)>) -> f32 {
+    v.sort_by(|a, b| a.0.total_cmp(&b.0));
+    let half = 0.5 * v.iter().map(|p| p.1).sum::<f32>();
+    let mut acc = 0.0;
+    for &(x, w) in &v {
+        acc += w;
+        if acc >= half {
+            return x;
+        }
+    }
+    v.last().map_or(0.0, |p| p.0)
 }
 
 /// Distance from `p` to the segment `a`–`b` (OKLab).

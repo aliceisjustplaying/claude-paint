@@ -144,7 +144,8 @@ pub struct ViewBox {
     // declared first: dropped before the world it borrows
     view: View<'static>,
     world: Arc<World>,
-    bodies: usize,
+    /// Form parts: the visible bodies (a proxy casts shadow but has no part).
+    parts: usize,
 }
 
 impl FormHolder for ViewBox {
@@ -191,7 +192,7 @@ fn bodies_of(v: Value, n: usize) -> Result<Vec<usize>> {
 impl UserData for ViewU {
     fn add_fields<F: mlua::UserDataFields<Self>>(f: &mut F) {
         // the bodies as a form: every form query, mask and field works on it
-        f.add_field_method_get("form", |_, v| Ok(FormU { src: v.0.clone(), parts: v.0.bodies as u16 }));
+        f.add_field_method_get("form", |_, v| Ok(FormU { src: v.0.clone(), parts: v.0.parts as u16 }));
     }
     fn add_methods<M_: UserDataMethods<Self>>(m: &mut M_) {
         m.add_method("at", |lua, v, (x, y): (f32, f32)| point_table(lua, &v.0.view.at(x, y)));
@@ -501,7 +502,8 @@ impl UserData for WorldU {
             // in an Arc (its address never moves) and drops after the view.
             let view: View<'static> = unsafe { std::mem::transmute::<View<'_>, View<'static>>(v) };
             crate::api::note_bytes(f.w * f.h * 40);
-            Ok(ViewU(Arc::new(ViewBox { view, world: w.w.clone(), bodies: w.w.bodies.len() })))
+            let parts = w.w.bodies.iter().filter(|b| b.visible).count();
+            Ok(ViewU(Arc::new(ViewBox { view, world: w.w.clone(), parts })))
         });
         // w:sky{haze=, uneven={amount, period_m, seed}, layer={alt, thick, density, uneven, seed},
         //       overcast=, fill=, altitude=, cell=6, exposure=, balance=}

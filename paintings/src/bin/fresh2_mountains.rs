@@ -38,6 +38,10 @@ fn main() {
     // blues, ochre, umber, black; no vermilion or red earth to fleck them
     let cool = st.palette.only(&["lead white", "pale smalt", "cobalt blue", "yellow ochre", "raw umber", "bone black"]);
     let cool = &cool;
+    // the far range's violet haze: smalt-blue and a little vermilion, as in
+    // the violet sky layer of the Cross in the Mountains [KÖR fig. 6]
+    let violet = st.palette.only(&["lead white", "pale smalt", "cobalt blue", "vermilion", "raw umber"]);
+    let violet = &violet;
     let mut rng = Rng::new(o.seed);
     let mut c = o.canvas(|| st.prepare(o.width, ASPECT, o.seed));
     let f = c.frame();
@@ -277,13 +281,15 @@ fn main() {
         // barely darker than the sky
         let sil = form.silhouette(&[id_far], |_| 1.2);
         let fcol = move |x: f32, y: f32| match form.sample(x, y).filter(|s| s.part == id_far) {
-            Some(s) => range_col(x, y, &s, hex("#6f6c86"), hex("#a8a0ad"), 9.0),
-            None => mix(hex("#a39eae"), air(x, y), 0.2, Mix::Light),
+            // a cool violet silhouette against the glow, a step darker
+            // than the sky behind it
+            Some(s) => range_col(x, y, &s, hex("#5d577c"), hex("#8b82a4"), 13.0),
+            None => mix(hex("#8b84a2"), air(x, y), 0.2, Mix::Light),
         };
         let fcol = &fcol;
-        let hd = st.body().palette(cool).color(fcol).angle(|x, y| form.fall(x, y)).angle_jitter(0.15).length(8.0, 26.0).coverage(3.0).medium(0.4).tool_width(5.0).clip(true).threshold(0.2);
+        let hd = st.body().palette(violet).color(fcol).angle(|x, y| form.fall(x, y)).angle_jitter(0.15).length(8.0, 26.0).coverage(3.0).medium(0.4).tool_width(5.0).clip(true).threshold(0.2);
         c.work(&sil, &hd, 201);
-        let sp = Stipple::new(Tool::stippler(2.2)).mixed(cool, 0.5).color(fcol).coverage(|_, _| 2.6).pressure(0.45, 0.8).dips(18, 0.4, 0.5).clip(true);
+        let sp = Stipple::new(Tool::stippler(2.2)).mixed(violet, 0.5).color(fcol).coverage(|_, _| 2.6).pressure(0.45, 0.8).dips(18, 0.4, 0.5).clip(true);
         c.stipple(&sil, &sp, 202);
         c.dry();
     }

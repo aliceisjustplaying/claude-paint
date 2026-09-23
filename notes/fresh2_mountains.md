@@ -19,8 +19,12 @@ The knoll takes the lower left: a dark hump of turf, heather and stones. On
 its crown sits a tor of weathered granite "woolsack" blocks. Right of the
 tor stands a lone wanderer, seen from behind, bareheaded, with a stick,
 looking east toward the light. At the knoll's right shoulder stand a few
-wind-thinned spruces (one dead). More spruces go down the flank into the
-mist, which climbs toward them. Four birds cross the glow toward the sun.
+wind-thinned spruces (one dead). Smaller spruces go down the flank toward
+the fog. A low, dark granite outcrop breaks through the turf at the bottom
+left, cut by the frame. Four birds cross the glow toward the sun. A thin
+waning crescent, the old moon rising ahead of the sun, hangs over the
+wanderer with its lit limb turned down toward the hidden light. The St.
+Laurentius chapel is a nub on the Schneekoppe's summit.
 
 What it draws on in Friedrich (from knowledge, no pictures):
 - The Riesengebirge is his real motif. He walked it in 1810 and painted
@@ -55,10 +59,12 @@ What it draws on in Friedrich (from knowledge, no pictures):
    paint) along each crest, the knoll's edge, the tor and the figure. The
    pencil lifts every 40–110 units. The lines stay faintly visible under the
    thin sky and mist.
-2. **underpainting**: a thin brushed wash, umber under the knoll and
-   blue-gray under the near range and valley. This came out of a problem
-   (see FRICTION 3): without it, the pale top ground flashed through the
-   dark foreground as white specks.
+2. **underpainting**: a thin brushed wash. Umber goes under the knoll
+   (starting 3 units inside its edge), blue-gray under the near range and
+   valley, and a cool violet-gray under the far and mid ranges. This came
+   out of a problem (FRICTION 3): without it, the pale pink top ground
+   flashed through as white specks in the dark and orange specks in the
+   ranges.
 3. **sky**: a lay-in in long level elbow arcs, a shade duller than the
    target, fused top to bottom with the badger, then stippled into the wet
    lay-in (stippler 3 units, coverage 2) to break the strokes.
@@ -68,44 +74,70 @@ What it draws on in Friedrich (from knowledge, no pictures):
 5. **far range**: one `Form` holds three `Ridge`s, lit from behind and
    above right (contre-jour, `front` −0.35). Each is painted with my own
    passes: body strokes down the fall lines, colored by shade and aerial
-   perspective, then a stipple aimed at the same colors so the strokes
-   dissolve.
+   perspective, then a stipple aimed at the same colors (coverage 2.6) so
+   the strokes dissolve. The ranges and mists are mixed from a family set
+   out on its own: lead white, pale smalt, cobalt, yellow ochre, raw umber,
+   bone black. No vermilion or red earth, which had flecked them orange.
 6. **far mist**: a stipple veil (`aim(false)`, density = tone) at the foot of
    the far range, thinning upward in noise banks.
-7. **mid range**: the same method, darker and cooler, then mist at its foot.
-8. **near range**: body strokes, then spruce woods hatched upright where a
-   noise field says forest, then single spruce-tip flicks along the crest
-   where the wood reaches it, then mist rising from the valley at its foot.
+7. **mid range**: the same method, a clear step darker and cooler than the
+   far range. Spurs (`bend` > 0) catch sky light and gullies (`bend` < 0)
+   stay dark. Then a short mist at its foot, stippled and fused with a
+   clipped badger pass.
+8. **near range** (masked off the knoll): body strokes, then spruce woods
+   hatched upright near the crest only. Then tiny spruces along the crest
+   where the wood reaches it, in groups with gaps: each is a hair-thin
+   rigger stem lifted to a point plus 3–6 level boughs, longer toward the
+   foot. Then a brushed, fused veil of mist rising from the valley at its
+   foot.
 9. **valley mist**: the sea of fog. Long level strokes of thin paint with
    `load_at` giving the density, fused with the badger, then stippled. Its
    color has lit billow tops and cool hollows, and it is grayer lower down,
    toward the knoll's shadow.
-10. **knoll**: body color in strokes following the swell of the ground.
+10. **knoll**: body color in strokes following the swell of the ground,
+    darker toward us.
 11. **heather**: rust-brown patches hatched upright, a thin band of dead
     grass along the crown's edge, and about 20 stones (a dark underside
     stroke and a pale upper-edge stroke each).
-12. **tor**: a `Form` of four rounded blocks (sunk into the turf) plus a
-    fracture plane and grain. My own passes: a dark lay-in down the planes,
-    stiffer paint on the lit planes, dark joints where `bend` < 0, then the
-    turf color tucked back over its foot.
+12. **tor** and **outcrop**: `Form`s of rounded blocks sunk into the turf,
+    with a fracture plane and grain. My own `paint_granite` passes:
+    - a dark lay-in down the planes;
+    - stiffer paint on the lit planes;
+    - dark joints where `bend` < 0;
+    - the turf color tucked back over the foot along its seat line.
+
+    The near outcrop is pushed toward near-black (`sheen` 0): in
+    contre-jour a near rock is darker than a far one.
 13. **knieholz**: dark mats hatched in crossing strokes on the knoll's
     shoulders.
 14. **spruces**: my own spruce. The stem is one stroke lifted toward the
     top. Tiers go out and down, each with a few hanging needle hatches.
     The left side is thinned by the west wind. The dead one is a gray stem
     with alternate bare claws.
-15. **slope trees**: smaller spruces going down the flank, then mist
-    stippled up over their feet.
+15. **slope trees**: smaller spruces going down the flank. I tried mist
+    lapping up over their feet, first stippled, then brushed; both turned
+    the dark flank into mottled lichen, so the knoll stays crisp against the
+    fog.
 16. **figure**: the wanderer, stroke by stroke in a local frame:
     - legs, boots, the coat in five overlapping strokes, shoulders, arms;
     - the stick;
     - neck, hair and a glimpse of cheek;
     - a thin warm rim of dawn light down his right side.
-17. **grass**: about 2,000 rigger flicks, curving upward from the knoll's
-    edge downward. Pale ones only right at the crest, against the mist.
-18. **birds**: four small V-strokes over the glow.
-19. **finish**: varnish, craquelure (finer than the aged preset: FRICTION 1)
-    and relief light.
+17. **grass**: about 2,000 rigger flicks, curving upward, spread from the
+    knoll's edge downward. Pale ones only right at the crest, against the
+    mist. Then backlit tufts in clumps on the knoll's skyline, breaking its
+    edge. Each flick is set down lightly at the root, pressed into the
+    blade and lifted off (`swell` + a slow attack); pressed at once, they
+    left a row of dark beads along the edge.
+18. **moon**: the crescent is a lune mask (the disc less the same disc
+    shifted away from the sun), filled with short sable strokes running
+    round the limb and clipped, so the horns come to points. A dragged
+    arc with swelling pressure gave a blunt banana.
+19. **birds**: four small V-strokes over the glow, each wing a rigger
+    flick lifted off. Also the chapel on the Schneekoppe: a dab and a
+    lantern flick.
+20. **finish**: varnish, craquelure (finer than the aged preset, over this
+    canvas's real 240 µm ground: FRICTION 1 and 11) and relief light.
 
 ## FRICTION (running list)
 

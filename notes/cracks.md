@@ -132,6 +132,29 @@ set these fields by hand and would need `Some(..)`, but they are not built.
   sizes where they measure the network. The golden scene doesn't crack and
   is unchanged.
 
+## Round 3 review fix: crop origin (branch `fix3-physics`)
+
+`crack_local` grouped pixels into ~1 mm averaging cells starting at the
+window's corner, not on a whole-canvas grid. A crop whose corner didn't
+fall on a cell boundary averaged different pixels into each cell, so its
+local reach and opening changed away from the crop's edge too. The
+review's probe used light and dark 4-px strips: reach 3.75 in the whole
+render against 4.49 in a crop starting one pixel over, so a generation-4
+crack went from absent to 49% visible. Now the cells sit on the canvas's
+grid (edges at multiples of `n` canvas pixels) and `Local`'s origin is the
+first cell's canvas corner. Cells cut by the buffer's edge average the part
+inside. That and the bilinear interpolation reach about two cells (~2 mm)
+in, which lies inside a crop's unsaved margin (`run::DEFAULT_MARGIN`, 40
+units, ~28 mm). Whole renders are unchanged, since their grid already
+started at 0. `study_aging` changes by at most 4 of 255 levels, and those
+changes come from the paint fixes, not the cracks.
+
+Test: `crop_origin_doesnt_move_the_local_field` builds a crop at canvas
+pixel (41, 42), which cuts the 4-px cells, over light and dark strips and a
+film that thickens in steps. It matches the whole render's reach and
+opening within 1e-4 everywhere two cells or more from the crop's edge.
+Before the fix it failed: reach 2.98 whole against 3.86 cropped.
+
 ## Known issues / next
 
 - **Cracks in darks are nearly invisible.** A dark slot on dark paint has

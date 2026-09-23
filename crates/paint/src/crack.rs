@@ -1202,7 +1202,13 @@ impl Canvas {
     }
 
     /// The local field for `raster_window`: the paint here (its total layer
-    /// thickness and how light it is) on a ~1 mm grid over the window.
+    /// thickness and how light it is) on a ~1 mm grid over the window. The
+    /// grid is the whole canvas's (cell edges at multiples of `n` canvas
+    /// pixels), so a crop render averages the same pixels into the same
+    /// cells as the whole render, wherever its corner falls. Cells cut by the
+    /// window's edge average the part inside; that and the interpolation
+    /// between cells reach two cells (~2 mm) in, well within a crop's
+    /// margin (`run::DEFAULT_MARGIN`, 40 units), which isn't saved.
     fn crack_local(&self, k: &Cracks) -> Local {
         if k.vary <= 0.0 {
             return Local::uniform();
@@ -1210,15 +1216,20 @@ impl Canvas {
         let f = self.f;
         let px = self.px_mm();
         let n = ((1.0 / px).round() as usize).max(2);
-        let (nx, ny) = (f.w.div_ceil(n), f.h.div_ceil(n));
+        // the canvas cells the window touches
+        let (gx0, gy0) = (f.x0 / n, f.y0 / n);
+        let (nx, ny) = ((f.x0 + f.w).div_ceil(n) - gx0, (f.y0 + f.h).div_ceil(n) - gy0);
         let ground = k.ground();
         let cells: Vec<(f32, f32)> = (0..nx * ny)
             .into_par_iter()
             .map(|ci| {
-                let (cx, cy) = (ci % nx, ci / nx);
+                // the cell's pixels in the buffer
+                let (cx, cy) = (gx0 + ci % nx, gy0 + ci / nx);
+                let (xa, xb) = ((cx * n).max(f.x0) - f.x0, ((cx + 1) * n).min(f.x0 + f.w) - f.x0);
+                let (ya, yb) = ((cy * n).max(f.y0) - f.y0, ((cy + 1) * n).min(f.y0 + f.h) - f.y0);
                 let (mut t, mut y, mut m) = (0.0, 0.0, 0.0);
-                for yy in cy * n..((cy + 1) * n).min(f.h) {
-                    for xx in cx * n..((cx + 1) * n).min(f.w) {
+                for yy in ya..yb {
+                    for xx in xa..xb {
                         let i = yy * f.w + xx;
                         let p = self.px[i];
                         t += self.film[i] * COAT_UM;
@@ -1241,7 +1252,7 @@ impl Canvas {
             })
             .collect();
         let (reach, open) = cells.into_iter().unzip();
-        Local { cell: n as f32 * px, o: [f.x0 as f32 * px, f.y0 as f32 * px], nx, ny, reach, open }
+        Local { cell: n as f32 * px, o: [(gx0 * n) as f32 * px, (gy0 * n) as f32 * px], nx, ny, reach, open }
     }
 
     /// Patches of old varnish crazed into microcracks a few tenths of a mm
@@ -1505,6 +1516,45 @@ mod tests {
         }
         eprintln!("corner: {:.2} of crack length within 30° of perpendicular to the diagonal", perp_len / all);
         assert!(perp_len / all > 0.6);
+    }
+
+    /// A crop render judges the paint under its cracks on the same cells as
+    /// the whole canvas: the averaging grid is anchored to the canvas, not
+    /// to the crop's corner, so a crop that doesn't start on a cell boundary
+    /// sees the same reach and opening away from its edge (it used to see
+    /// light and dark strips averaged differently and grow a generation-4
+    /// crack the whole render didn't have).
+    #[test]
+    fn crop_origin_doesnt_move_the_local_field() {
+        let k = Cracks { vary: 1.0, ..Cracks::aged(4).fit(240.0) };
+        let make = |crop: Option<crate::canvas::Crop>| {
+            let mut c = Canvas::new_window(400, 1.0, [0.5; 3], crop).with_size_mm(100.0);
+            let f = c.f;
+            for y in 0..f.h {
+                for x in 0..f.w {
+                    // light and dark strips 4 px wide (a cell is 4 px), and
+                    // a film that thickens in steps down the canvas
+                    let (gx, gy) = (x + f.x0, y + f.y0);
+                    c.px[y * f.w + x] = if (gx / 4) % 2 == 0 { [0.01; 3] } else { [0.4; 3] };
+                    c.film[y * f.w + x] = 9.6 + 2.0 * ((gy / 3) % 5) as f32;
+                }
+            }
+            c
+        };
+        let whole = make(None);
+        let crop = make(Some(crate::canvas::Crop { units: [102.5, 104.0, 300.0, 250.0], margin: 0.0 }));
+        let (f, px) = (crop.f, crop.px_mm());
+        assert!(f.x0 % 4 != 0 && f.y0 % 4 != 0, "crop at ({}, {}) should cut the cells", f.x0, f.y0);
+        let (a, b) = (whole.crack_local(&k), crop.crack_local(&k));
+        // (two cells from the crop's edge: its margin, in a real crop render)
+        for y in f.y0 + 8..f.y0 + f.h - 8 {
+            for x in f.x0 + 8..f.x0 + f.w - 8 {
+                let p = [(x as f32 + 0.5) * px, (y as f32 + 0.5) * px];
+                let (ra, oa) = a.at(p);
+                let (rb, ob) = b.at(p);
+                assert!((ra - rb).abs() < 1e-4 && (oa - ob).abs() < 1e-4, "at pixel ({x}, {y}): whole ({ra}, {oa}), crop ({rb}, {ob})");
+            }
+        }
     }
 
     #[test]

@@ -81,9 +81,9 @@ impl Paint {
         Paint::new(color, 0.5, 0.6)
     }
     /// This paint with its scattering set so one coat hides `hiding`
-    /// (the masstone stays).
+    /// (the masstone, stiffness and drying rate stay).
     pub fn with_hiding(self, hiding: f32) -> Self {
-        Paint::new(self.color, hiding, self.stiff)
+        Paint { scatter: scatter_for(luminance(self.color), hiding), ..self }
     }
     /// This paint with stiffness `stiff`.
     pub fn with_stiff(self, stiff: f32) -> Self {
@@ -226,12 +226,18 @@ pub fn mix_into(rv: &mut f32, rl: &mut Latent, rh: &mut Prop, v: f32, lat: &Late
 /// `coats` of `pig` over `under`, laid over the share `cover` of a pixel:
 /// the paint sits there `coats / cover` thick and the rest of the pixel
 /// shows `under` (area-weighted in linear light, as the eye averages it).
+/// However small the share, it weighs what it covers: a hair's edge over a
+/// thousandth of a pixel darkens it by a thousandth. (The paint's thickness
+/// there is capped far beyond hiding, so a vanishing share stays finite.)
 pub(crate) fn over_share(pig: Pigment, under: Rgb, coats: f32, cover: f32) -> Rgb {
     if cover >= 1.0 {
         return pig.over(under, coats);
     }
-    let c = cover.max(0.01);
-    let o = pig.over(under, coats / c);
+    if cover.is_nan() || cover <= 0.0 {
+        return under;
+    }
+    let c = cover;
+    let o = pig.over(under, (coats / c).min(1e4));
     [under[0] + (o[0] - under[0]) * c, under[1] + (o[1] - under[1]) * c, under[2] + (o[2] - under[2]) * c]
 }
 
@@ -293,6 +299,35 @@ impl Canvas {
 
 #[cfg(test)]
 mod tests {
+
+    /// Setting a paint's hiding changes its scattering and nothing else: a
+    /// slow-drying paint stays slow whichever builder comes first.
+    #[test]
+    fn with_hiding_keeps_the_other_fields() {
+        let a = super::Paint::body([0.3; 3]).with_stiff(0.4).with_drying(0.3).with_hiding(0.5);
+        let b = super::Paint::body([0.3; 3]).with_stiff(0.4).with_hiding(0.5).with_drying(0.3);
+        assert_eq!((a.drying, a.stiff, a.color), (0.3, 0.4, [0.3; 3]));
+        assert_eq!((a.drying, a.stiff, a.color, a.scatter), (b.drying, b.stiff, b.color, b.scatter));
+        assert!((a.hiding() - 0.5).abs() < 0.01);
+    }
+
+    /// Paint over a sliver of a pixel darkens it by that sliver's share, not
+    /// by a 1% floor; no share shows nothing, and a vanishing share of thick
+    /// paint stays finite.
+    #[test]
+    fn sub_percent_cover_keeps_its_area() {
+        let pig = super::Paint::body([0.01; 3]).pigment();
+        let under = [1.0; 3];
+        for cover in [0.001f32, 0.005, 0.02, 0.5] {
+            let thick = pig.over(under, 0.1 / cover);
+            let want: [f32; 3] = std::array::from_fn(|i| under[i] + (thick[i] - under[i]) * cover);
+            let got = super::over_share(pig, under, 0.1, cover);
+            assert!((0..3).all(|i| (got[i] - want[i]).abs() < 1e-6), "cover {cover}: {got:?} vs {want:?}");
+        }
+        assert_eq!(super::over_share(pig, under, 0.1, 0.0), under);
+        let tiny = super::over_share(pig, under, 5.0, 1e-30);
+        assert!(tiny.iter().all(|v| v.is_finite() && (v - 1.0).abs() < 1e-6), "{tiny:?}");
+    }
     use crate::color::hex;
     use crate::mask::Mask;
     use crate::style::Style;

@@ -116,6 +116,11 @@ smalt, cobalt, ochre, umber and red earth.
     brought up the spire shapes of the trees behind. The birch got irregular
     black patches, a dark foot and knots where limbs leave the trunk. Then
     the edge glaze, varnish and relief again.
+18. **Second render, last fix.** At 3200px the bracken read as flat rust
+    blobs (the hatched dark masses under it dominated). I undid the varnish
+    again and laid 56 more fronds in lighter, sunlit rusts over every
+    group; now they read as fronds. Edge glaze, varnish, relief, final
+    renders.
 
 ## HOW THE EASEL FELT
 
@@ -241,7 +246,8 @@ silhouettes. The surface under the streaks is still a noise mottle, not
 drawn stone. The front spruces are flat dark cutouts (the glazed wood
 interior behind them now has some depth); Friedrich's are dark too, but
 you can read every tier. The bracken along the foot is a continuous band
-where clumps with gaps would be truer. The middle floor
+where clumps with gaps would be truer, and its lit fronds are a little
+bright and orange. The middle floor
 between the wood and the rock is vague. The foreground is murky rather than
 dark-and-particular: the details are there at 3200px but little of it
 catches light. The boulder is still an egg. The composition is honest but

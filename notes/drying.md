@@ -246,3 +246,44 @@ thickness averaged over `drying::FILM_MM` (1.25 mm), so `study_time` gives
 the same stages at 400, 1000 and 2000px and asserts them again. What
 remains is the blunt deposit's own resolution dependence (a hog field is
 ~23% thicker at 400px than at 1200px).
+
+## Round 3 review fixes (branch `fix3-physics`)
+
+**Splitting a wait no longer changes the drying** (review3 physics #1).
+`film_thickness` averages only the paint that is still wet, and each `bake`
+removes the films that gelled. So every later `wait` judged the remaining
+paint's thickness afresh, and checking back often changed the physics. A
+striped film of thin fast stripes (0.2 coats, drying 2) and thick slow ones
+(4 coats, drying 0.4) reached Dry after `wait(7000)` but stayed Tacky after
+70 × `wait(100)`: the thick stripe lost its thin neighbors from its average
+and dried slower (set-film cure 1 vs 0.747).
+
+Now each open film's neighborhood thickness is judged when the film is
+worked (`absorb`, the start of the `wait` after a stroke laid or touched it)
+and stored in `drying::Px::th`. Waits, gel events (the set film's `srate`)
+and `dry()` use the stored value, and it changes only when a brush works
+that pixel again. Fresh paint laid next to an older film doesn't change
+the older film's rate; the fresh paint's own thickness is judged over
+everything wet around it, the older film included. Checkpoints are now
+`PAINTCK5`, which stores `th`, so `PAINTCK4` files are refused.
+
+Regressions in `drying.rs`:
+- `splitting_a_wait_changes_nothing`: the striped film, one wait vs 70.
+  Every pixel reaches the same stage, and the slow stripe's cure matches
+  within 1e-3.
+- `splitting_a_wait_changes_nothing_under_the_brush`: two filbert strokes
+  (lead white, drying 2, and slate, drying 0.4) on linen, `wait(3000)` vs
+  100 × `wait(30)`. Every pixel reaches the same stage, the time to dry
+  out matches within 0.1% and the picture after `dry()` matches within
+  1e-3. Before the fix, 149 pixels differed in stage.
+
+What remains: films that gel at different times inside one long wait still
+bake together at its end, while split waits bake them in separate groups.
+Leveling and pinhole closing see different neighbors, so the pictures
+differ by rounding-level amounts (under 1e-3 reflectance in the test above).
+Stages and times match.
+
+Evidence: `study_time` barely changes. Its largest change is at the tops
+of the rigger hooks in the tacky panel, and most of it comes from the tip
+fixes (notes/tip.md). `notes/drying/r3fix_hooks_before_after.jpg` shows
+them at 5× (before above, after below).

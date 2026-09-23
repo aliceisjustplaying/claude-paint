@@ -140,10 +140,18 @@ What it draws on in Friedrich (from knowledge, no pictures):
    stages. That's error-prone: I had to reason about whether a changed
    `Ridge` depth could change another ridge's silhouette in the shared
    `Form` (it could, in principle).
-5. **`--stop X` does nothing when resuming from X.** `--resume knoll --stop
-   knoll` ran to the end: the stage is "in checkpoint", so its end never
-   fires the stop. Wasted a render; I used `--stop` on the next stage
-   instead.
+5. **`--stop` silently doesn't stop.** Two ways, and both cost me renders:
+   - `--resume knoll --stop knoll` runs to the end: the stage is "in
+     checkpoint", so its end never fires the stop.
+   - `--resume` takes the file slug (`far_range`) but `--stop` compares to
+     the stage's real name (`far range`). `--stop far_range` never matches
+     and the run goes to the end without a word. While bisecting I took
+     three of these "stopped" renders for real intermediate states before
+     I noticed they were identical to the final.
+
+   *Workaround:* quote the real name (`--stop "valley mist"`) and always
+   stop on a stage after the one resumed. An unknown `--stop` name should
+   be an error, like an unknown `--resume` is.
 6. **Closures and ownership.** Every noise field (`Fbm`) and `per_column`
    profile is non-`Copy`. Each color or mask closure that uses it is `move`
    (it has to be, for `Sync` and lifetimes), so the second closure that
@@ -171,6 +179,13 @@ What it draws on in Friedrich (from knowledge, no pictures):
    "don't lay light paint where dark will go" has to be enforced by hand in
    every mask (`off_knoll`). Finding the stage took `--resume X --stop Y`
    bisection on crop checkpoints, which worked well.
+   It happened twice. The second time (3200px only, 2,600 pale pixels in a
+   200×80-unit patch of turf) the culprit was the near range itself: a
+   `Ridge` reaches `depth` below its crest across the whole width, so it was
+   painted gray under the knoll. Bisecting stage by stage with
+   `--resume A --stop B` and counting pixels over 70 found it, and masking the
+   range with `off_knoll` took the count to 204. A `Form` has no notion of
+   what stands in front of it unless that's in the same form.
 10. **Stipple as a veil over dark reads as static at 3200px.** A mist
     stippled with `aim(false)` over a dark range is a field of pale dots and
     hollow rings on the dark ("frogspawn" at the fringe). Stippling breaks

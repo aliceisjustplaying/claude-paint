@@ -339,7 +339,9 @@ fn main() {
     let woods = Fbm::new(81, 4, 70.0);
     let woods = &woods;
     if o.stage("near range", &mut c, &mut rng) {
-        let sil = form.silhouette(&[id_near], |_| 0.5);
+        // (not under the knoll: its gray showed in the gaps of the knoll's
+        // body color as pale flakes)
+        let sil = form.silhouette(&[id_near], |_| 0.5).mul_fn(|x, y| off_knoll(x, y));
         let forest = move |x: f32, y: f32| smoothstep(0.38, 0.5, woods.get01(x, y * 1.4) + 0.15 * smoothstep(0.0, 40.0, y - near_crest(x)));
         let forest = &forest;
         let ncol = move |x: f32, y: f32| match form.sample(x, y).filter(|s| s.part == id_near) {

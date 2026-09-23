@@ -53,6 +53,15 @@ fixes; amnesia round 3 **at the easel in Lua**, varied briefs (one fully
 free; others steered off twilight/moon/Rückenfigur, e.g. daylight, summer
 green, a close study); stop and evaluate.
 
+## Amnesia round 3 design (drafted; brief in scratch amnesia3_brief.md)
+Three painters at the easel (Lua), clean worktrees without existing
+paintings (moonrise, fresh/, fresh2/, archive/, figures.rs, round notes).
+- A: fully free (tests convergence: twilight, crescent, Rückenfigur, birds?)
+- B: daylight in a green season; no moon, no twilight
+- C: a near subject (a corner of a forest, a rock face, a single tree, a
+  shore at close range); no moon, no figure seen from behind
+Key question for the user: how the easel FEELS to the agent.
+
 ## Status log
 - Easel uses Lua 5.5 (mlua 0.12 `lua55` + `vendored`; Lua 5.5.1 is current), user's choice.
 - Batch 1 (easel, tip, cracks) and batch 2 (drying, scene, fixes-paint, fixes-ux) running. Batch 3 (atmosphere, green) waits for batch 1.
@@ -65,3 +74,4 @@ green, a close study); stop and evaluate.
 - green merged: sourced greens + palettes, foliage clumps, Sward. Weak painting: savanna umbrella oak (young-oak habit), leaf masses as flat cut-outs at 3200px, uniform round light dabs. Follow-up after tip: mature oak habit; foliage edges as pointed-tip hooked marks.
 - tip merged (coverage-aware baking ported into drying's bake; PAINTCK4). Coast #17 fix applied (non-finite gesture/touch rejected). fixes-paint merged; LAID_PER_LOAD_ROUND re-measured for the tip (4.0); open: aim at a mark's thickness-weighted mean look; flecks in darks from bristle model remain; drying stage resolution-dependent below ~800px.
 - atmosphere merged: sky fields are the win (off-center morning glow, overcast break, twilight Belt of Venus from scattering); study painting weak (dark pasted cumulus, cone peaks, straight range foot on the sea).
+- easel-3 (final merge + bindings for everything) and surface (flecks in darks, aim at a mark's average look, drying at a physical scale) running.

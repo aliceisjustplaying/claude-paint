@@ -19,3 +19,4 @@ Take your time; quality over speed; look at every render before merging.
 
 ## Status log
 - round 4 streams launched: pencil, lookaid, outline, depth. Round-3 full renders regenerating into out/easel3_*_full.png from notes/amnesia3/*.lua (worktrees removed).
+- pencil merged. Open: tree painted via drawing_mask shows beaded dots along limbs (painted_1000.jpg); look --mode drawing hook pending (lookaid owns look.rs); checkpoint doesn't save eraser bookkeeping.

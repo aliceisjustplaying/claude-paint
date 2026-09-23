@@ -208,6 +208,7 @@ fn paint_sky(c: &mut Canvas, st: &Style, w: &World, sf: &SkyField, cf: &CloudFie
     c.dry();
 }
 
+#[allow(clippy::too_many_arguments)]
 fn paint_sea(c: &mut Canvas, st: &Style, w: &World, sf: &SkyField, air: &Haze, kind: Kind, r: [f32; 4], seed: u64) {
     let f = c.frame();
     let pal = &st.palette;

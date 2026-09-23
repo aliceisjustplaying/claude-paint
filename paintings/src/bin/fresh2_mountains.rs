@@ -85,6 +85,11 @@ fn main() {
 
     let sky_m = Mask::from_fn(f, |x, y| 1.0 - smoothstep(far_crest(x) + 4.0, far_crest(x) + 12.0, y));
     let knoll_m = Mask::from_fn(f, |x, y| smoothstep(knoll(x) - 0.8, knoll(x) + 0.8, y));
+    // paint nothing pale where the dark knoll will go: whatever lies under
+    // it shows in the gaps of its body color (a few units of overlap at the
+    // edge so no light line opens along it)
+    let off_knoll = move |x: f32, y: f32| 1.0 - smoothstep(knoll(x) + 3.0, knoll(x) + 6.0, y);
+    let off_knoll = &off_knoll;
 
     // the tor: a pile of weathered granite blocks on the crown of the knoll
     let tor_base = (222.0, knoll(222.0) + 2.0);
@@ -229,7 +234,16 @@ fn main() {
             let body = mix(hex("#9d97a3"), hex("#b7a4a4"), warm, Mix::Light);
             mix(body, hex("#ebc9a8"), (under * (0.4 + 0.5 * warm)).min(0.85), Mix::Light)
         };
-        let s3 = Stipple::new(Tool::stippler(1.9)).mixed(pal, 0.55).color(ccol).coverage(move |x, y| 2.4 * cloud(x, y)).pressure(0.45, 0.8).drag(0.9, Some(0.0)).dips(18, 0.35, 0.6);
+        // laid in first with a soft brush, thin, in long level strokes, and
+        // fused, so the stipple softens a body instead of being the body
+        let cm_soft = Mask::from_fn(f, |x, y| cloud(x, y));
+        let lay = st.glaze(0.6).color(ccol).aim(0.6).angle(|_, _| 0.0).angle_jitter(0.02).length(40.0, 120.0).coverage(2.5).tool_width(9.0).load_at(|x, y| cloud(x, y)).clip(true).threshold(0.12);
+        c.work(&cm_soft, &lay, 113);
+        if let Some(b) = st.blend() {
+            c.work(&cm_soft, &b.angle(|_, _| 0.0).pressure(0.25, 0.35).length(40.0, 120.0).threshold(0.05), 114);
+        }
+        c.dry();
+        let s3 = Stipple::new(Tool::stippler(2.4)).mixed(pal, 0.55).color(ccol).coverage(move |x, y| 1.6 * cloud(x, y)).pressure(0.45, 0.8).drag(0.9, Some(0.0)).dips(18, 0.35, 0.6);
         c.stipple(&cm, &s3, 112);
         c.dry();
     }
@@ -304,6 +318,9 @@ fn main() {
         let mm = Mask::from_fn(f, move |x, y| if y < foot(x) + 10.0 && y > mid_crest(x) - 20.0 { 1.0 } else { 0.0 });
         let m = Stipple::new(Tool::stippler(2.4)).mixed(pal, 0.7).color(move |x, y| mix(air(x, y), hex("#ece2cc"), 0.25, Mix::Light)).coverage(move |x, y| 3.0 * mist_at(x, y, foot(x), 45.0)).pressure(0.5, 0.85).dips(16, 0.3, 0.7).aim(false);
         c.stipple(&mm, &m, 223);
+        if let Some(b) = st.blend() {
+            c.work(&mm, &b.angle(|_, _| 0.0).pressure(0.22, 0.3).coverage(2.0).length(50.0, 140.0), 224);
+        }
         c.dry();
     }
 
@@ -328,12 +345,12 @@ fn main() {
         c.work(&sil, &hd, 231);
         // the woods: short hatching, upright, "like a closely woven textile"
         let wm = Mask::from_fn(f, move |x, y| forest(x, y) * (1.0 - smoothstep(sea_top(x) - 12.0, sea_top(x) + 4.0, y))).mul(&sil);
-        let hatch = st.hatch().color(move |x, y| mix(ncol(x, y), hex("#1f2528"), 0.2, Mix::Pigment)).angle(|_, _| -1.5).cross(0.15).length(2.5, 6.0).coverage(1.6).tool_width(1.3).clip(true);
+        let hatch = st.hatch().color(move |x, y| mix(ncol(x, y), hex("#1f2528"), 0.1, Mix::Pigment)).angle(|_, _| -1.5).cross(0.15).length(2.5, 6.0).coverage(2.6).tool_width(1.3).clip(true);
         c.work(&wm, &hatch, 232);
         c.dry();
         // spruce tips along the crest where the wood reaches it
         let mut r = Rng::new(233);
-        let mut b = Held::new(Tool::round_sable(0.7), 234);
+        let mut b = Held::new(Tool::rigger(0.4), 234);
         let mut x = 0.0;
         while x < w {
             // spruces stand in groups, with gaps
@@ -343,7 +360,7 @@ fn main() {
                 continue;
             }
             let tall = r.range(2.5, 8.0) * if r.chance(0.1) { 1.5 } else { 1.0 };
-            let col = mix(ncol(x, yc + 3.0), hex("#2a3134"), 0.3, Mix::Pigment);
+            let col = mix(ncol(x, yc + 3.0), hex("#262d31"), 0.55, Mix::Pigment);
             b.load(pal.paint(col, 0.2), 0.5);
             // a narrow cone: the stem lifted to a point, and two short
             // flicks of boughs either side low down
@@ -359,9 +376,15 @@ fn main() {
         // mist at the foot of the near range, coming up out of the valley
         // between it and the knoll
         let foot = |x: f32| (knoll(x) + 20.0).min(h);
-        let m = Stipple::new(Tool::stippler(2.8)).mixed(pal, 0.7).color(move |x, y| mix(air(x, y), hex("#e9dfca"), 0.2, Mix::Light)).coverage(move |x, y| 3.2 * mist_at(x, y, foot(x).min(near_crest(x) + 95.0), 55.0)).pressure(0.5, 0.85).dips(16, 0.3, 0.7).aim(false);
-        let mm = Mask::from_fn(f, move |x, y| if y > near_crest(x) - 10.0 { 1.0 } else { 0.0 });
-        c.stipple(&mm, &m, 235);
+        // a veil brushed level, thin, its density carried by the load, and
+        // fused: stippled, it read as static over the dark hatching
+        let dens = move |x: f32, y: f32| mist_at(x, y, foot(x).min(near_crest(x) + 95.0), 55.0);
+        let mm = Mask::from_fn(f, move |x, y| if y > near_crest(x) - 10.0 { off_knoll(x, y) * smoothstep(0.02, 0.1, dens(x, y)) } else { 0.0 });
+        let hd = st.broad().color(move |x, y| mix(air(x, y), hex("#e9dfca"), 0.2, Mix::Light)).by_masstone().angle(|_, _| 0.0).angle_jitter(0.03).length(50.0, 150.0).coverage(3.0).medium(0.6).load_at(dens).clip(true).threshold(0.05).tool_width(12.0);
+        c.work(&mm, &hd, 235);
+        if let Some(b) = st.blend() {
+            c.work(&mm, &b.angle(|_, _| 0.0).pressure(0.25, 0.35).coverage(2.5).length(50.0, 140.0), 236);
+        }
         c.dry();
     }
     
@@ -389,7 +412,7 @@ fn main() {
     };
     let sea_col = &sea_col;
     if o.stage("valley mist", &mut c, &mut rng) {
-        let sm = Mask::from_fn(f, move |x, y| if sea(x, y) > 0.04 { 1.0 } else { 0.0 });
+        let sm = Mask::from_fn(f, move |x, y| if sea(x, y) > 0.04 { off_knoll(x, y) } else { 0.0 });
         // laid in with long level strokes, thin, and fused
         let hd = st.broad().color(sea_col).angle(|_, _| 0.0).angle_jitter(0.04).curve(0.03, 0.3).length(60.0, 180.0).coverage(3.0).medium(0.5).load_at(move |x, y| sea(x, y)).dips(1, 0.5, 0.6).clip(true).threshold(0.5);
         c.work(&sm, &hd, 251);
@@ -572,19 +595,32 @@ fn main() {
     if o.stage("birds", &mut c, &mut rng) {
         // a few birds far off over the valley, going toward the light
         let mut r = Rng::new(371);
-        let mut b = Held::new(Tool::round_sable(0.7), 372);
-        for &(x, y, s) in &[(548.0, 262.0, 2.2), (560.0, 255.0, 1.9), (571.0, 259.0, 1.7), (586.0, 252.0, 1.5)] {
-            b.load(pal.paint(hex("#4c4852"), 0.3), 0.4);
-            let wing = r.range(0.25, 0.5);
-            c.drag(&mut b, &Gesture::new(vec![(x - s, y - s * wing), (x - s * 0.4, y - s * 0.1), (x, y)]).pressure(0.3, 0.6).shake(0.2), None);
-            c.drag(&mut b, &Gesture::new(vec![(x, y), (x + s * 0.4, y - s * 0.12), (x + s, y - s * wing)]).pressure(0.6, 0.3).shake(0.2), None);
+        let mut b = Held::new(Tool::rigger(0.4), 372);
+        for &(x, y, s) in &[(546.0, 263.0, 3.4), (559.0, 256.0, 3.0), (569.0, 260.0, 2.6), (585.0, 252.0, 2.2)] {
+            b.load(pal.paint(hex("#4a4650"), 0.2), 0.5);
+            // each wing a curved flick from the body out to its tip; one
+            // bird with wings down, the others up
+            let wing = if r.chance(0.25) { -0.2 } else { r.range(0.3, 0.55) };
+            c.drag(&mut b, &Gesture::new(vec![(x, y), (x - s * 0.45, y - s * (wing * 0.6 + 0.12)), (x - s, y - s * wing)]).pressure(0.7, 0.05).ramps(0.0, 0.5).shake(0.2), None);
+            c.drag(&mut b, &Gesture::new(vec![(x, y), (x + s * 0.45, y - s * (wing * 0.6 + 0.12)), (x + s, y - s * wing * 0.9)]).pressure(0.7, 0.05).ramps(0.0, 0.5).shake(0.2), None);
         }
+        // the chapel of St. Laurentius on the summit of the Schneekoppe: a
+        // tiny round nub with a lantern, barely darker than the mountain
+        let cx = (640..700).map(|x| (x as f32, far_crest(x as f32))).fold((668.0, 1e9f32), |a, p| if p.1 < a.1 { p } else { a });
+        let mut t = Held::new(Tool::round_sable(0.9), 373);
+        t.load(pal.paint(hex("#6e6878"), 0.2), 0.5);
+        c.drag(&mut t, &Gesture::new(vec![(cx.0 - 1.3, cx.1 + 0.6), (cx.0 + 1.3, cx.1 + 0.6)]).pressure(0.9, 0.9).shake(0.1), None);
+        let mut t2 = Held::new(Tool::rigger(0.3), 374);
+        t2.load(pal.paint(hex("#6a6474"), 0.2), 0.5);
+        c.drag(&mut t2, &Gesture::new(vec![(cx.0, cx.1 + 0.2), (cx.0, cx.1 - 1.6)]).pressure(0.8, 0.1).ramps(0.0, 0.6).shake(0.1), None);
         c.dry();
     }
 
-    // an old canvas, but its cracks drawn at their real width: the aged
-    // preset's hairlines are a whole dark pixel at 1000px
-    let fin = Finish { cracks: Some(paint::Cracks { width_um: 40.0, depth_um: 20.0, dirt: 0.3, ..paint::Cracks::aged(0) }), ..Finish::aged(st.relief) };
+    // an old canvas, but its cracks drawn at their real width (the aged
+    // preset's hairlines are a whole dark pixel at 1000px), over the ground
+    // this canvas really has (240 µm: the cracks go their own way, not the
+    // weave's)
+    let fin = Finish { cracks: Some(paint::Cracks { width_um: 40.0, depth_um: 20.0, dirt: 0.3, ground_um: st.ground.iter().map(|g| g.um).sum(), ..paint::Cracks::aged(0) }), ..Finish::aged(st.relief) };
     o.finish(&mut c, &mut rng, &fin);
     let _ = luminance;
 }

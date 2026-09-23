@@ -148,3 +148,5 @@ look like a Friedrich", not a critic total. Critics (panel: Gemini 3.8 Flash
    panel names the next defects. Repeat in short loops.
 Bob Ross stays parked; his documented techniques (dark-before-light masses,
 tapping, knife deposits) may be borrowed as lab exercises.
+
+Note: a mirror of the PRE-scrub history is kept on the old machine at `~/tmp/paint-overnight-*/scrub/backup.git` (owner: keep it; never push from it).

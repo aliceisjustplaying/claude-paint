@@ -457,6 +457,11 @@ struct Plan {
     /// The passage this stroke belongs to: moving on to another passage is
     /// always a trip to the palette.
     passage: u32,
+    /// Take a fresh brush for this stroke (its own, seeded by where the
+    /// stroke starts).
+    fresh: bool,
+    /// Its stroke id, if fixed in advance (see `fill_gaps`); else the next.
+    id: Option<u32>,
 }
 
 impl Canvas {
@@ -626,29 +631,54 @@ impl Canvas {
         }
         let px_area = 1.0 / (f.scale * f.scale);
         let least = (0.02 * w * w).max(1.5 * px_area);
-        let mut rng = Rng::new(seed ^ 0xF111_0F11);
         let drift = crate::noise::Fbm::new((seed as u32) ^ 0xD21F, 3, hd.drift.1);
         let len = (0.5 * hd.length.0).clamp(w, 2.0 * w);
-        let (mut plans, mut ex, mut ey) = (Vec::new(), 0.0f32, 0.0f32);
-        for (_, (n, sx, sy)) in acc {
+        // Everything about a dab follows from its cell alone, so a crop
+        // (which sees only some cells) paints the same dabs where it looks:
+        // its randomness, its brush (`fresh`), its stroke id (one reserved
+        // per cell of the region's bounding box, whether or not it is
+        // filled) and the tiles (sized for any dab, not for these).
+        let (bx0, by0, bx1, by1) = mask_cells(mask, thr, cell, cw, ch);
+        let span = (bx1 + 1 - bx0) * (by1 + 1 - by0);
+        let first = if bx1 >= bx0 && by1 >= by0 { self.next_stroke_ids(span as u32) } else { 0 };
+        let reach = {
+            // a straight dab's footprint (units), plus room for its bow
+            const X: f32 = 1.0e4;
+            let r = footprint(&hd.tool, &[(X - 0.5 * len, X), (X + 0.5 * len, X)], hd.shake, 1.0, 1 << 16, 1 << 16);
+            r.map_or(len, |r| (X - r.0 as f32).max(r.2 as f32 - X).max(X - r.1 as f32).max(r.3 as f32 - X)) + 0.15 * len
+        };
+        let (mut plans, ex, ey) = (Vec::new(), reach, reach);
+        for (key, (n, sx, sy)) in acc {
             if n as f32 * px_area < least {
                 continue;
             }
+            let (kx, ky) = (key % cw, key / cw);
+            if kx < bx0 || kx > bx1 || ky < by0 || ky > by1 {
+                continue;
+            }
+            let mut rng = Rng::new(seed ^ 0xF111_0F11 ^ (key as u64).wrapping_mul(0x9E37_79B9_7F4A_7C15));
             let c = (sx / n as f32, sy / n as f32);
             let bend = rng.normal() * hd.angle_jitter;
             let pts = hand_trace(hd, &drift, c.0, c.1, len, bend, &mut rng);
-            let (rect, plan) = finish_plan(self, hd, &hd.tool, c, pts, &mut rng);
-            if let Some(r) = rect {
-                let (px, py) = (c.0 * f.scale, c.1 * f.scale);
-                ex = ex.max((px - r.0 as f32).max(r.2 as f32 - px) / f.scale);
-                ey = ey.max((py - r.1 as f32).max(r.3 as f32 - py) / f.scale);
-            }
+            let (rect, mut plan) = finish_plan(self, hd, &hd.tool, c, pts, &mut rng);
+            // a dab takes a touch of paint (as in `work`), on a brush of its
+            // own: what one fill dab leaves on the brush can't change
+            // another's (a crop sees only some of them)
+            plan.load *= (len / hd.length.0.max(1e-3)).clamp(0.25, 1.0);
+            plan.fresh = true;
+            // (its own passage: a trip to the palette for every dab)
+            plan.passage = 0x8000_0000 | key as u32;
+            plan.id = Some(first.wrapping_add(((ky - by0) * (bx1 + 1 - bx0) + kx - bx0) as u32));
             plans.push((c.0, c.1, rect, plan));
         }
         if std::env::var_os("PAINT_DEBUG").is_some() {
-            eprintln!("fill: {} strokes", plans.len());
+            let n = f.w * f.h;
+            let a = (0..n).filter(|&i| self.wet.stroke[i] <= before).count();
+            let b = (0..n).filter(|&i| self.wet.vol[i] < FILL_BARE).count();
+            eprintln!("fill: {} strokes; of {n} px, {a} untouched by the pass, {b} thin", plans.len());
         }
         if !plans.is_empty() {
+            let mut rng = Rng::new(seed ^ 0xF111);
             self.run_plans(plans, (ex, ey), w * 2.0, &hd.tool, hd, hd.ramps, clip, seed ^ 0xF111, &mut rng);
         }
     }
@@ -760,13 +790,15 @@ impl Canvas {
                 }
             }
         }
-        let n_strokes: usize = tiles.iter().map(|t| t.len()).sum();
-        let first_id = self.next_stroke_ids(n_strokes as u32);
+        // (strokes with ids fixed in advance don't take new ones)
+        let free = |t: &Vec<Plan>| t.iter().filter(|p| p.id.is_none()).count() as u32;
+        let n_strokes: u32 = tiles.iter().map(free).sum();
+        let first_id = if n_strokes > 0 { self.next_stroke_ids(n_strokes) } else { 0 };
         let mut offsets = Vec::with_capacity(tiles.len());
         let mut acc = 0u32;
         for t in &tiles {
             offsets.push(acc);
-            acc += t.len() as u32;
+            acc += free(t);
         }
 
         let surf = self.surf();
@@ -781,7 +813,15 @@ impl Canvas {
             let mut held = Held::new(tool.clone(), seed ^ 0x5EED ^ (ti as u64).wrapping_mul(0x9E37_79B9));
             let mut scratch = Vec::new();
             let mut b: crate::bristle::Bounds = None;
-            for (k, p) in tiles[ti].iter().enumerate() {
+            let mut k = 0u32;
+            for p in tiles[ti].iter() {
+                let id = p.id.unwrap_or_else(|| {
+                    k += 1;
+                    first_id.wrapping_add(offsets[ti] + k - 1)
+                });
+                if p.fresh {
+                    held = Held::new(tool.clone(), seed ^ 0xF4E5 ^ (p.pts[0].0.to_bits() as u64) << 20 ^ p.pts[0].1.to_bits() as u64);
+                }
                 if let Some(paint) = p.dip {
                     if hd.blender {
                         held.wipe(0.9);
@@ -796,7 +836,6 @@ impl Canvas {
                     .ramps(ramps.0, ramps.1)
                     .shake(hd.shake)
                     .swell(p.swell.clone());
-                let id = first_id.wrapping_add(offsets[ti] + k as u32);
                 // SAFETY: every pixel this drag touches lies in its stroke
                 // footprint, inside this tile's rect; run_ordered never runs
                 // tiles with overlapping rects at once; `surf()` checked the
@@ -876,7 +915,7 @@ fn finish_plan(cv: &Canvas, hd: &Handling, tool: &Tool, c: (f32, f32), pts: Vec<
         }
     };
     let load = hd.load * load_k;
-    (rect, Plan { pts, pressure, fade, dip: Some(paint), load, swell: Vec::new(), passage: 0 })
+    (rect, Plan { pts, pressure, fade, dip: Some(paint), load, swell: Vec::new(), passage: 0, fresh: false, id: None })
 }
 
 /// Coats a handling lays where its strokes land (the `Aim::Laid` estimate).
@@ -1078,9 +1117,40 @@ pub const FILL_FROM: f32 = 1.5;
 /// dry-brushing on purpose.
 const FILL_LOAD: f32 = 0.25;
 /// Film (coats) under which a pixel of the region reads as bare.
-const FILL_BARE: f32 = 0.12;
+const FILL_BARE: f32 = 0.04;
 
 /// Mask value at a point; the region continues past the canvas edges.
+/// The cells (of size `cell` units, `cw` × `ch` over the whole canvas)
+/// holding the region's pixels at or above `thr`, as an inclusive box
+/// (x0, y0, x1, y1); empty (x1 < x0) if there are none.
+fn mask_cells(mask: &Mask, thr: f32, cell: f32, cw: usize, ch: usize) -> (usize, usize, usize, usize) {
+    use rayon::prelude::*;
+    let mf = mask.f;
+    let rows: Vec<Option<(usize, usize)>> = mask
+        .data
+        .par_chunks(mf.w)
+        .map(|row| {
+            let a = row.iter().position(|&v| v >= thr)?;
+            let b = row.iter().rposition(|&v| v >= thr)?;
+            Some((a, b))
+        })
+        .collect();
+    let (mut x0, mut y0, mut x1, mut y1) = (usize::MAX, usize::MAX, 0, 0);
+    for (y, r) in rows.iter().enumerate() {
+        if let Some((a, b)) = r {
+            x0 = x0.min(*a);
+            x1 = x1.max(*b);
+            y0 = y0.min(y);
+            y1 = y1.max(y);
+        }
+    }
+    if x0 == usize::MAX {
+        return (1, 1, 0, 0);
+    }
+    let c = |px: usize, n: usize| (((px as f32 + 0.5) / mf.scale / cell) as usize).min(n - 1);
+    (c(x0, cw), c(y0, ch), c(x1, cw), c(y1, ch))
+}
+
 fn mask_at(mask: &Mask, x: f32, y: f32) -> f32 {
     mask.data[mask.f.index(x, y)]
 }

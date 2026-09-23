@@ -1666,6 +1666,11 @@ mod cover_tests {
                     ("unbroken", { let h = base(); Handling { broken: 0.0, ..h } }),
                     ("full", { let h = base(); Handling { load: 1.0, dip_every: 1, ..h } }),
                     ("nofill", base().fill(false)),
+                    ("load.1", { let h = base(); Handling { load: 0.1, ..h } }),
+                    ("load.2", { let h = base(); Handling { load: 0.2, ..h } }),
+                    ("load.4", { let h = base(); Handling { load: 0.4, ..h } }),
+                    ("light", base().pressure(0.15, 0.3)),
+                    ("light.1", { let h = base().pressure(0.15, 0.3); Handling { load: 0.1, ..h } }),
                 ] {
                     if !vars.split(',').any(|v| v == var) {
                         continue;

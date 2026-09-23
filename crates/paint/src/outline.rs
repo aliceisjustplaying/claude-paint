@@ -419,22 +419,6 @@ impl Along {
     }
 }
 
-/// Knots at uneven spacing along a line of length `total`, from 0 to
-/// `total` (a closed line's last knot coincides with its first).
-fn knots(rng: &mut Rng, total: f32, mean: f32) -> Vec<f32> {
-    let mut s = vec![0.0];
-    let mut x = 0.0;
-    loop {
-        x += mean * rng.range(0.45, 1.55);
-        if x >= total - mean * 0.4 {
-            break;
-        }
-        s.push(x);
-    }
-    s.push(total);
-    s
-}
-
 /// Knots with lognormal spacing (median `mean`, spread `sigma`).
 fn knots_ln(rng: &mut Rng, total: f32, mean: f32, sigma: f32) -> Vec<f32> {
     let mut s = vec![0.0];
@@ -502,6 +486,9 @@ struct Plan {
     pts: Vec<P>,
     closed: bool,
     corners: Vec<usize>,
+    /// Half the local thickness of the shape at each point (empty: ample).
+    /// Lobes and facets shrink where it is thin (a leg, a neck).
+    room: Vec<f32>,
 }
 
 impl Outline {
@@ -526,7 +513,7 @@ impl Outline {
             return Outline { lines: Vec::new(), strokes: Vec::new(), ch, scale, seed };
         }
         let plan = if closed && n >= 3 && !cor.iter().any(|&c| c) {
-            Plan { pts: resample(&spline(&q, true, step), true, step), closed: true, corners: Vec::new() }
+            Plan { pts: resample(&spline(&q, true, step), true, step), closed: true, corners: Vec::new(), room: Vec::new() }
         } else {
             // spans from corner to corner, each its own smooth curve
             let mut idx: Vec<usize> = (0..n).filter(|&i| cor[i]).collect();
@@ -575,7 +562,7 @@ impl Outline {
                 pts.push(*spans.last().unwrap().last().unwrap());
                 corners.retain(|&c| c > 0);
             }
-            Plan { pts, closed, corners }
+            Plan { pts, closed, corners, room: Vec::new() }
         };
         Self::from_plans(vec![plan], ch, seed, scale, step)
     }
@@ -688,7 +675,30 @@ impl Outline {
         };
         let pad = 3.0 * g + blend * mean_r.iter().cloned().fold(0.0, f32::max);
         let loops = contour_of(x0 - pad, y0 - pad, x1 + pad, y1 + pad, g, |x, y| -sd(x, y), 0.0);
-        let plans = loops_to_plans(loops, step, scale);
+        let mut plans = loops_to_plans(loops, step, scale);
+        // room: the radius of the limb nearest each point of the contour
+        for pl in plans.iter_mut() {
+            pl.room = pl
+                .pts
+                .par_iter()
+                .map(|&(x, y)| {
+                    let mut best = (f32::MAX, 0.0);
+                    for c in &caps {
+                        for &(a, b, ra, rb) in c {
+                            let (bx, by) = (b.0 - a.0, b.1 - a.1);
+                            let (px, py) = (x - a.0, y - a.1);
+                            let h = ((px * bx + py * by) / (bx * bx + by * by).max(1e-12)).clamp(0.0, 1.0);
+                            let r = ra + (rb - ra) * h;
+                            let e = (((px - bx * h).powi(2) + (py - by * h).powi(2)).sqrt() - r).abs();
+                            if e < best.0 {
+                                best = (e, r);
+                            }
+                        }
+                    }
+                    best.1
+                })
+                .collect();
+        }
         Self::from_plans(plans, ch, seed, scale, step)
     }
 
@@ -713,7 +723,7 @@ impl Outline {
         for l in self.lines.iter().filter(|l| !l.closed) {
             let nn = normals(&l.pts, false, 2);
             let pts: Vec<P> = l.pts.iter().zip(&nn).map(|(p, n)| (p.0 + n.0 * d, p.1 + n.1 * d)).collect();
-            plans.push(Plan { pts: resample(&pts, false, step), closed: false, corners: Vec::new() });
+            plans.push(Plan { pts: resample(&pts, false, step), closed: false, corners: Vec::new(), room: Vec::new() });
         }
         Self::from_plans(plans, ch, seed, self.scale, step)
     }
@@ -995,23 +1005,31 @@ fn contour_of(x0: f32, y0: f32, x1: f32, y1: f32, g: f32, field: impl Fn(f32, f3
 
 /// Contours as plans: drop specks, smooth the grid out, resample, find corners.
 fn loops_to_plans(loops: Vec<Vec<P>>, step: f32, scale: f32) -> Vec<Plan> {
+    // specks go; so do small holes (a chink between an arm and a coat reads
+    // as a buttonhole once it is outlined)
     let min_area = (scale * 0.01).powi(2);
+    let min_hole = (scale * 0.08).powi(2);
     loops
         .into_iter()
-        .filter(|l| area2(l).abs() * 0.5 > min_area)
+        .filter(|l| {
+            let a = area2(l) * 0.5;
+            if a > 0.0 { a > min_hole } else { -a > min_area }
+        })
         .map(|l| {
             let mut pts = resample(&l, true, step);
             relax(&mut pts, true, 3, &[]);
             let k = ((scale * 0.012 / step).round() as usize).max(2);
             let corners = dense_corners(&pts, true, k, 55.0);
-            Plan { pts, closed: true, corners }
+            Plan { pts, closed: true, corners, room: Vec::new() }
         })
         .collect()
 }
 
 /// Move a planned path the way a hand moves and weigh it.
 fn hand_line(plan: Plan, ch: &Character, seed: u32, scale: f32, step: f32, rng: &mut Rng) -> Line {
-    let Plan { pts, closed, corners } = plan;
+    let Plan { pts, closed, corners, room } = plan;
+    // lobes and facets no bigger than the shape is thick there
+    let fit = |i: usize, size: f32| -> f32 { room.get(i).map_or(1.0, |&r| (r / size.max(1e-6)).clamp(0.12, 1.0)) };
     let n = pts.len();
     let mut cum = vec![0.0f32; n];
     for i in 1..n {
@@ -1024,7 +1042,7 @@ fn hand_line(plan: Plan, ch: &Character, seed: u32, scale: f32, step: f32, rng: 
     let press = Along::new(seed.wrapping_add(101), 3, 0.2 * scale, total, closed);
     // facets: straight runs between kinks, some kinks chipped in
     let facet = (ch.facet > 0.0).then(|| {
-        let ks = knots(rng, total, ch.facet * scale);
+        let ks = knots_ln(rng, total, ch.facet * scale, 0.5);
         let mut vs: Vec<f32> = ks.iter().map(|_| rng.normal() * ch.facet_amp * scale).collect();
         for v in vs.iter_mut() {
             if rng.f() < ch.notch {
@@ -1035,7 +1053,7 @@ fn hand_line(plan: Plan, ch: &Character, seed: u32, scale: f32, step: f32, rng: 
             let l = vs.len();
             vs[l - 1] = vs[0];
         }
-        (ks, vs)
+        (ks, vs, Along::new(seed.wrapping_add(505), 2, 0.3 * scale, total, closed))
     });
     // lobes: rounded bulges with pinched dips between
     // (two sizes: crowns and the smaller masses on them; sizes lognormal,
@@ -1061,13 +1079,14 @@ fn hand_line(plan: Plan, ch: &Character, seed: u32, scale: f32, step: f32, rng: 
     for i in 0..n {
         let s = cum[i];
         let mut d = ch.wobble * scale * wob.get(s);
-        if let Some((ks, vs)) = &facet {
-            d += knot_value(ks, vs, s);
+        if let Some((ks, vs, env)) = &facet {
+            // quiet runs and broken stretches, not an even tear
+            d += knot_value(ks, vs, s) * (0.5 + 1.1 * env.get(s)).clamp(0.08, 1.8) * fit(i, ch.facet * scale);
         }
         for (ks, hs) in lobes.iter().flatten() {
             let j = ks.partition_point(|&x| x <= s).clamp(1, ks.len() - 1);
             let u = ((s - ks[j - 1]) / (ks[j] - ks[j - 1]).max(1e-6)).clamp(0.0, 1.0);
-            let h = hs[j - 1];
+            let h = hs[j - 1] * fit(i, ch.lobe * scale);
             d += h * ((PI * u).sin().max(0.0).powf(0.6) - 0.55);
         }
         out.push((pts[i].0 + nrm[i].0 * d, pts[i].1 + nrm[i].1 * d));

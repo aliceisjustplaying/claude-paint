@@ -327,7 +327,7 @@ impl Server {
             "check" => {
                 let t0 = Instant::now();
                 let width = self.s.st.borrow().width;
-                let mut fresh = Session::new(width, 0).map_err(|e| e.to_string())?;
+                let mut fresh = Session::replay(width).map_err(|e| e.to_string())?;
                 for (i, c) in self.s.log.iter().enumerate() {
                     fresh.run(&c.src).map_err(|e| format!("replay failed at chunk {}: {e}", i + 1))?;
                 }
@@ -381,7 +381,7 @@ fn run(args: &[String]) -> Result<(), String> {
     if chunks.is_empty() {
         return Err(format!("{file}: no chunks (each starts with a line \"{}\")", session::MARK));
     }
-    let mut s = Session::new(width, 0).map_err(|e| e.to_string())?;
+    let mut s = Session::replay(width).map_err(|e| e.to_string())?;
     let t0 = Instant::now();
     for (i, c) in chunks.iter().enumerate() {
         let r = s.run(c).map_err(|e| format!("chunk {} failed:\n{e}", i + 1))?;

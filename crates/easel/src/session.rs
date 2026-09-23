@@ -4,8 +4,10 @@
 use crate::api::{self, Studio};
 use mlua::{Function, Lua, StdLib, Table, Value};
 use paint::{Canvas, Held, Style};
-use std::cell::RefCell;
-use std::collections::VecDeque;
+use std::alloc::Layout;
+use std::cell::{Cell, RefCell};
+use std::collections::{BTreeMap, VecDeque};
+use std::ffi::c_void;
 use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 use std::mem::ManuallyDrop;
@@ -44,8 +46,16 @@ pub struct Session {
     pub log: Vec<Chunk>,
     snaps: VecDeque<Snap>,
     pub undo_depth: usize,
-    /// heap.lua's snap and restore (dropped before the state is closed).
+    /// A disposable replay (`easel run`, `check`): no snapshots, since a
+    /// failure ends it. A live session always snapshots before a chunk,
+    /// even at undo depth 0, so a failure can roll back.
+    replay: bool,
+    /// heap.lua's snap and restore, prelude.lua's per-chunk reset and the
+    /// private objects snapshots skip (dropped before the state is closed).
     heap: Option<(Function, Function)>,
+    prelude: Option<(Function, Table)>,
+    /// Creation serials of the state's objects (outlives the state).
+    _serials: Box<Serials>,
     /// Time spent snapshotting and restoring the Lua heap (s), for status.
     pub heap_secs: (f64, f64),
 }
@@ -65,7 +75,7 @@ impl Session {
             ));
         }
         let libs = StdLib::TABLE | StdLib::STRING | StdLib::MATH | StdLib::UTF8;
-        let (lua, state) = fixed_lua(libs)?;
+        let (lua, state, serials) = fixed_lua(libs)?;
         // no file or OS access for paintings
         for k in ["dofile", "loadfile", "require", "collectgarbage"] {
             lua.globals().raw_set(k, Value::Nil)?;
@@ -77,17 +87,29 @@ impl Session {
         }
         let dbg: Table = lua.globals().get("debug")?;
         lua.globals().raw_set("debug", Value::Nil)?;
-        let (snap_f, restore_f): (Function, Function) = lua.load(include_str!("heap.lua")).set_name("heap.lua").call(dbg)?;
+        let (snap_f, restore_f): (Function, Function) = lua.load(include_str!("heap.lua")).set_name("heap.lua").call(dbg.clone())?;
+        let id = serials.id_fn(&lua)?;
+        let getmt: Function = dbg.get("getmetatable")?;
+        let prelude: (Function, Table) = lua.load(include_str!("prelude.lua")).set_name("prelude.lua").call((id, getmt))?;
         let st = Rc::new(RefCell::new(Studio::new(width)));
         api::install(&lua, st.clone())?;
-        Ok(Session { lua: ManuallyDrop::new(lua), state, st, log: Vec::new(), snaps: VecDeque::new(), undo_depth, heap: Some((snap_f, restore_f)), heap_secs: (0.0, 0.0) })
+        Ok(Session { lua: ManuallyDrop::new(lua), state, st, log: Vec::new(), snaps: VecDeque::new(), undo_depth, replay: false, heap: Some((snap_f, restore_f)), prelude: Some(prelude), _serials: serials, heap_secs: (0.0, 0.0) })
+    }
+
+    /// A session that replays a program: a failed chunk ends it, so it
+    /// keeps no snapshots.
+    pub fn replay(width: usize) -> mlua::Result<Self> {
+        let mut s = Self::new(width, 0)?;
+        s.replay = true;
+        Ok(s)
     }
 
     fn snap(&mut self) -> mlua::Result<Snap> {
         let t0 = Instant::now();
         let (snap_f, _) = self.heap.as_ref().unwrap();
         let strings = self.lua.load("return getmetatable('')").eval::<Value>().ok();
-        let heap: Table = snap_f.call((self.lua.globals(), strings))?;
+        let skip = self.prelude.as_ref().unwrap().1.clone();
+        let heap: Table = snap_f.call((skip, self.lua.globals(), strings))?;
         self.heap_secs.0 += t0.elapsed().as_secs_f64();
         let mut s = self.st.borrow_mut();
         let brushes = s.live_brushes().into_iter().map(|b| {
@@ -125,10 +147,12 @@ impl Session {
         if src.trim().is_empty() {
             return Err("empty chunk".into());
         }
-        // a replay (undo depth 0) needs no snapshot: a failure ends it
-        let snap = if self.undo_depth > 0 { Some(self.snap().map_err(|e| e.to_string())?) } else { None };
+        // a live session snapshots even at undo depth 0 (to roll back a
+        // failure); a replay needs none, since a failure ends it
+        let snap = if !self.replay { Some(self.snap().map_err(|e| e.to_string())?) } else { None };
         let n = self.log.len() as u64 + 1;
         let clock = self.st.borrow().clock;
+        self.prelude.as_ref().unwrap().0.call::<()>(()).map_err(|e| e.to_string())?;
         self.st.borrow_mut().begin(n);
         let t0 = Instant::now();
         let chunk = self.lua.load(src.as_str()).set_name(format!("chunk {n}"));
@@ -153,7 +177,7 @@ impl Session {
             msg.push_str(&e);
             return Err(msg);
         }
-        if let Some(snap) = snap {
+        if let Some(snap) = snap.filter(|_| self.undo_depth > 0) {
             self.snaps.push_back(snap);
         }
         while self.snaps.len() > self.undo_depth {
@@ -222,6 +246,7 @@ impl Drop for Session {
         // everything holding references into the state goes first
         self.snaps.clear();
         self.heap = None;
+        self.prelude = None;
         let _ = self.lua.gc_collect();
         unsafe {
             ManuallyDrop::drop(&mut self.lua);
@@ -230,15 +255,77 @@ impl Drop for Session {
     }
 }
 
+/// Creation serials of a state's tables, closures, userdata and threads,
+/// kept by its allocator. Lua hashes these objects by address, which
+/// differs between processes; their serials give prelude.lua's `pairs` and
+/// `next` an order that doesn't: the order the program created them in.
+/// (Relative order is all that counts, so objects made by failed chunks,
+/// snapshots or mlua itself do no harm.)
+pub struct Serials {
+    next: Cell<i64>,
+    /// block address -> (serial, size)
+    live: RefCell<BTreeMap<usize, (i64, usize)>>,
+}
+
+const ALIGN: usize = 16;
+
+unsafe extern "C" fn counting_alloc(ud: *mut c_void, ptr: *mut c_void, osize: usize, nsize: usize) -> *mut c_void {
+    use mlua::ffi::{LUA_TFUNCTION, LUA_TTABLE, LUA_TTHREAD, LUA_TUSERDATA};
+    // SAFETY: `ud` is the session's boxed Serials, which outlives the state;
+    // Lua passes the block's true size as `osize` whenever `ptr` is a block.
+    unsafe {
+        let h = &*(ud as *const Serials);
+        if nsize == 0 {
+            if !ptr.is_null() {
+                h.live.borrow_mut().remove(&(ptr as usize));
+                std::alloc::dealloc(ptr as *mut u8, Layout::from_size_align_unchecked(osize, ALIGN));
+            }
+            return std::ptr::null_mut();
+        }
+        if ptr.is_null() {
+            let p = std::alloc::alloc(Layout::from_size_align_unchecked(nsize, ALIGN));
+            // a new object: `osize` is its type
+            if !p.is_null() && matches!(osize as i32, LUA_TTABLE | LUA_TFUNCTION | LUA_TUSERDATA | LUA_TTHREAD) {
+                let n = h.next.get();
+                h.next.set(n + 1);
+                h.live.borrow_mut().insert(p as usize, (n, nsize));
+            }
+            return p as *mut c_void;
+        }
+        // objects are never reallocated, only arrays and buffers
+        std::alloc::realloc(ptr as *mut u8, Layout::from_size_align_unchecked(osize, ALIGN), nsize) as *mut c_void
+    }
+}
+
+impl Serials {
+    /// `id(v)`: the serial of an object (the block holding a userdata's
+    /// memory), nil for values and library C functions.
+    fn id_fn(&self, lua: &Lua) -> mlua::Result<Function> {
+        let me = self as *const Serials;
+        lua.create_function(move |_, v: Value| {
+            let p = v.to_pointer() as usize;
+            if p == 0 {
+                return Ok(None);
+            }
+            // SAFETY: the Serials outlive the state, so this function
+            let live = unsafe { &*me }.live.borrow();
+            Ok(live.range(..=p).next_back().filter(|(a, (_, len))| p < *a + *len).map(|(_, (n, _))| *n))
+        })
+    }
+}
+
 /// A Lua state with the hash seed Lua's own `luaL_newstate` gives it, which
 /// is constant when Lua is built with `-Dluai_makeseed()=...` (see
 /// .cargo/config.toml). mlua 0.12 seeds its states from `arc4random` on
 /// macOS, so `pairs` order (and the layout of any hash table) would differ
-/// between a live session and its replay.
-fn fixed_lua(libs: StdLib) -> mlua::Result<(Lua, *mut mlua::ffi::lua_State)> {
+/// between a live session and its replay. Its allocator numbers objects
+/// (see `Serials`).
+fn fixed_lua(libs: StdLib) -> mlua::Result<(Lua, *mut mlua::ffi::lua_State, Box<Serials>)> {
     use mlua::ffi;
+    let serials = Box::new(Serials { next: Cell::new(1), live: RefCell::new(BTreeMap::new()) });
     unsafe {
-        let state = ffi::luaL_newstate();
+        let ud = &*serials as *const Serials as *mut c_void;
+        let state = ffi::lua_newstate(counting_alloc, ud, ffi::luaL_makeseed_(std::ptr::null_mut()));
         if state.is_null() {
             return Err(mlua::Error::runtime("could not create a Lua state"));
         }
@@ -246,7 +333,7 @@ fn fixed_lua(libs: StdLib) -> mlua::Result<(Lua, *mut mlua::ffi::lua_State)> {
         ffi::lua_pop(state, 1);
         let lua = Lua::get_or_init_from_ptr(state).clone();
         lua.load_std_libs(libs)?;
-        Ok((lua, state))
+        Ok((lua, state, serials))
     }
 }
 
@@ -254,7 +341,7 @@ fn fixed_lua(libs: StdLib) -> mlua::Result<(Lua, *mut mlua::ffi::lua_State)> {
 /// is built with a constant `luai_makeseed`, different run to run otherwise.
 pub fn hash_probe() -> String {
     let probe = || -> mlua::Result<String> {
-        let (lua, state) = fixed_lua(StdLib::NONE)?;
+        let (lua, state, _serials) = fixed_lua(StdLib::NONE)?;
         let t = lua.create_table()?;
         for i in 0..32 {
             t.set(format!("k{}", i * 7919), i)?;
@@ -357,7 +444,7 @@ mod tests {
         let prog = a.program("t");
         let chunks = parse_program(&prog);
         assert_eq!(chunks, CHUNKS.iter().map(|c| c.trim_end().to_string()).collect::<Vec<_>>());
-        let mut b = Session::new(W, 0).unwrap();
+        let mut b = Session::replay(W).unwrap();
         for c in &chunks {
             b.run(c).unwrap();
         }
@@ -378,7 +465,7 @@ mod tests {
         s.undo(1).unwrap();
         s.run(r##"assert(trees[2] == 2); assert(bump() == 2)"##).unwrap();
         // and the live session still replays exactly
-        let mut b = Session::new(W, 0).unwrap();
+        let mut b = Session::replay(W).unwrap();
         for c in &s.log {
             b.run(&c.src).unwrap();
         }
@@ -403,5 +490,156 @@ mod tests {
         let full: f32 = s.st.borrow().out.trim().parse().unwrap();
         assert!(full > 0.5, "the brush got its paint back: {full}");
         assert!(s.undo(5).is_err());
+    }
+
+    // review 3, finding 1: `--undo 0` kept no pre-chunk snapshot, so a
+    // failed chunk's paint and globals survived
+    #[test]
+    fn live_session_without_undo_still_rolls_back() {
+        let mut s = Session::new(W, 0).unwrap();
+        s.run("canvas{aspect=1.5, seed=2}; a = 1; t = {n = 1}").unwrap();
+        let before = bits(&s);
+        let e = s.run(r##"a = 2; t.n = 2; b = brush("round", 4); wait(30); glaze(everywhere(), {color="#ff0000", coats=0.5}); error("stop")"##).unwrap_err();
+        assert!(e.contains("stop"), "{e}");
+        assert_eq!(before, bits(&s), "the failed glaze is gone");
+        s.run("assert(a == 1 and t.n == 1 and b == nil and clock() == 0)").unwrap();
+        assert!(s.undo(1).is_err(), "no undo history at depth 0");
+        let mut r = Session::replay(W).unwrap();
+        for c in &s.log {
+            r.run(&c.src).unwrap();
+        }
+        assert_eq!(bits(&s), bits(&r));
+    }
+
+    /// The order `pairs` and `next` walk a table keyed by tables, closures
+    /// and userdata in, as printed by a fresh session.
+    fn object_key_order() -> String {
+        let mut s = Session::new(W, 2).unwrap();
+        s.run("canvas{aspect=1, seed=7}; items = {}; for i = 1, 64 do items[{index = i}] = i end").unwrap();
+        // garbage and failed chunks in between must not matter
+        let _ = s.run("for i = 1, 500 do local _ = {i} end; items[{index = 0}] = 0; error('x')");
+        s.run(r#"fs = {}; for i = 1, 16 do fs[function() return i end] = i end
+                  ms = {}; for i = 1, 8 do ms[mask(function() return 1 end)] = i end
+                  mixed = {10, 20, x = 1, y = 2, [2.5] = 3, [true] = 4}; for i = 1, 20 do mixed[{i}] = -i end"#).unwrap();
+        s.run(r#"local o = {}
+                  for k, v in pairs(items) do o[#o + 1] = v end
+                  for k, v in pairs(fs) do o[#o + 1] = v end
+                  for k, v in pairs(ms) do o[#o + 1] = v end
+                  for k, v in pairs(mixed) do o[#o + 1] = tostring(v) end
+                  local k, v = next(items); o[#o + 1] = 'first ' .. v
+                  k, v = next(items, k); o[#o + 1] = 'second ' .. v
+                  local n = 0; for k in next, items do n = n + 1 end; o[#o + 1] = 'n ' .. n
+                  print(table.concat(o, ','))"#).unwrap();
+        let out = s.st.borrow().out.clone();
+        out
+    }
+
+    // review 3, finding 2: tables keyed by objects walked in address order
+    #[test]
+    fn object_keys_walk_in_creation_order() {
+        let a = object_key_order();
+        // a different heap layout in the same process
+        let _pad: Vec<Session> = (0..3).map(|_| Session::new(W, 0).unwrap()).collect();
+        let b = object_key_order();
+        assert_eq!(a, b);
+        let first: String = (1..=64).map(|i| format!("{i},")).collect();
+        assert!(a.starts_with(&first), "object keys in creation order: {a}");
+        assert!(a.contains("first 1,second 2,n 64"), "{a}");
+    }
+
+    #[test]
+    fn plain_tables_keep_lua_order() {
+        // tables without object keys walk in stock Lua's order (same seed),
+        // so existing paintings replay as before
+        let build = "t = {}; for i = 1, 40 do t['k' .. i * 7919] = i end; for i = 1, 10 do t[i * 0.5] = -i end; t[true] = 0";
+        let (lua, state, _serials) = fixed_lua(StdLib::TABLE).unwrap();
+        let want: String = lua.load(format!("{build}; local o = {{}}; for k, v in next, t do o[#o + 1] = v end; return table.concat(o, ',')")).eval().unwrap();
+        drop(lua);
+        unsafe { mlua::ffi::lua_close(state) };
+        let mut s = Session::replay(W).unwrap();
+        s.run(build).unwrap();
+        s.run("local o = {}; for k, v in pairs(t) do o[#o + 1] = v end; print(table.concat(o, ','))").unwrap();
+        assert_eq!(s.st.borrow().out.trim_end(), want);
+        s.run("local o = {}; for k, v in next, t do o[#o + 1] = v end; print(table.concat(o, ','))").unwrap();
+        assert_eq!(s.st.borrow().out.trim_end(), want);
+        // __pairs is honored
+        s.run("local p = setmetatable({}, {__pairs = function(t) return function(_, k) if not k then return 1, 'one' end end, t, nil end}); for k, v in pairs(p) do assert(k == 1 and v == 'one') end").unwrap();
+    }
+
+    // review 3, finding 3: a gmatch iterator kept across chunks advanced
+    // during a failed chunk
+    #[test]
+    fn gmatch_iterators_roll_back() {
+        let mut s = Session::new(W, 4).unwrap();
+        s.run("canvas{aspect=1, seed=7}").unwrap();
+        s.run(r#"it = string.gmatch("red green blue", "%a+")"#).unwrap();
+        let e = s.run(r#"assert(it() == "red"); error("stop")"#).unwrap_err();
+        assert!(e.contains("stop"), "{e}");
+        s.run(r#"assert(it() == "red")"#).unwrap();
+        s.run(r#"assert(it() == "green")"#).unwrap();
+        s.undo(1).unwrap();
+        s.run(r#"w = it(); assert(w == "green", w)"#).unwrap();
+        // a method-call iterator and a word-pair iterator too
+        s.run(r#"it2 = ("a=1, b=2"):gmatch("(%w+)=(%w+)")"#).unwrap();
+        let _ = s.run("it2(); error('stop')").unwrap_err();
+        s.run(r#"local k, v = it2(); assert(k == "a" and v == "1")"#).unwrap();
+    }
+
+    // the rollback-aware gmatch matches Lua's own, match for match
+    #[test]
+    fn gmatch_matches_lua() {
+        let cases: &[(&str, &str, Option<i64>)] = &[
+            ("red green blue", "%a+", None),
+            ("hello world from Lua", "%a+", None),
+            ("key=val, k2=v2", "(%w+)=(%w+)", None),
+            ("abc", "", None),
+            ("abc", "x*", None),
+            ("a,b,,c,", "([^,]*)", None),
+            ("one two three", "()%a+()", None),
+            ("^a^b", "^%a", None),
+            ("aaa", "a-", None),
+            ("abcabc", "b", Some(3)),
+            ("abcabc", "%a", Some(-2)),
+            ("abc", "", Some(10)),
+            ("abc", "%a", Some(0)),
+            ("THE (quick) fox", "%((%a+)%)", None),
+            ("x = 1.5e3", "%d+%.?%d*", None),
+        ];
+        let lua = mlua::Lua::new();
+        let mut s = Session::replay(W).unwrap();
+        let prog = |s: &str, p: &str, i: Option<i64>| {
+            let init = i.map(|i| format!(", {i}")).unwrap_or_default();
+            format!("local o = {{}}; for a, b in string.gmatch({s:?}, {p:?}{init}) do o[#o + 1] = tostring(a) .. '|' .. tostring(b) end; return table.concat(o, ' ')")
+        };
+        for (str_, pat, init) in cases {
+            let want: String = lua.load(prog(str_, pat, *init)).eval().unwrap();
+            s.run(&format!("print((function() {} end)())", prog(str_, pat, *init))).unwrap();
+            let got = s.st.borrow().out.trim_end_matches('\n').to_string();
+            assert_eq!(got, want, "gmatch({str_:?}, {pat:?}, {init:?})");
+        }
+        // errors are Lua's too
+        let e = s.run("for _ in string.gmatch('abc', '%') do end").unwrap_err();
+        assert!(e.contains("malformed pattern"), "{e}");
+    }
+
+    // review 3, finding 4: a view's form counted proxies as visible parts
+    #[test]
+    fn view_form_counts_visible_parts_only() {
+        let mut s = Session::replay(W).unwrap();
+        s.run("canvas{aspect=1.5, seed=2}").unwrap();
+        s.run(r#"local w = world{horizon=300}
+                  local s = w:spot_at(0, 10)
+                  w = w:proxy(s, body.ellipsoid(s:p(0, 1, 0), s:size(1, 1, 1)))
+                  local v = w:view()
+                  assert(v.form.parts == 0, 'proxy-only: ' .. v.form.parts)
+                  assert(v:part(1) == 0)"#).unwrap();
+        s.run(r#"local w = world{horizon=300}
+                  local a, b = w:spot_at(-3, 12), w:spot_at(3, 12)
+                  w = w:place(a, body.ellipsoid(a:p(0, 1, 0), a:size(1, 1, 1)))
+                  w = w:proxy(a, body.ellipsoid(a:p(0, 5, 0), a:size(1, 1, 1)))
+                  w = w:place(b, body.ellipsoid(b:p(0, 1, 0), b:size(1, 1, 1)))
+                  local v = w:view()
+                  assert(v.form.parts == 2, 'mixed: ' .. v.form.parts)
+                  assert(v:part(1) == 1 and v:part(2) == 0 and v:part(3) == 2)"#).unwrap();
     }
 }

@@ -240,3 +240,9 @@ average over the pixel, so at coarse widths thin and thick paint blend into
 one intermediate thickness. The study now reports the difference instead of
 asserting. For the review: drying rates should be computed from thickness at
 a fixed physical scale, not per pixel.
+
+**Fixed** (branch `surface`, notes/surface.md §3): rates come from the film
+thickness averaged over `drying::FILM_MM` (1.25 mm), so `study_time` gives
+the same stages at 400, 1000 and 2000px and asserts them again. What
+remains is the blunt deposit's own resolution dependence (a hog field is
+~23% thicker at 400px than at 1200px).

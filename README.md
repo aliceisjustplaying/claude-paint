@@ -111,8 +111,14 @@ canvas, not the crop. A 3200px Form costs ≈190 MB to keep and ≈310 MB at
 peak (3:2); build one per motif and drop it after painting
 (`notes/form.md`, Memory).
 
+A handling that means to cover (coverage ≥ 1.5, a loaded brush) looks at
+its passage afterwards and dabs paint into the gaps its strokes left
+(`Handling::fill`, `notes/surface.md`); `.fill(false)` lets the ground
+show between strokes.
+
 Handlings mixed from a palette aim at the *look* on the canvas by default
-(`Aim::Laid`), judged over what is already there. Glazes (`Style::glaze`)
+(`Aim::Laid`), judged over what is already there, as the mean look of the
+brush's marks (`Palette::aim_for`). Glazes (`Style::glaze`)
 and fixed paints use the paint's *masstone* instead (`notes/color.md`).
 
 Notes for the painter (read before writing a painting):
@@ -122,6 +128,7 @@ Notes for the painter (read before writing a painting):
 - `notes/strokes.md` – how handlings plan strokes
 - `notes/color.md` – what a color means: masstone, aimed mixing, hiding
 - `notes/stipple.md` – stippling
+- `notes/surface.md` – covering a passage (look and fill), aiming at a mark's mean look, drying by film over millimeters
 - `notes/tip.md` – pointed brushes: hairlines, flicks, width from pressure
 - `notes/form.md` – solids, light, shadow and the masks they give
 - `notes/scene.md` – one world and one sun: placing things, shadows, contact, reflections, perspective

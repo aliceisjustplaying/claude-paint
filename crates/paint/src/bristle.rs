@@ -27,6 +27,9 @@ use crate::wet::{LAT, Latent, Paint, Prop, mix_into};
 /// Relief (µm) that spans a bristle's contact range: a bristle pressed
 /// lightly touches only peaks this much above their surroundings.
 const TOOTH_UM: f32 = 60.0;
+/// How far into the tooth's range the paint a fully loaded hair carries
+/// reaches ahead of the hair (see `exchange`).
+const WET_REACH: f32 = 0.5;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Kind {
@@ -1021,7 +1024,13 @@ unsafe fn exchange(
         // of a pointed soft brush carries a bead of paint that wets the
         // weave's valleys as well as its peaks, however lightly it is
         // pressed; run dry, it skims the peaks
-        let wick = if tool.point > 0.0 { tool.point * smoothstep(0.02, 0.25, br.vol / full) } else { 0.0 };
+        // pressed; run dry, it skims the peaks. Any loaded hair carries
+        // paint proud of itself: the paint touches before the hair does, so
+        // a well-loaded blunt brush wets the shallow hollows too (up to half
+        // the tooth's range); a nearly dry one drags over the peaks only
+        // (dry brush, broken color)
+        let wet = smoothstep(0.1, 0.8, br.vol / full);
+        let wick = if tool.point > 0.0 { tool.point * smoothstep(0.02, 0.25, br.vol / full) } else { 0.0 }.max(WET_REACH * wet);
         let th = 1.0 - reach.max(wick) * 1.6;
 
         // pass 1: contact weights
@@ -1580,6 +1589,153 @@ impl Touch {
     pub(crate) fn assert_valid(&self) {
         if let Err(e) = self.validate() {
             panic!("{e}");
+        }
+    }
+}
+
+#[cfg(test)]
+mod cover_tests {
+    use crate::canvas::Canvas;
+    use crate::color::hex;
+    use crate::handling::Handling;
+    use crate::mask::Mask;
+    use crate::style::Style;
+
+    fn lum(p: [f32; 3]) -> f32 {
+        0.2126 * p[0] + 0.7152 * p[1] + 0.0722 * p[2]
+    }
+
+    /// Paint a dark square (units 350..650) with `hd`, dry it, and return
+    /// (share of interior pixels whose wet film is under 0.15 coat before
+    /// drying, share that shows the ground after: closer to the ground's
+    /// value than to the paint's).
+    pub(crate) fn bare_share(w: usize, hd: &Handling, seed: u64) -> (f32, f32) {
+        let st = Style::friedrich_early();
+        let mut c: Canvas = st.prepare(w, 1.0, seed);
+        let m = Mask::from_fn(c.frame(), |x, y| if (350.0..650.0).contains(&x) && (350.0..650.0).contains(&y) { 1.0 } else { 0.0 });
+        let ground = c.px.clone();
+        c.work(&m, hd, seed);
+        let f = c.f;
+        let inner: Vec<usize> = (0..f.w * f.h).filter(|&i| {
+            let (x, y) = (f.ux(i % f.w), f.uy(i / f.w));
+            (380.0..620.0).contains(&x) && (380.0..620.0).contains(&y)
+        }).collect();
+        let thin = inner.iter().filter(|&&i| c.wet.vol[i] < 0.15).count() as f32 / inner.len() as f32;
+        let untouched = inner.iter().filter(|&&i| c.wet.vol[i] < 0.15 && c.wet.touched[i] == 0).count() as f32 / inner.len() as f32;
+
+        if std::env::var_os("PROBE_VERBOSE").is_some() {
+            println!("    thin {:.2}%, of it never touched by a bristle {:.2}%", 100.0 * thin, 100.0 * untouched);
+        }
+        c.dry();
+        let mut ls: Vec<f32> = inner.iter().map(|&i| lum(c.px[i])).collect();
+        ls.sort_by(f32::total_cmp);
+        let paint = ls[ls.len() / 2];
+        if let Ok(out) = std::env::var("PROBE_OUT") {
+            c.save(std::path::Path::new(&format!("{out}_{}.png", hd.tool.width))).unwrap();
+        }
+        let bare = inner.iter().filter(|&&i| lum(c.px[i]) - paint > 0.5 * (lum(ground[i]) - paint)).count() as f32 / inner.len() as f32;
+        (thin, bare)
+    }
+
+    /// A loaded brush covers a passage it means to cover: no flecks of the
+    /// ground in a dark body passage at coverage 2.5 (they were the gaps
+    /// the strokes' hand placement left, 1.5% of the area; broad 11%); a
+    /// nearly dry brush at light pressure still breaks up (dry brush).
+    #[test]
+    fn loaded_passage_covers() {
+        let st = Style::friedrich_early();
+        let dark = |_: f32, _: f32| hex("#2c2925");
+        let body = || st.body().color(dark).clip(true).threshold(0.5).coverage(2.5);
+        let broad = || st.broad().color(dark).clip(true).threshold(0.5).coverage(2.5);
+        let (_, bare) = bare_share(500, &body(), 5);
+        let (_, bare_broad) = bare_share(500, &broad(), 5);
+        let (_, gaps) = bare_share(500, &broad().fill(false), 5);
+        let h = body().pressure(0.15, 0.3);
+        let (_, dry) = bare_share(500, &Handling { load: 0.1, ..h }, 5);
+        println!("bare: body {:.2}%, broad {:.2}% ({:.2}% without looking), dry brush {:.1}%", 100.0 * bare, 100.0 * bare_broad, 100.0 * gaps, 100.0 * dry);
+        assert!(bare < 0.002 && bare_broad < 0.002, "a loaded passage at coverage 2.5 shows bare ground: body {:.2}%, broad {:.2}%", 100.0 * bare, 100.0 * bare_broad);
+        assert!(gaps > 0.005, "without looking the strokes leave gaps: {gaps}");
+        assert!(dry > 0.1, "dry brush at light pressure should break up: {dry}");
+    }
+
+    /// Where do bare flecks in a dark body passage come from?
+    /// `cargo test --release -p paint probe_bare -- --ignored --nocapture`
+    #[test]
+    #[ignore]
+    fn probe_bare() {
+        let st = Style::friedrich_early();
+        let w: usize = std::env::var("PROBE_W").ok().and_then(|s| s.parse().ok()).unwrap_or(1000);
+        let dark = |_: f32, _: f32| hex("#2c2925");
+        let names: Vec<String> = std::env::var("PROBE").map(|s| s.split(',').map(String::from).collect()).unwrap_or(vec!["body".into(), "broad".into(), "detail".into()]);
+        let covs: Vec<f32> = std::env::var("PROBE_COV").map(|s| s.split(',').map(|v| v.parse().unwrap()).collect()).unwrap_or(vec![1.0, 2.5, 4.0]);
+        let vars = std::env::var("PROBE_VARS").unwrap_or("base,nofill".into());
+        for name in names.iter().map(|s| s.as_str()) {
+            for &cov in &covs {
+                let base = || match name {
+                    "body" => st.body(),
+                    "broad" => st.broad(),
+                    _ => st.detail(),
+                }
+                .color(dark)
+                .clip(true)
+                .threshold(0.5)
+                .coverage(cov);
+                let mut line = format!("{name:6} cov {cov:.1}:");
+                for (var, hd) in [
+                    ("base", base()),
+                    ("push0", { let h = base(); let t = crate::bristle::Tool { push: 0.0, ..h.tool.clone() }; Handling { tool: t, ..h } }),
+                    ("pick0", { let h = base(); let t = crate::bristle::Tool { pickup: 0.0, ..h.tool.clone() }; Handling { tool: t, ..h } }),
+                    ("unbroken", { let h = base(); Handling { broken: 0.0, ..h } }),
+                    ("full", { let h = base(); Handling { load: 1.0, dip_every: 1, ..h } }),
+                    ("nofill", base().fill(false)),
+                    ("load.1", { let h = base(); Handling { load: 0.1, ..h } }),
+                    ("load.2", { let h = base(); Handling { load: 0.2, ..h } }),
+                    ("load.4", { let h = base(); Handling { load: 0.4, ..h } }),
+                    ("light", base().pressure(0.15, 0.3)),
+                    ("light.1", { let h = base().pressure(0.15, 0.3); Handling { load: 0.1, ..h } }),
+                ] {
+                    if !vars.split(',').any(|v| v == var) {
+                        continue;
+                    }
+                    let seeds: Vec<u64> = std::env::var("PROBE_SEEDS").unwrap_or("5,6,7".into()).split(',').map(|v| v.parse().unwrap()).collect();
+                    let (mut thin, mut bare) = (0.0, 0.0);
+                    for &sd in &seeds {
+                        let (t, b) = bare_share(w, &hd, sd);
+                        thin += t / seeds.len() as f32;
+                        bare += b / seeds.len() as f32;
+                    }
+                    line += &format!("  {var} thin {:.2}% bare {:.2}%", 100.0 * thin, 100.0 * bare);
+                }
+                println!("{line}");
+            }
+        }
+    }
+
+    /// Area a single stroke covers (film ≥ 0.15 coat) against its nominal
+    /// width × length.
+    #[test]
+    #[ignore]
+    fn probe_mark_area() {
+        use crate::bristle::{Gesture, Held};
+        use crate::wet::Paint;
+        let st = Style::friedrich_early();
+        for (name, tool, len, p, ramps, load) in [
+            ("broad", st.broad.clone(), 150.0f32, 0.675f32, (0.12f32, 0.4f32), 0.4f32),
+            ("body", st.body.clone(), 40.0, 0.75, (0.08, 0.15), 0.56),
+            ("detail", st.detail.clone(), 9.0, 0.82, (0.08, 0.15), 0.72),
+        ] {
+            let mut tot = (0.0, 0.0);
+            for sd in 0..6u64 {
+                let mut c: Canvas = st.prepare(1000, 1.0, sd);
+                let mut h = Held::new(tool.clone(), sd);
+                h.load(Paint::body(hex("#2c2925")), load);
+                let y = 500.0;
+                c.drag(&mut h, &Gesture::new(vec![(500.0 - len / 2.0, y), (500.0 + len / 2.0, y)]).pressure(p, p * 0.9).ramps(ramps.0, ramps.1), None);
+                let a = |t: f32| c.wet.vol.iter().filter(|&&v| v >= t).count() as f32 / (c.f.scale * c.f.scale);
+                tot.0 += a(0.15) / 6.0;
+                tot.1 += a(1e-4) / 6.0;
+            }
+            println!("{name:6}: area {:.0} (any paint {:.0}) of nominal {:.0}: {:.2}; mark_width {:.2} of {:.2}", tot.0, tot.1, tool.width * len, tot.0 / (tool.width * len), tool.mark_width(p), tool.width);
         }
     }
 }

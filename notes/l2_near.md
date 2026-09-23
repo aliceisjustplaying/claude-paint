@@ -69,8 +69,13 @@ Renders: `out/l2_near.png` (1000) and `out/l2_near_full.png` (3200).
   well above the line, a few young ones well below it, `halfw` factors from 0.18 to 0.32,
   and occasional twin spires 9–16 units apart.
 
-## Still weak
+## Still weak (checked at 3200, out/l2_near_full.png)
 
+- The drift is one continuous bank now, but along the front (x 300–560) it's still a fairly
+  even pale lip about 4–8 units high over a lilac shade band. The envelope needs a lower
+  base (1–2, not 4) there, so the rock meets the snow directly in places.
+- The wood's trunks taper to spikes at the top (round brush pressure 0.5→1 read upward). They
+  should end under the boughs instead, or start at full pressure.
 - The floor band in the wood is fairly even along its length at 1000 px and a little
   foggy. It needs more breaks where boughs come down to the snow.
 - The trunks come out warm brown-black, not cool gray-black.

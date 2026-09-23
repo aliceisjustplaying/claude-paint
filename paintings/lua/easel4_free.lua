@@ -132,20 +132,26 @@ local function jag(b, x, y, ang, len, depth, pr)
   local segs = math.random(3, 5)
   local a = ang
   for s = 1, segs do
-    a = a + randn(0, 0.45)
-    if math.random() < 0.25 then a = a + (math.random() < 0.5 and -0.8 or 0.8) end
+    a = a + randn(0, 0.18)
+    if math.random() < 0.3 then a = a + (math.random() < 0.5 and -0.55 or 0.55) end
+    a = a + 0.12 * (-1.5708 - a)
     local sl = len / segs * rand(0.6, 1.4)
     x = x + sl * math.cos(a); y = y + sl * math.sin(a)
     pts[#pts+1] = {x, y}
   end
   if b:fullness() < 0.3 then b:reload(bark, 0.9, {pal=landpal}) end
-  b:stroke(pts, {pressure={pr, pr*0.25}, ramps={0.02, 0.7}, shake=0.3})
+  local ns = #pts - 1
+  for s = 1, ns do
+    local p0 = pr * (1 - 0.7 * (s - 1) / ns)
+    local p1 = pr * (1 - 0.7 * s / ns)
+    b:stroke({pts[s], pts[s + 1]}, {pressure={p0, (s == ns) and 0.05 or p1}, ramps={0.0, (s == ns) and 0.6 or 0.0}, shake=0.2})
+  end
   nb = nb + 1
   if depth > 0 then
     local k = math.random(1, 3)
     for j = 1, k do
       local p = pts[math.random(math.max(2, #pts - 2), #pts)]
-      jag(tw, p[1], p[2], a + rand(-0.9, 0.9) - 0.25, len * rand(0.35, 0.6), depth - 1, pr * 0.7)
+      jag(tw, p[1], p[2], a + rand(-0.9, 0.9) - 0.25, len * rand(0.3, 0.5), depth - 1, pr * 0.7)
     end
   end
 end
@@ -159,16 +165,37 @@ for i, l in ipairs(oak.limbs) do
       if p[2] < 330 then
         local out = (p[1] < cx) and math.pi or 0
         local ang = out + (out == 0 and -1 or 1) * rand(0.2, 1.1)
-        if math.random() < 0.3 then jag(br, p[1], p[2], ang, rand(5, 10), 0, 0.95) else jag(br, p[1], p[2], ang, rand(18, 44), 2, 0.8) end
+        if math.random() < 0.3 then jag(br, p[1], p[2], ang, rand(5, 10), 0, 0.95) else jag(br, p[1], p[2], ang, rand(14, 32), 2, 0.8) end
       end
     end
   end
 end
 -- twig brushes at the tips
 for _, t in ipairs(oak.tips) do
-  for j = 1, math.random(2, 4) do jag(tw, t[1], t[2], -1.5708 + rand(-1.3, 1.3), rand(8, 18), 2, 0.6) end
+  for j = 1, math.random(2, 4) do jag(tw, t[1], t[2], -1.5708 + rand(-1.3, 1.3), rand(5, 12), 2, 0.6) end
 end
 print(nb, "branches and twigs")
+
+-- bark: fissures running up the trunk and the big limbs, and a hollow where a limb broke
+local fis = brush("round", 0.9)
+local trunkpts = oak.limbs[1].pts
+for k = 1, 16 do
+  local off = rand(-0.4, 0.4)
+  local pts = {}
+  local j0 = math.random(1, 8)
+  for j = j0, math.min(#trunkpts, j0 + math.random(5, 12)) do
+    local p = trunkpts[j]
+    local w = oak.limbs[1].w[j]
+    pts[#pts+1] = {p[1] + off * w + randn(0, 0.4), p[2]}
+  end
+  if #pts >= 2 then
+    if k % 4 == 1 then fis:reload("#1c1817", 0.8, {pal=landpal}) end
+    fis:stroke(pts, {pressure={0.5, 0.2}, ramps={0.2, 0.4}, shake=0.6})
+  end
+end
+-- the glow catches the right edge of the trunk faintly
+local rimm = mask(function(x, y) return clamp(oakm:at(x, y) - oakm:at(x + 2.2, y), 0, 1) end) * below(function() return 150 end)
+work(rimm, {hand="detail", tool="round 0.9", color="#5a4a44", angle=1.5708, length={3, 10}, coverage=1.2, broken=0.5, pal=landpal, clip=oakm})
 
 --@ chunk 9 · clock 2160
 cap = outline{{497,396,"c"},{503,381},{519,370,"c"},{553,363},{588,366},{611,374,"c"},{626,389,"c"},{612,399},{575,403,"c"},{540,401},{515,402,"c"}, char="broken", seed=4}
@@ -331,13 +358,6 @@ for _, r in ipairs({{548,196,1.0,0.1},{571,183,0.8,-0.15}}) do
 end
 
 --@ chunk 16 · clock 3720
-wait(24*60)
-local keep = mask(function(x, y) if y > 300 then return 0 end; local c = sample(x, y); return c.value > 0.1 and 1 or 0 end):shrink(2.5):soften(1)
-skyveil = keep - ellipse(MX, MY, 16, 16)
-stipple(skyveil, {width=3.0, color=sky, coverage=function(x, y) return 1.6 * (1 - smoothstep(180, 300, y)) end, pressure={0.4, 0.7},
-  dips={20, 0.35, 0.6}, medium=0.5, pal=skypal, feather=0.6})
-
---@ chunk 17 · clock 5160
 local vig = mask(function(x, y)
   local fg = smoothstep(HZ + 20, H + 40, y)
   local ex = math.max(0, math.abs(x - 560) / 560 - 0.5) / 0.5
@@ -346,7 +366,7 @@ local vig = mask(function(x, y)
 end)
 glaze(vig, {color="#2e2622", coats=0.4})
 
---@ chunk 18 · clock 46703.06640625
+--@ chunk 17 · clock 48492.05859375
 local fgn = noise{seed=131, octaves=3, period=60}
 local busy = pathm:grow(2) + rockA:mask():grow(3) + rockB:mask():grow(3) + rockC:mask():grow(3)
 -- tufts of dry grass: fine upturning strokes, a few blades lit by the sky
@@ -399,5 +419,5 @@ print(tuftn, "tufts")
 local fd = brush("round", 1.2); fd:load("#1c1716", 0.8, {pal=landpal})
 fd:stroke({{250,647.6},{272,642},{300,639.2},{332,630.4}}, {pressure={0.6, 0.25}})
 
---@ chunk 19 · clock 46703.06640625
+--@ chunk 18 · clock 48492.05859375
 wait(24*60); varnish{color="#e6d3a4", coats=0.3, vary=0.1}; relief()

@@ -179,6 +179,11 @@ pub(crate) struct Wet {
     /// not lift below (one pass lifts only part of the film).
     pub(crate) touched: Vec<u32>,
     pub(crate) floor: Vec<f32>,
+    /// Share of the pixel the wet paint covers (1 = all of it). Only the
+    /// hairs of a pointed tool, finer than a pixel, lay paint over part of
+    /// one; `dry` composites that paint at its real thickness over that
+    /// share, so a hairline looks alike at any resolution.
+    pub(crate) cover: Vec<f32>,
     /// Id of the stroke being painted.
     pub(crate) current: u32,
     /// Dirty bounding box in pixels (x0, y0, x1, y1), if any paint is wet.
@@ -189,7 +194,7 @@ pub(crate) struct Wet {
 
 impl Wet {
     pub fn new(n: usize) -> Self {
-        Wet { vol: vec![0.0; n], lat: vec![[0.0; LAT]; n], hide: vec![[0.0, 0.5, 1.0]; n], stroke: vec![0; n], touched: vec![0; n], floor: vec![0.0; n], current: 0, dirty: None, clock: Default::default() }
+        Wet { vol: vec![0.0; n], lat: vec![[0.0; LAT]; n], hide: vec![[0.0, 0.5, 1.0]; n], stroke: vec![0; n], touched: vec![0; n], floor: vec![0.0; n], cover: vec![1.0; n], current: 0, dirty: None, clock: Default::default() }
     }
 
     pub fn touch(&mut self, x0: usize, y0: usize, x1: usize, y1: usize) {
@@ -217,6 +222,18 @@ pub fn mix_into(rv: &mut f32, rl: &mut Latent, rh: &mut Prop, v: f32, lat: &Late
 }
 
 
+/// `coats` of `pig` over `under`, laid over the share `cover` of a pixel:
+/// the paint sits there `coats / cover` thick and the rest of the pixel
+/// shows `under` (area-weighted in linear light, as the eye averages it).
+pub(crate) fn over_share(pig: Pigment, under: Rgb, coats: f32, cover: f32) -> Rgb {
+    if cover >= 1.0 {
+        return pig.over(under, coats);
+    }
+    let c = cover.max(0.01);
+    let o = pig.over(under, coats / c);
+    [under[0] + (o[0] - under[0]) * c, under[1] + (o[1] - under[1]) * c, under[2] + (o[2] - under[2]) * c]
+}
+
 impl Canvas {
     /// What the painter sees at pixel `i`: the dry picture with any wet paint
     /// on it (at its laid thickness, before it levels).
@@ -226,7 +243,7 @@ impl Canvas {
             return self.px[i];
         }
         let c = mixbox::latent_to_linear_float_rgb(&self.wet.lat[i]);
-        Pigment::masstone(c, self.wet.hide[i][0]).over(self.px[i], v)
+        over_share(Pigment::masstone(c, self.wet.hide[i][0]), self.px[i], v, self.wet.cover[i])
     }
 
     /// What is on the canvas around (`x`, `y`) within radius `r` (units),

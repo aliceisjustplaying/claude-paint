@@ -449,3 +449,22 @@ collisions until it rehashes).
    self-contained.
 7. **Time-lapse.** `frames on` already writes one JPEG per chunk; add
    `easel frames --video` via ffmpeg.
+
+## Round 4: depth and editing in place (branch `depth`, see notes/depth.md)
+
+- **Depth**: `w:layer(name, mask, depth)`, view masks (`v:visible`,
+  `front`, `behind`, `at_depth`, `between`, `seen`, `cast_shadow`,
+  `contact_shadow`) and pass options `visible=`, `behind=` and `at=` on
+  `work`, `blend`, `stipple` and `glaze`. The options are a hard limit
+  (`Handling::limit`), so strokes never enter what is in front. They
+  resolve against the last view made, which lives in the `Studio` and in
+  every snapshot.
+- **Editing**: `easel edit N` (plus `--insert`, `--drop`, `--undone K`),
+  `show N`, `undone [K]` and `redo [K]`. Snapshots are now kept by chunk
+  count: the undo ring plus `--checkpoints` (default 6) in memory on a
+  doubling grid. `Session::splice` restores the nearest one and replays,
+  or puts everything back if a chunk fails. Undo reaches past the ring by
+  replaying.
+- **Timing**: edit at chunk 5 of 30 took 30.0 s, against 47.4 s to reopen
+  and 62.1 s for `easel run`. Undone code is kept in
+  `out/easel/<name>/undone.lua`.

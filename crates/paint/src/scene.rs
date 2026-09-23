@@ -1185,7 +1185,7 @@ struct Patch {
 }
 
 /// What lies behind what at every pixel: the ground or water (or sky),
-/// every body (visible or proxy) and every layer, each with its coverage
+/// every visible body (not proxies: they are never seen) and every layer, each with its coverage
 /// (soft at its edges) and its distance (m). Masks from it are
 /// front-to-back composites, so the soft edge of a figure over the sea
 /// hides the sea exactly as much as it covers it, and nothing is ever
@@ -1218,7 +1218,9 @@ impl Depths {
                 world.to_ground(x, y).is_some_and(|p| world.is_water(p[0], p[2]))
             })
             .collect();
-        let bodies = world.bodies.iter().map(|b| Self::patch(world, b, f)).collect();
+        // proxies are stand-ins (their shadow and reflection): what is seen of a
+        // figure written with gestures is the layer its outline is registered as
+        let bodies = world.bodies.iter().map(|b| if b.visible { Self::patch(world, b, f) } else { None }).collect();
         let layers = world
             .layers
             .iter()

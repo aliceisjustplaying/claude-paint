@@ -67,13 +67,18 @@ Read all three before you start.
    from earlier chunks), the paint in your brushes and the clock go back to
    how they were before it, and it isn't logged. This holds at any
    `--undo`, including `--undo 0`. `easel undo [n]` takes back the last
-   n successful chunks (up to `--undo`, 8 by default; each snapshot costs
-   about 50 MB at 1000px).
+   n successful chunks: instantly within `--undo` (8 by default; each
+   snapshot costs about 50 MB at 1000px), further back by replaying from a
+   checkpoint. The code of undone chunks is kept (`easel undone`).
 5. **Step back.** `easel log` prints the program so far. `easel status`
    gives a one-line summary. `easel save [path]` writes a PNG. `easel check`
    replays the log in a fresh session and confirms it matches the live
    canvas exactly.
-6. **Time-lapse.** `easel frames on` saves a JPEG after every chunk in
+6. **Fix an early chunk in place.** `easel show N` prints chunk N's code.
+   `easel edit N -f chunk.lua` (or `'<lua>'`, or `-` for stdin) replaces
+   chunk N and replays every chunk after it, without closing the session.
+   See [Editing a chunk](#editing-a-chunk).
+7. **Time-lapse.** `easel frames on` saves a JPEG after every chunk in
    `out/easel/<name>/frames/`.
 
 ## How chunks behave
@@ -398,6 +403,67 @@ work(v:shadows() * v:land(), {hand="body", tool="filbert 3", length={6, 16}, cov
   angle=w:shadow_angle(s.x, s.y + 2), color_over={shift={-0.06, -0.004, -0.012}}})
 ```
 
+### Depth: what is in front of what
+
+A view knows what lies behind what at every pixel: the sky, the ground,
+the water, every body and every **layer** (a motif you paint by hand,
+registered at a depth). So you never have to subtract earlier motifs from
+a mask by hand. Proxies cast shadows but are never seen, so they don't
+hide anything. Register what you paint for them as a layer.
+
+```lua
+-- a man written with gestures: a proxy for his shadow, his outline as a layer
+fs = w:spot_at(-0.35, 11)
+w = w:proxy(fs, body.ellipsoid(fs:p(0, 0.85, 0), fs:size(0.26, 0.88, 0.18)))
+w = w:layer("figure", coat + head, fs)   -- depth: a spot, meters, a canvas point
+                                          -- {x, y} (the ground seen there: his feet)
+                                          -- or "ground" (lies on it: a path, glints)
+v = w:view()                              -- the last view made is the one passes use
+```
+
+Passes take `visible=`, `behind=` and `at=` (`work`, `blend`, `stipple`,
+`glaze`). They are a hard limit: strokes still overshoot the region's own
+edges, but they never enter what is in front.
+
+```lua
+stipple(seaband, {..., behind={"figure", "bodies"}})   -- a veil laid behind the man and the stones
+work(zone, {hand="detail", ..., visible="water"})     -- glints only where the water is seen
+work(v:visible("bodies"), {...})                       -- the stones, less the man in front of one
+glaze(nil, {color="#8a8f98", coats=0.3, at=400})       -- mist 400 m off: all nearer hides it
+```
+
+Things are named by body number (from `w:place`), layer name, `"ground"`,
+`"water"`, `"surface"` (both), `"sky"`, `"bodies"`, `"layers"` or a
+list. `behind=` also takes a mask. Pass `view=v` to use another view.
+
+The same as masks, with soft edges composited front to back:
+
+```lua
+v:visible(x)        -- where x is seen: its coverage less what is in front
+v:visible("ground") -- the ground not covered by any body or layer
+v:front(x)          -- what hides x, where x is
+v:behind(x)         -- where a pass lying just behind x shows
+v:at_depth(m)       -- where a pass m meters off shows (a spot or {x, y} too)
+v:between(a, b)     -- whatever is seen between a and b meters
+v:seen(x, y)        -- {{what="layer", layer="figure", depth=11, share=1}, ...} nearest first
+```
+
+Shadows that fall off the way light does (no rings to soften by hand):
+
+```lua
+glaze(v:cast_shadow{soft=1.6}, {color="#4a4c60", coats=0.55})       -- crisp at the foot, soft far out
+glaze(v:contact_shadow{reach=0.35}, {color="#2a2420", coats=0.9})   -- the sky hidden near the bodies
+```
+
+`cast_shadow{soft=, from=}` traces the world's sun. The penumbra grows
+with distance from the caster, and `soft` widens it (1 is the sun's own
+width plus haze). `contact_shadow{reach=, from=}` is the share of the sky
+the bodies hide from the ground within `reach` meters. It is about 0.5 in
+the crease and fades to nothing, and it also darkens the foot of each
+body. Both stop where a layer or body stands in front. They cost 0.1–1 s
+at 1000px. `paintings/lua/depth.lua` uses all of this, and
+`paintings/lua/depth_hand.lua` is the same picture with hand masks.
+
 ### Sky, clouds, haze and distant ranges
 
 ```lua
@@ -475,6 +541,38 @@ touch-dry; that time passes on the clock and the easel says so
 canvas spends (a finishing verb drying the paint first) is also reported at
 the end of the chunk, so the clock you see is always the canvas's.
 
+## Editing a chunk
+
+```sh
+easel show 5                     # chunk 5's code
+easel edit 5 -f chunk5.lua       # replace it; replays 6.. from the nearest checkpoint
+easel edit 5 --insert -f fix.lua # a new chunk before chunk 5
+easel edit 5 --drop              # take chunk 5 out (a probe you forgot to undo)
+easel undone                     # chunks undone or replaced, newest last
+easel undone 3                   # the code of one of them
+easel redo 3                     # run it again as a new chunk
+easel edit 5 --undone 3          # or put it back in place of chunk 5
+```
+
+The log is still the program. An edit rewrites it and the canvas becomes
+exactly what a replay of the new log paints (`easel check` confirms it).
+If any chunk fails on the way, nothing changes. The replay starts from the
+nearest **checkpoint**: a full snapshot of the session (canvas, Lua
+variables, brushes, clock) kept in memory, not on disk, since the Lua heap
+can't be written out. The session keeps the `--undo` snapshots (the last
+8 chunks) plus `--checkpoints` older ones (default 6) on a grid that widens
+as the log grows (after chunks 0, 4, 8, … in a 30-chunk log). Each costs
+about 50 MB at 1000px. `easel status` lists them. Everything after the
+edited chunk still has to be painted again, so an edit near the start
+saves the chunks before it (often the slow ones: the canvas and the sky)
+and an edit near the end is almost instant. `undo` past the undo snapshots
+now works too: it replays from a checkpoint.
+
+Code taken out of the log by `undo` or `edit` is kept in
+`out/easel/<name>/undone.lua`, so undo never throws work away. Inserting
+or dropping a chunk renumbers the ones after it, and their random choices
+(`rand`, automatic seeds) change with the number.
+
 ## Replay
 
 ```sh
@@ -489,6 +587,7 @@ session. At 3200px it is the full render: the same program at a finer grain.
 The file is plain Lua with chunk markers (`--@ chunk N · clock M`), so you
 can edit it by hand and replay. If you do, keep the markers, and edit it
 with the session closed: a live session writes the log after every chunk.
+To change one chunk with the session open, use `easel edit` instead.
 If it finds the file was edited while it was open, it keeps your version as
 `<name>.edited-N.lua` next to it (and says so) instead of overwriting it;
 close, copy it back and open again to paint on from your edit.
@@ -506,6 +605,10 @@ close, copy it back and open again to paint on from your edit.
   tables: under 5 ms; a meadow of 9,000 tufts kept in a global: 0.1 s). Keep
   big lists `local` when later chunks don't need them.
 - `w:view()` ≈ 0.3 s, `w:sky{}` ≈ 0.2 s, `w:clouds{}` 1–4 s (cell 2–3)
+- the first depth mask or depth option on a view ≈ 0.1–0.5 s (traced once),
+  each further one ≈ 0.05 s; `cast_shadow` and `contact_shadow` 0.1–1 s
+- `easel edit 5` in a 30-chunk log: 30 s against 47 s to reopen and 62 s
+  for `easel run` (notes/depth.md)
 
 ## Limits
 

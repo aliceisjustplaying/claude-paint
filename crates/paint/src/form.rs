@@ -901,6 +901,25 @@ impl Form {
         self.light = Some(l);
     }
 
+    /// Light the form with cast shadows the caller has traced instead of
+    /// tracing them over the depth buffer: `cast(x, y, &sample)` (0..1) for
+    /// every point of a solid. A `scene::World` lights its solids this way,
+    /// so the shadows on the solids and on the ground come from one sun.
+    pub fn light_given(&mut self, l: Light, cast: impl Fn(f32, f32, &Sample) -> f32 + Sync) {
+        let f = self.f;
+        let inv = 1.0 / f.scale;
+        self.light = None;
+        let vals: Vec<f32> = (0..f.w * f.h)
+            .into_par_iter()
+            .map(|i| {
+                let (x, y) = (((i % f.w) as f32 + 0.5) * inv, ((i / f.w) as f32 + 0.5) * inv);
+                self.sample_i(i).map_or(0.0, |s| cast(x, y, &s).clamp(0.0, 1.0))
+            })
+            .collect();
+        self.cast = vals;
+        self.light = Some(l);
+    }
+
     /// The light the form was last lit with.
     pub fn lighting(&self) -> Option<Light> {
         self.light

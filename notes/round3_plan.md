@@ -76,3 +76,4 @@ Key question for the user: how the easel FEELS to the agent.
 - atmosphere merged: sky fields are the win (off-center morning glow, overcast break, twilight Belt of Venus from scattering); study painting weak (dark pasted cumulus, cone peaks, straight range foot on the sea).
 - easel-3 (final merge + bindings for everything) and surface (flecks in darks, aim at a mark's average look, drying at a physical scale) running.
 - easel merged (a2a5ada): Lua 5.5 (fixed hash seed via CFLAGS for replay), bindings for everything, painter's guide; meadow/rocks/example replay byte-identically at 1000 and 3200.
+- tried the easel myself: open/do/look/undo/rollback all work; value view shows ground flecks through a coverage-4 broad sky (surface stream's item 1).

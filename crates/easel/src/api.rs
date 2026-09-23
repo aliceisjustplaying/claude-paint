@@ -282,7 +282,7 @@ fn points(v: &Value) -> Result<Vec<(f32, f32)>> {
         }
         _ => {
             let v: Vec<f32> = t.sequence_values::<f32>().collect::<Result<_>>()?;
-            if v.len() % 2 != 0 {
+            if !v.len().is_multiple_of(2) {
                 return err("points: a flat list needs an even count (x1, y1, x2, y2, ...)");
             }
             out = v.chunks(2).map(|c| (c[0], c[1])).collect();
@@ -483,10 +483,10 @@ fn frame(st: &S) -> Result<Frame> {
 /// Paint for a brush: mixed from the palette to `c` (masstone), or aimed at
 /// the look over what is at `at`, or a raw paint.
 fn paint_for(st: &S, c: &Value, o: Option<&Table>, r: f32) -> Result<paint::Paint> {
-    if let Value::UserData(u) = c {
-        if let Ok(p) = u.borrow::<PaintU>() {
-            return Ok(p.0);
-        }
+    if let Value::UserData(u) = c
+        && let Ok(p) = u.borrow::<PaintU>()
+    {
+        return Ok(p.0);
     }
     let want = rgb_of(c)?;
     let sty = style(st)?;
@@ -1245,7 +1245,7 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
         })?)?;
         let st1 = st.clone();
         g.set("wait", lua.create_function(move |_, minutes: f64| {
-            if !(minutes >= 0.0) {
+            if minutes.is_nan() || minutes < 0.0 {
                 return err("wait(minutes): want >= 0");
             }
             let mut s = st1.borrow_mut();

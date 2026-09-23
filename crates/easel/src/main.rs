@@ -38,11 +38,11 @@ const USAGE: &str = "easel: a live painting session (see crates/easel/README.md)
 fn main() -> ExitCode {
     let mut args: Vec<String> = std::env::args().skip(1).collect();
     let mut name: Option<String> = std::env::var("EASEL_SESSION").ok();
-    if let Some(i) = args.iter().position(|a| a == "-s" || a == "--session") {
-        if i + 1 < args.len() {
-            name = Some(args.remove(i + 1));
-            args.remove(i);
-        }
+    if let Some(i) = args.iter().position(|a| a == "-s" || a == "--session")
+        && i + 1 < args.len()
+    {
+        name = Some(args.remove(i + 1));
+        args.remove(i);
     }
     let Some(cmd) = args.first().cloned() else {
         println!("{USAGE}");

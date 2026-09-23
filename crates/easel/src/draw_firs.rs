@@ -407,6 +407,17 @@ impl UserData for WoodU {
             Ok(wrap(m))
         });
         m.add_method("floor", |_, w, ()| Ok(wrap(w.w.floor(frame(&w.st)?))));
+        // cheap per-row numbers (w.rows builds every tree's table)
+        m.add_method("haze", |_, w, r: Option<usize>| Ok(w.w.rows[w.row(r)?].haze));
+        m.add_method("scale", |_, w, r: Option<usize>| Ok(w.w.rows[w.row(r)?].scale));
+        m.add_method("trees", |lua, w, r: Option<usize>| {
+            let r = w.row(r)?;
+            let t = lua.create_table()?;
+            for (k, f) in w.trees[r].iter().enumerate() {
+                t.raw_set(k + 1, FirU { f: f.clone(), habit: "wood".into(), st: w.st.clone() })?;
+            }
+            Ok(t)
+        });
         // w:paint(brush, row, {...}): as fir:paint, over every tree of a row
         m.add_method("paint", |lua, w, (b, r, opts): (AnyUserData, Option<usize>, Option<Table>)| {
             let r = w.row(r)?;

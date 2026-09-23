@@ -169,3 +169,22 @@ for _, t in ipairs(oak.tips) do
   for j = 1, math.random(2, 4) do jag(tw, t[1], t[2], -1.5708 + rand(-1.3, 1.3), rand(8, 18), 2, 0.6) end
 end
 print(nb, "branches and twigs")
+
+--@ chunk 9 · clock 2160
+cap = outline{{497,396,"c"},{503,381},{519,370,"c"},{553,363},{588,366},{611,374,"c"},{626,389,"c"},{612,399},{575,403,"c"},{540,401},{515,402,"c"}, char="broken", seed=4}
+up1 = outline{{510,400,"c"},{528,399,"c"},{534,411},{532,423,"c"},{509,422,"c"},{506,410}, char="broken", seed=5}
+up2 = outline{{556,402,"c"},{566,402},{569,426,"c"},{555,428,"c"},{553,414}, char="broken", seed=6}
+up3 = outline{{588,400,"c"},{607,399,"c"},{615,414},{612,437,"c"},{592,438,"c"},{586,418}, char="broken", seed=7}
+fall = outline{{627,442,"c"},{636,430},{656,425,"c"},{671,431},{677,442,"c"}, char="broken", seed=9}
+stones = {cap, up1, up2, up3, fall}
+local sn = noise{seed=44, octaves=5, period=14}
+for i, o in ipairs(stones) do
+  local m = o:mask()
+  local base = (o == up2) and "#262221" or "#312d2b"
+  work(m, {hand="body", tool="filbert 3", color=function(x, y) return mix(base, "#3d3734", 0.7*sn:at01(x, y)) end,
+    angle=function(x, y) return 0.4 + 1.2*sn(x, y) end, length={3, 9}, coverage=3.4, medium=0.15, pal=landpal, clip=m})
+end
+local m = cap:mask()
+local top = mask(function(x, y) return clamp(m:at(x, y) - m:at(x, y - 4), 0, 1) end):soften(0.6) * m * below(function(x) return 360 end) * above(function(x) return 392 end)
+work(top, {hand="detail", tool="round 1.2", color=function(x, y) return mix("#4b4850", "#5d5862", sn:at01(x, y)) end,
+  angle=0.08, angle_jitter=0.5, length={4, 10}, coverage=1.6, medium=0.2, pal=landpal, clip=m, broken=0.5})

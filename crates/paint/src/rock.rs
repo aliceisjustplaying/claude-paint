@@ -948,7 +948,6 @@ impl Rock {
         // the bed joints as lines too (for painting them as strokes and for
         // `along_crack`): traced across the rock where the bed coordinate
         // crosses each joint
-        let mut seams = seams;
         if bed > 0.0 {
             for (bi, _) in beds.iter().enumerate().skip(1) {
                 let mut run: Vec<P> = Vec::new();
@@ -1412,7 +1411,7 @@ impl Rock {
             }
         }
         let mut v: Vec<(usize, usize)> = c.into_iter().enumerate().filter(|(_, n)| *n > 0).collect();
-        v.sort_by(|a, b| b.1.cmp(&a.1));
+        v.sort_by_key(|a| std::cmp::Reverse(a.1));
         v
     }
 
@@ -1546,6 +1545,7 @@ mod look {
     /// `ROCK_LOOK=dir cargo test -p paint --lib rock::look -- --ignored`.
     #[test]
     #[ignore]
+    #[allow(clippy::needless_range_loop)]
     fn grisaille() {
         let Ok(dir) = std::env::var("ROCK_LOOK") else { return };
         let (w, h) = (1200usize, 500usize);
@@ -1593,9 +1593,8 @@ mod look {
             let cast = r.cast(f);
             for (i, c) in cast.data.iter().enumerate() {
                 if *c > 0.0 {
-                    let p = &mut img[i];
-                    for q in 0..3 {
-                        p[q] = (p[q] as f32 * (1.0 - 0.5 * c)) as u8;
+                    for q in img[i].iter_mut() {
+                        *q = (*q as f32 * (1.0 - 0.5 * c)) as u8;
                     }
                 }
             }

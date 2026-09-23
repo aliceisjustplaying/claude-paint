@@ -100,7 +100,8 @@ wait(24*60)
 local sn = B:snow{amount=0.7, depth=3, seed=3}:blur(2):map(function(v) return smoothstep(0.3, 0.6, v) end)
 local bv = B:value():blur(3)
 local blo, bhi = B:levels(0.03, 0.97)
-work(sn, {hand="body", tool="filbert 3", length={4, 12}, coverage=4, medium=0.15, angle=B:field("across"),
+-- masstone and full cover: laid thin over the dark rock, the snow let the stone speck through
+work(sn, {hand="body", tool="filbert 3", length={4, 12}, coverage=5, medium=0.1, aim="masstone", angle=B:field("across"),
   color=function(x, y) return mix("#8e96ae", "#efe3cf", smoothstep(blo, bhi, bv:at(x, y) + 0.1)) end})
 
 --@ chunk 7 · clock 4500

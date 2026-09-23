@@ -82,8 +82,9 @@ fn main() {
     c.dry();
     // a dark transparent glaze (raw umber and black in 0.9 medium, mixed by
     // masstone), laid as an even film growing from 0 to 5 coats left → right
-    let glaze = pal.paint(hex("#2b1f14"), 0.9);
-    eprintln!("glaze: {} hiding {:.3}", pal.recipe(&pal.mix(hex("#2b1f14"))), glaze.hiding);
+    let umber = pal.only(&["raw umber", "bone black"]);
+    let glaze = umber.paint(hex("#2b1f14"), 0.9);
+    eprintln!("glaze: {} hiding {:.3}", umber.recipe(&umber.mix(hex("#2b1f14"))), glaze.hiding);
     let wedge = Mask::from_fn(f, |x, y| if (320.0..560.0).contains(&y) && x > 40.0 { 1.0 } else { 0.0 });
     c.glaze(&glaze.pigment(), Some(&wedge), |x, _| 5.0 * smoothstep(40.0, 1000.0, x));
     for x in [100.0, 300.0, 500.0, 700.0, 950.0] {

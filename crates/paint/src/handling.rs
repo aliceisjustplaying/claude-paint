@@ -16,6 +16,26 @@ use crate::rng::Rng;
 use crate::wet::Paint;
 use rayon::prelude::*;
 
+/// How a handling reads its color field.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum Aim {
+    /// The color is the paint's masstone (`Palette::mix`): how it looks laid
+    /// thick, or over paint of its own color.
+    Masstone,
+    /// The color is the look wanted on the canvas: each pile is judged by
+    /// how it will look over what is under the stroke (sampled before the
+    /// pass), laid as thick as this handling lays paint, about
+    /// `LAID_PER_COVERAGE_LOAD × coverage × load` coats (× `load_at`).
+    Laid,
+    /// As `Laid`, expecting this many coats.
+    Coats(f32),
+}
+
+/// Coats laid per unit of coverage × load: the median film of the stock
+/// handlings is within a factor ~1.6 of this (probe_laid_thickness in wet.rs:
+/// broad 1.16 coats at coverage 2.5, load 0.4; body 1.71 at 2.5, 0.56).
+pub const LAID_PER_COVERAGE_LOAD: f32 = 1.1;
+
 type Field<'a, T> = Box<dyn Fn(f32, f32) -> T + Sync + 'a>;
 
 pub struct Handling<'a> {
@@ -40,6 +60,9 @@ pub struct Handling<'a> {
     pub palette: Option<(&'a Palette, f32)>,
     /// How unevenly each pile is mixed: relative sd of the proportions.
     pub mix_jitter: f32,
+    /// How `color` is read (see `Aim`). `None`: aim at the look (`Aim::Laid`)
+    /// when mixing from a palette, masstone for a fixed paint.
+    pub aim: Option<Aim>,
     /// Where the painter loads the brush more or less (multiplies `load`,
     /// evaluated at each stroke's center): a glaze goes on deeper where the
     /// brush carries more.
@@ -95,6 +118,7 @@ impl<'a> Handling<'a> {
             shake: 1.0,
             palette: None,
             mix_jitter: 0.08,
+            aim: None,
             load_at: None,
             cut_in: None,
         }
@@ -131,8 +155,39 @@ impl<'a> Handling<'a> {
         self
     }
     /// Mix every pile from `palette`'s tubes, thinned with `medium` (0..1).
+    /// The color field is the look wanted on the canvas: piles are aimed at
+    /// it over what is already there, at the thickness this handling lays
+    /// (`Aim::Laid`; change with `aim`, or mix by masstone with `by_masstone`).
     pub fn mixed(mut self, palette: &'a Palette, medium: f32) -> Self {
         self.palette = Some((palette, medium));
+        self
+    }
+    /// Mix from another palette, keeping the medium: e.g. the few paints set
+    /// out for one passage, `palette.only(&["lead white", "smalt"])`, so
+    /// neighboring piles stay in one family.
+    pub fn palette(mut self, palette: &'a Palette) -> Self {
+        let (_, medium) = self.palette.expect("palette() needs a palette already: use mixed()");
+        self.palette = Some((palette, medium));
+        self
+    }
+    /// Mix piles to the color field as masstone, without looking at the
+    /// canvas (the paint's own color, laid thick; see `Palette::mix`).
+    pub fn by_masstone(mut self) -> Self {
+        self.aim = Some(Aim::Masstone);
+        self
+    }
+    /// Aim every pile at the look wanted on the canvas, expecting paint laid
+    /// about `coats` thick (see `Aim`). A broad passage of `coverage` 2–3 lays
+    /// roughly 1–2 coats; a single dab or stipple dot, 0.3–1. Also works for
+    /// a fixed paint (`paint()`): its masstone is solved for its hiding.
+    pub fn aim(mut self, coats: f32) -> Self {
+        self.aim = Some(Aim::Coats(coats));
+        self
+    }
+    /// Aim at the look, expecting the thickness this handling lays (the
+    /// default when mixing from a palette).
+    pub fn aim_laid(mut self) -> Self {
+        self.aim = Some(Aim::Laid);
         self
     }
     /// Change how much medium goes into the palette mixtures.
@@ -275,7 +330,7 @@ impl Canvas {
             if pts.is_empty() {
                 continue;
             }
-            let (rect, plan) = finish_plan(hd, &hd.tool, (cx, cy), pts, f.scale, (f.w, f.h), &mut rng);
+            let (rect, plan) = finish_plan(self, hd, &hd.tool, (cx, cy), pts, &mut rng);
             if let Some(r) = rect {
                 let (px, py) = (cx * f.scale, cy * f.scale);
                 ex = ex.max((px - r.0 as f32).max(r.2 as f32 - px) / f.scale);
@@ -330,7 +385,7 @@ impl Canvas {
                         }
                         let pts: Vec<(f32, f32)> = run[k..=j].to_vec();
                         let c = pts[pts.len() / 2];
-                        let (rect, plan) = finish_plan(hd, tool, c, pts, f.scale, (f.w, f.h), rng);
+                        let (rect, plan) = finish_plan(self, hd, tool, c, pts, rng);
                         if let Some(r) = rect {
                             let (px, py) = (c.0 * f.scale, c.1 * f.scale);
                             ex = ex.max((px - r.0 as f32).max(r.2 as f32 - px) / f.scale);
@@ -465,14 +520,30 @@ impl Canvas {
 
 /// Footprint and the per-stroke choices (pressure, fade, the pile of paint,
 /// the load) for a stroke along `pts` centered at `c`.
-fn finish_plan(hd: &Handling, tool: &Tool, c: (f32, f32), pts: Vec<(f32, f32)>, scale: f32, (w, h): (usize, usize), rng: &mut Rng) -> (Option<Rect>, Plan) {
-    let rect = footprint(tool, &pts, hd.shake, scale, w, h);
+fn finish_plan(cv: &Canvas, hd: &Handling, tool: &Tool, c: (f32, f32), pts: Vec<(f32, f32)>, rng: &mut Rng) -> (Option<Rect>, Plan) {
+    let f = cv.f;
+    let rect = footprint(tool, &pts, hd.shake, f.scale, f.w, f.h);
     let pressure = rng.range(hd.pressure.0, hd.pressure.1);
     let fade = rng.range(0.75, 1.05);
     let target = (hd.color)(c.0, c.1);
+    let load_k = hd.load_at.as_ref().map_or(1.0, |f| f(c.0, c.1).max(0.0));
+    // aiming at the result: what the stroke will sit on, and how thick
+    let aim = hd.aim.unwrap_or(if hd.palette.is_some() { Aim::Laid } else { Aim::Masstone });
+    let coats = match aim {
+        Aim::Masstone => None,
+        Aim::Laid => Some((LAID_PER_COVERAGE_LOAD * hd.coverage * hd.load * load_k).clamp(0.3, 6.0)),
+        Aim::Coats(x) => Some(x),
+    };
+    let under = coats.map(|x| (stroke_under(cv, &pts, tool.width * 0.5), x));
     let paint = match hd.palette {
         // on the palette: mix the pile from tubes, never twice alike
-        Some((pal, medium)) => pal.remix(&pal.mix(target), hd.mix_jitter, rng).paint(medium),
+        Some((pal, medium)) => {
+            let m = match under {
+                Some((u, coats)) => pal.aim(target, u, medium, coats),
+                None => pal.mix(target),
+            };
+            pal.remix(&m, hd.mix_jitter, rng).paint(medium)
+        }
         None => {
             let lab = to_oklab(target);
             let col = from_oklab([
@@ -480,11 +551,29 @@ fn finish_plan(hd: &Handling, tool: &Tool, c: (f32, f32), pts: Vec<(f32, f32)>, 
                 lab[1] + rng.normal() * hd.jitter.1,
                 lab[2] + rng.normal() * hd.jitter.1,
             ]);
-            Paint { color: col, hiding: hd.hiding, stiff: hd.stiff }
+            match under {
+                Some((u, coats)) => Paint::aimed(col, u, coats, hd.hiding, hd.stiff),
+                None => Paint { color: col, hiding: hd.hiding, stiff: hd.stiff },
+            }
         }
     };
-    let load = hd.load * hd.load_at.as_ref().map_or(1.0, |f| f(c.0, c.1).max(0.0));
+    let load = hd.load * load_k;
     (rect, Plan { pts, pressure, fade, dip: Some(paint), load })
+}
+
+/// The mean underlayer along a stroke (linear light): a few samples on its path.
+fn stroke_under(cv: &Canvas, pts: &[(f32, f32)], r: f32) -> Rgb {
+    let n = pts.len();
+    let step = (n / 5).max(1);
+    let (mut acc, mut k) = ([0.0f32; 3], 0.0f32);
+    for p in pts.iter().step_by(step) {
+        let u = cv.under(p.0, p.1, r);
+        for q in 0..3 {
+            acc[q] += u[q];
+        }
+        k += 1.0;
+    }
+    [acc[0] / k, acc[1] / k, acc[2] / k]
 }
 
 /// The part of a stroke through `c` that stays inside `mask` (≥ 0.5), pulled

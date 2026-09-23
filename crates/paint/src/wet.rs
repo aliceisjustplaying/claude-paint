@@ -1,20 +1,34 @@
 //! Wet paint sitting on top of the dry picture.
 //!
 //! Every pixel holds a volume of wet paint (thickness, in "layer units": 1.0
-//! is one normal coat), its pigment mixture as a Mixbox latent vector (mixing
-//! is linear in latent space, weighted by volume) and its hiding power
-//! (0 = pure glaze, 1 = fully opaque body color). Brushes exchange paint with
-//! this layer. `Canvas::dry` bakes it into the dry picture with Kubelka–Munk.
+//! is one normal coat), its pigment mixture as a Mixbox latent vector of the
+//! masstone (mixing is linear in latent space, weighted by volume) and its
+//! Kubelka–Munk scattering per coat (mixed linearly by volume, as K and S mix
+//! in the two-constant KM model; absorption follows from masstone and S).
+//! Brushes exchange paint with this layer. `Canvas::dry` bakes it into the
+//! dry picture with Kubelka–Munk.
+//!
+//! **What a paint's color means.** `Paint::color` is its *masstone*: the
+//! color the paint has laid thick, which is also how it looks laid over
+//! paint of that same color, at any thickness. Hiding decides how much of a
+//! different underlayer shows through a thin coat. So a mark mixed to the
+//! color of the field it sits in disappears into it, whether it is body
+//! color or a thin scumble; a thin coat over a different color lands between
+//! the two, as real paint does. To ask "what will this look like *here*",
+//! use `Paint::over`, `Canvas::under` and the aiming calls in `palette`
+//! (`Palette::aim`, `Canvas::aim`). Glazes named by the tint they give a
+//! white ground use `Paint::tint`/`Paint::glaze`.
 
 use crate::canvas::Canvas;
-use crate::color::Rgb;
-use crate::pigment::Pigment;
+use crate::color::{Rgb, luminance};
+use crate::pigment::{Pigment, scatter_for};
 use crate::surface::COAT_UM;
 use rayon::prelude::*;
 
 pub const LAT: usize = mixbox::LATENT_SIZE;
 pub type Latent = [f32; LAT];
-/// Paint properties mixed by volume alongside the pigment: [hiding, stiffness].
+/// Paint properties mixed by volume alongside the pigment: [KM scattering per
+/// coat, stiffness].
 /// Stiffness 0 = fluid, medium-rich glaze; 1 = stiff tube paint.
 pub type Prop = [f32; 2];
 
@@ -27,8 +41,10 @@ fn lerp_prop(p: &mut Prop, q: Prop, a: f32) {
 /// A paint as squeezed from the tube and thinned with medium.
 #[derive(Clone, Copy, Debug)]
 pub struct Paint {
+    /// Masstone, linear RGB: the paint's color laid thick (and over itself).
     pub color: Rgb,
-    /// Hiding power at unit thickness: 0.05 = glaze, 0.5 = scumble, 0.92 = body.
+    /// Hiding power of one coat: its look over black divided by over white
+    /// (contrast ratio). 0.05 = glaze, 0.5 = scumble, 0.92 = body.
     pub hiding: f32,
     /// Stiffness: 0 = fluid, rich in medium (a glaze), 1 = stiff tube paint.
     /// Sets how the paint levels as it dries (see `surface::settle`). How
@@ -46,11 +62,60 @@ impl Paint {
     pub fn scumble(color: Rgb) -> Self {
         Paint { color, hiding: 0.5, stiff: 0.6 }
     }
-    pub fn glaze(color: Rgb) -> Self {
-        Paint { color, hiding: 0.07, stiff: 0.3 }
+    /// A transparent glaze that tints a white ground to `tint` at one coat.
+    pub fn glaze(tint: Rgb) -> Self {
+        Paint::tint(tint, 0.07, 0.3)
+    }
+    /// A paint named by its tint: one coat of it over white looks `tint`
+    /// (the old "appearance over white" meaning). Its masstone is deeper.
+    pub fn tint(tint: Rgb, hiding: f32, stiff: f32) -> Self {
+        Paint::solve(tint, [1.0; 3], 1.0, hiding, stiff)
+    }
+    /// The paint of this hiding that, laid `coats` thick over `under`,
+    /// looks `want` (or as near as a paint can: a light glaze cannot
+    /// lighten a dark underlayer, so it comes out as light as it can).
+    pub fn aimed(want: Rgb, under: Rgb, coats: f32, hiding: f32, stiff: f32) -> Self {
+        Paint::solve(want, under, coats, hiding, stiff)
+    }
+    fn solve(want: Rgb, under: Rgb, coats: f32, hiding: f32, stiff: f32) -> Self {
+        // the scattering follows from the masstone's luminance and the
+        // hiding, the masstone from the scattering: iterate to the fixed point
+        let mut m = want;
+        for _ in 0..24 {
+            let s = scatter_for(luminance(m), hiding);
+            let prev = m;
+            for c in 0..3 {
+                let (mut lo, mut hi) = (0.002f32, 0.995f32);
+                for _ in 0..30 {
+                    let mid = 0.5 * (lo + hi);
+                    if Pigment::masstone([mid; 3], s).over([under[c]; 3], coats)[0] < want[c] {
+                        lo = mid;
+                    } else {
+                        hi = mid;
+                    }
+                }
+                m[c] = 0.5 * (lo + hi);
+            }
+            if (0..3).all(|c| (m[c] - prev[c]).abs() < 1e-4) {
+                break;
+            }
+        }
+        Paint { color: m, hiding, stiff }
     }
     pub fn latent(&self) -> Latent {
         mixbox::linear_float_rgb_to_latent(&self.color)
+    }
+    /// Kubelka–Munk scattering per coat.
+    pub fn scatter(&self) -> f32 {
+        scatter_for(luminance(self.color), self.hiding)
+    }
+    /// The paint as a Kubelka–Munk layer (per coat).
+    pub fn pigment(&self) -> Pigment {
+        Pigment::masstone(self.color, self.scatter())
+    }
+    /// What `coats` of this paint look like laid over `under`.
+    pub fn over(&self, under: Rgb, coats: f32) -> Rgb {
+        self.pigment().over(under, coats)
     }
 }
 
@@ -143,16 +208,89 @@ impl Canvas {
                     let ti = t[j * ew + x - ex.0] / COAT_UM;
                     let i = y * w + x;
                     let c = mixbox::latent_to_linear_float_rgb(&lat[i]);
-                    let pig = Pigment::with_hiding(c, hide[i][0].clamp(0.01, 0.99));
-                    px[x] = pig.over(px[x], ti);
+                    px[x] = Pigment::masstone(c, hide[i][0]).over(px[x], ti);
                     ff[x] += ti;
                     vv[x] = 0.0;
                 }
             });
     }
 
+    /// What the painter sees at pixel `i`: the dry picture with any wet paint
+    /// on it (at its laid thickness, before it levels).
+    pub(crate) fn look_px(&self, i: usize) -> Rgb {
+        let v = self.wet.vol[i];
+        if v < 1e-5 {
+            return self.px[i];
+        }
+        let c = mixbox::latent_to_linear_float_rgb(&self.wet.lat[i]);
+        Pigment::masstone(c, self.wet.hide[i][0]).over(self.px[i], v)
+    }
+
+    /// What is on the canvas around (`x`, `y`) within radius `r` (units),
+    /// dry picture plus wet paint, averaged in linear light: the underlayer a
+    /// new mark there will sit on.
+    pub fn under(&self, x: f32, y: f32, r: f32) -> Rgb {
+        let f = self.f;
+        let n = if r * f.scale < 1.5 { 0 } else { 2 };
+        let (mut acc, mut k) = ([0.0f32; 3], 0.0f32);
+        for j in -n..=n {
+            for i in -n..=n {
+                let (dx, dy) = (i as f32 / 2.0 * r, j as f32 / 2.0 * r);
+                if n > 0 && dx * dx + dy * dy > r * r * 1.01 {
+                    continue;
+                }
+                let (px, py) = (x + dx, y + dy);
+                if px < 0.0 || py < 0.0 || px >= f.width() || py >= f.height() {
+                    continue;
+                }
+                let c = self.look_px(f.index(px, py));
+                for q in 0..3 {
+                    acc[q] += c[q];
+                }
+                k += 1.0;
+            }
+        }
+        if k == 0.0 {
+            return self.look_px(f.index(x, y));
+        }
+        [acc[0] / k, acc[1] / k, acc[2] / k]
+    }
+
     /// Total wet paint on the canvas (for tests / debugging).
     pub fn wet_total(&self) -> f64 {
         self.wet.vol.iter().map(|&v| v as f64).sum::<f64>() / (self.f.scale as f64 * self.f.scale as f64)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::color::hex;
+    use crate::mask::Mask;
+    use crate::style::Style;
+
+    /// How thick the stock handlings lay paint (coats), for choosing `aim`.
+    #[test]
+    #[ignore]
+    fn probe_laid_thickness() {
+        let st = Style::friedrich();
+        for (name, k) in [("broad", 0), ("body", 1), ("detail", 2), ("glaze0.9", 3), ("broad load .3", 4)] {
+            let mut c = st.prepare(500, 1.0, 1);
+            let f0 = c.film.clone();
+            let m = Mask::from_fn(c.frame(), |x, y| if (x - 500.0).abs() < 300.0 && (y - 500.0).abs() < 300.0 { 1.0 } else { 0.0 });
+            let col = move |_: f32, _: f32| hex("#8a9ab0");
+            let h = match k {
+                0 => st.broad().color(col),
+                1 => st.body().color(col),
+                2 => st.detail().color(col),
+                3 => st.glaze(0.9).color(col),
+                _ => st.broad().color(col).load(0.3),
+            };
+            c.work(&m, &h, 3);
+            c.dry();
+            let mut d: Vec<f32> = (0..f0.len()).filter(|&i| m.data[i] > 0.5).map(|i| c.film[i] - f0[i]).collect();
+            d.sort_by(|a, b| a.total_cmp(b));
+            let p = |q: f32| d[((d.len() - 1) as f32 * q) as usize];
+            println!("{name:14} coats p10 {:.2} p50 {:.2} p90 {:.2} mean {:.2}", p(0.1), p(0.5), p(0.9), d.iter().sum::<f32>() / d.len() as f32);
+        }
     }
 }

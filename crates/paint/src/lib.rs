@@ -33,7 +33,7 @@ pub use growth::{Habit, Limb, Skeleton};
 pub use bristle::{Gesture, Held, Kind, Orient, Tool};
 pub use wet::Paint;
 pub use palette::{Mixture, Palette, Tube};
-pub use handling::Handling;
+pub use handling::{Aim, Handling};
 pub use style::{Apply, Ground, Style};
 pub use hand::{Hand, Mark};
 pub use surface::{COAT_UM, Linen};

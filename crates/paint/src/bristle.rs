@@ -2,7 +2,7 @@
 //!
 //! A `Tool` is a physical brush (round sable, hog flat, filbert, fan, rigger,
 //! badger blender). `Held` is that brush in the hand: every bristle has its
-//! own little reservoir of paint (volume + Mixbox pigment mix + hiding).
+//! own little reservoir of paint (volume + Mixbox pigment mix + KM scattering).
 //!
 //! As the handle moves along a `Gesture`:
 //! - bristles splay with pressure and their tips trail behind the motion,
@@ -247,9 +247,10 @@ impl Held {
     pub fn load(&mut self, paint: Paint, amount: f32) {
         let lat = paint.latent();
         let full = self.full();
+        let scatter = paint.scatter();
         for (i, b) in self.bristles.iter_mut().enumerate() {
             let k = 0.75 + 0.5 * crate::rng::hash2(i as i64, 17, 3);
-            mix_into(&mut b.vol, &mut b.lat, &mut b.hide, amount * full * k, &lat, [paint.hiding, paint.stiff]);
+            mix_into(&mut b.vol, &mut b.lat, &mut b.hide, amount * full * k, &lat, [scatter, paint.stiff]);
         }
     }
 

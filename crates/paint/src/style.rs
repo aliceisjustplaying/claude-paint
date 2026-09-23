@@ -216,11 +216,14 @@ impl Style {
     /// A glaze or thin scumble brushed over dry paint: a soft brush, paint
     /// that is mostly medium (`medium` ≈ 0.85–0.95 for a transparent glaze,
     /// ≈ 0.6 for a veiling scumble), laid thinly in long strokes. Vary the
-    /// depth with `load_at`; fuse it afterwards with `blend()`.
+    /// depth with `load_at`; fuse it afterwards with `blend()`. The color is
+    /// the glaze paint's masstone (not aimed: a veil's depth is the
+    /// painter's to vary); add `.aim(coats)` to aim it at a look instead.
     pub fn glaze(&self, medium: f32) -> Handling<'_> {
         let soft = Tool { stiffness: 0.3, lay: 0.8, pickup: 0.08, ragged: 0.2, ..Tool::filbert(self.broad.width * 1.2) };
         Handling::new(soft)
             .mixed(&self.palette, medium)
+            .by_masstone()
             .mix_jitter(self.mix_jitter * 0.5)
             .length(120.0, 300.0)
             .coverage(2.5)

@@ -69,7 +69,9 @@ fn character(o: &Table, pts: &[(f32, f32)], default: &str) -> Result<(Character,
 
 /// Points and corner marks: `{x, y}` or `{x, y, "c"}` (a corner); `corners=`
 /// a list of indices, `true` (all), or unset (by angle, `corner_angle=`).
-fn marked_points(o: &Table) -> Result<(Vec<(f32, f32)>, Vec<bool>)> {
+type Marked = (Vec<(f32, f32)>, Vec<bool>);
+
+fn marked_points(o: &Table) -> Result<Marked> {
     let src: Table = match o.get::<Value>("pts")? {
         Value::Table(t) => t,
         Value::Nil => o.clone(),
@@ -161,7 +163,7 @@ fn widths_of(v: Value, n: usize, what: &str) -> Result<Vec<f32>> {
     if w.len() != n {
         return err(format!("{what}: {} widths for {n} points", w.len()));
     }
-    if w.iter().any(|&x| !(x > 0.0)) {
+    if w.iter().any(|&x| x.is_nan() || x <= 0.0) {
         return err(format!("{what}: widths must be > 0"));
     }
     Ok(w)
@@ -224,7 +226,7 @@ impl UserData for OutlineU {
         m.add_method("above", |_, o, ()| Ok(wrap(o.o.above(frame(&o.st)?))));
         // o:band(width, taper?): a band along the line (taper 1: as wide as the pressure)
         m.add_method("band", |_, o, (w, taper): (f32, Option<f32>)| {
-            if !(w > 0.0) {
+            if w.is_nan() || w <= 0.0 {
                 return err("band(width): want > 0");
             }
             Ok(wrap(o.o.band(frame(&o.st)?, w, taper.unwrap_or(0.0).clamp(0.0, 1.0))))

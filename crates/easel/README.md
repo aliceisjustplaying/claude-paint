@@ -219,6 +219,59 @@ A flick that ends in a hairline is a stroke whose pressure falls to 0:
 A brush keeps its paint across strokes and chunks: several strokes from one
 load run dry naturally. `orient` is `"across"`, `"along"` or a fixed angle.
 
+### Drawing: outlines and bodies
+
+Place a few rough points and let a hand draw the line: a smooth curve
+through them, broken at corners, with a hand's irregularity (a slow wobble,
+lifts and overlaps, overshoots at corners, pressure that swells and thins).
+The same line is the mask's edge and the path a brush follows.
+
+```lua
+-- seven points; "c" marks a corner (or corners={3,5}, or leave it to the angle)
+rock = outline{{300,600,"c"}, {312,524}, {354,458,"c"}, {424,446}, {490,424,"c"}, {560,504,"c"}, {572,600,"c"},
+               char="broken", seed=3}
+m = rock:mask()                        -- its inside, edged by the drawn line
+work(m, {hand="body", color=..., clip=m})
+rim = m - rock:inset(7):mask()         -- a strip just inside the edge (light, a cut-in)
+b = brush{kind="round", width=4}; b:load("#2e2b26", 0.9)
+rock:paint(b, {pressure=1, dip={"#2e2b26", 0.8}, every=4})   -- draw the contour
+
+-- a sheep from five spine points (rump, back, shoulder, poll, nose) and four legs
+sheep = body_of{spine={{100,500}, {109,499}, {119,499}, {125,503}, {127,507}}, widths={8,10,8.5,3.6,2.4},
+                limbs={{{103,502}, {102,508}, widths={1.3,0.9}}, ...}, char="soft"}
+```
+
+| char | the hand |
+|---|---|
+| `firm` (default for `outline`) | a sure contour: long strokes, slight overshoots, crisp mask |
+| `searching` | a sketch: short strokes restated a little off each other, running past corners |
+| `broken` | rock, bark: straight facets and chips, in broken stretches between quiet ones |
+| `soft` (default for `body_of`) | foliage, wool, a far wood: lobes of two sizes, light broken strokes, a mask edge lost in places |
+
+`outline{pts... or pts=, char=, seed=, closed=, open=true, corners=, corner_angle=60,
+size=, amount=, lobe=, edge=}`: `closed` is the default with three or more
+points; `amount` scales the irregularity (0 = a clean curve); `lobe` sets
+the lobe width in units (a tree line: `lobe=24`); `edge` the mask's soft
+edge in units (0 = crisp); `size` the scale the hand works at (default: from
+the points' extent). An open line's outside is on its left (up, for a line
+drawn left to right): lobes and chips go that way.
+
+`body_of{spine=, widths=, limbs={{pts..., widths=} or {pts..., width=}}, blend=0.8, char=, ...}`:
+the silhouette of a skeleton (widths are full widths). Limbs join the spine
+smoothly over `blend` times their width; a limb that starts outside the
+spine reaches into it. Lobes and chips shrink where the body is thin.
+
+Methods: `o:mask()` (closed), `o:below(bottom)`, `o:above()` (open lines),
+`o:band(width, taper)` (a band along the line; `taper` 1 follows the
+pressure), `o:inset(d)`, `o:offset(d)` (a parallel outline, redrawn by the
+same hand), `o:paint(brush, {pressure=1, shake=0.3, ramps=, clip=, dip={color,
+amount}, every=3})` (returns the stroke count), `o:path(i)` and
+`o:paths()` (the drawn line as `{{x, y}, ...}`), `o:strokes()`
+(`{{pts=, pressure=}, ...}`: how the hand drew it, for any tool),
+`o:at(t)` (x, y, tangent, outward normal at a fraction of the length),
+`o:length()`, `o:corners()`, `o.scale`. A pinna of three points, a
+rachis of three, a sheep of five: `paintings/lua/outline.lua` draws them all.
+
 ### Covering areas
 
 ```lua

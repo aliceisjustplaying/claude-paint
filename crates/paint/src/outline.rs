@@ -942,7 +942,7 @@ fn contour_of(x0: f32, y0: f32, x1: f32, y1: f32, g: f32, field: impl Fn(f32, f3
     let point = |e: usize| -> P {
         let k = e / 2;
         let (i, j) = (k % nx, k / nx);
-        let (i2, j2) = if e % 2 == 0 { (i + 1, j) } else { (i, j + 1) };
+        let (i2, j2) = if e.is_multiple_of(2) { (i + 1, j) } else { (i, j + 1) };
         let (a, b) = (v[j * nx + i], v[j2 * nx + i2]);
         let t = (a / (a - b)).clamp(0.0, 1.0);
         (x0 + (i as f32 + (i2 as f32 - i as f32) * t) * gx, y0 + (j as f32 + (j2 as f32 - j as f32) * t) * gy)
@@ -1185,14 +1185,14 @@ fn plan_strokes(l: &Line, ch: &Character, scale: f32, step: f32, rng: &mut Rng, 
                 }
             }
         };
-        if let (Some(ia), Some(ib)) = (idx(a), idx(b)) {
-            if s.pts.len() >= 2 {
-                if is_corner(ib) && (l.closed || (b as usize) < n - 1) && rng.f() < ch.overshoot {
-                    over(rng, ib, 1.0, &mut s, false);
-                }
-                if is_corner(ia) && (l.closed || a > 0) && rng.f() < ch.overshoot * 0.5 {
-                    over(rng, ia, -1.0, &mut s, true);
-                }
+        if let (Some(ia), Some(ib)) = (idx(a), idx(b))
+            && s.pts.len() >= 2
+        {
+            if is_corner(ib) && (l.closed || (b as usize) < n - 1) && rng.f() < ch.overshoot {
+                over(rng, ib, 1.0, &mut s, false);
+            }
+            if is_corner(ia) && (l.closed || a > 0) && rng.f() < ch.overshoot * 0.5 {
+                over(rng, ia, -1.0, &mut s, true);
             }
         }
         if s.pts.len() >= 2 {

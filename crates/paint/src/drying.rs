@@ -455,3 +455,148 @@ impl Canvas {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::bristle::{Gesture, Held, Tool};
+    use crate::color::hex;
+    use crate::surface::Linen;
+    use crate::wet::Paint;
+
+    fn canvas() -> Canvas {
+        Canvas::new(300, 1.0, hex("#c8b89a")).with_linen(Linen::fine(3))
+    }
+
+    fn band(c: &mut Canvas, p: Paint, y: f32, seed: u64) {
+        let mut h = Held::new(Tool::filbert(40.0), seed);
+        h.load(p, 1.0);
+        c.drag(&mut h, &Gesture::new(vec![(150.0, y), (850.0, y)]).pressure(0.9, 0.9), None);
+    }
+
+    fn lead_white() -> Paint {
+        Paint::body(hex("#e8e4d8")).with_drying(drier::LEAD_WHITE)
+    }
+
+    #[test]
+    fn stages_follow_the_clock_and_the_pigment() {
+        let mut c = canvas();
+        band(&mut c, lead_white(), 300.0, 1);
+        band(&mut c, Paint::body(hex("#202020")).with_drying(drier::BONE_BLACK), 700.0, 2);
+        assert_eq!(c.drying_at(500.0, 300.0), Stage::Open);
+        c.wait(30.0);
+        assert_eq!((c.drying_at(500.0, 300.0), c.drying_at(500.0, 700.0)), (Stage::Open, Stage::Open));
+        c.wait(150.0);
+        assert_eq!(c.drying_at(500.0, 300.0), Stage::Tacky, "lead white sets within 3 h");
+        assert!(matches!(c.drying_at(500.0, 700.0), Stage::Open | Stage::Setting), "bone black is still wet at 3 h");
+        c.wait(21.0 * 60.0);
+        assert_eq!(c.drying_at(500.0, 300.0), Stage::Dry, "lead white is touch-dry the next day");
+        assert_ne!(c.drying_at(500.0, 700.0), Stage::Dry, "bone black is not");
+        assert!((c.clock() - 24.0 * 60.0).abs() < 1e-3);
+        c.dry();
+        assert_eq!(c.drying_at(500.0, 700.0), Stage::Dry);
+        assert_eq!(c.wet_total(), 0.0);
+        assert!(c.clock() > 2.0 * 24.0 * 60.0, "bone black takes days: {}", c.clock());
+    }
+
+    #[test]
+    fn thick_and_fat_films_dry_slower() {
+        assert!(rate(1.0, 1.0, 1.0) > rate(4.0, 1.0, 1.0));
+        assert!(rate(1.0, 1.0, 1.0) > rate(1.0, 0.1, 1.0));
+        assert!(rate(1.0, 1.0, 2.0) > rate(1.0, 1.0, 1.0));
+        // one lean coat of average paint: touch-dry in a day
+        assert!((1.0 / rate(1.0, 1.0, 1.0) - TOUCH_DRY_MIN).abs() < 1e-2);
+    }
+
+    /// Waiting out the drying in steps bakes exactly what `dry()` bakes, and
+    /// a zero wait changes nothing.
+    #[test]
+    fn waiting_it_out_equals_dry() {
+        let paint = |c: &mut Canvas| {
+            band(c, lead_white(), 400.0, 1);
+            band(c, Paint::scumble(hex("#405070")), 450.0, 2);
+        };
+        let mut a = canvas();
+        paint(&mut a);
+        a.dry();
+        let mut b = canvas();
+        paint(&mut b);
+        b.wait(0.0);
+        b.wait(10.0);
+        b.wait(3.0 * 24.0 * 60.0);
+        b.dry();
+        assert!(a.px == b.px && a.height == b.height && a.film == b.film);
+    }
+
+    /// A clean brush lifts wet paint, less as it sets, and nothing from set
+    /// or dry paint; a tacky surface pulls paint off a loaded brush sooner
+    /// than a dry one (more of it lands early in the stroke).
+    #[test]
+    fn brushes_feel_the_stage() {
+        let mut lifted = Vec::new();
+        let mut laid = Vec::new();
+        for wait in [0.0, 60.0, 180.0, 36.0 * 60.0] {
+            let mut c = canvas();
+            band(&mut c, Paint::body(hex("#203050")).with_drying(drier::UMBER), 500.0, 1);
+            c.wait(wait);
+            let g = Gesture::new(vec![(200.0, 500.0), (800.0, 500.0)]).pressure(0.7, 0.7);
+            let mut clean = Held::new(Tool::filbert(20.0), 8);
+            let mut d = canvas_copy(&c);
+            d.drag(&mut clean, &g, None);
+            lifted.push(clean.bristles.iter().map(|b| b.vol as f64).sum::<f64>());
+            // paint laid in the first quarter of the stroke
+            let f = c.f;
+            let early = |c: &Canvas| (0..c.wet.vol.len()).filter(|&i| f.ux(i % f.w) < 350.0).map(|i| c.wet.vol[i] as f64).sum::<f64>();
+            let before = early(&c);
+            let mut h = Held::new(Tool::filbert(20.0), 9);
+            h.load(Paint::scumble(hex("#f0e8d0")), 0.6);
+            c.drag(&mut h, &g, None);
+            laid.push(early(&c) - before);
+        }
+        assert!(lifted[0] > 0.0 && lifted[1] < lifted[0], "setting paint lifts less: {lifted:?}");
+        // (at 3 h only the thickest ridges of the umber are still open)
+        assert!(lifted[2] < 0.05 * lifted[0] && lifted[3] == 0.0, "nothing lifts from set paint: {lifted:?}");
+        assert!(laid[2] > laid[3] * 1.2, "tack pulls paint off the brush: {laid:?}");
+    }
+
+    fn canvas_copy(c: &Canvas) -> Canvas {
+        let mut buf = Vec::new();
+        c.write_state(&mut buf, "").unwrap();
+        Canvas::read_state(&mut std::io::Cursor::new(buf)).unwrap().0
+    }
+
+    /// A checkpoint taken while paint is drying resumes exactly.
+    #[test]
+    fn checkpoint_mid_drying_resumes_exactly() {
+        let mut a = canvas();
+        band(&mut a, lead_white(), 400.0, 1);
+        a.wait(45.0);
+        band(&mut a, Paint::scumble(hex("#405070")), 430.0, 2);
+        let mut buf = Vec::new();
+        a.write_state(&mut buf, "").unwrap();
+        let (mut b, _) = Canvas::read_state(&mut std::io::Cursor::new(buf)).unwrap();
+        for c in [&mut a, &mut b] {
+            c.wait(120.0);
+            band(c, Paint::body(hex("#a04020")), 460.0, 3);
+            c.wait(30.0);
+            c.dry();
+        }
+        assert!(a.px == b.px && a.height == b.height && a.film == b.film && a.clock() == b.clock());
+    }
+
+    #[test]
+    fn drying_is_deterministic_across_thread_counts() {
+        let run = || {
+            let mut c = canvas();
+            band(&mut c, lead_white(), 400.0, 1);
+            c.wait(200.0);
+            band(&mut c, Paint::scumble(hex("#405070")), 420.0, 2);
+            c.wait(60.0);
+            c.dry();
+            (c.px, c.height)
+        };
+        let a = rayon::ThreadPoolBuilder::new().num_threads(1).build().unwrap().install(run);
+        let b = rayon::ThreadPoolBuilder::new().num_threads(4).build().unwrap().install(run);
+        assert!(a == b);
+    }
+}

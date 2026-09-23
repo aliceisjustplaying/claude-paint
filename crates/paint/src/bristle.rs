@@ -891,18 +891,17 @@ unsafe fn exchange(
                 }
                 let i = (y - oy) * bw_buf + x - ox;
                 let vol = &mut *sf.vol.add(i);
+                // paint that is setting is stiff: it comes up and moves less
+                let fl = if sf.dry.is_null() { 1.0 } else { crate::drying::fluid((*sf.dry.add(i)).cure) };
                 // one stroke lifts only part of the film
                 if *sf.touched.add(i) != id {
                     *sf.touched.add(i) = id;
-                    *sf.floor.add(i) = *vol * (1.0 - tool.pickup);
+                    *sf.floor.add(i) = *vol * (1.0 - tool.pickup * fl);
                 }
                 let v = *vol;
-                // paint that is setting is stiff: it comes up and moves less
-                let fl = if sf.dry.is_null() { 1.0 } else { crate::drying::fluid((*sf.dry.add(i)).cure) };
                 if v > 1e-6 {
                     let own = if *sf.stroke.add(i) == id { 0.15 } else { 1.0 };
-                    let lift = if fl < 1.0 { 0.3 + 0.7 * fl } else { 1.0 };
-                    let take = (v * tool.pickup * wt * hunger * own * lift).min((v - *sf.floor.add(i)).max(0.0));
+                    let take = (v * tool.pickup * wt * hunger * own * fl).min((v - *sf.floor.add(i)).max(0.0));
                     if take > 0.0 {
                         *vol -= take;
                         let tv = take * px_area;

@@ -150,7 +150,7 @@ fn build(r: [f32; 4], sun: Sun, ripple: f32) -> Scene {
         .rough(s.m(0.07), s.m(0.7), 3, false)
         .cut(s.p(0.0, 0.95, 0.0), [-0.25, -1.0, 0.2], 10, s.m(0.04))
         .cut(s.p(0.5, 0.45, 0.0), [1.0, -0.2, 0.4], 11, s.m(0.03))
-        .rough(s.m(0.006), s.m(0.12), 4, true);
+        .rough(s.m(0.004), s.m(0.15), 4, true);
     let boulder = world.place(s, rock);
     // two poles standing in the shallows, leaning a little
     let mut poles = [0; 2];
@@ -303,28 +303,34 @@ fn paint_panel(c: &mut Canvas, st: &Style, r: [f32; 4], l: &Light, seed: u64) {
     let hd = st.body().color(trod).angle(along).angle_jitter(0.1).length(8.0, 22.0).coverage(2.4).clip(true).threshold(0.35);
     c.work(&path, &hd, seed + 5);
     c.dry();
-    // the cast shadows, as their own pass: the sand as the sky alone lights
-    // it, stroked the way each shadow runs away from the one sun
+    // the cast shadows: one transparent glaze of cool darks (no white, so
+    // it can't go milky) through the soft mask, so the penumbra the world
+    // traced (growing with distance from the caster) is the glaze's edge
     if w.sun.up() {
-        // on the sand only: clear water shows a shadow barely at all
-        let sh = view.shadows().map(|v| smoothstep(0.15, 0.6, v)).mul(&land);
-        let dark = |x: f32, y: f32| {
+        let sh = view.shadows().mul(&land).map(|v| smoothstep(0.1, 0.8, v));
+        let shade = mix(l.sand_shade, l.sand_lit, 0.2, Mix::Pigment);
+        let view = &view;
+        let dark = move |x: f32, y: f32| {
             let p = view.at(x, y);
             let wet = 1.0 - smoothstep(0.02, 0.1, w.ground_at(p.at[0], p.at[2]));
-            let base = if p.what == paint::scene::What::Water { mix(l.water, l.sky_top, 0.25, Mix::Pigment) } else { l.sand_shade };
-            mix(base, mix(base, l.water, 0.4, Mix::Pigment), wet, Mix::Pigment)
+            mix(shade, mix(shade, l.water, 0.4, Mix::Pigment), wet, Mix::Pigment)
         };
-        let hd = st.body().color(dark).angle(|x, y| w.shadow_angle(x, y).unwrap_or(0.0)).angle_jitter(0.06).length(6.0, 20.0).coverage(3.0).clip(true).threshold(0.35);
+        let along = |x: f32, y: f32| w.shadow_angle(x, y).unwrap_or(0.0);
+        let hd = st.body().color(dark).angle(along).angle_jitter(0.05).length(8.0, 30.0).coverage(3.0).clip(true).threshold(0.2);
         c.work(&sh, &hd, seed + 7);
+        // fuse the penumbra along the shadow, never across the sand beyond
+        if let Some(b) = st.blend() {
+            let edge = sh.clone().map(|v| if v > 0.02 && v < 0.98 { 1.0 } else { 0.0 }).blur(1.5);
+            c.work(&edge, &b.clip(true).angle(along).length(10.0, 30.0), seed + 8);
+        }
         c.dry();
     }
-
     // 5. the boulder, plane by plane, lit by the world's light
     let stone = l.stone;
     let bpart = view.part(sc.boulder);
     let rock_col = |_: f32, _: f32, s: &Sample| mix(stone.at(&s.shade), sky_col(w, l, 500.0, w.horizon - 1.0), w.aerial(s.dist), Mix::Light);
     let bs = w.bodies[sc.boulder].spot;
-    rocks::paint_solid(c, st, &view.form, &rocks::Solid { parts: vec![bpart], color: &rock_col, soft: &|_| 0.8, scale: bs.m(1.5) / 300.0, accents: 0.8, seed: seed + 6 });
+    rocks::paint_solid(c, st, &view.form, &rocks::Solid { parts: vec![bpart], color: &rock_col, soft: &|_| 0.8, scale: bs.m(1.5) / 300.0, accents: 0.35, seed: seed + 6 });
 
     // 6. the poles: dark wood, then the side the sun (or the glow) finds
     for (i, &p) in sc.poles.iter().enumerate() {
@@ -383,9 +389,9 @@ fn paint_panel(c: &mut Canvas, st: &Style, r: [f32; 4], l: &Light, seed: u64) {
     let cloth = mix(hex("#2b2622"), key, 0.1, Mix::Pigment);
     let hd = paint::Handling::new(Tool::round_sable(ws.m(0.05))).mixed(pal, 0.2).color(move |_, _| cloth).angle(|_, _| std::f32::consts::FRAC_PI_2).length(ws.m(0.15), ws.m(0.4)).coverage(1.4).clip(true).threshold(0.4);
     c.work(&lit, &hd, seed + 41);
-    let edge = lit.clone().subtract(&sil.erode(ws.m(0.03)));
+    let edge = lit.clone().subtract(&sil.erode(ws.m(0.018)));
     let rim = mix(hex("#2b2622"), key, 0.4, Mix::Pigment);
-    let hd = paint::Handling::new(Tool::round_sable(ws.m(0.02))).mixed(pal, 0.15).color(move |_, _| rim).angle(|_, _| std::f32::consts::FRAC_PI_2).length(ws.m(0.08), ws.m(0.25)).coverage(1.2).clip(true).threshold(0.4);
+    let hd = paint::Handling::new(Tool::round_sable(ws.m(0.012))).mixed(pal, 0.15).color(move |_, _| rim).angle(|_, _| std::f32::consts::FRAC_PI_2).length(ws.m(0.08), ws.m(0.25)).coverage(1.2).clip(true).threshold(0.4);
     c.work(&edge, &hd, seed + 42);
     c.dry();
 

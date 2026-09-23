@@ -514,7 +514,8 @@ print(f)   -- fir(spire, 428 tall, 168 boughs (6 dead, 11 broken), 986 strokes, 
 local nd = f:needles()
 -- 1. a dark hatched body under everything, clipped to the needle mask (its edge is the strokes' fringe)
 work(nd, {hand="hatch", tool="round 1.8", length={3, 7}, coverage=2.6, clip=nd,
-  angle=function(x, y) return 1.57 + (x < f.foot[1] and 0.5 or -0.5) end, color="#1f2924"})
+  angle=function(x, y) return 1.57 + 0.5 * clamp((f.foot[1] - x) / 12, -1, 1) end, color="#1f2924"})
+-- (a continuous angle: one that flips at the stem leaves a seam of thin cover there)
 -- 2. the stem and boughs with a rigger (dead ones gray)
 local rb = brush("rigger", 1.2)
 for i, b in ipairs(f.boughs) do

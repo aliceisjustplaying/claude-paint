@@ -32,7 +32,7 @@ local nd = spire:needles()
 -- 1. the dark body of the needles, hatched along the hang of the shoots
 local turn = noise{seed=6, period=9}
 work(nd, {hand="hatch", tool="round 1.8", length={3, 7}, coverage=2.6, clip=nd, medium=0.2,
-  angle=function(x, y) return 1.57 + (x < 521 and 0.5 or -0.5) + 0.35 * turn(x, y) end, angle_jitter=0.4,
+  angle=function(x, y) return 1.57 + 0.5 * clamp((521 - x) / 12, -1, 1) + 0.35 * turn(x, y) end, angle_jitter=0.4,
   color=function(x, y) return shift(mix("#1c2621", "#25302a", smoothstep(120, 500, y)), 0.015 * turn(x, y), 0, 0) end})
 -- 2. the stem and boughs where they show
 local rb = brush("rigger", 1.2)
@@ -65,7 +65,7 @@ function paint_fir(f, o)
   local turn = noise{seed=o.seed or 6, period=9}
   local dark = o.dark or {"#1c2621", "#25302a"}
   work(nd, {hand="hatch", tool="round 1.8", length={3, 7}, coverage=2.4, clip=nd, medium=0.2,
-    angle=function(x, y) return 1.57 + (x < ax and 0.5 or -0.5) + 0.35 * turn(x, y) end, angle_jitter=0.4,
+    angle=function(x, y) return 1.57 + 0.5 * clamp((ax - x) / 12, -1, 1) + 0.35 * turn(x, y) end, angle_jitter=0.4,
     color=function(x, y) return shift(mix(dark[1], dark[2], smoothstep(f.apex[2], f.crown_base, y)), 0.015 * turn(x, y), 0, 0) end})
   local rb = brush("rigger", o.rigger or 1.2)
   rb:load("#221f1b", 0.9)

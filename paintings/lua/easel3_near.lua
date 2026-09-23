@@ -772,6 +772,27 @@ end
 
 --@ chunk 25 · clock 314623.72595214844
 
+wait(6*60)
+local lit = {"#a8683a", "#b87a44", "#9a5c30", "#c48a50", "#8d5530"}
+local groups = {
+  {335, 672, 5, 90, -1}, {880, 670, 6, 100, 1}, {965, 700, 5, 95, 1},
+  {40, 760, 6, 140, 1}, {150, 772, 4, 120, -1}, {590, 775, 5, 110, -1}, {740, 772, 5, 100, 1}, {20, 610, 3, 60, 1},
+  {470, 682, 5, 80, 1}, {600, 690, 5, 90, -1}, {735, 684, 4, 75, 1}, {395, 690, 3, 60, -1}}
+local n = 0
+for gi, g in ipairs(groups) do
+  for k = 1, g[3] do
+    local x = g[1] + randn(0, g[4] * 0.5)
+    local y = g[2] + randn(0, 8) - g[4] * 0.08
+    local up = -math.pi/2 + randn(0, 0.5) + 0.3 * g[5]
+    local scale = clamp((y - 540) / 200, 0.5, 1.3)
+    frond(x, y, g[4] * rand(0.6, 1.0) * scale, up, (rand() < 0.5 and 1 or -1) * rand(0.9, 1.9), lit[1 + (gi * 3 + k) % #lit], scale)
+    n = n + 1
+  end
+end
+print(n)
+
+--@ chunk 26 · clock 314983.72595214844
+
 dry()
 local vig = mask(function(x, y)
   local dx = (x - 560) / 560

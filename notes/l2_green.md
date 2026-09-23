@@ -41,7 +41,10 @@ Not done: the hedges and the field bushes are still stamped (critique "next" #2)
 stone is still loaf-shaped and now the palest thing on the land. The oak's limb structure
 ("rubbery, no species") is untouched. Some limbs in the crown are now covered by the lit
 leaf strokes. A faint pale rim still hugs the crown in places at 1000 px, maybe the
-relief pass. The figure is still small and plain at 3200.
+relief pass. The figure is still small and plain at 3200. **At 3200 (`look --crop 300,420,500,520
+--scale 3.2`) a pale green glow still surrounds the figure and the stone**, even after
+the integrator's engine fix. Check whether it comes from the engine or the paint before
+the next session.
 
 ## SKETCHBOOK CANDIDATES (add only if the critic's scores improve)
 

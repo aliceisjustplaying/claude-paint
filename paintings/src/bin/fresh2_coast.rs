@@ -99,6 +99,13 @@ fn main() {
         let dry = gradient(&[(0.0, hex("#8c7c62")), (0.45, hex("#6f604a")), (1.0, hex("#3a332b"))], ((y - 575.0) / (h - 575.0)).clamp(0.0, 1.0), Mix::Pigment);
         mix(wet, dry, smoothstep(10.0, 40.0, d), Mix::Light)
     };
+    let sea_col = move |x: f32, y: f32| {
+        let sh = shore(x);
+        let t = ((y - HORIZON) / (sh - HORIZON)).clamp(0.0, 1.0);
+        let base = gradient(&[(0.0, hex("#3c4556")), (0.12, hex("#4d5566")), (0.5, hex("#6b6f7a")), (0.85, hex("#8b8883")), (1.0, hex("#9c948a"))], t, Mix::Light);
+        let path = (-((x - SUN_X) / (40.0 + 150.0 * t)).powi(2)).exp();
+        mix(base, hex("#cdbb9c"), 0.45 * path * (0.3 + 0.7 * t), Mix::Light)
+    };
     let sky_m = Mask::from_fn(f, |_, y| 1.0 - smoothstep(HORIZON + 0.5, HORIZON + 3.0, y));
     let sea_m = Mask::from_fn(f, |x, y| smoothstep(HORIZON - 3.0, HORIZON + 1.0, y) * (1.0 - smoothstep(shore(x) + 2.0, shore(x) + 8.0, y)));
     let beach_m = Mask::from_fn(f, |x, y| smoothstep(shore(x) - 5.0, shore(x) + 1.0, y));
@@ -156,7 +163,10 @@ fn main() {
         // a very thin underpainting [CATS p.127]: the sea in a dull
         // blue-gray, the shore in umber, so the warm ground no longer
         // flickers through where later strokes skip or a blender lifts them
-        let under_col = move |x: f32, y: f32| if y < shore(x) + 2.0 { hex("#4b5260") } else { mix(hex("#6d6150"), hex("#3a322a"), smoothstep(560.0, h, y), Mix::Pigment) };
+        // (the sea underpainting follows the sea's own tones, a little darker:
+        // where the lay-in's strokes run dry at their ends, a flat dark
+        // underpainting showed through near the shore as bristly blots)
+        let under_col = move |x: f32, y: f32| if y < shore(x) + 2.0 { lift(sea_col(x, y), -0.04) } else { mix(hex("#6d6150"), hex("#3a322a"), smoothstep(560.0, h, y), Mix::Pigment) };
         let land_m = Mask::from_fn(f, |_, y| smoothstep(HORIZON - 1.0, HORIZON + 2.0, y));
         let up = st
             .broad()
@@ -311,13 +321,6 @@ fn main() {
     if o.stage("sea", &mut c, &mut rng) {
         // the sea: dark and cool at the horizon, the sky's glow in it nearer,
         // a path of light under the sun; long level strokes
-        let sea_col = move |x: f32, y: f32| {
-            let sh = shore(x);
-            let t = ((y - HORIZON) / (sh - HORIZON)).clamp(0.0, 1.0);
-            let base = gradient(&[(0.0, hex("#3c4556")), (0.12, hex("#4d5566")), (0.5, hex("#6b6f7a")), (0.85, hex("#8b8883")), (1.0, hex("#9c948a"))], t, Mix::Light);
-            let path = (-((x - SUN_X) / (40.0 + 150.0 * t)).powi(2)).exp();
-            mix(base, hex("#cdbb9c"), 0.45 * path * (0.3 + 0.7 * t), Mix::Light)
-        };
         let lay = st
             .broad()
             .palette(&sea_pal)
@@ -367,7 +370,9 @@ fn main() {
         // fuse with a narrower badger kept inside the water (a 40-unit
         // badger swept level drags the dark horizon band up into the sky)
         let sea_blend_m = sea_m.clone().mul_fn(|_, y| smoothstep(HORIZON + 5.0, HORIZON + 14.0, y));
-        let soft = paint::Handling::new(Tool { pickup: 0.07, run: 45.0, ..Tool::badger(16.0) })
+        // wiped clean after every stroke: a badger wiped every third stroke
+        // carried the dark of the horizon down and set it down as blots
+        let soft = paint::Handling::new(Tool { pickup: 0.05, run: 45.0, ..Tool::badger(16.0) })
             .blender()
             .angle(|_, _| 0.0)
             .angle_jitter(0.02)
@@ -375,7 +380,7 @@ fn main() {
             .length(120.0, 300.0)
             .coverage(2.2)
             .pressure(0.3, 0.42)
-            .dips(3, 0.0, 0.9)
+            .dips(1, 0.0, 1.0)
             .clip(true)
             .sweep(std::f32::consts::FRAC_PI_2);
         c.work(&sea_blend_m, &soft, 52);
@@ -401,11 +406,12 @@ fn main() {
                 // far off, the swell only darkens: a light band there reads as a scrape
                 let dark = t < 0.2 || (t < 0.6 && r.chance(0.55));
                 let path = (-((xs + l * 0.5 - SUN_X) / (40.0 + 150.0 * t)).powi(2)).exp();
-                let want = if dark { lift(under, -0.018 - 0.012 * t) } else { mix(lift(under, 0.05), hex("#d8cdb4"), 0.25 * path, Mix::Light) };
+                let want = if dark { lift(under, -0.012 - 0.008 * t) } else { mix(lift(under, 0.05), hex("#d8cdb4"), 0.25 * path, Mix::Light) };
                 // mixed by masstone: an aimed thin light over the cool sea
                 // comes out salmon (the pile fights the blue of thin white)
                 let p = sea_pal.paint(want, 0.3);
-                let w = 0.8 + 1.8 * t;
+                // darks long and thin (short ones read as ink blots)
+                let (w, l) = if dark { (0.6 + 1.0 * t, l.max(160.0 * (0.5 + t))) } else { (0.8 + 1.8 * t, l) };
                 let mut b = held(Tool { lay: 0.45, ..Tool::filbert(w) }, p, 0.3, 5300 + k);
                 k += 1;
                 let pts: Vec<(f32, f32)> = (0..5).map(|i| {

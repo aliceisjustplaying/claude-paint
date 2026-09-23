@@ -66,8 +66,9 @@ What it draws on in Friedrich (from general knowledge of his work and
 5. **clouds**: stratus bars as hand-placed filbert drags aimed at a
    violet-gray over the sky, and a warm round-sable line on each underside.
    Softened along their length with a small badger.
-6. **moon**: a halo stippled a touch lighter, then the crescent mask worked
-   with a small round in stiff lead white, by masstone.
+6. **moon**: a faint halo scumbled on as a radial lead-white glaze (a
+   stippled halo read as salt), then the crescent mask worked with a small
+   round in stiff lead white, by masstone.
 7. **sea**: a masstone `broad()` lay-in, dark at the horizon and lighter
    and warmer toward the shore, with a path of light under the sun. The far
    band is laid by hand in level rows. A narrow badger fuses it inside the
@@ -92,19 +93,26 @@ What it draws on in Friedrich (from general knowledge of his work and
 11. **poles**: the net first: a thin masstone veil over a mask hung from a
     sagging rope, lean fold lines, and two families of rigger mesh lines.
     Then the poles in two loads each (the second set down in the wet end of
-    the first), a lit edge on the sunward side, the rope, lashings, cork
-    floats and long faint shadows toward us.
+    the first), a lit edge on the sunward side, the rope, lashings and cork
+    floats.
 12. **figure**: gestures in a `Hand` frame: skirt strokes flaring to the
     hem, bodice, sleeves, shawl to a point down the back, neck, head and
-    hair knot; a small rim of light on the head and right shoulder; her
-    shadow.
-13. **foreground**: flat half-sunk stones (dark wide strokes, a light top,
-    a shadow) and marram tufts in upturned rigger strokes (dark, olive, a
-    few pale).
-14. **gulls**: bent two-stroke wings, aimed darker than the sky under them.
-15. **glaze**: a thin umber veil deepening toward the bottom edge and
-    corners; then `finish` with varnish, a finer and cleaner craquelure
-    than the stock one, and raking light.
+    hair knot; two gown folds; a small rim of light on the head and right
+    shoulder.
+13. **foreground**: flat half-sunk stones (dark wide strokes, a matte
+    lighter top) and marram tufts in upturned rigger strokes (dark, olive,
+    a few pale).
+14. **reflections**: the sun hasn't risen, so there are no cast shadows.
+    The damp sand holds faint, short reflections of the poles and the
+    woman, straight down and fading, and the stones darken where they sit.
+    It is all one transparent umber glaze (raw umber and black only)
+    through a mask of tapered ribbons.
+15. **gulls**: bent two-stroke wings, aimed darker than the sky under them.
+16. **glaze**: a thin umber veil deepening toward the bottom edge and
+    corners (a smooth `Canvas::glaze`; brushed, it streaked the boulder like
+    wood grain). Then `finish` with varnish, a finer craquelure freed of the
+    weave (`ground_um` 140, 5 mm islands, 32 µm hairlines, little grime)
+    and raking light.
 
 ## FRICTION
 
@@ -123,8 +131,21 @@ What it draws on in Friedrich (from general knowledge of his work and
     relief, so it took five stop-at-stage renders to find. The last one
     removed the reflections glaze, and the rectangle went with it.
     *Workaround:* threshold after blurring
-    (`.map(|v| if v < 0.004 { 0.0 } else { v })`). *Engine fix:* zero tiny
-    values in `blur`, or a threshold in `glaze`/`work` masks.
+    (`.map(|v| if v < 0.004 { 0.0 } else { v })`).
+    **The same bug, worse, without any mask:** a moon halo glazed with
+    thickness `0.35·exp(-(d/2.6r)²)` is tiny but positive out to about 255
+    units. The next preview had heavy black net strokes, black dots near
+    the brig and a pale rectangle across the upper right. I think the
+    mechanism is in `surface::settle` and `Canvas::glaze`: the glaze scales
+    the pigment by `t[i] / add[i]` (film after leveling ÷ film laid), and
+    `settle` rescales each pixel by `laid / kept` from running-sum blurs.
+    For deposits around 1e-7 coats, float residue in those blurs dominates
+    both ratios, so near-zero deposits come out thick, and the height field
+    they leave then throws later strokes. I didn't instrument the engine to
+    prove this; the evidence is that clamping every glaze thickness below
+    0.01 coats to exactly 0 (`trace()` in the program) removed it. Smoothstep
+    ramps give such values too. *Engine fix:* ignore deposits below a floor
+    in `glaze` and `settle`, and zero residue in `box_rows`/`box_blur`.
 0b. **Pale smears under the horizon were sky paint left uncovered.** See
     items 3 and 4. Three renders chased "stray piles" before a 3200px crop
     showed the cream sky showing through the sea's top edge.

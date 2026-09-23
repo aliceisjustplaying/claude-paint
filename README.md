@@ -17,10 +17,23 @@ optical blends pretending to be paint.
 cargo paint friedrich_moonrise_valley               # 1000px preview → out/<name>.png
 cargo paint friedrich_moonrise_valley -- --full     # 3200px         → out/<name>_full.png
 cargo paint <name> -- --width 1600 --seed 7 --out path.png
+cargo paint <name> -- --full --crop 280,440,460,580 # just that window (units) at 3200px
+                                                    #   → out/<name>_full_crop.png (--margin 40)
+cargo paint <name> -- --ckpt                        # checkpoint after every stage
+cargo paint <name> -- --resume mist                 # start from the "mist" checkpoint
 cargo paint <name> -- --stop sky                    # save right after a stage
 cargo paint <name> -- --no-cracks
 cargo test -p paint                                 # UPDATE_GOLDEN=1 to re-record the golden scene
 ```
+
+The fast loop for detail work: render the passage you're working on with
+`--full --crop`, add `--ckpt` once, then iterate on the late stages with
+`--resume <stage>`. The moonrise figures at full resolution on a busy
+machine: 86–145 s for the whole canvas, 14 s cropped, 1.6 s cropped and
+resumed from "mist". Paintings
+are written in stages (`if o.stage("sky", &mut c, &mut rng) { ... }`, see
+`paintings/src/run.rs`). A crop closely matches the same region of a whole
+render; a resume is exact. Details and limits: `notes/workflow.md`.
 
 Engine (`crates/paint`):
 - `surface` – linen weave and ground layers as a height field in µm; wet
@@ -41,6 +54,7 @@ Engine (`crates/paint`):
 - `canvas` – glazes, relief lighting, dithered PNG out
 - `tree` – oaks grown by rules and painted with brushes
 - `mask`, `shape`, `path`, `noise`, `rng` – geometry and randomness
+- `checkpoint` – the complete canvas state to a file and back (resuming)
 
 Motifs written as gestures and the `Run`/`Finish` helpers live in `paintings/src`.
 

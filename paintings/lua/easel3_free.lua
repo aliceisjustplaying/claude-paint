@@ -52,3 +52,77 @@ blend(skym, {angle=0, length={60, 160}, coverage=3})
 
 wait(180)
 stipple(skym, {width=2.6, color=skycol, coverage=3.2, pressure={0.4, 0.8}, dips={20, 0.35, 0.6}, medium=0.55, pal=skypal})
+
+--@ chunk 6 · clock 180
+
+wait(24*60)
+seaband = noise{seed=13, octaves=5, period=90, stretch={0.0, 14}}
+seacol = function(x, y)
+  local d = math.max(y - HZ, 0)
+  local refl = skycol(x, HZ - d * 2.2 - 10)
+  local dark = mix("#344063", "#232a3c", smoothstep(0, 110, d))
+  local k = 0.40 - 0.22 * smoothstep(0, 110, d) + 0.16 * seaband(x, y)
+  local dx = (x - SUNX) / 200
+  k = k + 0.22 * math.exp(-dx * dx) * (1 - smoothstep(0, 90, d)) * (0.6 + 0.4 * seaband(x * 1.7, y))
+  return mix(dark, refl, clamp(k, 0, 1))
+end
+seam = v:water():grow(3) * below(function(x) return HZ end)
+work(seam, {hand="broad", color=seacol, angle=0, angle_jitter=0.004, length={60, 180}, coverage=4.5, medium=0.28, clip=seam})
+blend(seam, {angle=0, length={60, 180}, clip=seam})
+
+--@ chunk 7 · clock 1620
+
+shoreline = function(x) local y = HZ; while y < H - 1 and v:at(x, y).what ~= "ground" do y = y + 1 end; return y end
+SH = {}; for x = 0, 990, 10 do SH[#SH+1] = {x, shoreline(x)} end
+SH[#SH+1] = {1000, SH[#SH][2] + 1.5}
+shoreY = function(x) local i = clamp(math.floor(x / 10) + 1, 1, #SH - 1); local a, b = SH[i], SH[i+1]; return lerp(a[2], b[2], (x - a[1]) / 10) end
+landm = below(SH):roughen(2.5, 22, 4, 1)
+gn = noise{seed=21, octaves=5, period=70}
+sandn = noise{seed=31, octaves=4, period=60, stretch={0.0, 3}}
+landcol = function(x, y)
+  local d = y - shoreY(x)
+  local c = mix("#4a4535", "#2c2a22", smoothstep(0, 160, d))
+  c = mix(c, "#5a5238", 0.25 * gn:at01(x, y))
+  local sw = 4 + 14 * sandn:at01(x, 0) * smoothstep(380, 760, x)
+  local sand = (1 - smoothstep(0, sw, d)) * smoothstep(380, 640, x)
+  return mix(c, mix("#8c8468", "#6f6a58", sandn:at01(x, y)), 0.75 * sand)
+end
+work(landm, {hand="body", color=landcol, angle=function(x, y) return -0.06 + 0.12 * gn(x, y) end, length={20, 60}, coverage=3.5, medium=0.18})
+
+--@ chunk 8 · clock 1620
+
+wait(24*60)
+moundtop = function(x) return 510 - 22 * math.exp(-((x - 318) / 120)^2) - 4 * math.exp(-((x - 250) / 40)^2) + 3 * gn(x, 0) end
+moundm = below(moundtop):roughen(1.2, 10, 6, 1.2) * mask(function(x, y) return 1 - smoothstep(505, 528, y) end)
+work(moundm, {hand="body", color=function(x, y) return mix("#4d4836", "#3b382b", smoothstep(488, 525, y)) end,
+  angle=function(x, y) return 0.25 * math.sin((x - 318) / 60) end, length={10, 30}, coverage=3.2, medium=0.18, hug=false})
+
+--@ chunk 9 · clock 3060
+
+local function stone(c, r, s, yaw, roll, cuts)
+  local b = body.ellipsoid(c, r):turn(c, yaw or 0, 0, roll or 0):rough(0.16 * math.max(r[1], r[2]), 0.7 * math.max(r[1], r[2]), s):rough(0.05 * math.max(r[1], r[2]), 0.25 * math.max(r[1], r[2]), s + 7)
+  for i, k in ipairs(cuts or {}) do
+    b = b:cut({c[1] + k[1] * r[1], c[2] + k[2] * r[2], c[3] + k[3] * r[3]}, k, s * 10 + i, 3)
+  end
+  return b
+end
+u1 = stone({230, 484, 0}, {17, 44, 17}, 1, 0.3, 0.14, {{-0.9, -0.3, 0.3}, {0.1, -0.97, 0.2}, {0.8, 0.3, 0.5}})
+u2 = stone({302, 478, 8}, {24, 42, 21}, 2, -0.3, -0.05, {{0.85, 0.1, 0.5}, {0.05, -0.98, 0.2}, {-0.8, 0.2, 0.5}})
+u3 = stone({404, 480, -4}, {22, 42, 20}, 3, 0.4, 0.14, {{0.9, -0.4, 0.2}, {-0.1, -0.97, 0.2}, {-0.85, 0.1, 0.4}})
+cap = stone({318, 416, -6}, {132, 25, 48}, 5, 0.15, -0.06, {{0.1, 0.9, 0.1}, {0.95, -0.2, 0.3}, {-0.7, -0.7, 0.2}, {0.1, -0.95, 0.3}})
+f1 = stone({180, 506, 25}, {20, 12, 14}, 6, 0.5, 0, {{0, -0.9, 0.4}})
+f2 = stone({462, 510, 18}, {15, 10, 12}, 8, -0.4, 0.2, {{0.3, -0.9, 0.3}})
+f3 = stone({526, 528, 30}, {8, 5, 7}, 9, 0.2, 0, {})
+dol = u1 + u2 + u3 + cap
+df = form{ {dol, dist=0.3}, {f1 + f2 + f3, dist=0.25},
+  light={from={0.8, -0.5}, front=-0.35, ambient=0.3, penumbra=0.1} }
+stn = noise{seed=41, octaves=4, period=26}
+stonecol = function(x, y, lo, hi)
+  local c = mix(lo, hi, smoothstep(0.0, 0.9, df:value(x, y)))
+  return mix(c, "#5a5344", 0.2 * stn:at01(x, y))
+end
+ground_clip = above(function(x) return moundtop(x) + 6 end):soften(2) + mask(function(x, y) return y < 500 and 1 or 0 end)
+stonesil = df:silhouette{parts={1, 2}, soft=0.4}:roughen(0.9, 16, 12, 0.6) * ground_clip
+work(stonesil, {hand="body", tool="flat 5", color=function(x, y) return stonecol(x, y, "#2a2823", "#3a362f") end,
+  angle=df:field("across"), length={10, 30}, coverage=5, load=1, medium=0.12, clip=stonesil})
+blend(stonesil, {angle=df:field("across"), length={8, 20}, clip=stonesil})

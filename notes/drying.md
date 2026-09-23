@@ -283,7 +283,14 @@ Leveling and pinhole closing see different neighbors, so the pictures
 differ by rounding-level amounts (under 1e-3 reflectance in the test above).
 Stages and times match.
 
-Evidence: `study_time` barely changes. Its largest change is at the tops
-of the rigger hooks in the tacky panel, and most of it comes from the tip
-fixes (notes/tip.md). `notes/drying/r3fix_hooks_before_after.jpg` shows
-them at 5× (before above, after below).
+Evidence (1000px `study_time`): 334 pixels change by more than 2 of 255
+levels and 80 by more than 8, nearly all at the tops of the hog-flat hooks
+in the next-day panel (rows 150–200, x 820–980). Every stroke in the study
+is blunt, so this is the drying fix alone. After three waits (30 min, 2.5 h
+and 21 h), the light field's films keep the thickness they were laid at
+instead of being re-judged without their set neighbors. A few pixels are
+at a different stage when the day-after blend works over them, and those
+pixels come out a little lighter (mean +3.5 levels where changed). The
+study's stage assertions still hold. The change is invisible at 1:1:
+`notes/drying/r3fix_hooks_before_after.jpg` shows the hooks at 5× (before
+above, after below).

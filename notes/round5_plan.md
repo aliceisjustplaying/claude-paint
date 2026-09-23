@@ -32,3 +32,14 @@ detail (especially foreground); worst defect (named).
 Big tool work (envelope growth for trees/spruces/rocks/figures, paint that
 warns about open paint, painter-shaped masks, ground research check,
 spectral) is split into single-defect fixes the loops pull in.
+
+## Sketchbook rules (so craft raises quality instead of freezing it)
+1. Every entry states its ceiling ("gets a readable silhouette; still
+   chevron-regular"): recipes are floors to beat, not targets.
+2. Entries earn their place: kept only if the critic's score on that axis
+   rose when used; beaten entries are replaced, not kept beside the new one.
+3. Principles before recipes.
+4. Pitfalls are permanent (they only prevent bad results).
+5. It opens with: "the best so far, not the best possible; if a passage
+   still reads digital, try something new and record it if it scores
+   better."

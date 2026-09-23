@@ -137,7 +137,38 @@ they only prevent bad results.
 
 *Ceiling:* oaks come out as umbrella/savanna crowns or "broccoli"; spruce tiers as regular chevrons; field trees as identical balls; wood interiors as flat black masses. No painter has yet drawn a tree with its structure, only built one from parameters.
 
-**Spruces (the stock generator gives a forest spruce with a bare trunk).**
+**Firs from a drawing: `fir{}` and `fir_wood{}` (use these before hand-building a spruce).**
+Draw the silhouette as an `outline{}` (apex, flanks, the crown's base) and
+`fir{envelope=o, foot={x, y}, habit="spire"|"old"|"young"|"storm", seed=}` grows
+a spruce into it: uneven whorls, gaps in runs, dead and broken lower boughs, tips
+on your line. Paint it in this order [firs study, `paintings/lua/firs.lua`]:
+1. `work(f:needles(), {hand="hatch", tool="round 1.8", length={3, 7}, coverage=2.4,
+   clip=f:needles(), angle=...})`, dark `#1c2621`→`#25302a` down the tree. Use a
+   **continuous** angle, `1.57 + 0.5*clamp((ax - x)/12, -1, 1)`. An angle that flips
+   at the stem leaves a pale seam down the tree at 3200.
+2. Boughs with a rigger 1.2 (`f.boughs`, dead ones `#6a655d`) and
+   `f:paint(brush("rigger", 0.6), {color="#77716a", kind="twig"})`. Stroke the stem
+   only below `f.crown_base - f.tier`; a full-length stem stroke reads as a pale line.
+3. `f:paint(brush("round", f.hatch), {color="#18211d", lit={0, 0.5}})`, then
+   `#34402f` for `lit={0.5, 0.7}`, then `#667052` with a brush 0.8x for
+   `lit={0.7, 1}, every=6`. These are the short hatched strokes, hung from each
+   bough, lit by the sun you passed (`sun=`).
+
+Draw each envelope yourself: lopsided, a torn flank, a notch for a lost top. A
+symmetric envelope still gives a Christmas tree. `old` at 400 units reads as
+curtain branches hanging off a crooked stem, `young` as a dense cone to the snow.
+
+A wood: `wood = fir_wood{skyline=outline{pts=TOP, open=true, char="soft",
+lobe=14}, foot=516, depth=4, count=13}`. Paint rows far to near. Row r's needles
+are `mix(dark, air, 0.62*wood:haze(r))` with air a shade darker than the low sky
+(`#a4a7a1`); 0.95 went milky. Paint trunks with a rigger (`wood:trees(r)`,
+`f.leader.pts`) and the hatched strokes (`wood:paint(b, r, {...})`) on rows 1–2
+only. Between rows 3 and 2, lay the floor: `wood:floor():roughen(7, 22, seed,
+3)` in `#2a302d`→`#555c5a` down to the foot, `hug=false`. Use `wood:haze(r)`,
+not `wood.rows[r].haze`, inside color functions: `wood.rows` builds every tree
+(14 s).
+
+**Spruces by hand (the older recipe; `tree{habit="spruce"}` gives a forest spruce with a bare trunk).**
 `tree{habit="spruce"}` is a tall forest tree; `years=14` gave a lollipop [r4 near]. What
 worked is a spruce hand of your own: an axis, then per tier a left and a right branch that
 droops and lifts at the tip, longer toward the foot, plus a shorter foreshortened branch

@@ -1,5 +1,5 @@
--- easel session "easel4_green": a painting replayed chunk by chunk.
---   easel run paintings/lua/easel4_green.lua [--width 3200]
+-- easel session "l1_green": a painting replayed chunk by chunk.
+--   easel run paintings/lua/l1_green.lua [--width 3200]
 -- Each "--@ chunk" line starts one chunk as it was run at the easel (clock = painting minutes).
 
 --@ chunk 1 · clock 0
@@ -324,19 +324,53 @@ print(#tufts, "tufts", n, "blades", k, "flowers")
 --@ chunk 17 · clock 9300
 -- the village farther into the morning haze
 glaze(VILLAGE:grow(1.5):soften(1), {color=sk:airlight(706), coats=0.35, pigment="semi"})
--- single field trees and their shadows in the near valley, right
-local tb = brush("round", 1.6)
-local trees = {{590, 420}, {602, 424}, {842, 452}, {905, 440}, {760, 402}, {690, 385}, {955, 470}, {520, 398}, {880, 404}, {866, 407}, {728, 362}, {415, 404}, {60, 395}, {98, 402}}
-for i, t in ipairs(trees) do
-  local x, y = t[1], t[2]
-  local r = (1.5 + (y - 340) * 0.07) * rand(0.75, 1.3)
-  local sh = ellipse(x + r*1.3, y + 1, r*1.1, r*0.35)
-  work(sh, {hand="detail", tool="round 1.2", length={2, 4}, coverage=2, angle=0, color_over={shift={-0.08, -0.005, -0.015}}, medium=0.3})
-  local cr = ellipse(x, y - r*0.9, r*0.85, r*0.95):roughen(r*0.2, r*0.7, i, 0.5)
-  work(cr, {hand="hatch", tool="round 1.2", length={1.5, 3}, coverage=2.6, angle=function(px,py) return 2.2*fnz(px*5,py*5) end, color="#34462a", medium=0.25})
-  local lit = cr * ellipse(x - r*0.35, y - r*1.25, r*0.55, r*0.55)
-  work(lit, {hand="detail", tool="round 1", length={1, 2.5}, coverage=2, angle=0.5, color="#62783c", medium=0.25})
+-- field trees in loose groups along the hedges: each crown drawn, sizes and habits varied, one soft shadow per group
+local groups = {{588,421,4},{846,452,3},{908,441,1},{760,402,2},{690,385,3},{524,398,1},{872,405,5},{728,362,2},{415,404,2},{70,398,4},{960,470,2}}
+local tb = brush("rigger", 0.7)
+FIELDTREES = nil
+for gi, gp in ipairs(groups) do
+  local gx, gy, cnt = gp[1], gp[2], gp[3]
+  local p = w:to_ground(gx, gy); local Z = p and p[3] or 800
+  local hazet = clamp(w:aerial(Z) * 0.9, 0, 0.8)
+  local air = sk:airlight(gx)
+  local base = 1.3 + (gy - 340) * 0.06
+  local crowns, lits, sh = nil, nil, nil
+  for k = 1, cnt do
+    local x = gx + (k - (cnt + 1) / 2) * base * rand(1.0, 1.9) + randn(0, base * 0.3)
+    local y = gy + randn(0, base * 0.15)
+    local r = base * rand(0.55, 1.35)
+    local tall = rand(0, 1) < 0.3 and rand(1.5, 2.1) or rand(0.85, 1.15)   -- some narrow and tall, most broad
+    local rx, ry = r * (tall > 1.4 and 0.6 or rand(0.85, 1.2)), r * tall
+    local cy = y - r * 0.5 - ry
+    local pts = {}
+    local np = 7
+    for j = 0, np - 1 do
+      local a = j / np * 2 * math.pi + randn(0, 0.2)
+      local rr = rand(0.75, 1.15)
+      pts[#pts + 1] = {x + math.cos(a) * rx * rr, cy + math.sin(a) * ry * rr * (math.sin(a) > 0 and 0.8 or 1)}
+    end
+    local cm = outline{pts=pts, closed=true, char="soft", lobe=math.max(1.2, r * 0.45), amount=0.9, seed=gi * 10 + k}:mask()
+    crowns = crowns and (crowns + cm) or cm
+    local lm = cm * ellipse(x - rx * 0.45, cy - ry * 0.4, rx * 0.8, ry * 0.75):soften(r * 0.3)
+    lits = lits and (lits + lm) or lm
+    -- a bit of trunk under the broad ones
+    if tall < 1.4 and r > 3 then
+      tb:reload(mix("#3a332b", air, hazet), 0.7)
+      tb:stroke({{x, y + 0.5}, {x + randn(0, 0.3), cy + ry * 0.6}}, {pressure={0.6, 0.3}})
+    end
+    local s = ellipse(x + r * 0.6 + rx * 0.4, y + 0.6, rx * rand(0.9, 1.4), math.max(0.8, r * 0.18))
+    sh = sh and (sh + s) or s
+  end
+  sh = (sh:roughen(base * 0.2, base, gi, base * 0.3)) - crowns
+  work(sh, {hand="detail", tool="round 1", length={2, 5}, coverage=1.6, angle=0, hug=false, medium=0.3,
+    color_over={shift={-0.05 * (1 - hazet), -0.003, -0.012}}})
+  local dk = mix(mix("#2d3627", "#3a3d2b", rand(0, 1)), air, hazet)
+  local lt = mix(mix("#58603e", "#646a45", rand(0, 1)), air, hazet)
+  work(crowns, {hand="hatch", tool="round 1.1", length={1.2, 3}, coverage=2.6, angle=function(px, py) return 2.2*fnz(px*5, py*5) end, color=dk, medium=0.25, clip=crowns:grow(0.6)})
+  work(lits, {hand="detail", tool="round 0.9", length={1, 2.2}, coverage=1.8, angle=function(px, py) return 0.6 + 1.2*fnz(px*6, py*6) end, color=lt, medium=0.25, hug=false})
+  FIELDTREES = FIELDTREES and (FIELDTREES + crowns) or crowns
 end
+print("field trees", FIELDTREES:area())
 -- a pale lane winding down to the river
 local lp = {}
 for _, c in ipairs({{296, 460}, {322, 440}, {312, 418}, {340, 398}, {400, 381}, {446, 366}, {478, 354}}) do
@@ -483,11 +517,11 @@ local top = STONE * fs:lit{parts={1}, soft=0.1} * mask(function(x, y) return smo
 work(top, {hand="scumble", tool="round 2", length={3, 8}, coverage=2, angle=fs:field("across"), medium=0.35, clip=STONE,
   color=function(x, y) return mix("#a39a86", "#c4b89c", smoothstep(0.3, 0.9, fs:value(x, y) or 0.5)) end})
 
---@ chunk 21 · clock 64733.267578125
+--@ chunk 21 · clock 64922.8408203125
 local cs = (ellipse(760, 462, 230, 42):roughen(22, 90, 5, 18) + ellipse(560, 404, 120, 16):roughen(10, 60, 6, 10)) * below(function(x) return HZ + 40 end) - HILL - WOOD
 glaze(cs:blur(18), {color="#55655a", coats=0.16, pigment="transparent"})
 
---@ chunk 22 · clock 100524.224609375
+--@ chunk 22 · clock 100747.1259765625
 -- long, curving blades through the dark foreground band: sunlit tips and dark stalks, uneven lengths
 local g = brush("rigger", 0.8)
 local gn = noise{seed=81, octaves=3, period=90}
@@ -526,5 +560,63 @@ for i = 1, 40 do
 end
 print(n, "blades")
 
---@ chunk 23 · clock 100524.224609375
+--@ chunk 23 · clock 100747.1259765625
+-- the plain: fuse the dash-rows a little and cut the sugary greens with a thin muted veil
+OAKALL = oak:mask():grow(2) + CROWN:grow(3)
+local keep = HILL:grow(1) + WOOD:grow(1) + FIELDTREES:grow(1.5) + VILLAGE:grow(1.5) + OAKALL + FIG:grow(3) + STONE:grow(3)
+PLAIN = below(function(x) return HZ + 1 end) - keep
+local vn = noise{seed=91, octaves=3, period=60, stretch={0, 3}}
+work(PLAIN, {hand="glaze", tool="filbert 4", length={6, 16}, coverage=1.6, angle=function(x, y) return 0.02*math.sin(x/120) end, medium=0.75, load=0.35, clip=PLAIN,
+  color_over=function(x, y, under)
+    local s = 255 * (under.value ^ (1/2.2))
+    local muted = mix(under, rgb(s, s, s), 0.4)
+    return mix(muted, "#7b7a5a", 0.12 + 0.06*vn(x, y))
+  end})
+print("plain", PLAIN:area())
+
+--@ chunk 24 · clock 100747.1259765625
+-- mute the sugary yellow-green of the near hill toward an olive earth green, heaviest where it is lit
+local hn2 = noise{seed=93, octaves=3, period=120}
+local hillg = (HILL - FIG:grow(2) - STONE:grow(2) - OAKALL) * mask(function(x, y) return 0.75 + 0.25*hn2:at01(x, y) end)
+glaze(hillg, {color="#6d6a4c", coats=0.32, pigment="semi"})
+-- quiet the cumulus: a veil of the sky's own blue-gray over the clouds, so they sit back into a calm sky
+local cm = (cl:mask{alpha={0.25, 0.9}} * above(function(x) return HZ - 30 end) - OAKALL):blur(8)
+glaze(cm, {color="#aeb6bd", coats=0.4, pigment="semi"})
+print("ok")
+
+--@ chunk 25 · clock 111626.87890625
+-- the wanderer: a hat brim, a head under it, a lit left flank of the coat, a staff; so he is a man, not a hooded blob
+local x, y, k = 348, 488, 1.3
+local function F(dx, dy) return {x + k*dx, y + k*dy} end
+local sb = brush("rigger", 0.7); sb:load("#3a3128", 0.9)
+sb:stroke({F(-5.5, -22), F(-7.5, -10), F(-9.5, 1)}, {pressure={0.7, 0.5}})             -- staff
+local brim = brush("round", 1.2); brim:load("#1e1d1c", 0.9)
+brim:stroke({F(-3.6, -38.6), F(0, -38.9), F(3.8, -38.4)}, {pressure={0.8, 0.7}})         -- hat brim
+local hair = brush("round", 1.2); hair:load("#4a3a2c", 0.8)
+hair:touch(F(-0.6, -36.4)[1], F(0, -36.4)[2], {pressure=0.6, drag={0, 1.2}})           -- nape and hair under the hat
+local collar = brush("round", 1); collar:load("#6b6454", 0.7)
+collar:stroke({F(-3.2, -33.2), F(-0.8, -34.2), F(1.6, -33.6)}, {pressure={0.5, 0.3}})   -- collar catching the light
+local lit = fig:band(1.4, 0.5) * FIG * rect(0, 0, x - 1.5, 714)
+work(lit, {hand="detail", tool="round 0.8", length={1.5, 4}, coverage=1.8, medium=0.15, angle=1.5, color="#5d6152", clip=FIG})
+local fold = brush("rigger", 0.5); fold:load("#454a44", 0.7)
+fold:stroke({F(-1.5, -30), F(-2.2, -20), F(-2.6, -13)}, {pressure={0.4, 0.2}})          -- a fold down the coat's back
+fold:stroke({F(1.8, -28), F(2.4, -18)}, {pressure={0.35, 0.15}})
+-- the boulder: break its flat pale face with a shadowed lower plane, a second fracture and weather streaks
+local lower = STONE * mask(function(px, py) return smoothstep(478, 498, py + 6*math.sin(px/9)) end)
+glaze(lower, {color="#5d5446", coats=0.35, pigment="transparent"})
+local face = STONE * mask(function(px, py) return smoothstep(452, 470, py) * (1 - smoothstep(470, 490, py)) end)
+local wn = noise{seed=95, period=5, stretch={1.5, 4}}
+work(face * mask(function(px, py) return wn:at01(px, py) > 0.6 and 1 or 0 end), {hand="glaze", tool="round 1.2", length={3, 7}, coverage=1.6, angle=1.45, medium=0.8, clip=STONE,
+  color_over={shift={-0.07, 0, 0.004}}})
+local cr = brush("rigger", 0.6); cr:load("#34302b", 0.8)
+for _, c in ipairs({{{392,466},{405,463},{420,466},{433,463}}, {{440,462},{446,472},{443,482},{448,492}}, {{384,478},{398,480}}}) do
+  cr:stroke(c, {pressure={0.65, 0.2}, ramps={0.1, 0.4}, shake=0.8})
+end
+local ml = brush("round", 1.4)
+for i = 1, 26 do
+  local px = rand(380, 475); local py = 500 + rand(-4, 3)
+  if STONE:at(px, py) > 0.5 then ml:reload(i % 2 == 0 and "#4f5a38" or "#6b6a46", 0.6); ml:touch(px, py, {pressure=0.5, drag={rand(1, 3), -0.5}}) end
+end
+
+--@ chunk 26 · clock 118428.42529296875
 wait(24*60); varnish{color="#e6d3a4", coats=0.3, vary=0.1}; relief()

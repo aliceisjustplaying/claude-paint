@@ -49,4 +49,6 @@ Then stop and evaluate with the user.
 - workflow merged (fast-forward, 47d333b): one scheduler (sched::run_ordered), crop-aware stipple/aim, per-pile forked RNG; 50 tests pass.
 - monk2 archived to paintings/archive/, monk figure removed.
 - Review (gpt-6-astra, medium): 13 distinct findings (notes/review/). review-sched hit a content filter at the very end but had written its report. Three fixers launched: fix-optics, fix-sched, fix-form.
+- All review fixes merged (fix-sched, fix-optics, fix-form); 66 tests pass.
+- Amnesia round 2 launched: winter, coast, mountains (same themes as round 1 for comparison); worktrees ../claude-paint-amnesia-<theme>, no existing paintings, brief in notes/amnesia_brief.md.
 - (updated as work lands)

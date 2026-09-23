@@ -264,23 +264,107 @@ renders change with the new engine (drying levels films differently), but
 each still replays byte-identically: live `save` and `easel run` gave
 identical PNGs, and `check` matched.
 
+## Round 3: the whole engine in Lua
+
+After merging main (tip, fixes-paint, green, atmosphere, scene, drying),
+the easel binds every new stream, keeping everything painter-shaped and
+immutable:
+- **Scene** (`crates/easel/src/world.rs`):
+  - `world{horizon, eye, fov, sun={azimuth, elevation}, ground=fn(X, Z),
+    water={level, ripple}}`, with spots (`w:spot`, `w:spot_at`,
+    `s:p/m/size`) and perspective helpers (`height`, `to_ground`,
+    `project`, `scale_at`, `aerial`, `shadow_angle`, `sun_canvas`,
+    `ribbon`, `line`, `recede`);
+  - `w:place` and `w:proxy` return a new world (it is kept as a recipe and
+    rebuilt, which is cheap until `w:view()` traces it);
+  - `v = w:view()` gives `at`, `mirror`, `sky`/`land`/`water`/`shadows`/
+    `contact`/`reflections`/`bodies_mask` masks, and `v.form`, which is
+    the whole form API over the view's bodies. `FormU` now holds any
+    "form holder", so a view's form reuses every form method.
+- **Air:**
+  - `w:sky{}` and `w:clouds{}` can be passed straight to `color=`: the
+    engine's threads read them natively, with no grid;
+  - clouds also give `alpha`, `lit`, `glow`, `soft` and
+    `mask{alpha, lit, shade}`;
+  - `haze{}`, and `w:ranges{}` layers with `crest`, `mask`, `haze`, `z_at`
+    and `ridge` (a solid for `form{}`).
+- **Noise:** `noise{kind=ridged|billow, warp, stretch}` (the plain
+  `noise{}` stays the same `Fbm`, so older sessions replay unchanged),
+  `worley{}` and `uneven()`. A noise passed to `coverage=`/`load_at=` is
+  read natively.
+- **Growth:** beech, alder and willow habits, `years`, and
+  `t:foliage{sun, winter, leafing overrides}`, which returns clumps back
+  to front plus `mask`, `lit`, `gaps` and `envelope`; `sward{}` returns
+  tufts with their blades and flowers.
+- **Color:**
+  - `canvas{palette=...}` and `palette(name)` for the greens palettes, and
+    `pal:with{...}`;
+  - `shift()`;
+  - `color_over` in `work` and `stipple`: `{shift={dL, da, db}}` is native
+    (relative to whatever each stroke lands on), and `function(x, y,
+    under)` is sampled on the 2-unit grid with `under` read from the
+    canvas before the pass;
+  - `hug`, stipple `fade`.
+- **Pointed tips:** the `point=` tool option, `b:mark_width(p)` and
+  `b:pressure_for(w)`.
+
+One fix on the way: the field grid used to ask painter functions about
+the canvas's own edge (x = 1000). A world's `to_ground` returns nil there,
+so strokes centered at the edge took the "far away" color, which showed as
+a pale band along the meadow's right side and bottom. Edge nodes now
+sample just inside the canvas.
+
+**The meadow (`paintings/lua/meadow.lua`), judged.** I painted it live in
+7 chunks. What works:
+- the sky is the world's own (Rayleigh blue over a paler horizon);
+- the ranges are hazed from their distance;
+- the ground pales into air toward the horizon;
+- the beech is grown and leafed with its lit side toward the sun, sits in
+  the world's perspective (18 m tall at 82 m) and casts a proxy shadow on
+  the grass;
+- about 36,000 grass blades are stroked with a pointed rigger and recede
+  in scale.
+
+What doesn't, yet:
+- the clouds are soft veils, because broad strokes and the blender melt
+  them; they need a second pass of light touches on `cl:mask{lit=...}`;
+- the grass is even, with no lush and thin patches in light and shade (use
+  the sward's `patch` and a value pass);
+- flowers are too small to read at 1000px;
+- the trunk barely shows;
+- the lower crown shows the beech's level spray layering a little too
+  regularly;
+- bare-ground flecks remain (the coverage issue).
+
+Two feel notes. The perspective helpers catch scale mistakes at once: my
+first beech spot was 11.5 m away, where 18 m is 1,671 units, and `print(s)`
+showed it before anything was painted. And `color_over` with a b shift
+turns a green shadow teal quickly; −0.012 is plenty.
+
+**Costs:**
+- `w:view()` 0.3–0.5 s, `w:sky{}` about 0.2 s, clouds 1–4 s;
+- the meadow's tufts (about 45,000 tables in globals) cost 0.1 s of
+  rollback bookkeeping per chunk, reaching 0.7 s by the last chunk; keep
+  big lists `local` when later chunks don't need them.
+
 ## Next
 
-1. **Form, deeper.** `Form::simplify` (the painter's squint over normals),
+1. **Rollback cost for big heaps.** Snapshot only tables that changed since the last chunk (a write barrier via proxies), or treat tables produced by `sward{}`/`tree{}` as frozen.
+2. **Form, deeper.** `Form::simplify` (the painter's squint over normals),
    lit-rim helpers for contre-jour, and a gallery of `rocks.rs`-style
    motifs rewritten in Lua.
-2. **Drying, felt.** `wait` now runs the engine's drying model (merged
+3. **Drying, felt.** `wait` now runs the engine's drying model (merged
    from main at the end of round 2) and `drying(x, y)` reports the stage;
    the looks could show it (a `--mode drying` map of open/tacky/dry).
-3. **Detail at full resolution, live.** A session holding a `--crop`
+4. **Detail at full resolution, live.** A session holding a `--crop`
    window at 3200px, resumed from a checkpoint of the chunks so far,
    would let a painter work Friedrich's small particulars at their real
    grain. The engine's Frame and crop machinery already supports it.
-4. **Rollback, last gaps.** Coroutines; a restore that rebuilds changed
+5. **Rollback, last gaps.** Coroutines; a restore that rebuilds changed
    tables in their original insertion order, so `pairs` order holds.
-5. **Motif helpers in Lua.** Tufts, needles and grass as small gesture
+6. **Motif helpers in Lua.** Tufts, needles and grass as small gesture
    libraries in Lua (`paintings/lua/lib/`), loaded by a sandboxed
    `use "trees"` whose text is inlined into the log so replay stays
    self-contained.
-6. **Time-lapse.** `frames on` already writes one JPEG per chunk; add
+7. **Time-lapse.** `frames on` already writes one JPEG per chunk; add
    `easel frames --video` via ffmpeg.

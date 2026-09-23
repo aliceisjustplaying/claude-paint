@@ -43,6 +43,9 @@ impl GroundGrid {
     }
 }
 
+/// Water: its level, and its ripple (slope, across, deep, seed).
+type WaterSpec = (f32, Option<(f32, f32, f32, u32)>);
+
 /// How a world was made: rebuilt whole when a body is placed.
 #[derive(Clone)]
 struct Recipe {
@@ -51,7 +54,7 @@ struct Recipe {
     eye: f32,
     fov: f32,
     ground: Option<Arc<GroundGrid>>,
-    water: Option<(f32, Option<(f32, f32, f32, u32)>)>,
+    water: Option<WaterSpec>,
     sun: Sun,
     visibility: Option<f32>,
     backdrop: Option<f32>,

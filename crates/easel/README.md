@@ -34,7 +34,10 @@ $E run paintings/lua/dusk.lua --width 3200    # the full render → out/lua/dusk
 `paintings/lua/example.lua` is a whole small study made this way: an evening
 sky, a distant ridge, mist and a spruce on a knoll, in ten chunks.
 `paintings/lua/rocks.lua` models a boulder and a mountain range as solids
-and paints them from their light and shadow. Read both before you start.
+and paints them from their light and shadow. `paintings/lua/meadow.lua` is
+a daylight landscape built on a world: a sky and clouds for its sun, hazed
+ranges, a beech in leaf casting its shadow and a meadow of grass tufts.
+Read all three before you start.
 
 ## The loop
 
@@ -114,6 +117,11 @@ and paints them from their light and shadow. Read both before you start.
 ```lua
 canvas{style="friedrich", aspect=1.4, seed=7}   -- the first chunk; returns H
 -- styles: "friedrich" (after 1820), "friedrich_early". Sets W, H and pal.
+canvas{style="friedrich", palette="friedrich_1820_greens", aspect=1.5, seed=11}
+-- palettes: friedrich_1820, friedrich_early, and the same with _greens (adds
+-- Prussian blue, green earth and, after 1820, Rinmann's green) for summer
+palette("friedrich_early_greens")            -- any palette by name
+pal:with{"copper green"}                     -- a rare tube for one passage
 print(pal)                                   -- the tubes
 pal:tubes()                                  -- list of tube names
 local blues = pal:only{"lead white", "pale smalt", "cobalt blue"}
@@ -133,7 +141,22 @@ smoothstep(a, b, x)  lerp(a, b, t)  clamp(x, lo, hi)
 n = noise{seed=3, octaves=5, period=260, persistence=0.5}
 n(x, y)              -- about -1..1        n:at01(x, y)  -- 0..1
 sample(x, y, r)      -- what's on the canvas there (wet paint included)
+shift(c, dL, da, db) -- the same color moved in OKLab: shift(c, -0.06, 0, -0.02) is darker, bluer
 ```
+
+### Noise and irregularity
+
+```lua
+noise{kind="ridged", seed=3, period=120}        -- kinds: fbm (default), ridged (crests), billow (heaps)
+noise{period=200, warp={80, 25}}                -- domain warp: {period, amount, twice?}: folds, wisps
+noise{period=150, stretch={0.2, 4}}             -- stretched 4x along angle 0.2: wind, bedding
+cells = worley{seed=2, period=30}               -- cells: stones, cracked mud, clumps
+local f1, f2, edge, r = cells:at(x, y)          -- edge is 0 on a cell wall; r is 0..1 per cell
+uneven(9, 120, 860, 0.6, 0.4, 5)                -- 9 positions from 120 to 860, spaced by hand:
+                                                -- irregular gaps, clumped (posts, trees, boats)
+```
+
+A noise can be passed straight to `coverage=` or `load_at=` (as 0..1).
 
 ### Masks
 
@@ -176,7 +199,13 @@ b:fullness()                 -- paint left, 0..1
 b:stroke({{100, 500}, {300, 520}, {500, 510}},
   {pressure={0.9, 0.3}, ramps={0.05, 0.4}, orient="across", shake=1, swell={1, 1.3, 0.8}, clip=m})
 b:touch(x, y, {pressure=0.6, drag={1, 0}, twist=0.2, angle=0.3, clip=m})
+b:mark_width(0.4)            -- round and rigger tips are pointed: width of a mark at this pressure
+b:pressure_for(0.5)          -- the pressure for a 0.5-unit line
+brush{kind="round", width=3, point=0.5}                -- a blunter point (1 = sharp, default)
 ```
+
+A flick that ends in a hairline is a stroke whose pressure falls to 0:
+`b:stroke({root, mid, tip}, {pressure={0.75, 0}, ramps={0.1, 0.75}})`.
 
 A brush keeps its paint across strokes and chunks: several strokes from one
 load run dry naturally. `orient` is `"across"`, `"along"` or a fixed angle.
@@ -195,7 +224,9 @@ conifers, grass), `glaze` (thin veils; `medium` 0.6–0.95), `scumble`,
 
 | option | meaning |
 |---|---|
-| `color` | required: a color or `function(x, y)` returning one: the look you want on the canvas |
+| `color` | a color, `function(x, y)` returning one, or a sky or clouds (`color=s`): the look you want on the canvas |
+| `color_over` | instead of `color`: relative to what's under each stroke. `{shift={dL, da, db}}` (e.g. a shadow: `{shift={-0.06, 0, -0.012}}`), or `function(x, y, under)` sampled every 2 units with `under` = the canvas there before the pass |
+| `hug` | `true` (default): strokes reach a mask's edges; `false` lets edges thin out |
 | `angle` | stroke direction, a number or `function(x, y)` |
 | `tool` | `"filbert 8"`, `{kind=, width=}` or a brush |
 | `length` | `{min, max}` stroke length in units |
@@ -214,24 +245,63 @@ conifers, grass), `glaze` (thin veils; `medium` 0.6–0.95), `scumble`,
 blend(mask, {angle=0})                    -- = work(mask, {hand="blend", ...})
 stipple(mask, {width=2.4, color="#cfccc2", coverage=function(x, y) ... end,
   pressure={0.5, 0.9}, dips={16, 0.35, 0.7}, aim=false, medium=0.6,
-  drag={1, 0}, twist=0.3, cluster={0.2, 5}, feather=0.6, clip=false})
+  drag={1, 0}, twist=0.3, cluster={0.2, 5}, feather=0.6, clip=false,
+  fade=1})                                -- fade: contrast falls where coverage thins; 0 for specks
+                                          -- (stars, snowflakes); color_over works here too
 glaze(mask_or_nil, {color="#8a6a3a", coats=0.4, pigment="transparent"})   -- or semi, opaque, varnish
 ```
 
-### Trees
+### Trees and foliage
 
 ```lua
-t = tree{habit="spruce", x=310, y=500, height=210, seed=4}  -- oak, dead_oak, birch, spruce
+t = tree{habit="beech", x=700, y=336, height=236, seed=5}
+-- habits: oak, dead_oak, birch, spruce, beech, alder, willow; years= to grow older or younger
 for _, l in ipairs(t.limbs) do
   -- l.pts {{x,y},...}, l.w (width per point), l.z, l.order (0 trunk, 1 limbs, ...),
   -- l.parent (index), l.at, l.dead, l.dead_from, l.broken, l.root
 end
 t.tips   t.bounds   t:mask()
+leaves = t:foliage{sun={-0.6, -0.7, 0.35}, seed=5}   -- sun: toward it (x right, y down, z to you)
+-- winter=true: bare; also years, clump, spacing, squash, droop, fill, ragged, bare, tip, spray
+leaves:mask()   leaves:lit()   leaves:gaps(6)   leaves:envelope(6)   -- masks
+leaves.clumps   -- back to front: {x, y, z, r, squash, tilt, fill, lit, shade, limb, mass}
 ```
 
-The skeleton says how the tree grew. Painting it is up to you: stroke
-the limbs with brushes sized by `l.w`, build foliage masks from
-`ribbon(l.pts, widths)`, and so on.
+The skeleton says how the tree grew, and the foliage where its leaves are
+and how the sun reaches them. Painting them is up to you. A worked example
+(from meadow.lua):
+
+```lua
+local trunk, limb, twig = brush("round", 3.5), brush("round", 1.4), brush("rigger", 0.6)
+for i, l in ipairs(t.limbs) do
+  local b = (l.order == 0) and trunk or ((l.w[1] > 0.9) and limb or twig)
+  if i % 5 == 1 or b:fullness() < 0.3 then b:reload("#3e372f", 0.9) end
+  b:stroke(l.pts, {pressure={0.85, 0.2}, ramps={0.03, 0.5}})
+end
+local turn = noise{seed=7, period=12}      -- leaf strokes turn every which way, not in rows
+local way = function(x, y) return 2.2 * turn(x, y) end
+work(leaves:mask(), {hand="hatch", tool="round 1.6", length={3, 7}, coverage=2.6, angle=way, color="#2c3a22"})
+work(leaves:lit() * leaves:mask(), {hand="hatch", tool="round 1.3", length={2, 5}, coverage=2.2, angle=way, color="#6a843b"})
+```
+
+### Meadows
+
+```lua
+tufts = sward{region=below(function(x) return HZ + 40 end), horizon=HZ, near=H, height=30,
+  flowers=0.05, seed=4, wind={lean=0.15, gust=0.2, period=160, seed=2}}
+-- also spacing, thin, smallest, blades={lo, hi}, fan, curl, kinds, patch, patch_size
+-- tufts far first: {x, y, scale, height, lean, lush, blades={{foot, ctrl, tip}, ...}, flower={x, y, r, kind}}
+local g = brush("rigger", 0.7)
+for i, t in ipairs(tufts) do
+  if i % 4 == 1 then g:reload(i % 8 == 1 and "#7a8f3c" or "#5e7a30", 0.7) end
+  for _, bl in ipairs(t.blades) do
+    g:stroke(bl, {pressure={clamp(0.25 + 0.5 * t.scale, 0.2, 0.9), 0}, ramps={0.05, 0.7}})
+  end
+end
+```
+
+Tufts shrink and thin toward the horizon and stop where they'd be smaller
+than `smallest`: paint the far meadow as tone underneath first.
 
 ### Form: solids, light and shade
 
@@ -280,6 +350,89 @@ Place solids in depth with z: a ridge's face leans toward you at its foot,
 so set its `z0` back (e.g. `z0=-600`) or it will hide the rocks in front of
 it. A form costs 28 bytes per pixel (20 MB at 1000px, 190 MB at 3200px).
 
+### The world: camera, ground, sun, shadows, water
+
+A world is one picture's space in meters: a camera (eye height, horizon,
+field of view), the ground, water, one sun and the bodies standing there.
+Build it once. `w:place` returns a new world (keep the result).
+
+```lua
+HZ = H * 0.46
+w = world{horizon=HZ, eye=1.7, fov=50,                 -- horizon: canvas y at eye level
+  sun={azimuth=-125, elevation=38},                    -- degrees: 0 ahead (contre-jour), -90 left,
+                                                       -- 180 behind you; below 0: twilight
+  ground=function(X, Z) return 1.2*math.sin(X/40) * math.min(1, Z/60) end,   -- meters, gentle
+  water={level=-0.2, ripple={0.03, 1.4, 0.3, 7}}}      -- fills hollows below the level
+-- also view={x, y, w, h} (a panel), visibility (m), backdrop (m)
+local s = w:spot(700, 336)             -- the ground seen at a canvas point (or w:spot_at(X, Z))
+print(s)                               -- spot(x, y, units per meter, at X, Y, Z m)
+local tall = w:height(s.x, s.y, 18)    -- how tall 18 m looks standing there (units)
+local rock = body.block(s:p(0, 0.4, 0), s:size(1.3, 1.0, 1.1), s:m(0.3))   -- meters -> units
+w, stone = w:place(s, rock)            -- a body in the world (lit, shadowed, reflected)
+w = w:proxy(s, body.ellipsoid(s:p(0, 11, 0), s:size(7, 6, 6)))   -- casts a shadow but isn't painted
+                                       -- as a form: stand-in for a tree crown or a figure
+v = w:view()                           -- trace once and keep it
+v:sky()  v:land()  v:water()  v:shadows()  v:contact(0.25)  v:reflections()  v:bodies_mask{stone}
+v:at(x, y)      -- {what="sky"|"ground"|"water"|"body", body, at={X, Y, Z}, n, dist, shade, lit}
+v:mirror(x, y)  -- what calm water shows there: {body, src={x, y}, shade, fresnel, travel} or nil
+v.form          -- the bodies as a form: v.form:lit{parts={v:part(stone)}}, v.form:field("fall"), ...
+w:to_ground(x, y)  w:project(X, Y, Z)  w:scale_at(Z)  w:aerial(Z)  w:shadow_angle(x, y)  w:sun_canvas()
+w:ribbon({{-2.6, 4.5}, {-1.6, 8.6}, {-0.4, 9.7}}, 1.1)   -- a path on the ground (width m) as a mask
+w:recede({2, 6}, {0.3, 4}, 8)                             -- spots stepping away: posts, footprints
+```
+
+A shadow is the ground a little darker and bluer, stroked the way it falls:
+
+```lua
+work(v:shadows() * v:land(), {hand="body", tool="filbert 3", length={6, 16}, coverage=3,
+  angle=w:shadow_angle(s.x, s.y + 2), color_over={shift={-0.06, -0.004, -0.012}}})
+```
+
+### Sky, clouds, haze and distant ranges
+
+```lua
+sk = w:sky{haze=2.2, uneven={0.5, 30000, 5}}   -- the sky for this world's sun, as paint colors
+-- also layer={alt, thick, density, uneven, seed}, overcast=0..1, exposure, balance (adapt to the sun's color)
+cl = w:clouds{sky=sk, cell=3,                  -- meters; x right, z away, base/top altitude
+  {kind="cumulus", x=-3000, z=9000, base=1300, width=3000, height=1500, seed=4},
+  {kind="bank", x0=-2000, x1=30000, z=38000, depth=9000, base=700, top=2600, seed=4},
+  {kind="stratus", base=3500, thick=500, cover=0.35, seed=2, wind={-0.2, 2}, breaks={14000, 0.2}}}
+work(above(function(x) return HZ + 12 end), {hand="broad", color=cl, angle=0, coverage=4.5})
+cl:mask{alpha={0.3, 0.8}, lit={0.4, 0.9}}      -- lit cloud edges; shade={..} for the bellies
+sk:at(x, y)  sk:airlight(x)  cl:alpha(x, y)  cl:lit(x, y)
+
+air = haze{visibility=18000, height=800, mist={140, 6, 90, 7}}   -- mist: {top m, density, uneven m, seed}
+rs = w:ranges{near=6000, far=22000, count=2, seed=8, heights={180, 700}, kinds={"dome", "saddle"}}
+for i = #rs, 1, -1 do                          -- far to near; kinds: peak, dome, plateau, saddle, cliff
+  local l = rs[i]
+  work(l:mask() * above(function(x) return HZ + 3 end), {hand="body", length={20, 60}, angle=0.05,
+    color=function(x, y) return mix("#3f4c44", sk:airlight(x), 0.75 * l:haze(air, x, y)) end})
+end
+-- l:crest(x), l:z_at(x), l:ridge{depth=200, gully=260} (a solid for form{} to light)
+```
+
+A sky or clouds passed as `color=` is read on the engine's threads, so it
+costs nothing extra. Twilight is the same code with the sun below the
+horizon (`elevation=-4`): the sky turns to its afterglow, the Earth's
+shadow and the Belt of Venus, and the clouds catch the light from below.
+
+### A whole painting, in order
+
+1. `canvas{}`, then `w = world{...}` and `sk = w:sky{...}` (and clouds).
+2. The sky, thin, in long strokes, then `blend`; `wait(24*60)`.
+3. The distance: ranges far to near, each hazed by `l:haze`; mist
+   stippled over their feet.
+4. The ground as tone, colored by distance (`w:to_ground`, `w:aerial`).
+5. The motifs: bodies and proxies placed in the world, `v = w:view()`,
+   then shadows and contact, trees (limbs, then foliage dark to light),
+   rocks from `v.form`, meadows from `sward`.
+6. The small particulars last, with pointed brushes: twigs, blades,
+   flowers, figures.
+7. `wait(24*60); varnish(); relief()` (and `cracks{}` for an old picture).
+
+For winter, grow trees bare (`t:foliage{winter=true}` or no foliage), and
+paint snow as the ground's color with `color_over` for its blue shadows.
+
 ### Time and finishing
 
 ```lua
@@ -324,7 +477,9 @@ can edit it by hand and replay. If you do, keep the markers.
 - `look` ≈ 0.04 s, `look --dried` ≈ 0.3 s
 - replaying the example: 18–29 s at 1000px (see notes/easel.md for 3200px)
 - rollback bookkeeping ≈ 1 µs per live Lua table per chunk (a tree's 4,000
-  tables: under 5 ms)
+  tables: under 5 ms; a meadow of 9,000 tufts kept in a global: 0.1 s). Keep
+  big lists `local` when later chunks don't need them.
+- `w:view()` ≈ 0.3 s, `w:sky{}` ≈ 0.2 s, `w:clouds{}` 1–4 s (cell 2–3)
 
 ## Limits
 

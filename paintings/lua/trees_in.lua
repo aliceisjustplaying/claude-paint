@@ -80,18 +80,20 @@ function paint_leaves(t, o)
   local way = function(x, y) return 2.4 * turn(x, y) end
   -- 1. the body of the leaves, from the light on them: deep shade inside, lit masses toward the sun
   local L = t:light()
-  local c0, c1, c2 = o.deep or "#1f271a", o.body or "#35412a", o.sunny or "#5c6a3a"
+  local c0, c1, c2 = o.deep or "#222b1d", o.body or "#35412a", o.sunny or "#5c6a3a"
   work(lv, {hand="hatch", tool="round 1.6", length={3, 6}, coverage=2.4, clip=lv, angle=way, angle_jitter=0.8, hug=false, medium=0.2,
     color=function(x, y) local v = L:at(x, y) return mix(mix(c0, c1, smoothstep(0.1, 0.45, v)), c2, smoothstep(0.5, 0.85, v)) end})
-  -- 2. hooked touches: the shade, the half light, the light
+  -- 2. the sky back into the crown's gaps, before the touches, so leaves break their edges
+  local gp = t:gaps()
+  work(gp, {hand="detail", tool="round 1.4", color=sky, clip=gp, coverage=2})
+  -- 3. hooked touches: the shade, the half light, the light
   local b = brush("round", t.touch_w)
-  t:paint(b, {color=o.shade or "#232b1c", lit={0, 0.4}})
+  t:paint(b, {color=o.shade or "#263020", lit={0, 0.4}})
+  -- the front masses on the shade side catch the sky: cool, grayer, a share of them
+  t:paint(b, {color=o.sky or "#4a5446", lit={0.15, 0.4}, depth={0.25, 1}, share=0.5})
   t:paint(b, {color=o.mid or "#46522e", lit={0.4, 0.6}})
   t:paint(brush("round", t.touch_w * 0.9), {color=o.lit or "#6f7c45", lit={0.6, 0.78}})
   t:paint(brush("round", t.touch_w * 0.8), {color=o.top or "#98a060", lit={0.78, 1}, every=6})
-  -- 3. the sky back into the crown's gaps
-  local gp = t:gaps()
-  work(gp, {hand="detail", tool="round 1.4", color=sky, clip=gp, coverage=2})
 end
 
 paint_wood(oak)

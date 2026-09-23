@@ -10,6 +10,23 @@ outcome to observe, not a bug. Big new idea: painting should feel like
 painting: a live Lua easel (REPL) whose session log is the replayable
 painting, and time (drying) as a first-class verb.
 
+## The user's standing instruction (read after any context compaction)
+"Take your time. It's okay if this work takes several auto-compactions.
+What counts is a result that feels like you poured real love into it."
+Quality over speed: look at every render, judge it like a painter, fix what
+reads as digital, and don't merge anything I haven't looked at.
+
+## Integrator notes (for resuming after compaction)
+- Scratch dir: ~/tmp/paint-overnight-8ce44b40 (briefs: common.md,
+  easel_brief.md, amnesia_brief.md, review_brief_r3.md: neutral wording, the
+  first review tripped a cybersecurity content filter on Astra).
+- Worktrees: ../claude-paint-<branch>; merge each into main after viewing its
+  evidence, run `cargo test -p paint` + build all bins, push.
+- Easel must use Lua 5.5 (mlua 0.12 `lua55` + `vendored`); switch at merge if needed.
+- Coast #17 (curved drag lays nothing) may need a bristle.rs fix after `tip` merges.
+- Reviews: openai-codex/gpt-6-astra, thinking medium, fast off.
+- Amnesia worktrees from round 2 (../claude-paint-amnesia-*) hold full-res PNGs; keep.
+
 ## Batch 1 (running)
 | stream | branch | owns |
 |---|---|---|

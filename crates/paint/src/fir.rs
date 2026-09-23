@@ -85,9 +85,9 @@ impl FirHabit {
             rise: (0.55, -0.35),
             droop: 0.35,
             upturn: 0.35,
-            pad: 0.95,
+            pad: 1.3,
             clumpy: 0.3,
-            bare_inner: 0.18,
+            bare_inner: 0.1,
             wind: 0.0,
             trunk: 0.028,
             dead_top: 0.0,
@@ -97,11 +97,11 @@ impl FirHabit {
     /// a crooked leader.
     pub fn old() -> Self {
         FirHabit {
-            tiers: 22.0,
-            per_whorl: (3, 6),
-            inter: 0.7,
-            fill: (0.4, 1.04),
-            gap: 0.22,
+            tiers: 20.0,
+            per_whorl: (4, 6),
+            inter: 1.0,
+            fill: (0.6, 1.05),
+            gap: 0.18,
             broken: 0.22,
             dead_below: 0.32,
             crook: 0.02,
@@ -109,9 +109,9 @@ impl FirHabit {
             rise: (0.35, -0.7),
             droop: 0.6,
             upturn: 0.22,
-            pad: 0.85,
-            clumpy: 0.75,
-            bare_inner: 0.35,
+            pad: 1.5,
+            clumpy: 0.7,
+            bare_inner: 0.28,
             wind: 0.0,
             trunk: 0.04,
             dead_top: 0.35,
@@ -132,9 +132,9 @@ impl FirHabit {
             rise: (0.8, -0.05),
             droop: 0.2,
             upturn: 0.3,
-            pad: 1.1,
+            pad: 1.35,
             clumpy: 0.12,
-            bare_inner: 0.06,
+            bare_inner: 0.04,
             wind: 0.0,
             trunk: 0.03,
             dead_top: 0.0,
@@ -155,9 +155,9 @@ impl FirHabit {
             rise: (0.3, -0.45),
             droop: 0.45,
             upturn: 0.15,
-            pad: 0.8,
+            pad: 1.05,
             clumpy: 0.55,
-            bare_inner: 0.25,
+            bare_inner: 0.22,
             wind: 0.8,
             trunk: 0.035,
             dead_top: 0.15,
@@ -392,7 +392,7 @@ impl Fir {
             let n = 10;
             let tw = width_at_y(&leader, &leader_w, y0);
             let w0 = (tw * 0.5 * (l / (0.25 * h)).sqrt().min(1.0)).max(0.25) * if minor { 0.7 } else { 1.0 };
-            let pad_d = habit.pad * sp * rng.range(0.75, 1.2) * (l / (0.12 * h)).sqrt().clamp(0.45, 1.0);
+            let pad_d = habit.pad * sp * rng.range(0.8, 1.25) * (l / (0.07 * h)).sqrt().clamp(0.55, 1.0);
             let tseed = rng.range(0.0, 100.0);
             let mut pts = Vec::with_capacity(n + 1);
             let mut w = Vec::with_capacity(n + 1);
@@ -407,7 +407,9 @@ impl Fir {
                 if dead {
                     pad.push((0.0, 0.0));
                 } else {
-                    let mut e = smoothstep(habit.bare_inner, habit.bare_inner + 0.2, s) * (1.0 - 0.3 * smoothstep(0.8, 1.0, s));
+                    // inner shoots keep some needles by the stem unless the tree is old
+                    let inner = if minor { 0.0 } else { 0.5 * (1.0 - habit.bare_inner * 2.5).max(0.0) };
+                    let mut e = lerp(inner, 1.0, smoothstep(habit.bare_inner, habit.bare_inner + 0.2, s)) * (1.0 - 0.3 * smoothstep(0.8, 1.0, s));
                     let tf = smoothstep(-0.15, 0.35, tuft.get(tseed + s * 3.0, tseed));
                     e *= lerp(1.0, tf, habit.clumpy);
                     if broken {
@@ -589,7 +591,7 @@ impl Fir {
                 let (pa, pb) = b.pad[k];
                 let p = b.pts[k];
                 up.push((p.0 + nu.0 * pa, p.1 + nu.1 * pa));
-                down.push((p.0 + dir.0 * pb * 0.15, p.1 + pb * 0.62));
+                down.push((p.0 + dir.0 * pb * 0.15, p.1 + pb * 0.78));
             }
             if b.pad.iter().all(|p| p.1 < 0.05) {
                 continue;

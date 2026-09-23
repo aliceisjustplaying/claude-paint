@@ -3,5 +3,6 @@
 //! figure many times puts it down: which brush, which stroke, in what order.
 
 pub mod figures;
+pub mod rocks;
 pub mod trees;
 pub mod run;

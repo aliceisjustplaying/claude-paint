@@ -227,6 +227,8 @@ impl Sdf {
         Sdf::Ellipsoid { c, r }
     }
     /// A box centered at `c`, `size` wide/tall/deep, edges rounded by `round`.
+    /// Its faces are facets 1 right, 2 left, 3 bottom, 4 top, 5 front, 6 back
+    /// (in the block's own frame, so they follow it when turned).
     pub fn block(c: V3, size: V3, round: f32) -> Sdf {
         Sdf::Block { c, half: [size[0] * 0.5, size[1] * 0.5, size[2] * 0.5], round }
     }
@@ -295,7 +297,10 @@ impl Sdf {
                 let r = round.min(half[0]).min(half[1]).min(half[2]);
                 let d = [q[0].abs() - half[0] + r, q[1].abs() - half[1] + r, q[2].abs() - half[2] + r];
                 let o = len([d[0].max(0.0), d[1].max(0.0), d[2].max(0.0)]);
-                (o + d[0].max(d[1]).max(d[2]).min(0.0) - r, 0)
+                // which face: the axis the point lies furthest out along
+                let ax = if d[0] >= d[1] && d[0] >= d[2] { 0 } else if d[1] >= d[2] { 1 } else { 2 };
+                let facet = 1 + 2 * ax as u16 + (q[ax] < 0.0) as u16;
+                (o + d[0].max(d[1]).max(d[2]).min(0.0) - r, facet)
             }
             Sdf::Plane { at, n } => (dot(sub(p, *at), *n), 0),
             Sdf::Union(v, k) => {
@@ -509,6 +514,8 @@ pub struct Ridge {
     pub strata: Option<(f32, f32, f32)>,
     /// Added to every z (to place it in front of or behind other solids).
     pub z0: f32,
+    /// Where the face meets level ground or water (y), if above its depth.
+    pub base: Option<f32>,
     spurs: Fbm,
     rills: Fbm,
     wander: Fbm,
@@ -536,6 +543,7 @@ impl Ridge {
             fan: 1.0,
             strata: None,
             z0: 0.0,
+            base: None,
             spurs: Fbm::new(seed, 3, 1.0),
             rills: Fbm::new(seed + 7, 3, 1.0),
             wander: Fbm::new(seed + 13, 2, 1.0),
@@ -563,6 +571,11 @@ impl Ridge {
         self.z0 = z;
         self
     }
+    /// The face stops at this level line (a beach, a lake, a valley floor).
+    pub fn base(mut self, y: f32) -> Self {
+        self.base = Some(y);
+        self
+    }
 
     /// The crest's y at x (linear between samples, flat past the ends).
     pub fn crest(&self, x: f32) -> f32 {
@@ -575,21 +588,28 @@ impl Ridge {
     /// The crest averaged over ±r units (the shape of the mass seen from
     /// further down its face, where the small notches no longer matter).
     fn crest_smooth(&self, x: f32, r: f32) -> f32 {
-        if r < 1.0 {
+        if r < 0.5 {
             return self.crest(x);
         }
+        // the integral of the crest (piecewise constant per sample, from
+        // sample centers), continuous in x and r so the face has no steps
         let n = self.crest.len();
-        let a = ((x - r - self.x0).round().max(0.0) as usize).min(n - 1);
-        let b = ((x + r - self.x0).round().max(0.0) as usize).min(n - 1);
-        if b <= a {
+        let integral = |t: f32| -> f64 {
+            let t = (t - self.x0 + 0.5).clamp(0.0, n as f32);
+            let i = (t as usize).min(n - 1);
+            self.sums[i] + (t - i as f32) as f64 * self.crest[i] as f64
+        };
+        let (a, b) = (x - r, x + r);
+        let (ca, cb) = ((a - self.x0 + 0.5).clamp(0.0, n as f32), (b - self.x0 + 0.5).clamp(0.0, n as f32));
+        if cb - ca < 1e-3 {
             return self.crest(x);
         }
-        ((self.sums[b + 1] - self.sums[a]) / (b + 1 - a) as f64) as f32
+        ((integral(b) - integral(a)) / (cb - ca) as f64) as f32
     }
 
     fn height(&self, x: f32, y: f32) -> Option<(f32, u16)> {
         let d = y - self.crest(x);
-        if d < 0.0 || d > self.depth {
+        if d < 0.0 || d > self.depth || self.base.is_some_and(|b| y > b) {
             return None;
         }
         // the mass: a face leaning back, steepest near the crest, flattening
@@ -604,13 +624,18 @@ impl Ridge {
         // follow the fall line back up to where it leaves the crest
         let k = s * s * slope / (s * s * slope * slope + 1.0);
         let u = x - self.fan * k * dd;
-        // gullies: spacing grows downhill, they wander a little
-        let p = self.gully * (1.0 + 1.5 * dd / self.depth);
-        let uw = u + 0.35 * p * self.wander.get(u / (p * 2.0), dd / (p * 4.0));
-        let a = self.carve * p * crate::smoothstep(0.0, self.gully * 0.8, d);
-        let n1 = self.spurs.get(uw / p, dd / (p * 3.5));
-        let n2 = self.rills.get(uw / (p * 0.3), dd / (p * 1.2));
-        z += a * (n1.abs().min(0.6).powf(0.75) + 0.25 * n2.abs().min(0.6).powf(0.8));
+        // gullies: they wander a little, and downhill the fine ones merge
+        // into fewer, wider ones (a fine set fading into a coarse one; the
+        // noise is sampled at fixed scales so nothing shears)
+        let g = self.gully;
+        let uw = u + 0.35 * g * self.wander.get(u / (g * 2.0), dd / (g * 6.0));
+        let merge = crate::smoothstep(0.0, self.depth * 0.7, dd);
+        let a = self.carve * g * (1.0 + 1.5 * dd / self.depth) * crate::smoothstep(0.0, g * 0.8, d);
+        let v = |n: f32, p: f32| n.abs().min(0.6).powf(p);
+        let fine = v(self.spurs.get(uw / g, dd / (g * 3.5)), 0.75);
+        let coarse = v(self.spurs.get(uw / (g * 2.2) + 17.3, dd / (g * 7.0)), 0.75);
+        let rills = v(self.rills.get(uw / (g * 0.3), dd / (g * 1.2)), 0.8);
+        z += a * (fine + (coarse - fine) * merge + 0.2 * rills);
         let mut facet = 0;
         if let Some((sp, step, tilt)) = self.strata {
             // ledges: each bed leans back a little, then a riser
@@ -628,7 +653,8 @@ impl Solid for Ridge {
     fn bounds(&self) -> [f32; 4] {
         let top = self.crest.iter().cloned().fold(f32::INFINITY, f32::min);
         let bot = self.crest.iter().cloned().fold(f32::NEG_INFINITY, f32::max);
-        [self.x0, top, self.x0 + (self.crest.len() - 1) as f32, bot + self.depth]
+        let low = self.base.map_or(bot + self.depth, |b| b.min(bot + self.depth));
+        [self.x0, top, self.x0 + (self.crest.len() - 1) as f32, low]
     }
     fn hit(&self, x: f32, y: f32) -> Option<Hit> {
         relief_hit(&|x, y| self.height(x, y), x, y)
@@ -808,6 +834,11 @@ impl Form {
         self.light = Some(l);
     }
 
+    /// The light the form was last lit with.
+    pub fn lighting(&self) -> Option<Light> {
+        self.light
+    }
+
     fn sample_i(&self, i: usize) -> Option<Sample> {
         let part = self.part[i];
         if part == 0 {
@@ -919,6 +950,29 @@ impl Form {
         Mask { f, data }
     }
 
+    /// How the surface bends at a point, over `span` units: positive where it
+    /// is convex (an arris, a spur: catches light, often a light edge),
+    /// negative where concave (a joint, a gully, a crevice: a dark accent).
+    /// Roughly the turn in radians across the span, strongest of the two axes.
+    pub fn bend(&self, x: f32, y: f32, span: f32) -> f32 {
+        let s = |dx: f32, dy: f32| self.sample(x + dx, y + dy);
+        let mut best = 0.0f32;
+        for (dx, dy) in [(span, 0.0), (0.0, span)] {
+            if let (Some(a), Some(b)) = (s(-dx, -dy), s(dx, dy)) {
+                if a.part != b.part {
+                    continue;
+                }
+                // normals diverge along a convex surface
+                let p = [2.0 * dx, 2.0 * dy, b.z - a.z];
+                let k = dot(p, sub(b.n, a.n)) / len(p).max(1e-6);
+                if k.abs() > best.abs() {
+                    best = k;
+                }
+            }
+        }
+        best
+    }
+
     /// Direction along the edge through a point (canvas angle): the line
     /// where the planes on either side meet, or along an overlap. Sample a
     /// span of `span` units around it.
@@ -1028,5 +1082,20 @@ mod tests {
         let vals: Vec<f32> = (0..200).map(|k| form.shade(300.0 + k as f32 * 2.0, 450.0).direct).collect();
         let (lo, hi) = vals.iter().fold((1.0f32, 0.0f32), |a, &v| (a.0.min(v), a.1.max(v)));
         assert!(hi - lo > 0.3, "{lo}..{hi}");
+    }
+}
+#[cfg(test)]
+mod probe {
+    use super::*;
+    #[test]
+    #[ignore]
+    fn probe_ridge() {
+        let r = Ridge::new(0.0, 1000.0, |x| 200.0 + (x - 500.0).abs() * 0.5, 400.0, 3).gullies(40.0, 0.5);
+        for k in 0..60 {
+            let y = 320.0 + k as f32 * 0.5;
+            let h = r.hit(300.0, y).unwrap();
+            let (z, _) = r.height(300.0, y).unwrap();
+            println!("{y:.1} z={z:.3} n=({:.3},{:.3},{:.3})", h.n[0], h.n[1], h.n[2]);
+        }
     }
 }

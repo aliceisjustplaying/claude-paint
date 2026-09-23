@@ -36,13 +36,13 @@ fn paint(width: usize, crop: Option<Crop>, seed: u64) -> Canvas {
     let mut rng = Rng::new(seed);
     for _ in 0..40 {
         let x = rng.range(0.0, w);
-        paintings::trees::spruce(&mut c, (x, ridge(x) + 2.0), rng.range(12.0, 30.0), Paint { hiding: 0.92, stiff: 0.6, ..st.palette.paint(hex("#1d2024"), 0.0) }, rng.next_u64());
+        paintings::trees::spruce(&mut c, (x, ridge(x) + 2.0), rng.range(12.0, 30.0), st.palette.paint(hex("#1d2024"), 0.0).with_hiding(0.92).with_stiff(0.6), rng.next_u64());
     }
     let mut rig = Held::new(st.line_tool(0.5), 5);
     for _ in 0..120 {
         let (x, y) = (rng.range(0.0, w), 0.0);
         let y = y + ridge(x) + rng.range(20.0, h - ridge(x));
-        rig.reload(Paint { color: hex("#1a1a17"), hiding: 0.85, stiff: 0.6 }, 0.6);
+        rig.reload(Paint::new(hex("#1a1a17"), 0.85, 0.6), 0.6);
         let lean = rng.range(-3.0, 3.0);
         c.drag(&mut rig, &Gesture::new(vec![(x, y), (x + lean * 0.4, y - 4.0), (x + lean, y - 8.0)]).pressure(0.8, 0.1).ramps(0.02, 0.7).orient(Orient::Along), None);
     }

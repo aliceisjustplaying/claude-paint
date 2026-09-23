@@ -1,7 +1,7 @@
 //! Study sheet for the Rückenfiguren (trees: see `study_trees`). Every
 //! figure is painted in paints mixed on the Friedrich palette.
 
-use paint::{Paint, Style, hex};
+use paint::{Style, hex};
 use paintings::figures::{self, Gown, WomanPose};
 
 fn main() {
@@ -11,7 +11,7 @@ fn main() {
     let mut c = st.prepare(o.width, 1.6, 1);
     let h = c.height();
     // stiff body color for clothes, thinner for hair and hands, lean light
-    let body = |hx: &str| Paint { hiding: 0.97, stiff: 1.0, ..pal.paint(hex(hx), 0.0) };
+    let body = |hx: &str| pal.paint(hex(hx), 0.0).with_hiding(0.97).with_stiff(1.0);
     let thin = |hx: &str| pal.paint(hex(hx), 0.15);
     let rim = pal.paint(hex("#8f8a78"), 0.2);
     let fh = 190.0;

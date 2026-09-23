@@ -238,7 +238,10 @@ impl<'a> Handling<'a> {
         self.length = (a, b);
         self
     }
+    /// How many times over the strokes cover the region (width × length ×
+    /// count ÷ area). 0 disables the pass; negative or non-finite panics.
     pub fn coverage(mut self, c: f32) -> Self {
+        assert!(c.is_finite() && c >= 0.0, "Handling::coverage must be finite and ≥ 0, got {c}");
         self.coverage = c;
         self
     }
@@ -391,6 +394,11 @@ impl Canvas {
     /// they are painted in parallel; phases run one after another.
     pub fn work(&mut self, mask: &Mask, hd: &Handling, seed: u64) {
         self.check_mask(mask);
+        // coverage 0 disables the pass (a painter who puts no strokes down)
+        assert!(hd.coverage.is_finite() && hd.coverage >= 0.0, "Handling::coverage must be finite and ≥ 0, got {}", hd.coverage);
+        if hd.coverage == 0.0 {
+            return;
+        }
         let mut rng = Rng::new(seed);
         // plan on the whole canvas (also in a crop render, so the strokes
         // are the same ones); run_plans paints only what reaches the window
@@ -691,7 +699,7 @@ fn finish_plan(cv: &Canvas, hd: &Handling, tool: &Tool, c: (f32, f32), pts: Vec<
             ]);
             match under {
                 Some((u, coats)) => Paint::aimed(col, u, coats, hd.hiding, hd.stiff),
-                None => Paint { color: col, hiding: hd.hiding, stiff: hd.stiff },
+                None => Paint::new(col, hd.hiding, hd.stiff),
             }
         }
     };
@@ -973,6 +981,44 @@ mod tests {
             }
             assert_eq!(ran.len(), rects.iter().flatten().count());
         }
+    }
+
+    /// `.coverage(0.0)` disables a pass: nothing is painted or blended.
+    #[test]
+    fn zero_coverage_is_a_no_op() {
+        use crate::color::{Mix, gradient};
+        for blender in [false, true] {
+            let mut c = Canvas::new(100, 1.0, [0.9; 3]);
+            let m = Mask::full(c.frame());
+            // something wet to blend
+            c.work(&m, &Handling::new(Tool::filbert(22.0)).color(|x, _| gradient(&[(0.0, [0.1, 0.2, 0.6]), (1.0, [0.9, 0.7, 0.2])], x / 100.0, Mix::Pigment)), 3);
+            let before = (c.wet_total(), c.pixels().to_vec());
+            let mut hd = Handling::new(Tool::filbert(22.0)).coverage(0.0).color(|_, _| [0.05; 3]);
+            if blender {
+                hd = hd.blender();
+            }
+            c.work(&m, &hd, 1);
+            assert_eq!(c.wet_total(), before.0, "blender {blender}: wet paint changed");
+            c.dry();
+            let mut d = Canvas::new(100, 1.0, [0.9; 3]);
+            d.work(&m, &Handling::new(Tool::filbert(22.0)).color(|x, _| gradient(&[(0.0, [0.1, 0.2, 0.6]), (1.0, [0.9, 0.7, 0.2])], x / 100.0, Mix::Pigment)), 3);
+            d.dry();
+            let changed = c.pixels().iter().zip(d.pixels()).filter(|(a, b)| a != b).count();
+            assert_eq!(changed, 0, "blender {blender}: {changed} pixels changed");
+            let _ = before.1;
+        }
+    }
+
+    #[test]
+    #[should_panic(expected = "coverage")]
+    fn negative_coverage_is_rejected() {
+        let _ = Handling::new(Tool::filbert(22.0)).coverage(-1.0);
+    }
+
+    #[test]
+    #[should_panic(expected = "coverage")]
+    fn nonfinite_coverage_is_rejected() {
+        let _ = Handling::new(Tool::filbert(22.0)).coverage(f32::NAN);
     }
 }
 

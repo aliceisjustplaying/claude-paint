@@ -156,7 +156,7 @@ fn limb(c: &mut Canvas, l: &Limb, paint: Paint, hand: &TreeHand, rng: &mut Rng) 
         // the finest twigs are only indicated: a lean, dry touch, so the
         // outer crown reads as a haze of twigs rather than a solid mass
         let thin = (l.w[a] / (2.0 * hand.finest)).clamp(0.2, 1.0);
-        held.load(Paint { hiding: paint.hiding * (0.4 + 0.6 * thin), ..paint }, 0.9 * thin.sqrt());
+        held.load(paint.with_hiding(paint.hiding() * (0.4 + 0.6 * thin)), 0.9 * thin.sqrt());
         let g = Gesture::new(pts).pressure(p0, p1).ramps(attack, release).orient(Orient::Across).shake(0.6);
         c.drag(&mut held, &g, None);
     }

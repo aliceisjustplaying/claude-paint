@@ -160,6 +160,9 @@ Knobs on `Handling` (all builder methods): `curve(bow, wave)`, `cross(angle)`,
 - `coverage` still means nominal layers of the full brush width; lean paint
   at light pressure hides less, so thin passages want coverage ≈ 4 (as the
   moonrise sky uses) or a second pass.
+- `coverage(0.0)` disables a pass: `work` returns before planning, for a
+  painting or a blending handling. Negative or non-finite coverage panics
+  (it used to be clamped up to 0.05, so a pass "turned off" still painted).
 - `Sweep` serializes tile rows (two phases per band), so swept passes run
   with less parallelism; fine for blending, slower for big lay-ins.
 - Next: per-passage variation of the knobs themselves (a painter's hand

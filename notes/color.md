@@ -29,6 +29,16 @@ hand (`aim()` in `paintings/fresh/fresh_coast.rs`).
   rebuilt from an over-white color. That under-weighted white: in real paint a
   little white makes a glaze turbid fast because its S is large, and linear
   S-mixing captures that. The wet layer's `Prop[0]` is now S, not hiding.
+- **`Paint` carries S.** `Paint { color, scatter, stiff }`: the masstone and
+  the KM scattering per coat. Name paint by hiding with
+  `Paint::new(color, hiding, stiff)` or `p.with_hiding(h)`; `Paint::km`
+  takes S directly; `p.hiding()` derives the contrast ratio for reporting.
+  Hiding saturates near 1 (`scatter_for` caps it at 0.9995), so a paint that
+  stored only hiding lost the S of any strongly scattering mixture: an
+  opaque black + white pile mixed to 0.1 has S ≈ 20 and came back as S ≈ 1,
+  and a 0.1-coat film of it over white read 0.44 instead of 0.10. Now the
+  paint the brush loads is the paint the palette scored
+  (`palette::canvas_tests::mixture_to_paint_preserves_scattering`).
 - **Medium thins the pigment.** It multiplies K and S by (1 − medium) and
   leaves the masstone alone (`Mixture::paint`). The old rule was
   `hiding × k^0.6`.
@@ -56,6 +66,8 @@ let m: Mixture = pal.aim(want, under, medium, coats);   // same, with the recipe
 let p = pal.paint_for(want, under, medium, coats);       // same, as Paint
 // no palette: solve the masstone for a fixed hiding
 let p = Paint::aimed(want, under, coats, hiding, stiff);
+// name paint by hiding, override on a mixed paint
+let p = pal.paint(col, 0.0).with_hiding(0.97).with_stiff(1.0);
 
 // handlings: palette-mixed handlings aim by default
 st.broad().color(sky)                  // Aim::Laid: expects the thickness it lays
@@ -134,6 +146,13 @@ safe to call when planning marks in parallel (results are order-independent).
   and moves the dark by +0.027. It deepens with thickness. A pale
   hiding-0.07 glaze aimed at a dark gets less than halfway. Body color
   reaches the same target (error < 0.05).
+- `wet::tests::aimed_reaches_targets_made_by_the_same_model`: `Paint::aimed`
+  (and `Paint::tint`) bisect on the masstone's luminance, whose residual
+  `luminance(m(l)) − l` changes sign across 0.002–0.995, so the solve always
+  converges. The old fixed-point iteration could stop far off. Targets made
+  by 4 hidings × 4 underlayers × 5 thicknesses (0.1–2.5 coats) × 5 paints
+  come back within 0.002 (it missed a 0.1-coat, hiding 0.92 target over
+  black by 0.26).
 - `pigment::tests::{masstone_is_a_fixed_point, scatter_inverts_hiding}`,
   `palette::tests::{aim_hits_reachable_targets, tint_round_trips_over_white}`.
 - Golden re-recorded (debug profile): paint color is now masstone and
@@ -190,6 +209,9 @@ safe to call when planning marks in parallel (results are order-independent).
   stacking.
 - The palette has no truly transparent glazing pigment (a madder or lake).
   Umber + black stands in.
+- `paintings/fresh` and `paintings/archive` are not built and still use
+  `Paint { hiding, .. }` literals. Use `Paint::new` or `.with_hiding` if
+  they are revived.
 - The fresh painters' archived programs (`paintings/fresh`) use
   `Pigment::with_hiding(pt.color, pt.hiding)` to preview a paint. That is
   now `pt.over(under, coats)`; their hand-rolled `aim()` is `Canvas::aim`.

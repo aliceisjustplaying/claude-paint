@@ -60,7 +60,7 @@ fn main() {
             0 | 1 => {
                 // the old reading of a pile's color: its look, one coat over white
                 let m = pal.mix(under).paint(medium);
-                Paint::tint(m.color, m.hiding, m.stiff)
+                Paint::tint(m.color, m.hiding(), m.stiff)
             }
             2 => c.aim(pal, under, (x, y), 2.5, medium, 0.6),
             _ => {
@@ -84,7 +84,7 @@ fn main() {
     // masstone), laid as an even film growing from 0 to 5 coats left → right
     let umber = pal.only(&["raw umber", "bone black"]);
     let glaze = umber.paint(hex("#2b1f14"), 0.9);
-    eprintln!("glaze: {} hiding {:.3}", umber.recipe(&umber.mix(hex("#2b1f14"))), glaze.hiding);
+    eprintln!("glaze: {} hiding {:.3}", umber.recipe(&umber.mix(hex("#2b1f14"))), glaze.hiding());
     let wedge = Mask::from_fn(f, |x, y| if (320.0..560.0).contains(&y) && x > 40.0 { 1.0 } else { 0.0 });
     c.glaze(&glaze.pigment(), Some(&wedge), |x, _| 5.0 * smoothstep(40.0, 1000.0, x));
     for x in [100.0, 300.0, 500.0, 700.0, 950.0] {

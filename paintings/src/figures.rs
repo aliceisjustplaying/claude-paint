@@ -32,14 +32,15 @@ fn thin(p: Paint) -> Paint {
 
 /// Lean: thinned with medium for a rim of light.
 fn lean(p: Paint) -> Paint {
-    Paint { hiding: p.hiding * 0.6, stiff: p.stiff.min(0.4), ..p }
+    p.with_hiding(p.hiding() * 0.6).with_stiff(p.stiff.min(0.4))
 }
 
-/// Two paints knifed together on the palette, `t` of `b` into `a`.
+/// Two paints knifed together on the palette, `t` of `b` into `a`
+/// (scattering mixes by volume, as on the palette).
 pub fn mix(a: Paint, b: Paint, t: f32) -> Paint {
     Paint {
         color: paint::color::mix(a.color, b.color, t, Mix::Pigment),
-        hiding: a.hiding + (b.hiding - a.hiding) * t,
+        scatter: a.scatter + (b.scatter - a.scatter) * t,
         stiff: a.stiff + (b.stiff - a.stiff) * t,
     }
 }

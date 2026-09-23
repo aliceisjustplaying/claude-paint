@@ -22,18 +22,21 @@ pub enum Aim {
     /// thick, or over paint of its own color.
     Masstone,
     /// The color is the look wanted on the canvas: each pile is judged by
-    /// how it will look over what is under the stroke (sampled before the
-    /// pass), laid as thick as this handling lays paint, about
-    /// `LAID_PER_COVERAGE_LOAD × coverage × load` coats (× `load_at`).
+    /// how it will look over what is under the stroke (sampled along it
+    /// before the pass), laid as thick as this handling lays paint where
+    /// its strokes land (see `Handling::laid_coats`).
     Laid,
     /// As `Laid`, expecting this many coats.
     Coats(f32),
 }
 
-/// Coats laid per unit of coverage × load: the median film of the stock
-/// handlings is within a factor ~1.6 of this (probe_laid_thickness in wet.rs:
-/// broad 1.16 coats at coverage 2.5, load 0.4; body 1.71 at 2.5, 0.56).
-pub const LAID_PER_COVERAGE_LOAD: f32 = 1.1;
+/// Coats one stroke lays per unit of load where it lands, by brush kind:
+/// a round (detail, hatch) packs its load into a narrow track, a filbert
+/// (broad, body) spreads it. Measured by `probe_laid_by_coverage` (median
+/// film where paint landed, Friedrich ground, coverage 0.2–4, load 0.3 and
+/// 0.7): filberts 1.2–1.35, rounds 2.0–2.4 at 1600px.
+pub const LAID_PER_LOAD_FILBERT: f32 = 1.3;
+pub const LAID_PER_LOAD_ROUND: f32 = 2.2;
 
 type Field<'a, T> = Box<dyn Fn(f32, f32) -> T + Sync + 'a>;
 
@@ -227,6 +230,24 @@ impl<'a> Handling<'a> {
     /// Work the area in one sweep in direction `angle` (see `Order::Sweep`).
     pub fn sweep(self, angle: f32) -> Self {
         self.order(Order::Sweep(angle))
+    }
+    /// How thick this handling lays paint where its strokes land (coats),
+    /// the thickness `Aim::Laid` judges piles at: one stroke's film (per
+    /// unit of load, by brush kind) times how many strokes overlap on
+    /// average at a point that gets paint at all, `c / (1 − e^−c)` for
+    /// coverage `c` (Poisson). A sparse pass of light touches lays each
+    /// touch full thickness, not `coverage` × it: the old estimate
+    /// (1.1 × coverage × load, floored at 0.3) expected 0.3 coats from
+    /// marks that laid 1–1.7, and aimed piles overshot to salmon and orange.
+    pub fn laid_coats(&self) -> f32 {
+        use crate::bristle::Kind;
+        let per = match self.tool.kind {
+            Kind::Round | Kind::Rigger => LAID_PER_LOAD_ROUND,
+            _ => LAID_PER_LOAD_FILBERT,
+        };
+        let c = self.coverage.max(1e-3);
+        let overlap = c / (1.0 - (-c).exp());
+        (per * self.load * overlap).clamp(0.2, 8.0)
     }
     /// Mean stroke length including the tails of the distribution.
     fn mean_length(&self) -> f32 {
@@ -676,7 +697,7 @@ fn finish_plan(cv: &Canvas, hd: &Handling, tool: &Tool, c: (f32, f32), pts: Vec<
     let aim = hd.aim.unwrap_or(if hd.palette.is_some() { Aim::Laid } else { Aim::Masstone });
     let coats = match aim {
         Aim::Masstone => None,
-        Aim::Laid => Some((LAID_PER_COVERAGE_LOAD * hd.coverage * hd.load * load_k).clamp(0.3, 6.0)),
+        Aim::Laid => Some(laid_coats(hd, load_k)),
         Aim::Coats(x) => Some(x),
     };
     let under = coats.map(|x| (stroke_under(cv, &pts, tool.width * 0.5), x));
@@ -711,24 +732,65 @@ fn finish_plan(cv: &Canvas, hd: &Handling, tool: &Tool, c: (f32, f32), pts: Vec<
     (rect, Plan { pts, pressure, fade, dip: Some(paint), load, swell: Vec::new(), passage: 0 })
 }
 
-/// The mean underlayer along a stroke (linear light): a few samples on its path.
+/// Coats a handling lays where its strokes land (the `Aim::Laid` estimate).
+fn laid_coats(hd: &Handling, load_k: f32) -> f32 {
+    hd.laid_coats() * load_k
+}
+
+/// What a stroke along `pts` will sit on, as a painter judges it: samples
+/// (discs of radius `r`) spread evenly along the path, weighted by where the
+/// paint lands (a stroke starts loaded and runs thinner toward its end), and
+/// combined by a weighted median per OKLab channel, so a fleck of bare ground
+/// or a stray pile under one sample can't skew the whole pile. (A mean in
+/// linear light let one light fleck among dark samples pull the judged
+/// underlayer far toward it.)
 fn stroke_under(cv: &Canvas, pts: &[(f32, f32)], r: f32) -> Rgb {
-    let n = pts.len();
-    let step = (n / 5).max(1);
-    let (mut acc, mut k) = ([0.0f32; 3], 0.0f32);
+    const N: usize = 9;
+    // points evenly spaced by arc length, with their position along (0..1)
+    let mut cum = vec![0.0f32];
+    for w in pts.windows(2) {
+        let d = ((w[1].0 - w[0].0).powi(2) + (w[1].1 - w[0].1).powi(2)).sqrt();
+        cum.push(cum.last().unwrap() + d);
+    }
+    let total = *cum.last().unwrap();
+    let at = |s: f32| -> (f32, f32) {
+        if pts.len() < 2 || total <= 1e-6 {
+            return pts[0];
+        }
+        let d = s * total;
+        let k = cum.partition_point(|&c| c < d).clamp(1, pts.len() - 1);
+        let seg = (cum[k] - cum[k - 1]).max(1e-6);
+        let t = ((d - cum[k - 1]) / seg).clamp(0.0, 1.0);
+        (pts[k - 1].0 + (pts[k].0 - pts[k - 1].0) * t, pts[k - 1].1 + (pts[k].1 - pts[k - 1].1) * t)
+    };
+    let n = if total < 2.0 * r.max(0.5) { 1 } else { N };
+    let samples: Vec<((f32, f32), f32)> = (0..n)
+        .map(|k| {
+            let s = if n == 1 { 0.5 } else { (k as f32 + 0.5) / n as f32 };
+            (at(s), 1.0 - 0.5 * s)
+        })
+        .collect();
     // (a crop render sees only its window: judge by the points it holds)
     let f = cv.window();
     let on = |p: &(f32, f32)| p.0 >= 0.0 && p.1 >= 0.0 && p.0 < f.width() && p.1 < f.height();
-    let held: Vec<&(f32, f32)> = pts.iter().step_by(step).filter(|p| !on(p) || f.holds(p.0, p.1)).collect();
-    let all: Vec<&(f32, f32)> = pts.iter().step_by(step).collect();
-    for p in if held.is_empty() { all } else { held } {
-        let u = cv.under(p.0, p.1, r);
-        for q in 0..3 {
-            acc[q] += u[q];
+    let held: Vec<&((f32, f32), f32)> = samples.iter().filter(|(p, _)| !on(p) || f.holds(p.0, p.1)).collect();
+    let use_: Vec<&((f32, f32), f32)> = if held.is_empty() { samples.iter().collect() } else { held };
+    let labs: Vec<(Rgb, f32)> = use_.iter().map(|&&(p, w)| (to_oklab(cv.under(p.0, p.1, r)), w)).collect();
+    from_oklab(std::array::from_fn(|q| weighted_median(labs.iter().map(|(l, w)| (l[q], *w)).collect())))
+}
+
+/// The weighted median of (value, weight) pairs (the lower median at a tie).
+fn weighted_median(mut v: Vec<(f32, f32)>) -> f32 {
+    v.sort_by(|a, b| a.0.total_cmp(&b.0));
+    let half = 0.5 * v.iter().map(|p| p.1).sum::<f32>();
+    let mut acc = 0.0;
+    for &(x, w) in &v {
+        acc += w;
+        if acc >= half {
+            return x;
         }
-        k += 1.0;
     }
-    [acc[0] / k, acc[1] / k, acc[2] / k]
+    v.last().map_or(0.0, |p| p.0)
 }
 
 /// The part of a stroke through `c` that stays inside `mask` (≥ 0.5), pulled
@@ -1010,6 +1072,105 @@ mod tests {
             let changed = c.pixels().iter().zip(d.pixels()).filter(|(a, b)| a != b).count();
             assert_eq!(changed, 0, "blender {blender}: {changed} pixels changed");
             let _ = before.1;
+        }
+    }
+
+    /// Sparse light marks aimed over a dark passage (with flecks of the warm
+    /// ground showing through it) land in the color asked for: no salmon or
+    /// orange piles (amnesia 2, coast #1/#2, winter #14). Returns (share of
+    /// marked pixels pushed warm, mean a/b miss, mean L miss).
+    fn light_over_dark(pal_names: Option<&[&str]>, tool: &str) -> (f32, f32, f32) {
+        use crate::color::hex;
+        let st = crate::style::Style::friedrich();
+        let pal = match pal_names {
+            Some(n) => st.palette.only(n),
+            None => st.palette.clone(),
+        };
+        let mut c = st.prepare(400, 1.0, 5);
+        let all = Mask::full(c.frame());
+        // a dark sand lay-in, thin enough that the ground flecks through
+        c.work(&all, &st.body().color(|_, _| hex("#3a3128")).by_masstone().coverage(1.6), 1);
+        c.dry();
+        let (px0, f0) = (c.pixels().to_vec(), c.film.clone());
+        let want = hex("#9a8f80");
+        let h = match tool {
+            "detail" => st.detail(),
+            _ => st.body(),
+        }
+        .palette(&pal)
+        .color(move |_, _| want)
+        .coverage(0.3)
+        .clip(false);
+        c.work(&all, &h, 2);
+        c.dry();
+        let wl = to_oklab(want);
+        let idx: Vec<usize> = (0..f0.len()).filter(|&i| c.film[i] - f0[i] > 0.5).collect();
+        assert!(idx.len() > 200, "marks laid: {}", idx.len());
+        let (mut warm, mut ab, mut dl) = (0usize, 0.0f32, 0.0f32);
+        for &i in &idx {
+            let l = to_oklab(c.pixels()[i]);
+            let u = to_oklab(px0[i]);
+            // pushed warmer (redder or yellower) than both the target and the underlayer
+            if l[1] - wl[1].max(u[1]) > 0.02 || l[2] - wl[2].max(u[2]) > 0.035 {
+                warm += 1;
+            }
+            ab += ((l[1] - wl[1]).powi(2) + (l[2] - wl[2]).powi(2)).sqrt();
+            dl += (l[0] - wl[0]).abs();
+        }
+        let n = idx.len() as f32;
+        (warm as f32 / n, ab / n, dl / n)
+    }
+
+    #[test]
+    fn light_marks_over_a_dark_stay_in_hue() {
+        for (label, names, tool) in [("full/detail", None, "detail"), ("full/body", None, "body"), ("earth/detail", Some(&["lead white", "yellow ochre", "raw umber", "bone black", "red earth"][..]), "detail")] {
+            let (warm, ab, dl) = light_over_dark(names, tool);
+            println!("{label}: warm share {warm:.3}, mean a/b miss {ab:.4}, mean L miss {dl:.3}");
+            assert!(warm < 0.05, "{label}: {warm:.3} of the marks dried warm");
+            assert!(ab < 0.02, "{label}: marks off hue by {ab:.4}");
+            // (the old thickness estimate, 0.3 coats for marks that lay 1–2,
+            // overshot: 0.049–0.050 L too light)
+            assert!(dl < 0.025, "{label}: marks off value by {dl:.3}");
+        }
+    }
+
+    /// How thick handlings lay paint where they land, across coverages
+    /// (for the aim's thickness model). `cargo test --release -p paint
+    /// probe_laid_by_coverage -- --ignored --nocapture`
+    #[test]
+    #[ignore]
+    fn probe_laid_by_coverage() {
+        use crate::color::hex;
+        let st = crate::style::Style::friedrich();
+        for name in std::env::var("PROBE").map(|s| s.split(',').map(String::from).collect::<Vec<_>>()).unwrap_or(vec!["broad".into(), "body".into(), "detail".into(), "hatch".into()]) {
+            let name = name.as_str();
+            let w: usize = std::env::var("PROBE_W").ok().and_then(|s| s.parse().ok()).unwrap_or(500);
+            for cov in [0.2f32, 0.5, 1.0, 2.5, 4.0] {
+                for load in [0.3f32, 0.7] {
+                    let mut c = st.prepare(w, 1.0, 1);
+                    let f0 = c.film.clone();
+                    let half = 150000.0 / w as f32;
+                    let m = Mask::from_fn(c.frame(), |x, y| if (x - 500.0).abs() < half && (y - 500.0).abs() < half && (y - 500.0).abs() < half { 1.0 } else { 0.0 });
+                    let col = move |_: f32, _: f32| hex("#8a9ab0");
+                    let h = match name {
+                        "broad" => st.broad(),
+                        "body" => st.body(),
+                        "detail" => st.detail(),
+                        _ => st.hatch(),
+                    }
+                    .color(col)
+                    .coverage(cov);
+                    let h = Handling { load, ..h };
+                    let model = laid_coats(&h, 1.0);
+                    c.work(&m, &h, 3);
+                    c.dry();
+                    let inside: Vec<usize> = (0..f0.len()).filter(|&i| m.data[i] > 0.5).collect();
+                    let mut d: Vec<f32> = inside.iter().map(|&i| c.film[i] - f0[i]).filter(|&v| v > 0.03).collect();
+                    d.sort_by(|a, b| a.total_cmp(b));
+                    let p = |q: f32| d[((d.len() - 1) as f32 * q) as usize];
+                    println!("{name:7} cov {cov:3.1} load {load:.1}: covered {:.2} coats p25 {:.2} p50 {:.2} p90 {:.2} | model {model:.2}", d.len() as f32 / inside.len() as f32, p(0.25), p(0.5), p(0.9));
+                }
+            }
         }
     }
 

@@ -1697,6 +1697,7 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
 
     crate::form::install(lua, st.clone())?;
     crate::world::install(lua, st.clone())?;
+    crate::draw_outline::install(lua, st.clone())?;
 
     // trees
     {

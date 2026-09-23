@@ -19,7 +19,7 @@ use crate::surface::Linen;
 use crate::wet::LAT;
 use std::io::{self, Read, Write};
 
-const MAGIC: &[u8; 8] = b"PAINTCK1";
+const MAGIC: &[u8; 8] = b"PAINTCK2";
 
 fn put_u64(w: &mut impl Write, v: u64) -> io::Result<()> {
     w.write_all(&v.to_le_bytes())
@@ -90,6 +90,7 @@ impl Canvas {
         }
         put_f32(w, f.scale)?;
         put_f32(w, self.mm_per_unit)?;
+        put_f32(w, self.ground_um)?;
         match self.linen {
             None => put_u64(w, 0)?,
             Some(l) => {
@@ -131,6 +132,7 @@ impl Canvas {
         let [w, h, x0, y0, full_w, full_h, k0, k1, k2, k3] = u;
         let scale = get_f32(r)?;
         let mm_per_unit = get_f32(r)?;
+        let ground_um = get_f32(r)?;
         let linen = match get_u64(r)? {
             0 => None,
             _ => {
@@ -179,6 +181,7 @@ impl Canvas {
         c.f = f;
         c.keep = (k0, k1, k2, k3);
         c.mm_per_unit = mm_per_unit;
+        c.ground_um = if ground_um.is_finite() { ground_um } else { 0.0 };
         c.linen = linen;
         c.surf_gen = surf_gen;
         c.base = None;

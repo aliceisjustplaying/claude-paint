@@ -157,6 +157,7 @@ impl Paint {
     }
 }
 
+#[derive(Clone)]
 pub(crate) struct Wet {
     pub(crate) vol: Vec<f32>,
     pub(crate) lat: Vec<Latent>,
@@ -262,6 +263,12 @@ impl Canvas {
         }
         let c = mixbox::latent_to_linear_float_rgb(&self.wet.lat[i]);
         Pigment::masstone(c, self.wet.hide[i][0]).over(self.px[i], v)
+    }
+
+    /// What the painter sees, pixel by pixel over the window: the dry
+    /// picture with any wet paint on it (at its laid thickness).
+    pub fn seen(&self) -> Vec<Rgb> {
+        (0..self.px.len()).into_par_iter().map(|i| self.look_px(i)).collect()
     }
 
     /// What is on the canvas around (`x`, `y`) within radius `r` (units),

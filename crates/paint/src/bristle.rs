@@ -246,6 +246,7 @@ pub(crate) struct Bristle {
 }
 
 /// A brush in the hand, with paint in its bristles.
+#[derive(Clone)]
 pub struct Held {
     pub tool: Tool,
     pub(crate) bristles: Vec<Bristle>,

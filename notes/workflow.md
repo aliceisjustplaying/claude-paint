@@ -266,3 +266,63 @@ the physics order, so it is a design decision, not a safe win.
   `Run::stage` plus a `Canvas` callback after each `work` phase or every N
   strokes, saving a copy with the wet layer composited (a `dry()` on a
   clone).
+
+## After merging main (color, strokes, stipple, form, motifs)
+
+- **One scheduler.** `sched::run_ordered` now runs all tile work: `work` in
+  the strokes stream's requested tile order (`tile_order`: Passages, Sweep,
+  Scatter), which replaces `levelize`, and `stipple` in its phase order,
+  which replaces its own phase runner. Both skip tiles that miss a crop
+  window. The semantics are the strokes stream's (notes/strokes.md): every
+  pair of overlapping tiles runs in the requested order, so parallel equals
+  serial. Tiles no longer wait for a whole batch, and the dependency build
+  uses a spatial index. `handling::tests::tiles_keep_their_order_where_they_overlap`
+  (the strokes stream's test, ported) and `sched::tests` check it.
+  Stipple output is the same on 2 and 10 threads.
+- **Random draws no longer depend on the canvas.** Aiming (the color
+  stream) makes a pile's recipe depend on what is under the stroke, and
+  `Palette::remix` draws a varying number of values per recipe. A crop sees
+  a different canvas outside its window, so its later strokes drew
+  different random values: moonrise planned 571 strokes whole and 560
+  cropped in one pass. Each pile's mixing jitter now uses its own generator
+  forked with one draw, in `finish_plan` and in stipple's `paint_for`.
+  Planning is identical again (every pass plans the same number of
+  strokes). Output changes, so the golden was re-recorded for this reason
+  only.
+- **Stipple recipe memo.** It stored the recipe for whichever exact color
+  first hit a coarse key; it is now computed from the key's center (the
+  same fix as `Palette::mix`). `Palette::mix` and `Palette::aim` on main
+  already compute from their keys, so they are order-independent.
+- **Crop-aware new code.** `stipple` plans in the mask's whole frame with
+  whole-canvas footprints; `touch_on` returns buffer bounds and, outside
+  the window, estimates the deposit. `Canvas::under` looks only at pixels
+  the window holds, falling back to the nearest one. `stroke_under` ignores
+  points that are on the canvas but outside the window. Form fields and
+  the new mask operations work on whole-canvas frames, like masks. The
+  `Frame { .. }` literals in form.rs and mask.rs tests became `Frame::new`.
+- **Stage API.** moonrise, monk2, study_form and study_stipple use stage
+  blocks. `Run::end(&mut c)` closes the last stage for programs that don't
+  call `finish`. The other studies have no stages and run unchanged; every
+  bin runs whole and with `--crop` (except study_cracks, which builds
+  several canvases).
+
+Verification after the merge (1000px, margin 40, diff in 8-bit levels):
+
+| crop vs the same region of a whole render | mean | > 8 levels | max |
+|---|---|---|---|
+| moonrise figures 280,440,460,580 | 1.43 | 5.1% | 96 |
+| study_stipple sky, both passes 300,150,500,300 | 0.59 | 0.003% | 10 |
+| study_stipple mist over the ridge 300,560,500,625 | 1.98 | 6.0% | 28 |
+| study_stipple same, margin 250 (before the rng fork) | 0.64 | 0.3% | 13 |
+| study_stipple ridge only (`--stop ridge`) | 0.005 | 0% | 1 |
+| study_form boulder 150,100,350,250 | 0.63 | 2.1% | 61 |
+| study_form ranges 650,450,850,600 | 0.60 | 0.35% | 33 |
+| study_form cliff 100,450,300,600 | 0.19 | 0.007% | 18 |
+
+The mist stipple is margin-limited: a dip serves 16 touches, so touches
+outside the window affect the load of those inside it. study_form crops
+take 11–12 s against 31 s whole, because its form fields (SDFs per pixel)
+are computed over the whole canvas, like masks.
+
+Resuming stays byte-identical: moonrise from "sky lay" (wet), "mist" and
+"figures", and study_stipple from "pass 1".

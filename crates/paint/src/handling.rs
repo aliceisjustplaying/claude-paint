@@ -675,7 +675,12 @@ fn finish_plan(cv: &Canvas, hd: &Handling, tool: &Tool, c: (f32, f32), pts: Vec<
                 Some((u, coats)) => pal.aim(target, u, medium, coats),
                 None => pal.mix(target),
             };
-            pal.remix(&m, hd.mix_jitter, rng).paint(medium)
+            // the pile's mixing jitter draws from its own generator: how many
+            // draws a recipe takes then can't shift every later stroke's
+            // randomness (a crop render aims strokes outside its window at
+            // a different underlayer, so their recipes may differ)
+            let mut prng = Rng::new(rng.next_u64());
+            pal.remix(&m, hd.mix_jitter, &mut prng).paint(medium)
         }
         None => {
             let lab = to_oklab(target);
@@ -699,7 +704,12 @@ fn stroke_under(cv: &Canvas, pts: &[(f32, f32)], r: f32) -> Rgb {
     let n = pts.len();
     let step = (n / 5).max(1);
     let (mut acc, mut k) = ([0.0f32; 3], 0.0f32);
-    for p in pts.iter().step_by(step) {
+    // (a crop render sees only its window: judge by the points it holds)
+    let f = cv.window();
+    let on = |p: &(f32, f32)| p.0 >= 0.0 && p.1 >= 0.0 && p.0 < f.width() && p.1 < f.height();
+    let held: Vec<&(f32, f32)> = pts.iter().step_by(step).filter(|p| !on(p) || f.holds(p.0, p.1)).collect();
+    let all: Vec<&(f32, f32)> = pts.iter().step_by(step).collect();
+    for p in if held.is_empty() { all } else { held } {
         let u = cv.under(p.0, p.1, r);
         for q in 0..3 {
             acc[q] += u[q];

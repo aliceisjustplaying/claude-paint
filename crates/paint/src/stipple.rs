@@ -426,7 +426,9 @@ impl Canvas {
             for p in t.iter_mut() {
                 if let Some(d) = p.dip.as_mut() {
                     let (x, y, cv) = p.aim_at;
-                    *d = sp.paint_for((sp.color)(x, y), self.under(x, y, sp.tool.width * 0.6), cv, &mut memo, &mut prng);
+                    // (a fresh generator per dip, so a recipe's draws can't shift the
+                    // rest; see `finish_plan`)
+                    *d = sp.paint_for((sp.color)(x, y), self.under(x, y, sp.tool.width * 0.6), cv, &mut memo, &mut Rng::new(prng.next_u64()));
                 }
             }
         }

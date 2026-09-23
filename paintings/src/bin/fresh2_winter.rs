@@ -654,6 +654,27 @@ fn main() {
             spruce(&mut c, (x, y), ht, needles, snow, snow_sh, &mut rng);
         }
         c.dry();
+        // where they stand: the snow under them in their shadow, soft,
+        // falling toward the viewer; stems' feet sunk in it
+        let sp = spruces;
+        let foot = move |x: f32, y: f32| -> f32 {
+            let mut v = 0.0f32;
+            for &(sx, sy, ht) in sp.iter() {
+                let dx = (x - sx) / (ht * 0.2 + 4.0);
+                let dy = (y - sy - 2.0) / (3.0 + ht * 0.04);
+                v = v.max((-(dx * dx) - dy * dy).exp());
+            }
+            v
+        };
+        let foot_m = Mask::from_fn(f, move |x, y| if foot(x, y) > 0.05 { 1.0 } else { 0.0 });
+        let foot_s = Stipple::new(Tool::stippler(1.5))
+            .mixed(pal, 0.4)
+            .color(move |x, y| mix(snow_col(x, y), hex("#7d839b"), 0.4, Mix::Light))
+            .coverage(move |x, y| 2.4 * smoothstep(0.1, 0.7, foot(x, y)))
+            .pressure(0.45, 0.85)
+            .dips(20, 0.4, 0.6);
+        c.stipple(&foot_m, &foot_s, 81);
+        c.dry();
     }
 
     // --------------------------------------------------------------- figure
@@ -1046,6 +1067,7 @@ fn spruce(c: &mut paint::Canvas, base: (f32, f32), ht: f32, needles: Paint, snow
     let mut big = Held::new(Tool::round_sable((ht * 0.03).max(0.9)), rng.next_u64());
     let mut fine = Held::new(Tool::round_sable((ht * 0.014).max(0.45)), rng.next_u64());
     let mut hang = Held::new(Tool::round_sable((ht * 0.01).max(0.4)), rng.next_u64());
+    let mut tip = Held::new(Tool::round_sable((ht * 0.008).max(0.35)), rng.next_u64());
     let mut tier_pts: Vec<(f32, f32, f32, f32)> = Vec::new(); // (sx, sy, ex, ey)
     for i in 0..tiers {
         let v = (i as f32 + rng.range(0.0, 0.7)) / tiers as f32; // 0 top .. 1 bottom
@@ -1055,16 +1077,23 @@ fn spruce(c: &mut paint::Canvas, base: (f32, f32), ht: f32, needles: Paint, snow
             big.reload(needles, 0.65);
             fine.reload(needles, 0.55);
             hang.reload(needles, 0.5);
+            tip.reload(needles, 0.5);
         }
-        let brush = if reach < ht * 0.06 { &mut fine } else { &mut big };
+        // near the spire the finest brush, pressed lightly, so the top is a
+        // needle and not a stack of beads
+        let spire = reach < ht * 0.035;
+        let brush = if spire { &mut tip } else if reach < ht * 0.06 { &mut fine } else { &mut big };
+        let p0 = if spire { 0.6 } else { 0.95 };
         for s in [-1.0f32, 1.0] {
-            let droop = reach * rng.range(0.35, 0.55);
+            // branches droop from the stem and turn up a little at the tips
+            let droop = reach * rng.range(0.22, 0.38);
             let sx = x + s * 0.3;
-            let e = (x + s * reach, ty + droop * 0.7);
-            let m = (x + s * reach * 0.55, ty + droop);
-            c.drag(brush, &Gesture::new(vec![(sx, ty), m, e]).pressure(0.95, 0.3).ramps(0.0, 0.5).shake(0.5), None);
+            let e = (x + s * reach, ty + droop * 0.55);
+            let m = (x + s * reach * 0.55, ty + droop * 0.8);
+            c.drag(brush, &Gesture::new(vec![(sx, ty), m, e]).pressure(p0, 0.3).ramps(0.0, 0.5).shake(0.5), None);
             // a few hanging needles under the tier
             if reach > 4.0 {
+                hang.load(needles, 0.15);
                 for _ in 0..(reach / 3.0) as usize {
                     let t = rng.range(0.2, 0.95);
                     let p = (x + s * reach * t, ty + droop * (0.4 + 0.6 * t) * 0.9);
@@ -1078,24 +1107,21 @@ fn spruce(c: &mut paint::Canvas, base: (f32, f32), ht: f32, needles: Paint, snow
     c.dry();
     // snow on the tiers: clumps lying on the upper side of a branch, flat
     // on top, ragged below, not on every tier; more on the lit (left) side
-    let mut sb = Held::new(Tool::round_sable((ht * 0.014).max(0.5)), rng.next_u64());
+    let mut sb = Held::new(Tool::round_sable((ht * 0.009).max(0.4)), rng.next_u64());
     for &(sx, sy, ex, ey) in tier_pts.iter() {
         let v = (sy - top) / ht;
         let left = ex < sx;
-        if rng.f() < 0.15 + 0.25 * (1.0 - v) + if left { 0.0 } else { 0.15 } {
+        if rng.f() < 0.3 + 0.3 * (1.0 - v) + if left { 0.0 } else { 0.15 } {
             continue;
         }
         let p = if left { snow } else { snow_sh };
-        sb.reload(p.with_hiding(0.85), rng.range(0.35, 0.6));
-        let lerp = |t: f32| (sx + (ex - sx) * t, sy + (ey - sy) * t * t - 0.4 - ht * 0.005);
-        let clumps = 1 + (rng.f() * 2.5) as usize;
-        for _ in 0..clumps {
-            let t = rng.range(0.2, 0.85);
-            let len = rng.range(0.1, 0.3);
-            let (p0, p1) = (lerp(t), lerp((t + len).min(0.95)));
-            let sag = rng.range(0.3, 0.9);
-            c.drag(&mut sb, &Gesture::new(vec![p0, ((p0.0 + p1.0) * 0.5, (p0.1 + p1.1) * 0.5 + sag * 0.5), p1]).pressure(rng.range(0.5, 0.9), rng.range(0.2, 0.5)).ramps(0.15, 0.5).shake(0.8), None);
-        }
+        sb.reload(p.with_hiding(0.8), rng.range(0.3, 0.5));
+        // lying along the branch's upper side, a little in from its tip
+        let lerp = |t: f32| (sx + (ex - sx) * t, sy + (ey - sy) * t * t - 0.3 - ht * 0.004);
+        let t0 = rng.range(0.15, 0.45);
+        let t1 = (t0 + rng.range(0.25, 0.5)).min(0.92);
+        let pts = vec![lerp(t0), lerp((t0 + t1) * 0.5), lerp(t1)];
+        c.drag(&mut sb, &Gesture::new(pts).pressure(rng.range(0.55, 0.85), rng.range(0.15, 0.35)).swell(vec![0.8, 1.15, 0.9]).ramps(0.2, 0.45).shake(0.8), None);
     }
     // snow at the foot, covering the stem's base
     let _ = snow_sh;

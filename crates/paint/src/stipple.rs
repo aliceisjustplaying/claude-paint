@@ -312,6 +312,9 @@ struct Plan {
     /// the painter mixes for that spot.
     aim_at: (f32, f32, f32),
     rect: Rect,
+    /// The color asked for there (before aiming it over what's there):
+    /// which pile on the palette the dip comes from (`tally::Piles`).
+    want: Rgb,
 }
 
 impl Canvas {
@@ -468,7 +471,7 @@ impl Canvas {
                             angle: rng.range(0.0, std::f32::consts::TAU),
                         };
                         let rect = touch_footprint(&sp.tool, &touch, f.scale, f.w, f.h).unwrap_or((0, 0, 0, 0));
-                        Plan { touch, dip, aim_at, rect }
+                        Plan { touch, dip, aim_at, rect, want: [0.0; 3] }
                     })
                     .collect()
             })
@@ -490,12 +493,27 @@ impl Canvas {
                         Some(g) => g(x, y, seen),
                         None => (sp.color)(x, y),
                     };
+                    p.want = want;
                     let want = sp.touch_target(want, seen, cv);
                     *d = sp.paint_for(want, seen, cv, &mut memo, &mut Rng::new(prng.next_u64()));
                 }
             }
         }
         let n_memo = memo.len();
+        // the hand's ledger: every planned touch and trip to the palette (on
+        // the whole canvas, before a crop drops passages; see `tally`)
+        let (mpu, mut piles) = (self.mm_per_unit, crate::tally::Piles::default());
+        let mut tile_secs = Vec::with_capacity(plans.len());
+        for t in plans.iter() {
+            let secs0 = self.tally.secs;
+            for p in t {
+                self.tally.touch(&sp.tool, mpu);
+                if p.dip.is_some() {
+                    piles.trip(&mut self.tally, p.want);
+                }
+            }
+            tile_secs.push(self.tally.secs - secs0);
+        }
         let n: usize = plans.iter().map(|t| t.len()).sum();
         let first_id = self.next_stroke_ids(n as u32);
         let mut offsets = Vec::with_capacity(plans.len());
@@ -516,7 +534,6 @@ impl Canvas {
             (None, true) => Some(mask),
             (None, false) => None,
         };
-        let surf = self.surf();
         let mut rng = Rng::new(seed ^ 0xFA5E);
         let mut phases = [(0usize, 0usize), (1, 0), (0, 1), (1, 1)];
         for i in (1..4).rev() {
@@ -531,11 +548,14 @@ impl Canvas {
             .iter()
             .map(|t| t.iter().filter(|p| p.rect.2 > p.rect.0).map(|p| p.rect).reduce(|a, r| (a.0.min(r.0), a.1.min(r.1), a.2.max(r.2), a.3.max(r.3))))
             .collect();
-        let order: Vec<usize> = phases
-            .iter()
-            .flat_map(|&(px, py)| (0..plans.len()).filter(move |&i| (i % tw) % 2 == px && (i / tw) % 2 == py))
-            .filter(|&i| !plans[i].is_empty() && tile_rect[i].is_some_and(|r| win.clip(r).is_some()))
-            .collect();
+        let order: Vec<usize> = phases.iter().flat_map(|&(px, py)| (0..plans.len()).filter(move |&i| (i % tw) % 2 == px && (i / tw) % 2 == py)).collect();
+        // with hand time on, the passages are painted in slices of hand time
+        // and the paint ages between them (`tally::batches`); else one batch
+        let batches = crate::tally::batches(&order, &tile_secs, self.hand_slice_secs());
+        let n_batches = batches.len();
+        for (bi, (order, bsecs)) in batches.into_iter().enumerate() {
+        let surf = self.surf();
+        let order: Vec<usize> = order.into_iter().filter(|&i| !plans[i].is_empty() && tile_rect[i].is_some_and(|r| win.clip(r).is_some())).collect();
         let paint_tile = |ti: usize| {
             let mut held = Held::new(sp.tool.clone(), seed ^ 0x5717 ^ (ti as u64).wrapping_mul(0x9E37_79B9));
             let mut scratch = Vec::new();
@@ -571,6 +591,10 @@ impl Canvas {
         }
         if let Some((x0, y0, x1, y1)) = dirty {
             self.wet.touch(x0, y0, x1, y1);
+        }
+        if bi + 1 < n_batches {
+            self.hand_pass(bsecs);
+        }
         }
         if std::env::var_os("PAINT_DEBUG").is_some() {
             eprintln!("stipple: {n} touches, reach {reach:.1}, tiles {tw}x{th} ({tile:.0} units), plan {t_geom:.2}s + paint {:.2}s ({} recipes), total {:.2}s", t_plan - t_geom, n_memo, t0.elapsed().as_secs_f32());

@@ -310,6 +310,16 @@ impl<'a> Stroke<'a> {
         }
     }
 
+    /// Set `film` aside at pixel `i` as `lay` does (tests; its coats must
+    /// already be part of the pixel's `vol`).
+    #[cfg(test)]
+    pub(crate) unsafe fn set_aside(&mut self, i: usize, film: Layer) {
+        unsafe {
+            *self.sf.slot.add(i) = self.aside.len() as u32;
+        }
+        self.aside.push(Aside { i, film });
+    }
+
     /// Coats set aside at pixel `i` (0 where none is).
     #[inline]
     unsafe fn aside_v(&self, i: usize) -> f32 {
@@ -342,11 +352,19 @@ impl<'a> Stroke<'a> {
     #[inline]
     pub(crate) unsafe fn stiffness(&self, i: usize) -> f32 {
         unsafe {
-            crate::wet::whole(
-                *self.sf.vol.add(i),
-                *self.sf.hide.add(i),
-                &*self.sf.top.add(i),
-            )[1]
+            let (hide, top) = (*self.sf.hide.add(i), &*self.sf.top.add(i));
+            let s = *self.sf.slot.add(i);
+            let m = if s == NONE {
+                None
+            } else {
+                Some(&self.aside[s as usize].film).filter(|m| m.v > 0.0)
+            };
+            let Some(m) = m else {
+                // (without a film set aside: the body and surface film)
+                return crate::wet::whole(*self.sf.vol.add(i), hide, top)[1];
+            };
+            let (b, t) = (self.body(i), top.v);
+            (b * hide[1] + t * top.hide[1] + m.v * m.hide[1]) / (b + t + m.v)
         }
     }
 

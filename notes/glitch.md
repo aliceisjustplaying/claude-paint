@@ -73,7 +73,7 @@ release builds): not byte-identical, as intended where the bug acts at 1000.
   hard to see (`alice_fixes.png`, right).
 - The golden scene and the release `hand_time` replay hashes are unchanged.
 
-## For the wet stream (r6-wet, not fixed here)
+## For the wet stream (r6-wet: W1 and T fixed there, `notes/wet.md` §10)
 
 - **W1, rings.** `notes/wet/repaints/sky_B_wet.lua` chunks 1-2 (chunk 2 without its
   `blend` shows it too) at `--width 3200 --crop 380,400,780,590`: crisp 1-px rings of bare

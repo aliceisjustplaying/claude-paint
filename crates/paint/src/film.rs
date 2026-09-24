@@ -227,6 +227,9 @@ pub(crate) struct Stroke<'a> {
     pub(crate) wts: &'a mut Vec<f32>,
     /// Pixels dirtied (whole-canvas).
     pub(crate) bounds: Bounds,
+    /// The share of its load a moving bristle lays this step (1, or less
+    /// where a lifting brush's hairs crowd into one track: `bristle::crowd`).
+    pub(crate) crowd: f32,
     aside: Vec<Aside>,
     /// How often pickup and the plough took paint set aside under this
     /// stroke (tests check that the conservation scene exercises it).
@@ -237,7 +240,7 @@ impl<'a> Stroke<'a> {
     /// SAFETY: no other thread may work pixels in `lim` until the stroke
     /// is dropped.
     pub(crate) unsafe fn begin(sf: Surf, id: u32, clip: Option<&'a Mask>, lim: Rect, wts: &'a mut Vec<f32>) -> Self {
-        Stroke { sf, id, clip, lim, wts, bounds: None, aside: Vec::new(), through: [0; 2] }
+        Stroke { sf, id, clip, lim, wts, bounds: None, crowd: 1.0, aside: Vec::new(), through: [0; 2] }
     }
 
     /// End the stroke: settle it and return the pixels it dirtied (buffer

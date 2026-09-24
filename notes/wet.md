@@ -949,3 +949,83 @@ block (moving it means a new format version for no gain now), and the
   main's engine used the old measure for both engines; its conclusion
   (the load controls softening; full loads crisp, lean ones soft) holds
   on the new numbers for this branch, but main's column wasn't re-measured.
+
+## 10. The glitch census's wet classes (W1, T) and the evening lake
+
+After merging main's glitch census (`notes/glitch.md`; its pinhole fix
+`wet::bead_cover` now sets the share of the pixel `film_over` composites
+the body and the surface film over, as it does `over_share` on main).
+
+**W1, rings of bare ground (this engine only).** Cause: not the sky pass
+but the brushed ground under it. The lift-off (§8) rolls a flat onto its
+chisel edge as the handle rises; its hairs then follow one another along
+one narrow track, and each still laid its full share per distance, so a
+stroke's end got many times the paint per area: small ellipse-shaped
+heaps (the Friedrich ground's film reached 35 coats, against 15 with the
+lift-off off and 17 on main's engine). A thin sky over the dried ground
+levels to below their tops (`settle_for`: the wet film can't dig into what
+is under it), so it drained off their rims to the bare ground. Found by
+dumping the bake (film in, leveled film out, surface height): the sky
+film was even; the leveled film had rings of zeros on 106 pixels (main:
+none).
+
+Fix (`bristle::crowd`): a lifting brush's hairs lay the share of their
+load the narrowed track can take: the span of the touching hairs' roots
+across the travel as it lifts, against as it was held (a flat rolled onto
+its edge, a round drawn to its point). The hairs behind ride on the paint
+the ones ahead just laid. Test
+`bristle::tip_tests::a_lifting_flat_does_not_heap_its_stroke_end` (a flat's
+end peaked at 5.8 coats against 1.5 in its body; now under 2.5×). Sky B's
+first pass at 3200 (the census's crop): flecks 198 → 0 per Mpx with its
+blend, 153 → 26 without (main: 13 and 0); `glitch_W1_before_after.jpg`.
+
+**T, tramlines (both engines).** Cause: the blender's plough. A badger's
+modeled hair is a clump several pixels wide at 3200 px (6.6 px radius for
+Friedrich's 40-unit badger), and a push set the paint it moved down on one
+spot a whole step (0.75 × (rb + 1) px) aside; a second push carried it on.
+A blend clipped to a thin band along a line (the sheen) moved the line's
+paint one way only (the band's edge refuses the rest), so it walked out as
+a second line 5–6 px away with a trough between. Found by switching the
+blender's plough, pickup and drag-in off for the one blend (only the
+plough mattered).
+
+Fix (`exchange`, blenders only): a soft splayed blender has no bow wave;
+what it parts lies all along its flank, spread over the pixels out to
+where it was set down before. A line it runs along smears into a band.
+Test `exchange::tests::a_blender_along_a_wet_line_does_not_split_it` (the
+style's own blend over a sheen band; before: a second peak 5 px below with
+a trough 16% of the line's lift). Water B's waterline:
+`glitch_T_before_after.jpg` (one soft line sitting in the water).
+
+**Effect** (mean / max of 255): W1 against the merged engine: 1000 px
+l5_near 0.25 / 121, l3_green 0.24 / 111; panel crops 0.20–0.57 (max
+37–145). T on top of it: l5_near 0.28 / 182, l3_green 0.19 / 56; crops
+sky_B 0.26, water_B 0.10, foliage_C 0.09, l5_near 0.19, rock_B and
+l3_green 0. Both against the merged engine: l5_near 0.40 / 182, l3_green
+0.33 / 111, under 0.11% of pixels over 8.
+Studies (against the merged engine): a flat's end no longer heaps, so its
+last stretch covers less. The sky brought over a tacky or dry hill pulls
+the hill 6 mm below the join 0.46/0.52 of the way to the sky (was
+0.62/0.65), the pitfall river's spent tail shows the ground in 35% of its
+track (was 22%), and a flat's stroke end fades over up to 5.3 mm (row C
+of `study_wet_control`, was 2.6). Clean accents, the lab's ground
+exposure and the rest are unchanged.
+
+**The evening lake (`notes/paint1/evening_lake.md`, main).**
+- *Double contour where the sky came over the wet range* (chunk 6 of
+  `paintings/lua/evening_lake.lua` on `r7-paint-wet`): neither W1 nor T,
+  and still there. It is the sky pass itself (without its blend too).
+  Switched off for that pass alone: without pickup the ridge is clean;
+  without the plough or drag-in it isn't
+  (`lake_double_contour_pickup.jpg`: as painted, no plough, no pickup,
+  no drag-in). The sky brush lifts the wet range's dark where it overlaps
+  the crest; that goes on its tip (§6) and is laid first, just behind
+  where it was lifted, restating the old crest as a dark line with the
+  clean sky band under it. Not fixed: a cushioned light brush lifting less
+  of a dark it only grazes, or the tip's paint spread over its run rather
+  than laid first, are the candidates. Both change every wet stroke, so
+  they need their own study.
+- *A dark into wet light breaks into a lace of pale beads*: not
+  reproduced here (the chunk the painter tried isn't in the log). The
+  same family: the light under the dark comes up through pickup and the
+  tip. Open, as §5 said.

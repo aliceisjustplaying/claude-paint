@@ -344,6 +344,53 @@ mod tests {
         assert_eq!(clock(&b), 0.0);
     }
 
+    /// The session's checkpoints carry the hand state: an edit (replaying
+    /// from the nearest checkpoint) and an undo past the undo ring leave the
+    /// clock, the sitting and the timesheet exactly as a fresh replay of the
+    /// same log (review r6, finding 1).
+    #[test]
+    fn edits_and_undo_keep_the_hand_state_of_a_replay() {
+        const LOG: [&str; 6] = [
+            r##"canvas{style="friedrich", aspect=1.5, seed=2, hand=true}; sitting{hours=2}"##,
+            r##"work(rect(100, 100, 300, 200), {hand="body", color="#8090a0"})"##,
+            r##"b = brush("round", 3); b:load("#303830", 0.9); for i = 1, 30 do b:stroke({{100 + 20*i, 500}, {110 + 20*i, 440}}) end"##,
+            "rest(3)",
+            r##"stipple(rect(0, 380, 1000, 120), {width=3, color="#cfccc2", coverage=1.2})"##,
+            r##"b:load("#6a5040", 0.9); b:stroke({{200, 300}, {600, 320}})"##,
+        ];
+        let sheet = |s: &mut Session| -> String {
+            run(s, "local t = timesheet(); sheet = string.format('%.9f %d %.9f %.9f %d %d %.3f %.9f', t.clock, t.sittings, t.sitting, t.hours, t.strokes, t.touches, t.reloads, t.hand_min)");
+            s.lua.globals().get::<String>("sheet").unwrap()
+        };
+        let bits = |s: &Session| s.canvas().unwrap().seen().iter().flat_map(|p| p.map(f32::to_bits)).collect::<Vec<_>>();
+        let fresh = |log: &[&str]| {
+            let mut r = Session::replay(W).unwrap();
+            for c in log {
+                run(&mut r, c);
+            }
+            r
+        };
+        let mut s = Session::new(W, 1).unwrap();
+        s.keep = 3;
+        for c in LOG {
+            run(&mut s, c);
+        }
+        // edit chunk 3 (a checkpoint before it, chunks after it replayed)
+        let new3 = r##"b = brush("round", 4); b:load("#303830", 0.9); for i = 1, 20 do b:stroke({{100 + 30*i, 520}, {110 + 30*i, 430}}) end"##;
+        s.splice(3, 1, &[new3.to_string()]).unwrap();
+        let mut want: Vec<&str> = LOG.to_vec();
+        want[2] = new3;
+        let mut r = fresh(&want);
+        assert_eq!(clock(&s), clock(&r));
+        assert_eq!(bits(&s), bits(&r));
+        assert_eq!(sheet(&mut s), sheet(&mut r));
+        // undo past the undo ring (replays from a checkpoint)
+        s.undo(4).unwrap();
+        let mut r = fresh(&want[..3]);
+        assert_eq!(clock(&s), clock(&r));
+        assert_eq!(sheet(&mut s), sheet(&mut r));
+    }
+
     /// Time a finishing verb spends drying the paint isn't hand time: it is
     /// reported as before, starts a new sitting and never counts as an
     /// overrun.

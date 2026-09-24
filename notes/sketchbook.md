@@ -8,6 +8,8 @@ round 3 (`notes/amnesia3/`), [r4 ...] round 4 with the drawing tools (`easel4_gr
 `easel4_near`). Add what you learn in the same form: what to do, the recipe, what goes
 wrong.
 
+**Read notes/principles.md first:** the tools give you physics and constraints; you make the decisions, the way a person painting would (piles mixed on a palette, not color formulas; gestures, not fills; structure tools as scaffolds, not things to trace).
+
 **These are the best techniques so far, not the best possible.** Every
 recipe is a floor to beat. Each section names its **ceiling**: where the
 best recipe still reads as schematic or digital. If a passage of yours still

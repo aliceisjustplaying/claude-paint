@@ -52,11 +52,14 @@ pub struct Hand {
     /// The ledger when `canvas{}` was set up (the grounds are the
     /// colorman's work, not the painter's).
     pub base: paint::Tally,
+    /// The ledger's clocked seconds at the last flush: the hand time put on
+    /// the clock since then (a long pass clocks its slices as it goes).
+    pub clocked: f64,
 }
 
 impl Default for Hand {
     fn default() -> Self {
-        Hand { start: 0.0, hours: SITTING_HOURS, sittings: 1, warned: 0, piles: Piles::default(), base: paint::Tally::default() }
+        Hand { start: 0.0, hours: SITTING_HOURS, sittings: 1, warned: 0, piles: Piles::default(), base: paint::Tally::default(), clocked: 0.0 }
     }
 }
 
@@ -92,9 +95,22 @@ pub fn flush(st: &S, force: bool) {
         return;
     }
     c.clock_hand();
+    let clocked = c.tally().clocked;
+    let hand = (clocked - s.hand.clocked) / 60.0;
+    s.hand.clocked = clocked;
     let now = c.clock() - s.clock0;
-    if now != s.clock {
+    // time the canvas spent that isn't hand time (a finishing verb drying
+    // the paint first) is left for the verb or the chunk's end to report
+    // (session.rs); a long stretch of it is a rest
+    let away = now - s.clock - hand;
+    if away > 0.5 {
+        s.clock += hand;
+    } else {
         s.clock = now;
+    }
+    if away >= REST_MIN {
+        s.hand.begin(now);
+    } else if hand > 0.0 {
         note_overrun(s);
     }
 }
@@ -172,12 +188,14 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
         let st1 = st.clone();
         g.set("hand_time", lua.create_function(move |_, on: Option<bool>| {
             flush(&st1, true);
-            let mut s = st1.borrow_mut();
+            let mut g = st1.borrow_mut();
+            let s = &mut *g;
             let Some(c) = s.canvas.as_mut() else {
                 return err("no canvas yet: canvas{..., hand=true} or hand_time(true) after it");
             };
             let was = c.hand_time().is_some();
             set(c, on.unwrap_or(true));
+            s.hand.clocked = c.tally().clocked;
             Ok(was)
         })?)?;
     }
@@ -324,6 +342,21 @@ mod tests {
         // turning it on later doesn't bill the past
         run(&mut b, "hand_time(true)");
         assert_eq!(clock(&b), 0.0);
+    }
+
+    /// Time a finishing verb spends drying the paint isn't hand time: it is
+    /// reported as before, starts a new sitting and never counts as an
+    /// overrun.
+    #[test]
+    fn drying_for_a_finish_is_not_time_at_the_easel() {
+        for on in [false, true] {
+            let mut s = Session::new(W, 0).unwrap();
+            run(&mut s, &format!(r##"canvas{{style="friedrich", aspect=1.5, seed=2, hand={on}}}"##));
+            run(&mut s, r##"work(rect(100, 100, 300, 200), {hand="body", color="#8090a0"})"##);
+            let out = run(&mut s, "varnish()");
+            assert!(out.contains("passed while the paint dried") && !out.contains("at the easel"), "hand {on}: {out}");
+            run(&mut s, "assert(timesheet().sittings == 2 and timesheet().sitting == 0)");
+        }
     }
 
     #[test]

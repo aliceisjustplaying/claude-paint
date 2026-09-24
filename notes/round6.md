@@ -100,12 +100,13 @@ over dry paint, tramlines). The sketchbook's "`dry()` before any
 passage" rule is replaced (on the branch) by when to work wet, tacky or
 dry. Cost: 44 bytes more per pixel (~300 MB at 3200), checkpoint format 7.
 
-**What it looks like** (panel 3, main vs the branch on identical logs:
+**What it looks like** (panel 3 judged pass 2, not pass 3; main vs the branch on identical logs:
 `notes/round6/panels/judge3/`). The branch wins **foliage C 4–0** (lights
 no longer sink) and **l5_near 4–0** (the fog veil at the wood's foot is
 gone and the spruces read as trees: `notes/round6/wet/l5_near_bench_cmp.jpg`,
 main above). Main wins **rock B 4–0** and sky B, water B and l3_green
-3–1. Three critics told the engines apart blind: on the branch later
+3–1. Both Astras told the engines apart blind in all six pairs and one
+Gemini in five of six (corrected after review): on the branch later
 marks stay discrete, firm and opaque; on main they're absorbed into the
 wet paint. The branch loses where passages should melt: stepped cloud
 tips, reflection "teeth", the rock's scalloped terminator, the l3_green

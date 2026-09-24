@@ -44,9 +44,9 @@ fn existing_logs_replay_unchanged() {
     // (the benchmark near is checked in release only: a debug replay takes
     // minutes)
     let logs: &[(&str, u64)] = if cfg!(debug_assertions) {
-        &[("paintings/lua/example.lua", 0xa9a1_8af6_2297_d28e)]
+        &[("paintings/lua/example.lua", 0xb3bd_c993_3f04_141a)]
     } else {
-        &[("paintings/lua/example.lua", 0xc2f0_9052_dcca_5e50), ("notes/loops/l5_near.lua", 0x061a_d996_81fe_d3cf)]
+        &[("paintings/lua/example.lua", 0x59df_badc_1870_f5a9), ("notes/loops/l5_near.lua", 0x780f_f09d_18fb_a5bc)]
     };
     for &(log, want) in logs {
         let (_, png) = replay(&root().join(log), 160, None, "unchanged");

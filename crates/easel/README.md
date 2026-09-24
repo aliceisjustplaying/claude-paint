@@ -1174,7 +1174,10 @@ shadow and the Belt of Venus, and the clouds catch the light from below.
    rocks from `v.form`, meadows from `sward`.
 6. The small particulars last, with pointed brushes: twigs, blades,
    flowers, figures.
-7. `wait(24*60); varnish(); relief()` (and `cracks{}` for an old picture).
+7. `wait(24*60); varnish(); cracks{}; relief()`. The craquelure is part of
+   the finished look: a Friedrich is two centuries old and cracked, and
+   Alice wants that (Round 6). Leave it out only for a study meant to show
+   fresh paint.
 
 For winter, grow trees bare (`t:foliage{winter=true}` or no foliage), and
 paint snow as the ground's color with `color_over` for its blue shadows.

@@ -96,7 +96,10 @@ varied, tapered twigs, all connected), water B, sky B, rock B.
 - **Glaze timing.** `glaze()` waits until everything under it is touch-dry (8 to 29 days
   of clock each) [r4 green], so never put one inside a wet-into-wet sequence. A veil that
   doesn't wait: `work(m, {hand="glaze", medium=0.8, color_over={shift={...}}})`.
-- **Retouch before the varnish.** Keep `wait(24*60); varnish{...}; relief()` as the last
+- **Finish old.** The standard last chunk is `wait(24*60); varnish{...}; cracks{}; relief()`:
+  a Friedrich is two centuries old and cracked, and Alice wants the craquelure as part of
+  the final look (Round 6). Judge glitches with and without it: cracks are marks too.
+- **Retouch before the varnish.** Keep `wait(24*60); varnish{...}; cracks{}; relief()` as the last
   chunk and fix things with `easel edit N --insert` before it: seconds, not a replay [r4
   near, r4 green]. Since round 6 the varnish (and any `glaze()`) coats every stroke ridge
   and pools only a little in the hollows, the same at 1000 and 3200: no need to thin

@@ -769,7 +769,7 @@ overridden: growth `step`, `density`, `influence`, `kill`, `up`, `out`,
 `crook`, `kink`, `inertia`, `shell`, `voids`, `void_size` and `depth`.
 Wood: `scaffold={min, max}`, `girth` (trunk width per crown height),
 `twig_w`, `smooth`, `pipe`, `leader` (how far the trunk runs on into the crown) and
-`angular` (0 smooth .. 1 an oak's straight runs and elbows). Twigs: `twigs`, `twig_len`, `twig_spread`,
+`angular` (0 smooth; above 0 an oak's straight runs and elbows, the number setting how much is straightened). Twigs: `twigs`, `twig_len`, `twig_spread`,
 `twig_droop`, `twig_zig` and `twig_along`. Leaves: `clump`, `squash`,
 `hang`, `fill`, `ragged`, `leafiness` and `leafy_w`. Touches: `touch`,
 `touch_w`, `hook`, `droop`, `flat`, `touches` and `marcescent`.

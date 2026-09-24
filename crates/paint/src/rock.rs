@@ -44,6 +44,7 @@
 
 use crate::form::{Light, Shade, V3, fall_angle, unit};
 use crate::noise::Fbm;
+use crate::path::{arclen, length};
 use crate::{Frame, Mask, Rng, Shape, smoothstep};
 use rayon::prelude::*;
 use std::f32::consts::PI;
@@ -394,20 +395,11 @@ fn near_line(l: &[P], cum: &[f32], x: f32, y: f32) -> (f32, f32, f32, P) {
     best
 }
 
-fn cumlen(l: &[P]) -> Vec<f32> {
-    let mut c = vec![0.0];
-    for w in l.windows(2) {
-        let d = ((w[1].0 - w[0].0).powi(2) + (w[1].1 - w[0].1).powi(2)).sqrt();
-        c.push(c.last().unwrap() + d);
-    }
-    c
-}
-
 /// Resample a closed line to about `n` points.
 fn resample_closed(p: &[P], n: usize) -> Vec<P> {
     let mut l = p.to_vec();
     l.push(p[0]);
-    let c = cumlen(&l);
+    let c = arclen(&l);
     let total = *c.last().unwrap();
     let mut out = Vec::with_capacity(n);
     let mut k = 0;
@@ -491,7 +483,7 @@ impl Rock {
         let (bw, bh) = (bounds.2 - bounds.0, bounds.3 - bounds.1);
         let size = bw.max(bh).max(1.0);
         // a working copy of the outline, evenly spaced
-        let per = (cumlen(&[outline, &outline[..1]].concat()).last().copied().unwrap_or(1.0)).max(1.0);
+        let per = length(&[outline, &outline[..1]].concat()).max(1.0);
         let m = ((per / (size / 160.0)).round() as usize).clamp(48, 480);
         let poly = resample_closed(outline, m);
         let orient = area2(&poly).signum();
@@ -763,7 +755,7 @@ impl Rock {
                 let e0 = s.pts[0];
                 let e1 = *s.pts.last().unwrap();
                 Groove {
-                    cum: cumlen(&s.pts),
+                    cum: arclen(&s.pts),
                     pts: s.pts.clone(),
                     bb,
                     depth: spec.crack_depth * r * rng.range(0.7, 1.3) * if s.grown { 0.8 } else { 1.0 },
@@ -1381,7 +1373,7 @@ impl Rock {
     pub fn along_crack(&self, x: f32, y: f32) -> f32 {
         let mut best = (f32::MAX, 0.0f32);
         for s in &self.seams {
-            let c = cumlen(&s.pts);
+            let c = arclen(&s.pts);
             let (d, _, _, dir) = near_line(&s.pts, &c, x, y);
             if d < best.0 {
                 best = (d, dir.1.atan2(dir.0));

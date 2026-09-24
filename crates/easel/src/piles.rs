@@ -172,3 +172,68 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
     })?)?;
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::session::Session;
+
+    const SKY: &str = r##"skyM = above(function(x) return 420 end)
+        skycol = function(x, y) return mix(gradient({{0,"#47536c"},{0.5,"#8b8d9c"},{1,"#d2bd98"}}, y/420), "#ecd49e", 0.6*math.exp(-((x-600)/250)^2)*y/420) end"##;
+
+    fn bits(s: &Session) -> Vec<u32> {
+        s.canvas().unwrap().seen().iter().flat_map(|p| p.map(f32::to_bits)).collect()
+    }
+
+    fn session(chunks: &[&str]) -> Session {
+        let mut s = Session::replay(200).unwrap();
+        s.run(r#"canvas{style="friedrich", aspect=1.4, seed=11}"#).unwrap();
+        s.run(SKY).unwrap();
+        for c in chunks {
+            s.run(c).unwrap();
+        }
+        s
+    }
+
+    #[test]
+    fn a_sky_from_piles_steps_and_replays_exactly() {
+        let paint = r##"P = piles(skycol, {n=5, over=skyM, coverage=3, seed=4})
+            assert(#P == 5, #P)
+            local c = P:colors()
+            for i = 2, #c do assert(c[i].L > c[i-1].L, "dark to light") end
+            -- stepped: along a column the look changes in a few steps, not every unit
+            local seen, steps, last = {}, 0, nil
+            for y = 5, 415, 5 do local h = P:at(300, y):hex() if h ~= last then steps = steps + 1 end last = h seen[h] = true end
+            assert(steps >= 4 and steps <= 30, steps)
+            assert(P:pick(300, 5) == 1 and P:pick(300, 415) >= 4, P:pick(300, 5) .. " " .. P:pick(300, 415))
+            assert(#P:recipes() == 5 and P:recipes()[1]:find("#"), P:recipes()[1])
+            work(skyM, {hand="broad", color=P, angle=0, coverage=3, seed=5})
+            blend(skyM, {angle=0, coverage=1.2, seed=6})"##;
+        let a = session(&[paint]);
+        let b = session(&[paint]);
+        assert_eq!(bits(&a), bits(&b), "deterministic");
+        // a formula sky paints differently (the piles are what the strokes load)
+        let c = session(&[r##"work(skyM, {hand="broad", color=skycol, angle=0, coverage=3, seed=5})
+            blend(skyM, {angle=0, coverage=1.2, seed=6})"##]);
+        assert_ne!(bits(&a), bits(&c));
+    }
+
+    #[test]
+    fn piles_options_and_errors() {
+        let s = session(&[]);
+        let mut s = s;
+        // the painter's own piles, unmixed: the field only says where each goes
+        s.run(r##"Q = piles(skycol, {colors={"#505c75", "#a99c9d", "#d6c19c"}, mix=false, seed=1})
+            assert(#Q == 3 and Q:recipes()[1]:find("not mixed"))
+            stipple(skyM, {width=2, color=Q, coverage=0.3, seed=2})"##)
+            .unwrap();
+        for (bad, want) in [
+            (r##"piles(skycol, {n=0})"##, "1 to 16"),
+            (r##"piles(skycol, {colour="#fff"})"##, "unknown option"),
+            (r##"piles(skycol, {aim="thick"})"##, "aim"),
+            (r##"piles(skycol, {hand="wave"})"##, "hand"),
+        ] {
+            let e = s.run(bad).unwrap_err();
+            assert!(e.contains(want), "{bad}: {e}");
+        }
+    }
+}

@@ -10,12 +10,17 @@
 //!
 //! Counting happens where the engine plans marks, on the whole canvas and in
 //! a fixed order, before the tiles are split among threads or a crop drops
-//! the ones off its window: the ledger is the same at any thread count and
-//! (but for the fill dabs, which look at the pixels a crop holds) in a crop.
+//! the ones off its window: the ledger is the same at any thread count. In
+//! a crop it is the same but for what looks at the pixels the crop holds:
+//! the look-and-fill dabs (which gaps it sees), and for aimed marks
+//! (`color_over`, a stipple's look under a dip) the color a dip asks for,
+//! so whether it is a reload or a new pile, and with a sitting's palette
+//! (`Piles`) the piles later dips find. With hand time on the ledger is the
+//! clock, so a crop can age its paint by a little more or less than the
+//! whole canvas does (notes/time.md, known issues).
 
 use crate::bristle::{Kind, Tool};
 use crate::canvas::Canvas;
-use crate::drying::{GEL, Stage};
 
 /// Seconds of hand time per kind of move. Sources and estimates:
 /// notes/time.md. [S]: from a source; [E]: my estimate.
@@ -153,9 +158,10 @@ pub fn stroke_secs(len_mm: f64, w_mm: f64) -> f64 {
     aim + draw
 }
 
-/// Hand time (s) of one touch of a tip `w_mm` wide.
-pub fn touch_secs(w_mm: f64) -> f64 {
-    let _ = w_mm; // (the index of difficulty is the same at any size)
+/// Hand time (s) of one touch of a tip: the same for a tip of any size (a
+/// spot about two tips across, three tips from the last: the index of
+/// difficulty doesn't depend on the size).
+pub fn touch_secs() -> f64 {
     (pace::FITTS_A + pace::FITTS_B * (1.0 + 3.0 / 2.0f64).log2() + pace::DWELL).max(pace::TAP_MIN)
 }
 
@@ -173,10 +179,10 @@ impl Tally {
         self.secs += stroke_secs(len, mark_mm(tool, mm_per_unit));
     }
 
-    /// A touch of the tip of `tool`.
-    pub fn touch(&mut self, tool: &Tool, mm_per_unit: f32) {
+    /// A touch of a tip.
+    pub fn touch(&mut self) {
         self.touches += 1;
-        self.secs += touch_secs(mark_mm(tool, mm_per_unit));
+        self.secs += touch_secs();
     }
 
     /// `n` trips to the palette for more paint (fractions for fill dabs).
@@ -226,6 +232,21 @@ impl Tally {
     /// Hand time in minutes.
     pub fn minutes(&self) -> f64 {
         self.secs / 60.0
+    }
+
+    /// The ledger as a checkpoint stores it (PAINTCK7): the counts, then the
+    /// bits of the lengths and times.
+    pub(crate) fn to_words(&self) -> [u64; 9] {
+        let t = self;
+        [t.strokes, t.touches, t.remixes, t.wipes, t.lines, t.length_mm.to_bits(), t.reloads.to_bits(), t.secs.to_bits(), t.clocked.to_bits()]
+    }
+
+    /// A ledger read back from `to_words`; None if a length or a time isn't
+    /// finite.
+    pub(crate) fn from_words(w: [u64; 9]) -> Option<Tally> {
+        let [strokes, touches, remixes, wipes, lines, ..] = w;
+        let [length_mm, reloads, secs, clocked] = [w[5], w[6], w[7], w[8]].map(f64::from_bits);
+        [length_mm, reloads, secs, clocked].iter().all(|v| v.is_finite()).then_some(Tally { strokes, touches, length_mm, reloads, remixes, wipes, lines, secs, clocked })
     }
 }
 
@@ -304,39 +325,6 @@ impl Canvas {
         self.mm_per_unit
     }
 
-    /// Where every pixel the canvas holds is in drying (buffer order, as
-    /// `pixels()`): the same stages as `drying_at`.
-    pub fn stages(&self) -> Vec<Stage> {
-        let n = self.f.w * self.f.h;
-        let px = &self.wet.clock.px;
-        (0..n)
-            .map(|i| {
-                let p = px.get(i).copied().unwrap_or(crate::drying::Px::FRESH);
-                if self.wet.vol[i] >= 1e-3 {
-                    if p.cure < 0.5 * GEL { Stage::Open } else { Stage::Setting }
-                } else if p.sub < 1.0 {
-                    Stage::Tacky
-                } else {
-                    Stage::Dry
-                }
-            })
-            .collect()
-    }
-
-    /// Shares of the canvas (the part `save` writes) that are open, setting,
-    /// tacky and dry.
-    pub fn stage_shares(&self) -> [f64; 4] {
-        let st = self.stages();
-        let (x0, y0, x1, y1) = self.keep;
-        let mut n = [0u64; 4];
-        for y in y0..y1 {
-            for x in x0..x1 {
-                n[st[y * self.f.w + x] as usize] += 1;
-            }
-        }
-        let t = n.iter().sum::<u64>().max(1) as f64;
-        n.map(|k| k as f64 / t)
-    }
 }
 
 #[cfg(test)]
@@ -509,8 +497,20 @@ mod tests {
 
     #[test]
     fn touches_are_no_faster_than_tapping() {
-        let t = touch_secs(1.0);
+        let t = touch_secs();
         assert!((pace::TAP_MIN..0.6).contains(&t), "{t}");
+    }
+
+    /// A checkpoint stores the ledger in PAINTCK7's order: the five counts,
+    /// then the bits of the length, reloads, seconds and clocked seconds.
+    #[test]
+    fn the_ledger_keeps_its_checkpoint_layout() {
+        let t = Tally { strokes: 1, touches: 2, length_mm: 6.5, reloads: 7.5, remixes: 3, wipes: 4, lines: 5, secs: 8.5, clocked: 9.5 };
+        assert_eq!(t.to_words(), [1, 2, 3, 4, 5, 6.5f64.to_bits(), 7.5f64.to_bits(), 8.5f64.to_bits(), 9.5f64.to_bits()]);
+        assert_eq!(Tally::from_words(t.to_words()), Some(t));
+        let mut w = t.to_words();
+        w[7] = f64::NAN.to_bits();
+        assert_eq!(Tally::from_words(w), None);
     }
 
     #[test]
@@ -519,11 +519,11 @@ mod tests {
         let mut a = Tally::default();
         a.stroke(&tool, &[(0.0, 0.0), (30.0, 40.0)], 0.44);
         let b0 = a;
-        a.touch(&tool, 0.44);
+        a.touch();
         a.remix();
         let d = a.since(&b0);
         assert_eq!((d.strokes, d.touches, d.remixes), (0, 1, 1));
-        assert!((d.secs - (touch_secs(1.32) + pace::REMIX + pace::RELOAD)).abs() < 1e-9);
+        assert!((d.secs - (touch_secs() + pace::REMIX + pace::RELOAD)).abs() < 1e-9);
         assert!((b0.length_mm - 22.0).abs() < 1e-4);
     }
 }

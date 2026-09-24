@@ -111,9 +111,10 @@ GABLE = [
     (0.500, 0.128 * ASPECT),
     (0.556, 0.196 * ASPECT), (0.566, 0.214 * ASPECT), (0.578, 0.208 * ASPECT),
     (0.598, 0.248 * ASPECT), (0.612, 0.240 * ASPECT), (0.700, 0.366 * ASPECT),
-    (0.714, 0.372 * ASPECT), (0.716, 0.470 * ASPECT), (0.734, 0.478 * ASPECT),
-    (0.738, 0.560 * ASPECT), (0.756, 0.566 * ASPECT), (0.760, 0.640 * ASPECT),
-    (0.772, 0.648 * ASPECT), (0.778, 0.720 * ASPECT),
+    (0.714, 0.372 * ASPECT), (0.717, 0.430 * ASPECT), (0.728, 0.452 * ASPECT),
+    (0.731, 0.520 * ASPECT), (0.742, 0.548 * ASPECT), (0.748, 0.600 * ASPECT),
+    (0.762, 0.618 * ASPECT), (0.766, 0.676 * ASPECT), (0.781, 0.694 * ASPECT),
+    (0.786, 0.740 * ASPECT),
 ]
 ARCH_HALF = 0.098           # half span of the pointed arch
 ARCH_SPRING = 0.545 * ASPECT
@@ -251,11 +252,14 @@ def sea_design(x, y):
     # the glow echoed, fainter and broken, on the axis
     streak = fbm(x * 8, y * 160, 71, 3)
     refl = np.exp(-((x - AXIS) / (0.10 + 0.25 * e)) ** 2) * (1 - e) ** 1.5
-    refl *= smooth(0.45, 0.7, streak)
-    col = col + refl[..., None] * (rgb("#d6c2a2") - col) * 0.45
+    refl *= 0.35 + 0.65 * smooth(0.4, 0.7, streak)
+    col = col + refl[..., None] * (rgb("#d8c4a2") - col) * 0.6
     # calm swell as long faint horizontal lines
-    swell = smooth(0.62, 0.8, fbm(x * 3, y * 260, 73, 3)) * e
-    col = col + swell[..., None] * (rgb("#7f7c86") - col) * 0.25
+    # calm water: long lighter lanes that echo the glow, fainter nearer
+    lanes = smooth(0.55, 0.78, fbm(x * 2.2, y * 140, 73, 4)) * (1 - 0.6 * e)
+    col = col + lanes[..., None] * (rgb("#b3a7a2") - col) * 0.45
+    dark = smooth(0.6, 0.8, fbm(x * 1.5, y * 90, 74, 3)) * e
+    col = col + dark[..., None] * (rgb("#3f4250") - col) * 0.35
     return col
 
 
@@ -578,6 +582,12 @@ def dead_color(cv, rng):
 
 
 def paint_sky(cv, rng):
+    # a thin, even first layer of the sky's color, the ground shimmering through
+    veil = 0.72 + 0.12 * fbm(cv.X * 3, cv.Y * 12, 33, 3)
+    m = (cv.masks["sky"] * veil)[..., None]
+    cv.rgb += (cv.bg - cv.rgb) * m
+    m = (cv.masks["sea"] * veil)[..., None]
+    cv.rgb += (cv.bg - cv.rgb) * m
     # body color: broad horizontal strokes, then finer
     passes = [(260, 0.030, 0.060, 0.14, 0.34, 0.55, 0.35),
               (1400, 0.010, 0.022, 0.06, 0.18, 0.45, 0.4),
@@ -639,7 +649,7 @@ def paint_clouds(cv, rng):
             w *= 1.6
         cv.stroke(rng, x - math.cos(ang) * ln / 2, y - math.sin(ang) * ln / 2,
                   x + math.cos(ang) * ln / 2, y + math.sin(ang) * ln / 2, w, c, 0.22 if in_wedge else 0.35,
-                  dry=0.15 if in_wedge else 0.35, bristle=0.3, follow=0.45, mask="sky", pool=0.3, thick=0.4, src="bg", soft=0.5,
+                  dry=0.15 if in_wedge else 0.35, bristle=0.3, follow=0.7 if in_wedge else 0.45, mask="sky", pool=0.3, thick=0.4, src="bg", soft=0.5,
                   jitter=0.02, taper=0.3)
 
 
@@ -658,13 +668,13 @@ def paint_moon(cv, rng):
     a = np.clip(cres * lump, 0, 1)[..., None] * 0.92
     cv.rgb[y0:y1, x0:x1] += (pale - cv.rgb[y0:y1, x0:x1]) * a
     cv.height[y0:y1, x0:x1] += a[..., 0] * 1.2
-    # the veil: thin cloud drawn across it
-    for i in range(14):
-        y = my + rng.normal(0.25, 0.4) * mr
-        x = mx + rng.normal(0, 0.6) * mr
-        c = cv.sample(x, y + mr * 1.5, True)
-        cv.stroke(rng, x - 0.03, y, x + 0.03, y + rng.normal(0, 0.001), rng.uniform(0.002, 0.005), c, 0.35,
-                  dry=0.4, bristle=0.5, follow=0.0, pool=0.2, thick=0.3, jitter=0.01, taper=0.4)
+    # the veil: a thin strip of cloud drawn across its lower half
+    for i in range(22):
+        y = my + mr * rng.uniform(0.0, 0.9)
+        x = mx + rng.normal(0, 0.8) * mr
+        c = cv.sample(x, my + mr * 2.5, True) * 0.9
+        cv.stroke(rng, x - 0.035, y, x + 0.035, y + rng.normal(0, 0.0015), rng.uniform(0.002, 0.005), c, 0.4,
+                  dry=0.3, bristle=0.4, follow=0.0, pool=0.2, thick=0.3, jitter=0.01, taper=0.4, soft=0.6)
 
 
 def paint_sea(cv, rng):
@@ -681,14 +691,14 @@ def paint_sea(cv, rng):
                       dry=0.45, bristle=0.4, follow=0.6, mask="sea", pool=0.35, thick=0.4, src="bg",
                       jitter=0.015, taper=0.2)
     # a few long pale glints of the horizon light, fewer and shorter nearer
-    for i in range(160):
+    for i in range(420):
         e = rng.random() ** 2
         y = HOR + 0.002 + e * 0.12
-        x = AXIS + rng.normal(0, 0.10 + 0.3 * e)
+        x = AXIS + rng.normal(0, 0.10 + 0.3 * e) if rng.random() < 0.5 else rng.random()
         ln = rng.uniform(0.01, 0.06) * (1 - 0.6 * e)
         c = rgb("#cdb99c") * (1 - 0.3 * e) + rgb("#6b6a76") * 0.3 * e
-        cv.stroke(rng, x - ln / 2, y, x + ln / 2, y, rng.uniform(0.0008, 0.0022), c, 0.35 * (1 - e),
-                  dry=0.7, bristle=0.5, follow=0.0, mask="sea", pool=0.0, thick=0.5, jitter=0.02, taper=0.5)
+        cv.stroke(rng, x - ln / 2, y, x + ln / 2, y, rng.uniform(0.0008, 0.0022), c, 0.5 * (1 - e),
+                  dry=0.6, bristle=0.5, follow=0.0, mask="sea", pool=0.0, thick=0.5, jitter=0.02, taper=0.5)
     # the ruled horizon, crisp at the center, softened by mist to the sides
     for i in range(40):
         x = rng.random()
@@ -772,7 +782,7 @@ def paint_wall(cv, rng):
         x = rng.uniform(0.21, 0.79)
         y0 = float(gable_top(np.float32(x))) + 0.004
         ln = rng.uniform(0.03, 0.18)
-        c = rgb("#2a2521") if rng.random() < 0.6 else rgb("#5b544d")
+        c = rgb("#231f1c")
         cv.stroke(rng, x, y0, x + rng.normal(0, 0.002), y0 + ln, rng.uniform(0.001, 0.004), c, 0.18,
                   dry=0.6, bristle=0.6, follow=0.0, mask="wall", pool=0.2, thick=0.2, jitter=0.02, taper=0.8)
     # the reveal of the arch catches the glow: a warm band just inside the edge

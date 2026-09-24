@@ -992,7 +992,12 @@ fn work(st: &S, mask: Rc<Mask>, o: Table, preset: Option<&str>) -> Result<()> {
     }
     h.tool.validate().map_err(mlua::Error::runtime)?;
     let seed = seed_of(st, &o)?;
-    st.borrow_mut().canvas.as_mut().ok_or_else(no_canvas)?.work(&mask, &h, seed);
+    {
+        // (dipping into the sitting's palette)
+        let mut g = st.borrow_mut();
+        let s = &mut *g;
+        s.canvas.as_mut().ok_or_else(no_canvas)?.work_with(&mut s.hand.piles, &mask, &h, seed);
+    }
     crate::time::flush(st, true);
     Ok(())
 }
@@ -1130,7 +1135,11 @@ fn stipple(st: &S, mask: Rc<Mask>, o: Table) -> Result<()> {
     }
     sp.tool.validate().map_err(mlua::Error::runtime)?;
     let seed = seed_of(st, &o)?;
-    st.borrow_mut().canvas.as_mut().ok_or_else(no_canvas)?.stipple(&mask, &sp, seed);
+    {
+        let mut g = st.borrow_mut();
+        let s = &mut *g;
+        s.canvas.as_mut().ok_or_else(no_canvas)?.stipple_with(&mut s.hand.piles, &mask, &sp, seed);
+    }
     crate::time::flush(st, true);
     Ok(())
 }

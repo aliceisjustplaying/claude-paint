@@ -13,6 +13,7 @@ use crate::color::{Rgb, from_oklab, to_oklab};
 use crate::mask::Mask;
 use crate::palette::Palette;
 use crate::rng::Rng;
+use crate::tally::Piles;
 use crate::wet::Paint;
 
 /// How a handling reads its color field.
@@ -487,6 +488,15 @@ impl Canvas {
     /// checkerboard phase can't share a pixel, so each gets its own brush and
     /// they are painted in parallel; phases run one after another.
     pub fn work(&mut self, mask: &Mask, hd: &Handling, seed: u64) {
+        self.work_with(&mut Piles::default(), mask, hd, seed);
+    }
+
+    /// `work`, dipping into the piles already mixed on the palette (a
+    /// sitting's, shared by its passes and held brushes) and leaving the
+    /// new ones there: which trips to the palette are reloads and which are
+    /// new mixes, in the hand's ledger (`tally`). `work` starts from a
+    /// clean palette.
+    pub fn work_with(&mut self, piles: &mut Piles, mask: &Mask, hd: &Handling, seed: u64) {
         hd.tool.assert_valid();
         if let Some(t) = &hd.cut_in {
             t.assert_valid();
@@ -613,12 +623,12 @@ impl Canvas {
         // (baked into the dry film, no longer wet): the film before the pass
         // tells that paint from a gap
         let film0 = (hd.fills() && slice.is_some()).then(|| self.film.clone());
-        self.run_plans(plans, (ex, ey), gap, &hd.tool, hd, hd.ramps, clip, seed, &mut rng, slice);
+        self.run_plans(plans, (ex, ey), gap, &hd.tool, hd, hd.ramps, clip, seed, &mut rng, piles, slice);
         if hd.fills() {
             self.fill_gaps(mask, hd, before, film0.as_deref(), clip, seed);
         }
         if let Some(edge) = &hd.cut_in {
-            self.cut_in_edges(mask, edge, hd, seed ^ 0xED6E, &mut rng);
+            self.cut_in_edges(mask, edge, hd, seed ^ 0xED6E, &mut rng, piles);
         }
     }
 
@@ -714,13 +724,15 @@ impl Canvas {
         }
         if !plans.is_empty() {
             let mut rng = Rng::new(seed ^ 0xF111);
-            self.run_plans(plans, (ex, ey), w * 2.0, &hd.tool, hd, hd.ramps, clip, seed ^ 0xF111, &mut rng, None);
+            // (no palette: every dab is `fresh`, a fraction of a reload of
+            // the pass's paint)
+            self.run_plans(plans, (ex, ey), w * 2.0, &hd.tool, hd, hd.ramps, clip, seed ^ 0xF111, &mut rng, &mut Piles::default(), None);
         }
     }
 
     /// Cut in the edges of `mask`: short strokes of the `tool` laid along the
     /// region's outline, just inside it, the way a painter sharpens a form.
-    fn cut_in_edges(&mut self, mask: &Mask, tool: &Tool, hd: &Handling, seed: u64, rng: &mut Rng) {
+    fn cut_in_edges(&mut self, mask: &Mask, tool: &Tool, hd: &Handling, seed: u64, rng: &mut Rng, piles: &mut Piles) {
         let f = mask.f;
         let step = (tool.width * 0.5).max(1.0 / f.scale);
         let inside = |p: (f32, f32)| p.0 >= 0.0 && p.1 >= 0.0 && p.0 < f.width() && p.1 < f.height() && mask.data[f.index(p.0, p.1)] >= 0.5;
@@ -776,7 +788,7 @@ impl Canvas {
             ring += 1;
         }
         if !plans.is_empty() {
-            self.run_plans(plans, (ex, ey), tool.width * 4.0, tool, hd, (0.03, 0.08), hd.limit.as_deref(), seed, rng, None);
+            self.run_plans(plans, (ex, ey), tool.width * 4.0, tool, hd, (0.03, 0.08), hd.limit.as_deref(), seed, rng, piles, None);
         }
     }
 
@@ -787,7 +799,7 @@ impl Canvas {
     /// between them (None for the fill and cut-in sub-passes: their time
     /// goes on the clock when the verb ends).
     #[allow(clippy::too_many_arguments)]
-    fn run_plans(&mut self, plans: Vec<(f32, f32, Option<Rect>, Plan)>, (ex, ey): (f32, f32), gap: f32, tool: &Tool, hd: &Handling, ramps: (f32, f32), clip: Option<&Mask>, seed: u64, rng: &mut Rng, slice: Option<f64>) {
+    fn run_plans(&mut self, plans: Vec<(f32, f32, Option<Rect>, Plan)>, (ex, ey): (f32, f32), gap: f32, tool: &Tool, hd: &Handling, ramps: (f32, f32), clip: Option<&Mask>, seed: u64, rng: &mut Rng, piles: &mut Piles, slice: Option<f64>) {
         let f = self.f;
         // tiles are sized per axis from the footprints: tiles painted at the
         // same time are one tile apart, so a tile at least twice the largest
@@ -815,7 +827,7 @@ impl Canvas {
         // whenever the hand moves on to a new passage
         // (and the hand's ledger: every planned stroke and trip, counted on
         // the whole canvas before a crop drops any tiles; see `tally`)
-        let (mpu, mut piles) = (self.mm_per_unit, crate::tally::Piles::default());
+        let mpu = self.mm_per_unit;
         let mut secs = Vec::with_capacity(tiles.len());
         for t in tiles.iter_mut() {
             let secs0 = self.tally.secs;

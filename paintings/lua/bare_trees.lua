@@ -1,8 +1,7 @@
 -- easel session "bare_trees": bare broadleaved trees in winter that hold together.
 --   easel run paintings/lua/bare_trees.lua [--width 3200]
 -- A lime, the oak from trees_in.lua (same crown, trunk and seed), a beech and a birch, bare.
--- The stout wood is painted whole, a share of the fine twigs is drawn (tree_in detail=),
--- and the rest of the fine twig mass is indicated as a tone first (t:twig_mass()).
+-- The stout wood is painted whole and a share of the fine twigs is drawn (tree_in detail=).
 -- Each "--@ chunk" line starts one chunk as it was run at the easel (clock = painting minutes).
 
 --@ chunk 1 · clock 0
@@ -28,20 +27,13 @@ work(land, {hand="body", length={20, 60}, angle=0.02, coverage=3.4, medium=0.18,
 
 --@ chunk 4 · clock 1440
 wait(24*60)
--- how a bare tree is painted: the fine twig mass first, as a tone (a dry rigger dragged out
--- along the twigs, thin and pale, the sky through it), then the wood: the stout wood as body
--- paint with a lit flank, the thinner wood as strokes pressed to its width, each starting on
--- the wood it leaves from, the selected twigs last
+-- how a bare tree is painted: the wood thick to thin, each band with a brush that can lay its
+-- widths (the stout wood as body paint with a lit flank, then strokes pressed to the width,
+-- each starting on the wood it leaves from); a share of the fine twigs is drawn (tree_in
+-- detail=), with the wood each leaves from, and the rest left out: no tone
 function paint_bare(t, o)
   o = o or {}
   local dark, light, twig = o.dark or "#3b342c", o.light or "#7d7566", o.twig or "#554e45"
-  local tm = t:twig_mass()
-  local cx, cy = t.fork[1], t.fork[2]
-  local way = o.hang and function(x, y) return 1.45 + 0.25 * clamp((x - cx) / 40, -1, 1) end
-                      or function(x, y) return math.atan(y - cy, x - cx) end
-  if (o.tone or 0.3) > 0 then work(tm, {hand="body", tool="rigger 0.7", length={6, 14}, coverage=2, pressure={0.5, 0.2}, load=0.25, medium=0.35,
-    threshold=0.05, hug=false, clip=tm:map(function(v) return (o.tone or 0.3) * v end), angle=way, angle_jitter=0.3,
-    color=function(x, y) return mix(twig, sky(x, y), 0.55) end}) end
   local thick = t:wood(o.thick or 3.5)
   work(thick, {hand="body", tool="round 2", length={4, 12}, coverage=3.5, angle=1.5, angle_jitter=0.6, clip=thick, color=dark, medium=0.15})
   local stout = t:wood(o.stout or 7)
@@ -49,7 +41,8 @@ function paint_bare(t, o)
   local flank = stout * mask(function(x, y) return 1 - stout:at(x + lx, y + ly) end)
   work(flank, {hand="body", tool="round 1.4", length={3, 8}, coverage=2.5, angle=1.5, clip=thick, color=light, medium=0.15})
   t:paint_wood(brush("round", 2.4), {color=dark, min=1.2, max=o.thick or 3.5})
-  t:paint_wood(brush("rigger", o.fine or 0.55), {color=twig, max=1.2, pressure=0.04})
+  t:paint_wood(brush("rigger", 0.9), {color=twig, min=0.5, max=1.2, every=2})
+  t:paint_wood(brush("rigger", 0.55), {color=twig, max=0.5, pressure=0.04, every=2})
 end
 
 --@ chunk 5 · clock 1440
@@ -80,11 +73,11 @@ print(beech)
 paint_bare(beech, {dark="#5a5a55", light="#9d9a90", twig="#4c4a45"})
 
 --@ chunk 8 · clock 1440
--- a birch: a white stem leading high, the fine twigs hanging in a purple-brown haze
+-- a birch: a white stem leading high, fine twigs hanging
 BIRCH = {{918,150},{934,176},{948,230},{960,300,"c"},{966,372},{952,420},{918,432},{886,416},{872,360,"c"},{880,290},{894,220},{906,172}}
 birch = tree_in{crown=outline{pts=BIRCH, char="soft", seed=15}, trunk={{921,610},{918,520},{922,440}}, species="birch", season="winter", sun=WORLD, seed=16}
 print(birch)
-paint_bare(birch, {dark="#4a3f38", twig="#4e3f3c", hang=true, tone=0.4, thick=2.6})
+paint_bare(birch, {dark="#4a3f38", twig="#4e3f3c", thick=2.6})
 local stem = birch:wood(2.6)
 work(stem, {hand="body", tool="round 1.6", length={3, 8}, coverage=3.2, angle=1.55, clip=stem, color="#d9d4c6", medium=0.15})
 local shadeside = stem * mask(function(x, y) return 1 - stem:at(x - 2.2, y) end)

@@ -132,6 +132,12 @@ pub struct Species {
     pub leader: f32,
     /// Pipe-model exponent (higher: limbs stay stouter against the trunk).
     pub pipe: f32,
+    /// How angular the wood is (0 smooth curves .. 1): an oak's limbs run
+    /// fairly straight between their nodes and change direction at them
+    /// (elbows, sympodial zigzags); a beech's rise in smooth curves. Wiggles
+    /// smaller than `angular` × about half a model step between two forks are
+    /// straightened out, and the wood is stroked straight from node to node.
+    pub angular: f32,
 }
 
 impl Species {
@@ -158,7 +164,7 @@ impl Species {
             twig_w: 0.55,
             smooth: 1,
             twigs: 3.2,
-            twig_len: 1.8,
+            twig_len: 1.1,
             twig_spread: 0.9,
             twig_droop: 0.0,
             twig_zig: 0.45,
@@ -179,6 +185,7 @@ impl Species {
             marcescent: 0.025,
             leader: 0.3,
             pipe: 2.7,
+            angular: 1.0,
         }
     }
     /// Beech: smooth gray limbs rising in a fan, level layered sprays, a
@@ -188,6 +195,7 @@ impl Species {
             name: "beech".into(),
             leader: 0.22,
             pipe: 2.5,
+            angular: 0.0,
             up: 0.35,
             out: 0.15,
             crook: 0.12,
@@ -227,6 +235,7 @@ impl Species {
             name: "lime".into(),
             leader: 0.55,
             pipe: 2.4,
+            angular: 0.5,
             density: 0.7,
             up: 0.3,
             out: 0.1,
@@ -267,6 +276,7 @@ impl Species {
             name: "birch".into(),
             leader: 0.6,
             pipe: 2.4,
+            angular: 0.0,
             step: 0.022,
             density: 0.45,
             up: 0.45,
@@ -312,6 +322,7 @@ impl Species {
             name: "willow".into(),
             leader: 0.0,
             pipe: 2.6,
+            angular: 0.0,
             step: 0.026,
             density: 0.5,
             influence: 8.0,
@@ -467,6 +478,9 @@ pub struct Tree {
     /// The width of the finest wood the model grows (units); wood under
     /// about twice this is fine wood (see `drawn`).
     pub twig_w: f32,
+    /// The species' `angular`: the wood is stroked straight from node to
+    /// node when it is above 0.
+    pub angular: f32,
     ragged: f32,
 }
 
@@ -550,10 +564,87 @@ fn resample(line: &[(f32, f32)], step: f32) -> Vec<(f32, f32)> {
     out
 }
 
+/// Straighten each run of nodes between joints (the root, trunk nodes,
+/// forks and tips): keep the nodes that stand off the run's chord by more
+/// than `eps` (Douglas-Peucker), and put the others back on the straight
+/// segments between the kept ones, at the same share of the length.
+fn straighten(nodes: &mut [Node], eps: f32) {
+    let n = nodes.len();
+    let mut kids: Vec<Vec<usize>> = vec![vec![]; n];
+    for i in 0..n {
+        if nodes[i].parent != ROOT {
+            kids[nodes[i].parent].push(i);
+        }
+    }
+    let joint = |i: usize, nodes: &[Node]| nodes[i].parent == ROOT || nodes[i].trunk || kids[i].len() != 1;
+    fn dp(p: &[V3], a: usize, b: usize, eps: f32, keep: &mut [bool]) {
+        if b <= a + 1 {
+            return;
+        }
+        let ab = sub(p[b], p[a]);
+        let l2 = dot(ab, ab).max(1e-9);
+        let (mut best, mut at) = (0.0, a);
+        for (k, q) in p.iter().enumerate().take(b).skip(a + 1) {
+            let t = (dot(sub(*q, p[a]), ab) / l2).clamp(0.0, 1.0);
+            let dd = len(sub(*q, add(p[a], mul(ab, t))));
+            if dd > best {
+                best = dd;
+                at = k;
+            }
+        }
+        if best > eps {
+            keep[at] = true;
+            dp(p, a, at, eps, keep);
+            dp(p, at, b, eps, keep);
+        }
+    }
+    for j in 0..n {
+        if !joint(j, nodes) {
+            continue;
+        }
+        for &c in &kids[j] {
+            let mut run = vec![j];
+            let mut cur = c;
+            loop {
+                run.push(cur);
+                if joint(cur, nodes) {
+                    break;
+                }
+                cur = kids[cur][0];
+            }
+            if run.len() < 3 {
+                continue;
+            }
+            let p: Vec<V3> = run.iter().map(|&i| nodes[i].p).collect();
+            let mut keep = vec![false; p.len()];
+            keep[0] = true;
+            *keep.last_mut().unwrap() = true;
+            dp(&p, 0, p.len() - 1, eps, &mut keep);
+            let mut arc = vec![0.0f32; p.len()];
+            for k in 1..p.len() {
+                arc[k] = arc[k - 1] + len(sub(p[k], p[k - 1]));
+            }
+            let mut a = 0;
+            for k in 1..p.len() {
+                if !keep[k] {
+                    continue;
+                }
+                for m in a + 1..k {
+                    let t = ((arc[m] - arc[a]) / (arc[k] - arc[a]).max(1e-6)).clamp(0.0, 1.0);
+                    nodes[run[m]].p = add(p[a], mul(sub(p[k], p[a]), t));
+                }
+                a = k;
+            }
+        }
+    }
+}
+
 struct Node {
     p: V3,
     parent: usize,
     dir: V3,
+    /// The shoot's heading: its direction over the last few steps.
+    head: V3,
     bias: V3,
     grow: bool,
     kids: u8,
@@ -645,7 +736,7 @@ impl Tree {
         let crook = Fbm::new(seed as u32 ^ 0x7c0c, 2, 6.0);
         for (i, p) in tpts.iter().enumerate() {
             let wob = if i > 0 && i + 1 < tpts.len() { crook.get(i as f32, 0.3) * d * 0.25 * sp.crook } else { 0.0 };
-            nodes.push(Node { p: [p.0 + wob, p.1, 0.0], parent: if i == 0 { ROOT } else { i - 1 }, dir: [0.0, -1.0, 0.0], bias: [0.0; 3], grow: false, kids: 1, trunk: true });
+            nodes.push(Node { p: [p.0 + wob, p.1, 0.0], parent: if i == 0 { ROOT } else { i - 1 }, dir: [0.0, -1.0, 0.0], head: [0.0, -1.0, 0.0], bias: [0.0; 3], grow: false, kids: 1, trunk: true });
         }
         let nt = nodes.len();
         nodes[nt - 1].kids = 0;
@@ -783,7 +874,7 @@ impl Tree {
                     let p = add(nodes[tip].p, mul(dir, d));
                     nodes[tip].kids += 1;
                     let i = nodes.len();
-                    nodes.push(Node { p, parent: tip, dir, bias: [0.0; 3], grow: true, kids: 0, trunk: false });
+                    nodes.push(Node { p, parent: tip, dir, head: dir, bias: [0.0; 3], grow: true, kids: 0, trunk: false });
                     grid.entry(key(p)).or_default().push(i);
                 }
                 continue;
@@ -814,6 +905,19 @@ impl Tree {
                 if n.parent != ROOT && dot(dir, n.dir) < 0.57 {
                     dir = unit(add(dir, mul(n.dir, 0.9)));
                 }
+                // an angular shoot zigzags about its heading but doesn't
+                // curl back on itself: no step more than about 70 degrees
+                // off the way it has been going (a side shoot sets out anew)
+                let lateral = n.kids > 0;
+                if sp.angular > 0.0 && !lateral && n.parent != ROOT && !n.trunk {
+                    for _ in 0..4 {
+                        if dot(dir, n.head) >= 0.34 {
+                            break;
+                        }
+                        dir = unit(add(dir, mul(n.head, 0.6)));
+                    }
+                }
+                let head = if lateral || n.trunk { dir } else { unit(add(mul(n.head, 0.7), mul(dir, 0.3))) };
                 // no growing back into the trunk's foot or through the ground
                 if dir[1] > 0.6 && !pollard {
                     dir[1] = 0.6;
@@ -828,7 +932,7 @@ impl Tree {
                 }
                 nodes[ni].kids += 1;
                 let i = nodes.len();
-                nodes.push(Node { p, parent: ni, dir, bias, grow: true, kids: 0, trunk: false });
+                nodes.push(Node { p, parent: ni, dir, head, bias, grow: true, kids: 0, trunk: false });
                 grid.entry(key(p)).or_default().push(i);
             }
         }
@@ -852,6 +956,12 @@ impl Tree {
                 let m = mul(add(old[nodes[i].parent], old[child[i]]), 0.5);
                 nodes[i].p = add(mul(old[i], 0.5), mul(m, 0.5));
             }
+        }
+
+        // an angular wood (oak): the runs between forks straightened, the
+        // turns kept at a few nodes (Douglas-Peucker on each run)
+        if sp.angular > 0.0 {
+            straighten(&mut nodes, sp.angular * 0.5 * d);
         }
 
         // widths: the pipe model from equal twigs down, remapped so the
@@ -938,14 +1048,20 @@ impl Tree {
                 let base = if at == 0 { (q2.0 - p.0, q2.1 - p.1) } else { (p.0 - q.0, p.1 - q.1) };
                 let bl = (base.0 * base.0 + base.1 * base.1).sqrt().max(1e-6);
                 // off to one side of the limb (a fishbone, not a starburst), or on along it
-                let mut a = base.1.atan2(base.0) + if side == 0.0 { rng.normal() * 0.25 * sp.twig_spread } else { side * sp.twig_spread * rng.range(0.45, 1.0) + rng.normal() * 0.12 };
+                // an angular twig stands well off its limb, not along it
+                let lo = if sp.angular > 0.0 { 0.7 } else { 0.45 };
+                let mut a = base.1.atan2(base.0) + if side == 0.0 { rng.normal() * 0.25 * sp.twig_spread } else { side * sp.twig_spread * rng.range(lo, 1.0) + rng.normal() * 0.12 };
                 let segs = 3;
                 let tl = sp.twig_len * d * rng.range(0.6, 1.3) * k;
                 let mut pts = vec![p];
                 let mut z = vec![l.z[at]];
                 let mut cur = p;
                 for s in 0..segs {
-                    let sa = if s % 2 == 0 { 1.0 } else { -1.0 };
+                    let mut sa = if s % 2 == 0 { 1.0 } else { -1.0 };
+                    // an angular twig's zigzag starts away from its limb
+                    if sp.angular > 0.0 && side != 0.0 {
+                        sa *= side;
+                    }
                     a += sp.twig_zig * sa * rng.range(0.3, 0.8);
                     let (mut dx, mut dy) = (a.cos(), a.sin());
                     // pendulous: bend toward hanging
@@ -1066,6 +1182,7 @@ impl Tree {
             sun,
             seed,
             twig_w,
+            angular: sp.angular,
             ragged: sp.ragged,
         };
         tree.touches = tree.lay_touches(sp, season, &mut rng);
@@ -1296,6 +1413,28 @@ pub struct WoodStroke {
     pub own: usize,
 }
 
+/// Points every `h` units or closer along each straight segment (the given
+/// points kept), so a brush's spline through them keeps the corners; `own`
+/// (a count of leading points) is carried over.
+fn subdivide(p: &[(f32, f32)], w: &[f32], own: usize, h: f32) -> (Vec<(f32, f32)>, Vec<f32>, usize) {
+    let (mut op, mut ow) = (vec![p[0]], vec![w[0]]);
+    let mut own2 = 1;
+    for k in 1..p.len() {
+        let (a, b) = (p[k - 1], p[k]);
+        let l = ((b.0 - a.0).powi(2) + (b.1 - a.1).powi(2)).sqrt();
+        let m = ((l / h).ceil() as usize).max(1);
+        for j in 1..=m {
+            let t = j as f32 / m as f32;
+            op.push((lerp(a.0, b.0, t), lerp(a.1, b.1, t)));
+            ow.push(lerp(w[k - 1], w[k], t));
+        }
+        if k < own {
+            own2 = op.len();
+        }
+    }
+    (op, ow, own2)
+}
+
 fn polylen(p: &[(f32, f32)]) -> f32 {
     p.windows(2).map(|w| ((w[1].0 - w[0].0).powi(2) + (w[1].1 - w[0].1).powi(2)).sqrt()).sum()
 }
@@ -1438,6 +1577,7 @@ impl Tree {
                     w.extend_from_slice(&self.limbs[t].w[1..]);
                 }
                 if pts.len() >= 2 {
+                    let (pts, w, own) = if self.angular > 0.0 { subdivide(&pts, &w, own, 0.5) } else { (pts, w, own) };
                     out.push(WoodStroke { pts, w, limb: i, tip, fine: self.is_fine(l), own });
                 }
             }
@@ -1739,7 +1879,7 @@ mod tests {
                 }
                 if s.own < s.pts.len() {
                     // the leading twig drawn on from the tip
-                    let tw = t.limbs.iter().position(|q| q.lead && q.parent == Some(s.limb) && q.pts[1] == s.pts[s.own]).expect("a leading twig");
+                    let tw = t.limbs.iter().position(|q| q.lead && q.parent == Some(s.limb) && q.pts[0] == s.pts[s.own - 1]).expect("a leading twig");
                     covered[tw].iter_mut().for_each(|c| *c = true);
                 }
             }

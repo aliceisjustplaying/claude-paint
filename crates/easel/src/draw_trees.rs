@@ -98,7 +98,7 @@ const SEASONS: &str = "spring, summer, autumn, late_autumn, winter";
 const SPECIES_KEYS: &[&str] = &[
     "step", "density", "influence", "kill", "up", "out", "crook", "kink", "inertia", "shell", "voids", "void_size", "depth", "girth", "twig_w", "twigs", "twig_len",
     "twig_spread", "twig_droop", "twig_zig", "twig_along", "clump", "squash", "hang", "fill", "ragged", "leafiness", "leafy_w", "touch", "touch_w", "hook", "droop",
-    "flat", "touches", "marcescent", "scaffold", "smooth", "pipe", "leader",
+    "flat", "touches", "marcescent", "scaffold", "smooth", "pipe", "leader", "angular",
 ];
 
 fn species_of(o: &Table, name: &str) -> Result<Species> {
@@ -107,7 +107,7 @@ fn species_of(o: &Table, name: &str) -> Result<Species> {
         ($($f:ident),*) => {$( if let Some(v) = num(o, stringify!($f))? { s.$f = v; } )*};
     }
     over!(step, density, influence, kill, up, out, crook, kink, inertia, shell, voids, void_size, depth, twig_w, twigs, twig_len, twig_spread, twig_droop, twig_zig, twig_along,
-        clump, squash, hang, fill, ragged, leafiness, leafy_w, touch, touch_w, hook, droop, flat, touches, marcescent, pipe, leader);
+        clump, squash, hang, fill, ragged, leafiness, leafy_w, touch, touch_w, hook, droop, flat, touches, marcescent, pipe, leader, angular);
     if let Some(v) = num(o, "girth")? {
         s.trunk = v;
     }
@@ -289,7 +289,8 @@ fn lay_wood(lua: &Lua, t: &Tree, b: &AnyUserData, opts: Option<Table>, detail: f
     let shake = num(&opts, "shake")?.unwrap_or(0.3);
     let end = num(&opts, "pressure")?;
     let clip = opts.get::<Value>("clip")?;
-    let bw: f32 = b.get("width")?;
+    // the widest mark the brush lays, pressed right down
+    let bw: f32 = b.call_method("mark_width", 1.0f32)?;
     let press = |w: f32| -> Result<f32> { b.call_method::<f32>("pressure_for", w.min(bw)) };
     let mut n = 0;
     for s in t.wood_strokes(lo, hi, detail) {
@@ -455,6 +456,27 @@ impl UserData for TreeU {
         m.add_method("paint", |lua, o, (b, opts): (AnyUserData, Option<Table>)| lay(lua, std::slice::from_ref(&o.t), &b, opts));
         // t:paint_wood(brush, {color=, min=, max=, twigs=true, every=5, load=, pressure=, ramps=, shake=, clip=})
         m.add_method("paint_wood", |lua, o, (b, opts): (AnyUserData, Option<Table>)| lay_wood(lua, &o.t, &b, opts, o.detail));
+        // t:wood_strokes{min=, max=, detail=}: the strokes paint_wood lays, {pts, w, tip, fine, limb}
+        m.add_method("wood_strokes", |lua, o, opts: Option<Table>| {
+            let (lo, hi, detail) = match &opts {
+                Some(t) => {
+                    check_keys(t, &["min", "max", "detail"], "tree:wood_strokes")?;
+                    (num(t, "min")?.unwrap_or(0.0), num(t, "max")?.unwrap_or(f32::MAX), num(t, "detail")?.unwrap_or(o.detail).clamp(0.0, 1.0))
+                }
+                None => (0.0, f32::MAX, o.detail),
+            };
+            let out = lua.create_table()?;
+            for (i, s) in o.t.wood_strokes(lo, hi, detail).iter().enumerate() {
+                let t = lua.create_table()?;
+                t.set("pts", pts_table(lua, &s.pts)?)?;
+                t.set("w", lua.create_sequence_from(s.w.iter().copied())?)?;
+                t.set("tip", s.tip)?;
+                t.set("fine", s.fine)?;
+                t.set("limb", s.limb + 1)?;
+                out.raw_set(i + 1, t)?;
+            }
+            Ok(out)
+        });
         // t:twig_mass(detail): the fine wood not drawn as lines, as a soft tone (0..1)
         m.add_method("twig_mass", |_, o, detail: Option<f32>| Ok(wrap(o.t.twig_mass(frame(&o.st)?, detail.unwrap_or(o.detail).clamp(0.0, 1.0)))));
         m.add_meta_method(MetaMethod::ToString, |_, o, ()| {

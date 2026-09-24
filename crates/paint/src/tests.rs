@@ -388,7 +388,7 @@ fn thin_film_over_dry_impasto_coats_peaks_and_pools_a_little() {
     let (sa, st): (f64, f64) = (add.iter().map(|&v| v as f64).sum(), t.iter().map(|&v| v as f64).sum());
     assert!((st - sa).abs() < sa * 1e-4, "volume {sa} -> {st}");
     let (lo, hi) = t.iter().fold((f32::MAX, 0.0f32), |(l, m), &v| (l.min(v), m.max(v)));
-    assert!(lo >= 0.99 * crate::canvas::MIN_FILM_UM, "a peak went bare: {lo} µm");
+    assert!(lo >= 0.99 * crate::surface::PEAK_FILM_UM, "a peak went bare: {lo} µm");
     assert!(hi <= 2.25 * 2.0 * 1.01, "a hollow pooled {hi} µm");
     // most of the surface is simply coated
     let even = t.iter().filter(|&&v| (v - 2.25).abs() < 0.1).count() as f32 / t.len() as f32;

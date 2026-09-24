@@ -157,8 +157,27 @@ touches on the clumps [trees_in study, `paintings/lua/trees_in.lua`]. Paint it i
    `lit={0.4, 0.6}` `#46522e`; `lit={0.6, 0.78}` `#6f7c45`; `lit={0.78, 1}` `#98a060`, `every=6`.
 
 A bare tree: the same crown, trunk and seed with `season="winter"` grow the same wood (even
-moved across the canvas). Stroke the twigs `rigger 0.55`, `pressure=0.04`, a shade lighter than
-the limbs. Paint only `share=0.4` of the dead leaves an oak keeps, or they read as burrs.
+moved across the canvas). *Principle: say the twig mass, don't count it.* A painter draws the
+big limbs whole, a few twigs with character, and indicates the rest of a winter crown's fine
+twigs as a soft tone at its edge. `tree_in` does the picking: `detail=` (default 0.35 bare)
+is the share of the fine wood drawn, always with the wood it leaves from, and
+`t:twig_mass()` is the rest as a mask. Paint in this order [bare_trees study,
+`paintings/lua/bare_trees.lua`, notes/oak.md]:
+1. The tone first: `work(tm, {hand="body", tool="rigger 0.7", length={6, 14}, coverage=2,
+   pressure={0.5, 0.2}, load=0.25, medium=0.35, threshold=0.05, hug=false,
+   clip=tm:map(function(v) return 0.3 * v end), angle=` out from `t.fork` `, angle_jitter=0.3,
+   color=` twig color mixed 0.55 toward the sky`})`. At 0.4 of the mask it fogs the crown; a
+   scumble or a fan brush makes blobs or confetti. A birch's hangs: angle ~1.45.
+2. The wood thick to thin: `t:wood(3.5)` as body paint (lit flank on `t:wood(7)`), then
+   `t:paint_wood(brush("round", 2.4), {min=1.2, max=3.5})`, then
+   `t:paint_wood(brush("rigger", 0.55), {max=1.2, pressure=0.04})` a shade lighter than the
+   limbs. The bands are local widths, so no stretch of wood is left out and nothing floats.
+   (Before this, `paint_wood` picked limbs by their base width: every stout limb's thin end was
+   painted by no pass and its twigs hung in the air.)
+Paint only `share=0.4` of the dead leaves an oak keeps, or they read as burrs.
+*Ceiling:* at 1000 px the drawn twigs are sub-pixel hairlines and read as faint, broken lines;
+the tone's strokes read as a crosshatch at 3200 if pressed harder. Lines only (no tone: `paint_bare(t, {tone=0})` in the study)
+is a fair alternative: judge the pair.
 Field trees: draw 2–3 different crowns (a broad low one, a tall narrow one) with short
 trunks, then `tree_group{crowns=, trunks=, species={...}, count=6, horizon=HZ, spread=0.8}`.
 Paint far to near with `t.haze`, and lay one `g:shadow():blur(1.5)` glaze at 0.25. Don't

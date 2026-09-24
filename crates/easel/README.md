@@ -673,12 +673,46 @@ oak:paint(brush("round", oak.touch_w * 0.8), {color="#98a060", lit={0.78, 1}, ev
 -- the same oak bare: same crown, trunk and seed (moved 322 right), season="winter"
 local function moved(pts) local o = {} for i, p in ipairs(pts) do o[i] = {p[1] + 322, p[2]} end return o end
 bare = tree_in{crown=moved(oak.crown), trunk={{518,592},{514,520},{509,452}}, species="oak", season="winter", sun=WORLD, seed=7}
--- wood as above, then the fine twigs thinner and lighter: the crown's lace against the sky
+-- the fine twig mass first, as a tone: a dry rigger dragged out along the twigs, pale, the sky through it
+local tm, cx, cy = bare:twig_mass(), bare.fork[1], bare.fork[2]
+work(tm, {hand="body", tool="rigger 0.7", length={6, 14}, coverage=2, pressure={0.5, 0.2}, load=0.25, medium=0.35,
+  threshold=0.05, hug=false, clip=tm:map(function(v) return 0.3 * v end), angle_jitter=0.3,
+  angle=function(x, y) return math.atan(y - cy, x - cx) end, color=function(x, y) return mix("#554e45", sky(x, y), 0.55) end})
+-- the wood as above, then the drawn twigs thinner and lighter: the crown's lace against the sky
 bare:paint_wood(brush("rigger", 0.55), {color="#554e45", max=1.2, pressure=0.04})
 bare:paint(brush("round", bare.touch_w * 0.7), {color="#6e5234", share=0.4})   -- the few dead leaves an oak keeps
 ```
 
-`tree_in{crown=, trunk=, species=, season=, sun=, seed=, ...}`: `crown` is
+**A bare tree holds together.** `paint_wood` paints the wood by its
+*local* width: `{min=1.2, max=3.5}` is every run of wood between 1.2 and
+3.5 wide, including the thin outer end of a stout limb and of the leader
+(the runs `t:wood(3.5)` leaves out). Every stroke starts on wood painted
+before it: a run starts one point back in the thicker wood, and a limb
+starts half a segment back along its parent, pulled out of it as a
+painter pulls a twig from a branch. The pressure follows the wood's width
+along the stroke, and the brush lifts off only at a real tip, never where
+the wood goes on or where twigs leave it. A limb's leading twig is drawn
+on in the same stroke, so the limb runs out into it in one movement. So
+paint the bands thick to thin (`t:wood(3.5)`, then `min=1.2, max=3.5`, then
+`max=1.2`) and nothing floats.
+
+**Fewer, more deliberate twigs: `detail`.** A painter doesn't paint every
+twig. `detail` (0..1) is the share of the *fine* wood (the twigs and limbs
+under about two twig widths) drawn as lines: pieces picked for character
+(long ones, a limb's leading twig, those toward the crown's edge where they
+show against the sky; one side twig per spot, not a starburst), always
+with the wood they leave from. The stout wood is always drawn. The rest is
+left to a tone: `t:twig_mass(detail)` is a soft mask (0..1) of the fine
+twig mass that isn't drawn, strongest where the twigs are thickest, spread
+about half a twig's length. Lay it first, thin and pale (above), and draw the
+selected twigs over it. `tree_in{detail=}` sets it for the tree (read it
+back as `t.detail`); `paint_wood{detail=}` and `t:twig_mass(d)` override
+it. The default is `0.35 + 0.65 * leaf` (the season's share of leaves):
+0.35 for a bare tree, 1 (every twig) in summer, where the leaves carry the
+fine structure. `detail=1` draws every twig, as before; 0 only the stout
+wood. The study is `paintings/lua/bare_trees.lua` (notes/oak.md).
+
+`tree_in{crown=, trunk=, species=, season=, sun=, seed=, detail=, ...}`: `crown` is
 a closed `outline{}` or points. With fewer than 12 points the corners are
 rounded. `trunk` runs from the foot up, as points or an open outline. If
 it stops short, a crooked leader carries it on into the crown. A single
@@ -717,7 +751,7 @@ What you get:
   fill, lit, shade, turn, dead, limb}`, depth from -1 at the back to 1 at
   the front), `t.foot`, `t.fork`, `t.height`, `t.step`, `t.grain` (mean
   clump radius), `t.touch_w` (a good pointed-brush width), `t.bounds`,
-  `t.crown`, `t.species` and `t.season`.
+  `t.crown`, `t.species`, `t.season` and `t.detail`.
 - **Masks.** `t:leaves()` or `t:leaves{depth={lo, hi}, lit={lo, hi},
   turn=, dead=}` (clumps by depth or light), `t:light()` (0..1 on the
   leaves), `t:lit(from)` and `t:shade(from)` (default 0.55), `t:gaps(reach)`
@@ -731,9 +765,15 @@ What you get:
   pointed brush pressed to each touch's width. `color` may be
   `function(touch)` (autumn: mix by `touch.turn`). `share` lays a
   deterministic part of them. The `lit` ranges are half open.
-- **Wood strokes.** `t:paint_wood(brush, {color=, min=, max=, twigs=true,
-  every=5, pressure=, ...})` strokes every limb whose base width is in
-  `[min, max)`, pressed from its base width to its tip.
+- **Wood strokes.** `t:paint_wood(brush, {color=, min=, max=, detail=,
+  twigs=true, every=5, pressure=, ramps=, shake=, clip=})` strokes the wood
+  whose local width is in `[min, max)`, each stroke starting on the wood
+  it leaves from and pressed to the width along it (see "A bare tree holds
+  together" above). `pressure` is the pressure at a tip (where the brush
+  lifts off); `ramps` defaults to no attack and a short lift at tips only.
+  `twigs=false` leaves out the fine twigs past the model.
+- **Twig mass.** `t:twig_mass(detail)`: the fine wood not drawn at
+  `detail` (default `t.detail`) as a soft tone, 0..1.
 
 **Field trees in depth.** Draw a few crowns and `tree_group` grows them
 where you drew them. It adds `count` more trees behind, made from your
@@ -754,7 +794,7 @@ end
 ```
 
 `tree_group{crowns=, trunks=, species= (a name or a list, one per crown),
-season=, foot=, count=3, horizon=, recede=1.5, air=0.5, spread=0.5,
+season=, detail=, foot=, count=3, horizon=, recede=1.5, air=0.5, spread=0.5,
 narrow=0.3, sun=, seed=}`: `foot` is the y the drawn trees stand on if no
 trunks are given. The added trees stand `1 + u*recede` times farther off,
 with `haze = 1 - exp(-(d - 1)*air)`. They spread `spread` times the drawn

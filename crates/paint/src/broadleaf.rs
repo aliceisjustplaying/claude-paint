@@ -1899,6 +1899,51 @@ mod tests {
         }
     }
 
+    /// Straight runs (interior nodes that barely turn) and hooks (net
+    /// turning over three segments beyond 120 degrees) on the model limbs.
+    fn runs_and_hooks(t: &Tree) -> (f32, usize) {
+        let (mut straight, mut inner, mut hooks) = (0, 0, 0);
+        for l in t.limbs.iter().filter(|l| !l.twig && l.order > 0) {
+            let a: Vec<f32> = l.pts.windows(2).map(|w| (w[1].1 - w[0].1).atan2(w[1].0 - w[0].0)).collect();
+            let turn: Vec<f32> = a.windows(2).map(|w| { let mut d = w[1] - w[0]; while d > PI { d -= TAU; } while d < -PI { d += TAU; } d }).collect();
+            inner += turn.len();
+            straight += turn.iter().filter(|d| d.abs() < 0.05).count();
+            hooks += turn.windows(3).filter(|w| (w[0] + w[1] + w[2]).abs() > 2.0 * PI / 3.0).count();
+        }
+        (straight as f32 / inner.max(1) as f32, hooks)
+    }
+
+    #[test]
+    fn an_oak_is_angular_a_beech_smooth() {
+        let c = crown();
+        let trunk = [(505.0, 560.0), (498.0, 330.0)];
+        let w = Season::named("winter").unwrap();
+        let oak = Tree::grow(&c, Some(&trunk), &Species::oak(), &w, [-0.5, -0.7, 0.3], 3);
+        let round = Tree::grow(&c, Some(&trunk), &Species { angular: 0.0, ..Species::oak() }, &w, [-0.5, -0.7, 0.3], 3);
+        let (so, ho) = runs_and_hooks(&oak);
+        let (sr, hr) = runs_and_hooks(&round);
+        // the oak runs straight between a few turning nodes, and hooks back less
+        assert!(so > 0.5 && sr < 0.25, "straight nodes: oak {so}, not angular {sr}");
+        assert!(ho < hr, "hooks: oak {ho}, not angular {hr}");
+        // strokes follow the straight runs: every stroke point lies on its
+        // limb's segments (no spline between them)
+        for s in oak.wood_strokes(0.0, f32::MAX, 1.0).iter().filter(|s| s.own == s.pts.len()) {
+            let l = &oak.limbs[s.limb];
+            let par = l.parent.map(|q| oak.limbs[q].pts.clone()).unwrap_or_default();
+            for p in &s.pts {
+                let on = |line: &[(f32, f32)]| line.len() >= 2 && off_wood(*p, line, &vec![0.0; line.len()]) < 1e-3;
+                assert!(on(&l.pts) || on(&par), "{p:?} off limb {} and its parent", s.limb);
+            }
+        }
+        // a beech keeps its smooth curves
+        let beech = Tree::grow(&c, Some(&trunk), &Species::beech(), &w, [-0.5, -0.7, 0.3], 3);
+        assert!(beech.angular == 0.0 && runs_and_hooks(&beech).0 < so - 0.2, "{}", runs_and_hooks(&beech).0);
+        // wood thins at forks, and twigs end thinner than they start
+        for l in oak.limbs.iter().filter(|l| l.twig) {
+            assert!(l.w[l.w.len() - 1] < l.w[0]);
+        }
+    }
+
     #[test]
     fn twig_mass_is_a_soft_tone_where_the_undrawn_twigs_are() {
         let c = crown();

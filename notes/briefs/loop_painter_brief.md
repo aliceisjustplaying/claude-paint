@@ -41,4 +41,4 @@ reference images, never look at pictures of his work.
 - Final reply: what you changed, render paths, sketchbook candidates.
 
 ## Anonymity (required)
-This project is published under the pseudonym "alice". Never write the owner's real name or an absolute home path into any committed file: write paths as `~/...` (e.g. `~/tmp/...`, `~/src/a/...`). A pre-commit hook rejects violations.
+This project is published under the pseudonym "alice". Never write Alice's real name or an absolute home path into any committed file: write paths as `~/...` (e.g. `~/tmp/...`, `~/src/a/...`). A pre-commit hook rejects violations.

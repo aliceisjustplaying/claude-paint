@@ -440,7 +440,7 @@ conifers, grass), `glaze` (thin veils; `medium` 0.6–0.95), `scumble`,
 
 | option | meaning |
 |---|---|
-| `color` | a color, `function(x, y)` returning one, or a sky or clouds (`color=s`): the look you want on the canvas |
+| `color` | a color, `function(x, y)` returning one, a sky or clouds (`color=s`), or piles (`color=P`, below): the look you want on the canvas |
 | `color_over` | instead of `color`: relative to what's under each stroke. `{shift={dL, da, db}}` (e.g. a shadow: `{shift={-0.06, 0, -0.012}}`), or `function(x, y, under)` sampled every 2 units with `under` = the canvas there before the pass |
 | `hug` | `true` (default): strokes reach a mask's edges; `false` lets edges thin out |
 | `angle` | stroke direction, a number or `function(x, y)` |
@@ -466,6 +466,64 @@ stipple(mask, {width=2.4, color="#cfccc2", coverage=function(x, y) ... end,
                                           -- (stars, snowflakes); color_over works here too
 glaze(mask_or_nil, {color="#8a6a3a", coats=0.4, pigment="transparent"})   -- or semi, opaque, varnish
 ```
+
+#### Piles: mix piles, don't paint a formula
+
+A `color=function(x, y)` gives every stroke the exact color of the formula
+at its center: a gradient or glow written as math comes out mathematically
+perfect ("a little too perfect", Alice on the evening_lake sky). A painter
+knifes a handful of piles along the passage's range, reloads from them and
+makes the transitions on the canvas. `piles` does that:
+
+```lua
+SKYP = piles(skycol, {n=7, over=skyM, pal=skypal, medium=0.3, coverage=3.8, load=0.75, seed=601})
+print(SKYP)                  -- the piles, dark to light, and their recipes
+work(skyM, {hand="broad", color=SKYP, ...})   -- each stroke dips into one pile
+blend(skyM, {angle=0, coverage=1.2})          -- the steps softened, on the canvas
+```
+
+- The piles are chosen along the field's range over `over` (clusters of
+  its distinct colors, so a small glow still gets its own pile), or given:
+  `colors={"#47536c", "#8b8d9c", ...}` (the field then only says where
+  each goes).
+- They are mixed **when `piles` is called**, from `pal`'s tubes, each aimed
+  at how it looks over what is on the canvas where it will go (so call it
+  after the underpainting it covers), and each misses a little, as a pile
+  mixed by eye does. Every pile is a new pile on the palette (hand time).
+- A stroke loads from the pile its center picks (never per pixel): the
+  nearest pile to the field there, with the boundary between two zones
+  wandering in patches (`overlap`, `patch`), so steps are ragged and
+  interleaved, not contour lines. Wet strokes of neighboring piles fuse
+  where they meet; `blend` does the rest.
+- Piles run out and are knifed again: each part of the picture (irregular
+  cells about `batch` units across) gets its own batch, a little off in
+  its proportions (`vary`) with a touch of the neighboring pile off the
+  knife (`dirty`). No two passages are the same mixture.
+- Everything follows from `seed` and position (deterministic). Give a
+  `seed`, or the pile set takes one from the painting's seed stream (and
+  every later auto seed shifts).
+
+| option | meaning |
+|---|---|
+| `n` | how many piles (default 5; 1–16) |
+| `over` | the mask whose colors choose the piles and whose underlayer they are aimed over (default: the whole canvas) |
+| `colors` | the painter's own piles instead |
+| `pal`, `medium` | tubes and oil medium the piles are aimed with (default: the style's palette, thin medium) |
+| `aim`, `coats` | `"laid"` (default), `"masstone"`, or a number of coats |
+| `hand`, `tool`, `coverage`, `load` | the pass the piles are mixed for (default a `broad` pass): `"laid"` aims them at the thickness it lays, as `work` would. Give the pass's own `coverage` and `load` |
+| `mix` | `false`: don't mix (the field is only stepped; each pass mixes its own paint for the steps) |
+| `overlap` | 0..1, how far either pile reaches into the other's zone (default 0.5) |
+| `patch` | size (units) of the wandering boundary's patches (default 45) |
+| `vary`, `batch`, `dirty` | knife variation (0.08), batch size in units (130), most of the neighbor a batch picks up (0.12) |
+
+`P:colors()` lists the piles' looks, `P:recipes()` their recipes,
+`P:at(x, y)` the look of the pile a stroke there dips into, `P:pick(x, y)`
+which pile (1-based), `P:field(x, y)` the field they were mixed for. Used
+as `color=` elsewhere (`stipple`, a brush's paint), a pile set reads as
+its stepped field. Reuse one set for touch-ups later: they are the same
+piles. Mixed looking at the canvas, a pile set in a crop render (`--crop`)
+sees only the crop's window, so its recipes can differ a little from the
+whole canvas's.
 
 ### Trees and foliage
 

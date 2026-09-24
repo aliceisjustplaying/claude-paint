@@ -20,10 +20,13 @@
 //! rate until the film is worked again); version 6 (`PAINTCK6`) adds the
 //! drawing (`graphite::Drawing`): every cell of the deposit (coverage,
 //! flake reflectance, lift, fixed floor, film when drawn) and the
-//! whole-canvas guide with its fixed floor; version 7 (`PAINTCK7`) adds each
+//! whole-canvas guide with its fixed floor; version 7 (`PAINTCK7`) adds
+//! hand time (`tally`): the slice setting and the complete ledger, with the
+//! part already on the clock, so a resumed hand-timed painting keeps ageing
+//! its passes and owes the time it owed; version 8 (`PAINTCK8`) adds each
 //! wet pixel's surface film (paint laid into wet paint and not yet worked
-//! in: `wet::Wet::top`). Older files are refused
-//! (re-run to checkpoint again).
+//! in: `wet::Wet::top`, branch r6-wet), appended after the hand-time block.
+//! Older files are refused (re-run to checkpoint again).
 //!
 //! Format: little-endian binary, `MAGIC`, then a free-form UTF-8 header
 //! (length-prefixed; the caller's key=value lines), then the canvas. If you
@@ -34,7 +37,7 @@ use crate::surface::Linen;
 use crate::wet::LAT;
 use std::io::{self, Read, Write};
 
-const MAGIC: &[u8; 8] = b"PAINTCK7";
+const MAGIC: &[u8; 8] = b"PAINTCK8";
 
 fn put_u64(w: &mut impl Write, v: u64) -> io::Result<()> {
     w.write_all(&v.to_le_bytes())
@@ -153,9 +156,6 @@ impl Canvas {
         }
         put_f32(w, self.ground_um)?;
         put_all(w, wt.cover.iter().copied())?;
-        put_all(w, wt.top.iter().copied())?;
-        put_all(w, wt.tlat.iter().flat_map(|l| *l))?;
-        put_all(w, wt.thide.iter().flat_map(|h| *h))?;
         match &self.drawing {
             None => put_u64(w, 0)?,
             Some(d) => {
@@ -163,6 +163,25 @@ impl Canvas {
                 put_all(w, d.to_f32s())?;
             }
         }
+        // hand time (version 7)
+        match self.hand_slice {
+            None => put_u64(w, 0)?,
+            Some(m) => {
+                put_u64(w, 1)?;
+                put_f32(w, m)?;
+            }
+        }
+        let t = &self.tally;
+        for v in [t.strokes, t.touches, t.remixes, t.wipes, t.lines] {
+            put_u64(w, v)?;
+        }
+        for v in [t.length_mm, t.reloads, t.secs, t.clocked] {
+            put_u64(w, v.to_bits())?;
+        }
+        // the wet film's surface layer (version 8)
+        put_all(w, wt.top.iter().copied())?;
+        put_all(w, wt.tlat.iter().flat_map(|l| *l))?;
+        put_all(w, wt.thide.iter().flat_map(|h| *h))?;
         Ok(())
     }
 
@@ -267,9 +286,6 @@ impl Canvas {
         let ground_um = get_f32(r)?;
         c.ground_um = if ground_um.is_finite() { ground_um.max(0.0) } else { 0.0 };
         wet.cover = get_all(r, n)?;
-        wet.top = get_all(r, n)?;
-        wet.tlat = get_all(r, n * LAT)?.as_chunks::<LAT>().0.to_vec();
-        wet.thide = get_all(r, n * 3)?.as_chunks::<3>().0.to_vec();
         c.wet = wet;
         c.drawing = match get_u64(r)? {
             0 => None,
@@ -280,6 +296,29 @@ impl Canvas {
             }
             _ => return Err(bad("checkpoint drawing flag is invalid")),
         };
+        c.hand_slice = match get_u64(r)? {
+            0 => None,
+            1 => Some(get_f32(r)?).filter(|m| m.is_finite() && *m > 0.0),
+            _ => return Err(bad("checkpoint hand time flag is invalid")),
+        };
+        let mut n5 = [0u64; 5];
+        for v in n5.iter_mut() {
+            *v = get_u64(r)?;
+        }
+        let mut f4 = [0f64; 4];
+        for v in f4.iter_mut() {
+            *v = f64::from_bits(get_u64(r)?);
+        }
+        if !f4.iter().all(|v| v.is_finite()) {
+            return Err(bad("checkpoint hand-time ledger is invalid"));
+        }
+        let [strokes, touches, remixes, wipes, lines] = n5;
+        let [length_mm, reloads, secs, clocked] = f4;
+        c.tally = crate::tally::Tally { strokes, touches, length_mm, reloads, remixes, wipes, lines, secs, clocked };
+        // the wet film's surface layer (version 8)
+        c.wet.top = get_all(r, n)?;
+        c.wet.tlat = get_all(r, n * LAT)?.as_chunks::<LAT>().0.to_vec();
+        c.wet.thide = get_all(r, n * 3)?.as_chunks::<3>().0.to_vec();
         Ok((c, header))
     }
 }

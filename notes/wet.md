@@ -207,7 +207,8 @@ surface film, not pickup depth, was what made touches dirty at high
 resolution.
 
 Costs: 44 bytes more per pixel (about 300 MB at 3200 × 2240). Checkpoints
-are `PAINTCK7` (they store the surface film); `PAINTCK6` files are refused.
+are `PAINTCK8` (they store the surface film, after main's hand-time block
+`PAINTCK7`); older files are refused.
 No new painter API: the same verbs behave like paint.
 
 ### How a painter uses it (easel)
@@ -657,8 +658,6 @@ lights and the wood are as they were. Stacked pass 3 / fix:
 `reviewfix_l5_near.jpg`. The golden scene and the hand-time replay hashes
 (both profiles) are re-recorded because the fix changes output.
 
-**Checkpoint format.** Main still writes `PAINTCK6`; the r6-time
-checkpoint fix, which takes `PAINTCK7`, hadn't landed when this was
-written. This branch uses `PAINTCK7` for the surface film. When both
-merge, the surface film should become `PAINTCK8` (a one-line `MAGIC`
-bump plus the doc line in `checkpoint.rs`).
+**Checkpoint format.** Merged with main's hand-time checkpoint
+(`PAINTCK7`, r6-time's review fix): the surface film is now `PAINTCK8`,
+appended after the hand-time block; older files are refused.

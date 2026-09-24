@@ -50,11 +50,14 @@ pub struct Studio {
     pub crop: Option<paint::Crop>,
     /// The hand's clock: hand time, sittings (time.rs).
     pub hand: crate::time::Hand,
+    /// Sittings are enforced (every new session; a log says so in its
+    /// header): see `time::at_easel`.
+    pub strict: bool,
 }
 
 impl Studio {
     pub fn new(width: usize) -> Self {
-        Studio { width, canvas: None, style: None, setup: None, seed: 1, chunk: 0, calls: 0, clock: 0.0, clock0: 0.0, rng: Rng::new(1), brushes: Vec::new(), out: String::new(), field_secs: 0.0, view: None, crop: None, hand: crate::time::Hand::default() }
+        Studio { width, canvas: None, style: None, setup: None, seed: 1, chunk: 0, calls: 0, clock: 0.0, clock0: 0.0, rng: Rng::new(1), brushes: Vec::new(), out: String::new(), field_secs: 0.0, view: None, crop: None, hand: crate::time::Hand::default(), strict: false }
     }
 
     /// Start chunk `n`: its randomness depends only on the seed and `n`.
@@ -1644,6 +1647,7 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
             let pig = pigment_of(o.get::<Option<String>>("pigment")?.as_deref(), rgb_of(&o.get::<Value>("color")?)?)?;
             let b = support(m.as_deref(), f, 4.0);
             let th = scalar_field(&st1, &o.get::<Option<Value>>("coats")?.unwrap_or(Value::Number(0.5)), b, "coats")?;
+            time::at_easel(&st1)?;
             // a glaze goes over dry paint: the painter waits for what is
             // under it to dry first, and that time passes on the clock
             time::verb(&st1, Verb::Jump { rest: Rest::IfLong, note: Some(("glaze", "the paint under it")) }, |s| {
@@ -1712,6 +1716,7 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
                 }
             };
             // brushed over the whole canvas once it is dry, like a glaze
+            time::at_easel(&st1)?;
             time::verb(&st1, Verb::Jump { rest: Rest::IfLong, note: Some(("varnish", "the paint under it")) }, |s| {
                 let var = Fbm::new(s.seed as u32 + seed, 3, 400.0);
                 let c = s.canvas.as_mut().ok_or_else(no_canvas)?;

@@ -71,7 +71,7 @@ fn main() {
     });
     // a far range, just showing over the bank to the left, low and pale
     let hill_n = Fbm::new(41, 4, 150.0);
-    let hills = f.per_column(move |x| HZ - 6.0 - 16.0 * smoothstep(420.0, 60.0, x) - 7.0 * smoothstep(700.0, 990.0, x) + 4.0 * hill_n.get(x, 0.0) + 1.2 * hill_n.get(x * 4.0, 2.0));
+    let hills = f.per_column(move |x| HZ + 3.0 - 24.0 * smoothstep(440.0, 70.0, x) - 13.0 * smoothstep(690.0, 990.0, x) + (4.0 * hill_n.get(x, 0.0) + 1.2 * hill_n.get(x * 4.0, 2.0)) * (smoothstep(440.0, 300.0, x) + smoothstep(690.0, 820.0, x)));
 
     let sky_m = Mask::from_fn(f, |x, y| 1.0 - smoothstep(bank_top(x) + 3.0, bank_top(x) + 6.0, y));
     let hills_m = Mask::from_fn(f, |x, y| smoothstep(hills(x) - 0.7, hills(x) + 0.7, y) * (1.0 - smoothstep(HZ + 2.0, HZ + 4.0, y)));
@@ -154,7 +154,7 @@ fn main() {
         c.dry();
         // the trees' dark in the same brown, a brush along their growth
         let tree_under = st.body().color(|_, _| hex("#3d2d22")).angle(|_, _| -FRAC_PI_2).angle_jitter(0.2).length(10.0, 30.0).coverage(2.0).medium(0.55).load(0.5).clip(true);
-        c.work(&trees_m.clone().erode(2.0), &tree_under, 102);
+        c.work(&trees_m.clone().erode(7.0), &tree_under, 102);
         c.dry();
     }
 
@@ -162,7 +162,7 @@ fn main() {
     if o.stage("sky", &mut c, &mut rng) {
         // first layer: lean, long level arcs, a shade duller than the end,
         // fused with the badger while open
-        let spal = pal.only(&["lead white", "smalt", "pale smalt", "cobalt blue", "yellow ochre", "raw umber", "red earth", "bone black"]);
+        let spal = pal.only(&["lead white", "pale smalt", "cobalt blue", "yellow ochre", "raw umber", "red earth", "bone black"]);
         let lay = st
             .broad()
             .mixed(&spal, 0.35)
@@ -192,7 +192,7 @@ fn main() {
         // three strands of evening cloud at different heights, none alike:
         // a long low one lying in the glow, a shorter thin one above it to
         // the right, a faint drawn-out streak high on the left
-        let spal = pal.only(&["lead white", "smalt", "pale smalt", "cobalt blue", "yellow ochre", "raw umber", "red earth", "bone black"]);
+        let spal = pal.only(&["lead white", "pale smalt", "cobalt blue", "yellow ochre", "raw umber", "red earth", "bone black"]);
         let n = Fbm::new(61, 3, 220.0);
         // (y, thickness, x0, x1, strength, tint)
         let strands: [(f32, f32, f32, f32, f32); 4] = [(352.0, 9.0, -40.0, 690.0, 0.9), (316.0, 5.0, 520.0, 1040.0, 0.6), (380.0, 4.0, 700.0, 960.0, 0.45), (148.0, 7.0, -60.0, 420.0, 0.35)];
@@ -205,7 +205,7 @@ fn main() {
                 let thick = th * (0.4 + 1.1 * n.get01(x * 1.4, 90.0 + kf * 30.0));
                 let d = (y - cy - wob) / thick;
                 // flat-bottomed: the underside sharper than the top
-                let across = if d > 0.0 { 1.0 - smoothstep(0.3, 1.0, d) } else { 1.0 - smoothstep(0.0, 1.6, -d) };
+                let across = if d > 0.0 { 1.0 - smoothstep(0.1, 1.2, d) } else { 1.0 - smoothstep(0.0, 1.8, -d) };
                 let ends = smoothstep(x0, x0 + 120.0, x) * (1.0 - smoothstep(x1 - 160.0, x1, x));
                 let breaks = smoothstep(0.28, 0.55, n.get01(x * 0.9, 200.0 + kf * 50.0));
                 v = v.max(a * across * ends * breaks);
@@ -218,9 +218,9 @@ fn main() {
         let cc = move |x: f32, y: f32| {
             let s = sky_col(x, y);
             let low = smoothstep(200.0, 380.0, y);
-            mix(s, mix(hex("#6f6674"), hex("#8e7e7c"), low, Mix::Pigment), 0.32 + 0.1 * low, Mix::Pigment)
+            mix(s, mix(hex("#6f6674"), hex("#8e7e7c"), low, Mix::Pigment), 0.2 + 0.08 * low, Mix::Pigment)
         };
-        let cl = Stipple::new(Tool::stippler(1.7)).mixed(&spal, 0.5).color(cc).coverage(cov).pressure(0.4, 0.8).drag(2.2, Some(0.0)).dips(20, 0.35, 0.6);
+        let cl = Stipple::new(Tool::stippler(1.7)).mixed(&spal, 0.5).color(cc).coverage(move |x, y| 0.8 * cov(x, y)).pressure(0.4, 0.8).drag(2.2, Some(0.0)).dips(20, 0.35, 0.6);
         c.stipple(&cloud_m, &cl, 15);
         c.dry();
         // the lit lower lip of the long low strand: a few lean level touches
@@ -286,6 +286,27 @@ fn main() {
         c.dry();
     }
 
+    // ------------------------------------------------------------ water
+    if o.stage("water", &mut c, &mut rng) {
+        // whole level strokes, no flat brush: a round-ended filbert swung
+        // along the water, in the water's own tones, then fused level
+        let wpal = pal.only(&["lead white", "pale smalt", "cobalt blue", "yellow ochre", "raw umber", "red earth", "bone black"]);
+        let lay = st.broad().mixed(&wpal, 0.35).color(water_col).angle(|_, _| 0.0).angle_jitter(0.01).curve(0.01, 0.05).drift(0.03, 400.0).broken(0.0).tail(0.0).coverage(4.2).medium(0.32);
+        c.work(&water_m, &lay, 51);
+        if let Some(b) = st.blend() {
+            c.work(&water_m, &b.angle(|_, _| 0.0).cross(0.03), 52);
+        }
+        c.wait(5.0 * 60.0);
+        // a veil of the same tones stippled over it once set, then laid
+        // level with the badger while that is open
+        let sv = Stipple::new(Tool::stippler(2.2)).mixed(&wpal, 0.5).color(water_col).coverage(|_, _| 2.4).pressure(0.4, 0.8).dips(18, 0.35, 0.6);
+        c.stipple(&water_m, &sv, 53);
+        if let Some(b) = st.blend() {
+            c.work(&water_m, &b.angle(|_, _| 0.0).cross(0.004).length(80.0, 220.0).coverage(2.0), 54);
+        }
+        c.dry();
+    }
+
     if o.stage("bank", &mut c, &mut rng) {
         // the meadow bank against the light: nearly one dark, olive-gray,
         // short level hatching; the bushes hatched upright
@@ -293,10 +314,23 @@ fn main() {
             let t = smoothstep(bank_top(x), WL, y);
             mix(hex("#4a4a42"), hex("#34352f"), t, Mix::Pigment)
         };
-        let hd = st.hatch().color(bc).angle(|_, _| 0.03).angle_jitter(0.3).length(4.0, 11.0).coverage(3.2).medium(0.3);
-        c.work(&bank_m, &hd, 41);
+        // its top first: level pulls of a small round along the line, the
+        // way the eye reads it against the glow; then the body hatched in
+        // below it, down under where the reflection will start
+        let mut tb = Held::new(Tool::round_sable(1.7), 40);
+        let mut x = rng.range(-20.0, -2.0);
+        while x < 1005.0 {
+            let l = rng.range(30.0, 80.0);
+            tb.reload(pal.mix(bc(x, HZ + 1.0)).paint(0.25), rng.range(0.5, 0.7));
+            let pts: Vec<(f32, f32)> = (0..=8).map(|i| { let xx = x + l * i as f32 / 8.0; (xx, bank_top(xx) + 0.9 + rng.normal() * 0.12) }).collect();
+            c.drag(&mut tb, &Gesture::new(pts).pressure(rng.range(0.6, 0.85), 0.5).ramps(0.1, 0.2).shake(0.3), None);
+            x += l * rng.range(0.8, 0.97);
+        }
+        let bank_body = Mask::from_fn(f, move |x, y| smoothstep(bank_top(x) + 1.0, bank_top(x) + 2.2, y) * (1.0 - smoothstep(water_edge(x) + 2.0, water_edge(x) + 3.0, y)));
+        let hd = st.body().color(bc).angle(|_, _| 0.0).angle_jitter(0.08).length(18.0, 55.0).coverage(3.6).medium(0.22);
+        c.work(&bank_body, &hd, 41);
         // the bushes: a small round, short strokes upward and out
-        let bushes = Mask::from_fn(f, move |x, y| smoothstep(bank_top(x) - 0.5, bank_top(x) + 0.5, y) * (1.0 - smoothstep(HZ - 1.0, HZ + 1.5, y)));
+        let bushes = Mask::from_fn(f, move |x, y| smoothstep(bank_top(x) - 0.5, bank_top(x) + 0.5, y) * (1.0 - smoothstep(HZ - 1.0, HZ + 1.5, y)) * smoothstep(HZ - 1.2, HZ - 2.5, bank_top(x)));
         let bh = st.hatch().color(|_, _| hex("#3e3f39")).angle(|_, _| -1.2).angle_jitter(0.5).length(2.5, 6.0).coverage(3.0).medium(0.25);
         c.work(&bushes, &bh, 42);
         c.dry();
@@ -325,42 +359,40 @@ fn main() {
             x += len * rng.range(0.8, 1.1);
         }
         c.dry();
-    }
-
-    // ------------------------------------------------------------ water
-    if o.stage("water", &mut c, &mut rng) {
-        // whole level strokes, no flat brush: a round-ended filbert swung
-        // along the water, in the water's own tones, then fused level
-        let wpal = pal.only(&["lead white", "smalt", "pale smalt", "cobalt blue", "yellow ochre", "raw umber", "red earth", "bone black"]);
-        let lay = st.broad().mixed(&wpal, 0.35).color(water_col).angle(|_, _| 0.0).angle_jitter(0.01).curve(0.01, 0.05).drift(0.03, 400.0).broken(0.0).tail(0.0).coverage(4.2).medium(0.32);
-        c.work(&water_m, &lay, 51);
-        if let Some(b) = st.blend() {
-            c.work(&water_m, &b.angle(|_, _| 0.0).cross(0.03), 52);
-        }
-        c.wait(5.0 * 60.0);
-        // a veil of the same tones stippled over it once set, then laid
-        // level with the badger while that is open
-        let sv = Stipple::new(Tool::stippler(2.2)).mixed(&wpal, 0.5).color(water_col).coverage(|_, _| 2.4).pressure(0.4, 0.8).dips(18, 0.35, 0.6);
-        c.stipple(&water_m, &sv, 53);
-        if let Some(b) = st.blend() {
-            c.work(&water_m, &b.angle(|_, _| 0.0).cross(0.004).length(80.0, 220.0).coverage(2.0), 54);
-        }
-        c.dry();
         // the bank's reflection: a dark band under the edge, its lower edge
         // lost in level strokes; the bushes hang down in it
-        let refl_bank = Mask::from_fn(f, move |x, y| {
-            let depth = (water_edge(x) - bank_top(x)) * 0.95;
-            smoothstep(water_edge(x) - 0.5, water_edge(x) + 0.8, y) * (1.0 - smoothstep(water_edge(x) + depth - 2.0, water_edge(x) + depth + 3.0, y))
-        });
-        let rb = st.detail().color(move |x, y| mix(hex("#3a3b37"), water_col(x, y), 0.25 + 0.3 * smoothstep(WL, WL + 20.0, y), Mix::Pigment)).angle(|_, _| 0.0).angle_jitter(0.02).length(8.0, 30.0).coverage(3.0).medium(0.3).clip(false).hug(false);
-        c.work(&refl_bank, &rb, 55);
+        // row by row, level pulls of a round, each row as long as the hand
+        // makes it; the lower rows thinner and broken, lost in the water
+        let mut b = Held::new(Tool::round_sable(2.2), 55);
+        let mut row = 0;
+        let mut y = WL - 1.6;
+        while y < WL + 24.0 {
+            let mut x = rng.range(-30.0, -5.0);
+            while x < 1000.0 {
+                let l = rng.range(25.0, 90.0);
+                let xm = x + l * 0.5;
+                let depth = (water_edge(xm) - bank_top(xm)) * 0.95;
+                let d = y - water_edge(xm);
+                let fade = 1.0 - smoothstep(depth * 0.55, depth + 2.0, d);
+                if fade > 0.05 && rng.f() < 0.35 + 0.65 * fade {
+                    let col = mix(hex("#2d2e2a"), water_col(xm, y + 6.0), 0.12 + 0.55 * (1.0 - fade), Mix::Pigment);
+                    b.reload(pal.mix(col).paint(0.28).with_hiding(0.9), rng.range(0.4, 0.65));
+                    let yy = y + rng.normal() * 0.25;
+                    c.drag(&mut b, &Gesture::new(vec![(x, yy), (xm, yy + rng.normal() * 0.2), (x + l, yy + rng.normal() * 0.25)]).pressure(rng.range(0.5, 0.8) * (0.6 + 0.4 * fade), 0.4).ramps(0.15, 0.25), None);
+                }
+                x += l * rng.range(0.75, 1.05);
+            }
+            row += 1;
+            y += rng.range(1.3, 1.9);
+        }
+        let _ = row;
         c.dry();
     }
 
     // ------------------------------------------------------------ poplars
     if o.stage("poplars", &mut c, &mut rng) {
-        for (p, m) in trees.iter().zip(tree_m.iter()) {
-            poplar(&mut c, &st, p, m, &sky_col, &mut rng);
+        for p in trees.iter() {
+            poplar(&mut c, &st, p, &sky_col, &mut rng);
         }
         c.dry();
     }
@@ -388,23 +420,6 @@ fn main() {
         c.dry();
     }
 
-    // ------------------------------------------------------------ mist
-    if o.stage("mist", &mut c, &mut rng) {
-        // a low mist lying on the far meadow and over the water's edge; it
-        // takes the trees' feet: a brushed veil, then fused level
-        let mn = Fbm::new(71, 4, 140.0);
-        let mist_m = Mask::from_fn(f, |_, y| smoothstep(HZ - 26.0, HZ - 12.0, y) * (1.0 - smoothstep(WL + 14.0, WL + 24.0, y)));
-        let dens = move |x: f32, y: f32| {
-            let core = (-((y - (HZ + 4.0)) / 12.0).powi(2)).exp();
-            (0.15 + 0.6 * core) * (0.6 + 0.8 * mn.get01(x * 0.6, y * 3.0))
-        };
-        let veil = st.broad().color(|_, _| hex("#9c9790")).angle(|_, _| 0.0).angle_jitter(0.01).length(90.0, 240.0).medium(0.6).load(0.35).coverage(2.4).load_at(dens).hug(false);
-        c.work(&mist_m, &veil, 71);
-        if let Some(b) = st.blend() {
-            c.work(&mist_m, &b.angle(|_, _| 0.0).clip(false), 72);
-        }
-        c.dry();
-    }
 
     // ------------------------------------------------------------ near shore
     if o.stage("shore", &mut c, &mut rng) {
@@ -419,13 +434,13 @@ fn main() {
         c.dry();
         // the water's lip at the near shore: a thin dull light where the
         // wet mud takes the sky, broken
-        let wet = pal.mix(hex("#7a7466")).paint(0.3).with_hiding(0.55);
+        let wet = pal.mix(hex("#4e4a40")).paint(0.3).with_hiding(0.5);
         let mut b = Held::new(Tool::round_sable(1.3), 82);
         let mut x = 0.0;
         while x < 1000.0 {
             let len = rng.range(12.0, 50.0);
-            if rng.f() < 0.5 {
-                b.reload(wet, 0.3);
+            if rng.f() < 0.3 {
+                b.reload(wet, 0.25);
                 let pts: Vec<(f32, f32)> = (0..=4).map(|i| { let xx = x + len * i as f32 / 4.0; (xx, shore(xx) + 1.0 + rng.normal() * 0.3) }).collect();
                 c.drag(&mut b, &Gesture::new(pts).pressure(rng.range(0.35, 0.55), 0.2).ramps(0.3, 0.5), None);
             }
@@ -536,107 +551,138 @@ impl Poplar {
     }
 }
 
-/// A Lombardy poplar against the evening light, stroke by stroke: the stem,
-/// a dead-color body inside the silhouette, then the sprays in short
-/// upswept strokes of three dark piles, the edges broken outward, a cool
-/// light on the side toward the open sky, a few sky holes, the trunk's foot.
-fn poplar(c: &mut paint::Canvas, st: &Style, p: &Poplar, m: &Mask, sky_col: &(impl Fn(f32, f32) -> Rgb + Sync), rng: &mut Rng) {
+/// A Lombardy poplar against the evening light, built the way it grows:
+/// the stem, then its many branches rising steeply from it, each carrying
+/// its sprays of leaves in short upswept strokes; the silhouette comes from
+/// where the sprays end, not from a drawn line. A dark core inside first
+/// (dead color) so the sprays have a dark under them; then the sprays, from
+/// three dark piles; a little cool light on the flank toward the open sky,
+/// a warmer rim where the glow behind catches the right edge; the trunk.
+fn poplar(c: &mut paint::Canvas, st: &Style, p: &Poplar, sky_col: &(impl Fn(f32, f32) -> Rgb + Sync), rng: &mut Rng) {
     let pal = &st.palette;
     let f = c.frame();
-    // three piles mixed on the palette, never quite the same
-    let piles = [pal.mix(hex("#1d211d")).paint(0.2), pal.mix(hex("#262b23")).paint(0.2), pal.mix(hex("#30352a")).paint(0.22)];
-    let edge_lit = pal.mix(hex("#4d544c")).paint(0.25).with_hiding(0.7);
-    let warm_rim = pal.mix(hex("#5f5a45")).paint(0.25).with_hiding(0.6);
+    let piles = [pal.mix(hex("#161915")).paint(0.2), pal.mix(hex("#1c201b")).paint(0.2), pal.mix(hex("#252820")).paint(0.22)];
+    let edge_lit = pal.mix(hex("#3f4541")).paint(0.25).with_hiding(0.7);
+    let warm_rim = pal.mix(hex("#51493a")).paint(0.25).with_hiding(0.6);
+    let t1 = p.top();
+    let t_of = |y: f32| (p.foot - y) / p.ht;
 
-    // the stem up through the crown (it shows between the sprays low down)
-    let stem = pal.mix(hex("#2a2622")).paint(0.2);
-    let mut sb = Held::new(Tool::round_sable((p.hw * 0.12).max(1.2)), rng.next_u64());
+    // the stem up through the crown
+    let stem = pal.mix(hex("#221f1c")).paint(0.2);
+    let mut sb = Held::new(Tool::round_sable((p.hw * 0.1).max(1.2)), rng.next_u64());
     sb.load(stem, 0.8);
-    let pts: Vec<(f32, f32)> = (0..=10).map(|i| { let t = i as f32 / 10.0 * 0.75 * p.top(); (p.axis(t), p.y(t) + 2.0) }).collect();
-    c.drag(&mut sb, &Gesture::new(pts).pressure(0.9, 0.3).ramps(0.0, 0.5).shake(0.4), None);
+    let pts: Vec<(f32, f32)> = (0..=10).map(|i| { let t = i as f32 / 10.0 * 0.85 * t1; (p.axis(t), p.y(t) + 2.0) }).collect();
+    c.drag(&mut sb, &Gesture::new(pts).pressure(0.9, 0.2).ramps(0.0, 0.6).shake(0.4), None);
 
-    // dead color: one body layer inside the silhouette, so the hatching
-    // later has a dark under it and no sky pinholes
-    let body = st.body().color(|_, _| hex("#232720")).angle(|_, _| -FRAC_PI_2).angle_jitter(0.25).length(8.0, 22.0).coverage(3.0).medium(0.3).clip(true);
-    c.work(&m.clone().erode(2.5), &body, rng.next_u64());
+    // dead color in the core only: the inner half of the crown, uneven
+    let cn = Fbm::new(p.seed + 50, 3, 30.0);
+    let core = Mask::from_fn(f, move |x, y| {
+        let t = t_of(y);
+        if t < Poplar::CB + 0.02 || t > t1 - 0.04 {
+            return 0.0;
+        }
+        let k = (0.45 + 0.2 * cn.get(x, y)) * smoothstep(Poplar::CB, Poplar::CB + 0.035, t).sqrt();
+        let (l, r) = (p.axis(t) - p.half(t, -1.0) * k, p.axis(t) + p.half(t, 1.0) * k);
+        smoothstep(l - 1.0, l + 1.0, x) * (1.0 - smoothstep(r - 1.0, r + 1.0, x))
+    });
+    let body = st.body().color(|_, _| hex("#1d201c")).angle(|_, _| -FRAC_PI_2).angle_jitter(0.3).length(6.0, 18.0).coverage(2.6).medium(0.3).hug(false);
+    c.work(&core, &body, rng.next_u64());
     c.wait(90.0);
 
-    // the sprays: short strokes pulled up and out from inside the crown,
-    // steep near the stem, opening outward toward the flanks
-    let bw = (p.hw * 0.075).clamp(1.3, 2.6);
+    // the branches: from the stem, steeply up and out to the flank, then up
+    // along it; each gets its sprays. Their number and spacing uneven, so
+    // the crown has hollows and bulges and a few sky gaps between them.
+    let bw = (p.hw * 0.055).clamp(1.1, 1.9);
     let mut brushes: Vec<Held> = (0..3).map(|_| Held::new(Tool::round_sable(bw * rng.range(0.85, 1.15)), rng.next_u64())).collect();
-    let area = p.hw * p.ht * 1.1;
-    let n = (area / 9.0) as usize;
-    let t1 = p.top();
-    let mut count = 0usize;
-    while count < n {
-        let t = rng.range(Poplar::CB + 0.01, t1);
+    let mut fine = Held::new(Tool::round_sable(bw * 0.65), rng.next_u64());
+    let nb = (p.ht / 3.2) as usize;
+    let mut sprays = 0usize;
+    for i in 0..nb {
+        let t0 = Poplar::CB + (t1 - Poplar::CB - 0.03) * (i as f32 + rng.range(0.0, 1.0)) / nb as f32;
         let s = if rng.f() < 0.5 { -1.0 } else { 1.0 };
-        let hw = p.half(t, s);
-        if hw < 0.5 {
-            continue;
-        }
-        // biased outward: the sprays show at the surface of the crown
-        let r = rng.f().powf(0.6);
-        let x0 = p.axis(t) + s * hw * r;
-        let y0 = p.y(t);
-        // a spray leans out more the farther from the stem it grows
-        let out = 0.15 + 0.55 * r;
-        let a = -FRAC_PI_2 + s * out + rng.normal() * 0.18;
-        let len = rng.range(5.0, 13.0) * (0.7 + 0.5 * (1.0 - (t - 0.3).abs()));
-        let bend = rng.normal() * 0.25 - s * 0.1;
-        let mid = (x0 + 0.5 * len * a.cos() + bend * len * 0.2 * (a + FRAC_PI_2).cos(), y0 + 0.5 * len * a.sin());
-        let end = (x0 + len * (a + bend * 0.3).cos(), y0 + len * (a + bend * 0.3).sin());
-        let k = (count % 3 + (rng.f() * 1.3) as usize).min(2);
-        let pile = if t > 0.7 * t1 && rng.f() < 0.4 { piles[2] } else { piles[k] };
-        if count % 7 == 0 || brushes[k].fullness() < 0.3 {
-            brushes[k].reload(pile, rng.range(0.5, 0.75));
-        }
-        c.drag(&mut brushes[k], &Gesture::new(vec![(x0, y0), mid, end]).pressure(rng.range(0.55, 0.9), 0.1).ramps(0.05, 0.6).shake(0.5), None);
-        count += 1;
-    }
-    c.wait(60.0);
-
-    // the flanks broken outward: flicks from just inside the edge that
-    // carry past it, fewer and finer, heavier on the lobes
-    let mut fine = Held::new(Tool::round_sable(bw * 0.7), rng.next_u64());
-    let ne = (p.ht * 1.4) as usize;
-    for i in 0..ne {
-        let t = rng.range(Poplar::CB + 0.03, t1 - 0.01);
-        let s = if rng.f() < 0.5 { -1.0 } else { 1.0 };
-        let hw = p.half(t, s);
+        let rise = rng.range(0.07, 0.17) * (1.0 - 0.4 * t0);
+        let tt = (t0 + rise).min(t1 - 0.005);
+        let reach = rng.range(0.55, 1.08);
+        let hw = p.half(tt, s);
         if hw < 1.0 {
             continue;
         }
-        let x0 = p.axis(t) + s * hw * rng.range(0.75, 0.98);
-        let y0 = p.y(t);
-        let a = -FRAC_PI_2 + s * rng.range(0.45, 1.0) + rng.normal() * 0.12;
-        let len = rng.range(3.0, 8.0);
-        if i % 6 == 0 {
-            fine.reload(piles[rng.f().mul_add(2.0, 0.0) as usize], 0.5);
+        let a = (p.axis(t0), p.y(t0));
+        let e = (p.axis(tt) + s * hw * reach, p.y(tt));
+        // the branch bows outward, then turns up
+        let m = (a.0 + (e.0 - a.0) * 0.75, a.1 + (e.1 - a.1) * 0.4);
+        let path = |u: f32| -> (f32, f32) {
+            let v = 1.0 - u;
+            (v * v * a.0 + 2.0 * v * u * m.0 + u * u * e.0, v * v * a.1 + 2.0 * v * u * m.1 + u * u * e.1)
+        };
+        // how leafy this branch is: some are thin, leaving a hollow
+        let leafy = rng.range(0.35, 1.0);
+        let len = ((e.0 - a.0).powi(2) + (e.1 - a.1).powi(2)).sqrt();
+        let n = (len * 1.4 * leafy) as usize + 2;
+        for _ in 0..n {
+            let u = rng.range(0.3, 1.0).powf(0.7);
+            let (x0, y0) = path(u);
+            let (x1, y1) = path((u + 0.05).min(1.0));
+            let dir = (y1 - y0).atan2(x1 - x0);
+            // sprays stand up off the branch, steeper at its end
+            let up = -FRAC_PI_2 + s * rng.range(0.1, 0.5);
+            let mut ang = dir + (up - dir) * rng.range(0.5, 0.9) + rng.normal() * 0.3;
+            // low down some sprays hang instead of standing up
+            if t0 < Poplar::CB + 0.12 && rng.f() < 0.4 {
+                let r = rng.range(0.2, 0.9);
+                ang = if s > 0.0 { r } else { PI - r };
+            }
+            let l = rng.range(3.0, 8.0) * (0.7 + 0.5 * u);
+            let bend = rng.normal() * 0.3;
+            let k = (rng.f() * 3.0) as usize % 3;
+            let pile = if tt > 0.75 * t1 && rng.f() < 0.35 { piles[2] } else { piles[k] };
+            let b = &mut brushes[k];
+            if sprays % 7 == 0 || b.fullness() < 0.3 {
+                b.reload(pile, rng.range(0.5, 0.75));
+            }
+            sprays += 1;
+            let mid = (x0 + 0.5 * l * (ang + bend * 0.3).cos(), y0 + 0.5 * l * (ang + bend * 0.3).sin());
+            let end = (x0 + l * (ang + bend).cos(), y0 + l * (ang + bend).sin());
+            c.drag(b, &Gesture::new(vec![(x0, y0), mid, end]).pressure(rng.range(0.4, 0.75), 0.06).ramps(0.05, 0.6).shake(0.5), None);
         }
-        c.drag(&mut fine, &Gesture::new(vec![(x0, y0), (x0 + len * 0.55 * a.cos(), y0 + len * 0.5 * a.sin()), (x0 + len * a.cos(), y0 + len * a.sin() + len * 0.15)]).pressure(0.7, 0.05).ramps(0.05, 0.7), None);
+        // the branch's end: a few fine flicks past it, into the air
+        for _ in 0..(1 + (rng.f() * 3.0 * leafy) as usize) {
+            fine.reload(piles[(rng.f() * 2.0) as usize], 0.45);
+            let ang = -FRAC_PI_2 + s * rng.range(0.2, 0.75);
+            let l = rng.range(3.0, 7.5);
+            let o = (e.0 + rng.normal() * 1.5, e.1 + rng.normal() * 2.0);
+            c.drag(&mut fine, &Gesture::new(vec![o, (o.0 + l * 0.5 * ang.cos(), o.1 + l * 0.5 * ang.sin()), (o.0 + l * ang.cos(), o.1 + l * ang.sin() + 0.1 * l)]).pressure(0.65, 0.04).ramps(0.05, 0.7), None);
+        }
+        // low down, where the crown is thin, the branch itself shows
+        if t0 < 0.3 && rng.f() < 0.5 {
+            let mut wb = Held::new(Tool::round_sable(0.8), rng.next_u64());
+            wb.load(stem, 0.6);
+            c.drag(&mut wb, &Gesture::new((0..=4).map(|j| path(j as f32 / 4.0 * 0.6)).collect()).pressure(0.7, 0.2).ramps(0.0, 0.6), None);
+        }
     }
-    // the spire: a few fine strokes drawn up into a point
+    c.wait(60.0);
+
+    // the top
     if !p.broken {
+        // the leader: a few fine strokes drawn up into a slightly bent point
         let mut tip = Held::new(Tool::round_sable(bw * 0.5), rng.next_u64());
-        for _ in 0..5 {
+        let bent = rng.range(1.0, 3.0);
+        for _ in 0..6 {
             tip.reload(piles[0], 0.5);
-            let t = rng.range(0.9, 0.96);
+            let t = rng.range(0.9, 0.97);
             let x0 = p.axis(t) + rng.normal() * 0.8;
-            c.drag(&mut tip, &Gesture::new(vec![(x0, p.y(t)), (p.axis(0.99) + rng.normal() * 0.6, p.y(1.0) + rng.range(-2.0, 3.0))]).pressure(0.7, 0.05).ramps(0.05, 0.7), None);
+            c.drag(&mut tip, &Gesture::new(vec![(x0, p.y(t)), (p.axis(0.985) + bent * 0.5, p.y(0.985)), (p.axis(1.0) + bent + rng.normal() * 0.5, p.y(1.0) + rng.range(-1.0, 3.0))]).pressure(0.7, 0.05).ramps(0.05, 0.7), None);
         }
     } else {
-        // the broken top: a dead leader standing out of the crown, silver
-        // gray against the glow, a snapped end and two dead side shoots
-        let dead = pal.mix(hex("#4b4744")).paint(0.2);
+        // the broken top: a dead leader standing out of the crown, gray
+        // against the glow, a snapped end and two dead side shoots
+        let dead = pal.mix(hex("#403c39")).paint(0.2);
         let mut lb = Held::new(Tool::round_sable((bw * 0.9).max(1.2)), rng.next_u64());
         lb.load(dead, 0.8);
         let base = (p.axis(t1 - 0.12), p.y(t1 - 0.12));
         let topp = (p.axis(t1) + 3.0, p.y(t1 + 0.1));
         let mid = ((base.0 + topp.0) * 0.5 - 1.0, (base.1 + topp.1) * 0.5);
-        c.drag(&mut lb, &Gesture::new(vec![base, mid, topp]).pressure(0.9, 0.55).ramps(0.0, 0.1).shake(0.6), None);
-        // the snap: a short bent-over stub
+        c.drag(&mut lb, &Gesture::new(vec![base, mid, topp]).pressure(0.9, 0.5).ramps(0.0, 0.1).shake(0.6), None);
         lb.reload(dead, 0.5);
         c.drag(&mut lb, &Gesture::new(vec![topp, (topp.0 + 3.5, topp.1 + 2.0)]).pressure(0.6, 0.4).ramps(0.0, 0.3), None);
         let mut tw = Held::new(Tool::round_sable(0.7), rng.next_u64());
@@ -645,66 +691,61 @@ fn poplar(c: &mut paint::Canvas, st: &Style, p: &Poplar, m: &Mask, sky_col: &(im
             tw.load(dead, 0.5);
             c.drag(&mut tw, &Gesture::new(vec![b0, (b0.0 + side * l * 0.6, b0.1 - l * 0.45), (b0.0 + side * l, b0.1 - l * 0.6)]).pressure(0.7, 0.1).ramps(0.0, 0.6), None);
         }
-        // a lean light down its left side
-        let lit = pal.mix(hex("#8a8278")).paint(0.25).with_hiding(0.6);
+        let lit = pal.mix(hex("#7a7268")).paint(0.25).with_hiding(0.6);
         let mut lt = Held::new(Tool::round_sable(0.6), rng.next_u64());
         lt.load(lit, 0.35);
         c.drag(&mut lt, &Gesture::new(vec![(topp.0 - 0.8, topp.1 + 2.0), (mid.0 - 0.9, mid.1), (base.0 - 0.9, base.1 - 4.0)]).pressure(0.5, 0.2).ramps(0.2, 0.5), None);
     }
     c.wait(60.0);
 
-    // light: the open sky above the left flank lights it coolly; the glow
-    // behind rims the right flank a little warm; lean, few, broken
-    let mut lb = Held::new(Tool::round_sable(bw * 0.75), rng.next_u64());
+    // light: lean, few, broken; the cool one on the left upper sprays, the
+    // warm rim on the right where the glow is
+    let mut lb = Held::new(Tool::round_sable(bw * 0.7), rng.next_u64());
     for side in [-1.0f32, 1.0] {
         let paint = if side < 0.0 { edge_lit } else { warm_rim };
-        let n = (p.ht * if side < 0.0 { 0.35 } else { 0.22 }) as usize;
+        let n = (p.ht * if side < 0.0 { 0.25 } else { 0.18 }) as usize;
         for i in 0..n {
-            let t = rng.range(0.15, t1 - 0.03);
+            let t = rng.range(0.2, t1 - 0.03);
             let hw = p.half(t, side);
-            if hw < 1.5 {
+            if hw < 1.5 || rng.f() > 0.3 + 0.6 * t {
                 continue;
             }
-            // mostly the upper, outer sprays catch it
-            if rng.f() > 0.35 + 0.6 * t {
-                continue;
-            }
-            let x0 = p.axis(t) + side * hw * rng.range(0.6, 0.92);
+            let x0 = p.axis(t) + side * hw * rng.range(0.55, 0.9);
             let y0 = p.y(t);
-            let a = -FRAC_PI_2 + side * rng.range(0.35, 0.8);
-            let len = rng.range(3.0, 7.0);
+            let a = -FRAC_PI_2 + side * rng.range(0.3, 0.7);
+            let len = rng.range(2.5, 6.0);
             if i % 5 == 0 {
-                lb.reload(paint, rng.range(0.25, 0.4));
+                lb.reload(paint, rng.range(0.2, 0.35));
             }
-            c.drag(&mut lb, &Gesture::new(vec![(x0, y0), (x0 + len * a.cos(), y0 + len * a.sin())]).pressure(rng.range(0.35, 0.6), 0.1).ramps(0.1, 0.6), None);
+            c.drag(&mut lb, &Gesture::new(vec![(x0, y0), (x0 + len * a.cos(), y0 + len * a.sin())]).pressure(rng.range(0.3, 0.55), 0.08).ramps(0.1, 0.6), None);
         }
     }
-    // sky holes: a few, high, near the flanks, small touches of the sky
-    let mut hb = Held::new(Tool::round_sable(bw * 0.6), rng.next_u64());
-    let holes = (p.ht / 18.0) as usize;
-    for _ in 0..holes {
-        let t = rng.range(0.35, t1 - 0.08);
+    // a few sky holes where two branches' sprays don't meet
+    let mut hb = Held::new(Tool::round_sable(bw * 0.55), rng.next_u64());
+    for _ in 0..(p.ht / 28.0) as usize {
+        let t = rng.range(0.3, t1 - 0.1);
         let s = if rng.f() < 0.5 { -1.0 } else { 1.0 };
         let hw = p.half(t, s);
-        if hw < 5.0 {
+        if hw < 6.0 {
             continue;
         }
-        let x0 = p.axis(t) + s * hw * rng.range(0.55, 0.8);
+        let x0 = p.axis(t) + s * hw * rng.range(0.6, 0.8);
         let y0 = p.y(t);
-        let col = mix(sky_col(x0, y0), hex("#4a4c48"), 0.35, Mix::Pigment);
-        hb.load(pal.mix(col).paint(0.3).with_hiding(0.85), 0.35);
-        let a = -FRAC_PI_2 + s * 0.5;
-        c.drag(&mut hb, &Gesture::new(vec![(x0, y0), (x0 + 1.8 * a.cos(), y0 + 1.8 * a.sin())]).pressure(0.6, 0.4).ramps(0.1, 0.4), None);
+        let col = mix(sky_col(x0, y0), hex("#3a3c38"), 0.3, Mix::Pigment);
+        hb.load(pal.mix(col).paint(0.3).with_hiding(0.85), 0.3);
+        let a = -FRAC_PI_2 + s * 0.45;
+        c.drag(&mut hb, &Gesture::new(vec![(x0, y0), (x0 + 1.6 * a.cos(), y0 + 1.6 * a.sin())]).pressure(0.55, 0.35).ramps(0.1, 0.4), None);
     }
 
-    // the trunk's foot below the crown: two strokes, dark, a little flare
-    let trunk = pal.mix(hex("#221f1c")).paint(0.2);
-    let tw = (p.hw * 0.16).max(1.8);
+    // the trunk below the crown: a little flare, a lean light on the left
+    let trunk = pal.mix(hex("#1f1c1a")).paint(0.2);
+    let tw = (p.hw * 0.15).max(1.8);
     let mut tb = Held::new(Tool::round_sable(tw), rng.next_u64());
     tb.load(trunk, 0.8);
-    let top = (p.axis(Poplar::CB + 0.04), p.y(Poplar::CB + 0.04));
-    c.drag(&mut tb, &Gesture::new(vec![(p.x - 0.4, p.foot + 1.0), (p.axis(Poplar::CB * 0.5), p.y(Poplar::CB * 0.5)), top]).pressure(0.95, 0.6).ramps(0.0, 0.3).shake(0.3), None);
-    // low shoots springing from the foot, as Lombardy poplars have
+    let top = (p.axis(Poplar::CB + 0.05), p.y(Poplar::CB + 0.05));
+    c.drag(&mut tb, &Gesture::new(vec![(p.x - 0.4, p.foot + 1.5), (p.axis(Poplar::CB * 0.5) + 0.3, p.y(Poplar::CB * 0.5)), top]).pressure(0.95, 0.55).ramps(0.0, 0.3).shake(0.3), None);
+    tb.reload(trunk, 0.5);
+    c.drag(&mut tb, &Gesture::new(vec![(p.x - tw * 0.55, p.foot + 1.0), (p.x - tw * 0.2, p.foot - 4.0)]).pressure(0.7, 0.3).ramps(0.0, 0.3), None);
     let mut sh = Held::new(Tool::round_sable(0.8), rng.next_u64());
     for _ in 0..(3 + (rng.f() * 3.0) as usize) {
         let s = if rng.f() < 0.5 { -1.0 } else { 1.0 };
@@ -713,7 +754,6 @@ fn poplar(c: &mut paint::Canvas, st: &Style, p: &Poplar, m: &Mask, sky_col: &(im
         sh.load(piles[1], 0.5);
         c.drag(&mut sh, &Gesture::new(vec![(p.x + s * 1.0, y0), (p.x + s * l * 0.3, y0 - l * 0.6), (p.x + s * l * 0.45, y0 - l)]).pressure(0.7, 0.05).ramps(0.0, 0.6), None);
     }
-    let _ = (f, PI);
 }
 
 /// The poplar's reflection: laid in level strokes row by row down the
@@ -724,7 +764,7 @@ fn reflection(c: &mut paint::Canvas, pal: &Palette, p: &Poplar, water_col: &(imp
     let rip = Fbm::new(p.seed + 300, 3, 9.0);
     let gaps = Fbm::new(p.seed + 301, 3, 5.0);
     let t1 = p.top();
-    let mut b = Held::new(Tool::round_sable(1.9), rng.next_u64());
+    let mut b = Held::new(Tool::round_sable(2.3), rng.next_u64());
     let mut y = mirror + 0.5;
     let mut k = 0;
     // the image of height t lies as far below the mirror as the tree's
@@ -746,7 +786,7 @@ fn reflection(c: &mut paint::Canvas, pal: &Palette, p: &Poplar, water_col: &(imp
         // ripples displace a row sideways, more with distance
         let dx = (1.0 + 3.5 * d) * rip.get(0.0, y);
         let broken = gaps.get01(0.0, y * 1.2);
-        let step = rng.range(1.3, 2.1) + 0.8 * d;
+        let step = rng.range(0.9, 1.4) + 0.5 * d;
         if hi - lo > 0.8 && broken > 0.22 {
             let wc = water_col(p.x, y);
             let dark = mix(hex("#262a27"), wc, 0.18 + 0.35 * d + 0.3 * (1.0 - broken), Mix::Pigment);
@@ -831,12 +871,17 @@ fn reeds(c: &mut paint::Canvas, pal: &Palette, shore: &(impl Fn(f32) -> f32 + Sy
             rig.tool = Tool::rigger(0.6);
             rig.reload(dark[1], 0.8);
             c.drag(&mut rig, &Gesture::new(vec![(cx, base_y), (cx + ht * lean * 0.4, base_y - ht * 0.5), top]).pressure(0.6, 0.2).ramps(0.05, 0.3), None);
-            let mut hb = Held::new(Tool::round_sable(1.4), rng.next_u64());
-            for j in 0..5 {
-                let wc = mix(water_col(top.0, top.1), hex("#2d2820"), 0.5, Mix::Pigment);
-                hb.load(pal.mix(if j < 3 { hex("#3a3226") } else { wc }).paint(0.25), 0.4);
-                let s = j as f32 * 1.6;
-                c.drag(&mut hb, &Gesture::new(vec![(top.0 + 0.5, top.1 + s), (top.0 + 1.8 + rng.normal() * 0.5, top.1 + s + 4.0)]).pressure(0.6, 0.2).ramps(0.1, 0.5), None);
+            // the plume nods to one side: fine hairs hung from the top,
+            // brownish, a couple catching the glow
+            let mut hb = Held::new(Tool::rigger(0.5), rng.next_u64());
+            let nod = if rng.f() < 0.5 { -1.0 } else { 1.0 } * rng.range(0.5, 1.0);
+            for j in 0..8 {
+                let wc = mix(water_col(top.0, top.1), hex("#3a3226"), 0.55, Mix::Pigment);
+                hb.reload(pal.mix(if j % 3 == 2 { wc } else { hex("#3a3226") }).paint(0.25), 0.4);
+                let l = rng.range(6.0, 12.0);
+                let s = rng.range(0.0, 3.0);
+                let o = (top.0 + nod * s * 0.6, top.1 + s);
+                c.drag(&mut hb, &Gesture::new(vec![o, (o.0 + nod * l * 0.5, o.1 + l * 0.25), (o.0 + nod * l * 0.8 + rng.normal(), o.1 + l * 0.8)]).pressure(0.6, 0.05).ramps(0.05, 0.7), None);
             }
         }
     }

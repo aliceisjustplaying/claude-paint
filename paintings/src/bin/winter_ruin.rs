@@ -162,7 +162,7 @@ fn main() {
         // wall turns, lighter up where the glow reaches
         let stone = move |x: f32, y: f32| {
             let t = ((y - 250.0) / 220.0).clamp(0.0, 1.0);
-            let base = gradient(&[(0.0, hex("#766d6c")), (0.6, hex("#665e60")), (1.0, hex("#817a7a"))], t, Mix::Pigment);
+            let base = gradient(&[(0.0, hex("#6f6665")), (0.55, hex("#5a5254")), (1.0, hex("#6e6868"))], t, Mix::Pigment);
             let k = 1.0 + 0.14 * rn.get(x * 0.5, y * 0.9) - 0.12 * smoothstep(300.0, 350.0, x);
             [base[0] * k, base[1] * k, base[2] * k]
         };
@@ -172,8 +172,8 @@ fn main() {
         // detail with the sable: the window's reveal in shadow (the inner
         // face of the jamb on the right of the opening, as the light is from
         // the right), the mullion and the tracery, the courses of stone
-        let mut sab = Held::new(Tool::round_sable(1.4), 201);
-        let shade = pal.paint(hex("#4c4549"), 0.15);
+        let mut sab = Held::new(Tool { ragged: 0.4, ..Tool::round_sable(3.2) }, 201);
+        let shade = pal.paint(hex("#4a4347"), 0.3);
         // the reveal: the left jamb and arch, seen at a slant
         let mut pts = Vec::new();
         for k in 0..=24 {
@@ -186,21 +186,35 @@ fn main() {
                 pts.push((rx + 23.0 - 46.0 * a.cos() + 1.6 * (1.0 - t), 342.0 - 46.0 * a.sin()));
             }
         }
-        sab.load(shade, 0.8);
-        c.drag(&mut sab, &Gesture::new(pts).pressure(0.9, 0.7).ramps(0.05, 0.1).shake(0.3), None);
+        sab.load(shade, 0.5);
+        c.drag(&mut sab, &Gesture::new(pts).pressure(0.6, 0.35).ramps(0.05, 0.3).shake(0.3), Some(&ruin));
         // the tracery has fallen: a stump of the mullion on the sill, and
         // the springing of one sub-arch still hanging from the left jamb
         let tr = pal.paint(hex("#686061"), 0.1).with_hiding(0.95).with_stiff(0.8);
         let mut mul = Held::new(Tool::round_sable(2.6), 202);
         mul.load(tr, 0.9);
         c.drag(&mut mul, &Gesture::new(vec![(rx + 0.4, 430.0), (rx + 0.2, 414.0), (rx - 0.3, 402.0)]).pressure(0.8, 0.7).ramps(0.05, 0.05).shake(0.4), None);
-        let mut ring = Held::new(Tool::round_sable(2.0), 203);
-        let pts: Vec<(f32, f32)> = (0..=5).map(|k| {
-            let a = std::f32::consts::PI * (k as f32 / 10.0);
-            (rx - 11.5 - 11.5 * a.cos(), 358.0 - 14.0 * a.sin())
-        }).collect();
-        ring.reload(tr, 0.8);
-        c.drag(&mut ring, &Gesture::new(pts).pressure(0.75, 0.55).ramps(0.1, 0.05).shake(0.3), None);
+        // weathering: rain has run down from the sill and the broken top in
+        // dark lean streaks; a row of putlog holes from the builders' scaffold
+        let mut wet = Held::new(Tool { ragged: 0.5, point: 0.5, ..Tool::round_sable(2.4) }, 209);
+        for _ in 0..14 {
+            let x0 = rng.range(186.0, 346.0);
+            let y0 = if (x0 - rx).abs() < 26.0 { 434.0 } else { wall_top(x0) + rng.range(4.0, 30.0) };
+            let l = rng.range(14.0, 50.0);
+            wet.reload(pal.paint(hex("#4d4649"), 0.5), rng.range(0.1, 0.22));
+            c.drag(&mut wet, &Gesture::new(vec![(x0, y0), (x0 + rng.range(-0.8, 0.8), y0 + l * 0.5), (x0 + rng.range(-1.2, 1.2), y0 + l)]).pressure(rng.range(0.3, 0.6), 0.1).ramps(0.1, 0.7).shake(0.3), Some(&ruin));
+        }
+        let mut hole = Held::new(Tool::round_sable(2.0), 210);
+        for (i, yh) in [300.0f32, 372.0].iter().enumerate() {
+            let mut x = 206.0 + 9.0 * i as f32;
+            while x < 334.0 {
+                if ruin.sample(x, *yh) > 0.9 && ruin.sample(x, yh - 4.0) > 0.9 && rng.chance(0.8) {
+                    hole.reload(pal.paint(hex("#2f2a2c"), 0.1), 0.6);
+                    c.drag(&mut hole, &Gesture::new(vec![(x - 0.8, yh + rng.range(-0.4, 0.4)), (x + 0.8, *yh)]).pressure(0.8, 0.8).ramps(0.1, 0.1), None);
+                }
+                x += rng.range(20.0, 30.0);
+            }
+        }
         // the thickness of the wall seen on its broken right end, in shade
         let mut side = Held::new(Tool::round_sable(3.0), 207);
         side.load(pal.paint(hex("#433d40"), 0.15), 0.7);
@@ -247,7 +261,7 @@ fn main() {
         c.dry();
         // snow lying on the sills, the buttress offsets and the broken top
         let mut sn = Held::new(Tool::round_sable(1.8), 206);
-        let snow = pal.paint(hex("#dcdad8"), 0.05).with_hiding(0.95).with_stiff(0.9);
+        let snow = pal.paint(hex("#c4c2c3"), 0.1).with_hiding(0.9).with_stiff(0.85);
         // find the top of the stone at x, looking down from y0 (as the
         // eye finds a ledge): the first point inside the wall
         let top_at = |x: f32, y0: f32| -> Option<f32> {
@@ -272,8 +286,8 @@ fn main() {
             }
         }
         for l in ledges {
-            sn.reload(snow, 0.7);
-            c.drag(&mut sn, &Gesture::new(l).pressure(0.6, 0.45).ramps(0.1, 0.3).shake(0.4), None);
+            sn.reload(snow, 0.5);
+            c.drag(&mut sn, &Gesture::new(l).pressure(rng.range(0.3, 0.55), 0.25).ramps(0.1, 0.3).shake(0.4), None);
         }
         c.dry();
     }
@@ -302,66 +316,102 @@ fn main() {
             let (x, y) = base;
             let top = y - ht;
             let dk = pal.paint(dark, 0.1).with_hiding(0.93).with_stiff(0.7);
+            // a second pile a touch warmer and lighter, for the tips of the
+            // pads, knifed unevenly from the first
+            let dk2 = pal.paint(shift_l(mix(dark, hex("#4a4a3a"), 0.25, Mix::Pigment), 0.08), 0.12).with_hiding(0.9).with_stiff(0.7);
             let sw = (ht * 0.014).clamp(0.6, 3.0);
+            let lean = rng.range(-1.5, 1.5);
+            let stem_x = move |yy: f32| x + lean * (1.0 - (yy - top) / ht);
+            // the outline the eye wants: a narrow spire, fuller below the
+            // middle, ragged; reach at each height, with runs of short boughs
+            let env = |t: f32| ht * (0.02 + 0.33 * t.powf(1.0));
+            // first the dark core the boughs hang from: short level hatching
+            // with a small filbert up the middle third of the width, so the
+            // tree is a mass and not a comb
+            let mut core = Held::new(Tool { ragged: 0.45, ..Tool::filbert((ht * 0.03).clamp(1.2, 5.0)) }, seed + 5);
+            let mut yy = top + ht * 0.2;
+            let mut k = 0;
+            while yy < y - ht * 0.04 {
+                if k % 6 == 0 {
+                    core.reload(dk, 0.7);
+                }
+                let t = (yy - top) / ht;
+                let r = env(t) * rng.range(0.1, 0.28);
+                let sx = stem_x(yy);
+                let dy = rng.range(-0.3, 0.8) * r * 0.3;
+                c.drag(&mut core, &Gesture::new(vec![(sx - r, yy + dy), (sx, yy - dy * 0.3), (sx + r, yy + dy * 1.2)]).pressure(rng.range(0.5, 0.85), rng.range(0.4, 0.7)).ramps(0.2, 0.3).shake(0.4), None);
+                yy += ht * rng.range(0.012, 0.03);
+                k += 1;
+            }
             let mut stem = Held::new(Tool { point: 1.0, ..Tool::round_sable(sw * 1.6) }, seed);
             stem.load(dk, 0.9);
-            let lean = rng.range(-1.5, 1.5);
             c.drag(&mut stem, &Gesture::new(vec![(x, y), (x + lean * 0.5, y - ht * 0.5), (x + lean, top)]).pressure(0.9, 0.05).ramps(0.02, 0.6).shake(0.2), None);
-            let nt = ((ht / 5.5) as usize).clamp(6, 44);
+            let nt = ((ht / 6.0) as usize).clamp(7, 40);
             let bw = (ht * 0.011).clamp(0.6, 2.4);
             let mut bough = Held::new(Tool { point: 0.6, ..Tool::round_sable(bw * 1.4) }, seed + 1);
-            let mut needle = Held::new(Tool { point: 1.0, ..Tool::round_sable(bw * 1.2) }, seed + 2);
-            let mut snow = Held::new(Tool { point: 0.5, ..Tool::round_sable(bw * 1.1) }, seed + 3);
+            let mut needle = Held::new(Tool { point: 1.0, ragged: 0.3, ..Tool::round_sable(bw * 1.3) }, seed + 2);
+            let mut snow = Held::new(Tool { point: 0.3, ragged: 0.4, ..Tool::round_sable(bw * 1.4) }, seed + 3);
             let sn = pal.paint(snowc, 0.05).with_hiding(0.95).with_stiff(0.9);
             let mut snow_strokes = Vec::new();
+            let mut run_short = 0;
             for k in 0..nt {
-                let t = (k as f32 + 0.6 + rng.range(-0.3, 0.3)) / nt as f32;
-                let yy = top + ht * (0.02 + 0.84 * t);
-                let sx = x + lean * (1.0 - (yy - top) / ht);
-                // the crown is a narrow spire, fuller below the middle
-                let reach = ht * (0.05 + 0.24 * t.powf(0.85)) * rng.range(0.7, 1.15);
-                if k % 3 == 0 {
+                let t = (k as f32 + 0.6 + rng.range(-0.45, 0.45)) / nt as f32;
+                let yy = top + ht * (0.02 + 0.86 * t);
+                let sx = stem_x(yy);
+                // a run of short boughs now and then: a notch in the outline
+                if run_short == 0 && rng.chance(0.07) {
+                    run_short = rng.range(1.0, 4.0) as i32;
+                }
+                let short = if run_short > 0 { run_short -= 1; rng.range(0.45, 0.7) } else { 1.0 };
+                let reach = env(t) * rng.range(0.6, 1.15) * short;
+                if k % 2 == 0 {
                     bough.reload(dk, 0.8);
-                    needle.reload(dk, 0.8);
+                    needle.reload(if rng.chance(0.3) { dk2 } else { dk }, 0.85);
                 }
                 for side in [-1.0f32, 1.0] {
-                    if rng.chance(0.08 + 0.1 * t) {
-                        continue; // a gap: a bough missing
+                    if rng.chance(0.04 + 0.06 * t) {
+                        continue;
                     }
-                    let r = reach * rng.range(0.75, 1.1);
-                    let sag = r * rng.range(0.25, 0.45);
-                    let lift = r * rng.range(0.02, 0.12);
-                    let tip = (sx + side * r, yy + sag - lift);
-                    let pts = vec![(sx, yy - 0.5), (sx + side * r * 0.4, yy + sag * 0.55), (sx + side * r * 0.8, yy + sag * 0.95), tip];
-                    c.drag(&mut bough, &Gesture::new(pts.clone()).pressure(0.8, 0.2).ramps(0.05, 0.5).shake(0.3), None);
-                    // needles: short strokes hanging from the bough, down and
-                    // a little outward, longer toward the middle of the bough
-                    let nn = ((r / (bw * 1.5)) as usize).clamp(2, 24);
+                    let r = reach * rng.range(0.8, 1.08);
+                    // upper boughs rise, lower ones sag deeper, the tip lifts
+                    let sag = r * (rng.range(0.1, 0.3) + 0.3 * t);
+                    let lift = r * rng.range(0.03, 0.14);
+                    let at = |u: f32| (sx + side * r * u, yy + sag * (1.15 * u - 0.2 * u * u) - lift * u * u * u);
+                    let pts: Vec<(f32, f32)> = [0.0, 0.3, 0.6, 0.85, 1.0].iter().map(|&u| at(u)).collect();
+                    c.drag(&mut bough, &Gesture::new(pts).pressure(rng.range(0.6, 0.9), 0.15).ramps(0.05, 0.5).shake(0.35), None);
+                    // the pad: pendant shoots hang below the bough, deepest
+                    // in the middle, in short pointed strokes, uneven in
+                    // length and spacing and leaning with the bough; a few
+                    // stand up short above it
+                    let nn = ((r / (bw * 0.9)) as usize).clamp(3, 40);
                     for j in 0..nn {
-                        let u = (j as f32 + rng.range(0.0, 0.9)) / nn as f32;
-                        let bx = sx + side * r * u;
-                        let by = yy + sag * (1.1 * u - 0.15 * u * u) - lift * u * u;
-                        let l = ht * rng.range(0.018, 0.045) * (0.5 + (1.0 - (u - 0.5).abs() * 1.4).max(0.2));
-                        let a = side * rng.range(0.1, 0.5);
-                        c.drag(&mut needle, &Gesture::new(vec![(bx, by - 0.4), (bx + a * l * 0.5, by + l * 0.55), (bx + a * l, by + l)]).pressure(0.75, 0.05).ramps(0.03, 0.6), None);
+                        let u = ((j as f32 + rng.range(0.0, 1.0)) / nn as f32).min(1.0);
+                        let (bx, by) = at(u);
+                        let deep = (1.0 - (u - 0.45).abs() * 1.5).max(0.25) * (0.5 + 0.8 * t);
+                        let l = ht * rng.range(0.018, 0.058) * deep * (r / (ht * 0.07)).clamp(0.35, 1.0) * if rng.chance(0.15) { 1.6 } else { 1.0 };
+                        let up = rng.chance(0.18);
+                        let a = side * rng.range(0.05, 0.6) + rng.range(-0.15, 0.15);
+                        let dir = if up { -0.45 } else { 1.0 };
+                        c.drag(&mut needle, &Gesture::new(vec![(bx, by - 0.3 * dir), (bx + a * l * 0.5, by + l * 0.55 * dir), (bx + a * l, by + l * dir)]).pressure(rng.range(0.55, 0.9), 0.04).ramps(0.03, 0.6), None);
                     }
-                    // snow on the outer half of some boughs
-                    if rng.chance(0.55) {
-                        let u0 = rng.range(0.25, 0.6);
-                        let u1 = (u0 + rng.range(0.2, 0.45)).min(0.98);
-                        let seg: Vec<(f32, f32)> = (0..=4).map(|q| {
-                            let u = u0 + (u1 - u0) * q as f32 / 4.0;
-                            (sx + side * r * u, yy + sag * (1.1 * u - 0.15 * u * u) - lift * u * u - bw * 0.7)
+                    // snow on some of the outer boughs, in lumps
+                    if rng.chance(0.4) {
+                        let u0 = rng.range(0.2, 0.6);
+                        let u1 = (u0 + rng.range(0.1, 0.35)).min(0.95);
+                        let seg: Vec<(f32, f32)> = (0..=3).map(|q| {
+                            let u = u0 + (u1 - u0) * q as f32 / 3.0;
+                            let (px, py) = at(u);
+                            (px, py - bw * 0.8)
                         }).collect();
                         snow_strokes.push(seg);
                     }
                 }
             }
             for (i, s) in snow_strokes.into_iter().enumerate() {
-                if i % 4 == 0 {
-                    snow.reload(sn, 0.7);
+                if i % 3 == 0 {
+                    snow.reload(sn, 0.6);
                 }
-                c.drag(&mut snow, &Gesture::new(s).pressure(rng.range(0.45, 0.8), 0.15).ramps(0.1, 0.5).shake(0.3), None);
+                c.drag(&mut snow, &Gesture::new(s).pressure(rng.range(0.35, 0.8), rng.range(0.1, 0.4)).ramps(0.2, 0.4).shake(0.5), None);
             }
         }
         // far ones first, the near dark ones over them
@@ -370,8 +420,8 @@ fn main() {
         for (n, i) in order.into_iter().enumerate() {
             let (x, y, ht, haze) = stand[i];
             let dark = mix(hex("#1d231f"), hex("#8c8990"), haze * 0.9, Mix::Pigment);
-            let snowc = mix(hex("#d6d6d8"), hex("#b8b5bb"), haze, Mix::Pigment);
-            spruce(&mut c, pal, (x, y), ht, dark, snowc, &mut rng, o.seed * 1000 + 300 + n as u64 * 10);
+            let snowc = mix(hex("#c9cbd1"), hex("#b3b0b7"), haze, Mix::Pigment);
+            spruce(&mut c, pal, (x, y + 2.0), ht * 1.18, dark, snowc, &mut rng, o.seed * 1000 + 300 + n as u64 * 10);
         }
         c.dry();
     }
@@ -381,10 +431,10 @@ fn main() {
     let mn = Fbm::new(seed + 30, 4, 180.0);
     if o.stage("mist", &mut c, &mut rng) {
         let depth = move |x: f32, y: f32| {
-            let d = (y - (hz(x) - 50.0)) / 60.0 + 0.45 * mn.get(x * 0.8, y * 1.6);
-            smoothstep(0.0, 1.0, d) * (1.0 - smoothstep(hz(x) + 6.0, hz(x) + 26.0, y))
+            let d = (y - (hz(x) - 75.0)) / 80.0 + 0.5 * mn.get(x * 0.8, y * 1.6);
+            smoothstep(0.0, 1.0, d).powf(1.5) * (1.0 - smoothstep(hz(x) + 6.0, hz(x) + 26.0, y))
         };
-        let band = Mask::from_fn(f, move |x, y| smoothstep(hz(x) - 90.0, hz(x) - 30.0, y) * (1.0 - smoothstep(hz(x) + 14.0, hz(x) + 30.0, y)));
+        let band = Mask::from_fn(f, move |x, y| smoothstep(hz(x) - 140.0, hz(x) - 60.0, y) * (1.0 - smoothstep(hz(x) + 14.0, hz(x) + 30.0, y)));
         let veil = paint::Handling::new(Tool { stiffness: 0.3, lay: 0.8, pickup: 0.08, ragged: 0.35, ..Tool::filbert(7.0) })
             .mixed(pal, 0.65)
             .by_masstone()
@@ -401,8 +451,11 @@ fn main() {
         c.work(&band, &veil, o.seed * 100 + 31);
         let s = Stipple::new(Tool::stippler(2.0)).mixed(pal, 0.7).color(|_, y| mix(hex("#c9bfbb"), hex("#d9d2cc"), smoothstep(420.0, 470.0, y), Mix::Pigment)).coverage(move |x, y| 1.6 * depth(x, y)).pressure(0.4, 0.7).dips(16, 0.25, 0.7).aim(false);
         c.stipple(&band, &s, o.seed * 100 + 30);
+        // fused level, the badger carried across the mist's top so it has
+        // no edge
         if let Some(b) = st.blend() {
-            c.work(&band, &b.angle(|_, _| 0.0).pressure(0.3, 0.4), o.seed * 100 + 32);
+            let wide = Mask::from_fn(f, move |x, y| smoothstep(hz(x) - 150.0, hz(x) - 120.0, y) * (1.0 - smoothstep(hz(x) + 14.0, hz(x) + 30.0, y)));
+            c.work(&wide, &b.angle(|_, _| 0.0).pressure(0.3, 0.4).clip(false), o.seed * 100 + 32);
         }
         c.dry();
     }
@@ -435,30 +488,19 @@ fn main() {
     }
 
     if o.stage("track", &mut c, &mut rng) {
-        // the trodden way, curving from us toward the ruin: two ruts, a hand
-        // pulling a cool gray down them in pieces, narrower as they recede
-        let path = |t: f32| -> (f32, f32) {
-            let y = 714.0 + 10.0 - (724.0 - 471.0) * t.powf(0.8);
-            let x = 560.0 - 250.0 * t + 70.0 * (std::f32::consts::PI * t).sin();
-            (x, y)
-        };
-        let mut rut = Held::new(Tool { point: 0.4, ..Tool::round_sable(3.0) }, 401);
-        let gray = pal.paint(hex("#b0b4c0"), 0.45);
-        for side in [-1.0f32, 1.0] {
-            let mut t = 0.0f32;
-            while t < 0.97 {
-                let t1 = (t + rng.range(0.03, 0.1)).min(0.98);
-                let pts: Vec<(f32, f32)> = (0..=6).map(|k| {
-                    let u = t + (t1 - t) * k as f32 / 6.0;
-                    let (x, y) = path(u);
-                    let half = 12.0 * (1.0 - u).powf(1.3) + 1.0;
-                    (x + side * half, y)
-                }).collect();
-                let wk = 1.0 - t;
-                rut.reload(gray, 0.3 + 0.25 * wk);
-                c.drag(&mut rut, &Gesture::new(pts).pressure(0.15 + 0.4 * wk, 0.1 + 0.35 * wk).ramps(0.2, 0.3).shake(0.4), None);
-                t = t1 + rng.range(0.01, 0.06);
-            }
+        // no road: the walker breaks the trail through fresh snow, so the
+        // only way is the trough his steps leave behind him, a cool shallow
+        // groove, wider as it comes toward us, pulled in a few pieces
+        let (fx, fy) = (478.0f32, 552.0f32);
+        let path = move |t: f32| (fx + 16.0 * t + 50.0 * t * t, fy + 4.0 + 160.0 * t);
+        let mut tr = Held::new(Tool { ragged: 0.45, push: 0.02, pickup: 0.05, ..Tool::filbert(5.0) }, 401);
+        let mut t = 0.0f32;
+        while t < 0.98 {
+            let t1 = (t + rng.range(0.12, 0.25)).min(1.0);
+            let pts: Vec<(f32, f32)> = (0..=5).map(|k| path(t + (t1 - t) * k as f32 / 5.0)).collect();
+            tr.reload(pal.paint(hex("#b3b8c5"), 0.5), 0.3);
+            c.drag(&mut tr, &Gesture::new(pts).pressure(0.2 + 0.5 * t, 0.2 + 0.5 * t1).ramps(0.3, 0.3).shake(0.5), None);
+            t = t1 - rng.range(0.0, 0.03);
         }
         c.dry();
     }
@@ -484,8 +526,8 @@ fn main() {
             // lit from behind and above: the top edge catches the sky, the
             // face toward us dark
             let t = ((y - 548.0) / 90.0).clamp(0.0, 1.0);
-            let base = gradient(&[(0.0, hex("#5e5a5a")), (0.35, hex("#46423f")), (1.0, hex("#2e2b29"))], t, Mix::Pigment);
-            let k = 1.0 + 0.2 * bn.get(x * 1.5, y * 1.5);
+            let base = gradient(&[(0.0, hex("#5e5a5a")), (0.35, hex("#4a4644")), (1.0, hex("#33302d"))], t, Mix::Pigment);
+            let k = 1.0 + 0.25 * bn.get(x * 1.5, y * 1.5);
             [base[0] * k, base[1] * k, base[2] * k]
         };
         c.work(&boulder, &st.body().color(rockc).angle(move |x, _| 0.5 * ((x - bx) / 80.0)).angle_jitter(0.5).length(6.0, 20.0).coverage(4.0).threshold(0.2).clip(true), o.seed * 100 + 50);
@@ -502,14 +544,6 @@ fn main() {
             let l = rng.range(8.0, 25.0);
             sab.reload(pal.paint(hex("#221f1d"), 0.2), 0.5);
             c.drag(&mut sab, &Gesture::new(vec![(x0, y0), (x0 + a.cos() * l * 0.5 + rng.range(-2.0, 2.0), y0 + a.sin() * l * 0.5), (x0 + a.cos() * l, y0 + a.sin() * l)]).pressure(0.6, 0.1).ramps(0.1, 0.5).shake(0.4), Some(&boulder));
-        }
-        let mut lit = Held::new(Tool::round_sable(3.0), 502);
-        for _ in 0..7 {
-            let x0 = bx + rng.range(-55.0, 45.0);
-            let y0 = 566.0 + rng.range(0.0, 18.0);
-            lit.reload(pal.paint(hex("#77716c"), 0.3), 0.35);
-            let l = rng.range(8.0, 20.0);
-            c.drag(&mut lit, &Gesture::new(vec![(x0, y0), (x0 + l, y0 + rng.range(-3.0, 3.0))]).pressure(0.35, 0.2).ramps(0.2, 0.4), Some(&boulder));
         }
         c.dry();
         // the snow cap: thick lead white laid on the top in a few strokes,
@@ -530,13 +564,33 @@ fn main() {
         });
         let cap = Mask::from_fn(f, move |x, y| boulder_in(x, y + 2.5).max(boulder_in(x, y)) * (1.0 - smoothstep(cap_bot(x) - 1.0, cap_bot(x) + 1.0, y)));
         let _ = &cap;
+        // the stone turned to the sky: lean cool planes following its
+        // crown, lighter near the top, a few blots of lichen
+        let mut lit = Held::new(Tool { ragged: 0.5, ..Tool::round_sable(2.2) }, 502);
+        for i in 0..60 {
+            let x0 = bx + rng.range(-100.0, 80.0);
+            let t = top_y(x0);
+            if t >= 639.0 { continue; }
+            let d = rng.range(2.0, 30.0);
+            let y0 = cap_bot(x0) + d * 0.8;
+            if boulder.sample(x0, y0) < 0.7 { continue; }
+            let l = rng.range(10.0, 30.0);
+            let x1 = x0 + l;
+            let slope = (top_y(x1) - t) * (1.0 - d / 40.0);
+            let col = mix(hex("#67656b"), hex("#45413f"), d / 32.0, Mix::Pigment);
+            let col = if i % 9 == 4 { hex("#5f5a48") } else { col };
+            // dry brush: little paint, light pressure, the tooth breaks it
+            lit.reload(pal.paint(col, 0.25), rng.range(0.1, 0.2));
+            c.drag(&mut lit, &Gesture::new(vec![(x0, y0), (x0 + l * 0.5, y0 + slope * 0.5 + rng.range(-1.0, 1.0)), (x1, y0 + slope)]).pressure(rng.range(0.2, 0.4), 0.15).ramps(0.2, 0.4).shake(0.4), Some(&boulder));
+        }
+        c.wait(60.0);
         // laid by hand, in stiff lead white, stroke over stroke along the
         // stone's crown, from the top down to the lip, each a little shorter
         let mut capb = Held::new(Tool { lay: 1.3, ..Tool::filbert(6.0) }, 504);
         for layer in 0..5 {
             let mut x = bx - 95.0 + rng.range(0.0, 10.0);
             while x < bx + 92.0 {
-                let x1 = x + rng.range(14.0, 34.0);
+                let x1 = x + rng.range(24.0, 52.0);
                 let pts: Vec<(f32, f32)> = (0..=5).filter_map(|k| {
                     let xx = x + (x1 - x) * k as f32 / 5.0;
                     let (t, b) = (top_y(xx), cap_bot(xx));
@@ -546,7 +600,9 @@ fn main() {
                 }).collect();
                 if pts.len() >= 2 {
                     let y = pts[0].1;
-                    let col = mix(hex("#eeebe6"), hex("#c7cad3"), smoothstep(550.0, 590.0, y) * 0.7 + 0.2 * layer as f32 / 5.0, Mix::Pigment);
+                    // the crown catches the sky; the front of the load, turned
+                    // toward us and away from the light, is a cool gray
+                    let col = mix(hex("#eceae6"), hex("#aab1c0"), (smoothstep(552.0, 600.0, y) * 0.5 + 0.55 * layer as f32 / 4.0).min(1.0), Mix::Pigment);
                     capb.reload(pal.paint(col, 0.04).with_hiding(0.97).with_stiff(0.95), rng.range(0.7, 1.0));
                     c.drag(&mut capb, &Gesture::new(pts).pressure(rng.range(0.55, 0.85), rng.range(0.35, 0.6)).ramps(0.1, 0.3).shake(0.3), None);
                 }
@@ -574,8 +630,24 @@ fn main() {
             c.drag(&mut lip, &Gesture::new(vec![(x0, y0), (x0 + rng.range(2.0, 6.0), y0 + rng.range(-1.0, 1.0))]).pressure(0.4, 0.2).ramps(0.2, 0.4), Some(&boulder));
         }
         // snow drifted against its foot
-        let foot = Mask::from_fn(f, move |x, y| (1.0 - smoothstep(0.0, 6.0, (y - 638.0 + 4.0 * bn.get(x * 2.0, 5.0)).abs())) * (1.0 - smoothstep(70.0, 95.0, (x - bx).abs())));
-        c.work(&foot, &st.body().color(|_, _| hex("#dcdde0")).angle(|_, _| 0.0).length(10.0, 30.0).coverage(3.0).medium(0.1).threshold(0.2).clip(true), o.seed * 100 + 52);
+        // the snow drifted up against the foot: low mounds laid in arcs,
+        // higher where the wind packed it, the stone's base lost in them
+        let mut dr = Held::new(Tool { lay: 1.2, ragged: 0.35, ..Tool::filbert(7.0) }, 505);
+        let mut x = bx - 100.0;
+        while x < bx + 96.0 {
+            let len = rng.range(28.0, 70.0);
+            let hgt = rng.range(0.5, 7.0);
+            let skew = rng.range(0.6, 1.7);
+            let y0 = 641.0 + rng.range(-1.0, 1.5);
+            let col = mix(snow_col(x, y0), hex("#b3b9c6"), rng.range(0.0, 0.4), Mix::Pigment);
+            dr.reload(pal.paint(col, 0.05).with_hiding(0.96).with_stiff(0.9), rng.range(0.7, 1.0));
+            let pts: Vec<(f32, f32)> = (0..=6).map(|k| {
+                let u = k as f32 / 6.0;
+                (x + len * u, y0 - hgt * (std::f32::consts::PI * u.powf(skew)).sin().max(0.0).powf(0.6))
+            }).collect();
+            c.drag(&mut dr, &Gesture::new(pts).pressure(rng.range(0.6, 0.9), rng.range(0.5, 0.8)).ramps(0.15, 0.3).shake(0.4), None);
+            x += len * rng.range(0.3, 0.75);
+        }
         c.dry();
     }
 
@@ -664,7 +736,7 @@ fn main() {
             // trunk, one stroke for a limb, the pointed rigger for twigs
             let tool = if s.w0 > 4.0 {
                 Tool::round_sable((s.w0 * 0.55).min(8.0))
-            } else if s.w0 > 1.2 {
+            } else if s.w0 > 2.0 {
                 Tool { point: 1.0, ..Tool::round_sable(s.w0 * 1.1) }
             } else {
                 Tool { point: 1.0, ..Tool::rigger(s.w0 * 1.3) }
@@ -706,7 +778,7 @@ fn main() {
         c.drag(&mut drift, &Gesture::new(vec![(base.0 - 26.0, base.1 + 2.0), (base.0 - 10.0, base.1 - 1.5), (base.0 + 6.0, base.1 - 0.5), (base.0 + 24.0, base.1 + 3.0)]).pressure(0.7, 0.5).ramps(0.2, 0.4).shake(0.4), None);
         // a lean lighter streak down the trunk's right, where the glow is
         let mut lt = Held::new(Tool { ragged: 0.5, ..Tool::round_sable(1.6) }, 690);
-        for k in 0..3 {
+        for k in 0..0 {
             let dx = 7.0 + 2.5 * k as f32;
             lt.reload(pal.paint(hex("#4c4440"), 0.4), 0.25);
             let y0 = base.1 - rng.range(8.0, 30.0);
@@ -814,7 +886,7 @@ fn main() {
         }
         for _ in 0..14 {
             let x = rng.range(300.0, 800.0);
-            let y = rng.range(490.0, 620.0);
+            let y = rng.range(525.0, 640.0);
             clumps.push((x, y, 0.25 + (y - 480.0) / 200.0));
         }
         clumps.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap());
@@ -856,5 +928,7 @@ fn main() {
         c.dry();
     }
 
-    o.finish(&mut c, &mut rng, &Finish::aged(st.relief));
+    // an old painting, but one kept with care: less soot in the cracks
+    let fin = Finish { cracks: Some(paint::Cracks { dirt: 0.2, grime: 0.5, ..paint::Cracks::aged(0) }), ..Finish::aged(st.relief) };
+    o.finish(&mut c, &mut rng, &fin);
 }

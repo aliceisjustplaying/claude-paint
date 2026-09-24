@@ -25,6 +25,17 @@ exact geometry. When a design choice is "compute it" vs "let the painter
 do it the way a person would", choose the second, and make the tool about
 the physics that person works with.
 
+## 2b. Entropy
+Alice, from round 1 on: "the less entropy we have the more digital
+everything looks." A hand never repeats: no two strokes carry the same
+load, pressure, length or angle; piles are mixed unevenly; a painter
+corrects, overpaints, loses and finds; paint runs dry mid-stroke; grounds
+and weave are irregular; time sets some passages and not others. A
+computed answer has almost no entropy: the same mark, spacing, edge or
+gradient everywhere. So variation has to come from the process (the hand,
+the palette, the physics, the painter's decisions), at every scale, and
+not from noise sprinkled on a perfect result (that's still a formula).
+
 ## 3. First principles
 Every mark is made the way a painter makes it: bristles, paint, canvas,
 optics (README.md). No flat fills, no optical blends pretending to be

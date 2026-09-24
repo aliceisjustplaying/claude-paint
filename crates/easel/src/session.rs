@@ -32,6 +32,8 @@ struct Snap {
     seed: u64,
     clock: f64,
     clock0: f64,
+    /// The hand's clock (hand time, sittings).
+    hand: crate::time::Hand,
     /// The last world view made (depth options resolve against it).
     view: Option<crate::world::ViewU>,
     /// The Lua heap (heap.lua's snapshot).
@@ -141,7 +143,7 @@ impl Session {
             let h = b.borrow().clone();
             (b, h)
         }).collect();
-        Ok(Snap { canvas: s.canvas.clone(), style: s.style.clone(), setup: s.setup.clone(), seed: s.seed, clock: s.clock, clock0: s.clock0, view: s.view.clone(), heap, brushes, marks: crate::look::saved(&self.lua) })
+        Ok(Snap { canvas: s.canvas.clone(), style: s.style.clone(), setup: s.setup.clone(), seed: s.seed, clock: s.clock, clock0: s.clock0, hand: s.hand.clone(), view: s.view.clone(), heap, brushes, marks: crate::look::saved(&self.lua) })
     }
 
     /// Put everything back as it was at `snap`, which stays usable (heap.lua
@@ -161,6 +163,7 @@ impl Session {
         s.seed = snap.seed;
         s.clock = snap.clock;
         s.clock0 = snap.clock0;
+        s.hand = snap.hand.clone();
         s.view = snap.view.clone();
         Ok(())
     }
@@ -208,6 +211,10 @@ impl Session {
         let t0 = Instant::now();
         let chunk = self.lua.load(src.as_str()).set_name(format!("chunk {n}"));
         let r = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| chunk.exec()));
+        // the hand time the chunk spent goes on the clock before it ends
+        if matches!(r, Ok(Ok(()))) {
+            crate::time::flush(&self.st, true);
+        }
         let secs = t0.elapsed().as_secs_f64();
         let (out, field_secs) = {
             let s = self.st.borrow();
@@ -367,15 +374,14 @@ impl Session {
 
     pub fn status(&self) -> String {
         let s = self.st.borrow();
-        let wet = s.canvas.as_ref().map(|c| c.wet_total() > 1e-6).unwrap_or(false);
         let secs: f64 = self.log.iter().map(|c| c.secs).sum::<f64>() + 0.0;
         format!(
             "{} chunks · {}px · {} · clock {} min · {} · undo {} deep · checkpoints at {} · painted {secs:.0}s · rollback bookkeeping {:.2}s",
             self.log.len(),
             s.width,
             s.setup.as_deref().unwrap_or("no canvas yet"),
-            s.clock,
-            if wet { "wet paint on the canvas" } else { "dry" },
+            clock_str(s.clock),
+            crate::time::summary(&s),
             self.snaps.range(self.log.len().saturating_sub(self.undo_depth)..).count(),
             {
                 let k: Vec<String> = self.snaps.range(..self.log.len().saturating_sub(self.undo_depth)).map(|(k, _)| k.to_string()).collect();
@@ -384,6 +390,12 @@ impl Session {
             self.heap_secs.0 + self.heap_secs.1
         )
     }
+}
+
+/// The clock for the status line: whole minutes unless it has a fraction
+/// (hand time runs in seconds).
+fn clock_str(m: f64) -> String {
+    if m.fract() == 0.0 { format!("{m}") } else { format!("{m:.1}") }
 }
 
 impl Drop for Session {
@@ -583,7 +595,23 @@ pub fn parse_program(text: &str) -> Vec<String> {
     chunks.into_iter().map(|c| c.trim_end().to_string()).filter(|c| !c.trim().is_empty()).collect()
 }
 
+/// The checkout the easel works in (session logs in `paintings/lua`, renders
+/// in `out/`): `EASEL_ROOT` if set, else the nearest directory at or above
+/// the working directory that holds `crates/easel/Cargo.toml`, else the
+/// checkout this binary was built from. Looking from the working directory
+/// keeps git worktrees apart: a binary built in (or copied from) another
+/// checkout still writes into the worktree it's run in.
 pub fn root() -> PathBuf {
+    if let Some(r) = std::env::var_os("EASEL_ROOT").filter(|r| !r.is_empty()) {
+        let r = PathBuf::from(r);
+        return r.canonicalize().unwrap_or(r);
+    }
+    if let Ok(cwd) = std::env::current_dir() {
+        let found = cwd.ancestors().find(|d| d.join("crates/easel/Cargo.toml").is_file()).map(Path::to_path_buf);
+        if let Some(r) = found {
+            return r.canonicalize().unwrap_or(r);
+        }
+    }
     let r = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
     r.canonicalize().unwrap_or(r)
 }

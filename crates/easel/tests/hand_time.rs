@@ -39,7 +39,8 @@ fn replay(src: &Path, width: u32, threads: Option<usize>, tag: &str) -> (String,
 /// went from 0.2 to 0.06 (Round 6, Alice's pick): only the finishing
 /// relief changed, and again when glazes and the varnish got their own
 /// thin-film settle (Round 6, notes/varnish.md): at 160px both logs moved by
-/// 1/255 in 1 and 8 pixels.
+/// 1/255 in 1 and 8 pixels. And again for l5_near (release) when a mask passed as `clip=` began
+/// to be used (Round 7: it had been read as `clip=true`).
 #[test]
 fn existing_logs_replay_unchanged() {
     // (the benchmark near is checked in release only: a debug replay takes
@@ -47,7 +48,7 @@ fn existing_logs_replay_unchanged() {
     let logs: &[(&str, u64)] = if cfg!(debug_assertions) {
         &[("paintings/lua/example.lua", 0x62d1_127e_8305_1451)]
     } else {
-        &[("paintings/lua/example.lua", 0x62d1_127e_8305_1451), ("notes/loops/l5_near.lua", 0x4c75_e799_85f9_bfef)]
+        &[("paintings/lua/example.lua", 0x62d1_127e_8305_1451), ("notes/loops/l5_near.lua", 0xde04_a651_cf0f_33b0)]
     };
     for &(log, want) in logs {
         let (_, png) = replay(&root().join(log), 160, None, "unchanged");

@@ -105,3 +105,11 @@ Reading: the look-first control didn't beat the engine, and the current
 process didn't beat round 2. The best picture is still the one whose
 painter authored its own motifs (fresh2_winter.rs: its own wood, prune,
 gnarl, limb_snow, spruce, walker_fig).
+
+## Piles (notes/round7/piles/)
+She guessed B (the formula) was the piles version; A was piles. "Maybe I'm
+biased now that I know I picked wrong, but don't discard piles yet,
+because I think we may have something there." The helper stays parked on
+branch r7-piles (unmerged). The fair test: a painter who works from piles
+from the start (choose a pile, paint a passage with it, then the next),
+not a formula painting with its colors swapped.

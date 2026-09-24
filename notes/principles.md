@@ -87,3 +87,17 @@ Agents think in functions (compute everything, everywhere, perfectly);
 humans paint in gestures under constraints. The integrator and the
 painters are LLMs and will keep reaching for the computed answer: every
 brief and review should check against this page.
+
+## Feature freeze (Round 7, Alice)
+After the edges, piles and cracks streams land, no new engine capabilities
+until a painting round shows which of the existing ones help the pictures.
+Bug fixes, tests and painter craft (sketchbook) are fine. The question on
+the table: are we overengineering? Evidence to weigh: the visible gains of
+Round 6 came mostly from bug fixes (varnish, pinholes, wet lights) and
+painter choices, not new machinery; the inspiring post got four styles
+from ~7,500 lines; Alice finds round 2's early paintings (notes/amnesia2/,
+plain Rust programs on an older, simpler API) better in many ways than
+anything since; and in the post, the Turner (the style closest to
+Friedrich's world) was by far the most digital-looking and furthest from
+its painter, probably not a coincidence. A control experiment (branch
+r7-python: a look-first Friedrich in plain Python, no engine) tests it.

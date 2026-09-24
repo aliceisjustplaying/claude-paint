@@ -416,3 +416,45 @@ glaze(NEARDARK, {color="#5d6680", coats=0.32})
 VIG = mask(function(x, y) local dx, dy = (x - 520)/560, (y - 430)/430
   return smoothstep(0.6, 1.3, math.sqrt(dx*dx + dy*dy)) * (0.8 + 0.2*vn:at01(y, x)) end)
 glaze(VIG, {color="#3f4458", coats=0.3})
+
+--@ chunk 20 · clock 71762.13330078125
+-- the ice worked over the dry lay-in: thin long streaks of polished ice glazed darker, and a few pale
+-- drifted lines of snow laid with a small brush, all running flat to the horizon
+local KEEP = -(CROSSM + FIGM):grow(0.8)
+local pn = noise{seed=201, octaves=4, period=260, stretch={0.0, 45}, warp={300, 1.5}}
+local function tpond(x, y) return clamp((y - shore(x)) / (bank(x) - shore(x)), 0, 1) end
+POLISH = mask(function(x, y) local t = tpond(x, y)
+  return smoothstep(0.6, 0.66, pn:at01(x, y) + 0.08*t) * (0.6 + 0.4*t) end) * POND * KEEP
+glaze(POLISH:blur(0.6), {color="#4b5663", coats=0.4})
+-- snow lines: short and long dry strokes of a small round, flat, lighter toward the far shore
+local sb = brush{kind="round", width=1.6}
+for i = 1, 150 do
+  local x = rand(-20, 1000)
+  local t = rand()^1.4
+  local y = lerp(shore(x) + 3, bank(x) + 2, t)
+  if i % 6 == 1 then sb:reload(mix("#d2c8bd", "#aeb2ba", t), rand(0.4, 0.7)) end
+  local L = rand(20, 110) * (1 - 0.4*t)
+  local pts = {{x, y}, {x + L/2, y + randn(0, 0.35)}, {x + L, y + randn(0, 0.5)}}
+  sb:stroke(pts, {pressure={0.15, rand(0.3, 0.55), 0.1}, ramps={0.3, 0.4}, clip=POND * KEEP})
+end
+
+--@ chunk 21 · clock 71762.13330078125
+-- the near snow: long wind drifts, each a cool shadow on its lee under a lit crest; a few stones
+local KEEPF = -(CROSSM + FIGM):grow(1)
+local dn = noise{seed=211, octaves=4, period=200, stretch={-0.08, 6}, warp={140, 10}}
+DRIFTSH = mask(function(x, y)
+  local d = y - bank(x); if d < 14 then return 0 end
+  local v = dn:at01(x, y*1.6)
+  return smoothstep(0.55, 0.62, v) * (1 - smoothstep(0.66, 0.74, v)) * smoothstep(14, 40, d) end) * KEEPF
+glaze(DRIFTSH:blur(1.5), {color="#56607c", coats=0.3})
+-- stones through the snow: dark tops, snow lying on them
+local stb = brush{kind="round", width=3, point=0.3}
+for i, s in ipairs({{206, 676, 17, 7}, {232, 682, 8, 4}}) do
+  local x, y, w, h = s[1], s[2], s[3], s[4]
+  local st = poly({{x - w, y}, {x - w*0.7, y - h*0.8}, {x - w*0.1, y - h}, {x + w*0.6, y - h*0.7}, {x + w, y}}, true):roughen(0.5, 3, 212 + i, 0.3)
+  work(st, {hand="detail", tool="round 1.2", length={2, 6}, coverage=4, medium=0.1, angle=0.2, color="#4c4a4d", edge="found"})
+  stb:reload("#c9c7cc", 0.8)
+  stb:stroke({{x - w*0.75, y - h*0.7}, {x - w*0.1, y - h*1.05}, {x + w*0.55, y - h*0.75}}, {pressure={0.3, 0.6, 0.25}, ramps={0.2, 0.3}})
+  stb:reload("#b4b5bd", 0.7)
+  stb:stroke({{x - w*1.3, y + 0.8}, {x, y + 1.2}, {x + w*1.3, y + 0.6}}, {pressure={0.4, 0.7, 0.3}, ramps={0.2, 0.3}})
+end

@@ -1039,7 +1039,7 @@ struct RSeg {
 /// each generation; assumption, in the 20–70 µm range measured: 70 µm for a
 /// canvas-aging crack by OCT, Kim et al. 2022, 20 ± 8 µm for a saturated
 /// fine network, Janas et al. 2022).
-const HIER_DECAY: f32 = 0.6;
+const HIER_DECAY: f32 = 0.68;
 /// A primary crack's opening relative to `Cracks::width` when `hierarchy`
 /// is 1 (the later generations are narrower, so the primaries are wider
 /// than the old even crack).

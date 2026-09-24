@@ -39,9 +39,9 @@ function paint_bare(t, o)
   local cx, cy = t.fork[1], t.fork[2]
   local way = o.hang and function(x, y) return 1.45 + 0.25 * clamp((x - cx) / 40, -1, 1) end
                       or function(x, y) return math.atan(y - cy, x - cx) end
-  work(tm, {hand="body", tool="rigger 0.7", length={6, 14}, coverage=2, pressure={0.5, 0.2}, load=0.25, medium=0.35,
-    threshold=0.05, hug=false, clip=tm:map(function(v) return (o.tone or 0.4) * v end), angle=way, angle_jitter=0.3,
-    color=function(x, y) return mix(twig, sky(x, y), 0.5) end})
+  if (o.tone or 0.3) > 0 then work(tm, {hand="body", tool="rigger 0.7", length={6, 14}, coverage=2, pressure={0.5, 0.2}, load=0.25, medium=0.35,
+    threshold=0.05, hug=false, clip=tm:map(function(v) return (o.tone or 0.3) * v end), angle=way, angle_jitter=0.3,
+    color=function(x, y) return mix(twig, sky(x, y), 0.55) end}) end
   local thick = t:wood(o.thick or 3.5)
   work(thick, {hand="body", tool="round 2", length={4, 12}, coverage=3.5, angle=1.5, angle_jitter=0.6, clip=thick, color=dark, medium=0.15})
   local stout = t:wood(o.stout or 7)
@@ -84,7 +84,7 @@ paint_bare(beech, {dark="#5a5a55", light="#9d9a90", twig="#4c4a45"})
 BIRCH = {{918,150},{934,176},{948,230},{960,300,"c"},{966,372},{952,420},{918,432},{886,416},{872,360,"c"},{880,290},{894,220},{906,172}}
 birch = tree_in{crown=outline{pts=BIRCH, char="soft", seed=15}, trunk={{921,610},{918,520},{922,440}}, species="birch", season="winter", sun=WORLD, seed=16}
 print(birch)
-paint_bare(birch, {dark="#4a3f38", twig="#4e3f3c", hang=true, tone=0.5, thick=2.6})
+paint_bare(birch, {dark="#4a3f38", twig="#4e3f3c", hang=true, tone=0.4, thick=2.6})
 local stem = birch:wood(2.6)
 work(stem, {hand="body", tool="round 1.6", length={3, 8}, coverage=3.2, angle=1.55, clip=stem, color="#d9d4c6", medium=0.15})
 local shadeside = stem * mask(function(x, y) return 1 - stem:at(x - 2.2, y) end)

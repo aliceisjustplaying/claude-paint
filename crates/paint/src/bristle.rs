@@ -24,7 +24,8 @@ use crate::rng::Rng;
 use crate::smoothstep;
 use crate::exchange::{FINE_RB, Mode, exchange};
 pub(crate) use crate::film::{Bounds, Rect};
-use crate::film::{Stroke, Surf};
+pub(crate) use crate::film::Surf;
+use crate::film::Stroke;
 use crate::wet::{LAT, Latent, Layer, Paint, Prop, mix_into};
 
 /// Relief (µm) that spans a bristle's contact range: a bristle pressed
@@ -1038,7 +1039,7 @@ impl Canvas {
         if let Some(m) = clip {
             self.check_mask(m);
         }
-        self.tally.touch(&held.tool, self.mm_per_unit);
+        self.tally.touch();
         let id = self.next_stroke_ids(1);
         let surf = self.surf();
         let mut scratch = Vec::new();

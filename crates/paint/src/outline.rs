@@ -24,6 +24,7 @@ use crate::bristle::{Gesture, Held, Orient};
 use crate::canvas::{Canvas, Frame};
 use crate::mask::Mask;
 use crate::noise::Fbm;
+use crate::path::{arclen, dist, length};
 use crate::rng::Rng;
 use crate::shape::Shape;
 use rayon::prelude::*;
@@ -256,9 +257,6 @@ pub fn hand_scale(size: f32) -> f32 {
     size.max(1.0).powf(0.7) * 100f32.powf(0.3)
 }
 
-fn dist(a: P, b: P) -> f32 {
-    ((b.0 - a.0).powi(2) + (b.1 - a.1).powi(2)).sqrt()
-}
 
 fn bbox(pts: impl Iterator<Item = P>) -> (f32, f32, f32, f32) {
     pts.fold((f32::MAX, f32::MAX, f32::MIN, f32::MIN), |b, p| (b.0.min(p.0), b.1.min(p.1), b.2.max(p.0), b.3.max(p.1)))
@@ -333,10 +331,7 @@ fn resample(pts: &[P], closed: bool, step: f32) -> Vec<P> {
     if p.len() < 2 {
         return pts.to_vec();
     }
-    let mut cum = vec![0.0f32];
-    for w in p.windows(2) {
-        cum.push(cum.last().unwrap() + dist(w[0], w[1]));
-    }
+    let cum = arclen(&p);
     let total = *cum.last().unwrap();
     if total < 1e-6 {
         return vec![p[0]];
@@ -920,9 +915,11 @@ impl Outline {
 }
 
 fn line_len(l: &Line) -> f32 {
-    let n = l.pts.len();
-    let segs = if l.closed { n } else { n.saturating_sub(1) };
-    (0..segs).map(|i| dist(l.pts[i], l.pts[(i + 1) % n])).sum()
+    let close = match (l.closed, l.pts.first(), l.pts.last()) {
+        (true, Some(&a), Some(&b)) => dist(b, a),
+        _ => 0.0,
+    };
+    length(&l.pts) + close
 }
 
 /// Polynomial smooth minimum over `k` units.
@@ -1056,10 +1053,7 @@ fn hand_line(plan: Plan, ch: &Character, seed: u32, scale: f32, step: f32, rng: 
     // lobes and facets no bigger than the shape is thick there
     let fit = |i: usize, size: f32| -> f32 { room.get(i).map_or(1.0, |&r| (r / size.max(1e-6)).clamp(0.12, 1.0)) };
     let n = pts.len();
-    let mut cum = vec![0.0f32; n];
-    for i in 1..n {
-        cum[i] = cum[i - 1] + dist(pts[i - 1], pts[i]);
-    }
+    let cum = arclen(&pts);
     let total = cum[n - 1] + if closed { dist(pts[n - 1], pts[0]) } else { 0.0 };
     let k = ((scale * 0.01 / step).round() as usize).clamp(1, n / 4 + 1);
     let nrm = normals(&pts, closed, k);

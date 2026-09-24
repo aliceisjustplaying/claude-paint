@@ -418,8 +418,7 @@ impl Canvas {
             })
             .collect();
         let add: Vec<f32> = th.iter().map(|t| t * COAT_UM * GLAZE_FILM).collect();
-        let sv = vec![0.05f32; w * h];
-        let t = self.settle((0, 0, w, h), &add, &sv);
+        let t = self.settle_film(&add, 0.05);
         self.px.par_iter_mut().enumerate().for_each(|(i, p)| {
             if add[i] > 0.0 {
                 *p = pigment.over(*p, th[i] * t[i] / add[i]);

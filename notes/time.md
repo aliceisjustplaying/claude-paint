@@ -44,7 +44,10 @@ print(string.format("%.0f min at the easel this sitting, %.0f%% of the canvas op
   motif verb built on them: `f:paint`, `t:paint`, `t:paint_wood`,
   `o:paint`, the rock seams) do so each time a minute has piled up. Every
   chunk ends with the clock up to date. `clock()`, `drying(x, y)` and
-  `timesheet()` bring it up to date first.
+  `timesheet()` bring it up to date first, and so do the verbs that make
+  the clock jump (`wait`, `dry`, `rest`, `glaze`, `varnish`, `cracks`,
+  `relief`), so the time owed is spent before the paint dries. Brushing a
+  glaze or a varnish on is hand time too (by its area), after the wait.
 - A long pass is painted in **slices of 15 minutes of hand time**, and the
   paint ages between slices. A sky that takes an hour has begun to set at
   its first passages by the time the hand reaches the last. With the paint
@@ -53,12 +56,17 @@ print(string.format("%.0f min at the easel this sitting, %.0f%% of the canvas op
   path). An `order=` you set is kept.
 - `wait(minutes)` stays as it was. A wait of 2 hours or more is a rest (the
   next mark starts a new sitting). So is `dry()`, and so is the time a
-  finishing verb spends drying the paint (`varnish`, `glaze`).
-- Palette trips: a load of a held brush (`b:load`, `b:reload`) is a reload
-  if a pile of that color is already on the palette this sitting, or a new
-  pile to mix if not. The palette holds 16 piles, and a new sitting starts
-  with a clean palette. Within a pass, the piles are judged by the color
-  asked for (not the aimed result, so a crop prices the same).
+  finishing verb spends drying the paint (`glaze`, `varnish`, `cracks`,
+  `relief`), which it reports (`varnish: waited 9.4 days for the paint
+  under it to dry (clock 178325 min)`).
+- Palette trips: a dip is a reload if a pile of that color is already on
+  the palette this sitting, or a new pile to mix if not. One palette
+  serves the sitting: held brushes (`b:load`, `b:reload`) and covering
+  passes (`work`, `blend`, `stipple`, with their fill and cut-in) dip into
+  the same piles. It holds 16 piles, and a new sitting starts with a clean
+  palette. A pass judges its piles by the color asked for, not the aimed
+  result (but with `color_over` the color asked for comes from the
+  canvas; see the known issues on crops).
 - The reply after every chunk and `easel status` read:
   `clock 1175.6 min · sitting 2: 2.9 h of 3.0 h · hand time on · open 46% setting 0% tacky 54% dry <1%`.
 
@@ -85,10 +93,19 @@ as before.
 ## The engine
 
 - `paint::tally` (new): `Tally` (strokes, touches, path mm, reloads, piles
-  mixed, wipes, pencil lines, seconds), the pace constants, `Piles` (the
-  palette) and `batches` (slices of a pass). `Canvas::tally()`,
-  `tally_mut()`, `stages()`, `stage_shares()`, `set_hand_time(slice)`,
-  `hand_owed()`, `clock_hand()`, `mm_per_unit()`.
+  mixed, wipes, pencil lines, seconds), the pace constants and `Piles`
+  (the palette). `Canvas::tally()`, `tally_mut()`,
+  `set_hand_time(slice_min)`, `hand_owed_secs()`, `clock_hand_min()`,
+  `mm_per_unit()`; `stages()` and `stage_shares()` live in `drying.rs`
+  with `drying_at`, all three on one stage rule. `Canvas::work_with` and
+  `stipple_with` dip into a caller's `Piles` (the easel passes the
+  sitting's); `work` and `stipple` start a clean palette.
+- `sched.rs`: `Canvas::paint_pass` paints a covering pass's tiles for
+  both `work` (`run_plans`) and `stipple`. It owns the slices of hand time
+  (`batches`), stroke ids per slice, the crop filter, the dirty bounds, the
+  `hand_pass` between slices and the order rule: an order asked for
+  (`Handling::order` is `Some`, which `order()`, `sweep()` and `ruler()`
+  set) is kept, else hand time paints the tiles in `sweep_down`.
 - Counting is additive and never changes what is painted:
   - `run_plans` (handling.rs) counts every planned stroke and dip;
   - `stipple` counts every planned touch and dip;
@@ -113,6 +130,12 @@ as before.
 - `drying.rs`, `wet.rs` and the bristle physics are untouched (the r6-wet
   stream owns them). `bristle.rs` gains one counting line in `drag` and one
   in `touch`.
+- The easel (`time.rs`): every verb that marks the canvas, reads the clock
+  or moves it runs through `time::verb(st, Verb, f)`, which holds the
+  rules: `Marks` put their hand time on the clock once a minute piled up,
+  a `Pass` when it ends, a `Query` first; a `Jump` puts the time owed on
+  first, then takes the jump into the studio clock, reports it, starts a
+  sitting by its `Rest` rule and clocks the verb's own hand time.
 
 ## How long a mark takes
 
@@ -277,18 +300,80 @@ test that failed on the merged code:
    `time::tests::queries_after_a_finish_consume_its_drying_once`. One
    side effect: `clock()` called after a finish in the same chunk now
    returns the true clock, where before it returned the clock from before
-   the finish until the chunk ended.
+   the finish until the chunk ended. (Since replaced: every verb that
+   moves the clock now takes the jump in itself; see the thermos
+   maintenance below.)
 3. **Hand time overrode an order asked for.** With slicing on, explicit
    `order="scatter"` and `order="passages"` also became a sweep down.
    `Handling::order_set` (set by `order()` and `sweep()`) now separates a
    choice from the default, and only the default is swept. A preset's own
-   order counts as a default. Test:
+   order counted as a default. (Since replaced by `Option<Order>`, and
+   the ruler preset's scatter now counts as asked for: thermos B2.) Test:
    `tally::tests::hand_time_keeps_an_order_asked_for`, which reads the
    paint's age: a sweep leaves the top rows about 2.3× as cured as the
    bottom, while explicit scatter and passages age the whole area alike.
 
 Hand time off is unchanged by all three: the benchmark logs are still
 byte-identical at 1000 px and the golden scene is unchanged.
+
+## Maintenance after the thermos review
+
+The thermos review (notes/round6/thermos.md) found four bugs in hand time
+and asked for its code to be restructured. Each bug has a test that fails
+on the code before the fix:
+
+- **B1: a long pass filled over its own set paint.** A pass of hours has
+  its first slices past the gel point before the look-and-fill; baked
+  paint has no wet volume, so the look read it as bare. `work` now keeps
+  the dry film from before a hand-timed pass that fills, and the look
+  counts the paint laid as the wet volume plus the film gained since.
+  `handling::tests::a_long_timed_pass_fills_only_its_gaps` (a 7 h pass at
+  160 px): 219 fill dabs with hand time off, 540 on before, 155 on after.
+- **B2: `ruler()` lost its scatter under hand time.** `Handling::order` is
+  now `Option<Order>` (no `order_set` flag), and `ruler()` sets it through
+  `order()`. `tally::tests::hand_time_keeps_an_order_asked_for` has a
+  ruler case.
+- **B4: `varnish()` skipped the hand clock.** The time owed before it went
+  on the clock after it had dried the canvas, and its brushing cost
+  nothing. It now runs as a `Jump` like `glaze`, and its brushing is
+  priced like a glaze over the whole canvas, in the sitting after the
+  wait. `time::tests::varnish_is_hand_time_after_the_rest`.
+- **B5: every pass started with an empty palette.** Each `work` and
+  `stipple` (and a `work`'s cut-in) billed its first dip as a new pile
+  (22.5 s), even for a color mixed a moment before. The sitting's palette
+  is now passed through (`Canvas::work_with`). I chose that over keeping
+  `Piles` on the `Canvas`: a canvas field would have to be checkpointed for
+  a resume to stay exact, which means a new checkpoint format, and the
+  sitting is the easel's idea. `time::tests::a_sitting_mixes_on_one_palette`:
+  one color loaded, passed, stippled and passed again was 4 piles, now 1.
+- **B6** is documented, not fixed (see Crops below).
+
+The restructuring: one timed-pass runner (`paint_pass`, with one
+`sweep_down` order where there were two), the `time::verb` wrapper, and
+smaller items. `touch_secs()` lost its unused width, `stage_at_index` in
+`drying.rs` holds the one stage rule, the engine's unit-ambiguous names
+now carry their units (`hand_owed_secs`, `clock_hand_min`), and the
+checkpoint writes the ledger through `Tally::to_words` in PAINTCK7's byte
+order. The `Verb::Jump` rule keeps the studio clock in step with the
+canvas, so the flush no longer infers time spent away by subtraction, and
+the chunk's "passed while the paint dried" note is gone. `varnish`,
+`cracks` and `relief` now report their own wait, as `glaze` did.
+
+Hand time off paints the same bytes: l5_near and l3_green at 1000 px are
+identical to a render from before this round when both are built alike
+(see below), and the golden scene and replay hashes are unchanged. With
+hand time on, output changes where it's meant to: the ruler (B2), the
+clock (B4, B5), fill dabs in passes that ran past the gel point (B1) and
+the sweep down of `work` (stipple's row-by-row order now serves both;
+`work` used `Order::Sweep(π/2)`, whose float bands can mix neighboring
+rows when tiles are square). That moved 0.3% of the pixels of a
+hand-timed l5_near at 400 px.
+
+**A build caveat for byte checks.** The release profile builds
+incrementally (`incremental = true`). The same commit (eff0ef6) built in
+two target directories renders l3_green at 1000 px one pixel apart, by
+1/255. Compare renders from binaries built the same way, e.g. both with
+`CARGO_INCREMENTAL=0`.
 
 ## Known issues and ceilings
 
@@ -304,12 +389,12 @@ byte-identical at 1000 px and the golden scene is unchanged.
 - **A slice is 15 minutes.** Within a slice the strokes go on at once. The
   paint's age follows a sweep down the pass, not a painter's actual path
   across it.
-- **Crops.** A `look --scale` crop prices the look-and-fill dabs from the
-  pixels it holds, so its clock can differ from the whole canvas's by those
-  dabs, and its drying by a little.
-- **A pass that runs past the gel point** (hours of hand time) can have its
-  first slices baked before the look-and-fill runs. The fill then sees the
-  set pixels as bare and dabs into them. This is untested at that length.
+- **Crops.** A `look --scale` crop prices what it judges from the pixels
+  it holds: the look-and-fill dabs, and for aimed marks (`color_over`, a
+  stipple's look) the color a dip asks for, so whether it is a reload or a
+  new pile, which the sitting's palette carries on. Its clock can differ
+  from the whole canvas's by those (a probe in the thermos review: 76.003
+  vs 76.013 min for a sky), and its drying by a little.
 - **Hand time never rests on its own.** A painting that turns it on and
   never rests reports the overrun and goes on (by design, see above).
 - **The wet-on-wet look is not mine.** How open paint behaves at a contour

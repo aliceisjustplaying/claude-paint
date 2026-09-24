@@ -13,6 +13,7 @@ use crate::color::{Rgb, from_oklab, to_oklab};
 use crate::mask::Mask;
 use crate::palette::Palette;
 use crate::rng::Rng;
+use crate::sched::TileOrder;
 use crate::tally::Piles;
 use crate::wet::Paint;
 
@@ -859,7 +860,8 @@ impl Canvas {
         let order = tile_order(hd.order.unwrap_or_default(), (tw, th), (tile_x, tile_y), rng);
         // (strokes with ids fixed in advance don't take new ones)
         let ids = tiles.iter().map(|t| t.iter().filter(|p| p.id.is_none()).count() as u32).collect();
-        let pass = crate::sched::Pass { grid: (tw, th), order, asked: hd.order.is_some(), rects, secs, ids, slice };
+        let order = if hd.order.is_some() { TileOrder::Asked(order) } else { TileOrder::Default(order) };
+        let pass = crate::sched::Pass { grid: (tw, th), order, rects, secs, ids, slice };
         self.paint_pass(pass, |surf, ti, first_id| {
             let mut held = Held::new(tool.clone(), seed ^ 0x5EED ^ (ti as u64).wrapping_mul(0x9E37_79B9));
             let mut scratch = Vec::new();

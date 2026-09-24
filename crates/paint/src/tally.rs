@@ -10,12 +10,17 @@
 //!
 //! Counting happens where the engine plans marks, on the whole canvas and in
 //! a fixed order, before the tiles are split among threads or a crop drops
-//! the ones off its window: the ledger is the same at any thread count and
-//! (but for the fill dabs, which look at the pixels a crop holds) in a crop.
+//! the ones off its window: the ledger is the same at any thread count. In
+//! a crop it is the same but for what looks at the pixels the crop holds:
+//! the look-and-fill dabs (which gaps it sees), and for aimed marks
+//! (`color_over`, a stipple's look under a dip) the color a dip asks for,
+//! so whether it is a reload or a new pile, and with a sitting's palette
+//! (`Piles`) the piles later dips find. With hand time on the ledger is the
+//! clock, so a crop can age its paint by a little more or less than the
+//! whole canvas does (notes/time.md, known issues).
 
 use crate::bristle::{Kind, Tool};
 use crate::canvas::Canvas;
-use crate::drying::{GEL, Stage};
 
 /// Seconds of hand time per kind of move. Sources and estimates:
 /// notes/time.md. [S]: from a source; [E]: my estimate.
@@ -94,6 +99,8 @@ pub struct Tally {
 /// The piles of mixed paint on the palette: a dip into a color close to a
 /// pile already there is a reload, a new color is a new pile to mix. The
 /// palette holds `PILES` at most; the oldest is scraped off for a new one.
+/// A sitting keeps one palette for its passes and held brushes (the easel's
+/// `Hand`, passed to `Canvas::work_with`); `Canvas::work` starts a clean one.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct Piles {
     /// OKLab colors, oldest first.
@@ -151,9 +158,10 @@ pub fn stroke_secs(len_mm: f64, w_mm: f64) -> f64 {
     aim + draw
 }
 
-/// Hand time (s) of one touch of a tip `w_mm` wide.
-pub fn touch_secs(w_mm: f64) -> f64 {
-    let _ = w_mm; // (the index of difficulty is the same at any size)
+/// Hand time (s) of one touch of a tip: the same for a tip of any size (a
+/// spot about two tips across, three tips from the last: the index of
+/// difficulty doesn't depend on the size).
+pub fn touch_secs() -> f64 {
     (pace::FITTS_A + pace::FITTS_B * (1.0 + 3.0 / 2.0f64).log2() + pace::DWELL).max(pace::TAP_MIN)
 }
 
@@ -171,10 +179,10 @@ impl Tally {
         self.secs += stroke_secs(len, mark_mm(tool, mm_per_unit));
     }
 
-    /// A touch of the tip of `tool`.
-    pub fn touch(&mut self, tool: &Tool, mm_per_unit: f32) {
+    /// A touch of a tip.
+    pub fn touch(&mut self) {
         self.touches += 1;
-        self.secs += touch_secs(mark_mm(tool, mm_per_unit));
+        self.secs += touch_secs();
     }
 
     /// `n` trips to the palette for more paint (fractions for fill dabs).
@@ -225,6 +233,21 @@ impl Tally {
     pub fn minutes(&self) -> f64 {
         self.secs / 60.0
     }
+
+    /// The ledger as a checkpoint stores it (PAINTCK7): the counts, then the
+    /// bits of the lengths and times.
+    pub(crate) fn to_words(self) -> [u64; 9] {
+        let t = self;
+        [t.strokes, t.touches, t.remixes, t.wipes, t.lines, t.length_mm.to_bits(), t.reloads.to_bits(), t.secs.to_bits(), t.clocked.to_bits()]
+    }
+
+    /// A ledger read back from `to_words`; None if a length or a time isn't
+    /// finite.
+    pub(crate) fn from_words(w: [u64; 9]) -> Option<Tally> {
+        let [strokes, touches, remixes, wipes, lines, ..] = w;
+        let [length_mm, reloads, secs, clocked] = [w[5], w[6], w[7], w[8]].map(f64::from_bits);
+        [length_mm, reloads, secs, clocked].iter().all(|v| v.is_finite()).then_some(Tally { strokes, touches, length_mm, reloads, remixes, wipes, lines, secs, clocked })
+    }
 }
 
 impl std::fmt::Display for Tally {
@@ -244,32 +267,10 @@ impl std::fmt::Display for Tally {
     }
 }
 
-/// Passages (tile indices in painting `order`) in consecutive batches of
-/// about `slice` seconds of hand time each (`secs` per tile), with each
-/// batch's seconds. No slice (hand time off): one batch of everything. The
-/// cut follows the whole canvas's plan, so a crop ages its window on the
-/// same timeline.
-pub(crate) fn batches(order: &[usize], secs: &[f64], slice: Option<f64>) -> Vec<(Vec<usize>, f64)> {
-    let Some(slice) = slice.filter(|s| *s > 0.0) else {
-        return vec![(order.to_vec(), order.iter().map(|&t| secs[t]).sum())];
-    };
-    let mut out: Vec<(Vec<usize>, f64)> = vec![(Vec::new(), 0.0)];
-    for &t in order {
-        let last = out.last_mut().unwrap();
-        if last.1 >= slice {
-            out.push((vec![t], secs[t]));
-        } else {
-            last.0.push(t);
-            last.1 += secs[t];
-        }
-    }
-    out
-}
-
 impl Canvas {
     /// Hand time: with `Some(slice)` (minutes), passes are painted in slices
     /// of about that much hand time with the paint ageing between them
-    /// (`wait`), and `clock_hand` puts the rest of the hand time counted on
+    /// (`wait`), and `clock_hand_min` puts the rest of the hand time counted on
     /// the clock. `None` (the default): marks take no time on the clock.
     /// Either way the ledger counts from here as already clocked.
     pub fn set_hand_time(&mut self, slice_min: Option<f32>) {
@@ -287,14 +288,14 @@ impl Canvas {
     }
 
     /// Hand time counted but not yet on the clock (s); 0 with hand time off.
-    pub fn hand_owed(&self) -> f64 {
+    pub fn hand_owed_secs(&self) -> f64 {
         if self.hand_slice.is_none() { 0.0 } else { (self.tally.secs - self.tally.clocked).max(0.0) }
     }
 
     /// Put the owed hand time on the clock: the paint ages by it. Returns
     /// the minutes. With hand time off, nothing.
-    pub fn clock_hand(&mut self) -> f64 {
-        let owed = self.hand_owed();
+    pub fn clock_hand_min(&mut self) -> f64 {
+        let owed = self.hand_owed_secs();
         if owed > 0.0 {
             self.hand_pass(owed);
         }
@@ -324,39 +325,6 @@ impl Canvas {
         self.mm_per_unit
     }
 
-    /// Where every pixel the canvas holds is in drying (buffer order, as
-    /// `pixels()`): the same stages as `drying_at`.
-    pub fn stages(&self) -> Vec<Stage> {
-        let n = self.f.w * self.f.h;
-        let px = &self.wet.clock.px;
-        (0..n)
-            .map(|i| {
-                let p = px.get(i).copied().unwrap_or(crate::drying::Px::FRESH);
-                if self.wet.vol[i] >= 1e-3 {
-                    if p.cure < 0.5 * GEL { Stage::Open } else { Stage::Setting }
-                } else if p.sub < 1.0 {
-                    Stage::Tacky
-                } else {
-                    Stage::Dry
-                }
-            })
-            .collect()
-    }
-
-    /// Shares of the canvas (the part `save` writes) that are open, setting,
-    /// tacky and dry.
-    pub fn stage_shares(&self) -> [f64; 4] {
-        let st = self.stages();
-        let (x0, y0, x1, y1) = self.keep;
-        let mut n = [0u64; 4];
-        for y in y0..y1 {
-            for x in x0..x1 {
-                n[st[y * self.f.w + x] as usize] += 1;
-            }
-        }
-        let t = n.iter().sum::<u64>().max(1) as f64;
-        n.map(|k| k as f64 / t)
-    }
 }
 
 #[cfg(test)]
@@ -385,7 +353,7 @@ mod tests {
         let mut sp = Stipple::new(Tool::stippler(6.0));
         sp.color = Box::new(|_, _| hex("#cfccc2"));
         c.stipple(&band, &sp, 5);
-        c.clock_hand();
+        c.clock_hand_min();
         c
     }
 
@@ -413,7 +381,7 @@ mod tests {
         let off = scene(None, None);
         let c0 = Canvas::new(240, 1.4, hex("#c8b89a")).clock();
         assert_eq!(off.clock(), c0);
-        assert_eq!(off.hand_owed(), 0.0);
+        assert_eq!(off.hand_owed_secs(), 0.0);
         // on: the whole ledger is on the clock, and in slices of 2 minutes
         // the pass aged as it went; 1 and 4 threads paint the same
         let a = in_pool(1, || scene(None, Some(2.0)));
@@ -438,18 +406,18 @@ mod tests {
         let then = |c: &mut Canvas| {
             let band = Mask::from_fn(c.frame(), |_, y| if (300.0..500.0).contains(&y) { 1.0 } else { 0.0 });
             c.work(&band, &Handling::new(Tool::filbert(14.0)).color(|_, _| hex("#d8ccb0")).coverage(3.0).fill(false), 4);
-            c.clock_hand();
+            c.clock_hand_min();
         };
         let mut a = Canvas::new(240, 1.4, hex("#c8b89a")).with_size_mm(440.0);
         a.set_hand_time(Some(1.0));
         first(&mut a);
-        assert!(a.hand_owed() > 0.0 && a.tally().strokes > 0, "time still owed at the checkpoint: {} {:?}", a.tally(), a.hand_owed());
+        assert!(a.hand_owed_secs() > 0.0 && a.tally().strokes > 0, "time still owed at the checkpoint: {} {:?}", a.tally(), a.hand_owed_secs());
         let mut buf = Vec::new();
         a.write_state(&mut buf, "").unwrap();
         let (mut b, _) = Canvas::read_state(&mut std::io::Cursor::new(buf)).unwrap();
         assert_eq!(b.hand_time(), a.hand_time());
         assert_eq!(b.tally(), a.tally());
-        assert_eq!(b.hand_owed(), a.hand_owed());
+        assert_eq!(b.hand_owed_secs(), a.hand_owed_secs());
         then(&mut a);
         then(&mut b);
         assert_eq!(b.tally(), a.tally());
@@ -460,17 +428,16 @@ mod tests {
     /// With hand time on, only the default order becomes a sweep down: an
     /// order the painter asked for is kept (review r6, finding 3). Seen in
     /// the paint's age: a sweep paints the top in the first slices (older
-    /// than the bottom); scatter's slices each reach over the whole area.
+    /// than the bottom); scatter's slices each reach over the whole area. A
+    /// preset's order counts as asked for (`ruler()`, thermos B2).
     #[test]
     fn hand_time_keeps_an_order_asked_for() {
-        let age = |explicit: Option<crate::handling::Order>| {
+        use crate::handling::Order;
+        let age = |set: &dyn Fn(Handling) -> Handling| {
             let mut c = Canvas::new(240, 1.4, hex("#c8b89a")).with_size_mm(440.0);
             c.set_hand_time(Some(1.0));
             let all = Mask::from_fn(c.frame(), |_, _| 1.0);
-            let mut hd = Handling::new(Tool::filbert(18.0)).color(|_, _| hex("#6f84a8")).coverage(3.0).fill(false);
-            if let Some(o) = explicit {
-                hd = hd.order(o);
-            }
+            let hd = set(Handling::new(Tool::filbert(18.0)).color(|_, _| hex("#6f84a8")).coverage(3.0).fill(false));
             c.work(&all, &hd, 3);
             let (w, h) = (c.f.w, c.f.h);
             let mean = |y0: usize, y1: usize| {
@@ -478,15 +445,16 @@ mod tests {
                 v.iter().sum::<f32>() / v.len() as f32
             };
             let (top, bottom) = (mean(h / 10, h * 3 / 10), mean(h * 6 / 10, h * 8 / 10));
-            (top, bottom, c.hand_owed())
+            (top, bottom, c.hand_owed_secs())
         };
-        let (t, b, _) = age(None);
+        let (t, b, _) = age(&|h| h);
         assert!(t > 1.8 * b, "the default sweeps down: top {t} bottom {b}");
-        use crate::handling::Order;
         for o in [Order::Scatter, Order::Passages] {
-            let (t, b, _) = age(Some(o));
+            let (t, b, _) = age(&|h| h.order(o));
             assert!(t < 1.5 * b && b < 1.5 * t, "{o:?} asked for is kept: top {t} bottom {b}");
         }
+        let (t, b, _) = age(&|h| h.ruler().coverage(3.0));
+        assert!(t < 1.5 * b && b < 1.5 * t, "the ruler's scatter is kept: top {t} bottom {b}");
     }
 
     /// A wait between slices must see the strokes of the slices after it as
@@ -499,20 +467,11 @@ mod tests {
         c.set_hand_time(Some(1.0));
         let all = Mask::from_fn(c.frame(), |_, _| 1.0);
         c.work(&all, &Handling::new(Tool::filbert(18.0)).color(|_, _| hex("#6f84a8")).coverage(3.0).fill(false), 3);
-        assert!(c.clock() > 0.0 && c.hand_owed() > 0.0, "sliced, with the last slice still owed");
+        assert!(c.clock() > 0.0 && c.hand_owed_secs() > 0.0, "sliced, with the last slice still owed");
         let mark = c.wet.clock.mark;
         let fresh = c.wet.stroke.iter().filter(|&&id| id > mark).count();
         let older = c.wet.stroke.iter().filter(|&&id| id > 0 && id <= mark).count();
         assert!(fresh > 0 && older > 0, "fresh {fresh}, older {older}");
-    }
-
-    #[test]
-    fn batches_cut_the_order_by_hand_time() {
-        let secs = [30.0, 50.0, 0.0, 70.0, 10.0, 90.0];
-        let order = [5, 0, 1, 2, 3, 4];
-        assert_eq!(batches(&order, &secs, None), vec![(order.to_vec(), 250.0)]);
-        let b = batches(&order, &secs, Some(60.0));
-        assert_eq!(b, vec![(vec![5], 90.0), (vec![0, 1], 80.0), (vec![2, 3], 70.0), (vec![4], 10.0)]);
     }
 
     #[test]
@@ -540,8 +499,20 @@ mod tests {
 
     #[test]
     fn touches_are_no_faster_than_tapping() {
-        let t = touch_secs(1.0);
+        let t = touch_secs();
         assert!((pace::TAP_MIN..0.6).contains(&t), "{t}");
+    }
+
+    /// A checkpoint stores the ledger in PAINTCK7's order: the five counts,
+    /// then the bits of the length, reloads, seconds and clocked seconds.
+    #[test]
+    fn the_ledger_keeps_its_checkpoint_layout() {
+        let t = Tally { strokes: 1, touches: 2, length_mm: 6.5, reloads: 7.5, remixes: 3, wipes: 4, lines: 5, secs: 8.5, clocked: 9.5 };
+        assert_eq!(t.to_words(), [1, 2, 3, 4, 5, 6.5f64.to_bits(), 7.5f64.to_bits(), 8.5f64.to_bits(), 9.5f64.to_bits()]);
+        assert_eq!(Tally::from_words(t.to_words()), Some(t));
+        let mut w = t.to_words();
+        w[7] = f64::NAN.to_bits();
+        assert_eq!(Tally::from_words(w), None);
     }
 
     #[test]
@@ -550,11 +521,11 @@ mod tests {
         let mut a = Tally::default();
         a.stroke(&tool, &[(0.0, 0.0), (30.0, 40.0)], 0.44);
         let b0 = a;
-        a.touch(&tool, 0.44);
+        a.touch();
         a.remix();
         let d = a.since(&b0);
         assert_eq!((d.strokes, d.touches, d.remixes), (0, 1, 1));
-        assert!((d.secs - (touch_secs(1.32) + pace::REMIX + pace::RELOAD)).abs() < 1e-9);
+        assert!((d.secs - (touch_secs() + pace::REMIX + pace::RELOAD)).abs() < 1e-9);
         assert!((b0.length_mm - 22.0).abs() < 1e-4);
     }
 }

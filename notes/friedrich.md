@@ -214,7 +214,7 @@ A painter's one-page version is `notes/briefs/friedrich_painter.md`.
   "Larger and completely motionless figures have become an allegory of yearning"
   instead of "picturesque staffage or ... a measure of scale" [MW cat.8].
 - Scale varies. The monk is tiny against the sky [WP-en Monk], while in *Two Men*
-  "the figures are larger than in most of the artist's works" [MW essay, p.12]. What
+  "the figures are larger than in most of the artist's works" [MW essay, pp.12–14]. What
   stays constant is stillness and the axis, not a size.
 - The vertical against horizontal layers: in the *Monk* the composition is "a
   horizontal layering; the monk forms the only vertical" (my translation) [WP-de
@@ -226,7 +226,7 @@ and "thought nothing of combining motifs ... from completely different regions"
 [MW cat.4]. He kept the moon in the same spot in three versions of one subject,
 which "followed his inner vision instead of nature" [MW essay, p.16]. His own rule:
 "Close your bodily eye, so that you may see your picture first with the spiritual
-eye" [WQ; the 1830 notes, trans. in Vaughan 1994, and Friedenthal 1963].
+eye" (his notes of c.1830) [WP-en CDF; WQ; secondary].
 
 ### 2. Light and sky
 
@@ -300,19 +300,19 @@ eye" [WQ; the 1830 notes, trans. in Vaughan 1994, and Friedenthal 1963].
   subject—whether moonlit night, sunset, or morning—calls for a single dominant
   tonality that sometimes borders on monochrome" [RV Asvarishch, p.35]. The 1819 *Two
   Men*: "The blue green of the two men's garb is the only other color in the
-  near-monochrome haze of rust and brown" [MW essay, p.13]. Early oils look "dry and
+  near-monochrome haze of rust and brown" [MW essay, pp.13–14]. Early oils look "dry and
   almost monochrome", later ones "lighter and also pastose" (my translation) [WP-de
   CDF "Arbeitsweise"; secondary].
 - **Zones of color, not one unifying atmosphere.** Goethe complained that Friedrich
   "does not strive to adjust his colors to one another or to create a harmony" [MW
-  essay, p.13]. The *Tetschen* literature notes "the absence of a unifying tonality"
+  essay, pp.13–14]. The *Tetschen* literature notes "the absence of a unifying tonality"
   [WP-en Tetschen; secondary]. A Rügen view is "divided into four zones" of color:
   red-brown field, deep green hill, blue distant valley, evening sky [MAD cat.72,
   p.217]. So: **one tonal key, with each zone holding its own color**, rather than an
   aerial perspective blending everything into everything.
 - **One small accent.** *Chalk Cliffs*: "the color triad green-white-blue is raised by
   the woman's red dress" [WP-de Kreidefelsen; secondary]. The *Two Men*'s blue-green
-  garb [MW essay, p.13].
+  garb [MW essay, pp.13–14].
 - **Layers thin from top to bottom.** "Layer on layer [applied] like a glaze, thinning
   from top to bottom and tinting the underdrawing's scaffold with the local color";
   "foreground and background of a painting are often treated differently" (my
@@ -372,7 +372,7 @@ eye" [WQ; the 1830 notes, trans. in Vaughan 1994, and Friedenthal 1963].
   [WQ, citing Börsch-Supan/Jähnig 1973 pp.182–83, trans. Britt].
 - Symbols stay open. Rosenblum warns against reading him "as a rebus to be solved";
   "one of the most potent aspects of his genius is to transcend a one-to-one reading
-  of conventional symbols" [RV Rosenblum, pp.13–16]. Of the *Cross on the Baltic*:
+  of conventional symbols" [RV Rosenblum, pp.14–16]. Of the *Cross on the Baltic*:
   "for those who see it that way, a consolation, and for those who don't ... just a
   cross" [WQ, citing Rosen and Zerner].
 
@@ -406,12 +406,12 @@ eye" [WQ; the 1830 notes, trans. in Vaughan 1994, and Friedenthal 1963].
    such affinity is something entirely different from mimicry" [WQ, citing Friedenthal
    1963, p.32].
 8. **Symbol stacking.** Reading or painting the pictures "almost as if it were a
-   Rosetta stone" [RV Rosenblum, p.13]. The Dresden *Two Men*'s fir, dead oak, rock and
+   Rosetta stone" [RV Rosenblum, p.14]. The Dresden *Two Men*'s fir, dead oak, rock and
    branch are already "theatrical props" to modern eyes [MW essay, pp.11–12]; that
    picture is the exception, and "relatively crowded".
 9. **Taking the *Monk* as the norm.** The *Monk* "stands alone in the œuvre" and
-   "remained unfollowed" [RAD p.1]; Friedrich "does not return to the formal radicalism
-   of the *Monk*" except in *The Great Enclosure* [WP-de Mönch; secondary]. Most of his
+   "remained unfollowed" [RAD, abstract and p.1]; Friedrich did not return to "the formal radicalism of
+   the *Monk*", except in *The Great Enclosure* (my translation) [WP-de Mönch; secondary]. Most of his
    pictures are symmetric, ordered and hold one object of contemplation [MW cat.6].
 10. **Illogical light.** A sunset sky over a sunlit foreground [CAR p.125].
 11. **Anachronistic materials.** A landscape was de-attributed partly because its
@@ -429,7 +429,7 @@ eye" [WQ; the 1830 notes, trans. in Vaughan 1994, and Friedenthal 1963].
 - *Symmetric or not?* Mostly symmetric [MW essay; RV Rosenblum], with named
   asymmetric exceptions [MW essay on the 1819 *Two Men*].
 - *One tonality or none?* One key per picture [RV Asvarishch, p.35] but no
-  harmonizing of zones [MW essay p.13; WP-en Tetschen].
+  harmonizing of zones [MW essay pp.13–14; WP-en Tetschen].
 - *Monk's sky share* is "five sixths" in one source and "three quarters" in another
   [WP-de Mönch; WP-en Monk]. Neither was measured by me.
 
@@ -486,7 +486,7 @@ Read from notes/paint1/evening_lake.md and the two critiques, not from the pictu
   Nebelmeer", "Mondaufgang am Meer", "Tetschener Altar", "Frau vor der untergehenden
   Sonne". https://de.wikipedia.org/wiki/Caspar_David_Friedrich and the article
   titles under https://de.wikipedia.org/wiki/
-- **[WP-en ...]** *(secondary)* English Wikipedia: "The Monk by the Sea", "Cross in the
+- **[WP-en ...]** *(secondary)* English Wikipedia: "Caspar David Friedrich", "The Monk by the Sea", "Cross in the
   Mountains" (Tetschen), "Two Men Contemplating the Moon", "The Abbey in the Oakwood",
   "Johan Christian Dahl". https://en.wikipedia.org/wiki/The_Monk_by_the_Sea etc.
 - Materials report keys ([MÄD], [materials §n]): notes/research/friedrich_materials.md.

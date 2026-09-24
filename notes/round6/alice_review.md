@@ -47,3 +47,29 @@ kind of Pixar, to bad painter, which is great. I love that."
   PNG crop of sky A and the quality-80 JPEG of the same window look the
   same; the crunchy mottle is in the paint (the stipple over the weave),
   not in the compression. PNGs are there for her to verify.
+
+## Wet repaints (`notes/round6/wet_experiment/lossless/`; decoded afterwards)
+- **l3_green: maybe A (main)**, hard to tell. A has "the weird dots
+  problem, weird digital-looking artifacts"; B (wet) does not. Grass looks
+  more natural on A. The rock is too strong for the rest of the image; the
+  background is "actually not half bad"; the sky still gives JPEG vibes.
+- **rock_B: A (wet)**, "the shading seems better on A", though "the physics
+  is off, I think". Both have "the weird artifact-looking whatever" and an
+  outline ("remnants of the pencil?").
+- **sky_B: torn.** Both have digital-looking artifacts, A (wet) more. Zoomed
+  out, "lines that are not blended properly", but "more bad painter". "The
+  A crop is better if it would not have those glitches." **"We need to
+  track down those glitches."**
+- **water_B: B (wet), by elimination.** "I'm starting to be impressed with
+  the green blob." Zoomed in both look very digital, A (main) more so.
+  **"All the lines in both the sky and the water, those orangey, earthy,
+  browny lines, look horrible."**
+
+## Varnish fix: "definitely after" (approved to merge)
+Rock base much better (still some digital artifacts in the lining); the
+oak "before looks horrible, after actually looks passable, zoomed in";
+the boulder "before absolutely horrible, after a lot less bad"; the green
+rock "before horrible, after less bad".
+
+Note: all four wet repaints were rendered BEFORE the varnish fix; the dots,
+outlines and digital lining may be largely the varnish bug.

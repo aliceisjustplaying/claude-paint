@@ -517,6 +517,7 @@ impl Canvas {
             }
             cv
         };
+        let px_um = self.px_mm() * 1000.0;
         let wet = &mut self.wet;
         let (lat, hide) = (&wet.lat, &wet.hide);
         let add = &add;
@@ -544,7 +545,7 @@ impl Canvas {
                     let ti = t[k] / COAT_UM;
                     let i = y * w + x;
                     // (the body, then the surface film on it)
-                    px[x] = crate::wet::film_over(&lat[i], hide[i], &tv[x], vv[x], px[x], ti, cover[k]);
+                    px[x] = crate::wet::film_over(&lat[i], hide[i], &tv[x], vv[x], px[x], ti, crate::wet::bead_cover(cover[k], ti, px_um));
                     ff[x] += ti;
                     Wet::clear(&mut vv[x], &mut tv[x]);
                     cv[x] = 1.0;

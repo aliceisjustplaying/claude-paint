@@ -583,7 +583,23 @@ pub fn parse_program(text: &str) -> Vec<String> {
     chunks.into_iter().map(|c| c.trim_end().to_string()).filter(|c| !c.trim().is_empty()).collect()
 }
 
+/// The checkout the easel works in (session logs in `paintings/lua`, renders
+/// in `out/`): `EASEL_ROOT` if set, else the nearest directory at or above
+/// the working directory that holds `crates/easel/Cargo.toml`, else the
+/// checkout this binary was built from. Looking from the working directory
+/// keeps git worktrees apart: a binary built in (or copied from) another
+/// checkout still writes into the worktree it's run in.
 pub fn root() -> PathBuf {
+    if let Some(r) = std::env::var_os("EASEL_ROOT").filter(|r| !r.is_empty()) {
+        let r = PathBuf::from(r);
+        return r.canonicalize().unwrap_or(r);
+    }
+    if let Ok(cwd) = std::env::current_dir() {
+        let found = cwd.ancestors().find(|d| d.join("crates/easel/Cargo.toml").is_file()).map(Path::to_path_buf);
+        if let Some(r) = found {
+            return r.canonicalize().unwrap_or(r);
+        }
+    }
     let r = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
     r.canonicalize().unwrap_or(r)
 }

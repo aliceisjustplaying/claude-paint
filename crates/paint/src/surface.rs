@@ -126,8 +126,9 @@ fn conserve_total(add: &[f32], out: &mut [f32], lo: impl Fn(usize) -> f32 + Sync
     let past = |i: usize, v: f32, k: f32| if down { v * k < lo(i) } else { v * k > hi(i) };
     let mut pinned = vec![false; out.len()];
     // pinning some makes the factor on the rest stronger, which may carry
-    // more past theirs: a few rounds settle it
-    for _ in 0..8 {
+    // more past theirs: repeat until a round pins nothing new (every round
+    // that goes on pins at least one more pixel, so this ends within n + 1)
+    loop {
         let mut more = false;
         for (i, p) in pinned.iter_mut().enumerate() {
             if !*p && past(i, out[i], k) {
@@ -513,6 +514,21 @@ mod tests {
         conserve_total(&add, &mut out, |_| 0.0, |_| f32::INFINITY);
         let k = (4.0f64 / 4.5) as f32;
         assert_eq!(out, [0.5 * k, 2.0 * k, k, k]);
+    }
+
+    /// A cascade that needs many pinning rounds (each round's stronger
+    /// factor carries a few more pixels to the floor) still ends inside
+    /// the bounds: it used to stop after 8 rounds and leave pixels below
+    /// the floor (review of the maintenance round, finding 1).
+    #[test]
+    fn a_long_pinning_cascade_keeps_the_bounds() {
+        let n = 1024usize;
+        let add = vec![0.5f32; n];
+        let mut out: Vec<f32> = (0..n).map(|i| 0.5 + 0.5 * i as f32 / (n - 1) as f32).collect();
+        conserve_total(&add, &mut out, |_| 0.5, |_| 1.0);
+        let min = out.iter().cloned().fold(f32::INFINITY, f32::min);
+        assert!(min >= 0.5, "a pixel below the floor: {min}");
+        assert!((total(&out) - 512.0).abs() < 1e-3, "total {}", total(&out));
     }
 
     /// A varnish over tall dry impasto at 3200px (0.094 mm/px) keeps its

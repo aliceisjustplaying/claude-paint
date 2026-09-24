@@ -17,6 +17,10 @@
 //!    thinned and pressed (lower stroke).
 //!
 //! `cargo paint study_wet` (1000 px, square). `--width 2000` for detail.
+//! After the table it runs the sketchbook's three pitfalls (translucent
+//! rock, fog band, plowed river) in painter's terms. `WET_LOOK=1` also
+//! prints the table for the wet look before drying; `PITFALL_PNG=<dir>`
+//! saves the pitfall canvases.
 
 use paint::color::to_oklab;
 use paint::drying::drier;

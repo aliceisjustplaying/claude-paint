@@ -61,7 +61,7 @@ replayable log, byte-identical to its live session.
 
 ## Rules the user set (keep them)
 - Anonymity: the project is under the pseudonym "alice"; never write the
-  Alice's real name or an absolute home path into the repo (write `~/...`).
+  the user's real name or an absolute home path into the repo (write `~/...`).
 - US English, no Oxford comma; each message to the user starts with a
   kaomoji; back claims with receipts.
 - Python only via `uv` with a virtualenv.

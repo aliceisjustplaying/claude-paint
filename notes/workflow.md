@@ -451,3 +451,16 @@ invalid `Tool` is rejected. Panic with the point's index and value, e.g.
 `crates/paint/tests/curved_drag_nan.rs`. Three tests pin the diagnosis,
 and `a_nan_point_is_an_error` is `#[ignore]`d (it expects the panic to
 mention "point 10"). Un-ignore it with the fix.
+
+## Tests: two tiers (Round 6)
+- **Everyday:** `cargo test --workspace`. The test profile is optimized
+  (`[profile.test]` in Cargo.toml: opt-level 2, debug assertions and
+  overflow checks on, not incremental), so the whole suite runs in about a
+  minute on the M3 Pro (it took ~10 minutes unoptimized), plus about 50 s
+  of build when the engine changed. The golden scene is recorded with this
+  profile (`UPDATE_GOLDEN=1 cargo test -p paint`).
+- **Before a merge:** also `cargo test --release -p easel --test hand_time`
+  (the owner's logs replayed in the release build, hashed). The release
+  profile is deterministic (`incremental = false`, `codegen-units = 1`):
+  two clean builds give byte-identical binaries and renders, so a hash
+  mismatch is a real change, not build noise.

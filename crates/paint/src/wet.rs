@@ -519,7 +519,9 @@ mod tests {
                 stroke(&mut c, light(), 0.3, 0.95, 650.0);
                 c.dry();
                 let d = l(&c, 500.0, 500.0);
-                let at = |y: f32| (250..=450).step_by(25).map(|x| l(&c, x as f32, y)).sum::<f32>() / 9.0 - d;
+                // (the stroke's first stretch, while the brush is loaded; its
+                // load runs out over about a hundred units)
+                let at = |y: f32| (170..=290).step_by(15).map(|x| l(&c, x as f32, y)).sum::<f32>() / 9.0 - d;
                 (at(350.0), at(650.0))
             };
             let (wet_loaded, wet_lean) = run(false);
@@ -616,6 +618,40 @@ mod tests {
                 let bl = to_oklab(mixbox::latent_to_linear_float_rgb(&c.wet.lat[i]))[0];
                 println!("{w} px: lift over the dark per touch{out}; first center vol {:.2} top {:.2} (L {tl:.2}, body L {bl:.2}, light L {:.2}) S {:.1}/{:.1}", c.wet.vol[i], c.wet.top[i], to_oklab(light().color)[0], c.wet.thide[i][0], c.wet.hide[i][0]);
             }
+        }
+
+        #[test]
+        #[ignore]
+        fn probe_seam() {
+            use crate::mask::Mask;
+            use crate::style::Style;
+            let st = Style::friedrich();
+            let mut c = st.prepare(1000, 2.5, 1);
+            let f = c.frame();
+            let r = |x0: f32, y0: f32, x1: f32, y1: f32| Mask::from_fn(f, move |x, y| if x > x0 && x < x1 && y > y0 && y < y1 { 1.0 } else { 0.0 });
+            let sky = hex("#b9c3cb");
+            c.work(&r(12.0, 40.0, 155.0, 200.0), &st.broad().color(move |_, _| sky).medium(0.3).clip(true), 10);
+            let g = hex("#5b5a3e");
+            c.work(&r(12.0, 200.0, 155.0, 360.0), &st.body().color(move |_, _| g).medium(0.3).clip(true), 30);
+            let l = |lat: &crate::wet::Latent| to_oklab(mixbox::latent_to_linear_float_rgb(lat))[0];
+            let stats = |c: &Canvas, tag: &str| {
+                let mut v: Vec<(f32, f32, f32, f32, f32)> = Vec::new();
+                for y in 205..225 {
+                    for x in 20..150 {
+                        let i = f.index(x as f32, y as f32);
+                        v.push((to_oklab(c.look_px(i))[0], c.wet.vol[i], c.wet.top[i], l(&c.wet.lat[i]), l(&c.wet.tlat[i])));
+                    }
+                }
+                let tot = |y0: usize, y1: usize| (y0..y1).flat_map(|y| (12..155).map(move |x| (x, y))).map(|(x, y)| c.wet.vol[f.index(x as f32, y as f32)]).sum::<f32>();
+                println!("{tag}: vol sky 150-200 {:.0}, ground 200-250 {:.0}, rest {:.0}", tot(150, 200), tot(200, 250), tot(40, 150) + tot(250, 360));
+                v.sort_by(|a, b| b.0.total_cmp(&a.0));
+                println!("{tag}: lightest looks (L, vol, top, body L, top L): {:?}", &v[..5]);
+                println!("{tag}: median {:?}", v[v.len() / 2]);
+            };
+            stats(&c, "before");
+            let b = st.blend().unwrap().coverage(1.2);
+            c.work(&r(12.0, 170.0, 155.0, 230.0), &b, 31);
+            stats(&c, "after blend");
         }
 
         /// Whatever brushes do, the surface film is part of the film:

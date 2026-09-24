@@ -85,6 +85,9 @@ const WET_REACH: f32 = 0.5;
 /// body, for a stiff bristle pressed fully into wet paint with no paint of
 /// its own (see `exchange`; notes/wet.md).
 const STIR: f32 = 0.12;
+/// A surface film this thin (coats) is stirred twice as readily as a thick
+/// one: sheared, it smears into the paint under it (see `Surf::stir`).
+const THIN_FILM: f32 = 0.15;
 /// How much a full load cushions a bristle from the wet film under it: it
 /// lifts and stirs `1 − CUSHION` of what a spent one does.
 const CUSHION: f32 = 0.8;
@@ -92,6 +95,10 @@ const CUSHION: f32 = 0.8;
 /// push aside (15 µm, a small fraction of the bristle's 0.2–0.3 mm): finer,
 /// softer hair and more pressure get closer to the canvas (see `exchange`).
 const PLOUGH_KEEP: f32 = 0.6;
+/// Paint stiffness from which wet paint keeps a plough's bow wave (a yield
+/// stress); more fluid paint mostly flows back (a glaze at medium 0.85 is
+/// about 0.02 stiff, a thin sky at medium 0.3 about 0.35, tube paint 1).
+const PLOUGH_STIFF: f32 = 0.6;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Kind {
@@ -617,17 +624,47 @@ impl Surf {
 
     /// Lay `v` coats from the brush of stroke `id` on pixel `i` (`add`). The
     /// surface film is the newest stroke's paint: a surface film left by an
-    /// earlier stroke is now under this one, so it joins the body first.
+    /// earlier stroke is set aside in `mid` when this stroke first lays
+    /// paint here, and `settle_mid` decides at the stroke's end whether it
+    /// now lies buried under this stroke's paint or shows through it.
     #[inline]
-    unsafe fn lay(&self, i: usize, v: f32, lat: &Latent, hide: Prop, id: u32) {
+    unsafe fn lay(&self, i: usize, v: f32, lat: &Latent, hide: Prop, id: u32, mid: &mut Vec<Mid>) {
         unsafe {
             if v > 0.0 && *self.stroke.add(i) != id && *self.top.add(i) > 0.0 {
                 let t = &mut *self.top.add(i);
-                let mut b = (*self.vol.add(i) - *t).max(0.0);
-                mix_into(&mut b, &mut *self.lat.add(i), &mut *self.hide.add(i), *t, &*self.tlat.add(i), *self.thide.add(i));
+                mid.push(Mid { i, v: *t, lat: *self.tlat.add(i), hide: *self.thide.add(i) });
+                // (its volume stays in the film; it sits between the body
+                // and this stroke's paint until the stroke ends)
                 *t = 0.0;
             }
             self.add(i, v, lat, hide);
+        }
+    }
+
+    /// At a stroke's end: each surface film it covered (`lay`) is buried in
+    /// the body as far as the stroke's own paint over it hides it (`BURY`
+    /// coats hide it all), and the rest stays in the surface film, mixed
+    /// with this stroke's paint: a thin edge over an earlier light stroke
+    /// doesn't bring the dark body up through it. A film like the body it
+    /// lies on is always buried (that changes nothing but frees the
+    /// surface for the new paint).
+    unsafe fn settle_mid(&self, mid: &[Mid]) {
+        unsafe {
+            for m in mid {
+                let i = m.i;
+                let vol = *self.vol.add(i);
+                let t = &mut *self.top.add(i);
+                let mv = m.v.min((vol - *t).max(0.0));
+                if mv <= 0.0 {
+                    continue;
+                }
+                let mut b = (vol - *t - mv).max(0.0);
+                let l = &mut *self.lat.add(i);
+                let like = 1.0 - smoothstep(0.05, 0.3, l.iter().zip(&m.lat).map(|(a, c)| (a - c).abs()).sum::<f32>());
+                let k = if b > 1e-6 { smoothstep(0.0, BURY, *t).max(like) } else { smoothstep(0.0, BURY, *t) };
+                mix_into(&mut b, l, &mut *self.hide.add(i), mv * k, &m.lat, m.hide);
+                mix_into(t, &mut *self.tlat.add(i), &mut *self.thide.add(i), mv * (1.0 - k), &m.lat, m.hide);
+            }
         }
     }
 
@@ -641,7 +678,9 @@ impl Surf {
             if *t <= 0.0 || k <= 0.0 {
                 return;
             }
-            let k = k * (1.25 - 0.5 * (*self.thide.add(i))[1].clamp(0.0, 1.0));
+            // (a film much thinner than a coat is no layer of its own once
+            // it is sheared: it smears into the wet paint it lies on)
+            let k = k * (1.25 - 0.5 * (*self.thide.add(i))[1].clamp(0.0, 1.0)) * (1.0 + THIN_FILM / (*t).max(1e-3));
             let m = *t * k.min(1.0);
             let mut b = (*self.vol.add(i) - *t).max(0.0);
             mix_into(&mut b, &mut *self.lat.add(i), &mut *self.hide.add(i), m, &*self.tlat.add(i), *self.thide.add(i));
@@ -707,6 +746,19 @@ impl Surf {
         }
     }
 }
+
+/// An earlier stroke's surface film set aside while a new stroke lays
+/// paint over it (see `Surf::lay`): pixel, volume, pigment, properties.
+pub(crate) struct Mid {
+    i: usize,
+    v: f32,
+    lat: Latent,
+    hide: Prop,
+}
+
+/// Thickness (coats) of a new stroke's paint that buries the surface film
+/// under it in the body (about what hides it; see `Surf::settle_mid`).
+const BURY: f32 = 0.6;
 
 /// Wet film (coats) below which a pixel counts as dry for new paint: what
 /// lands there becomes the film's body rather than lying on its surface.
@@ -921,6 +973,7 @@ pub(crate) unsafe fn drag_on(
 ) -> Bounds {
     g.assert_valid();
     let mut bounds: Bounds = None;
+    let mut mid: Vec<Mid> = Vec::new();
     if g.pts.is_empty() {
         return bounds;
     }
@@ -1049,11 +1102,13 @@ pub(crate) unsafe fn drag_on(
             let prev = b.prev[0].unwrap_or(if tool.point > 0.0 && k > 0 { (cur.0 - dir.0 * step, cur.1 - dir.1 * step) } else { cur });
             let (rk, sh) = if tool.point > 0.0 { (excl[bi], shift[bi]) } else { (rb, 0.0) };
             let (sx, sy) = (-dir.1 * sh, dir.0 * sh);
-            unsafe { exchange(sf, b, &tool, (prev.0 + sx, prev.1 + sy), (cur.0 + sx, cur.1 + sy), rk, reach, full, None, 1.0, clip, id, scratch, &mut bounds, lim) };
+            unsafe { exchange(sf, b, &tool, (prev.0 + sx, prev.1 + sy), (cur.0 + sx, cur.1 + sy), rk, reach, full, None, 1.0, clip, id, scratch, &mut mid, &mut bounds, lim) };
             b.prev[0] = Some(cur);
         }
         feed(&mut held.bristles, feed_k);
     }
+    // SAFETY: the pixels in `mid` are this stroke's own (its footprint)
+    unsafe { sf.settle_mid(&mid) };
     // whole-canvas pixels → buffer pixels
     bounds.map(|(x0, y0, x1, y1)| (x0 - sf.ox, y0 - sf.oy, x1 - sf.ox, y1 - sf.oy))
 }
@@ -1191,6 +1246,7 @@ unsafe fn exchange(
     clip: Option<&Mask>,
     id: u32,
     wts: &mut Vec<f32>,
+    mid: &mut Vec<Mid>,
     bounds: &mut Bounds,
     lim: Rect,
 ) {
@@ -1336,10 +1392,18 @@ unsafe fn exchange(
         // how far this bristle reaches into the wet film: pressed, stiff and
         // lean it goes through to the body; a loaded one rides on a cushion
         // of its own paint (the painter's loaded brush and light touch)
-        let cushion = 1.0 - CUSHION * wet;
+        // (a blender's fine, splayed hair holds no charge to ride on: the
+        // cushion goes with how much paint the tool is made to carry)
+        let cushion = 1.0 - CUSHION * wet * tool.lay.clamp(0.0, 1.0);
+        // the share of what it lays that a bristle drags into the wet film
+        // instead of laying on it: all of it for a blender, and for a
+        // nearly spent bristle, whose last paint is what it picked up
+        let drag_in = (1.0 - tool.lay.clamp(0.0, 1.0)).max(1.0 - smoothstep(0.02, 0.2, br.vol / full));
         // (mixing is shear: it goes with how far the bristle moves, as the
         // plough does, so a tip pressed straight down barely stirs)
-        let stir = STIR * (seg / (2.0 * rb)).clamp(0.0, 1.0) * reach.clamp(0.0, 1.0) * (0.3 + 0.7 * tool.stiffness.clamp(0.0, 1.0)) * cushion;
+        // (any hair sheared across a surface film mixes it; a stiff one
+        // pressed hard digs deeper into the body too)
+        let stir = STIR * (seg / (2.0 * rb)).clamp(0.0, 1.0) * reach.clamp(0.0, 1.0).sqrt() * (0.5 + 0.5 * tool.stiffness.clamp(0.0, 1.0)) * cushion;
         // the film a bristle rides on, which it can't push aside (coats):
         // thicker under coarse stiff hog (0.2–0.3 mm) than fine soft hair
         // (0.06–0.12 mm), thinner the harder it is pressed
@@ -1390,24 +1454,35 @@ unsafe fn exchange(
                         }
                     }
                 }
-                // the bristles work the surface film into the body as far
-                // as they reach into it
-                sf.stir(i, stir * wt * fl);
                 if dep_per_w > 0.0 {
                     // the share of the pixel this paint covers: its contact
                     // (a fine hair's own share of the tuft's width, where
                     // the hairs of a gathered point lie over each other)
                     let cv = &mut *sf.cover.add(i);
                     *cv = if fine { ((if *sf.vol.add(i) < 1e-6 { 0.0 } else { *cv }) + wt * excl).min(1.0) } else { 1.0 };
-                    sf.lay(i, dep_per_w * wt, &blat, bhide, id);
+                    // a loaded bristle lays its paint on the wet film (it
+                    // rides on it); a lean one or a blender drags what it
+                    // carries into the film
+                    let d = dep_per_w * wt;
+                    if *sf.vol.add(i) >= WET_FILM && drag_in > 0.0 {
+                        sf.add_body(i, d * drag_in, &blat, bhide);
+                    }
+                    sf.lay(i, if *sf.vol.add(i) >= WET_FILM { d * (1.0 - drag_in) } else { d }, &blat, bhide, id, mid);
                     *sf.stroke.add(i) = id;
                 }
+                // the bristle works the surface film (with what it just
+                // laid) into the body as far as it reaches into it
+                sf.stir(i, stir * wt * fl);
                 // plough: move paint outward from the bristle's path, and ahead
                 if push_k > 0.0 {
                     let v = *sf.vol.add(i);
                     // a bristle parts and smears a film thinner than the
-                    // layer it rides on; it pushes only what stands above it
-                    let m = (v - keep).max(0.0) * push_k * wt * fl;
+                    // layer it rides on; it pushes only what stands above
+                    // it, and only paint with a yield stress keeps a bow
+                    // wave: fluid, medium-rich paint flows round the
+                    // bristle and back into its furrow (leveling in seconds)
+                    let stiff = crate::wet::whole(v, *sf.top.add(i), *sf.hide.add(i), *sf.thide.add(i))[1];
+                    let m = (v - keep).max(0.0) * push_k * wt * fl * (0.1 + 0.9 * smoothstep(0.0, PLOUGH_STIFF, stiff));
                     if m > 1e-6 {
                         let (px, py) = (x as f32 + 0.5, y as f32 + 0.5);
                         let side = if (px - a.0) * nx + (py - a.1) * ny >= 0.0 { 1.0 } else { -1.0 };
@@ -1609,6 +1684,7 @@ impl Canvas {
 pub(crate) unsafe fn touch_on(sf: Surf, held: &mut Held, t: &Touch, clip: Option<&Mask>, id: u32, scratch: &mut Vec<f32>) -> Bounds {
     t.assert_valid();
     let mut bounds: Bounds = None;
+    let mut mid: Vec<Mid> = Vec::new();
     let s = sf.scale;
     let tool = held.tool.clone();
     let full = held.full();
@@ -1653,10 +1729,12 @@ pub(crate) unsafe fn touch_on(sf: Surf, held: &mut Held, t: &Touch, clip: Option
             let prev = b.prev[0].unwrap_or(cur);
             let fill = (b.vol / full).min(1.0);
             let v = film * fill * reach / sums[bi].max(1e-6);
-            unsafe { exchange(sf, b, &tool, prev, cur, rb, reach, full, Some(v), 1.0, clip, id, scratch, &mut bounds, lim) };
+            unsafe { exchange(sf, b, &tool, prev, cur, rb, reach, full, Some(v), 1.0, clip, id, scratch, &mut mid, &mut bounds, lim) };
             b.prev[0] = Some(cur);
         }
     }
+    // SAFETY: the pixels in `mid` are this stroke's own (its footprint)
+    unsafe { sf.settle_mid(&mid) };
     // whole-canvas pixels → buffer pixels
     bounds.map(|(x0, y0, x1, y1)| (x0 - sf.ox, y0 - sf.oy, x1 - sf.ox, y1 - sf.oy))
 }

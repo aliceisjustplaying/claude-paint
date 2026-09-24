@@ -197,6 +197,12 @@ pub struct Canvas {
     /// Loose graphite and chalk on the picture (None until something is
     /// drawn): `graphite`.
     pub(crate) drawing: Option<Box<crate::graphite::Drawing>>,
+    /// What the brushes did and the hand time it took (`tally`): counted
+    /// only, it never changes what is painted.
+    pub(crate) tally: crate::tally::Tally,
+    /// Hand time on (`set_hand_time`): the slice of hand time (minutes) a
+    /// long pass is painted in, the paint ageing between slices.
+    pub(crate) hand_slice: Option<f32>,
 }
 
 impl Canvas {
@@ -237,6 +243,8 @@ impl Canvas {
             surf_gen: 0,
             base: None,
             drawing: None,
+            tally: crate::tally::Tally::default(),
+            hand_slice: None,
         }
     }
 

@@ -123,6 +123,9 @@ and after this change.
 - `notes/loops/l3_green.lua`: not byte-identical. Mean 0.0001/255, max 1 (292 pixels
   differ by 1).
 
+The replay hashes in `crates/easel/tests/hand_time.rs` (example.lua and l5_near at
+160px) were re-recorded: 1 and 8 pixels moved by 1/255.
+
 At 3200 they change where the old varnish drew lines (the crops above: mean abs
 difference 4.7/255 for l5_near and 4.8/255 for l3_green, max 164 and 117).
 

@@ -28,8 +28,9 @@ I measured three causes in `crates/paint/src/bristle.rs`.
 ## The model
 
 `Tool::point` (0..1) says how finely the hairs come to a point: 0 is a
-blunt tuft (hog, flat, filbert, fan, badger, stippler) and 1 is a fine
-point. `round_sable` and `rigger` have `point: 1.0`. Everything below
+blunt tuft and 1 is a fine point. Since Round 7 every preset has
+`point: 0.0`, `round_sable` and `rigger` included: the pointed tip is
+opt-in (see "Round 7: opt-in" below). Everything below
 applies only when `point > 0`. With `point = 0` the old code runs
 unchanged: the old golden matched bit for bit with both presets set to 0.
 
@@ -73,8 +74,8 @@ unchanged: the old golden matched bit for bit with both presets set to 0.
 ## API
 
 ```rust
-// pointed tools as before; the point is on by default
-let mut b = Held::new(Tool::round_sable(1.6), seed);
+// a pointed tool: the point is opt-in (Round 7); Lua brush{kind="round", width=1.6, point=1}
+let mut b = Held::new(Tool { point: 1.0, ..Tool::round_sable(1.6) }, seed);
 b.load(Paint::body(dark), 0.8);
 
 // a flick: pressed on the belly, lifted off to a hairline point
@@ -195,6 +196,35 @@ resolution test fails (1.50 against 1.01).
   bead where they cross pixel diagonals.
   `notes/tip/r3fix_hairlines_before_after.jpg` shows the S-curves at 4×
   (before above, after below). The difference is slight at this scale.
+
+## Round 7: opt-in (branch `r7-d`)
+
+The winter A/B (notes/round7/winter_ab.md) showed the default thinned
+every tapered mark of a painter who had asked for a width: the winter
+oak's dark share fell from 10.2% to 6.1% at 1000 and the firs' from 16.4%
+to 10.7%. A painter who writes `round_sable(1.6)` or `brush("round", 1.6)`
+means a mark about 1.6 wide, and at ordinary pressures the cone laid a
+half to a third of that. Alice chose the variant without it ("we want
+d"). So `round_sable`, `rigger`, `Style::detail` and `Style::line_tool`
+are blunt again (`point: 0.0`): the pre-tip code path, which lays the
+width asked for. The pointed model is unchanged and one field away:
+`Tool { point: 1.0, ..Tool::round_sable(w) }`, Lua
+`brush{kind="round", width=w, point=1}`. Logs that already set `point=`
+behave as before.
+
+- `mark_width` and `pressure_for` work for blunt tools too (a blunt
+  `round 3` gives 1.05 at pressure 0, 1.92 at 0.4 and 3.68 at 1; pointed,
+  0.44, 0.90 and 3.68). `fit=true` in `f:paint`, `t:paint` and
+  `paint_wood` presses whichever brush it is given.
+- Test `presets_are_blunt_and_lay_their_width` (fails with the old
+  default): the presets, `detail` and `line_tool` have point 0, and a blunt
+  sable 1.6 at pressure 0.4 lays over 0.8 units of ink and more than 1.5
+  times the pointed one. The tip tests build their tools with
+  `point: 1.0` explicitly.
+- Golden and replay hashes re-recorded (the golden scene drags a round
+  sable and a rigger; the replayed logs use rounds and riggers).
+- The open issues below apply to pointed tools only; blunt small marks
+  keep the old resolution dependence (heavier at 1000 than at 3200).
 
 ## Open issues
 

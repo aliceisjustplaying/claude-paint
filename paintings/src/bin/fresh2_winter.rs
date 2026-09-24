@@ -27,9 +27,6 @@ fn main() {
         palette: Palette::friedrich_early(),
         ..Style::friedrich()
     };
-    // A/B switch (temporary, see ab_ below): WINTER_POINT0=2 also blunts the
-    // style's detail sable, used by st.detail() and st.hatch()
-    let st = if ab_("WINTER_POINT0", "2") { Style { detail: Tool { point: 0.0, ..st.detail.clone() }, ..st } } else { st };
     let pal = &st.palette;
     let mut c = o.canvas(|| st.prepare(o.width, ASPECT, o.seed));
     let f = c.frame();
@@ -182,7 +179,7 @@ fn main() {
         // thinner than body paint: a thick clipped rim casts a dark line
         // under the raking light
         let paint = pal.mix(hex("#efe8cc")).paint(0.3).with_hiding(0.93);
-        let mut b = Held::new(rs_(1.3), rng.next_u64());
+        let mut b = Held::new(Tool::round_sable(1.3), rng.next_u64());
         let mut k = 0;
         while k < 260 {
             let a = rng.range(0.3, 4.3);
@@ -302,7 +299,7 @@ fn main() {
         c.dry();
         // weathering: broken courses of masonry, faint
         let course = pal.mix(hex("#5c5c68")).paint(0.3).with_hiding(0.5);
-        let mut b = Held::new(lt_(&st, 0.35), rng.next_u64());
+        let mut b = Held::new(st.line_tool(0.35), rng.next_u64());
         for _ in 0..16 {
             let y = rng.range(392.0, 448.0);
             let x0 = rng.range(462.0, 555.0);
@@ -314,7 +311,7 @@ fn main() {
         // the afterglow, a thin lighter strip
         let reveal = pal.mix(hex("#8c8790")).paint(0.2);
         for (cx, w, y0, y1) in [(489.0f32, 15.0f32, 376.0f32, 438.0f32), (535.0, 5.5, 408.0, 436.0), (550.0, 5.0, 414.0, 436.0)] {
-            let mut b = Held::new(rs_((w * 0.12).max(0.6)), rng.next_u64());
+            let mut b = Held::new(Tool::round_sable((w * 0.12).max(0.6)), rng.next_u64());
             b.load(reveal, 0.6);
             let x = cx + w / 2.0 + w * 0.08;
             c.drag(&mut b, &Gesture::new(vec![(x, y1), (x, y0 + w * 0.9), (cx + w * 0.2, y0 + w * 0.15)]).pressure(0.7, 0.4).ramps(0.1, 0.4), Some(&ruin_m));
@@ -323,7 +320,7 @@ fn main() {
         // wall's top is near level
         let snow = pal.mix(hex("#cfcbc6")).paint(0.15).with_hiding(0.9);
         let tops = ruin_top();
-        let mut b = Held::new(rs_(1.0), rng.next_u64());
+        let mut b = Held::new(Tool::round_sable(1.0), rng.next_u64());
         for w in tops.windows(2) {
             let (a, e) = (w[0], w[1]);
             let (dx, dy) = (e.0 - a.0, e.1 - a.1);
@@ -503,7 +500,7 @@ fn main() {
         // the far bank: snow overhanging the ice casts a thin blue-gray
         // shadow line along the upper edge, broken
         let edge = pal.mix(hex("#5d6172")).paint(0.2);
-        let mut b = Held::new(lt_(&st, 1.0), rng.next_u64());
+        let mut b = Held::new(st.line_tool(1.0), rng.next_u64());
         for i in 0..brook.len() - 1 {
             if rng.f() < 0.25 {
                 continue;
@@ -522,7 +519,7 @@ fn main() {
             let pa = (a.0 + dx * t0 + nrm.0 * wa * 0.45, a.1 + dy * t0 + nrm.1 * wa * 0.45);
             let pe = (a.0 + dx * t1 + nrm.0 * we * 0.45, a.1 + dy * t1 + nrm.1 * we * 0.45);
             let d = ((a.1 - HORIZON) / (h - HORIZON)).clamp(0.0, 1.0);
-            b.tool = lt_(&st, 0.5 + 1.6 * d);
+            b.tool = st.line_tool(0.5 + 1.6 * d);
             b.reload(edge, 0.7);
             c.drag(&mut b, &Gesture::new(vec![pa, ((pa.0 + pe.0) * 0.5 + rng.normal() * 0.6, (pa.1 + pe.1) * 0.5 + rng.normal() * 0.4), pe]).pressure(0.7, 0.5).ramps(0.2, 0.4), None);
         }
@@ -561,7 +558,7 @@ fn main() {
         wood(&mut c, &oak, dark, dead, 0.3, Some(&above), &mut rng);
         // the foot flares into the ground (the roots are under the snow)
         let w0 = oak.limbs[0].w[0];
-        let mut fb = Held::new(rs_(w0 * 0.45), rng.next_u64());
+        let mut fb = Held::new(Tool::round_sable(w0 * 0.45), rng.next_u64());
         for side in [-1.0f32, 1.0] {
             fb.reload(dark, 0.8);
             c.drag(&mut fb, &Gesture::new(vec![(oak_base.0 + side * w0 * 0.25, oak_base.1 - w0 * 1.5), (oak_base.0 + side * w0 * 0.4, oak_base.1 - w0 * 0.6), (oak_base.0 + side * w0 * 0.58, oak_base.1 + 1.0)]).pressure(0.8, 0.5).ramps(0.0, 0.2), Some(&above));
@@ -591,7 +588,7 @@ fn main() {
                     })
                     .collect();
                 let tw = (l.w[a] * rng.range(0.06, 0.12)).max(0.4);
-                let mut b = Held::new(Tool { ragged: 0.6, ..rs_(tw) }, rng.next_u64());
+                let mut b = Held::new(Tool { ragged: 0.6, ..Tool::round_sable(tw) }, rng.next_u64());
                 b.load(bark, rng.range(0.2, 0.4));
                 c.drag(&mut b, &Gesture::new(pts).pressure(rng.range(0.4, 0.7), 0.2).ramps(0.2, 0.4).shake(0.8), Some(&oak_m));
                 if k == 0 {
@@ -602,7 +599,7 @@ fn main() {
                         (l.pts[i].0 + nrm.0 * l.w[i] * 0.42, l.pts[i].1 + nrm.1 * l.w[i] * 0.42)
                     }).collect();
                     if pts.len() >= 2 {
-                        let mut rb = Held::new(Tool { ragged: 0.6, ..rs_((l.w[0] * 0.08).max(0.4)) }, rng.next_u64());
+                        let mut rb = Held::new(Tool { ragged: 0.6, ..Tool::round_sable((l.w[0] * 0.08).max(0.4)) }, rng.next_u64());
                         rb.load(rimp, 0.3);
                         c.drag(&mut rb, &Gesture::new(pts).pressure(0.5, 0.25).ramps(0.2, 0.5).shake(0.8), Some(&oak_m));
                     }
@@ -667,7 +664,7 @@ fn main() {
         c.dry();
         // a little snow thrown up against the foot on the lit side
         let snow_lip = pal.mix(hex("#d3cfc8")).paint(0.15).with_hiding(0.8);
-        let mut b = Held::new(rs_(2.0), rng.next_u64());
+        let mut b = Held::new(Tool::round_sable(2.0), rng.next_u64());
         b.load(snow_lip, 0.4);
         let w0 = oak.limbs[0].w[0];
         c.drag(&mut b, &Gesture::new(vec![(oak_base.0 - w0 * 0.75, oak_base.1 - 0.3), (oak_base.0 - w0 * 0.2, oak_base.1 - 1.2), (oak_base.0 + w0 * 0.1, oak_base.1 - 0.8)]).pressure(0.6, 0.3).ramps(0.2, 0.5), None);
@@ -731,7 +728,7 @@ fn main() {
         let track: Vec<(f32, f32)> = vec![(walker.0 + 1.0, walker.1 + 3.0), (628.0, 603.0), (668.0, 622.0), (690.0, 648.0), (715.0, 675.0), (752.0, 700.0), (795.0, 732.0)];
         let arc = arclen(&track);
         let total = arc[arc.len() - 1];
-        let mut b = Held::new(rs_(1.2), rng.next_u64());
+        let mut b = Held::new(Tool::round_sable(1.2), rng.next_u64());
         let mut t = 0.0f32;
         let mut k = 0;
         while t < total {
@@ -745,7 +742,7 @@ fn main() {
             let side = if k % 2 == 0 { 1.0 } else { -1.0 };
             let q = (p.0 - dy / l * size * 0.9 * side + rng.normal() * size * 0.12, p.1 + dx / l * size * 0.3 * side + rng.normal() * size * 0.08);
             // a boot's hollow seen at a slant: longer across than deep
-            b.tool = rs_(size * 0.55);
+            b.tool = Tool::round_sable(size * 0.55);
             if k % 6 == 0 {
                 b.reload(hollow, 0.5);
             }
@@ -898,16 +895,16 @@ fn main() {
             let lean = rng.normal() * 0.08 + 0.03;
             let w = ht * 0.085;
             let top = (x + lean * ht, y - ht);
-            let mut b = Held::new(Tool { ragged: 0.4, ..rs_(w) }, rng.next_u64());
+            let mut b = Held::new(Tool { ragged: 0.4, ..Tool::round_sable(w) }, rng.next_u64());
             b.load(wood_p, 0.8);
             c.drag(&mut b, &Gesture::new(vec![(x, y + w * 0.4), (x + lean * ht * 0.5 + rng.normal() * 0.3, y - ht * 0.5), top]).pressure(0.95, if broken { 0.8 } else { 0.7 }).ramps(0.0, 0.08).shake(0.5), None);
             // the left edge catches the afterglow
-            let mut lb = Held::new(rs_((w * 0.25).max(0.4)), rng.next_u64());
+            let mut lb = Held::new(Tool::round_sable((w * 0.25).max(0.4)), rng.next_u64());
             lb.load(lit, 0.35);
             let off = -w * 0.3;
             c.drag(&mut lb, &Gesture::new(vec![(x + off, y - ht * 0.15), (top.0 + off, top.1 + w * 0.6)]).pressure(0.5, 0.3).ramps(0.3, 0.3), None);
             // snow cap
-            let mut sb = Held::new(rs_(w * 0.6), rng.next_u64());
+            let mut sb = Held::new(Tool::round_sable(w * 0.6), rng.next_u64());
             sb.load(snow, 0.5);
             c.drag(&mut sb, &Gesture::new(vec![(top.0 - w * 0.6, top.1 + w * 0.1), (top.0 + w * 0.1, top.1 - w * 0.05), (top.0 + w * 0.6, top.1 + w * 0.2)]).pressure(0.7, 0.35).ramps(0.1, 0.4), None);
             tops.push(top);
@@ -925,18 +922,18 @@ fn main() {
             let (a, e) = ((a.0, a.1 + ha * 0.25), (e.0, e.1 + he * 0.25));
             let w = (ha * 0.04).max(0.5);
             let sag = ha * 0.04;
-            let mut b = Held::new(rs_(w), rng.next_u64());
+            let mut b = Held::new(Tool::round_sable(w), rng.next_u64());
             b.load(wood_p, 0.8);
             let m = ((a.0 + e.0) * 0.5, (a.1 + e.1) * 0.5 + sag);
             c.drag(&mut b, &Gesture::new(vec![a, m, e]).pressure(0.9, 0.7).ramps(0.05, 0.1).shake(0.4), None);
-            let mut sb = Held::new(rg_(w * 0.7), rng.next_u64());
+            let mut sb = Held::new(Tool::rigger(w * 0.7), rng.next_u64());
             sb.load(snow, 0.6);
             let up = w * 0.55;
             c.drag(&mut sb, &Gesture::new(vec![(a.0, a.1 - up), (m.0, m.1 - up), (e.0, e.1 - up)]).pressure(0.6, 0.5).ramps(0.2, 0.2), None);
         }
         // the broken rail: from the 3rd post down into the snow
         let (a, ha) = (tops[2], posts[2].2);
-        let mut b = Held::new(rs_((ha * 0.04).max(0.5)), rng.next_u64());
+        let mut b = Held::new(Tool::round_sable((ha * 0.04).max(0.5)), rng.next_u64());
         b.load(wood_p, 0.8);
         c.drag(&mut b, &Gesture::new(vec![(a.0, a.1 + ha * 0.25), (a.0 - ha * 0.4, a.1 + ha * 0.6), (a.0 - ha * 0.75, posts[2].1 - 1.0)]).pressure(0.9, 0.7).ramps(0.05, 0.3), None);
         // snow drifted against the posts' feet
@@ -956,7 +953,7 @@ fn main() {
         // and across the foreground, bigger toward the viewer
         let tufts = Fbm::new(77, 3, 150.0);
         let hues = [pal.mix(hex("#5b4c38")).paint(0.2), pal.mix(hex("#766246")).paint(0.2), pal.mix(hex("#3e342a")).paint(0.2), pal.mix(hex("#8a7a5c")).paint(0.2)];
-        let mut b = Held::new(lt_(&st, 0.8), rng.next_u64());
+        let mut b = Held::new(st.line_tool(0.8), rng.next_u64());
         let mut placed = 0;
         for _ in 0..6000 {
             let x = rng.range(-10.0, 1010.0);
@@ -975,7 +972,7 @@ fn main() {
             let blades = 2 + (rng.f() * 5.0) as usize;
             let tall = (4.0 + 22.0 * d.powf(1.4)) * rng.range(0.6, 1.3);
             let paint = hues[(rng.f() * hues.len() as f32) as usize % hues.len()];
-            b.tool = lt_(&st, 0.3 + 0.5 * d);
+            b.tool = st.line_tool(0.3 + 0.5 * d);
             b.reload(paint, 0.6);
             for _ in 0..blades {
                 let lean = rng.normal() * 0.3 + 0.08;
@@ -1016,7 +1013,7 @@ fn main() {
         // grain, the old soot. notes/round7/winter_port.md)
         cracks: Some(paint::Cracks { island_mm: Some(2.6), ground_um: Some(140.0), width_um: Some(18.0), depth_um: 9.0, cupping_um: 6.0, dirt: 0.12, corners: true, vary: 0.0, veil: 0.0, hierarchy: 0.0, patchy: 0.0, grain: 0.0, grime: 0.0, seed: 0 }),
         varnish_coats: 0.3,
-        ..Finish::aged(relief_(&st))
+        ..Finish::aged(st.relief)
     };
     o.finish(&mut c, &mut rng, &fin);
     let _ = (to_oklab, from_oklab, Touch::at, Orient::Across, Paint::body);
@@ -1080,7 +1077,7 @@ fn wood(c: &mut paint::Canvas, sk: &paint::Skeleton, live: Paint, dead: Paint, f
             if pts.len() < 2 {
                 continue;
             }
-            let tool = if w[a] > 1.5 { Tool { ragged: 0.35, ..rs_(w[a] / spread(1.0, 0.45)) } } else { let tw = w[a] / spread(1.0, 0.6); Tool { length: tw * 3.0, ..rg_(tw) } };
+            let tool = if w[a] > 1.5 { Tool { ragged: 0.35, ..Tool::round_sable(w[a] / spread(1.0, 0.45)) } } else { let tw = w[a] / spread(1.0, 0.6); Tool { length: tw * 3.0, ..Tool::rigger(tw) } };
             let p1 = pressure_for(w[b] / w[a], tool.splay).max(0.05);
             let total = (arc[b] - arc[a0]).max(1e-3);
             let release = if last { if l.broken { 0.05 } else { (w[a].min(5.0) * 2.5 / total).clamp(0.15, 0.6) } } else { 0.05 };
@@ -1156,7 +1153,7 @@ fn limb_snow(c: &mut paint::Canvas, sk: &paint::Skeleton, snow: Paint, shade: Pa
             if long {
                 let wm = widths.iter().sum::<f32>() / widths.len() as f32;
                 let tw = (wm * 0.55).clamp(0.35, 3.5);
-                let mut b = Held::new(if tw > 1.4 { rs_(tw) } else { rg_(tw) }, rng.next_u64());
+                let mut b = Held::new(if tw > 1.4 { Tool::round_sable(tw) } else { Tool::rigger(tw) }, rng.next_u64());
                 let p = if rng.f() < 0.7 { snow } else { shade };
                 b.load(p, 0.7);
                 c.drag(&mut b, &Gesture::new(run.clone()).pressure(0.75, 0.45).swell(vec![0.7, 1.1, 0.9, 1.05]).ramps(0.15, 0.3).shake(0.5), None);
@@ -1191,14 +1188,14 @@ fn spruce(c: &mut paint::Canvas, base: (f32, f32), ht: f32, needles: Paint, snow
     let (x, y) = base;
     let top = y - ht;
     let reach_k = rng.range(0.19, 0.24);
-    let mut stem = Held::new(rs_((ht * 0.02).max(0.6)), rng.next_u64());
+    let mut stem = Held::new(Tool::round_sable((ht * 0.02).max(0.6)), rng.next_u64());
     stem.load(needles, 0.7);
     c.drag(&mut stem, &Gesture::new(vec![(x, y), (x + rng.normal() * 0.3, y - ht * 0.5), (x, top)]).pressure(1.0, 0.1).ramps(0.0, 0.4).shake(0.3), None);
     let tiers = (16.0 + ht / 5.0) as usize;
-    let mut big = Held::new(rs_((ht * 0.03).max(0.9)), rng.next_u64());
-    let mut fine = Held::new(rs_((ht * 0.014).max(0.45)), rng.next_u64());
-    let mut hang = Held::new(rs_((ht * 0.01).max(0.4)), rng.next_u64());
-    let mut tip = Held::new(rs_((ht * 0.008).max(0.35)), rng.next_u64());
+    let mut big = Held::new(Tool::round_sable((ht * 0.03).max(0.9)), rng.next_u64());
+    let mut fine = Held::new(Tool::round_sable((ht * 0.014).max(0.45)), rng.next_u64());
+    let mut hang = Held::new(Tool::round_sable((ht * 0.01).max(0.4)), rng.next_u64());
+    let mut tip = Held::new(Tool::round_sable((ht * 0.008).max(0.35)), rng.next_u64());
     let mut tier_pts: Vec<(f32, f32, f32, f32)> = Vec::new(); // (sx, sy, ex, ey)
     for i in 0..tiers {
         let v = (i as f32 + rng.range(0.0, 0.7)) / tiers as f32; // 0 top .. 1 bottom
@@ -1238,7 +1235,7 @@ fn spruce(c: &mut paint::Canvas, base: (f32, f32), ht: f32, needles: Paint, snow
     c.dry();
     // snow on the tiers: clumps lying on the upper side of a branch, flat
     // on top, ragged below, not on every tier; more on the lit (left) side
-    let mut sb = Held::new(rs_((ht * 0.009).max(0.4)), rng.next_u64());
+    let mut sb = Held::new(Tool::round_sable((ht * 0.009).max(0.4)), rng.next_u64());
     for &(sx, sy, ex, ey) in tier_pts.iter() {
         let v = (sy - top) / ht;
         let left = ex < sx;
@@ -1264,18 +1261,18 @@ fn walker_fig(c: &mut paint::Canvas, at: (f32, f32), size: f32, coat: Paint, hat
     let mut hd = paint::Hand::new(at, size, rng.next_u64());
     hd.tremor = 0.004;
     // shadow first, falling toward the viewer and right (the glow is behind)
-    let mut s = hd.take(rs_, 0.07, shadow, 0.7);
+    let mut s = hd.take(Tool::round_sable, 0.07, shadow, 0.7);
     hd.mark(c, &mut s, paint::Mark { pts: &[(0.0, 0.01), (0.1, -0.15), (0.22, -0.38)], pressure: (0.9, 0.2), ramps: (0.05, 0.6) }, None);
     // legs: one striding back (lower), one forward, boots dark
-    let mut b = hd.take(rs_, 0.07, coat, 0.7);
-    let mut lb = hd.take(rs_, 0.05, coat, 0.7);
+    let mut b = hd.take(Tool::round_sable, 0.07, coat, 0.7);
+    let mut lb = hd.take(Tool::round_sable, 0.05, coat, 0.7);
     // the near leg straight under him, the far one stepping away (higher
     // on the canvas, a little out), its heel lifted
     hd.line(c, &mut lb, &[(-0.025, 0.3), (-0.045, 0.14), (-0.06, -0.005)], 0.9, 0.8);
     lb.reload(coat, 0.7);
     hd.line(c, &mut lb, &[(0.03, 0.3), (0.05, 0.17), (0.075, 0.05)], 0.85, 0.6);
     // the coat: shoulders to hem in several strokes, widening, the hem swinging
-    let mut cb = hd.take(rs_, 0.11, coat, 0.8);
+    let mut cb = hd.take(Tool::round_sable, 0.11, coat, 0.8);
     for (u0, u1) in [(-0.07, -0.12), (-0.02, -0.03), (0.03, 0.05), (0.075, 0.11)] {
         cb.reload(coat, 0.8);
         hd.line(c, &mut cb, &[(u0, 0.8), (u0 + (u1 - u0) * 0.5, 0.55), (u1, 0.24)], 0.95, 0.9);
@@ -1287,23 +1284,23 @@ fn walker_fig(c: &mut paint::Canvas, at: (f32, f32), size: f32, coat: Paint, hat
     b.reload(coat, 0.7);
     hd.line(c, &mut b, &[(0.1, 0.76), (0.14, 0.6), (0.17, 0.5)], 0.9, 0.8);
     // head: a dab of dark hair under a cap (seen from behind), a hint of neck
-    let mut sk = hd.take(rs_, 0.05, skin, 0.5);
+    let mut sk = hd.take(Tool::round_sable, 0.05, skin, 0.5);
     hd.dab(c, &mut sk, 0.0, 0.83, 0.03, std::f32::consts::FRAC_PI_2, 0.7);
     // the head, dark hair at the nape, under a flat cap worn a little
     // aslant (an old-German beret)
-    let mut hb = hd.take(rs_, 0.075, hat, 0.8);
+    let mut hb = hd.take(Tool::round_sable, 0.075, hat, 0.8);
     hd.mark(c, &mut hb, paint::Mark { pts: &[(-0.01, 0.84), (0.0, 0.875)], pressure: (1.0, 0.9), ramps: (0.0, 0.2) }, None);
-    let mut cap = hd.take(rs_, 0.04, hat, 0.8);
+    let mut cap = hd.take(Tool::round_sable, 0.04, hat, 0.8);
     hd.mark(c, &mut cap, paint::Mark { pts: &[(-0.075, 0.9), (-0.02, 0.918), (0.04, 0.915), (0.08, 0.895)], pressure: (0.7, 0.8), ramps: (0.1, 0.3) }, None);
     cap.reload(hat, 0.7);
     hd.mark(c, &mut cap, paint::Mark { pts: &[(-0.045, 0.915), (0.0, 0.94), (0.045, 0.925)], pressure: (0.9, 0.7), ramps: (0.1, 0.3) }, None);
     // the stick: a rigger line from the hand to the snow ahead
-    let mut r = hd.take(rg_, 0.018, hat, 0.8);
+    let mut r = hd.take(Tool::rigger, 0.018, hat, 0.8);
     hd.mark(c, &mut r, paint::Mark { pts: &[(0.17, 0.52), (0.21, 0.26), (0.25, 0.0)], pressure: (0.8, 0.6), ramps: (0.05, 0.1) }, None);
     // the hat's brim, a little wider than the crown
     // the edge of the left shoulder and back catching the afterglow: a
     // lean touch, broken by the tooth of the coat's paint
-    let mut rb = hd.take(rs_, 0.025, rim, 0.3);
+    let mut rb = hd.take(Tool::round_sable, 0.025, rim, 0.3);
     hd.mark(c, &mut rb, paint::Mark { pts: &[(-0.095, 0.78), (-0.1, 0.66), (-0.115, 0.5)], pressure: (0.6, 0.2), ramps: (0.2, 0.6) }, None);
     let _ = rng;
 }
@@ -1312,13 +1309,13 @@ fn walker_fig(c: &mut paint::Canvas, at: (f32, f32), size: f32, coat: Paint, hat
 /// of wings).
 fn crow(c: &mut paint::Canvas, at: (f32, f32), size: f32, paint: Paint, flying: bool, rng: &mut Rng) {
     let (x, y) = at;
-    let mut b = Held::new(rs_(size * 0.32), rng.next_u64());
+    let mut b = Held::new(Tool::round_sable(size * 0.32), rng.next_u64());
     b.load(paint, 0.8);
     if flying {
         // a thin shallow M: each wing pulled out from the body to a lifted
         // tip, a fine brush, the body a touch at the middle
         let s = size;
-        let mut w = Held::new(rs_(size * 0.16), rng.next_u64());
+        let mut w = Held::new(Tool::round_sable(size * 0.16), rng.next_u64());
         let up = rng.range(0.25, 0.45) * s;
         for side in [-1.0f32, 1.0] {
             w.load(paint, 0.8);
@@ -1337,20 +1334,3 @@ fn crow(c: &mut paint::Canvas, at: (f32, f32), size: f32, paint: Paint, flying: 
         c.drag(&mut b, &Gesture::new(vec![(x + lean * s, y - s * 1.0), (x + lean * s + dir * s * 0.35, y - s * 1.05)]).pressure(0.8, 0.2).ramps(0.0, 0.6), None);
     }
 }
-
-// ----------------------------------------------------------------------
-// Temporary A/B switches (branch r7-winter-ab only, not for merge;
-// notes/round7/winter_ab.md). Off by default: the render is the port's.
-//   WINTER_POINT0=1  every round sable, rigger and line tool the painter
-//                    makes at point 0 (the port's point-0 diagnostic)
-//   WINTER_POINT0=2  the same, and the style's detail sable (st.detail(),
-//                    st.hatch()) too: the pointed-tip default of 2ce7ee0
-//                    undone everywhere in this picture
-//   WINTER_RELIEF=1  the finish's relief at round 2's (0.2, 0.02) instead
-//                    of today's Style default (0.06, 0.006)
-fn ab_(k: &str, v: &str) -> bool { std::env::var(k).map(|x| x.as_str() >= v).unwrap_or(false) }
-fn pt_(t: Tool) -> Tool { if ab_("WINTER_POINT0", "1") { Tool { point: 0.0, ..t } } else { t } }
-fn rs_(w: f32) -> Tool { pt_(Tool::round_sable(w)) }
-fn rg_(w: f32) -> Tool { pt_(Tool::rigger(w)) }
-fn lt_(st: &Style, w: f32) -> Tool { pt_(st.line_tool(w)) }
-fn relief_(st: &Style) -> (f32, f32) { if ab_("WINTER_RELIEF", "1") { (0.2, 0.02) } else { st.relief } }

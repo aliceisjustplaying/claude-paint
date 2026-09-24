@@ -116,8 +116,11 @@ pub struct Tool {
     pub splay: f32,
     /// Unevenness of bristle lengths (ragged edges, broken marks).
     pub ragged: f32,
-    /// How finely the hairs converge to a point: 0 = a blunt tuft (hog,
-    /// flat, stippler), 1 = a fine point (round sable, rigger). A pointed
+    /// How finely the hairs converge to a point: 0 = a blunt tuft, 1 = a
+    /// fine point. 0 for every preset (round sable and rigger included, so
+    /// a mark is as wide as the brush and pressure ask): the pointed tip is
+    /// the painter's choice, `Tool { point: 1.0, ..Tool::round_sable(w) }`
+    /// (Lua `brush{kind="round", width=w, point=1}`). A pointed
     /// tuft is a cone: pressed lightly only the point touches (a hairline),
     /// pressed harder the belly spreads (width grows with pressure), and on
     /// the lift the mark draws down to a point. Its loaded tip wets the
@@ -148,7 +151,7 @@ impl Tool {
 
     /// Soft pointed round: smooth, precise, little ploughing. Friedrich's detail brush.
     pub fn round_sable(width: f32) -> Self {
-        Tool { stiffness: 0.2, pickup: 0.1, push: 0.05, splay: 0.45, ragged: 0.15, point: 1.0, ..Self::base(Kind::Round, width) }
+        Tool { stiffness: 0.2, pickup: 0.1, push: 0.05, splay: 0.45, ragged: 0.15, ..Self::base(Kind::Round, width) }
     }
 
     /// Stiff hog-bristle flat: square marks, strong ridges, broken edges.
@@ -191,7 +194,6 @@ impl Tool {
             push: 0.02,
             splay: 0.6,
             ragged: 0.1,
-            point: 1.0,
             ..Self::base(Kind::Rigger, width)
         }
     }
@@ -1558,6 +1560,14 @@ mod tip_tests {
     use super::*;
     use crate::color::hex;
 
+    /// The pointed tip is opt-in: these tests use it explicitly.
+    fn sable(w: f32) -> Tool {
+        Tool { point: 1.0, ..Tool::round_sable(w) }
+    }
+    fn rigger(w: f32) -> Tool {
+        Tool { point: 1.0, ..Tool::rigger(w) }
+    }
+
     const BG: &str = "#e8e0d0";
     const INK: &str = "#1a1612";
 
@@ -1599,7 +1609,7 @@ mod tip_tests {
     #[test]
     fn pointed_marks_are_resolution_independent() {
         let g = Gesture::line((50.0, 120.0), (450.0, 122.0)).pressure(0.4, 0.4).ramps(0.05, 0.1).shake(0.0);
-        for tool in [Tool::rigger(0.5), Tool::round_sable(1.6)] {
+        for tool in [rigger(0.5), sable(1.6)] {
             let lo = ink(&canvas(500, false, tool.clone(), &g), 100.0, 400.0);
             let hi = ink(&canvas(1600, false, tool.clone(), &g), 100.0, 400.0);
             assert!((lo / hi - 1.0).abs() < 0.2, "{:?}: ink width {lo} at 500px, {hi} at 1600px", tool.kind);
@@ -1609,9 +1619,26 @@ mod tip_tests {
         }
     }
 
+    /// Round 7 (winter A/B): the presets are blunt again, so a round, a
+    /// rigger, a line or a detail brush lays the width the painter asked
+    /// for; the pointed tip (a hairline at light pressure) is opt-in.
+    #[test]
+    fn presets_are_blunt_and_lay_their_width() {
+        let st = crate::style::Style::friedrich();
+        for t in [Tool::round_sable(1.6), Tool::rigger(0.5), st.detail.clone(), st.line_tool(0.8)] {
+            assert_eq!(t.point, 0.0, "{:?} is pointed by default", t.kind);
+        }
+        let g = Gesture::line((50.0, 120.0), (450.0, 122.0)).pressure(0.4, 0.4).ramps(0.05, 0.1).shake(0.0);
+        let blunt = ink(&canvas(1600, false, Tool::round_sable(1.6), &g), 100.0, 400.0);
+        let pointed = ink(&canvas(1600, false, sable(1.6), &g), 100.0, 400.0);
+        // a blunt sable 1.6 at a light pressure lays most of its width; the
+        // pointed one only its point
+        assert!(blunt > 0.5 * 1.6 && blunt > 1.5 * pointed, "ink width at p 0.4: blunt {blunt}, pointed {pointed}");
+    }
+
     #[test]
     fn pointed_width_follows_pressure_and_tapers() {
-        let t = Tool::round_sable(3.0);
+        let t = sable(3.0);
         assert!(t.mark_width(0.1) < 0.25 * t.mark_width(0.9), "{} vs {}", t.mark_width(0.1), t.mark_width(0.9));
         assert!((t.mark_width(t.pressure_for(1.5)) - 1.5).abs() < 0.01);
         let at = |p: f32| ink(&canvas(800, false, t.clone(), &Gesture::line((50.0, 120.0), (450.0, 120.0)).pressure(p, p).shake(0.0)), 150.0, 350.0);
@@ -1664,7 +1691,7 @@ mod tip_tests {
     /// not where it falls between pixel centers).
     #[test]
     fn translated_pointed_marks_look_alike() {
-        for (tool, p) in [(Tool::rigger(0.5), 0.3), (Tool::round_sable(1.6), 0.15)] {
+        for (tool, p) in [(rigger(0.5), 0.3), (sable(1.6), 0.15)] {
             for (dx, dy) in [(200.0f32, 200.0f32), (240.0, 90.0)] {
                 let total = |off: (f32, f32)| {
                     let (a, b) = ((100.0 + off.0, 10.0 + off.1), (100.0 + dx + off.0, 10.0 + dy + off.1));
@@ -1685,7 +1712,7 @@ mod tip_tests {
     /// on the weave's peaks.
     #[test]
     fn hairline_on_linen_is_continuous() {
-        let c = canvas(1600, true, Tool::rigger(0.5), &Gesture::line((50.0, 120.0), (450.0, 120.0)).pressure(0.25, 0.25).ramps(0.05, 0.1).shake(0.0));
+        let c = canvas(1600, true, rigger(0.5), &Gesture::line((50.0, 120.0), (450.0, 120.0)).pressure(0.25, 0.25).ramps(0.05, 0.1).shake(0.0));
         let s = c.f.scale;
         let (y0, y1) = (((120.0 - 2.0) * s) as usize, ((120.0 + 2.0) * s) as usize);
         let cols: Vec<f32> = ((150.0 * s) as usize..(350.0 * s) as usize).map(|x| (y0..y1).map(|y| dark(&c, x, y)).sum::<f32>()).collect();
@@ -1698,7 +1725,7 @@ mod tip_tests {
     #[test]
     #[ignore]
     fn probe_ink_width() {
-        for (name, tool) in [("rigger .5", Tool::rigger(0.5)), ("sable 1.6", Tool::round_sable(1.6)), ("sable 3", Tool::round_sable(3.0))] {
+        for (name, tool) in [("rigger .5", rigger(0.5)), ("sable 1.6", sable(1.6)), ("sable 3", sable(3.0))] {
             for p in [0.1, 0.4, 0.7, 0.9] {
                 let g = Gesture::line((50.0, 120.0), (450.0, 122.0)).pressure(p, p).ramps(0.05, 0.1).shake(0.0);
                 let lo = ink(&canvas(1000, false, tool.clone(), &g), 100.0, 400.0);
@@ -1714,7 +1741,7 @@ mod tip_tests {
         // TIP_OUT=path.png TIP_P=0.8 cargo test --release -p paint probe_patch -- --ignored
         let out = std::env::var("TIP_OUT").unwrap_or_else(|_| "patch.png".into());
         let mut c = Canvas::new(3200, 4.0, hex(BG)).with_size_mm(440.0).with_linen(crate::surface::Linen::fine(3));
-        let mut h = Held::new(Tool::round_sable(5.6), 3);
+        let mut h = Held::new(sable(5.6), 3);
         let mut rng = crate::rng::Rng::new(4);
         for k in 0..14 {
             h.reload(Paint::body(hex(INK)), 1.0);
@@ -1728,7 +1755,7 @@ mod tip_tests {
 
     #[test]
     fn feed_conserves_paint() {
-        let mut h = Held::new(Tool::round_sable(2.0), 1);
+        let mut h = Held::new(sable(2.0), 1);
         h.load(Paint::body(hex(INK)), 1.0);
         for (i, b) in h.bristles.iter_mut().enumerate() {
             b.vol *= (i % 5) as f32 / 4.0;

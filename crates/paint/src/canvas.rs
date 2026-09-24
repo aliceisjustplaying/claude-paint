@@ -9,12 +9,14 @@ use crate::surface::{COAT_UM, Linen, vnoise};
 /// Fraction of a glaze layer that stays as film (the rest of the "thickness"
 /// is how deep the color reads; a glaze is mostly medium, and thin).
 const GLAZE_FILM: f32 = 0.3;
-/// Thinnest glaze film that forms, µm. A film has to be at least about as
-/// thick as its pigment particles and the oil they sit in; glazing pigments
-/// (lakes, earths, smalt fines) run ~0.2–2 µm, so below ~1 µm there is no
-/// continuous film, only a trace wiped into the tooth. Thinner requests fade
-/// out smoothly from `MIN_FILM_UM` to half of it (no cut, so no edge).
-pub const MIN_FILM_UM: f32 = 1.0;
+/// Thinnest glaze film that forms, µm: a numerical floor, not a physical
+/// one. A float tail (a long soft falloff, a blurred mask's residue) ends
+/// here, fading smoothly from `MIN_FILM_UM` to half of it (no cut, so no
+/// edge). Real thin veils, a few tenths of a µm and up, are laid as asked
+/// (Round 7: the 1 µm floor of 1742baa erased the winter painter's 0.34 µm
+/// veil; the edge bug it was also meant to stop was the NaN in settle,
+/// guarded there).
+pub const MIN_FILM_UM: f32 = 0.05;
 use rayon::prelude::*;
 
 /// Film that forms from a request of `um` µm: all of it above `MIN_FILM_UM`,
@@ -386,10 +388,10 @@ impl Canvas {
     /// `thickness(x, y)` (times mask coverage, if given), in coats.
     ///
     /// The glaze is mostly medium: its film is `GLAZE_FILM` of a coat per
-    /// coat of color depth, and a film thinner than `MIN_FILM_UM` does not
-    /// form (it fades out smoothly below it). So a long soft falloff, or a
-    /// blurred mask's float residue, ends where the film gives out, softly,
-    /// not at the last nonzero float. It dries at once (a glaze over dry
+    /// coat of color depth. A request thinner than `MIN_FILM_UM` (0.05 µm)
+    /// fades out smoothly, so a long soft falloff, or a blurred mask's
+    /// float residue, ends softly, not at the last nonzero float; a thin
+    /// veil of a few tenths of a µm is laid as asked. It dries at once (a glaze over dry
     /// paint; see `drying` for wet paint and time).
     pub fn glaze(
         &mut self,
@@ -575,14 +577,33 @@ mod tests {
     #[test]
     fn formed_film_is_smooth_and_monotone() {
         let mut last = 0.0f32;
-        for k in 0..=400 {
-            let um = k as f32 * 0.005;
+        for k in 0..=4000 {
+            let um = k as f32 * 0.0005;
             let f = super::formed_film(um);
             assert!(f >= last - 1e-7 && f <= um + 1e-7, "{um}: {f}");
-            assert!(f - last < 0.02, "step at {um}");
+            assert!(f - last < 0.0025, "step at {um}");
             last = f;
         }
-        assert_eq!(super::formed_film(0.2), 0.0);
+        assert_eq!(super::formed_film(0.02), 0.0);
+        assert_eq!(super::formed_film(0.2), 0.2);
         assert_eq!(super::formed_film(3.0), 3.0);
+    }
+
+    /// Round 7 (notes/round7/winter_ab.md): the winter painter's veil is
+    /// 0.045-0.06 coats, a film of 0.34-0.45 µm. The 1 µm floor erased it
+    /// and left a bare, lighter oval; a thin veil must lay what was asked,
+    /// in proportion to a thicker one.
+    #[test]
+    fn a_thin_veil_is_laid() {
+        let st = Style::friedrich();
+        let dark = |coats: f32| {
+            let mut c = st.prepare(200, 1.5, 5);
+            let before = c.px.clone();
+            c.glaze(&Pigment::transparent(hex("#4a3a30")), None, move |_, _| coats);
+            let lum = |p: &crate::color::Rgb| 0.2126 * p[0] + 0.7152 * p[1] + 0.0722 * p[2];
+            before.iter().zip(&c.px).map(|(a, b)| (lum(a) - lum(b)) as f64).sum::<f64>() / c.px.len() as f64
+        };
+        let (thin, thicker) = (dark(0.045), dark(0.18));
+        assert!(thin > 0.0 && thin > 0.2 * thicker, "a 0.34 µm veil darkens {thin}, 1.35 µm {thicker}");
     }
 }

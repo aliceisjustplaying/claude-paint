@@ -138,17 +138,25 @@ and thrown strokes the coast painter saw.
   numerically nothing and below f32 resolution on ~100 µm heights. It also
   accepts the local ratio only when it is finite, and it asserts (in debug
   builds) and guards the global total.
-- `Canvas::glaze` gives films a physical minimum:
-  `canvas::MIN_FILM_UM` = 1 µm, about the size of glazing-pigment
-  particles. Below it, the film fades out smoothly (C¹, zero at 0.5 µm), so
-  the cutoff itself draws no edge. Blurred-mask residue and long tails end
-  softly where the film gives out. Glazes of about 0.13 coats or more (1 µm of
-  film) are unchanged bit for bit, which covers every glaze in the golden
-  scene.
+- `Canvas::glaze` gives films a minimum, `canvas::MIN_FILM_UM`. Below it,
+  the film fades out smoothly (C¹, zero at half of it), so the cutoff
+  itself draws no edge and blurred-mask residue and long tails end softly.
+  It was 1 µm here (about the size of glazing-pigment particles, zero at
+  0.5 µm). **Round 7: 0.05 µm** (zero at 0.025 µm), a numerical floor. The
+  1 µm floor erased real thin veils: the winter painter's veil is
+  0.045–0.06 coats, 0.34–0.45 µm of film, and it left a bare, lighter oval
+  in the middle of the picture (notes/round7/winter_ab.md, variant d). The
+  edge and rectangle bugs were the NaN in `settle`, and its guard alone
+  keeps both regression tests green with no floor at all. Glazes of 0.0067
+  coats or more (0.05 µm) are laid as asked. The peak film of
+  `settle_film` (below) was tied to this constant; it is its own
+  `surface::PEAK_FILM_UM`, still 1 µm.
 - Regression tests (`canvas::tests`):
   - `glaze_long_falloff_has_no_edge`: the winter moon glow.
   - `glaze_through_blurred_mask_leaves_no_rectangle`: the coast ribbons.
   - `formed_film_is_smooth_and_monotone`.
+  - `a_thin_veil_is_laid` (Round 7): a 0.045-coat veil darkens the
+    canvas, in proportion to a 0.18-coat one. It fails with the 1 µm floor.
 
   They also assert that every pixel and height is finite.
 
@@ -225,7 +233,7 @@ covers:
   pixels) but the dark dashes were the other side: the volume taken off
   them pooled 15–80 µm deep at the foot of every step (film 3–38× the
   request). `Canvas::glaze` now uses `settle_film`, a thin film over dry
-  relief that keeps at least `MIN_FILM_UM` on every peak and gathers at
+  relief that keeps at least `PEAK_FILM_UM` (1 µm) on every peak and gathers at
   most 2× in the hollows.
 - `Canvas::glaze` still dries everything first (it is a finished glaze,
   not a wet film). A wet glaze that ages would be a `Handling` with

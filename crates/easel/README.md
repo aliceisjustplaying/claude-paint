@@ -443,6 +443,8 @@ conifers, grass), `glaze` (thin veils; `medium` 0.6–0.95), `scumble`,
 | `color` | a color, `function(x, y)` returning one, or a sky or clouds (`color=s`): the look you want on the canvas |
 | `color_over` | instead of `color`: relative to what's under each stroke. `{shift={dL, da, db}}` (e.g. a shadow: `{shift={-0.06, 0, -0.012}}`), or `function(x, y, under)` sampled every 2 units with `under` = the canvas there before the pass |
 | `hug` | `true` (default): strokes reach a mask's edges; `false` lets edges thin out |
+| `clip` | `true`: every bristle stops exactly on the region's edge (a stencil: one crisp, even line). It is true or false: a mask given here counts as `true` and is not used (the reply says so) |
+| `edge` | instead of `clip`: carry the passage to the region's edge as a brush does, found, soft or lost (see [Edges](#edges-found-soft-and-lost)) |
 | `angle` | stroke direction, a number or `function(x, y)` |
 | `tool` | `"filbert 8"`, `{kind=, width=}` or a brush |
 | `length` | `{min, max}` stroke length in units |
@@ -455,7 +457,7 @@ conifers, grass), `glaze` (thin veils; `medium` 0.6–0.95), `scumble`,
 | `load`, `load_at` | load per dip; a field that varies it |
 | `angle_jitter`, `curve` (`{bow, wave}`), `cross`, `drift` (`{amount, scale}`), `tail`, `broken`, `swell`, `clump` | the hand's irregularity |
 | `order` | `"passages"`, `"scatter"`, `"down"`, `"across"` or a sweep angle |
-| `orient`, `shake`, `clip`, `threshold`, `cut_in` (a tool), `scrub`, `blender`, `ruler`, `jitter`, `mix_jitter`, `paint` (`{hiding, stiff}`), `seed` | as in the engine's `Handling` |
+| `orient`, `shake`, `threshold`, `cut_in` (a tool), `scrub`, `blender`, `ruler`, `jitter`, `mix_jitter`, `paint` (`{hiding, stiff}`), `seed` | as in the engine's `Handling` |
 
 ```lua
 blend(mask, {angle=0})                    -- = work(mask, {hand="blend", ...})
@@ -466,6 +468,57 @@ stipple(mask, {width=2.4, color="#cfccc2", coverage=function(x, y) ... end,
                                           -- (stars, snowflakes); color_over works here too
 glaze(mask_or_nil, {color="#8a6a3a", coats=0.4, pigment="transparent"})   -- or semi, opaque, varnish
 ```
+
+### Edges: found, soft and lost
+
+A stencil clip makes an edge no brush makes: one crisp, even line along the
+whole contour, the same for every stroke (Evening at a Mountain Lake's
+ridge read as "a filled selection"). A painter decides each edge and varies
+it along one contour: **found** (crisp, where a form turns against the
+light), **soft** (the stroke runs over and its film thins out) and **lost**
+(the passage carries well into its neighbor and dissolves there).
+
+```lua
+work(rangeM, {hand="body", tool="filbert 6", color=rangecol, edge="soft"})       -- one quality all along
+work(rangeM, {..., edge=function(x, y) return 1 - glow(x, y) end})               -- 0 found .. 1 lost: by the light
+work(reflM,  {..., edge={found=0.2, soft=0.5, lost=0.3, period=50, seed=3}})      -- stretches along the contour
+work(figM,   {..., edge={quality=0.2, waver=0.5, reach=0.8}})                     -- any form, with its knobs
+dry()
+lose(reflM, {where=function(x, y) return y > HZ + 6 and 0.7 or 0 end, angle=0})  -- drag the water back across
+```
+
+`edge=` takes a number (0 found .. 1 lost), a name (`"found"`, `"firm"`,
+`"soft"`, `"loose"`, `"lost"`), a function of `(x, y)` or a noise, a mask
+(its values), or a table: `found=, soft=, lost=` shares of the contour laid
+out in runs about `period` units long (default 40), `seed=`, or `quality=`
+(any of the above); plus `waver=` (1: how far the painter's line wanders off
+the mask's, about 0.3 units plus a tenth of the brush where found and three
+times that where lost) and `reach=` (1: scales every stroke's overrun). It
+clips like `clip=true` (strokes seeded outside still brush in), but each
+stroke stops by its own amount: up to about a tenth of the brush width past
+the line where found, a quarter where soft, four tenths where lost, and past
+that it lifts off over about 0.06, 0.8 and 2.2 brush widths: its hairs ride
+the tops of the weave and its film thins (the deposit falls with the square
+of the fence), so a soft edge is a thinning, broken fringe, not a blur. Into
+wet paint the overrun also picks up the neighbor. It can't be combined with
+`cut_in`. Old logs replay unchanged: nothing changes unless you write `edge=`.
+
+`lose(region, {where=, tool="filbert 4", reach={out, in}, load=0.2,
+pressure={0.35, 0.02}, angle=, every=1.2, mix=0.35, medium=0.45, pal=,
+seed=})` loses an edge after the passage is laid: along the region's edge,
+where `where` (as `edge=`; default 1 everywhere) is high, short strokes
+start out in the neighbor, cross the edge at a shallow slant (or at `angle`,
+pointed inward) and lift off inside. Each is loaded lightly with what lies
+out in the neighbor, dirtied with `mix` of the region's own color, aimed at
+the look where it crosses. It returns the number of strokes. Use it over
+**dry** paint: into wet paint a lean brush lifts the film and shows what is
+under it. Press harder (`pressure={0.75, 0.25}`) and thin it
+(`medium=0.6`) for a scumble rather than dry-brush specks.
+
+`scripts/edges.py RENDER.png --box x0,y0,x1,y1` measures a render's edges
+(width, contrast, found/soft/lost shares and waver along a contour); the
+study is `paintings/lua/edges_old.lua` against `edges_new.lua`
+(`notes/edges.md`).
 
 ### Trees and foliage
 

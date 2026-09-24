@@ -55,11 +55,14 @@ pub struct Hand {
     /// The ledger's clocked seconds at the last flush: the hand time put on
     /// the clock since then (a long pass clocks its slices as it goes).
     pub clocked: f64,
+    /// Minutes the canvas spent drying for a finishing verb that are on the
+    /// clock but not yet reported (the chunk's end reports them once).
+    pub unreported: f64,
 }
 
 impl Default for Hand {
     fn default() -> Self {
-        Hand { start: 0.0, hours: SITTING_HOURS, sittings: 1, warned: 0, piles: Piles::default(), base: paint::Tally::default(), clocked: 0.0 }
+        Hand { start: 0.0, hours: SITTING_HOURS, sittings: 1, warned: 0, piles: Piles::default(), base: paint::Tally::default(), clocked: 0.0, unreported: 0.0 }
     }
 }
 
@@ -100,13 +103,12 @@ pub fn flush(st: &S, force: bool) {
     s.hand.clocked = clocked;
     let now = c.clock() - s.clock0;
     // time the canvas spent that isn't hand time (a finishing verb drying
-    // the paint first) is left for the verb or the chunk's end to report
-    // (session.rs); a long stretch of it is a rest
+    // the paint first) is taken into the clock here, once: the chunk's end
+    // reports it (session.rs), and a long stretch of it is a rest
     let away = now - s.clock - hand;
+    s.clock = now;
     if away > 0.5 {
-        s.clock += hand;
-    } else {
-        s.clock = now;
+        s.hand.unreported += away;
     }
     if away >= REST_MIN {
         s.hand.begin(now);
@@ -342,6 +344,81 @@ mod tests {
         // turning it on later doesn't bill the past
         run(&mut b, "hand_time(true)");
         assert_eq!(clock(&b), 0.0);
+    }
+
+    /// The session's checkpoints carry the hand state: an edit (replaying
+    /// from the nearest checkpoint) and an undo past the undo ring leave the
+    /// clock, the sitting and the timesheet exactly as a fresh replay of the
+    /// same log (review r6, finding 1).
+    #[test]
+    fn edits_and_undo_keep_the_hand_state_of_a_replay() {
+        const LOG: [&str; 6] = [
+            r##"canvas{style="friedrich", aspect=1.5, seed=2, hand=true}; sitting{hours=2}"##,
+            r##"work(rect(100, 100, 300, 200), {hand="body", color="#8090a0"})"##,
+            r##"b = brush("round", 3); b:load("#303830", 0.9); for i = 1, 30 do b:stroke({{100 + 20*i, 500}, {110 + 20*i, 440}}) end"##,
+            "rest(3)",
+            r##"stipple(rect(0, 380, 1000, 120), {width=3, color="#cfccc2", coverage=1.2})"##,
+            r##"b:load("#6a5040", 0.9); b:stroke({{200, 300}, {600, 320}})"##,
+        ];
+        let sheet = |s: &mut Session| -> String {
+            run(s, "local t = timesheet(); sheet = string.format('%.9f %d %.9f %.9f %d %d %.3f %.9f', t.clock, t.sittings, t.sitting, t.hours, t.strokes, t.touches, t.reloads, t.hand_min)");
+            s.lua.globals().get::<String>("sheet").unwrap()
+        };
+        let bits = |s: &Session| s.canvas().unwrap().seen().iter().flat_map(|p| p.map(f32::to_bits)).collect::<Vec<_>>();
+        let fresh = |log: &[&str]| {
+            let mut r = Session::replay(W).unwrap();
+            for c in log {
+                run(&mut r, c);
+            }
+            r
+        };
+        let mut s = Session::new(W, 1).unwrap();
+        s.keep = 3;
+        for c in LOG {
+            run(&mut s, c);
+        }
+        // edit chunk 3 (a checkpoint before it, chunks after it replayed)
+        let new3 = r##"b = brush("round", 4); b:load("#303830", 0.9); for i = 1, 20 do b:stroke({{100 + 30*i, 520}, {110 + 30*i, 430}}) end"##;
+        s.splice(3, 1, &[new3.to_string()]).unwrap();
+        let mut want: Vec<&str> = LOG.to_vec();
+        want[2] = new3;
+        let mut r = fresh(&want);
+        assert_eq!(clock(&s), clock(&r));
+        assert_eq!(bits(&s), bits(&r));
+        assert_eq!(sheet(&mut s), sheet(&mut r));
+        // undo past the undo ring (replays from a checkpoint)
+        s.undo(4).unwrap();
+        let mut r = fresh(&want[..3]);
+        assert_eq!(clock(&s), clock(&r));
+        assert_eq!(sheet(&mut s), sheet(&mut r));
+    }
+
+    /// The time a finishing verb spent drying the paint is taken into the
+    /// clock once: repeated queries in the same chunk see the same clock and
+    /// the same sitting, never a new sitting per query or a negative one,
+    /// and the drying is still reported once (review r6, finding 2).
+    #[test]
+    fn queries_after_a_finish_consume_its_drying_once() {
+        for on in [false, true] {
+            let mut s = Session::new(W, 0).unwrap();
+            run(&mut s, &format!(r##"canvas{{style="friedrich", aspect=1.5, seed=2, hand={on}}}"##));
+            run(&mut s, r##"work(rect(100, 100, 300, 200), {hand="body", color="#8090a0", coverage=4})"##);
+            let out = run(
+                &mut s,
+                r##"varnish()
+                    local a = timesheet(); local b = timesheet(); local c1, c2 = clock(), clock(); drying(200, 200); local c = timesheet()
+                    assert(a.sittings == 2 and b.sittings == 2 and c.sittings == 2, a.sittings .. " " .. b.sittings .. " " .. c.sittings)
+                    assert(a.sitting >= 0 and b.sitting == a.sitting and c.sitting == a.sitting, a.sitting .. " " .. b.sitting)
+                    assert(c1 == c2 and c1 == a.clock and a.clock > 120, c1 .. " " .. c2 .. " " .. a.clock)"##,
+            );
+            assert_eq!(out.matches("passed while the paint dried").count(), 1, "hand {on}: {out}");
+            let now = s.canvas().unwrap().clock();
+            let c0 = s.st.borrow().clock0;
+            assert_eq!(clock(&s), now - c0);
+            // and the next chunk reports nothing more
+            let out = run(&mut s, "assert(timesheet().sittings == 2)");
+            assert!(!out.contains("passed while"), "{out}");
+        }
     }
 
     /// Time a finishing verb spends drying the paint isn't hand time: it is

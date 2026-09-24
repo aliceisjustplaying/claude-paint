@@ -41,7 +41,8 @@ fn replay(src: &Path, width: u32, threads: Option<usize>, tag: &str) -> (String,
 /// thin-film settle (Round 6, notes/varnish.md), for the wet-on-wet engine
 /// (branch r6-wet, notes/wet.md), which changes output on purpose, for its
 /// maintenance round's two fixes (B3, B7: notes/wet.md §9), and for the
-/// merge of r6-wet into the engine with main's changes (B10).
+/// merge of r6-wet into the engine with main's changes (B10); the test-profile
+/// hash again when tests became optimized (`[profile.test]`, Round 6).
 /// `PRINT_HASHES=1` prints them instead of checking (re-record in both
 /// profiles after an intended change).
 #[test]
@@ -49,7 +50,7 @@ fn existing_logs_replay_unchanged() {
     // (the benchmark near is checked in release only: a debug replay takes
     // minutes)
     let logs: &[(&str, u64)] = if cfg!(debug_assertions) {
-        &[("paintings/lua/example.lua", 0x0f19_d003_ca35_d334)]
+        &[("paintings/lua/example.lua", 0x5d8b_8104_0908_9111)]
     } else {
         &[("paintings/lua/example.lua", 0x5d8b_8104_0908_9111), ("notes/loops/l5_near.lua", 0xc132_7692_9ef9_16da)]
     };

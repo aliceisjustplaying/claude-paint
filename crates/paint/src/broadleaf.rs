@@ -1339,9 +1339,22 @@ impl Tree {
         let total: f32 = cand.iter().map(|c| len[c.1]).sum();
         let budget = detail.max(0.0) * total;
         let mut acc = 0.0;
+        // where drawn fine pieces leave their parents: one side twig per
+        // spot, not a starburst of them from one point
+        let gap = 0.5 * self.step;
+        let mut starts: HashMap<usize, Vec<(f32, f32)>> = HashMap::new();
         for (_, i) in cand {
             if acc >= budget {
                 break;
+            }
+            let l = &self.limbs[i];
+            if let Some(p) = l.parent {
+                let s0 = l.pts[0];
+                let near = |q: &(f32, f32)| (q.0 - s0.0).powi(2) + (q.1 - s0.1).powi(2) < gap * gap;
+                if !l.lead && starts.get(&p).is_some_and(|v| v.iter().any(near)) {
+                    continue;
+                }
+                starts.entry(p).or_default().push(s0);
             }
             // the piece and the wood it leaves from, down to drawn wood
             let mut j = i;

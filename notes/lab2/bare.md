@@ -94,7 +94,7 @@ field below the horizon, so a far trunk doesn't glow pale against the ground) an
 `lay` (C2's stroker). Chunks 2–7 are the same in both versions: C's sky, ground and
 crest, then the near oak by C2's recipe (1,328 pieces: 694 fine kept, 164 faint) with
 the trunk turned. Chunks 9–11 of L and 10–12 of T are also shared: the feet, the three
-shadows (fainter with distance) and the grass bands, all C's recipe scaled by trunk
+shadows (fainter with distance) and grass bands at the near and middle feet, all C's recipe scaled by trunk
 width.
 
 - **L** (chunk 8): the middle and far oaks in selected lines only. `detail` is 0.35

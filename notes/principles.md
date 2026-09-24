@@ -8,7 +8,7 @@ off-the-shelf art software. instead, it's about 7,500 lines of code using
 standard libraries to emulate different brush styles. the agents don't
 use any pictures as reference, instead working only from what they know
 about each painter." It showcased very different styles (Pieter Bruegel
-the Elder, likely Cézanne, others), and they looked amazing. Ours is the
+the Elder, likely Cézanne, David Hockney and one more), and they looked amazing. Ours is the
 same spirit, and more first principles: we simulate the paint and let the
 painter make the marks. Friedrich (smooth, thin, luminous realism) is a
 harder target than any of those; it may fail, and that's allowed.

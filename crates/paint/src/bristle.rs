@@ -622,25 +622,24 @@ fn cohesion(held: &Held, full: f32) -> f32 {
 }
 
 /// Capillary feed: paint in a soft tuft runs from full hairs to spent ones
-/// (the belly feeds the tip). Moves the share `k` of every hair's paint into
-/// a common pool and shares it out evenly; volume is conserved exactly and
-/// colors mix through the tuft.
+/// (the belly feeds the tip). Moves the share `k` of every hair's reservoir
+/// into a common pool and shares it out evenly; volume is conserved exactly
+/// and colors mix through the tuft. What a hair picked up from the wet film
+/// stays on its tip (`Bristle::tip`): it lies where it was picked up and
+/// works in as the brush travels, as on any brush.
 fn feed(bristles: &mut [Bristle], k: f32) {
     if k <= 0.0 || bristles.is_empty() {
         return;
     }
     let (mut tv, mut lat, mut hide) = (0.0f32, [0.0f32; LAT], [0.0f32; 3]);
-    // (the feed runs through the whole tuft, tips and all)
-    for b in bristles.iter_mut() {
-        b.fold_tip(1.0);
-    }
     for b in bristles.iter() {
-        tv += b.vol;
+        let r = (b.vol - b.tip.v).max(0.0);
+        tv += r;
         for (l, bl) in lat.iter_mut().zip(&b.lat) {
-            *l += bl * b.vol;
+            *l += bl * r;
         }
         for (h, bh) in hide.iter_mut().zip(&b.hide) {
-            *h += bh * b.vol;
+            *h += bh * r;
         }
     }
     if tv <= 1e-12 {
@@ -652,8 +651,9 @@ fn feed(bristles: &mut [Bristle], k: f32) {
     hide = [hide[0] / tv, hide[1] / tv, hide[2] / tv];
     let share = k * tv / bristles.len() as f32;
     for b in bristles.iter_mut() {
-        b.vol *= 1.0 - k;
-        mix_into(&mut b.vol, &mut b.lat, &mut b.hide, share, &lat, hide);
+        let mut r = (b.vol - b.tip.v).max(0.0) * (1.0 - k);
+        mix_into(&mut r, &mut b.lat, &mut b.hide, share, &lat, hide);
+        b.vol = r + b.tip.v;
     }
 }
 
@@ -1286,6 +1286,39 @@ mod tip_tests {
         }
         c.dry();
         c.save(std::path::Path::new(&out)).unwrap();
+    }
+
+    /// Capillary feed runs the belly's paint through the tuft; what each
+    /// hair picked up from the wet film stays on its tip, to be laid first
+    /// and worked in over `TIP_RUN` (review B7: feed folded every tip in at
+    /// every step, so a round's or rigger's tip did nothing). A round
+    /// dragged through a wet dark still carries a dirty tip at the end.
+    #[test]
+    fn feed_keeps_the_tips() {
+        let mut h = Held::new(Tool::round_sable(2.0), 1);
+        h.load(Paint::body(hex(INK)), 1.0);
+        let dirt = Paint::body(hex(BG));
+        for (i, b) in h.bristles.iter_mut().enumerate() {
+            b.vol *= (i % 5) as f32 / 4.0 + 0.2;
+            b.tip = Layer::new(0.1 * b.vol, dirt.latent(), [dirt.scatter, 1.0, 1.0]);
+        }
+        let tips: Vec<Layer> = h.bristles.iter().map(|b| b.tip).collect();
+        let before: f64 = h.bristles.iter().map(|b| b.vol as f64).sum();
+        feed(&mut h.bristles, 0.3);
+        let after: f64 = h.bristles.iter().map(|b| b.vol as f64).sum();
+        assert!((after - before).abs() < before * 1e-5);
+        assert!(h.bristles.iter().zip(&tips).all(|(b, t)| b.tip == *t && b.tip.v <= b.vol), "feed leaves the tips on their hairs");
+        // a round through a wet dark, then on over bare ground
+        let mut c = Canvas::new(300, 1.0, hex(BG));
+        let mut d = Held::new(Tool::filbert(40.0), 2);
+        d.reload(Paint::body(hex(INK)), 1.0);
+        c.drag(&mut d, &Gesture::new(vec![(100.0, 500.0), (500.0, 500.0)]).pressure(0.9, 0.9), None);
+        let mut r = Held::new(Tool::round_sable(8.0), 3);
+        r.reload(Paint::body(hex(BG)), 0.8);
+        c.drag(&mut r, &Gesture::new(vec![(150.0, 500.0), (480.0, 500.0)]).pressure(0.8, 0.8).ramps(0.0, 0.0), None);
+        let tip: f32 = r.bristles.iter().map(|b| b.tip.v).sum();
+        let load: f32 = r.bristles.iter().map(|b| b.vol).sum();
+        assert!(tip > 1e-3 * load, "a round's tip is dirty after a stroke through wet paint: {tip} of {load}");
     }
 
     #[test]

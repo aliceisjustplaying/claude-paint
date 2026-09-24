@@ -358,6 +358,70 @@ fn settle_conserves_paint() {
 
 
 
+/// A 2 µm varnish over tall dry impasto (the lab2 oak and rock finish at
+/// 3200px, 0.094 mm/px): it used to level the impasto as if it were fluid,
+/// leaving the step tops bare and 15–80 µm of varnish at their feet (brown
+/// worm lines). The film follows the relief: every peak keeps a film, the
+/// hollows gather at most `POOL_MAX` of it, and the volume is kept.
+#[test]
+fn thin_film_over_dry_impasto_coats_peaks_and_pools_a_little() {
+    let (w, h) = (240usize, 240usize);
+    let mut c = Canvas::new(w, 1.0, hex("#808080")).with_size_mm(w as f32 * 0.094);
+    // dabs of dry paint 100–300 µm tall with crisp edges, over a weave ripple
+    for y in 0..h {
+        for x in 0..w {
+            let (xf, yf) = (x as f32, y as f32);
+            let mut z = 20.0 * ((xf * 0.9).sin() * (yf * 0.8).sin()).abs();
+            for k in 0..9 {
+                let (cx, cy) = (30.0 + 80.0 * (k % 3) as f32, 30.0 + 80.0 * (k / 3) as f32);
+                let d = ((xf - cx) / 22.0).powi(2) + ((yf - cy) / 12.0).powi(2);
+                if d < 1.0 {
+                    z += 100.0 + 25.0 * k as f32;
+                }
+            }
+            c.height[y * w + x] = z;
+        }
+    }
+    let add = vec![2.25f32; w * h];
+    let t = c.settle_film(&add, 0.05);
+    let (sa, st): (f64, f64) = (add.iter().map(|&v| v as f64).sum(), t.iter().map(|&v| v as f64).sum());
+    assert!((st - sa).abs() < sa * 1e-4, "volume {sa} -> {st}");
+    let (lo, hi) = t.iter().fold((f32::MAX, 0.0f32), |(l, m), &v| (l.min(v), m.max(v)));
+    assert!(lo >= 0.99 * crate::canvas::MIN_FILM_UM, "a peak went bare: {lo} µm");
+    assert!(hi <= 2.25 * 2.0 * 1.01, "a hollow pooled {hi} µm");
+    // most of the surface is simply coated
+    let even = t.iter().filter(|&&v| (v - 2.25).abs() < 0.1).count() as f32 / t.len() as f32;
+    assert!(even > 0.8, "only {even} of the surface got the film laid");
+    // and the old fluid leveling did pool there (the test sees the case)
+    let mut c2 = Canvas::new(w, 1.0, hex("#808080")).with_size_mm(w as f32 * 0.094);
+    c2.height.copy_from_slice(&c.height.iter().zip(&t).map(|(z, f)| z - f).collect::<Vec<_>>());
+    let t2 = c2.settle((0, 0, w, h), &add, &vec![0.05; w * h]);
+    assert!(t2.iter().cloned().fold(0.0, f32::max) > 10.0 * 2.25, "fluid settle no longer pools at the steps");
+}
+
+/// The varnish over dry impasto is an even warm layer: no pixel is warmed
+/// much more than the flat surface around it (no lines at paint edges).
+#[test]
+fn varnish_over_impasto_is_even() {
+    let (w, h) = (200usize, 200usize);
+    let mut c = Canvas::new(w, 1.0, hex("#708090")).with_size_mm(w as f32 * 0.094);
+    for y in 0..h {
+        for x in 0..w {
+            let d = ((x as f32 - 100.0) / 50.0).powi(2) + ((y as f32 - 100.0) / 30.0).powi(2);
+            c.height[y * w + x] = if d < 1.0 { 250.0 } else { 0.0 };
+        }
+    }
+    let before = c.px.clone();
+    c.glaze(&Pigment::varnish(hex("#e6d3a4")), None, |_, _| 0.3);
+    // warming (red minus blue shift) per pixel
+    let warm: Vec<f32> = c.px.iter().zip(&before).map(|(p, b)| (p[0] - b[0]) - (p[2] - b[2])).collect();
+    let flat = warm[10 * w + 10];
+    assert!(flat > 0.0, "the varnish warms");
+    let hi = warm.iter().cloned().fold(0.0, f32::max);
+    let lo = warm.iter().cloned().fold(f32::MAX, f32::min);
+    assert!(hi <= 2.2 * flat && lo >= 0.3 * flat, "warming {lo}..{hi} vs flat {flat}");
+}
+
 /// A brushed ground lays about the thickness it asks for, and none at 0.
 #[test]
 fn brushed_ground_honors_thickness() {

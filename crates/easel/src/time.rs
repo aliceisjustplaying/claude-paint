@@ -354,7 +354,7 @@ mod tests {
         assert_eq!(clock(&s), 0.0, "the grounds are not the painter's time");
         // a new pile, a stroke 300 units long with a 4-unit round, a touch
         run(&mut s, r##"b = brush("round", 4); b:load("#303830", 0.9); b:stroke({{100, 500}, {400, 500}}); b:touch(500, 300)"##);
-        let want = (pace::REMIX + pace::RELOAD + stroke_secs(300.0 * mm, 4.0 * mm) + touch_secs(4.0 * mm)) / 60.0;
+        let want = (pace::REMIX + pace::RELOAD + stroke_secs(300.0 * mm, 4.0 * mm) + touch_secs()) / 60.0;
         assert!((clock(&s) - want).abs() < 1e-4, "clock {} want {want}", clock(&s));
         // the same color again is a reload, a wipe is a wipe
         let t0 = clock(&s);

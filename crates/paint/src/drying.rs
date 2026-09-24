@@ -309,10 +309,34 @@ impl Canvas {
 
     /// Where the paint at a point (units) is in drying.
     pub fn drying_at(&self, x: f32, y: f32) -> Stage {
-        let i = self.f.index(x, y);
-        let v = self.wet.vol[i];
+        self.stage_at_index(self.f.index(x, y))
+    }
+
+    /// Where every pixel the canvas holds is in drying (buffer order, as
+    /// `pixels()`).
+    pub fn stages(&self) -> Vec<Stage> {
+        (0..self.f.w * self.f.h).map(|i| self.stage_at_index(i)).collect()
+    }
+
+    /// Shares of the canvas (the part `save` writes) that are open, setting,
+    /// tacky and dry.
+    pub fn stage_shares(&self) -> [f64; 4] {
+        let (x0, y0, x1, y1) = self.keep;
+        let mut n = [0u64; 4];
+        for y in y0..y1 {
+            for x in x0..x1 {
+                n[self.stage_at_index(y * self.f.w + x) as usize] += 1;
+            }
+        }
+        let t = n.iter().sum::<u64>().max(1) as f64;
+        n.map(|k| k as f64 / t)
+    }
+
+    /// The stage at pixel `i` of the buffer: open or setting where wet paint
+    /// lies (by its cure), else tacky or dry (by the set film's).
+    fn stage_at_index(&self, i: usize) -> Stage {
         let p = self.wet.clock.px.get(i).copied().unwrap_or(Px::FRESH);
-        if v >= 1e-3 {
+        if self.wet.vol[i] >= 1e-3 {
             if p.cure < 0.5 * GEL { Stage::Open } else { Stage::Setting }
         } else if p.sub < 1.0 {
             Stage::Tacky

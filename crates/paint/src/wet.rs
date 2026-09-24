@@ -355,6 +355,30 @@ pub(crate) fn over_share(pig: Pigment, under: Rgb, coats: f32, cover: f32) -> Rg
     [under[0] + (o[0] - under[0]) * c, under[1] + (o[1] - under[1]) * c, under[2] + (o[2] - under[2]) * c]
 }
 
+/// Paste stands at most this tall for its width (a bead of oil paint: stroke
+/// ridges of 0.1-0.3 mm on strokes 1-2 mm wide are 0.1-0.3; 0.5 is stiff
+/// impasto).
+const BEAD_ASPECT: f32 = 0.5;
+
+/// The share of a pixel (`px_um` wide) that `coats` of wet paint in it
+/// cover: at least `cover` (what the hairs touched), and at least enough
+/// that the paint on it stands no taller than `BEAD_ASPECT` times the
+/// pixel's width. A sliver of a pixel can't hold a bead taller than that:
+/// the paint has slumped across it (c ≥ coats·COAT_UM / (BEAD_ASPECT·px_um)).
+/// Linear in the paint, so a hairline's fringe keeps its share wherever the
+/// line falls between pixel centers; at 1000px (pixels of 0.2-0.9 mm) it
+/// takes a film over 100 µm on the sliver to act. At 3200 (0.1 mm pixels)
+/// the tens of µm that leveling pours into a pixel a hair only grazed no
+/// longer sit on a sliver of it and leave the rest bare (the lab 2 lime's
+/// pale pinholes, notes/glitch.md P1).
+pub(crate) fn bead_cover(cover: f32, coats: f32, px_um: f32) -> f32 {
+    if cover >= 1.0 || coats.is_nan() || coats <= 0.0 || px_um.is_nan() || px_um <= 0.0 {
+        return cover;
+    }
+    let need = coats * crate::surface::COAT_UM / (BEAD_ASPECT * px_um);
+    cover.max(need).min(1.0)
+}
+
 impl Canvas {
     /// What the painter sees at pixel `i`: the dry picture with any wet paint
     /// on it (at its laid thickness, before it levels).
@@ -364,7 +388,7 @@ impl Canvas {
             return self.px[i];
         }
         let w = &self.wet;
-        film_over(&w.lat[i], w.hide[i], &w.top[i], v, self.px[i], v, w.cover[i])
+        film_over(&w.lat[i], w.hide[i], &w.top[i], v, self.px[i], v, bead_cover(w.cover[i], v, self.px_mm() * 1000.0))
     }
 
     /// What the painter sees, pixel by pixel over the window: the dry
@@ -428,6 +452,23 @@ mod tests {
         assert_eq!((a.drying, a.stiff, a.color), (0.3, 0.4, [0.3; 3]));
         assert_eq!((a.drying, a.stiff, a.color, a.scatter), (b.drying, b.stiff, b.color, b.scatter));
         assert!((a.hiding() - 0.5).abs() < 0.01);
+    }
+
+    /// A hairline's fringe keeps its share (the floor is linear in the paint
+    /// and far below a hair's film at 1000px); a sliver holding a bead many
+    /// times taller than the pixel is wide spreads over the pixel.
+    #[test]
+    fn bead_cover_floors_only_impossible_beads() {
+        // 0.02 coats on 5% of a 0.3 mm pixel: a 10 µm film, left alone
+        assert_eq!(super::bead_cover(0.05, 0.02, 300.0), 0.05);
+        // linear: twice the paint on twice the share is the same film
+        assert_eq!(super::bead_cover(0.10, 0.04, 300.0), 0.10);
+        // 4 coats (100 µm) on 10% of a 0.1 mm pixel would stand 1 mm tall
+        assert_eq!(super::bead_cover(0.10, 4.0, 100.0), 1.0);
+        // 1 coat on 10% of a 0.1 mm pixel: at least half of it
+        assert!((super::bead_cover(0.10, 1.0, 100.0) - 0.5).abs() < 1e-6);
+        assert_eq!(super::bead_cover(1.0, 9.0, 100.0), 1.0);
+        assert_eq!(super::bead_cover(0.3, 0.0, 100.0), 0.3);
     }
 
     /// Paint over a sliver of a pixel darkens it by that sliver's share, not

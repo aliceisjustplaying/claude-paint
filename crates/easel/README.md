@@ -1305,7 +1305,12 @@ easel run paintings/lua/<name>.lua [--width 3200] [--out path.png]
 ```
 
 This runs the chunks in order in a fresh session and writes
-`out/lua/<name>_<width>.png`; `--look` also writes a JPEG next to it. At the
+`out/lua/<name>_<width>.png`; `--look` also writes a JPEG next to it.
+`--dump-surface path.f32` also writes the dried surface height under the
+saved pixels (µm, little-endian f32, row by row). To hunt small digital
+artifacts in a 3200 crop (specks, pinholes, slivers of ground, outlines,
+mottle), run `uv run scripts/glitch.py <png> --out overlay.png`
+(`notes/glitch.md`). At the
 width you painted at, the PNG is byte-identical to `easel save` from the live
 session. At 3200px it is the full render: the same program at a finer grain.
 The file is plain Lua with chunk markers (`--@ chunk N · clock M`), so you

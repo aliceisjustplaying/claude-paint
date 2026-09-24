@@ -39,7 +39,8 @@ byte-identical to before the night.
 The relief lighting makes the canvas weave grid and the stroke-ridge
 creases. At 0.2 the green sky is covered in embossed diagonal creases and
 the tree's sky holes get raised outlines; at 0.06 they're nearly gone; off
-looks like a print. It does NOT make the knife-cut hatching on the near
+looks like a print. (Correction: the knife-cut hatching below was the
+varnish, fixed and merged in `d5c53f0`.) It does NOT make the knife-cut hatching on the near
 rock, the pale rims around objects, the fog rectangle in the near wood or
 the pale halos in the green tree's holes: those are identical at every
 strength. So relief is the "grooves", not the whole plateau.

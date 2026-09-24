@@ -100,22 +100,22 @@ fn under_hill(c: &mut Canvas, (ox, oy): (f32, f32)) {
     let m = Mask::from_fn(c.frame(), move |x, y| if x > ox + 15.0 && x < ox + 235.0 && y > oy + ridge(x - ox) && y < oy + 235.0 { 1.0 } else { 0.0 });
     field(c, hill(), &m, 0.2, 12);
 }
-/// The sky: laid in above, then brought down in level strokes over the
-/// hill's top, 8 units into it.
+/// The sky: laid in above, then brought down in strokes that follow the
+/// hill's top, the last one reaching about 8 units (3.5 mm) into it. No
+/// mask: the brush makes the edge.
 fn sky_down(c: &mut Canvas, (ox, oy): (f32, f32)) {
-    let top = Mask::from_fn(c.frame(), move |x, y| if x > ox + 15.0 && x < ox + 235.0 && y > oy + 15.0 && y < oy + ridge(x - ox) - 3.0 { 1.0 } else { 0.0 });
+    let top = Mask::from_fn(c.frame(), move |x, y| if x > ox + 15.0 && x < ox + 235.0 && y > oy + 15.0 && y < oy + ridge(x - ox) - 10.0 { 1.0 } else { 0.0 });
     field(c, sky(), &top, 0.2, 16);
-    let m = Mask::from_fn(c.frame(), move |x, y| if x > ox + 15.0 && x < ox + 235.0 && y > oy + 15.0 && y < oy + ridge(x - ox) + 8.0 { 1.0 } else { 0.0 });
     let mut h = Held::new(Tool::hog_flat(12.0), 22);
-    let mut yy = oy + 102.0;
-    let mut k = 0;
-    while yy < oy + 140.0 {
+    for (k, dy) in [-14.0f32, -10.0, -6.0, -2.0, 2.0].into_iter().enumerate() {
         if k % 2 == 0 {
             h.reload(sky(), 0.8);
         }
-        c.drag(&mut h, &Gesture::new(vec![(ox + 12.0, yy), (ox + 125.0, yy + 1.0), (ox + 238.0, yy)]).pressure(0.8, 0.75).orient(Orient::Across), Some(&m));
-        yy += 3.0;
-        k += 1;
+        let pts: Vec<(f32, f32)> = (0..=20).map(|j| {
+            let x = 20.0 + 10.5 * j as f32;
+            (ox + x, oy + ridge(x) + dy)
+        }).collect();
+        c.drag(&mut h, &Gesture::new(pts).pressure(0.8, 0.75).orient(Orient::Across), None);
     }
 }
 /// A clean badger worked along the join, three light passes.
@@ -307,7 +307,7 @@ fn measure(img: &Img, pre: &[f32; 4], mm: f32) -> Vec<String> {
         for &(x, y) in &DABS {
             for j in -16..=16 {
                 for i in -16..=16 {
-                    let n = (img.l(ox + x + i as f32 * 0.5, oy + y + j as f32 * 0.5, 0.0) - d) / (lp - d);
+                    let n = (img.l(ox + x + i as f32 * 0.5, oy + y + j as f32 * 0.5, 0.5) - d) / (lp - d);
                     if n > 0.5 {
                         core += 1.0;
                     } else if n > 0.1 {
@@ -410,6 +410,64 @@ fn measure(img: &Img, pre: &[f32; 4], mm: f32) -> Vec<String> {
     out
 }
 
+/// The sketchbook's three pitfalls, in painter's terms (the style's
+/// handlings, as at the easel), each over a passage still open (half an
+/// hour old) and over the same passage dried first. Prints how far the later passage got toward
+/// its look over the dried one (1 = all the way), and for the river the
+/// share of its track that shows the ground.
+fn pitfalls(width: usize) {
+    let st = Style::friedrich();
+    let run = |dry_first: bool| -> [f32; 4] {
+        let mut c = st.prepare(width / 2, 2.0, 5);
+        let f = c.frame();
+        let col = |h: &str| {
+            let c = hex(h);
+            move |_: f32, _: f32| c
+        };
+        let rect = |x0: f32, y0: f32, x1: f32, y1: f32| Mask::from_fn(f, move |x, y| if x > x0 && x < x1 && y > y0 && y < y1 { 1.0 } else { 0.0 });
+        // translucent rock: a thick body floor, then a rock over it
+        c.work(&rect(20.0, 40.0, 320.0, 460.0), &st.body().color(col("#4a4636")).coverage(4.5).clip(true), 1);
+        // fog band: a near-black wood, then snow brought up over its foot
+        c.work(&rect(360.0, 40.0, 640.0, 300.0), &st.body().color(col("#1b221f")).coverage(3.0).clip(true), 2);
+        // plowed river: valley paint, then a river laid with a flat into it
+        c.work(&rect(680.0, 40.0, 980.0, 460.0), &st.body().color(col("#62703c")).coverage(3.0).clip(true), 3);
+        if dry_first {
+            c.dry();
+        } else {
+            c.wait(30.0);
+            println!("  after wait(30): floor {:?}, wood {:?}, valley {:?}", c.drying_at(170.0, 250.0), c.drying_at(500.0, 270.0), c.drying_at(800.0, 215.0));
+        }
+        let rock = Mask::from_fn(f, |x, y| if ((x - 170.0) / 100.0).powi(2) + ((y - 250.0) / 80.0).powi(2) < 1.0 { 1.0 } else { 0.0 });
+        c.work(&rock, &st.body().color(col("#bdb4a2")).coverage(2.5).clip(true), 4);
+        c.work(&rect(360.0, 250.0, 640.0, 460.0), &st.body().color(col("#e4e8ea")).coverage(3.0).clip(true), 5);
+        let mut h = Held::new(Tool::hog_flat(8.0), 6);
+        for k in 0..6 {
+            h.reload(Paint::body(hex("#9fb0b6")), 0.6);
+            let y = 200.0 + 6.0 * k as f32;
+            c.drag(&mut h, &Gesture::new(vec![(700.0, y), (830.0, y + 20.0), (960.0, y + 10.0)]).pressure(0.9, 0.85).orient(Orient::Across), None);
+        }
+        c.dry();
+        if let Ok(d) = std::env::var("PITFALL_PNG") {
+            c.save(format!("{d}/pitfalls_{}.png", if dry_first { "dried" } else { "open" })).unwrap();
+        }
+        let img = Img::new(&c, c.pixels());
+        let ground = to_oklab(st.prepare(8, 1.0, 5).pixels()[0]);
+        let floor = img.l(170.0, 420.0, 10.0);
+        let wood = img.l(500.0, 150.0, 10.0);
+        let track = (0..40).filter(|&k| {
+            let x = 720.0 + 5.8 * k as f32;
+            let y = 215.0 + if x < 830.0 { 20.0 * (x - 700.0) / 130.0 } else { 20.0 - 10.0 * (x - 830.0) / 130.0 };
+            (-10..=10).any(|dy| de(img.at(x, y + dy as f32, 0.0), ground) < 0.06)
+        }).count() as f32 / 40.0;
+        [img.l(170.0, 250.0, 30.0) - floor, img.l(500.0, 270.0, 8.0) - wood, track, 0.0]
+    };
+    println!("pitfalls (the later passage 30 min after, or after dry()):");
+    let (open, dried) = (run(false), run(true));
+    println!("  translucent rock: the rock gets {:.2} of the way to its look over a dried floor", open[0] / dried[0]);
+    println!("  fog band: snow over the wood's foot gets {:.2} of the way", open[1] / dried[1]);
+    println!("  plowed river: {:.0}% of the river's track shows the ground (dried first: {:.0}%)", open[2] * 100.0, dried[2] * 100.0);
+}
+
 fn stages(c: &Canvas, col: usize) -> String {
     (0..4).map(|row| {
         let (ox, oy) = cell(col, row);
@@ -471,10 +529,17 @@ fn main() {
     for row in 0..4 {
         gesture(&mut c, 0, row, &mut pre);
     }
+    if std::env::var("WET_LOOK").is_ok() {
+        println!("-- the wet look, before drying --");
+        for l in measure(&Img::new(&c, &c.seen()), &pre, mm) {
+            println!("{l}");
+        }
+    }
     c.dry();
     let img = Img::new(&c, c.pixels());
     for l in measure(&img, &pre, mm) {
         println!("{l}");
     }
     o.save(&mut c);
+    pitfalls(o.width);
 }

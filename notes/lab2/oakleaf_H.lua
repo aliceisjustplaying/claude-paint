@@ -180,7 +180,8 @@ work(MASS, {hand="body", tool="filbert 6", length={10, 24}, coverage=3.2, medium
   clip=MASS:grow(0.6), color=function(x, y) return mix("#2a3322", "#46522f", smoothstep(0.2, 0.7, VAL(x, y))) end})
 -- then at once, wet into the lay-in, the crown's big masses: values in steps (families, not a smooth
 -- ramp), the shade side cool with sky-lit tops, the sun side warm, strokes wrapping around their own
--- mass. (Laid 15 h later over the setting lay-in, the surface crazed and the relief drew worms.)
+-- mass. (First laid 15 h later over the setting lay-in; moved here wet into wet. The wormy grain
+-- seen then at 3200 turned out to be the varnish, not this: see oakleaf.md.)
 local function steps(v)
   local s = 0.12
   local i = math.floor(v / s)

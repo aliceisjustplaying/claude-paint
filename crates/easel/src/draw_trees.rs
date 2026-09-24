@@ -264,12 +264,22 @@ fn lay(lua: &Lua, trees: &[Rc<Tree>], b: &AnyUserData, opts: Option<Table>) -> R
 
 const WOOD_KEYS: &[&str] = &["color", "load", "every", "min", "max", "twigs", "pressure", "ramps", "shake", "clip", "detail"];
 
-/// How one wood stroke is laid: its first `m` points, the pressure knots
-/// along it (from the width), and the attack and release ramps.
+/// How one wood stroke is laid: its first `m` points, the pressure along
+/// it at evenly spaced knots (from the width), and the attack and release
+/// ramps.
 struct StrokePlan {
     m: usize,
-    knots: Vec<f32>,
+    pressure: Vec<f32>,
     ramps: (f32, f32),
+}
+
+/// Set a pressure profile (evenly spaced knots) on `b:stroke` options.
+/// `b:stroke`'s `pressure=` is a start and end pair, and `swell=` knots
+/// multiply it along the stroke, so the profile goes in as the swell over a
+/// flat pressure of 1: the brush presses 1 × knot, exactly the knot.
+fn set_pressure_profile(lua: &Lua, so: &Table, knots: Vec<f32>) -> Result<()> {
+    so.set("pressure", lua.create_sequence_from([1.0f32, 1.0])?)?;
+    so.set("swell", lua.create_sequence_from(knots)?)
 }
 
 /// Plan a wood stroke: `twigs` false drops a leading twig drawn on from the
@@ -284,10 +294,7 @@ fn plan_stroke(s: &WoodStroke, twigs: bool, bw: f32, end: Option<f32>, ramps: Op
     let (pts, w) = (&s.pts[..m], &s.w[..m]);
     // the limb's end is still a tip when its leading twig is left out
     let tip = s.tip;
-    let mut arc = vec![0.0f32; m];
-    for k in 1..m {
-        arc[k] = arc[k - 1] + ((pts[k].0 - pts[k - 1].0).powi(2) + (pts[k].1 - pts[k - 1].1).powi(2)).sqrt();
-    }
+    let arc = paint::path::arclen(pts);
     let total = arc[m - 1].max(1e-6);
     let nk = ((total / (0.75 * bw).max(0.5)).ceil() as usize + 1).clamp(2, 24);
     let mut knots = Vec::with_capacity(nk);
@@ -305,13 +312,13 @@ fn plan_stroke(s: &WoodStroke, twigs: bool, bw: f32, end: Option<f32>, ramps: Op
         *knots.last_mut().unwrap() = e.clamp(0.02, 1.0);
     }
     let (ra, rr) = ramps.unwrap_or((0.0, if tip { 0.12 } else { 0.0 }));
-    Ok(Some(StrokePlan { m, knots, ramps: (ra, if tip { rr } else { 0.0 }) }))
+    Ok(Some(StrokePlan { m, pressure: knots, ramps: (ra, if tip { rr } else { 0.0 }) }))
 }
 
 /// Lay the wood between `min` and `max` wide (the local width, so a stout
 /// limb's thin end is in the thin band) as strokes that start inside the
 /// wood they leave from, pressed to the wood's width along the way (the
-/// pressure follows the width through `swell` knots), lifting off only at
+/// pressure follows the width: `set_pressure_profile`), lifting off only at
 /// the tips. The fine wood is drawn at `detail` (see `Tree::drawn`).
 fn lay_wood(lua: &Lua, t: &Tree, b: &AnyUserData, opts: Option<Table>, detail: f32) -> Result<usize> {
     let opts = opts.unwrap_or(lua.create_table()?);
@@ -350,10 +357,9 @@ fn lay_wood(lua: &Lua, t: &Tree, b: &AnyUserData, opts: Option<Table>, detail: f
             };
             b.call_method::<()>("reload", (c, load))?;
         }
-        let (pts, knots, (ra, rr)) = (&s.pts[..plan.m], plan.knots, plan.ramps);
+        let (pts, (ra, rr)) = (&s.pts[..plan.m], plan.ramps);
         let so = lua.create_table()?;
-        so.set("pressure", lua.create_sequence_from([1.0f32, 1.0])?)?;
-        so.set("swell", lua.create_sequence_from(knots)?)?;
+        set_pressure_profile(lua, &so, plan.pressure)?;
         so.set("ramps", lua.create_sequence_from([ra, rr])?)?;
         so.set("shake", shake)?;
         if !clip.is_nil() {
@@ -751,7 +757,7 @@ mod tests {
         assert_eq!(with.m, s.pts.len());
         assert_eq!(without.m, s.own);
         for p in [&with, &without] {
-            assert!((p.knots.last().unwrap() - 0.03).abs() < 1e-6, "tip pressure {:?}", p.knots.last());
+            assert!((p.pressure.last().unwrap() - 0.03).abs() < 1e-6, "tip pressure {:?}", p.pressure.last());
             assert!((p.ramps.1 - 0.3).abs() < 1e-6, "release {:?}", p.ramps);
         }
     }

@@ -301,12 +301,17 @@ b:fullness()                 -- paint left, 0..1
 b:stroke({{100, 500}, {300, 520}, {500, 510}},
   {pressure={0.9, 0.3}, ramps={0.05, 0.4}, orient="across", shake=1, swell={1, 1.3, 0.8}, clip=m})
 b:touch(x, y, {pressure=0.6, drag={1, 0}, twist=0.2, angle=0.3, clip=m})
-b:mark_width(0.4)            -- round and rigger tips are pointed: width of a mark at this pressure
+b:mark_width(0.4)            -- width of a mark at this pressure
 b:pressure_for(0.5)          -- the pressure for a 0.5-unit line
-brush{kind="round", width=3, point=0.5}                -- a blunter point (1 = sharp, default)
+brush{kind="round", width=3, point=1}                  -- a pointed tip (0 = blunt, default; 0.5 a soft point)
 ```
 
-A flick that ends in a hairline is a stroke whose pressure falls to 0:
+Every brush is blunt unless you give it a `point`: a round or a rigger lays
+about the width you asked for at any pressure. A pointed tip (`point=1`) is
+a cone of hairs: at light pressure only the point touches (a hairline),
+pressed it spreads to the belly, so its width follows the pressure and
+a stroke draws down to a point on the lift. With a pointed brush, a flick
+that ends in a hairline is a stroke whose pressure falls to 0:
 `b:stroke({root, mid, tip}, {pressure={0.75, 0}, ramps={0.1, 0.75}})`.
 
 A brush keeps its paint across strokes and chunks: several strokes from one
@@ -623,7 +628,7 @@ hanging from a bough), `"top"` (along its upper face) or `"twig"` (on
 dead boughs). `f:paint(brush, {color=, lit=, kind=, z=, every=10,
 load=0.8, pressure={0.75, 0.05}, ramps=, shake=, clip=, fit=true})` lays
 them, back to front. `color` may be `function(stroke)`. `fit` presses the
-pointed brush to each stroke's width. It returns the count. `lit` ranges
+brush to each stroke's width. It returns the count. `lit` ranges
 are half open, so `{0, 0.5}` and `{0.5, 1}` split the strokes.
 
 **A wood.** Draw the wood's skyline, give the line its feet stand on,
@@ -752,8 +757,9 @@ the wood goes on or where twigs leave it. A limb's leading twig is drawn
 on in the same stroke, so the limb runs out into it in one movement. So
 paint the bands thick to thin (`t:wood(3.5)`, then `min=1.2, max=3.5`, then
 `max=1.2`) and nothing floats. Give each band a brush that can lay its
-widths: a pointed brush's mark runs from about two hairs (`b:mark_width(0)`)
-to a little over its size (`b:mark_width(1)`), and `paint_wood` presses up
+widths: a brush's mark runs from `b:mark_width(0)` (about a third of its size,
+or two hairs with a pointed tip) to a little over its size
+(`b:mark_width(1)`), and `paint_wood` presses up
 to that, no further. A `rigger 0.55` lays 0.21 to 0.71, so over the whole
 fine band (0.12 to 1.2) it paints every twig and small limb about the same
 width: split it (`rigger 0.9` for 0.5 to 1.2, `rigger 0.55` below 0.5), and
@@ -844,7 +850,7 @@ What you get:
   z, depth, turn, dead, clump}`. `t:paint(brush, {color=, lit=, depth=,
   turn=, dead=, share=1, every=10, load=0.8, pressure={0.75, 0.05},
   ramps=, shake=, clip=, fit=true})` lays them back to front, with the
-  pointed brush pressed to each touch's width. `color` may be
+  brush pressed to each touch's width. `color` may be
   `function(touch)` (autumn: mix by `touch.turn`). `share` lays a
   deterministic part of them. The `lit` ranges are half open.
 - **Wood strokes.** `t:paint_wood(brush, {color=, min=, max=, detail=,
@@ -1225,7 +1231,8 @@ shadow and the Belt of Venus, and the clouds catch the light from below.
 5. The motifs: bodies and proxies placed in the world, `v = w:view()`,
    then shadows and contact, trees (limbs, then foliage dark to light),
    rocks from `v.form`, meadows from `sward`.
-6. The small particulars last, with pointed brushes: twigs, blades,
+6. The small particulars last, with small rounds and riggers (`point=1`
+   for a tip that draws down to a hairline): twigs, blades,
    flowers, figures.
 7. `wait(24*60); varnish(); cracks{}; relief()`. The craquelure is part of
    the finished look: a Friedrich is two centuries old and cracked, and

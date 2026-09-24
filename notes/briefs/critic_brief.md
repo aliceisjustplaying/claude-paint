@@ -38,4 +38,4 @@ notes: <a short paragraph of teacher's critique>
 Then reply with the same text.
 
 ## Anonymity (required)
-This project is published under the pseudonym "alice". Never write the owner's real name or an absolute home path into any committed file: write paths as `~/...` (e.g. `~/tmp/...`, `~/src/a/...`). A pre-commit hook rejects violations.
+This project is published under the pseudonym "alice". Never write the user's real name or an absolute home path into any committed file: write paths as `~/...` (e.g. `~/tmp/...`, `~/src/a/...`). A pre-commit hook rejects violations.

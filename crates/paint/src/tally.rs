@@ -165,15 +165,10 @@ pub fn touch_secs() -> f64 {
     (pace::FITTS_A + pace::FITTS_B * (1.0 + 3.0 / 2.0f64).log2() + pace::DWELL).max(pace::TAP_MIN)
 }
 
-/// Path length of `pts` (units).
-pub fn path_len(pts: &[(f32, f32)]) -> f32 {
-    pts.windows(2).map(|w| ((w[1].0 - w[0].0).powi(2) + (w[1].1 - w[0].1).powi(2)).sqrt()).sum()
-}
-
 impl Tally {
     /// A stroke of `tool` along `pts` (units).
     pub fn stroke(&mut self, tool: &Tool, pts: &[(f32, f32)], mm_per_unit: f32) {
-        let len = path_len(pts) as f64 * mm_per_unit as f64;
+        let len = crate::path::length(pts) as f64 * mm_per_unit as f64;
         self.strokes += 1;
         self.length_mm += len;
         self.secs += stroke_secs(len, mark_mm(tool, mm_per_unit));

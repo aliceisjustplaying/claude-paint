@@ -1389,12 +1389,15 @@ impl Tree {
         // this band (a brush for stouter wood can't lay a twig's hairline)
         let mut lead_of = vec![None; n];
         for (i, l) in self.limbs.iter().enumerate() {
-            if l.lead && on[i] && l.pts.len() >= 2 && l.w.iter().all(|w| band(*w)) {
-                if let Some(p) = l.parent {
-                    if on[p] && self.limbs[p].w.last().is_some_and(|w| band(*w)) {
-                        lead_of[p] = Some(i);
-                    }
-                }
+            if l.lead
+                && on[i]
+                && l.pts.len() >= 2
+                && l.w.iter().all(|w| band(*w))
+                && let Some(p) = l.parent
+                && on[p]
+                && self.limbs[p].w.last().is_some_and(|w| band(*w))
+            {
+                lead_of[p] = Some(i);
             }
         }
         let mut out = vec![];
@@ -1420,23 +1423,19 @@ impl Tree {
                 // a limb is pulled out of its parent: its stroke starts half a
                 // segment back along the parent, at its own width, so the
                 // brush is down on painted wood before the fork
-                if a == 0 {
-                    if let Some(p) = l.parent {
-                        let pp = &self.limbs[p].pts;
-                        if let Some(j) = pp.iter().position(|q| *q == l.pts[0]).filter(|&j| j > 0) {
-                            let (q, r) = (pp[j - 1], pp[j]);
-                            pts.insert(0, (0.5 * (q.0 + r.0), 0.5 * (q.1 + r.1)));
-                            w.insert(0, l.w[0]);
-                        }
-                    }
+                if a == 0
+                    && let Some(p) = l.parent
+                    && let Some(j) = self.limbs[p].pts.iter().position(|q| *q == l.pts[0]).filter(|&j| j > 0)
+                {
+                    let (q, r) = (self.limbs[p].pts[j - 1], self.limbs[p].pts[j]);
+                    pts.insert(0, (0.5 * (q.0 + r.0), 0.5 * (q.1 + r.1)));
+                    w.insert(0, l.w[0]);
                 }
                 let tip = k >= m;
                 let own = pts.len();
-                if tip {
-                    if let Some(t) = lead_of[i] {
-                        pts.extend_from_slice(&self.limbs[t].pts[1..]);
-                        w.extend_from_slice(&self.limbs[t].w[1..]);
-                    }
+                if tip && let Some(t) = lead_of[i] {
+                    pts.extend_from_slice(&self.limbs[t].pts[1..]);
+                    w.extend_from_slice(&self.limbs[t].w[1..]);
                 }
                 if pts.len() >= 2 {
                     out.push(WoodStroke { pts, w, limb: i, tip, fine: self.is_fine(l), own });

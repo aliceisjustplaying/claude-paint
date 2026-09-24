@@ -27,7 +27,8 @@ it is the right direction; a painting that looks digital is the wrong one.
 
 ## Lab round 2 (`notes/lab2/`, blind sheets; decoded afterwards)
 Her yardstick again: "we are slowly moving from looks digital, looks still
-kind of Pixar, to bad painter, which is great. I love that."
+kind of pixels [voice-to-text had "Pixar"; Alice: not Pixar, likely
+"pixels"], to bad painter, which is great. I love that."
 - **Rock: P (hierarchical H).** P's 3200 crop "looks actually pretty good";
   zoomed out, "more like bad painter, which again, good". Q (round 1's B)
   has dots on the lit part that look like a digital anomaly. The shadow is

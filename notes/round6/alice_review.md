@@ -122,3 +122,10 @@ thinner, which is bad here"; the difference between today and today-wet
 worse: the pointed-brush default (thinner marks) and something that
 smooths the light (candidates: relief 0.2 → 0.06, removing the canvas
 grain and mottle; other engine changes since round 2).
+
+## The winter A/B (notes/round7/winter_ab/)
+"d and the original are actually remarkably close. There may be cases d
+almost edges out the original." In the fir-group crop the original is good
+and the other two bad. **"So we want d"**: today's engine with the pointed
+brush default off and the glaze min-film floor off. "We don't want to fall
+into the trap of copying the round 2 original."

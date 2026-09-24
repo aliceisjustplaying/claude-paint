@@ -241,7 +241,9 @@ found.
   - `existing_logs_replay_unchanged`: `paintings/lua/example.lua` and
     (in release builds) `notes/loops/l5_near.lua` at 160 px give the PNG
     hashes recorded with the easel of commit 2c5a658, built in the same
-    profile (debug and release floats differ);
+    profile (debug and release floats differ); re-recorded for the
+    wet-on-wet engine (r6-wet, `notes/wet.md`), which changes output on
+    purpose (`PRINT_HASHES=1` prints them);
   - `hand_time_is_the_same_at_any_thread_count`: a hand-time program at
     `RAYON_NUM_THREADS` 1 and 4 gives identical PNGs and clocks.
 - By hand: `l5_near.lua` and `l3_green.lua` at 1000 px are byte-identical

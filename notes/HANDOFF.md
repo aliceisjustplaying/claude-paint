@@ -15,6 +15,19 @@ horizontal line through a grass patch in painting A = arm 1); git identity: this
 repo sets `alice` locally (the per-directory git identity include for ~/src/a is missing on
 this machine). Next: decide the direction with Alice after Fable's advice.
 
+**Morning summary (2026-09-25):** Fable (`notes/advice/fable_r7.md`): "the engine isn't what's
+stopping you. The brief is." The composition guide `notes/briefs/friedrich_painter.md`
+(required reading tonight) says "You can have no figure at all", "Keep the foreground
+bare", "Leave out, then leave out more" (lines 34, 58, 60): it bans the winter picture;
+round 2's brief said the opposite ("full of tiny particular details",
+`notes/amnesia_brief.md:49`); tonight's painters obeyed ("There is no figure"). It
+proposes: round 2's short brief back, assigned themes (winter, coast, mountains) as a
+patron would, hand time off for painters, the winter program as a golden picture gate,
+round 8 = six painters (each theme in Rust and at the easel without procedural tools),
+blind against round 2. Critics on the three arms: `notes/round7/arms/critics/` (C
+strongest; "a relationship, not just a motif"; the "JPEG" look = patchy fine-scale
+mottling over smooth fields). Texture forensics: branch r7-texture.
+
 **Update 2026-09-24 morning: Round 6 night 1 ran (steps 1–4 of the plan
 below, plus critic panels). Read `notes/round6.md` first: what landed on
 main, what waits on branches and the decisions for Alice.**

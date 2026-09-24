@@ -87,6 +87,73 @@ fn shrink(d: f32, decay: f32, a_c: f32) -> f32 {
     d.signum() * (m * decay).max(m.min(a_c))
 }
 
+/// The two bands a wet layer levels in at a pixel size: the bristle and
+/// thread scale (box radius `r1` px, wavelength `lam1` m) and the stroke
+/// scale (`r2`, `lam2`).
+struct Bands {
+    r1: usize,
+    r2: usize,
+    lam1: f32,
+    lam2: f32,
+}
+
+impl Bands {
+    fn at(px_mm: f32) -> Bands {
+        let r1 = ((0.15 / px_mm).round() as usize).max(1);
+        let r2 = ((0.9 / px_mm).round() as usize).max(r1 + 1);
+        let lam1 = ((2 * r1 + 1) as f32 * px_mm * 1.5).max(0.25) * 1e-3;
+        let lam2 = ((2 * r2 + 1) as f32 * px_mm * 1.5).max(1.5) * 1e-3;
+        Bands { r1, r2, lam1, lam2 }
+    }
+}
+
+/// Make the film's total exactly the paint laid: the local conservation
+/// before this is only approximate (blur edges), so the film is scaled by
+/// one small factor, except that no pixel is pushed past its bound (below
+/// `lo` when the factor shrinks the film, above `hi` when it grows it):
+/// those stop at the bound and the rest make up the difference. When no
+/// bound is in the way (always, for `settle`) it is the one factor.
+fn conserve_total(add: &[f32], out: &mut [f32], lo: impl Fn(usize) -> f32 + Sync, hi: impl Fn(usize) -> f32 + Sync) {
+    let (sa, so): (f64, f64) = (add.iter().map(|&v| v as f64).sum(), out.iter().map(|&v| v as f64).sum());
+    debug_assert!(so.is_finite(), "settle: non-finite film");
+    if !(so > 0.0 && so.is_finite()) {
+        return;
+    }
+    let mut k = (sa / so) as f32;
+    let down = k < 1.0;
+    // where a pixel stops, and whether the factor would carry it past that
+    let stop = |i: usize, v: f32| if down { v.min(lo(i)) } else { v.max(hi(i)) };
+    let past = |i: usize, v: f32, k: f32| if down { v * k < lo(i) } else { v * k > hi(i) };
+    let mut pinned = vec![false; out.len()];
+    // pinning some makes the factor on the rest stronger, which may carry
+    // more past theirs: a few rounds settle it
+    for _ in 0..8 {
+        let mut more = false;
+        for (i, p) in pinned.iter_mut().enumerate() {
+            if !*p && past(i, out[i], k) {
+                *p = true;
+                more = true;
+            }
+        }
+        if !more {
+            break;
+        }
+        let (mut fixed, mut free) = (0.0f64, 0.0f64);
+        for (i, &v) in out.iter().enumerate() {
+            if pinned[i] {
+                fixed += stop(i, v) as f64;
+            } else {
+                free += v as f64;
+            }
+        }
+        if free <= 0.0 {
+            break;
+        }
+        k = ((sa - fixed) / free) as f32;
+    }
+    out.par_iter_mut().zip(&pinned).enumerate().for_each(|(i, (o, &p))| *o = if p { stop(i, *o) } else { *o * k });
+}
+
 /// Separable box blur of a rect-sized buffer (w × h), radius r, clamped.
 pub(crate) fn box_blur(src: &[f32], w: usize, h: usize, r: usize) -> Vec<f32> {
     if r == 0 {
@@ -193,12 +260,7 @@ impl Canvas {
         let (x0, y0, x1, y1) = rect;
         let (rw, rh) = (x1 - x0, y1 - y0);
         let w = self.f.w;
-        let px = self.px_mm();
-        // bands: bristle/thread scale and stroke scale
-        let r1 = ((0.15 / px).round() as usize).max(1);
-        let r2 = ((0.9 / px).round() as usize).max(r1 + 1);
-        let lam1 = ((2 * r1 + 1) as f32 * px * 1.5).max(0.25) * 1e-3;
-        let lam2 = ((2 * r2 + 1) as f32 * px * 1.5).max(1.5) * 1e-3;
+        let Bands { r1, r2, lam1, lam2 } = Bands::at(self.px_mm());
         let mut old = vec![0.0f32; rw * rh];
         let mut s = vec![0.0f32; rw * rh];
         for y in 0..rh {
@@ -249,15 +311,18 @@ impl Canvas {
                 *o = add[i];
             }
         });
-        // the local ratio is only approximately conservative (blur edges);
-        // make the total exact
-        let (sa, so): (f64, f64) = (add.iter().map(|&v| v as f64).sum(), out.iter().map(|&v| v as f64).sum());
-        debug_assert!(so.is_finite(), "settle: non-finite film");
-        if so > 0.0 && so.is_finite() {
-            let k = (sa / so) as f32;
-            out.par_iter_mut().for_each(|o| *o *= k);
-        }
-        for y in 0..rh {
+        conserve_total(add, &mut out, |_| f32::NEG_INFINITY, |_| f32::INFINITY);
+        self.raise(rect, &old, add, &out);
+        out
+    }
+
+    /// Raise the height of `rect` to the surface under the paint (`old`)
+    /// plus the film settled there (`out`), where paint was laid (`add`);
+    /// all three are `rect`-sized.
+    fn raise(&mut self, rect: (usize, usize, usize, usize), old: &[f32], add: &[f32], out: &[f32]) {
+        let (x0, y0, x1, y1) = rect;
+        let (rw, w) = (x1 - x0, self.f.w);
+        for y in 0..y1 - y0 {
             for x in 0..rw {
                 let i = y * rw + x;
                 if add[i] > 0.0 {
@@ -266,9 +331,120 @@ impl Canvas {
             }
         }
         self.surf_gen += 1;
+    }
+
+    /// A thin fluid film (a glaze or varnish, `add` µm per pixel of the
+    /// whole buffer) over a **dry** surface levels its own thickness, not the
+    /// relief under it. Returns the film per pixel (µm) and raises the height.
+    ///
+    /// `settle` levels the whole surface as if it were fluid, which is right
+    /// when the wet layer is thick next to the relief. A 2 µm varnish over
+    /// 100–300 µm dry impasto can't level the impasto: leveling there puts
+    /// the level below the ridge tops (no film) and far above the foot of
+    /// every step (tens of µm of film, dark brown lines at 3200px). Here the
+    /// film follows the relief and only flows along it (lubrication theory,
+    /// ∂h/∂t = −∇·(h³σ/3η ∇∇²z)): on a convex spot of band amplitude A (above
+    /// the yield floor a_c) it thins as dh/dt = −h³σAk⁴/3η, which integrates
+    /// in closed form to h = h₀ / √(1 + 2 (A/h₀)(T/τ₀)) (τ₀ = Orchard's τ at
+    /// h₀): drainage slows as the film thins, so peaks keep a film. They keep
+    /// at least `PEAK_FILM_UM` (a wetting film: the solvent is gone and the
+    /// resin has set before it drains further). What drains moves downhill
+    /// about one bristle band and gathers in the concave spots there, at
+    /// most `POOL_MAX` times the film laid (a little deeper in the hollows,
+    /// not a line of pooled color at a step's foot). Volume is conserved
+    /// locally and then exactly, without pushing a pixel past either bound
+    /// (see `conserve_total`).
+    pub(crate) fn settle_film(&mut self, add: &[f32], stiff: f32) -> Vec<f32> {
+        let (w, h) = (self.f.w, self.f.h);
+        let n = w * h;
+        debug_assert_eq!(add.len(), n);
+        let add: Vec<f32> = add.iter().map(|&a| if a.is_finite() && a >= ADD_EPS_UM { a } else { 0.0 }).collect();
+        let Bands { r1, r2, lam1, lam2 } = Bands::at(self.px_mm());
+        let old = self.height.clone();
+        // the relief's bands (convex > 0, concave < 0), µm
+        let l1 = box_blur(&box_blur(&old, w, h, r1), w, h, r1);
+        let l2 = box_blur(&box_blur(&l1, w, h, r2), w, h, r2);
+        let (eta, ty) = rheology(stiff);
+        // per pixel: the drainage rate 2 Σ (A/h₀)(T/τ₀) on convex bands and
+        // the gathering weight on concave ones
+        let (rate, gather): (Vec<f32>, Vec<f32>) = (0..n)
+            .into_par_iter()
+            .map(|i| {
+                let a = add[i];
+                if a <= 0.0 {
+                    return (0.0, 0.0);
+                }
+                let hm = a * 1e-6;
+                let mut rate = 0.0;
+                let mut gather = 0.0;
+                for (lam, d) in [(lam1, old[i] - l1[i]), (lam2, l1[i] - l2[i])] {
+                    let (decay, a_c) = level_band(lam, hm, eta, ty, SET_TIME);
+                    if !a_c.is_finite() {
+                        continue;
+                    }
+                    // T/τ₀ from the decay factor e^(−T/τ₀)
+                    let t_tau = -decay.max(1e-30).ln();
+                    let over = (d.abs() - a_c).max(0.0) / a;
+                    if d > 0.0 {
+                        rate += 2.0 * over * t_tau;
+                    } else {
+                        gather += over * t_tau;
+                    }
+                }
+                (rate, gather.min(1.0))
+            })
+            .unzip();
+        // film left where it drains, and what it gives up
+        let kept: Vec<f32> = (0..n)
+            .map(|i| {
+                let a = add[i];
+                if a <= 0.0 {
+                    return 0.0;
+                }
+                (a / (1.0 + rate[i]).sqrt()).max(a.min(PEAK_FILM_UM))
+            })
+            .collect();
+        let drain: Vec<f32> = (0..n).map(|i| add[i] - kept[i]).collect();
+        // it moves about one bristle band downhill, into the concave spots
+        let wgt: Vec<f32> = (0..n).map(|i| add[i] * gather[i]).collect();
+        let rd = 2 * r1;
+        let bd = box_blur(&box_blur(&drain, w, h, rd), w, h, rd);
+        let bw = box_blur(&box_blur(&wgt, w, h, rd), w, h, rd);
+        let gain: Vec<f32> = (0..n)
+            .map(|i| {
+                if wgt[i] <= 0.0 || bw[i] <= 0.0 {
+                    return 0.0;
+                }
+                let g = wgt[i] * bd[i] / bw[i];
+                if g.is_finite() { g.min((POOL_MAX - 1.0) * add[i]) } else { 0.0 }
+            })
+            .collect();
+        // only what found a place to gather left the peaks: scale the
+        // drainage by the gain it made nearby (the rest stays in place)
+        let bg = box_blur(&box_blur(&gain, w, h, rd), w, h, rd);
+        let mut out: Vec<f32> = (0..n)
+            .map(|i| {
+                let a = add[i];
+                if a <= 0.0 {
+                    return 0.0;
+                }
+                let used = if bd[i] > 0.0 { (bg[i] / bd[i]).clamp(0.0, 1.0) } else { 0.0 };
+                let v = a - drain[i] * used + gain[i];
+                if v.is_finite() { v.max(0.0) } else { a }
+            })
+            .collect();
+        conserve_total(&add, &mut out, |i| add[i].min(PEAK_FILM_UM), |i| POOL_MAX * add[i]);
+        self.raise((0, 0, w, h), &old, &add, &out);
         out
     }
 }
+
+/// Film a glaze or varnish keeps on the peaks of a dry relief however much
+/// it drains, µm (capped by the film laid): about the thinnest continuous
+/// film (`MIN_FILM_UM`).
+const PEAK_FILM_UM: f32 = crate::canvas::MIN_FILM_UM;
+/// Deepest a thin film gathers in a hollow of a dry relief, times the film laid.
+const POOL_MAX: f32 = 2.0;
 
 /// Smooth value noise in 0..1 (bilinear with smoothstep), lattice spacing 1.
 pub(crate) fn vnoise(x: f32, y: f32, seed: u64) -> f32 {
@@ -305,4 +481,64 @@ fn linen_um(xm: f32, ym: f32, l: &Linen) -> f32 {
     // fiber fuzz
     let grit = vnoise(x0 * 3.1, y0 * 3.1, seed + 19) - 0.5;
     l.crown_um * (a.max(b) + 0.06 * grit)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::color::hex;
+
+    fn total(v: &[f32]) -> f64 {
+        v.iter().map(|&x| x as f64).sum()
+    }
+
+    /// The exact global correction stops each pixel at its bound (the peak
+    /// film when it scales down, the pool cap when it scales up) and the
+    /// others make up the difference, so the total is still exact.
+    #[test]
+    fn the_total_is_made_exact_within_the_bounds() {
+        // scaling down: pixel 0 is at its floor
+        let add = [1.0f32, 1.0, 1.0, 1.0];
+        let mut out = [0.5f32, 2.0, 1.0, 1.0];
+        conserve_total(&add, &mut out, |_| 0.5, |_| f32::INFINITY);
+        assert_eq!(out[0], 0.5, "{out:?}");
+        assert!((total(&out) - 4.0).abs() < 1e-6, "{out:?}");
+        // scaling up: pixel 1 is at its cap
+        let mut out = [0.5f32, 2.0, 0.5, 0.5];
+        conserve_total(&add, &mut out, |_| 0.0, |_| 2.0);
+        assert_eq!(out[1], 2.0, "{out:?}");
+        assert!((total(&out) - 4.0).abs() < 1e-6, "{out:?}");
+        // no bound in the way: one factor for all, as before
+        let mut out = [0.5f32, 2.0, 1.0, 1.0];
+        conserve_total(&add, &mut out, |_| 0.0, |_| f32::INFINITY);
+        let k = (4.0f64 / 4.5) as f32;
+        assert_eq!(out, [0.5 * k, 2.0 * k, k, k]);
+    }
+
+    /// A varnish over tall dry impasto at 3200px (0.094 mm/px) keeps its
+    /// peak film and pool cap exactly, not to within the global correction.
+    #[test]
+    fn a_film_over_impasto_keeps_its_bounds_exactly() {
+        let (w, h) = (240usize, 240usize);
+        let mut c = Canvas::new(w, 1.0, hex("#808080")).with_size_mm(w as f32 * 0.094);
+        for y in 0..h {
+            for x in 0..w {
+                let (xf, yf) = (x as f32, y as f32);
+                let mut z = 20.0 * ((xf * 0.9).sin() * (yf * 0.8).sin()).abs();
+                for k in 0..9 {
+                    let (cx, cy) = (30.0 + 80.0 * (k % 3) as f32, 30.0 + 80.0 * (k / 3) as f32);
+                    if ((xf - cx) / 22.0).powi(2) + ((yf - cy) / 12.0).powi(2) < 1.0 {
+                        z += 100.0 + 25.0 * k as f32;
+                    }
+                }
+                c.height[y * w + x] = z;
+            }
+        }
+        let add = vec![2.25f32; w * h];
+        let t = c.settle_film(&add, 0.05);
+        assert!((total(&t) - total(&add)).abs() < total(&add) * 1e-6, "volume {} -> {}", total(&add), total(&t));
+        let (lo, hi) = t.iter().fold((f32::MAX, 0.0f32), |(l, m), &v| (l.min(v), m.max(v)));
+        assert!(lo >= PEAK_FILM_UM, "a peak thinned past the peak film: {lo} µm");
+        assert!(hi <= POOL_MAX * 2.25, "a hollow pooled past the cap: {hi} µm");
+    }
 }

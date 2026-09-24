@@ -13,6 +13,8 @@ use crate::color::{Rgb, from_oklab, to_oklab};
 use crate::mask::Mask;
 use crate::palette::Palette;
 use crate::rng::Rng;
+use crate::sched::TileOrder;
+use crate::tally::Piles;
 use crate::wet::Paint;
 
 /// How a handling reads its color field.
@@ -136,18 +138,18 @@ pub struct Handling<'a> {
     /// Uneven density: strokes crowd in some places and thin in others
     /// (relative amplitude of the stroke density, 0 = even).
     pub clump: f32,
-    /// The order the area is worked in.
-    pub order: Order,
-    /// `order` was asked for (`order()`, `sweep()`), not left at the
-    /// handling's default: hand time keeps it (see `run_plans`).
-    pub order_set: bool,
+    /// The order the area is worked in, if asked for (`order()`, `sweep()`,
+    /// `ruler()`); None: the handling's default, `Order::Passages`, whose
+    /// passages hand time paints in a sweep down (`Canvas::paint_pass`).
+    pub order: Option<Order>,
 }
 
 /// The order a painter works an area in.
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub enum Order {
     /// Passage by passage: the area is worked patch by patch, the strokes in a
     /// patch laid side by side as the hand moves across it.
+    #[default]
     Passages,
     /// One sweep across the whole area in the given direction (radians;
     /// `FRAC_PI_2` = top to bottom), band by band: a blender fusing a
@@ -197,8 +199,7 @@ impl<'a> Handling<'a> {
             broken: 0.06,
             swell: 0.15,
             clump: 0.3,
-            order: Order::Passages,
-            order_set: false,
+            order: None,
         }
     }
     /// Ruler strokes: straight, even, evenly spread, in random order (the
@@ -212,8 +213,7 @@ impl<'a> Handling<'a> {
         self.broken = 0.0;
         self.swell = 0.0;
         self.clump = 0.0;
-        self.order = Order::Scatter;
-        self
+        self.order(Order::Scatter)
     }
     /// Bow strokes into arcs (sagitta / length, sd); `wave` of them are S-curves.
     pub fn curve(mut self, bow: f32, wave: f32) -> Self {
@@ -252,8 +252,7 @@ impl<'a> Handling<'a> {
         self
     }
     pub fn order(mut self, order: Order) -> Self {
-        self.order = order;
-        self.order_set = true;
+        self.order = Some(order);
         self
     }
     /// Work the area in one sweep in direction `angle` (see `Order::Sweep`).
@@ -490,6 +489,15 @@ impl Canvas {
     /// checkerboard phase can't share a pixel, so each gets its own brush and
     /// they are painted in parallel; phases run one after another.
     pub fn work(&mut self, mask: &Mask, hd: &Handling, seed: u64) {
+        self.work_with(&mut Piles::default(), mask, hd, seed);
+    }
+
+    /// `work`, dipping into the piles already mixed on the palette (a
+    /// sitting's, shared by its passes and held brushes) and leaving the
+    /// new ones there: which trips to the palette are reloads and which are
+    /// new mixes, in the hand's ledger (`tally`). `work` starts from a
+    /// clean palette.
+    pub fn work_with(&mut self, piles: &mut Piles, mask: &Mask, hd: &Handling, seed: u64) {
         hd.tool.assert_valid();
         if let Some(t) = &hd.cut_in {
             t.assert_valid();
@@ -611,17 +619,24 @@ impl Canvas {
             (None, false) => None,
         };
         let before = self.wet.current;
-        self.run_plans(plans, (ex, ey), gap, &hd.tool, hd, hd.ramps, clip, seed, &mut rng, true);
+        let slice = self.hand_slice_secs();
+        // with hand time on, the pass's first slices can set before the look
+        // (baked into the dry film, no longer wet): the film before the pass
+        // tells that paint from a gap
+        let film0 = (hd.fills() && slice.is_some()).then(|| self.film.clone());
+        self.run_plans(plans, (ex, ey), gap, &hd.tool, hd, hd.ramps, clip, seed, &mut rng, piles, slice);
         if hd.fills() {
-            self.fill_gaps(mask, hd, before, clip, seed);
+            self.fill_gaps(mask, hd, before, film0.as_deref(), clip, seed);
         }
         if let Some(edge) = &hd.cut_in {
-            self.cut_in_edges(mask, edge, hd, seed ^ 0xED6E, &mut rng);
+            self.cut_in_edges(mask, edge, hd, seed ^ 0xED6E, &mut rng, piles);
         }
     }
 
     /// Look and fill: find the bare spots the pass (strokes with ids above
-    /// `before`) left inside the region and lay a short stroke through each,
+    /// `before`) left inside the region: pixels it didn't reach, or where
+    /// it laid less than `FILL_BARE`, wet or (with `film0`, the dry film
+    /// before a hand-timed pass) set since. Lay a short stroke through each,
     /// as a painter covering a passage does. The spots are gathered on a grid
     /// of cells half a brush wide (units, so any resolution fills the same
     /// spots); a cell is filled when its bare area is at least 0.5% of a
@@ -629,7 +644,7 @@ impl Canvas {
     /// loop. Deterministic (its own random stream), and it sees only the
     /// pixels the canvas holds (a crop's margin is wider than a fill stroke
     /// reaches).
-    fn fill_gaps(&mut self, mask: &Mask, hd: &Handling, before: u32, clip: Option<&Mask>, seed: u64) {
+    fn fill_gaps(&mut self, mask: &Mask, hd: &Handling, before: u32, film0: Option<&[f32]>, clip: Option<&Mask>, seed: u64) {
         let f = self.f;
         let w = hd.tool.width.max(0.3);
         let cell = (0.5 * w).max(1.5 / f.scale);
@@ -641,7 +656,11 @@ impl Canvas {
             let uy = f.uy(y);
             for x in 0..f.w {
                 let i = y * f.w + x;
-                let bare = self.wet.stroke[i] <= before || self.wet.vol[i] < FILL_BARE;
+                let laid = match film0 {
+                    None => self.wet.vol[i],
+                    Some(f0) => self.wet.vol[i] + (self.film[i] - f0[i]),
+                };
+                let bare = self.wet.stroke[i] <= before || laid < FILL_BARE;
                 if !bare {
                     continue;
                 }
@@ -706,13 +725,15 @@ impl Canvas {
         }
         if !plans.is_empty() {
             let mut rng = Rng::new(seed ^ 0xF111);
-            self.run_plans(plans, (ex, ey), w * 2.0, &hd.tool, hd, hd.ramps, clip, seed ^ 0xF111, &mut rng, false);
+            // (no palette: every dab is `fresh`, a fraction of a reload of
+            // the pass's paint)
+            self.run_plans(plans, (ex, ey), w * 2.0, &hd.tool, hd, hd.ramps, clip, seed ^ 0xF111, &mut rng, &mut Piles::default(), None);
         }
     }
 
     /// Cut in the edges of `mask`: short strokes of the `tool` laid along the
     /// region's outline, just inside it, the way a painter sharpens a form.
-    fn cut_in_edges(&mut self, mask: &Mask, tool: &Tool, hd: &Handling, seed: u64, rng: &mut Rng) {
+    fn cut_in_edges(&mut self, mask: &Mask, tool: &Tool, hd: &Handling, seed: u64, rng: &mut Rng, piles: &mut Piles) {
         let f = mask.f;
         let step = (tool.width * 0.5).max(1.0 / f.scale);
         let inside = |p: (f32, f32)| p.0 >= 0.0 && p.1 >= 0.0 && p.0 < f.width() && p.1 < f.height() && mask.data[f.index(p.0, p.1)] >= 0.5;
@@ -768,17 +789,18 @@ impl Canvas {
             ring += 1;
         }
         if !plans.is_empty() {
-            self.run_plans(plans, (ex, ey), tool.width * 4.0, tool, hd, (0.03, 0.08), hd.limit.as_deref(), seed, rng, false);
+            self.run_plans(plans, (ex, ey), tool.width * 4.0, tool, hd, (0.03, 0.08), hd.limit.as_deref(), seed, rng, piles, None);
         }
     }
 
-    /// Paint planned strokes: group them into tiles, then paint the tiles in
-    /// four checkerboard phases, tiles within a phase in parallel. With hand
-    /// time on and `sliced`, in slices of hand time with the paint ageing
-    /// between them (not for strokes whose ids were fixed in advance: a
-    /// wait's watermark needs the strokes after it to take later ids).
+    /// Paint planned strokes as one pass (`paint_pass`): group them into
+    /// tiles, count them in the hand's ledger, then paint the tiles in
+    /// order, in parallel wherever that can't change the result. With hand
+    /// time on, `slice` (s) cuts the pass into slices with the paint ageing
+    /// between them (None for the fill and cut-in sub-passes: their time
+    /// goes on the clock when the verb ends).
     #[allow(clippy::too_many_arguments)]
-    fn run_plans(&mut self, plans: Vec<(f32, f32, Option<Rect>, Plan)>, (ex, ey): (f32, f32), gap: f32, tool: &Tool, hd: &Handling, ramps: (f32, f32), clip: Option<&Mask>, seed: u64, rng: &mut Rng, sliced: bool) {
+    fn run_plans(&mut self, plans: Vec<(f32, f32, Option<Rect>, Plan)>, (ex, ey): (f32, f32), gap: f32, tool: &Tool, hd: &Handling, ramps: (f32, f32), clip: Option<&Mask>, seed: u64, rng: &mut Rng, piles: &mut Piles, slice: Option<f64>) {
         let f = self.f;
         // tiles are sized per axis from the footprints: tiles painted at the
         // same time are one tile apart, so a tile at least twice the largest
@@ -792,16 +814,13 @@ impl Canvas {
         }
         let mut tiles: Vec<Vec<Plan>> = (0..tw * th).map(|_| Vec::new()).collect();
         // pixel footprint of each tile: the union of its strokes'
-        let mut tile_rect: Vec<Option<Rect>> = vec![None; tw * th];
+        let mut rects: Vec<Option<Rect>> = vec![None; tw * th];
         for (cx, cy, rect, p) in plans {
             let tx = ((cx / tile_x) as usize).min(tw - 1);
             let ty = ((cy / tile_y) as usize).min(th - 1);
             let t = ty * tw + tx;
             if let Some(r) = rect {
-                tile_rect[t] = Some(match tile_rect[t] {
-                    None => r,
-                    Some(a) => (a.0.min(r.0), a.1.min(r.1), a.2.max(r.2), a.3.max(r.3)),
-                });
+                rects[t] = crate::sched::union(rects[t], Some(r));
                 tiles[t].push(p);
             }
         }
@@ -809,8 +828,8 @@ impl Canvas {
         // whenever the hand moves on to a new passage
         // (and the hand's ledger: every planned stroke and trip, counted on
         // the whole canvas before a crop drops any tiles; see `tally`)
-        let (mpu, mut piles) = (self.mm_per_unit, crate::tally::Piles::default());
-        let mut tile_secs = Vec::with_capacity(tiles.len());
+        let mpu = self.mm_per_unit;
+        let mut secs = Vec::with_capacity(tiles.len());
         for t in tiles.iter_mut() {
             let secs0 = self.tally.secs;
             let (mut since, mut last) = (0, None);
@@ -834,45 +853,16 @@ impl Canvas {
                     }
                 }
             }
-            tile_secs.push(self.tally.secs - secs0);
+            secs.push(self.tally.secs - secs0);
         }
+        // (the checkerboard's shuffle is drawn whatever order the pass is
+        // painted in, so the strokes planned after it don't depend on it)
+        let order = tile_order(hd.order.unwrap_or_default(), (tw, th), (tile_x, tile_y), rng);
         // (strokes with ids fixed in advance don't take new ones)
-        let free = |t: &Vec<Plan>| t.iter().filter(|p| p.id.is_none()).count() as u32;
-        let order = tile_order(hd.order, (tw, th), (tile_x, tile_y), rng);
-        // with hand time on, the passages are painted in slices of hand time
-        // and the paint ages between them (`tally::batches`); else one batch
-        let slice = if sliced { self.hand_slice_secs() } else { None };
-        // a hand works down a passage, not in the checkerboard phases that
-        // let tiles run in parallel: with the paint ageing as it goes, the
-        // default order becomes a sweep down (an order asked for is kept)
-        let order = match (slice, hd.order_set) {
-            (Some(_), false) => tile_order(Order::Sweep(std::f32::consts::FRAC_PI_2), (tw, th), (tile_x, tile_y), rng),
-            _ => order,
-        };
-        let batches = crate::tally::batches(&order, &tile_secs, slice);
-        let n_batches = batches.len();
-        let mut offsets = vec![0u32; tiles.len()];
-        for (bi, (order, bsecs)) in batches.into_iter().enumerate() {
-        // stroke ids for this slice's strokes, in tile order (all at once for
-        // a single slice): a wait between slices sees the next slice's
-        // strokes as fresh work
-        let mut in_batch = order.clone();
-        in_batch.sort_unstable();
-        let n_strokes: u32 = in_batch.iter().map(|&t| free(&tiles[t])).sum();
-        let first_id = if n_strokes > 0 { self.next_stroke_ids(n_strokes) } else { 0 };
-        let mut acc = 0u32;
-        for &t in &in_batch {
-            offsets[t] = acc;
-            acc += free(&tiles[t]);
-        }
-        let surf = self.surf();
-        // a crop render skips passages that miss its window (they paint
-        // nothing it holds; the rest keep their relative order)
-        let order: Vec<usize> = order.into_iter().filter(|&t| tile_rect[t].is_some_and(|r| f.clip(r).is_some())).collect();
-        if std::env::var_os("PAINT_DEBUG").is_some() {
-            eprintln!("  {} tiles", order.len());
-        }
-        let paint_tile = |ti: usize| {
+        let ids = tiles.iter().map(|t| t.iter().filter(|p| p.id.is_none()).count() as u32).collect();
+        let order = if hd.order.is_some() { TileOrder::Asked(order) } else { TileOrder::Default(order) };
+        let pass = crate::sched::Pass { grid: (tw, th), order, rects, secs, ids, slice };
+        self.paint_pass(pass, |surf, ti, first_id| {
             let mut held = Held::new(tool.clone(), seed ^ 0x5EED ^ (ti as u64).wrapping_mul(0x9E37_79B9));
             let mut scratch = Vec::new();
             let mut b: crate::bristle::Bounds = None;
@@ -880,7 +870,7 @@ impl Canvas {
             for p in tiles[ti].iter() {
                 let id = p.id.unwrap_or_else(|| {
                     k += 1;
-                    first_id.wrapping_add(offsets[ti] + k - 1)
+                    first_id.wrapping_add(k - 1)
                 });
                 if p.fresh {
                     held = Held::new(tool.clone(), seed ^ 0xF4E5 ^ (p.pts[0].0.to_bits() as u64) << 20 ^ p.pts[0].1.to_bits() as u64);
@@ -904,31 +894,10 @@ impl Canvas {
                 // tiles with overlapping rects at once; `surf()` checked the
                 // buffers match the frame.
                 let r = unsafe { crate::bristle::drag_on(surf, &mut held, &g, clip, id, &mut scratch) };
-                if let Some((a, c, d, e)) = r {
-                    b = Some(match b {
-                        None => (a, c, d, e),
-                        Some((a0, c0, d0, e0)) => (a0.min(a), c0.min(c), d0.max(d), e0.max(e)),
-                    });
-                }
+                b = crate::sched::union(b, r);
             }
             b
-        };
-        // tiles run in parallel wherever that can't change the result: a
-        // tile starts once every earlier tile (in `order`) it overlaps is done
-        let mut dirty: crate::bristle::Bounds = None;
-        for r in crate::sched::run_ordered(&order, &tile_rect, paint_tile).into_iter().flatten() {
-            dirty = Some(match dirty {
-                None => r,
-                Some((a0, c0, d0, e0)) => (a0.min(r.0), c0.min(r.1), d0.max(r.2), e0.max(r.3)),
-            });
-        }
-        if let Some((x0, y0, x1, y1)) = dirty {
-            self.wet.touch(x0, y0, x1, y1);
-        }
-        if bi + 1 < n_batches {
-            self.hand_pass(bsecs);
-        }
-        }
+        });
     }
 }
 
@@ -1279,7 +1248,7 @@ fn place(hd: &Handling, f: Frame, gap: f32, mean_len: f32, seed: u64, rng: &mut 
                         if x < sx || x >= sx + side || y < sy || y >= sy + side {
                             continue;
                         }
-                        let key = match hd.order {
+                        let key = match hd.order.unwrap_or_default() {
                             Order::Passages => dir * v + rng.normal() * across * 0.7,
                             Order::Sweep(s) => x * s.cos() + y * s.sin() + rng.normal() * gap * 0.3,
                             Order::Scatter => rng.f(),
@@ -1290,7 +1259,7 @@ fn place(hd: &Handling, f: Frame, gap: f32, mean_len: f32, seed: u64, rng: &mut 
             }
         }
     }
-    match hd.order {
+    match hd.order.unwrap_or_default() {
         Order::Passages => out.sort_by(|a, b| a.3.cmp(&b.3).then(a.4.total_cmp(&b.4))),
         _ => out.sort_by(|a, b| a.4.total_cmp(&b.4)),
     }
@@ -1780,6 +1749,31 @@ mod tests {
                 }
             }
         }
+    }
+
+    /// A long hand-timed pass ages as it goes: its first slices can set (and
+    /// bake into the dry film) before the look-and-fill. The look must see
+    /// that paint as laid, not as a gap, so the pass lays about the fill
+    /// dabs it does with hand time off (thermos B1; here 219 dabs off, 540 on
+    /// before the fix, 155 after).
+    #[test]
+    fn a_long_timed_pass_fills_only_its_gaps() {
+        let run = |hand: Option<f32>, fill: bool| {
+            let mut c = Canvas::new(160, 1.4, crate::color::hex("#c8b89a")).with_size_mm(440.0);
+            c.set_hand_time(hand);
+            let all = Mask::from_fn(c.frame(), |_, _| 1.0);
+            // thin, lean paint, one reload a stroke: hours of work
+            let hd = Handling::new(Tool::filbert(6.0)).color(|_, _| crate::color::hex("#6f84a8")).paint(0.85, 1.0).load(0.3).coverage(3.0).fill(fill);
+            c.work(&all, &hd, 3);
+            let set = c.wet.clock.px.iter().filter(|p| p.sub > 0.0 && p.sub < 1.0).count() as f32 / c.wet.vol.len() as f32;
+            (c.tally().strokes, c.clock(), set)
+        };
+        let (pass, _, _) = run(None, false);
+        let (off, _, _) = run(None, true);
+        let (on, clock, set) = run(Some(15.0), true);
+        assert!(clock > 120.0 && set > 0.01, "the pass took hours ({clock} min) and its start set ({set})");
+        let (off, on) = (off - pass, on - pass);
+        assert!(on <= off + off / 2 + 10, "fill dabs: {on} with hand time, {off} without");
     }
 
     #[test]

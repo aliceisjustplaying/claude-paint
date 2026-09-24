@@ -769,7 +769,7 @@ overridden: growth `step`, `density`, `influence`, `kill`, `up`, `out`,
 `crook`, `kink`, `inertia`, `shell`, `voids`, `void_size` and `depth`.
 Wood: `scaffold={min, max}`, `girth` (trunk width per crown height),
 `twig_w`, `smooth`, `pipe`, `leader` (how far the trunk runs on into the crown) and
-`angular` (0 smooth .. 1 an oak's straight runs and elbows). Twigs: `twigs`, `twig_len`, `twig_spread`,
+`angular` (0 smooth; above 0 an oak's straight runs and elbows, the number setting how much is straightened). Twigs: `twigs`, `twig_len`, `twig_spread`,
 `twig_droop`, `twig_zig` and `twig_along`. Leaves: `clump`, `squash`,
 `hang`, `fill`, `ragged`, `leafiness` and `leafy_w`. Touches: `touch`,
 `touch_w`, `hook`, `droop`, `flat`, `touches` and `marcescent`.
@@ -1251,9 +1251,10 @@ t = timesheet()       -- {clock, sitting (min), sittings, hours, hand, open, set
 
 `glaze` goes over dry paint, so it first waits until everything under it is
 touch-dry; that time passes on the clock and the easel says so
-(`glaze: waited 9.8 days for the paint under it to dry`). Any other time the
-canvas spends (a finishing verb drying the paint first) is also reported at
-the end of the chunk, so the clock you see is always the canvas's.
+(`glaze: waited 9.8 days for the paint under it to dry`). The other
+finishing verbs that dry the paint first (`varnish`, `cracks`, `relief`)
+report their wait the same way, so the clock you see is always the
+canvas's.
 
 ## Editing a chunk
 

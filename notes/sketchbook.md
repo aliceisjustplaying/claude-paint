@@ -98,7 +98,9 @@ varied, tapered twigs, all connected), water B, sky B, rock B.
   doesn't wait: `work(m, {hand="glaze", medium=0.8, color_over={shift={...}}})`.
 - **Retouch before the varnish.** Keep `wait(24*60); varnish{...}; relief()` as the last
   chunk and fix things with `easel edit N --insert` before it: seconds, not a replay [r4
-  near, r4 green].
+  near, r4 green]. Since round 6 the varnish (and any `glaze()`) coats every stroke ridge
+  and pools only a little in the hollows, the same at 1000 and 3200: no need to thin
+  `coats` to 0.12 against brown worm lines at paint edges (`notes/varnish.md`) [r6 varnish].
 - **Keep `relief()` at its default.** The Friedrich default is now `(0.06, 0.006)`, the
   owner's pick from the Round 6 A/B (`notes/round6/relief/`): the old 0.2 embossed every
   stroke into creases ("grooves") and raised outlines around sky holes. `relief(0.6)`
@@ -655,8 +657,7 @@ The foreground is where every round fell shortest of Friedrich. Budget real time
   repaint just outside the motif (round 1.6, lengths 2–6, coverage 3, medium 0.25,
   `clip=-M`), each stroke's color sampled ~11 units farther out. Check halos at 3200: they
   can be clean at 1000. [loop 3 green]
-- *Pitfall:* at 3200 a `glaze()` over heavily stroked turf pools into dotted loops and
-  dashes (a tool issue being fixed); a brush veil with `color_over` over a detailed area
+- *Pitfall:* a brush veil with `color_over` over a detailed area
   blurs the detail away. [loop 3 green]
 - *Tried and rejected (loop 4 near, 0):* a distance-graded veil + wet blend over a black
   wood gave air but smeared it into vertical streaks and lost the trunks. Use `fir_wood{}`

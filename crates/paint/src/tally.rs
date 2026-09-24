@@ -392,7 +392,7 @@ mod tests {
     /// The picture, its relief and the wet film on it (paint that aged but
     /// hasn't set yet differs only there).
     fn px_bits(c: &Canvas) -> Vec<u32> {
-        c.pixels().iter().flat_map(|p| p.map(f32::to_bits)).chain(c.height.iter().map(|v| v.to_bits())).chain(c.wet.vol.iter().chain(&c.wet.top).map(|v| v.to_bits())).collect()
+        c.pixels().iter().flat_map(|p| p.map(f32::to_bits)).chain(c.height.iter().map(|v| v.to_bits())).chain(c.wet.vol.iter().chain(c.wet.top.iter().map(|t| &t.v)).map(|v| v.to_bits())).collect()
     }
 
     #[test]

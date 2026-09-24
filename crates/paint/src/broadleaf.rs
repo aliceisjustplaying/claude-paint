@@ -402,6 +402,9 @@ pub struct Limb {
     pub parent: Option<usize>,
     /// A fine twig added past the model's resolution.
     pub twig: bool,
+    /// The fine twig that leads on from the tip of its limb (the limb's own
+    /// continuation, not a side twig).
+    pub lead: bool,
 }
 
 /// A clump of leaves on a twig.
@@ -461,6 +464,9 @@ pub struct Tree {
     pub touch_w: f32,
     pub sun: V3,
     pub seed: u64,
+    /// The width of the finest wood the model grows (units); wood under
+    /// about twice this is fine wood (see `drawn`).
+    pub twig_w: f32,
     ragged: f32,
 }
 
@@ -914,7 +920,7 @@ impl Tree {
                 }
                 cur = main;
             }
-            limbs.push(Limb { pts, w, z, order, parent, twig: false });
+            limbs.push(Limb { pts, w, z, order, parent, twig: false, lead: false });
         }
 
         // fine twigs at the tips, and hanging along thin wood
@@ -925,7 +931,7 @@ impl Tree {
             if m < 2 || l.order == 0 {
                 continue;
             }
-            let sprout = |rng: &mut Rng, at: usize, k: f32, side: f32, limbs: &mut Vec<Limb>| {
+            let sprout = |rng: &mut Rng, at: usize, k: f32, side: f32, lead: bool, limbs: &mut Vec<Limb>| {
                 let p = l.pts[at];
                 let q = l.pts[at.saturating_sub(1).min(m - 2)];
                 let q2 = l.pts[(at.max(1)).min(m - 1)];
@@ -954,20 +960,20 @@ impl Tree {
                 let _ = bl;
                 let w0 = (l.w[at] * 0.6).min(twig_w * 0.9).max(0.15);
                 let w: Vec<f32> = (0..pts.len()).map(|i| (w0 * (1.0 - 0.6 * i as f32 / segs as f32)).max(0.12)).collect();
-                limbs.push(Limb { pts, w, z, order: l.order + 1, parent: Some(li), twig: true });
+                limbs.push(Limb { pts, w, z, order: l.order + 1, parent: Some(li), twig: true, lead });
             };
             // at the tip
             let k = (sp.twigs + rng.f()) as usize;
             for j in 0..k {
                 let at = if j == 0 { m - 1 } else { (m - 1).saturating_sub(j).max(1) };
                 let side = if j == 0 { 0.0 } else if j % 2 == 1 { 1.0 } else { -1.0 };
-                sprout(&mut rng, at, if j == 0 { 1.0 } else { 0.85 }, side, &mut limbs);
+                sprout(&mut rng, at, if j == 0 { 1.0 } else { 0.85 }, side, j == 0, &mut limbs);
             }
             // along the thin wood
             for at in 1..m - 1 {
                 if l.w[at] < twig_w * sp.leafy_w * 1.6 && rng.chance(sp.twig_along) {
                     let side = if rng.chance(0.5) { 1.0 } else { -1.0 };
-                    sprout(&mut rng, at, 0.8, side, &mut limbs);
+                    sprout(&mut rng, at, 0.8, side, false, &mut limbs);
                 }
             }
         }
@@ -1059,6 +1065,7 @@ impl Tree {
             touch_w: tw,
             sun,
             seed,
+            twig_w,
             ragged: sp.ragged,
         };
         tree.touches = tree.lay_touches(sp, season, &mut rng);
@@ -1271,6 +1278,189 @@ impl Tree {
     }
 }
 
+/// A stroke along the wood for a pointed brush pressed to the wood's width
+/// (see `Tree::wood_strokes`).
+#[derive(Clone, Debug)]
+pub struct WoodStroke {
+    pub pts: Vec<(f32, f32)>,
+    /// Width of the wood at each point.
+    pub w: Vec<f32>,
+    pub limb: usize,
+    /// It ends at a tip (the brush lifts off to a point there), rather than
+    /// running on into thinner wood that another stroke paints.
+    pub tip: bool,
+    /// Fine wood: a twig, or a limb under about two twig widths at its base.
+    pub fine: bool,
+    /// How many of the points are the limb's own (the rest are its leading
+    /// twig, drawn on from its tip).
+    pub own: usize,
+}
+
+fn polylen(p: &[(f32, f32)]) -> f32 {
+    p.windows(2).map(|w| ((w[1].0 - w[0].0).powi(2) + (w[1].1 - w[0].1).powi(2)).sqrt()).sum()
+}
+
+impl Tree {
+    /// Fine wood: a twig, or a limb under about two twig widths at its base
+    /// (the finest shoots of the model and the twigs past its resolution).
+    pub fn is_fine(&self, l: &Limb) -> bool {
+        l.twig || l.w[0] < 2.0 * self.twig_w
+    }
+
+    /// Which limbs a painter draws as lines at `detail` (0..1): all the
+    /// stout wood, and of the fine wood a share `detail` of its length,
+    /// picked for character (long pieces, a limb's leading twig, pieces
+    /// toward the crown's edge, where they show against the sky), always
+    /// with the wood each leaves from, so nothing drawn floats. `detail`
+    /// 1 draws everything, 0 only the stout wood; the rest is left to a
+    /// tone (`twig_mass`).
+    pub fn drawn(&self, detail: f32) -> Vec<bool> {
+        let n = self.limbs.len();
+        if detail >= 1.0 {
+            return vec![true; n];
+        }
+        let fine: Vec<bool> = self.limbs.iter().map(|l| self.is_fine(l)).collect();
+        let len: Vec<f32> = self.limbs.iter().map(|l| polylen(&l.pts)).collect();
+        let mut on: Vec<bool> = fine.iter().map(|f| !f).collect();
+        let (x0, y0, x1, y1) = self.crown.iter().fold((f32::MAX, f32::MAX, f32::MIN, f32::MIN), |b, p| (b.0.min(p.0), b.1.min(p.1), b.2.max(p.0), b.3.max(p.1)));
+        let reach = (0.2 * (x1 - x0).min(y1 - y0)).max(1.0);
+        let mut cand: Vec<(f32, usize)> = (0..n)
+            .filter(|&i| fine[i] && self.limbs[i].pts.len() >= 2)
+            .map(|i| {
+                let l = &self.limbs[i];
+                let tip = *l.pts.last().unwrap();
+                let outer = if inside(&self.crown, tip.0, tip.1) { 1.0 - (edge_dist(&self.crown, tip.0, tip.1) / reach).min(1.0) } else { 1.0 };
+                let jit = crate::rng::hash2(i as i64, 41, self.seed);
+                let s = len[i] * if l.lead { 1.6 } else { 1.0 } * (0.6 + 0.8 * outer) * (0.5 + jit);
+                (s, i)
+            })
+            .collect();
+        cand.sort_by(|a, b| b.0.total_cmp(&a.0).then(a.1.cmp(&b.1)));
+        let total: f32 = cand.iter().map(|c| len[c.1]).sum();
+        let budget = detail.max(0.0) * total;
+        let mut acc = 0.0;
+        for (_, i) in cand {
+            if acc >= budget {
+                break;
+            }
+            // the piece and the wood it leaves from, down to drawn wood
+            let mut j = i;
+            while !on[j] {
+                on[j] = true;
+                if fine[j] {
+                    acc += len[j];
+                }
+                match self.limbs[j].parent {
+                    Some(p) => j = p,
+                    None => break,
+                }
+            }
+        }
+        on
+    }
+
+    /// Strokes that paint the wood between `lo` and `hi` wide (by the
+    /// local width, so the thin ends of stout limbs are in the thin band),
+    /// drawing the fine wood at `detail` (see `drawn`). Every stroke starts
+    /// inside the wood it leaves from: a limb's run starts one point back,
+    /// in the thicker wood before it, and a limb's first point is on its
+    /// parent. A run that goes on into thinner wood overlaps it by a point
+    /// and does not lift off (`tip` false); a drawn leading twig is painted
+    /// as the end of its limb's stroke, so a limb runs out into its twig
+    /// in one movement and lifts off there. Parents come before children.
+    pub fn wood_strokes(&self, lo: f32, hi: f32, detail: f32) -> Vec<WoodStroke> {
+        let on = self.drawn(detail);
+        let n = self.limbs.len();
+        let mut lead_of = vec![None; n];
+        for (i, l) in self.limbs.iter().enumerate() {
+            if l.lead && on[i] && l.pts.len() >= 2 {
+                if let Some(p) = l.parent {
+                    if on[p] {
+                        lead_of[p] = Some(i);
+                    }
+                }
+            }
+        }
+        let band = |w: f32| w >= lo && w < hi;
+        let mut out = vec![];
+        for (i, l) in self.limbs.iter().enumerate() {
+            let m = l.pts.len();
+            if !on[i] || m < 2 || (l.lead && l.parent.is_some_and(|p| lead_of[p] == Some(i))) {
+                continue;
+            }
+            let mut k = 0;
+            while k < m {
+                if !band(l.w[k]) {
+                    k += 1;
+                    continue;
+                }
+                let s = k;
+                while k < m && band(l.w[k]) {
+                    k += 1;
+                }
+                let a = s.saturating_sub(1);
+                let b = if k < m { k + 1 } else { m };
+                let mut pts = l.pts[a..b].to_vec();
+                let mut w = l.w[a..b].to_vec();
+                let tip = k >= m;
+                let own = pts.len();
+                if tip {
+                    if let Some(t) = lead_of[i] {
+                        pts.extend_from_slice(&self.limbs[t].pts[1..]);
+                        w.extend_from_slice(&self.limbs[t].w[1..]);
+                    }
+                }
+                if pts.len() >= 2 {
+                    out.push(WoodStroke { pts, w, limb: i, tip, fine: self.is_fine(l), own });
+                }
+            }
+        }
+        out
+    }
+
+    /// The fine wood's mass as a soft tone (0..1): where the twigs are
+    /// thick on the ground, strongest where fewest of them are drawn at
+    /// `detail`, spread over about half a twig's length. A painter
+    /// indicates a winter crown's twig mass this way, with a dry brush or a
+    /// scumble, and draws a few twigs over it.
+    pub fn twig_mass(&self, f: Frame, detail: f32) -> Mask {
+        let on = self.drawn(detail);
+        let mut shape = Shape::new();
+        let mut shape_on = Shape::new();
+        let (mut tl, mut nt) = (0.0, 0);
+        for (i, l) in self.limbs.iter().enumerate() {
+            if !self.is_fine(l) || l.pts.len() < 2 {
+                continue;
+            }
+            if l.twig {
+                tl += polylen(&l.pts);
+                nt += 1;
+            }
+            // a fixed width, so the density is the same at any resolution
+            let w = vec![0.5; l.pts.len()];
+            if on[i] {
+                shape_on = shape_on.ribbon(&l.pts, &w);
+            } else {
+                shape = shape.ribbon(&l.pts, &w);
+            }
+        }
+        let reach = if nt > 0 { 0.5 * tl / nt as f32 } else { self.step };
+        let undrawn = Mask::from_shape(f, shape);
+        let drawn = Mask::from_shape(f, shape_on);
+        let mut m = undrawn.union(&drawn.map(|v| 0.35 * v)).blur(reach);
+        // scale by the densest parts (the 98th percentile of the tone), so
+        // the thick of the twigs is about 1 and thinner parts grade off
+        let mut v: Vec<f32> = m.data.iter().copied().filter(|v| *v > 1e-3).collect();
+        if !v.is_empty() {
+            let k = ((v.len() - 1) as f32 * 0.98) as usize;
+            let q = *v.select_nth_unstable_by(k, |a, b| a.total_cmp(b)).1;
+            let q = q.max(1e-4);
+            m = m.map(|x| (x / q).clamp(0.0, 1.0));
+        }
+        m
+    }
+}
+
 fn self_touch_w(sp: &Species, hc: f32, season: &Season) -> f32 {
     (sp.touch * hc * season.size.sqrt() * sp.touch_w).max(0.35)
 }
@@ -1466,6 +1656,94 @@ mod tests {
         assert!(m(&left) > m(&right) + 0.1, "{} {}", m(&left), m(&right));
         // the trunk is the widest wood
         assert!(t.limbs[0].w[0] > 20.0, "{}", t.limbs[0].w[0]);
+    }
+
+    /// Distance from p to the polyline, less half its width there.
+    fn off_wood(p: (f32, f32), pts: &[(f32, f32)], w: &[f32]) -> f32 {
+        let mut best = f32::MAX;
+        for k in 1..pts.len() {
+            let (a, b) = (pts[k - 1], pts[k]);
+            let (dx, dy) = (b.0 - a.0, b.1 - a.1);
+            let t = (((p.0 - a.0) * dx + (p.1 - a.1) * dy) / (dx * dx + dy * dy).max(1e-9)).clamp(0.0, 1.0);
+            let d = ((a.0 + t * dx - p.0).powi(2) + (a.1 + t * dy - p.1).powi(2)).sqrt();
+            best = best.min(d - 0.5 * lerp(w[k - 1], w[k], t));
+        }
+        best
+    }
+
+    #[test]
+    fn bare_wood_is_drawn_connected_at_any_detail() {
+        let c = crown();
+        let t = Tree::grow(&c, Some(&[(505.0, 560.0), (498.0, 330.0)]), &Species::oak(), &Season::named("winter").unwrap(), [-0.5, -0.7, 0.3], 3);
+        let fine_len = |on: &[bool]| t.limbs.iter().zip(on).filter(|(l, o)| **o && t.is_fine(l)).map(|(l, _)| polylen(&l.pts)).sum::<f32>();
+        let all = fine_len(&t.drawn(1.0));
+        let mut last = all;
+        for detail in [0.6, 0.35, 0.1, 0.0] {
+            let on = t.drawn(detail);
+            // nothing drawn leaves from undrawn wood; the stout wood is always drawn
+            for (i, l) in t.limbs.iter().enumerate() {
+                if on[i] {
+                    assert!(l.parent.is_none_or(|p| on[p]), "detail {detail}: limb {i} drawn, its parent not");
+                }
+                if !t.is_fine(l) {
+                    assert!(on[i], "detail {detail}: stout limb {i} not drawn");
+                }
+            }
+            // fewer fine wood at lower detail, about the share asked for
+            let f = fine_len(&on);
+            assert!(f <= last + 1e-3, "detail {detail}: {f} > {last}");
+            assert!(f <= all * (detail + 0.15) + 1e-3, "detail {detail}: {f} of {all}");
+            last = f;
+
+            // the strokes of the usual bands paint every drawn point of every
+            // drawn limb, and each starts inside wood painted before it (or
+            // at the foot)
+            let mut strokes = vec![];
+            for (lo, hi) in [(3.5, f32::MAX), (1.2, 3.5), (0.0, 1.2)] {
+                strokes.extend(t.wood_strokes(lo, hi, detail));
+            }
+            let mut covered: Vec<Vec<bool>> = t.limbs.iter().map(|l| vec![false; l.pts.len()]).collect();
+            for s in &strokes {
+                let l = &t.limbs[s.limb];
+                for p in &s.pts[..s.own] {
+                    if let Some(k) = l.pts.iter().position(|q| q == p) {
+                        covered[s.limb][k] = true;
+                    }
+                }
+                if s.own < s.pts.len() {
+                    // the leading twig drawn on from the tip
+                    let tw = t.limbs.iter().position(|q| q.lead && q.parent == Some(s.limb) && q.pts[1] == s.pts[s.own]).expect("a leading twig");
+                    covered[tw].iter_mut().for_each(|c| *c = true);
+                }
+            }
+            for (i, l) in t.limbs.iter().enumerate() {
+                if on[i] {
+                    assert!(covered[i].iter().all(|c| *c), "detail {detail}: limb {i} (w {:?}) has points no stroke paints", l.w);
+                }
+            }
+            for (n, s) in strokes.iter().enumerate() {
+                let p = s.pts[0];
+                if s.limb == 0 && p == t.limbs[0].pts[0] {
+                    continue;
+                }
+                let on_wood = strokes[..n].iter().any(|o| off_wood(p, &o.pts, &o.w) < 0.05);
+                assert!(on_wood, "detail {detail}: stroke {n} (limb {}) starts at {p:?}, off the wood painted before it", s.limb);
+            }
+        }
+    }
+
+    #[test]
+    fn twig_mass_is_a_soft_tone_where_the_undrawn_twigs_are() {
+        let c = crown();
+        let t = Tree::grow(&c, Some(&[(505.0, 560.0), (498.0, 330.0)]), &Species::oak(), &Season::named("winter").unwrap(), [-0.5, -0.7, 0.3], 3);
+        let f = Frame::new(500, 350, 0.5);
+        let m = t.twig_mass(f, 0.35);
+        assert!(m.data.iter().all(|v| (0.0..=1.0).contains(v)));
+        let at = |x: f32, y: f32| m.sample(x, y);
+        // on in the crown's outer twigs, off in the open sky and at the foot
+        let edge: f32 = (0..32).map(|i| { let a = i as f32 / 32.0 * TAU; at(500.0 + 170.0 * a.cos(), 260.0 + 125.0 * a.sin()) }).sum::<f32>() / 32.0;
+        assert!(edge > 0.2, "{edge}");
+        assert!(at(60.0, 40.0) < 1e-3 && at(505.0, 590.0) < 1e-3);
     }
 
     #[test]

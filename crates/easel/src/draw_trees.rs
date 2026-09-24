@@ -26,7 +26,17 @@ pub struct TreeU {
     season: String,
     haze: f32,
     scale: f32,
+    /// Share of the fine wood drawn as lines (the rest is a tone): the
+    /// default for `paint_wood` and `twig_mass`.
+    detail: f32,
     st: S,
+}
+
+/// The default share of the fine wood drawn as lines (see `Tree::drawn`):
+/// a bare tree draws about a third of it and leaves the rest to a tone; in
+/// leaf, the leaves carry the fine structure and every twig is drawn.
+fn detail_for(season: &Season) -> f32 {
+    0.35 + 0.65 * season.leaf.clamp(0.0, 1.0)
 }
 
 fn pt(lua: &Lua, p: (f32, f32)) -> Result<Table> {
@@ -136,7 +146,7 @@ fn trunk_of(v: Value) -> Result<Option<Vec<(f32, f32)>>> {
     })
 }
 
-const TREE_KEYS: &[&str] = &["crown", "trunk", "species", "season", "sun", "seed", "leaf", "turn"];
+const TREE_KEYS: &[&str] = &["crown", "trunk", "species", "season", "sun", "seed", "leaf", "turn", "detail"];
 
 fn tree_in(st: &S, o: Table) -> Result<TreeU> {
     let keys: Vec<&str> = TREE_KEYS.iter().chain(SPECIES_KEYS).copied().collect();
@@ -151,7 +161,8 @@ fn tree_in(st: &S, o: Table) -> Result<TreeU> {
     let trunk = trunk_of(o.get::<Value>("trunk")?)?;
     let seed = seed_of(st, &o)?;
     let t = Tree::grow(&crown, trunk.as_deref(), &sp, &season, sun_of(&o)?, seed);
-    Ok(TreeU { t: Rc::new(t), season: sname, haze: 0.0, scale: 1.0, st: st.clone() })
+    let detail = num(&o, "detail")?.unwrap_or(detail_for(&season)).clamp(0.0, 1.0);
+    Ok(TreeU { t: Rc::new(t), season: sname, haze: 0.0, scale: 1.0, detail, st: st.clone() })
 }
 
 /// Which clumps or touches: {depth={lo, hi} (-1 back .. 1 front), lit={lo, hi}, dead=bool, turn={lo, hi}}
@@ -251,10 +262,14 @@ fn lay(lua: &Lua, trees: &[Rc<Tree>], b: &AnyUserData, opts: Option<Table>) -> R
     Ok(n)
 }
 
-const WOOD_KEYS: &[&str] = &["color", "load", "every", "min", "max", "twigs", "pressure", "ramps", "shake", "clip"];
+const WOOD_KEYS: &[&str] = &["color", "load", "every", "min", "max", "twigs", "pressure", "ramps", "shake", "clip", "detail"];
 
-/// Lay the limbs (base width in [min, max)) as strokes, pressed to width.
-fn lay_wood(lua: &Lua, t: &Tree, b: &AnyUserData, opts: Option<Table>) -> Result<usize> {
+/// Lay the wood between `min` and `max` wide (the local width, so a stout
+/// limb's thin end is in the thin band) as strokes that start inside the
+/// wood they leave from, pressed to the wood's width along the way (the
+/// pressure follows the width through `swell` knots), lifting off only at
+/// the tips. The fine wood is drawn at `detail` (see `Tree::drawn`).
+fn lay_wood(lua: &Lua, t: &Tree, b: &AnyUserData, opts: Option<Table>, detail: f32) -> Result<usize> {
     let opts = opts.unwrap_or(lua.create_table()?);
     check_keys(&opts, WOOD_KEYS, "tree:paint_wood")?;
     let color = opts.get::<Value>("color")?;
@@ -266,33 +281,68 @@ fn lay_wood(lua: &Lua, t: &Tree, b: &AnyUserData, opts: Option<Table>) -> Result
     let lo = num(&opts, "min")?.unwrap_or(0.0);
     let hi = num(&opts, "max")?.unwrap_or(f32::MAX);
     let twigs = opts.get::<Option<bool>>("twigs")?.unwrap_or(true);
-    let ramps = range_of(&opts, "ramps", (0.03, 0.5))?;
+    let detail = num(&opts, "detail")?.unwrap_or(detail).clamp(0.0, 1.0);
+    let ramps = match opts.get::<Value>("ramps")? {
+        Value::Nil => None,
+        _ => Some(range_of(&opts, "ramps", (0.0, 0.12))?),
+    };
     let shake = num(&opts, "shake")?.unwrap_or(0.3);
     let end = num(&opts, "pressure")?;
     let clip = opts.get::<Value>("clip")?;
     let bw: f32 = b.get("width")?;
+    let press = |w: f32| -> Result<f32> { b.call_method::<f32>("pressure_for", w.min(bw)) };
     let mut n = 0;
-    for (i, l) in t.limbs.iter().enumerate() {
-        if l.pts.len() < 2 || l.w[0] < lo || l.w[0] >= hi || (!twigs && l.twig) {
+    for s in t.wood_strokes(lo, hi, detail) {
+        let l = &t.limbs[s.limb];
+        if !twigs && l.twig {
             continue;
         }
+        let m = if twigs { s.pts.len() } else { s.own };
+        if m < 2 {
+            continue;
+        }
+        let (pts, w) = (&s.pts[..m], &s.w[..m]);
+        let tip = s.tip && m == s.pts.len();
         if n % every == 0 || b.call_method::<f32>("fullness", ())? < 0.3 {
             let c = match &color {
-                Value::Function(g) => g.call::<Value>(limb_table(lua, i, l)?)?,
+                Value::Function(g) => g.call::<Value>(limb_table(lua, s.limb, l)?)?,
                 c => c.clone(),
             };
             b.call_method::<()>("reload", (c, load))?;
         }
-        let p0: f32 = b.call_method("pressure_for", l.w[0].min(bw))?;
-        let p1: f32 = b.call_method("pressure_for", l.w[l.w.len() - 1].min(bw))?;
+        // the pressure along the stroke, from the width at even steps of its length
+        let mut arc = vec![0.0f32; m];
+        for k in 1..m {
+            arc[k] = arc[k - 1] + ((pts[k].0 - pts[k - 1].0).powi(2) + (pts[k].1 - pts[k - 1].1).powi(2)).sqrt();
+        }
+        let total = arc[m - 1].max(1e-6);
+        let nk = ((total / (0.75 * bw).max(0.5)).ceil() as usize + 1).clamp(2, 24);
+        let mut knots = Vec::with_capacity(nk);
+        let mut j = 0;
+        for q in 0..nk {
+            let d = total * q as f32 / (nk - 1) as f32;
+            while j + 2 < m && arc[j + 1] < d {
+                j += 1;
+            }
+            let f = ((d - arc[j]) / (arc[j + 1] - arc[j]).max(1e-6)).clamp(0.0, 1.0);
+            let wd = w[j] + (w[j + 1] - w[j]) * f;
+            knots.push(press(wd)?.clamp(0.05, 1.0));
+        }
+        if tip {
+            if let Some(e) = end {
+                *knots.last_mut().unwrap() = e.clamp(0.02, 1.0);
+            }
+        }
+        let (ra, rr) = ramps.unwrap_or((0.0, if tip { 0.12 } else { 0.0 }));
         let so = lua.create_table()?;
-        so.set("pressure", lua.create_sequence_from([p0.clamp(0.05, 1.0), end.unwrap_or(p1).clamp(0.02, 1.0)])?)?;
-        so.set("ramps", lua.create_sequence_from([ramps.0, ramps.1])?)?;
+        so.set("pressure", lua.create_sequence_from([1.0f32, 1.0])?)?;
+        so.set("swell", lua.create_sequence_from(knots)?)?;
+        so.set("ramps", lua.create_sequence_from([ra, if tip { rr } else { 0.0 }])?)?;
         so.set("shake", shake)?;
         if !clip.is_nil() {
             so.set("clip", clip.clone())?;
         }
-        b.call_method::<()>("stroke", (pts_table(lua, &l.pts)?, so))?;
+        b.call_method::<()>("stroke", (pts_table(lua, pts)?, so))?;
         n += 1;
     }
     Ok(n)
@@ -327,6 +377,7 @@ impl UserData for TreeU {
         f.add_field_method_get("touch_w", |_, o| Ok(o.t.touch_w));
         f.add_field_method_get("haze", |_, o| Ok(o.haze));
         f.add_field_method_get("scale", |_, o| Ok(o.scale));
+        f.add_field_method_get("detail", |_, o| Ok(o.detail));
         f.add_field_method_get("crown", |lua, o| pts_table(lua, &o.t.crown));
         f.add_field_method_get("bounds", |lua, o| {
             let b = o.t.bounds();
@@ -405,7 +456,9 @@ impl UserData for TreeU {
         // t:paint(brush, {color=, lit=, depth=, turn=, dead=, share=1, every=10, load=0.8, pressure={0.75, 0.05}, ramps=, shake=, clip=, fit=true})
         m.add_method("paint", |lua, o, (b, opts): (AnyUserData, Option<Table>)| lay(lua, std::slice::from_ref(&o.t), &b, opts));
         // t:paint_wood(brush, {color=, min=, max=, twigs=true, every=5, load=, pressure=, ramps=, shake=, clip=})
-        m.add_method("paint_wood", |lua, o, (b, opts): (AnyUserData, Option<Table>)| lay_wood(lua, &o.t, &b, opts));
+        m.add_method("paint_wood", |lua, o, (b, opts): (AnyUserData, Option<Table>)| lay_wood(lua, &o.t, &b, opts, o.detail));
+        // t:twig_mass(detail): the fine wood not drawn as lines, as a soft tone (0..1)
+        m.add_method("twig_mass", |_, o, detail: Option<f32>| Ok(wrap(o.t.twig_mass(frame(&o.st)?, detail.unwrap_or(o.detail).clamp(0.0, 1.0)))));
         m.add_meta_method(MetaMethod::ToString, |_, o, ()| {
             let t = &o.t;
             Ok(format!(
@@ -431,10 +484,11 @@ pub struct GroupU {
     g: Rc<Group>,
     trees: Vec<Rc<Tree>>,
     season: String,
+    detail: f32,
     st: S,
 }
 
-const GROUP_KEYS: &[&str] = &["crowns", "trunks", "species", "season", "foot", "count", "horizon", "recede", "air", "spread", "narrow", "sun", "seed", "leaf", "turn"];
+const GROUP_KEYS: &[&str] = &["crowns", "trunks", "species", "season", "foot", "count", "horizon", "recede", "air", "spread", "narrow", "sun", "seed", "leaf", "turn", "detail"];
 
 fn tree_group(lua: &Lua, st: &S, o: Table) -> Result<GroupU> {
     check_keys(&o, GROUP_KEYS, "tree_group")?;
@@ -482,7 +536,8 @@ fn tree_group(lua: &Lua, st: &S, o: Table) -> Result<GroupU> {
     let seed = seed_of(st, &o)?;
     let g = Group::grow(&crowns, &trunks, &species, &season, foot, &spec, seed);
     let trees = g.trees.iter().cloned().map(Rc::new).collect();
-    Ok(GroupU { g: Rc::new(g), trees, season: sname, st: st.clone() })
+    let detail = num(&o, "detail")?.unwrap_or(detail_for(&season)).clamp(0.0, 1.0);
+    Ok(GroupU { g: Rc::new(g), trees, season: sname, detail, st: st.clone() })
 }
 
 impl GroupU {
@@ -495,7 +550,7 @@ impl GroupU {
         }
     }
     fn tree(&self, i: usize) -> TreeU {
-        TreeU { t: self.trees[i].clone(), season: self.season.clone(), haze: self.g.haze[i], scale: self.g.scale[i], st: self.st.clone() }
+        TreeU { t: self.trees[i].clone(), season: self.season.clone(), haze: self.g.haze[i], scale: self.g.scale[i], detail: self.detail, st: self.st.clone() }
     }
 }
 

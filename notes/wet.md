@@ -932,3 +932,20 @@ numbers and write the same images as before.
 Left: the checkpoint still writes the surface film after the hand-time
 block (moving it means a new format version for no gain now), and the
 `#[ignore]` probes in `wet.rs` stay.
+
+## 10. Review of the maintenance round (finding 2 and 3)
+- **Checkpoint volume** (finding 2): loading now refuses a film whose
+  total volume isn't finite or is negative; before, `vol = +inf` or a tiny
+  negative total under an empty surface layer passed the surface check.
+  Test `a_corrupt_film_volume_is_refused` (fails without the check).
+- **The studies' line measure** (finding 3): `study::Img::line` offset its
+  averaging band by the per-sample step times `j/s`, so the band shrank as
+  the resolution grew (0.20 units instead of 0.63 for a 32-unit vertical
+  line at 3200). It now uses a unit normal. `study_wet_control`'s numbers
+  on this branch, before → after: row B (contour softening) is unchanged
+  at 1000 and moves in two cells at 3200 (2.34 → 2.47 and 1.92 → 2.06 mm);
+  row C (a flat's stroke end) changes in most cells at both sizes (at
+  1000, e.g. 2.20 → 1.32 mm open/full/light). The §8 comparison with
+  main's engine used the old measure for both engines; its conclusion
+  (the load controls softening; full loads crisp, lean ones soft) holds
+  on the new numbers for this branch, but main's column wasn't re-measured.

@@ -297,8 +297,7 @@ render byte-identical.
   operations in the same order as each copy it replaces: broadleaf
   `polylen`, graphite `arclen`, rock `cumlen`, outline `dist`/`line_len`
   and two cumulative loops, and `plan_stroke`'s arc table in
-  draw_trees.rs). `tally::path_len` is the same sum and is left for its
-  owner to switch.
+  draw_trees.rs). `tally::path_len` was the same sum and is now replaced by it.
 - `paint_wood`'s pressure profile goes through one named helper,
   `set_pressure_profile` (swell knots over a flat pressure of 1, which is
   exactly the profile). A direct `pressure=` knot list needs `b:stroke` in

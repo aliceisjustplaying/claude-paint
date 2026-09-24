@@ -515,13 +515,6 @@ impl Canvas {
             tile_secs.push(self.tally.secs - secs0);
         }
         let n: usize = plans.iter().map(|t| t.len()).sum();
-        let first_id = self.next_stroke_ids(n as u32);
-        let mut offsets = Vec::with_capacity(plans.len());
-        let mut acc = 0u32;
-        for t in &plans {
-            offsets.push(acc);
-            acc += t.len() as u32;
-        }
         let t_plan = t0.elapsed().as_secs_f32();
 
         let limited;
@@ -548,12 +541,29 @@ impl Canvas {
             .iter()
             .map(|t| t.iter().filter(|p| p.rect.2 > p.rect.0).map(|p| p.rect).reduce(|a, r| (a.0.min(r.0), a.1.min(r.1), a.2.max(r.2), a.3.max(r.3))))
             .collect();
-        let order: Vec<usize> = phases.iter().flat_map(|&(px, py)| (0..plans.len()).filter(move |&i| (i % tw) % 2 == px && (i / tw) % 2 == py)).collect();
+        let mut order: Vec<usize> = phases.iter().flat_map(|&(px, py)| (0..plans.len()).filter(move |&i| (i % tw) % 2 == px && (i / tw) % 2 == py)).collect();
+        // with the paint ageing as the hand goes (hand time on), it works
+        // down the region row by row, not in the checkerboard phases
+        if self.hand_slice_secs().is_some() {
+            order.sort_by_key(|&i| (i / tw, (i % tw) % 2, i));
+        }
         // with hand time on, the passages are painted in slices of hand time
         // and the paint ages between them (`tally::batches`); else one batch
         let batches = crate::tally::batches(&order, &tile_secs, self.hand_slice_secs());
         let n_batches = batches.len();
+        let mut offsets = vec![0u32; plans.len()];
         for (bi, (order, bsecs)) in batches.into_iter().enumerate() {
+        // stroke ids for this slice's touches, in passage order (all at once
+        // for a single slice): a wait between slices sees the next slice's
+        // touches as fresh work
+        let mut in_batch = order.clone();
+        in_batch.sort_unstable();
+        let first_id = self.next_stroke_ids(in_batch.iter().map(|&t| plans[t].len() as u32).sum());
+        let mut acc = 0u32;
+        for &t in &in_batch {
+            offsets[t] = acc;
+            acc += plans[t].len() as u32;
+        }
         let surf = self.surf();
         let order: Vec<usize> = order.into_iter().filter(|&i| !plans[i].is_empty() && tile_rect[i].is_some_and(|r| win.clip(r).is_some())).collect();
         let paint_tile = |ti: usize| {

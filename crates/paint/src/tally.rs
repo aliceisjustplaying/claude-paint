@@ -423,6 +423,23 @@ mod tests {
         assert_ne!(px_bits(&a), px_bits(&off), "paint that aged while the hand worked");
     }
 
+    /// A wait between slices must see the strokes of the slices after it as
+    /// fresh work (their ids above its watermark), or their paint takes the
+    /// cure and thickness of the film it went over: setting streaks along
+    /// the slices' seams (found in notes/time's example in sittings).
+    #[test]
+    fn the_slices_after_a_wait_are_fresh_work() {
+        let mut c = Canvas::new(240, 1.4, hex("#c8b89a")).with_size_mm(440.0);
+        c.set_hand_time(Some(1.0));
+        let all = Mask::from_fn(c.frame(), |_, _| 1.0);
+        c.work(&all, &Handling::new(Tool::filbert(18.0)).color(|_, _| hex("#6f84a8")).coverage(3.0).fill(false), 3);
+        assert!(c.clock() > 0.0 && c.hand_owed() > 0.0, "sliced, with the last slice still owed");
+        let mark = c.wet.clock.mark;
+        let fresh = c.wet.stroke.iter().filter(|&&id| id > mark).count();
+        let older = c.wet.stroke.iter().filter(|&&id| id > 0 && id <= mark).count();
+        assert!(fresh > 0 && older > 0, "fresh {fresh}, older {older}");
+    }
+
     #[test]
     fn batches_cut_the_order_by_hand_time() {
         let secs = [30.0, 50.0, 0.0, 70.0, 10.0, 90.0];

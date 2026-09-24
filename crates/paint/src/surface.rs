@@ -268,7 +268,132 @@ impl Canvas {
         self.surf_gen += 1;
         out
     }
+
+    /// A thin fluid film (a glaze or varnish, `add` µm per pixel of the
+    /// whole buffer) over a **dry** surface levels its own thickness, not the
+    /// relief under it. Returns the film per pixel (µm) and raises the height.
+    ///
+    /// `settle` levels the whole surface as if it were fluid, which is right
+    /// when the wet layer is thick next to the relief. A 2 µm varnish over
+    /// 100–300 µm dry impasto can't level the impasto: leveling there puts
+    /// the level below the ridge tops (no film) and far above the foot of
+    /// every step (tens of µm of film, dark brown lines at 3200px). Here the
+    /// film follows the relief and only flows along it (lubrication theory,
+    /// ∂h/∂t = −∇·(h³σ/3η ∇∇²z)): on a convex spot of band amplitude A (above
+    /// the yield floor a_c) it thins as dh/dt = −h³σAk⁴/3η, which integrates
+    /// in closed form to h = h₀ / √(1 + 2 (A/h₀)(T/τ₀)) (τ₀ = Orchard's τ at
+    /// h₀): drainage slows as the film thins, so peaks keep a film. They keep
+    /// at least `PEAK_FILM_UM` (a wetting film: the solvent is gone and the
+    /// resin has set before it drains further). What drains moves downhill
+    /// about one bristle band and gathers in the concave spots there, at
+    /// most `POOL_MAX` times the film laid (a little deeper in the hollows,
+    /// not a line of pooled color at a step's foot). Volume is conserved
+    /// locally and then exactly.
+    pub(crate) fn settle_film(&mut self, add: &[f32], stiff: f32) -> Vec<f32> {
+        let (w, h) = (self.f.w, self.f.h);
+        let n = w * h;
+        debug_assert_eq!(add.len(), n);
+        let add: Vec<f32> = add.iter().map(|&a| if a.is_finite() && a >= ADD_EPS_UM { a } else { 0.0 }).collect();
+        let px = self.px_mm();
+        let r1 = ((0.15 / px).round() as usize).max(1);
+        let r2 = ((0.9 / px).round() as usize).max(r1 + 1);
+        let lam1 = ((2 * r1 + 1) as f32 * px * 1.5).max(0.25) * 1e-3;
+        let lam2 = ((2 * r2 + 1) as f32 * px * 1.5).max(1.5) * 1e-3;
+        let old = self.height.clone();
+        // the relief's bands (convex > 0, concave < 0), µm
+        let l1 = box_blur(&box_blur(&old, w, h, r1), w, h, r1);
+        let l2 = box_blur(&box_blur(&l1, w, h, r2), w, h, r2);
+        let (eta, ty) = rheology(stiff);
+        // per pixel: the drainage rate 2 Σ (A/h₀)(T/τ₀) on convex bands and
+        // the gathering weight on concave ones
+        let (rate, gather): (Vec<f32>, Vec<f32>) = (0..n)
+            .into_par_iter()
+            .map(|i| {
+                let a = add[i];
+                if a <= 0.0 {
+                    return (0.0, 0.0);
+                }
+                let hm = a * 1e-6;
+                let mut rate = 0.0;
+                let mut gather = 0.0;
+                for (lam, d) in [(lam1, old[i] - l1[i]), (lam2, l1[i] - l2[i])] {
+                    let (decay, a_c) = level_band(lam, hm, eta, ty, SET_TIME);
+                    if !a_c.is_finite() {
+                        continue;
+                    }
+                    // T/τ₀ from the decay factor e^(−T/τ₀)
+                    let t_tau = -decay.max(1e-30).ln();
+                    let over = (d.abs() - a_c).max(0.0) / a;
+                    if d > 0.0 {
+                        rate += 2.0 * over * t_tau;
+                    } else {
+                        gather += over * t_tau;
+                    }
+                }
+                (rate, gather.min(1.0))
+            })
+            .unzip();
+        // film left where it drains, and what it gives up
+        let kept: Vec<f32> = (0..n)
+            .map(|i| {
+                let a = add[i];
+                if a <= 0.0 {
+                    return 0.0;
+                }
+                (a / (1.0 + rate[i]).sqrt()).max(a.min(PEAK_FILM_UM))
+            })
+            .collect();
+        let drain: Vec<f32> = (0..n).map(|i| add[i] - kept[i]).collect();
+        // it moves about one bristle band downhill, into the concave spots
+        let wgt: Vec<f32> = (0..n).map(|i| add[i] * gather[i]).collect();
+        let rd = 2 * r1;
+        let bd = box_blur(&box_blur(&drain, w, h, rd), w, h, rd);
+        let bw = box_blur(&box_blur(&wgt, w, h, rd), w, h, rd);
+        let gain: Vec<f32> = (0..n)
+            .map(|i| {
+                if wgt[i] <= 0.0 || bw[i] <= 0.0 {
+                    return 0.0;
+                }
+                let g = wgt[i] * bd[i] / bw[i];
+                if g.is_finite() { g.min((POOL_MAX - 1.0) * add[i]) } else { 0.0 }
+            })
+            .collect();
+        // only what found a place to gather left the peaks: scale the
+        // drainage by the gain it made nearby (the rest stays in place)
+        let bg = box_blur(&box_blur(&gain, w, h, rd), w, h, rd);
+        let mut out: Vec<f32> = (0..n)
+            .map(|i| {
+                let a = add[i];
+                if a <= 0.0 {
+                    return 0.0;
+                }
+                let used = if bd[i] > 0.0 { (bg[i] / bd[i]).clamp(0.0, 1.0) } else { 0.0 };
+                let v = a - drain[i] * used + gain[i];
+                if v.is_finite() { v.max(0.0) } else { a }
+            })
+            .collect();
+        // the local shares are only approximately conservative: make the total exact
+        let (sa, so): (f64, f64) = (add.iter().map(|&v| v as f64).sum(), out.iter().map(|&v| v as f64).sum());
+        if so > 0.0 && so.is_finite() {
+            let k = (sa / so) as f32;
+            out.par_iter_mut().for_each(|o| *o *= k);
+        }
+        for i in 0..n {
+            if add[i] > 0.0 {
+                self.height[i] = old[i] + out[i];
+            }
+        }
+        self.surf_gen += 1;
+        out
+    }
 }
+
+/// Film a glaze or varnish keeps on the peaks of a dry relief however much
+/// it drains, µm (capped by the film laid): about the thinnest continuous
+/// film (`MIN_FILM_UM`).
+const PEAK_FILM_UM: f32 = crate::canvas::MIN_FILM_UM;
+/// Deepest a thin film gathers in a hollow of a dry relief, times the film laid.
+const POOL_MAX: f32 = 2.0;
 
 /// Smooth value noise in 0..1 (bilinear with smoothstep), lattice spacing 1.
 pub(crate) fn vnoise(x: f32, y: f32, seed: u64) -> f32 {

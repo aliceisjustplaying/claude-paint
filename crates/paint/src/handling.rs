@@ -606,7 +606,7 @@ impl Canvas {
             (None, false) => None,
         };
         let before = self.wet.current;
-        self.run_plans(plans, (ex, ey), gap, &hd.tool, hd, hd.ramps, clip, seed, &mut rng);
+        self.run_plans(plans, (ex, ey), gap, &hd.tool, hd, hd.ramps, clip, seed, &mut rng, true);
         if hd.fills() {
             self.fill_gaps(mask, hd, before, clip, seed);
         }
@@ -701,7 +701,7 @@ impl Canvas {
         }
         if !plans.is_empty() {
             let mut rng = Rng::new(seed ^ 0xF111);
-            self.run_plans(plans, (ex, ey), w * 2.0, &hd.tool, hd, hd.ramps, clip, seed ^ 0xF111, &mut rng);
+            self.run_plans(plans, (ex, ey), w * 2.0, &hd.tool, hd, hd.ramps, clip, seed ^ 0xF111, &mut rng, false);
         }
     }
 
@@ -763,14 +763,17 @@ impl Canvas {
             ring += 1;
         }
         if !plans.is_empty() {
-            self.run_plans(plans, (ex, ey), tool.width * 4.0, tool, hd, (0.03, 0.08), hd.limit.as_deref(), seed, rng);
+            self.run_plans(plans, (ex, ey), tool.width * 4.0, tool, hd, (0.03, 0.08), hd.limit.as_deref(), seed, rng, false);
         }
     }
 
     /// Paint planned strokes: group them into tiles, then paint the tiles in
-    /// four checkerboard phases, tiles within a phase in parallel.
+    /// four checkerboard phases, tiles within a phase in parallel. With hand
+    /// time on and `sliced`, in slices of hand time with the paint ageing
+    /// between them (not for strokes whose ids were fixed in advance: a
+    /// wait's watermark needs the strokes after it to take later ids).
     #[allow(clippy::too_many_arguments)]
-    fn run_plans(&mut self, plans: Vec<(f32, f32, Option<Rect>, Plan)>, (ex, ey): (f32, f32), gap: f32, tool: &Tool, hd: &Handling, ramps: (f32, f32), clip: Option<&Mask>, seed: u64, rng: &mut Rng) {
+    fn run_plans(&mut self, plans: Vec<(f32, f32, Option<Rect>, Plan)>, (ex, ey): (f32, f32), gap: f32, tool: &Tool, hd: &Handling, ramps: (f32, f32), clip: Option<&Mask>, seed: u64, rng: &mut Rng, sliced: bool) {
         let f = self.f;
         // tiles are sized per axis from the footprints: tiles painted at the
         // same time are one tile apart, so a tile at least twice the largest
@@ -830,21 +833,33 @@ impl Canvas {
         }
         // (strokes with ids fixed in advance don't take new ones)
         let free = |t: &Vec<Plan>| t.iter().filter(|p| p.id.is_none()).count() as u32;
-        let n_strokes: u32 = tiles.iter().map(free).sum();
-        let first_id = if n_strokes > 0 { self.next_stroke_ids(n_strokes) } else { 0 };
-        let mut offsets = Vec::with_capacity(tiles.len());
-        let mut acc = 0u32;
-        for t in &tiles {
-            offsets.push(acc);
-            acc += free(t);
-        }
-
         let order = tile_order(hd.order, (tw, th), (tile_x, tile_y), rng);
         // with hand time on, the passages are painted in slices of hand time
         // and the paint ages between them (`tally::batches`); else one batch
-        let batches = crate::tally::batches(&order, &tile_secs, self.hand_slice_secs());
+        let slice = if sliced { self.hand_slice_secs() } else { None };
+        // a hand works down a passage, not in the checkerboard phases that
+        // let tiles run in parallel: with the paint ageing as it goes, the
+        // default order becomes a sweep down (an order asked for is kept)
+        let order = match (slice, hd.order) {
+            (Some(_), Order::Passages | Order::Scatter) => tile_order(Order::Sweep(std::f32::consts::FRAC_PI_2), (tw, th), (tile_x, tile_y), rng),
+            _ => order,
+        };
+        let batches = crate::tally::batches(&order, &tile_secs, slice);
         let n_batches = batches.len();
+        let mut offsets = vec![0u32; tiles.len()];
         for (bi, (order, bsecs)) in batches.into_iter().enumerate() {
+        // stroke ids for this slice's strokes, in tile order (all at once for
+        // a single slice): a wait between slices sees the next slice's
+        // strokes as fresh work
+        let mut in_batch = order.clone();
+        in_batch.sort_unstable();
+        let n_strokes: u32 = in_batch.iter().map(|&t| free(&tiles[t])).sum();
+        let first_id = if n_strokes > 0 { self.next_stroke_ids(n_strokes) } else { 0 };
+        let mut acc = 0u32;
+        for &t in &in_batch {
+            offsets[t] = acc;
+            acc += free(&tiles[t]);
+        }
         let surf = self.surf();
         // a crop render skips passages that miss its window (they paint
         // nothing it holds; the rest keep their relative order)

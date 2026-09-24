@@ -10,7 +10,7 @@ foot and a fracture face on the right, one arris line, one brow line and one cra
 (plane 29, turned down to the meadow, 0.52), fracture face in shadow (planes 21/33/36,
 0.23–0.30).
 
-## Key (the owner judges blind)
+## Key (Alice judges blind)
 **P = H** (hierarchical detail), **Q = B** (round 1's rock B recipe). Drawn with
 `random.SystemRandom().choice`.
 

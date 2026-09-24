@@ -460,7 +460,7 @@ mention "point 10"). Un-ignore it with the fix.
   of build when the engine changed. The golden scene is recorded with this
   profile (`UPDATE_GOLDEN=1 cargo test -p paint`).
 - **Before a merge:** also `cargo test --release -p easel --test hand_time`
-  (the owner's logs replayed in the release build, hashed). The release
+  (Alice's logs replayed in the release build, hashed). The release
   profile is deterministic (`incremental = false`, `codegen-units = 1`):
   two clean builds give byte-identical binaries and renders, so a hash
   mismatch is a real change, not build noise.

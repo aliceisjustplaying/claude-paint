@@ -2,8 +2,9 @@
 //! determinism, and a golden fingerprint of a small scene) so refactors can
 //! prove they change nothing. Regenerate the golden file deliberately with
 //! `UPDATE_GOLDEN=1 cargo test -p paint` when a change is meant to alter
-//! rendering. The golden is recorded in the default (debug) test profile;
-//! release builds round floats differently and don't match it.
+//! rendering. The golden is recorded with the workspace's `[profile.test]`
+//! (optimized, debug assertions on, not incremental: see Cargo.toml); a
+//! release build rounds floats differently and doesn't match it.
 
 use crate::bristle::{Gesture, Held, Orient, Tool};
 use crate::canvas::Canvas;

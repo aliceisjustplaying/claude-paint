@@ -654,6 +654,38 @@ mod tests {
             stats(&c, "after blend");
         }
 
+        /// A brush's tip dirties first: touches of one load into a wet dark
+        /// start as clean as touches from a fresh load at the same spots;
+        /// the later ones are dirtier, as the tip lays down the dark it
+        /// picked up;
+        /// a reload is clean again.
+        #[test]
+        fn touches_of_one_load_dirty_as_they_go() {
+            use crate::bristle::Touch;
+            let run = |reload_each: bool| {
+                let mut c = Canvas::new(1000, 0.25, hex(GROUND)).with_linen(Linen::fine(3));
+                field(&mut c, Paint::body(hex("#262a24")), 1.0, 20.0, 230.0);
+                let d = to_oklab(c.under(300.0, 125.0, 5.0))[0];
+                let mut h = Held::new(Tool::filbert(10.0), 21);
+                (0..6)
+                    .map(|k| {
+                        if k == 0 || k == 5 || reload_each {
+                            h.reload(light(), 0.9);
+                        }
+                        let x = 360.0 + 40.0 * k as f32;
+                        c.touch(&mut h, &Touch::at(x, 125.0).pressure(0.8).drag(2.0, 1.0).angle(0.5), None);
+                        to_oklab(c.under(x + 1.0, 125.5, 1.5))[0] - d
+                    })
+                    .collect::<Vec<f32>>()
+            };
+            let (one, fresh) = (run(false), run(true));
+            let r: Vec<f32> = one.iter().zip(&fresh).map(|(a, b)| a / b).collect();
+            assert!(r[0] > 0.98, "the first touch is as clean as a fresh load's: {r:?}");
+            // (it settles: each touch lays what the one before picked up)
+            assert!(r[1..5].iter().sum::<f32>() / 4.0 < 0.96, "later touches of one load are dirtier: {r:?}");
+            assert!(r[5] > 0.98, "a reload is clean again: {r:?}");
+        }
+
         /// Whatever brushes do, the surface film is part of the film:
         /// finite, not negative and never more than the whole.
         #[test]

@@ -1,5 +1,9 @@
 # Handoff (2026-09-23 evening): moving to the M3 Pro
 
+**Update 2026-09-24 morning: Round 6 night 1 ran (steps 1–4 of the plan
+below, plus critic panels). Read `notes/round6.md` first: what landed on
+main, what waits on branches and the decisions for the owner.**
+
 Read this first in a new session. Then `notes/round5_plan.md` (the current
 round, its rules and a status log) and `notes/scores.md` (every critic
 batch so far).

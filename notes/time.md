@@ -249,6 +249,47 @@ found.
 - By hand: `l5_near.lua` and `l3_green.lua` at 1000 px are byte-identical
   (`cmp`) to the renders from before this branch.
 
+## Review fixes (after the merge)
+
+A code review (gpt-6-astra) found three defects. Each now has a regression
+test that failed on the merged code:
+
+1. **A checkpoint dropped hand time.** `Canvas::write_state` stored
+   neither the slice setting nor the ledger. A resumed hand-timed painting
+   had hand time off and an empty ledger: its passes no longer aged between
+   slices, and the time still owed was lost. Checkpoint version 7
+   (`PAINTCK7`) stores both, including `clocked`. The r6-wet branch drafted
+   its two-layer film as version 7 too, so it becomes 8 when it merges
+   (see the note in `checkpoint.rs`). Test:
+   `tally::tests::a_checkpoint_keeps_hand_time_and_the_ledger`, which
+   checks an uninterrupted run against a checkpointed one with time owed:
+   ledger, clock bits and pixels. The easel's own checkpoints already
+   carried the hand state; `time::tests::edits_and_undo_keep_the_hand_state_of_a_replay`
+   now pins it (an `edit` and a deep undo match a fresh replay's clock,
+   timesheet and picture).
+2. **Clock queries after a finish reused its drying.** `varnish()` dries
+   the paint without telling the studio clock. The flush left that
+   interval unreported, so every later `timesheet()`, `clock()` or
+   `drying()` in the chunk saw it again and started another sitting
+   (2, 3, 7), and the sitting could go negative. Now the flush takes the
+   interval into the clock exactly once and banks it for the chunk's
+   "passed while the paint dried" note, which still appears once. Test:
+   `time::tests::queries_after_a_finish_consume_its_drying_once`. One
+   side effect: `clock()` called after a finish in the same chunk now
+   returns the true clock, where before it returned the clock from before
+   the finish until the chunk ended.
+3. **Hand time overrode an order asked for.** With slicing on, explicit
+   `order="scatter"` and `order="passages"` also became a sweep down.
+   `Handling::order_set` (set by `order()` and `sweep()`) now separates a
+   choice from the default, and only the default is swept. A preset's own
+   order counts as a default. Test:
+   `tally::tests::hand_time_keeps_an_order_asked_for`, which reads the
+   paint's age: a sweep leaves the top rows about 2.3× as cured as the
+   bottom, while explicit scatter and passages age the whole area alike.
+
+Hand time off is unchanged by all three: the benchmark logs are still
+byte-identical at 1000 px and the golden scene is unchanged.
+
 ## Known issues and ceilings
 
 - **The numbers are estimates.** The movement laws are sourced; the tunnel

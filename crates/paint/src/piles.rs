@@ -75,7 +75,14 @@ pub struct Pile {
 
 pub struct PileSet {
     pub piles: Vec<Pile>,
+    /// The piles' looks (OKLab): a pick by look.
     labs: Vec<Rgb>,
+    /// The piles' paints (masstone, OKLab), when they were chosen by the
+    /// paint strokes need (`by_paint`): a pick by paint.
+    paints: Option<Vec<Rgb>>,
+    /// How the paint a stroke needs is judged (medium, coats, marks), as
+    /// the piles were mixed.
+    aim: Option<(f32, f32, Marks)>,
     /// The field the painter wrote (the light as they see it).
     field: Box<dyn Fn(f32, f32) -> Rgb + Send + Sync>,
     pub opts: PileOpts,
@@ -216,6 +223,8 @@ impl PileSet {
         PileSet {
             piles,
             labs,
+            paints: None,
+            aim: None,
             field,
             opts,
             palette: None,
@@ -247,23 +256,107 @@ impl PileSet {
         Self::new(wants, field, opts)
     }
 
+    /// Piles chosen by the paint the strokes need, and mixed: at points of
+    /// `over` every `step` units (that the canvas holds), the pile a pass
+    /// would mix for the field's look over what is there (`Palette::aim_for`
+    /// with `medium`, `coats` and `marks`; by masstone if `coats` is None);
+    /// `n` piles along the range of those paints (`choose`, on their
+    /// masstones), each knifed once to its paint (`Palette::mix`) and
+    /// missing a little (`vary`). One bank of cloud crossing a dark sky and
+    /// a warm glow needs two paints for one look, and gets them. A pile's
+    /// look (`want`) is the mean of the looks it was chosen for.
+    #[allow(clippy::too_many_arguments)]
+    pub fn by_paint(field: Box<dyn Fn(f32, f32) -> Rgb + Send + Sync>, cv: &Canvas, over: &Mask, n: usize, pal: &Palette, medium: f32, coats: Option<f32>, marks: Marks, step: f32, opts: PileOpts) -> Self {
+        let f = over.f;
+        let win = cv.window();
+        let step = step.max(1.0);
+        // (paint, look, weight) per sample
+        let mut samples: Vec<(Rgb, Rgb, f32)> = Vec::new();
+        let mut y = 0.5 * step;
+        while y < f.height() {
+            let mut x = 0.5 * step;
+            while x < f.width() {
+                let w = over.data[f.index(x, y)];
+                if w > 0.25 && win.holds(x, y) {
+                    let want = field(x, y);
+                    let need = match coats {
+                        Some(c) => pal.aim_for(want, cv.judge_under(x, y, step.min(8.0)), medium, c, marks),
+                        None => pal.mix(want),
+                    };
+                    samples.push((to_oklab(need.color), to_oklab(want), w));
+                }
+                x += step;
+            }
+            y += step;
+        }
+        let centers = choose(&samples.iter().map(|s| (s.0, s.2)).collect::<Vec<_>>(), n.max(1));
+        if centers.is_empty() {
+            // nothing of `over` on this canvas: one pile by masstone
+            let want = field(0.5 * f.width(), 0.5 * f.height());
+            let mut set = Self::new(vec![want], field, opts);
+            set.mix(cv, over, pal, medium, None, marks, step);
+            return set;
+        }
+        // each pile's look: the mean look of the samples whose paint it is
+        let mut looks = vec![([0.0f32; 3], 0.0f32); centers.len()];
+        for (p, l, w) in &samples {
+            let k = nearest(&centers, *p).0;
+            for c in 0..3 {
+                looks[k].0[c] += l[c] * w;
+            }
+            looks[k].1 += w;
+        }
+        let wants: Vec<Rgb> = looks.iter().zip(&centers).map(|((s, w), c)| if *w > 0.0 { from_oklab([s[0] / w, s[1] / w, s[2] / w]) } else { from_oklab(*c) }).collect();
+        let mut set = Self::new(wants, field, opts);
+        for (i, c) in centers.iter().enumerate() {
+            let m = pal.mix(from_oklab(*c));
+            let mut rng = Rng::new(opts.seed ^ 0x9111_E5ED ^ (i as u64).wrapping_mul(0x9E37_79B9));
+            set.piles[i].recipe = Some(pal.remix(&m, opts.vary, &mut rng));
+            set.piles[i].near = (0..centers.len()).filter(|&j| j != i).min_by(|&a, &b| dist(centers[a], *c).total_cmp(&dist(centers[b], *c))).unwrap_or(i);
+        }
+        set.paints = Some(centers);
+        set.aim = coats.map(|c| (medium, c, marks));
+        set.palette = Some(pal.clone());
+        set
+    }
+
     /// The field the painter wrote, at (x, y).
     pub fn field_at(&self, x: f32, y: f32) -> Rgb {
         (self.field)(x, y)
     }
 
-    /// The pile a stroke centered at (x, y) is loaded from.
+    /// The pile a stroke centered at (x, y) is loaded from, by the look
+    /// wanted there (see `pick_over` for the pile by the paint it needs).
     pub fn pick(&self, x: f32, y: f32) -> usize {
-        if self.piles.len() == 1 {
+        self.pick_in(&self.labs, to_oklab((self.field)(x, y)), x, y)
+    }
+
+    /// The pile a stroke centered at (x, y) over `under` (what is on the
+    /// canvas there) is loaded from: for piles chosen by paint, the one
+    /// nearest the paint the stroke needs (the pile aimed at the field's
+    /// look over `under`, `Palette::aim_for`, as a pass mixing for the
+    /// field would mix it); otherwise by look (`pick`).
+    pub fn pick_over(&self, x: f32, y: f32, under: Rgb) -> usize {
+        match (&self.paints, self.aim, &self.palette) {
+            (Some(paints), Some((medium, coats, marks)), Some(pal)) => {
+                let need = pal.aim_for((self.field)(x, y), under, medium, coats, marks);
+                self.pick_in(paints, to_oklab(need.color), x, y)
+            }
+            _ => self.pick(x, y),
+        }
+    }
+
+    /// Nearest of `labs` to `l`, the boundary between two piles' zones
+    /// displaced by a coherent wander and a little chance per stroke.
+    fn pick_in(&self, labs: &[Rgb], l: Rgb, x: f32, y: f32) -> usize {
+        if labs.len() == 1 {
             return 0;
         }
-        let l = to_oklab((self.field)(x, y));
-        let (i1, d1, i2, d2) = nearest(&self.labs, l);
-        // where between the two piles the field is (0 at the first, 0.5
-        // halfway), the boundary moved by a coherent wander and a little
-        // chance per stroke
-        // (oriented from the lower index to the higher, so the displacement
-        // moves the boundary instead of swapping the piles on both sides)
+        let (i1, d1, i2, d2) = nearest(labs, l);
+        // where between the two piles the stroke's color is (0 at the
+        // first, 0.5 halfway), oriented from the lower index to the higher
+        // so the displacement moves the boundary instead of swapping the
+        // piles on both sides
         let r = d1 / (d1 + d2).max(1e-9);
         let (a, b, pos) = if i1 < i2 { (i1, i2, r) } else { (i2, i1, 1.0 - r) };
         let n = (1.6 * self.wander.get(x, y)).clamp(-1.0, 1.0) * 0.8 + 0.4 * (unit_at(x, y, self.opts.seed) - 0.5);
@@ -430,6 +523,32 @@ mod tests {
             let hi = (0..1000).step_by(7).map(|x| set.pick(x as f32, y as f32)).max().unwrap();
             assert!(hi - lo <= 1, "row {y}: piles {lo}..{hi}");
         }
+    }
+
+    /// One look over two underlayers (a cloud crossing a dark sky and a
+    /// warm glow) needs two paints: piles chosen by paint give it two, and
+    /// a stroke picks the one for what it lies over. (Chosen by look, both
+    /// sides got one pile aimed at the median underlayer: violet over the
+    /// glow in evening_lake's bank.)
+    #[test]
+    fn piles_by_paint_follow_the_underlayer() {
+        let mut cv = Canvas::new(400, 1.0, crate::color::hex("#d8c7a0"));
+        let f = cv.frame();
+        let left = Mask::from_fn(f, |x, _| if x < 500.0 { 1.0 } else { 0.0 });
+        cv.glaze(&crate::pigment::Pigment::transparent(crate::color::hex("#2a3350")), Some(&left), |_, _| 1.5);
+        let pal = Palette::friedrich_1820();
+        let m = Mask::full(f);
+        let grey = crate::color::hex("#8a8590");
+        let set = PileSet::by_paint(Box::new(move |_, _| grey), &cv, &m, 2, &pal, 0.3, Some(0.8), Marks::Blunt, 10.0, PileOpts { overlap: 0.0, ..PileOpts::default() });
+        assert_eq!(set.piles.len(), 2, "{:?}", set.describe());
+        let (ul, ur) = (cv.judge_under(250.0, 500.0, 4.0), cv.judge_under(750.0, 500.0, 4.0));
+        let (a, b) = (set.pick_over(250.0, 500.0, ul), set.pick_over(750.0, 500.0, ur));
+        assert_ne!(a, b, "left and right take different piles: {:?}", set.describe());
+        // the pile over the dark is the lighter paint (it must cover more)
+        let l = |i: usize| to_oklab(set.piles[i].recipe.as_ref().unwrap().color)[0];
+        assert!(l(a) > l(b) + 0.03, "over the dark {:.3}, over the light {:.3}", l(a), l(b));
+        // by look alone there is one color here, so one pile for both
+        assert_eq!(set.pick(250.0, 500.0), set.pick(750.0, 500.0));
     }
 
     #[test]

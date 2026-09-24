@@ -53,7 +53,7 @@ fn finish(mut c: Canvas, k: &Cracks) -> Canvas {
 fn main() {
     let o = paintings::run::Run::new("study_aging");
     let s = o.seed;
-    let old = Cracks { island_mm: Some(3.5), ground_um: Some(60.0), width_um: Some(70.0), depth_um: 35.0, cupping_um: 30.0, dirt: 0.6, corners: true, vary: 0.0, veil: 0.0, seed: s };
+    let old = Cracks { island_mm: Some(3.5), ground_um: Some(60.0), width_um: Some(70.0), depth_um: 35.0, cupping_um: 30.0, dirt: 0.6, corners: true, vary: 0.0, veil: 0.0, hierarchy: 0.0, patchy: 0.0, grain: 0.0, grime: 0.0, seed: s };
     let new = Cracks::aged(s);
     let w = o.width;
     eprintln!("  {w}px canvases");

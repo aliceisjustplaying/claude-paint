@@ -45,7 +45,7 @@ fn main() {
     let ph = (pw as f32 / aspect).round() as usize;
     let s = o.seed;
     // the calibration panels: even aging, no varnish veil
-    let base = Cracks { corners: false, island_mm: Some(3.0), vary: 0.0, veil: 0.0, ..Cracks::aged(s) };
+    let base = Cracks { corners: false, island_mm: Some(3.0), vary: 0.0, veil: 0.0, ..Cracks::even(s) };
     let panels = [
         panel(pw, 50.0, aspect, &Cracks { ground_um: Some(0.0), ..base }, s),
         panel(pw, 50.0, aspect, &Cracks { ground_um: Some(50.0), ..base }, s),

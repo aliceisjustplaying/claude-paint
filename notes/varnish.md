@@ -65,7 +65,8 @@ A new `Canvas::settle_film` (`crates/paint/src/surface.rs`) for a thin fluid fil
 - What drains moves downhill about one bristle band (two box blurs of radius 2·r₁) and
   gathers in the concave spots there, weighted by how concave they are, **at most 2× the
   film laid** (`POOL_MAX`). What finds no place stays where it was. Volume is conserved
-  locally, then exactly.
+  locally, then exactly, and the exact correction doesn't push a pixel past either
+  bound (see "Maintenance" below).
 
 The varnish now reads as what it should be: a gentle, even, warm layer. It is a little
 deeper in the weave's hollows and there are no lines.
@@ -153,3 +154,31 @@ to hide the worms (the lab2 oakleaf logs; I left those records as they are).
 - Crops: like `settle`, `settle_film` ends with an exact volume rescale over the whole
   buffer, so a crop can differ very slightly from a whole render (as before). I did
   not measure it.
+
+## Maintenance (round 6 review, S5)
+
+- `settle` and `settle_film` share their scaffolding in `surface.rs`: `Bands::at(px_mm)`
+  (the two band radii and wavelengths), `conserve_total` (the exact volume correction) and
+  `Canvas::raise` (the height write-back). Each function now shows only its own physics.
+  The clean-up of tiny deposits stays separate on purpose: `settle` zeroes only positive
+  residue below `ADD_EPS_UM` (and only when there is some), `settle_film` also zeroes
+  non-finite and negative requests; sharing one would change `settle` on such input.
+- **The clamps were approximate (a reviewer's suspicion, measured).** `settle_film`
+  clamped each pixel (peak film ≥ `PEAK_FILM_UM`, pool ≤ `POOL_MAX` × laid) and then
+  scaled every pixel by `k` = laid / kept to make the total exact. In the unit case
+  (0.094 mm/px) `k` = 0.999905 and 5 floor-clamped peaks ended below the floor. In
+  l5_near at 3200 (crop 350,250,650,450) the varnish had `k` = 0.99481: 655 of 48,131
+  floor-clamped peaks ended 0.52% under it. Now the pixels the factor would carry past
+  their bound stop at it and the rest make up the difference (a few rounds), so the
+  total and the bounds are both exact (tests `the_total_is_made_exact_within_the_bounds`
+  and `a_film_over_impasto_keeps_its_bounds_exactly`, both failing before).
+  Every `settle_film` call in the golden scene and in l5_near and l3_green at 1000 has
+  `k` = 1 exactly, so nothing is pinned there, and those render byte-identical. Where it
+  does act, it is invisible: in that l5_near 3200 crop, 246 of 614,400 pixels move, each by
+  1/255.
+- **Comparing renders: build clean.** The release profile is incremental
+  (`Cargo.toml`), and an incremental release build can round a few floats differently
+  from a clean build of the same source: a clean rebuild of the starting commit in this
+  worktree's `target/` rendered l3_green with 21 pixels 1/255 off its first render.
+  Clean, non-incremental builds (`CARGO_PROFILE_RELEASE_INCREMENTAL=false` and a fresh
+  `CARGO_TARGET_DIR`) of the base and of this branch rendered it identically.

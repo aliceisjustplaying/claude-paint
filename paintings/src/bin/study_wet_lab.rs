@@ -10,6 +10,8 @@
 //! 4. reference: the brush-free `glaze()` verb over dry sky, same color.
 //! 5. **a thin stroke into open water**, a round 3 with a varying pressure,
 //!    then a short level blend (the "tramlines").
+//! 6. **a clean blender over a lean veil on open thin sky** (lab 3: "salmon
+//!    dashes after `blend` at coverage 1.2 over a lean filbert veil").
 //!
 //! Printed: the share of each panel's worked area that shows the ground,
 //! its texture (mean |L − L blurred over 2 units|, OKLab ×1000: rims,
@@ -22,7 +24,7 @@
 use paint::color::to_oklab;
 use paint::{Canvas, Gesture, Held, Mask, Orient, Pigment, Rgb, Stage, Style, Tool, hex};
 
-const W: f32 = 1000.0 / 6.0;
+const W: f32 = 1000.0 / 7.0;
 const Y0: f32 = 40.0;
 const Y1: f32 = 360.0;
 
@@ -146,6 +148,13 @@ fn main() {
     c.drag(&mut r, &Gesture::new(vec![(x0 + 10.0, 200.0), (x1 - 10.0, 200.0)]).pressure(0.45, 0.45).swell(vec![0.25, 1.1, 0.7, 1.2, 0.1]).orient(Orient::Across), None);
     let lb = st.blend().expect("blender").coverage(1.0).angle(|_, _| 0.0).length(20.0, 40.0);
     c.work(&rect(&c, x0 + 10.0, 192.0, x1 - 10.0, 208.0), &lb, 42);
+    sky(&mut c, &st, 6, Y1);
+    let (x0, x1) = panel(6);
+    let veil = hex("#9a968e");
+    let mut vh = st.body().color(move |_, _| veil).medium(0.5).load(0.3).length(20.0, 50.0);
+    vh.tool = Tool::filbert(6.0);
+    c.work(&rect(&c, x0 + 15.0, 120.0, x1 - 15.0, 300.0), &vh, 50);
+    c.work(&rect(&c, x0 + 15.0, 120.0, x1 - 15.0, 300.0), &st.blend().expect("blender").coverage(1.2), 51);
     c.dry();
     // measure
     let img = Img::new(&c);
@@ -157,8 +166,8 @@ fn main() {
             _ => (x0 + 20.0, 125.0, x1 - 20.0, 295.0),
         }
     };
-    let names = ["blend on a wet seam", "glaze hand, open sky", "glaze hand, tacky sky", "glaze hand, dry sky", "glaze() verb, dry sky", "thin stroke into open water"];
-    for k in 0..6 {
+    let names = ["blend on a wet seam", "glaze hand, open sky", "glaze hand, tacky sky", "glaze hand, dry sky", "glaze() verb, dry sky", "thin stroke into open water", "blend over a lean veil, open"];
+    for k in 0..7 {
         println!("{k} {:<28} ground {:>5.1}%  texture {:>5.1}", names[k], 100.0 * img.ground(g, area(k)), img.texture(area(k)));
     }
     // tramlines: the stroke's cross profile, averaged along it

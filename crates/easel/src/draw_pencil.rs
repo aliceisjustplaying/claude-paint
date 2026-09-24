@@ -66,7 +66,9 @@ fn draw_marks(st: &S, p: &Table, marks: &[Mark], seed: u64) -> Result<f32> {
             worn += d;
             drawn += d;
         }
+        c.tally_mut().draw(marks.len() as u64, drawn as f64);
     }
+    crate::time::flush(st, true);
     p.set("worn", worn)?;
     Ok(drawn)
 }

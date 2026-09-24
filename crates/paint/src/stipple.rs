@@ -508,12 +508,11 @@ impl Canvas {
         let n_memo = memo.len();
         // the hand's ledger: every planned touch and trip to the palette (on
         // the whole canvas, before a crop drops passages; see `tally`)
-        let mpu = self.mm_per_unit;
         let mut tile_secs = Vec::with_capacity(plans.len());
         for t in plans.iter() {
             let secs0 = self.tally.secs;
             for p in t {
-                self.tally.touch(&sp.tool, mpu);
+                self.tally.touch();
                 if p.dip.is_some() {
                     piles.trip(&mut self.tally, p.want);
                 }

@@ -168,16 +168,52 @@ impl Paint {
     }
 }
 
+/// A part of a film of paint: `v` coats of pigment `lat` with properties
+/// `hide`. The wet film's surface film, a bristle's tip, paint set aside
+/// under a stroke and the parcels brushes lift and push are all layers.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct Layer {
+    pub(crate) v: f32,
+    pub(crate) lat: Latent,
+    pub(crate) hide: Prop,
+}
+
+impl Layer {
+    /// No paint (the pigment a fresh buffer starts with).
+    pub(crate) const EMPTY: Layer = Layer { v: 0.0, lat: [0.0; LAT], hide: [0.0, 0.5, 1.0] };
+
+    pub(crate) fn new(v: f32, lat: Latent, hide: Prop) -> Self {
+        Layer { v, lat, hide }
+    }
+
+    /// Mix `v` coats of `lat`/`hide` into this layer by volume.
+    #[inline]
+    pub(crate) fn mix(&mut self, v: f32, lat: &Latent, hide: Prop) {
+        mix_into(&mut self.v, &mut self.lat, &mut self.hide, v, lat, hide);
+    }
+
+    /// `v` coats of this layer's paint (a parcel of it; this layer keeps
+    /// its volume).
+    #[inline]
+    pub(crate) fn of(&self, v: f32) -> Layer {
+        Layer { v, ..*self }
+    }
+}
+
 /// The wet paint on the canvas, per pixel: a film of `vol` coats in two
-/// parts. The **surface film** (`top` coats of `tlat`/`thide`) is paint laid
-/// into wet paint and not yet worked into it: a loaded brush laid with a
-/// light touch leaves its paint on top of the wet layer, as oil paint does.
-/// The rest (`vol − top` coats of `lat`/`hide`) is the **body** of the film:
-/// paint laid on a dry surface, and everything brushes have worked in.
-/// Bristles pressing through the surface film stir it into the body (see
-/// `bristle::exchange`); `look_px` and `dry` composite the surface over the
+/// parts. The **surface film** (`top`, a `Layer`) is paint laid into wet
+/// paint and not yet worked into it: a loaded brush laid with a light touch
+/// leaves its paint on top of the wet layer, as oil paint does. The rest
+/// (`vol − top.v` coats of `lat`/`hide`, `Wet::body`) is the **body** of
+/// the film: paint laid on a dry surface, and everything brushes have
+/// worked in. Bristles pressing through the surface film stir it into the
+/// body (see `film`); `look_px` and `dry` composite the surface over the
 /// body with Kubelka–Munk. Everything that asks how much wet paint lies
 /// there (drying, leveling, the brushes' contact) reads `vol`, the whole.
+///
+/// `vol` is stored and the body's volume is what is left of it: every
+/// change to the film goes through `vol` (the brushes' film operations in
+/// `film`, drying), so a part is never larger than the whole it is in.
 #[derive(Clone)]
 pub(crate) struct Wet {
     pub(crate) vol: Vec<f32>,
@@ -185,17 +221,8 @@ pub(crate) struct Wet {
     pub(crate) lat: Vec<Latent>,
     /// [scattering, stiffness, drying rate] of the film's body.
     pub(crate) hide: Vec<Prop>,
-    /// The surface film: its thickness (coats, part of `vol`), pigment and
-    /// properties.
-    pub(crate) top: Vec<f32>,
-    pub(crate) tlat: Vec<Latent>,
-    pub(crate) thide: Vec<Prop>,
-    /// While a stroke is being painted: an earlier surface film it has set
-    /// aside under its own paint (coats, part of `vol`; its pigment lives
-    /// with the stroke, at index `midx`). Settled, so 0, when the stroke
-    /// ends (`bristle::Surf::settle_mid`): never seen between strokes.
-    pub(crate) mid: Vec<f32>,
-    pub(crate) midx: Vec<u32>,
+    /// The surface film (its coats are part of `vol`).
+    pub(crate) top: Vec<Layer>,
     /// Which stroke last laid paint here (a stroke barely re-picks its own paint).
     pub(crate) stroke: Vec<u32>,
     /// Stroke that last touched a pixel, and the film floor that stroke may
@@ -221,11 +248,7 @@ impl Wet {
             vol: vec![0.0; n],
             lat: vec![[0.0; LAT]; n],
             hide: vec![[0.0, 0.5, 1.0]; n],
-            top: vec![0.0; n],
-            tlat: vec![[0.0; LAT]; n],
-            thide: vec![[0.0, 0.5, 1.0]; n],
-            mid: vec![0.0; n],
-            midx: vec![0; n],
+            top: vec![Layer::EMPTY; n],
             stroke: vec![0; n],
             touched: vec![0; n],
             floor: vec![0.0; n],
@@ -240,7 +263,15 @@ impl Wet {
     /// `i`: body and surface mixed by volume (what dries, levels and sets).
     #[inline]
     pub(crate) fn prop(&self, i: usize) -> Prop {
-        whole(self.vol[i], self.top[i], self.hide[i], self.thide[i])
+        whole(self.vol[i], self.hide[i], &self.top[i])
+    }
+
+    /// Clear pixel `i`'s wet film (it has dried or baked): no body and no
+    /// surface film (their last pigments stay, unread).
+    #[inline]
+    pub(crate) fn clear(vol: &mut f32, top: &mut Layer) {
+        *vol = 0.0;
+        top.v = 0.0;
     }
 
     pub fn touch(&mut self, x0: usize, y0: usize, x1: usize, y1: usize) {
@@ -268,9 +299,11 @@ pub fn mix_into(rv: &mut f32, rl: &mut Latent, rh: &mut Prop, v: f32, lat: &Late
 
 
 /// [scattering, stiffness, drying rate] of a film `v` coats thick whose
-/// body has `b` and whose surface film (`t` of the `v` coats) has `s`.
+/// body has `b` and whose surface film (`top.v` of the `v` coats) has
+/// `top.hide`.
 #[inline]
-pub(crate) fn whole(v: f32, t: f32, b: Prop, s: Prop) -> Prop {
+pub(crate) fn whole(v: f32, b: Prop, top: &Layer) -> Prop {
+    let (t, s) = (top.v, top.hide);
     if t <= 0.0 || v <= 0.0 {
         return b;
     }
@@ -278,22 +311,21 @@ pub(crate) fn whole(v: f32, t: f32, b: Prop, s: Prop) -> Prop {
     std::array::from_fn(|k| b[k] + (s[k] - b[k]) * a)
 }
 
-/// One pixel's wet film (body `lat`/`hide`, surface `tlat`/`thide` of `t`
-/// of its `v` coats), `coats` thick (as laid, or as it levels), over
-/// `under`, covering the share `cover` of the pixel (see `over_share`): the
-/// body, then the surface film over it, each its share of the thickness.
+/// One pixel's wet film (body `lat`/`hide`, surface film `top`, `v` coats
+/// in all), `coats` thick (as laid, or as it levels), over `under`,
+/// covering the share `cover` of the pixel (see `over_share`): the body,
+/// then the surface film over it, each its share of the thickness.
 /// Without a surface film this is `over_share` of the body, bit for bit.
-#[allow(clippy::too_many_arguments)]
-pub(crate) fn film_over(lat: &Latent, hide: Prop, tlat: &Latent, thide: Prop, v: f32, t: f32, under: Rgb, coats: f32, cover: f32) -> Rgb {
+pub(crate) fn film_over(lat: &Latent, hide: Prop, top: &Layer, v: f32, under: Rgb, coats: f32, cover: f32) -> Rgb {
     let body = || Pigment::masstone(mixbox::latent_to_linear_float_rgb(lat), hide[0]);
-    let t = t.min(v);
+    let t = top.v.min(v);
     if t <= 1e-7 || v <= 0.0 {
         return over_share(body(), under, coats, cover);
     }
     if cover.is_nan() || cover <= 0.0 {
         return under;
     }
-    let surf = Pigment::masstone(mixbox::latent_to_linear_float_rgb(tlat), thide[0]);
+    let surf = Pigment::masstone(mixbox::latent_to_linear_float_rgb(&top.lat), top.hide[0]);
     // (within the share of the pixel the paint covers, as `over_share`)
     let c = cover.min(1.0);
     let k = (coats / v / c).min(1e4 / v.max(1e-9));
@@ -332,7 +364,7 @@ impl Canvas {
             return self.px[i];
         }
         let w = &self.wet;
-        film_over(&w.lat[i], w.hide[i], &w.tlat[i], w.thide[i], v, w.top[i], self.px[i], v, w.cover[i])
+        film_over(&w.lat[i], w.hide[i], &w.top[i], v, self.px[i], v, w.cover[i])
     }
 
     /// What the painter sees, pixel by pixel over the window: the dry
@@ -588,9 +620,7 @@ mod tests {
                 c.wet.vol[i] = 2.0;
                 c.wet.lat[i] = dark.latent();
                 c.wet.hide[i] = [dark.scatter, 1.0, 1.0];
-                c.wet.top[i] = 0.8;
-                c.wet.tlat[i] = lt.latent();
-                c.wet.thide[i] = [lt.scatter, 1.0, 1.0];
+                c.wet.top[i] = crate::wet::Layer::new(0.8, lt.latent(), [lt.scatter, 1.0, 1.0]);
             }
             c.wet.touch(0, 0, c.frame().w, c.frame().h);
             let i = c.frame().index(500.0, 500.0);
@@ -601,7 +631,7 @@ mod tests {
             let got = c.px[i];
             let e = (0..3).map(|k| (got[k] - want[k]).abs()).fold(0.0, f32::max);
             assert!(e < 0.02, "dried {got:?}, want the light over the dark {want:?} (not the mixture {mixed:?})");
-            assert!(c.wet.top.iter().all(|&t| t == 0.0), "no surface film is left after drying");
+            assert!(c.wet.top.iter().all(|t| t.v == 0.0), "no surface film is left after drying");
         }
 
         #[test]
@@ -622,9 +652,9 @@ mod tests {
                 }
                 let f = c.frame();
                 let i = f.index(461.0, 125.5);
-                let tl = to_oklab(mixbox::latent_to_linear_float_rgb(&c.wet.tlat[i]))[0];
+                let tl = to_oklab(mixbox::latent_to_linear_float_rgb(&c.wet.top[i].lat))[0];
                 let bl = to_oklab(mixbox::latent_to_linear_float_rgb(&c.wet.lat[i]))[0];
-                println!("{w} px: lift over the dark per touch{out}; first center vol {:.2} top {:.2} (L {tl:.2}, body L {bl:.2}, light L {:.2}) S {:.1}/{:.1}", c.wet.vol[i], c.wet.top[i], to_oklab(light().color)[0], c.wet.thide[i][0], c.wet.hide[i][0]);
+                println!("{w} px: lift over the dark per touch{out}; first center vol {:.2} top {:.2} (L {tl:.2}, body L {bl:.2}, light L {:.2}) S {:.1}/{:.1}", c.wet.vol[i], c.wet.top[i].v, to_oklab(light().color)[0], c.wet.top[i].hide[0], c.wet.hide[i][0]);
             }
         }
 
@@ -647,7 +677,7 @@ mod tests {
                 for y in 205..225 {
                     for x in 20..150 {
                         let i = f.index(x as f32, y as f32);
-                        v.push((to_oklab(c.look_px(i))[0], c.wet.vol[i], c.wet.top[i], l(&c.wet.lat[i]), l(&c.wet.tlat[i])));
+                        v.push((to_oklab(c.look_px(i))[0], c.wet.vol[i], c.wet.top[i].v, l(&c.wet.lat[i]), l(&c.wet.top[i].lat)));
                     }
                 }
                 let tot = |y0: usize, y1: usize| (y0..y1).flat_map(|y| (12..155).map(move |x| (x, y))).map(|(x, y)| c.wet.vol[f.index(x as f32, y as f32)]).sum::<f32>();
@@ -706,10 +736,11 @@ mod tests {
             let mut b = Held::new(Tool::badger(40.0), 3);
             c.drag(&mut b, &Gesture::new(vec![(100.0, 500.0), (900.0, 520.0)]).pressure(0.4, 0.4), None);
             let w = &c.wet;
-            assert!(w.top.iter().any(|&t| t > 0.1), "strokes into wet paint leave a surface film");
+            assert!(w.top.iter().any(|t| t.v > 0.1), "strokes into wet paint leave a surface film");
             for i in 0..w.vol.len() {
-                assert!(w.top[i].is_finite() && w.top[i] >= 0.0 && w.top[i] <= w.vol[i] + 1e-5, "pixel {i}: top {} of {}", w.top[i], w.vol[i]);
-                assert!(w.tlat[i].iter().chain(&w.lat[i]).all(|v| v.is_finite()));
+                let t = w.top[i].v;
+                assert!(t.is_finite() && t >= 0.0 && t <= w.vol[i] + 1e-5, "pixel {i}: top {t} of {}", w.vol[i]);
+                assert!(w.top[i].lat.iter().chain(&w.lat[i]).all(|v| v.is_finite()));
             }
         }
     }

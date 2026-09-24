@@ -99,6 +99,8 @@ impl Canvas {
     /// Write the complete canvas state (dries nothing: wet paint stays wet)
     /// after `header`.
     pub fn write_state(&self, w: &mut impl Write, header: &str) -> io::Result<()> {
+        // (between strokes nothing is set aside: the file needn't hold it)
+        debug_assert!(self.aside.settled(), "a checkpoint written while a stroke holds set-aside paint");
         w.write_all(MAGIC)?;
         put_u64(w, header.len() as u64)?;
         w.write_all(header.as_bytes())?;
@@ -179,9 +181,9 @@ impl Canvas {
             put_u64(w, v.to_bits())?;
         }
         // the wet film's surface layer (version 8)
-        put_all(w, wt.top.iter().copied())?;
-        put_all(w, wt.tlat.iter().flat_map(|l| *l))?;
-        put_all(w, wt.thide.iter().flat_map(|h| *h))?;
+        put_all(w, wt.top.iter().map(|t| t.v))?;
+        put_all(w, wt.top.iter().flat_map(|t| t.lat))?;
+        put_all(w, wt.top.iter().flat_map(|t| t.hide))?;
         Ok(())
     }
 
@@ -316,9 +318,10 @@ impl Canvas {
         let [length_mm, reloads, secs, clocked] = f4;
         c.tally = crate::tally::Tally { strokes, touches, length_mm, reloads, remixes, wipes, lines, secs, clocked };
         // the wet film's surface layer (version 8)
-        c.wet.top = get_all(r, n)?;
-        c.wet.tlat = get_all(r, n * LAT)?.as_chunks::<LAT>().0.to_vec();
-        c.wet.thide = get_all(r, n * 3)?.as_chunks::<3>().0.to_vec();
+        let top = get_all(r, n)?;
+        let tlat = get_all(r, n * LAT)?;
+        let thide = get_all(r, n * 3)?;
+        c.wet.top = top.iter().zip(tlat.as_chunks::<LAT>().0).zip(thide.as_chunks::<3>().0).map(|((&v, l), h)| crate::wet::Layer::new(v, *l, *h)).collect();
         Ok((c, header))
     }
 }

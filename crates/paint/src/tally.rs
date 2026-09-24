@@ -458,7 +458,7 @@ mod tests {
     #[test]
     fn touches_are_no_faster_than_tapping() {
         let t = touch_secs(1.0);
-        assert!(t >= pace::TAP_MIN && t < 0.6, "{t}");
+        assert!((pace::TAP_MIN..0.6).contains(&t), "{t}");
     }
 
     #[test]

@@ -472,6 +472,9 @@ struct Plan {
     fresh: bool,
     /// Its stroke id, if fixed in advance (see `fill_gaps`); else the next.
     id: Option<u32>,
+    /// The color asked for (before aiming it over what's there): which pile
+    /// on the palette the dip comes from (`tally::Piles`).
+    want: Rgb,
 }
 
 impl Canvas {
@@ -796,7 +799,12 @@ impl Canvas {
         }
         // trips to the palette: every `dip_every` strokes within a tile, and
         // whenever the hand moves on to a new passage
+        // (and the hand's ledger: every planned stroke and trip, counted on
+        // the whole canvas before a crop drops any tiles; see `tally`)
+        let (mpu, mut piles) = (self.mm_per_unit, crate::tally::Piles::default());
+        let mut tile_secs = Vec::with_capacity(tiles.len());
         for t in tiles.iter_mut() {
+            let secs0 = self.tally.secs;
             let (mut since, mut last) = (0, None);
             for p in t.iter_mut() {
                 let moved = last != Some(p.passage);
@@ -807,7 +815,18 @@ impl Canvas {
                 } else {
                     since = 1;
                 }
+                self.tally.stroke(tool, &p.pts, mpu);
+                if p.dip.is_some() {
+                    if hd.blender {
+                        self.tally.wipe();
+                    } else if p.fresh {
+                        self.tally.reload(1.0 / crate::tally::pace::DABS_PER_RELOAD);
+                    } else {
+                        piles.trip(&mut self.tally, p.want);
+                    }
+                }
             }
+            tile_secs.push(self.tally.secs - secs0);
         }
         // (strokes with ids fixed in advance don't take new ones)
         let free = |t: &Vec<Plan>| t.iter().filter(|p| p.id.is_none()).count() as u32;
@@ -820,8 +839,13 @@ impl Canvas {
             acc += free(t);
         }
 
-        let surf = self.surf();
         let order = tile_order(hd.order, (tw, th), (tile_x, tile_y), rng);
+        // with hand time on, the passages are painted in slices of hand time
+        // and the paint ages between them (`tally::batches`); else one batch
+        let batches = crate::tally::batches(&order, &tile_secs, self.hand_slice_secs());
+        let n_batches = batches.len();
+        for (bi, (order, bsecs)) in batches.into_iter().enumerate() {
+        let surf = self.surf();
         // a crop render skips passages that miss its window (they paint
         // nothing it holds; the rest keep their relative order)
         let order: Vec<usize> = order.into_iter().filter(|&t| tile_rect[t].is_some_and(|r| f.clip(r).is_some())).collect();
@@ -881,6 +905,10 @@ impl Canvas {
         if let Some((x0, y0, x1, y1)) = dirty {
             self.wet.touch(x0, y0, x1, y1);
         }
+        if bi + 1 < n_batches {
+            self.hand_pass(bsecs);
+        }
+        }
     }
 }
 
@@ -934,7 +962,7 @@ fn finish_plan(cv: &Canvas, hd: &Handling, tool: &Tool, c: (f32, f32), pts: Vec<
         }
     };
     let load = hd.load * load_k;
-    (rect, Plan { pts, pressure, fade, dip: Some(paint), load, swell: Vec::new(), passage: 0, fresh: false, id: None })
+    (rect, Plan { pts, pressure, fade, dip: Some(paint), load, swell: Vec::new(), passage: 0, fresh: false, id: None, want: target })
 }
 
 /// Coats a handling lays where its strokes land (the `Aim::Laid` estimate).

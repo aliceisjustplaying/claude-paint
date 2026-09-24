@@ -22,6 +22,7 @@ mod draw_trees;
 mod draw_rocks;
 mod look;
 mod session;
+mod time;
 
 use session::{Session, parse_program, root};
 use std::io::{Read, Write};

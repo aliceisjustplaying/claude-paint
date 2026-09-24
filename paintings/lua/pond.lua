@@ -117,3 +117,146 @@ farhill = function(x) return 447 - 13 * math.exp(-((x - 330) / 80)^2) - 7 * math
 hills = below(farhill) * above(function(x) return HZ + 2 end) * mask(function(x, y) return smoothstep(170, 215, x) end)
 stipple(hills, {width=2.2, pal=skypal, color=function(x, y) return mix("#a6a2b4", "#bab2b8", smoothstep(432, 452, y)) end,
   coverage=3.2, pressure={0.5, 0.9}, dips={14, 0.4, 0.7}, medium=0.45, cluster={0.2, 4}, feather=0.5})
+
+--@ chunk 8 · clock 29160.958984375
+wood = fir_wood{skyline=outline{pts=WOODTOP, open=true, char="soft", lobe=10, seed=31}, foot={{500,461},{650,463},{800,462},{1005,466}},
+  depth=3, count=15, horizon=HZ, recede=0.6, air=0.5, seed=32}
+print(wood)
+woodair = "#bdb3b3"
+function woodrow(r)
+  local h, s, nd = wood:haze(r), wood:scale(r), wood:needles(r)
+  work(nd, {hand="hatch", tool=string.format("round %.1f", math.max(0.9, 1.6 * s)), length={2, 6 * s + 1}, coverage=2.4,
+    clip=nd, angle=1.57, angle_jitter=0.5, pal=snowpal, color=mix("#2c3238", woodair, 0.25 + 0.6 * h)})
+  local rb = brush("rigger", math.max(0.5, 1.2 * s))
+  for n, f in ipairs(wood:trees(r)) do
+    if n % 5 == 1 then rb:reload(mix("#262428", woodair, 0.2 + 0.6 * h), 0.85) end
+    rb:stroke(f.leader.pts, {pressure={0.8, 0.15}, ramps={0.02, 0.3}})
+  end
+  if r == 1 then
+    local hb = brush("round", 1.8 * s + 0.3)
+    wood:paint(hb, r, {color=mix("#1f252a", woodair, 0.2), lit={0, 0.55}})
+    wood:paint(hb, r, {color=mix("#4a4c52", woodair, 0.3), lit={0.55, 1}, every=6})
+  end
+end
+woodrow(3); woodrow(2)
+local fl = wood:floor():roughen(4, 16, 34, 2)
+work(fl, {hand="body", coverage=3, clip=fl, angle=0, hug=false, pal=snowpal,
+  color=function(x, y) return mix("#6e6d78", "#a9a7b2", smoothstep(448, 464, y)) end})
+woodrow(1)
+
+--@ chunk 9 · clock 29160.958984375
+local sx = SPIRE[1]
+tower = poly({{sx-3.2,447},{sx-3.2,414},{sx-3.8,412.5},{sx-0.25,386},{sx+0.25,386},{sx+3.8,412.5},{sx+3.2,414},{sx+3.2,447}})
+nave = poly({{sx+3,447},{sx+3,432},{sx+9,426},{sx+25,426},{sx+29,431},{sx+29,447}})
+local b = brush{kind="round", width=1.1, point=0.8}
+work(tower + nave, {hand="detail", tool=b, pal=skypal, color="#9d97a4", angle=1.57, length={2, 6}, coverage=3, clip=true})
+local lit = poly({{sx+0.2,387},{sx+3.6,412},{sx+1.2,412}}) + poly({{sx+9,426},{sx+25,426},{sx+26.5,428},{sx+10,428}})
+work(lit, {hand="detail", tool=b, pal=skypal, color="#b9aca8", angle=1.2, length={2, 4}, coverage=2, clip=true})
+local mistn = noise{seed=61, period=80, octaves=4, stretch={0, 4}}
+stipple(above(function(x) return 462 end) * below(function(x) return 425 end), {width=2.2, pal=skypal, color="#d8ccc2",
+  coverage=function(x, y) local u = (y - 436) / 26 + 0.4 * mistn(x, y); return 1.8 * smoothstep(0.15, 0.95, u) end,
+  pressure={0.4, 0.8}, dips={16, 0.3, 0.7}, medium=0.7, cluster={0.2, 5}, feather=0.7, aim=false})
+
+--@ chunk 10 · clock 29160.958984375
+OAKC = {{52,236},{70,178},{112,140},{150,96},{196,84},{232,110},{262,104},{300,140},{322,190},{336,246,"c"},{318,292},
+        {296,330},{250,352},{206,358},{160,362},{112,350},{76,326,"c"},{48,290}}
+oak = tree_in{crown=outline{pts=OAKC, char="soft", seed=9}, trunk={{176,448},{174,410},{168,372},{170,340}},
+  species="oak", season="winter", sun={0.55, -0.15, -0.6}, detail=0.3, seed=17}
+barkpal = pal:only{"lead white", "smalt", "raw umber", "bone black", "red earth", "yellow ochre"}
+local bark = "#37322e"
+local thick = oak:wood(3.5)
+local bn = noise{seed=71, period=6, octaves=3, stretch={1.57, 3}}
+work(thick, {hand="body", tool="round 2", length={4, 12}, coverage=3.5, clip=thick, pal=barkpal,
+  angle=function(x, y) return 1.5 + 0.3 * bn(x, y) end,
+  color=function(x, y) return shift(bark, 0.03 * bn(x, y), 0.004, 0.006 * bn(y, x)) end})
+-- the flank toward the dawn glow (right)
+local stout = oak:wood(6)
+work(stout * mask(function(x, y) return 1 - stout:at(x + 2.2, y + 0.5) end),
+  {hand="body", tool="round 1.2", length={3, 9}, coverage=2.4, angle=1.5, clip=thick, pal=barkpal, color="#6f655d"})
+-- the shaded left side darker, bark furrows
+work(stout * mask(function(x, y) return 1 - stout:at(x - 4, y) end),
+  {hand="hatch", tool="round 1", length={4, 10}, coverage=2, angle=1.55, clip=thick, pal=barkpal, color="#221f1e"})
+oak:paint_wood(brush("round", 2.4), {color=bark, min=1.2, max=3.5, every=2, load=1})
+-- the fine wood by hand: a pointed round, pressed to each run's width at its root and lifting to a point
+local fb = brush{kind="round", width=1.3, point=1}
+local ff = brush{kind="rigger", width=0.8, point=1}
+local n = 0
+for _, s in ipairs(oak:wood_strokes{max=1.2}) do
+  local b = (s.w[1] > 0.6) and fb or ff
+  n = n + 1
+  if n % 7 == 1 or b:fullness() < 0.3 then b:reload(mix("#3a3431", "#57504d", rand()), 0.8) end
+  local p0 = clamp(b:pressure_for(s.w[1]), 0.05, 1)
+  local p1 = s.tip and 0 or clamp(b:pressure_for(s.w[#s.w]), 0.02, 1)
+  b:stroke(s.pts, {pressure={p0, p1}, ramps={0.02, s.tip and 0.6 or 0.1}, shake=0.3})
+end
+print(n, "fine strokes")
+
+--@ chunk 11 · clock 29160.958984375
+firs = {}
+local specs = {{268, 150, 44, "spire", 41}, {318, 96, 32, "young", 42}, {236, 70, 24, "young", 43}, {352, 58, 20, "old", 44}}
+for i, s in ipairs(specs) do
+  local x, h, wd, habit, sd = s[1], s[2], s[3], s[4], s[5]
+  local fy = bankY(x) + 5
+  firs[i] = fir{x=x, y=fy, height=h, width=wd, habit=habit, seed=sd, sun={0.55, -0.15, -0.6}, gap=0.22, pad=0.85, droop=1.2}
+  print(firs[i])
+end
+firpal = pal:only{"lead white", "smalt", "yellow ochre", "raw umber", "bone black"}
+for i = #firs, 1, -1 do
+  local f = firs[i]
+  local nd = f:needles()
+  work(nd, {hand="hatch", tool="round 0.9", length={2, 5}, coverage=1.6, clip=nd, pal=firpal,
+    angle=function(x, y) return 1.57 + 0.5 * clamp((f.foot[1] - x) / 10, -1, 1) end, color="#1e2524"})
+  local st = brush{kind="round", width=math.max(1.2, f.hatch * 1.6), point=0.6}
+  st:load("#211f1d", 0.9)
+  st:stroke(f.leader.pts, {pressure={0.9, 0.05}, ramps={0.01, 0.5}, shake=0.4})
+  local rb = brush("rigger", 0.9)
+  for k, b in ipairs(f.boughs) do
+    if k % 6 == 1 or b.dead then rb:reload(b.dead and "#5d5853" or "#1c1f1e", 0.8) end
+    rb:stroke(b.pts, {pressure={0.6, 0.05}, ramps={0.05, 0.6}})
+  end
+  local hb = brush{kind="round", width=math.max(0.6, f.hatch), point=0.7}
+  f:paint(hb, {color="#171d1c", lit={0, 0.5}})
+  f:paint(hb, {color="#2e3632", lit={0.5, 0.75}})
+  f:paint(hb, {color="#5a5f5c", lit={0.75, 1}, every=6})
+  -- snow lying along the upper faces of some boughs
+  local sb = brush{kind="round", width=math.max(0.7, f.hatch * 1.1), point=0.5}
+  local k = 0
+  for _, s in ipairs(f:strokes{kind="top"}) do
+    k = k + 1
+    if k % 3 ~= 0 then
+      if k % 9 == 1 then sb:reload(mix("#c3c2cf", "#dcd5d3", rand()), 0.7) end
+      sb:stroke(s.pts, {pressure={0.55, 0.1}, ramps={0.1, 0.5}})
+    end
+  end
+end
+
+--@ chunk 12 · clock 29160.958984375
+dry()
+-- the foot of each tree: the trunk carried down into the snow, then a few short strokes of snow across it
+local tb = brush{kind="round", width=1.4, point=0.4}
+for _, f in ipairs(firs) do
+  tb:reload("#26221f", 0.8)
+  tb:stroke({{f.foot[1] + rand(-0.3, 0.3), f.crown_base - 4}, {f.foot[1], f.foot[2] + 2}}, {pressure={0.7, 0.8}})
+end
+local sb = brush{kind="filbert", width=3}
+local feet = {{176, 444, 30}}
+for _, f in ipairs(firs) do feet[#feet+1] = {f.foot[1], f.foot[2], 12} end
+for i, ft in ipairs(feet) do
+  local x, y, r = ft[1], ft[2], ft[3]
+  for k = 1, (i == 1 and 14 or 3) do
+    local yy = y - 4 + k * 1.6 + rand(-0.8, 0.8)
+    local x0 = x - r * rand(0.5, 0.9); local x1 = x + r * rand(0.5, 0.9)
+    local c = sample(x0 - 6, yy + 2, 2):mix(sample(x1 + 6, yy + 2, 2), 0.5)
+    sb:reload(c, 0.75)
+    local sl = (bankY(x1) - bankY(x0)) / (x1 - x0)
+    local ym = yy + sl * (0.5 * (x0 + x1) - x)
+    sb:stroke({{x0, yy + sl * (x0 - x)}, {0.5 * (x0 + x1), ym - rand(0.5, 1.5)}, {x1, yy + sl * (x1 - x)}},
+      {pressure={0.4, 0.7}, ramps={0.25, 0.35}, shake=0.4})
+  end
+end
+for k = 1, 6 do
+  local yy = 452 + k * 2.2 + rand(-0.6, 0.6)
+  local x0, x1 = 146 + rand(-3, 3), 196 + rand(-3, 3)
+  sb:reload(sample(x0 - 5, yy, 2):mix(sample(x1 + 5, yy, 2), 0.5), 0.8)
+  sb:stroke({{x0, yy - 3}, {0.5 * (x0 + x1), yy + 0.3}, {x1, yy + 4}}, {pressure={0.5, 0.7}, ramps={0.25, 0.35}, shake=0.4})
+end

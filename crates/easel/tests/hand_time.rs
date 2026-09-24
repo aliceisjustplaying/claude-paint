@@ -35,18 +35,25 @@ fn replay(src: &Path, width: u32, threads: Option<usize>, tag: &str) -> (String,
 
 /// The owner's logs replay byte for byte as they did before hand time
 /// existed: the PNG hashes were recorded with the easel of commit 2c5a658,
-/// built in each profile (the engine's floats differ between them).
+/// built in each profile (the engine's floats differ between them), and
+/// re-recorded for the wet-on-wet engine (branch r6-wet, notes/wet.md),
+/// which changes output on purpose. `PRINT_HASHES=1` prints them instead of
+/// checking (re-record in both profiles after an intended engine change).
 #[test]
 fn existing_logs_replay_unchanged() {
     // (the benchmark near is checked in release only: a debug replay takes
-    // minutes; its debug hash is 0x37a4_2e28_e714_0112)
+    // minutes)
     let logs: &[(&str, u64)] = if cfg!(debug_assertions) {
-        &[("paintings/lua/example.lua", 0x9659_9066_5f64_5c5e)]
+        &[("paintings/lua/example.lua", 0xa9a1_8af6_2297_d28e)]
     } else {
-        &[("paintings/lua/example.lua", 0xf74e_3682_94fb_26c9), ("notes/loops/l5_near.lua", 0x8539_3b4e_e942_47d3)]
+        &[("paintings/lua/example.lua", 0xc2f0_9052_dcca_5e50), ("notes/loops/l5_near.lua", 0x061a_d996_81fe_d3cf)]
     };
     for &(log, want) in logs {
         let (_, png) = replay(&root().join(log), 160, None, "unchanged");
+        if std::env::var("PRINT_HASHES").is_ok() {
+            println!("HASH {log} {:#x}", fnv(&png));
+            continue;
+        }
         assert_eq!(fnv(&png), want, "{log} at 160px changed");
     }
 }

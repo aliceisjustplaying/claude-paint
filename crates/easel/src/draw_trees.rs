@@ -629,6 +629,75 @@ mod tests {
         assert!(out.contains("tree_in(oak, summer"), "{out}");
     }
 
+    /// Paint a bare oak on a plain ground and count the dark pieces that
+    /// don't touch the tree: every twig must leave from painted wood.
+    #[test]
+    fn a_bare_oak_paints_without_floating_twigs() {
+        let mut s = Session::replay(600).unwrap();
+        s.run(r#"canvas{aspect=1.4, seed=11}"#).unwrap();
+        s.run(
+                r##"local c = outline{{330,150},{460,110},{600,150},{680,260,"c"},{640,380},{500,420},{360,400},{300,300,"c"}, char="soft", seed=2}
+               t = tree_in{crown=c, trunk={{495,690},{490,520},{500,420}}, species="oak", season="winter", seed=4}
+               assert(math.abs(t.detail - 0.35) < 1e-6, t.detail)
+               t:paint_wood(brush("round", 2.4), {color="#2a2520", min=1.2})
+               t:paint_wood(brush("rigger", 0.6), {color="#2a2520", max=1.2})
+               local m = t:twig_mass()
+               assert(m:area() > 0)
+               dry()"##,
+        )
+        .unwrap();
+        let c = s.canvas().unwrap();
+        let f = c.window();
+        let px = c.pixels();
+        let lum = |p: &paint::Rgb| 0.2126 * p[0] + 0.7152 * p[1] + 0.0722 * p[2];
+        let mut l: Vec<f32> = px.iter().map(lum).collect();
+        let bg = {
+            let mut v = l.clone();
+            let k = v.len() * 3 / 4;
+            *v.select_nth_unstable_by(k, |a, b| a.total_cmp(b)).1
+        };
+        let ink = lum(&paint::hex("#2a2520"));
+        for v in &mut l {
+            *v = (bg - *v) / (bg - ink);
+        }
+        // dark pieces, 8-connected; a speck is up to 6 px (at 600 px the code
+        // before this fix left 14 pieces over 3 px, the largest 16)
+        let (w, h) = (f.w, f.h);
+        let mut lab = vec![0u32; w * h];
+        let mut sizes = vec![0usize];
+        for start in 0..w * h {
+            if l[start] <= 0.15 || lab[start] != 0 {
+                continue;
+            }
+            let id = sizes.len() as u32;
+            let mut stack = vec![start];
+            lab[start] = id;
+            let mut n = 0;
+            while let Some(i) = stack.pop() {
+                n += 1;
+                let (x, y) = ((i % w) as i64, (i / w) as i64);
+                for dy in -1..=1 {
+                    for dx in -1..=1 {
+                        let (xx, yy) = (x + dx, y + dy);
+                        if xx < 0 || yy < 0 || xx >= w as i64 || yy >= h as i64 {
+                            continue;
+                        }
+                        let j = yy as usize * w + xx as usize;
+                        if l[j] > 0.15 && lab[j] == 0 {
+                            lab[j] = id;
+                            stack.push(j);
+                        }
+                    }
+                }
+            }
+            sizes.push(n);
+        }
+        let tree = (1..sizes.len()).max_by_key(|&i| sizes[i]).unwrap();
+        let floating: Vec<usize> = (1..sizes.len()).filter(|&i| i != tree && sizes[i] > 6).map(|i| sizes[i]).collect();
+        assert!(sizes[tree] > 5000, "the tree is {} px", sizes[tree]);
+        assert!(floating.is_empty(), "pieces off the tree bigger than a speck: {floating:?} (tree {} px)", sizes[tree]);
+    }
+
     #[test]
     fn a_group_and_errors() {
         run(r#"local c = {{40,80},{60,70},{75,85},{70,100},{45,102}}

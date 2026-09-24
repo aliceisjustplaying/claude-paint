@@ -250,6 +250,11 @@ impl Canvas {
         c.film = get_all(r, n)?;
         let mut wet = crate::wet::Wet::new(n);
         wet.vol = get_all(r, n)?;
+        // a film's total volume is finite and never negative (the surface
+        // layer's check below compares against it)
+        if !wet.vol.iter().all(|&v| v.is_finite() && v >= 0.0) {
+            return Err(bad("checkpoint wet film volume is invalid"));
+        }
         let lat = get_all(r, n * LAT)?;
         wet.lat = lat.as_chunks::<LAT>().0.to_vec();
         let hide = get_all(r, n * 3)?;
@@ -431,6 +436,27 @@ mod tests {
             (lat + 4, f32::NAN, "nan surface pigment"),
             (hide + 8, f32::INFINITY, "infinite surface stiffness"),
         ] {
+            let mut b = o.clone();
+            b[at..at + 4].copy_from_slice(&v.to_le_bytes());
+            rejected(b, what);
+        }
+    }
+
+    /// A film's total volume is checked too: an infinite or negative total
+    /// under an empty surface layer used to pass the surface check (review
+    /// of the maintenance round, finding 2).
+    #[test]
+    fn a_corrupt_film_volume_is_refused() {
+        let mut c = Canvas::new_window(2, 1.0, [0.1; 3], None);
+        let mark = 0.876_543_2f32; // a value found once in the file: pixel 1's volume
+        c.wet.vol[1] = mark;
+        let mut o = Vec::new();
+        c.write_state(&mut o, "").unwrap();
+        let hits: Vec<usize> = o.windows(4).enumerate().filter(|(_, w)| *w == mark.to_le_bytes()).map(|(i, _)| i).collect();
+        assert_eq!(hits.len(), 1, "the marked volume is in the file once");
+        let at = hits[0];
+        assert!(load(o.clone()).is_ok(), "a sound film loads");
+        for (v, what) in [(f32::INFINITY, "infinite film volume"), (-1e-6, "negative film volume"), (f32::NAN, "nan film volume")] {
             let mut b = o.clone();
             b[at..at + 4].copy_from_slice(&v.to_le_bytes());
             rejected(b, what);

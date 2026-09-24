@@ -129,3 +129,36 @@ almost edges out the original." In the fir-group crop the original is good
 and the other two bad. **"So we want d"**: today's engine with the pointed
 brush default off and the glaze min-film floor off. "We don't want to fall
 into the trap of copying the round 2 original."
+
+## Round 7: the three arms (notes/round7/arms/; blind; A = arm 1 Lua
+## without procedural tools, B = arm 2 Rust program, C = arm 3 Lua with
+## everything)
+Live, late at night:
+- **A (Lua, no procedural tools):** "a very fat trunk, and then like
+  spikes as trees... like the brush you use for shaving" (she laughed).
+  The sky looks okay; the water pretty okay; the big background trees
+  reflecting in the pond "actually pretty good". The entropy "still reads
+  like JPEG artifacts, even though these are PNG files". Cracks less
+  uniform, "doesn't quite hit the mark". **A genuine rendering bug: a
+  whitish horizontal line through one of the foreground grass patches.**
+  "Overall fits with a good painting."
+- **B (Rust):** "one of the ones that used algorithms for lighting" (she
+  guessed right: "the Rust one felt the most computational"). "In many
+  ways better than anything before." "Almost eerily similar to A in
+  structure: the sky, the pond, the grass in the foreground, the trees in
+  the background reflecting." The reflection is nice; the sky less
+  JPEG-artifacty than A's; the pond some, less than A. Trees "not that
+  bad".
+- **C (Lua with everything):** "the sky is fine, maybe the most digital";
+  the lake "actually pretty good, but the strokes a little too digital";
+  the front grass a little rough. **"Weirdly, C has the best vibe
+  somehow... there's something about C that feels different. Both A and
+  B feel perhaps too precise."**
+- Overall: **"so far none of them are moving me. The thing about round
+  two is that it almost moved something in me, especially the winter
+  one."** **Convergence: "Claude, without any extra instructions around
+  themes, converges on roughly the same painting"** (pond, sky, trees
+  reflecting, foreground grass); suggests light-touch steering of subject
+  ("paint a winter scene"). Wonders whether "the easel with everything
+  introduces some entropy". **"I'm more confused than ever which direction
+  we should go."**

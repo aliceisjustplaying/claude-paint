@@ -953,6 +953,32 @@ fn feed(bristles: &mut [Bristle], k: f32) {
     }
 }
 
+/// How far the hairs of a lifting brush trail (as a share of the full trail
+/// they have pressed down) as the handle rises (see `lift_off`).
+const LIFT_DRAG: f32 = 0.6;
+
+/// How far along its lift-off a stroke is at `u` (0 before the release
+/// ramp, 1 at the end), and how the tool lifts: how far its wide axis rolls
+/// toward the travel (a flat onto its chisel edge: 1; a filbert half way; a
+/// round has no wide axis) and how far its footprint draws in (a round to
+/// its point; a flat's edge is its narrowing). A stroke without a release
+/// ramp stops square: that's the painter pressing to the end and lifting
+/// straight off.
+fn lift_off(tool: &Tool, g: &Gesture, u: f32) -> (f32, f32, f32) {
+    if g.release <= 0.0 {
+        return (0.0, 0.0, 0.0);
+    }
+    let lift = 1.0 - smoothstep(0.0, g.release, 1.0 - u);
+    let (roll, taper) = match tool.kind {
+        Kind::Flat => (1.0, 0.0),
+        Kind::Filbert => (0.5, 0.3),
+        Kind::Fan => (0.3, 0.0),
+        Kind::Round | Kind::Rigger => (0.0, if tool.point > 0.0 { 0.0 } else { 0.5 }),
+        Kind::Blender => (0.0, 0.3),
+    };
+    (lift, roll, taper)
+}
+
 /// Bristle roots never sit farther than this (in half-widths) from the axis.
 const ROOT_MAX: f32 = 1.2;
 /// Longest bristle relative to the tool's length.
@@ -1086,14 +1112,27 @@ pub(crate) unsafe fn drag_on(
         let (hx, hy) = (hx - dir.1 * off, hy + dir.0 * off);
         let u = if total > 0.0 { d / total } else { 0.5 };
         let p = (g.pressure_at(u) * (1.0 + g.shake * 0.14 * wander(d / (lw * 0.8), hs + 3))).clamp(0.0, 1.0);
+        // lifting off (the release ramp): a flat rolls onto its chisel
+        // edge (its wide axis turns toward the travel), a round draws up to
+        // its point, a filbert between; the trailing hairs drag longer as
+        // the handle rises (see `lift_off`)
+        let (lift, roll, taper) = lift_off(&tool, g, u);
         let theta = match g.orient {
             Orient::Across => dir.1.atan2(dir.0) + std::f32::consts::FRAC_PI_2,
             Orient::Along => dir.1.atan2(dir.0),
             Orient::Fixed(a) => a,
         };
+        let theta = if lift * roll > 0.0 {
+            // turn toward the travel by the shortest way (the axis is a line)
+            let along = dir.1.atan2(dir.0);
+            let d = (along - theta + std::f32::consts::FRAC_PI_2).rem_euclid(std::f32::consts::PI) - std::f32::consts::FRAC_PI_2;
+            theta + d * lift * roll
+        } else {
+            theta
+        };
         let (st, ct) = theta.sin_cos();
         let coh = cohesion(held, full);
-        let half = tool.width * 0.5 * s * (0.45 + 0.55 * p) * (1.0 + tool.splay * (p - 0.5)) * cone(&tool, p, coh);
+        let half = tool.width * 0.5 * s * (0.45 + 0.55 * p) * (1.0 + tool.splay * (p - 0.5)) * cone(&tool, p, coh) * (1.0 - taper * lift);
         // bend relaxes toward its target: a rate in 0..1 keeps it a blend of
         // targets, within the reach `footprint` allows for
         let rate = (1.0 - (-(step / s) / (bend_len.max(0.0) + 1e-3)).exp()).clamp(0.0, 1.0);
@@ -1111,7 +1150,7 @@ pub(crate) unsafe fn drag_on(
             let (ox, oy) = ((b.rx + wv * 0.12) * half, (b.ry + wv * 0.05) * half);
             let root = (hx + ox * ct - oy * st, hy + ox * st + oy * ct);
             // tips trail behind the motion and splay outward under pressure
-            let trail = tool.length * s * b.len * p;
+            let trail = tool.length * s * b.len * (p + LIFT_DRAG * lift * (1.0 - p));
             let spread = tool.splay * p * 0.3;
             let target = (-dir.0 * trail + (ox * ct - oy * st) * spread, -dir.1 * trail + (ox * st + oy * ct) * spread);
             b.bend.0 += (target.0 - b.bend.0) * rate;

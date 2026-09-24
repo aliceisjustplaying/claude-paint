@@ -1131,7 +1131,16 @@ is part of the program.
 
 A day isn't always enough: thick, oily or slow-drying paint (bone black,
 lakes, heavy body color) can stay open for weeks of painting time. Check
-with `drying(x, y)` before painting over a passage, or call `dry()`.
+with `drying(x, y)` before painting over a passage.
+
+Painting into open paint is normal, not a mistake. Paint laid into wet
+paint lies on top of it; brushes work it in as a painter's would: a loaded
+brush laid lightly leaves a clean mark (lights into a wet dark mass, a
+highlight, a sky brought down over a hill's edge), while pressure, a lean
+brush, a stiff hog and going back and forth mix it, and `blend` or a clean
+badger along a wet contour loses the edge. Over tacky paint marks catch and
+break; over dry paint they stay separate and crisp. Choose the stage by
+the edge you want (`notes/sketchbook.md` §1, `notes/wet.md`).
 
 `glaze` goes over dry paint, so it first waits until everything under it is
 touch-dry; that time passes on the clock and the easel says so

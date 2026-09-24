@@ -210,7 +210,8 @@ covers:
 - **Wet-in-wet within a pixel is still one mixture.** Setting (not yet
   gelled) paint still mixes with new paint laid into it; only its lift and
   plough fall. A two-film wet pixel would need a second latent, which costs
-  memory.
+  memory. **Done in round 6** (`notes/wet.md`): each wet pixel has a
+  surface film over its body; it mattered (translucent rock, fog band).
 - **Through-drying and fat over lean** are not modeled after touch-dry.
   `Px` could keep a film age for `crack.rs` (drying cracks when a
   fast-drying layer sits on a slow one, bitumen-like).

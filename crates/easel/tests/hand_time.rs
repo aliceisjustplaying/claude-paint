@@ -37,15 +37,17 @@ fn replay(src: &Path, width: u32, threads: Option<usize>, tag: &str) -> (String,
 /// existed: the PNG hashes were recorded with the easel of commit 2c5a658,
 /// built in each profile, then re-recorded when the Friedrich relief default
 /// went from 0.2 to 0.06 (Round 6, the owner's pick): only the finishing
-/// relief changed.
+/// relief changed, and again when glazes and the varnish got their own
+/// thin-film settle (Round 6, notes/varnish.md): at 160px both logs moved by
+/// 1/255 in 1 and 8 pixels.
 #[test]
 fn existing_logs_replay_unchanged() {
     // (the benchmark near is checked in release only: a debug replay takes
     // minutes)
     let logs: &[(&str, u64)] = if cfg!(debug_assertions) {
-        &[("paintings/lua/example.lua", 0x99a5_7233_a465_f4a9)]
+        &[("paintings/lua/example.lua", 0x62d1_127e_8305_1451)]
     } else {
-        &[("paintings/lua/example.lua", 0x99a5_7233_a465_f4a9), ("notes/loops/l5_near.lua", 0xd503_b048_7f30_dedc)]
+        &[("paintings/lua/example.lua", 0x62d1_127e_8305_1451), ("notes/loops/l5_near.lua", 0x4c75_e799_85f9_bfef)]
     };
     for &(log, want) in logs {
         let (_, png) = replay(&root().join(log), 160, None, "unchanged");

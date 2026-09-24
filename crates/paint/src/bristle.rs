@@ -771,6 +771,7 @@ impl Canvas {
         if let Some(m) = clip {
             self.check_mask(m);
         }
+        self.tally.stroke(&held.tool, &g.pts, self.mm_per_unit);
         let id = self.next_stroke_ids(1);
         let surf = self.surf();
         let mut scratch = Vec::new();
@@ -1590,6 +1591,7 @@ impl Canvas {
         if let Some(m) = clip {
             self.check_mask(m);
         }
+        self.tally.touch(&held.tool, self.mm_per_unit);
         let id = self.next_stroke_ids(1);
         let surf = self.surf();
         let mut scratch = Vec::new();

@@ -48,14 +48,16 @@ Read all three before you start.
    opened last (or `-s <name>`, or `EASEL_SESSION`).
 2. **Paint a chunk.** `easel do '<lua>'`, `easel do -f chunk.lua` or
    `easel do -` (stdin). The reply is whatever the chunk `print`ed, then
-   `ok · chunk N · seconds · clock · wet/dry`. Add `--look` to also get a
-   look in the same command.
+   `ok · chunk N · seconds · clock · sitting · how much is open, setting,
+   tacky and dry`. Add `--look` to also get a look in the same command.
 3. **Look.** `easel look` prints the path of a ≤1000px JPEG (100–250 KB):
    - `--crop x0,y0,x1,y1` a window in canvas units, enlarged by whole
      pixels so you see the real grain;
    - `--mode value` (grayscale), `squint` (blurred: big shapes and values
-     only), `mirror` (flipped: fresh eyes on the drawing); comma-separate
-     to combine, e.g. `--mode value,squint`;
+     only), `mirror` (flipped: fresh eyes on the drawing), `wet` (where the
+     paint is in drying: open blue, setting green, tacky orange, dry gray,
+     over the picture dimmed); comma-separate to combine, e.g.
+     `--mode value,squint`;
    - `--dried` (alias `--wet`): wet paint as it will look once it has
      leveled and dried; `--relief` also lights the brushwork from the upper
      left; `--size N` for the longest side;
@@ -73,7 +75,8 @@ Read all three before you start.
    snapshot costs about 50 MB at 1000px), further back by replaying from a
    checkpoint. The code of undone chunks is kept (`easel undone`).
 5. **Step back.** `easel log` prints the program so far. `easel status`
-   gives a one-line summary. `easel save [path]` writes a PNG. `easel check`
+   gives a one-line summary (with the clock, the sitting and the drying
+   stages). `easel save [path]` writes a PNG. `easel check`
    replays the log in a fresh session and confirms it matches the live
    canvas exactly.
 6. **Fix an early chunk in place.** `easel show N` prints chunk N's code.
@@ -1131,7 +1134,43 @@ is part of the program.
 
 A day isn't always enough: thick, oily or slow-drying paint (bone black,
 lakes, heavy body color) can stay open for weeks of painting time. Check
-with `drying(x, y)` before painting over a passage, or call `dry()`.
+with `drying(x, y)` or `look --mode wet` before painting over a passage, or
+call `dry()`.
+
+### Hand time and sittings
+
+By default marks take no time: only `wait`, `dry` and the finishing verbs
+move the clock. Turn **hand time** on and every mark costs the time a hand
+takes to make it, and the paint ages while you work (notes/time.md).
+
+```lua
+canvas{style="friedrich", aspect=1.4, seed=7, hand=true}   -- or hand_time(true) later
+sitting{hours=3}      -- a new sitting starts now, with a clean palette (default 3 h)
+rest(16)              -- step away: the paint sets; the next mark starts a new sitting
+                      -- (rest() = overnight, 16 h; any wait of 2 h or more is a rest too)
+t = timesheet()       -- {clock, sitting (min), sittings, hours, hand, open, setting, tacky,
+                      --  dry (shares of the canvas), strokes, touches, reloads, piles, hand_min}
+```
+
+- The time comes from what the brushes actually did: each stroke from its
+  length and the brush's width (Fitts's and the steering law: fine lines
+  are slow per mm, broad sweeps fast), each stipple touch (about 3 a
+  second), each trip to the palette (2.5 s to reload from a pile already
+  mixed, 20 s more to mix a new one) and each wipe. A 10 cm sweep with a
+  12 mm flat takes 0.6 s, a 3 mm hatch 0.4 s and a 10 cm hairline 4.6 s.
+  The fir wood in `notes/loops/l5_near.lua` would be 53 hours.
+- `work`, `blend`, `stipple`, `glaze` and pencil lines put their time on
+  the clock when they finish. A long pass is painted in slices of 15
+  minutes and ages between them, top to bottom. Brush strokes, touches and
+  the motif verbs made of them put theirs on once a minute has piled up,
+  and every chunk ends with the clock up to date.
+- A sitting that runs past its hours is reported in the reply (`sitting 2:
+  3.8 h at the easel, 3.0 h planned; ...`), never cut short: finish the
+  passage while it is open, then `rest`.
+- In one sitting the paint under a later passage is still open and comes
+  up into it. Lay each passage only where it shows, a little past where
+  its neighbor will meet it (`notes/time/example_three_ways.jpg`).
+- Old paintings don't use hand time and replay exactly as before.
 
 `glaze` goes over dry paint, so it first waits until everything under it is
 touch-dry; that time passes on the clock and the easel says so

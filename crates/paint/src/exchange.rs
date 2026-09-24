@@ -672,3 +672,45 @@ pub(crate) fn fine_cover(a: (f32, f32), b: (f32, f32), rb: f32, px: f32, py: f32
     }
     (0.5 * area.abs()).clamp(0.0, 1.0)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::bristle::Held;
+    use crate::canvas::Canvas;
+    use crate::color::hex;
+    use crate::wet::Layer;
+
+    /// The plough's stiffness gate reads the whole column it pushes: paint
+    /// set aside under the stroke counts with its own stiffness (review B3,
+    /// Astra's reproduction). Ten coats whose volume-weighted stiffness is
+    /// 0.9 move alike whether they lie as one body or as one fluid coat
+    /// under nine stiff ones set aside (before: 2.64 and 0.26 coats).
+    #[test]
+    fn the_plough_feels_the_set_aside_films_stiffness() {
+        let run = |aside: bool| {
+            let mut c = Canvas::new(100, 1.0, hex("#ffffff"));
+            let i = 50 * c.f.w + 50;
+            c.wet.vol[i] = 10.0;
+            c.wet.hide[i] = [1.0, if aside { 0.0 } else { 0.9 }, 1.0];
+            let mut tool = Tool::hog_flat(10.0);
+            tool.pickup = 0.0;
+            tool.push = 0.3;
+            let mut held = Held::new(tool.clone(), 1);
+            let full = held.full();
+            let sf = c.surf();
+            let mut wts = Vec::new();
+            unsafe {
+                let mut st = Stroke::begin(sf, 1, None, (0, 0, 100, 100), &mut wts);
+                if aside {
+                    st.set_aside(i, Layer::new(9.0, [0.0; LAT], [1.0, 1.0, 1.0]));
+                }
+                exchange(&mut st, &mut held.bristles[0], &tool, (49.5, 50.5), (50.5, 50.5), 0.55, 1.0, full, Mode::Touch { dep: 0.0 }, 1.0);
+                10.0 - sf.vol(i)
+            }
+        };
+        let (plain, aside) = (run(false), run(true));
+        assert!(plain > 1.0, "the plough moves stiff paint: {plain}");
+        assert!((plain - aside).abs() < 1e-5, "same whole-column stiffness: plain moves {plain}, with a film set aside {aside}");
+    }
+}

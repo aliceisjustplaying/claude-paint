@@ -15,7 +15,7 @@ reads digital, don't settle for the recipe: try something new, and if the
 critic scores it better, replace the entry (don't keep both). Pitfalls stay:
 they only prevent bad results.
 
-**Hierarchical detail, not maximal subtraction** (the owner, Round 6).
+**Hierarchical detail, not maximal subtraction** (Alice, Round 6).
 Economy doesn't mean less detail everywhere; it means detail placed where
 the eye goes and massed where it doesn't. Big shapes and value families
 first, then a middle scale of irregular groups, then a few selected
@@ -102,7 +102,7 @@ varied, tapered twigs, all connected), water B, sky B, rock B.
   and pools only a little in the hollows, the same at 1000 and 3200: no need to thin
   `coats` to 0.12 against brown worm lines at paint edges (`notes/varnish.md`) [r6 varnish].
 - **Keep `relief()` at its default.** The Friedrich default is now `(0.06, 0.006)`, the
-  owner's pick from the Round 6 A/B (`notes/round6/relief/`): the old 0.2 embossed every
+  Alice's pick from the Round 6 A/B (`notes/round6/relief/`): the old 0.2 embossed every
   stroke into creases ("grooves") and raised outlines around sky holes. `relief(0.6)`
   turned a sky into swirling impasto [r3 free]. Relief lighting can't fix pale rims,
   halos or cut-out edges: those are in the paint.

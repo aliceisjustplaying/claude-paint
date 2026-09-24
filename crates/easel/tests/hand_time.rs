@@ -33,11 +33,11 @@ fn replay(src: &Path, width: u32, threads: Option<usize>, tag: &str) -> (String,
     (String::from_utf8(out.stdout).unwrap(), std::fs::read(&png).unwrap())
 }
 
-/// The owner's logs replay byte for byte as they did before hand time
+/// Alice's logs replay byte for byte as they did before hand time
 /// existed: the PNG hashes were recorded with the easel of commit 2c5a658,
 /// built in each profile (the engine's floats differ between them), then
 /// re-recorded when the Friedrich relief default went from 0.2 to 0.06
-/// (Round 6, the owner's pick), when glazes and the varnish got their own
+/// (Round 6, Alice's pick), when glazes and the varnish got their own
 /// thin-film settle (Round 6, notes/varnish.md), for the wet-on-wet engine
 /// (branch r6-wet, notes/wet.md), which changes output on purpose, for its
 /// maintenance round's two fixes (B3, B7: notes/wet.md §9), and for the

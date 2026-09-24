@@ -1193,8 +1193,22 @@ varnish{color="#e6d3a4", coats=0.4, vary=0.12}
 cracks{dirt=0.4, vary=1, veil=0.5}          -- craquelure, fitted to this canvas's ground;
                                              -- also island_mm, ground_um, width_um (default:
                                              -- from the ground), depth_um, cupping_um, corners
+cracks{hierarchy=1, patchy=1, grain=0.15, grime=1}   -- (the defaults) how uneven it is
 relief(strength, gloss)                      -- light the surface relief (style default)
 ```
+
+The craquelure is uneven on purpose (Round 7, `notes/cracks.md`). A few long
+first cracks open widest (about 70 µm) and cup most. The later generations,
+splitting smaller islands, are finer and pinch shut for stretches
+(`hierarchy`). Some passages kept only their first cracks while others split
+finely (`patchy`), and the first cracks lean across the canvas's length
+(`grain`, a tendency). Each crack holds a different amount of grime, and a
+few hold old amber varnish. Its walls show the pale ground, so in darks a
+crack is a faint light line instead of stopping at the edge of the dark
+(`grime`). Thin paint shows hairlines and thick paint wider cracks. Set a knob
+to 0 for the old even web, or use all four at 0 to get the Round 6 look. The
+cupped island edges barely show in the style's frontal light, as on a real
+picture. `relief(0.3)` rakes the light across them.
 
 `wait` runs the engine's drying model: each pixel's paint goes from open
 (workable, blends and lifts) through setting (stiff, barely blends) to

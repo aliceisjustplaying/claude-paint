@@ -78,7 +78,7 @@ Why this exists: Alice's verdict on *Evening at a Mountain Lake* was "not very
 Caspar" (notes/round6/alice_review.md). The materials report
 (notes/research/friedrich_materials.md) covers canvas, ground, pigments and layers.
 This section covers the rest: composition, light, sky and water, what he left out,
-mood, and how imitations go wrong. It comes from written sources only (catalogue
+mood and how imitations go wrong. It comes from written sources only (catalogue
 essays and entries, a technical study, contemporaries' letters, Friedrich's own
 notes as quoted in print). No images were viewed. Source keys are listed at the
 end of this section. Keys marked *(secondary)* are encyclopedia or quotation
@@ -100,7 +100,7 @@ A painter's one-page version is `notes/briefs/friedrich_painter.md`.
   Schopenhauer, after a studio visit in 1810: "The air ... takes up more than half of
   the space in most of his compositions. Middle- and background are often missing
   because his motifs don't require them" [MW cat.8].
-- **Light is the subject, not the sun.** Twilight, fog, veiled moons, and a light
+- **Light is the subject, not the sun.** Twilight, fog, veiled moons and a light
   that comes from behind things. "Friedrich did not care for strong daylight"
   [RV p.60].
 - **Leaving out is the method.** He drew ships, nets and gulls on the *Monk* canvas

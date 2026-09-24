@@ -98,7 +98,11 @@ failures the lab painters hit are fixed (glaze-hand strokes lifting thin
 open sky to the ground 42% → 0.1%, crazing over tacky paint, dark rims
 over dry paint, tramlines). The sketchbook's "`dry()` before any
 passage" rule is replaced (on the branch) by when to work wet, tacky or
-dry. Cost: 44 bytes more per pixel (~300 MB at 3200), checkpoint format 7.
+dry. Cost: 44 bytes more per pixel in the film (~315 MB at 3200; it was
+52 before the maintenance round, ~373 MB, with 8 of them per-stroke
+state copied into every undo snapshot), plus 4 bytes of stroke scratch
+that snapshots and checkpoints don't carry (`notes/wet.md` §9);
+checkpoint format 8.
 
 **What it looks like** (panel 3 judged pass 2, not pass 3; main vs the branch on identical logs:
 `notes/round6/panels/judge3/`). The branch wins **foliage C 4–0** (lights

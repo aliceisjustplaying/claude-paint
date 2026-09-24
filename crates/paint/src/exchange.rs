@@ -74,15 +74,7 @@ pub(crate) struct Contact {
 /// How a bristle carrying `fill` of a full load (paint of stiffness
 /// `stiff`) meets the wet film, pressed to `reach` and moving `seg` pixels
 /// this step with a track of radius `rb`.
-pub(crate) fn contact(
-    tool: &Tool,
-    fill: f32,
-    stiff: f32,
-    reach: f32,
-    seg: f32,
-    rb: f32,
-    mode: Mode,
-) -> Contact {
+pub(crate) fn contact(tool: &Tool, fill: f32, stiff: f32, reach: f32, seg: f32, rb: f32, mode: Mode) -> Contact {
     // lowest surface height this bristle reaches down to. The loaded tip
     // of a pointed soft brush carries a bead of paint that wets the
     // weave's valleys as well as its peaks, however lightly it is
@@ -92,12 +84,7 @@ pub(crate) fn contact(
     // the tooth's range); a nearly dry one drags over the peaks only
     // (dry brush, broken color)
     let wet = smoothstep(0.1, 0.8, fill);
-    let wick = if tool.point > 0.0 {
-        tool.point * smoothstep(0.02, 0.25, fill)
-    } else {
-        0.0
-    }
-    .max(WET_REACH * wet);
+    let wick = if tool.point > 0.0 { tool.point * smoothstep(0.02, 0.25, fill) } else { 0.0 }.max(WET_REACH * wet);
     let th = 1.0 - reach.max(wick) * 1.6;
     // soft hair bends down into the valleys of the weave; stiff hog
     // bristles ride on the peaks
@@ -106,8 +93,7 @@ pub(crate) fn contact(
     // when loaded; a spent bristle drinks more
     // (fluid, medium-rich paint on the bristle wets into the film and
     // takes it up more readily than stiff paint)
-    let hunger = (0.35 + 0.65 * (1.0 - fill).clamp(0.0, 1.0).powf(1.5))
-        * (1.3 - 0.6 * stiff.clamp(0.0, 1.0));
+    let hunger = (0.35 + 0.65 * (1.0 - fill).clamp(0.0, 1.0).powf(1.5)) * (1.3 - 0.6 * stiff.clamp(0.0, 1.0));
     let push_k = tool.push * (seg / (2.0 * rb)).clamp(0.0, 1.0);
     // how far this bristle reaches into the wet film: pressed, stiff and
     // lean it goes through to the body; a loaded one rides on a cushion
@@ -128,40 +114,18 @@ pub(crate) fn contact(
     // and its edges), whose thin film meets the wet surface and is dragged
     // into it: stroke ends feather into wet paint instead of stopping
     // blunt (a touch pressed down doesn't)
-    let glance = if mode == Mode::Drag {
-        GLANCE * (1.0 - reach.clamp(0.0, 1.0)).powi(2)
-    } else {
-        0.0
-    };
-    let drag_in = (1.0 - tool.lay.clamp(0.0, 1.0))
-        .max(1.0 - smoothstep(0.02, 0.2, fill))
-        .max(glance);
+    let glance = if mode == Mode::Drag { GLANCE * (1.0 - reach.clamp(0.0, 1.0)).powi(2) } else { 0.0 };
+    let drag_in = (1.0 - tool.lay.clamp(0.0, 1.0)).max(1.0 - smoothstep(0.02, 0.2, fill)).max(glance);
     // (mixing is shear: it goes with how far the bristle moves, as the
     // plough does, so a tip pressed straight down barely stirs)
     // (any hair sheared across a surface film mixes it; a stiff one
     // pressed hard digs deeper into the body too)
-    let stir = STIR
-        * (seg / (2.0 * rb)).clamp(0.0, 1.0)
-        * reach.clamp(0.0, 1.0).sqrt()
-        * (0.5 + 0.5 * tool.stiffness.clamp(0.0, 1.0))
-        * cushion;
+    let stir = STIR * (seg / (2.0 * rb)).clamp(0.0, 1.0) * reach.clamp(0.0, 1.0).sqrt() * (0.5 + 0.5 * tool.stiffness.clamp(0.0, 1.0)) * cushion;
     // the film a bristle rides on, which it can't push aside (coats):
     // thicker under coarse stiff hog (0.2–0.3 mm) than fine soft hair
     // (0.06–0.12 mm), thinner the harder it is pressed
-    let keep = PLOUGH_KEEP
-        * (0.3 + 0.7 * tool.stiffness.clamp(0.0, 1.0))
-        * (1.0 - 0.4 * reach.clamp(0.0, 1.0));
-    Contact {
-        wet,
-        th,
-        give,
-        hunger,
-        through,
-        drag_in,
-        stir,
-        push_k,
-        keep,
-    }
+    let keep = PLOUGH_KEEP * (0.3 + 0.7 * tool.stiffness.clamp(0.0, 1.0)) * (1.0 - 0.4 * reach.clamp(0.0, 1.0));
+    Contact { wet, th, give, hunger, through, drag_in, stir, push_k, keep }
 }
 
 impl Contact {
@@ -173,11 +137,7 @@ impl Contact {
     /// (leveling in seconds).
     #[inline]
     fn plough(&self, v: f32, wt: f32, fl: f32, stiff: f32) -> f32 {
-        (v - self.keep).max(0.0)
-            * self.push_k
-            * wt
-            * fl
-            * (0.1 + 0.9 * smoothstep(0.0, PLOUGH_STIFF, stiff))
+        (v - self.keep).max(0.0) * self.push_k * wt * fl * (0.1 + 0.9 * smoothstep(0.0, PLOUGH_STIFF, stiff))
     }
 }
 
@@ -190,18 +150,7 @@ impl Contact {
 ///
 /// SAFETY: as `Stroke::begin`: no other thread works the stroke's footprint.
 #[allow(clippy::too_many_arguments)]
-pub(crate) unsafe fn exchange(
-    st: &mut Stroke,
-    br: &mut Bristle,
-    tool: &Tool,
-    a: (f32, f32),
-    b: (f32, f32),
-    rb: f32,
-    reach: f32,
-    full: f32,
-    mode: Mode,
-    excl: f32,
-) {
+pub(crate) unsafe fn exchange(st: &mut Stroke, br: &mut Bristle, tool: &Tool, a: (f32, f32), b: (f32, f32), rb: f32, reach: f32, full: f32, mode: Mode, excl: f32) {
     unsafe {
         let sf = st.sf;
         let lim = st.lim;
@@ -222,12 +171,7 @@ pub(crate) unsafe fn exchange(
         let seg2 = dx * dx + dy * dy;
         let seg = seg2.sqrt();
         // a crop render holds only a window of the canvas: clip to it
-        let (x0, y0, x1, y1) = (
-            cx0.max(ox),
-            cy0.max(oy),
-            cx1.min(ox + sf.w),
-            cy1.min(oy + sf.h),
-        );
+        let (x0, y0, x1, y1) = (cx0.max(ox), cy0.max(oy), cx1.min(ox + sf.w), cy1.min(oy + sf.h));
         let windowed = (x0, y0, x1, y1) != (cx0, cy0, cx1, cy1);
         if x1 <= x0 || y1 <= y0 {
             // outside the window the canvas isn't there to feel: assume the
@@ -243,19 +187,12 @@ pub(crate) unsafe fn exchange(
         }
         // never outside the stroke's footprint: the scheduler runs strokes
         // whose footprints don't overlap at once
-        debug_assert!(
-            x0 >= lim.0 && y0 >= lim.1 && x1 <= lim.2 && y1 <= lim.3,
-            "bristle contact ({x0},{y0},{x1},{y1}) outside the stroke footprint {lim:?}"
-        );
+        debug_assert!(x0 >= lim.0 && y0 >= lim.1 && x1 <= lim.2 && y1 <= lim.3, "bristle contact ({x0},{y0},{x1},{y1}) outside the stroke footprint {lim:?}");
         let (x0, y0, x1, y1) = (x0.max(lim.0), y0.max(lim.1), x1.min(lim.2), y1.min(lim.3));
         if x1 <= x0 || y1 <= y0 {
             return;
         }
-        let (mx, my) = if seg > 1e-4 {
-            (dx / seg, dy / seg)
-        } else {
-            (0.0, 0.0)
-        };
+        let (mx, my) = if seg > 1e-4 { (dx / seg, dy / seg) } else { (0.0, 0.0) };
         let (nx, ny) = (-my, mx);
         // a pointed tool's moving hair covers pixels by the exact share of
         // its track in them (see `strip_cover`)
@@ -274,11 +211,7 @@ pub(crate) unsafe fn exchange(
         for y in y0..y1 {
             for x in x0..x1 {
                 let (px, py) = (x as f32 + 0.5, y as f32 + 0.5);
-                let t = if seg2 > 1e-8 {
-                    (((px - a.0) * dx + (py - a.1) * dy) / seg2).clamp(0.0, 1.0)
-                } else {
-                    0.0
-                };
+                let t = if seg2 > 1e-8 { (((px - a.0) * dx + (py - a.1) * dy) / seg2).clamp(0.0, 1.0) } else { 0.0 };
                 let (qx, qy) = (a.0 + dx * t - px, a.1 + dy * t - py);
                 let dist = (qx * qx + qy * qy).sqrt();
                 // a moving bristle has a crisp track; in a pressed tip (fixed
@@ -338,11 +271,7 @@ pub(crate) unsafe fn exchange(
             dep_total
         };
         // a capsule cut by the window edge lays only the window's share there
-        let share = if windowed {
-            sum_cov / capsule_cover(a, b, rb, fine, (cx0, cy0, cx1, cy1)).max(1e-6)
-        } else {
-            1.0
-        };
+        let share = if windowed { sum_cov / capsule_cover(a, b, rb, fine, (cx0, cy0, cx1, cy1)).max(1e-6) } else { 1.0 };
         let dep_per_w = dep_total * share.min(1.0) / sum_w / px_area;
         // ploughed paint lands just outside the track: the next pixel, or for
         // a pointed tool (shared bilinearly, below) a hair's width away, the
@@ -379,8 +308,7 @@ pub(crate) unsafe fn exchange(
                 let v = sf.vol(i);
                 if v > 1e-6 {
                     let own = if *sf.stroke(i) == st.id { 0.15 } else { 1.0 };
-                    let take =
-                        (v * tool.pickup * wt * ct.hunger * own * fl).min((v - *floor).max(0.0));
+                    let take = (v * tool.pickup * wt * ct.hunger * own * fl).min((v - *floor).max(0.0));
                     // the surface film comes up first (with an earlier one
                     // this stroke has set aside under its own paint); the
                     // body under it only as far as the bristles reach
@@ -405,11 +333,7 @@ pub(crate) unsafe fn exchange(
                     // (a fine hair's own share of the tuft's width, where
                     // the hairs of a gathered point lie over each other)
                     let cv = sf.cover(i);
-                    *cv = if fine {
-                        ((if sf.vol(i) < 1e-6 { 0.0 } else { *cv }) + wt * excl).min(1.0)
-                    } else {
-                        1.0
-                    };
+                    *cv = if fine { ((if sf.vol(i) < 1e-6 { 0.0 } else { *cv }) + wt * excl).min(1.0) } else { 1.0 };
                     // a loaded bristle lays its paint on the wet film (it
                     // rides on it); a lean one or a blender drags what it
                     // carries into the film
@@ -417,16 +341,7 @@ pub(crate) unsafe fn exchange(
                     if sf.vol(i) >= WET_FILM && ct.drag_in > 0.0 {
                         st.add_body(i, d * ct.drag_in, &blat, bhide);
                     }
-                    st.lay(
-                        i,
-                        if sf.vol(i) >= WET_FILM {
-                            d * (1.0 - ct.drag_in)
-                        } else {
-                            d
-                        },
-                        &blat,
-                        bhide,
-                    );
+                    st.lay(i, if sf.vol(i) >= WET_FILM { d * (1.0 - ct.drag_in) } else { d }, &blat, bhide);
                     *sf.stroke(i) = st.id;
                 }
                 // the bristle works the surface film (with what it just
@@ -441,11 +356,7 @@ pub(crate) unsafe fn exchange(
                     let m = ct.plough(v, wt, fl, st.stiffness(i));
                     if m > 1e-6 {
                         let (px, py) = (x as f32 + 0.5, y as f32 + 0.5);
-                        let side = if (px - a.0) * nx + (py - a.1) * ny >= 0.0 {
-                            1.0
-                        } else {
-                            -1.0
-                        };
+                        let side = if (px - a.0) * nx + (py - a.1) * ny >= 0.0 { 1.0 } else { -1.0 };
                         let tx = px + (nx * side * 0.75 + mx * 0.45) * off;
                         let ty = py + (ny * side * 0.75 + my * 0.45) * off;
                         // where the paint goes: the pixel under the target,
@@ -458,12 +369,7 @@ pub(crate) unsafe fn exchange(
                             let (gx, gy) = (tx - 0.5, ty - 0.5);
                             let (fx, fy) = (gx - gx.floor(), gy - gy.floor());
                             let (bx, by) = (gx.floor() + 0.5, gy.floor() + 0.5);
-                            to = [
-                                (bx, by, (1.0 - fx) * (1.0 - fy)),
-                                (bx + 1.0, by, fx * (1.0 - fy)),
-                                (bx, by + 1.0, (1.0 - fx) * fy),
-                                (bx + 1.0, by + 1.0, fx * fy),
-                            ];
+                            to = [(bx, by, (1.0 - fx) * (1.0 - fy)), (bx + 1.0, by, fx * (1.0 - fy)), (bx, by + 1.0, (1.0 - fx) * fy), (bx + 1.0, by + 1.0, fx * fy)];
                             4
                         } else {
                             to[0] = (tx, ty, 1.0);
@@ -474,24 +380,9 @@ pub(crate) unsafe fn exchange(
                                 continue;
                             }
                             // (paint pushed out of a crop window stays put)
-                            let inside = tx >= ox as f32
-                                && ty >= oy as f32
-                                && (tx as usize) < w.min(ox + sf.w)
-                                && (ty as usize) < h.min(oy + sf.h);
-                            debug_assert!(
-                                !inside
-                                    || (tx >= lim.0 as f32
-                                        && ty >= lim.1 as f32
-                                        && (tx as usize) < lim.2
-                                        && (ty as usize) < lim.3),
-                                "plough target outside the stroke footprint {lim:?}"
-                            );
-                            if inside
-                                && tx >= lim.0 as f32
-                                && ty >= lim.1 as f32
-                                && (tx as usize) < lim.2
-                                && (ty as usize) < lim.3
-                            {
+                            let inside = tx >= ox as f32 && ty >= oy as f32 && (tx as usize) < w.min(ox + sf.w) && (ty as usize) < h.min(oy + sf.h);
+                            debug_assert!(!inside || (tx >= lim.0 as f32 && ty >= lim.1 as f32 && (tx as usize) < lim.2 && (ty as usize) < lim.3), "plough target outside the stroke footprint {lim:?}");
+                            if inside && tx >= lim.0 as f32 && ty >= lim.1 as f32 && (tx as usize) < lim.2 && (ty as usize) < lim.3 {
                                 let (tx, ty) = (tx as usize, ty as usize);
                                 let j = (ty - oy) * bw_buf + tx - ox;
                                 // a clipped stroke can't push paint past its mask:
@@ -503,13 +394,7 @@ pub(crate) unsafe fn exchange(
                                     // (its film there thins but still covers it)
                                     let ci = *sf.cover(i);
                                     let cj = sf.cover(j);
-                                    *cj = if fine {
-                                        ((if sf.vol(j) < 1e-6 { 0.0 } else { *cj })
-                                            + (m / v.max(1e-9)).min(1.0) * ci)
-                                            .min(1.0)
-                                    } else {
-                                        1.0
-                                    };
+                                    *cj = if fine { ((if sf.vol(j) < 1e-6 { 0.0 } else { *cj }) + (m / v.max(1e-9)).min(1.0) * ci).min(1.0) } else { 1.0 };
                                     // a bristle pushes the whole column of
                                     // paint in its way; it keeps its
                                     // layering where it lands (the
@@ -540,13 +425,7 @@ pub(crate) unsafe fn exchange(
         // and works into the reservoir as the bristle travels
         br.fold_tip(1.0 - (-travel / TIP_RUN).exp());
         let pad = (off + 2.0) as usize;
-        grow(
-            &mut st.bounds,
-            x0.saturating_sub(pad).max(ox),
-            y0.saturating_sub(pad).max(oy),
-            (x1 + pad).min(ox + sf.w),
-            (y1 + pad).min(oy + sf.h),
-        );
+        grow(&mut st.bounds, x0.saturating_sub(pad).max(ox), y0.saturating_sub(pad).max(oy), (x1 + pad).min(ox + sf.w), (y1 + pad).min(oy + sf.h));
     }
 }
 
@@ -556,24 +435,14 @@ const GHOST_TOUCH: f32 = 0.8;
 
 /// Summed coverage of the capsule a–b (radius rb, pixels) over rect `r`:
 /// its geometric footprint, whatever the canvas under it.
-fn capsule_cover(
-    a: (f32, f32),
-    b: (f32, f32),
-    rb: f32,
-    fine: bool,
-    r: (usize, usize, usize, usize),
-) -> f32 {
+fn capsule_cover(a: (f32, f32), b: (f32, f32), rb: f32, fine: bool, r: (usize, usize, usize, usize)) -> f32 {
     let (dx, dy) = (b.0 - a.0, b.1 - a.1);
     let seg2 = dx * dx + dy * dy;
     let mut sum = 0.0f32;
     for y in r.1..r.3 {
         for x in r.0..r.2 {
             let (px, py) = (x as f32 + 0.5, y as f32 + 0.5);
-            let t = if seg2 > 1e-8 {
-                (((px - a.0) * dx + (py - a.1) * dy) / seg2).clamp(0.0, 1.0)
-            } else {
-                0.0
-            };
+            let t = if seg2 > 1e-8 { (((px - a.0) * dx + (py - a.1) * dy) / seg2).clamp(0.0, 1.0) } else { 0.0 };
             let (qx, qy) = (a.0 + dx * t - px, a.1 + dy * t - py);
             let dist = (qx * qx + qy * qy).sqrt();
             if fine {
@@ -610,11 +479,7 @@ fn strip_cover(dist: f32, rb: f32) -> f32 {
 pub(crate) fn fine_cover(a: (f32, f32), b: (f32, f32), rb: f32, px: f32, py: f32) -> f32 {
     let (dx, dy) = (b.0 - a.0, b.1 - a.1);
     let seg = (dx * dx + dy * dy).sqrt();
-    let (ux, uy, lo, hi) = if seg > 1e-4 {
-        (dx / seg, dy / seg, 0.0, seg)
-    } else {
-        (1.0, 0.0, -rb, rb)
-    };
+    let (ux, uy, lo, hi) = if seg > 1e-4 { (dx / seg, dy / seg, 0.0, seg) } else { (1.0, 0.0, -rb, rb) };
     // the pixel center in track coordinates: along `t`, across `q`
     let (rx, ry) = (px - a.0, py - a.1);
     let t = rx * ux + ry * uy;
@@ -634,12 +499,7 @@ pub(crate) fn fine_cover(a: (f32, f32), b: (f32, f32), rb: f32, px: f32, py: f32
     let corner = |s: f32, r: f32| (a.0 - px + ux * s + nx * r, a.1 - py + uy * s + ny * r);
     let mut poly = [(0.0f32, 0.0f32); 8];
     let mut n = 4;
-    poly[..4].copy_from_slice(&[
-        corner(lo, -rb),
-        corner(hi, -rb),
-        corner(hi, rb),
-        corner(lo, rb),
-    ]);
+    poly[..4].copy_from_slice(&[corner(lo, -rb), corner(hi, -rb), corner(hi, rb), corner(lo, rb)]);
     for side in 0..4 {
         // inside: sign·coordinate ≤ ½ along x (sides 0, 1) or y (2, 3)
         let (axis, sign) = (side / 2, if side % 2 == 0 { 1.0f32 } else { -1.0 });

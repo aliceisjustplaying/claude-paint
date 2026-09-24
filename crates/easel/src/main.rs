@@ -502,6 +502,14 @@ fn run(args: &[String]) -> Result<(), String> {
     let mut c = s.canvas().ok_or("the program never made a canvas")?.clone();
     c.save(&out).map_err(|e| e.to_string())?;
     eprintln!("wrote {} ({} chunks, painted in {paint_secs:.1}s, total {:.1}s)", out.display(), chunks.len(), t0.elapsed().as_secs_f64());
+    if let Some(p) = flag(args, "--dump-surface") {
+        // the dried surface height (µm) under the saved pixels: little-endian
+        // f32, row by row (scripts/glitch.py --surface reads it)
+        let (w, h, v) = c.kept_surface_um();
+        let bytes: Vec<u8> = v.iter().flat_map(|x| x.to_le_bytes()).collect();
+        std::fs::write(&p, bytes).map_err(|e| format!("{p}: {e}"))?;
+        eprintln!("surface {w}x{h} µm → {p}");
+    }
     if args.iter().any(|a| a == "--look") {
         let relief = s.st.borrow().style.as_ref().map(|s| s.relief).unwrap_or((0.5, 0.1));
         let jpg = out.with_extension("jpg");

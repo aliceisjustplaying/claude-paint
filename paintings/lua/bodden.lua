@@ -126,3 +126,81 @@ stipple(upperZone, {width=4.5, coverage=function(x, y) return 1.35 * (1 - smooth
   color_over=function(x, y, under) return shift(mix(under, pileAt(x, y), 0.45), 0.008, 0, 0) end,
   pressure={0.4, 0.8}, dips={18, 0.35, 0.7}, medium=0.5, pal=skypal})
 local t = timesheet(); print(string.format("sitting %.0f min, touches %d", t.sitting, t.touches))
+
+--@ chunk 8 · clock 2583.2638859711587
+-- next day: three strata, dull violet-gray bodies lit from below by the set sun, laid in body color
+-- over the dry stipple and blended while wet, their undersides touched in warm
+rest(16)
+sitting{hours=3}
+cloudpal = pal:only{"lead white", "pale smalt", "cobalt blue", "yellow ochre", "raw umber", "red earth", "vermilion", "bone black"}
+local function strandM(x0, x1, y, tilt, w)
+  local pts, ws, n = {}, {}, math.max(4, math.floor((x1 - x0) / 25))
+  for k = 0, n do
+    local t = k / n
+    pts[#pts+1] = {x0 + (x1 - x0) * t, y - tilt * t + randn(0, 0.8)}
+    ws[#ws+1] = w * (0.25 + 0.75 * math.sin(math.pi * t)^0.6) * rand(0.7, 1.15)
+  end
+  return ribbon(pts, ws)
+end
+local function cloud(list, tilt, seed)
+  local m
+  for _, s in ipairs(list) do local r = strandM(s[1], s[2], s[3], tilt, s[4]); m = m and (m + r) or r end
+  return m:roughen(1.2, 18, seed, 1.2)
+end
+cA = cloud({{60, 330, 78, 5}, {150, 520, 86, 7}, {230, 610, 92, 6}, {310, 470, 99, 4}, {520, 700, 88, 3}, {95, 260, 83, 4}, {400, 560, 95, 5}}, 5, 31)
+cB = cloud({{560, 860, 168, 5}, {640, 990, 174, 6}, {720, 900, 179, 3}, {880, 1010, 166, 3}}, -4, 32)
+local cn = noise{seed=41, period=60}
+local function veil(m, body, warm, amt, seed)
+  local soft = m:blur(5)
+  local und = function(x, y) return clamp(1.6 * (soft:at(x, y) - soft:at(x, y + 5)), 0, 1) end
+  work(soft, {hand="broad", angle=-0.005, length={40, 120}, coverage=2.6, medium=0.3, pal=cloudpal, hug=false, seed=seed,
+    color_over=function(x, y, under)
+      local c = mix(body, warm, und(x, y))
+      return mix(under, c, amt * (0.55 + 0.45 * soft:at(x, y)) * (0.8 + 0.4 * cn:at01(x, y)))
+    end})
+  blend(m:grow(4):blur(3), {angle=0, coverage=1.4, seed=seed + 1})
+end
+veil(cA, "#7e7a8c", "#c4a09a", 0.75, 51)
+veil(cB, "#8c8a98", "#c9aa9a", 0.55, 53)
+local t = timesheet(); print(string.format("sitting %.0f min", t.sitting))
+
+--@ chunk 9 · clock 3545.729750197381
+-- the far shore and the town against the glow: dark and cool at the top, lost into the mist on the water
+farpal = pal:only{"lead white", "pale smalt", "cobalt blue", "raw umber", "bone black", "red earth", "yellow ochre"}
+local base = HZ + 2
+local shoreP = {}
+for _, p in ipairs(SHORE) do shoreP[#shoreP+1] = {p[1], p[2]} end
+shoreP[#shoreP+1] = {1005, base}; shoreP[#shoreP+1] = {-5, base}
+landM = poly(shoreP)
+TOWN2 = {}
+for _, p in ipairs(TOWN) do
+  if p[1] < 486 or p[1] > 514 then TOWN2[#TOWN2+1] = p
+  elseif p[1] == 488 and p[2] == 403 then
+    for _, q in ipairs({{491,403},{491,372},{490,371},{490,367},{493,366},{493,362},{500,329},{507,362},{507,366},{510,367},{510,371},{509,372},{509,403}}) do TOWN2[#TOWN2+1] = q end
+  end
+end
+local townP = {}
+for _, p in ipairs(TOWN2) do townP[#townP+1] = {p[1], p[2]} end
+townP[#townP+1] = {TOWN2[#TOWN2][1], base}; townP[#townP+1] = {TOWN2[1][1], base}
+townM = poly(townP)
+-- low groves on the shore, drawn by a soft hand, none alike
+GROVES = {
+  outline{pts={{112,428},{118,421},{128,418},{141,419},{150,416},{162,420},{168,427}}, open=true, char="soft", lobe=5, seed=61},
+  outline{pts={{300,423},{306,416},{318,414},{331,415},{338,419},{352,418},{360,421}}, open=true, char="soft", lobe=4, seed=62},
+  outline{pts={{672,422},{680,416},{694,413},{708,416},{716,414},{730,418},{742,424}}, open=true, char="soft", lobe=5, seed=63},
+  outline{pts={{880,428},{888,423},{899,422},{906,425}}, open=true, char="soft", lobe=3, seed=64},
+}
+groveM = nil
+for _, o in ipairs(GROVES) do local m = o:below(base); groveM = groveM and (groveM + m) or m end
+local farcol = function(x, y)
+  local t = smoothstep(398, base, y)
+  return mix(mix("#4d4f60", "#5a5a68", smoothstep(330, 400, y)), "#8f8c8f", t * t)
+end
+-- the land sliver and groves: short level strokes of a small filbert
+work(landM + groveM, {hand="detail", tool="filbert 3", angle=0, angle_jitter=0.15, length={4, 14}, coverage=4, medium=0.25, pal=farpal,
+  color=farcol, edge={found=0.3, soft=0.5, lost=0.2, period=30, seed=65}})
+-- the town: roofs level, the tower upright, found against the light
+work(townM, {hand="detail", tool="round 1.2", angle=function(x, y) return (x > 488 and x < 512) and 1.57 or 0.05 end,
+  length={3, 10}, coverage=3.6, medium=0.2, pal=farpal, color=farcol, edge={found=0.8, soft=0.2, period=25, seed=66}})
+blend(landM + groveM + townM, {angle=0, coverage=0.8, clip=true})
+local t = timesheet(); print(string.format("sitting %.0f min", t.sitting))

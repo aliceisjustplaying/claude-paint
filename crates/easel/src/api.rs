@@ -212,9 +212,14 @@ fn sample<const N: usize>(st: &S, fun: &Function, b: (f32, f32, f32, f32), conv:
 
 pub(crate) type FieldBox<T> = Box<dyn Fn(f32, f32) -> T + Sync>;
 
-fn color_field(st: &S, v: &Value, b: (f32, f32, f32, f32)) -> Result<FieldBox<Rgb>> {
+pub(crate) fn color_field(st: &S, v: &Value, b: (f32, f32, f32, f32)) -> Result<FieldBox<Rgb>> {
     // a sky or clouds: read natively on the engine's threads
     if let Value::UserData(u) = v {
+        // a pile set: its field stepped to the piles (crate::piles)
+        if let Ok(p) = u.borrow::<crate::piles::PilesU>() {
+            let p = p.0.clone();
+            return Ok(Box::new(move |x, y| p.stepped(x, y)));
+        }
         if let Ok(s) = u.borrow::<crate::world::SkyU>() {
             let s = s.0.clone();
             return Ok(Box::new(move |x, y| s.at(x, y)));
@@ -418,7 +423,7 @@ pub struct Brush {
     st: S,
 }
 
-fn palette_of(st: &S, v: Value) -> Result<Rc<Palette>> {
+pub(crate) fn palette_of(st: &S, v: Value) -> Result<Rc<Palette>> {
     match v {
         Value::Nil => Ok(Rc::new(style(st)?.palette.clone())),
         Value::UserData(u) => Ok(u.borrow::<Pal>()?.0.clone()),
@@ -520,11 +525,11 @@ impl UserData for Brush {
     }
 }
 
-fn no_canvas() -> mlua::Error {
+pub(crate) fn no_canvas() -> mlua::Error {
     mlua::Error::runtime("no canvas yet: start with canvas{style=\"friedrich\", aspect=1.4, seed=1}")
 }
 
-fn style(st: &S) -> Result<Rc<Style>> {
+pub(crate) fn style(st: &S) -> Result<Rc<Style>> {
     st.borrow().style.clone().ok_or_else(no_canvas)
 }
 
@@ -830,6 +835,11 @@ fn work(st: &S, mask: Rc<Mask>, o: Table, preset: Option<&str>) -> Result<()> {
         Value::Nil | Value::Boolean(false) => None,
         v => Some(palette_of(st, v.clone())?),
     };
+    // a pile set's piles (crate::piles) must outlive the handling too
+    let piles_keep: Option<std::sync::Arc<paint::piles::PileSet>> = match o.get::<Value>("color")? {
+        Value::UserData(u) => u.borrow::<crate::piles::PilesU>().ok().map(|p| p.0.clone()),
+        _ => None,
+    };
     let mut h: Handling = match hand.as_str() {
         "broad" => sty.broad(),
         "body" => sty.body(),
@@ -984,6 +994,9 @@ fn work(st: &S, mask: Rc<Mask>, o: Table, preset: Option<&str>) -> Result<()> {
     }
     if let Some(l) = limit {
         h = h.limit(l);
+    }
+    if let Some(p) = &piles_keep {
+        h = h.piles(p);
     }
     h.tool.validate().map_err(mlua::Error::runtime)?;
     let seed = seed_of(st, &o)?;
@@ -1768,6 +1781,7 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
     crate::draw_firs::install(lua, st.clone())?;
     crate::draw_trees::install(lua, st.clone())?;
     crate::draw_rocks::install(lua, st.clone())?;
+    crate::piles::install(lua, st.clone())?;
 
     // trees
     {

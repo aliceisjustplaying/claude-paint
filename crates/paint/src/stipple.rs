@@ -326,6 +326,12 @@ impl Canvas {
     /// touch's reach, and passages in a 2×2 checkerboard phase are painted in
     /// parallel, each with its own brush.
     pub fn stipple(&mut self, mask: &Mask, sp: &Stipple, seed: u64) {
+        self.stipple_with(&mut crate::tally::Piles::default(), mask, sp, seed);
+    }
+
+    /// `stipple`, dipping into the piles already on the palette (see
+    /// `work_with`).
+    pub fn stipple_with(&mut self, piles: &mut crate::tally::Piles, mask: &Mask, sp: &Stipple, seed: u64) {
         sp.tool.assert_valid();
         self.check_mask(mask);
         // plan on the whole canvas (a crop render plans the same touches)
@@ -502,7 +508,7 @@ impl Canvas {
         let n_memo = memo.len();
         // the hand's ledger: every planned touch and trip to the palette (on
         // the whole canvas, before a crop drops passages; see `tally`)
-        let (mpu, mut piles) = (self.mm_per_unit, crate::tally::Piles::default());
+        let mpu = self.mm_per_unit;
         let mut tile_secs = Vec::with_capacity(plans.len());
         for t in plans.iter() {
             let secs0 = self.tally.secs;

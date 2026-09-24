@@ -236,7 +236,7 @@ impl Tally {
 
     /// The ledger as a checkpoint stores it (PAINTCK7): the counts, then the
     /// bits of the lengths and times.
-    pub(crate) fn to_words(&self) -> [u64; 9] {
+    pub(crate) fn to_words(self) -> [u64; 9] {
         let t = self;
         [t.strokes, t.touches, t.remixes, t.wipes, t.lines, t.length_mm.to_bits(), t.reloads.to_bits(), t.secs.to_bits(), t.clocked.to_bits()]
     }

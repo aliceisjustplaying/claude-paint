@@ -204,3 +204,106 @@ work(townM, {hand="detail", tool="round 1.2", angle=function(x, y) return (x > 4
   length={3, 10}, coverage=3.6, medium=0.2, pal=farpal, color=farcol, edge={found=0.8, soft=0.2, period=25, seed=66}})
 blend(landM + groveM + townM, {angle=0, coverage=0.8, clip=true})
 local t = timesheet(); print(string.format("sitting %.0f min", t.sitting))
+
+--@ chunk 10 · clock 3710.5641051344573
+-- next day: the spire and turret drawn to their points, the two mills
+rest(16)
+sitting{hours=4}
+local dk = "#4a4b5b"
+local p = brush{kind="round", width=1.3, point=1}
+p:load(dk, 0.8)
+-- spire: each flank pulled up from the belfry to the apex, lifting off at the point
+for k = 1, 3 do
+  p:stroke({{493.2 + 0.4*k, 364}, {496.5 + 0.2*k, 346}, {499.8, 330.5}}, {pressure={0.8, 0.02}, ramps={0.05, 0.8}})
+  p:stroke({{506.8 - 0.4*k, 364}, {503.5 - 0.2*k, 346}, {500.2, 330.5}}, {pressure={0.8, 0.02}, ramps={0.05, 0.8}})
+end
+p:stroke({{500, 362}, {500, 331}}, {pressure={0.7, 0.05}, ramps={0.05, 0.7}})
+-- small corner pinnacles on the tower top
+for _, x in ipairs({490.8, 509.2}) do p:stroke({{x, 368}, {x, 361.5}}, {pressure={0.55, 0.02}, ramps={0.05, 0.8}}) end
+-- the turret of the second church, a thin spike
+p:reload(dk, 0.7)
+for k = 1, 2 do p:stroke({{576.3 + 0.6*k, 391}, {578, 377}}, {pressure={0.7, 0.02}, ramps={0.05, 0.8}}) end
+p:stroke({{580.2, 391}, {578.1, 378}}, {pressure={0.7, 0.02}, ramps={0.05, 0.8}})
+-- the mills: a tapered body, a cap, four sails (lattice lost at this distance)
+local function mill(M, s, col)
+  local body = poly({{M.x - 4.2*s, M.base + 1}, {M.x - 2.6*s, M.top + 1.5*s}, {M.x, M.top - 0.5*s}, {M.x + 2.6*s, M.top + 1.5*s}, {M.x + 4.2*s, M.base + 1}})
+  work(body, {hand="detail", tool="round 1", angle=1.57, length={2, 6}, coverage=3.4, medium=0.2, pal=farpal, color=col, edge="firm"})
+  local r = brush{kind="round", width=1.0}
+  local hx, hy = M.x, M.top + 1.2*s
+  local a0 = M.turn
+  for k = 0, 3 do
+    local a = a0 + k * math.pi / 2
+    local L = (13 + rand(-0.8, 0.8)) * s
+    r:reload(col, 0.8)
+    r:stroke({{hx, hy}, {hx + math.cos(a) * L * 0.5, hy + math.sin(a) * L * 0.5}, {hx + math.cos(a) * L, hy + math.sin(a) * L}},
+      {pressure={0.8, 0.6}, ramps={0.02, 0.15}})
+    -- the sail cloth: a second, lighter line beside the stock
+    local b = a + 0.12
+    r:stroke({{hx + math.cos(b) * L * 0.25, hy + math.sin(b) * L * 0.25}, {hx + math.cos(b) * L * 0.95, hy + math.sin(b) * L * 0.95}},
+      {pressure={0.55, 0.45}, ramps={0.05, 0.15}})
+  end
+end
+MILL.turn = -0.72; MILL2.turn = -0.35
+mill(MILL, 1, "#57586a")
+mill(MILL2, 0.72, "#6a6a78")
+local t = timesheet(); print(string.format("sitting %.0f min", t.sitting))
+
+--@ chunk 11 · clock 4678.356588657945
+-- the town's particulars: chimneys on the ridges, a few trees between the houses
+local p = brush{kind="round", width=1.1, point=0.5}
+p:load("#4c4d5c", 0.8)
+for _, c in ipairs({{384,412.5,2.5},{421,410,2},{436.5,409.5,3},{459,409,2.2},{524.5,403.5,2.6},{535,403.5,2},{566,398.5,2.2},{606.5,407.5,2.4},{626,409.5,2}}) do
+  p:stroke({{c[1] + randn(0, 0.1), c[2]}, {c[1] + randn(0, 0.15), c[2] - c[3]}}, {pressure={0.75, 0.6}, ramps={0.02, 0.1}})
+end
+local trees = nil
+for i, tr in ipairs({{468, 404, 5, 4.5}, {553, 406, 7, 5}, {644, 409, 7, 4}, {399, 410, 4, 3}}) do
+  local pts = {}
+  local n = 7
+  for k = 0, n do
+    local a = math.pi * k / n
+    local r = rand(0.75, 1.1)
+    pts[#pts+1] = {tr[1] - math.cos(a) * tr[3] * r, tr[2] + 2 - math.sin(a) * tr[4] * r}
+  end
+  local m = outline{pts=pts, char="soft", lobe=1.6, seed=70 + i}:mask()
+  trees = trees and (trees + m) or m
+end
+work(trees, {hand="detail", tool="round 1.2", angle_jitter=1.5, length={1.5, 4}, coverage=3.2, medium=0.2, pal=farpal, color="#50535f", edge="soft"})
+local t = timesheet(); print(string.format("sitting %.0f min", t.sitting))
+
+--@ chunk 12 · clock 4684.620464619249
+-- the water's second layer, looking up at the sky for each band and laying its reflection a shade
+-- darker, darker still toward me; then the town's reflection dragged down into it while wet
+local base = HZ + 2
+water2 = mask(function(x, y) return smoothstep(base - 1, base + 1.5, y) * (1 - smoothstep(bankcurve(x) + 2, bankcurve(x) + 9, y)) end)
+local wn = noise{seed=81, period=160, octaves=3, stretch={0, 8}}
+work(water2, {hand="broad", angle=0, angle_jitter=0.002, length={200, 520}, coverage=3.4, medium=0.3, pal=waterpal, hug=false,
+  curve={0.01, 0}, cross=0, drift={0, 1},
+  color_over=function(x, y, under)
+    local d = y - base
+    local sky = sample(x, math.max(4, HZ - 8 - d * 1.8), 8)
+    local dark = smoothstep(4, 230, d)
+    local want = mix(shift(sky, -0.05 - 0.02 * wn(x, y), 0, -0.005), "#3a4150", 0.62 * dark^0.9)
+    return mix(under, want, 0.7)
+  end})
+-- the town mirrored in the calm water: same width, a little shorter, softer and lighter than itself
+local rp = {}
+for _, p in ipairs(TOWN2) do rp[#rp+1] = {p[1], base + (base - p[2]) * 0.92} end
+rp[#rp+1] = {TOWN2[#TOWN2][1], base}; rp[#rp+1] = {TOWN2[1][1], base}
+townRefl = poly(rp):roughen(0.8, 6, 83, 1)
+work(townRefl, {hand="detail", tool="round 1.6", angle=1.57, angle_jitter=0.05, length={4, 14}, coverage=2.6, medium=0.3, pal=farpal, hug=false,
+  color_over=function(x, y, under) return mix(under, "#666674", 0.4 * (1 - 0.7 * smoothstep(base, base + 90, y))) end})
+blend(water2, {angle=0, angle_jitter=0.001, coverage=1.3, length={160, 420}, curve={0.005, 0}, cross=0, drift={0, 1}})
+local t = timesheet(); print(string.format("sitting %.0f min", t.sitting))
+
+--@ chunk 13 · clock 4748.569219406694
+-- the near bank in dark earth colors, laid into the wet edge of the water so the two meet soft
+bankpal = pal:only{"raw umber", "bone black", "yellow ochre", "red earth", "lead white", "pale smalt"}
+local bn = noise{seed=91, period=70, octaves=4}
+bank2 = below(function(x) return bankcurve(x) + 1.5 end):roughen(1.6, 11, 92, 1)
+work(bank2, {hand="body", tool="filbert 6", angle=function(x, y) return 0.04 + 0.12 * bn(x, y) end, length={12, 40}, coverage=3.4,
+  medium=0.22, pal=bankpal, edge={soft=0.6, found=0.2, lost=0.2, period=60, seed=93},
+  color=function(x, y)
+    local d = y - bankcurve(x)
+    return mix(mix("#3b3a30", "#2c2a24", smoothstep(4, 50, d)), "#463f31", 0.35 * bn:at01(x * 1.7, y))
+  end})
+local t = timesheet(); print(string.format("sitting %.0f min", t.sitting))

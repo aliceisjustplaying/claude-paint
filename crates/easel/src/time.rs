@@ -55,11 +55,14 @@ pub struct Hand {
     /// The ledger's clocked seconds at the last flush: the hand time put on
     /// the clock since then (a long pass clocks its slices as it goes).
     pub clocked: f64,
+    /// Minutes the canvas spent drying for a finishing verb that are on the
+    /// clock but not yet reported (the chunk's end reports them once).
+    pub unreported: f64,
 }
 
 impl Default for Hand {
     fn default() -> Self {
-        Hand { start: 0.0, hours: SITTING_HOURS, sittings: 1, warned: 0, piles: Piles::default(), base: paint::Tally::default(), clocked: 0.0 }
+        Hand { start: 0.0, hours: SITTING_HOURS, sittings: 1, warned: 0, piles: Piles::default(), base: paint::Tally::default(), clocked: 0.0, unreported: 0.0 }
     }
 }
 
@@ -100,13 +103,12 @@ pub fn flush(st: &S, force: bool) {
     s.hand.clocked = clocked;
     let now = c.clock() - s.clock0;
     // time the canvas spent that isn't hand time (a finishing verb drying
-    // the paint first) is left for the verb or the chunk's end to report
-    // (session.rs); a long stretch of it is a rest
+    // the paint first) is taken into the clock here, once: the chunk's end
+    // reports it (session.rs), and a long stretch of it is a rest
     let away = now - s.clock - hand;
+    s.clock = now;
     if away > 0.5 {
-        s.clock += hand;
-    } else {
-        s.clock = now;
+        s.hand.unreported += away;
     }
     if away >= REST_MIN {
         s.hand.begin(now);
@@ -389,6 +391,34 @@ mod tests {
         let mut r = fresh(&want[..3]);
         assert_eq!(clock(&s), clock(&r));
         assert_eq!(sheet(&mut s), sheet(&mut r));
+    }
+
+    /// The time a finishing verb spent drying the paint is taken into the
+    /// clock once: repeated queries in the same chunk see the same clock and
+    /// the same sitting, never a new sitting per query or a negative one,
+    /// and the drying is still reported once (review r6, finding 2).
+    #[test]
+    fn queries_after_a_finish_consume_its_drying_once() {
+        for on in [false, true] {
+            let mut s = Session::new(W, 0).unwrap();
+            run(&mut s, &format!(r##"canvas{{style="friedrich", aspect=1.5, seed=2, hand={on}}}"##));
+            run(&mut s, r##"work(rect(100, 100, 300, 200), {hand="body", color="#8090a0", coverage=4})"##);
+            let out = run(
+                &mut s,
+                r##"varnish()
+                    local a = timesheet(); local b = timesheet(); local c1, c2 = clock(), clock(); drying(200, 200); local c = timesheet()
+                    assert(a.sittings == 2 and b.sittings == 2 and c.sittings == 2, a.sittings .. " " .. b.sittings .. " " .. c.sittings)
+                    assert(a.sitting >= 0 and b.sitting == a.sitting and c.sitting == a.sitting, a.sitting .. " " .. b.sitting)
+                    assert(c1 == c2 and c1 == a.clock and a.clock > 120, c1 .. " " .. c2 .. " " .. a.clock)"##,
+            );
+            assert_eq!(out.matches("passed while the paint dried").count(), 1, "hand {on}: {out}");
+            let now = s.canvas().unwrap().clock();
+            let c0 = s.st.borrow().clock0;
+            assert_eq!(clock(&s), now - c0);
+            // and the next chunk reports nothing more
+            let out = run(&mut s, "assert(timesheet().sittings == 2)");
+            assert!(!out.contains("passed while"), "{out}");
+        }
     }
 
     /// Time a finishing verb spends drying the paint isn't hand time: it is

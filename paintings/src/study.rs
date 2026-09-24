@@ -81,13 +81,18 @@ impl Img {
     /// Lightness along a line from `a` to `b`, one sample per pixel,
     /// averaged across ±`band` units.
     pub fn line(&self, a: (f32, f32), b: (f32, f32), band: f32) -> Vec<f32> {
-        let len = ((b.0 - a.0).hypot(b.1 - a.1) * self.s) as usize;
+        let units = (b.0 - a.0).hypot(b.1 - a.1);
+        let len = (units * self.s) as usize;
+        // the step along the line (one pixel) and the unit normal across it:
+        // the band is ±`band` canvas units at any resolution (the offset used
+        // to scale by the step, which shrank the band as `s` grew)
         let (dx, dy) = ((b.0 - a.0) / len as f32, (b.1 - a.1) / len as f32);
+        let (nx, ny) = (-(b.1 - a.1) / units, (b.0 - a.0) / units);
         let nb = ((band * self.s) as i32).max(0);
         (0..len)
             .map(|k| {
                 let (x, y) = (a.0 + dx * k as f32, a.1 + dy * k as f32);
-                (-nb..=nb).map(|j| j as f32 / self.s).map(|t| self.px(x - dy * t, y + dx * t)).sum::<f32>() / (2 * nb + 1) as f32
+                (-nb..=nb).map(|j| j as f32 / self.s).map(|t| self.px(x + nx * t, y + ny * t)).sum::<f32>() / (2 * nb + 1) as f32
             })
             .collect()
     }

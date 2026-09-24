@@ -328,6 +328,8 @@ eye" (his notes of c.1830) [WP-en CDF; WQ; secondary].
 
 ### 5. What he left out
 
+- **Four things.** The *Monk* "makes do in an elementary way with only four objects:
+  monk, beach, sea and sky" (my translation) [WP-de Mönch; secondary].
 - **Removed things.** *Monk*: three large, precisely drawn ships and fishing nets,
   never painted: "thus emptying the seascape radically" [CATS abstract; pp.128–130].
   Twenty small gulls were added last, instead [same].

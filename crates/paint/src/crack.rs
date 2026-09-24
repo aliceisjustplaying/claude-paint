@@ -88,6 +88,28 @@ pub struct Cracks {
     /// has crazed finely and its crack edges scatter light "like a milky
     /// veil" [SMB-blog], strongest over darks.
     pub veil: f32,
+    /// How much the first cracks dominate, 0 (every crack opens alike, the
+    /// old even web) .. 1. A crack keeps opening while the islands on
+    /// either side shrink into it, so the first cracks, which formed when
+    /// the islands were whole, open widest, go deepest and cup most; each
+    /// later generation, splitting a smaller island, opens less. Cracks
+    /// also swell and pinch along their length and close to nothing for
+    /// stretches (notes/cracks.md, Round 7).
+    pub hierarchy: f32,
+    /// How patchily the network developed, 0 (evenly) .. 1: the ground was
+    /// primed unevenly and the glue size and paint differ from place to
+    /// place, so over some centimeters one passage split into small islands
+    /// while another kept only its first few long cracks.
+    pub patchy: f32,
+    /// A dominant direction, 0 (none) .. 1: the canvas was stretched
+    /// tighter along its length (keying out, the weave's crimp), so the
+    /// first cracks run across it; the direction drifts over the canvas.
+    pub grain: f32,
+    /// What fills the cracks, 0 (the old even soot) .. 1: gray-brown grime
+    /// that differs crack to crack (wide ones hold more; a cleaning took it
+    /// out of some; old varnish stayed amber in others) over walls that
+    /// show the pale ground, so in darks a crack reads as a faint light line.
+    pub grime: f32,
     pub seed: u64,
 }
 
@@ -119,8 +141,19 @@ impl Cracks {
             corners: true,
             vary: 1.0,
             veil: 0.5,
+            hierarchy: 1.0,
+            patchy: 1.0,
+            grain: 0.15,
+            grime: 1.0,
             seed,
         }
+    }
+
+    /// The Round 6 recipe: one even network (every crack alike, no patchy
+    /// development, no direction, the old soot in the cracks), fitted to
+    /// the canvas like `aged`.
+    pub fn even(seed: u64) -> Self {
+        Cracks { hierarchy: 0.0, patchy: 0.0, grain: 0.0, grime: 0.0, ..Cracks::aged(seed) }
     }
 
     /// The recipe fitted to a canvas primed with `ground_um` µm: every
@@ -220,6 +253,13 @@ const CORNER_STRESS: f32 = 0.7;
 const CORNER_ZONE: f32 = 0.08;
 /// Fraction of the isotropic stress turned along the diagonal at a corner.
 const CORNER_UNIAXIAL: f32 = 0.75;
+/// Anisotropy of the canvas's tension at `grain` 1 (± this × the mean
+/// stress along and across; assumption).
+const GRAIN: f32 = 0.25;
+/// Log of how much tougher the toughest passages are at `patchy` 1: e^1.1
+/// = 3× stronger stops the network about three generations early
+/// (the strength steps ×0.72 per generation; assumption).
+const PATCHY: f32 = 1.1;
 
 type V2 = [f32; 2];
 
@@ -355,6 +395,8 @@ struct Builder {
     sub: u32,
     pitch: V2,
     weave: f32,
+    /// Anisotropy of the tension (`Cracks::grain` × GRAIN).
+    grain: f32,
     // stress grid
     gc: f32,
     gx: usize,
@@ -390,7 +432,7 @@ impl Builder {
         let seed = k.seed;
         // mean stress: isotropic shrinkage of the film, varying slowly
         let broad = Fbm::new(seed as u32 ^ 0x51, 3, 12.0 * s);
-        let patchy = Fbm::new(seed as u32 ^ 0x52, 3, 2.5 * s);
+        let patchy_s = Fbm::new(seed as u32 ^ 0x52, 3, 2.5 * s);
         let diag = (size[0] * size[0] + size[1] * size[1]).sqrt();
         let zone = CORNER_ZONE * diag;
         let corners = k.corners;
@@ -400,6 +442,16 @@ impl Builder {
         let uneven = Fbm::new(seed as u32 ^ 0x54, 3, 60.0);
         let bars = stretcher(size);
         let wob = Fbm::new(seed as u32 ^ 0x55, 2, 40.0);
+        // patchy development: the ground's thickness and the size and paint
+        // under it vary over several centimeters, so the film is tougher
+        // here (it stops after the first generations) and weaker there
+        let patch = Fbm::new(seed as u32 ^ 0x56, 3, 110.0);
+        let patchy = k.patchy.clamp(0.0, 1.0);
+        // grain: the canvas pulled tighter along its length, the direction
+        // drifting ±25° over the canvas
+        let grain = GRAIN * k.grain.clamp(0.0, 1.0);
+        let drift = Fbm::new(seed as u32 ^ 0x57, 2, 180.0);
+        let along_x = size[0] >= size[1];
         let cells: Vec<([f32; 3], f32)> = (0..gx * gy)
             .into_par_iter()
             .map(|i| {
@@ -416,6 +468,14 @@ impl Builder {
                     let e = 0.35 * vary;
                     t[0] += e * edge[0];
                     t[1] += e * edge[1];
+                }
+                if grain > 0.0 {
+                    // extra tension along the direction th (cracks run across it)
+                    let th = if along_x { 0.0 } else { std::f32::consts::FRAC_PI_2 } + 0.45 * drift.get(p[0], p[1]);
+                    let (s2, c2) = (2.0 * th).sin_cos();
+                    t[0] += grain * m * c2;
+                    t[1] -= grain * m * c2;
+                    t[2] += grain * m * s2;
                 }
                 if corners {
                     for (cx, cy) in [(0.0, 0.0), (size[0], 0.0), (0.0, size[1]), (size[0], size[1])] {
@@ -436,7 +496,13 @@ impl Builder {
                     }
                 }
                 let white = hash2((i % gx) as i64, (i / gx) as i64, seed ^ 0x53) - 0.5;
-                let st = (STRENGTH_SD * (1.4 * patchy.get(p[0], p[1]) + 0.9 * white)).exp();
+                let mut st = (STRENGTH_SD * (1.4 * patchy_s.get(p[0], p[1]) + 0.9 * white)).exp();
+                if patchy > 0.0 {
+                    // skewed: most of the canvas cracks well, some passages
+                    // hardly past the first generation
+                    let v = crate::smoothstep(-0.35, 0.55, patch.get(p[0], p[1]));
+                    st *= (PATCHY * patchy * v * v).exp();
+                }
                 (t, st)
             })
             .collect();
@@ -457,6 +523,7 @@ impl Builder {
             sub,
             pitch,
             weave: k.weave(),
+            grain,
             gc,
             gx,
             gy,
@@ -792,7 +859,12 @@ impl Builder {
         let p = [((cx as f32 + 0.5 + j(0x61)) * self.gc).clamp(0.0, self.size[0]), ((cy as f32 + 0.5 + j(0x62)) * self.gc).clamp(0.0, self.size[1])];
         let (s1, s2, e1) = principal(self.sig[i]);
         let conf = (s1 - s2) / (s1.abs() + s2.abs() + 1e-6);
-        let h = if conf > 0.05 { perp(e1) } else { rot([1.0, 0.0], std::f32::consts::PI * (j(0x63) + 0.5)) };
+        let mut h = if conf > 0.05 { perp(e1) } else { rot([1.0, 0.0], std::f32::consts::PI * (j(0x63) + 0.5)) };
+        if self.grain > 0.0 && conf > 0.05 {
+            // a weak preference: a crack starts off its ideal heading by up
+            // to ±50° where the stress is nearly isotropic
+            h = rot(h, 1.75 * j(0x64) * (1.0 - (conf / 0.3).min(1.0)));
+        }
         let h = self.snap(h, self.weave);
         let crack = self.ncracks;
         self.ncracks += 1;
@@ -954,6 +1026,32 @@ struct RSeg {
     wb: f32,
     /// Generation the crack formed in.
     generation: f32,
+    /// How far its island edges lift, relative to `cupping_um`.
+    cup: f32,
+    /// Grime in it (0..1 of `dirt`), and the part of that which is old
+    /// amber varnish rather than gray grime.
+    grime: f32,
+    amber: f32,
+}
+
+/// Opening of each later generation relative to the one before (a crack
+/// opens by the strain of the island it splits, and the islands shrink with
+/// each generation; assumption, in the 20–70 µm range measured: 70 µm for a
+/// canvas-aging crack by OCT, Kim et al. 2022, 20 ± 8 µm for a saturated
+/// fine network, Janas et al. 2022).
+const HIER_DECAY: f32 = 0.6;
+/// A primary crack's opening relative to `Cracks::width` when `hierarchy`
+/// is 1 (the later generations are narrower, so the primaries are wider
+/// than the old even crack).
+const HIER_PRIMARY: f32 = 1.7;
+
+/// Smooth 1D value noise along a crack, in 0..1, feature size `l` (mm).
+fn along_noise(s: f32, l: f32, crack: u32, salt: u64) -> f32 {
+    let x = s / l;
+    let (i, f) = (x.floor(), x - x.floor());
+    let f = f * f * (3.0 - 2.0 * f);
+    let v = |j: f32| hash2(crack as i64, j as i64 + 1, salt);
+    v(i) + (v(i + 1.0) - v(i)) * f
 }
 
 /// What the paint under a crack does to it, on a coarse grid (mm) over the
@@ -967,23 +1065,36 @@ pub(crate) struct Local {
     ny: usize,
     reach: Vec<f32>,
     open: Vec<f32>,
+    /// How much of a crack's visible walls is the pale ground (the rest is
+    /// the paint over it): more under thin paint.
+    walls: Vec<f32>,
 }
 
 impl Local {
     /// The whole network, openings as given.
     pub(crate) fn uniform() -> Self {
-        Local { cell: 1e9, o: [0.0; 2], nx: 1, ny: 1, reach: vec![GENERATIONS as f32], open: vec![1.0] }
+        Local { cell: 1e9, o: [0.0; 2], nx: 1, ny: 1, reach: vec![GENERATIONS as f32], open: vec![1.0], walls: vec![WALL_THIN] }
     }
 
-    /// Bilinear (reach, opening) at p (mm).
-    fn at(&self, p: V2) -> (f32, f32) {
+    /// The cell weights around p (bilinear).
+    fn weights(&self, p: V2) -> [(usize, f32); 4] {
         let fx = ((p[0] - self.o[0]) / self.cell - 0.5).clamp(0.0, (self.nx - 1) as f32);
         let fy = ((p[1] - self.o[1]) / self.cell - 0.5).clamp(0.0, (self.ny - 1) as f32);
         let (x0, y0) = (fx as usize, fy as usize);
         let (x1, y1) = ((x0 + 1).min(self.nx - 1), (y0 + 1).min(self.ny - 1));
         let (tx, ty) = (fx - x0 as f32, fy - y0 as f32);
+        [(y0 * self.nx + x0, (1.0 - tx) * (1.0 - ty)), (y0 * self.nx + x1, tx * (1.0 - ty)), (y1 * self.nx + x0, (1.0 - tx) * ty), (y1 * self.nx + x1, tx * ty)]
+    }
+
+    /// Fraction of the crack walls at p that is ground.
+    fn wall(&self, p: V2) -> f32 {
+        self.weights(p).iter().map(|&(i, w)| self.walls[i] * w).sum()
+    }
+
+    /// Bilinear (reach, opening) at p (mm).
+    fn at(&self, p: V2) -> (f32, f32) {
         let mut r = (0.0, 0.0);
-        for (i, w) in [(y0 * self.nx + x0, (1.0 - tx) * (1.0 - ty)), (y0 * self.nx + x1, tx * (1.0 - ty)), (y1 * self.nx + x0, (1.0 - tx) * ty), (y1 * self.nx + x1, tx * ty)] {
+        for (i, w) in self.weights(p) {
             r.0 += self.reach[i] * w;
             r.1 += self.open[i] * w;
         }
@@ -999,6 +1110,9 @@ pub(crate) struct Raster {
     pub shoulder: Vec<f32>,
     /// Height change, µm.
     pub dz: Vec<f32>,
+    /// Grime in the crack here (relative to `dirt`) and the amber part of it.
+    pub grime: Vec<f32>,
+    pub amber: Vec<f32>,
 }
 
 /// Coverage of a pixel (tent filter of radius r around its center) by a band
@@ -1021,6 +1135,10 @@ fn band_cover(d: f32, w: f32, r: f32) -> f32 {
 
 fn rsegs(net: &Network, k: &Cracks) -> Vec<RSeg> {
     let taper = 0.35 * k.island();
+    let h = k.hierarchy.clamp(0.0, 1.0);
+    let gr = k.grime.clamp(0.0, 1.0);
+    // cleaning went patchily: some passages' cracks were cleaned out
+    let cleaned = Fbm::new(k.seed as u32 ^ 0x74, 3, 90.0);
     let mut out = Vec::new();
     for a in &net.arms {
         let n = a.pts.len();
@@ -1030,19 +1148,42 @@ fn rsegs(net: &Network, k: &Cracks) -> Vec<RSeg> {
         // each crack opens by the stress it released, and unevenly along
         // its length (grain, varying film thickness)
         let lognormal = |x: f32| (0.3 * 1.7 * (x - 0.5)).exp();
-        let open = (a.opening * lognormal(hash2(a.crack as i64, 0, k.seed ^ 0x71))).clamp(0.2, 1.4);
+        let open0 = (a.opening * lognormal(hash2(a.crack as i64, 0, k.seed ^ 0x71))).clamp(0.2, 1.4);
+        // hierarchy: the earlier the generation, the wider it opened
+        let g = a.generation as f32;
+        let gf = HIER_DECAY.powf(g);
+        let wide = (0.45 * 1.7 * (hash2(a.crack as i64, 0, k.seed ^ 0x73) - 0.5)).exp();
+        let open = open0 + h * (HIER_PRIMARY * gf * wide * a.opening.clamp(0.5, 1.3) - open0);
+        let cup = 1.0 + h * (1.3 * gf.sqrt() - 1.0);
+        // grime: wide cracks hold more; some were cleaned out; in some the
+        // old varnish stayed, amber
+        let (grime, amber) = if gr > 0.0 {
+            let p0 = a.pts[0];
+            let clean = crate::smoothstep(0.1, 0.6, cleaned.get(p0[0], p0[1]));
+            let r = hash2(a.crack as i64, 2, k.seed ^ 0x75);
+            let fill = (0.35 + 0.65 * (open / HIER_PRIMARY).min(1.0)) * (0.4 + 1.2 * r) * (1.0 - 0.8 * clean);
+            let amb = if hash2(a.crack as i64, 3, k.seed ^ 0x76) < 0.18 { 0.8 } else { 0.0 };
+            (1.0 + gr * (fill.min(1.3) - 1.0), gr * amb)
+        } else {
+            (1.0, 0.0)
+        };
         let mut arc = vec![0.0f32; n];
         for i in 1..n {
             let d = sub(a.pts[i], a.pts[i - 1]);
             arc[i] = arc[i - 1] + dot(d, d).sqrt();
         }
         let total = arc[n - 1];
+        // closes to nothing for stretches: a later crack more often
+        let shut = [0.0, 0.12, 0.25, 0.38, 0.5][(a.generation as usize).min(4)] * h;
         let along = |s: f32| {
-            let x = s / 0.7;
-            let (i, f) = (x.floor(), x - x.floor());
-            let f = f * f * (3.0 - 2.0 * f);
-            let v = |j: f32| hash2(a.crack as i64, j as i64 + 1, k.seed ^ 0x72);
-            0.7 + 0.6 * (v(i) + (v(i + 1.0) - v(i)) * f)
+            let old = 0.7 + 0.6 * along_noise(s, 0.7, a.crack, k.seed ^ 0x72);
+            if h <= 0.0 {
+                return old;
+            }
+            // swells and pinches over a few millimeters as well
+            let slow = (1.1 * (along_noise(s, 3.5, a.crack, k.seed ^ 0x77) - 0.5)).exp();
+            let open = crate::smoothstep(shut - 0.12, shut + 0.12, along_noise(s, 5.0, a.crack, k.seed ^ 0x78));
+            old + h * (old * slow * open - old)
         };
         // the opening closes to a point at a free end
         let wf = |i: usize| {
@@ -1050,7 +1191,7 @@ fn rsegs(net: &Network, k: &Cracks) -> Vec<RSeg> {
             open * along(arc[i]) * t
         };
         for i in 0..n - 1 {
-            out.push(RSeg { a: a.pts[i], b: a.pts[i + 1], wa: wf(i), wb: wf(i + 1), generation: a.generation as f32 });
+            out.push(RSeg { a: a.pts[i], b: a.pts[i + 1], wa: wf(i), wb: wf(i + 1), generation: a.generation as f32, cup, grime, amber });
         }
     }
     out
@@ -1102,16 +1243,21 @@ pub(crate) fn raster_window(net: &Network, k: &Cracks, local: &Local, win: (usiz
     let mut cover = vec![0.0f32; w * h];
     let mut shoulder = vec![0.0f32; w * h];
     let mut dz = vec![0.0f32; w * h];
+    let mut grime = vec![1.0f32; w * h];
+    let mut amber = vec![0.0f32; w * h];
     cover
         .par_chunks_mut(w * BAND)
         .zip(shoulder.par_chunks_mut(w * BAND))
         .zip(dz.par_chunks_mut(w * BAND))
+        .zip(grime.par_chunks_mut(w * BAND).zip(amber.par_chunks_mut(w * BAND)))
         .enumerate()
-        .for_each(|(bi, ((cv, shv), dzv))| {
+        .for_each(|(bi, (((cv, shv), dzv), (grv, amv)))| {
             let rows = cv.len() / w;
             let y0 = bi * BAND;
             let mut deep = vec![0.0f32; w * rows];
             let mut cup = vec![0.0f32; w * rows];
+            // grime weighted by how much of the pixel each crack covers
+            let mut gsum = vec![[0.0f32; 3]; w * rows];
             for &si in &bins[bi] {
                 let s = &segs[si as usize];
                 // whole-canvas pixels, clipped to this band of the window
@@ -1150,15 +1296,26 @@ pub(crate) fn raster_window(net: &Network, k: &Cracks, local: &Local, win: (usiz
                         // groove: open crack at full depth, rounded shoulders shallow
                         let g = wf * (core + 0.3 * (shd - core));
                         deep[i] = deep[i].max(g);
-                        cup[i] = cup[i].max(vis * cup_profile(d));
+                        cup[i] = cup[i].max(vis * s.cup * cup_profile(d));
+                        if shd > 0.0 {
+                            let gs = &mut gsum[i];
+                            gs[0] += shd * s.grime;
+                            gs[1] += shd * s.amber;
+                            gs[2] += shd;
+                        }
                     }
                 }
             }
             for i in 0..w * rows {
                 dzv[i] = k.cupping_um * cup[i] - k.depth_um * deep[i];
+                let gs = gsum[i];
+                if gs[2] > 0.0 {
+                    grv[i] = gs[0] / gs[2];
+                    amv[i] = gs[1] / gs[2];
+                }
             }
         });
-    Raster { cover, shoulder, dz }
+    Raster { cover, shoulder, dz, grime, amber }
 }
 
 impl Canvas {
@@ -1185,12 +1342,28 @@ impl Canvas {
         // an open crack is a deep narrow slot: it traps light (its walls and
         // floor are in shadow), and soot and dust in a little oil settle in it
         let dirt = Pigment::from_appearance([0.065, 0.054, 0.042], [0.014, 0.012, 0.01]);
+        // grime: house dust and some soot, gray-brown; old varnish, amber
+        let grime = Pigment::from_appearance([0.26, 0.22, 0.18], [0.045, 0.039, 0.032]);
+        let amber = Pigment::from_appearance([0.62, 0.45, 0.2], [0.02, 0.016, 0.01]);
         let th = 2.5 * k.dirt;
+        let gr = k.grime.clamp(0.0, 1.0);
+        let (w, x0, y0) = (f.w, f.x0, f.y0);
         self.px.par_iter_mut().enumerate().for_each(|(i, p)| {
             let c = (r.cover[i] + 0.25 * (r.shoulder[i] - r.cover[i])).min(1.0);
             if c > 0.0 {
                 let slot = [p[0] * SLOT, p[1] * SLOT, p[2] * SLOT];
-                let d = dirt.over(slot, th);
+                let mut d = dirt.over(slot, th);
+                if gr > 0.0 {
+                    // the walls: paint above, the pale ground below, in shadow
+                    let q = [((i % w + x0) as f32 + 0.5) * px, ((i / w + y0) as f32 + 0.5) * px];
+                    let fg = local.wall(q);
+                    let wall: [f32; 3] = std::array::from_fn(|ch| SLOT * (p[ch] + (GROUND_WALL[ch] - p[ch]) * fg));
+                    let (amt, am) = (th * r.grime[i], r.amber[i]);
+                    let g = amber.over(grime.over(wall, amt * (1.0 - am)), 0.6 * amt * am);
+                    for ch in 0..3 {
+                        d[ch] += (g[ch] - d[ch]) * gr;
+                    }
+                }
                 for ch in 0..3 {
                     p[ch] += (d[ch] - p[ch]) * c;
                 }
@@ -1220,7 +1393,7 @@ impl Canvas {
         let (gx0, gy0) = (f.x0 / n, f.y0 / n);
         let (nx, ny) = ((f.x0 + f.w).div_ceil(n) - gx0, (f.y0 + f.h).div_ceil(n) - gy0);
         let ground = k.ground();
-        let cells: Vec<(f32, f32)> = (0..nx * ny)
+        let cells: Vec<(f32, f32, f32)> = (0..nx * ny)
             .into_par_iter()
             .map(|ci| {
                 // the cell's pixels in the buffer
@@ -1245,14 +1418,19 @@ impl Canvas {
                 let tough = 2.0 * (1.0 - crate::smoothstep(0.02, 0.25, y));
                 // thick paint cracks more coarsely (spacing grows with the
                 // layer), and each crack opens wider
-                let thick = crate::smoothstep(30.0, 150.0, paint);
+                let thick = crate::smoothstep(THICK_UM[0], THICK_UM[1], paint);
                 let reach = GENERATIONS as f32 - k.vary * (tough + thick);
                 let open = (1.0 + k.vary * (((ground + paint) / (ground + PAINT_UM).max(1.0)).sqrt() - 1.0)).clamp(0.7, 1.8);
-                (reach, open)
+                (reach, open, WALL_THIN + (WALL_THICK - WALL_THIN) * thick)
             })
             .collect();
-        let (reach, open) = cells.into_iter().unzip();
-        Local { cell: n as f32 * px, o: [(gx0 * n) as f32 * px, (gy0 * n) as f32 * px], nx, ny, reach, open }
+        let (mut reach, mut open, mut walls) = (Vec::with_capacity(nx * ny), Vec::with_capacity(nx * ny), Vec::with_capacity(nx * ny));
+        for (r, o, w) in cells {
+            reach.push(r);
+            open.push(o);
+            walls.push(w);
+        }
+        Local { cell: n as f32 * px, o: [(gx0 * n) as f32 * px, (gy0 * n) as f32 * px], nx, ny, reach, open, walls }
     }
 
     /// Patches of old varnish crazed into microcracks a few tenths of a mm
@@ -1291,8 +1469,23 @@ impl Canvas {
     }
 }
 
+/// Paint film over the ground (the canvas's `film` bookkeeping, µm) from
+/// which a passage counts as thin, and as fully thick. The film counts every
+/// coat laid, also paint that was blended or wiped into its neighbors, so
+/// it runs high: in the wet-engine *Evening at a Mountain Lake* the sky
+/// reads ~250 µm and the fir wood 500–1000 (calibrated there).
+const THICK_UM: [f32; 2] = [150.0, 700.0];
+/// Fraction of a crack's visible walls that is ground under thin and under
+/// thick paint.
+const WALL_THIN: f32 = 0.5;
+const WALL_THICK: f32 = 0.15;
 /// Reflectance left in an open crack (its shadowed slot) before grime.
 const SLOT: f32 = 0.35;
+/// The ground seen in a crack's walls: lead white and chalk over the warm
+/// lower layers, yellowed (a Dresden ground: a patchy whitish top over
+/// ocher and red earth, notes/research/friedrich_materials.md §2;
+/// assumption for the value).
+const GROUND_WALL: [f32; 3] = [0.52, 0.44, 0.32];
 /// Spacing of varnish microcracks, mm.
 const VEIL_CELL: f32 = 0.3;
 /// How far a lit microcrack edge veils the paint toward milky gray; a fully
@@ -1408,7 +1601,7 @@ mod tests {
     #[test]
     fn median_island_matches_target() {
         for (island, ground) in [(2.0, 150.0), (4.0, 150.0), (3.0, 0.0), (6.0, 60.0)] {
-            let k = Cracks { island_mm: Some(island), ground_um: Some(ground), corners: false, vary: 0.0, ..Cracks::aged(3) };
+            let k = Cracks { island_mm: Some(island), ground_um: Some(ground), corners: false, vary: 0.0, ..Cracks::even(3) };
             let size = [island * 22.0, island * 16.0];
             let (m, n) = islands(&k, size, island / 40.0);
             eprintln!("island {island} mm, ground {ground} µm: median {m:.2} mm over {n} islands");
@@ -1419,7 +1612,7 @@ mod tests {
 
     #[test]
     fn junctions_are_mostly_t_shaped() {
-        let k = Cracks { corners: false, vary: 0.0, ..Cracks::aged(8).fit(240.0) };
+        let k = Cracks { corners: false, vary: 0.0, ..Cracks::even(8).fit(240.0) };
         let n = net(&k, [80.0, 60.0]);
         let (mut t, mut free) = (0, 0);
         for a in &n.arms {
@@ -1485,8 +1678,8 @@ mod tests {
 
     #[test]
     fn thin_grounds_follow_the_weave() {
-        let thin = axis_fraction(&Cracks { ground_um: Some(5.0), island_mm: Some(3.5), corners: false, ..Cracks::aged(4) });
-        let thick = axis_fraction(&Cracks { ground_um: Some(200.0), island_mm: Some(3.5), corners: false, ..Cracks::aged(4) });
+        let thin = axis_fraction(&Cracks { ground_um: Some(5.0), island_mm: Some(3.5), corners: false, ..Cracks::even(4) });
+        let thick = axis_fraction(&Cracks { ground_um: Some(200.0), island_mm: Some(3.5), corners: false, ..Cracks::even(4) });
         eprintln!("near warp/weft: thin ground {thin:.2}, thick ground {thick:.2} (uniform 0.22)");
         assert!(thin > 0.8, "thin {thin}");
         assert!(thick < 0.45, "thick {thick}");
@@ -1494,7 +1687,7 @@ mod tests {
 
     #[test]
     fn corner_cracks_cross_the_diagonal() {
-        let k = Cracks { corners: true, island_mm: Some(3.0), vary: 0.0, ..Cracks::aged(2).fit(240.0) };
+        let k = Cracks { corners: true, island_mm: Some(3.0), vary: 0.0, ..Cracks::even(2).fit(240.0) };
         let size = [120.0, 90.0];
         let n = net(&k, size);
         let diag = norm(size);
@@ -1564,7 +1757,7 @@ mod tests {
         let before = c.height.clone();
         let px_before = c.px.clone();
         let g0 = c.surf_gen;
-        let k = Cracks { vary: 0.0, veil: 0.0, width_um: Some(70.0), depth_um: 35.0, cupping_um: 30.0, ..Cracks::aged(9).fit(50.0) };
+        let k = Cracks { vary: 0.0, veil: 0.0, width_um: Some(70.0), depth_um: 35.0, cupping_um: 30.0, ..Cracks::even(9).fit(50.0) };
         c.crack(&k);
         assert!(c.surf_gen > g0);
         let px = c.px_mm();

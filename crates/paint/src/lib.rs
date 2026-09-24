@@ -15,6 +15,7 @@ pub mod mask;
 pub mod noise;
 pub mod path;
 pub mod edge;
+pub mod fence;
 pub mod form;
 pub mod graphite;
 pub mod scene;

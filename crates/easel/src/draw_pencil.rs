@@ -57,18 +57,17 @@ fn profile(o: Option<&Table>, default: f32) -> Result<Vec<f32>> {
 fn draw_marks(st: &S, p: &Table, marks: &[Mark], seed: u64) -> Result<f32> {
     let lead = lead_of(p)?;
     let mut worn: f32 = p.get::<Option<f32>>("worn")?.unwrap_or(0.0);
-    let mut drawn = 0.0;
-    {
-        let mut s = st.borrow_mut();
+    let drawn = crate::time::verb(st, crate::time::Verb::Pass, |s| {
         let c = s.canvas.as_mut().ok_or_else(|| mlua::Error::runtime("no canvas yet: call canvas{} first"))?;
+        let mut drawn = 0.0;
         for (k, m) in marks.iter().enumerate() {
             let d = c.draw(&lead, m, worn, seed.wrapping_add(k as u64 * 0x9E37));
             worn += d;
             drawn += d;
         }
         c.tally_mut().draw(marks.len() as u64, drawn as f64);
-    }
-    crate::time::flush(st, true);
+        Ok(drawn)
+    })?;
     p.set("worn", worn)?;
     Ok(drawn)
 }

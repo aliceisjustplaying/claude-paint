@@ -60,7 +60,7 @@ A new `Canvas::settle_film` (`crates/paint/src/surface.rs`) for a thin fluid fil
   integrates to **h = h₀ / √(1 + 2 (A/h₀)(T/τ₀))** (τ₀ is Orchard's τ at h₀, from the same
   `level_band`; A counts only above the same yield floor). Drainage slows as the film
   thins, so the peaks keep a film.
-- Every peak keeps at least `MIN_FILM_UM` (1 µm, or all of it when less was laid): a
+- Every peak keeps at least `PEAK_FILM_UM` (1 µm, or all of it when less was laid): a
   wetting film; the resin has set before it drains thinner.
 - What drains moves downhill about one bristle band (two box blurs of radius 2·r₁) and
   gathers in the concave spots there, weighted by how concave they are, **at most 2× the
@@ -73,7 +73,7 @@ deeper in the weave's hollows and there are no lines.
 
 Tests (`crates/paint/src/tests.rs`):
 - `thin_film_over_dry_impasto_coats_peaks_and_pools_a_little`: 2.25 µm over 100–300 µm
-  dry dabs at 0.094 mm/px. Volume is kept to 1e-4, every pixel gets ≥ `MIN_FILM_UM` and
+  dry dabs at 0.094 mm/px. Volume is kept to 1e-4, every pixel gets ≥ `PEAK_FILM_UM` and
   ≤ 2×, and over 80% get the film laid. It also checks that the old fluid `settle` still
   pools there (>10×), so the case stays covered.
 - `varnish_over_impasto_is_even`: `glaze(varnish, 0.3)` over a 250 µm dab. Every pixel's
@@ -149,7 +149,7 @@ to hide the worms (the lab2 oakleaf logs; I left those records as they are).
   dry relief under it).
 - Pooling is capped by a constant (2×), not derived from the hollow's shape and volume.
   It reads right. A fuller model would fill each hollow to its level and stop.
-- The peak floor is `MIN_FILM_UM` for every glaze. A glaze that is wiped (a rag over
+- The peak floor is `PEAK_FILM_UM` (surface.rs; `MIN_FILM_UM` until Round 7) for every glaze. A glaze that is wiped (a rag over
   the peaks) would want less, and that could be an option on `glaze`.
 - Crops: like `settle`, `settle_film` ends with an exact volume rescale over the whole
   buffer, so a crop can differ very slightly from a whole render (as before). I did

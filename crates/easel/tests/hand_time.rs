@@ -43,7 +43,9 @@ fn replay(src: &Path, width: u32, threads: Option<usize>, tag: &str) -> (String,
 /// to be used (Round 7: it had been read as `clip=true`). And all three
 /// (example, l5_near, overran) when rounds and riggers became blunt by
 /// default again (Round 7, notes/tip.md): these logs paint with
-/// `brush("round", w)` and riggers and never set `point`.
+/// `brush("round", w)` and riggers and never set `point`. And l5_near
+/// (release) again when the glaze film floor went from 1 to 0.05 µm (Round
+/// 7, notes/drying.md): its glazes have films under 1 µm.
 #[test]
 fn existing_logs_replay_unchanged() {
     // (the benchmark near is checked in release only: a debug replay takes
@@ -51,7 +53,7 @@ fn existing_logs_replay_unchanged() {
     let logs: &[(&str, u64)] = if cfg!(debug_assertions) {
         &[("paintings/lua/example.lua", 0x78f0_1414_a962_f6e3)]
     } else {
-        &[("paintings/lua/example.lua", 0x78f0_1414_a962_f6e3), ("notes/loops/l5_near.lua", 0x07a5_fd85_f0e1_849b)]
+        &[("paintings/lua/example.lua", 0x78f0_1414_a962_f6e3), ("notes/loops/l5_near.lua", 0x0059_7db6_71de_8740)]
     };
     for &(log, want) in logs {
         let (_, png) = replay(&root().join(log), 160, None, "unchanged");

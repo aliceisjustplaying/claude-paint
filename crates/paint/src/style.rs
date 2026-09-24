@@ -130,7 +130,7 @@ impl Style {
             body_medium: 0.2,
             thin_medium: 0.45,
             mix_jitter: 0.06,
-            // the owner's pick from the Round 6 relief A/B (notes/round6/relief/):
+            // Alice's pick from the Round 6 relief A/B (notes/round6/relief/):
             // 0.2 embossed every stroke into creases ("grooves"); 0.06 keeps
             // a hint of weave and ridge without them
             relief: (0.06, 0.006),

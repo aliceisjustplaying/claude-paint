@@ -34,6 +34,6 @@ Correct “three identified the engines”: judge3's `answer_g2.md` reverses sky
 
 ## 5. Next steps, in order
 
-1. **Settle wet control.** Compare current main, wet and wet-plus-lift-off using identical strokes across load, pressure and drying stages. Measure retained light, exposed ground and edge width at 1000/3200. Pass: both clean accents and deliberately softened edges, then owner preference on repainted sky/water/rock without losing foliage/near gains.
-2. **Test hierarchy on two new crowns.** Compare A against a revised C with fewer repeated domes, separated shadow values and selective holes. Pass: owner prefers C at whole and crop scales with fewer marks, not merely brighter lights.
-3. **Return to complete paintings.** Apply the accepted lighting, engine and recipes to near, green and one fresh composition with hand time enabled. Pass: repeated blind owner preference and fewer specific contact/edge defects. Stop counting infrastructure as visual progress until that transfer succeeds.
+1. **Settle wet control.** Compare current main, wet and wet-plus-lift-off using identical strokes across load, pressure and drying stages. Measure retained light, exposed ground and edge width at 1000/3200. Pass: both clean accents and deliberately softened edges, then preference from Alice on repainted sky/water/rock without losing foliage/near gains.
+2. **Test hierarchy on two new crowns.** Compare A against a revised C with fewer repeated domes, separated shadow values and selective holes. Pass: Alice prefers C at whole and crop scales with fewer marks, not merely brighter lights.
+3. **Return to complete paintings.** Apply the accepted lighting, engine and recipes to near, green and one fresh composition with hand time enabled. Pass: repeated blind preference from Alice and fewer specific contact/edge defects. Stop counting infrastructure as visual progress until that transfer succeeds.

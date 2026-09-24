@@ -227,24 +227,6 @@ impl Session {
         };
         // masks and brushes hold memory Lua can't see: collect between chunks
         let _ = self.lua.gc_collect();
-        // any time the canvas spent that no wait/dry/glaze reported (e.g. a
-        // finishing verb drying the paint first) shows on the clock now
-        let out = if fail.is_none() {
-            let mut s = self.st.borrow_mut();
-            let (c0, clock) = (s.clock0, s.clock);
-            let now = s.canvas.as_ref().map(|c| c.clock() - c0);
-            // (a query in the chunk may already have taken it into the clock)
-            let unreported = std::mem::take(&mut s.hand.unreported);
-            match now {
-                Some(now) if unreported + now - clock > 0.5 => {
-                    s.clock = now;
-                    format!("{out}note: {} passed while the paint dried (clock {:.0} min)\n", crate::api::span(unreported + now - clock), now)
-                }
-                _ => out,
-            }
-        } else {
-            out
-        };
         if let Some(e) = fail {
             if let Some(snap) = snap {
                 self.restore(&snap).map_err(|e| e.to_string())?;

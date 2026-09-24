@@ -44,3 +44,24 @@ main: sound but needs B1, B2, B4, B5 fixed and S1 before more work lands
 on the timed passes. r6-wet: the physics is careful and well tested, but
 restructure around a `Layer` type (S2) before merging, which also fixes
 B3 and B9; then B7, B8, B10.
+
+## Status (end of the maintenance round)
+All fixed, each bug with a test that failed first; with hand time off the
+benchmarks are byte-identical on main.
+- main (merged `55a85df` maint-b, `8c5bf96` maint-a): B1, B2, B4, B5, B6
+  (documented), S1 (`Canvas::paint_pass` in sched.rs, `TileOrder`), S3
+  (`broadleaf/wood.rs`, `path::{length, arclen}`), S4 (`time::verb`), S5
+  (shared settle helpers; settle_film's bounds now exact, GLM's suspicion
+  was real), S6 (timing items).
+- r6-wet (unmerged, `accfd87`): S2 (`Layer`, `film.rs` Stroke reservation,
+  `exchange.rs` `contact()`; bristle.rs 2,357 → 1,638), B3, B7, B8, B9 (44
+  B/px again: the set-aside film is stroke-local), the studies' shared
+  module, B10 (main merged, golden and replay hashes re-recorded for the
+  merged engine).
+- Also found during the round, by two agents independently: the release
+  profile's incremental codegen moved a few pixels by 1/255 between
+  rebuilds. Fixed in `3060281` (incremental = false, codegen-units = 1):
+  two clean builds now give byte-identical binaries and renders.
+- Left: the engine owning the hand/idle split (S4's "ideally"); storing
+  the wet film's parts disjointly (changes float rounding); `tally::path_len`
+  → `path::length`; the `Sweep(π/2)` float wobble in `tile_order`.

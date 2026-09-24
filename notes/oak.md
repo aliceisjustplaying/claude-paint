@@ -1,6 +1,6 @@
 # Bare trees that hold together (branch `r6-oak`)
 
-The owner called the bare oak from `tree_in{}` promising but "too
+Alice called the bare oak from `tree_in{}` promising but "too
 computationally fractal", with "twigs floating in the air". This stream
 found why the twigs float, fixed it in the painting code, and made the
 crown more economical: a few big limbs and fewer twigs with character.
@@ -120,7 +120,7 @@ images use this branch and `paintings/lua/bare_trees.lua`.
 - `2_oak_1000_before_lines_tone.jpg`: the oak at 1000 px, three ways:
   before | lines only (`detail` 0.35, no tone) | lines and tone. Lines
   only is clean and calligraphic. With the tone, it reads as a winter
-  oak's crown. The owner should pick: the tone is one `work` pass in the
+  oak's crown. Alice should pick: the tone is one `work` pass in the
   recipe and easy to drop.
 - `3_crown_edge_3200_before_lines_tone.jpg`: a 3200 crop of the crown edge
   (140 units square), the same three. Before: a starburst of look-alike
@@ -166,13 +166,13 @@ their stout limbs painted where they show through the gaps.
 A blind panel of four critics (two Gemini, two gpt-6-astra), judging a
 lab study where the fine twigs were indicated as a tone, all preferred
 drawn twigs, strongly ("steel wool", "fur", "gray scribble cushions").
-The owner agreed: in `4_lime_beech_birch_before_after.jpg` the toned
+Alice agreed: in `4_lime_beech_birch_before_after.jpg` the toned
 trees look heavier and smeared. The recipe (the easel guide, sketchbook
 §5, `bare_trees.lua`) is lines only now. `t:twig_mass()` stays in the
 API, documented as not recommended, with this evidence.
 
 ### Why the limbs read as rope
-The owner saw curly vines: long smooth S-curves of nearly even width,
+Alice saw curly vines: long smooth S-curves of nearly even width,
 with loops at the tips. I measured the strokes as the brush draws them
 (`notes/oak/shape.py`, on `t:wood_strokes{}` dumps). I found four causes.
 1. **The brush's spline.** `Canvas::drag` runs every stroke through

@@ -595,3 +595,67 @@ for i = 1, 300 do
     {pressure={rand(0.4, 0.7), 0}, ramps={0.04, 0.7}, shake=0.2})
 end
 local t = timesheet(); print(t.sitting)
+
+--@ chunk 28 · clock 24190.847946733702
+-- more rods: the crown fuller, a broom, not a few spikes; some older ones bowed outward
+local brushes = {}
+local function pick(w)
+  local key = string.format("%.1f", math.max(0.6, math.floor(w * 5 + 0.5) / 5))
+  if not brushes[key] then brushes[key] = brush{kind="round", width=tonumber(key), point=1} end
+  return brushes[key]
+end
+local added = 0
+for k, kn in ipairs(KNOBS) do
+  for i = 1, math.random(9, 14) do
+    local a = kn[4] + randn(0, kn[5] * 1.3)
+    local len = rand(120, 300) * (1 - 0.28 * math.abs(a + 1.57))
+    local x0, y0 = kn[1] + rand(-7, 7), kn[2] + rand(-3, 4)
+    local bow = randn(0, 0.12) + 0.08 * (a + 1.57)
+    local pts = {{x0, y0}}
+    local ax = a
+    for s = 1, 6 do
+      ax = ax + bow / 6 + randn(0, 0.02)
+      pts[#pts + 1] = {pts[#pts][1] + math.cos(ax) * len / 6, pts[#pts][2] + math.sin(ax) * len / 6}
+    end
+    local ok = pts[#pts][2] < y0 - 40
+    for _, p in ipairs(pts) do if p[2] > y0 + 2 then ok = false end end
+    if ok then
+    local w = clamp(len / 110, 0.8, 2.4) * rand(0.8, 1.15)
+    local b = pick(w * 0.75)
+    b:reload(rand() < 0.4 and RODP.old or (rand() < 0.6 and RODP.mid or RODP.young), rand(0.6, 0.85))
+    b:stroke(pts, {pressure={rand(0.7, 0.9), rand(0.2, 0.35), 0}, ramps={0.03, rand(0.25, 0.4)}, shake=0.25})
+    RODS[#RODS + 1] = {pts = pts, len = len, w = w, depth = 3}
+    added = added + 1
+    end
+  end
+end
+print(added, #RODS)
+local t = timesheet(); print(t.sitting)
+
+--@ chunk 29 · clock 24199.496261179913
+-- the water's surface: a few faint level lines of light, closer and shorter toward the far shore
+local lb = brush{kind="rigger", width=0.9, point=1}
+local db = brush{kind="round", width=1.4}
+local y = HZ + 7
+local n = 0
+while y < 560 do
+  local d = (y - HZ) / 110
+  local cnt = math.random(1, 3)
+  for k = 1, cnt do
+    local len = rand(40, 180) * (0.5 + d)
+    local x0 = rand(-40, 1000)
+    if not (x0 + len > 425 and x0 < 575) or rand() < 0.2 then
+      local under = sample(x0 + len / 2, y, 3)
+      if rand() < 0.75 then
+        lb:reload(shift(mix(under, color(SKY.glow), 0.6), 0.03, 0, 0), 0.5)
+        lb:stroke({{x0, y}, {x0 + len * 0.5, y + randn(0, 0.2)}, {x0 + len, y + randn(0, 0.3)}}, {pressure={rand(0.25, 0.45), 0.05}, ramps={0.3, 0.4}})
+      else
+        db:reload(shift(under, -0.04, 0, -0.01), 0.4)
+        db:stroke({{x0, y}, {x0 + len * 0.6, y + randn(0, 0.2)}, {x0 + len * 0.8, y}}, {pressure={0.25, 0.1}, ramps={0.3, 0.4}})
+      end
+      n = n + 1
+    end
+  end
+  y = y + 2.5 + d * 9 + rand(0, 4)
+end
+print(n)

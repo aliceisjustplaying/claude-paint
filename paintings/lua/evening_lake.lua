@@ -278,11 +278,11 @@ end
 for i, f in ipairs(FIRS) do
   local hb = brush("round", math.max(0.9, f.hatch))
   f:paint(hb, {color="#161b18", lit={0, 0.6}})
-  f:paint(brush("round", math.max(0.8, f.hatch*0.8)), {color="#3c4344", lit={0.75, 1}, every=6})
+  f:paint(brush("round", math.max(0.8, f.hatch*0.8)), {color="#282e2d", lit={0.75, 1}, every=8})
 end
 local t = timesheet() print(string.format("%.0f min this sitting", t.sitting))
 
---@ chunk 12 · clock 69855.96864567697
+--@ chunk 12 · clock 69853.46864621714
 -- the spit: a low grassy tongue running out from the wood's foot. First the water relaid over the smudged
 -- drips under it (full load, laid lightly, level), then the spit, its reeds and its short mirror.
 SPIT = outline{pts={{318,446},{336,455},{352,459},{372,462},{396,465},{420,467.5},{442,469.5},{456,471},
@@ -323,7 +323,7 @@ for i, p in ipairs({{314, 392, 46}, {326, 418, 36}, {333, 437, 26}, {344, 452, 1
 end
 print(n, spitM:area())
 
---@ chunk 13 · clock 69894.60989324749
+--@ chunk 13 · clock 69892.10989378765
 -- a row of firs standing at the water in front of the wooded slope, so the slope doesn't end in a line of
 -- spire bottoms: fir_wood along the waterline, two rows, dark, the back row a little aired
 FRONTTOP = {{-10,352},{40,334},{80,360},{120,346},{165,372},{205,366},{245,392},{280,404},{310,430},{326,452}}
@@ -341,11 +341,133 @@ local function row(r)
     rb:stroke(f.leader.pts, {pressure={0.9, 0.2}, ramps={0.02, 0.3}})
   end
   front:paint(brush("round", 1.9*s + 0.3), r, {color=mix("#141916", air, 0.5*h), lit={0, 0.7}})
-  front:paint(brush("round", 1.5*s + 0.3), r, {color=mix("#343c3a", air, 0.4*h), lit={0.7, 1}, every=7})
+  front:paint(brush("round", 1.5*s + 0.3), r, {color=mix("#262d2b", air, 0.4*h), lit={0.7, 1}, every=9})
 end
 row(2)
 row(1)
 local t = timesheet() print(string.format("%.0f min this sitting", t.sitting))
 
---@ chunk 14 · clock 70180.34592701495
+--@ chunk 14 · clock 70176.88759406283
 rest(16)
+
+--@ chunk 15 · clock 71136.88759406283
+-- sitting 4: the near shore. The bank as one dark mass in level strokes, its lip catching a little sky light;
+-- two stones on the water's edge laid into it wet so they sit in the bank, dark against the pale water,
+-- lit only on the faces turned up to the sky.
+shoreCol = function(x, y)
+  local top = SHORE(x)
+  return mix(mix("#3a3831", "#27251f", smoothstep(top, top + 18, y)), "#1d1c19", smoothstep(top + 30, H, y))
+end
+work(shoreM, {hand="body", tool="filbert 6", color=shoreCol, angle=0.04, angle_jitter=0.25, length={14, 50}, coverage=3.0,
+  medium=0.2, load=0.85, clip=shoreM:grow(1.2)})
+SKYLIGHT = {from={0.35, -1}, front=-0.2, ambient=0.35, bounce=0.2, bounce_from={0, 1, 0.3}}
+S1 = outline{pts={{356,653,"c"},{360,641},{371,631,"c"},{398,623},{426,612,"c"},{445,610},{457,617,"c"},{467,634},{474,654,"c"},{420,657}},
+  char="broken", seed=71}
+S2 = outline{pts={{494,649,"c"},{497,640},{506,633,"c"},{521,631},{530,637,"c"},{535,650},{512,652}}, char="broken", seed=72}
+stones = {}
+for i, o in ipairs({S1, S2}) do
+  local r = rock{outline=o, kind="granite", sun=SKYLIGHT, seed=80 + i,
+    cracks=(i == 1) and {{{428,613},{431,630},{426,648}}} or nil}
+  stones[i] = r
+  local m, v = r:mask(), r:value()
+  local lo, hi = r:levels(0.03, 0.97)
+  local col = function(x, y)
+    return gradient({{0, "#1f1e1b"}, {0.45, "#282724"}, {0.8, "#343432"}, {1, "#444548"}}, smoothstep(lo, hi, v:at(x, y)))
+  end
+  work(m, {hand="body", tool="filbert 4", color=col, angle=r:field("plane"), length={5, 14}, coverage=3.0, medium=0.2, load=0.9, clip=m})
+  local rb = brush("round", 1.2)
+  for j, s in ipairs(r.seams) do
+    if j % 3 == 1 then rb:reload("#191816", 0.8) end
+    rb:stroke(s.pts, {pressure={0.6, 0.15}, ramps={0.15, 0.45}, shake=0.5, clip=m})
+  end
+  blend(m, {angle=r:field("plane"), coverage=1.6, length={4, 12}, clip=m})
+end
+stoneM = stones[1]:mask() + stones[2]:mask()
+print(shoreM:area(), stoneM:area(), stones[1])
+
+--@ chunk 16 · clock 71209.39677127823
+-- a man from behind on the rise, looking out over the lake toward the afterglow: a dark coat in short strokes,
+-- (no rim light: the glow is too far off and low to catch him)
+local fx, fy = 802, SHORE(802) + 1
+FIG = body_of{spine={{fx - 0.3, fy - 55.4}, {fx, fy - 52.8}, {fx + 0.2, fy - 49.6}, {fx + 0.6, fy - 46.2}, {fx + 1.7, fy - 30}, {fx + 2.2, fy - 13}},
+  widths={6.8, 5.0, 3.9, 10.8, 9.0, 13.2},
+  limbs={{{fx - 1.6, fy - 14}, {fx - 2.6, fy}, widths={2.8, 2.0}}, {{fx + 4.6, fy - 14}, {fx + 5.4, fy + 0.5}, widths={2.8, 2.0}},
+         {{fx - 4.2, fy - 45.2}, {fx - 5.8, fy - 37}, {fx - 5.0, fy - 28.5}, widths={3.0, 2.7, 2.2}},
+         {{fx + 6.2, fy - 44.8}, {fx + 8.2, fy - 35}, {fx + 8.8, fy - 27.5}, widths={3.0, 2.7, 2.2}}},
+  blend=0.4, char="firm", amount=1.1, seed=91}
+figM = FIG:mask()
+print(fx, fy, figM:area())
+work(figM, {hand="detail", tool="round 1.6", color=function(x, y) return mix("#252321", "#1b1a19", smoothstep(560, 600, y)) end,
+  angle=1.57, angle_jitter=0.3, length={2, 6}, coverage=5, medium=0.2, load=0.95, clip=figM:grow(0.3)})
+-- his stick, from the right hand down to the ground beside him
+local sb = brush("rigger", 0.9); sb:load("#1e1c1a", 0.9)
+sb:stroke({{fx + 8.9, fy - 28}, {fx + 10.2, fy - 14}, {fx + 11.2, fy + 0.5}}, {pressure={0.8, 0.6}, ramps={0.05, 0.1}})
+
+--@ chunk 17 · clock 71224.5979578495
+-- grass on the near bank: rigger blades set down at the root and lifted off, in patches (a noise), taller
+-- toward me, leaning with a slow noise; dark stalks, a few tips catching the sky. Denser along the bank's lip
+-- so the line where it meets the water is broken, and around the man's feet and the stones' feet.
+local patch = noise{seed=93, octaves=3, period=70}
+local lean = noise{seed=94, octaves=2, period=180}
+local g = brush("rigger", 0.8)
+local n = 0
+local cols = {"#1d1c18", "#26251f", "#2e2c24", "#1a1a17", "#34332b", "#43423a"}
+for i = 1, 5200 do
+  local x = rand(-5, 1005)
+  local top = SHORE(x)
+  local depth = rand()^1.6                                   -- most near the lip
+  local y = top + 1 + depth*(H - top)
+  local near = clamp((y - 600)/110, 0, 1)
+  local lip = 1 - smoothstep(0, 14, y - top)
+  local p = patch:at01(x, y) + 0.55*lip
+  if p > 0.62 and stoneM:at(x, y - 2) < 0.5 then
+    local h = (5 + 26*near) * rand(0.5, 1.5)
+    local a = -1.57 + 0.35*lean(x, 0) + randn(0, 0.2)
+    local curl = randn(0, 0.25)
+    local tip = {x + h*math.cos(a + curl), y + h*math.sin(a + curl)}
+    local mid = {x + 0.55*h*math.cos(a), y + 0.55*h*math.sin(a)}
+    if n % 7 == 0 then
+      local k = (rand() < 0.07) and (5 + (rand() < 0.5 and 1 or 0)) or math.random(1, 4)
+      g:reload(cols[k], 0.7)
+    end
+    g:stroke({{x, y}, mid, tip}, {pressure={0.3 + 0.5*near, 0}, ramps={0.05, 0.75}})
+    n = n + 1
+  end
+end
+print(n)
+local t = timesheet() print(string.format("%.0f min this sitting", t.sitting))
+
+--@ chunk 18 · clock 71280.1509731412
+-- the young moon, a thin crescent lit on the side toward the set sun (down and a little left), laid with short
+-- touches clipped to its mask on the dry sky so the horns come to points
+local mx, my, R = MOON[1], MOON[2], 8.5
+local dx, dy = SUNX - mx, HZ - my
+local l = math.sqrt(dx*dx + dy*dy); dx, dy = dx/l, dy/l
+moonM = (ellipse(mx, my, R, R) - ellipse(mx - 3.4*dx, my - 3.4*dy, R*1.02, R*1.02)):soften(0.4)
+work(moonM, {hand="detail", tool="round 1.2", color="#efe5c8", angle=math.atan(dy, dx) + math.pi/2, angle_jitter=0.3,
+  length={2, 5}, coverage=4, medium=0.15, load=1.0, aim="masstone", clip=moonM})
+print(moonM:area())
+
+--@ chunk 19 · clock 71282.42082434893
+-- the far crest still showed a double contour at 3200 (a dark line over a pale band). Now that it's dry, bring
+-- the range up over both, about 5 units, loaded and laid lightly along the ridge, clipped softly at the new ridge.
+print(drying(790, crest(790) - 3), drying(470, crest(470)))
+crest2 = function(x) return crest(x) - 5.5 end
+crestBand = mask(function(x, y) local c = crest2(x)
+  return smoothstep(c - 1, c + 0.5, y) * (1 - smoothstep(c + 10, c + 16, y)) end) - landM:grow(3)
+work(crestBand, {hand="body", tool="filbert 4", color=function(x, y) return rangecol(x, y + 5.5) end,
+  angle=function(x, y) return math.atan(crest(x + 4) - crest(x - 4), 8) end,
+  length={20, 60}, coverage=2.8, medium=0.2, load=1.0, pressure={0.35, 0.5}, ramps={0.3, 0.3}, pal=skypal,
+  clip=mask(function(x, y) return smoothstep(crest2(x) - 0.7, crest2(x) + 0.7, y) end)})
+
+--@ chunk 20 · clock 71293.12886172533
+-- Friedrich's advice to Carus: a dark glaze over the whole picture except the moon, growing darker toward the
+-- edges. A smooth elliptical falloff centered on the glow's reflection, transparent, light.
+rest(16)
+local vig = mask(function(x, y)
+  local dx, dy = (x - 610)/640, (y - 440)/470
+  return smoothstep(0.45, 1.25, math.sqrt(dx*dx + dy*dy)) end) * (-moonM)
+glaze(vig, {color="#22232b", coats=0.32, pigment="transparent"})
+
+--@ chunk 21 · clock 102172.06083780527
+wait(24*60); varnish{color="#e6d3a4", coats=0.3, vary=0.1}; relief()

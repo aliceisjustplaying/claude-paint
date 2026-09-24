@@ -2,7 +2,7 @@
 //!
 //!   easel open <name> [--width 1000] [--undo 8]   start (or reattach to) a session
 //!   easel do '<lua>' | -f chunk.lua | -            run a chunk on the live canvas
-//!   easel look [--crop x0,y0,x1,y1] [--mode value|squint|mirror] [--dried] [--relief]
+//!   easel look [--crop x0,y0,x1,y1] [--mode value|squint|mirror|wet] [--dried] [--relief]
 //!              [--grid [step]] [--probe x,y;...] [--show on|off|clear] [--scale 3.2]
 //!   easel try '<lua>'                              run a chunk, keep its show()s, roll it back
 //!   easel undo [n] | log | status | save [path] | frames on|off | check | close
@@ -35,7 +35,7 @@ const USAGE: &str = "easel: a live painting session (see crates/easel/README.md)
 
   easel open <name> [--width 1000] [--undo 8] [--checkpoints 6]   start or reattach; replays paintings/lua/<name>.lua if it exists
   easel do '<lua>'  |  easel do -f chunk.lua  |  easel do - (stdin)     [--look] also looks afterwards
-  easel look [--crop x0,y0,x1,y1] [--mode value,squint,mirror] [--dried] [--relief] [--size 1000]
+  easel look [--crop x0,y0,x1,y1] [--mode value,squint,mirror,wet] [--dried] [--relief] [--size 1000]
              [--grid [step]] [--probe x,y;x,y] [--show on|off|clear] [--scale 3.2 [--wait 90]]
   easel try '<lua>' | -f file | -  run a chunk to see its show()/probe()/print, then roll it back (not logged) [--look]
   easel undo [n]      take back the last n chunks (default 1); their code is kept (easel undone)
@@ -45,7 +45,7 @@ const USAGE: &str = "easel: a live painting session (see crates/easel/README.md)
   easel undone [K]    list the chunks undone or replaced (or print K's code)
   easel redo [K]      run undone chunk K (default: the latest) again as a new chunk
   easel log           the session so far (= paintings/lua/<name>.lua)
-  easel status        chunks, clock, wet or dry
+  easel status        chunks, clock, sitting, open/setting/tacky/dry
   easel save [path]   the canvas as a PNG (default out/easel/<name>/<name>.png)
   easel frames on|off save a frame after every chunk (a time-lapse)
   easel check         replay the log from scratch and compare with the live canvas

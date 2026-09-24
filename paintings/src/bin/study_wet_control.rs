@@ -20,7 +20,8 @@
 //! `cargo paint study_wet_control` (1000 px); `--width 3200`.
 
 use paint::color::to_oklab;
-use paint::{Canvas, Gesture, Held, Mask, Orient, Paint, Rgb, Stage, Style, Tool, Touch, hex};
+use paint::{Canvas, Gesture, Held, Orient, Paint, Stage, Style, Tool, Touch, hex};
+use paintings::study::{Img, MM, field, median, rect, width};
 
 const CW: f32 = 1000.0 / 16.0;
 const RH: f32 = 70.0;
@@ -36,19 +37,10 @@ fn press_of(c: usize) -> f32 {
     if c % 2 == 0 { 0.45 } else { 0.9 }
 }
 
-fn rect(c: &Canvas, x0: f32, y0: f32, x1: f32, y1: f32) -> Mask {
-    Mask::from_fn(c.frame(), move |x, y| if x > x0 && x < x1 && y > y0 && y < y1 { 1.0 } else { 0.0 })
-}
-
 const DARK: &str = "#26301f";
 const LIGHT: &str = "#c9c79a";
 const SKY: &str = "#b9c3cb";
 const VEIL: &str = "#8d8a86";
-
-fn field(c: &mut Canvas, st: &Style, col: &str, m: &Mask, medium: f32, seed: u64) {
-    let k = hex(col);
-    c.work(m, &st.body().color(move |_, _| k).medium(medium).angle(|_, _| 0.1).clip(true), seed);
-}
 
 /// The underlayer of row `r` in column `c`.
 fn under(cv: &mut Canvas, st: &Style, c: usize, r: usize) {
@@ -57,13 +49,13 @@ fn under(cv: &mut Canvas, st: &Style, c: usize, r: usize) {
     match r {
         0 | 2 => {
             let m = rect(cv, x0 + 4.0, y0 + 6.0, x0 + CW - 4.0, y0 + RH - 6.0);
-            field(cv, st, DARK, &m, 0.2, seed);
+            field(cv, st, hex(DARK), &m, 0.2, seed);
         }
         1 => {
             let m = rect(cv, x0 + 4.0, y0 + 6.0, x0 + CW - 4.0, y0 + 35.0);
-            field(cv, st, LIGHT, &m, 0.2, seed);
+            field(cv, st, hex(LIGHT), &m, 0.2, seed);
             let m = rect(cv, x0 + 4.0, y0 + 35.0, x0 + CW - 4.0, y0 + RH - 6.0);
-            field(cv, st, DARK, &m, 0.2, seed + 100);
+            field(cv, st, hex(DARK), &m, 0.2, seed + 100);
         }
         _ => {
             let m = rect(cv, x0 + 4.0, y0 + 6.0, x0 + CW - 4.0, y0 + RH - 6.0);
@@ -111,93 +103,11 @@ fn gesture(cv: &mut Canvas, st: &Style, c: usize, r: usize) {
     }
 }
 
-struct Img {
-    lab: Vec<Rgb>,
-    w: usize,
-    s: f32,
-}
-impl Img {
-    fn at(&self, x: f32, y: f32, r: f32) -> Rgb {
-        let (cx, cy, rp) = (x * self.s, y * self.s, (r * self.s).max(0.6));
-        let (mut a, mut n) = ([0.0f32; 3], 0.0);
-        for j in (cy - rp).floor() as i64..=(cy + rp).ceil() as i64 {
-            for i in (cx - rp).floor() as i64..=(cx + rp).ceil() as i64 {
-                let (dx, dy) = (i as f32 + 0.5 - cx, j as f32 + 0.5 - cy);
-                if dx * dx + dy * dy <= rp * rp {
-                    let p = self.lab[j as usize * self.w + i as usize];
-                    for k in 0..3 {
-                        a[k] += p[k];
-                    }
-                    n += 1.0;
-                }
-            }
-        }
-        [a[0] / n, a[1] / n, a[2] / n]
-    }
-    fn l(&self, x: f32, y: f32, r: f32) -> f32 {
-        self.at(x, y, r)[0]
-    }
-    /// Lightness along a line from a to b (units), one sample per pixel,
-    /// averaged across ±band units.
-    fn line(&self, a: (f32, f32), b: (f32, f32), band: f32) -> Vec<f32> {
-        let len = ((b.0 - a.0).hypot(b.1 - a.1) * self.s) as usize;
-        let (dx, dy) = ((b.0 - a.0) / len as f32, (b.1 - a.1) / len as f32);
-        let (nx, ny) = (-dy, dx);
-        let nb = ((band * self.s) as i32).max(0);
-        (0..len)
-            .map(|k| {
-                let (x, y) = (a.0 + dx * k as f32, a.1 + dy * k as f32);
-                let mut acc = 0.0;
-                for j in -nb..=nb {
-                    let t = j as f32 / self.s;
-                    let (px, py) = ((x + nx * t * len as f32 / len as f32) * self.s, (y + ny * t) * self.s);
-                    acc += self.lab[py as usize * self.w + px as usize][0];
-                }
-                acc / (2 * nb + 1) as f32
-            })
-            .collect()
-    }
-    fn ground(&self, g: Rgb, b: (f32, f32, f32, f32)) -> f32 {
-        let (mut n, mut k) = (0.0f32, 0.0f32);
-        for y in (b.1 * self.s) as usize..(b.3 * self.s) as usize {
-            for x in (b.0 * self.s) as usize..(b.2 * self.s) as usize {
-                let p = self.lab[y * self.w + x];
-                n += 1.0;
-                if (p[0] - g[0]).hypot(p[1] - g[1]).hypot(p[2] - g[2]) < 0.06 {
-                    k += 1.0;
-                }
-            }
-        }
-        k / n.max(1.0)
-    }
-}
-
-/// 10–90% width (units) of a transition from `hi` (start) to `lo` (end),
-/// from the 50% crossing nearest the middle outward.
-fn width(p: &[f32], hi: f32, lo: f32, s: f32) -> f32 {
-    let n: Vec<f32> = p.iter().map(|&v| (v - lo) / (hi - lo)).collect();
-    let mid = n.len() as f32 / 2.0;
-    let Some(c) = (1..n.len()).filter(|&i| (n[i - 1] - 0.5) * (n[i] - 0.5) <= 0.0).min_by(|&a, &b| (a as f32 - mid).abs().total_cmp(&(b as f32 - mid).abs())) else { return f32::NAN };
-    let a = (0..c).rev().find(|&i| n[i] >= 0.9).unwrap_or(0);
-    let b = (c..n.len()).find(|&i| n[i] <= 0.1).unwrap_or(n.len() - 1);
-    (b - a) as f32 / s
-}
-
-fn median(mut v: Vec<f32>) -> f32 {
-    v.retain(|x| x.is_finite());
-    if v.is_empty() {
-        return f32::NAN;
-    }
-    v.sort_by(|a, b| a.total_cmp(b));
-    v[v.len() / 2]
-}
-
 fn main() {
     let o = paintings::run::Run::new("study_wet_control");
     let st = Style::friedrich();
     let mut cv = st.prepare(o.width, 1000.0 / (4.0 * RH), o.seed);
     let g = to_oklab(cv.pixels()[0]);
-    let mm = 440.0 / 1000.0;
     let cols = |stage: usize| (0..4).map(move |k| stage * 4 + k);
     // dry
     for c in cols(3) {
@@ -262,7 +172,7 @@ fn main() {
         }
     }
     cv.dry();
-    let img = Img { lab: cv.pixels().iter().map(|&p| to_oklab(p)).collect(), w: cv.window().w, s: cv.window().w as f32 / 1000.0 };
+    let img = Img::new(&cv, cv.pixels());
     let lp = to_oklab(light().color)[0];
     // per cell
     let clean = |c: usize, r: usize| {
@@ -289,15 +199,15 @@ fn main() {
             1 => {
                 let hi = img.l(x0 + 31.0, y0 + 14.0, 3.0);
                 let lo = img.l(x0 + 31.0, y0 + 58.0, 3.0);
-                median((0..9).map(|k| {
+                median((0..9).filter_map(|k| {
                     let x = x0 + 16.0 + 4.0 * k as f32;
-                    width(&img.line((x, y0 + 20.0), (x, y0 + 52.0), 0.8), hi, lo, img.s)
-                }).collect()) * mm
+                    width(&img.line((x, y0 + 20.0), (x, y0 + 52.0), 0.8), hi, lo, img.s, true)
+                }).collect()) * MM
             }
             2 => {
                 let hi = img.l(x0 + 22.0, y0 + 35.0, 1.5);
                 let lo = img.l(x0 + CW - 8.0, y0 + 35.0, 1.5);
-                width(&img.line((x0 + 20.0, y0 + 35.0), (x0 + CW - 6.0, y0 + 35.0), 1.5), hi, lo, img.s) * mm
+                width(&img.line((x0 + 20.0, y0 + 35.0), (x0 + CW - 6.0, y0 + 35.0), 1.5), hi, lo, img.s, true).map_or(f32::NAN, |w| w * MM)
             }
             _ => f32::NAN,
         }

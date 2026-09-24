@@ -1,0 +1,6 @@
+set1 foliage P=C
+set1 foliage Q=A
+set1 foliage R=B
+set2 baretree P=A
+set2 baretree Q=B
+set2 baretree R=C

@@ -535,38 +535,15 @@ impl Canvas {
         }
         // passages in phase order; each passage's footprint is the union of
         // its touches'. run_ordered keeps overlapping passages in this order
-        // (as the phases did) and a crop render skips those off its window
-        let win = self.f;
-        let tile_rect: Vec<Option<Rect>> = plans
+        // (as the phases did)
+        let rects: Vec<Option<Rect>> = plans
             .iter()
             .map(|t| t.iter().filter(|p| p.rect.2 > p.rect.0).map(|p| p.rect).reduce(|a, r| (a.0.min(r.0), a.1.min(r.1), a.2.max(r.2), a.3.max(r.3))))
             .collect();
-        let mut order: Vec<usize> = phases.iter().flat_map(|&(px, py)| (0..plans.len()).filter(move |&i| (i % tw) % 2 == px && (i / tw) % 2 == py)).collect();
-        // with the paint ageing as the hand goes (hand time on), it works
-        // down the region row by row, not in the checkerboard phases
-        if self.hand_slice_secs().is_some() {
-            order.sort_by_key(|&i| (i / tw, (i % tw) % 2, i));
-        }
-        // with hand time on, the passages are painted in slices of hand time
-        // and the paint ages between them (`tally::batches`); else one batch
-        let batches = crate::tally::batches(&order, &tile_secs, self.hand_slice_secs());
-        let n_batches = batches.len();
-        let mut offsets = vec![0u32; plans.len()];
-        for (bi, (order, bsecs)) in batches.into_iter().enumerate() {
-        // stroke ids for this slice's touches, in passage order (all at once
-        // for a single slice): a wait between slices sees the next slice's
-        // touches as fresh work
-        let mut in_batch = order.clone();
-        in_batch.sort_unstable();
-        let first_id = self.next_stroke_ids(in_batch.iter().map(|&t| plans[t].len() as u32).sum());
-        let mut acc = 0u32;
-        for &t in &in_batch {
-            offsets[t] = acc;
-            acc += plans[t].len() as u32;
-        }
-        let surf = self.surf();
-        let order: Vec<usize> = order.into_iter().filter(|&i| !plans[i].is_empty() && tile_rect[i].is_some_and(|r| win.clip(r).is_some())).collect();
-        let paint_tile = |ti: usize| {
+        let order: Vec<usize> = phases.iter().flat_map(|&(px, py)| (0..plans.len()).filter(move |&i| (i % tw) % 2 == px && (i / tw) % 2 == py)).collect();
+        let ids = plans.iter().map(|t| t.len() as u32).collect();
+        let pass = crate::sched::Pass { grid: (tw, th), order, asked: false, rects, secs: tile_secs, ids, slice: self.hand_slice_secs() };
+        self.paint_pass(pass, |surf, ti, first_id| {
             let mut held = Held::new(sp.tool.clone(), seed ^ 0x5717 ^ (ti as u64).wrapping_mul(0x9E37_79B9));
             let mut scratch = Vec::new();
             let mut b: Bounds = None;
@@ -578,34 +555,15 @@ impl Canvas {
                 if p.rect.2 <= p.rect.0 {
                     continue;
                 }
-                let id = first_id.wrapping_add(offsets[ti] + k as u32);
+                let id = first_id.wrapping_add(k as u32);
                 // SAFETY: every pixel a touch reaches lies in its footprint,
                 // inside its passage's rect; run_ordered never runs passages
                 // with overlapping rects at once; `surf()` checked the buffers.
                 let r = unsafe { touch_on(surf, &mut held, &p.touch, clip, id, &mut scratch) };
-                if let Some((a, c, d, e)) = r {
-                    b = Some(match b {
-                        None => (a, c, d, e),
-                        Some((a0, c0, d0, e0)) => (a0.min(a), c0.min(c), d0.max(d), e0.max(e)),
-                    });
-                }
+                b = crate::sched::union(b, r);
             }
             b
-        };
-        let mut dirty: Bounds = None;
-        for r in crate::sched::run_ordered(&order, &tile_rect, paint_tile).into_iter().flatten() {
-            dirty = Some(match dirty {
-                None => r,
-                Some((a0, c0, d0, e0)) => (a0.min(r.0), c0.min(r.1), d0.max(r.2), e0.max(r.3)),
-            });
-        }
-        if let Some((x0, y0, x1, y1)) = dirty {
-            self.wet.touch(x0, y0, x1, y1);
-        }
-        if bi + 1 < n_batches {
-            self.hand_pass(bsecs);
-        }
-        }
+        });
         if std::env::var_os("PAINT_DEBUG").is_some() {
             eprintln!("stipple: {n} touches, reach {reach:.1}, tiles {tw}x{th} ({tile:.0} units), plan {t_geom:.2}s + paint {:.2}s ({} recipes), total {:.2}s", t_plan - t_geom, n_memo, t0.elapsed().as_secs_f32());
         }

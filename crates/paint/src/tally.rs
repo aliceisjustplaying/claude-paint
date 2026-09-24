@@ -244,28 +244,6 @@ impl std::fmt::Display for Tally {
     }
 }
 
-/// Passages (tile indices in painting `order`) in consecutive batches of
-/// about `slice` seconds of hand time each (`secs` per tile), with each
-/// batch's seconds. No slice (hand time off): one batch of everything. The
-/// cut follows the whole canvas's plan, so a crop ages its window on the
-/// same timeline.
-pub(crate) fn batches(order: &[usize], secs: &[f64], slice: Option<f64>) -> Vec<(Vec<usize>, f64)> {
-    let Some(slice) = slice.filter(|s| *s > 0.0) else {
-        return vec![(order.to_vec(), order.iter().map(|&t| secs[t]).sum())];
-    };
-    let mut out: Vec<(Vec<usize>, f64)> = vec![(Vec::new(), 0.0)];
-    for &t in order {
-        let last = out.last_mut().unwrap();
-        if last.1 >= slice {
-            out.push((vec![t], secs[t]));
-        } else {
-            last.0.push(t);
-            last.1 += secs[t];
-        }
-    }
-    out
-}
-
 impl Canvas {
     /// Hand time: with `Some(slice)` (minutes), passes are painted in slices
     /// of about that much hand time with the paint ageing between them
@@ -458,17 +436,16 @@ mod tests {
     /// With hand time on, only the default order becomes a sweep down: an
     /// order the painter asked for is kept (review r6, finding 3). Seen in
     /// the paint's age: a sweep paints the top in the first slices (older
-    /// than the bottom); scatter's slices each reach over the whole area.
+    /// than the bottom); scatter's slices each reach over the whole area. A
+    /// preset's order counts as asked for (`ruler()`, thermos B2).
     #[test]
     fn hand_time_keeps_an_order_asked_for() {
-        let age = |explicit: Option<crate::handling::Order>| {
+        use crate::handling::Order;
+        let age = |set: &dyn Fn(Handling) -> Handling| {
             let mut c = Canvas::new(240, 1.4, hex("#c8b89a")).with_size_mm(440.0);
             c.set_hand_time(Some(1.0));
             let all = Mask::from_fn(c.frame(), |_, _| 1.0);
-            let mut hd = Handling::new(Tool::filbert(18.0)).color(|_, _| hex("#6f84a8")).coverage(3.0).fill(false);
-            if let Some(o) = explicit {
-                hd = hd.order(o);
-            }
+            let hd = set(Handling::new(Tool::filbert(18.0)).color(|_, _| hex("#6f84a8")).coverage(3.0).fill(false));
             c.work(&all, &hd, 3);
             let (w, h) = (c.f.w, c.f.h);
             let mean = |y0: usize, y1: usize| {
@@ -478,13 +455,14 @@ mod tests {
             let (top, bottom) = (mean(h / 10, h * 3 / 10), mean(h * 6 / 10, h * 8 / 10));
             (top, bottom, c.hand_owed())
         };
-        let (t, b, _) = age(None);
+        let (t, b, _) = age(&|h| h);
         assert!(t > 1.8 * b, "the default sweeps down: top {t} bottom {b}");
-        use crate::handling::Order;
         for o in [Order::Scatter, Order::Passages] {
-            let (t, b, _) = age(Some(o));
+            let (t, b, _) = age(&|h| h.order(o));
             assert!(t < 1.5 * b && b < 1.5 * t, "{o:?} asked for is kept: top {t} bottom {b}");
         }
+        let (t, b, _) = age(&|h| h.ruler().coverage(3.0));
+        assert!(t < 1.5 * b && b < 1.5 * t, "the ruler's scatter is kept: top {t} bottom {b}");
     }
 
     /// A wait between slices must see the strokes of the slices after it as
@@ -502,15 +480,6 @@ mod tests {
         let fresh = c.wet.stroke.iter().filter(|&&id| id > mark).count();
         let older = c.wet.stroke.iter().filter(|&&id| id > 0 && id <= mark).count();
         assert!(fresh > 0 && older > 0, "fresh {fresh}, older {older}");
-    }
-
-    #[test]
-    fn batches_cut_the_order_by_hand_time() {
-        let secs = [30.0, 50.0, 0.0, 70.0, 10.0, 90.0];
-        let order = [5, 0, 1, 2, 3, 4];
-        assert_eq!(batches(&order, &secs, None), vec![(order.to_vec(), 250.0)]);
-        let b = batches(&order, &secs, Some(60.0));
-        assert_eq!(b, vec![(vec![5], 90.0), (vec![0, 1], 80.0), (vec![2, 3], 70.0), (vec![4], 10.0)]);
     }
 
     #[test]

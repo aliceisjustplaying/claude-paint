@@ -173,12 +173,8 @@ impl Canvas {
                 put_f32(w, m)?;
             }
         }
-        let t = &self.tally;
-        for v in [t.strokes, t.touches, t.remixes, t.wipes, t.lines] {
+        for v in self.tally.to_words() {
             put_u64(w, v)?;
-        }
-        for v in [t.length_mm, t.reloads, t.secs, t.clocked] {
-            put_u64(w, v.to_bits())?;
         }
         // the wet film's surface layer (version 8)
         put_all(w, wt.top.iter().map(|t| t.v))?;
@@ -303,20 +299,11 @@ impl Canvas {
             1 => Some(get_f32(r)?).filter(|m| m.is_finite() && *m > 0.0),
             _ => return Err(bad("checkpoint hand time flag is invalid")),
         };
-        let mut n5 = [0u64; 5];
-        for v in n5.iter_mut() {
+        let mut words = [0u64; 9];
+        for v in words.iter_mut() {
             *v = get_u64(r)?;
         }
-        let mut f4 = [0f64; 4];
-        for v in f4.iter_mut() {
-            *v = f64::from_bits(get_u64(r)?);
-        }
-        if !f4.iter().all(|v| v.is_finite()) {
-            return Err(bad("checkpoint hand-time ledger is invalid"));
-        }
-        let [strokes, touches, remixes, wipes, lines] = n5;
-        let [length_mm, reloads, secs, clocked] = f4;
-        c.tally = crate::tally::Tally { strokes, touches, length_mm, reloads, remixes, wipes, lines, secs, clocked };
+        c.tally = crate::tally::Tally::from_words(words).ok_or_else(|| bad("checkpoint hand-time ledger is invalid"))?;
         // the wet film's surface layer (version 8)
         let top = get_all(r, n)?;
         let tlat = get_all(r, n * LAT)?;

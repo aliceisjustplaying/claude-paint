@@ -673,13 +673,10 @@ oak:paint(brush("round", oak.touch_w * 0.8), {color="#98a060", lit={0.78, 1}, ev
 -- the same oak bare: same crown, trunk and seed (moved 322 right), season="winter"
 local function moved(pts) local o = {} for i, p in ipairs(pts) do o[i] = {p[1] + 322, p[2]} end return o end
 bare = tree_in{crown=moved(oak.crown), trunk={{518,592},{514,520},{509,452}}, species="oak", season="winter", sun=WORLD, seed=7}
--- the fine twig mass first, as a tone: a dry rigger dragged out along the twigs, pale, the sky through it
-local tm, cx, cy = bare:twig_mass(), bare.fork[1], bare.fork[2]
-work(tm, {hand="body", tool="rigger 0.7", length={6, 14}, coverage=2, pressure={0.5, 0.2}, load=0.25, medium=0.35,
-  threshold=0.05, hug=false, clip=tm:map(function(v) return 0.3 * v end), angle_jitter=0.3,
-  angle=function(x, y) return math.atan(y - cy, x - cx) end, color=function(x, y) return mix("#554e45", sky(x, y), 0.55) end})
--- the wood as above, then the drawn twigs thinner and lighter: the crown's lace against the sky
-bare:paint_wood(brush("rigger", 0.55), {color="#554e45", max=1.2, pressure=0.04})
+-- the wood as above (thick body, lit flank, round 2.4 for 1.2..3.5), then the fine wood a shade
+-- lighter, each band with a rigger that can lay its widths: the crown's lace against the sky
+bare:paint_wood(brush("rigger", 0.9), {color="#554e45", min=0.5, max=1.2, every=2})
+bare:paint_wood(brush("rigger", 0.55), {color="#554e45", max=0.5, pressure=0.04, every=2})
 bare:paint(brush("round", bare.touch_w * 0.7), {color="#6e5234", share=0.4})   -- the few dead leaves an oak keeps
 ```
 
@@ -694,20 +691,44 @@ along the stroke, and the brush lifts off only at a real tip, never where
 the wood goes on or where twigs leave it. A limb's leading twig is drawn
 on in the same stroke, so the limb runs out into it in one movement. So
 paint the bands thick to thin (`t:wood(3.5)`, then `min=1.2, max=3.5`, then
-`max=1.2`) and nothing floats.
+`max=1.2`) and nothing floats. Give each band a brush that can lay its
+widths: a pointed brush's mark runs from about two hairs (`b:mark_width(0)`)
+to a little over its size (`b:mark_width(1)`), and `paint_wood` presses up
+to that, no further. A `rigger 0.55` lays 0.21 to 0.71, so over the whole
+fine band (0.12 to 1.2) it paints every twig and small limb about the same
+width: split it (`rigger 0.9` for 0.5 to 1.2, `rigger 0.55` below 0.5), and
+the wood visibly thins at each fork and runs out to a point.
+
+**An oak is angular.** An oak's wood runs fairly straight between its
+nodes and changes direction at them: elbows, the sympodial zigzag, twigs
+short and stiff. The species number `angular` (oak 1, lime 0.5, beech,
+birch and willow 0) makes it so. The runs between forks are straightened
+(wiggles under about half a model step are taken out, the larger turns
+kept at a few nodes), a shoot zigzags about its heading but never turns
+more than about 70 degrees off it (no hooks or loops), a side twig stands
+well off its limb, and `paint_wood` strokes the wood straight from node to
+node (a brush's own spline through the nodes would round every elbow into
+a rope-like S-curve). A beech (`angular=0`) keeps its smooth rising curves.
+`angular=` overrides it; it changes the wood in every season.
 
 **Fewer, more deliberate twigs: `detail`.** A painter doesn't paint every
 twig. `detail` (0..1) is the share of the *fine* wood (the twigs and limbs
 under about two twig widths) drawn as lines: pieces picked for character
 (long ones, a limb's leading twig, those toward the crown's edge where they
 show against the sky; one side twig per spot, not a starburst), always
-with the wood they leave from. The stout wood is always drawn. The rest is
-left to a tone: `t:twig_mass(detail)` is a soft mask (0..1) of the fine
-twig mass that isn't drawn, strongest where the twigs are thickest, spread
-about half a twig's length. Lay it first, thin and pale (above), and draw the
-selected twigs over it. `tree_in{detail=}` sets it for the tree (read it
-back as `t.detail`); `paint_wood{detail=}` and `t:twig_mass(d)` override
-it. The default is `0.35 + 0.65 * leaf` (the season's share of leaves):
+with the wood they leave from. The stout wood is always drawn, and the
+rest is left out: draw the selected twigs and leave the sky between them.
+`tree_in{detail=}` sets it for the tree (read it back as `t.detail`);
+`paint_wood{detail=}` overrides it.
+
+*Not recommended: a tone for the undrawn twigs.* `t:twig_mass(detail)` is
+a soft mask (0..1) of the fine twig mass that isn't drawn. Laid as a pale
+dry-brush tone under the drawn twigs it can pass for a winter crown's
+haze, but it doesn't hold up: a blind panel of four critics (two Gemini,
+two gpt-6-astra) judging a lab study of it all preferred the version with
+drawn twigs, strongly, calling the tone "steel wool", "fur" and "gray
+scribble cushions", and on this branch's study the toned trees look
+heavier and smeared (notes/oak.md). It stays available for experiments. The default is `0.35 + 0.65 * leaf` (the season's share of leaves):
 0.35 for a bare tree, 1 (every twig) in summer, where the leaves carry the
 fine structure. `detail=1` draws every twig, as before; 0 only the stout
 wood. The study is `paintings/lua/bare_trees.lua` (notes/oak.md).
@@ -740,7 +761,8 @@ whose sun is used. The default is the upper left, a little in front.
 overridden: growth `step`, `density`, `influence`, `kill`, `up`, `out`,
 `crook`, `kink`, `inertia`, `shell`, `voids`, `void_size` and `depth`.
 Wood: `scaffold={min, max}`, `girth` (trunk width per crown height),
-`twig_w`, `smooth`, `pipe` and `leader` (how far the trunk runs on into the crown). Twigs: `twigs`, `twig_len`, `twig_spread`,
+`twig_w`, `smooth`, `pipe`, `leader` (how far the trunk runs on into the crown) and
+`angular` (0 smooth .. 1 an oak's straight runs and elbows). Twigs: `twigs`, `twig_len`, `twig_spread`,
 `twig_droop`, `twig_zig` and `twig_along`. Leaves: `clump`, `squash`,
 `hang`, `fill`, `ragged`, `leafiness` and `leafy_w`. Touches: `touch`,
 `touch_w`, `hook`, `droop`, `flat`, `touches` and `marcescent`.
@@ -772,8 +794,11 @@ What you get:
   together" above). `pressure` is the pressure at a tip (where the brush
   lifts off); `ramps` defaults to no attack and a short lift at tips only.
   `twigs=false` leaves out the fine twigs past the model.
-- **Twig mass.** `t:twig_mass(detail)`: the fine wood not drawn at
-  `detail` (default `t.detail`) as a soft tone, 0..1.
+- **Wood strokes as data.** `t:wood_strokes{min=, max=, detail=}` gives
+  the strokes `paint_wood` lays (`{pts, w, tip, fine, limb}`), to stroke
+  by hand.
+- **Twig mass (not recommended, see above).** `t:twig_mass(detail)`: the
+  fine wood not drawn at `detail` (default `t.detail`) as a soft tone, 0..1.
 
 **Field trees in depth.** Draw a few crowns and `tree_group` grows them
 where you drew them. It adds `count` more trees behind, made from your

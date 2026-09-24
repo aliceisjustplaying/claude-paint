@@ -374,7 +374,7 @@ fn tool_named(kind: &str, width: f32) -> Result<Tool> {
 }
 
 /// A tool from a `Brush`, "filbert 8", or {kind, width, stiffness=...}.
-fn tool_of(v: &Value) -> Result<Tool> {
+pub(crate) fn tool_of(v: &Value) -> Result<Tool> {
     match v {
         Value::UserData(u) => Ok(u.borrow::<Brush>()?.held.borrow().tool.clone()),
         Value::String(s) => {

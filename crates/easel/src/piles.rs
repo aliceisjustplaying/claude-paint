@@ -40,7 +40,7 @@ impl UserData for PilesU {
     }
 }
 
-const KEYS: &[&str] = &["n", "over", "colors", "pal", "medium", "coats", "aim", "mix", "overlap", "patch", "vary", "batch", "dirty", "seed"];
+const KEYS: &[&str] = &["n", "over", "colors", "pal", "medium", "coats", "aim", "hand", "tool", "coverage", "load", "mix", "overlap", "patch", "vary", "batch", "dirty", "seed"];
 
 fn piles(st: &S, field: Value, o: Table) -> Result<PilesU> {
     let f = frame(st)?;
@@ -62,48 +62,85 @@ fn piles(st: &S, field: Value, o: Table) -> Result<PilesU> {
         dirty: opt("dirty", d.dirty)?.min(0.5),
         seed: seed_of(st, &o)?,
     };
-    let mut set = match o.get::<Value>("colors")? {
-        Value::Nil => {
-            let n = o.get::<Option<usize>>("n")?.unwrap_or(5);
-            if !(1..=16).contains(&n) {
-                return err(format!("piles: n = {n}: a palette holds 1 to 16 piles"));
-            }
-            PileSet::from_field(fld, &over, n, 3.0, opts)
-        }
+    // the painter's own piles, or n chosen from the field
+    let given: Option<Vec<Rgb>> = match o.get::<Value>("colors")? {
+        Value::Nil => None,
         Value::Table(t) => {
             let cs: Vec<Rgb> = t.sequence_values::<Value>().map(|v| rgb_of(&v?)).collect::<Result<_>>()?;
             if cs.is_empty() || cs.len() > 16 {
                 return err("piles: colors={...} wants 1 to 16 colors");
             }
-            PileSet::new(cs, fld, opts)
+            Some(cs)
         }
         v => return err(format!("piles: colors wants a list of colors, got {}", v.type_name())),
     };
-    if o.get::<Option<bool>>("mix")?.unwrap_or(true) {
+    let n = o.get::<Option<usize>>("n")?.unwrap_or(5);
+    if !(1..=16).contains(&n) {
+        return err(format!("piles: n = {n}: a palette holds 1 to 16 piles"));
+    }
+    let mix = o.get::<Option<bool>>("mix")?.unwrap_or(true);
+    if !mix {
+        let set = match given {
+            Some(cs) => PileSet::new(cs, fld, opts),
+            None => PileSet::from_field(fld, &over, n, 3.0, opts),
+        };
+        return Ok(PilesU(Arc::new(set)));
+    }
+    {
         let pal = palette_of(st, o.get::<Value>("pal")?)?;
         let medium = num(&o, "medium")?.unwrap_or(sty.thin_medium).clamp(0.0, 1.0);
-        // aimed like a broad pass lays it, unless asked otherwise
+        // aimed at the thickness the pass they are mixed for lays (as
+        // `work` estimates it: `Handling::laid_coats`), unless asked otherwise
+        let pass = || -> Result<(f32, Marks)> {
+            let mut h = match o.get::<Option<String>>("hand")?.as_deref().unwrap_or("broad") {
+                "broad" => sty.broad(),
+                "body" => sty.body(),
+                "detail" => sty.detail(),
+                "hatch" => sty.hatch(),
+                "scumble" => sty.scumble(),
+                "glaze" => sty.glaze(num(&o, "medium")?.unwrap_or(0.9)),
+                h => return err(format!("piles: hand {h:?}: broad, body, detail, hatch, glaze or scumble")),
+            };
+            if let Some(t) = o.get::<Option<Value>>("tool")? {
+                h.tool = crate::api::tool_of(&t)?;
+            }
+            if let Some(c) = num(&o, "coverage")? {
+                h = h.coverage(c);
+            }
+            if let Some(l) = num(&o, "load")? {
+                h = h.load(l);
+            }
+            Ok((h.laid_coats(), Marks::of(&h.tool)))
+        };
+        let (laid, marks) = pass()?;
         let coats = match (o.get::<Value>("aim")?, num(&o, "coats")?) {
             (Value::String(s), _) if &*s.to_str()? == "masstone" => None,
             (Value::Nil, Some(c)) | (Value::String(_), Some(c)) => Some(c.max(0.05)),
-            (Value::String(s), None) if &*s.to_str()? == "laid" => Some(sty.broad().laid_coats()),
-            (Value::Nil, None) => Some(sty.broad().laid_coats()),
+            (Value::String(s), None) if &*s.to_str()? == "laid" => Some(laid),
+            (Value::Nil, None) => Some(laid),
             (Value::Number(n), _) => Some((n as f32).max(0.05)),
             (Value::Integer(n), _) => Some((n as f32).max(0.05)),
             _ => return err("piles: aim = \"laid\", \"masstone\" or a number of coats"),
         };
         // the painter looks at the canvas and knifes the piles: each is a
         // new pile on the palette (hand time)
-        time::verb(st, Verb::Pass, |s| {
+        let set = time::verb(st, Verb::Pass, |s| {
             let c = s.canvas.as_mut().ok_or_else(crate::api::no_canvas)?;
-            set.mix(c, &over, &pal, medium, coats, Marks::Blunt, 6.0);
+            let set = match given {
+                Some(cs) => {
+                    let mut set = PileSet::new(cs, fld, opts);
+                    set.mix(c, &over, &pal, medium, coats, marks, 6.0);
+                    set
+                }
+                None => PileSet::by_paint(fld, c, &over, n, &pal, medium, coats, marks, 5.0, opts),
+            };
             for p in &set.piles {
                 s.hand.piles.trip(c.tally_mut(), p.want);
             }
-            Ok(())
+            Ok(set)
         })?;
+        Ok(PilesU(Arc::new(set)))
     }
-    Ok(PilesU(Arc::new(set)))
 }
 
 /// The field read every `STEP` units into a plain grid (bilinear between

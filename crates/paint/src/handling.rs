@@ -925,7 +925,7 @@ fn finish_plan(cv: &Canvas, hd: &Handling, tool: &Tool, c: (f32, f32), pts: Vec<
     // from piles already mixed: the pile this stroke picks, as knifed here
     // (without a palette the color field says what to lay: `PileSet::stepped`)
     if let (Some(ps), Some((_, medium))) = (hd.piles, hd.palette) {
-        let i = ps.pick(c.0, c.1);
+        let i = ps.pick_over(c.0, c.1, stroke_under(cv, &pts, tool.width * 0.5));
         let mut prng = Rng::new(rng.next_u64());
         if let Some(paint) = ps.paint(i, c.0, c.1, medium, hd.mix_jitter, &mut prng) {
             let want = ps.want(i);

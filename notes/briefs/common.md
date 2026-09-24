@@ -42,7 +42,8 @@ and detail laborious.
 - View PNGs only through `scripts/peek SRC OUT.jpg [H W Y X]` (PNG renders
   are huge). Look at your results; judge them like a painter would.
 - `cargo test -p paint` must pass. The golden scene fingerprint
-  (crates/paint/tests/golden_scene.txt, debug profile) may change when you
+  (crates/paint/tests/golden_scene.txt, recorded with `[profile.test]`:
+  `cargo test`, not `--release`) may change when you
   intentionally change output: re-record with UPDATE_GOLDEN=1 and say so in
   the commit. Keep existing paintings (friedrich_moonrise_valley,
   friedrich_monk2, study_*) building and rendering; update them to new APIs.

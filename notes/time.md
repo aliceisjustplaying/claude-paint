@@ -7,7 +7,7 @@ depended only on the `wait()` calls a painter wrote. The sketchbook's habit
 of `dry()` before every passage then finishes each object alone over dry
 paint.
 
-The owner's principle: *a stroke costs the time a hand takes to make it; a
+Alice's principle: *a stroke costs the time a hand takes to make it; a
 painter works in sittings of a few hours and paint sets between them.*
 Economy and wet/dry timing should come from that physics, not from rules.
 
@@ -403,7 +403,7 @@ two target directories renders l3_green at 1000 px one pixel apart, by
 
 - Reprice the palette trips once r6-wet settles how much paint a brush
   carries. Then a painting's timesheet is a fair measure of its economy
-  (the lab's studies could report it next to the owner's verdict).
+  (the lab's studies could report it next to Alice's verdict).
 - Paint `near` and `green` in sittings once r6-wet lands, with passages
   laid to meet, and compare them with the dried-by-day logs.
 - If a slice proves too coarse for skies, slice by stroke count within a

@@ -2,7 +2,7 @@
 
 **Update 2026-09-24 morning: Round 6 night 1 ran (steps 1–4 of the plan
 below, plus critic panels). Read `notes/round6.md` first: what landed on
-main, what waits on branches and the decisions for the owner.**
+main, what waits on branches and the decisions for Alice.**
 
 Read this first in a new session. Then `notes/round5_plan.md` (the current
 round, its rules and a status log) and `notes/scores.md` (every critic
@@ -66,25 +66,25 @@ All work is merged into main except the per-loop painter branches
 `easel4-*`), archived in `notes/amnesia2/3/4`.
 
 ## Update: second opinions (read notes/advice/astra.md and gemini.md)
-The owner felt progress went sideways since round 2–3. Both advisors
+Alice felt progress went sideways since round 2–3. Both advisors
 (gpt-6-astra, Gemini 3.8 Flash) agree: (1) A/B the paint relief lighting on
-identical paintings first (cheap, the owner judges); (2) mark economy:
+identical paintings first (cheap, Alice judges); (2) mark economy:
 masses, edges and a few accents instead of painting every generated detail
 (keep structure for placement and branching: the bare oak is the evidence);
 (3) test wet/tacky/open interaction: the sketchbook's "dry() before any
 passage" likely causes the pasted-on cutout look; (4) no full Bob Ross
-sprint: bounded single-subject mark-making studies instead; (5) the owner's
+sprint: bounded single-subject mark-making studies instead; (5) Alice's
 eye decides, critics are diagnostic. Rejected: Gemini's idea to benchmark
 Friedrich's actual masterpieces (copying). The next plan is those three
 experiments, in order, before more loops.
 
-## Round 6 plan: the mark-making lab (high level, agreed with the owner)
+## Round 6 plan: the mark-making lab (high level, agreed with Alice)
 
-**The measuring stick is the owner's eye: does it look good?** Not "does it
+**The measuring stick is Alice's eye: does it look good?** Not "does it
 look like a Friedrich", not a critic total. Critics (panel: Gemini 3.8 Flash
 + gpt-6-astra) are diagnostic only: they name defects, they don't decide.
 
-**Principles** (from the owner's review and both advisors, notes/advice/):
+**Principles** (from Alice's review and both advisors, notes/advice/):
 - *Mark economy*: say as much as possible with as few marks as possible.
   A crown is a dark mass, a few unequal lights, a couple of branches and
   sky holes, not 30,000 touches ("confetti").
@@ -111,4 +111,4 @@ look like a Friedrich", not a critic total. Critics (panel: Gemini 3.8 Flash
 
 
 
-Note: a mirror of the PRE-scrub history is kept on the old machine at `~/tmp/paint-overnight-*/scrub/backup.git` (owner: keep it; never push from it).
+Note: a mirror of the PRE-scrub history is kept on the old machine at `~/tmp/paint-overnight-*/scrub/backup.git` (Alice: keep it; never push from it).

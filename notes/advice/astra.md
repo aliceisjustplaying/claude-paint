@@ -33,8 +33,8 @@ A complete Ross implementation risks replacing Friedrich symbols with evergreen-
 
 ## 5. Three next changes, in order
 
-1. **Separate surface artifacts from painting errors.** Compare identical saved paint states with current, reduced and zero relief lighting, at whole-image and native crop scales. Hold everything else fixed. Success: blind owner preference for less digital surfaces without losing form. If contours remain, investigate edge handling separately.
+1. **Separate surface artifacts from painting errors.** Compare identical saved paint states with current, reduced and zero relief lighting, at whole-image and native crop scales. Hold everything else fixed. Success: blind preference from Alice for less digital surfaces without losing form. If contours remain, investigate edge handling separately.
 2. **Replace detail-first recipes with mass-and-edge studies.** Compare the existing detailed recipe against the simplified recipe in §3, holding geometry, palette and drying fixed. Success: the rock looks grounded and foliage reads as volume with fewer marks, without continuous pale rims or punched holes. Test a second composition before adoption.
 3. **Test paint interaction instead of drying by default.** Repeat the same foliage-light and sky-blending gestures over dry, tacky and open paint, holding brush, load and colors fixed. Success: an interacting passage has less pasted-on edging without muddy values or exposed ground. Adopt selective waits only where that advantage survives transfer to a full painting.
 
-For all three, freeze engine/version pairs, randomize presentation and judge surface, contact and drawing separately. Require repeated owner preference on studies and full-painting transfers; use critics diagnostically, not a one-point total as permission to merge. This addresses the drift in `notes/scores.md`.
+For all three, freeze engine/version pairs, randomize presentation and judge surface, contact and drawing separately. Require repeated preference from Alice on studies and full-painting transfers; use critics diagnostically, not a one-point total as permission to merge. This addresses the drift in `notes/scores.md`.

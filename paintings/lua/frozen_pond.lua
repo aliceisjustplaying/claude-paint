@@ -318,10 +318,10 @@ for i = 0, steps do
   PRINTS[#PRINTS+1] = {x, y, s}
   hollows = hollows + ellipse(x, y, 3.2*s, 1.5*s):roughen(0.35*s, 3, 170 + i, 0.4*s)
 end
-glaze(hollows, {color="#5f6a86", coats=0.35})
+glaze(hollows:blur(1.2), {color="#5f6a86", coats=0.26})
 local lip = brush{kind="round", width=1.2, point=0.5}
-lip:load("#cfcdd0", 0.8)
-lip:stroke({{CROSS.x - 6, CROSS.foot - 7.2}, {CROSS.x - 1, CROSS.foot - 8.4}, {CROSS.x + 3, CROSS.foot - 8.2}, {CROSS.x + 8, CROSS.foot - 6.8}}, {pressure={0.2, 0.55, 0.2}, ramps={0.3, 0.3}})
+lip:load("#c6c5ca", 0.6)
+lip:stroke({{CROSS.x - 6, CROSS.foot - 7.2}, {CROSS.x - 1, CROSS.foot - 8.4}, {CROSS.x + 3, CROSS.foot - 8.2}, {CROSS.x + 8, CROSS.foot - 6.8}}, {pressure={0.1, 0.35, 0.1}, ramps={0.4, 0.4}})
 for i, p in ipairs(PRINTS) do
   local x, y, s = p[1], p[2], p[3]
   if i % 4 == 1 then lip:reload("#cfcdd0", 0.7) end
@@ -407,7 +407,7 @@ for _, c in ipairs({{700, 214, 5.2, 0.1}, {731, 203, 4.4, -0.15}, {664, 238, 3.8
   cb:stroke({{x, y + 0.15*s}, {x + 0.45*s, y - 0.15*s}, {x + 1.1*s, y - 0.8*s - t*s}}, {pressure={0.7, 0.1}, ramps={0.1, 0.5}})
 end
 
---@ chunk 19 · clock 63072.85400390625
+--@ chunk 19 · clock 63072.85498046875
 -- the evening comes down: a cool glaze over the near snow, deeper toward the bottom, and a dark veil
 -- growing toward the picture's edges (Friedrich to Carus: darker toward the edges)
 local vn = noise{seed=191, octaves=3, period=300}
@@ -417,7 +417,7 @@ VIG = mask(function(x, y) local dx, dy = (x - 520)/560, (y - 430)/430
   return smoothstep(0.6, 1.3, math.sqrt(dx*dx + dy*dy)) * (0.8 + 0.2*vn:at01(y, x)) end)
 glaze(VIG, {color="#3f4458", coats=0.3})
 
---@ chunk 20 · clock 71762.13330078125
+--@ chunk 20 · clock 71762.13427734375
 -- the ice worked over the dry lay-in: thin long streaks of polished ice glazed darker, and a few pale
 -- drifted lines of snow laid with a small brush, all running flat to the horizon
 local KEEP = -(CROSSM + FIGM):grow(0.8)
@@ -432,13 +432,13 @@ for i = 1, 150 do
   local x = rand(-20, 1000)
   local t = rand()^1.4
   local y = lerp(shore(x) + 3, bank(x) + 2, t)
-  if i % 6 == 1 then sb:reload(mix("#d2c8bd", "#aeb2ba", t), rand(0.4, 0.7)) end
+  if i % 6 == 1 then sb:reload(mix(mix("#d2c8bd", "#aeb2ba", t), "#8e949c", rand(0.15, 0.4)), rand(0.3, 0.55)) end
   local L = rand(20, 110) * (1 - 0.4*t)
   local pts = {{x, y}, {x + L/2, y + randn(0, 0.35)}, {x + L, y + randn(0, 0.5)}}
-  sb:stroke(pts, {pressure={0.15, rand(0.3, 0.55), 0.1}, ramps={0.3, 0.4}, clip=POND * KEEP})
+  sb:stroke(pts, {pressure={0.05, rand(0.2, 0.45), 0.03}, ramps={rand(0.3, 0.5), rand(0.35, 0.6)}, clip=POND * KEEP})
 end
 
---@ chunk 21 · clock 71762.13330078125
+--@ chunk 21 · clock 71762.13427734375
 -- the near snow: long wind drifts, each a cool shadow on its lee under a lit crest; a few stones
 local KEEPF = -(CROSSM + FIGM):grow(1)
 local dn = noise{seed=211, octaves=4, period=200, stretch={-0.08, 6}, warp={140, 10}}
@@ -458,3 +458,61 @@ for i, s in ipairs({{206, 676, 17, 7}, {232, 682, 8, 4}}) do
   stb:reload("#b4b5bd", 0.7)
   stb:stroke({{x - w*1.3, y + 0.8}, {x, y + 1.2}, {x + w*1.3, y + 0.6}}, {pressure={0.4, 0.7, 0.3}, ramps={0.2, 0.3}})
 end
+
+--@ chunk 22 · clock 72780.63623046875
+-- mending: a stray curl of the hill paint at the far right (fill the hollow, cut the hook back to sky)
+local fill = poly({{898, 447}, {912, 442}, {930, 441}, {940, 446}, {936, 450}, {904, 451}}, true)
+work(fill, {hand="detail", tool="round 1.5", length={4, 10}, coverage=3.4, medium=0.25, angle=0, color=sample(918, 453, 2), edge="soft"})
+local hook = poly({{897, 437}, {905, 434}, {920, 434}, {938, 439}, {944, 444}, {930, 441}, {910, 440}, {899, 441}}, true)
+work(hook, {hand="detail", tool="round 1.5", length={4, 10}, coverage=3.4, medium=0.25, angle=0.05, color=sample(920, 428, 3), edge="soft"})
+-- the far wood's skyline: bare crowns against the glow, a fringe of fine upright twig strokes
+local tw = brush{kind="rigger", width=0.45, point=1}
+for i = 1, 260 do
+  local x = rand(0, 440)
+  local top = nil
+  for y = HZ - 32, HZ + 4 do if WOOD:at(x, y) > 0.5 then top = y break end end
+  if top then
+    if i % 8 == 1 then tw:reload(mix("#8d8790", "#a9a1a0", rand(0, 0.4)), 0.7) end
+    local h = rand(2, 7)
+    tw:stroke({{x, top + 2}, {x + randn(0, 0.8), top - h*0.5}, {x + randn(0, 1.4), top - h}}, {pressure={0.4, 0}, ramps={0.05, 0.7}})
+  end
+end
+-- the willow trunks: a dark glaze to pull their speckle together
+local wt = nil
+for _, w in ipairs(WILLOWS) do local fy = farbank(w[1]) + 3; local m = ellipse(w[1] + w[3]*15*w[2], fy - 20*w[2], 7*w[2], 22*w[2])
+  wt = wt and (wt + m) or m end
+glaze(wt * mask(function(x, y) local c = sample(x, y); return (c.L < 0.5) and 1 or 0 end), {color="#2c2729", coats=0.35})
+
+--@ chunk 23 · clock 85342.18896484375
+dry()
+-- the woman, modeled over the dry silhouette: long folds of the cloak, the hood, a thin rim of the glow
+local fx, fy = FIG.x, FIG.foot
+local pb = brush{kind="round", width=1.1, point=1}
+-- folds: lighter where the cloth turns to the sky, darker in the hollows between
+local folds = {{-5.5, -46, -8.5, -1, "#3f3938"}, {-1, -49, -2, 0, "#3a3434"}, {4.5, -47, 8, -1, "#3f3938"}, {8, -40, 11.2, -2, "#453e3c"},
+               {-3.2, -45, -5.4, 0, "#1d1a1c"}, {2, -48, 3.2, 0, "#1d1a1c"}, {6.2, -44, 9.8, 0, "#201c1e"}}
+for _, f in ipairs(folds) do
+  pb:reload(f[5], 0.8)
+  local mx = (f[1] + f[3])/2 + randn(0, 0.25)
+  pb:stroke({{fx + f[1], fy + f[2]}, {fx + mx, fy + (f[2] + f[4])/2}, {fx + f[3], fy + f[4]}}, {pressure={0.05, 0.45, 0.6}, ramps={0.35, 0.1}, clip=FIGM})
+end
+-- the hood's top and its fall onto the shoulders, a shade lighter
+pb:reload("#433c3a", 0.7)
+pb:stroke({{fx - 3, fy - 60}, {fx + 0.5, fy - 61.8}, {fx + 3.6, fy - 59.6}}, {pressure={0.2, 0.5, 0.2}, ramps={0.3, 0.3}, clip=FIGM})
+pb:stroke({{fx - 6.5, fy - 49.8}, {fx - 3.5, fy - 51.4}, {fx + 0.5, fy - 51.6}}, {pressure={0.15, 0.4, 0.1}, ramps={0.3, 0.3}, clip=FIGM})
+-- the rim of the glow: a hair of warm light on the right side of hood and shoulder, and on the left sleeve
+local rb = brush{kind="round", width=0.6, point=1}
+rb:load("#9a8474", 0.6)
+rb:stroke({{fx + 3.9, fy - 60.5}, {fx + 4.4, fy - 57}, {fx + 5, fy - 53}, {fx + 8.2, fy - 49.4}, {fx + 9.1, fy - 44}}, {pressure={0.05, 0.3, 0.25, 0.05}, ramps={0.3, 0.4}})
+rb:reload("#857368", 0.5)
+rb:stroke({{fx - 7.8, fy - 48}, {fx - 8.6, fy - 42}, {fx - 9.2, fy - 34}}, {pressure={0.05, 0.25, 0.05}, ramps={0.3, 0.5}})
+-- the hem sunk in the snow: short strokes of the snow over the bottom edge, uneven
+local sn = brush{kind="round", width=1.6, point=0.4}
+for i = 1, 9 do
+  local x = fx - 13 + i*2.9 + randn(0, 0.5)
+  sn:reload(snowcol(x, fy + 3):hex(), 0.7)
+  sn:stroke({{x - 2.2, fy + 0.4 + randn(0, 0.5)}, {x + 2.2, fy - rand(0, 1.4)}}, {pressure={0.4, 0.6}, ramps={0.2, 0.3}})
+end
+
+--@ chunk 24 · clock 85342.18896484375
+wait(24*60); varnish(); cracks{}; relief()

@@ -77,7 +77,6 @@ fn main() {
     let hills_m = Mask::from_fn(f, |x, y| smoothstep(hills(x) - 0.7, hills(x) + 0.7, y) * (1.0 - smoothstep(HZ + 2.0, HZ + 4.0, y)));
     let bank_m = Mask::from_fn(f, |x, y| smoothstep(bank_top(x) - 0.7, bank_top(x) + 0.7, y) * (1.0 - smoothstep(water_edge(x) - 0.6, water_edge(x) + 0.6, y)));
     let water_m = Mask::from_fn(f, |x, y| smoothstep(water_edge(x) - 0.6, water_edge(x) + 0.6, y) * (1.0 - smoothstep(shore(x) + 4.0, shore(x) + 7.0, y)));
-    let shore_m = Mask::from_fn(f, |x, y| smoothstep(shore(x) - 0.8, shore(x) + 0.8, y));
 
     // the water: the sky mirrored about the hinge, seen at a slant (so the
     // low sky, stretched), darkening toward the viewer
@@ -187,6 +186,34 @@ fn main() {
         c.dry();
     }
 
+    // ------------------------------------------------------------ moon
+    if o.stage("moon", &mut c, &mut rng) {
+        let (mx, my) = MOON;
+        let mr = 8.0f32;
+        // a young moon, lit from below right where the sun is; half lost in
+        // the high streak of cloud
+        let crescent = Mask::from_shape(f, Shape::new().circle(mx, my, mr)).subtract(&Mask::from_shape(f, Shape::new().circle(mx - 3.4, my - 2.6, mr * 0.95)));
+        let paint = pal.mix(hex("#e6e0cb")).paint(0.4).with_hiding(0.75);
+        let mut b = Held::new(Tool::round_sable(1.2), 21);
+        let mut k = 0;
+        while k < 150 {
+            let a = rng.range(-0.8, 2.4);
+            let rr = mr * rng.range(0.55, 1.0);
+            let p = (mx + rr * a.cos(), my + rr * a.sin());
+            if crescent.sample(p.0, p.1) < 0.5 {
+                continue;
+            }
+            if k % 12 == 0 {
+                b.reload(paint, 0.4);
+            }
+            k += 1;
+            let t = (-a.sin(), a.cos());
+            c.drag(&mut b, &Gesture::new(vec![(p.0 - t.0 * 0.9, p.1 - t.1 * 0.9), (p.0 + t.0 * 0.9, p.1 + t.1 * 0.9)]).pressure(0.75, 0.6).ramps(0.1, 0.2), Some(&crescent));
+        }
+        c.dry();
+        c.dry();
+    }
+
     // ------------------------------------------------------------ clouds
     if o.stage("clouds", &mut c, &mut rng) {
         // three strands of evening cloud at different heights, none alike:
@@ -218,10 +245,15 @@ fn main() {
         let cc = move |x: f32, y: f32| {
             let s = sky_col(x, y);
             let low = smoothstep(200.0, 380.0, y);
-            mix(s, mix(hex("#6f6674"), hex("#8e7e7c"), low, Mix::Pigment), 0.2 + 0.08 * low, Mix::Pigment)
+            mix(s, mix(hex("#6f6674"), hex("#8e7e7c"), low, Mix::Pigment), 0.36 + 0.1 * low, Mix::Pigment)
         };
-        let cl = Stipple::new(Tool::stippler(1.7)).mixed(&spal, 0.5).color(cc).coverage(move |x, y| 0.8 * cov(x, y)).pressure(0.4, 0.8).drag(2.2, Some(0.0)).dips(20, 0.35, 0.6);
+        let cl = Stipple::new(Tool::stippler(1.7)).mixed(&spal, 0.5).color(cc).coverage(move |x, y| 1.0 * cov(x, y)).pressure(0.4, 0.8).drag(2.2, Some(0.0)).dips(20, 0.35, 0.6);
         c.stipple(&cloud_m, &cl, 15);
+        // fused level with the badger while open: the touches run together
+        // into streaks (the dry sky round them is not moved)
+        if let Some(b) = st.blend() {
+            c.work(&cloud_m.clone().dilate(4.0).blur(3.0), &b.angle(|_, _| 0.0).cross(0.02).length(60.0, 160.0).coverage(2.0).clip(false), 17);
+        }
         c.dry();
         // the lit lower lip of the long low strand: a few lean level touches
         let lip = pal.mix(hex("#e6cfa0")).paint(0.45).with_hiding(0.6);
@@ -236,41 +268,6 @@ fn main() {
             }
             x += len + rng.range(6.0, 40.0);
         }
-        c.dry();
-    }
-
-    // ------------------------------------------------------------ moon
-    if o.stage("moon", &mut c, &mut rng) {
-        let (mx, my) = MOON;
-        let mr = 8.0f32;
-        // a young moon, lit from below right where the sun is; half lost in
-        // the high streak of cloud
-        let crescent = Mask::from_shape(f, Shape::new().circle(mx, my, mr)).subtract(&Mask::from_shape(f, Shape::new().circle(mx - 3.4, my - 2.6, mr * 0.95)));
-        let paint = pal.mix(hex("#ece2c0")).paint(0.3).with_hiding(0.9);
-        let mut b = Held::new(Tool::round_sable(1.2), 21);
-        let mut k = 0;
-        while k < 150 {
-            let a = rng.range(-0.8, 2.4);
-            let rr = mr * rng.range(0.55, 1.0);
-            let p = (mx + rr * a.cos(), my + rr * a.sin());
-            if crescent.sample(p.0, p.1) < 0.5 {
-                continue;
-            }
-            if k % 12 == 0 {
-                b.reload(paint, 0.4);
-            }
-            k += 1;
-            let t = (-a.sin(), a.cos());
-            c.drag(&mut b, &Gesture::new(vec![(p.0 - t.0 * 0.9, p.1 - t.1 * 0.9), (p.0 + t.0 * 0.9, p.1 + t.1 * 0.9)]).pressure(0.75, 0.6).ramps(0.1, 0.2), Some(&crescent));
-        }
-        c.dry();
-        // veiled: the high cloud's tone scumbled lightly back over its lower horn
-        let veil = Mask::from_fn(f, move |x, y| {
-            let d = ((x - mx).powi(2) + (y - my).powi(2)).sqrt();
-            (1.0 - smoothstep(mr * 0.6, mr * 2.2, d)) * smoothstep(my - 2.0, my + 5.0, y)
-        });
-        let vs = Stipple::new(Tool::stippler(1.3)).mixed(pal, 0.6).color(move |x, y| mix(sky_col(x, y), hex("#7c7582"), 0.25, Mix::Pigment)).coverage(|_, _| 1.0).pressure(0.35, 0.7).drag(1.6, Some(0.0)).dips(20, 0.3, 0.6).aim(false);
-        c.stipple(&veil, &vs, 22);
         c.dry();
     }
 
@@ -419,6 +416,22 @@ fn main() {
             reflection(&mut c, pal, p, &water_col, &shore, &mut rng);
         }
         c.dry();
+        // faint level drags over the open water, a shade lighter or darker
+        // than what is there, matched by eye; kept off the trees' images
+        let mut lb = Held::new(Tool::round_sable(1.5), 62);
+        for _ in 0..90 {
+            let y = WL + 30.0 + (640.0 - WL - 30.0) * rng.f().powf(0.8);
+            let l = rng.range(30.0, 150.0) * (0.6 + 0.8 * smoothstep(WL, 650.0, y));
+            let x0 = rng.range(-60.0, 1000.0);
+            if x0 < 625.0 && x0 + l > 425.0 {
+                continue;
+            }
+            let seen = c.sample(x0 + l * 0.5, y);
+            let k = if rng.f() < 0.55 { rng.range(1.03, 1.06) } else { rng.range(0.93, 0.97) };
+            lb.reload(pal.mix([seen[0] * k, seen[1] * k, seen[2] * k]).paint(0.35).with_hiding(0.5), rng.range(0.2, 0.35));
+            let yy = y + rng.normal() * 0.3;
+            c.drag(&mut lb, &Gesture::new(vec![(x0, yy), (x0 + l * 0.5, yy + rng.normal() * 0.25), (x0 + l, yy + rng.normal() * 0.3)]).pressure(rng.range(0.3, 0.55), 0.15).ramps(0.3, 0.5), Some(&water_m));
+        }
         // wind lines: a few long pale level streaks across the dark, where
         // a breath of air roughens the surface and shows the sky
         let streak = |y: f32| pal.mix(mix(water_col(500.0, y), hex("#c9bfa9"), 0.35, Mix::Pigment)).paint(0.35).with_hiding(0.55);
@@ -488,7 +501,7 @@ fn main() {
         let mut x = rng.range(-5.0, 5.0);
         let mut n = 0;
         while x < 1005.0 {
-            let side = smoothstep(120.0, 470.0, (x - 500.0).abs());
+            let side = 0.2 + 0.8 * smoothstep(120.0, 470.0, (x - 500.0).abs());
             let y0 = shore(x) + rng.range(0.5, 6.0) + 18.0 * rng.f().powi(3);
             let blades = (2.0 + 7.0 * side * rng.f() + rng.f() * 3.0) as usize;
             let ht = (5.0 + 14.0 * side) * rng.range(0.5, 1.3) * (1.0 + 0.02 * (y0 - shore(x)));
@@ -509,6 +522,37 @@ fn main() {
                 }
             }
             x += rng.range(4.0, 22.0) * (1.4 - side);
+        }
+        // nearer tufts through the whole band, sparse, larger toward me, a
+        // shade lighter than the ground so they read in the dark
+        let near = [pal.mix(hex("#3b3829")).paint(0.25), pal.mix(hex("#322f24")).paint(0.25), pal.mix(hex("#46412e")).paint(0.25).with_hiding(0.85)];
+        let tn = Fbm::new(87, 2, 120.0);
+        let mut k = 0;
+        while k < 170 {
+            let x = rng.range(-10.0, 1010.0);
+            let y0 = rng.range(shore(x) + 8.0, h + 3.0);
+            // in drifts: some stretches bare
+            if tn.get01(x, y0 * 2.0) < 0.42 {
+                continue;
+            }
+            k += 1;
+            let d = smoothstep(shore(x), h, y0);
+            let blades = 3 + (rng.f() * 7.0) as usize;
+            let ht = (8.0 + 22.0 * d) * rng.range(0.6, 1.3);
+            let lean0 = rng.normal() * 0.2;
+            rig.tool = Tool::rigger(0.6 + 0.6 * d);
+            for _ in 0..blades {
+                let bx = x + rng.normal() * (2.0 + 3.0 * d);
+                let hh = ht * rng.range(0.35, 1.0);
+                let lean = lean0 + rng.normal() * 0.3;
+                rig.reload(near[(rng.f() * 3.0) as usize % 3], 0.75);
+                let pts = vec![(bx, y0), (bx + hh * lean * 0.3, y0 - hh * 0.5), (bx + hh * lean * 0.8, y0 - hh * 0.85), (bx + hh * lean, y0 - hh)];
+                c.drag(&mut rig, &Gesture::new(pts).pressure(rng.range(0.45, 0.8), 0.0).ramps(0.05, 0.7), None);
+                if rng.f() < 0.15 {
+                    rig.reload(dry_tip, 0.35);
+                    c.drag(&mut rig, &Gesture::new(vec![(bx + hh * lean * 0.5, y0 - hh * 0.6), (bx + hh * lean, y0 - hh)]).pressure(0.35, 0.0).ramps(0.1, 0.8), None);
+                }
+            }
         }
         c.dry();
     }
@@ -828,6 +872,26 @@ fn reflection(c: &mut paint::Canvas, pal: &Palette, p: &Poplar, water_col: &(imp
     // the image of height t lies as far below the mirror as the tree's
     // point is above it (the bank lifts the tree a little)
     let lift = mirror - p.foot;
+    // the trunk's image first: two or three downward pulls, each a little
+    // shifted by the ripples, the gaps where the water catches the sky
+    {
+        let tw = (p.hw * 0.14).max(1.6);
+        let mut tb = Held::new(Tool::round_sable(tw * 0.9), rng.next_u64());
+        let y_end = mirror + lift + p.ht * Poplar::CB + 2.0;
+        let wc = water_col(p.x, mirror + 10.0);
+        tb.reload(pal.mix(mix(hex("#262a27"), wc, 0.22, Mix::Pigment)).paint(0.28).with_hiding(0.9), 0.8);
+        let n = ((y_end - mirror) / 2.0) as usize + 2;
+        let pts: Vec<(f32, f32)> = (0..=n).map(|i| { let y = mirror + 0.3 + (y_end - mirror) * i as f32 / n as f32; (p.x + rip.get(0.0, y) * 1.4, y) }).collect();
+        c.drag(&mut tb, &Gesture::new(pts).pressure(0.8, 0.7).ramps(0.05, 0.1), None);
+        // the breaks: thin level touches of the water across it
+        let mut br = Held::new(Tool::round_sable(0.9), rng.next_u64());
+        for _ in 0..(2 + (rng.f() * 2.0) as usize) {
+            let y = rng.range(mirror + 4.0, y_end - 3.0);
+            br.reload(pal.mix(water_col(p.x, y)).paint(0.3).with_hiding(0.8), 0.4);
+            let hw = tw * rng.range(0.7, 1.1);
+            c.drag(&mut br, &Gesture::new(vec![(p.x - hw, y), (p.x + hw, y + rng.normal() * 0.2)]).pressure(0.5, 0.4).ramps(0.2, 0.3), None);
+        }
+    }
     loop {
         let t = (y - mirror - lift) / p.ht;
         if t > t1 || y > shore(p.x) + 2.0 {
@@ -835,9 +899,9 @@ fn reflection(c: &mut paint::Canvas, pal: &Palette, p: &Poplar, water_col: &(imp
         }
         let d = (y - mirror) / 200.0;
         let (lo, hi) = if t < Poplar::CB {
-            // the trunk
-            let tw = (p.hw * 0.14).max(1.6);
-            (p.axis(t.max(0.0)) - tw * 0.5, p.axis(t.max(0.0)) + tw * 0.5)
+            // the trunk is done
+            y += 1.0;
+            continue;
         } else {
             (p.axis(t) - p.half(t, -1.0), p.axis(t) + p.half(t, 1.0))
         };
@@ -882,7 +946,7 @@ fn reeds(c: &mut paint::Canvas, pal: &Palette, shore: &(impl Fn(f32) -> f32 + Sy
     let lean_n = Fbm::new(91, 2, 300.0);
     // clump centers: many at the corners, a few scattered, none on the axis
     let mut clumps: Vec<(f32, f32)> = Vec::new();
-    for _ in 0..34 {
+    for _ in 0..52 {
         let side = if rng.f() < 0.5 { -1.0 } else { 1.0 };
         let u = rng.f().powf(1.6);
         let x = 500.0 + side * (500.0 - 460.0 * u) + rng.normal() * 10.0;
@@ -937,27 +1001,6 @@ fn reeds(c: &mut paint::Canvas, pal: &Palette, shore: &(impl Fn(f32) -> f32 + Sy
                 rig.reload(straw[(rng.f() * 2.0) as usize % 2], 0.4);
                 let p2 = pts[2];
                 c.drag(&mut rig, &Gesture::new(vec![p2, (tipx, y - ht)]).pressure(0.35, 0.0).ramps(0.1, 0.8), None);
-            }
-        }
-        // a seed head (reed plume) on some tall clumps, against the water
-        if dens > 0.4 && rng.f() < 0.5 {
-            let ht = tallest * rng.range(0.9, 1.1);
-            let lean = 0.2 * lean_n.get(cx, 0.0);
-            let top = (cx + ht * lean, base_y - ht);
-            rig.tool = Tool::rigger(0.6);
-            rig.reload(dark[1], 0.8);
-            c.drag(&mut rig, &Gesture::new(vec![(cx, base_y), (cx + ht * lean * 0.4, base_y - ht * 0.5), top]).pressure(0.6, 0.2).ramps(0.05, 0.3), None);
-            // the plume nods to one side: fine hairs hung from the top,
-            // brownish, a couple catching the glow
-            let mut hb = Held::new(Tool::rigger(0.5), rng.next_u64());
-            let nod = if rng.f() < 0.5 { -1.0 } else { 1.0 } * rng.range(0.5, 1.0);
-            for j in 0..8 {
-                let wc = mix(water_col(top.0, top.1), hex("#3a3226"), 0.55, Mix::Pigment);
-                hb.reload(pal.mix(if j % 3 == 2 { wc } else { hex("#3a3226") }).paint(0.25), 0.4);
-                let l = rng.range(6.0, 12.0);
-                let s = rng.range(0.0, 3.0);
-                let o = (top.0 + nod * s * 0.6, top.1 + s);
-                c.drag(&mut hb, &Gesture::new(vec![o, (o.0 + nod * l * 0.5, o.1 + l * 0.25), (o.0 + nod * l * 0.8 + rng.normal(), o.1 + l * 0.8)]).pressure(0.6, 0.05).ramps(0.05, 0.7), None);
             }
         }
     }

@@ -99,6 +99,11 @@ pub struct Ran {
     pub field_secs: f64,
 }
 
+/// The tools that grow or compute a motif or a scene for the painter (trees,
+/// firs, rocks, meadows, solids, mountains, the world with its sky, light and
+/// aerial perspective), which `EASEL_WITHOUT=procedural` removes.
+pub const PROCEDURAL: &[&str] = &["tree", "tree_in", "tree_group", "fir", "fir_wood", "rock", "sward", "form", "terrain", "ridge", "world", "aerial", "haze"];
+
 impl Session {
     pub fn new(width: usize, undo_depth: usize) -> mlua::Result<Self> {
         if !hash_seed_fixed() {
@@ -125,6 +130,19 @@ impl Session {
         let prelude: (Function, Table) = lua.load(include_str!("prelude.lua")).set_name("prelude.lua").call((id, getmt))?;
         let st = Rc::new(RefCell::new(Studio::new(width)));
         api::install(&lua, st.clone())?;
+        // An experiment can take tools away from the painter (Round 7:
+        // painting without the procedural motif and scene generators):
+        // EASEL_WITHOUT="procedural" (the set below) or a comma list of
+        // globals. Replays are unaffected: a log painted without them never
+        // calls them.
+        if let Ok(w) = std::env::var("EASEL_WITHOUT") {
+            for k in w.split(',').map(str::trim).filter(|k| !k.is_empty()) {
+                let names: &[&str] = if k == "procedural" { PROCEDURAL } else { &[k] };
+                for &n in names {
+                    lua.globals().raw_set(n, Value::Nil)?;
+                }
+            }
+        }
         Ok(Session { lua: ManuallyDrop::new(lua), state, st, log: Vec::new(), snaps: BTreeMap::new(), undo_depth, keep: 0, spacing: 1, replay: false, heap: Some((snap_f, restore_f)), prelude: Some(prelude), _serials: serials, heap_secs: (0.0, 0.0) })
     }
 

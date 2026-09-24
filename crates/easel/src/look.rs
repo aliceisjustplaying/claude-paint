@@ -1173,6 +1173,35 @@ mod tests {
     }
 
     #[test]
+    fn the_wet_look_shows_open_setting_tacky_and_dry() {
+        let mut s = Session::new(W, 0).unwrap();
+        s.run(r##"canvas{style="friedrich", aspect=1.5, seed=2, hand=true}"##).unwrap();
+        // the left half laid yesterday, the right half just now; the top band stays bare
+        s.run(r##"work(rect(0, 200, 480, 460), {hand="broad", color="#e0d8c0"}); rest(20)
+                  work(rect(520, 200, 480, 460), {hand="broad", color="#e0d8c0"})"##).unwrap();
+        let c = s.canvas().unwrap().clone();
+        let f = c.window();
+        let at = |x: f32, y: f32| f.index(x, y);
+        let st = c.stages();
+        assert_eq!(st[at(760.0, 420.0)], paint::Stage::Open);
+        assert!(matches!(st[at(240.0, 420.0)], paint::Stage::Tacky | paint::Stage::Setting), "{:?}", st[at(240.0, 420.0)]);
+        assert_eq!(st[at(500.0, 60.0)], paint::Stage::Dry, "bare ground");
+        let px = stage_colors(&c, &c.seen());
+        let (open, old, bare) = (px[at(760.0, 420.0)], px[at(240.0, 420.0)], px[at(500.0, 60.0)]);
+        assert!(open[2] > 2.0 * open[0], "open is blue: {open:?}");
+        assert!(old[1].max(old[0]) > 1.5 * old[2], "setting green or tacky orange: {old:?}");
+        assert!((bare[0] - bare[2]).abs() < 1e-6 && bare[0] < 0.4, "dry is the picture dimmed to gray: {bare:?}");
+        // the look itself, with its legend, leaves the canvas alone
+        let before = bits(&c);
+        let v = View::parse(&["--mode".into(), "wet,squint".into()]).unwrap();
+        assert!(v.wet && v.squint);
+        let out = root().join("target/easel-look-test/wet.jpg");
+        assert_eq!(look(&c, (0.5, 0.1), &v, &[], &out).unwrap(), (1120, 749));
+        assert!(out.exists());
+        assert_eq!(before, bits(&c));
+    }
+
+    #[test]
     fn looks_draw_the_aids_without_touching_the_canvas() {
         let mut s = live(1);
         begin(&s.lua, "chunk 4");

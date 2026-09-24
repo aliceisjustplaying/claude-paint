@@ -190,6 +190,12 @@ pub(crate) struct Wet {
     pub(crate) top: Vec<f32>,
     pub(crate) tlat: Vec<Latent>,
     pub(crate) thide: Vec<Prop>,
+    /// While a stroke is being painted: an earlier surface film it has set
+    /// aside under its own paint (coats, part of `vol`; its pigment lives
+    /// with the stroke, at index `midx`). Settled, so 0, when the stroke
+    /// ends (`bristle::Surf::settle_mid`): never seen between strokes.
+    pub(crate) mid: Vec<f32>,
+    pub(crate) midx: Vec<u32>,
     /// Which stroke last laid paint here (a stroke barely re-picks its own paint).
     pub(crate) stroke: Vec<u32>,
     /// Stroke that last touched a pixel, and the film floor that stroke may
@@ -218,6 +224,8 @@ impl Wet {
             top: vec![0.0; n],
             tlat: vec![[0.0; LAT]; n],
             thide: vec![[0.0, 0.5, 1.0]; n],
+            mid: vec![0.0; n],
+            midx: vec![0; n],
             stroke: vec![0; n],
             touched: vec![0; n],
             floor: vec![0.0; n],

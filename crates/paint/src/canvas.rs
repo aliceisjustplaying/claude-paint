@@ -315,6 +315,15 @@ impl Canvas {
         &self.height
     }
 
+    /// Surface height in µm over the pixels `save` writes (a crop without its
+    /// margin), row by row, with that width and height: for diagnostics
+    /// that line the relief up with a saved PNG.
+    pub fn kept_surface_um(&self) -> (usize, usize, Vec<f32>) {
+        let (bw, (kx0, ky0, kx1, ky1)) = (self.f.w, self.keep);
+        let v = (ky0..ky1).flat_map(|y| (kx0..kx1).map(move |x| y * bw + x)).map(|i| self.height[i]).collect();
+        (kx1 - kx0, ky1 - ky0, v)
+    }
+
     /// Panics unless `m` was made for this canvas's (whole) frame.
     #[track_caller]
     pub(crate) fn check_mask(&self, m: &Mask) {

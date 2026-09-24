@@ -487,7 +487,9 @@ blend(skyM, {angle=0, coverage=1.2})          -- the steps softened, on the canv
 - The piles are chosen along the field's range over `over` (clusters of
   its distinct colors, so a small glow still gets its own pile), or given:
   `colors={"#47536c", "#8b8d9c", ...}` (the field then only says where
-  each goes).
+  each goes). Prefer naming the piles yourself: that is the painter
+  deciding the mixtures (notes/principles.md); letting `piles` pick them
+  from a formula is the formula in disguise.
 - They are mixed **when `piles` is called**, from `pal`'s tubes, each aimed
   at how it looks over what is on the canvas where it will go (so call it
   after the underpainting it covers), and each misses a little, as a pile

@@ -30,7 +30,6 @@
 //! the clock existed (the drying state isn't even allocated).
 
 use crate::canvas::Canvas;
-use crate::pigment::Pigment;
 use crate::surface::{COAT_UM, SET_TIME};
 use crate::{smoothstep, surface::vnoise};
 use rayon::prelude::*;
@@ -224,13 +223,14 @@ impl Canvas {
         if let Some((x0, y0, x1, y1)) = self.wet.dirty {
             let (x1, y1) = (x1.min(w), y1.min(self.f.h));
             let wet = &mut self.wet;
-            let (vol, hide) = (&wet.vol, &wet.hide);
+            let (vol, hide, top, thide) = (&wet.vol, &wet.hide, &wet.top, &wet.thide);
             wet.clock.px[y0 * w..y1 * w].par_chunks_mut(w).enumerate().for_each(|(j, row)| {
                 for x in x0..x1 {
                     let i = (y0 + j) * w + x;
                     if vol[i] >= 1e-5 {
                         let p = &mut row[x];
-                        p.cure += dt * rate(p.th, hide[i][1], hide[i][2]);
+                        let h = crate::wet::whole(vol[i], top[i], hide[i], thide[i]);
+                        p.cure += dt * rate(p.th, h[1], h[2]);
                     }
                 }
             });
@@ -339,7 +339,7 @@ impl Canvas {
             // `wait` would)
             let th = if self.wet.clock.px.is_empty() { self.film_thickness((x0, y0, x1, y1)) } else { Vec::new() };
             let bw = x1 - x0;
-            let (vol, hide, px) = (&self.wet.vol, &self.wet.hide, &self.wet.clock.px);
+            let (vol, px, wet) = (&self.wet.vol, &self.wet.clock.px, &self.wet);
             left = (y0..y1)
                 .into_par_iter()
                 .map(|y| {
@@ -348,7 +348,8 @@ impl Canvas {
                         let i = y * w + x;
                         if vol[i] >= 1e-5 {
                             let (c, t) = px.get(i).map_or((0.0, th.get((y - y0) * bw + x - x0).copied().unwrap_or(0.0)), |p| (p.cure, p.th));
-                            m = m.max((1.0 - c).max(0.0) / rate(t, hide[i][1], hide[i][2]));
+                            let h = wet.prop(i);
+                            m = m.max((1.0 - c).max(0.0) / rate(t, h[1], h[2]));
                         }
                     }
                     m
@@ -435,12 +436,13 @@ impl Canvas {
                 if v >= 1e-5 && (all || cp.get(i).is_some_and(|p| p.cure >= GEL)) {
                     let k = y * ew + x;
                     add[k] = v * COAT_UM;
-                    stiff[k] = self.wet.hide[i][1];
+                    let h = self.wet.prop(i);
+                    stiff[k] = h[1];
                     if let Some(p) = cp.get(i) {
                         sets[k] = p.lev;
                     }
                     if !all && let Some(p) = cp.get(i) {
-                        rates[k] = rate(p.th, self.wet.hide[i][1], self.wet.hide[i][2]);
+                        rates[k] = rate(p.th, h[1], h[2]);
                     }
                     any = true;
                 }
@@ -452,9 +454,11 @@ impl Canvas {
         if !any {
             if all {
                 for y in ex.1..ex.3 {
-                    for v in &mut self.wet.vol[y * w + ex.0..y * w + ex.2] {
+                    let r = y * w + ex.0..y * w + ex.2;
+                    for (v, t) in self.wet.vol[r.clone()].iter_mut().zip(&mut self.wet.top[r]) {
                         if *v < 1e-5 {
                             *v = 0.0;
+                            *t = 0.0;
                         }
                     }
                 }
@@ -489,15 +493,16 @@ impl Canvas {
             cv
         };
         let wet = &mut self.wet;
-        let (lat, hide) = (&wet.lat, &wet.hide);
+        let (lat, hide, tlat, thide) = (&wet.lat, &wet.hide, &wet.tlat, &wet.thide);
         let add = &add;
         self.px[ex.1 * w..ex.3 * w]
             .par_chunks_mut(w)
             .zip(wet.vol[ex.1 * w..ex.3 * w].par_chunks_mut(w))
             .zip(self.film[ex.1 * w..ex.3 * w].par_chunks_mut(w))
             .zip(wet.cover[ex.1 * w..ex.3 * w].par_chunks_mut(w))
+            .zip(wet.top[ex.1 * w..ex.3 * w].par_chunks_mut(w))
             .enumerate()
-            .for_each(|(j, (((px, vv), ff), cv))| {
+            .for_each(|(j, ((((px, vv), ff), cv), tv))| {
                 let y = ex.1 + j;
                 for x in ex.0..ex.2 {
                     let k = j * ew + x - ex.0;
@@ -505,6 +510,7 @@ impl Canvas {
                         if all {
                             vv[x] = 0.0;
                             cv[x] = 1.0;
+                            tv[x] = 0.0;
                         }
                         continue;
                     }
@@ -513,11 +519,12 @@ impl Canvas {
                     }
                     let ti = t[k] / COAT_UM;
                     let i = y * w + x;
-                    let c = mixbox::latent_to_linear_float_rgb(&lat[i]);
-                    px[x] = crate::wet::over_share(Pigment::masstone(c, hide[i][0]), px[x], ti, cover[k]);
+                    // (the body, then the surface film on it)
+                    px[x] = crate::wet::film_over(&lat[i], hide[i], &tlat[i], thide[i], vv[x], tv[x], px[x], ti, cover[k]);
                     ff[x] += ti;
                     vv[x] = 0.0;
                     cv[x] = 1.0;
+                    tv[x] = 0.0;
                 }
             });
         if wet.clock.px.is_empty() {

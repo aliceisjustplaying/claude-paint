@@ -3,8 +3,10 @@
 The owner called the bare oak from `tree_in{}` promising but "too
 computationally fractal", with "twigs floating in the air". This stream
 found why the twigs float, fixed it in the painting code, and made the
-crown more economical: a few big limbs, fewer twigs with character, and
-the rest of the fine twig mass indicated as a tone.
+crown more economical: a few big limbs and fewer twigs with character.
+A second pass (below, "Pass 2") dropped the twig tone after a critic
+panel rejected it, and made the oak's wood angular and tapering instead
+of rope-like.
 
 ## Why the twigs floated (measured)
 
@@ -92,22 +94,20 @@ Cause 1 was the big one.
 
 ```lua
 bare = tree_in{crown=C, trunk=T, species="oak", season="winter", sun=WORLD, seed=7}   -- detail 0.35
--- 1. the fine twig mass as a tone: a dry rigger dragged out along the twigs, thin and pale
-local tm, cx, cy = bare:twig_mass(), bare.fork[1], bare.fork[2]
-work(tm, {hand="body", tool="rigger 0.7", length={6, 14}, coverage=2, pressure={0.5, 0.2}, load=0.25,
-  medium=0.35, threshold=0.05, hug=false, clip=tm:map(function(v) return 0.3 * v end), angle_jitter=0.3,
-  angle=function(x, y) return math.atan(y - cy, x - cx) end,
-  color=function(x, y) return mix("#554e45", sky(x, y), 0.55) end})
--- 2. the wood thick to thin; the bands are local widths, so nothing is left out
+-- the wood thick to thin, each band with a brush that can lay its widths
 work(bare:wood(3.5), {hand="body", tool="round 2", coverage=3.5, angle=1.5, clip=bare:wood(3.5), color="#3b342c"})
 bare:paint_wood(brush("round", 2.4), {color="#3b342c", min=1.2, max=3.5})
-bare:paint_wood(brush("rigger", 0.55), {color="#554e45", max=1.2, pressure=0.04})
+bare:paint_wood(brush("rigger", 0.9), {color="#554e45", min=0.5, max=1.2, every=2})
+bare:paint_wood(brush("rigger", 0.55), {color="#554e45", max=0.5, pressure=0.04, every=2})
 ```
 
 `detail=1` draws every twig (connected now too); `detail=0` draws only the
-stout wood. A birch's tone hangs: `angle` about 1.45 instead of outward.
+stout wood. `angular=` (a species number) sets how angular the wood is.
+`t:wood_strokes{min=, max=, detail=}` returns the planned strokes.
+`t:twig_mass()` still exists, but a tone laid from it is not recommended
+(Pass 2).
 
-## Evidence (notes/oak/)
+## Evidence, pass 1 (notes/oak/1_* to 5_*)
 
 All the "before" images were rendered by the base commit's binary (built
 from `git archive 2c5a658`) with the trees_in.lua recipe. All the "after"
@@ -160,6 +160,114 @@ by local width. Its bare oak gets the default `detail` 0.35 (lines only,
 since its recipe has no tone), and the in-leaf trees get the thin runs of
 their stout limbs painted where they show through the gaps.
 
+## Pass 2: no tone; angular, tapering wood
+
+### The tone is out
+A blind panel of four critics (two Gemini, two gpt-6-astra), judging a
+lab study where the fine twigs were indicated as a tone, all preferred
+drawn twigs, strongly ("steel wool", "fur", "gray scribble cushions").
+The owner agreed: in `4_lime_beech_birch_before_after.jpg` the toned
+trees look heavier and smeared. The recipe (the easel guide, sketchbook
+§5, `bare_trees.lua`) is lines only now. `t:twig_mass()` stays in the
+API, documented as not recommended, with this evidence.
+
+### Why the limbs read as rope
+The owner saw curly vines: long smooth S-curves of nearly even width,
+with loops at the tips. I measured the strokes as the brush draws them
+(`notes/oak/shape.py`, on `t:wood_strokes{}` dumps). I found four causes.
+1. **The brush's spline.** `Canvas::drag` runs every stroke through
+   `densify` (`crates/paint/src/path.rs`), a Catmull-Rom spline through
+   the given points. Stroked through the limb's nodes, every elbow became
+   a smooth curve. Only 43% of the turning was near a node (within 0.12
+   of a model step).
+2. **A random walk in the growth.** Each step turns by a random `crook`
+   (0.45 for an oak), and a smoothing pass followed. So the limbs meander
+   at every step (about 33° per step), with no straight runs. Path over
+   chord was 1.45, and 89 strokes hooked back (net turning over three
+   steps beyond 120°).
+3. **Brushes that couldn't lay the widths.** A pointed brush lays from
+   about two hairs to a little over its size: `rigger 0.55` lays 0.21 to
+   0.71 (`b:mark_width`). `paint_wood` pressed it to at most its nominal
+   0.55, and the recipe used it for all wood under 1.2. So everything from
+   a twig to a small limb came out about one width. On a plain ground at
+   3200, wood 0.3–0.6 and 0.6–1.2 wide both painted 0.70 wide.
+4. **Long, wavy twigs.** An oak's twigs were 1.8 model steps long, and a
+   side twig's zigzag started toward its limb, so some ran alongside it
+   like a doubled line.
+
+The pipe model does thin the wood at forks: a limb's width drops to a
+median 0.71 of itself past a fork. The brushes hid it.
+
+### What changed
+- `Species::angular` (oak 1, lime 0.5, beech, birch and willow 0), with
+  `tree_in{angular=}` to override it. For an angular species:
+  - each run of nodes between forks is straightened with Douglas-Peucker
+    (tolerance `angular` × half a model step); the kept nodes are the
+    elbows;
+  - a shoot keeps a heading (a running mean of its direction) and no step
+    turns more than about 70° off it, so it can zigzag but not hook back
+    (a side shoot starts a new heading);
+  - `wood_strokes` subdivides each straight segment every 0.5 units, so the
+    brush's spline follows the straight runs and keeps the corners;
+  - a side twig stands at least 0.7 × `twig_spread` off its limb, and its
+    zigzag starts away from it.
+  The oak's `twig_len` is 1.1 (was 1.8): short, stiff twigs.
+- `paint_wood` presses a brush up to the widest mark it lays
+  (`mark_width(1)`), not its nominal size. The recipe splits the fine band
+  in two: `rigger 0.9` for 0.5–1.2, and `rigger 0.55` below 0.5 with a lift
+  to a point.
+- Test `an_oak_is_angular_a_beech_smooth`. It checks that 70% of an oak's
+  interior nodes barely turn, against 14% with `angular=0`; that the oak
+  has fewer hooks; that its strokes lie on its segments; that a beech keeps
+  its curves; and that twigs end thinner than they start.
+
+This changes the grown wood of oaks and limes in every season: the in-leaf
+oak of trees_in.lua grows a different crown of the same outline
+(`p2_5_oak_in_leaf_before_after.jpg`), with elbows showing in the gaps.
+Beeches, birches and willows grow as before; only their brush pressure
+changed. The benchmark logs don't use `tree_in` and still render
+**byte-identical** (`cmp` against the base binary, after this pass). The
+golden scene is unchanged.
+
+### Measured (the trees_in bare oak; pass-1 geometry reproduced with `angular=0, twig_len=1.8`)
+
+| limb strokes | before | after |
+|---|---|---|
+| path length / chord | 1.45 | 1.25 |
+| turning within 0.12 step of a node | 43% | 80% |
+| hooks (net turn over 3 steps > 120°) | 89 of 474 | 69 of 538 |
+| turning per model step | 0.57 rad | 0.54 rad |
+
+About 40 of the remaining hooks are the turn where a limb leaves its
+parent (the stroke starts half a segment back on the parent), which is a
+real fork angle. Lime: node share 47% → 87%, path/chord 1.31 → 1.24. Beech
+and birch: unchanged, by design (beech path/chord 1.21, its turning spread
+along the curves, 45% at nodes).
+
+Painted width on a plain ground at 3200 (median across the wood, binned by
+the model's width; the twig bin is too thin to measure this way):
+
+| model width | pass 1 | pass 2 |
+|---|---|---|
+| 0.3–0.6 | 0.70 | 1.00 |
+| 0.6–1.2 | 0.70 | 1.30 |
+| 1.2–2.4 | 1.95 | 2.15 |
+| 2.4–3.5 | (none measured) | 2.90 |
+
+### Evidence, pass 2 (before = pass 1 lines only, pass-1 binary)
+- `p2_1_whole_before_above_after_below.jpg`: the study at 1000 px.
+- `p2_2_oak_1000_before_after.jpg`: the oak at 1000. Before, it reads as
+  rope, all smooth S-curves. After, it's a crooked oak: elbows, limbs
+  thinning at each fork, short stiff twigs.
+- `p2_3_crown_edge_3200_before_after.jpg`: the crown edge at 3200. After,
+  straight runs change direction at nodes, twigs end in points, and no
+  loops at the tips.
+- `p2_4_lime_beech_birch_before_after.jpg`: the lime straighter, the beech
+  still smooth and rising (its fine wood a little stronger), the birch
+  with its hanging twigs as before.
+- `p2_5_oak_in_leaf_before_after.jpg`: the in-leaf oak of trees_in.lua,
+  which changes with the wood.
+
 ## The fir
 
 I looked at the ragged `old` fir at 3200. Its boughs do run from the stem
@@ -172,16 +280,16 @@ l5_near's spruce. I left it for a stream that can re-judge that painting.
 
 ## Known issues and next
 
-- At 1000 px the drawn twigs are sub-pixel and read as faint, broken
-  lines. The tone hides this; a `detail` that falls with the tree's size
-  on the canvas (fewer, stouter twigs on a small tree) would help.
-- The tone's rigger strokes can read as a crosshatch at 3200 if pressed
-  harder or with more jitter. At 0.4 of the mask it fogged the crown.
-  Blotchy alternatives failed: a scumble made one gray blob and a fan
-  brush made confetti.
-- `twig_mass` is scaled by its own 98th percentile, so a tree with few
-  twigs gets as strong a tone as a dense one. Scale by density per unit
-  area if that matters.
+- At 1000 px the drawn twigs are sub-pixel and read as faint lines. A
+  `detail` that falls with the tree's size on the canvas (fewer, stouter
+  twigs on a small tree) would help.
+- The crown is still a model's. Limbs cross each other more than a real
+  crown's do, and a few sibling limbs run side by side like doubled lines.
+  A space-colonization step that keeps siblings apart would help.
+- Some elbows are sharper than an oak's (a turn kept at one node can reach
+  about 90°). Rounding kept nodes over a hair's width would soften them
+  without bringing back the rope.
+- `twig_mass` is kept but not recommended.
 - Leaders as poles (beech, birch) and the in-leaf torn-paper holes are
   still open (notes/trees_in.md).
 - The fir's pads (above).

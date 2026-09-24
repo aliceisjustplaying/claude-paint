@@ -138,6 +138,9 @@ pub struct Handling<'a> {
     pub clump: f32,
     /// The order the area is worked in.
     pub order: Order,
+    /// `order` was asked for (`order()`, `sweep()`), not left at the
+    /// handling's default: hand time keeps it (see `run_plans`).
+    pub order_set: bool,
 }
 
 /// The order a painter works an area in.
@@ -195,6 +198,7 @@ impl<'a> Handling<'a> {
             swell: 0.15,
             clump: 0.3,
             order: Order::Passages,
+            order_set: false,
         }
     }
     /// Ruler strokes: straight, even, evenly spread, in random order (the
@@ -249,6 +253,7 @@ impl<'a> Handling<'a> {
     }
     pub fn order(mut self, order: Order) -> Self {
         self.order = order;
+        self.order_set = true;
         self
     }
     /// Work the area in one sweep in direction `angle` (see `Order::Sweep`).
@@ -840,8 +845,8 @@ impl Canvas {
         // a hand works down a passage, not in the checkerboard phases that
         // let tiles run in parallel: with the paint ageing as it goes, the
         // default order becomes a sweep down (an order asked for is kept)
-        let order = match (slice, hd.order) {
-            (Some(_), Order::Passages | Order::Scatter) => tile_order(Order::Sweep(std::f32::consts::FRAC_PI_2), (tw, th), (tile_x, tile_y), rng),
+        let order = match (slice, hd.order_set) {
+            (Some(_), false) => tile_order(Order::Sweep(std::f32::consts::FRAC_PI_2), (tw, th), (tile_x, tile_y), rng),
             _ => order,
         };
         let batches = crate::tally::batches(&order, &tile_secs, slice);

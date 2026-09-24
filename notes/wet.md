@@ -594,3 +594,71 @@ dry 7.7).
 
 Tests: the golden scene and the hand-time replay hashes are re-recorded
 (output changes on purpose).
+
+## 7. Review fix: paint conservation through a set-aside film
+
+A code review found that the surface film an earlier stroke left, set
+aside when a new stroke first lays paint on it (`Surf::lay`, pass 2), was
+treated as body paint until the stroke ended. Its volume stayed in `vol`
+with no pigment of its own, so:
+- stirring and `add_body` mixed against an inflated body;
+- pickup and the plough could carry it away with the *body's* pigment;
+- `settle_mid` then restored the saved film at its full volume, however
+  much of it had gone.
+
+Total volume could stay right while the pigment amounts drifted.
+
+**Fix** (`bristle.rs`, `wet.rs`). While a stroke runs, the set-aside film
+is an explicit layer: `Wet::mid` holds its remaining volume per pixel and
+`Wet::midx` points to its pigment and properties, kept with the stroke.
+- Body volume is `vol − top − mid` everywhere (`Surf::body`).
+- Pickup takes the surface film, then the set-aside film, then the body,
+  each with its own pigment.
+- The plough moves all three layers in proportion; the set-aside part
+  lands on the neighbor's surface.
+- Settlement uses what is left of the set-aside film and computes the body
+  before clearing it. My first version of the fix made that last mistake
+  itself, and the new test caught it.
+
+`mid` is always 0 between strokes, so checkpoints don't store it.
+
+**Test** (`bristle::conservation::a_third_stroke_over_two_wet_colors_conserves_paint`).
+Every moment is summed over the canvas's wet paint and every bristle's
+reservoir and tip, before and after each stroke, touch and clean-brush
+pass: the volume, and the volume times each latent pigment component,
+scattering, stiffness and drying rate. Each must hold within 2e-4 of its
+own total; f32 mixing rounds at about 1e-6 a step.
+
+The scene:
+- a dark field;
+- a light field over half of it;
+- a third pigment dragged back and forth across both, loaded and lean;
+- a clean hog through it after each stroke;
+- a touch into it after each stroke.
+
+The test counts the pickups and plough moves that take set-aside paint
+(more than 100 of each) and checks that every set-aside film is settled
+when its stroke ends. On the reviewed code it fails at the first light
+stroke over the wet dark: pigment 0 is off by 2.6e-3 of its total.
+
+**Effect on pictures** (3200 px crops of the panel's windows, pass 3
+against the fix; mean difference out of 255):
+
+| crop | mean | max |
+|---|---|---|
+| rock_B | 1.6 | 131 |
+| foliage_C | 0.7 | 157 |
+| l5_near | 1.0 | 182 |
+| l5_near, whole at 1000 px | 0.4 | 138 |
+
+None of these is visible at viewing size: the rock's terminator, the
+lights and the wood are as they were. Stacked pass 3 / fix:
+`notes/wet/reviewfix_rock_B.jpg`, `reviewfix_foliage_C.jpg` and
+`reviewfix_l5_near.jpg`. The golden scene and the hand-time replay hashes
+(both profiles) are re-recorded because the fix changes output.
+
+**Checkpoint format.** Main still writes `PAINTCK6`; the r6-time
+checkpoint fix, which takes `PAINTCK7`, hadn't landed when this was
+written. This branch uses `PAINTCK7` for the surface film. When both
+merge, the surface film should become `PAINTCK8` (a one-line `MAGIC`
+bump plus the doc line in `checkpoint.rs`).

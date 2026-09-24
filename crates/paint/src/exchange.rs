@@ -4,7 +4,7 @@
 //! pixel by pixel along its track (`exchange`, through the stroke's
 //! `film::Stroke`).
 
-use crate::bristle::{Bristle, Tool};
+use crate::bristle::{Bristle, Kind, Tool};
 use crate::film::{Stroke, WET_FILM, grow};
 use crate::smoothstep;
 use crate::wet::{LAT, Prop, mix_into};
@@ -33,6 +33,9 @@ const PLOUGH_KEEP: f32 = 0.6;
 /// stress); more fluid paint mostly flows back (a glaze at medium 0.85 is
 /// about 0.02 stiff, a thin sky at medium 0.3 about 0.35, tube paint 1).
 const PLOUGH_STIFF: f32 = 0.6;
+
+/// Most pixels a soft blender's ploughed paint is spread over (`exchange`).
+const SPREAD: usize = 8;
 
 /// How a bristle meets the canvas: moving along a stroke, laying a share
 /// of its load per distance, or pressed down in a touch, laying about
@@ -179,7 +182,7 @@ pub(crate) unsafe fn exchange(st: &mut Stroke, br: &mut Bristle, tool: &Tool, a:
             // window about as spent as in a whole render), lifting none
             let travel = (seg / s).max(rb / s * 0.5);
             br.vol = match mode {
-                Mode::Drag => br.vol * (1.0 - (1.0 - (-travel / tool.run).exp()) * GHOST_TOUCH),
+                Mode::Drag => br.vol * (1.0 - (1.0 - (-travel / tool.run).exp()) * GHOST_TOUCH * st.crowd),
                 Mode::Touch { dep } => (br.vol - dep.min(br.vol * 0.5) * GHOST_TOUCH).max(0.0),
             };
             br.tip.v = br.tip.v.min(br.vol);
@@ -270,6 +273,7 @@ pub(crate) unsafe fn exchange(st: &mut Stroke, br: &mut Bristle, tool: &Tool, a:
         } else {
             dep_total
         };
+        let dep_total = dep_total * st.crowd;
         // a capsule cut by the window edge lays only the window's share there
         let share = if windowed { sum_cov / capsule_cover(a, b, rb, fine, (cx0, cy0, cx1, cy1)).max(1e-6) } else { 1.0 };
         let dep_per_w = dep_total * share.min(1.0) / sum_w / px_area;
@@ -277,6 +281,7 @@ pub(crate) unsafe fn exchange(st: &mut Stroke, br: &mut Bristle, tool: &Tool, a:
         // a pointed tool (shared bilinearly, below) a hair's width away, the
         // same distance at any resolution
         let off = if fine { 2.0 * rb } else { rb + 1.0 };
+        let soft = tool.kind == Kind::Blender && mode == Mode::Drag && !fine;
 
         let mut got_v = 0.0f32;
         let mut got_l = [0.0f32; LAT];
@@ -364,13 +369,26 @@ pub(crate) unsafe fn exchange(st: &mut Stroke, br: &mut Bristle, tool: &Tool, a:
                         // bilinearly by the four pixels around it (a hair
                         // finer than a pixel would otherwise leave a ridge
                         // of dots along its track where rounding lands it)
-                        let mut to = [(0.0f32, 0.0f32, 0.0f32); 4];
+                        let mut to = [(0.0f32, 0.0f32, 0.0f32); SPREAD];
                         let n_to = if fine {
                             let (gx, gy) = (tx - 0.5, ty - 0.5);
                             let (fx, fy) = (gx - gx.floor(), gy - gy.floor());
                             let (bx, by) = (gx.floor() + 0.5, gy.floor() + 0.5);
-                            to = [(bx, by, (1.0 - fx) * (1.0 - fy)), (bx + 1.0, by, fx * (1.0 - fy)), (bx, by + 1.0, (1.0 - fx) * fy), (bx + 1.0, by + 1.0, fx * fy)];
+                            to[..4].copy_from_slice(&[(bx, by, (1.0 - fx) * (1.0 - fy)), (bx + 1.0, by, fx * (1.0 - fy)), (bx, by + 1.0, (1.0 - fx) * fy), (bx + 1.0, by + 1.0, fx * fy)]);
                             4
+                        } else if soft {
+                            // a soft blender's splayed hair has no bow
+                            // wave: what it parts lies all along its flank,
+                            // out to where the paint would be pushed, so a
+                            // line it runs along smears into a band instead
+                            // of jumping a whole step aside as a line of its
+                            // own (notes/glitch.md T)
+                            let n = (off.ceil() as usize).clamp(1, SPREAD);
+                            for (k, t) in to.iter_mut().take(n).enumerate() {
+                                let f = (k + 1) as f32 / n as f32;
+                                *t = (px + (tx - px) * f, py + (ty - py) * f, 1.0 / n as f32);
+                            }
+                            n
                         } else {
                             to[0] = (tx, ty, 1.0);
                             1
@@ -541,6 +559,60 @@ mod tests {
     use crate::color::hex;
     use crate::wet::Layer;
 
+    /// A soft blender run along a thin line laid into wet paint widens and
+    /// softens it; it doesn't split it into two pale lines with a darker
+    /// trough ("tramlines", notes/glitch.md T: water B's waterline sheen).
+    /// A badger's modeled hair is a clump a few pixels wide at 3200 px; each
+    /// push set the paint it moved down on one spot a whole step aside, and
+    /// a second push carried it on, as a line of its own.
+    #[test]
+    fn a_blender_along_a_wet_line_does_not_split_it() {
+        use crate::bristle::Gesture;
+        use crate::canvas::Crop;
+        use crate::color::to_oklab;
+        use crate::mask::Mask;
+        use crate::wet::Paint;
+        let st = crate::style::Style::friedrich();
+        let mut c = Canvas::new_window(3200, 1.5, hex("#b07a5a"), Some(Crop { units: [100.0, 120.0, 400.0, 200.0], margin: 0.0 }));
+        let f = c.frame();
+        // a thick open dark, then a light line laid into it
+        let dark = Paint::new(hex("#2c3330"), 0.8, 0.3);
+        let mut h = Held::new(Tool::filbert(30.0), 1);
+        for y in (120..=200).step_by(8) {
+            h.reload(dark, 1.0);
+            c.drag(&mut h, &Gesture::new(vec![(60.0, y as f32), (440.0, y as f32)]).pressure(0.9, 0.9), None);
+        }
+        let mut r = Held::new(Tool::round_sable(3.0), 2);
+        r.reload(Paint::body(hex("#c9c7bc")), 0.7);
+        c.drag(&mut r, &Gesture::new(vec![(80.0, 160.0), (420.0, 160.0)]).pressure(0.5, 0.5).ramps(0.25, 0.35), None);
+        // the style's blend, level, over a thin band along it (from a little
+        // above the line to a few units below), clipped to the band
+        let band = Mask::from_fn(f, |_, y| {
+            let d = y - 157.6;
+            crate::smoothstep(0.5, 1.5, d) * (1.0 - crate::smoothstep(4.0, 6.0, d))
+        });
+        c.work(&band, &st.blend().unwrap().angle(|_, _| 0.0).coverage(1.5).length(20.0, 60.0), 9);
+        c.dry();
+        // lightness across the line (averaged along it), and its peaks
+        let (seen, wf) = (c.pixels(), c.window());
+        let prof: Vec<f32> = (0..(12.0 * f.scale) as usize)
+            .map(|k| {
+                let y = 157.0 + k as f32 / f.scale;
+                (0..60).map(|j| to_oklab(seen[wf.index(200.0 + 2.0 * j as f32, y)])[0]).sum::<f32>() / 60.0
+            })
+            .collect();
+        let base = prof[prof.len() - 1];
+        let top = prof.iter().cloned().fold(f32::MIN, f32::max);
+        let peaks: Vec<usize> = (1..prof.len() - 1).filter(|&k| prof[k] > prof[k - 1] && prof[k] >= prof[k + 1] && prof[k] - base > 0.3 * (top - base)).collect();
+        // (a trough between two peaks deeper than a tenth of the line's
+        // lift; before the fix a second line 5 px below the first, the
+        // trough 16% of the lift)
+        let split = peaks.windows(2).any(|p| {
+            let low = prof[p[0]..=p[1]].iter().cloned().fold(f32::MAX, f32::min);
+            prof[p[0]].min(prof[p[1]]) - low > 0.1 * (top - base)
+        });
+        assert!(!split, "the blended line splits into pale lines at {peaks:?}: {prof:.3?}");
+    }
     /// The plough's stiffness gate reads the whole column it pushes: paint
     /// set aside under the stroke counts with its own stiffness (review B3,
     /// Astra's reproduction). Ten coats whose volume-weighted stiffness is

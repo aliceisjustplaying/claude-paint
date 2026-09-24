@@ -684,6 +684,28 @@ fn lift_off(tool: &Tool, g: &Gesture, u: f32) -> (f32, f32, f32) {
     (lift, roll, taper)
 }
 
+/// The share of its paint each hair of a lifting brush lays: how wide the
+/// touching hairs' roots span across the travel as the brush lifts (held
+/// at angle `now.1`, `half` wide), against as it was held (`now.0`, `was`
+/// wide), each span with a hair's track (`rb`) on either side. 1 where the
+/// brush hasn't narrowed.
+fn crowd(held: &Held, contact: &[Option<((f32, f32), f32)>], now: (f32, f32), was: f32, half: f32, dir: (f32, f32), rb: f32) -> f32 {
+    let span = |theta: f32, half: f32| {
+        let (st, ct) = theta.sin_cos();
+        let (mut lo, mut hi) = (f32::MAX, f32::MIN);
+        for (b, c) in held.bristles.iter().zip(contact) {
+            if c.is_some() {
+                let (ox, oy) = (b.rx * half, b.ry * half);
+                let q = -(ox * ct - oy * st) * dir.1 + (ox * st + oy * ct) * dir.0;
+                lo = lo.min(q);
+                hi = hi.max(q);
+            }
+        }
+        if hi < lo { 0.0 } else { hi - lo }
+    };
+    ((span(now.1, half) + 2.0 * rb) / (span(now.0, was) + 2.0 * rb)).clamp(0.0, 1.0)
+}
+
 /// Bristle roots never sit farther than this (in half-widths) from the axis.
 const ROOT_MAX: f32 = 1.2;
 /// Longest bristle relative to the tool's length.
@@ -830,6 +852,7 @@ unsafe fn drag_stroke(sf: Surf, held: &mut Held, g: &Gesture, clip: Option<&Mask
             Orient::Along => dir.1.atan2(dir.0),
             Orient::Fixed(a) => a,
         };
+        let held_at = theta;
         let theta = if lift * roll > 0.0 {
             // turn toward the travel by the shortest way (the axis is a line)
             let along = dir.1.atan2(dir.0);
@@ -866,6 +889,11 @@ unsafe fn drag_stroke(sf: Surf, held: &mut Held, g: &Gesture, clip: Option<&Mask
             // one contact point: the belly-to-tip region of the bent bristle
             contact[bi] = Some(((root.0 + b.bend.0 * 0.6, root.1 + b.bend.1 * 0.6), reach));
         }
+        // a lifting brush narrows across its track (a flat rolled onto its
+        // edge, a round drawn to its point): its hairs follow one another
+        // and those behind ride on the paint the ones ahead just laid, so
+        // each lays the share of its load the narrowed track can take
+        stroke.crowd = if lift * (roll + taper) > 0.0 { crowd(held, &contact, (held_at, theta), half / (1.0 - taper * lift), half, dir, rb) } else { 1.0 };
         // the track each hair of a pointed tuft lays (see `exchange`): the
         // touching hairs lie over and beside each other, so each covers its
         // own share of the contact's width, from halfway to its neighbor on
@@ -1320,6 +1348,32 @@ mod tip_tests {
         let tip: f32 = r.bristles.iter().map(|b| b.tip.v).sum();
         let load: f32 = r.bristles.iter().map(|b| b.vol).sum();
         assert!(tip > 1e-3 * load, "a round's tip is dirty after a stroke through wet paint: {tip} of {load}");
+    }
+
+    /// A flat lifting off rolls onto its chisel edge: its hairs follow one
+    /// another along one narrow track, and the hairs behind ride on the
+    /// paint the ones ahead laid. The stroke's end is no thicker than its
+    /// body (review W1, notes/glitch.md: the ends of a brushed ground's
+    /// strokes heaped to 5-7x its film, and a thin sky over it drained off
+    /// their rims to the bare ground).
+    #[test]
+    fn a_lifting_flat_does_not_heap_its_stroke_end() {
+        for (tool, what) in [(Tool::hog_flat(20.0), "flat"), (Tool::filbert(20.0), "filbert"), (Tool { point: 0.0, ..Tool::round_sable(12.0) }, "blunt round")] {
+            let mut c = Canvas::new(1000, 1.0, hex(BG));
+            let mut h = Held::new(tool, 4);
+            h.reload(Paint::body(hex(INK)), 1.0);
+            c.drag(&mut h, &Gesture::new(vec![(200.0, 500.0), (700.0, 500.0)]).pressure(0.9, 0.9).ramps(0.1, 0.35).orient(Orient::Across), None);
+            let f = c.frame();
+            let at = |x0: f32, x1: f32| {
+                let mut v: Vec<f32> = (0..f.w * f.h).filter(|&i| (x0..x1).contains(&f.ux(i % f.w)) && c.wet.vol[i] > 0.0).map(|i| c.wet.vol[i]).collect();
+                v.sort_by(|a, b| a.total_cmp(b));
+                v
+            };
+            let body = at(260.0, 420.0);
+            let end = at(560.0, 720.0);
+            let (typ, peak) = (body[body.len() / 2], end[end.len() - 1]);
+            assert!(peak < 2.5 * typ, "{what}: the lift-off's end peaks at {peak:.2} coats, the stroke's body {typ:.2}");
+        }
     }
 
     #[test]

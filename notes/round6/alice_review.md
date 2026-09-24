@@ -24,3 +24,26 @@ it is the right direction; a painting that looks digital is the wrong one.
 - **Across sky and water: the orange/peach strokes aren't blended; they
   read as harsh strokes.** The "unclipped lights" wet-paint crop: "there
   might be something there."
+
+## Lab round 2 (`notes/lab2/`, blind sheets; decoded afterwards)
+Her yardstick again: "we are slowly moving from looks digital, looks still
+kind of Pixar, to bad painter, which is great. I love that."
+- **Rock: P (hierarchical H).** P's 3200 crop "looks actually pretty good";
+  zoomed out, "more like bad painter, which again, good". Q (round 1's B)
+  has dots on the lit part that look like a digital anomaly. The shadow is
+  "probably still very wrong".
+- **Lime: P (the OLD recipe A).** "Q [hierarchical] is really bad." "We
+  have a lot of work to do in the 3D department." P zoomed in has the same
+  dots she saw on the rock.
+- **Oak in leaf: split.** The tree is better in P (hierarchical), but
+  everything else is better in Q (old recipe): the foreground, the shadow,
+  even the sky somewhat. The sky still has "JPEG artifact vibes".
+- **Bare: B (C2, round 1's C on the new angular oak).** "Still unnatural,
+  but slightly less so. Like improvement."
+- **Bare row: B (LINES ONLY), "absolutely B"** over the distant haze. "A
+  lot more work to do with B." So "select near, veil far" is out: lines at
+  every distance.
+- **The JPEG question:** checked (`notes/round6/jpeg_check/`): a lossless
+  PNG crop of sky A and the quality-80 JPEG of the same window look the
+  same; the crunchy mottle is in the paint (the stipple over the weave),
+  not in the compression. PNGs are there for her to verify.

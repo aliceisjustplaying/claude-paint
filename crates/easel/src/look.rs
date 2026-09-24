@@ -22,6 +22,9 @@ pub struct View {
     pub value: bool,
     pub squint: bool,
     pub mirror: bool,
+    /// Where the paint is in drying: open, setting, tacky and dry in false
+    /// color over the picture, dimmed to gray.
+    pub wet: bool,
     /// Show wet paint as it will look once it has leveled and dried.
     pub dried: bool,
     /// Also light the surface relief (implies `dried`).
@@ -43,11 +46,11 @@ pub struct View {
 
 impl Default for View {
     fn default() -> Self {
-        View { crop: None, value: false, squint: false, mirror: false, dried: false, relief: None, size: None, grid: None, probes: Vec::new(), show: None, scale: None, wait: 90.0 }
+        View { crop: None, value: false, squint: false, mirror: false, wet: false, dried: false, relief: None, size: None, grid: None, probes: Vec::new(), show: None, scale: None, wait: 90.0 }
     }
 }
 
-const LOOK_ARGS: &str = "--crop x0,y0,x1,y1 --scale 3.2 --grid [step] --probe x,y[;x,y] --show [on|off|clear] --mode value|squint|mirror --dried --relief --size N --wait S";
+const LOOK_ARGS: &str = "--crop x0,y0,x1,y1 --scale 3.2 --grid [step] --probe x,y[;x,y] --show [on|off|clear] --mode value|squint|mirror|wet --dried --relief --size N --wait S";
 
 fn is_num(s: Option<&String>) -> bool {
     s.is_some_and(|s| s.parse::<f32>().is_ok())
@@ -80,7 +83,8 @@ impl View {
                             "value" | "gray" => v.value = true,
                             "squint" | "blur" => v.squint = true,
                             "mirror" => v.mirror = true,
-                            o => return Err(format!("--mode {o}: normal, value, squint, mirror (comma-separated)")),
+                            "wet" | "drying" | "stages" => v.wet = true,
+                            o => return Err(format!("--mode {o}: normal, value, squint, mirror, wet (comma-separated)")),
                         }
                     }
                 }
@@ -912,6 +916,7 @@ pub fn look(c: &Canvas, relief_default: (f32, f32), v: &View, marks: &[Mark], ou
     } else {
         c.seen()
     };
+    let px = if v.wet { stage_colors(c, &px) } else { px };
     // crop: units -> whole-canvas pixels -> pixels of the held window
     let (wx0, wy0, wx1, wy1) = (f.x0, f.y0, f.x0 + f.w, f.y0 + f.h);
     let (x0, y0, x1, y1) = match v.crop {
@@ -965,7 +970,7 @@ pub fn look(c: &Canvas, relief_default: (f32, f32), v: &View, marks: &[Mark], ou
         // half-closed eyes: detail goes, the big shapes and values stay
         img = blur(&img, ow, oh, (ow.max(oh) as f32 * 0.012).max(2.0));
     }
-    if v.value {
+    if v.value && !v.wet {
         for p in img.iter_mut() {
             let l = luminance(*p);
             *p = [l; 3];
@@ -986,6 +991,13 @@ pub fn look(c: &Canvas, relief_default: (f32, f32), v: &View, marks: &[Mark], ou
     for mk in marks {
         draw_mark(&mut im, &map, mk, fs);
     }
+    if v.wet {
+        // the legend, top left
+        let (mut x, y) = (4 * fs, 4 * fs);
+        for (i, name) in ["OPEN", "SETTING", "TACKY", "DRY"].iter().enumerate() {
+            x += im.text(x, y, name, fs, STAGE_LEGEND[i]) + 2 * fs;
+        }
+    }
     for (i, &(x, y)) in v.probes.iter().enumerate() {
         draw_mark(&mut im, &map, &Mark { kind: Kind::Cross(x, y), color: [1.0, 0.8, 0.0], label: Some((i + 1).to_string()) }, fs);
     }
@@ -997,6 +1009,32 @@ pub fn look(c: &Canvas, relief_default: (f32, f32), v: &View, marks: &[Mark], ou
     let mut enc = image::codecs::jpeg::JpegEncoder::new_with_quality(std::io::BufWriter::new(file), 88);
     enc.encode(&buf, ow as u32, oh as u32, image::ExtendedColorType::Rgb8).map_err(|e| e.to_string())?;
     Ok((ow, oh))
+}
+
+/// False colors for the drying stages (linear RGB): open, setting, tacky,
+/// and dry (none: the dimmed picture shows through).
+const STAGE_TINT: [Option<Rgb>; 4] = [Some([0.02, 0.22, 1.0]), Some([0.05, 0.75, 0.12]), Some([1.0, 0.36, 0.0]), None];
+const STAGE_LEGEND: [Rgb; 4] = [[0.25, 0.5, 1.0], [0.2, 0.9, 0.25], [1.0, 0.5, 0.1], [0.55, 0.55, 0.55]];
+
+/// The picture dimmed to gray, with each pixel tinted by where its paint
+/// is in drying (`--mode wet`).
+fn stage_colors(c: &Canvas, px: &[Rgb]) -> Vec<Rgb> {
+    let st = c.stages();
+    px.iter()
+        .zip(st)
+        .map(|(p, s)| {
+            // dimmed gray keeps the picture's values; the tint is scaled by
+            // them too, so forms still read through the color
+            let g = 0.015 + 0.4 * luminance(*p);
+            match STAGE_TINT[s as usize] {
+                Some(t) => {
+                    let k = 0.25 + 1.6 * g;
+                    [g + (t[0] * k - g) * 0.5, g + (t[1] * k - g) * 0.5, g + (t[2] * k - g) * 0.5]
+                }
+                None => [g; 3],
+            }
+        })
+        .collect()
 }
 
 /// Three box blurs ≈ a Gaussian of sd `r`.
@@ -1132,6 +1170,35 @@ mod tests {
         let e = try_chunk(&mut s, "u = 2; error('stop')").unwrap_err();
         assert!(e.contains("stop"));
         s.run("assert(u == nil)").unwrap();
+    }
+
+    #[test]
+    fn the_wet_look_shows_open_setting_tacky_and_dry() {
+        let mut s = Session::new(W, 0).unwrap();
+        s.run(r##"canvas{style="friedrich", aspect=1.5, seed=2, hand=true}"##).unwrap();
+        // the left half laid yesterday, the right half just now; the top band stays bare
+        s.run(r##"work(rect(0, 200, 480, 460), {hand="broad", color="#e0d8c0"}); rest(20)
+                  work(rect(520, 200, 480, 460), {hand="broad", color="#e0d8c0"})"##).unwrap();
+        let c = s.canvas().unwrap().clone();
+        let f = c.window();
+        let at = |x: f32, y: f32| f.index(x, y);
+        let st = c.stages();
+        assert_eq!(st[at(760.0, 420.0)], paint::Stage::Open);
+        assert!(matches!(st[at(240.0, 420.0)], paint::Stage::Tacky | paint::Stage::Setting), "{:?}", st[at(240.0, 420.0)]);
+        assert_eq!(st[at(500.0, 60.0)], paint::Stage::Dry, "bare ground");
+        let px = stage_colors(&c, &c.seen());
+        let (open, old, bare) = (px[at(760.0, 420.0)], px[at(240.0, 420.0)], px[at(500.0, 60.0)]);
+        assert!(open[2] > 2.0 * open[0], "open is blue: {open:?}");
+        assert!(old[1].max(old[0]) > 1.5 * old[2], "setting green or tacky orange: {old:?}");
+        assert!((bare[0] - bare[2]).abs() < 1e-6 && bare[0] < 0.4, "dry is the picture dimmed to gray: {bare:?}");
+        // the look itself, with its legend, leaves the canvas alone
+        let before = bits(&c);
+        let v = View::parse(&["--mode".into(), "wet,squint".into()]).unwrap();
+        assert!(v.wet && v.squint);
+        let out = root().join("target/easel-look-test/wet.jpg");
+        assert_eq!(look(&c, (0.5, 0.1), &v, &[], &out).unwrap(), (1120, 749));
+        assert!(out.exists());
+        assert_eq!(before, bits(&c));
     }
 
     #[test]

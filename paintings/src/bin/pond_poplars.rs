@@ -153,7 +153,7 @@ fn main() {
         c.work(&whole, &st.glaze(0.88).color(|_, _| hex("#5e4430")).angle(|_, _| 0.0).load_at(depth), 101);
         c.dry();
         // the trees' dark in the same brown, a brush along their growth
-        let tree_under = st.body().color(|_, _| hex("#3d2d22")).angle(|_, _| -FRAC_PI_2).angle_jitter(0.2).length(10.0, 30.0).coverage(2.0).medium(0.55).load(0.5).clip(true);
+        let tree_under = st.body().color(|_, _| hex("#261e19")).angle(|_, _| -FRAC_PI_2).angle_jitter(0.2).length(10.0, 30.0).coverage(2.0).medium(0.55).load(0.5).clip(true);
         c.work(&trees_m.clone().erode(7.0), &tree_under, 102);
         c.dry();
     }
@@ -314,21 +314,38 @@ fn main() {
             let t = smoothstep(bank_top(x), WL, y);
             mix(hex("#4a4a42"), hex("#34352f"), t, Mix::Pigment)
         };
-        // its top first: level pulls of a small round along the line, the
-        // way the eye reads it against the glow; then the body hatched in
-        // below it, down under where the reflection will start
-        let mut tb = Held::new(Tool::round_sable(1.7), 40);
-        let mut x = rng.range(-20.0, -2.0);
-        while x < 1005.0 {
-            let l = rng.range(30.0, 80.0);
-            tb.reload(pal.mix(bc(x, HZ + 1.0)).paint(0.25), rng.range(0.5, 0.7));
-            let pts: Vec<(f32, f32)> = (0..=8).map(|i| { let xx = x + l * i as f32 / 8.0; (xx, bank_top(xx) + 0.9 + rng.normal() * 0.12) }).collect();
-            c.drag(&mut tb, &Gesture::new(pts).pressure(rng.range(0.6, 0.85), 0.5).ramps(0.1, 0.2).shake(0.3), None);
-            x += l * rng.range(0.8, 0.97);
-        }
-        let bank_body = Mask::from_fn(f, move |x, y| smoothstep(bank_top(x) + 1.0, bank_top(x) + 2.2, y) * (1.0 - smoothstep(water_edge(x) + 2.0, water_edge(x) + 3.0, y)));
+        // the body first, laid inside the line in level strokes, down under
+        // where the reflection will start
+        let bank_body = Mask::from_fn(f, move |x, y| smoothstep(bank_top(x) + 3.5, bank_top(x) + 4.5, y) * (1.0 - smoothstep(water_edge(x) + 2.0, water_edge(x) + 3.0, y)));
         let hd = st.body().color(bc).angle(|_, _| 0.0).angle_jitter(0.08).length(18.0, 55.0).coverage(3.6).medium(0.22);
         c.work(&bank_body, &hd, 41);
+        c.wait(60.0);
+        // the sky cut back down over wherever a stroke end stood up past the
+        // line, in the sky's tone matched by eye just above
+        let mut cb = Held::new(Tool::round_sable(2.2), 39);
+        let mut x = rng.range(-20.0, -2.0);
+        while x < 1005.0 {
+            let l = rng.range(20.0, 50.0);
+            let xm = x + l * 0.5;
+            let seen = c.sample(xm, bank_top(xm) - 9.0);
+            cb.reload(pal.mix(seen).paint(0.35).with_hiding(0.85), rng.range(0.4, 0.55));
+            let pts: Vec<(f32, f32)> = (0..=6).map(|i| { let xx = x + l * i as f32 / 6.0; (xx, bank_top(xx) - 2.4 + rng.normal() * 0.15) }).collect();
+            c.drag(&mut cb, &Gesture::new(pts).pressure(rng.range(0.55, 0.75), 0.45).ramps(0.2, 0.3), None);
+            x += l * rng.range(0.75, 0.95);
+        }
+        // then the top, the line as the eye reads it against the glow: two
+        // rows of level pulls of a small round
+        for (row, wdt) in [(2.8f32, 2.0f32), (0.9, 1.6)] {
+            let mut tb = Held::new(Tool::round_sable(wdt), 40);
+            let mut x = rng.range(-20.0, -2.0);
+            while x < 1005.0 {
+                let l = rng.range(30.0, 80.0);
+                tb.reload(pal.mix(bc(x, HZ + row)).paint(0.25), rng.range(0.5, 0.7));
+                let pts: Vec<(f32, f32)> = (0..=8).map(|i| { let xx = x + l * i as f32 / 8.0; (xx, bank_top(xx) + row + rng.normal() * 0.12) }).collect();
+                c.drag(&mut tb, &Gesture::new(pts).pressure(rng.range(0.6, 0.85), 0.5).ramps(0.1, 0.2).shake(0.3), None);
+                x += l * rng.range(0.8, 0.97);
+            }
+        }
         // the bushes: a small round, short strokes upward and out
         let bushes = Mask::from_fn(f, move |x, y| smoothstep(bank_top(x) - 0.5, bank_top(x) + 0.5, y) * (1.0 - smoothstep(HZ - 1.0, HZ + 1.5, y)) * smoothstep(HZ - 1.2, HZ - 2.5, bank_top(x)));
         let bh = st.hatch().color(|_, _| hex("#3e3f39")).angle(|_, _| -1.2).angle_jitter(0.5).length(2.5, 6.0).coverage(3.0).medium(0.25);
@@ -430,21 +447,68 @@ fn main() {
             mix(base, hex("#4b4535"), 0.3 * sn.get01(x, y * 2.0), Mix::Pigment)
         };
         let body = st.body().color(sc).angle(move |x, _| ((shore(x + 5.0) - shore(x - 5.0)) / 10.0).atan()).angle_jitter(0.3).length(14.0, 45.0).coverage(3.4).medium(0.2);
-        c.work(&shore_m, &body, 81);
+        let shore_in = Mask::from_fn(f, move |x, y| smoothstep(shore(x) + 2.5, shore(x) + 4.0, y));
+        c.work(&shore_in, &body, 81);
+        c.wait(120.0);
+        // the grassy slope hatched over it, short upright strokes, dark
+        // olive and brown, a little lighter at the water where the grass
+        // tips take the glow; thinning out down into the dark
+        let gn = Fbm::new(85, 3, 90.0);
+        let gc = move |x: f32, y: f32| {
+            let t = smoothstep(shore(x), shore(x) + 40.0, y);
+            let base = mix(hex("#3d3a2c"), hex("#23211b"), t, Mix::Pigment);
+            mix(base, hex("#2f3326"), 0.5 * gn.get01(x, y), Mix::Pigment)
+        };
+        let grass_m = Mask::from_fn(f, move |x, y| smoothstep(shore(x) - 0.5, shore(x) + 1.5, y) * (1.0 - 0.6 * smoothstep(shore(x) + 20.0, h, y)));
+        let mut gh = st.hatch().color(gc).angle(|_, _| -FRAC_PI_2).angle_jitter(0.35).length(3.0, 8.0).coverage(1.8).medium(0.2).hug(false);
+        gh.tool = Tool::round_sable(1.3);
+        c.work(&grass_m, &gh, 86);
         c.dry();
-        // the water's lip at the near shore: a thin dull light where the
-        // wet mud takes the sky, broken
-        let wet = pal.mix(hex("#4e4a40")).paint(0.3).with_hiding(0.5);
-        let mut b = Held::new(Tool::round_sable(1.3), 82);
-        let mut x = 0.0;
-        while x < 1000.0 {
-            let len = rng.range(12.0, 50.0);
-            if rng.f() < 0.3 {
-                b.reload(wet, 0.25);
-                let pts: Vec<(f32, f32)> = (0..=4).map(|i| { let xx = x + len * i as f32 / 4.0; (xx, shore(xx) + 1.0 + rng.normal() * 0.3) }).collect();
-                c.drag(&mut b, &Gesture::new(pts).pressure(rng.range(0.35, 0.55), 0.2).ramps(0.3, 0.5), None);
+        // the water cut back down over the shore's top, level pulls of the
+        // water's own tone, so the bank is a line and not stroke ends
+        let mut wb = Held::new(Tool::round_sable(2.6), 83);
+        let mut x = rng.range(-20.0, 0.0);
+        while x < 1010.0 {
+            let l = rng.range(20.0, 60.0);
+            let xm = x + l * 0.5;
+            // matched by eye to the water just above
+            let seen = c.sample(xm, shore(xm) - 9.0);
+            wb.reload(pal.mix(seen).paint(0.3).with_hiding(0.85), rng.range(0.45, 0.6));
+            let row = if rng.f() < 0.5 { 1.6 } else { 3.8 };
+            let pts: Vec<(f32, f32)> = (0..=6).map(|i| { let xx = x + l * i as f32 / 6.0; (xx, shore(xx) - row + rng.normal() * 0.2) }).collect();
+            c.drag(&mut wb, &Gesture::new(pts).pressure(rng.range(0.6, 0.8), 0.5).ramps(0.15, 0.25), None);
+            x += l * rng.range(0.75, 0.95);
+        }
+        c.dry();
+        // low sedge and grass along the whole shore, blade by blade: thin
+        // in the middle, thicker toward the corners where the reeds stand
+        let dark = [pal.mix(hex("#1f1c17")).paint(0.25), pal.mix(hex("#29261e")).paint(0.25), pal.mix(hex("#343020")).paint(0.25)];
+        let dry_tip = pal.mix(hex("#62583f")).paint(0.25).with_hiding(0.8);
+        let mut rig = Held::new(Tool::rigger(0.7), 84);
+        let mut x = rng.range(-5.0, 5.0);
+        let mut n = 0;
+        while x < 1005.0 {
+            let side = smoothstep(120.0, 470.0, (x - 500.0).abs());
+            let y0 = shore(x) + rng.range(0.5, 6.0) + 18.0 * rng.f().powi(3);
+            let blades = (2.0 + 7.0 * side * rng.f() + rng.f() * 3.0) as usize;
+            let ht = (5.0 + 14.0 * side) * rng.range(0.5, 1.3) * (1.0 + 0.02 * (y0 - shore(x)));
+            for _ in 0..blades {
+                let bx = x + rng.normal() * 2.0;
+                let hh = ht * rng.range(0.4, 1.0);
+                let lean = rng.normal() * 0.35;
+                if n % 5 == 0 {
+                    rig.tool = Tool::rigger(rng.range(0.5, 0.85));
+                }
+                n += 1;
+                rig.reload(dark[(rng.f() * 3.0) as usize % 3], 0.75);
+                let pts = vec![(bx, y0), (bx + hh * lean * 0.4, y0 - hh * 0.55), (bx + hh * lean, y0 - hh)];
+                c.drag(&mut rig, &Gesture::new(pts).pressure(rng.range(0.5, 0.8), 0.0).ramps(0.05, 0.7), None);
+                if rng.f() < 0.12 {
+                    rig.reload(dry_tip, 0.35);
+                    c.drag(&mut rig, &Gesture::new(vec![(bx + hh * lean * 0.5, y0 - hh * 0.6), (bx + hh * lean, y0 - hh)]).pressure(0.35, 0.0).ramps(0.1, 0.8), None);
+                }
             }
-            x += len + rng.range(4.0, 40.0);
+            x += rng.range(4.0, 22.0) * (1.4 - side);
         }
         c.dry();
     }
@@ -581,7 +645,7 @@ fn poplar(c: &mut paint::Canvas, st: &Style, p: &Poplar, sky_col: &(impl Fn(f32,
         if t < Poplar::CB + 0.02 || t > t1 - 0.04 {
             return 0.0;
         }
-        let k = (0.45 + 0.2 * cn.get(x, y)) * smoothstep(Poplar::CB, Poplar::CB + 0.035, t).sqrt();
+        let k = (0.72 + 0.14 * cn.get(x, y)) * smoothstep(Poplar::CB, Poplar::CB + 0.035, t).sqrt();
         let (l, r) = (p.axis(t) - p.half(t, -1.0) * k, p.axis(t) + p.half(t, 1.0) * k);
         smoothstep(l - 1.0, l + 1.0, x) * (1.0 - smoothstep(r - 1.0, r + 1.0, x))
     });
@@ -652,12 +716,6 @@ fn poplar(c: &mut paint::Canvas, st: &Style, p: &Poplar, sky_col: &(impl Fn(f32,
             let l = rng.range(3.0, 7.5);
             let o = (e.0 + rng.normal() * 1.5, e.1 + rng.normal() * 2.0);
             c.drag(&mut fine, &Gesture::new(vec![o, (o.0 + l * 0.5 * ang.cos(), o.1 + l * 0.5 * ang.sin()), (o.0 + l * ang.cos(), o.1 + l * ang.sin() + 0.1 * l)]).pressure(0.65, 0.04).ramps(0.05, 0.7), None);
-        }
-        // low down, where the crown is thin, the branch itself shows
-        if t0 < 0.3 && rng.f() < 0.5 {
-            let mut wb = Held::new(Tool::round_sable(0.8), rng.next_u64());
-            wb.load(stem, 0.6);
-            c.drag(&mut wb, &Gesture::new((0..=4).map(|j| path(j as f32 / 4.0 * 0.6)).collect()).pressure(0.7, 0.2).ramps(0.0, 0.6), None);
         }
     }
     c.wait(60.0);
@@ -838,7 +896,9 @@ fn reeds(c: &mut paint::Canvas, pal: &Palette, shore: &(impl Fn(f32) -> f32 + Sy
     let mut rig = Held::new(Tool::rigger(0.8), rng.next_u64());
     let mut n = 0;
     for &(cx, dens) in &clumps {
-        let base_y = shore(cx) + rng.range(4.0, 30.0);
+        // some clumps stand out in the shallows, their feet in the water
+        let wet = dens > 0.45 && rng.f() < 0.3;
+        let base_y = if wet { shore(cx) - rng.range(2.0, 9.0) } else { shore(cx) + rng.range(4.0, 30.0) };
         let blades = (6.0 + 22.0 * dens * rng.range(0.5, 1.2)) as usize;
         let tallest = (30.0 + 80.0 * dens) * rng.range(0.6, 1.2);
         for _ in 0..blades {
@@ -857,6 +917,22 @@ fn reeds(c: &mut paint::Canvas, pal: &Palette, shore: &(impl Fn(f32) -> f32 + Sy
             rig.reload(dark[(rng.f() * 3.0) as usize % 3], 0.8);
             n += 1;
             c.drag(&mut rig, &Gesture::new(pts.clone()).pressure(rng.range(0.55, 0.85), 0.0).ramps(0.05, 0.75), None);
+            if wet && y < shore(x) {
+                // its image hangs below it, shorter, paler, broken by the
+                // water into two or three pieces
+                let wc = water_col(x, y + 6.0);
+                let rc = pal.mix(mix(hex("#2a271f"), wc, 0.35, Mix::Pigment)).paint(0.3);
+                let mut v = 0.0f32;
+                let reach = ht * rng.range(0.35, 0.6);
+                while v < reach {
+                    let seg = rng.range(2.0, 7.0);
+                    let a = (x + (v / ht) * ht * lean * 0.35, y + 0.8 + v);
+                    let e = (x + ((v + seg) / ht) * ht * lean * 0.35 + rng.normal() * 0.4, y + 0.8 + v + seg);
+                    rig.reload(rc, 0.5);
+                    c.drag(&mut rig, &Gesture::new(vec![a, e]).pressure(rng.range(0.35, 0.6) * (1.0 - v / reach), 0.1).ramps(0.1, 0.3), None);
+                    v += seg + rng.range(1.0, 4.0);
+                }
+            }
             if lit_tip {
                 rig.reload(straw[(rng.f() * 2.0) as usize % 2], 0.4);
                 let p2 = pts[2];

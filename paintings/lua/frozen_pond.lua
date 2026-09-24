@@ -332,11 +332,11 @@ end
 -- dry grass and sedge through the snow: fine upturning strokes laid last over the snow
 local gb = brush{kind="rigger", width=0.9, point=1}
 local gf = brush{kind="rigger", width=0.55, point=1}
-local GRASS = {"#6b5a45", "#7d6a4c", "#8a7a5e", "#56493c", "#9a8866", "#5e5448"}
+local GRASS = {"#4d4337", "#5b4f3f", "#6a5b45", "#433a32", "#7a6a4e", "#504740"}
 function tuft(x, y, h, n, lean, seed)
   for i = 1, n do
     local b = (rand() < 0.3) and gb or gf
-    if b:fullness() < 0.35 or rand() < 0.15 then b:reload(mix(GRASS[math.random(#GRASS)], "#a9a7aa", rand(0, 0.25)), rand(0.6, 0.9)) end
+    if b:fullness() < 0.35 or rand() < 0.15 then b:reload(mix(GRASS[math.random(#GRASS)], "#8e9098", rand(0, 0.2)), rand(0.6, 0.9)) end
     local bx = x + randn(0, h*0.12)
     local a = -math.pi/2 + lean + randn(0, 0.28)
     local L = h * rand(0.45, 1.05)
@@ -350,14 +350,14 @@ function tuft(x, y, h, n, lean, seed)
   end
 end
 -- near left corner: a big clump and a few smaller ones
-local spots = {{40, 690, 46, 34}, {78, 700, 38, 26}, {18, 660, 30, 20}, {120, 706, 30, 18}, {160, 676, 22, 12},
-  {930, 700, 42, 30}, {968, 672, 34, 24}, {880, 690, 24, 12}, {990, 640, 26, 14}, {846, 706, 20, 10}}
+local spots = {{40, 692, 78, 60}, {84, 704, 60, 44}, {14, 664, 52, 34}, {126, 710, 44, 26}, {168, 680, 30, 16}, {58, 640, 30, 14},
+  {226, 700, 22, 10}, {930, 704, 70, 52}, {972, 676, 58, 40}, {884, 692, 36, 20}, {992, 636, 40, 22}, {846, 710, 28, 14}, {790, 690, 18, 8}}
 for i, s in ipairs(spots) do tuft(s[1], s[2], s[3], s[4], randn(0.05, 0.12), 170 + i) end
 -- along the crest of the bank, small and sparse, leaving the middle clear
 for i = 1, 26 do
   local x = (i <= 13) and rand(10, 380) or rand(730, 995)
   local y = bank(x) + rand(2, 12)
-  tuft(x, y, rand(7, 15), math.random(3, 7), randn(0.08, 0.1), 200 + i)
+  tuft(x, y, rand(9, 20), math.random(4, 9), randn(0.08, 0.1), 200 + i)
 end
 -- reeds at the far shore's edge, a hazed thin fringe
 local rf = brush{kind="rigger", width=0.45, point=1}
@@ -367,3 +367,52 @@ for i = 1, 70 do
   local y = shore(x) + rand(0.5, 2.5)
   rf:stroke({{x, y}, {x + randn(0.3, 0.4), y - rand(3, 7)}}, {pressure={0.35, 0}, ramps={0.05, 0.7}})
 end
+
+--@ chunk 18 · clock 58644.58984375
+dry()
+-- two long thin streaks of cloud low in the glow, lit rose from below, gray above
+local cn = noise{seed=181, octaves=5, period=260, stretch={0.0, 14}, warp={90, 8}}
+local band = function(y0, th, x0, x1) return mask(function(x, y)
+  local e = smoothstep(x0, x0 + 80, x) * (1 - smoothstep(x1 - 120, x1, x))
+  local d = math.abs(y - y0 - 6*cn(x*0.3, 3)) / th
+  return e * clamp(1.2 - d, 0, 1) * smoothstep(0.45, 0.7, cn:at01(x, y))
+end) end
+STREAKS = band(372, 5, 520, 1000) + band(398, 3.5, 60, 520) + band(344, 3, 700, 980)
+work(STREAKS, {hand="scumble", tool="round 2", length={30, 90}, coverage=2.2, medium=0.35, angle=0, angle_jitter=0.02, hug=false,
+  color=function(x, y) return mix("#a69ea6", "#d8b7a4", smoothstep(-3, 4, y - 372 + (x < 520 and -26 or 0))) end, edge="lost"})
+-- the village church far off on the hills: nave, a slim tower and spire, as hazed as the hills
+local chx, chy = 648, hills(648) + 5
+CHURCH = rect(chx - 14, chy - 7, 20, 9) + poly({{chx - 15, chy - 7}, {chx - 4, chy - 11.5}, {chx + 7, chy - 7}}) +
+  rect(chx + 4, chy - 22, 4.2, 22) + poly({{chx + 3.6, chy - 22}, {chx + 6.1, chy - 38}, {chx + 8.6, chy - 22}})
+work(CHURCH, {hand="detail", tool="round 1", length={2, 6}, coverage=3.4, medium=0.15, angle=-1.57, color="#8a8590", edge={found=0.4, soft=0.6, period=8, seed=18}})
+local roofs = rect(chx - 34, chy - 4, 14, 6) + poly({{chx - 35, chy - 4}, {chx - 27, chy - 8}, {chx - 19, chy - 4}}) + rect(chx + 16, chy - 3, 11, 5)
+work(roofs, {hand="detail", tool="round 1", length={2, 6}, coverage=3, medium=0.15, angle=0, color="#948e97", edge="soft"})
+-- the new moon, a thin crescent low in the west over the glow, its lit side toward the set sun
+MOON = {x=452, y=236, r=6.5}
+-- one stroke of a pointed brush from horn to horn along the lit limb, swelling in the middle
+local mb = brush{kind="round", width=2.6, point=1}
+mb:load("#f2ecd6", 1)
+local arc = {}
+for k = 0, 8 do local a = math.rad(-35 + 150*k/8)   -- lit limb toward the lower right
+  arc[#arc+1] = {MOON.x + MOON.r*math.cos(a), MOON.y + MOON.r*math.sin(a)} end
+mb:stroke(arc, {pressure={0.05, 0.85, 0.05}, ramps={0.45, 0.45}})
+mb:reload("#f5f0de", 0.8)
+mb:stroke(arc, {pressure={0.02, 0.55, 0.02}, ramps={0.4, 0.4}})
+-- crows going home over the oak
+local cb = brush{kind="round", width=1.4, point=1}
+cb:load("#2f2b2d", 0.9)
+for _, c in ipairs({{700, 214, 5.2, 0.1}, {731, 203, 4.4, -0.15}, {664, 238, 3.8, 0.25}, {848, 188, 3.2, 0}}) do
+  local x, y, s, t = c[1], c[2], c[3], c[4]
+  cb:stroke({{x - s, y - 0.9*s + t*s}, {x - 0.4*s, y - 0.1*s}, {x, y + 0.15*s}}, {pressure={0.1, 0.7}, ramps={0.5, 0.1}})
+  cb:stroke({{x, y + 0.15*s}, {x + 0.45*s, y - 0.15*s}, {x + 1.1*s, y - 0.8*s - t*s}}, {pressure={0.7, 0.1}, ramps={0.1, 0.5}})
+end
+
+--@ chunk 19 · clock 63072.85400390625
+-- the evening comes down: a cool glaze over the near snow, deeper toward the bottom, and a dark veil
+-- growing toward the picture's edges (Friedrich to Carus: darker toward the edges)
+local vn = noise{seed=191, octaves=3, period=300}
+NEARDARK = mask(function(x, y) return smoothstep(bank(x) + 10, 714, y) * (0.75 + 0.25*vn:at01(x, y)) end)
+glaze(NEARDARK, {color="#5d6680", coats=0.32})
+VIG = mask(function(x, y) local dx, dy = (x - 520)/560, (y - 430)/430
+  return smoothstep(0.6, 1.3, math.sqrt(dx*dx + dy*dy)) * (0.8 + 0.2*vn:at01(y, x)) end)
+glaze(VIG, {color="#3f4458", coats=0.3})

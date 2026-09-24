@@ -76,9 +76,11 @@ varied, tapered twigs, all connected), water B, sky B, rock B.
 - **Retouch before the varnish.** Keep `wait(24*60); varnish{...}; relief()` as the last
   chunk and fix things with `easel edit N --insert` before it: seconds, not a replay [r4
   near, r4 green].
-- **Keep `relief()` at or below its default.** `relief(0.6)` turned a sky into swirling
-  impasto, and at 3200 even the default put a pale edge on stone silhouettes.
-  `relief(0.14)` was safe [r3 free].
+- **Keep `relief()` at its default.** The Friedrich default is now `(0.06, 0.006)`, the
+  owner's pick from the Round 6 A/B (`notes/round6/relief/`): the old 0.2 embossed every
+  stroke into creases ("grooves") and raised outlines around sky holes. `relief(0.6)`
+  turned a sky into swirling impasto [r3 free]. Relief lighting can't fix pale rims,
+  halos or cut-out edges: those are in the paint.
 
 ## 2. Skies and air
 

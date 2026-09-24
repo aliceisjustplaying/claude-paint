@@ -34,10 +34,18 @@ fn replay(src: &Path, width: u32, threads: Option<usize>, tag: &str) -> (String,
 }
 
 /// The owner's logs replay byte for byte as they did before hand time
-/// existed: the PNG hashes were recorded with the easel of commit 2c5a658.
+/// existed: the PNG hashes were recorded with the easel of commit 2c5a658,
+/// built in each profile (the engine's floats differ between them).
 #[test]
 fn existing_logs_replay_unchanged() {
-    for (log, want) in [("paintings/lua/example.lua", 0xf74e_3682_94fb_26c9u64), ("notes/loops/l5_near.lua", 0x8539_3b4e_e942_47d3)] {
+    // (the benchmark near is checked in release only: a debug replay takes
+    // minutes; its debug hash is 0x37a4_2e28_e714_0112)
+    let logs: &[(&str, u64)] = if cfg!(debug_assertions) {
+        &[("paintings/lua/example.lua", 0x9659_9066_5f64_5c5e)]
+    } else {
+        &[("paintings/lua/example.lua", 0xf74e_3682_94fb_26c9), ("notes/loops/l5_near.lua", 0x8539_3b4e_e942_47d3)]
+    };
+    for &(log, want) in logs {
         let (_, png) = replay(&root().join(log), 160, None, "unchanged");
         assert_eq!(fnv(&png), want, "{log} at 160px changed");
     }

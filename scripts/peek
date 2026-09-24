@@ -1,18 +1,18 @@
 #!/bin/sh
-# Make a small JPEG preview for viewing (keeps image payloads ~100–250 KB).
+# Make a small JPEG preview for viewing (keeps image payloads ~150–300 KB).
 # PNG renders of canvas texture compress badly (1–20 MB), so never view them directly.
 #
 #   scripts/peek SRC OUT.jpg [H W Y X]     optional crop: height width offsetY offsetX
-#   max dimension 1000px, JPEG quality 80
+#   max dimension 1000px, JPEG quality 95 with full-resolution color (4:4:4):
+#   quality 80 with half-resolution color (the old setting) smeared thin colored
+#   strokes and edges, the very things a painter judges at 3200 (Round 6).
+#   Sheets for Alice are built lossless from the PNG renders, never from these.
 set -e
 src=$1
 out=$2
-dir=${TMPDIR:-$HOME/tmp}
-tmp=$(mktemp -p "$dir" peek.XXXXXX)
-cp "$src" "$tmp.png"
 if [ -n "$6" ]; then
-  sips -c "$3" "$4" --cropOffset "$5" "$6" "$tmp.png" >/dev/null
+  magick "$src" -crop "${4}x${3}+${6}+${5}" +repage -resize '1000x1000>' -quality 95 -sampling-factor 4:4:4 "$out"
+else
+  magick "$src" -resize '1000x1000>' -quality 95 -sampling-factor 4:4:4 "$out"
 fi
-sips -Z 1000 -s format jpeg -s formatOptions 80 "$tmp.png" --out "$out" >/dev/null
-rm -f "$tmp" "$tmp.png"
 ls -la "$out" | awk '{print $5, $9}'

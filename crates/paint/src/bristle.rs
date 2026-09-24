@@ -81,6 +81,17 @@ fn transpose(src: &[f32], w: usize, h: usize) -> Vec<f32> {
 /// How far into the tooth's range the paint a fully loaded hair carries
 /// reaches ahead of the hair (see `exchange`).
 const WET_REACH: f32 = 0.5;
+/// Share of a pixel's surface film one bristle pass works into the film's
+/// body, for a stiff bristle pressed fully into wet paint with no paint of
+/// its own (see `exchange`; notes/wet.md).
+const STIR: f32 = 0.12;
+/// How much a full load cushions a bristle from the wet film under it: it
+/// lifts and stirs `1 − CUSHION` of what a spent one does.
+const CUSHION: f32 = 0.8;
+/// The wet film (coats) a stiff hog bristle laid lightly rides on and can't
+/// push aside (15 µm, a small fraction of the bristle's 0.2–0.3 mm): finer,
+/// softer hair and more pressure get closer to the canvas (see `exchange`).
+const PLOUGH_KEEP: f32 = 0.6;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Kind {
@@ -548,6 +559,9 @@ pub(crate) struct Surf {
     vol: *mut f32,
     lat: *mut Latent,
     hide: *mut Prop,
+    top: *mut f32,
+    tlat: *mut Latent,
+    thide: *mut Prop,
     stroke: *mut u32,
     touched: *mut u32,
     floor: *mut f32,
@@ -573,6 +587,10 @@ fn grow(b: &mut Bounds, x0: usize, y0: usize, x1: usize, y1: usize) {
 }
 
 impl Surf {
+    /// Lay `v` coats of paint (`lat`, `hide`) on pixel `i`. On a dry
+    /// surface it becomes the film's body; laid into wet paint it goes on
+    /// the surface film, on top of what is there (a brush works it in by
+    /// stirring, see `stir`).
     #[inline]
     unsafe fn add(&self, i: usize, v: f32, lat: &Latent, hide: Prop) {
         unsafe {
@@ -580,20 +598,119 @@ impl Surf {
                 return;
             }
             let vol = &mut *self.vol.add(i);
-            let l = &mut *self.lat.add(i);
-            let hd = &mut *self.hide.add(i);
-            let t = *vol + v;
-            let a = v / t;
-            for k in 0..LAT {
-                l[k] += (lat[k] - l[k]) * a;
+            if *vol < WET_FILM {
+                // (a trace of paint on a dry pixel is part of the body)
+                let t = &mut *self.top.add(i);
+                if *t > 0.0 {
+                    mix_into(&mut 0.0f32.max(*vol - *t), &mut *self.lat.add(i), &mut *self.hide.add(i), *t, &*self.tlat.add(i), *self.thide.add(i));
+                    *t = 0.0;
+                }
+                let mut b = *vol;
+                mix_into(&mut b, &mut *self.lat.add(i), &mut *self.hide.add(i), v, lat, hide);
+                *vol = b;
+            } else {
+                mix_into(&mut *self.top.add(i), &mut *self.tlat.add(i), &mut *self.thide.add(i), v, lat, hide);
+                *vol += v;
             }
-            for k in 0..hd.len() {
-                hd[k] += (hide[k] - hd[k]) * a;
+        }
+    }
+
+    /// Lay `v` coats from the brush of stroke `id` on pixel `i` (`add`). The
+    /// surface film is the newest stroke's paint: a surface film left by an
+    /// earlier stroke is now under this one, so it joins the body first.
+    #[inline]
+    unsafe fn lay(&self, i: usize, v: f32, lat: &Latent, hide: Prop, id: u32) {
+        unsafe {
+            if v > 0.0 && *self.stroke.add(i) != id && *self.top.add(i) > 0.0 {
+                let t = &mut *self.top.add(i);
+                let mut b = (*self.vol.add(i) - *t).max(0.0);
+                mix_into(&mut b, &mut *self.lat.add(i), &mut *self.hide.add(i), *t, &*self.tlat.add(i), *self.thide.add(i));
+                *t = 0.0;
             }
-            *vol = t;
+            self.add(i, v, lat, hide);
+        }
+    }
+
+    /// Work the share `k` (0..1) of pixel `i`'s surface film into its body,
+    /// for surface paint of middling stiffness: stiff paint holds its place
+    /// (it has a yield stress), fluid paint gives way (up to 1.5× apart).
+    #[inline]
+    unsafe fn stir(&self, i: usize, k: f32) {
+        unsafe {
+            let t = &mut *self.top.add(i);
+            if *t <= 0.0 || k <= 0.0 {
+                return;
+            }
+            let k = k * (1.25 - 0.5 * (*self.thide.add(i))[1].clamp(0.0, 1.0));
+            let m = *t * k.min(1.0);
+            let mut b = (*self.vol.add(i) - *t).max(0.0);
+            mix_into(&mut b, &mut *self.lat.add(i), &mut *self.hide.add(i), m, &*self.tlat.add(i), *self.thide.add(i));
+            *t -= m;
+        }
+    }
+
+    /// Mix `v` coats of paint into the body of pixel `i`'s film (under its
+    /// surface film).
+    #[inline]
+    unsafe fn add_body(&self, i: usize, v: f32, lat: &Latent, hide: Prop) {
+        unsafe {
+            if v <= 0.0 {
+                return;
+            }
+            let vol = &mut *self.vol.add(i);
+            let mut b = (*vol - *self.top.add(i)).max(0.0);
+            mix_into(&mut b, &mut *self.lat.add(i), &mut *self.hide.add(i), v, lat, hide);
+            *vol += v;
+        }
+    }
+
+    /// Take `v` coats of pixel `i`'s whole film, surface and body alike:
+    /// returns (from the surface, from the body).
+    #[inline]
+    unsafe fn take_column(&self, i: usize, v: f32) -> (f32, f32) {
+        unsafe {
+            let vol = *self.vol.add(i);
+            if vol <= 0.0 {
+                return (0.0, 0.0);
+            }
+            let v = v.min(vol).max(0.0);
+            let a = *self.top.add(i) * (v / vol);
+            let t = &mut *self.top.add(i);
+            *t = (*t - a).max(0.0);
+            *self.vol.add(i) = vol - v;
+            if vol - v <= 0.0 {
+                *t = 0.0;
+            } else if *t > vol - v {
+                *t = vol - v;
+            }
+            (a, v - a)
+        }
+    }
+
+    /// Take `v` coats off the top of pixel `i` (the surface film first,
+    /// then the body): returns (from the surface, from the body).
+    #[inline]
+    unsafe fn take(&self, i: usize, v: f32) -> (f32, f32) {
+        unsafe {
+            let vol = &mut *self.vol.add(i);
+            let t = &mut *self.top.add(i);
+            let v = v.min(*vol).max(0.0);
+            let a = v.min(*t);
+            *t -= a;
+            *vol -= v;
+            if *vol <= 0.0 {
+                *t = 0.0;
+            } else if *t > *vol {
+                *t = *vol;
+            }
+            (a, v - a)
         }
     }
 }
+
+/// Wet film (coats) below which a pixel counts as dry for new paint: what
+/// lands there becomes the film's body rather than lying on its surface.
+const WET_FILM: f32 = 1e-3;
 
 impl Canvas {
     pub(crate) fn surf(&mut self) -> Surf {
@@ -601,7 +718,7 @@ impl Canvas {
         let n = self.f.w * self.f.h;
         let wt = &self.wet;
         assert!(
-            [self.height.len(), self.px.len(), self.film.len(), wt.vol.len(), wt.lat.len(), wt.hide.len(), wt.stroke.len(), wt.touched.len(), wt.floor.len(), wt.cover.len()].iter().all(|&l| l == n),
+            [self.height.len(), self.px.len(), self.film.len(), wt.vol.len(), wt.lat.len(), wt.hide.len(), wt.top.len(), wt.tlat.len(), wt.thide.len(), wt.stroke.len(), wt.touched.len(), wt.floor.len(), wt.cover.len()].iter().all(|&l| l == n),
             "canvas buffers out of sync with frame"
         );
         if self.base.as_ref().map(|b| b.0) != Some(self.surf_gen) {
@@ -630,6 +747,9 @@ impl Canvas {
             vol: self.wet.vol.as_mut_ptr(),
             lat: self.wet.lat.as_mut_ptr(),
             hide: self.wet.hide.as_mut_ptr(),
+            top: self.wet.top.as_mut_ptr(),
+            tlat: self.wet.tlat.as_mut_ptr(),
+            thide: self.wet.thide.as_mut_ptr(),
             stroke: self.wet.stroke.as_mut_ptr(),
             touched: self.wet.touched.as_mut_ptr(),
             floor: self.wet.floor.as_mut_ptr(),
@@ -1212,6 +1332,17 @@ unsafe fn exchange(
         // when loaded; a spent bristle drinks more
         let hunger = 0.35 + 0.65 * (1.0 - br.vol / full).clamp(0.0, 1.0).powf(1.5);
         let push_k = tool.push * (seg / (2.0 * rb)).clamp(0.0, 1.0);
+        // how far this bristle reaches into the wet film: pressed, stiff and
+        // lean it goes through to the body; a loaded one rides on a cushion
+        // of its own paint (the painter's loaded brush and light touch)
+        let cushion = 1.0 - CUSHION * wet;
+        // (mixing is shear: it goes with how far the bristle moves, as the
+        // plough does, so a tip pressed straight down barely stirs)
+        let stir = STIR * (seg / (2.0 * rb)).clamp(0.0, 1.0) * reach.clamp(0.0, 1.0) * (0.3 + 0.7 * tool.stiffness.clamp(0.0, 1.0)) * cushion;
+        // the film a bristle rides on, which it can't push aside (coats):
+        // thicker under coarse stiff hog (0.2–0.3 mm) than fine soft hair
+        // (0.06–0.12 mm), thinner the harder it is pressed
+        let keep = PLOUGH_KEEP * (0.3 + 0.7 * tool.stiffness.clamp(0.0, 1.0)) * (1.0 - 0.4 * reach.clamp(0.0, 1.0));
         // ploughed paint lands just outside the track: the next pixel, or for
         // a pointed tool (shared bilinearly, below) a hair's width away, the
         // same distance at any resolution
@@ -1240,33 +1371,42 @@ unsafe fn exchange(
                 if v > 1e-6 {
                     let own = if *sf.stroke.add(i) == id { 0.15 } else { 1.0 };
                     let take = (v * tool.pickup * wt * hunger * own * fl).min((v - *sf.floor.add(i)).max(0.0));
-                    if take > 0.0 {
-                        *vol -= take;
-                        let tv = take * px_area;
-                        got_v += tv;
-                        let l = &*sf.lat.add(i);
-                        for k in 0..LAT {
-                            got_l[k] += l[k] * tv;
-                        }
-                        let hp = *sf.hide.add(i);
-                        for k in 0..hp.len() {
-                            got_h[k] += hp[k] * tv;
+                    // the surface film comes up first; the body under it
+                    // only as far as the bristles reach through their own
+                    // paint
+                    let a = take.min(*sf.top.add(i));
+                    let (a, b) = sf.take(i, a + (take - a) * cushion);
+                    for (part, l, hp) in [(a, &*sf.tlat.add(i), *sf.thide.add(i)), (b, &*sf.lat.add(i), *sf.hide.add(i))] {
+                        if part > 0.0 {
+                            let tv = part * px_area;
+                            got_v += tv;
+                            for k in 0..LAT {
+                                got_l[k] += l[k] * tv;
+                            }
+                            for k in 0..hp.len() {
+                                got_h[k] += hp[k] * tv;
+                            }
                         }
                     }
                 }
+                // the bristles work the surface film into the body as far
+                // as they reach into it
+                sf.stir(i, stir * wt * fl);
                 if dep_per_w > 0.0 {
                     // the share of the pixel this paint covers: its contact
                     // (a fine hair's own share of the tuft's width, where
                     // the hairs of a gathered point lie over each other)
                     let cv = &mut *sf.cover.add(i);
                     *cv = if fine { ((if *sf.vol.add(i) < 1e-6 { 0.0 } else { *cv }) + wt * excl).min(1.0) } else { 1.0 };
-                    sf.add(i, dep_per_w * wt, &blat, bhide);
+                    sf.lay(i, dep_per_w * wt, &blat, bhide, id);
                     *sf.stroke.add(i) = id;
                 }
                 // plough: move paint outward from the bristle's path, and ahead
                 if push_k > 0.0 {
                     let v = *sf.vol.add(i);
-                    let m = v * push_k * wt * fl;
+                    // a bristle parts and smears a film thinner than the
+                    // layer it rides on; it pushes only what stands above it
+                    let m = (v - keep).max(0.0) * push_k * wt * fl;
                     if m > 1e-6 {
                         let (px, py) = (x as f32 + 0.5, y as f32 + 0.5);
                         let side = if (px - a.0) * nx + (py - a.1) * ny >= 0.0 { 1.0 } else { -1.0 };
@@ -1302,15 +1442,18 @@ unsafe fn exchange(
                                 // only the accepted share moves, the rest stays
                                 let m = m * share * clip.map_or(1.0, |c| c.data[ty * w + tx]);
                                 if j != i && m > 0.0 {
-                                    let l = *sf.lat.add(i);
-                                    let hd = *sf.hide.add(i);
+                                    let (l, hd, tl, th) = (*sf.lat.add(i), *sf.hide.add(i), *sf.tlat.add(i), *sf.thide.add(i));
                                     // the paint moved covers its share of
                                     // the pixel it came from
                                     // (its film there thins but still covers it)
                                     let cj = &mut *sf.cover.add(j);
                                     *cj = if fine { ((if *sf.vol.add(j) < 1e-6 { 0.0 } else { *cj }) + (m / v.max(1e-9)).min(1.0) * *sf.cover.add(i)).min(1.0) } else { 1.0 };
-                                    *sf.vol.add(i) -= m;
-                                    sf.add(j, m, &l, hd);
+                                    // a bristle pushes the whole column of
+                                    // paint in its way; it keeps its
+                                    // layering where it lands
+                                    let (a, b) = sf.take_column(i, m);
+                                    sf.add_body(j, b, &l, hd);
+                                    sf.add(j, a, &tl, th);
                                 }
                             }
                         }

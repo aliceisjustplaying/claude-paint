@@ -246,4 +246,106 @@ blend(mistM:blur(3), {angle=0, angle_jitter=0.003, coverage=2.0, length={100, 30
 local t = timesheet() print(string.format("%.0f min this sitting, mist %.0f", t.sitting, mistM:area()))
 
 --@ chunk 10 · clock 30477.39663292095
-rest(16) print(drying(200, 205), drying(300, 330), drying(600, 300), drying(200, 520))
+print(dry())
+
+--@ chunk 11 · clock 69112.67397667095
+-- sitting 3: the promontory over the dry sky. 1. the wood as one dark hatched mass, near-black green, a little
+-- air toward its top edge; strokes turn slowly (a wood, not rows), the edge is the strokes' own fringe
+local turn = noise{seed=12, period=40}
+woodCol = function(x, y)
+  local top = promSky(x)
+  local air = 1 - smoothstep(top, top + 70, y)
+  return mix(mix("#1c211d", "#262d27", smoothstep(PWL(x) - 120, PWL(x), y)), "#4a4f55", 0.28*air)
+end
+local spit = mask(function(x, y) return x > 330 and 1 or 0 end):blur(6)
+wood = woodM - spit
+work(wood, {hand="hatch", tool="round 1.8", length={3, 8}, coverage=2.8, clip=wood:grow(1.5), hug=false,
+  angle=function(x, y) return 1.57 + 0.45*turn(x, y) end, angle_jitter=0.35, color=woodCol, medium=0.2})
+-- 2. the spires: needles dark, a rigger for the stem and boughs, then the few shoots that catch the sky light
+for i, f in ipairs(FIRS) do
+  local nd = f:needles()
+  local ax = f.foot[1]
+  work(nd, {hand="hatch", tool="round 1.6", length={3, 7}, coverage=2.6, clip=nd,
+    angle=function(x, y) return 1.57 + 0.5*clamp((ax - x)/12, -1, 1) end, color="#1b201c", medium=0.2})
+end
+local rb = brush("rigger", 1.0)
+for i, f in ipairs(FIRS) do
+  for j, b in ipairs(f.boughs) do
+    if j % 6 == 1 or b.dead then rb:reload(b.dead and "#4a4a47" or "#1a1d1a", 0.8) end
+    rb:stroke(b.pts, {pressure={0.7, 0.05}, ramps={0.05, 0.6}})
+  end
+end
+for i, f in ipairs(FIRS) do
+  local hb = brush("round", math.max(0.9, f.hatch))
+  f:paint(hb, {color="#161b18", lit={0, 0.6}})
+  f:paint(brush("round", math.max(0.8, f.hatch*0.8)), {color="#3c4344", lit={0.75, 1}, every=6})
+end
+local t = timesheet() print(string.format("%.0f min this sitting", t.sitting))
+
+--@ chunk 12 · clock 69855.96864567697
+-- the spit: a low grassy tongue running out from the wood's foot. First the water relaid over the smudged
+-- drips under it (full load, laid lightly, level), then the spit, its reeds and its short mirror.
+SPIT = outline{pts={{318,446},{336,455},{352,459},{372,462},{396,465},{420,467.5},{442,469.5},{456,471},
+                    {440,472.5},{380,473},{318,474}}, char="soft", lobe=4, amount=0.6, seed=52}
+spitM = SPIT:mask()
+spitRefl = mask(function(x, y) local wl = 472
+  if y <= wl then return 0 end return spitM:at(x, wl - (y - wl)/0.8) end):soften(0.8)
+local fixW = mask(function(x, y)
+  return smoothstep(338, 356, x) * (1 - smoothstep(470, 492, x)) * smoothstep(469, 472, y) * (1 - smoothstep(496, 508, y)) end) - reflM - spitM
+work(fixW, {hand="body", tool="filbert 5", color=waterCol, angle=0, angle_jitter=0.004, curve={0, 0}, length={30, 90},
+  coverage=3.0, medium=0.25, load=1.0, pressure={0.3, 0.45}, ramps={0.3, 0.3}, pal=skypal, clip=fixW:grow(1) * waterM})
+work(spitM, {hand="body", tool="filbert 3", color=function(x, y)
+    return mix("#3a3a32", "#22231e", smoothstep(460, 471, y)) end, angle=0.06, angle_jitter=0.1, length={8, 26},
+  coverage=2.8, medium=0.2, load=0.9, clip=spitM:grow(0.6) - wood})
+work(spitRefl, {hand="body", tool="filbert 3", color="#2c2e2a", angle=math.pi/2, length={3, 8}, coverage=2.4, medium=0.25, load=0.8,
+  clip=spitRefl:grow(0.8)})
+blend(spitRefl:grow(3), {angle=0, angle_jitter=0.004, length={20, 60}, coverage=1.6, clip=waterM - spitM})
+-- reeds on the spit, a few upright flicks, darker near the wood, sparse toward the tip
+local rr = brush("rigger", 0.6)
+local n = 0
+for x = 326, 440, 3.2 do
+  if rand() < 0.75 - 0.5*smoothstep(360, 440, x) then
+    local y0 = 458 + (x - 320)*0.095 + rand(0, 2)
+    local h = rand(3, 9) * (1 - 0.5*smoothstep(360, 440, x))
+    if n % 5 == 0 then rr:reload(rand() < 0.3 and "#5d5a4a" or "#23241f", 0.7) end
+    rr:stroke({{x, y0}, {x + rand(-1, 1), y0 - h*0.6}, {x + rand(-2, 2.5), y0 - h}}, {pressure={0.5, 0}, ramps={0.05, 0.7}})
+    n = n + 1
+  end
+end
+-- small firs down the wood's steep right flank, so it isn't one cut edge
+FLANK = {}
+for i, p in ipairs({{314, 392, 46}, {326, 418, 36}, {333, 437, 26}, {344, 452, 17}}) do
+  local f = fir{x=p[1], y=p[2] + p[3], height=p[3], width=p[3]*rand(0.22, 0.3), habit="spire", seed=300 + i}
+  FLANK[#FLANK + 1] = f
+  local nd = f:needles()
+  work(nd, {hand="hatch", tool="round 1.2", length={2, 5}, coverage=2.6, clip=nd, angle=1.57, angle_jitter=0.4, color="#1b201c", medium=0.2})
+  f:paint(brush("round", math.max(0.8, f.hatch)), {color="#171c19", lit={0, 1}})
+end
+print(n, spitM:area())
+
+--@ chunk 13 · clock 69894.60989324749
+-- a row of firs standing at the water in front of the wooded slope, so the slope doesn't end in a line of
+-- spire bottoms: fir_wood along the waterline, two rows, dark, the back row a little aired
+FRONTTOP = {{-10,352},{40,334},{80,360},{120,346},{165,372},{205,366},{245,392},{280,404},{310,430},{326,452}}
+front = fir_wood{skyline=outline{pts=FRONTTOP, open=true, char="soft", lobe=12, seed=61},
+  foot={{-10, PWL(-10) - 1}, {160, PWL(160) - 1}, {330, PWL(330) - 1}}, depth=2, count=11, horizon=HZ, seed=62}
+print(front)
+local air = "#5a6064"
+local function row(r)
+  local h, s, nd = front:haze(r), front:scale(r), front:needles(r)
+  work(nd, {hand="hatch", tool=string.format("round %.1f", math.max(0.9, 1.7*s)), length={2, 6*s + 1}, coverage=2.5,
+    clip=nd, angle=1.57, angle_jitter=0.5, color=mix("#1a1f1b", air, 0.5*h), medium=0.2})
+  local rb = brush("rigger", math.max(0.6, 1.3*s))
+  for n, f in ipairs(front:trees(r)) do
+    if n % 5 == 1 then rb:reload(mix("#1c1a17", air, 0.5*h), 0.85) end
+    rb:stroke(f.leader.pts, {pressure={0.9, 0.2}, ramps={0.02, 0.3}})
+  end
+  front:paint(brush("round", 1.9*s + 0.3), r, {color=mix("#141916", air, 0.5*h), lit={0, 0.7}})
+  front:paint(brush("round", 1.5*s + 0.3), r, {color=mix("#343c3a", air, 0.4*h), lit={0.7, 1}, every=7})
+end
+row(2)
+row(1)
+local t = timesheet() print(string.format("%.0f min this sitting", t.sitting))
+
+--@ chunk 14 · clock 70180.34592701495
+rest(16)

@@ -194,6 +194,9 @@ pub struct Canvas {
     /// bristles feel.
     pub(crate) surf_gen: u64,
     pub(crate) base: Option<(u64, Vec<f32>)>,
+    /// Where each stroke under way keeps the films it set aside (scratch:
+    /// empty between strokes, never copied or saved; `film::Slots`).
+    pub(crate) aside: crate::film::Slots,
     /// Loose graphite and chalk on the picture (None until something is
     /// drawn): `graphite`.
     pub(crate) drawing: Option<Box<crate::graphite::Drawing>>,
@@ -242,6 +245,7 @@ impl Canvas {
             wet: crate::wet::Wet::new(n),
             surf_gen: 0,
             base: None,
+            aside: Default::default(),
             drawing: None,
             tally: crate::tally::Tally::default(),
             hand_slice: None,

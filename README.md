@@ -57,8 +57,8 @@ Engine (`crates/paint`):
   hand works, a long pass in slices: `notes/time.md`
 - `bristle` – simulated brushes (round, flat, filbert, fan, rigger, badger):
   per-bristle reservoirs, bend and splay, contact with the surface relief,
-  deposit, pickup and ploughing; pointed rounds and riggers (`Tool::point`)
-  paint a hairline with the point, spread with pressure and lift off to a
+  deposit, pickup and ploughing; a round or rigger given a point
+  (`Tool::point`, opt-in) paints a hairline with the point, spread with pressure and lift off to a
   point, the same at any resolution (`notes/tip.md`)
 - `handling` – how a painter covers an area: hand-like stroke planning (arcs,
   criss-cross, drift, dabs, broken strokes, pressure swell; see

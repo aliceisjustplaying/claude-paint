@@ -249,7 +249,7 @@ impl std::fmt::Display for Tally {
 impl Canvas {
     /// Hand time: with `Some(slice)` (minutes), passes are painted in slices
     /// of about that much hand time with the paint ageing between them
-    /// (`wait`), and `clock_hand` puts the rest of the hand time counted on
+    /// (`wait`), and `clock_hand_min` puts the rest of the hand time counted on
     /// the clock. `None` (the default): marks take no time on the clock.
     /// Either way the ledger counts from here as already clocked.
     pub fn set_hand_time(&mut self, slice_min: Option<f32>) {
@@ -267,14 +267,14 @@ impl Canvas {
     }
 
     /// Hand time counted but not yet on the clock (s); 0 with hand time off.
-    pub fn hand_owed(&self) -> f64 {
+    pub fn hand_owed_secs(&self) -> f64 {
         if self.hand_slice.is_none() { 0.0 } else { (self.tally.secs - self.tally.clocked).max(0.0) }
     }
 
     /// Put the owed hand time on the clock: the paint ages by it. Returns
     /// the minutes. With hand time off, nothing.
-    pub fn clock_hand(&mut self) -> f64 {
-        let owed = self.hand_owed();
+    pub fn clock_hand_min(&mut self) -> f64 {
+        let owed = self.hand_owed_secs();
         if owed > 0.0 {
             self.hand_pass(owed);
         }
@@ -365,7 +365,7 @@ mod tests {
         let mut sp = Stipple::new(Tool::stippler(6.0));
         sp.color = Box::new(|_, _| hex("#cfccc2"));
         c.stipple(&band, &sp, 5);
-        c.clock_hand();
+        c.clock_hand_min();
         c
     }
 
@@ -391,7 +391,7 @@ mod tests {
         let off = scene(None, None);
         let c0 = Canvas::new(240, 1.4, hex("#c8b89a")).clock();
         assert_eq!(off.clock(), c0);
-        assert_eq!(off.hand_owed(), 0.0);
+        assert_eq!(off.hand_owed_secs(), 0.0);
         // on: the whole ledger is on the clock, and in slices of 2 minutes
         // the pass aged as it went; 1 and 4 threads paint the same
         let a = in_pool(1, || scene(None, Some(2.0)));
@@ -416,18 +416,18 @@ mod tests {
         let then = |c: &mut Canvas| {
             let band = Mask::from_fn(c.frame(), |_, y| if (300.0..500.0).contains(&y) { 1.0 } else { 0.0 });
             c.work(&band, &Handling::new(Tool::filbert(14.0)).color(|_, _| hex("#d8ccb0")).coverage(3.0).fill(false), 4);
-            c.clock_hand();
+            c.clock_hand_min();
         };
         let mut a = Canvas::new(240, 1.4, hex("#c8b89a")).with_size_mm(440.0);
         a.set_hand_time(Some(1.0));
         first(&mut a);
-        assert!(a.hand_owed() > 0.0 && a.tally().strokes > 0, "time still owed at the checkpoint: {} {:?}", a.tally(), a.hand_owed());
+        assert!(a.hand_owed_secs() > 0.0 && a.tally().strokes > 0, "time still owed at the checkpoint: {} {:?}", a.tally(), a.hand_owed_secs());
         let mut buf = Vec::new();
         a.write_state(&mut buf, "").unwrap();
         let (mut b, _) = Canvas::read_state(&mut std::io::Cursor::new(buf)).unwrap();
         assert_eq!(b.hand_time(), a.hand_time());
         assert_eq!(b.tally(), a.tally());
-        assert_eq!(b.hand_owed(), a.hand_owed());
+        assert_eq!(b.hand_owed_secs(), a.hand_owed_secs());
         then(&mut a);
         then(&mut b);
         assert_eq!(b.tally(), a.tally());
@@ -455,7 +455,7 @@ mod tests {
                 v.iter().sum::<f32>() / v.len() as f32
             };
             let (top, bottom) = (mean(h / 10, h * 3 / 10), mean(h * 6 / 10, h * 8 / 10));
-            (top, bottom, c.hand_owed())
+            (top, bottom, c.hand_owed_secs())
         };
         let (t, b, _) = age(&|h| h);
         assert!(t > 1.8 * b, "the default sweeps down: top {t} bottom {b}");
@@ -477,7 +477,7 @@ mod tests {
         c.set_hand_time(Some(1.0));
         let all = Mask::from_fn(c.frame(), |_, _| 1.0);
         c.work(&all, &Handling::new(Tool::filbert(18.0)).color(|_, _| hex("#6f84a8")).coverage(3.0).fill(false), 3);
-        assert!(c.clock() > 0.0 && c.hand_owed() > 0.0, "sliced, with the last slice still owed");
+        assert!(c.clock() > 0.0 && c.hand_owed_secs() > 0.0, "sliced, with the last slice still owed");
         let mark = c.wet.clock.mark;
         let fresh = c.wet.stroke.iter().filter(|&&id| id > mark).count();
         let older = c.wet.stroke.iter().filter(|&&id| id > 0 && id <= mark).count();

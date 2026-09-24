@@ -124,6 +124,8 @@ varied, tapered twigs, all connected), water B, sky B, rock B.
   `glaze()` gave gray slabs [r4 green].
 - **An afterglow** that `w:sky` got wrong (it read as noon): your own gradient with a
   Gaussian `math.exp(-((x - SUNX)/520)^2)` added to its t [r3 free].
+  Then paint it from piles, not from the formula (section 12, "Mix piles, don't paint a
+  formula") [r7 piles].
 - **Haze at the foot of a range:** a graded `glaze(hazem, {coats=0.55, pigment="semi"})`
   and then a fine, low-contrast stipple (`width=1.5`, `aim=false`, `medium=0.6`,
   `fade=1`). A coarse stipple there read as frost [r3 green].
@@ -558,6 +560,32 @@ The foreground is where every round fell shortest of Friedrich. Budget real time
 
 ## 12. Color
 
+*Ceiling* (piles): the sky and lake from piles (`notes/piles/`) read as
+stepped paint rather than a formula, but the steps are still laid by the
+formula's strokes, and a pile over a whole cloud body goes flat. Nobody has
+yet painted a sky from piles from the start (short strokes laid into each
+other at each step, a wet blend per step).
+
+- **Mix piles, don't paint a formula.** A `color=function(x, y)` gives
+  every stroke the formula's exact color; a gradient plus a Gaussian glow
+  comes out "a little too perfect" (Alice, Round 7). Write the light as a
+  field if you like, then knife a handful of piles from it and paint from
+  those; make the transitions on the canvas.
+  ```lua
+  SKYP = piles(skyB, {n=7, over=skyS, pal=skypal, medium=0.3, coverage=3.8, load=0.75, seed=601})
+  print(SKYP)                                   -- read the recipes: are they paint you'd mix?
+  work(skyS, {hand="broad", color=SKYP, coverage=3.8, medium=0.3, load=0.75, pal=skypal})
+  blend(skyS, {angle=0, coverage=1.2, length={150, 400}})
+  ```
+  5–7 piles for a sky, 3–4 for a cloud bank or its lights, 5–6 for water.
+  Call `piles` after the underpainting it covers (the piles are mixed
+  looking at the canvas) and give it the pass's `coverage` and `load` (it
+  aims them at the thickness that pass lays). Give each `piles` a `seed`:
+  without one it takes the painting's next auto seed and shifts every later
+  one. Reuse the same pile set for touch-ups. [r7 piles]
+  *Pitfall:* few piles over a small shape paint it flat (the bank's body in
+  4 piles went one taupe); a straight broad stroke's square end shows more
+  against a neighboring pile: blend the steps, or shorten the strokes.
 - **Aim at what's there.** `aim="laid"` (default) aims each stroke at the look over what's
   under it. After a glaze, old colors are wrong: grass loaded with the pre-glaze colors
   stood out pale. Sample the glazed ground and mix from it [r3 free].

@@ -472,6 +472,8 @@ stipple(mask, {width=2.4, color="#cfccc2", coverage=function(x, y) ... end,
   fade=1})                                -- fade: contrast falls where coverage thins; 0 for specks
                                           -- (stars, snowflakes); color_over works here too
 glaze(mask_or_nil, {color="#8a6a3a", coats=0.4, pigment="transparent"})   -- or semi, opaque, varnish
+                                          -- a veil of 0.05 coats is laid as asked; only
+                                          -- float dust under ~0.007 coats fades out
 ```
 
 ### Edges: found, soft and lost

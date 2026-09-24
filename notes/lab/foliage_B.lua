@@ -134,19 +134,49 @@ end
 print("flicks", #pts)
 
 --@ chunk 6 · clock 990
--- B chunk 6: next morning (the sky in the holes setting to tacky). A few limb fragments, only
--- where the wood crosses a sky hole; nowhere else. The wood there a little stouter than grown,
--- so a fragment reads at arm's length; a lighter flank on the sun side of the stoutest.
+-- B chunk 6: once the sky in the holes is DRY (over setting sky a loaded dark stroke laid a
+-- translucent gray streak). One limb per hole, drawn once:
+-- the stoutest limb that crosses each sky hole, a single round-brush stroke pressed to its width,
+-- clipped to the hole. (Filling the grown wood mask there gave crossed planks at 3200.)
 wait(1020)
+local t0 = clock()
+while drying(760, 445) ~= "dry" and clock() - t0 < 30*24*60 do wait(12*60) end
+print("waited for the hole sky to dry:", (clock() - t0) / 60, "h")
 print("holes:", drying(425,318), drying(760,445), drying(330,520))
-LIMBS = tree:wood(1.3):grow(0.8) * HOLES:grow(4)
-work(LIMBS, {hand="detail", tool="round 1.6", length={3, 8}, coverage=3, clip=LIMBS, medium=0.14, color="#2f2b26"})
-local st = tree:wood(2.6):grow(0.8) * HOLES:grow(4)
-local fl = st * mask(function(x, y) return 1 - st:at(x - 1.6, y + 0.6) end)
-work(fl, {hand="detail", tool="round 1", length={2, 5}, coverage=1.6, clip=LIMBS, medium=0.12, color="#7a7466"})
-print("limb area", LIMBS:area())
+local HG = HOLES:grow(3)
+local best = {}
+for li, l in ipairs(tree.limbs) do
+  for k, p in ipairs(l.pts) do
+    if HG:at(p[1], p[2]) > 0.5 then
+      for hi, h in ipairs(HOLEPTS) do
+        if math.abs(p[1] - h[1]) < h[3] + 6 and math.abs(p[2] - h[2]) < h[4] + 6 then
+          local w = l.w[k] or l.w[1]
+          if not best[hi] or w > best[hi].w then best[hi] = {w=w, limb=l, h=h} end
+        end
+      end
+    end
+  end
+end
+local b = brush("round", 3)
+local n = 0
+for hi, e in pairs(best) do
+  if e.w >= 1.2 then
+    -- only the stretch of the limb near its hole (the whole limb, clipped, ran the brush dry
+    -- before the hole: a gray translucent streak)
+    local seg, h = {}, e.h
+    for _, p in ipairs(e.limb.pts) do
+      if math.abs(p[1] - h[1]) < h[3] + 14 and math.abs(p[2] - h[2]) < h[4] + 14 then seg[#seg + 1] = p end
+    end
+    if #seg < 2 then goto continue end
+    b:reload("#2d2924", 0.9)
+    b:stroke(seg, {pressure={b:pressure_for(math.min(3, e.w + 0.6)), b:pressure_for(math.max(0.8, e.w * 0.6))}, clip=HG})
+    n = n + 1
+  end
+  ::continue::
+end
+print("limbs", n)
 
---@ chunk 7 · clock 2010
+--@ chunk 7 · clock 14970
 -- B chunk 7: the same day. The last accents, a very few: the brightest lights as single touches
 -- on the tops of the lit lobes. (A cool veil on the front shade masses, tried here, laid flat
 -- gray slabs in the exact shape of its mask over the tacky dark, even thin and a step off the
@@ -160,11 +190,11 @@ for i, t in ipairs(top) do
 end
 print("top lights", #top)
 
---@ chunk 8 · clock 2010
+--@ chunk 8 · clock 14970
 
 -- B chunk 8: the trunk showed the warm ground in streaks through its one body pass (a second
 -- wet pass plowed more of it open): one transparent dark glaze once it is dry, trunk only
 glaze(TRUNKM - MASS, {color="#2c2723", coats=0.45, pigment="transparent"})
 
---@ chunk 9 · clock 30137.35546875
+--@ chunk 9 · clock 30137.3603515625
 wait(24*60); varnish{color="#e6d3a4", coats=0.3, vary=0.1}; relief()

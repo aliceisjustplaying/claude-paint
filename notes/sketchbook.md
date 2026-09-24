@@ -15,6 +15,17 @@ reads digital, don't settle for the recipe: try something new, and if the
 critic scores it better, replace the entry (don't keep both). Pitfalls stay:
 they only prevent bad results.
 
+**Hierarchical detail, not maximal subtraction** (the owner, Round 6).
+Economy doesn't mean less detail everywhere; it means detail placed where
+the eye goes and massed where it doesn't. Big shapes and value families
+first, then a middle scale of irregular groups, then a few selected
+particulars. The Round 6 lab (`notes/lab/`, `notes/round6.md`) found both
+failures: too little (foliage as blobs or domes, a bare tree's twigs as a
+tone that read as fur) lost to the old detailed recipes, and too much (an
+even carpet of 40,000 touches, a starburst at every twig tip) read as
+procedural noise. What won kept the middle scale: bare tree C (fewer,
+varied, tapered twigs, all connected), water B, sky B, rock B.
+
 ---
 
 ## 1. Working order and time

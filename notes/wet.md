@@ -666,7 +666,7 @@ lights and the wood are as they were. Stacked pass 3 / fix:
 (`PAINTCK7`, r6-time's review fix): the surface film is now `PAINTCK8`,
 appended after the hand-time block; older files are refused.
 
-## 8. Wet control experiment (the owner's decision: r6-wet stays unmerged; run the experiment)
+## 8. Wet control experiment (Alice's decision: r6-wet stays unmerged; run the experiment)
 
 Main was merged first (relief default 0.06, r6-oak, r6-time's review
 fixes). The film format stays `PAINTCK8`. The replay hashes are

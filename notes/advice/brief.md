@@ -42,7 +42,7 @@ summer valley); 5_free_round4_dolmen.jpg; 6_tool_firs.jpg,
 Also, for comparison: notes/amnesia2/*.jpg (round 2), notes/amnesia3/*.jpg
 (round 3), notes/amnesia4/*.jpg (round 4).
 
-## The owner's view (her words, condensed)
+## Alice's view (her words, condensed)
 "Things are improved but we have so much more to go. The strokes still look
 digital, a little too neat. The rock looks good but its shadow makes it
 float. The background trees improved but are still very digital. I think we
@@ -63,7 +63,7 @@ we've gone sideways since round 2 or 3."
    with a brush), which reads as vector art; painters work mark-first
    (masses, then a few lights and accents; the brush's own mark does the
    rest).
-3. Critics reward motifs; the owner's eye is harsher about surface.
+3. Critics reward motifs; Alice's eye is harsher about surface.
 Proposed next steps: (a) a quick test with paint relief lighting turned way
 down; (b) park Friedrich and run a Bob Ross sprint as a "mark-making school"
 (his tools and techniques are documented in notes/research/bob_ross.md:

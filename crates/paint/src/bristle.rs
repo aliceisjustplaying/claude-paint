@@ -601,6 +601,8 @@ pub(crate) struct Surf {
     top: *mut f32,
     tlat: *mut Latent,
     thide: *mut Prop,
+    mid: *mut f32,
+    midx: *mut u32,
     stroke: *mut u32,
     touched: *mut u32,
     floor: *mut f32,
@@ -626,12 +628,19 @@ fn grow(b: &mut Bounds, x0: usize, y0: usize, x1: usize, y1: usize) {
 }
 
 impl Surf {
+    /// Volume of pixel `i`'s body: its film less the surface film and any
+    /// earlier surface film set aside by the stroke under way (`lay`).
+    #[inline]
+    unsafe fn body(&self, i: usize) -> f32 {
+        unsafe { (*self.vol.add(i) - *self.top.add(i) - *self.mid.add(i)).max(0.0) }
+    }
+
     /// Lay `v` coats of paint (`lat`, `hide`) on pixel `i`. On a dry
     /// surface it becomes the film's body; laid into wet paint it goes on
     /// the surface film, on top of what is there (a brush works it in by
-    /// stirring, see `stir`).
+    /// stirring, see `stir`). `mids`: the films set aside by this stroke.
     #[inline]
-    unsafe fn add(&self, i: usize, v: f32, lat: &Latent, hide: Prop) {
+    unsafe fn add(&self, i: usize, v: f32, lat: &Latent, hide: Prop, mids: &[Mid]) {
         unsafe {
             if v <= 0.0 {
                 return;
@@ -639,58 +648,64 @@ impl Surf {
             let vol = &mut *self.vol.add(i);
             if *vol < WET_FILM {
                 // (a trace of paint on a dry pixel is part of the body)
+                let mut b = self.body(i);
                 let t = &mut *self.top.add(i);
                 if *t > 0.0 {
-                    mix_into(&mut 0.0f32.max(*vol - *t), &mut *self.lat.add(i), &mut *self.hide.add(i), *t, &*self.tlat.add(i), *self.thide.add(i));
+                    mix_into(&mut b, &mut *self.lat.add(i), &mut *self.hide.add(i), *t, &*self.tlat.add(i), *self.thide.add(i));
                     *t = 0.0;
                 }
-                let mut b = *vol;
+                let mv = &mut *self.mid.add(i);
+                if *mv > 0.0 {
+                    let m = &mids[*self.midx.add(i) as usize];
+                    mix_into(&mut b, &mut *self.lat.add(i), &mut *self.hide.add(i), *mv, &m.lat, m.hide);
+                    *mv = 0.0;
+                }
                 mix_into(&mut b, &mut *self.lat.add(i), &mut *self.hide.add(i), v, lat, hide);
-                *vol = b;
             } else {
                 mix_into(&mut *self.top.add(i), &mut *self.tlat.add(i), &mut *self.thide.add(i), v, lat, hide);
-                *vol += v;
             }
+            *vol += v;
         }
     }
 
     /// Lay `v` coats from the brush of stroke `id` on pixel `i` (`add`). The
     /// surface film is the newest stroke's paint: a surface film left by an
-    /// earlier stroke is set aside in `mid` when this stroke first lays
-    /// paint here, and `settle_mid` decides at the stroke's end whether it
-    /// now lies buried under this stroke's paint or shows through it.
+    /// earlier stroke is set aside (`Wet::mid`, its pigment in `mids`) when
+    /// this stroke first lays paint here; until the stroke ends it lies
+    /// between the body and this stroke's paint, and `settle_mid` then
+    /// decides whether it is buried under this stroke's paint or shows
+    /// through it.
     #[inline]
-    unsafe fn lay(&self, i: usize, v: f32, lat: &Latent, hide: Prop, id: u32, mid: &mut Vec<Mid>) {
+    unsafe fn lay(&self, i: usize, v: f32, lat: &Latent, hide: Prop, id: u32, mids: &mut Vec<Mid>) {
         unsafe {
-            if v > 0.0 && *self.stroke.add(i) != id && *self.top.add(i) > 0.0 {
-                let t = &mut *self.top.add(i);
-                mid.push(Mid { i, v: *t, lat: *self.tlat.add(i), hide: *self.thide.add(i) });
-                // (its volume stays in the film; it sits between the body
-                // and this stroke's paint until the stroke ends)
-                *t = 0.0;
+            if v > 0.0 && *self.stroke.add(i) != id && *self.top.add(i) > 0.0 && *self.vol.add(i) >= WET_FILM && *self.mid.add(i) <= 0.0 {
+                *self.midx.add(i) = mids.len() as u32;
+                mids.push(Mid { i, lat: *self.tlat.add(i), hide: *self.thide.add(i) });
+                *self.mid.add(i) = *self.top.add(i);
+                *self.top.add(i) = 0.0;
             }
-            self.add(i, v, lat, hide);
+            self.add(i, v, lat, hide, mids);
         }
     }
 
-    /// At a stroke's end: each surface film it covered (`lay`) is buried in
-    /// the body as far as the stroke's own paint over it hides it (`BURY`
+    /// At a stroke's end: each surface film it set aside (`lay`), as much of
+    /// it as is left after the stroke's pickup and plough, is buried in the
+    /// body as far as the stroke's own paint over it hides it (`BURY`
     /// coats hide it all), and the rest stays in the surface film, mixed
     /// with this stroke's paint: a thin edge over an earlier light stroke
     /// doesn't bring the dark body up through it. A film like the body it
     /// lies on is always buried (that changes nothing but frees the
     /// surface for the new paint).
-    unsafe fn settle_mid(&self, mid: &[Mid]) {
+    unsafe fn settle_mid(&self, mids: &[Mid]) {
         unsafe {
-            for m in mid {
+            for m in mids {
                 let i = m.i;
-                let vol = *self.vol.add(i);
-                let t = &mut *self.top.add(i);
-                let mv = m.v.min((vol - *t).max(0.0));
+                let mut b = self.body(i);
+                let mv = std::mem::take(&mut *self.mid.add(i));
                 if mv <= 0.0 {
                     continue;
                 }
-                let mut b = (vol - *t - mv).max(0.0);
+                let t = &mut *self.top.add(i);
                 let l = &mut *self.lat.add(i);
                 let like = 1.0 - smoothstep(0.05, 0.3, l.iter().zip(&m.lat).map(|(a, c)| (a - c).abs()).sum::<f32>());
                 let k = if b > 1e-6 { smoothstep(0.0, BURY, *t).max(like) } else { smoothstep(0.0, BURY, *t) };
@@ -714,7 +729,7 @@ impl Surf {
             // it is sheared: it smears into the wet paint it lies on)
             let k = k * (1.25 - 0.5 * (*self.thide.add(i))[1].clamp(0.0, 1.0)) * (1.0 + THIN_FILM / (*t).max(1e-3));
             let m = *t * k.min(1.0);
-            let mut b = (*self.vol.add(i) - *t).max(0.0);
+            let mut b = self.body(i);
             mix_into(&mut b, &mut *self.lat.add(i), &mut *self.hide.add(i), m, &*self.tlat.add(i), *self.thide.add(i));
             *t -= m;
         }
@@ -728,65 +743,65 @@ impl Surf {
             if v <= 0.0 {
                 return;
             }
+            let mut b = self.body(i);
             let vol = &mut *self.vol.add(i);
-            let mut b = (*vol - *self.top.add(i)).max(0.0);
             mix_into(&mut b, &mut *self.lat.add(i), &mut *self.hide.add(i), v, lat, hide);
             *vol += v;
         }
     }
 
-    /// Take `v` coats of pixel `i`'s whole film, surface and body alike:
-    /// returns (from the surface, from the body).
+    /// Take `v` coats of pixel `i`'s whole film, its layers alike: returns
+    /// the coats from (the surface film, the film set aside, the body).
     #[inline]
-    unsafe fn take_column(&self, i: usize, v: f32) -> (f32, f32) {
+    unsafe fn take_column(&self, i: usize, v: f32) -> [f32; 3] {
         unsafe {
             let vol = *self.vol.add(i);
             if vol <= 0.0 {
-                return (0.0, 0.0);
+                return [0.0; 3];
             }
-            let v = v.min(vol).max(0.0);
-            let a = *self.top.add(i) * (v / vol);
-            let t = &mut *self.top.add(i);
-            *t = (*t - a).max(0.0);
-            *self.vol.add(i) = vol - v;
-            if vol - v <= 0.0 {
-                *t = 0.0;
-            } else if *t > vol - v {
-                *t = vol - v;
-            }
-            (a, v - a)
+            let f = (v / vol).clamp(0.0, 1.0);
+            let (t, m) = (&mut *self.top.add(i), &mut *self.mid.add(i));
+            let parts = [*t * f, *m * f, self.body(i) * f];
+            *t -= parts[0];
+            *m -= parts[1];
+            *self.vol.add(i) = vol - v.min(vol).max(0.0);
+            parts
         }
     }
 
-    /// Take `v` coats off the top of pixel `i` (the surface film first,
-    /// then the body): returns (from the surface, from the body).
+    /// Take `v` coats off the top of pixel `i`: the surface film first, then
+    /// the film set aside under it, then the body. Returns the coats from
+    /// each (as `take_column`).
     #[inline]
-    unsafe fn take(&self, i: usize, v: f32) -> (f32, f32) {
+    unsafe fn take(&self, i: usize, v: f32) -> [f32; 3] {
         unsafe {
             let vol = &mut *self.vol.add(i);
-            let t = &mut *self.top.add(i);
+            let (t, m) = (&mut *self.top.add(i), &mut *self.mid.add(i));
             let v = v.min(*vol).max(0.0);
             let a = v.min(*t);
+            let am = (v - a).min(*m);
             *t -= a;
+            *m -= am;
             *vol -= v;
-            if *vol <= 0.0 {
-                *t = 0.0;
-            } else if *t > *vol {
-                *t = *vol;
-            }
-            (a, v - a)
+            [a, am, v - a - am]
         }
     }
 }
 
 /// An earlier stroke's surface film set aside while a new stroke lays
-/// paint over it (see `Surf::lay`): pixel, volume, pigment, properties.
+/// paint over it (see `Surf::lay`): pixel, pigment and properties (its
+/// volume, what is left of it, is `Wet::mid` at the pixel).
 pub(crate) struct Mid {
     i: usize,
-    v: f32,
     lat: Latent,
     hide: Prop,
 }
+
+const NO_MID: Mid = Mid { i: 0, lat: [0.0; LAT], hide: [0.0; 3] };
+
+/// (tests: how often pickup and the plough took paint from a film set aside)
+#[cfg(test)]
+pub(crate) static MID_MOVES: [std::sync::atomic::AtomicU64; 2] = [std::sync::atomic::AtomicU64::new(0), std::sync::atomic::AtomicU64::new(0)];
 
 /// Thickness (coats) of a new stroke's paint that buries the surface film
 /// under it in the body (about what hides it; see `Surf::settle_mid`).
@@ -802,7 +817,7 @@ impl Canvas {
         let n = self.f.w * self.f.h;
         let wt = &self.wet;
         assert!(
-            [self.height.len(), self.px.len(), self.film.len(), wt.vol.len(), wt.lat.len(), wt.hide.len(), wt.top.len(), wt.tlat.len(), wt.thide.len(), wt.stroke.len(), wt.touched.len(), wt.floor.len(), wt.cover.len()].iter().all(|&l| l == n),
+            [self.height.len(), self.px.len(), self.film.len(), wt.vol.len(), wt.lat.len(), wt.hide.len(), wt.top.len(), wt.tlat.len(), wt.thide.len(), wt.mid.len(), wt.midx.len(), wt.stroke.len(), wt.touched.len(), wt.floor.len(), wt.cover.len()].iter().all(|&l| l == n),
             "canvas buffers out of sync with frame"
         );
         if self.base.as_ref().map(|b| b.0) != Some(self.surf_gen) {
@@ -834,6 +849,8 @@ impl Canvas {
             top: self.wet.top.as_mut_ptr(),
             tlat: self.wet.tlat.as_mut_ptr(),
             thide: self.wet.thide.as_mut_ptr(),
+            mid: self.wet.mid.as_mut_ptr(),
+            midx: self.wet.midx.as_mut_ptr(),
             stroke: self.wet.stroke.as_mut_ptr(),
             touched: self.wet.touched.as_mut_ptr(),
             floor: self.wet.floor.as_mut_ptr(),
@@ -1491,11 +1508,18 @@ unsafe fn exchange(
                     // the surface film comes up first; the body under it
                     // only as far as the bristles reach through their own
                     // paint
-                    let a = take.min(*sf.top.add(i));
+                    // (the surface film includes an earlier one this stroke
+                    // has set aside under its own paint)
+                    let a = take.min(*sf.top.add(i) + *sf.mid.add(i));
                     // (a pressed tip is pushed into the wet paint and splits
                     // off it as it lifts: its own load cushions it less)
-                    let (a, b) = sf.take(i, a + (take - a) * if dep.is_some() { 1.0 - 0.3 * wet } else { cushion });
-                    for (part, l, hp) in [(a, &*sf.tlat.add(i), *sf.thide.add(i)), (b, &*sf.lat.add(i), *sf.hide.add(i))] {
+                    let p = sf.take(i, a + (take - a) * if dep.is_some() { 1.0 - 0.3 * wet } else { cushion });
+                    let ml = if p[1] > 0.0 { &mid[*sf.midx.add(i) as usize] } else { &NO_MID };
+                    #[cfg(test)]
+                    if p[1] > 0.0 {
+                        MID_MOVES[0].fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                    }
+                    for (part, l, hp) in [(p[0], &*sf.tlat.add(i), *sf.thide.add(i)), (p[1], &ml.lat, ml.hide), (p[2], &*sf.lat.add(i), *sf.hide.add(i))] {
                         if part > 0.0 {
                             let tv = part * px_area;
                             got_v += tv;
@@ -1581,9 +1605,17 @@ unsafe fn exchange(
                                     // a bristle pushes the whole column of
                                     // paint in its way; it keeps its
                                     // layering where it lands
-                                    let (a, b) = sf.take_column(i, m);
-                                    sf.add_body(j, b, &l, hd);
-                                    sf.add(j, a, &tl, th);
+                                    let p = sf.take_column(i, m);
+                                    let (ml, mh) = if p[1] > 0.0 { let q = &mid[*sf.midx.add(i) as usize]; (q.lat, q.hide) } else { (tl, th) };
+                                    #[cfg(test)]
+                                    if p[1] > 0.0 {
+                                        MID_MOVES[1].fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                                    }
+                                    sf.add_body(j, p[2], &l, hd);
+                                    sf.add(j, p[0], &tl, th, mid);
+                                    // (the set-aside film lands on the
+                                    // neighbor's surface, as surface paint)
+                                    sf.add(j, p[1], &ml, mh, mid);
                                 }
                             }
                         }
@@ -2174,5 +2206,113 @@ mod cover_tests {
             }
             println!("{name:6}: area {:.0} (any paint {:.0}) of nominal {:.0}: {:.2}; mark_width {:.2} of {:.2}", tot.0, tot.1, tool.width * len, tot.0 / (tool.width * len), tool.mark_width(p), tool.width);
         }
+    }
+}
+
+/// Paint is conserved: no brush operation creates or destroys pigment or
+/// changes paint properties in total. Every moment (volume, volume × each
+/// latent pigment component, volume × scattering, stiffness and drying
+/// rate), summed over the canvas's wet paint and the brush's bristles, is
+/// the same before and after a stroke.
+#[cfg(test)]
+mod conservation {
+    use super::*;
+    use crate::color::hex;
+    use crate::surface::Linen;
+
+    const N: usize = LAT + 4;
+
+    fn add(m: &mut [f64; N], v: f32, lat: &Latent, hide: &Prop) {
+        let v = v as f64;
+        m[0] += v;
+        for k in 0..LAT {
+            m[1 + k] += v * lat[k] as f64;
+        }
+        for k in 0..3 {
+            m[1 + LAT + k] += v * hide[k] as f64;
+        }
+    }
+
+    /// Moments of the canvas's wet paint (per unit², like a brush's
+    /// volumes) and of the brushes' paint.
+    fn moments(c: &Canvas, brushes: &[&Held]) -> [f64; N] {
+        let mut m = [0.0f64; N];
+        let px_area = 1.0 / (c.f.scale * c.f.scale);
+        let w = &c.wet;
+        for i in 0..w.vol.len() {
+            let t = w.top[i].min(w.vol[i]);
+            add(&mut m, (w.vol[i] - t) * px_area, &w.lat[i], &w.hide[i]);
+            add(&mut m, t * px_area, &w.tlat[i], &w.thide[i]);
+        }
+        for h in brushes {
+            for b in &h.bristles {
+                let t = b.tip.min(b.vol);
+                add(&mut m, b.vol - t, &b.lat, &b.hide);
+                add(&mut m, t, &b.tlat, &b.thide);
+            }
+        }
+        m
+    }
+
+    fn check(before: &[f64; N], after: &[f64; N], what: &str) {
+        // (each moment relative to its own total, or to the volume where
+        // that total is small: f32 mixing rounds at about 1e-6 per step)
+        let vol = before[0].max(after[0]).max(1e-9);
+        let names = |k: usize| if k == 0 { "volume".to_string() } else if k <= LAT { format!("pigment {}", k - 1) } else { ["scattering", "stiffness", "drying"][k - 1 - LAT].to_string() };
+        for k in 0..N {
+            let e = (after[k] - before[k]).abs() / before[k].abs().max(after[k].abs()).max(0.01 * vol);
+            assert!(e < 2e-4, "{what}: {} changed by {e:.2e} of its total ({} → {})", names(k), before[k], after[k]);
+        }
+    }
+
+    /// A dark field, a light field over half of it (so its pixels carry a
+    /// surface film), then a third pigment stroked across both while all is
+    /// wet: its bristles lay paint on the earlier surface film (setting it
+    /// aside until the stroke ends), then pick up and plough through the
+    /// pixels where it lies. Stirring, pickup, the plough and the stroke's
+    /// settlement must all keep every moment.
+    #[test]
+    fn a_third_stroke_over_two_wet_colors_conserves_paint() {
+        let mut c = Canvas::new(300, 1.0, hex("#c8b89a")).with_linen(Linen::fine(3));
+        let paints = [
+            Paint::body(hex("#23302a")).with_drying(0.4).with_stiff(0.9),
+            Paint::new(hex("#e2d6b8"), 0.8, 0.5).with_drying(2.0),
+            Paint::new(hex("#a0342a"), 0.7, 0.3).with_drying(1.2),
+        ];
+        let mut h = Held::new(Tool::hog_flat(30.0), 5);
+        // the dark, then the light over its right half
+        for (k, (p, x0)) in [(paints[0], 100.0), (paints[1], 480.0)].into_iter().enumerate() {
+            let mut y = 300.0;
+            while y < 700.0 {
+                h.reload(p, 0.9);
+                let b = moments(&c, &[&h]);
+                c.drag(&mut h, &Gesture::new(vec![(x0, y), (900.0, y + 3.0)]).pressure(0.85, 0.8).orient(Orient::Across), None);
+                check(&b, &moments(&c, &[&h]), &format!("field {k} at y {y}"));
+                y += 22.0;
+            }
+        }
+        // the third pigment, pressed and dragged back and forth across both
+        use std::sync::atomic::Ordering::Relaxed;
+        let moves0 = [MID_MOVES[0].load(Relaxed), MID_MOVES[1].load(Relaxed)];
+        let mut r = Held::new(Tool::filbert(24.0), 9);
+        for (k, y) in [360.0f32, 420.0, 480.0, 540.0, 600.0].into_iter().enumerate() {
+            r.reload(paints[2], if k % 2 == 0 { 0.8 } else { 0.25 });
+            let b = moments(&c, &[&r]);
+            c.drag(&mut r, &Gesture::new(vec![(120.0, y), (500.0, y - 20.0), (880.0, y + 10.0), (500.0, y + 30.0)]).pressure(0.95, 0.7).orient(Orient::Across), None);
+            check(&b, &moments(&c, &[&r]), &format!("third stroke {k}"));
+            // and a clean hog through it at once: pickup and plough
+            let mut clean = Held::new(Tool::hog_flat(18.0), 11 + k as u64);
+            let b = moments(&c, &[&clean]);
+            c.drag(&mut clean, &Gesture::new(vec![(860.0, y + 5.0), (140.0, y - 5.0)]).pressure(0.95, 0.9).orient(Orient::Across), None);
+            check(&b, &moments(&c, &[&clean]), &format!("clean hog after third stroke {k}"));
+            // and a touch into it
+            let b = moments(&c, &[&r]);
+            c.touch(&mut r, &Touch::at(500.0, y).pressure(0.9).drag(3.0, 1.0), None);
+            check(&b, &moments(&c, &[&r]), &format!("touch after third stroke {k}"));
+        }
+        // (the strokes did pick up and plough paint set aside under them)
+        let moves = [MID_MOVES[0].load(Relaxed) - moves0[0], MID_MOVES[1].load(Relaxed) - moves0[1]];
+        assert!(moves[0] > 100 && moves[1] > 100, "pickups and plough moves through set-aside paint: {moves:?}");
+        assert!(c.wet.mid.iter().all(|&m| m == 0.0), "every set-aside film is settled when its stroke ends");
     }
 }

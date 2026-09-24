@@ -22,6 +22,30 @@ they only prevent bad results.
 - **Order.** Draw; the sky thin; the distance far to near; the ground as tone; the motifs;
   small particulars last with pointed brushes; grass last of all in fine upturning strokes
   over finished ground or snow.
+- **Working in sittings (hand time) [r6 time].** *Principle:* a stroke costs the time a
+  hand takes to make it, and a painter works in sittings of a few hours with the paint
+  setting between them. Then what is wet when a passage meets its neighbor follows from
+  the work, not from a rule. `canvas{..., hand=true}`, `sitting{hours=3}`, `rest(16)`,
+  `timesheet()`, `look --mode wet` (`crates/easel/README.md`, notes/time.md). What
+  follows from it:
+  - In one sitting the paint under a later passage is still open and comes up into it.
+    Lay each passage only where it shows, a little (about 10 units) past where its
+    neighbor will meet it. A ridge painted to the bottom of the canvas and then a dark
+    knoll over it in the same sitting came out cobbled with churned-up light paint. Laid
+    only where it shows, the knoll stayed solid, with a soft shoulder against the ridge,
+    and the ridge took 42 minutes of hand time instead of 90
+    (`notes/time/example_three_ways.jpg`).
+  - The time of an edge decides its character: painted into open paint it is lost (a
+    hill's top drags the sky down), after lunch (`rest(4)`) it drags less, and the next
+    day (`rest(16)`) it is crisp like `dry()` (`notes/time/edge_timing.jpg`). Put the rest
+    where you want a found edge.
+  - Read the timesheet as the price of detail: the fir wood in `l5_near` is 53 hours of
+    hand time (211,000 hatched strokes), the whole sky 32 minutes.
+  - *Ceiling:* the times are estimates (Fitts and the steering law are sourced; the
+    palette trips, which are most of the time, are guesses), a pass ages in 15-minute
+    slices from the top down rather than along a painter's path, and how open paint
+    looks where two passages meet (a pale, streaky drag band) is still unresolved. The
+    `dry()` rule below stands until the wet-on-wet work decides it.
 - **`dry()` before any passage that goes over earlier work.** `wait(24*60)` is often not
   enough. A thick body floor (coverage 4.5) was still "open" after a day, and the rock
   laid over it went semi-transparent [r3 near]. Snow over a day-old near-black wood

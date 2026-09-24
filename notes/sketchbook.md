@@ -643,6 +643,33 @@ The foreground is where every round fell shortest of Friedrich. Budget real time
   wood gave air but smeared it into vertical streaks and lost the trunks. Use `fir_wood{}`
   instead (section 5).
 
+- **Glitches at 3200 that are the recipe's, not the engine's** (Round 6 glitch census,
+  `notes/glitch.md`, sheet `notes/glitch/alice_census.png`). Principle: whatever you
+  leave uncovered over a strong underlayer shows at full size as sharp, bright,
+  digital-looking specks and slivers, even when the 1000 px preview reads as a mass.
+  Check at `look --crop ... --scale 3.2` and run `uv run scripts/glitch.py` on a
+  3200 crop. Ceiling: these fixes remove the slivers; they don't make the passage good.
+  - *Thin long level strokes over the orange Friedrich ground* leave slivers of
+    ground between them (lab 1 water B's open water and sky: the "orangey lines" the
+    owner called horrible). Fix: a second pass of the same color at a different
+    stroke length, or a `blend()` while open, or tone the ground there first; judge
+    `coverage` at 3200, not 1000. [lab 1 water B]
+  - *A dense small-brush hatch over a dry pale layer* (a dark crown hatched with
+    `round 1.6` over a dry sky) leaves pinholes of sky between its ridges. The engine
+    no longer leaves paint on a sliver (glitch P1), but the bare crevices between
+    200 µm ridges of stiff paint stay open. Fix: lay the crown's darkest mass as one
+    body layer first (dead coloring), then hatch into it; or hatch with more medium.
+    [lab 2 lime P]
+  - *A crack left as a masked channel* (the lit pass clipped off `rk:cracks()`) reads as
+    an even, ruled line of the shadow paint. Fix: paint the crack as a stroke with a
+    pointed round, varying pressure, a light lip on the sunny side, lost halfway (lab 2
+    rock H does this). [lab 1 rock B]
+  - *Thin snow dragged over a dry, ridged rock* catches in the hollows and leaves the
+    ridges' crests bare: at 1000 it reads as snow torn by the grain (as meant), at 3200
+    as dark outlines round the rock's old strokes. Fix: lay the cap fuller (`load` 0.9,
+    less medium) or before the rock dries, or accept it only where it reads as grain.
+    [l5_near]
+
 ## 14. Habits of looking
 
 - **Look after every chunk** (`easel do --look`). A third of round 3's chunks were undone;

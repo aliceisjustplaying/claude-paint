@@ -658,3 +658,52 @@ fn diag_sky_bare_pixels() {
         eprintln!("  {r:?}");
     }
 }
+
+/// A dense hatch of dark paint with a pointed round over a dry pale ground,
+/// at full size (3.2 px per unit, 0.1 mm per pixel: the lab 2 lime at 3200):
+/// where the dried film is thick, it hides the ground. The lime's pale
+/// pinholes held 50-130 µm of dark paint on a small share of the pixel (a
+/// bead far taller than it is wide), because a pointed tool's `cover` (its
+/// hairs' share of the pixel) stayed what the hairs had touched while
+/// leveling poured paint in from the strokes around (notes/glitch.md, P1).
+/// Bare gaps between strokes (no film to speak of) are not counted: they
+/// are the hatch's own.
+#[test]
+fn thick_paint_from_a_pointed_hatch_hides_the_ground_at_full_size() {
+    use crate::canvas::Crop;
+    const PALE: &str = "#aab7c3";
+    const DARK: &str = "#1f291b";
+    let crop = Crop { units: [420.0, 420.0, 500.0, 500.0], margin: 20.0 };
+    let mut c = Canvas::new_window(3200, 1.0, hex(PALE), Some(crop)).with_size_mm(320.0);
+    assert!((c.px_mm() - 0.1).abs() < 1e-3);
+    let region = Mask::from_fn(c.frame(), |x, y| if (400.0..520.0).contains(&x) && (400.0..520.0).contains(&y) { 1.0 } else { 0.0 });
+    let hd = Handling::new(Tool::round_sable(1.6))
+        .length(3.0, 6.0)
+        .coverage(2.4)
+        .pressure(0.6, 0.9)
+        .angle(|x, y| 2.4 * ((x * 0.31).sin() + (y * 0.23).cos()))
+        .color(|_, _| hex(DARK));
+    let h0 = c.height.clone();
+    c.work(&region, &hd, 7);
+    c.dry();
+    let lum = |p: [f32; 3]| 0.2126 * p[0] + 0.7152 * p[1] + 0.0722 * p[2];
+    let (lp, ld) = (lum(hex(PALE)), lum(hex(DARK)));
+    let f = c.f;
+    let (kx0, ky0, kx1, ky1) = c.keep;
+    let (mut thick, mut pale) = (0usize, 0usize);
+    for y in ky0..ky1 {
+        for x in kx0..kx1 {
+            let i = y * f.w + x;
+            // 30 µm of this paint over the whole pixel hides the ground to
+            // 95%; on half of it, half. Pale: more ground than paint shows
+            if c.height[i] - h0[i] >= 30.0 {
+                thick += 1;
+                if (lp - lum(c.px[i])) / (lp - ld) < 0.5 {
+                    pale += 1;
+                }
+            }
+        }
+    }
+    assert!(thick > 50_000, "{thick} pixels with a thick film");
+    assert!(pale <= thick / 20_000, "{pale} of {thick} pixels under 30 µm or more of dark paint show more ground than paint");
+}

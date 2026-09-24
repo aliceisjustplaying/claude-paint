@@ -425,3 +425,70 @@ local lee = mask(function(x, y)
   return smoothstep(0.05, 0.4, v) * smoothstep(by + 8, by + 40, y)
 end)
 glaze(lee:blur(3), {color="#8288a6", coats=0.2})
+
+--@ chunk 20 · clock 79701.02807617188
+-- snow lying along the upper faces of the oak's level limbs
+local snb = brush{kind="round", width=1.2, point=0.8}
+local cnt = 0
+for _, s in ipairs(oak:wood_strokes{min=1.4}) do
+  local run = {}
+  for k = 1, #s.pts - 1 do
+    local a, b = s.pts[k], s.pts[k + 1]
+    local dx, dy = b[1] - a[1], b[2] - a[2]
+    local level = math.abs(dy) < 0.6 * math.abs(dx)
+    if level then
+      local w = s.w[k] or 2
+      run[#run + 1] = {a[1], a[2] - 0.42 * w}
+    elseif #run >= 2 then
+      cnt = cnt + 1
+      snb:reload(mix("#c5c2cb", "#ddd3d0", rand()), 0.7)
+      snb:stroke(run, {pressure={0.45, 0.2}, ramps={0.2, 0.4}, shake=0.2}); run = {}
+    else run = {} end
+  end
+  if #run >= 2 then cnt = cnt + 1; snb:reload(mix("#c5c2cb", "#ddd3d0", rand()), 0.7); snb:stroke(run, {pressure={0.45, 0.2}, ramps={0.2, 0.4}}) end
+end
+print(cnt, "snow runs")
+
+--@ chunk 21 · clock 79701.02807617188
+-- deepen the oak against the dawn: a dark umber glaze over its wood, heavier low and on the left
+local wd = oak:wood(1.0):grow(0.4) * above(function(x) return 431 + (x - 158) * 0.5 end)
+glaze(wd * mask(function(x, y) return 0.6 + 0.4 * smoothstep(100, 440, y) end), {color="#2a2320", coats=0.35})
+-- bark: furrows down the trunk, broken, with a few pale lichen touches on the shaded side
+local tr = oak:wood(7)
+local fb = brush{kind="round", width=0.9, point=0.8}
+for i = 1, 70 do
+  local x = rand(150, 196); local y = rand(338, 446)
+  if tr:at(x, y) > 0.8 and tr:at(x, y - 8) > 0.8 then
+    if i % 6 == 1 then fb:reload(mix("#1c1917", "#2a2522", rand()), 0.8) end
+    local l = rand(5, 14)
+    fb:stroke({{x, y}, {x + rand(-0.8, 0.8), y - l * 0.5}, {x + rand(-1.2, 1.2), y - l}}, {pressure={0.5, 0.1}, ramps={0.2, 0.5}, shake=0.5, clip=tr})
+  end
+end
+-- bury the foot properly: short opaque snow touches along a lumpy drift line against the trunk
+local sb = brush{kind="filbert", width=2.4}
+for i = 1, 40 do
+  local x = rand(150, 200)
+  local top = 432.5 + (x - 158) * 0.5 + 2 * math.sin(x / 4) + rand(-1, 1)
+  sb:reload(mix("#cfcfd1", "#c3c4cb", rand()), 1.0)
+  local y = top + rand(-1, 7)
+  sb:stroke({{x - rand(3, 6), y + 1}, {x, y - 0.5}, {x + rand(3, 6), y + 2.5}}, {pressure={0.8, 0.6}, ramps={0.2, 0.3}, shake=0.3})
+end
+
+--@ chunk 22 · clock 82211.1962890625
+-- his boots sunk in the trodden snow
+local sb = brush{kind="round", width=1.6, point=0.3}
+for _, p in ipairs({{586, 603.4}, {590.6, 601.6}, {594.7, 603.8}}) do
+  sb:reload(sample(p[1] + 5, p[2] + 1.5, 1.5), 0.9)
+  sb:stroke({{p[1] - 1.8, p[2] + 0.2}, {p[1], p[2] - 0.3}, {p[1] + 1.8, p[2] + 0.3}}, {pressure={0.6, 0.6}})
+end
+
+--@ chunk 23 · clock 82211.1962890625
+-- a last veil of stippled sky over the upper sky to quiet the streaks, then a thin smalt glaze deepening toward the top
+local vary = noise{seed=171, period=110, octaves=3}
+local up = mask(function(x, y) return 1 - smoothstep(150, 260, y) end) - oak:mask():grow(2)
+stipple(up, {width=2.4, pal=skypal, color=function(x, y) return shift(skycol(x, y), 0.005 * vary(x, y), 0, -0.004) end,
+  coverage=function(x, y) return 1.5 + 0.6 * vary:at01(x, y) end, pressure={0.45, 0.85}, dips={18, 0.35, 0.7}, medium=0.55, cluster={0.25, 6}, feather=0.6})
+glaze(mask(function(x, y) return 0.25 + 0.75 * (1 - smoothstep(0, 300, y)) end), {color="#4f5776", coats=0.14})
+
+--@ chunk 24 · clock 94505.0771484375
+wait(24*60); varnish{color="#e6d3a4", coats=0.3, vary=0.12}; cracks{dirt=0.35}; relief()

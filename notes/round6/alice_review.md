@@ -113,3 +113,12 @@ because I think we may have something there." The helper stays parked on
 branch r7-piles (unmerged). The fair test: a painter who works from piles
 from the start (choose a pile, paint a passage with it, then the next),
 not a formula painting with its colors swapped.
+
+## The winter port (notes/round7/winter_port/)
+**The original (round 2) wins.** Today's version at 3200 "shows the
+tell-tale too-perfect lighting"; "the trees are worse and yes, they are
+thinner, which is bad here"; the difference between today and today-wet
+"is very subtle". So two of today's changes made the painter's own work
+worse: the pointed-brush default (thinner marks) and something that
+smooths the light (candidates: relief 0.2 → 0.06, removing the canvas
+grain and mottle; other engine changes since round 2).

@@ -108,14 +108,21 @@ pub(crate) fn sweep_down((tw, th): (usize, usize)) -> Vec<usize> {
     idx
 }
 
+/// The order a pass's tiles are painted in.
+pub(crate) enum TileOrder {
+    /// An order the painter asked for: kept.
+    Asked(Vec<usize>),
+    /// The verb's default (checkerboard phases that let tiles run in
+    /// parallel): with hand time on, a sweep down instead.
+    Default(Vec<usize>),
+}
+
 /// The tiles of a covering pass, planned and counted, ready to paint.
 pub(crate) struct Pass {
     /// The grid of tiles (columns, rows).
     pub grid: (usize, usize),
-    /// The order to paint them in: the one asked for (`asked`), or the
-    /// verb's default (checkerboard phases that let tiles run in parallel).
-    pub order: Vec<usize>,
-    pub asked: bool,
+    /// The order to paint them in.
+    pub order: TileOrder,
     /// Each tile's pixel footprint (None: it paints nothing).
     pub rects: Vec<Option<Rect>>,
     /// Each tile's hand time (s), as counted in the ledger.
@@ -134,7 +141,7 @@ impl Canvas {
     /// the pixels it dirtied.
     ///
     /// With a `slice` (hand time on), the tiles are painted in slices of
-    /// about the canvas's hand slice (`batches`) with the paint ageing
+    /// about that much hand time (`batches`) with the paint ageing
     /// between them (`hand_pass`; the last slice is left owed, for the
     /// caller's clock), and the default order becomes a sweep down: a hand
     /// works down a passage, not in the phases that let tiles run in
@@ -145,8 +152,11 @@ impl Canvas {
     /// it holds; the rest keep their relative order), after the ids are
     /// handed out, so it paints with the same ids as the whole canvas.
     pub(crate) fn paint_pass(&mut self, pass: Pass, paint: impl Fn(Surf, usize, u32) -> Bounds + Sync) {
-        let Pass { grid, order, asked, rects, secs, ids, slice } = pass;
-        let order = if slice.is_some() && !asked { sweep_down(grid) } else { order };
+        let Pass { grid, order, rects, secs, ids, slice } = pass;
+        let order = match order {
+            TileOrder::Default(_) if slice.is_some() => sweep_down(grid),
+            TileOrder::Asked(o) | TileOrder::Default(o) => o,
+        };
         let batches = batches(&order, &secs, slice);
         let n_batches = batches.len();
         let mut offsets = vec![0u32; ids.len()];

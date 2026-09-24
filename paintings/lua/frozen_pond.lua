@@ -118,10 +118,6 @@ end) * POND
 work(streak, {hand="body", tool="round 2.5", length={25, 80}, coverage=2.4, medium=0.15, hug=false, angle=0,
   angle_jitter=0.04, load=0.6, color=function(x, y) local t = clamp((y - shore(x)) / (bank(x) - shore(x)), 0, 1)
     return mix("#c9c0b6", "#a9acb4", t) end, edge="lost"})
--- open water: a long thin lead in the ice, dark, holding a little warm sky
-HOLE = poly({{690,511},{730,509},{790,509.5},{850,512},{812,515.5},{752,516},{708,514.5}}, true):soften(0.8)
-work(HOLE, {hand="detail", tool="round 1.5", length={15, 45}, coverage=3, medium=0.2, angle=0,
-  color=function(x, y) return mix("#5b5c60", "#7e766d", smoothstep(509, 516, y)) end, edge={found=0.5, soft=0.5, period=25, seed=8}})
 
 --@ chunk 9 · clock 26308.669921875
 -- a low far wood on the left of the far bank, bare, a gray-violet mass in the haze
@@ -212,4 +208,162 @@ for i, L in ipairs(OAKLIMBS) do
       oakbranch(pts[k][1], pts[k][2], a + side*rand(0.5, 1.0), rand(30, 52), lerp(L[2], L[3], k/n) * 0.5, 3, OAKC)
     end
   end
+end
+
+--@ chunk 12 · clock 26308.669921875
+-- pollard willows on the far bank: a short thick trunk, a knuckled head, rods rising from its knuckles.
+-- (moved from the drawing: spacing made uneven, one smaller and one leaning)
+WILLOWS = {{112, 0.8, -0.1}, {198, 1.1, 0.04}, {241, 0.72, 0.16}, {352, 0.95, -0.05}}
+WILC = "#393536"
+local rodb = brush{kind="rigger", width=0.9, point=1}
+local rodf = brush{kind="rigger", width=0.5, point=1}
+function willow(fx, fy, s, lean, seed)
+  local hx, hy = fx + lean*30*s, fy - 34*s
+  local tr = ribbon({{fx, fy+2}, {fx + lean*10*s + randn(0, 1), fy - 12*s}, {hx, hy}}, {8*s, 6.2*s, 8*s}):roughen(0.6*s, 5, seed, 0.3)
+  -- the head: two or three knuckles
+  local knuck = {}
+  local nk = 2 + (seed % 2)
+  local head = nil
+  for k = 1, nk do
+    local kx, ky = hx + (k - (nk+1)/2)*6*s + randn(0, 1.2*s), hy - 2*s + randn(0, 1.5*s)
+    knuck[k] = {kx, ky}
+    local e = ellipse(kx, ky, rand(4, 6)*s, rand(3, 4.5)*s)
+    head = head and (head + e) or e
+  end
+  local m = tr + head:roughen(1*s, 4, seed + 1, 0.3)
+  work(m, {hand="body", tool="round 1.5", length={3, 8}, coverage=4.5, medium=0.1, load=0.9, angle=-1.5, angle_jitter=0.5,
+    color=function(x, y) return mix(WILC, "#57504d", 0.35*smoothstep(fx-2, fx+6*s, x)) end, edge={found=0.5, soft=0.5, period=8, seed=seed}})
+  -- rods: mostly upright, from every knuckle; lengths very uneven, a few thick old ones, a few crossing
+  local n = math.floor(26 + 18*s)
+  for i = 1, n do
+    local kn = knuck[1 + (i % nk)]
+    local u = randn(0, 0.42)
+    local a = -math.pi/2 + u*0.95 + lean*0.4 + (kn[1] - hx)/(12*s)*0.25
+    local L = s*(66 - 30*math.min(1, math.abs(u))) * rand(0.35, 1.1)
+    local bx, by = kn[1] + randn(0, 2.2*s), kn[2] - rand(0, 3)*s
+    local bow = randn(0, 0.12)
+    local pts = {{bx, by}}
+    for k = 1, 3 do local aa = a + bow*k/3
+      pts[#pts+1] = {pts[#pts][1] + L/3*math.cos(aa), pts[#pts][2] + L/3*math.sin(aa)} end
+    local thick = rand() < 0.2
+    local b = thick and rodb or rodf
+    if b:fullness() < 0.3 or rand() < 0.1 then b:reload(mix(WILC, rand() < 0.5 and "#6e584a" or "#7d6a55", rand(0.2, 0.45)), rand(0.7, 0.95)) end
+    b:stroke(pts, {pressure={thick and rand(0.6, 0.85) or rand(0.4, 0.8), 0}, ramps={0.02, rand(0.5, 0.8)}, shake=0.25})
+  end
+end
+rodb:load(WILC, 0.9); rodf:load(WILC, 0.9)
+for i, w in ipairs(WILLOWS) do willow(w[1], farbank(w[1]) + 3, w[2], w[3], 120 + i) end
+
+--@ chunk 13 · clock 26308.669921875
+-- the wayside cross: old weathered timber, leaning a little, snow on its top and arms
+local cx, cf = CROSS.x, bank(CROSS.x) + 20
+local ct = cf - 142
+CROSS.foot, CROSS.top, CROSS.lean = cf, ct, 5
+local lean = 5
+local function P(t) return {cx + lean*t, cf + (ct - cf)*t} end
+UPRIGHT = ribbon({P(0), P(0.5), P(1)}, {5.2, 4.8, 4.4}):roughen(0.25, 4, 31, 0.15)
+local by = ct + 31
+CROSS.beam = by
+BEAM = ribbon({{cx - 26 + lean*0.75, by + 1.2}, {cx + lean*0.75, by}, {cx + 27 + lean*0.75, by - 1}}, {4.2, 4.4, 4}):roughen(0.25, 4, 32, 0.15)
+CROSSM = UPRIGHT + BEAM
+work(CROSSM, {hand="body", tool="round 1.5", length={4, 12}, coverage=4, medium=0.1, load=0.9, angle=-1.53, angle_jitter=0.15,
+  color=function(x, y) return mix("#2f2a29", "#4a423d", 0.5*smoothstep(-2, 2.5, x - (cx + lean*(cf - y)/(cf - ct)))) end,
+  edge={found=0.8, soft=0.2, period=14, seed=33}})
+work(BEAM, {hand="detail", tool="round 1.2", length={5, 14}, coverage=2.5, medium=0.1, angle=0.02, color="#332d2b", edge="found"})
+
+--@ chunk 14 · clock 26308.669921875
+-- the woman seen from behind: a long dark cloak from the shoulders to the snow, a close hood
+FIG.x = 530; FIG.foot = bank(530) + 22
+local fx, fy = FIG.x, FIG.foot
+local cloak = outline{pts={{fx-12.5,fy+0.5,"c"},{fx-10.5,fy-16},{fx-8.6,fy-33},{fx-7.6,fy-44},{fx-6.6,fy-49.5},{fx-3.5,fy-51.8},
+  {fx+0.5,fy-52.2},{fx+4.6,fy-51.5},{fx+7.6,fy-48.8},{fx+8.8,fy-43},{fx+10,fy-31},{fx+11.8,fy-15},{fx+13.4,fy+0.5,"c"},{fx+3,fy+1.5},{fx-6,fy+1.2}},
+  char="firm", seed=141, amount=0.5}
+local head = ellipse(fx + 0.6, fy - 56.8, 3.7, 5.2) + ellipse(fx + 0.3, fy - 52.5, 2.6, 2.5)
+FIGM = cloak:mask() + head:soften(0.3)
+work(FIGM, {hand="body", tool="round 1.2", length={3, 10}, coverage=4.4, medium=0.1, load=0.9, angle=-1.57, angle_jitter=0.12,
+  color=function(x, y) return mix("#262224", "#312c2c", smoothstep(fy - 30, fy, y)) end, edge={found=0.75, soft=0.25, period=16, seed=14}})
+
+--@ chunk 15 · clock 26308.669921875
+dry()
+-- seat things in the snow: small drifts over the feet (opaque lead-white body, shaded like the bank)
+local function drift(x, y, w, h, seed)
+  return poly({{x - w, y + 1}, {x - w*0.55, y - h*0.55}, {x - w*0.1, y - h}, {x + w*0.35, y - h*0.8}, {x + w, y + 1}, {x + w*0.2, y + h*0.5}, {x - w*0.4, y + h*0.4}}, true):roughen(0.5, 5, seed, 0.4)
+end
+local cf = CROSS.foot
+local drifts = drift(CROSS.x + 0.5, cf - 1, 9, 5, 151) + drift(FIG.x, FIG.foot + 0.5, 15, 2.6, 152)
+work(drifts, {hand="detail", tool="round 1.5", length={3, 9}, coverage=4, medium=0.08, load=0.9, angle=0.05, color=snowcol, edge={soft=0.6, lost=0.4, period=10, seed=15}})
+-- the far bank's snow drawn up round the oak's foot and the willows' feet
+local far = drift(OAK.x - 1, OAK.foot + 2, 8, 2.2, 153)
+for i, w in ipairs(WILLOWS) do far = far + drift(w[1], farbank(w[1]) + 5, 6*w[2], 1.8, 154 + i) end
+work(far, {hand="detail", tool="round 1.2", length={2, 7}, coverage=4, medium=0.08, load=0.9, angle=0, color=function(x, y) return shift(sample(x, farbank(x) + 3, 1.5), -0.01, 0, -0.004) end, edge={soft=0.6, lost=0.4, period=10, seed=16}})
+-- snow on the cross: the top of the upright and the upper edges of the arms
+local lean, ct, by = CROSS.lean, CROSS.top, CROSS.beam
+local sb = brush{kind="round", width=1.6, point=0.4}
+sb:load("#dcd6d0", 0.9)
+sb:stroke({{CROSS.x + lean - 2.5, ct + 0.6}, {CROSS.x + lean, ct - 0.8}, {CROSS.x + lean + 2.6, ct + 0.5}}, {pressure={0.8, 0.5}})
+sb:stroke({{CROSS.x - 25.5 + lean*0.75, by - 1.3}, {CROSS.x - 14 + lean*0.75, by - 1.9}, {CROSS.x - 3.5 + lean*0.75, by - 2.1}}, {pressure={0.55, 0.7, 0.3}, ramps={0.1, 0.3}})
+sb:stroke({{CROSS.x + 4.5 + lean*0.75, by - 2.4}, {CROSS.x + 16 + lean*0.75, by - 2.6}, {CROSS.x + 26.5 + lean*0.75, by - 2.8}}, {pressure={0.4, 0.7, 0.5}, ramps={0.2, 0.2}})
+
+--@ chunk 16 · clock 46744.912109375
+-- wind scoops and her footprints, glazed as blue-gray hollows over the dry snow, with a lit lip on each
+local function scoop(x, y, w) return ellipse(x, y + 1.5, w, w*0.3):roughen(0.6, 4, 161, 0.8) end
+local hollows = (scoop(CROSS.x + 1, CROSS.foot - 7.5, 7) + scoop(FIG.x + 0.5, FIG.foot - 0.3, 13)) - (CROSSM + FIGM)
+PRINTS = {}
+local steps = 17
+for i = 0, steps do
+  local t = i / steps
+  local s = lerp(1.0, 0.36, t)
+  local x = lerp(372, FIG.x - 4, t^0.85) + 16*math.sin(t*2.6) + ((i % 2 == 0) and -3.4 or 3.4)*s + randn(0, 0.7*s)
+  local y = lerp(714, FIG.foot + 3, t^0.8) + randn(0, 0.5*s)
+  PRINTS[#PRINTS+1] = {x, y, s}
+  hollows = hollows + ellipse(x, y, 3.2*s, 1.5*s):roughen(0.35*s, 3, 170 + i, 0.4*s)
+end
+glaze(hollows, {color="#5f6a86", coats=0.35})
+local lip = brush{kind="round", width=1.2, point=0.5}
+lip:load("#cfcdd0", 0.8)
+lip:stroke({{CROSS.x - 6, CROSS.foot - 7.2}, {CROSS.x - 1, CROSS.foot - 8.4}, {CROSS.x + 3, CROSS.foot - 8.2}, {CROSS.x + 8, CROSS.foot - 6.8}}, {pressure={0.2, 0.55, 0.2}, ramps={0.3, 0.3}})
+for i, p in ipairs(PRINTS) do
+  local x, y, s = p[1], p[2], p[3]
+  if i % 4 == 1 then lip:reload("#cfcdd0", 0.7) end
+  lip:stroke({{x - 2.6*s, y + 0.9*s}, {x, y + 1.6*s}, {x + 2.6*s, y + 0.8*s}}, {pressure={0.1, 0.25 + 0.35*s, 0.05}, ramps={0.3, 0.4}})
+end
+
+--@ chunk 17 · clock 58644.58984375
+-- dry grass and sedge through the snow: fine upturning strokes laid last over the snow
+local gb = brush{kind="rigger", width=0.9, point=1}
+local gf = brush{kind="rigger", width=0.55, point=1}
+local GRASS = {"#6b5a45", "#7d6a4c", "#8a7a5e", "#56493c", "#9a8866", "#5e5448"}
+function tuft(x, y, h, n, lean, seed)
+  for i = 1, n do
+    local b = (rand() < 0.3) and gb or gf
+    if b:fullness() < 0.35 or rand() < 0.15 then b:reload(mix(GRASS[math.random(#GRASS)], "#a9a7aa", rand(0, 0.25)), rand(0.6, 0.9)) end
+    local bx = x + randn(0, h*0.12)
+    local a = -math.pi/2 + lean + randn(0, 0.28)
+    local L = h * rand(0.45, 1.05)
+    local bend = randn(0.12, 0.18) * ((a > -math.pi/2) and 1 or -1)
+    local p = {{bx, y + rand(0, 1.5)}}
+    for k = 1, 3 do
+      local aa = a + bend*(k/3)^1.6
+      p[#p+1] = {p[#p][1] + L/3*math.cos(aa), p[#p][2] + L/3*math.sin(aa)}
+    end
+    b:stroke(p, {pressure={clamp(0.35 + h/60, 0.3, 0.95), 0}, ramps={0.03, rand(0.55, 0.85)}, shake=0.3})
+  end
+end
+-- near left corner: a big clump and a few smaller ones
+local spots = {{40, 690, 46, 34}, {78, 700, 38, 26}, {18, 660, 30, 20}, {120, 706, 30, 18}, {160, 676, 22, 12},
+  {930, 700, 42, 30}, {968, 672, 34, 24}, {880, 690, 24, 12}, {990, 640, 26, 14}, {846, 706, 20, 10}}
+for i, s in ipairs(spots) do tuft(s[1], s[2], s[3], s[4], randn(0.05, 0.12), 170 + i) end
+-- along the crest of the bank, small and sparse, leaving the middle clear
+for i = 1, 26 do
+  local x = (i <= 13) and rand(10, 380) or rand(730, 995)
+  local y = bank(x) + rand(2, 12)
+  tuft(x, y, rand(7, 15), math.random(3, 7), randn(0.08, 0.1), 200 + i)
+end
+-- reeds at the far shore's edge, a hazed thin fringe
+local rf = brush{kind="rigger", width=0.45, point=1}
+for i = 1, 70 do
+  local x = rand(420, 1000)
+  if i % 6 == 1 then rf:reload(mix("#8a7c68", "#b8b0a8", 0.35), 0.7) end
+  local y = shore(x) + rand(0.5, 2.5)
+  rf:stroke({{x, y}, {x + randn(0.3, 0.4), y - rand(3, 7)}}, {pressure={0.35, 0}, ramps={0.05, 0.7}})
 end

@@ -1,5 +1,18 @@
 # Principles (read before designing a tool, writing a brief or painting)
 
+**North star.** The project's inspiration, in its author's words: "for the
+past few months i've been asking our models to paint. opus 5.5 is very
+skilled at emulating different styles. every image here is a python
+program generated pixel by pixel. there is no image model, and no
+off-the-shelf art software. instead, it's about 7,500 lines of code using
+standard libraries to emulate different brush styles. the agents don't
+use any pictures as reference, instead working only from what they know
+about each painter." It showcased very different styles (Pieter Bruegel
+the Elder, likely Cézanne, others), and they looked amazing. Ours is the
+same spirit, and more first principles: we simulate the paint and let the
+painter make the marks. Friedrich (smooth, thin, luminous realism) is a
+harder target than any of those; it may fail, and that's allowed.
+
 Alice's direction, Round 7. We keep drifting from this, and the drift
 causes most of what looks digital.
 

@@ -246,7 +246,7 @@ What mixes: pressure, a lean brush (`load` 0.2–0.4), a stiff hog, dragging
 back and forth, `blend`, `scrub`. What stays on top: a full load
 (0.8–1.0), a soft brush, a light touch, one pass.
 
-## 3. Evidence (after)
+## 3. Evidence (after the first pass; see §5 for the current engine)
 
 `cargo paint study_wet` (1000 px):
 
@@ -350,3 +350,181 @@ prints a touch's lift at 500–3200 px.
 - The stir and cushion constants are estimates (`[E]`), set so the study's
   gestures behave as the alla prima rules describe; there are no
   measurements of mixing depth to calibrate them against.
+
+## 5. Second pass: the lab painters' failures, veins, blending
+
+Main was merged first (r6-time's hand time and the easel fix). The lab
+painters had worked wet on purpose on the old engine and reported
+failures (`notes/lab/*.md` on their branches). I rebuilt each mechanism as
+a panel in `paintings/src/bin/study_wet_lab.rs` (`cargo paint
+study_wet_lab`), with the handling they used, measured on main's engine
+and this branch's, and replayed `notes/lab/water_B.lua` for the tramlines.
+
+### What changed in the engine
+
+- **The earlier surface film is settled at the stroke's end** (`Surf::lay`,
+  `Surf::settle_mid`). The first pass buried an earlier stroke's surface
+  film in the body as soon as a new stroke touched the pixel. A new
+  stroke's thin edge over an earlier light stroke then showed the dark body
+  through it: the **web of dark veins** on the rock and the snow in the
+  first pass's `pitfalls_before_after.jpg`. Now the old film is set aside
+  and, when the stroke ends, buried in proportion to how much of the new
+  paint covers it (`BURY` = 0.6 coats hides it all). The rest stays in the
+  surface film, mixed with the new paint. A film like the body under it is
+  always buried; that changes nothing but frees the surface.
+- **The plough goes with the paint's stiffness** (`PLOUGH_STIFF`). Only
+  paint with a yield stress keeps a bow wave; medium-rich paint flows round
+  the bristle and back into its furrow (a glaze levels bristle-scale
+  ridges in about 0.06 s: `notes/research/oil_paint_physics.md` §1). Paint
+  from medium 0.85 (stiffness about 0.02) is pushed at a tenth of the old
+  rate, a thin sky at medium 0.3 at about 0.6, stiff paint as before.
+- **A blender or a nearly spent bristle drags what it carries into the
+  film** instead of laying it on top (`drag_in`). A clean blender (`lay`
+  0) holds no charge; the paint it moves was picked up a moment before.
+  In the first pass it laid that paint as a surface film, and across a wet
+  seam it left a pale lace of sky on the dark and no blend. The cushion
+  also scales with how much paint the tool is made to carry.
+- **Stirring** follows the bristle's deposit (so what a bristle lays is
+  worked by the same pass). It is stronger for thin surface films: a film
+  much thinner than a coat is no layer of its own once it is sheared. It
+  depends less on bristle stiffness and pressure: any hair shears a surface
+  film.
+
+### The lab failures, one by one
+
+Measured in `study_wet_lab` (1000 px; ground = share of the worked area
+within ΔE 0.06 of the ground color; texture = mean |L − L blurred over 2
+units| ×1000; the brush-free `glaze()` verb gives about 1):
+
+```
+                                     main engine          this branch
+0 blend across a wet seam            ground 0.0% tex  4.8  ground 0.0% tex  4.8
+1 glaze hand over open thin sky      ground 42%  tex 20.4  ground 0.1% tex 11.9
+2 glaze hand over tacky sky          ground 0.0% tex 32.3  ground 0.0% tex  4.0
+3 glaze hand over dry sky            ground 0.0% tex 42.2  ground 0.0% tex  6.8
+4 glaze() verb over dry sky (ref.)   ground 0.2% tex  1.4  ground 0.0% tex  1.0
+5 thin stroke into open water        ground 0.0% tex  6.2  ground 0.0% tex 12.1
+6 blender over a lean veil, open     ground 0.8% tex  5.2  ground 0.0% tex  6.1
+```
+
+Images: `lab_failures_before_after.jpg` (all panels),
+`lab_glaze_zoom_before_after.jpg` (panels 1–3 at 2000 px),
+`lab_water_B_3200crop_before_after.jpg` (the replayed water log).
+
+**Lifting or ploughing to the ground**
+- *A glaze-hand stroke over thin open sky lifts it to the ground* (lab 3):
+  reproduced (42% of the area). **Fixed** (0.1%): the plough no longer
+  bulldozes fluid glaze paint, and the thin sky under it stays.
+- *A clean blender or badger along a wet seam, or over a lean veil,
+  exposes the ground* (labs 1 and 3): reproduced only weakly (0.8% over a
+  lean veil). **Fixed** (0%), by the same fluid plough and by blenders
+  dragging their paint in. A blender across a seam fuses it again (texture
+  4.8, as on main) where the first pass left a lace.
+- *A filbert into thin wet sky scrapes it to the ground* (lab 2): the same
+  mechanism as the plowed river and row 4 of `study_wet` (a bristle
+  pushing a thin film aside), fixed in the first pass by the plough floor
+  and now also by the fluid plough. Not replayed separately.
+- *A light into an open dark ploughs a camouflage mottle with ground
+  showing* (lab 1): **fixed in the first pass** (lights stay on top, clean:
+  `row1_zoom_before_after.jpg`). *Heaps of 2.8–3.5 mm* at one spot: **not
+  fixed**. Found the mechanism: a bristle's contact rises with the wet
+  film's thickness (`base + 0.35 × vol`), so it lays more where paint is
+  already thick. A clean blender over a seam heaped the dark side from 2.2
+  to 4–6 coats while conserving paint overall. Blenders now mix what they
+  heap, so it doesn't show there. A deposit that falls as the wet film
+  under it thickens (film splitting) would fix it, but every handling's
+  thickness is calibrated on the present deposit (the brushed-ground test
+  doubled when I tried limiting pickup instead). Next step.
+
+**Pushed aside instead of mixed**
+- *Tramlines from a thin stroke into wet water* (lab 2): replayed
+  `water_B.lua` at 3200 px (units 380–700 × 520–660). **Fixed**: the sheen is
+  one faint line where main has two parallel pale lines. The fluid plough
+  no longer piles the water into two ridges beside the stroke. (The reeds'
+  dark touches on the spit now stay where they were laid, too.)
+- *A dark over open light pushes the light to the stroke's edges as a pale
+  lace ridge* (labs 1 and 3): the same plough, now weaker in fluid paint.
+  Not measured separately.
+- *A dark stroke through wet light drags the light 40–60 units at nearly
+  full strength* (lab 2): **not addressed**. That is how far a brush
+  carries what it picked up (its `run`), not the wet film. Open.
+
+**Setting and tacky**
+- *Glaze-hand strokes over tacky sky craze into a mosaic* (lab 3):
+  reproduced (texture 32). **Fixed** (4.0): the cells were fresh glaze
+  ploughed into rims around stick-slip patches.
+- *Glaze-hand strokes on dry sky lift each other into a net of dark rims*
+  (lab 3): reproduced (42). **Fixed** (6.8; the `glaze()` verb gives 1).
+  Each new stroke ploughed the previous, still-fluid glaze stroke into a
+  rim.
+- *A dark over setting light comes out a translucent gray streak* (labs 1
+  and 2): **not fixed**. Setting paint already feels tacky
+  (`drying::feel` ramps tack from half the gel point), so the brush
+  empties within a few units, and a spent brush's last paint is dragged
+  in. The loaded stiff light over setting dark in `study_wet` row 4 ends
+  at 0.09 clean (0.88 over open paint). The suspect is the tack ramp in
+  the drying model; I left it, since the time stream owns drying.
+- *Sky laid into setting dark: lumpy puffs 246–625 µm* (lab 1): the heaping
+  above, plus the fast emptying. Open.
+- *A thin veil over tacky paint lies as a flat, hard-edged slab the shape of
+  its mask* (lab 1): not addressed. Over tacky paint nothing mixes, so a
+  veil's edge is where its mask put it, as over dry paint. That is the
+  mask's edge, which the painter controls (`hug=false`, a softened mask).
+- *A dark on tacky paint skips with pale flecks* (lab 3): stick and slip,
+  as designed in `notes/drying.md`. Left.
+
+### The veins (my first pass's own artifact)
+
+`veins_before_after.jpg`: the rock over an open floor. The first pass
+shows a web of sharp dark lines along the edges of the rock's strokes;
+now the dark comes up as soft, broken grays where the brush thinned or
+dragged. The pitfall scene now reads: rock 0.80 of the way to its look
+over a dried floor, snow 0.78, river 25% of its track showing the ground
+at the spent tail (main: 0.60, 0.73 and 90%; first pass: 0.82, 0.87 and
+18%, but with the veins). `pitfalls_before_after.jpg` is updated.
+
+### The blocky patches at l5_near's wood foot
+
+They are paint the log lays. Chunk 7 paints the wood's floor between tree
+rows 3 and 2 as `work(fl, {hand="body", coverage=3, angle=1.5, ...})`:
+vertical body-color strokes, into the still-wet rows. On main's engine
+they mixed into the wet needles as a muddy veil; now they stay where they
+were laid and read as the flat-brush marks they are. Rendered without that
+one `work` call, the patches are gone
+(`l5_near_3200crop_floor_pass_check.jpg`: the log as it is above, the
+floor pass removed below). It's the log's problem. A painter would now lay
+the wood's floor as a thin, soft tone, or before the rows. The blocky top
+edge of the snow bank below is chunk 8's own body strokes, the same on
+both engines.
+
+### Current numbers (`study_wet`, 1000 px)
+
+```
+(units: mm at the canvas's 440 mm width)         open  setting    tacky      dry
+1 light touches: clean, first of a load          0.87     0.93     0.99     0.94
+  clean, third of a load                         0.87     0.90     0.99     0.94
+  area reading light, mm² per touch              5.32     5.10     7.37     5.70
+  short strokes, clean                           1.00     1.00     1.00     1.00
+2 sky over hill: edge 10–90% before badger       4.40     2.20     0.88     0.88
+  edge 10–90% after badger (dried)              11.44    11.00     1.32     1.32
+  hill 6 mm below the join, pulled to sky        0.10     0.06     0.63     0.66
+3 contact shadow: depth reached (1 = paint)      0.98     1.00     1.00     1.00
+  edge to the form above, 10–90%                 1.32     1.32     0.88     0.88
+4 loaded stiff light, clean (start/end)      0.99/0.88 0.99/0.09 0.98/0.88 0.98/0.94
+  thinned light pressed, clean (start/end)   0.61/0.44 0.86/0.26 0.91/0.70 0.85/0.74
+```
+
+At 2000 px the touches read 0.89/0.95 clean (open/setting).
+
+### Benchmarks and tests
+
+`l5_near.lua` and `l3_green.lua` at 1000 px do **not** render identically
+to main (on purpose). l5_near: mean difference 4.5 of 255, 14% of pixels
+over 8, max 176. l3_green: mean 3.1, 7% over 8, max 121. Images:
+`l5_near_after.jpg`, `l3_green_after.jpg` (with the `_before.jpg`s),
+`l5_near_3200crop_before_after.jpg`, `l3_green_3200crop_before_after.jpg`.
+Re-recorded because output changes on purpose: the golden scene, and the
+replay hashes in `crates/easel/tests/hand_time.rs` (both profiles;
+`PRINT_HASHES=1` prints them). `tally`'s aging test now fingerprints the
+wet film too: with the new engine nothing in its 160 minutes of hand time
+gels, so the dry picture alone no longer differs.

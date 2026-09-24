@@ -206,7 +206,11 @@ rely on a brush taking up excess paint as it spreads it. The stale
 surface film, not pickup depth, was what made touches dirty at high
 resolution.
 
-Costs: 44 bytes more per pixel (about 300 MB at 3200 × 2240). Checkpoints
+Costs: 44 bytes more per pixel (about 315 MB at 3200 × 2240; the surface
+film's volume, pigment and properties). Pass 2's set-aside film added 8
+more (52, about 373 MB) until the maintenance round (§9) moved them out
+of the canvas; they are now 4 bytes of stroke scratch that copies of the
+canvas and checkpoints don't carry. Checkpoints
 are `PAINTCK8` (they store the surface film, after main's hand-time block
 `PAINTCK7`); older files are refused.
 No new painter API: the same verbs behave like paint.
@@ -846,3 +850,85 @@ lift-off, 3200 px crops):
 - **Or offer the engine as an opt-in** ("wet control" as a style or
   canvas setting), so paintings that want main's melting keep it, as
   the advice suggests: capability first, default later.
+
+## 9. Maintenance round (the thermos review: S2, B3, B7, B8, B9, S6)
+
+The eight-reviewer review (`notes/round6/thermos.md` on main) asked for
+the film to have one owner before more work lands on it. What changed:
+
+**Structure (S2), behavior-identical.** `l5_near` and `l3_green` at 1000
+px `cmp` byte-identical to `7a1340f` after it; the golden scene and the
+replay hashes passed unchanged.
+- `wet::Layer { v, lat, hide }`: one part of a film. The surface film
+  (`Wet::top`, was `top/tlat/thide`), a bristle's tip (`Bristle::tip`),
+  a film set aside under a stroke, and the `film::Parcel`s that pickup
+  and the plough move (surface, set aside, body) are layers.
+- `vol` stays the stored whole and the body its remainder, computed in
+  one place (`film::Stroke::body`). Storing the body as its own layer
+  would have been cleaner, but every stroke would then round differently
+  (`(b + t) + v` against `b + (t + v)`), so it wasn't done in a
+  behavior-preserving pass. Same for the bristle (`vol` plus `tip`).
+- `film.rs` (new): the raw view `Surf` and `Stroke`, one stroke's hold on
+  the film. Every change a brush makes to the film goes through it
+  (`lay`, `add`, `add_body`, `stir`, `take`, `take_column`, `land`). The
+  set-aside film is a reservation the stroke owns and settles when it is
+  dropped, so drags and touches (and any later stroke path) settle alike.
+  Debug builds assert that nothing is set aside when time passes (`wait`)
+  or a checkpoint is written.
+- `exchange.rs` (new): `exchange`, and `contact()`, a pure function
+  computing a bristle's physics once per step (contact threshold,
+  hunger, the pickup's reach through the cushion, drag-in, stir, the
+  plough's floor and its stiffness gate). `enum Mode { Drag, Touch { dep } }`
+  replaces `dep: Option<f32>`.
+- The test-only global `MID_MOVES` is gone: a stroke reports how often
+  its pickup and plough took set-aside paint (`Canvas::drag_counted`,
+  `touch_counted`), and the conservation test sums its own strokes.
+- Lines: `bristle.rs` 2357 → 1638; `exchange.rs` 576 and `film.rs` 516
+  are new; `wet.rs` 716 → 747.
+
+**Memory (B9).** The set-aside film's volume and pigment now live with
+the stroke. The canvas keeps only a per-pixel slot index (4 bytes) as
+scratch: it is empty between strokes, and copies of the canvas (undo
+snapshots) and checkpoints don't carry it. The film costs 44 bytes a
+pixel (about 315 MB at 3200 × 2240; it was 52, about 373 MB, all of it
+copied into every snapshot).
+
+**B3: the plough's stiffness.** It now counts a film set aside under the
+stroke with that film's own stiffness (body, surface and set-aside
+mixed by volume). Before, set-aside coats counted as body paint: in
+Astra's reproduction ten coats of whole-column stiffness 0.9 moved 2.64
+coats as one body and 0.26 as a fluid coat under nine stiff set-aside
+ones (`exchange::tests::the_plough_feels_the_set_aside_films_stiffness`).
+Effect: 1000 px l5_near mean 0.00 of 255 (max 18), l3_green 0.00 (23);
+the six 3200 px panel crops mean ≤ 0.02 (max 7–166 at a few pixels).
+The wet studies print the same numbers.
+
+**B7: a round's dirty tip.** Capillary feed (`feed`, pointed tools)
+folded every bristle's tip into its reservoir on every step, so rounds
+and riggers never had a dirty tip. The feed runs the belly's paint down
+the tuft; what a hair picked up sits on its tip and works in over
+`TIP_RUN`, as on any brush. Feed now pools reservoirs only
+(`bristle::tip_tests::feed_keeps_the_tips`: a round dragged through a
+wet dark ends with 0.46 of 147 in its tips, before 0). Effect against
+B3: 1000 px l5_near mean 0.02 (max 59), l3_green 0.01 (58); panel crops
+l5_near 0.12 (46), l3_green 0.03 (50), the others ≤ 0.00 (≤ 4). A faint
+speckle along rigger and round marks, invisible at viewing size. The
+wet studies print the same numbers.
+
+The golden scene and the replay hashes (both profiles) are re-recorded
+for B3 and B7. Merging main needs its own deliberate re-record (B10).
+
+**B8: checkpoints.** `read_state` refuses a PAINTCK8 surface film that
+isn't finite or lies outside `0 ≤ top ≤ vol` (with float slack), as it
+refuses a bad hand-time ledger
+(`checkpoint::tests::a_corrupt_surface_film_is_refused`).
+
+**S6: the studies.** `paintings/src/study.rs` holds the measuring code
+the three wet studies had copied (`Img`, `width`, `median`, `rect`,
+`field`). Where the copies had drifted, each study keeps its own
+semantics explicitly (`width(.., to_ends)`). All three print the same
+numbers and write the same images as before.
+
+Left: the checkpoint still writes the surface film after the hand-time
+block (moving it means a new format version for no gain now), and the
+`#[ignore]` probes in `wet.rs` stay.

@@ -319,6 +319,9 @@ for i = 0, steps do
   hollows = hollows + ellipse(x, y, 3.2*s, 1.5*s):roughen(0.35*s, 3, 170 + i, 0.4*s)
 end
 glaze(hollows:blur(1.2), {color="#5f6a86", coats=0.26})
+local pm = nil
+for _, p in ipairs(PRINTS) do local e = ellipse(p[1], p[2] - 0.3*p[3], 2.4*p[3], 1*p[3]); pm = pm and (pm + e) or e end
+glaze(pm:blur(0.4), {color="#4f5874", coats=0.3})
 local lip = brush{kind="round", width=1.2, point=0.5}
 lip:load("#c6c5ca", 0.6)
 lip:stroke({{CROSS.x - 6, CROSS.foot - 7.2}, {CROSS.x - 1, CROSS.foot - 8.4}, {CROSS.x + 3, CROSS.foot - 8.2}, {CROSS.x + 8, CROSS.foot - 6.8}}, {pressure={0.1, 0.35, 0.1}, ramps={0.4, 0.4}})
@@ -407,17 +410,17 @@ for _, c in ipairs({{700, 214, 5.2, 0.1}, {731, 203, 4.4, -0.15}, {664, 238, 3.8
   cb:stroke({{x, y + 0.15*s}, {x + 0.45*s, y - 0.15*s}, {x + 1.1*s, y - 0.8*s - t*s}}, {pressure={0.7, 0.1}, ramps={0.1, 0.5}})
 end
 
---@ chunk 19 · clock 63072.85498046875
+--@ chunk 19 · clock 63072.85400390625
 -- the evening comes down: a cool glaze over the near snow, deeper toward the bottom, and a dark veil
 -- growing toward the picture's edges (Friedrich to Carus: darker toward the edges)
 local vn = noise{seed=191, octaves=3, period=300}
 NEARDARK = mask(function(x, y) return smoothstep(bank(x) + 10, 714, y) * (0.75 + 0.25*vn:at01(x, y)) end)
-glaze(NEARDARK, {color="#5d6680", coats=0.32})
+glaze(NEARDARK, {color="#56607c", coats=0.5})
 VIG = mask(function(x, y) local dx, dy = (x - 520)/560, (y - 430)/430
   return smoothstep(0.6, 1.3, math.sqrt(dx*dx + dy*dy)) * (0.8 + 0.2*vn:at01(y, x)) end)
-glaze(VIG, {color="#3f4458", coats=0.3})
+glaze(VIG, {color="#3b4055", coats=0.4})
 
---@ chunk 20 · clock 71762.13427734375
+--@ chunk 20 · clock 71762.13330078125
 -- the ice worked over the dry lay-in: thin long streaks of polished ice glazed darker, and a few pale
 -- drifted lines of snow laid with a small brush, all running flat to the horizon
 local KEEP = -(CROSSM + FIGM):grow(0.8)
@@ -438,7 +441,7 @@ for i = 1, 150 do
   sb:stroke(pts, {pressure={0.05, rand(0.2, 0.45), 0.03}, ramps={rand(0.3, 0.5), rand(0.35, 0.6)}, clip=POND * KEEP})
 end
 
---@ chunk 21 · clock 71762.13427734375
+--@ chunk 21 · clock 71762.13330078125
 -- the near snow: long wind drifts, each a cool shadow on its lee under a lit crest; a few stones
 local KEEPF = -(CROSSM + FIGM):grow(1)
 local dn = noise{seed=211, octaves=4, period=200, stretch={-0.08, 6}, warp={140, 10}}
@@ -453,13 +456,14 @@ for i, s in ipairs({{206, 676, 17, 7}, {232, 682, 8, 4}}) do
   local x, y, w, h = s[1], s[2], s[3], s[4]
   local st = poly({{x - w, y}, {x - w*0.7, y - h*0.8}, {x - w*0.1, y - h}, {x + w*0.6, y - h*0.7}, {x + w, y}}, true):roughen(0.5, 3, 212 + i, 0.3)
   work(st, {hand="detail", tool="round 1.2", length={2, 6}, coverage=4, medium=0.1, angle=0.2, color="#4c4a4d", edge="found"})
-  stb:reload("#c9c7cc", 0.8)
-  stb:stroke({{x - w*0.75, y - h*0.7}, {x - w*0.1, y - h*1.05}, {x + w*0.55, y - h*0.75}}, {pressure={0.3, 0.6, 0.25}, ramps={0.2, 0.3}})
-  stb:reload("#b4b5bd", 0.7)
-  stb:stroke({{x - w*1.3, y + 0.8}, {x, y + 1.2}, {x + w*1.3, y + 0.6}}, {pressure={0.4, 0.7, 0.3}, ramps={0.2, 0.3}})
+  stb:reload("#bebdc4", 0.6)
+  stb:stroke({{x - w*0.75, y - h*0.7}, {x - w*0.1, y - h*1.05}, {x + w*0.55, y - h*0.75}}, {pressure={0.15, 0.45, 0.1}, ramps={0.3, 0.4}})
+  -- the snow it sits in, drawn up over its foot (the stone's own lower edge lost)
+  work(poly({{x - w*1.2, y + 1.5}, {x - w*0.8, y - h*0.25}, {x, y - h*0.1}, {x + w*0.9, y - h*0.3}, {x + w*1.2, y + 1.5}}, true),
+    {hand="detail", tool="round 1.4", length={3, 8}, coverage=3, medium=0.1, angle=0.05, color=sample(x, y + 4, 2), edge="lost"})
 end
 
---@ chunk 22 · clock 72780.63623046875
+--@ chunk 22 · clock 72780.6400756836
 -- mending: a stray curl of the hill paint at the far right (fill the hollow, cut the hook back to sky)
 local fill = poly({{898, 447}, {912, 442}, {930, 441}, {940, 446}, {936, 450}, {904, 451}}, true)
 work(fill, {hand="detail", tool="round 1.5", length={4, 10}, coverage=3.4, medium=0.25, angle=0, color=sample(918, 453, 2), edge="soft"})
@@ -483,7 +487,7 @@ for _, w in ipairs(WILLOWS) do local fy = farbank(w[1]) + 3; local m = ellipse(w
   wt = wt and (wt + m) or m end
 glaze(wt * mask(function(x, y) local c = sample(x, y); return (c.L < 0.5) and 1 or 0 end), {color="#2c2729", coats=0.35})
 
---@ chunk 23 · clock 85342.18896484375
+--@ chunk 23 · clock 84717.2767944336
 dry()
 -- the woman, modeled over the dry silhouette: long folds of the cloak, the hood, a thin rim of the glow
 local fx, fy = FIG.x, FIG.foot
@@ -514,5 +518,5 @@ for i = 1, 9 do
   sn:stroke({{x - 2.2, fy + 0.4 + randn(0, 0.5)}, {x + 2.2, fy - rand(0, 1.4)}}, {pressure={0.4, 0.6}, ramps={0.2, 0.3}})
 end
 
---@ chunk 24 · clock 85342.18896484375
+--@ chunk 24 · clock 84717.2767944336
 wait(24*60); varnish(); cracks{}; relief()

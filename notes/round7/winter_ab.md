@@ -213,6 +213,9 @@ ground (de1b0c5, 4bf6cb5, 68d6c04: in 088b51c), varnish (1beff29 in
 
     WINTER_POINT0=1 WINTER_RELIEF=1 cargo paint fresh2_winter -- --full
 
+(On branch r7-winter-ab. Since r7-d the engine is d and the switches are
+gone: notes/round7/winter_d.md.)
+
 The scratch builds (the glaze floor and fade switches, and the bisect
 worktrees with an adapter for the `Cracks` literal) are not committed.
 The diff and bisect scripts are in the task's scratch directory.

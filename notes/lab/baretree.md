@@ -168,3 +168,116 @@ exact mask. A glaze-hand veil or a blender over a thin open sky lifts to the gro
 cauliflower or an opaque wreath. *Ceiling:* at 3200 the tone is fur, and the 0.7-wide
 limbs are wiry and curly as grown. Next try: fewer, straighter limbs chosen by hand, and
 a tone whose strokes fork.
+
+## C: A's connected wood, chosen and weighted by hand
+
+The panel went 4-0 for A: "an intelligible, connected network of winter twigs and open
+sky", where B's twig tone read as gray scribble cushions (steel wool, fur) with limbs
+ending inside them and halo fringes on the boughs. A's named defects: tiny forks at the
+same sharpness everywhere (a diagrammatic mesh with starbursts), twigs spread too evenly,
+limbs uniformly ink-dark with no recession or turning, twig ends blunt instead of tapered,
+floating sprays, hairline grass repeating the twig fuss, and a flat, hard cast shadow. C keeps
+A's structure and addresses those defects. Log: `baretree_C.lua` (13 chunks; chunk 1 is the setup, byte for byte).
+Images: `baretree_C.jpg`, `baretree_C_crop.jpg` (the same 3200 window as A and B, canvas
+640–940 × 180–400).
+
+1. **Sky and ground exactly as A** (chunks 2–5 copied from A's log): the stippled
+   two-layer sky was the best sky of the pair, and every critic liked A's open sky.
+2. **The wood, every limb stroked from my own loop over the dry sky**, instead of
+   `paint_wood` over everything:
+   - *Chosen.* Everything down to 0.7 wide, then a clustered share of the finer limbs (a low
+     noise, `period=140`, keeps 25–95% by place, so some sprays crowd and some sky windows open).
+     Thin and middle limbs longer than 1.12× (under 1.2 wide) or 1.2× (under 2.2) their chord
+     are dropped: they are the scaffold's crook, which read as noodles. A limb is painted only if its
+     parent is, so nothing floats. 622 strokes.
+   - *Recession.* Each limb's color is the dark pulled toward **the sky right behind it** by
+     its depth: `REC = smoothstep(40, -260, mean z)`, eased from the parent's value
+     (±0.3 per generation, so no limb jumps in value at a fork), mixed `0.06 + 0.5*REC +
+     0.2*thin*(0.4 + 0.6*REC)` toward `sky(x, y)`. Far limbs also go 25% thinner. The far
+     half of the crown comes out a cool gray-blue, the near limbs warm and dark.
+   - *Tapered.* A limb with no painted child ends at pressure 0 (`ramps={0.08, 0.55}`).
+   - *Two engine lessons.* Long limbs are painted in pieces of about 60 units, each on
+     its own load and each with the brush for its own width: one 309-unit stroke ran
+     dry and a lightly pressed round 2.4 skipped into dashes. A joining piece starts at
+     0.85 pressure, since a full-pressure touchdown left a bead at every join. The stout
+     limbs and the leader continue past the `wood(3.5)` fill as strokes. A's "thick
+     limb ends bluntly mid-crown" came from this: nothing ever painted a stout limb's
+     thin outer part.
+3. **Twigs, chosen**: 417 of the 4,474, only on painted limbs, with a clustered share
+   (more toward the rim), spaced at least 14 units apart along a limb and **at most
+   one near a limb's tip** (A's starbursts were full fishbone sprays at every tip). Each
+   is 18% lighter than its limb, tapered to nothing, and 40% of them stop one point short.
+4. **The trunk turns.** A lit rim laid into the wet dark (B's recipe) read here as a
+   pale outline on both sides, which is B's halo defect, so I undid it. Instead the fill
+   is restated into its own wet dark, and each point's color comes from where it sits
+   across the limb toward the sun (the steps to the sun-side edge against the steps to
+   the far edge). A broad warm light (`#857a68` × 0.7) rolls into a core shadow
+   (`#29241f`), and the far edge is a hair lighter. Probed: sun side L 0.375, core
+   L 0.30.
+5. **The crown's mass as a second tier of real twigs**, not a tone: 500 more twigs,
+   weighted to the rim, spaced 7 apart, drawn at 0.65 of their width and pulled 40% of
+   the way to the sky behind. At 1000 px they give a faint, transparent warmth toward
+   the rim. At 3200 they are fine lines, each springing from painted wood, with no patches.
+6. **Foot and shadow.** A low patch of ground color over the round foot, then a glaze
+   cast shadow that starts inside the foot. It is darkest at the contact, fades and
+   widens along its run, is blurred 6 and broken by a noise. Then a rough-topped band of
+   short upward round-brush strokes in the shadow's color (probed `#4b4b3b`) over the
+   trunk's base: the trunk stands in the grass. **No grass blades anywhere.**
+7. Finish. Marks: about 1,540 wood strokes (622 limb pieces + 417 + 500 twigs) against A's
+   ~5,500 plus ~900 blades and ~200 dead-leaf touches. B had ~570 plus two tone passes.
+
+**What I see.** At 1000 px it's a bare oak with a legible structure: a trunk that turns
+toward the low sun, dark near limbs and cool, lighter far limbs, so the crown has some depth.
+The crown is uneven, dense on the right and toward the rim and open with sky windows
+elsewhere. There are no stars and no fur, and the ground is one quiet mass with one soft shadow.
+At 3200 (`baretree_C_crop.jpg` against A's) the lace is still drawing: varied weights,
+every twig tapering to a point, faint far twigs behind dark near ones, and no floating
+sprays. **C looks best of the three to me.** It keeps what the panel liked in A and loses
+A's mesh, its ink-flat limbs, the broom at the foot and the barcode ground. It avoids B's fur and halos.
+
+**C's ceiling.**
+- The limbs are still **curvy**: an oak's crooked, elbowed, level limbs come out as smooth S-curves
+  (the scaffold's crook plus my smoothing). Dropping the curliest helped at the cost of
+  density. The upper left is thin. The real fix is straighter segments with sharp elbows,
+  which would mean redrawing the limbs rather than choosing among them.
+- The crown is **sparser than a real winter oak**; the faint tier barely registers at
+  1000 px. Pushed harder it would become A's even mesh again. The balance between the two is narrow.
+- The foot is only fair: at 3200 the round cap still shows as a slightly paler dome
+  inside the grass band.
+- The sky is A's, so its stipple texture shows in relief at 3200.
+
+**Wet-paint misbehavior.** Nothing new of consequence. C works mostly on dry paint. As in A and B, the
+body fill on the dry sky's tooth leaves pale flecks, and a restatement into its own wet
+paint closes them. One oddity (`baretree_wet/C_foot_patch_probe_vs_look.jpg`, 5× crop, `--dried`):
+body strokes of `#5e5b4a` over the dry ground **probe darker** than the ground beside
+them (L 0.464 against 0.52), yet the look shows them paler and greener, as a pale puddle. It is
+either a look/probe mismatch or a surface effect (gloss or relief) that the probe
+doesn't report. **Suspect, worth a check.** `glaze()` on the still-open ground waited
+16 days on its own before laying ("waited 16.0 days for the paint under it to dry").
+That is correct, but it is a long wait to discover in the log.
+
+## SKETCHBOOK CANDIDATE (C won): a bare tree is chosen wood, lighter as it recedes
+
+*Principle.* Don't paint every generated limb. Paint the ones that carry the tree, each
+from the root out and each tapering to a point, colored by its depth toward the sky
+right behind it. Then add a few twigs, never a spray at a tip, and a faint second tier
+toward the rim. Turn the trunk with a light that sits inside the form, not on its edge.
+
+```lua
+-- REC 0 near .. 1 far, eased from the parent (no value jumps at forks)
+REC = function(l) local s = 0 for _, z in ipairs(l.z) do s = s + z end return smoothstep(40, -260, s / #l.z) end
+KEEP: all non-twig limbs >= 0.7 wide; finer ones by a clustered noise (0.25..0.95); drop limbs under 2.2 wide
+      whose path is > 1.12-1.2x their chord; never a limb whose parent isn't kept
+color = mix(dark, sky(midpoint), 0.06 + 0.5*RE + 0.2*thin*(0.4 + 0.6*RE)); width *= 0.85*(1 - 0.25*RE)
+stroke in <=60-unit pieces, reload 0.6 {medium=0.3} per piece, brush by the piece's width
+  (round 2.4 >= 1.2, rigger 0.9 >= 0.6, rigger 0.5 below); joining piece starts at 0.85 pressure;
+  a limb with no painted child ends at pressure 0, ramps {0.08, 0.55}
+stout limbs: ALSO stroke their part past the wood(3.5) fill (else they end bluntly)
+twigs: <= 0.5 share, clustered, toward the rim, >= 14 apart on a limb, <= 1 near the tip,
+  18% toward the sky, rigger 0.5 to pressure 0; then a faint tier: 7 apart, 0.65 width, 40% toward the sky
+trunk: restate wood(3.5) wet with color from ACROSS(x, y) (steps to the sun-side edge / total width):
+  mix("#29241f", "#857a68", 0.7*(1 - smoothstep(0.08, 0.42, u))) -- no rim, no reflected-light edge
+```
+*Pitfalls.* A lit rim or a reflected-light rim on a trunk reads as a double outline.
+Don't use `paint_wood` for the whole wood: it can't vary color per limb and leaves the
+stout limbs' outer parts unpainted.

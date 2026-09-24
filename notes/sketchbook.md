@@ -619,15 +619,23 @@ other at each step, a wet blend per step).
 
 - **Mix piles, don't paint a formula.** A `color=function(x, y)` gives
   every stroke the formula's exact color; a gradient plus a Gaussian glow
-  comes out "a little too perfect" (Alice, Round 7). Write the light as a
-  field if you like, then knife a handful of piles from it and paint from
-  those; make the transitions on the canvas.
+  comes out "a little too perfect" (Alice, Round 7). Decide your piles
+  the way a painter does: name the handful of mixtures you'd knife on the
+  palette (`colors=`), and use a field only as a map of where each goes.
+  Make the transitions on the canvas (`blend`, wet into wet).
   ```lua
-  SKYP = piles(skyB, {n=7, over=skyS, pal=skypal, medium=0.3, coverage=3.8, load=0.75, seed=601})
+  -- the piles you'd mix for this sky, dusk blue down to the warm band
+  SKYP = piles(where, {colors={"#47536c", "#626b82", "#8b8d9c", "#a8999c", "#c9b49c", "#e3cb9a"},
+    over=skyS, pal=skypal, medium=0.3, coverage=3.8, load=0.75, seed=601})
   print(SKYP)                                   -- read the recipes: are they paint you'd mix?
   work(skyS, {hand="broad", color=SKYP, coverage=3.8, medium=0.3, load=0.75, pal=skypal})
   blend(skyS, {angle=0, coverage=1.2, length={150, 400}})
   ```
+  (`where` is any rough color map saying which pile belongs where; the
+  pile nearest to it wins, with ragged, wandering boundaries.) Letting
+  `piles` choose the piles for you from a formula (`n=7` without
+  `colors=`) works, but it's the formula in disguise: the machine decides
+  the mixtures. Prefer naming them (notes/principles.md).
   5–7 piles for a sky, 3–4 for a cloud bank or its lights, 5–6 for water.
   Call `piles` after the underpainting it covers (the piles are mixed
   looking at the canvas) and give it the pass's `coverage` and `load` (it

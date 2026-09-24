@@ -113,13 +113,7 @@ impl Surf {
     /// Drying state at pixel `i`, once the canvas has waited.
     #[inline]
     pub(crate) unsafe fn dry(&self, i: usize) -> Option<crate::drying::Px> {
-        unsafe {
-            if self.dry.is_null() {
-                None
-            } else {
-                Some(*self.dry.add(i))
-            }
-        }
+        unsafe { if self.dry.is_null() { None } else { Some(*self.dry.add(i)) } }
     }
     /// The stroke that last laid paint at pixel `i`.
     #[inline]
@@ -148,21 +142,7 @@ impl Canvas {
         let n = self.f.w * self.f.h;
         let wt = &self.wet;
         assert!(
-            [
-                self.height.len(),
-                self.px.len(),
-                self.film.len(),
-                wt.vol.len(),
-                wt.lat.len(),
-                wt.hide.len(),
-                wt.top.len(),
-                wt.stroke.len(),
-                wt.touched.len(),
-                wt.floor.len(),
-                wt.cover.len()
-            ]
-            .iter()
-            .all(|&l| l == n),
+            [self.height.len(), self.px.len(), self.film.len(), wt.vol.len(), wt.lat.len(), wt.hide.len(), wt.top.len(), wt.stroke.len(), wt.touched.len(), wt.floor.len(), wt.cover.len()].iter().all(|&l| l == n),
             "canvas buffers out of sync with frame"
         );
         if self.aside.0.len() != n {
@@ -178,11 +158,9 @@ impl Canvas {
             let r = ((1.5 / self.px_mm()).round() as usize).max(1);
             let (w, h) = (self.f.w, self.f.h);
             let low = crate::bristle::contact_level(&self.height, w, h, r);
-            base.par_iter_mut()
-                .zip(self.height.par_iter().zip(low.par_iter()))
-                .for_each(|(b, (&hgt, &lo))| {
-                    *b = (0.5 + (hgt - lo) / (2.0 * crate::bristle::TOOTH_UM)).clamp(-0.2, 1.3);
-                });
+            base.par_iter_mut().zip(self.height.par_iter().zip(low.par_iter())).for_each(|(b, (&hgt, &lo))| {
+                *b = (0.5 + (hgt - lo) / (2.0 * crate::bristle::TOOTH_UM)).clamp(-0.2, 1.3);
+            });
             self.base = Some((self.surf_gen, base));
         }
         Surf {
@@ -203,11 +181,7 @@ impl Canvas {
             floor: self.wet.floor.as_mut_ptr(),
             cover: self.wet.cover.as_mut_ptr(),
             base: self.base.as_ref().unwrap().1.as_ptr(),
-            dry: if self.wet.clock.px.len() == n {
-                self.wet.clock.px.as_ptr()
-            } else {
-                std::ptr::null()
-            },
+            dry: if self.wet.clock.px.len() == n { self.wet.clock.px.as_ptr() } else { std::ptr::null() },
         }
     }
 }
@@ -230,11 +204,7 @@ pub(crate) struct Parcel {
 }
 
 impl Parcel {
-    const EMPTY: Parcel = Parcel {
-        top: Layer::EMPTY,
-        aside: Layer::EMPTY,
-        body: Layer::EMPTY,
-    };
+    const EMPTY: Parcel = Parcel { top: Layer::EMPTY, aside: Layer::EMPTY, body: Layer::EMPTY };
 
     /// Its parts, surface first.
     pub(crate) fn parts(&self) -> [&Layer; 3] {
@@ -266,23 +236,8 @@ pub(crate) struct Stroke<'a> {
 impl<'a> Stroke<'a> {
     /// SAFETY: no other thread may work pixels in `lim` until the stroke
     /// is dropped.
-    pub(crate) unsafe fn begin(
-        sf: Surf,
-        id: u32,
-        clip: Option<&'a Mask>,
-        lim: Rect,
-        wts: &'a mut Vec<f32>,
-    ) -> Self {
-        Stroke {
-            sf,
-            id,
-            clip,
-            lim,
-            wts,
-            bounds: None,
-            aside: Vec::new(),
-            through: [0; 2],
-        }
+    pub(crate) unsafe fn begin(sf: Surf, id: u32, clip: Option<&'a Mask>, lim: Rect, wts: &'a mut Vec<f32>) -> Self {
+        Stroke { sf, id, clip, lim, wts, bounds: None, aside: Vec::new(), through: [0; 2] }
     }
 
     /// End the stroke: settle it and return the pixels it dirtied (buffer
@@ -291,22 +246,14 @@ impl<'a> Stroke<'a> {
         // SAFETY: `begin`'s contract holds until the stroke is dropped.
         unsafe { self.settle() };
         let sf = self.sf;
-        (
-            self.bounds
-                .map(|(x0, y0, x1, y1)| (x0 - sf.ox, y0 - sf.oy, x1 - sf.ox, y1 - sf.oy)),
-            self.through,
-        )
+        (self.bounds.map(|(x0, y0, x1, y1)| (x0 - sf.ox, y0 - sf.oy, x1 - sf.ox, y1 - sf.oy)), self.through)
     }
 
     #[inline]
     unsafe fn aside_at(&mut self, i: usize) -> Option<&mut Layer> {
         unsafe {
             let s = *self.sf.slot.add(i);
-            if s == NONE {
-                None
-            } else {
-                Some(&mut self.aside[s as usize].film)
-            }
+            if s == NONE { None } else { Some(&mut self.aside[s as usize].film) }
         }
     }
 
@@ -325,11 +272,7 @@ impl<'a> Stroke<'a> {
     unsafe fn aside_v(&self, i: usize) -> f32 {
         unsafe {
             let s = *self.sf.slot.add(i);
-            if s == NONE {
-                0.0
-            } else {
-                self.aside[s as usize].film.v
-            }
+            if s == NONE { 0.0 } else { self.aside[s as usize].film.v }
         }
     }
 
@@ -354,11 +297,7 @@ impl<'a> Stroke<'a> {
         unsafe {
             let (hide, top) = (*self.sf.hide.add(i), &*self.sf.top.add(i));
             let s = *self.sf.slot.add(i);
-            let m = if s == NONE {
-                None
-            } else {
-                Some(&self.aside[s as usize].film).filter(|m| m.v > 0.0)
-            };
+            let m = if s == NONE { None } else { Some(&self.aside[s as usize].film).filter(|m| m.v > 0.0) };
             let Some(m) = m else {
                 // (without a film set aside: the body and surface film)
                 return crate::wet::whole(*self.sf.vol.add(i), hide, top)[1];
@@ -413,19 +352,10 @@ impl<'a> Stroke<'a> {
         unsafe {
             let sf = self.sf;
             let t = &mut *sf.top.add(i);
-            if v > 0.0
-                && *sf.stroke.add(i) != self.id
-                && t.v > 0.0
-                && *sf.vol.add(i) >= WET_FILM
-                && self.aside_v(i) <= 0.0
-            {
+            if v > 0.0 && *sf.stroke.add(i) != self.id && t.v > 0.0 && *sf.vol.add(i) >= WET_FILM && self.aside_v(i) <= 0.0 {
                 // (a pixel's paint is set aside once a stroke: it lays here
                 // and is the pixel's last stroke from then on)
-                debug_assert_eq!(
-                    *sf.slot.add(i),
-                    NONE,
-                    "a film set aside twice by one stroke"
-                );
+                debug_assert_eq!(*sf.slot.add(i), NONE, "a film set aside twice by one stroke");
                 *sf.slot.add(i) = self.aside.len() as u32;
                 self.aside.push(Aside { i, film: *t });
                 t.v = 0.0;
@@ -455,20 +385,8 @@ impl<'a> Stroke<'a> {
                 }
                 let t = &mut *sf.top.add(i);
                 let l = &mut *sf.lat.add(i);
-                let like = 1.0
-                    - smoothstep(
-                        0.05,
-                        0.3,
-                        l.iter()
-                            .zip(&m.lat)
-                            .map(|(a, c)| (a - c).abs())
-                            .sum::<f32>(),
-                    );
-                let k = if b > 1e-6 {
-                    smoothstep(0.0, BURY, t.v).max(like)
-                } else {
-                    smoothstep(0.0, BURY, t.v)
-                };
+                let like = 1.0 - smoothstep(0.05, 0.3, l.iter().zip(&m.lat).map(|(a, c)| (a - c).abs()).sum::<f32>());
+                let k = if b > 1e-6 { smoothstep(0.0, BURY, t.v).max(like) } else { smoothstep(0.0, BURY, t.v) };
                 mix_into(&mut b, l, &mut *sf.hide.add(i), mv * k, &m.lat, m.hide);
                 t.mix(mv * (1.0 - k), &m.lat, m.hide);
             }
@@ -488,18 +406,10 @@ impl<'a> Stroke<'a> {
             }
             // (a film much thinner than a coat is no layer of its own once
             // it is sheared: it smears into the wet paint it lies on)
-            let k =
-                k * (1.25 - 0.5 * t.hide[1].clamp(0.0, 1.0)) * (1.0 + THIN_FILM / t.v.max(1e-3));
+            let k = k * (1.25 - 0.5 * t.hide[1].clamp(0.0, 1.0)) * (1.0 + THIN_FILM / t.v.max(1e-3));
             let m = t.v * k.min(1.0);
             let mut b = self.body(i);
-            mix_into(
-                &mut b,
-                &mut *sf.lat.add(i),
-                &mut *sf.hide.add(i),
-                m,
-                &t.lat,
-                t.hide,
-            );
+            mix_into(&mut b, &mut *sf.lat.add(i), &mut *sf.hide.add(i), m, &t.lat, t.hide);
             (*sf.top.add(i)).v -= m;
         }
     }
@@ -514,14 +424,7 @@ impl<'a> Stroke<'a> {
             }
             let sf = self.sf;
             let mut b = self.body(i);
-            mix_into(
-                &mut b,
-                &mut *sf.lat.add(i),
-                &mut *sf.hide.add(i),
-                v,
-                lat,
-                hide,
-            );
+            mix_into(&mut b, &mut *sf.lat.add(i), &mut *sf.hide.add(i), v, lat, hide);
             *sf.vol.add(i) += v;
         }
     }
@@ -549,11 +452,7 @@ impl<'a> Stroke<'a> {
                 Some(m) if v[1] > 0.0 => m.of(v[1]),
                 _ => Layer::EMPTY.of(v[1]),
             };
-            Parcel {
-                top: t.of(v[0]),
-                aside,
-                body: Layer::new(v[2], *sf.lat.add(i), *sf.hide.add(i)),
-            }
+            Parcel { top: t.of(v[0]), aside, body: Layer::new(v[2], *sf.lat.add(i), *sf.hide.add(i)) }
         }
     }
 
@@ -568,11 +467,7 @@ impl<'a> Stroke<'a> {
                 return Parcel::EMPTY;
             }
             let f = (v / vol).clamp(0.0, 1.0);
-            let parts = [
-                (*sf.top.add(i)).v * f,
-                self.aside_v(i) * f,
-                self.body(i) * f,
-            ];
+            let parts = [(*sf.top.add(i)).v * f, self.aside_v(i) * f, self.body(i) * f];
             (*sf.top.add(i)).v -= parts[0];
             if let Some(m) = self.aside_at(i) {
                 m.v -= parts[1];

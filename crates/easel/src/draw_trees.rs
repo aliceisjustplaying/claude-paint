@@ -328,10 +328,8 @@ fn lay_wood(lua: &Lua, t: &Tree, b: &AnyUserData, opts: Option<Table>, detail: f
             let wd = w[j] + (w[j + 1] - w[j]) * f;
             knots.push(press(wd)?.clamp(0.05, 1.0));
         }
-        if tip {
-            if let Some(e) = end {
-                *knots.last_mut().unwrap() = e.clamp(0.02, 1.0);
-            }
+        if tip && let Some(e) = end {
+            *knots.last_mut().unwrap() = e.clamp(0.02, 1.0);
         }
         let (ra, rr) = ramps.unwrap_or((0.0, if tip { 0.12 } else { 0.0 }));
         let so = lua.create_table()?;

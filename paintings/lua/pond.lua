@@ -260,3 +260,105 @@ for k = 1, 6 do
   sb:reload(sample(x0 - 5, yy, 2):mix(sample(x1 + 5, yy, 2), 0.5), 0.8)
   sb:stroke({{x0, yy - 3}, {0.5 * (x0 + x1), yy + 0.3}, {x1, yy + 4}}, {pressure={0.5, 0.7}, ramps={0.25, 0.35}, shake=0.4})
 end
+
+--@ chunk 13 · clock 46798.708984375
+-- the trodden path: from the bottom edge up the slope to the figure, then over the flat to the ice
+PATH = {{668,716},{672,694},{662,668},{640,644},{612,622},{594,608},{580,592},{560,574},{540,556},{530,540},{526,528},{524,520}}
+local wds = {}
+for i, p in ipairs(PATH) do wds[i] = 1.5 + 11 * smoothstep(520, 716, p[2]) end
+pathm = ribbon(PATH, wds):roughen(2, 10, 91, 1.5)
+glaze(pathm:blur(1.5), {color="#7a7f9c", coats=0.16})
+stipple(pathm, {width=1.8, pal=snowpal, color="#c9c8d0", coverage=0.35, pressure={0.4, 0.8}, dips={16, 0.4, 0.7}, medium=0.4, feather=0.6})
+-- footprints: small darker hollows, pairs staggered, shrinking with distance
+local fb = brush{kind="round", width=2.2, point=0.3}
+for t = 0.02, 0.98, 0.034 do
+  local n = #PATH - 1
+  local u = t * n; local i = math.floor(u) + 1; local f = u - (i - 1)
+  local a, b = PATH[i], PATH[i + 1]
+  local x, y = a[1] + (b[1] - a[1]) * f, a[2] + (b[2] - a[2]) * f
+  if y > 610 or y < 590 then
+    local s = 0.25 + 0.9 * smoothstep(520, 716, y)
+    local side = (math.floor(t / 0.034) % 2 == 0) and -1 or 1
+    fb:reload(mix("#707592", "#80849e", rand()), 0.9)
+    fb:reload(mix("#7f839c", "#8d90a6", rand()), 0.5)
+    fb:stroke({{x + side * 1.6 * s, y - 1.2 * s}, {x + side * 1.6 * s + 0.3, y + 1.4 * s}}, {pressure={0.15 + 0.35 * s, 0.1}, ramps={0.2, 0.5}})
+  end
+end
+
+--@ chunk 14 · clock 58599.51953125
+-- the walker, from behind: greatcoat to the calves, a low hat, a stick
+local fx, fy = 588, 603
+coat = poly({{fx-4.4,fy-7.6},{fx-3.5,fy-15},{fx-3.3,fy-21.5},{fx-1.5,fy-23.2},{fx+1.8,fy-23.2},{fx+3.4,fy-21.4},{fx+3.7,fy-15},{fx+4.8,fy-7.9},{fx+2,fy-7.2},{fx-1,fy-7.1}}, true)
+head = ellipse(fx + 0.2, fy - 25, 1.5, 1.9)
+hat = poly({{fx-2.8,fy-26.4},{fx-1.7,fy-26.8},{fx-1.6,fy-29.6},{fx+1.9,fy-29.8},{fx+2,fy-26.8},{fx+3,fy-26.3},{fx+2.8,fy-25.8},{fx-2.6,fy-25.9}})
+figm = coat + head + hat
+local fb = brush{kind="round", width=1.2, point=0.5}
+work(figm, {hand="detail", tool=fb, pal=barkpal, color="#29272d", angle=1.57, length={2, 6}, coverage=3.2, edge={found=0.6, soft=0.4, period=10}})
+-- legs and boots below the hem
+local lb = brush{kind="round", width=1.3, point=0.3}
+lb:load("#24222a", 0.9)
+lb:stroke({{fx-1.5, fy-7.6}, {fx-1.8, fy-3.6}, {fx-2.1, fy+0.2}}, {pressure={0.6, 0.7}})
+lb:stroke({{fx+1.4, fy-7.6}, {fx+1.9, fy-4.4}, {fx+2.6, fy-1.6}}, {pressure={0.6, 0.7}})
+-- the stick
+local sb = brush{kind="rigger", width=0.7, point=1}
+sb:load("#3a3330", 0.8)
+sb:stroke({{fx+4, fy-12.5}, {fx+5.6, fy-5.5}, {fx+6.9, fy+0.6}}, {pressure={0.7, 0.45}})
+-- the dawn catching the right shoulder and the hat brim
+local rb = brush{kind="round", width=0.8, point=1}
+rb:load("#6e6464", 0.7)
+rb:stroke({{fx+2.1, fy-22.9}, {fx+3.3, fy-21.2}, {fx+3.6, fy-16.5}}, {pressure={0.7, 0.15}})
+rb:stroke({{fx+0.8, fy-29.6}, {fx+1.9, fy-29.3}}, {pressure={0.5, 0.1}})
+
+--@ chunk 15 · clock 58599.51953125
+local drift = below(function(x) return 439.5 + (x - 158) * 0.5 end)
+local patch = (ellipse(184, 456, 32, 13) * drift):soften(2.5)
+stipple(patch, {width=1.8, pal=snowpal, color=function(x, y) return mix("#cdcecf", "#c6c8cc", smoothstep(440, 475, y)) end, coverage=2.2,
+  pressure={0.45, 0.85}, dips={14, 0.4, 0.7}, medium=0.3, cluster={0.2, 4}, feather=0.7})
+
+--@ chunk 16 · clock 58599.51953125
+-- a few thin strata, drawn by hand: long, slightly wavering strokes of a half-dry filbert
+local notree = -(oak:mask():grow(1.5) + tower:grow(1))
+local cb = brush{kind="filbert", width=5}
+local lines = {
+  {y=318, x0=250, x1=560, c="#d0b5b3"}, {y=328, x0=600, x1=960, c="#d6bab2"}, {y=300, x0=420, x1=780, c="#c8b0b2"},
+  {y=276, x0=140, x1=430, c="#bca9b1"}, {y=262, x0=560, x1=1000, c="#b9a8b2"}, {y=236, x0=300, x1=640, c="#aea2ae"},
+  {y=345, x0=700, x1=1000, c="#dbc0b0"}, {y=352, x0=360, x1=560, c="#d8c0b2"}, {y=212, x0=720, x1=990, c="#a59cab"},
+}
+for i, l in ipairs(lines) do
+  local pts = {}
+  local n = 7
+  for k = 0, n do
+    local x = l.x0 + (l.x1 - l.x0) * k / n
+    pts[#pts + 1] = {x, l.y + 2.5 * math.sin(x / 70 + i) + rand(-1, 1)}
+  end
+  for pass = 1, 2 do
+    cb:reload(mix(l.c, sample(0.5 * (l.x0 + l.x1), l.y), 0.05 + 0.12 * pass), 0.55)
+    local off = {}
+    for k, p in ipairs(pts) do off[k] = {p[1] + rand(-8, 8), p[2] + (pass - 1.5) * 3 + rand(-0.6, 0.6)} end
+    cb:stroke(off, {pressure={0.45, 0.2}, ramps={0.3, 0.4}, shake=0.8, swell={0.8, 1.2, 0.7}, clip=notree})
+  end
+end
+
+--@ chunk 17 · clock 58599.51953125
+-- bare ice swept clear of snow: long thin darker streaks, reflecting the gray upper sky
+local sw = noise{seed=113, period=110, octaves=4, stretch={0.0, 10}, warp={60, 6}}
+local clear = (pond:shrink(2) * mask(function(x, y) return smoothstep(0.12, 0.45, sw(x, y)) * smoothstep(466, 490, y) end)):blur(1.2)
+glaze(clear, {color="#8d90a8", coats=0.22})
+-- reeds and rushes along the near shore and at the pond's two ends, dry and pale where lit, dark against the ice
+reedpal = pal:only{"lead white", "raw umber", "yellow ochre", "bone black", "red earth"}
+local rb = brush{kind="rigger", width=0.7, point=1}
+local clumps = {{338, 500, 22}, {372, 507, 14}, {455, 514, 18}, {690, 522, 10}, {845, 518, 20}, {935, 509, 16}, {985, 500, 12}, {312, 474, 10}, {952, 472, 14}}
+for ci, cl in ipairs(clumps) do
+  local cx, cy, n = cl[1], cl[2], cl[3]
+  local scale = 0.6 + 0.6 * smoothstep(465, 525, cy)
+  for k = 1, n do
+    local x = cx + randn(0, 7 * scale); local y = cy + rand(-1.5, 2.5)
+    local h = rand(6, 16) * scale
+    local lean = randn(0.1, 0.25)
+    if k % 4 == 1 then rb:reload(mix("#4a4036", "#8a7a60", rand() ^ 1.5), 0.7) end
+    local tip = {x + lean * h, y - h}
+    local bend = (rand() < 0.15)
+    if bend then tip = {x + lean * h + h * 0.5, y - h * 0.6} end
+    rb:stroke({{x, y}, {x + lean * h * 0.35, y - h * 0.55}, tip}, {pressure={clamp(0.35 + 0.4 * scale, 0.3, 0.8), 0}, ramps={0.05, 0.7}})
+  end
+end

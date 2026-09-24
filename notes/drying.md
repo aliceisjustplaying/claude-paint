@@ -220,11 +220,13 @@ covers:
   `with_drying`.
 - **Tacky films can't be torn.** A brush dragged hard through tacky paint
   lifts strings of it. Here set paint never lifts.
-- **Glazes over heavy impasto leave the ridge tops bare** (pre-existing
-  `settle` pooling). A thin fluid glaze levels below tall stroke ridges and
-  `(lev − old).max(0)` gives those pixels no film, which shows as crisp
-  dark dashes. Real glazes leave a wetting film on peaks. A floor of about
-  `MIN_FILM_UM` on the peaks, taken from the pooled volume, would fix it.
+- ~~**Glazes over heavy impasto leave the ridge tops bare**~~ Fixed in
+  round 6 (`notes/varnish.md`). Measured, the tops were bare (1.5% of
+  pixels) but the dark dashes were the other side: the volume taken off
+  them pooled 15–80 µm deep at the foot of every step (film 3–38× the
+  request). `Canvas::glaze` now uses `settle_film`, a thin film over dry
+  relief that keeps at least `MIN_FILM_UM` on every peak and gathers at
+  most 2× in the hollows.
 - `Canvas::glaze` still dries everything first (it is a finished glaze,
   not a wet film). A wet glaze that ages would be a `Handling` with
   `st.glaze()` plus `wait`.

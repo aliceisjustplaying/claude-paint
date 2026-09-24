@@ -42,7 +42,8 @@ fn replay(src: &Path, width: u32, threads: Option<usize>, tag: &str) -> (String,
 /// (branch r6-wet, notes/wet.md), which changes output on purpose, for its
 /// maintenance round's two fixes (B3, B7: notes/wet.md §9), and for the
 /// merge of r6-wet into the engine with main's changes (B10); the test-profile
-/// hash again when tests became optimized (`[profile.test]`, Round 6).
+/// hash again when tests became optimized (`[profile.test]`, Round 6), and
+/// for the wet engine's glitch fixes (W1, T: notes/wet.md §10).
 /// `PRINT_HASHES=1` prints them instead of checking (re-record in both
 /// profiles after an intended change).
 #[test]
@@ -50,9 +51,9 @@ fn existing_logs_replay_unchanged() {
     // (the benchmark near is checked in release only: a debug replay takes
     // minutes)
     let logs: &[(&str, u64)] = if cfg!(debug_assertions) {
-        &[("paintings/lua/example.lua", 0x5d8b_8104_0908_9111)]
+        &[("paintings/lua/example.lua", 0xf62a_9aac_f9d2_08fb)]
     } else {
-        &[("paintings/lua/example.lua", 0x5d8b_8104_0908_9111), ("notes/loops/l5_near.lua", 0xc132_7692_9ef9_16da)]
+        &[("paintings/lua/example.lua", 0xf62a_9aac_f9d2_08fb), ("notes/loops/l5_near.lua", 0xf2f9_3fb1_1c49_c0f5)]
     };
     for &(log, want) in logs {
         let (_, png) = replay(&root().join(log), 160, None, "unchanged");

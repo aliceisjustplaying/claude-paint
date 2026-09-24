@@ -16,6 +16,11 @@ use std::time::Instant;
 
 /// Marks the start of a chunk in a session file.
 pub const MARK: &str = "--@ chunk";
+/// The header line of a log whose sittings are enforced: the easel writes it
+/// for every session it starts, and a replay of a log with it is held to
+/// the same rule (`time::at_easel`). Logs from before have no such line and
+/// replay as they were painted.
+pub const STRICT: &str = "-- sittings enforced: a sitting ends at its length; the easel refuses marks until rest(hours) (notes/time.md)";
 
 pub struct Chunk {
     pub src: String,
@@ -129,6 +134,16 @@ impl Session {
         let mut s = Self::new(width, 0)?;
         s.replay = true;
         Ok(s)
+    }
+
+    /// Hold the painting to its sittings (a new session, or a log whose
+    /// header says so: `STRICT`).
+    pub fn set_strict(&mut self, on: bool) {
+        self.st.borrow_mut().strict = on;
+    }
+
+    pub fn strict(&self) -> bool {
+        self.st.borrow().strict
     }
 
     fn snap(&mut self) -> mlua::Result<Snap> {
@@ -348,6 +363,9 @@ impl Session {
         let _ = writeln!(s, "-- easel session {name:?}: a painting replayed chunk by chunk.");
         let _ = writeln!(s, "--   easel run paintings/lua/{name}.lua [--width 3200]");
         let _ = writeln!(s, "-- Each {MARK:?} line starts one chunk as it was run at the easel (clock = painting minutes).");
+        if self.strict() {
+            let _ = writeln!(s, "{STRICT}");
+        }
         for (i, c) in self.log.iter().enumerate() {
             let _ = writeln!(s, "\n{MARK} {} · clock {}", i + 1, c.clock);
             s.push_str(&c.src);
@@ -558,6 +576,12 @@ fn clean_error(e: &str) -> String {
     out.join("\n")
 }
 
+/// Whether a session file holds its sittings: the `STRICT` line in its
+/// header (before the first chunk).
+pub fn program_is_strict(text: &str) -> bool {
+    text.lines().take_while(|l| !l.trim_start().starts_with(MARK)).any(|l| l.trim_end() == STRICT)
+}
+
 /// Split a session file into chunks.
 pub fn parse_program(text: &str) -> Vec<String> {
     let mut chunks: Vec<String> = Vec::new();
@@ -618,6 +642,21 @@ mod tests {
            for i = 1, 5 do b:stroke({{100 + i*60, 500}, {130 + i*60 + rand(-10, 10), 420}}) end"##,
         r##"wait(90); stipple(below(function(x) return 380 end), {width=3, color="#c8c6bc", coverage=1.5})"##,
     ];
+
+    /// A strict session's log says so in its header, and only then.
+    #[test]
+    fn the_log_header_carries_strictness() {
+        for on in [false, true] {
+            let mut a = Session::new(W, 0).unwrap();
+            a.set_strict(on);
+            a.run(CHUNKS[0]).unwrap();
+            let prog = a.program("t");
+            assert_eq!(program_is_strict(&prog), on, "{prog}");
+            assert_eq!(parse_program(&prog), vec![CHUNKS[0].to_string()]);
+        }
+        // (a chunk quoting the line isn't the header)
+        assert!(!program_is_strict(&format!("--@ chunk 1\n{STRICT}\n")));
+    }
 
     #[test]
     fn replay_is_exact_and_failures_roll_back() {

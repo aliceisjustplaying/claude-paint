@@ -24,7 +24,7 @@ mod look;
 mod session;
 mod time;
 
-use session::{Session, parse_program, root};
+use session::{Session, parse_program, program_is_strict, root};
 use std::io::{Read, Write};
 use std::os::unix::net::{UnixListener, UnixStream};
 use std::path::{Path, PathBuf};
@@ -241,10 +241,13 @@ fn serve(args: &[String]) -> Result<(), String> {
     let undo: usize = flag(args, "--undo").and_then(|w| w.parse().ok()).unwrap_or(8);
     let mut s = Session::new(width, undo).map_err(|e| format!("easel: fatal: {e}"))?;
     s.keep = flag(args, "--checkpoints").and_then(|w| w.parse().ok()).unwrap_or(edit::CHECKPOINTS);
-    // resume from the log
+    // resume from the log; a new session holds its sittings, an old log
+    // goes on as it was painted (notes/time.md)
     let lp = log_path(&name);
     let mut written = None;
-    if let Ok(text) = std::fs::read_to_string(&lp) {
+    let old = std::fs::read_to_string(&lp).ok();
+    s.set_strict(old.as_deref().is_none_or(program_is_strict));
+    if let Some(text) = old {
         written = Some(text.clone());
         let chunks = parse_program(&text);
         let t0 = Instant::now();
@@ -261,7 +264,9 @@ fn serve(args: &[String]) -> Result<(), String> {
     let l = UnixListener::bind(&sock).map_err(|e| format!("easel: fatal: bind {}: {e}", sock.display()))?;
     let _ = std::io::stdout().flush();
     look::begin(&s.lua, "resume");
-    let mut srv = Server { name, s, frames: false, written, crops: crop::Crops::default() };
+    let mut crops = crop::Crops::default();
+    crops.strict = s.strict();
+    let mut srv = Server { name, s, frames: false, written, crops };
     for conn in l.incoming() {
         let Ok(mut conn) = conn else { continue };
         let mut req = Vec::new();
@@ -437,6 +442,7 @@ impl Server {
                 let t0 = Instant::now();
                 let width = self.s.st.borrow().width;
                 let mut fresh = Session::replay(width).map_err(|e| e.to_string())?;
+                fresh.set_strict(self.s.strict());
                 for (i, c) in self.s.log.iter().enumerate() {
                     fresh.run(&c.src).map_err(|e| format!("replay failed at chunk {}: {e}", i + 1))?;
                 }
@@ -492,6 +498,7 @@ fn run(args: &[String]) -> Result<(), String> {
         return Err(format!("{file}: no chunks (each starts with a line \"{}\")", session::MARK));
     }
     let mut s = Session::replay(width).map_err(|e| e.to_string())?;
+    s.set_strict(program_is_strict(&text));
     let t0 = Instant::now();
     for (i, c) in chunks.iter().enumerate() {
         let r = s.run(c).map_err(|e| format!("chunk {} failed:\n{e}", i + 1))?;

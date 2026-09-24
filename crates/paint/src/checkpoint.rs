@@ -403,7 +403,10 @@ mod tests {
         // a corrupt drawing is refused
         let mut b = Vec::new();
         c.write_state(&mut b, "").unwrap();
-        let at = b.len() - 4 * (300 * 200 + 1) - 4;
+        // (the wet film's surface layer, version 8, comes after the drawing
+        // and the hand-time block)
+        let film = 300 * 200 * (1 + LAT + 3) * 4;
+        let at = b.len() - film - 4 * (300 * 200 + 1) - 4;
         b[at..at + 4].copy_from_slice(&f32::NAN.to_le_bytes());
         rejected(b, "nan in the guide");
     }

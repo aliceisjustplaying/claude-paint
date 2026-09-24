@@ -16,7 +16,7 @@
 use crate::api::{S, check_keys, err, frame, mask_of, num, points, seed_of, wrap};
 use crate::draw_outline::outline_path;
 use mlua::{AnyUserData, Lua, MetaMethod, ObjectLike, Result, Table, UserData, UserDataFields, UserDataMethods, Value};
-use paint::broadleaf::{Clump, Group, GroupSpec, Limb, Season, Species, Touch, Tree};
+use paint::broadleaf::{Clump, Group, GroupSpec, Limb, Season, Species, Touch, Tree, WoodStroke};
 use paint::{Frame, Mask};
 use std::rc::Rc;
 
@@ -264,6 +264,50 @@ fn lay(lua: &Lua, trees: &[Rc<Tree>], b: &AnyUserData, opts: Option<Table>) -> R
 
 const WOOD_KEYS: &[&str] = &["color", "load", "every", "min", "max", "twigs", "pressure", "ramps", "shake", "clip", "detail"];
 
+/// How one wood stroke is laid: its first `m` points, the pressure knots
+/// along it (from the width), and the attack and release ramps.
+struct StrokePlan {
+    m: usize,
+    knots: Vec<f32>,
+    ramps: (f32, f32),
+}
+
+/// Plan a wood stroke: `twigs` false drops a leading twig drawn on from the
+/// limb's tip; `bw` is the widest mark the brush lays; `end` the pressure at
+/// a tip and `ramps` the attack and release asked for (default: none and a
+/// short lift at tips); `press` the pressure for a width.
+fn plan_stroke(s: &WoodStroke, twigs: bool, bw: f32, end: Option<f32>, ramps: Option<(f32, f32)>, press: &dyn Fn(f32) -> Result<f32>) -> Result<Option<StrokePlan>> {
+    let m = if twigs { s.pts.len() } else { s.own };
+    if m < 2 {
+        return Ok(None);
+    }
+    let (pts, w) = (&s.pts[..m], &s.w[..m]);
+    // the limb's end is still a tip when its leading twig is left out
+    let tip = s.tip;
+    let mut arc = vec![0.0f32; m];
+    for k in 1..m {
+        arc[k] = arc[k - 1] + ((pts[k].0 - pts[k - 1].0).powi(2) + (pts[k].1 - pts[k - 1].1).powi(2)).sqrt();
+    }
+    let total = arc[m - 1].max(1e-6);
+    let nk = ((total / (0.75 * bw).max(0.5)).ceil() as usize + 1).clamp(2, 24);
+    let mut knots = Vec::with_capacity(nk);
+    let mut j = 0;
+    for q in 0..nk {
+        let d = total * q as f32 / (nk - 1) as f32;
+        while j + 2 < m && arc[j + 1] < d {
+            j += 1;
+        }
+        let f = ((d - arc[j]) / (arc[j + 1] - arc[j]).max(1e-6)).clamp(0.0, 1.0);
+        let wd = w[j] + (w[j + 1] - w[j]) * f;
+        knots.push(press(wd)?.clamp(0.05, 1.0));
+    }
+    if tip && let Some(e) = end {
+        *knots.last_mut().unwrap() = e.clamp(0.02, 1.0);
+    }
+    let (ra, rr) = ramps.unwrap_or((0.0, if tip { 0.12 } else { 0.0 }));
+    Ok(Some(StrokePlan { m, knots, ramps: (ra, if tip { rr } else { 0.0 }) }))
+}
+
 /// Lay the wood between `min` and `max` wide (the local width, so a stout
 /// limb's thin end is in the thin band) as strokes that start inside the
 /// wood they leave from, pressed to the wood's width along the way (the
@@ -298,12 +342,7 @@ fn lay_wood(lua: &Lua, t: &Tree, b: &AnyUserData, opts: Option<Table>, detail: f
         if !twigs && l.twig {
             continue;
         }
-        let m = if twigs { s.pts.len() } else { s.own };
-        if m < 2 {
-            continue;
-        }
-        let (pts, w) = (&s.pts[..m], &s.w[..m]);
-        let tip = s.tip && m == s.pts.len();
+        let Some(plan) = plan_stroke(&s, twigs, bw, end, ramps, &press)? else { continue };
         if n % every == 0 || b.call_method::<f32>("fullness", ())? < 0.3 {
             let c = match &color {
                 Value::Function(g) => g.call::<Value>(limb_table(lua, s.limb, l)?)?,
@@ -311,32 +350,11 @@ fn lay_wood(lua: &Lua, t: &Tree, b: &AnyUserData, opts: Option<Table>, detail: f
             };
             b.call_method::<()>("reload", (c, load))?;
         }
-        // the pressure along the stroke, from the width at even steps of its length
-        let mut arc = vec![0.0f32; m];
-        for k in 1..m {
-            arc[k] = arc[k - 1] + ((pts[k].0 - pts[k - 1].0).powi(2) + (pts[k].1 - pts[k - 1].1).powi(2)).sqrt();
-        }
-        let total = arc[m - 1].max(1e-6);
-        let nk = ((total / (0.75 * bw).max(0.5)).ceil() as usize + 1).clamp(2, 24);
-        let mut knots = Vec::with_capacity(nk);
-        let mut j = 0;
-        for q in 0..nk {
-            let d = total * q as f32 / (nk - 1) as f32;
-            while j + 2 < m && arc[j + 1] < d {
-                j += 1;
-            }
-            let f = ((d - arc[j]) / (arc[j + 1] - arc[j]).max(1e-6)).clamp(0.0, 1.0);
-            let wd = w[j] + (w[j + 1] - w[j]) * f;
-            knots.push(press(wd)?.clamp(0.05, 1.0));
-        }
-        if tip && let Some(e) = end {
-            *knots.last_mut().unwrap() = e.clamp(0.02, 1.0);
-        }
-        let (ra, rr) = ramps.unwrap_or((0.0, if tip { 0.12 } else { 0.0 }));
+        let (pts, knots, (ra, rr)) = (&s.pts[..plan.m], plan.knots, plan.ramps);
         let so = lua.create_table()?;
         so.set("pressure", lua.create_sequence_from([1.0f32, 1.0])?)?;
         so.set("swell", lua.create_sequence_from(knots)?)?;
-        so.set("ramps", lua.create_sequence_from([ra, if tip { rr } else { 0.0 }])?)?;
+        so.set("ramps", lua.create_sequence_from([ra, rr])?)?;
         so.set("shake", shake)?;
         if !clip.is_nil() {
             so.set("clip", clip.clone())?;
@@ -716,6 +734,26 @@ mod tests {
         let floating: Vec<usize> = (1..sizes.len()).filter(|&i| i != tree && sizes[i] > 6).map(|i| sizes[i]).collect();
         assert!(sizes[tree] > 5000, "the tree is {} px", sizes[tree]);
         assert!(floating.is_empty(), "pieces off the tree bigger than a speck: {floating:?} (tree {} px)", sizes[tree]);
+    }
+
+    /// A limb whose leading twig is drawn on in its stroke is still a tip
+    /// when the twig is left out (twigs=false): the pressure asked for at a
+    /// tip and the release apply at the limb's end.
+    #[test]
+    fn dropping_a_leading_twig_keeps_the_limb_end_a_tip() {
+        use paint::broadleaf::{Season, Species, Tree};
+        let crown: Vec<(f32, f32)> = (0..32).map(|i| { let a = i as f32 / 32.0 * std::f32::consts::TAU; (500.0 + 190.0 * a.cos(), 260.0 + 140.0 * a.sin()) }).collect();
+        let t = Tree::grow(&crown, Some(&[(505.0, 560.0), (498.0, 330.0)]), &Species::oak(), &Season::named("winter").unwrap(), [-0.5, -0.7, 0.3], 3);
+        let s = t.wood_strokes(0.0, 1.2, 1.0).into_iter().find(|s| s.tip && s.own < s.pts.len() && s.own >= 2).expect("a stroke with a leading twig drawn on");
+        let press = |w: f32| -> mlua::Result<f32> { Ok((w / 1.2).clamp(0.0, 1.0)) };
+        let with = super::plan_stroke(&s, true, 1.2, Some(0.03), Some((0.0, 0.3)), &press).unwrap().unwrap();
+        let without = super::plan_stroke(&s, false, 1.2, Some(0.03), Some((0.0, 0.3)), &press).unwrap().unwrap();
+        assert_eq!(with.m, s.pts.len());
+        assert_eq!(without.m, s.own);
+        for p in [&with, &without] {
+            assert!((p.knots.last().unwrap() - 0.03).abs() < 1e-6, "tip pressure {:?}", p.knots.last());
+            assert!((p.ramps.1 - 0.3).abs() < 1e-6, "release {:?}", p.ramps);
+        }
     }
 
     #[test]

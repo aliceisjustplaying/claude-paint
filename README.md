@@ -47,6 +47,9 @@ Engine (`crates/paint`):
 - `drying` – time: `c.wait(minutes)` ages each pixel's wet paint (open,
   setting, tacky, touch-dry) by pigment, thickness and fat; brushes feel
   the stage; `c.dry()` waits until all is touch-dry: `notes/drying.md`
+- `tally` – the hand's ledger: every planned stroke, touch and palette trip
+  priced in hand time; with `c.set_hand_time(..)` the paint ages while the
+  hand works, a long pass in slices: `notes/time.md`
 - `bristle` – simulated brushes (round, flat, filbert, fan, rigger, badger):
   per-bristle reservoirs, bend and splay, contact with the surface relief,
   deposit, pickup and ploughing; pointed rounds and riggers (`Tool::point`)

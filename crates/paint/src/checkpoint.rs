@@ -20,7 +20,9 @@
 //! rate until the film is worked again); version 6 (`PAINTCK6`) adds the
 //! drawing (`graphite::Drawing`): every cell of the deposit (coverage,
 //! flake reflectance, lift, fixed floor, film when drawn) and the
-//! whole-canvas guide with its fixed floor. Older files are refused
+//! whole-canvas guide with its fixed floor; version 7 (`PAINTCK7`) adds each
+//! wet pixel's surface film (paint laid into wet paint and not yet worked
+//! in: `wet::Wet::top`). Older files are refused
 //! (re-run to checkpoint again).
 //!
 //! Format: little-endian binary, `MAGIC`, then a free-form UTF-8 header
@@ -32,7 +34,7 @@ use crate::surface::Linen;
 use crate::wet::LAT;
 use std::io::{self, Read, Write};
 
-const MAGIC: &[u8; 8] = b"PAINTCK6";
+const MAGIC: &[u8; 8] = b"PAINTCK7";
 
 fn put_u64(w: &mut impl Write, v: u64) -> io::Result<()> {
     w.write_all(&v.to_le_bytes())
@@ -151,6 +153,9 @@ impl Canvas {
         }
         put_f32(w, self.ground_um)?;
         put_all(w, wt.cover.iter().copied())?;
+        put_all(w, wt.top.iter().copied())?;
+        put_all(w, wt.tlat.iter().flat_map(|l| *l))?;
+        put_all(w, wt.thide.iter().flat_map(|h| *h))?;
         match &self.drawing {
             None => put_u64(w, 0)?,
             Some(d) => {
@@ -262,6 +267,9 @@ impl Canvas {
         let ground_um = get_f32(r)?;
         c.ground_um = if ground_um.is_finite() { ground_um.max(0.0) } else { 0.0 };
         wet.cover = get_all(r, n)?;
+        wet.top = get_all(r, n)?;
+        wet.tlat = get_all(r, n * LAT)?.as_chunks::<LAT>().0.to_vec();
+        wet.thide = get_all(r, n * 3)?.as_chunks::<3>().0.to_vec();
         c.wet = wet;
         c.drawing = match get_u64(r)? {
             0 => None,

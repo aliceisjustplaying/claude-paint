@@ -168,12 +168,28 @@ impl Paint {
     }
 }
 
+/// The wet paint on the canvas, per pixel: a film of `vol` coats in two
+/// parts. The **surface film** (`top` coats of `tlat`/`thide`) is paint laid
+/// into wet paint and not yet worked into it: a loaded brush laid with a
+/// light touch leaves its paint on top of the wet layer, as oil paint does.
+/// The rest (`vol − top` coats of `lat`/`hide`) is the **body** of the film:
+/// paint laid on a dry surface, and everything brushes have worked in.
+/// Bristles pressing through the surface film stir it into the body (see
+/// `bristle::exchange`); `look_px` and `dry` composite the surface over the
+/// body with Kubelka–Munk. Everything that asks how much wet paint lies
+/// there (drying, leveling, the brushes' contact) reads `vol`, the whole.
 #[derive(Clone)]
 pub(crate) struct Wet {
     pub(crate) vol: Vec<f32>,
+    /// Pigment of the film's body.
     pub(crate) lat: Vec<Latent>,
-    /// [scattering, stiffness, drying rate] of the wet paint.
+    /// [scattering, stiffness, drying rate] of the film's body.
     pub(crate) hide: Vec<Prop>,
+    /// The surface film: its thickness (coats, part of `vol`), pigment and
+    /// properties.
+    pub(crate) top: Vec<f32>,
+    pub(crate) tlat: Vec<Latent>,
+    pub(crate) thide: Vec<Prop>,
     /// Which stroke last laid paint here (a stroke barely re-picks its own paint).
     pub(crate) stroke: Vec<u32>,
     /// Stroke that last touched a pixel, and the film floor that stroke may
@@ -195,7 +211,28 @@ pub(crate) struct Wet {
 
 impl Wet {
     pub fn new(n: usize) -> Self {
-        Wet { vol: vec![0.0; n], lat: vec![[0.0; LAT]; n], hide: vec![[0.0, 0.5, 1.0]; n], stroke: vec![0; n], touched: vec![0; n], floor: vec![0.0; n], cover: vec![1.0; n], current: 0, dirty: None, clock: Default::default() }
+        Wet {
+            vol: vec![0.0; n],
+            lat: vec![[0.0; LAT]; n],
+            hide: vec![[0.0, 0.5, 1.0]; n],
+            top: vec![0.0; n],
+            tlat: vec![[0.0; LAT]; n],
+            thide: vec![[0.0, 0.5, 1.0]; n],
+            stroke: vec![0; n],
+            touched: vec![0; n],
+            floor: vec![0.0; n],
+            cover: vec![1.0; n],
+            current: 0,
+            dirty: None,
+            clock: Default::default(),
+        }
+    }
+
+    /// [scattering, stiffness, drying rate] of the whole wet film at pixel
+    /// `i`: body and surface mixed by volume (what dries, levels and sets).
+    #[inline]
+    pub(crate) fn prop(&self, i: usize) -> Prop {
+        whole(self.vol[i], self.top[i], self.hide[i], self.thide[i])
     }
 
     pub fn touch(&mut self, x0: usize, y0: usize, x1: usize, y1: usize) {
@@ -204,7 +241,6 @@ impl Wet {
             Some((a, b, c, d)) => (a.min(x0), b.min(y0), c.max(x1), d.max(y1)),
         });
     }
-
 }
 
 /// Mix `v` of (`lat`, `hide`) into a reservoir (`rv`, `rl`, `rh`).
@@ -222,6 +258,44 @@ pub fn mix_into(rv: &mut f32, rl: &mut Latent, rh: &mut Prop, v: f32, lat: &Late
     *rv = t;
 }
 
+
+/// [scattering, stiffness, drying rate] of a film `v` coats thick whose
+/// body has `b` and whose surface film (`t` of the `v` coats) has `s`.
+#[inline]
+pub(crate) fn whole(v: f32, t: f32, b: Prop, s: Prop) -> Prop {
+    if t <= 0.0 || v <= 0.0 {
+        return b;
+    }
+    let a = (t / v).min(1.0);
+    std::array::from_fn(|k| b[k] + (s[k] - b[k]) * a)
+}
+
+/// One pixel's wet film (body `lat`/`hide`, surface `tlat`/`thide` of `t`
+/// of its `v` coats), `coats` thick (as laid, or as it levels), over
+/// `under`, covering the share `cover` of the pixel (see `over_share`): the
+/// body, then the surface film over it, each its share of the thickness.
+/// Without a surface film this is `over_share` of the body, bit for bit.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn film_over(lat: &Latent, hide: Prop, tlat: &Latent, thide: Prop, v: f32, t: f32, under: Rgb, coats: f32, cover: f32) -> Rgb {
+    let body = || Pigment::masstone(mixbox::latent_to_linear_float_rgb(lat), hide[0]);
+    let t = t.min(v);
+    if t <= 1e-7 || v <= 0.0 {
+        return over_share(body(), under, coats, cover);
+    }
+    if cover.is_nan() || cover <= 0.0 {
+        return under;
+    }
+    let surf = Pigment::masstone(mixbox::latent_to_linear_float_rgb(tlat), thide[0]);
+    // (within the share of the pixel the paint covers, as `over_share`)
+    let c = cover.min(1.0);
+    let k = (coats / v / c).min(1e4 / v.max(1e-9));
+    let b = if v - t > 1e-7 { body().over(under, (v - t) * k) } else { under };
+    let o = surf.over(b, t * k);
+    if c >= 1.0 {
+        return o;
+    }
+    [under[0] + (o[0] - under[0]) * c, under[1] + (o[1] - under[1]) * c, under[2] + (o[2] - under[2]) * c]
+}
 
 /// `coats` of `pig` over `under`, laid over the share `cover` of a pixel:
 /// the paint sits there `coats / cover` thick and the rest of the pixel
@@ -249,8 +323,8 @@ impl Canvas {
         if v < 1e-5 {
             return self.px[i];
         }
-        let c = mixbox::latent_to_linear_float_rgb(&self.wet.lat[i]);
-        over_share(Pigment::masstone(c, self.wet.hide[i][0]), self.px[i], v, self.wet.cover[i])
+        let w = &self.wet;
+        film_over(&w.lat[i], w.hide[i], &w.tlat[i], w.thide[i], v, w.top[i], self.px[i], v, w.cover[i])
     }
 
     /// What the painter sees, pixel by pixel over the window: the dry
@@ -385,5 +459,182 @@ mod tests {
             }
         }
         assert!(worst.0 < 2e-3, "worst miss {}: {}", worst.0, worst.1);
+    }
+
+    /// Wet on wet (notes/wet.md): paint laid into open paint lies on its
+    /// surface in proportion to the brush's load and how lightly it is laid.
+    mod wet_on_wet {
+        use crate::bristle::{Gesture, Held, Orient, Tool};
+        use crate::canvas::Canvas;
+        use crate::color::{hex, to_oklab};
+        use crate::surface::Linen;
+        use crate::wet::Paint;
+
+        const GROUND: &str = "#b07a5a";
+
+        fn canvas() -> Canvas {
+            Canvas::new(500, 1.0, hex(GROUND)).with_linen(Linen::fine(3))
+        }
+
+        /// A field of `p` from y0 to y1 in overlapping filbert strokes.
+        fn field(c: &mut Canvas, p: Paint, load: f32, y0: f32, y1: f32) {
+            let mut h = Held::new(Tool::filbert(30.0), 1);
+            let mut y = y0;
+            while y < y1 {
+                h.reload(p, load);
+                c.drag(&mut h, &Gesture::new(vec![(60.0, y), (940.0, y)]).pressure(0.9, 0.9), None);
+                y += 8.0;
+            }
+        }
+
+        fn light() -> Paint {
+            Paint::body(hex("#e6dcc2"))
+        }
+
+        /// One hog-flat stroke along y = `y`.
+        fn stroke(c: &mut Canvas, p: Paint, load: f32, pressure: f32, y: f32) {
+            let mut h = Held::new(Tool::hog_flat(20.0), 7);
+            h.reload(p, load);
+            c.drag(&mut h, &Gesture::new(vec![(150.0, y), (850.0, y)]).pressure(pressure, pressure).orient(Orient::Across), None);
+        }
+
+        fn l(c: &Canvas, x: f32, y: f32) -> f32 {
+            to_oklab(c.under(x, y, 2.0))[0]
+        }
+
+        /// A loaded stiff light laid lightly into an open dark stays nearly
+        /// as light as over the dark dried; the same light from a lean
+        /// brush pressed hard is worked into the dark. (Before the surface
+        /// film, the loaded one mixed a third to half of the dark in.)
+        #[test]
+        fn a_loaded_light_laid_lightly_stays_on_top() {
+            let dark = Paint::body(hex("#262a24"));
+            let run = |dry_first: bool| {
+                let mut c = canvas();
+                field(&mut c, dark, 1.0, 150.0, 850.0);
+                if dry_first {
+                    c.dry();
+                }
+                stroke(&mut c, light(), 1.0, 0.4, 350.0);
+                stroke(&mut c, light(), 0.3, 0.95, 650.0);
+                c.dry();
+                let d = l(&c, 500.0, 500.0);
+                let at = |y: f32| (250..=450).step_by(25).map(|x| l(&c, x as f32, y)).sum::<f32>() / 9.0 - d;
+                (at(350.0), at(650.0))
+            };
+            let (wet_loaded, wet_lean) = run(false);
+            let (dry_loaded, dry_lean) = run(true);
+            let (loaded, lean) = (wet_loaded / dry_loaded, wet_lean / dry_lean);
+            assert!(loaded > 0.85, "a loaded light laid lightly into wet dark keeps {loaded:.2} of its lift over the dark");
+            assert!(lean < loaded - 0.1, "a lean brush pressed hard works the dark in more: {lean:.2} vs {loaded:.2}");
+        }
+
+        /// A brush pressed through a thin wet film smears it; it can't
+        /// push it aside down to the ground (the "plowed river": with the
+        /// old plough 81% of these tracks showed the ground, now 3%).
+        #[test]
+        fn a_pressed_stroke_does_not_plough_a_thin_film_to_the_ground() {
+            let mut c = canvas();
+            field(&mut c, Paint::new(hex("#25262e"), 0.6, 0.25), 0.3, 250.0, 750.0);
+            let thinned = light().with_stiff(0.3).with_hiding(0.6);
+            for y in [420.0, 500.0, 580.0] {
+                stroke(&mut c, thinned, 0.45, 0.95, y);
+            }
+            c.dry();
+            let g = to_oklab(hex(GROUND));
+            let f = c.frame();
+            let seen = c.pixels();
+            // share of samples that show the ground: in the tracks' cores,
+            // and in the same field where no stroke went (its own gaps)
+            let bare = |ys: &[f32]| {
+                let (mut b, mut n) = (0, 0);
+                for &y0 in ys {
+                    for y in (y0 as i32 - 6..=y0 as i32 + 6).step_by(2) {
+                        for x in (200..800).step_by(2) {
+                            let p = to_oklab(seen[f.index(x as f32, y as f32)]);
+                            n += 1;
+                            if (p[0] - g[0]).hypot(p[1] - g[1]).hypot(p[2] - g[2]) < 0.06 {
+                                b += 1;
+                            }
+                        }
+                    }
+                }
+                b as f32 / n as f32
+            };
+            let (tracks, field) = (bare(&[420.0, 500.0, 580.0]), bare(&[300.0, 330.0, 700.0]));
+            // (the old engine: 81% of the tracks; a thin semi-opaque light
+            // over the smeared film still lets a little through)
+            assert!(tracks <= field + 0.1, "{:.1}% of the tracks show the ground, {:.1}% of the field around them", tracks * 100.0, field * 100.0);
+        }
+
+        /// The surface film dries over the body (Kubelka–Munk layering),
+        /// not mixed into it, and the film's state stays consistent.
+        #[test]
+        fn the_surface_film_dries_over_the_body() {
+            let mut c = canvas();
+            let (dark, lt) = (Paint::body(hex("#262a24")), light());
+            let n = c.wet.vol.len();
+            for i in 0..n {
+                c.wet.vol[i] = 2.0;
+                c.wet.lat[i] = dark.latent();
+                c.wet.hide[i] = [dark.scatter, 1.0, 1.0];
+                c.wet.top[i] = 0.8;
+                c.wet.tlat[i] = lt.latent();
+                c.wet.thide[i] = [lt.scatter, 1.0, 1.0];
+            }
+            c.wet.touch(0, 0, c.frame().w, c.frame().h);
+            let i = c.frame().index(500.0, 500.0);
+            let under = c.px[i];
+            let want = lt.over(dark.over(under, 1.2), 0.8);
+            let mixed = mixbox::lerp_linear_float(&dark.color, &lt.color, 0.4);
+            c.dry();
+            let got = c.px[i];
+            let e = (0..3).map(|k| (got[k] - want[k]).abs()).fold(0.0, f32::max);
+            assert!(e < 0.02, "dried {got:?}, want the light over the dark {want:?} (not the mixture {mixed:?})");
+            assert!(c.wet.top.iter().all(|&t| t == 0.0), "no surface film is left after drying");
+        }
+
+        #[test]
+        #[ignore]
+        fn probe_touch() {
+            use crate::bristle::Touch;
+            for w in [500usize, 1000, 2000, 3200] {
+                let mut c = Canvas::new(w, 0.25, hex(GROUND)).with_linen(Linen::fine(3));
+                field(&mut c, Paint::body(hex("#262a24")), 1.0, 20.0, 230.0);
+                let d = to_oklab(c.under(300.0, 125.0, 5.0))[0];
+                let mut h = Held::new(Tool::filbert(10.0), 21);
+                h.reload(light(), 0.9);
+                let mut out = String::new();
+                for k in 0..3 {
+                    let x = 460.0 + 40.0 * k as f32;
+                    c.touch(&mut h, &Touch::at(x, 125.0).pressure(0.8).drag(2.0, 1.0).angle(0.5), None);
+                    out += &format!(" {:.2}", to_oklab(c.under(x + 1.0, 125.5, 1.5))[0] - d);
+                }
+                let f = c.frame();
+                let i = f.index(461.0, 125.5);
+                let tl = to_oklab(mixbox::latent_to_linear_float_rgb(&c.wet.tlat[i]))[0];
+                let bl = to_oklab(mixbox::latent_to_linear_float_rgb(&c.wet.lat[i]))[0];
+                println!("{w} px: lift over the dark per touch{out}; first center vol {:.2} top {:.2} (L {tl:.2}, body L {bl:.2}, light L {:.2}) S {:.1}/{:.1}", c.wet.vol[i], c.wet.top[i], to_oklab(light().color)[0], c.wet.thide[i][0], c.wet.hide[i][0]);
+            }
+        }
+
+        /// Whatever brushes do, the surface film is part of the film:
+        /// finite, not negative and never more than the whole.
+        #[test]
+        fn the_surface_film_stays_within_the_film() {
+            let mut c = canvas();
+            field(&mut c, Paint::body(hex("#262a24")), 1.0, 300.0, 700.0);
+            for (k, y) in [320.0, 400.0, 480.0, 560.0, 640.0].into_iter().enumerate() {
+                stroke(&mut c, light(), 0.2 + 0.2 * k as f32, 0.3 + 0.15 * k as f32, y);
+            }
+            let mut b = Held::new(Tool::badger(40.0), 3);
+            c.drag(&mut b, &Gesture::new(vec![(100.0, 500.0), (900.0, 520.0)]).pressure(0.4, 0.4), None);
+            let w = &c.wet;
+            assert!(w.top.iter().any(|&t| t > 0.1), "strokes into wet paint leave a surface film");
+            for i in 0..w.vol.len() {
+                assert!(w.top[i].is_finite() && w.top[i] >= 0.0 && w.top[i] <= w.vol[i] + 1e-5, "pixel {i}: top {} of {}", w.top[i], w.vol[i]);
+                assert!(w.tlat[i].iter().chain(&w.lat[i]).all(|v| v.is_finite()));
+            }
+        }
     }
 }

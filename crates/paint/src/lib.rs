@@ -34,6 +34,7 @@ pub mod bristle;
 pub mod handling;
 pub mod stipple;
 pub mod tally;
+pub mod piles;
 pub mod style;
 pub mod hand;
 pub mod outline;

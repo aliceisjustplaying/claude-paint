@@ -74,6 +74,10 @@ pub struct Handling<'a> {
     /// How `color` is read (see `Aim`). `None`: aim at the look (`Aim::Laid`)
     /// when mixing from a palette, masstone for a fixed paint.
     pub aim: Option<Aim>,
+    /// Dip into these piles (see `piles`): each stroke is loaded from the
+    /// pile its center picks, a batch of that pile's one recipe, instead of
+    /// a pile mixed for the color field there. None: mix for the field.
+    pub piles: Option<&'a crate::piles::PileSet>,
     /// Where the painter loads the brush more or less (multiplies `load`,
     /// evaluated at each stroke's center): a glaze goes on deeper where the
     /// brush carries more.
@@ -189,6 +193,7 @@ impl<'a> Handling<'a> {
             palette: None,
             mix_jitter: 0.08,
             aim: None,
+            piles: None,
             load_at: None,
             cut_in: None,
             curve: 0.05,
@@ -359,6 +364,13 @@ impl<'a> Handling<'a> {
     /// a fixed paint (`paint()`): its masstone is solved for its hiding.
     pub fn aim(mut self, coats: f32) -> Self {
         self.aim = Some(Aim::Coats(coats));
+        self
+    }
+    /// Load every stroke from these piles (see `crate::piles`): the pile its
+    /// center picks, as knifed for that part of the picture. With piles
+    /// that aren't mixed (no palette) the color is the pile's look.
+    pub fn piles(mut self, set: &'a crate::piles::PileSet) -> Self {
+        self.piles = Some(set);
         self
     }
     /// Aim at the look, expecting the thickness this handling lays (the
@@ -910,6 +922,16 @@ fn finish_plan(cv: &Canvas, hd: &Handling, tool: &Tool, c: (f32, f32), pts: Vec<
     let pressure = rng.range(hd.pressure.0, hd.pressure.1);
     let fade = rng.range(0.75, 1.05);
     let load_k = hd.load_at.as_ref().map_or(1.0, |f| f(c.0, c.1).max(0.0));
+    // from piles already mixed: the pile this stroke picks, as knifed here
+    // (without a palette the color field says what to lay: `PileSet::stepped`)
+    if let (Some(ps), Some((_, medium))) = (hd.piles, hd.palette) {
+        let i = ps.pick(c.0, c.1);
+        let mut prng = Rng::new(rng.next_u64());
+        if let Some(paint) = ps.paint(i, c.0, c.1, medium, hd.mix_jitter, &mut prng) {
+            let want = ps.want(i);
+            return (rect, Plan { pts, pressure, fade, dip: Some(paint), load: hd.load * load_k, swell: Vec::new(), passage: 0, fresh: false, id: None, want });
+        }
+    }
     // aiming at the result: what the stroke will sit on, and how thick
     let aim = hd.aim.unwrap_or(if hd.palette.is_some() { Aim::Laid } else { Aim::Masstone });
     let coats = match aim {

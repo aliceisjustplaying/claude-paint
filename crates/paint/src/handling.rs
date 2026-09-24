@@ -609,9 +609,13 @@ impl Canvas {
         };
         let before = self.wet.current;
         let slice = self.hand_slice_secs();
+        // with hand time on, the pass's first slices can set before the look
+        // (baked into the dry film, no longer wet): the film before the pass
+        // tells that paint from a gap
+        let film0 = (hd.fills() && slice.is_some()).then(|| self.film.clone());
         self.run_plans(plans, (ex, ey), gap, &hd.tool, hd, hd.ramps, clip, seed, &mut rng, slice);
         if hd.fills() {
-            self.fill_gaps(mask, hd, before, clip, seed);
+            self.fill_gaps(mask, hd, before, film0.as_deref(), clip, seed);
         }
         if let Some(edge) = &hd.cut_in {
             self.cut_in_edges(mask, edge, hd, seed ^ 0xED6E, &mut rng);
@@ -619,7 +623,9 @@ impl Canvas {
     }
 
     /// Look and fill: find the bare spots the pass (strokes with ids above
-    /// `before`) left inside the region and lay a short stroke through each,
+    /// `before`) left inside the region: pixels it didn't reach, or where
+    /// it laid less than `FILL_BARE`, wet or (with `film0`, the dry film
+    /// before a hand-timed pass) set since. Lay a short stroke through each,
     /// as a painter covering a passage does. The spots are gathered on a grid
     /// of cells half a brush wide (units, so any resolution fills the same
     /// spots); a cell is filled when its bare area is at least 0.5% of a
@@ -627,7 +633,7 @@ impl Canvas {
     /// loop. Deterministic (its own random stream), and it sees only the
     /// pixels the canvas holds (a crop's margin is wider than a fill stroke
     /// reaches).
-    fn fill_gaps(&mut self, mask: &Mask, hd: &Handling, before: u32, clip: Option<&Mask>, seed: u64) {
+    fn fill_gaps(&mut self, mask: &Mask, hd: &Handling, before: u32, film0: Option<&[f32]>, clip: Option<&Mask>, seed: u64) {
         let f = self.f;
         let w = hd.tool.width.max(0.3);
         let cell = (0.5 * w).max(1.5 / f.scale);
@@ -639,7 +645,11 @@ impl Canvas {
             let uy = f.uy(y);
             for x in 0..f.w {
                 let i = y * f.w + x;
-                let bare = self.wet.stroke[i] <= before || self.wet.vol[i] < FILL_BARE;
+                let laid = match film0 {
+                    None => self.wet.vol[i],
+                    Some(f0) => self.wet.vol[i] + (self.film[i] - f0[i]),
+                };
+                let bare = self.wet.stroke[i] <= before || laid < FILL_BARE;
                 if !bare {
                     continue;
                 }
@@ -1725,6 +1735,31 @@ mod tests {
                 }
             }
         }
+    }
+
+    /// A long hand-timed pass ages as it goes: its first slices can set (and
+    /// bake into the dry film) before the look-and-fill. The look must see
+    /// that paint as laid, not as a gap, so the pass lays about the fill
+    /// dabs it does with hand time off (thermos B1; here 219 dabs off, 540 on
+    /// before the fix, 155 after).
+    #[test]
+    fn a_long_timed_pass_fills_only_its_gaps() {
+        let run = |hand: Option<f32>, fill: bool| {
+            let mut c = Canvas::new(160, 1.4, crate::color::hex("#c8b89a")).with_size_mm(440.0);
+            c.set_hand_time(hand);
+            let all = Mask::from_fn(c.frame(), |_, _| 1.0);
+            // thin, lean paint, one reload a stroke: hours of work
+            let hd = Handling::new(Tool::filbert(6.0)).color(|_, _| crate::color::hex("#6f84a8")).paint(0.85, 1.0).load(0.3).coverage(3.0).fill(fill);
+            c.work(&all, &hd, 3);
+            let set = c.wet.clock.px.iter().filter(|p| p.sub > 0.0 && p.sub < 1.0).count() as f32 / c.wet.vol.len() as f32;
+            (c.tally().strokes, c.clock(), set)
+        };
+        let (pass, _, _) = run(None, false);
+        let (off, _, _) = run(None, true);
+        let (on, clock, set) = run(Some(15.0), true);
+        assert!(clock > 120.0 && set > 0.01, "the pass took hours ({clock} min) and its start set ({set})");
+        let (off, on) = (off - pass, on - pass);
+        assert!(on <= off + off / 2 + 10, "fill dabs: {on} with hand time, {off} without");
     }
 
     #[test]

@@ -22,12 +22,34 @@ they only prevent bad results.
 - **Order.** Draw; the sky thin; the distance far to near; the ground as tone; the motifs;
   small particulars last with pointed brushes; grass last of all in fine upturning strokes
   over finished ground or snow.
-- **`dry()` before any passage that goes over earlier work.** `wait(24*60)` is often not
-  enough. A thick body floor (coverage 4.5) was still "open" after a day, and the rock
-  laid over it went semi-transparent [r3 near]. Snow over a day-old near-black wood
-  smeared into a gray fog band [r4 near]. A river over wet valley paint plowed through
-  to the red ground [r4 green]. If you aren't sure, `print(drying(x, y))` at the spot
-  first.
+- **Wet, tacky or dry: choose by the edge you want, not by habit.** Since
+  round 6 (`notes/wet.md`) paint laid into open paint lies on top of it:
+  how much it mixes depends on the brush's load, pressure and stiffness and
+  on how far you drag it, as with real oil. The old default ("`dry()`
+  before any passage over earlier work") made every object finished alone
+  over dried paint, the pasted-on look.
+  - **Wet into wet** (no wait, or `wait` well short of the gel point: about
+    2–4 h for average paint): for everything that must *belong* to its
+    neighbor. Lights into a dark mass (a loaded brush, one touch, `load`
+    0.8–1.0, pressure 0.5–0.8: they stay clean), a sky brought down over a
+    hill's top, a contact shadow along a form's foot, snow into a wood's
+    foot. The edge is found where the brush put it; work it (`blend`, a clean
+    badger, a dry brush along it) where it should be lost. Pressure, a lean
+    brush, a stiff hog and scrubbing mix; a full soft brush laid lightly
+    doesn't. *Ceiling:* the brush's tip doesn't dirty faster than its belly
+    (a few touches of one load are equally clean); a spent hog pressed hard
+    still scrapes wet paint thin enough to show the ground; only two layers
+    stay apart per pixel (a third wet stroke mixes the second in).
+  - **Tacky** (`wait(180)` to a day; check with `drying(x, y)`): for broken,
+    dragged marks that must not mix, a scumble that catches, a second sky
+    stipple. The brush empties fast and in patches. *Ceiling:* setting paint
+    (just before tacky) already grabs, so long strokes give out early.
+  - **Dry** (`dry()`, or `glaze`): for glazes, fine lines and cracks, and
+    anything that must stay crisp and separate. *Ceiling:* nothing laid on
+    dry paint ever blends into it: edges are only as soft as the brush's
+    own mark, and objects painted this way read as cut out.
+  If you aren't sure where you are, `print(drying(x, y))` at the spot.
+  [r6 wet; before: r3 near, r4 near, r4 green]
 - **Fine lines only on dry paint.** Cracks drawn into open paint come out dashed like
   stitching [r3 near]. Stones painted 4 h after the grass came out green-streaked; a day's
   wait fixed it [r3 green].
@@ -539,7 +561,7 @@ The foreground is where every round fell shortest of Friedrich. Budget real time
 
 | Pitfall | Fix |
 |---|---|
-| Paint laid over paint that's still open (translucent rock, fog band, plowed river) | `dry()` first, or check `drying(x, y)` [r3 near, r4 near, r4 green] |
+| Translucent rock, fog band, plowed river (paint laid into open paint, before round 6) | Engine behavior, fixed in r6 (`notes/wet.md`): open paint no longer swallows what's laid into it. If a passage still sinks, the brush was lean, pressed or scrubbing: load it and lay it lightly [r6 wet] |
 | A later pass paints over an earlier motif | Depth layers and `behind=`, or subtract the motif (grown) from every later mask; crop the motif after every big pass [r3 free] |
 | `rect()` fades and ring masks leave ruled edges and outlines | `smoothstep` fades in `mask(fn)`, `hug=false`, `v:contact_shadow` [r4 near, r3 near] |
 | Fixing an early chunk by hand-editing the log (close, sed, 30 to 100 s replay; `close` once overwrote the edit) | `easel edit N -f`, `edit N --insert`, `edit N --drop` in the live session [r3 green, r3 free] |

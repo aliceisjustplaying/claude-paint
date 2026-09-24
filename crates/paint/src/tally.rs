@@ -94,6 +94,8 @@ pub struct Tally {
 /// The piles of mixed paint on the palette: a dip into a color close to a
 /// pile already there is a reload, a new color is a new pile to mix. The
 /// palette holds `PILES` at most; the oldest is scraped off for a new one.
+/// A sitting keeps one palette for its passes and held brushes (the easel's
+/// `Hand`, passed to `Canvas::work_with`); `Canvas::work` starts a clean one.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct Piles {
     /// OKLab colors, oldest first.

@@ -126,9 +126,7 @@ pub fn choose(samples: &[(Rgb, f32)], n: usize) -> Vec<Rgb> {
         }
         let k = [(l[0] / BIN).round() as i32, (l[1] / BIN).round() as i32, (l[2] / BIN).round() as i32];
         let e = bins.entry(k).or_insert(([0.0; 3], 0.0));
-        for c in 0..3 {
-            e.0[c] += l[c] * w;
-        }
+        add_to(&mut e.0, l, w);
         e.1 += w;
     }
     let pts: Vec<(Rgb, f32)> = bins.values().map(|(s, w)| ([s[0] / w, s[1] / w, s[2] / w], w.sqrt())).collect();
@@ -156,9 +154,7 @@ pub fn choose(samples: &[(Rgb, f32)], n: usize) -> Vec<Rgb> {
         let mut sum = vec![([0.0f32; 3], 0.0f32); n];
         for &(l, w) in &pts {
             let j = nearest(&centers, l).0;
-            for c in 0..3 {
-                sum[j].0[c] += l[c] * w;
-            }
+            add_to(&mut sum[j].0, l, w);
             sum[j].1 += w;
         }
         let mut moved = 0.0f32;
@@ -177,6 +173,11 @@ pub fn choose(samples: &[(Rgb, f32)], n: usize) -> Vec<Rgb> {
     centers.sort_by(|a, b| a[0].total_cmp(&b[0]));
     centers.dedup_by(|a, b| dist(*a, *b) < 1e-4);
     centers
+}
+
+/// `acc += l · w`, per channel.
+fn add_to(acc: &mut Rgb, l: Rgb, w: f32) {
+    acc.iter_mut().zip(l).for_each(|(a, v)| *a += v * w);
 }
 
 /// Index of the nearest and the second nearest center, with distances.
@@ -301,9 +302,7 @@ impl PileSet {
         let mut looks = vec![([0.0f32; 3], 0.0f32); centers.len()];
         for (p, l, w) in &samples {
             let k = nearest(&centers, *p).0;
-            for c in 0..3 {
-                looks[k].0[c] += l[c] * w;
-            }
+            add_to(&mut looks[k].0, *l, *w);
             looks[k].1 += w;
         }
         let wants: Vec<Rgb> = looks.iter().zip(&centers).map(|((s, w), c)| if *w > 0.0 { from_oklab([s[0] / w, s[1] / w, s[2] / w]) } else { from_oklab(*c) }).collect();
@@ -380,6 +379,7 @@ impl PileSet {
     /// pick it, every `step` units, and the canvas holds), laid `coats`
     /// thick (None: by masstone). Each pile misses its aim a little
     /// (`vary`), as a pile mixed by eye does.
+    #[allow(clippy::too_many_arguments)]
     pub fn mix(&mut self, cv: &Canvas, over: &Mask, pal: &Palette, medium: f32, coats: Option<f32>, marks: Marks, step: f32) {
         let f = over.f;
         let win = cv.window();

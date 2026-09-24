@@ -534,9 +534,12 @@ The foreground is where every round fell shortest of Friedrich. Budget real time
 
 ## 11. Masks
 
-- **`work` strokes overshoot the mask by design.** Pass `clip=` the same mask wherever the
-  edge must hold (silhouettes, horizons) [r3 free]. Use `hug=false` where an edge should
-  thin out (foliage, drifts, veils).
+- **`work` strokes overshoot the mask by design.** `clip=true` stops every bristle on the
+  mask's edge [r3 free]; `edge=` (below) carries the passage to it the way a brush does. Use
+  `hug=false` where an edge should thin out (foliage, drifts, veils).
+- **`clip=` is true or false.** A mask there (`clip=m:grow(3):blur(2)`) has always been read
+  as `true`: the strokes clip to the pass's own region, hard, and the grown, softened mask
+  is never used. The reply now says so. For a softer or looser edge use `edge=` [r7 edges].
 - **Never put a `rect()` inside a painted area.** It prints ruled edges, even softened.
   Snow banks, drifts and the stump's snow all showed straight sides [r4 near]. Build fades
   from `mask(function(x, y) return smoothstep(a, b, x) * smoothstep(c, d, y) end)` and add
@@ -557,6 +560,52 @@ The foreground is where every round fell shortest of Friedrich. Budget real time
   laid, clipped to it.
 - **`f:part(x, y)` returns 0 off the form, not nil.** A test for nil painted nothing,
   silently [r3 green].
+
+### Edges: found, soft and lost [r7 edges]
+
+**Decide every edge; vary it along one contour.** A stencil (`clip=true`) makes the edge no
+brush makes: one crisp, even line the length of a ridge, the same for every stroke. That is
+what Alice and both critics called "a filled selection" in Evening at a Mountain Lake
+(measured: the ridge's edge 0.38 units wide all along, 100% crisp, contrast varying 3%,
+wandering 0.1 unit off a perfect curve; `notes/edges.md`). A painter makes an edge
+**found** where a form turns against the light (the peak against the glow, a figure's
+lit shoulder), **soft** along most of a contour and **lost** where a shape runs into its
+neighbor at a close value (a ridge running down into haze, a reflection's lower edge in
+the water).
+
+- `work(m, {..., edge=...})` instead of `clip=`: each stroke carries its paint up to the
+  region's edge and a little over it, by its own amount, and past the line the brush lifts
+  and its film thins out. `edge="soft"` for one quality; a function of `(x, y)` (0 found ..
+  1 lost) to decide it by the light; `edge={found=0.3, soft=0.5, lost=0.2, period=50}` for
+  stretches along the contour.
+  ```lua
+  ridgeQ = function(x, y)                       -- found against the glow, lost low in the haze
+    local glow = G(x, SUNX, 150)
+    local low = smoothstep(HZ - 60, HZ - 10, crest(x))
+    return clamp(0.5 - 0.5*glow + 0.5*low + 0.25*sn(x, y), 0, 1)
+  end
+  work(rangeM, {hand="body", tool="filbert 6", color=rangecol, ..., edge=ridgeQ})
+  ```
+- `lose(m, {where=..., angle=0})` after the passage is **dry**: short strokes of the
+  neighbor's color (dirtied a little with the region's) dragged back across the edge where
+  `where` says. Level strokes (`angle=0`) break a reflection's lower edge into the water.
+- Lay the dead color a few units **inside** the line (`m:shrink(3)`) so the last pass
+  decides the edge; a stencilled dead color shows through a soft edge as a hard one.
+- Soft edges soften most into **wet** neighbors (the overrun picks up and mixes); over dry
+  paint they are a thinning film and a broken fringe.
+
+*Goes wrong:* `lose` into **wet** paint with its default lean brush lifts the wet film and
+shows what is under it (pale "teeth" along a ridge in the lab); lose over dry paint, or
+load more. On a ridge that `edge=` already carried outward, `lose` works along the mask's
+line, now inside the dark, and leaves gray patches there: use it on edges a pass stencilled
+or held found. Large overruns only move the edge out as a staircase of opaque stroke ends;
+the fence keeps them short on purpose.
+
+*Ceiling:* the lab ridge (`notes/edges/alice_edges.png`) is brushed and varied but still
+reads mostly crisp over dry sky (86% of its length found at 3200, from 100%): a truly soft
+dark-on-light edge over dry paint needs a blend of the two in the wet or a scumble,
+which `lose` does only roughly. Not yet tried on firs, the figure or grass, or on the
+wet engine (`r7-paint-wet`).
 
 ## 12. Color
 
@@ -603,6 +652,7 @@ The foreground is where every round fell shortest of Friedrich. Budget real time
 |---|---|
 | Paint laid over paint that's still open (translucent rock, fog band, plowed river) | `dry()` first, or check `drying(x, y)` [r3 near, r4 near, r4 green] |
 | A later pass paints over an earlier motif | Depth layers and `behind=`, or subtract the motif (grown) from every later mask; crop the motif after every big pass [r3 free] |
+| `clip=<mask>` taken for a softer fence (it clips hard to the region itself) | `clip=true` or `edge=` [r7 edges] |
 | `rect()` fades and ring masks leave ruled edges and outlines | `smoothstep` fades in `mask(fn)`, `hug=false`, `v:contact_shadow` [r4 near, r3 near] |
 | Fixing an early chunk by hand-editing the log (close, sed, 30 to 100 s replay; `close` once overwrote the edit) | `easel edit N -f`, `edit N --insert`, `edit N --drop` in the live session [r3 green, r3 free] |
 | Probe chunks cluttering the log | `easel try` [r3 free] |

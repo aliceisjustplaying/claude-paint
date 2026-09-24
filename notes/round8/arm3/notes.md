@@ -2,7 +2,11 @@
 
 ## Composition and why
 
-Working title: *Winter Morning by a Frozen Pond*.
+Title: *Winter Morning by a Frozen Pond*.
+
+Renders: `painting_1000.png`, `painting_3200.png` (lossless, from
+`easel run paintings/lua/pond.lua`; `easel check` confirms the replay matches
+the live canvas).
 
 A low horizon under a tall dawn sky that runs from cold gray-violet at the
 top to a pale rose and straw band at the horizon (the pale mauve sky of the
@@ -65,7 +69,15 @@ Session `pond` at the easel, 1000px, hand time off. Source:
    finished snow, larger near. A glaze of blue shade on the lee sides of
    soft drifts. A last stipple veil and a thin smalt glaze darkening
    toward the top (Friedrich's advice to Carus about edges).
-9. **Finish.** A day's wait, then varnish, cracks and relief.
+9. **Refinement after the first full render** (3200 crops): a warm rim on
+   the trunk's right flank and bark plates; more snow over the trunk's
+   straight lower edge; a thin stipple of snow over the bank to close
+   pinholes of warm ground (the first version also stippled over the
+   walker and smeared him, so he and the grass clumps are now left out
+   of it); low mist over the hard end and floor of the fir wood and the
+   church's foot.
+10. **Finish.** A day's wait, then varnish, cracks (`dirt=0.2`; at 0.35
+    the web was too dark over pale snow) and relief.
 
 ## FRICTION
 
@@ -121,6 +133,14 @@ Session `pond` at the easel, 1000px, hand time off. Source:
     planned after it in the same sitting is gone.
 14. **Pale specks of ground in body passages** (warm dots in the snow at
     3200) where strokes left pinholes over the ochre ground.
-15. **The bank crest never reads** against the flat snow beyond, because
+15. **`fir_wood`'s floor band has hard edges**: a flat bottom and a cut-off
+    vertical end where the wood stops read as a shelf. Workaround: low
+    mist stippled over them afterward.
+16. **A stipple whose color samples the canvas also picks up whatever
+    small dark motif is under it** (the walker, grass) and spreads it
+    around as specks. Masks have to exclude every small motif by hand;
+    no "under the snow layer only" is available unless each motif is
+    registered as a world layer.
+17. **The bank crest never reads** against the flat snow beyond, because
     both come from the same values; there's no tool problem here, just a
     reminder that snow needs a planned value step at every overlap.

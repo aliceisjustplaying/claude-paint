@@ -124,3 +124,112 @@ work(MASS, {hand="body", tool="filbert 7", length={10, 24}, coverage=2.6, medium
 ```
 Pitfalls: never lay the dark over wet sky, sky into the dark, or a veil over tacky
 dark (see above). Ceiling: the shade half is flat and the lit masses are spongy.
+
+## C (lab round C: the best of A and B)
+
+| | C |
+|---|---|
+| log | `foliage_C.lua` (same setup chunk as A and B, byte for byte) |
+| 1000 px | `foliage_C.jpg` |
+| 3200 crop (the same window, canvas 600–920 × 250–490) | `foliage_C_crop.jpg` |
+| chunks | 7 (setup, plan + sky, modeled dark, half-light + touches, edges, wood + accents, finish) |
+| marks in the crown | one modeled dark pass (filbert 6), one half-light pass (filbert 4), **2,831** of the tree's 38,586 leaf touches (685 mid, 1,383 lit, 235 top, 528 cool), **700** edge leaf dabs + 120 soft ones, the wood of the fork, 79 hanging leaves, **2** hole limbs, **22** top lights |
+| clock | 41,194 min at 1000 px (33,643 at 3200: see the wet notes) |
+
+### What C did differently
+The panel split 2–2 (A for its leafy lit masses and directional light, B for its grouped
+lights and softer edges) and agreed on two faults in both: the shade half has no internal
+structure, and the edges have no hierarchy. So C:
+1. **Models the crown as ~22 overlapping leaf masses** (chunk 2). The tree's 6,479 clumps
+   grouped by k-means, each group an ellipse (unequal: radii × 0.8–1.35) with a height that
+   puts the lower masses in front. On a 4-unit grid: which mass is in front, its own light
+   (sun 0.7 + sky on its top 0.3) and a **crease** where it overhangs the mass behind.
+   A smoother crown-scale light (`BIG`, B's light blurred 28) decides which side is lit,
+   and each mass models by its own amount (0.35–1) so they aren't all the same dome.
+2. **Sky around the reserved silhouette, no shrink** (B reserved it shrunk and softened, which
+   gave every hole the same smoky halo). The sky set 15 h, **then** the dark met it edge to
+   edge: no halo, no lace.
+3. **The dark in one pass, but modeled** (chunk 3): filbert 6 strokes *wrapping around their
+   own mass* (tangent to it) instead of B's noise angle, which made diagonal grooves across
+   the shade. Shade half `#1b2217` → `#2f3a2d` at the tops of its masses (cool, the sky),
+   sun half `#2a3423` → `#4f5d35`, the crease `#141a11`.
+4. **Lights 15 h later** (chunk 4): a thin half-light (filbert 4, `hug=false`, edge broken by
+   noise) on the sun-turned sides of the lit masses, then **A's hooked leaf touches, but a
+   chosen 7%**: each touch kept with a probability from the plan (crown side × mass turn ×
+   no crease × its own light), so the lights come in groups that thin into the dark instead
+   of an even carpet. A sparse few cool touches (`#3a4636`) on the shade masses' tops.
+5. **Edges in spans** (chunk 5, after the sky dried): a slow noise along the contour and the
+   holes picks *found and broken* stretches (blunt filbert 3.4–3.8 leaf dabs pushed 2–6 out,
+   lit on the sun side, dark in shade), *soft* stretches in shade and *plain* ones (the lower
+   edge against the bright horizon is always left found and clean). Blunt dabs, not flicks:
+   a flick that ends in a hairline is B's whisker.
+6. **The crown's underside opened** (chunk 6): the trunk runs on up into the crown's shadow
+   and forks (the leader and the low left scaffold limb, from `tree.limbs`), darkening as it
+   rises, with dark leaf clusters hanging in front. One limb per hole in only two holes, the
+   stoutest, its stretch carried 12 units into the leaves either side (two limbs crossing in
+   one hole made an X of floating sticks, so one only). 22 top lights. The common finish.
+
+### What I see
+- **At 1000 px** C is a lit oak with volume: big light masses on the upper left (leafy, as
+  in A, not B's knobby rubber), and a shade half built of overlapping darker masses whose
+  tops turn cool, instead of A's slab or B's one flat dark. The trunk goes into the crown
+  and forks, so the tree stands on something. The sun side edge is lit leaves against the
+  sky; the underside is a clean found edge.
+- **At 3200** (`foliage_C_crop.jpg`): holes with mixed edges (a few leaves crossing some,
+  clean elsewhere), no halos and no whiskers; a limb that comes out of the leaves into a
+  hole. The upper left (not committed; any crop of `out/lab/foliage_C_full.png` at
+  1920×384 shows it) has leaf touches in groups over a soft half-light: leafy, not confetti.
+- **Against A and B:** I think C is the best of the three. It has A's leafy light and B's
+  grouping, and it's the only one with a shade half that has a structure and a trunk that
+  goes somewhere.
+
+### C's ceiling
+- **The masses are a repeated motif.** 22 k-means domes, each lit on its upper left and dark
+  underneath, read a bit as cumulus or broccoli at arm's length. The per-mass contrast helps
+  but doesn't break the rhythm. A painter would merge some, lose some and let one or two
+  big ones dominate.
+- **The shade half at 3200 is still mostly one dark** with vague greener masses in it: the
+  structure reads at 1000 px, less up close.
+- **No truly lost edge.** The "soft" spans (a gray-green halfway between the dark and the
+  sky, dragged across the contour) came out as pale leaf specks, not a soft edge. The edge
+  hierarchy is found-and-broken versus found-and-smooth.
+- The relief finish embosses a fine grain into the dark and swirls in the sky (all three
+  versions).
+
+### Wet-paint misbehavior (C)
+1. **Dark leaf dabs over tacky sky (30 h) lie as translucent gray ghosts**
+   (`wet/C1_edge_leaves_over_tacky_sky.jpg`, 3200): filbert 3.4–3.8, `#20291b`, load 0.7.
+   Over the same sky once dry they are clean dark leaves (`foliage_C_crop.jpg`). This
+   agrees with B's finding 6 (a dark over setting sky is translucent gray).
+2. **`b:touch` with `drag` over tacky sky** (`wet/C2_touch_drag_over_tacky_sky.jpg`) left
+   faint gray scratches in the sky and only a few leaf-shaped marks.
+3. **The same log dries on a different clock at 3200 than at 1000.** Chunk 5 waits
+   `while drying(760, 445) ~= "dry"` in 12 h steps: the 1000 px replay ended at 41,194 min,
+   the 3200 replay at 33,643. The painting still looks the same, but a `drying()`-driven
+   wait isn't resolution-independent.
+4. What worked: **sky set 15 h, then the dark meeting it edge to edge** (no lace, no halo),
+   and lights into the dark 15 h after it was laid (partly still open at 700,450; no plowing).
+   A trunk-top glaze (tried first) waited 14 days and laid a black band with a square top:
+   dropped for body strokes that fade with height.
+
+### SKETCHBOOK CANDIDATE (C over A and B; confirm on a second crown)
+*A crown is a few overlapping leaf masses, each modeled by the sun and the sky; the light is
+the tree's own touches, but only where the plan says, and the edge is decided in spans.*
+```lua
+-- plan: B's silhouette (lv:blur(2.5) + lv:blur(8):shrink(14) - drawn holes)
+-- masses: k-means the clumps (K ~ 22, y weighted 1.25), radii 1.9/1.7 x spread (x0.8-1.35),
+--   height 0.35*depth + 0.25*(y - mid)/250; on a 4-unit grid store the front mass's light
+--   0.7*max(0, n.sun) + 0.3*sky(top) and a crease where it overhangs the one behind
+-- BIG = (LB*MASS):blur(28) / MASS:blur(28)   (which side of the crown is lit)
+-- 1. sky around MASS:soften(0.8) (no shrink); wait 15 h
+-- 2. dark: filbert 6, length 8-18, coverage 2.8, medium 0.3, load 0.6, angle tangent to its mass,
+--    color mix(shade #1b2217->#2f3a2d, lit #2a3423->#4f5d35, BIG) darkened to #141a11 by the crease
+-- 3. +15 h: half-light filbert 4 hug=false on s*FORM > 0.42-0.7; then tree touches kept with
+--    p = s * smoothstep(0.45, 0.85, form) * (1 - crease) * smoothstep(0.25, 0.6, t.lit), x1.4:
+--    #46532e / #6d7b43 / #9aa35e; a few #3a4636 on shade tops
+-- 4. sky DRY: edge spans by noise(period 55): blunt filbert 3.4-3.8 dabs, pressure {0.75, 0.55},
+--    2-6 out; keep the underside against the horizon clean
+-- 5. the trunk on into the crown's shadow, forking, fading with height; one limb in two holes
+```
+Pitfalls: never lay dark leaves over tacky sky (gray ghosts); a flick ending at pressure 0
+is a whisker at 3200; two limbs in one hole make an X.

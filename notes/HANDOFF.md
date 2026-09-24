@@ -1,5 +1,20 @@
 # Handoff (2026-09-23 evening): moving to the M3 Pro
 
+**Update 2026-09-24 night (read first): Round 7.** Principles: `notes/principles.md`
+(tools give physics and constraints, not answers; entropy; feature freeze; against
+reward hacking). Alice's reviews: `notes/round6/alice_review.md` (last sections).
+The engine is variant d (`notes/round7/winter_ab.md`, `winter_d.md`): round 2's
+winter program on it is "remarkably close" to the original. Tonight: three free
+paintings on engine d (`notes/round7/arms/`, key there): none moves Alice yet;
+the three converged on nearly the same picture; the Lua easel with everything
+(C) "has the best vibe somehow". A second opinion from Claude Fable 5.1:
+`notes/advice/fable_r7.md`. Open: the wet engine (branch r6-wet, unmerged; needs
+main merged: edges/clip fix vs its exchange rewrite); piles (branch r7-piles,
+parked, Alice wants to keep it); the rendering bug Alice saw (a whitish
+horizontal line through a grass patch in painting A = arm 1); git identity: this
+repo sets `alice` locally (the per-directory git identity include for ~/src/a is missing on
+this machine). Next: decide the direction with Alice after Fable's advice.
+
 **Update 2026-09-24 morning: Round 6 night 1 ran (steps 1–4 of the plan
 below, plus critic panels). Read `notes/round6.md` first: what landed on
 main, what waits on branches and the decisions for Alice.**

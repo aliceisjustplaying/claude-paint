@@ -321,6 +321,12 @@ impl Canvas {
         let top = get_all(r, n)?;
         let tlat = get_all(r, n * LAT)?;
         let thide = get_all(r, n * 3)?;
+        // (finite, and part of the film: 0 ≤ top ≤ vol, give or take the
+        // rounding of the two sums)
+        let sound = top.iter().zip(&c.wet.vol).all(|(&t, &v)| t.is_finite() && t >= 0.0 && t <= v + 1e-5 * (1.0 + v.abs())) && tlat.iter().chain(&thide).all(|x| x.is_finite());
+        if !sound {
+            return Err(bad("checkpoint surface film is invalid"));
+        }
         c.wet.top = top.iter().zip(tlat.as_chunks::<LAT>().0).zip(thide.as_chunks::<3>().0).map(|((&v, l), h)| crate::wet::Layer::new(v, *l, *h)).collect();
         Ok((c, header))
     }
@@ -412,6 +418,36 @@ mod tests {
         let at = b.len() - film - 4 * (300 * 200 + 1) - 4;
         b[at..at + 4].copy_from_slice(&f32::NAN.to_le_bytes());
         rejected(b, "nan in the guide");
+    }
+
+    /// The surface film (version 8) is checked as the hand-time block is:
+    /// finite, and within the film (0 ≤ top ≤ vol); a sound one loads.
+    #[test]
+    fn a_corrupt_surface_film_is_refused() {
+        let mut c = Canvas::new_window(2, 1.0, [0.1; 3], None);
+        c.wet.vol[0] = 1.0;
+        c.wet.top[0] = crate::wet::Layer::new(0.4, [0.2; LAT], [1.0, 0.5, 1.0]);
+        let mut o = Vec::new();
+        c.write_state(&mut o, "").unwrap();
+        // (the film block closes the file: top, then its pigment, then its
+        // properties, per pixel)
+        let n = 4;
+        let top = o.len() - n * (1 + LAT + 3) * 4;
+        let (lat, hide) = (top + n * 4, top + n * (1 + LAT) * 4);
+        let d = load(o.clone()).unwrap();
+        assert_eq!(d.wet.top[0], c.wet.top[0], "a sound surface film loads");
+        for (at, v, what) in [
+            (top, f32::NAN, "nan surface film"),
+            (top, -0.5, "negative surface film"),
+            (top, 1.5, "surface film thicker than the film"),
+            (top + 4, 0.01, "surface film on a dry pixel"),
+            (lat + 4, f32::NAN, "nan surface pigment"),
+            (hide + 8, f32::INFINITY, "infinite surface stiffness"),
+        ] {
+            let mut b = o.clone();
+            b[at..at + 4].copy_from_slice(&v.to_le_bytes());
+            rejected(b, what);
+        }
     }
 
     /// Corrupt geometry is an error when loading, not a panic later (cases

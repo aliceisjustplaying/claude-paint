@@ -11,12 +11,15 @@
 //! turns it on (`canvas{hand=true}` or `hand_time(true)`), so older logs
 //! replay exactly as before.
 //!
+//! Every verb that marks the canvas, reads the clock or moves it goes
+//! through `verb`, which keeps these rules in one place (`Verb`).
+//!
 //! A painter works in sittings of a few hours and rests between them:
 //! `sitting{hours=3}` starts one, `rest(hours)` steps away while the paint
 //! sets. A sitting that runs over its hours is reported, not cut short (see
 //! `note_overrun`).
 
-use crate::api::{S, err, num, span};
+use crate::api::{S, Studio, err, num, span};
 use mlua::{Lua, Result, Table, Value};
 use paint::tally::Piles;
 
@@ -47,34 +50,21 @@ pub struct Hand {
     pub sittings: u32,
     /// The overrun of this sitting was reported (whole hours over).
     pub warned: u32,
-    /// The piles mixed on the palette this sitting (held brushes' loads).
+    /// The piles mixed on the palette this sitting: held brushes load from
+    /// them and covering passes dip into them (`Canvas::work_with`).
     pub piles: Piles,
     /// The ledger when `canvas{}` was set up (the grounds are the
     /// colorman's work, not the painter's).
     pub base: paint::Tally,
-    /// The ledger's clocked seconds at the last flush: the hand time put on
-    /// the clock since then (a long pass clocks its slices as it goes).
-    pub clocked: f64,
-    /// Minutes the canvas spent drying for a finishing verb that are on the
-    /// clock but not yet reported (the chunk's end reports them once).
-    pub unreported: f64,
 }
 
 impl Default for Hand {
     fn default() -> Self {
-        Hand { start: 0.0, hours: SITTING_HOURS, sittings: 1, warned: 0, piles: Piles::default(), base: paint::Tally::default(), clocked: 0.0, unreported: 0.0 }
+        Hand { start: 0.0, hours: SITTING_HOURS, sittings: 1, warned: 0, piles: Piles::default(), base: paint::Tally::default() }
     }
 }
 
 impl Hand {
-    /// After everything dried (`dry()`): a rest, unless nothing was painted
-    /// in this sitting yet.
-    pub fn begin_rested(&mut self, clock: f64) {
-        if clock - self.start > 1e-9 {
-            self.begin(clock);
-        }
-    }
-
     /// A new sitting starts at `clock`: a clean palette.
     fn begin(&mut self, clock: f64) {
         self.start = clock;
@@ -84,35 +74,104 @@ impl Hand {
     }
 }
 
+/// What a verb does with the painting's clock (see `verb`).
+pub enum Verb {
+    /// Marks made one at a time (`b:stroke`, `b:touch`): their hand time
+    /// goes on the clock once a `GRAIN_MIN` has piled up.
+    Marks,
+    /// A covering verb (`work`, `stipple`, pencil lines): all its hand time
+    /// is on the clock when it ends (a long pass clocks its slices as it
+    /// goes; the engine's `set_hand_time`).
+    Pass,
+    /// A verb that reads the clock or starts from it (`clock`, `drying`,
+    /// `timesheet`, `sitting`, `hand_time`): the hand time owed goes on the
+    /// clock first.
+    Query,
+    /// A verb that makes the clock jump (`wait`, `dry`, `rest`, `glaze`,
+    /// `varnish`, `cracks`, `relief`): the hand time owed goes on the clock
+    /// first, in the sitting it was spent in. Then the jump is taken into
+    /// the clock: reported (`note`: the verb and what dried, for a wait the
+    /// painter didn't ask for) and a rest by `rest`. The verb's own hand
+    /// time (a glaze's brushing) comes after the jump, in the new sitting.
+    Jump { rest: Rest, note: Option<(&'static str, &'static str)> },
+}
+
+/// When a jump of the clock is a rest (the next mark starts a new sitting).
+pub enum Rest {
+    /// A wait of this many minutes was asked for: a rest if `REST_MIN` or
+    /// more.
+    Waited(f64),
+    /// A jump of `REST_MIN` or more.
+    IfLong,
+    /// Always, unless nothing was painted this sitting yet (`dry`: waiting
+    /// for everything to dry is a rest, however short).
+    IfPainted,
+    /// Always (`rest`).
+    Always,
+}
+
+/// Run a verb `f` on the studio under the hand clock's rules for its kind
+/// (`Verb`). With hand time off no hand time is put on the clock, but jumps
+/// are still reported and rests still start sittings.
+pub fn verb<R>(st: &S, kind: Verb, f: impl FnOnce(&mut Studio) -> Result<R>) -> Result<R> {
+    if matches!(kind, Verb::Query | Verb::Jump { .. }) {
+        flush(st, true);
+    }
+    let r = {
+        let mut g = st.borrow_mut();
+        let s = &mut *g;
+        let r = f(s)?;
+        if let Verb::Jump { rest, note } = &kind
+            && let Some(c) = s.canvas.as_ref()
+        {
+            let now = c.clock() - s.clock0;
+            let jumped = now - s.clock;
+            s.clock = now;
+            if let Some((verb, what)) = note
+                && jumped > 0.5
+            {
+                let note = format!("{verb}: waited {} for {what} to dry (clock {now:.0} min)\n", span(jumped));
+                s.out.push_str(&note);
+            }
+            let rests = match rest {
+                Rest::Waited(m) => *m >= REST_MIN,
+                Rest::IfLong => jumped >= REST_MIN,
+                Rest::IfPainted => now - s.hand.start > 1e-9,
+                Rest::Always => true,
+            };
+            if rests {
+                s.hand.begin(now);
+            }
+        }
+        r
+    };
+    match kind {
+        Verb::Marks => flush(st, false),
+        Verb::Pass | Verb::Jump { .. } => flush(st, true),
+        Verb::Query => {}
+    }
+    Ok(r)
+}
+
 /// Put the hand time spent and not yet clocked on the clock (hand time on)
 /// once a `GRAIN_MIN` has piled up, or always with `force`. A long pass has
 /// already put all but its last slice on the clock as it went (the engine's
 /// `set_hand_time`); this puts the rest. With hand time off, nothing: the
-/// ledger only counts.
-pub fn flush(st: &S, force: bool) {
+/// ledger only counts. (The chunk's end calls it; verbs go through `verb`.)
+pub(crate) fn flush(st: &S, force: bool) {
     let mut g = st.borrow_mut();
     let s = &mut *g;
     let Some(c) = s.canvas.as_mut() else { return };
-    let owed = c.hand_owed() / 60.0;
-    if !force && owed < GRAIN_MIN {
+    if !force && c.hand_owed_secs() / 60.0 < GRAIN_MIN {
         return;
     }
-    c.clock_hand();
-    let clocked = c.tally().clocked;
-    let hand = (clocked - s.hand.clocked) / 60.0;
-    s.hand.clocked = clocked;
+    c.clock_hand_min();
+    // (every other move of the clock is a `Verb::Jump`, which takes it into
+    // `s.clock`: what moved since is hand time)
     let now = c.clock() - s.clock0;
-    // time the canvas spent that isn't hand time (a finishing verb drying
-    // the paint first) is taken into the clock here, once: the chunk's end
-    // reports it (session.rs), and a long stretch of it is a rest
-    let away = now - s.clock - hand;
+    let hand = now - s.clock;
     s.clock = now;
-    if away > 0.5 {
-        s.hand.unreported += away;
-    }
-    if away >= REST_MIN {
-        s.hand.begin(now);
-    } else if hand > 0.0 {
+    if hand > 0.0 {
         note_overrun(s);
     }
 }
@@ -126,7 +185,7 @@ pub fn set(c: &mut paint::Canvas, on: bool) {
 /// ended: an automatic rest would fall wherever the hand happened to be
 /// (halfway through a sky), when a painter finishes the passage while it is
 /// wet and then stops. The painter decides where the break goes (`rest`).
-fn note_overrun(s: &mut crate::api::Studio) {
+fn note_overrun(s: &mut Studio) {
     let over = s.clock - s.hand.start - s.hand.hours * 60.0;
     if over <= 0.0 {
         return;
@@ -141,16 +200,6 @@ fn note_overrun(s: &mut crate::api::Studio) {
             span(s.hand.hours * 60.0)
         );
         s.out.push_str(&note);
-    }
-}
-
-/// After the clock jumped by `minutes` (a `wait` or `dry`): a long one is a
-/// rest, and the next mark starts a new sitting.
-pub fn waited(st: &S, minutes: f64) {
-    if minutes >= REST_MIN {
-        let mut s = st.borrow_mut();
-        let now = s.clock;
-        s.hand.begin(now);
     }
 }
 
@@ -189,16 +238,14 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
     {
         let st1 = st.clone();
         g.set("hand_time", lua.create_function(move |_, on: Option<bool>| {
-            flush(&st1, true);
-            let mut g = st1.borrow_mut();
-            let s = &mut *g;
-            let Some(c) = s.canvas.as_mut() else {
-                return err("no canvas yet: canvas{..., hand=true} or hand_time(true) after it");
-            };
-            let was = c.hand_time().is_some();
-            set(c, on.unwrap_or(true));
-            s.hand.clocked = c.tally().clocked;
-            Ok(was)
+            verb(&st1, Verb::Query, |s| {
+                let Some(c) = s.canvas.as_mut() else {
+                    return err("no canvas yet: canvas{..., hand=true} or hand_time(true) after it");
+                };
+                let was = c.hand_time().is_some();
+                set(c, on.unwrap_or(true));
+                Ok(was)
+            })
         })?)?;
     }
     // sitting{hours=3} or sitting(3): a new sitting starts now (a clean
@@ -221,21 +268,21 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
             {
                 return err("sitting: hours between 0 and 24");
             }
-            flush(&st1, true);
-            let mut s = st1.borrow_mut();
-            if s.canvas.is_none() {
-                return err("no canvas yet");
-            }
-            let now = s.clock;
-            // the first sitting is under way from canvas{}: starting it
-            // again before anything was painted just sets its hours
-            if !(s.hand.sittings == 1 && now - s.hand.start < 1e-9) {
-                s.hand.begin(now);
-            }
-            if let Some(h) = hours {
-                s.hand.hours = h;
-            }
-            Ok(now)
+            verb(&st1, Verb::Query, |s| {
+                if s.canvas.is_none() {
+                    return err("no canvas yet");
+                }
+                let now = s.clock;
+                // the first sitting is under way from canvas{}: starting it
+                // again before anything was painted just sets its hours
+                if !(s.hand.sittings == 1 && now - s.hand.start < 1e-9) {
+                    s.hand.begin(now);
+                }
+                if let Some(h) = hours {
+                    s.hand.hours = h;
+                }
+                Ok(now)
+            })
         })?)?;
     }
     // rest(hours): step away from the easel; the paint sets meanwhile and
@@ -247,41 +294,37 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
             if h.is_nan() || h < 0.0 {
                 return err("rest(hours): want >= 0 (default: overnight, 16)");
             }
-            flush(&st1, true);
-            let mut g = st1.borrow_mut();
-            let s = &mut *g;
-            let c = s.canvas.as_mut().ok_or_else(|| mlua::Error::runtime("no canvas yet"))?;
-            c.wait((h * 60.0) as f32);
-            s.clock = c.clock() - s.clock0;
-            let now = s.clock;
-            s.hand.begin(now);
-            Ok(now)
+            verb(&st1, Verb::Jump { rest: Rest::Always, note: None }, |s| {
+                s.canvas.as_mut().ok_or_else(|| mlua::Error::runtime("no canvas yet"))?.wait((h * 60.0) as f32);
+                Ok(())
+            })?;
+            Ok(st1.borrow().clock)
         })?)?;
     }
     // timesheet(): {clock=, sitting=, sittings=, hours=, hand=, open=, setting=, tacky=, dry=, strokes=, touches=, reloads=, piles=, hand_min=}
     {
         let st1 = st.clone();
         g.set("timesheet", lua.create_function(move |lua, ()| {
-            flush(&st1, true);
-            let s = st1.borrow();
-            let c = s.canvas.as_ref().ok_or_else(|| mlua::Error::runtime("no canvas yet"))?;
-            let t: Table = lua.create_table()?;
-            let sh = c.stage_shares();
-            let k = c.tally().since(&s.hand.base);
-            t.set("clock", s.clock)?;
-            t.set("sitting", s.clock - s.hand.start)?;
-            t.set("sittings", s.hand.sittings)?;
-            t.set("hours", s.hand.hours)?;
-            t.set("hand", c.hand_time().is_some())?;
-            for (i, n) in ["open", "setting", "tacky", "dry"].iter().enumerate() {
-                t.set(*n, sh[i])?;
-            }
-            t.set("strokes", k.strokes)?;
-            t.set("touches", k.touches)?;
-            t.set("reloads", k.reloads)?;
-            t.set("piles", k.remixes)?;
-            t.set("hand_min", k.minutes())?;
-            Ok(t)
+            verb(&st1, Verb::Query, |s| {
+                let c = s.canvas.as_ref().ok_or_else(|| mlua::Error::runtime("no canvas yet"))?;
+                let t: Table = lua.create_table()?;
+                let sh = c.stage_shares();
+                let k = c.tally().since(&s.hand.base);
+                t.set("clock", s.clock)?;
+                t.set("sitting", s.clock - s.hand.start)?;
+                t.set("sittings", s.hand.sittings)?;
+                t.set("hours", s.hand.hours)?;
+                t.set("hand", c.hand_time().is_some())?;
+                for (i, n) in ["open", "setting", "tacky", "dry"].iter().enumerate() {
+                    t.set(*n, sh[i])?;
+                }
+                t.set("strokes", k.strokes)?;
+                t.set("touches", k.touches)?;
+                t.set("reloads", k.reloads)?;
+                t.set("piles", k.remixes)?;
+                t.set("hand_min", k.minutes())?;
+                Ok(t)
+            })
         })?)?;
     }
     Ok(())
@@ -311,7 +354,7 @@ mod tests {
         assert_eq!(clock(&s), 0.0, "the grounds are not the painter's time");
         // a new pile, a stroke 300 units long with a 4-unit round, a touch
         run(&mut s, r##"b = brush("round", 4); b:load("#303830", 0.9); b:stroke({{100, 500}, {400, 500}}); b:touch(500, 300)"##);
-        let want = (pace::REMIX + pace::RELOAD + stroke_secs(300.0 * mm, 4.0 * mm) + touch_secs(4.0 * mm)) / 60.0;
+        let want = (pace::REMIX + pace::RELOAD + stroke_secs(300.0 * mm, 4.0 * mm) + touch_secs()) / 60.0;
         assert!((clock(&s) - want).abs() < 1e-4, "clock {} want {want}", clock(&s));
         // the same color again is a reload, a wipe is a wipe
         let t0 = clock(&s);
@@ -411,19 +454,19 @@ mod tests {
                     assert(a.sitting >= 0 and b.sitting == a.sitting and c.sitting == a.sitting, a.sitting .. " " .. b.sitting)
                     assert(c1 == c2 and c1 == a.clock and a.clock > 120, c1 .. " " .. c2 .. " " .. a.clock)"##,
             );
-            assert_eq!(out.matches("passed while the paint dried").count(), 1, "hand {on}: {out}");
+            assert_eq!(out.matches("varnish: waited").count(), 1, "hand {on}: {out}");
             let now = s.canvas().unwrap().clock();
             let c0 = s.st.borrow().clock0;
             assert_eq!(clock(&s), now - c0);
             // and the next chunk reports nothing more
             let out = run(&mut s, "assert(timesheet().sittings == 2)");
-            assert!(!out.contains("passed while"), "{out}");
+            assert!(!out.contains("waited"), "{out}");
         }
     }
 
     /// Time a finishing verb spends drying the paint isn't hand time: it is
-    /// reported as before, starts a new sitting and never counts as an
-    /// overrun.
+    /// reported, starts a new sitting and never counts as an overrun (the
+    /// new sitting holds only the varnish's brushing, with hand time on).
     #[test]
     fn drying_for_a_finish_is_not_time_at_the_easel() {
         for on in [false, true] {
@@ -431,9 +474,47 @@ mod tests {
             run(&mut s, &format!(r##"canvas{{style="friedrich", aspect=1.5, seed=2, hand={on}}}"##));
             run(&mut s, r##"work(rect(100, 100, 300, 200), {hand="body", color="#8090a0"})"##);
             let out = run(&mut s, "varnish()");
-            assert!(out.contains("passed while the paint dried") && !out.contains("at the easel"), "hand {on}: {out}");
-            run(&mut s, "assert(timesheet().sittings == 2 and timesheet().sitting == 0)");
+            assert!(out.contains("varnish: waited") && !out.contains("at the easel"), "hand {on}: {out}");
+            run(&mut s, &format!("local t = timesheet(); assert(t.sittings == 2 and t.sitting {}, t.sitting)", if on { "> 0 and t.sitting < 2" } else { "== 0" }));
         }
+    }
+
+    /// A varnish is brushed over the whole canvas like a glaze: after the
+    /// hand time owed before it goes on the clock (in the sitting it was
+    /// spent in), the paint dries (a rest), and its brushing is hand time
+    /// in the new sitting (thermos B4).
+    #[test]
+    fn varnish_is_hand_time_after_the_rest() {
+        let mut s = Session::new(W, 0).unwrap();
+        run(&mut s, r##"canvas{style="friedrich", aspect=1.5, seed=2, hand=true}"##);
+        run(&mut s, r##"work(rect(100, 100, 300, 200), {hand="body", color="#8090a0"})"##);
+        run(&mut s, r##"b = brush("round", 4); b:load("#303830", 0.9); b:stroke({{100, 500}, {400, 500}})
+                        varnish(); local t = timesheet(); sitting, sittings = t.sitting, t.sittings"##);
+        let c = s.canvas().unwrap();
+        let f = c.frame();
+        let brushing = (f.width() * f.height()) as f64 * (c.mm_per_unit() as f64).powi(2) / pace::GLAZE_MM2_S / 60.0;
+        let sitting: f64 = s.lua.globals().get("sitting").unwrap();
+        let sittings: u32 = s.lua.globals().get("sittings").unwrap();
+        assert_eq!(sittings, 2);
+        assert!((sitting - brushing).abs() < 1e-6, "the new sitting is the varnish's brushing: {sitting} vs {brushing} min");
+    }
+
+    /// One palette a sitting: passes and stipples dip into the piles the
+    /// held brushes and earlier passes mixed (a reload, not a new mix), and
+    /// a new sitting starts with a clean palette (thermos B5).
+    #[test]
+    fn a_sitting_mixes_on_one_palette() {
+        let mut s = Session::new(W, 0).unwrap();
+        run(&mut s, r##"canvas{style="friedrich", aspect=1.5, seed=2, hand=true}"##);
+        run(
+            &mut s,
+            r##"b = brush("round", 4); b:load("#8090a0", 0.9)
+                work(rect(100, 100, 300, 200), {hand="body", color="#8090a0", cut_in="round 2"})
+                stipple(rect(100, 400, 300, 100), {width=3, color="#8090a0", coverage=1})
+                work(rect(500, 100, 300, 200), {hand="body", color="#8090a0"})
+                local t = timesheet(); assert(t.piles == 1, t.piles .. " piles")"##,
+        );
+        run(&mut s, r##"rest(3); b:load("#8090a0", 0.9); local t = timesheet(); assert(t.piles == 2, t.piles .. " piles")"##);
     }
 
     #[test]

@@ -47,7 +47,8 @@ pub struct Hand {
     pub sittings: u32,
     /// The overrun of this sitting was reported (whole hours over).
     pub warned: u32,
-    /// The piles mixed on the palette this sitting (held brushes' loads).
+    /// The piles mixed on the palette this sitting: held brushes load from
+    /// them and covering passes dip into them (`Canvas::work_with`).
     pub piles: Piles,
     /// The ledger when `canvas{}` was set up (the grounds are the
     /// colorman's work, not the painter's).
@@ -434,6 +435,24 @@ mod tests {
             assert!(out.contains("passed while the paint dried") && !out.contains("at the easel"), "hand {on}: {out}");
             run(&mut s, "assert(timesheet().sittings == 2 and timesheet().sitting == 0)");
         }
+    }
+
+    /// One palette a sitting: passes and stipples dip into the piles the
+    /// held brushes and earlier passes mixed (a reload, not a new mix), and
+    /// a new sitting starts with a clean palette (thermos B5).
+    #[test]
+    fn a_sitting_mixes_on_one_palette() {
+        let mut s = Session::new(W, 0).unwrap();
+        run(&mut s, r##"canvas{style="friedrich", aspect=1.5, seed=2, hand=true}"##);
+        run(
+            &mut s,
+            r##"b = brush("round", 4); b:load("#8090a0", 0.9)
+                work(rect(100, 100, 300, 200), {hand="body", color="#8090a0", cut_in="round 2"})
+                stipple(rect(100, 400, 300, 100), {width=3, color="#8090a0", coverage=1})
+                work(rect(500, 100, 300, 200), {hand="body", color="#8090a0"})
+                local t = timesheet(); assert(t.piles == 1, t.piles .. " piles")"##,
+        );
+        run(&mut s, r##"rest(3); b:load("#8090a0", 0.9); local t = timesheet(); assert(t.piles == 2, t.piles .. " piles")"##);
     }
 
     #[test]

@@ -40,15 +40,18 @@ fn replay(src: &Path, width: u32, threads: Option<usize>, tag: &str) -> (String,
 /// relief changed, and again when glazes and the varnish got their own
 /// thin-film settle (Round 6, notes/varnish.md): at 160px both logs moved by
 /// 1/255 in 1 and 8 pixels. And again for l5_near (release) when a mask passed as `clip=` began
-/// to be used (Round 7: it had been read as `clip=true`).
+/// to be used (Round 7: it had been read as `clip=true`). And all three
+/// (example, l5_near, overran) when rounds and riggers became blunt by
+/// default again (Round 7, notes/tip.md): these logs paint with
+/// `brush("round", w)` and riggers and never set `point`.
 #[test]
 fn existing_logs_replay_unchanged() {
     // (the benchmark near is checked in release only: a debug replay takes
     // minutes)
     let logs: &[(&str, u64)] = if cfg!(debug_assertions) {
-        &[("paintings/lua/example.lua", 0x62d1_127e_8305_1451)]
+        &[("paintings/lua/example.lua", 0x78f0_1414_a962_f6e3)]
     } else {
-        &[("paintings/lua/example.lua", 0x62d1_127e_8305_1451), ("notes/loops/l5_near.lua", 0xde04_a651_cf0f_33b0)]
+        &[("paintings/lua/example.lua", 0x78f0_1414_a962_f6e3), ("notes/loops/l5_near.lua", 0x07a5_fd85_f0e1_849b)]
     };
     for &(log, want) in logs {
         let (_, png) = replay(&root().join(log), 160, None, "unchanged");
@@ -101,7 +104,7 @@ fn hand_time_is_the_same_at_any_thread_count() {
 #[test]
 fn an_old_overrunning_log_replays_unchanged() {
     let (out, png) = replay(&root().join("crates/easel/tests/logs/overran.lua"), 160, None, "overran");
-    assert_eq!(fnv(&png), 0x62d2_46cf_91df_21e9, "tests/logs/overran.lua at 160px changed");
+    assert_eq!(fnv(&png), 0x7758_7315_17fd_5b9a, "tests/logs/overran.lua at 160px changed");
     assert_eq!(
         out,
         "sitting 1: 20 min at the easel, 12 min planned; finish the passage while it is open, then rest(hours)

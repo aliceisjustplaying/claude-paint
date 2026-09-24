@@ -1420,7 +1420,10 @@ impl Canvas {
                 // layer), and each crack opens wider
                 let thick = crate::smoothstep(THICK_UM[0], THICK_UM[1], paint);
                 let reach = GENERATIONS as f32 - k.vary * (tough + thick);
-                let open = (1.0 + k.vary * (((ground + paint) / (ground + PAINT_UM).max(1.0)).sqrt() - 1.0)).clamp(0.7, 1.8);
+                // (the film bookkeeping runs high: the physical film is taken
+                // as 20 µm where it reads thin and 300 µm where fully thick)
+                let film = PAINT_UM + (300.0 - PAINT_UM) * thick;
+                let open = (1.0 + k.vary * (((ground + film) / (ground + PAINT_UM).max(1.0)).sqrt() - 1.0)).clamp(0.7, 1.8);
                 (reach, open, WALL_THIN + (WALL_THICK - WALL_THIN) * thick)
             })
             .collect();
@@ -1788,6 +1791,168 @@ mod tests {
         // grooves go down, cupped edges up
         let (lo, hi) = c.height.iter().zip(&before).fold((0.0f32, 0.0f32), |(lo, hi), (a, b)| (lo.min(a - b), hi.max(a - b)));
         assert!(lo < -5.0 && hi > 5.0, "dz range {lo}..{hi}");
+    }
+
+    /// Mean opening (relative, before the local paint) of each generation's
+    /// cracks, weighted by length.
+    fn opening_by_generation(k: &Cracks, size: [f32; 2]) -> [f32; GENERATIONS] {
+        let n = net(k, size);
+        let (mut sum, mut len) = ([0.0f32; GENERATIONS], [0.0f32; GENERATIONS]);
+        for s in rsegs(&n, k) {
+            let d = sub(s.b, s.a);
+            let l = dot(d, d).sqrt();
+            let g = s.generation as usize;
+            sum[g] += 0.5 * (s.wa + s.wb) * l;
+            len[g] += l;
+        }
+        std::array::from_fn(|g| sum[g] / len[g].max(1e-6))
+    }
+
+    /// The first cracks open widest, each later generation less (Round 7:
+    /// the even web read as "too neat, too digital"); without hierarchy
+    /// every generation opens about alike.
+    #[test]
+    fn first_cracks_open_widest() {
+        let base = Cracks { corners: false, patchy: 0.0, grain: 0.0, ..Cracks::aged(8).fit(240.0) };
+        let even = opening_by_generation(&Cracks { hierarchy: 0.0, ..base }, [90.0, 70.0]);
+        let tiered = opening_by_generation(&base, [90.0, 70.0]);
+        eprintln!("opening by generation: even {even:.2?}, hierarchy {tiered:.2?}");
+        assert!(even[0] < 1.8 * even[3], "even: {even:?}");
+        assert!(tiered[0] > 3.0 * tiered[3], "hierarchy: {tiered:?}");
+        assert!(tiered.windows(2).all(|w| w[0] > w[1]), "each generation narrower: {tiered:?}");
+    }
+
+    /// Crack length per 20 mm cell: (coefficient of variation, fraction of
+    /// cells under half the median).
+    fn density_spread(k: &Cracks, size: [f32; 2]) -> (f32, f32) {
+        let n = net(k, size);
+        let c = 20.0;
+        let (nx, ny) = ((size[0] / c) as usize, (size[1] / c) as usize);
+        let mut d = vec![0.0f32; nx * ny];
+        for a in &n.arms {
+            for s in a.pts.windows(2) {
+                let m = mul(addv(s[0], s[1]), 0.5);
+                let (x, y) = ((m[0] / c) as usize, (m[1] / c) as usize);
+                if x < nx && y < ny {
+                    let v = sub(s[1], s[0]);
+                    d[y * nx + x] += dot(v, v).sqrt();
+                }
+            }
+        }
+        let mean = d.iter().sum::<f32>() / d.len() as f32;
+        let sd = (d.iter().map(|v| (v - mean).powi(2)).sum::<f32>() / d.len() as f32).sqrt();
+        let mut sorted = d.clone();
+        sorted.sort_by(f32::total_cmp);
+        let med = sorted[sorted.len() / 2];
+        (sd / mean, d.iter().filter(|&&v| v < 0.5 * med).count() as f32 / d.len() as f32)
+    }
+
+    /// With `patchy` some passages keep only their first long cracks while
+    /// others split into small islands.
+    #[test]
+    fn patchy_development_leaves_quiet_passages() {
+        let base = Cracks { corners: false, vary: 0.0, grain: 0.0, ..Cracks::aged(11).fit(240.0) };
+        let size = [260.0, 200.0];
+        let (cv0, q0) = density_spread(&Cracks { patchy: 0.0, ..base }, size);
+        let (cv1, q1) = density_spread(&base, size);
+        eprintln!("crack length per 20 mm cell: even cv {cv0:.2} (quiet {q0:.2}), patchy cv {cv1:.2} (quiet {q1:.2})");
+        assert!(cv1 > 2.0 * cv0, "cv {cv0} -> {cv1}");
+        assert!(q1 > 0.05 && q0 < 0.02, "quiet cells {q0} -> {q1}");
+    }
+
+    /// Length-weighted fraction of the first two generations within 30° of
+    /// running across the canvas's length (vertical on a landscape canvas).
+    fn across_fraction(k: &Cracks) -> f32 {
+        let n = net(k, [150.0, 100.0]);
+        let (mut on, mut all) = (0.0, 0.0);
+        for a in n.arms.iter().filter(|a| a.generation < 2) {
+            for s in a.pts.windows(2) {
+                let d = sub(s[1], s[0]);
+                let l = dot(d, d).sqrt();
+                if l > 0.0 && (d[0] / l).abs() < 0.5 {
+                    on += l;
+                }
+                all += l;
+            }
+        }
+        on / all
+    }
+
+    /// `grain`: a canvas stretched tighter along its length cracks across it
+    /// first; a tendency, not a rule.
+    #[test]
+    fn grain_turns_the_first_cracks_across() {
+        let base = Cracks { corners: false, vary: 0.0, patchy: 0.0, ..Cracks::aged(12).fit(240.0) };
+        let none = across_fraction(&Cracks { grain: 0.0, ..base });
+        let some = across_fraction(&Cracks { grain: 0.15, ..base });
+        let full = across_fraction(&Cracks { grain: 1.0, ..base });
+        eprintln!("first cracks within 30° of vertical: grain 0 {none:.2}, 0.15 {some:.2}, 1 {full:.2} (uniform 0.33)");
+        assert!(some > none + 0.05 && full > some + 0.1, "{none} {some} {full}");
+        assert!(some < 0.75, "grain 0.15 should stay a tendency: {some}");
+    }
+
+    /// A dark canvas with a lead-white ground, cracked: (mean over pixels a
+    /// crack mostly covers, the paint).
+    fn crack_in_dark(grime: f32) -> (f32, f32) {
+        let mut c = Canvas::new(400, 1.25, [0.02, 0.02, 0.025]).with_size_mm(60.0);
+        c.ground_um = 240.0;
+        let k = Cracks { grime, vary: 0.0, veil: 0.0, patchy: 0.0, width_um: Some(60.0), ..Cracks::aged(3) };
+        let before = c.px.clone();
+        c.crack(&k);
+        let px = c.px_mm();
+        let n = network(&k.fit(240.0), [c.f.w as f32 * px, c.f.h as f32 * px], [10.0 / 14.0, 10.0 / 12.0]);
+        let r = raster(&n, &k.fit(240.0), c.f.w, c.f.h, px);
+        let (mut s, mut m) = (0.0, 0.0);
+        for i in 0..c.px.len() {
+            if r.cover[i] > 0.3 {
+                s += c.px[i][1];
+                m += 1.0;
+            }
+        }
+        (s / m, before[0][1])
+    }
+
+    /// In the darks a crack shows its pale ground walls under gray grime: a
+    /// faint light line, where the old soot left it invisible.
+    #[test]
+    fn cracks_in_darks_read_light() {
+        let (old, paint) = crack_in_dark(0.0);
+        let (new, _) = crack_in_dark(1.0);
+        eprintln!("dark paint {paint:.4}: crack pixels, soot {old:.4}, grime and ground {new:.4}");
+        assert!(old < 1.3 * paint, "old {old} vs {paint}");
+        assert!(new > 1.3 * paint && new < 4.0 * paint, "new {new} vs {paint}");
+    }
+
+    /// A crop render cracks exactly like the whole canvas away from its
+    /// edge: every new variation hangs on canvas millimeters or crack ids.
+    #[test]
+    fn crop_cracks_like_the_whole() {
+        let k = Cracks::aged(4);
+        let make = |crop: Option<crate::canvas::Crop>| {
+            let mut c = Canvas::new_window(400, 1.0, [0.5; 3], crop).with_size_mm(120.0);
+            c.ground_um = 240.0;
+            let f = c.f;
+            for y in 0..f.h {
+                for x in 0..f.w {
+                    let (gx, gy) = (x + f.x0, y + f.y0);
+                    c.px[y * f.w + x] = if (gx / 40 + gy / 50) % 2 == 0 { [0.02; 3] } else { [0.5, 0.45, 0.35] };
+                    c.film[y * f.w + x] = 10.0 + 12.0 * ((gx / 30) % 3) as f32 + 12.0;
+                }
+            }
+            c.crack(&k);
+            c
+        };
+        let whole = make(None);
+        let crop = make(Some(crate::canvas::Crop { units: [302.5, 204.0, 700.0, 650.0], margin: 0.0 }));
+        let f = crop.f;
+        let mut worst = 0.0f32;
+        for y in f.y0 + 8..f.y0 + f.h - 8 {
+            for x in f.x0 + 8..f.x0 + f.w - 8 {
+                let (a, b) = (whole.px[y * whole.f.w + x], crop.px[(y - f.y0) * f.w + x - f.x0]);
+                worst = worst.max((a[0] - b[0]).abs().max((a[2] - b[2]).abs()));
+            }
+        }
+        assert!(worst < 1e-4, "crop differs from whole by {worst}");
     }
 
     /// `cargo test --release -p paint full_canvas_speed -- --ignored --nocapture`

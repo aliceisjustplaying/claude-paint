@@ -528,3 +528,69 @@ replay hashes in `crates/easel/tests/hand_time.rs` (both profiles;
 `PRINT_HASHES=1` prints them). `tally`'s aging test now fingerprints the
 wet film too: with the new engine nothing in its 160 minutes of hand time
 gels, so the dry picture alone no longer differs.
+
+## 6. Third pass: the brush's tip
+
+A blind panel (2 × Gemini 3.8 Flash, 2 × gpt-6-astra) judged main against
+pass 2 on six pairs from identical logs. Pass 2 won foliage_C and l5_near
+4–0 (lights don't sink, the wood reads); main won rock_B 4–0 and sky_B,
+water_B, l3_green 3–1. The panel's read: on pass 2 later marks stay
+discrete, firm and opaque; where passages should melt (cloud undersides,
+reflections, the rock's terminator and base, the hedge) they read as
+stepped, stamped stroke ends.
+
+### What changed
+
+- **A tip layer on each bristle** (`Bristle::tip`, part of its load).
+  What a bristle picks up from the wet film stays on its surface and is
+  laid first; it works into the reservoir as the brush travels
+  (`TIP_RUN`, 15 units e-folding). A dip in the pile coats the tip
+  afresh; wiping takes the tip too. So a loaded stiff light touched into a
+  wet dark is clean on the first touch and dirtier on the following ones
+  (`wet::tests::wet_on_wet::touches_of_one_load_dirty_as_they_go`: the
+  first touch is as light as a fresh load's at the same spot, the next
+  four average under 0.96 of it, a reload is clean again). A stroke
+  dragged along a wet contour lays the under-paint it picked up just
+  behind where it picked it up.
+- **A pressed touch is cushioned less** when it picks up (the tip is
+  pushed into the wet paint and splits off it as it lifts).
+- **Fluid paint on the brush picks up more** (pickup × `1.3 − 0.6 ×
+  stiffness` of the bristle's paint): a medium-rich brush integrates more
+  than a stiff full one.
+- **Glancing bristles in a moving stroke drag their paint in**
+  (`GLANCE`): a bristle that barely touches (the lift-off, the edges) lays
+  its thin film into the wet surface instead of on it, so stroke ends
+  feather into wet paint. Touches are exempt (pressed straight down).
+
+### Evidence
+
+`notes/wet/pass3_<pair>.jpg`: the six panel crops (3200 px, the panel's
+windows), stacked main / pass 2 / pass 3.
+
+Mean difference between pass 2 and pass 3 per crop (of 255): sky_B 2.5,
+water_B 2.0, rock_B 1.2, foliage_C 0.8, l5_near 1.9, l3_green 0.9
+(main to pass 3: 4.5, 3.6, 3.1, 2.2, 8.3, 3.6). **Pass 3 moves the
+pictures only a little.** The cloud bellies in sky_B feather slightly
+more; l5_near's wood and foliage_C's lights are unchanged (the wins hold).
+The rock's scalloped terminator and blunt stroke ends and the hedge's
+separate lights are about as they were.
+
+Why so little: what a bristle picks up is a few percent of what a loaded
+bristle lays per step (its pickup is cushioned by its own load), so the
+tip colors the stroke only where the load runs low. The blunt ends at the
+rock's terminator are the flat brush's own footprint ending. Main softened
+them by mixing every mark into the wet paint, which is also what sank the
+lights and muddied the wood. Getting both needs the stroke's end itself to
+change: a flat lifting off rolls onto its edge and drags. That is a change
+to the gesture (`Gesture` ramps and the flat's orientation as pressure
+falls), not to the wet film, and I didn't attempt it in this pass.
+
+`study_wet` after pass 3: touches 0.88 clean first, 0.83 third (open);
+rock 0.69 and snow 0.74 of the way to their look over dried paint (more
+integrated than pass 2's 0.80/0.78); the river's spent tail shows the
+ground in 35% of its track (pass 2: 25%). The lab failures stay fixed
+(`study_wet_lab`: glaze hand over open sky 0% ground, tacky texture 4.2,
+dry 7.7).
+
+Tests: the golden scene and the hand-time replay hashes are re-recorded
+(output changes on purpose).

@@ -88,6 +88,12 @@ const STIR: f32 = 0.12;
 /// A surface film this thin (coats) is stirred twice as readily as a thick
 /// one: sheared, it smears into the paint under it (see `Surf::stir`).
 const THIN_FILM: f32 = 0.15;
+/// The share of its paint a barely touching moving bristle drags into the
+/// wet film (see `exchange`).
+const GLANCE: f32 = 0.8;
+/// Distance (units, e-folding) over which what a bristle picked up works
+/// from its surface into its reservoir (see `Bristle::tip`).
+const TIP_RUN: f32 = 15.0;
 /// How much a full load cushions a bristle from the wet film under it: it
 /// lifts and stirs `1 − CUSHION` of what a spent one does.
 const CUSHION: f32 = 0.8;
@@ -355,6 +361,26 @@ pub(crate) struct Bristle {
     pub(crate) vol: f32,
     lat: Latent,
     hide: Prop,
+    /// The paint on the bristle's surface, part of `vol`: what it picked up
+    /// from the wet film it passed through. It is laid first, and works
+    /// into the reservoir (`lat`, `hide`: the rest of `vol`) as the brush
+    /// travels (`TIP_RUN`). A dip in the pile coats it afresh.
+    tip: f32,
+    tlat: Latent,
+    thide: Prop,
+}
+
+impl Bristle {
+    /// Work the tip's paint into the reservoir: all of it, or the share `k`.
+    fn fold_tip(&mut self, k: f32) {
+        if self.tip <= 0.0 {
+            return;
+        }
+        let m = self.tip * k.clamp(0.0, 1.0);
+        let mut res = (self.vol - self.tip).max(0.0);
+        mix_into(&mut res, &mut self.lat, &mut self.hide, m, &self.tlat, self.thide);
+        self.tip -= m;
+    }
 }
 
 /// A brush in the hand, with paint in its bristles.
@@ -424,6 +450,9 @@ impl Held {
                     vol: 0.0,
                     lat: [0.0; LAT],
                     hide: [0.5, 0.5, 1.0],
+                    tip: 0.0,
+                    tlat: [0.0; LAT],
+                    thide: [0.5, 0.5, 1.0],
                 }
             })
             .collect();
@@ -445,6 +474,8 @@ impl Held {
         let scatter = paint.scatter();
         for (i, b) in self.bristles.iter_mut().enumerate() {
             let k = 0.75 + 0.5 * crate::rng::hash2(i as i64, 17, 3);
+            // (the pile coats the hairs afresh: what the tip held goes in)
+            b.fold_tip(1.0);
             mix_into(&mut b.vol, &mut b.lat, &mut b.hide, amount * full * k, &lat, [scatter, paint.stiff, paint.drying]);
         }
     }
@@ -453,6 +484,7 @@ impl Held {
     pub fn wipe(&mut self, frac: f32) {
         for b in &mut self.bristles {
             b.vol *= 1.0 - frac.clamp(0.0, 1.0);
+            b.tip *= 1.0 - frac.clamp(0.0, 1.0);
         }
     }
 
@@ -877,6 +909,10 @@ fn feed(bristles: &mut [Bristle], k: f32) {
         return;
     }
     let (mut tv, mut lat, mut hide) = (0.0f32, [0.0f32; LAT], [0.0f32; 3]);
+    // (the feed runs through the whole tuft, tips and all)
+    for b in bristles.iter_mut() {
+        b.fold_tip(1.0);
+    }
     for b in bristles.iter() {
         tv += b.vol;
         for (l, bl) in lat.iter_mut().zip(&b.lat) {
@@ -1279,6 +1315,7 @@ unsafe fn exchange(
                 None => br.vol * (1.0 - (1.0 - (-travel / tool.run).exp()) * GHOST_TOUCH),
                 Some(v) => (br.vol - v.min(br.vol * 0.5) * GHOST_TOUCH).max(0.0),
             };
+            br.tip = br.tip.min(br.vol);
             return;
         }
         // never outside the stroke's footprint: the scheduler runs strokes
@@ -1387,7 +1424,9 @@ unsafe fn exchange(
         let dep_per_w = dep_total * share.min(1.0) / sum_w / px_area;
         // film splitting: a bristle in wet paint always lifts some of it, even
         // when loaded; a spent bristle drinks more
-        let hunger = 0.35 + 0.65 * (1.0 - br.vol / full).clamp(0.0, 1.0).powf(1.5);
+        // (fluid, medium-rich paint on the bristle wets into the film and
+        // takes it up more readily than stiff paint)
+        let hunger = (0.35 + 0.65 * (1.0 - br.vol / full).clamp(0.0, 1.0).powf(1.5)) * (1.3 - 0.6 * br.hide[1].clamp(0.0, 1.0));
         let push_k = tool.push * (seg / (2.0 * rb)).clamp(0.0, 1.0);
         // how far this bristle reaches into the wet film: pressed, stiff and
         // lean it goes through to the body; a loaded one rides on a cushion
@@ -1398,7 +1437,12 @@ unsafe fn exchange(
         // the share of what it lays that a bristle drags into the wet film
         // instead of laying on it: all of it for a blender, and for a
         // nearly spent bristle, whose last paint is what it picked up
-        let drag_in = (1.0 - tool.lay.clamp(0.0, 1.0)).max(1.0 - smoothstep(0.02, 0.2, br.vol / full));
+        // … and for a moving bristle that only glances the wet film (a
+        // stroke's lift-off and its edges), whose thin film meets the wet
+        // surface and is dragged into it: stroke ends feather into wet
+        // paint instead of stopping blunt (a touch pressed down doesn't)
+        let glance = if dep.is_none() { GLANCE * (1.0 - reach.clamp(0.0, 1.0)).powi(2) } else { 0.0 };
+        let drag_in = (1.0 - tool.lay.clamp(0.0, 1.0)).max(1.0 - smoothstep(0.02, 0.2, br.vol / full)).max(glance);
         // (mixing is shear: it goes with how far the bristle moves, as the
         // plough does, so a tip pressed straight down barely stirs)
         // (any hair sheared across a surface film mixes it; a stiff one
@@ -1416,7 +1460,15 @@ unsafe fn exchange(
         let mut got_v = 0.0f32;
         let mut got_l = [0.0f32; LAT];
         let mut got_h: Prop = [0.0; 3];
-        let (blat, bhide) = (br.lat, br.hide);
+        // the tip's paint (what the bristle picked up) goes down first
+        let from_tip = dep_total.min(br.tip);
+        let (blat, bhide) = if from_tip > 0.0 {
+            let (mut v, mut l, mut h) = ((dep_total - from_tip).max(0.0), br.lat, br.hide);
+            mix_into(&mut v, &mut l, &mut h, from_tip, &br.tlat, br.thide);
+            (l, h)
+        } else {
+            (br.lat, br.hide)
+        };
         for y in y0..y1 {
             for x in x0..x1 {
                 let wt = wts[(y - y0) * bw + (x - x0)];
@@ -1440,7 +1492,9 @@ unsafe fn exchange(
                     // only as far as the bristles reach through their own
                     // paint
                     let a = take.min(*sf.top.add(i));
-                    let (a, b) = sf.take(i, a + (take - a) * cushion);
+                    // (a pressed tip is pushed into the wet paint and splits
+                    // off it as it lifts: its own load cushions it less)
+                    let (a, b) = sf.take(i, a + (take - a) * if dep.is_some() { 1.0 - 0.3 * wet } else { cushion });
                     for (part, l, hp) in [(a, &*sf.tlat.add(i), *sf.thide.add(i)), (b, &*sf.lat.add(i), *sf.hide.add(i))] {
                         if part > 0.0 {
                             let tv = part * px_area;
@@ -1538,6 +1592,7 @@ unsafe fn exchange(
             }
         }
         br.vol = (br.vol - dep_total).max(0.0);
+        br.tip = (br.tip - from_tip).max(0.0).min(br.vol);
         if got_v > 0.0 {
             for k in 0..LAT {
                 got_l[k] /= got_v;
@@ -1545,8 +1600,12 @@ unsafe fn exchange(
             for g in &mut got_h {
                 *g /= got_v;
             }
-            mix_into(&mut br.vol, &mut br.lat, &mut br.hide, got_v, &got_l, got_h);
+            // what it picks up stays on the bristle's surface
+            mix_into(&mut br.tip, &mut br.tlat, &mut br.thide, got_v, &got_l, got_h);
+            br.vol += got_v;
         }
+        // and works into the reservoir as the bristle travels
+        br.fold_tip(1.0 - (-travel / TIP_RUN).exp());
         let pad = (off + 2.0) as usize;
         grow(bounds, x0.saturating_sub(pad).max(ox), y0.saturating_sub(pad).max(oy), (x1 + pad).min(ox + sf.w), (y1 + pad).min(oy + sf.h));
     }

@@ -188,3 +188,89 @@ for i, c in ipairs(CL) do
   blend(c.m:grow(4):blur(2), {angle=0, coverage=1.5})
 end
 local t = timesheet(); print(t.sitting)
+
+--@ chunk 13 · clock 5095.9054563590325
+rest(16); sitting{hours=6}
+farpal = pal:only{"lead white", "pale smalt", "cobalt blue", "raw umber", "bone black", "yellow ochre"}
+farO = outline{pts=FAR, open=true, char="soft", lobe=7, amount=0.8, seed=71}
+farM = farO:below(HZ + 30) * above(function(x) return HZ + 2.5 + 0.8 * math.sin(x / 37) end)
+FARC = {wood="#58535c", land="#645d62", mist="#8f8a8f"}
+-- the far land: darker under the wood, paler into the mist on the right
+local c = function(x, y)
+  local m = smoothstep(820, 1000, x)
+  return mix(y < HZ - 2 and FARC.wood or FARC.land, FARC.mist, 0.75 * m)
+end
+work(farM, {hand="detail", tool="round 2.2", length={6, 22}, coverage=3, angle=0, angle_jitter=0.15, pal=farpal, clip=false,
+  edge={found=0.55, soft=0.45, period=35, seed=5}, color=c, medium=0.2})
+-- the wood's crowns, touched upward along its top
+local rb = brush("round", 1.6)
+for i = 1, 170 do
+  local x = rand(45, 305)
+  local top = nil
+  for yy = 425, HZ, 0.5 do if farM:at(x, yy) > 0.5 then top = yy; break end end
+  if top then
+    if i % 12 == 1 then rb:reload(mix(FARC.wood, "#3f3c44", rand(0, 0.5)), 0.6) end
+    rb:stroke({{x, top + rand(3, 7)}, {x + randn(0, 0.6), top + rand(-1.5, 0.8)}}, {pressure={0.55, 0.15}, ramps={0.1, 0.5}})
+  end
+end
+
+--@ chunk 14 · clock 6093.465015465859
+-- small far pollards along the far shore, each by hand: bole, knob, a head of many short rods; hazier to the right
+local tb, kb, rg = brush("round", 1.5), brush("round", 1.2), brush{kind="rigger", width=0.5, point=1}
+for i, f in ipairs(FARWILL) do
+  local x, y, h = f[1], f[2], f[3] * 1.2
+  local haze = smoothstep(640, 920, x) * 0.6
+  local col = mix("#4e4a52", FARC.mist, haze)
+  local bh = h * rand(0.3, 0.42)
+  local lean = randn(0, 0.06)
+  tb:reload(col, 0.7)
+  tb:stroke({{x, y + 1}, {x + lean * bh, y - bh}}, {pressure={0.85, 0.7}, ramps={0.05, 0.2}})
+  local hx, hy = x + lean * bh, y - bh
+  local cr = (h - bh) * rand(0.45, 0.6)          -- the head's radius
+  local sky = sample(hx, hy - h, 3)
+  -- the head's mass: soft touches of the rods' color thinned with the sky
+  kb:reload(mix(col, sky, 0.22), 0.6)
+  for k = 1, math.random(14, 22) do
+    local a, r = rand(-3.3, 0.2), cr * math.sqrt(rand()) * 0.9
+    kb:touch(hx + math.cos(a) * r, hy - cr * 0.8 + math.sin(a) * r * 0.9, {pressure=rand(0.25, 0.5), drag={0, -rand(0.3, 1)}})
+  end
+  rg:reload(mix(col, sky, 0.2), 0.7)
+  for r = 1, math.random(14, 22) do
+    local a = -1.57 + randn(0, 0.55)
+    local len = cr * rand(1.0, 2.0)
+    rg:stroke({{hx + randn(0, 0.5), hy}, {hx + math.cos(a) * len * 0.5, hy + math.sin(a) * len * 0.5}, {hx + math.cos(a) * len, hy + math.sin(a) * len}},
+      {pressure={0.45, 0.02}, ramps={0.05, 0.7}})
+  end
+end
+
+--@ chunk 15 · clock 6098.579453478102
+-- the far shore mirrored in the still water: the wood's height turned down, darker than the water, lost below
+local sn = noise{seed=81, period=40, stretch={0, 6}}
+reflM = mask(function(x, y)
+  if y < HZ + 2 then return 0 end
+  -- the height of the far land at x, found on its mask
+  local top = HZ + 3
+  for yy = 420, HZ + 3, 1 do if farM:at(x, yy) > 0.5 then top = yy; break end end
+  local depth = (HZ + 3 - top) * 0.9 + 2.5
+  return 1 - smoothstep(HZ + 2 + depth * 0.6, HZ + 2 + depth * (1.1 + 0.3 * sn(x, y)), y)
+end)
+glaze(reflM:blur(1.2), {color="#4a4552", coats=0.55, pigment="transparent"})
+
+--@ chunk 16 · clock 21715.97642190056
+bankpal = pal:only{"lead white", "yellow ochre", "raw umber", "bone black", "pale smalt", "red earth"}
+BANKP = {top="#4b4737", mid="#3c3729", low="#2d2a22"}
+local bw = noise{seed=91, period=180}
+local function under(dy, amp) return function(x) local b = 0; for i = 1, #BANK - 1 do if x >= BANK[i][1] and x < BANK[i+1][1] then local t = (x - BANK[i][1]) / (BANK[i+1][1] - BANK[i][1]); b = BANK[i][2] + t * (BANK[i+1][2] - BANK[i][2]) end end; return b + dy + amp * bw(x, dy) end end
+bankTop = function(x) return under(0, 0)(x) end
+local topBand = bankM * above(under(26, 8))
+local midBand = bankM * below(under(18, 8)) * above(under(80, 14))
+local lowBand = bankM * below(under(70, 14))
+local o = {hand="body", tool="filbert 6", length={25, 70}, coverage=2.6, medium=0.18, pal=bankpal, angle=function(x, y) return -0.02 + 0.04 * bw(x, y) end}
+local function pass(m, c, e) local t = {} for k, v in pairs(o) do t[k] = v end; t.color = c; t.edge = e; work(m, t) end
+pass(lowBand, BANKP.low, "soft")
+pass(midBand, BANKP.mid, "soft")
+pass(topBand, BANKP.top, {found=0.4, soft=0.6, period=40, seed=9})
+local t = timesheet(); print(t.sitting)
+
+--@ chunk 17 · clock 21788.34510953026
+blend(bankM:shrink(4), {angle=0, coverage=1.6, length={60, 180}})

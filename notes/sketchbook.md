@@ -48,8 +48,33 @@ they only prevent bad results.
     anything that must stay crisp and separate. *Ceiling:* nothing laid on
     dry paint ever blends into it: edges are only as soft as the brush's
     own mark, and objects painted this way read as cut out.
-  If you aren't sure where you are, `print(drying(x, y))` at the spot.
+  If you aren't sure where you are, `print(drying(x, y))` at the spot or
+  `look --mode wet`.
   [r6 wet; before: r3 near, r4 near, r4 green]
+- **Working in sittings (hand time) [r6 time].** *Principle:* a stroke costs the time a
+  hand takes to make it, and a painter works in sittings of a few hours with the paint
+  setting between them. Then what is wet when a passage meets its neighbor follows from
+  the work, not from a rule. `canvas{..., hand=true}`, `sitting{hours=3}`, `rest(16)`,
+  `timesheet()`, `look --mode wet` (`crates/easel/README.md`, notes/time.md). What
+  follows from it:
+  - In one sitting the paint under a later passage is still open and comes up into it.
+    Lay each passage only where it shows, a little (about 10 units) past where its
+    neighbor will meet it. A ridge painted to the bottom of the canvas and then a dark
+    knoll over it in the same sitting came out cobbled with churned-up light paint. Laid
+    only where it shows, the knoll stayed solid, with a soft shoulder against the ridge,
+    and the ridge took 42 minutes of hand time instead of 90
+    (`notes/time/example_three_ways.jpg`).
+  - The time of an edge decides its character: painted into open paint it is lost (a
+    hill's top drags the sky down), after lunch (`rest(4)`) it drags less, and the next
+    day (`rest(16)`) it is crisp like `dry()` (`notes/time/edge_timing.jpg`). Put the rest
+    where you want a found edge.
+  - Read the timesheet as the price of detail: the fir wood in `l5_near` is 53 hours of
+    hand time (211,000 hatched strokes), the whole sky 32 minutes.
+  - *Ceiling:* the times are estimates (Fitts and the steering law are sourced; the
+    palette trips, which are most of the time, are guesses), a pass ages in 15-minute
+    slices from the top down rather than along a painter's path, and how open paint
+    looks where two passages meet (a pale, streaky drag band) is still unresolved. When
+    to work wet, tacky or dry: the entry above.
 - **Fine lines only on dry paint.** Cracks drawn into open paint come out dashed like
   stitching [r3 near]. Stones painted 4 h after the grass came out green-streaked; a day's
   wait fixed it [r3 green].

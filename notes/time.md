@@ -70,14 +70,49 @@ print(string.format("%.0f min at the easel this sitting, %.0f%% of the canvas op
 - The reply after every chunk and `easel status` read:
   `clock 1175.6 min · sitting 2: 2.9 h of 3.0 h · hand time on · open 46% setting 0% tacky 54% dry <1%`.
 
-**A sitting that runs long is reported, not ended.** Once a sitting passes
-its hours, the chunk's reply says so, once for every hour over:
-`sitting 2: 3.8 h at the easel, 3.0 h planned; finish the passage while it
-is open, then rest(hours)`. An automatic rest would fall wherever the hand
-happened to be, say halfway through a sky, and silently put the second
-half on set paint. A painter finishes the passage while it is wet and then
-stops. So the painter chooses where the break goes, and the easel keeps
-the count honest.
+**A sitting that runs long ends (Round 7).** "Constraints are enforced,
+not reported" (notes/principles.md, against reward hacking, item 4):
+Evening at a Mountain Lake reported a 3 h sitting running 17.8 h and went
+on painting. Now, with hand time on, once a sitting's time (the clock
+since it began, with the hand time not yet clocked) reaches its hours, the
+easel refuses every verb that marks the canvas (strokes, touches and the
+motif verbs built on them, `work`, `blend`, `stipple`, `glaze`, pencil
+lines, `varnish`) with `the sitting is over after 3.0 h: rest(hours)
+first`. Queries (`timesheet`, `clock`, `drying`, `look`, `status`) still
+answer; `wait`, `dry` and `rest` still run, and a rest (`rest`, or a wait
+of 2 h or more) starts the next sitting. As any failing chunk, the
+refused chunk is rolled back whole, so plan chunks by the time left
+(`t.hours*60 - t.sitting` from `timesheet()`).
+
+- **The passage in hand finishes, uncapped.** The rule is checked when a
+  verb starts. A pass that begins inside the sitting runs to its end (the
+  passage is finished while it is open, as a painter would), and its
+  overrun is not cut. Strokes made one at a time stop at the next stroke,
+  so only a pass can overrun far. Cutting a pass short would leave half a
+  sky on the canvas and need the engine to stop mid-pass. The cost: a long
+  pass started late overruns by its length (Evening Lake's sitting 3,
+  replayed strict, stops in chunk 11 at 6.8 h of 3 h, after one pass).
+- **No way around it from Lua.** In a strict session `sitting{hours=}`
+  sets a sitting's length only before anything is painted in it (after
+  `canvas{}` or a rest), at most 8 h; mid-sitting it is refused (it used to
+  start a new sitting on the spot, which would dodge the rest). And
+  `hand_time(false)` is refused once hand time is on. With hand time off
+  there is no clock and no sitting to enforce.
+- **Only new logs.** Every existing log must replay unchanged, overruns
+  and all, so strictness is a property of the session, not of a Lua
+  option a painter could leave out: `easel open` on a new name starts a
+  strict session, and its log carries a header line the easel writes,
+  `-- sittings enforced: a sitting ends at its length; ...`
+  (`session::STRICT`). `easel run`, a resumed `easel open`, `check` and the
+  `look --scale` crop sessions read it from the header. A log without it
+  (every log from before) replays with overruns only reported, as it was
+  painted: Evening Lake at 160 px replays byte-identically, its printout
+  too, and so does `crates/easel/tests/logs/overran.lua` (a golden hash).
+  A log edited to add the line is held to it on replay (a test).
+
+The overrun note stays (`sitting 2: 3.8 h at the easel, 3.0 h planned;
+finish the passage while it is open, then rest(hours)`). In a strict
+session it now means that the pass that just ended was the last one.
 
 ```sh
 easel look --mode wet            # open (blue), setting (green), tacky (orange), dry (gray)
@@ -393,8 +428,10 @@ two target directories renders l3_green at 1000 px one pixel apart, by
   new pile, which the sitting's palette carries on. Its clock can differ
   from the whole canvas's by those (a probe in the thermos review: 76.003
   vs 76.013 min for a sky), and its drying by a little.
-- **Hand time never rests on its own.** A painting that turns it on and
-  never rests reports the overrun and goes on (by design, see above).
+- **Hand time never rests on its own.** A strict session refuses marks
+  until the painter rests; an old log that never rests reports the
+  overrun and goes on (see above). A pass started near the end of a
+  sitting still runs over by its whole length (not capped).
 - **The wet-on-wet look is not mine.** How open paint behaves at a contour
   (the pale drag band) belongs to the r6-wet stream, which also decides
   whether the sketchbook's `dry()` rule goes.

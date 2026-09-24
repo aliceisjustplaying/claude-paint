@@ -16,8 +16,10 @@
 //!
 //! A painter works in sittings of a few hours and rests between them:
 //! `sitting{hours=3}` starts one, `rest(hours)` steps away while the paint
-//! sets. A sitting that runs over its hours is reported, not cut short (see
-//! `note_overrun`).
+//! sets. In a session that holds its sittings (every new one: `Studio::
+//! strict`), a sitting that has run its hours is over: the easel refuses
+//! marks until a rest (`at_easel`). In a log from before, an overrun is only
+//! reported (`note_overrun`), so it replays as it was painted.
 
 use crate::api::{S, Studio, err, num, span};
 use mlua::{Lua, Result, Table, Value};
@@ -38,6 +40,8 @@ pub const SITTING_HOURS: f64 = 3.0;
 pub const REST_MIN: f64 = 120.0;
 /// `rest()` without hours: overnight [E].
 pub const OVERNIGHT_H: f64 = 16.0;
+/// The longest sitting a strict session can plan (hours): a working day.
+pub const MAX_SITTING_H: f64 = 8.0;
 
 /// The hand's clock: part of the studio, snapshotted with it (undo).
 #[derive(Clone, Debug)]
@@ -114,6 +118,9 @@ pub enum Rest {
 /// (`Verb`). With hand time off no hand time is put on the clock, but jumps
 /// are still reported and rests still start sittings.
 pub fn verb<R>(st: &S, kind: Verb, f: impl FnOnce(&mut Studio) -> Result<R>) -> Result<R> {
+    if matches!(kind, Verb::Marks | Verb::Pass) {
+        at_easel(st)?;
+    }
     if matches!(kind, Verb::Query | Verb::Jump { .. }) {
         flush(st, true);
     }
@@ -176,13 +183,48 @@ pub(crate) fn flush(st: &S, force: bool) {
     }
 }
 
+/// A mark may start: in a strict session with hand time on, not once this
+/// sitting's time (the clock since it began, with the hand time owed) has
+/// reached its length. Every marking verb asks before it starts (strokes
+/// and touches, so the motif verbs built on them; covering passes, pencil
+/// lines, glazes, the varnish); queries, waits and rests don't. A verb
+/// already started finishes, its overrun not cut short: the passage in hand
+/// is finished while it is open (a pass that crosses the line runs to its
+/// end; strokes one at a time stop at the next stroke). The time left is
+/// the painter's to plan (`timesheet`).
+pub fn at_easel(st: &S) -> Result<()> {
+    let s = st.borrow();
+    match over(&s) {
+        Some(msg) => err(msg),
+        None => Ok(()),
+    }
+}
+
+/// Why no mark may start now (see `at_easel`), or None.
+fn over(s: &Studio) -> Option<String> {
+    let c = s.canvas.as_ref()?;
+    if !s.strict || c.hand_time().is_none() {
+        return None;
+    }
+    let spent = s.clock + c.hand_owed_secs() / 60.0 - s.hand.start;
+    (spent >= s.hand.hours * 60.0).then(|| {
+        format!(
+            "the sitting is over after {}: rest(hours) first (sitting {}: {} at the easel; queries still answer)",
+            span(s.hand.hours * 60.0),
+            s.hand.sittings,
+            span(spent)
+        )
+    })
+}
+
 /// Hand time on or off.
 pub fn set(c: &mut paint::Canvas, on: bool) {
     c.set_hand_time(on.then_some(SLICE_MIN));
 }
 
-/// A sitting that runs over its hours is reported once per hour over, not
-/// ended: an automatic rest would fall wherever the hand happened to be
+/// A sitting that runs over its hours is reported once per hour over (in a
+/// strict session the easel then refuses marks: `at_easel`), not ended by
+/// an automatic rest: one would fall wherever the hand happened to be
 /// (halfway through a sky), when a painter finishes the passage while it is
 /// wet and then stops. The painter decides where the break goes (`rest`).
 fn note_overrun(s: &mut Studio) {
@@ -243,6 +285,9 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
                     return err("no canvas yet: canvas{..., hand=true} or hand_time(true) after it");
                 };
                 let was = c.hand_time().is_some();
+                if s.strict && was && on == Some(false) {
+                    return err("hand_time(false): this session holds its sittings, and hand time stays on once on; to stop, rest(hours) first");
+                }
                 set(c, on.unwrap_or(true));
                 Ok(was)
             })
@@ -273,6 +318,28 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
                     return err("no canvas yet");
                 }
                 let now = s.clock;
+                // holding its sittings, a session sets a sitting's length
+                // before anything is painted in it; only a rest ends one
+                if s.strict {
+                    if let Some(msg) = over(s) {
+                        return err(format!("sitting: {msg}"));
+                    }
+                    if now - s.hand.start > 1e-9 || s.canvas.as_ref().is_some_and(|c| c.hand_owed_secs() > 0.0) {
+                        return err(format!(
+                            "sitting: sitting {} is under way ({} of {}); its length is set at its start: rest(hours) first",
+                            s.hand.sittings,
+                            span(now - s.hand.start),
+                            span(s.hand.hours * 60.0)
+                        ));
+                    }
+                    if let Some(h) = hours {
+                        if h > MAX_SITTING_H {
+                            return err(format!("sitting: at most {MAX_SITTING_H} hours at the easel"));
+                        }
+                        s.hand.hours = h;
+                    }
+                    return Ok(now);
+                }
                 // the first sitting is under way from canvas{}: starting it
                 // again before anything was painted just sets its hours
                 if !(s.hand.sittings == 1 && now - s.hand.start < 1e-9) {
@@ -515,6 +582,50 @@ mod tests {
                 local t = timesheet(); assert(t.piles == 1, t.piles .. " piles")"##,
         );
         run(&mut s, r##"rest(3); b:load("#8090a0", 0.9); local t = timesheet(); assert(t.piles == 2, t.piles .. " piles")"##);
+    }
+
+    /// A strict session (every new log: notes/time.md, "Enforced
+    /// sittings"): once a sitting's time reaches its length the easel
+    /// refuses marks until a rest, while queries go on answering. The pass
+    /// that crossed the line finishes.
+    #[test]
+    fn a_strict_sitting_refuses_marks_after_its_length_until_a_rest() {
+        let mut s = Session::new(W, 2).unwrap();
+        s.set_strict(true);
+        run(&mut s, r##"canvas{style="friedrich", aspect=1.5, seed=2, hand=true}; sitting{hours=0.05}
+                        b = brush("round", 3); b:load("#303830", 0.9); p = pencil("3B")"##);
+        // the pass under way when the time runs out finishes
+        run(&mut s, r##"work(rect(100, 100, 400, 300), {hand="body", color="#8090a0"})"##);
+        assert!(clock(&s) > 3.0, "the pass ran past the sitting: {}", clock(&s));
+        let bits = |s: &Session| s.canvas().unwrap().seen().iter().flat_map(|p| p.map(f32::to_bits)).collect::<Vec<_>>();
+        let before = (bits(&s), clock(&s));
+        for mark in [
+            r##"b:stroke({{100, 500}, {400, 500}})"##,
+            "b:touch(300, 300)",
+            r##"work(rect(500, 100, 100, 100), {hand="body", color="#8090a0"})"##,
+            r##"blend(rect(100, 100, 200, 100))"##,
+            r##"stipple(rect(0, 380, 1000, 120), {width=3, color="#cfccc2", coverage=1})"##,
+            r##"glaze(rect(100, 100, 200, 100), {color="#8a5a2a", coats=0.2})"##,
+            "p:line({{100, 600}, {600, 610}})",
+            "varnish()",
+        ] {
+            let e = s.run(mark).map(|r| r.out).expect_err(mark);
+            assert!(e.contains("the sitting is over after 3 min: rest(hours) first"), "{mark}: {e}");
+        }
+        // nor can the sitting be renamed or the clock turned off to go on
+        for dodge in ["sitting{hours=2}", "hand_time(false)"] {
+            let e = s.run(dodge).map(|r| r.out).expect_err(dodge);
+            assert!(e.contains("rest(hours) first"), "{dodge}: {e}");
+        }
+        assert_eq!((bits(&s), clock(&s)), before, "nothing refused touched the canvas or the clock");
+        // queries still answer
+        run(&mut s, "local t = timesheet(); assert(t.sittings == 1 and t.sitting > t.hours * 60); clock(); drying(200, 200)");
+        assert!(s.status().contains("sitting 1:"));
+        // a rest ends the sitting: marks again, and the new sitting's length
+        // can be set before anything is painted in it
+        run(&mut s, r##"rest(2); sitting{hours=1}; b:stroke({{100, 500}, {400, 500}})
+                        local t = timesheet(); assert(t.sittings == 2 and t.hours == 1, t.sittings)"##);
+        assert_ne!(bits(&s), before.0);
     }
 
     #[test]

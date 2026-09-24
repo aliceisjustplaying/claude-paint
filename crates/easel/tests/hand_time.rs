@@ -92,3 +92,53 @@ fn hand_time_is_the_same_at_any_thread_count() {
     assert!(sky > 15.0, "a sky takes more than one slice: {sky} min");
     assert!(lines(&o1)[1].contains("sitting 2"), "{o1}");
 }
+
+/// A log from before sittings were enforced replays byte for byte as it did
+/// then, overrun and all: tests/logs/overran.lua (hand time on, a 12-minute
+/// sitting that runs 20 min, a second one that runs 3.8 h) was recorded
+/// with the easel of commit 82fd8fb (release, 160px): its PNG hash and its
+/// printout.
+#[test]
+fn an_old_overrunning_log_replays_unchanged() {
+    let (out, png) = replay(&root().join("crates/easel/tests/logs/overran.lua"), 160, None, "overran");
+    assert_eq!(fnv(&png), 0x62d2_46cf_91df_21e9, "tests/logs/overran.lua at 160px changed");
+    assert_eq!(
+        out,
+        "sitting 1: 20 min at the easel, 12 min planned; finish the passage while it is open, then rest(hours)
+sky: sitting 1 0.337 of 0.200 h
+sitting 2: 3.8 h at the easel, 30 min planned; finish the passage while it is open, then rest(hours)
+clock 247.7596 sitting 2 226.4621 of 0.500 h
+clock 368.2098 sittings 3
+"
+    );
+}
+
+/// The same log marked as a new one (the header line the easel writes for
+/// every new session) is held to its sittings on replay: its third chunk
+/// strokes after the first sitting ran out, and is refused.
+#[test]
+fn a_strict_log_is_held_to_its_sittings_on_replay() {
+    let old = std::fs::read_to_string(root().join("crates/easel/tests/logs/overran.lua")).unwrap();
+    let src = dir().join("overran_strict.lua");
+    std::fs::write(&src, old.replacen("\n\n--@ chunk 1", &format!("\n{}\n\n--@ chunk 1", STRICT), 1)).unwrap();
+    let out = Command::new(env!("CARGO_BIN_EXE_easel")).args(["run", src.to_str().unwrap(), "--width", "160", "--out", dir().join("strict.png").to_str().unwrap()]).output().unwrap();
+    let err = String::from_utf8_lossy(&out.stderr);
+    assert!(!out.status.success() && err.contains("chunk 3 failed") && err.contains("the sitting is over after 12 min: rest(hours) first"), "{err}");
+}
+
+const STRICT: &str = "-- sittings enforced: a sitting ends at its length; the easel refuses marks until rest(hours) (notes/time.md)";
+
+/// A strict log that rests when its sittings end paints the same picture
+/// at any thread count, and at every replay.
+#[test]
+fn a_strict_log_is_deterministic() {
+    let src = dir().join("strict.lua");
+    let prog = PROGRAM.replace("hand=true}", "hand=true}; sitting{hours=1.5}").replace("rest(3)", "rest(3); sitting{hours=6}");
+    std::fs::write(&src, format!("{STRICT}\n{prog}")).unwrap();
+    let (o1, p1) = replay(&src, 200, Some(1), "strict-1");
+    let (o4, p4) = replay(&src, 200, Some(4), "strict-4");
+    let (o4b, p4b) = replay(&src, 200, Some(4), "strict-4b");
+    assert!(o1 == o4 && o4 == o4b, "{o1}\n{o4}");
+    assert!(p1 == p4 && p4 == p4b, "the pictures differ between replays");
+    assert!(o1.contains("sitting 2"), "{o1}");
+}

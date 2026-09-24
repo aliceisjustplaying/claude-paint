@@ -1384,17 +1384,19 @@ impl Tree {
     pub fn wood_strokes(&self, lo: f32, hi: f32, detail: f32) -> Vec<WoodStroke> {
         let on = self.drawn(detail);
         let n = self.limbs.len();
+        let band = |w: f32| w >= lo && w < hi;
+        // a leading twig is drawn on in its limb's stroke when both are in
+        // this band (a brush for stouter wood can't lay a twig's hairline)
         let mut lead_of = vec![None; n];
         for (i, l) in self.limbs.iter().enumerate() {
-            if l.lead && on[i] && l.pts.len() >= 2 {
+            if l.lead && on[i] && l.pts.len() >= 2 && l.w.iter().all(|w| band(*w)) {
                 if let Some(p) = l.parent {
-                    if on[p] {
+                    if on[p] && self.limbs[p].w.last().is_some_and(|w| band(*w)) {
                         lead_of[p] = Some(i);
                     }
                 }
             }
         }
-        let band = |w: f32| w >= lo && w < hi;
         let mut out = vec![];
         for (i, l) in self.limbs.iter().enumerate() {
             let m = l.pts.len();
@@ -1415,6 +1417,19 @@ impl Tree {
                 let b = if k < m { k + 1 } else { m };
                 let mut pts = l.pts[a..b].to_vec();
                 let mut w = l.w[a..b].to_vec();
+                // a limb is pulled out of its parent: its stroke starts half a
+                // segment back along the parent, at its own width, so the
+                // brush is down on painted wood before the fork
+                if a == 0 {
+                    if let Some(p) = l.parent {
+                        let pp = &self.limbs[p].pts;
+                        if let Some(j) = pp.iter().position(|q| *q == l.pts[0]).filter(|&j| j > 0) {
+                            let (q, r) = (pp[j - 1], pp[j]);
+                            pts.insert(0, (0.5 * (q.0 + r.0), 0.5 * (q.1 + r.1)));
+                            w.insert(0, l.w[0]);
+                        }
+                    }
+                }
                 let tip = k >= m;
                 let own = pts.len();
                 if tip {

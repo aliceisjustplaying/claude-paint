@@ -45,7 +45,11 @@ Read all three before you start.
    background session, or reattaches if it's already running. If
    `paintings/lua/<name>.lua` exists, the session replays it first, so you
    can close, come back and go on painting. Other commands use the session you
-   opened last (or `-s <name>`, or `EASEL_SESSION`).
+   opened last in this checkout (or `-s <name>`, or `EASEL_SESSION`). The
+   checkout is the nearest directory at or above where you run `easel` that
+   holds `crates/easel` (or `EASEL_ROOT`): logs go to its `paintings/lua`,
+   renders to its `out/`, so git worktrees stay apart. With several painters
+   on one machine, still name your session (`-s <name>`).
 2. **Paint a chunk.** `easel do '<lua>'`, `easel do -f chunk.lua` or
    `easel do -` (stdin). The reply is whatever the chunk `print`ed, then
    `ok · chunk N · seconds · clock · wet/dry`. Add `--look` to also get a

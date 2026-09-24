@@ -70,6 +70,14 @@ Every chunk is in `paintings/lua/frozen_pond.lua`; the numbers below are its chu
     veil toward the edges (Friedrich's advice to Carus, materials §6); one long
     drift trough glazed across the foreground; two half-buried stones.
 13. **Finish** (24): varnish, craquelure, relief.
+14. **Refining after the first full render** (edits in place): at 3200 the
+    stones read as pies on white plates (the snow stroke under them), so their
+    feet were buried in snow sampled from below instead; the footprints had
+    faded under the thinned hollow glaze, so each print got its own small
+    glaze; the value view showed the near snow almost as light as the horizon
+    glow, so the evening glaze went from 0.32 to 0.5 coats and the edge veil
+    from 0.3 to 0.4. The foot scoops were blurred and thinned (they read as
+    plinths), and the drifted snow lines on the ice were loaded leaner.
 
 ## FRICTION
 
@@ -111,6 +119,15 @@ Every chunk is in `paintings/lua/frozen_pond.lua`; the numbers below are its chu
    lay-in, the snow): the broad and body hands at 1000px give rounded
    blob-shaped strokes; there's no hand that lays a long flat, even
    horizontal the way a wide soft brush drags across a panel.
-9. **Without `world`/`sky`, there's no scaffold for light**, but that turned
+9. **Glaze is the only darkening that behaves.** Every shadow in the picture
+   (hollows, drift trough, prints, evening, polished ice) ended up a glaze over
+   dry paint, because stroked darkening either overran small shapes (3) or went
+   the wrong way (4). Glazes need a dry canvas, so each one costs a `dry()` and
+   days on the clock, which is right, but it means a shadow can't be modeled
+   wet-into-wet with the thing that casts it.
+10. **First 3200 look costs a full replay** (84 s at chunk 22, on a shared
+    machine), then 19 s per look after edits: fine for checking, too slow to
+    paint small things by eye at the real grain.
+11. **Without `world`/`sky`, there's no scaffold for light**, but that turned
    out fine for this picture: a gradient function and my own palette choices
    did the sky, and contre-jour needs few decisions.

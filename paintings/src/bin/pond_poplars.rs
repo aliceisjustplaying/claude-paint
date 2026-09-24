@@ -406,7 +406,7 @@ fn main() {
     // ------------------------------------------------------------ poplars
     if o.stage("poplars", &mut c, &mut rng) {
         for p in trees.iter() {
-            poplar(&mut c, &st, p, &sky_col, &mut rng);
+            poplar(&mut c, &st, p, &mut rng);
         }
         c.dry();
     }
@@ -558,7 +558,10 @@ fn main() {
     }
 
     if o.stage("reeds", &mut c, &mut rng) {
-        reeds(&mut c, pal, &shore, h, &water_col, &mut rng);
+        // the reeds from their own seed, so what comes before does not
+        // reshuffle them
+        let mut rr = Rng::new(std::env::var("REED_SEED").ok().and_then(|v| v.parse().ok()).unwrap_or(23));
+        reeds(&mut c, pal, &shore, h, &water_col, &mut rr);
         c.dry();
     }
 
@@ -666,7 +669,7 @@ impl Poplar {
 /// (dead color) so the sprays have a dark under them; then the sprays, from
 /// three dark piles; a little cool light on the flank toward the open sky,
 /// a warmer rim where the glow behind catches the right edge; the trunk.
-fn poplar(c: &mut paint::Canvas, st: &Style, p: &Poplar, sky_col: &(impl Fn(f32, f32) -> Rgb + Sync), rng: &mut Rng) {
+fn poplar(c: &mut paint::Canvas, st: &Style, p: &Poplar, rng: &mut Rng) {
     let pal = &st.palette;
     let f = c.frame();
     let piles = [pal.mix(hex("#161915")).paint(0.2), pal.mix(hex("#1c201b")).paint(0.2), pal.mix(hex("#252820")).paint(0.22)];
@@ -686,10 +689,10 @@ fn poplar(c: &mut paint::Canvas, st: &Style, p: &Poplar, sky_col: &(impl Fn(f32,
     let cn = Fbm::new(p.seed + 50, 3, 30.0);
     let core = Mask::from_fn(f, move |x, y| {
         let t = t_of(y);
-        if t < Poplar::CB + 0.02 || t > t1 - 0.04 {
+        if t < Poplar::CB + 0.02 || t > t1 - 0.12 {
             return 0.0;
         }
-        let k = (0.72 + 0.14 * cn.get(x, y)) * smoothstep(Poplar::CB, Poplar::CB + 0.035, t).sqrt();
+        let k = (0.72 + 0.14 * cn.get(x, y)) * smoothstep(Poplar::CB, Poplar::CB + 0.035, t).sqrt() * (1.0 - 0.6 * smoothstep(0.55, 0.9, t / t1));
         let (l, r) = (p.axis(t) - p.half(t, -1.0) * k, p.axis(t) + p.half(t, 1.0) * k);
         smoothstep(l - 1.0, l + 1.0, x) * (1.0 - smoothstep(r - 1.0, r + 1.0, x))
     });
@@ -779,14 +782,16 @@ fn poplar(c: &mut paint::Canvas, st: &Style, p: &Poplar, sky_col: &(impl Fn(f32,
         // the broken top: a dead leader standing out of the crown, gray
         // against the glow, a snapped end and two dead side shoots
         let dead = pal.mix(hex("#403c39")).paint(0.2);
-        let mut lb = Held::new(Tool::round_sable((bw * 0.9).max(1.2)), rng.next_u64());
+        let mut lb = Held::new(Tool::round_sable((bw * 0.6).max(0.9)), rng.next_u64());
         lb.load(dead, 0.8);
         let base = (p.axis(t1 - 0.12), p.y(t1 - 0.12));
         let topp = (p.axis(t1) + 3.0, p.y(t1 + 0.1));
         let mid = ((base.0 + topp.0) * 0.5 - 1.0, (base.1 + topp.1) * 0.5);
-        c.drag(&mut lb, &Gesture::new(vec![base, mid, topp]).pressure(0.9, 0.5).ramps(0.0, 0.1).shake(0.6), None);
+        c.drag(&mut lb, &Gesture::new(vec![base, mid, topp]).pressure(0.85, 0.3).ramps(0.0, 0.5).shake(0.6), None);
         lb.reload(dead, 0.5);
-        c.drag(&mut lb, &Gesture::new(vec![topp, (topp.0 + 3.5, topp.1 + 2.0)]).pressure(0.6, 0.4).ramps(0.0, 0.3), None);
+        let mut sp = Held::new(Tool::round_sable(0.6), rng.next_u64());
+        sp.load(dead, 0.5);
+        c.drag(&mut sp, &Gesture::new(vec![(topp.0 - 0.3, topp.1 + 1.5), (topp.0 + 2.5, topp.1 + 0.5), (topp.0 + 4.0, topp.1 + 2.2)]).pressure(0.6, 0.05).ramps(0.0, 0.6), None);
         let mut tw = Held::new(Tool::round_sable(0.7), rng.next_u64());
         for (u, side, l) in [(0.45f32, -1.0f32, 11.0f32), (0.7, 1.0, 7.0)] {
             let b0 = (base.0 + (topp.0 - base.0) * u, base.1 + (topp.1 - base.1) * u);
@@ -821,22 +826,6 @@ fn poplar(c: &mut paint::Canvas, st: &Style, p: &Poplar, sky_col: &(impl Fn(f32,
             }
             c.drag(&mut lb, &Gesture::new(vec![(x0, y0), (x0 + len * a.cos(), y0 + len * a.sin())]).pressure(rng.range(0.3, 0.55), 0.08).ramps(0.1, 0.6), None);
         }
-    }
-    // a few sky holes where two branches' sprays don't meet
-    let mut hb = Held::new(Tool::round_sable(bw * 0.55), rng.next_u64());
-    for _ in 0..(p.ht / 28.0) as usize {
-        let t = rng.range(0.3, t1 - 0.1);
-        let s = if rng.f() < 0.5 { -1.0 } else { 1.0 };
-        let hw = p.half(t, s);
-        if hw < 6.0 {
-            continue;
-        }
-        let x0 = p.axis(t) + s * hw * rng.range(0.6, 0.8);
-        let y0 = p.y(t);
-        let col = mix(sky_col(x0, y0), hex("#3a3c38"), 0.3, Mix::Pigment);
-        hb.load(pal.mix(col).paint(0.3).with_hiding(0.85), 0.3);
-        let a = -FRAC_PI_2 + s * 0.45;
-        c.drag(&mut hb, &Gesture::new(vec![(x0, y0), (x0 + 1.6 * a.cos(), y0 + 1.6 * a.sin())]).pressure(0.55, 0.35).ramps(0.1, 0.4), None);
     }
 
     // the trunk below the crown: a little flare, a lean light on the left
@@ -946,8 +935,8 @@ fn reeds(c: &mut paint::Canvas, pal: &Palette, shore: &(impl Fn(f32) -> f32 + Sy
     let lean_n = Fbm::new(91, 2, 300.0);
     // clump centers: many at the corners, a few scattered, none on the axis
     let mut clumps: Vec<(f32, f32)> = Vec::new();
-    for _ in 0..52 {
-        let side = if rng.f() < 0.5 { -1.0 } else { 1.0 };
+    for i in 0..52 {
+        let side = if i % 2 == 0 { -1.0 } else { 1.0 };
         let u = rng.f().powf(1.6);
         let x = 500.0 + side * (500.0 - 460.0 * u) + rng.normal() * 10.0;
         if (x - 500.0).abs() < 90.0 {

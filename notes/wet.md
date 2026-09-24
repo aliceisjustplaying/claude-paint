@@ -661,3 +661,188 @@ lights and the wood are as they were. Stacked pass 3 / fix:
 **Checkpoint format.** Merged with main's hand-time checkpoint
 (`PAINTCK7`, r6-time's review fix): the surface film is now `PAINTCK8`,
 appended after the hand-time block; older files are refused.
+
+## 8. Wet control experiment (the owner's decision: r6-wet stays unmerged; run the experiment)
+
+Main was merged first (relief default 0.06, r6-oak, r6-time's review
+fixes). The film format stays `PAINTCK8`. The replay hashes are
+re-recorded for the combination.
+
+### The lift-off
+
+`bristle::lift_off`, applied over a stroke's release ramp (the last
+`ramps.1` of it, where the pressure falls):
+- a **flat** rolls onto its chisel edge (its wide axis turns toward the
+  travel);
+- a **round** draws in to its point (blunt rounds; pointed ones already
+  do);
+- a **filbert** does half of each;
+- the trailing hairs drag longer as the handle rises (`LIFT_DRAG`).
+
+It is geometry and pressure, not a fade. **It is the default**, because
+it is how a brush that lifts off moves, and it is tied to the release
+ramp the handlings already have. A painter who wants a square, stamped
+end sets the release to 0 (`ramps={a, 0}`): pressing to the end and
+lifting straight off.
+
+### The controlled study
+
+`paintings/src/bin/study_wet_control.rs`, built unchanged on three
+engines:
+- **main** at `dc79ebb` (a worktree in scratch);
+- **r6-wet as it was** (this branch without the lift-off);
+- **r6-wet + lift-off**.
+
+Rows:
+- **A.** A loaded stiff light accent (a filbert touch and a short stroke)
+  into a dark.
+- **B.** A hog flat with the light dragged along a light/dark contour.
+- **C.** A flat's light stroke ending in a dark.
+- **D.** A glaze-hand veil over a thin sky.
+
+Columns: stage (o open, s setting, t tacky, d dry) × load (F 0.9, L 0.3)
+× pressure (l 0.45, p 0.9). The metrics:
+- retained light: 1 is the light's own paint;
+- exposed ground: % of the track within ΔE 0.06 of the ground;
+- edge or end width: 10–90%, mm on the 440 mm canvas.
+
+Rows with no exposed ground anywhere are left out below. Row A, B and C
+never showed ground on any engine.
+
+### main, 1000 px
+```
+                                   oFl oFp oLl oLp sFl sFp sLl sLp tFl tFp tLl tLp dFl dFp dLl dLp
+A accent: retained light           0.62 0.65 0.49 0.52 0.68 0.58 0.52 0.43 0.99 0.99 0.78 0.92 0.84 0.96 0.53 0.75
+B contour: edge 10-90% mm          0.88 0.88 3.96 5.28 1.32 1.32 3.96 4.84 0.44 0.44 0.44 0.88 0.44 0.44 0.44 0.44
+C flat end: end 10-90% mm          1.76 1.32 3.96 3.52 3.08 2.20 4.40 9.24 0.44 0.88 0.44 0.88 0.44 0.88 0.88 0.88
+C flat end: retained light         0.95 0.94 0.83 0.83 0.88 0.83 0.80 0.82 0.98 0.98 0.83 0.84 0.94 0.93 0.90 0.72
+D glaze veil: ground %               17   13   41   36    1    0   12    6    0    0    0    0    0    0    0    0
+```
+### main, 3200 px
+```
+                                   oFl oFp oLl oLp sFl sFp sLl sLp tFl tFp tLl tLp dFl dFp dLl dLp
+A accent: retained light           0.51 0.56 0.47 0.38 0.63 0.46 0.37 0.39 1.00 1.00 0.95 0.98 0.96 0.99 0.80 0.90
+B contour: edge 10-90% mm          0.41 2.47 1.10 2.47 0.55 2.47 1.92 2.34 0.14 0.14 0.14 0.28 0.14 0.14 0.14 0.14
+C flat end: end 10-90% mm          1.92 0.82 3.03 0.69 1.51 2.06 2.20 7.56 0.28 0.28 0.28 0.28 0.28 0.28 0.14 0.28
+C flat end: retained light         0.79 0.77 0.81 0.34 0.76 0.73 0.42 0.75 1.00 1.00 1.00 1.00 1.00 1.00 0.99 0.99
+D glaze veil: ground %                0    0    6    1    0    0    0    0    0    0    0    0    0    0    0    0
+```
+### wet, 1000 px
+```
+                                   oFl oFp oLl oLp sFl sFp sLl sLp tFl tFp tLl tLp dFl dFp dLl dLp
+A accent: retained light           0.82 0.94 0.53 0.65 0.99 0.96 0.74 0.70 0.99 1.00 0.83 0.96 0.89 0.98 0.60 0.87
+B contour: edge 10-90% mm          0.44 0.44 1.32 1.32 0.88 0.44 1.32 1.76 0.44 0.44 0.44 0.44 0.44 0.44 0.44 0.44
+C flat end: end 10-90% mm          1.76 0.88 3.08 4.84 1.76 1.32 3.96 4.84 0.44 0.88 0.44 0.88 0.44 0.88 0.88 0.44
+C flat end: retained light         0.99 0.98 0.94 0.85 0.99 0.99 0.90 0.99 1.00 0.99 0.96 0.95 0.98 0.98 0.95 0.92
+```
+### wet, 3200 px
+```
+                                   oFl oFp oLl oLp sFl sFp sLl sLp tFl tFp tLl tLp dFl dFp dLl dLp
+A accent: retained light           0.70 0.91 0.41 0.48 0.98 0.89 0.73 0.63 1.00 1.00 0.96 0.98 0.97 0.99 0.81 0.91
+B contour: edge 10-90% mm          0.28 0.28 1.92 2.34 0.28 0.28 1.79 1.92 0.14 0.14 0.14 0.28 0.14 0.28 0.28 0.14
+C flat end: end 10-90% mm          3.30 1.38 4.68 7.15 3.71 2.89 3.44 6.46 0.28 0.28 0.28 0.14 0.28 0.28 0.28 0.28
+C flat end: retained light         0.98 0.91 0.75 0.56 0.99 0.93 0.79 1.00 1.00 1.00 1.00 1.00 1.00 1.00 1.00 0.99
+```
+### lift, 1000 px
+```
+                                   oFl oFp oLl oLp sFl sFp sLl sLp tFl tFp tLl tLp dFl dFp dLl dLp
+A accent: retained light           0.82 0.95 0.52 0.65 0.99 0.97 0.76 0.71 0.99 1.00 0.86 0.96 0.91 0.98 0.52 0.88
+B contour: edge 10-90% mm          0.44 0.44 1.32 1.32 0.44 0.44 1.32 1.76 0.44 0.44 0.44 0.44 0.44 0.44 0.44 0.44
+C flat end: end 10-90% mm          2.20 1.76 3.96 4.40 2.20 1.76 2.20 4.84 1.32 1.32 1.32 1.32 0.88 1.32 0.88 1.32
+C flat end: retained light         0.99 0.98 0.93 0.85 0.99 0.98 0.90 1.00 1.00 0.99 0.96 0.95 0.98 0.98 0.96 0.92
+```
+### lift, 3200 px
+```
+                                   oFl oFp oLl oLp sFl sFp sLl sLp tFl tFp tLl tLp dFl dFp dLl dLp
+A accent: retained light           0.70 0.91 0.40 0.48 0.98 0.89 0.72 0.64 1.00 1.00 0.96 0.98 0.97 0.99 0.86 0.90
+B contour: edge 10-90% mm          0.28 0.28 1.92 2.34 0.28 0.28 1.65 1.92 0.14 0.14 0.14 0.28 0.14 0.28 0.28 0.14
+C flat end: end 10-90% mm          1.65 0.55 1.51 0.82 2.61 0.82 1.10 5.91 0.28 0.41 0.41 1.24 0.28 0.14 0.28 0.14
+C flat end: retained light         0.98 0.91 0.75 0.55 0.99 0.93 0.78 1.00 1.00 1.00 1.00 1.00 1.00 1.00 1.00 0.99
+```
+
+### What it shows
+
+- **Clean accents: pass.** A loaded stiff light into open paint keeps 0.82
+  (light) and 0.94 (firm) of its light at 1000 px, 0.70 and 0.91 at 3200 px.
+  Main keeps 0.62/0.65 and 0.51/0.56. Into setting paint: 0.99/0.96 against
+  main's 0.68/0.58. A lean accent integrates on every engine (0.4–0.75).
+- **Exposed ground: pass.** Main's glaze-hand veil over open sky shows the
+  ground in 13–41% of its track at 1000 px (0–6% at 3200). Both wet
+  engines show none, anywhere.
+- **Deliberately softened edges: partial pass.**
+  - On the wet engines the load controls it. A full flat dragged along a
+    wet contour keeps it crisp (0.44 mm at 1000 px, 0.28 at 3200); a lean
+    one softens it (1.3–1.8 mm, 1.7–2.3 at 3200).
+  - Main softens more (4–5 mm at 1000 px) and softens even a full load
+    (0.9–1.3 mm).
+  - So the wet engine softens only what the painter works lean. Its
+    softest deliberate edge is about a third of main's accidental one at
+    1000 px, and about the same at 3200 (2.3 against 2.5).
+- **The lift-off changes the shape of a stroke's end, not its softness.**
+  - A flat ending in wet paint now ends tapered to its chisel edge
+    instead of square (`owner_control_detail_open.jpg`, row C).
+  - Measured along the centerline, its 10–90% end is shorter at 3200 px
+    (open: 1.65/0.55 mm against 3.30/1.38 without it), because the end
+    narrows instead of fading.
+  - At 1000 px over tacky and dry paint the ends read a little longer
+    (1.3 mm against 0.4–0.9), for the same reason.
+
+### Repaints
+
+The logs were adapted, not replayed: each copy changes only the passage
+that relied on paint sinking, with the same number of chunks
+(`notes/wet/repaints/*_wet.lua`, each saying what changed):
+- **sky_B:** chunk 3 blends the cloud banks' edges into the open sky.
+- **water_B:** chunk 5 blends the reflections level more (coverage 3.5
+  for 2.0).
+- **rock_B:** chunk 3 blends the lit face into the setting shadow along
+  the terminator.
+- **l3_green:** chunk 11 lays the wood's lights lean and fewer (load 0.3,
+  coverage 1.6 for 2.2).
+
+Rendered on r6-wet + lift-off against main's own log on main (at
+`dc79ebb`). The sheets `notes/wet/owner_repaint_<S>.jpg` are labeled A
+and B only.
+
+**Key** (don't read before judging):
+- sky_B: A = r6-wet repaint, B = main
+- water_B: A = main, B = r6-wet repaint
+- rock_B: A = r6-wet repaint, B = main
+- l3_green: A = main, B = r6-wet repaint
+
+My own look, as a reading rather than a verdict:
+- **rock_B:** the adapted terminator is softer than the plain replay's
+  and closer to main's.
+- **sky_B:** the bank edges are softer, but main's banks still melt more
+  at the bellies.
+- **water_B:** the reflection's teeth under the spit remain; more
+  blending didn't remove them.
+- **l3_green:** the wood's lights are smaller and lower in contrast, but
+  still read as separate dots against main's merged texture.
+
+**The wins** (`liftoff_regression_foliage_C.jpg`,
+`liftoff_regression_l5_near.jpg`; main / r6-wet as it was / r6-wet +
+lift-off, 3200 px crops):
+- The lift-off leaves them nearly untouched: a mean difference of 0.6
+  (foliage_C) and 1.4 (l5_near) out of 255.
+- Main's r6-oak merge regrew foliage_C's crowns. On the new geometry main
+  and r6-wet differ little there (mean 1.6); l5_near still differs
+  clearly (8.1).
+
+### Recommendation
+
+- **Keep the two-layer film and don't merge it as the default yet.**
+  Accents and ground exposure pass clearly. Soft edges are controllable
+  but modest, and only the painter's lean or blended strokes make them.
+  Passages that main softened for free (cloud bellies, reflections, a
+  hedge's lights) need deliberate work on this engine and still don't
+  fully melt with one extra blend.
+- **The lift-off is a reasonable default for stroke shape**, but it
+  doesn't close the softness gap.
+- **The next thing to try** is a real softening mechanism for fluid paint:
+  the leveling of a wet stroke's thin end into the paint around it (the
+  Orchard leveling the physics notes describe, applied laterally at a
+  wet-into-wet stroke end), not more geometry.
+- **Or offer the engine as an opt-in** ("wet control" as a style or
+  canvas setting), so paintings that want main's melting keep it, as
+  the advice suggests: capability first, default later.

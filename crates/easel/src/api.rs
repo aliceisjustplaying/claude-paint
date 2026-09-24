@@ -13,6 +13,7 @@ use mlua::{Function, Lua, MetaMethod, Result, Table, UserData, UserDataMethods, 
 use paint::color::{Mix, luminance, mix, to_oklab};
 use paint::growth::Habit;
 use paint::{Canvas, Cracks, Fbm, Frame, Gesture, Handling, Held, Kind, Mask, Order, Orient, Palette, Pigment, Rgb, Rng, Shape, Stipple, Style, Tool, Touch, hex};
+use crate::time::{self, Rest, Verb};
 use std::cell::RefCell;
 use std::rc::{Rc, Weak};
 
@@ -435,13 +436,13 @@ impl UserData for Brush {
         m.add_method("load", |_, b, (c, amount, o): (Value, Option<f32>, Option<Table>)| {
             let paint = paint_for(&b.st, &c, o.as_ref(), (b.held.borrow().tool.width * 0.5).max(1.0))?;
             b.held.borrow_mut().load(paint, amount.unwrap_or(0.8));
-            crate::time::trip(&b.st, paint.color);
+            time::trip(&b.st, paint.color);
             Ok(())
         });
         m.add_method("reload", |_, b, (c, amount, o): (Value, Option<f32>, Option<Table>)| {
             let paint = paint_for(&b.st, &c, o.as_ref(), (b.held.borrow().tool.width * 0.5).max(1.0))?;
             b.held.borrow_mut().reload(paint, amount.unwrap_or(0.8));
-            crate::time::trip(&b.st, paint.color);
+            time::trip(&b.st, paint.color);
             Ok(())
         });
         m.add_method("wipe", |_, b, frac: Option<f32>| {
@@ -482,13 +483,10 @@ impl UserData for Brush {
                 }
                 clip = mask_opt(o.get("clip")?)?;
             }
-            {
-                let mut s = b.st.borrow_mut();
-                let c = s.canvas.as_mut().ok_or_else(no_canvas)?;
-                c.drag(&mut b.held.borrow_mut(), &g, clip.as_deref());
-            }
-            crate::time::flush(&b.st, false);
-            Ok(())
+            time::verb(&b.st, Verb::Marks, |s| {
+                s.canvas.as_mut().ok_or_else(no_canvas)?.drag(&mut b.held.borrow_mut(), &g, clip.as_deref());
+                Ok(())
+            })
         });
         // b:touch(x, y, {pressure=, drag={dx,dy}, twist=, angle=, clip=})
         m.add_method("touch", |_, b, (x, y, o): (f32, f32, Option<Table>)| {
@@ -510,13 +508,10 @@ impl UserData for Brush {
                 }
                 clip = mask_opt(o.get("clip")?)?;
             }
-            {
-                let mut s = b.st.borrow_mut();
-                let c = s.canvas.as_mut().ok_or_else(no_canvas)?;
-                c.touch(&mut b.held.borrow_mut(), &t, clip.as_deref());
-            }
-            crate::time::flush(&b.st, false);
-            Ok(())
+            time::verb(&b.st, Verb::Marks, |s| {
+                s.canvas.as_mut().ok_or_else(no_canvas)?.touch(&mut b.held.borrow_mut(), &t, clip.as_deref());
+                Ok(())
+            })
         });
         m.add_meta_method(MetaMethod::ToString, |_, b, ()| {
             let h = b.held.borrow();
@@ -992,9 +987,11 @@ fn work(st: &S, mask: Rc<Mask>, o: Table, preset: Option<&str>) -> Result<()> {
     }
     h.tool.validate().map_err(mlua::Error::runtime)?;
     let seed = seed_of(st, &o)?;
-    st.borrow_mut().canvas.as_mut().ok_or_else(no_canvas)?.work(&mask, &h, seed);
-    crate::time::flush(st, true);
-    Ok(())
+    // (dipping into the sitting's palette)
+    time::verb(st, Verb::Pass, |s| {
+        s.canvas.as_mut().ok_or_else(no_canvas)?.work_with(&mut s.hand.piles, &mask, &h, seed);
+        Ok(())
+    })
 }
 
 pub(crate) trait FromLuaValue: Sized {
@@ -1130,9 +1127,21 @@ fn stipple(st: &S, mask: Rc<Mask>, o: Table) -> Result<()> {
     }
     sp.tool.validate().map_err(mlua::Error::runtime)?;
     let seed = seed_of(st, &o)?;
-    st.borrow_mut().canvas.as_mut().ok_or_else(no_canvas)?.stipple(&mask, &sp, seed);
-    crate::time::flush(st, true);
-    Ok(())
+    time::verb(st, Verb::Pass, |s| {
+        s.canvas.as_mut().ok_or_else(no_canvas)?.stipple_with(&mut s.hand.piles, &mask, &sp, seed);
+        Ok(())
+    })
+}
+
+/// Brushing a glaze or a varnish over `m` (None: the whole canvas) is hand
+/// time, priced by its area (counted; on the clock with hand time on).
+fn brushed(c: &mut Canvas, m: Option<&Mask>) {
+    let f = c.frame();
+    let mm2 = match m {
+        Some(m) => m.data.iter().map(|&v| v as f64).sum::<f64>() / (m.f.scale as f64).powi(2),
+        None => (f.width() * f.height()) as f64,
+    } * (c.mm_per_unit() as f64).powi(2);
+    c.tally_mut().glaze(mm2);
 }
 
 fn pigment_of(kind: Option<&str>, c: Rgb) -> Result<Pigment> {
@@ -1426,8 +1435,8 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
                     // hand time (off unless asked): the clock counts from here
                     let on = o.get::<Option<bool>>("hand")?.unwrap_or(false);
                     let mut c = c;
-                    crate::time::set(&mut c, on);
-                    s.hand = crate::time::Hand { base: c.tally(), clocked: c.tally().clocked, ..Default::default() };
+                    time::set(&mut c, on);
+                    s.hand = time::Hand { base: c.tally(), ..Default::default() };
                     s.canvas = Some(c);
                     s.style = Some(Rc::new(sty));
                     let mut sz = num(&o, "size")?.map(|mm| format!(", size={mm}")).unwrap_or_default();
@@ -1635,31 +1644,14 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
             let pig = pigment_of(o.get::<Option<String>>("pigment")?.as_deref(), rgb_of(&o.get::<Value>("color")?)?)?;
             let b = support(m.as_deref(), f, 4.0);
             let th = scalar_field(&st1, &o.get::<Option<Value>>("coats")?.unwrap_or(Value::Number(0.5)), b, "coats")?;
-            crate::time::flush(&st1, true);
-            let waited = {
-                let mut s = st1.borrow_mut();
+            // a glaze goes over dry paint: the painter waits for what is
+            // under it to dry first, and that time passes on the clock
+            time::verb(&st1, Verb::Jump { rest: Rest::IfLong, note: Some(("glaze", "the paint under it")) }, |s| {
                 let c = s.canvas.as_mut().ok_or_else(no_canvas)?;
-                // a glaze goes over dry paint: the painter waits for what is
-                // under it to dry first, and that time passes on the clock
                 c.glaze(&pig, m.as_deref(), th);
-                // brushing it on is hand time (counted, on the clock only
-                // with hand time on)
-                let mm2 = match m.as_deref() {
-                    Some(m) => m.data.iter().map(|&v| v as f64).sum::<f64>() / (m.f.scale as f64).powi(2),
-                    None => (f.width() * f.height()) as f64,
-                } * (c.mm_per_unit() as f64).powi(2);
-                c.tally_mut().glaze(mm2);
-                let now = c.clock() - s.clock0;
-                let waited = now - s.clock;
-                if waited > 0.5 {
-                    let note = format!("glaze: waited {} for the paint under it to dry (clock {:.0} min)\n", span(waited), now);
-                    s.out.push_str(&note);
-                }
-                s.clock = now;
-                waited
-            };
-            crate::time::waited(&st1, waited);
-            crate::time::flush(&st1, true);
+                brushed(c, m.as_deref());
+                Ok(())
+            })?;
             Ok(st1.borrow().clock)
         })?)?;
     }
@@ -1668,15 +1660,12 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
     {
         let st1 = st.clone();
         g.set("dry", lua.create_function(move |_, ()| {
-            crate::time::flush(&st1, true);
-            let mut s = st1.borrow_mut();
-            let c = s.canvas.as_mut().ok_or_else(no_canvas)?;
-            c.dry();
-            let now = c.clock() - s.clock0;
-            s.clock = now;
             // waiting for everything to dry is a rest, however short
-            s.hand.begin_rested(now);
-            Ok(now)
+            time::verb(&st1, Verb::Jump { rest: Rest::IfPainted, note: None }, |s| {
+                s.canvas.as_mut().ok_or_else(no_canvas)?.dry();
+                Ok(())
+            })?;
+            Ok(st1.borrow().clock)
         })?)?;
         // wait(minutes): the paint ages where it lies (the engine's drying
         // model: open, setting, tacky, touch-dry by pigment, film and oil)
@@ -1685,36 +1674,26 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
             if minutes.is_nan() || minutes < 0.0 {
                 return err("wait(minutes): want >= 0");
             }
-            crate::time::flush(&st1, true);
-            let now = {
-                let mut s = st1.borrow_mut();
-                let c = s.canvas.as_mut().ok_or_else(no_canvas)?;
-                c.wait(minutes as f32);
-                let now = c.clock() - s.clock0;
-                s.clock = now;
-                now
-            };
-            crate::time::waited(&st1, minutes);
-            Ok(now)
+            time::verb(&st1, Verb::Jump { rest: Rest::Waited(minutes), note: None }, |s| {
+                s.canvas.as_mut().ok_or_else(no_canvas)?.wait(minutes as f32);
+                Ok(())
+            })?;
+            Ok(st1.borrow().clock)
         })?)?;
         // drying(x, y): "open", "setting", "tacky" or "dry"
         let st1 = st.clone();
         g.set("drying", lua.create_function(move |_, (x, y): (f32, f32)| {
-            crate::time::flush(&st1, true);
-            let s = st1.borrow();
-            let c = s.canvas.as_ref().ok_or_else(no_canvas)?;
-            Ok(match c.drying_at(x, y) {
-                paint::Stage::Open => "open",
-                paint::Stage::Setting => "setting",
-                paint::Stage::Tacky => "tacky",
-                paint::Stage::Dry => "dry",
+            time::verb(&st1, Verb::Query, |s| {
+                Ok(match s.canvas.as_ref().ok_or_else(no_canvas)?.drying_at(x, y) {
+                    paint::Stage::Open => "open",
+                    paint::Stage::Setting => "setting",
+                    paint::Stage::Tacky => "tacky",
+                    paint::Stage::Dry => "dry",
+                })
             })
         })?)?;
         let st1 = st.clone();
-        g.set("clock", lua.create_function(move |_, ()| {
-            crate::time::flush(&st1, true);
-            Ok(st1.borrow().clock)
-        })?)?;
+        g.set("clock", lua.create_function(move |_, ()| time::verb(&st1, Verb::Query, |s| Ok(s.clock)))?)?;
     }
 
     // finishing
@@ -1732,17 +1711,19 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
                     (col, num(o, "coats")?.unwrap_or(0.4), num(o, "vary")?.unwrap_or(0.12), o.get::<Option<u32>>("seed")?.unwrap_or(98))
                 }
             };
-            let mut s = st1.borrow_mut();
-            let var = Fbm::new(s.seed as u32 + seed, 3, 400.0);
-            let c = s.canvas.as_mut().ok_or_else(no_canvas)?;
-            c.dry();
-            c.glaze(&Pigment::varnish(col), None, |x, y| coats + vary * var.get(x, y));
-            Ok(())
+            // brushed over the whole canvas once it is dry, like a glaze
+            time::verb(&st1, Verb::Jump { rest: Rest::IfLong, note: Some(("varnish", "the paint under it")) }, |s| {
+                let var = Fbm::new(s.seed as u32 + seed, 3, 400.0);
+                let c = s.canvas.as_mut().ok_or_else(no_canvas)?;
+                c.dry();
+                c.glaze(&Pigment::varnish(col), None, |x, y| coats + vary * var.get(x, y));
+                brushed(c, None);
+                Ok(())
+            })
         })?)?;
         let st1 = st.clone();
         g.set("cracks", lua.create_function(move |_, o: Option<Table>| {
-            let mut s = st1.borrow_mut();
-            let mut k = Cracks::aged(s.seed);
+            let mut k = Cracks::aged(st1.borrow().seed);
             if let Some(o) = &o {
                 check_keys(o, &["island_mm", "ground_um", "width_um", "depth_um", "cupping_um", "dirt", "corners", "vary", "veil", "seed"], "cracks")?;
                 // unset: fitted to this canvas's ground (Cracks::aged)
@@ -1760,19 +1741,24 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
                     k.seed = sd;
                 }
             }
-            s.canvas.as_mut().ok_or_else(no_canvas)?.crack(&k);
-            Ok(())
+            // (the paint dries first)
+            time::verb(&st1, Verb::Jump { rest: Rest::IfLong, note: Some(("cracks", "the paint")) }, |s| {
+                s.canvas.as_mut().ok_or_else(no_canvas)?.crack(&k);
+                Ok(())
+            })
         })?)?;
         let st1 = st.clone();
         g.set("relief", lua.create_function(move |_, (strength, gloss): (Option<f32>, Option<f32>)| {
             let sty = style(&st1)?;
-            let mut s = st1.borrow_mut();
-            s.canvas.as_mut().ok_or_else(no_canvas)?.relief(strength.unwrap_or(sty.relief.0), gloss.unwrap_or(sty.relief.1));
-            Ok(())
+            // (the paint dries first)
+            time::verb(&st1, Verb::Jump { rest: Rest::IfLong, note: Some(("relief", "the paint")) }, |s| {
+                s.canvas.as_mut().ok_or_else(no_canvas)?.relief(strength.unwrap_or(sty.relief.0), gloss.unwrap_or(sty.relief.1));
+                Ok(())
+            })
         })?)?;
     }
 
-    crate::time::install(lua, st.clone())?;
+    time::install(lua, st.clone())?;
     crate::form::install(lua, st.clone())?;
     crate::world::install(lua, st.clone())?;
     draw_pencil::install(lua, st.clone())?;

@@ -17,7 +17,10 @@ print.
 What doesn't change: the knife-cut hatching on the near rock's shadow
 face, the pale rim along its silhouette, the fog rectangle in the wood
 (`near_rockedge_sheet.jpg`) and the pale halos inside the green tree's
-sky holes are the same at every strength. They're in the paint, not the
-lighting.
+sky holes are the same at every strength. They're not the relief
+lighting. Correction (later the same day): the knife-cut hatching wasn't
+the paint either: it was the varnish pooling at the foot of every dried
+stroke edge (branch `r6-varnish`, `notes/round6/varnish/`). The rims,
+the fog rectangle and the halos are in the paint.
 
-The owner picks; the winner becomes the Friedrich default.
+Alice picked 0.06; it's the Friedrich default now.

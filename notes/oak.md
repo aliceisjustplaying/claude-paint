@@ -268,6 +268,42 @@ the model's width; the twig bin is too thin to measure this way):
 - `p2_5_oak_in_leaf_before_after.jpg`: the in-leaf oak of trees_in.lua,
   which changes with the wood.
 
+## Maintenance (round 6 review, S3)
+
+No change to any tree: the five-species bare fixture (painted wood in three
+bands plus a dump of every `wood_strokes` point) and both benchmark logs
+render byte-identical.
+
+- The painter's layer moved out of the growth model into
+  `crates/paint/src/broadleaf/wood.rs`: `WoodStroke`, `subdivide`,
+  `Tree::{is_fine, drawn, wood_strokes, twig_mass}` and their tests
+  (`broadleaf.rs` 2000 → 1683 lines; `wood.rs` 351). It is a child module,
+  so it reads the growth model's private helpers (`inside`, `edge_dist`)
+  without widening them, and `paint::broadleaf::WoodStroke` still works.
+  `straighten` stays in `broadleaf.rs`: it shapes the grown nodes (it runs
+  inside `grow`), so it is growth, not the painter's selection.
+- `angular` is a switch plus a size, and now says so. Four of its five uses
+  are `> 0` (no turn past 70° off the heading; twigs 0.7 × spread off the
+  limb; twig zigzag away from the limb; strokes subdivided along straight
+  runs) and one scales (the straightening tolerance, `angular` × half a
+  step). Making the four continuous would have moved lime (0.5) and costs
+  an arbitrary blend for the zigzag sign, so I named the switch instead:
+  `Species::is_angular()`, documented on the field. **Lime** keeps its
+  output: the whole angular habit, with half the oak's straightening.
+  `Tree.angular` is now a bool (the wood was grown angular), not a copied
+  number. `Tree.twig_w` was never a copy: it is the species' `twig_w` at
+  the tree's size (documented).
+- One polyline helper: `paint::path::{dist, length, arclen}` (same float
+  operations in the same order as each copy it replaces: broadleaf
+  `polylen`, graphite `arclen`, rock `cumlen`, outline `dist`/`line_len`
+  and two cumulative loops, and `plan_stroke`'s arc table in
+  draw_trees.rs). `tally::path_len` is the same sum and is left for its
+  owner to switch.
+- `paint_wood`'s pressure profile goes through one named helper,
+  `set_pressure_profile` (swell knots over a flat pressure of 1, which is
+  exactly the profile). A direct `pressure=` knot list needs `b:stroke` in
+  `api.rs` to take one; that's the place to fix it.
+
 ## The fir
 
 I looked at the ragged `old` fir at 3200. Its boughs do run from the stem

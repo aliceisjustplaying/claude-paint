@@ -22,7 +22,8 @@
 //! `cargo paint study_wet_lab` (1000 px). `--width 3200` for the detail.
 
 use paint::color::to_oklab;
-use paint::{Canvas, Gesture, Held, Mask, Orient, Pigment, Rgb, Stage, Style, Tool, hex};
+use paint::{Canvas, Gesture, Held, Orient, Pigment, Stage, Style, Tool, hex};
+use paintings::study::{Img, rect};
 
 const W: f32 = 1000.0 / 7.0;
 const Y0: f32 = 40.0;
@@ -30,10 +31,6 @@ const Y1: f32 = 360.0;
 
 fn panel(k: usize) -> (f32, f32) {
     (k as f32 * W + 12.0, (k + 1) as f32 * W - 12.0)
-}
-
-fn rect(c: &Canvas, x0: f32, y0: f32, x1: f32, y1: f32) -> Mask {
-    Mask::from_fn(c.frame(), move |x, y| if x > x0 && x < x1 && y > y0 && y < y1 { 1.0 } else { 0.0 })
 }
 
 const SKY: &str = "#b9c3cb";
@@ -54,53 +51,6 @@ fn glaze_hand(c: &mut Canvas, st: &Style, k: usize) {
     let mut h = st.glaze(0.85).color(move |_, _| col);
     h.tool = Tool::filbert(6.0);
     c.work(&m, &h.length(20.0, 60.0), 20 + k as u64);
-}
-
-struct Img {
-    l: Vec<f32>,
-    lab: Vec<Rgb>,
-    w: usize,
-    s: f32,
-}
-
-impl Img {
-    fn new(c: &Canvas) -> Self {
-        let lab: Vec<Rgb> = c.pixels().iter().map(|&p| to_oklab(p)).collect();
-        Img { l: lab.iter().map(|p| p[0]).collect(), lab, w: c.window().w, s: c.window().w as f32 / 1000.0 }
-    }
-    fn px(&self, x0: f32, y0: f32, x1: f32, y1: f32) -> impl Iterator<Item = (usize, usize)> + '_ {
-        let (a, b, cc, d) = ((x0 * self.s) as usize, (y0 * self.s) as usize, (x1 * self.s) as usize, (y1 * self.s) as usize);
-        (b..d).flat_map(move |y| (a..cc).map(move |x| (x, y)))
-    }
-    /// Share of the box within ΔE 0.06 of the ground's color.
-    fn ground(&self, g: Rgb, b: (f32, f32, f32, f32)) -> f32 {
-        let (mut n, mut k) = (0.0f32, 0.0f32);
-        for (x, y) in self.px(b.0, b.1, b.2, b.3) {
-            let p = self.lab[y * self.w + x];
-            n += 1.0;
-            if (p[0] - g[0]).hypot(p[1] - g[1]).hypot(p[2] - g[2]) < 0.06 {
-                k += 1.0;
-            }
-        }
-        k / n
-    }
-    /// Mean |L − box-blurred L| over the box (blur radius 2 units), ×1000.
-    fn texture(&self, b: (f32, f32, f32, f32)) -> f32 {
-        let r = ((2.0 * self.s) as i64).max(1);
-        let (mut n, mut acc) = (0.0f32, 0.0f32);
-        for (x, y) in self.px(b.0, b.1, b.2, b.3) {
-            let (mut m, mut q) = (0.0f32, 0.0f32);
-            for j in -r..=r {
-                for i in -r..=r {
-                    m += self.l[(y as i64 + j) as usize * self.w + (x as i64 + i) as usize];
-                    q += 1.0;
-                }
-            }
-            acc += (self.l[y * self.w + x] - m / q).abs();
-            n += 1.0;
-        }
-        1000.0 * acc / n
-    }
 }
 
 fn main() {
@@ -157,7 +107,7 @@ fn main() {
     c.work(&rect(&c, x0 + 15.0, 120.0, x1 - 15.0, 300.0), &st.blend().expect("blender").coverage(1.2), 51);
     c.dry();
     // measure
-    let img = Img::new(&c);
+    let img = Img::new(&c, c.pixels());
     let area = |k: usize| {
         let (x0, x1) = panel(k);
         match k {
@@ -175,7 +125,7 @@ fn main() {
     let prof: Vec<f32> = (0..=24).map(|j| {
         let y = 194.0 + 0.5 * j as f32;
         let xs: Vec<f32> = (0..60).map(|i| x0 + 25.0 + (x1 - x0 - 50.0) * i as f32 / 59.0).collect();
-        xs.iter().map(|&x| img.l[(y * img.s) as usize * img.w + (x * img.s) as usize]).sum::<f32>() / xs.len() as f32
+        xs.iter().map(|&x| img.px(x, y)).sum::<f32>() / xs.len() as f32
     }).collect();
     let base = 0.5 * (prof[0] + prof[prof.len() - 1]);
     let peak = prof.iter().cloned().fold(f32::MIN, f32::max);

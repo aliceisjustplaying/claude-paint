@@ -212,4 +212,62 @@ mod tests {
         assert!(us.iter().all(|u| (0.0..1.0).contains(u)));
         assert!((mean - 0.5).abs() < 0.03, "{mean}");
     }
+
+    /// A dark disk over a light ground, painted with a stencil clip, a found
+    /// fence and a lost fence: mean darkening (OKLab L) in rings just outside
+    /// the edge (0-3 units, 8-16 units: a body brush is 8 wide) and the share of a 2-unit rim
+    /// inside that is covered.
+    fn rings(fence: Option<f32>) -> (f32, f32, f32) {
+        use crate::canvas::Canvas;
+        use crate::color::{hex, to_oklab};
+        let st = crate::style::Style::friedrich();
+        let mut c = Canvas::new(1000, 1.0, st.raw).with_size_mm(st.width_mm).with_linen(crate::surface::Linen { seed: 3, ..st.linen });
+        c.prime(hex("#b08457"), 0.8, 120.0, 0.3, 0.3, 3);
+        let before = c.pixels().to_vec();
+        let f = c.frame();
+        let m = Mask::from_fn(f, |x, y| if (x - 500.0).powi(2) + (y - 330.0).powi(2) < 200.0f32.powi(2) { 1.0 } else { 0.0 });
+        let mut hd = st.body().color(|_, _| hex("#2e2a28")).coverage(2.5).clip(true);
+        if let Some(q) = fence {
+            let qm = Mask::from_fn(f, move |_, _| q);
+            let w = hd.tool.width;
+            hd = hd.fence(std::sync::Arc::new(Fence::new(&m, &qm, w, 1.0, 1.0, 9)));
+        }
+        c.work(&m, &hd, 4);
+        c.dry();
+        let sd = m.distance();
+        let (mut a, mut an, mut b, mut bn, mut r, mut rn) = (0.0f32, 0, 0.0f32, 0, 0, 0);
+        for (k, p) in c.pixels().iter().enumerate() {
+            let d = sd.data[k];
+            let dl = to_oklab(before[k])[0] - to_oklab(*p)[0];
+            if (-3.0..0.0).contains(&d) {
+                a += dl;
+                an += 1;
+            } else if (-16.0..-8.0).contains(&d) {
+                b += dl;
+                bn += 1;
+            } else if (0.0..2.0).contains(&d) {
+                rn += 1;
+                r += (dl > 0.15) as usize;
+            }
+        }
+        (a / an as f32, b / bn as f32, r as f32 / rn as f32)
+    }
+
+    /// The stencil stops dead on the line; a found fence nearly so; a lost
+    /// fence carries a thinning film well past it; all cover the rim inside.
+    #[test]
+    fn fences_carry_paint_past_the_edge_by_quality() {
+        let (s1, s2, sr) = rings(None);
+        let (f1, f2, fr) = rings(Some(0.0));
+        let (l1, l2, lr) = rings(Some(1.0));
+        println!("stencil {s1:.3} {s2:.3} rim {sr:.2} | found {f1:.3} {f2:.3} rim {fr:.2} | lost {l1:.3} {l2:.3} rim {lr:.2}");
+        assert!(s1 < 0.02 && s2 < 0.01, "a stencil lays nothing past its edge: {s1} {s2}");
+        assert!(f1 > s1 + 0.05, "a found edge's strokes run a little over the line: {f1}");
+        assert!(f2 < 0.02, "but stay near it: {f2}");
+        assert!(l2 > 0.08, "a lost edge carries paint a brush and more past it: {l2}");
+        assert!(l1 > l2 + 0.05, "thinning as it goes: {l1} then {l2}");
+        for rim in [sr, fr, lr] {
+            assert!(rim > 0.9, "the rim inside is covered: {rim}");
+        }
+    }
 }

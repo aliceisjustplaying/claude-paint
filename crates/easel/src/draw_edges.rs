@@ -23,6 +23,9 @@ use mlua::{Lua, Result, Table, Value};
 use paint::rng::Rng;
 use paint::{Gesture, Held};
 
+/// A stroke across the edge: its points, where its paint comes from, where it crosses into.
+type Planned = (Vec<(f32, f32)>, (f32, f32), (f32, f32));
+
 const KEYS: &[&str] = &["where", "tool", "reach", "load", "pressure", "angle", "every", "medium", "pal", "seed", "mix"];
 
 fn lose(lua: &Lua, st: &S, m: Value, o: Option<Table>) -> Result<usize> {
@@ -61,7 +64,7 @@ fn lose(lua: &Lua, st: &S, m: Value, o: Option<Table>) -> Result<usize> {
     // the edge, point by point (inward normals), a stroke every `every` brush widths
     let lines = paint::edge::contours(&region, (every * w).max(0.5));
     let mut rng = Rng::new(seed ^ 0x105E_ED6E);
-    let mut plans: Vec<(Vec<(f32, f32)>, (f32, f32), (f32, f32))> = Vec::new();
+    let mut plans: Vec<Planned> = Vec::new();
     for line in &lines {
         for &((x, y), (nx, ny)) in line {
             let qv = q.sample(x, y).clamp(0.0, 1.0);
@@ -128,4 +131,61 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
     let s1 = st.clone();
     lua.globals().set("lose", lua.create_function(move |lua, (m, o): (Value, Option<Table>)| lose(lua, &s1, m, o))?)?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::session::Session;
+
+    const SETUP: &str = r##"canvas{style="friedrich", aspect=1.4, seed=5}
+light = everywhere()
+work(light, {hand="broad", color="#c9b99a", coverage=3, clip=true})
+dry()
+hill = ellipse(500, 400, 220, 120)"##;
+
+    fn dark_outside(s: &Session) -> usize {
+        // pixels a few units outside the hill that the dark passage darkened
+        let c = s.canvas().unwrap();
+        let f = c.frame();
+        let mut n = 0;
+        for k in 0..60 {
+            let a = k as f32 / 60.0 * std::f32::consts::TAU;
+            let (x, y) = (500.0 + 225.0 * a.cos(), 400.0 + 124.0 * a.sin());
+            let p = c.seen()[f.index(x, y)];
+            n += (p[0] + p[1] + p[2] < 0.9) as usize;
+        }
+        n
+    }
+
+    /// edge= carries a passage past its region's edge (the stencil stops on
+    /// it); lose drags the neighbor back across; a mask passed as clip= is
+    /// named in the reply (it has always meant clip=true).
+    #[test]
+    fn edges_lose_and_the_clip_notice() {
+        let mut a = Session::new(400, 2).unwrap();
+        a.run(SETUP).unwrap();
+        let r = a.run(r##"work(hill, {hand="body", color="#2e2d33", coverage=3, clip=hill:grow(8)})"##).unwrap();
+        assert!(r.out.contains("clip= is true or false"), "{}", r.out);
+        let stencil = dark_outside(&a);
+        let mut b = Session::new(400, 2).unwrap();
+        b.run(SETUP).unwrap();
+        let r = b.run(r##"work(hill, {hand="body", color="#2e2d33", coverage=3, edge="lost"})"##).unwrap();
+        assert!(!r.out.contains("clip="), "{}", r.out);
+        let lost = dark_outside(&b);
+        assert!(stencil == 0 && lost > 10, "stencil {stencil}, lost {lost} of 60 points 5 units out darkened");
+        // the other forms of edge=
+        b.run(r##"work(hill, {hand="body", color="#2e2d33", coverage=1, edge={found=0.5, soft=0.3, lost=0.2, period=30}})
+                  work(hill, {hand="body", color="#2e2d33", coverage=1, edge=function(x, y) return x / 1000 end})
+                  work(hill, {hand="body", color="#2e2d33", coverage=1, edge=0.3})"##)
+            .unwrap();
+        assert!(b.run(r##"work(hill, {hand="body", color="#2e2d33", edge="blurry"})"##).is_err());
+        assert!(b.run(r##"work(hill, {hand="body", color="#2e2d33", edge="soft", cut_in="round 2"})"##).is_err());
+        // lose: strokes along the edge where asked, none where not
+        b.run("dry()").unwrap();
+        let r = b.run(r##"print(lose(hill, {where=function(x, y) return x < 500 and 1 or 0 end, tool="filbert 4"}))"##).unwrap();
+        let n: usize = r.out.trim().lines().next().unwrap().trim().parse().unwrap();
+        assert!(n > 20, "{}", r.out);
+        let r = b.run(r##"print(lose(hill, {where=0}))"##).unwrap();
+        assert_eq!(r.out.trim().lines().next().unwrap().trim(), "0");
+    }
 }

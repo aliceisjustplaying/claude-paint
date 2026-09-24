@@ -77,7 +77,7 @@ pub struct PileSet {
     pub piles: Vec<Pile>,
     labs: Vec<Rgb>,
     /// The field the painter wrote (the light as they see it).
-    field: Box<dyn Fn(f32, f32) -> Rgb + Sync>,
+    field: Box<dyn Fn(f32, f32) -> Rgb + Send + Sync>,
     pub opts: PileOpts,
     /// The palette the recipes are mixed from.
     pub palette: Option<Palette>,
@@ -203,7 +203,7 @@ impl PileSet {
     /// Piles for `field` at the looks `wants` (linear RGB), not yet mixed
     /// (see `mix`; unmixed piles are laid as `want` with the handling's own
     /// paint).
-    pub fn new(wants: Vec<Rgb>, field: Box<dyn Fn(f32, f32) -> Rgb + Sync>, opts: PileOpts) -> Self {
+    pub fn new(wants: Vec<Rgb>, field: Box<dyn Fn(f32, f32) -> Rgb + Send + Sync>, opts: PileOpts) -> Self {
         assert!(!wants.is_empty(), "a pile set needs at least one pile");
         let labs: Vec<Rgb> = wants.iter().map(|&c| to_oklab(c)).collect();
         let piles = (0..wants.len())
@@ -226,7 +226,7 @@ impl PileSet {
 
     /// Piles chosen from the field itself: `n` of them along the colors it
     /// takes over `over` (see `choose`), sampled every `step` units.
-    pub fn from_field(field: Box<dyn Fn(f32, f32) -> Rgb + Sync>, over: &Mask, n: usize, step: f32, opts: PileOpts) -> Self {
+    pub fn from_field(field: Box<dyn Fn(f32, f32) -> Rgb + Send + Sync>, over: &Mask, n: usize, step: f32, opts: PileOpts) -> Self {
         let f = over.f;
         let step = step.max(0.5);
         let mut samples = Vec::new();

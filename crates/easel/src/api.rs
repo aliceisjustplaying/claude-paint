@@ -1427,7 +1427,7 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
                     let on = o.get::<Option<bool>>("hand")?.unwrap_or(false);
                     let mut c = c;
                     crate::time::set(&mut c, on);
-                    s.hand = crate::time::Hand { base: c.tally(), ..Default::default() };
+                    s.hand = crate::time::Hand { base: c.tally(), clocked: c.tally().clocked, ..Default::default() };
                     s.canvas = Some(c);
                     s.style = Some(Rc::new(sty));
                     let mut sz = num(&o, "size")?.map(|mm| format!(", size={mm}")).unwrap_or_default();

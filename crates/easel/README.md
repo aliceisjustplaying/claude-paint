@@ -1284,7 +1284,7 @@ takes to make it, and the paint ages while you work (notes/time.md).
 
 ```lua
 canvas{style="friedrich", aspect=1.4, seed=7, hand=true}   -- or hand_time(true) later
-sitting{hours=3}      -- a new sitting starts now, with a clean palette (default 3 h)
+sitting{hours=3}      -- this sitting's length (default 3 h, at most 8), set before painting in it
 rest(16)              -- step away: the paint sets; the next mark starts a new sitting
                       -- (rest() = overnight, 16 h; any wait of 2 h or more is a rest too)
 t = timesheet()       -- {clock, sitting (min), sittings, hours, hand, open, setting, tacky,
@@ -1303,9 +1303,19 @@ t = timesheet()       -- {clock, sitting (min), sittings, hours, hand, open, set
   minutes and ages between them, top to bottom. Brush strokes, touches and
   the motif verbs made of them put theirs on once a minute has piled up,
   and every chunk ends with the clock up to date.
-- A sitting that runs past its hours is reported in the reply (`sitting 2:
-  3.8 h at the easel, 3.0 h planned; ...`), never cut short: finish the
-  passage while it is open, then `rest`.
+- **A sitting ends at its length.** Once its time reaches its hours, the
+  easel refuses marks (strokes, touches, motif verbs, `work`, `blend`,
+  `stipple`, `glaze`, pencil lines, `varnish`): `the sitting is over after
+  3.0 h: rest(hours) first`. Queries (`timesheet`, `clock`, `drying`,
+  `look`) still answer. A verb already started finishes its pass (not cut
+  short, so a long pass started late runs over), and the reply reports the
+  overrun (`sitting 2: 3.8 h at the easel, 3.0 h planned; ...`). A refused
+  chunk is rolled back whole: plan chunks by the time left (`t.hours*60 -
+  t.sitting`). `sitting{}` can't end a sitting under way (only a rest can)
+  and `hand_time(false)` is refused once it is on.
+- This holds for every session the easel starts (its log says so in a
+  header line, `-- sittings enforced: ...`). Logs from before have no such
+  line and replay as painted, overruns only reported (notes/time.md).
 - In one sitting the paint under a later passage is still open and comes
   up into it. Lay each passage only where it shows, a little past where
   its neighbor will meet it (`notes/time/example_three_ways.jpg`).

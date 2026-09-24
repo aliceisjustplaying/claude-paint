@@ -1725,7 +1725,7 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
         g.set("cracks", lua.create_function(move |_, o: Option<Table>| {
             let mut k = Cracks::aged(st1.borrow().seed);
             if let Some(o) = &o {
-                check_keys(o, &["island_mm", "ground_um", "width_um", "depth_um", "cupping_um", "dirt", "corners", "vary", "veil", "seed"], "cracks")?;
+                check_keys(o, &["island_mm", "ground_um", "width_um", "depth_um", "cupping_um", "dirt", "corners", "vary", "veil", "hierarchy", "patchy", "grain", "grime", "seed"], "cracks")?;
                 // unset: fitted to this canvas's ground (Cracks::aged)
                 k.island_mm = num(o, "island_mm")?.or(k.island_mm);
                 k.ground_um = num(o, "ground_um")?.or(k.ground_um);
@@ -1733,7 +1733,7 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
                 macro_rules! over {
                     ($($f:ident),*) => {$( if let Some(v) = num(o, stringify!($f))? { k.$f = v; } )*};
                 }
-                over!(depth_um, cupping_um, dirt, vary, veil);
+                over!(depth_um, cupping_um, dirt, vary, veil, hierarchy, patchy, grain, grime);
                 if let Some(c) = o.get::<Option<bool>>("corners")? {
                     k.corners = c;
                 }

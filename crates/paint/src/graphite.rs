@@ -33,6 +33,7 @@
 use crate::canvas::Canvas;
 use crate::color::Rgb;
 use crate::mask::Mask;
+use crate::path::arclen;
 use crate::rng::{Rng, hash2};
 use crate::surface::vnoise;
 
@@ -220,15 +221,6 @@ pub fn resample(pts: &[(f32, f32)], smooth: bool, step: f32) -> Vec<(f32, f32)> 
         }
     }
     out
-}
-
-/// Cumulative arc length along a path.
-fn arclen(p: &[(f32, f32)]) -> Vec<f32> {
-    let mut s = vec![0.0; p.len()];
-    for i in 1..p.len() {
-        s[i] = s[i - 1] + ((p[i].0 - p[i - 1].0).powi(2) + (p[i].1 - p[i - 1].1).powi(2)).sqrt();
-    }
-    s
 }
 
 /// Unit normal of a path at point `i`.

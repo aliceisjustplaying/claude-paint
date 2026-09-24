@@ -74,3 +74,22 @@ rock "before horrible, after less bad".
 
 Note: all four wet repaints were rendered BEFORE the varnish fix; the dots,
 outlines and digital lining may be largely the varnish bug.
+
+## Round 7: Evening at a Mountain Lake (wet engine, free subject)
+First reactions (she wanted the plain painting, not only sheets: added
+`notes/paint1/evening_lake_1000.png`, `_3200.png`, `_aged_3200.png`):
+- "Not very Caspar." "Every cloud seems to be obsessed with this one
+  figure, which is fine, fascinating." "Every cloud seems to be drawing
+  the exact same moon inside [in] a different phase": the cloud shapes
+  repeat the crescent.
+- **The lighting is quite good, but "maybe a little too perfect".** (Checked:
+  no lighting tool was used; the painter wrote the sky's light as smooth
+  math, a 6-stop color gradient plus a Gaussian glow, `evening_lake.lua`
+  lines 108–115, so every stroke got a mathematically perfect color.)
+- The sky still has a lot to improve, but it's better. The lake and the
+  sky look very similar ("I get it, it kind of should be").
+- The mountain: not that great. The reflection (the mirror): "actually not
+  half bad". The foliage: less bad, a long way to go. The grass: still
+  very digital. The two rocks: not half bad. Still the boundaries.
+- **Aging: "we do want the age stuff", but the craquelure is "still too
+  neat, still too digital": the crack algorithm needs work.**

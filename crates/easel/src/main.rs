@@ -21,6 +21,7 @@ mod draw_firs;
 mod draw_trees;
 mod draw_rocks;
 mod look;
+mod piles;
 mod session;
 mod time;
 

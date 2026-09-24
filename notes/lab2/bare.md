@@ -1,6 +1,6 @@
 # Lab 2: the bare oak on the angular tool, and bare oaks at a distance
 
-Two subjects, each with its own owner sheet. The letters on the sheets are
+Two subjects, each with its own sheet for Alice. The letters on the sheets are
 neutral and were drawn at random.
 
 ## Key (don't read this before you look at the sheets)

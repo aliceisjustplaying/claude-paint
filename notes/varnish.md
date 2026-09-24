@@ -6,7 +6,7 @@ lab2 oak's smooth crown (`notes/lab2/oakleaf.md`, failure 1), a dark-orange hair
 the rock's lit base (`notes/lab2/rock.md`). `relief()` alone was clean; `vary=0` and
 `dry()` first didn't help; `coats=0.12` nearly cleared it. At 1000 the finish was fine.
 
-**Owner sheet:** `notes/varnish/owner_sheet.jpg` (four 3200 crops at 1:1 pixels, before
+**Sheet for Alice:** `notes/varnish/owner_sheet.jpg` (four 3200 crops at 1:1 pixels, before
 over after, labeled).
 
 ## Cause (measured)

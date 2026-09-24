@@ -101,3 +101,11 @@ anything since; and in the post, the Turner (the style closest to
 Friedrich's world) was by far the most digital-looking and furthest from
 its painter, probably not a coincidence. A control experiment (branch
 r7-python: a look-first Friedrich in plain Python, no engine) tests it.
+
+### Backlog (frozen; revisit after the painting round shows what helps)
+From the process research (notes/research/friedrich_process.md): P1 study
+sheets enlarged by a small whole ratio and traced (with a tracer's
+faults); P2 pen and ink for the underdrawing; P3 lifting wet paint with a
+rag and scraping set paint; P4 painting up to a drawn line with a hand's
+error (bare ground between colors); P5 abrasion by cleaning; P6
+mechanical crack events; P7 ground defects; P8 old restorations (opt-in).

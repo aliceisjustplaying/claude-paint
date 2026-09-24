@@ -63,5 +63,4 @@ benchmarks are byte-identical on main.
   rebuilds. Fixed in `3060281` (incremental = false, codegen-units = 1):
   two clean builds now give byte-identical binaries and renders.
 - Left: the engine owning the hand/idle split (S4's "ideally"); storing
-  the wet film's parts disjointly (changes float rounding); `tally::path_len`
-  → `path::length`; the `Sweep(π/2)` float wobble in `tile_order`.
+  the wet film's parts disjointly (changes float rounding); the `Sweep(π/2)` float wobble in `tile_order`.

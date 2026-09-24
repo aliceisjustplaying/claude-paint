@@ -1,7 +1,7 @@
 # Wet control experiment (branch r6-wet, not merged)
 
 Copied from branch `r6-wet` (`notes/wet/`, full write-up in `notes/wet.md`
-§8 there) so the owner can view it on main.
+§8 there) so Alice can view it on main.
 
 **Control sheet** (`owner_control_sheet.jpg`, details `_open`, `_setting`):
 three engines stacked (main; r6-wet; r6-wet + lift-off). Rows: A a light
@@ -28,7 +28,7 @@ strokes); next, a real softening mechanism (a wet stroke's thin end
 leveling sideways into the paint around it), or ship it as an opt-in
 "wet control" setting now. The integrator's note: on the sky repaint the
 r6-wet version looked the softer of the two to me, the opposite of the
-engineer's read, so the owner's eye decides.
+engineer's read, so Alice's eye decides.
 
 ---
 Key: sky_B A = r6-wet, B = main · water_B A = main, B = r6-wet ·

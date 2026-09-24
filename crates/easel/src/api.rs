@@ -819,8 +819,51 @@ impl UserData for WorleyU {
 const WORK_KEYS: &[&str] = &[
     "hand", "tool", "length", "coverage", "angle", "angle_jitter", "color", "jitter", "medium", "pal", "aim", "load_at", "cut_in", "pressure",
     "orient", "dips", "blender", "scrub", "clip", "threshold", "ramps", "shake", "curve", "cross", "drift", "tail", "broken", "swell", "clump",
-    "order", "mix_jitter", "seed", "ruler", "paint", "load", "color_over", "hug", "visible", "behind", "at", "view",
+    "order", "mix_jitter", "seed", "ruler", "paint", "load", "color_over", "hug", "visible", "behind", "at", "view", "edge",
 ];
+
+const EDGE_KEYS: &[&str] = &["found", "soft", "lost", "period", "seed", "quality", "waver", "reach"];
+
+/// A named edge quality (0 found .. 1 lost).
+fn edge_name(s: &str) -> Result<f32> {
+    Ok(match s {
+        "found" | "crisp" | "hard" => 0.0,
+        "firm" => 0.25,
+        "soft" => 0.5,
+        "loose" => 0.75,
+        "lost" => 1.0,
+        o => return err(format!("edge {o:?}: \"found\", \"firm\", \"soft\", \"loose\" or \"lost\" (or a number 0..1, a function, a mask or a table)")),
+    })
+}
+
+/// The quality field of `edge=` as a whole-canvas mask (0 found .. 1 lost).
+pub(crate) fn edge_quality(st: &S, v: &Value, region: &Mask, b: (f32, f32, f32, f32), seed: u64) -> Result<Mask> {
+    let f = region.f;
+    match v {
+        Value::String(s) => {
+            let q = edge_name(&s.to_str()?)?;
+            Ok(Mask::from_fn(f, move |_, _| q))
+        }
+        Value::UserData(u) if u.borrow::<M>().is_ok() => Ok((*u.borrow::<M>()?.0).clone()),
+        Value::Table(t) => {
+            check_keys(t, EDGE_KEYS, "edge")?;
+            if let Some(q) = t.get::<Option<Value>>("quality")? {
+                return edge_quality(st, &q, region, b, seed);
+            }
+            let (fo, so, lo) = (t.get::<Option<f32>>("found")?.unwrap_or(0.0), t.get::<Option<f32>>("soft")?.unwrap_or(0.0), t.get::<Option<f32>>("lost")?.unwrap_or(0.0));
+            if !(fo >= 0.0 && so >= 0.0 && lo >= 0.0) || fo + so + lo <= 0.0 {
+                return err("edge={found=, soft=, lost=}: shares of the contour, at least one above 0");
+            }
+            let period = t.get::<Option<f32>>("period")?.unwrap_or(40.0);
+            let sd = t.get::<Option<u64>>("seed")?.unwrap_or(seed);
+            Ok(paint::fence::stretches(region, (fo, so, lo), period, 6.0, sd))
+        }
+        v => {
+            let g = scalar_field(st, v, b, "edge")?;
+            Ok(Mask::from_fn(f, move |x, y| g(x, y).clamp(0.0, 1.0)))
+        }
+    }
+}
 
 fn work(st: &S, mask: Rc<Mask>, o: Table, preset: Option<&str>) -> Result<()> {
     check_keys(&o, WORK_KEYS, "work")?;
@@ -932,7 +975,8 @@ fn work(st: &S, mask: Rc<Mask>, o: Table, preset: Option<&str>) -> Result<()> {
     if let Some(n) = o.get::<Option<usize>>("scrub")? {
         h = h.scrub(n);
     }
-    if let Some(c) = o.get::<Option<bool>>("clip")? {
+    let (clip, limit) = clip_opt(&o, limit)?;
+    if let Some(c) = clip {
         h = h.clip(c);
     }
     if let Some(t) = num(&o, "threshold")? {
@@ -943,6 +987,23 @@ fn work(st: &S, mask: Rc<Mask>, o: Table, preset: Option<&str>) -> Result<()> {
     }
     if let Some(s) = num(&o, "shake")? {
         h = h.shake(s);
+    }
+    // (drawn once, here: edge= must not change the pass's strokes)
+    let pass_seed = seed_of(st, &o)?;
+    // edge=: carry the passage to the region's edge as a brush does (found, soft, lost)
+    let edge_v = o.get::<Value>("edge")?;
+    if !edge_v.is_nil() {
+        if h.cut_in.is_some() {
+            return err("work: edge= and cut_in= both say how the edge is made; give one");
+        }
+        let seed = pass_seed ^ 0xED6E_F00D;
+        let q = edge_quality(st, &edge_v, &mask, b, seed)?;
+        let (waver, reach) = match &edge_v {
+            Value::Table(t) => (t.get::<Option<f32>>("waver")?.unwrap_or(1.0), t.get::<Option<f32>>("reach")?.unwrap_or(1.0)),
+            _ => (1.0, 1.0),
+        };
+        let fence = paint::fence::Fence::new(&mask, &q, h.tool.width, waver, reach, seed);
+        h = h.fence(std::sync::Arc::new(fence));
     }
     if o.get::<Option<bool>>("ruler")?.unwrap_or(false) {
         h = h.ruler();
@@ -999,7 +1060,7 @@ fn work(st: &S, mask: Rc<Mask>, o: Table, preset: Option<&str>) -> Result<()> {
         h = h.piles(p);
     }
     h.tool.validate().map_err(mlua::Error::runtime)?;
-    let seed = seed_of(st, &o)?;
+    let seed = pass_seed;
     // (dipping into the sitting's palette)
     time::verb(st, Verb::Pass, |s| {
         s.canvas.as_mut().ok_or_else(no_canvas)?.work_with(&mut s.hand.piles, &mask, &h, seed);
@@ -1017,6 +1078,28 @@ impl FromLuaValue for f32 {
             Value::Integer(n) => Ok(n as f32),
             o => err(format!("want a number, got {}", o.type_name())),
         }
+    }
+}
+
+/// `clip=` on a pass: true, false, or a mask the strokes are clipped to,
+/// soft edges and all (the deposit is scaled by the mask's value), combined
+/// with any limit from `behind=`/`at=`. A mask used to be read as `true`
+/// (the Lua bridge turns any value into a boolean) and clipped hard to the
+/// pass's own region, so painters' grown and blurred clip masks were never
+/// used (Round 7, found by the edges stream; fixed at Alice's call).
+fn clip_opt(o: &Table, limit: Option<std::sync::Arc<Mask>>) -> Result<(Option<bool>, Option<std::sync::Arc<Mask>>)> {
+    match o.get::<Value>("clip")? {
+        Value::Nil => Ok((None, limit)),
+        Value::Boolean(b) => Ok((Some(b), limit)),
+        Value::UserData(u) if u.borrow::<M>().is_ok() => {
+            let m = (*u.borrow::<M>()?.0).clone();
+            let m = match limit {
+                Some(l) => m.mul(&l),
+                None => m,
+            };
+            Ok((Some(false), Some(std::sync::Arc::new(m))))
+        }
+        v => err(format!("clip= is true, false or a mask, got {}", v.type_name())),
     }
 }
 
@@ -1120,7 +1203,8 @@ fn stipple(st: &S, mask: Rc<Mask>, o: Table) -> Result<()> {
     if let Some(k) = num(&o, "feather")? {
         sp = sp.feather(k);
     }
-    if let Some(c) = o.get::<Option<bool>>("clip")? {
+    let (clip, limit) = clip_opt(&o, limit)?;
+    if let Some(c) = clip {
         sp = sp.clip(c);
     }
     if let Some((l, h)) = pair(&o, "jitter")? {
@@ -1738,7 +1822,7 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
         g.set("cracks", lua.create_function(move |_, o: Option<Table>| {
             let mut k = Cracks::aged(st1.borrow().seed);
             if let Some(o) = &o {
-                check_keys(o, &["island_mm", "ground_um", "width_um", "depth_um", "cupping_um", "dirt", "corners", "vary", "veil", "seed"], "cracks")?;
+                check_keys(o, &["island_mm", "ground_um", "width_um", "depth_um", "cupping_um", "dirt", "corners", "vary", "veil", "hierarchy", "patchy", "grain", "grime", "seed"], "cracks")?;
                 // unset: fitted to this canvas's ground (Cracks::aged)
                 k.island_mm = num(o, "island_mm")?.or(k.island_mm);
                 k.ground_um = num(o, "ground_um")?.or(k.ground_um);
@@ -1746,7 +1830,7 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
                 macro_rules! over {
                     ($($f:ident),*) => {$( if let Some(v) = num(o, stringify!($f))? { k.$f = v; } )*};
                 }
-                over!(depth_um, cupping_um, dirt, vary, veil);
+                over!(depth_um, cupping_um, dirt, vary, veil, hierarchy, patchy, grain, grime);
                 if let Some(c) = o.get::<Option<bool>>("corners")? {
                     k.corners = c;
                 }
@@ -1782,6 +1866,7 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
     crate::draw_trees::install(lua, st.clone())?;
     crate::draw_rocks::install(lua, st.clone())?;
     crate::piles::install(lua, st.clone())?;
+    crate::draw_edges::install(lua, st.clone())?;
 
     // trees
     {

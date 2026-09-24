@@ -20,6 +20,7 @@ mod draw_outline;
 mod draw_firs;
 mod draw_trees;
 mod draw_rocks;
+mod draw_edges;
 mod look;
 mod piles;
 mod session;

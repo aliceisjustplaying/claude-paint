@@ -656,9 +656,34 @@ impl Canvas {
         let surf = self.surf();
         let mut scratch = Vec::new();
         // SAFETY: exclusive &mut self, single brush.
-        let b = unsafe { drag_on(surf, held, g, clip, id, &mut scratch) };
+        let b = unsafe { drag_on(surf, held, g, clip.map(Clip::Mask), id, &mut scratch) };
         if let Some((x0, y0, x1, y1)) = b {
             self.wet.touch(x0, y0, x1, y1);
+        }
+    }
+}
+
+/// Where a stroke may lay paint: a mask multiplying the bristles' contact
+/// (a stencil: the region's edge exactly, the same for every stroke), or a
+/// fence (`crate::fence`): the region's edge, overrun by this stroke's own
+/// amount `u` (0..1), the hairs lifting off the weave past it; `limit` is a
+/// hard mask on top (what is in front).
+#[derive(Clone, Copy)]
+pub(crate) enum Clip<'a> {
+    Mask(&'a Mask),
+    Fence { fence: &'a crate::fence::Fence, u: f32, limit: Option<&'a Mask> },
+}
+
+impl Clip<'_> {
+    /// (contact factor, lift) at whole-canvas pixel `i`.
+    #[inline]
+    pub(crate) fn at(&self, i: usize) -> (f32, f32) {
+        match self {
+            Clip::Mask(m) => (m.data[i], 0.0),
+            Clip::Fence { fence, u, limit } => {
+                let (k, lift) = fence.at(i, *u);
+                (k * limit.map_or(1.0, |l| l.data[i]), lift)
+            }
         }
     }
 }
@@ -795,7 +820,7 @@ pub(crate) unsafe fn drag_on(
     sf: Surf,
     held: &mut Held,
     g: &Gesture,
-    clip: Option<&Mask>,
+    clip: Option<Clip<'_>>,
     id: u32,
     scratch: &mut Vec<f32>,
 ) -> Bounds {
@@ -1068,7 +1093,7 @@ unsafe fn exchange(
     full: f32,
     dep: Option<f32>,
     excl: f32,
-    clip: Option<&Mask>,
+    clip: Option<Clip<'_>>,
     id: u32,
     wts: &mut Vec<f32>,
     bounds: &mut Bounds,
@@ -1140,6 +1165,8 @@ unsafe fn exchange(
         let mut sum_w = 0.0f32;
         let mut sum_cov = 0.0f32;
         let mut sum_tack = 0.0f32;
+        // past a fence a lifting brush lays a thinner film too (see `Clip`)
+        let mut sum_k = 0.0f32;
         for y in y0..y1 {
             for x in x0..x1 {
                 let (px, py) = (x as f32 + 0.5, y as f32 + 0.5);
@@ -1167,11 +1194,18 @@ unsafe fn exchange(
                 // soft hair bends down into the valleys of the weave; stiff hog
                 // bristles ride on the peaks
                 let give = 0.15 + 0.45 * (1.0 - tool.stiffness).clamp(0.0, 1.0);
-                let contact = smoothstep(th - give, th + 0.2, surf);
-                let mut wt = cov * contact;
-                if let Some(m) = clip {
-                    wt *= m.data[y * w + x];
-                }
+                let wt = match clip {
+                    None => cov * smoothstep(th - give, th + 0.2, surf),
+                    Some(Clip::Mask(m)) => cov * smoothstep(th - give, th + 0.2, surf) * m.data[y * w + x],
+                    // past a fence the hairs lift off the weave's hollows
+                    Some(c @ Clip::Fence { .. }) => {
+                        let (k, lift) = c.at(y * w + x);
+                        let th = th + lift;
+                        let wt = cov * smoothstep(th - give, th + 0.2, surf) * k;
+                        sum_k += wt * k * k;
+                        wt
+                    }
+                };
                 wts[(y - y0) * bw + (x - x0)] = wt;
                 sum_w += wt;
                 if !sf.dry.is_null() {
@@ -1196,6 +1230,7 @@ unsafe fn exchange(
             None => br.vol * (1.0 - (-travel / tool.run).exp()) * touch,
             Some(v) => v.min(br.vol * 0.5) * touch,
         };
+        let dep_total = if matches!(clip, Some(Clip::Fence { .. })) { dep_total * (sum_k / sum_w).min(1.0) } else { dep_total };
         let dep_total = if tack > 0.0 {
             let g = crate::drying::grab(tack) * crate::drying::stick(b.0, b.1, rb, br.seed, tack);
             let d = match dep {
@@ -1301,7 +1336,7 @@ unsafe fn exchange(
                                 let j = (ty - oy) * bw_buf + tx - ox;
                                 // a clipped stroke can't push paint past its mask:
                                 // only the accepted share moves, the rest stays
-                                let m = m * share * clip.map_or(1.0, |c| c.data[ty * w + tx]);
+                                let m = m * share * clip.map_or(1.0, |c| c.at(ty * w + tx).0);
                                 if j != i && m > 0.0 {
                                     let l = *sf.lat.add(i);
                                     let hd = *sf.hide.add(i);
@@ -1453,7 +1488,7 @@ impl Canvas {
         let surf = self.surf();
         let mut scratch = Vec::new();
         // SAFETY: exclusive &mut self, single brush.
-        let b = unsafe { touch_on(surf, held, t, clip, id, &mut scratch) };
+        let b = unsafe { touch_on(surf, held, t, clip.map(Clip::Mask), id, &mut scratch) };
         if let Some((x0, y0, x1, y1)) = b {
             self.wet.touch(x0, y0, x1, y1);
         }
@@ -1463,7 +1498,7 @@ impl Canvas {
 /// SAFETY: no other thread may touch pixels in `touch_footprint(..)` of `t`,
 /// and `held.tool` must pass `Tool::validate` (accesses are clamped to that
 /// footprint too, as in `drag_on`).
-pub(crate) unsafe fn touch_on(sf: Surf, held: &mut Held, t: &Touch, clip: Option<&Mask>, id: u32, scratch: &mut Vec<f32>) -> Bounds {
+pub(crate) unsafe fn touch_on(sf: Surf, held: &mut Held, t: &Touch, clip: Option<Clip<'_>>, id: u32, scratch: &mut Vec<f32>) -> Bounds {
     t.assert_valid();
     let mut bounds: Bounds = None;
     let s = sf.scale;

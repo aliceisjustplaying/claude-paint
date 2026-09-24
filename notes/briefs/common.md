@@ -12,9 +12,10 @@ Goal: agents composing new, original Caspar David Friedrich paintings from
 first principles, from what is known about his materials and method. Read
 README.md (the two rules: work only from knowledge, never pictures; first
 principles: every mark made by a simulated brush carrying paint, KM optics,
-no flat fills or optical blends pretending to be paint).
+no flat fills or optical blends pretending to be paint; and the third:
+tools give physics and constraints, not answers: notes/principles.md).
 
-Read first: README.md, notes/fresh_painters.md (what three fresh painters
+Read first: notes/principles.md, README.md, notes/fresh_painters.md (what three fresh painters
 struggled with, plus the user's review; this is your requirements list),
 notes/overnight_plan.md, notes/friedrich.md, notes/research/*.md as needed.
 The fresh painters' programs are archived in paintings/fresh/*.rs (not built;

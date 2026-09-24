@@ -1005,9 +1005,15 @@ pub fn look(c: &Canvas, relief_default: (f32, f32), v: &View, marks: &[Mark], ou
     if let Some(d) = out.parent() {
         std::fs::create_dir_all(d).map_err(|e| e.to_string())?;
     }
+    // quality 95 with full-resolution color (4:4:4): the image crate's
+    // encoder always halves the color resolution and was at quality 88,
+    // which smeared thin colored strokes and edges, the very things a
+    // painter judges (Round 6)
     let file = std::fs::File::create(out).map_err(|e| e.to_string())?;
-    let mut enc = image::codecs::jpeg::JpegEncoder::new_with_quality(std::io::BufWriter::new(file), 88);
-    enc.encode(&buf, ow as u32, oh as u32, image::ExtendedColorType::Rgb8).map_err(|e| e.to_string())?;
+    let mut enc = jpeg_encoder::Encoder::new(std::io::BufWriter::new(file), 95);
+    enc.set_sampling_factor(jpeg_encoder::SamplingFactor::R_4_4_4);
+    let (w16, h16) = (u16::try_from(ow).map_err(|_| "look: image too wide")?, u16::try_from(oh).map_err(|_| "look: image too tall")?);
+    enc.encode(&buf, w16, h16, jpeg_encoder::ColorType::Rgb).map_err(|e| e.to_string())?;
     Ok((ow, oh))
 }
 

@@ -35,18 +35,20 @@ fn replay(src: &Path, width: u32, threads: Option<usize>, tag: &str) -> (String,
 
 /// The owner's logs replay byte for byte as they did before hand time
 /// existed: the PNG hashes were recorded with the easel of commit 2c5a658,
-/// built in each profile (the engine's floats differ between them), and
-/// re-recorded for the wet-on-wet engine (branch r6-wet, notes/wet.md),
-/// which changes output on purpose. `PRINT_HASHES=1` prints them instead of
-/// checking (re-record in both profiles after an intended engine change).
+/// built in each profile (the engine's floats differ between them), then
+/// re-recorded when the Friedrich relief default went from 0.2 to 0.06
+/// (Round 6, the owner's pick) and for the wet-on-wet engine (branch r6-wet,
+/// notes/wet.md), which changes output on purpose. `PRINT_HASHES=1` prints
+/// them instead of checking (re-record in both profiles after an intended
+/// change).
 #[test]
 fn existing_logs_replay_unchanged() {
     // (the benchmark near is checked in release only: a debug replay takes
     // minutes)
     let logs: &[(&str, u64)] = if cfg!(debug_assertions) {
-        &[("paintings/lua/example.lua", 0x35e4_3d68_1c46_53a5)]
+        &[("paintings/lua/example.lua", 0x8b0b_cffb_870c_b1a0)]
     } else {
-        &[("paintings/lua/example.lua", 0x64e2_8d2b_afff_506d), ("notes/loops/l5_near.lua", 0x9a17_d1e8_08c5_a0d9)]
+        &[("paintings/lua/example.lua", 0x51e4_8f12_b3c0_cdaf), ("notes/loops/l5_near.lua", 0xf2ea_908c_619d_0f1c)]
     };
     for &(log, want) in logs {
         let (_, png) = replay(&root().join(log), 160, None, "unchanged");

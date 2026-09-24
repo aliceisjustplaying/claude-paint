@@ -129,14 +129,17 @@ work(litm, {hand="body", tool="filbert 4", color="#6c6b45", angle=function(x, y)
 --@ chunk 7 · clock 0
 
 -- B6: the one accent: a broken sheen where the bank meets the water, three strokes of a round
--- brush along the waterline, the pale low sky as the water mirrors it; laid into the open paint
-local r = brush("round", 2.4)
+-- brush along the waterline in the pale low sky the water mirrors, laid into the open paint;
+-- then a short level blend over a thin band along it, so it sits in the water, not on it
+local r = brush("round", 3)
 for _, run in ipairs({{60, 230}, {290, 420}, {480, 636}}) do
   local pts = {}
-  for x = run[1], run[2], 8 do pts[#pts + 1] = {x, WL(x) + 2.2 + randn(0, 0.3)} end
-  r:reload(shift(watercol(run[1], HZ + 30), 0.02, 0, 0), 0.8)
-  r:stroke(pts, {pressure={0.15, 0.7, 0.45, 0.65, 0.1}, ramps={0.2, 0.3}})
+  for x = run[1], run[2], 8 do pts[#pts + 1] = {x, WL(x) + 2.4 + randn(0, 0.4)} end
+  r:reload(shift(watercol(run[1], HZ + 30), 0.0, 0, 0), 0.7)
+  r:stroke(pts, {pressure={0.1, 0.5, 0.3, 0.55, 0.05}, ramps={0.25, 0.35}})
 end
+local sheen = mask(function(x, y) local d = y - WL(x) return smoothstep(0.5, 1.5, d) * (1 - smoothstep(4, 6, d)) end) * water
+blend(sheen, {angle=0, coverage=1.5, length={20, 60}, clip=water})
 
 --@ chunk 8 · clock 0
 wait(24*60); varnish{color="#e6d3a4", coats=0.3, vary=0.1}; relief()

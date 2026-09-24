@@ -13,6 +13,11 @@ it: bristle brushes carrying wet paint over a primed linen surface, paint that
 levels and dries, layers composited by Kubelka–Munk optics. No flat fills, no
 optical blends pretending to be paint.
 
+The third rule: tools give physics and constraints, not answers. The engine is
+the world a painter works in; the painter agents do the seeing, composing and
+painting, the way a person would (piles mixed on a palette, gestures, time,
+looking). Read `notes/principles.md` before designing a tool or writing a brief.
+
 ```
 cargo paint friedrich_moonrise_valley               # 1000px preview → out/<name>.png
 cargo paint friedrich_moonrise_valley -- --full     # 3200px         → out/<name>_full.png

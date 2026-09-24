@@ -93,3 +93,15 @@ First reactions (she wanted the plain painting, not only sheets: added
   very digital. The two rocks: not half bad. Still the boundaries.
 - **Aging: "we do want the age stuff", but the craquelure is "still too
   neat, still too digital": the crack algorithm needs work.**
+
+## Round 7 comparison (notes/round7/compare/; not really blind: she knew two)
+- **B, round 2's winter: still the best.** "Still flawed", but "a better
+  tree, better composition and so on", and "good entropy, perceived".
+- **A, the Python control: "very simplistic, very digital tells, the sky
+  is very gradient-like."**
+- **C, Evening at a Mountain Lake: "just very different and very much not
+  there. Digital in a different way."**
+Reading: the look-first control didn't beat the engine, and the current
+process didn't beat round 2. The best picture is still the one whose
+painter authored its own motifs (fresh2_winter.rs: its own wood, prune,
+gnarl, limb_snow, spruce, walker_fig).

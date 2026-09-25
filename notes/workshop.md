@@ -1,250 +1,448 @@
 # The workshop notebook
 
-About twenty painters in this project painted trees in Friedrich's manner, each from scratch and
-alone. This notebook collects what they tried, what they and Alice (the viewer) saw and why,
-where the record says. It describes what was painted and how it looked. It has no methods to
-copy and no verdicts on which picture came out on top.
+About thirty painters in this project each painted an original picture in Friedrich's manner, from
+scratch and alone. Each kept notes. Alice, the viewer, reacted to the pictures. None of it reached
+the next painter. This notebook gathers what they tried, what happened and why, by what a painter
+works on. It has no recipes and no verdicts on which picture came out ahead.
 
-**How sure.** Each claim has a tag. **[firm]**: several painters, or a painter and Alice, saw
-the same thing. **[fair]**: one clear case, or a cause a painter showed by changing one thing.
-**[thin]**: one remark, or my own reading of the record.
+**How sure.** **[firm]**: several painters, or painters and Alice, saw the same thing. **[fair]**:
+one clear case or a cause shown by changing one thing. **[thin]**: one remark, or my reading.
 
-**Sources.** [AR] main:notes/round6/alice_review.md. [TR] main:notes/research/trees.md. [LAB]
-main:notes/lab/baretree.md. [R2] amnesia-winter:notes/fresh2_winter.md. A branch name means that
-branch's notes file (r7–r9 arms: notes/roundN/armN/notes.md; r10-arm1/2/3: r10_winter_a,
-r10_winter_b, r10_summer; others: the matching notes/*.md). [s:X] is the X worktree's session
-log; [s:main] is the log of the session that ran the rounds. Picture letters come from notes/round10/blind/key.md,
-notes/round11/blind/key.md, notes/round12/look/README.md, [AR] (rounds 7–9 and 13) and [s:main]
-(round 11 studies: X = study 2, Y = study 1, Z = study 3).
+**Sources.** [AR] main:notes/round6/alice_review.md (her descriptions only). [CT]
+main:notes/craft_trees.md. [SB] main:notes/sketchbook.md. [coast], [mountains], [winter]:
+origin/amnesia-coast:notes/fresh2_coast.md and its mountains and winter siblings (round 2).
+[e3-free] … [e4-near]: main:notes/amnesia3/easel3_*.md and amnesia4/easel4_*.md (rounds 3–4). A
+branch name (r7-arm1 … r13-tree3) means that branch's notes file. Other main files by path under
+notes/: [lab/sky], [lab2/rock], [l3_green] (loops/), [lake] (paint1/evening_lake.md), [texture]
+(round7/), [halo] (loop1_halo.md), [grain] (loop2_grain.md), [dry_rims], [twigfix]
+(fixes/*/README.md), [winter_port] (round7/), [fresh] (fresh_painters.md, round 1) and [glitch],
+[edges], [time], [drying], [varnish], [pencil_check], [round6], [workflow], [amnesia3]. [s:X] is
+worktree X's session log.
 
-## 1. How Friedrich worked with trees (from [TR] §5)
+## 1. The ground and underdrawing
 
-- He drew particular trees outdoors in pencil: about 400 of some 1,300 drawings, mostly oaks and
-  spruces. He reused one study for decades (a 1809 oak went into paintings up to about 1835).
-  Painted trees were often composites of studies. For *The Tree of Crows* he added and
-  lengthened branches so the tree stretched across the picture [§5.1, §5.3].
-- The drawings are described as "small strokes and hooks," foliage "outlined in jagged lines"
-  and an oak of parallel hatching "with almost no modeling of volume." One leafless tree was
-  traced "down to the smallest detail," its shaded side given only by a "sinuous outline."
-  Conifers were drawn "twig by twig" [§5.1–5.2].
-- He drew sitting on the ground, marked the horizon even across a lower trunk and kept that
-  viewpoint in the painting [§5.2].
-- The underdrawing includes the trees, and the trees were painted over the finished sky. His
-  firs are "thinly painted with short, hatched strokes." A late picture is "less detailed …
-  rendered with a fluid, assured brush." **No text says how he painted bare twigs** [§5.5].
-- His old oaks have dead tops and limbs that look "sawn off," likely invented. He hardly ever
-  painted lopped trees. His friend Carus faulted painters who turn trees into "an imaginary
-  substance that they call 'foliage'" [§5.4–5.5].
-- Alice, looking at a real Friedrich winter tree, saw every branch carry snow, "the same amount
-  of remnant snow," which "adds so much." She also saw "so much texture," probably many small
-  strokes [AR, "real Friedrichs"]. **[fair]**: one viewer, one picture.
-
-## 2. What painters tried, what it looked like and why
-
-### Thousands of twigs, each its own line
-- Lab oak A got one rigger stroke per twig, about 5,500 in all. Its painter saw an even
-  "spiderweb" crown with no mass and "little stars" of sprays at every limb end. Up close the
-  sprays hung "in the air with no visible parent" [LAB]. Alice: "branches in the middle of
-  nowhere"; "the big branches are actually fine … the small ones … get very unnatural" [AR].
+- **The warm ground shows wherever paint is thin.** In every round the red-brown ground came through
+  thin sky, sea and snow as orange flecks, slivers or torn scallops, mostly at the dry ends of long
+  strokes and in blended passes [mountains; coast; r9-arm1; r9-arm3]. Alice: "those orangey, earthy,
+  browny lines, look horrible" [AR]. What held: a thin dead color first in the passage's own tones,
+  a second pass of a different stroke length and judging coverage at full size [mountains; lake;
+  SB]. A flat one-color underpainting showed through a sea as "bristle-textured blots" [coast].
   **[firm]**
-- Round 12's oaks had hundreds to thousands of twigs, plus added sprays at the tips. The painters
-  named the result: tufts, "brooms," "thistle-like radiating bursts" [r12-tree1..3]. Alice: "very
-  fractal-ey, which is the opposite of what we are going for," and yes, the brooms [AR]. **[firm]**
-- Round 13's painters drew about 19,000 and 13,000 fine twig strokes [r13-tree2, r13-tree3]. At
-  full size they saw filigree. Their critiques: "a fairly uniform haze of twigs of one density
-  and one warm color," "too even a dome," "the twigs are spread too evenly" [r13-tree1..3]. Alice:
-  "Ouch. … How do we teach Claudes to paint trees?" [AR]. **[firm]**
-- Why, in their words: evenly spread marks give the crown no "events," meaning no clumps, gaps
-  or limbs bare to the tip [r13-tree1]. Each fix swung between faults. Tip clusters made brooms
-  or "pom-poms." Removing them left a crown "pruned or wind-stripped." Twigs added everywhere
-  made an even haze [r12-tree1, r12-tree2, s:r13-tree2]. **[firm]** that the swing happened;
-  **[thin]** that evenness is the root cause.
-- Hairlines misbehave: a lean pointed stroke breaks into "dotted wire" [r9-arm1]; a thin dark
-  line over light sky dries golden or orange-brown [r9-arm1, r12-tree3]. **[firm]**
-
-### The same fork at every size
-- Study 2 (X) drew oak twigs as an angular zigzag forked three times over. Alice: "the small
-  branches look very abnormal … branches do not look like that" [r11-study2; AR]. Study 3 (Z)
-  forked "at the same fractions and similar angles" (its painter). Alice: "trees only do that
-  when they're in extreme distress" [r11-study3; AR]. **[firm]**
-- Botany agrees with her eye. A healthy crown edge is "a network of long shoots." Spiky
-  "bottle-brush" tips and bushy chains of short shoots are Roloff's stages of decline [TR §1].
-  A fork repeated at every size has no long shoots. **[thin]**: my link.
-- Painters saw it too: twig hooks "like thick thorny 'V' ticks" [s:r10-arm1]. **[firm]**
-
-### A few limbs painted one by one
-- Round 2's dead oak was sparse and broken. Each limb was one movement. As it thinned, a smaller
-  brush was set down in the wet end of the last stroke, so thickness ran from trunk to tip with
-  no joins [R2, method 8]. Alice: "trees looked like trees." Her guess why: "the tree in round 2
-  doesn't have small branches." It has few, short and stubby [s:main]. **[firm]**
-- Lab oak C kept every limb down to a chosen width, then a clustered share of the finer ones. It
-  dropped the curliest, painted no limb whose parent was missing and pulled far limbs toward the
-  sky color behind them. It used about a quarter of A's strokes [LAB, C]. Alice: no "branches in
-  the middle of nowhere, but the tree is sort of unnatural," still in the small branches [AR].
+- **The ground's warmth, used on purpose, helped.** "The red ground pricks through the pale blue as
+  a fine warm speckle" [r11-study1]; glints at dusk "read as dusk warmth," the same flecks elsewhere
+  "as dirt" [s:r7-arm1; s:r9-arm1]. A warm ground also pulls pale cool colors warm: a lilac-gray
+  came out khaki and near-white snow went pinkish, and two winter painters lightened the ground for
+  pale pictures [r10-arm2; r11-fable; r11-study2; r11-astra]. **[firm]**
+- **The pencil can't be seen.** A light search line was invisible at working size on the warm
+  ground; only a firm dark restatement read [e4-green; r8-arm1; r13-tree1; SB]. "That stage
+  contributes nothing you can see" [r10-arm1]. Painters placed things from written positions or
+  overlays, "which are not the drawing" [e4-green]. It was slow too: "the single most expensive
+  stage after the sky, for something a painter does in minutes" [r13-tree2]. **[firm]**
+- **Drawing followed the painting.** "A painter draws it; I compiled it" [e3-near]. "Anything
+  singular (a stone, a man, a crescent) I could draw"; numerous things were the hard part [e4-free].
+  Redrawing a dolmen after the sky was down "felt like a real painter's second thought" [e4-free].
   **[firm]**
-- Round 8 arm 2's oak had a thick trunk dividing low, an elbow at every knot, limbs never
-  hanging below level and twigs turning up in short hooks. It was painted thickest limb first
-  [r8-arm2]. Alice (Z): "The tree is good" [AR]. **[fair]**
-- The pattern: big limbs placed deliberately hold up, and trouble starts in the small wood
-  [AR; LAB; R2]. **[firm]**
-
-### Limbs bent or gnarled by hand
-- Smooth curves read wrong for oak: "smooth noodles" [R2]; "rubbery … an oak limb kinks"
-  [r11-study2]; "too clean for 'gnarled, bent branches'" [r13-tree2]; "curvy" [LAB, C]. A limb
-  of even width between forks reads as a tube or "marker" line [r12-tree2; r10-arm1]. **[firm]**
-- A soft wobble over the whole tree makes limbs snakelike: "a snake-like wobble instead of sharp
-  breaks" [r13-tree1]. Round 2 bent limbs and twigs by the same small wobble, so twigs stayed on
-  [R2]. Straight runs that turn sharply at a knot read as oak [r8-arm2; r11-study3; r10-arm1],
-  as the botany says [TR §1, §3.1]. **[fair]**
-
-### The crown as masses
-- Lab oak B painted the fine twigs as one tone of short lean strokes, no twig traced. Small, the
-  painter saw a crown with mass. Large, it was "fur or cotton wool," limbs ending inside it
-  [LAB, B]. Alice: "different bad" [AR]. **[fair]**
-- Round 10's lime was laid in dark with short hatching. Thousands of hooked leaf touches went on
-  back to front, colored by their light, and a cool veil went over the side away from the sun
-  [r10-arm3]. Alice: "impressive … the big trees and bushes finally look nice." An outside
-  viewer: "The trees are amazing" [AR]. The painter still saw the shaded edge as "too even an
-  arc" [r10-arm3]. **[fair]**
-- A lay-in cut hard to the crown's outline gave "a cut-paper edge"; with the leaf touches making
-  the edge it read as a crown [r10-arm3]. A crown drawn as a round outline and filled read as "a
-  lollipop or a baobab" [r9-arm3]. Alice (N): "the tree is not good" [AR]. **[firm]**
-- Firs without a dark mass under the needle strokes read as "fishbones," "palm fronds" or "comb
-  teeth" [r8-arm2; r10-arm2; r11-astra]. Round 11 D's spruces were needle flicks with no mass
-  under them. Alice: "The trees on the right look terrible" [r11-fable; AR]. **[fair]**
-
-### Leaves placed by hand
-- Beyond the lime (above): last year's brown oak leaves on hundreds of twigs read "like
-  confetti" or "berries"; on a few sheltered low twigs, hanging and dull, they held [r13-tree1,
-  r13-tree3]. Alice: "an interesting idea" [AR]. **[firm]**
-
-### Snow on limbs
-- Painters placed snow limb by limb, by how level and thick each limb was, as the snow research
-  says [TR §4]. It came out timid: "physically argued … but the picture wants more"
-  [r13-tree1]. Compare Alice's "same amount of remnant snow" on every branch [AR]. **[fair]**
-- Separate white touches beaded: "white beads at every fork" [R2]; "a line of white pearls"
-  [r11-fable]; "polka dots" in forks [r12-tree2, r13-tree3]; "commas" [r12-tree3];
-  "pills" [r11-study2]. A continuous ridge along the upper edge over a thin cooler underside
-  read as snow lying on wood [r11-fable; r12-tree1; r13-tree2]. **[firm]**
-
-### Trunks
-- One big brush up a wide bole streaks and runs dry. Without frequent reloading it leaves pale
-  "ladder" bands or dotted chains [r12-tree2; r10-arm1; r8-arm2; r11-fable]. **[firm]**
-- Laid in as a filled shape, the trunk's stroke ends notched its edge into "a cut-paper
-  staircase," and cutting the edge after left a pale rim [r12-tree2]. Round 11 E's boughs were
-  filled shapes brushed inside [r11-astra]. Alice: "nice but too crisp and digital-y" [AR; s:main].
+- **Outlines Alice took for pencil were paint.** She asked about "remnants of the pencil?" around
+  rocks [AR]; with the drawing removed the edges looked the same, and the lines came from contact
+  glazes, snow caps stopping short and the varnish [pencil_check]. The ground's own texture could
+  print through as well: horizontal "wood-grain" from a ground laid in level strokes (a tool fault,
+  since repaired) and "a crackle net" where a soft brush touched only its ridges [grain; r13-tree2].
   **[fair]**
-- Edges grew outlines. A thin dark edge over pale sky dried as a tan or brown halo [r9-arm2;
-  r12-tree3]. Dry-brushed sky light drew "neon" lines along limbs [r12-tree1]. A lit rim read as
-  a pale outline on both sides [LAB, C]. **[firm]**
-- The lime's trunk was repainted as a smooth modeled column over wood already painted
-  [r10-arm3]. Alice: "part is too smooth and then there's almost a separate bit that doesn't
-  match" [AR]. **[fair]**
-- The study trunks came out even in tone: "one mid-dark brown all the way up" [r11-study2]. Of
-  X Alice said the shading is "very simplistic." Study 1 modeled across the form, with a sky-lit
-  flank, the darkest just past the middle and snow light low on the far side. Of that one she
-  said it "feels better," not sure it's accurate [r11-study1; AR]. **[fair]**
-- Joins: a limb begun inside the trunk showed as a lighter band across it [r11-study3]. A root
-  looked pasted on until roots and limbs went down first and the trunk over their starts, which
-  a painter "would do without thinking" [r11-study2]. A taper at each brush change left a
-  feathered break at every joint [r11-fable]. **[firm]**
 
-### Roots and the foot
-- Roots painted like limbs lay on the snow "as flat dark boards" [r12-tree1], rose as a "horn"
-  [r11-study2] or hung below the snow as a "boot" or "lozenge" [R2; r11-study1]. A brush's round
-  end left a bulb, "bottle" or disc under the foot [r8-arm3; r9-arm3; r11-astra; r13-tree2].
+## 2. Skies
+
+- **The sky everyone trusted.** From round 2 on nearly every painter laid the sky thin in long
+  near-level arcs, fused it, stippled into the wet and once dry added a finer stipple barely lighter
+  than the field, denser toward the glow [coast; winter; mountains; e3-free; r11-study1..3;
+  r12-tree1..3]. Round 2's three each called it their strongest passage: "a luminous grain with no
+  stroke direction" [winter]. Round 1's skies had been ruled strokes, "the same sky three times"
+  [fresh]. **[firm]**
+- **To Alice the texture read as compression.** "It almost looks like JPEG artifacts" [AR]. Lossless
+  and compressed crops looked the same: "the crunchy mottle is in the paint (the stipple over the
+  weave)" [AR], mostly the stipple's "blotches with sharp scalloped rims" [texture]. She wanted more
+  texture, not less: "we're just not doing the texture right yet" [AR]. Stipple itself is not the
+  fault: Friedrich stippled skies, mist and distant hills
+  (notes/research/friedrich_materials.md, [NG p.56]) and round 2's skies were stippled; how to make
+  it read as paint is still open. A wet sky of unequal thin
+  bands, no stipple, read to her as "less digital and more bad painter" [lab/sky; AR]. **[firm]**
+- **The fault that stayed: a correct, quiet gradient.** "Close to a digital gradient at viewing
+  distance," the stipple "only visible up close" [r12-tree2; r13-tree3; SB]. A sky whose light was
+  written as a smooth color formula looked to Alice "maybe a little too perfect," a "computational
+  light simulation" [AR]. Why it stayed: the sky was the slowest thing to repaint, so "the sky got
+  the fewest iterations" [r13-tree3]. **[firm]**
+- **Stipple has to sit close to what's under it.** Much lighter than its field it "reads as salt"
+  [coast]; stippled band by band from fixed mixes it made "hard stripes," fixed by touches taking
+  their color from the paint beneath [r7-arm1; r7-arm3]. Blending a fresh broad pass lifted it into
+  "cloudlets" or rust streaks down to the ground [r8-arm3; r8-arm2]; long strokes that ran dry left
+  holes: "coverage … doesn't mean covered" [r9-arm3]. **[firm]**
+- **Clouds sit only if laid into the wet sky.** Banks painted inside outlines on a dry gradient came
+  out as "two cigar-shaped cloud cutouts pasted on it"; laid unfenced into the wet sky they "sit
+  *in* it" [lab/sky]. Wet-stippled clouds vanished under the blender [r10-arm3]. First shapes read
+  as "white 'worms'," cigars, "cartoon sprites" [r10-arm3]. What held: thin level streaks, warm only
+  underneath, edges lost [coast; e4-free]. Alice on one sky: every cloud was "drawing the exact same
+  moon" [AR]. **[firm]**
+- **The glow stays the lightest thing.** Three trunk studies first made the snow lighter than the
+  sunset, "a digital gradient, not evening," and all three darkened the snow a step below the sky
+  [r11-study1..3]. **[firm]**
+
+## 3. Distance and air
+
+- **Distance comes from value steps.** Each nearer range a step darker and cooler, mist at each
+  foot: "it came from values, not from detail" [mountains; SB]. **[fair]**
+- **Carry the sky back over a crest.** Stroke ends notched hard crests into "a mesa"; sky taken from
+  just above and laid back over it "turned the crenellated mesa into a soft dome": "the move a
+  painter makes, and it worked" [e3-green]. A stenciled ridge was "the filled selection" [edges];
+  Alice: "Still the boundaries" [AR]. A dark brought into a wet sky "broke into a lace of pale
+  beads," while over the dried sky it gave "a clean found ridge" [lake]. **[firm]**
+- **Never stipple a pale veil over dark land.** "Over dark ones every dot stands alone" [mountains];
+  "pale salt on the darker strip" [r11-fable]; stippled mist read as "granite" [mountains; winter].
+  A thin veil brushed level and fused worked [mountains; r11-fable]. **[firm]**
+- **The far band of woods was weak nearly everywhere.** "A flat dark hump" [r10-arm1], "a hedge
+  wall" [r12-tree1], "more diagram than distance" [r12-tree2]; an evenly stepped skyline was "a
+  perfect sawtooth," seen only at full size [r10-arm2]. What helped: paler, lower, broken into
+  stretches with open country between, in unequal groups, the tops re-cut with a small brush into "a
+  believable serration" [r13-tree1; r11-astra; r9-arm3]. Groves and field trees became "identical
+  balls with identical shadows, scattered like stamps" until set in mixed groups [e4-green;
+  e3-green; SB]. **[firm]**
+- **A near-black wood won't recede by glazing.** Pale columns read as "white ghosts or smoke"; a
+  veil into open dark "vanished." Body-paint haze after the dark dried, then separate firs in rows
+  paler toward the air, finally showed "air and sky between them" [l2_near; l4_near; l5_near].
+  **[fair]**
+- **Far buildings.** "The spire carries it" [r10-arm2]. Many small strokes into an open band made
+  gables "stacked like pagodas"; one firm shape per roof on a dried band read [r9-arm1]. **[fair]**
+- **Guard the horizon.** Where snow and glow matched, a wood set on the planned horizon "floated in
+  snow" until the painter probed for the real meeting [r9-arm3]; snow spilling above it "silently
+  ruins a horizon, the most important line in a Friedrich" [r12-tree3]. **[fair]**
+
+## 4. Snow, ground and grass
+
+- **The foreground was every round's weak spot, by the painters' own account.** "Friedrich's
+  foregrounds are dark but *drawn*" [coast]; "his foregrounds reward close looking everywhere; mine
+  do in patches" [e3-green]; the other five easel painters said the same [e3-free; e3-near; e4-free;
+  e4-green; e4-near]. All six painters of rounds 12–13 called the snowfield empty, named what was
+  missing ("a track, a stone, a stake") and none added it [r12-tree1..3; r13-tree1..3]. One who
+  added a fence last: "it took ten minutes, which says where the next hour should go … not more
+  passes on the sky" [r11-fable]. **[firm]**
+- **Snow recedes only when laid out on the ground.** Drifts placed as blotches read "like a lake
+  mirroring clouds"; bands narrowing with distance receded [r10-arm2; r11-study3]. The stroke size
+  still never changed with depth [r11-study1; r11-study3]. **[firm]**
+- **Shade laid on afterward looks pasted on.** Over dry snow shadows came out as "crisp blue
+  outlined scribbles ('wire')" [r9-arm3], glazed as "a separate pasted-on path" [r11-study3],
+  stippled as "a strip of dark clover" [r10-arm3]. What held was mixing the shade into the snow as
+  it was laid, "the way a painter mixes the shaded grass, not shades the grass afterwards"
+  [r10-arm3; r11-study1]. Stippled cool hollows became "blue puddles" and "purple slabs": "the
+  contrast of the touch against what's under it decides" [r12-tree2; r12-tree3]. **[firm]**
+- **New snow never matches old snow.** A drift over a trunk's foot went "a pale oval, then … a blue
+  puddle, then a pale rectangle"; shadows mixed from the planned snow color came out lighter than
+  the real snow, leaving "pale halos round the stones" [r9-arm1; winter]. What held: paint taken
+  from the field right beside the spot and drifts laid as rows of strokes along their surface, "how
+  a painter would do it," where a filled shape was "a hard white box" [r9-arm1; r13-tree2;
+  r13-tree3]. **[firm]**
+- **Snow lying on things beads.** "Stipple works as a field texture; as a thing lying on a thing it
+  beads" [r11-fable]; round white touches "all looked like wool or fog" [r9-arm2]. Crests cut
+  against dark bark scalloped into "a cotton edge"; long flat overlapping strokes, broken in places,
+  held [r11-study1..3]. A bank against a stone read as one bank only when deep to windward, nearly
+  gone in the lee and colored from the field [l1_near; l2_near]. **[firm]**
+- **Thick snow reads as illustration.** Relief light made body snow look like "crumpled paper"
+  [r9-arm1]; "more 'clean illustration' than thin oil" [r10-arm2]. Tracks without foreshortening
+  were "a flat pale ribbon (a second river)" [r9-arm1] and later ones "too evenly spaced"
+  [r11-fable]. **[firm]**
+- **Grass went on last, and placement was the whole problem.** Everyone flicked dry grass upward
+  over finished ground, as Friedrich did. It failed by evenness: "a uniform barcode of short upright
+  dashes," "confetti," "a digital sprinkle," "statistical, not looked at" [e4-near; r8-arm3;
+  r12-tree2; r10-arm3]. What held: patches where wind thins the snow, clumps larger near, long
+  curving blades each leaning differently: "the barcode became a meadow" [r12-tree2; r8-arm3;
+  e4-green]. Alice: "still very digital"; "the foreground grass just stops" [AR]. **[firm]**
+- **Small plants vanish or turn into diagrams.** A thin thistle over grass of its own value is
+  invisible in the preview; transparent greens vanish on green; built part by part a plant is "a
+  diagram of one" [e3-green; e4-green]. **[firm]**
+
+## 5. Water and ice
+
+- **Darks first, lights brought to them wet.** Laid as one dark with the mirrored sky brought to it,
+  a headland and its reflection "read as one dark shape" [lake]. In the water lab the layered
+  version "reads as a render. Every edge is found," its reflection "a knife-sharp outline"; laid wet
+  and together, "the reflection dissolves into the water" [lab/water]. Alice: the layered bank
+  "abnormal," the wet one "more bad painter," still "not terribly water-like" [AR]. **[firm]**
+- **Calm water wants whole level strokes.** Drifting strokes made "cloud-like blotches," a flat
+  brush "brick marks" [r7-arm3; e3-free]. Flipped fir silhouettes put spires in the lake instead of
+  "the flat polygon of the headland" [lake]; reflections in rows of broken level pulls held, and a
+  level blend over them "left a ghostly rectangle" [r7-arm2]. One soft light line couldn't be made:
+  blended it became two lines "with a darker trough between," unblended "a single uniform hard wire"
+  [lab/water]. **[firm]**
+- **Frozen water reads as a road.** A brook "is still somewhat 'road'" [winter]; a river stayed "one
+  even band with a perfectly continuous edge" until snow tongues dragged from both banks, sheen and
+  cracks made it ice [r9-arm2]. A pond was "a little too neat an ellipse" [r10-arm2]; shore touches
+  "read as road markings" [r11-astra]. **[firm]**
+
+## 6. Trees (shortened from [CT], which has the full record)
+
+- **What the record says of Friedrich.** He drew particular trees in pencil in "small strokes and
+  hooks," reused studies for decades and painted trees over the finished sky; no text says how he
+  painted bare twigs [CT]. Alice, at a real Friedrich winter tree: every branch carries "the same
+  amount of remnant snow," and "so much texture," probably many small strokes [AR]. **[fair]**
+- **The small wood is where trees failed.** Thousands of even twigs read as a "spiderweb," sprays
+  "in the air with no visible parent," "brooms," "a fairly uniform haze" [CT]. Alice: "branches in
+  the middle of nowhere"; yes, "the brooms"; "twigs hang in the air" [AR]. Twigs laid as a tone read
+  as "fur or cotton wool" [lab/baretree]. Twigs forking "at the same fractions and similar angles"
+  [r11-study3] drew "trees only do that when they're in extreme distress" [AR]. **[firm]**
+- **What held: few limbs, each one movement.** Round 2's oak was sparse and broken, each limb pulled
+  from where it leaves its parent, a smaller brush set into the wet end of the last [winter; CT].
+  Straight runs turning at knots read as oak; smooth curves as "smooth noodles," "rubbery" [r8-arm2;
+  winter; r11-study2]. Where the brush was changed or ran dry, joins showed as light bands and
+  dotted chains: "a painter would reload" [r10-arm2; r8-arm2]. Twigs hanging in the air were partly
+  a brush fault, since repaired [twigfix]. **[firm]**
+- **Crowns in leaf.** Over 40,000 even touches read as "confetti," "textured more than … a lit
+  volume"; a few big masses read as "broccoli" [lab/foliage; lab2/lime]. A lime laid dark first,
+  then hooked leaf touches back to front colored by their light, with a cool veil away from the sun,
+  drew from Alice "the big trees and bushes finally look nice" [r10-arm3; AR]; a lay-in cut hard to
+  the crown gave "a hard, broccoli-like silhouette" until the leaf touches made the edge [r10-arm3].
   **[firm]**
-- Roots that bulge and turn down, left to dry, then a snow bank laid over them with an uneven
-  edge read as a planted tree [r12-tree1]. So did snow painted over the foot [r11-study1].
-  Added snow at a foot read as ovals, puddles or boxes until painted in snow taken from beside
-  the trunk [r9-arm1]. **[firm]**
+- **Firs need a dark mass under the needles.** Hatching alone read as "fishbones," "palm fronds,"
+  "comb teeth" [r8-arm2; r10-arm2; r11-astra]; evenly spaced firs were "a row of Christmas trees"
+  [SB]. **[firm]**
+- **Pollards: painters and Alice disagreed.** Five painters drew a fat bole with thin upright rods
+  from one head, and one wrote that the rods "worked well" [r9-arm2]. Alice: "like the brush you use
+  for shaving"; "I don't think those trees even exist" [AR]. An old pollard has a gnarled head and
+  thick branches of several ages [CT]. **[firm]**
+- **Snow on limbs, trunks and feet.** Separate white touches beaded into "white pearls" and "polka
+  dots"; a continuous ridge on the real upper side read as snow on wood [CT; r11-fable; r11-study3].
+  Backlit trunks came out "one mid-dark brown all the way up"; Alice on one: "the tree's shading
+  simplistic" [r11-study2; AR]. A round stroke end at the foot left a bulb or "boot"; snow laid over
+  the foot last, with an uneven edge, planted the tree [CT; r12-tree1]. **[firm]**
+- **Everyone painted the same oak.** From the same research all six late painters painted a centered
+  stag-headed dome; Alice saw one as "too symmetrical" [CT; AR]. Their critiques asked for
+  accidents: "one long limb reaching out and one gap where a limb fell" [r13-tree2]. **[firm]**
 
-### Pollards
-- Five painters drew pollard willows: a fat bole and a head with many thin, mostly upright rods
-  from one place [r7-arm1; r8-arm1; r9-arm1; r9-arm2; r10-arm3]. Alice: "a very fat trunk, and
-  then like spikes … like the brush you use for shaving"; "straight spikes everywhere. I don't
-  think those trees even exist"; "not a natural structure"; later "wiry trees" [AR]. **[firm]**
-- The painters saw "identical shaving brushes" [s:r8-arm1], "a pincushion" [s:r9-arm1] and
-  "solid brown flame-heads … all emanate from one narrow point" [s:r9-arm2]. Each answered with
-  more rods, "a fuller broom" [s:r7-arm1; s:r9-arm1]. **[firm]**
-- Why: they painted one crop of straight rods of one age from one point. An old pollard has a
-  gnarled head and thick branches several years old; uncut heads spread, "like shocks of hair"
-  [TR §3.5]. Friedrich hardly painted them [TR §5.6]. A project note had called them "worth
-  doing" (main:notes/green.md:202). **[fair]**
+## 7. Rocks and buildings
 
-### Dead oaks and stag heads
-- Once the tree research arrived, all six painters of rounds 12 and 13 painted an old
-  stag-headed oak, mostly centered, as a dome [r12-*, r13-*]. One painter called its tree "too
-  centered and too symmetric"; Alice (Q): "too symmetrical" [r12-tree3; AR]. **[firm]**
-- Dead wood held as a flat silver-gray. A round brush end at a break ("round-capped," a
-  "sausage cap") failed until splinters and a torn face replaced it [r13-tree2; r11-study3;
-  r12-tree2]. A pale touch on a break read as "a white eye" [r12-tree1]. Dead gray dragged
-  through wet live bark went muddy [r12-tree3]. **[firm]**
-- Round 11 D's dead oak "starts out fine, but the top ends are weird" [AR]. Its tips were lifted
-  to nothing and its breaks split into three flicks [r11-fable]. **[thin]** on the cause.
+- **Rocks come out as other things.** "Macarons, loaves, haystacks, beetles, soap bars" in round 1
+  [fresh]; later "a mushroom capstone," "a hay bale," "pillows," "a stack of bricks," "pies on white
+  plates" [e3-free; e3-near; e4-green; e4-near; r8-arm1]. One painter called a dolmen "the focal
+  point and the weakest-drawn thing in the picture" [r10-arm1]. **[firm]**
+- **What made stone.** "A high shoulder, a broken back and a crack running off at an angle made it a
+  stone" [SB]. A pure oval "reads as an egg or potato" [coast]. Angular planes with only the top
+  taking the sky light, strokes following the planes, only the shadow side blended [e4-free;
+  e3-green; SB]. Roughening too fine gave "pumice," black specks "pepper" [coast; SB]. **[firm]**
+- **A rock sits when shadow side, foot and cast shadow are one dark.** Finished inside its outline
+  with a glazed cast shadow, a rock "looks pasted on"; with the three laid as one dark across the
+  rock-ground line, "B sits" [lab/rock]. Alice still saw the shadows as wrong ("super wrong," "a
+  different bad shadow"), and of a rock built from three lit planes said the close crop "looks
+  actually pretty good," the shadow "probably still very wrong" [AR; lab2/rock]. **[firm]**
+- **Backlit stone goes pale.** A tor's tops came out "pale beige: loaves"; "contre-jour painting is
+  all rim" [mountains]. Snow caps read as "stickers," "a fried egg," "little cakes (white top, dark
+  flat underside)"; snow put wherever stone faced up made "tiger stripes" and even landed inside a
+  covered chamber [s:r11-flash; winter]. **[firm]**
+- **Cracks and weathering.** Drawn into open paint cracks came out "dashed, like stitching"; left as
+  unpainted channels, "an even, ruled line"; one pointed stroke with a light lip, lost halfway,
+  held, and "the eye goes to it" [e3-near; SB; lab2/rock]. Streaks from ledges and clustered lichen
+  turned mottle "into something that reads as weather" [e3-near]. The "dots on the lit part that
+  look like a digital anomaly" were the varnish pooling at stroke edges, a tool fault since repaired
+  [varnish; AR]. **[firm]**
+- **Buildings.** A ruin's weathering went "rusty leopard spots" until stone-only colors were used
+  [winter]; a dolmen chamber read as "a hut with two windows" until the glow showed only in slivers
+  [e4-free]; rock on a straight base went architectural [e3-near]. **[fair]**
 
-## 3. Patterns across painters
+## 8. Figures and animals
 
-What kept going wrong:
-- **The small wood.** Nearly every tree Alice spoke about failed in the twigs, and her words
-  were twig words: hanging in the air, brooms, fractal, wiry, spikes [AR]. **[firm]**
-- **Things not joined.** Twigs floated where a lifted stroke stopped short and the next twig
-  was set on that end. This was partly a brush fault, since repaired
-  (main:notes/fixes/twigs/README.md). Limbs stopped bluntly mid-crown [LAB], and a trunk
-  "doesn't match" its top [AR]. **[firm]**
-- **Any small mark repeated.** "The first try of nearly every small detail … came out as a
-  regular, repeated shape: dots, arrowheads, confetti, scallops, lumps" [r13-tree1]. Snow beads,
-  twig stars and rod fans are the same fault. **[firm]**
-- **Evenness** of density, width, tone and spacing, and a centered dome [r11-study1..3;
-  r12-tree3; r13-tree1..3]. **[firm]**
-- **The painters knew.** Their critiques named brooms, evenness and pincushions before Alice
-  did. Their fixes stayed inside the same approach: more twigs, fewer, elsewhere (the sections
-  above; s:main after round 13). **[firm]**
-- **The size gap.** Marks right at the small preview were wrong at full size, or the reverse
-  [r9-arm1; r9-arm3; r11-study2]. **[firm]**
+- **The small figure from behind is in nearly every picture,** usually the only hard silhouette,
+  rimmed toward the hidden sun [coast; winter; mountains; lake; r9-arm2; r10-arm1]. First versions
+  were toys: "a bell-shaped sack in a cowboy hat," "a pawn," a hat "a mop with a bow tie" [r10-arm1;
+  r11-fable; s:r9-arm3]. What read: a coat narrowing at the shoulders and flaring at the hem, one
+  leg in stride, a stick, a hat painted as part of the body, feet sunk in snow [r9-arm2; r10-arm1;
+  lake]. **[firm]**
+- **Figures show faults only at full size, and later passes paint over them.** A sea veil left a
+  man's "coat … pale gray and his cap … gone," and the preview hid it [e3-free]. On flat ground a
+  standing figure's head sits on the horizon, so painters sized figures by eye [e3-free; r11-fable];
+  at the right scale they were "too small to carry the sentiment" [r10-arm2]. Alice: "The figure
+  disappears into the snow; that should not happen"; "a rendering glitch around the figure" [AR],
+  partly a tool fault near thick paint and partly a veil cut around the figure with a margin [halo].
+  **[firm]**
+- **Crows: a real silhouette or nothing.** Perched crows "read as pods and the fliers as specks"
+  until given an upright body, beak, tail and bent wings [s:r9-arm1; r8-arm1]; dragged arcs made
+  "hearts" [winter]. Against a dark trunk they vanished; against sky they were "blobs with beaks" at
+  full size [r12-tree1]. Crows placed by eye floated when the tree was reworked [r9-arm3].
+  **[firm]**
 
-What held up:
-- A limb in one movement from where it leaves its parent. As it thins, the next smaller brush is
-  set down in the wet end of the last, and the brush is reloaded before it runs dry. Nothing
-  thickens outward; a side limb starts as thick as it is where it leaves [R2; r10-arm2;
-  r11-fable; TR §2]. **[firm]**
-- Few limbs, chosen, with sky between: a sparse, broken, old tree [R2; LAB C; s:main]. **[fair]**
-- Friedrich's order: the tree over the finished sky, then snow over the tree's foot [TR §5.5;
-  r11-study1; r12-tree1]. **[firm]**
-- A dark mass first, with needle or leaf touches making the edge [r10-arm2; r10-arm3]. **[fair]**
-- Colors taken from what is actually beside the tree, not from the intended color [R2 friction
-  18; r9-arm1]. **[firm]**
+## 9. Small details
 
-## 4. What painters did that a person would not, and the reverse
+- **The first try at any small detail repeats.** "The first try of nearly every small detail … came
+  out as a regular, repeated shape: dots, arrowheads, confetti, scallops, lumps. The fix was always
+  the same: fewer, irregular spacing, varied size, patchy" [r13-tree1; e3-near; r12-tree2].
+  The irregularity did the work; fewer was one painter's way to it, and texture itself was never
+  the fault (§15). **[firm]**
+- **Moons.** A dragged arc gave "a blunt banana," a filled shape "a small moth"; a crescent filled
+  with short touches so the horns point, or one pointed stroke swelling along the lit limb, turned
+  toward the sunk sun, read [mountains; winter; r8-arm1; s:r8-arm1]. A glazed glow drew a hard line
+  across the sky [winter]. Alice: "the moon has a weird halo"; "the moon does not look like that
+  ever" [AR]. **[firm]**
+- **The brush won't come to a point by itself.** Tips came out as "a rounded peg or a bean"; "a real
+  sable round comes to a point when lifted" [mountains; winter; r10-arm1]. **[firm]**
+- **Particular things.** A fence with a sagging rail was "the most Friedrich-like particular thing
+  in the picture" [r11-fable]; Alice on another: "not right, very digital" [AR]. A net read as "a
+  flag" [coast], a boat as "a puck" [r9-arm2], a cross "like a sword" [r9-arm3], reed beds "as
+  domes" [r7-arm3]. Tiny things carry at full size and vanish in the preview: yarrow read as "scraps
+  of white paper" [mountains; r10-arm3]. **[fair]**
+
+## 10. Edges and how things sit in their surroundings
+
+- **Alone on dry paint a thing looks pasted on; laid wet against its neighbors it sits.** Every lab
+  found it: cloud cutouts, the knife-edged reflection, the pasted rock [lab/sky; lab/water;
+  lab/rock]. The old habit of drying everything before each passage made cut-outs [time; round6].
+  Timing decides the edge: a hill painted into open sky dragged into "a pale, broken band," after
+  lunch less and the next day sat on top crisp, "a cut-out" [time]. **[firm]**
+- **A stencil makes an edge no brush makes.** "No brush lays that; a selection filled with paint
+  does" [edges]. Edges decided by the light held: found against the glow, soft along most of a
+  contour, lost into a neighbor of close value; but soft over dry paint stays "a thinning, broken
+  fringe" and a truly soft edge needs wet paint [edges; SB]. A soft mask gave "gaps, not thin paint"
+  [r11-study2]. **[firm]**
+- **Nothing sits behind anything unless arranged.** "There is no 'behind' for gestures, only order
+  and masks" [r13-tree2]; "every new pass needs every earlier motif subtracted" [e3-free]. A land
+  glaze "drew a visible horizon line straight across the dark willow trunks"; broad strokes filled
+  any hole smaller than about two brush widths [r9-arm1]. **[firm]**
+- **Halos come from margins.** A veil cut around motifs with a slightly larger outline left a ring
+  that reads as a glow; cutting exactly, or blurring the veil and then cutting, removed it, and
+  touches just outside in the surroundings' color closed the rest [l3_green; halo; SB]. **[firm]**
+- **Anything that rings a whole shape becomes an outline.** A ring shadow "reads as a cartoon
+  outline"; light on every side of a stone was "like frosting"; a lit rim on both sides of a trunk,
+  "a pale outline" [e3-near; e4-free; lab/baretree]. Light only on faces turned to the light held
+  [e4-free]. A drawn contact line "read as a seam," since "a stroke's centerline isn't its edge"
+  [r11-study1]. **[firm]**
+- **Carry past the line and cut back.** "A painter would carry the paint past the line and cut back
+  with the next passage" [winter]. Laying the neighbor's color back over an edge made it "lost and
+  found" [r7-arm2; r9-arm2]. Thin dark edges over pale sky dried with "a thin light-brown rim … the
+  most 'digital' thing in the picture" [r9-arm2; r12-tree3]. **[firm]**
+- **Feet are where things look pasted on.** A cross's foot under snow of exactly the right color
+  still left "a straight horizontal cut … (correct but reads as pasted)" [r8-arm1]. Grass laid over
+  roots and stone feet was the most common cure [e3-free; e3-green; e4-free]. **[firm]**
+
+## 11. The paint surface and texture
+
+- **Wet paint behaves by the hour.** A light into an open dark plowed "a camouflage mottle," into a
+  setting dark it was "soft and leafy," into a tacky one "flat poster slabs"; a dark over dry sky
+  was "a clean dark" [lab/foliage; lab2/oakleaf]. Pale paint set fast and blacks slowly, so a dark
+  passage could still be open beside a tacky sky [drying]. Hidden wet paint was the commonest
+  surprise: a rock "went semi-transparent," a river plowed, "the drying state is invisible until it
+  bites" [e3-near; e4-near], much of it later traced to an older model of wet paint [round6].
+  **[firm]**
+- **Body paint over dry paint kept its outlines,** "a lacy net of loop outlines," shadows "like
+  glass tubing": a tool fault, since repaired [r8-arm3; r9-arm2; dry_rims]. Painters at the time
+  went over dry paint only with stipple or glaze [r8-arm3]. **[firm]**
+- **Glazes.** A glaze waits for everything under it to dry, so "a shadow can't be modeled
+  wet-into-wet with the thing that casts it" [r8-arm1; r9-arm3]. Glazes fading toward nothing drew
+  hard lines and rectangles [winter; coast]. Even glazes read as gradients: "a painter would glaze
+  with a brush, unevenly" [r12-tree3]. The final veil darker toward the edges, after Friedrich's
+  advice, "gathered the picture onto the glow" [lake]; heavy, it was "a photographic vignette with a
+  visible oval" [e4-free]. **[firm]**
+- **Thin paint shows its other color.** Dark twigs came out "golden-brown and transparent," light
+  touches over cool darks dried orange, thin edges showed "red rims" [r9-arm1; coast]. Mixing each
+  mark for how it looks over what is under it and setting out only a passage's few colors fixed it
+  [r9-arm1; r11-astra; r10-arm2]. **[firm]**
+- **Stipple is a surface, not a scatter;** sparse it read as "pollen" or "frost" [e3-near;
+  e3-green]. Big flats and fluid washes left paint only at the rims, "fish scales" [r7-arm3]. Strong
+  raking light drew "worms" and "swirling impasto," and painters kept it low [e3-free; e4-free].
+  **[firm]**
+- **Cracks.** The early crack pattern read as "crazed glass" and "a dark rectangular grid," and all
+  three round 2 painters made finer ones [mountains; winter; coast]. Later cracks read over pale
+  snow "as ruled hatching" [r8-arm2]. Alice: "we do want the age stuff," but "still too neat, still
+  too digital"; in real Friedrichs she saw cracks that "almost flow, running down a little to the
+  right" (*Monk by the Sea*), clusters random "in a sort of human random way" and an amount that
+  varies by painting, where "ours is one uniform net" [AR]. The crack widths have since been
+  repaired (the first cracks now open widest); direction and clusters are still open. **[firm]**
+
+## 12. Composition
+
+- **Left alone, painters paint the same picture.** Free painters chose "twilight, a crescent moon,
+  the evening star, a figure seen from behind and a dead oak" again and again [amnesia3; e4-free].
+  These are Friedrich's own motifs; what Alice noticed was the sameness from painter to painter,
+  not the motifs.
+  Alice saw that a painter "without any extra instructions around themes, converges on roughly the
+  same painting" (pond, sky, trees reflecting, foreground grass) [AR]. **[firm]**
+- **The shared design:** low horizon, big quiet sky, dark near stage, empty middle, far band, light
+  low and behind: "everything important is dark against the lightest band of sky" [r10-arm1;
+  mountains; coast]. "Contre-jour needs few decisions" [r8-arm1]. **[firm]**
+- **Safe, centered, even.** "Too centered and too symmetric" [r12-tree3]; "a Friedrich
+  *arrangement*, but without his tension" [r13-tree1]; "closer to a pleasant summer view than to
+  Friedrich's charged emptiness" [r10-arm3]. Even spacing crept into crests, skylines and uprights
+  [r10-arm1; r10-arm2]. Alice: "an emptiness that doesn't do anything for her"; "it doesn't come
+  together" [AR]. **[firm]**
+- **Squint first.** The value view showed "the rock, sky and middle floor all at the same value,"
+  and darkening the surroundings "changed the whole picture's weight in half a second" [e3-near].
+  Framing makes its own faults: keeping a crown inside the frame bent its edge shoots into brooms,
+  "not from a tree" [r13-tree2]. **[firm]**
+
+## 13. Working method, time and looking
+
+- **The preview and the full-size picture are different paintings.** The full-size crops "caught
+  most of the above," while in the preview faults "read only as vague wrongness" [r11-study3]; "a
+  fix judged at one width can be wrong at the other" [r9-arm1]. The preview is for composition and
+  value [SB]. Alice later asked to "paint, look and deliver at one size" [AR]. **[firm]**
+- **Saved stages made detail work possible and trained a bad habit.** Resuming a full-size crop from
+  a late saved stage took seconds instead of minutes, "what made iteration possible" [mountains;
+  r13-tree1]. But any edit marked every stage stale, so painters overrode the check by reflex, and
+  it bit: "a stale boat," "the old shadow" [r9-arm2; r11-study2; r12-tree1]. Crops are close but not
+  exact, since long strokes carry paint from outside the window [workflow]. **[firm]**
+- **What is slow is the sky and the ground, not the tree.** A full render took a couple of minutes,
+  mostly priming, pencil and sky; a tree of thousands of strokes took seconds [r12-tree1; r13-tree3;
+  r11-fable]. So the sky was painted once, and sky, horizon and snowfield got the fewest looks
+  [r13-tree3]. **[firm]**
+- **The painter's clock.** With hand time counted, one fir wood came to about 53 hours against half
+  an hour for the sky [time]; the lake painter finished a passage "rather than resting in the middle
+  of the wood" [lake]. A view coloring open, setting, tacky and dry paint showed what was still wet
+  [time]. **[fair]**
+- **Finding a cause meant stopping stage by stage.** One rectangle took five stopped renders
+  [coast]; a crackle net took four crops with layers switched off: "a painter would have seen it at
+  once on the easel" [r13-tree2]. **[firm]**
+- **Look after every step; undo freely.** "Undo is the palette knife" [e4-free]; a third of passages
+  undone is "normal" [SB]. "A program written in one go would have had the mushroom capstone and the
+  lawn-green foreground, and I wouldn't have known" [e3-free]. **[firm]**
+- **Measure when the eye doubts, and expect the tools to move.** A "pale" rock was simply lighter
+  than its turf [SB]; sizes given as half-widths doubled boulders [e3-green]. A round 2 picture
+  repainted on a later engine came out with thinner marks, which Alice saw in its trees
+  [winter_port; AR]. **[fair]**
+
+## 14. What painters did that a person would not, and the reverse
 
 Painters here, unlike a person:
-- Drew every twig of a crown, by the thousand. Friedrich's drawings are "small strokes and
-  hooks" [TR §5.2]; how he painted a twig mass is unrecorded [TR Gaps]. **[fair]**
-- Painted from botany instead of from one tree: every study tree was a correct old oak, none
-  a particular one, and six painters painted the same tree [r12-*, r13-*]. **[fair]**
-- Placed snow by argument (angle, thickness) rather than by look [r13-tree1; AR]. **[fair]**
-- Cut the trunk exactly at the snow line and planned every overlap in advance. A person paints
-  the snow over the foot and cuts back [r11-study1; r11-study2]. **[firm]**
-- Answered a fault with more of the same: more rods, more twigs [s:r7-arm1; s:r9-arm1;
-  r12-tree2]. **[firm]**
-- Found faults only in magnified crops, often late. "A painter sees the mark as it forms"
-  [r11-study2]. **[firm]**
+- Placed marks by positions read off a small image, "programming with a picture as the debugger"
+  [e4-green; e3-near]. **[firm]**
+- Finished each thing alone over dry paint and laid tens of thousands of like touches; their notes
+  say what a person would do: "merge some, lose some and let one or two big ones dominate"
+  [lab/foliage; time]. **[firm]**
+- Answered a fault with more of the same, stenciled every edge and subtracted every figure from
+  every glaze by hand [CT; edges; r9-arm1]. **[firm]**
+- Mixed from the plan instead of the canvas, so shadows came out lighter than the snow under them
+  [winter; coast]. **[firm]**
+- Placed snow by argument, and got it on limb undersides and inside a covered chamber [r13-tree1;
+  r11-study3; s:r11-flash]. **[firm]**
+- Saw a mark only after a render, and gave the slowest passage the least attention [r11-study2;
+  r13-tree3]. **[firm]**
 
-A person does and painters mostly did not:
-- Draw one real tree and let its accidents decide: a limb that reaches out, a gap, a lean.
-  Friedrich reused such studies and changed them freely [TR §5.3]. The painters asked for those
-  accidents in their critiques: "one long limb reaching out and one gap where a limb fell"
-  [r13-tree2]. **[fair]**
-- Let far and thin wood go lighter and cooler into the sky [LAB, C] and let the shaded side
-  lose its edge [TR §5.2]. **[fair]**
-- Leave things unsaid. The tree Alice called "more bad painter … less digital" (round 11 F) was
-  unfinished. Each limb was one stroke of a blunt brush with a slight tremor, plus a few lit
-  streaks [AR; r11-flash:paintings/src/bin/r11_winter_flash.rs, the oak]. **[thin]**: one
-  picture.
+A person does, and painters mostly did not:
+- Reloads when the brush runs dry; paints snow over a tree's foot and cuts back without thinking
+  [r8-arm2; r11-study2]. **[firm]**
+- Brushes a shadow wet with the thing that casts it and keeps the blender inside the passage
+  [r8-arm1; mountains]. **[firm]**
+- Paints one particular tree or stone and adds the particular thing: all six late painters named the
+  missing track or stone and none painted it [r13-tree2; CT]. **[firm]**
 
-## 5. What the record does not settle
+When painters acted like painters, it paid: cutting sky back over a crest, darkening the
+surroundings, waiting for paint to set. "Paint has consequences here, and time is a real tool"
+[e3-green]. **[firm]**
 
-- Whether a twig mass can read as a tone without turning to fur. Nobody has tried since the lab
-  [LAB B].
-- Whether "the same snow on every branch" holds beyond the one picture Alice looked at [AR].
-- Whether trees read better inside a landscape (rounds 2, 10) than filling a study [s:main].
+## 15. What comes back in every section
+
+- **Evenness reads as digital:** grass, twigs, snow beads, stipple bands, skylines, tracks and
+  cracks all failed first by being even. What helped was unevenness (clusters and gaps, varied size
+  and spacing), not fewness: Alice saw "so much texture," probably many small strokes, in a real
+  Friedrich tree, and found an empty picture's emptiness did nothing for her [r13-tree1; SB; AR].
+- **Pasted on or sitting** depends on when a thing goes down (wet against its neighbors or alone on
+  dry paint) and where its color comes from (the paint beside it or the plan) [lab/*; time; r9-arm1;
+  winter].
+- **Two sizes, two pictures:** nearly every fault was found late in a full-size crop [SB;
+  r11-study3].
+- **The painters saw their faults** before anyone else, but their fixes stayed inside the same
+  approach, and the particular things they asked for went unpainted [r12-*; r13-*; CT].
+- **Still open:** a sky with structure that reads as paint; foliage whose shade isn't one slab;
+  cracks with direction and clusters; a twig mass that reads as tone without turning to fur [SB;
+  round6; AR; CT].

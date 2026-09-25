@@ -442,6 +442,9 @@ impl<'a> Handling<'a> {
     }
     /// Whether this pass fills the gaps its strokes leave (see `fill`).
     pub fn fills(&self) -> bool {
+        if crate::texoff::off("fill") {
+            return false;
+        }
         self.fill.unwrap_or(self.coverage >= FILL_FROM && self.load >= FILL_LOAD && !self.blender && self.scrub == 0)
     }
     /// Hug the region's edges (default on): a painter carries a passage to
@@ -936,6 +939,7 @@ fn finish_plan(cv: &Canvas, hd: &Handling, tool: &Tool, c: (f32, f32), pts: Vec<
     // aiming at the result: what the stroke will sit on, and how thick
     let aim = hd.aim.unwrap_or(if hd.palette.is_some() { Aim::Laid } else { Aim::Masstone });
     let coats = match aim {
+        _ if crate::texoff::off("aim") => None,
         Aim::Masstone => None,
         Aim::Laid => Some(laid_coats(hd, load_k)),
         Aim::Coats(x) => Some(x),
@@ -962,10 +966,11 @@ fn finish_plan(cv: &Canvas, hd: &Handling, tool: &Tool, c: (f32, f32), pts: Vec<
         }
         None => {
             let lab = to_oklab(target);
+            let jk = if crate::texoff::off("jitter") { 0.0 } else { 1.0 };
             let col = from_oklab([
-                lab[0] + rng.normal() * hd.jitter.0,
-                lab[1] + rng.normal() * hd.jitter.1,
-                lab[2] + rng.normal() * hd.jitter.1,
+                lab[0] + rng.normal() * hd.jitter.0 * jk,
+                lab[1] + rng.normal() * hd.jitter.1 * jk,
+                lab[2] + rng.normal() * hd.jitter.1 * jk,
             ]);
             match under {
                 Some((u, coats)) => Paint::aimed(col, u, coats, hd.hiding, hd.stiff),

@@ -1327,6 +1327,9 @@ impl Canvas {
     /// how wide it opened; with `veil` patches of microcracked varnish
     /// scatter a milky light.
     pub fn crack(&mut self, k: &Cracks) {
+        if crate::texoff::off("cracks") {
+            return;
+        }
         self.dry();
         let k = &k.fit(self.ground_um);
         let f = self.f;

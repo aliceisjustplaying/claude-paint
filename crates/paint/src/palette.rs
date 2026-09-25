@@ -376,12 +376,13 @@ impl Palette {
     pub fn aim_for(&self, want: Rgb, under: Rgb, medium: f32, coats: f32, marks: Marks) -> Mixture {
         let (wl, ul) = (to_oklab(want), to_oklab(under));
         let q = |v: f32, s: f32| (v * s).round() as i32;
-        let key: AimKey = [q(wl[0], Q_WANT), q(wl[1], Q_WANT), q(wl[2], Q_WANT), q(ul[0], Q_UNDER), q(ul[1], Q_UNDER), q(ul[2], Q_UNDER), q(coats.max(0.0), Q_COATS), q(medium.clamp(0.0, 1.0), Q_MEDIUM), marks as i32];
+        let qu = if crate::texoff::off("aimfine") { 4.0 * Q_UNDER } else { Q_UNDER };
+        let key: AimKey = [q(wl[0], Q_WANT), q(wl[1], Q_WANT), q(wl[2], Q_WANT), q(ul[0], qu), q(ul[1], qu), q(ul[2], qu), q(coats.max(0.0), Q_COATS), q(medium.clamp(0.0, 1.0), Q_MEDIUM), marks as i32];
         if let Some(m) = self.aims.lock().unwrap().get(&key) {
             return m.clone();
         }
         let wl = [key[0] as f32 / Q_WANT, key[1] as f32 / Q_WANT, key[2] as f32 / Q_WANT];
-        let under = crate::color::from_oklab([key[3] as f32 / Q_UNDER, key[4] as f32 / Q_UNDER, key[5] as f32 / Q_UNDER]);
+        let under = crate::color::from_oklab([key[3] as f32 / qu, key[4] as f32 / qu, key[5] as f32 / qu]);
         let coats = (key[6] as f32 / Q_COATS).max(1.0 / Q_COATS);
         let dil = 1.0 - key[7] as f32 / Q_MEDIUM;
         let look = |c: Rgb, s: f32, x: f32| to_oklab(Pigment::masstone(c, s * dil).over(under, x));
@@ -476,7 +477,7 @@ impl Palette {
     /// The painter never mixes the same pile twice: jitter the proportions
     /// (relative sd `amount`) and remix.
     pub fn remix(&self, m: &Mixture, amount: f32, rng: &mut Rng) -> Mixture {
-        if amount <= 0.0 || m.parts.len() < 2 {
+        if amount <= 0.0 || m.parts.len() < 2 || crate::texoff::off("jitter") {
             return m.clone();
         }
         let mut parts: Vec<(usize, f32)> = m.parts.iter().map(|&(i, f)| (i, (f * (1.0 + rng.normal() * amount)).max(0.0))).collect();
@@ -530,6 +531,9 @@ impl Canvas {
     /// bare ground inside the mark doesn't skew the pile.
     #[allow(clippy::too_many_arguments)]
     pub fn aim(&self, pal: &Palette, want: Rgb, (x, y): (f32, f32), r: f32, medium: f32, coats: f32) -> Paint {
+        if crate::texoff::off("aim") {
+            return pal.paint(want, medium);
+        }
         pal.paint_for(want, self.judge_under(x, y, r), medium, coats)
     }
 

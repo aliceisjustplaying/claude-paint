@@ -843,7 +843,8 @@ pub(crate) unsafe fn drag_on(
     let tool = held.tool.clone();
     // a pointed tool's hairs are drawn at their true size, however far
     // below a pixel (see `strip_cover`)
-    let rb = (tool.hair_radius() * s).max(if tool.point > 0.0 { FINE_RB } else { 0.55 });
+    let floor = if crate::texoff::off("hairsoft") { 1.2 } else { 0.55 };
+    let rb = (tool.hair_radius() * s).max(if tool.point > 0.0 { FINE_RB } else { floor });
     let full = held.full();
     let step = rb.max(1.25);
     let nsteps = ((total / step).ceil() as usize).max(1);
@@ -1451,7 +1452,8 @@ fn touch_half(tool: &Tool, p: f32, s: f32) -> f32 {
 /// sampled: a coarse render must not make small marks bigger (and fainter).
 fn touch_rb(tool: &Tool, p: f32, s: f32) -> f32 {
     let spacing = touch_half(tool, p, s) * (root_area(tool.kind) / tool.bristles.max(1) as f32).sqrt();
-    (tool.hair_radius() * s).max(1.4 * spacing).max(0.75)
+    let floor = if crate::texoff::off("hairsoft") { 1.5 } else { 0.75 };
+    (tool.hair_radius() * s).max(1.4 * spacing).max(floor)
 }
 
 /// Every pixel `touch_on` may read or write for `t`, as a conservative

@@ -1805,7 +1805,9 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
                 let var = Fbm::new(s.seed as u32 + seed, 3, 400.0);
                 let c = s.canvas.as_mut().ok_or_else(no_canvas)?;
                 c.dry();
-                c.glaze(&Pigment::varnish(col), None, |x, y| coats + vary * var.get(x, y));
+                if !paint::texoff::off("varnish") {
+                    c.glaze(&Pigment::varnish(col), None, |x, y| coats + vary * var.get(x, y));
+                }
                 brushed(c, None);
                 Ok(())
             })

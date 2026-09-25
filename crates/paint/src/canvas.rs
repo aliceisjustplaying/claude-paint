@@ -438,6 +438,9 @@ impl Canvas {
     /// `strength` ≈ 0.3–1.0; `gloss` adds a faint varnish sheen on ridges.
     pub fn relief(&mut self, strength: f32, gloss: f32) {
         self.dry();
+        if crate::texoff::off("relief") {
+            return;
+        }
         let (w, h) = (self.f.w, self.f.h);
         let surf = &self.height;
         // light from the upper left at ~35° elevation
@@ -494,7 +497,9 @@ impl Canvas {
                 let p = self.px[(y + ky0) * bw + x + kx0];
                 let (gx, gy) = ((x + ox) as i64, (y + oy) as i64);
                 for c in 0..3 {
-                    let d = hash2(gx, gy, c as u64 * 7 + 1) - hash2(gx, gy, c as u64 * 7 + 2);
+                    // (texture forensics: PAINT_TEXOFF=dither / dither_mono)
+                    let cd = if crate::texoff::off("dither_mono") { 0 } else { c as u64 };
+                    let d = if crate::texoff::off("dither") { 0.0 } else { hash2(gx, gy, cd * 7 + 1) - hash2(gx, gy, cd * 7 + 2) };
                     let v = color::linear_to_srgb(p[c]) * 255.0 + d;
                     row[x * 3 + c] = v.round().clamp(0.0, 255.0) as u8;
                 }

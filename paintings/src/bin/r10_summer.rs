@@ -58,9 +58,21 @@ fn main() {
     let far = Mask::from_fn(f, |x, y| soft(y - far_top(x), 0.4) * (1.0 - soft(y - horizon - 1.2, 0.4)));
     let plain = Mask::from_fn(f, |x, y| soft(y - horizon - 1.2, 0.4) * (1.0 - soft(y - rise(x), 0.8)));
     let bank = Mask::from_fn(f, |x, y| soft(y - rise(x), 0.8));
-    let land = Mask::from_fn(f, |x, y| soft(y - far_top(x), 0.4));
     // depth across the plain: 0 at the horizon, 1 at the rise
     let depth = move |x: f32, y: f32| ((y - horizon) / (rise(x) - horizon).max(1.0)).clamp(0.0, 1.0);
+    // where the lime stands, and its shadow: the sun is behind us and to the
+    // left, so the shadow falls away from us and to the right, a long
+    // flattened pool on the rise and the meadow behind it. Painted into the
+    // meadow's own color (laid in shade), not put on after.
+    let lime_foot = (300.0, rise(300.0) + 12.0);
+    let nsh = Fbm::new(s32 + 33, 4, 40.0);
+    let lime_sh = move |x: f32, y: f32| {
+        let (sx, sy) = (lime_foot.0 + 150.0, lime_foot.1 - 14.0);
+        let nx = (x - sx) / 175.0;
+        let ny = (y - sy - 0.03 * (x - sx)) / 14.0;
+        let n = 0.45 * nsh.get(x, y * 2.0);
+        (1.0 - smoothstep(0.35, 1.1, nx * nx + ny * ny + n)) * smoothstep(horizon + 8.0, horizon + 14.0, y) * smoothstep(lime_foot.0 - 10.0, lime_foot.0 + 20.0, x)
+    };
 
     // ---- underpainting: thin warm brown for the values, the land darker
     if o.stage("ground", &mut c, &mut rng) {
@@ -156,6 +168,25 @@ fn main() {
         c.dry();
     }
 
+    // ---- swallows high in the summer air, the late afternoon's hunters
+    if o.stage("swallows", &mut c, &mut rng) {
+        let mut sw = Held::new(Tool { point: 1.0, ..Tool::rigger(0.45) }, 811);
+        for &(x, y, s, tilt) in &[(585.0f32, 205.0f32, 4.2f32, 0.15f32), (640.0, 232.0, 3.4, -0.25), (612.0, 178.0, 2.8, 0.35)] {
+            let (ca, sa) = (tilt.cos(), tilt.sin());
+            let rot = |u: f32, v: f32| (x + u * ca - v * sa, y + u * sa + v * ca);
+            for side in [-1.0f32, 1.0] {
+                sw.reload(pal.paint(hex("#26262a"), 0.15), 0.8);
+                // a wing: swept back in a crescent
+                let pts = vec![rot(0.0, 0.0), rot(side * s * 0.45, -s * 0.18), rot(side * s, s * 0.12)];
+                c.drag(&mut sw, &Gesture::new(pts).pressure(0.9, 0.05).ramps(0.05, 0.7).orient(Orient::Across), None);
+                // the forked tail
+                sw.reload(pal.paint(hex("#26262a"), 0.15), 0.6);
+                c.drag(&mut sw, &Gesture::new(vec![rot(0.0, s * 0.1), rot(side * s * 0.12, s * 0.55)]).pressure(0.6, 0.05).ramps(0.05, 0.7).orient(Orient::Across), None);
+            }
+        }
+        c.dry();
+    }
+
     // ---- the distance: far woods cool blue-green, the town, a windmill
     let town_x = 705.0;
     if o.stage("distance", &mut c, &mut rng) {
@@ -196,7 +227,7 @@ fn main() {
         let green = gradient(&[(0.0, hex("#98a497")), (0.12, hex("#8a9677")), (0.45, hex("#6f7c45")), (1.0, hex("#5e6a35"))], d, Mix::Pigment);
         let hay = gradient(&[(0.0, hex("#aeab93")), (0.12, hex("#b0ab80")), (0.5, hex("#aaa066")), (1.0, hex("#a0935a"))], d, Mix::Pigment);
         let base = mixc(green, hay, mown(x, y) * 0.8);
-        let k = (1.0 + 0.06 * nm.get(x, y * 3.0)) * (1.0 - 0.28 * cloud_shade(x, y));
+        let k = (1.0 + 0.06 * nm.get(x, y * 3.0)) * (1.0 - 0.28 * cloud_shade(x, y)) * (1.0 - 0.3 * lime_sh(x, y));
         [base[0] * k, base[1] * k, base[2] * k * (1.0 + 0.05 * cloud_shade(x, y))]
     };
     if o.stage("plain", &mut c, &mut rng) {
@@ -257,14 +288,14 @@ fn main() {
         // the ditch: its far bank in shade, a dark band of rushes, the water
         // showing only in pieces, a pale sky glint
         let pts: Vec<(f32, f32)> = (0..=24).map(|k| ditch(k as f32 / 24.0)).map(|(x, y)| (x, y + 2.0)).collect();
-        let mut dw = Held::new(Tool { point: 0.6, ..Tool::round_sable(2.6) }, 301);
+        let mut dw = Held::new(Tool { point: 0.6, ..Tool::filbert(4.0) }, 301);
         dw.load(pal.paint(hex("#44502f"), 0.3), 0.9);
         c.drag(&mut dw, &Gesture::new(pts.clone()).pressure(0.9, 0.15).ramps(0.05, 0.7).orient(Orient::Across), None);
         let mut gl = Held::new(Tool { point: 0.9, ..Tool::round_sable(0.8) }, 302);
-        for seg in 0..5 {
-            let i0 = 2 + seg * 3;
+        for seg in 0..3 {
+            let i0 = 3 + seg * 5;
             let piece: Vec<(f32, f32)> = pts[i0..i0 + 2].iter().map(|&(x, y)| (x, y + 0.6)).collect();
-            gl.reload(pal.paint(hex("#9aa9b0"), 0.2), 0.6);
+            gl.reload(pal.paint(hex("#7f8d8e"), 0.2), 0.5);
             c.drag(&mut gl, &Gesture::new(piece).pressure(0.6, 0.2).ramps(0.2, 0.5).orient(Orient::Across), None);
         }
         // rushes along it, fine upright strokes
@@ -313,13 +344,12 @@ fn main() {
     let bank_c = move |x: f32, y: f32| {
         let t = ((y - rise(x)) / (h - rise(x)).max(1.0)).clamp(0.0, 1.0);
         let base = gradient(&[(0.0, hex("#5f6634")), (0.3, hex("#4a5129")), (0.75, hex("#363c20")), (1.0, hex("#2b2f1b"))], t, Mix::Pigment);
-        let k = (1.0 + 0.1 * nbk.get(x, y * 2.0)) * (1.0 - 0.3 * cloud_shade(x, y)) * (1.0 + 0.12 * (1.0 - smoothstep(rise(x), rise(x) + 30.0, y)));
+        let k = (1.0 + 0.1 * nbk.get(x, y * 2.0)) * (1.0 - 0.3 * cloud_shade(x, y)) * (1.0 - 0.3 * lime_sh(x, y)) * (1.0 + 0.12 * (1.0 - smoothstep(rise(x), rise(x) + 30.0, y)));
         [base[0] * k, base[1] * k * 1.01, base[2] * k * (1.0 + 0.06 * cloud_shade(x, y))]
     };
     // the lime and where it stands
-    let lime_foot = (300.0, rise(300.0) + 2.0);
     let crown: Vec<(f32, f32)> = {
-        let (cx, top, bot, rw) = (300.0, 58.0, 440.0, 190.0);
+        let (cx, top, bot, rw) = (300.0, 40.0, 446.0, 172.0);
         let nn = Fbm::new(s32 + 40, 3, 1.3);
         (0..48).map(|i| {
             let a = i as f32 / 48.0 * std::f32::consts::TAU;
@@ -331,7 +361,7 @@ fn main() {
             let (ca, sa) = (a.cos(), a.sin());
             // the crown's outline in masses: a few big lobes where the main
             // limbs carry their leaves out, smaller bumps on them
-            let r = 1.0 + 0.13 * nn.get(ca * 1.1 + 3.0, sa * 1.1) + 0.05 * nn.get(ca * 3.5, sa * 3.5);
+            let r = 1.0 + 0.2 * nn.get(ca * 1.2 + 3.0, sa * 1.2) + 0.06 * nn.get(ca * 3.5, sa * 3.5);
             let sx = ca * rw * r * (1.0 + 0.12 * sa.max(0.0)) * (1.0 - 0.22 * (-sa).max(0.0).powi(3));
             let lift = if sa > 0.0 { 0.9 - 0.2 * (1.0 - ca.abs()).powi(2) } else { 1.0 };
             let sy = sa * ry * r * lift;
@@ -339,26 +369,14 @@ fn main() {
         }).collect()
     };
     let trunk_line = vec![lime_foot, (298.0, lime_foot.1 - 60.0), (296.0, lime_foot.1 - 140.0)];
-    let lime = Tree::grow(&crown, Some(&trunk_line), &Species { voids: 0.16, void_size: 0.16, ragged: 0.7, ..Species::lime() }, &Season::named("summer").unwrap(), SUN, seed * 13 + 5);
+    let lime = Tree::grow(&crown, Some(&trunk_line), &Species { voids: 0.16, void_size: 0.16, ragged: 0.7, ..Species::lime() }, &Season::named("summer").unwrap(), SUN, seed * 13 + std::env::var("LIME").ok().and_then(|v| v.parse().ok()).unwrap_or(5));
     eprintln!("lime: {} limbs, {} clumps, {} touches, grain {:.2} touch_w {:.2}", lime.limbs.len(), lime.clumps.len(), lime.touches.len(), lime.grain, lime.touch_w);
-    // the lime's shadow on the grass: thrown to the right and toward us
-    let shadow = {
-        // the sun is behind us and to the left: the shadow falls away from
-        // us and to the right, a long flattened pool on the rise and the
-        // meadow behind it
-        let (sx, sy) = (lime_foot.0 + 150.0, lime_foot.1 - 4.0);
-        Mask::from_fn(f, move |x, y| {
-            let nx = (x - sx) / 175.0;
-            let ny = (y - sy - 0.03 * (x - sx)) / 13.0;
-            let n = 0.5 * nbk.get(x * 1.5, y * 3.0);
-            (1.0 - smoothstep(0.3, 1.1, nx * nx + ny * ny + n)) * soft(y - horizon - 8.0, 2.0)
-        })
-    };
+    let shadow = Mask::from_fn(f, lime_sh);
     // a footpath worn through the grass, from the bottom edge up the rise
     // to where the two stand: the centerline in perspective, narrowing
     let path_x = move |y: f32| {
         let t = ((y - rise(410.0)) / (h - rise(410.0))).clamp(0.0, 1.0);
-        410.0 + 230.0 * t.powf(1.3) + 30.0 * (t * 5.0).sin() * t
+        410.0 + 170.0 * t.powf(1.5) + 50.0 * (t * 3.6).sin() * t
     };
     let np = Fbm::new(s32 + 31, 4, 12.0);
     // a cart track: two worn ruts with a strip of grass between
@@ -381,13 +399,7 @@ fn main() {
         let path_c = move |x: f32, y: f32| mixc(hex("#5e573c"), hex("#8f8562"), 0.55 + 0.6 * np.get(x * 0.8, y * 1.5));
         c.work(&path, &st.detail().mixed(pal, 0.3).color(path_c).angle(move |_, y| ((path_x(y + 3.0) - path_x(y - 3.0)) / 6.0).atan() * -1.0 + std::f32::consts::FRAC_PI_2).angle_jitter(0.1).length(6.0, 20.0).coverage(3.5).clip(true).threshold(0.3), seed * 100 + 32);
         c.dry();
-        // the shadow stippled in, its density following the shade, so its
-        // edge is a thinning of touches, not a stroke's end
-        let shade_sp = Stipple::new(Tool::stippler(2.6)).mixed(pal, 0.35).color(move |x, y| {
-            let g = if y > rise(x) { bank_c(x, y) } else { plain_c(x, y) };
-            [g[0] * 0.7, g[1] * 0.75, g[2] * 0.74]
-        }).coverage(|x, y| 1.3 * shadow.sample(x, y)).pressure(0.35, 0.75);
-        c.stipple(&land, &shade_sp, seed * 100 + 31);
+
         c.dry();
     }
 
@@ -683,22 +695,69 @@ fn paint_lime(c: &mut Canvas, st: &Style, pal: &Palette, t: &Tree, g: &Greens, s
         c.drag(&mut held, &Gesture::new(ws.pts.clone()).pressure(p0, p1).ramps(0.02, if ws.tip { 0.4 } else { 0.05 }).orient(Orient::Across), None);
     }
     c.dry();
-    // lit bark on the trunk's sunward side: lean dry strokes up the grain,
-    // grey-green, only where the trunk stands clear of the crown
+    // the trunk where it stands clear of the crown, painted as a column:
+    // strokes up the grain side by side, lit grey-green on the sun's side
+    // (left) through the bark's brown to a dark right side; then the long
+    // fissures, flecks of light, and the foot flaring into the ground
     let tr = &t.limbs[0];
     let n = tr.pts.len();
-    let clear = (0..n).take_while(|&i| tr.pts[i].1 > 430.0).count().max(2);
-    for k in 0..9 {
-        // the lit side, strongest at the edge, and the bark's long fissures
-        let off = 0.44 - 0.03 * k as f32 + rng.range(-0.015, 0.015);
-        let mut lb = Held::new(Tool { point: 0.5, ..Tool::round_sable((tr.w[0] * 0.06).max(0.5)) }, rng.next_u64());
-        let col = mixc(hex("#3f3d32"), hex("#77745f"), (1.0 - k as f32 / 9.0) * rng.range(0.5, 1.0));
-        lb.load(pal.paint(col, 0.15), 0.4);
-        let y0 = rng.range(0.0, 0.25);
-        let pts: Vec<(f32, f32)> = tr.pts[..clear].iter().zip(&tr.w).skip((y0 * clear as f32) as usize).map(|(&(x, y), &w)| (x - w * off + rng.normal() * 0.25, y)).collect();
-        if pts.len() >= 2 {
-            c.drag(&mut lb, &Gesture::new(pts).pressure(0.45, 0.25).ramps(0.15, 0.4).orient(Orient::Across), None);
-        }
+    let clear = (0..n).take_while(|&i| tr.pts[i].1 > 400.0).count().clamp(2, n);
+    let spine: Vec<(f32, f32, f32)> = tr.pts[..clear].iter().zip(&tr.w).map(|(&(x, y), &w)| (x, y, w)).collect();
+    let bands = 11;
+    for k in 0..bands {
+        let s = (k as f32 + 0.5) / bands as f32; // 0 left .. 1 right
+        let lit = (1.0 - s).powf(1.6);
+        let col = gradient(&[(0.0, hex("#181611")), (0.4, hex("#2c281f")), (0.75, hex("#4a4637")), (1.0, hex("#6e6b57"))], lit + rng.normal() * 0.05, Mix::Pigment);
+        let w0 = spine[0].2;
+        let mut hb = Held::new(Tool { point: 0.3, ..Tool::filbert(w0 / bands as f32 * 1.8) }, rng.next_u64());
+        let (mx, my, mw) = spine[spine.len() / 2];
+        let u = -0.5 + 0.97 * s;
+        hb.load(c.aim(pal, col, (mx + u * mw, my), mw * 0.1, 0.3, 1.0), 0.9);
+        let pts: Vec<(f32, f32)> = spine.iter().map(|&(x, y, w)| (x + u * w + rng.normal() * 0.15, y)).collect();
+        c.drag(&mut hb, &Gesture::new(pts).pressure(0.8, 0.75).ramps(0.05, 0.2).orient(Orient::Across), None);
+    }
+    // fissures: thin dark wavy lines up the bark, fewer on the lit side
+    for _ in 0..34 {
+        let s = rng.range(0.1, 0.95);
+        let mut fl = Held::new(Tool { point: 1.0, ..Tool::rigger(0.35) }, rng.next_u64());
+        fl.load(pal.paint(hex("#16140f"), 0.3), 0.7);
+        let a0 = rng.range(0.0, 0.5);
+        let a1 = (a0 + rng.range(0.25, 0.6)).min(1.0);
+        let i0 = (a0 * (spine.len() - 1) as f32) as usize;
+        let i1 = ((a1 * (spine.len() - 1) as f32) as usize).max(i0 + 1);
+        let wob = rng.range(0.0, 10.0);
+        let pts: Vec<(f32, f32)> = spine[i0..=i1].iter().enumerate().map(|(j, &(x, y, w))| (x + (s - 0.5) * w * 0.9 + 0.6 * (j as f32 * 0.9 + wob).sin(), y)).collect();
+        c.drag(&mut fl, &Gesture::new(pts).pressure(0.7, 0.4).ramps(0.2, 0.3).orient(Orient::Across), None);
+    }
+    // flecks of lichen and light on the sun's side
+    let mut fk = Held::new(Tool::round_sable(0.9), rng.next_u64());
+    for _ in 0..40 {
+        let j = rng.range(0.0, (spine.len() - 1) as f32) as usize;
+        let (x, y, w) = spine[j];
+        let s = rng.range(0.02, 0.4);
+        let col = mixc(hex("#8f8c74"), hex("#a8a98a"), rng.range(0.0, 1.0));
+        fk.reload(pal.paint(col, 0.2), 0.5);
+        c.touch(&mut fk, &Touch::at(x + (s - 0.5) * w, y + rng.range(-3.0, 3.0)).pressure(0.5).drag(0.0, rng.range(0.5, 2.0)), None);
+    }
+    // the foot: roots flaring out and running into the grass
+    let (fx, fy, fw) = spine[0];
+    for &(side, len, col) in &[(-1.0f32, 0.8f32, "#4a4535"), (1.0, 0.7, "#1f1c16"), (-0.35, 0.4, "#3a3529"), (0.4, 0.45, "#27231b")] {
+        let mut rt = Held::new(Tool::filbert(fw * 0.4), rng.next_u64());
+        rt.load(c.aim(pal, hex(col), (fx + side * fw * 0.4, fy - 2.0), fw * 0.2, 0.3, 1.0), 0.8);
+        let x0 = fx + side * fw * 0.3;
+        let pts = vec![(x0, fy - fw * 1.2), (x0 + side * fw * 0.15, fy - fw * 0.4), (fx + side * fw * (0.5 + 0.4 * len), fy + 1.0)];
+        c.drag(&mut rt, &Gesture::new(pts).pressure(0.9, 0.55).ramps(0.05, 0.3).orient(Orient::Across), None);
+    }
+    // grass grown up round the foot, over the roots
+    let mut gb = Held::new(Tool { point: 0.9, ..Tool::rigger(0.7) }, rng.next_u64());
+    for _ in 0..70 {
+        let x = fx + rng.range(-1.3, 1.3) * fw;
+        let y = fy + rng.range(-0.5, 3.0);
+        let hh = rng.range(3.0, 9.0);
+        let col = mixc(hex("#2c3320"), hex("#6d7440"), rng.range(0.0, 1.0) * if x < fx { 1.0 } else { 0.5 });
+        gb.reload(pal.paint(col, 0.2), 0.8);
+        let lean = rng.range(-0.4, 0.4) * hh;
+        c.drag(&mut gb, &Gesture::new(vec![(x, y), (x + lean * 0.4, y - hh * 0.6), (x + lean, y - hh)]).pressure(0.8, 0.05).ramps(0.03, 0.6).orient(Orient::Across), None);
     }
     // 2. leaves: the mass laid in dark, in short hatched strokes cut to it
     let mask = t.leaves(f);
@@ -909,12 +968,14 @@ fn yarrow(c: &mut Canvas, pal: &Palette, (x, y): (f32, f32), ht: f32, g: Rgb, rn
         // the umbel: a flat cluster of small touches, shaded below
         let spread = ht * 0.12;
         for k in 0..34 {
-            let (u, v) = (rng.normal() * spread, rng.normal().abs() * spread * 0.3);
-            let col = if v > spread * 0.25 { hex("#a8a48e") } else { mixc(hex("#d8d3bf"), hex("#ece6d2"), rng.range(0.0, 1.0)) };
+            let u = rng.range(-1.0, 1.0);
+            let v = (1.0 - u * u).sqrt() * rng.range(0.0, 1.0);
+            let (u, v) = (u * spread, v * spread * 0.55);
+            let col = if v < spread * 0.12 { hex("#a8a48e") } else { mixc(hex("#d8d3bf"), hex("#ece6d2"), rng.range(0.0, 1.0)) };
             let _ = k;
             let mut f = Held::new(Tool::round_sable(0.6 + ht * 0.008), rng.next_u64());
             f.load(pal.paint(col, 0.1), 0.8);
-            c.touch(&mut f, &Touch::at(tx + u, y - hh + v - 0.5).pressure(0.7), None);
+            c.touch(&mut f, &Touch::at(tx + u, y - hh - v).pressure(0.7), None);
         }
         for k in 0..3 {
             let t = 0.2 + 0.2 * k as f32;

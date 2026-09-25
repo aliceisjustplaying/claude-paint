@@ -739,9 +739,7 @@ mod tests {
     /// used to be saved empty, and restoring then panicked).
     #[test]
     fn last_stage_keeps_its_state() {
-        let base = std::env::var_os("TMPDIR").map(PathBuf::from).unwrap_or_else(|| root().join("target"));
-        let dir = base.join(format!("run_keep_test_{}", std::process::id()));
-        std::fs::create_dir_all(&dir).unwrap();
+        let dir = scratch("keep_test");
         let painted = {
             let o = run(&dir, &[]);
             let mut rng = Rng::new(o.seed);
@@ -781,8 +779,11 @@ mod tests {
         dir.join(format!("keep_test.{stage}.ckpt"))
     }
 
+    /// A fresh directory for one test's files: under `$TMPDIR` when that is
+    /// an absolute path, else under the workspace `target/` (an empty or
+    /// relative `TMPDIR` would put them in the package directory).
     fn scratch(tag: &str) -> PathBuf {
-        let base = std::env::var_os("TMPDIR").map(PathBuf::from).unwrap_or_else(|| root().join("target"));
+        let base = std::env::var_os("TMPDIR").map(PathBuf::from).filter(|p| p.is_absolute()).unwrap_or_else(|| root().join("target"));
         let dir = base.join(format!("run_{tag}_{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         dir

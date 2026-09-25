@@ -218,12 +218,6 @@ impl Session {
         }
     }
 
-    /// The chunk counts snapshots are kept at (undo and checkpoints).
-    #[cfg(test)]
-    pub fn checkpoints(&self) -> Vec<usize> {
-        self.snaps.keys().copied().collect()
-    }
-
     /// Run one chunk. On error nothing it did survives (canvas, globals,
     /// brushes, clock) and it is not logged.
     pub fn run(&mut self, src: &str) -> Result<Ran, String> {
@@ -733,7 +727,7 @@ mod tests {
         }
         assert_eq!(s.log.len(), 8);
         // undo ring: 6, 7; checkpoints on a grid below it
-        let cp = s.checkpoints();
+        let cp: Vec<usize> = s.snaps.keys().copied().collect();
         assert!(cp.contains(&6) && cp.contains(&7) && cp.len() <= 4, "{cp:?}");
         // replace chunk 5 (a stroke): the log and the canvas are as if it
         // had been painted that way

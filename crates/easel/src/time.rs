@@ -506,7 +506,9 @@ mod tests {
     /// The time a finishing verb spent drying the paint is taken into the
     /// clock once: repeated queries in the same chunk see the same clock and
     /// the same sitting, never a new sitting per query or a negative one,
-    /// and the drying is still reported once (review r6, finding 2).
+    /// and the drying is still reported once (review r6, finding 2). It
+    /// isn't hand time: it starts a new sitting and never counts as an
+    /// overrun (with hand time off, the new sitting is empty).
     #[test]
     fn queries_after_a_finish_consume_its_drying_once() {
         for on in [false, true] {
@@ -515,34 +517,23 @@ mod tests {
             run(&mut s, r##"work(rect(100, 100, 300, 200), {hand="body", color="#8090a0", coverage=4})"##);
             let out = run(
                 &mut s,
-                r##"varnish()
+                &format!(
+                    r##"varnish()
                     local a = timesheet(); local b = timesheet(); local c1, c2 = clock(), clock(); drying(200, 200); local c = timesheet()
                     assert(a.sittings == 2 and b.sittings == 2 and c.sittings == 2, a.sittings .. " " .. b.sittings .. " " .. c.sittings)
                     assert(a.sitting >= 0 and b.sitting == a.sitting and c.sitting == a.sitting, a.sitting .. " " .. b.sitting)
-                    assert(c1 == c2 and c1 == a.clock and a.clock > 120, c1 .. " " .. c2 .. " " .. a.clock)"##,
+                    assert({on} or a.sitting == 0, "hand time off, yet a sitting of " .. a.sitting)
+                    assert(c1 == c2 and c1 == a.clock and a.clock > 120, c1 .. " " .. c2 .. " " .. a.clock)"##
+                ),
             );
             assert_eq!(out.matches("varnish: waited").count(), 1, "hand {on}: {out}");
+            assert!(!out.contains("at the easel"), "the drying counted as an overrun, hand {on}: {out}");
             let now = s.canvas().unwrap().clock();
             let c0 = s.st.borrow().clock0;
             assert_eq!(clock(&s), now - c0);
             // and the next chunk reports nothing more
             let out = run(&mut s, "assert(timesheet().sittings == 2)");
             assert!(!out.contains("waited"), "{out}");
-        }
-    }
-
-    /// Time a finishing verb spends drying the paint isn't hand time: it is
-    /// reported, starts a new sitting and never counts as an overrun (the
-    /// new sitting holds only the varnish's brushing, with hand time on).
-    #[test]
-    fn drying_for_a_finish_is_not_time_at_the_easel() {
-        for on in [false, true] {
-            let mut s = Session::new(W, 0).unwrap();
-            run(&mut s, &format!(r##"canvas{{style="friedrich", aspect=1.5, seed=2, hand={on}}}"##));
-            run(&mut s, r##"work(rect(100, 100, 300, 200), {hand="body", color="#8090a0"})"##);
-            let out = run(&mut s, "varnish()");
-            assert!(out.contains("varnish: waited") && !out.contains("at the easel"), "hand {on}: {out}");
-            run(&mut s, &format!("local t = timesheet(); assert(t.sittings == 2 and t.sitting {}, t.sitting)", if on { "> 0 and t.sitting < 2" } else { "== 0" }));
         }
     }
 

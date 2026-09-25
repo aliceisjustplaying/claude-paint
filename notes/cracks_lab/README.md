@@ -37,3 +37,11 @@ repetition reads digital" (principles.md 2b). Suspect in the model: the
 fixed relaxation distance (D_r ~ S/2) gives even spacing; direction only
 makes it visible. Next: vary spacing, width and density locally (several
 fracture scales, dense patches and quiet areas), not the direction knob.
+Fable (blind): D, C, E, B, A. Both judges: a slight lean (0.25-0.35) best,
+0.6 worst. Fable measured: coverage 0.7-1.1% everywhere (sky, snow, tree
+alike); every crack a one-pixel hairline ~5 gray levels darker, end to
+end; primaries 18-25 px apart; identical concentric arcs at all four
+corners. The engine is designed for patchiness, uneven aging, a hierarchy
+of widths and diagonal corner cracks (crack.rs), and a painter reported
+depth/dirt/grime/cupping make no visible difference (r10_winter_a.md
+friction 5): suspected bug, the variation isn't reaching the picture.

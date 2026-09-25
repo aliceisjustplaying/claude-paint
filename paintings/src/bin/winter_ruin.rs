@@ -654,13 +654,13 @@ fn main() {
         // snow drifted against its foot
         // the snow drifted up against the foot: low mounds laid in arcs,
         // higher where the wind packed it, the stone's base lost in them
-        let mut dr = Held::new(Tool { lay: 1.2, ragged: 0.35, ..Tool::filbert(7.0) }, 505);
+        let mut dr = Held::new(Tool { lay: 1.3, ragged: 0.35, ..Tool::filbert(10.0) }, 505);
         let mut x = bx - 100.0;
         while x < bx + 96.0 {
             let len = rng.range(28.0, 70.0);
-            let hgt = rng.range(0.5, 7.0);
+            let hgt = rng.range(3.0, 11.0);
             let skew = rng.range(0.6, 1.7);
-            let y0 = 641.0 + rng.range(-1.0, 1.5);
+            let y0 = 643.0 + rng.range(-1.0, 1.5);
             let col = mix(snow_col(x, y0), hex("#b3b9c6"), rng.range(0.0, 0.4), Mix::Pigment);
             dr.reload(pal.paint(col, 0.05).with_hiding(0.96).with_stiff(0.9), rng.range(0.7, 1.0));
             let pts: Vec<(f32, f32)> = (0..=6).map(|k| {
@@ -946,7 +946,9 @@ fn main() {
                 // (not across the oak's trunk, which stands in the bank)
                 let clear_of_oak = x + len < 872.0 || x > 938.0;
                 if boulder.sample(x + len * 0.5, crest(x + len * 0.5)) < 0.1 && clear_of_oak {
-                    if rng.chance(0.45) {
+                    // (lead-white impasto along the crests came out as
+                    // isolated white lozenges at 3200px: left out)
+                    if false {
                         let a = rng.range(0.1, 0.5);
                         let b = (a + rng.range(0.25, 0.5)).min(1.0);
                         let part: Vec<(f32, f32)> = pts.iter().enumerate().filter(|(k, _)| { let u = *k as f32 / 5.0; u >= a - 0.1 && u <= b + 0.1 }).map(|(_, p)| *p).collect();
@@ -982,8 +984,9 @@ fn main() {
             }
             clumps.push((x, y, 1.0 + (y - 598.0) / 100.0));
         }
-        for _ in 0..14 {
-            let x = rng.range(300.0, 800.0);
+        // only a few in the open field, near the walker's trail
+        for _ in 0..5 {
+            let x = rng.range(400.0, 600.0);
             let y = rng.range(525.0, 640.0);
             clumps.push((x, y, 0.25 + (y - 480.0) / 200.0));
         }

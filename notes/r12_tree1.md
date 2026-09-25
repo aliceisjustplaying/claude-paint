@@ -80,6 +80,14 @@ No varnish, no cracks: `Run::end` + relief only.
   the shade side. (The first bank dragged the wet root paint into the
   snow in dark smears: true to wet paint, so I let the roots dry first.)
 
+- v12–v13 (final): cool sky light dry-brushed down the lit side of the
+  trunk and the big limbs (a filbert at load 0.1–0.2 first drew hard
+  pale-blue "neon" outlines along every limb; at load 0.04–0.09, hiding
+  ×0.45, short broken lengths, only wood over 12 units, it is a faint
+  sheen); the twig veil denser along limbs under 6 units; no pale-wood
+  touch on small or downward breaks (it read as a white eye on the burl).
+  Final render is a clean run with no checkpoints, 136 s.
+
 ## Working method, as it turned out
 Whole render ≈ 133 s (ground prep ≈ 45 s, sky ≈ 65 s, everything else
 ≈ 20 s). With checkpoints, `--resume land` painted the tree stages in
@@ -173,5 +181,11 @@ Most important first.
    over 2 minutes; crops are the only fast view (20 s cold).
 9. `Handling::fill(false)` with the hatch preset still made the far woods
    a continuous band; the gaps had to come from the mask.
+11. Dry-brush is hard to dose: a lean filbert at load 0.1–0.2, pressure
+    0.25–0.45 over dry dark paint still laid continuous opaque lines
+    (v12); it took load 0.04–0.09 and hiding ×0.45 to get a broken
+    sheen. There is no "starved brush" setting that breaks on the tooth
+    the way dry-brush does; the load number is the only knob and it is
+    very nonlinear at the low end.
 10. Wet pickup is right but global: laying snow against wet roots dragged
     dark into the snow; the only remedy is `c.dry()` (the whole canvas).

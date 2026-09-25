@@ -99,7 +99,14 @@ units), horizon at y 1012, the trunk's foot at y 1112.
   branches thicker than 3.5 (on thinner ones it made hollow tubes).
 - 18:39 fallen limb crooked and tapering, a fork, a splintered butt, snow
   in broken bands (it was a flat plank).
-- 18:40 clean whole run from scratch for the final.
+- 18:40 clean whole run from scratch (kept as a fallback).
+- 18:42 last round on the critique's three worst points: the sky gets an
+  overcast deck (soft darker masses lying level in the upper sky, paler
+  lanes between, thinning toward the horizon); each live limb its own
+  tone, grayer-green or browner (a hash of where it starts); snow held on
+  wood from 1.8 units and up to ~65° from level (wet snow near 0 °C
+  sticks more [MIL64 p.5]). Clean whole run: 2 min 16 s. This is the
+  final `out/r13_tree3_full.png`.
 
 ## FRICTION
 
@@ -166,15 +173,15 @@ quiet, a single tree under a low overcast with the horizon across its
 trunk, is the right mood.
 
 What reads as digital, harshly:
-- **The sky is a gradient.** Stippled and fused, it is paint up close,
-  but from across the room it is an even top-to-bottom ramp with faint
-  horizontal striation in the upper third. It has no cloud structure
-  worth the name. The sky got the fewest iterations because each costs
-  two minutes.
-- **The wood is one color.** Every limb is the same warm dark gray-brown;
-  there is no difference between near and far limbs, no moss-green on the
-  north side worth seeing, and the lit side of the bole is only slightly
-  lighter. Friedrich would have made the bole more particular: moss,
+- **The sky is only a little more than a gradient.** The last round gave
+  it a level overcast deck, which helps the mood, but the bands are
+  regular and ruled-looking at the whole-picture view (alternating
+  darker and lighter stripes). The sky got the fewest iterations because
+  each costs two minutes.
+- **The wood is nearly one color.** A tone per limb now varies it a
+  little, but there is no difference between near and far limbs, no
+  moss-green on the north side worth seeing, and the lit side of the
+  bole is only slightly lighter. Friedrich would have made the bole more particular: moss,
   a hollow, bark plates.
 - **The branch drawing is too even in density.** The grower fills its
   dome uniformly; a real old oak has clumps, gaps and a few big
@@ -183,9 +190,9 @@ What reads as digital, harshly:
 - **The snow field is empty and smooth.** It is believable snow, but the
   foreground has no particular detail except the tufts and the fallen
   limb, and the drift crest barely registers.
-- **The snow on the limbs is thin.** At the whole-picture view it barely
-  reads; the tree could be in any cold month. More snow, or hoarfrost
-  on the twigs, would make it winter.
+- **Snow on the limbs** now reads as winter, but some of it lies on wood
+  steeper than it would really hold, and it is all the same bright
+  ridge; no hoarfrost on the twigs.
 - **The foot of the drift** is a little lumpy (a row of round stroke
   ends along its top) and the stub on the bole looks like a sawn log
   end glued on.

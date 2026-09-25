@@ -336,17 +336,20 @@ fn main() {
                     core.reload(dk, 0.7);
                 }
                 let t = (yy - top) / ht;
-                let r = env(t) * rng.range(0.1, 0.28);
+                let r = env(t) * rng.range(0.15, 0.4);
                 let sx = stem_x(yy);
-                let dy = rng.range(-0.3, 0.8) * r * 0.3;
-                c.drag(&mut core, &Gesture::new(vec![(sx - r, yy + dy), (sx, yy - dy * 0.3), (sx + r, yy + dy * 1.2)]).pressure(rng.range(0.5, 0.85), rng.range(0.4, 0.7)).ramps(0.2, 0.3).shake(0.4), None);
-                yy += ht * rng.range(0.012, 0.03);
+                let side = if k % 2 == 0 { -1.0 } else { 1.0 };
+                let dy = rng.range(0.2, 0.7) * r;
+                c.drag(&mut core, &Gesture::new(vec![(sx - side * 0.5, yy), (sx + side * r * 0.5, yy + dy * 0.45), (sx + side * r, yy + dy)]).pressure(rng.range(0.5, 0.85), rng.range(0.2, 0.5)).ramps(0.1, 0.5).shake(0.4), None);
+                yy += ht * rng.range(0.006, 0.016);
                 k += 1;
             }
             let mut stem = Held::new(Tool { point: 1.0, ..Tool::round_sable(sw * 1.6) }, seed);
             stem.load(dk, 0.9);
             c.drag(&mut stem, &Gesture::new(vec![(x, y), (x + lean * 0.5, y - ht * 0.5), (x + lean, top)]).pressure(0.9, 0.05).ramps(0.02, 0.6).shake(0.2), None);
             let nt = ((ht / 6.0) as usize).clamp(7, 40);
+            // the leader stands clear above the top whorl
+            let top = top + ht * 0.035;
             let bw = (ht * 0.011).clamp(0.6, 2.4);
             let mut bough = Held::new(Tool { point: 0.6, ..Tool::round_sable(bw * 1.4) }, seed + 1);
             let mut needle = Held::new(Tool { point: 1.0, ragged: 0.3, ..Tool::round_sable(bw * 1.3) }, seed + 2);
@@ -374,7 +377,7 @@ fn main() {
                     }
                     let r = reach * rng.range(0.8, 1.08);
                     // upper boughs rise, lower ones sag deeper, the tip lifts
-                    let sag = r * (rng.range(0.1, 0.3) + 0.3 * t);
+                    let sag = r * (rng.range(0.1, 0.3) + 0.3 * t) - r * 0.9 * (1.0 - t / 0.14).max(0.0);
                     let lift = r * rng.range(0.03, 0.14);
                     let at = |u: f32| (sx + side * r * u, yy + sag * (1.15 * u - 0.2 * u * u) - lift * u * u * u);
                     let pts: Vec<(f32, f32)> = [0.0, 0.3, 0.6, 0.85, 1.0].iter().map(|&u| at(u)).collect();
@@ -491,6 +494,25 @@ fn main() {
         // no road: the walker breaks the trail through fresh snow, so the
         // only way is the trough his steps leave behind him, a cool shallow
         // groove, wider as it comes toward us, pulled in a few pieces
+        // what is left of the churchyard: a few crosses and a stone at the
+        // ruin's foot, leaning, sunk in the snow (seen through the haze, so pale and soft)
+        let mut cr = Held::new(Tool { point: 0.4, ..Tool::round_sable(1.7) }, 211);
+        let mut cs = Held::new(Tool { point: 0.4, ..Tool::round_sable(1.3) }, 212);
+        for &(x, y, hgt, tilt) in &[(356.0f32, 476.0f32, 15.0f32, 0.08f32), (381.0, 479.0, 12.0, -0.12), (404.0, 477.0, 10.0, 0.18), (163.0, 478.0, 11.0, -0.06)] {
+            let top = (x + tilt * hgt, y - hgt);
+            cr.reload(pal.paint(hex("#7a7475"), 0.15), 0.7);
+            c.drag(&mut cr, &Gesture::new(vec![(x, y), top]).pressure(0.8, 0.7).ramps(0.05, 0.1), None);
+            let (bx0, by0) = (x + tilt * hgt * 0.7, y - hgt * 0.7);
+            let arm = hgt * 0.32;
+            c.drag(&mut cr, &Gesture::new(vec![(bx0 - arm, by0 + tilt * arm), (bx0 + arm, by0 - tilt * arm)]).pressure(0.7, 0.7).ramps(0.05, 0.1), None);
+            cs.reload(pal.paint(hex("#c9c6c6"), 0.1).with_hiding(0.9), 0.5);
+            c.drag(&mut cs, &Gesture::new(vec![(bx0 - arm * 0.8, by0 + tilt * arm * 0.8 - 1.0), (bx0 + arm * 0.8, by0 - tilt * arm * 0.8 - 1.0)]).pressure(0.4, 0.3).ramps(0.2, 0.3), None);
+        }
+        // a headstone, round-topped, tipped back
+        let mut hs = Held::new(Tool::filbert(5.0), 213);
+        hs.load(pal.paint(hex("#7f797a"), 0.15), 0.7);
+        c.drag(&mut hs, &Gesture::new(vec![(428.0, 479.0), (428.8, 474.0), (429.6, 470.0)]).pressure(0.9, 0.8).ramps(0.05, 0.3), None);
+        c.dry();
         let (fx, fy) = (478.0f32, 552.0f32);
         let path = move |t: f32| (fx + 16.0 * t + 50.0 * t * t, fy + 4.0 + 160.0 * t);
         let mut tr = Held::new(Tool { ragged: 0.45, push: 0.02, pickup: 0.05, ..Tool::filbert(5.0) }, 401);
@@ -741,6 +763,9 @@ fn main() {
             } else {
                 Tool { point: 1.0, ..Tool::rigger(s.w0 * 1.3) }
             };
+            // a well-filled brush carries a whole limb (a stock brush ran
+            // dry on the long limbs in dotted chains)
+            let tool = Tool { run: tool.run.max(320.0), ..tool };
             let mut held = Held::new(tool.clone(), 600 + n);
             let passes = if s.w0 > 4.0 { ((s.w0 / 3.5).ceil() as usize).max(2) } else { 1 };
             for q in 0..passes {
@@ -773,9 +798,50 @@ fn main() {
         }
         c.wait(60.0);
         // snow banked against the foot of the trunk
-        let mut drift = Held::new(Tool::filbert(6.0), 689);
-        drift.load(pal.paint(hex("#d9dadf"), 0.08).with_hiding(0.95), 0.9);
-        c.drag(&mut drift, &Gesture::new(vec![(base.0 - 26.0, base.1 + 2.0), (base.0 - 10.0, base.1 - 1.5), (base.0 + 6.0, base.1 - 0.5), (base.0 + 24.0, base.1 + 3.0)]).pressure(0.7, 0.5).ramps(0.2, 0.4).shake(0.4), None);
+        // the bark: long wavering fissures up the trunk, darker, and between
+        // them ridges touched lean with a cool gray where the sky reaches
+        let mut fis = Held::new(Tool { point: 1.0, ragged: 0.4, ..Tool::round_sable(1.4) }, 687);
+        for k in 0..26 {
+            let u = rng.range(-0.45, 0.45);
+            let y0 = base.1 - rng.range(0.0, 60.0);
+            let y1 = y0 - rng.range(25.0, 90.0);
+            let wx = |y: f32| {
+                let t = ((base.1 - y) / 150.0).clamp(0.0, 1.0);
+                let half = 15.0 + (9.5 - 15.0) * t;
+                let cx = base.0 + 3.0 * (t * 3.0).sin() - 6.0 * t;
+                cx + u * 2.0 * half * 0.9
+            };
+            let pts: Vec<(f32, f32)> = (0..=5).map(|q| {
+                let y = y0 + (y1 - y0) * q as f32 / 5.0;
+                (wx(y) + rng.range(-0.8, 0.8), y)
+            }).collect();
+            let (col, load) = if k % 3 == 0 { (hex("#5d5a5e"), 0.12) } else { (hex("#161311"), 0.35) };
+            fis.reload(pal.paint(col, 0.3), load);
+            c.drag(&mut fis, &Gesture::new(pts).pressure(rng.range(0.3, 0.7), 0.1).ramps(0.1, 0.5).shake(0.4), None);
+        }
+        // roots flaring into the snow
+        let mut root = Held::new(Tool { point: 0.6, ..Tool::round_sable(5.0) }, 686);
+        for side in [-1.0f32, 1.0] {
+            root.reload(bark, 0.8);
+            c.drag(&mut root, &Gesture::new(vec![(base.0 + side * 8.0, base.1 - 14.0), (base.0 + side * 16.0, base.1 - 3.0), (base.0 + side * 25.0, base.1 + 1.5)]).pressure(0.9, 0.2).ramps(0.05, 0.6).shake(0.3), None);
+        }
+        // and the snow drifted around the foot in low uneven mounds of the
+        // field's own color
+        let mut drift = Held::new(Tool { lay: 1.2, ragged: 0.35, ..Tool::filbert(6.0) }, 689);
+        let mut x = base.0 - 40.0;
+        while x < base.0 + 36.0 {
+            let len = rng.range(16.0, 34.0);
+            let hgt = rng.range(1.0, 6.0);
+            let skew = rng.range(0.6, 1.6);
+            let y0 = base.1 + 4.0 + rng.range(-1.0, 1.5);
+            drift.reload(pal.paint(mix(snow_col(x, y0), hex("#b3b9c6"), rng.range(0.0, 0.4), Mix::Pigment), 0.05).with_hiding(0.96).with_stiff(0.9), rng.range(0.6, 0.9));
+            let pts: Vec<(f32, f32)> = (0..=6).map(|q| {
+                let u = q as f32 / 6.0;
+                (x + len * u, y0 - hgt * (std::f32::consts::PI * u.powf(skew)).sin().max(0.0).powf(0.6))
+            }).collect();
+            c.drag(&mut drift, &Gesture::new(pts).pressure(rng.range(0.55, 0.85), rng.range(0.4, 0.7)).ramps(0.15, 0.3).shake(0.4), None);
+            x += len * rng.range(0.3, 0.7);
+        }
         // a lean lighter streak down the trunk's right, where the glow is
         let mut lt = Held::new(Tool { ragged: 0.5, ..Tool::round_sable(1.6) }, 690);
         for k in 0..0 {
@@ -929,6 +995,8 @@ fn main() {
     }
 
     // an old painting, but one kept with care: less soot in the cracks
-    let fin = Finish { cracks: Some(paint::Cracks { dirt: 0.2, grime: 0.5, ..paint::Cracks::aged(0) }), ..Finish::aged(st.relief) };
+    // (and no corner cracks: at this size their parallel arcs read as ruled
+    // hatching across the snow)
+    let fin = Finish { cracks: Some(paint::Cracks { dirt: 0.2, grime: 0.5, corners: false, ..paint::Cracks::aged(0) }), ..Finish::aged(st.relief) };
     o.finish(&mut c, &mut rng, &fin);
 }

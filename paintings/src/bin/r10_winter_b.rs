@@ -122,18 +122,41 @@ fn snow_col(n: &Fbm, x: f32, y: f32) -> Rgb {
     let far = mix(hex("#cdc9cf"), hex("#dfd3c3"), (-(((x - GLOW_X) / 300.0).powi(2))).exp(), Mix::Light);
     let near = hex("#b0b3c6");
     let base = mix(far, near, depth.powf(0.8), Mix::Light);
-    // drifts: slow undulation, lit crests toward the glow, blue troughs
-    let d = n.get(x * 0.35, y * 2.6);
-    let crest = smoothstep(0.05, 0.45, d) * depth;
-    let trough = smoothstep(0.0, -0.45, d) * depth;
-    let lit = mix(base, hex("#e3dcd4"), 0.45 * crest, Mix::Light);
-    mix(lit, hex("#959bb3"), 0.22 * trough, Mix::Light)
+    let _ = n;
+    // drifts, seen against the light: faces turned to the glow (away from
+    // us) catch it warm, faces turned to us lie in the blue of the sky
+    let s = drift_face(x, y);
+    let k = depth.powf(0.6);
+    let warm = mix(base, hex("#e6ddd1"), 0.5 * k * smoothstep(0.05, 0.7, -s), Mix::Light);
+    mix(warm, hex("#9ba1b9"), 0.42 * k * smoothstep(0.05, 0.7, s), Mix::Light)
+}
+
+/// The snow's drifts as a height field on the ground (wind from the left,
+/// ridges long across the view), seen in perspective: ground depth from
+/// the height under the horizon. Returns how much the surface at a canvas
+/// point turns toward the viewer (+) or toward the glow beyond (−).
+fn drift_face(x: f32, y: f32) -> f32 {
+    thread_local! {
+        static DRIFT: Fbm = Fbm::new(31, 4, 1.0);
+    }
+    let q = (y - HZ).max(0.5);
+    let gz = 1000.0 / q;
+    let gx = (x - 500.0) * gz / 100.0;
+    DRIFT.with(|d| {
+        let h = |z: f32| d.get(gx / 16.0 + 0.2 * z, z / 2.2) + 0.35 * d.get(gx / 5.0 + 9.0, z / 0.9 + 3.0);
+        (h(gz + 0.15) - h(gz - 0.15)) / 0.3 * 1.6
+    })
 }
 
 fn main() {
     let o = Run::new("r10_winter_b");
     let st = Style { palette: Palette::friedrich_early_greens(), ..Style::friedrich() };
     let pal = &st.palette;
+    // the snow and the ice are set out as a family, as a painter would: no
+    // reds on that part of the palette (an aimed pile over the bare red
+    // ground once reached for red earth and dried salmon at the pond's edge)
+    let snow_pal = st.palette.only(&["lead white", "pale smalt", "smalt", "yellow ochre", "raw umber", "bone black"]);
+    let snow_pal = &snow_pal;
     let mut rng = Rng::new(o.seed);
     let mut c = o.canvas(|| st.prepare(o.width, ASPECT, o.seed));
     let f = c.frame();
@@ -295,7 +318,7 @@ fn main() {
         // strokes, bowed into the drifts in front
         let snow = move |x: f32, y: f32| snow_col(&n, x, y);
         let dir = move |x: f32, y: f32| 0.25 * n.get(x * 0.3 + 40.0, y * 0.9) * smoothstep(HZ + 30.0, 650.0, y);
-        let hd = st.broad().color(snow).angle(dir).angle_jitter(0.06).length(40.0, 130.0).coverage(4.0).medium(0.2).clip(true);
+        let hd = st.broad().palette(snow_pal).color(snow).angle(dir).angle_jitter(0.06).length(40.0, 130.0).coverage(4.0).medium(0.2).clip(true);
         c.work(&land, &hd, 41);
         if let Some(b) = st.blend() {
             c.work(&land, &b.angle(|_, _| 0.0), 42);
@@ -303,11 +326,11 @@ fn main() {
         c.dry();
         // body of the snow in stiffer lead white: the drifts' lit faces
         let near = land.clone().mul_fn(|_, y| smoothstep(HZ + 20.0, 620.0, y));
-        let hd = st.body().color(snow).angle(dir).angle_jitter(0.1).length(14.0, 50.0).coverage(2.6).medium(0.12).pressure(0.5, 0.85).clip(true).threshold(0.2);
+        let hd = st.body().palette(snow_pal).color(snow).angle(dir).angle_jitter(0.1).length(14.0, 50.0).coverage(2.6).medium(0.12).pressure(0.5, 0.85).clip(true).threshold(0.2);
         c.work(&near, &hd, 43);
         // the far field stippled, so it lies flat and holds light
         let farsnow = land.clone().mul_fn(|_, y| 1.0 - smoothstep(HZ + 15.0, HZ + 70.0, y));
-        let sp = Stipple::new(Tool::stippler(1.6)).mixed(pal, 0.45).color(snow).coverage(|_, _| 1.5).pressure(0.4, 0.75).drag(1.0, Some(0.0)).dips(18, 0.35, 0.6).clip(true);
+        let sp = Stipple::new(Tool::stippler(1.6)).mixed(snow_pal, 0.45).color(snow).coverage(|_, _| 1.5).pressure(0.4, 0.75).drag(1.0, Some(0.0)).dips(18, 0.35, 0.6).clip(true);
         c.stipple(&farsnow, &sp, 44);
         c.dry();
         // the rise under the oak: its crest against the far field, a cool
@@ -319,12 +342,12 @@ fn main() {
             let crest = mix(base, hex("#e6dccd"), 0.5 * smoothstep(12.0, 0.0, d), Mix::Light);
             mix(crest, hex("#9fa3ba"), 0.3 * smoothstep(0.0, 60.0, d) * smoothstep(280.0, 60.0, x), Mix::Light)
         };
-        let hd = st.body().color(rise_col).angle(move |x, _| -0.25 * ((x - 175.0) / 170.0).clamp(-1.0, 1.0)).angle_jitter(0.12).length(12.0, 40.0).coverage(2.8).medium(0.15).clip(true).threshold(0.2);
+        let hd = st.body().palette(snow_pal).color(rise_col).angle(move |x, _| -0.25 * ((x - 175.0) / 170.0).clamp(-1.0, 1.0)).angle_jitter(0.12).length(12.0, 40.0).coverage(2.8).medium(0.15).clip(true).threshold(0.2);
         c.work(&rise, &hd, 45);
         c.dry();
         // blue shadow troughs of the near drifts, glazed thin
-        let trough = land.clone().mul_fn(move |x, y| smoothstep(0.0, -0.4, n.get(x * 0.35, y * 2.6)) * smoothstep(HZ + 60.0, 650.0, y)).blur(4.0);
-        let hd = st.body().color_over(|_, _, u| paint::shift(u, -0.035, 0.0, -0.018)).angle(dir).angle_jitter(0.1).length(16.0, 50.0).coverage(1.8).medium(0.35).pressure(0.4, 0.7).clip(true).threshold(0.25);
+        let trough = land.clone().mul_fn(move |x, y| smoothstep(0.2, 0.8, drift_face(x, y)) * smoothstep(HZ + 40.0, 650.0, y)).blur(1.5);
+        let hd = st.body().palette(snow_pal).color_over(|_, _, u| paint::shift(u, -0.035, 0.0, -0.018)).angle(dir).angle_jitter(0.1).length(16.0, 50.0).coverage(1.8).medium(0.35).pressure(0.4, 0.7).clip(true).threshold(0.25);
         c.work(&trough, &hd, 46);
         c.dry();
     }
@@ -339,7 +362,7 @@ fn main() {
             let ice = mix(sky, hex("#8e94a8"), 0.4 + 0.25 * t, Mix::Light);
             mix(ice, hex("#c4bfc2"), 0.35 * n2.get01(x * 0.25, y * 3.0).powi(2), Mix::Light)
         };
-        let hd = st.body().color(ice).angle(|_, _| 0.0).angle_jitter(0.03).length(20.0, 70.0).coverage(3.4).medium(0.25).clip(true).threshold(0.3);
+        let hd = st.body().palette(snow_pal).color(ice).angle(|_, _| 0.0).angle_jitter(0.03).length(20.0, 70.0).coverage(3.4).medium(0.25).clip(true).threshold(0.3);
         c.work(&pond, &hd, 51);
         if let Some(b) = st.blend() {
             c.work(&pond, &b.angle(|_, _| 0.0).length(20.0, 60.0), 52);
@@ -347,15 +370,15 @@ fn main() {
         c.dry();
         // wind-laid snow streaks across the ice
         let streak = pond.clone().mul_fn(move |x, y| smoothstep(0.55, 0.8, n2.get01(x * 0.15, y * 4.0)));
-        let hd = paint::Handling::new(Tool::round_sable(2.4)).mixed(pal, 0.15).color(move |x, y| snow_col(&n, x, y)).angle(|_, _| -0.03).angle_jitter(0.04).length(8.0, 30.0).coverage(1.4).pressure(0.3, 0.6).clip(true).threshold(0.4);
+        let hd = paint::Handling::new(Tool::round_sable(2.4)).mixed(snow_pal, 0.15).color(move |x, y| snow_col(&n, x, y)).angle(|_, _| -0.03).angle_jitter(0.04).length(8.0, 30.0).coverage(1.4).pressure(0.3, 0.6).clip(true).threshold(0.4);
         c.work(&streak, &hd, 53);
         // under the far bank the ice lies in the snow's shadow: a cool band
         let under = pond.rim(3.5, 2.5).mul_fn(|_, y| smoothstep(546.0, 532.0, y));
-        let hd = paint::Handling::new(Tool::round_sable(2.6)).mixed(pal, 0.3).color_over(|_, _, u| paint::shift(u, -0.07, -0.004, -0.02)).angle(|_, _| 0.0).angle_jitter(0.05).length(10.0, 30.0).coverage(1.6).pressure(0.35, 0.6).clip(true).threshold(0.3);
+        let hd = paint::Handling::new(Tool::round_sable(2.6)).mixed(snow_pal, 0.3).color_over(|_, _, u| paint::shift(u, -0.07, -0.004, -0.02)).angle(|_, _| 0.0).angle_jitter(0.05).length(10.0, 30.0).coverage(1.6).pressure(0.35, 0.6).clip(true).threshold(0.3);
         c.work(&under, &hd, 55);
         // the snow's lip over the ice's edge, broken, level strokes
         let lip = pond.rim(2.5, 1.5).mul_fn(move |x, y| smoothstep(0.5, 0.7, n2.get01(x * 0.4, y)));
-        let hd = paint::Handling::new(Tool::round_sable(2.2)).mixed(pal, 0.15).color(move |x, y| snow_col(&n, x, y)).angle(|_, _| 0.0).angle_jitter(0.08).length(6.0, 20.0).coverage(1.6).pressure(0.35, 0.65).clip(false).threshold(0.4);
+        let hd = paint::Handling::new(Tool::round_sable(2.2)).mixed(snow_pal, 0.15).color(move |x, y| snow_col(&n, x, y)).angle(|_, _| 0.0).angle_jitter(0.08).length(6.0, 20.0).coverage(1.6).pressure(0.35, 0.65).clip(false).threshold(0.4);
         c.work(&lip, &hd, 54);
         c.dry();
     }
@@ -459,46 +482,83 @@ fn main() {
     }
 
     // ------------------------------------ a stone half buried in the snow
+    // an erratic block, flatter on top, a chipped shoulder on the right
     let (sx, sy) = (338.0f32, 652.0f32);
-    let stone = Mask::from_fn(f, move |x, y| {
-        let dx = (x - sx) / 46.0;
-        let dy = (y - sy) / 18.0;
-        if dx.abs() > 1.5 || dy.abs() > 1.5 {
-            return 0.0;
-        }
-        let lump = dx * dx + dy * dy * (if dy < 0.0 { (1.0 + 0.4 * dx).max(0.5) } else { 1.0 });
-        smoothstep(1.05, 0.95, lump)
-    })
-    .roughen(71, 14.0, 1.8, 0.6);
+    let outline: Vec<(f32, f32)> = [(-47.0, 8.0), (-43.0, -3.0), (-33.0, -11.0), (-15.0, -16.0), (2.0, -18.0), (19.0, -16.5), (27.0, -12.0), (33.0, -12.5), (41.0, -5.0), (47.0, 6.0), (31.0, 13.0), (0.0, 14.0), (-29.0, 12.0)]
+        .iter()
+        .map(|&(dx, dy)| (sx + dx, sy + dy))
+        .collect();
+    let stone = Mask::from_shape(f, Shape::new().smooth_poly(&outline)).roughen(71, 9.0, 1.2, 0.5);
+    let cap_line = move |x: f32| {
+        let u = (x - sx) / 46.0;
+        sy - 10.0 + 8.0 * u * u + 3.0 * n2.get(x * 0.9, 40.0) + 1.2 * n2.get(x * 3.0, 80.0) + 2.5 * u
+    };
     if o.stage("stone", &mut c, &mut rng) {
-        // the rock: dark, cool where it faces the sky, strokes round its form
+        // its shadow first: backlit by the glow, it throws a soft cool
+        // shadow toward us on the snow
+        let shadow = Mask::from_fn(f, move |x, y| {
+            let dx = (x - sx - 6.0) / 58.0;
+            let dy = (y - sy - 18.0) / 9.0;
+            if dx.abs() > 1.5 || dy.abs() > 2.0 {
+                return 0.0;
+            }
+            smoothstep(1.0, 0.3, dx * dx + dy * dy)
+        });
+        let hd = paint::Handling::new(Tool::filbert(5.0)).mixed(snow_pal, 0.35).color_over(|_, _, u| paint::shift(u, -0.06, 0.0, -0.03)).angle(|_, _| 0.0).angle_jitter(0.1).length(10.0, 30.0).coverage(1.6).pressure(0.35, 0.6).clip(true).threshold(0.2);
+        c.work(&shadow, &hd, 70);
+        c.dry();
+        // the rock by its planes: the left end turned from the light, the
+        // front face in shadow, a cool band where it turns up to the sky
+        // planes split along a few edges, as a stone breaks
         let rock = move |x: f32, y: f32| {
-            let up = smoothstep(sy + 10.0, sy - 12.0, y);
-            let v = n2.get01(x * 2.0, y * 2.0);
-            mix(mix(hex("#3b3835"), hex("#6a6a73"), 0.6 * up, Mix::Pigment), hex("#524a42"), 0.4 * v, Mix::Pigment)
+            let (u, v) = (x - sx, y - sy);
+            let top = v < cap_line(x) - sy + 6.0 + 0.15 * u; // the upper plane, turned to the sky
+            let left = u < -22.0 + 0.6 * v; // the end, turned away
+            let chip = u > 24.0 && v < 2.0 - 0.3 * (u - 24.0); // the chipped shoulder
+            let face = if top {
+                hex("#707280")
+            } else if left {
+                hex("#302d2b")
+            } else if chip {
+                hex("#5d5a5c")
+            } else {
+                hex("#433e3a")
+            };
+            mix(face, hex("#5a5046"), 0.3 * n2.get01(x * 3.0, y * 3.0), Mix::Pigment)
         };
-        let hd = paint::Handling::new(Tool::filbert(3.5)).mixed(pal, 0.15).color(rock).angle(move |x, y| (y - sy).atan2(x - sx) + FRAC_PI_2).angle_jitter(0.3).length(4.0, 12.0).coverage(3.2).clip(true).threshold(0.3);
+        let hd = paint::Handling::new(Tool::filbert(3.0)).mixed(pal, 0.15).color(rock).angle(move |x, _| if (x - sx).abs() > 30.0 { 1.2 * (x - sx).signum() } else { 0.15 }).angle_jitter(0.35).length(3.0, 10.0).coverage(3.4).clip(true).threshold(0.3);
         c.work(&stone, &hd, 72);
         c.dry();
-        // the snow cap, thick, lying over the top and hanging over its edge
-        let cap = Mask::from_fn(f, move |x, y| {
-            let top = sy - 9.0 + 10.0 * ((x - sx) / 46.0).powi(2) + 1.5 * (x * 0.3).sin() + 2.0 * ((x - sx) / 46.0);
-            smoothstep(top + 0.8, top - 0.8, y)
-        })
-        .mul(&stone.clone().dilate(1.4));
+        // cracks and a chipped edge with the point
+        let mut r = Held::new(Tool { point: 1.0, ..Tool::rigger(0.6) }, 75);
+        for &(a, e) in &[((sx - 12.0, sy - 4.0), (sx - 6.0, sy + 11.0)), ((sx + 27.0, sy - 9.0), (sx + 31.0, sy + 3.0)), ((sx - 33.0, sy - 2.0), (sx - 28.0, sy + 9.0))] {
+            r.reload(pal.paint(hex("#221f1d"), 0.15), 0.6);
+            c.drag(&mut r, &Gesture::new(vec![a, ((a.0 + e.0) * 0.5 + 1.5, (a.1 + e.1) * 0.5), e]).pressure(0.5, 0.2).ramps(0.1, 0.5).shake(0.8), None);
+        }
+        c.dry();
+        // the snow cap: lumpy, lying over the top and hanging a little over
+        // the edge; its front edge in shadow, its top catching the glow
+        let cap = Mask::from_fn(f, move |x, y| smoothstep(cap_line(x) + 0.7, cap_line(x) - 0.7, y)).mul(&stone.clone().dilate(1.6));
         let capc = move |x: f32, y: f32| {
-            let lit = smoothstep(sx - 30.0, sx + 20.0, x);
-            mix(hex("#bfc0cf"), hex("#e7dfd6"), 0.3 + 0.6 * lit * smoothstep(sy + 2.0, sy - 14.0, y), Mix::Light)
+            let d = cap_line(x) - y; // depth into the cap from its lower edge
+            let top = smoothstep(2.0, 7.0, d);
+            mix(hex("#b1b4c8"), hex("#e9e1d6"), 0.2 + 0.7 * top * smoothstep(sx - 40.0, sx + 10.0, x), Mix::Light)
         };
-        let hd = paint::Handling::new(Tool::filbert(4.0)).mixed(pal, 0.1).color(capc).angle(|_, _| -0.1).angle_jitter(0.25).length(5.0, 14.0).coverage(3.0).clip(true).threshold(0.3);
+        let hd = paint::Handling::new(Tool::filbert(3.6)).mixed(snow_pal, 0.1).color(capc).angle(|_, _| -0.05).angle_jitter(0.3).length(4.0, 12.0).coverage(3.2).clip(true).threshold(0.3);
         c.work(&cap, &hd, 73);
-        // snow banked against its foot, and a cool shadow off its left side
+        // (Handling isn't Clone: the second pass is written out again)
+        let hd = paint::Handling::new(Tool::filbert(3.0)).mixed(snow_pal, 0.1).color(capc).angle(|_, _| 0.1).angle_jitter(0.3).length(3.0, 9.0).coverage(2.4).clip(true).threshold(0.3);
+        c.work(&cap.erode(0.8), &hd, 76);
+        // snow banked against its foot, its top uneven
         let bank = Mask::from_fn(f, move |x, y| {
-            let dx = (x - sx) / 48.0;
-            let top = sy + 13.0 - 2.0 * (x * 0.2).sin() + 3.0 * dx * dx;
-            smoothstep(top - 0.6, top + 0.6, y) * smoothstep(1.2, 0.9, dx.abs()) * smoothstep(sy + 26.0, sy + 16.0, y)
+            let dx = (x - sx) / 52.0;
+            if dx.abs() > 1.4 {
+                return 0.0;
+            }
+            let top = sy + 9.0 - 2.5 * (x * 0.17).sin() - 1.5 * (x * 0.53).sin() + 4.0 * dx * dx;
+            smoothstep(top - 0.6, top + 0.6, y) * smoothstep(1.3, 0.95, dx.abs()) * smoothstep(sy + 28.0, sy + 18.0, y)
         });
-        let hd = paint::Handling::new(Tool::filbert(4.0)).mixed(pal, 0.12).color(move |x, y| snow_col(&n, x, y)).angle(|_, _| 0.0).angle_jitter(0.15).length(6.0, 18.0).coverage(2.4).clip(true).threshold(0.3);
+        let hd = paint::Handling::new(Tool::filbert(4.0)).mixed(snow_pal, 0.12).color(move |x, y| snow_col(&n, x, y)).angle(|_, _| 0.0).angle_jitter(0.15).length(6.0, 18.0).coverage(3.6).clip(true).threshold(0.3);
         c.work(&bank, &hd, 74);
         c.dry();
     }
@@ -689,6 +749,11 @@ fn paint_spruce(c: &mut paint::Canvas, pal: &Palette, t: &Fir, rng: &mut Rng) {
     b.load(pal.paint(hex("#2a2420"), 0.2), 1.0);
     let p0 = b.tool.pressure_for(t.leader_w[0].max(0.8));
     c.drag(&mut b, &Gesture::new(t.leader.clone()).pressure(p0, 0.0).ramps(0.02, 0.4).shake(0.3), None);
+    // the needle mass laid in dark first, in short hatching, so the tree
+    // is a body and not a scatter of strokes
+    let mass = t.needles(c.frame()).erode(1.3).roughen(t.seed as u32 + 9, 2.5, 0.8, 0.3);
+    let hd = paint::Handling::new(Tool { point: 0.8, ..Tool::round_sable((t.hatch * 1.6).max(1.0)) }).mixed(pal, 0.15).color(|_, _| hex("#222925")).angle(|_, _| 0.35).cross(0.5).angle_jitter(0.3).length(2.0, 5.0).coverage(2.4).clip(true).threshold(0.35);
+    c.work(&mass, &hd, t.seed + 5);
     // needles
     let mut hb = Held::new(Tool { point: 1.0, ..Tool::round_sable(t.hatch.max(0.6) * 1.2) }, t.seed + 2);
     for (k, s) in t.strokes.iter().enumerate() {
@@ -699,28 +764,46 @@ fn paint_spruce(c: &mut paint::Canvas, pal: &Palette, t: &Fir, rng: &mut Rng) {
         let p = hb.tool.pressure_for(s.w.max(0.4));
         // short: pulled back toward the root
         let r = s.pts[0];
-        let pts: Vec<(f32, f32)> = s.pts.iter().map(|q| (r.0 + 0.78 * (q.0 - r.0), r.1 + 0.78 * (q.1 - r.1))).collect();
+        let k = if s.kind == fir::Kind::Under { 0.55 } else { 0.8 };
+        let pts: Vec<(f32, f32)> = s.pts.iter().map(|q| (r.0 + k * (q.0 - r.0), r.1 + k * (q.1 - r.1))).collect();
         c.drag(&mut hb, &Gesture::new(pts).pressure(p, p * 0.2).ramps(0.05, 0.6).shake(0.4), None);
     }
     c.dry();
-    // snow: heaped on each bough's upper face, fullest along its middle
-    let snow = pal.paint(hex("#e9e4de"), 0.05).with_stiff(0.95);
-    let shade = pal.paint(hex("#b9bccb"), 0.08);
-    let mut sb = Held::new(Tool { point: 0.5, ..Tool::round_sable((t.hatch * 2.2).max(1.4)) }, t.seed + 3);
+    // snow: lumps along each bough's upper face, touched on with the tip,
+    // bigger along the middle of the bough; warm on the glow side (left)
+    let snow = pal.paint(hex("#ebe5de"), 0.05).with_stiff(0.95);
+    let cool = pal.paint(hex("#c3c5d3"), 0.06).with_stiff(0.9);
+    let shade = pal.paint(hex("#a9adc0"), 0.08);
+    let mut sb = Held::new(Tool { point: 0.5, ..Tool::round_sable((t.hatch * 1.8).max(1.2)) }, t.seed + 3);
+    let stem_x = t.foot.0;
     for bo in &t.boughs {
-        if bo.dead || bo.minor || bo.pts.len() < 3 || rng.f() < 0.12 {
+        if bo.dead || bo.pts.len() < 3 || rng.f() < 0.22 {
             continue;
         }
         let n = bo.pts.len();
-        let a = (n as f32 * rng.range(0.05, 0.25)) as usize;
-        let e = (n as f32 * rng.range(0.8, 1.0)) as usize;
-        let pts: Vec<(f32, f32)> = (a..e.min(n)).map(|k| (bo.pts[k].0, bo.pts[k].1 - bo.pad[k].0 * 0.5)).collect();
-        if pts.len() < 2 {
-            continue;
+        let a = (n as f32 * rng.range(0.1, 0.3)) as usize;
+        let e = (n as f32 * rng.range(0.7, 1.0)) as usize;
+        let mut k = a;
+        while k < e.min(n) {
+            let u = (k - a) as f32 / (e - a).max(1) as f32;
+            let mid = (std::f32::consts::PI * u).sin();
+            if rng.f() < 0.8 {
+                let (x, y) = bo.pts[k];
+                let glow_side = x < stem_x;
+                let pick = if rng.f() < 0.15 { shade } else if glow_side || rng.f() < 0.4 { snow } else { cool };
+                sb.reload(pick, 0.5);
+                let p = (0.25 + 0.45 * mid) * rng.range(0.7, 1.15) * if bo.minor { 0.6 } else { 1.0 };
+                let (nx, ny) = bo.pts[(k + 1).min(n - 1)];
+                let (dx, dy) = (nx - x, ny - y);
+                let len = (dx * dx + dy * dy).sqrt().max(1e-3);
+                let run = rng.range(1.5, 3.5) * (0.6 + mid);
+                let lift = bo.pad[k].0 * 0.55 + rng.f() * 0.5;
+                let a = (x, y - lift);
+                let e = (x + dx / len * run, y + dy / len * run - lift + rng.range(-0.3, 0.2));
+                c.drag(&mut sb, &Gesture::line(a, e).pressure(p.min(0.9), p * 0.5).ramps(0.2, 0.5).shake(0.4), None);
+            }
+            k += 1 + (rng.f() * 1.6) as usize;
         }
-        sb.reload(if rng.f() < 0.7 { snow } else { shade }, 0.8);
-        let p = 0.35 + 0.35 * (1.0 - bo.t * 0.5);
-        c.drag(&mut sb, &Gesture::new(pts).pressure(p, p * 0.4).swell(vec![0.6, 1.3, 1.1, 0.5]).ramps(0.2, 0.5).shake(0.6), None);
     }
 }
 

@@ -1249,11 +1249,22 @@ unsafe fn exchange(
         // film splitting: a bristle in wet paint always lifts some of it, even
         // when loaded; a spent bristle drinks more
         let hunger = 0.35 + 0.65 * (1.0 - br.vol / full).clamp(0.0, 1.0).powf(1.5);
-        let push_k = tool.push * (seg / (2.0 * rb)).clamp(0.0, 1.0);
-        // ploughed paint lands just outside the track: the next pixel, or for
-        // a pointed tool (shared bilinearly, below) a hair's width away, the
-        // same distance at any resolution
-        let off = if fine { 2.0 * rb } else { rb + 1.0 };
+        // a moving hair ploughs aside the share `push` of the paint in its
+        // own track, 2·`hair` wide, and lays it a hair's width away (shared
+        // bilinearly, below): the same paint moved the same distance at any
+        // resolution. A hair finer than a pixel is drawn wider than it is
+        // (`rb`, see `drag_on`), so each pixel of its drawn track gives up
+        // only its share of it, hair / rb. (Ploughed by the drawn track and
+        // thrown to the next pixel, a filbert 5 at 1000px, its hairs a
+        // quarter of a pixel, moved some 18 times the paint a hair's width
+        // does, compounding over the ~50 hairs over each pixel: every
+        // stroke ploughed its paint into rims, 399 µm on its edges and
+        // 11 µm inside, rounds 8 and 9.) A pressed tip's hairs lie together
+        // (see `touch_rb`): its contact is its track.
+        let hair = if fine || dep.is_some() { rb } else { (tool.hair_radius() * s).min(rb) };
+        let push_k = tool.push * (seg / (2.0 * hair)).clamp(0.0, 1.0) * (hair / rb);
+        let off = if dep.is_some() { rb + 1.0 } else { 2.0 * hair };
+        let spread = dep.is_none();
 
         let mut got_v = 0.0f32;
         let mut got_l = [0.0f32; LAT];
@@ -1311,12 +1322,12 @@ unsafe fn exchange(
                         let tx = px + (nx * side * 0.75 + mx * 0.45) * off;
                         let ty = py + (ny * side * 0.75 + my * 0.45) * off;
                         // where the paint goes: the pixel under the target,
-                        // or for a pointed tool's fine hairs, shared
+                        // or for a moving hair, shared
                         // bilinearly by the four pixels around it (a hair
                         // finer than a pixel would otherwise leave a ridge
                         // of dots along its track where rounding lands it)
                         let mut to = [(0.0f32, 0.0f32, 0.0f32); 4];
-                        let n_to = if fine {
+                        let n_to = if spread {
                             let (gx, gy) = (tx - 0.5, ty - 0.5);
                             let (fx, fy) = (gx - gx.floor(), gy - gy.floor());
                             let (bx, by) = (gx.floor() + 0.5, gy.floor() + 0.5);
@@ -1604,6 +1615,51 @@ mod tip_tests {
             }
         }
         sum / s / (b - a) as f32
+    }
+
+    /// Paint (coats) one stroke of `tool` lays across its mark over a dry
+    /// layer on a Friedrich-sized strip `px` wide: the mean film at each
+    /// pixel row from 2 widths above the stroke's line to 2 below, over the
+    /// middle of its length, as (offset from the line in units, coats).
+    fn film_across_over_dry(px: usize, tool: Tool, pressure: f32) -> Vec<(f32, f32)> {
+        let mut c = Canvas::new(px, 4.0, hex(BG)).with_size_mm(440.0).with_linen(crate::surface::Linen::fine(3));
+        // a light layer, laid in overlapping bands and let dry
+        for (k, y) in [95.0, 110.0, 125.0, 140.0, 155.0].into_iter().enumerate() {
+            let mut h = Held::new(Tool::filbert(40.0), 10 + k as u64);
+            h.load(Paint::body(hex("#b8c4d0")), 1.0);
+            c.drag(&mut h, &Gesture::line((100.0, y), (900.0, y)).pressure(0.9, 0.9), None);
+        }
+        c.dry();
+        let mut h = Held::new(tool.clone(), 5);
+        h.load(Paint::body(hex("#50586a")), 0.8);
+        c.drag(&mut h, &Gesture::line((300.0, 125.0), (700.0, 125.0)).pressure(pressure, pressure), None);
+        let f = c.f;
+        let (x0, x1) = ((400.0 * f.scale) as usize, (600.0 * f.scale) as usize);
+        let (y0, y1) = (((125.0 - 2.0 * tool.width) * f.scale) as usize, ((125.0 + 2.0 * tool.width) * f.scale) as usize);
+        (y0..=y1).map(|y| (f.uy(y) - 125.0, (x0..x1).map(|x| c.wet.vol[y * f.w + x]).sum::<f32>() / (x1 - x0) as f32)).collect()
+    }
+
+    /// A body stroke over dry paint lays a covering film, thickest about
+    /// where the brush pressed, not a ring: across the middle half of the
+    /// mark the film is not far below the thickest paint at its edges.
+    /// Rounds 8 and 9: a filbert 5 at 1000px ploughed its paint into rims
+    /// (399 µm on the edges, 11 µm inside), so the old paint showed through
+    /// every stroke as a net; thin filbert shadows at 3200px were dark
+    /// ridged tubes with pale middles. The brushes' hairs were finer than a
+    /// pixel (so too for the filbert 2, at 1000px as at 3200px).
+    #[test]
+    fn a_stroke_over_dry_paint_covers_its_middle() {
+        let st = crate::style::Style::friedrich();
+        for (name, tool) in [("filbert 5", Tool::filbert(5.0)), ("filbert 2", Tool { lay: 0.5, stiffness: 0.3, ..Tool::filbert(2.0) }), ("body", st.body.clone())] {
+            let prof = film_across_over_dry(1000, tool, 0.8);
+            let peak = prof.iter().map(|p| p.1).fold(0.0f32, f32::max);
+            // the mark: where it laid a tenth of its peak or more
+            let on: Vec<f32> = prof.iter().filter(|p| p.1 >= 0.1 * peak).map(|p| p.0).collect();
+            let (a, b) = (on[0], on[on.len() - 1]);
+            let mid: Vec<f32> = prof.iter().filter(|p| p.0 >= a + 0.25 * (b - a) && p.0 <= b - 0.25 * (b - a)).map(|p| p.1).collect();
+            let middle = mid.iter().sum::<f32>() / mid.len() as f32;
+            assert!(middle >= 0.6 * peak, "{name}: {middle:.2} coats in the middle of the mark, {peak:.2} at its thickest: {prof:.2?}");
+        }
     }
 
     #[test]

@@ -364,7 +364,17 @@ fn crack_lab_generations() {
         let net = network(&k, size, [10.0 / 14.0, 10.0 / 12.0]);
         let diag = (size[0] * size[0] + size[1] * size[1]).sqrt();
         let bar = (0.1 * size[0].min(size[1])).clamp(30.0, 70.0);
-        eprintln!("== {name}: island {:.2} mm, width {:.1} µm", k.island(), k.width());
+        // the network's mean opening (relative to `width_um`, length weighted)
+        let mean = |k: &Cracks| {
+            let (mut sum, mut len) = (0.0f32, 0.0f32);
+            for sg in super::rsegs(&net, k) {
+                let l = ((sg.b[0] - sg.a[0]).powi(2) + (sg.b[1] - sg.a[1]).powi(2)).sqrt();
+                sum += 0.5 * (sg.wa + sg.wb) * l;
+                len += l;
+            }
+            sum / len
+        };
+        eprintln!("== {name}: island {:.2} mm, width {:.1} µm; mean opening {:.2} (hierarchy 0: {:.2})", k.island(), k.width(), mean(&k), mean(&Cracks { hierarchy: 0.0, ..k }));
         for g in 0..5u8 {
             let (mut len, mut near_corner, mut near_bar) = (0.0f32, 0.0f32, 0.0f32);
             let mut rel = Vec::new();

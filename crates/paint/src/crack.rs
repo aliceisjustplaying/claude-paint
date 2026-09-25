@@ -60,7 +60,7 @@ use std::collections::BinaryHeap;
 ///
 /// How strongly cracks read in the picture: an age crack is narrower than a
 /// pixel (0.14 mm on a 440 mm canvas at 3200 px), so it shows as the part
-/// of the pixel it opens (`width_um`, `hierarchy`, and `vary` in thick
+/// of the pixel it opens (`width_um`, `hierarchy` and `vary` in thick
 /// paint) times how far its dark slot or pale walls differ from the paint
 /// there. What fills it (`dirt`, `grime`) moves that a little; `depth_um`
 /// and `cupping_um` shape the surface relief, which only the finish's relief

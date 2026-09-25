@@ -51,10 +51,14 @@ impl Trunk {
         36.0 + 22.0 * t + flare + collar
     }
     fn left(&self, y: f32) -> f32 {
-        self.cx(y) - self.hw(y) - 2.6 * self.bumps_l.get(3.0, y) - 1.2 * self.bumps_l.get(40.0, y * 3.0)
+        // slow swellings, the callus lip round the old scar
+        let callus = 6.0 * (-((y - 640.0) / 45.0).powi(2)).exp();
+        self.cx(y) - self.hw(y) - 2.6 * self.bumps_l.get(3.0, y) - 1.2 * self.bumps_l.get(40.0, y * 3.0) - 4.5 * self.bumps_l.get(0.0, y * 0.3) - callus
     }
     fn right(&self, y: f32) -> f32 {
-        self.cx(y) + self.hw(y) + 2.2 * self.bumps_r.get(9.0, y) + 1.0 * self.bumps_r.get(50.0, y * 3.0)
+        // and a burl low on the shadow side
+        let burl = 9.0 * (-((y - 815.0) / 32.0).powi(2)).exp();
+        self.cx(y) + self.hw(y) + 2.2 * self.bumps_r.get(9.0, y) + 1.0 * self.bumps_r.get(50.0, y * 3.0) + 4.0 * self.bumps_r.get(0.0, y * 0.3) + burl
     }
     /// -1 at the left edge, +1 at the right
     fn across(&self, x: f32, y: f32) -> f32 {
@@ -192,7 +196,6 @@ fn main() {
         w: vec![22.0, 18.0, 16.0, 14.0, 13.0],
     }
     .smooth(6);
-    let limbs = [&limb, &bough, &high];
     // ckpt: from twigs
     let mut twig_list: Vec<(Vec<P>, f32)> = Vec::new();
     // twigs off the bough and the limb, crossing the sky: oak shoots, short
@@ -239,6 +242,15 @@ fn main() {
             + 2.0 * lobes.get(x, 0.0) - 4.0 * lobes.get(x * 0.35, 5.0).max(0.0).powf(1.5)
     };
 
+    // a root running out from the foot on the shadow side, diving under the
+    // snow
+    let root = Limb {
+        pts: vec![(tr.right(1050.0) - 26.0, 1050.0), (tr.right(1070.0) + 6.0, 1072.0), (tr.right(1078.0) + 26.0, 1088.0), (tr.right(1080.0) + 44.0, 1108.0), (tr.right(1080.0) + 62.0, 1135.0)],
+        w: vec![44.0, 30.0, 24.0, 22.0, 21.0],
+    }
+    .smooth(4);
+    let limbs = [&limb, &bough, &high, &root];
+    let under_snow = move |x: f32, y: f32| 1.0 - smoothstep(bank(x) + 0.5, bank(x) + 2.0, y);
     // masks
     let sky_m = Mask::from_fn(f, move |x, y| 1.0 - smoothstep(horizon(x) - 1.0, horizon(x) + 3.0, y));
     let snow_m = Mask::from_fn(f, move |x, y| smoothstep(horizon(x) - 1.5, horizon(x) + 1.5, y));
@@ -252,7 +264,7 @@ fn main() {
             let (d, _, _) = l.sd(x, y);
             m = m.max(1.0 - smoothstep(-0.7, 0.7, d));
         }
-        m
+        m * under_snow(x, y)
     });
     let tree_m = trunk_m.clone().union(&limbs_m);
 
@@ -458,7 +470,7 @@ fn main() {
         // limbs: along their own direction, the upper side catching the
         // glow, the underside dark
         for (k, l) in limbs.iter().enumerate() {
-            let lm = Mask::from_fn(f, |x, y| 1.0 - smoothstep(-0.7, 0.7, l.sd(x, y).0));
+            let lm = Mask::from_fn(f, |x, y| (1.0 - smoothstep(-0.7, 0.7, l.sd(x, y).0)) * under_snow(x, y));
             let lcol = |x: f32, y: f32| {
                 let (_, _, a) = l.sd(x, y);
                 let n = 0.5 + 0.5 * bark.get(x * 2.0, y * 2.0);
@@ -660,7 +672,7 @@ fn main() {
         // the brush lifting now and then a hair higher onto the bark)
         let mut lip = Held::new(Tool { lay: 0.9, ..Tool::filbert(6.0) }, 705);
         let mut x = tr.left(1080.0) - 16.0;
-        while x < tr.right(1080.0) + 16.0 {
+        while x < tr.right(1080.0) + 75.0 {
             let len = rng.range(14.0, 40.0);
             let col = bcol(x + len * 0.5, bank(x + len * 0.5) + 4.0);
             lip.reload(snow_pal.paint(shift(col, -0.02, 0.0, -0.005), 0.05), 0.6);
@@ -733,6 +745,27 @@ fn main() {
         let mut rgr = Held::new(Tool { point: 1.0, ..Tool::rigger(1.0) }, 801);
         let mut sab = Held::new(Tool { point: 1.0, ..Tool::round_sable(1.6) }, 802);
         let straw = [hex("#8a7248"), hex("#6d5a3c"), hex("#4e4232"), hex("#a08a5e")];
+        // a few oak leaves the wind has brought down onto the snow, curled,
+        // each with a hair of blue shadow under it
+        let mut lf = Held::new(Tool { point: 1.0, ..Tool::round_sable(3.2) }, 803);
+        for _ in 0..8 {
+            let x = tr.cx(1100.0) + rng.range(-170.0, 200.0);
+            let y = rng.range(1105.0, 1235.0);
+            if y < bank(x) + 8.0 {
+                continue;
+            }
+            let s = 0.7 + 0.5 * ((y - 1100.0) / 150.0);
+            let a = rng.range(-0.6, 0.6);
+            let (ca, sa) = (a.cos(), a.sin());
+            let l = 9.0 * s;
+            lf.reload(snow_pal.paint(hex("#a2a8bc"), 0.1), 0.4);
+            c.drag(&mut lf, &Gesture::line((x - ca * l * 0.4, y + 2.0 * s), (x + ca * l * 0.5, y + sa * l * 0.5 + 2.5 * s)).pressure(0.5, 0.2).ramps(0.2, 0.5), None);
+            let col = [hex("#6e4e32"), hex("#8a6440"), hex("#5a4230")][(rng.f() * 3.0) as usize % 3];
+            lf.reload(snow_pal.paint(col, 0.1), 0.6);
+            c.drag(&mut lf, &Gesture::new(vec![(x - ca * l * 0.5, y - sa * l * 0.5), (x, y - 1.5 * s), (x + ca * l * 0.5, y + sa * l * 0.5)]).pressure(0.75, 0.1).ramps(0.1, 0.7).shake(0.8), None);
+            // the stalk
+            c.drag(&mut lf, &Gesture::line((x - ca * l * 0.5, y - sa * l * 0.5), (x - ca * l * 0.75, y - sa * l * 0.75 + 1.0)).pressure(0.25, 0.0).ramps(0.1, 0.8), None);
+        }
         // clumps: near the trunk and scattered, smaller with distance
         let mut clumps: Vec<(f32, f32, f32)> = vec![(330.0, 1102.0, 1.0), (560.0, 1106.0, 0.9), (610.0, 1118.0, 0.7), (270.0, 1150.0, 1.1), (180.0, 1190.0, 1.3), (820.0, 1170.0, 1.1), (900.0, 1225.0, 1.3)];
         for _ in 0..7 {

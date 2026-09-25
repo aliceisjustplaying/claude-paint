@@ -1606,6 +1606,51 @@ mod tip_tests {
         sum / s / (b - a) as f32
     }
 
+    /// Paint (coats) one stroke of `tool` lays across its mark over a dry
+    /// layer on a Friedrich-sized strip `px` wide: the mean film at each
+    /// pixel row from 2 widths above the stroke's line to 2 below, over the
+    /// middle of its length, as (offset from the line in units, coats).
+    fn film_across_over_dry(px: usize, tool: Tool, pressure: f32) -> Vec<(f32, f32)> {
+        let mut c = Canvas::new(px, 4.0, hex(BG)).with_size_mm(440.0).with_linen(crate::surface::Linen::fine(3));
+        // a light layer, laid in overlapping bands and let dry
+        for (k, y) in [95.0, 110.0, 125.0, 140.0, 155.0].into_iter().enumerate() {
+            let mut h = Held::new(Tool::filbert(40.0), 10 + k as u64);
+            h.load(Paint::body(hex("#b8c4d0")), 1.0);
+            c.drag(&mut h, &Gesture::line((100.0, y), (900.0, y)).pressure(0.9, 0.9), None);
+        }
+        c.dry();
+        let mut h = Held::new(tool.clone(), 5);
+        h.load(Paint::body(hex("#50586a")), 0.8);
+        c.drag(&mut h, &Gesture::line((300.0, 125.0), (700.0, 125.0)).pressure(pressure, pressure), None);
+        let f = c.f;
+        let (x0, x1) = ((400.0 * f.scale) as usize, (600.0 * f.scale) as usize);
+        let (y0, y1) = (((125.0 - 2.0 * tool.width) * f.scale) as usize, ((125.0 + 2.0 * tool.width) * f.scale) as usize);
+        (y0..=y1).map(|y| (f.uy(y) - 125.0, (x0..x1).map(|x| c.wet.vol[y * f.w + x]).sum::<f32>() / (x1 - x0) as f32)).collect()
+    }
+
+    /// A body stroke over dry paint lays a covering film, thickest about
+    /// where the brush pressed, not a ring: across the middle half of the
+    /// mark the film is not far below the thickest paint at its edges.
+    /// Rounds 8 and 9: a filbert 5 at 1000px ploughed its paint into rims
+    /// (399 µm on the edges, 11 µm inside), so the old paint showed through
+    /// every stroke as a net; thin filbert shadows at 3200px were dark
+    /// ridged tubes with pale middles. The brushes' hairs were finer than a
+    /// pixel (so too for the filbert 2, at 1000px as at 3200px).
+    #[test]
+    fn a_stroke_over_dry_paint_covers_its_middle() {
+        let st = crate::style::Style::friedrich();
+        for (name, tool) in [("filbert 5", Tool::filbert(5.0)), ("filbert 2", Tool { lay: 0.5, stiffness: 0.3, ..Tool::filbert(2.0) }), ("body", st.body.clone())] {
+            let prof = film_across_over_dry(1000, tool, 0.8);
+            let peak = prof.iter().map(|p| p.1).fold(0.0f32, f32::max);
+            // the mark: where it laid a tenth of its peak or more
+            let on: Vec<f32> = prof.iter().filter(|p| p.1 >= 0.1 * peak).map(|p| p.0).collect();
+            let (a, b) = (on[0], on[on.len() - 1]);
+            let mid: Vec<f32> = prof.iter().filter(|p| p.0 >= a + 0.25 * (b - a) && p.0 <= b - 0.25 * (b - a)).map(|p| p.1).collect();
+            let middle = mid.iter().sum::<f32>() / mid.len() as f32;
+            assert!(middle >= 0.6 * peak, "{name}: {middle:.2} coats in the middle of the mark, {peak:.2} at its thickest: {prof:.2?}");
+        }
+    }
+
     #[test]
     fn pointed_marks_are_resolution_independent() {
         let g = Gesture::line((50.0, 120.0), (450.0, 122.0)).pressure(0.4, 0.4).ramps(0.05, 0.1).shake(0.0);

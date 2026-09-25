@@ -1,6 +1,0 @@
-pair1 sky_B X=main Y=wet
-pair2 water_B X=main Y=wet
-pair3 rock_B X=main Y=wet
-pair4 foliage_C X=main Y=wet
-pair5 l5_near X=wet Y=main
-pair6 l3_green X=wet Y=main

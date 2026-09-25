@@ -54,20 +54,41 @@ fn hills_top(n: &Fbm, x: f32) -> f32 {
     HZ - 3.0 - swell - 4.0 * n.get01(x * 0.8, 0.5) - 1.2 * n.get(x * 5.0, 3.0)
 }
 
-/// Skyline of the far fir wood on the right: spiky tops.
-fn wood_top(n: &Fbm, x: f32) -> f32 {
+/// The far fir wood's trees: (x, height of the spire above the mass,
+/// half width), unevenly spaced, a few standing out.
+fn wood_trees() -> Vec<(f32, f32, f32)> {
+    let mut r = Rng::new(4711);
+    let mut v = vec![];
+    let mut x = 648.0;
+    while x < 1012.0 {
+        let tall = if r.f() < 0.12 { r.range(6.0, 11.0) } else { 0.0 };
+        let h = r.range(3.0, 12.0) + tall;
+        v.push((x, h, r.range(2.2, 4.2) + 0.12 * h));
+        x += r.range(2.5, 10.0) * if r.f() < 0.15 { 2.0 } else { 1.0 };
+    }
+    v
+}
+
+/// The wood's mass (without the spires), rising from its left end.
+fn wood_base(n: &Fbm, x: f32) -> f32 {
+    let ramp = smoothstep(642.0, 730.0, x);
+    HZ - 2.0 - ramp * (14.0 + 9.0 * n.get01(x * 0.5, 1.0))
+}
+
+/// Skyline of the far fir wood on the right: the mass with its spires.
+fn wood_top(n: &Fbm, trees: &[(f32, f32, f32)], x: f32) -> f32 {
     if x < 640.0 {
         return 1e9;
     }
-    let ramp = smoothstep(640.0, 720.0, x);
-    let base = HZ - 2.0 - ramp * (18.0 + 8.0 * n.get01(x * 0.5, 1.0));
-    // each tree a small spire
-    let cell = 7.5;
-    let k = (x / cell).floor();
-    let f = x / cell - k;
-    let hgt = 6.0 + 9.0 * ((k * 12.9898).sin() * 43758.545).fract().abs();
-    let spire = hgt * (1.0 - (2.0 * f - 1.0).abs()).powf(1.6);
-    base - ramp * spire
+    let mut top = wood_base(n, x);
+    for &(tx, h, hw) in trees {
+        let d = (x - tx).abs();
+        if d < hw {
+            let ramp = smoothstep(642.0, 700.0, tx);
+            top = top.min(wood_base(n, tx) + 2.0 - ramp * (h + 2.0) * (1.0 - d / hw).powf(1.3));
+        }
+    }
+    top
 }
 
 /// The near ground's edge seen against the far snowfield: the low rise
@@ -106,7 +127,7 @@ fn snow_col(n: &Fbm, x: f32, y: f32) -> Rgb {
     let crest = smoothstep(0.05, 0.45, d) * depth;
     let trough = smoothstep(0.0, -0.45, d) * depth;
     let lit = mix(base, hex("#e3dcd4"), 0.45 * crest, Mix::Light);
-    mix(lit, hex("#959bb3"), 0.3 * trough, Mix::Light)
+    mix(lit, hex("#959bb3"), 0.22 * trough, Mix::Light)
 }
 
 fn main() {
@@ -211,17 +232,21 @@ fn main() {
         c.stipple(&far, &sp, 32);
         c.dry();
         // the village: roofs and the church, a shade darker than the hills
-        let town = hex("#6f7288");
+        let town = hex("#7b7d91");
         let mut b = Held::new(Tool { point: 0.8, ..Tool::round_sable(1.4) }, 33);
         let roofs = [(258.0f32, 4.0f32, 3.2f32), (268.0, 5.0, 4.0), (281.0, 3.5, 3.0), (318.0, 5.0, 3.6), (330.0, 4.0, 3.0), (341.0, 3.0, 2.4)];
         let ground_y = |x: f32| hills_top(&n, x) + 3.0;
         for &(x, hw, ht) in &roofs {
             b.reload(pal.paint(town, 0.2), 0.7);
             let gy = ground_y(x) + 1.0;
-            // gable: up one side, down the other, then the wall filled in
-            c.drag(&mut b, &Gesture::new(vec![(x - hw, gy - ht * 0.5), (x, gy - ht - 1.5), (x + hw, gy - ht * 0.5)]).pressure(0.5, 0.5).shake(0.3), None);
-            c.drag(&mut b, &Gesture::line((x - hw, gy - ht * 0.4), (x + hw, gy - ht * 0.4)).pressure(0.7, 0.7).shake(0.3), None);
-            c.drag(&mut b, &Gesture::line((x - hw + 0.5, gy - 0.5), (x + hw - 0.5, gy - 0.5)).pressure(0.7, 0.7).shake(0.3), None);
+            // a low house: the wall in two level strokes, the roof in
+            // shorter ones stepping in to the ridge
+            for k in 0..4 {
+                let yy = gy - 0.4 - k as f32 * 0.9;
+                let inset = if k < 2 { 0.0 } else { (k - 1) as f32 * hw * 0.3 };
+                c.drag(&mut b, &Gesture::line((x - hw + inset, yy), (x + hw - inset, yy + 0.1)).pressure(0.55, 0.55).shake(0.3), None);
+            }
+            let _ = ht;
         }
         // the church: nave and tower with a tall spire
         let (cx, cy) = (300.0f32, ground_y(300.0) + 1.0);
@@ -242,7 +267,9 @@ fn main() {
 
         // the fir wood on the right horizon: short vertical hatching, dark
         // and blue with distance
-        let wood = Mask::from_fn(f, |x, y| if y > wood_top(&n, x) && y < HZ + 4.0 { 1.0 } else { 0.0 }).blur(0.5);
+        let trees = wood_trees();
+        let top = f.per_column(|x| wood_top(&n, &trees, x));
+        let wood = Mask::from_fn(f, |x, y| if y > top(x) && y < HZ + 4.0 { 1.0 } else { 0.0 }).blur(0.5);
         let wood_col = |x: f32, y: f32| {
             let t = smoothstep(HZ - 30.0, HZ + 2.0, y);
             let d = mix(hex("#454a5c"), hex("#5c6072"), t, Mix::Light);
@@ -252,12 +279,10 @@ fn main() {
         c.work(&wood, &hd, 34);
         // the spires of the tree tops written with the point
         let mut r = Held::new(Tool { point: 1.0, ..Tool::rigger(0.7) }, 35);
-        let mut x = 700.0;
-        while x < 1000.0 {
-            let top = wood_top(&n, x);
-            r.reload(pal.paint(wood_col(x, top), 0.2), 0.6);
-            c.drag(&mut r, &Gesture::line((x, top + 7.0), (x + 0.2, top - 1.5)).pressure(0.6, 0.05).ramps(0.05, 0.6).shake(0.4), None);
-            x += 3.0 + 6.0 * rng.f();
+        for &(x, _, _) in trees.iter().filter(|t| t.0 > 690.0) {
+            let t = top(x);
+            r.reload(pal.paint(wood_col(x, t), 0.2), 0.6);
+            c.drag(&mut r, &Gesture::line((x + rng.range(-0.3, 0.3), t + 6.0), (x + rng.range(-0.4, 0.4), t - 1.2)).pressure(0.6, 0.05).ramps(0.05, 0.6).shake(0.4), None);
         }
         c.dry();
     }
@@ -298,7 +323,7 @@ fn main() {
         c.work(&rise, &hd, 45);
         c.dry();
         // blue shadow troughs of the near drifts, glazed thin
-        let trough = land.clone().mul_fn(move |x, y| smoothstep(0.0, -0.4, n.get(x * 0.35, y * 2.6)) * smoothstep(HZ + 60.0, 650.0, y));
+        let trough = land.clone().mul_fn(move |x, y| smoothstep(0.0, -0.4, n.get(x * 0.35, y * 2.6)) * smoothstep(HZ + 60.0, 650.0, y)).blur(4.0);
         let hd = st.body().color_over(|_, _, u| paint::shift(u, -0.035, 0.0, -0.018)).angle(dir).angle_jitter(0.1).length(16.0, 50.0).coverage(1.8).medium(0.35).pressure(0.4, 0.7).clip(true).threshold(0.25);
         c.work(&trough, &hd, 46);
         c.dry();
@@ -329,7 +354,7 @@ fn main() {
         let hd = paint::Handling::new(Tool::round_sable(2.6)).mixed(pal, 0.3).color_over(|_, _, u| paint::shift(u, -0.07, -0.004, -0.02)).angle(|_, _| 0.0).angle_jitter(0.05).length(10.0, 30.0).coverage(1.6).pressure(0.35, 0.6).clip(true).threshold(0.3);
         c.work(&under, &hd, 55);
         // the snow's lip over the ice's edge, broken, level strokes
-        let lip = pond.rim(2.5, 1.5).mul_fn(move |x, y| smoothstep(0.35, 0.6, n2.get01(x * 0.4, y)));
+        let lip = pond.rim(2.5, 1.5).mul_fn(move |x, y| smoothstep(0.5, 0.7, n2.get01(x * 0.4, y)));
         let hd = paint::Handling::new(Tool::round_sable(2.2)).mixed(pal, 0.15).color(move |x, y| snow_col(&n, x, y)).angle(|_, _| 0.0).angle_jitter(0.08).length(6.0, 20.0).coverage(1.6).pressure(0.35, 0.65).clip(false).threshold(0.4);
         c.work(&lip, &hd, 54);
         c.dry();
@@ -436,8 +461,8 @@ fn main() {
     // ------------------------------------ a stone half buried in the snow
     let (sx, sy) = (338.0f32, 652.0f32);
     let stone = Mask::from_fn(f, move |x, y| {
-        let dx = (x - sx) / 40.0;
-        let dy = (y - sy) / 16.0;
+        let dx = (x - sx) / 46.0;
+        let dy = (y - sy) / 18.0;
         if dx.abs() > 1.5 || dy.abs() > 1.5 {
             return 0.0;
         }
@@ -457,7 +482,7 @@ fn main() {
         c.dry();
         // the snow cap, thick, lying over the top and hanging over its edge
         let cap = Mask::from_fn(f, move |x, y| {
-            let top = sy - 4.0 + 3.0 * ((x - sx) / 40.0).powi(2) * 4.0 + 1.5 * (x * 0.3).sin();
+            let top = sy - 9.0 + 10.0 * ((x - sx) / 46.0).powi(2) + 1.5 * (x * 0.3).sin() + 2.0 * ((x - sx) / 46.0);
             smoothstep(top + 0.8, top - 0.8, y)
         })
         .mul(&stone.clone().dilate(1.4));
@@ -470,7 +495,7 @@ fn main() {
         // snow banked against its foot, and a cool shadow off its left side
         let bank = Mask::from_fn(f, move |x, y| {
             let dx = (x - sx) / 48.0;
-            let top = sy + 11.0 - 2.0 * (x * 0.2).sin() + 3.0 * dx * dx;
+            let top = sy + 13.0 - 2.0 * (x * 0.2).sin() + 3.0 * dx * dx;
             smoothstep(top - 0.6, top + 0.6, y) * smoothstep(1.2, 0.9, dx.abs()) * smoothstep(sy + 26.0, sy + 16.0, y)
         });
         let hd = paint::Handling::new(Tool::filbert(4.0)).mixed(pal, 0.12).color(move |x, y| snow_col(&n, x, y)).angle(|_, _| 0.0).angle_jitter(0.15).length(6.0, 18.0).coverage(2.4).clip(true).threshold(0.3);
@@ -495,13 +520,16 @@ fn main() {
             let scale = 0.35 + 0.65 * smoothstep(wy, h, y);
             let side = if k % 2 == 0 { -1.0 } else { 1.0 };
             let x = x + side * 1.8 * scale;
-            let col = paint::shift(snow_col(&n, x, y), -0.09, 0.0, -0.035);
+            let col = paint::shift(snow_col(&n, x, y), -0.13, 0.0, -0.045);
             s.reload(pal.paint(col, 0.25), 0.5);
             c.touch(&mut s, &Touch::at(x, y).pressure(0.25 + 0.5 * scale).drag(0.0, 1.0 * scale), None);
             t += 0.012 + 0.03 * (1.0 - scale);
             k += 1;
         }
         c.dry();
+        // the snow's shadow under his feet, cool, to the right (away from the glow)
+        s.reload(pal.paint(paint::shift(snow_col(&n, wx, wy), -0.12, 0.0, -0.04), 0.3), 0.6);
+        c.drag(&mut s, &Gesture::line((wx - 5.0, wy + 0.3), (wx + 9.0, wy + 0.8)).pressure(0.35, 0.15).ramps(0.2, 0.6).shake(0.3), None);
         paint_walker(&mut c, pal, (wx, wy), 30.0);
         c.dry();
     }
@@ -572,7 +600,9 @@ fn main() {
             1.4 * smoothstep(0.5, 1.2, r) + 0.45 * smoothstep(0.35, 0.0, y / hh)
         });
     }
-    o.finish(&mut c, &mut rng, &Finish::aged(st.relief));
+    // a quieter craquelure than the default: finer openings, less grime
+    let fin = Finish { cracks: Some(paint::Cracks { width_um: Some(16.0), dirt: 0.25, depth_um: 14.0, ..paint::Cracks::aged(0) }), ..Finish::aged(st.relief) };
+    o.finish(&mut c, &mut rng, &fin);
 }
 
 /// A tree's limbs, each one continuous movement from where it springs to
@@ -667,7 +697,10 @@ fn paint_spruce(c: &mut paint::Canvas, pal: &Palette, t: &Fir, rng: &mut Rng) {
             hb.reload(pick, 0.7);
         }
         let p = hb.tool.pressure_for(s.w.max(0.4));
-        c.drag(&mut hb, &Gesture::new(s.pts.to_vec()).pressure(p, p * 0.2).ramps(0.05, 0.6).shake(0.4), None);
+        // short: pulled back toward the root
+        let r = s.pts[0];
+        let pts: Vec<(f32, f32)> = s.pts.iter().map(|q| (r.0 + 0.78 * (q.0 - r.0), r.1 + 0.78 * (q.1 - r.1))).collect();
+        c.drag(&mut hb, &Gesture::new(pts).pressure(p, p * 0.2).ramps(0.05, 0.6).shake(0.4), None);
     }
     c.dry();
     // snow: heaped on each bough's upper face, fullest along its middle
@@ -679,9 +712,9 @@ fn paint_spruce(c: &mut paint::Canvas, pal: &Palette, t: &Fir, rng: &mut Rng) {
             continue;
         }
         let n = bo.pts.len();
-        let a = (n as f32 * rng.range(0.15, 0.35)) as usize;
-        let e = (n as f32 * rng.range(0.75, 0.98)) as usize;
-        let pts: Vec<(f32, f32)> = (a..e.min(n)).map(|k| (bo.pts[k].0, bo.pts[k].1 - bo.pad[k].0 * 0.7)).collect();
+        let a = (n as f32 * rng.range(0.05, 0.25)) as usize;
+        let e = (n as f32 * rng.range(0.8, 1.0)) as usize;
+        let pts: Vec<(f32, f32)> = (a..e.min(n)).map(|k| (bo.pts[k].0, bo.pts[k].1 - bo.pad[k].0 * 0.5)).collect();
         if pts.len() < 2 {
             continue;
         }

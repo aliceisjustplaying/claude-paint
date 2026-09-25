@@ -661,10 +661,7 @@ fn main() {
     if o.stage("drifts", &mut c, &mut rng) {
         let snow_pal = pal.only(&["lead white", "cobalt blue", "pale smalt", "yellow ochre", "red earth", "raw umber"]);
         let g_ang = |_: f32, _: f32| 0.0;
-        c.work(&drift_sh, &st.body().palette(&snow_pal).color_over(|_, y, u| shift(u, -0.022 - 0.018 * smoothstep(560.0, 704.0, y), -0.001, -0.009)).angle(g_ang).length(20.0, 60.0).coverage(3.0).medium(0.3).mix_jitter(0.01), 35);
-        if let Some(b) = st.blend() {
-            c.work(&drift_sh.clone().blur(4.0), &b.angle(g_ang).coverage(2.0).clip(false), 36);
-        }
+        c.work(&drift_sh.clone().blur(1.0), &st.detail().palette(&snow_pal).color_over(|_, y, u| shift(u, -0.018 - 0.014 * smoothstep(560.0, 704.0, y), -0.001, -0.007)).angle(g_ang).length(12.0, 40.0).coverage(3.0).medium(0.35).mix_jitter(0.008), 35);
         c.wait(20.0);
         c.work(&drift_lip, &st.detail().palette(&snow_pal).color_over(|_, _, u| shift(u, 0.025, 0.002, 0.006)).angle(g_ang).length(8.0, 24.0).coverage(2.5).medium(0.1), 37);
         c.dry();
@@ -877,49 +874,87 @@ fn main() {
     if o.stage("figure", &mut c, &mut rng) {
         let (fx, fy) = (402.0f32, 598.0f32);
         let s = 46.0; // height
+        let p = |x: f32, y: f32| (fx + x * s, fy + y * s);
+        // footprints first: he came in from the lower left; each print a
+        // small dent, darker and bluer than the snow, with its lit rim
+        let snow_pal = pal.only(&["lead white", "cobalt blue", "pale smalt", "yellow ochre", "raw umber"]);
+        let mut t = Held::new(Tool { point: 0.5, ..Tool::round_sable(3.0) }, 75);
+        for k in 0..18 {
+            let u = k as f32 / 17.0;
+            let side = if k % 2 == 0 { -1.0 } else { 1.0 };
+            let cx = fx - 6.0 - u * 170.0 + 7.0 * (u * 7.0).sin();
+            let cy = fy + 2.0 + u * 100.0;
+            let (dx, dy) = (-170.0f32, 100.0f32);
+            let dl = (dx * dx + dy * dy).sqrt();
+            let (nx, ny) = (-dy / dl, dx / dl);
+            let px = cx + side * nx * (1.5 + 1.5 * u);
+            let py = cy + side * ny * (1.5 + 1.5 * u);
+            let sz = 1.0 + 1.6 * u;
+            let want = shift(c.sample(px, py), -0.075, 0.0, -0.018);
+            let pn = c.aim(&snow_pal, want, (px, py), 1.5, 0.15, 1.2);
+            // heel and toe, the toe toward him
+            for (j, (q, pr)) in [(0.0f32, 0.36f32), (1.3, 0.3)].iter().enumerate() {
+                let hx = px - dx / dl * sz * q * 1.4;
+                let hy = py - dy / dl * sz * q * 1.4;
+                t.reload(pn, 0.7);
+                let _ = j;
+                c.touch(&mut t, &Touch::at(hx, hy).pressure(pr + 0.12 * sz).drag(-dx / dl * sz * 0.8, -dy / dl * sz * 0.8).twist(0.3), None);
+            }
+        }
+        c.wait(10.0);
         let coat = Mask::from_shape(f, Shape::new().smooth_poly(&[
-            (fx - 0.10 * s, fy - 0.80 * s),
-            (fx + 0.10 * s, fy - 0.80 * s),
-            (fx + 0.15 * s, fy - 0.55 * s),
-            (fx + 0.19 * s, fy - 0.12 * s),
-            (fx + 0.03 * s, fy - 0.10 * s),
-            (fx - 0.17 * s, fy - 0.12 * s),
-            (fx - 0.15 * s, fy - 0.55 * s),
+            p(-0.10, -0.835),
+            p(0.10, -0.835),
+            p(0.14, -0.79),
+            p(0.135, -0.62),
+            p(0.115, -0.47),
+            p(0.16, -0.20),
+            p(0.17, -0.165),
+            p(0.0, -0.15),
+            p(-0.17, -0.165),
+            p(-0.16, -0.20),
+            p(-0.115, -0.47),
+            p(-0.135, -0.62),
+            p(-0.14, -0.79),
         ]));
-        c.work(&coat, &st.detail().color(|_, y| mix(hex("#24232a"), hex("#2f2c2c"), smoothstep(560.0, 595.0, y), Mix::Light)).angle(|_, _| 1.57).length(3.0, 9.0).coverage(4.5), 70);
-        let dark = pal.paint(hex("#1f1d20"), 0.1);
-        let mut b = Held::new(Tool::round_sable(2.2), 71);
-        // legs and boots under the coat
-        for dx in [-0.06f32, 0.07] {
+        c.work(&coat, &st.detail().color(|_, y| mix(hex("#23232b"), hex("#2c2a2c"), smoothstep(560.0, 595.0, y), Mix::Light)).angle(|_, _| 1.57).length(3.0, 9.0).coverage(4.5), 70);
+        let dark = pal.paint(hex("#1d1b1f"), 0.1);
+        let mut b = Held::new(Tool { point: 0.6, ..Tool::round_sable(2.0) }, 71);
+        // trousers below the hem and boots
+        for dx in [-0.055f32, 0.06] {
             b.reload(dark, 0.8);
-            c.drag(&mut b, &Gesture::new(vec![(fx + dx * s, fy - 0.14 * s), (fx + dx * s * 1.2, fy - 0.01 * s)]).pressure(0.55, 0.6).ramps(0.05, 0.1).shake(0.2), None);
+            c.drag(&mut b, &Gesture::new(vec![p(dx, -0.17), p(dx * 1.05, -0.02)]).pressure(0.6, 0.6).ramps(0.05, 0.05).shake(0.2), None);
+            b.reload(pal.paint(hex("#18161a"), 0.1), 0.8);
+            c.drag(&mut b, &Gesture::new(vec![p(dx * 1.05, -0.025), p(dx * 1.05 + 0.02, -0.005)]).pressure(0.75, 0.6).ramps(0.05, 0.1).shake(0.1), None);
         }
-        // head and hat (a low-crowned hat), a collar
-        let mut hb = Held::new(Tool::round_sable(3.0), 72);
-        hb.load(pal.paint(hex("#2b2522"), 0.1), 0.8);
-        c.touch(&mut hb, &Touch::at(fx, fy - 0.86 * s).pressure(0.75), None);
-        hb.reload(dark, 0.8);
-        c.drag(&mut hb, &Gesture::new(vec![(fx - 0.09 * s, fy - 0.9 * s), (fx + 0.09 * s, fy - 0.9 * s)]).pressure(0.6, 0.6).ramps(0.05, 0.1).shake(0.2), None);
-        c.drag(&mut hb, &Gesture::new(vec![(fx - 0.04 * s, fy - 0.93 * s), (fx + 0.04 * s, fy - 0.95 * s)]).pressure(0.7, 0.7).ramps(0.05, 0.1).shake(0.2), None);
-        // his stick, planted to the right
-        let mut r = Held::new(Tool::rigger(0.7), 73);
-        r.load(pal.paint(hex("#2e2823"), 0.1), 0.8);
-        c.drag(&mut r, &Gesture::new(vec![(fx + 0.17 * s, fy - 0.5 * s), (fx + 0.27 * s, fy + 0.01 * s)]).pressure(0.7, 0.6).ramps(0.05, 0.1).shake(0.3), None);
-        // a cool rim of sky light on his shoulders
-        let mut rim = Held::new(Tool::rigger(0.6), 74);
-        rim.load(pal.paint(hex("#7c7f8c"), 0.1), 0.6);
-        c.drag(&mut rim, &Gesture::new(vec![(fx - 0.12 * s, fy - 0.74 * s), (fx - 0.02 * s, fy - 0.80 * s), (fx + 0.1 * s, fy - 0.78 * s)]).pressure(0.4, 0.3).ramps(0.2, 0.3).shake(0.3), None);
-        // footprints leading back to him from the lower left: blue hollows
-        let fp = pal.paint(hex("#9097a8"), 0.15);
-        let mut t = Held::new(Tool::round_sable(2.6), 75);
-        for k in 0..16 {
-            let u = k as f32 / 15.0;
-            let px = fx - 12.0 - u * 150.0 + 6.0 * (u * 9.0).sin() + if k % 2 == 0 { -2.5 } else { 2.5 };
-            let py = fy + 4.0 + u * 95.0;
-            let sz = 0.3 + 0.35 * u;
-            t.reload(fp, 0.6);
-            c.touch(&mut t, &Touch::at(px, py).pressure(sz).drag(1.5 + 2.0 * u, 0.0), None);
+        // the right arm, bent, a touch lighter so it separates from the back
+        b.reload(pal.paint(hex("#2e2e37"), 0.1), 0.8);
+        c.drag(&mut b, &Gesture::new(vec![p(0.125, -0.77), p(0.165, -0.64), p(0.19, -0.52)]).pressure(0.75, 0.6).ramps(0.05, 0.1).shake(0.2), None);
+        // folds down the back catching the cool sky
+        let mut r = Held::new(Tool { point: 1.0, ..Tool::rigger(0.8) }, 73);
+        for (x0, x1) in [(-0.03f32, -0.05f32), (0.05, 0.08), (-0.08, -0.12)] {
+            r.reload(pal.paint(hex("#3a3b47"), 0.1), 0.5);
+            c.drag(&mut r, &Gesture::new(vec![p(x0, -0.6), p(x1, -0.2)]).pressure(0.35, 0.15).ramps(0.3, 0.4).shake(0.3), None);
         }
+        // collar, head, and a top hat
+        let mut hb = Held::new(Tool { point: 0.5, ..Tool::round_sable(2.6) }, 72);
+        hb.load(dark, 0.8);
+        c.drag(&mut hb, &Gesture::new(vec![p(-0.075, -0.835), p(0.075, -0.835)]).pressure(0.7, 0.7).ramps(0.05, 0.05).shake(0.1), None);
+        hb.reload(pal.paint(hex("#2a2320"), 0.1), 0.8);
+        c.touch(&mut hb, &Touch::at(fx, fy - 0.875 * s).pressure(0.6), None);
+        let hat = Mask::from_shape(f, Shape::new().poly(&[p(-0.058, -0.915), p(0.058, -0.915), p(0.052, -1.02), p(-0.052, -1.02)]));
+        c.work(&hat, &st.detail().color(|_, _| hex("#19171a")).angle(|_, _| 1.57).length(2.0, 5.0).coverage(4.5), 76);
+        r.reload(dark, 0.8);
+        c.drag(&mut r, &Gesture::new(vec![p(-0.1, -0.912), p(0.0, -0.918), p(0.1, -0.91)]).pressure(0.8, 0.8).ramps(0.05, 0.05).shake(0.1), None);
+        // his stick, from the hand to the snow
+        r.reload(pal.paint(hex("#2e2823"), 0.1), 0.8);
+        c.drag(&mut r, &Gesture::new(vec![p(0.2, -0.54), p(0.285, 0.005)]).pressure(0.55, 0.45).ramps(0.05, 0.1).shake(0.3), None);
+        // the glow side (his left, our left) takes a faint warm rim
+        let mut rim = Held::new(Tool { point: 1.0, ..Tool::rigger(0.6) }, 74);
+        rim.load(pal.paint(hex("#6d625c"), 0.1), 0.5);
+        c.drag(&mut rim, &Gesture::new(vec![p(-0.1, -0.83), p(-0.14, -0.78), p(-0.135, -0.62), p(-0.12, -0.48)]).pressure(0.3, 0.15).ramps(0.2, 0.5).shake(0.3), None);
+        rim.reload(pal.paint(hex("#6d625c"), 0.1), 0.4);
+        c.drag(&mut rim, &Gesture::new(vec![p(-0.05, -1.018), p(-0.056, -0.93)]).pressure(0.25, 0.1).ramps(0.2, 0.5).shake(0.2), None);
         c.dry();
     }
 

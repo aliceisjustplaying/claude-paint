@@ -118,7 +118,8 @@ fn grow(rng: &mut Rng, out: &mut Vec<Br>, p: (f32, f32), a0: f32, w0: f32, dead:
         w *= (-step * 0.004).exp();
         pts.push(pos);
         ws.push(w);
-        if pos.1 > FOOT.1 - 30.0 || pos.0 < 14.0 || pos.0 > 986.0 || pos.1 < 20.0 {
+        let crown_top = 205.0 + 60.0 * ((pos.0 - 420.0) / 260.0).powi(2) + 12.0 * (pos.0 / 37.0).sin();
+        if pos.1 > FOOT.1 - 30.0 || pos.0 < 14.0 || pos.0 > 986.0 || (!dead && pos.1 < crown_top) || pos.1 < 20.0 {
             tip = false;
             break;
         }
@@ -223,13 +224,13 @@ fn build_tree(seed: u64) -> Tree {
     let bump = Fbm::new(seed as u32 + 1, 3, 40.0);
     let mut left = vec![];
     let mut right = vec![];
-    for i in (0..tp.len()).step_by(3) {
+    for i in (0..tp.len()).step_by(2) {
         let (x, y) = tp[i];
         let wv = tw[i] * 0.5;
         // concave flare: the buttress roots spread into the snow
-        let flare = ((y - (fy + 20.0)) / 22.0).exp().min(1.0);
-        let l = wv * (1.0 + 1.1 * flare) + 5.0 * bump.get(0.0, y);
-        let r = wv * (1.0 + 0.8 * flare) + 5.0 * bump.get(50.0, y);
+        let flare = ((y - (fy + 20.0)) / 30.0).exp().min(1.0);
+        let l = wv * (1.0 + 0.55 * flare) + 5.0 * bump.get(0.0, y) + 1.6 * bump.get(7.0, y * 3.5);
+        let r = wv * (1.0 + 0.45 * flare) + 5.0 * bump.get(50.0, y) + 1.6 * bump.get(57.0, y * 3.5);
         left.push((x - l, y));
         right.push((x + r, y));
     }
@@ -454,6 +455,28 @@ fn main() {
         });
         let crest_h = paint::Handling::new(Tool::round_sable(3.0)).mixed(pal, 0.1).color(|_, _| hex("#ebe8df")).angle(|_, _| 0.0).angle_jitter(0.05).length(15.0, 50.0).coverage(1.3).pressure(0.4, 0.7).clip(true).threshold(0.3).fill(false);
         c.work(&crest, &crest_h, 202);
+        // low drifts across the near snow: each a long, slightly curving
+        // bluish lee with its lit crest just above, laid thin and level
+        let mut r = Rng::new(o.seed + 210);
+        let mut db = Held::new(Tool { lay: 0.8, ..Tool::filbert(5.0) }, 211);
+        for _ in 0..34 {
+            let y0 = r.range(HORIZON + 45.0, 1240.0);
+            let near = smoothstep(HORIZON, 1250.0, y0);
+            let len = r.range(60.0, 220.0) * (0.5 + near);
+            let x0 = r.range(-60.0, 1000.0);
+            let bow = r.range(-4.0, 4.0) * (0.5 + near);
+            let pts: Vec<(f32, f32)> = (0..=8).map(|i| {
+                let t = i as f32 / 8.0;
+                (x0 + len * t, y0 + bow * (PI * t).sin() + 2.0 * t)
+            }).collect();
+            let wd = 1.5 + 4.0 * near;
+            db.reload(pal.paint(mix(hex("#aeb4bb"), snow_col(x0 + len * 0.5, y0), 0.45), 0.35), 0.6);
+            let p = db.tool.pressure_for(wd).clamp(0.2, 0.9);
+            c.drag(&mut db, &Gesture::new(pts.clone()).pressure(p * 0.6, p).ramps(0.35, 0.4).shake(0.3), None);
+            let crest: Vec<(f32, f32)> = pts.iter().map(|&(x, y)| (x + 6.0, y - wd * 0.8)).collect();
+            db.reload(pal.paint(hex("#eeebe3"), 0.1), 0.6);
+            c.drag(&mut db, &Gesture::new(crest).pressure(p * 0.5, p * 0.8).ramps(0.4, 0.4).shake(0.3), None);
+        }
         c.dry();
         let sp = Stipple::new(Tool::stippler(1.5))
             .mixed(pal, 0.3)
@@ -475,8 +498,8 @@ fn main() {
     let bark_mid = hex("#453c34");
     let bark_lit = hex("#857e73");
     let bark_cool = hex("#a09f9a");
-    let dead_dark = hex("#5a5650");
-    let dead_lit = hex("#b4aea2");
+    let dead_dark = hex("#4c4843");
+    let dead_lit = hex("#a09a8f");
     let twig_col = hex("#3a322c");
     // lit from the brighter sky, upper left, diffuse
     let light = |nx: f32, ny: f32| smoothstep(-0.9, 0.9, -(nx * 0.75 + ny * 0.65));
@@ -555,10 +578,10 @@ fn main() {
         // the lit ridges between them picked out in gray
         let mut rig = Held::new(Tool { point: 1.0, ..Tool::round_sable(1.8) }, 330);
         let mut ridge = Held::new(Tool { point: 0.8, ..Tool::round_sable(2.0) }, 331);
-        for b in bodies.iter().filter(|b| b.w[0] > 12.0 && std::env::var("SKIPF").is_err()) {
+        for b in bodies.iter().filter(|b| (b.w[0] > 12.0 || b.dead && b.w[0] > 5.0) && std::env::var("SKIPF").is_err()) {
             let n = b.pts.len();
-            let k_end = b.w.iter().position(|&w| w < 10.0).unwrap_or(n);
-            let lines = (b.w[0] / 2.6) as usize;
+            let k_end = b.w.iter().position(|&w| w < if b.dead { 4.0 } else { 10.0 }).unwrap_or(n);
+            let lines = ((b.w[0] / 2.6) as usize).max(3);
             for _ in 0..lines {
                 let u = r.range(-0.95, 0.95);
                 let mut i = r.range(0.0, 12.0) as usize;
@@ -571,8 +594,8 @@ fn main() {
                     let lit = light(-dy * u, dx * u);
                     if b.dead {
                         // dead wood: fine grain lines, few
-                        if r.chance(0.4) {
-                            rig.reload(pal.paint(hex("#6c665d"), 0.3), 0.5);
+                        if r.chance(0.8) {
+                            rig.reload(pal.paint(hex("#4a4540"), 0.2), 0.6);
                             c.drag(&mut rig, &Gesture::new(seg).pressure(0.25, 0.15).ramps(0.2, 0.3).shake(0.3), Some(&wood_m));
                         }
                     } else {
@@ -712,7 +735,7 @@ fn main() {
         let mut sf = Held::new(Tool { point: 1.0, ..Tool::round_sable(1.6) }, 505);
         let white = hex("#f1eee6");
         let body = hex("#d3d5d6");
-        let limbs: Vec<&Br> = tree.limbs.iter().chain(std::iter::once(&tree.stump)).chain(tree.all.iter()).collect();
+        let limbs: Vec<&Br> = tree.limbs.iter().chain(tree.all.iter()).collect();
         for b in limbs {
             let n = b.pts.len();
             let mut runs: Vec<Vec<(usize, f32)>> = vec![];
@@ -720,7 +743,7 @@ fn main() {
             for i in 0..n {
                 let (_, dy) = b.dir(i);
                 let wv = b.w[i];
-                let hold = (1.0 - smoothstep(0.3, 0.72, dy.abs())) * smoothstep(0.8, 3.5, wv);
+                let hold = (1.0 - smoothstep(0.3, 0.72, dy.abs())) * smoothstep(1.6, 4.5, wv);
                 let (x, y) = b.pts[i];
                 if hold > 0.12 && lose.get(x, y) > -0.2 {
                     cur.push((i, (wv * 0.5).min(8.0) * hold));
@@ -764,6 +787,8 @@ fn main() {
 
     // ---------------------------------------------------- foot and details
     if o.stage("foot", &mut c, &mut rng) {
+        // the bark and twigs are left to dry before the snow goes over them
+        c.dry();
         let mut r = Rng::new(o.seed + 601);
         // snow drifted against the foot of the trunk: it buries the root
         // flare, heaped a little higher on the windward left, its top edge
@@ -772,13 +797,13 @@ fn main() {
         let (fx, fy) = FOOT;
         let edge = Fbm::new(o.seed as u32 + 602, 3, 18.0);
         let mound_top = move |x: f32| {
-            let d = (x - fx - 5.0) / 110.0;
-            fy + 24.0 - 34.0 * (-d * d * 1.5).exp() - 5.0 * (-((x - fx + 55.0) / 30.0).powi(2)).exp() + 3.5 * edge.get(x, 0.0)
+            let d = (x - fx - 5.0) / 125.0;
+            fy + 26.0 - 36.0 * (-d * d * 1.3).exp() - 5.0 * (-((x - fx + 55.0) / 30.0).powi(2)).exp() + 3.5 * edge.get(x, 0.0)
         };
         let mut mb = Held::new(Tool { lay: 1.0, ..Tool::filbert(6.0) }, 603);
         for k in 0..18 {
             let dy = k as f32 * 2.3;
-            let half = 150.0 + 20.0 * r.f();
+            let half = 95.0 + 3.5 * dy + 40.0 * r.f();
             let pieces = 4;
             for q in 0..pieces {
                 let xa = fx - half + (2.0 * half) * q as f32 / pieces as f32 - 10.0 + r.range(-6.0, 6.0);
@@ -791,30 +816,33 @@ fn main() {
                 let col = mix(hex("#efece4"), snow_col(mx, my), smoothstep(0.0, 26.0, dy) * 0.9 + 0.1);
                 mb.reload(pal.paint(col, 0.05).with_stiff(0.8), 0.9);
                 // ends lifted: the outer pieces fade into the ground snow
-                let (pa, pb) = if q == 0 { (0.15, 0.7) } else if q == pieces - 1 { (0.7, 0.15) } else { (0.7, 0.7) };
-                c.drag(&mut mb, &Gesture::new(pts).pressure(pa, pb).ramps(0.25, 0.25).shake(0.35), None);
+                let (pa, pb, ra, rr) = if q == 0 { (0.1, 0.7, 0.6, 0.2) } else if q == pieces - 1 { (0.7, 0.1, 0.2, 0.6) } else { (0.7, 0.7, 0.25, 0.25) };
+                c.drag(&mut mb, &Gesture::new(pts).pressure(pa, pb).ramps(ra, rr).shake(0.35), None);
             }
         }
         c.wait(10.0);
-        // the shadowed seam where the snow meets the bark
+        // the snow's shade where it meets the bark: a cool touch below the
+        // contact, soft
         let mut sm = Held::new(Tool { point: 1.0, ..Tool::round_sable(2.0) }, 607);
-        let xs: Vec<f32> = (0..=30).map(|i| fx - 70.0 + i as f32 * 4.8).collect();
-        let seam: Vec<(f32, f32)> = xs.iter().map(|&x| (x, mound_top(x) + 0.8)).collect();
-        sm.reload(pal.paint(hex("#8f959c"), 0.1), 0.6);
-        c.drag(&mut sm, &Gesture::new(seam).pressure(0.35, 0.3).ramps(0.3, 0.3).shake(0.3), None);
+        let seam: Vec<(f32, f32)> = (0..=24).map(|i| {
+            let x = fx - 45.0 + i as f32 * 4.2;
+            (x, mound_top(x) + 2.5)
+        }).collect();
+        sm.reload(pal.paint(hex("#c2c6cb"), 0.2), 0.5);
+        c.drag(&mut sm, &Gesture::new(seam).pressure(0.5, 0.4).ramps(0.3, 0.3).shake(0.2), None);
         // dry grass and weed stalks through the snow, in patches, more on
         // the rise and near the tree: fine upturning strokes over the snow
         let patch = Fbm::new(o.seed as u32 + 608, 3, 110.0);
         let mut g = Held::new(Tool { point: 1.0, ..Tool::round_sable(1.2) }, 604);
         let mut tries = 0;
         let mut placed = 0;
-        while placed < 120 && tries < 4000 {
+        while placed < 75 && tries < 4000 {
             tries += 1;
             let x = r.range(10.0, 990.0);
             let y0 = rise_c(x) + 2.0;
-            let yb = y0 + (1250.0 - y0 - 8.0) * r.f().powf(0.8);
+            let yb = y0 + 25.0 + (1250.0 - y0 - 33.0) * r.f().powf(0.7);
             let p = smoothstep(0.1, 0.45, patch.get(x, yb * 2.0)) + 0.6 * (-((x - fx) / 120.0).powi(2) - ((yb - fy - 20.0) / 40.0).powi(2)).exp();
-            if !r.chance(p * 0.5) || (x - fx).abs() < 60.0 && yb < fy + 25.0 {
+            if !r.chance(p * 0.45 - 0.08) || (x - fx).abs() < 60.0 && yb < fy + 25.0 {
                 continue;
             }
             placed += 1;

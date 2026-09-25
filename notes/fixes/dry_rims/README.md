@@ -1,3 +1,14 @@
+# What to look at (for Alice)
+- **`LOOK_HERE_far_hills_4x.png`**: the bug, enlarged 4x. Before: every
+  stroke of the far hills is a ring of paint with the sky showing through
+  its middle (the "lacy net"). After: the strokes cover.
+- `r8arm1_far_hills_1000.png`: the same at 1:1.
+- `r8arm3_*` and `r9arm3_*`: reconstructions that barely differ; the
+  fixer couldn't reproduce those two painters' nets (their tools weren't
+  recorded). Nothing to see.
+- `winter_*`: round 2's winter, on purpose nearly identical: the check
+  that the fix doesn't change the painting you like.
+
 # Fix: strokes over tacky or dry paint kept their outlines
 
 Branch `fix-dry-rims`, from main at d9af250. A bug fix under the feature

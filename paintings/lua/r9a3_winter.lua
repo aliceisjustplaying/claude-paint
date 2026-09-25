@@ -192,3 +192,95 @@ st:stroke({{710.8, 588}, {713.6, 603}, {716.4, 619}}, {pressure={0.7, 0.6}, ramp
 local rim = brush{kind="round", width=1.0, point=0.6}
 rim:load("#6e675f", 0.6, {medium=0.2})
 rim:stroke({{698.6, 573.4}, {696, 576}, {695.2, 586}, {694.4, 598}}, {pressure={0.5, 0.15}, ramps={0.1, 0.6}, shake=0.4})
+
+--@ chunk 12 · clock 25747.828125
+dry()
+-- snow drifted against the feet: each pull loaded with the snow beside it, a touch lighter on the heap's top
+local function drag(pts, w, dL, p)
+  local x0, y0 = pts[1][1], pts[1][2]
+  local base = sample(x0, y0 + 4, 3)
+  local b = brush{kind="filbert", width=w, stiffness=0.35}
+  b:load(shift(base, dL or 0, 0, 0), 0.9, {medium=0.2})
+  b:stroke(pts, {pressure=p or {0.55, 0.15}, ramps={0.15, 0.6}, shake=0.8})
+end
+for k = 0, 5 do   -- the oak: banked higher on the windward left
+  local y = 553 - k * 1.6 + rand(-0.8, 0.8)
+  drag({{262 + 6 * k + rand(-3, 3), y + 3}, {292 + 3 * k, y - 1.5}, {316 + rand(-2, 2), y - 2 + 0.5 * k}, {348 - 2 * k, y + 2.5}}, rand(3.5, 5.5), 0.005 * k)
+end
+drag({{352, 559}, {336, 555.5}, {326, 552.8}}, 3.5, -0.03, {0.5, 0.1})
+for k = 0, 2 do   -- the cross
+  local y = 609.5 - k * 1.2
+  drag({{584 + 3 * k, y + 1}, {596, y - 1.8}, {603, y - 1.5}, {612 - 2 * k, y + 1}}, rand(2.5, 3.5), 0.004 * k)
+end
+drag({{693, 619.6}, {698, 617.6}, {703, 618}}, 1.8, 0, {0.5, 0.2})    -- the walker's boots
+drag({{704.5, 617.4}, {709, 615.8}, {712.5, 616.6}}, 1.6, 0, {0.5, 0.2})
+drag({{713, 620.4}, {716.5, 618.8}, {719.5, 619.8}}, 1.5, 0, {0.45, 0.2})
+
+--@ chunk 13 · clock 38794.033203125
+-- the cross's wood darkened with a thin warm-dark glaze, only where the wood is (the snow on it stays)
+local woodm = mask(function(x, y)
+  if x < 574 or x > 638 or y < 498 or y > 614 then return 0 end
+  local s = sample(x, y)
+  return 1 - smoothstep(0.5, 0.7, s.L)
+end)
+glaze(woodm, {color="#2e2621", coats=0.45, pigment="semi"})
+
+--@ chunk 14 · clock 48224.5576171875
+dry()
+-- bury the post's foot: a heap of snow over the bottom, its lee side a little cooler
+local base = sample(586, 618, 3)
+local b = brush{kind="filbert", width=4, stiffness=0.35}
+for k = 0, 4 do
+  b:reload(shift(base, 0.006 * (2 - k), 0, -0.002 * k), 0.9)
+  local y = 614 - k * 1.9 + rand(-0.5, 0.5)
+  b:stroke({{586 + 1.5 * k + rand(-1, 1), y + 1.2}, {594, y - 1.2}, {601, y - 1.6}, {611 - 1.5 * k, y + 0.8}}, {pressure={0.6, 0.2}, ramps={0.12, 0.55}, shake=0.7})
+end
+-- fresh snow back on the crossbar and roof, broken, not a clean line
+local sn = brush{kind="round", width=1.2, point=0.5}
+sn:load("#dcd6cf", 0.8, {medium=0.1})
+sn:stroke({{581, 529.0}, {587, 528.6}, {592, 528.4}}, {pressure={0.55, 0.25}, ramps={0.1, 0.5}, shake=0.7})
+sn:stroke({{595.5, 528.3}, {601.5, 527.8}}, {pressure={0.5, 0.2}, ramps={0.1, 0.5}, shake=0.7})
+sn:stroke({{610, 528.5}, {618, 529.0}, {626, 530.0}}, {pressure={0.5, 0.2}, ramps={0.1, 0.5}, shake=0.7})
+sn:stroke({{598.5, 509.2}, {603, 504.6}, {606.2, 501.5}}, {pressure={0.55, 0.2}, ramps={0.1, 0.5}})
+sn:stroke({{607.2, 501.8}, {611, 505.6}}, {pressure={0.45, 0.15}, ramps={0.1, 0.5}})
+
+--@ chunk 15 · clock 48224.5576171875
+dry()
+-- two stones pushing through the snow, painted by hand: dark body, a snow cap, snow over the base
+STONES = {
+  {pts={{92,678},{98,662},{116,649},{146,642},{174,646},{198,657},{214,676}}, cap={{100,660},{120,647.5},{146,641.5},{172,645},{190,652}}, lean=0.2},
+  {pts={{236,700},{244,689},{258,683},{276,684},{290,700}}, cap={{245,688},{258,682.5},{274,683}}, lean=0.1},
+}
+local shade = noise{seed=171, period=9, octaves=3}
+for i, st in ipairs(STONES) do
+  local m = poly(st.pts, true):roughen(1.0, 8, 170 + i, 0.4)
+  local x0, x1 = st.pts[1][1], st.pts[#st.pts][1]
+  work(m, {hand="body", tool="filbert 2.5", length={4, 10}, coverage=3.4, medium=0.18, edge="firm",
+    angle=function(x, y) return 1.2 + 0.9 * (x - (x0 + x1) / 2) / (x1 - x0) + 0.3 * shade(x, y) end,
+    color=function(x, y)
+      local t = (x - x0) / (x1 - x0)
+      local c = mix("#6c675f", "#3c3c44", smoothstep(0.15, 0.7, t))
+      return mix(c, "#2e2e34", 0.35 * smoothstep(0.2, 0.7, shade(x, y)))
+    end})
+  -- the cap: long pulls along the top, heavy in the middle, cool where it turns away
+  local b = brush{kind="filbert", width=(i == 1) and 5.5 or 3.5, stiffness=0.4}
+  b:load("#d8d3cc", 0.95, {medium=0.1})
+  b:stroke(st.cap, {pressure={0.55, 0.85, 0.3}, ramps={0.2, 0.45}, shake=0.8})
+  b:reload("#c3c3cc", 0.8)
+  local tail = {}
+  for k = math.max(1, #st.cap - 2), #st.cap do tail[#tail + 1] = {st.cap[k][1] + 2, st.cap[k][2] + 1.5} end
+  tail[#tail + 1] = {st.pts[#st.pts - 1][1] + 2, st.pts[#st.pts - 1][2] + 2}
+  b:stroke(tail, {pressure={0.5, 0.2}, ramps={0.1, 0.6}, shake=0.8})
+end
+
+--@ chunk 16 · clock 56604.5703125
+dry()
+-- the snow drifted up over the stones' feet: one or two pulls each, loaded with the snow beneath
+for i, st in ipairs(STONES) do
+  local x0, x1, yb = st.pts[1][1], st.pts[#st.pts][1], st.pts[1][2]
+  local b = brush{kind="filbert", width=(i == 1) and 8 or 5, stiffness=0.35}
+  b:load(sample((x0 + x1) / 2, yb + 10, 4), 0.95, {medium=0.2})
+  b:stroke({{x0 - 10, yb + 3}, {x0 + 25, yb - 0.5}, {(x0 + x1) / 2 + 10, yb - 1}, {x1 + 8, yb + 2}}, {pressure={0.4, 0.75, 0.2}, ramps={0.15, 0.5}, shake=0.8})
+  b:reload(shift(sample((x0 + x1) / 2, yb + 10, 4), -0.02, 0, -0.01), 0.8)
+  b:stroke({{x1 + 12, yb + 5}, {(x0 + x1) / 2 + 20, yb + 2.5}, {x0 + 10, yb + 4}}, {pressure={0.5, 0.2}, ramps={0.1, 0.6}, shake=0.8})
+end

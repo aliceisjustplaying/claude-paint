@@ -35,6 +35,7 @@ pub mod bristle;
 pub mod handling;
 pub mod stipple;
 pub mod tally;
+pub mod texoff;
 pub mod style;
 pub mod hand;
 pub mod outline;

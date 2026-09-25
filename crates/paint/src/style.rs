@@ -176,6 +176,10 @@ impl Style {
                 continue;
             }
             let s = seed * 31 + k as u64;
+            if crate::texoff::off("ground") {
+                c.prime(g.color, g.hiding, g.um, g.stiff, 0.0, s);
+                continue;
+            }
             match g.apply {
                 Apply::Knife { texture } => c.prime(g.color, g.hiding, g.um, g.stiff, texture, s),
                 Apply::Roller => c.prime(g.color, g.hiding, g.um, g.stiff, 0.8, s),

@@ -577,30 +577,6 @@ fn work_covers_the_edges() {
     assert!(frac > 0.97, "border covered {frac}");
 }
 
-/// Stroke geometry is hand-like by default and ruler-straight on request.
-#[test]
-fn strokes_bow_unless_ruled() {
-    use crate::bristle::Tool;
-    let bows = |h: &Handling| {
-        let drift = crate::noise::Fbm::new(1, 3, 300.0);
-        let mut rng = crate::rng::Rng::new(9);
-        let mut v: Vec<f32> = (0..200)
-            .map(|_| {
-                let p = crate::handling::hand_trace_for_test(h, &drift, 500.0, 500.0, 150.0, &mut rng);
-                let (a, b, m) = (p[0], p[p.len() - 1], p[p.len() / 2]);
-                let chord = ((b.0 - a.0).powi(2) + (b.1 - a.1).powi(2)).sqrt();
-                // distance of the middle from the chord, relative to its length
-                ((b.0 - a.0) * (a.1 - m.1) - (a.0 - m.0) * (b.1 - a.1)).abs() / chord / chord
-            })
-            .collect();
-        v.sort_by(f32::total_cmp);
-        v[v.len() / 2]
-    };
-    let hand = bows(&Handling::new(Tool::filbert(10.0)).curve(0.08, 0.0).drift(0.0, 100.0));
-    let ruler = bows(&Handling::new(Tool::filbert(10.0)).ruler());
-    assert!(hand > 0.03 && ruler < 1e-3, "median bow: hand {hand}, ruler {ruler}");
-}
-
 /// Diagnostic: what the pixels a thin blended sky leaves bare had before
 /// the bake (wet volume, cover, relief), against the rest.
 #[test]

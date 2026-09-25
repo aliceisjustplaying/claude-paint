@@ -18,6 +18,33 @@ the world a painter works in; the painter agents do the seeing, composing and
 painting, the way a person would (piles mixed on a palette, gestures, time,
 looking). Read `notes/principles.md` before designing a tool or writing a brief.
 
+Where it stands (2026-09-25)
+----------------------------
+- **Painters are AI models**, each working from `notes/research/` alone.
+  What works best so far (Rounds 2 and 10): one Rust program per painting,
+  round 2's short brief (`notes/amnesia_brief.md`), a strong model at high
+  thinking and no recipe book. Why: `notes/round2_magic.md`. Opus, Fable,
+  Astra (OpenAI) and Gemini Flash have painted; results and blind
+  critiques by round in `notes/round*/`; the latest summary is at the top
+  of `notes/HANDOFF.md`.
+- **Judging is blind.** Alice looks first, unlabeled; then AI critics
+  judge blind (a round 2 painting as an unmarked anchor); keys stay off
+  disk until they're done. Alice's reactions: `notes/round6/alice_review.md`.
+- **Feature freeze:** no new engine capabilities; bug fixes (test first)
+  are allowed. Recent fixes: strokes over dry paint cover instead of
+  leaving rims (`notes/fixes/dry_rims/`); crack widths follow the stress
+  each crack released, so the variation reaches the picture
+  (`notes/fixes/cracks/`). Open: the sky's "JPEG effect", branches that
+  float off their limbs, crack direction per painting, checkpoint
+  staleness by line.
+- **Resolution (decided, not yet wired in):** paint, look and deliver at
+  one size, about 0.2 mm per pixel (2250-2400 px for a small Friedrich
+  canvas), retiring the separate 1000px preview. Until then, `--full`
+  (3200) is what counts; a 1000px render is a different painting, not a
+  smaller copy.
+- **The Lua easel** (`crates/easel`) is frozen too; whether to keep it is
+  open (a clean test is proposed in `notes/HANDOFF.md`).
+
 ```
 cargo paint friedrich_moonrise_valley               # 1000px preview → out/<name>.png
 cargo paint friedrich_moonrise_valley -- --full     # 3200px         → out/<name>_full.png
@@ -30,6 +57,8 @@ cargo paint <name> -- --stop sky                    # save right after a stage (
 cargo paint <name> -- --resume mist --stale-ok --ckpt  # use a stale checkpoint and adopt it
 cargo paint <name> -- --no-cracks
 cargo test -p paint                                 # UPDATE_GOLDEN=1 to re-record the golden scene
+cargo test --workspace                              # all tests (~1 min)
+cargo test --release -p easel --test hand_time      # replay tripwires (~10 s); add -- --ignored for the slow l5_near
 ```
 
 The fast loop for detail work: render the passage you're working on with
@@ -57,7 +86,8 @@ Engine (`crates/paint`):
   hand works, a long pass in slices: `notes/time.md`
 - `bristle` – simulated brushes (round, flat, filbert, fan, rigger, badger):
   per-bristle reservoirs, bend and splay, contact with the surface relief,
-  deposit, pickup and ploughing; a round or rigger given a point
+  deposit, pickup and ploughing (each hair ploughs by its own size, so a
+  stroke over dry paint covers its middle: `notes/fixes/dry_rims/`); a round or rigger given a point
   (`Tool::point`, opt-in) paints a hairline with the point, spread with pressure and lift off to a
   point, the same at any resolution (`notes/tip.md`)
 - `handling` – how a painter covers an area: hand-like stroke planning (arcs,
@@ -72,7 +102,10 @@ Engine (`crates/paint`):
   body color hides it), a kneaded eraser and fixative: `notes/pencil.md`
 - `pigment` – Kubelka–Munk layers (Curtis et al. 1997); `color` – Mixbox, OKLab
 - `crack` – craquelure grown crack by crack from film stress (T-junctions,
-  weave-following on thin grounds, cupping, grime)
+  weave-following on thin grounds, cupping, grime); each crack opens by
+  the stress it released (first cracks widest), `grain` gives a dominant
+  direction, `vary`/`patchy` make it uneven. Alice's lab and what's
+  still off: `notes/cracks_lab/README.md`
 - `palette` – the painter's tubes and mixing on the palette; what a paint's
   color means (masstone vs. the look on the canvas): `notes/color.md`
 - `stipple` – many small touches of a brush tip (Friedrich's skies, mist,

@@ -418,8 +418,38 @@ end)
 glaze(SKYG - KEEP, {color="#4f5a74", coats=0.3, pigment="transparent"})
 
 --@ chunk 18 · clock 191719.970703125
--- (a second drift pass in a sampled color stood here; at 3200 its rect clip left pale rectangles, so it was taken out)
-local _ = 0
+-- long wind-drift swells over the plain: a cool lee under each crest, a lighter lip along it.
+-- One pass each over the open snow; the swells are in the coverage, fading, not in a mask's edge.
+local sw = noise{seed=91, octaves=3, period=260}
+local CRESTS = {{-40, 668, 470, 0.9}, {520, 690, 1040, 0.7}, {-40, 603, 330, 0.8}, {600, 640, 1040, 0.8}, {120, 560, 420, 0.6}, {700, 585, 1040, 0.6}, {-40, 528, 250, 0.5}, {760, 540, 1040, 0.5}, {280, 512, 640, 0.4}}
+local function swell(x, y, lip)
+  local v = 0
+  for i, c in ipairs(CRESTS) do
+    local x0, y0, x1, amt = c[1], c[2], c[3], c[4]
+    if x > x0 and x < x1 then
+      local t = (x - x0) / (x1 - x0)
+      local taper = math.sin(math.pi * t) ^ 0.7
+      local cy = y0 + 10 * sw(x, i * 50) * (y0 - HZ) / 200
+      local s = per_m(cy)
+      local d = y - cy
+      if lip then
+        local w = 0.07 * s
+        v = v + amt * taper * math.exp(-(d / w)^2)
+      else
+        local w = 0.3 * s
+        if d > 0 then v = v + amt * taper * math.exp(-((d - 0.35 * w) / w)^2) end
+      end
+    end
+  end
+  return clamp(v, 0, 1)
+end
+local open = SNOW - KEEP:grow(10) - STREAMM:grow(4)
+local leeM = mask(function(x, y) return smoothstep(0.08, 0.35, swell(x, y, false)) end) * open
+local lipM = mask(function(x, y) return smoothstep(0.1, 0.4, swell(x, y, true)) end) * open
+work(leeM, {hand="broad", tool="filbert 4", length={30, 90}, coverage=2.4, load_at=function(x, y) return 0.25 + 0.75 * swell(x, y, false) end, medium=0.3, angle=0.02, angle_jitter=0.05,
+  edge="lost", color_over={shift={-0.04, -0.002, -0.016}}})
+work(lipM, {hand="detail", tool="filbert 2", length={15, 50}, coverage=1.8, load_at=function(x, y) return 0.3 + 0.7 * swell(x, y, true) end, medium=0.18, angle=0.02,
+  edge="lost", color_over={shift={0.03, 0.0, 0.008}}})
 
 --@ chunk 19 · clock 191719.970703125
 -- a thin waxing crescent low over the afterglow, its lit limb toward the set sun (down and left)
@@ -429,7 +459,7 @@ work(lit, {hand="detail", tool="round 0.8", length={1, 3}, coverage=4, medium=0.
 local halo = ellipse(mx, my, r * 3.2, r * 3.2):blur(r * 1.2)
 glaze(halo - ellipse(mx, my, r, r), {color="#e9e2cc", coats=0.06, pigment="semi"})
 
---@ chunk 20 · clock 194997.4111328125
+--@ chunk 20 · clock 201223.75
 -- dry grass and reeds, upturning flicks laid last over the snow
 local GR = {"#5a4e40", "#463c32", "#6e604c", "#7a6a52", "#52483d"}
 function tuft(x, y, hm, n, reed)
@@ -469,7 +499,7 @@ end
 for i = 1, 7 do tuft(rand(25, 120), rand(655, 708), rand(0.35, 0.7), math.floor(rand(8, 16)), true) end
 for i = 1, 4 do tuft(rand(900, 985), rand(672, 706), rand(0.2, 0.45), math.floor(rand(4, 9)), false) end
 
---@ chunk 21 · clock 194997.4111328125
+--@ chunk 21 · clock 201223.75
 function crow(cx, cy, L, dir, hunch)
   local function R(p) return {cx + dir * p[1] * L, cy + p[2] * L} end
   local pts = {}
@@ -500,5 +530,5 @@ flying(612, 262, 20, 0.1, 1)
 flying(588, 287, 16, -0.12, -0.5)
 flying(330, 322, 11, 0.05, 0.8)
 
---@ chunk 22 · clock 194997.4111328125
+--@ chunk 22 · clock 201223.75
 wait(24*60); varnish{color="#e6d3a4", coats=0.3, vary=0.12}; cracks{dirt=0.35}; relief()

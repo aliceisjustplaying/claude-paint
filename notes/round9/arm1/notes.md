@@ -4,7 +4,7 @@ Painting: `paintings/lua/winter_willows.lua` (easel session, `EASEL_WITHOUT=proc
 
 ## Composition and why
 
-*Winter Evening with Pollard Willows* (working title). A flat, snow-covered
+**Title: *Winter Evening with Pollard Willows*.** A flat, snow-covered
 lowland just after sunset. A frozen brook winds out of the lower left
 foreground and back into the plain; a row of pollard willows stands along its
 bank, diminishing toward a far village whose church spire is the only
@@ -77,6 +77,11 @@ What it draws on in Friedrich (from notes/research, not from pictures):
 
 ## FRICTION
 
+Top five, in order of how much they cost the picture:
+glazes crossing motifs (1), patches of later snow never matching the field
+(the drift story, 12), dark paint drying into slivers (2), thin strokes going
+golden (4) and lost edges reaching into motifs (14).
+
 1. **Glazes cross the motifs.** A glaze over the land (to darken the snow
    toward the edges, Friedrich's advice to Carus) drew a visible horizon
    line straight across the dark willow trunks: cooler below, warmer
@@ -134,10 +139,11 @@ What it draws on in Friedrich (from notes/research, not from pictures):
     0.25–0.3 on the 440 mm canvas barely shows at 1000px even in a crop, so
     I couldn't use it to check placement; I placed everything by
     coordinates instead.
-11. **The thinnest whips read as dotted wire** at 1000px (a rigger 0.45
-    with a point, lean load): broken runs of single pixels. At 3200px they
-    are continuous hairlines.
-13. **Drift patches never matched the field.** Snow laid later over a
+11. **The thinnest whips read as dotted wire**, at 1000px and at 3200px
+    too: a pointed rigger with a lean load rides the weave's crests and
+    breaks into dashes. Workaround: load the whips with `{medium=0.4}` and
+    press a little harder, so the paint flows into the hollows.
+12. **Drift patches never matched the field.** Snow laid later over a
     trunk's foot came out as a pale oval, then (darker) a blue puddle, then
     a pale rectangle: `rect()` in the zone left straight sides, the land
     glaze skipped the part of the drift inside the trunk mask I had excluded,
@@ -146,23 +152,31 @@ What it draws on in Friedrich (from notes/research, not from pictures):
     irregular snow line with paint *sampled from the field beside the
     trunk* (`sample()` in the color function) and drag single strokes
     across, each loaded from the field at its height.
-14. **`work{coverage=}` takes no function.** I wanted the swells as a
+13. **`work{coverage=}` takes no function.** I wanted the swells as a
     coverage field fading in and out; `coverage` takes a number or a noise,
     not a function. Workaround: the field became the region's mask values and
     `load_at`, with `edge="lost"`.
-15. **Lost edges reach into motifs.** A lost edge on a broad filbert runs
+14. **Lost edges reach into motifs.** A lost edge on a broad filbert runs
     up to ~2 brush widths past its region and picks up wet paint there: the
     first swell pass laid light bands straight across two trunks. The trunk
     masks had to be grown by 10 units before subtracting.
-16. **Relief makes the snow look embossed.** At 3200 the body snow's stroke
+15. **Relief makes the snow look embossed.** At 3200 the body snow's stroke
     ridges, lit by the default relief (0.06), read as crumpled paper or
     etched scribbles over the whole field. I left Alice's default in place;
     thinner snow paint (more medium) from the start would have been
     smoother and closer to Friedrich's "slight impasto".
-17. **The 1000px and 3200px pictures differ where it matters.** Slivers,
+16. **The 1000px and 3200px pictures differ where it matters.** Slivers,
     specks and dotted hairlines appear at 1000 and not at 3200 (or the
     reverse), so a fix judged at one width can be wrong at the other.
 
-12. **Crops at 3200 cost a replay after an early edit.** Each `easel edit`
+17. **Crops at 3200 cost a replay after an early edit.** Each `easel edit`
     of an early chunk (the willows are chunk 11) makes the next `--scale
     3.2` look replay the whole log (50–90 s on this busy machine).
+
+## Renders
+
+- `notes/round9/arm1/painting_1000.png` (the session at 1000px, `easel save`)
+- `notes/round9/arm1/painting_3200.png` (`easel run paintings/lua/winter_willows.lua --width 3200`)
+
+Always `export EASEL_WITHOUT=procedural` before replaying (the log never calls
+the removed tools, so it replays the same either way).

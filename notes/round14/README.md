@@ -13,3 +13,13 @@ pictures or code, or any judgment.
 Question: do painters 2 and 3 paint better than painter 1?
 Briefs: notes/briefs/sent/r14_p*.md. Folders: ~/src/a/paint-r14-p1..3;
 their files are copied back to branches r14-p1..3 afterward.
+
+## Painter 1 and the notebook (Alice)
+Painter 1 took the notebook as instructions (avoided every motif it said
+painters converge on, added every "missing" thing). Plan: revise the
+notebook (cut composition, subject choice and the lesson-like summaries;
+keep per-subject cause and effect) and restart the chain.
+If that fails too, Alice's method: one Claude reads the painters' session
+logs one by one, in chronological order, taking notes as it goes, so the
+notebook grows as a sequential understanding (as she has done with
+therapy transcripts) rather than a grep across everything.

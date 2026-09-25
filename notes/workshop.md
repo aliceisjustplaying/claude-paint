@@ -1,4 +1,4 @@
-# The workshop notebook: painting trees
+# The workshop notebook
 
 About twenty painters in this project painted trees in Friedrich's manner, each from scratch and
 alone. This notebook collects what they tried, what they and Alice (the viewer) saw and why,

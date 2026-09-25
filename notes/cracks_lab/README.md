@@ -19,7 +19,10 @@ Round 2 (`round2/`): the same painting with direction strengths between 4
 and 5, unlabeled A-E (`sheet_AtoE.png`, `whole_A..E.png`). Astra and Fable
 judge the same crops blind, as conservators.
 
-Alice's correction: the real *Monk by the Sea*'s cracks are "very much
-digital-like" themselves. So regular, directional cracks are not fake in
-themselves; whatever makes variant 5 read as digital is something else.
-(The round 2 judges' brief did not know this and may blame direction.)
+Alice, after checking (she had taken "the Monk" to mean round 2's winter):
+the real *Monk by the Sea*'s cracks flow broadly down and to the right,
+and that is one pattern: other Friedrichs have other patterns. The
+"very much digital-like" cracks she mentioned were round 2's winter
+(ours), not the Monk's. So direction is real and should vary per painting;
+what reads as digital is our cracks, not directionality as such. (The
+round 2 judges' brief describes the Monk's flow correctly.)

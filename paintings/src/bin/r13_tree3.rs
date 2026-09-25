@@ -182,8 +182,9 @@ fn build_tree(seed: u64) -> Vec<Axis> {
     let mut g = Grower { rng: Rng::new(seed), axes: vec![], dmin: 0.42 };
     // the bole, drawn as the painter chose it: a short massive trunk leaning
     // a little, swelling where the limbs leave it, flared at the foot
-    let bole = [(BASE.0, BASE.1), (476.0, 1060.0), (471.0, 1000.0), (466.0, 940.0), (463.0, 880.0), (466.0, 830.0), (472.0, 790.0)];
-    let bw = [86.0, 66.0, 60.0, 58.0, 58.0, 61.0, 64.0];
+    let bole = [(BASE.0, BASE.1), (476.0, 1060.0), (471.0, 1000.0), (466.0, 940.0), (463.0, 880.0), (466.0, 830.0), (472.0, 792.0), (475.0, 768.0)];
+    // it swells where the limbs leave, then gives itself up into them
+    let bw = [86.0, 66.0, 60.0, 58.0, 58.0, 61.0, 60.0, 34.0];
     g.axes.push(Axis { pts: bole.to_vec(), w: bw.to_vec(), order: 0, dead: false, broken: false, shoot: false });
     // an old limb sawn or broken off the bole long ago: a stub with a
     // collar grown round it
@@ -376,12 +377,20 @@ fn main() {
         let s2 = Stipple::new(Tool::stippler(1.5)).mixed(pal, 0.5).color(glow).coverage(|_, y| 0.6 + 1.6 * smoothstep(300.0, HZ, y)).pressure(0.45, 0.8).dips(24, 0.35, 0.6);
         c.stipple(&sky_m, &s2, 14);
         c.dry();
+        // the upper sky again: the lay-in ran thin there and the red-brown
+        // ground broke through in rusty flecks; a closer stipple of its own
+        // gray veils them, thinning toward the middle
+        let s3 = Stipple::new(Tool::stippler(2.0)).mixed(pal, 0.4).color(skyc).coverage(|_, y| 2.4 * (1.0 - smoothstep(150.0, 650.0, y))).pressure(0.5, 0.85).dips(20, 0.4, 0.5).cluster(0.2, None);
+        c.stipple(&sky_m, &s3, 15);
+        c.dry();
     }
 
     // ---- the far field: the snow plain to the horizon, a far hedge line
     let hedge = Fbm::new(o.seed as u32 + 21, 4, 40.0);
     let hedge_top = move |x: f32| {
-        let run = smoothstep(20.0, 90.0, x) * (1.0 - smoothstep(250.0, 340.0, x)) + smoothstep(640.0, 720.0, x) * (1.0 - smoothstep(900.0, 990.0, x)) * 0.6 + 0.25;
+        // runs of hedge and copse with gaps of open field between
+        let gaps = hedge.get01(x * 0.08, 40.0);
+        let run = smoothstep(20.0, 90.0, x) * (1.0 - smoothstep(250.0, 340.0, x)) + smoothstep(640.0, 720.0, x) * (1.0 - smoothstep(900.0, 990.0, x)) * 0.6 + 0.5 * smoothstep(0.45, 0.6, gaps);
         HZ - run * (4.0 + 5.0 * hedge.get01(x, 3.0))
     };
     let snowc = {
@@ -399,6 +408,14 @@ fn main() {
             let light = hex("#ece7da");
             let mut col = mix(far, shade, (0.2 + 0.75 * (1.0 - lit)) * (0.3 + 0.7 * near) * (0.5 + 0.5 * m.abs()), Mix::Light);
             col = mix(col, light, lit * 0.55 * near, Mix::Light);
+            // a long drift crest across the foreground: lit on its crest,
+            // a cool lee below it
+            let crest = 1165.0 + 22.0 * (x / 170.0).sin() + 9.0 * (x / 61.0 + 1.3).sin();
+            let dy = y - crest;
+            let lee = smoothstep(0.0, 6.0, dy) * (1.0 - smoothstep(10.0, 60.0, dy));
+            let crest_lit = (1.0 - smoothstep(0.0, 14.0, (dy + 6.0).abs())) * 0.8;
+            col = mix(col, light, crest_lit * 0.5, Mix::Light);
+            col = mix(col, hex("#a2a8b4"), lee * 0.45, Mix::Light);
             // under the crown and around the foot the snow is a shade cooler
             let dtx = (x - BASE.0) / 380.0;
             let dty = (y - BASE.1 - 40.0) / 90.0;
@@ -415,18 +432,43 @@ fn main() {
         c.work(&land_m, &lay, 21);
         // foreground: fuller paint, a slight impasto on the lit drifts
         let near_m = land_m.clone().mul_fn(move |_, y| smoothstep(HZ + 60.0, HZ + 160.0, y));
-        let thick = st.body().color(snowc).angle(|_, _| 0.05).angle_jitter(0.25).length(12.0, 40.0).coverage(1.6).medium(0.05).curve(0.1, 0.3);
+        let thick = st.body().color(snowc).angle(|_, _| 0.03).angle_jitter(0.15).length(30.0, 90.0).coverage(1.8).medium(0.06).curve(0.06, 0.2).mix_jitter(0.02);
         c.work(&near_m, &thick, 22);
+        if let Some(b) = st.blend() {
+            c.work(&near_m, &b.angle(|_, _| 0.0).pressure(0.3, 0.4), 25);
+        }
         c.dry();
         // far field stippled level so the horizon is touches, not a rule
         let far_m = Mask::from_fn(f, move |_, y| smoothstep(HZ + 0.5, HZ + 2.0, y) * (1.0 - smoothstep(HZ + 10.0, HZ + 45.0, y)));
         let sp = Stipple::new(Tool::stippler(1.6)).mixed(pal, 0.5).color(snowc).coverage(|_, _| 1.5).pressure(0.4, 0.75).drag(1.4, Some(0.0)).dips(18, 0.35, 0.6);
         c.stipple(&far_m, &sp, 23);
         // the far hedge: bluish touches, very pale in the air
-        let hedge_m = Mask::from_fn(f, move |x, y| if y >= hedge_top(x) - 0.3 && y <= HZ + 1.0 { 1.0 } else { 0.0 });
-        let hc = |x: f32, _y: f32| mix(hex("#9a9ca2"), hex("#b3b2b0"), smoothstep(0.0, 1000.0, x), Mix::Light);
-        let sp = Stipple::new(Tool::stippler(1.2)).mixed(pal, 0.35).color(hc).coverage(|_, _| 2.2).pressure(0.4, 0.7).dips(14, 0.35, 0.5).clip(true);
+        let hedge_m = Mask::from_fn(f, move |x, y| if y >= hedge_top(x) - 0.3 && y <= HZ + 1.0 && hedge_top(x) < HZ - 1.0 { 1.0 } else { 0.0 });
+        let hc = |x: f32, _y: f32| mix(hex("#a9aaae"), hex("#bcbab5"), smoothstep(0.0, 1000.0, x), Mix::Light);
+        let sp = Stipple::new(Tool::stippler(1.8)).mixed(pal, 0.5).color(hc).coverage(|_, _| 2.0).pressure(0.4, 0.7).dips(14, 0.35, 0.5).clip(true);
         c.stipple(&hedge_m, &sp, 24);
+        // a few far trees standing out of the hedges, bare, pale in the air
+        let mut ft = Held::new(Tool { point: 1.0, ..Tool::rigger(1.0) }, o.seed + 26);
+        let mut fr = Rng::new(o.seed + 27);
+        for &(x0, ht) in &[(96.0f32, 26.0f32), (131.0, 18.0), (218.0, 22.0), (752.0, 16.0), (870.0, 21.0)] {
+            let base = hedge_top(x0) + 2.0;
+            ft.reload(pal.paint(hex("#a3a4a8"), 0.3), 0.6);
+            c.drag(&mut ft, &Gesture::new(vec![(x0, base), (x0 + 0.4, base - ht * 0.5), (x0 - 0.3, base - ht)]).pressure(0.35, 0.05).ramps(0.02, 0.5).shake(0.4), None);
+            for _ in 0..16 {
+                let t = fr.range(0.3, 0.95);
+                let (bx, by) = (x0, base - ht * t);
+                let a = -FRAC_PI_2 + fr.range(-1.0, 1.0);
+                let l = ht * fr.range(0.25, 0.5) * (1.15 - t);
+                c.drag(&mut ft, &Gesture::new(vec![(bx, by), (bx + a.cos() * l * 0.5, by + a.sin() * l * 0.5), (bx + a.cos() * l, by + a.sin() * l - 1.0)]).pressure(0.2, 0.0).ramps(0.02, 0.6).shake(0.4), None);
+            }
+            // their crowns of twigs: a stipple haze
+            let crown = Mask::from_fn(f, move |x, y| {
+                let (dx, dy) = ((x - x0) / (ht * 0.45), (y - (base - ht * 0.65)) / (ht * 0.4));
+                if dx * dx + dy * dy < 1.0 { 1.0 } else { 0.0 }
+            });
+            let sp = Stipple::new(Tool::stippler(1.2)).mixed(pal, 0.6).color(|_, _| hex("#b0afad")).coverage(|_, _| 1.3).pressure(0.3, 0.5).dips(10, 0.3, 0.6).aim(false);
+            c.stipple(&crown, &sp, 28 + x0 as u64);
+        }
         c.dry();
     }
 
@@ -749,15 +791,6 @@ fn main() {
                 i = e + (hr.range(3.0, 14.0) as usize);
             }
         }
-        // forks: small heaps where a side limb leaves a thick one
-        let mut dab = Held::new(Tool::round_sable(3.5), o.seed + 703);
-        for ax in axes.iter().filter(|a| a.order >= 1 && a.order <= 3 && !a.shoot) {
-            let (x, y) = ax.pts[0];
-            if ax.w[0] > 6.0 && hr.f() < 0.5 {
-                dab.reload(pal.paint(snow(0.7 + 0.3 * hr.f()), 0.02).with_stiff(0.95), 0.9);
-                c.touch(&mut dab, &Touch::at(x, y - ax.w[0] * 0.3).pressure(0.5 + 0.3 * hr.f()), None);
-            }
-        }
         // the old stub on the bole: a pale weathered face where it broke,
         // a cap of snow
         let mut sf = Held::new(Tool::round_sable(4.0), o.seed + 704);
@@ -796,9 +829,19 @@ fn main() {
         c.work(&drift_m, &dh, 807);
         // the fallen limb, lying right of the tree, broken from the crown
         let limb: Vec<(f32, f32)> = vec![(560.0, 1150.0), (610.0, 1146.0), (655.0, 1149.0), (700.0, 1144.0), (735.0, 1147.0)];
+        // its shadow first: a cool hollow in the snow under it
+        let mut sh = Held::new(Tool::filbert(8.0), o.seed + 808);
+        sh.reload(pal.paint(hex("#a3a9b4"), 0.15), 0.7);
+        let under: Vec<(f32, f32)> = limb.iter().map(|&(x, y)| (x + 3.0, y + 4.0)).collect();
+        c.drag(&mut sh, &Gesture::new(under).pressure(0.5, 0.3).ramps(0.2, 0.4).shake(0.6), None);
         let mut lb = Held::new(Tool::round_sable(7.0), o.seed + 803);
-        lb.reload(pal.paint(hex("#3b3631"), 0.1), 0.9);
+        lb.reload(pal.paint(hex("#34302c"), 0.1), 0.9);
         c.drag(&mut lb, &Gesture::new(limb.clone()).pressure(0.8, 0.45).ramps(0.05, 0.2).shake(0.5), None);
+        // bark lit along its upper side
+        let mut lt = Held::new(Tool { point: 1.0, ..Tool::round_sable(2.4) }, o.seed + 809);
+        lt.reload(pal.paint(hex("#6e6a62"), 0.1), 0.6);
+        let upper: Vec<(f32, f32)> = limb.iter().map(|&(x, y)| (x, y - 1.6)).collect();
+        c.drag(&mut lt, &Gesture::new(upper).pressure(0.35, 0.2).ramps(0.1, 0.4).shake(0.7), None);
         let mut tw = Held::new(Tool { point: 1.0, ..Tool::rigger(1.6) }, o.seed + 804);
         for &(x, y, a, l) in &[(600.0, 1146.0, -2.2f32, 22.0f32), (648.0, 1147.0, -1.2, 18.0), (690.0, 1144.0, -2.0, 26.0), (720.0, 1146.0, -0.8, 14.0)] {
             tw.reload(pal.paint(hex("#3a332d"), 0.15), 0.7);

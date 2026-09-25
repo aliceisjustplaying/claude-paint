@@ -65,11 +65,77 @@ units), horizon at y 1012, the trunk's foot at y 1112.
   targets circled round them; fixed by dropping the target within 70
   units) → dead leader shooting off the canvas (dead axes now break off) →
   seed survey, chose 104.
-- 18:26 first whole render at 2400 with checkpoints.
+- 18:22 first whole render at 2400 with checkpoints (2 min: sky 110 s,
+  everything else 13 s). Read: tree good; trunk banded horizontally (all
+  the strokes across it broke at the same points), snow on the limbs a
+  string of white dashes, crown twigs sparse, snow field bland, a row of
+  cotton-ball dabs at the foot.
+- 18:26 staggered breaks and shuffled stroke order across each limb;
+  knobby bole (fbm on the width); many more fissures, lit ridges, lichen;
+  drift at the foot as a mask worked with body strokes (first try was a
+  hard white box: the mask's sides were cut and its color was not the
+  field's; second try takes its color *from* the field color and only
+  lightens/cools it near the trunk); far stipple kept below the horizon.
+- 18:28 outer strokes of each limb run its whole length (the edge had a
+  row of rounded stroke ends); strokes converge and lighten in pressure
+  as the wood thins; wood thinner than 7 units is a single pointed round;
+  snow as longer lumpy ridges (random swell knots) on level wood.
+- 18:29 twiglets clustered at each live tip (oak buds cluster), a few
+  marcescent leaves low in the crown (first pass: far too many and orange,
+  read as berries; cut to ~7% of low tips, dull brown, hanging).
+- 18:30 sky: a third stipple pass over the upper third (rusty flecks of
+  the red-brown ground broke through the thin lay-in); snow foreground:
+  longer calmer strokes and a light badger (was mottled like camouflage);
+  fallen limb with a cool hollow under it and a lit upper edge.
 
 ## FRICTION
 
-(see below; kept as I go)
+1. **No way to paint a tapering limb as a stroke that tapers.** A filbert
+   or blunt round has a mark width that barely changes with pressure
+   (0.45 + 0.55p), so a limb painted as strokes along it ends in a blunt
+   rounded cap where the next, thinner brush takes over. Workaround: the
+   stroke centers converge with the local width (offset by the width left
+   after the brush's own), pressure follows √(w/wmax) through `swell`
+   knots, and wood thinner than 7 units is handed to a *pointed* round
+   (`point: 1.0`), whose width does follow pressure. A "flat laid on
+   edge" or a brush whose footprint can be set per point would make this
+   one gesture.
+2. **Parallel strokes across a form band into seams.** Nothing in
+   `Canvas::drag` knows that ten strokes belong to one passage, so if I
+   break them at the same points, the canvas shows a row of stroke ends
+   across the trunk (horizontal banding), and the outer strokes' ends make
+   a lobed silhouette. `Handling` solves this for masks (passages,
+   staggered lattices), but there is no "handling along a path": a
+   limb-shaped passage with its own direction field. Workaround: shuffle
+   the stroke order, stagger breaks per stroke, run the two edge strokes
+   the whole length. A `work_along(path, widths, handling)` would be the
+   engine-level answer.
+3. **Checkpoint staleness counts helper code above `main` for every
+   stage.** The tree grower (`build_tree`, above `main`) is only used from
+   the "limbs" stage on, but any edit to it made the 110 s "sky"
+   checkpoint stale. Workaround: `--stale-ok --ckpt` after checking by
+   eye that the sky code didn't change, and a clean whole run at the end.
+   A `// ckpt: from limbs` tag on a whole fn item (or moving it below
+   `main`) is the fix on the painter's side; I learned it too late.
+4. **Sky time dominates.** Sky 110 s of a 123 s render; the tree with
+   ~20 000 hand drags takes under 10 s. The loop for tree work is fast
+   (resume from "snow": 5 s), but any sky edit costs two minutes. Fine,
+   but it means the sky got the fewest iterations.
+5. **A mask-bounded passage has a cut edge unless its color matches what
+   is around it.** The drift at the foot as a mask came out as a white
+   box: its sides were where the mask stopped. Workaround: soft mask and a
+   color closure built from the neighboring field's color, only departing
+   from it near the trunk. `color_over` would do this too, but I wanted a
+   fixed target.
+6. **No skeleton preview in the engine.** For a tree the drawing is the
+   hard part; I wrote a 25-line PGM rasterizer of the axes to look at the
+   skeleton (and 8 seeds) in a second without painting. An underdrawing
+   preview (`graphite` onto a blank canvas at low res) would be the
+   in-engine version.
+7. **Palette mixes drift warm in tiny marks.** The first leaves and grass
+   mixed from `#8a7050` came out orange-straw; small touches of a mixed
+   earth read more saturated than the asked color over the pale snow. I
+   darkened and grayed the targets by eye.
 
 ## Critique
 

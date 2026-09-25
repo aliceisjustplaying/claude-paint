@@ -465,8 +465,6 @@ fn main() {
             let dark = mix(hex("#2b2622"), hex("#3a322b"), n, Mix::Light);
             mix(dark, hex("#5d544a"), 0.75 * lit, Mix::Light)
         };
-        let body = st.body().palette(&bark_pal).color(body_col).angle(move |_, y| (1.0f32).atan2(tr.slope(y))).length(25.0, 70.0).coverage(3.2).medium(0.15).clip(true);
-        c.work(&trunk_m, &body, 402);
         // limbs: along their own direction, the upper side catching the
         // glow, the underside dark
         for (k, l) in limbs.iter().enumerate() {
@@ -480,6 +478,10 @@ fn main() {
             let hd = st.body().palette(&bark_pal).color(lcol).angle(|x, y| l.sd(x, y).1).length(15.0, 50.0).coverage(3.2).medium(0.15).clip(true);
             c.work(&lm, &hd, 410 + k as u64);
         }
+        // the trunk's body over the limbs' and root's starts, so they grow
+        // out of it rather than lie on it
+        let body = st.body().palette(&bark_pal).color(body_col).angle(move |_, y| (1.0f32).atan2(tr.slope(y))).length(25.0, 70.0).coverage(3.2).medium(0.15).clip(true);
+        c.work(&trunk_m, &body, 402);
         // the fork: bark strokes pulled from the trunk out along the limb,
         // so the limb grows out of the trunk instead of lying on it
         let mut jb = Held::new(Tool::filbert(7.0), 420);

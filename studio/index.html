@@ -1,0 +1,139 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>studio</title>
+<style>
+  :root { --bg:#16161a; --fg:#ddd; --dim:#888; --acc:#e0b060; }
+  * { box-sizing:border-box } body { margin:0; background:var(--bg); color:var(--fg); font:13px/1.4 -apple-system, sans-serif; height:100vh; display:flex; flex-direction:column }
+  header { display:flex; gap:10px; align-items:center; padding:6px 10px; border-bottom:1px solid #333 }
+  header select { background:#222; color:var(--fg); border:1px solid #444; max-width:40vw }
+  header button { background:#222; color:var(--fg); border:1px solid #444; padding:2px 8px; cursor:pointer }
+  #live { color:#6c6 } #clock { color:var(--acc); font-variant-numeric:tabular-nums }
+  main { flex:1; display:grid; grid-template-columns: 42% 58%; min-height:0 }
+  #code { overflow:auto; margin:0; padding:8px; font:11px/1.35 ui-monospace, Menlo, monospace; white-space:pre; border-right:1px solid #333 }
+  #code .new { background:#3a3320 } #code .ln { color:#555; user-select:none; display:inline-block; width:4em }
+  #right { display:flex; flex-direction:column; min-height:0 }
+  #view { flex:1; display:flex; align-items:center; justify-content:center; background:#000; min-height:0; position:relative }
+  #view img { max-width:100%; max-height:100%; object-fit:contain }
+  #cap { position:absolute; left:8px; bottom:6px; color:var(--dim); font-size:11px; background:#000a; padding:2px 6px }
+  #feed { height:34%; overflow:auto; border-top:1px solid #333; padding:6px 10px; font-size:12px }
+  #feed div { margin:2px 0; white-space:pre-wrap; word-break:break-word }
+  .say { color:#eee } .think { color:#777; font-style:italic } .cmd { color:#8bc } .write,.edit { color:var(--acc) } .image { color:#c8c } .user { color:#9c9 }
+  footer { padding:6px 10px; border-top:1px solid #333; display:flex; gap:10px; align-items:center }
+  footer input[type=range] { flex:1 }
+  #strip { display:flex; gap:2px; overflow-x:auto; padding:4px 10px; border-top:1px solid #333; height:64px }
+  #strip img { height:56px; cursor:pointer; opacity:.6 } #strip img.on { opacity:1; outline:2px solid var(--acc) }
+</style></head>
+<body>
+<header>
+  <b>studio</b>
+  <select id="sess"></select>
+  <button id="play">▶ replay</button>
+  <select id="speed"><option value="1">1×</option><option value="10">10×</option><option value="60" selected>60×</option><option value="300">300×</option></select>
+  <button id="golive">● live</button>
+  <label><input type="checkbox" id="showthink"> thinking</label>
+  <span id="live"></span><span id="clock"></span><span id="file" style="color:var(--dim)"></span>
+</header>
+<main>
+  <pre id="code"></pre>
+  <div id="right"><div id="view"><img id="img"><span id="cap"></span></div><div id="feed"></div></div>
+</main>
+<div id="strip"></div>
+<footer><input type="range" id="scrub" min="0" max="0" value="0"><span id="pos"></span></footer>
+<script>
+const $ = id => document.getElementById(id);
+let S = null, events = [], pos = 0, live = true, playing = null;
+
+async function loadSessions() {
+  const ss = await (await fetch('/api/sessions')).json();
+  $('sess').innerHTML = ss.map(s => `<option value="${s.path}">${s.folder} — ${new Date(s.mtime*1000).toLocaleString()}</option>`).join('');
+  const want = new URLSearchParams(location.search).get('s');
+  S = want || (ss[0] && ss[0].path); $('sess').value = S;
+}
+async function poll() {
+  if (!S) return;
+  const r = await (await fetch(`/api/events?s=${encodeURIComponent(S)}&since=${events.length}`)).json();
+  if (r.events.length) {
+    events.push(...r.events);
+    $('scrub').max = events.length - 1;
+    for (const e of r.events) if (e.kind === 'image') addThumb(e, events.indexOf(e));
+    if (live) show(events.length - 1);
+  }
+  const age = events.length ? (Date.now() - Date.parse(events[events.length-1].ts)) / 1000 : 1e9;
+  $('live').textContent = age < 120 ? '● painting' : '';
+}
+function addThumb(e, i) {
+  const im = document.createElement('img'); im.src = `/img?s=${encodeURIComponent(S)}&i=${e.img}`; im.dataset.i = i;
+  im.onclick = () => { live = false; stop(); show(i); }; $('strip').appendChild(im);
+}
+// rebuild the painting's source up to event i
+function paintingFile(upto) {
+  const n = {};
+  for (let k = 0; k <= upto; k++) { const e = events[k]; if ((e.kind === 'write' || e.kind === 'edit') && /\.(rs|lua)$/.test(e.path)) n[e.path] = (n[e.path]||0) + 1; }
+  let best = null, m = 0; for (const p in n) if (n[p] > m) { m = n[p]; best = p; } return best;
+}
+function source(path, upto) {
+  let text = '', changed = [];
+  for (let k = 0; k <= upto; k++) {
+    const e = events[k]; if (e.path !== path) continue;
+    if (e.kind === 'write') { text = e.content; changed = [[0, text.length]]; }
+    else if (e.kind === 'edit') { changed = [];
+      for (const ed of e.edits) { const at = text.indexOf(ed.oldText); if (at < 0) continue;
+        text = text.slice(0, at) + ed.newText + text.slice(at + ed.oldText.length); changed.push([at, at + ed.newText.length]); } }
+  }
+  return { text, changed };
+}
+function esc(s) { return s.replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c])); }
+function renderCode(upto) {
+  const p = paintingFile(upto); $('file').textContent = p ? p.split('/').slice(-1)[0] : '';
+  if (!p) { $('code').textContent = '(no program yet)'; return; }
+  const { text, changed } = source(p, upto);
+  const lines = text.split('\n'); let off = 0, first = null, html = '';
+  lines.forEach((l, i) => {
+    const a = off, b = off + l.length; off = b + 1;
+    const isNew = changed.some(([x, y]) => x <= b && y >= a) && changed[0][1] - changed[0][0] < text.length;
+    if (isNew && first === null) first = i;
+    html += `<div class="${isNew ? 'new' : ''}"><span class="ln">${i+1}</span>${esc(l) || ' '}</div>`;
+  });
+  $('code').innerHTML = html;
+  if (first !== null) $('code').children[first].scrollIntoView({ block: 'center' });
+}
+function show(i) {
+  if (!events.length) return; pos = Math.max(0, Math.min(i, events.length - 1)); $('scrub').value = pos;
+  let img = null; for (let k = pos; k >= 0; k--) if (events[k].kind === 'image') { img = events[k]; break; }
+  if (img) { const u = `/img?s=${encodeURIComponent(S)}&i=${img.img}`; if ($('img').src.indexOf(u) < 0) $('img').src = u;
+    $('cap').textContent = (img.path || '').split('/').slice(-1)[0] + '  ' + new Date(img.ts).toLocaleTimeString(); }
+  for (const t of $('strip').children) t.classList.toggle('on', img && +t.dataset.i === events.indexOf(img));
+  renderCode(pos);
+  const think = $('showthink').checked, from = Math.max(0, pos - 60);
+  $('feed').innerHTML = events.slice(from, pos + 1).filter(e => think || e.kind !== 'think').map(line).join('');
+  $('feed').scrollTop = 1e9;
+  const t0 = Date.parse(events[0].ts), t = Date.parse(events[pos].ts);
+  $('clock').textContent = fmt((t - t0) / 1000); $('pos').textContent = `${pos + 1} / ${events.length}`;
+}
+function fmt(s) { s = Math.max(0, s|0); return `${(s/3600)|0}:${String(((s%3600)/60)|0).padStart(2,'0')}:${String(s%60).padStart(2,'0')}`; }
+function line(e) {
+  const tm = new Date(e.ts).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
+  let body = {say: e.text, think: e.text, user: e.text, cmd: '$ ' + e.text + (e.out ? '\n' + e.out.split('\n').slice(-4).join('\n') : ''),
+    write: 'write ' + (e.path||'').split('/').slice(-1)[0], edit: 'edit ' + (e.path||'').split('/').slice(-1)[0] + ` (${(e.edits||[]).length})`,
+    read: 'read ' + (e.path||''), image: 'looks at ' + (e.path||'').split('/').slice(-1)[0], tool: (e.name||'') + ' ' + (e.text||''),
+    start: 'session in ' + e.cwd, note: e.text}[e.kind] || '';
+  return `<div class="${e.kind}"><span style="color:#555">${tm}</span> ${esc(String(body).slice(0, 1200))}</div>`;
+}
+function stop() { if (playing) { clearInterval(playing); playing = null; } $('play').textContent = '▶ replay'; }
+$('play').onclick = () => {
+  if (playing) return stop(); live = false; if (pos >= events.length - 1) show(0);
+  $('play').textContent = '❚❚ pause';
+  let simT = Date.parse(events[pos].ts);
+  playing = setInterval(() => {
+    simT += 100 * +$('speed').value; let k = pos;
+    while (k + 1 < events.length && Date.parse(events[k + 1].ts) <= simT) k++;
+    if (k !== pos) show(k); if (pos >= events.length - 1) stop();
+  }, 100);
+};
+$('golive').onclick = () => { stop(); live = true; show(events.length - 1); };
+$('scrub').oninput = e => { stop(); live = false; show(+e.target.value); };
+$('showthink').onchange = () => show(pos);
+$('sess').onchange = e => { stop(); S = e.target.value; events = []; $('strip').innerHTML = ''; live = true; history.replaceState(null, '', '?s=' + encodeURIComponent(S)); poll(); };
+document.onkeydown = e => { if (e.key === 'ArrowRight') { live = false; show(pos + 1); } if (e.key === 'ArrowLeft') { live = false; show(pos - 1); } if (e.key === ' ') { e.preventDefault(); $('play').click(); } };
+loadSessions().then(() => { poll(); setInterval(poll, 2000); });
+</script>
+</body></html>

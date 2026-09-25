@@ -15,22 +15,7 @@ horizontal line through a grass patch in painting A = arm 1); git identity: this
 repo sets `alice` locally (the per-directory git identity include for ~/src/a is missing on
 this machine). Next: decide the direction with Alice after Fable's advice.
 
-**RESUME HERE (2026-09-25, ~23:00): Round 14 painter chain, paused for a herdr restart.**
-- Painter 1 DONE: folder ~/src/a/paint-r14-p1; saved on branch r14-p1 (346dc1f):
-  program, notes/r14_p1.md, notes/craft_r14_p1.md ("Ploughed field before
-  Greifswald"). Final render: ~/src/a/paint-r14-p1/out/r14_p1_full.png.
-- Painter 2 NOT STARTED (a background attempt was stopped for the restart).
-  Its folder ~/src/a/paint-r14-p2 is ready (plain export of r14-base, no git,
-  with notes/craft_r14_p1.md copied in). To start it: spawn a subagent,
-  model anthropic/claude-opus-5-5, thinking high, cwd that folder, task:
-  "Complete your task autonomously. Read
-  ~/tmp/paint-r6-b943b1ca/briefs/r14_p2.md and follow it exactly. That file
-  is your whole brief. Your FINAL message is the reply it asks for."
-  (Delete ~/tmp/r14-p2-807a0008 first, or let it make a new one.)
-- Then painter 3: folder ~/src/a/paint-r14-p3 = git archive r14-base, plus
-  craft_r14_p1.md and craft_r14_p2.md; brief briefs/r14_p3.md. After each,
-  copy program + notes + craft notes back to branch r14-pN (as for p1).
-- Setup and rules: notes/round14/README.md. Keys/pictures to Alice unlabeled.
+**Round 14 restarted (2026-09-26) with the revised notebook** (notes/round14/README.md). First attempt kept on branch r14a-p1 (the ploughed field). Chain: p1 in ~/src/a/paint-r14-p1, then p2, then p3 (folders from r14-base + previous craft notes).
 
 **Day of 2026-09-25 (with Alice):**
 - **Round 10 = the breakthrough** (`notes/round10/`, `notes/round2_magic.md`):

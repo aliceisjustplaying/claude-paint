@@ -246,3 +246,18 @@ Trunk studies (X, Y, Z):
   in the reflection.
 - "Three different ways of snow ... I'm not saying anyone is better":
   interesting in itself.
+
+## Alice looking at real Friedrichs (2026-09-25, voice notes)
+Cracks:
+- *Monk by the Sea*: the cracks almost flow, running down a little to the
+  right: a direction.
+- Another painting: a very different pattern, clustered, random "in a
+  sort of human random way".
+- Her favorite painting has few cracks (maybe restored).
+- "Cracks can be clustered sometimes."
+So: real craquelure has a direction, uneven density (clusters) and a
+varying overall amount per painting. Ours is one uniform net.
+Trees (her favorite, a winter scene): "the guy's so good at trees";
+every branch carries snow, the same amount of remnant snow on each, and
+"that adds so much". The tree has "so much texture", probably many small
+strokes.

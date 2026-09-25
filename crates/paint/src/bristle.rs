@@ -1249,11 +1249,22 @@ unsafe fn exchange(
         // film splitting: a bristle in wet paint always lifts some of it, even
         // when loaded; a spent bristle drinks more
         let hunger = 0.35 + 0.65 * (1.0 - br.vol / full).clamp(0.0, 1.0).powf(1.5);
-        let push_k = tool.push * (seg / (2.0 * rb)).clamp(0.0, 1.0);
-        // ploughed paint lands just outside the track: the next pixel, or for
-        // a pointed tool (shared bilinearly, below) a hair's width away, the
-        // same distance at any resolution
-        let off = if fine { 2.0 * rb } else { rb + 1.0 };
+        // a moving hair ploughs aside the share `push` of the paint in its
+        // own track, 2·`hair` wide, and lays it a hair's width away (shared
+        // bilinearly, below): the same paint moved the same distance at any
+        // resolution. A hair finer than a pixel is drawn wider than it is
+        // (`rb`, see `drag_on`), so each pixel of its drawn track gives up
+        // only its share of it, hair / rb. (Ploughed by the drawn track and
+        // thrown to the next pixel, a filbert 5 at 1000px, its hairs a
+        // quarter of a pixel, moved some 18 times the paint a hair's width
+        // does, compounding over the ~50 hairs over each pixel: every
+        // stroke ploughed its paint into rims, 399 µm on its edges and
+        // 11 µm inside, rounds 8 and 9.) A pressed tip's hairs lie together
+        // (see `touch_rb`): its contact is its track.
+        let hair = if fine || dep.is_some() { rb } else { (tool.hair_radius() * s).min(rb) };
+        let push_k = tool.push * (seg / (2.0 * hair)).clamp(0.0, 1.0) * (hair / rb);
+        let off = if dep.is_some() { rb + 1.0 } else { 2.0 * hair };
+        let spread = dep.is_none();
 
         let mut got_v = 0.0f32;
         let mut got_l = [0.0f32; LAT];
@@ -1311,12 +1322,12 @@ unsafe fn exchange(
                         let tx = px + (nx * side * 0.75 + mx * 0.45) * off;
                         let ty = py + (ny * side * 0.75 + my * 0.45) * off;
                         // where the paint goes: the pixel under the target,
-                        // or for a pointed tool's fine hairs, shared
+                        // or for a moving hair, shared
                         // bilinearly by the four pixels around it (a hair
                         // finer than a pixel would otherwise leave a ridge
                         // of dots along its track where rounding lands it)
                         let mut to = [(0.0f32, 0.0f32, 0.0f32); 4];
-                        let n_to = if fine {
+                        let n_to = if spread {
                             let (gx, gy) = (tx - 0.5, ty - 0.5);
                             let (fx, fy) = (gx - gx.floor(), gy - gy.floor());
                             let (bx, by) = (gx.floor() + 0.5, gy.floor() + 0.5);

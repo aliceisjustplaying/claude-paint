@@ -118,11 +118,11 @@ fn main() {
     let wood_n = Fbm::new(o.seed as u32 + 21, 5, 40.0);
     let woods_top = f.per_column(move |x| {
         let lump = 7.0 + 9.0 * wood_n.get(x, 3.0) + 4.0 * wood_n.get(x * 4.0, 9.0);
-        snow_top(x) - 10.0 - lump.max(0.0) * (0.4 + 0.6 * smoothstep(-0.2, 0.3, wood_n.get(x * 0.2, 1.0)))
+        snow_top(x) - 9.0 - lump.max(0.0) * smoothstep(-0.15, 0.25, wood_n.get(x * 0.25, 1.0))
     });
     let woods_m = Mask::from_fn(f, move |x, y| smoothstep(woods_top(x) - 0.8, woods_top(x) + 0.8, y) * (1.0 - smoothstep(snow_top(x) + 2.0, snow_top(x) + 4.0, y)));
     if o.stage("land", &mut c, &mut rng) {
-        let woods = st.hatch().color(|_, y| mix(hex("#8a8d93"), hex("#7c7c80"), smoothstep(985.0, 1005.0, y), Mix::Light)).angle(|_, _| -1.45).cross(0.3).length(3.0, 8.0).coverage(3.0);
+        let woods = st.hatch().color(|x, y| mix(hex("#a3a5a8"), hex("#8f9095"), smoothstep(985.0, 1005.0, y) * (0.6 + 0.4 * smoothstep(0.0, 400.0, x)), Mix::Light)).angle(|_, _| -1.45).cross(0.3).length(3.0, 8.0).coverage(3.0);
         c.work(&woods_m, &woods, 21);
         c.dry();
         // the snow: lead white in body, lit from the low light at left and
@@ -137,8 +137,15 @@ fn main() {
         let snow = st.body().color(snow_col).angle(|_, _| 0.02).angle_jitter(0.08).length(25.0, 80.0).coverage(4.0).curve(0.03, 0.2);
         c.work(&snow_m, &snow, 22);
         c.wait(20.0);
-        // the rise of the ground drifts a little around the tree: shadowed
-        // hollow on the far side of the swell
+        // the snow lies in low waves: long cool hollows between them, a
+        // bluer gray under the gray sky, fainter far off
+        let waves = Fbm::new(o.seed as u32 + 25, 4, 200.0);
+        let hollows = Mask::from_fn(f, move |x, y| {
+            let v = waves.get(x * 0.18, y * 2.6);
+            smoothstep(0.0, 0.4, v) * snow_m.sample(x, y) * smoothstep(snow_top(x) + 6.0, snow_top(x) + 30.0, y)
+        });
+        let cool = st.body().color(move |x, y| mix(hex("#d3d5d4"), hex("#c1c6cb"), smoothstep(HORIZON, h, y) * smoothstep(200.0, 900.0, x), Mix::Light)).angle(|_, _| 0.03).length(40.0, 110.0).coverage(1.8).medium(0.45);
+        c.work(&hollows, &cool, 24);
         c.dry();
     }
 
@@ -234,25 +241,25 @@ fn main() {
         let mut b = Held::new(Tool { point: 0.6, ..Tool::round_sable(3.0) }, 62);
         let white = pal.paint(hex("#ece8de"), 0.05).with_stiff(0.9);
         let blue = pal.paint(hex("#c4c8cc"), 0.05);
-        for l in tree.limbs.iter().filter(|l| l.w[0] > 1.3 && !l.dead || l.w[0] > 2.5) {
+        for l in tree.limbs.iter().filter(|l| l.order != 99 && (l.w[0] > 1.3 && !l.dead || l.w[0] > 2.5)) {
             let mut i = 0;
             while i + 1 < l.pts.len() {
                 let (dx, dy) = l.dir(i);
                 let flat = 1.0 - dy.abs() / (dx.abs() + dy.abs() + 1e-6) * 1.4;
-                if flat < 0.15 || l.w[i] < 1.1 {
+                if flat < -0.05 || l.w[i] < 1.6 {
                     i += 1;
                     continue;
                 }
                 // a band of snow of 2-8 segments, then a gap where it slid off
                 let run = 2 + below(&mut r, 6);
                 let e = (i + run).min(l.pts.len() - 1);
-                if r.f() < 0.35 + 0.5 * flat {
+                if r.f() < 0.3 + 0.55 * flat * smoothstep(1.5, 6.0, l.w[i]).max(0.4) {
                     let up = if dx >= 0.0 { -0.5 } else { 0.5 };
                     let pts: Vec<(f32, f32)> = (i..=e).map(|k| {
                         let (x, y) = l.offset(k, up * 0.92);
                         (x, y - 0.25 * l.w[k].min(8.0) * 0.25)
                     }).collect();
-                    let w = (l.w[i] * 0.45).clamp(0.9, 7.0) * (0.6 + 0.6 * flat);
+                    let w = (l.w[i] * 0.3).clamp(0.7, 5.0) * (0.45 + 0.6 * flat.max(0.0)) * r.range(0.7, 1.1);
                     b = Held::new(Tool { point: 0.6, ..round_for(w) }, r.next_u64());
                     b.reload(if r.f() < 0.2 { blue.clone() } else { white.clone() }, 0.9);
                     let p = b.tool.pressure_for(w);
@@ -261,13 +268,18 @@ fn main() {
                 i = e + 1 + below(&mut r, 4);
             }
         }
-        // snow held in the forks
-        for &(x, y, w) in &tree.forks {
-            if w > 3.0 && r.f() < 0.8 {
-                b = Held::new(Tool::round_sable((w * 0.7).min(9.0)), r.next_u64());
-                b.reload(white.clone(), 1.0);
-                c.touch(&mut b, &Touch::at(x, y - w * 0.2).pressure(0.8).drag(r.range(-1.5, 1.5), 0.3), None);
-            }
+        // snow lodged in the great crotch where the boughs part: a few
+        // short strokes piled on each other, cool underneath
+        let top = *tree.limbs[0].pts.last().unwrap();
+        for k in 0..9 {
+            let x = top.0 + r.range(-16.0, 16.0);
+            let y = top.1 + 12.0 + r.range(-5.0, 4.0) + (x - top.0).abs() * 0.3;
+            let ww = r.range(2.5, 5.0);
+            b = Held::new(Tool { point: 0.4, ..round_for(ww) }, 600 + k);
+            b.reload(if k < 3 { blue.clone() } else { white.clone() }, 0.9);
+            let p = b.tool.pressure_for(ww);
+            let len = r.range(5.0, 11.0);
+            c.drag(&mut b, &Gesture::new(vec![(x - len * 0.5, y + 0.8), (x, y - 1.0), (x + len * 0.5, y + 0.6)]).pressure(p, p * 0.6).ramps(0.3, 0.4).shake(0.6), None);
         }
         c.dry();
     }
@@ -278,27 +290,58 @@ fn main() {
         // flicked up through it, last
         let mut r = Rng::new(o.seed + 71);
         let (bx, by) = BASE;
-        let mut b = Held::new(Tool::filbert(6.0), 72);
-        for k in 0..70 {
-            let t = k as f32 / 69.0;
-            let x = bx - 70.0 + 140.0 * t + r.range(-3.0, 3.0);
-            let dx = (x - bx) / 70.0;
-            let y = by + 2.0 - 10.0 * (1.0 - dx * dx).max(0.0) + r.range(-2.0, 2.0);
-            let col = if dx > 0.15 { hex("#b9bfc5") } else { hex("#e8e4d8") };
-            b.reload(pal.paint(col, 0.1), 0.8);
-            c.drag(&mut b, &Gesture::line((x - 8.0, y + r.range(-1.0, 1.0)), (x + 8.0, y + r.range(-1.5, 1.5))).pressure(0.6, 0.5).shake(0.7), None);
+        // the drift: a mound piled round the foot, higher on the weather
+        // (left) side; worked with the snow's own strokes along its contour
+        let mound = move |x: f32| {
+            let u = (x - bx) / 95.0;
+            let bump = (1.0 - u * u).max(0.0).powf(1.5);
+            by + 4.0 - (7.0 + 3.0 * (-u).max(0.0)) * bump
+        };
+        let drift_m = Mask::from_fn(f, move |x, y| {
+            let u = ((x - bx) / 100.0).abs();
+            smoothstep(mound(x) - 0.7, mound(x) + 0.7, y) * (1.0 - smoothstep(by + 6.0, by + 20.0, y)) * (1.0 - smoothstep(0.55, 1.0, u))
+        });
+        let drift = st
+            .body()
+            .color(move |x, y| {
+                let side = smoothstep(-20.0, 50.0, x - bx);
+                let under = 1.0 - smoothstep(mound(x), mound(x) + 6.0, y);
+                mix(hex("#e9e5d9"), hex("#c3c8cd"), (0.55 * side + 0.35 * under * side).min(0.9), Mix::Light)
+            })
+            .angle(move |x, _| {
+                let d = mound(x + 1.0) - mound(x - 1.0);
+                (d * 0.5).atan()
+            })
+            .length(10.0, 30.0)
+            .coverage(4.0)
+            .clip(true);
+        c.work(&drift_m, &drift, 72);
+        // the trunk's cool shadow where it meets the drift
+        let mut b = Held::new(Tool::filbert(4.0), 73);
+        for k in 0..8 {
+            let x = bx + 6.0 + k as f32 * 4.5 + r.range(-1.0, 1.0);
+            b.reload(pal.paint(hex("#9fa6ae"), 0.2), 0.5);
+            let y = mound(x) + 1.5;
+            c.drag(&mut b, &Gesture::line((x - 5.0, y + 0.5), (x + 6.0, y + 1.0)).pressure(0.45, 0.3).shake(0.7), None);
         }
         // grass: fine upturned strokes, in clumps, over the snow
         let mut g = Held::new(Tool { point: 1.0, ..Tool::rigger(0.9) }, 73);
-        let grass = [hex("#6d5f45"), hex("#8a7a55"), hex("#4f4636"), hex("#9b8a62")];
-        let clumps: Vec<(f32, f32, usize)> = (0..46)
-            .map(|_| {
-                let x = r.range(10.0, 990.0);
-                let y0 = snow_top(x) + 8.0;
-                let y = y0 + (h - y0 - 10.0) * r.f().powf(0.7);
-                (x, y, 3 + below(&mut r, 9))
-            })
-            .collect();
+        let grass = [hex("#6a5e4c"), hex("#857657"), hex("#4a4238"), hex("#9a8c6c")];
+        // in patches: where a ditch or bank lies under the snow, the dry
+        // grass stands through it; elsewhere a few stalks alone
+        let mut clumps: Vec<(f32, f32, usize)> = vec![];
+        for &(px, py, spread, count) in &[(150.0f32, 1150.0f32, 120.0f32, 14usize), (820.0, 1185.0, 150.0, 16), (620.0, 1060.0, 90.0, 8), (300.0, 1045.0, 70.0, 6), (40.0, 1225.0, 60.0, 7)] {
+            for _ in 0..count {
+                let x = px + r.normal() * spread * 0.5;
+                let y = (py + r.normal() * spread * 0.12).max(snow_top(x) + 8.0).min(h - 6.0);
+                clumps.push((x, y, 3 + below(&mut r, 8)));
+            }
+        }
+        for _ in 0..10 {
+            let x = r.range(10.0, 990.0);
+            let y0 = snow_top(x) + 10.0;
+            clumps.push((x, y0 + (h - y0 - 10.0) * r.f(), 1 + below(&mut r, 3)));
+        }
         for (cx, cy, n) in clumps {
             let near = smoothstep(HORIZON, h, cy);
             for _ in 0..n {
@@ -313,9 +356,13 @@ fn main() {
         }
         // a fallen limb from the dead crown, lying half in the snow
         let mut fl = Held::new(Tool { point: 1.0, ..Tool::round_sable(4.0) }, 74);
-        let lx = bx + 150.0;
-        let ly = snow_top(lx) + 28.0;
-        let limb: Vec<(f32, f32)> = (0..8).map(|i| (lx + i as f32 * 14.0, ly - i as f32 * 1.6 + (i as f32 * 1.3).sin() * 1.5)).collect();
+        let lx = bx + 170.0;
+        let ly = snow_top(lx) + 95.0;
+        let limb: Vec<(f32, f32)> = (0..8).map(|i| (lx + i as f32 * 16.0, ly - i as f32 * 2.2 + (i as f32 * 1.3).sin() * 1.8)).collect();
+        // its shadow in the snow first, cool, just below
+        let mut sh = Held::new(Tool::filbert(5.0), 77);
+        sh.reload(pal.paint(hex("#aeb4bb"), 0.25), 0.6);
+        c.drag(&mut sh, &Gesture::new(limb.iter().map(|&(x, y)| (x + 3.0, y + 3.5)).collect()).pressure(0.5, 0.3).shake(0.6), None);
         fl.reload(pal.paint(hex("#4a443c"), 0.1), 1.0);
         c.drag(&mut fl, &Gesture::new(limb.clone()).pressure(0.8, 0.35).ramps(0.05, 0.3).shake(0.6), None);
         let mut fl = Held::new(Tool { point: 1.0, ..Tool::round_sable(1.8) }, 76);
@@ -324,10 +371,16 @@ fn main() {
             fl.reload(pal.paint(hex("#51493f"), 0.1), 0.8);
             c.drag(&mut fl, &Gesture::new(vec![(x, y), (x + a.cos() * len * 0.5, y + a.sin() * len * 0.5), (x + a.cos() * len, y + a.sin() * len - 2.0)]).pressure(0.7, 0.0).ramps(0.05, 0.7).shake(0.6), None);
         }
-        // snow along its top
+        // snow along its top, and drifted over it in two places
         let mut sw = Held::new(Tool::round_sable(2.5), 75);
         sw.reload(pal.paint(hex("#ede9df"), 0.05), 0.9);
-        c.drag(&mut sw, &Gesture::new(limb.iter().map(|&(x, y)| (x, y - 2.2)).collect()).pressure(0.6, 0.3).ramps(0.2, 0.3).shake(0.6), None);
+        c.drag(&mut sw, &Gesture::new(limb[..5].iter().map(|&(x, y)| (x, y - 2.4)).collect()).pressure(0.6, 0.3).ramps(0.2, 0.3).shake(0.6), None);
+        let mut sd = Held::new(Tool::filbert(6.0), 78);
+        for &i in &[1usize, 5] {
+            let (x, y) = limb[i];
+            sd.reload(pal.paint(hex("#e6e2d7"), 0.1), 0.9);
+            c.drag(&mut sd, &Gesture::new(vec![(x - 8.0, y + 1.0), (x, y - 2.5), (x + 9.0, y + 1.5)]).pressure(0.7, 0.5).shake(0.6), None);
+        }
         c.dry();
     }
 
@@ -417,9 +470,11 @@ impl Tree {
             let t = i as f32 / n as f32;
             pts.push((x, y));
             // flare at the foot, the bole, a swelling where the boughs part
-            let wt = 54.0 + 30.0 * (-t * 16.0).exp() - 8.0 * t + 6.0 * smoothstep(0.8, 1.0, t);
+            // an old oak's bole is not a column: burrs and swellings
+            let burr = 3.5 * (t * 23.0 + 1.3).sin() * (t * 7.0).cos() + 2.5 * (t * 41.0).sin();
+            let wt = 54.0 + 30.0 * (-t * 16.0).exp() - 8.0 * t + 6.0 * smoothstep(0.8, 1.0, t) + burr;
             w.push(wt);
-            a += r.range(-0.03, 0.03) - 0.004 * (a + 1.57 - 0.03);
+            a += r.range(-0.03, 0.03) - 0.004 * (a + 1.57 - 0.03) + 0.012 * (t * 9.0).sin();
             x += a.cos() * 8.5;
             y += a.sin() * 8.5;
         }
@@ -441,6 +496,22 @@ impl Tree {
             let sy = top.1 + 10.0 + (k as f32 - 2.5).abs() * 7.0;
             let sawn = k == 5;
             t.branch(&mut r, (sx, sy), ang, bw, 0, dead, reach, sawn);
+        }
+        // roots: the foot spreads into buttresses that run down into the snow
+        for &(ang, rw) in &[(2.55f32, 26.0f32), (2.2, 18.0), (0.62, 24.0), (0.95, 16.0), (1.7, 20.0)] {
+            let p = (BASE.0 + ang.cos() * 20.0, BASE.1 - 22.0);
+            let mut pts = vec![p];
+            let mut ws = vec![rw];
+            let (mut x, mut y, mut a, mut w) = (p.0, p.1, ang, rw);
+            for _ in 0..5 {
+                a += r.range(-0.1, 0.1);
+                x += a.cos() * 6.0;
+                y += a.sin() * 6.0;
+                w *= 0.8;
+                pts.push((x, y));
+                ws.push(w);
+            }
+            t.limbs.push(Limb { pts, w: ws, dead: false, order: 99 });
         }
         // epicormic shoots on the bole: a few thin sprouts from old wounds
         for _ in 0..7 {
@@ -530,10 +601,10 @@ impl Tree {
             }
         }
         // the tip: a living twig ends in a small cluster of short shoots
-        if !dead && !sawn && w < 1.0 && order > 1 {
-            for _ in 0..(1 + below(r, 3)) {
-                let ca = a + r.range(-0.7, 0.7);
-                let l = r.range(2.5, 8.0);
+        if !dead && !sawn && w < 1.0 && order > 1 && r.f() < 0.45 {
+            for _ in 0..(1 + below(r, 2)) {
+                let ca = a + r.range(-0.45, 0.45);
+                let l = r.range(2.0, 5.5);
                 let q = (x + ca.cos() * l, y + ca.sin() * l);
                 self.limbs.push(Limb { pts: vec![(x, y), ((x + q.0) * 0.5 + r.range(-0.6, 0.6), (y + q.1) * 0.5), q], w: vec![0.5, 0.4, 0.3], dead: false, order: order + 1 });
             }
@@ -636,7 +707,7 @@ impl Tree {
         let n = Fbm::new(77, 3, 6.0);
         Mask::from_fn(f, move |x, y| match self.nearest(x, y) {
             // the foot goes into the snow
-            Some((_, inside, _)) => smoothstep(-0.35, 0.35, inside + 0.5 * n.get(x, y)) * (1.0 - smoothstep(BASE.1 - 3.0, BASE.1 + 1.0, y - 3.0 * n.get(x * 3.0, 0.0))),
+            Some((_, inside, _)) => smoothstep(-0.35, 0.35, inside + 0.5 * n.get(x, y)) * (1.0 - smoothstep(BASE.1 + 2.0, BASE.1 + 5.0, y - 5.0 * n.get(x * 0.7, 0.0))),
             None => 0.0,
         })
     }
@@ -673,7 +744,7 @@ impl Tree {
         let lit = self.light_across((b.0 - a.0) / d, (b.1 - a.1) / d, across.clamp(-1.0, 1.0));
         let dead = self.limbs[li].dead;
         let n = self.bark_n.get(x * 0.5, y * 0.12);
-        let (sh, mid, hi) = if dead { (hex("#4a4640"), hex("#77736a"), hex("#a8a397")) } else { (hex("#231f1b"), hex("#3e3830"), hex("#6f6a5a")) };
+        let (sh, mid, hi) = if dead { (hex("#46423c"), hex("#6a665d"), hex("#96918a")) } else { (hex("#201c18"), hex("#36302a"), hex("#5d584b")) };
         let base = if lit < 0.5 { mix(sh, mid, lit / 0.5, Mix::Pigment) } else { mix(mid, hi, (lit - 0.5) / 0.5, Mix::Pigment) };
         // lichen, gray-green, on the lit, weather side of the bole
         let lichen = if !dead { smoothstep(0.1, 0.5, n) * smoothstep(0.45, 0.8, lit) * 0.45 } else { 0.0 };
@@ -683,12 +754,12 @@ impl Tree {
     fn limb_color(&self, l: &Limb, i: usize, r: &mut Rng) -> Rgb {
         let w = l.w[i];
         if l.dead {
-            return mix(hex("#5e5a52"), hex("#8b877d"), r.f() * 0.5, Mix::Pigment);
+            return mix(hex("#57534b"), hex("#77736a"), r.f() * 0.5, Mix::Pigment);
         }
         // thick: dark; the finest: warmer and a little lighter, as twigs
         // against a light sky are
         let t = smoothstep(0.4, 3.0, w);
-        mix(hex("#5a4d42"), hex("#2e2923"), t, Mix::Pigment)
+        mix(hex("#4c433b"), hex("#2a2521"), t, Mix::Pigment)
     }
 }
 

@@ -11,12 +11,12 @@ type Pt = (f32, f32);
 fn line(c: &mut Canvas, pts: &[Pt], width: f32, end: f32, p: Paint, seed: u64) {
     if pts.len() < 2 { return; }
     let tool = Tool { point: 0.88, push: 0.015, pickup: 0.035, ragged: 0.16,
-        run: 280.0, ..Tool::round_sable(width.max(0.22) * 1.32) };
+        run: 480.0, ..Tool::round_sable(width.max(0.22) * 1.32) };
     let a = tool.pressure_for(width);
     let b = tool.pressure_for(end.max(0.05));
     let mut held = Held::new(tool, seed);
     held.load(p, 0.85);
-    c.drag(&mut held, &Gesture::new(pts.to_vec()).pressure(a,b).ramps(0.015,0.12).shake(0.08), None);
+    c.drag(&mut held, &Gesture::new(pts.to_vec()).pressure(a,b).ramps(0.0,0.025).shake(0.08), None);
 }
 fn dab(c: &mut Canvas, at: Pt, w: f32, p: Paint, seed: u64) {
     let mut b = Held::new(Tool::stippler(w), seed);
@@ -34,12 +34,12 @@ fn bank(x: f32) -> f32 {
 fn stream(y:f32) -> (f32,f32) {
     let t=((y-419.0)/281.0).clamp(0.0,1.0);
     let mid=534.0 + 125.0*t + 83.0*(t*6.0-0.8).sin()*t;
-    (mid, 2.0+92.0*t.powf(1.55))
+    (mid, 2.0+92.0*t.powf(1.55)+t*(2.1*(y*0.19).sin()+0.9*(y*0.57).sin()))
 }
 fn snow(x:f32,y:f32)->Rgb {
     let n=Fbm::new(81,4,120.0);
     let t=((y-408.0)/285.0).clamp(0.0,1.0);
-    let shade=0.30+0.24*t+0.13*(x*0.011+y*0.025).sin()+0.18*n.get(x,y);
+    let shade=0.30+0.24*t+0.13*(x*0.011+y*0.025).sin()+0.07*n.get(x,y);
     lerp(hex("#d9d6c9"),hex("#929cab"),shade.clamp(0.0,0.86),Mix::Pigment)
 }
 
@@ -78,20 +78,54 @@ fn oak(c:&mut Canvas,st:&Style,r:&mut Rng) {
     let light=st.palette.paint(hex("#8a8270"),0.22);
     let fine=st.palette.paint(hex("#59554e"),0.24);
     let boughs=oak_boughs();
+    let mut outline=Shape::new();
+    let mut wood_axes=Vec::new();
     for (pts,w) in &boughs {
-        for i in 0..pts.len()-1 {
-            let t=i as f32/(pts.len()-1) as f32;
-            let t1=(i+1) as f32/(pts.len()-1) as f32;
-            line(c,&pts[i..=i+1],w*(1.0-0.86*t),w*(1.0-0.86*t1),dark,r.next_u64());
+        let path=paint::graphite::resample(pts,true,2.0);
+        let widths:Vec<_>=path.iter().enumerate().map(|(i,_)| {
+            let t=i as f32/(path.len()-1) as f32;
+            w*(1.-0.91*t)*(1.+0.045*(t*34.+w).sin())
+        }).collect();
+        outline=outline.ribbon(&path,&widths);
+        for (i,pair) in path.windows(2).enumerate().step_by(3) {
+            wood_axes.push((pair[0],pair[1],widths[i]));
         }
     }
-    // Bark follows the twist of the wood, never crosswise ladder hatching.
+    let wood=Mask::from_shape(c.frame(),outline);
+    let nearest=|x:f32,y:f32| {
+        let &(a,b,w)=wood_axes.iter().min_by(|a,b| {
+            let da=(x-a.0.0).powi(2)+(y-a.0.1).powi(2);
+            let db=(x-b.0.0).powi(2)+(y-b.0.1).powi(2);
+            da.total_cmp(&db)
+        }).unwrap();
+        let angle=(b.1-a.1).atan2(b.0-a.0);
+        let offset=((x-a.0)*(-angle.sin())+(y-a.1)*angle.cos())/w;
+        (angle,offset)
+    };
+    let n=Fbm::new(407,3,17.0);
+    let pal=st.palette.only(&["raw umber","bone black","yellow ochre","lead white"]);
+    let mut handling=st.body().palette(&pal).color(|x,y| {
+        let (_,offset)=nearest(x,y);
+        let lit=(0.34+offset*0.42+0.17*n.get(x,y)).clamp(0.05,0.9);
+        lerp(hex("#393830"),hex("#777366"),lit,Mix::Pigment)
+    }).angle(|x,y|nearest(x,y).0).coverage(4.1).length(8.,29.)
+        .curve(0.045,0.25).cross(0.08).medium(0.17).clip(true).jitter(0.01,0.004);
+    handling.tool=Tool {push:0.02,pickup:0.04,..Tool::filbert(4.8)};
+    c.work(&wood,&handling,407);
+    c.dry();
+    // Broken longitudinal bark passages, not parallel full-length pinstripes.
     for (pts,w) in &boughs {
         if *w<6.0 {continue;}
-        for j in 0..3 {
-            let off=(*w)*(j as f32-0.2)*0.12;
-            let pp:Vec<Pt>=pts.iter().enumerate().map(|(i,&(x,y))|(x+off*(1.0-i as f32/pts.len() as f32),y)).collect();
-            line(c,&pp,w*0.11,w*0.016,if j==2 {light} else {gray},r.next_u64());
+        let path=paint::graphite::resample(pts,true,2.0);
+        for _ in 0..(w*5.) as usize {
+            let i=(r.range(0.,(path.len()-5) as f32)) as usize;
+            let end=(i+r.range(3.,12.) as usize).min(path.len()-1);
+            let t=i as f32/path.len() as f32;
+            let width=w*(1.-0.91*t);
+            let off=r.range(-0.32,0.30)*width;
+            let pp:Vec<_>=path[i..=end].iter().map(|&(x,y)|(x+off,y)).collect();
+            let p=if r.f()<0.78 {gray} else {light};
+            line(c,&pp,r.range(0.35,0.95)*width*0.15,0.12,p,r.next_u64());
         }
     }
     for (pts,w) in &boughs {
@@ -140,35 +174,37 @@ fn oak(c:&mut Canvas,st:&Style,r:&mut Rng) {
     }
 }
 fn fir(c:&mut Canvas, st:&Style, x:f32, base:f32, h:f32, col:Rgb, r:&mut Rng) {
-    let p=st.palette.paint(col,0.3);
+    let pal=st.palette.only(&["lead white","raw umber","bone black","yellow ochre","cobalt blue"]);
+    let p=pal.paint(col,0.18);
     line(c,&[(x,base),(x-0.7,base-h)],h*0.022,0.14,p,r.next_u64());
-    let count=(h*0.7) as usize;
+    let count=(h*1.6) as usize;
     for i in 1..count {
         let t=i as f32/count as f32;
         let y=base-h+h*t;
         let reach=h*0.24*t.powf(0.85)*r.range(0.66,1.10);
         for s in [-1.,1.] {
             let end=(x+s*reach,y+h*0.08*t);
-            line(c,&[(x,y-1.),(x+s*reach*0.5,y+h*0.025),end],(h*0.033*t).max(0.45),0.16,p,r.next_u64());
+            line(c,&[(x,y-1.),(x+s*reach*0.5,y+h*0.025),end],(h*0.062*t).max(0.55),0.22,p,r.next_u64());
         }
     }
 }
 fn traveler(c:&mut Canvas,st:&Style,r:&mut Rng) {
     // A turned back, a cape opening above two boots and one hand on a staff.
+    let at=|pts:&[Pt]| -> Vec<Pt> {pts.iter().map(|&(x,y)|(x+24.,y)).collect()};
     let dark=st.palette.paint(hex("#373d40"),0.10);
     let warm=st.palette.paint(hex("#6d635b"),0.12);
-    patch(c,st,&[(593.,477.),(598.,476.),(602.,482.),(604.,493.),(607.,502.),
-        (600.,505.),(588.,503.),(590.,490.),(589.,483.)],hex("#454950"),770);
-    line(c,&[(594.,501.),(593.,508.),(590.,509.)],2.2,1.5,dark,r.next_u64());
-    line(c,&[(600.,501.),(601.,507.),(605.,508.)],2.1,1.4,dark,r.next_u64());
-    dab(c,(595.,474.),5.6,dark,r.next_u64());
-    line(c,&[(591.,475.),(599.,475.5)],1.1,0.8,dark,r.next_u64());
-    line(c,&[(600.,481.),(605.,488.),(610.,489.)],2.6,1.0,warm,r.next_u64());
-    line(c,&[(610.,484.),(609.,509.)],0.75,0.55,dark,r.next_u64());
+    patch(c,st,&at(&[(593.,477.),(598.,476.),(602.,482.),(604.,493.),(607.,502.),
+        (600.,505.),(588.,503.),(590.,490.),(589.,483.)]),hex("#454950"),770);
+    line(c,&at(&[(594.,501.),(593.,508.),(590.,509.)]),2.2,1.5,dark,r.next_u64());
+    line(c,&at(&[(600.,501.),(601.,507.),(605.,508.)]),2.1,1.4,dark,r.next_u64());
+    dab(c,(619.,474.),5.6,dark,r.next_u64());
+    line(c,&at(&[(591.,475.),(599.,475.5)]),1.1,0.8,dark,r.next_u64());
+    line(c,&at(&[(600.,481.),(605.,488.),(610.,489.)]),2.6,1.0,warm,r.next_u64());
+    line(c,&at(&[(610.,484.),(609.,509.)]),0.75,0.55,dark,r.next_u64());
     let rim=st.palette.paint(hex("#96928a"),0.25);
-    line(c,&[(597.,479.),(600.,483.),(601.,491.)],0.65,0.15,rim,r.next_u64());
-    line(c,&[(594.,485.),(593.,495.),(591.,502.)],0.6,0.3,dark,r.next_u64());
-    line(c,&[(598.,488.),(599.,499.)],0.5,0.1,rim,r.next_u64());
+    line(c,&at(&[(597.,479.),(600.,483.),(601.,491.)]),0.65,0.15,rim,r.next_u64());
+    line(c,&at(&[(594.,485.),(593.,495.),(591.,502.)]),0.6,0.3,dark,r.next_u64());
+    line(c,&at(&[(598.,488.),(599.,499.)]),0.5,0.1,rim,r.next_u64());
 }
 
 fn main() {
@@ -227,8 +263,8 @@ fn main() {
         let p=st.palette.paint(hex("#929799"),0.25);
         line(&mut c,&[(684.,401.),(684.,376.)],5.3,4.1,p,r.next_u64());
         patch(&mut c,&st,&[(680.,378.),(683.,365.),(688.,378.)],hex("#929698"),214);
-        line(&mut c,&[(676.,400.),(696.,400.)],7.5,6.0,p,r.next_u64());
-        line(&mut c,&[(674.,395.),(686.,389.),(700.,396.)],1.8,1.0,p,r.next_u64());
+        patch(&mut c,&st,&[(674.,396.),(684.,390.),(701.,396.),(701.,403.),(674.,403.)],hex("#a3a7a5"),215);
+        line(&mut c,&[(674.,395.),(684.,390.),(701.,396.)],1.0,0.5,p,r.next_u64());
         line(&mut c,&[(683.5,367.),(683.5,362.)],0.5,0.2,p,r.next_u64());
         for _ in 0..100 {
             let x=r.range(5.,995.); let y=425.+6.*(x/63.).sin();
@@ -251,49 +287,90 @@ fn main() {
         c.dry();
         let ice=Mask::from_fn(f,move|x,y| {
             let (mid,w)=stream(y);
-            smoothstep(425.,438.,y)*(1.-smoothstep(w-1.0,w+1.2,(x-mid+2.*n.get(x,y)).abs()))
+            smoothstep(410.,422.,y)*(1.-smoothstep(w-1.0,w+1.2,(x-mid+2.*n.get(x,y)).abs()))
         });
-        c.work(&ice,&st.body().color(move|x,y| {
+        let ice_pal=st.palette.only(&["lead white","cobalt blue","raw umber","bone black"]);
+        c.work(&ice,&st.body().palette(&ice_pal).color(move|x,y| {
             let t=((y-425.)/275.).clamp(0.,1.);
-            lerp(hex("#b6bdbe"),hex("#586c7b"),0.22+0.65*t+0.09*n.get(x*0.5,y*2.),Mix::Pigment)
+            lerp(hex("#bcc4c5"),hex("#738591"),0.22+0.65*t+0.06*n.get(x*0.5,y*2.),Mix::Pigment)
         }).coverage(4.).length(18.,64.).angle(|_,_|0.02).cross(0.08).curve(0.035,0.2)
             .medium(0.23).clip(true),305);
         c.dry();
         // Exposed lip of earth below the overhanging near snow banks.
-        let earth=st.palette.paint(hex("#666760"),0.2);
-        let lip=st.palette.paint(hex("#d3d4c9"),0.10);
+        let earth=st.palette.paint(hex("#858982"),0.28);
+        let lip=st.palette.paint(hex("#c8cec9"),0.22);
         for side in [-1.,1.] {
             for j in 0..27 {
+                if r.f()<0.48 {continue;}
                 let y=457.+j as f32*9.; let (m,w)=stream(y); let (m2,w2)=stream(y+8.);
                 let x=m+side*w;
                 let pts=[(x,y),(m2+side*w2,y+8.)];
                 line(&mut c,&pts,0.5+(y-450.)*0.011,0.6,earth,r.next_u64());
-                if j%3!=0 {
+                if j%3==0 {
                     line(&mut c,&[(x-side*2.,y-1.5),(m2+side*(w2-2.),y+6.)],1.0+(y-450.)*0.007,0.3,lip,r.next_u64());
                 }
             }
         }
         // Long, unequal gray seams, not a repeating crystalline pattern.
         let seam=st.palette.paint(hex("#596e7b"),0.38);
-        let frost=st.palette.paint(hex("#bbc5c8"),0.25);
-        for j in 0..55 {
+        let frost=ice_pal.paint(hex("#b0bbc1"),0.35);
+        for j in 0..31 {
             let y=r.range(453.,696.); let (m,w)=stream(y);
             let x=m+r.range(-0.8,0.8)*w;
             let len=r.range(3.,22.)*(y-418.)/200.;
             line(&mut c,&[(x,y),(x+len*0.6,y+r.range(-1.,1.)),(x+len,y+1.0)],
                 r.range(0.35,0.9),0.15,if j%3==0 {seam} else {frost},r.next_u64());
         }
+        // A broad opaque ice shelf, broken into low flat plates at the near bend.
+        // Masks describe the sheets; their frost is laid with an actual loaded brush.
+        let sheet_shape=Shape::new().poly(&[(507.,687.),(537.,664.),(550.,665.),(564.,646.),
+            (589.,637.),(614.,640.),(634.,633.),(648.,642.),(638.,658.),(625.,669.),
+            (609.,677.),(594.,697.),(510.,699.)])
+            .poly(&[(625.,681.),(646.,665.),(667.,662.),(666.,676.),(655.,699.),(611.,699.)]);
+        let sheet=Mask::from_shape(f,sheet_shape).mul(&ice);
+        c.work(&sheet,&st.body().palette(&ice_pal).color(move|x,y| {
+            lerp(hex("#b5c0c4"),hex("#929fa9"),0.28+0.16*n.get(x,y),Mix::Pigment)
+        }).coverage(3.4).length(9.,35.).angle(|_,_|-0.12).cross(0.12)
+            .curve(0.045,0.3).medium(0.24).clip(true),311);
+        let split=ice_pal.paint(hex("#728692"),0.22);
+        line(&mut c,&[(551.,680.),(573.,667.),(594.,665.),(607.,652.)],0.8,0.15,split,r.next_u64());
+        line(&mut c,&[(594.,665.),(608.,673.),(624.,672.)],0.5,0.15,split,r.next_u64());
         // A few dark melt openings, confined to the near bend.
         for (x,y,w) in [(669.,646.,17.),(638.,675.,25.),(707.,609.,9.)] {
             line(&mut c,&[(x-w,y),(x,y-1.),(x+w*0.7,y+1.3)],3.1,0.9,seam,r.next_u64());
         }
     }
+    if o.stage("snow relief",&mut c,&mut r) {
+        let n=Fbm::new(607,3,43.0);
+        let drifts=Mask::from_fn(f,move|x,y| {
+            let (m,w)=stream(y); if (x-m).abs()<w+5. {return 0.;}
+            let lines=[(210.,508.,172.,8.,-0.10),(840.,526.,188.,10.,0.07),
+                (325.,580.,141.,11.,-0.16),(893.,640.,153.,15.,-0.07)];
+            lines.iter().map(|&(cx,cy,rx,ry,slope)| {
+                let dx=(x-cx)/rx;
+                let dy=(y-cy-slope*(x-cx)-4.*n.get(x,y))/(ry*1.6);
+                (-dx.powi(4)*1.6-dy.powi(2)*1.8).exp()
+            }).fold(0.0f32,f32::max)
+        });
+        c.work(&drifts,&st.broad().color_over(|_,_,u|paint::shift(u,-0.017,0.,-0.005))
+            .coverage(2.1).length(24.,63.).angle(|_,_|-0.08).curve(0.065,0.3)
+            .medium(0.3).clip(true).jitter(0.003,0.001),360);
+        let hollow=Mask::from_fn(f,move|x,y| {
+            let dx=(x-217.)/94.; let dy=(y-604.-0.04*(x-217.)-2.*n.get(x,y))/10.;
+            (-dx*dx*1.8-dy*dy*1.6).exp()
+        });
+        c.work(&hollow,&st.body().color_over(|_,_,u|paint::shift(u,-0.037,0.0,-0.007))
+            .coverage(2.3).length(9.,25.).angle(|_,_|0.05).medium(0.28).clip(true),361);
+        c.dry();
+    }
     if o.stage("woods",&mut c,&mut r) {
-        for j in 0..24 {
-            let x=775.+j as f32*11.+r.range(-5.,5.);
-            let base=448.+(x-780.)*0.115;
-            let h=r.range(25.,70.)*(0.8+0.2*((x-880.)/110.).abs());
-            fir(&mut c,&st,x,base,h,hex("#667573"),&mut r);
+        let mut positions:Vec<f32>=(0..43).map(|_|r.range(788.,1030.)).collect();
+        positions.sort_by(f32::total_cmp);
+        for x in positions {
+            let base=458.-(x-800.)*0.045+r.range(-3.,3.);
+            let mass=0.68+0.38*((x-800.)/58.).cos();
+            let h=r.range(30.,66.)*mass;
+            fir(&mut c,&st,x,base,h,hex("#687773"),&mut r);
         }
         // A bare riverside sapling: fine cool wood, not a second large oak.
         let p=st.palette.paint(hex("#77817e"),0.3);
@@ -307,24 +384,38 @@ fn main() {
     }
     if o.stage("banks and traveler",&mut c,&mut r) {
         // Flat fractured stones sunk in the left bank, individually faceted.
-        for (x,y,s) in [(108.,644.,1.0),(340.,626.,0.64),(79.,587.,0.47),(851.,609.,0.75)] {
+        for (k,(x,y,s)) in [(108.,644.,1.0),(340.,626.,0.64),(79.,587.,0.47),(851.,609.,0.75)].into_iter().enumerate() {
             let pts=[(-32.,2.),(-22.,-12.),(3.,-17.),(25.,-9.),(33.,4.),(16.,12.),(-17.,10.)];
-            let pp:Vec<_>=pts.iter().map(|&(a,b)|(x+a*s,y+b*s)).collect();
-            patch(&mut c,&st,&pp,hex("#5e625f"),r.next_u64());
+            let pp:Vec<_>=pts.iter().map(|&(a,b)|(x+(a+r.range(-4.,4.))*s,y+(b+r.range(-3.,3.))*s)).collect();
+            let rock=Mask::from_shape(f,Shape::new().poly(&pp)).roughen(800+k as u32,7.,0.9*s,0.3);
+            let n=Fbm::new(801+k as u32,3,9.);
+            c.work(&rock,&st.body().color(move|xx,yy|lerp(hex("#565e5b"),hex("#96998e"),
+                (0.32-0.017*(yy-y)+0.13*n.get(xx,yy)).clamp(0.,1.),Mix::Pigment))
+                .coverage(3.5).length(5.,14.).angle(|_,_|0.6).cross(0.2).medium(0.18).clip(true),810+k as u64);
             let top=[(-30.,0.),(-19.,-12.),(2.,-16.),(23.,-8.),(7.,-4.),(-7.,-5.)];
-            let pp:Vec<_>=top.iter().map(|&(a,b)|(x+a*s,y+b*s)).collect();
-            patch(&mut c,&st,&pp,hex("#c9cbc3"),r.next_u64());
-            let p=st.palette.paint(hex("#838780"),0.2);
-            line(&mut c,&[(x-5.*s,y-3.*s),(x+8.*s,y+4.*s),(x+24.*s,y+3.*s)],1.1*s,0.2,p,r.next_u64());
+            let pp:Vec<_>=top.iter().map(|&(a,b)|(x+(a+r.range(-3.,3.))*s,y+(b+r.range(-2.,2.))*s)).collect();
+            let cap=Mask::from_shape(f,Shape::new().poly(&pp)).roughen(820+k as u32,5.,1.1*s,0.6).mul(&rock);
+            c.work(&cap,&st.detail().color(|_,_|hex("#c4c9c1")).coverage(3.2).length(3.,10.)
+                .angle(|_,_|-0.2).medium(0.1).clip(true),830+k as u64);
+            let p=st.palette.paint(hex("#7c847b"),0.25);
+            line(&mut c,&[(x-5.*s,y-3.*s),(x+8.*s,y+4.*s),(x+24.*s,y+3.*s)],0.65*s,0.15,p,r.next_u64());
+            let snowpaint=st.palette.paint(snow(x,y),0.18);
+            line(&mut c,&[(x-35.*s,y+6.*s),(x-19.*s,y+8.*s),(x-4.*s,y+9.*s)],2.5*s,0.6,snowpaint,r.next_u64());
+            for _ in 0..28 {
+                let xx=x+r.range(-25.,26.)*s; let yy=y+r.range(-7.,7.)*s;
+                if rock.sample(xx,yy)>0.7 && cap.sample(xx,yy)<0.4 {
+                    dab(&mut c,(xx,yy),r.range(0.3,1.0)*s,p,r.next_u64());
+                }
+            }
         }
         // The slight hollow around the traveler grounds the feet.
         let shadow=st.palette.paint(hex("#8c99a3"),0.34);
-        line(&mut c,&[(589.,509.),(603.,510.),(624.,514.)],3.1,0.2,shadow,r.next_u64());
+        line(&mut c,&[(613.,509.),(627.,510.),(648.,514.)],3.1,0.2,shadow,r.next_u64());
         traveler(&mut c,&st,&mut r);
         // His approach stops at the ford; tracks become smaller into distance.
         let track=st.palette.paint(hex("#9aa5ab"),0.25);
         for j in 0..13 {
-            let t=j as f32/12.; let y=514.+t*t*69.; let x=603.+t*41.+4.*(t*5.).sin();
+            let t=j as f32/12.; let y=514.+t*t*69.; let x=627.+t*41.+4.*(t*5.).sin();
             line(&mut c,&[(x+if j%2==0 {2.} else {-2.},y),(x+1.,y+1.5+t)],1.2+t*1.8,0.4,track,r.next_u64());
         }
         c.dry();
@@ -334,7 +425,8 @@ fn main() {
         let pale=st.palette.paint(hex("#afa58b"),0.18);
         let shadow=st.palette.paint(hex("#87949c"),0.28);
         // Tufts are clustered at bank breaks and stones, not uniformly scattered.
-        for i in 0..210 {
+        let tuft_field=Fbm::new(909,3,65.0);
+        for i in 0..360 {
             let (x,y)=if i<95 {
                 let y=r.range(481.,693.); let (m,w)=stream(y);
                 (m+if i%2==0 {-w-r.range(2.,17.)} else {w+r.range(3.,18.)},y)
@@ -342,7 +434,7 @@ fn main() {
                 (r.range(12.,971.),r.range(579.,696.))
             };
             let (m,w)=stream(y); if (x-m).abs()<w+1. {continue;}
-            if i>=95 && r.f()<0.36 {continue;}
+            if i>=95 && (tuft_field.get(x,y)<0.08 || r.f()<0.25) {continue;}
             let scale=((y-411.)/270.).clamp(0.1,1.1);
             line(&mut c,&[(x-2.,y+0.7),(x+5.*scale,y+2.)],2.*scale,0.3,shadow,r.next_u64());
             for j in 0..(3+(r.f()*5.) as usize) {
@@ -355,6 +447,33 @@ fn main() {
                     for k in 0..3 {dab(&mut c,(top.0+k as f32*0.45,top.1+k as f32*1.1),0.8*scale,grass,r.next_u64());}
                 }
             }
+        }
+        // A few persistent umbellifer stalks beside the near ice: wiry stems,
+        // lateral forks and collapsed seed rays, rather than generic grass spikes.
+        for j in 0..9 {
+            let x=701.+r.range(-14.,24.); let y=677.+r.range(-5.,17.);
+            let h=r.range(23.,45.); let lean=r.range(-11.,7.);
+            let top=(x+lean,y-h);
+            line(&mut c,&[(x,y),(x+lean*0.4,y-h*0.6),top],0.85,0.22,grass,r.next_u64());
+            for k in 0..5 {
+                let ray=(top.0+(k as f32-2.)*1.8,top.1-r.range(1.,4.));
+                line(&mut c,&[(top.0,top.1+2.),ray],0.35,0.1,grass,r.next_u64());
+                dab(&mut c,ray,0.65,grass,r.next_u64());
+            }
+            if j%2==0 {
+                let fork=(x+lean*0.4,y-h*0.5);
+                line(&mut c,&[fork,(fork.0+7.,fork.1-5.),(fork.0+9.,fork.1-11.)],0.45,0.10,grass,r.next_u64());
+            }
+        }
+        // Exposed earth at wind-scoured breaks. Unequal strips sit below snow lips.
+        let soil=st.palette.paint(hex("#78766a"),0.22);
+        let cap=st.palette.paint(hex("#c9ccc4"),0.14);
+        for i in 0..42 {
+            let x=r.range(3.,424.); let y=628.+0.10*x+r.range(-10.,24.);
+            if tuft_field.get(x,y)<0.12 {continue;}
+            let len=r.range(3.,17.);
+            line(&mut c,&[(x,y),(x+len*0.6,y-1.),(x+len,y+0.4)],r.range(0.7,2.),0.2,soil,r.next_u64());
+            if i%2==0 {line(&mut c,&[(x,y-1.),(x+len*0.8,y-1.8)],0.8,0.15,cap,r.next_u64());}
         }
         // Broken fallen twig with a fork on the near snow, in front of the oak.
         let wood=st.palette.paint(hex("#555449"),0.2);

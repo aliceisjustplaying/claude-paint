@@ -30,8 +30,8 @@ this machine). Next: decide the direction with Alice after Fable's advice.
   `notes/fixes/dry_rims/`, start with `LOOK_HERE_far_hills_4x.png`); the
   test audit (13 items, -291 lines, release hand_time 2 min -> 8 s); the
   pollard willow removed from the docs; a clippy error on main.
-- **Decided:** one resolution for painting, looking and delivering: ~0.2 mm
-  per pixel (2250-2400 px for a small Friedrich canvas), from the next round.
+- **Trial:** one resolution for painting, looking and delivering: ~0.2 mm
+  per pixel (2250-2400 px for a small Friedrich canvas), from the next round; may go back to 3200.
 - **Cracks** (`notes/cracks_lab/README.md`): real craquelure has direction
   (the Monk: broadly down-right; other paintings other patterns), clusters
   and varying amounts; "anything that reads like repetition reads digital".

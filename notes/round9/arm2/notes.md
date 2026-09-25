@@ -68,79 +68,110 @@ handling. Ground: Friedrich's reddish ocher stack with a brushed top.
 7. **banks**: the dark lip where the field breaks over the ice, drawn down
    each bank in runs of strokes, set down and lifted, with gaps; snow
    dragged back over it from the field side so the edge is lost and found.
-8. **boat**: hull side in a few strokes, the gunwale light, snow heaped
-   inside and drifted against it, the post with its snow cap and the rope.
+8. **boat**: the hull in side view, laid in level strokes from the sheer
+   line (rising to both ends, bow raked, stern square) down to the ice,
+   darker below; the gunwale light; snow heaped inside and drifted against
+   it; the post with its snow cap and the rope. (First version, strokes
+   along a single curve, read as a puck; the side-view rows fixed it.)
 9. **shadows**: the willows' shadows and the sledge ruts as a thin cool
    glaze through a mask (built from the sun's direction), before the trees
    go in.
 10. **willows**: each tree far to near: the trunk in side-by-side strokes
-    following a flared foot, a waist and the swollen head, a slight kink;
-    the knuckled head in dabs; bark fissures and lights in short broken
+    following a flared foot, a waist and the swollen head, a slight kink,
+    the silhouette strokes blunt and cooler (see friction 5); the knuckled
+    head as stumps of old cuts pushed up out of it; on the big tree a dark
+    split cleft with a lit lip; bark fissures and lights in short broken
     strokes; the rods pulled up out of the head with a pointed rigger in a
     fan, arching outward, reloaded every six rods with a slightly different
-    brown; snow on the head; snow dragged across the foot.
-11. **details**: grass and reeds in clumps, flicked up with the pointed
-    rigger; crows.
+    brown; snow on the head; a drift heaped against the foot in short level
+    strokes, lit on top.
+11. **details**: an old fence of weathered posts across the field from the
+    river to the path (two fallen), snow-capped, drifted at the feet; reeds
+    standing out of the ice by the left bank; grass and reeds in clumps
+    along the banks and in a few wind-scoured patches, flicked up with the
+    pointed rigger; crows.
 12. **figure**: legs, the coat in five overlapping strokes flaring below the
     waist, arms, a fold and belt, collar, head, a tall hat, a stick; snow
     dragged across the feet. Painted after the grass so the grass doesn't
     cross him.
-13. **finish**: aged varnish, craquelure, relief light (`Finish::aged`).
+13. **finish**: aged varnish, craquelure made finer and cleaner than
+    `Cracks::aged` (depth 12 µm, dirt 0.2, veil 0.3: a picture kept well;
+    the default network dominated the quiet sky), relief light.
 
 ## FRICTION
 
-(Running list, most painful first at the end; see the final summary.)
+Top five first, then the rest in the order I hit them.
 
-1. **Editing a helper function below `main` stales every checkpoint.** My
-   willow and figure are helper functions (as they should be: one tree
-   motif called eleven times). Per the staleness model, "everything after
-   the top-level item that holds it" counts for every stage, so tweaking
-   the figure made "fields" stale. Workaround: `--stale-ok --ckpt` on almost
-   every iteration, which trains the painter to ignore the staleness check
-   entirely. A per-stage "which helpers does this block call" or a
-   `// ckpt: from <stage>` tag for fn items would fix it.
-2. **Geometry at the top stales early stages even when they don't use it.**
+1. **A dark stroke laid with a pointed tip draws a warm tan outline
+   around itself.** Every trunk had a thin light-brown rim a few pixels
+   outside its dark silhouette, on both sides, at 3200px: an outline, the
+   most "digital" thing in the picture. It is in the paint (present at
+   `--stop willows`, before varnish and relief), and it went away when the
+   silhouette strokes used `point: 0.0`. My reading: the few outer hairs of a
+   pointed tuft lay a very thin film of the brown beyond the body of the
+   mark, and a thin brown film over white snow is, optically, a tan glaze.
+   Physically honest, maybe, but no painter sees it, because a real loaded
+   sable edge is crisp. Workaround: blunt tips and a cooler grey mixed
+   into the edge strokes, so any thin film reads as a soft grey edge.
+2. **Editing a helper function below `main` stales every checkpoint.** My
+   willow and figure are helper functions (as they
+   should be: one tree motif called eleven times). Per the staleness model,
+   "everything after the top-level item that holds it" counts for every
+   stage, so tweaking the figure made "fields" stale. Workaround:
+   `--stale-ok --ckpt` on almost every iteration, which trains the painter
+   to ignore the staleness check entirely (I then resumed *after* the stage
+   I had changed once and looked at a stale boat, which is exactly the
+   mistake the check exists to prevent). A per-stage "which helpers does this
+   block call" or a `// ckpt: from <stage>` tag for fn items would fix it.
+3. **Thin dark strokes over light snow looked like glass tubing.** Cast
+   shadows and sledge ruts painted as dragged filbert strokes of a darker,
+   low-hiding pile came out *lighter* than the snow at their centers with
+   dark ridged edges (3200px crop), and the ruts as beaded dashes.
+   Workaround: shadows and ruts as a transparent glaze (`st.glaze(0.85)`)
+   through a mask built from the sun's direction. That's closer to how a
+   shadow on snow was glazed, but a painter would just brush it: it should
+   work as a stroke too.
+4. **Variation written into a `color(x, y)` closure gets averaged away.** The
+   river, painted with one handling over one mask, came out as one even
+   band with a perfectly continuous edge; the planned sheen and snow
+   patches in the color function barely showed after aiming and the
+   badger. It read as a road in three iterations. Workaround: a darker base,
+   then the variation painted as separate gestures (snow tongues dragged by
+   hand from the banks, lean sheen strokes). Matches principles.md, but
+   the handling API invites the function route first.
+5. **Snow lying on top of things comes out as cotton balls.** A `touch` of
+   stiff white with a round sable is a round fuzzy blob; willow heads, the
+   boat, posts and the foot drifts all looked like wool or fog at 3200px
+   (the first foot drift of the big tree, a 40-unit filbert, was a grey
+   bow-tie smear). A lying cap or a heaped drift needs flat, pressed,
+   level marks; I rebuilt drifts as rows of short level filbert strokes,
+   narrower, lit on top. Still no easy mark for "a thin crisp cap of snow".
+
+6. **Geometry at the top stales early stages even when they don't use it.**
    The river masks live near the top (the ice and the fields need them);
-   changing the river's width staled the sky. Workaround again `--stale-ok`
-   (sound, since the sky doesn't read those masks, but the tool can't know).
-3. **Strokes laid as shading read as glassy tubes.** Cast shadows and
-   sledge ruts painted as dragged filbert strokes of a darker, low-hiding
-   pile came out *lighter* than the snow at their centers with dark ridged
-   edges, like plastic tubing (3200px crop), and the ruts as beaded dashes.
-   The mean-look aim plus relief lighting of the stroke ridges seems to make
-   any thin dark-over-light stroke look embossed. Workaround: shadows and
-   ruts as a transparent glaze (`st.glaze(0.85)`) through a mask built from
-   the sun's direction. That's closer to how a shadow on snow was glazed,
-   but a painter would just brush it: it should work as a stroke too.
-4. **A glaze covers whatever is under its mask, including trunks already
-   painted.** My first shadow glaze ran across the trunks of nearer willows
-   and lightened them into pale bands (a bluish scattering glaze over a dark
-   is lighter). Workaround: reorder, glaze the shadows before the willows.
-   Fine for a painter, but surprising: a transparent glaze was expected
-   only to darken.
-5. **Snow on the tops of things (willow heads, the boat, the post) comes out
-   as cotton balls.** A `touch` of stiff white with a round sable gives a
-   round fuzzy blob; a thin lying cap of snow needs a flat, dragged,
-   pressed-off mark. I made the touches smaller and leaner; still blobby at
-   3200px.
-6. **The ice first read as a road.** A river painted with one handling over
-   one mask is one even band with a perfectly continuous edge; the
-   `color(x, y)` closure varied the color but the aimed, blended result
-   flattened it again (the planned sheen and snow patches barely showed).
-   Workaround: paint the variation as separate gestures (snow tongues
-   dragged by hand from the banks) over a darker base. The lesson matches
-   principles.md: variation from a function gets averaged away; variation
-   from gestures survives.
-7. **No `Clone` on `Handling`.** To run the badger three times with an
-   angle I call `st.blend()` inside the loop. Minor.
-8. **No integer draw on `Rng`** (`below`, `pick`): I wrote
-   `(rng.f() * n as f32) as usize` with a clamp. Minor.
-9. **The mask edge is the edge.** The ice/field boundary is a hard,
-   perfectly continuous curve even with a soft ramp; the bank strokes on
-   top only partly hide it. Roughening would help (`Mask::roughen`), but a
-   painter would find the edge by painting the two sides against each
-   other; there's no easy way to say "let the field strokes overlap the ice
-   strokes irregularly".
-10. **Craquelure is strong at 1000px**: long straight crack lines cross the
-    quiet sky; `Finish::aged` gives no easy knob for a younger, finer net
-    other than building my own `Finish`.
+   changing the river's width staled the sky. `--stale-ok` again (sound
+   here, but the tool can't know).
+7. **A glaze covers whatever is under its mask, including trunks already
+   painted**, and a bluish scattering glaze over a dark *lightens* it: my
+   first shadow glaze ran across the nearer willows' trunks as pale bands.
+   Workaround: glaze the shadows before the willows. Fine for a painter,
+   but surprising.
+8. **The mask edge is the edge.** The ice/field boundary is a continuous
+   curve even with a soft ramp; the bank strokes on top only partly hide
+   it. A painter finds that edge by painting the two sides against each
+   other; there is no easy way to say "let the field strokes overlap the
+   ice irregularly".
+9. **`Cracks::aged` dominates a quiet sky** at both 1000 and 3200px (long,
+   dark, dense network). Knobs exist (`depth_um`, `dirt`, `veil`) but only
+   by reading crack.rs; `Finish::aged` has no gentler sibling.
+10. **Stroke shapes are points, not outlines.** Everything with a
+    silhouette (hull, coat, trunk) needed me to invent a raster of rows of
+    strokes between two curves; the first boat (strokes along one curve)
+    was a puck. Writing "fill this outline with level strokes, bow raked"
+    by hand is where most of my code went.
+11. **Pollard rods, crows and grass worked well** with the pointed rigger
+    and a reload every few marks: not friction, noted for balance.
+12. Minor API: no `Clone` on `Handling` (I call `st.blend()` inside the
+    loop to run the badger three times); no integer draw on `Rng`.
+13. **Speed was fine**: 1000px whole in 28 s, resumed late stages in about
+    1 s, a 3200px crop in 8 to 40 s, the whole 3200px in about 3 min.

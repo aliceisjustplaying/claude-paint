@@ -104,6 +104,10 @@ fn grow(rng: &mut Rng, out: &mut Vec<Br>, p: (f32, f32), a0: f32, w0: f32, dead:
         // tropism: thin shoots turn up toward the light, heavy near-level
         // limbs sag a little under their own weight
         let up = -FRAC_PI_2;
+        let edge = smoothstep(130.0, 40.0, pos.0) + smoothstep(870.0, 960.0, pos.0);
+        if edge > 0.0 {
+            a += ang_diff(up, a) * 0.12 * edge;
+        }
         if w < 5.0 {
             a += ang_diff(up, a) * 0.025 * vigor;
         } else if a.cos().abs() > 0.5 {
@@ -114,7 +118,7 @@ fn grow(rng: &mut Rng, out: &mut Vec<Br>, p: (f32, f32), a0: f32, w0: f32, dead:
         w *= (-step * 0.004).exp();
         pts.push(pos);
         ws.push(w);
-        if pos.1 > FOOT.1 - 30.0 || pos.0 < -40.0 || pos.0 > 1040.0 || pos.1 < -40.0 {
+        if pos.1 > FOOT.1 - 30.0 || pos.0 < 14.0 || pos.0 > 986.0 || pos.1 < 20.0 {
             tip = false;
             break;
         }
@@ -143,7 +147,7 @@ fn grow(rng: &mut Rng, out: &mut Vec<Br>, p: (f32, f32), a0: f32, w0: f32, dead:
         }
     }
     // clustered buds at a live tip: short shoots from one point
-    if tip && w0 < 3.0 && rng.chance(0.55) && out.len() < 40_000 {
+    if tip && w0 < 3.0 && rng.chance(0.3) && out.len() < 40_000 {
         let q = *pts.last().unwrap();
         let wl = *ws.last().unwrap();
         for _ in 0..rng.range(1.0, 3.0) as usize {
@@ -163,7 +167,7 @@ fn grow(rng: &mut Rng, out: &mut Vec<Br>, p: (f32, f32), a0: f32, w0: f32, dead:
 }
 
 fn internode(w: f32, rng: &mut Rng) -> f32 {
-    (3.5 + 2.4 * w).min(70.0) * rng.range(0.55, 1.45)
+    (5.0 + 2.4 * w).min(70.0) * rng.range(0.55, 1.45)
 }
 
 /// Resample a hand-placed polyline smoothly every `step` units with widths
@@ -236,12 +240,12 @@ fn build_tree(seed: u64) -> Tree {
     // scaffold limbs (x, y, width); dead ones silver and bare
     let defs: Vec<(Vec<(f32, f32, f32)>, bool, f32)> = vec![
         // A: the great left bough: out, rising, then level and twisting
-        (vec![(top.0 - 30.0, top.1 + 10.0, 50.0), (430.0, 735.0, 40.0), (370.0, 690.0, 32.0), (318.0, 668.0, 26.0), (262.0, 612.0, 21.0), (200.0, 590.0, 16.0), (150.0, 548.0, 11.0), (100.0, 530.0, 7.0)], false, 1.0),
+        (vec![(top.0 - 30.0, top.1 + 10.0, 50.0), (430.0, 735.0, 40.0), (370.0, 690.0, 32.0), (318.0, 668.0, 26.0), (262.0, 612.0, 21.0), (205.0, 588.0, 16.0), (165.0, 546.0, 11.0), (140.0, 520.0, 7.0)], false, 1.0),
         // B: centre-left leader, alive low, dead above (stag-head)
         (vec![(top.0 - 12.0, top.1, 52.0), (482.0, 690.0, 42.0), (470.0, 590.0, 34.0), (446.0, 500.0, 28.0), (440.0, 430.0, 24.0)], false, 0.85),
         (vec![(440.0, 432.0, 24.0), (428.0, 360.0, 19.0), (404.0, 290.0, 15.0), (415.0, 225.0, 11.0), (402.0, 170.0, 8.0), (408.0, 140.0, 6.0)], true, 0.0),
         // C: the heavy right elbow, nearly level: holds the most snow
-        (vec![(top.0 + 26.0, top.1 + 14.0, 48.0), (600.0, 752.0, 38.0), (672.0, 728.0, 31.0), (748.0, 690.0, 25.0), (812.0, 676.0, 19.0), (870.0, 640.0, 13.0), (925.0, 610.0, 8.0)], false, 1.0),
+        (vec![(top.0 + 26.0, top.1 + 14.0, 48.0), (600.0, 752.0, 38.0), (672.0, 728.0, 31.0), (748.0, 690.0, 25.0), (812.0, 676.0, 19.0), (850.0, 642.0, 13.0), (880.0, 612.0, 8.0)], false, 1.0),
         // D: centre-right riser, dead and broken off short
         (vec![(top.0 + 10.0, top.1 - 6.0, 44.0), (560.0, 680.0, 36.0), (586.0, 580.0, 30.0), (606.0, 500.0, 25.0)], false, 0.9),
         (vec![(606.0, 502.0, 25.0), (618.0, 430.0, 21.0), (636.0, 372.0, 19.0)], true, 0.0),
@@ -303,10 +307,10 @@ fn build_tree(seed: u64) -> Tree {
     // the sawn stump of a lost limb, left side of the bole: a short thick
     // cylinder out and up from the bole, cut clean
     let i = tp.iter().position(|p| p.1 < fy - 236.0).unwrap_or(0);
-    let base = (tp[i].0 - tw[i] * 0.36, tp[i].1);
-    let a = -PI + 0.5; // out to the left and up
-    let (len, sw) = (30.0, 30.0);
-    let (sp, sws) = smooth(&[(base.0 + 8.0, base.1 + 6.0, sw * 1.3), (base.0 - len * 0.5 * a.cos().abs(), base.1 + len * 0.5 * a.sin(), sw * 1.05), (base.0 - len * a.cos().abs(), base.1 + len * a.sin(), sw)], 2.0);
+    let base = (tp[i].0 - tw[i] * 0.47, tp[i].1);
+    let a = -PI + 0.62; // out to the left and up
+    let (len, sw) = (30.0, 24.0);
+    let (sp, sws) = smooth(&[(base.0 + 12.0, base.1 + 8.0, sw * 1.9), (base.0 + 0.4 * len * a.cos(), base.1 + 0.4 * len * a.sin(), sw * 1.15), (base.0 + len * a.cos(), base.1 + len * a.sin(), sw)], 2.0);
     let stump = Br { pts: sp, w: sws, dead: false, tip: false };
     Tree { trunk, outline, limbs, all, stump, crotches }
 }
@@ -476,12 +480,12 @@ fn main() {
     let twig_col = hex("#3a322c");
     // lit from the brighter sky, upper left, diffuse
     let light = |nx: f32, ny: f32| smoothstep(-0.9, 0.9, -(nx * 0.75 + ny * 0.65));
-    let bodies: Vec<&Br> = std::iter::once(&tree.trunk).chain(std::iter::once(&tree.stump)).chain(tree.limbs.iter()).chain(tree.all.iter().filter(|b| b.w[0] > BODY_W)).collect();
+    let bodies: Vec<&Br> = std::iter::once(&tree.stump).chain(std::iter::once(&tree.trunk)).chain(tree.limbs.iter()).chain(tree.all.iter().filter(|b| b.w[0] > BODY_W)).collect();
 
     if o.stage("trunk", &mut c, &mut rng) {
         let t1 = std::time::Instant::now();
         let mut shape = Shape::new().smooth_poly(&tree.outline);
-        for b in bodies.iter().skip(1) {
+        for b in bodies.iter().filter(|b| !std::ptr::eq(**b, &tree.trunk)) {
             // only the thick part of each branch is a body
             let k = b.w.iter().position(|&w| w < BODY_W).unwrap_or(b.w.len());
             if k >= 2 {
@@ -492,7 +496,8 @@ fn main() {
         eprintln!("  wood mask {:.1}s", t1.elapsed().as_secs_f32());
         // underpaint: dark umber through the whole wood, thin
         let hd = paint::Handling::new(Tool { lay: 0.7, ..Tool::filbert(7.0) })
-            .mixed(pal, 0.3)
+            .mixed(pal, 0.08)
+            .load(1.0)
             .color(|_, _| bark_mid)
             .angle(|_, _| -FRAC_PI_2)
             .angle_jitter(0.4)
@@ -501,19 +506,24 @@ fn main() {
             .clip(true)
             .threshold(0.35);
         c.work(&wood_m, &hd, 301);
-        c.wait(10.0);
+        c.dry();
         // modeling: strokes along each limb, side by side across its width,
         // shadow side to lit side
         let mut r = Rng::new(o.seed + 303);
-        let mut brushes: Vec<Held> = [1.5f32, 3.0, 6.0, 10.0].iter().enumerate().map(|(i, &wd)| Held::new(Tool { point: 0.6, ..Tool::round_sable(wd) }, 310 + i as u64)).collect();
+        let mut brushes: Vec<Held> = vec![
+            Held::new(Tool { point: 0.6, ..Tool::round_sable(1.5) }, 310),
+            Held::new(Tool { point: 0.3, ..Tool::round_sable(3.0) }, 311),
+            Held::new(Tool { lay: 1.1, ..Tool::filbert(6.0) }, 312),
+            Held::new(Tool { lay: 1.1, ..Tool::filbert(10.0) }, 313),
+        ];
         let bi_for = |wd: f32| if wd < 1.6 { 0 } else if wd < 3.5 { 1 } else if wd < 7.0 { 2 } else { 3 };
-        for b in &bodies {
+        for b in bodies.iter().filter(|_| std::env::var("SKIPL").is_err()) {
             let n = b.w.iter().position(|&w| w < BODY_W).unwrap_or(b.w.len());
             if n < 3 {
                 continue;
             }
             let wmax = b.w[..n].iter().cloned().fold(0.0, f32::max);
-            let lanes = ((wmax / 4.5).ceil() as usize).clamp(2, 26);
+            let lanes = ((wmax / 3.5).ceil() as usize).clamp(2, 34);
             for lane in 0..lanes {
                 let u = ((lane as f32 + 0.5) / lanes as f32 * 2.0 - 1.0) * 0.92;
                 let mut i0 = 0;
@@ -521,7 +531,7 @@ fn main() {
                     let i1 = (i0 + (r.range(8.0, 22.0) as usize)).min(n - 1);
                     let seg: Vec<(f32, f32)> = (i0..=i1).map(|i| b.across(i, u)).collect();
                     let mid = (i0 + i1) / 2;
-                    let wd = b.w[mid] / lanes as f32 * 1.7;
+                    let wd = b.w[mid] / lanes as f32 * 2.2;
                     let (dx, dy) = b.dir(mid);
                     let lit = light(-dy * u.signum() * u.abs().sqrt(), dx * u.signum() * u.abs().sqrt());
                     let lit = (lit * (1.0 - 0.35 * u.abs().powi(3)) + r.range(-0.08, 0.08)).clamp(0.0, 1.0);
@@ -532,8 +542,8 @@ fn main() {
                         mix(base, hex("#6b6a5a"), 0.2 * r.f())
                     };
                     let hb = &mut brushes[bi_for(wd)];
-                    let p = hb.tool.pressure_for(wd.min(hb.tool.width)).clamp(0.15, 1.0);
-                    hb.reload(pal.paint(col, 0.2), 0.7);
+                    let p = hb.tool.pressure_for(wd.min(hb.tool.width)).clamp(0.45, 1.0);
+                    hb.reload(pal.paint(col, 0.06), 1.0);
                     c.drag(hb, &Gesture::new(seg).pressure(p, p * 0.9).ramps(0.1, 0.2).shake(0.4), Some(&wood_m));
                     i0 = i1.saturating_sub(1).max(i0 + 1);
                 }
@@ -545,7 +555,7 @@ fn main() {
         // the lit ridges between them picked out in gray
         let mut rig = Held::new(Tool { point: 1.0, ..Tool::round_sable(1.8) }, 330);
         let mut ridge = Held::new(Tool { point: 0.8, ..Tool::round_sable(2.0) }, 331);
-        for b in bodies.iter().filter(|b| b.w[0] > 12.0) {
+        for b in bodies.iter().filter(|b| b.w[0] > 12.0 && std::env::var("SKIPF").is_err()) {
             let n = b.pts.len();
             let k_end = b.w.iter().position(|&w| w < 10.0).unwrap_or(n);
             let lines = (b.w[0] / 2.6) as usize;
@@ -574,6 +584,15 @@ fn main() {
                             ridge.reload(pal.paint(mix(bark_lit, hex("#9c9a94"), lit), 0.2), 0.5);
                             c.drag(&mut ridge, &Gesture::new(sh).pressure(0.35, 0.25).ramps(0.2, 0.3).shake(0.15), Some(&wood_m));
                         }
+                    }
+                    // a cross-break at the fissure's end: the bark cracks
+                    // across into blocks
+                    if !b.dead && r.chance(0.25) {
+                        let du = r.range(0.08, 0.2) * if r.chance(0.5) { 1.0 } else { -1.0 };
+                        let a0 = b.across(j, u.clamp(-0.97, 0.97));
+                        let a1 = b.across((j + 1).min(k_end - 1), (u + du).clamp(-0.97, 0.97));
+                        rig.reload(pal.paint(hex("#1f1a17"), 0.25), 0.5);
+                        c.drag(&mut rig, &Gesture::line(a0, a1).pressure(0.4, 0.25).ramps(0.2, 0.3).shake(0.2), Some(&wood_m));
                     }
                     i = j + r.range(1.0, 5.0) as usize;
                 }
@@ -731,13 +750,14 @@ fn main() {
                 }
             }
         }
-        // the main fork holds a heap, and the stump a cap
-        let mut hb = Held::new(Tool::filbert(8.0), 506);
-        let (fx0, fy0) = (FOOT.0 + 14.0, FORK_Y + 6.0);
-        for k in 0..4 {
-            let s = 22.0 - k as f32 * 4.0;
-            hb.reload(pal.paint(if k < 2 { body } else { white }, 0.02).with_stiff(0.85), 1.0);
-            c.drag(&mut hb, &Gesture::new(vec![(fx0 - s, fy0 - s * 0.1 - k as f32), (fx0, fy0 - s * 0.45 - k as f32 * 1.5), (fx0 + s, fy0 - s * 0.05 - k as f32)]).pressure(0.8, 0.7).ramps(0.25, 0.3).shake(0.3), None);
+        // the main fork holds snow lodged between the limbs: a few uneven
+        // lumps, not one heap
+        let mut hb = Held::new(Tool { point: 0.5, ..Tool::round_sable(6.0) }, 506);
+        let (fx0, fy0) = (FOOT.0 + 16.0, FORK_Y + 2.0);
+        for &(dx, dy, s, k) in &[(-14.0f32, 4.0f32, 9.0f32, 0.0f32), (-3.0, -2.0, 11.0, 0.3), (9.0, 1.0, 8.0, 0.1), (19.0, 6.0, 6.0, 0.6), (-24.0, 9.0, 5.0, 0.5), (2.0, -5.0, 6.0, 1.0)] {
+            let (x, y) = (fx0 + dx, fy0 + dy);
+            hb.reload(pal.paint(mix(body, white, k), 0.02).with_stiff(0.85), 0.9);
+            c.drag(&mut hb, &Gesture::new(vec![(x - s, y + s * 0.15), (x - s * 0.2, y - s * 0.3), (x + s * 0.7, y - s * 0.1), (x + s, y + s * 0.2)]).pressure(0.55, 0.4).ramps(0.3, 0.35).shake(0.6), None);
         }
         c.wait(30.0);
     }
@@ -745,37 +765,43 @@ fn main() {
     // ---------------------------------------------------- foot and details
     if o.stage("foot", &mut c, &mut rng) {
         let mut r = Rng::new(o.seed + 601);
-        // snow drifted against the foot of the trunk: the mound covers the
-        // root flare, higher on the windward left, its edge uneven
+        // snow drifted against the foot of the trunk: it buries the root
+        // flare, heaped a little higher on the windward left, its top edge
+        // uneven. Laid in strokes that follow its surface, row under row,
+        // lifting off at the ends into the snow already there
         let (fx, fy) = FOOT;
         let edge = Fbm::new(o.seed as u32 + 602, 3, 18.0);
         let mound_top = move |x: f32| {
-            let d = (x - fx - 10.0) / 120.0;
-            fy + 22.0 - 30.0 * (-d * d * 2.0).exp() - 6.0 * (-((x - fx + 60.0) / 30.0).powi(2)).exp() + 4.0 * edge.get(x, 0.0)
+            let d = (x - fx - 5.0) / 110.0;
+            fy + 24.0 - 34.0 * (-d * d * 1.5).exp() - 5.0 * (-((x - fx + 55.0) / 30.0).powi(2)).exp() + 3.5 * edge.get(x, 0.0)
         };
-        let mound = Mask::from_fn(f, move |x, y| if (x - fx).abs() < 240.0 { smoothstep(mound_top(x) - 0.8, mound_top(x) + 0.8, y) } else { 0.0 });
-        let hd = paint::Handling::new(Tool::filbert(5.0))
-            .mixed(pal, 0.08)
-            .color(move |x, y| {
-                let top = mound_top(x);
-                // lit on top, cooler down its face toward us
-                mix(hex("#eeebe2"), snow_col(x, y), smoothstep(top, top + 30.0, y))
-            })
-            .angle(move |x, _| (mound_top(x + 2.0) - mound_top(x - 2.0)).atan2(4.0))
-            .angle_jitter(0.1)
-            .length(8.0, 24.0)
-            .coverage(2.6)
-            .clip(true)
-            .threshold(0.3);
-        let near = Mask::from_fn(f, move |x, y| if (x - fx).abs() < 240.0 && y < mound_top(x) + 45.0 { 1.0 } else { 0.0 });
-        c.work(&mound.clone().mul(&near), &hd, 603);
+        let mut mb = Held::new(Tool { lay: 1.0, ..Tool::filbert(6.0) }, 603);
+        for k in 0..18 {
+            let dy = k as f32 * 2.3;
+            let half = 150.0 + 20.0 * r.f();
+            let pieces = 4;
+            for q in 0..pieces {
+                let xa = fx - half + (2.0 * half) * q as f32 / pieces as f32 - 10.0 + r.range(-6.0, 6.0);
+                let xb = xa + 2.0 * half / pieces as f32 + 22.0;
+                let pts: Vec<(f32, f32)> = (0..=8).map(|i| {
+                    let x = xa + (xb - xa) * i as f32 / 8.0;
+                    (x, mound_top(x) + dy + 0.8)
+                }).collect();
+                let (mx, my) = pts[4];
+                let col = mix(hex("#efece4"), snow_col(mx, my), smoothstep(0.0, 26.0, dy) * 0.9 + 0.1);
+                mb.reload(pal.paint(col, 0.05).with_stiff(0.8), 0.9);
+                // ends lifted: the outer pieces fade into the ground snow
+                let (pa, pb) = if q == 0 { (0.15, 0.7) } else if q == pieces - 1 { (0.7, 0.15) } else { (0.7, 0.7) };
+                c.drag(&mut mb, &Gesture::new(pts).pressure(pa, pb).ramps(0.25, 0.25).shake(0.35), None);
+            }
+        }
         c.wait(10.0);
         // the shadowed seam where the snow meets the bark
         let mut sm = Held::new(Tool { point: 1.0, ..Tool::round_sable(2.0) }, 607);
-        let xs: Vec<f32> = (0..=40).map(|i| fx - 95.0 + i as f32 * 4.6).collect();
+        let xs: Vec<f32> = (0..=30).map(|i| fx - 70.0 + i as f32 * 4.8).collect();
         let seam: Vec<(f32, f32)> = xs.iter().map(|&x| (x, mound_top(x) + 0.8)).collect();
         sm.reload(pal.paint(hex("#8f959c"), 0.1), 0.6);
-        c.drag(&mut sm, &Gesture::new(seam).pressure(0.45, 0.45).ramps(0.2, 0.2).shake(0.3), None);
+        c.drag(&mut sm, &Gesture::new(seam).pressure(0.35, 0.3).ramps(0.3, 0.3).shake(0.3), None);
         // dry grass and weed stalks through the snow, in patches, more on
         // the rise and near the tree: fine upturning strokes over the snow
         let patch = Fbm::new(o.seed as u32 + 608, 3, 110.0);
@@ -813,7 +839,7 @@ fn main() {
             for _ in 0..r.range(1.0, 4.0) as usize {
                 let a = r.range(0.0, 2.0 * PI);
                 let (lx, ly) = (x + 2.0 * a.cos(), y + 2.0 * a.sin() + 1.0);
-                lb.reload(pal.paint(mix(hex("#6a462a"), hex("#8c6640"), r.f()), 0.2), 0.6);
+                lb.reload(pal.paint(mix(hex("#5e4631"), hex("#7c6246"), r.f()), 0.2), 0.6);
                 c.drag(&mut lb, &Gesture::new(vec![(lx, ly), (lx + 1.8 * a.cos(), ly + 2.6)]).pressure(0.55, 0.25).ramps(0.2, 0.4).shake(0.5), None);
             }
         }
@@ -834,7 +860,9 @@ fn main() {
     }
     o.end(&mut c, &mut rng);
     c.dry();
-    c.relief(st.relief.0, st.relief.1);
+    if std::env::var("NORELIEF").is_err() {
+        c.relief(st.relief.0, st.relief.1);
+    }
     o.save(&mut c);
 }
 

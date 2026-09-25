@@ -35,7 +35,7 @@ fn main() {
     let hz = f.per_column(move |x: f32| 468.0 + 2.0 * n1.get(x, 0.0) - 3.0 * smoothstep(300.0, 700.0, x));
     // low wooded rises far off, left and right, almost lost in the haze
     let hill = f.per_column(move |x: f32| {
-        468.0 - 3.0 - 11.0 * (-((x - 40.0) / 200.0).powi(2)).exp() - 9.0 * (-((x - 960.0) / 170.0).powi(2)).exp() - 4.0 * n2.get(x, 3.0).abs() - 3.0 * smoothstep(300.0, 700.0, x)
+        468.0 - 3.0 - 6.0 * (-((x - 40.0) / 220.0).powi(2)).exp() - 9.0 * (-((x - 960.0) / 170.0).powi(2)).exp() - 4.0 * n2.get(x, 3.0).abs() - 3.0 * smoothstep(300.0, 700.0, x)
     });
     let soft = |d: f32, e: f32| smoothstep(-e, e, d);
     let sky = Mask::from_fn(f, move |x, y| 1.0 - soft(y - hill(x) - 3.0, 0.8));
@@ -190,7 +190,7 @@ fn main() {
         c.drag(&mut sab, &Gesture::new(pts).pressure(0.6, 0.35).ramps(0.05, 0.3).shake(0.3), Some(&ruin));
         // the tracery has fallen: a stump of the mullion on the sill, and
         // the springing of one sub-arch still hanging from the left jamb
-        let tr = pal.paint(hex("#686061"), 0.1).with_hiding(0.95).with_stiff(0.8);
+        let tr = pal.paint(hex("#736b6b"), 0.2).with_hiding(0.9).with_stiff(0.8);
         let mut mul = Held::new(Tool::round_sable(2.6), 202);
         mul.load(tr, 0.9);
         c.drag(&mut mul, &Gesture::new(vec![(rx + 0.4, 430.0), (rx + 0.2, 414.0), (rx - 0.3, 402.0)]).pressure(0.8, 0.7).ramps(0.05, 0.05).shake(0.4), None);
@@ -929,6 +929,38 @@ fn main() {
     }
 
     if o.stage("grass", &mut c, &mut rng) {
+        // the banks: a little impasto of lead white along the crests where
+        // they catch the sky [NG p.50: slight impasto in foreground snow],
+        // and below each crest a lean cool shade on the face turned to us
+        let mut imp = Held::new(Tool { lay: 1.6, ragged: 0.35, ..Tool::filbert(6.0) }, 811);
+        let mut shd = Held::new(Tool { ragged: 0.45, push: 0.02, pickup: 0.05, ..Tool::filbert(12.0) }, 812);
+        for (x0, x1, which) in [(-10.0f32, 440.0f32, 0), (700.0, 1010.0, 1)] {
+            let crest = move |x: f32| if which == 0 { bank_l(x.clamp(0.0, 999.0)) } else { bank_r(x.clamp(0.0, 999.0)) };
+            let mut x = x0;
+            while x < x1 {
+                let len = rng.range(25.0, 70.0);
+                let pts: Vec<(f32, f32)> = (0..=5).map(|k| {
+                    let xx = x + len * k as f32 / 5.0;
+                    (xx, crest(xx) + rng.range(-0.6, 0.6))
+                }).collect();
+                // (not across the oak's trunk, which stands in the bank)
+                let clear_of_oak = x + len < 872.0 || x > 938.0;
+                if boulder.sample(x + len * 0.5, crest(x + len * 0.5)) < 0.1 && clear_of_oak {
+                    if rng.chance(0.45) {
+                        let a = rng.range(0.1, 0.5);
+                        let b = (a + rng.range(0.25, 0.5)).min(1.0);
+                        let part: Vec<(f32, f32)> = pts.iter().enumerate().filter(|(k, _)| { let u = *k as f32 / 5.0; u >= a - 0.1 && u <= b + 0.1 }).map(|(_, p)| *p).collect();
+                        imp.reload(pal.paint(hex("#ebe9e5"), 0.03).with_hiding(0.96).with_stiff(1.0), rng.range(0.5, 0.8));
+                        if part.len() >= 2 { c.drag(&mut imp, &Gesture::new(part).pressure(rng.range(0.25, 0.5), rng.range(0.1, 0.3)).ramps(0.3, 0.5).shake(0.4), None); }
+                    }
+                    let low: Vec<(f32, f32)> = pts.iter().map(|&(px, py)| (px, py + rng.range(6.0, 12.0))).collect();
+                    shd.reload(pal.paint(hex("#a4abbb"), 0.55), rng.range(0.2, 0.35));
+                    c.drag(&mut shd, &Gesture::new(low).pressure(rng.range(0.35, 0.6), rng.range(0.2, 0.4)).ramps(0.3, 0.4).shake(0.5), None);
+                }
+                x += len * rng.range(0.6, 1.0);
+            }
+        }
+        c.wait(90.0);
         // dry grass through the snow, "fine upturning strokes" laid last
         // [NG p.56]: clumps along the banks, a few in the field
         let cols = [hex("#5e5242"), hex("#766a55"), hex("#34302b"), hex("#4b4439"), hex("#857a64"), hex("#3e3a36")];
@@ -984,12 +1016,18 @@ fn main() {
             }
         }
         // one on the snow by the track
-        for &(x, y) in &[(418.0f32, 596.0f32)] {
-            b.reload(black, 0.7);
-            c.drag(&mut b, &Gesture::new(vec![(x - 3.0, y - 2.0), (x, y - 2.8), (x + 3.0, y - 2.2)]).pressure(1.0, 0.9).ramps(0.1, 0.2), None);
-            c.drag(&mut b, &Gesture::new(vec![(x + 2.6, y - 2.6), (x + 4.2, y - 3.6)]).pressure(0.7, 0.4).ramps(0.1, 0.3), None);
-            c.drag(&mut b, &Gesture::new(vec![(x - 2.5, y - 2.2), (x - 5.0, y - 1.2)]).pressure(0.6, 0.1).ramps(0.1, 0.5), None);
-            c.drag(&mut b, &Gesture::new(vec![(x - 0.5, y - 1.0), (x - 0.4, y)]).pressure(0.2, 0.2).ramps(0.1, 0.1), None);
+        // one on the snow by the walker's trail, head down, pecking
+        let (x, y) = (418.0f32, 596.0f32);
+        let mut cb = Held::new(Tool::round_sable(2.6), 902);
+        cb.load(black, 0.8);
+        c.drag(&mut cb, &Gesture::new(vec![(x - 4.0, y - 3.4), (x - 0.5, y - 4.4), (x + 3.0, y - 3.4)]).pressure(0.9, 0.8).ramps(0.1, 0.2), None);
+        b.reload(black, 0.7);
+        c.drag(&mut b, &Gesture::new(vec![(x + 2.8, y - 3.6), (x + 4.6, y - 2.6), (x + 5.8, y - 1.4)]).pressure(0.8, 0.2).ramps(0.1, 0.5), None);
+        c.drag(&mut b, &Gesture::new(vec![(x - 3.5, y - 3.8), (x - 6.5, y - 4.8), (x - 8.0, y - 5.2)]).pressure(0.7, 0.1).ramps(0.1, 0.6), None);
+        let mut leg = Held::new(Tool { point: 1.0, ..Tool::rigger(0.5) }, 903);
+        leg.load(black, 0.6);
+        for dx in [-1.2f32, 0.6] {
+            c.drag(&mut leg, &Gesture::new(vec![(x + dx, y - 2.6), (x + dx + 0.3, y)]).pressure(0.6, 0.5).ramps(0.1, 0.1), None);
         }
         c.dry();
     }

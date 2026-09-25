@@ -194,3 +194,18 @@ Decisions: yes, fix the "strokes over dry paint keep their outlines" bug
 (failing test first). Keep cracks, but they're wrong. Skies need *more*
 texture, done right, not less (so Round 9's "no stippled veil" line fixed
 the wrong thing).
+
+## Alice on Round 10 (2026-09-25, unlabeled A, B, C; live reaction)
+"This feels like progress." First real quality jump in how they look;
+"not half bad ... almost tempted to say they're good, especially B and C".
+All three have an ominous "offness" she hasn't felt before and can't name.
+- A: trees nice, but zoomed in, twigs hang in the air. The snow is quite
+  nice; the stone is nice. Something ominous, something off.
+- B: impressive. The cracks still need work. Still some neatness: the
+  foreground grass just stops. Still the wiry trees (left background too):
+  "I think those are still wrong". The big trees and bushes finally look
+  nice, but the trunk is wrong: part too smooth, then a separate bit that
+  doesn't match. "Finally ... the right-ish direction."
+- C: also ominous; "probably the best one ... technically pretty good".
+  The texture still reads as JPEG artifacts ("I do not yet know how" to
+  fix it). The moon has a weird halo; "not sure that's how it works".

@@ -165,8 +165,7 @@ What I saw, judged as a painter would:
 - `Outline::is_open()`: true if the outline has lines and none is closed.
   An inset that consumes the shape has no lines. It is not open, and its
   `mask` is empty, so `o:mask() - o:inset(d):mask()` keeps the shape
-  (#5). The Lua `:mask()` guard should test `is_open()` instead of "has
-  no closed line"; that binding is the easel fixer's.
+  (#5). The Lua `:mask()` guard tests `is_open()`.
 
 ## Known issues
 

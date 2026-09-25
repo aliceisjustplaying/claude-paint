@@ -232,9 +232,8 @@ impl UserData for OutlineU {
     }
     fn add_methods<M: UserDataMethods<Self>>(m: &mut M) {
         m.add_method("mask", |_, o, ()| {
-            // no lines at all (an inset that ate the shape) is an empty mask;
-            // lines with none closed have no inside
-            if !o.o.lines.is_empty() && !o.o.lines.iter().any(|l| l.closed) {
+            // an inset that ate the shape is not open: its mask is empty
+            if o.o.is_open() {
                 return err("outline:mask(): this line is open; use :below() or :above() (or closed=true)");
             }
             Ok(wrap(o.o.mask(frame(&o.st)?)))

@@ -282,3 +282,14 @@ shows everyone) and still not round 2 level. "How do we teach Claudes to
 paint trees? We should stop and think about this."
 (Key: S = tree1, T = tree2, U = tree3, the one with the trunk and five
 limbs placed by hand and the fewest rules.)
+
+## Alice on Round 14, painter 1 (2026-09-25; "Ploughed field before Greifswald")
+"I kind of like it", partly because it is different; "it's not a
+Friedrich"; "very funny ... adorable". The field looks "extremely digital,
+almost obnoxiously digital", against a "more normal" sky that is "actually
+quite good". Three almost identical churches, resting on something she
+can't make out. Foreground rocks also "obnoxiously digital". "This is not
+what we're going for": the painter took the workshop notebook as
+instructions (it avoided every motif the notebook said painters converge
+on and added every "missing" thing). Revise the notebook so it doesn't
+instruct, and try again.

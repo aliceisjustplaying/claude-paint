@@ -87,6 +87,19 @@ units), horizon at y 1012, the trunk's foot at y 1112.
   the red-brown ground broke through the thin lay-in); snow foreground:
   longer calmer strokes and a light badger (was mottled like camouflage);
   fallen limb with a cool hollow under it and a lit upper edge.
+- 18:33 horizon: the far hedge broken into runs with gaps, a few far bare
+  trees (rigger trunk and twigs, a stipple haze for the crown; first try
+  read as pylons, crowns added); a drift crest across the foreground with
+  a cool lee.
+- 18:35 the bole now tapers into the crotch (it ended square where the
+  limbs left it); fork snow dabs removed (round white polka dots).
+- 18:38 side twiglets along all thin wood (13 000 hairline drags; the
+  crown's edge net was too thin), keeping the chosen skeleton rather than
+  regrowing it; a darker sky-light line on the upper side of level
+  branches thicker than 3.5 (on thinner ones it made hollow tubes).
+- 18:39 fallen limb crooked and tapering, a fork, a splintered butt, snow
+  in broken bands (it was a flat plank).
+- 18:40 clean whole run from scratch for the final.
 
 ## FRICTION
 
@@ -139,4 +152,60 @@ units), horizon at y 1012, the trunk's foot at y 1112.
 
 ## Critique
 
-(after the render)
+What works. The tree reads as an old oak and not a generic tree: crooked
+limbs that zigzag and thin as they go, a short massive bole that gives
+itself up into five limbs, a round live lower crown with a dead,
+silver-gray leader standing above it with its sawn-looking broken stubs,
+and bud clusters at the twig tips. It stays whole from the snow to the
+hairlines. The limbs look painted, not drawn: strokes along the wood, the
+edge held by one long stroke, bark as short fissures and dry-dragged
+ridges. The crown's fine net against the pale sky is the best passage.
+Snow on the limbs sits where the snow research says it should, as ridges
+on the level wood and nothing on steep or thin wood. The picture's
+quiet, a single tree under a low overcast with the horizon across its
+trunk, is the right mood.
+
+What reads as digital, harshly:
+- **The sky is a gradient.** Stippled and fused, it is paint up close,
+  but from across the room it is an even top-to-bottom ramp with faint
+  horizontal striation in the upper third. It has no cloud structure
+  worth the name. The sky got the fewest iterations because each costs
+  two minutes.
+- **The wood is one color.** Every limb is the same warm dark gray-brown;
+  there is no difference between near and far limbs, no moss-green on the
+  north side worth seeing, and the lit side of the bole is only slightly
+  lighter. Friedrich would have made the bole more particular: moss,
+  a hollow, bark plates.
+- **The branch drawing is too even in density.** The grower fills its
+  dome uniformly; a real old oak has clumps, gaps and a few big
+  characterful dead branches hanging across the crown. The dead top is
+  the only strong accident.
+- **The snow field is empty and smooth.** It is believable snow, but the
+  foreground has no particular detail except the tufts and the fallen
+  limb, and the drift crest barely registers.
+- **The snow on the limbs is thin.** At the whole-picture view it barely
+  reads; the tree could be in any cold month. More snow, or hoarfrost
+  on the twigs, would make it winter.
+- **The foot of the drift** is a little lumpy (a row of round stroke
+  ends along its top) and the stub on the bole looks like a sawn log
+  end glued on.
+- **Horizon** dotted and slightly mechanical at full size; acceptable at
+  the whole-picture view.
+
+If I had another hour: build the sky with the `atmos` fields (a real
+overcast deck with a paler break low on the left where the sun is), vary
+the wood color by limb and by lit side, clump the crown (a density field
+on the grower), paint a hollow and moss on the bole, and more snow.
+
+## Top five friction points
+
+1. No stroke that tapers from thick to a point with a blunt brush; limbs
+   end in caps unless handed to a pointed round (FRICTION 1).
+2. No "handling along a path": parallel drags across a limb band into
+   seams and lobed edges (FRICTION 2).
+3. Checkpoint staleness counts helper code above `main` for every stage
+   (FRICTION 3).
+4. The sky dominates render time, so it gets the fewest looks
+   (FRICTION 4).
+5. A mask-bounded passage has a cut edge unless its color is made from
+   its surroundings (FRICTION 5).

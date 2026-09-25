@@ -654,6 +654,24 @@ fn main() {
             held.reload(pal.paint(col, 0.12), 0.8);
             c.drag(&mut held, &Gesture::new(p.clone()).pressure(p0, p0).swell(swell).ramps(0.03, 0.08).shake(0.35), None);
         }
+        // the sky's light along the upper side of the level ones
+        let mut lt = Held::new(Tool { point: 1.0, ..Tool::round_sable(1.6) }, o.seed + 503);
+        for (p, w, dead) in &pieces {
+            let (p, w) = densify(p, w, 2.5);
+            if w[0] < 3.5 || p.len() < 5 {
+                continue;
+            }
+            let (a0, a1) = (p[0], p[p.len() - 1]);
+            let level = ((a1.0 - a0.0) / ((a1.0 - a0.0).powi(2) + (a1.1 - a0.1).powi(2)).sqrt().max(1e-3)).abs();
+            if level < 0.45 {
+                continue;
+            }
+            let up_side = if (a1.0 - a0.0) >= 0.0 { -0.6 } else { 0.6 };
+            let line = offset_line(&p, &w, up_side);
+            let e = (line.len() * 2 / 3).max(3);
+            lt.reload(pal.paint(if *dead { hex("#a7a39b") } else { hex("#5a5650") }, 0.12), 0.4);
+            c.drag(&mut lt, &Gesture::new(line[..e].to_vec()).pressure(0.25, 0.05).ramps(0.2, 0.5).shake(0.5), None);
+        }
         c.wait(20.0);
     }
 
@@ -720,6 +738,38 @@ fn main() {
                 c.drag(&mut fine, &Gesture::new(pts).pressure(p0, 0.0).ramps(0.02, 0.6).shake(0.4), None);
             }
         }
+        // side twiglets along the thin wood: the net at the crown's edge
+        let mut side = 0;
+        for ax in axes.iter().filter(|a| !a.dead && !a.shoot) {
+            for (p, w) in runs(ax, 0.0, 1.5) {
+                let (p, w) = densify(&p, &w, 3.0);
+                for i in 1..p.len().saturating_sub(1) {
+                    if hr.f() > 0.45 {
+                        continue;
+                    }
+                    let a0 = (p[i + 1].1 - p[i - 1].1).atan2(p[i + 1].0 - p[i - 1].0);
+                    let sgn = if hr.f() < 0.5 { -1.0 } else { 1.0 };
+                    let a = a0 + sgn * hr.range(0.45, 1.0);
+                    let l = hr.range(3.0, 9.0) * (0.6 + 0.4 * (1.5 - w[i]).max(0.0));
+                    let q = p[i];
+                    let bend = hr.range(-0.35, 0.35);
+                    let pts: Vec<(f32, f32)> = (0..4)
+                        .map(|k| {
+                            let t = k as f32 / 3.0;
+                            let aa = a + bend * t;
+                            (q.0 + aa.cos() * l * t, q.1 + aa.sin() * l * t)
+                        })
+                        .collect();
+                    if side % 6 == 0 {
+                        fine.reload(pal.paint(mix(hex("#38312b"), hex("#554b44"), hr.f(), Mix::Pigment), 0.2), 0.6);
+                    }
+                    side += 1;
+                    let p0 = tool_f.pressure_for((w[i] * 0.6).clamp(0.3, 0.7)).max(0.03);
+                    c.drag(&mut fine, &Gesture::new(pts).pressure(p0, 0.0).ramps(0.02, 0.6).shake(0.4), None);
+                }
+            }
+        }
+        eprintln!("side twiglets {side}");
         // last year's leaves still hanging on young low shoots (marcescence)
         let mut lf = Held::new(Tool::round_sable(2.2), o.seed + 604);
         let mut leaves = 0;
@@ -828,15 +878,26 @@ fn main() {
         let dh = st.body().color(driftc).angle(|_, _| 0.0).angle_jitter(0.3).length(6.0, 18.0).coverage(2.6).medium(0.08).pressure(0.5, 0.8).curve(0.12, 0.3);
         c.work(&drift_m, &dh, 807);
         // the fallen limb, lying right of the tree, broken from the crown
-        let limb: Vec<(f32, f32)> = vec![(560.0, 1150.0), (610.0, 1146.0), (655.0, 1149.0), (700.0, 1144.0), (735.0, 1147.0)];
+        // crooked, thick at its broken butt (left), thinning to the right
+        let limb: Vec<(f32, f32)> = vec![(558.0, 1151.0), (584.0, 1148.5), (607.0, 1149.5), (628.0, 1146.0), (655.0, 1148.0), (676.0, 1145.5), (700.0, 1146.5), (722.0, 1143.0), (738.0, 1144.5)];
         // its shadow first: a cool hollow in the snow under it
         let mut sh = Held::new(Tool::filbert(8.0), o.seed + 808);
         sh.reload(pal.paint(hex("#a3a9b4"), 0.15), 0.7);
         let under: Vec<(f32, f32)> = limb.iter().map(|&(x, y)| (x + 3.0, y + 4.0)).collect();
         c.drag(&mut sh, &Gesture::new(under).pressure(0.5, 0.3).ramps(0.2, 0.4).shake(0.6), None);
-        let mut lb = Held::new(Tool::round_sable(7.0), o.seed + 803);
+        let mut lb = Held::new(Tool::round_sable(8.5), o.seed + 803);
         lb.reload(pal.paint(hex("#34302c"), 0.1), 0.9);
-        c.drag(&mut lb, &Gesture::new(limb.clone()).pressure(0.8, 0.45).ramps(0.05, 0.2).shake(0.5), None);
+        c.drag(&mut lb, &Gesture::new(limb.clone()).pressure(0.95, 0.3).swell(vec![1.0, 1.05, 0.9, 1.0, 0.85, 0.9]).ramps(0.02, 0.3).shake(0.5), None);
+        // a fork going off to the back, and the splintered butt
+        let mut fk = Held::new(Tool { point: 1.0, ..Tool::round_sable(4.0) }, o.seed + 811);
+        fk.reload(pal.paint(hex("#3a3530"), 0.1), 0.8);
+        let p0 = fk.tool.pressure_for(3.2);
+        c.drag(&mut fk, &Gesture::new(vec![(652.0, 1147.0), (668.0, 1141.0), (686.0, 1138.5), (703.0, 1134.0)]).pressure(p0, p0 * 0.3).ramps(0.05, 0.4).shake(0.5), None);
+        let mut sp_b = Held::new(Tool { point: 1.0, ..Tool::rigger(2.0) }, o.seed + 810);
+        for &(dy, l) in &[(-2.0f32, 7.0f32), (0.5, 9.0), (2.5, 6.0)] {
+            sp_b.reload(pal.paint(hex("#7d766c"), 0.1), 0.6);
+            c.drag(&mut sp_b, &Gesture::new(vec![(561.0, 1151.0 + dy), (561.0 - l, 1151.0 + dy * 1.4)]).pressure(0.45, 0.0).ramps(0.05, 0.7).shake(0.6), None);
+        }
         // bark lit along its upper side
         let mut lt = Held::new(Tool { point: 1.0, ..Tool::round_sable(2.4) }, o.seed + 809);
         lt.reload(pal.paint(hex("#6e6a62"), 0.1), 0.6);
@@ -855,8 +916,12 @@ fn main() {
         // snow on the fallen limb and drifted against it
         let mut sb = Held::new(Tool { point: 0.5, ..Tool::round_sable(3.0) }, o.seed + 805);
         sb.reload(pal.paint(hex("#ece8dc"), 0.02).with_stiff(0.95), 0.9);
-        let top: Vec<(f32, f32)> = limb.iter().map(|&(x, y)| (x, y - 3.2)).collect();
-        c.drag(&mut sb, &Gesture::new(top).pressure(0.55, 0.4).swell(vec![1.0, 0.6, 1.1, 0.8, 1.0]).ramps(0.1, 0.3).shake(0.6), None);
+        // in broken bands along its top
+        for w in limb.windows(3).step_by(2) {
+            let top: Vec<(f32, f32)> = w.iter().map(|&(x, y)| (x, y - 3.0)).collect();
+            sb.reload(pal.paint(hex("#ebe7dc"), 0.02).with_stiff(0.95), 0.8);
+            c.drag(&mut sb, &Gesture::new(top).pressure(0.55, 0.35).swell(vec![0.8, 1.2, 0.7]).ramps(0.2, 0.35).shake(0.6), None);
+        }
         // dry grass and weeds through the snow
         let mut gb = Held::new(Tool { point: 1.0, ..Tool::rigger(1.0) }, o.seed + 806);
         // tufts along an old field margin running off to the left, buried

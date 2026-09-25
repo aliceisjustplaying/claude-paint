@@ -153,7 +153,14 @@ fn paint_limb(c: &mut paint::Canvas, l: &Limb, live: Paint, dead: Paint, seed: u
         let w0 = l.w[i0].max(0.35);
         let is_dead = l.dead_at(i0);
         let mut i1 = i0 + 1;
-        while i1 < n - 1 && l.w[i1] > w0 * 0.5 && i1 - i0 < 10 && l.dead_at(i1) == is_dead {
+        let mut run = ((lp[1.min(n - 1)].0 - lp[0].0).powi(2) + (lp[1.min(n - 1)].1 - lp[0].1).powi(2)).sqrt() * 0.0;
+        // a load lasts about 35 units of limb (less for a fat brush)
+        let reach = (35.0 - w0).max(14.0);
+        while i1 < n - 1 && l.w[i1] > w0 * 0.5 && l.dead_at(i1) == is_dead {
+            run += ((lp[i1].0 - lp[i1 - 1].0).powi(2) + (lp[i1].1 - lp[i1 - 1].1).powi(2)).sqrt();
+            if run > reach {
+                break;
+            }
             i1 += 1;
         }
         let last = i1 == n - 1;
@@ -175,9 +182,26 @@ fn paint_limb(c: &mut paint::Canvas, l: &Limb, live: Paint, dead: Paint, seed: u
         }
         pts.extend_from_slice(&lp[i0..=i1]);
         let mut h = Held::new(tool, seed * 131 + k);
-        h.load(if is_dead { dead } else { live }, 0.9);
-        let release = if last && !l.broken { 0.45 } else { 0.08 };
-        c.drag(&mut h, &Gesture::new(pts).pressure(pa, pb).ramps(0.04, release).shake(0.35), None);
+        h.load(if is_dead { dead } else { live }, 1.0);
+        // a section set down inside the previous one goes down at full
+        // pressure; only the limb's own start and live tip have ramps
+        let attack = if i0 == 0 { 0.04 } else { 0.0 };
+        let release = if last && !l.broken { 0.45 } else { 0.0 };
+        c.drag(&mut h, &Gesture::new(pts).pressure(pa, pb).ramps(attack, release).shake(0.35), None);
+        // a broken end: splinters, one longer than the rest
+        if last && l.broken && w1 > 1.0 {
+            let d = l.dir(n - 1);
+            let e = lp[n - 1];
+            let mut sp = Held::new(Tool { point: 1.0, ..Tool::rigger((w1 * 0.5).clamp(0.5, 3.0)) }, seed * 17 + 3);
+            for (k2, off) in [-0.3f32, 0.05, 0.35].iter().enumerate() {
+                let (nx, ny) = (-d.1, d.0);
+                let st_ = (e.0 + nx * off * w1, e.1 + ny * off * w1);
+                let ln = w1 * if k2 == 1 { 1.6 } else { 0.7 } * (0.8 + 0.4 * hash01(e.0, e.1, k2 as f32));
+                let tip = (st_.0 + d.0 * ln + nx * off * w1 * 0.3, st_.1 + d.1 * ln + ny * off * w1 * 0.3);
+                sp.reload(if is_dead { dead } else { live }, 0.6);
+                c.drag(&mut sp, &Gesture::new(vec![(st_.0 - d.0 * w1 * 0.3, st_.1 - d.1 * w1 * 0.3), tip]).pressure(0.7, 0.0).ramps(0.0, 0.8).shake(0.3), None);
+            }
+        }
         i0 = i1;
         k += 1;
     }
@@ -514,25 +538,29 @@ fn main() {
 
     // ---- moon and evening star
     if o.stage("moon", &mut c, &mut rng) {
-        let r = 12.0;
+        let r = 11.0;
         // the lit limb faces the sun, below the horizon toward the glow
         let sun_dir = ((GLOW_X - MOON.0), (HOR + 40.0 - MOON.1));
-        let a0 = sun_dir.1.atan2(sun_dir.0);
-        let moon_p = pal.paint(hex("#f6efd6"), 0.05).with_hiding(0.97).with_stiff(0.8);
-        let mut b = Held::new(Tool::round_sable(2.4), 77);
-        for pass in 0..3 {
-            let inset = pass as f32 * 0.9;
-            let pts: Vec<(f32, f32)> = (0..=16)
-                .map(|i| {
-                    let t = i as f32 / 16.0;
-                    let a = a0 + (t - 0.5) * 2.6;
-                    let rr = r - inset * (1.0 - (2.0 * t - 1.0).powi(2)).sqrt() - 0.6;
-                    (MOON.0 + rr * a.cos(), MOON.1 + rr * a.sin())
-                })
-                .collect();
-            b.reload(moon_p, 0.8);
-            c.drag(&mut b, &Gesture::new(pts).pressure(0.35, 0.35).swell(vec![0.2, 1.0, 0.2]).ramps(0.3, 0.3).shake(0.2), None);
-        }
+        let sl = (sun_dir.0 * sun_dir.0 + sun_dir.1 * sun_dir.1).sqrt();
+        let (sx, sy) = (sun_dir.0 / sl, sun_dir.1 / sl);
+        // a young crescent: the disk beyond the terminator (an ellipse
+        // across it), thick in the middle and sharp at the horns
+        let crescent = Mask::from_fn(f, move |x, y| {
+            let (px, py) = (x - MOON.0, y - MOON.1);
+            let a = px * sx + py * sy;
+            let b = -px * sy + py * sx;
+            let disk = 1.0 - smoothstep(r - 0.5, r + 0.5, (px * px + py * py).sqrt());
+            let term = 0.62 * (r * r - b * b).max(0.0).sqrt();
+            disk * smoothstep(term - 0.4, term + 0.4, a)
+        });
+        let dark = Mask::from_fn(f, move |x, y| {
+            let d = ((x - MOON.0).powi(2) + (y - MOON.1).powi(2)).sqrt();
+            1.0 - smoothstep(r - 0.6, r + 0.6, d)
+        })
+        .subtract(&crescent);
+        // earthshine: the rest of the disk a breath lighter than the sky
+        c.work(&dark, &st.detail().color_over(|_, _, u| shift(u, 0.013, 0.0, 0.003)).length(2.0, 5.0).coverage(3.0).medium(0.5), 76);
+        c.work(&crescent, &st.detail().color(|_, _| hex("#f5eed6")).angle(move |x, y| (y - MOON.1).atan2(x - MOON.0) + std::f32::consts::FRAC_PI_2).length(2.0, 6.0).coverage(4.5).medium(0.05), 77);
         let mut s = Held::new(Tool::round_sable(1.6), 78);
         s.load(pal.paint(hex("#fbf4df"), 0.05).with_hiding(0.97), 0.8);
         c.touch(&mut s, &Touch::at(318.0, 232.0).pressure(0.45), None);
@@ -848,12 +876,12 @@ fn main() {
         }
     }
     if o.stage("oaks", &mut c, &mut rng) {
-        let live = pal.paint(hex("#2a2522"), 0.2);
-        let dead = pal.paint(hex("#35302d"), 0.2);
+        let live = pal.paint(hex("#2a2522"), 0.3);
+        let dead = pal.paint(hex("#35302d"), 0.3);
         let snow_p = pal.paint(hex("#d6d4d8"), 0.05).with_stiff(0.8);
         // the small one behind first (farther), a touch grayer in the air
-        let live_f = pal.paint(hex("#38333a"), 0.2);
-        let dead_f = pal.paint(hex("#47434a"), 0.2);
+        let live_f = pal.paint(hex("#38333a"), 0.3);
+        let dead_f = pal.paint(hex("#47434a"), 0.3);
         let rim = pal.paint(hex("#6f6259"), 0.2);
         let glow = (GLOW_X, HOR + 30.0);
         paint_tree(&mut c, &small, live_f, dead_f, rim, snow_p, glow, &mut rng, 500);

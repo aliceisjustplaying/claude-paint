@@ -27,5 +27,15 @@ The first preview completed in 10.2 seconds. Viewed using `scripts/peek` as `pre
 5. Very small hatching strokes can become thin combs rather than conifer masses. Workaround: increase overlapping needle-bearing strokes, use irregular tree spacing and group the far wood into unequal masses.
 6. The repository pre-commit hook rejects absolute home paths in notes. Workaround: record the retained scratch directory with `~/` rather than spelling the home directory.
 
+## Full-resolution inspection and second revision
+A complete 3200px render was produced in 67.3 seconds, alongside a refreshed preview. Examined the whole picture plus actual full-resolution bark and ford crops (`full-03.jpg`, `bark-full-03.jpg`, `ford-full-03.jpg` in scratch). Also rendered a dedicated 3200px oak window with `--crop 110,280,370,620` (30.6 seconds). The crop paid 16.35 seconds for the distant land despite seeing little of it: whole-frame preparation is a real workflow cost here.
+
+The second tree version connects, but the full-size brush marks have squared bristle edges and pinstriped bark. Adopted a different physical method: construct a continuous, tapering bough mask from my own spline drawing, brush body color inside it along the wood, then add broken fine bark marks. This is still paint, not a pixel fill. Sky and snow remain brushed/stippled passages. The traveler's position is corrected and the fir spacing is irregular.
+
+7. A single large pointed brush cannot cover the entire width range of a bough. Large-tool tips vanish before the geometric end and expose detached twigs; continuous large gestures also leave squared hair tracks. Shortening release ramps and overlapping smaller tools helped, but the final workaround is a brushed continuous wood mask with a local stroke-direction field. This costs more planning but gives control of silhouette and form.
+8. Full-palette aiming produced unwelcome cyan-green patches in gray ice and over-green conifers. Workaround: restrict ice to lead white, cobalt blue, raw umber and bone black; give wood and needles similarly limited pigment families.
+9. A low-contrast soft mask does not automatically yield a soft-looking brushed snow shadow: the first drift pass showed scalloped blue bars. Workaround: double the transition width and halve the requested value change, rather than assuming mask softness alone controls the optical edge.
+10. Regularly spaced small shore gestures read as road markings. This is a painter-side misuse of the brush planner, not an engine defect. Workaround: omit most edge accents, vary the bank itself and add pale broken ice shelves rather than uniform white dashes.
+
 ## Critique
-Work in progress: first pass is legible but too diagrammatic in the tree, stone polygons and river shape. The next pass must prioritize connected organic wood and more credible snowbanks over adding further motifs.
+The atmospheric scale and the pause at the crossing work. The paint is still too neat in some foreground motifs. I am refining wood, bank transitions and ice before accepting the final render. The large quiet sky is deliberate; adding more symbols would not improve it.

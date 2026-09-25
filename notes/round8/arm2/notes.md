@@ -90,6 +90,11 @@ black), 1.4:1, about 44 × 31 cm. Every paint is mixed from those tubes
     [NG p.56], clumps on the banks and a few in the field, pointed rigger,
     grays, umbers and dull ochers.
 12. **crows**: three in the air, one on the snow.
+    (Added late, in the track stage after the snow: what is left of a
+    churchyard at the ruin's foot, three leaning crosses with snow on their
+    arms and a round-topped headstone, pale with haze. The oak also got
+    bark: long wavering dark fissures and a few cool ridges; roots flaring
+    into the snow; drifts of the field's own color around its foot.)
 13. finish: aged varnish, craquelure, relief light (`Finish::aged`).
 
 ## FRICTION
@@ -128,8 +133,11 @@ black), 1.4:1, about 44 × 31 cm. Every paint is mixed from those tubes
 7. **Crops aren't cheap here.** A 3200px crop of the ruin took 24 s, the
    same as a whole 1000px preview: every mask (whole canvas, per-pixel
    closures with noise) is built for the whole 3200px canvas each run.
-8. **Aged finish corners.** The corner craquelure makes strong arcs in the
-   bottom corners at 1000px; the only control is dropping cracks.
+8. **Aged finish corners.** The corner craquelure makes parallel arcs in
+   the bottom corners that read, over pale snow, as ruled hatching. There
+   is a switch (`Cracks { corners: false, .. }`), which I found in
+   `crack.rs`, not in any note; I turned them off and lowered dirt and
+   grime (a painting kept with care).
 9. **The NaN trap is still a painter's trap.** A drift profile
    `sin(π·u).powf(0.6)` gave NaN at u = 1 (f32 `sin(π)` is −8.7e-8), the
    same bug the coast painter hit. The engine now panics with the point
@@ -144,4 +152,15 @@ black), 1.4:1, about 44 × 31 cm. Every paint is mixed from those tubes
     its mask stops and leaves an edge. What worked best: a small-brush veil
     with a wide, noisy load ramp, a stipple, then a badger *unclipped* over
     a mask reaching well above the mist.
-12. Minor: no integer draw on `Rng` (`below`); I used `range` and cast.
+12. **Stock brushes run dry along a long limb.** A round sable's `run` is
+    40 + 6·width units, so the oak's longer limbs, pulled in one gesture,
+    ran dry halfway and turned into dotted chains at 3200px. Physically
+    right, but a painter would reload or use a fuller brush; I raised
+    `run` to 320 for the oak. It is invisible at 1000px and obvious at
+    3200px, so it only shows up in full-res crops.
+13. **Stage order vs. what a later stage covers.** The churchyard crosses,
+    painted in the ruin stage, vanished under the snow stage (the field is
+    painted over everything below the horizon). This was my ordering
+    mistake, not an engine fault, but nothing tells you a stage's marks
+    were fully covered; I moved them after the snow.
+14. Minor: no integer draw on `Rng` (`below`); I used `range` and cast.

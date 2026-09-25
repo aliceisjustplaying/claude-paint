@@ -1034,12 +1034,17 @@ struct RSeg {
     amber: f32,
 }
 
-/// Opening of each later generation relative to the one before (a crack
-/// opens by the strain of the island it splits, and the islands shrink with
-/// each generation; assumption, in the 20–70 µm range measured: 70 µm for a
-/// canvas-aging crack by OCT, Kim et al. 2022, 20 ± 8 µm for a saturated
-/// fine network, Janas et al. 2022).
-const HIER_DECAY: f32 = 0.68;
+/// With `hierarchy`, a crack opens by the strain of the island it split:
+/// the stress it released (`Arm::opening`, 1 for a crack through whole
+/// film) over the span it relaxed, which shrinks with it, so the opening
+/// goes as the released stress to this power. It is the crack's own
+/// history, not the canvas's generation count: a tough passage that only
+/// began cracking late still splits whole islands first. On an evenly aged
+/// canvas the cracks of each later generation release ~1, 0.83, 0.64,
+/// 0.48, so each opens ~0.68 of the one before (assumption, in the
+/// 20–70 µm range measured: 70 µm for a canvas-aging crack by OCT, Kim et
+/// al. 2022, 20 ± 8 µm for a saturated fine network, Janas et al. 2022).
+const HIER_EXP: i32 = 2;
 /// A primary crack's opening relative to `Cracks::width` when `hierarchy`
 /// is 1 (the later generations are narrower, so the primaries are wider
 /// than the old even crack).
@@ -1149,12 +1154,14 @@ fn rsegs(net: &Network, k: &Cracks) -> Vec<RSeg> {
         // its length (grain, varying film thickness)
         let lognormal = |x: f32| (0.3 * 1.7 * (x - 0.5)).exp();
         let open0 = (a.opening * lognormal(hash2(a.crack as i64, 0, k.seed ^ 0x71))).clamp(0.2, 1.4);
-        // hierarchy: the earlier the generation, the wider it opened
-        let g = a.generation as f32;
-        let gf = HIER_DECAY.powf(g);
+        // hierarchy: the more of an island it split, the wider it opened
+        // (by what it released, not by the generation count: the first
+        // crack through a tough passage opens like a primary)
+        let rel = a.opening.clamp(0.3, 1.2);
+        let gf = rel.powi(HIER_EXP);
         let wide = (0.45 * 1.7 * (hash2(a.crack as i64, 0, k.seed ^ 0x73) - 0.5)).exp();
-        let open = open0 + h * (HIER_PRIMARY * gf * wide * a.opening.clamp(0.5, 1.3) - open0);
-        let cup = 1.0 + h * (1.3 * gf.sqrt() - 1.0);
+        let open = open0 + h * (HIER_PRIMARY * gf * wide - open0);
+        let cup = 1.0 + h * (1.3 * rel - 1.0);
         // grime: wide cracks hold more; some were cleaned out; in some the
         // old varnish stayed, amber
         let (grime, amber) = if gr > 0.0 {
@@ -1174,7 +1181,7 @@ fn rsegs(net: &Network, k: &Cracks) -> Vec<RSeg> {
         }
         let total = arc[n - 1];
         // closes to nothing for stretches: a later crack more often
-        let shut = [0.0, 0.12, 0.25, 0.38, 0.5][(a.generation as usize).min(4)] * h;
+        let shut = 0.55 * (1.0 - gf.min(1.0)) * h;
         let along = |s: f32| {
             let old = 0.7 + 0.6 * along_noise(s, 0.7, a.crack, k.seed ^ 0x72);
             if h <= 0.0 {
@@ -1784,6 +1791,74 @@ mod tests {
         assert!(even[0] < 1.8 * even[3], "even: {even:?}");
         assert!(tiered[0] > 3.0 * tiered[3], "hierarchy: {tiered:?}");
         assert!(tiered.windows(2).all(|w| w[0] > w[1]), "each generation narrower: {tiered:?}");
+    }
+
+    /// Mean opening (relative, length weighted) of the cracks that were the
+    /// first to split their passage (no earlier crack within an island of
+    /// where they started) and of those that subdivided it, by generation.
+    fn first_and_later_openings(k: &Cracks, size: [f32; 2]) -> [[f32; 2]; GENERATIONS] {
+        let n = net(k, size);
+        // every crack's path, bucketed on an island-sized grid
+        let s = k.island();
+        let (gx, gy) = ((size[0] / s).ceil() as usize + 1, (size[1] / s).ceil() as usize + 1);
+        let mut grid: Vec<Vec<(V2, u8)>> = vec![Vec::new(); gx * gy];
+        for a in &n.arms {
+            for p in &a.pts {
+                let (x, y) = ((p[0] / s) as usize, (p[1] / s) as usize);
+                grid[y.min(gy - 1) * gx + x.min(gx - 1)].push((*p, a.generation));
+            }
+        }
+        // a crack is first in its passage if no older crack came within S
+        let first: Vec<bool> = n
+            .arms
+            .iter()
+            .map(|a| {
+                let p = a.pts[0];
+                let (x, y) = ((p[0] / s) as i64, (p[1] / s) as i64);
+                !(-1..=1).any(|j| {
+                    (-1..=1).any(|i| {
+                        let (cx, cy) = (x + i, y + j);
+                        cx >= 0 && cy >= 0 && (cx as usize) < gx && (cy as usize) < gy && grid[cy as usize * gx + cx as usize].iter().any(|&(q, g)| g < a.generation && dot(sub(q, p), sub(q, p)) < s * s)
+                    })
+                })
+            })
+            .collect();
+        let crack_first: std::collections::HashMap<u32, bool> = n.arms.iter().zip(&first).map(|(a, &f)| (a.crack, f)).collect();
+        let (mut sum, mut len) = ([[0.0f32; 2]; GENERATIONS], [[0.0f32; 2]; GENERATIONS]);
+        let segs = rsegs(&n, k);
+        // rsegs walks the arms in order: recover each segment's crack
+        let mut owner = Vec::with_capacity(segs.len());
+        for a in n.arms.iter().filter(|a| a.pts.len() >= 2) {
+            owner.extend(std::iter::repeat_n(a.crack, a.pts.len() - 1));
+        }
+        for (sg, c) in segs.iter().zip(owner) {
+            let d = sub(sg.b, sg.a);
+            let l = dot(d, d).sqrt();
+            let (g, f) = (sg.generation as usize, if crack_first[&c] { 0 } else { 1 });
+            sum[g][f] += 0.5 * (sg.wa + sg.wb) * l;
+            len[g][f] += l;
+        }
+        std::array::from_fn(|g| [sum[g][0] / len[g][0].max(1e-6), sum[g][1] / len[g][1].max(1e-6)])
+    }
+
+    /// The first cracks to split a passage open widest, whenever that
+    /// passage cracked (`hierarchy`: "the first cracks, which formed when
+    /// the islands were whole, open widest"). With `patchy` a tough passage
+    /// only starts cracking a few generations late; its first long cracks
+    /// still split whole islands, so they open like the canvas's primaries,
+    /// and wider than the late cracks that subdivide an island. (On main
+    /// the opening followed the global generation: a tough passage's first
+    /// cracks opened at a third of a primary and read as the finest.)
+    #[test]
+    fn first_cracks_open_widest_wherever_they_formed() {
+        let k = Cracks { corners: false, vary: 0.0, grain: 0.0, ..Cracks::aged(11).fit(240.0) };
+        let o = first_and_later_openings(&k, [260.0, 200.0]);
+        eprintln!("opening by generation [first in its passage, subdividing]: {o:.2?}");
+        let primary = o[1][0];
+        for (g, &[first, later]) in o.iter().enumerate().skip(3) {
+            assert!(first > 0.7 * primary, "generation {g}: first cracks open {first:.2} vs primaries {primary:.2}");
+            assert!(first > 1.5 * later, "generation {g}: first {first:.2} vs subdividing {later:.2}");
+        }
     }
 
     /// Crack length per 20 mm cell: (coefficient of variation, fraction of

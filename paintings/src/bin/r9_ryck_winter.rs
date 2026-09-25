@@ -372,7 +372,7 @@ fn main() {
     // the smallest at the horizon (painted far to near, so the near ones
     // stand over the far)
     let willow_ts = [0.03f32, 0.045, 0.065, 0.092, 0.13, 0.18, 0.25, 0.345, 0.47, 0.64];
-    let willows: Vec<(f32, f32, f32)> = willow_ts
+    let mut willows: Vec<(f32, f32, f32)> = willow_ts
         .iter()
         .enumerate()
         .map(|(i, &t)| {
@@ -383,6 +383,9 @@ fn main() {
             (x, y, ht)
         })
         .collect();
+    // and one old pollard close by on the left bank, near the frame: its
+    // crown stands dark against the sky, a repoussoir
+    willows.push((78.0, h - 12.0, 540.0));
     // the figure: on the path, a way ahead of us, walking toward the town
     let ft = 0.5f32;
     let (fx, fy, fh) = (path_x(ft) + 4.0, yh + ft * (h - yh), 108.0 * ft);

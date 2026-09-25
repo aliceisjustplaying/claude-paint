@@ -3,8 +3,7 @@
 About thirty painters in this project each painted an original picture in Friedrich's manner, from
 scratch and alone. Each kept notes. Alice, the viewer, reacted to the pictures. None of it reached
 the next painter. This notebook gathers, by what a painter works on, what happened when they
-painted it and why. It says nothing about what to paint. It has no recipes and no verdicts on
-which picture came out ahead.
+painted it and why.
 
 **How sure.** **[firm]**: several painters, or painters and Alice, saw the same thing. **[fair]**:
 one clear case or a cause shown by changing one thing. **[thin]**: one remark, or my reading.

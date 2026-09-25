@@ -18,3 +18,8 @@ direction (`grain` 0.6; default 0.15), 6 = direction 1.0.
 Round 2 (`round2/`): the same painting with direction strengths between 4
 and 5, unlabeled A-E (`sheet_AtoE.png`, `whole_A..E.png`). Astra and Fable
 judge the same crops blind, as conservators.
+
+Alice's correction: the real *Monk by the Sea*'s cracks are "very much
+digital-like" themselves. So regular, directional cracks are not fake in
+themselves; whatever makes variant 5 read as digital is something else.
+(The round 2 judges' brief did not know this and may blame direction.)

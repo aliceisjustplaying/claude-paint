@@ -8,7 +8,7 @@ Program: `paintings/src/bin/r10_winter_a.rs`. Renders: `out/r10_winter_a.png`
 A winter evening just after sunset on the flat Pomeranian land. A Hünengrab
 (a passage grave: a great domed capstone on three uprights) stands on the
 crown of a low snow rise, right on the skyline. A big bare oak rises beside
-it and spreads over it. A smaller, broken-topped oak stands behind on the
+it and spreads over it. A dead, broken oak snag stands behind on the
 left, against the brightest part of the afterglow. On the flat horizon lies
 a thin blue band of far woods, with a church spire far off on the right.
 Above is a young crescent moon, and low in the glow the evening star. The
@@ -91,13 +91,19 @@ What it draws on (from knowledge, not pictures):
    warm west end, reflected snow-light low down, and mottling at two
    scales. The capstone's strokes follow its dome. A lighter broken pass on
    the upper planes (a fbm facet mask with `color_over`), fissures, lichen
-   touches, then snow on the capstone's top (thicker in the middle, patchy)
+   touches aimed a shade off the stone under them, then snow on the capstone's top (thicker in the middle, patchy)
    and on the uprights' tops and the half-buried boulders. The capstone
    went through three shapes (a plank, a mushroom, a pointed lens) before
    the final one: a superellipse profile, domed above and flatter below,
-   with blunt round ends, tilted a little.
+   with blunt round ends, tilted a little. The chamber is open: only a thin
+   shadow band hangs under the capstone's belly, and the evening sky shows
+   between the three uprights. The uprights are irregular boulder outlines
+   (`smooth_poly`), not slabs.
 9. **oaks**: my own oak habit (see friction #1), painted limb by limb from
-   the trunk up. Then crooked claw twigs along every limb (two levels);
+   the trunk up. Each limb is one movement handed on to a finer brush where
+   it thins, and a fresh load every ~35 units. The second tree is the same
+   habit grown as a snag: a tall broken bole, two or three limbs mostly
+   broken off, all dead wood, only three orders deep. Then crooked claw twigs along every limb (two levels);
    bark furrows on the trunk; a dull warm rim on the glow side of the big
    wood; snow on the upper edge of level limbs; snow drifted against the
    foot.
@@ -232,9 +238,9 @@ Judged at 1000px and in 3200px crops, harshly.
   uprights. This is the one moment of drama in the picture, and it reads.
 
 **What reads as digital, or simply weak.**
-- **The dolmen is still too neat.** The uprights are near-rectangular
-  slabs with straight sides. The capstone is a smooth symmetric bun whose
-  snow sits on it like icing with a hard lower edge. Real megaliths are
+- **The dolmen is still too neat.** The uprights are now irregular, but
+  squat and evenly spaced. The capstone is a smooth, nearly symmetric bun
+  whose snow sits on it like icing with a hard lower edge. Real megaliths are
   lumpy, split and lichened. The stone texture at 3200px is flat,
   stroke-smoothed paint with almost no grain; every attempt at grain
   (dry-brush lights) came out as confetti, and I removed it. It's the
@@ -247,9 +253,9 @@ Judged at 1000px and in 3200px crops, harshly.
 - **The grass is scattered evenly.** Clumped by noise and along the
   bank, but it still reads as sprinkled rather than growing where the
   ground would hold it (along the bank, in hollows, around the stones).
-- **The small oak** is my big oak's habit at a smaller size, so the two
-  trees rhyme too closely. Friedrich would make the second tree a
-  different character (a stump, a pollard, a dead snag).
+- **The snag** (changed late from a small copy of the great oak, which
+  rhymed too closely) is the right character but thin in detail: few
+  splinters, no bark.
 - **The far woods** are a flat dark hump at left and right, with no
   gradation into the haze. The spire is nice but tiny, and the church body
   is a lump.
@@ -259,6 +265,6 @@ Judged at 1000px and in 3200px crops, harshly.
 
 **If I had another hour.** Build the stones with `Form` (an `Sdf` capstone
 turned and cut, weathered, lit by sky light from above and glow from
-behind) instead of hand color fields; give the second tree a different
-habit; move the grass to where the drifts thin; add a thin impasto of
+behind) instead of hand color fields; give the snag bark and splinters;
+move the grass to where the drifts thin; add a thin impasto of
 lead white on the foreground drift lips.

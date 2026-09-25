@@ -261,3 +261,10 @@ Trees (her favorite, a winter scene): "the guy's so good at trees";
 every branch carries snow, the same amount of remnant snow on each, and
 "that adds so much". The tree has "so much texture", probably many small
 strokes.
+
+## Outside reaction (2026-09-25)
+The person whose post started this project, shown round 10's A, B and C:
+"wow!!", "The trees are amazing", "The second one especially" (B, the
+summer lime tree). Two humans (Alice: "impressive") rank B high; both model
+judges ranked it last ("identical leaf sprites"). Human and model judges
+diverge most on this picture.

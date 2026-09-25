@@ -20,14 +20,17 @@ use paint::{Canvas, Handling, Fbm, Gesture, Habit, Held, Limb, Mask, Orient, Pai
 
 const ASPECT: f32 = 0.8; // portrait: 1000 x 1250 units
 const HORIZON: f32 = 1012.0;
-const BASE: (f32, f32) = (492.0, 1084.0);
-const TREE_H: f32 = 880.0;
-const TREE_SEED: u64 = 12;
+const BASE: (f32, f32) = (474.0, 1084.0);
+const TREE_H: f32 = 830.0;
+const TREE_SEED: u64 = 9;
 /// Wood wider than this (units) is laid in as a form, not dragged.
 const THICK: f32 = 6.0;
 
 fn habit() -> Habit {
-    Habit { years: 30, lean: -0.03, decline: 0.18, decay: 0.4, breakage: 0.18, twig: 0.0010, apical: 0.56, ..Habit::oak() }
+    // an open-grown oak: two buds in each axil and a cluster at every
+    // shoot tip (oak's crowded buds), little shedding in open light, then a
+    // start of decline: the top dying back, a limb or two broken
+    Habit { years: 34, decline: 0.18, decay: 0.4, breakage: 0.18, twig: 0.0010, apical: 0.58, lean: 0.0, trunk: 0.07, shed: 0.06, node_buds: 2, tip_buds: (2, 2), ..Habit::oak() }
 }
 
 /// Thumbnails of candidate trees (the painter's pencil studies before
@@ -37,8 +40,13 @@ fn probe(first: u64) {
     let (cols, rows) = (6usize, 3usize);
     let mut img = vec![255u8; tw * cols * th * rows];
     for k in 0..cols * rows {
-        let seed = first + k as u64;
-        let sk = habit().grow((500.0, 1150.0), 1000.0, seed);
+        let seed = first + (k % 6) as u64;
+        let hb = match k / 6 {
+            0 => Habit { apical: 0.6, ..habit() },
+            1 => Habit { apical: 0.62, tip_buds: (2, 1), ..habit() },
+            _ => Habit { apical: 0.58, lean: 0.0, trunk: 0.07, ..habit() },
+        };
+        let sk = hb.grow((500.0, 1150.0), 1000.0, seed);
         let fr = paint::Frame::new(tw, th, tw as f32 / 1000.0);
         let m = sk.mask(fr);
         let dead = sk.limbs.iter().filter(|l| l.dead).count();
@@ -112,6 +120,17 @@ fn main() {
         // dry: finer and lighter, denser toward the light at the horizon;
         // a faint band of cloud edge lighter at a third of the way down
         let bands = Fbm::new(41, 4, 260.0);
+        // first, low stratus banks in the upper sky: darker, violet-grey,
+        // long and level, stippled in, thinning out downward
+        let cloud = Fbm::new(53, 5, 300.0);
+        let field = move |x: f32, y: f32| cloud.get(x * 0.22 + 40.0, y * 3.2) + 0.25 * cloud.get(x * 0.9, y * 5.0);
+        let banks = Stipple::new(Tool::stippler(2.4))
+            .mixed(pal, 0.5)
+            .color(move |x, y| mix(sky(x, y), hex("#646874"), 0.1 + 0.1 * smoothstep(0.2, 0.7, field(x, y)), Mix::Light))
+            .coverage(move |x, y| 1.8 * smoothstep(-0.15, 0.55, field(x, y)) * (1.0 - smoothstep(380.0, 760.0, y)))
+            .pressure(0.45, 0.8)
+            .dips(20, 0.35, 0.6);
+        c.stipple(&sky_m, &banks, 15);
         let glow = move |x: f32, y: f32| {
             let b = 0.5 + 0.5 * bands.get(x * 0.35, y * 2.2);
             mix(sky(x, y), hex("#ece2c4"), 0.04 + 0.2 * smoothstep(500.0, HORIZON, y) + 0.06 * b, Mix::Light)
@@ -128,10 +147,10 @@ fn main() {
 
     // far land: a low line of woods and fields, far off, blue-grey
     let woods = Fbm::new(9, 5, 30.0);
-    let wood_top = move |x: f32| HORIZON - 2.5 - 6.0 * (woods.get(x, 0.0) * 1.6).max(0.0) * (0.3 + 0.7 * smoothstep(620.0, 900.0, x) + 0.5 * smoothstep(260.0, 80.0, x));
+    let wood_top = move |x: f32| HORIZON - 3.5 - 9.0 * (woods.get(x, 0.0) * 1.6).max(0.0) * (0.3 + 0.7 * smoothstep(620.0, 900.0, x) + 0.5 * smoothstep(260.0, 80.0, x));
     let woods_m = Mask::from_fn(f, move |x, y| smoothstep(wood_top(x) - 0.8, wood_top(x) + 0.8, y) * (1.0 - smoothstep(HORIZON + 2.0, HORIZON + 5.0, y)));
     if o.stage("far", &mut c, &mut rng) {
-        let far_p = st.detail().color(|x, _| mix(hex("#878b92"), hex("#9c9ea0"), 0.5 + 0.5 * (x / 170.0).sin(), Mix::Light)).angle(|_, _| 0.0).length(8.0, 24.0).coverage(4.5).medium(0.4);
+        let far_p = st.detail().color(|x, _| mix(hex("#747983"), hex("#8f9296"), 0.5 + 0.5 * (x / 170.0).sin(), Mix::Light)).angle(|_, _| 0.0).length(8.0, 24.0).coverage(4.5).medium(0.4);
         c.work(&woods_m, &far_p, 21);
         c.dry();
     }
@@ -152,7 +171,7 @@ fn main() {
         mix(base, hex("#9aa0a8"), 0.35 * sh, Mix::Light)
     };
     if o.stage("snow", &mut c, &mut rng) {
-        let lay = st.body().color(snow_col).angle(|x, y| 0.04 * ((x + y) / 150.0).sin()).length(30.0, 90.0).coverage(3.0).medium(0.15);
+        let lay = st.body().color(snow_col).angle(|x, y| 0.04 * ((x + y) / 150.0).sin()).length(30.0, 90.0).coverage(3.0).medium(0.15).clip(true);
         c.work(&land_m, &lay, 31);
         // fused a little, horizontally, so the drifts read as soft
         if let Some(b) = st.blend() {
@@ -244,7 +263,9 @@ fn main() {
             let tipw = l.w[n - 1];
             let d = l.dir(n - 1);
             let a0 = d.1.atan2(d.0);
-            let k = if tipw > 2.0 { 0 } else { 2 + (r.f() * 3.0) as usize };
+            // (the grown crown already ends in bud clusters; add a shoot
+            // here and there only)
+            let k = if tipw > 2.0 || r.f() < 0.75 { 0 } else { 1 };
             for _ in 0..k {
                 let a = a0 + r.range(-0.9, 0.9);
                 shoot(&mut c, l.pts[n - 1], a, r.range(7.0, 20.0), 0.5, twig, 2, &mut r);
@@ -259,12 +280,14 @@ fn main() {
                 let dd = l.dir(i);
                 let a = dd.1.atan2(dd.0) + side * r.range(0.5, 1.1);
                 if l.w[i] < 2.2 {
-                    shoot(&mut c, l.pts[i], a, r.range(5.0, 14.0), 0.45, twig, 1, &mut r);
-                    s0 += r.range(5.0, 11.0);
+                    if r.f() < 0.5 {
+                        shoot(&mut c, l.pts[i], a, r.range(5.0, 12.0), 0.45, twig, 1, &mut r);
+                    }
+                    s0 += r.range(6.0, 14.0);
                 } else {
                     // on older wood: a side branch of a few years, itself
                     // branching, or a short epicormic sprout
-                    if r.f() < 0.55 {
+                    if r.f() < 0.2 {
                         let big = (l.w[i] / 8.0).clamp(1.0, 1.8);
                         shoot_w(&mut c, l.pts[i], a, r.range(14.0, 34.0) * big, 0.95, 1.4 + 0.5 * big, twig, 2, &mut r);
                     } else {
@@ -511,7 +534,7 @@ fn main() {
         for l in oak.limbs.iter().filter(|l| !l.is_empty() && !l.root && !l.dead && !l.broken) {
             let tip = *l.pts.last().unwrap();
             let low = smoothstep(BASE.1 - TREE_H * 0.35, BASE.1 - TREE_H * 0.62, tip.1);
-            if r.f() > 0.55 * (1.0 - low) || l.w[l.w.len() - 1] > 1.5 {
+            if r.f() > 0.18 * (1.0 - low) || l.w[l.w.len() - 1] > 1.5 {
                 continue;
             }
             for _ in 0..(1 + (r.f() * 3.0) as usize) {

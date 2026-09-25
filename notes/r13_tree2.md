@@ -150,6 +150,66 @@ about 125 s: drawing 43 s, sky 61 s. Crops of about 140 × 120 units take
     lanes if it comes first, and paints over the trunk if it comes after.
     There is no "behind" for gestures, only order and masks.
 
+11. **Thick wood joins are hard with strokes that run along each branch.**
+    A side branch starts on its parent's axis, so its modeling strokes
+    streak across the parent. Starting them where the branch leaves the
+    parent's side fixed the crown. For the scaffold limbs at the main fork
+    it exposed the trunk outline's flat top and bare underpaint, so they
+    still start inside. There is no notion of one body growing out of
+    another (a union with a blended seam). The fork is still a bit of a
+    jumble of crossing strokes.
+12. **Keeping the whole tree in the frame** needed a hack in the growth
+    rule (shoots turn upward near the side edges) plus a hard stop. The
+    engine has no help for "compose this inside the canvas"; that is fair
+    (it's the painter's job), but the upturned twigs at the left and right
+    ends read a little like brooms.
+
+Things that worked well: resuming is exact and fast (1.4 s to repaint
+only the last stage at 2400 px); crops at 2400 px take 9–25 s; drawing
+about 19,000 pointed twig strokes takes only about 2.5 s; `pressure_for`
+made width-driven strokes possible at all.
+
 ## Critique (honest)
 
-*(to be finished at the end)*
+What reads as painting: the twig net. The fine pointed strokes lifting
+off at the tips give a real filigree against the sky, and at 2400 px the
+finest twigs are hairlines that thicken toward the limbs in steps. The
+stag-head reads: a pale dead leader and a broken dead riser stand above a
+living crown that stops short of them. The trunk's bark, with dark
+broken fissures, lit ridges and cross-breaks, reads as brushwork in the
+spirit of his hatched pencil studies. The snow along the tops of the level
+limbs is the most "winter" thing in it. The sky is a quiet, believable
+overcast with a warm band low down. The low horizon crossing the bole
+puts us on the ground, looking up.
+
+What reads as digital or weak:
+- **Symmetry and roundness of the crown.** It is a well-behaved dome.
+  Friedrich's oaks are wilder: limbs that go out, turn back, break off.
+  Mine has the right parts (dead top, stump, hollow) but the silhouette is
+  too even, and the brooms at the side edges come from my edge rule, not
+  from a tree.
+- **The scaffold limbs are smooth Catmull-Rom curves**, too clean for
+  "gnarled, bent branches"; they needed elbows and thickened knuckles
+  where limbs were lost.
+- **The limbs' modeling** is lanes of parallel strokes. At full size they
+  read as painted, but uniformly so: the same stroke length and spacing
+  everywhere, with no passages where the hand slowed for a knot or a
+  scar.
+- **The snowfield is nearly empty.** The drifts are faint horizontal
+  lines; the drift at the foot is better but still a little like a
+  cushion. The weeds help, but the foreground lacks the small particular
+  things Friedrich would put there (a track, a stone, a stake).
+- **The dead wood** is a flat silver-gray with grain lines. It lacks the
+  cracks and the broken, splintered ends a dead oak limb has (the top ends
+  are round-capped strokes).
+- **The main fork** is a crossing of strokes and not the swelling collars
+  and bark ridges the sources describe (trees.md §2).
+- I left out craquelure and varnish as the brief asked. The ground shows
+  through only faintly. I lost the "paint pooling in the texture" look on
+  the trunk when I fixed the crackle net, and the sky and snow have it
+  only slightly.
+
+If I had another hour: gnarl the scaffolds (elbows, collars, a torn limb
+with splinters), break the crown's silhouette with one long limb reaching
+out and one gap where a limb fell, and give the foreground one particular
+object.

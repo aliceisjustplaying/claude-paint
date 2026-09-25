@@ -1716,8 +1716,9 @@ mod tip_tests {
     /// A lifting brush draws down to its tip at the end of its path; it
     /// doesn't leave the canvas before the hand does. Rounds 10 and 11: a
     /// limb lifted off with `ramps` stopped painting where the pressure fell
-    /// below its first hair's threshold, 5–30% of the path short of its end,
-    /// so a twig set on the limb's end started on bare canvas ("floated").
+    /// below its first hair's threshold, up to a fifth of the path short of
+    /// its end, so a twig set on the limb's end started on bare canvas
+    /// ("floated"). See notes/fixes/twigs.
     /// Blunt and pointed, the documented flick and a limb lifted at a fork.
     #[test]
     fn a_lifted_stroke_paints_to_the_end_of_its_path() {

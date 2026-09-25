@@ -45,3 +45,16 @@ corners. The engine is designed for patchiness, uneven aging, a hierarchy
 of widths and diagonal corner cracks (crack.rs), and a painter reported
 depth/dirt/grime/cupping make no visible difference (r10_winter_a.md
 friction 5): suspected bug, the variation isn't reaching the picture.
+
+Alice on A-E (blind, before the key):
+- A (0.6): too hairline-like, which gives the digital look; flows too
+  much down and not enough to the right. The sky has her "JPEG effect"
+  (not literally JPEG artifacts, but that feeling).
+- B (as delivered): thin and strong like A; a different pattern, "worse,
+  not feeling B at all". C (0.25): not liking it either.
+- D (0.35): "something maybe? Not sure." (Fable's first choice.)
+- E (0.45): "kind of chaotic a little bit".
+So: the cracks are too thin and too even (matches Fable's measurement:
+one-pixel hairlines end to end); the direction should run diagonally
+down-right, not straight down; the sky's "JPEG effect" is separate from
+the cracks and still open.

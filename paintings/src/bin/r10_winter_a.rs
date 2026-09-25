@@ -129,18 +129,6 @@ fn gnarled(l: &Limb) -> Vec<(f32, f32)> {
         .collect()
 }
 
-/// The painter's taper: oak wood thins faster than the pipe model's
-/// widths, from the trunk down to the twigs (w' = W (w / W)^k).
-fn taper(mut sk: Skeleton, k: f32) -> Skeleton {
-    let top = sk.limbs[0].w[0];
-    for l in sk.limbs.iter_mut() {
-        for w in l.w.iter_mut() {
-            *w = (top * (*w / top).powf(k)).max(0.28);
-        }
-    }
-    sk
-}
-
 fn paint_limb(c: &mut paint::Canvas, l: &Limb, live: Paint, dead: Paint, seed: u64) {
     if l.is_empty() {
         return;
@@ -211,20 +199,20 @@ fn paint_limb(c: &mut paint::Canvas, l: &Limb, live: Paint, dead: Paint, seed: u
 /// each turning at elbows from bud to bud, with side limbs off them down
 /// to the fourth order; some limbs broken off short, some dead. Returned
 /// as a `Skeleton` so the same hand paints it.
-fn my_oak(base: (f32, f32), height: f32, lean: f32, broken_top: bool, seed: u64) -> Skeleton {
+fn my_oak(base: (f32, f32), height: f32, lean: f32, broken_top: bool, snag: bool, seed: u64) -> Skeleton {
     use std::f32::consts::FRAC_PI_2;
     let mut rng = Rng::new(seed);
     let mut limbs: Vec<Limb> = Vec::new();
     let w0 = height * 0.08;
     #[allow(clippy::too_many_arguments)]
-    fn grow(limbs: &mut Vec<Limb>, parent: Option<(usize, usize)>, start: (f32, f32), ang: f32, len: f32, w: f32, order: u32, height: f32, broken_top: bool, rng: &mut Rng) {
+    fn grow(limbs: &mut Vec<Limb>, parent: Option<(usize, usize)>, start: (f32, f32), ang: f32, len: f32, w: f32, order: u32, height: f32, broken_top: bool, snag: bool, rng: &mut Rng) {
         let seg = (8.0 + 5.0 * rng.f()) * (if order == 0 { 1.4 } else { 1.0 });
         let n = ((len / seg).round() as usize).max(2);
         let mut pts = vec![start];
         let mut ws = vec![w];
         let mut a = ang;
         let mut q = start;
-        let broken = order >= 1 && order <= 2 && rng.f() < 0.22;
+        let broken = order >= 1 && order <= 2 && rng.f() < if snag { 0.75 } else { 0.22 };
         let n = if broken { (n as f32 * rng.range(0.4, 0.75)).ceil() as usize } else { n };
         let tip_w = if order == 0 { w * 0.55 } else { (w * 0.3).max(0.35) };
         for k in 1..=n {
@@ -241,7 +229,7 @@ fn my_oak(base: (f32, f32), height: f32, lean: f32, broken_top: bool, seed: u64)
             let t = k as f32 / n as f32;
             ws.push(w + (tip_w - w) * t.powf(0.8));
         }
-        let dead = order >= 2 && rng.f() < 0.3 || broken && rng.f() < 0.6;
+        let dead = snag || order >= 2 && rng.f() < 0.3 || broken && rng.f() < 0.6;
         let np = pts.len();
         let idx = limbs.len();
         limbs.push(Limb {
@@ -257,11 +245,13 @@ fn my_oak(base: (f32, f32), height: f32, lean: f32, broken_top: bool, seed: u64)
             root: false,
             pts: pts.clone(),
         });
-        if order >= 4 || len < 14.0 {
+        if order >= if snag { 3 } else { 4 } || len < 14.0 {
             return;
         }
         // side limbs
         let kids = match order {
+            0 if snag => 2 + (rng.f() * 2.0) as usize,
+            _ if snag => 1 + (rng.f() * 2.0) as usize,
             0 => 4 + (rng.f() * 2.0) as usize,
             1 => 3 + (rng.f() * 3.0) as usize,
             2 => 2 + (rng.f() * 3.0) as usize,
@@ -285,11 +275,11 @@ fn my_oak(base: (f32, f32), height: f32, lean: f32, broken_top: bool, seed: u64)
                 cw = ws[i] * rng.range(0.45, 0.7);
             }
             side = -side;
-            grow(limbs, Some((idx, i)), pts[i], ca, cl, cw, order + 1, height, broken_top, rng);
+            grow(limbs, Some((idx, i)), pts[i], ca, cl, cw, order + 1, height, broken_top, snag, rng);
         }
     }
-    let trunk_len = height * rng.range(0.28, 0.36);
-    grow(&mut limbs, None, base, -FRAC_PI_2 + lean, trunk_len, w0, 0, height, broken_top, &mut rng);
+    let trunk_len = height * if snag { rng.range(0.5, 0.6) } else { rng.range(0.28, 0.36) };
+    grow(&mut limbs, None, base, -FRAC_PI_2 + lean, trunk_len, w0, 0, height, broken_top, snag, &mut rng);
     // buttress roots into the snow
     for side in [-1.0f32, 1.0] {
         let a = if side < 0.0 { std::f32::consts::PI - 0.1 } else { 0.1 };
@@ -705,8 +695,8 @@ fn main() {
     let uprights = Mask::from_shape(
         f,
         Shape::new()
-            .poly(&[(416.0, 424.0), (446.0, 427.0), (450.0, 466.0), (410.0, 468.0)])
-            .add(Shape::new().poly(&[(522.0, 429.0), (556.0, 427.0), (563.0, 472.0), (518.0, 470.0)])),
+            .smooth_poly(&[(418.0, 426.0), (433.0, 423.0), (446.0, 428.0), (449.0, 440.0), (447.0, 452.0), (452.0, 468.0), (430.0, 471.0), (409.0, 468.0), (412.0, 450.0), (410.0, 436.0)])
+            .add(Shape::new().smooth_poly(&[(524.0, 431.0), (541.0, 426.0), (556.0, 430.0), (560.0, 445.0), (565.0, 470.0), (540.0, 474.0), (517.0, 471.0), (521.0, 455.0), (519.0, 442.0)])),
     )
     .roughen(4, 9.0, 2.2, 0.5)
     .mul(&Mask::from_fn(f, move |x, y| 1.0 - smoothstep(kn(x) - 1.5, kn(x) + 1.0, y)));
@@ -856,8 +846,9 @@ fn main() {
 
     // ---- the oaks
     let oak_seed: u64 = std::env::var("OAK_SEED").ok().and_then(|v| v.parse().ok()).unwrap_or(5);
-    let big = my_oak((612.0, knoll(612.0) + 4.0), 360.0, -0.04, false, o.seed * 7 + oak_seed);
-    let small = my_oak((336.0, knoll(336.0) + 3.0), 200.0, 0.1, true, o.seed * 7 + 101);
+    let big = my_oak((612.0, knoll(612.0) + 4.0), 360.0, -0.04, false, false, o.seed * 7 + oak_seed);
+    let small_seed: u64 = std::env::var("SNAG_SEED").ok().and_then(|v| v.parse().ok()).unwrap_or(101);
+    let small = my_oak((336.0, knoll(336.0) + 3.0), 190.0, 0.12, true, true, o.seed * 7 + small_seed);
     if std::env::var("OAK_STATS").is_ok() {
         for (name, sk) in [("big", &big), ("small", &small)] {
             let mut by = [0usize; 6];
@@ -877,7 +868,7 @@ fn main() {
         let snow_p = pal.paint(hex("#d6d4d8"), 0.05).with_stiff(0.8);
         // the small one behind first (farther), a touch grayer in the air
         let live_f = pal.paint(hex("#38333a"), 0.3);
-        let dead_f = pal.paint(hex("#47434a"), 0.3);
+        let dead_f = pal.paint(hex("#3d393f"), 0.3);
         let rim = pal.paint(hex("#6f6259"), 0.2);
         let glow = (GLOW_X, HOR + 30.0);
         paint_tree(&mut c, &small, live_f, dead_f, rim, snow_p, glow, &mut rng, 500);

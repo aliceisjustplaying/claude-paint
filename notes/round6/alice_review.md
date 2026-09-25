@@ -180,8 +180,13 @@ Round 9:
 - K (arm 1): the same bad spiky trees.
 - L: the control.
 - M (arm 2): surprisingly nice. The cracks still aren't right, in a
-  different way now, but we still need the cracks.
+  different way now, but we still need the cracks. The spiky trees are
+  horrible, but mentally removing them, the composition is "not half bad";
+  "there's something different about it".
 - N (arm 3): bad; the tree is not good; feels like a regression.
+Spiky trees (the pollard willow, X, K, M): "I do not think that's a
+natural structure." Traced: an earlier agent's idea (notes/green.md:202)
+built into the engine as "straight rods rising" (broadleaf.rs:331).
 Overall: a little unhappy and frustrated, though "at least we are course
 correcting now". Wants to see the exact prompts given to the painters
 (round 7 showed the brief told painters what to paint).

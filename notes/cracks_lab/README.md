@@ -26,3 +26,14 @@ and that is one pattern: other Friedrichs have other patterns. The
 (ours), not the Monk's. So direction is real and should vary per painting;
 what reads as digital is our cracks, not directionality as such. (The
 round 2 judges' brief describes the Monk's flow correctly.)
+
+Round 2 key: A = direction 0.6, B = as delivered (0.15), C = 0.25,
+D = 0.35, E = 0.45. Astra (blind): C, B, D, E, A: "straight stretches are
+not inherently wrong. The giveaway is repeated long stretches with similar
+orientation, separated by comparable gaps ... like ladder rungs"; "dark
+paint can crack too".
+Alice: "yes ... this is why I always say entropy: anything that reads like
+repetition reads digital" (principles.md 2b). Suspect in the model: the
+fixed relaxation distance (D_r ~ S/2) gives even spacing; direction only
+makes it visible. Next: vary spacing, width and density locally (several
+fracture scales, dense patches and quiet areas), not the direction knob.

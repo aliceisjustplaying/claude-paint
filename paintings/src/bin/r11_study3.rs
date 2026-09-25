@@ -549,27 +549,74 @@ fn main() {
         let mut lipb = Held::new(Tool { point: 1.0, ..Tool::round_sable(4.5) }, 510);
         let lx0 = left_edge(BASE_Y) - 6.0;
         let lx1 = right_edge(BASE_Y) + 8.0;
-        let crease = pal.paint(hex("#8f8e96"), 0.15);
-        let lip = [pal.paint(hex("#c6c1ba"), 0.18), pal.paint(hex("#bcb8b4"), 0.2), pal.paint(hex("#cec8bf"), 0.15)];
+        let crease = pal.paint(hex("#8c8b92"), 0.2);
+        let lip_want = [hex("#bdb8b1"), hex("#b3afab"), hex("#c2bdb5")];
         let mut x = lx0;
         while x < lx1 {
             let len = r0.range(10.0, 26.0);
-            let pts: Vec<(f32, f32)> = (0..4).map(|i| { let xx = x + len * i as f32 / 3.0; (xx, contact(xx) + 5.5) }).collect();
-            lipb.reload(crease, 0.5);
-            c.drag(&mut lipb, &Gesture::new(pts).pressure(0.4, 0.3).ramps(0.2, 0.3).shake(0.5), None);
+            let pts: Vec<(f32, f32)> = (0..4).map(|i| { let xx = x + len * i as f32 / 3.0; (xx, contact(xx) + 3.2) }).collect();
+            lipb.reload(crease, 0.35);
+            c.drag(&mut lipb, &Gesture::new(pts).pressure(0.32, 0.22).ramps(0.2, 0.3).shake(0.5), None);
             x += len * r0.range(0.7, 1.0);
         }
         let mut x = lx0 - 8.0;
         while x < lx1 + 6.0 {
             let len = r0.range(6.0, 18.0);
-            let up = r0.range(-1.0, 3.5);
-            let pts: Vec<(f32, f32)> = (0..4).map(|i| { let xx = x + len * i as f32 / 3.0; (xx, contact(xx) + 1.5 - up * (1.0 - (2.0 * i as f32 / 3.0 - 1.0).powi(2))) }).collect();
-            if r0.f() < 0.3 {
+            let up = r0.range(-0.5, 2.0);
+            let pts: Vec<(f32, f32)> = (0..4).map(|i| { let xx = x + len * i as f32 / 3.0; (xx, contact(xx) + 3.0 - up * (1.0 - (2.0 * i as f32 / 3.0 - 1.0).powi(2))) }).collect();
+            if r0.f() < 0.6 {
                 x += len;
                 continue;
             }
-            lipb.reload(lip[(r0.f() * 2.999) as usize], 0.35);
-            c.drag(&mut lipb, &Gesture::new(pts).pressure(r0.range(0.3, 0.55), 0.15).ramps(0.3, 0.5).shake(0.8), None);
+            // aimed at the look wanted where it lands (a masstone pile
+            // from `pal.paint` dried to bright white hooks here)
+            let (mx, my) = pts[1];
+            let _ = lip_want;
+            let want = shift(c.judge_under(mx, my + 8.0, 5.0), r0.range(0.01, 0.035), 0.0, 0.004);
+            let pp = c.aim(pal, want, (mx, my + 4.0), 5.0, 0.4, 1.0);
+            lipb.reload(pp, 0.25);
+            c.drag(&mut lipb, &Gesture::new(pts).pressure(r0.range(0.55, 0.8), 0.4).ramps(0.3, 0.5).shake(0.8), None);
+            x += len * r0.range(0.6, 1.1);
+        }
+        // (rounded strokes for a drift on the left came out as claws in the
+        // open snow; the snow field's own edge already carries the drift)
+        let _ = axis(BASE_Y);
+        // where the trunk goes into the snow: a crease of shade right at
+        // the bark, then the snow's lip pushed up against the dark and over
+        // it in places, lead white from a small round; the drift on the
+        // windward left piled higher
+        let _ = &snow_pal;
+        let mut r0 = Rng::new(o.seed + 510);
+        let mut lipb = Held::new(Tool { point: 1.0, ..Tool::round_sable(4.5) }, 510);
+        let lx0 = left_edge(BASE_Y) - 6.0;
+        let lx1 = right_edge(BASE_Y) + 8.0;
+        let crease = pal.paint(hex("#8c8b92"), 0.2);
+        let lip_want = [hex("#bdb8b1"), hex("#b3afab"), hex("#c2bdb5")];
+        let mut x = lx0;
+        while x < lx1 {
+            let len = r0.range(10.0, 26.0);
+            let pts: Vec<(f32, f32)> = (0..4).map(|i| { let xx = x + len * i as f32 / 3.0; (xx, contact(xx) + 3.2) }).collect();
+            lipb.reload(crease, 0.35);
+            c.drag(&mut lipb, &Gesture::new(pts).pressure(0.32, 0.22).ramps(0.2, 0.3).shake(0.5), None);
+            x += len * r0.range(0.7, 1.0);
+        }
+        let mut x = lx0 - 8.0;
+        while x < lx1 + 6.0 {
+            let len = r0.range(6.0, 18.0);
+            let up = r0.range(-0.5, 2.0);
+            let pts: Vec<(f32, f32)> = (0..4).map(|i| { let xx = x + len * i as f32 / 3.0; (xx, contact(xx) + 3.0 - up * (1.0 - (2.0 * i as f32 / 3.0 - 1.0).powi(2))) }).collect();
+            if r0.f() < 0.6 {
+                x += len;
+                continue;
+            }
+            // aimed at the look wanted where it lands (a masstone pile
+            // from `pal.paint` dried to bright white hooks here)
+            let (mx, my) = pts[1];
+            let _ = lip_want;
+            let want = shift(c.judge_under(mx, my + 8.0, 5.0), r0.range(0.01, 0.035), 0.0, 0.004);
+            let pp = c.aim(pal, want, (mx, my + 4.0), 5.0, 0.4, 1.0);
+            lipb.reload(pp, 0.25);
+            c.drag(&mut lipb, &Gesture::new(pts).pressure(r0.range(0.55, 0.8), 0.4).ramps(0.3, 0.5).shake(0.8), None);
             x += len * r0.range(0.6, 1.1);
         }
         // the drift on the left: a few rounded strokes swelling against the bark
@@ -577,15 +624,16 @@ fn main() {
             let x = lx0 - 30.0 + k as f32 * 9.0 + r0.range(-3.0, 3.0);
             let y = contact(x) + 8.0 + r0.range(-3.0, 3.0);
             let pts = vec![(x - 14.0, y + 4.0), (x, y - 3.0 - k as f32 * 0.8), (x + 16.0, y - 1.0)];
-            lipb.reload(lip[k % 3], 0.6);
-            c.drag(&mut lipb, &Gesture::new(pts).pressure(0.55, 0.3).ramps(0.3, 0.4).shake(0.6), None);
+            let pp = c.aim(pal, lip_want[k % 3], (x, y), 6.0, 0.4, 1.0);
+            lipb.reload(pp, 0.25);
+            c.drag(&mut lipb, &Gesture::new(pts).pressure(0.75, 0.45).ramps(0.35, 0.45).shake(0.6), None);
         }
         let ax = axis(BASE_Y);
         // the snow crust on top of the limb and the stub: a broken line of
         // white laid with the side of a small round
         let mut r = Rng::new(o.seed + 501);
         let mut sab = Held::new(Tool { point: 1.0, ..Tool::round_sable(3.0) }, 501);
-        let crust = pal.paint(hex("#cfcbc4"), 0.1);
+        let crust = pal.paint(hex("#c4c1bc"), 0.45);
         for (pts, ws) in [(&LIMB[..], &LIMB_W[..]), (&STUB[..], &STUB_W[..]), (&DEAD[..], &DEAD_W[..])] {
             for i in 0..pts.len() - 1 {
                 if i == 0 && pts.len() > 3 {
@@ -598,15 +646,18 @@ fn main() {
                 }
                 let (w0, w1) = (ws[i], ws[i + 1]);
                 let ang = (b.1 - a.1).atan2(b.0 - a.0);
-                let (nx, ny) = (ang.sin(), -ang.cos()); // up side
-                let t0 = r.range(0.0, 0.8);
-                let t1 = (t0 + r.range(0.08, 0.25)).min(1.0);
+                // the up side, whichever way the limb was drawn
+                let (nx, ny) = if ang.cos() >= 0.0 { (ang.sin(), -ang.cos()) } else { (-ang.sin(), ang.cos()) };
+                let t0 = r.range(0.0, 0.6);
+                let t1 = (t0 + r.range(0.2, 0.45)).min(1.0);
                 let pt = |t: f32| {
                     let hw = 0.5 * (w0 + (w1 - w0) * t) - 0.6;
                     (a.0 + (b.0 - a.0) * t + nx * hw, a.1 + (b.1 - a.1) * t + ny * hw)
                 };
-                sab.reload(crust, 0.8);
-                c.drag(&mut sab, &Gesture::new(vec![pt(t0), pt((t0 + t1) * 0.5), pt(t1)]).pressure(0.62, 0.3).ramps(0.3, 0.4).shake(0.8), None);
+                let pc = c.aim(pal, hex("#bdbab6"), pt((t0 + t1) * 0.5), 3.0, 0.4, 1.0);
+                let _ = crust;
+                sab.reload(pc, 0.6);
+                c.drag(&mut sab, &Gesture::new(vec![pt(t0), pt((t0 + t1) * 0.5), pt(t1)]).pressure(0.5, 0.3).ramps(0.35, 0.45).shake(0.8), None);
                 }
             }
         }
@@ -623,20 +674,9 @@ fn main() {
     }
 
     if o.stage("shadow", &mut c, &mut rng) {
-        let snow_pal = st.palette.only(&["lead white", "cobalt blue", "yellow ochre", "red earth", "raw umber", "bone black"]);
-        let ax = axis(BASE_Y);
-        // the scoop in the lee of the trunk: a bluer hollow
-        let scoop_m = Mask::from_fn(f, move |x, y| {
-            let dx = (x - (ax + 62.0)) / 46.0;
-            let dy = (y - (contact(x) + 10.0)) / 10.0;
-            smoothstep(1.0, 0.5, (dx * dx + dy * dy).sqrt())
-        });
-        let scoop = Stipple::new(Tool::stippler(3.0))
-            .mixed(&snow_pal, 0.4)
-            .color_over(|_, _, u| shift(u, -0.05, 0.0, -0.014))
-            .coverage(|_, _| 2.0)
-            .dips(14, 0.4, 0.6);
-        c.stipple(&scoop_m, &scoop, 62);
+        let _ax = axis(BASE_Y);
+        // (a stippled blue scoop in the lee came out as saturated violet
+        // dots at 3200px; the lee is in the trunk's shadow already)
         c.dry();
         // the snow's modeling near: long low drift crests catching the
         // glow, each with its furrow of shade below, laid with the side of a
@@ -718,6 +758,6 @@ fn main() {
     o.end(&mut c, &mut rng);
     // no varnish, no cracks: the paint as it left the easel
     c.dry();
-    c.relief(st.relief.0, st.relief.1);
+    if std::env::var("NO_RELIEF").is_err() { c.relief(st.relief.0, st.relief.1); }
     o.save(&mut c);
 }

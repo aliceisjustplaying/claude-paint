@@ -85,6 +85,10 @@ No `Finish::aged`: no varnish and no cracks, as the brief asks.
   down each edge with a pointed round, following the pencil line. The bark
   plates are longer and fewer. The grass comes in tufts of 2–5 fanning
   blades.
+- Last: dark bark ticks showed through the thin top of the drift, and the
+  right root stuck up as a spike. Bark and contour marks are now clipped to
+  "tree above the snow line minus 1–4 units", and the root flares are
+  fuller capsules that merge with the trunk before they go under.
 
 ## FRICTION
 1. **Masks can't be clipped to "behind this later passage", and a Handling
@@ -143,27 +147,35 @@ No `Finish::aged`: no varnish and no cracks, as the brief asks.
    rotated coordinates into each limb's axis by hand inside the mask
    closure (`Aniso` exists but takes one global angle). Isotropic fbm on a
    silhouette made rectangular notches that I first blamed on the brushes.
-10. **Snow color judged in a JPEG vs. numbers.** The peek JPEGs made the snow
+10. **Painting over a thin edge shows what's under it.** The drift, body
+   paint, still let dark bark fissures under its feathered top edge read
+   through as ticks. A painter would scrape them out or paint the snow
+   thicker there. I clipped the earlier marks instead, which means planning
+   the overlap in advance again (see 1).
+11. **Snow color judged in a JPEG vs. numbers.** The peek JPEGs made the snow
    look paler than it is. I had to sample pixels with `magick` to trust the
    tones. A `scripts/peek` option that prints a few sampled values would help.
 
-## Critique (honest)
+## Critique (honest, final state)
 - **Works**: the sky. A thin lay-in, the badger, then two stipple passes
   give a gradation from cool gray-blue to a warm glow that looks like paint:
   the red ground pricks through the pale blue as a fine warm speckle, the way
   thin paint pools in a textured ground. The composition reads at once: dark
-  vertical, pale sky, a low horizon, the shadow coming at you.
-- **Half works**: the trunk against the sky. The silhouette is irregular
-  enough at 1000px, but up close the edge is blocky in places (noise-driven
-  knobs, not bark plates). The bark is too uniform a dark, with texture but
-  no real modeling of a round trunk in reflected light. The twigs are sparse
-  and a little regular for Friedrich's dense, gnarled oak crowns, and their
-  tips bead at 3200px.
-- **Weakest**: the trunk entering the snow. The drift is plausible, but the
-  cast shadow is made of blotchy, visible dabs that look like brush tests,
-  not a shadow lying on a snow surface. The grass is scattered straight pins
-  rather than tufts. The contact line itself is clean but plain: no root
-  humps breaking the snow and no melt ring.
-- **Digital tells**: the trunk is too straight and columnar through the
-  middle, and the far band is a thin even strip. The snow plain's strokes are
-  uniform in size across the whole depth (no perspective in the handling).
+  vertical, pale sky, low horizon, the shadow coming toward you. The
+  trunk's silhouette against the glow is now convincing at 3200px, with
+  long plates along the wood and no notches, and the left flank turns
+  toward the sky light.
+- **Half works**: the trunk entering the snow. The drift, the broad root
+  flare diving under it and the shaded snow right against the bark read
+  correctly. But the cast shadow is built from blotchy, visible dabs that
+  look like brush tests more than a shadow lying on a snow surface. The
+  grass tufts are small and sparse.
+- **Weak**: the crown. The twigs are too few and a little regular for
+  Friedrich's dense, gnarled oak crowns, and their tips break into dashes
+  at 3200px. The broken stub on the left is a clean cylinder, not torn wood.
+  The bark plates still read partly as rain streaks up close.
+- **Digital tells**: the trunk is too straight and columnar through its
+  middle, and the far band is a thin even strip. The snow plain's strokes
+  are the same size across the whole depth (no perspective in the
+  handling), and the snow is one smooth plane with no drifts or tracks
+  beyond the foot.

@@ -12,6 +12,7 @@ timeline to scrub. Read-only: it never touches the painter.
 
     uv run studio/studio.py            # then open http://localhost:8765
     uv run studio/studio.py --port 9000
+    uv run studio/studio.py --host "$(tailscale ip -4)"   # from your other devices
 """
 import argparse
 import base64
@@ -150,9 +151,10 @@ class H(http.server.BaseHTTPRequestHandler):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--port", type=int, default=8765)
+    ap.add_argument("--host", default="127.0.0.1", help="e.g. this machine's Tailscale IP to watch from another of your devices")
     a = ap.parse_args()
-    print(f"studio: http://localhost:{a.port}")
-    http.server.ThreadingHTTPServer(("127.0.0.1", a.port), H).serve_forever()
+    print(f"studio: http://{a.host}:{a.port}")
+    http.server.ThreadingHTTPServer((a.host, a.port), H).serve_forever()
 
 
 if __name__ == "__main__":

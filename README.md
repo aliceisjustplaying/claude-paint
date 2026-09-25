@@ -18,33 +18,6 @@ the world a painter works in; the painter agents do the seeing, composing and
 painting, the way a person would (piles mixed on a palette, gestures, time,
 looking). Read `notes/principles.md` before designing a tool or writing a brief.
 
-Where it stands (2026-09-25)
-----------------------------
-- **Painters are AI models**, each working from `notes/research/` alone.
-  What works best so far (Rounds 2 and 10): one Rust program per painting,
-  round 2's short brief (`notes/amnesia_brief.md`), a strong model at high
-  thinking and no recipe book. Why: `notes/round2_magic.md`. Opus, Fable,
-  Astra (OpenAI) and Gemini Flash have painted; results and blind
-  critiques by round in `notes/round*/`; the latest summary is at the top
-  of `notes/HANDOFF.md`.
-- **Judging is blind.** Alice looks first, unlabeled; then AI critics
-  judge blind (a round 2 painting as an unmarked anchor); keys stay off
-  disk until they're done. Alice's reactions: `notes/round6/alice_review.md`.
-- **Feature freeze:** no new engine capabilities; bug fixes (test first)
-  are allowed. Recent fixes: strokes over dry paint cover instead of
-  leaving rims (`notes/fixes/dry_rims/`); crack widths follow the stress
-  each crack released, so the variation reaches the picture
-  (`notes/fixes/cracks/`). Open: the sky's "JPEG effect", branches that
-  float off their limbs, crack direction per painting, checkpoint
-  staleness by line.
-- **Resolution (a trial, not yet wired in; may go back to 3200):**
-  paint, look and deliver at one size, about 0.2 mm per pixel (2250-2400 px for a small Friedrich
-  canvas), retiring the separate 1000px preview. Until then, `--full`
-  (3200) is what counts; a 1000px render is a different painting, not a
-  smaller copy.
-- **The Lua easel** (`crates/easel`) is frozen too; whether to keep it is
-  open (a clean test is proposed in `notes/HANDOFF.md`).
-
 ```
 cargo paint friedrich_moonrise_valley               # 1000px preview → out/<name>.png
 cargo paint friedrich_moonrise_valley -- --full     # 3200px         → out/<name>_full.png
@@ -58,7 +31,6 @@ cargo paint <name> -- --resume mist --stale-ok --ckpt  # use a stale checkpoint 
 cargo paint <name> -- --no-cracks
 cargo test -p paint                                 # UPDATE_GOLDEN=1 to re-record the golden scene
 cargo test --workspace                              # all tests (~1 min)
-cargo test --release -p easel --test hand_time      # replay tripwires (~10 s); add -- --ignored for the slow l5_near
 ```
 
 The fast loop for detail work: render the passage you're working on with
@@ -87,7 +59,7 @@ Engine (`crates/paint`):
 - `bristle` – simulated brushes (round, flat, filbert, fan, rigger, badger):
   per-bristle reservoirs, bend and splay, contact with the surface relief,
   deposit, pickup and ploughing (each hair ploughs by its own size, so a
-  stroke over dry paint covers its middle: `notes/fixes/dry_rims/`); a round or rigger given a point
+  stroke over dry paint covers its middle); a round or rigger given a point
   (`Tool::point`, opt-in) paints a hairline with the point, spread with pressure and lift off to a
   point, the same at any resolution (`notes/tip.md`)
 - `handling` – how a painter covers an area: hand-like stroke planning (arcs,
@@ -104,8 +76,7 @@ Engine (`crates/paint`):
 - `crack` – craquelure grown crack by crack from film stress (T-junctions,
   weave-following on thin grounds, cupping, grime); each crack opens by
   the stress it released (first cracks widest), `grain` gives a dominant
-  direction, `vary`/`patchy` make it uneven. Alice's lab and what's
-  still off: `notes/cracks_lab/README.md`
+  direction, `vary`/`patchy` make it uneven.
 - `palette` – the painter's tubes and mixing on the palette; what a paint's
   color means (masstone vs. the look on the canvas): `notes/color.md`
 - `stipple` – many small touches of a brush tip (Friedrich's skies, mist,
@@ -128,11 +99,6 @@ Engine (`crates/paint`):
   varied silhouettes and stratified haze. It paints nothing:
   `notes/atmosphere.md`
 - `canvas` – glazes, relief lighting, dithered PNG out
-- `growth` – how trees grow (buds, light, vigor, pipe-model widths, decline):
-  returns a skeleton of limbs, including which parts are dead wood;
-  leaves as lit clumps on the young wood (`Skeleton::foliage`: masks,
-  light, sky gaps) and meadow tufts in perspective and wind (`Sward`);
-  painting them is the painter's job: `notes/motifs.md`, `notes/green.md`
 - `mask`, `edge`, `shape`, `path`, `noise`, `rng` – geometry and randomness
   (`noise` also has ridged/billow octaves, domain warping, Worley cells,
   anisotropic stretch and `uneven` spacing for anything repeated)
@@ -166,8 +132,6 @@ brush's marks (`Palette::aim_for`). Glazes (`Style::glaze`)
 and fixed paints use the paint's *masstone* instead (`notes/color.md`).
 
 Notes for the painter (read before writing a painting):
-- `crates/easel/README.md` – the easel: paint live in Lua, one chunk at a time,
-  looking as you go; the session is saved as a replayable program
 - `notes/workflow.md` – stages, crops, checkpoints, resuming, speed
 - `notes/strokes.md` – how handlings plan strokes
 - `notes/color.md` – what a color means: masstone, aimed mixing, hiding
@@ -177,8 +141,6 @@ Notes for the painter (read before writing a painting):
 - `notes/form.md` – solids, light, shadow and the masks they give
 - `notes/scene.md` – one world and one sun: placing things, shadows, contact, reflections, perspective
 - `notes/atmosphere.md` – sky light, clouds, haze and receding ranges
-- `notes/motifs.md` – trees, spruces, figures
-- `notes/green.md` – greens on the palette, foliage, meadows
 
 Viewing renders
 ---------------

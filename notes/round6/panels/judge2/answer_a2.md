@@ -1,9 +1,0 @@
-(•‿•) Compared both sets, including all six whole views and six crops.
-
-set1 ranking: Q > P > R, margin: slight
-why: Q's broken foliage and irregular sky openings let air into the crown without sacrificing its broad light-left, dark-right organization (set1_Q.jpg, set1_Q_crop.jpg). P has quieter, more coherent light masses than R, but its rounded perimeter and clean holes make the crown feel cut out (set1_P.jpg, set1_P_crop.jpg). R softens that boundary, but its knobby yellow-green highlights and repeated diagonal drag marks make the foliage feel more worked than observed (set1_R.jpg, set1_R_crop.jpg).
-best's remaining defects: The lower-right crown closes into a nearly undifferentiated dark mass, flattening its volume (set1_Q.jpg). Small curls and pale pinholes repeat across the shadow surface, spending marks without describing much form (set1_Q_crop.jpg). The right perimeter is ragged but still insistently definite; more genuinely lost passages would connect the tree to the sky (set1_Q_crop.jpg).
-
-set2 ranking: R > P > Q, margin: clear
-why: R gives the branching gesture room to breathe, with fine tips fading against the sky and fewer competing marks (set2_R.jpg, set2_R_crop.jpg). P's dense little forks and foreground grass add specificity but turn the image toward fussy pen drawing over painted ground (set2_P.jpg, set2_P_crop.jpg). Q's gray twig clouds read as repetitive crosshatching, forming a fuzzy shell around the crown rather than convincing bare growth (set2_Q.jpg, set2_Q_crop.jpg).
-best's remaining defects: The larger branches remain uniformly crisp, smooth ribbons against the textured sky, so they look drawn on rather than painted into it (set2_R_crop.jpg). The lower-right branch crossings merge into a dark knot that obscures which limbs come forward (set2_R.jpg). The trunk ends in a rounded foot with a small muddy patch underneath; the rightward shadow does not fully resolve that weak contact with the ground (set2_R.jpg).

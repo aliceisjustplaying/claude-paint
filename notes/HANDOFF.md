@@ -15,6 +15,24 @@ horizontal line through a grass patch in painting A = arm 1); git identity: this
 repo sets `alice` locally (the per-directory git identity include for ~/src/a is missing on
 this machine). Next: decide the direction with Alice after Fable's advice.
 
+**Overnight (2026-09-25, after Alice slept):**
+- **Round 8** (`notes/round8/blind/`, key there): round-2-style brief, commission "a winter
+  landscape", three arms. Every painting has figures, a route and hand-written motifs.
+  Blind critics: Gemini ranks round 2's winter first, Astra ranks arm 1 (the cross) first
+  ("moves me most") and round 2 as the most painted.
+- **The "JPEG artifact" look is the stipple layer** (`notes/round7/texture/README.md`):
+  forensics plus a truly blind judge (no key on disk) picked stipple-off in both passages.
+  (A Gemini judgment read the key file and was discarded.)
+- **Round 9** (`notes/round9/`, justification in its README): Round 8 plus two brief lines
+  (skies in broad blended strokes, no stipple veil; bury the feet of things). Blind critics:
+  Gemini ranks round 2 first, then arm 2 (the Ryck); Astra ranks arm 3 (the wayside cross)
+  first. **Both put the new craquelure first in their advice** ("antique skin", "cracked
+  glass"); round 2's older cracks aren't blamed. With vs without cracks:
+  `notes/round9/nocracks/`. Candidate regression: the Round 7 craquelure (merge 112ed6b).
+- **Recurring engine friction** (four painters): strokes laid over dry paint keep their
+  outlines (a "lacy net", "glass tubing"; one measured 399 um at the rims vs 11 um inside):
+  the top bug to investigate. Also `edge="lost"` overpaints small holes.
+
 **Morning summary (2026-09-25):** Fable (`notes/advice/fable_r7.md`): "the engine isn't what's
 stopping you. The brief is." The composition guide `notes/briefs/friedrich_painter.md`
 (required reading tonight) says "You can have no figure at all", "Keep the foreground

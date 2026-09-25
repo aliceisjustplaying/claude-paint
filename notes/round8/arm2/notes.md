@@ -12,9 +12,9 @@ lost in ground mist. Right of center a small stand of spruces rises out of
 the same mist in a roughly symmetrical group (the tallest in the middle).
 In the right foreground a bare, contorted oak grows from a snow bank, its
 limbs carrying lines of snow; on the left bank a single glacial boulder
-with a snow cap and dry grass. A trodden track curves from the foreground
-toward the ruin; on it one small traveler in a dark coat with a stick walks
-away from us toward the ruin, leaving footprints. A few crows.
+with a snow cap and dry grass. No road: one small traveler in a dark coat with a stick walks
+away from us toward the ruin through fresh snow, breaking the trail; his
+footprints and a shallow trough run back toward us. A few crows.
 
 What it draws on (from text only, `notes/research/friedrich_materials.md`
 and general knowledge of his motifs): the ruined Gothic church (Eldena, the
@@ -50,21 +50,32 @@ black), 1.4:1, about 44 × 31 cm. Every paint is mixed from those tubes
    springing of one sub-arch); the shaded thickness of the wall at its
    broken end; light on the gable's slope; snow on the sill, the step tops
    and the buttress offsets (found by looking down the mask for the stone).
-4. **spruces**: ten trees by hand, far and pale first: stem lifted to a
-   point, then tier by tier each bough as one sagging stroke with the
-   needles hatched down from it in short pointed strokes, snow on the
-   upper side of the outer boughs.
+4. **spruces**: ten trees by hand, far and pale first. A dark core first
+   (short level hatching with a small filbert up the middle of the crown,
+   so the tree is a mass, not a comb), the stem lifted to a point, then
+   tier by tier each bough as one stroke from the stem (rising above,
+   sagging below, the tip lifting), its pad of pendant shoots hatched down
+   in short pointed strokes, uneven in length, deepest mid-bough, a few
+   standing up; runs of short boughs make notches in the outline; two piles
+   (one a touch warmer); lumps of shaded snow on some boughs. My first
+   version (boughs + evenly hanging needles, no core) read as fishbones at
+   3200px.
 5. **mist**: a veil of pale lean paint in level strokes with a small soft
    filbert (deep at the feet, thin above, the top edge broken by noise),
    then a stipple, fused level with the badger.
 6. **snow**: body color in long near-level strokes, cool and a little
    darker toward us, the far field picking up the glow, rolls and the two
    near banks modeled (lit crests, bluer faces toward us), lightly fused.
-7. **track**: two ruts pulled in broken pieces, narrowing as they recede.
-8. **boulder**: an erratic with two smaller stones, body strokes turned
-   with the form, dark cracks, a few lit planes, a soft shadow under the
-   snow's lip, the snow cap laid by hand in stiff lead white, stroke over
-   stroke along the crown, and drifted snow at the foot.
+7. **track**: at first two ruts toward the ruin; at 3200px they read as
+   scratches that didn't follow the walker, so now only the trough behind
+   him, a lean cool groove in a few pieces, wider toward us.
+8. **boulder**: an erratic with two smaller stones leaning on it, body
+   strokes turned with the form, dark cracks, dry-brush planes of cooler
+   gray following the crown (a first try with a filbert made pale
+   camouflage blots), a few of lichen, a soft shadow under the snow's lip,
+   the snow cap laid by hand in stiff lead white in five layers from the
+   crown down, bright on top and a cool gray on its front; low drifts of
+   the field's own color banked against the foot in uneven arcs.
 9. **oak**: grown by my own recursive hand (angular elbows every knot,
    limbs never hanging below level, twigs turning up in short hooks, a few
    broken ends, a torn-off stub), a hand-drawn thick trunk dividing at a
@@ -119,4 +130,18 @@ black), 1.4:1, about 44 × 31 cm. Every paint is mixed from those tubes
    closures with noise) is built for the whole 3200px canvas each run.
 8. **Aged finish corners.** The corner craquelure makes strong arcs in the
    bottom corners at 1000px; the only control is dropping cracks.
-9. Minor: no integer draw on `Rng` (`below`); I used `range` and cast.
+9. **The NaN trap is still a painter's trap.** A drift profile
+   `sin(π·u).powf(0.6)` gave NaN at u = 1 (f32 `sin(π)` is −8.7e-8), the
+   same bug the coast painter hit. The engine now panics with the point
+   index ("Gesture point 6 is not finite"), which found it at once, but it
+   cost a render. Workaround: `.max(0.0)` before `powf`.
+10. **Stroke ends show on thin bands.** Short strokes laid side by side
+    along a contour (the boulder's cap, the drifts at its foot) show a
+    scallop at every stroke end, a regular lace edge. I had to lengthen
+    them, vary their height and skew their profiles by hand to break it up.
+11. **Mist has no good tool.** Stipple alone was too weak to veil a dark
+    ruin; a veil of strokes has stroke tops; a clipped badger stops where
+    its mask stops and leaves an edge. What worked best: a small-brush veil
+    with a wide, noisy load ramp, a stipple, then a badger *unclipped* over
+    a mask reaching well above the mist.
+12. Minor: no integer draw on `Rng` (`below`); I used `range` and cast.

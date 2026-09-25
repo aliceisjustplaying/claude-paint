@@ -270,6 +270,13 @@ fn main() {
             bark(&mut c, l, bark_dark, bark_lit, dead_lit, &tm, &mut r);
         }
         c.dry();
+        // the cool light of the sky on the side of the wood turned to it:
+        // lean dry-brush strokes along the lit third, broken by the bark
+        let sky_lit = pal.mix(hex("#9aa0a8")).paint(0.3);
+        for l in oak.limbs.iter().filter(|l| !l.is_empty() && l.w[0] > 12.0 && !l.root) {
+            sky_side(&mut c, l, sky_lit, &tm, &mut r);
+        }
+        c.dry();
     }
 
     if o.stage("snow on wood", &mut c, &mut rng) {
@@ -616,8 +623,11 @@ fn break_end(c: &mut Canvas, l: &Limb, dead: Paint, wood: Paint, rng: &mut Rng) 
         held.load(dead, 0.8);
         c.drag(&mut held, &Gesture::new(vec![s, e]).pressure(0.85, 0.1).ramps(0.0, 0.7).shake(0.6), None);
     }
-    let mut held = Held::new(Tool { point: 0.6, ..Tool::round_sable((w * 0.35).max(0.6)) }, rng.next_u64());
-    held.load(wood, 0.5);
+    if w < 6.0 || d.1 > 0.2 {
+        return;
+    }
+    let mut held = Held::new(Tool { point: 0.6, ..Tool::round_sable((w * 0.3).max(0.6)) }, rng.next_u64());
+    held.load(wood, 0.35);
     let a = (end.0 - d.0 * w * 0.35 - nrm.0 * w * 0.3, end.1 - d.1 * w * 0.35 - nrm.1 * w * 0.3);
     let b = (end.0 - d.0 * w * 0.2 + nrm.0 * w * 0.25, end.1 - d.1 * w * 0.2 + nrm.1 * w * 0.25);
     c.drag(&mut held, &Gesture::new(vec![a, b]).pressure(0.6, 0.3).ramps(0.2, 0.5), None);
@@ -665,6 +675,41 @@ fn bark(c: &mut Canvas, l: &Limb, dark: Paint, lit: Paint, dead_lit: Paint, mask
         held.load(paint, lightness);
         let g = Gesture::new(sp).pressure(rng.range(0.4, 0.8), rng.range(0.2, 0.5)).ramps(0.15, 0.4).shake(0.7);
         c.drag(&mut held, &g, Some(mask));
+    }
+}
+
+/// Sky light down the lit side of a big limb: a few lean, lightly pressed
+/// strokes a little inside the edge facing the light, so the tooth and the
+/// bark break them.
+fn sky_side(c: &mut Canvas, l: &Limb, paint: Paint, mask: &Mask, rng: &mut Rng) {
+    let (pts, w, _) = resample(l, 2.0);
+    let wide = w.iter().position(|&x| x < 5.0).unwrap_or(w.len());
+    if wide < 4 {
+        return;
+    }
+    let strokes = 3 + (l.w[0] / 6.0) as usize;
+    for _ in 0..strokes {
+        let u = rng.range(0.22, 0.4);
+        let a = rng.range(0.0, 0.8);
+        let b = (a + rng.range(0.08, 0.22)).min(1.0);
+        let (i0, i1) = ((a * wide as f32) as usize, ((b * wide as f32) as usize).min(wide - 1));
+        if i1 < i0 + 3 {
+            continue;
+        }
+        let sp: Vec<(f32, f32)> = (i0..=i1)
+            .map(|i| {
+                let d = dir_at(&pts, i);
+                let mut n = (-d.1, d.0);
+                if n.0 * LIGHT.0 + n.1 * LIGHT.1 < 0.0 {
+                    n = (-n.0, -n.1);
+                }
+                (pts[i].0 + n.0 * w[i] * u, pts[i].1 + n.1 * w[i] * u)
+            })
+            .collect();
+        let bw = (l.w[0] * rng.range(0.12, 0.2)).max(1.0);
+        let mut held = Held::new(Tool { ragged: 0.6, stiffness: 0.5, ..Tool::filbert(bw) }, rng.next_u64());
+        held.load(paint.with_hiding(paint.hiding() * 0.45), rng.range(0.04, 0.09));
+        c.drag(&mut held, &Gesture::new(sp).pressure(rng.range(0.2, 0.35), rng.range(0.1, 0.2)).ramps(0.3, 0.5).shake(0.7), Some(mask));
     }
 }
 
@@ -910,7 +955,7 @@ fn grass(c: &mut Canvas, pal: &paint::Palette, rng: &mut Rng) {
 fn twigs(c: &mut Canvas, l: &Limb, paint: Paint, rng: &mut Rng) {
     let n = l.pts.len();
     let wend = l.w[n - 1];
-    if wend > 3.0 {
+    if wend > 3.5 {
         return;
     }
     let arc = cumulative(&l.pts);
@@ -962,10 +1007,10 @@ fn twigs(c: &mut Canvas, l: &Limb, paint: Paint, rng: &mut Rng) {
         spray(c, tip, dd, rng.range(8.0, 20.0), (wend * 0.8).clamp(0.3, 0.8), 2, rng);
     }
     // and from along the thin stretch of the limb, both sides: the net
-    let thin_from = l.w.iter().position(|&x| x < 5.0).unwrap_or(n - 1);
+    let thin_from = l.w.iter().position(|&x| x < 6.0).unwrap_or(n - 1);
     let span = total - arc[thin_from];
-    let m = (span / 6.0) as usize;
-    for _ in 0..m.min(34) {
+    let m = (span / 4.5) as usize;
+    for _ in 0..m.min(48) {
         let t = total - rng.range(2.0, span.max(2.5));
         let i = arc.iter().position(|&a| a >= t).unwrap_or(n - 1).clamp(1, n - 1);
         let p = l.pts[i];

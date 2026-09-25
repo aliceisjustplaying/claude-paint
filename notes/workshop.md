@@ -3,9 +3,7 @@
 About thirty painters in this project each painted an original picture in Friedrich's manner, from
 scratch and alone. Each kept notes. Alice, the viewer, reacted to the pictures. None of it reached
 the next painter. This notebook gathers what they tried, what happened and why, by what a painter
-works on. It has no recipes and no verdicts on which picture came out ahead. Alice's yardstick:
-"less digital and more bad painter. Which is good, to be clear" [AR]. Nearly every complaint below
-comes down to something reading as "digital."
+works on. It has no recipes and no verdicts on which picture came out ahead.
 
 **How sure.** **[firm]**: several painters, or painters and Alice, saw the same thing. **[fair]**:
 one clear case or a cause shown by changing one thing. **[thin]**: one remark, or my reading.
@@ -62,7 +60,10 @@ worktree X's session log.
 - **To Alice the texture read as compression.** "It almost looks like JPEG artifacts" [AR]. Lossless
   and compressed crops looked the same: "the crunchy mottle is in the paint (the stipple over the
   weave)" [AR], mostly the stipple's "blotches with sharp scalloped rims" [texture]. She wanted more
-  texture, not less: "we're just not doing the texture right yet" [AR]. A wet sky of unequal thin
+  texture, not less: "we're just not doing the texture right yet" [AR]. Stipple itself is not the
+  fault: Friedrich stippled skies, mist and distant hills
+  (notes/research/friedrich_materials.md, [NG p.56]) and round 2's skies were stippled; how to make
+  it read as paint is still open. A wet sky of unequal thin
   bands, no stipple, read to her as "less digital and more bad painter" [lab/sky; AR]. **[firm]**
 - **The fault that stayed: a correct, quiet gradient.** "Close to a digital gradient at viewing
   distance," the stipple "only visible up close" [r12-tree2; r13-tree3; SB]. A sky whose light was
@@ -268,7 +269,8 @@ worktree X's session log.
 - **The first try at any small detail repeats.** "The first try of nearly every small detail … came
   out as a regular, repeated shape: dots, arrowheads, confetti, scallops, lumps. The fix was always
   the same: fewer, irregular spacing, varied size, patchy" [r13-tree1; e3-near; r12-tree2].
-  **[firm]**
+  The irregularity did the work; fewer was one painter's way to it, and texture itself was never
+  the fault (§15). **[firm]**
 - **Moons.** A dragged arc gave "a blunt banana," a filled shape "a small moth"; a crescent filled
   with short touches so the horns point, or one pointed stroke swelling along the lit limb, turned
   toward the sunk sun, read [mountains; winter; r8-arm1; s:r8-arm1]. A glazed glow drew a hard line
@@ -345,12 +347,15 @@ worktree X's session log.
   snow "as ruled hatching" [r8-arm2]. Alice: "we do want the age stuff," but "still too neat, still
   too digital"; in real Friedrichs she saw cracks that "almost flow, running down a little to the
   right" (*Monk by the Sea*), clusters random "in a sort of human random way" and an amount that
-  varies by painting, where "ours is one uniform net" [AR]. **[firm]**
+  varies by painting, where "ours is one uniform net" [AR]. The crack widths have since been
+  repaired (the first cracks now open widest); direction and clusters are still open. **[firm]**
 
 ## 12. Composition
 
 - **Left alone, painters paint the same picture.** Free painters chose "twilight, a crescent moon,
   the evening star, a figure seen from behind and a dead oak" again and again [amnesia3; e4-free].
+  These are Friedrich's own motifs; what Alice noticed was the sameness from painter to painter,
+  not the motifs.
   Alice saw that a painter "without any extra instructions around themes, converges on roughly the
   same painting" (pond, sky, trees reflecting, foreground grass) [AR]. **[firm]**
 - **The shared design:** low horizon, big quiet sky, dark near stage, empty middle, far band, light
@@ -420,8 +425,6 @@ A person does, and painters mostly did not:
   [r8-arm1; mountains]. **[firm]**
 - Paints one particular tree or stone and adds the particular thing: all six late painters named the
   missing track or stone and none painted it [r13-tree2; CT]. **[firm]**
-- Leaves things unsaid: the tree Alice saw as having "more bad painter vibes and a lot less digital
-  vibes" was unfinished, each limb one blunt stroke with a slight tremor [AR; CT]. **[thin]**
 
 When painters acted like painters, it paid: cutting sky back over a crest, darkening the
 surroundings, waiting for paint to set. "Paint has consequences here, and time is a real tool"
@@ -430,8 +433,9 @@ surroundings, waiting for paint to set. "Paint has consequences here, and time i
 ## 15. What comes back in every section
 
 - **Evenness reads as digital:** grass, twigs, snow beads, stipple bands, skylines, tracks and
-  cracks all failed first by being even, and the fix was fewer, clustered, varied, sparser and
-  duller than the first try [r13-tree1; SB].
+  cracks all failed first by being even. What helped was unevenness (clusters and gaps, varied size
+  and spacing), not fewness: Alice saw "so much texture," probably many small strokes, in a real
+  Friedrich tree, and found an empty picture's emptiness did nothing for her [r13-tree1; SB; AR].
 - **Pasted on or sitting** depends on when a thing goes down (wet against its neighbors or alone on
   dry paint) and where its color comes from (the paint beside it or the plan) [lab/*; time; r9-arm1;
   winter].

@@ -8,7 +8,7 @@ painted it and why.
 **How sure.** **[firm]**: several painters, or painters and Alice, saw the same thing. **[fair]**:
 one clear case or a cause shown by changing one thing. **[thin]**: one remark, or my reading.
 
-**Sources.** [AR] main:notes/round6/alice_review.md (her descriptions only). [CT]
+**Sources.** [AR] main:notes/round6/alice_review.md. [CT]
 main:notes/craft_trees.md. [SB] main:notes/sketchbook.md. [coast], [mountains], [winter]:
 origin/amnesia-coast:notes/fresh2_coast.md and its mountains and winter siblings (round 2).
 [e3-free] … [e4-near]: main:notes/amnesia3/easel3_*.md and amnesia4/easel4_*.md (rounds 3–4). A
@@ -60,10 +60,8 @@ worktree X's session log.
 - **To Alice the texture read as compression.** "It almost looks like JPEG artifacts" [AR]. Lossless
   and compressed crops looked the same: "the crunchy mottle is in the paint (the stipple over the
   weave)" [AR], mostly the stipple's "blotches with sharp scalloped rims" [texture]. She wanted more
-  texture, not less: "we're just not doing the texture right yet" [AR]. Stipple itself is not the
-  fault: Friedrich stippled skies, mist and distant hills
-  (notes/research/friedrich_materials.md, [NG p.56]) and round 2's skies were stippled; how to make
-  it read as paint is still open. A wet sky of unequal thin
+  texture: "we're just not doing the texture right yet" [AR]. Friedrich stippled skies, mist and
+  distant hills (notes/research/friedrich_materials.md, [NG p.56]). A wet sky of unequal thin
   bands, no stipple, read to her as "less digital and more bad painter" [lab/sky; AR]. **[firm]**
 - **The fault that stayed: a correct, quiet gradient.** "Close to a digital gradient at viewing
   distance," the stipple "only visible up close" [r12-tree2; r13-tree3; SB]. A sky whose light was
@@ -81,7 +79,7 @@ worktree X's session log.
   as "white 'worms'," cigars, "cartoon sprites" [r10-arm3]. What held: thin level streaks, warm only
   underneath, edges lost [coast; e4-free]. Alice on one sky: every cloud was "drawing the exact same
   moon" [AR]. **[firm]**
-- **The glow stays the lightest thing.** Three trunk studies first made the snow lighter than the
+- **Snow lighter than the glow read as a gradient.** Three trunk studies first made the snow lighter than the
   sunset, "a digital gradient, not evening," and all three darkened the snow a step below the sky
   [r11-study1..3]. **[firm]**
 
@@ -89,12 +87,12 @@ worktree X's session log.
 
 - **Distance comes from value steps.** Each nearer range a step darker and cooler, mist at each
   foot: "it came from values, not from detail" [mountains; SB]. **[fair]**
-- **Carry the sky back over a crest.** Stroke ends notched hard crests into "a mesa"; sky taken from
+- **Sky carried back over a crest softened it.** Stroke ends notched hard crests into "a mesa"; sky taken from
   just above and laid back over it "turned the crenellated mesa into a soft dome": "the move a
   painter makes, and it worked" [e3-green]. A stenciled ridge was "the filled selection" [edges];
   Alice: "Still the boundaries" [AR]. A dark brought into a wet sky "broke into a lace of pale
   beads," while over the dried sky it gave "a clean found ridge" [lake]. **[firm]**
-- **Never stipple a pale veil over dark land.** "Over dark ones every dot stands alone" [mountains];
+- **A pale stipple over dark land stood out dot by dot.** "Over dark ones every dot stands alone" [mountains];
   "pale salt on the darker strip" [r11-fable]; stippled mist read as "granite" [mountains; winter].
   A thin veil brushed level and fused worked [mountains; r11-fable]. **[firm]**
 - **The far band of woods was weak nearly everywhere.** "A flat dark hump" [r10-arm1], "a hedge
@@ -110,7 +108,7 @@ worktree X's session log.
   **[fair]**
 - **Far buildings.** "The spire carries it" [r10-arm2]. Many small strokes into an open band made
   gables "stacked like pagodas"; one firm shape per roof on a dried band read [r9-arm1]. **[fair]**
-- **Guard the horizon.** Where snow and glow matched, a wood set on the planned horizon "floated in
+- **The horizon was easy to lose.** Where snow and glow matched, a wood set on the planned horizon "floated in
   snow" until the painter probed for the real meeting [r9-arm3]; snow spilling above it "silently
   ruins a horizon, the most important line in a Friedrich" [r12-tree3]. **[fair]**
 
@@ -157,7 +155,7 @@ worktree X's session log.
   version "reads as a render. Every edge is found," its reflection "a knife-sharp outline"; laid wet
   and together, "the reflection dissolves into the water" [lab/water]. Alice: the layered bank
   "abnormal," the wet one "more bad painter," still "not terribly water-like" [AR]. **[firm]**
-- **Calm water wants whole level strokes.** Drifting strokes made "cloud-like blotches," a flat
+- **Calm water read with whole level strokes.** Drifting strokes made "cloud-like blotches," a flat
   brush "brick marks" [r7-arm3; e3-free]. Flipped fir silhouettes put spires in the lake instead of
   "the flat polygon of the headland" [lake]; reflections in rows of broken level pulls held, and a
   level blend over them "left a ghostly rectangle" [r7-arm2]. One soft light line couldn't be made:
@@ -191,7 +189,7 @@ worktree X's session log.
   drew from Alice "the big trees and bushes finally look nice" [r10-arm3; AR]; a lay-in cut hard to
   the crown gave "a hard, broccoli-like silhouette" until the leaf touches made the edge [r10-arm3].
   **[firm]**
-- **Firs need a dark mass under the needles.** Hatching alone read as "fishbones," "palm fronds,"
+- **Firs read with a dark mass under the needles.** Hatching alone read as "fishbones," "palm fronds,"
   "comb teeth" [r8-arm2; r10-arm2; r11-astra]; evenly spaced firs were "a row of Christmas trees"
   [SB]. **[firm]**
 - **Pollards: painters and Alice disagreed.** Five painters drew a fat bole with thin upright rods
@@ -247,7 +245,7 @@ worktree X's session log.
   disappears into the snow; that should not happen"; "a rendering glitch around the figure" [AR],
   partly a tool fault near thick paint and partly a veil cut around the figure with a margin [halo].
   **[firm]**
-- **Crows: a real silhouette or nothing.** Perched crows "read as pods and the fliers as specks"
+- **Crows read as crows with a real silhouette.** Perched crows "read as pods and the fliers as specks"
   until given an upright body, beak, tail and bent wings [s:r9-arm1; r8-arm1]; dragged arcs made
   "hearts" [winter]. Against a dark trunk they vanished; against sky they were "blobs with beaks" at
   full size [r12-tree1]. Crows placed by eye floated when the tree was reworked [r9-arm3].
@@ -257,9 +255,7 @@ worktree X's session log.
 
 - **The first try at any small detail repeats.** "The first try of nearly every small detail … came
   out as a regular, repeated shape: dots, arrowheads, confetti, scallops, lumps. The fix was always
-  the same: fewer, irregular spacing, varied size, patchy" [r13-tree1; e3-near; r12-tree2].
-  The irregularity did the work; fewer was one painter's way to it, and texture itself was never
-  the fault (§15). **[firm]**
+  the same: fewer, irregular spacing, varied size, patchy" [r13-tree1; e3-near; r12-tree2]. **[firm]**
 - **Moons.** A dragged arc gave "a blunt banana," a filled shape "a small moth"; a crescent filled
   with short touches so the horns point, or one pointed stroke swelling along the lit limb, turned
   toward the sunk sun, read [mountains; winter; r8-arm1; s:r8-arm1]. A glazed glow drew a hard line
@@ -296,7 +292,7 @@ worktree X's session log.
   "a pale outline" [e3-near; e4-free; lab/baretree]. Light only on faces turned to the light held
   [e4-free]. A drawn contact line "read as a seam," since "a stroke's centerline isn't its edge"
   [r11-study1]. **[firm]**
-- **Carry past the line and cut back.** "A painter would carry the paint past the line and cut back
+- **Paint carried past a line and cut back.** "A painter would carry the paint past the line and cut back
   with the next passage" [winter]. Laying the neighbor's color back over an edge made it "lost and
   found" [r7-arm2; r9-arm2]. Thin dark edges over pale sky dried with "a thin light-brown rim … the
   most 'digital' thing in the picture" [r9-arm2; r12-tree3]. **[firm]**
@@ -360,10 +356,10 @@ worktree X's session log.
 - **Finding a cause meant stopping stage by stage.** One rectangle took five stopped renders
   [coast]; a crackle net took four crops with layers switched off: "a painter would have seen it at
   once on the easel" [r13-tree2]. **[firm]**
-- **Look after every step; undo freely.** "Undo is the palette knife" [e4-free]; a third of passages
+- **Looking after every step caught what a program written in one go missed.** "Undo is the palette knife" [e4-free]; a third of passages
   undone is "normal" [SB]. "A program written in one go would have had the mushroom capstone and the
   lawn-green foreground, and I wouldn't have known" [e3-free]. **[firm]**
-- **Measure when the eye doubts, and expect the tools to move.** A "pale" rock was simply lighter
+- **Measuring settled what the eye doubted, and the tools changed over time.** A "pale" rock was simply lighter
   than its turf [SB]; sizes given as half-widths doubled boulders [e3-green]. A round 2 picture
   repainted on a later engine came out with thinner marks, which Alice saw in its trees
   [winter_port; AR]. **[fair]**

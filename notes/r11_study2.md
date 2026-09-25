@@ -35,7 +35,15 @@ Program: `paintings/src/bin/r11_study2.rs`. Renders: `out/r11_study2.png`
 - 12:02 lip as long flat overlapping strokes along the bank line; the dark
   hollow only on the shadow side; little snow pushed up on the windward side
   as pressed touches; grass with bent-over and stubble blades; bark ridges
-  toned down. Final renders 12:03 (1000px) and 3200px after.
+  toned down. 3200px render of that state (279 s) kept in scratch as
+  `r11_study2_full_prev.png`.
+- 12:06 last round on the weak points of the critique: the trunk's
+  silhouette made uneven (slow swellings per side, a callus round the scar,
+  a burl low on the shadow side); a root running out from the foot on the
+  shadow side and diving under the snow (first try tapered to a point on
+  top of the snow like a horn; now it keeps its girth and the bank line
+  cuts it); eight curled oak leaves blown onto the snow, each with a hair of
+  blue shadow. Final renders from scratch: 1000px 12:10 (44 s), then 3200px.
 
 ## FRICTION
 Ranked by how much it cost me.
@@ -105,14 +113,15 @@ foot of the trunk and runs toward us, and at 3200px it is visibly brushed
 and fused. The limbs grow out of the trunk and are lit on top.
 
 What doesn't:
-- The trunk is too even: the same width of dark all the way up, fissures
-  like combed lines of similar weight. It reads as a painted column more
-  than as an old oak. It needs bigger irregularities (a burl, a twist, a
-  bulge where the scar is, bark plates as shapes, not strokes).
+- The trunk is still too even in tone: one mid-dark brown all the way up,
+  fissures like combed lines of similar weight. The last round gave its
+  silhouette swellings, a callus and a burl, which helped, but the bark is
+  strokes, not plates. Next: bark plates as shapes with lit upper edges.
 - The junction with the snow, the actual subject, is better but still too
-  clean: an almost straight line on the left, a neat dark wedge on the
-  right. No roots show, and there's no melt ring, no dirty snow and no
-  leaf litter. Friedrich would have put more there.
+  clean: an almost straight line on the left. The root on the right now
+  dives into the snow, but it is a smooth horn-like tube, not a gnarled
+  flange. The leaves are right in idea, but at 1000px they read as specks.
+  There's no melt ring.
 - The snow field is empty and even: fine strokes, soft lavender troughs,
   but the swells don't read as forms. It also sits a little too white next
   to a glowing sky for a sun on the horizon.

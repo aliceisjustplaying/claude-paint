@@ -5,7 +5,7 @@ Original winter painting, r11-astra. No reference images or earlier paintings co
 ## Composition and intent
 A low, cold valley before sunrise. A frozen watercourse bends out of the foreground toward an opening in the eastern sky. One old, leafless oak occupies the left bank; a traveler has stopped on the right. The stream is a threshold, not a picturesque road: its near ice is broken and its farther course disappears in mist. A very small church on the distant ridge offers an uncertain destination rather than a dominant Gothic emblem.
 
-The unequal banks and displaced figure should keep the composition from becoming a centered symbol. Dark roots and reeds arrest the eye below; the oak's living twigs reach into the large still sky. Particular details will include splintered wood, snow on upward-facing branches, exposed bank earth, ice seams, dry seed heads and the traveler's stick.
+The unequal banks and displaced figure should keep the composition from becoming a centered symbol. Dark roots and reeds arrest the eye below; the oak's living twigs reach into the large still sky. Particular details include splintered wood, snow on upward-facing branches, exposed bank earth, ice seams, dry seed heads and the traveler's stick.
 
 Friedrich connections: precise drawing before thin paint, warm earth under a light ground, stippled sky and distance, lead-white snow, fine grass strokes laid last. These are documented in `notes/research/friedrich_materials.md` §§2–6. The metaphoric threshold, bare trees, back-turned traveler and remote sacred building draw on knowledge of his recurring motifs, not an image or a copied composition. Film thicknesses and brush parameters are artistic approximations, not historical measurements.
 
@@ -34,8 +34,45 @@ The second tree version connects, but the full-size brush marks have squared bri
 
 7. A single large pointed brush cannot cover the entire width range of a bough. Large-tool tips vanish before the geometric end and expose detached twigs; continuous large gestures also leave squared hair tracks. Shortening release ramps and overlapping smaller tools helped, but the final workaround is a brushed continuous wood mask with a local stroke-direction field. This costs more planning but gives control of silhouette and form.
 8. Full-palette aiming produced unwelcome cyan-green patches in gray ice and over-green conifers. Workaround: restrict ice to lead white, cobalt blue, raw umber and bone black; give wood and needles similarly limited pigment families.
-9. A low-contrast soft mask does not automatically yield a soft-looking brushed snow shadow: the first drift pass showed scalloped blue bars. Workaround: double the transition width and halve the requested value change, rather than assuming mask softness alone controls the optical edge.
+9. A low-contrast soft mask does not automatically yield a soft-looking brushed snow shadow: the first drift pass showed scalloped blue bars. Workaround: widen the transition and approximately halve the requested value change, rather than assuming mask softness alone controls the optical edge.
 10. Regularly spaced small shore gestures read as road markings. This is a painter-side misuse of the brush planner, not an engine defect. Workaround: omit most edge accents, vary the bank itself and add pale broken ice shelves rather than uniform white dashes.
 
-## Critique
-The atmospheric scale and the pause at the crossing work. The paint is still too neat in some foreground motifs. I am refining wood, bank transitions and ice before accepting the final render. The large quiet sky is deliberate; adding more symbols would not improve it.
+## Final corrections
+- Viewed another native-resolution window, `--full --crop 70,475,370,670`, in `wood-stones-05.jpg`. It exposed the ribbon's rounded trunk foot hanging below the roots. Truncated that cap at an uneven turf line and painted separate tapered root ribbons into the bank. This is a geometry limitation to remember: a round stroke end is not a planted trunk.
+- Broke the repeated stone silhouette with individual vertex changes and roughened masks. Snow caps now have discontinuous edges and the exposed stone has separate dark and lighter passages.
+- Added a small stand of dried umbellifers near the lower-right bank. Removed the uniform blue shadow dash under every grass tuft: without a risen sun those dashes were both mechanical and unjustified.
+- The full ford crop caught three hand-placed melt marks outside the stream. This was my coordinate error, not an engine bug. Their x positions now derive from `stream(y)` so they remain inside the ice.
+- Reduced bark-highlight contrast, softened the snow hollows and let the fir group recede toward the right rather than putting smaller trees progressively closer.
+
+## Final method, stage by stage
+1. **Preparation:** 640 mm-wide fine linen with warm lower grounds and a light 48 µm rolled top ground. Numerical thickness is a simulator choice, not a measured Friedrich value.
+2. **Drawing:** light graphite for the principal boughs and stream axis, fixed before painting.
+3. **Sky:** curved crossing strokes, restricted five-pigment family and a wet stipple pass with a 2.5-unit tip. Cool gray-blue above, a restrained mauve transition and warm gray-yellow toward the eastern horizon. No photographic sky or image texture.
+4. **Distance:** three uneven low ridges, a tiny solid church, distant trees and a stippled mist belt. Air is represented by value, hue and edge choices rather than copied scenery.
+5. **Snow and ice:** a continuous cold snow field, warmer reflected light, a meandering ice passage, sparse exposed banks and two broken pale ice shelves. Color families for the ice exclude chrome yellow.
+6. **Snow relief:** shallow, softened depressions and a contact hollow beneath the oak. No invented hard sunlight.
+7. **Woods:** my own branch architecture converted to a continuous ribbon mask, brushed along local wood directions with earth-pigment body color. Fine twig growth is connected to those branches. Bark fissures and snow rests are separate final strokes. The firs are my own overlapping short hatches.
+8. **Banks and traveler:** individually weathered stones, interrupted snow caps, a back-turned figure in a coat, boots, hat, staff and faint approaching footprints. All are local geometry and brush gestures authored here.
+9. **Winter particulars:** clustered grass, seed heads, forked umbellifers, exposed earth and a fallen branch. These go over the finished snow.
+10. **Finish:** a very slight warm varnish (0.055 coats), restrained relief and no decorative craquelure. Aging is not used to disguise awkward drawing.
+
+## Honest final critique
+The best passage is the low dawn: the large quiet sky, remote church and small traveler establish scale without an oversized emblem. The asymmetrical oak and bent watercourse make an original composition with a clear pause at its center. Close viewing rewards the forked stems, ice cracks, broken bark and subdued footprints.
+
+The weakest passage is still the near wood: it is more smoothly designed than a truly observed old oak, and the smaller branches retain a schematic recursive quality. The distant firs remain conspicuously conical. The snow's brushed transitions can read as soft digital patches, while the ice shelves and stones are too cleanly planar. At full resolution this is a restrained program-painted landscape, not a convincing substitute for Friedrich's minute, irregular hand. I would improve observation and edge variety before adding more objects. No claim of historical reconstruction is intended.
+
+## Top five friction points
+1. **Brush taper and joins:** one tool cannot span a thick bough through a hairline tip without premature disappearance or pinched joins. Final workaround: a connected mask brushed along the wood, separate fine twigs and shorter release ramps.
+2. **Palette hue surprises:** broadly aimed gray passages showed cyan/green patches. Final workaround: restricted pigment families for ice, wood and needles.
+3. **Soft mask versus soft paint edge:** soft snow masks initially made scalloped blue bars. Final workaround: wider transitions, much smaller value changes and less uniform contact marking.
+4. **Small hatches versus coherent masses:** sparse conifer strokes read as comb teeth. Final workaround: denser overlap, unequal tree spacing and several grouped silhouettes; the remaining conical look is noted above.
+5. **Crop preparation cost:** a small full-resolution crop still paid nearly 20 seconds for the distant-land stage. Final workaround: direct gestures for tiny details, scoped masks and whole renders when a crop would save little. No engine changes.
+
+## Accepted deliverables and checks
+- Program: `paintings/src/bin/r11_winter_astra.rs`.
+- Preview: `out/r11_winter_astra.png`, **1000 × 699**, final render **17.6 s**.
+- Full: `out/r11_winter_astra_full.png`, **3200 × 2238**, final render **80.4 s**.
+- Viewed only through `scripts/peek`: `accepted-preview.jpg`, `accepted-full.jpg` and `accepted-ford.jpg` in the retained scratch directory. Earlier actual full-resolution crops of the oak, roots and stones are retained there too.
+- Both final `cargo paint` commands completed successfully under `timeout 900`. `file` confirmed PNG dimensions. `git diff --check` passed. No engine or shared source files were edited. The render PNGs stay in the repository's ignored `out/` directory; the program and this note are committed.
+- Preview SHA-256: `c143e35f609ec2d667da310149c9e97d9a26778aedd2e9ae59c4bc511876a919`.
+- Full SHA-256: `856431ba6e11db834fdc0fd0682885cd73374cc80dc8c3e4597b8ddab641562c`.

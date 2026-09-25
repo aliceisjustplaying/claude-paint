@@ -94,5 +94,43 @@ the rise in front.
    foreground (a digital grass brush look), even with per-tuft color
    variation.
 5. **Glazes are streaky as a shadow.** A glaze `work` with `load_at` from a
-   soft shadow mask left a hard dark slab with visible stroke ends;
-   needed a lower load and a badger pass over the shadow area.
+   soft shadow mask left a hard dark slab with visible stroke ends (the
+   strokes are planned where the mask passes the threshold and end
+   there); a badger pass after it did not soften it. Workaround: the
+   shadow *stippled*, with density following the shade mask and a
+   darker version of the ground's own color: the edge becomes a thinning
+   of touches. The same trick (a stipple with `.paint(0.25, 0.3)`, low
+   hiding) worked as a cool shade veil over the lime's far side. A
+   "stipple glaze" is the most useful tool I found this round.
+6. **Thick limbs paint as striped planks.** `wood_strokes` painted with a
+   round sable at the limb's width show bristle stripes and pale, square
+   ends at 3200px (the "ladder" issue in notes/motifs.md). Workaround: each
+   stroke twice, the second narrower with more medium (0.4). Better, not
+   gone.
+7. **Sky clouds took four tries.** Cloud density fields are mine to
+   write (Fbm + domes), and the look depends on them completely:
+   continuous banks came out as white "worms" (only the crest showed),
+   heaped banks as cigars, separate heaps as cartoon sprites. What worked:
+   soft level streaks, Gaussian across, heaped above and flat below,
+   gated by a low noise so they break. `atmos::Clouds` exists but needs a
+   `World` camera and meters; I didn't have time to learn it for a
+   painting with no other use for `scene`.
+8. **The small things of a foreground are all hand-written.** Nothing in
+   the engine helps with a dock, a thistle, yarrow, pebbles or a cart
+   track, which is right by the principles, but each one took a function
+   of gestures (100+ lines together), and at 1000px most of them
+   read as specks. Yarrow heads at the first size read as scraps of white
+   paper.
+9. **`Tree::bounds` includes the trunk.** I wanted the crown's extent to
+   shade the crown's far side and break its edge; I had to compute it from
+   `Tree::crown` (the drawn outline) myself.
+10. **Crops don't share checkpoints with the whole render.** A crop's
+    `--ckpt` goes to `<name>_full_crop.*`, so every different crop window
+    paints from the ground up (25–60 s at 3200px here because the whole-
+    canvas masks and the lime's 23k touches are planned regardless). The
+    lime crop took 59 s.
+11. **The perspective of flat land is mine to derive.** Mown strips equally
+    spaced on the ground, cloud shadows in perspective, the cart track
+    narrowing: all from a hand-made `depth` and `1/(d+k)` distance. The
+    `scene` module would give this, but it's a big API to learn for
+    one painting; a small "ground plane" helper (y ↔ distance) would do.

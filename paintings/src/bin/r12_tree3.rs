@@ -395,6 +395,20 @@ fn main() {
         c.dry();
     }
 
+    if o.stage("veil", &mut c, &mut rng) {
+        // a thin cool glaze, once all is dry: over the near snow, deepening
+        // toward the bottom edge so the eye goes back to the tree, and a
+        // breath of it in the upper corners of the sky
+        let lie = Fbm::new(77, 3, 140.0);
+        c.glaze(&paint::Pigment::with_hiding(hex("#6f7288"), 0.03), None, move |x, y| {
+            let near = smoothstep(HORIZON + 40.0, h, y) * (0.8 + 0.4 * lie.get01(x * 0.4, y * 2.5));
+            let dx = (x - 500.0) / 560.0;
+            let dy = (y - 620.0) / 700.0;
+            let corner = smoothstep(0.75, 1.25, (dx * dx + dy * dy).sqrt()) * (1.0 - smoothstep(500.0, 800.0, y));
+            0.35 * near + 0.18 * corner
+        });
+    }
+
     // no aged finish: the paint as it left the easel, only the raking light
     let fin = Finish { varnish_coats: 0.0, varnish_vary: 0.0, cracks: None, ..Finish::aged(st.relief) };
     o.finish(&mut c, &mut rng, &fin);

@@ -126,10 +126,63 @@ from.
    ends.
 8. **Rng has no integer range.** It's a small thing, but every painter writes one
    (`ri` in my program).
+10. **Editing a helper below `main` makes every stage stale.** Changing
+    `limb_snow` or `short_shoots` (used only by late stages) refused
+    `--resume snow`, because helpers after the item count for every stage.
+    The painter's own motif functions are exactly what you edit most.
+    *Workaround:* `--stale-ok` when I know the early stages don't call
+    them. A per-function "used from stage X" tag would fix it.
+11. **Dead wood dragged through wet dark goes muddy.** My broad lanes ran
+    in live bark colour past `dead_from`; the grey dead top laid over wet
+    dark came out streaked and translucent, with the pencil contours
+    showing as outlines. This is correct wet-in-wet physics, and my own
+    mistake. *Fix:* stop the lanes at `dead_from`. Worth a line in
+    motifs.md: `dead_from` matters for any multi-pass limb painting.
+12. **A glaze is a smooth function.** The final cool veil over the near
+    snow reads a little like a digital gradient. The noise I multiplied in
+    barely shows through 0.03-hiding paint. A painter would glaze with a
+    brush, unevenly; `glaze` has no hand.
 9. **Big round sables plough ladder-like pale lines** along long thick
    limbs under the relief light (known, motifs.md). I cut the long bark
    streaks to 1–4 nodes so the pale lines don't read as plank grain.
 
-## Critique
+- v6–v7: dead wood made opaque, and lanes stop at `dead_from`. Short shoots
+  are fewer and closer to the limb angle (they read as thorns), and the snow heaps are
+  smaller and greyer (they read as white commas). A clean full render.
+- v8: a `veil` stage glaze (cool over the near snow, faint in the sky's
+  upper corners), resumed from `foot` (exact).
 
-(see the end of this file, written after the final render)
+## Critique (honest)
+
+What works: the tree's architecture. It is an open-grown oak that has
+visibly lived a long time. A live, spreading lower crown ends in sprays
+of fine shoots that lift off to hairlines, and the leader and upper
+limbs are dead and silvered, broken off with splinters. At 2400 px the
+twig filigree against the pale sky reads as painted with a pointed brush,
+not rasterized. The dead grey against the live near-black gives the tree a
+story. The foot has buttress roots going under a drift, which is better
+than the flat-cut stump of v4. The sky's warm low band behind the bole puts
+the darkest dark against the lightest light, where the eye should go.
+
+What doesn't:
+- **Too centered and too symmetric.** A candelabra silhouette in the middle
+  of the canvas, with the horizon ruled level. Friedrich would place it
+  deliberately and give the land some line. My rise barely reads.
+- **The snow is empty and too even.** It has no drift lie and no tracks; the
+  scattered grass tufts are too small and too evenly spread to carry it,
+  and the final glaze reads as a gradient.
+- **The twig tufts are brooms.** The growth model's tip clusters plus my
+  sprays give dense round tufts at limb ends, with bare wood between.
+  Real oak crowns are a more even net. The short shoots still have a
+  whiff of thorns.
+- **Snow on the limbs** now reads as snow, but it is too uniform in size and
+  spacing: little white dashes on every level limb. Forks hold no
+  heaps and no snow bridges between twigs.
+- **The sky's cloud bank** is blotchy stipple in patches, and the lay-in
+  leaves horizontal banding in the upper sky: painted, but not
+  Friedrich's seamless stipple.
+- The bole's lanes show as long parallel strokes. They read as bark but
+  are a little too tidy, and the rim light is still thin.
+
+In short, a believable old oak, painted with a hand, standing in a
+placeholder landscape.

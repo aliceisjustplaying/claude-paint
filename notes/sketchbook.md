@@ -182,10 +182,10 @@ varied, tapered twigs, all connected), water B, sky B, rock B.
 *Ceiling:* oaks come out as umbrella/savanna crowns or "broccoli"; spruce tiers as regular chevrons; field trees as identical balls; wood interiors as flat black masses. No painter has yet drawn a tree with its structure, only built one from parameters.
 
 **Broadleaves from a drawing: `tree_in{}` and `tree_group{}` (THE TOOL TO USE for oak,
-beech, lime, birch and willow; use it before `tree{}`/`t:foliage{}` or a hand-built crown).**
+beech, lime and birch; use it before `tree{}`/`t:foliage{}` or a hand-built crown).**
 Draw the crown as an `outline{}`, lopsided and lobed (a symmetric blob grows a
 lollipop), and the trunk from the foot up. Then
-`t = tree_in{crown=o, trunk={{x,foot},...}, species="oak"|"beech"|"lime"|"birch"|"willow",
+`t = tree_in{crown=o, trunk={{x,foot},...}, species="oak"|"beech"|"lime"|"birch",
 season="summer"|"spring"|"autumn"|"late_autumn"|"winter", sun=WORLD, seed=}` grows the limbs
 from the trunk into your crown, with the crown's own gaps, leaf clumps on the twigs and hooked
 touches on the clumps [trees_in study, `paintings/lua/trees_in.lua`]. Paint it in this order:

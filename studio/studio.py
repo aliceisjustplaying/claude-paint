@@ -139,6 +139,14 @@ class H(http.server.BaseHTTPRequestHandler):
             since = int(q.get("since", ["0"])[0])
             ev, _ = parse(path)
             return self._send(200, json.dumps({"events": ev[since:], "total": len(ev)}).encode(), "application/json")
+        if u.path == "/api/file":  # the painting's current source, from the painter's folder
+            ev, _ = parse(path)
+            cwd = next((e["cwd"] for e in ev if e["kind"] == "start"), "")
+            want = os.path.realpath(os.path.join(cwd, q.get("p", [""])[0]))
+            if cwd and want.startswith(os.path.realpath(cwd) + os.sep) and os.path.isfile(want):
+                with open(want, "rb") as fh:
+                    return self._send(200, fh.read(), "text/plain; charset=utf-8")
+            return self._send(404, b"", "text/plain")
         if u.path == "/img":
             _, imgs = parse(path)
             i = int(q.get("i", ["0"])[0])

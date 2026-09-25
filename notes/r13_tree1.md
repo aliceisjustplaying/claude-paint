@@ -36,7 +36,7 @@ lies half-buried at the right.
      cluster at the tip).
    - Buttress roots go down into the snow. The bole has burrs (a width
      wobble), not a column.
-   The result is about 10,000 limbs and 110,000 points. I checked the
+   The result is about 5,400 limbs and 94,000 points. I checked the
    silhouette with a 1-px-per-unit PGM thumbnail (`TREE_PGM=path`). That is
    the painter's thumbnail sketch, not part of the painting.
 2. **Drawing**: an HB contour of the trunk and boughs, and an H line for the
@@ -90,6 +90,21 @@ lies half-buried at the right.
   as steep buttresses. A contour-stroked mound replaced the slab. Woods made
   paler and broken. Grass put in patches. Cool hollows added. Bark
   darkened and the bole given burrs.
+- v5: the sky at full size read as flat gray with scanline stripes.
+  The lay-in now wanders (`angle` varying, `cross(0.12)`, `drift`),
+  pass 1 of the stipple went to coverage 3 and pass 2 covers the upper sky
+  too. It reads as stippled paint now. Added last year's leaves on low
+  twigs near the trunk (marcescence; the *Oak Tree in Snow* text mentions
+  brown leaves kept through winter [CDF-EICH]). The first try put leaves on
+  565 twigs, like confetti. Now they are on about 60 twigs in sheltered
+  patches, hanging from their stalks, a darker brown.
+- v6–v8: far woods hatched with a small round (1.3) instead of the hatch
+  preset's 2.6 brush, so the edge is a serration of tree tops, not cotton
+  lumps. Cool hollows lighter (they had read as dirty stains). Fallen limb
+  made crooked, with a softer shadow and without its cotton-ball snow. Weed
+  stalks with dark seed heads added among the grass. The drift now
+  overlaps the foot in low, uneven lumps: a pointed round made loops and
+  a filbert made snowballs, until the lumps were flattened.
 
 ## FRICTION
 
@@ -129,7 +144,10 @@ lies half-buried at the right.
 5. **Checkpoints at 2400 px are 893 MB each.** `--ckpt` on a whole render
    wrote about 7 GB for 8 stages on a disk with 100 GB free. I kept them
    because resuming from "sky light" is what made iteration possible
-   (13 s instead of 130 s).
+   (13 s instead of 130 s). Whole-render timings at 2400 px: underdrawing
+   plus priming 45 s, sky lay-in, blend and stipple 72 s, everything
+   else 18 s. The ~5,400 limbs' drags (limbs and twigs) take under 1 s,
+   and the priming and the sky take 90% of the time.
 6. **No round-dab primitive that isn't round.** `Touch` at a fork made a
    perfect disk of white, which reads as digital at once. Snow in a crotch
    has to be several short drags on top of each other. That is fine as a
@@ -149,6 +167,45 @@ lies half-buried at the right.
    0.25–0.6, the HB contour was nearly invisible on the reddish ground at
    2400 px, even before paint. There is no feedback short of rendering.
 
+10. **Every motif ends up hand-tuned against its own failure mode.** The
+   first try of nearly every small detail (fork snow, tip clusters, leaves,
+   knuckle snow, far woods) came out as a regular, repeated shape: dots,
+   arrowheads, confetti, scallops, lumps. The fix was always the same: fewer,
+   irregular spacing, varied size, patchy by a noise field. The engine
+   gives `uneven` spacing in `noise` for this, but the drags and touches a
+   painter places by hand get no help, so each motif re-derives it.
+
 ## Critique
 
-(Updated at the end.)
+What works. At full size the tree reads as an oak and as old: a short,
+burred bole, boughs that spread and twist, a living crown ending in a fine
+net of twigs, and above it two bleached dead limbs, crooked at their old
+nodes. The whole is painted from the snow to the finest twigs. The
+twigs are the best passage: pointed-rigger strokes lifted off to the tip,
+warm gray-brown against the cold sky, overlapping into a filigree that
+looks painted, not rendered. The trunk's body color, run along the form,
+with fissures drawn into the wet paint, reads as bark. The stippled sky
+has the granular, strokeless look of his skies, and the far woods are a
+believable serration.
+
+What reads as digital or weak:
+- The composition is safe: the tree is centered, the horizon straight and
+  low, the sky empty. It is a Friedrich *arrangement*, but without his
+  tension (no second element, no figure, no dolmen, no ruin, which the
+  brief ruled out anyway).
+- The crown silhouette is too even. The living crown is a fairly
+  uniform haze of twigs of one density and one warm color. Friedrich's
+  oaks have gaps, holes, clumps and some limbs bare to the tip. The generator's
+  randomness is statistically even, so the crown has no "events".
+- Snow on the limbs is thin and timid. Only a few bands show at viewing
+  distance, so the tree barely says "snow has fallen". It is physically
+  argued (steep limbs shed snow), but the picture wants more.
+- The dead limbs' crookedness is sinuous rather than angular. A
+  snake-like wobble instead of sharp breaks.
+- The snow field is correct but inert. The cool hollows are very quiet
+  now, the grass patches still look placed, and the fallen limb still reads
+  a little like a stick laid on a tablecloth.
+- The foot: the drift's top is still mostly one straight line across the
+  root flare.
+- The underdrawing is invisible. The HB lines were too light to show even
+  under the thin sky.

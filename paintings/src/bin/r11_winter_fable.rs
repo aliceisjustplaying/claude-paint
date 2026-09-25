@@ -17,8 +17,8 @@
 //!   cargo paint r11_winter_fable -- --full       3200px → out/r11_winter_fable_full.png
 //!   cargo paint r11_winter_fable -- --full --crop 120,300,420,660   the oak
 //!
-//! Stages: drawing, sky, far, snow, pool, oak, spruces, grass, figure,
-//! birds (then the finish).
+//! Stages: drawing, sky, far, snow, pool, oak, spruces, grass, fence,
+//! figure, birds (then the finish).
 
 use paint::atmos::{Sky, SkyField};
 use paint::color::{Mix, mix, to_oklab, from_oklab};
@@ -442,6 +442,56 @@ fn main() {
         c.dry();
     }
 
+    // --------------------------------------------------------------- fence
+    // A broken paling fence running from the lower right into the middle
+    // distance toward the church: posts at uneven, receding spacing, most
+    // leaning, a sagging rail between some, snow caps on the posts.
+    if o.stage("fence", &mut c, &mut rng) {
+        let wood = pal.paint(hex("#3a3128"), 0.2);
+        let snow = pal.paint(hex("#e9e6dc"), 0.08).with_hiding(0.97);
+        let (x0, y0) = (982.0, 706.0);
+        let (x1, y1) = (898.0, 478.0);
+        let mut posts: Vec<((f32, f32), f32, f32)> = vec![]; // foot, height, lean
+        let mut t = 0.0f32;
+        let mut k = 0;
+        while t < 1.0 {
+            let d = 1.0 - t; // 1 near, 0 far
+            let foot = (x0 + (x1 - x0) * t + rng.range(-3.0, 3.0) * d, y0 + (y1 - y0) * t);
+            let h = 8.0 + 46.0 * d * d;
+            let lean = rng.range(-0.28, 0.28) * if k % 3 == 1 { 1.8 } else { 1.0 };
+            posts.push((foot, h, lean));
+            t += (0.045 + 0.075 * d * d) * rng.range(0.7, 1.4);
+            k += 1;
+        }
+        let mut b = Held::new(Tool::round_sable(2.4), 91);
+        let mut rg = Held::new(Tool::rigger(0.7), 92);
+        let mut sn = Held::new(Tool::round_sable(1.6), 93);
+        for (i, &(foot, h, lean)) in posts.iter().enumerate() {
+            let d = ((foot.1 - HZ) / (H - HZ)).clamp(0.0, 1.0);
+            let col = mix(wood.color, airlight(foot.0), 0.55 * (1.0 - d).powi(2), Mix::Light);
+            let p = pal.paint(col, 0.2);
+            let top = (foot.0 + lean * h, foot.1 - h);
+            let hb = if h > 18.0 { &mut b } else { &mut rg };
+            hb.reload(p, 0.9);
+            c.drag(hb, &Gesture::new(vec![foot, ((foot.0 + top.0) * 0.5 + rng.range(-0.4, 0.4), (foot.1 + top.1) * 0.5), top]).pressure((0.4 + 0.5 * d).min(0.9), (0.3 + 0.4 * d).min(0.8)).ramps(0.05, 0.1).shake(0.5), None);
+            // rail to the next post, sagging, missing here and there
+            if i + 1 < posts.len() && rng.f() < 0.72 {
+                let (nf, nh, nl) = posts[i + 1];
+                let a = (top.0, top.1 + h * 0.18);
+                let e = (nf.0 + nl * nh, nf.1 - nh + nh * 0.18);
+                let m = ((a.0 + e.0) * 0.5, (a.1 + e.1) * 0.5 + h * rng.range(0.03, 0.12));
+                rg.reload(p, 0.8);
+                c.drag(&mut rg, &Gesture::new(vec![a, m, e]).pressure((0.3 + 0.4 * d).min(0.7), (0.25 + 0.35 * d).min(0.6)).ramps(0.05, 0.1).shake(0.5), None);
+            }
+            // a snow cap
+            if h > 10.0 {
+                sn.reload(snow, 0.9);
+                c.touch(&mut sn, &Touch::at(top.0, top.1 - 0.6).pressure((0.3 + 0.4 * d).min(0.75)).drag(1.2 + 1.5 * d, 0.0), None);
+            }
+        }
+        c.dry();
+    }
+
     // -------------------------------------------------------------- figure
     // The wanderer, from behind, stopped on the snow, looking toward the
     // spire; his tracks come up from the bottom edge.
@@ -471,7 +521,7 @@ fn main() {
             let wob = 0.4 * ((k as f32) * 1.7).sin();
             let x = fx + 2.0 + (y - fy) / (H - fy) * -46.0 + sway * (2.6 * d + 0.6) + wob;
             let under = c.under(x, y, 2.0);
-            b.reload(pal.paint(shift(under, -0.17, 0.0, -0.035), 0.2), 0.8);
+            b.reload(pal.paint(shift(under, -0.15, 0.0, -0.02), 0.2), 0.8);
             let sz = (3.2 * d + 0.6).min(3.8);
             // a dent: a short stroke pulled toward the walker, heavier at the heel
             c.drag(&mut b, &Gesture::line((x - sway * 0.3, y + sz * 0.5), (x + sway * 0.2, y - sz * 0.5)).pressure((0.35 + 0.6 * d).min(0.95), (0.2 + 0.4 * d).min(0.7)).ramps(0.1, 0.3).shake(0.5), None);

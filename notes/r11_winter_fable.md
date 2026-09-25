@@ -150,13 +150,64 @@ What it draws on (from knowledge, not pictures):
    one arc stroke with a pressure swell, which works but its hiding
    (0.98) had to be forced because the aimed lead white over the glow
    would have vanished.
-10. **`Gesture` has no width field**: a stroke's width is the tool's width
+10. **Editing a helper below `main` stales every checkpoint.** The
+    staleness model counts "everything after the item that holds the
+    stage", so touching `wanderer()` (used only in the figure stage) made
+    the *sky* checkpoint stale and I had to `--stale-ok --ckpt`. Painters
+    write motifs as helper functions; a per-stage rule that only counts
+    helpers the stage's block actually calls would keep the fast loop.
+11. **Stipple touches read as beads at 3200px** for two things I tried:
+    snow on limbs as separate touches (a line of white pearls) and the
+    mist as an `aim(false)` veil over the ridge (pale salt on the darker
+    strip). Both became strokes: a short dragged stroke along the limb's
+    upper side, and a thin lead-white scumble (`Style::glaze(0.62)`)
+    brushed level and fused. Stipple works as a field texture; as a
+    thing lying on a thing it beads.
+12. **Limb sections handed between brushes tapered to nothing at the
+    joint.** My first tree painter gave each section a small release; at
+    3200px every joint on the trunk showed as a soft feathered break
+    (the next, thinner brush can't refill the taper). Release must be 0
+    at a hand-over and the next section must set down inside the wet
+    end. The engine's `Gesture` can't express "end at full pressure and
+    continue with another brush" except by this discipline.
+13. **`Mask` isn't `Copy` and closures capturing it move it.** A `load_at`
+    closure that samples the mist `band` moved the mask, which the next
+    line needed; `{ let band = &band; move |x, y| .. }` fixes it but
+    every mask-sampling closure needs the dance.
+14. **`Gesture` has no width field**: a stroke's width is the tool's width
     × pressure. To draw a limb of a known width you must solve the
     pressure (`Tool::pressure_for`), and the round sable's mark width at
     pressure 1 is not the tool width (spread ≈ 1.0–1.3). Every motif
     painter re-derives this.
 
 ## Critique (honest, updated as I look)
+
+After the first 3200px render (`~/tmp/r11-winter-fable-92d3ae5a/full1_oak.jpg`,
+`full1_fig.jpg`): the oak's trunk joints feathered (fixed, FRICTION 12),
+the snow on its limbs was a string of white beads (fixed, 11), the mist
+stipple was salt on the ridge (fixed, 11), the figure was a pawn (the
+coat now narrows at the shoulders and flares to the hem), the tracks were
+invisible (now short dragged dents, darker and bluer than the snow). The
+snow itself at 3200px reads as thin paint over a fine ground with the
+craquelure right for its scale; the pool's snow-dusted rim is one of the
+better passages.
+
+At 1000px, after the fourth preview (`v4.jpg`): the mist scumble
+softens the ridge into the sky, the snow lies on the oak's limbs, the
+figure reads as a man in a long coat with a stick and a hat, and the
+tracks come up to him. Still wrong or weak:
+- The tracks are too blue and too evenly spaced; the snow's shadow color
+  should be grayer.
+- The ridge is still a strip with a soft top, not hills with trees.
+- The snow field is too even; the hummocks are only visible near the
+  bottom.
+- The sky: the yellow-to-gray transition is a band, not a gradation of
+  many stipple layers; the zenith is heavier than Friedrich's would be.
+- Nothing in the picture is truly *particular* yet in the way
+  Friedrich's details are (a fence post, a stone, a gate). Given the
+  time, the next things I would add: a snow-covered stone or two near the
+  oak's foot with a shadow, a broken fence running into the distance
+  toward the church, a fine haze of twigs on the oak's crown.
 
 At 1000px, after the third preview:
 - The sky reads as thin stippled paint with a real glow and a cold

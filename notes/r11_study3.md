@@ -88,10 +88,69 @@ No varnish and no cracks: `c.dry()` and `c.relief(st.relief)`, then save.
   load) and vary in pressure.
 - The limb mask began inside the trunk, so the limb was painted across
   the trunk as a lighter band. Now it starts at the trunk's edge, with a
-  fillet in the crotch.
+  fillet in the crotch. The first fillet sat under the limb as a bulb; it
+  belongs in the acute angle above it.
+- The broken stub ended in a rounded sausage cap: a capsule mask always
+  rounds its end. I cut the last segment square in `limb_side` and drew
+  four splinters off the break, one longer than the rest, plus a touch of
+  pale wood.
+- The far copses came out milky below their dark tops: stippled into the
+  still-wet snow, the touches picked up lead white. I dry the snow first.
+- Cloud streaks: first stippled on thin masks, they came out as ruled
+  lines, then as dotted smears (the stippler grain shows in a thin band).
+  Now a small soft filbert draws them in broken, swelling strokes of thin
+  paint, with no fill.
+- The limb was a straight rod and the upper trunk a bare pole. The limb is
+  crooked now (eight points, zig-zag, as sympodial oak limbs grow), with a
+  dead branch high on the left that ends in a break.
+- Final pass at 3200px: the crust on the dead branch and the stub landed
+  on the **underside**. My "up" normal flipped for limbs drawn right to
+  left. Fixed by choosing the normal with negative y.
+- The foot still had bright white "claws". Removing relief lighting
+  (`NO_RELIEF=1`, a debug switch left in the program) didn't change
+  them, and neither did aiming the lip paint. Tinting each stroke family
+  in a debug run (crease red, lip green, drift blue) showed the whole
+  story at once. The "drift" arcs were claws out in the open snow, 30
+  units left of the trunk. The crease sat 5 units below the real edge,
+  and the lip strokes sat on the bark. Before the `foot` stage, the
+  snow field's own edge (the trunk mask cut at `contact`) already made a
+  clean mound against the trunk. So the foot is now just a thin crease of
+  shade on that edge and a few lip touches, each aimed with
+  `Canvas::aim` a shade lighter than the snow it lands on. Lesson: debug
+  colors per stroke family should be a one-line switch.
+- The 3200px crops caught most of the above (bark "rain streaks", the
+  beaded lip, the limb band across the trunk, milky copses). At 1000px
+  they read only as vague wrongness.
 
 ## FRICTION
-(See the end of this file for the ranked top five.)
+
+### Top five
+1. **No false-color or "which code made this mark" view.** It took three
+   blind experiments at 3200px to find that the white claws at the foot
+   were my own drift strokes in the wrong place (item 14).
+2. **Checkpoint staleness follows lines, not what a stage uses.** Shared
+   geometry functions above `main` stale every stage, including the sky,
+   so `--stale-ok` became routine. And crop checkpoints share one stem,
+   so switching between two crop windows repaints from scratch
+   (items 1, 2 and 13).
+3. **Wet-into-wet pickup is silent and easy to trigger.** Twice a later
+   pass went milky over an open passage (trunk into snow, copses into
+   snow). It's physically right, but there's no warning and no cheap
+   "is this mask dry?" query (items 7 and 12).
+4. **Masks are hard boundaries for handlings.** Feathered passages turn
+   into rectangles with `clip(true)`, and there's no tapered-path mask
+   for limbs (capsules round every end), so a painter's own limbs need a
+   hand-written coverage function, a square cut and a crotch fillet
+   (items 3 and 10).
+5. **Hand strokes and thin passages don't aim by default.**
+   `pal.paint(hex, medium)` is a masstone, so thin hand strokes (the
+   lip, crust and crests) dry off their intended look. Thin stipple bands
+   show their grain as dotted lines, and a glaze over impasto pools into
+   crescents. Each needed a different workaround: `Canvas::aim` per mark,
+   a brush instead of the stippler, or mixing the shadow into the lay-in
+   (items 4, 5, 11 and 15).
+
+### All of it
 
 1. **Geometry helpers invalidate every checkpoint.** A painting's shared
    geometry (`axis`, `half_w`, `contact`) lives in top-level functions
@@ -137,6 +196,74 @@ No varnish and no cracks: `c.dry()` and `c.relief(st.relief)`, then save.
    lighter loads, varied lengths.
 9. `Rng` has `f`, `range`, `chance`, `normal`, but no integer pick
    (`below(n)`). Trivial, but I reached for it.
+10. **A capsule is the only limb shape at hand.** `Mask` has no "tapered
+    polyline" or "stroke of a path with widths", so I wrote my own
+    `limb_side` (coverage, direction, and which side is up). It needed a
+    square cut for broken ends and a hand-placed ellipse for the crotch
+    fillet. `growth::Skeleton` has `mask`, but a skeleton you draw by
+    hand (a painter's own limb) can't use it.
+11. **Thin stipple bands show their grain.** A stipple in a band a few
+    units wide reads as a dotted line, not a streak. `fade` helps at the
+    edges, but the dots along the band's axis stay visible. A brush was
+    the right tool.
+12. **Wet-into-wet pickup is silent.** Twice (trunk into snow, copses into
+    snow) a later pass went milky because the passage under it was still
+    open. Nothing in the run output says "stroke picked up X% foreign
+    paint". The 1000px preview just looks gray, and it takes a 3200px
+    crop to see why.
+14. **No way to see which marks came from which code.** The white claws
+    at the foot took three blind experiments (thinner paint, aimed
+    paint, no relief) before I tinted each stroke family by hand. A
+    debug mode that colors marks by call site or stage (a "false-color"
+    view) would have found it in one render.
+15. **`pal.paint(target, medium)` means "masstone"** (`Palette::mix`:
+    "the pile that, laid thick … looks `target`"). For thin hand
+    strokes, that's easy to misread as "looks like this where I put
+    it". `Canvas::aim` is the right call; the notes say so, but hand-mark
+    examples (study_tip) all use `Paint::body(hex)` or `pal.paint`.
+13. **Crop checkpoints are per stem, and 3200px crops cost 40–95 s from
+    scratch** on the shared machine (mask building over the whole canvas
+    is most of it). Switching between two crop windows means a full
+    re-run each time (friction 2).
 
-## Critique
-(in progress; see the final section)
+## Critique (honest)
+What works:
+- The value structure is Friedrich's: a dark, nearly silhouetted tree
+  against a sky that is the lightest thing in the picture, with snow a
+  step below the glow. The sky passes from cool gray-blue through a pale
+  green band to the warm glow without a seam. It is thin paint, stippled,
+  and the ground's grain shows through it.
+- Trunk against sky: the silhouette is ragged at the bark's scale, not
+  smooth. The limb springs from a fillet, lit on top and dark
+  underneath, with a broken crust of snow on it. The twigs lift off to
+  hairlines. The dead branch and the stub's torn end give the tree a
+  history.
+- Trunk into snow: the trunk stops at an irregular contact line. A drift
+  piles on the windward side, with a crease of shade at the bark and a
+  scoop of bluer shadow in the lee. The cast shadow comes toward us and
+  widens, mixed into the snow rather than laid on it, so the drifts show
+  through. The grass stalks, laid last, sit in the snow.
+
+What reads as digital or weak:
+- The trunk is still too even in tone along its length. At 1000px it is
+  one dark shape. The bark (fissures, cross cracks, lichen) only shows in
+  3200px crops, and the lichen barely at all. A backlit oak is dark, but
+  Friedrich's trunks have more going on in their lower third.
+- The root flare is a smooth bell. There are no roots going into the snow
+  and no humps of snow over buried roots.
+- The contact at the foot is clean now, but it's plain: one mound and
+  one crease. There are no crumbs of snow on the bark, no roots, and no
+  hollow where the snow has melted back from the dark wood.
+- The foreground snow modeling is a noise field in perspective. It reads
+  as painted drifts at 1000px, but its strokes are the same everywhere.
+  The crest strokes are generic, not drawn to particular drifts.
+- The twigs are recursive and too regular: forks at the same fractions
+  and similar angles. The claw-like, hooked twig ends of an old oak
+  aren't there.
+- The far copses are flat dark strips with ragged tops. They pass at
+  1000px but have no inner structure (no trunks, no gaps of sky).
+- The cloud streaks are good in the 3200px crop but faint at 1000px.
+
+As a study of the two meetings, it succeeds at the sky edge more than at
+the snow edge: the sky edge is decided, and the foot is still an
+arrangement of marks that almost convinces.

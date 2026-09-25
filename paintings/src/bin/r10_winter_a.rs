@@ -56,6 +56,7 @@ fn sky(x: f32, y: f32) -> Rgb {
     mix(warm, hex("#c3bdb8"), 0.35 * away, Mix::Light)
 }
 
+// ckpt: from field
 /// A low bank running across the middle ground (a sunken lane's edge): the
 /// crest line.
 fn bank(x: f32) -> f32 {
@@ -74,17 +75,19 @@ fn snow(x: f32, y: f32, drift: &Fbm) -> Rgb {
     // drifts: a height field stretched along the ground; slopes facing the
     // glow (west, left) catch light, hollows go blue
     let e = 1.5;
-    let hx = |x: f32, y: f32| drift.get(x, y * 3.2);
+    let hx = |x: f32, y: f32| drift.get(x, y * 4.0);
     let slope = (hx(x + e, y) - hx(x - e, y)) / (2.0 * e);
     let up = (hx(x, y - e) - hx(x, y + e)) / (2.0 * e);
-    let lit = (-slope * 70.0 + up * 30.0).clamp(-1.0, 1.0) * (0.3 + 0.7 * d);
-    let hollow = drift.get(x, y * 3.2);
+    let lit = (-slope * 110.0 + up * 45.0).clamp(-1.0, 1.0) * (0.3 + 0.7 * d);
+    let hollow = drift.get(x, y * 4.0);
     // the bank: a lit lip, then its face turned from the sky in shadow
     let below = y - bank(x);
     let face = if below > 0.0 { (1.0 - below / 16.0).max(0.0).powf(1.5) } else { 0.0 };
     let lip = if below <= 0.0 { (1.0 + below / 5.0).max(0.0) } else { 0.0 };
-    shift(base, 0.065 * lit - 0.055 * hollow - 0.095 * face + 0.035 * lip, 0.005 * face, -0.018 * lit.min(0.0) - 0.016 * hollow - 0.03 * face)
+    shift(base, 0.05 * lit - 0.04 * hollow - 0.095 * face + 0.035 * lip, 0.005 * face, -0.018 * lit.min(0.0) - 0.016 * hollow - 0.03 * face)
 }
+
+// ckpt: end
 
 /// Capstone of the dolmen: top and bottom edges.
 fn cap_top(x: f32) -> f32 {
@@ -98,6 +101,7 @@ fn cap_bot(x: f32) -> f32 {
 
 /// Paint one limb of a grown tree as the hand would: one movement from
 /// where it springs to its tip, handing on to a finer brush where it thins.
+// ckpt: from oaks
 fn hash01(x: f32, y: f32, k: f32) -> f32 {
     let v = ((x * 12.9898 + y * 78.233 + k * 37.719).sin() * 43758.547).fract();
     v.abs()
@@ -155,7 +159,9 @@ fn paint_limb(c: &mut paint::Canvas, l: &Limb, live: Paint, dead: Paint, seed: u
         let last = i1 == n - 1;
         let w1 = l.w[i1].max(0.3);
         let tool = if w0 < 1.3 {
-            Tool::rigger((w0 * 1.4).max(0.5))
+            Tool { point: 1.0, ..Tool::rigger((w0 * 1.4).max(0.5)) }
+        } else if w0 < 6.0 {
+            Tool { point: 0.7, ..Tool::round_sable(w0 * 1.25) }
         } else {
             Tool::round_sable((w0 * 1.25).min(30.0))
         };
@@ -287,9 +293,9 @@ fn claw(c: &mut paint::Canvas, h: &mut Held, p: Paint, at: (f32, f32), dir: f32,
         q = (q.0 + l * a.cos(), q.1 + l * a.sin());
         pts.push(q);
     }
-    let t = Tool::rigger((w * 1.3).clamp(0.5, 2.0));
-    let pa = t.pressure_for(w).max(0.25);
-    h.reload(p, 0.5);
+    let t = Tool { point: 1.0, ..Tool::rigger((w * 1.2).clamp(0.45, 1.6)) };
+    let pa = t.pressure_for(w * 0.8).clamp(0.12, 0.5);
+    h.reload(p, 0.4);
     c.drag(h, &Gesture::new(pts.clone()).pressure(pa, 0.0).ramps(0.03, 0.7).shake(0.5), None);
     if depth > 0 && len > 7.0 {
         let n = 1 + (rng.f() * 2.5) as usize;
@@ -324,14 +330,14 @@ fn paint_tree(c: &mut paint::Canvas, sk: &Skeleton, live: Paint, dead: Paint, ri
                 continue;
             }
             while s_acc > next {
-                next += rng.range(4.0, 11.0) * (0.6 + 0.15 * w);
+                next += rng.range(5.0, 14.0) * (0.6 + 0.15 * w);
                 let d = l.dir(i);
                 let base_a = d.1.atan2(d.0);
                 let side = if rng.f() < 0.5 { -1.0 } else { 1.0 };
                 let dir = base_a + side * rng.range(0.55, 1.15);
                 let len = rng.range(6.0, 16.0) * (0.6 + 0.25 * w.min(4.0)) * (sk.height / 260.0).sqrt();
                 let tp = if l.dead_at(i - 1) { dead } else { live };
-                claw(c, &mut th, tp, b, dir, len, (w * 0.5).clamp(0.4, 1.6), 1, rng);
+                claw(c, &mut th, tp, b, dir, len * rng.range(0.5, 1.5), (w * 0.4).clamp(0.3, 1.2), 2, rng);
             }
         }
     }
@@ -359,11 +365,11 @@ fn paint_tree(c: &mut paint::Canvas, sk: &Skeleton, live: Paint, dead: Paint, ri
                         nx = -nx;
                         ny = -ny;
                     }
-                    (lp[q].0 + nx * l.w[q] * 0.36, lp[q].1 + ny * l.w[q] * 0.36)
+                    (lp[q].0 + nx * l.w[q] * 0.4, lp[q].1 + ny * l.w[q] * 0.4)
                 })
                 .collect();
-            let mut h = Held::new(Tool::rigger((w * 0.22).clamp(0.5, 2.2)), seed ^ (i as u64 * 7919 + j as u64));
-            h.load(rim_p, 0.45);
+            let mut h = Held::new(Tool::rigger((w * 0.12).clamp(0.45, 1.4)), seed ^ (i as u64 * 7919 + j as u64));
+            h.load(rim_p, 0.35);
             c.drag(&mut h, &Gesture::new(pts).pressure(0.45, 0.3).ramps(0.25, 0.4).shake(0.6), None);
             j = k + 1;
         }
@@ -371,12 +377,13 @@ fn paint_tree(c: &mut paint::Canvas, sk: &Skeleton, live: Paint, dead: Paint, ri
     // bark: oak's furrows, short broken strokes along the big wood, some
     // darker than the bark, some catching a little light
     let mut bk = Held::new(Tool::rigger(0.9), seed ^ 0xba4c);
-    for (i, l) in sk.limbs.iter().enumerate().filter(|(_, l)| !l.root && !l.is_empty() && l.w[0] > 5.0) {
+    let furrow = [live, Paint { color: shift(live.color, 0.05, 0.0, 0.005), ..live }, Paint { color: shift(live.color, -0.04, 0.0, 0.0), ..live }];
+    for (i, l) in sk.limbs.iter().enumerate().filter(|(_, l)| !l.root && !l.is_empty() && l.order == 0) {
         let lp = gnarled(l);
         let n = lp.len();
         for q in 0..n - 1 {
             let w = l.w[q];
-            if w < 4.0 {
+            if w < 7.0 {
                 break;
             }
             let strokes = (w * 0.5) as usize + 1;
@@ -392,7 +399,7 @@ fn paint_tree(c: &mut paint::Canvas, sk: &Skeleton, live: Paint, dead: Paint, ri
                 // light on the side toward the glow
                 let (gx, gy) = (glow.0 - p0.0, glow.1 - p0.1);
                 let toward = (nx * gx + ny * gy).signum() * off.signum() > 0.0 && off.abs() > 0.2 * w;
-                let col = if toward && rng.f() < 0.6 { rim_p } else { live };
+                let col = if toward && rng.f() < 0.35 { rim_p } else { furrow[(rng.f() * 3.0) as usize % 3] };
                 bk.reload(col, 0.4);
                 c.drag(&mut bk, &Gesture::new(vec![p0, ((p0.0 + p1.0) * 0.5 + nx * rng.range(-0.5, 0.5), (p0.1 + p1.1) * 0.5), p1]).pressure(0.45, 0.2).ramps(0.2, 0.4).shake(0.7), None);
             }
@@ -409,17 +416,28 @@ fn paint_tree(c: &mut paint::Canvas, sk: &Skeleton, live: Paint, dead: Paint, ri
         while i < n - 1 {
             let w = l.w[i];
             let d = l.dir(i);
-            if w < 0.9 || d.1.abs() > 0.8 || rng.f() < 0.3 {
+            if w < 1.2 || d.1.abs() > 0.55 || rng.f() < 0.35 {
                 i += 1;
                 continue;
             }
             // a run of segments while it stays level
             let mut j = i + 1;
-            while j < n - 1 && l.dir(j).1.abs() < 0.8 && j - i < 5 {
+            while j < n - 1 && l.dir(j).1.abs() < 0.55 && j - i < 3 {
                 j += 1;
             }
-            let pts: Vec<(f32, f32)> = (i..=j).map(|q| (lp[q].0, lp[q].1 - l.w[q] * 0.42)).collect();
-            let sw = (w * 0.45).clamp(0.5, 3.5);
+            let pts: Vec<(f32, f32)> = (i..=j)
+                .map(|q| {
+                    // the upper edge: along the normal that points up
+                    let d = l.dir(q);
+                    let (mut nx, mut ny) = (-d.1, d.0);
+                    if ny > 0.0 {
+                        nx = -nx;
+                        ny = -ny;
+                    }
+                    (lp[q].0 + nx * l.w[q] * 0.5, lp[q].1 + ny * l.w[q] * 0.5)
+                })
+                .collect();
+            let sw = (w * 0.3).clamp(0.5, 2.5);
             let t = Tool::rigger(sw);
             h = Held::new(t, seed ^ (i as u64 * 977 + l.pts.len() as u64));
             h.load(snow_p, 0.7);
@@ -429,6 +447,8 @@ fn paint_tree(c: &mut paint::Canvas, sk: &Skeleton, live: Paint, dead: Paint, ri
     }
     let _ = h;
 }
+
+// ckpt: end
 
 fn main() {
     let o = Run::new("r10_winter_a");
@@ -494,7 +514,7 @@ fn main() {
 
     // ---- moon and evening star
     if o.stage("moon", &mut c, &mut rng) {
-        let r = 10.0;
+        let r = 12.0;
         // the lit limb faces the sun, below the horizon toward the glow
         let sun_dir = ((GLOW_X - MOON.0), (HOR + 40.0 - MOON.1));
         let a0 = sun_dir.1.atan2(sun_dir.0);
@@ -543,13 +563,13 @@ fn main() {
         let mut x = 15.0;
         while x < 960.0 {
             let w = woods(x);
-            if w > 4.0 && rng.f() < 0.55 {
-                let ht = w + rng.range(2.0, 8.0);
+            if w > 4.0 && rng.f() < 0.3 {
+                let ht = w * rng.range(0.6, 1.0) + rng.range(1.0, 7.0) * rng.f();
                 let base = far_line(x) - w * 0.5;
                 b.reload(tree_p, 0.6);
                 c.drag(&mut b, &Gesture::new(vec![(x, base), (x + 0.2, base - ht)]).pressure(0.7, 0.0).ramps(0.05, 0.7).shake(0.3), None);
             }
-            x += rng.range(2.5, 7.0);
+            x += rng.range(2.0, 12.0) * rng.f() + 1.5;
         }
         // the church: nave, tower and a tall spire, far and blue in the air
         let ch = pal.paint(hex("#737684"), 0.15);
@@ -565,7 +585,7 @@ fn main() {
 
     // ---- the snow field in front, rising to the knoll
     let field_m = Mask::from_fn(f, move |x, y| smoothstep(kn(x) - 1.0, kn(x) + 1.0, y));
-    let drift = Fbm::new(5, 5, 170.0);
+    let drift = Fbm::new(5, 3, 300.0);
     if o.stage("field", &mut c, &mut rng) {
         let snow_pal = pal.only(&["lead white", "cobalt blue", "pale smalt", "yellow ochre", "red earth", "raw umber", "bone black"]);
         // the lay-in: long strokes following the lie of the ground, curving
@@ -575,7 +595,7 @@ fn main() {
             let fade = 1.0 - smoothstep(0.0, 90.0, y - knoll(x));
             (slope * fade).atan() + 0.05 * (x / 170.0 + y / 90.0).sin()
         };
-        let lay = st.broad().palette(&snow_pal).color(move |x, y| snow(x, y, &drift)).angle(ground_angle).length(60.0, 160.0).coverage(4.5).medium(0.2);
+        let lay = st.broad().palette(&snow_pal).color(move |x, y| snow(x, y, &drift)).angle(ground_angle).length(60.0, 160.0).coverage(4.5).medium(0.2).mix_jitter(0.012);
         c.work(&field_m, &lay, 31);
         if let Some(b) = st.blend() {
             c.work(&field_m, &b.angle(ground_angle).coverage(2.0), 32);
@@ -584,8 +604,69 @@ fn main() {
         // body snow in the foreground: shorter strokes, stiffer paint, the
         // drifts modeled
         let near_m = field_m.clone().mul_fn(|_, y| smoothstep(520.0, 600.0, y));
-        let body = st.body().palette(&snow_pal).color(move |x, y| snow(x, y, &drift)).angle(ground_angle).length(25.0, 70.0).coverage(2.5).medium(0.12);
+        let body = st.body().palette(&snow_pal).color(move |x, y| snow(x, y, &drift)).angle(ground_angle).length(25.0, 70.0).coverage(2.5).medium(0.12).mix_jitter(0.015);
         c.work(&near_m, &body, 33);
+        // fuse the body strokes into the lay-in, gently, along the ground
+        if let Some(b) = st.blend() {
+            c.work(&near_m, &b.angle(ground_angle).coverage(2.5).clip(false), 34);
+        }
+        c.dry();
+    }
+
+    // ---- wind-carved drift crests in the near snow: a soft blue shadow
+    // under each crest, a lit lip along it
+    let crest_list: Vec<(f32, f32, f32, f32, f32)> = {
+        let mut r = Rng::new(o.seed + 99);
+        (0..9)
+            .map(|k| {
+                let y0 = 574.0 + k as f32 * 14.0 + r.range(-5.0, 5.0);
+                let len = r.range(160.0, 400.0) * (0.7 + 0.5 * k as f32 / 9.0);
+                let xa = r.range(-80.0, 1000.0 - len * 0.4);
+                (y0, len, xa, r.range(2.0, 6.0), r.range(0.0, 6.0))
+            })
+            .collect()
+    };
+    let crest_at = |cr: &(f32, f32, f32, f32, f32), x: f32| cr.0 + cr.3 * ((x - cr.2) / cr.1 * 5.0 + cr.4).sin() + 1.5 * ((x - cr.2) / 23.0).sin();
+    let crests_c = crest_list.clone();
+    let drift_sh = Mask::from_fn(f, move |x, y| {
+        let mut m: f32 = 0.0;
+        for cr in &crests_c {
+            let u = (x - cr.2) / cr.1;
+            if !(0.0..=1.0).contains(&u) {
+                continue;
+            }
+            let ext = smoothstep(0.0, 0.25, u.min(1.0 - u));
+            let d = y - crest_at(cr, x);
+            let depth = 3.5 + 4.0 * smoothstep(560.0, 704.0, cr.0);
+            let v = smoothstep(-0.8, 0.8, d) * (1.0 - smoothstep(depth * 0.2, depth, d)) * smoothstep(0.0, 0.25, u.min(1.0 - u));
+            m = m.max(v * ext);
+        }
+        m
+    });
+    let crests_c = crest_list.clone();
+    let drift_lip = Mask::from_fn(f, move |x, y| {
+        let mut m: f32 = 0.0;
+        for cr in &crests_c {
+            let u = (x - cr.2) / cr.1;
+            if !(0.0..=1.0).contains(&u) {
+                continue;
+            }
+            let ext = smoothstep(0.05, 0.3, u.min(1.0 - u));
+            let d = crest_at(cr, x) - y;
+            let v = smoothstep(-0.5, 0.5, d) * (1.0 - smoothstep(1.5, 3.5, d));
+            m = m.max(v * ext);
+        }
+        m
+    });
+    if o.stage("drifts", &mut c, &mut rng) {
+        let snow_pal = pal.only(&["lead white", "cobalt blue", "pale smalt", "yellow ochre", "red earth", "raw umber"]);
+        let g_ang = |_: f32, _: f32| 0.0;
+        c.work(&drift_sh, &st.body().palette(&snow_pal).color_over(|_, y, u| shift(u, -0.022 - 0.018 * smoothstep(560.0, 704.0, y), -0.001, -0.009)).angle(g_ang).length(20.0, 60.0).coverage(3.0).medium(0.3).mix_jitter(0.01), 35);
+        if let Some(b) = st.blend() {
+            c.work(&drift_sh.clone().blur(4.0), &b.angle(g_ang).coverage(2.0).clip(false), 36);
+        }
+        c.wait(20.0);
+        c.work(&drift_lip, &st.detail().palette(&snow_pal).color_over(|_, _, u| shift(u, 0.025, 0.002, 0.006)).angle(g_ang).length(8.0, 24.0).coverage(2.5).medium(0.1), 37);
         c.dry();
     }
 
@@ -712,7 +793,7 @@ fn main() {
             }
             let col = match k % 5 {
                 0 | 3 => hex("#7f7c6a"),
-                1 => hex("#8e8a80"),
+                1 => hex("#6f6c66"),
                 _ => hex("#2c2927"),
             };
             b.reload(pal.paint(col, 0.1), 0.45);
@@ -771,7 +852,7 @@ fn main() {
     }
     if o.stage("oaks", &mut c, &mut rng) {
         let live = pal.paint(hex("#2a2522"), 0.2);
-        let dead = pal.paint(hex("#3b3632"), 0.2);
+        let dead = pal.paint(hex("#35302d"), 0.2);
         let snow_p = pal.paint(hex("#d6d4d8"), 0.05).with_stiff(0.8);
         // the small one behind first (farther), a touch grayer in the air
         let live_f = pal.paint(hex("#38333a"), 0.2);
@@ -869,7 +950,7 @@ fn main() {
             r.load(crow, 0.6);
             c.drag(&mut r, &Gesture::new(vec![(p.0 + face * sz * 0.7, p.1 - sz * 1.75), (p.0 + face * sz * 1.25, p.1 - sz * 1.6)]).pressure(0.6, 0.0).ramps(0.05, 0.7).shake(0.2), None);
         }
-        let mut w = Held::new(Tool::rigger(1.0), 85);
+        let mut w = Held::new(Tool { point: 1.0, ..Tool::rigger(1.1) }, 85);
         for &(x, y, sz, beat) in &[(712.0f32, 196.0f32, 7.0f32, 0.5f32), (748.0, 224.0, 6.0, -0.3)] {
             for side in [-1.0f32, 1.0] {
                 w.reload(crow, 0.7);
@@ -893,8 +974,8 @@ fn main() {
             pal.paint(hex("#7a6a58"), 0.15),
             pal.paint(hex("#2d2824"), 0.15),
         ];
-        let mut rg = Held::new(Tool::rigger(0.7), 90);
-        let mut sb = Held::new(Tool::round_sable(1.1), 91);
+        let mut rg = Held::new(Tool { point: 1.0, ..Tool::rigger(0.8) }, 90);
+        let mut sb = Held::new(Tool { point: 1.0, ..Tool::round_sable(1.3) }, 91);
         let mut n = 0usize;
         // tufts: (x, y, blades)
         let mut spots: Vec<(f32, f32, usize)> = Vec::new();
@@ -924,7 +1005,7 @@ fn main() {
             let near = smoothstep(470.0, h, y);
             let spread = 2.0 + blades as f32 * 0.5;
             for _ in 0..blades {
-                let ht = (2.0 + 16.0 * rng.f() * rng.f() * rng.f() + 4.0 * rng.f()) * (0.3 + 1.2 * near);
+                let ht = (3.0 + 18.0 * rng.f() * rng.f() * rng.f() + 5.0 * rng.f()) * (0.3 + 1.2 * near);
                 let lean = rng.range(-0.7, 0.7) * rng.f() + 0.12;
                 let bx = x + rng.range(-spread, spread) * (0.4 + near);
                 let by = y + rng.range(-1.0, 1.0) * (0.3 + near);
@@ -939,7 +1020,7 @@ fn main() {
                     _ => 3,
                 };
                 hb.reload(paints[pk], 0.55);
-                c.drag(hb, &Gesture::new(pts).pressure(0.6 + 0.2 * near, 0.0).ramps(0.04, 0.8).shake(0.5), None);
+                c.drag(hb, &Gesture::new(pts).pressure(0.3 + 0.2 * near, 0.0).ramps(0.04, 0.85).shake(0.5), None);
                 n += 1;
             }
         }
@@ -974,7 +1055,7 @@ fn main() {
     // Carus for a moonlit picture), then varnish and age
     if o.stage("veil", &mut c, &mut rng) {
         let hgt = h;
-        c.glaze(&Pigment::transparent(hex("#8f7f6c")), None, move |x, y| {
+        c.glaze(&Pigment::transparent(hex("#86807e")), None, move |x, y| {
             let dx = (x - 480.0) / 560.0;
             let dy = (y - hgt * 0.55) / (hgt * 0.62);
             0.55 * smoothstep(0.55, 1.25, (dx * dx + dy * dy).sqrt()) * (0.3 + 0.7 * smoothstep(0.0, hgt, y))
@@ -984,6 +1065,6 @@ fn main() {
     // a picture about two hundred years old, but well kept: the network
     // finer in its grime than the default
     let aged = paint::Cracks::aged(0);
-    let cracks = paint::Cracks { dirt: aged.dirt * 0.3, depth_um: aged.depth_um * 0.4, cupping_um: aged.cupping_um * 0.5, ..aged };
+    let cracks = paint::Cracks { dirt: 0.12, grime: 0.3, depth_um: 8.0, cupping_um: 6.0, width_um: Some(12.0), ..aged };
     o.finish(&mut c, &mut rng, &Finish { cracks: Some(cracks), ..Finish::aged(st.relief) });
 }

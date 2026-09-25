@@ -76,10 +76,18 @@ fn limb_side(x: f32, y: f32, pts: &[(f32, f32)], w: &[f32]) -> (f32, f32, f32) {
     let mut ang = 0.0;
     let mut side = 0.0;
     let mut bestd = f32::MAX;
+    let last = pts.len() - 2;
     for i in 0..pts.len() - 1 {
         let (d, t) = seg_dist((x, y), pts[i], pts[i + 1]);
         let hw = 0.5 * (w[i] + (w[i + 1] - w[i]) * t);
-        let v = smoothstep(hw + 0.8, hw - 0.8, d);
+        let mut v = smoothstep(hw + 0.8, hw - 0.8, d);
+        if i == last {
+            // a limb broken off ends in a cut, not a rounded cap
+            let (dx, dy) = (pts[i + 1].0 - pts[i].0, pts[i + 1].1 - pts[i].1);
+            let l = (dx * dx + dy * dy).sqrt();
+            let along = ((x - pts[i + 1].0) * dx + (y - pts[i + 1].1) * dy) / l;
+            v *= smoothstep(0.8, -0.8, along);
+        }
         if v > best || (v == best && d < bestd) {
             best = v;
             bestd = d;
@@ -174,6 +182,40 @@ fn main() {
             .dips(24, 0.35, 0.6);
         c.stipple(&sky_m, &s2, 14);
         c.dry();
+        // three thin streaks of evening cloud low in the glow, a little
+        // grayer and rosier than the sky, stippled so they have no edges
+        let streak_n = Fbm::new(55, 4, 1.0);
+        let streaks = Mask::from_fn(f, move |x, y| {
+            let mut v = 0.0f32;
+            for &(yc, th, x0, x1) in &[(612.0f32, 10.0f32, 520.0f32, 1060.0f32), (668.0, 7.0, -40.0, 420.0), (705.0, 5.0, 610.0, 940.0)] {
+                let wob = 6.0 * streak_n.get(x / 180.0, yc) + 2.0 * streak_n.get(x / 40.0, yc + 9.0);
+                let d = (y - yc - wob - 0.02 * (x - x0)).abs();
+                let t = th * (0.5 + 0.8 * (0.5 + 0.5 * streak_n.get(x / 90.0, yc + 3.0)));
+                let along = smoothstep(x0, x0 + 90.0, x) * (1.0 - smoothstep(x1 - 120.0, x1, x));
+                // thicker and thinner along its length, torn in places
+                let body = smoothstep(-0.35, 0.3, streak_n.get(x / 60.0, yc + 17.0));
+                let fl = if y < yc + wob + 0.02 * (x - x0) { 1.0 } else { 0.6 };
+                v = v.max(smoothstep(t * fl + 4.0, 0.0, d) * along * body);
+            }
+            v
+        });
+        // a soft small filbert, thin paint, drawn along the streaks
+        let cloud = paint::Handling::new(Tool { lay: 0.45, ragged: 0.5, stiffness: 0.35, ..Tool::filbert(8.0) })
+            .mixed(&sky_pal, 0.6)
+            .color_over(|_, _, u| shift(u, -0.03, 0.007, -0.004))
+            .angle(|_, _| 0.02)
+            .angle_jitter(0.03)
+            .curve(0.03, 0.2)
+            .length(40.0, 140.0)
+            .coverage(1.8)
+            .pressure(0.3, 0.55)
+            .dips(2, 0.35, 0.5)
+            .swell(0.3)
+            .broken(0.25)
+            .ramps(0.3, 0.5)
+            .fill(false);
+        c.work(&streaks, &cloud, 15);
+        c.dry();
     }
 
     // far snow: bluer, in the evening shade; the field nearer is lighter
@@ -208,7 +250,7 @@ fn main() {
         let lit = if k > 0.0 { shift(base, 0.045 * k, 0.001 * k, 0.01 * k) } else { shift(base, 0.04 * k, 0.0, 0.007 * k) };
         let sh = shadow_fp(x, y);
         // in the shadow the drifts still show, but only just
-        mix(lit, shift(mix(base, lit, 0.35, Mix::Light), -0.095, 0.0, -0.018), sh, Mix::Light)
+        mix(lit, shift(mix(base, lit, 0.35, Mix::Light), -0.13, 0.002, -0.022), sh, Mix::Light)
     };
     // far woods: two low copses on the snow, their tops ragged with bare
     // crowns, the right one farther and paler
@@ -243,7 +285,10 @@ fn main() {
             let far = land_m.clone().mul_fn(|x, y| 1.0 - smoothstep(far_snow(x) + 60.0, far_snow(x) + 120.0, y));
             c.work(&far, &b.angle(|_, _| 0.0).pressure(0.3, 0.4), 22);
         }
-        // the far woods: a low broken line, stippled small and cool
+        c.dry();
+        // the far woods: a low broken line, stippled small and cool, into
+        // dry snow (into the wet snow the touches picked up lead white and
+        // went milky)
         let hedge = Stipple::new(Tool::stippler(1.6))
             .mixed(&snow_pal, 0.3)
             .color(|x, _| if x < 500.0 { hex("#5f606b") } else { hex("#7a7a84") })
@@ -269,11 +314,11 @@ fn main() {
         let v = limb_cov(x, y, &LIMB, &LIMB_W).0 * smoothstep(right_edge(y) - 8.0, right_edge(y) - 3.0, x);
         let w = limb_cov(x, y, &STUB, &STUB_W).0 * smoothstep(left_edge(y) + 8.0, left_edge(y) + 3.0, x);
         // the crotch: the limb's wood swells into the trunk's, no corner
-        let fx = (x - (right_edge(488.0) + 4.0)) / 20.0;
-        let fy = (y - 492.0) / 34.0;
+        let fx = (x - (right_edge(478.0) + 1.0)) / 12.0;
+        let fy = (y - 478.0) / 26.0;
         let fil = smoothstep(1.05, 0.95, (fx * fx + fy * fy).sqrt()) * smoothstep(right_edge(y) - 8.0, right_edge(y) - 3.0, x);
-        let sx = (x - (left_edge(733.0) - 2.0)) / 11.0;
-        let sy = (y - 735.0) / 20.0;
+        let sx = (x - (left_edge(722.0) + 1.0)) / 8.0;
+        let sy = (y - 722.0) / 16.0;
         let sfil = smoothstep(1.05, 0.95, (sx * sx + sy * sy).sqrt()) * smoothstep(left_edge(y) + 8.0, left_edge(y) + 3.0, x);
         v.max(w).max(fil).max(sfil)
     })
@@ -404,14 +449,24 @@ fn main() {
             c.drag(&mut rg, &Gesture::new(pts).pressure(0.35, 0.15).ramps(0.2, 0.5).shake(0.5), Some(&trunk_m));
             y += len + r.range(10.0, 60.0);
         }
-        // the break of the stub: pale split wood
-        let mut w = Held::new(Tool { point: 1.0, ..Tool::round_sable(2.0) }, 303);
-        w.load(pal.paint(hex("#8c7f6a"), 0.1), 0.6);
+        // the break of the stub: torn splinters, one longer, and a little
+        // pale split wood on the break
         let (ex, ey) = STUB[2];
-        for s in 0..4 {
-            let a = -2.6 + s as f32 * 0.35;
-            c.drag(&mut w, &Gesture::new(vec![(ex + 3.0, ey + 1.0), (ex - 5.0 * a.cos().abs(), ey + 5.0 * a.sin())]).pressure(0.4, 0.0).ramps(0.1, 0.7), None);
+        let (px, py) = STUB[1];
+        let (dx, dy) = ((ex - px), (ey - py));
+        let l = (dx * dx + dy * dy).sqrt();
+        let (ux, uy) = (dx / l, dy / l);
+        let (nx, ny) = (-uy, ux);
+        let mut sp = Held::new(Tool { point: 1.0, ..Tool::round_sable(4.0) }, 303);
+        for &(off, len, pr) in &[(-6.0f32, 7.0f32, 0.55f32), (-1.5, 16.0, 0.6), (3.5, 5.0, 0.5), (6.5, 9.0, 0.4)] {
+            sp.reload(pal.paint(hex("#221e1b"), 0.12), 0.7);
+            let a = (ex - ux * 4.0 + nx * off, ey - uy * 4.0 + ny * off);
+            let b = (ex + ux * len + nx * off * 0.6, ey + uy * len + ny * off * 0.6);
+            c.drag(&mut sp, &Gesture::new(vec![a, b]).pressure(pr, 0.0).ramps(0.05, 0.8).shake(0.4), None);
         }
+        let mut w = Held::new(Tool { point: 1.0, ..Tool::round_sable(2.0) }, 304);
+        w.load(pal.paint(hex("#7d725f"), 0.12), 0.5);
+        c.drag(&mut w, &Gesture::new(vec![(ex + nx * 5.0, ey + ny * 5.0 - 1.0), (ex + ux * 3.0, ey + uy * 3.0 - 1.5), (ex - nx * 2.0 + ux * 6.0, ey - ny * 2.0 + uy * 6.0)]).pressure(0.45, 0.1).ramps(0.1, 0.6), None);
         c.wait(60.0);
     }
 
@@ -518,24 +573,26 @@ fn main() {
         // white laid with the side of a small round
         let mut r = Rng::new(o.seed + 501);
         let mut sab = Held::new(Tool { point: 1.0, ..Tool::round_sable(3.0) }, 501);
-        let crust = pal.paint(hex("#dedad2"), 0.05);
+        let crust = pal.paint(hex("#cfcbc4"), 0.1);
         for (pts, ws) in [(&LIMB[..], &LIMB_W[..]), (&STUB[..], &STUB_W[..])] {
             for i in 0..pts.len() - 1 {
-                if r.f() < 0.2 {
+                let (a, b) = (pts[i], pts[i + 1]);
+                for _lump in 0..3 {
+                if r.f() < 0.35 {
                     continue;
                 }
-                let (a, b) = (pts[i], pts[i + 1]);
                 let (w0, w1) = (ws[i], ws[i + 1]);
                 let ang = (b.1 - a.1).atan2(b.0 - a.0);
                 let (nx, ny) = (ang.sin(), -ang.cos()); // up side
-                let t0 = r.range(0.0, 0.3);
-                let t1 = r.range(0.6, 1.0);
+                let t0 = r.range(0.0, 0.8);
+                let t1 = (t0 + r.range(0.08, 0.25)).min(1.0);
                 let pt = |t: f32| {
                     let hw = 0.5 * (w0 + (w1 - w0) * t) - 0.6;
                     (a.0 + (b.0 - a.0) * t + nx * hw, a.1 + (b.1 - a.1) * t + ny * hw)
                 };
                 sab.reload(crust, 0.8);
-                c.drag(&mut sab, &Gesture::new(vec![pt(t0), pt((t0 + t1) * 0.5), pt(t1)]).pressure(0.62, 0.3).ramps(0.2, 0.4).shake(0.8), None);
+                c.drag(&mut sab, &Gesture::new(vec![pt(t0), pt((t0 + t1) * 0.5), pt(t1)]).pressure(0.62, 0.3).ramps(0.3, 0.4).shake(0.8), None);
+                }
             }
         }
         // snow caught in the bark's hollows on the windward side, low down

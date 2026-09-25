@@ -383,7 +383,11 @@ mod tests {
         let t = a.tally();
         assert!(((a.clock() - c0) - t.minutes()).abs() < 1e-3, "clock {} vs hand {}", a.clock() - c0, t.minutes());
         assert_eq!(t.clocked, t.secs);
-        assert_ne!(px_bits(&a), px_bits(&off), "paint that aged while the hand worked");
+        // (the paint aged but is still open: the dry picture can be the
+        // same, the wet paint is not. Before the plough was fixed, strokes
+        // left thin films between their rims, which set within the pass)
+        let wet_bits = |c: &Canvas| c.wet.vol.iter().map(|v| v.to_bits()).collect::<Vec<_>>();
+        assert_ne!(wet_bits(&a), wet_bits(&off), "paint that aged while the hand worked");
     }
 
     /// A checkpoint of a hand-timed painting resumes with its ledger, the

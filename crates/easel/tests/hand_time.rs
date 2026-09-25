@@ -45,15 +45,18 @@ fn replay(src: &Path, width: u32, threads: Option<usize>, tag: &str) -> (String,
 /// default again (Round 7, notes/tip.md): these logs paint with
 /// `brush("round", w)` and riggers and never set `point`. And l5_near
 /// (release) again when the glaze film floor went from 1 to 0.05 µm (Round
-/// 7, notes/drying.md): its glazes have films under 1 µm.
+/// 7, notes/drying.md): its glazes have films under 1 µm. And all three
+/// when a blunt brush's hairs began to plough by their own size (the dry
+/// rims fix, notes/fixes/dry_rims): at 160px every hair is finer than a
+/// pixel.
 #[test]
 fn existing_logs_replay_unchanged() {
     // (the benchmark near is checked in release only: a debug replay takes
     // minutes)
     let logs: &[(&str, u64)] = if cfg!(debug_assertions) {
-        &[("paintings/lua/example.lua", 0x78f0_1414_a962_f6e3)]
+        &[("paintings/lua/example.lua", 0x5ba0_7c4f_fd38_a4e3)]
     } else {
-        &[("paintings/lua/example.lua", 0x78f0_1414_a962_f6e3), ("notes/loops/l5_near.lua", 0x0059_7db6_71de_8740)]
+        &[("paintings/lua/example.lua", 0x5ba0_7c4f_fd38_a4e3), ("notes/loops/l5_near.lua", 0xb2ea_a2f7_baba_f888)]
     };
     for &(log, want) in logs {
         let (_, png) = replay(&root().join(log), 160, None, "unchanged");
@@ -102,18 +105,20 @@ fn hand_time_is_the_same_at_any_thread_count() {
 /// then, overrun and all: tests/logs/overran.lua (hand time on, a 12-minute
 /// sitting that runs 20 min, a second one that runs 3.8 h) was recorded
 /// with the easel of commit 82fd8fb (release, 160px): its PNG hash and its
-/// printout.
+/// printout. Re-recorded for the dry rims fix (notes/fixes/dry_rims): the
+/// hash, and the clock by 3 s (the sky's fill strokes through bare spots
+/// are hand time, and it has other bare spots now).
 #[test]
 fn an_old_overrunning_log_replays_unchanged() {
     let (out, png) = replay(&root().join("crates/easel/tests/logs/overran.lua"), 160, None, "overran");
-    assert_eq!(fnv(&png), 0x7758_7315_17fd_5b9a, "tests/logs/overran.lua at 160px changed");
+    assert_eq!(fnv(&png), 0xd7d7_7ef2_9947_7d37, "tests/logs/overran.lua at 160px changed");
     assert_eq!(
         out,
         "sitting 1: 20 min at the easel, 12 min planned; finish the passage while it is open, then rest(hours)
 sky: sitting 1 0.337 of 0.200 h
 sitting 2: 3.8 h at the easel, 30 min planned; finish the passage while it is open, then rest(hours)
-clock 247.7596 sitting 2 226.4621 of 0.500 h
-clock 368.2098 sittings 3
+clock 247.8083 sitting 2 226.4621 of 0.500 h
+clock 368.2586 sittings 3
 "
     );
 }

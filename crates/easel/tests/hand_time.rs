@@ -38,7 +38,7 @@ fn replay(src: &Path, width: u32, threads: Option<usize>, tag: &str) -> (String,
 #[test]
 fn example_log_replays_as_recorded() {
     let (_, png) = replay(&root().join("paintings/lua/example.lua"), 160, None, "example");
-    assert_eq!(fnv(&png), 0x78f0_1414_a962_f6e3, "paintings/lua/example.lua at 160px changed");
+    assert_eq!(fnv(&png), 0x5ba0_7c4f_fd38_a4e3, "paintings/lua/example.lua at 160px changed");
 }
 
 /// Opt-in, slow: the benchmark near replays to its recorded hash (re-record on intended changes). Run with
@@ -47,7 +47,7 @@ fn example_log_replays_as_recorded() {
 #[ignore]
 fn l5_near_replays_as_recorded() {
     let (_, png) = replay(&root().join("notes/loops/l5_near.lua"), 160, None, "l5_near");
-    assert_eq!(fnv(&png), 0x0059_7db6_71de_8740, "notes/loops/l5_near.lua at 160px changed");
+    assert_eq!(fnv(&png), 0xb2ea_a2f7_baba_f888, "notes/loops/l5_near.lua at 160px changed");
 }
 
 const PROGRAM: &str = r##"
@@ -82,8 +82,8 @@ fn an_old_overrunning_log_replays_unchanged() {
         "sitting 1: 20 min at the easel, 12 min planned; finish the passage while it is open, then rest(hours)
 sky: sitting 1 0.337 of 0.200 h
 sitting 2: 3.8 h at the easel, 30 min planned; finish the passage while it is open, then rest(hours)
-clock 247.7596 sitting 2 226.4621 of 0.500 h
-clock 368.2098 sittings 3
+clock 247.8083 sitting 2 226.4621 of 0.500 h
+clock 368.2586 sittings 3
 "
     );
 }

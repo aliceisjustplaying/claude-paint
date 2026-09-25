@@ -596,9 +596,17 @@ fn paint_tree(c: &mut paint::Canvas, sk: &paint::Skeleton, live: Paint, dead: Pa
             let paint = if l.dead_at(a) { dead } else { live };
             let thin = (wa / (2.0 * finest)).clamp(0.3, 1.0);
             let mut held = Held::new(tool, rng.next_u64());
-            held.load(paint.with_hiding(paint.hiding() * (0.5 + 0.5 * thin)), 0.9 * thin.sqrt());
+            // (a starved rigger skips over the weave and beads; keep it fed)
+            held.load(paint.with_hiding(paint.hiding() * (0.5 + 0.5 * thin)), 0.7 + 0.25 * thin);
             let g = Gesture::new(pts).pressure(p0, if last && !l.broken { 0.0 } else { p1 }).ramps(if a == 0 { 0.02 } else { 0.0 }, release).shake(0.6);
             c.drag(&mut held, &g, None);
+            // thick wood: a big round lays a ribbed, half-covering stroke;
+            // go over it once more, reloaded, a hair to one side
+            if wa > 5.0 {
+                held.reload(paint, 1.0);
+                let g2 = Gesture::new(g.pts.iter().map(|p| (p.0 + 0.15 * wa, p.1)).collect()).pressure(p0 * 0.9, if last && !l.broken { 0.0 } else { p1 * 0.9 }).ramps(0.05, release.max(0.05)).shake(0.6);
+                c.drag(&mut held, &g2, None);
+            }
             a = b;
         }
         let _ = (w0, w1);

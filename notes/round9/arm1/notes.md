@@ -49,6 +49,31 @@ What it draws on in Friedrich (from notes/research, not from pictures):
    left flank, then rods from five knobs with a pointed rigger in two
    passes, outer rods leaning out and curving back up). Sized by hand in
    perspective: eye at 1.7 m, so 1 m = (y − horizon)/1.7 units.
+8. The near willow, cut by the top edge and old: a split in the trunk.
+   Then per trunk: a second dark coat after drying (the first dried thin),
+   a thicket of thin whips added to every crown (medium 0.4 in the load so
+   the hairlines don't break on the weave), then after drying the light bark
+   ridges dragged dry, patchy snow on the knuckles, and snow dragged across
+   each foot: first the trunk below an irregular snow line filled with the
+   field's own paint sampled beside it, then horizontal strokes across the
+   base, each loaded from the field at that height.
+9. The walker's track: footprints only, spaced by the ground's
+   foreshortening (distinct near, a furrow far off). The walker: greatcoat,
+   tall hat and stick, drawn as small polygons and painted with small rounds,
+   one leg in stride, a faint glint of the glow on his left shoulder.
+10. A cool transparent glaze over the land, darker toward the bottom and
+    sides and lighter under the glow (Friedrich to Carus: a dark glaze
+    "growing darker toward the picture's edges"), a lighter slate glaze in
+    the upper sky corners. The trunks and walker take the land glaze at one
+    even strength along their whole height.
+11. Long wind-drift swells: a cool lee under each crest and a lighter lip,
+    as two passes whose region and load come from a swell field, with lost
+    edges.
+12. Particulars: a thin waxing crescent over the afterglow (lit limb toward
+    the set sun, a faint ring of earthshine), dry grass and reeds with seed
+    heads along the brook and in the corners as upturning flicks, crows
+    perched in the rods and a few flying.
+13. Finish: a day's wait, varnish (0.3 coats), craquelure, relief.
 
 ## FRICTION
 
@@ -112,6 +137,32 @@ What it draws on in Friedrich (from notes/research, not from pictures):
 11. **The thinnest whips read as dotted wire** at 1000px (a rigger 0.45
     with a point, lean load): broken runs of single pixels. At 3200px they
     are continuous hairlines.
+13. **Drift patches never matched the field.** Snow laid later over a
+    trunk's foot came out as a pale oval, then (darker) a blue puddle, then
+    a pale rectangle: `rect()` in the zone left straight sides, the land
+    glaze skipped the part of the drift inside the trunk mask I had excluded,
+    and new opaque paint lies smoother and lighter than the textured,
+    glazed field. What finally worked was the painter's move: fill below an
+    irregular snow line with paint *sampled from the field beside the
+    trunk* (`sample()` in the color function) and drag single strokes
+    across, each loaded from the field at its height.
+14. **`work{coverage=}` takes no function.** I wanted the swells as a
+    coverage field fading in and out; `coverage` takes a number or a noise,
+    not a function. Workaround: the field became the region's mask values and
+    `load_at`, with `edge="lost"`.
+15. **Lost edges reach into motifs.** A lost edge on a broad filbert runs
+    up to ~2 brush widths past its region and picks up wet paint there: the
+    first swell pass laid light bands straight across two trunks. The trunk
+    masks had to be grown by 10 units before subtracting.
+16. **Relief makes the snow look embossed.** At 3200 the body snow's stroke
+    ridges, lit by the default relief (0.06), read as crumpled paper or
+    etched scribbles over the whole field. I left Alice's default in place;
+    thinner snow paint (more medium) from the start would have been
+    smoother and closer to Friedrich's "slight impasto".
+17. **The 1000px and 3200px pictures differ where it matters.** Slivers,
+    specks and dotted hairlines appear at 1000 and not at 3200 (or the
+    reverse), so a fix judged at one width can be wrong at the other.
+
 12. **Crops at 3200 cost a replay after an early edit.** Each `easel edit`
     of an early chunk (the willows are chunk 11) makes the next `--scale
     3.2` look replay the whole log (50–90 s on this busy machine).

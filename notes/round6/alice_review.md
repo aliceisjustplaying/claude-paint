@@ -219,3 +219,30 @@ recorded reason. After Round 11, try about 0.2 mm per pixel, i.e.
 default canvas is 70 cm wide (crates/paint/src/canvas.rs:253). "Let's see
 what it yields." Not 8570 (Monk size): the problems are decisions, not
 resolution, and renders would take ~20 min.
+
+## Alice on Round 11 (2026-09-25, unlabeled; live)
+Whole paintings (D, E, F):
+- D: the cracks still need work ("I say this every time"). The big tree
+  starts fine but its top ends are weird. The figure is really nice; the
+  pond is nice. An emptiness that doesn't do anything for her. The trees on
+  the right look terrible; the fence not right, very digital. The moon is
+  rotated: "the moon does not look like that ever". The background is
+  "machine in a bad way". Seems to be missing things.
+- E: "looks so digital". Composition okay; the sky not half bad and not
+  that digital; the tree nice but too crisp. Everything but the sky
+  screams digital.
+- F: doesn't love the composition; "it doesn't come together". But the
+  sky is the nicest, the moon is the right shape, the tree gives "more bad
+  painter vibes and a lot less digital vibes". The trees on the right a
+  bit digital; the figure's shadow nice but maybe not accurate.
+  "Paradoxically, F might be the best one ... in sort of a bad painter way."
+Trunk studies (X, Y, Z):
+- X: the small branches look abnormal: "branches do not look like that".
+  The snow is rather nice. The sky generic. The tree's shading simplistic.
+- Y: the snow has nice texture; the tree's shading feels better (not sure
+  it's accurate).
+- Z: the tree a little too neat; the small branches again: "trees only do
+  that when they're in extreme distress". A third take on snow; more work
+  in the reflection.
+- "Three different ways of snow ... I'm not saying anyone is better":
+  interesting in itself.

@@ -59,9 +59,13 @@ What it draws on (from knowledge, not pictures):
 3. **glow**: a finer, lighter stipple (1.6 units), denser toward the
    horizon and toward the glow. (Cloud streaks were tried here and removed:
    they read as pink smudges, and a clear evening is more Friedrich.)
-4. **moon**: the crescent in three passes of a round sable along an arc,
-   each set in from the last, with pressure swelling in the middle. The
-   evening star is a single touch.
+4. **moon**: first three curved drags of a round sable (a blunt banana of
+   even width at full size, rejected). Now the crescent is a mask: the
+   disk beyond a terminator ellipse, with its lit limb turned toward the
+   sun below the horizon. It is thick in the middle and sharp at the horns,
+   worked in small strokes around the curve. The rest of the disk is a
+   breath lighter than the sky (earthshine, "the old moon in the new
+   moon's arms"). The evening star is a single touch.
 5. **far**: the far woods band and the far snow plain in hatching. Single
    far trees as tiny pointed flicks, grouped and uneven. A church (nave and
    tower in `detail` strokes, the spire a rigger flick).
@@ -71,30 +75,47 @@ What it draws on (from knowledge, not pictures):
    `snow()` models drifts as a stretched height field lit from the west
    (the glow side). The hollows go bluer, and a bank across the middle
    ground has a lit lip and a shadowed face. The far slope is warmer and
-   lighter; the near snow is cooler and darker.
-7. **dolmen**: the dark hollow under the capstone; the far upright in
+   lighter; the near snow is cooler and darker. The foreground body
+   strokes are fused with the badger (without it each stroke read as a
+   gray lozenge at 3200px), and the palette jitter is turned down for the
+   snow.
+7. **drifts**: wind-carved crests across the near snow: thin soft-mask
+   bands under each crest worked in `detail` strokes a little darker and
+   bluer than what is there (`color_over`), then a lit lip along each
+   crest. (Two failed tries: hand drags with a lean filbert gave rows of
+   blue ovals; a `body` pass in the band spilled the 9-unit filbert far
+   past it into flat blue smears.)
+8. **dolmen**: the dark hollow under the capstone; the far upright in
    shadow; the uprights and the capstone in `detail` strokes. The stones'
    color is a function of place: cool sky-light on top, dark undersides, a
    warm west end, reflected snow-light low down, and mottling at two
    scales. The capstone's strokes follow its dome. A lighter broken pass on
    the upper planes (a fbm facet mask with `color_over`), fissures, lichen
    touches, then snow on the capstone's top (thicker in the middle, patchy)
-   and on the uprights' tops and the half-buried boulders.
-8. **oaks**: my own oak habit (see friction #1), painted limb by limb from
+   and on the uprights' tops and the half-buried boulders. The capstone
+   went through three shapes (a plank, a mushroom, a pointed lens) before
+   the final one: a superellipse profile, domed above and flatter below,
+   with blunt round ends, tilted a little.
+9. **oaks**: my own oak habit (see friction #1), painted limb by limb from
    the trunk up. Then crooked claw twigs along every limb (two levels);
    bark furrows on the trunk; a dull warm rim on the glow side of the big
    wood; snow on the upper edge of level limbs; snow drifted against the
    foot.
-9. **figure**: the coat as a small mask worked in dark vertical strokes;
-   legs, head, a low hat, a stick; a cool rim of sky-light on the
-   shoulders; footprints as blue-gray touches dragged along.
-10. **crows**: perched ones found on level stretches of upper limbs (a
-    body stroke, a head touch, a rigger beak); flying ones as two wing
-    flicks and a body touch.
-11. **grass**: tufts along the bank's lip, in the near snow and at the
-    dolmen's foot, as rigger and small-sable flicks pressed at the root and
-    lifted off. A few tall weed stalks with side shoots and seed heads.
-12. **veil**: the transparent edge glaze. Then `finish` (varnish, softened
+10. **figure**: first the footprints (heel and toe touches, aimed a
+   little darker and bluer than the snow, larger as they come nearer). Then
+   a greatcoat mask with shoulders, a waist and a flared hem, worked in
+   dark vertical strokes. Trousers and boots, the right arm bent to the
+   stick, three cool folds down the back, a collar and head, a top hat (a
+   mask plus a rigger brim), the stick, and a faint warm rim on the glow
+   side. (The first version was a bell-shaped sack in a cowboy hat.)
+11. **crows**: perched ones found on level stretches of upper limbs (a
+    body stroke, a head touch, a rigger beak); flying ones as two pointed
+    wing flicks and a body touch.
+12. **grass**: tufts along the bank's lip, in the near snow and at the
+    dolmen's foot. Flicks of a *pointed* rigger and small sable, pressed
+    lightly at the root and lifted off; heights skewed (most short, a few
+    long); four muted straw and umber paints. A few tall weed stalks with side shoots and seed heads.
+13. **veil**: the transparent edge glaze. Then `finish` (varnish, softened
     cracks, relief).
 
 ## FRICTION
@@ -140,13 +161,13 @@ What it draws on (from knowledge, not pictures):
    stones I'd have had to rebuild the whole handling with `Handling::new`
    and re-set a dozen knobs. A `.tool(Tool)` builder would do it.
 6. **Crack visibility at full size.** `Finish::aged` craquelure dominates a
-   3200px crop of a light passage (the snow, the glow). Halving `dirt` and
-   `depth_um` barely changed it; I also halved `cupping_um`. It is hard to
-   know which knob controls the visible weight of a crack.
-7. **Stages can't tell a crop render where to look.** A full crop still
-   pays for every whole-canvas mask and the sky stipple (33–45 s for a
-   crop). Resuming the crop from a checkpoint (`--resume field`) brings it
-   to about 8 s, which is what made the detail work possible.
+   3200px crop of a light passage (the snow, the glow). See #14 for the
+   knob that worked.
+7. **A fresh crop pays for the whole canvas.** A 3200px crop still
+   builds every whole-canvas mask and plans the whole sky stipple (15–45 s
+   per crop here). Resuming the crop from a checkpoint (`--resume field`)
+   brings it to 2–10 s, which is what made the detail work possible. (This
+   is documented; it's still the main cost of looking closely.)
 8. **A limb's "up" side.** Putting snow on top of a limb needs the normal
    that points up. My first version offset in y by the width, which lands
    inside a diagonal limb as a pale stripe down its middle. Not an engine
@@ -156,6 +177,38 @@ What it draws on (from knowledge, not pictures):
    the early palette panics at run time ("no tube smalt"). Fine, but a
    compile-time or clearer message listing the palette's tube names would
    save a cycle.
+
+10. **Pointed tips are opt-in, and I only found out halfway.** Every
+    `Tool` preset, `rigger` and `round_sable` included, has `point: 0.0`
+    (tip.md). So my grass, twigs and wing flicks were blunt tufts: every
+    blade a thick wedge, like a thorn. A painter picking up "a rigger" for
+    grass expects a point. Workaround: `Tool { point: 1.0, ..Tool::rigger(w) }`
+    everywhere fine work happens. A `Tool::rigger` that comes pointed (and a
+    `blunt()` to opt out) would match what the name promises.
+11. **A brush running dry makes "ladder" bands.** A thick limb painted in
+    one long drag (up to 10 nodes, ~80 units) ran out of paint partway, and
+    under relief lighting the starved bristle tracks came out as regular
+    light bands across the limb. This looks like the "ladder ridges"
+    motifs.md describes. More medium (0.3) didn't fix it; reloading every
+    ~35 units did. `Held::fullness()` exists, but nothing tells the painter
+    during a drag that the brush has gone dry. A drag option to reload when
+    fullness falls below x, or a warning, would make this easy.
+12. **Aiming against the wrong underlayer.** `c.sample()` + `c.aim()` for a
+    contact shadow under the man's boots sampled the boots I'd just painted,
+    so "a bit darker than what's here" was aimed against black and came out
+    as a *light* blue oval. My mistake, but `Canvas::aim` has no way to say
+    "judge against the snow, not against the last marks". An explicit
+    `under` color parameter (it exists on `Palette::aim`) is the workaround.
+13. **A handling spills past a narrow mask.** A `body()` pass (9-unit
+    filbert, unclipped by default) over a 4–8-unit band laid broad flat
+    smears far outside it. Obvious in hindsight: `clip(true)` or a tool
+    sized to the band. The presets don't warn when the tool is wider than
+    the mask's features.
+14. **Crack weight is set by `width_um`, not by `depth_um`/`dirt`/`grime`.**
+    I turned down depth, dirt, grime and cupping without visible effect.
+    Setting `width_um: Some(12.0)` (the default is strain × island size,
+    much wider) quieted the network. The doc comments are accurate, but
+    "which knob makes cracks less visible" isn't answered anywhere.
 
 ## Critique
 

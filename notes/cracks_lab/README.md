@@ -58,3 +58,13 @@ So: the cracks are too thin and too even (matches Fable's measurement:
 one-pixel hairlines end to end); the direction should run diagonally
 down-right, not straight down; the sky's "JPEG effect" is separate from
 the cracks and still open.
+
+## Alice on the fix (branch fix-cracks)
+"Overall an improvement, but it's still off. Kind of hard to say how."
+Keep it; cracks need a lot more iteration later; parked for now.
+- Corner: the fix is better; but the bottom-right cracks are straight
+  45-degree lines, which feels wrong; the top left looks more realistic.
+  (Maybe corners are like that; she hasn't checked real corners.)
+- Sky: better, still work to do.
+- Tree against warm sky: a bit strong; "still a little too computational
+  vibes, but probably an improvement". The main change she sees: stronger.

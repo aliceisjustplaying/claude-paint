@@ -4,8 +4,8 @@
 <style>
   :root {
     --bg:#0b0b0d; --panel:#111114; --panel2:#16161b; --line:#1f1f26;
-    --fg:#dcd6cb; --soft:#aaa49a; --dim:#716c65; --faint:#46433f;
-    --acc:#d6a25a; --live:#e0564f; --blue:#7d9fd4;
+    --fg:#f0f0f2; --soft:#d4d4da; --dim:#aeaeb6; --faint:#85858e;
+    --acc:#f2b865; --live:#e0564f; --blue:#7d9fd4;
     --mono: ui-monospace, "SF Mono", Menlo, monospace;
   }
   * { box-sizing:border-box } html, body { height:100% }
@@ -36,28 +36,28 @@
   .pane > h4 { margin:0; padding:8px 14px 6px; font-size:11px; font-weight:600; letter-spacing:.14em; color:var(--dim); text-transform:uppercase; display:flex; gap:8px; align-items:center }
   .pane > h4 span { text-transform:none; letter-spacing:0; font:12px var(--mono); color:var(--faint); overflow:hidden; text-overflow:ellipsis; white-space:nowrap }
   #codepane { background:var(--panel) }
-  #code { flex:1; min-height:0; overflow:auto; margin:0; padding:4px 0 12px; font:12.5px/1.55 var(--mono); color:#b3ada3; white-space:pre; tab-size:4 }
+  #code { flex:1; min-height:0; overflow:auto; margin:0; padding:4px 0 12px; font:12.5px/1.55 var(--mono); color:#d0d0d6; white-space:pre; tab-size:4 }
   #code > div { padding-right:12px } #code .ln { color:var(--faint); user-select:none; display:inline-block; width:3.6em; text-align:right; padding-right:1em }
   #code .new { background:rgba(214,162,90,.10); box-shadow:inset 3px 0 0 var(--acc) }
-  .k { color:#c792d6 } .s { color:#a8c38a } .c { color:#5f5b55; font-style:italic } .n { color:#e0a36b } .m { color:#7fb3d9 } .f { color:#e6d6a8 }
+  .k { color:#c792d6 } .s { color:#a8c38a } .c { color:#9a9aa3; font-style:italic } .n { color:#e0a36b } .m { color:#7fb3d9 } .f { color:#e6d6a8 }
   #viewpane { background:#070708; position:relative }
   #view { flex:1; min-height:0; display:flex; align-items:center; justify-content:center; padding:12px }
   #view img { max-width:100%; max-height:100%; object-fit:contain; border-radius:2px; box-shadow:0 12px 44px rgba(0,0,0,.7); cursor:zoom-in }
   #cap { position:absolute; left:14px; bottom:10px; font:12px var(--mono); color:var(--dim) }
   #journal { background:var(--panel2); border-right:none }
   #jbody { flex:1; min-height:0; overflow:auto; padding:4px 16px 16px }
-  .th { margin:10px 0 12px; font-size:14.5px; line-height:1.6; color:var(--dim); white-space:pre-wrap; word-break:break-word }
-  .th.last { color:var(--fg) } .say { margin:10px 0; padding-left:10px; border-left:2px solid var(--acc); color:var(--fg); font-size:14.5px; white-space:pre-wrap }
+  .th { margin:10px 0 12px; font-size:15px; line-height:1.6; color:var(--soft); white-space:pre-wrap; word-break:break-word }
+  .th.last { color:#ffffff } .say { margin:10px 0; padding-left:10px; border-left:2px solid var(--acc); color:var(--fg); font-size:14.5px; white-space:pre-wrap }
   .chips { display:flex; flex-wrap:wrap; gap:5px; margin:6px 0 }
-  .chip { font-size:12.5px; color:var(--soft); background:#1d1d23; border:1px solid var(--line); border-radius:6px; padding:1px 8px; white-space:nowrap; max-width:100%; overflow:hidden; text-overflow:ellipsis; cursor:default }
-  .chip.code { color:var(--acc) } .chip.render { color:#8fb3e0 } .chip.look { color:#c7a2d6; cursor:pointer } .chip.fail { color:#e38a80 }
+  .chip { font-size:13px; color:var(--soft); background:#202027; border:1px solid var(--line); border-radius:6px; padding:1px 8px; white-space:nowrap; max-width:100%; overflow:hidden; text-overflow:ellipsis; cursor:default }
+  .chip.code { color:var(--acc) } .chip.render { color:#a9c9f2 } .chip.look { color:#dcb8ea; cursor:pointer } .chip.fail { color:#ff9d93 }
   .tm { font:11px var(--mono); color:var(--faint); display:block; margin-top:12px }
   .cursor { display:inline-block; width:7px; height:1em; vertical-align:text-bottom; background:var(--acc); animation:blink 1s infinite }
 
   /* bottom: looks + transport */
   footer { background:var(--panel); border-top:1px solid var(--line); padding:8px 14px 10px }
   #strip { display:flex; gap:6px; overflow-x:auto; padding-bottom:8px; height:74px }
-  #strip img { height:58px; border-radius:3px; cursor:pointer; opacity:.4; transition:opacity .12s; flex:none }
+  #strip img { height:58px; border-radius:3px; cursor:pointer; opacity:.6; transition:opacity .12s; flex:none }
   #strip img:hover { opacity:.8 } #strip img.on { opacity:1; outline:2px solid var(--acc); outline-offset:1px }
   #transport { display:flex; align-items:center; gap:8px }
   #scrub { flex:1; accent-color:var(--acc) }

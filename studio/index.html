@@ -1,214 +1,292 @@
 <!doctype html>
 <html><head><meta charset="utf-8"><title>studio</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <style>
-  :root { --bg:#16161a; --fg:#ddd; --dim:#888; --acc:#e0b060; }
-  * { box-sizing:border-box } body { margin:0; background:var(--bg); color:var(--fg); font:15px/1.45 -apple-system, sans-serif; height:100vh; display:flex; flex-direction:column }
-  header { display:flex; flex-wrap:nowrap; gap:10px; align-items:center; padding:6px 10px; border-bottom:1px solid #333; white-space:nowrap; overflow:hidden }
-  header > * { flex:none } header #sess { flex:0 1 auto; min-width:120px }
-  #clock, #file { flex:0 1 auto; min-width:0; overflow:hidden; text-overflow:ellipsis }
-  header select { background:#222; color:var(--fg); border:1px solid #444; max-width:40vw }
-  header button { background:#222; color:var(--fg); border:1px solid #444; padding:2px 8px; cursor:pointer }
-  #clock { color:var(--dim); font-variant-numeric:tabular-nums }
-  #badge { white-space:nowrap; font-weight:700; padding:2px 8px; border-radius:3px; letter-spacing:.05em }
-  #badge.live { background:#c22; color:#fff; animation:pulse 1.6s infinite }
-  #badge.idle { background:#553; color:#ddd } #badge.replay { background:#246; color:#dde } #badge.ended { background:#333; color:#aaa }
-  @keyframes pulse { 50% { opacity:.55 } }
-  #doing { padding:8px 12px; font-size:19px; border-bottom:1px solid #333; display:flex; gap:12px; align-items:baseline }
-  #doing .what { font-weight:600 } #doing .detail { color:var(--dim); font-size:15px; font-family:ui-monospace, Menlo, monospace; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; flex:1 }
-  #doing .since { color:var(--dim); font-size:15px; font-variant-numeric:tabular-nums }
-  main { flex:1; display:grid; grid-template-columns: 42% 58%; min-height:0 }
-  #code { overflow:auto; margin:0; padding:8px; font:13px/1.4 ui-monospace, Menlo, monospace; white-space:pre; border-right:1px solid #333 }
-  #code .new { background:#3a3320 } #code .ln { color:#555; user-select:none; display:inline-block; width:4em }
-  #right { display:flex; flex-direction:column; min-height:0 }
-  #view { flex:1; display:flex; align-items:center; justify-content:center; background:#000; min-height:0; position:relative }
-  #view img { max-width:100%; max-height:100%; object-fit:contain }
-  #cap { position:absolute; left:8px; bottom:6px; color:var(--dim); font-size:13px; background:#000a; padding:2px 6px }
-  #bottom { height:38%; display:grid; grid-template-columns: 1fr 1fr; border-top:1px solid #333; min-height:0 }
-  #feed { overflow:auto; padding:6px 10px; font-size:14px; border-right:1px solid #333 }
-  #thoughts { overflow:auto; padding:6px 10px; font-size:14.5px; line-height:1.5; color:#bbb; background:#1b1b20 }
-  #thoughts h4 { margin:0 0 4px; font-size:12px; color:var(--dim); font-weight:600; letter-spacing:.06em }
-  #thoughts .t { margin:0 0 10px; white-space:pre-wrap; word-break:break-word; opacity:.55 }
-  #thoughts .t.last { opacity:1; color:#e6e6e6 } #thoughts .tm { color:#666; font-size:12px }
-  #thoughts .cursor { display:inline-block; width:7px; background:#bbb; animation:pulse 1s infinite }
-  #feed div { margin:2px 0; white-space:pre-wrap; word-break:break-word }
-  .say { color:#eee } .think { color:#777; font-style:italic } .cmd { color:#8bc } .write,.edit { color:var(--acc) } .image { color:#c8c } .user { color:#9c9 }
-  footer { padding:6px 10px; border-top:1px solid #333; display:flex; gap:10px; align-items:center }
-  footer input[type=range] { flex:1 }
-  #strip { display:flex; gap:2px; overflow-x:auto; padding:4px 10px; border-top:1px solid #333; height:64px }
-  #strip img { height:56px; cursor:pointer; opacity:.6 } #strip img.on { opacity:1; outline:2px solid var(--acc) }
+  :root {
+    --bg:#0b0b0d; --panel:#111114; --panel2:#16161b; --line:#1f1f26;
+    --fg:#dcd6cb; --soft:#aaa49a; --dim:#716c65; --faint:#46433f;
+    --acc:#d6a25a; --live:#e0564f; --blue:#7d9fd4;
+    --mono: ui-monospace, "SF Mono", Menlo, monospace;
+  }
+  * { box-sizing:border-box } html, body { height:100% }
+  body { margin:0; background:var(--bg); color:var(--fg); font:15px/1.5 -apple-system, system-ui, sans-serif; -webkit-font-smoothing:antialiased;
+         display:grid; grid-template-rows: auto minmax(0,1fr) auto; grid-template-columns: minmax(0,1fr); width:100vw; overflow:hidden }
+  header, main, footer { min-width:0 } #strip, #transport { min-width:0 }
+  ::-webkit-scrollbar { width:9px; height:9px } ::-webkit-scrollbar-thumb { background:#27272e; border-radius:5px } ::-webkit-scrollbar-track { background:transparent }
+  button, select { font:inherit; font-size:13.5px; color:var(--soft); background:var(--panel2); border:1px solid var(--line); border-radius:7px; padding:4px 10px; cursor:pointer }
+  button:hover, select:hover { color:var(--fg); border-color:#30303a }
+
+  /* top: which painter, what it's doing now, live state */
+  header { display:flex; align-items:center; gap:14px; padding:9px 14px; background:var(--panel); border-bottom:1px solid var(--line); min-width:0 }
+  #sess { max-width:210px; flex:none }
+  #doing { flex:1; min-width:0; display:flex; align-items:baseline; gap:10px; white-space:nowrap; overflow:hidden }
+  #doing .what { font-size:18px; font-weight:600 } #doing .detail { color:var(--dim); font:13px var(--mono); overflow:hidden; text-overflow:ellipsis; min-width:0 }
+  #badge { flex:none; font-size:11.5px; font-weight:700; letter-spacing:.12em; padding:3px 10px; border-radius:999px; border:1px solid var(--line); color:var(--dim) }
+  #badge.live { color:#fff; background:var(--live); border-color:var(--live); animation:glow 2s infinite }
+  #badge.replay { color:var(--blue); border-color:#2b3b58 }
+  @keyframes glow { 0% { box-shadow:0 0 0 0 rgba(224,86,79,.45) } 70% { box-shadow:0 0 0 8px rgba(224,86,79,0) } 100% { box-shadow:none } }
+  @keyframes blink { 50% { opacity:.3 } }
+  #clockbox { flex:none; text-align:right; line-height:1.1 } #clocklbl { font-size:11px; color:var(--dim); display:block }
+  #clock { font:20px var(--mono); font-variant-numeric:tabular-nums }
+
+  /* middle: code | picture | journal */
+  main { display:grid; grid-template-columns: minmax(0,26fr) minmax(0,44fr) minmax(0,30fr); min-height:0 }
+  body.nocode main { grid-template-columns: minmax(0,60fr) minmax(0,40fr) } body.nocode #codepane { display:none }
+  .pane { min-height:0; display:flex; flex-direction:column; border-right:1px solid var(--line) }
+  .pane > h4 { margin:0; padding:8px 14px 6px; font-size:11px; font-weight:600; letter-spacing:.14em; color:var(--dim); text-transform:uppercase; display:flex; gap:8px; align-items:center }
+  .pane > h4 span { text-transform:none; letter-spacing:0; font:12px var(--mono); color:var(--faint); overflow:hidden; text-overflow:ellipsis; white-space:nowrap }
+  #codepane { background:var(--panel) }
+  #code { flex:1; min-height:0; overflow:auto; margin:0; padding:4px 0 12px; font:12.5px/1.55 var(--mono); color:#b3ada3; white-space:pre; tab-size:4 }
+  #code > div { padding-right:12px } #code .ln { color:var(--faint); user-select:none; display:inline-block; width:3.6em; text-align:right; padding-right:1em }
+  #code .new { background:rgba(214,162,90,.10); box-shadow:inset 3px 0 0 var(--acc) }
+  .k { color:#c792d6 } .s { color:#a8c38a } .c { color:#5f5b55; font-style:italic } .n { color:#e0a36b } .m { color:#7fb3d9 } .f { color:#e6d6a8 }
+  #viewpane { background:#070708; position:relative }
+  #view { flex:1; min-height:0; display:flex; align-items:center; justify-content:center; padding:12px }
+  #view img { max-width:100%; max-height:100%; object-fit:contain; border-radius:2px; box-shadow:0 12px 44px rgba(0,0,0,.7); cursor:zoom-in }
+  #cap { position:absolute; left:14px; bottom:10px; font:12px var(--mono); color:var(--dim) }
+  #journal { background:var(--panel2); border-right:none }
+  #jbody { flex:1; min-height:0; overflow:auto; padding:4px 16px 16px }
+  .th { margin:10px 0 12px; font-size:14.5px; line-height:1.6; color:var(--dim); white-space:pre-wrap; word-break:break-word }
+  .th.last { color:var(--fg) } .say { margin:10px 0; padding-left:10px; border-left:2px solid var(--acc); color:var(--fg); font-size:14.5px; white-space:pre-wrap }
+  .chips { display:flex; flex-wrap:wrap; gap:5px; margin:6px 0 }
+  .chip { font-size:12.5px; color:var(--soft); background:#1d1d23; border:1px solid var(--line); border-radius:6px; padding:1px 8px; white-space:nowrap; max-width:100%; overflow:hidden; text-overflow:ellipsis; cursor:default }
+  .chip.code { color:var(--acc) } .chip.render { color:#8fb3e0 } .chip.look { color:#c7a2d6; cursor:pointer } .chip.fail { color:#e38a80 }
+  .tm { font:11px var(--mono); color:var(--faint); display:block; margin-top:12px }
+  .cursor { display:inline-block; width:7px; height:1em; vertical-align:text-bottom; background:var(--acc); animation:blink 1s infinite }
+
+  /* bottom: looks + transport */
+  footer { background:var(--panel); border-top:1px solid var(--line); padding:8px 14px 10px }
+  #strip { display:flex; gap:6px; overflow-x:auto; padding-bottom:8px; height:74px }
+  #strip img { height:58px; border-radius:3px; cursor:pointer; opacity:.4; transition:opacity .12s; flex:none }
+  #strip img:hover { opacity:.8 } #strip img.on { opacity:1; outline:2px solid var(--acc); outline-offset:1px }
+  #transport { display:flex; align-items:center; gap:8px }
+  #scrub { flex:1; accent-color:var(--acc) }
+  #golive { font-weight:700; letter-spacing:.06em }
+  #golive.on { color:#fff; background:var(--live); border-color:var(--live) }
+  #pos { font:12px var(--mono); color:var(--dim); min-width:9ch; text-align:right }
+  #zoom { position:fixed; inset:0; background:rgba(0,0,0,.94); display:none; align-items:center; justify-content:center; cursor:zoom-out; z-index:9 }
+  #zoom img { max-width:98vw; max-height:98vh }
 </style></head>
-<body>
+<body class="nocode">
 <header>
-  <b>studio</b>
-  <select id="sess"></select>
-  <button id="play">▶ replay</button>
-  <select id="speed"><option value="1">1×</option><option value="10">10×</option><option value="60" selected>60×</option><option value="300">300×</option></select>
-  <button id="golive">● live</button>
-  <span id="badge"></span><span id="clock"></span><span id="file" style="color:var(--dim)"></span>
+  <select id="sess" title="painter session"></select>
+  <div id="doing"><span class="what"></span><span class="detail"></span></div>
+  <span id="badge"></span>
+  <div id="clockbox"><span id="clocklbl">painting for</span><span id="clock">0:00:00</span></div>
 </header>
-<div id="doing"><span class="what"></span><span class="detail"></span><span class="since"></span></div>
 <main>
-  <pre id="code"></pre>
-  <div id="right"><div id="view"><img id="img"><span id="cap"></span></div><div id="bottom"><div id="feed"></div><div id="thoughts"></div></div></div>
+  <section class="pane" id="codepane"><h4>code <span id="file"></span></h4><pre id="code"></pre></section>
+  <section class="pane" id="viewpane"><div id="view"><img id="img" alt=""></div><span id="cap"></span></section>
+  <section class="pane" id="journal"><h4>thoughts &amp; actions</h4><div id="jbody"></div></section>
 </main>
-<div id="strip"></div>
-<footer><input type="range" id="scrub" min="0" max="0" value="0"><span id="pos"></span></footer>
+<footer>
+  <div id="strip"></div>
+  <div id="transport">
+    <button id="prevlook" title="previous look  [">⏮</button>
+    <button id="play" title="replay  space">▶</button>
+    <select id="speed" title="replay speed"><option value="1">1×</option><option value="10">10×</option><option value="60" selected>60×</option><option value="300">300×</option></select>
+    <button id="nextlook" title="next look  ]">⏭</button>
+    <input type="range" id="scrub" min="0" max="0" value="0">
+    <span id="pos"></span>
+    <button id="togglecode" title="show/hide code  c">code</button>
+    <button id="golive" title="jump to live  l">● LIVE</button>
+  </div>
+</footer>
+<div id="zoom"><img id="zimg" alt=""></div>
 <script>
 const $ = id => document.getElementById(id);
-let S = null, events = [], pos = 0, live = true, playing = null;
+let S = null, events = [], pos = 0, live = true, playing = null, cwd = '';
+const esc = s => String(s).replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+const fname = p => (p || '').split('/').slice(-1)[0];
+const fmt = s => { s = Math.max(0, s|0); return `${(s/3600)|0}:${String(((s%3600)/60)|0).padStart(2,'0')}:${String(s%60).padStart(2,'0')}`; };
+const hhmm = ts => new Date(ts).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
+const ago = s => s < 90 ? Math.round(s) + ' s ago' : s < 5400 ? Math.round(s/60) + ' min ago' : Math.round(s/3600) + ' h ago';
+const imgURL = i => `/img?s=${encodeURIComponent(S)}&i=${i}`;
 
 async function loadSessions() {
   const ss = await (await fetch('/api/sessions')).json();
-  $('sess').innerHTML = ss.map(s => `<option value="${s.path}">${s.folder} — ${new Date(s.mtime*1000).toLocaleString()}</option>`).join('');
-  const want = new URLSearchParams(location.search).get('s');
-  S = want || (ss[0] && ss[0].path); $('sess').value = S;
+  $('sess').innerHTML = ss.map(s => `<option value="${s.path}">${esc(s.folder.replace(/^claude-paint-/, ''))} · ${new Date(s.mtime*1000).toLocaleString([], {month:'short', day:'numeric', hour:'2-digit', minute:'2-digit'})}</option>`).join('');
+  S = new URLSearchParams(location.search).get('s') || (ss[0] && ss[0].path); $('sess').value = S;
 }
 async function poll() {
   if (!S) return;
   const r = await (await fetch(`/api/events?s=${encodeURIComponent(S)}&since=${events.length}`)).json();
   if (r.events.length) {
-    events.push(...r.events);
+    const base = events.length; events.push(...r.events);
+    for (const e of r.events) if (e.kind === 'start') cwd = e.cwd;
     $('scrub').max = events.length - 1;
-    for (const e of r.events) if (e.kind === 'image') addThumb(e, events.indexOf(e));
+    r.events.forEach((e, j) => { if (e.kind === 'image') thumb(e, base + j); });
     if (live) show(events.length - 1);
   }
-  badge();
+  if (live) refreshLiveCode();
+  status();
 }
-function badge() {
-  if (!events.length) return;
-  const age = (Date.now() - Date.parse(events[events.length-1].ts)) / 1000;
-  const active = age < 180, b = $('badge');
-  if (live && active) { b.className = 'live'; b.textContent = 'LIVE'; b.title = 'following the painter; last action ' + ago(age); }
-  else if (live) { b.className = active ? 'live' : 'ended'; b.textContent = active ? 'LIVE' : 'IDLE'; b.title = 'last action ' + ago(age); }
-  else if (playing) { b.className = 'replay'; b.textContent = 'REPLAY ' + $('speed').value + '×'; }
-  else { b.className = 'replay'; b.textContent = 'PAUSED'; b.title = (events.length - 1 - pos) + ' events behind live'; }
+function thumb(e, i) {
+  const im = document.createElement('img'); im.src = imgURL(e.img); im.dataset.i = i; im.title = hhmm(e.ts) + '  ' + fname(e.path);
+  im.onclick = () => { live = false; stop(); show(i); }; $('strip').appendChild(im);
+  if (live) $('strip').scrollLeft = 1e9;
 }
-// what the painter is doing at event i (live: now)
-const ICON = { think:'💭', code:'✍️', compile:'🔧', render:'🎨', look:'👁', read:'📖', notes:'📝', wait:'⏳', cmd:'⌨️', talk:'💬', done:'✓' };
-function classify(e) {
-  const f = (e.path||'').split('/').slice(-1)[0];
-  if (e.kind === 'write' || e.kind === 'edit') return /\.(rs|lua)$/.test(f) ? ['code', 'writing code', f] : /\.md$/.test(f) ? ['notes', 'writing notes', f] : ['code', 'writing', f];
-  if (e.kind === 'read') return /\.(jpe?g|png)$/i.test(f) ? ['look', 'looking at the canvas', f] : ['read', 'reading', e.path];
-  if (e.kind === 'image') return ['look', 'looking at the canvas', f];
-  if (e.kind === 'cmd') { const c = e.text || '';
+
+// ---- what an event is, in a few words
+function kindOf(e) {
+  const f = fname(e.path);
+  if (e.kind === 'write' || e.kind === 'edit') {
+    let d = ''; if (e.kind === 'edit') { let a = 0, r = 0; for (const x of e.edits || []) { a += (x.newText||'').split('\n').length; r += (x.oldText||'').split('\n').length; } d = ` +${a} −${r}`; }
+    return /\.(rs|lua)$/.test(f) ? ['code', '✍️', (e.kind === 'write' ? 'wrote ' : 'edited ') + f + d] : /\.md$/.test(f) ? ['notes', '📝', (e.kind === 'write' ? 'wrote ' : 'edited ') + f] : ['code', '✍️', 'wrote ' + f];
+  }
+  if (e.kind === 'read') return /\.(jpe?g|png)$/i.test(f) ? ['look', '👁', 'looks at the canvas'] : ['read', '📖', 'reads ' + f];
+  if (e.kind === 'image') return ['look', '👁', 'looks at ' + (f || 'the canvas')];
+  if (e.kind === 'cmd') {
+    const c = (e.text || '').replace(/^\s*((cd\s+\S+|export\s+[^;&\n]*|source\s+\S+|set\s+-\S+)\s*(&&|;|\n)\s*)+/, ''), fail = /error(\[|:)|panicked|FAILED/.test(e.out || '');
     if (/cargo paint/.test(c)) { const w = (c.match(/--crop\s+(\S+)/)||[])[1], r = (c.match(/--resume\s+("[^"]+"|\S+)/)||[])[1];
-      return ['render', w ? 'rendering a close-up' : 'rendering the whole painting', (r ? 'from stage ' + r + ' ' : '') + (w ? 'window ' + w : '')]; }
-    if (/cargo (build|check|test|clippy)/.test(c)) return ['compile', 'compiling', c.slice(0, 120)];
-    if (/scripts\/peek|magick/.test(c)) return ['look', 'preparing a look', c.slice(0, 120)];
-    if (/^\s*(cat|sed|head|tail|grep|rg|ls|find|wc)\b/.test(c)) return ['read', 'reading', c.slice(0, 120)];
-    return ['cmd', 'running a command', c.slice(0, 120)]; }
-  if (e.kind === 'tool' && /bg_wait|bg_logs|bg_status/.test(e.name)) return ['wait', 'waiting for a render', ''];
-  if (e.kind === 'think') return ['think', 'thinking', e.text.split('\n').filter(Boolean).slice(-1)[0] || ''];
-  if (e.kind === 'say') return ['talk', 'talking', e.text.split('\n')[0]];
+      return [fail ? 'fail' : 'render', '🎨', (w ? 'renders a close-up' : 'renders the whole painting') + (r ? ' from ' + r.replace(/"/g, '') : '') + (fail ? ' — failed' : '')]; }
+    if (/cargo (build|check|test|clippy)/.test(c)) return [fail ? 'fail' : 'compile', '🔧', 'compiles' + (fail ? ' — errors' : '')];
+    const wr = c.match(/(?:cat|tee)\s*>+\s*(\S+)|(?:sed|perl)\s+-[a-z]*i\S*\s.*?(\S+\.(?:rs|lua|md))\s*$|open\(["']([^"']+\.(?:rs|lua|md))["'],\s*["']w/m);
+    if (wr || /python3?\s+-\s*<</.test(c) && /\.(rs|lua|md)/.test(c)) { const t = wr ? fname(wr[1] || wr[2] || wr[3]) : fname((c.match(/[\w/.-]+\.(?:rs|lua|md)/)||[''])[0]);
+      return [/\.md$/.test(t) ? 'notes' : 'code', '✍️', 'edits ' + (t || 'files') + ' via script']; }
+    if (/scripts\/peek|magick/.test(c)) return ['look', '🔍', 'prepares a look'];
+    if (/^\s*(cat|sed -n|head|tail|grep|rg|ls|find|wc)\b/.test(c)) return ['read', '📖', 'reads ' + (fname((c.match(/[\w/.-]+\.\w+/)||[''])[0]) || 'files')];
+    return ['cmd', '⌨️', c.split('\n')[0].slice(0, 60)];
+  }
+  if (e.kind === 'tool' && /bg_wait|bg_logs|bg_status/.test(e.name)) return ['wait', '⏳', 'waits for a render'];
+  if (e.kind === 'tool') return ['cmd', '⌨️', e.name];
   return null;
 }
-function doing(i, isLive) {
+
+// ---- right now
+function status() {
   if (!events.length) return;
-  const e = events[i]; let c = classify(e), since = Date.parse(e.ts);
-  const busy = (e.kind === 'cmd' || e.kind === 'tool' || e.kind === 'write' || e.kind === 'edit' || e.kind === 'read') && e.out === undefined;
-  if (isLive) {
-    const age = (Date.now() - since) / 1000;
-    if (age > 1800) c = ['done', 'not working', 'last action ' + ago(age)];
-    else if (!busy && e.kind !== 'say' && e.kind !== 'think') c = ['think', 'thinking about the next step', 'after: ' + (c ? c[1] : e.kind)];
-    else if (e.kind === 'say' && /final|finished|done/i.test(e.text) && i === events.length - 1) c = ['done', 'finished', e.text.split('\n')[0]];
-  }
-  if (!c) c = ['think', 'thinking', ''];
-  const el = $('doing');
-  el.querySelector('.what').textContent = (ICON[c[0]] || '') + ' ' + c[1];
-  el.querySelector('.detail').textContent = c[2] || '';
-  el.querySelector('.since').textContent = isLive ? 'for ' + fmt((Date.now() - since) / 1000) : '';
+  const last = events[events.length - 1], age = (Date.now() - Date.parse(last.ts)) / 1000, atLive = live && pos === events.length - 1;
+  const b = $('badge'), active = age < 1800;
+  if (atLive && active) { b.className = 'live'; b.textContent = 'LIVE'; b.title = 'last action ' + ago(age); }
+  else if (atLive) { b.className = ''; b.textContent = 'FINISHED'; b.title = 'last action ' + ago(age); }
+  else if (playing) { b.className = 'replay'; b.textContent = 'REPLAY ' + $('speed').value + '×'; b.title = ''; }
+  else { b.className = 'replay'; b.textContent = 'REWOUND'; b.title = (events.length - 1 - pos) + ' events behind live'; }
+  $('golive').classList.toggle('on', atLive);
+  const t0 = Date.parse(events[0].ts), t = atLive && active ? Date.now() : Date.parse(events[pos].ts);
+  $('clock').textContent = fmt((t - t0) / 1000); $('clocklbl').textContent = atLive ? (active ? 'painting for' : 'painted for') : 'at';
+  doing(atLive && active);
 }
-// the painter's thoughts up to event i; the newest is typed out when it arrives live
-let typed = -1, typer = null;
-function thoughts(i) {
-  const th = []; for (let k = 0; k <= i; k++) if (events[k].kind === 'think') th.push(k);
-  const show = th.slice(-6), box = $('thoughts'), newest = show[show.length - 1];
-  const tm = k => new Date(events[k].ts).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit', second:'2-digit'});
-  box.innerHTML = '<h4>THOUGHTS</h4>' + show.map(k => `<div class="t${k === newest ? ' last' : ''}" data-k="${k}"><span class="tm">${tm(k)}</span>\n${k === newest && live && k !== typed ? '' : esc(events[k].text)}</div>`).join('');
-  if (newest !== undefined && live && newest !== typed) {
-    typed = newest; clearInterval(typer); const el = box.querySelector('.t.last'), txt = events[newest].text; let n = 0;
-    typer = setInterval(() => { n = Math.min(txt.length, n + Math.max(3, txt.length / 150 | 0));
-      el.innerHTML = `<span class="tm">${tm(newest)}</span>\n` + esc(txt.slice(0, n)) + (n < txt.length ? '<span class="cursor">&nbsp;</span>' : '');
-      box.scrollTop = 1e9; if (n >= txt.length) clearInterval(typer); }, 30);
-  }
-  box.scrollTop = 1e9;
+function doing(isLive) {
+  const e = events[pos]; let c = kindOf(e), what, detail = '';
+  const busy = ['cmd','tool','write','edit','read'].includes(e.kind) && e.out === undefined;
+  if (e.kind === 'think') { what = '💭 thinking'; detail = e.text.split('\n').filter(Boolean).slice(-1)[0] || ''; }
+  else if (e.kind === 'say') { what = '💬 says'; detail = e.text.split('\n')[0]; }
+  else if (isLive && !busy) { what = '💭 thinking about the next step'; detail = c ? 'after: ' + c[2] : ''; }
+  else if (c) { what = c[1] + ' ' + c[2].replace(/^(\S+)s /, (m, v) => v.endsWith('e') ? v.slice(0,-1) + 'ing ' : v + 'ing ').replace(/^edited |^wrote /, m => m === 'edited ' ? 'editing ' : 'writing '); detail = e.kind === 'cmd' ? e.text.split('\n')[0] : (e.path || ''); }
+  else what = '💭 thinking';
+  if (isLive) detail += (detail ? '  ·  ' : '') + 'for ' + fmt((Date.now() - Date.parse(e.ts)) / 1000);
+  $('doing').querySelector('.what').textContent = what; $('doing').querySelector('.detail').textContent = detail;
 }
-function ago(s) { return s < 90 ? Math.round(s) + ' s ago' : s < 5400 ? Math.round(s/60) + ' min ago' : Math.round(s/3600) + ' h ago'; }
-function addThumb(e, i) {
-  const im = document.createElement('img'); im.src = `/img?s=${encodeURIComponent(S)}&i=${e.img}`; im.dataset.i = i;
-  im.onclick = () => { live = false; stop(); show(i); }; $('strip').appendChild(im);
-}
-// rebuild the painting's source up to event i
+
+// ---- code
 function paintingFile(upto) {
   const n = {};
-  for (let k = 0; k <= upto; k++) { const e = events[k]; if ((e.kind === 'write' || e.kind === 'edit') && /\.(rs|lua)$/.test(e.path)) n[e.path] = (n[e.path]||0) + 1; }
+  for (let k = 0; k <= upto; k++) { const e = events[k];
+    if ((e.kind === 'write' || e.kind === 'edit') && /\.(rs|lua)$/.test(e.path)) n[e.path] = (n[e.path]||0) + 1;
+    if (e.kind === 'cmd') { const m = (e.text||'').match(/cargo paint (\w+)/); if (m) { const p = cwd + '/paintings/src/bin/' + m[1] + '.rs'; n[p] = (n[p]||0) + 0.5; } } }
   let best = null, m = 0; for (const p in n) if (n[p] > m) { m = n[p]; best = p; } return best;
 }
 function source(path, upto) {
-  let text = '', changed = [];
-  for (let k = 0; k <= upto; k++) {
-    const e = events[k]; if (e.path !== path) continue;
-    if (e.kind === 'write') { text = e.content; changed = [[0, text.length]]; }
-    else if (e.kind === 'edit') { changed = [];
-      for (const ed of e.edits) { const at = text.indexOf(ed.oldText); if (at < 0) continue;
-        text = text.slice(0, at) + ed.newText + text.slice(at + ed.oldText.length); changed.push([at, at + ed.newText.length]); } }
+  let text = '', changed = [], known = false;
+  for (let k = 0; k <= upto; k++) { const e = events[k]; if (e.path !== path) continue;
+    if (e.kind === 'write') { text = e.content; changed = []; known = true; }
+    else if (e.kind === 'edit') { changed = []; for (const ed of e.edits) { const at = text.indexOf(ed.oldText); if (at < 0) continue;
+      text = text.slice(0, at) + ed.newText + text.slice(at + ed.oldText.length); changed.push([at, at + ed.newText.length]); } } }
+  return { text, changed, known };
+}
+let liveText = null;
+async function refreshLiveCode() {
+  const p = paintingFile(events.length - 1); if (!p || !cwd) return;
+  const rel = p.startsWith(cwd + '/') ? p.slice(cwd.length + 1) : p;
+  const r = await fetch(`/api/file?s=${encodeURIComponent(S)}&p=${encodeURIComponent(rel)}`); if (!r.ok) return;
+  const t = await r.text(); if (t !== liveText) { const old = liveText; liveText = t; if (live && pos === events.length - 1) renderCode(p, t, diffLines(old, t)); }
+}
+function diffLines(a, b) { if (a == null) return new Set(); const A = new Set(a.split('\n')); const out = new Set(); b.split('\n').forEach((l, i) => { if (!A.has(l) && l.trim()) out.add(i); }); return out; }
+const KW = /\b(fn|let|mut|if|else|for|in|while|loop|match|return|use|pub|struct|enum|impl|const|static|move|as|ref|mod|where|break|continue|local|function|end|then|do|elseif|nil|and|or|not|repeat|until|true|false|Some|None|Ok|Err|self|Self)\b/;
+function hl(line, lua) {
+  const re = lua ? /(--.*$)|("(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*')|\b(\d+(?:\.\d+)?(?:e-?\d+)?)\b|(\b[A-Za-z_]\w*\b)(?=\s*\()|(\b[A-Za-z_]\w*\b)/g
+                 : /(\/\/.*$)|("(?:\\.|[^"\\])*")|\b(\d+(?:\.\d+)?(?:e-?\d+)?(?:f32|f64|usize|u8|u32|i32|u64)?)\b|(\b[A-Za-z_]\w*!?)(?=\s*[(!])|(\b[A-Za-z_]\w*\b)/g;
+  let out = '', last = 0, m;
+  while ((m = re.exec(line))) { out += esc(line.slice(last, m.index)); const t = esc(m[0]);
+    out += m[1] ? `<span class="c">${t}</span>` : m[2] ? `<span class="s">${t}</span>` : m[3] ? `<span class="n">${t}</span>`
+         : m[4] ? (KW.test(m[4]) ? `<span class="k">${t}</span>` : m[4].endsWith('!') ? `<span class="m">${t}</span>` : `<span class="f">${t}</span>`)
+         : KW.test(m[5]) && m[5].match(KW)[0] === m[5] ? `<span class="k">${t}</span>` : /^[A-Z]/.test(m[5]) ? `<span class="m">${t}</span>` : t;
+    last = m.index + m[0].length; if (!m[0].length) re.lastIndex++; }
+  return out + esc(line.slice(last));
+}
+function renderCode(path, text, newLines) {
+  $('file').textContent = fname(path); const lua = /\.lua$/.test(path);
+  if (!text) { $('code').innerHTML = '<div style="padding:12px 16px;color:var(--dim)">no program yet</div>'; return; }
+  let first = null, html = '';
+  text.split('\n').forEach((l, i) => { const isNew = newLines.has(i); if (isNew && first === null) first = i;
+    html += `<div${isNew ? ' class="new"' : ''}><span class="ln">${i+1}</span>${hl(l, lua) || ' '}</div>`; });
+  $('code').innerHTML = html; if (first !== null) $('code').children[first].scrollIntoView({ block:'center' });
+}
+function codeAt(i) {
+  const p = paintingFile(i); if (!p) return renderCode('', '', new Set());
+  const atLive = live && i === events.length - 1;
+  if (atLive && liveText != null) return renderCode(p, liveText, new Set());
+  const { text, changed, known } = source(p, i);
+  const nl = new Set(); if (known) { let off = 0; text.split('\n').forEach((l, k) => { const a = off, b = off + l.length; off = b + 1; if (changed.some(([x, y]) => x <= b && y >= a)) nl.add(k); }); }
+  renderCode(p, known ? text : (liveText || ''), nl);
+}
+
+// ---- journal: thoughts as prose, actions condensed into chips
+let typed = -1, typer = null;
+function journal(i) {
+  const from = Math.max(0, i - 250); let html = '', chips = [], lastTm = 0, lastThink = -1;
+  for (let k = i; k >= from; k--) if (events[k].kind === 'think') { lastThink = k; break; }
+  const flush = () => { if (chips.length) { html += `<div class="chips">${chips.join('')}</div>`; chips = []; } };
+  for (let k = from; k <= i; k++) { const e = events[k], t = Date.parse(e.ts);
+    if (t - lastTm > 5 * 60e3 && (e.kind === 'think' || e.kind === 'say')) { flush(); html += `<span class="tm">${hhmm(e.ts)}</span>`; lastTm = t; }
+    if (e.kind === 'think') { flush(); const typing = k === lastThink && live && k === events.length - 1 && k !== typed;
+      html += `<div class="th${k === lastThink ? ' last' : ''}" data-k="${k}">${typing ? '' : esc(e.text.trim())}</div>`; }
+    else if (e.kind === 'say') { flush(); html += `<div class="say">${esc(e.text.trim().slice(0, 1500))}</div>`; }
+    else { const c = kindOf(e); if (!c || e.kind === 'image' && k > 0 && events[k-1].kind === 'read') continue;
+      const title = esc(e.kind === 'cmd' ? e.text.slice(0, 2000) : (e.path || ''));
+      chips.push(`<span class="chip ${c[0]}" title="${title}"${e.kind === 'image' ? ` data-i="${k}"` : ''}>${c[1]} ${esc(c[2])}</span>`); } }
+  flush(); $('jbody').innerHTML = html; $('jbody').scrollTop = 1e9;
+  for (const el of $('jbody').querySelectorAll('.chip.look[data-i]')) el.onclick = () => { live = false; stop(); show(+el.dataset.i); };
+  if (lastThink >= 0 && live && lastThink === events.length - 1 && lastThink !== typed) {
+    typed = lastThink; clearInterval(typer); const el = $('jbody').querySelector(`.th[data-k="${lastThink}"]`), txt = events[lastThink].text.trim(); let n = 0;
+    typer = setInterval(() => { n = Math.min(txt.length, n + Math.max(3, txt.length / 120 | 0)); if (!el.isConnected) return clearInterval(typer);
+      el.innerHTML = esc(txt.slice(0, n)) + (n < txt.length ? '<span class="cursor"></span>' : ''); $('jbody').scrollTop = 1e9; if (n >= txt.length) clearInterval(typer); }, 30);
   }
-  return { text, changed };
 }
-function esc(s) { return s.replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c])); }
-function renderCode(upto) {
-  const p = paintingFile(upto); $('file').textContent = p ? p.split('/').slice(-1)[0] : '';
-  if (!p) { $('code').textContent = '(no program yet)'; return; }
-  const { text, changed } = source(p, upto);
-  const lines = text.split('\n'); let off = 0, first = null, html = '';
-  lines.forEach((l, i) => {
-    const a = off, b = off + l.length; off = b + 1;
-    const isNew = changed.some(([x, y]) => x <= b && y >= a) && changed[0][1] - changed[0][0] < text.length;
-    if (isNew && first === null) first = i;
-    html += `<div class="${isNew ? 'new' : ''}"><span class="ln">${i+1}</span>${esc(l) || ' '}</div>`;
-  });
-  $('code').innerHTML = html;
-  if (first !== null) $('code').children[first].scrollIntoView({ block: 'center' });
-}
+
+// ---- show event i everywhere
 function show(i) {
   if (!events.length) return; pos = Math.max(0, Math.min(i, events.length - 1)); $('scrub').value = pos;
-  let img = null; for (let k = pos; k >= 0; k--) if (events[k].kind === 'image') { img = events[k]; break; }
-  if (img) { const u = `/img?s=${encodeURIComponent(S)}&i=${img.img}`; if ($('img').src.indexOf(u) < 0) $('img').src = u;
-    $('cap').textContent = (img.path || '').split('/').slice(-1)[0] + '  ' + new Date(img.ts).toLocaleTimeString(); }
-  for (const t of $('strip').children) t.classList.toggle('on', img && +t.dataset.i === events.indexOf(img));
-  renderCode(pos);
-  const from = Math.max(0, pos - 60);
-  $('feed').innerHTML = events.slice(from, pos + 1).filter(e => e.kind !== 'think').map(line).join('');
-  $('feed').scrollTop = 1e9;
-  thoughts(pos);
-  const t0 = Date.parse(events[0].ts), t = Date.parse(events[pos].ts);
-  $('clock').textContent = fmt((t - t0) / 1000) + ' in · ' + new Date(t).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}); $('clock').title = 'time into the session · clock time';
-  badge(); doing(pos, live && pos === events.length - 1); $('pos').textContent = `${pos + 1} / ${events.length}`;
+  let img = null, imgK = -1; for (let k = pos; k >= 0; k--) if (events[k].kind === 'image') { img = events[k]; imgK = k; break; }
+  if (img) { const u = imgURL(img.img); if (!$('img').src.endsWith(u)) $('img').src = u; $('cap').textContent = hhmm(img.ts) + '  ' + fname(img.path); }
+  for (const t of $('strip').children) { const on = +t.dataset.i === imgK; t.classList.toggle('on', on); if (on && !live) t.scrollIntoView({ inline:'center', block:'nearest' }); }
+  codeAt(pos); journal(pos); status();
+  $('pos').textContent = `${pos + 1}/${events.length}`;
 }
-function fmt(s) { s = Math.max(0, s|0); return `${(s/3600)|0}:${String(((s%3600)/60)|0).padStart(2,'0')}:${String(s%60).padStart(2,'0')}`; }
-function line(e) {
-  const tm = new Date(e.ts).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
-  let body = {say: e.text, think: e.text, user: e.text, cmd: '$ ' + e.text + (e.out ? '\n' + e.out.split('\n').slice(-4).join('\n') : ''),
-    write: 'write ' + (e.path||'').split('/').slice(-1)[0], edit: 'edit ' + (e.path||'').split('/').slice(-1)[0] + ` (${(e.edits||[]).length})`,
-    read: 'read ' + (e.path||''), image: 'looks at ' + (e.path||'').split('/').slice(-1)[0], tool: (e.name||'') + ' ' + (e.text||''),
-    start: 'session in ' + e.cwd, note: e.text}[e.kind] || '';
-  return `<div class="${e.kind}"><span style="color:#555">${tm}</span> ${esc(String(body).slice(0, 1200))}</div>`;
-}
-function stop() { if (playing) { clearInterval(playing); playing = null; } $('play').textContent = '▶ replay'; }
+function looks() { const r = []; events.forEach((e, k) => e.kind === 'image' && r.push(k)); return r; }
+function stop() { if (playing) { clearInterval(playing); playing = null; } $('play').textContent = '▶'; }
+function goLive() { stop(); live = true; show(events.length - 1); refreshLiveCode(); }
 $('play').onclick = () => {
-  if (playing) return stop(); live = false; if (pos >= events.length - 1) show(0);
-  $('play').textContent = '❚❚ pause';
-  let simT = Date.parse(events[pos].ts);
-  playing = setInterval(() => {
-    simT += 100 * +$('speed').value; let k = pos;
+  if (playing) { stop(); status(); return; } live = false; if (pos >= events.length - 1) show(0);
+  $('play').textContent = '❚❚'; let simT = Date.parse(events[pos].ts);
+  playing = setInterval(() => { simT += 100 * +$('speed').value; let k = pos;
     while (k + 1 < events.length && Date.parse(events[k + 1].ts) <= simT) k++;
-    if (k !== pos) show(k); if (pos >= events.length - 1) stop();
-  }, 100);
+    if (k !== pos) show(k); if (pos >= events.length - 1) { stop(); goLive(); } }, 100);
 };
-$('golive').onclick = () => { stop(); live = true; show(events.length - 1); };
-$('scrub').oninput = e => { stop(); live = false; show(+e.target.value); };
-$('sess').onchange = e => { stop(); S = e.target.value; events = []; $('strip').innerHTML = ''; live = true; history.replaceState(null, '', '?s=' + encodeURIComponent(S)); poll(); };
-document.onkeydown = e => { if (e.key === 'ArrowRight') { live = false; show(pos + 1); } if (e.key === 'ArrowLeft') { live = false; show(pos - 1); } if (e.key === ' ') { e.preventDefault(); $('play').click(); } };
-loadSessions().then(() => { poll(); setInterval(poll, 2000); setInterval(() => { badge(); if (live && events.length) doing(events.length - 1, true); }, 1000); });
+$('prevlook').onclick = () => { stop(); live = false; const L = looks().filter(k => k < pos); if (L.length) show(L[L.length - 1]); };
+$('nextlook').onclick = () => { stop(); const L = looks().filter(k => k > pos); if (L.length) { live = false; show(L[0]); } else goLive(); };
+$('golive').onclick = goLive;
+$('scrub').oninput = e => { stop(); live = +e.target.value >= events.length - 1; show(+e.target.value); };
+$('togglecode').onclick = () => document.body.classList.toggle('nocode');
+$('img').onclick = () => { $('zimg').src = $('img').src; $('zoom').style.display = 'flex'; };
+$('zoom').onclick = () => { $('zoom').style.display = 'none'; };
+$('sess').onchange = e => { stop(); S = e.target.value; events = []; cwd = ''; liveText = null; typed = -1; $('strip').innerHTML = ''; live = true;
+  history.replaceState(null, '', '?s=' + encodeURIComponent(S)); poll(); };
+document.onkeydown = e => { if (e.target.tagName === 'SELECT') return;
+  const k = e.key; if (k === 'ArrowRight') { stop(); live = false; show(pos + 1); } else if (k === 'ArrowLeft') { stop(); live = false; show(pos - 1); }
+  else if (k === '[') $('prevlook').click(); else if (k === ']') $('nextlook').click(); else if (k === 'l') goLive(); else if (k === 'c') $('togglecode').click();
+  else if (k === 'Escape') $('zoom').style.display = 'none'; else if (k === ' ') { e.preventDefault(); $('play').click(); } };
+loadSessions().then(() => { poll(); setInterval(poll, 2000); setInterval(status, 1000); });
 </script>
 </body></html>

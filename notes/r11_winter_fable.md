@@ -174,7 +174,20 @@ What it draws on (from knowledge, not pictures):
     closure that samples the mist `band` moved the mask, which the next
     line needed; `{ let band = &band; move |x, y| .. }` fixes it but
     every mask-sampling closure needs the dance.
-14. **`Gesture` has no width field**: a stroke's width is the tool's width
+14. **A big round sable (≈ 12 units) lays a ribbed, half-covering
+    stroke** on the trunk at 3200px (the "ladder ridges" already noted in
+    notes/motifs.md), and a rigger loaded below ≈ 0.5 skips over the
+    weave and beads along thin twigs. Workaround: thick wood is gone
+    over twice, reloaded, a hair to one side; riggers are kept at load
+    ≥ 0.7. The joint where the trunk hands over to the first fork still
+    shows a faint lighter ring (`~/tmp/r11-winter-fable-92d3ae5a/oakcrop.jpg`).
+15. **`--crop` renders still pay for the whole canvas**: the oak crop
+    (320 × 330 units at 3200px) took 66 s, against 200–215 s for the whole
+    picture, because every mask, the sky field and the snow height field
+    are built whole-canvas (notes/workflow.md says so). Fine for a few
+    looks, but not the "1.6 s loop" without checkpoints, and checkpoints
+    at 3200px are 440 MB each.
+16. **`Gesture` has no width field**: a stroke's width is the tool's width
     × pressure. To draw a limb of a known width you must solve the
     pressure (`Tool::pressure_for`), and the round sable's mark width at
     pressure 1 is not the tool width (spread ≈ 1.0–1.3). Every motif
@@ -208,6 +221,22 @@ tracks come up to him. Still wrong or weak:
   time, the next things I would add: a snow-covered stone or two near the
   oak's foot with a shadow, a broken fence running into the distance
   toward the church, a fine haze of twigs on the oak's crown.
+
+After the third 3200px render and the oak crop (`oakcrop.jpg`): the
+trunk is solid, the snow lies on the wood, the lit streaks read as
+bark catching the glow; the finest twigs still bead a little and the
+fork joint shows a faint ring. The fence (added last) recedes to the
+right of the spruces with snow caps and a sagging rail; it is the most
+Friedrich-like *particular* thing in the picture, and it took ten
+minutes, which says where the next hour should go: more such things
+(a stone, a gate, a second figure far off), not more passes on the sky.
+
+What reads as paint: the sky's stipple grain at 3200px, the snow's thin
+film over the ground with the craquelure, the pool's dusted rim, the
+snow on the limbs. What reads as digital: the ridge (a band with a
+noise top), the too-even spacing of the tracks and of the grass
+clumps, the sky's transition (a band, not a dozen layers), the spruces'
+needle hatch (regular in angle).
 
 At 1000px, after the third preview:
 - The sky reads as thin stippled paint with a real glow and a cold

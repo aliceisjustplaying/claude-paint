@@ -227,7 +227,7 @@ fn main() {
 
     // ------------------------------------------------------------------ oak
     let bark_dark = pal.mix(hex("#2a2826")).paint(0.25);
-    let bark_dead = pal.mix(hex("#4a4642")).paint(0.25);
+    let bark_dead = pal.mix(hex("#4a4642")).paint(0.2).with_hiding(0.9);
     if o.stage("wood", &mut c, &mut rng) {
         // the snow line cuts the bole and the roots run in under the snow
         let sl = Fbm::new(88, 2, 14.0);
@@ -285,7 +285,7 @@ fn main() {
         // wet snow near 0°C clings: it lies in heaps on rough bark [MIL64
         // p.6], along the upper side of limbs near level and in the forks;
         // steep limbs and springy twigs hold none [MIL66]
-        let snow = pal.mix(hex("#dcd8d0")).paint(0.12).with_hiding(0.9);
+        let snow = pal.mix(hex("#d2cfc9")).paint(0.12).with_hiding(0.85);
         let snow_sh = pal.mix(hex("#a6a8b6")).paint(0.12).with_hiding(0.85);
         limb_snow(&mut c, &oak, snow, snow_sh, &mut rng);
         c.dry();
@@ -425,7 +425,9 @@ fn broad_limb(c: &mut paint::Canvas, l: &Limb, live: Paint, dead: Paint, clip: O
     let w0 = l.w[0];
     let bw = (w0 / 4.0).clamp(3.0, 9.0);
     let lanes = ((w0 / (bw * 0.45)).ceil() as usize).max(2);
-    let end = (0..n).find(|&i| l.w[i] < bw * 1.6).unwrap_or(n - 1).max(1);
+    // the lanes stop where the wood dies: the dead top is laid in its own
+    // grey by `limb`, not dragged through wet dark
+    let end = (0..n).find(|&i| l.w[i] < bw * 1.6).unwrap_or(n - 1).min(if l.dead_from == 0 { n - 1 } else { l.dead_from }).max(1);
     for k in 0..lanes {
         let u = -0.5 + bw * 0.55 / w0 + (1.0 - bw * 1.1 / w0) * k as f32 / (lanes - 1) as f32;
         let pts: Vec<(f32, f32)> = (0..=end).map(|i| across(l, i, u + rng.normal() * 0.01)).collect();
@@ -529,18 +531,18 @@ fn short_shoots(c: &mut paint::Canvas, l: &Limb, live: Paint, dead: Paint, rng: 
     let mut b = Held::new(Tool { point: 1.0, length: 2.0, ..Tool::rigger(0.5) }, rng.next_u64());
     for i in 1..n.saturating_sub(1) {
         let is_dead = l.dead_at(i);
-        if rng.f() > if is_dead { 0.12 } else { 0.4 } || l.w[i] > 9.0 {
+        if rng.f() > if is_dead { 0.08 } else { 0.25 } || l.w[i] > 9.0 {
             continue;
         }
         let d = l.dir(i);
         let side = if rng.f() < 0.5 { 1.0 } else { -1.0 };
-        let mut a = d.1.atan2(d.0) + side * rng.range(0.6, 1.2);
+        let mut a = d.1.atan2(d.0) + side * rng.range(0.4, 0.85);
         // turn toward up a little
         let up = -std::f32::consts::FRAC_PI_2;
         a += 0.3 * (up - a).sin().clamp(-1.0, 1.0);
         let t = rng.f();
         let p = (l.pts[i].0 + (l.pts[i + 1].0 - l.pts[i].0) * t, l.pts[i].1 + (l.pts[i + 1].1 - l.pts[i].1) * t);
-        let len = rng.range(2.5, 7.0) * if is_dead { 0.6 } else { 1.0 };
+        let len = rng.range(2.0, 5.5) * if is_dead { 0.6 } else { 1.0 };
         let m = (p.0 + a.cos() * len * 0.5 + rng.normal() * 0.3, p.1 + a.sin() * len * 0.5 + rng.normal() * 0.3);
         let a2 = a + rng.normal() * 0.35;
         let e = (m.0 + a2.cos() * len * 0.5, m.1 + a2.sin() * len * 0.5);
@@ -657,7 +659,7 @@ fn limb_snow(c: &mut paint::Canvas, sk: &Skeleton, snow: Paint, shade: Paint, rn
             };
             let pts: Vec<(f32, f32)> = (i..=e).map(up).collect();
             let wm = (i..=e).map(|k| l.w[k]).sum::<f32>() / (e - i + 1) as f32;
-            let tw = (wm * rng.range(0.45, 0.8)).clamp(0.7, 6.0);
+            let tw = (wm * rng.range(0.35, 0.6)).clamp(0.6, 5.0);
             // the shade first, a hair lower, then the lit top over it
             let mut b = Held::new(Tool { point: 0.7, ..Tool::round_sable(tw) }, rng.next_u64());
             b.load(shade, 0.6);
@@ -668,7 +670,7 @@ fn limb_snow(c: &mut paint::Canvas, sk: &Skeleton, snow: Paint, shade: Paint, rn
             b.reload(snow, 0.8);
             let hi: Vec<(f32, f32)> = pts.iter().map(|p| (p.0 - 0.05 * tw, p.1 - 0.08 * tw)).collect();
             if hi.len() >= 2 {
-                c.drag(&mut b, &Gesture::new(hi).pressure(0.8, 0.5).swell(vec![0.7, 1.15, 0.85, 1.0]).ramps(0.25, 0.35).shake(0.5), None);
+                c.drag(&mut b, &Gesture::new(hi).pressure(0.7, 0.6).swell(vec![0.8, 1.1, 0.9, 1.0]).ramps(0.1, 0.15).shake(0.5), None);
             }
             i = e + 1 + ri(rng, 0, 3) as usize;
         }

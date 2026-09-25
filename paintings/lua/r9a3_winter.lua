@@ -176,7 +176,7 @@ leg:stroke({{698.2, 606}, {698.0, 612}, {697.6, 618.2}}, {pressure={0.8, 0.8}, r
 leg:stroke({{705.6, 606}, {706.6, 611}, {708.4, 615.6}}, {pressure={0.75, 0.7}, ramps={0, 0.05}})
 -- head (hair seen from behind), a high collar, and a round-crowned hat
 local headm = ellipse(702.1, 570.2, 2.9, 3.4):roughen(0.3, 3, 112, 0.3)
-work(headm, {hand="detail", tool="round 1.2", coverage=3, color="#3a2f27", edge="firm", length={1, 3}})
+work(headm, {hand="detail", tool="round 1.2", coverage=3, color="#2b2623", edge="firm", length={1, 3}})
 local collar = poly({{697.4,575.2},{698.6,571.8},{702,573.2},{705.6,571.8},{707,575.4}}):roughen(0.3, 3, 113, 0.3)
 work(collar, {hand="detail", tool="round 1.2", coverage=3, color="#232826", edge="firm", length={1, 3}})
 local hatm = (ellipse(702.1, 563.6, 3.6, 3.4) + ellipse(702.1, 567.0, 6.2, 1.3)):roughen(0.25, 3, 114, 0.3)
@@ -225,7 +225,7 @@ local woodm = mask(function(x, y)
 end)
 glaze(woodm, {color="#2e2621", coats=0.45, pigment="semi"})
 
---@ chunk 14 · clock 48171.5751953125
+--@ chunk 14 · clock 48171.5732421875
 dry()
 -- bury the post's foot: a heap of snow over the bottom, its lee side a little cooler
 local base = sample(586, 618, 3)
@@ -244,7 +244,7 @@ sn:stroke({{610, 528.5}, {618, 529.0}, {626, 530.0}}, {pressure={0.5, 0.2}, ramp
 sn:stroke({{598.5, 509.2}, {603, 504.6}, {606.2, 501.5}}, {pressure={0.55, 0.2}, ramps={0.1, 0.5}})
 sn:stroke({{607.2, 501.8}, {611, 505.6}}, {pressure={0.45, 0.15}, ramps={0.1, 0.5}})
 
---@ chunk 15 · clock 48171.5751953125
+--@ chunk 15 · clock 48171.5732421875
 dry()
 -- two stones pushing through the snow, painted by hand: dark body, a snow cap, snow over the base
 STONES = {
@@ -278,9 +278,9 @@ dry()
 -- the snow drifted up over the stones' feet: one or two pulls each, loaded with the snow beneath
 for i, st in ipairs(STONES) do
   local x0, x1, yb = st.pts[1][1], st.pts[#st.pts][1], st.pts[1][2]
-  local b = brush{kind="filbert", width=(i == 1) and 8 or 5, stiffness=0.35}
+  local b = brush{kind="filbert", width=(i == 1) and 10 or 6, stiffness=0.35}
   b:load(sample((x0 + x1) / 2, yb + 10, 4), 0.95, {medium=0.2})
-  b:stroke({{x0 - 10, yb + 3}, {x0 + 25, yb - 0.5}, {(x0 + x1) / 2 + 10, yb - 1}, {x1 + 8, yb + 2}}, {pressure={0.4, 0.75, 0.2}, ramps={0.15, 0.5}, shake=0.8})
+  b:stroke({{x0 - 10, yb + 3.5}, {x0 + 25, yb + 0.5}, {(x0 + x1) / 2 + 10, yb}, {x1 + 8, yb + 2.5}}, {pressure={0.4, 0.75, 0.2}, ramps={0.15, 0.5}, shake=0.8})
   b:reload(shift(sample((x0 + x1) / 2, yb + 10, 4), -0.02, 0, -0.01), 0.8)
   b:stroke({{x1 + 12, yb + 5}, {(x0 + x1) / 2 + 20, yb + 2.5}, {x0 + 10, yb + 4}}, {pressure={0.5, 0.2}, ramps={0.1, 0.6}, shake=0.8})
 end
@@ -329,7 +329,7 @@ while u < 1 do
 end
 print(n, "steps")
 
---@ chunk 18 · clock 79246.5537109375
+--@ chunk 18 · clock 81438.1611328125
 -- dry grass through the snow, laid over the finished snow in fine upturning strokes
 local clumps = {}
 local function add(x, y, s) clumps[#clumps + 1] = {x, y, s} end
@@ -360,18 +360,18 @@ for i, c in ipairs(clumps) do
 end
 print(#clumps, "clumps")
 
---@ chunk 19 · clock 79246.5537109375
+--@ chunk 19 · clock 81438.1611328125
 -- far off on the left, under the glow: the plain's edge as a broken line of low hedges and copses,
 -- and a village church, all nearly lost in the air
 local hn = noise{seed=193, period=18, octaves=3}
 local hedge = mask(function(x, y)
   if x > 560 then return 0 end
-  local top = 466.5 - 3.2 * smoothstep(-0.1, 0.6, hn(x, 0)) - 2.5 * math.exp(-((x - 205) / 16)^2) - 3 * math.exp(-((x - 40) / 22)^2)
-  local on = smoothstep(-0.35, -0.1, hn(x * 0.7, 40))
+  local top = 467 - 4.2 * smoothstep(-0.3, 0.7, hn(x, 0)) - 1.6 * smoothstep(0, 0.8, hn(x * 4, 17)) - 3 * math.exp(-((x - 205) / 16)^2) - 3.5 * math.exp(-((x - 40) / 22)^2)
+  local on = smoothstep(-0.3, 0.05, hn(x * 0.7, 40)) * (0.35 + 0.65 * smoothstep(-0.2, 0.3, hn(x * 2.3, 71)))
   return on * smoothstep(top - 0.4, top + 0.4, y) * (1 - smoothstep(467.5, 468.5, y))
-end)
-work(hedge, {hand="hatch", tool="round 0.9", length={1.5, 4}, coverage=2.2, angle=0.1, angle_jitter=0.6, edge="soft",
-  color=function(x, y) return mix("#9a93a0", "#b3aab0", smoothstep(80, 520, x)) end, medium=0.25})
+end) * (-oak:mask():grow(0.6))
+work(hedge, {hand="hatch", tool="round 0.8", length={1, 3}, coverage=1.8, angle=1.45, angle_jitter=0.7, edge="soft", hug=false,
+  color=function(x, y) return mix("#9c95a2", "#bab1b4", smoothstep(60, 540, x)) end, medium=0.25})
 local tower = rect(124.6, 452.5, 3.4, 15)
 local nave = poly({{128, 468}, {128, 461.2}, {133.5, 458.6}, {140.5, 461.4}, {140.5, 468}})
 work(tower + nave, {hand="detail", tool="round 0.8", length={1, 3}, coverage=3, angle=1.57, edge="firm", color="#8e8794", medium=0.2})
@@ -379,7 +379,7 @@ local sp = brush{kind="round", width=1.6, point=1}
 sp:load("#8a8390", 0.9)
 sp:stroke({{126.3, 453.2}, {126.3, 449}, {126.3, 443.5}}, {pressure={0.9, 0.0}, ramps={0, 0.95}})
 
---@ chunk 20 · clock 79246.5537109375
+--@ chunk 20 · clock 81438.1611328125
 dry()
 -- a thin young moon high on the right, its lit limb toward the sun that has set (lower left), and the evening star
 local cres = ellipse(812, 148, 7.2, 7.2) - ellipse(814.6, 146.0, 6.9, 7.0)
@@ -417,7 +417,7 @@ flying(598, 332, 1.3, 1.6)
 flying(626, 318, 1.0, 0.4)
 flying(668, 340, 0.8, 1.2)
 
---@ chunk 21 · clock 83802.4033203125
+--@ chunk 21 · clock 85419.57836914063
 -- the near foreground: denser stubble and dry stalks along the bottom, thicker in the corners
 local g = brush{kind="rigger", width=0.8, point=1}
 local cols = {"#6d5d43", "#8a7654", "#4d4337", "#9c8660", "#3f372f", "#7c6c50"}
@@ -451,7 +451,31 @@ br:reload("#4a3d33", 0.8)
 br:stroke({{930, 713}, {938, 694}, {952, 686}, {968, 690}}, {pressure={0.6, 0.05}, ramps={0.05, 0.6}, shake=0.8})
 print(n, "stalks")
 
---@ chunk 22 · clock 83802.4033203125
+--@ chunk 22 · clock 85419.57836914063
+dry()
+-- the drift round the oak's foot carried on to the right, where it turns from the glow and goes cool;
+-- it climbs the bole unevenly, so the trunk goes into the snow, not onto it
+local base = sample(372, 560, 3)
+local b = brush{kind="filbert", width=6, stiffness=0.35}
+for k = 0, 5 do
+  local y = 557 - k * 1.3 + rand(-0.5, 0.5)
+  b:reload(shift(base, 0.012 - 0.006 * k, 0.001, -0.004 * k), 0.95)
+  b:stroke({{312 + rand(-4, 4) + 2 * k, y - 1.5 + 0.3 * k}, {332, y - 2.2 - 0.4 * k}, {348 + rand(-2, 2), y - 1 - 0.3 * k}, {368 - 3 * k, y + 1.5}},
+    {pressure={0.65, 0.3}, ramps={0.1, 0.55}, shake=0.8})
+end
+local sm = brush{kind="filbert", width=3, stiffness=0.35}
+sm:load(shift(base, -0.035, 0.002, -0.018), 0.8)
+sm:stroke({{351, 555.5}, {358, 556.8}, {368, 559.5}}, {pressure={0.5, 0.15}, ramps={0.1, 0.6}, shake=0.8})
+sm:stroke({{338, 552.5}, {346, 553.2}, {352, 555}}, {pressure={0.45, 0.15}, ramps={0.1, 0.6}, shake=0.8})
+-- tiny bare trees rising out of a few far copses under the glow
+local tb = brush{kind="rigger", width=0.55, point=1}
+for i, x in ipairs({22, 48, 60, 168, 214, 236, 292, 402, 470}) do
+  tb:reload(mix("#948d9a", "#b2a9b0", x / 520), 0.7)
+  local h = rand(4, 9)
+  tb:stroke({{x, 466}, {x + rand(-0.4, 0.4), 466 - h * 0.6}, {x + rand(-0.8, 0.8), 466 - h}}, {pressure={0.6, 0.0}, ramps={0, 0.8}})
+end
+
+--@ chunk 23 · clock 89945.97534179688
 -- a faint dark veil growing toward the edges and corners (as he advised Carus), the glow left clear
 local edges = mask(function(x, y)
   local dx = math.abs(x - 470) / 530

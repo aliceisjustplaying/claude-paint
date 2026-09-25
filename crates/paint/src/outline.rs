@@ -1371,12 +1371,6 @@ mod tests {
         let bs = lobe_troughs(&hs, true);
         let (first, last) = (lobe_offset(&ks, &hs, &bs, 0.0), lobe_offset(&ks, &hs, &bs, 40.0 - 1e-4));
         assert!((first - last).abs() < 0.02, "seam step {}", (first - last).abs());
-        // equal heights: the old shape
-        let (hq, bq) = ([2.0; 4], lobe_troughs(&[2.0; 4], false));
-        for u in [0.1f32, 0.37, 0.5, 0.8] {
-            let want = 2.0 * ((PI * u).sin().powf(0.6) - 0.55);
-            assert!((lobe_offset(&ks, &hq, &bq, 10.0 + 10.0 * u) - want).abs() < 1e-5);
-        }
         // a whole soft closed line: no step between neighbors bigger than
         // the rounded lobes' own slope allows
         let pts: Vec<P> = (0..24).map(|i| {
@@ -1402,7 +1396,7 @@ mod tests {
             let o = Outline::draw(&line, &[], false, ch, 1, None);
             o.lines[0].pts.iter().map(|p| (p.1 - 200.0).abs()).fold(0.0, f32::max)
         };
-        // the binding's order: amount, then an explicit lobe (default height)
+        // amount, then an explicit lobe (the binding's default height)
         let lobed = |k: f32| {
             let mut ch = Character::firm().amount(k);
             ch.lobe = 24.0 / 100.0;

@@ -162,3 +162,30 @@ Live, late at night:
   ("paint a winter scene"). Wonders whether "the easel with everything
   introduces some entropy". **"I'm more confused than ever which direction
   we should go."**
+
+## Alice on Rounds 8 and 9 (morning of 2026-09-25, blind, before the keys)
+Round 8:
+- W (arm 3): a rendering glitch around the figure. Doesn't move me, but the
+  right direction visually. The sky is still the same "JPEG artifacty".
+  To be clear: the sky *should* have texture, a lot more texture; we're just
+  not doing the texture right yet.
+- Y: the round 2 original re-rendered on the new engine (correct guess).
+- Z (arm 2): recycles the same elements in a different way. Sky maybe too
+  muted. The tree is good, the rock is good. The figure disappears into the
+  snow; that should not happen.
+- X (arm 1): again the "computational light simulation" effect. And the
+  bizarre trees: a trunk, then straight spikes everywhere. "I don't think
+  those trees even exist." They keep popping up; fix that.
+Round 9:
+- K (arm 1): the same bad spiky trees.
+- L: the control.
+- M (arm 2): surprisingly nice. The cracks still aren't right, in a
+  different way now, but we still need the cracks.
+- N (arm 3): bad; the tree is not good; feels like a regression.
+Overall: a little unhappy and frustrated, though "at least we are course
+correcting now". Wants to see the exact prompts given to the painters
+(round 7 showed the brief told painters what to paint).
+Decisions: yes, fix the "strokes over dry paint keep their outlines" bug
+(failing test first). Keep cracks, but they're wrong. Skies need *more*
+texture, done right, not less (so Round 9's "no stippled veil" line fixed
+the wrong thing).

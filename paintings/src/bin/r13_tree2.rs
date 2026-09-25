@@ -547,9 +547,19 @@ fn main() {
             }
             let wmax = b.w[..n].iter().cloned().fold(0.0, f32::max);
             let lanes = ((wmax / 3.5).ceil() as usize).clamp(2, 34);
+            // a branch starts inside its parent: its strokes begin where it
+            // comes out of the parent's side, so they don't streak across it
+            let scaffold = std::ptr::eq(*b, &tree.trunk) || std::ptr::eq(*b, &tree.stump) || tree.limbs.iter().any(|l| std::ptr::eq(*b, l));
+            let skip_len = if scaffold { 0.0 } else { b.w[0] * 0.7 };
+            let mut acc = 0.0;
+            let mut first = 0;
+            while first + 3 < n && acc < skip_len {
+                acc += ((b.pts[first + 1].0 - b.pts[first].0).powi(2) + (b.pts[first + 1].1 - b.pts[first].1).powi(2)).sqrt();
+                first += 1;
+            }
             for lane in 0..lanes {
                 let u = ((lane as f32 + 0.5) / lanes as f32 * 2.0 - 1.0) * 0.92;
-                let mut i0 = 0;
+                let mut i0 = first;
                 while i0 < n - 1 {
                     let i1 = (i0 + (r.range(8.0, 22.0) as usize)).min(n - 1);
                     let seg: Vec<(f32, f32)> = (i0..=i1).map(|i| b.across(i, u)).collect();
@@ -813,7 +823,10 @@ fn main() {
                     (x, mound_top(x) + dy + 0.8)
                 }).collect();
                 let (mx, my) = pts[4];
-                let col = mix(hex("#efece4"), snow_col(mx, my), smoothstep(0.0, 26.0, dy) * 0.9 + 0.1);
+                // lit on its top, its face toward us in the cool shade of the
+                // overcast, then the ground snow at its foot
+                let face = mix(hex("#eceae2"), hex("#c9cdd1"), smoothstep(2.0, 16.0, dy));
+                let col = mix(face, snow_col(mx, my), smoothstep(18.0, 38.0, dy));
                 mb.reload(pal.paint(col, 0.05).with_stiff(0.8), 0.9);
                 // ends lifted: the outer pieces fade into the ground snow
                 let (pa, pb, ra, rr) = if q == 0 { (0.1, 0.7, 0.6, 0.2) } else if q == pieces - 1 { (0.7, 0.1, 0.2, 0.6) } else { (0.7, 0.7, 0.25, 0.25) };

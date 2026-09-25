@@ -17,7 +17,7 @@
 
 use paint::color::mix;
 use paint::graphite::{Lead, hand_line};
-use paint::{Fbm, Gesture, Habit, Held, Limb, Mask, Mix, Paint, Pigment, Rgb, Rng, Shape, Skeleton, Stipple, Style, Tool, Touch, gradient, hex, shift, smoothstep};
+use paint::{Fbm, Gesture, Held, Limb, Mask, Mix, Paint, Pigment, Rgb, Rng, Shape, Skeleton, Stipple, Style, Tool, Touch, gradient, hex, shift, smoothstep};
 use paintings::run::{Finish, Run};
 
 const ASPECT: f32 = 1.42;
@@ -710,18 +710,24 @@ fn main() {
     )
     .roughen(4, 9.0, 2.2, 0.5)
     .mul(&Mask::from_fn(f, move |x, y| 1.0 - smoothstep(kn(x) - 1.5, kn(x) + 1.0, y)));
-    let back_up = Mask::from_shape(f, Shape::new().poly(&[(474.0, 430.0), (499.0, 431.0), (501.0, 464.0), (471.0, 464.0)]))
+    let back_up = Mask::from_shape(f, Shape::new().poly(&[(477.0, 430.0), (494.0, 431.0), (497.0, 464.0), (475.0, 464.0)]))
         .roughen(5, 10.0, 1.0, 0.5)
         .mul(&Mask::from_fn(f, move |x, y| 1.0 - smoothstep(kn(x) - 1.5, kn(x) + 1.0, y)));
     let boulders = Mask::from_shape(f, Shape::new().ellipse(388.0, 467.0, 15.0, 7.0).add(Shape::new().ellipse(590.0, 476.0, 12.0, 6.0)).add(Shape::new().ellipse(455.0, 473.0, 9.0, 4.5)).add(Shape::new().ellipse(371.0, 475.0, 7.0, 3.5)))
         .roughen(6, 8.0, 1.2, 0.5)
         .mul(&Mask::from_fn(f, move |_, y| 1.0 - smoothstep(0.0, 1.0, 0.0 * y)));
     if o.stage("dolmen", &mut c, &mut rng) {
-        // the hollow under the capstone: deep, cool shadow
-        let under_m = Mask::from_shape(f, Shape::new().poly(&[(444.0, 427.0), (523.0, 430.0), (520.0, 466.0), (448.0, 465.0)]))
-            .roughen(8, 12.0, 1.5, 0.6)
-            .mul(&Mask::from_fn(f, move |x, y| 1.0 - smoothstep(kn(x) - 1.0, kn(x) + 1.0, y)));
-        c.work(&under_m, &st.detail().color(|_, y| mix(hex("#2e2d33"), hex("#4a4a55"), smoothstep(440.0, 462.0, y), Mix::Light)).angle(|_, _| 0.0).length(4.0, 12.0).coverage(4.0), 40);
+        // under the capstone the evening shows through between the stones:
+        // only a thin cool shadow band hangs under the stone's belly, and
+        // the chamber's floor of snow is in shade
+        let under_m = Mask::from_fn(f, move |x, y| {
+            let inx = smoothstep(446.0, 449.0, x) * (1.0 - smoothstep(519.0, 522.0, x));
+            let belly = smoothstep(cap_bot(x) - 1.0, cap_bot(x), y) * (1.0 - smoothstep(cap_bot(x) + 2.5, cap_bot(x) + 4.5, y));
+            let floor = smoothstep(kn(x) - 5.0, kn(x) - 3.0, y) * (1.0 - smoothstep(kn(x) + 0.5, kn(x) + 1.5, y));
+            inx * belly.max(floor)
+        })
+        .roughen(8, 10.0, 0.8, 0.4);
+        c.work(&under_m, &st.detail().color(|x, y| if y < knoll(x) - 6.0 { hex("#3e3d45") } else { hex("#8e919f") }).angle(|_, _| 0.0).length(4.0, 12.0).coverage(4.0), 40);
         // the far upright, in the shadow under the stone
         c.work(&back_up, &st.detail().color(move |x, y| shift(hex("#45434a"), 0.03 * stone_f.get(x, y), 0.0, 0.0)).angle(|_, _| 1.5).length(4.0, 10.0).coverage(4.0), 41);
         // stones: granite, dark in the dusk; the west faces catch a little
@@ -770,7 +776,6 @@ fn main() {
         // cool gray dragged over the dark, catching on the grain; then
         // fissures, then lichen and grain
         let all = cap_m.clone().union(&uprights).union(&boulders);
-        let mut dry = Held::new(Tool { lay: 0.35, ragged: 0.6, ..Tool::filbert(3.0) }, 50);
         c.wait(20.0);
         // the upper planes of the capstone, lighter where they turn up to
         // the sky: broken patches, one plane beside the next
@@ -780,20 +785,6 @@ fn main() {
             (1.0 - smoothstep(0.25, 0.55, t)) * smoothstep(-0.05, 0.15, facets.get(x, y * 1.6))
         });
         c.work(&upper, &st.detail().color_over(|_, _, u| shift(u, 0.06, -0.002, -0.01)).angle(cap_ang).angle_jitter(0.15).length(5.0, 14.0).coverage(3.0).medium(0.1), 52);
-        for k in 0..26 {
-            let x = rng.range(412.0, 560.0);
-            let (lo, hi) = if x > 449.0 && x < 519.0 { (cap_top(x), cap_bot(x)) } else { (cap_top(x), knoll(x)) };
-            let y = rng.range(lo + 4.0, hi - 2.0);
-            if all.sample(x, y) < 0.9 {
-                continue;
-            }
-            let vertical = !(cap_m.sample(x, y) > 0.5);
-            let a = if vertical { 1.5 + rng.range(-0.3, 0.3) } else { cap_ang(x, y) + rng.range(-0.4, 0.4) };
-            let len = rng.range(4.0, 11.0);
-            dry.reload(pal.paint(hex("#6f7178"), 0.05).with_stiff(0.9), 0.2);
-            let _ = k;
-            c.drag(&mut dry, &Gesture::new(vec![(x, y), (x + len * a.cos(), y + len * a.sin())]).pressure(0.3, 0.15).ramps(0.3, 0.4).shake(0.8), None);
-        }
         let mut fis = Held::new(Tool::rigger(0.7), 51);
         for _ in 0..16 {
             let x = rng.range(412.0, 566.0);
@@ -816,12 +807,17 @@ fn main() {
             if all.sample(x, y) < 0.9 {
                 continue;
             }
-            let col = match k % 5 {
-                0 | 3 => hex("#7f7c6a"),
-                1 => hex("#6f6c66"),
-                _ => hex("#2c2927"),
+            if k % 5 == 3 {
+                continue;
+            }
+            // lichen a shade off the stone, pits darker
+            let under = c.sample(x, y);
+            let want = match k % 5 {
+                0 => shift(under, 0.03, -0.004, 0.012),
+                1 => shift(under, 0.02, 0.0, -0.004),
+                _ => shift(under, -0.05, 0.0, 0.0),
             };
-            b.reload(pal.paint(col, 0.1), 0.45);
+            b.reload(pal.paint(want, 0.1), 0.45);
             c.touch(&mut b, &Touch::at(x, y).pressure(rng.range(0.15, 0.5)).drag(rng.range(-1.0, 1.0), rng.range(-0.4, 0.4)).twist(0.5), Some(&all));
         }
         // the crack under the capstone's edge and the joints: dark lines
@@ -846,8 +842,8 @@ fn main() {
         let snow_hd = st.detail().color(snow_col).medium(0.05).angle(|x, _| 0.1 * ((x - 490.0) / 70.0)).length(5.0, 15.0).coverage(4.0);
         c.work(&cap_snow, &snow_hd, 47);
         let up_snow = uprights.clone().mul_fn(move |x, y| {
-            let t = if x < 490.0 { 427.0 } else { 429.0 };
-            1.0 - smoothstep(t + 1.5, t + 3.5, y)
+            let t = if x < 490.0 { 426.0 } else { 428.0 };
+            1.0 - smoothstep(t + 0.8, t + 2.4, y)
         });
         c.work(&up_snow, &st.detail().color(|_, _| hex("#c9c8d0")).length(3.0, 8.0).coverage(3.5), 48);
         let b_snow = boulders.clone().mul_fn(|x, y| {

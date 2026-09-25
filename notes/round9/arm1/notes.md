@@ -52,3 +52,66 @@ What it draws on in Friedrich (from notes/research, not from pictures):
 
 ## FRICTION
 
+1. **Glazes cross the motifs.** A glaze over the land (to darken the snow
+   toward the edges, Friedrich's advice to Carus) drew a visible horizon
+   line straight across the dark willow trunks: cooler below, warmer
+   above. A glaze over a rectangle around each knuckle (to sink the snow
+   caps) left dark rectangles over the rods, like a filled selection. Without
+   `world`/`view` (removed with the procedural tools) there is no depth
+   system to say "behind the trees", so every glaze needs the motif masks
+   subtracted by hand (`LANDG - KEEP`, the union of every trunk and the
+   figure). Workaround: keep a global union of motif masks and subtract it
+   from every glaze.
+2. **Dark paint over light dries into slivers.** The willow trunks, painted
+   dark in one coat over dry snow, looked solid while wet. After `dry()`
+   they showed rows of horizontal light slivers at 1000px: the film leveled
+   off the weave's crests and the snow showed through. It looked like a
+   glitch, not paint. The plain look before drying gave no hint (`--dried`
+   would have). Workaround: a second coat of the dark after drying, as a
+   painter would, then dry again.
+3. **Snow body left the red ground in scallops.** A body pass of snow
+   (filbert 5, coverage 4) left torn holes of the red-ocher ground between
+   strokes. The `friedrich` ground is uniformly reddish; the research
+   describes a patchy lead-white top ground, which would have forgiven gaps.
+   Workaround: a thin broad underpainting over all the land first, then body
+   snow at coverage 5.5, load 0.95.
+4. **Thin dark strokes go golden.** Dried grass and the willow rods, loaded
+   with dark umber-gray masstones, came out golden-brown and transparent
+   over the snow and the light sky: the thin film of a rigger is mostly
+   the paint's transparent side. Workaround: `b:load(color, amount, {at=...,
+   coats=0.9})`, aiming at the look over what is there; for the trunks
+   `aim="masstone"` and a second coat.
+5. **Small strokes over open paint lift it.** The village gables and church
+   tower, built from many small overlapping strokes of a round over the
+   still-open far band, came out pale, rounded and stacked like pagodas
+   (each stroke lifted the band paint). Workaround: let the band dry, then
+   lay each roof as a small polygon with `work{hand="detail", edge=...}`
+   and the spire as three pointed strokes.
+6. **Perspective by hand.** With `world` gone there is no ground-plane
+   scale. I derived it: 1 m = (y − horizon)/1.7 units at the foot of a thing
+   (eye at 1.7 m), and a step on the ground is dy ≈ 0.36·(y − HZ)²/k with
+   k = 1.7·f. Before I did that, the footprints came out first as a flat
+   pale ribbon (a second river) and then as evenly spaced blue polka dots.
+   This is knowledge a painter carries, so it's fair, but it cost three
+   tries.
+7. **`edge="lost"` on a narrow band.** A 0.3 m-wide trodden furrow painted
+   with `edge={lost=0.6, soft=0.4}` still read as a crisp, even ribbon. I
+   dropped the band and let the footprints make the track.
+8. **Option names differ between verbs.** `work` rejects `fill` (documented
+   in the engine README as `Handling::fill`); `b:stroke` rejects `broken`.
+   The error lists the valid options, which helps, but each costs a round
+   trip.
+9. **No mask translate.** A "top rim" (snow caps, the far bank's face) needs
+   `m * (1 − m shifted down by k)`, written as a per-pixel `mask(function)`
+   closure calling `m:at(x, y − k)`. It works (≈0.1 s), but a
+   `m:shift(dx, dy)` would be simpler and cheaper.
+10. **Pencil invisible at working size.** A 2H underdrawing at pressure
+    0.25–0.3 on the 440 mm canvas barely shows at 1000px even in a crop, so
+    I couldn't use it to check placement; I placed everything by
+    coordinates instead.
+11. **The thinnest whips read as dotted wire** at 1000px (a rigger 0.45
+    with a point, lean load): broken runs of single pixels. At 3200px they
+    are continuous hairlines.
+12. **Crops at 3200 cost a replay after an early edit.** Each `easel edit`
+    of an early chunk (the willows are chunk 11) makes the next `--scale
+    3.2` look replay the whole log (50–90 s on this busy machine).

@@ -127,10 +127,6 @@ function icecol(x, y)
 end
 work(STREAMM, {hand="body", tool="filbert 3", color=icecol, medium=0.2, coverage=4.5, length={8, 30}, angle=0.0, angle_jitter=0.1,
   edge={found=0.3, soft=0.5, lost=0.2, period=35, seed=9}})
--- open water in a hole in the ice by the near willow
-HOLE = poly({{232,670},{252,662},{278,654},{300,647},{312,648},{300,655},{276,662},{250,670},{232,675}}, true)
-work(HOLE * STREAMM, {hand="body", tool="filbert 2.5", color=function(x, y) return mix("#2f3440", "#4a4f5c", smoothstep(625, 660, y)) end,
-  medium=0.18, coverage=4, length={6, 20}, angle=-0.35, edge={found=0.6, soft=0.4, period=20, seed=3}})
 
 --@ chunk 10 · clock 34282.828125
 wait(8*60)
@@ -296,7 +292,7 @@ function ridges(Wt, haze, lean)
   -- snow lying in patches on the knuckle's upper faces
   local cap = m * mask(function(xx, yy) return (1 - m:at(xx, yy - math.max(1, fw * 0.12))) * smoothstep(0.05, 0.35, capn(xx * 3 / math.max(1, fw * 0.3), yy)) end) * rect(hx - fw * 2, hy - th * 0.2, fw * 4, th * 0.3)
   work(cap, {hand="detail", tool=string.format("round %.1f", math.max(0.6, fw * 0.1)), length={1, fw * 0.4}, coverage=2.4, medium=0.12, angle=0.1, angle_jitter=0.5,
-    color=mix("#cfcacb", AIR, haze * 0.5), edge={found=0.2, soft=0.5, lost=0.3, period=5, seed=3}})
+    color=mix("#aeacb8", AIR, haze * 0.5), edge={found=0.2, soft=0.5, lost=0.3, period=5, seed=3}})
 end
 for i, f in ipairs(FEET) do if f[4] < 0.5 then ridges(f[5], f[4], f[3]) end end
 -- snow drifted against every foot, in the field's own color, climbing the trunk unevenly
@@ -310,7 +306,7 @@ for i, f in ipairs(FEET) do
     edge={found=0.3, soft=0.4, lost=0.3, period=0.3 * s, seed=i}})
 end
 
---@ chunk 15 · clock 163287.080078125
+--@ chunk 15 · clock 164454.0390625
 FX, FY = 674, 522
 TRACK = {{770,714},{742,664},{712,610},{692,568},{680,540},{674,522},{671,508},{676,497},{694,488},{716,481.5}}
 KF = 1.7 * 500 / math.tan(math.rad(25))     -- ground: y - HZ = KF / Z (fov 50 over the width)
@@ -345,7 +341,7 @@ for i = 1, #TRACK - 1 do
   end
 end
 
---@ chunk 16 · clock 163287.080078125
+--@ chunk 16 · clock 164454.0390625
 -- the walker, seen from behind, going toward the village: greatcoat, tall hat, stick
 local k = per_m(FY) / 26          -- the drawing below is in units at 26 per meter
 local function R(pts) local o = {} for i, p in ipairs(pts) do o[i] = {FX + p[1] * k, FY + p[2] * k} end return o end
@@ -381,3 +377,115 @@ local sn = brush{kind="filbert", width=1.2 * k, stiffness=0.4}
 sn:load(snowcol(FX, FY + 2), 0.6)
 sn:stroke(R{{-4.6,0.1}, {-2.5,-0.5}, {-0.6,0.2}}, {pressure={0.6, 0.4}})
 sn:stroke(R{{1.0,-1.4}, {2.6,-1.9}, {4.0,-1.2}}, {pressure={0.4, 0.2}})
+
+--@ chunk 17 · clock 164454.0390625
+local gn = noise{seed=81, octaves=3, period=220}
+local keep = FIGM
+for _, f in ipairs(FEET) do keep = keep + f[5][1] end
+KEEP = keep:grow(0.4)
+LANDG = mask(function(x, y)
+  if y < HZ - 1 then return 0 end
+  local d = clamp((y - HZ) / (H - HZ), 0, 1)
+  local e = math.abs(x - 520) / 520
+  local g = math.exp(-((x - GLOW) / 330)^2)
+  return clamp(0.35 + 0.45 * d + 0.35 * e * e - 0.18 * g * (1 - d) + 0.08 * gn(x, y), 0, 1) * smoothstep(HZ - 1, HZ + 3, y)
+end)
+glaze(LANDG - KEEP, {color="#737b98", coats=0.55, pigment="transparent"})
+SKYG = mask(function(x, y)
+  if y > HZ then return 0 end
+  local e = ((x - 420) / 620)^2 + ((y + 60) / 520)^2
+  return clamp((1 - y / HZ) * 0.6 * smoothstep(0.35, 1.2, e), 0, 1)
+end)
+glaze(SKYG - KEEP, {color="#4f5a74", coats=0.3, pigment="transparent"})
+
+--@ chunk 18 · clock 177591.3359375
+for i, f in ipairs(FEET) do
+  local x, y, fw = f[1], f[2], f[5][5]
+  local s = per_m(y)
+  local left, right = sample(x - fw * 3.2, y + 0.05 * s, 2), sample(x + fw * 3.2, y + 0.05 * s, 2)
+  local fieldc = mix(left, right, 0.5)
+  local top = function(xx) local u = (xx - x) / (fw * 2.1); return y - 0.07 * s * math.max(0, 1 - u * u) + 0.025 * s * math.sin(xx * 0.7 + i * 3) end
+  local zone = (below(top) * rect(x - fw * 2.8, y - 0.2 * s, fw * 5.6, 0.45 * s)):roughen(0.03 * s, 0.25 * s, 90 + i, 0.3)
+  work(zone, {hand="body", tool=string.format("filbert %.1f", math.max(1.0, 0.05 * s)), length={0.15 * s, 0.5 * s}, coverage=4.5, medium=0.12, load=1,
+    angle=0.03, angle_jitter=0.2, color=function(xx, yy) return shift(fieldc, 0.01 * math.sin(xx * 0.3 + yy), 0, 0) end,
+    edge={found=0.1, soft=0.4, lost=0.5, period=0.3 * s, seed=i}})
+end
+
+--@ chunk 19 · clock 177591.3359375
+-- a thin waxing crescent low over the afterglow, its lit limb toward the set sun (down and left)
+local mx, my, r = 268, 214, 6.2
+local lit = ellipse(mx, my, r, r) - ellipse(mx + 2.0, my - 1.7, r * 1.0, r * 1.0)
+work(lit, {hand="detail", tool="round 0.8", length={1, 3}, coverage=4, medium=0.12, aim="masstone", color="#f1ead0", edge={found=0.7, soft=0.3, period=8, seed=4}})
+local halo = ellipse(mx, my, r * 3.2, r * 3.2):blur(r * 1.2)
+glaze(halo - ellipse(mx, my, r, r), {color="#e9e2cc", coats=0.06, pigment="semi"})
+
+--@ chunk 20 · clock 201939.748046875
+-- dry grass and reeds, upturning flicks laid last over the snow
+local GR = {"#5a4e40", "#463c32", "#6e604c", "#7a6a52", "#52483d"}
+function tuft(x, y, hm, n, reed)
+  local s = per_m(y)
+  local h = hm * s
+  local g = brush{kind="rigger", width=math.max(0.45, 0.012 * s), point=1}
+  for i = 1, n do
+    if i % 3 == 1 then g:reload(GR[math.random(1, #GR)], 0.7, {at={x, y - 0.1 * s}, coats=0.9}) end
+    local bx = x + randn(0, 0.06 * s)
+    local lean = randn(0.12, 0.35)
+    local hh = h * rand(0.35, 1.0)
+    local p = {{bx, y + rand(0, 0.02 * s)}, {bx + lean * hh * 0.25, y - hh * 0.5}, {bx + lean * hh * 0.7 + randn(0, 0.05 * hh), y - hh}}
+    g:stroke(p, {pressure={0.8, 0.0}, ramps={0.03, 0.8}, shake=0.4})
+    if reed and i % 4 == 0 then           -- a seed head, a dark little plume at the tip
+      local tb = brush{kind="round", width=math.max(0.5, 0.025 * s), point=1}
+      tb:load("#3e342c", 0.7, {at={x, y - 0.3 * s}, coats=0.9})
+      local tx, ty = p[3][1], p[3][2]
+      tb:stroke({{tx - lean * 0.03 * s, ty + 0.08 * s}, {tx + lean * 0.06 * s, ty - 0.02 * s}}, {pressure={0.7, 0.0}})
+    end
+  end
+end
+STREAMG = STREAMM:grow(5)
+-- along both banks of the brook, nearer = more
+for i = 1, #STREAM - 1 do
+  local a, b = STREAM[i], STREAM[i + 1]
+  local nseg = math.max(1, math.floor((b[2] > 560 and 5 or 2) * math.min(1, (a[2] - HZ) / 120)))
+  for k = 1, nseg do
+    local t = rand(0, 1)
+    local x, y = a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t
+    local w = stream_w(y) / 2
+    local sd = (math.random() < 0.5) and -1 or 1
+    local yy = y + sd * (w + rand(0.5, 3) * per_m(y) * 0.1)
+    if per_m(yy) > 8 and STREAMG:at(x, yy) < 0.2 then tuft(x + randn(0, 4), yy, rand(0.25, 0.6), math.floor(rand(5, 12)), math.random() < 0.4) end
+  end
+end
+-- a patch of reeds in the left foreground, and a few stalks at the lower right
+for i = 1, 7 do tuft(rand(25, 120), rand(655, 708), rand(0.35, 0.7), math.floor(rand(8, 16)), true) end
+for i = 1, 4 do tuft(rand(900, 985), rand(672, 706), rand(0.2, 0.45), math.floor(rand(4, 9)), false) end
+
+--@ chunk 21 · clock 201939.748046875
+function crow(cx, cy, L, dir, hunch)
+  local function R(p) return {cx + dir * p[1] * L, cy + p[2] * L} end
+  local pts = {}
+  for i, p in ipairs({{-0.5,-0.42},{-0.44,-0.56 - hunch},{-0.3,-0.54 - hunch},{-0.12,-0.36},{0.12,-0.2},{0.3,0.0},{0.58,0.36},{0.66,0.48},{0.5,0.47},{0.34,0.3},{0.12,0.22},{-0.14,0.08},{-0.3,-0.1},{-0.42,-0.28}}) do pts[i] = R(p) end
+  local body = poly(pts)
+  work(body, {hand="detail", tool=string.format("round %.1f", math.max(0.6, L * 0.12)), length={L * 0.1, L * 0.4}, coverage=4.5, medium=0.12, aim="masstone",
+    angle=0.3 * dir, color="#1b191c", edge={found=0.7, soft=0.3, period=L, seed=math.floor(cx)}})
+  local b = brush{kind="round", width=math.max(0.5, L * 0.07), point=1}
+  b:load("#1b191c", 0.8)
+  b:stroke({R{-0.46, -0.47 - hunch}, R{-0.8, -0.43 - hunch}}, {pressure={0.9, 0.0}})           -- beak
+  b:stroke({R{-0.02, 0.14}, R{-0.06, 0.34}}, {pressure={0.5, 0.2}})                               -- legs
+  b:stroke({R{0.1, 0.2}, R{0.08, 0.36}}, {pressure={0.5, 0.2}})
+end
+function flying(cx, cy, span, tilt, up)
+  local b = brush{kind="round", width=math.max(0.6, span * 0.1), point=1}
+  b:load("#29262b", 0.85)
+  local h = span * 0.5
+  b:stroke({{cx - h, cy - up * h * 0.1 + tilt * h}, {cx - h * 0.6, cy - up * h * 0.45}, {cx - h * 0.25, cy - up * h * 0.2}, {cx - 0.02 * h, cy}}, {pressure={0.05, 0.95}, ramps={0.7, 0.05}})
+  b:stroke({{cx + 0.02 * h, cy}, {cx + h * 0.25, cy - up * h * 0.22}, {cx + h * 0.6, cy - up * h * 0.5}, {cx + h, cy - up * h * 0.15 - tilt * h}}, {pressure={0.95, 0.05}, ramps={0.05, 0.7}})
+  local bb = brush{kind="round", width=math.max(0.7, span * 0.13), point=0.6}
+  bb:load("#29262b", 0.85)
+  bb:stroke({{cx - 0.18 * h, cy + 0.02 * h}, {cx + 0.28 * h, cy + 0.06 * h}}, {pressure={0.9, 0.5}})
+end
+crow(822, 318, 21, 1, 0.05)
+crow(918, 262, 19, -1, 0.0)
+crow(470, 372, 13, 1, 0.08)
+flying(612, 262, 20, 0.1, 1)
+flying(588, 287, 16, -0.12, -0.5)
+flying(330, 322, 11, 0.05, 0.8)

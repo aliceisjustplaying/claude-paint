@@ -2,7 +2,7 @@
 <html><head><meta charset="utf-8"><title>studio</title>
 <style>
   :root { --bg:#16161a; --fg:#ddd; --dim:#888; --acc:#e0b060; }
-  * { box-sizing:border-box } body { margin:0; background:var(--bg); color:var(--fg); font:13px/1.4 -apple-system, sans-serif; height:100vh; display:flex; flex-direction:column }
+  * { box-sizing:border-box } body { margin:0; background:var(--bg); color:var(--fg); font:15px/1.45 -apple-system, sans-serif; height:100vh; display:flex; flex-direction:column }
   header { display:flex; flex-wrap:nowrap; gap:10px; align-items:center; padding:6px 10px; border-bottom:1px solid #333; white-space:nowrap; overflow:hidden }
   header > * { flex:none } header #sess { flex:0 1 auto; min-width:120px }
   #clock, #file { flex:0 1 auto; min-width:0; overflow:hidden; text-overflow:ellipsis }
@@ -13,22 +13,22 @@
   #badge.live { background:#c22; color:#fff; animation:pulse 1.6s infinite }
   #badge.idle { background:#553; color:#ddd } #badge.replay { background:#246; color:#dde } #badge.ended { background:#333; color:#aaa }
   @keyframes pulse { 50% { opacity:.55 } }
-  #doing { padding:8px 12px; font-size:17px; border-bottom:1px solid #333; display:flex; gap:12px; align-items:baseline }
-  #doing .what { font-weight:600 } #doing .detail { color:var(--dim); font-size:13px; font-family:ui-monospace, Menlo, monospace; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; flex:1 }
-  #doing .since { color:var(--dim); font-size:13px; font-variant-numeric:tabular-nums }
+  #doing { padding:8px 12px; font-size:19px; border-bottom:1px solid #333; display:flex; gap:12px; align-items:baseline }
+  #doing .what { font-weight:600 } #doing .detail { color:var(--dim); font-size:15px; font-family:ui-monospace, Menlo, monospace; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; flex:1 }
+  #doing .since { color:var(--dim); font-size:15px; font-variant-numeric:tabular-nums }
   main { flex:1; display:grid; grid-template-columns: 42% 58%; min-height:0 }
-  #code { overflow:auto; margin:0; padding:8px; font:11px/1.35 ui-monospace, Menlo, monospace; white-space:pre; border-right:1px solid #333 }
+  #code { overflow:auto; margin:0; padding:8px; font:13px/1.4 ui-monospace, Menlo, monospace; white-space:pre; border-right:1px solid #333 }
   #code .new { background:#3a3320 } #code .ln { color:#555; user-select:none; display:inline-block; width:4em }
   #right { display:flex; flex-direction:column; min-height:0 }
   #view { flex:1; display:flex; align-items:center; justify-content:center; background:#000; min-height:0; position:relative }
   #view img { max-width:100%; max-height:100%; object-fit:contain }
-  #cap { position:absolute; left:8px; bottom:6px; color:var(--dim); font-size:11px; background:#000a; padding:2px 6px }
+  #cap { position:absolute; left:8px; bottom:6px; color:var(--dim); font-size:13px; background:#000a; padding:2px 6px }
   #bottom { height:38%; display:grid; grid-template-columns: 1fr 1fr; border-top:1px solid #333; min-height:0 }
-  #feed { overflow:auto; padding:6px 10px; font-size:12px; border-right:1px solid #333 }
-  #thoughts { overflow:auto; padding:6px 10px; font-size:12.5px; line-height:1.5; color:#bbb; background:#1b1b20 }
-  #thoughts h4 { margin:0 0 4px; font-size:11px; color:var(--dim); font-weight:600; letter-spacing:.06em }
+  #feed { overflow:auto; padding:6px 10px; font-size:14px; border-right:1px solid #333 }
+  #thoughts { overflow:auto; padding:6px 10px; font-size:14.5px; line-height:1.5; color:#bbb; background:#1b1b20 }
+  #thoughts h4 { margin:0 0 4px; font-size:12px; color:var(--dim); font-weight:600; letter-spacing:.06em }
   #thoughts .t { margin:0 0 10px; white-space:pre-wrap; word-break:break-word; opacity:.55 }
-  #thoughts .t.last { opacity:1; color:#e6e6e6 } #thoughts .tm { color:#555; font-size:11px }
+  #thoughts .t.last { opacity:1; color:#e6e6e6 } #thoughts .tm { color:#666; font-size:12px }
   #thoughts .cursor { display:inline-block; width:7px; background:#bbb; animation:pulse 1s infinite }
   #feed div { margin:2px 0; white-space:pre-wrap; word-break:break-word }
   .say { color:#eee } .think { color:#777; font-style:italic } .cmd { color:#8bc } .write,.edit { color:var(--acc) } .image { color:#c8c } .user { color:#9c9 }

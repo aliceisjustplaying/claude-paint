@@ -137,7 +137,11 @@ fn main() {
                 if d > r + 12.0 {
                     continue;
                 }
-                let r = r * (1.0 + 0.09 * bark_n.get(x, y) + 0.06 * burl.get(x, y).max(0.0)) + 0.9 * knob.get(x, y) * (r / 40.0).min(1.0).sqrt();
+                // bark plates run along the wood: the noise stretched along the
+                // limb's axis, so the edge breaks in long plates, not notches
+                let (_, _, (dx, dy), _) = l.near(x, y);
+                let (a, b) = (x * dx + y * dy, -x * dy + y * dx);
+                let r = r * (1.0 + 0.07 * bark_n.get(a * 0.3, b) + 0.06 * burl.get(x, y).max(0.0)) + 0.9 * knob.get(a * 0.4, b) * (r / 40.0).min(1.0).sqrt();
                 m = m.max(smoothstep(r + 0.9, r - 0.9, d));
             }
             // it goes down into the snow: nothing far below the drift's crest
@@ -299,9 +303,31 @@ fn main() {
             }
             best.1
         };
+        let limbs3 = limbs.clone();
+        let across = move |x: f32, y: f32| {
+            // signed position across the nearest limb: -1 left edge, +1 right
+            let mut best = (f32::MAX, 0.0f32);
+            for l in &limbs3 {
+                let (d, r, _, s) = l.near(x, y);
+                if d - r < best.0 {
+                    let (ax, _, _) = l.at(s);
+                    best = (d - r, ((x - ax) / r.max(1.0)).clamp(-1.0, 1.0));
+                }
+            }
+            best.1
+        };
         let under = st.body()
             .palette(&bark_pal)
-            .color(|x, _| mix(hex("#2e2620"), hex("#3a3129"), smoothstep(520.0, 400.0, x), Mix::Pigment))
+            .color(move |x, y| {
+                let u = across(x, y);
+                // sky light on the left flank, the core darkest right of
+                // center, a little warm light thrown up by the snow low down
+                let lit = smoothstep(-0.2, -0.9, u);
+                let base = mix(hex("#2a221c"), hex("#4a4239"), 0.8 * lit, Mix::Pigment);
+                let snowlight = smoothstep(820.0, 990.0, y) * smoothstep(0.3, 0.95, u);
+                mix(base, hex("#4b4540"), 0.5 * snowlight, Mix::Pigment)
+            })
+            .clip(true)
             .angle(along)
             .angle_jitter(0.06)
             .length(25.0, 70.0)
@@ -309,6 +335,34 @@ fn main() {
             .cut_in(Tool::round_sable(3.0))
             .medium(0.15);
         c.work(&tree_m, &under, 41);
+        // the silhouette drawn by hand, as he'd follow his pencil line: long
+        // strokes of the trunk's dark down each edge, just inside it
+        let mut ct = Held::new(Tool { point: 0.6, ..Tool::round_sable(3.4) }, 42);
+        for l in limbs.iter().take(5) {
+            for side in [-1.0f32, 1.0] {
+                let mut s0 = 0.0;
+                while s0 < l.segs() - 0.02 {
+                    let ds = rng.range(0.5, 1.1);
+                    let pts: Vec<(f32, f32)> = (0..7).map(|i| {
+                        let ss = (s0 + ds * i as f32 / 6.0).min(l.segs());
+                        let (x, y, r) = l.at(ss);
+                        let (dx, dy) = l.dir(ss);
+                        let rr = r * (1.0 + 0.07 * bark_n.get((x * dx + y * dy) * 0.3, -x * dy + y * dx)) - 1.4;
+                        (x - dy * rr * side, y + dx * rr * side)
+                    }).collect();
+                    let (_, _, r) = l.at(s0);
+                    let (px, py) = pts[3];
+                    if py < drift_top(px) + 10.0 {
+                        let u = side;
+                        let col = if u < 0.0 { hex("#3a332c") } else { hex("#231c17") };
+                        ct.reload(bark_pal.paint(col, 0.12), 0.6);
+                        let pr = (r / 30.0).clamp(0.35, 0.7);
+                        c.drag(&mut ct, &Gesture::new(pts).pressure(pr, pr).ramps(0.15, 0.2).shake(0.35), Some(&tree_m));
+                    }
+                    s0 += ds * rng.range(0.8, 0.95);
+                }
+            }
+        }
         c.wait(40.0);
     }
 
@@ -326,7 +380,7 @@ fn main() {
                 ((b.0 - a.0).powi(2) + (b.1 - a.1).powi(2)).sqrt()
             }).sum();
             let rmean = l.pts.iter().map(|p| p.2).sum::<f32>() / l.pts.len() as f32;
-            let n = (len * rmean / 30.0) as usize + 4;
+            let n = (len * rmean / 45.0) as usize + 4;
             for _ in 0..n {
                 let s0 = rng.f() * l.segs();
                 let (x0, y0, r0) = l.at(s0);
@@ -334,7 +388,7 @@ fn main() {
                     continue;
                 }
                 let u = rng.range(-0.95, 0.95);
-                let seg = rng.range(8.0, 28.0) * (r0 / 40.0).clamp(0.4, 1.0);
+                let seg = rng.range(16.0, 44.0) * (r0 / 40.0).clamp(0.4, 1.0);
                 let (dx, dy) = l.dir(s0);
                 let wob = rng.range(-1.0, 1.0);
                 let pts: Vec<(f32, f32)> = (0..5).map(|i| {
@@ -356,7 +410,7 @@ fn main() {
                 } else if roll < 0.88 || !left {
                     // a plate: a small filbert nearly dry, dragged along the
                     // axis, so it catches the tops of the weave and breaks
-                    let col = if left { mix(hex("#362e27"), hex("#433d37"), flank, Mix::Pigment) } else { mix(hex("#312821"), hex("#29221c"), flank, Mix::Pigment) };
+                    let col = if left { mix(hex("#3a322b"), hex("#56504a"), flank, Mix::Pigment) } else { mix(hex("#312821"), hex("#29221c"), flank, Mix::Pigment) };
                     plate.reload(bark_pal.paint(col, 0.05), rng.range(0.18, 0.32));
                     c.drag(&mut plate, &Gesture::new(pts).pressure(0.35, 0.25).ramps(0.1, 0.3).shake(0.4), Some(&clip));
                 } else {
@@ -520,7 +574,7 @@ fn main() {
             c.drag(&mut w, &Gesture::new(pts).pressure(0.45, 0.1).ramps(0.3, 0.6).shake(0.4), None);
         }
         let sh_m = Mask::from_fn(f, move |x, y| shadow(x, y) * smoothstep(975.0, 1010.0, y));
-        let veil = st.glaze(0.9).palette(&snow_pal).color(|_, _| hex("#6f7fa0")).angle(|_, _| 1.1).length(60.0, 160.0).load_at(|_, _| 0.25);
+        let veil = st.glaze(0.9).palette(&snow_pal).color(|_, _| hex("#6f7fa0")).angle(|_, _| 1.1).length(60.0, 160.0).load_at(|_, _| 0.15);
         c.work(&sh_m, &veil, 82);
         c.dry();
     }
@@ -543,8 +597,16 @@ fn main() {
             let col = if rng.f() < 0.5 { hex("#6b5a3f") } else { hex("#8a7652") };
             let hb = if k % 2 == 0 { &mut b } else { &mut t };
             hb.reload(bark_pal.paint(col, 0.1), 0.6);
-            let pts = vec![(x, yb), (x + lean * ht * 0.3, yb - ht * 0.55), (x + lean * ht, yb - ht)];
-            c.drag(hb, &Gesture::new(pts).pressure(0.55 * (0.5 + depth), 0.0).ramps(0.05, 0.85).shake(0.5), None);
+            // a tuft: a few blades from one root, fanning, bent by the wind
+            let blades = if rng.f() < 0.6 { 1 } else { 2 + (rng.f() * 4.0) as usize };
+            for bl in 0..blades {
+                let l2 = lean + (bl as f32 - blades as f32 / 2.0) * 0.18 + rng.range(-0.1, 0.1);
+                let h2 = ht * rng.range(0.55, 1.0);
+                let x2 = x + rng.range(-1.2, 1.2);
+                let pts = vec![(x2, yb), (x2 + l2 * h2 * 0.25, yb - h2 * 0.55), (x2 + l2 * h2 * 0.9 + 0.1 * h2 * l2.signum(), yb - h2)];
+                hb.reload(bark_pal.paint(col, 0.1), 0.5);
+                c.drag(hb, &Gesture::new(pts).pressure(0.5 * (0.5 + depth), 0.0).ramps(0.05, 0.85).shake(0.5), None);
+            }
         }
         let _ = Touch::at(0.0, 0.0);
     }

@@ -688,7 +688,7 @@ once, not inside a color function.
 
 `tree{habit="oak"}` grows a tree from buds, and you can't choose its
 shape. `tree_in{}` works the other way round: you draw the crown's
-silhouette and the trunk, and an oak, beech, lime, birch or pollard willow
+silhouette and the trunk, and an oak, beech, lime or birch
 grows into it by space colonization (Runions et al. 2007). Attraction
 points fill the crown in depth, thinned by a low noise so the crown has
 its own gaps where limb masses part. The trunk runs on into the crown as
@@ -770,7 +770,7 @@ the wood visibly thins at each fork and runs out to a point.
 **An oak is angular.** An oak's wood runs fairly straight between its
 nodes and changes direction at them: elbows, the sympodial zigzag, twigs
 short and stiff. The species number `angular` (oak 1, lime 0.5, beech,
-birch and willow 0) makes it so. The runs between forks are straightened
+birch 0) makes it so. The runs between forks are straightened
 (wiggles under about half a model step are taken out, the larger turns
 kept at a few nodes), a shoot zigzags about its heading but never turns
 more than about 70 degrees off it (no hooks or loops), a side twig stands
@@ -815,7 +815,6 @@ whose sun is used. The default is the upper left, a little in front.
 | `beech` | smooth rising limbs, level sprays (flat touches), dense |
 | `lime` (or `linden`) | a dense dome, leaves to the shell, many fine limbs |
 | `birch` | a leading stem, thin limbs, long hanging twigs, small airy clumps |
-| `willow` (or `pollard`) | a short thick trunk ending in a head, straight rods rising from it |
 
 | season | leaves |
 |---|---|

@@ -1,5 +1,5 @@
-//! Broadleaved trees in Lua: `tree_in{...}` grows an oak, beech, lime,
-//! birch or pollard willow into a crown you draw (an `outline{}` or a few
+//! Broadleaved trees in Lua: `tree_in{...}` grows an oak, beech, lime
+//! or birch into a crown you draw (an `outline{}` or a few
 //! points) from a trunk line you draw, and `tree_group{...}` makes a group
 //! of field trees in depth from a few drawn crowns. Geometry only: limbs
 //! with widths, leaf clumps by depth, lit/shade/gap masks, and the hooked
@@ -92,7 +92,7 @@ fn range_of(o: &Table, k: &str, dflt: (f32, f32)) -> Result<(f32, f32)> {
     })
 }
 
-const SPECIES: &str = "oak, beech, lime (or linden), birch, willow (a pollard)";
+const SPECIES: &str = "oak, beech, lime (or linden), birch";
 const SEASONS: &str = "spring, summer, autumn, late_autumn, winter";
 
 const SPECIES_KEYS: &[&str] = &[

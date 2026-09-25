@@ -167,15 +167,20 @@ fn main() {
             let run = rng.range(10.0, 90.0);
             if (x - 560.0).abs() > 150.0 || rng.f() < 0.4 {
                 let yy = horizon(x) + rng.range(-0.3, 0.8);
-                let dark = if (x - sx).abs() < 160.0 { "#9d97a0" } else { "#8a8795" };
-                sab.reload(pile(&st, dark, 0.8, 0.5), 0.5);
+                let dark = if (x - sx).abs() < 160.0 { "#96929b" } else { "#84818e" };
+                sab.reload(pile(&st, dark, 0.85, 0.5), rng.range(0.45, 0.65));
+                // one or two long level strokes, the brush pressed and
+                // eased as it goes, so the hedge thickens and thins
                 let mut xx = x;
                 while xx < x + run {
-                    let seg = rng.range(3.0, 14.0);
-                    let hump = rng.range(0.4, 2.4);
-                    let pts = vec![(xx, yy), (xx + seg * 0.5, yy - hump), (xx + seg, yy - rng.range(0.0, 0.8))];
-                    c.drag(&mut sab, &Gesture::new(pts).pressure(rng.range(0.35, 0.7), rng.range(0.3, 0.6)).ramps(0.2, 0.3), None);
-                    xx += seg * rng.range(0.6, 1.1);
+                    let seg = rng.range(12.0, 40.0).min(x + run - xx + 4.0);
+                    let pts: Vec<(f32, f32)> = (0..5).map(|j| {
+                        let u = j as f32 / 4.0;
+                        (xx + seg * u, yy - rng.range(0.0, 0.7))
+                    }).collect();
+                    let knots: Vec<f32> = (0..5).map(|_| rng.range(0.5, 1.3)).collect();
+                    c.drag(&mut sab, &Gesture::new(pts).pressure(rng.range(0.45, 0.8), rng.range(0.3, 0.6)).ramps(0.25, 0.35).swell(knots), None);
+                    xx += seg * rng.range(0.9, 1.3);
                 }
                 // a copse: a few taller round tufts rising from the line
                 if rng.f() < 0.35 {
@@ -318,12 +323,12 @@ fn main() {
             let (l, r) = (bank_l(y), bank_r(y));
             let wid = r - l;
             for side in [0usize, 1] {
-                if rng.f() < 0.45 {
+                if rng.f() < 0.3 || t < 0.13 {
                     continue;
                 }
                 let reach = wid * rng.range(0.1, 0.6) * rng.range(0.5, 1.0) * (if t < 0.12 { 1.6 } else { 1.0 });
                 let (x0, dir) = if side == 0 { (l - 2.0 * t, 1.0) } else { (r + 2.0 * t, -1.0) };
-                tg.tool.width = 1.2 + 11.0 * t;
+                tg.tool.width = (1.2 + 11.0 * t) * rng.range(0.6, 1.1);
                 let col = if rng.f() < 0.5 { "#cfccca" } else { "#bdbdc2" };
                 tg.reload(pile(&st, col, 0.75, 0.7), rng.range(0.35, 0.7));
                 // the wind came from the west (left): the drifts trail
@@ -333,7 +338,7 @@ fn main() {
                     let u = j as f32 / 4.0;
                     (x0 + dir * reach * u, y + sag * u * u + rng.range(-0.3, 0.3) * t)
                 }).collect();
-                c.drag(&mut tg, &Gesture::new(pts).pressure(rng.range(0.55, 0.9), rng.range(0.05, 0.3)).ramps(0.05, rng.range(0.4, 0.8)).swell(vec![1.0, 0.8, 1.1]), Some(&ice));
+                c.drag(&mut tg, &Gesture::new(pts).pressure(rng.range(0.65, 0.95), 0.1).ramps(rng.range(0.02, 0.12), rng.range(0.45, 0.75)).swell(vec![rng.range(0.7, 1.1), rng.range(0.8, 1.2), rng.range(0.5, 1.0)]).orient(Orient::Across), Some(&ice));
             }
             y += (1.5 + 13.0 * t) * rng.range(0.4, 1.8);
         }
@@ -411,14 +416,14 @@ fn main() {
                 let t = depth(y);
                 let run = (6.0 + 70.0 * t) * rng.range(0.5, 1.2);
                 edge.tool.width = 0.6 + 4.5 * t;
-                edge.reload(pile(&st, if side == 0 { "#7c7771" } else { "#6c6760" }, 0.8, 0.5), 0.45);
+                edge.reload(pile(&st, if side == 0 { "#86817a" } else { "#7d7872" }, 0.75, 0.5), 0.4);
                 let dir = if side == 0 { -1.0 } else { 1.0 };
                 let bx = |yy: f32| if side == 0 { bank_l(yy) } else { bank_r(yy) };
                 let pts: Vec<(f32, f32)> = (0..5).map(|j| {
                     let yy = y + run * j as f32 / 4.0;
                     (bx(yy) + dir * (0.3 + 1.2 * depth(yy)) * rng.range(-0.3, 1.0), yy)
                 }).collect();
-                if rng.f() < 0.35 { y += run; continue; }
+                if rng.f() < 0.5 { y += run; continue; }
                 c.drag(&mut edge, &Gesture::new(pts).pressure(rng.range(0.25, 0.7), rng.range(0.1, 0.6)).ramps(0.15, 0.3).swell(vec![1.0, rng.range(0.6, 1.2), 0.9]), None);
                 y += run * rng.range(0.8, 1.15);
             }

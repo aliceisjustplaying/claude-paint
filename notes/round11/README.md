@@ -13,3 +13,8 @@ Two experiments on the fixed engine (main at e8bb1f8, dry rims fixed).
      (the highest pi allows for it: "supported: low, medium, high")
    Caveat: Astra and Gemini Flash are also this project's critics; blind
    judging keeps the painter unknown, but a model may favor its own style.
+   - anthropic/claude-fable-5-1, thinking xhigh (added by Alice)
+
+**Cross-critique** (Alice): when all are done, the three model-painters
+(Astra, Gemini Flash, Fable) each judge all the whole paintings blind,
+their own included (unmarked), plus round 2's winter as an anchor.

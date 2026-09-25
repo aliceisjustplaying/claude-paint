@@ -7,15 +7,14 @@
 //! CRACK_LAB_CKPT=path/to/r10_winter_b_full.glaze.ckpt CRACK_LAB_OUT=dir \
 //! CRACK_LAB_ONLY=base,hier0 cargo test --release -p paint crack_lab -- --ignored --nocapture
 //! ```
-//! The checkpoint is round 10's frozen pond (branch r10-arm2) before its
-//! `glaze` stage; the lab replays that glaze and the finish (`Run::finish`:
+//! The checkpoint is round 10's frozen pond (branch r10-arm2) after its
+//! last stage (`glaze`); the lab replays the finish (`Run::finish`:
 //! varnish, cracks, relief) with the painting's own settings.
 
 use crate::canvas::Canvas;
 use crate::color::{hex, linear_to_srgb};
 use super::{Cracks, network, raster_window};
 use crate::noise::Fbm;
-use crate::palette::Palette;
 use crate::pigment::Pigment;
 use crate::surface::COAT_UM;
 use std::io::Write;
@@ -30,7 +29,8 @@ fn env(k: &str) -> Option<String> {
     std::env::var(k).ok().filter(|s| !s.is_empty())
 }
 
-/// The canvas after the glaze stage and the varnish, before the cracks.
+/// The canvas after the glaze stage (its checkpoint) and the varnish,
+/// before the cracks.
 fn prefinish(ckpt: &str, out: &str) -> Canvas {
     let cache = format!("{out}/prefinish.ckpt");
     if let Ok(f) = std::fs::File::open(&cache) {
@@ -38,18 +38,7 @@ fn prefinish(ckpt: &str, out: &str) -> Canvas {
     }
     let f = std::fs::File::open(ckpt).unwrap();
     let (mut c, _) = Canvas::read_state(&mut std::io::BufReader::new(f)).unwrap();
-    // r10_winter_b's glaze stage
-    let pal = Palette::friedrich_early_greens();
-    let umber = pal.only(&["raw umber", "bone black", "smalt"]).mix(hex("#2c2a2e")).paint(0.9).pigment();
-    let (w, hh) = (1000.0f32, c.height());
-    const GLOW_X: f32 = 395.0;
-    const HZ: f32 = 452.0;
-    c.glaze(&umber, None, move |x, y| {
-        let dx = (x - GLOW_X) / (0.62 * w);
-        let dy = (y - HZ + 30.0) / (0.75 * hh);
-        let r = (dx * dx + dy * dy).sqrt();
-        1.4 * crate::smoothstep(0.5, 1.2, r) + 0.45 * crate::smoothstep(0.35, 0.0, y / hh)
-    });
+    // (a stage's checkpoint is saved at its end: this one holds the glaze)
     // Run::finish up to the cracks (Finish::aged)
     c.dry();
     let var = Fbm::new(SEED as u32 + 98, 3, 400.0);
@@ -74,8 +63,13 @@ fn save_rgb(path: &str, w: usize, h: usize, f: impl Fn(usize, usize) -> [u8; 3])
     image::save_buffer(path, &buf, w as u32, h as u32, image::ColorType::Rgb8).unwrap();
 }
 
-fn to8(p: [f32; 3]) -> [u8; 3] {
-    std::array::from_fn(|c| (linear_to_srgb(p[c]) * 255.0).round().clamp(0.0, 255.0) as u8)
+/// A pixel as `Canvas::save` writes it (dithered by whole-canvas pixel).
+fn to8(p: [f32; 3], gx: usize, gy: usize) -> [u8; 3] {
+    let (gx, gy) = (gx as i64, gy as i64);
+    std::array::from_fn(|c| {
+        let d = crate::rng::hash2(gx, gy, c as u64 * 7 + 1) - crate::rng::hash2(gx, gy, c as u64 * 7 + 2);
+        (linear_to_srgb(p[c]) * 255.0 + d).round().clamp(0.0, 255.0) as u8
+    })
 }
 
 /// The lab painting's finish (`r10_crackslab.rs`, variant "as delivered").
@@ -330,7 +324,7 @@ fn crack_lab() {
         let dir = format!("{out}/{name}");
         std::fs::create_dir_all(&dir).unwrap();
         for &(cn, x0, y0, cw, ch) in &crops {
-            save_rgb(&format!("{dir}/{cn}.png"), cw, ch, |x, y| to8(c.px[(y0 + y) * w + x0 + x]));
+            save_rgb(&format!("{dir}/{cn}.png"), cw, ch, |x, y| to8(c.px[(y0 + y) * w + x0 + x], x0 + x, y0 + y));
             // the cracks' effect on the picture, ×8 (dark: darker, red: lighter)
             save_rgb(&format!("{dir}/{cn}_diff.png"), cw, ch, |x, y| {
                 let v = d[(y0 + y) * w + x0 + x] * 8.0;

@@ -399,6 +399,14 @@ fn main() {
         let path_c = move |x: f32, y: f32| mixc(hex("#5e573c"), hex("#8f8562"), 0.55 + 0.6 * np.get(x * 0.8, y * 1.5));
         c.work(&path, &st.detail().mixed(pal, 0.3).color(path_c).angle(move |_, y| ((path_x(y + 3.0) - path_x(y - 3.0)) / 6.0).atan() * -1.0 + std::f32::consts::FRAC_PI_2).angle_jitter(0.1).length(6.0, 20.0).coverage(3.5).clip(true).threshold(0.3), seed * 100 + 32);
         c.dry();
+        // the ruts' grain: crumbs of darker and paler earth, grit, the
+        // shadowed edge the grass overhangs
+        let grit = Stipple::new(Tool::stippler(1.1)).mixed(pal, 0.25).color(move |x, y| {
+            let v = np.get(x * 3.0, y * 3.0);
+            mixc(hex("#4a4432"), hex("#a39676"), 0.5 + 0.9 * v)
+        }).coverage(|x, y| 0.9 * path.sample(x, y)).pressure(0.4, 0.9);
+        c.stipple(&path, &grit, seed * 100 + 34);
+        c.dry();
 
         c.dry();
     }
@@ -410,6 +418,13 @@ fn main() {
     }
 
     // ---- the two figures under the lime's edge, seen from behind
+    if o.stage("horses", &mut c, &mut rng) {
+        // two horses at grass on the meadow beyond the rise, one grazing,
+        // one with its head up, looking toward the town
+        horse(&mut c, pal, (640.0, horizon + 50.0), 13.0, true, hex("#5a3c26"), &mut rng);
+        horse(&mut c, pal, (676.0, horizon + 47.0), 12.0, false, hex("#2e2620"), &mut rng);
+        c.dry();
+    }
     if o.stage("figures", &mut c, &mut rng) {
         let fx = 405.0;
         couple(&mut c, pal, (fx, rise(fx) + 1.0), 40.0, seed * 100 + 50);
@@ -424,10 +439,10 @@ fn main() {
             near: h,
             height: 24.0,
             spacing: 4.6,
-            thin: 0.5,
+            thin: 0.9,
             patch: 0.75,
             patch_size: 70.0,
-            smallest: 0.8,
+            smallest: 1.3,
             flowers: 0.035,
             kinds: 3,
             wind: Wind { lean: 0.1, gust: 0.15, period: 150.0, seed: seed + 5 },
@@ -802,7 +817,7 @@ fn paint_lime(c: &mut Canvas, st: &Style, pal: &Palette, t: &Tree, g: &Greens, s
         let (px, py) = tc.pts[1];
         let (u, v) = ((px - cx) / rx, (py - cy) / ry);
         let e = (u * u + v * v).sqrt();
-        if e < 0.8 || !rng.chance(0.55) {
+        if e < 0.78 || !rng.chance(0.85) {
             continue;
         }
         let k = rng.range(1.5, 4.5) * tw;
@@ -997,12 +1012,18 @@ fn thistle(c: &mut Canvas, pal: &Palette, (x, y): (f32, f32), ht: f32, g: Rgb, r
         let side = if k % 2 == 0 { -1.0 } else { 1.0 };
         let l = ht * (0.4 - 0.035 * k as f32);
         let lc = mixc(stem, hex("#6f7a5a"), 0.35);
-        let pts: Vec<(f32, f32)> = (0..=4).map(|j| {
-            let s = j as f32 / 4.0;
-            let zig = if j % 2 == 1 { -1.6 } else { 0.0 };
-            (px + side * l * s, py - l * 0.25 * s + zig + l * 0.2 * s * s)
+        // the leaf: a narrow blade, then spines pulled out from it
+        let pts: Vec<(f32, f32)> = (0..=3).map(|j| {
+            let s = j as f32 / 3.0;
+            (px + side * l * s, py - l * 0.25 * s + l * 0.25 * s * s)
         }).collect();
-        stroke(c, pal, rng, Tool { point: 1.0, ..Tool::round_sable(2.4) }, lc, pts, (0.9, 0.15), (0.05, 0.6));
+        stroke(c, pal, rng, Tool { point: 1.0, ..Tool::round_sable(1.8) }, lc, pts.clone(), (0.9, 0.1), (0.05, 0.6));
+        for j in 1..5 {
+            let s = j as f32 / 5.0;
+            let (qx, qy) = (px + side * l * s, py - l * 0.25 * s + l * 0.25 * s * s);
+            let up = if j % 2 == 0 { -1.0 } else { 1.0 };
+            stroke(c, pal, rng, Tool { point: 1.0, ..Tool::rigger(0.3) }, lc, vec![(qx, qy), (qx + side * 1.5, qy + up * 2.2)], (0.7, 0.05), (0.05, 0.7));
+        }
     }
     for &(dx, dy) in &[(0.0f32, 0.0f32), (5.0, 7.0)] {
         let (hx, hy) = (tx + dx, y - ht + dy);
@@ -1015,5 +1036,44 @@ fn thistle(c: &mut Canvas, pal: &Palette, (x, y): (f32, f32), ht: f32, g: Rgb, r
             let pc = mixc(hex("#7a3d6a"), hex("#b06a98"), rng.range(0.0, 1.0));
             stroke(c, pal, rng, Tool { point: 1.0, ..Tool::round_sable(0.8) }, pc, vec![(hx, hy - 0.8), (hx + 3.0 * a.cos(), hy - 0.8 + 3.2 * a.sin())], (0.8, 0.2), (0.05, 0.5));
         }
+    }
+}
+
+/// A horse seen from the side, walking left to right in the grass: barrel,
+/// chest and quarters, neck and head (down to the grass when grazing), four
+/// legs, tail; lit along the back from the left. `s` is the height at the
+/// withers.
+fn horse(c: &mut Canvas, pal: &Palette, (x, y): (f32, f32), s: f32, grazing: bool, coat: Rgb, rng: &mut Rng) {
+    let lit = mixc(coat, hex("#b89a74"), 0.45);
+    let dark = mixc(coat, hex("#16120e"), 0.5);
+    let tool = |w: f32| Tool { point: 0.4, ..Tool::round_sable(w) };
+    // legs (far pair darker), then the body over them
+    for &(u, far) in &[(-0.42f32, true), (0.3, true), (-0.52, false), (0.4, false)] {
+        let col = if far { dark } else { coat };
+        let bend = if far { 0.04 } else { -0.03 };
+        stroke(c, pal, rng, tool(s * 0.08), col, vec![(x + u * s, y - s * 0.55), (x + (u + bend) * s, y - s * 0.25), (x + u * s, y)], (0.9, 0.7), (0.0, 0.1));
+    }
+    // barrel: two thick strokes, the back lit
+    stroke(c, pal, rng, tool(s * 0.34), coat, vec![(x - 0.55 * s, y - s * 0.66), (x, y - s * 0.62), (x + 0.5 * s, y - s * 0.68)], (0.95, 0.95), (0.05, 0.1));
+    stroke(c, pal, rng, tool(s * 0.12), lit, vec![(x - 0.55 * s, y - s * 0.82), (x, y - s * 0.78), (x + 0.45 * s, y - s * 0.84)], (0.7, 0.6), (0.2, 0.3));
+    // neck and head
+    let neck = if grazing {
+        vec![(x + 0.5 * s, y - s * 0.72), (x + 0.75 * s, y - s * 0.45), (x + 0.88 * s, y - s * 0.12)]
+    } else {
+        vec![(x + 0.48 * s, y - s * 0.74), (x + 0.7 * s, y - s * 0.9), (x + 0.86 * s, y - s * 0.98)]
+    };
+    stroke(c, pal, rng, tool(s * 0.17), coat, neck.clone(), (0.9, 0.6), (0.05, 0.2));
+    let (hx, hy) = *neck.last().unwrap();
+    let head = if grazing { vec![(hx, hy - s * 0.02), (hx + 0.08 * s, hy + s * 0.12)] } else { vec![(hx - 0.02 * s, hy), (hx + 0.16 * s, hy + s * 0.22)] };
+    stroke(c, pal, rng, tool(s * 0.12), coat, head, (0.9, 0.6), (0.05, 0.3));
+    // mane, tail
+    stroke(c, pal, rng, Tool { point: 1.0, ..Tool::rigger(s * 0.04) }, dark, neck.iter().map(|&(a, b)| (a - 0.04 * s, b - 0.05 * s)).collect(), (0.8, 0.4), (0.05, 0.3));
+    stroke(c, pal, rng, Tool { point: 1.0, ..Tool::rigger(s * 0.06) }, dark, vec![(x - 0.6 * s, y - s * 0.72), (x - 0.7 * s, y - s * 0.5), (x - 0.68 * s, y - s * 0.28)], (0.9, 0.2), (0.05, 0.5));
+    // grass over the hooves
+    let mut g = Held::new(Tool { point: 1.0, ..Tool::rigger(0.35) }, rng.next_u64());
+    for _ in 0..12 {
+        let gx = x + rng.range(-0.7, 0.7) * s;
+        g.reload(pal.paint(mixc(hex("#5d6a38"), hex("#8e9656"), rng.range(0.0, 1.0)), 0.2), 0.6);
+        c.drag(&mut g, &Gesture::new(vec![(gx, y + 0.5), (gx + rng.range(-0.5, 0.5), y - s * 0.12)]).pressure(0.7, 0.1).ramps(0.05, 0.5).orient(Orient::Across), None);
     }
 }

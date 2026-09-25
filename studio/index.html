@@ -11,6 +11,9 @@
   #badge.live { background:#c22; color:#fff; animation:pulse 1.6s infinite }
   #badge.idle { background:#553; color:#ddd } #badge.replay { background:#246; color:#dde } #badge.ended { background:#333; color:#aaa }
   @keyframes pulse { 50% { opacity:.55 } }
+  #doing { padding:8px 12px; font-size:17px; border-bottom:1px solid #333; display:flex; gap:12px; align-items:baseline }
+  #doing .what { font-weight:600 } #doing .detail { color:var(--dim); font-size:13px; font-family:ui-monospace, Menlo, monospace; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; flex:1 }
+  #doing .since { color:var(--dim); font-size:13px; font-variant-numeric:tabular-nums }
   main { flex:1; display:grid; grid-template-columns: 42% 58%; min-height:0 }
   #code { overflow:auto; margin:0; padding:8px; font:11px/1.35 ui-monospace, Menlo, monospace; white-space:pre; border-right:1px solid #333 }
   #code .new { background:#3a3320 } #code .ln { color:#555; user-select:none; display:inline-block; width:4em }
@@ -36,6 +39,7 @@
   <label><input type="checkbox" id="showthink"> thinking</label>
   <span id="badge"></span><span id="clock"></span><span id="file" style="color:var(--dim)"></span>
 </header>
+<div id="doing"><span class="what"></span><span class="detail"></span><span class="since"></span></div>
 <main>
   <pre id="code"></pre>
   <div id="right"><div id="view"><img id="img"><span id="cap"></span></div><div id="feed"></div></div>
@@ -71,6 +75,41 @@ function badge() {
   else if (live) { b.className = active ? 'live' : 'ended'; b.textContent = active ? 'LIVE' : 'SESSION IDLE · last action ' + ago(age); }
   else if (playing) { b.className = 'replay'; b.textContent = 'REPLAY ' + $('speed').value + '×'; }
   else { b.className = 'replay'; b.textContent = 'PAUSED · ' + (events.length - 1 - pos) + ' events behind live'; }
+}
+// what the painter is doing at event i (live: now)
+const ICON = { think:'💭', code:'✍️', compile:'🔧', render:'🎨', look:'👁', read:'📖', notes:'📝', wait:'⏳', cmd:'⌨️', talk:'💬', done:'✓' };
+function classify(e) {
+  const f = (e.path||'').split('/').slice(-1)[0];
+  if (e.kind === 'write' || e.kind === 'edit') return /\.(rs|lua)$/.test(f) ? ['code', 'writing code', f] : /\.md$/.test(f) ? ['notes', 'writing notes', f] : ['code', 'writing', f];
+  if (e.kind === 'read') return /\.(jpe?g|png)$/i.test(f) ? ['look', 'looking at the canvas', f] : ['read', 'reading', e.path];
+  if (e.kind === 'image') return ['look', 'looking at the canvas', f];
+  if (e.kind === 'cmd') { const c = e.text || '';
+    if (/cargo paint/.test(c)) { const w = (c.match(/--crop\s+(\S+)/)||[])[1], r = (c.match(/--resume\s+("[^"]+"|\S+)/)||[])[1];
+      return ['render', w ? 'rendering a close-up' : 'rendering the whole painting', (r ? 'from stage ' + r + ' ' : '') + (w ? 'window ' + w : '')]; }
+    if (/cargo (build|check|test|clippy)/.test(c)) return ['compile', 'compiling', c.slice(0, 120)];
+    if (/scripts\/peek|magick/.test(c)) return ['look', 'preparing a look', c.slice(0, 120)];
+    if (/^\s*(cat|sed|head|tail|grep|rg|ls|find|wc)\b/.test(c)) return ['read', 'reading', c.slice(0, 120)];
+    return ['cmd', 'running a command', c.slice(0, 120)]; }
+  if (e.kind === 'tool' && /bg_wait|bg_logs|bg_status/.test(e.name)) return ['wait', 'waiting for a render', ''];
+  if (e.kind === 'think') return ['think', 'thinking', e.text.split('\n').filter(Boolean).slice(-1)[0] || ''];
+  if (e.kind === 'say') return ['talk', 'talking', e.text.split('\n')[0]];
+  return null;
+}
+function doing(i, isLive) {
+  if (!events.length) return;
+  const e = events[i]; let c = classify(e), since = Date.parse(e.ts);
+  const busy = (e.kind === 'cmd' || e.kind === 'tool' || e.kind === 'write' || e.kind === 'edit' || e.kind === 'read') && e.out === undefined;
+  if (isLive) {
+    const age = (Date.now() - since) / 1000;
+    if (age > 1800) c = ['done', 'not working', 'last action ' + ago(age)];
+    else if (!busy && e.kind !== 'say' && e.kind !== 'think') c = ['think', 'thinking about the next step', 'after: ' + (c ? c[1] : e.kind)];
+    else if (e.kind === 'say' && /final|finished|done/i.test(e.text) && i === events.length - 1) c = ['done', 'finished', e.text.split('\n')[0]];
+  }
+  if (!c) c = ['think', 'thinking', ''];
+  const el = $('doing');
+  el.querySelector('.what').textContent = (ICON[c[0]] || '') + ' ' + c[1];
+  el.querySelector('.detail').textContent = c[2] || '';
+  el.querySelector('.since').textContent = isLive ? 'for ' + fmt((Date.now() - since) / 1000) : '';
 }
 function ago(s) { return s < 90 ? Math.round(s) + ' s ago' : s < 5400 ? Math.round(s/60) + ' min ago' : Math.round(s/3600) + ' h ago'; }
 function addThumb(e, i) {
@@ -121,7 +160,7 @@ function show(i) {
   $('feed').scrollTop = 1e9;
   const t0 = Date.parse(events[0].ts), t = Date.parse(events[pos].ts);
   $('clock').textContent = 'at ' + fmt((t - t0) / 1000) + ' into the session (' + new Date(t).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}) + ')';
-  badge(); $('pos').textContent = `${pos + 1} / ${events.length}`;
+  badge(); doing(pos, live && pos === events.length - 1); $('pos').textContent = `${pos + 1} / ${events.length}`;
 }
 function fmt(s) { s = Math.max(0, s|0); return `${(s/3600)|0}:${String(((s%3600)/60)|0).padStart(2,'0')}:${String(s%60).padStart(2,'0')}`; }
 function line(e) {
@@ -148,6 +187,6 @@ $('scrub').oninput = e => { stop(); live = false; show(+e.target.value); };
 $('showthink').onchange = () => show(pos);
 $('sess').onchange = e => { stop(); S = e.target.value; events = []; $('strip').innerHTML = ''; live = true; history.replaceState(null, '', '?s=' + encodeURIComponent(S)); poll(); };
 document.onkeydown = e => { if (e.key === 'ArrowRight') { live = false; show(pos + 1); } if (e.key === 'ArrowLeft') { live = false; show(pos - 1); } if (e.key === ' ') { e.preventDefault(); $('play').click(); } };
-loadSessions().then(() => { poll(); setInterval(poll, 2000); setInterval(badge, 1000); });
+loadSessions().then(() => { poll(); setInterval(poll, 2000); setInterval(() => { badge(); if (live && events.length) doing(events.length - 1, true); }, 1000); });
 </script>
 </body></html>

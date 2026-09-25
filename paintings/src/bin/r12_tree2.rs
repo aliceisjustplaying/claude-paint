@@ -128,10 +128,10 @@ fn main() {
 
     // far land: a low line of woods and fields, far off, blue-grey
     let woods = Fbm::new(9, 5, 30.0);
-    let wood_top = move |x: f32| HORIZON - 5.0 - 5.0 * (woods.get(x, 0.0) * 1.6).max(-0.3) * smoothstep(0.0, 60.0, x.min(1000.0 - x)) * (0.4 + 0.6 * smoothstep(600.0, 900.0, x));
+    let wood_top = move |x: f32| HORIZON - 2.5 - 6.0 * (woods.get(x, 0.0) * 1.6).max(0.0) * (0.3 + 0.7 * smoothstep(620.0, 900.0, x) + 0.5 * smoothstep(260.0, 80.0, x));
     let woods_m = Mask::from_fn(f, move |x, y| smoothstep(wood_top(x) - 0.8, wood_top(x) + 0.8, y) * (1.0 - smoothstep(HORIZON + 2.0, HORIZON + 5.0, y)));
     if o.stage("far", &mut c, &mut rng) {
-        let far_p = st.detail().color(|_, _| hex("#7c7f86")).angle(|_, _| 0.0).length(3.0, 8.0).coverage(2.5).medium(0.35);
+        let far_p = st.detail().color(|x, _| mix(hex("#878b92"), hex("#9c9ea0"), 0.5 + 0.5 * (x / 170.0).sin(), Mix::Light)).angle(|_, _| 0.0).length(8.0, 24.0).coverage(4.5).medium(0.4);
         c.work(&woods_m, &far_p, 21);
         c.dry();
     }
@@ -144,7 +144,7 @@ fn main() {
         // shallow hollows between drifts
         let base = paint::gradient(&[(0.0, hex("#c6c4bb")), (0.25, hex("#dcd9cf")), (1.0, hex("#e6e3da"))], t, Mix::Light);
         let hollow = (drift.get(x * 0.5, y * 3.0) * 1.4).clamp(-1.0, 1.0);
-        let base = if hollow < 0.0 { mix(base, hex("#a9adb4"), -hollow * 0.35 * (0.3 + t), Mix::Light) } else { mix(base, hex("#efece3"), hollow * 0.25 * t, Mix::Light) };
+        let base = if hollow < 0.0 { mix(base, hex("#a3a9b3"), -hollow * 0.55 * (0.3 + t), Mix::Light) } else { mix(base, hex("#efece3"), hollow * 0.25 * t, Mix::Light) };
         // the tree's soft shadow under overcast light, and snow heaped round the foot
         let dx = (x - BASE.0) / 120.0;
         let dy = (y - BASE.1 - 6.0) / 18.0;
@@ -198,9 +198,36 @@ fn main() {
             .angle_jitter(0.08)
             .length(12.0, 40.0)
             .coverage(3.5)
+            .clip(true)
             .medium(0.18);
-        c.work(&thick, &wood, 41);
+        c.work(&thick.clone().erode(1.2), &wood, 41);
         let mut r = Rng::new(o.seed + 501);
+        // the silhouette cut with a sable along both sides of the big wood,
+        // so the laid-in strokes' ends don't notch the edge
+        for l in oak.limbs.iter().filter(|l| !l.is_empty() && !l.root && l.w[0] > THICK) {
+            let n = l.pts.iter().zip(&l.w).take_while(|(_, w)| **w > THICK * 0.8).count().min(l.pts.len());
+            if n < 2 {
+                continue;
+            }
+            for side in [-1.0f32, 1.0] {
+                let pts: Vec<(f32, f32)> = (0..n)
+                    .map(|i| {
+                        let d = l.dir(i);
+                        let nn = (-d.1 * side, d.0 * side);
+                        let off = (l.w[i] * 0.5 - 1.3).max(0.0) + r.normal() * 0.12;
+                        (l.pts[i].0 + nn.0 * off, l.pts[i].1 + nn.1 * off)
+                    })
+                    .filter(|p| p.1 < BASE.1 + 6.0)
+                    .collect();
+                if pts.len() < 2 {
+                    continue;
+                }
+                let p = if l.dead_at(0) { bark_dead } else { bark_dark };
+                let mut held = Held::new(Tool { point: 0.5, ragged: 0.2, ..Tool::round_sable(2.8) }, r.next_u64());
+                held.load(p, 1.0);
+                c.drag(&mut held, &Gesture::new(pts).pressure(0.85, 0.85).ramps(0.0, 0.1).orient(Orient::Across).shake(0.5), None);
+            }
+        }
         // then every limb from where it leaves the laid-in wood to its tip
         for l in oak.limbs.iter().filter(|l| !l.is_empty() && !l.root) {
             limb(&mut c, l, bark_dark, bark_dead, &mut r);
@@ -215,12 +242,9 @@ fn main() {
         for l in oak.limbs.iter().filter(|l| !l.is_empty() && !l.root && !l.dead && !l.broken) {
             let n = l.pts.len();
             let tipw = l.w[n - 1];
-            if tipw > 2.0 {
-                continue;
-            }
             let d = l.dir(n - 1);
             let a0 = d.1.atan2(d.0);
-            let k = 2 + (r.f() * 3.0) as usize;
+            let k = if tipw > 2.0 { 0 } else { 2 + (r.f() * 3.0) as usize };
             for _ in 0..k {
                 let a = a0 + r.range(-0.9, 0.9);
                 shoot(&mut c, l.pts[n - 1], a, r.range(7.0, 20.0), 0.5, twig, 2, &mut r);
@@ -228,17 +252,27 @@ fn main() {
             // side twigs along the outer part of thin limbs
             let arc = cumulative(&l.pts);
             let tot = arc[n - 1];
-            let mut s0 = tot * 0.35 + r.range(0.0, 8.0);
+            let mut s0 = tot * 0.15 + r.range(0.0, 8.0);
             let mut side = if r.f() < 0.5 { 1.0 } else { -1.0 };
             while s0 < tot - 3.0 {
                 let i = arc.iter().position(|&v| v >= s0).unwrap_or(n - 1).min(n - 1);
+                let dd = l.dir(i);
+                let a = dd.1.atan2(dd.0) + side * r.range(0.5, 1.1);
                 if l.w[i] < 2.2 {
-                    let dd = l.dir(i);
-                    let a = dd.1.atan2(dd.0) + side * r.range(0.5, 1.1);
                     shoot(&mut c, l.pts[i], a, r.range(5.0, 14.0), 0.45, twig, 1, &mut r);
+                    s0 += r.range(5.0, 11.0);
+                } else {
+                    // on older wood: a side branch of a few years, itself
+                    // branching, or a short epicormic sprout
+                    if r.f() < 0.55 {
+                        let big = (l.w[i] / 8.0).clamp(1.0, 1.8);
+                        shoot_w(&mut c, l.pts[i], a, r.range(14.0, 34.0) * big, 0.95, 1.4 + 0.5 * big, twig, 2, &mut r);
+                    } else {
+                        shoot(&mut c, l.pts[i], a, r.range(4.0, 9.0), 0.5, twig, 0, &mut r);
+                    }
+                    s0 += r.range(12.0, 26.0);
                 }
                 side = -side;
-                s0 += r.range(5.0, 11.0);
             }
         }
         c.dry();
@@ -327,49 +361,78 @@ fn main() {
                     run_w = 0.0;
                 }
             }
-            // a fork: a small cushion of snow in the crotch
-            if let Some(pi) = l.parent {
-                let par = &oak.limbs[pi];
-                if l.w[0] > 3.0 && par.w[l.at.min(par.w.len() - 1)] > 5.0 && r.f() < 0.7 {
-                    let q = par.pts[l.at.min(par.pts.len() - 1)];
-                    let mut held = Held::new(Tool::round_sable((l.w[0] * 0.8).min(7.0)), r.next_u64());
-                    held.load(white, 0.8);
-                    c.touch(&mut held, &Touch::at(q.0, q.1 - l.w[0] * 0.3).pressure(0.6), None);
-                }
-            }
         }
-        // heaps in the bark on the windward side of the bole
+        // snow driven against the windward (left) side of the bole, caught
+        // in the rough bark: a dry brush skipping down the side, broken
         let trunk = &oak.limbs[0];
-        for i in 0..trunk.pts.len() {
-            if trunk.w[i] < 8.0 {
-                break;
+        let nt = trunk.pts.iter().zip(&trunk.w).take_while(|(p, w)| **w > 10.0 && p.1 > BASE.1 - 170.0).count();
+        for k in 0..7 {
+            let u = 0.55 + 0.4 * (k as f32 / 6.0) + r.normal() * 0.04;
+            let a = (r.f() * nt as f32 * 0.5) as usize;
+            let b = (a + 2 + (r.f() * nt as f32 * 0.6) as usize).min(nt);
+            let pts: Vec<(f32, f32)> = (a..b.max(a + 2).min(trunk.pts.len()))
+                .map(|i| (trunk.pts[i].0 - trunk.w[i] * 0.5 * u, trunk.pts[i].1))
+                .collect();
+            if pts.len() < 2 {
+                continue;
             }
-            let (x, y) = trunk.pts[i];
-            for _ in 0..3 {
-                let u = r.range(0.45, 0.95);
-                let py = y + r.range(-4.0, 4.0);
-                let px = x - trunk.w[i] * 0.5 * u;
-                let mut held = Held::new(Tool { point: 0.6, ragged: 0.5, ..Tool::round_sable(r.range(1.2, 2.6)) }, r.next_u64());
-                held.load(if r.f() < 0.7 { white } else { blue }, 0.6);
-                let len = r.range(2.0, 7.0);
-                c.drag(&mut held, &Gesture::new(vec![(px, py), (px + r.normal() * 0.4, py + len)]).pressure(0.6, 0.3).ramps(0.2, 0.5).shake(0.8), Some(&thick));
-            }
+            let mut held = Held::new(Tool { ragged: 0.8, ..Tool::filbert(r.range(2.0, 4.0)) }, r.next_u64());
+            held.load(if k % 3 == 2 { blue } else { white }, r.range(0.12, 0.3));
+            c.drag(&mut held, &Gesture::new(pts).pressure(r.range(0.25, 0.45), 0.2).ramps(0.2, 0.3).shake(0.9), Some(&thick));
         }
         c.dry();
     }
 
     // the foot of the tree: snow heaped round it, the drift banked on the
     // windward side
-    let mound = Fbm::new(29, 3, 40.0);
+    let mound = Fbm::new(29, 3, 12.0);
     let tw0 = oak.limbs[0].w[0];
+    let mound_top = move |x: f32| {
+        let dx = (x - BASE.0) / (tw0 * 0.5);
+        // highest against the windward (left) side of the bole, where the
+        // wind piled it, low on the lee
+        let bank = (-(dx + 0.75).powi(2) * 1.3).exp() * 17.0 + (-(dx - 0.6).powi(2) * 1.6).exp() * 7.0;
+        let spread = (-(dx * dx) / 9.0).exp() * 6.0;
+        BASE.1 + 9.0 - bank - spread + 2.2 * mound.get(x, 3.0)
+    };
     let foot_m = Mask::from_fn(f, move |x, y| {
-        let dx = (x - BASE.0 + 6.0) / (tw0 * 1.5);
-        let top = BASE.1 - 4.0 - 9.0 * (1.0 - dx * dx).max(0.0) - 5.0 * (1.0 - ((x - BASE.0 + tw0 * 0.6) / 16.0).powi(2)).max(0.0) + 2.5 * mound.get(x, 0.0);
-        smoothstep(top - 1.0, top + 1.0, y) * (1.0 - smoothstep(BASE.1 + 18.0, BASE.1 + 30.0, y)) * (1.0 - smoothstep(0.8, 1.2, dx.abs() * 0.5))
+        let dx = (x - BASE.0) / (tw0 * 0.5);
+        let t = mound_top(x);
+        smoothstep(t - 0.6, t + 0.6, y) * (1.0 - smoothstep(BASE.1 + 16.0, BASE.1 + 26.0, y)) * (1.0 - smoothstep(2.4, 3.6, dx.abs()))
     });
     if o.stage("foot", &mut c, &mut rng) {
-        let heap = Handling::new(Tool::round_sable(4.0)).mixed(pal, 0.1).pressure(0.7, 0.95).dips(3, 0.7, 0.8).clip(true).threshold(0.1).curve(0.04, 0.2).color(move |x, y| mix(snow_col(x, y), hex("#eeebe2"), 0.5 * smoothstep(BASE.1 + 12.0, BASE.1 - 10.0, y), Mix::Light)).angle(|_, _| 0.0).length(6.0, 18.0).coverage(3.0).medium(0.1);
+        let tc = move |x: f32, y: f32| {
+            let dx = (x - BASE.0) / (tw0 * 0.5);
+            // lit on the upper left of the drift, cool in the lee and in
+            // the hollow the eddy scoured just below the bole on the right
+            let lit = smoothstep(mound_top(x) + 7.0, mound_top(x), y) * smoothstep(1.2, -0.4, dx);
+            let lee = smoothstep(-0.2, 1.2, dx) * smoothstep(3.2, 1.2, dx) * smoothstep(mound_top(x), mound_top(x) + 8.0, y);
+            let base = mix(snow_col(x, y), hex("#f1eee6"), 0.6 * lit, Mix::Light);
+            mix(base, hex("#a7adb6"), 0.45 * lee, Mix::Light)
+        };
+        let heap = Handling::new(Tool::round_sable(3.5))
+            .mixed(pal, 0.1)
+            .pressure(0.7, 0.95)
+            .dips(3, 0.7, 0.8)
+            .clip(true)
+            .threshold(0.1)
+            .curve(0.06, 0.3)
+            .color(tc)
+            .angle(|x, _| 0.1 * ((x - BASE.0) / 30.0).sin())
+            .length(5.0, 16.0)
+            .coverage(3.2)
+            .medium(0.1);
         c.work(&foot_m, &heap, 51);
+        // the crest of the drift against the bark, cut with a sable
+        let mut r = Rng::new(o.seed + 551);
+        let white = pal.mix(hex("#f3f0e8")).paint(0.08);
+        let pts: Vec<(f32, f32)> = (0..40).map(|i| {
+            let x = BASE.0 - tw0 * 1.4 + tw0 * 2.6 * i as f32 / 39.0;
+            (x, mound_top(x) + 0.8)
+        }).collect();
+        let mut held = Held::new(Tool { point: 0.6, ..Tool::round_sable(2.0) }, r.next_u64());
+        held.load(white, 0.8);
+        c.drag(&mut held, &Gesture::new(pts).pressure(0.6, 0.4).ramps(0.2, 0.3).shake(0.8), Some(&foot_m.clone().dilate(2.0)));
         c.dry();
     }
 
@@ -380,15 +443,15 @@ fn main() {
         let dead = pal.mix(hex("#4d4943")).paint(0.25);
         let shadow = pal.mix(hex("#a3a8b0")).paint(0.4);
         let white = pal.mix(hex("#efede6")).paint(0.08);
-        let main = vec![(612.0, 1101.0), (650.0, 1098.0), (690.0, 1101.0), (726.0, 1097.0), (752.0, 1099.0)];
-        let mut hs = Held::new(Tool::round_sable(5.0), r.next_u64());
+        let main = vec![(598.0, 1146.0), (650.0, 1141.0), (706.0, 1146.0), (760.0, 1139.0), (808.0, 1143.0), (846.0, 1140.0)];
+        let mut hs = Held::new(Tool::round_sable(8.0), r.next_u64());
         hs.load(shadow, 0.6);
-        let sh: Vec<(f32, f32)> = main.iter().map(|p| (p.0 + 2.0, p.1 + 3.5)).collect();
+        let sh: Vec<(f32, f32)> = main.iter().map(|p| (p.0 + 3.0, p.1 + 5.0)).collect();
         c.drag(&mut hs, &Gesture::new(sh).pressure(0.6, 0.3).ramps(0.2, 0.3).shake(0.5), None);
-        let mut hm = Held::new(Tool { point: 0.4, ..Tool::round_sable(4.5) }, r.next_u64());
+        let mut hm = Held::new(Tool { point: 0.4, ..Tool::round_sable(7.0) }, r.next_u64());
         hm.load(dead, 0.9);
         c.drag(&mut hm, &Gesture::new(main.clone()).pressure(0.9, 0.35).ramps(0.0, 0.4).shake(0.6), None);
-        let claws = [((650.0, 1098.0), -2.3, 16.0), ((690.0, 1101.0), -1.1, 22.0), ((726.0, 1097.0), -0.7, 14.0), ((752.0, 1099.0), -2.8, 9.0)];
+        let claws = [((650.0, 1141.0), -2.2, 26.0), ((706.0, 1146.0), -1.2, 34.0), ((760.0, 1139.0), -0.6, 22.0), ((808.0, 1143.0), -2.6, 16.0), ((846.0, 1140.0), -0.3, 12.0)];
         for &(p, a, len) in &claws {
             shoot(&mut c, p, a, len, 0.8, dead, 1, &mut r);
         }
@@ -396,10 +459,11 @@ fn main() {
         let wood = pal.mix(hex("#a39883")).paint(0.2);
         let mut hw = Held::new(Tool::round_sable(1.6), r.next_u64());
         hw.load(wood, 0.6);
-        c.drag(&mut hw, &Gesture::new(vec![(611.0, 1099.0), (612.5, 1103.0)]).pressure(0.7, 0.4), None);
-        let mut hsn = Held::new(Tool { point: 0.5, ..Tool::round_sable(2.2) }, r.next_u64());
+        c.drag(&mut hw, &Gesture::new(vec![(597.0, 1143.0), (599.0, 1149.0)]).pressure(0.8, 0.5), None);
+        c.drag(&mut hw, &Gesture::new(vec![(595.0, 1144.5), (591.0, 1146.0)]).pressure(0.5, 0.0).ramps(0.0, 0.8), None);
+        let mut hsn = Held::new(Tool { point: 0.5, ..Tool::round_sable(3.2) }, r.next_u64());
         hsn.load(white, 0.8);
-        let top: Vec<(f32, f32)> = main.iter().map(|p| (p.0, p.1 - 2.2)).collect();
+        let top: Vec<(f32, f32)> = main.iter().skip(1).map(|p| (p.0, p.1 - 3.2)).collect();
         c.drag(&mut hsn, &Gesture::new(top).pressure(0.7, 0.4).ramps(0.2, 0.3).shake(0.8), None);
         c.dry();
     }
@@ -409,21 +473,31 @@ fn main() {
         // with fine upturning strokes [NG p.56], in tufts, more near us
         let mut r = Rng::new(o.seed + 1001);
         let straw = [pal.mix(hex("#8c7b58")).paint(0.2), pal.mix(hex("#6e604a")).paint(0.2), pal.mix(hex("#a08d66")).paint(0.2), pal.mix(hex("#4f463a")).paint(0.2)];
-        let tufts = 70;
-        for k in 0..tufts {
-            let y = HORIZON + 25.0 + (h - HORIZON - 30.0) * r.f().powf(0.7);
+        // patches: where the wind has blown the snow thin, grass shows in
+        // groups of tufts; a patch round the foot, a few near us
+        let mut patches: Vec<(f32, f32, f32, usize)> = vec![(BASE.0 - 40.0, BASE.1 + 18.0, 60.0, 9), (BASE.0 + 70.0, BASE.1 + 12.0, 40.0, 6)];
+        for _ in 0..9 {
+            let y = HORIZON + 40.0 + (h - HORIZON - 50.0) * r.f().powf(0.6);
             let near = ((y - HORIZON) / (h - HORIZON)).clamp(0.0, 1.0);
-            let x = if k < 12 { BASE.0 + r.range(-70.0, 90.0) } else { r.range(10.0, 990.0) };
-            let y = if k < 12 { BASE.1 + r.range(2.0, 30.0) } else { y };
-            let blades = 3 + (r.f() * 8.0 * (0.4 + near)) as usize;
-            for _ in 0..blades {
-                let ht = r.range(4.0, 16.0) * (0.35 + near);
-                let lean = r.range(-0.45, 0.45);
-                let fx = x + r.normal() * 2.0 * (0.4 + near);
-                let pts = vec![(fx, y), (fx + lean * ht * 0.3, y - ht * 0.55), (fx + lean * ht, y - ht)];
-                let mut held = Held::new(Tool { point: 1.0, ..Tool::rigger(0.9 * (0.5 + near)) }, r.next_u64());
-                held.load(straw[(r.f() * 4.0) as usize % 4], 0.7);
-                c.drag(&mut held, &Gesture::new(pts).pressure(0.7, 0.0).ramps(0.05, 0.8).shake(0.5), None);
+            patches.push((r.range(20.0, 980.0), y, 25.0 + 70.0 * near, 3 + (r.f() * 7.0 * near) as usize));
+        }
+        patches.push((140.0, h - 30.0, 90.0, 12));
+        patches.push((860.0, h - 55.0, 70.0, 8));
+        for &(px, py, spread, n) in &patches {
+            for _ in 0..n {
+                let x = px + r.normal() * spread * 0.5;
+                let y = py + r.normal() * spread * 0.12;
+                let near = ((y - HORIZON) / (h - HORIZON)).clamp(0.05, 1.0);
+                let blades = 3 + (r.f() * 9.0 * near) as usize;
+                for _ in 0..blades {
+                    let ht = r.range(4.0, 18.0) * (0.3 + near);
+                    let lean = r.range(-0.5, 0.35);
+                    let fx = x + r.normal() * 2.5 * (0.3 + near);
+                    let pts = vec![(fx, y), (fx + lean * ht * 0.3, y - ht * 0.55), (fx + lean * ht, y - ht)];
+                    let mut held = Held::new(Tool { point: 1.0, ..Tool::rigger(0.9 * (0.5 + near)) }, r.next_u64());
+                    held.load(straw[(r.f() * 4.0) as usize % 4], 0.7);
+                    c.drag(&mut held, &Gesture::new(pts).pressure(0.7, 0.0).ramps(0.05, 0.8).shake(0.5), None);
+                }
             }
         }
         c.dry();
@@ -534,6 +608,11 @@ fn limb(c: &mut Canvas, l: &Limb, live: Paint, dead: Paint, rng: &mut Rng) {
 /// with `depth` levels of side twiglets.
 #[allow(clippy::too_many_arguments)]
 fn shoot(c: &mut Canvas, from: (f32, f32), angle: f32, len: f32, pressure: f32, p: Paint, depth: u32, r: &mut Rng) {
+    shoot_w(c, from, angle, len, pressure, 0.9, p, depth, r)
+}
+
+#[allow(clippy::too_many_arguments)]
+fn shoot_w(c: &mut Canvas, from: (f32, f32), angle: f32, len: f32, pressure: f32, width: f32, p: Paint, depth: u32, r: &mut Rng) {
     let k = 3 + (r.f() * 2.0) as usize;
     let mut pts = vec![from];
     let mut a = angle;
@@ -547,8 +626,9 @@ fn shoot(c: &mut Canvas, from: (f32, f32), angle: f32, len: f32, pressure: f32, 
         q = (q.0 + a.cos() * step, q.1 + a.sin() * step);
         pts.push(q);
     }
-    let mut held = Held::new(Tool { point: 1.0, length: 3.0, ..Tool::rigger(0.9) }, r.next_u64());
-    held.load(p.with_hiding(p.hiding() * 0.7), 0.6);
+    let mut held = Held::new(Tool { point: 1.0, length: 3.0 * width / 0.9, ..Tool::rigger(width) }, r.next_u64());
+    let lean = (0.6 + 0.3 * (width - 0.9)).clamp(0.6, 1.0);
+    held.load(p.with_hiding(p.hiding() * lean), 0.6 + 0.3 * (lean - 0.6) / 0.4);
     c.drag(&mut held, &Gesture::new(pts.clone()).pressure(pressure, 0.0).ramps(0.0, 0.7).orient(Orient::Along).shake(0.4), None);
     if depth > 0 {
         let m = (r.f() * 2.5) as usize;
@@ -556,7 +636,7 @@ fn shoot(c: &mut Canvas, from: (f32, f32), angle: f32, len: f32, pressure: f32, 
             let i = 1 + (r.f() * (pts.len() - 2) as f32) as usize;
             let side = if r.f() < 0.5 { -1.0 } else { 1.0 };
             let d = (pts[i + 1].0 - pts[i].0, pts[i + 1].1 - pts[i].1);
-            shoot(c, pts[i], d.1.atan2(d.0) + side * r.range(0.5, 1.0), len * r.range(0.3, 0.55), pressure * 0.6, p, depth - 1, r);
+            shoot_w(c, pts[i], d.1.atan2(d.0) + side * r.range(0.5, 1.0), len * r.range(0.3, 0.55), pressure * 0.8, (width * 0.65).max(0.9), p, depth - 1, r);
         }
     }
 }

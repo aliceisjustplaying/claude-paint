@@ -15,7 +15,7 @@
 
 use paint::color::mix;
 use paint::graphite::hand_line;
-use paint::{Fbm, Gesture, Habit, Held, Lead, Limb, Mask, Mix, Orient, Paint, Rgb, Rng, Skeleton, Stipple, Style, Tool, Touch, gradient, hex, smoothstep, Canvas};
+use paint::{Fbm, Gesture, Habit, Held, Lead, Limb, Mask, Mix, Orient, Paint, Rng, Skeleton, Stipple, Style, Tool, Touch, gradient, hex, smoothstep, Canvas};
 
 const ASPECT: f32 = 0.78;
 const HORIZON: f32 = 1000.0;
@@ -64,16 +64,6 @@ fn main() {
     // and broken, the lower crown alive (retrenchment [ATF; HTC])
     let oak = habit(0.12, 34).grow(BASE, TREE_H, tree_seed());
     eprintln!("oak: {} limbs, bounds {:?}, pipe {:.2}", oak.limbs.len(), oak.bounds(), oak.pipe);
-    if std::env::var("LIMBS").is_ok() {
-        for (i, l) in oak.limbs.iter().enumerate() {
-            let a = l.pts[0];
-            let b = *l.pts.last().unwrap();
-            if a.0 > 360.0 && a.0 < 440.0 && a.1 > 900.0 && a.1 < 1010.0 {
-                eprintln!("{i}: order {} w0 {:.1} wend {:.1} len {:.0} {:?}->{:?} dead {} broken {} root {} parent {:?}", l.order, l.w[0], l.w[l.w.len() - 1], l.len(), a, b, l.dead, l.broken, l.root, l.parent);
-            }
-        }
-        return;
-    }
     if let Ok(dir) = std::env::var("PROBE") {
         // a sketchbook of candidate oaks: skeleton silhouettes, 12 seeds a
         // sheet, written as PGM for choosing (not a painting)
@@ -156,7 +146,7 @@ fn main() {
         let across = -(x - bx) * 0.3 + (y - by) * 0.95;
         let reach = smoothstep(-10.0, 30.0, along) * (1.0 - smoothstep(150.0, 520.0, along));
         let width = 16.0 + along.max(0.0) * 0.06;
-        let sh = reach * (1.0 - smoothstep(width * 0.5, width * 1.4, across.abs())) * 0.6;
+        let sh = reach * (1.0 - smoothstep(width * 0.4, width * 1.5, across.abs())) * 0.85;
         // the lower snow around the foot, a slight hollow on the shadow side
         let foot = (1.0 - smoothstep(20.0, 70.0, ((x - bx - 25.0).powi(2) / 4.0 + (y - by - 6.0).powi(2)).sqrt())) * 0.35;
         mix(col, hex("#a9b0bb"), (sh + foot).min(0.65), Mix::Light)
@@ -243,9 +233,9 @@ fn main() {
     let bark_dark = pal.mix(hex("#2f2a25")).paint(0.22);
     let bark_mid = pal.mix(hex("#575149")).paint(0.22);
     let bark_lit = pal.mix(hex("#8c877d")).paint(0.25);
-    let dead_mid = pal.mix(hex("#5d5953")).paint(0.22);
-    let dead_lit = pal.mix(hex("#a39e93")).paint(0.25);
-    let wood = pal.mix(hex("#b8ab90")).paint(0.2);
+    let dead_mid = pal.mix(hex("#6d6860")).paint(0.22);
+    let dead_lit = pal.mix(hex("#8e897f")).paint(0.25);
+    let wood = pal.mix(hex("#948a78")).paint(0.2);
     let tm = oak.mask(f);
 
     if o.stage("tree", &mut c, &mut rng) {
@@ -258,7 +248,7 @@ fn main() {
         // back into the wet: the lit side of the bigger wood, and the dark
         // under the limbs, so each reads as round
         for l in oak.limbs.iter().filter(|l| !l.is_empty() && l.w[0] > 3.0 && !l.root) {
-            model_limb(&mut c, l, bark_lit, dead_lit, bark_dark, &tm, &mut r);
+            model_limb(&mut c, l, bark_lit, dead_lit, bark_dark, &mut r);
         }
         // the outer crown: last year's twigs, crooked and clustered at the
         // tips (oak buds crowd at the shoot tip), a haze, not a mass
@@ -331,6 +321,7 @@ fn main() {
             .medium(0.15)
             .clip(true);
         c.work(&mound, &bank, 41);
+        fallen(&mut c, pal, &mut r);
         grass(&mut c, pal, &mut r);
         c.dry();
     }
@@ -341,6 +332,37 @@ fn main() {
         // [CDF-EICH]
         let mut r = Rng::new(tree_seed() + 5000);
         leaves(&mut c, pal, &oak, &mut r);
+        c.dry();
+    }
+
+    if o.stage("crows", &mut c, &mut rng) {
+        // crows in the dead wood, and two far off over the fields
+        let mut r = Rng::new(tree_seed() + 6000);
+        let black = pal.mix(hex("#1c1b1e")).paint(0.15);
+        // perches: the broken ends of the biggest dead limbs
+        let mut dead: Vec<&Limb> = oak.limbs.iter().filter(|l| l.broken && l.dead_from < l.pts.len() && !l.root && l.w[l.w.len() - 1] > 3.0).collect();
+        // far out against the sky, where a crow is seen
+        let out = |l: &&Limb| (l.pts[l.pts.len() - 1].0 - BASE.0).abs();
+        dead.sort_by(|a, b| out(b).total_cmp(&out(a)));
+        let mut used: Vec<(f32, f32)> = vec![];
+        let mut k = 0;
+        for l in dead.iter() {
+            let e = l.pts[l.pts.len() - 1];
+            if k >= 2 || used.iter().any(|u| (u.0 - e.0).hypot(u.1 - e.1) < 80.0) {
+                continue;
+            }
+            used.push(e);
+            k += 1;
+            let k = k - 1;
+            let n = l.pts.len();
+            let i = n.saturating_sub(2).max(1);
+            let d = l.dir(i);
+            let up = if -d.0 < 0.0 { (d.1, -d.0) } else { (-d.1, d.0) };
+            let at = (l.pts[i].0 + up.0 * l.w[i] * 0.5, l.pts[i].1 + up.1 * l.w[i] * 0.5);
+            crow_perched(&mut c, at, if k == 0 { -1.0 } else { 1.0 }, 15.0, black, &mut r);
+        }
+        crow_flying(&mut c, (140.0, 520.0), 9.0, black, &mut r);
+        crow_flying(&mut c, (176.0, 548.0), 7.0, black, &mut r);
         c.dry();
     }
 
@@ -512,7 +534,7 @@ fn paint_limb(c: &mut Canvas, l: &Limb, dark: Paint, mid: Paint, dead: Paint, rn
 
 /// Back into the wet dark: a lighter stroke down the lit side, a darker
 /// one down the shadow side, following the limb's taper.
-fn model_limb(c: &mut Canvas, l: &Limb, lit: Paint, dead_lit: Paint, dark: Paint, mask: &Mask, rng: &mut Rng) {
+fn model_limb(c: &mut Canvas, l: &Limb, lit: Paint, dead_lit: Paint, dark: Paint, rng: &mut Rng) {
     let (pts, w, deadv) = resample(l, (l.w[0] * 0.25).clamp(0.6, 4.0));
     let keep = w.iter().position(|&x| x < 2.2).unwrap_or(w.len());
     if keep < 3 {
@@ -536,13 +558,8 @@ fn model_limb(c: &mut Canvas, l: &Limb, lit: Paint, dead_lit: Paint, dark: Paint
         let face = ((-d.1) * LIGHT.0 + d.0 * LIGHT.1).abs();
         let a = amt * (0.4 + 0.6 * face);
         let pa = |i: usize| paint.unwrap_or(if deadv[i] { dead_lit } else { lit });
-        let _ = mask;
-        taper_stroke(c, &sp, &sw, deadv, &pa, &|_| a * rng_free(), true, 0.5, rng);
+        taper_stroke(c, &sp, &sw, deadv, &pa, &|_| a, true, 0.5, rng);
     }
-}
-
-fn rng_free() -> f32 {
-    1.0
 }
 
 /// A broken end: blunt, split into a few splinters, pale wood on the face.
@@ -633,7 +650,7 @@ fn snow_on_limb(c: &mut Canvas, l: &Limb, lit: Paint, cool: Paint, lumps: &Fbm, 
     let amt: Vec<f32> = (0..n)
         .map(|i| {
             let d = dir_at(&pts, i);
-            let level = 1.0 - smoothstep(0.35, 0.75, d.1.abs());
+            let level = 1.0 - smoothstep(0.45, 0.8, d.1.abs());
             let thick = smoothstep(0.9, 3.0, w[i]);
             let lump = 0.5 + lumps.get(pts[i].0, pts[i].1);
             // the noise only thickens and thins the ridge; it drops out
@@ -730,6 +747,94 @@ fn crotch(c: &mut Canvas, par: &Limb, child: &Limb, lit: Paint, rng: &mut Rng) {
     c.touch(&mut held, &Touch::at(at.0, at.1).pressure(rng.range(0.5, 0.8)), None);
 }
 
+/// The piece that broke from the dead limb, lying half buried in the snow
+/// before the tree: a crooked grey branch with stubs, snow along its top
+/// and drifted over it in places.
+fn fallen(c: &mut Canvas, pal: &paint::Palette, rng: &mut Rng) {
+    let wood = pal.mix(hex("#5f5a53")).paint(0.2);
+    let dark = pal.mix(hex("#34302b")).paint(0.2);
+    let snow = pal.mix(hex("#efebe1")).paint(0.14);
+    let cool = pal.mix(hex("#b4bac3")).paint(0.14);
+    let pts = vec![(530.0, 1172.0), (575.0, 1179.0), (612.0, 1175.0), (640.0, 1186.0), (683.0, 1190.0), (712.0, 1186.0)];
+    // the shadow under it on the snow first
+    let mut sh = Held::new(Tool { ragged: 0.4, ..Tool::round_sable(5.0) }, rng.next_u64());
+    sh.load(cool, 0.6);
+    let low: Vec<(f32, f32)> = pts.iter().map(|p| (p.0 + 5.0, p.1 + 5.0)).collect();
+    c.drag(&mut sh, &Gesture::new(low).pressure(0.8, 0.5).ramps(0.2, 0.4).shake(0.6), None);
+    // the branch, thick end left, and its dark underside
+    let mut b = Held::new(Tool { point: 0.7, ragged: 0.15, ..Tool::round_sable(10.0) }, rng.next_u64());
+    b.load(wood, 0.9);
+    c.drag(&mut b, &Gesture::new(pts.clone()).pressure(0.9, 0.35).ramps(0.06, 0.2).shake(0.6), None);
+    let mut u = Held::new(Tool { point: 0.7, ..Tool::round_sable(2.5) }, rng.next_u64());
+    u.load(dark, 0.7);
+    let under: Vec<(f32, f32)> = pts.iter().map(|p| (p.0, p.1 + 2.6)).collect();
+    c.drag(&mut u, &Gesture::new(under).pressure(0.8, 0.3).ramps(0.1, 0.3).shake(0.6), None);
+    // stubs of its side branches, broken short
+    for &(x, y, dx, dy) in &[(600.0f32, 1178.0f32, 6.0f32, -12.0f32), (640.0, 1182.0, -4.0, -9.0), (668.0, 1185.0, 9.0, -6.0)] {
+        let mut t = Held::new(Tool { point: 0.8, ..Tool::round_sable(2.2) }, rng.next_u64());
+        t.load(wood, 0.8);
+        c.drag(&mut t, &Gesture::new(vec![(x, y), (x + dx * 0.6, y + dy * 0.5), (x + dx, y + dy)]).pressure(0.8, 0.2).ramps(0.0, 0.5).shake(0.6), None);
+    }
+    // snow along its top, and drifted over it at two places
+    let top: Vec<(f32, f32)> = pts.iter().map(|p| (p.0, p.1 - 3.2)).collect();
+    let mut s = Held::new(Tool { point: 0.5, ragged: 0.4, ..Tool::round_sable(2.6) }, rng.next_u64());
+    s.load(snow, 0.8);
+    c.drag(&mut s, &Gesture::new(top[..3].to_vec()).pressure(0.7, 0.5).ramps(0.2, 0.3).swell(vec![1.0, 0.6, 1.1, 0.8]).shake(0.6), None);
+    for &(x, y, w) in &[(608.0f32, 1179.0f32, 12.0f32), (672.0, 1186.0, 9.0)] {
+        let mut d = Held::new(Tool { ragged: 0.4, ..Tool::filbert(6.0) }, rng.next_u64());
+        d.load(snow, 0.8);
+        c.drag(&mut d, &Gesture::new(vec![(x - w * 0.5, y + 2.0), (x, y - 1.0), (x + w * 0.5, y + 2.5)]).pressure(0.7, 0.5).ramps(0.3, 0.4).shake(0.7), None);
+    }
+}
+
+/// A crow sitting on a branch at `at` (its feet), facing left (-1) or
+/// right (1): a body pressed in one short stroke, the head a touch, the
+/// beak a flick, the tail a stroke drawn down and back.
+fn crow_perched(c: &mut Canvas, at: (f32, f32), face: f32, size: f32, black: Paint, rng: &mut Rng) {
+    let s = size;
+    let body_c = (at.0, at.1 - s * 0.3);
+    let mut b = Held::new(Tool { point: 0.6, ..Tool::round_sable(s * 0.42) }, rng.next_u64());
+    b.load(black, 0.9);
+    // body: from the tail root up to the shoulders, leaning forward
+    let tail_root = (body_c.0 - face * s * 0.28, body_c.1 + s * 0.08);
+    let shoulder = (body_c.0 + face * s * 0.22, body_c.1 - s * 0.12);
+    c.drag(&mut b, &Gesture::new(vec![tail_root, body_c, shoulder]).pressure(0.75, 0.9).ramps(0.2, 0.2).shake(0.4), None);
+    // head
+    let head = (shoulder.0 + face * s * 0.08, shoulder.1 - s * 0.07);
+    let mut h = Held::new(Tool { point: 0.5, ..Tool::round_sable(s * 0.3) }, rng.next_u64());
+    h.load(black, 0.9);
+    // the neck and head pulled up out of the wet body in one short stroke
+    c.drag(&mut h, &Gesture::new(vec![shoulder, head]).pressure(0.9, 0.8).ramps(0.0, 0.3).shake(0.2), None);
+    // beak
+    let mut k = Held::new(Tool { point: 1.0, ..Tool::round_sable(s * 0.1) }, rng.next_u64());
+    k.load(black, 0.8);
+    c.drag(&mut k, &Gesture::new(vec![head, (head.0 + face * s * 0.22, head.1 + s * 0.03)]).pressure(0.8, 0.0).ramps(0.0, 0.8).shake(0.2), None);
+    // tail: down and back
+    let mut t = Held::new(Tool { point: 0.8, ..Tool::round_sable(s * 0.18) }, rng.next_u64());
+    t.load(black, 0.8);
+    c.drag(&mut t, &Gesture::new(vec![tail_root, (tail_root.0 - face * s * 0.3, tail_root.1 + s * 0.3)]).pressure(0.8, 0.4).ramps(0.0, 0.3).shake(0.3), None);
+    // legs to the branch
+    let mut l = Held::new(Tool { point: 1.0, ..Tool::rigger(s * 0.05) }, rng.next_u64());
+    l.load(black, 0.7);
+    for dx in [-0.05f32, 0.07] {
+        c.drag(&mut l, &Gesture::line((body_c.0 + face * dx * s, body_c.1 + s * 0.12), (at.0 + face * dx * s * 1.2, at.1 + 0.3)).pressure(0.6, 0.5).shake(0.2), None);
+    }
+}
+
+/// A crow flying far off: two wing strokes pressed at the body and lifted
+/// toward the tips, a touch for the body.
+fn crow_flying(c: &mut Canvas, at: (f32, f32), size: f32, black: Paint, rng: &mut Rng) {
+    let mut b = Held::new(Tool { point: 1.0, ..Tool::round_sable(size * 0.2) }, rng.next_u64());
+    let lift = rng.range(-0.3, 0.3);
+    for side in [-1.0f32, 1.0] {
+        b.reload(black, 0.8);
+        let tip = (at.0 + side * size, at.1 - size * (0.25 + lift * side * 0.5));
+        let mid = (at.0 + side * size * 0.45, at.1 - size * 0.32);
+        c.drag(&mut b, &Gesture::new(vec![at, mid, tip]).pressure(0.8, 0.0).ramps(0.05, 0.75).shake(0.4), None);
+    }
+    c.touch(&mut b, &Touch::at(at.0, at.1 + 0.4).pressure(0.6), None);
+}
+
 /// Dry grass stalks through the snow: fine strokes flicked upward.
 fn grass(c: &mut Canvas, pal: &paint::Palette, rng: &mut Rng) {
     let colors = [hex("#7a6844"), hex("#8d7a52"), hex("#5b4c35"), hex("#a08d63")];
@@ -774,7 +879,7 @@ fn grass(c: &mut Canvas, pal: &paint::Palette, rng: &mut Rng) {
 fn twigs(c: &mut Canvas, l: &Limb, paint: Paint, rng: &mut Rng) {
     let n = l.pts.len();
     let wend = l.w[n - 1];
-    if wend > 2.2 {
+    if wend > 3.0 {
         return;
     }
     let arc = cumulative(&l.pts);
@@ -826,10 +931,10 @@ fn twigs(c: &mut Canvas, l: &Limb, paint: Paint, rng: &mut Rng) {
         spray(c, tip, dd, rng.range(8.0, 20.0), (wend * 0.8).clamp(0.3, 0.8), 2, rng);
     }
     // and from along the thin stretch of the limb, both sides: the net
-    let thin_from = l.w.iter().position(|&x| x < 3.0).unwrap_or(n - 1);
+    let thin_from = l.w.iter().position(|&x| x < 5.0).unwrap_or(n - 1);
     let span = total - arc[thin_from];
-    let m = (span / 7.0) as usize;
-    for _ in 0..m.min(24) {
+    let m = (span / 6.0) as usize;
+    for _ in 0..m.min(34) {
         let t = total - rng.range(2.0, span.max(2.5));
         let i = arc.iter().position(|&a| a >= t).unwrap_or(n - 1).clamp(1, n - 1);
         let p = l.pts[i];
@@ -865,6 +970,3 @@ fn leaves(c: &mut Canvas, pal: &paint::Palette, oak: &Skeleton, rng: &mut Rng) {
         }
     }
 }
-
-#[allow(dead_code)]
-fn _unused(_: Rgb) {}

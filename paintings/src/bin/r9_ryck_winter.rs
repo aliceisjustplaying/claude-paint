@@ -196,20 +196,29 @@ fn main() {
     // than the tree lines (they stand in more air): x positions
     let town = (620.0f32, 745.0f32);
     if o.stage("town", &mut c, &mut rng) {
-        let air = pile(&st, "#9f9aa3", 0.85, 0.6);
-        let roofs = pile(&st, "#a29ca4", 0.85, 0.6);
-        // the roofs: a low broken band, gable after gable
-        let mut r = Held::new(Tool::round_sable(1.4), 30);
+        let air = pile(&st, "#9d9aa4", 0.85, 0.6);
+        let roofs = pile(&st, "#98949e", 0.85, 0.6);
+        // the roofs: a low, broken band laid in short level strokes, its top
+        // edge stepping up and down; here and there a gable end or a roof
+        // ridge a little higher, never two alike
+        let mut r = Held::new(Tool { point: 0.6, ..Tool::round_sable(1.6) }, 30);
         r.load(roofs, 0.6);
-        let mut x = town.0 - 20.0;
-        while x < town.1 + 25.0 {
-            let gw = rng.range(3.0, 8.0);
-            let gh = rng.range(2.0, 5.0);
-            let base = horizon(x) + 0.5;
-            c.drag(&mut r, &Gesture::new(vec![(x, base), (x + gw * 0.5, base - gh), (x + gw, base)]).pressure(0.7, 0.6).ramps(0.1, 0.2), None);
-            c.touch(&mut r, &Touch::at(x + gw * 0.5, base - gh * 0.4).pressure(0.8).drag(gw * 0.4, 0.0), None);
-            x += gw * rng.range(0.7, 1.3);
-            if rng.f() < 0.1 {
+        let mut x = town.0 - 30.0;
+        while x < town.1 + 30.0 {
+            let seg = rng.range(4.0, 16.0);
+            let top = rng.range(1.2, 3.8) * (1.0 - 0.5 * smoothstep(30.0, 60.0, (x - 690.0).abs()));
+            let base = horizon(x) + 0.6;
+            c.drag(&mut r, &Gesture::new(vec![(x, base - top), (x + seg * 0.5, base - top - rng.range(-0.3, 0.3)), (x + seg, base - top + rng.range(-0.4, 0.4))]).pressure(rng.range(0.5, 0.9), rng.range(0.4, 0.8)).ramps(0.1, 0.2).shake(0.6), None);
+            c.drag(&mut r, &Gesture::new(vec![(x + seg * 0.1, base - top * 0.4), (x + seg * 0.9, base - top * 0.4)]).pressure(0.8, 0.8).ramps(0.1, 0.1), None);
+            if rng.f() < 0.3 {
+                // a gable: a small steep triangle rising from the band
+                let gx = x + rng.range(0.0, seg);
+                let gw = rng.range(2.0, 4.5);
+                let gh = rng.range(1.5, 3.5);
+                c.drag(&mut r, &Gesture::new(vec![(gx - gw * 0.5, base - top), (gx, base - top - gh), (gx + gw * 0.5, base - top)]).pressure(0.55, 0.5).ramps(0.1, 0.1).orient(Orient::Along), None);
+            }
+            x += seg * rng.range(0.8, 1.2);
+            if rng.f() < 0.15 {
                 r.reload(roofs, 0.6);
             }
         }
@@ -582,6 +591,48 @@ fn main() {
                 c.drag(&mut rig, &Gesture::new(pts).pressure(rng.range(0.5, 0.9), 0.05).ramps(0.03, 0.7).orient(Orient::Along), None);
             }
         }
+        // an old fence running across the field from the river to the path:
+        // weathered posts, leaning, one or two gone, snow capping them and
+        // drifted against their feet
+        let yb = yh + 0.25 * (h - yh);
+        let (ax, ay) = (bank_r(yb) + 14.0, yb);
+        let (bx, by) = (path_x(0.14) - 26.0, yh + 0.14 * (h - yh));
+        let mut po = Held::new(Tool { point: 0.5, ..Tool::round_sable(1.6) }, 82);
+        let mut cap = Held::new(Tool { lay: 0.8, ..Tool::filbert(2.0) }, 83);
+        for k in 0..11 {
+            if k == 4 || k == 8 {
+                continue; // fallen
+            }
+            let u = (k as f32 + rng.range(-0.4, 0.4)) / 10.0;
+            let px = ax + (bx - ax) * u;
+            let py = ay + (by - ay) * u;
+            let t = depth(py);
+            let ph = 70.0 * t * rng.range(0.6, 1.1);
+            let tilt = rng.range(-0.12, 0.12);
+            po.tool.width = (1.6 + 5.0 * t).min(3.0);
+            po.reload(pile(&st, if rng.f() < 0.5 { "#5a5048" } else { "#6c6158" }, 0.9, 0.6), 0.7);
+            c.drag(&mut po, &Gesture::new(vec![(px, py + 0.5), (px + tilt * ph * 0.5, py - ph * 0.5), (px + tilt * ph, py - ph)]).pressure(0.85, 0.75).ramps(0.05, 0.1).shake(0.5), None);
+            cap.tool.width = po.tool.width * 1.1;
+            cap.reload(pile(&st, "#dcd7ce", 0.92, 0.9), 0.5);
+            c.drag(&mut cap, &Gesture::new(vec![(px + tilt * ph - po.tool.width * 0.4, py - ph - 0.2), (px + tilt * ph + po.tool.width * 0.4, py - ph - 0.3)]).pressure(0.6, 0.5).ramps(0.2, 0.3), None);
+            cap.reload(pile(&st, "#d2cfcb", 0.9, 0.85), 0.5);
+            c.drag(&mut cap, &Gesture::new(vec![(px - po.tool.width * 1.5, py + 0.8), (px, py - 0.4), (px + po.tool.width * 1.5, py + 0.6)]).pressure(0.7, 0.3).ramps(0.1, 0.5), None);
+        }
+        // reeds standing out of the ice by the left bank, bent by the wind
+        let mut rd = Held::new(Tool { point: 1.0, ..Tool::rigger(0.9) }, 84);
+        for _ in 0..16 {
+            let t = rng.range(0.45, 1.0f32);
+            let gy = yh + t * (h - yh);
+            let gx = bank_l(gy) + rng.range(2.0, 16.0) * t;
+            for _ in 0..(3.0 + 6.0 * rng.f()) as u32 {
+                rd.tool.width = 0.4 + 0.9 * t;
+                rd.reload(pile(&st, if rng.f() < 0.6 { "#8a7558" } else { "#5e4f40" }, 0.85, 0.6), 0.6);
+                let x = gx + rng.normal() * 2.0 * t;
+                let hg = rng.range(10.0, 26.0) * t;
+                let bend = rng.range(0.1, 0.35) * hg;
+                c.drag(&mut rd, &Gesture::new(vec![(x, gy), (x + bend * 0.25, gy - hg * 0.55), (x + bend, gy - hg)]).pressure(0.7, 0.1).ramps(0.03, 0.6).orient(Orient::Along), None);
+            }
+        }
         // crows: a few in the air over the far fields, dark gestures, and a
         // pair sitting on the head of the nearest willow
         let mut cr = Held::new(Tool { point: 1.0, ..Tool::round_sable(1.6) }, 81);
@@ -599,7 +650,9 @@ fn main() {
         c.dry();
     }
 
-    o.finish(&mut c, &mut rng, &Finish::aged(st.relief));
+    // a picture kept well: the craquelure fine and clean, not soiled
+    let cracks = paint::Cracks { depth_um: 12.0, dirt: 0.2, veil: 0.3, ..paint::Cracks::aged(0) };
+    o.finish(&mut c, &mut rng, &Finish { cracks: Some(cracks), ..Finish::aged(st.relief) });
 }
 
 /// A pollard willow at (x, y) (its foot), `ht` units tall to the tips of
@@ -623,13 +676,19 @@ fn willow(c: &mut paint::Canvas, st: &Style, rng: &mut Rng, x: f32, y: f32, ht: 
 
     // the trunk: side by side strokes pulled up from the foot, a little
     // curved, the gnarled shaft swelling into the head
-    let mut br = Held::new(Tool { point: 0.6, ..Tool::round_sable((tw * 0.35).max(0.8)) }, 900 + id * 17);
+    let mut br = Held::new(Tool { point: 0.6, push: 0.005, ..Tool::round_sable((tw * 0.35).max(0.8)) }, 900 + id * 17);
     let strokes = (4.0 + 6.0 * s.min(1.5)) as usize;
     for k in 0..strokes {
         let u = (k as f32 + 0.5) / strokes as f32 * 2.0 - 1.0;
         let lit = (u * lit_side).max(0.0);
         let col = gradient(&[(0.0, bark_dark), (1.0, bark_lit)], lit.powf(1.5) * 0.9, Mix::Pigment);
-        br.reload(Paint::new(st.palette.mix(col).color, 0.9, 0.6), 0.7);
+        // the silhouette strokes: a blunt brush and a cooler grey mixed in,
+        // so that where their edge thins over the snow it reads as a soft
+        // grey edge, not a warm brown line
+        let edge = u.abs() > 0.75;
+        let col = if edge { gradient(&[(0.0, col), (1.0, hex("#5f5f66"))], 0.25, Mix::Pigment) } else { col };
+        br.tool.point = if edge { 0.0 } else { 0.6 };
+        br.reload(Paint::new(st.palette.mix(col).color, 0.95, 0.6), 0.7);
         // the shaft's girth up the trunk: a flared foot, a waist, the
         // swollen head where it has been cut back year after year
         let prof = [1.25, 0.95, 0.88, 1.0, 1.35];
@@ -641,17 +700,36 @@ fn willow(c: &mut paint::Canvas, st: &Style, rng: &mut Rng, x: f32, y: f32, ht: 
         }).collect();
         c.drag(&mut br, &Gesture::new(pts).pressure(rng.range(0.75, 0.95), rng.range(0.7, 0.95)).ramps(0.05, 0.1), None);
     }
-    // the head: a swollen, knuckled crown, dabbed and turned with the brush
-    let mut dab = Held::new(Tool::round_sable((tw * 0.3).max(0.7)), 901 + id * 17);
-    let knobs = (6.0 + 10.0 * s.min(1.5)) as usize;
+    // the head: a swollen, knuckled crown, the stumps of old cuts standing
+    // up from it; each a short, thick stroke pushed up and out of the head
+    // and lifted, darker below, a touch of light on the sun's side
+    let mut dab = Held::new(Tool { point: 0.4, ..Tool::round_sable((tw * 0.2).max(0.6)) }, 901 + id * 17);
+    let knobs = (5.0 + 8.0 * s.min(1.5)) as usize;
     for _ in 0..knobs {
         let a = rng.range(-1.0, 1.0);
-        let px = head.0 + a * tw * 0.8;
-        let py = head.1 - rng.range(-0.15, 0.3) * tw;
-        let lit = (a * lit_side).max(0.0);
-        let col = gradient(&[(0.0, bark_dark), (1.0, bark_lit)], lit * 0.8, Mix::Pigment);
-        dab.reload(Paint::new(st.palette.mix(col).color, 0.9, 0.7), 0.6);
-        c.touch(&mut dab, &Touch::at(px, py).pressure(rng.range(0.6, 1.0)).drag(rng.range(-0.3, 0.3) * tw, -rng.range(0.1, 0.35) * tw), None);
+        let px = head.0 + a * tw * 0.65;
+        let py = head.1 + rng.range(0.0, 0.2) * tw;
+        let lit = (a * lit_side).max(0.0) * rng.f();
+        let col = gradient(&[(0.0, bark_dark), (1.0, bark_lit)], lit, Mix::Pigment);
+        dab.tool.width = (tw * rng.range(0.15, 0.3)).max(0.6);
+        dab.reload(Paint::new(st.palette.mix(col).color, 0.92, 0.7), 0.7);
+        let ang = -std::f32::consts::FRAC_PI_2 + a * 0.7 + rng.range(-0.2, 0.2);
+        let l = tw * rng.range(0.2, 0.5);
+        c.drag(&mut dab, &Gesture::new(vec![(px, py), (px + l * 0.5 * ang.cos(), py + l * 0.5 * ang.sin()), (px + l * ang.cos(), py + l * ang.sin())]).pressure(0.95, 0.5).ramps(0.05, 0.4), None);
+    }
+    // an old tree splits: a dark cleft down the shaft, its lip catching
+    // a little light on the sun's side
+    if ht > 200.0 {
+        let cu = rng.range(-0.25, 0.1) * lit_side;
+        let at = |v: f32, du: f32| (x + lean * trunk_h * v + kink * (std::f32::consts::PI * v).sin() * tw + (cu + du) * tw * 0.5, y - trunk_h * v);
+        let mut cl = Held::new(Tool { point: 0.7, ..Tool::round_sable(tw * 0.09) }, 906 + id * 17);
+        cl.load(Paint::new(st.palette.mix(hex("#15110e")).color, 0.95, 0.7), 0.8);
+        let pts: Vec<(f32, f32)> = (0..6).map(|j| at(0.25 + 0.7 * j as f32 / 5.0, 0.04 * (j as f32 * 1.7).sin())).collect();
+        c.drag(&mut cl, &Gesture::new(pts).pressure(0.3, 0.9).ramps(0.3, 0.1).swell(vec![0.8, 1.2, 1.0, 1.3]), None);
+        cl.tool.width = tw * 0.04;
+        cl.reload(Paint::new(st.palette.mix(bark_lit).color, 0.9, 0.7), 0.6);
+        let pts: Vec<(f32, f32)> = (0..6).map(|j| at(0.3 + 0.62 * j as f32 / 5.0, 0.12 * lit_side + 0.04 * (j as f32 * 1.7).sin())).collect();
+        c.drag(&mut cl, &Gesture::new(pts).pressure(0.2, 0.7).ramps(0.3, 0.2), None);
     }
     // the bark: short, broken vertical strokes, darker fissures and a few
     // lights on the side toward the sun, following the shaft
@@ -704,15 +782,20 @@ fn willow(c: &mut paint::Canvas, st: &Style, rng: &mut Rng, x: f32, y: f32, ht: 
         let py = head.1 - tw * rng.range(0.2, 0.4);
         c.touch(&mut sn, &Touch::at(px, py).pressure(rng.range(0.3, 0.6)).drag(rng.range(0.15, 0.4) * tw, rng.range(-0.05, 0.05) * tw), None);
     }
-    // the foot buried: snow dragged across the base of the trunk from the
-    // side, a drift heaped against it
-    let mut dr = Held::new(Tool { lay: 0.9, ..Tool::filbert((tw * 0.7).max(1.2)) }, 904 + id * 17);
-    for k in 0..4 {
-        dr.reload(pile(st, if k % 2 == 0 { "#d2cec8" } else { "#c2c1c6" }, 0.92, 0.85), 0.5);
-        let yy = y + rng.range(-0.4, 1.0) * s * 2.0;
-        let side = if k % 2 == 0 { -1.0 } else { 1.0 };
-        let x0 = x + side * tw * rng.range(0.6, 1.0);
-        c.drag(&mut dr, &Gesture::new(vec![(x0, yy + 1.0 * s), (x + side * tw * 0.2, yy - s * 1.5), (x - side * tw * rng.range(0.0, 0.3), yy - s * 0.6)]).pressure(0.8, 0.3).ramps(0.1, 0.5), None);
+    // the foot buried: a drift heaped against the trunk, laid in short
+    // level strokes of stiff snow from the lower edge up over the foot, the
+    // top of the heap lit, its far side cool
+    let mut dr = Held::new(Tool { lay: 1.0, stiffness: 0.7, ..Tool::filbert((tw * 0.22).max(1.0)) }, 904 + id * 17);
+    let rows = (3.0 + 5.0 * s.min(1.5)) as usize;
+    for k in 0..rows {
+        let v = k as f32 / rows as f32; // 0 at the bottom of the heap
+        let half = tw * (1.2 - 0.6 * v) * rng.range(0.85, 1.15);
+        let yy = y + tw * 0.12 * (1.0 - v) - tw * 0.18 * v;
+        let col = if v > 0.6 { "#ddd8ce" } else if k % 2 == 0 { "#cfccc8" } else { "#bebec5" };
+        dr.reload(pile(st, col, 0.95, 0.9), 0.55);
+        let x0 = x - half + rng.range(-0.1, 0.1) * tw;
+        let x1 = x + half + rng.range(-0.1, 0.1) * tw;
+        c.drag(&mut dr, &Gesture::new(vec![(x0, yy + rng.range(-0.03, 0.03) * tw), ((x0 + x1) * 0.5, yy - tw * 0.04), (x1, yy + rng.range(-0.03, 0.03) * tw)]).pressure(rng.range(0.55, 0.85), rng.range(0.3, 0.6)).ramps(0.25, 0.35), None);
     }
 }
 
@@ -767,8 +850,8 @@ fn man_from_behind(c: &mut paint::Canvas, st: &Style, rng: &mut Rng, x: f32, y: 
     hb.load(hat, 0.9);
     // brim, then the crown of a tall hat
     c.drag(&mut hb, &Gesture::new(vec![(x - 7.5 * u, sh_y - 12.5 * u), (x, sh_y - 13.5 * u), (x + 7.5 * u, sh_y - 12.0 * u)]).pressure(0.6, 0.6).ramps(0.1, 0.1).orient(Orient::Along), None);
-    for dx in [-3.0f32, 0.0, 3.0] {
-        c.drag(&mut hb, &Gesture::new(vec![(x + dx * u, sh_y - 12.5 * u), (x + dx * 0.95 * u, sh_y - 20.0 * u)]).pressure(0.9, 0.9).ramps(0.0, 0.0), None);
+    for dx in [-3.2f32, -1.0, 1.2, 3.2] {
+        c.drag(&mut hb, &Gesture::new(vec![(x + dx * u, sh_y - 12.5 * u), (x + dx * 1.08 * u, sh_y - 25.0 * u)]).pressure(0.8, 0.85).ramps(0.0, 0.0).shake(0.4), None);
     }
     // the stick, held out to the right, its foot in the snow
     let mut st_b = Held::new(Tool { point: 1.0, ..Tool::rigger(1.2 * u) }, 96);

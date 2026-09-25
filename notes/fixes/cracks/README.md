@@ -1,7 +1,5 @@
 # Cracks: the variation that didn't reach the picture (branch fix-cracks)
 
-**On main for viewing only: the fix itself is on branch fix-cracks, not merged yet (Alice reviews first).**
-
 ## What to look at
 
 All images are lossless PNGs at 1:1 (look at 100%): main on the left,

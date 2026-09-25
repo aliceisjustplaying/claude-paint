@@ -963,15 +963,17 @@ fn tall_grass(c: &mut Canvas, pal: &Palette, (x, y): (f32, f32), ht: f32, g: Rgb
 /// Dock: a rosette of broad long leaves, dark, the lit edges and midribs
 /// picked out, a rusty seed stalk rising from it.
 fn dock(c: &mut Canvas, pal: &Palette, (x, y): (f32, f32), s: f32, g: Rgb, rng: &mut Rng) {
-    let dark = mixc([g[0] * 0.55, g[1] * 0.62, g[2] * 0.5], hex("#26301c"), 0.4);
-    let lit = mixc(g, hex("#9ba25a"), 0.6);
+    // broad leaves catch more light than the grass round them: a deeper
+    // body, then a lit upper edge and the pale midrib
+    let dark = mixc(g, hex("#3d4a27"), 0.6);
+    let lit = mixc(g, hex("#a3a860"), 0.75);
     for k in 0..6 {
         let a = -std::f32::consts::PI * (0.12 + 0.76 * k as f32 / 5.0) + rng.range(-0.1, 0.1);
         let l = s * rng.range(0.7, 1.1);
         let (ex, ey) = (x + l * a.cos(), y + l * a.sin() * 0.6);
         let mid = (x + l * 0.5 * a.cos(), y + l * 0.5 * a.sin() * 0.6 - l * 0.12);
         stroke(c, pal, rng, Tool { point: 0.7, ..Tool::round_sable(s * 0.22) }, dark, vec![(x, y), mid, (ex, ey)], (0.9, 0.2), (0.1, 0.55));
-        stroke(c, pal, rng, Tool { point: 1.0, ..Tool::rigger(0.35) }, lit, vec![(x, y - 0.5), mid, (ex, ey)], (0.6, 0.1), (0.1, 0.5));
+        stroke(c, pal, rng, Tool { point: 0.8, ..Tool::round_sable(s * 0.07) }, lit, vec![(x, y - s * 0.05), (mid.0, mid.1 - s * 0.06), (ex, ey - s * 0.03)], (0.7, 0.1), (0.1, 0.5));
     }
     let rust = hex("#6e3f24");
     let hh = s * 2.2;

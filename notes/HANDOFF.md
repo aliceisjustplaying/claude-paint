@@ -15,6 +15,36 @@ horizontal line through a grass patch in painting A = arm 1); git identity: this
 repo sets `alice` locally (the per-directory git identity include for ~/src/a is missing on
 this machine). Next: decide the direction with Alice after Fable's advice.
 
+**Day of 2026-09-25 (with Alice):**
+- **Round 10 = the breakthrough** (`notes/round10/`, `notes/round2_magic.md`):
+  round 2's brief verbatim, Rust, Opus at thinking high, no recipe book.
+  Alice: "this feels like progress". The person whose post started the
+  project: "The trees are amazing ... the second one especially" (the
+  summer lime). Model judges ranked that one last: humans and models
+  diverge there.
+- **Round 11** (`notes/round11/`): a trunk study (3x Opus) and whole winters
+  by Astra, Gemini Flash (ran out of Google credits at the end) and Fable
+  5.1; blind cross-critique: every model ranked its own painting 5th-6th;
+  round 2 still first for all; round 10's Opus paintings next.
+- **Fixed and merged:** dry rims (strokes over dry paint kept their outlines,
+  `notes/fixes/dry_rims/`, start with `LOOK_HERE_far_hills_4x.png`); the
+  test audit (13 items, -291 lines, release hand_time 2 min -> 8 s); the
+  pollard willow removed from the docs; a clippy error on main.
+- **Decided:** one resolution for painting, looking and delivering: ~0.2 mm
+  per pixel (2250-2400 px for a small Friedrich canvas), from the next round.
+- **Cracks** (`notes/cracks_lab/README.md`): real craquelure has direction
+  (the Monk: broadly down-right; other paintings other patterns), clusters
+  and varying amounts; "anything that reads like repetition reads digital".
+  Ours: one-pixel hairlines, even coverage, rings at the corners.
+  **Running:** `fix-cracks` (branch fix-cracks): make the existing crack
+  settings reach the picture, test-first; merge only after Alice sees its
+  before/after (`notes/fixes/cracks/`). Then: direction ~0.3, diagonal
+  down-right, per painting.
+- **Open:** the sky's "JPEG effect" (not the stipple alone: round 2
+  stippled too); floating twigs (3 painters: a branch should start at its
+  parent's width); checkpoint staleness by line (6 painters); whether to
+  keep Lua (a clean test is proposed); more models (Gemini needs credits).
+
 **Overnight (2026-09-25, after Alice slept):**
 - **Round 8** (`notes/round8/blind/`, key there): round-2-style brief, commission "a winter
   landscape", three arms. Every painting has figures, a route and hand-written motifs.

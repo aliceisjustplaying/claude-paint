@@ -55,6 +55,14 @@ reports for *Winter Landscape*), and the walker's footprints.
 15. A faint dark glaze growing toward the edges (his advice to Carus, MET
     PDF p.35), then varnish, cracks and relief.
 
+16. Refinement after the first full render: the far hedge line broken into
+    copses with lobed tops (it was a flat lavender stripe at 3200), the
+    stone's drift lowered to cover a dotted sliver of rock under it, a
+    drift carried round the right side of the oak's foot (the trunk ended
+    on a straight cut), a few tiny bare trees out of the far copses, the
+    walker's hair darkened (it read as a brown face patch at 3200), and
+    the hedge kept off the oak's trunk.
+
 Title: **Winter Evening with a Wayside Cross**.
 
 ## FRICTION
@@ -117,3 +125,31 @@ Title: **Winter Evening with a Wayside Cross**.
 13. **`--scale 3.2` looks cost 15 to 25 s for each new window** (a whole
     replay) while two other painters share the machine; I kept windows few
     and reused them.
+14. **Passes don't know what I painted in front.** The far hedge, laid
+    after the oak, crossed its trunk as pale dashes at 1000 px. The depth
+    tools (`w:layer`, `behind=`) would handle it, but only for motifs
+    registered in a world; a motif painted from `tree_in` alone isn't.
+    Workaround: multiply the hedge mask by `-oak:mask():grow(0.6)`.
+15. **1000 px and 3200 px disagree on fine motifs.** The oak's fine twigs
+    look like fuzzy "caterpillars" at 1000 and a clean lace at 3200; the
+    far hedge was a smooth stripe at 1000 and a row of hard dashes at
+    3200. Judging at one width misleads about the other; I had to look at
+    both before each decision.
+
+## Top five friction points
+
+1. Wet over dry keeps every stroke's outline (shadows became wire or
+   flame tongues); the only way to model the snow softly was inside the
+   first wet lay-in's color function.
+2. `tree_in` oaks come out as a lollipop or a baobab (a round bulb painted
+   below the foot); it took a drawn, notched, low crown, a tuned girth and
+   a clip at the foot line.
+3. The `rock` tool on small stones in snow: vertical streaks, a black
+   void after `blend`, cotton-wool snow caps; hand-painted stones were
+   better.
+4. Editing an early motif silently moves things placed on it (crows
+   floating after the oak regrew); edits and chunk numbers are easy to
+   lose track of.
+5. Fine motifs look different at 1000 and 3200 (twigs, hedges), and each
+   new `--scale 3.2` window costs a whole replay (15 to 30 s on a shared
+   machine).

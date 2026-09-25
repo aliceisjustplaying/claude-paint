@@ -209,3 +209,13 @@ All three have an ominous "offness" she hasn't felt before and can't name.
 - C: also ominous; "probably the best one ... technically pretty good".
   The texture still reads as JPEG artifacts ("I do not yet know how" to
   fix it). The moon has a weird halo; "not sure that's how it works".
+
+## Alice on resolution (2026-09-25)
+Retire the separate 1000px preview: paint, look and deliver at one size.
+3200 was an agent's pick in the first engine commit (2bc5dfd), with no
+recorded reason. After Round 11, try about 0.2 mm per pixel, i.e.
+2250-2400 px for a small Friedrich-sized canvas (Winter Landscape is
+32.5 x 45 cm, notes/research/friedrich_materials.md:18). The engine's
+default canvas is 70 cm wide (crates/paint/src/canvas.rs:253). "Let's see
+what it yields." Not 8570 (Monk size): the problems are decisions, not
+resolution, and renders would take ~20 min.

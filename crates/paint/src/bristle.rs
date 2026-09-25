@@ -1736,24 +1736,6 @@ mod tip_tests {
     }
 
     #[test]
-    #[ignore]
-    fn probe_patch() {
-        // TIP_OUT=path.png TIP_P=0.8 cargo test --release -p paint probe_patch -- --ignored
-        let out = std::env::var("TIP_OUT").unwrap_or_else(|_| "patch.png".into());
-        let mut c = Canvas::new(3200, 4.0, hex(BG)).with_size_mm(440.0).with_linen(crate::surface::Linen::fine(3));
-        let mut h = Held::new(sable(5.6), 3);
-        let mut rng = crate::rng::Rng::new(4);
-        for k in 0..14 {
-            h.reload(Paint::body(hex(INK)), 1.0);
-            let y = 60.0 + k as f32 * 3.0;
-            let pr: f32 = std::env::var("TIP_P").ok().and_then(|v| v.parse().ok()).unwrap_or(0.7);
-            c.drag(&mut h, &Gesture::new(vec![(60.0, y + rng.range(-1.0, 1.0)), (120.0, y + 2.0), (180.0, y + rng.range(-1.0, 1.0))]).pressure(pr * 0.6, pr).ramps(0.05, 0.1), None);
-        }
-        c.dry();
-        c.save(std::path::Path::new(&out)).unwrap();
-    }
-
-    #[test]
     fn feed_conserves_paint() {
         let mut h = Held::new(sable(2.0), 1);
         h.load(Paint::body(hex(INK)), 1.0);

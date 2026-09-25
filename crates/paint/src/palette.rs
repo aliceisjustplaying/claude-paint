@@ -820,7 +820,7 @@ mod canvas_tests {
         let left = Mask::from_fn(f, |x, _| if x < 500.0 { 1.0 } else { 0.0 });
         c.apply_masked(&left, |_, _, _, _| dark);
         let all = Mask::from_fn(f, |_, _| 1.0);
-        c.work(&all, &st.glaze(0.9).color(|_, _| hex("#4a2f1c")).angle(|_, _| 1.5708).coverage(3.0), 3);
+        c.work(&all, &st.glaze(0.9).color(|_, _| hex("#4a2f1c")).angle(|_, _| std::f32::consts::FRAC_PI_2).coverage(3.0), 3);
         c.dry();
         let region = |x0: f32, x1: f32| -> Vec<usize> { (0..f.w * f.h).filter(|&i| { let x = (i % f.w) as f32 / f.scale; x > x0 && x < x1 }).collect() };
         let (on_dark, on_light) = (mean(c.pixels(), &region(100.0, 400.0)), mean(c.pixels(), &region(600.0, 900.0)));

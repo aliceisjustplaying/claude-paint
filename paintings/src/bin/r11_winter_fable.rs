@@ -189,8 +189,14 @@ fn main() {
             let cov = if y < HZ { smoothstep(HZ - 30.0, HZ - 6.0, y) } else { 1.0 - smoothstep(HZ + 2.0, HZ + 40.0, y) };
             (cov * (0.8 + 0.3 * mist_n.get(x, y * 2.0))).clamp(0.0, 1.0)
         });
-        let sp = Stipple::new(Tool::stippler(2.3)).mixed(pal, 0.6).color(move |_, _| mist_col).coverage(move |x, y| 1.6 * (0.8 + 0.3 * mist_n.get(x + 500.0, y * 2.0))).aim(false).fade(1.3).pressure(0.4, 0.7).dips(16, 0.3, 0.7).clip(true);
-        c.stipple(&band, &sp, 35);
+        // (a stipple veil here read as salt at 3200px: pale beads on the
+        // ridge. A scumble of lead white, thin, brushed level and fused,
+        // lies over it like air.)
+        let hd = st.glaze(0.62).color(move |_, _| mist_col).angle(|_, _| 0.0).angle_jitter(0.06).length(60.0, 200.0).coverage(2.2).load_at({ let band = &band; move |x, y| 0.25 + 0.25 * band.sample(x, y) * (0.8 + 0.3 * mist_n.get(x + 500.0, y * 2.0)) }).clip(true).threshold(0.15);
+        c.work(&band, &hd, 35);
+        if let Some(b) = st.blend() {
+            c.work(&band, &b.clip(true).angle(|_, _| 0.0).angle_jitter(0.05), 36);
+        }
         c.dry();
     }
 
@@ -320,35 +326,48 @@ fn main() {
             c.drag(&mut b, &Gesture::new(pts).pressure(0.5, 0.2).ramps(0.2, 0.4).shake(0.7), None);
         }
         c.dry();
-        // snow on the limbs: on the upper side of segments that lie near
-        // level, a run of small touches of lead white; more on thicker wood
+        // snow lying on the limbs: along the upper side of every run of
+        // segments that lies nearer level than vertical, one short stroke
+        // of lead white dragged along the limb, offset up by 0.4 of its
+        // width, pressed harder on thicker wood; broken where the run
+        // steepens. Separate touches read as beads at 3200px; a dragged
+        // stroke lies on the wood.
         let snow = pal.paint(hex("#ece8dd"), 0.08).with_hiding(0.97);
-        let mut b = Held::new(Tool::round_sable(2.2), rng.next_u64());
         for l in oak.limbs.iter().filter(|l| !l.root && l.w[0] > 0.9) {
             let n = l.pts.len();
+            let mut run: Vec<(f32, f32, f32)> = vec![]; // x, y, width
+            let flush = |c: &mut paint::Canvas, run: &mut Vec<(f32, f32, f32)>, rng: &mut Rng| {
+                if run.len() >= 2 {
+                    let wm = run.iter().map(|r| r.2).fold(0.0f32, f32::max);
+                    let mut b = Held::new(Tool { ragged: 0.4, ..Tool::round_sable((wm * 0.45).clamp(0.9, 3.2)) }, rng.next_u64());
+                    b.load(snow, 0.9);
+                    let pts: Vec<(f32, f32)> = run.iter().map(|r| (r.0, r.1)).collect();
+                    let p = (0.35 + 0.5 * (wm / 6.0).clamp(0.2, 1.0)).min(0.9);
+                    let k = run.len().min(6);
+                    let swell: Vec<f32> = (0..k).map(|_| rng.range(0.4, 1.1)).collect();
+                    c.drag(&mut b, &Gesture::new(pts).pressure(p, p * 0.6).ramps(0.15, 0.3).swell(swell).shake(0.7), None);
+                }
+                run.clear();
+            };
             for i in 0..n.saturating_sub(1) {
                 let (a, e) = (l.pts[i], l.pts[i + 1]);
                 let d = (e.0 - a.0, e.1 - a.1);
                 let len = (d.0 * d.0 + d.1 * d.1).sqrt();
-                if len < 0.5 { continue; }
+                if len < 0.3 { continue; }
                 let level = 1.0 - (d.1.abs() / len).powf(0.7); // 1 = level, 0 = vertical
-                if level < 0.35 { continue; }
+                if level < 0.4 || rng.f() < 0.12 {
+                    flush(&mut c, &mut run, &mut rng);
+                    continue;
+                }
                 let wdt = l.w[i];
                 let up = (-d.1 / len, d.0 / len);
                 let up = if up.1 > 0.0 { (-up.0, -up.1) } else { up }; // canvas y down: up is negative y
-                let k = ((len / 2.5).ceil() as usize).max(1);
-                let mut j = 0;
-                while j < k {
-                    if rng.f() < 0.35 * level + 0.35 { 
-                        let t = (j as f32 + rng.f()) / k as f32;
-                        let p = (a.0 + d.0 * t + up.0 * wdt * 0.42, a.1 + d.1 * t + up.1 * wdt * 0.42);
-                        let pr = (0.3 + 0.6 * level * (wdt / 5.0).clamp(0.25, 1.0)).min(0.9);
-                        if j % 5 == 0 { b.reload(snow, 0.9); }
-                        c.touch(&mut b, &Touch::at(p.0, p.1).pressure(pr).drag(0.7 * wdt.min(3.0), 0.0), None);
-                    }
-                    j += 1;
+                if run.is_empty() {
+                    run.push((a.0 + up.0 * wdt * 0.4, a.1 + up.1 * wdt * 0.4, wdt));
                 }
+                run.push((e.0 + up.0 * wdt * 0.4, e.1 + up.1 * wdt * 0.4, wdt));
             }
+            flush(&mut c, &mut run, &mut rng);
         }
         c.dry();
     }
@@ -452,9 +471,10 @@ fn main() {
             let wob = 0.4 * ((k as f32) * 1.7).sin();
             let x = fx + 2.0 + (y - fy) / (H - fy) * -46.0 + sway * (2.6 * d + 0.6) + wob;
             let under = c.under(x, y, 2.0);
-            b.reload(pal.paint(shift(under, -0.13, 0.0, -0.03), 0.2), 0.7);
-            let sz = (2.6 * d + 0.5).min(3.0);
-            c.touch(&mut b, &Touch::at(x, y).pressure((0.3 + 0.6 * d).min(0.9)).drag(sz * 0.9, -1.4), None);
+            b.reload(pal.paint(shift(under, -0.17, 0.0, -0.035), 0.2), 0.8);
+            let sz = (3.2 * d + 0.6).min(3.8);
+            // a dent: a short stroke pulled toward the walker, heavier at the heel
+            c.drag(&mut b, &Gesture::line((x - sway * 0.3, y + sz * 0.5), (x + sway * 0.2, y - sz * 0.5)).pressure((0.35 + 0.6 * d).min(0.95), (0.2 + 0.4 * d).min(0.7)).ramps(0.1, 0.3).shake(0.5), None);
             y -= step;
             k += 1;
         }
@@ -519,7 +539,10 @@ fn paint_tree(c: &mut paint::Canvas, sk: &paint::Skeleton, live: Paint, dead: Pa
             let p0 = tool.pressure_for(wa).clamp(0.2, 1.0);
             let p1 = tool.pressure_for(l.w[b].max(finest)).clamp(0.05, 1.0);
             let last = b + 1 >= n;
-            let release = if last { if l.broken { 0.06 } else { 0.45 } } else { 0.1 };
+            // a section that hands over to the next brush ends at full
+            // pressure (a release there tapers the limb to nothing at the
+            // joint and the next, thinner brush can't fill it)
+            let release = if last { if l.broken { 0.06 } else { 0.45 } } else { 0.0 };
             let paint = if l.dead_at(a) { dead } else { live };
             let thin = (wa / (2.0 * finest)).clamp(0.3, 1.0);
             let mut held = Held::new(tool, rng.next_u64());
@@ -629,15 +652,17 @@ fn wanderer(c: &mut paint::Canvas, (x, y): (f32, f32), ht: f32, coat: Paint, coa
     let mut b = Held::new(Tool::round_sable(cw.max(1.2)), rng.next_u64());
     let sh = y - ht * 0.78; // shoulders
     let hem = y - ht * 0.2;
+    // the coat narrows at the shoulders and flares to the hem; the outer
+    // strokes start lower (the shoulders slope) and lean outward
     for k in [-2.0f32, 2.0, -1.0, 1.0, 0.0] {
         b.reload(if k <= -1.0 { coat_lit } else { coat }, 1.0);
-        let top = (x + k * cw * 0.7, sh + k.abs() * u * 1.5);
-        let bot = (x + k * cw * 0.95, hem - k.abs() * u * 1.0);
-        c.drag(&mut b, &Gesture::new(vec![top, (top.0 + k * cw * 0.05, y - ht * 0.5), bot]).pressure(0.9, 0.8).ramps(0.04, 0.08).shake(0.35), None);
+        let top = (x + k * cw * 0.45, sh + k.abs() * u * 3.0);
+        let bot = (x + k * cw * 1.05, hem - k.abs() * u * 1.5);
+        c.drag(&mut b, &Gesture::new(vec![top, (x + k * cw * 0.6, y - ht * 0.55), bot]).pressure(0.85, 0.75).ramps(0.06, 0.08).shake(0.35), None);
     }
     // the hem, a level touch across the bottom of the coat
     b.reload(coat, 0.8);
-    c.drag(&mut b, &Gesture::line((x - cw * 2.1, hem - u), (x + cw * 2.1, hem - u)).pressure(0.5, 0.5).ramps(0.1, 0.1).shake(0.4), None);
+    c.drag(&mut b, &Gesture::line((x - cw * 2.0, hem - u), (x + cw * 2.0, hem - u)).pressure(0.5, 0.5).ramps(0.1, 0.1).shake(0.4), None);
     // legs and boots below the hem
     let mut s = Held::new(Tool::round_sable((cw * 0.55).max(0.8)), rng.next_u64());
     for dx in [-0.55f32, 0.6] {

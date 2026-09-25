@@ -30,7 +30,7 @@ fn habit() -> Habit {
     // an open-grown oak: two buds in each axil and a cluster at every
     // shoot tip (oak's crowded buds), little shedding in open light, then a
     // start of decline: the top dying back, a limb or two broken
-    Habit { years: 34, decline: 0.18, decay: 0.4, breakage: 0.18, twig: 0.0010, apical: 0.58, lean: 0.0, trunk: 0.07, shed: 0.06, node_buds: 2, tip_buds: (2, 2), ..Habit::oak() }
+    Habit { years: 34, decline: 0.18, decay: 0.4, breakage: 0.18, twig: 0.0007, apical: 0.58, lean: 0.0, trunk: 0.07, shed: 0.06, node_buds: 2, tip_buds: (2, 2), ..Habit::oak() }
 }
 
 /// Thumbnails of candidate trees (the painter's pencil studies before
@@ -150,7 +150,7 @@ fn main() {
     let wood_top = move |x: f32| HORIZON - 3.5 - 9.0 * (woods.get(x, 0.0) * 1.6).max(0.0) * (0.3 + 0.7 * smoothstep(620.0, 900.0, x) + 0.5 * smoothstep(260.0, 80.0, x));
     let woods_m = Mask::from_fn(f, move |x, y| smoothstep(wood_top(x) - 0.8, wood_top(x) + 0.8, y) * (1.0 - smoothstep(HORIZON + 2.0, HORIZON + 5.0, y)));
     if o.stage("far", &mut c, &mut rng) {
-        let far_p = st.detail().color(|x, _| mix(hex("#747983"), hex("#8f9296"), 0.5 + 0.5 * (x / 170.0).sin(), Mix::Light)).angle(|_, _| 0.0).length(8.0, 24.0).coverage(4.5).medium(0.4);
+        let far_p = st.detail().color(|x, _| mix(hex("#80858e"), hex("#989b9f"), 0.5 + 0.5 * (x / 170.0).sin(), Mix::Light)).angle(|_, _| 0.0).length(8.0, 24.0).coverage(4.5).medium(0.4);
         c.work(&woods_m, &far_p, 21);
         c.dry();
     }
@@ -177,6 +177,35 @@ fn main() {
         if let Some(b) = st.blend() {
             c.work(&land_m, &b.angle(|_, _| 0.0).pressure(0.3, 0.4), 32);
         }
+        c.dry();
+    }
+
+    if o.stage("snow modeling", &mut c, &mut rng) {
+        // the drifts modeled by stippling, dry, as in his skies: cool grey-blue
+        // touches in the hollows between drifts, lead white on the crests
+        // facing the light; both fade toward the horizon
+        let hollows = Stipple::new(Tool::stippler(1.8))
+            .mixed(pal, 0.5)
+            .color(|_, _| hex("#bcc1c8"))
+            .coverage(move |x, y| {
+                let t = ((y - HORIZON) / (h - HORIZON)).clamp(0.0, 1.0);
+                0.8 * smoothstep(-0.05, -0.6, drift.get(x * 0.5, y * 3.0)) * smoothstep(0.02, 0.4, t)
+            })
+            .pressure(0.45, 0.8)
+            .dips(20, 0.35, 0.6)
+            .aim(false);
+        c.stipple(&land_m, &hollows, 36);
+        let crests = Stipple::new(Tool::stippler(2.0))
+            .mixed(pal, 0.2)
+            .color(|_, _| hex("#f4f1ea"))
+            .coverage(move |x, y| {
+                let t = ((y - HORIZON) / (h - HORIZON)).clamp(0.0, 1.0);
+                2.0 * smoothstep(0.1, 0.45, drift.get(x * 0.5, y * 3.0)) * smoothstep(0.05, 0.4, t)
+            })
+            .pressure(0.45, 0.8)
+            .dips(20, 0.4, 0.6)
+            .aim(false);
+        c.stipple(&land_m, &crests, 37);
         c.dry();
     }
 
@@ -228,23 +257,29 @@ fn main() {
             if n < 2 {
                 continue;
             }
-            for side in [-1.0f32, 1.0] {
-                let pts: Vec<(f32, f32)> = (0..n)
-                    .map(|i| {
-                        let d = l.dir(i);
-                        let nn = (-d.1 * side, d.0 * side);
-                        let off = (l.w[i] * 0.5 - 1.3).max(0.0) + r.normal() * 0.12;
-                        (l.pts[i].0 + nn.0 * off, l.pts[i].1 + nn.1 * off)
-                    })
-                    .filter(|p| p.1 < BASE.1 + 6.0)
-                    .collect();
-                if pts.len() < 2 {
+            // live and dead stretches cut in their own paint
+            let df = l.dead_from.min(n);
+            for (lo, hi, p) in [(0usize, (df + 1).min(n), bark_dark), (df, n, bark_dead)] {
+                if hi < lo + 2 {
                     continue;
                 }
-                let p = if l.dead_at(0) { bark_dead } else { bark_dark };
-                let mut held = Held::new(Tool { point: 0.5, ragged: 0.2, ..Tool::round_sable(2.8) }, r.next_u64());
-                held.load(p, 1.0);
-                c.drag(&mut held, &Gesture::new(pts).pressure(0.85, 0.85).ramps(0.0, 0.1).orient(Orient::Across).shake(0.5), None);
+                for side in [-1.0f32, 1.0] {
+                    let pts: Vec<(f32, f32)> = (lo..hi)
+                        .map(|i| {
+                            let d = l.dir(i);
+                            let nn = (-d.1 * side, d.0 * side);
+                            let off = (l.w[i] * 0.5 - 1.3).max(0.0) + r.normal() * 0.12;
+                            (l.pts[i].0 + nn.0 * off, l.pts[i].1 + nn.1 * off)
+                        })
+                        .filter(|p| p.1 < BASE.1 + 6.0)
+                        .collect();
+                    if pts.len() < 2 {
+                        continue;
+                    }
+                    let mut held = Held::new(Tool { point: 0.5, ragged: 0.2, ..Tool::round_sable(2.8) }, r.next_u64());
+                    held.load(p, 1.0);
+                    c.drag(&mut held, &Gesture::new(pts).pressure(0.85, 0.85).ramps(0.0, 0.1).orient(Orient::Across).shake(0.5), None);
+                }
             }
         }
         // then every limb from where it leaves the laid-in wood to its tip
@@ -270,7 +305,7 @@ fn main() {
                 let a = a0 + r.range(-0.9, 0.9);
                 shoot(&mut c, l.pts[n - 1], a, r.range(7.0, 20.0), 0.5, twig, 2, &mut r);
             }
-            // side twigs along the outer part of thin limbs
+            // side twigs along the outer part of thin limbs (and below)
             let arc = cumulative(&l.pts);
             let tot = arc[n - 1];
             let mut s0 = tot * 0.15 + r.range(0.0, 8.0);
@@ -299,6 +334,43 @@ fn main() {
             }
         }
         c.dry();
+    }
+
+    if o.stage("breaks", &mut c, &mut rng) {
+        // a broken end stops blunt and tears into splinters, one longer
+        // than the rest, with a touch of pale wood on the torn face
+        let mut r = Rng::new(o.seed + 651);
+        let wood = pal.mix(hex("#a79c86")).paint(0.2);
+        for l in oak.limbs.iter().filter(|l| (l.broken || (l.dead_at(l.pts.len().saturating_sub(2)) && *l.w.last().unwrap_or(&0.0) > 3.0)) && !l.is_empty() && !l.root) {
+            let n = l.pts.len();
+            let w = l.w[n - 1];
+            if w < 1.2 {
+                continue;
+            }
+            let end = l.pts[n - 1];
+            let d = l.dir(n - 1);
+            let nrm = (-d.1, d.0);
+            let p = if l.dead_at(n - 2) { bark_dead } else { bark_dark };
+            let k = 3 + (r.f() * 2.0) as usize;
+            let long = (r.f() * k as f32) as usize % k;
+            for i in 0..k {
+                let off = (i as f32 / (k - 1) as f32 - 0.5) * w * 0.8 + r.normal() * w * 0.06;
+                let len = w * if i == long { r.range(1.2, 2.4) } else { r.range(0.3, 0.9) };
+                let bend = r.normal() * 0.25;
+                let s0 = (end.0 - d.0 * w * 0.5 + nrm.0 * off, end.1 - d.1 * w * 0.5 + nrm.1 * off);
+                let dd = (d.0 + nrm.0 * bend, d.1 + nrm.1 * bend);
+                let e = (s0.0 + dd.0 * len, s0.1 + dd.1 * len);
+                let mut held = Held::new(Tool { point: 1.0, ..Tool::round_sable((w * 0.35).max(0.8)) }, r.next_u64());
+                held.load(p, 0.8);
+                c.drag(&mut held, &Gesture::new(vec![s0, e]).pressure(0.9, 0.05).ramps(0.0, 0.8).orient(Orient::Across), None);
+            }
+            // the torn face, pale, across the end
+            let mut hw = Held::new(Tool::round_sable((w * 0.35).max(0.8)), r.next_u64());
+            hw.load(wood, 0.5);
+            let a = (end.0 - d.0 * w * 0.3 - nrm.0 * w * 0.3, end.1 - d.1 * w * 0.3 - nrm.1 * w * 0.3);
+            let b = (end.0 - d.0 * w * 0.2 + nrm.0 * w * 0.3, end.1 - d.1 * w * 0.2 + nrm.1 * w * 0.3);
+            c.drag(&mut hw, &Gesture::new(vec![a, b]).pressure(0.6, 0.4).ramps(0.2, 0.4), None);
+        }
     }
 
     if o.stage("bark", &mut c, &mut rng) {
@@ -466,15 +538,15 @@ fn main() {
         let dead = pal.mix(hex("#4d4943")).paint(0.25);
         let shadow = pal.mix(hex("#a3a8b0")).paint(0.4);
         let white = pal.mix(hex("#efede6")).paint(0.08);
-        let main = vec![(598.0, 1146.0), (650.0, 1141.0), (706.0, 1146.0), (760.0, 1139.0), (808.0, 1143.0), (846.0, 1140.0)];
-        let mut hs = Held::new(Tool::round_sable(8.0), r.next_u64());
+        let main = vec![(588.0, 1172.0), (652.0, 1165.0), (722.0, 1172.0), (790.0, 1162.0), (850.0, 1168.0), (898.0, 1163.0)];
+        let mut hs = Held::new(Tool::round_sable(11.0), r.next_u64());
         hs.load(shadow, 0.6);
         let sh: Vec<(f32, f32)> = main.iter().map(|p| (p.0 + 3.0, p.1 + 5.0)).collect();
         c.drag(&mut hs, &Gesture::new(sh).pressure(0.6, 0.3).ramps(0.2, 0.3).shake(0.5), None);
-        let mut hm = Held::new(Tool { point: 0.4, ..Tool::round_sable(7.0) }, r.next_u64());
+        let mut hm = Held::new(Tool { point: 0.4, ..Tool::round_sable(9.5) }, r.next_u64());
         hm.load(dead, 0.9);
         c.drag(&mut hm, &Gesture::new(main.clone()).pressure(0.9, 0.35).ramps(0.0, 0.4).shake(0.6), None);
-        let claws = [((650.0, 1141.0), -2.2, 26.0), ((706.0, 1146.0), -1.2, 34.0), ((760.0, 1139.0), -0.6, 22.0), ((808.0, 1143.0), -2.6, 16.0), ((846.0, 1140.0), -0.3, 12.0)];
+        let claws = [((652.0, 1165.0), -2.2, 34.0), ((722.0, 1172.0), -1.2, 44.0), ((790.0, 1162.0), -0.6, 28.0), ((850.0, 1168.0), -2.6, 20.0), ((898.0, 1163.0), -0.3, 16.0)];
         for &(p, a, len) in &claws {
             shoot(&mut c, p, a, len, 0.8, dead, 1, &mut r);
         }
@@ -482,11 +554,11 @@ fn main() {
         let wood = pal.mix(hex("#a39883")).paint(0.2);
         let mut hw = Held::new(Tool::round_sable(1.6), r.next_u64());
         hw.load(wood, 0.6);
-        c.drag(&mut hw, &Gesture::new(vec![(597.0, 1143.0), (599.0, 1149.0)]).pressure(0.8, 0.5), None);
-        c.drag(&mut hw, &Gesture::new(vec![(595.0, 1144.5), (591.0, 1146.0)]).pressure(0.5, 0.0).ramps(0.0, 0.8), None);
-        let mut hsn = Held::new(Tool { point: 0.5, ..Tool::round_sable(3.2) }, r.next_u64());
+        c.drag(&mut hw, &Gesture::new(vec![(587.0, 1168.0), (589.0, 1176.0)]).pressure(0.8, 0.5), None);
+        c.drag(&mut hw, &Gesture::new(vec![(585.0, 1170.0), (579.0, 1172.0)]).pressure(0.5, 0.0).ramps(0.0, 0.8), None);
+        let mut hsn = Held::new(Tool { point: 0.5, ..Tool::round_sable(4.0) }, r.next_u64());
         hsn.load(white, 0.8);
-        let top: Vec<(f32, f32)> = main.iter().skip(1).map(|p| (p.0, p.1 - 3.2)).collect();
+        let top: Vec<(f32, f32)> = main.iter().skip(1).map(|p| (p.0, p.1 - 4.2)).collect();
         c.drag(&mut hsn, &Gesture::new(top).pressure(0.7, 0.4).ramps(0.2, 0.3).shake(0.8), None);
         c.dry();
     }

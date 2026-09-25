@@ -38,7 +38,7 @@ fn replay(src: &Path, width: u32, threads: Option<usize>, tag: &str) -> (String,
 #[test]
 fn example_log_replays_as_recorded() {
     let (_, png) = replay(&root().join("paintings/lua/example.lua"), 160, None, "example");
-    assert_eq!(fnv(&png), 0x5ba0_7c4f_fd38_a4e3, "paintings/lua/example.lua at 160px changed");
+    assert_eq!(fnv(&png), 0x016d_3a13_a4ec_1fd6, "paintings/lua/example.lua at 160px changed");
 }
 
 /// Opt-in, slow: the benchmark near replays to its recorded hash (re-record on intended changes). Run with
@@ -47,7 +47,7 @@ fn example_log_replays_as_recorded() {
 #[ignore]
 fn l5_near_replays_as_recorded() {
     let (_, png) = replay(&root().join("notes/loops/l5_near.lua"), 160, None, "l5_near");
-    assert_eq!(fnv(&png), 0xb2ea_a2f7_baba_f888, "notes/loops/l5_near.lua at 160px changed");
+    assert_eq!(fnv(&png), 0xbb35_6706_3532_5dac, "notes/loops/l5_near.lua at 160px changed");
 }
 
 const PROGRAM: &str = r##"

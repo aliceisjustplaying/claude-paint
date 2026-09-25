@@ -866,6 +866,11 @@ pub(crate) unsafe fn drag_on(
     let mut contact: Vec<Option<((f32, f32), f32)>> = vec![None; held.bristles.len()];
     let mut order: Vec<(f32, usize)> = Vec::with_capacity(held.bristles.len());
     let feed_k = tool.point * (1.0 - (-(step / s) / (FEED_WIDTHS * tool.width).max(0.3)).exp());
+    // the hair that comes down first: the tip. However lightly the brush is
+    // pressed or lifted, the tip is on the canvas until the hand leaves it
+    // at the path's end (a lift-off draws down to the tip, it doesn't stop
+    // short of the end where the pressure falls below the tip's own length)
+    let tip = held.bristles.iter().enumerate().min_by(|a, b| a.1.thresh.total_cmp(&b.1.thresh)).map_or(0, |(i, _)| i);
     for k in 0..=nsteps {
         let d = (k as f32 * step).min(total);
         while seg + 1 < path.len() - 1 && arc[seg + 1] < d {
@@ -902,7 +907,7 @@ pub(crate) unsafe fn drag_on(
         // where each touching hair meets the canvas this step
         for (bi, b) in held.bristles.iter_mut().enumerate() {
             let reach = (p - b.thresh) / (1.0 - b.thresh).max(1e-3);
-            if reach <= 0.0 {
+            if reach <= 0.0 && !(bi == tip && p > 0.0) {
                 b.prev = [None, None];
                 contact[bi] = None;
                 continue;
@@ -918,7 +923,7 @@ pub(crate) unsafe fn drag_on(
             b.bend.0 += (target.0 - b.bend.0) * rate;
             b.bend.1 += (target.1 - b.bend.1) * rate;
             // one contact point: the belly-to-tip region of the bent bristle
-            contact[bi] = Some(((root.0 + b.bend.0 * 0.6, root.1 + b.bend.1 * 0.6), reach));
+            contact[bi] = Some(((root.0 + b.bend.0 * 0.6, root.1 + b.bend.1 * 0.6), reach.max(0.0)));
         }
         // the track each hair of a pointed tuft lays (see `exchange`): the
         // touching hairs lie over and beside each other, so each covers its
@@ -1706,6 +1711,32 @@ mod tip_tests {
         assert!(root > mid && mid > tip && tip < 0.3 * root, "flick ink root {root}, middle {mid}, tip {tip}");
         // a blunt stippler of the same kind keeps its old footprint
         assert_eq!(Tool::stippler(2.0).point, 0.0);
+    }
+
+    /// A lifting brush draws down to its tip at the end of its path; it
+    /// doesn't leave the canvas before the hand does. Rounds 10 and 11: a
+    /// limb lifted off with `ramps` stopped painting where the pressure fell
+    /// below its first hair's threshold, up to a fifth of the path short of
+    /// its end, so a twig set on the limb's end started on bare canvas
+    /// ("floated"). See notes/fixes/twigs.
+    /// Blunt and pointed, the documented flick and a limb lifted at a fork.
+    #[test]
+    fn a_lifted_stroke_paints_to_the_end_of_its_path() {
+        let tools = [("blunt sable 3", Tool::round_sable(3.0)), ("blunt rigger 1", Tool::rigger(1.0)), ("pointed rigger 1.4", Tool { point: 0.9, ..Tool::rigger(1.4) }), ("pointed sable 3", sable(3.0))];
+        let strokes = [("flick", (0.75, 0.0), (0.1, 0.75)), ("limb lifted at a fork", (0.8, 0.36), (0.03, 0.35))];
+        for (tn, tool) in &tools {
+            for (gn, p, r) in strokes {
+                // a twig's length, within one load of every brush here
+                let g = Gesture::line((100.0, 120.0), (180.0, 120.0)).pressure(p.0, p.1).ramps(r.0, r.1).shake(0.0);
+                let c = canvas(1000, false, tool.clone(), &g);
+                let s = c.f.scale;
+                let col = |x: usize| (0..c.f.h).map(|y| dark(&c, x, y)).sum::<f32>() / s;
+                // every column from just past the start to the last pixel
+                // before the end has paint on it
+                let bare: Vec<f32> = ((101.0 * s) as usize..(179.0 * s) as usize).filter(|&x| col(x) < 0.02).map(|x| x as f32 / s).collect();
+                assert!(bare.is_empty(), "{tn}, {gn}: path ends at 180, mark stops at {:?} ({} bare columns)", bare.first(), bare.len());
+            }
+        }
     }
 
     /// A hair's track covers its own area of the pixel lattice, however it

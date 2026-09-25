@@ -423,8 +423,11 @@ v = w:view()"##;
         assert!(s.st.borrow().view.is_none());
     }
 
+    /// The shadow verbs take their options and give masks where the shadows
+    /// fall (the engine owns their falloff and rings:
+    /// `paint::scene::tests::soft_shadows_fall_off_without_rings`).
     #[test]
-    fn soft_shadow_masks_have_no_rings() {
+    fn shadow_verbs_take_their_options() {
         let mut s = Session::replay(200).unwrap();
         s.run(SETUP).unwrap();
         s.run(r#"local sh = v:cast_shadow{soft=2}

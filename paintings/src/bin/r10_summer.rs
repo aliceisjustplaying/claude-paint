@@ -476,6 +476,12 @@ fn main() {
             peb.reload(pal.paint(lc, 0.2), 0.7);
             c.touch(&mut peb, &Touch::at(x - r * 0.15, y - r * 0.2).pressure(0.6).drag(r * 0.4, 0.0), None);
         }
+        // at the bottom corners, close to us and large: a dock and grasses
+        // gone to seed on the left, yarrow and grasses on the right
+        dock(&mut c, pal, (78.0, h - 8.0), 38.0, bank_c(78.0, h - 8.0), &mut rng);
+        tall_grass(&mut c, pal, (36.0, h - 1.0), 125.0, bank_c(36.0, h - 1.0), &mut rng);
+        tall_grass(&mut c, pal, (958.0, h - 2.0), 105.0, bank_c(958.0, h - 2.0), &mut rng);
+        yarrow(&mut c, pal, (912.0, h - 6.0), 70.0, bank_c(912.0, h - 6.0), &mut rng);
         let spots = [(40.0f32, 0.0f32), (95.0, 2.0), (180.0, 1.0), (262.0, 0.0), (520.0, 2.0), (575.0, 3.0), (700.0, 0.0), (760.0, 1.0), (880.0, 0.0), (955.0, 2.0), (610.0, 0.0), (330.0, 2.0)];
         for &(x, kind) in &spots {
             let y = h - rng.range(4.0, 60.0);
@@ -861,8 +867,11 @@ fn couple(c: &mut Canvas, pal: &Palette, at: (f32, f32), s: f32, seed: u64) {
     // sunlit edge of the coat, left
     stroke(c, coat_l, 0.02, &[(mx - 0.1, 0.35), (mx - 0.11, 0.6), (mx - 0.1, 0.79)], 0.7, 0.5, &mut rng);
     // head and cap
-    stroke(c, hex("#6b5440"), 0.075, &[(mx, 0.82), (mx, 0.9)], 1.0, 1.0, &mut rng);
-    stroke(c, hex("#1a1a17"), 0.05, &[(mx - 0.065, 0.915), (mx, 0.935), (mx + 0.06, 0.925)], 0.9, 0.9, &mut rng);
+    // the head from behind: the nape, then brown hair over it, the beret
+    // sitting on the hair
+    stroke(c, hex("#7a5e48"), 0.05, &[(mx, 0.8), (mx, 0.84)], 1.0, 1.0, &mut rng);
+    stroke(c, hex("#3e2c20"), 0.075, &[(mx, 0.835), (mx, 0.9)], 1.0, 1.0, &mut rng);
+    stroke(c, hex("#1a1a17"), 0.045, &[(mx - 0.06, 0.895), (mx, 0.915), (mx + 0.055, 0.9)], 0.9, 0.9, &mut rng);
     // the woman (left): long dress flaring, shawl, hair knot
     let dress = hex("#5a2a22");
     let dress_l = hex("#8a4a36");
@@ -877,12 +886,13 @@ fn couple(c: &mut Canvas, pal: &Palette, at: (f32, f32), s: f32, seed: u64) {
     // right half in the shade of her turned body
     stroke(c, hex("#d8d2bc"), 0.045, &[(wx - 0.085, 0.73), (wx - 0.03, 0.62), (wx + 0.005, 0.5)], 0.9, 0.5, &mut rng);
     stroke(c, hex("#a9a592"), 0.04, &[(wx + 0.085, 0.73), (wx + 0.03, 0.62), (wx + 0.005, 0.51)], 0.9, 0.5, &mut rng);
+    stroke(c, hex("#cfc9b2"), 0.06, &[(wx, 0.73), (wx + 0.003, 0.54)], 0.9, 0.3, &mut rng);
     stroke(c, hex("#d8d2bc"), 0.05, &[(wx - 0.085, 0.735), (wx + 0.08, 0.735)], 0.9, 0.9, &mut rng);
     // her arm to his shoulder
     stroke(c, dress, 0.035, &[(wx + 0.07, 0.7), (mx - 0.02, 0.76)], 0.8, 0.7, &mut rng);
     // head, hair knot
-    stroke(c, hex("#4a3424"), 0.07, &[(wx, 0.76), (wx, 0.84)], 1.0, 1.0, &mut rng);
-    stroke(c, hex("#3a281c"), 0.045, &[(wx + 0.005, 0.855), (wx + 0.006, 0.88)], 1.0, 1.0, &mut rng);
+    stroke(c, hex("#3a2a1e"), 0.07, &[(wx, 0.76), (wx, 0.84)], 1.0, 1.0, &mut rng);
+    stroke(c, hex("#2e2118"), 0.045, &[(wx + 0.005, 0.84), (wx + 0.006, 0.865)], 1.0, 1.0, &mut rng);
 }
 
 /// Grass: every tuft's blades pulled up from the foot and lifted off;

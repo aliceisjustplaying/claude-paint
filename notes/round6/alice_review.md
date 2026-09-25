@@ -268,3 +268,10 @@ The person whose post started this project, shown round 10's A, B and C:
 summer lime tree). Two humans (Alice: "impressive") rank B high; both model
 judges ranked it last ("identical leaf sprites"). Human and model judges
 diverge most on this picture.
+
+## Alice on Round 12, the tree studies (2026-09-25, unlabeled P, Q, R)
+- "Looks very fractal-ey, which is the opposite of what we are going for."
+- Yes, the brooms (the twig ends).
+- Q (the middle one) is too symmetrical; "idk". R and P "not half bad".
+- The snow "not too bad but room for improvement".
+- The brown leaves (last year's, hanging low) are "an interesting idea".

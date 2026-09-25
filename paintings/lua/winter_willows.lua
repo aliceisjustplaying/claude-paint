@@ -215,7 +215,7 @@ function whips(Wt, n, haze, lean)
   local s = th / 1.9
   local rb = brush{kind="rigger", width=math.max(0.45, 0.025 * s), point=1}
   for i = 1, n do
-    if i % 7 == 1 then rb:reload(mix(mix("#302a27", "#54463b", rand() * 0.5), AIR, haze), 0.8) end
+    if i % 5 == 1 then rb:reload(mix(mix("#302a27", "#54463b", rand() * 0.5), AIR, haze), 0.95, {medium=0.4}) end
     local u = clamp(randn(0, 0.5), -1.05, 1.05)
     local sx, sy = hx + u * fw * 1.1, hy + math.abs(u) * 0.06 * th + rand(-0.03, 0.05) * th
     local a0 = -1.5708 + u * 0.8 + randn(0, 0.12)
@@ -228,7 +228,7 @@ function whips(Wt, n, haze, lean)
       px = px + math.cos(aa) * len / 6; py = py + math.sin(aa) * len / 6
       p[#p + 1] = {px + randn(0, 0.12), py}
     end
-    rb:stroke(p, {pressure={0.7, 0.0}, ramps={0.02, 0.85}, shake=0.6})
+    rb:stroke(p, {pressure={0.85, 0.0}, ramps={0.02, 0.8}, shake=0.6})
   end
 end
 function bark(Wt, haze, lean, seed)
@@ -306,7 +306,7 @@ for i, f in ipairs(FEET) do
     edge={found=0.3, soft=0.4, lost=0.3, period=0.3 * s, seed=i}})
 end
 
---@ chunk 15 · clock 164454.0390625
+--@ chunk 15 · clock 164739.142578125
 FX, FY = 674, 522
 TRACK = {{770,714},{742,664},{712,610},{692,568},{680,540},{674,522},{671,508},{676,497},{694,488},{716,481.5}}
 KF = 1.7 * 500 / math.tan(math.rad(25))     -- ground: y - HZ = KF / Z (fov 50 over the width)
@@ -341,7 +341,7 @@ for i = 1, #TRACK - 1 do
   end
 end
 
---@ chunk 16 · clock 164454.0390625
+--@ chunk 16 · clock 164739.142578125
 -- the walker, seen from behind, going toward the village: greatcoat, tall hat, stick
 local k = per_m(FY) / 26          -- the drawing below is in units at 26 per meter
 local function R(pts) local o = {} for i, p in ipairs(pts) do o[i] = {FX + p[1] * k, FY + p[2] * k} end return o end
@@ -378,7 +378,7 @@ sn:load(snowcol(FX, FY + 2), 0.6)
 sn:stroke(R{{-4.6,0.1}, {-2.5,-0.5}, {-0.6,0.2}}, {pressure={0.6, 0.4}})
 sn:stroke(R{{1.0,-1.4}, {2.6,-1.9}, {4.0,-1.2}}, {pressure={0.4, 0.2}})
 
---@ chunk 17 · clock 164454.0390625
+--@ chunk 17 · clock 164739.142578125
 local gn = noise{seed=81, octaves=3, period=220}
 local keep = FIGM
 for _, f in ipairs(FEET) do keep = keep + f[5][1] end
@@ -398,7 +398,7 @@ SKYG = mask(function(x, y)
 end)
 glaze(SKYG - KEEP, {color="#4f5a74", coats=0.3, pigment="transparent"})
 
---@ chunk 18 · clock 177591.3359375
+--@ chunk 18 · clock 177876.439453125
 for i, f in ipairs(FEET) do
   local x, y, fw = f[1], f[2], f[5][5]
   local s = per_m(y)
@@ -411,7 +411,7 @@ for i, f in ipairs(FEET) do
     edge={found=0.1, soft=0.4, lost=0.5, period=0.3 * s, seed=i}})
 end
 
---@ chunk 19 · clock 177591.3359375
+--@ chunk 19 · clock 177876.439453125
 -- a thin waxing crescent low over the afterglow, its lit limb toward the set sun (down and left)
 local mx, my, r = 268, 214, 6.2
 local lit = ellipse(mx, my, r, r) - ellipse(mx + 2.0, my - 1.7, r * 1.0, r * 1.0)
@@ -419,7 +419,7 @@ work(lit, {hand="detail", tool="round 0.8", length={1, 3}, coverage=4, medium=0.
 local halo = ellipse(mx, my, r * 3.2, r * 3.2):blur(r * 1.2)
 glaze(halo - ellipse(mx, my, r, r), {color="#e9e2cc", coats=0.06, pigment="semi"})
 
---@ chunk 20 · clock 201939.748046875
+--@ chunk 20 · clock 202224.859375
 -- dry grass and reeds, upturning flicks laid last over the snow
 local GR = {"#5a4e40", "#463c32", "#6e604c", "#7a6a52", "#52483d"}
 function tuft(x, y, hm, n, reed)
@@ -459,7 +459,7 @@ end
 for i = 1, 7 do tuft(rand(25, 120), rand(655, 708), rand(0.35, 0.7), math.floor(rand(8, 16)), true) end
 for i = 1, 4 do tuft(rand(900, 985), rand(672, 706), rand(0.2, 0.45), math.floor(rand(4, 9)), false) end
 
---@ chunk 21 · clock 201939.748046875
+--@ chunk 21 · clock 202224.859375
 function crow(cx, cy, L, dir, hunch)
   local function R(p) return {cx + dir * p[1] * L, cy + p[2] * L} end
   local pts = {}
@@ -489,3 +489,6 @@ crow(470, 372, 13, 1, 0.08)
 flying(612, 262, 20, 0.1, 1)
 flying(588, 287, 16, -0.12, -0.5)
 flying(330, 322, 11, 0.05, 0.8)
+
+--@ chunk 22 · clock 202224.859375
+wait(24*60); varnish{color="#e6d3a4", coats=0.3, vary=0.12}; cracks{dirt=0.35}; relief()

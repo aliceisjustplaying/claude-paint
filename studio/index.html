@@ -23,7 +23,13 @@
   #view { flex:1; display:flex; align-items:center; justify-content:center; background:#000; min-height:0; position:relative }
   #view img { max-width:100%; max-height:100%; object-fit:contain }
   #cap { position:absolute; left:8px; bottom:6px; color:var(--dim); font-size:11px; background:#000a; padding:2px 6px }
-  #feed { height:34%; overflow:auto; border-top:1px solid #333; padding:6px 10px; font-size:12px }
+  #bottom { height:38%; display:grid; grid-template-columns: 1fr 1fr; border-top:1px solid #333; min-height:0 }
+  #feed { overflow:auto; padding:6px 10px; font-size:12px; border-right:1px solid #333 }
+  #thoughts { overflow:auto; padding:6px 10px; font-size:12.5px; line-height:1.5; color:#bbb; background:#1b1b20 }
+  #thoughts h4 { margin:0 0 4px; font-size:11px; color:var(--dim); font-weight:600; letter-spacing:.06em }
+  #thoughts .t { margin:0 0 10px; white-space:pre-wrap; word-break:break-word; opacity:.55 }
+  #thoughts .t.last { opacity:1; color:#e6e6e6 } #thoughts .tm { color:#555; font-size:11px }
+  #thoughts .cursor { display:inline-block; width:7px; background:#bbb; animation:pulse 1s infinite }
   #feed div { margin:2px 0; white-space:pre-wrap; word-break:break-word }
   .say { color:#eee } .think { color:#777; font-style:italic } .cmd { color:#8bc } .write,.edit { color:var(--acc) } .image { color:#c8c } .user { color:#9c9 }
   footer { padding:6px 10px; border-top:1px solid #333; display:flex; gap:10px; align-items:center }
@@ -38,13 +44,12 @@
   <button id="play">▶ replay</button>
   <select id="speed"><option value="1">1×</option><option value="10">10×</option><option value="60" selected>60×</option><option value="300">300×</option></select>
   <button id="golive">● live</button>
-  <label><input type="checkbox" id="showthink"> thinking</label>
   <span id="badge"></span><span id="clock"></span><span id="file" style="color:var(--dim)"></span>
 </header>
 <div id="doing"><span class="what"></span><span class="detail"></span><span class="since"></span></div>
 <main>
   <pre id="code"></pre>
-  <div id="right"><div id="view"><img id="img"><span id="cap"></span></div><div id="feed"></div></div>
+  <div id="right"><div id="view"><img id="img"><span id="cap"></span></div><div id="bottom"><div id="feed"></div><div id="thoughts"></div></div></div>
 </main>
 <div id="strip"></div>
 <footer><input type="range" id="scrub" min="0" max="0" value="0"><span id="pos"></span></footer>
@@ -113,6 +118,21 @@ function doing(i, isLive) {
   el.querySelector('.detail').textContent = c[2] || '';
   el.querySelector('.since').textContent = isLive ? 'for ' + fmt((Date.now() - since) / 1000) : '';
 }
+// the painter's thoughts up to event i; the newest is typed out when it arrives live
+let typed = -1, typer = null;
+function thoughts(i) {
+  const th = []; for (let k = 0; k <= i; k++) if (events[k].kind === 'think') th.push(k);
+  const show = th.slice(-6), box = $('thoughts'), newest = show[show.length - 1];
+  const tm = k => new Date(events[k].ts).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit', second:'2-digit'});
+  box.innerHTML = '<h4>THOUGHTS</h4>' + show.map(k => `<div class="t${k === newest ? ' last' : ''}" data-k="${k}"><span class="tm">${tm(k)}</span>\n${k === newest && live && k !== typed ? '' : esc(events[k].text)}</div>`).join('');
+  if (newest !== undefined && live && newest !== typed) {
+    typed = newest; clearInterval(typer); const el = box.querySelector('.t.last'), txt = events[newest].text; let n = 0;
+    typer = setInterval(() => { n = Math.min(txt.length, n + Math.max(3, txt.length / 150 | 0));
+      el.innerHTML = `<span class="tm">${tm(newest)}</span>\n` + esc(txt.slice(0, n)) + (n < txt.length ? '<span class="cursor">&nbsp;</span>' : '');
+      box.scrollTop = 1e9; if (n >= txt.length) clearInterval(typer); }, 30);
+  }
+  box.scrollTop = 1e9;
+}
 function ago(s) { return s < 90 ? Math.round(s) + ' s ago' : s < 5400 ? Math.round(s/60) + ' min ago' : Math.round(s/3600) + ' h ago'; }
 function addThumb(e, i) {
   const im = document.createElement('img'); im.src = `/img?s=${encodeURIComponent(S)}&i=${e.img}`; im.dataset.i = i;
@@ -157,9 +177,10 @@ function show(i) {
     $('cap').textContent = (img.path || '').split('/').slice(-1)[0] + '  ' + new Date(img.ts).toLocaleTimeString(); }
   for (const t of $('strip').children) t.classList.toggle('on', img && +t.dataset.i === events.indexOf(img));
   renderCode(pos);
-  const think = $('showthink').checked, from = Math.max(0, pos - 60);
-  $('feed').innerHTML = events.slice(from, pos + 1).filter(e => think || e.kind !== 'think').map(line).join('');
+  const from = Math.max(0, pos - 60);
+  $('feed').innerHTML = events.slice(from, pos + 1).filter(e => e.kind !== 'think').map(line).join('');
   $('feed').scrollTop = 1e9;
+  thoughts(pos);
   const t0 = Date.parse(events[0].ts), t = Date.parse(events[pos].ts);
   $('clock').textContent = fmt((t - t0) / 1000) + ' in · ' + new Date(t).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}); $('clock').title = 'time into the session · clock time';
   badge(); doing(pos, live && pos === events.length - 1); $('pos').textContent = `${pos + 1} / ${events.length}`;
@@ -186,7 +207,6 @@ $('play').onclick = () => {
 };
 $('golive').onclick = () => { stop(); live = true; show(events.length - 1); };
 $('scrub').oninput = e => { stop(); live = false; show(+e.target.value); };
-$('showthink').onchange = () => show(pos);
 $('sess').onchange = e => { stop(); S = e.target.value; events = []; $('strip').innerHTML = ''; live = true; history.replaceState(null, '', '?s=' + encodeURIComponent(S)); poll(); };
 document.onkeydown = e => { if (e.key === 'ArrowRight') { live = false; show(pos + 1); } if (e.key === 'ArrowLeft') { live = false; show(pos - 1); } if (e.key === ' ') { e.preventDefault(); $('play').click(); } };
 loadSessions().then(() => { poll(); setInterval(poll, 2000); setInterval(() => { badge(); if (live && events.length) doing(events.length - 1, true); }, 1000); });

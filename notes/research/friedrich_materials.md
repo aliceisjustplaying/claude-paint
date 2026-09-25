@@ -149,7 +149,7 @@ Hex = oil masstone estimate. Hiding runs 0 (transparent) to 1 (opaque). Tint is 
 
 Rendering: allow up to four stacked green layers [MÄD p.102]. Paint foliage after the sky and grass last.
 
-**In the simulator** (`Palette::friedrich_early_greens`, `friedrich_1820_greens`, `copper_green`; notes/green.md): Prussian blue and green earth join both periods, Rinmann's green the post-1820 one, copper green as an optional rare tube. The base palettes are kept without them (the aimed search picked Prussian blue for skies).
+**In the simulator** (`Palette::friedrich_early_greens`, `friedrich_1820_greens`, `copper_green`): Prussian blue and green earth join both periods, Rinmann's green the post-1820 one, copper green as an optional rare tube. The base palettes are kept without them (the aimed search picked Prussian blue for skies).
 
 ## Implications for a simulator
 

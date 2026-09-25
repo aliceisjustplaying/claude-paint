@@ -54,8 +54,11 @@ fn contact(x: f32) -> f32 {
 }
 
 /// the big limb leaving the trunk to the right, and a broken stub to the left
-const LIMB: [(f32, f32); 6] = [(468.0, 505.0), (560.0, 440.0), (650.0, 400.0), (760.0, 352.0), (880.0, 300.0), (1030.0, 236.0)];
-const LIMB_W: [f32; 6] = [44.0, 32.0, 26.0, 21.0, 16.0, 12.0];
+const LIMB: [(f32, f32); 8] = [(468.0, 505.0), (555.0, 446.0), (640.0, 421.0), (702.0, 380.0), (790.0, 356.0), (878.0, 298.0), (955.0, 276.0), (1040.0, 226.0)];
+const LIMB_W: [f32; 8] = [44.0, 32.0, 27.0, 23.0, 19.0, 16.0, 13.0, 11.0];
+/// an old dead branch high on the left, crooked, broken off
+const DEAD: [(f32, f32); 6] = [(472.0, 176.0), (424.0, 146.0), (392.0, 134.0), (352.0, 100.0), (318.0, 90.0), (284.0, 62.0)];
+const DEAD_W: [f32; 6] = [22.0, 15.0, 12.5, 10.0, 8.0, 6.5];
 const STUB: [(f32, f32); 3] = [(420.0, 742.0), (372.0, 706.0), (338.0, 690.0)];
 const STUB_W: [f32; 3] = [30.0, 22.0, 17.0];
 
@@ -312,7 +315,7 @@ fn main() {
     // the limb out of the trunk, not across it)
     let limb_m = Mask::from_fn(f, |x, y| {
         let v = limb_cov(x, y, &LIMB, &LIMB_W).0 * smoothstep(right_edge(y) - 8.0, right_edge(y) - 3.0, x);
-        let w = limb_cov(x, y, &STUB, &STUB_W).0 * smoothstep(left_edge(y) + 8.0, left_edge(y) + 3.0, x);
+        let w = limb_cov(x, y, &STUB, &STUB_W).0.max(limb_cov(x, y, &DEAD, &DEAD_W).0) * smoothstep(left_edge(y) + 8.0, left_edge(y) + 3.0, x);
         // the crotch: the limb's wood swells into the trunk's, no corner
         let fx = (x - (right_edge(478.0) + 1.0)) / 12.0;
         let fy = (y - 478.0) / 26.0;
@@ -354,7 +357,8 @@ fn main() {
             .color(|x, y| {
                 let (v1, _, s1) = limb_side(x, y, &LIMB, &LIMB_W);
                 let (v2, _, s2) = limb_side(x, y, &STUB, &STUB_W);
-                let side = if v1 >= v2 { s1 } else { s2 };
+                let (v3, _, s3) = limb_side(x, y, &DEAD, &DEAD_W);
+                let side = if v1 >= v2.max(v3) { s1 } else if v2 >= v3 { s2 } else { s3 };
                 // the top takes the sky, the underside the dark
                 let top = smoothstep(0.1, 0.85, side);
                 let core = mix(hex("#2b2622"), hex("#1d1a17"), smoothstep(0.2, -0.8, side), Mix::Pigment);
@@ -363,7 +367,8 @@ fn main() {
             .angle(|x, y| {
                 let (v1, a1) = limb_cov(x, y, &LIMB, &LIMB_W);
                 let (v2, a2) = limb_cov(x, y, &STUB, &STUB_W);
-                if v1 >= v2 { a1 } else { a2 }
+                let (v3, a3) = limb_cov(x, y, &DEAD, &DEAD_W);
+                if v1 >= v2.max(v3) { a1 } else if v2 >= v3 { a2 } else { a3 }
             })
             .length(15.0, 50.0)
             .coverage(3.2)
@@ -486,8 +491,15 @@ fn main() {
                 stack.push(((x + 20.0, y + LIMB_W[i] * 0.2), 0.4 + r.range(-0.2, 0.3), 50.0 + r.range(0.0, 50.0), 0.7));
             }
         }
+        // off the dead branch: a few short dead twigs, stiff
+        for i in 1..DEAD.len() - 1 {
+            let (x, y) = DEAD[i];
+            if r.f() < 0.7 {
+                stack.push(((x, y - DEAD_W[i] * 0.4), -1.9 + r.range(-0.4, 0.4), 25.0 + r.range(0.0, 30.0), 0.7));
+            }
+        }
         // off the trunk: short epicormic shoots and two old dead branches
-        for &(y, side, len) in &[(180.0f32, -1.0f32, 150.0f32), (300.0, -1.0, 90.0), (90.0, 1.0, 120.0), (620.0, 1.0, 60.0), (860.0, -1.0, 45.0), (410.0, -1.0, 70.0)] {
+        for &(y, side, len) in &[(30.0f32, -1.0f32, 110.0f32), (300.0, -1.0, 90.0), (90.0, 1.0, 120.0), (255.0, 1.0, 75.0), (620.0, 1.0, 60.0), (860.0, -1.0, 45.0), (410.0, -1.0, 70.0)] {
             let x = axis(y) + side * (half_w(y) - 3.0);
             let a = if side < 0.0 { -2.5 } else { -0.7 } + r.range(-0.25, 0.25);
             stack.push(((x, y), a, len, 0.85));
@@ -574,8 +586,11 @@ fn main() {
         let mut r = Rng::new(o.seed + 501);
         let mut sab = Held::new(Tool { point: 1.0, ..Tool::round_sable(3.0) }, 501);
         let crust = pal.paint(hex("#cfcbc4"), 0.1);
-        for (pts, ws) in [(&LIMB[..], &LIMB_W[..]), (&STUB[..], &STUB_W[..])] {
+        for (pts, ws) in [(&LIMB[..], &LIMB_W[..]), (&STUB[..], &STUB_W[..]), (&DEAD[..], &DEAD_W[..])] {
             for i in 0..pts.len() - 1 {
+                if i == 0 && pts.len() > 3 {
+                    continue;
+                }
                 let (a, b) = (pts[i], pts[i + 1]);
                 for _lump in 0..3 {
                 if r.f() < 0.35 {
@@ -628,9 +643,9 @@ fn main() {
         // small round, stiff paint, a little raised
         let mut r = Rng::new(o.seed + 601);
         let mut sab = Held::new(Tool { point: 1.0, ..Tool::round_sable(4.0) }, 601);
-        let lit = pal.paint(hex("#cfc8bd"), 0.1);
-        let lit2 = pal.paint(hex("#c6c0b8"), 0.12);
-        let furrow = pal.paint(hex("#a3a2a8"), 0.2);
+        let lit = pal.paint(hex("#c8c2b9"), 0.15);
+        let lit2 = pal.paint(hex("#c1bcb5"), 0.18);
+        let furrow = pal.paint(hex("#a8a7ac"), 0.25);
         let off_tree = Mask::from_fn(f, |_, _| 1.0).subtract(&trunk_m.dilate(1.5));
         for k in 0..30 {
             let y = BASE_Y - 60.0 + (h - BASE_Y + 60.0) * (k as f32 / 30.0).powf(0.8) + r.range(-6.0, 6.0);
@@ -678,10 +693,10 @@ fn main() {
         let mut rig = Held::new(Tool { point: 1.0, ..Tool::rigger(0.9) }, 701);
         let stalk = [pal.paint(hex("#5c4e3a"), 0.12), pal.paint(hex("#433a2e"), 0.12), pal.paint(hex("#77674e"), 0.1)];
         let ax = axis(BASE_Y);
-        let clumps: Vec<(f32, f32, usize)> = vec![(ax - 95.0, 0.0, 14), (ax + 110.0, 0.0, 9), (170.0, 1240.0, 12), (760.0, 1210.0, 10), (880.0, 1290.0, 8), (80.0, 1090.0, 6), (600.0, 1060.0, 5)];
+        let clumps: Vec<(f32, f32, usize)> = vec![(ax - 95.0, 0.0, 18), (ax + 110.0, 0.0, 12), (ax - 150.0, 0.0, 5), (170.0, 1240.0, 18), (760.0, 1210.0, 14), (880.0, 1290.0, 12), (80.0, 1090.0, 7), (600.0, 1060.0, 6), (330.0, 1300.0, 9)];
         for &(cx, cy, n) in &clumps {
             let cy = if cy == 0.0 { contact(cx) + 6.0 } else { cy };
-            let scale = 0.5 + 0.5 * smoothstep(1000.0, 1300.0, cy);
+            let scale = 0.45 + 0.75 * smoothstep(1000.0, 1320.0, cy);
             for _ in 0..n {
                 let x = cx + r.range(-18.0, 18.0) * scale;
                 let y = cy + r.range(-4.0, 4.0);

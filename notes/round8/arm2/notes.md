@@ -1,6 +1,11 @@
 # Round 8, arm 2: a winter landscape in the manner of Friedrich
 
-Program: `paintings/src/bin/winter_ruin.rs` (`cargo paint winter_ruin`).
+**Title:** *Winter Evening, the Way to the Ruined Choir*
+
+Program: `paintings/src/bin/winter_ruin.rs` (`cargo paint winter_ruin`,
+`-- --full` for 3200px; `OAK=n` picks the oak's seed, default 3). Renders:
+`painting_1000.png`, `painting_3200.png` (seed 1, the 3200px render about
+100 s on the shared machine). About 45 minutes of work, 5 full renders.
 
 ## Composition and why
 
@@ -164,3 +169,20 @@ black), 1.4:1, about 44 × 31 cm. Every paint is mixed from those tubes
     mistake, not an engine fault, but nothing tells you a stage's marks
     were fully covered; I moved them after the snow.
 14. Minor: no integer draw on `Rng` (`below`); I used `range` and cast.
+
+## Top five, in order of cost
+
+1. One RNG for the whole painting plus stage fingerprints that cover every
+   earlier line: an edit anywhere early re-shapes every later motif and
+   forces a full rerender (items 3, 4).
+2. Narrow bands and thin veils: planned handlings leave narrow bands empty
+   or toothed, short strokes along a contour scallop, glaze strokes show
+   their tops, a clipped badger leaves an edge (items 1, 5, 10, 11).
+3. A badger over a wet stipple (or a hog drawn into a wet sky) lifts paint
+   down to the red ground in streaks (item 2).
+4. Things that only show at 3200px (brushes running dry along long limbs,
+   stroke-end scallops, impasto lozenges, the needle "combs"), while a
+   3200px crop costs as much as a whole 1000px preview because masks are
+   built for the whole canvas (items 7, 12).
+5. No mask edge queries, and `roughen` moves edges away from the geometry
+   that made them, so detail placed from the geometry floats (item 6).

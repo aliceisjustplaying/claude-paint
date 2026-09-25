@@ -275,3 +275,10 @@ diverge most on this picture.
 - Q (the middle one) is too symmetrical; "idk". R and P "not half bad".
 - The snow "not too bad but room for improvement".
 - The brown leaves (last year's, hanging low) are "an interesting idea".
+
+## Alice on Round 13, hand-structured trees (2026-09-25, unlabeled S, T, U)
+"Ouch. Wow. Ouch. U is the least bad." Worse than round 10 (the round she
+shows everyone) and still not round 2 level. "How do we teach Claudes to
+paint trees? We should stop and think about this."
+(Key: S = tree1, T = tree2, U = tree3, the one with the trunk and five
+limbs placed by hand and the fewest rules.)

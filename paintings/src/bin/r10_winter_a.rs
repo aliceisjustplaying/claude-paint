@@ -46,7 +46,7 @@ fn woods(x: f32) -> f32 {
 fn sky(x: f32, y: f32) -> Rgb {
     let t = (y / HOR).clamp(0.0, 1.0);
     let base = gradient(
-        &[(0.0, hex("#76849b")), (0.28, hex("#96a0ac")), (0.52, hex("#b7b8b3")), (0.72, hex("#d0c3b5")), (0.88, hex("#e0cdad")), (1.0, hex("#ebd5a8"))],
+        &[(0.0, hex("#6d7ca3")), (0.28, hex("#8f9bb0")), (0.52, hex("#b7b8b3")), (0.72, hex("#d0c3b5")), (0.88, hex("#e0cdad")), (1.0, hex("#ebd5a8"))],
         t,
         Mix::Light,
     );
@@ -69,7 +69,7 @@ fn snow(x: f32, y: f32, drift: &Fbm) -> Rgb {
     let top = knoll(x);
     let d = ((y - top) / (704.0 - top)).clamp(0.0, 1.0);
     let g = (-((x - GLOW_X) / 300.0).powi(2)).exp();
-    let far = mix(hex("#d2cac8"), hex("#dfd2c2"), g, Mix::Light);
+    let far = mix(hex("#cec8cc"), hex("#dcd0c6"), g, Mix::Light);
     let base = mix(far, hex("#8e95a8"), d.powf(0.75), Mix::Light);
     // drifts: a height field stretched along the ground; slopes facing the
     // glow (west, left) catch light, hollows go blue
@@ -83,15 +83,17 @@ fn snow(x: f32, y: f32, drift: &Fbm) -> Rgb {
     let below = y - bank(x);
     let face = if below > 0.0 { (1.0 - below / 16.0).max(0.0).powf(1.5) } else { 0.0 };
     let lip = if below <= 0.0 { (1.0 + below / 5.0).max(0.0) } else { 0.0 };
-    shift(base, 0.045 * lit - 0.04 * hollow - 0.07 * face + 0.03 * lip, 0.004 * face, -0.014 * lit.min(0.0) - 0.012 * hollow - 0.025 * face)
+    shift(base, 0.065 * lit - 0.055 * hollow - 0.095 * face + 0.035 * lip, 0.005 * face, -0.018 * lit.min(0.0) - 0.016 * hollow - 0.03 * face)
 }
 
 /// Capstone of the dolmen: top and bottom edges.
 fn cap_top(x: f32) -> f32 {
-    401.0 + 11.0 * ((x - 492.0) / 68.0).powi(2) + 1.3 * (x / 9.0).sin()
+    let u = ((x - 490.0) / 84.0).clamp(-1.0, 1.0);
+    412.0 + 3.0 * u - 25.0 * (1.0 - u.powi(4)).max(0.0).sqrt() + 1.4 * (x / 9.0).sin() + 2.5 * (x / 31.0 + 1.0).sin() - 3.5 * (-((x - 452.0) / 22.0).powi(2)).exp()
 }
 fn cap_bot(x: f32) -> f32 {
-    430.0 + 3.0 * (x / 23.0).sin() + 4.0 * ((x - 470.0) / 80.0)
+    let u = ((x - 490.0) / 84.0).clamp(-1.0, 1.0);
+    412.0 + 3.0 * u + 17.0 * (1.0 - u.powi(4)).max(0.0).sqrt() + 2.0 * (x / 23.0).sin()
 }
 
 /// Paint one limb of a grown tree as the hand would: one movement from
@@ -260,10 +262,10 @@ fn my_oak(base: (f32, f32), height: f32, lean: f32, broken_top: bool, seed: u64)
     grow(&mut limbs, None, base, -FRAC_PI_2 + lean, trunk_len, w0, 0, height, broken_top, &mut rng);
     // buttress roots into the snow
     for side in [-1.0f32, 1.0] {
-        let a = if side < 0.0 { std::f32::consts::PI - 0.25 } else { 0.25 };
-        let l = w0 * rng.range(0.8, 1.3);
-        let pts = vec![(base.0 + side * w0 * 0.2, base.1 - w0 * 0.3), (base.0 + side * w0 * 0.2 + l * a.cos(), base.1 - w0 * 0.3 + l * a.sin())];
-        limbs.push(Limb { z: vec![0.0; 2], age: vec![1; 2], w: vec![w0 * 0.55, w0 * 0.15], order: 1, parent: Some(0), at: 0, dead: false, dead_from: 2, broken: false, root: true, pts });
+        let a = if side < 0.0 { std::f32::consts::PI - 0.1 } else { 0.1 };
+        let l = w0 * rng.range(0.7, 1.1);
+        let pts = vec![(base.0 + side * w0 * 0.15, base.1 - w0 * 0.12), (base.0 + side * w0 * 0.15 + l * a.cos(), base.1 - w0 * 0.12 + l * a.sin())];
+        limbs.push(Limb { z: vec![0.0; 2], age: vec![1; 2], w: vec![w0 * 0.4, w0 * 0.12], order: 1, parent: Some(0), at: 0, dead: false, dead_from: 2, broken: false, root: true, pts });
     }
     Skeleton { limbs, base, height, pipe: 2.0, leaf: paint::Leafing::none() }
 }
@@ -366,6 +368,37 @@ fn paint_tree(c: &mut paint::Canvas, sk: &Skeleton, live: Paint, dead: Paint, ri
             j = k + 1;
         }
     }
+    // bark: oak's furrows, short broken strokes along the big wood, some
+    // darker than the bark, some catching a little light
+    let mut bk = Held::new(Tool::rigger(0.9), seed ^ 0xba4c);
+    for (i, l) in sk.limbs.iter().enumerate().filter(|(_, l)| !l.root && !l.is_empty() && l.w[0] > 5.0) {
+        let lp = gnarled(l);
+        let n = lp.len();
+        for q in 0..n - 1 {
+            let w = l.w[q];
+            if w < 4.0 {
+                break;
+            }
+            let strokes = (w * 0.5) as usize + 1;
+            for _ in 0..strokes {
+                let d = l.dir(q);
+                let (nx, ny) = (-d.1, d.0);
+                let off = rng.range(-0.42, 0.42) * w;
+                let t0 = rng.f();
+                let seg = ((lp[q + 1].0 - lp[q].0).powi(2) + (lp[q + 1].1 - lp[q].1).powi(2)).sqrt();
+                let len = rng.range(0.4, 1.0) * seg;
+                let p0 = (lp[q].0 + d.0 * seg * t0 * 0.5 + nx * off, lp[q].1 + d.1 * seg * t0 * 0.5 + ny * off);
+                let p1 = (p0.0 + d.0 * len + nx * rng.range(-0.6, 0.6), p0.1 + d.1 * len + ny * rng.range(-0.6, 0.6));
+                // light on the side toward the glow
+                let (gx, gy) = (glow.0 - p0.0, glow.1 - p0.1);
+                let toward = (nx * gx + ny * gy).signum() * off.signum() > 0.0 && off.abs() > 0.2 * w;
+                let col = if toward && rng.f() < 0.6 { rim_p } else { live };
+                bk.reload(col, 0.4);
+                c.drag(&mut bk, &Gesture::new(vec![p0, ((p0.0 + p1.0) * 0.5 + nx * rng.range(-0.5, 0.5), (p0.1 + p1.1) * 0.5), p1]).pressure(0.45, 0.2).ramps(0.2, 0.4).shake(0.7), None);
+            }
+            let _ = i;
+        }
+    }
     // snow: a thin broken line on the upper side of limbs that lie level
     // enough to hold it
     let mut h = Held::new(Tool::rigger(1.2), seed ^ 0x5eed);
@@ -423,7 +456,7 @@ fn main() {
         }).collect();
         worn += c.draw(&hb, &hand_line(&rise, &[0.5, 0.6, 0.45], true, false, 0.6, 2), worn, 2);
         let capl: Vec<(f32, f32)> = (0..=14).map(|i| {
-            let x = 414.0 + i as f32 * 10.5;
+            let x = 402.0 + i as f32 * 12.5;
             (x, cap_top(x))
         }).collect();
         worn += c.draw(&hb, &hand_line(&capl, &[0.6, 0.7], true, false, 0.4, 3), worn, 3);
@@ -456,16 +489,6 @@ fn main() {
         };
         let s2 = Stipple::new(Tool::stippler(1.6)).mixed(&sky_pal, 0.5).color(glow).coverage(|_, y| 0.6 + 1.6 * smoothstep(80.0, HOR, y)).pressure(0.5, 0.85).dips(24, 0.35, 0.6);
         c.stipple(&sky_m, &s2, 14);
-        // thin streaks of cloud low in the west, violet-gray, their lower
-        // edges touched by the glow
-        let streak = Fbm::new(21, 4, 160.0);
-        let cloud_cov = move |x: f32, y: f32| {
-            let band = (-((y - 352.0) / 22.0).powi(2)).exp() + 0.7 * (-((y - 300.0) / 12.0).powi(2)).exp() + 0.5 * (-((y - 398.0) / 9.0).powi(2)).exp();
-            let n = streak.get(x * 0.25, y * 3.0);
-            (band * smoothstep(-0.05, 0.35, n) * 2.2 * (1.0 - smoothstep(620.0, 900.0, x))).max(0.0)
-        };
-        let cloud = Stipple::new(Tool::stippler(2.4)).mixed(&sky_pal, 0.55).color_over(|_, _, u| shift(u, -0.07, 0.012, -0.01)).coverage(cloud_cov).pressure(0.45, 0.8).drag(1.5, Some(0.0)).dips(18, 0.35, 0.6);
-        c.stipple(&sky_m, &cloud, 15);
         c.dry();
     }
 
@@ -569,27 +592,27 @@ fn main() {
     // ---- the dolmen
     let stone_f = Fbm::new(9, 4, 14.0);
     let cap_m = Mask::from_fn(f, move |x, y| {
-        let inx = smoothstep(412.0, 418.0, x) * (1.0 - smoothstep(556.0, 563.0, x));
+        let inx = smoothstep(405.0, 407.0, x) * (1.0 - smoothstep(573.0, 575.0, x));
         inx * smoothstep(cap_top(x) - 0.7, cap_top(x) + 0.7, y) * (1.0 - smoothstep(cap_bot(x) - 0.7, cap_bot(x) + 0.7, y))
     })
     .roughen(3, 12.0, 1.4, 0.5);
     let uprights = Mask::from_shape(
         f,
         Shape::new()
-            .poly(&[(424.0, 428.0), (449.0, 430.0), (452.0, 462.0), (419.0, 464.0)])
-            .add(Shape::new().poly(&[(517.0, 432.0), (546.0, 430.0), (553.0, 468.0), (514.0, 466.0)])),
+            .poly(&[(416.0, 424.0), (446.0, 427.0), (450.0, 466.0), (410.0, 468.0)])
+            .add(Shape::new().poly(&[(522.0, 429.0), (556.0, 427.0), (563.0, 472.0), (518.0, 470.0)])),
     )
-    .roughen(4, 10.0, 1.3, 0.5)
+    .roughen(4, 9.0, 2.2, 0.5)
     .mul(&Mask::from_fn(f, move |x, y| 1.0 - smoothstep(kn(x) - 1.5, kn(x) + 1.0, y)));
-    let back_up = Mask::from_shape(f, Shape::new().poly(&[(476.0, 432.0), (497.0, 433.0), (499.0, 462.0), (474.0, 462.0)]))
+    let back_up = Mask::from_shape(f, Shape::new().poly(&[(474.0, 430.0), (499.0, 431.0), (501.0, 464.0), (471.0, 464.0)]))
         .roughen(5, 10.0, 1.0, 0.5)
         .mul(&Mask::from_fn(f, move |x, y| 1.0 - smoothstep(kn(x) - 1.5, kn(x) + 1.0, y)));
-    let boulders = Mask::from_shape(f, Shape::new().ellipse(396.0, 466.0, 13.0, 6.0).add(Shape::new().ellipse(578.0, 474.0, 10.0, 5.0)).add(Shape::new().ellipse(458.0, 471.0, 8.0, 4.0)))
+    let boulders = Mask::from_shape(f, Shape::new().ellipse(388.0, 467.0, 15.0, 7.0).add(Shape::new().ellipse(590.0, 476.0, 12.0, 6.0)).add(Shape::new().ellipse(455.0, 473.0, 9.0, 4.5)).add(Shape::new().ellipse(371.0, 475.0, 7.0, 3.5)))
         .roughen(6, 8.0, 1.2, 0.5)
         .mul(&Mask::from_fn(f, move |_, y| 1.0 - smoothstep(0.0, 1.0, 0.0 * y)));
     if o.stage("dolmen", &mut c, &mut rng) {
         // the hollow under the capstone: deep, cool shadow
-        let under_m = Mask::from_shape(f, Shape::new().poly(&[(447.0, 430.0), (518.0, 433.0), (516.0, 462.0), (450.0, 461.0)]))
+        let under_m = Mask::from_shape(f, Shape::new().poly(&[(444.0, 427.0), (523.0, 430.0), (520.0, 466.0), (448.0, 465.0)]))
             .roughen(8, 12.0, 1.5, 0.6)
             .mul(&Mask::from_fn(f, move |x, y| 1.0 - smoothstep(kn(x) - 1.0, kn(x) + 1.0, y)));
         c.work(&under_m, &st.detail().color(|_, y| mix(hex("#2e2d33"), hex("#4a4a55"), smoothstep(440.0, 462.0, y), Mix::Light)).angle(|_, _| 0.0).length(4.0, 12.0).coverage(4.0), 40);
@@ -597,39 +620,108 @@ fn main() {
         c.work(&back_up, &st.detail().color(move |x, y| shift(hex("#45434a"), 0.03 * stone_f.get(x, y), 0.0, 0.0)).angle(|_, _| 1.5).length(4.0, 10.0).coverage(4.0), 41);
         // stones: granite, dark in the dusk; the west faces catch a little
         // warm light from the glow, the tops cool light from the sky
-        let stone = move |x: f32, y: f32, top: f32, left: f32, right: f32| {
-            let n = stone_f.get(x, y);
-            let west = 1.0 - smoothstep(left, left + 7.0, x);
-            let upper = 1.0 - smoothstep(top, top + 8.0, y);
-            let east = smoothstep(right - 8.0, right, x);
-            let base = mix(hex("#4b4847"), hex("#5a5550"), 0.5 + 0.5 * n, Mix::Pigment);
-            let b = mix(base, hex("#857563"), 0.55 * west, Mix::Light);
-            let b = mix(b, hex("#6e727c"), 0.45 * upper, Mix::Light);
-            shift(b, -0.03 * east, 0.0, -0.005 * east)
+        let fine = Fbm::new(19, 3, 4.0);
+        // granite at dusk: the tops take the cool sky, the west ends a
+        // little warm light from the glow, the undersides are dark, and
+        // low down the snow throws a cool reflected light back up
+        let stone = move |x: f32, y: f32, top: f32, bot: f32, left: f32, right: f32| {
+            let t = ((y - top) / (bot - top).max(1.0)).clamp(0.0, 1.0);
+            let base = gradient(&[(0.0, hex("#6a6c73")), (0.3, hex("#555250")), (0.75, hex("#3c3937")), (1.0, hex("#302e2f"))], t, Mix::Light);
+            let west = 1.0 - smoothstep(left, left + 9.0, x);
+            let east = smoothstep(right - 9.0, right, x);
+            let b = mix(base, hex("#76685b"), 0.5 * west, Mix::Light);
+            let b = shift(b, -0.035 * east, 0.0, -0.006 * east);
+            let n = 0.05 * stone_f.get(x, y) + 0.03 * fine.get(x, y);
+            shift(b, n, 0.004 * stone_f.get(y, x), 0.0)
         };
-        let up_hd = st.detail().color(move |x, y| if x < 490.0 { stone(x, y, 434.0, 424.0, 450.0) } else { stone(x, y, 436.0, 516.0, 549.0) }).angle(|_, _| 1.45).angle_jitter(0.25).length(5.0, 14.0).coverage(4.0);
+        let up_col = move |x: f32, y: f32| {
+            let (top, l, r) = if x < 490.0 { (426.0, 412.0, 449.0) } else { (428.0, 519.0, 560.0) };
+            let b = stone(x, y, top, knoll(x) + 2.0, l, r);
+            // reflected light off the snow at the foot
+            let refl = smoothstep(knoll(x) - 14.0, knoll(x), y);
+            mix(b, hex("#7c808e"), 0.35 * refl, Mix::Light)
+        };
+        let up_hd = st.detail().color(up_col).angle(|_, _| 1.45).angle_jitter(0.25).length(5.0, 14.0).coverage(4.0);
         c.work(&uprights, &up_hd, 42);
-        let cap_hd = st.detail().color(move |x, y| stone(x, y, cap_top(x) + 3.0, 415.0, 560.0)).angle(|x, _| 0.08 * ((x - 490.0) / 70.0)).angle_jitter(0.2).length(6.0, 18.0).coverage(4.0);
+        let cap_col = move |x: f32, y: f32| {
+            let b = stone(x, y, cap_top(x), cap_bot(x), 410.0, 572.0);
+            // the underside above the snow also takes reflected light
+            let refl = smoothstep(cap_bot(x) - 5.0, cap_bot(x), y);
+            mix(b, hex("#5d606c"), 0.3 * refl, Mix::Light)
+        };
+        // strokes follow the dome of the stone
+        let cap_ang = move |x: f32, y: f32| {
+            let t = ((y - cap_top(x)) / (cap_bot(x) - cap_top(x)).max(1.0)).clamp(0.0, 1.0);
+            let st_ = (cap_top(x + 2.0) - cap_top(x - 2.0)) / 4.0;
+            let sb = (cap_bot(x + 2.0) - cap_bot(x - 2.0)) / 4.0;
+            (st_ * (1.0 - t) + sb * t).atan()
+        };
+        let cap_hd = st.detail().color(cap_col).angle(cap_ang).angle_jitter(0.2).length(6.0, 18.0).coverage(4.0);
         c.work(&cap_m, &cap_hd, 43);
-        c.work(&boulders, &st.detail().color(move |x, y| stone(x, y, 460.0, 390.0, 590.0)).angle(|_, _| 0.1).length(3.0, 8.0).coverage(4.0), 44);
+        c.work(&boulders, &st.detail().color(move |x, y| stone(x, y, 458.0, 480.0, 376.0, 602.0)).angle(|_, _| 0.1).length(3.0, 8.0).coverage(4.0), 44);
         c.wait(30.0);
-        // lichen and grain: small touches, dark pits and pale flecks
-        let mut b = Held::new(Tool::round_sable(1.0), 45);
+        // the planes turned up to the sky: lean, dry strokes of a lighter
+        // cool gray dragged over the dark, catching on the grain; then
+        // fissures, then lichen and grain
         let all = cap_m.clone().union(&uprights).union(&boulders);
-        for k in 0..260 {
-            let x = rng.range(410.0, 590.0);
-            let y = rng.range(398.0, 476.0);
-            if all.sample(x, y) < 0.8 {
+        let mut dry = Held::new(Tool { lay: 0.35, ragged: 0.6, ..Tool::filbert(3.0) }, 50);
+        c.wait(20.0);
+        // the upper planes of the capstone, lighter where they turn up to
+        // the sky: broken patches, one plane beside the next
+        let facets = Fbm::new(23, 3, 18.0);
+        let upper = cap_m.clone().mul_fn(move |x, y| {
+            let t = (y - cap_top(x)) / (cap_bot(x) - cap_top(x)).max(1.0);
+            (1.0 - smoothstep(0.25, 0.55, t)) * smoothstep(-0.05, 0.15, facets.get(x, y * 1.6))
+        });
+        c.work(&upper, &st.detail().color_over(|_, _, u| shift(u, 0.06, -0.002, -0.01)).angle(cap_ang).angle_jitter(0.15).length(5.0, 14.0).coverage(3.0).medium(0.1), 52);
+        for k in 0..26 {
+            let x = rng.range(412.0, 560.0);
+            let (lo, hi) = if x > 449.0 && x < 519.0 { (cap_top(x), cap_bot(x)) } else { (cap_top(x), knoll(x)) };
+            let y = rng.range(lo + 4.0, hi - 2.0);
+            if all.sample(x, y) < 0.9 {
                 continue;
             }
-            let col = if k % 3 == 0 { hex("#8a8674") } else { hex("#35322f") };
-            b.reload(pal.paint(col, 0.1), 0.5);
-            c.touch(&mut b, &Touch::at(x, y).pressure(rng.range(0.25, 0.55)).drag(rng.range(-0.8, 0.8), rng.range(-0.3, 0.3)), None);
+            let vertical = !(cap_m.sample(x, y) > 0.5);
+            let a = if vertical { 1.5 + rng.range(-0.3, 0.3) } else { cap_ang(x, y) + rng.range(-0.4, 0.4) };
+            let len = rng.range(4.0, 11.0);
+            dry.reload(pal.paint(hex("#6f7178"), 0.05).with_stiff(0.9), 0.2);
+            let _ = k;
+            c.drag(&mut dry, &Gesture::new(vec![(x, y), (x + len * a.cos(), y + len * a.sin())]).pressure(0.3, 0.15).ramps(0.3, 0.4).shake(0.8), None);
+        }
+        let mut fis = Held::new(Tool::rigger(0.7), 51);
+        for _ in 0..16 {
+            let x = rng.range(412.0, 566.0);
+            let y = rng.range(cap_top(x) + 6.0, knoll(x) - 3.0);
+            if all.sample(x, y) < 0.95 {
+                continue;
+            }
+            let a = rng.range(0.0, std::f32::consts::PI);
+            let pts: Vec<(f32, f32)> = (0..4).map(|i| {
+                let t = i as f32 * rng.range(2.0, 4.0);
+                (x + t * (a + rng.range(-0.4, 0.4)).cos(), y + t * (a + rng.range(-0.4, 0.4)).sin())
+            }).collect();
+            fis.reload(pal.paint(hex("#221f20"), 0.1), 0.6);
+            c.drag(&mut fis, &Gesture::new(pts).pressure(0.5, 0.1).ramps(0.1, 0.6).shake(0.6), Some(&all));
+        }
+        let mut b = Held::new(Tool::round_sable(2.0), 45);
+        for k in 0..420 {
+            let x = rng.range(370.0, 605.0);
+            let y = rng.range(385.0, 482.0);
+            if all.sample(x, y) < 0.9 {
+                continue;
+            }
+            let col = match k % 5 {
+                0 | 3 => hex("#7f7c6a"),
+                1 => hex("#8e8a80"),
+                _ => hex("#2c2927"),
+            };
+            b.reload(pal.paint(col, 0.1), 0.45);
+            c.touch(&mut b, &Touch::at(x, y).pressure(rng.range(0.15, 0.5)).drag(rng.range(-1.0, 1.0), rng.range(-0.4, 0.4)).twist(0.5), Some(&all));
         }
         // the crack under the capstone's edge and the joints: dark lines
         let mut r = Held::new(Tool::rigger(0.8), 46);
         let bot: Vec<(f32, f32)> = (0..=12).map(|i| {
-            let x = 418.0 + i as f32 * 11.5;
+            let x = 410.0 + i as f32 * 13.0;
             (x, cap_bot(x) - 0.8)
         }).collect();
         r.load(pal.paint(hex("#232226"), 0.1), 0.8);
@@ -637,7 +729,8 @@ fn main() {
         c.dry();
         // snow lying on the capstone and in the ledges: a soft irregular cap
         let cap_snow = cap_m.clone().mul_fn(move |x, y| {
-            let depth = 4.5 + 2.5 * (x / 13.0).sin() + 1.5 * stone_f.get(x * 2.0, 0.0);
+            let u = (x - 490.0) / 84.0;
+            let depth = 2.5 + 10.0 * (1.0 - u * u).max(0.0).powf(1.5) + 1.5 * (x / 17.0).sin() + 3.0 * stone_f.get(x * 0.6, 7.0);
             1.0 - smoothstep(cap_top(x) + depth - 1.0, cap_top(x) + depth + 1.0, y)
         });
         let snow_col = move |x: f32, y: f32| {
@@ -647,11 +740,14 @@ fn main() {
         let snow_hd = st.detail().color(snow_col).medium(0.05).angle(|x, _| 0.1 * ((x - 490.0) / 70.0)).length(5.0, 15.0).coverage(4.0);
         c.work(&cap_snow, &snow_hd, 47);
         let up_snow = uprights.clone().mul_fn(move |x, y| {
-            let t = if x < 490.0 { 431.0 } else { 433.0 };
+            let t = if x < 490.0 { 427.0 } else { 429.0 };
             1.0 - smoothstep(t + 1.5, t + 3.5, y)
         });
         c.work(&up_snow, &st.detail().color(|_, _| hex("#c9c8d0")).length(3.0, 8.0).coverage(3.5), 48);
-        let b_snow = boulders.clone().mul_fn(|_, y| 1.0 - smoothstep(465.0, 470.0, y));
+        let b_snow = boulders.clone().mul_fn(|x, y| {
+            let cy = if x < 400.0 { if x < 380.0 { 475.0 } else { 467.0 } } else if x < 500.0 { 473.0 } else { 476.0 };
+            1.0 - smoothstep(cy - 1.0 + 1.2 * (x / 5.0).sin(), cy + 1.0 + 1.2 * (x / 5.0).sin(), y)
+        });
         c.work(&b_snow, &st.detail().color(|_, _| hex("#cdcad0")).length(3.0, 8.0).coverage(3.5), 49);
         c.dry();
     }
@@ -689,7 +785,7 @@ fn main() {
         for (x, w) in [(612.0f32, 30.0f32), (336.0, 16.0)] {
             let foot = Mask::from_fn(f, move |px, py| {
                 let top = knoll(px) - 3.0 + 3.0 * ((px - x) / w).powi(2);
-                smoothstep(top - 0.6, top + 0.6, py) * (1.0 - smoothstep(w * 0.6, w, (px - x).abs())) * (1.0 - smoothstep(knoll(px) + 4.0, knoll(px) + 6.0, py))
+                smoothstep(top - 0.6, top + 0.6, py) * (1.0 - smoothstep(w * 0.9, w * 1.3, (px - x).abs())) * (1.0 - smoothstep(knoll(px) + 14.0, knoll(px) + 16.0, py))
             });
             c.work(&foot, &st.detail().color(move |px, py| snow(px, py, &drift)).angle(|_, _| 0.0).length(4.0, 10.0).coverage(3.5), 60 + x as u64);
         }
@@ -792,47 +888,49 @@ fn main() {
     if o.stage("grass", &mut c, &mut rng) {
         let dens = Fbm::new(41, 3, 70.0);
         let paints = [
-            pal.paint(hex("#4d4236"), 0.15),
-            pal.paint(hex("#5e5040"), 0.15),
-            pal.paint(hex("#86705a"), 0.15),
-            pal.paint(hex("#2e2822"), 0.15),
+            pal.paint(hex("#4a4038"), 0.15),
+            pal.paint(hex("#5d5249"), 0.15),
+            pal.paint(hex("#7a6a58"), 0.15),
+            pal.paint(hex("#2d2824"), 0.15),
         ];
         let mut rg = Held::new(Tool::rigger(0.7), 90);
         let mut sb = Held::new(Tool::round_sable(1.1), 91);
         let mut n = 0usize;
-        let mut spots: Vec<(f32, f32)> = Vec::new();
-        for _ in 0..260 {
+        // tufts: (x, y, blades)
+        let mut spots: Vec<(f32, f32, usize)> = Vec::new();
+        for _ in 0..120 {
             let x = rng.range(-10.0, 1010.0);
-            let y = bank(x) + rng.range(-3.0, 2.0);
-            if dens.get(x, 0.0) > -0.05 {
-                spots.push((x, y));
+            let y = bank(x) + rng.range(-2.0, 1.5);
+            if dens.get(x, 0.0) > -0.1 {
+                spots.push((x, y, 4 + (rng.f() * 12.0) as usize));
             }
         }
-        for _ in 0..420 {
+        for _ in 0..200 {
             let x = rng.range(-10.0, 1010.0);
-            let y = rng.range(600.0, h + 5.0);
-            if dens.get(x, y) > 0.1 {
-                spots.push((x, y));
+            let y = rng.range(610.0, h + 5.0);
+            if dens.get(x, y) > 0.05 {
+                spots.push((x, y, 5 + (rng.f() * rng.f() * 18.0) as usize));
             }
         }
-        for _ in 0..40 {
-            let x = rng.range(380.0, 640.0);
-            let y = knoll(x) + rng.range(2.0, 12.0);
-            spots.push((x, y));
+        for _ in 0..24 {
+            let x = rng.range(360.0, 660.0);
+            let y = knoll(x) + rng.range(3.0, 14.0);
+            spots.push((x, y, 2 + (rng.f() * 4.0) as usize));
         }
-        for &(x, y) in &spots {
+        for &(x, y, blades) in &spots {
             if (x - 402.0).abs() < 22.0 && y > 540.0 && y < 612.0 {
                 continue;
             }
             let near = smoothstep(470.0, h, y);
-            let blades = 2 + (rng.f() * 5.0) as usize;
+            let spread = 2.0 + blades as f32 * 0.5;
             for _ in 0..blades {
-                let ht = (3.0 + 10.0 * rng.f() * rng.f() + 4.0 * rng.f()) * (0.3 + 1.2 * near);
-                let lean = rng.range(-0.5, 0.5) + 0.12;
-                let bx = x + rng.range(-2.5, 2.5) * (0.4 + near);
+                let ht = (2.0 + 16.0 * rng.f() * rng.f() * rng.f() + 4.0 * rng.f()) * (0.3 + 1.2 * near);
+                let lean = rng.range(-0.7, 0.7) * rng.f() + 0.12;
+                let bx = x + rng.range(-spread, spread) * (0.4 + near);
+                let by = y + rng.range(-1.0, 1.0) * (0.3 + near);
                 let bend = rng.range(-0.15, 0.15);
-                let pts = vec![(bx, y + 0.5), (bx + lean * ht * 0.3, y - ht * 0.5), (bx + (lean + bend) * ht, y - ht)];
-                let fine = ht < 6.0 || n % 3 != 0;
+                let pts = vec![(bx, by + 0.5), (bx + lean * ht * 0.3, by - ht * 0.5), (bx + (lean + bend) * ht, by - ht)];
+                let fine = ht < 7.0 || n % 4 != 0;
                 let hb = if fine { &mut rg } else { &mut sb };
                 let pk = match n % 7 {
                     0 | 3 => 0,
@@ -841,7 +939,7 @@ fn main() {
                     _ => 3,
                 };
                 hb.reload(paints[pk], 0.55);
-                c.drag(hb, &Gesture::new(pts).pressure(0.65 + 0.2 * near, 0.0).ramps(0.04, 0.8).shake(0.5), None);
+                c.drag(hb, &Gesture::new(pts).pressure(0.6 + 0.2 * near, 0.0).ramps(0.04, 0.8).shake(0.5), None);
                 n += 1;
             }
         }
@@ -879,9 +977,13 @@ fn main() {
         c.glaze(&Pigment::transparent(hex("#8f7f6c")), None, move |x, y| {
             let dx = (x - 480.0) / 560.0;
             let dy = (y - hgt * 0.55) / (hgt * 0.62);
-            0.55 * smoothstep(0.55, 1.25, (dx * dx + dy * dy).sqrt())
+            0.55 * smoothstep(0.55, 1.25, (dx * dx + dy * dy).sqrt()) * (0.3 + 0.7 * smoothstep(0.0, hgt, y))
         });
     }
 
-    o.finish(&mut c, &mut rng, &Finish::aged(st.relief));
+    // a picture about two hundred years old, but well kept: the network
+    // finer in its grime than the default
+    let aged = paint::Cracks::aged(0);
+    let cracks = paint::Cracks { dirt: aged.dirt * 0.3, depth_um: aged.depth_um * 0.4, cupping_um: aged.cupping_um * 0.5, ..aged };
+    o.finish(&mut c, &mut rng, &Finish { cracks: Some(cracks), ..Finish::aged(st.relief) });
 }

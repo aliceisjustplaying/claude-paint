@@ -2,8 +2,9 @@
 
 About thirty painters in this project each painted an original picture in Friedrich's manner, from
 scratch and alone. Each kept notes. Alice, the viewer, reacted to the pictures. None of it reached
-the next painter. This notebook gathers what they tried, what happened and why, by what a painter
-works on. It has no recipes and no verdicts on which picture came out ahead.
+the next painter. This notebook gathers, by what a painter works on, what happened when they
+painted it and why. It says nothing about what to paint. It has no recipes and no verdicts on
+which picture came out ahead.
 
 **How sure.** **[firm]**: several painters, or painters and Alice, saw the same thing. **[fair]**:
 one clear case or a cause shown by changing one thing. **[thin]**: one remark, or my reading.
@@ -116,13 +117,6 @@ worktree X's session log.
 
 ## 4. Snow, ground and grass
 
-- **The foreground was every round's weak spot, by the painters' own account.** "Friedrich's
-  foregrounds are dark but *drawn*" [coast]; "his foregrounds reward close looking everywhere; mine
-  do in patches" [e3-green]; the other five easel painters said the same [e3-free; e3-near; e4-free;
-  e4-green; e4-near]. All six painters of rounds 12–13 called the snowfield empty, named what was
-  missing ("a track, a stone, a stake") and none added it [r12-tree1..3; r13-tree1..3]. One who
-  added a fence last: "it took ten minutes, which says where the next hour should go … not more
-  passes on the sky" [r11-fable]. **[firm]**
 - **Snow recedes only when laid out on the ground.** Drifts placed as blotches read "like a lake
   mirroring clouds"; bands narrowing with distance receded [r10-arm2; r11-study3]. The stroke size
   still never changed with depth [r11-study1; r11-study3]. **[firm]**
@@ -210,10 +204,6 @@ worktree X's session log.
   Backlit trunks came out "one mid-dark brown all the way up"; Alice on one: "the tree's shading
   simplistic" [r11-study2; AR]. A round stroke end at the foot left a bulb or "boot"; snow laid over
   the foot last, with an uneven edge, planted the tree [CT; r12-tree1]. **[firm]**
-- **Everyone painted the same oak.** From the same research all six late painters painted a centered
-  stag-headed dome; Alice saw one as "too symmetrical" [CT; AR]. Their critiques asked for
-  accidents: "one long limb reaching out and one gap where a limb fell" [r13-tree2]. **[firm]**
-
 ## 7. Rocks and buildings
 
 - **Rocks come out as other things.** "Macarons, loaves, haystacks, beetles, soap bars" in round 1
@@ -245,8 +235,8 @@ worktree X's session log.
 
 ## 8. Figures and animals
 
-- **The small figure from behind is in nearly every picture,** usually the only hard silhouette,
-  rimmed toward the hidden sun [coast; winter; mountains; lake; r9-arm2; r10-arm1]. First versions
+- **Small figures.** A small figure is usually the only hard silhouette in a picture, rimmed toward
+  the light [coast; winter; mountains; lake; r9-arm2; r10-arm1]. First versions
   were toys: "a bell-shaped sack in a cowboy hat," "a pawn," a hat "a mop with a bow tie" [r10-arm1;
   r11-fable; s:r9-arm3]. What read: a coat narrowing at the shoulders and flaring at the hem, one
   leg in stride, a stick, a hat painted as part of the body, feet sunk in snow [r9-arm2; r10-arm1;
@@ -278,8 +268,7 @@ worktree X's session log.
   ever" [AR]. **[firm]**
 - **The brush won't come to a point by itself.** Tips came out as "a rounded peg or a bean"; "a real
   sable round comes to a point when lifted" [mountains; winter; r10-arm1]. **[firm]**
-- **Particular things.** A fence with a sagging rail was "the most Friedrich-like particular thing
-  in the picture" [r11-fable]; Alice on another: "not right, very digital" [AR]. A net read as "a
+- **Particular things.** A fence read to Alice as "not right, very digital" [AR]. A net read as "a
   flag" [coast], a boat as "a puck" [r9-arm2], a cross "like a sword" [r9-arm3], reed beds "as
   domes" [r7-arm3]. Tiny things carry at full size and vanish in the preview: yarrow read as "scraps
   of white paper" [mountains; r10-arm3]. **[fair]**
@@ -350,28 +339,7 @@ worktree X's session log.
   varies by painting, where "ours is one uniform net" [AR]. The crack widths have since been
   repaired (the first cracks now open widest); direction and clusters are still open. **[firm]**
 
-## 12. Composition
-
-- **Left alone, painters paint the same picture.** Free painters chose "twilight, a crescent moon,
-  the evening star, a figure seen from behind and a dead oak" again and again [amnesia3; e4-free].
-  These are Friedrich's own motifs; what Alice noticed was the sameness from painter to painter,
-  not the motifs.
-  Alice saw that a painter "without any extra instructions around themes, converges on roughly the
-  same painting" (pond, sky, trees reflecting, foreground grass) [AR]. **[firm]**
-- **The shared design:** low horizon, big quiet sky, dark near stage, empty middle, far band, light
-  low and behind: "everything important is dark against the lightest band of sky" [r10-arm1;
-  mountains; coast]. "Contre-jour needs few decisions" [r8-arm1]. **[firm]**
-- **Safe, centered, even.** "Too centered and too symmetric" [r12-tree3]; "a Friedrich
-  *arrangement*, but without his tension" [r13-tree1]; "closer to a pleasant summer view than to
-  Friedrich's charged emptiness" [r10-arm3]. Even spacing crept into crests, skylines and uprights
-  [r10-arm1; r10-arm2]. Alice: "an emptiness that doesn't do anything for her"; "it doesn't come
-  together" [AR]. **[firm]**
-- **Squint first.** The value view showed "the rock, sky and middle floor all at the same value,"
-  and darkening the surroundings "changed the whole picture's weight in half a second" [e3-near].
-  Framing makes its own faults: keeping a crown inside the frame bent its edge shoots into brooms,
-  "not from a tree" [r13-tree2]. **[firm]**
-
-## 13. Working method, time and looking
+## 12. Working method, time and looking
 
 - **The preview and the full-size picture are different paintings.** The full-size crops "caught
   most of the above," while in the preview faults "read only as vague wrongness" [r11-study3]; "a
@@ -400,49 +368,3 @@ worktree X's session log.
   than its turf [SB]; sizes given as half-widths doubled boulders [e3-green]. A round 2 picture
   repainted on a later engine came out with thinner marks, which Alice saw in its trees
   [winter_port; AR]. **[fair]**
-
-## 14. What painters did that a person would not, and the reverse
-
-Painters here, unlike a person:
-- Placed marks by positions read off a small image, "programming with a picture as the debugger"
-  [e4-green; e3-near]. **[firm]**
-- Finished each thing alone over dry paint and laid tens of thousands of like touches; their notes
-  say what a person would do: "merge some, lose some and let one or two big ones dominate"
-  [lab/foliage; time]. **[firm]**
-- Answered a fault with more of the same, stenciled every edge and subtracted every figure from
-  every glaze by hand [CT; edges; r9-arm1]. **[firm]**
-- Mixed from the plan instead of the canvas, so shadows came out lighter than the snow under them
-  [winter; coast]. **[firm]**
-- Placed snow by argument, and got it on limb undersides and inside a covered chamber [r13-tree1;
-  r11-study3; s:r11-flash]. **[firm]**
-- Saw a mark only after a render, and gave the slowest passage the least attention [r11-study2;
-  r13-tree3]. **[firm]**
-
-A person does, and painters mostly did not:
-- Reloads when the brush runs dry; paints snow over a tree's foot and cuts back without thinking
-  [r8-arm2; r11-study2]. **[firm]**
-- Brushes a shadow wet with the thing that casts it and keeps the blender inside the passage
-  [r8-arm1; mountains]. **[firm]**
-- Paints one particular tree or stone and adds the particular thing: all six late painters named the
-  missing track or stone and none painted it [r13-tree2; CT]. **[firm]**
-
-When painters acted like painters, it paid: cutting sky back over a crest, darkening the
-surroundings, waiting for paint to set. "Paint has consequences here, and time is a real tool"
-[e3-green]. **[firm]**
-
-## 15. What comes back in every section
-
-- **Evenness reads as digital:** grass, twigs, snow beads, stipple bands, skylines, tracks and
-  cracks all failed first by being even. What helped was unevenness (clusters and gaps, varied size
-  and spacing), not fewness: Alice saw "so much texture," probably many small strokes, in a real
-  Friedrich tree, and found an empty picture's emptiness did nothing for her [r13-tree1; SB; AR].
-- **Pasted on or sitting** depends on when a thing goes down (wet against its neighbors or alone on
-  dry paint) and where its color comes from (the paint beside it or the plan) [lab/*; time; r9-arm1;
-  winter].
-- **Two sizes, two pictures:** nearly every fault was found late in a full-size crop [SB;
-  r11-study3].
-- **The painters saw their faults** before anyone else, but their fixes stayed inside the same
-  approach, and the particular things they asked for went unpainted [r12-*; r13-*; CT].
-- **Still open:** a sky with structure that reads as paint; foliage whose shade isn't one slab;
-  cracks with direction and clusters; a twig mass that reads as tone without turning to fur [SB;
-  round6; AR; CT].

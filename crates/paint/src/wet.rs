@@ -374,35 +374,6 @@ mod tests {
         let tiny = super::over_share(pig, under, 5.0, 1e-30);
         assert!(tiny.iter().all(|v| v.is_finite() && (v - 1.0).abs() < 1e-6), "{tiny:?}");
     }
-    use crate::color::hex;
-    use crate::mask::Mask;
-    use crate::style::Style;
-
-    /// How thick the stock handlings lay paint (coats), for choosing `aim`.
-    #[test]
-    #[ignore]
-    fn probe_laid_thickness() {
-        let st = Style::friedrich();
-        for (name, k) in [("broad", 0), ("body", 1), ("detail", 2), ("glaze0.9", 3), ("broad load .3", 4)] {
-            let mut c = st.prepare(500, 1.0, 1);
-            let f0 = c.film.clone();
-            let m = Mask::from_fn(c.frame(), |x, y| if (x - 500.0).abs() < 300.0 && (y - 500.0).abs() < 300.0 { 1.0 } else { 0.0 });
-            let col = move |_: f32, _: f32| hex("#8a9ab0");
-            let h = match k {
-                0 => st.broad().color(col),
-                1 => st.body().color(col),
-                2 => st.detail().color(col),
-                3 => st.glaze(0.9).color(col),
-                _ => st.broad().color(col).load(0.3),
-            };
-            c.work(&m, &h, 3);
-            c.dry();
-            let mut d: Vec<f32> = (0..f0.len()).filter(|&i| m.data[i] > 0.5).map(|i| c.film[i] - f0[i]).collect();
-            d.sort_by(|a, b| a.total_cmp(b));
-            let p = |q: f32| d[((d.len() - 1) as f32 * q) as usize];
-            println!("{name:14} coats p10 {:.2} p50 {:.2} p90 {:.2} mean {:.2}", p(0.1), p(0.5), p(0.9), d.iter().sum::<f32>() / d.len() as f32);
-        }
-    }
 
     /// `Paint::aimed` reaches any target made by a paint of the same hiding
     /// (the review's repro: masstone 0.8, hiding 0.92, 0.1 coats over black),

@@ -3,8 +3,9 @@
 //! paintings/fresh2/fresh2_coast.rs is an 11-point U,
 //! `y = py + 1.3 + drop * sin(a).powf(0.8)` for `a = PI * k / 10`. In f32,
 //! `sin(PI)` is -8.7e-8, so the last point's y is NaN, and a gesture with a
-//! NaN point lays nothing anywhere along it (and says nothing). The
-//! diagnosis and the proposed fix are in notes/workflow.md, "Open bugs".
+//! NaN point laid nothing anywhere along it (and said nothing). Now such a
+//! gesture is rejected loudly; the diagnosis and the fix are in
+//! notes/workflow.md, "Fixed: a gesture with a NaN point".
 
 use paint::{Canvas, Gesture, Held, Orient, Paint, Tool, hex};
 
@@ -29,14 +30,6 @@ fn laid(pts: Vec<(f32, f32)>) -> usize {
     c.drag(&mut b, &g, None);
     c.dry();
     c.pixels().iter().zip(&before).filter(|(a, b)| a != b).count()
-}
-
-#[test]
-fn the_coil_has_a_nan_point() {
-    assert!(std::f32::consts::PI.sin() < 0.0);
-    let pts = coil(500.0, 372.0, 12.0, 2.3);
-    let bad: Vec<usize> = (0..pts.len()).filter(|&i| !(pts[i].0.is_finite() && pts[i].1.is_finite())).collect();
-    assert_eq!(bad, vec![10], "only the last point, at a = PI, is NaN");
 }
 
 /// The same curved drag with the last point made finite paints normally:

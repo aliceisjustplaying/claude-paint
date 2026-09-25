@@ -1834,7 +1834,6 @@ mod tests {
         ] {
             assert_eq!(m.sample(off.0, off.1), 0.0, "{name} off the panel");
             assert_eq!(m.sample(off.0 + 200.0, 600.0), 0.0, "{name} off the panel, low");
-            let _ = m.sample(on.0, on.1);
         }
         assert!(d.visible(&|t| t == Thing::Sky).sample(on.0, 50.0) == 0.0, "the veil covers the sky on the panel");
         assert!(d.visible(&|t| t == Thing::Layer(l)).sample(on.0, on.1) > 0.99);

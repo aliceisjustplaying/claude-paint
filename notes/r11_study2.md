@@ -43,7 +43,12 @@ Program: `paintings/src/bin/r11_study2.rs`. Renders: `out/r11_study2.png`
   shadow side and diving under the snow (first try tapered to a point on
   top of the snow like a horn; now it keeps its girth and the bank line
   cuts it); eight curled oak leaves blown onto the snow, each with a hair of
-  blue shadow. Final renders from scratch: 1000px 12:10 (44 s), then 3200px.
+  blue shadow.
+- 12:14 at 3200px the root read as a lump pasted on the trunk (its round
+  start showed as a contour). Fixed by paint order: limbs and root first,
+  then the trunk's body strokes over their starts, then the fork strokes.
+  A painter would do that without thinking; it took me a 3200px look.
+- 12:16 final renders from scratch: 1000px (32 s) and 3200px.
 
 ## FRICTION
 Ranked by how much it cost me.

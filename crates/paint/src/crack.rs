@@ -57,6 +57,15 @@ use std::collections::BinaryHeap;
 /// at any pixel resolution. `None` fields are derived from the canvas when it
 /// cracks (`Canvas::crack`): the ground it was primed with, the island size
 /// that ground and paint give, the opening that size gives.
+///
+/// How strongly cracks read in the picture: an age crack is narrower than a
+/// pixel (0.14 mm on a 440 mm canvas at 3200 px), so it shows as the part
+/// of the pixel it opens (`width_um`, `hierarchy`, and `vary` in thick
+/// paint) times how far its dark slot or pale walls differ from the paint
+/// there. What fills it (`dirt`, `grime`) moves that a little; `depth_um`
+/// and `cupping_um` shape the surface relief, which only the finish's relief
+/// lighting shows (clearly in raking light; under a quiet light such as
+/// Friedrich's, `relief` 0.06, not at all). To quiet a network, narrow it.
 #[derive(Clone, Copy, Debug)]
 pub struct Cracks {
     /// Target median island size (square root of island area), mm.
@@ -69,11 +78,16 @@ pub struct Cracks {
     /// Opening of a primary crack at the surface, µm (secondaries are finer).
     /// `None`: the film's strain times the island size (`STRAIN`).
     pub width_um: Option<f32>,
-    /// Visible depth of a primary crack after varnish, µm.
+    /// Visible depth of a primary crack after varnish, µm: its groove in
+    /// the surface relief (seen in raking light, not in its color).
     pub depth_um: f32,
-    /// How far island edges lift beside a crack, µm.
+    /// How far island edges lift beside a crack, µm (relief, like
+    /// `depth_um`).
     pub cupping_um: f32,
-    /// Grime in the cracks, 0 (clean) .. 1 (heavily soiled).
+    /// Grime in the cracks, 0 (clean) .. 1 (heavily soiled): in lights a
+    /// soiled crack reads a little darker, in darks it hides the pale walls.
+    /// A clean crack is still a shadowed slot, so this tunes a crack's tone
+    /// by a few percent of the pixel; `width_um` sets how strongly it reads.
     pub dirt: f32,
     /// Corner cracks perpendicular to the diagonals.
     pub corners: bool,
@@ -92,7 +106,9 @@ pub struct Cracks {
     /// old even web) .. 1. A crack keeps opening while the islands on
     /// either side shrink into it, so the first cracks, which formed when
     /// the islands were whole, open widest, go deepest and cup most; each
-    /// later generation, splitting a smaller island, opens less. Cracks
+    /// later crack, splitting a smaller island, opens less (by the stress it
+    /// released: in a passage that only began cracking late, as with
+    /// `patchy`, the first cracks still open like primaries). Cracks
     /// also swell and pinch along their length and close to nothing for
     /// stretches (notes/cracks.md, Round 7).
     pub hierarchy: f32,

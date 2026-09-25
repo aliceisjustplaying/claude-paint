@@ -37,8 +37,8 @@ Where it stands (2026-09-25)
   (`notes/fixes/cracks/`). Open: the sky's "JPEG effect", branches that
   float off their limbs, crack direction per painting, checkpoint
   staleness by line.
-- **Resolution (decided, not yet wired in):** paint, look and deliver at
-  one size, about 0.2 mm per pixel (2250-2400 px for a small Friedrich
+- **Resolution (a trial, not yet wired in; may go back to 3200):**
+  paint, look and deliver at one size, about 0.2 mm per pixel (2250-2400 px for a small Friedrich
   canvas), retiring the separate 1000px preview. Until then, `--full`
   (3200) is what counts; a 1000px render is a different painting, not a
   smaller copy.

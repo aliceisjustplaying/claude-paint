@@ -295,15 +295,31 @@ function ridges(Wt, haze, lean)
     color=mix("#aeacb8", AIR, haze * 0.5), edge={found=0.2, soft=0.5, lost=0.3, period=5, seed=3}})
 end
 for i, f in ipairs(FEET) do if f[4] < 0.5 then ridges(f[5], f[4], f[3]) end end
--- snow drifted against every foot, in the field's own color, climbing the trunk unevenly
+DRIFTS = nil
+-- snow dragged across every foot: horizontal strokes, each loaded with the field's own paint beside the trunk at that height
 for i, f in ipairs(FEET) do
   local x, y, fw = f[1], f[2], f[5][5]
   local s = per_m(y)
-  local top = function(xx) local u = (xx - x) / (fw * 2.2); return y - 0.09 * s * math.max(0, 1 - u * u) + 0.03 * s * capn(xx * 0.4 + 30 * i, i) end
-  local zone = (below(top) * rect(x - fw * 2.6, y - 0.2 * s, fw * 5.2, 0.5 * s)):roughen(0.03 * s, 0.25 * s, 50 + i, 0.3)
-  work(zone, {hand="body", tool=string.format("filbert %.1f", math.max(1.0, 0.05 * s)), length={0.15 * s, 0.5 * s}, coverage=3.2, medium=0.12,
-    angle=function(xx, yy) return 0.25 * (xx - x) / fw * 0.3 end, angle_jitter=0.2, color=function(xx, yy) return shift(snowcol(xx, yy + 0.3 * s), -0.015, 0, -0.004) end,
-    edge={found=0.3, soft=0.4, lost=0.3, period=0.3 * s, seed=i}})
+  local m = f[5][1]
+  local line = function(xx) local u = (xx - x) / fw; return y - 0.03 * s - 0.035 * s * math.sin(u * 1.7 + i) + 0.02 * s * capn(xx * 0.4 + 40 * i, 7 * i) end
+  local under = (m:grow(4) * below(line)):roughen(0.01 * s, 0.1 * s, 60 + i, 0.3)
+  work(under, {hand="body", tool=string.format("filbert %.1f", math.max(1.0, 0.04 * s)), length={0.1 * s, 0.35 * s}, coverage=4.5, medium=0.14, load=1,
+    angle=0.02, angle_jitter=0.2, edge={found=0.3, soft=0.5, lost=0.2, period=0.2 * s, seed=i},
+    color=function(xx, yy) local sd = (xx < x) and -1 or 1; return sample(x + sd * fw * 2.8, yy, 1.5) end})
+  local b = brush{kind="filbert", width=math.max(1.0, 0.035 * s), stiffness=0.5}
+  local n = math.floor(8 + fw * 0.6)
+  for k = 1, n do
+    local yy = y + rand(-0.08, 0.0) * s
+    local u = rand(-1, 1)
+    local side = (u < 0) and -1 or 1
+    local c = sample(x + side * fw * rand(2.2, 3.2), yy + rand(-0.02, 0.02) * s, 1.5)
+    b:reload(c, rand(0.6, 0.9))
+    local reach = fw * rand(0.8, 1.6)
+    local x0 = x + side * fw * rand(1.6, 2.4)
+    local x1 = x0 - side * (fw * 1.2 + reach)
+    local sag = rand(-0.015, 0.015) * s
+    b:stroke({{x0, yy}, {(x0 + x1) / 2, yy + sag}, {x1, yy + randn(0, 0.01 * s)}}, {pressure={0.75, 0.15}, ramps={0.05, 0.6}, shake=0.5})
+  end
 end
 
 --@ chunk 15 · clock 164739.142578125
@@ -383,14 +399,17 @@ local gn = noise{seed=81, octaves=3, period=220}
 local keep = FIGM
 for _, f in ipairs(FEET) do keep = keep + f[5][1] end
 KEEP = keep:grow(0.4)
-LANDG = mask(function(x, y)
+local kk = keep:grow(0.8)
+local function landf(x, y)
   if y < HZ - 1 then return 0 end
   local d = clamp((y - HZ) / (H - HZ), 0, 1)
   local e = math.abs(x - 520) / 520
   local g = math.exp(-((x - GLOW) / 330)^2)
   return clamp(0.35 + 0.45 * d + 0.35 * e * e - 0.18 * g * (1 - d) + 0.08 * gn(x, y), 0, 1) * smoothstep(HZ - 1, HZ + 3, y)
-end)
-glaze(LANDG - KEEP, {color="#737b98", coats=0.55, pigment="transparent"})
+end
+-- the trunks and the walker take the glaze evenly along their whole height, so it draws no horizon across them
+LANDG = mask(function(x, y) local kv = kk:at(x, y); return kv * 0.6 + (1 - kv) * landf(x, y) end)
+glaze(LANDG, {color="#737b98", coats=0.55, pigment="transparent"})
 SKYG = mask(function(x, y)
   if y > HZ then return 0 end
   local e = ((x - 420) / 620)^2 + ((y + 60) / 520)^2
@@ -398,20 +417,11 @@ SKYG = mask(function(x, y)
 end)
 glaze(SKYG - KEEP, {color="#4f5a74", coats=0.3, pigment="transparent"})
 
---@ chunk 18 · clock 177876.439453125
-for i, f in ipairs(FEET) do
-  local x, y, fw = f[1], f[2], f[5][5]
-  local s = per_m(y)
-  local left, right = sample(x - fw * 3.2, y + 0.05 * s, 2), sample(x + fw * 3.2, y + 0.05 * s, 2)
-  local fieldc = mix(left, right, 0.5)
-  local top = function(xx) local u = (xx - x) / (fw * 2.1); return y - 0.07 * s * math.max(0, 1 - u * u) + 0.025 * s * math.sin(xx * 0.7 + i * 3) end
-  local zone = (below(top) * rect(x - fw * 2.8, y - 0.2 * s, fw * 5.6, 0.45 * s)):roughen(0.03 * s, 0.25 * s, 90 + i, 0.3)
-  work(zone, {hand="body", tool=string.format("filbert %.1f", math.max(1.0, 0.05 * s)), length={0.15 * s, 0.5 * s}, coverage=4.5, medium=0.12, load=1,
-    angle=0.03, angle_jitter=0.2, color=function(xx, yy) return shift(fieldc, 0.01 * math.sin(xx * 0.3 + yy), 0, 0) end,
-    edge={found=0.1, soft=0.4, lost=0.5, period=0.3 * s, seed=i}})
-end
+--@ chunk 18 · clock 191719.970703125
+-- (a second drift pass in a sampled color stood here; at 3200 its rect clip left pale rectangles, so it was taken out)
+local _ = 0
 
---@ chunk 19 · clock 177876.439453125
+--@ chunk 19 · clock 191719.970703125
 -- a thin waxing crescent low over the afterglow, its lit limb toward the set sun (down and left)
 local mx, my, r = 268, 214, 6.2
 local lit = ellipse(mx, my, r, r) - ellipse(mx + 2.0, my - 1.7, r * 1.0, r * 1.0)
@@ -419,7 +429,7 @@ work(lit, {hand="detail", tool="round 0.8", length={1, 3}, coverage=4, medium=0.
 local halo = ellipse(mx, my, r * 3.2, r * 3.2):blur(r * 1.2)
 glaze(halo - ellipse(mx, my, r, r), {color="#e9e2cc", coats=0.06, pigment="semi"})
 
---@ chunk 20 · clock 202224.859375
+--@ chunk 20 · clock 194997.4111328125
 -- dry grass and reeds, upturning flicks laid last over the snow
 local GR = {"#5a4e40", "#463c32", "#6e604c", "#7a6a52", "#52483d"}
 function tuft(x, y, hm, n, reed)
@@ -459,7 +469,7 @@ end
 for i = 1, 7 do tuft(rand(25, 120), rand(655, 708), rand(0.35, 0.7), math.floor(rand(8, 16)), true) end
 for i = 1, 4 do tuft(rand(900, 985), rand(672, 706), rand(0.2, 0.45), math.floor(rand(4, 9)), false) end
 
---@ chunk 21 · clock 202224.859375
+--@ chunk 21 · clock 194997.4111328125
 function crow(cx, cy, L, dir, hunch)
   local function R(p) return {cx + dir * p[1] * L, cy + p[2] * L} end
   local pts = {}
@@ -490,5 +500,5 @@ flying(612, 262, 20, 0.1, 1)
 flying(588, 287, 16, -0.12, -0.5)
 flying(330, 322, 11, 0.05, 0.8)
 
---@ chunk 22 · clock 202224.859375
+--@ chunk 22 · clock 194997.4111328125
 wait(24*60); varnish{color="#e6d3a4", coats=0.3, vary=0.12}; cracks{dirt=0.35}; relief()

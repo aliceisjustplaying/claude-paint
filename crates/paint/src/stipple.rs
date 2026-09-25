@@ -250,7 +250,7 @@ impl<'a> Stipple<'a> {
     /// the `aim_km` workaround.
     fn paint_for(&self, want: Rgb, seen: Rgb, coverage: f32, memo: &mut Memo, rng: &mut Rng) -> Paint {
         let coats = self.touch_coats() * coverage.max(1.0);
-        let aim = self.aim;
+        let aim = self.aim && !crate::texoff::off("aim");
         match self.palette {
             Some((pal, medium0)) => {
                 if !aim {
@@ -264,7 +264,8 @@ impl<'a> Stipple<'a> {
                     let l = to_oklab(c);
                     [(l[0] * k).round() as i32, (l[1] * k).round() as i32, (l[2] * k).round() as i32]
                 };
-                let key = (q(want, 200.0), q(seen, 120.0), (coats * 20.0).round() as i32);
+                let (qw, qs) = if crate::texoff::off("aimfine") { (800.0, 480.0) } else { (200.0, 120.0) };
+                let key = (q(want, qw), q(seen, qs), (coats * 20.0).round() as i32);
                 let (m, medium) = if let Some(v) = memo.get(&key) {
                     v.clone()
                 } else {
@@ -272,7 +273,7 @@ impl<'a> Stipple<'a> {
                     // which touch asked first (a crop or a reordered run must
                     // mix what a whole one does)
                     let c = |k: [i32; 3], s: f32| crate::color::from_oklab([k[0] as f32 / s, k[1] as f32 / s, k[2] as f32 / s]);
-                    let (want, seen, coats) = (c(key.0, 200.0), c(key.1, 120.0), key.2 as f32 / 20.0);
+                    let (want, seen, coats) = (c(key.0, qw), c(key.1, qs), key.2 as f32 / 20.0);
                     let wl = to_oklab(want);
                     let mut best: Option<(f32, crate::palette::Mixture, f32)> = None;
                     for medium in [medium0, medium0 * 0.5, 0.0] {
@@ -294,7 +295,8 @@ impl<'a> Stipple<'a> {
             }
             None => {
                 let lab = to_oklab(want);
-                let col = from_oklab([lab[0] + rng.normal() * self.jitter.0, lab[1] + rng.normal() * self.jitter.1, lab[2] + rng.normal() * self.jitter.1]);
+                let jk = if crate::texoff::off("jitter") { 0.0 } else { 1.0 };
+                let col = from_oklab([lab[0] + rng.normal() * self.jitter.0 * jk, lab[1] + rng.normal() * self.jitter.1 * jk, lab[2] + rng.normal() * self.jitter.1 * jk]);
                 if aim { Paint::aimed(col, seen, coats, self.hiding, self.stiff) } else { Paint::new(col, self.hiding, self.stiff) }
             }
         }
@@ -333,6 +335,9 @@ impl Canvas {
     /// `work_with`).
     pub fn stipple_with(&mut self, piles: &mut crate::tally::Piles, mask: &Mask, sp: &Stipple, seed: u64) {
         sp.tool.assert_valid();
+        if crate::texoff::off("stipple") {
+            return;
+        }
         self.check_mask(mask);
         // plan on the whole canvas (a crop render plans the same touches)
         let f = mask.f;
@@ -441,6 +446,10 @@ impl Canvas {
                 // patch; a load serves about one patch, so each pile of paint
                 // lands where it was mixed for
                 let cell = (g * (sp.dip_every as f32).sqrt()).max(sp.tool.width * 2.0);
+                // (texture forensics, PAINT_TEXOFF=dipcells: no patches; the
+                // hand dabs about the whole passage at random, so a pile's
+                // touches scatter over it)
+                let cell = if crate::texoff::off("dipcells") { f32::MAX } else { cell };
                 let (tx0, ty0) = ((ti % tw) as f32 * tile, (ti / tw) as f32 * tile);
                 let mut keyed: Vec<(u64, (f32, f32))> = pts
                     .iter()

@@ -465,6 +465,9 @@ pub(crate) fn vnoise(x: f32, y: f32, seed: u64) -> f32 {
 /// Bare plain-weave linen height at a point (mm), µm.
 fn linen_um(xm: f32, ym: f32, l: &Linen) -> f32 {
     use std::f32::consts::PI;
+    if crate::texoff::off("weave") {
+        return 0.0;
+    }
     let seed = l.seed;
     let (x0, y0) = (xm * l.warp_per_cm / 10.0, ym * l.weft_per_cm / 10.0);
     // threads wander a little; the weft more than the warp

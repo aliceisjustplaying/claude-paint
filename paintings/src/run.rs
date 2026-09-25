@@ -604,7 +604,10 @@ impl Run {
         c.dry();
         let var = Fbm::new(self.seed as u32 + 98, 3, 400.0);
         let (base, vary) = (f.varnish_coats, f.varnish_vary);
-        c.glaze(&Pigment::varnish(f.varnish), None, |x, y| base + vary * var.get(x, y));
+        // (texture forensics: PAINT_TEXOFF=varnish, notes/round7/texture.md)
+        if !paint::texoff::off("varnish") {
+            c.glaze(&Pigment::varnish(f.varnish), None, |x, y| base + vary * var.get(x, y));
+        }
         if let (Some(k), false) = (f.cracks, self.no_cracks) {
             c.crack(&Cracks { seed: k.seed.wrapping_add(self.seed), ..k });
         }

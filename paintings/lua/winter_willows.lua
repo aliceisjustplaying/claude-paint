@@ -1,0 +1,202 @@
+-- easel session "winter_willows": a painting replayed chunk by chunk.
+--   easel run paintings/lua/winter_willows.lua [--width 3200]
+-- Each "--@ chunk" line starts one chunk as it was run at the easel (clock = painting minutes).
+-- sittings enforced: a sitting ends at its length; the easel refuses marks until rest(hours) (notes/time.md)
+
+--@ chunk 1 · clock 0
+canvas{style="friedrich", aspect=1.4, seed=29}; print(W, H); print(pal); print(type(world), type(tree))
+
+--@ chunk 2 · clock 0
+HZ = 478
+-- the far land line: flat, with a low wood band and the village
+farn = noise{seed=41, octaves=4, period=90}
+function farline(x)
+  local wood = 10 * math.exp(-((x - 880) / 90)^2) + 6 * math.exp(-((x - 120) / 110)^2)
+  return HZ - 3 - wood - 2.5 * farn(x, 0)
+end
+-- the stream: center line from near foreground to vanishing point
+STREAM = {{150,714},{205,672},{300,626},{360,598},{388,574},{430,552},{478,530},{520,512},{548,500},{566,491},{578,484}}
+-- widths shrink with depth
+function stream_w(y) return 4 + 70 * ((y - HZ) / (714 - HZ))^1.6 end
+-- willow feet on the right bank (x, y, height of trunk, head width)
+WILLOWS = {{352,606,86,26},{462,546,46,15},{528,514,27,9},{562,496,15,5}}
+FIG = {640, 552}   -- the walker's feet
+MOON = {238, 176}
+h = pencil("2H")
+h:rule({0, HZ}, {1000, HZ}, {pressure=0.22})
+local fl = {} for x = 0, 1000, 20 do fl[#fl+1] = {x, farline(x)} end
+h:sketch(fl, {pressure=0.25})
+-- stream banks
+local L, R = {}, {}
+for i, p in ipairs(STREAM) do local w = stream_w(p[2]) / 2; L[i] = {p[1] - w, p[2]}; R[i] = {p[1] + w, p[2]} end
+h:sketch(L, {pressure=0.3}); h:sketch(R, {pressure=0.3})
+-- willows: trunks and heads
+for _, t in ipairs(WILLOWS) do
+  local x, y, th, hw = t[1], t[2], t[3], t[4]
+  h:sketch({{x - hw*0.35, y}, {x - hw*0.3, y - th*0.5}, {x - hw*0.5, y - th}}, {pressure=0.3})
+  h:sketch({{x + hw*0.35, y}, {x + hw*0.28, y - th*0.5}, {x + hw*0.5, y - th}}, {pressure=0.3})
+end
+-- village and church
+h:sketch({{700,HZ-4},{700,HZ-12},{712,HZ-18},{724,HZ-12},{724,HZ-4}}, {pressure=0.25})
+h:sketch({{738,HZ-4},{738,HZ-30},{741,HZ-44},{744,HZ-30},{744,HZ-4}}, {pressure=0.25})
+-- figure
+h:sketch({{FIG[1]-4,FIG[2]},{FIG[1]-3,FIG[2]-22},{FIG[1],FIG[2]-30},{FIG[1]+3,FIG[2]-22},{FIG[1]+5,FIG[2]}}, {pressure=0.3})
+fix()
+
+--@ chunk 3 · clock 0
+skyn = noise{seed=17, octaves=3, period=380, stretch={0.02, 5}}
+GLOW = 250
+function skycol(x, y)
+  local t = clamp(y / HZ, 0, 1)
+  local g = math.exp(-((x - GLOW) / 330)^2)           -- where the sun went down
+  local band = skyn(x, y) * 0.04
+  local c = gradient({{0, "#5d6c86"}, {0.35, "#8190a6"}, {0.62, "#b1b3bb"}, {0.8, "#cdbfb6"}, {1, "#dcc8ae"}}, t + band)
+  local warm = gradient({{0, "#6c7890"}, {0.45, "#a4a8b4"}, {0.7, "#d9c7b0"}, {0.88, "#ecd7a8"}, {1, "#f0dca6"}}, t + band)
+  return mix(c, warm, g * smoothstep(0.2, 0.9, t) * 0.9)
+end
+skym = above(function(x) return farline(x) + 10 end)
+work(skym, {hand="broad", color=skycol, angle=function(x, y) return 0.02 * skyn(x * 2, y) end, coverage=4.5, medium=0.28, length={80, 240}})
+blend(skym, {angle=0.01})
+
+--@ chunk 4 · clock 0
+
+work(skym, {hand="broad", color=skycol, angle=function(x, y) return 0.015 * skyn(x * 1.5, y + 90) end, angle_jitter=0.03, coverage=3.2, medium=0.3, length={160, 380}, pressure={0.6, 0.45}})
+blend(skym, {angle=0.0, coverage=2.5})
+blend(skym, {angle=0.03, coverage=1.5})
+
+--@ chunk 5 · clock 0
+wait(24*60)
+local bandn = noise{seed=5, octaves=5, period=26}
+BAND = (below(function(x) return farline(x) + 1.5 * bandn(x, 0) end) * above(function(x) return HZ + 4 end)):roughen(0.6, 9, 3, 0.5)
+work(BAND, {hand="body", tool="filbert 2.5", length={5, 16}, coverage=4.5, medium=0.2, angle=0.0, angle_jitter=0.08, pressure={0.7, 0.6},
+  edge={found=0.15, soft=0.6, lost=0.25, period=30, seed=4},
+  color=function(x, y)
+    local g = math.exp(-((x - GLOW) / 300)^2)
+    return mix(mix("#7b7580", "#978c8b", g), "#a7a3aa", smoothstep(HZ - 14, HZ + 4, y) * 0.55)
+  end})
+blend(BAND, {angle=0, coverage=1.2})
+
+--@ chunk 6 · clock 1440
+dry()
+local roofs = poly({{695,HZ+1},{695,HZ-7},{702,HZ-14.5},{709,HZ-7},{710,HZ-5},{712,HZ-10.5},{716,HZ-5},{719,HZ-6},{725,HZ-12.5},{731,HZ-6},{731,HZ+1}})
+local tower = poly({{736.6,HZ+1},{736.8,HZ-21},{742.4,HZ-21},{742.6,HZ+1}})
+work(roofs + tower, {hand="detail", tool="round 1", length={2, 5}, coverage=4, medium=0.18, angle=1.57, color="#5f5b66", edge={found=0.8, soft=0.2, period=10, seed=2}, aim="masstone"})
+local sp = brush{kind="round", width=1.8, point=1}
+sp:load("#5d5963", 0.9)
+sp:stroke({{739.6, HZ - 19}, {739.5, HZ - 30}, {739.4, HZ - 41}}, {pressure={0.95, 0.0}, ramps={0.0, 0.9}})
+sp:stroke({{738.2, HZ - 21}, {739.4, HZ - 33}}, {pressure={0.8, 0.0}})
+sp:stroke({{741.0, HZ - 21}, {739.6, HZ - 33}}, {pressure={0.8, 0.0}})
+
+--@ chunk 7 · clock 32842.828125
+STREAM = {{112,714},{165,690},{245,664},{322,643},{372,626},{392,611},{384,598},{360,588},{356,577},{380,566},{428,553},{470,540},{496,528},{498,517},{516,506},{546,496},{568,489},{580,484}}
+function stream_w(y) return 3 + 52 * ((y - HZ) / (714 - HZ))^1.5 end
+-- the stream as a band
+local ws = {} for i, p in ipairs(STREAM) do ws[i] = stream_w(p[2]) end
+STREAMM = ribbon(STREAM, ws):roughen(1.2, 14, 8, 0.6)
+drift = noise{seed=23, octaves=4, period=160, stretch={0.05, 3.5}}
+local fine = noise{seed=24, octaves=3, period=40, stretch={0.05, 3}}
+function snowcol(x, y)
+  local d = clamp((y - HZ) / (H - HZ), 0, 1)
+  local g = math.exp(-((x - GLOW) / 380)^2)
+  local c = gradient({{0, "#a9a6af"}, {0.12, "#b6b3ba"}, {0.45, "#c6c3c6"}, {1, "#d4d0cc"}}, d)
+  c = mix(c, "#d8cfc0", 0.35 * g * (1 - d * 0.5))                   -- the glow's warmth on the far snow
+  local sh = drift(x, y) * 0.5 + 0.5
+  c = mix(c, shift(c, -0.05, -0.002, -0.022), smoothstep(0.55, 0.85, sh) * (0.3 + 0.7 * d))  -- lee of the drifts
+  return shift(c, 0.012 * fine(x, y), 0, 0)
+end
+SNOW = below(function(x) return HZ + 1.2 + 0.8 * farn(x * 3, 5) end)
+-- a thin underpainting over all the land, stream included
+work(SNOW, {hand="broad", tool="flat 10", color=function(x, y) return shift(snowcol(x, y), -0.08, 0.0, -0.01) end, medium=0.35, coverage=4.5, length={60, 200}, angle=0.03, angle_jitter=0.04})
+blend(SNOW, {angle=0.02, coverage=1.5})
+
+--@ chunk 8 · clock 32842.828125
+wait(24*60)
+local snow = SNOW - STREAMM:shrink(1.5)
+work(snow, {hand="body", tool="filbert 6", color=snowcol, medium=0.14, coverage=5.5, load=0.95, length={24, 80},
+  angle=function(x, y) local d = clamp((y - HZ) / (H - HZ), 0, 1); return 0.02 + d * 0.22 * drift(x * 1.3, y + 40) end,
+  angle_jitter=0.06, pressure={0.8, 0.6}})
+blend(snow * below(function(x) return HZ + 40 end), {angle=0.02, coverage=1.2})
+
+--@ chunk 9 · clock 34282.828125
+local icen = noise{seed=31, octaves=4, period=30, stretch={0.0, 4}}
+function icecol(x, y)
+  local d = clamp((y - HZ) / (H - HZ), 0, 1)
+  local c = gradient({{0, "#d9ccb4"}, {0.15, "#c3bdb6"}, {0.45, "#9ea2ae"}, {1, "#7f8798"}}, d)
+  c = mix(c, "#cfd0d4", 0.35 * smoothstep(0.2, 0.7, icen(x, y)))   -- snow dusted on the ice
+  return c
+end
+work(STREAMM, {hand="body", tool="filbert 3", color=icecol, medium=0.2, coverage=4.5, length={8, 30}, angle=0.0, angle_jitter=0.1,
+  edge={found=0.3, soft=0.5, lost=0.2, period=35, seed=9}})
+-- open water in a hole in the ice by the near willow
+HOLE = poly({{232,670},{252,662},{278,654},{300,647},{312,648},{300,655},{276,662},{250,670},{232,675}}, true)
+work(HOLE * STREAMM, {hand="body", tool="filbert 2.5", color=function(x, y) return mix("#2f3440", "#4a4f5c", smoothstep(625, 660, y)) end,
+  medium=0.18, coverage=4, length={6, 20}, angle=-0.35, edge={found=0.6, soft=0.4, period=20, seed=3}})
+
+--@ chunk 10 · clock 34282.828125
+wait(8*60)
+local function k(y) return 1 + 7 * clamp((y - HZ) / (H - HZ), 0, 1) end
+FARBANK = mask(function(x, y) return STREAMM:at(x, y) * (1 - STREAMM:at(x, y - k(y))) end):roughen(0.6, 8, 12, 0.4)
+NEARLIP = mask(function(x, y) return STREAMM:at(x, y) * (1 - STREAMM:at(x, y + 0.6 * k(y))) end):roughen(0.8, 10, 13, 0.4)
+work(FARBANK, {hand="detail", tool="round 1.5", length={4, 14}, coverage=3.5, medium=0.18, angle=0, angle_jitter=0.2,
+  color=function(x, y) return mix("#8c8c9c", "#6f7385", smoothstep(HZ, H, y)) end, edge={found=0.2, soft=0.5, lost=0.3, period=25, seed=5}})
+work(NEARLIP, {hand="detail", tool="round 1.8", length={5, 16}, coverage=3.5, medium=0.12, angle=0, angle_jitter=0.25,
+  color=function(x, y) return shift(snowcol(x, y), 0.02, 0, 0.004) end, edge={found=0.4, soft=0.4, lost=0.2, period=22, seed=6}})
+
+--@ chunk 11 · clock 34762.828125
+dry()
+AIR = "#a9a5ad"
+function per_m(y) return (y - HZ) / 1.7 end
+-- one pollard willow, by hand: trunk outline, dark body, rim of glow on the left, rods from the knuckle
+function willow(x, y, lean, nrods, seed, haze)
+  local s = per_m(y)
+  local th = 1.9 * s * (0.9 + 0.2 * rand())
+  local fw = 0.34 * s
+  local function P(dx, h, c) return {x + dx + lean * h, y - h, c} end
+  local pts = {
+    {x - fw * 1.35, y + 0.06 * s},
+    P(-fw * 1.0, 0.25 * th), P(-fw * 0.85, 0.55 * th), P(-fw * 1.05, 0.78 * th),
+    P(-fw * 1.75, 0.9 * th, "c"), P(-fw * 1.25, 1.04 * th), P(-fw * 0.5, 1.09 * th, "c"), P(fw * 0.2, 1.05 * th),
+    P(fw * 0.8, 1.1 * th, "c"), P(fw * 1.7, 0.95 * th, "c"), P(fw * 1.05, 0.8 * th), P(fw * 0.9, 0.5 * th), P(fw * 1.05, 0.22 * th),
+    {x + fw * 1.45, y + 0.06 * s}}
+  local o = outline{pts=pts, char="broken", seed=seed, amount=0.8}
+  local m = o:mask()
+  local dark = mix("#35302c", AIR, haze)
+  work(m, {hand="body", tool=string.format("filbert %.1f", math.max(1.2, fw * 0.5)), length={0.1 * th, 0.35 * th}, coverage=4, medium=0.15,
+    angle=1.57 + lean, angle_jitter=0.15, color=function(xx, yy) return mix(dark, mix("#4d433b", AIR, haze), 0.5 + 0.5 * math.sin(xx * 1.7 + yy * 0.3)) end,
+    edge={found=0.6, soft=0.3, lost=0.1, period=15, seed=seed}})
+  -- rim of light from the glow on the left flank
+  local rim = m * mask(function(xx, yy) return 1 - m:at(xx - math.max(0.8, fw * 0.18), yy) end)
+  work(rim, {hand="detail", tool="round 0.8", length={2, 7}, coverage=1.2, medium=0.2, angle=1.57 + lean, broken=0.6,
+    color=mix("#6d6158", AIR, haze * 0.6)})
+  -- rods: from a few knobs on the head, outer ones lean out and curve back up, lengths very uneven
+  local hx, hy = x + lean * th, y - 1.06 * th
+  local knobs = {}
+  for k = 1, 5 do knobs[k] = {hx + (k - 3) * fw * 0.6 + randn(0, fw * 0.12), hy + math.abs(k - 3) * 0.05 * th + randn(0, 0.02 * th)} end
+  local rodc = mix("#2c2724", AIR, haze)
+  for pass = 1, 2 do
+    local rb = brush{kind="rigger", width=math.max(0.5, (pass == 1 and 0.06 or 0.035) * s), point=1}
+    local n = pass == 1 and nrods or math.floor(nrods * 0.8)
+    for i = 1, n do
+      if i % 5 == 1 then rb:reload(mix(rodc, "#4a3d33", rand() * 0.35), 0.95) end
+      local kn = knobs[math.random(1, 5)]
+      local u = clamp((kn[1] - hx) / (fw * 1.4) + randn(0, 0.35), -1.2, 1.2)
+      local a0 = -1.5708 + u * 0.85 + randn(0, 0.1)
+      local bend = -u * 0.55 + randn(0, 0.08)             -- curving back toward the vertical
+      local len = s * 4.6 * rand(0.3, 1.0)^0.7 * (pass == 1 and 1 or 0.6) * (1 - 0.25 * math.abs(u))
+      local p = {{kn[1] + randn(0, fw * 0.1), kn[2]}}
+      local px, py = p[1][1], p[1][2]
+      for k = 1, 5 do
+        local aa = a0 + bend * (k / 5)^1.3
+        px = px + math.cos(aa) * len / 5; py = py + math.sin(aa) * len / 5
+        p[#p + 1] = {px + randn(0, 0.15), py}
+      end
+      rb:stroke(p, {pressure={0.9, 0.0}, ramps={0.02, 0.75}, shake=0.5})
+    end
+  end
+  return m, hx, hy, th, fw
+end
+W1 = {willow(455, 572, 0.05, 60, 101, 0.0)}
+W2 = {willow(532, 521, -0.04, 50, 102, 0.22)}
+W3 = {willow(577, 500, 0.06, 36, 103, 0.4)}
+W4 = {willow(603, 491.5, -0.02, 26, 104, 0.55)}
+W5 = {willow(621, 486.5, 0.03, 18, 105, 0.66)}

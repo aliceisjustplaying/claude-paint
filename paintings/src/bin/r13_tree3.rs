@@ -355,12 +355,18 @@ fn main() {
     let h = c.height();
 
     // ---- sky
-    let bands = Fbm::new(o.seed as u32 + 11, 4, 260.0);
+    let bands = Fbm::new(o.seed as u32 + 11, 5, 320.0);
     let skyc = move |x: f32, y: f32| {
-        // long low bands of cloud, a little darker, lying level
-        let b = bands.get(x * 0.35, y * 2.2);
-        let k = smoothstep(0.1, 0.55, b) * 0.10 * smoothstep(HZ, 250.0, y);
-        mix(sky(x, y), hex("#6f7280"), k, Mix::Light)
+        // an overcast deck: soft darker masses lying level in the upper
+        // sky, thinning and paling toward the horizon, with lighter lanes
+        // between them; the light low on the left where the sun is behind
+        // the cloud
+        let n = bands.get(x * 0.28 + 0.15 * y, y * 1.7);
+        let upper = 1.0 - smoothstep(250.0, 820.0, y);
+        let dark = smoothstep(-0.05, 0.45, n) * 0.26 * upper;
+        let lane = smoothstep(-0.15, -0.45, n) * 0.18 * (0.3 + upper);
+        let c = mix(sky(x, y), hex("#6a6b76"), dark, Mix::Light);
+        mix(c, hex("#c4c2bc"), lane, Mix::Light)
     };
     let sky_m = Mask::from_fn(f, |_, y| 1.0 - smoothstep(HZ + 4.0, HZ + 10.0, y));
     if o.stage("sky", &mut c, &mut rng) {
@@ -478,6 +484,11 @@ fn main() {
 
     // bark colors: dark warm gray-brown, grayer and lighter on the lit
     // (left, upper) side; dead wood silver-gray
+    // each limb its own: some grayer and greener with lichen, some browner
+    let tone = |x: f32, y: f32| -> f32 { paint::rng::hash2((x * 0.2) as i64, (y * 0.2) as i64, 77) * 2.0 - 1.0 };
+    let wood = move |col: Rgb, t: f32| -> Rgb {
+        if t > 0.0 { mix(col, hex("#44443b"), t * 0.45, Mix::Pigment) } else { mix(col, hex("#3a2c24"), -t * 0.45, Mix::Pigment) }
+    };
     let bark = |s: f32, dead: bool, x: f32, y: f32| -> Rgb {
         // s: -1 (left edge) .. 1 (right edge)
         let lit = smoothstep(0.6, -0.8, s);
@@ -552,6 +563,7 @@ fn main() {
                     let seg: Vec<(f32, f32)> = line[j..=e].to_vec();
                     let (mx, my) = seg[seg.len() / 2];
                     let col = bark(s + hr.range(-0.15, 0.15), *dead, mx, my);
+                    let col = if *dead { col } else { wood(col, tone(p[0].0, p[0].1)) };
                     held.reload(pal.paint(col, 0.12), 0.9);
                     let pr = hr.range(0.62, 0.8);
                     let sw: Vec<f32> = prs[j..=e].iter().step_by(((e - j) / 6).max(1)).cloned().collect();
@@ -651,6 +663,7 @@ fn main() {
             let swell: Vec<f32> = w.iter().step_by((w.len() / 8).max(1)).map(|&wi| tool.pressure_for(wi) / p0).collect();
             let s = hr.range(-0.6, 0.2);
             let col = bark(s, *dead, p[0].0, p[0].1);
+            let col = if *dead { col } else { wood(col, tone(p[0].0, p[0].1)) };
             held.reload(pal.paint(col, 0.12), 0.8);
             c.drag(&mut held, &Gesture::new(p.clone()).pressure(p0, p0).swell(swell).ramps(0.03, 0.08).shake(0.35), None);
         }
@@ -810,7 +823,7 @@ fn main() {
                 let level = ang.cos().abs();
                 let wi = w[i];
                 // hold: level wood, thick enough
-                let hold = smoothstep(0.5, 0.9, level) * smoothstep(2.5, 9.0, wi);
+                let hold = smoothstep(0.42, 0.88, level) * smoothstep(1.8, 7.0, wi);
                 if hold < 0.05 || hr.f() > hold * 0.85 {
                     i += 1;
                     continue;

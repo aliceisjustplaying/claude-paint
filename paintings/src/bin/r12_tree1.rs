@@ -297,12 +297,31 @@ fn main() {
         // grass through it, flicked up over the finished snow [NG p.56]
         let mut r = Rng::new(tree_seed() + 4000);
         let (bx, by) = BASE;
-        let edge = Fbm::new(61, 3, 22.0);
+        // the root buttresses first: the trunk swells as it meets the
+        // ground and its roots run out and down under the snow
+        let tw = oak.limbs[0].w[0];
+        let flare = [(-1.0f32, 0.6f32, 1.05f32, 12.0f32), (-1.0, 0.25, 0.6, 9.0), (1.0, 0.55, 1.12, 13.0), (1.0, 0.2, 0.7, 8.0)];
+        for (k, &(side, from, to, w)) in flare.iter().enumerate() {
+            let a = (bx + side * tw * from * 0.5, by - 26.0 - 3.0 * k as f32);
+            // the buttress bulges out before it turns down into the ground
+            let m = (bx + side * tw * (from + to) * 0.4, by - 8.0);
+            let e = (bx + side * tw * to * 0.62, by + 6.0);
+            let paint = if side < 0.0 { bark_mid } else { bark_dark };
+            let mut b = Held::new(Tool { point: 0.7, ragged: 0.3, ..Tool::round_sable(w) }, r.next_u64());
+            b.load(paint, 0.9);
+            c.drag(&mut b, &Gesture::new(vec![a, m, e]).pressure(0.9, 0.55).ramps(0.0, 0.15).shake(0.6), None);
+        }
+        c.dry();
+        let edge = Fbm::new(61, 4, 13.0);
+        // the bank rises against the trunk, higher on the windward left
+        // and in a tongue up the left buttress; its top edge is uneven
+        let top_at = move |x: f32| {
+            let dx = (x - bx - 12.0) / 120.0;
+            by - 4.0 - 9.0 * (1.0 - (dx * 2.2).powi(2)).max(0.0) + 14.0 * edge.get(x, 0.0) - 7.0 * (-((x - bx + 22.0) / 9.0).powi(2)).exp()
+        };
         let mound = Mask::from_fn(f, move |x, y| {
             let dx = (x - bx - 12.0) / 120.0;
-            // the bank rises against the trunk, a little higher on the
-            // windward left; its top edge is uneven
-            let top = by - 6.0 - 10.0 * (1.0 - (dx * 2.2).powi(2)).max(0.0) + 3.5 * edge.get(x, 0.0) - 5.0 * smoothstep(0.0, -0.3, dx) * (1.0 - smoothstep(-0.3, -0.7, dx));
+            let top = top_at(x);
             let bottom = by + 26.0 - 20.0 * dx.abs();
             smoothstep(top - 1.0, top + 1.5, y) * (1.0 - smoothstep(bottom - 6.0, bottom + 6.0, y)) * (1.0 - smoothstep(0.85, 1.0, dx.abs()))
         });
@@ -321,6 +340,18 @@ fn main() {
             .medium(0.15)
             .clip(true);
         c.work(&mound, &bank, 41);
+        // the snow's shadow tucked in under the trunk on the shade side
+        let cool = pal.mix(hex("#a3aab5")).paint(0.15);
+        let mut sb = Held::new(Tool { ragged: 0.4, ..Tool::round_sable(5.0) }, r.next_u64());
+        for k in 0..3 {
+            sb.load(cool, 0.45);
+            let x0 = bx + 6.0 + k as f32 * 9.0;
+            let pts: Vec<(f32, f32)> = (0..4).map(|j| {
+                let x = x0 + j as f32 * 4.0;
+                (x, top_at(x) + 2.0)
+            }).collect();
+            c.drag(&mut sb, &Gesture::new(pts).pressure(0.55, 0.15).ramps(0.2, 0.6).shake(0.5), None);
+        }
         fallen(&mut c, pal, &mut r);
         grass(&mut c, pal, &mut r);
         c.dry();

@@ -59,9 +59,18 @@ earth), for a c.1811 winter picture before cobalt and chrome yellow.
    point. The fir wood is a hatch pass through a spiky skyline mask, then
    rigger flicks for the tree tops.
 4. `snow`: broad lay-in bowed by a slow direction field in front, fused;
-   a stiffer body pass for the drifts' lit faces; the far field stippled
-   with level drift; the rise under the oak worked separately; cool
-   troughs laid thinly relative to the snow under them (`color_over`).
+   a stiffer body pass for the drifts; the far field stippled with level
+   drift; the rise under the oak worked separately; the faces of the
+   drifts turned toward us laid thinly cooler than the snow under them
+   (`color_over`). The drifts are a height field on the ground plane
+   (`drift_face`): ground depth from the height under the horizon, ridges
+   long across the view, seen against the light. Faces turned to the glow
+   beyond catch it warm; faces turned to us lie in the blue of the sky. My
+   first version, blotches of fbm on the canvas, made the whole snowfield
+   read at 3200px like a lake mirroring clouds. Perspective fixed that:
+   the drift bands narrow with distance. Snow and ice are mixed from a
+   family palette (lead white, pale smalt, smalt, yellow ochre, raw umber,
+   bone black).
 5. `pond`: ice in level body strokes, mirroring higher and cooler sky
    nearer the viewer, fused; wind-laid snow streaks; a cool band under the
    far bank; the snow's broken lip over the edge.
@@ -72,11 +81,17 @@ earth), for a c.1811 winter picture before cobalt and chrome yellow.
    width falls below 45% or a load runs out. Then lit touches on the glow
    side, dry gray drags for bark, snow on the level upper faces of limbs,
    a drift over the root flare, and the crows.
-7. `spruces`: `fir::Fir::grow` into `envelope_for("young")`. I paint the stem,
-   then every hatch stroke with a pointed sable in three greens by how lit
-   it is, then snow heaped along each bough's upper face.
-8. `stone`: a rough lump in filbert strokes around its form, a thick snow
-   cap hanging over it, snow banked against its foot.
+7. `spruces`: `fir::Fir::grow` into `envelope_for("young")`. I paint the
+   stem, then lay in the needle mass dark in short crossed hatching
+   (eroded and roughened, so the strokes make the edge), then every
+   hatch stroke with a pointed sable in three greens by how lit it is
+   (the pendant strokes pulled back to 55% of their length, the others
+   to 80%), then snow as short flat strokes along each bough's upper
+   face, warmer on the glow side.
+8. `stone`: its cool shadow thrown toward us first (it is backlit), then
+   the rock in planes (the upper plane cool and turned to the sky, the end
+   turned away dark, a chipped shoulder), cracks with the point, a lumpy
+   two-pass snow cap and snow banked against its foot.
 9. `figure`: the tracks (touches alternating left and right, smaller
    with distance), then the walker as gestures.
 10. `grass`: rigger and pointed-sable flicks, pressed at the root and
@@ -151,6 +166,65 @@ earth), for a c.1811 winter picture before cobalt and chrome yellow.
     palm-like needle strokes at 3200px; `spire()` at the same envelope gave
     skinny sparse trees. I shortened `young`'s hatch strokes toward their
     roots (×0.78) in my own painting code to get something between.
+12. **`Handling` isn't `Clone`.** It holds boxed closures, so "the same
+    pass again, shorter strokes, on the eroded mask" means writing the
+    whole builder out a second time.
+13. **Aimed piles went off-hue at a soft mask edge over the bare ground.**
+    One salmon stroke at the pond's near edge came from a pile with red
+    earth in it, judged partly over the red-brown ground. Setting out a
+    family (`Palette::only`) for the snow and ice passes fixed it
+    (color.md's advice), but I found it by zooming in on a 1000px
+    preview. A pass-level report of piles that include a tube far from the
+    requested hue would catch it.
+14. **Fir needles over a dark mass read as a body.** The fir geometry's
+    hatch strokes alone read as a transparent scatter of long pendant
+    strokes ("palm fronds") at 3200px. `Fir::needles` as a mask for a
+    dark lay-in underneath made them read as trees. Not engine friction as
+    such, but worth saying in `notes/firs.md`: lay the mass in first.
 11. **Crescent moon has no primitive.** Fine; I clipped curved strokes to
     a difference-of-disks mask. The edge quality then depends on the clip
     mask's antialiasing, not the brush.
+
+## Critique (honest)
+
+What works:
+- **The big design.** Low horizon, a huge quiet sky going from smalt-gray
+  to a pale gold band, a thin crescent and one star. The dead oak black
+  against the glow on the left, the dark firs on the right, and the small
+  back-turned figure between them walking toward the far church. It reads
+  as a Friedrich *idea* at 1000px: the dead tree and the young firs, the
+  lone walker, the church in the haze.
+- **The oak** at 3200px: one continuous movement per limb, clean
+  tapering to hairline twigs, snow on the level tops of the limbs and
+  gray dry-brush on the trunk. It reads as painted wood.
+- **The sky**: thin, fused and stippled, with no stroke direction. The
+  one warm streak of cloud stays quiet.
+- **The spruces** after the dark mass lay-in: dense dark bodies with snow
+  laid along the boughs, close to his compact firs.
+- **The drifts** as a ground-plane field: the snow now recedes, bands
+  narrowing toward the horizon, faces turned to us cool and turned away warm.
+
+What doesn't:
+- **The snowfield is still too busy** in the middle distance at 3200px.
+  The drift bands are soft, rounded and cloud-like, where his snow is
+  calmer and broader. I'd halve the drift amplitude beyond the pond and
+  keep the modeling for the near ground.
+- **The stone** is the weakest passage: an oval loaf with a snow cap. The
+  planes help, but its silhouette is too regular and its snow cap edge
+  too even. A `Form`/`Sdf` block lit by the scene would do better than
+  my hand-drawn planes.
+- **The pond** reads as ice at 1000px but is a little too neat an ellipse,
+  and its rim is still a continuous light ring in places.
+- **The village** is almost too small to read; the spire carries it.
+- **The fir wood** on the horizon is a smooth-edged silhouette of cones;
+  at 3200px it wants broken edges and a few stippled tops.
+- **The figure** is tidy, but too small to carry the sentiment. His tracks
+  are faint at 1000px.
+- **The whole reads more "clean illustration" than thin oil** at
+  1000px: too little of the ground's warmth and the pooled grain shows
+  through the snow, because the snow passes are opaque body color.
+  Friedrich's snow is thin over a light ground. A thinner, leaner
+  snow lay-in with lead white only in the lights would be truer to
+  NG p.50/56.
+- No underdrawing: I skipped the graphite stage for time. Friedrich's
+  precise underdrawing is a core part of his method.

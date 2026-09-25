@@ -455,21 +455,36 @@ fn main() {
         let bx = bank_l(by) + l * 0.7;
         let d = 13.0 * bt; // depth of the side
         let mut hull = Held::new(Tool { point: 0.5, ..Tool::round_sable(2.2 * bt + 0.8) }, 75);
-        // the dark side of the hull: strokes along it, the stern end rising
-        for k in 0..5 {
-            let v = k as f32 / 4.0;
-            hull.reload(pile(&st, if k < 2 { "#3b332c" } else { "#2c2723" }, 0.92, 0.7), 0.7);
-            let yy = by - d + d * v;
-            c.drag(&mut hull, &Gesture::new(vec![(bx - l, yy - 2.0 * bt * (1.0 - v)), (bx, yy + 0.5 * v), (bx + l * (0.95 - 0.1 * v), yy - 3.0 * bt * (1.0 - v))]).pressure(0.8, 0.7).ramps(0.1, 0.2).shake(0.6), None);
+        // the hull in side view, bow to the left: the sheer line rising to
+        // both ends, the bow raked, the stern square; laid in level strokes
+        // from the gunwale down to where it sits in the ice, each a little
+        // shorter at the ends, darker below
+        let sheer = |u: f32| by - d - 3.5 * bt * u * u - 1.5 * bt * (u < 0.0) as i32 as f32 * u * u;
+        let rows = 6;
+        for k in 0..rows {
+            let v = k as f32 / (rows - 1) as f32;
+            let (u0, u1) = (-1.0 + 0.45 * v, 1.0 - 0.12 * v);
+            let pts: Vec<(f32, f32)> = (0..7).map(|j| {
+                let u = u0 + (u1 - u0) * j as f32 / 6.0;
+                (bx + l * u, sheer(u) + (by - sheer(u)) * v)
+            }).collect();
+            hull.reload(pile(&st, if v < 0.3 { "#4a3f35" } else { "#2c2622" }, 0.93, 0.7), 0.7);
+            c.drag(&mut hull, &Gesture::new(pts).pressure(0.8, 0.75).ramps(0.05, 0.1).shake(0.5), None);
         }
-        // the gunwale catching the light, then the snow heaped inside
-        hull.reload(pile(&st, "#7a6d60", 0.9, 0.7), 0.6);
-        c.drag(&mut hull, &Gesture::new(vec![(bx - l, by - d - 2.3 * bt), (bx, by - d), (bx + l * 0.95, by - d - 3.0 * bt)]).pressure(0.5, 0.45).ramps(0.1, 0.2), None);
+        // the stern's square end, and the gunwale catching the light
+        c.drag(&mut hull, &Gesture::new(vec![(bx + l, sheer(1.0)), (bx + l * 0.88, by)]).pressure(0.7, 0.7).ramps(0.05, 0.05), None);
+        hull.reload(pile(&st, "#857868", 0.9, 0.7), 0.6);
+        let top: Vec<(f32, f32)> = (0..9).map(|j| {
+            let u = -1.0 + 2.0 * j as f32 / 8.0;
+            (bx + l * u, sheer(u) - 0.3)
+        }).collect();
+        c.drag(&mut hull, &Gesture::new(top).pressure(0.45, 0.4).ramps(0.1, 0.2), None);
         let mut sn = Held::new(Tool { lay: 0.9, ..Tool::filbert(3.0 * bt + 1.0) }, 76);
-        for k in 0..4 {
-            sn.reload(pile(&st, if k % 2 == 0 { "#dcd6cc" } else { "#c9c6c6" }, 0.95, 0.9), 0.7);
-            let yy = by - d - (1.5 + k as f32) * bt;
-            c.drag(&mut sn, &Gesture::new(vec![(bx - l * 0.85, yy), (bx - l * 0.1, yy - 1.5 * bt), (bx + l * 0.8, yy - 0.5 * bt)]).pressure(0.6, 0.5).ramps(0.2, 0.3), None);
+        // snow heaped inside, just showing over the gunwale amidships
+        for k in 0..3 {
+            sn.reload(pile(&st, if k % 2 == 0 { "#dcd6cc" } else { "#c9c6c6" }, 0.95, 0.9), 0.6);
+            let yy = by - d - (0.8 + 0.9 * k as f32) * bt;
+            c.drag(&mut sn, &Gesture::new(vec![(bx - l * 0.6, yy + 0.5 * bt), (bx - l * 0.05, yy - 1.2 * bt), (bx + l * 0.6, yy)]).pressure(0.55, 0.4).ramps(0.3, 0.3), None);
         }
         // snow drifted against the hull, burying its foot
         for k in 0..3 {
@@ -565,14 +580,22 @@ fn main() {
             let y = yh + (h - yh) * rng.range(0.05, 1.0f32).powf(0.8);
             spots.push((bank_l(y) - rng.range(-2.0, 30.0) * (0.2 + depth(y)), y));
         }
-        for _ in 0..34 {
-            // and the near right corner, and the path's verges
-            spots.push((rng.range(620.0, w + 10.0), rng.range(h * 0.84, h + 5.0)));
+        // and patches in the near right corner and along the path's
+        // verges, where the wind has blown the snow thin: a few places,
+        // several tufts each, not a sprinkling
+        for _ in 0..7 {
+            let (cx, cy) = (rng.range(640.0, w), rng.range(h * 0.86, h));
+            for _ in 0..(3.0 + 5.0 * rng.f()) as u32 {
+                spots.push((cx + rng.normal() * 22.0, cy + rng.normal() * 5.0));
+            }
         }
-        for _ in 0..50 {
+        for _ in 0..14 {
             let t = rng.range(0.05, 1.0f32).powf(0.7);
             let side = if rng.f() < 0.5 { -1.0 } else { 1.0 };
-            spots.push((path_x(t) + side * (18.0 + rng.range(0.0, 30.0)) * t, yh + t * (h - yh)));
+            let (cx, cy) = (path_x(t) + side * (18.0 + rng.range(0.0, 20.0)) * t, yh + t * (h - yh));
+            for _ in 0..(1.0 + 4.0 * rng.f()) as u32 {
+                spots.push((cx + rng.normal() * 9.0 * t, cy + rng.normal() * 2.0 * t));
+            }
         }
         spots.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap());
         for (gx, gy) in spots {

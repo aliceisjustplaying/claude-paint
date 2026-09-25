@@ -212,4 +212,53 @@ What it draws on (from knowledge, not pictures):
 
 ## Critique
 
-(Written after the full render; see the end.)
+Judged at 1000px and in 3200px crops, harshly.
+
+**What works.**
+- The big shape is Friedrich's: a low horizon, a quiet stippled sky from
+  cobalt-gray to lemon, three dark silhouettes on the skyline (the broken
+  oak, the grave, the great oak) and one small dark figure below. The
+  values hold. Everything important is dark against the lightest band of
+  sky, and the snow sits between the two in value.
+- The great oak is the best passage. It is broad, elbowed and crooked,
+  with broken limbs ending in splinters. Its twigs are a fine crooked lace
+  at 3200px rather than "foliage", and it has no ladder bands or joins
+  since the reload fix.
+- The crescent: thick in the middle, sharp horns, lit limb toward the
+  sunken sun, earthshine in the dark part. The evening star in the glow.
+- The man is legible at 3200px as a man of the 1820s (greatcoat, top hat,
+  stick). He is small enough to be Friedrich's, not an illustration.
+- Evening light through the dolmen, under the capstone and between the
+  uprights. This is the one moment of drama in the picture, and it reads.
+
+**What reads as digital, or simply weak.**
+- **The dolmen is still too neat.** The uprights are near-rectangular
+  slabs with straight sides. The capstone is a smooth symmetric bun whose
+  snow sits on it like icing with a hard lower edge. Real megaliths are
+  lumpy, split and lichened. The stone texture at 3200px is flat,
+  stroke-smoothed paint with almost no grain; every attempt at grain
+  (dry-brush lights) came out as confetti, and I removed it. It's the
+  focal point and the weakest-drawn thing in the picture.
+- **The snow is smooth but empty.** After fusing the lay-in it reads as
+  snow at 1000px, but at 3200px it's a soft haze with very little paint
+  character. Friedrich's foreground snow has a slight impasto and a
+  crisp, dense surface. The drift crests help but are too regular (all
+  horizontal, similar lengths).
+- **The grass is scattered evenly.** Clumped by noise and along the
+  bank, but it still reads as sprinkled rather than growing where the
+  ground would hold it (along the bank, in hollows, around the stones).
+- **The small oak** is my big oak's habit at a smaller size, so the two
+  trees rhyme too closely. Friedrich would make the second tree a
+  different character (a stump, a pollard, a dead snag).
+- **The far woods** are a flat dark hump at left and right, with no
+  gradation into the haze. The spire is nice but tiny, and the church body
+  is a lump.
+- **Crows** are readable only in crops.
+- The underdrawing is fully hidden: honest for a late picture, but it
+  means that stage contributes nothing you can see.
+
+**If I had another hour.** Build the stones with `Form` (an `Sdf` capstone
+turned and cut, weathered, lit by sky light from above and glow from
+behind) instead of hand color fields; give the second tree a different
+habit; move the grass to where the drifts thin; add a thin impasto of
+lead white on the foreground drift lips.

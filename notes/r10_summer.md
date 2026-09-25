@@ -183,6 +183,21 @@ the rise in front.
     specks over the smooth sky. I let them stand (they read as texture at
     arm's length).
 
+17. **Dark broad leaves vanish in dark grass.** The dock's rosette,
+    mixed as a deeper version of the ground under it, disappeared
+    entirely at 3200px; only its seed stalk showed. Broad leaves catch more
+    light than grass; I had to paint them lighter than the ground with a
+    lit edge and midrib. (A painter's error, not the engine's, but a
+    reminder that "a shade off the ground" is the wrong rule for anything
+    with a surface.)
+
+## Render times (this machine, shared)
+
+1000px whole: 57–76 s (the lime stage ~20 s: 20k leaf touches plus aimed
+mixes). 3200px whole: 202–225 s. 3200px crops: 14–70 s (the lime and
+whole-canvas masks are planned regardless of the crop). Resuming a 1000px
+render from "horses": 6 s.
+
 ## Critique (honest)
 
 What works: the sky, a luminous cool-to-cream gradient with soft level

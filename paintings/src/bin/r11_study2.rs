@@ -162,12 +162,7 @@ fn main() {
         pts: wobble(&[(452.0, 150.0), (420.0, 110.0), (372.0, 76.0), (340.0, 30.0), (300.0, -20.0)], 3.0, &mut g),
         w: vec![22.0, 18.0, 16.0, 14.0, 13.0],
     };
-    // the broken stub on the shady... no, the lit side, low down
-    let stub = Limb {
-        pts: vec![(tr.cx(660.0) - 20.0, 664.0), (tr.cx(655.0) - 58.0, 636.0), (tr.cx(655.0) - 76.0, 618.0), (tr.cx(655.0) - 92.0, 600.0)],
-        w: vec![52.0, 30.0, 22.0, 19.0],
-    };
-    let limbs = [&limb, &bough, &high, &stub];
+    let limbs = [&limb, &bough, &high];
     // ckpt: from twigs
     let mut twig_list: Vec<(Vec<P>, f32)> = Vec::new();
     // twigs off the bough and the limb, crossing the sky: oak shoots, short
@@ -513,6 +508,22 @@ fn main() {
             c.drag(&mut rim, &Gesture::new(pts).pressure(0.35, 0.25).ramps(0.2, 0.4).shake(0.3), Some(&trunk_m));
             y -= len + rng.range(-5.0, 20.0);
         }
+        // where a limb was lost long ago: a healed scar, a swollen callus lip
+        // around a dark hollow, the lip lit on its upper left
+        let (sx, sy) = (tr.cx(640.0) - 14.0, 640.0);
+        let mut sc = Held::new(Tool::round_sable(3.0), 505);
+        sc.reload(bark_pal.paint(hex("#191614"), 0.1), 0.8);
+        for k in 0..3 {
+            let r = 5.0 - k as f32 * 1.5;
+            let ring: Vec<P> = (0..9).map(|i| { let a = i as f32 / 8.0 * 2.0 * PI; (sx + a.cos() * r * 0.8, sy + a.sin() * r * 1.5) }).collect();
+            c.drag(&mut sc, &Gesture::new(ring).pressure(0.8, 0.8).shake(0.3), Some(&trunk_m));
+        }
+        sc.reload(bark_pal.paint(hex("#7f7262"), 0.1), 0.6);
+        let arc: Vec<P> = (0..7).map(|i| { let a = PI * 0.75 + i as f32 / 6.0 * PI * 0.95; (sx + a.cos() * 9.5, sy + a.sin() * 15.0) }).collect();
+        c.drag(&mut sc, &Gesture::new(arc).pressure(0.55, 0.3).ramps(0.2, 0.4).shake(0.4), Some(&trunk_m));
+        sc.reload(bark_pal.paint(hex("#221e1b"), 0.1), 0.6);
+        let arc2: Vec<P> = (0..6).map(|i| { let a = -PI * 0.3 + i as f32 / 5.0 * PI * 0.9; (sx + a.cos() * 10.0, sy + a.sin() * 16.0) }).collect();
+        c.drag(&mut sc, &Gesture::new(arc2).pressure(0.6, 0.3).ramps(0.2, 0.4).shake(0.4), Some(&trunk_m));
         // lichen: a few grey-green touches on the lit, north... lit side
         let mut lb = Held::new(Tool::stippler(3.0), 504);
         for _ in 0..14 {
@@ -551,7 +562,7 @@ fn main() {
         let bcol = move |x: f32, y: f32| mix(mix(snow_col(x, y), hex("#efe3cf"), 0.5 * smoothstep(20.0, -40.0, x - cx0), Mix::Light), hex("#a3a9bf"), 0.6 * shadow(x, y).max(0.5 * smoothstep(0.0, 40.0, x - cx0)), Mix::Light);
         // the lip of the bank against the bark: short curved strokes of the
         // lit snow pulled up onto the trunk, broken, so the bark shows through
-        let mut lip = Held::new(Tool::round_sable(4.5), 705);
+        let mut lip = Held::new(Tool::round_sable(4.0), 705);
         let mut x = tr.left(1080.0) - 10.0;
         while x < tr.right(1080.0) + 10.0 {
             let len = rng.range(8.0, 26.0);
@@ -562,9 +573,9 @@ fn main() {
             let y0 = bank(x);
             let y1 = bank(x + len);
             // now and then the snow heaps a little against the bark
-            let heap = if rng.f() < 0.35 { rng.range(3.0, 9.0) } else { rng.range(-0.5, 2.0) };
+            let heap = if rng.f() < 0.25 { rng.range(2.0, 6.0) } else { rng.range(-0.5, 1.5) };
             let col = bcol(x + len * 0.5, (y0 + y1) * 0.5 + 3.0);
-            lip.reload(snow_pal.paint(shift(col, 0.01, 0.0, 0.0), 0.05), 0.7);
+            lip.reload(snow_pal.paint(shift(col, -0.035, 0.0, -0.01), 0.05), 0.6);
             let pts = vec![(x, y0 + 2.5), (x + len * 0.35, y0 - heap * 0.8), (x + len * 0.65, y1 - heap), (x + len, y1 + 2.5)];
             c.drag(&mut lip, &Gesture::new(pts).pressure(rng.range(0.5, 0.8), 0.3).ramps(0.3, 0.5).shake(0.8), None);
             x += len * rng.range(0.45, 0.9);
@@ -596,10 +607,10 @@ fn main() {
             c.drag(&mut sab, &Gesture::new(vec![(x, y0), (x + len * 0.5, (y0 + y1) * 0.5 - rng.range(0.5, 2.0)), (x + len, y1)]).pressure(0.45, 0.15).ramps(0.2, 0.5).shake(0.6), None);
             x += len + rng.range(3.0, 14.0);
         }
-        // snow lying along the top of the stub and of the big limb: thin,
+        // snow lying along the top of the long bough: thin,
         // broken lines of lit white on the upper edge, not caps
         let mut wb = Held::new(Tool::round_sable(2.2), 703);
-        for (l, from, to) in [(&stub, 0usize, 2usize), (&bough, 0, 5)] {
+        for (l, from, to) in [(&bough, 0usize, 5usize)] {
             for i in from..to {
                 let (a, b) = (l.pts[i], l.pts[i + 1]);
                 let n = 2;
@@ -622,24 +633,6 @@ fn main() {
                     c.drag(&mut wb, &Gesture::line(p0, p1).pressure(0.55, 0.25).ramps(0.3, 0.5).shake(0.6), None);
                 }
             }
-        }
-        // the stub: its upper edge catches the evening, and it throws a small
-        // shadow down the trunk under it
-        let mut ed = Held::new(Tool::round_sable(2.4), 706);
-        ed.reload(bark_pal.paint(hex("#7e705e"), 0.1), 0.5);
-        let up: Vec<P> = stub.pts.iter().zip(&stub.w).skip(1).map(|(p, w)| (p.0 + w * 0.3, p.1 - w * 0.42)).collect();
-        c.drag(&mut ed, &Gesture::new(up).pressure(0.4, 0.25).ramps(0.2, 0.3).shake(0.5), None);
-        ed.reload(bark_pal.paint(hex("#1d1a18"), 0.1), 0.6);
-        let j = stub.pts[0];
-        c.drag(&mut ed, &Gesture::new(vec![(j.0 - 6.0, j.1 + 12.0), (j.0 + 4.0, j.1 + 30.0), (j.0 + 10.0, j.1 + 55.0)]).pressure(0.8, 0.2).ramps(0.1, 0.7).shake(0.5), Some(&trunk_m));
-        // the broken end of the stub: pale splintered wood
-        let wood = bark_pal.paint(hex("#9a8a70"), 0.1);
-        let e = stub.pts[2];
-        let mut sp = Held::new(Tool::round_sable(1.6), 704);
-        for k in 0..4 {
-            sp.reload(wood, 0.5);
-            let a = -2.4 + k as f32 * 0.22;
-            c.drag(&mut sp, &Gesture::new(vec![(e.0 + 4.0, e.1 + 4.0), (e.0 + a.cos() * 9.0, e.1 + a.sin() * 9.0)]).pressure(0.5, 0.0).ramps(0.05, 0.7), None);
         }
         c.dry();
     }
@@ -683,8 +676,7 @@ fn main() {
             }
         }
         // a thin cool line of shadow under each near clump would come here
-        let _ = PI;
-    }
+            }
 
     o.end(&mut c, &mut rng);
     c.relief(st.relief.0, st.relief.1);

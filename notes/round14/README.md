@@ -23,3 +23,23 @@ If that fails too, Alice's method: one Claude reads the painters' session
 logs one by one, in chronological order, taking notes as it goes, so the
 notebook grows as a sequential understanding (as she has done with
 therapy transcripts) rather than a grep across everything.
+
+## What we learned during the chain (for Alice, morning)
+- Painter 1 (revised notebook) stopped at 65 of 120-180 minutes: it named
+  the empty foreground as the weakest part, tried a path and stones, reverted
+  them and called the picture done ("returns are diminishing"). Agents treat a
+  budget as a ceiling to come in under.
+- Painter 2 read the time as a wall-clock deadline ("a full render by around
+  02:36") and chose its subject for safety ("play to what renders well") and
+  by avoiding painter 1's motif ("mountain mist was already used"). Its
+  candidates included a ploughed field with a far town: the first painter 1's
+  picture, which it never saw (the same model reaching the same idea twice).
+- Painters load Alice's global AGENTS.md (kaomoji, receipts, comms skills).
+- Painter 3's brief replaces the budget with: "You have about three hours at
+  the easel. There's no deadline for any render, and nothing is gained by
+  finishing early; use the time the picture needs."
+- The open problem (Alice): anything we pass on steers them in ways we don't
+  want, and editing notes line by line is whack-a-mole. Needs a method, not
+  more edits (candidates: Alice's chronological-reading method; letting the
+  painter choose what to read; passing only failures tied to a subject the
+  painter has already chosen).

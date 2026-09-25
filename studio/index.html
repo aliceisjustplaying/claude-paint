@@ -3,11 +3,13 @@
 <style>
   :root { --bg:#16161a; --fg:#ddd; --dim:#888; --acc:#e0b060; }
   * { box-sizing:border-box } body { margin:0; background:var(--bg); color:var(--fg); font:13px/1.4 -apple-system, sans-serif; height:100vh; display:flex; flex-direction:column }
-  header { display:flex; gap:10px; align-items:center; padding:6px 10px; border-bottom:1px solid #333 }
+  header { display:flex; flex-wrap:nowrap; gap:10px; align-items:center; padding:6px 10px; border-bottom:1px solid #333; white-space:nowrap; overflow:hidden }
+  header > * { flex:none } header #sess { flex:0 1 auto; min-width:120px }
+  #clock, #file { flex:0 1 auto; min-width:0; overflow:hidden; text-overflow:ellipsis }
   header select { background:#222; color:var(--fg); border:1px solid #444; max-width:40vw }
   header button { background:#222; color:var(--fg); border:1px solid #444; padding:2px 8px; cursor:pointer }
   #clock { color:var(--dim); font-variant-numeric:tabular-nums }
-  #badge { font-weight:700; padding:2px 8px; border-radius:3px; letter-spacing:.05em }
+  #badge { white-space:nowrap; font-weight:700; padding:2px 8px; border-radius:3px; letter-spacing:.05em }
   #badge.live { background:#c22; color:#fff; animation:pulse 1.6s infinite }
   #badge.idle { background:#553; color:#ddd } #badge.replay { background:#246; color:#dde } #badge.ended { background:#333; color:#aaa }
   @keyframes pulse { 50% { opacity:.55 } }
@@ -72,9 +74,9 @@ function badge() {
   const age = (Date.now() - Date.parse(events[events.length-1].ts)) / 1000;
   const active = age < 180, b = $('badge');
   if (live && active) { b.className = 'live'; b.textContent = 'LIVE'; b.title = 'following the painter; last action ' + ago(age); }
-  else if (live) { b.className = active ? 'live' : 'ended'; b.textContent = active ? 'LIVE' : 'SESSION IDLE · last action ' + ago(age); }
+  else if (live) { b.className = active ? 'live' : 'ended'; b.textContent = active ? 'LIVE' : 'IDLE'; b.title = 'last action ' + ago(age); }
   else if (playing) { b.className = 'replay'; b.textContent = 'REPLAY ' + $('speed').value + '×'; }
-  else { b.className = 'replay'; b.textContent = 'PAUSED · ' + (events.length - 1 - pos) + ' events behind live'; }
+  else { b.className = 'replay'; b.textContent = 'PAUSED'; b.title = (events.length - 1 - pos) + ' events behind live'; }
 }
 // what the painter is doing at event i (live: now)
 const ICON = { think:'💭', code:'✍️', compile:'🔧', render:'🎨', look:'👁', read:'📖', notes:'📝', wait:'⏳', cmd:'⌨️', talk:'💬', done:'✓' };
@@ -159,7 +161,7 @@ function show(i) {
   $('feed').innerHTML = events.slice(from, pos + 1).filter(e => think || e.kind !== 'think').map(line).join('');
   $('feed').scrollTop = 1e9;
   const t0 = Date.parse(events[0].ts), t = Date.parse(events[pos].ts);
-  $('clock').textContent = 'at ' + fmt((t - t0) / 1000) + ' into the session (' + new Date(t).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}) + ')';
+  $('clock').textContent = fmt((t - t0) / 1000) + ' in · ' + new Date(t).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}); $('clock').title = 'time into the session · clock time';
   badge(); doing(pos, live && pos === events.length - 1); $('pos').textContent = `${pos + 1} / ${events.length}`;
 }
 function fmt(s) { s = Math.max(0, s|0); return `${(s/3600)|0}:${String(((s%3600)/60)|0).padStart(2,'0')}:${String(s%60).padStart(2,'0')}`; }

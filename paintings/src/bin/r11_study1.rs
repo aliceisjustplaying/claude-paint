@@ -93,8 +93,8 @@ fn tree() -> Vec<Limb> {
         // a smaller limb high on the left
         Limb::new(&[(430.0, 175.0, 13.0), (372.0, 128.0, 9.0), (318.0, 110.0, 6.5), (262.0, 70.0, 4.5)]),
         // root flare, left and right, going under the snow
-        Limb::new(&[(452.0, 935.0, 20.0), (426.0, 978.0, 22.0), (408.0, 1004.0, 18.0)]),
-        Limb::new(&[(492.0, 935.0, 18.0), (520.0, 972.0, 19.0), (536.0, 1000.0, 15.0)]),
+        Limb::new(&[(448.0, 915.0, 26.0), (428.0, 965.0, 27.0), (410.0, 1000.0, 22.0)]),
+        Limb::new(&[(490.0, 915.0, 26.0), (512.0, 962.0, 26.0), (530.0, 998.0, 20.0)]),
     ]
 }
 
@@ -338,6 +338,7 @@ fn main() {
         // the silhouette drawn by hand, as he'd follow his pencil line: long
         // strokes of the trunk's dark down each edge, just inside it
         let mut ct = Held::new(Tool { point: 0.6, ..Tool::round_sable(3.4) }, 42);
+        let above = tree_m.clone().mul_fn(|x, y| 1.0 - smoothstep(drift_top(x) - 4.0, drift_top(x) - 1.0, y));
         for l in limbs.iter().take(5) {
             for side in [-1.0f32, 1.0] {
                 let mut s0 = 0.0;
@@ -357,7 +358,7 @@ fn main() {
                         let col = if u < 0.0 { hex("#3a332c") } else { hex("#231c17") };
                         ct.reload(bark_pal.paint(col, 0.12), 0.6);
                         let pr = (r / 30.0).clamp(0.35, 0.7);
-                        c.drag(&mut ct, &Gesture::new(pts).pressure(pr, pr).ramps(0.15, 0.2).shake(0.35), Some(&tree_m));
+                        c.drag(&mut ct, &Gesture::new(pts).pressure(pr, pr).ramps(0.15, 0.2).shake(0.35), Some(&above));
                     }
                     s0 += ds * rng.range(0.8, 0.95);
                 }
@@ -373,7 +374,9 @@ fn main() {
         let mut dark = Held::new(Tool { point: 0.7, ..Tool::round_sable(2.4) }, 51);
         let mut pale = Held::new(Tool { point: 0.3, ..Tool::filbert(3.5) }, 52);
         let mut plate = Held::new(Tool { ragged: 0.6, ..Tool::filbert(4.5) }, 54);
-        let clip = tree_m.clone().dilate(0.8);
+        // marks on the bark stop at the snow: what the drift will cover
+        // thinly shouldn't be there to show through it
+        let clip = tree_m.clone().dilate(0.8).mul_fn(|x, y| 1.0 - smoothstep(drift_top(x) - 4.0, drift_top(x) - 1.0, y));
         for (k, l) in limbs.iter().enumerate() {
             let len: f32 = (0..l.pts.len() - 1).map(|i| {
                 let (a, b) = (l.pts[i], l.pts[i + 1]);

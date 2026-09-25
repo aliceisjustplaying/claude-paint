@@ -72,6 +72,19 @@ No `Finish::aged`: no varnish and no cracks, as the brief asks.
   started from invisible wood. Now a twig ends at 45% pressure when it has
   children, and each child starts at the pressure its parent had at that
   point.
+- Final pass, 3200px crop of the mid-trunk: the silhouette stepped in
+  rectangles, and the trunk was one flat dark. I printed the mask's right
+  edge down the trunk. The steps were in *my mask*: the isotropic bark noise
+  moved the edge 5 units within 8 units of height (x 504.75 at y 594 to 509
+  at y 602), and vertical strokes hugging it squared the notches off. Now
+  the noise is stretched along each limb's axis (sampled in the limb's
+  along/across frame), so the edge breaks into long plates. The underpaint
+  is modeled across the trunk (lighter warm gray on the left flank lit by
+  the sky dome, darkest right of center, a little snow-light low on the
+  right) and clipped to the silhouette. The contour is then drawn by hand
+  down each edge with a pointed round, following the pencil line. The bark
+  plates are longer and fewer. The grass comes in tufts of 2–5 fanning
+  blades.
 
 ## FRICTION
 1. **Masks can't be clipped to "behind this later passage", and a Handling
@@ -125,7 +138,12 @@ No `Finish::aged`: no varnish and no cracks, as the brief asks.
    `--full --crop`, and any edit to the tree geometry (defined before the
    first stage) invalidates every checkpoint. For a trunk study, where the
    silhouette is what I keep editing, that's all of them.
-9. **Snow color judged in a JPEG vs. numbers.** The peek JPEGs made the snow
+9. **Noise has no orientation of its own.** Anything grown along a form
+   (bark, grain, plates) needs noise sampled in the form's own frame. I
+   rotated coordinates into each limb's axis by hand inside the mask
+   closure (`Aniso` exists but takes one global angle). Isotropic fbm on a
+   silhouette made rectangular notches that I first blamed on the brushes.
+10. **Snow color judged in a JPEG vs. numbers.** The peek JPEGs made the snow
    look paler than it is. I had to sample pixels with `magick` to trust the
    tones. A `scripts/peek` option that prints a few sampled values would help.
 

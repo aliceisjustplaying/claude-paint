@@ -35,6 +35,9 @@ fn main() {
     let st = Style { palette: Palette::friedrich_1820_greens(), ..Style::friedrich() };
     let pal = &st.palette;
     let sky_pal = pal.only(&["lead white", "cobalt blue", "pale smalt", "yellow ochre", "red earth"]);
+    // the clouds' greys from blue, ochre and white alone: with red earth in
+    // reach the bellies went a dirty brown
+    let cloud_pal = pal.only(&["lead white", "cobalt blue", "pale smalt", "yellow ochre"]);
     let mut c = o.canvas(|| st.prepare(o.width, 1.42, seed));
     let (w, h) = (c.width(), c.height());
     let f = c.frame();
@@ -77,7 +80,7 @@ fn main() {
     // ---- underpainting: thin warm brown for the values, the land darker
     if o.stage("ground", &mut c, &mut rng) {
         let whole = Mask::from_fn(f, |_, _| 1.0);
-        let under = move |x: f32, y: f32| 0.2 + 0.9 * smoothstep(horizon - 5.0, horizon + 30.0, y) + 1.2 * smoothstep(rise(x) - 10.0, rise(x) + 60.0, y);
+        let under = move |x: f32, y: f32| 0.07 + 1.0 * smoothstep(horizon - 5.0, horizon + 30.0, y) + 1.2 * smoothstep(rise(x) - 10.0, rise(x) + 60.0, y);
         c.work(&whole, &st.glaze(0.9).color(|_, _| hex("#7a5a3c")).angle(|_, _| 0.0).angle_jitter(0.04).load_at(under), seed * 100 + 90);
         if let Some(b) = st.blend() {
             c.work(&whole, &b.angle(|_, _| 0.0), seed * 100 + 91);
@@ -131,7 +134,7 @@ fn main() {
         (0.55 + 1.2 * (b - a)).clamp(0.0, 1.0)
     };
     if o.stage("sky", &mut c, &mut rng) {
-        c.work(&sky, &st.broad().mixed(&sky_pal, 0.28).color(sky_color).angle(move |x, y| 0.02 * drift.get(x, y * 3.0)).load(0.62).coverage(4.5), seed * 100 + 1);
+        c.work(&sky, &st.broad().mixed(&sky_pal, 0.28).color(sky_color).angle(move |x, y| 0.02 * drift.get(x, y * 3.0)).load(0.62).coverage(5.5), seed * 100 + 1);
         if let Some(b) = st.blend() {
             let b = b.angle(|_, _| 0.0);
             for k in 0..st.blend_passes {
@@ -143,7 +146,7 @@ fn main() {
         // lit tops warm white, stippled, and fused a little where they lie
         // the clouds laid wet into the wet sky: bellies first, grey-violet,
         // then the lit tops warm white, stippled
-        let belly = Stipple::new(Tool::stippler(3.4)).mixed(&sky_pal, 0.35).color(move |_, y| mixc(hex("#a9adbd"), hex("#c9c3bb"), y / horizon)).coverage(move |x, y| 1.4 * cloud(x, y) * (1.0 - cloud_lit(x, y)).powf(0.7)).pressure(0.4, 0.75).feather(0.8);
+        let belly = Stipple::new(Tool::stippler(3.4)).mixed(&cloud_pal, 0.35).color(move |_, y| mixc(hex("#aab2c4"), hex("#cbc8c0"), y / horizon)).coverage(move |x, y| 1.4 * cloud(x, y) * (1.0 - cloud_lit(x, y)).powf(0.7)).pressure(0.4, 0.75).feather(0.8);
         c.stipple(&sky, &belly, seed * 100 + 5);
         let tops = Stipple::new(Tool::stippler(3.0)).mixed(&sky_pal, 0.3).color(|_, _| hex("#f6f0e2")).coverage(move |x, y| 2.6 * cloud(x, y) * cloud_lit(x, y)).pressure(0.4, 0.8).feather(0.8);
         c.stipple(&sky, &tops, seed * 100 + 6);

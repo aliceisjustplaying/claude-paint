@@ -29,11 +29,10 @@ every color and mark.
     Quilez (<https://iquilezles.org/articles/warp/>).
   - `Aniso`: stretching along a direction (wind, bedding).
   - `Worley`: cellular noise returning `f1`, `f2`, `edge()`, a stable cell
-    `id`/`rand()` and the feature point, plus `f1_3` in 3-D. A feature lies
-    anywhere in its cell, so the search runs past the 3×3 block (to 7×7 in
-    2-D, 5×5×5 in 3-D), skipping cells whose nearest corner is already
-    farther than F2 (F1 in 3-D). The 3×3 search missed nearer features two
-    cells away (tested against brute force:
+    `id`/`rand()` and the feature point. A feature lies anywhere in its
+    cell, so the search runs past the 3×3 block (to 7×7), skipping cells
+    whose nearest corner is already farther than F2. The 3×3 search missed
+    nearer features two cells away (tested against brute force:
     `worley_finds_the_true_nearest_features`).
   - Hand irregularity: `uneven(n, lo, hi, irregular, clump, seed)` gives
     lognormal gaps grouped into clumps. `vary(v, amount, i, seed)` and

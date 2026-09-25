@@ -4,5 +4,4 @@
 
 pub mod figures;
 pub mod rocks;
-pub mod trees;
 pub mod run;

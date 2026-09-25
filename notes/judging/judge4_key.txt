@@ -1,5 +1,0 @@
-U1 l3_green (loop3)
-U2 coast anchor
-U3 l4_near (loop4)
-U4 l2_green
-U5 l3_near

@@ -1,3 +1,0 @@
-V1 l5_near (loop5, fir tools)
-V2 coast anchor
-V3 l3_near (best so far)

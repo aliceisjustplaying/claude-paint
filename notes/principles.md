@@ -24,7 +24,7 @@ optics. The painter makes every decision: what to paint, where, which
 pile, which edge to lose, when to stop.
 
 A tool that **computes the result** (a perfect color field, an exact
-mask edge, a fully grown structure traced as-is) takes the decision away
+mask edge, a structure traced as-is) takes the decision away
 from the painter and puts a machine's perfection into the picture. That's
 the "digital" look: "the lighting is maybe a little too perfect", "a
 filled selection", "an icon", "wire", confetti, fractal twigs.
@@ -66,13 +66,12 @@ finished pictures to copy.
   consults instead (placement, proportion, light direction) rather than
   something traced?
 - Would a person painting have this? (A palette knife and piles, yes; a
-  per-pixel color function, no. A drawing of a tree's structure, yes; a
-  tree grown and traced for you, only as a scaffold.)
+  per-pixel color function, no. A drawing of a tree's structure, yes.)
 - Does it default to the painter deciding? Automation, if any, is opt-in
   and visible.
 - Is it deterministic and physical (conserves paint, respects time)?
 
-## Structure tools (tree_in, fir, rock, form, scene, atmos): the tension
+## Structure tools (rock, form, scene, atmos): the tension
 Alice is wary of them, with reason: they grow or compute objects, and
 traced in full they read as computed ("too computationally fractal").
 They stay because painters need some flexibility and knowledge a person
@@ -126,6 +125,6 @@ saw. So:
 3. Short briefs with principles and process (mix piles, sittings, look and
    revise), not lists of symptoms to avoid.
 4. Constraints are enforced, not reported: a sitting that runs past its
-   length ends; the easel refuses marks until a rest.
+   length ends.
 5. Only Alice promotes a recipe into the sketchbook, when she approves the
    picture, not when a painter claims it won.

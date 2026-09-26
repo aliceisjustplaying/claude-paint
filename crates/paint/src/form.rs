@@ -10,8 +10,7 @@
 //!   distance from the viewer for aerial perspective.
 //! - Solids are either 3-D bodies (`Sdf`: ellipsoids, blocks, fracture planes
 //!   cut through them, weathering) seen straight on, or reliefs over the
-//!   canvas (`Ridge`: an eroded mountain face with spurs and gullies running
-//!   down from its crest; `Relief`: any height function).
+//!   canvas (`Relief`: any height function).
 //! - `Form::light` casts shadows over it; then `shade` says, per point, how far
 //!   the plane turns toward the light, how much direct light it gets, whether
 //!   it lies in a cast shadow, how much reflected light and sky it sees.
@@ -26,7 +25,6 @@
 
 use crate::canvas::Frame;
 use crate::mask::Mask;
-use crate::noise::Fbm;
 use noise::{NoiseFn, Perlin};
 use rayon::prelude::*;
 
@@ -575,196 +573,6 @@ impl<F: Fn(f32, f32) -> Option<(f32, u16)> + Sync> Solid for Relief<F> {
     }
 }
 
-/// A mountain face or cliff seen from in front: a skyline (the crest), and
-/// below it a face that leans back from the viewer (`lean`), cut by gullies
-/// that start just under the crest and run down the fall lines, fanning out
-/// and widening as they descend, with rounded spurs between them. Optional
-/// strata make ledges across it.
-///
-/// Facets: 0 the face; 1 the top of a ledge, 2 its riser (with strata).
-pub struct Ridge {
-    x0: f32,
-    /// Crest y sampled every unit from x0, and its prefix sums.
-    crest: Vec<f32>,
-    sums: Vec<f64>,
-    /// How far below the crest the face reaches (units).
-    pub depth: f32,
-    /// How the face leans back: dz/dy (0 a sheer wall facing us, 1 a slope
-    /// tilted 45° toward the sky). Mountains ~0.6–1.2, cliffs ~0.1–0.3.
-    pub lean: f32,
-    /// Extra lean at the foot (a concave slope flattening out).
-    pub foot: f32,
-    /// Gully spacing just under the crest (units); they widen downhill.
-    pub gully: f32,
-    /// Gully depth, as a fraction of their spacing.
-    pub carve: f32,
-    /// How much the gullies follow the fall line (1) or run straight down (0).
-    pub fan: f32,
-    /// Ledges: (spacing, step height in z, tilt as dy/dx), or None.
-    pub strata: Option<(f32, f32, f32)>,
-    /// Added to every z (to place it in front of or behind other solids).
-    pub z0: f32,
-    /// Where the face meets level ground or water (y), if above its depth.
-    pub base: Option<f32>,
-    spurs: Fbm,
-    rills: Fbm,
-    wander: Fbm,
-}
-
-impl Ridge {
-    /// A ridge from `x0` to `x1` (units) whose crest line is at
-    /// `y = crest(x)` (units, y down; sampled once per unit), and whose face
-    /// reaches `depth` units below the crest at every x, whatever stands in
-    /// front of it (mask it where a nearer passage covers it). `seed` picks
-    /// its spurs and gullies. Defaults: `lean(0.8, 0.6)`, gullies every 40
-    /// units carved 0.35 deep, `fan(1.0)`, no strata, `z0(0.0)`.
-    pub fn new(x0: f32, x1: f32, crest: impl Fn(f32) -> f32, depth: f32, seed: u32) -> Self {
-        let n = (x1 - x0).ceil().max(1.0) as usize + 1;
-        let crest: Vec<f32> = (0..n).map(|i| crest(x0 + i as f32)).collect();
-        let mut sums = vec![0.0f64; n + 1];
-        for i in 0..n {
-            sums[i + 1] = sums[i] + crest[i] as f64;
-        }
-        Ridge {
-            x0,
-            crest,
-            sums,
-            depth,
-            lean: 0.8,
-            foot: 0.6,
-            gully: 40.0,
-            carve: 0.35,
-            fan: 1.0,
-            strata: None,
-            z0: 0.0,
-            base: None,
-            spurs: Fbm::new(seed, 3, 1.0),
-            rills: Fbm::new(seed + 7, 3, 1.0),
-            wander: Fbm::new(seed + 13, 2, 1.0),
-        }
-    }
-    /// How the face leans back (dz/dy, no units; see the `lean` field) and
-    /// how much more it leans at the foot.
-    pub fn lean(mut self, lean: f32, foot: f32) -> Self {
-        self.lean = lean;
-        self.foot = foot;
-        self
-    }
-    /// Gullies `spacing` units apart just under the crest (they widen
-    /// downhill), carved `carve` × their spacing deep.
-    pub fn gullies(mut self, spacing: f32, carve: f32) -> Self {
-        self.gully = spacing;
-        self.carve = carve;
-        self
-    }
-    /// 1: gullies follow the fall line; 0: they run straight down.
-    pub fn fan(mut self, f: f32) -> Self {
-        self.fan = f;
-        self
-    }
-    /// Ledges `spacing` units apart down the face, each stepping `step`
-    /// units in z, tilted `tilt` (dy/dx: 0.1 drops 1 unit every 10 across).
-    pub fn strata(mut self, spacing: f32, step: f32, tilt: f32) -> Self {
-        self.strata = Some((spacing, step, tilt));
-        self
-    }
-    /// Add `z` units toward the viewer to the whole face (to place it in
-    /// front of or behind other solids in the same `Form`).
-    pub fn z0(mut self, z: f32) -> Self {
-        self.z0 = z;
-        self
-    }
-    /// The face stops at the level line `y` (units): a beach, a lake, a
-    /// valley floor.
-    pub fn base(mut self, y: f32) -> Self {
-        self.base = Some(y);
-        self
-    }
-
-    /// The crest's y at x (linear between samples, flat past the ends).
-    pub fn crest(&self, x: f32) -> f32 {
-        let t = (x - self.x0).clamp(0.0, (self.crest.len() - 1) as f32);
-        let i = (t as usize).min(self.crest.len() - 2);
-        let u = t - i as f32;
-        self.crest[i] + (self.crest[i + 1] - self.crest[i]) * u
-    }
-
-    /// The crest averaged over ±r units (the shape of the mass seen from
-    /// further down its face, where the small notches no longer matter).
-    fn crest_smooth(&self, x: f32, r: f32) -> f32 {
-        if r < 0.5 {
-            return self.crest(x);
-        }
-        // the integral of the crest (piecewise constant per sample, from
-        // sample centers), continuous in x and r so the face has no steps
-        let n = self.crest.len();
-        let integral = |t: f32| -> f64 {
-            let t = (t - self.x0 + 0.5).clamp(0.0, n as f32);
-            let i = (t as usize).min(n - 1);
-            self.sums[i] + (t - i as f32) as f64 * self.crest[i] as f64
-        };
-        let (a, b) = (x - r, x + r);
-        let (ca, cb) = ((a - self.x0 + 0.5).clamp(0.0, n as f32), (b - self.x0 + 0.5).clamp(0.0, n as f32));
-        if cb - ca < 1e-3 {
-            return self.crest(x);
-        }
-        ((integral(b) - integral(a)) / (cb - ca) as f64) as f32
-    }
-
-    fn height(&self, x: f32, y: f32) -> Option<(f32, u16)> {
-        let d = y - self.crest(x);
-        if d < 0.0 || d > self.depth || self.base.is_some_and(|b| y > b) {
-            return None;
-        }
-        // the mass: a face leaning back, steepest near the crest, flattening
-        // toward the foot; deeper down, only the large shape of the crest counts
-        let r = (d * 0.8).min(200.0);
-        let cs = self.crest_smooth(x, r);
-        let h = (r * 0.5).max(3.0);
-        let slope = (self.crest_smooth(x + h, r) - self.crest_smooth(x - h, r)) / (2.0 * h);
-        let dd = (y - cs).max(0.0);
-        let s = self.lean + self.foot * 2.0 * dd / self.depth;
-        let mut z = self.lean * dd + self.foot * dd * dd / self.depth;
-        // follow the fall line back up to where it leaves the crest
-        let k = s * s * slope / (s * s * slope * slope + 1.0);
-        let u = x - self.fan * k * dd;
-        // gullies: they wander a little, and downhill the fine ones merge
-        // into fewer, wider ones (a fine set fading into a coarse one; the
-        // noise is sampled at fixed scales so nothing shears)
-        let g = self.gully;
-        let uw = u + 0.35 * g * self.wander.get(u / (g * 2.0), dd / (g * 6.0));
-        let merge = crate::smoothstep(0.0, self.depth * 0.7, dd);
-        let a = self.carve * g * (1.0 + 1.5 * dd / self.depth) * crate::smoothstep(0.0, g * 0.8, d);
-        let v = |n: f32, p: f32| n.abs().min(0.6).powf(p);
-        let fine = v(self.spurs.get(uw / g, dd / (g * 3.5)), 0.75);
-        let coarse = v(self.spurs.get(uw / (g * 2.2) + 17.3, dd / (g * 7.0)), 0.75);
-        let rills = v(self.rills.get(uw / (g * 0.3), dd / (g * 1.2)), 0.8);
-        z += a * (fine + (coarse - fine) * merge + 0.2 * rills);
-        let mut facet = 0;
-        if let Some((sp, step, tilt)) = self.strata {
-            // ledges: each bed leans back a little, then a riser
-            let q = (d + tilt * (x - self.x0) + 0.2 * sp * self.wander.get(x / (sp * 6.0), 3.0)) / sp;
-            let fr = q - q.floor();
-            let riser = crate::smoothstep(0.78, 1.0, fr);
-            z += step * (q.floor() + riser);
-            facet = if fr < 0.78 { 1 } else { 2 };
-        }
-        Some((z + self.z0, facet))
-    }
-}
-
-impl Solid for Ridge {
-    fn bounds(&self) -> [f32; 4] {
-        let top = self.crest.iter().cloned().fold(f32::INFINITY, f32::min);
-        let bot = self.crest.iter().cloned().fold(f32::NEG_INFINITY, f32::max);
-        let low = self.base.map_or(bot + self.depth, |b| b.min(bot + self.depth));
-        [self.x0, top, self.x0 + (self.crest.len() - 1) as f32, low]
-    }
-    fn hit(&self, x: f32, y: f32) -> Option<Hit> {
-        relief_hit(&|x, y| self.height(x, y), x, y)
-    }
-}
-
 // ------------------------------------------------------------------- form
 
 /// A part of the form, as added.
@@ -1294,22 +1102,5 @@ mod tests {
         let b = Sdf::block([0.0; 3], [40.0, 40.0, 40.0], 0.0).turn([0.0; 3], 0.0, 0.4, 0.0);
         assert_eq!(b.hit(0.0, -22.0).map(|h| h.facet), Some(4));
         assert_eq!(b.hit(0.0, 0.0).map(|h| h.facet), Some(5));
-    }
-
-    #[test]
-    fn a_ridge_has_flanks_and_gullies() {
-        let mut form = Form::new(frame());
-        // a peak at x = 500
-        let r = Ridge::new(0.0, 1000.0, |x| 200.0 + (x - 500.0).abs() * 0.5, 400.0, 3).gullies(40.0, 0.4);
-        form.add(&r, 1.0);
-        form.light(Light::new((-1.0, -0.5), 0.4));
-        assert!(form.sample(500.0, 190.0).is_none());
-        // averaged over the gullies, the left flank faces left, the right right
-        let mean_nx = |x0: f32| (0..40).map(|k| form.sample(x0 + k as f32 * 3.0, 380.0).unwrap().n[0]).sum::<f32>() / 40.0;
-        assert!(mean_nx(250.0) < -0.05 && mean_nx(650.0) > 0.05);
-        // the gullies make light and dark alternate across the face
-        let vals: Vec<f32> = (0..200).map(|k| form.shade(300.0 + k as f32 * 2.0, 450.0).direct).collect();
-        let (lo, hi) = vals.iter().fold((1.0f32, 0.0f32), |a, &v| (a.0.min(v), a.1.max(v)));
-        assert!(hi - lo > 0.3, "{lo}..{hi}");
     }
 }

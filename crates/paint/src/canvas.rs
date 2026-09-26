@@ -388,8 +388,9 @@ impl Canvas {
     /// coat of color depth. A request thinner than `MIN_FILM_UM` (0.05 µm)
     /// fades out smoothly, so a long soft falloff, or a blurred mask's
     /// float residue, ends softly, not at the last nonzero float; a thin
-    /// veil of a few tenths of a µm is laid as asked. It dries at once (a glaze over dry
-    /// paint; see `drying` for wet paint and time).
+    /// veil of a few tenths of a µm is laid as asked. It dries at once.
+    /// The caller must ensure the mask-covered substrate is touch-dry;
+    /// this operation neither advances time nor dries paint elsewhere.
     pub fn glaze(
         &mut self,
         pigment: &Pigment,
@@ -399,7 +400,6 @@ impl Canvas {
         if let Some(m) = mask {
             self.check_mask(m);
         }
-        self.dry();
         // the glaze is mostly medium: a thin fluid film that levels and pools
         // in the hollows of the surface, so it is deeper there
         let f = self.f;
@@ -511,6 +511,25 @@ mod tests {
     use crate::mask::Mask;
     use crate::pigment::Pigment;
     use crate::style::Style;
+
+    // Engine contract: glazing a dry patch must not advance time or cure
+    // other paint. The Lua guard alone cannot prevent an engine dry().
+    #[test]
+    fn masked_glaze_preserves_wet_paint_and_clock_elsewhere() {
+        let mut c = Style::oil().prepare(100, 1.0, 3);
+        let pal = crate::Palette::tube_box();
+        let paint = pal.pile(vec![(pal.tubes.iter().position(|t| t.name == "bone black").unwrap(), 1.0)]).laid(0.0);
+        let mut held = crate::Held::new(crate::Tool::hog_flat(20.0), 1);
+        held.load(paint, 1.0);
+        c.drag(&mut held, &crate::Gesture::line((100.0, 200.0), (400.0, 200.0)).pressure(0.8, 0.8), None);
+        let stages = c.stages();
+        assert!(stages.iter().any(|s| *s != crate::Stage::Dry));
+        let clock = c.clock();
+        let m = Mask::from_fn(c.frame(), |x, y| if x > 700.0 && y > 700.0 { 1.0 } else { 0.0 });
+        c.glaze(&Pigment::transparent(hex("#302010")), Some(&m), |_, _| 0.5);
+        assert_eq!(c.clock(), clock, "glaze must not advance the drying clock");
+        assert_eq!(c.stages(), stages, "paint outside the glaze stays wet");
+    }
 
     /// Largest channel change per distance band (40 units) from `at`.
     fn change_by_distance(c: &super::Canvas, before: &[crate::color::Rgb], at: (f32, f32)) -> Vec<f32> {

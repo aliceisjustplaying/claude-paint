@@ -981,6 +981,13 @@ fn main() {
             for parity in 0..2 {
                 for k in (parity..10).step_by(2) {
                     lb.reload(rope, 0.5);
+                    // (port, 2026-09-26: the last point is NaN, sin(PI) < 0 in
+                    // f32; round 2's engine laid nothing for a gesture with a
+                    // NaN point, today's refuses it, so that segment is skipped.
+                    // notes/wet_merge/PORTS.md)
+                    if pts[k..=k + 1].iter().any(|p| !(p.0.is_finite() && p.1.is_finite())) {
+                        continue;
+                    }
                     stroke(&mut c, &mut lb, &[pts[k], pts[k + 1]], 0.7, 0.7, (0.0, 0.0), None);
                 }
                 c.dry();
@@ -990,6 +997,12 @@ fn main() {
         for k in 0..9 {
             let x = rail0.0 + 4.0 + k as f32 * (rail1.0 - rail0.0 - 8.0) / 8.0 + r.range(-1.5, 1.5);
             let y = hem(x) - 3.0;
+            // (port: `hem` is NaN from x = 458 on, sin(PI) < 0 in f32 as in
+            // the coil; round 2's engine laid nothing for a touch there,
+            // today's refuses it, so that float is skipped)
+            if !y.is_finite() {
+                continue;
+            }
             let p = c.aim(&earth_pal, hex("#5a4632"), (x, y), 1.2, 0.1, 1.5);
             let mut fb = held(Tool::round_sable(2.2), p, 0.5, 150 + k);
             c.touch(&mut fb, &Touch::at(x, y).pressure(0.6).drag(1.0, 0.0), None);

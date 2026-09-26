@@ -1,5 +1,7 @@
 //! Delivery contract: the PNG a painter saves is the canvas as it is seen
 //! now (wet paint included), and a replay of the log delivers the same file.
+// The replay build: EASEL_ROOT, named sessions and `easel run`.
+#![cfg(feature = "replay")]
 
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};

@@ -1,13 +1,18 @@
 //! easel: a live Lua painting session over the claude-paint engine.
 //!
-//!   easel open <name>                start (or reattach to) a session
+//!   easel open [<name>]              start (or reattach to) a session
 //!   easel do '<lua>' | -f chunk.lua | -            run a chunk on the live canvas
 //!   easel look [--crop x0,y0,x1,y1] [--mode value|squint|mirror] [--grid [step]] [--size N]
 //!   easel log | status | save [path] | frames on|off | check | close
 //!   easel note '<text>' | -                        append to notes/journal.md
 //!   easel run paintings/lua/<name>.lua [--out path] [--look]
 //!
-//! See notes/easel_guide.md.
+//! Two builds (see `USAGE`). The replay build (feature `replay`, on by
+//! default: developers, tests and the outside runner) has named sessions
+//! (`-s`, `EASEL_SESSION`), `EASEL_ROOT`, `run` and `hash-probe`. The
+//! painter build (`--no-default-features`) has none of them: its studio is
+//! the directory above the executable's (`<studio>/bin/easel`) and holds one
+//! painting, `PAINTING`. See notes/easel_guide.md.
 
 mod api;
 mod depth;
@@ -31,6 +36,25 @@ use std::time::{Duration, Instant};
 /// The one width a painting is painted, replayed and delivered at (px).
 const LIVE_WIDTH: usize = 2400;
 
+/// The painter build's one session.
+#[cfg(not(feature = "replay"))]
+const PAINTING: &str = "painting";
+
+#[cfg(not(feature = "replay"))]
+const USAGE: &str = "easel: a live painting session (see notes/easel_guide.md)
+
+  easel open          start or reattach; replays paintings/lua/painting.lua if it exists
+  easel do '<lua>'  |  easel do -f chunk.lua  |  easel do - (stdin)     [--look] also looks afterwards
+  easel look [--crop x0,y0,x1,y1] [--mode value,squint,mirror] [--grid [step]] [--size 1000]
+  easel log           the painting so far (= paintings/lua/painting.lua)
+  easel status        chunks, width, canvas
+  easel save [path]   the canvas as a PNG (default out/easel/painting/painting.png)
+  easel frames on|off save a look after every chunk
+  easel check         replay the log from scratch and compare with the live canvas
+  easel close         end the session (the log stays)
+  easel note '<text>' | easel note - (stdin)    append a dated entry to notes/journal.md";
+
+#[cfg(feature = "replay")]
 const USAGE: &str = "easel: a live painting session (see notes/easel_guide.md)
 
   easel open <name>    start or reattach; replays paintings/lua/<name>.lua if it exists
@@ -49,13 +73,13 @@ const USAGE: &str = "easel: a live painting session (see notes/easel_guide.md)
 
 fn main() -> ExitCode {
     let mut args: Vec<String> = std::env::args().skip(1).collect();
-    let mut name: Option<String> = std::env::var("EASEL_SESSION").ok();
-    if let Some(i) = args.iter().position(|a| a == "-s" || a == "--session")
-        && i + 1 < args.len()
-    {
-        name = Some(args.remove(i + 1));
-        args.remove(i);
-    }
+    let name = match take_session(&mut args) {
+        Ok(n) => n,
+        Err(e) => {
+            eprintln!("{e}");
+            return ExitCode::FAILURE;
+        }
+    };
     let Some(cmd) = args.first().cloned() else {
         println!("{USAGE}");
         return ExitCode::SUCCESS;
@@ -64,8 +88,10 @@ fn main() -> ExitCode {
     let r = match cmd.as_str() {
         "open" => open(&rest),
         "serve" => serve(&rest),
+        #[cfg(feature = "replay")]
         "run" => run(&rest),
         "note" => note(&rest, name),
+        #[cfg(feature = "replay")]
         "hash-probe" => {
             println!("{}", session::hash_probe());
             Ok(())
@@ -86,6 +112,30 @@ fn main() -> ExitCode {
     }
 }
 
+/// The session a command is for: `-s <name>` (taken out of `args`), else
+/// `EASEL_SESSION`, else (None) the last one opened.
+#[cfg(feature = "replay")]
+fn take_session(args: &mut Vec<String>) -> Result<Option<String>, String> {
+    let mut name: Option<String> = std::env::var("EASEL_SESSION").ok();
+    if let Some(i) = args.iter().position(|a| a == "-s" || a == "--session")
+        && i + 1 < args.len()
+    {
+        name = Some(args.remove(i + 1));
+        args.remove(i);
+    }
+    Ok(name)
+}
+
+/// The painter build has one session: `-s` is refused, `EASEL_SESSION`
+/// ignored.
+#[cfg(not(feature = "replay"))]
+fn take_session(args: &mut Vec<String>) -> Result<Option<String>, String> {
+    if let Some(a) = args.iter().find(|a| *a == "-s" || *a == "--session") {
+        return Err(format!("easel: no option {a:?}: this studio has one painting, there are no sessions to pick\n\n{USAGE}"));
+    }
+    Ok(Some(PAINTING.to_string()))
+}
+
 fn session_dir(name: &str) -> PathBuf {
     root().join("out/easel").join(name)
 }
@@ -99,6 +149,7 @@ fn journal_path() -> PathBuf {
     root().join("notes/journal.md")
 }
 
+#[cfg(feature = "replay")]
 fn flag(args: &[String], f: &str) -> Option<String> {
     args.iter().position(|a| a == f).and_then(|i| args.get(i + 1).cloned())
 }
@@ -178,7 +229,11 @@ fn append_note(clock: f64, text: &str) -> Result<String, String> {
 // ---------------------------------------------------------------- client
 
 fn request(name: &str, cmd: &str, args: &[String], payload: &[u8]) -> Result<(bool, String), String> {
-    let mut s = UnixStream::connect(sock_path(name)).map_err(|_| format!("no easel session {name:?} running: easel open {name}"))?;
+    #[cfg(feature = "replay")]
+    let not_running = || format!("no easel session {name:?} running: easel open {name}");
+    #[cfg(not(feature = "replay"))]
+    let not_running = || "no painting open: easel open".to_string();
+    let mut s = UnixStream::connect(sock_path(name)).map_err(|_| not_running())?;
     let mut head = cmd.to_string();
     for a in args {
         head.push('\t');
@@ -234,19 +289,44 @@ fn client(cmd: &str, args: &[String], name: Option<String>) -> Result<(), String
     }
 }
 
-fn open(args: &[String]) -> Result<(), String> {
+/// The session `open` is for: the name given (replay build).
+#[cfg(feature = "replay")]
+fn open_name(args: &[String]) -> Result<String, String> {
     let name = args.first().filter(|a| !a.starts_with('-')).ok_or("open <name>")?.clone();
     valid_name(&name)?;
     if args.len() != 1 {
         return Err("open: live sessions are fixed at 2400px; no width option".into());
     }
+    Ok(name)
+}
+
+/// The painter build opens its one painting: `open` takes nothing.
+#[cfg(not(feature = "replay"))]
+fn open_name(args: &[String]) -> Result<String, String> {
+    if let Some(a) = args.first() {
+        return Err(format!("open: this studio has one painting; easel open takes no name or option (got {a:?})"));
+    }
+    Ok(PAINTING.to_string())
+}
+
+/// Remember the session opened last (replay build: commands without `-s`
+/// go to it).
+fn set_current(name: &str) -> Result<(), String> {
+    #[cfg(feature = "replay")]
+    std::fs::write(root().join("out/easel/current"), name).map_err(|e| e.to_string())?;
+    let _ = name;
+    Ok(())
+}
+
+fn open(args: &[String]) -> Result<(), String> {
+    let name = open_name(args)?;
     let dir = session_dir(&name);
     std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
     if let Ok((ok, st)) = request(&name, "status", &[], &[]) {
         if !ok {
             return Err(st);
         }
-        std::fs::write(root().join("out/easel/current"), &name).map_err(|e| e.to_string())?;
+        set_current(&name)?;
         print!("reattached to {name:?}: {st}");
         return Ok(());
     }
@@ -270,7 +350,7 @@ fn open(args: &[String]) -> Result<(), String> {
             for l in resumed.lines().filter(|l| l.starts_with("resumed") || l.starts_with("warning")) {
                 println!("{l}");
             }
-            std::fs::write(root().join("out/easel/current"), &name).map_err(|e| e.to_string())?;
+            set_current(&name)?;
             print!("easel {name:?} open: {st}");
             return Ok(());
         }
@@ -298,6 +378,10 @@ struct Server {
 fn serve(args: &[String]) -> Result<(), String> {
     let name = args.first().ok_or("serve <name>")?.clone();
     valid_name(&name)?;
+    #[cfg(not(feature = "replay"))]
+    if name != PAINTING {
+        return Err(format!("easel: fatal: this studio has one painting, {PAINTING:?}"));
+    }
     if args.len() != 1 {
         return Err("easel: fatal: live sessions are fixed at 2400px".into());
     }
@@ -498,8 +582,10 @@ fn deliver(c: &Canvas, out: &Path) -> Result<(), String> {
     image::save_buffer(out, &buf, f.w as u32, f.h as u32, image::ColorType::Rgb8).map_err(|e| format!("{}: {e}", out.display()))
 }
 
+#[cfg(feature = "replay")]
 const RUN_USAGE: &str = "run <file.lua> [--out path.png] [--look] (replays at the live width, 2400px)";
 
+#[cfg(feature = "replay")]
 fn run(args: &[String]) -> Result<(), String> {
     let file = args.first().filter(|a| !a.starts_with('-')).ok_or(RUN_USAGE)?;
     let mut i = 1;

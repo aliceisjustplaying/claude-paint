@@ -110,7 +110,7 @@ pub struct Cracks {
     /// released: in a passage that only began cracking late, as with
     /// `patchy`, the first cracks still open like primaries). Cracks
     /// also swell and pinch along their length and close to nothing for
-    /// stretches (notes/cracks.md, Round 7).
+    /// stretches.
     pub hierarchy: f32,
     /// How patchily the network developed, 0 (evenly) .. 1: the ground was
     /// primed unevenly and the glue size and paint differ from place to
@@ -165,7 +165,7 @@ impl Cracks {
         }
     }
 
-    /// The Round 6 recipe: one even network (every crack alike, no patchy
+    /// One even network (every crack alike, no patchy
     /// development, no direction, the old soot in the cracks), fitted to
     /// the canvas like `aged`.
     pub fn even(seed: u64) -> Self {
@@ -1548,8 +1548,6 @@ fn voronoi_edge(x: f32, y: f32, seed: u64) -> f32 {
 }
 
 #[cfg(test)]
-#[path = "crack_lab.rs"]
-mod lab;
 
 #[cfg(test)]
 mod tests {
@@ -1795,8 +1793,7 @@ mod tests {
         std::array::from_fn(|g| sum[g] / len[g].max(1e-6))
     }
 
-    /// The first cracks open widest, each later generation less (Round 7:
-    /// the even web read as "too neat, too digital"); without hierarchy
+    /// The first cracks open widest, each later generation less; without hierarchy
     /// every generation opens about alike.
     #[test]
     fn first_cracks_open_widest() {

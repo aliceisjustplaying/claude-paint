@@ -536,8 +536,7 @@ fn crop_scene(crop: Option<crate::canvas::Crop>, strokes: usize) -> Canvas {
 
 /// A crop render is the same picture as the whole render there: the
 /// support and grounds exactly, brushwork closely (strokes are planned on
-/// the whole canvas; outside the window a brush can only be estimated, see
-/// notes/workflow.md), and the difference falls as the margin grows.
+/// the whole canvas; outside the window a brush can only be estimated), and the difference falls as the margin grows.
 #[test]
 fn crop_matches_whole() {
     use crate::canvas::Crop;
@@ -641,7 +640,7 @@ fn diag_sky_bare_pixels() {
 /// pinholes held 50-130 µm of dark paint on a small share of the pixel (a
 /// bead far taller than it is wide), because a pointed tool's `cover` (its
 /// hairs' share of the pixel) stayed what the hairs had touched while
-/// leveling poured paint in from the strokes around (notes/glitch.md, P1).
+/// leveling poured paint in from the strokes around.
 /// Bare gaps between strokes (no film to speak of) are not counted: they
 /// are the hatch's own.
 #[test]

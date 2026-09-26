@@ -1454,7 +1454,7 @@ mod tests {
 
     /// Sparse light marks aimed over a dark passage (with flecks of the warm
     /// ground showing through it) land in the color asked for: no salmon or
-    /// orange piles (amnesia 2, coast #1/#2, winter #14). Returns (share of
+    /// orange piles. Returns (share of
     /// marked pixels pushed warm, mean a/b miss, mean L miss).
     fn light_over_dark(pal_names: Option<&[&str]>, tool: &str, w: usize) -> (f32, f32, f32) {
         use crate::color::hex;
@@ -1584,9 +1584,7 @@ mod tests {
 
     /// `color_over` sees the canvas: "the snow here, darker and bluer" over
     /// a snow field that runs from bright to dull comes out darker and bluer
-    /// than the snow at both ends, strokes and stipple alike (amnesia 2,
-    /// winter #18: a shadow mixed from the painter's own snow field dried
-    /// lighter than the real, dimmer snow).
+    /// than the snow at both ends, strokes and stipple alike.
     #[test]
     fn color_over_sees_the_canvas() {
         use crate::color::{hex, shift};
@@ -1623,7 +1621,7 @@ mod tests {
     }
 
     /// `Style::blend()` fuses a masked passage without dragging its wet
-    /// paint across the mask's edge (amnesia 2, coast #5, mountains #14);
+    /// paint across the mask's edge;
     /// `.clip(false)` still fuses across it on purpose.
     #[test]
     fn blender_stays_in_its_region() {
@@ -1708,8 +1706,7 @@ mod tests {
         (e as f32 / en.max(1) as f32, le / en.max(1) as f32 - li / inn.max(1) as f32, sp as f32 / spn.max(1) as f32)
     }
 
-    /// Coverage doesn't thin at a mask's edges (amnesia 2, coast #3/#12,
-    /// winter #15): stroke centers just outside a region hug its edge, and
+    /// Coverage doesn't thin at a mask's edges: stroke centers just outside a region hug its edge, and
     /// unclipped strokes that brush into it are carried in from the edge.
     #[test]
     #[ignore]

@@ -442,8 +442,7 @@ impl Canvas {
 
 /// Film a glaze or varnish keeps on the peaks of a dry relief however much
 /// it drains, µm (capped by the film laid): a wetting film about as thick
-/// as its particles. (It was `canvas::MIN_FILM_UM` until that became a
-/// numerical floor in Round 7; its value is unchanged.)
+/// as its particles.
 pub(crate) const PEAK_FILM_UM: f32 = 1.0;
 /// Deepest a thin film gathers in a hollow of a dry relief, times the film laid.
 const POOL_MAX: f32 = 2.0;

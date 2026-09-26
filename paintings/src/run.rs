@@ -278,7 +278,7 @@ fn hash_src_with(start: (&str, u32), end: (&str, u32), read: impl Fn(&str) -> St
 }
 
 /// Fingerprint of the painting code a stage's checkpoint depends on (the
-/// staleness model; see the module docs and notes/workflow.md). For a stage
+/// staleness model; see the module docs). For a stage
 /// written as `if o.stage(..) { body }`:
 /// - the source up to the closing brace of its own block (everything that
 ///   ran before the stage ended, minus the code between blocks that comes
@@ -625,8 +625,7 @@ impl Run {
 
 /// Default margin around a crop window, units: painted but not saved. It
 /// gives paint leveling, the brushes' feel for the surface and strokes
-/// entering the window their context (see notes/workflow.md for how the
-/// difference to a whole render falls with it).
+/// entering the window their context.
 pub const DEFAULT_MARGIN: f32 = 40.0;
 
 fn list(names: &[String]) -> String {

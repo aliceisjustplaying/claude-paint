@@ -1,8 +1,6 @@
 //! The Friedrich ground must read as a painted ground seen through thin
-//! paint, not as a mechanical wood-grain of parallel horizontal streaks
-//! (loop-2 critic: "a horizontal wood-grain streaking covers the sky and
-//! snow, which looks like the tool rather than a painting choice"; see
-//! notes/loop2_grain.md). These tests measure the direction of the ground's
+//! paint, not as a mechanical wood-grain of parallel horizontal streaks.
+//! These tests measure the direction of the ground's
 //! relief: how much of its slope runs down the columns (horizontal ridges)
 //! against along the rows.
 
@@ -210,7 +208,7 @@ fn sky_bare(mut c: paint::Canvas, margin: f32) -> usize {
     n
 }
 
-/// A thin blended sky (as the easel's `hand="broad"` lays it) leaves
+/// A thin blended sky (as a broad handling lays it) leaves
 /// about as few pixels of bare ground over the new brushed ground as over
 /// the old one: three seeds at 3200 px, old 98 in all, new 164 (before the
 /// fix, 883, as one-pixel dotted contours along the ridges the priming

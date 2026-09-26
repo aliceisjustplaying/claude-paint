@@ -4,8 +4,7 @@
 //! commit bb2b05c9d1e65ae824d47e3b1cc17ea32c8ee68f, 2026-01-01), "a paint
 //! like color mixing library utilizing the Kubelka-Munk theory", extended
 //! to the engine's two-constant paint model and to layering (a film over a
-//! substrate, per wavelength). See notes/spectral.md for the design, the
-//! measurements against Mixbox and per-channel KM, and the verdict.
+//! substrate, per wavelength).
 //!
 //! What comes from spectral.js (the data tables and three conversions):
 //! - `from_rgb`: a reflectance spectrum for a linear RGB color, 38 samples

@@ -647,7 +647,7 @@ mod tests {
         assert!(aim[1] < 0.5 * mix[1], "{aim:?} vs {mix:?}");
     }
 
-    /// What aim picks for contrasting marks (the amnesia-2 cases): the
+    /// What aim picks for contrasting marks: the
     /// recipe and its look at a spread of thicknesses, in OKLab.
     /// `cargo test --release -p paint probe_contrast_aims -- --ignored --nocapture`
     #[test]

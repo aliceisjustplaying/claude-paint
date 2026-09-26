@@ -398,7 +398,7 @@ fn thin_film_over_dry_impasto_coats_peaks_and_pools_a_little() {
     let mut c2 = Canvas::new(w, 1.0, hex("#808080")).with_size_mm(w as f32 * 0.094);
     c2.height.copy_from_slice(&c.height.iter().zip(&t).map(|(z, f)| z - f).collect::<Vec<_>>());
     let t2 = c2.settle((0, 0, w, h), &add, &vec![0.05; w * h]);
-    assert!(t2.iter().cloned().fold(0.0, f32::max) > 10.0 * 2.25, "fluid settle no longer pools at the steps");
+    assert!(t2.iter().cloned().fold(0.0, f32::max) > 10.0 * 2.25, "fluid settle does not pool at the steps");
 }
 
 /// The varnish over dry impasto is an even warm layer: no pixel is warmed

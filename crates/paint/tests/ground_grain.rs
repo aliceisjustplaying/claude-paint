@@ -1,4 +1,4 @@
-//! Direction of the relief of `Style::friedrich()`'s ground: how much of its
+//! Direction of the relief of `Style::oil()`'s ground: how much of its
 //! slope runs down the columns (horizontal ridges) against along the rows,
 //! and how many pixels of bare ground a thin blended pass over it leaves.
 
@@ -99,15 +99,15 @@ fn only(st: &Style, g: Vec<Ground>) -> Style {
 /// brushed ground 1.29 and 1.61. At 3200 px (`print_ground_grain`, seeds 1,
 /// 23, 5) it is 1.73–1.76 and 2.04–2.50 (linen + knives 1.5 and 2.5).
 #[test]
-fn friedrich_ground_has_no_horizontal_grain() {
-    let st = Style::friedrich();
+fn the_brushed_ground_has_no_horizontal_grain() {
+    let st = Style::oil();
     let knives = only(&st, st.ground[..2].to_vec());
     // (1200 px keeps it quick in the debug profile; the full-resolution
     // numbers are in `print_ground_grain`)
     let seed = 1u64;
     let under = surface_grain(&knives, 1200, seed);
     let g = surface_grain(&st, 1200, seed);
-    eprintln!("seed {seed}: knives {under:?}\n        friedrich {g:?}");
+    eprintln!("seed {seed}: knives {under:?}\n        brushed {g:?}");
     assert!(g.fine < 2.2, "seed {seed}: horizontal striations dominate: {g:?}");
     assert!(g.coarse < 3.0, "seed {seed}: horizontal ridges (parallel streaks): {g:?} vs knives {under:?}");
     // and it keeps more relief than the knife layers under it
@@ -119,12 +119,12 @@ fn friedrich_ground_has_no_horizontal_grain() {
 #[test]
 #[ignore]
 fn print_ground_grain() {
-    let base = Style::friedrich();
+    let base = Style::oil();
     let cases: Vec<(&str, Style)> = vec![
         ("linen", only(&base, vec![])),
         ("linen+knives", only(&base, base.ground[..2].to_vec())),
-        ("friedrich", base.clone()),
-        ("friedrich_early (roller)", Style::friedrich_early()),
+        ("brushed", base.clone()),
+        ("red ground (roller)", Style::oil_red_ground()),
     ];
     for (name, st) in &cases {
         for seed in [1u64, 23, 5] {
@@ -138,8 +138,8 @@ fn print_ground_grain() {
 #[ignore]
 fn save_ground_crops() {
     let dir = std::env::var("GRAIN_OUT").unwrap_or_else(|_| "grain_out".into());
-    let base = Style::friedrich();
-    for (name, st) in [("knives", only(&base, base.ground[..2].to_vec())), ("friedrich", base.clone()), ("early", Style::friedrich_early())] {
+    let base = Style::oil();
+    for (name, st) in [("knives", only(&base, base.ground[..2].to_vec())), ("brushed", base.clone()), ("red ground", Style::oil_red_ground())] {
         let crop = Crop { units: [400.0, 100.0, 560.0, 260.0], margin: 30.0 };
         let mut c = st.prepare_window(3200, 1.3, 23, Some(crop));
         c.relief(0.35, 0.02);
@@ -151,7 +151,7 @@ fn save_ground_crops() {
 /// canvas, for comparison.
 fn parallel_brushed(width: usize, seed: u64, crop: Crop) -> paint::Canvas {
     use paint::{Handling, Mask, Tool};
-    let st = Style::friedrich();
+    let st = Style::oil();
     let g = st.ground[2];
     let mut c = Style { ground: st.ground[..2].to_vec(), ..st.clone() }.prepare_window(width, 1.3, seed, Some(crop));
     let all = Mask::from_fn(c.frame(), |_, _| 1.0);
@@ -182,7 +182,7 @@ fn parallel_brushed(width: usize, seed: u64, crop: Crop) -> paint::Canvas {
 /// canvas, blended as the style blends it, on a prepared canvas.
 fn bare_after_blend(mut c: paint::Canvas, margin: f32) -> usize {
     use paint::{Mask, hex};
-    let base = Style::friedrich();
+    let base = Style::oil();
     let whole = Mask::from_fn(c.frame(), |_, _| 1.0);
     c.work(&whole, &base.broad().color(|_, _| hex("#d9dcd6")).angle(|_, _| 0.0).coverage(4.5).medium(0.3), 11);
     if let Some(b) = base.blend() {
@@ -214,7 +214,7 @@ fn bare_after_blend(mut c: paint::Canvas, margin: f32) -> usize {
 #[ignore]
 fn thin_blend_bares_ground() {
     let crop = Crop { units: [400.0, 100.0, 560.0, 260.0], margin: 40.0 };
-    let st = Style::friedrich();
+    let st = Style::oil();
     let (mut parallel, mut style) = (0, 0);
     for seed in [23u64, 1, 5] {
         let o = bare_after_blend(parallel_brushed(3200, seed, crop), 40.0);

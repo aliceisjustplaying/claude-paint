@@ -14,6 +14,7 @@
 
 use crate::canvas::Canvas;
 use crate::color::{Rgb, hex, luminance, to_oklab};
+use crate::drying::drier;
 use crate::pigment::{Pigment, hiding_of, scatter_for};
 use crate::rng::Rng;
 use crate::wet::Paint;
@@ -34,10 +35,13 @@ pub struct Tube {
     /// Tinting strength relative to an average pigment (smalt is weak,
     /// Prussian blue very strong).
     pub strength: f32,
+    /// How fast the paint dries in oil, relative to average paint (1):
+    /// `drying::drier`.
+    pub drying: f32,
 }
 
-fn tube(name: &'static str, color: &str, hiding: f32, stiff: f32, strength: f32) -> Tube {
-    Tube { name, color: hex(color), hiding, stiff, strength }
+fn tube(name: &'static str, color: &str, hiding: f32, stiff: f32, strength: f32, drying: f32) -> Tube {
+    Tube { name, color: hex(color), hiding, stiff, strength, drying }
 }
 
 /// A mixture on the palette: parts of tubes.
@@ -54,6 +58,10 @@ pub struct Mixture {
     /// volume (two-constant KM mixing).
     pub scatter: f32,
     pub stiff: f32,
+    /// Drying rate of the pile: its tubes' rates (`Tube::drying`) mixed by
+    /// volume. `Mixture::paint` leaves paint at the average rate (1); a pile
+    /// laid as knifed carries this rate (`Mixture::laid`).
+    pub drying: f32,
     /// OKLab distance from the color asked for (for `aim`: from the look
     /// asked for, at the expected thickness over the underlayer).
     pub error: f32,
@@ -126,7 +134,7 @@ const AIM_FAMILY: f32 = 0.28;
 /// How a mark's area is spread over thicknesses (× the expected one,
 /// share of the area), as the eye averages it at viewing distance: the
 /// aim makes this mean look (in linear light) the look wanted. Measured by
-/// `handling::tests::probe_mark_thickness` (sparse marks, `Style::friedrich`
+/// `handling::tests::probe_mark_thickness` (sparse marks, `Style::oil`
 /// ground, 1000px): a blunt brush (filbert, flat) lays most of its mark near 1–2×,
 /// a pointed one (round sable, rigger) a thick core with thin, semi-
 /// transparent edges and tails (half its area at ½× or less), which over a
@@ -213,66 +221,74 @@ impl Palette {
     }
 
     /// Lead white, smalt (semi-transparent cobalt glass, weak) and pale
-    /// smalt, yellow ochre, red earth, vermilion, raw umber, bone black
-    /// (notes/research/friedrich_materials.md §4: CATS p.127, NG pp.51–56,
-    /// ALF p.348). Naples yellow is not included. With green tubes added:
-    /// `friedrich_early_greens`.
-    pub fn friedrich_early() -> Self {
+    /// smalt, yellow ochre, red earth, vermilion, raw umber, bone black.
+    /// Naples yellow is not included. With green tubes added:
+    /// `smalt_box_greens`.
+    pub fn smalt_box() -> Self {
         Palette::new(
-            "Friedrich, early",
+            "smalt box",
             vec![
-                tube("lead white", "#efe9dc", 0.82, 0.8, 1.0),
-                tube("smalt", "#5a6e9e", 0.3, 0.55, 0.45),
-                tube("pale smalt", "#8d9bb8", 0.35, 0.55, 0.35),
-                tube("yellow ochre", "#b98a36", 0.8, 0.7, 0.8),
-                tube("red earth", "#9c4a30", 0.85, 0.7, 0.9),
-                tube("vermilion", "#cf3a24", 0.9, 0.75, 1.0),
-                tube("raw umber", "#5c4c3a", 0.8, 0.65, 0.9),
-                tube("bone black", "#1e1b19", 0.9, 0.7, 1.1),
+                tube("lead white", "#efe9dc", 0.82, 0.8, 1.0, drier::LEAD_WHITE),
+                tube("smalt", "#5a6e9e", 0.3, 0.55, 0.45, drier::SMALT),
+                tube("pale smalt", "#8d9bb8", 0.35, 0.55, 0.35, drier::SMALT),
+                tube("yellow ochre", "#b98a36", 0.8, 0.7, 0.8, drier::OCHRE),
+                tube("red earth", "#9c4a30", 0.85, 0.7, 0.9, drier::RED_EARTH),
+                tube("vermilion", "#cf3a24", 0.9, 0.75, 1.0, drier::VERMILION),
+                tube("raw umber", "#5c4c3a", 0.8, 0.65, 0.9, drier::UMBER),
+                tube("bone black", "#1e1b19", 0.9, 0.7, 1.1, drier::BONE_BLACK),
             ],
         )
     }
 
-    /// `friedrich_early` without smalt (pale smalt stays), plus cobalt blue
-    /// and chrome yellow (notes/research/friedrich_materials.md §4: ALF
-    /// pp.341, 348–349; NG p.56). With green tubes added:
-    /// `friedrich_1820_greens`.
-    pub fn friedrich_1820() -> Self {
-        let mut t = Palette::friedrich_early().tubes;
+    /// `smalt_box` without smalt (pale smalt stays), plus cobalt blue
+    /// and chrome yellow. With green tubes added: `cobalt_box_greens`.
+    pub fn cobalt_box() -> Self {
+        let mut t = Palette::smalt_box().tubes;
         t.retain(|t| t.name != "smalt");
-        t.push(tube("cobalt blue", "#2f55a8", 0.55, 0.6, 0.8));
-        t.push(tube("chrome yellow", "#e8b21c", 0.9, 0.7, 1.0));
-        Palette::new("Friedrich, after 1820", t)
+        t.push(tube("cobalt blue", "#2f55a8", 0.55, 0.6, 0.8, drier::COBALT_BLUE));
+        t.push(tube("chrome yellow", "#e8b21c", 0.9, 0.7, 1.0, drier::CHROME_YELLOW));
+        Palette::new("cobalt box", t)
     }
 
-    /// Two tubes: Prussian blue and green earth
-    /// (notes/research/friedrich_materials.md). Masstones and numbers are
+    /// Two tubes: Prussian blue and green earth. Masstones and numbers are
     /// documented approximations: Prussian blue transparent and very strong
     /// [AP3 pp.196–197] (tinting strength 3, below the sourced "very high",
     /// because Mixbox's latent already carries some of a dark pigment's
     /// strength); green earth translucent, weak, short of body [AP1 p.146;
     /// FIELD p.129], its masstone from Munsell 7.5G/2.9/1.5 [AP1 Table 1].
+    /// Green earth's drying rate is an estimate (an earth: medium).
     pub fn green_tubes() -> Vec<Tube> {
-        vec![tube("Prussian blue", "#172440", 0.35, 0.45, 3.0), tube("green earth", "#3a4843", 0.2, 0.35, 0.3)]
+        vec![tube("Prussian blue", "#172440", 0.35, 0.45, 3.0, drier::PRUSSIAN_BLUE), tube("green earth", "#3a4843", 0.2, 0.35, 0.3, drier::OCHRE)]
     }
 
-    /// `friedrich_early` plus `green_tubes`: Prussian blue (hiding 0.35,
+    /// `smalt_box` plus `green_tubes`: Prussian blue (hiding 0.35,
     /// stiffness 0.45, tinting strength 3) and green earth (hiding 0.2,
-    /// stiffness 0.35, tinting strength 0.3). The base palette leaves them
-    /// out: with very strong Prussian blue among the candidates, `aim` picks
-    /// it for light blue targets, and a smooth blue ramp's aimed recipes
-    /// switch between neighboring steps.
-    pub fn friedrich_early_greens() -> Self {
-        Palette::friedrich_early().with(Palette::green_tubes()).named("Friedrich, early, greens")
+    /// stiffness 0.35, tinting strength 0.3).
+    pub fn smalt_box_greens() -> Self {
+        Palette::smalt_box().with(Palette::green_tubes()).named("smalt box, greens")
     }
 
-    /// `friedrich_1820` plus `green_tubes` and Rinmann's green (cobalt-zinc
+    /// `cobalt_box` plus `green_tubes` and Rinmann's green (cobalt-zinc
     /// oxide: semi-transparent, weak, permanent [WEB-co]; hiding 0.35,
-    /// stiffness 0.5, tinting strength 0.4).
-    pub fn friedrich_1820_greens() -> Self {
+    /// stiffness 0.5, tinting strength 0.4; drying estimated as cobalt's).
+    pub fn cobalt_box_greens() -> Self {
         let mut t = Palette::green_tubes();
-        t.push(tube("Rinmann's green", "#5f8f76", 0.35, 0.5, 0.4));
-        Palette::friedrich_1820().with(t).named("Friedrich, after 1820, greens")
+        t.push(tube("Rinmann's green", "#5f8f76", 0.35, 0.5, 0.4, drier::COBALT_BLUE));
+        Palette::cobalt_box().with(t).named("cobalt box, greens")
+    }
+
+    /// Every tube the engine knows, in one box: lead white, smalt, pale
+    /// smalt, yellow ochre, red earth, vermilion, raw umber, bone black,
+    /// cobalt blue, chrome yellow, Prussian blue, green earth, Rinmann's
+    /// green and copper green. All were made by the 1820s (cobalt blue from
+    /// 1802, chrome yellow sold in Germany from about 1820, Rinmann's green
+    /// rare and costly [AP3; WEB-co]).
+    pub fn tube_box() -> Self {
+        let mut t = Palette::smalt_box().tubes;
+        let later = Palette::cobalt_box_greens().tubes;
+        t.extend(later.into_iter().filter(|x| !["lead white", "pale smalt", "yellow ochre", "red earth", "vermilion", "raw umber", "bone black"].contains(&x.name)));
+        t.push(Palette::copper_green());
+        Palette::new("tube box", t)
     }
 
     /// The same tubes under another name.
@@ -282,10 +298,10 @@ impl Palette {
 
     /// A copper green (verdigris ground in oil); not in the standard
     /// palettes (add it with `with`). Masstone and numbers are assumptions;
-    /// "poor hiding power in oil" [AP2 p.132]
-    /// (notes/research/friedrich_materials.md).
+    /// "poor hiding power in oil" [AP2 p.132]; copper is a drier (drying
+    /// rate estimated as smalt's).
     pub fn copper_green() -> Tube {
-        tube("copper green", "#3f7f6a", 0.25, 0.4, 1.0)
+        tube("copper green", "#3f7f6a", 0.25, 0.4, 1.0, drier::SMALT)
     }
 
     /// This palette with extra tubes appended.
@@ -323,7 +339,8 @@ impl Palette {
 
     fn mixture(&self, parts: Vec<(usize, f32)>, error: f32) -> Mixture {
         let (color, scatter, stiff) = self.eval(&parts);
-        Mixture { hiding: hiding_of(luminance(color), scatter), parts, color, scatter, stiff, error }
+        let drying = parts.iter().map(|&(i, f)| self.tubes[i].drying * f).sum::<f32>() / parts.iter().map(|p| p.1).sum::<f32>().max(1e-9);
+        Mixture { hiding: hiding_of(luminance(color), scatter), parts, color, scatter, stiff, drying, error }
     }
 
     /// The mixture of up to three tubes whose masstone is closest to
@@ -513,6 +530,13 @@ impl Mixture {
         // rounds to 1 for strong scatterers and would lose it.
         Paint::km(self.color, self.scatter * k.max(1e-3), self.stiff * k * k)
     }
+
+    /// This pile as paint on the brush, thinned with `medium` (0..1), drying
+    /// at its tubes' rate (`drying`). Medium adds oil, which the drying
+    /// model already counts (a fat film stays open longer).
+    pub fn laid(&self, medium: f32) -> Paint {
+        self.paint(medium).with_drying(self.drying)
+    }
 }
 
 impl Canvas {
@@ -589,6 +613,39 @@ mod tests {
         dist(to_oklab(a), to_oklab(b))
     }
 
+    /// A pile laid as knifed dries at its tubes' rate, mixed by volume: lead
+    /// white fast, bone black slow, half and half in between.
+    #[test]
+    fn a_pile_dries_at_its_tubes_rate() {
+        let pal = Palette::tube_box();
+        let at = |n: &str| pal.tubes.iter().position(|t| t.name == n).unwrap();
+        let (w, k) = (at("lead white"), at("bone black"));
+        let white = pal.pile(vec![(w, 1.0)]).laid(0.2);
+        let black = pal.pile(vec![(k, 1.0)]).laid(0.2);
+        let half = pal.pile(vec![(w, 0.5), (k, 0.5)]).laid(0.2);
+        assert_eq!(white.drying, drier::LEAD_WHITE);
+        assert_eq!(black.drying, drier::BONE_BLACK);
+        assert!((half.drying - 0.5 * (drier::LEAD_WHITE + drier::BONE_BLACK)).abs() < 1e-6, "{}", half.drying);
+        // the paint is otherwise the pile's own
+        let p = pal.pile(vec![(w, 0.5), (k, 0.5)]);
+        assert_eq!((half.color, half.scatter, half.stiff), (p.paint(0.2).color, p.paint(0.2).scatter, p.paint(0.2).stiff));
+    }
+
+    /// The tube box holds every tube the engine knows, each once.
+    #[test]
+    fn the_tube_box_holds_every_tube_once() {
+        let names: Vec<&str> = Palette::tube_box().tubes.iter().map(|t| t.name).collect();
+        let mut known: Vec<&str> = Palette::smalt_box().tubes.iter().chain(Palette::cobalt_box_greens().tubes.iter()).map(|t| t.name).collect();
+        known.push(Palette::copper_green().name);
+        known.sort();
+        known.dedup();
+        let mut sorted = names.clone();
+        sorted.sort();
+        assert_eq!(sorted, known);
+        assert_eq!(names.len(), 14);
+        assert!(Palette::tube_box().tubes.iter().all(|t| t.drying > 0.0));
+    }
+
     /// A smalt → lead-white ramp over a smooth warm underlayer, `n` steps.
     fn blue_ramp(n: usize) -> Vec<(Rgb, Rgb)> {
         let (top, bottom) = (to_oklab(hex("#5f7398")), to_oklab(hex("#e2ddd0")));
@@ -624,7 +681,7 @@ mod tests {
     /// any thickness the brush lays.
     #[test]
     fn smooth_targets_make_no_seams() {
-        let full = Palette::friedrich_early();
+        let full = Palette::smalt_box();
         let fam = full.only(&["lead white", "smalt", "yellow ochre"]);
         let n = 80;
         let ramp = blue_ramp(n);
@@ -647,7 +704,7 @@ mod tests {
     #[test]
     #[ignore]
     fn probe_contrast_aims() {
-        let full = Palette::friedrich_1820();
+        let full = Palette::cobalt_box();
         let subset = full.only(&["lead white", "pale smalt", "cobalt blue", "raw umber", "bone black", "yellow ochre"]);
         let lift = |c: Rgb, dl: f32| { let mut l = to_oklab(c); l[0] += dl; from_oklab(l) };
         let cases = [
@@ -679,7 +736,7 @@ mod tests {
     /// wherever the brush lays more.
     #[test]
     fn contrasting_aims_stay_in_family() {
-        let pal = Palette::friedrich_1820();
+        let pal = Palette::cobalt_box();
         for (under, want) in [(hex("#3a3128"), hex("#9a8f80")), (hex("#3d4a5c"), hex("#b8b4a8")), (hex("#4a3f33"), hex("#7a6d5c"))] {
             let wl = to_oklab(want);
             for coats in [0.3, 0.6, 1.0] {
@@ -696,7 +753,7 @@ mod tests {
 
     #[test]
     fn aim_hits_reachable_targets() {
-        let pal = Palette::friedrich_1820();
+        let pal = Palette::cobalt_box();
         // a mid blue over a pale ground, thin paint: reachable
         let (want, under) = (hex("#8898b0"), hex("#d8cdb8"));
         let m = pal.aim(want, under, 0.45, 1.0);
@@ -745,7 +802,7 @@ mod canvas_tests {
     /// A painted gradient field, dry: a blue-to-pale gradient laid with a
     /// broad brush over a warm ground.
     pub(super) fn graded_field(w: usize) -> Canvas {
-        let st = Style::friedrich();
+        let st = Style::oil();
         let mut c = Canvas::new(w, 1.0, hex("#a9785a"));
         let all = Mask::from_fn(c.frame(), |_, _| 1.0);
         let stops = [(0.0, hex("#6f84a8")), (1.0, hex("#dcd6c4"))];
@@ -772,7 +829,7 @@ mod canvas_tests {
 
     #[test]
     fn matched_marks_disappear() {
-        let st = Style::friedrich();
+        let st = Style::oil();
         let pal = &st.palette;
         let mut c = graded_field(500);
         let mut k = 0;
@@ -805,7 +862,7 @@ mod canvas_tests {
     /// ground can't lighten it (physics is not faked).
     #[test]
     fn glazes_stay_glazes() {
-        let st = Style::friedrich();
+        let st = Style::oil();
         let pal = &st.palette;
         let (light, dark) = (hex("#d8d0bc"), hex("#2a2622"));
         let mut c = Canvas::new(300, 1.0, light);
@@ -849,8 +906,8 @@ mod canvas_tests {
     #[test]
     fn mixture_to_paint_preserves_scattering() {
         let pal = Palette::new("opaque neutral tubes", vec![
-            Tube { name: "white", color: [0.99; 3], hiding: 0.99, stiff: 0.5, strength: 1.0 },
-            Tube { name: "black", color: [0.01; 3], hiding: 0.99, stiff: 0.5, strength: 1.0 },
+            Tube { name: "white", color: [0.99; 3], hiding: 0.99, stiff: 0.5, strength: 1.0, drying: 1.0 },
+            Tube { name: "black", color: [0.01; 3], hiding: 0.99, stiff: 0.5, strength: 1.0, drying: 1.0 },
         ]);
         for (target, medium) in [([0.1; 3], 0.0), ([0.1; 3], 0.5), ([0.6; 3], 0.0), ([0.6; 3], 0.9)] {
             let m = pal.mix(target);
@@ -885,13 +942,13 @@ mod green_tests {
     #[test]
     fn greens_are_mixed_closer() {
         for want in [hex("#4f6331"), hex("#2e3d2a"), hex("#93a14a"), hex("#6d7e3e")] {
-            let (base, green) = (Palette::friedrich_1820(), Palette::friedrich_1820_greens());
+            let (base, green) = (Palette::cobalt_box(), Palette::cobalt_box_greens());
             let (a, b) = (base.mix(want), green.mix(want));
             println!("{:?}: base {:.3} ({}) greens {:.3} ({})", want, a.error, base.recipe(&a), b.error, green.recipe(&b));
             assert!(b.error <= a.error + 1e-4);
         }
-        let early = Palette::friedrich_early_greens();
-        assert_eq!(early.tubes.len(), Palette::friedrich_early().tubes.len() + 2);
-        assert!(Palette::friedrich_1820().with(vec![Palette::copper_green()]).tubes.iter().any(|t| t.name == "copper green"));
+        let early = Palette::smalt_box_greens();
+        assert_eq!(early.tubes.len(), Palette::smalt_box().tubes.len() + 2);
+        assert!(Palette::cobalt_box().with(vec![Palette::copper_green()]).tubes.iter().any(|t| t.name == "copper green"));
     }
 }

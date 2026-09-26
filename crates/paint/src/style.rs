@@ -94,17 +94,16 @@ pub struct Style {
 }
 
 impl Style {
-    /// A profile built from notes/research/friedrich_materials.md.
+    /// A small oil painting's materials.
     ///
-    /// - Plain linen, 15 × 13 threads/cm (10–16 threads/cm proxy range, §1),
-    ///   440 mm wide.
-    /// - Ground (§2): two knifed layers (110 µm and 70 µm) that level the
+    /// - Plain linen, 15 × 13 threads/cm, 440 mm wide.
+    /// - Ground: two knifed layers (110 µm and 70 µm) that level the
     ///   weave, then a brushed top layer (60 µm) whose striations stay;
-    ///   total 240 µm (proxy range ~150–300 µm).
-    /// - `Palette::friedrich_1820` (§4).
-    pub fn friedrich() -> Self {
+    ///   total 240 µm.
+    /// - `Palette::cobalt_box`.
+    pub fn oil() -> Self {
         Style {
-            name: "Caspar David Friedrich",
+            name: "oil",
             width_mm: 440.0,
             linen: Linen { warp_per_cm: 15.0, weft_per_cm: 13.0, ..Linen::fine(1) },
             raw: hex("#a8966f"),
@@ -120,7 +119,7 @@ impl Style {
             blender: Some(Tool { pickup: 0.15, run: 45.0, ..Tool::badger(40.0) }),
             blend_passes: 3,
             blend_pressure: 0.5,
-            palette: Palette::friedrich_1820(),
+            palette: Palette::cobalt_box(),
             body_medium: 0.2,
             thin_medium: 0.45,
             mix_jitter: 0.06,
@@ -128,12 +127,11 @@ impl Style {
         }
     }
 
-    /// `friedrich` on a 1714 mm canvas of 12 × 11 threads/cm linen, with
-    /// `Palette::friedrich_early` and the three-layer ground of
-    /// notes/research/friedrich_materials.md §2: bright red, then two light
-    /// brown layers, the first two knifed, the third rolled on (a fine
-    /// texture) [CATS p.127].
-    pub fn friedrich_early() -> Self {
+    /// `oil` on a 1714 mm canvas of 12 × 11 threads/cm linen, with
+    /// `Palette::smalt_box` and a three-layer ground: bright red, then two
+    /// light brown layers, the first two knifed, the third rolled on (a fine
+    /// texture).
+    pub fn oil_red_ground() -> Self {
         Style {
             width_mm: 1714.0,
             linen: Linen { warp_per_cm: 12.0, weft_per_cm: 11.0, ..Linen::fine(1) },
@@ -142,8 +140,8 @@ impl Style {
                 Ground { color: hex("#c9ad8a"), hiding: 0.8, um: 70.0, stiff: 0.3, apply: Apply::Knife { texture: 0.3 } },
                 Ground { color: hex("#d8c7ab"), hiding: 0.8, um: 30.0, stiff: 0.5, apply: Apply::Roller },
             ],
-            palette: Palette::friedrich_early(),
-            ..Self::friedrich()
+            palette: Palette::smalt_box(),
+            ..Self::oil()
         }
     }
 

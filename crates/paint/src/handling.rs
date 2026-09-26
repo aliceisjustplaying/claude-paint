@@ -35,7 +35,7 @@ pub enum Aim {
 /// Coats one stroke lays per unit of load where it lands, by brush kind:
 /// a round (detail, hatch) packs its load into a narrow track, a filbert
 /// (broad, body) spreads it. Measured by `probe_laid_by_coverage` (median
-/// film where paint landed, `Style::friedrich()` ground, coverage 0.2–4,
+/// film where paint landed, `Style::oil()` ground, coverage 0.2–4,
 /// load 0.3 and 0.7): filberts 1.2–1.35; rounds, whose pointed-tip marks are
 /// narrow and concentrate paint where they land, ~3.7–4.2 at coverage 2.5–4.
 pub const LAID_PER_LOAD_FILBERT: f32 = 1.3;
@@ -70,6 +70,11 @@ pub struct Handling<'a> {
     pub palette: Option<(&'a Palette, f32)>,
     /// How unevenly each pile is mixed: relative sd of the proportions.
     pub mix_jitter: f32,
+    /// Dip into this pile (knifed from `palette`'s tubes in the given
+    /// parts, thinned with this fraction of medium) for every stroke. When
+    /// set, the color field, `color_over`, `palette` and `aim` are not
+    /// used: the paint is the pile's (`piled`).
+    pub pile: Option<(&'a Palette, crate::palette::Mixture, f32)>,
     /// How `color` is read (see `Aim`). `None`: aim at the look (`Aim::Laid`)
     /// when mixing from a palette, masstone for a fixed paint.
     pub aim: Option<Aim>,
@@ -191,6 +196,7 @@ impl<'a> Handling<'a> {
             shake: 1.0,
             palette: None,
             mix_jitter: 0.08,
+            pile: None,
             aim: None,
             load_at: None,
             cut_in: None,
@@ -338,6 +344,14 @@ impl<'a> Handling<'a> {
     /// (`Aim::Laid`; change with `aim`, or mix by masstone with `by_masstone`).
     pub fn mixed(mut self, palette: &'a Palette, medium: f32) -> Self {
         self.palette = Some((palette, medium));
+        self
+    }
+    /// Dip every stroke into `pile` (parts of `palette`'s tubes), thinned
+    /// with `medium` (0..1): the pass lays that pile as knifed, remixed a
+    /// little per dip by `mix_jitter` (a pile mixed by hand is uneven),
+    /// drying at its tubes' rate. Nothing is aimed or matched.
+    pub fn piled(mut self, palette: &'a Palette, pile: crate::palette::Mixture, medium: f32) -> Self {
+        self.pile = Some((palette, pile, medium.clamp(0.0, 1.0)));
         self
     }
     /// Mix from another palette, keeping the medium, e.g. a subset of the
@@ -931,6 +945,13 @@ fn finish_plan(cv: &Canvas, hd: &Handling, tool: &Tool, c: (f32, f32), pts: Vec<
     let pressure = rng.range(hd.pressure.0, hd.pressure.1);
     let fade = rng.range(0.75, 1.05);
     let load_k = hd.load_at.as_ref().map_or(1.0, |f| f(c.0, c.1).max(0.0));
+    if let Some((pal, pile, medium)) = &hd.pile {
+        // the pile on the palette, as knifed (its own generator, as below)
+        let mut prng = Rng::new(rng.next_u64());
+        let paint = pal.remix(pile, hd.mix_jitter, &mut prng).laid(*medium);
+        let load = hd.load * load_k;
+        return (rect, Plan { pts, pressure, fade, dip: Some(paint), load, swell: Vec::new(), passage: 0, fresh: false, id: None, want: pile.color });
+    }
     // aiming at the result: what the stroke will sit on, and how thick
     let aim = hd.aim.unwrap_or(if hd.palette.is_some() { Aim::Laid } else { Aim::Masstone });
     let coats = match aim {
@@ -1358,6 +1379,37 @@ fn hand_trace(hd: &Handling, drift: &crate::noise::Fbm, cx: f32, cy: f32, len: f
 mod tests {
     use super::*;
 
+    /// A pass from a pile lays that pile: its paint and drying rate,
+    /// whatever the color field says, every dip from the same pile
+    /// (remixed a little: a pile knifed by hand is uneven), never a recipe
+    /// the engine chose.
+    #[test]
+    fn a_pass_from_a_pile_lays_the_pile() {
+        use crate::bristle::Tool;
+        let pal = Palette::tube_box();
+        let at = |n: &str| pal.tubes.iter().position(|t| t.name == n).unwrap();
+        let blue = pal.pile(vec![(at("lead white"), 0.5), (at("Prussian blue"), 0.5)]);
+        let run = |mix_jitter: f32| {
+            let mut c = Canvas::new(200, 1.0, [0.8; 3]);
+            let m = Mask::from_fn(c.frame(), |x, y| if (300.0..700.0).contains(&x) && (300.0..700.0).contains(&y) { 1.0 } else { 0.0 });
+            let hd = Handling::new(Tool::filbert(20.0)).color(|_, _| [0.9, 0.05, 0.05]).coverage(3.0).mix_jitter(mix_jitter).piled(&pal, blue.clone(), 0.2);
+            c.work(&m, &hd, 3);
+            c
+        };
+        let c = run(0.0);
+        let f = c.frame();
+        let i = f.index(500.0, 500.0);
+        let px = c.seen()[i];
+        assert!(px[2] > px[0] + 0.05, "the pile's blue, not the field's red: {px:?}");
+        assert_eq!(c.wet.hide[i][2], blue.drying, "the pile's drying rate");
+        // with mixing jitter the dips vary around the pile, not toward the field
+        let c = run(0.08);
+        let d = c.wet.hide[i][2];
+        assert!((d - blue.drying).abs() < 0.2 * blue.drying && d != blue.drying, "{d} vs {}", blue.drying);
+        let px = c.seen()[i];
+        assert!(px[2] > px[0] + 0.05, "{px:?}");
+    }
+
     /// Strokes bow by default and are straight with `ruler()`.
     #[test]
     fn strokes_bow_unless_ruled() {
@@ -1454,7 +1506,7 @@ mod tests {
     /// than both the target and the underlayer, mean a/b miss, mean L miss).
     fn light_over_dark(pal_names: Option<&[&str]>, tool: &str, w: usize) -> (f32, f32, f32) {
         use crate::color::hex;
-        let st = crate::style::Style::friedrich();
+        let st = crate::style::Style::oil();
         let pal = match pal_names {
             Some(n) => st.palette.only(n),
             None => st.palette.clone(),
@@ -1523,7 +1575,7 @@ mod tests {
     #[ignore]
     fn probe_mark_thickness() {
         use crate::color::hex;
-        let st = crate::style::Style::friedrich();
+        let st = crate::style::Style::oil();
         for w in [500usize, 1000, 2000] {
             for tool in ["detail", "body", "broad"] {
                 let mut c = st.prepare(w, 1.0, 5);
@@ -1580,7 +1632,7 @@ mod tests {
     #[test]
     fn color_over_sees_the_canvas() {
         use crate::color::{hex, shift};
-        let st = crate::style::Style::friedrich();
+        let st = crate::style::Style::oil();
         let mut c = Canvas::new(200, 1.0, hex("#b0a898"));
         let f = c.frame();
         c.apply(|x, _, _| crate::color::lerp3(hex("#e8ecf0"), hex("#8e949c"), x / 1000.0));
@@ -1618,7 +1670,7 @@ mod tests {
     #[test]
     fn blender_stays_in_its_region() {
         use crate::color::hex;
-        let st = crate::style::Style::friedrich();
+        let st = crate::style::Style::oil();
         let run = |clip: Option<bool>| {
             let mut c = Canvas::new(200, 1.0, hex("#d8d0c0"));
             let f = c.frame();
@@ -1659,7 +1711,7 @@ mod tests {
 
     fn edge_stats_in(clip: bool, disk: bool, thin: bool, hug: bool, seed: u64) -> (f32, f32, f32) {
         use crate::color::hex;
-        let st = crate::style::Style::friedrich();
+        let st = crate::style::Style::oil();
         // a knifed light ground on linen (the brushed one costs a pass)
         let mut c = Canvas::new(300, 1.0, st.raw).with_size_mm(st.width_mm).with_linen(crate::surface::Linen { seed, ..st.linen });
         c.prime(hex("#b08457"), 0.8, 120.0, 0.3, 0.3, seed);
@@ -1748,7 +1800,7 @@ mod tests {
     #[ignore]
     fn probe_laid_by_coverage() {
         use crate::color::hex;
-        let st = crate::style::Style::friedrich();
+        let st = crate::style::Style::oil();
         for name in std::env::var("PROBE").map(|s| s.split(',').map(String::from).collect::<Vec<_>>()).unwrap_or(vec!["broad".into(), "body".into(), "detail".into(), "hatch".into()]) {
             let name = name.as_str();
             let w: usize = std::env::var("PROBE_W").ok().and_then(|s| s.parse().ok()).unwrap_or(500);

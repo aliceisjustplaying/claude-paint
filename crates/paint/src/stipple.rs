@@ -56,8 +56,12 @@ pub struct Stipple<'a> {
     pub stiff: f32,
     /// Palette-mixing inconsistency per dip: OKLab L and a/b sd (no palette).
     pub jitter: (f32, f32),
-    /// Relative sd of the tube proportions per dip (palette).
+    /// Relative sd of the tube proportions per dip (palette or pile).
     pub mix_jitter: f32,
+    /// Dip into this pile (parts of the palette's tubes, thinned with this
+    /// medium) on every trip: the color field, `color_over`, `palette`,
+    /// `aim` and `fade` are then not used (`piled`).
+    pub pile: Option<(&'a Palette, crate::palette::Mixture, f32)>,
     /// Touches between trips to the palette, how much of a full load a dip
     /// takes and how much old paint is wiped off first. A stippler's tip
     /// carries paint for many touches; each lays a little less.
@@ -108,6 +112,7 @@ impl<'a> Stipple<'a> {
             stiff: 0.3,
             jitter: (0.015, 0.004),
             mix_jitter: 0.05,
+            pile: None,
             dip_every: 24,
             load: 0.5,
             wipe: 0.5,
@@ -148,6 +153,13 @@ impl<'a> Stipple<'a> {
     /// Mix every pile from `palette`'s tubes, thinned with `medium` (0..1).
     pub fn mixed(mut self, palette: &'a Palette, medium: f32) -> Self {
         self.palette = Some((palette, medium));
+        self
+    }
+    /// Load every trip from `pile` (parts of `palette`'s tubes), thinned
+    /// with `medium` (0..1), remixed a little per dip by `mix_jitter`,
+    /// drying at its tubes' rate. Nothing is aimed or faded.
+    pub fn piled(mut self, palette: &'a Palette, pile: crate::palette::Mixture, medium: f32) -> Self {
+        self.pile = Some((palette, pile, medium.clamp(0.0, 1.0)));
         self
     }
     /// A fixed paint (no palette mixing).
@@ -489,6 +501,11 @@ impl Canvas {
         for t in plans.iter_mut() {
             for p in t.iter_mut() {
                 if let Some(d) = p.dip.as_mut() {
+                    if let Some((pal, pile, medium)) = &sp.pile {
+                        p.want = pile.color;
+                        *d = pal.remix(pile, sp.mix_jitter, &mut Rng::new(prng.next_u64())).laid(*medium);
+                        continue;
+                    }
                     let (x, y, cv) = p.aim_at;
                     // (a fresh generator per dip, so a recipe's draws can't shift the
                     // rest; see `finish_plan`)
@@ -575,6 +592,25 @@ impl Canvas {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Stippling from a pile lays that pile at its drying rate, whatever
+    /// the color field says, with no aim or fade toward a color.
+    #[test]
+    fn stippling_from_a_pile_lays_the_pile() {
+        let pal = Palette::tube_box();
+        let at = |n: &str| pal.tubes.iter().position(|t| t.name == n).unwrap();
+        let white = pal.pile(vec![(at("lead white"), 1.0)]);
+        let mut c = Canvas::new(200, 1.0, [0.1; 3]);
+        let m = Mask::from_fn(c.frame(), |x, y| if (300.0..700.0).contains(&x) && (300.0..700.0).contains(&y) { 1.0 } else { 0.0 });
+        let sp = Stipple::new(Tool::stippler(6.0)).color(|_, _| [0.9, 0.05, 0.05]).coverage(|_, _| 0.5).mix_jitter(0.0).piled(&pal, white.clone(), 0.3);
+        c.stipple(&m, &sp, 5);
+        let f = c.frame();
+        let painted: Vec<usize> = (0..f.w * f.h).filter(|&i| c.wet.vol[i] > 0.05).collect();
+        assert!(painted.len() > 50, "{}", painted.len());
+        assert!(painted.iter().all(|&i| c.wet.hide[i][2] == white.drying));
+        let px = painted.iter().map(|&i| c.seen()[i]).fold([0.0f32; 3], |a, p| [a[0] + p[0], a[1] + p[1], a[2] + p[2]]);
+        assert!(px[0] < 1.3 * px[2] && px[1] > 0.5 * px[0], "white touches, not red: {px:?}");
+    }
     use crate::bristle::{Gesture, Kind};
     use crate::color::hex;
 
@@ -740,7 +776,7 @@ mod tests {
     /// Speckle of a stipple over a flat field: (std of L, mean L lift) over
     /// x in `xs`. Coverage runs 0 → `cmax` across the canvas.
     fn speckle(field: Rgb, want: Rgb, cmax: f32, xs: std::ops::Range<f32>, set: impl Fn(Stipple) -> Stipple) -> (f32, f32) {
-        let st = crate::style::Style::friedrich();
+        let st = crate::style::Style::oil();
         let mut c = Canvas::new(400, 1.0, field);
         let f = c.frame();
         let before = to_oklab(field)[0];
@@ -779,7 +815,7 @@ mod tests {
     }
 
     fn stippled_canvas() -> Canvas {
-        let st = crate::style::Style::friedrich();
+        let st = crate::style::Style::oil();
         let mut c = st.prepare(300, 1.5, 7);
         let m = Mask::from_fn(c.f, |x, y| crate::smoothstep(100.0, 300.0, x) * (1.0 - crate::smoothstep(400.0, 450.0, y)));
         let sp = Stipple::new(Tool::stippler(4.0)).mixed(&st.palette, 0.5).color(|_, y| if y < 200.0 { hex("#7d8fae") } else { hex("#e0d4b0") }).coverage(|x, _| x / 500.0).drag(1.0, None);
@@ -878,7 +914,7 @@ mod tests {
     /// out in the open.
     #[test]
     fn veil_reaches_its_tone_up_to_dark_shapes() {
-        let st = crate::style::Style::friedrich();
+        let st = crate::style::Style::oil();
         let mut c = Canvas::new_window(2000, 4.0, hex("#8a8894"), None).with_size_mm(440.0);
         let f = c.frame();
         // dark bars of three widths and four heights

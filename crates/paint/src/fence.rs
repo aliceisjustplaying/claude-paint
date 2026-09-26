@@ -1,21 +1,18 @@
-//! Edges a brush makes: found, soft and lost.
+//! Edges of a pass at a region's boundary: found, soft and lost.
 //!
 //! A clipped pass (`Handling::clip`) stops every bristle exactly on its
-//! mask's edge: one even, crisp line that no brush makes, and the same line
-//! for every stroke (a "filled selection"). A painter carries a passage up to
-//! a neighbor instead. Each stroke stops a little past the line or short of
-//! it, by its own amount; where the brush runs out past the edge it lifts
-//! and its hairs skim the tops of the weave, so the edge breaks up; and the
-//! painter decides, stretch by stretch along one contour, where the edge is
-//! **found** (crisp: a careful stroke cut to the line, where a form turns
-//! against the light), **soft** (the stroke runs over and thins out,
-//! picking up the wet neighbor) or **lost** (the passage carries well into
-//! its neighbor and the shape dissolves there).
+//! mask's 0.5 level, the same line for every stroke. A fenced pass instead
+//! lets each stroke stop a little past the line or short of it, by its own
+//! amount; where the brush runs out past the edge it lifts and its hairs
+//! skim the tops of the weave, so the edge breaks up. A quality field sets,
+//! point by point along the contour, whether the edge is **found** (the
+//! stroke ends close to the line), **soft** (the stroke runs over and thins
+//! out, picking up the wet neighbor) or **lost** (the stroke carries well
+//! past the line and thins out over several brush widths).
 //!
 //! A `Fence` is that edge for one pass: the region's signed distance to its
-//! edge in units, moved by a slow waver (the painter's line isn't the mask's
-//! line), and a quality field `q` (0 found, 0.5 soft, 1 lost) over the
-//! canvas. Each stroke draws its own overrun `u` (0..1, from where it
+//! edge in units, offset by a slow noise (the waver), and a quality field
+//! `q` (0 found, 0.5 soft, 1 lost) over the canvas. Each stroke draws its own overrun `u` (0..1, from where it
 //! starts, so a crop paints the same strokes). A bristle's contact at a
 //! pixel is then scaled by
 //!
@@ -32,10 +29,10 @@
 //!
 //! The numbers (units of brush width): found `a 0 b 0.12 c 0.06`, soft
 //! `0.02 / 0.25 / 0.8`, lost `0.1 / 0.4 / 2.2`, interpolated in between.
-//! The overrun stays short: a longer one only moves the edge out as a
-//! staircase of opaque stroke ends. What makes an
-//! edge soft or lost is the film thinning to nothing over a distance: the
-//! deposit past the fence falls with `f²` (`bristle::exchange`).
+//! The overrun `a + b u` is at most 0.5 brush widths; the lift-off
+//! distance `c` reaches 2.2. Past the fence the deposit falls with `f²`
+//! (`bristle::exchange`), so soft and lost edges are a film thinning to
+//! nothing over that distance.
 //! `reach` scales `a` and `b`, `waver` the line's wander.
 
 use crate::mask::Mask;
@@ -49,7 +46,7 @@ pub(crate) const LIFT: f32 = 0.7;
 
 /// One pass's edge (see the module docs).
 pub struct Fence {
-    /// Signed distance to the painter's line, units, + inside (whole canvas).
+    /// Signed distance to the wavered line, units, + inside (whole canvas).
     d: Vec<f32>,
     /// Edge quality 0 found .. 1 lost (whole canvas).
     q: Vec<f32>,
@@ -76,9 +73,10 @@ fn shape(q: f32) -> (f32, f32, f32) {
 impl Fence {
     /// The fence of `region` (its 0.5 level) for a brush `width` units wide,
     /// with edge quality `quality` (0 found .. 1 lost, a whole-canvas mask
-    /// used as a field). `waver` scales the line's wander (1 = a hand
-    /// following a drawn line: about 0.3 units plus a tenth of the brush
-    /// where found, three times that where lost, over 6-40 units); `reach`
+    /// used as a field). `waver` scales the line's offset (at 1: an
+    /// amplitude of 0.3 units plus a tenth of the brush width where found,
+    /// three times that where lost, with a noise period of four brush widths
+    /// clamped to 6-40 units); `reach`
     /// scales every stroke's overrun (1 default); `seed` fixes the waver.
     pub fn new(region: &Mask, quality: &Mask, width: f32, waver: f32, reach: f32, seed: u64) -> Fence {
         let f = region.f;
@@ -152,10 +150,11 @@ impl Fence {
     }
 }
 
-/// A quality field in stretches along a contour: shares of found, soft and
-/// lost (normalized), laid out by a noise of `period` units, so each quality
-/// comes in runs of about that length, with short transitions. The shares
-/// are met over the band within `band` units of `region`'s edge.
+/// A quality field for `Fence::new`: the values 0 (found), 0.5 (soft) and 1
+/// (lost) in the given shares (normalized), assigned by thresholding an Fbm
+/// noise of `period` units, so each value occupies runs of about that
+/// length, with transitions over 4% of the noise's range. The shares are
+/// met over the band within `band` units of `region`'s edge.
 pub fn stretches(region: &Mask, shares: (f32, f32, f32), period: f32, band: f32, seed: u64) -> Mask {
     let f = region.f;
     let total = (shares.0 + shares.1 + shares.2).max(1e-6);

@@ -2,49 +2,12 @@
 //!
 //! `Palette::pile` mixes explicitly supplied tube proportions in Mixbox
 //! latent space, weighted by each tube's tinting strength. The painter
-//! chooses the recipe; the palette does not search for a target color.
+//! chooses the proportions.
 //!
 //! Masstone colors, hiding and tinting strength are approximations from
 //! pigment knowledge (not measurements); each palette's tube list cites its
 //! source.
 //!
-//! Color matching is not part of the physical paint API.
-//!
-//! No automatic `Palette::mix`:
-//! ```compile_fail,E0599
-//! use paint::Palette;
-//! Palette::smalt_box().mix([0.5; 3]);
-//! ```
-//!
-//! No automatic `Palette::aim`:
-//! ```compile_fail,E0599
-//! use paint::Palette;
-//! Palette::smalt_box().aim([0.5; 3], [0.2; 3], 0.3, 1.0);
-//! ```
-//!
-//! No automatic `Palette::aim_for`:
-//! ```compile_fail,E0599
-//! use paint::Palette;
-//! Palette::smalt_box().aim_for([0.5; 3], [0.2; 3], 0.3, 1.0, unsafe { std::mem::zeroed() });
-//! ```
-//!
-//! No automatic `Palette::paint`:
-//! ```compile_fail,E0599
-//! use paint::Palette;
-//! Palette::smalt_box().paint([0.5; 3], 0.3);
-//! ```
-//!
-//! No automatic `Palette::paint_for`:
-//! ```compile_fail,E0599
-//! use paint::Palette;
-//! Palette::smalt_box().paint_for([0.5; 3], [0.2; 3], 0.3, 1.0);
-//! ```
-//!
-//! No automatic `Canvas::aim`:
-//! ```compile_fail,E0599
-//! use paint::{Canvas, Palette};
-//! Canvas::new(10, 1.0, [1.0; 3]).aim(&Palette::smalt_box(), [0.5; 3], (5.0, 5.0), 1.0, 0.3, 1.0);
-//! ```
 
 #[cfg(test)]
 use crate::canvas::Canvas;

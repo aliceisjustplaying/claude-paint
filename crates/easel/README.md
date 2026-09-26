@@ -301,12 +301,17 @@ b:fullness()                 -- paint left, 0..1
 b:stroke({{100, 500}, {300, 520}, {500, 510}},
   {pressure={0.9, 0.3}, ramps={0.05, 0.4}, orient="across", shake=1, swell={1, 1.3, 0.8}, clip=m})
 b:touch(x, y, {pressure=0.6, drag={1, 0}, twist=0.2, angle=0.3, clip=m})
-b:mark_width(0.4)            -- round and rigger tips are pointed: width of a mark at this pressure
+b:mark_width(0.4)            -- width of a mark at this pressure
 b:pressure_for(0.5)          -- the pressure for a 0.5-unit line
-brush{kind="round", width=3, point=0.5}                -- a blunter point (1 = sharp, default)
+brush{kind="round", width=3, point=1}                  -- a pointed tip (0 = blunt, default; 0.5 a soft point)
 ```
 
-A flick that ends in a hairline is a stroke whose pressure falls to 0:
+Every brush is blunt unless you give it a `point`: a round or a rigger lays
+about the width you asked for at any pressure. A pointed tip (`point=1`) is
+a cone of hairs: at light pressure only the point touches (a hairline),
+pressed it spreads to the belly, so its width follows the pressure and
+a stroke draws down to a point on the lift. With a pointed brush, a flick
+that ends in a hairline is a stroke whose pressure falls to 0:
 `b:stroke({root, mid, tip}, {pressure={0.75, 0}, ramps={0.1, 0.75}})`.
 
 A brush keeps its paint across strokes and chunks: several strokes from one
@@ -443,6 +448,8 @@ conifers, grass), `glaze` (thin veils; `medium` 0.6–0.95), `scumble`,
 | `color` | a color, `function(x, y)` returning one, or a sky or clouds (`color=s`): the look you want on the canvas |
 | `color_over` | instead of `color`: relative to what's under each stroke. `{shift={dL, da, db}}` (e.g. a shadow: `{shift={-0.06, 0, -0.012}}`), or `function(x, y, under)` sampled every 2 units with `under` = the canvas there before the pass |
 | `hug` | `true` (default): strokes reach a mask's edges; `false` lets edges thin out |
+| `clip` | `true`: every bristle stops exactly on the region's edge (a stencil: one crisp, even line). It is true or false: a mask given here counts as `true` and is not used (the reply says so) |
+| `edge` | instead of `clip`: carry the passage to the region's edge as a brush does, found, soft or lost (see [Edges](#edges-found-soft-and-lost)) |
 | `angle` | stroke direction, a number or `function(x, y)` |
 | `tool` | `"filbert 8"`, `{kind=, width=}` or a brush |
 | `length` | `{min, max}` stroke length in units |
@@ -455,7 +462,7 @@ conifers, grass), `glaze` (thin veils; `medium` 0.6–0.95), `scumble`,
 | `load`, `load_at` | load per dip; a field that varies it |
 | `angle_jitter`, `curve` (`{bow, wave}`), `cross`, `drift` (`{amount, scale}`), `tail`, `broken`, `swell`, `clump` | the hand's irregularity |
 | `order` | `"passages"`, `"scatter"`, `"down"`, `"across"` or a sweep angle |
-| `orient`, `shake`, `clip`, `threshold`, `cut_in` (a tool), `scrub`, `blender`, `ruler`, `jitter`, `mix_jitter`, `paint` (`{hiding, stiff}`), `seed` | as in the engine's `Handling` |
+| `orient`, `shake`, `threshold`, `cut_in` (a tool), `scrub`, `blender`, `ruler`, `jitter`, `mix_jitter`, `paint` (`{hiding, stiff}`), `seed` | as in the engine's `Handling` |
 
 ```lua
 blend(mask, {angle=0})                    -- = work(mask, {hand="blend", ...})
@@ -465,7 +472,60 @@ stipple(mask, {width=2.4, color="#cfccc2", coverage=function(x, y) ... end,
   fade=1})                                -- fade: contrast falls where coverage thins; 0 for specks
                                           -- (stars, snowflakes); color_over works here too
 glaze(mask_or_nil, {color="#8a6a3a", coats=0.4, pigment="transparent"})   -- or semi, opaque, varnish
+                                          -- a veil of 0.05 coats is laid as asked; only
+                                          -- float dust under ~0.007 coats fades out
 ```
+
+### Edges: found, soft and lost
+
+A stencil clip makes an edge no brush makes: one crisp, even line along the
+whole contour, the same for every stroke (Evening at a Mountain Lake's
+ridge read as "a filled selection"). A painter decides each edge and varies
+it along one contour: **found** (crisp, where a form turns against the
+light), **soft** (the stroke runs over and its film thins out) and **lost**
+(the passage carries well into its neighbor and dissolves there).
+
+```lua
+work(rangeM, {hand="body", tool="filbert 6", color=rangecol, edge="soft"})       -- one quality all along
+work(rangeM, {..., edge=function(x, y) return 1 - glow(x, y) end})               -- 0 found .. 1 lost: by the light
+work(reflM,  {..., edge={found=0.2, soft=0.5, lost=0.3, period=50, seed=3}})      -- stretches along the contour
+work(figM,   {..., edge={quality=0.2, waver=0.5, reach=0.8}})                     -- any form, with its knobs
+dry()
+lose(reflM, {where=function(x, y) return y > HZ + 6 and 0.7 or 0 end, angle=0})  -- drag the water back across
+```
+
+`edge=` takes a number (0 found .. 1 lost), a name (`"found"`, `"firm"`,
+`"soft"`, `"loose"`, `"lost"`), a function of `(x, y)` or a noise, a mask
+(its values), or a table: `found=, soft=, lost=` shares of the contour laid
+out in runs about `period` units long (default 40), `seed=`, or `quality=`
+(any of the above); plus `waver=` (1: how far the painter's line wanders off
+the mask's, about 0.3 units plus a tenth of the brush where found and three
+times that where lost) and `reach=` (1: scales every stroke's overrun). It
+clips like `clip=true` (strokes seeded outside still brush in), but each
+stroke stops by its own amount: up to about a tenth of the brush width past
+the line where found, a quarter where soft, four tenths where lost, and past
+that it lifts off over about 0.06, 0.8 and 2.2 brush widths: its hairs ride
+the tops of the weave and its film thins (the deposit falls with the square
+of the fence), so a soft edge is a thinning, broken fringe, not a blur. Into
+wet paint the overrun also picks up the neighbor. It can't be combined with
+`cut_in`. Old logs replay unchanged: nothing changes unless you write `edge=`.
+
+`lose(region, {where=, tool="filbert 4", reach={out, in}, load=0.2,
+pressure={0.35, 0.02}, angle=, every=1.2, mix=0.35, medium=0.45, pal=,
+seed=})` loses an edge after the passage is laid: along the region's edge,
+where `where` (as `edge=`; default 1 everywhere) is high, short strokes
+start out in the neighbor, cross the edge at a shallow slant (or at `angle`,
+pointed inward) and lift off inside. Each is loaded lightly with what lies
+out in the neighbor, dirtied with `mix` of the region's own color, aimed at
+the look where it crosses. It returns the number of strokes. Use it over
+**dry** paint: into wet paint a lean brush lifts the film and shows what is
+under it. Press harder (`pressure={0.75, 0.25}`) and thin it
+(`medium=0.6`) for a scumble rather than dry-brush specks.
+
+`scripts/edges.py RENDER.png --box x0,y0,x1,y1` measures a render's edges
+(width, contrast, found/soft/lost shares and waver along a contour); the
+study is `paintings/lua/edges_old.lua` against `edges_new.lua`
+(`notes/edges.md`).
 
 ### Trees and foliage
 
@@ -570,7 +630,7 @@ hanging from a bough), `"top"` (along its upper face) or `"twig"` (on
 dead boughs). `f:paint(brush, {color=, lit=, kind=, z=, every=10,
 load=0.8, pressure={0.75, 0.05}, ramps=, shake=, clip=, fit=true})` lays
 them, back to front. `color` may be `function(stroke)`. `fit` presses the
-pointed brush to each stroke's width. It returns the count. `lit` ranges
+brush to each stroke's width. It returns the count. `lit` ranges
 are half open, so `{0, 0.5}` and `{0.5, 1}` split the strokes.
 
 **A wood.** Draw the wood's skyline, give the line its feet stand on,
@@ -628,7 +688,7 @@ once, not inside a color function.
 
 `tree{habit="oak"}` grows a tree from buds, and you can't choose its
 shape. `tree_in{}` works the other way round: you draw the crown's
-silhouette and the trunk, and an oak, beech, lime, birch or pollard willow
+silhouette and the trunk, and an oak, beech, lime or birch
 grows into it by space colonization (Runions et al. 2007). Attraction
 points fill the crown in depth, thinned by a low noise so the crown has
 its own gaps where limb masses part. The trunk runs on into the crown as
@@ -699,8 +759,9 @@ the wood goes on or where twigs leave it. A limb's leading twig is drawn
 on in the same stroke, so the limb runs out into it in one movement. So
 paint the bands thick to thin (`t:wood(3.5)`, then `min=1.2, max=3.5`, then
 `max=1.2`) and nothing floats. Give each band a brush that can lay its
-widths: a pointed brush's mark runs from about two hairs (`b:mark_width(0)`)
-to a little over its size (`b:mark_width(1)`), and `paint_wood` presses up
+widths: a brush's mark runs from `b:mark_width(0)` (about a third of its size,
+or two hairs with a pointed tip) to a little over its size
+(`b:mark_width(1)`), and `paint_wood` presses up
 to that, no further. A `rigger 0.55` lays 0.21 to 0.71, so over the whole
 fine band (0.12 to 1.2) it paints every twig and small limb about the same
 width: split it (`rigger 0.9` for 0.5 to 1.2, `rigger 0.55` below 0.5), and
@@ -709,7 +770,7 @@ the wood visibly thins at each fork and runs out to a point.
 **An oak is angular.** An oak's wood runs fairly straight between its
 nodes and changes direction at them: elbows, the sympodial zigzag, twigs
 short and stiff. The species number `angular` (oak 1, lime 0.5, beech,
-birch and willow 0) makes it so. The runs between forks are straightened
+birch 0) makes it so. The runs between forks are straightened
 (wiggles under about half a model step are taken out, the larger turns
 kept at a few nodes), a shoot zigzags about its heading but never turns
 more than about 70 degrees off it (no hooks or loops), a side twig stands
@@ -754,7 +815,6 @@ whose sun is used. The default is the upper left, a little in front.
 | `beech` | smooth rising limbs, level sprays (flat touches), dense |
 | `lime` (or `linden`) | a dense dome, leaves to the shell, many fine limbs |
 | `birch` | a leading stem, thin limbs, long hanging twigs, small airy clumps |
-| `willow` (or `pollard`) | a short thick trunk ending in a head, straight rods rising from it |
 
 | season | leaves |
 |---|---|
@@ -791,7 +851,7 @@ What you get:
   z, depth, turn, dead, clump}`. `t:paint(brush, {color=, lit=, depth=,
   turn=, dead=, share=1, every=10, load=0.8, pressure={0.75, 0.05},
   ramps=, shake=, clip=, fit=true})` lays them back to front, with the
-  pointed brush pressed to each touch's width. `color` may be
+  brush pressed to each touch's width. `color` may be
   `function(touch)` (autumn: mix by `touch.turn`). `share` lays a
   deterministic part of them. The `lit` ranges are half open.
 - **Wood strokes.** `t:paint_wood(brush, {color=, min=, max=, detail=,
@@ -1172,7 +1232,8 @@ shadow and the Belt of Venus, and the clouds catch the light from below.
 5. The motifs: bodies and proxies placed in the world, `v = w:view()`,
    then shadows and contact, trees (limbs, then foliage dark to light),
    rocks from `v.form`, meadows from `sward`.
-6. The small particulars last, with pointed brushes: twigs, blades,
+6. The small particulars last, with small rounds and riggers (`point=1`
+   for a tip that draws down to a hairline): twigs, blades,
    flowers, figures.
 7. `wait(24*60); varnish(); cracks{}; relief()`. The craquelure is part of
    the finished look: a Friedrich is two centuries old and cracked, and
@@ -1193,8 +1254,22 @@ varnish{color="#e6d3a4", coats=0.4, vary=0.12}
 cracks{dirt=0.4, vary=1, veil=0.5}          -- craquelure, fitted to this canvas's ground;
                                              -- also island_mm, ground_um, width_um (default:
                                              -- from the ground), depth_um, cupping_um, corners
+cracks{hierarchy=1, patchy=1, grain=0.15, grime=1}   -- (the defaults) how uneven it is
 relief(strength, gloss)                      -- light the surface relief (style default)
 ```
+
+The craquelure is uneven on purpose (Round 7, `notes/cracks.md`). A few long
+first cracks open widest (about 70 µm) and cup most. The later generations,
+splitting smaller islands, are finer and pinch shut for stretches
+(`hierarchy`). Some passages kept only their first cracks while others split
+finely (`patchy`), and the first cracks lean across the canvas's length
+(`grain`, a tendency). Each crack holds a different amount of grime, and a
+few hold old amber varnish. Its walls show the pale ground, so in darks a
+crack is a faint light line instead of stopping at the edge of the dark
+(`grime`). Thin paint shows hairlines and thick paint wider cracks. Set a knob
+to 0 for the old even web, or use all four at 0 to get the Round 6 look. The
+cupped island edges barely show in the style's frontal light, as on a real
+picture. `relief(0.3)` rakes the light across them.
 
 `wait` runs the engine's drying model: each pixel's paint goes from open
 (workable, blends and lifts) through setting (stiff, barely blends) to
@@ -1225,7 +1300,7 @@ takes to make it, and the paint ages while you work (notes/time.md).
 
 ```lua
 canvas{style="friedrich", aspect=1.4, seed=7, hand=true}   -- or hand_time(true) later
-sitting{hours=3}      -- a new sitting starts now, with a clean palette (default 3 h)
+sitting{hours=3}      -- this sitting's length (default 3 h, at most 8), set before painting in it
 rest(16)              -- step away: the paint sets; the next mark starts a new sitting
                       -- (rest() = overnight, 16 h; any wait of 2 h or more is a rest too)
 t = timesheet()       -- {clock, sitting (min), sittings, hours, hand, open, setting, tacky,
@@ -1244,9 +1319,19 @@ t = timesheet()       -- {clock, sitting (min), sittings, hours, hand, open, set
   minutes and ages between them, top to bottom. Brush strokes, touches and
   the motif verbs made of them put theirs on once a minute has piled up,
   and every chunk ends with the clock up to date.
-- A sitting that runs past its hours is reported in the reply (`sitting 2:
-  3.8 h at the easel, 3.0 h planned; ...`), never cut short: finish the
-  passage while it is open, then `rest`.
+- **A sitting ends at its length.** Once its time reaches its hours, the
+  easel refuses marks (strokes, touches, motif verbs, `work`, `blend`,
+  `stipple`, `glaze`, pencil lines, `varnish`): `the sitting is over after
+  3.0 h: rest(hours) first`. Queries (`timesheet`, `clock`, `drying`,
+  `look`) still answer. A verb already started finishes its pass (not cut
+  short, so a long pass started late runs over), and the reply reports the
+  overrun (`sitting 2: 3.8 h at the easel, 3.0 h planned; ...`). A refused
+  chunk is rolled back whole: plan chunks by the time left (`t.hours*60 -
+  t.sitting`). `sitting{}` can't end a sitting under way (only a rest can)
+  and `hand_time(false)` is refused once it is on.
+- This holds for every session the easel starts (its log says so in a
+  header line, `-- sittings enforced: ...`). Logs from before have no such
+  line and replay as painted, overruns only reported (notes/time.md).
 - In one sitting the paint under a later passage is still open and comes
   up into it. Lay each passage only where it shows, a little past where
   its neighbor will meet it (`notes/time/example_three_ways.jpg`).

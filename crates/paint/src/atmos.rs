@@ -1546,7 +1546,6 @@ mod tests {
             let c = r.crest(&w, x);
             assert!(r.haze(&w, &air, x, c + 30.0) >= r.haze(&w, &air, x, c) - 1e-4);
         }
-        let _ = rs[0].ridge(&w, 0.0, 1000.0, 200.0, 300.0);
     }
 
     #[test]

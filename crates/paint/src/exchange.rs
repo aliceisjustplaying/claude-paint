@@ -4,7 +4,7 @@
 //! pixel by pixel along its track (`exchange`, through the stroke's
 //! `film::Stroke`).
 
-use crate::bristle::{Bristle, Kind, Tool};
+use crate::bristle::{Bristle, Clip, Kind, Tool};
 use crate::film::{Stroke, WET_FILM, grow};
 use crate::smoothstep;
 use crate::wet::{LAT, Prop, mix_into};
@@ -76,8 +76,10 @@ pub(crate) struct Contact {
 
 /// How a bristle carrying `fill` of a full load (paint of stiffness
 /// `stiff`) meets the wet film, pressed to `reach` and moving `seg` pixels
-/// this step with a track of radius `rb`.
-pub(crate) fn contact(tool: &Tool, fill: f32, stiff: f32, reach: f32, seg: f32, rb: f32, mode: Mode) -> Contact {
+/// this step with a track of radius `rb`, drawn for a hair of radius
+/// `hair` (≤ `rb`; see `exchange`).
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn contact(tool: &Tool, fill: f32, stiff: f32, reach: f32, seg: f32, rb: f32, hair: f32, mode: Mode) -> Contact {
     // lowest surface height this bristle reaches down to. The loaded tip
     // of a pointed soft brush carries a bead of paint that wets the
     // weave's valleys as well as its peaks, however lightly it is
@@ -97,7 +99,11 @@ pub(crate) fn contact(tool: &Tool, fill: f32, stiff: f32, reach: f32, seg: f32, 
     // (fluid, medium-rich paint on the bristle wets into the film and
     // takes it up more readily than stiff paint)
     let hunger = (0.35 + 0.65 * (1.0 - fill).clamp(0.0, 1.0).powf(1.5)) * (1.3 - 0.6 * stiff.clamp(0.0, 1.0));
-    let push_k = tool.push * (seg / (2.0 * rb)).clamp(0.0, 1.0);
+    // a moving hair ploughs aside the share `push` of the paint in its
+    // own track, 2·`hair` wide (a hair finer than a pixel is drawn wider
+    // than it is, so each pixel of its drawn track gives up only its share
+    // of it, hair / rb; notes/fixes/dry_rims/)
+    let push_k = tool.push * (seg / (2.0 * hair)).clamp(0.0, 1.0) * (hair / rb);
     // how far this bristle reaches into the wet film: pressed, stiff and
     // lean it goes through to the body; a loaded one rides on a cushion
     // of its own paint (the painter's loaded brush and light touch)
@@ -200,7 +206,12 @@ pub(crate) unsafe fn exchange(st: &mut Stroke, br: &mut Bristle, tool: &Tool, a:
         // a pointed tool's moving hair covers pixels by the exact share of
         // its track in them (see `strip_cover`)
         let fine = tool.point > 0.0 && mode == Mode::Drag;
-        let ct = contact(tool, br.vol / full, br.hide[1], reach, seg, rb, mode);
+        // the hair's own radius: a blunt brush's moving hair is drawn at
+        // least 0.55 px wide (`rb`), however fine it is; a pointed tool's
+        // is drawn at its size, and a pressed tip's hairs lie together (see
+        // `touch_rb`): its contact is its track
+        let hair = if fine || mode != Mode::Drag { rb } else { (tool.hair_radius() * s).min(rb) };
+        let ct = contact(tool, br.vol / full, br.hide[1], reach, seg, rb, hair, mode);
         let clip = st.clip;
 
         // pass 1: contact weights
@@ -211,6 +222,8 @@ pub(crate) unsafe fn exchange(st: &mut Stroke, br: &mut Bristle, tool: &Tool, a:
         let mut sum_w = 0.0f32;
         let mut sum_cov = 0.0f32;
         let mut sum_tack = 0.0f32;
+        // past a fence a lifting brush lays a thinner film too (see `Clip`)
+        let mut sum_k = 0.0f32;
         for y in y0..y1 {
             for x in x0..x1 {
                 let (px, py) = (x as f32 + 0.5, y as f32 + 0.5);
@@ -235,11 +248,18 @@ pub(crate) unsafe fn exchange(st: &mut Stroke, br: &mut Bristle, tool: &Tool, a:
                 sum_cov += cov;
                 let i = (y - oy) * bw_buf + x - ox;
                 let surf = (sf.base(i) + 0.35 * sf.vol(i)).min(1.5);
-                let contact = smoothstep(ct.th - ct.give, ct.th + 0.2, surf);
-                let mut wt = cov * contact;
-                if let Some(m) = clip {
-                    wt *= m.data[y * w + x];
-                }
+                let wt = match clip {
+                    None => cov * smoothstep(ct.th - ct.give, ct.th + 0.2, surf),
+                    Some(Clip::Mask(m)) => cov * smoothstep(ct.th - ct.give, ct.th + 0.2, surf) * m.data[y * w + x],
+                    // past a fence the hairs lift off the weave's hollows
+                    Some(c @ Clip::Fence { .. }) => {
+                        let (k, lift) = c.at(y * w + x);
+                        let th = ct.th + lift;
+                        let wt = cov * smoothstep(th - ct.give, th + 0.2, surf) * k;
+                        sum_k += wt * k * k;
+                        wt
+                    }
+                };
                 wts[(y - y0) * bw + (x - x0)] = wt;
                 sum_w += wt;
                 if let Some(p) = sf.dry(i) {
@@ -263,6 +283,7 @@ pub(crate) unsafe fn exchange(st: &mut Stroke, br: &mut Bristle, tool: &Tool, a:
             Mode::Drag => br.vol * (1.0 - (-travel / tool.run).exp()) * touch,
             Mode::Touch { dep } => dep.min(br.vol * 0.5) * touch,
         };
+        let dep_total = if matches!(clip, Some(Clip::Fence { .. })) { dep_total * (sum_k / sum_w).min(1.0) } else { dep_total };
         let dep_total = if tack > 0.0 {
             let g = crate::drying::grab(tack) * crate::drying::stick(b.0, b.1, rb, br.seed, tack);
             let d = match mode {
@@ -277,10 +298,10 @@ pub(crate) unsafe fn exchange(st: &mut Stroke, br: &mut Bristle, tool: &Tool, a:
         // a capsule cut by the window edge lays only the window's share there
         let share = if windowed { sum_cov / capsule_cover(a, b, rb, fine, (cx0, cy0, cx1, cy1)).max(1e-6) } else { 1.0 };
         let dep_per_w = dep_total * share.min(1.0) / sum_w / px_area;
-        // ploughed paint lands just outside the track: the next pixel, or for
-        // a pointed tool (shared bilinearly, below) a hair's width away, the
-        // same distance at any resolution
-        let off = if fine { 2.0 * rb } else { rb + 1.0 };
+        // a moving hair lays what it ploughs a hair's width away (shared
+        // bilinearly, below): the same paint moved the same distance at any
+        // resolution; a pressed tip's to the next pixel
+        let off = if mode != Mode::Drag { rb + 1.0 } else { 2.0 * hair };
         let soft = tool.kind == Kind::Blender && mode == Mode::Drag && !fine;
 
         let mut got_v = 0.0f32;
@@ -365,12 +386,12 @@ pub(crate) unsafe fn exchange(st: &mut Stroke, br: &mut Bristle, tool: &Tool, a:
                         let tx = px + (nx * side * 0.75 + mx * 0.45) * off;
                         let ty = py + (ny * side * 0.75 + my * 0.45) * off;
                         // where the paint goes: the pixel under the target,
-                        // or for a pointed tool's fine hairs, shared
-                        // bilinearly by the four pixels around it (a hair
-                        // finer than a pixel would otherwise leave a ridge
-                        // of dots along its track where rounding lands it)
+                        // or for a moving hair, shared bilinearly by the
+                        // four pixels around it (a hair finer than a pixel
+                        // would otherwise leave a ridge of dots along its
+                        // track where rounding lands it)
                         let mut to = [(0.0f32, 0.0f32, 0.0f32); SPREAD];
-                        let n_to = if fine {
+                        let n_to = if mode == Mode::Drag && !soft {
                             let (gx, gy) = (tx - 0.5, ty - 0.5);
                             let (fx, fy) = (gx - gx.floor(), gy - gy.floor());
                             let (bx, by) = (gx.floor() + 0.5, gy.floor() + 0.5);
@@ -405,7 +426,7 @@ pub(crate) unsafe fn exchange(st: &mut Stroke, br: &mut Bristle, tool: &Tool, a:
                                 let j = (ty - oy) * bw_buf + tx - ox;
                                 // a clipped stroke can't push paint past its mask:
                                 // only the accepted share moves, the rest stays
-                                let m = m * share * clip.map_or(1.0, |c| c.data[ty * w + tx]);
+                                let m = m * share * clip.map_or(1.0, |c| c.at(ty * w + tx).0);
                                 if j != i && m > 0.0 {
                                     // the paint moved covers its share of
                                     // the pixel it came from
@@ -582,7 +603,7 @@ mod tests {
             h.reload(dark, 1.0);
             c.drag(&mut h, &Gesture::new(vec![(60.0, y as f32), (440.0, y as f32)]).pressure(0.9, 0.9), None);
         }
-        let mut r = Held::new(Tool::round_sable(3.0), 2);
+        let mut r = Held::new(Tool { point: 1.0, ..Tool::round_sable(3.0) }, 2);
         r.reload(Paint::body(hex("#c9c7bc")), 0.7);
         c.drag(&mut r, &Gesture::new(vec![(80.0, 160.0), (420.0, 160.0)]).pressure(0.5, 0.5).ramps(0.25, 0.35), None);
         // the style's blend, level, over a thin band along it (from a little

@@ -1,5 +1,100 @@
 # Handoff (2026-09-23 evening): moving to the M3 Pro
 
+**Update 2026-09-24 night (read first): Round 7.** Principles: `notes/principles.md`
+(tools give physics and constraints, not answers; entropy; feature freeze; against
+reward hacking). Alice's reviews: `notes/round6/alice_review.md` (last sections).
+The engine is variant d (`notes/round7/winter_ab.md`, `winter_d.md`): round 2's
+winter program on it is "remarkably close" to the original. Tonight: three free
+paintings on engine d (`notes/round7/arms/`, key there): none moves Alice yet;
+the three converged on nearly the same picture; the Lua easel with everything
+(C) "has the best vibe somehow". A second opinion from Claude Fable 5.1:
+`notes/advice/fable_r7.md`. Open: the wet engine (branch r6-wet, unmerged; needs
+main merged: edges/clip fix vs its exchange rewrite); piles (branch r7-piles,
+parked, Alice wants to keep it); the rendering bug Alice saw (a whitish
+horizontal line through a grass patch in painting A = arm 1); git identity: this
+repo sets `alice` locally (the per-directory git identity include for ~/src/a is missing on
+this machine). Next: decide the direction with Alice after Fable's advice.
+
+**Morning of 2026-09-26 (for Alice):**
+- **Round 14 chain, done:** `notes/round14/look/p1.png` (mountains), `p2.png` (evening town
+  on the coast), `p3.png` (Baltic shore, 87 min with the new time line). Its studio still had
+  ready-made figures and rocks, every past painting's program and the developer notes
+  (`notes/round14/README.md`).
+- **Round 15 chain, done** (`notes/round15/look/`, README there): studio audited and
+  reviewed adversarially by Astra first (`notes/round15/astra_review.md`); painters ran
+  without your AGENTS.md or skills. Paintings: misty mountains; an oak in snow with a church;
+  a Baltic shore. All three: dusk or dawn, a crescent, a figure from behind, even painter 1
+  with no notes. Round 15's painter 3 repainted Round 14's painter 3 picture unseen. The
+  craft notes still carry subjects and settings.
+- **Incident:** round 15 painter 2 hung twice on an SVG conversion (ImageMagick handing
+  off to Inkscape; pi's bash has no timeout); I killed the processes; ~3 h lost.
+- **Decisions waiting for you:** the color-recipe search (`aim`/`mix`), the handling
+  presets' gesture planning, the stipple defaults (Astra's findings 5, 7, 8). And the
+  sameness: the model paints the same Friedrich whatever we remove.
+
+**Round 14 restarted (2026-09-26) with the revised notebook** (notes/round14/README.md). First attempt kept on branch r14a-p1 (the ploughed field). Chain: p1 in ~/src/a/paint-r14-p1, then p2, then p3 (folders from r14-base + previous craft notes).
+
+**Day of 2026-09-25 (with Alice):**
+- **Round 10 = the breakthrough** (`notes/round10/`, `notes/round2_magic.md`):
+  round 2's brief verbatim, Rust, Opus at thinking high, no recipe book.
+  Alice: "this feels like progress". The person whose post started the
+  project: "The trees are amazing ... the second one especially" (the
+  summer lime). Model judges ranked that one last: humans and models
+  diverge there.
+- **Round 11** (`notes/round11/`): a trunk study (3x Opus) and whole winters
+  by Astra, Gemini Flash (ran out of Google credits at the end) and Fable
+  5.1; blind cross-critique: every model ranked its own painting 5th-6th;
+  round 2 still first for all; round 10's Opus paintings next.
+- **Fixed and merged:** dry rims (strokes over dry paint kept their outlines,
+  `notes/fixes/dry_rims/`, start with `LOOK_HERE_far_hills_4x.png`); the
+  test audit (13 items, -291 lines, release hand_time 2 min -> 8 s); the
+  pollard willow removed from the docs; a clippy error on main.
+- **Trial:** one resolution for painting, looking and delivering: ~0.2 mm
+  per pixel (2250-2400 px for a small Friedrich canvas), from the next round; may go back to 3200.
+- **Cracks** (`notes/cracks_lab/README.md`): real craquelure has direction
+  (the Monk: broadly down-right; other paintings other patterns), clusters
+  and varying amounts; "anything that reads like repetition reads digital".
+  Ours: one-pixel hairlines, even coverage, rings at the corners.
+  **Running:** `fix-cracks` (branch fix-cracks): make the existing crack
+  settings reach the picture, test-first; merge only after Alice sees its
+  before/after (`notes/fixes/cracks/`). Then: direction ~0.3, diagonal
+  down-right, per painting.
+- **Open:** the sky's "JPEG effect" (not the stipple alone: round 2
+  stippled too); floating twigs (3 painters: a branch should start at its
+  parent's width); checkpoint staleness by line (6 painters); whether to
+  keep Lua (a clean test is proposed); more models (Gemini needs credits).
+
+**Overnight (2026-09-25, after Alice slept):**
+- **Round 8** (`notes/round8/blind/`, key there): round-2-style brief, commission "a winter
+  landscape", three arms. Every painting has figures, a route and hand-written motifs.
+  Blind critics: Gemini ranks round 2's winter first, Astra ranks arm 1 (the cross) first
+  ("moves me most") and round 2 as the most painted.
+- **The "JPEG artifact" look is the stipple layer** (`notes/round7/texture/README.md`):
+  forensics plus a truly blind judge (no key on disk) picked stipple-off in both passages.
+  (A Gemini judgment read the key file and was discarded.)
+- **Round 9** (`notes/round9/`, justification in its README): Round 8 plus two brief lines
+  (skies in broad blended strokes, no stipple veil; bury the feet of things). Blind critics:
+  Gemini ranks round 2 first, then arm 2 (the Ryck); Astra ranks arm 3 (the wayside cross)
+  first. **Both put the new craquelure first in their advice** ("antique skin", "cracked
+  glass"); round 2's older cracks aren't blamed. With vs without cracks:
+  `notes/round9/nocracks/`. Candidate regression: the Round 7 craquelure (merge 112ed6b).
+- **Recurring engine friction** (four painters): strokes laid over dry paint keep their
+  outlines (a "lacy net", "glass tubing"; one measured 399 um at the rims vs 11 um inside):
+  the top bug to investigate. Also `edge="lost"` overpaints small holes.
+
+**Morning summary (2026-09-25):** Fable (`notes/advice/fable_r7.md`): "the engine isn't what's
+stopping you. The brief is." The composition guide `notes/briefs/friedrich_painter.md`
+(required reading tonight) says "You can have no figure at all", "Keep the foreground
+bare", "Leave out, then leave out more" (lines 34, 58, 60): it bans the winter picture;
+round 2's brief said the opposite ("full of tiny particular details",
+`notes/amnesia_brief.md:49`); tonight's painters obeyed ("There is no figure"). It
+proposes: round 2's short brief back, assigned themes (winter, coast, mountains) as a
+patron would, hand time off for painters, the winter program as a golden picture gate,
+round 8 = six painters (each theme in Rust and at the easel without procedural tools),
+blind against round 2. Critics on the three arms: `notes/round7/arms/critics/` (C
+strongest; "a relationship, not just a motif"; the "JPEG" look = patchy fine-scale
+mottling over smooth fields). Texture forensics: branch r7-texture.
+
 **Update 2026-09-24 morning: Round 6 night 1 ran (steps 1–4 of the plan
 below, plus critic panels). Read `notes/round6.md` first: what landed on
 main, what waits on branches and the decisions for Alice.**

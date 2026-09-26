@@ -9,8 +9,8 @@
 //! and properties) and settles it when it ends (`Drop`): nothing is set
 //! aside between strokes, so the canvas stores none of it.
 
+use crate::bristle::Clip;
 use crate::canvas::Canvas;
-use crate::mask::Mask;
 use crate::smoothstep;
 use crate::wet::{Latent, Layer, Prop, mix_into};
 
@@ -220,7 +220,7 @@ impl Parcel {
 pub(crate) struct Stroke<'a> {
     pub(crate) sf: Surf,
     pub(crate) id: u32,
-    pub(crate) clip: Option<&'a Mask>,
+    pub(crate) clip: Option<Clip<'a>>,
     /// The stroke's footprint (whole-canvas pixels): it never works outside.
     pub(crate) lim: Rect,
     /// Contact weights, reused by every bristle.
@@ -239,7 +239,7 @@ pub(crate) struct Stroke<'a> {
 impl<'a> Stroke<'a> {
     /// SAFETY: no other thread may work pixels in `lim` until the stroke
     /// is dropped.
-    pub(crate) unsafe fn begin(sf: Surf, id: u32, clip: Option<&'a Mask>, lim: Rect, wts: &'a mut Vec<f32>) -> Self {
+    pub(crate) unsafe fn begin(sf: Surf, id: u32, clip: Option<Clip<'a>>, lim: Rect, wts: &'a mut Vec<f32>) -> Self {
         Stroke { sf, id, clip, lim, wts, bounds: None, crowd: 1.0, aside: Vec::new(), through: [0; 2] }
     }
 

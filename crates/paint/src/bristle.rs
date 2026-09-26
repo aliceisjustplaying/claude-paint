@@ -117,8 +117,11 @@ pub struct Tool {
     pub splay: f32,
     /// Unevenness of bristle lengths (ragged edges, broken marks).
     pub ragged: f32,
-    /// How finely the hairs converge to a point: 0 = a blunt tuft (hog,
-    /// flat, stippler), 1 = a fine point (round sable, rigger). A pointed
+    /// How finely the hairs converge to a point: 0 = a blunt tuft, 1 = a
+    /// fine point. 0 for every preset (round sable and rigger included, so
+    /// a mark is as wide as the brush and pressure ask): the pointed tip is
+    /// the painter's choice, `Tool { point: 1.0, ..Tool::round_sable(w) }`
+    /// (Lua `brush{kind="round", width=w, point=1}`). A pointed
     /// tuft is a cone: pressed lightly only the point touches (a hairline),
     /// pressed harder the belly spreads (width grows with pressure), and on
     /// the lift the mark draws down to a point. Its loaded tip wets the
@@ -149,7 +152,7 @@ impl Tool {
 
     /// Soft pointed round: smooth, precise, little ploughing. Friedrich's detail brush.
     pub fn round_sable(width: f32) -> Self {
-        Tool { stiffness: 0.2, pickup: 0.1, push: 0.05, splay: 0.45, ragged: 0.15, point: 1.0, ..Self::base(Kind::Round, width) }
+        Tool { stiffness: 0.2, pickup: 0.1, push: 0.05, splay: 0.45, ragged: 0.15, ..Self::base(Kind::Round, width) }
     }
 
     /// Stiff hog-bristle flat: square marks, strong ridges, broken edges.
@@ -192,7 +195,6 @@ impl Tool {
             push: 0.02,
             splay: 0.6,
             ragged: 0.1,
-            point: 1.0,
             ..Self::base(Kind::Rigger, width)
         }
     }
@@ -581,11 +583,36 @@ impl Canvas {
         let surf = self.surf();
         let mut scratch = Vec::new();
         // SAFETY: exclusive &mut self, single brush.
-        let (b, through) = unsafe { drag_stroke(surf, held, g, clip, id, &mut scratch) };
+        let (b, through) = unsafe { drag_stroke(surf, held, g, clip.map(Clip::Mask), id, &mut scratch) };
         if let Some((x0, y0, x1, y1)) = b {
             self.wet.touch(x0, y0, x1, y1);
         }
         through
+    }
+}
+
+/// Where a stroke may lay paint: a mask multiplying the bristles' contact
+/// (a stencil: the region's edge exactly, the same for every stroke), or a
+/// fence (`crate::fence`): the region's edge, overrun by this stroke's own
+/// amount `u` (0..1), the hairs lifting off the weave past it; `limit` is a
+/// hard mask on top (what is in front).
+#[derive(Clone, Copy)]
+pub(crate) enum Clip<'a> {
+    Mask(&'a Mask),
+    Fence { fence: &'a crate::fence::Fence, u: f32, limit: Option<&'a Mask> },
+}
+
+impl Clip<'_> {
+    /// (contact factor, lift) at whole-canvas pixel `i`.
+    #[inline]
+    pub(crate) fn at(&self, i: usize) -> (f32, f32) {
+        match self {
+            Clip::Mask(m) => (m.data[i], 0.0),
+            Clip::Fence { fence, u, limit } => {
+                let (k, lift) = fence.at(i, *u);
+                (k * limit.map_or(1.0, |l| l.data[i]), lift)
+            }
+        }
     }
 }
 
@@ -771,7 +798,7 @@ pub(crate) unsafe fn drag_on(
     sf: Surf,
     held: &mut Held,
     g: &Gesture,
-    clip: Option<&Mask>,
+    clip: Option<Clip<'_>>,
     id: u32,
     scratch: &mut Vec<f32>,
 ) -> Bounds {
@@ -779,7 +806,7 @@ pub(crate) unsafe fn drag_on(
 }
 
 /// `drag_on`, also reporting how often it took set-aside paint.
-unsafe fn drag_stroke(sf: Surf, held: &mut Held, g: &Gesture, clip: Option<&Mask>, id: u32, scratch: &mut Vec<f32>) -> (Bounds, [u32; 2]) {
+unsafe fn drag_stroke(sf: Surf, held: &mut Held, g: &Gesture, clip: Option<Clip<'_>>, id: u32, scratch: &mut Vec<f32>) -> (Bounds, [u32; 2]) {
     g.assert_valid();
     if g.pts.is_empty() {
         return (None, [0; 2]);
@@ -821,6 +848,11 @@ unsafe fn drag_stroke(sf: Surf, held: &mut Held, g: &Gesture, clip: Option<&Mask
     let mut contact: Vec<Option<((f32, f32), f32)>> = vec![None; held.bristles.len()];
     let mut order: Vec<(f32, usize)> = Vec::with_capacity(held.bristles.len());
     let feed_k = tool.point * (1.0 - (-(step / s) / (FEED_WIDTHS * tool.width).max(0.3)).exp());
+    // the hair that comes down first: the tip. However lightly the brush is
+    // pressed or lifted, the tip is on the canvas until the hand leaves it
+    // at the path's end (a lift-off draws down to the tip, it doesn't stop
+    // short of the end where the pressure falls below the tip's own length)
+    let tip = held.bristles.iter().enumerate().min_by(|a, b| a.1.thresh.total_cmp(&b.1.thresh)).map_or(0, |(i, _)| i);
     for k in 0..=nsteps {
         let d = (k as f32 * step).min(total);
         while seg + 1 < path.len() - 1 && arc[seg + 1] < d {
@@ -871,7 +903,7 @@ unsafe fn drag_stroke(sf: Surf, held: &mut Held, g: &Gesture, clip: Option<&Mask
         // where each touching hair meets the canvas this step
         for (bi, b) in held.bristles.iter_mut().enumerate() {
             let reach = (p - b.thresh) / (1.0 - b.thresh).max(1e-3);
-            if reach <= 0.0 {
+            if reach <= 0.0 && !(bi == tip && p > 0.0) {
                 b.prev = [None, None];
                 contact[bi] = None;
                 continue;
@@ -881,13 +913,17 @@ unsafe fn drag_stroke(sf: Surf, held: &mut Held, g: &Gesture, clip: Option<&Mask
             let (ox, oy) = ((b.rx + wv * 0.12) * half, (b.ry + wv * 0.05) * half);
             let root = (hx + ox * ct - oy * st, hy + ox * st + oy * ct);
             // tips trail behind the motion and splay outward under pressure
-            let trail = tool.length * s * b.len * (p + LIFT_DRAG * lift * (1.0 - p));
+            // (the trailing hairs drag longer as the handle rises; the tip,
+            // which stays down until the hand leaves the canvas, ends where
+            // the hand does)
+            let drag = if bi == tip { 0.0 } else { LIFT_DRAG };
+            let trail = tool.length * s * b.len * (p + drag * lift * (1.0 - p));
             let spread = tool.splay * p * 0.3;
             let target = (-dir.0 * trail + (ox * ct - oy * st) * spread, -dir.1 * trail + (ox * st + oy * ct) * spread);
             b.bend.0 += (target.0 - b.bend.0) * rate;
             b.bend.1 += (target.1 - b.bend.1) * rate;
             // one contact point: the belly-to-tip region of the bent bristle
-            contact[bi] = Some(((root.0 + b.bend.0 * 0.6, root.1 + b.bend.1 * 0.6), reach));
+            contact[bi] = Some(((root.0 + b.bend.0 * 0.6, root.1 + b.bend.1 * 0.6), reach.max(0.0)));
         }
         // a lifting brush narrows across its track (a flat rolled onto its
         // edge, a round drawn to its point): its hairs follow one another
@@ -1072,7 +1108,7 @@ impl Canvas {
         let surf = self.surf();
         let mut scratch = Vec::new();
         // SAFETY: exclusive &mut self, single brush.
-        let (b, through) = unsafe { touch_stroke(surf, held, t, clip, id, &mut scratch) };
+        let (b, through) = unsafe { touch_stroke(surf, held, t, clip.map(Clip::Mask), id, &mut scratch) };
         if let Some((x0, y0, x1, y1)) = b {
             self.wet.touch(x0, y0, x1, y1);
         }
@@ -1083,12 +1119,12 @@ impl Canvas {
 /// SAFETY: no other thread may touch pixels in `touch_footprint(..)` of `t`,
 /// and `held.tool` must pass `Tool::validate` (accesses are clamped to that
 /// footprint too, as in `drag_on`).
-pub(crate) unsafe fn touch_on(sf: Surf, held: &mut Held, t: &Touch, clip: Option<&Mask>, id: u32, scratch: &mut Vec<f32>) -> Bounds {
+pub(crate) unsafe fn touch_on(sf: Surf, held: &mut Held, t: &Touch, clip: Option<Clip<'_>>, id: u32, scratch: &mut Vec<f32>) -> Bounds {
     unsafe { touch_stroke(sf, held, t, clip, id, scratch).0 }
 }
 
 /// `touch_on`, also reporting how often it took set-aside paint.
-unsafe fn touch_stroke(sf: Surf, held: &mut Held, t: &Touch, clip: Option<&Mask>, id: u32, scratch: &mut Vec<f32>) -> (Bounds, [u32; 2]) {
+unsafe fn touch_stroke(sf: Surf, held: &mut Held, t: &Touch, clip: Option<Clip<'_>>, id: u32, scratch: &mut Vec<f32>) -> (Bounds, [u32; 2]) {
     t.assert_valid();
     let s = sf.scale;
     let tool = held.tool.clone();
@@ -1149,6 +1185,14 @@ mod tip_tests {
     use crate::exchange::fine_cover;
     use crate::color::hex;
 
+    /// The pointed tip is opt-in: these tests use it explicitly.
+    fn sable(w: f32) -> Tool {
+        Tool { point: 1.0, ..Tool::round_sable(w) }
+    }
+    fn rigger(w: f32) -> Tool {
+        Tool { point: 1.0, ..Tool::rigger(w) }
+    }
+
     const BG: &str = "#e8e0d0";
     const INK: &str = "#1a1612";
 
@@ -1187,10 +1231,62 @@ mod tip_tests {
         sum / s / (b - a) as f32
     }
 
+    /// Paint (coats) one stroke of `tool` loaded to `load` lays across its
+    /// mark over a dry layer on a Friedrich-sized strip `px` wide: the mean
+    /// film at each pixel row from 2 widths above the stroke's line to 2
+    /// below, over the middle of its length, as (offset from the line in
+    /// units, coats).
+    fn film_across_over_dry(px: usize, tool: Tool, pressure: f32, load: f32) -> Vec<(f32, f32)> {
+        let mut c = Canvas::new(px, 4.0, hex(BG)).with_size_mm(440.0).with_linen(crate::surface::Linen::fine(3));
+        // a light layer, laid in overlapping bands and let dry
+        for (k, y) in [95.0, 110.0, 125.0, 140.0, 155.0].into_iter().enumerate() {
+            let mut h = Held::new(Tool::filbert(40.0), 10 + k as u64);
+            h.load(Paint::body(hex("#b8c4d0")), 1.0);
+            c.drag(&mut h, &Gesture::line((100.0, y), (900.0, y)).pressure(0.9, 0.9), None);
+        }
+        c.dry();
+        let mut h = Held::new(tool.clone(), 5);
+        h.load(Paint::body(hex("#50586a")), load);
+        c.drag(&mut h, &Gesture::line((300.0, 125.0), (700.0, 125.0)).pressure(pressure, pressure), None);
+        let f = c.f;
+        let (x0, x1) = ((400.0 * f.scale) as usize, (600.0 * f.scale) as usize);
+        let (y0, y1) = (((125.0 - 2.0 * tool.width) * f.scale) as usize, ((125.0 + 2.0 * tool.width) * f.scale) as usize);
+        (y0..=y1).map(|y| (f.uy(y) - 125.0, (x0..x1).map(|x| c.wet.vol[y * f.w + x]).sum::<f32>() / (x1 - x0) as f32)).collect()
+    }
+
+    /// A body stroke over dry paint lays a covering film, thickest about
+    /// where the brush pressed, not a ring: across the middle half of the
+    /// mark the film is not far below the thickest paint at its edges.
+    /// Rounds 8 and 9: a filbert 5 at 1000px ploughed its paint into rims
+    /// (399 µm on the edges, 11 µm inside), so the old paint showed through
+    /// every stroke as a net; thin filbert shadows at 3200px were dark
+    /// ridged tubes with pale middles. The brushes' hairs were finer than a
+    /// pixel (so too for the filbert 2, at 1000px as at 3200px).
+    /// A full brush too: the wet engine's plough moves only the paint
+    /// standing above the film a hair rides on, so a brush loaded to 0.8
+    /// passed even when each pixel of a fine hair's drawn track ploughed as
+    /// if it were the hair; loaded full, its filbert 5 left 0.53 of its peak
+    /// in the middle (notes/wet_merge/MERGE.md).
+    #[test]
+    fn a_stroke_over_dry_paint_covers_its_middle() {
+        let st = crate::style::Style::friedrich();
+        let tools = [("filbert 5", Tool::filbert(5.0)), ("filbert 2", Tool { lay: 0.5, stiffness: 0.3, ..Tool::filbert(2.0) }), ("body", st.body.clone())];
+        for ((name, tool), load) in tools.iter().flat_map(|t| [(t.clone(), 0.8), (t.clone(), 1.0)]) {
+            let prof = film_across_over_dry(1000, tool, 0.8, load);
+            let peak = prof.iter().map(|p| p.1).fold(0.0f32, f32::max);
+            // the mark: where it laid a tenth of its peak or more
+            let on: Vec<f32> = prof.iter().filter(|p| p.1 >= 0.1 * peak).map(|p| p.0).collect();
+            let (a, b) = (on[0], on[on.len() - 1]);
+            let mid: Vec<f32> = prof.iter().filter(|p| p.0 >= a + 0.25 * (b - a) && p.0 <= b - 0.25 * (b - a)).map(|p| p.1).collect();
+            let middle = mid.iter().sum::<f32>() / mid.len() as f32;
+            assert!(middle >= 0.6 * peak, "{name}, load {load}: {middle:.2} coats in the middle of the mark, {peak:.2} at its thickest: {prof:.2?}");
+        }
+    }
+
     #[test]
     fn pointed_marks_are_resolution_independent() {
         let g = Gesture::line((50.0, 120.0), (450.0, 122.0)).pressure(0.4, 0.4).ramps(0.05, 0.1).shake(0.0);
-        for tool in [Tool::rigger(0.5), Tool::round_sable(1.6)] {
+        for tool in [rigger(0.5), sable(1.6)] {
             let lo = ink(&canvas(500, false, tool.clone(), &g), 100.0, 400.0);
             let hi = ink(&canvas(1600, false, tool.clone(), &g), 100.0, 400.0);
             assert!((lo / hi - 1.0).abs() < 0.2, "{:?}: ink width {lo} at 500px, {hi} at 1600px", tool.kind);
@@ -1200,9 +1296,32 @@ mod tip_tests {
         }
     }
 
+    /// Round 7 (winter A/B): the presets are blunt again, so a round, a
+    /// rigger, a line or a detail brush lays the width the painter asked
+    /// for; the pointed tip (a hairline at light pressure) is opt-in.
+    #[test]
+    fn presets_are_blunt_and_lay_their_width() {
+        let st = crate::style::Style::friedrich();
+        for t in [Tool::round_sable(1.6), Tool::rigger(0.5), st.detail.clone(), st.line_tool(0.8)] {
+            assert_eq!(t.point, 0.0, "{:?} is pointed by default", t.kind);
+        }
+        let g = Gesture::line((50.0, 120.0), (450.0, 122.0)).pressure(0.4, 0.4).ramps(0.05, 0.1).shake(0.0);
+        let blunt = ink(&canvas(1600, false, Tool::round_sable(1.6), &g), 100.0, 400.0);
+        let pointed = ink(&canvas(1600, false, sable(1.6), &g), 100.0, 400.0);
+        // a blunt sable 1.6 at a light pressure lays the width its hairs
+        // span there (`mark_width`); the pointed one only its point. (With
+        // the wet engine's plough, which moves only paint above the film a
+        // hair rides on, a blunt mark is its hairs' width, 0.97 of 1.02
+        // units, where main's engine ploughed paint out past them to 1.10;
+        // the pointed one lays 0.66 on both. The old pointed default made
+        // them equal.)
+        let want = Tool::round_sable(1.6).mark_width(0.4);
+        assert!(blunt > 0.9 * want && blunt > 1.3 * pointed, "ink width at p 0.4: blunt {blunt} (its hairs span {want}), pointed {pointed}");
+    }
+
     #[test]
     fn pointed_width_follows_pressure_and_tapers() {
-        let t = Tool::round_sable(3.0);
+        let t = sable(3.0);
         assert!(t.mark_width(0.1) < 0.25 * t.mark_width(0.9), "{} vs {}", t.mark_width(0.1), t.mark_width(0.9));
         assert!((t.mark_width(t.pressure_for(1.5)) - 1.5).abs() < 0.01);
         let at = |p: f32| ink(&canvas(800, false, t.clone(), &Gesture::line((50.0, 120.0), (450.0, 120.0)).pressure(p, p).shake(0.0)), 150.0, 350.0);
@@ -1214,6 +1333,32 @@ mod tip_tests {
         assert!(root > mid && mid > tip && tip < 0.3 * root, "flick ink root {root}, middle {mid}, tip {tip}");
         // a blunt stippler of the same kind keeps its old footprint
         assert_eq!(Tool::stippler(2.0).point, 0.0);
+    }
+
+    /// A lifting brush draws down to its tip at the end of its path; it
+    /// doesn't leave the canvas before the hand does. Rounds 10 and 11: a
+    /// limb lifted off with `ramps` stopped painting where the pressure fell
+    /// below its first hair's threshold, up to a fifth of the path short of
+    /// its end, so a twig set on the limb's end started on bare canvas
+    /// ("floated"). See notes/fixes/twigs.
+    /// Blunt and pointed, the documented flick and a limb lifted at a fork.
+    #[test]
+    fn a_lifted_stroke_paints_to_the_end_of_its_path() {
+        let tools = [("blunt sable 3", Tool::round_sable(3.0)), ("blunt rigger 1", Tool::rigger(1.0)), ("pointed rigger 1.4", Tool { point: 0.9, ..Tool::rigger(1.4) }), ("pointed sable 3", sable(3.0))];
+        let strokes = [("flick", (0.75, 0.0), (0.1, 0.75)), ("limb lifted at a fork", (0.8, 0.36), (0.03, 0.35))];
+        for (tn, tool) in &tools {
+            for (gn, p, r) in strokes {
+                // a twig's length, within one load of every brush here
+                let g = Gesture::line((100.0, 120.0), (180.0, 120.0)).pressure(p.0, p.1).ramps(r.0, r.1).shake(0.0);
+                let c = canvas(1000, false, tool.clone(), &g);
+                let s = c.f.scale;
+                let col = |x: usize| (0..c.f.h).map(|y| dark(&c, x, y)).sum::<f32>() / s;
+                // every column from just past the start to the last pixel
+                // before the end has paint on it
+                let bare: Vec<f32> = ((101.0 * s) as usize..(179.0 * s) as usize).filter(|&x| col(x) < 0.02).map(|x| x as f32 / s).collect();
+                assert!(bare.is_empty(), "{tn}, {gn}: path ends at 180, mark stops at {:?} ({} bare columns)", bare.first(), bare.len());
+            }
+        }
     }
 
     /// A hair's track covers its own area of the pixel lattice, however it
@@ -1255,7 +1400,7 @@ mod tip_tests {
     /// not where it falls between pixel centers).
     #[test]
     fn translated_pointed_marks_look_alike() {
-        for (tool, p) in [(Tool::rigger(0.5), 0.3), (Tool::round_sable(1.6), 0.15)] {
+        for (tool, p) in [(rigger(0.5), 0.3), (sable(1.6), 0.15)] {
             for (dx, dy) in [(200.0f32, 200.0f32), (240.0, 90.0)] {
                 let total = |off: (f32, f32)| {
                     let (a, b) = ((100.0 + off.0, 10.0 + off.1), (100.0 + dx + off.0, 10.0 + dy + off.1));
@@ -1276,7 +1421,7 @@ mod tip_tests {
     /// on the weave's peaks.
     #[test]
     fn hairline_on_linen_is_continuous() {
-        let c = canvas(1600, true, Tool::rigger(0.5), &Gesture::line((50.0, 120.0), (450.0, 120.0)).pressure(0.25, 0.25).ramps(0.05, 0.1).shake(0.0));
+        let c = canvas(1600, true, rigger(0.5), &Gesture::line((50.0, 120.0), (450.0, 120.0)).pressure(0.25, 0.25).ramps(0.05, 0.1).shake(0.0));
         let s = c.f.scale;
         let (y0, y1) = (((120.0 - 2.0) * s) as usize, ((120.0 + 2.0) * s) as usize);
         let cols: Vec<f32> = ((150.0 * s) as usize..(350.0 * s) as usize).map(|x| (y0..y1).map(|y| dark(&c, x, y)).sum::<f32>()).collect();
@@ -1289,7 +1434,7 @@ mod tip_tests {
     #[test]
     #[ignore]
     fn probe_ink_width() {
-        for (name, tool) in [("rigger .5", Tool::rigger(0.5)), ("sable 1.6", Tool::round_sable(1.6)), ("sable 3", Tool::round_sable(3.0))] {
+        for (name, tool) in [("rigger .5", rigger(0.5)), ("sable 1.6", sable(1.6)), ("sable 3", sable(3.0))] {
             for p in [0.1, 0.4, 0.7, 0.9] {
                 let g = Gesture::line((50.0, 120.0), (450.0, 122.0)).pressure(p, p).ramps(0.05, 0.1).shake(0.0);
                 let lo = ink(&canvas(1000, false, tool.clone(), &g), 100.0, 400.0);
@@ -1299,24 +1444,6 @@ mod tip_tests {
         }
     }
 
-    #[test]
-    #[ignore]
-    fn probe_patch() {
-        // TIP_OUT=path.png TIP_P=0.8 cargo test --release -p paint probe_patch -- --ignored
-        let out = std::env::var("TIP_OUT").unwrap_or_else(|_| "patch.png".into());
-        let mut c = Canvas::new(3200, 4.0, hex(BG)).with_size_mm(440.0).with_linen(crate::surface::Linen::fine(3));
-        let mut h = Held::new(Tool::round_sable(5.6), 3);
-        let mut rng = crate::rng::Rng::new(4);
-        for k in 0..14 {
-            h.reload(Paint::body(hex(INK)), 1.0);
-            let y = 60.0 + k as f32 * 3.0;
-            let pr: f32 = std::env::var("TIP_P").ok().and_then(|v| v.parse().ok()).unwrap_or(0.7);
-            c.drag(&mut h, &Gesture::new(vec![(60.0, y + rng.range(-1.0, 1.0)), (120.0, y + 2.0), (180.0, y + rng.range(-1.0, 1.0))]).pressure(pr * 0.6, pr).ramps(0.05, 0.1), None);
-        }
-        c.dry();
-        c.save(std::path::Path::new(&out)).unwrap();
-    }
-
     /// Capillary feed runs the belly's paint through the tuft; what each
     /// hair picked up from the wet film stays on its tip, to be laid first
     /// and worked in over `TIP_RUN` (review B7: feed folded every tip in at
@@ -1324,7 +1451,7 @@ mod tip_tests {
     /// dragged through a wet dark still carries a dirty tip at the end.
     #[test]
     fn feed_keeps_the_tips() {
-        let mut h = Held::new(Tool::round_sable(2.0), 1);
+        let mut h = Held::new(sable(2.0), 1);
         h.load(Paint::body(hex(INK)), 1.0);
         let dirt = Paint::body(hex(BG));
         for (i, b) in h.bristles.iter_mut().enumerate() {
@@ -1342,7 +1469,7 @@ mod tip_tests {
         let mut d = Held::new(Tool::filbert(40.0), 2);
         d.reload(Paint::body(hex(INK)), 1.0);
         c.drag(&mut d, &Gesture::new(vec![(100.0, 500.0), (500.0, 500.0)]).pressure(0.9, 0.9), None);
-        let mut r = Held::new(Tool::round_sable(8.0), 3);
+        let mut r = Held::new(sable(8.0), 3);
         r.reload(Paint::body(hex(BG)), 0.8);
         c.drag(&mut r, &Gesture::new(vec![(150.0, 500.0), (480.0, 500.0)]).pressure(0.8, 0.8).ramps(0.0, 0.0), None);
         let tip: f32 = r.bristles.iter().map(|b| b.tip.v).sum();
@@ -1358,7 +1485,7 @@ mod tip_tests {
     /// their rims to the bare ground).
     #[test]
     fn a_lifting_flat_does_not_heap_its_stroke_end() {
-        for (tool, what) in [(Tool::hog_flat(20.0), "flat"), (Tool::filbert(20.0), "filbert"), (Tool { point: 0.0, ..Tool::round_sable(12.0) }, "blunt round")] {
+        for (tool, what) in [(Tool::hog_flat(20.0), "flat"), (Tool::filbert(20.0), "filbert"), (Tool::round_sable(12.0), "blunt round")] {
             let mut c = Canvas::new(1000, 1.0, hex(BG));
             let mut h = Held::new(tool, 4);
             h.reload(Paint::body(hex(INK)), 1.0);
@@ -1378,7 +1505,7 @@ mod tip_tests {
 
     #[test]
     fn feed_conserves_paint() {
-        let mut h = Held::new(Tool::round_sable(2.0), 1);
+        let mut h = Held::new(sable(2.0), 1);
         h.load(Paint::body(hex(INK)), 1.0);
         for (i, b) in h.bristles.iter_mut().enumerate() {
             b.vol *= (i % 5) as f32 / 4.0;

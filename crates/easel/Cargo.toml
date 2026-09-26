@@ -4,6 +4,15 @@ version = "0.1.0"
 edition = "2024"
 publish = false
 
+[features]
+default = ["replay"]
+# The developer/runner build: EASEL_ROOT, named sessions (-s, EASEL_SESSION),
+# `easel run` (with --dump-surface) and `hash-probe`. Without it (the
+# painter build, `--no-default-features`) the studio is the directory above
+# the one holding the executable (<studio>/bin/easel) and it holds one
+# painting, "painting".
+replay = []
+
 [[bin]]
 name = "easel"
 path = "src/main.rs"

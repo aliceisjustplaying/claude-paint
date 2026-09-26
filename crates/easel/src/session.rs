@@ -397,11 +397,12 @@ pub fn parse_program(text: &str) -> Vec<String> {
 }
 
 /// The checkout the easel works in (session logs in `paintings/lua`, renders
-/// in `out/`): `EASEL_ROOT` if set, else the nearest directory at or above
+/// in `out/`) in the replay build: `EASEL_ROOT` if set, else the nearest directory at or above
 /// the working directory that holds `crates/easel/Cargo.toml`, else the
 /// checkout this binary was built from. Looking from the working directory
 /// keeps git worktrees apart: a binary built in (or copied from) another
 /// checkout still writes into the worktree it's run in.
+#[cfg(feature = "replay")]
 pub fn root() -> PathBuf {
     if let Some(r) = std::env::var_os("EASEL_ROOT").filter(|r| !r.is_empty()) {
         let r = PathBuf::from(r);
@@ -415,6 +416,15 @@ pub fn root() -> PathBuf {
     }
     let r = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
     r.canonicalize().unwrap_or(r)
+}
+
+/// The studio the painter build works in: the parent of the directory
+/// holding the executable (the studio ships it as `<studio>/bin/easel`),
+/// wherever it is run from. Nothing in the environment moves it.
+#[cfg(not(feature = "replay"))]
+pub fn root() -> PathBuf {
+    let exe = std::env::current_exe().and_then(|e| e.canonicalize()).unwrap_or_else(|e| panic!("easel: cannot locate its own executable: {e}"));
+    exe.parent().and_then(Path::parent).unwrap_or_else(|| panic!("easel: {} is not inside <studio>/bin", exe.display())).to_path_buf()
 }
 
 #[cfg(test)]

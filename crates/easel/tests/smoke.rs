@@ -2,6 +2,8 @@
 //! piles, lay strokes and a passage, wait, look (whole and cropped), check
 //! that the log replays exactly, save and replay it, keep a journal. What
 //! the easel doesn't have errors clearly and changes nothing.
+// The replay build: EASEL_ROOT, named sessions and `easel run`.
+#![cfg(feature = "replay")]
 
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};

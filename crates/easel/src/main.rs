@@ -1,56 +1,43 @@
 //! easel: a live Lua painting session over the claude-paint engine.
 //!
-//!   easel open <name> [--width 1000] [--undo 8]   start (or reattach to) a session
+//!   easel open <name> [--width 1000]                start (or reattach to) a session
 //!   easel do '<lua>' | -f chunk.lua | -            run a chunk on the live canvas
-//!   easel look [--crop x0,y0,x1,y1] [--mode value|squint|mirror|wet] [--dried] [--relief]
-//!              [--grid [step]] [--probe x,y;...] [--show on|off|clear] [--scale 3.2]
-//!   easel try '<lua>'                              run a chunk, keep its show()s, roll it back
-//!   easel undo [n] | log | status | save [path] | frames on|off | check | close
-//!   easel run paintings/lua/<name>.lua [--width 3200] [--out path] [--crop ...]
+//!   easel look [--crop x0,y0,x1,y1] [--mode value|squint|mirror|wet] [--grid [step]] [--size N]
+//!   easel log | status | save [path] | frames on|off | check | close
+//!   easel note '<text>' | -                        append to notes/journal.md
+//!   easel run paintings/lua/<name>.lua [--width 1000] [--out path] [--crop ...]
 //!
-//! See crates/easel/README.md.
+//! See notes/easel_guide.md.
 
 mod api;
-mod crop;
-mod form;
-mod world;
 mod depth;
-mod edit;
-mod draw_outline;
-mod draw_firs;
-mod draw_trees;
-mod draw_rocks;
 mod draw_edges;
+mod draw_outline;
+mod form;
 mod look;
 mod session;
 mod time;
+mod world;
 
-use session::{Session, parse_program, program_is_strict, root};
+use session::{Session, parse_program, root};
 use std::io::{Read, Write};
 use std::os::unix::net::{UnixListener, UnixStream};
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 use std::time::{Duration, Instant};
 
-const USAGE: &str = "easel: a live painting session (see crates/easel/README.md)
+const USAGE: &str = "easel: a live painting session (see notes/easel_guide.md)
 
-  easel open <name> [--width 1000] [--undo 8] [--checkpoints 6]   start or reattach; replays paintings/lua/<name>.lua if it exists
+  easel open <name> [--width 1000]    start or reattach; replays paintings/lua/<name>.lua if it exists
   easel do '<lua>'  |  easel do -f chunk.lua  |  easel do - (stdin)     [--look] also looks afterwards
-  easel look [--crop x0,y0,x1,y1] [--mode value,squint,mirror,wet] [--dried] [--relief] [--size 1000]
-             [--grid [step]] [--probe x,y;x,y] [--show on|off|clear] [--scale 3.2 [--wait 90]]
-  easel try '<lua>' | -f file | -  run a chunk to see its show()/probe()/print, then roll it back (not logged) [--look]
-  easel undo [n]      take back the last n chunks (default 1); their code is kept (easel undone)
-  easel show N        print chunk N's code
-  easel edit N '<lua>' | -f chunk.lua | -    replace chunk N and replay from it (from the nearest checkpoint)
-        [--insert] put it before chunk N instead   [--drop] remove chunk N   [--undone K] use undone chunk K's code   [--look]
-  easel undone [K]    list the chunks undone or replaced (or print K's code)
-  easel redo [K]      run undone chunk K (default: the latest) again as a new chunk
+  easel look [--crop x0,y0,x1,y1] [--mode value,squint,mirror,wet] [--grid [step]] [--size 1000]
   easel log           the session so far (= paintings/lua/<name>.lua)
-  easel status        chunks, clock, sitting, open/setting/tacky/dry
+  easel status        chunks, width, canvas
   easel save [path]   the canvas as a PNG (default out/easel/<name>/<name>.png)
-  easel frames on|off save a frame after every chunk (a time-lapse)
+  easel frames on|off save a look after every chunk
   easel check         replay the log from scratch and compare with the live canvas
   easel close         end the session (the log stays)
+  easel note '<text>' | easel note - (stdin)    append a dated entry to notes/journal.md
   easel run <file.lua> [--width 1000] [--out path.png] [--crop x0,y0,x1,y1] [--margin 40] [--look]
 
   -s <name> (or EASEL_SESSION) picks the session; default: the last opened.";
@@ -73,6 +60,7 @@ fn main() -> ExitCode {
         "open" => open(&rest),
         "serve" => serve(&rest),
         "run" => run(&rest),
+        "note" => note(&rest),
         "hash-probe" => {
             println!("{}", session::hash_probe());
             Ok(())
@@ -81,9 +69,8 @@ fn main() -> ExitCode {
             println!("{USAGE}");
             Ok(())
         }
-        "do" | "try" | "look" | "undo" | "log" | "status" | "save" | "frames" | "check" | "close" => client(&cmd, &rest, name),
-        "edit" | "show" | "undone" | "redo" => edit::client(&cmd, &rest, name),
-        o => Err(format!("unknown command {o:?}\n\n{USAGE}")),
+        "do" | "look" | "log" | "status" | "save" | "frames" | "check" | "close" => client(&cmd, &rest, name),
+        o => Err(format!("easel: no command {o:?}\n\n{USAGE}")),
     };
     match r {
         Ok(()) => ExitCode::SUCCESS,
@@ -103,6 +90,9 @@ fn sock_path(name: &str) -> PathBuf {
 fn log_path(name: &str) -> PathBuf {
     root().join("paintings/lua").join(format!("{name}.lua"))
 }
+fn journal_path() -> PathBuf {
+    root().join("notes/journal.md")
+}
 
 fn flag(args: &[String], f: &str) -> Option<String> {
     args.iter().position(|a| a == f).and_then(|i| args.get(i + 1).cloned())
@@ -112,6 +102,79 @@ fn valid_name(n: &str) -> Result<(), String> {
     if n.is_empty() || !n.chars().all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-') {
         return Err(format!("session name {n:?}: letters, digits, _ and - only"));
     }
+    Ok(())
+}
+
+// ---------------------------------------------------------------- journal
+
+/// Days since 1970-01-01 to a civil date (proleptic Gregorian).
+fn civil(days: i64) -> (i64, u32, u32) {
+    let z = days + 719_468;
+    let era = z.div_euclid(146_097);
+    let doe = z.rem_euclid(146_097);
+    let yoe = (doe - doe / 1460 + doe / 36_524 - doe / 146_096) / 365;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let d = (doy - (153 * mp + 2) / 5 + 1) as u32;
+    let m = if mp < 10 { mp + 3 } else { mp - 9 } as u32;
+    (yoe + era * 400 + i64::from(m <= 2), m, d)
+}
+
+/// The entry `easel note` appends: a dated line, the text's further lines
+/// indented under it.
+fn journal_entry(unix_secs: i64, text: &str) -> String {
+    let (y, m, d) = civil(unix_secs.div_euclid(86_400));
+    let t = unix_secs.rem_euclid(86_400);
+    let mut lines = text.trim_end().lines();
+    let first = lines.next().unwrap_or("").trim_end();
+    let mut s = format!("- {y:04}-{m:02}-{d:02} {:02}:{:02} UTC: {first}\n", t / 3600, t / 60 % 60);
+    for l in lines {
+        if l.trim().is_empty() {
+            s.push('\n');
+        } else {
+            s.push_str("  ");
+            s.push_str(l.trim_end());
+            s.push('\n');
+        }
+    }
+    s
+}
+
+/// Append an entry to the journal. The file only ever grows: the entry is
+/// written at its end, after what is there.
+fn note(args: &[String]) -> Result<(), String> {
+    let text = match args.first().map(|s| s.as_str()) {
+        Some("-") => {
+            let mut b = String::new();
+            std::io::stdin().read_to_string(&mut b).map_err(|e| e.to_string())?;
+            b
+        }
+        Some(_) => args.join(" "),
+        None => return Err("note: give the text: easel note '<text>' | easel note - (stdin)".into()),
+    };
+    if text.trim().is_empty() {
+        return Err("note: empty".into());
+    }
+    let p = journal_path();
+    std::fs::create_dir_all(p.parent().unwrap()).map_err(|e| e.to_string())?;
+    let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_err(|e| e.to_string())?.as_secs() as i64;
+    let mut f = std::fs::OpenOptions::new().create(true).append(true).open(&p).map_err(|e| format!("{}: {e}", p.display()))?;
+    // an entry starts on a line of its own
+    let len = f.metadata().map(|m| m.len()).unwrap_or(0);
+    let mut entry = String::new();
+    if len > 0 {
+        let mut last = [0u8; 1];
+        let mut r = std::fs::File::open(&p).map_err(|e| e.to_string())?;
+        use std::io::Seek;
+        r.seek(std::io::SeekFrom::End(-1)).map_err(|e| e.to_string())?;
+        r.read_exact(&mut last).map_err(|e| e.to_string())?;
+        if last[0] != b'\n' {
+            entry.push('\n');
+        }
+    }
+    entry.push_str(&journal_entry(now, &text));
+    f.write_all(entry.as_bytes()).map_err(|e| e.to_string())?;
+    println!("noted in {}", p.display());
     Ok(())
 }
 
@@ -146,7 +209,7 @@ fn client(cmd: &str, args: &[String], name: Option<String>) -> Result<(), String
     let name = current(name)?;
     let mut args = args.to_vec();
     let mut payload = Vec::new();
-    if cmd == "do" || cmd == "try" {
+    if cmd == "do" {
         let look = if let Some(i) = args.iter().position(|a| a == "--look") {
             args.remove(i);
             true
@@ -175,11 +238,16 @@ fn client(cmd: &str, args: &[String], name: Option<String>) -> Result<(), String
 }
 
 fn open(args: &[String]) -> Result<(), String> {
-    let name = args.first().filter(|a| !a.starts_with('-')).ok_or("open <name> [--width 1000] [--undo 8]")?.clone();
+    let name = args.first().filter(|a| !a.starts_with('-')).ok_or("open <name> [--width 1000]")?.clone();
     valid_name(&name)?;
+    let mut i = 1;
+    while i < args.len() {
+        match args[i].as_str() {
+            "--width" => i += 2,
+            o => return Err(format!("open: unknown argument {o:?} (open <name> [--width 1000])")),
+        }
+    }
     let width: usize = flag(args, "--width").map(|w| w.parse().map_err(|_| "--width N")).transpose()?.unwrap_or(1000);
-    let undo: usize = flag(args, "--undo").map(|w| w.parse().map_err(|_| "--undo N")).transpose()?.unwrap_or(8);
-    let keep: usize = flag(args, "--checkpoints").map(|w| w.parse().map_err(|_| "--checkpoints N")).transpose()?.unwrap_or(edit::CHECKPOINTS);
     let dir = session_dir(&name);
     std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
     std::fs::write(root().join("out/easel/current"), &name).map_err(|e| e.to_string())?;
@@ -192,7 +260,7 @@ fn open(args: &[String]) -> Result<(), String> {
     let exe = std::env::current_exe().map_err(|e| e.to_string())?;
     use std::os::unix::process::CommandExt;
     std::process::Command::new(exe)
-        .args(["serve", &name, "--width", &width.to_string(), "--undo", &undo.to_string(), "--checkpoints", &keep.to_string()])
+        .args(["serve", &name, "--width", &width.to_string()])
         .stdin(std::process::Stdio::null())
         .stdout(log.try_clone().map_err(|e| e.to_string())?)
         .stderr(log)
@@ -208,9 +276,6 @@ fn open(args: &[String]) -> Result<(), String> {
                 println!("{l}");
             }
             print!("easel {name:?} open: {st}");
-            if !st.contains("style=") {
-                println!("next: easel do 'canvas{{style=\"friedrich\", aspect=1.4, seed=1}}'");
-            }
             return Ok(());
         }
         let log = std::fs::read_to_string(dir.join("server.log")).unwrap_or_default();
@@ -230,31 +295,24 @@ struct Server {
     s: Session,
     frames: bool,
     /// The log text as the easel last wrote (or read) it: if the file on
-    /// disk differs, someone edited it by hand and it must not be clobbered.
+    /// disk differs, it was changed outside the session.
     written: Option<String>,
-    /// Full-resolution crop windows following the log (`look --scale`).
-    crops: crop::Crops,
 }
 
 fn serve(args: &[String]) -> Result<(), String> {
     let name = args.first().ok_or("serve <name>")?.clone();
     let width: usize = flag(args, "--width").and_then(|w| w.parse().ok()).unwrap_or(1000);
-    let undo: usize = flag(args, "--undo").and_then(|w| w.parse().ok()).unwrap_or(8);
-    let mut s = Session::new(width, undo).map_err(|e| format!("easel: fatal: {e}"))?;
-    s.keep = flag(args, "--checkpoints").and_then(|w| w.parse().ok()).unwrap_or(edit::CHECKPOINTS);
-    // resume from the log; a new session holds its sittings, an old log
-    // goes on as it was painted (notes/time.md)
+    let mut s = Session::new(width).map_err(|e| format!("easel: fatal: {e}"))?;
+    // resume from the log
     let lp = log_path(&name);
     let mut written = None;
-    let old = std::fs::read_to_string(&lp).ok();
-    s.set_strict(old.as_deref().is_none_or(program_is_strict));
-    if let Some(text) = old {
+    if let Ok(text) = std::fs::read_to_string(&lp) {
         written = Some(text.clone());
         let chunks = parse_program(&text);
         let t0 = Instant::now();
         for (i, c) in chunks.iter().enumerate() {
             if let Err(e) = s.run(c) {
-                println!("warning: chunk {} of {} failed on replay and was dropped:\n{e}", i + 1, lp.display());
+                println!("warning: chunk {} of {} failed on replay:\n{e}", i + 1, lp.display());
                 break;
             }
         }
@@ -264,10 +322,7 @@ fn serve(args: &[String]) -> Result<(), String> {
     let _ = std::fs::remove_file(&sock);
     let l = UnixListener::bind(&sock).map_err(|e| format!("easel: fatal: bind {}: {e}", sock.display()))?;
     let _ = std::io::stdout().flush();
-    look::begin(&s.lua, "resume");
-    let mut crops = crop::Crops::default();
-    crops.strict = s.strict();
-    let mut srv = Server { name, s, frames: false, written, crops };
+    let mut srv = Server { name, s, frames: false, written };
     for conn in l.incoming() {
         let Ok(mut conn) = conn else { continue };
         let mut req = Vec::new();
@@ -296,11 +351,10 @@ fn serve(args: &[String]) -> Result<(), String> {
 }
 
 impl Server {
-    /// Write the session log. If the file was edited by hand since the
-    /// easel last wrote it, the hand-edited version is kept beside it
-    /// (`<name>.edited-N.lua`) and a note says so: the live session can't
-    /// take in edits to chunks it has already painted (close, then reopen to
-    /// replay the edited file).
+    /// Write the session log. If the file was changed outside the session
+    /// since the easel last wrote it, that version is kept beside it
+    /// (`<name>.edited-N.lua`) and a note says so; the session's own log is
+    /// what it painted.
     fn save_log(&mut self) -> Result<String, String> {
         let p = log_path(&self.name);
         std::fs::create_dir_all(p.parent().unwrap()).map_err(|e| e.to_string())?;
@@ -317,12 +371,7 @@ impl Server {
                 k += 1;
             };
             std::fs::write(&kept, &disk).map_err(|e| e.to_string())?;
-            note = format!(
-                "note: {} was edited outside the session; your edited version is kept as {} (the session's own log is in {}). To paint from the edited version: easel close, copy it back, easel open.\n",
-                p.display(),
-                kept.display(),
-                p.display()
-            );
+            note = format!("note: {} was changed outside the session; that version is kept as {}; the log is what this session painted.\n", p.display(), kept.display());
         }
         let text = self.s.program(&self.name);
         std::fs::write(&p, &text).map_err(|e| e.to_string())?;
@@ -332,102 +381,39 @@ impl Server {
 
     fn look(&mut self, args: &[String], path: Option<PathBuf>) -> Result<String, String> {
         let v = look::View::parse(args)?;
-        let mut out = String::new();
-        if let Some(cmd) = &v.show {
-            out.push_str(&look::show_cmd(&self.s.lua, cmd));
-        }
-        let relief = self.s.st.borrow().style.as_ref().map(|s| s.relief).unwrap_or((0.5, 0.1));
         let t0 = Instant::now();
-        let c = self.s.canvas().ok_or("no canvas yet: easel do 'canvas{style=\"friedrich\", aspect=1.4, seed=1}'")?;
-        // probes read the live canvas (and the world in the globals)
-        for (i, &(x, y)) in v.probes.iter().enumerate() {
-            let t = look::probe_at(&self.s.lua, &c, x, y, None).and_then(|t| look::probe_text(&t)).map_err(|e| e.to_string())?;
-            out.push_str(&format!("probe {} {t}\n", i + 1));
-        }
-        let (marks, from) = look::marks(&self.s.lua);
-        if !marks.is_empty() {
-            out.push_str(&format!("overlay: {} marks from {from} (look --show off hides them, --show clear drops them)\n", marks.len()));
-        }
+        let c = self.s.canvas().ok_or("no canvas yet: the first chunk is canvas{...}")?;
         let dir = session_dir(&self.name);
         let path = path.unwrap_or_else(|| {
             let n = std::fs::read_dir(&dir).map(|d| d.filter_map(|e| e.ok()).filter(|e| e.file_name().to_string_lossy().starts_with("look-")).count()).unwrap_or(0);
             dir.join(format!("look-{:04}.jpg", n + 1))
         });
-        let width = v.scale.map(|s| (s * 1000.0).round() as usize).filter(|&w| w != self.s.st.borrow().width);
-        let (w, h) = match (width, v.crop) {
-            (Some(width), Some(crop)) => {
-                let hgt = c.frame().height();
-                drop(c);
-                let log: Vec<String> = self.s.log.iter().map(|c| c.src.clone()).collect();
-                let got = self.crops.get(width, crop, hgt, &log, v.wait)?;
-                out.push_str(&got.note);
-                look::look(&got.canvas, got.relief, &v, &marks, &path)?
-            }
-            _ => look::look(&c, relief, &v, &marks, &path)?,
-        };
-        out.push_str(&format!("{} ({w}x{h}, {:.2}s)\n", path.display(), t0.elapsed().as_secs_f64()));
-        Ok(out)
-    }
-
-    /// Run a chunk as `do` does, in a live session.
-    fn run_chunk(&mut self, payload: &str, from: &str) -> Result<session::Ran, String> {
-        look::begin(&self.s.lua, from);
-        self.s.run(payload)
-    }
-
-    fn sync_crops(&mut self) {
-        let log: Vec<String> = self.s.log.iter().map(|c| c.src.clone()).collect();
-        self.crops.sync(&log);
+        let (w, h) = look::look(&c, &v, &path)?;
+        Ok(format!("{} ({w}x{h}, {:.2}s)\n", path.display(), t0.elapsed().as_secs_f64()))
     }
 
     fn handle(&mut self, cmd: &str, args: &[String], payload: &str) -> Result<String, String> {
         match cmd {
             "status" => Ok(format!("{}\n", self.s.status())),
-            "try" => {
-                // run it to see what it shows and prints, then take it back
-                let ran = look::try_chunk(&mut self.s, payload).map_err(|e| format!("{e}\n(nothing changed)"))?;
-                let mut out = ran.out;
-                let (marks, _) = look::marks(&self.s.lua);
-                out.push_str(&format!("tried ({:.2}s): rolled back, not logged; {} overlay marks for the next look\n", ran.secs, marks.len()));
-                if args.iter().any(|a| a == "--look") {
-                    out.push_str(&self.look(&[], None)?);
-                }
-                Ok(out)
-            }
-            "do" => {
-                let from = format!("chunk {}", self.s.log.len() + 1);
-                let r = self.run_chunk(payload, &from);
-                match r {
-                    Ok(ran) => {
-                        let note = self.save_log()?;
-                        self.sync_crops();
-                        let n = self.s.log.len();
-                        let mut out = note;
-                        out.push_str(&ran.out);
-                        let fields = if ran.field_secs > 0.005 { format!(" (Lua fields {:.2}s)", ran.field_secs) } else { String::new() };
-                        out.push_str(&format!("ok · chunk {n} · {:.2}s{fields} · {}\n", ran.secs, self.s.status().split(" · ").skip(3).collect::<Vec<_>>().join(" · ")));
-                        if self.frames {
-                            let p = session_dir(&self.name).join("frames").join(format!("{n:04}.jpg"));
-                            self.look(&[], Some(p))?;
-                        }
-                        if args.iter().any(|a| a == "--look") {
-                            out.push_str(&self.look(&[], None)?);
-                        }
-                        Ok(out)
+            "do" => match self.s.run(payload) {
+                Ok(ran) => {
+                    let note = self.save_log()?;
+                    let n = self.s.log.len();
+                    let mut out = note;
+                    out.push_str(&ran.out);
+                    out.push_str(&format!("ok · chunk {n} ({:.2} s to compute)\n", ran.secs));
+                    if self.frames {
+                        let p = session_dir(&self.name).join("frames").join(format!("{n:04}.jpg"));
+                        self.look(&[], Some(p))?;
                     }
-                    Err(e) => Err(format!("{e}\n(rolled back: the canvas is as it was before this chunk)")),
+                    if args.iter().any(|a| a == "--look") {
+                        out.push_str(&self.look(&[], None)?);
+                    }
+                    Ok(out)
                 }
-            }
+                Err(e) => Err(format!("{e}\n(the chunk failed and changed nothing)")),
+            },
             "look" => self.look(args, None),
-            "undo" => {
-                let n: usize = args.first().map(|a| a.parse().map_err(|_| "undo [n]")).transpose()?.unwrap_or(1);
-                let len = self.s.log.len();
-                let gone = self.s.undo(n)?;
-                edit::keep_undone(&self.name, len + 1 - gone.len(), "undone", &gone)?;
-                self.sync_crops();
-                let note = self.save_log()?;
-                Ok(format!("{note}undid {n} · {}\n", self.s.status()))
-            }
             "log" => Ok(self.s.program(&self.name)),
             "save" => {
                 let p = args.first().map(PathBuf::from).unwrap_or_else(|| session_dir(&self.name).join(format!("{}.png", self.name)));
@@ -443,7 +429,6 @@ impl Server {
                 let t0 = Instant::now();
                 let width = self.s.st.borrow().width;
                 let mut fresh = Session::replay(width).map_err(|e| e.to_string())?;
-                fresh.set_strict(self.s.strict());
                 for (i, c) in self.s.log.iter().enumerate() {
                     fresh.run(&c.src).map_err(|e| format!("replay failed at chunk {}: {e}", i + 1))?;
                 }
@@ -455,14 +440,13 @@ impl Server {
                 if same {
                     Ok(format!("replay matches the live canvas exactly ({} chunks, {:.1}s)\n", self.s.log.len(), t0.elapsed().as_secs_f64()))
                 } else {
-                    Err("replay DIFFERS from the live canvas: a chunk depended on state from a failed or undone chunk (e.g. a table it changed); the log is the truth: close and reopen to continue from it".into())
+                    Err("replay DIFFERS from the live canvas: a chunk depended on state from a failed chunk (e.g. a table it changed); the log is the painting: close and reopen to continue from it".into())
                 }
             }
             "close" => {
                 let note = self.save_log()?;
                 Ok(format!("{note}closed; the session is in {}\n", log_path(&self.name).display()))
             }
-            "edit" | "show" | "undone" | "redo" => self.handle_edit(cmd, args, payload),
             o => Err(format!("unknown command {o:?}")),
         }
     }
@@ -499,7 +483,6 @@ fn run(args: &[String]) -> Result<(), String> {
         return Err(format!("{file}: no chunks (each starts with a line \"{}\")", session::MARK));
     }
     let mut s = Session::replay(width).map_err(|e| e.to_string())?;
-    s.set_strict(program_is_strict(&text));
     let t0 = Instant::now();
     for (i, c) in chunks.iter().enumerate() {
         let r = s.run(c).map_err(|e| format!("chunk {} failed:\n{e}", i + 1))?;
@@ -512,16 +495,15 @@ fn run(args: &[String]) -> Result<(), String> {
     eprintln!("wrote {} ({} chunks, painted in {paint_secs:.1}s, total {:.1}s)", out.display(), chunks.len(), t0.elapsed().as_secs_f64());
     if let Some(p) = flag(args, "--dump-surface") {
         // the dried surface height (µm) under the saved pixels: little-endian
-        // f32, row by row (scripts/glitch.py --surface reads it)
+        // f32, row by row
         let (w, h, v) = c.kept_surface_um();
         let bytes: Vec<u8> = v.iter().flat_map(|x| x.to_le_bytes()).collect();
         std::fs::write(&p, bytes).map_err(|e| format!("{p}: {e}"))?;
         eprintln!("surface {w}x{h} µm → {p}");
     }
     if args.iter().any(|a| a == "--look") {
-        let relief = s.st.borrow().style.as_ref().map(|s| s.relief).unwrap_or((0.5, 0.1));
         let jpg = out.with_extension("jpg");
-        let (w, h) = look::look(&c, relief, &look::View::default(), &[], &jpg)?;
+        let (w, h) = look::look(&c, &look::View::default(), &jpg)?;
         println!("{} ({w}x{h})", jpg.display());
     }
     Ok(())
@@ -529,110 +511,15 @@ fn run(args: &[String]) -> Result<(), String> {
 
 #[cfg(test)]
 mod tests {
-    //! The live server's command path (`Server::handle`), where the overlay
-    //! store is live and taken-out code goes to the undone file.
     use super::*;
 
-    /// Removes a test session's log and directory, before and after.
-    struct Scratch(String);
-    impl Drop for Scratch {
-        fn drop(&mut self) {
-            let _ = std::fs::remove_file(log_path(&self.0));
-            let _ = std::fs::remove_dir_all(session_dir(&self.0));
-        }
-    }
-
-    fn server(name: &str) -> (Server, Scratch) {
-        let g = Scratch(format!("test-{name}"));
-        let _ = std::fs::remove_file(log_path(&g.0));
-        let _ = std::fs::remove_dir_all(session_dir(&g.0));
-        let mut s = Session::new(160, 8).unwrap();
-        s.keep = edit::CHECKPOINTS;
-        look::begin(&s.lua, "resume");
-        let mut srv = Server { name: g.0.clone(), s, frames: false, written: None, crops: crop::Crops::default() };
-        srv.handle("do", &[], "canvas{aspect=1.4, seed=1}").unwrap();
-        (srv, g)
-    }
-
-    fn overlay(srv: &Server) -> (Vec<String>, String) {
-        let (m, from) = look::marks(&srv.s.lua);
-        (m.iter().map(|m| m.label.clone().unwrap_or_default()).collect(), from)
-    }
-
-    fn a(s: &str) -> Vec<String> {
-        s.split_whitespace().map(|s| s.to_string()).collect()
-    }
-
-    // review 4 (session), finding 1: code with lines that look like the undone
-    // file's headers (in a long string, in a comment) comes back intact
     #[test]
-    fn undone_code_round_trips_marker_like_lines() {
-        let (mut srv, _g) = server("undone-markers");
-        let chunk = "message = [[first line\n--@ undone this is painting text, not an archive delimiter\n--@ undone 9 · was chunk 1 · undone · 3 bytes\nlast line]]\n--[[\n--@ undone 2 · was chunk 7 · undone\n]]\nprint(#message)";
-        srv.handle("do", &[], chunk).unwrap();
-        srv.handle("do", &[], "x = 1").unwrap();
-        srv.handle("undo", &a("2"), "").unwrap();
-        let list = srv.handle("undone", &[], "").unwrap();
-        assert_eq!(list.lines().filter(|l| l.contains(" · was chunk ")).count(), 2, "two entries:\n{list}");
-        assert_eq!(srv.handle("undone", &a("1"), "").unwrap(), format!("{chunk}\n"));
-        assert_eq!(srv.handle("undone", &a("2"), "").unwrap(), "x = 1\n");
-        // redo runs it again, whole
-        let long = chunk.split_once("[[").unwrap().1.split_once("]]").unwrap().0;
-        let out = srv.handle("redo", &a("1"), "").unwrap();
-        assert!(out.contains(&format!("{}\n", long.len())), "{out}");
-        assert_eq!(srv.s.log[1].src, chunk);
-        // and edit --undone puts it in place of a chunk
-        srv.handle("do", &[], "y = 2").unwrap();
-        srv.handle("edit", &a("3 --undone 1"), "").unwrap();
-        assert_eq!(srv.s.log[2].src, chunk);
-        // the replaced chunk is kept as entry 3, after both
-        assert_eq!(srv.handle("undone", &a("3"), "").unwrap(), "y = 2\n");
-        assert!(srv.handle("check", &[], "").is_ok());
-    }
-
-    // finding 2: an edit replays its chunks as `do` ran them (each one's
-    // first show() replaces the overlay), not piling their marks up
-    #[test]
-    fn an_edit_replays_the_overlay_chunk_by_chunk() {
-        let (mut srv, _g) = server("edit-overlay");
-        srv.handle("do", &[], r#"show(100, 100, "old")"#).unwrap();
-        srv.handle("do", &[], r#"show(200, 100, "latest")"#).unwrap();
-        assert_eq!(overlay(&srv), (vec!["latest".to_string()], "chunk 3".to_string()));
-        srv.handle("edit", &a("2"), r#"show(100, 200, "replacement")"#).unwrap();
-        assert_eq!(overlay(&srv), (vec!["latest".to_string()], "chunk 3".to_string()));
-        // the last chunk shows nothing: the overlay is the one before it, and says so
-        srv.handle("edit", &a("3"), "x = 1").unwrap();
-        assert_eq!(overlay(&srv), (vec!["replacement".to_string()], "chunk 2".to_string()));
-        let look = srv.handle("look", &a("--size 100"), "").unwrap();
-        assert!(look.contains("overlay: 1 marks from chunk 2"), "{look}");
-    }
-
-    // a failed edit changes nothing, the overlay included
-    #[test]
-    fn a_failed_edit_leaves_the_overlay_as_it_was() {
-        let (mut srv, _g) = server("failed-edit-overlay");
-        srv.handle("do", &[], r#"show(100, 100, "original")"#).unwrap();
-        let e = srv.handle("edit", &a("2"), r#"show(900, 900, "failed replacement"); error("stop")"#).unwrap_err();
-        assert!(e.contains("nothing changed"), "{e}");
-        assert_eq!(overlay(&srv), (vec!["original".to_string()], "chunk 2".to_string()));
-        // a replayed chunk after the edited one fails
-        srv.handle("do", &[], r#"show(300, 300, "third"); assert(not flag, "flagged")"#).unwrap();
-        let e = srv.handle("edit", &a("2"), r#"show(1, 1, "new"); flag = true"#).unwrap_err();
-        assert!(e.contains("flagged") && e.contains("nothing changed"), "{e}");
-        assert_eq!(overlay(&srv), (vec!["third".to_string()], "chunk 3".to_string()));
-    }
-
-    // the overlay keeps the label of the run that made it
-    #[test]
-    fn the_overlay_keeps_its_origin() {
-        let (mut srv, _g) = server("overlay-origin");
-        srv.handle("do", &[], r#"show(100, 100, "two")"#).unwrap();
-        srv.handle("do", &[], "x = 1").unwrap();
-        assert_eq!(overlay(&srv).1, "chunk 2");
-        srv.handle("try", &[], r#"show(100, 100, "tried")"#).unwrap();
-        srv.handle("do", &[], "y = 1").unwrap();
-        assert_eq!(overlay(&srv), (vec!["tried".to_string()], "try".to_string()));
-        let look = srv.handle("look", &a("--size 100"), "").unwrap();
-        assert!(look.contains("overlay: 1 marks from try"), "{look}");
+    fn journal_entries_are_dated_lines() {
+        // 2026-09-26 21:43 UTC
+        let t = 1_790_458_980;
+        assert_eq!(journal_entry(t, "first line\nsecond\n\nthird\n"), "- 2026-09-26 21:43 UTC: first line\n  second\n\n  third\n");
+        assert_eq!(civil(0), (1970, 1, 1));
+        assert_eq!(civil(-1), (1969, 12, 31));
+        assert_eq!(civil(11_016), (2000, 2, 29));
     }
 }

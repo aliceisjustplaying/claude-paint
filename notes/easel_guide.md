@@ -14,46 +14,52 @@ Three things hold for every session:
   variables, the paint on your brushes and the clock are as they were
   before it, and it isn't written to the log.
 - **The log is the painting.** Every chunk that ran is appended to
-  `paintings/lua/<name>.lua`, and replaying that file paints the same
+  `paintings/lua/painting.lua`, and replaying that file paints the same
   canvas, bit for bit. The easel verifies the log before reopening it and
   before each request; changing or shortening it causes a refusal.
 
 ## Starting
 
-```sh
-cargo build --release -p easel          # once; the binary is target/release/easel
-E=target/release/easel
+The easel is the program `bin/easel` in this folder. The studio holds one
+painting, and every command works on it. Run the commands from this
+folder:
 
-$E open study                           # start a session named "study" (2400 px wide)
-$E do 'canvas{size=400, aspect=1.25, linen=15, ground={{pile={{"lead white", 3}, {"raw umber", 1}}, um=100, apply="knife"}}}'
-$E do -f chunk.lua                      # a chunk from a file (or `do -` for stdin)
-$E look                                 # prints the path of a PNG of the canvas: read it
-$E close                                # the log stays in paintings/lua/study.lua
+```sh
+bin/easel open                                # start the session (2400 px wide), or reattach to it
+bin/easel do 'canvas{size=400, aspect=1.25, linen=15, ground={{pile={{"lead white", 1}}, um=100, apply="knife"}}}'
+bin/easel do -f chunk.lua                     # a chunk from a file (or `do -` for stdin)
+bin/easel look                                # prints the path of a PNG of the canvas: read it
+bin/easel note 'what I did and why'           # an entry in notes/journal.md
+bin/easel save                                # the finished canvas: out/easel/painting/painting.png
+bin/easel close                               # the log stays in paintings/lua/painting.lua
 ```
 
 | command | what it does |
 |---|---|
-| `easel open <name>` | starts a 2400-pixel-wide session, or reattaches to a running one. If `paintings/lua/<name>.lua` exists, the session verifies and replays it first and goes on from there |
-| `easel do '<lua>'`, `do -f file.lua`, `do -` | runs a chunk. The reply is what the chunk printed, then `ok · chunk N`. Add `--look` to look afterwards |
-| `easel look [...]` | writes a PNG of the canvas and prints its path (see [Looking](#looking)) |
-| `easel log` | prints the painting so far (the log file) |
-| `easel status` | chunks, width and the canvas's setup |
-| `easel save [path]` | the canvas as a PNG (default `out/easel/<name>/<name>.png`) |
-| `easel frames on\|off` | saves a look after every chunk in `out/easel/<name>/frames/` |
-| `easel check` | replays the log in a fresh session and confirms it matches the live canvas |
-| `easel close` | ends the session |
-| `easel note '<text>'`, `note -` | adds an entry to your journal (see [The journal](#the-journal)) |
-| `easel run <file.lua> [--out path.png]` | replays a log at 2400 pixels wide into a PNG |
+| `bin/easel open` | starts the 2400-pixel-wide session, or reattaches to it if it is running. If `paintings/lua/painting.lua` exists, the session verifies and replays it first and goes on from there |
+| `bin/easel do '<lua>'`, `do -f file.lua`, `do -` | runs a chunk. The reply is what the chunk printed, then `ok · chunk N`. Add `--look` to look afterwards |
+| `bin/easel look [...]` | writes a PNG of the canvas and prints its path (see [Looking](#looking)) |
+| `bin/easel log` | prints the painting so far (the log file) |
+| `bin/easel status` | chunks, width and the canvas's setup |
+| `bin/easel save` | writes the canvas as it is now to `out/easel/painting/painting.png` and prints the path |
+| `bin/easel frames on\|off` | saves a look after every chunk in `out/easel/painting/frames/` |
+| `bin/easel check` | replays the log in a fresh session and confirms it matches the live canvas |
+| `bin/easel close` | ends the session |
+| `bin/easel note '<text>'`, `note -` | adds an entry to your journal (see [The journal](#the-journal)) |
 
-Commands use the session you opened last in this folder; `-s <name>`
-picks another. The first chunk is `canvas{}`.
+The first chunk is `canvas{}`. When the painting is done, `bin/easel save`
+writes the picture to `out/easel/painting/painting.png`; the program that
+paints it is `paintings/lua/painting.lua`.
+
+In the examples below, `<tube>` stands for a name from the tube box and
+`<parts>` for a number of parts you choose.
 
 ## The canvas
 
 ```lua
 canvas{size=400, aspect=1.25, linen={16, 14}, seed=1,
-       ground={{pile={{"lead white", 2}, {"red earth", 1}}, um=100, apply="knife", texture=0.3},
-               {pile={{"lead white", 6}, {"yellow ochre", 1}}, um=50, apply="brush"}}}
+       ground={{pile={{"<tube>", <parts>}, {"<tube>", <parts>}}, um=100, apply="knife", texture=0.3},
+               {pile={{"<tube>", <parts>}}, um=50, apply="brush"}}}
 ```
 
 - `size`: the canvas's width in mm (50 to 5000).
@@ -79,10 +85,10 @@ Paint reaches the canvas only from piles you knife together on the
 palette from the tubes in the box:
 
 ```lua
-p = pile{{"lead white", 6}, {"smalt", 1}, {"yellow ochre", 0.5}}
-q = pile{{"bone black", 1}, {"raw umber", 2}, medium=0.3}
-print(p)                         -- pile(lead white 6, smalt 1, yellow ochre 0.5; medium 0)
-print(table.concat(tubes(), ", "))
+p = pile{{"<tube>", <parts>}, {"<tube>", <parts>}}
+q = pile{{"<tube>", <parts>}, medium=0.3}
+print(p)                         -- pile(<tube> <parts>, <tube> <parts>; medium 0)
+print(table.concat(tubes(), ", "))   -- the names in the box
 ```
 
 A pile is parts by volume of named tubes, plus `medium`: the share of oil
@@ -155,7 +161,7 @@ whose pressure falls to 0 ends in a point.
 work(m, {hand="body", pile=p, angle=0.3, coverage=3})
 blend(m, {angle=0})                      -- a clean blender over wet paint (= work with hand="blend")
 stipple(m, {pile=p, width=3, coverage=1.2})
-glaze(m, {pile=pile{{"raw umber", 1}, medium=0.9}, coats=0.4})
+work(m, {hand="glaze", pile=q})          -- a thin layer brushed on with a soft brush
 lose(m, {pile=p, where=0.5})
 ```
 
@@ -214,14 +220,6 @@ tip moves while down: a number or `{length, angle}`), `twist`, `cluster`
 above 0, touches get lighter where coverage is below 1), `clip`,
 `mix_jitter`, `seed`.
 
-**`glaze(m or nil, {pile=, coats=0.5})`** lays a film of a pile over dry
-paint: it levels and pools in the hollows of the surface. `coats` is a
-number or `function(x, y)`. A pile with a lot of medium makes a
-transparent film. Paint beneath the covered area must be touch-dry; wet
-paint elsewhere does not prevent the glaze. If a covered spot is still
-wet, the error gives its canvas coordinates. To glaze into wet paint,
-brush it: `work(m, {hand="glaze", pile=...})`.
-
 **`lose(m, {pile=, where=, ...})`** drags a lightly loaded brush across
 the mask's edge from the outside in, where `where` (as `edge=`; 1 by
 default) is high: short strokes start outside, cross the edge at a slant
@@ -230,7 +228,7 @@ default) is high: short strokes start outside, cross the edge at a slant
 (a stroke every 1.2 brush widths), `seed`. It returns the number of
 strokes.
 
-`work`, `blend`, `stipple` and `glaze` also take `visible=`, `behind=`,
+`work`, `blend` and `stipple` also take `visible=`, `behind=`,
 `at=` and `view=` (see [Depth](#depth)).
 
 ## Masks and geometry
@@ -301,7 +299,6 @@ h:hatch(m, {angle=-1.1, pressure=0.35})         -- short parallel strokes (spaci
 h:width()   h.worn   h:sharpen()  -- the point blunts as you draw
 erase(pts, {strength=0.9, width=9})  -- a kneaded eraser along a path, or erase(mask, {strength=})
 fix()                                -- fixative (or fix(mask)): the eraser no longer lifts it
-drawing_mask()                       -- where the graphite lies, as laid
 drawing_guide()                      -- the drawn lines themselves, as a continuous mask
 ```
 
@@ -333,25 +330,31 @@ Solids combine with `s:union(o)` and `s:subtract(o)`; `body.half_space(at,
 normal)` cuts. The light also takes `bounce`, `bounce_from`, `penumbra`,
 `reach`, `thickness` and `across_parts`.
 
-**World.** One picture's space in meters: a camera, the ground, water and
-one sun, and the bodies you place there.
+**World.** A space in meters seen in perspective: a camera over a
+supporting surface, one directional light, and the bodies you place
+there. A flat plane with one block:
 
 ```lua
-w = world{horizon=H * 0.5, eye=1.6, fov=45, sun={azimuth=-120, elevation=30},
-          ground=function(X, Z) return 0 end, water={level=-0.5}}
-s = w:spot(500, 600)                     -- the ground seen at a canvas point (or w:spot_at(X, Z))
+w = world{eye=1.6, fov=45}               -- camera height (m) and field of view (degrees)
+s = w:spot(500, 600)                     -- the plane seen at a canvas point (or w:spot_at(X, Z))
 w, n = w:place(s, body.block(s:p(0, 0.5, 0), s:size(1, 1, 1), s:m(0.05)))   -- meters to units
 v = w:view()                             -- trace once and keep it
-v:land()   v:water()   v:sky()   v:shadows()   v:contact(0.25)   v:reflections()   v:bodies_mask{n}
-v:at(x, y)   v:mirror(x, y)   v.form     -- what is seen there; what still water shows; the bodies as a form
-w:to_ground(x, y)   w:project(X, Y, Z)   w:scale_at(Z)   w:height(x, y, meters)   w:aerial(Z)
+v:bodies_mask{n}   v:shadows()   v:contact(0.25)   v:at(x, y)   v.form
+w:to_ground(x, y)   w:project(X, Y, Z)   w:scale_at(Z)   w:height(x, y, meters)
 w:shadow_angle(x, y)   w:sun_canvas()   w:ribbon(pts, width)   w:recede({X, Z}, {dX, dZ}, n)
 ```
 
-`sun.azimuth` is in degrees, 0 straight ahead, -90 to the left, 180
-behind you; elevation below 0 is after sunset. `w:proxy(s, body)` places a
-body that casts a shadow but isn't seen. `w:aerial(Z)` and `aerial(dist,
-visibility)` give how much air lies between the eye and a distance (0..1).
+`world{}` takes, all optional: `view` (the canvas rectangle it covers),
+`horizon` (the canvas y of eye level), `eye`, `fov`, `ground` (a function
+`(X, Z)` giving the surface's height in meters; flat by default), `water`
+(`{level=, ripple=}`: a level reflecting surface), `sun` (`{azimuth=,
+elevation=}` in degrees: the light's direction; azimuth 0 is straight
+ahead, -90 to the left, 180 behind you), `visibility` and `backdrop`.
+With water, `v:water()` and `v:mirror(x, y)` say where it is seen and
+what it reflects; `v:land()` and `v:sky()` are where the surface and the
+space above it are seen. `w:proxy(s, body)` places a body that casts a
+shadow but isn't seen. `w:aerial(Z)` and `aerial(dist, visibility)` give
+how much air lies between the eye and a distance (0..1).
 
 **Depth.** A view knows what lies behind what. `w = w:layer(name, mask,
 depth)` registers a shape you paint by hand at a depth (meters, a spot, a
@@ -368,10 +371,11 @@ mask's own edges, never what is in front.
 
 ## Time
 
-Painting takes time, and paint dries on the painting's clock. Real time
-between commands does not advance this clock. `wait(minutes)` computes
-the passage of simulated time; it does not make you wait that many real
-minutes.
+Painting takes time, and paint dries on the painting's clock. Only
+painting operations (strokes, touches, passes, trips to the palette) and
+`wait(minutes)` advance it. Real time between commands does not: paint
+doesn't dry while you think. `wait(minutes)` passes painting time at once;
+it doesn't make you wait that many real minutes.
 
 - **Hand time.** Every stroke, touch, pass and trip to the palette takes
   the time a hand takes to make it: a stroke by its length and the
@@ -381,12 +385,12 @@ minutes.
   works: a long pass is painted in slices of 15 minutes, and its first
   strokes are setting by the time the last go on.
 - **`wait(minutes)`** lets time pass with your hand away from the canvas:
-  minutes, hours or days (`wait(3 * 24 * 60)`). It returns the time of
-  day, e.g. `day 3, 14:20` (the painting was begun at 09:00 on day 1).
+  minutes, hours or days (`wait(3 * 24 * 60)`), up to 10 years
+  (5,259,600 minutes). It returns the time of day, e.g. `day 3, 14:20`
+  (the painting was begun at 09:00 on day 1).
 - **`drying(x, y)`** tells you what the paint there is like to the touch:
   `"open"` (workable: it blends and lifts), `"setting"` (stiff, barely
   blends), `"tacky"` (set; it grabs the brush) or `"dry"` (touch-dry).
-  `look --mode wet` shows the same over the whole canvas.
 
 Each film dries at its own pace, set by its pigments, its thickness and
 its oil. Thin lean paint of fast-drying pigments is touch-dry in a day;
@@ -394,7 +398,9 @@ thick, oily paint of slow pigments can stay open for weeks. Wet paint
 under a new stroke comes up into it; paint laid over dry paint sits on
 top of it.
 
-## Finishing
+## Finishing (optional)
+
+Each of these is optional.
 
 ```lua
 varnish{coats=0.4, vary=0.12}     -- a mastic varnish film over the whole canvas, as it looks aged
@@ -410,7 +416,7 @@ ground; its options are `island_mm`, `ground_um`, `width_um`, `depth_um`,
 
 ## Looking
 
-`easel look` prints the path of a PNG of the canvas as it is now, with
+`bin/easel look` prints the path of a PNG of the canvas as it is now, with
 wet paint as laid. The live canvas is 2400 pixels wide. A whole view is
 scaled down to at most 1600 pixels on its long side and kept below 3 MB,
 like stepping back. A crop shows the original pixels at 1:1 and may be
@@ -418,14 +424,13 @@ at most 1200 pixels on either side. `--crop x0,y0,x1,y1` gives two
 opposite corners in canvas units, not a position and width/height.
 
 ```sh
-$E look --crop 300,200,500,350          # a window in canvas units, shown at 1:1 pixels
-$E look --mode value                    # in grays
-$E look --mode squint                   # blurred, as through half-closed eyes
-$E look --mode mirror                   # flipped left to right
-$E look --mode wet                      # open blue, setting green, tacky orange, dry gray
-$E look --mode value,squint --size 600  # modes combine; --size sets the long side
-$E look --grid                          # a squared grid in canvas units, labeled along the edges
-$E look --crop 300,200,500,350 --grid 10
+bin/easel look --crop 300,200,500,350          # a window in canvas units, shown at 1:1 pixels
+bin/easel look --mode value                    # in grays
+bin/easel look --mode squint                   # blurred, as through half-closed eyes
+bin/easel look --mode mirror                   # flipped left to right
+bin/easel look --mode value,squint --size 600  # modes combine; --size sets the long side
+bin/easel look --grid                          # a squared grid in canvas units, labeled along the edges
+bin/easel look --crop 300,200,500,350 --grid 10
 ```
 
 The grid is drawn on the PNG only, never on the canvas, like the squares
@@ -456,21 +461,16 @@ ruled over a drawing to transfer it.
 
 ## The journal
 
-`notes/journal.md` is your working journal. `easel note '<text>'` (or
-`easel note -` to read the text from stdin) appends an entry stamped with
-the open session's painting time, such as `day 2, 09:40`. Use `-s <name>`
-to select a different open session. Entries already there stay as they
-were written; writing a note does not advance painting time.
+`notes/journal.md` is your working journal. `bin/easel note '<text>'` (or
+`bin/easel note -` to read the text from stdin) appends an entry stamped
+with the session's painting time, such as `day 2, 09:40`; the session must
+be open. Entries already there stay as they were written; writing a note
+doesn't advance painting time.
 
-## Replay
+## The log
 
-`easel check` replays the log in a fresh session and compares it with the
-live canvas. `easel run paintings/lua/<name>.lua` replays it at 2400 pixels
-wide into `out/lua/<name>.png`, byte-identical to `easel save`.
-
-The log is plain Lua with a line `--@ chunk N` before each chunk. Keep it
-as written by the easel. The matching integrity record is
-`out/easel/<name>/committed.lua`; keep both files together when backing up
-or moving a session. If either is missing or differs, the easel refuses
-to continue. An interrupted disk write can also cause this refusal;
-keep both files intact for diagnosis rather than editing either one.
+`bin/easel check` replays the log in a fresh session and compares it with
+the live canvas. The log, `paintings/lua/painting.lua`, is plain Lua with
+a line `--@ chunk N` before each chunk. The easel keeps a record of it in
+`out/easel/painting/committed.lua`. If the log is changed, shortened or
+missing, the easel refuses to continue.

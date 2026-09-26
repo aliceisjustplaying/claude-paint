@@ -1911,7 +1911,7 @@ mod tests {
     }
 
     /// Length-weighted fraction of the first two generations within 30° of
-    /// running across the canvas's length (vertical on a landscape canvas).
+    /// running across the canvas's length (vertical on a canvas wider than it is tall).
     fn across_fraction(k: &Cracks) -> f32 {
         let n = net(k, [150.0, 100.0]);
         let (mut on, mut all) = (0.0, 0.0);

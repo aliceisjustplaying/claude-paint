@@ -7,7 +7,7 @@
 //! stroke, so all mixing, smearing, dry-brush and ridges come from the
 //! bristle simulation, not from blend modes.
 
-use crate::bristle::{Gesture, Held, Orient, Rect, Tool, footprint};
+use crate::bristle::{Clip, Gesture, Held, Orient, Rect, Tool, footprint};
 use crate::canvas::{Canvas, Frame};
 use crate::color::{Rgb, from_oklab, to_oklab};
 use crate::mask::Mask;
@@ -100,6 +100,10 @@ pub struct Handling<'a> {
     /// part of a region that is seen (not hidden by a figure or a stone in
     /// front of it), while strokes still overshoot the region's own edges.
     pub limit: Option<std::sync::Arc<Mask>>,
+    /// Instead of a stencil clip, a fence (`crate::fence`): each stroke
+    /// overruns the region's edge by its own amount, found, soft or lost
+    /// along the contour as the fence's quality says. Set by `fence()`.
+    pub fence: Option<std::sync::Arc<crate::fence::Fence>>,
     /// Look and fill: after the strokes, dab paint into the bare spots the
     /// strokes left in the region (see `fill`). `None`: on when the pass
     /// means to cover (coverage ≥ `FILL_FROM`, a loaded brush, not a
@@ -181,6 +185,7 @@ impl<'a> Handling<'a> {
             scrub: 0,
             clip: false,
             limit: None,
+            fence: None,
             fill: None,
             hug: true,
             threshold: 0.3,
@@ -414,6 +419,14 @@ impl<'a> Handling<'a> {
         self.scrub = n;
         self
     }
+    /// Carry the passage up to the region's edge the way a brush does (see
+    /// `crate::fence`) instead of stopping every bristle on it: strokes are
+    /// clipped as with `clip(true)`, but each by its own overrun.
+    pub fn fence(mut self, fence: std::sync::Arc<crate::fence::Fence>) -> Self {
+        self.fence = Some(fence);
+        self.clip = true;
+        self
+    }
     pub fn clip(mut self, on: bool) -> Self {
         self.clip = on;
         self
@@ -618,6 +631,11 @@ impl Canvas {
             (None, true) => Some(mask),
             (None, false) => None,
         };
+        // a fence instead of a stencil (the stroke's own overrun is drawn in run_plans)
+        let clip = match &hd.fence {
+            Some(fe) if hd.clip && hd.cut_in.is_none() => Some(Clip::Fence { fence: fe, u: 0.0, limit: hd.limit.as_deref() }),
+            _ => clip.map(Clip::Mask),
+        };
         let before = self.wet.current;
         let slice = self.hand_slice_secs();
         // with hand time on, the pass's first slices can set before the look
@@ -644,7 +662,7 @@ impl Canvas {
     /// loop. Deterministic (its own random stream), and it sees only the
     /// pixels the canvas holds (a crop's margin is wider than a fill stroke
     /// reaches).
-    fn fill_gaps(&mut self, mask: &Mask, hd: &Handling, before: u32, film0: Option<&[f32]>, clip: Option<&Mask>, seed: u64) {
+    fn fill_gaps(&mut self, mask: &Mask, hd: &Handling, before: u32, film0: Option<&[f32]>, clip: Option<Clip<'_>>, seed: u64) {
         let f = self.f;
         let w = hd.tool.width.max(0.3);
         let cell = (0.5 * w).max(1.5 / f.scale);
@@ -789,7 +807,7 @@ impl Canvas {
             ring += 1;
         }
         if !plans.is_empty() {
-            self.run_plans(plans, (ex, ey), tool.width * 4.0, tool, hd, (0.03, 0.08), hd.limit.as_deref(), seed, rng, piles, None);
+            self.run_plans(plans, (ex, ey), tool.width * 4.0, tool, hd, (0.03, 0.08), hd.limit.as_deref().map(Clip::Mask), seed, rng, piles, None);
         }
     }
 
@@ -800,7 +818,7 @@ impl Canvas {
     /// between them (None for the fill and cut-in sub-passes: their time
     /// goes on the clock when the verb ends).
     #[allow(clippy::too_many_arguments)]
-    fn run_plans(&mut self, plans: Vec<(f32, f32, Option<Rect>, Plan)>, (ex, ey): (f32, f32), gap: f32, tool: &Tool, hd: &Handling, ramps: (f32, f32), clip: Option<&Mask>, seed: u64, rng: &mut Rng, piles: &mut Piles, slice: Option<f64>) {
+    fn run_plans(&mut self, plans: Vec<(f32, f32, Option<Rect>, Plan)>, (ex, ey): (f32, f32), gap: f32, tool: &Tool, hd: &Handling, ramps: (f32, f32), clip: Option<Clip<'_>>, seed: u64, rng: &mut Rng, piles: &mut Piles, slice: Option<f64>) {
         let f = self.f;
         // tiles are sized per axis from the footprints: tiles painted at the
         // same time are one tile apart, so a tile at least twice the largest
@@ -893,6 +911,11 @@ impl Canvas {
                 // footprint, inside this tile's rect; run_ordered never runs
                 // tiles with overlapping rects at once; `surf()` checked the
                 // buffers match the frame.
+                // a fence: this stroke's own overrun, drawn from where it starts
+                let clip = match clip {
+                    Some(Clip::Fence { fence, limit, .. }) => Some(Clip::Fence { fence, u: crate::fence::Fence::stroke_draw(p.pts[0], seed), limit }),
+                    c => c,
+                };
                 let r = unsafe { crate::bristle::drag_on(surf, &mut held, &g, clip, id, &mut scratch) };
                 b = crate::sched::union(b, r);
             }
@@ -1335,13 +1358,32 @@ fn hand_trace(hd: &Handling, drift: &crate::noise::Fbm, cx: f32, cy: f32, len: f
 }
 
 #[cfg(test)]
-pub(crate) fn hand_trace_for_test(hd: &Handling, drift: &crate::noise::Fbm, cx: f32, cy: f32, len: f32, rng: &mut Rng) -> Vec<(f32, f32)> {
-    hand_trace(hd, drift, cx, cy, len, 0.0, rng)
-}
-
-#[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Stroke geometry is hand-like by default and ruler-straight on request.
+    #[test]
+    fn strokes_bow_unless_ruled() {
+        use crate::bristle::Tool;
+        let bows = |h: &Handling| {
+            let drift = crate::noise::Fbm::new(1, 3, 300.0);
+            let mut rng = crate::rng::Rng::new(9);
+            let mut v: Vec<f32> = (0..200)
+                .map(|_| {
+                    let p = hand_trace(h, &drift, 500.0, 500.0, 150.0, 0.0, &mut rng);
+                    let (a, b, m) = (p[0], p[p.len() - 1], p[p.len() / 2]);
+                    let chord = ((b.0 - a.0).powi(2) + (b.1 - a.1).powi(2)).sqrt();
+                    // distance of the middle from the chord, relative to its length
+                    ((b.0 - a.0) * (a.1 - m.1) - (a.0 - m.0) * (b.1 - a.1)).abs() / chord / chord
+                })
+                .collect();
+            v.sort_by(f32::total_cmp);
+            v[v.len() / 2]
+        };
+        let hand = bows(&Handling::new(Tool::filbert(10.0)).curve(0.08, 0.0).drift(0.0, 100.0));
+        let ruler = bows(&Handling::new(Tool::filbert(10.0)).ruler());
+        assert!(hand > 0.03 && ruler < 1e-3, "median bow: hand {hand}, ruler {ruler}");
+    }
 
     /// Every pair of tiles whose footprints overlap is painted in the
     /// requested order (so a parallel run equals a serial one in that order).

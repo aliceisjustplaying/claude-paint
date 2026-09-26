@@ -1029,3 +1029,14 @@ exposure and the rest are unchanged.
   reproduced here (the chunk the painter tried isn't in the log). The
   same family: the light under the dark comes up through pickup and the
   tip. Open, as §5 said.
+
+## 11. Merged with main (branch `wet-merge`, 2026-09-26)
+
+Main at `4abe5b4` merged in: the fence, blunt presets, dry rims, twigs,
+cracks and the test audit. Main's dry-rims fix is re-expressed in this
+plough (each hair ploughs by its own size, above the film it rides on).
+The tip hair doesn't take the lift-off's extra drag, so lifted strokes
+reach the end of their path. Four test thresholds changed, among them
+`a_loaded_light_laid_lightly_stays_on_top`: at 500 px the old plough
+over-ploughed and cleared the dark out of the light's track (0.97, but
+0.58 at 2400 px). Everything is in `notes/wet_merge/MERGE.md`.

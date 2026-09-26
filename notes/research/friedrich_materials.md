@@ -1,5 +1,7 @@
 # Caspar David Friedrich: painting materials and technique
 
+*Process and hand (sequence, studies and their transfer, edges, pace, what copies got wrong) are in `friedrich_process.md`.*
+
 *Sourced technical report for a physical paint simulator. Every claim cites a source key; full URLs are in the "Sources" list at the end. "Uncertain" marks claims that are unverified, disputed or taken from a single object.*
 
 ## Bottom line

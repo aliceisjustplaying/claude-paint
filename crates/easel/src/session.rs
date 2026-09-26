@@ -16,6 +16,11 @@ use std::time::Instant;
 
 /// Marks the start of a chunk in a session file.
 pub const MARK: &str = "--@ chunk";
+/// The header line of a log whose sittings are enforced: the easel writes it
+/// for every session it starts, and a replay of a log with it is held to
+/// the same rule (`time::at_easel`). Logs from before have no such line and
+/// replay as they were painted.
+pub const STRICT: &str = "-- sittings enforced: a sitting ends at its length; the easel refuses marks until rest(hours) (notes/time.md)";
 
 pub struct Chunk {
     pub src: String,
@@ -94,6 +99,11 @@ pub struct Ran {
     pub field_secs: f64,
 }
 
+/// The tools that grow or compute a motif or a scene for the painter (trees,
+/// firs, rocks, meadows, solids, mountains, the world with its sky, light and
+/// aerial perspective), which `EASEL_WITHOUT=procedural` removes.
+pub const PROCEDURAL: &[&str] = &["tree", "tree_in", "tree_group", "fir", "fir_wood", "rock", "sward", "form", "terrain", "ridge", "world", "aerial", "haze"];
+
 impl Session {
     pub fn new(width: usize, undo_depth: usize) -> mlua::Result<Self> {
         if !hash_seed_fixed() {
@@ -120,6 +130,19 @@ impl Session {
         let prelude: (Function, Table) = lua.load(include_str!("prelude.lua")).set_name("prelude.lua").call((id, getmt))?;
         let st = Rc::new(RefCell::new(Studio::new(width)));
         api::install(&lua, st.clone())?;
+        // An experiment can take tools away from the painter (Round 7:
+        // painting without the procedural motif and scene generators):
+        // EASEL_WITHOUT="procedural" (the set below) or a comma list of
+        // globals. Replays are unaffected: a log painted without them never
+        // calls them.
+        if let Ok(w) = std::env::var("EASEL_WITHOUT") {
+            for k in w.split(',').map(str::trim).filter(|k| !k.is_empty()) {
+                let names: &[&str] = if k == "procedural" { PROCEDURAL } else { &[k] };
+                for &n in names {
+                    lua.globals().raw_set(n, Value::Nil)?;
+                }
+            }
+        }
         Ok(Session { lua: ManuallyDrop::new(lua), state, st, log: Vec::new(), snaps: BTreeMap::new(), undo_depth, keep: 0, spacing: 1, replay: false, heap: Some((snap_f, restore_f)), prelude: Some(prelude), _serials: serials, heap_secs: (0.0, 0.0) })
     }
 
@@ -129,6 +152,16 @@ impl Session {
         let mut s = Self::new(width, 0)?;
         s.replay = true;
         Ok(s)
+    }
+
+    /// Hold the painting to its sittings (a new session, or a log whose
+    /// header says so: `STRICT`).
+    pub fn set_strict(&mut self, on: bool) {
+        self.st.borrow_mut().strict = on;
+    }
+
+    pub fn strict(&self) -> bool {
+        self.st.borrow().strict
     }
 
     fn snap(&mut self) -> mlua::Result<Snap> {
@@ -183,12 +216,6 @@ impl Session {
             }
             self.spacing *= 2;
         }
-    }
-
-    /// The chunk counts snapshots are kept at (undo and checkpoints).
-    #[cfg(test)]
-    pub fn checkpoints(&self) -> Vec<usize> {
-        self.snaps.keys().copied().collect()
     }
 
     /// Run one chunk. On error nothing it did survives (canvas, globals,
@@ -348,6 +375,9 @@ impl Session {
         let _ = writeln!(s, "-- easel session {name:?}: a painting replayed chunk by chunk.");
         let _ = writeln!(s, "--   easel run paintings/lua/{name}.lua [--width 3200]");
         let _ = writeln!(s, "-- Each {MARK:?} line starts one chunk as it was run at the easel (clock = painting minutes).");
+        if self.strict() {
+            let _ = writeln!(s, "{STRICT}");
+        }
         for (i, c) in self.log.iter().enumerate() {
             let _ = writeln!(s, "\n{MARK} {} · clock {}", i + 1, c.clock);
             s.push_str(&c.src);
@@ -558,6 +588,12 @@ fn clean_error(e: &str) -> String {
     out.join("\n")
 }
 
+/// Whether a session file holds its sittings: the `STRICT` line in its
+/// header (before the first chunk).
+pub fn program_is_strict(text: &str) -> bool {
+    text.lines().take_while(|l| !l.trim_start().starts_with(MARK)).any(|l| l.trim_end() == STRICT)
+}
+
 /// Split a session file into chunks.
 pub fn parse_program(text: &str) -> Vec<String> {
     let mut chunks: Vec<String> = Vec::new();
@@ -619,6 +655,21 @@ mod tests {
         r##"wait(90); stipple(below(function(x) return 380 end), {width=3, color="#c8c6bc", coverage=1.5})"##,
     ];
 
+    /// A strict session's log says so in its header, and only then.
+    #[test]
+    fn the_log_header_carries_strictness() {
+        for on in [false, true] {
+            let mut a = Session::new(W, 0).unwrap();
+            a.set_strict(on);
+            a.run(CHUNKS[0]).unwrap();
+            let prog = a.program("t");
+            assert_eq!(program_is_strict(&prog), on, "{prog}");
+            assert_eq!(parse_program(&prog), vec![CHUNKS[0].to_string()]);
+        }
+        // (a chunk quoting the line isn't the header)
+        assert!(!program_is_strict(&format!("--@ chunk 1\n{STRICT}\n")));
+    }
+
     #[test]
     fn replay_is_exact_and_failures_roll_back() {
         let mut a = Session::new(W, 4).unwrap();
@@ -676,7 +727,7 @@ mod tests {
         }
         assert_eq!(s.log.len(), 8);
         // undo ring: 6, 7; checkpoints on a grid below it
-        let cp = s.checkpoints();
+        let cp: Vec<usize> = s.snaps.keys().copied().collect();
         assert!(cp.contains(&6) && cp.contains(&7) && cp.len() <= 4, "{cp:?}");
         // replace chunk 5 (a stroke): the log and the canvas are as if it
         // had been painted that way

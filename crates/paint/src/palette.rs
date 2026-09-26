@@ -1,16 +1,16 @@
-//! The painter's palette: a few tube paints, and mixing on the palette.
+//! Palettes: a few tube paints, and mixing on the palette.
 //!
-//! A painting asks for a color; the painter can only mix it from the tubes
-//! they own. `Palette::mix` searches mixtures of up to three tube paints (in
-//! proportions a painter would knife together) for the one that looks
-//! closest (OKLab distance), mixing the way pigments mix (Mixbox latent
-//! space, weighted by each paint's tinting strength). Colors the palette
-//! cannot reach come out as the nearest color the painter could actually
-//! make: the palette limits the gamut, as it did for the painter.
+//! Every color is mixed from the palette's tubes. `Palette::pile` mixes the
+//! parts it is given. `Palette::mix` searches mixtures of up to three tube
+//! paints (proportions on a grid of twelfths, then refined) for the one
+//! whose masstone is closest (OKLab distance), mixing in Mixbox latent
+//! space weighted by each paint's tinting strength. Colors the palette
+//! cannot reach come out as the nearest mixture: the palette limits the
+//! gamut.
 //!
 //! Masstone colors, hiding and tinting strength are approximations from
-//! pigment knowledge (not measurements); which pigments a painter owned is
-//! sourced per palette.
+//! pigment knowledge (not measurements); each palette's tube list cites its
+//! source.
 
 use crate::canvas::Canvas;
 use crate::color::{Rgb, hex, luminance, to_oklab};
@@ -118,16 +118,16 @@ const AIM_SPREAD: [(f32, f32); 4] = [(0.5, 0.2), (1.0, 0.45), (2.0, 0.25), (4.0,
 /// that line (a red rim, a milky blue veil) is penalized by its distance
 /// from it, with this weight.
 const AIM_THIN: (f32, f32) = (0.25, 0.3);
-/// A painter keeps a pile in the family of the color wanted: its own color
-/// (masstone) costs this much per unit of OKLab a/b distance from the look
-/// wanted. Aim may still push a pile's hue against the underlayer, but only
+/// A pile's own color (masstone) costs this much per unit of OKLab a/b
+/// distance from the look wanted, keeping aimed piles near the hue of the
+/// target. Aim may still push a pile's hue against the underlayer, but only
 /// where that buys a real improvement in the look.
 const AIM_FAMILY: f32 = 0.28;
 /// How a mark's area is spread over thicknesses (× the expected one,
 /// share of the area), as the eye averages it at viewing distance: the
 /// aim makes this mean look (in linear light) the look wanted. Measured by
-/// `handling::tests::probe_mark_thickness` (sparse marks, Friedrich ground,
-/// 1000px): a blunt brush (filbert, flat) lays most of its mark near 1–2×,
+/// `handling::tests::probe_mark_thickness` (sparse marks, `Style::friedrich`
+/// ground, 1000px): a blunt brush (filbert, flat) lays most of its mark near 1–2×,
 /// a pointed one (round sable, rigger) a thick core with thin, semi-
 /// transparent edges and tails (half its area at ½× or less), which over a
 /// dark dry darker than the core.
@@ -173,10 +173,7 @@ impl Palette {
         p
     }
 
-    /// The same palette restricted to the named tubes: a painter setting out
-    /// the few paints for one passage (lead white, smalt and a touch of
-    /// ochre for a sky) keeps its mixtures in one family, so neighboring
-    /// piles never jump between unrelated recipes. Panics on unknown names.
+    /// Return a palette restricted to the named tubes. Unknown names panic.
     pub fn only(&self, names: &[&str]) -> Palette {
         let tubes = names
             .iter()
@@ -215,11 +212,11 @@ impl Palette {
             .collect()
     }
 
-    /// Friedrich before ~1820: lead white, smalt (semi-transparent cobalt
-    /// glass, weak, in several grades), ochres and earths, vermilion, umber,
-    /// bone black (notes/research/friedrich_materials.md §4: CATS p.127,
-    /// NG pp.51–56, ALF p.348). Naples yellow is left out. For greens,
-    /// see `friedrich_early_greens`.
+    /// Lead white, smalt (semi-transparent cobalt glass, weak) and pale
+    /// smalt, yellow ochre, red earth, vermilion, raw umber, bone black
+    /// (notes/research/friedrich_materials.md §4: CATS p.127, NG pp.51–56,
+    /// ALF p.348). Naples yellow is not included. With green tubes added:
+    /// `friedrich_early_greens`.
     pub fn friedrich_early() -> Self {
         Palette::new(
             "Friedrich, early",
@@ -236,9 +233,10 @@ impl Palette {
         )
     }
 
-    /// Friedrich from ~1820: cobalt blue and chrome yellow join the palette
-    /// and largely replace smalt (ALF pp.341, 348–349; NG p.56). For
-    /// greens, see `friedrich_1820_greens`.
+    /// `friedrich_early` without smalt (pale smalt stays), plus cobalt blue
+    /// and chrome yellow (notes/research/friedrich_materials.md §4: ALF
+    /// pp.341, 348–349; NG p.56). With green tubes added:
+    /// `friedrich_1820_greens`.
     pub fn friedrich_1820() -> Self {
         let mut t = Palette::friedrich_early().tubes;
         t.retain(|t| t.name != "smalt");
@@ -247,33 +245,30 @@ impl Palette {
         Palette::new("Friedrich, after 1820", t)
     }
 
-    /// The tubes Friedrich added for his greens
-    /// (notes/research/friedrich_materials.md §9): Prussian blue, which he
-    /// used "very often" to mix greens with ochre, Naples yellow or chrome
-    /// yellow, and green earth, one of his few true green pigments
-    /// [MÄD p.102]. Masstones and numbers are documented approximations:
-    /// Prussian blue transparent and very strong [AP3 pp.196–197] (tinting
-    /// strength 3, below the sourced "very high", because Mixbox's latent
-    /// already carries some of a dark pigment's strength); green earth
-    /// translucent, weak, short of body [AP1 p.146; FIELD p.129], its
-    /// masstone from Munsell 7.5G/2.9/1.5 [AP1 Table 1].
+    /// Two tubes: Prussian blue and green earth
+    /// (notes/research/friedrich_materials.md). Masstones and numbers are
+    /// documented approximations: Prussian blue transparent and very strong
+    /// [AP3 pp.196–197] (tinting strength 3, below the sourced "very high",
+    /// because Mixbox's latent already carries some of a dark pigment's
+    /// strength); green earth translucent, weak, short of body [AP1 p.146;
+    /// FIELD p.129], its masstone from Munsell 7.5G/2.9/1.5 [AP1 Table 1].
     pub fn green_tubes() -> Vec<Tube> {
         vec![tube("Prussian blue", "#172440", 0.35, 0.45, 3.0), tube("green earth", "#3a4843", 0.2, 0.35, 0.3)]
     }
 
-    /// `friedrich_early` with his green tubes (`green_tubes`), for green
-    /// passages: meadows, foliage, summer. Kept apart from the base palette
-    /// because the aimed search would otherwise pick very strong Prussian
-    /// blue for skies (the sky ramp's miss halves but its recipes seam; and
-    /// his skies are smalt or cobalt [ALF; NPJ25]). Set out a sky family
-    /// with `only` when painting a sky from this palette.
+    /// `friedrich_early` plus `green_tubes`: Prussian blue (hiding 0.35,
+    /// stiffness 0.45, tinting strength 3) and green earth (hiding 0.2,
+    /// stiffness 0.35, tinting strength 0.3). The base palette leaves them
+    /// out: with very strong Prussian blue among the candidates, `aim` picks
+    /// it for light blue targets, and a smooth blue ramp's aimed recipes
+    /// switch between neighboring steps.
     pub fn friedrich_early_greens() -> Self {
         Palette::friedrich_early().with(Palette::green_tubes()).named("Friedrich, early, greens")
     }
 
-    /// `friedrich_1820` with his green tubes and Rinmann's green
-    /// (cobalt-zinc oxide: semi-transparent, weak, permanent [WEB-co]),
-    /// found, rarely, in paintings of c.1819–23 [MÄD p.102 n.3].
+    /// `friedrich_1820` plus `green_tubes` and Rinmann's green (cobalt-zinc
+    /// oxide: semi-transparent, weak, permanent [WEB-co]; hiding 0.35,
+    /// stiffness 0.5, tinting strength 0.4).
     pub fn friedrich_1820_greens() -> Self {
         let mut t = Palette::green_tubes();
         t.push(tube("Rinmann's green", "#5f8f76", 0.35, 0.5, 0.4));
@@ -285,16 +280,15 @@ impl Palette {
         Palette { name, ..self }
     }
 
-    /// A copper green (verdigris ground in oil): one of the "copper-containing"
-    /// true greens found in Friedrich's Dresden paintings [MÄD p.102], used
-    /// sparingly; not in the standard palettes (add it with `with`).
-    /// Masstone and numbers are assumptions; "poor hiding power in oil"
-    /// [AP2 p.132] (notes/research/friedrich_materials.md §9).
+    /// A copper green (verdigris ground in oil); not in the standard
+    /// palettes (add it with `with`). Masstone and numbers are assumptions;
+    /// "poor hiding power in oil" [AP2 p.132]
+    /// (notes/research/friedrich_materials.md).
     pub fn copper_green() -> Tube {
         tube("copper green", "#3f7f6a", 0.25, 0.4, 1.0)
     }
 
-    /// This palette with more tubes (a rare paint for one passage).
+    /// This palette with extra tubes appended.
     pub fn with(&self, extra: Vec<Tube>) -> Palette {
         let mut t = self.tubes.clone();
         t.extend(extra);
@@ -320,7 +314,7 @@ impl Palette {
         (mixbox::latent_to_linear_float_rgb(&lat), sct, stf)
     }
 
-    /// The pile knifed from these parts (tube index, fraction by volume;
+    /// The pile mixed from these parts (tube index, fraction by volume;
     /// fractions sum to 1), mixed the way the palette mixes: its masstone,
     /// scattering and stiffness (`error` is 0).
     pub fn pile(&self, parts: Vec<(usize, f32)>) -> Mixture {
@@ -355,15 +349,15 @@ impl Palette {
 
     /// Aim at the result: the mixture that, thinned with `medium` and laid
     /// `coats` thick over `under` (what is on the canvas there, see
-    /// `Canvas::under`), looks most like `want`. A painter judges a pile by
-    /// eye on the canvas, not by its masstone: a thin scumble meant to read
-    /// as a pale sky over a darker underpainting must be mixed paler than
-    /// the sky, a glaze deeper. Piles are judged over a spread of
+    /// `Canvas::under`), looks most like `want`. Piles are scored by their
+    /// look over the underlayer, not by their masstone: a thin semi-opaque
+    /// layer that should look pale over a darker underlayer is mixed paler
+    /// than the target, a glaze deeper. Piles are judged over a spread of
     /// thicknesses around `coats` (see `AIM_SPREAD`), so the choice favors
     /// piles that look right however thick the brush lays them; this also
     /// keeps neighboring targets from flipping between recipes. Targets no
     /// pile can reach (a light glaze over a dark ground) come out as the
-    /// nearest the painter could get. `error` is the OKLab miss of the
+    /// nearest reachable look. `error` is the OKLab miss of the
     /// mark's mean look (see `aim_for`).
     pub fn aim(&self, want: Rgb, under: Rgb, medium: f32, coats: f32) -> Mixture {
         self.aim_for(want, under, medium, coats, Marks::Blunt)
@@ -473,8 +467,8 @@ impl Palette {
         (parts, s0)
     }
 
-    /// The painter never mixes the same pile twice: jitter the proportions
-    /// (relative sd `amount`) and remix.
+    /// Jitter the proportions (relative sd `amount`) and remix, so repeated
+    /// piles of one recipe vary.
     pub fn remix(&self, m: &Mixture, amount: f32, rng: &mut Rng) -> Mixture {
         if amount <= 0.0 || m.parts.len() < 2 {
             return m.clone();
@@ -533,8 +527,8 @@ impl Canvas {
         pal.paint_for(want, self.judge_under(x, y, r), medium, coats)
     }
 
-    /// What a mark of radius `r` at (`x`, `y`) sits on, as a painter judges
-    /// it: the typical color there, not the average. Nine sub-discs across
+    /// What a mark of radius `r` at (`x`, `y`) sits on: the typical color
+    /// there, not the average. Nine sub-discs across
     /// the mark, combined by a median per OKLab channel, so a fleck of bare
     /// ground or a stray speck (which a mean in linear light lets dominate a
     /// dark passage) doesn't decide the pile. `Canvas::under` is the plain
@@ -549,10 +543,10 @@ impl Canvas {
     }
 }
 
-/// A painter doesn't flick a touch of a third paint in and out of neighboring
-/// piles: each tube in a pile costs a little (OKLab units), ramping in over
+/// Each tube in a pile costs a little (OKLab units), ramping in over
 /// its first `PARSIMONY_RAMP` of the pile so the cost is continuous in the
-/// proportions. Keeps aimed recipes in one family along a smooth passage.
+/// proportions. Along a smooth run of targets it keeps a small share of a
+/// third tube from switching in and out between neighboring piles.
 const PARSIMONY: f32 = 0.004;
 const PARSIMONY_RAMP: f32 = 0.1;
 
@@ -595,8 +589,8 @@ mod tests {
         dist(to_oklab(a), to_oklab(b))
     }
 
-    /// A smalt → lead-white sky over a smooth warm underlayer, `n` steps.
-    fn sky_ramp(n: usize) -> Vec<(Rgb, Rgb)> {
+    /// A smalt → lead-white ramp over a smooth warm underlayer, `n` steps.
+    fn blue_ramp(n: usize) -> Vec<(Rgb, Rgb)> {
         let (top, bottom) = (to_oklab(hex("#5f7398")), to_oklab(hex("#e2ddd0")));
         let (u0, u1) = (to_oklab(hex("#a9785a")), to_oklab(hex("#c4a482")));
         (0..=n).map(|k| {
@@ -625,7 +619,7 @@ mod tests {
         (worst, miss)
     }
 
-    /// A smooth smalt → lead-white sky over a smooth warm underlayer: aimed
+    /// A smooth smalt → lead-white ramp over a smooth warm underlayer: aimed
     /// piles change no faster than the target does (no recipe seams), at
     /// any thickness the brush lays.
     #[test]
@@ -633,7 +627,7 @@ mod tests {
         let full = Palette::friedrich_early();
         let fam = full.only(&["lead white", "smalt", "yellow ochre"]);
         let n = 80;
-        let ramp = sky_ramp(n);
+        let ramp = blue_ramp(n);
         let target_step = (0..n).map(|k| de(ramp[k].0, ramp[k + 1].0)).fold(0.0f32, f32::max);
         let (mix, _) = ramp_steps(&full, &ramp, false);
         let (aim, aim_miss) = ramp_steps(&full, &ramp, true);
@@ -654,20 +648,20 @@ mod tests {
     #[ignore]
     fn probe_contrast_aims() {
         let full = Palette::friedrich_1820();
-        let sea = full.only(&["lead white", "pale smalt", "cobalt blue", "raw umber", "bone black", "yellow ochre"]);
+        let subset = full.only(&["lead white", "pale smalt", "cobalt blue", "raw umber", "bone black", "yellow ochre"]);
         let lift = |c: Rgb, dl: f32| { let mut l = to_oklab(c); l[0] += dl; from_oklab(l) };
         let cases = [
-            ("glint on sea", hex("#3d4a5c"), lerp3(to_oklab(lift(hex("#3d4a5c"), 0.12)), to_oklab(hex("#d8cdb4")), 0.3)),
-            ("pebble top", hex("#4a3f33"), to_oklab(hex("#7a6d5c"))),
-            ("stone patch", hex("#6d6a70"), to_oklab(hex("#8a8590"))),
-            ("shadow on sand", hex("#b8a888"), to_oklab(hex("#8a8680"))),
-            ("bright glint", hex("#3d4a5c"), to_oklab(hex("#d8cdb4"))),
-            ("glint, fleck", { let (a, b) = (hex("#3d4a5c"), hex("#a9785a")); std::array::from_fn(|i| 0.8 * a[i] + 0.2 * b[i]) }, lerp3(to_oklab(lift(hex("#3d4a5c"), 0.12)), to_oklab(hex("#d8cdb4")), 0.3)),
-            ("light on dark sand", hex("#3a3128"), to_oklab(hex("#9a8f80"))),
+            ("light over blue", hex("#3d4a5c"), lerp3(to_oklab(lift(hex("#3d4a5c"), 0.12)), to_oklab(hex("#d8cdb4")), 0.3)),
+            ("light over brown", hex("#4a3f33"), to_oklab(hex("#7a6d5c"))),
+            ("light over gray", hex("#6d6a70"), to_oklab(hex("#8a8590"))),
+            ("dark over light", hex("#b8a888"), to_oklab(hex("#8a8680"))),
+            ("pale over blue", hex("#3d4a5c"), to_oklab(hex("#d8cdb4"))),
+            ("light over mix", { let (a, b) = (hex("#3d4a5c"), hex("#a9785a")); std::array::from_fn(|i| 0.8 * a[i] + 0.2 * b[i]) }, lerp3(to_oklab(lift(hex("#3d4a5c"), 0.12)), to_oklab(hex("#d8cdb4")), 0.3)),
+            ("light over dark", hex("#3a3128"), to_oklab(hex("#9a8f80"))),
         ];
         for (name, under, want) in cases {
             let want = from_oklab(want);
-            for (pn, pal) in [("full", &full), ("sea", &sea)] {
+            for (pn, pal) in [("full", &full), ("sub", &subset)] {
                 for coats in [0.3, 1.0, 2.0] {
                     let m = pal.aim(want, under, 0.3, coats);
                     let p = m.paint(0.3);
@@ -679,10 +673,10 @@ mod tests {
         }
     }
 
-    /// A light touch over a dark, aimed thin, stays in the family of the
-    /// color asked for: its pile is not a salmon (lead white + red earth,
-    /// masstone a +0.053 before) that only matches at exactly the expected
-    /// thickness and dries pink wherever the brush lays more.
+    /// A light touch over a dark, aimed thin, stays near the hue of the
+    /// color asked for: its pile is not one (such as lead white + red earth)
+    /// that only matches at exactly the expected thickness and dries pink
+    /// wherever the brush lays more.
     #[test]
     fn contrasting_aims_stay_in_family() {
         let pal = Palette::friedrich_1820();
@@ -703,7 +697,7 @@ mod tests {
     #[test]
     fn aim_hits_reachable_targets() {
         let pal = Palette::friedrich_1820();
-        // a mid sky blue over a pale ground, thin paint: reachable
+        // a mid blue over a pale ground, thin paint: reachable
         let (want, under) = (hex("#8898b0"), hex("#d8cdb8"));
         let m = pal.aim(want, under, 0.45, 1.0);
         assert!(m.error < 0.02, "{} {}", m.error, pal.recipe(&m));
@@ -748,9 +742,9 @@ mod canvas_tests {
         [m[0] / n, m[1] / n, m[2] / n]
     }
 
-    /// A painted sky field, dry: a pale-to-blue gradient laid with a broad
-    /// brush over a warm ground.
-    pub(super) fn sky_field(w: usize) -> Canvas {
+    /// A painted gradient field, dry: a blue-to-pale gradient laid with a
+    /// broad brush over a warm ground.
+    pub(super) fn graded_field(w: usize) -> Canvas {
         let st = Style::friedrich();
         let mut c = Canvas::new(w, 1.0, hex("#a9785a"));
         let all = Mask::from_fn(c.frame(), |_, _| 1.0);
@@ -780,28 +774,28 @@ mod canvas_tests {
     fn matched_marks_disappear() {
         let st = Style::friedrich();
         let pal = &st.palette;
-        let mut c = sky_field(500);
+        let mut c = graded_field(500);
         let mut k = 0;
         for (label, medium) in [("body", 0.15), ("semi", 0.55), ("thin", 0.8)] {
-            let (mut new, mut old) = ((0.0f32, 0.0f32), (0.0f32, 0.0f32));
+            let (mut aimed, mut masstone) = ((0.0f32, 0.0f32), (0.0f32, 0.0f32));
             for j in 0..4 {
                 let (x, y) = (150.0 + 230.0 * j as f32, 120.0 + 250.0 * j as f32);
                 let want = c.under(x, y, 7.0);
                 let p = c.aim(pal, want, (x, y), 7.0, medium, 0.7);
                 let (a, b) = dab(&mut c, p, (x, y), 40 + k);
-                new = (new.0.max(a), new.1.max(b));
-                // the old meaning: the same pile, its masstone read as its look over white
+                aimed = (aimed.0.max(a), aimed.1.max(b));
+                // for comparison: the same pile, its masstone read as its look over white
                 let m = pal.mix(want).paint(medium);
                 let q = Paint::tint(m.color, m.hiding(), m.stiff);
                 let (a, b) = dab(&mut c, q, (x + 60.0, y), 80 + k);
-                old = (old.0.max(a), old.1.max(b));
+                masstone = (masstone.0.max(a), masstone.1.max(b));
                 k += 1;
             }
-            println!("{label}: aimed ΔE mean {:.4} per-px {:.4} | old ΔE mean {:.4} per-px {:.4}", new.0, new.1, old.0, old.1);
+            println!("{label}: aimed ΔE mean {:.4} per-px {:.4} | masstone-as-tint ΔE mean {:.4} per-px {:.4}", aimed.0, aimed.1, masstone.0, masstone.1);
             // a JND in OKLab is about 0.02; aimed marks stay well under it
-            assert!(new.0 < 0.008 && new.1 < 0.012, "{label}: aimed mark shows: {new:?}");
+            assert!(aimed.0 < 0.008 && aimed.1 < 0.012, "{label}: aimed mark shows: {aimed:?}");
             if medium > 0.5 {
-                assert!(old.0 > 3.0 * new.0, "{label}: the old reading should have shown: {old:?} vs {new:?}");
+                assert!(masstone.0 > 3.0 * aimed.0, "{label}: the masstone-as-tint mark should show: {masstone:?} vs {aimed:?}");
             }
         }
     }
@@ -851,7 +845,7 @@ mod canvas_tests {
     }
 
     /// Brush paint keeps a mixture's scattering, even when it rounds to
-    /// hiding 1 (the review's repro: opaque neutral tubes mixed to 0.1).
+    /// hiding 1 (e.g. opaque neutral tubes mixed to 0.1).
     #[test]
     fn mixture_to_paint_preserves_scattering() {
         let pal = Palette::new("opaque neutral tubes", vec![
@@ -886,8 +880,8 @@ mod green_tests {
     use super::*;
     use crate::color::hex;
 
-    /// The green palettes reach summer greens the base palettes can only
-    /// approach, by mixing (Prussian blue with the yellows), as he did.
+    /// The green palettes mix greens at least as close as the base palettes
+    /// do (Prussian blue with the yellows).
     #[test]
     fn greens_are_mixed_closer() {
         for want in [hex("#4f6331"), hex("#2e3d2a"), hex("#93a14a"), hex("#6d7e3e")] {

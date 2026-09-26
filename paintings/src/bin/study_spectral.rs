@@ -1,8 +1,8 @@
 //! Study: spectral Kubelka–Munk (a port of spectral.js, `paint::spectral`)
 //! against the engine's color model (Mixbox for mixing, KM per RGB channel
-//! for layering), on painter's questions. A measuring sheet, not a
-//! painting: each swatch is a computed color, laid flat so the models can
-//! be compared side by side. The numbers are printed to stderr.
+//! for layering). A measuring sheet: each swatch is a computed color, laid
+//! flat so the models can be compared side by side. The numbers are printed
+//! to stderr.
 //!
 //! Layout (1000 units wide, top to bottom):
 //! A  greens, four pairs, blue → yellow in 11 steps by volume, each pair
@@ -14,10 +14,10 @@
 //!    four strips each
 //! C  glazes, each row RGB-KM (upper strip) over spectral (lower strip):
 //!    substrate, then 0.5, 1, 2, 4 coats, then the stack in the last cells
-//!    umber over sky blue · madder over yellow ochre · Prussian blue over
-//!    chrome yellow · umber over madder over sky blue
+//!    umber over smalt tint · madder over yellow ochre · Prussian blue over
+//!    chrome yellow · umber over madder over smalt tint
 //! D  aged varnish (`Finish::aged`'s #e6d3a4) at 0, 0.4, 1, 2, 4 coats
-//!    over a dark, a dark green, a deep blue, a mid sky, lead white;
+//!    over a dark, a dark green, a deep blue, a mid blue, lead white;
 //!    RGB-KM strip over spectral strip
 //! F  the same questions with *pigment-shaped* spectra (`shape_of`: each
 //!    tube's known spectral shape, fitted to its masstone): each block is
@@ -42,7 +42,7 @@ enum How {
 }
 const HOWS: [How; 4] = [How::Mixbox, How::RgbKm, How::SpecKm, How::SpecJs];
 
-/// All the tubes of the Friedrich palettes in one list.
+/// All the tubes of the `Palette::friedrich_*` green palettes in one list.
 fn tubes() -> Palette {
     let mut t = Palette::friedrich_early_greens().tubes;
     for x in Palette::friedrich_1820_greens().tubes {
@@ -238,7 +238,7 @@ fn main() {
     }
 
     // ---- C: glazes
-    let sky = masstone(&p, &[(idx(&p, "smalt"), 0.45), (idx(&p, "lead white"), 0.55)], How::Mixbox);
+    let tint = masstone(&p, &[(idx(&p, "smalt"), 0.45), (idx(&p, "lead white"), 0.55)], How::Mixbox);
     let ochre = p.tubes[idx(&p, "yellow ochre")].color;
     let chrome = p.tubes[idx(&p, "chrome yellow")].color;
     let umber = Film::paint(&p, "raw umber", 0.9);
@@ -248,10 +248,10 @@ fn main() {
     let madder = Film::tint(hex("#d8768a"), 0.06);
     let madder_over = |c: Rgb| stack(c, &[(&madder, 1.0)]);
     let glazes: [(&str, Rgb, Vec<&Film>); 4] = [
-        ("umber over sky blue", sky, vec![&umber]),
+        ("umber over smalt tint", tint, vec![&umber]),
         ("madder over yellow ochre", ochre, vec![&madder]),
         ("Prussian blue over chrome yellow", chrome, vec![&prussian]),
-        ("umber over madder over sky blue", madder_over(sky).0, vec![&umber]),
+        ("umber over madder over smalt tint", madder_over(tint).0, vec![&umber]),
     ];
     eprintln!("\n[C] glazes (RGB-KM | spectral | ΔE)");
     y += 6.0;
@@ -259,7 +259,7 @@ fn main() {
     for (name, sub, films) in &glazes {
         let f = films[0];
         // for the stacked row the spectral substrate is itself a spectral stack
-        let spec_sub = if name.starts_with("umber over madder") { madder_over(sky).1 } else { *sub };
+        let spec_sub = if name.starts_with("umber over madder") { madder_over(tint).1 } else { *sub };
         let mut line = format!("  {name:34}");
         for (k, &x) in coats.iter().enumerate() {
             let r = if x == 0.0 { *sub } else { f.rgb.over(*sub, x) };
@@ -272,13 +272,13 @@ fn main() {
         y += 44.0;
     }
     // the stacks the glazes' order question asks: A then B vs B then A
-    let (a1, b1) = stack(sky, &[(&madder, 1.0), (&umber, 1.0)]);
-    let (a2, b2) = stack(sky, &[(&umber, 1.0), (&madder, 1.0)]);
-    eprintln!("  sky + madder then umber: {}|{}; umber then madder: {}|{} (order ΔE rgb {:.3} spectral {:.3})", hexs(a1), hexs(b1), hexs(a2), hexs(b2), de(a1, a2), de(b1, b2));
+    let (a1, b1) = stack(tint, &[(&madder, 1.0), (&umber, 1.0)]);
+    let (a2, b2) = stack(tint, &[(&umber, 1.0), (&madder, 1.0)]);
+    eprintln!("  smalt tint + madder then umber: {}|{}; umber then madder: {}|{} (order ΔE rgb {:.3} spectral {:.3})", hexs(a1), hexs(b1), hexs(a2), hexs(b2), de(a1, a2), de(b1, b2));
 
     // ---- D: aged varnish
     let varnish = Film::varnish(hex("#e6d3a4"));
-    let subs = [("dark", hex("#1e1b19")), ("dark green", hex("#2c3a26")), ("deep blue", hex("#26324f")), ("mid sky", hex("#8d9bb8")), ("lead white", hex("#efe9dc"))];
+    let subs = [("dark", hex("#1e1b19")), ("dark green", hex("#2c3a26")), ("deep blue", hex("#26324f")), ("mid blue", hex("#8d9bb8")), ("lead white", hex("#efe9dc"))];
     eprintln!("\n[D] aged varnish #e6d3a4 (RGB-KM | spectral, ΔE between; shift = ΔE from the unvarnished)");
     y += 6.0;
     for (name, sub) in subs {
@@ -329,8 +329,8 @@ fn main() {
     let sh = |n: &str| spectral::fit_shape(p.tubes[idx(&p, n)].color, &shape_of(n).unwrap());
     let ochre_s = sh("yellow ochre");
     let chrome_s = sh("chrome yellow");
-    let sky_s = spec_mix(&p, &[(idx(&p, "smalt"), 0.45), (idx(&p, "lead white"), 0.55)], true);
-    let sky_b = spec_mix(&p, &[(idx(&p, "smalt"), 0.45), (idx(&p, "lead white"), 0.55)], false);
+    let tint_s = spec_mix(&p, &[(idx(&p, "smalt"), 0.45), (idx(&p, "lead white"), 0.55)], true);
+    let tint_b = spec_mix(&p, &[(idx(&p, "smalt"), 0.45), (idx(&p, "lead white"), 0.55)], false);
     let glaze_of = |n: &str, medium: f32, shaped: bool| spec_tube(&p, idx(&p, n), shaped).scaled(1.0 - medium);
     // madder: two alizarin/purpurin bands near 510 and 540 nm, rose over white
     let madder_shape = spectral::curve(&[(380.0, 0.45), (420.0, 0.4), (460.0, 0.3), (495.0, 0.14), (515.0, 0.08), (530.0, 0.1), (545.0, 0.07), (570.0, 0.15), (600.0, 0.55), (640.0, 0.8), (750.0, 0.85)]);
@@ -350,8 +350,8 @@ fn main() {
     let cases: Vec<Case> = vec![
         ("madder over yellow ochre", ochre, ochre_s, ochre, rgb_madder, madder.spec, madder_s),
         ("Prussian blue glaze over chrome yellow", chrome, chrome_s, chrome, &prs, glaze_of("Prussian blue", 0.8, false), glaze_of("Prussian blue", 0.8, true)),
-        ("umber glaze over smalt sky", sky_b.masstone_color(), sky_s.masstone_spectrum(), sky_b.masstone_color(), &ums, glaze_of("raw umber", 0.9, false), glaze_of("raw umber", 0.9, true)),
-        ("varnish over smalt sky", sky_b.masstone_color(), sky_s.masstone_spectrum(), sky_b.masstone_color(), rgb_varn, varnish.spec, varn_s),
+        ("umber glaze over smalt tint", tint_b.masstone_color(), tint_s.masstone_spectrum(), tint_b.masstone_color(), &ums, glaze_of("raw umber", 0.9, false), glaze_of("raw umber", 0.9, true)),
+        ("varnish over smalt tint", tint_b.masstone_color(), tint_s.masstone_spectrum(), tint_b.masstone_color(), rgb_varn, varnish.spec, varn_s),
         ("varnish over a Prussian-ochre dark green", dark_green_b.masstone_color(), dark_green.masstone_spectrum(), dark_green_b.masstone_color(), rgb_varn, varnish.spec, varn_s),
     ];
     for (name, sub_rgb, sub_shaped, sub_basis, rgbf, basisf, shapedf) in cases {

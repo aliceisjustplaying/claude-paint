@@ -55,9 +55,9 @@ The ranges come from comparing the thin-film form with a deep-layer form, a_c �
 | Hog bristle | 0.20–0.30 mm (fine hog 0.15–0.25) | Naturally split ("flagged") | [8][S] |
 | Kolinsky/red sable | ~60–120 µm | Single fine taper | [8][S] |
 
-In profilometry of oil paintings, the height features that best identify the painter sit at **0.2–0.4 mm**, matching the bristle widths used (**0.25 and 0.65 mm**) [7][V]. For macro impasto, *The Night Watch* has measured relief up to about 0.85 mm [42][S].
+In profilometry of oil paintings, the height features that best identify the painter sit at **0.2–0.4 mm**, matching the bristle widths used (**0.25 and 0.65 mm**) [7][V]. For macro impasto, a 17th-century canvas has measured relief up to about 0.85 mm [42][S].
 
-**Dry brush and scumble.** Describing Renoir's *Near the Lake*, the Art Institute of Chicago writes that he "dragged an almost dry brush across the surface, catching only the thread tops." This works even over a heavy, smooth ground: the deposit follows *contact*, not flow.
+**Dry brush and scumble.** A technical description of an 1879/80 canvas reports "an almost dry brush [dragged] across the surface, catching only the thread tops" [9]. This works even over a heavy, smooth ground: the deposit follows *contact*, not flow.
 
 ## 3. Film formation and drying
 
@@ -74,27 +74,27 @@ In profilometry of oil paintings, the height features that best identify the pai
 | Red iron oxide | ~0% | 0.3% | ~50 MPa |
 
   Lead white's strain at break fell from **7.3% at 0.2 years** to under 1% at 31 years [12][S]. Chalk-glue grounds are modeled with a break strain of **0.002** [21][V].
-- **Layer thicknesses.** A three-layer commercial ground from about 1880 (Renoir) measured **1.5–30 µm (chalk), 5–35 µm and 10–45 µm (lead white)** [9][V]. Mock-up oil layers measured **59–125 µm for one coat** and 110–188 µm for two [29][S]. Single paint layers run roughly 10–200+ µm, and varnish 5–50 µm [S; general cross-section ranges, low confidence].
-- **Conformal vs. filling.** The Renoir ground is "thicker and smoother, greatly diminishing the texture of the canvas weave" [9][V]. Orchard's law explains the physics: with the weave pitch λ ≈ 0.3–0.8 mm, a film only 10–20 µm thick has τ ∝ h⁻³ that is huge, and it may also have a yield floor. Thin paint therefore stays conformal to the weave, while thick fluid paint levels over it [E, from 3].
+- **Layer thicknesses.** A three-layer commercial ground from about 1880 measured **1.5–30 µm (chalk), 5–35 µm and 10–45 µm (lead white)** [9][V]. Mock-up oil layers measured **59–125 µm for one coat** and 110–188 µm for two [29][S]. Single paint layers run roughly 10–200+ µm, and varnish 5–50 µm [S; general cross-section ranges, low confidence].
+- **Conformal vs. filling.** That ground is "thicker and smoother, greatly diminishing the texture of the canvas weave" [9][V]. Orchard's law explains the physics: with the weave pitch λ ≈ 0.3–0.8 mm, a film only 10–20 µm thick has τ ∝ h⁻³ that is huge, and it may also have a yield floor. Thin paint therefore stays conformal to the weave, while thick fluid paint levels over it [E, from 3].
 
 ## 4. Canvas and ground
 
 **Thread counts (plain weave unless noted).** These are individual measured paintings, not period averages.
 
-| Painting / period | Threads/cm | Tag |
+| Canvas | Threads/cm | Tag |
 |---|---|---|
-| French 18th c. hemp (Desportes, Oudry, Hallé) | mostly 12–14 × 9.5–13 | [14][V] |
-| Boucher *L'Aurore* (hemp warp, linen weft) | 17 × 14 | [14][V] |
-| Ingres, 19th c. | 10 × 6 (coarse) to 16 × 10 | [14][V] |
-| Delacroix 1830 (twill linen) | 30 × 29 | [14][V] |
-| Troyon 1855 (fine linen) | 38 × 34 | [14][V] |
-| Renoir *Near the Lake* 1879/80 (commercial) | 26.0 × 29.9 | [9][V] |
-| Van Gogh, Tasset et L'Hôte commercial roll, 1888–90 | ~12 × 15–17 (e.g., 12.3 × 17.3) | [15][S] |
+| French 18th-century hemp | mostly 12–14 × 9.5–13 | [14][V] |
+| French 18th century, hemp warp and linen weft | 17 × 14 | [14][V] |
+| French 19th century | 10 × 6 (coarse) to 16 × 10 | [14][V] |
+| Twill linen, 1830 | 30 × 29 | [14][V] |
+| Fine linen, 1855 | 38 × 34 | [14][V] |
+| Commercial canvas, 1879/80 | 26.0 × 29.9 | [9][V] |
+| Commercial roll (Tasset et L'Hôte), 1888–90 | ~12 × 15–17 (e.g., 12.3 × 17.3) | [15][S] |
 
 A usable range for 19th-century canvases is **10–38 threads/cm**, which is a **0.26–1.0 mm pitch**. Warp and weft often differ by 10–40%.
 
 - **Irregularity.** Density along the warp is always more consistent than along the weft [16][V]. Weft "slubs" (thick spots) are the usual irregularity [16][S].
-- **Cusping (scalloping).** This is "a regular scalloping of the threads at the perimeter" left by the tacks used while the canvas was sized and grounded [13][V]. Over half of Vermeer's paintings show cusping reaching **more than 5 cm** in from all four sides [17][V]. Renoir's original tacks were **5.5–6 cm apart** [9][V]. Commercial pre-primed rolls often show *no* cusping on edges cut from the roll [16][V].
+- **Cusping (scalloping).** This is "a regular scalloping of the threads at the perimeter" left by the tacks used while the canvas was sized and grounded [13][V]. On the 1879/80 canvas the original tacks were **5.5–6 cm apart** [9][V]. Commercial pre-primed rolls often show *no* cusping on edges cut from the roll [16][V].
 - **Ground and texture.** Late-19th-century commercial grounds were either *à grain* (one layer, so more weave texture shows) or *lisse* (two layers, fills the interstices) [10][S]. There are no measured residual weave-relief amplitudes in the sources I found. My **estimate is 5–40 µm** peak to valley under *à grain* and about 2–10 µm under *lisse* **[E, unverified; measure from raking-light references]**.
 - **Mechanics.** Above about 80% RH the canvas *shrinks* as crimp increases, and once dry the glue size, not the canvas, carries the tension [18][V][25].
 
@@ -114,10 +114,9 @@ A usable range for 19th-century canvases is **10–38 threads/cm**, which is a *
 - Oil paint layer on panel, model: **S/t ≈ 4** (egg tempera about 3) [22][V]. For a 50–120 µm paint film that means 0.2–0.5 mm micro-cracking [E].
 - A phase-field study reports a median observed island size of **≈1.9 mm** (1.66 mm modeled) [26][S, unverified].
 - **Working range for 18th- and 19th-century canvas craquelure: islands of about 1–6 mm across** [E, bracketed by the three results above].
-- In a historic panel, cracks covered **about 18%** of the area, which implies about 9% linear shrinkage [22][S]. That is the extreme end. Typical canvas work should be far lower.
+- In a historic panel, cracks covered **about 18%** of the area, which implies about 9% linear shrinkage [22][S]. That is one panel measurement, not an estimate for this simulator's canvas.
 
-**Pattern features (Bucklow).** Bucklow used seven features: predominant direction; local jaggedness vs. global curvature; junction and termination type; the relationship between directions; distance between cracks; crack thickness; and network organization [18][V][20]. Human sorters matched 17th-century Dutch canvases, 18th-century French canvases and Italian and Flemish panels at **97% pairwise** accuracy. Discriminant analysis on Bézier-coded cracks reached **82%**, and pairwise **94%** [19][V].
-- **Dutch 17th-century canvas:** straight but jagged cracks, square islands, an orthogonal network. **French 18th-century canvas:** smooth, curved cracks with non-square islands [18][V][19].
+**Pattern features (Bucklow).** Bucklow used seven features: predominant direction; local jaggedness vs. global curvature; junction and termination type; the relationship between directions; distance between cracks; crack thickness; and network organization [18][V][20]. Patterns differ enough between groups of paintings that human sorters and a discriminant analysis on Bézier-coded cracks could tell the groups apart [19][V].
 - **Weave coupling depends on the ground.** "Jagged cracks with a rectangular pattern are associated with characteristically thin brittle grounds which allow cracks to faithfully follow the (plain) canvas weave. Smooth, curved cracks are associated with thick (possibly double) grounds", which "liberate" the pattern from the canvas [18][V].
 - **Junctions:** mostly T-shaped and near 90°. A crack relieves the stress normal to itself, so a new crack meets it at a right angle. Sequential nucleation gives orthogonal networks; simultaneous nucleation gives about 120° junctions. The top bar of every T formed first, which produces primary and secondary generations of cracks [18][V].
 - **Large-scale structure on canvas:** cracks relate to the stretcher bars. Corner cracks run **perpendicular to the diagonal**, confined to about **5–10% of the diagonal length** from each corner [21][V]. "Convection crackle" concentrates where stretcher bars trap moisture behind the canvas and is weaker directly over the bars [13][V].
@@ -132,51 +131,6 @@ A usable range for 19th-century canvases is **10–38 threads/cm**, which is a *
 - **Varnish yellowing.** Fresh dammar and mastic absorb mainly in the far UV (about 190–200 nm). Oxidation adds carbonyl and conjugated chromophores that push absorption past **400 nm**, so transmission from 400 to 600 nm falls, steepest at the blue end [30][S][31][S]. The degradation is strongest at the top surface of the varnish [30][S]. Mastic yellows more than dammar [S; https://www.sciencedirect.com/science/article/pii/S1296207408001647]. Aged varnish also *scatters* more at 600–700 nm, which gives a milky look [31][S]. A virtual-cleaning study measured a mean **ΔE ≈ 8.3** from aged varnish plus grime [S; https://www.researchgate.net/publication/287988566].
 - **Gloss and saturation.** Low-molecular-weight varnishes level the surface better, and a higher varnish refractive index increases saturation, gloss and depth [32][S]. Berns and de la Rie model the effect as a smoothed air–varnish interface over a varnish–paint interface whose scattering drops as the two indices match [32][S].
 
-## 7. Computer graphics literature
-
-| Paper | Method | Tag |
-|---|---|---|
-| Baxter, Liu, Lin 2004, *A Viscous Paint Model* / IMPaSTo | Simplified Stokes flow of a thick, free-surface paint layer on the GPU; pigment-based optics | [37][S] |
-| Baxter et al., dAb | Spring–mass brush head with haptic feedback | [37][S] |
-| Chu, Baxter, Wei, Govindaraju, NPAR 2010, *Detail-Preserving Paint Modeling for 3D Brushes* | Pre-stroke canvas snapshot plus a 2D pickup map matched to canvas resolution, which avoids resampling blur and keeps fine streaks | [38][S] |
-| Chen, Kim, Ito, Wang 2015, *WetBrush* | Bristle-level simulation; FLIP particles near the brush and an Eulerian grid on the canvas; 30–110 fps on a TITAN X | [39][S] |
-| Hirota, Tanoue, Kaneko 1998 | Drying-shrinkage spring network; springs break past a strain threshold | [36][S] |
-| Paquette, Poulin, Drettakis 2002 | Grid of stress and strength; crack starts where σ/S_b is highest and propagates perpendicular to the max stress while σ > S_c (S_b ≈ 1.5 S_c); stress relaxes within distance D_r of a crack; existing cracks finish propagating before new ones start; adhesion-driven peeling | [34][S] |
-| Iben and O'Brien 2009 | Physically guided surface crack patterns with artist-directed heuristics | [35][S] |
-| Wyvill et al. 2004; Cuch-Guillén et al. | Distance-transform crack networks; branching tapered Bézier craquelure | [40][41][S] |
-| Abas and Martinez 2002 | Crack classes: circular, rectangular, spider-web, unidirectional, random | [43][S] |
-
----
-
-## Implications for a simulator
-
-**A. Leveling as a scale-dependent filter with a yield floor.** Split the height field into bands (a Laplacian pyramid, or an FFT with radial bins). For band b with wavelength λ_b and local film thickness h:
-- τ_b = 3η_low(λ_b/2π)⁴/(σh³) and a_c,b = τ_y λ_b³/(8π³σh). Once h > λ_b/6, switch to the deep-layer form τ_yλ_b²/(4π²σ) and Stokes decay τ ≈ 2η/(σk), k = 2π/λ [E; standard capillary-wave result].
-- For each coefficient c: if |c| > a_c,b, set |c| ← max(a_c,b, |c|·e^(−Δt/τ_b)); otherwise leave it unchanged. Band-pass bands have zero mean, so volume is conserved.
-- Let τ_y and η_low ramp up after each stroke (thixotropic recovery, time scale of seconds to minutes) and diverge as the skin forms (hours to about 4–6 days) [11]. Skipping the simulation of days is fine: freeze leveling after roughly 1–2 hours of simulated time [E].
-- Parameters: σ = 0.035 N/m. **Glaze with medium:** τ_y 0–15 Pa, η 0.05–5 Pa·s. **Tube paint:** τ_y 100–1000 Pa, η_low 10³–10⁵ Pa·s. **Stiff impasto:** τ_y about 3000 Pa [1][2].
-
-**B. Bristle striations.** Set bristle pitch to 0.2–0.3 mm for hog (clumps up to about 0.65 mm) and 0.06–0.12 mm for sable [7][8]. Keep striation amplitude only where τ_y is high enough (table in section 1). With glazes, bristle striations should disappear, while stroke-edge ridges (λ 1–5 mm) remain.
-
-**C. Deposition on the weave.** Deposit only where the brush-bottom surface falls below canvas height plus existing paint (contact), weighted by the paint load. With a low load, paint lands only on thread crowns [9]. Pressing harder, or loading more fluid paint, fills the valleys. After deposition, run the leveling filter on the *total* surface, so thin films stay conformal and thick fluid films bridge the weave.
-
-**D. Canvas generator.** Pitch 0.26–1.0 mm, with warp and weft counts differing by 10–40%. Add weft spacing jitter plus sparse weft slubs (1.5–3× diameter, a few mm long) [E]. Keep the warp more regular [16]. Add cusping: sinusoidal thread displacement with period equal to the tack spacing (about 5–6 cm), decaying over 3–8 cm from tacked edges. Skip it on edges "cut from the roll" [9][16][17]. Model the ground as a leveling pass over the weave: *à grain* uses one pass with h about 30 µm, *lisse* two passes with total h about 60–110 µm [9][10].
-
-**E. Craquelure generator** (replaces the Voronoi version):
-1. **Sequential, not Voronoi.** Stress-driven, Paquette-style [34]: nucleate at the maximum σ/strength, propagate perpendicular to the principal stress and relax stress within a band (see step 3). Later cracks meet earlier ones in T-junctions at about 90° [18]. Voronoi gives 120° Y-junctions, which correspond to simultaneous nucleation [18]; I'd keep them only for fast drying crackle [E].
-2. **Stress field sources:** corner zones (cracks perpendicular to the diagonal, within 5–10% of the diagonal) [21]; stretcher-bar outlines (convection crackle, weaker directly over the bars) [13]; drying shrinkage of the paint itself, highest for verdigris, lead-and-litharge, zinc white and bitumen and lowest for iron oxide [12][27].
-3. **Spacing:** set the relaxation distance D_r ≈ S/2. Use S ≈ 30–50 × ground thickness for age cracks (about 5–15 mm with a 0.15–0.3 mm ground; 6 ± 3 mm observed) [21], trending toward a median island of about 2 mm over a long simulated age [26][S]. For drying crackle, S ≈ 4 × local paint thickness [22], which is **thickness-dependent**, so impasto cracks coarser than thin passages.
-4. **Weave bias:** a direction prior aligned with warp and weft, with strength w = clamp(1 − t_ground/t₀) and t₀ ≈ 100 µm [E; qualitative rule from 18]. With a thin ground (w → 1), snap crack paths to thread lines with a step equal to the thread pitch, producing jagged rectangular islands (the "Dutch" look). With a thick double ground (w → 0), smooth the paths with curvature noise (the "French" look).
-5. **Geometry per crack:** age cracks 50–100 µm wide and cut through the full paint-plus-ground depth; drying cracks about 90–125 µm wide and shallower, with rounded edges exposing the layer below [23]. Cupping: lift island edges by a profile of height ∝ (distance to crack)⁻¹ over about 10–20% of the island width, with amplitude around 10–50 µm [E, unsourced]. This gives the raking-light rims.
-6. **Dirt:** a separate dark, absorbing KM layer that fills crack grooves and the downhill sides of relief.
-
-**F. Aging optics (KM layer).**
-- Raise the binder refractive index from 1.48 to 1.57 and cut scattering, weighting lead white's loss of hiding power beyond the RI effect. This thins the effective hiding of thin layers and reveals pentimenti [28].
-- Add a varnish layer, 5–50 µm, with absorption rising steeply below about 450–500 nm and concentrated in the top of the film [30][31].
-- Varnish over the leveled surface gives a smoother specular lobe (a lower roughness parameter) [32].
-
----
-
 ## Sources
 1. Ranquet et al., "A holistic view on the role of egg yolk in Old Masters' oil paints," *Nat. Commun.* 2023. https://pmc.ncbi.nlm.nih.gov/articles/PMC10050151/
 2. "Rheology, Chemistry and Microstructure of Oil and Tempera Paints" (KIT dissertation). https://publikationen.bibliothek.kit.edu/1000162025/151394380
@@ -186,15 +140,14 @@ A usable range for 19th-century canvases is **10–38 threads/cm**, which is a *
 6. Cornell NYSIPM linseed oil profile. https://ecommons.cornell.edu/bitstream/handle/1813/56131/linseed-oil-MRP-NYSIPM.pdf
 7. Ji, McMaster et al., "Discerning the painter's hand: machine learning on surface topography," *npj Herit. Sci.* 2021. https://www.nature.com/articles/s40494-021-00618-w
 8. da Vinci brush guide https://www.yumpu.com/en/document/view/2351054/10-the-artist-brush-resource-guide-da-vinci; Blick https://www.dickblick.com/learning-resources/buying-guides/brush-fiber-differences/
-9. Art Institute of Chicago, Renoir *Near the Lake* technical report. https://publications.artic.edu/api/epub/paintingsanddrawings/135638/print_view
-10. AIC Renoir catalog glossary (*à grain*/*lisse*). https://publications.artic.edu/renoir/reader/paintingsanddrawings/section/135630/135630_anchor
+9. Art Institute of Chicago, technical report on an 1879/80 painting. https://publications.artic.edu/api/epub/paintingsanddrawings/135638/print_view
+10. Art Institute of Chicago, paintings catalog, glossary (*à grain*/*lisse*).
 11. Golden, "Weighing In on the Drying of Oils." https://justpaint.org/weighing-in-on-the-drying-of-oils/
 12. Janas et al., "Shrinkage and mechanical properties of drying oil paints," *npj Herit. Sci.* 2022. https://www.nature.com/articles/s40494-022-00814-2
 13. Getty, *Conserving Canvas*, glossary. https://www.getty.edu/publications/conserving-canvas/glossary/
 14. "A Study of French Painting Canvases," *JAIC* 20(1). https://cool.culturalheritage.org/jaic/articles/jaic20-01-001_4.html
-15. Tasset et L'Hôte grounds (Van Gogh). https://www.researchgate.net/publication/265251185
+15. Tasset et L'Hôte commercial grounds, 1888–90. https://www.researchgate.net/publication/265251185
 16. Johnson/Erdmann TCAP, "Interpreting Results." https://www.ece.rice.edu/~dhj/TCAP/ITC.html
-17. *Counting Vermeer* 6.3, Cusping. https://countingvermeer.rkdstudies.nl/6-exploiting-weave-maps/63-cusping/
 18. P. de Willigen, *A Mathematical Study on Craquelure…*, TU Delft 1999. https://repository.tudelft.nl/file/File_12873aa5-9b16-4a33-b9f0-ab1ed6ab3cd1
 19. Hamilton Kerr Institute, Bucklow, "The Classification of Craquelure." https://www.hki.fitzmuseum.cam.ac.uk/projects/cracks2
 20. Bucklow, "The description of craquelure patterns," *Stud. Conserv.* 42 (1997). https://www.tandfonline.com/doi/abs/10.1179/sic.1997.42.3.129
@@ -208,7 +161,7 @@ A usable range for 19th-century canvases is **10–38 threads/cm**, which is a *
 28. Laurie, RI of linseed film https://www.researchgate.net/publication/252852261; UvA thesis https://pure.uva.nl/ws/files/4280227/53044_thesis.pdf
 29. Pozo-Antonio et al., *Coatings* 12:601 (2022). https://www.mdpi.com/2079-6412/12/5/601
 30. Theodorakopoulos et al., depth gradients in aged varnishes https://opg.optica.org/as/abstract.cfm?uri=as-61-10-1045; de la Rie 1988 https://scispace.com/papers/photochemical-and-thermal-degradation-of-films-of-dammar-18bi1sndbx
-31. Kirchner et al., Van Gogh *Field with Irises*, Part 1: Varnish (2018). https://onlinelibrary.wiley.com/doi/10.1002/col.22162
+31. Kirchner et al., *Color Research and Application* (2018), Part 1: Varnish. https://onlinelibrary.wiley.com/doi/10.1002/col.22162
 32. de la Rie 1987 https://doi.org/10.1179/sic.1987.32.1.1; Berns and de la Rie 2003 https://doi.org/10.1179/sic.2003.48.4.251
 33. Human detection of soot on works of art (Caltech). https://authors.library.caltech.edu/records/n944g-0fr77
 34. Paquette, Poulin and Drettakis, GI 2002. https://graphicsinterface.org/wp-content/uploads/gi2002-8.pdf
@@ -219,5 +172,5 @@ A usable range for 19th-century canvases is **10–38 threads/cm**, which is a *
 39. Chen et al., WetBrush 2015. https://www.zhilichen.com/research/wet_brush/2015-WB.pdf
 40. Wyvill et al., batik cracks 2004. https://isgwww.cs.uni-magdeburg.de/~stefans/npr/entry-Wyvill-2004-RCB.html
 41. Cuch-Guillén et al., synthetic craquelure. https://www.iri.upc.edu/files/scidoc/3058-Synthetic-craquelure-generation-for-unsupervised-painting-restoration.pdf
-42. *Night Watch* costume study. https://pmc.ncbi.nlm.nih.gov/articles/PMC12360951/
+42. Surface relief study of a 17th-century canvas. https://pmc.ncbi.nlm.nih.gov/articles/PMC12360951/
 43. Abas and Martinez 2002. https://eprints.soton.ac.uk/257382/1/dsp2002.pdf

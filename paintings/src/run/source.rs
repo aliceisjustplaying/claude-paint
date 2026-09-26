@@ -259,21 +259,21 @@ mod tests {
 
     #[test]
     fn finds_stage_blocks_and_names() {
-        let s = "fn main() {\n    let a = 1;\n    if o.stage(\"sky\", &mut c, &mut r) {\n        paint(\"}\");\n    }\n    let b = 2;\n    if o.stage(\"far range\", &mut c, &mut r) { x(); }\n    o.end(&mut c, &mut r);\n}\nfn helper() {}\n";
+        let s = "fn main() {\n    let a = 1;\n    if o.stage(\"first\", &mut c, &mut r) {\n        paint(\"}\");\n    }\n    let b = 2;\n    if o.stage(\"second pass\", &mut c, &mut r) { x(); }\n    o.end(&mut c, &mut r);\n}\nfn helper() {}\n";
         assert_eq!(stage_block(s, 3, 8), Some((4, 8)));
         assert_eq!(stage_block(s, 7, 8), Some((6, 8)));
         assert_eq!(stage_block(s, 8, 5), None);
-        assert_eq!(declared_stages(s), (vec!["sky".to_string(), "far range".to_string()], false));
+        assert_eq!(declared_stages(s), (vec!["first".to_string(), "second pass".to_string()], false));
         assert!(declared_stages("for n in x { if o.stage(n, &mut c, &mut ()) {} }").1);
         assert_eq!(declared_stages("// o.stage(\"no\")\n").0, Vec::<String>::new());
     }
 
     #[test]
     fn tags_only_in_plain_comments() {
-        let s = "a(); // ckpt: from oak\n// ckpt: from sky\n/// // ckpt: from x\nlet s = \"// ckpt: from y\";\n// see `// ckpt: from z`\n    // ckpt: end\n";
+        let s = "a(); // ckpt: from later\n// ckpt: from first\n/// // ckpt: from x\nlet s = \"// ckpt: from y\";\n// see `// ckpt: from z`\n    // ckpt: end\n";
         let t = tags(s);
-        assert_eq!(t[0], Some(Tag::From("oak".into(), false)));
-        assert_eq!(t[1], Some(Tag::From("sky".into(), true)));
+        assert_eq!(t[0], Some(Tag::From("later".into(), false)));
+        assert_eq!(t[1], Some(Tag::From("first".into(), true)));
         assert_eq!(&t[2..5], &[None, None, None]);
         assert_eq!(t[5], Some(Tag::End));
     }

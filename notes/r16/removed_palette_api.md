@@ -39,3 +39,30 @@ No automatic `Canvas::aim`:
 use paint::{Canvas, Palette};
 Canvas::new(10, 1.0, [1.0; 3]).aim(&Palette::smalt_box(), [0.5; 3], (5.0, 5.0), 1.0, 0.3, 1.0);
 ```
+
+Color matching is not part of the physical paint API.
+
+No automatic `Paint::aimed`:
+```compile_fail,E0599
+use paint::Paint;
+Paint::aimed([0.5; 3], [0.2; 3], 1.0, 0.5, 0.5);
+```
+
+No automatic `Paint::tint`:
+```compile_fail,E0599
+use paint::Paint;
+Paint::tint([0.5; 3], 0.5, 0.5);
+```
+
+No automatic `Paint::glaze`:
+```compile_fail,E0599
+use paint::Paint;
+Paint::glaze([0.5; 3]);
+```
+
+Spectra are supplied directly or converted from RGB, not fitted to targets:
+```compile_fail,E0425
+use paint::spectral;
+spectral::fit_shape([0.5; 3], &[0.5; spectral::N]);
+```
+

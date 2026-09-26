@@ -46,10 +46,9 @@ pub struct Linen {
 }
 
 impl Linen {
-    /// Fine plain-weave linen, 14 × 12 threads/cm (inside the 10–16
-    /// threads/cm proxy range in notes/research/friedrich_materials.md §1);
-    /// the warp is more even than the weft (TCAP,
-    /// notes/research/oil_paint_physics.md §4).
+    /// Fine plain-weave linen, 14 × 12 threads/cm (inside the 10–38
+    /// threads/cm of 19th-century canvases); the warp is more even than the
+    /// weft (TCAP, notes/research/oil_paint_physics.md §4).
     pub fn fine(seed: u64) -> Self {
         Linen { warp_per_cm: 14.0, weft_per_cm: 12.0, crown_um: 160.0, slubs: 0.7, seed }
     }

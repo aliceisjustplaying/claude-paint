@@ -1,18 +1,17 @@
-//! Painter style profiles: which tools a painter reaches for and how they
-//! handle them. Written from knowledge of the painter, never from images.
+//! Style profiles: a support and ground, a tool kit, a palette and
+//! handling presets.
 //!
-//! A `Style` is data: a support and ground, a tool kit and handling
-//! parameters for the kinds of passage a painting is made of (sky, body of a
-//! form, detail, line, blending). Paintings ask the style for a `Handling`
-//! and supply geometry and color.
+//! A `Style` is data: linen, ground layers, five tools (`broad`, `body`,
+//! `detail`, `line`, `blender`), a palette, medium fractions and blending
+//! settings. Paintings ask the style for a `Handling` and supply geometry
+//! and color.
 //!
 //! The handling presets (`broad`, `body`, `detail`, `hatch`, `glaze`,
-//! `blend`) are a vocabulary of techniques with this painter's tools, not
-//! finished recipes: each has a hand (strokes arc, wander, break off, press
-//! unevenly) but no direction or look of its own. The painter decides which
-//! way strokes run (`angle`), whether they criss-cross (`cross`), how much
-//! they bow (`curve`), wander (`drift`) and in what order an area is worked
-//! (`order`, `sweep`).
+//! `blend`) choose stroke lengths, paths, pressure variation, placement and
+//! order. Their fields are public and are listed in each preset below;
+//! every one can be changed with the `Handling` builder methods, for
+//! example stroke direction (`angle`), crossing (`cross`), bow (`curve`),
+//! wander (`drift`) and the order an area is worked in (`order`, `sweep`).
 
 use crate::bristle::{Orient, Tool};
 use crate::canvas::Canvas;
@@ -39,10 +38,10 @@ pub enum Apply {
     Knife { texture: f32 },
     /// Rolled on: a fine, even orange-peel texture.
     Roller,
-    /// Brushed with a broad hog brush as a primer does it: spread in crossing
-    /// strokes whose direction drifts over the canvas, then laid off with
-    /// light passes of the clean brush; fine, broken bristle striations
-    /// stay (see `brush_ground`).
+    /// Brushed with a broad hog brush: spread in crossing strokes whose
+    /// direction drifts over the canvas, then laid off with light passes of
+    /// the clean brush; fine, broken bristle striations stay (see
+    /// `brush_ground`).
     Brush,
 }
 
@@ -68,24 +67,24 @@ pub struct Style {
     pub raw: Rgb,
     /// Preparation layers, bottom first.
     pub ground: Vec<Ground>,
-    /// Tool for large atmospheric areas (sky, fog, water).
+    /// Tool for large areas of thin paint (`broad`).
     pub broad: Tool,
-    /// Tool for building forms (land, rocks, masses).
+    /// Tool for body color (`body`).
     pub body: Tool,
-    /// Tool for small forms and edges.
+    /// Tool for small marks and edges (`detail`, `hatch`).
     pub detail: Tool,
-    /// Tool for lines: twigs, rigging, grasses.
+    /// Tool for lines (`line_tool`).
     pub line: Tool,
-    /// Tool for softening wet passages (None = the painter leaves strokes).
+    /// Tool for softening wet passages (`blend`; None: no blender).
     pub blender: Option<Tool>,
     /// Blending passes over broad areas.
     pub blend_passes: usize,
     /// Pressure used when blending (light = gentle fusing).
     pub blend_pressure: f32,
-    /// The tube paints this painter mixes everything from.
+    /// The tube paints every preset mixes from.
     pub palette: Palette,
-    /// Fraction of oil medium in the paint for body passages and for thin,
-    /// atmospheric passages.
+    /// Fraction of oil medium in the paint for body color (`body`) and for
+    /// thin paint (`broad`).
     pub body_medium: f32,
     pub thin_medium: f32,
     /// How unevenly each pile is mixed (relative sd of proportions).
@@ -95,19 +94,14 @@ pub struct Style {
 }
 
 impl Style {
-    /// Caspar David Friedrich (1774–1840), Dresden practice around 1820.
-    /// Sources: notes/research/friedrich_materials.md.
+    /// A profile built from notes/research/friedrich_materials.md.
     ///
-    /// - Fine handwoven plain linen bought ready primed [KÖR p.283];
-    ///   10–16 threads/cm (proxy, Eckersberg's Dresden canvases [CATS-E]).
-    /// - Dresden grounds: 2–4 thin layers; lower ocher / red earth / chalk
-    ///   layers "only served to smooth and even out the weave"; the top layer
-    ///   brushed, its striations showing through the thin paint [KÖR p.284].
-    ///   *Two Men Contemplating the Moon* has a reddish-ocher top ground used
-    ///   as the mid-tone [KÖR p.284]. Ground total ~150–300 µm (proxy).
-    /// - One or two very thin paint layers over a thin underpainting; skies,
-    ///   mist and far hills stippled; paint pools in the ground texture
-    ///   [CATS p.127; NG p.56].
+    /// - Plain linen, 15 × 13 threads/cm (10–16 threads/cm proxy range, §1),
+    ///   440 mm wide.
+    /// - Ground (§2): two knifed layers (110 µm and 70 µm) that level the
+    ///   weave, then a brushed top layer (60 µm) whose striations stay;
+    ///   total 240 µm (proxy range ~150–300 µm).
+    /// - `Palette::friedrich_1820` (§4).
     pub fn friedrich() -> Self {
         Style {
             name: "Caspar David Friedrich",
@@ -130,16 +124,15 @@ impl Style {
             body_medium: 0.2,
             thin_medium: 0.45,
             mix_jitter: 0.06,
-            // relief light: 0.2 embossed every stroke into creases ("grooves"); 0.06 keeps
-            // a hint of weave and ridge without them
             relief: (0.06, 0.006),
         }
     }
 
-    /// Friedrich's early Berlin grounds (*Monk by the Sea*, *Abbey in the
-    /// Oakwood*): bright red, then two light brown layers, the first two put
-    /// on with a spatula, the third looking rolled on, with a finely
-    /// textured structure he exploited [CATS p.127].
+    /// `friedrich` on a 1714 mm canvas of 12 × 11 threads/cm linen, with
+    /// `Palette::friedrich_early` and the three-layer ground of
+    /// notes/research/friedrich_materials.md §2: bright red, then two light
+    /// brown layers, the first two knifed, the third rolled on (a fine
+    /// texture) [CATS p.127].
     pub fn friedrich_early() -> Self {
         Style {
             width_mm: 1714.0,
@@ -154,8 +147,8 @@ impl Style {
         }
     }
 
-    /// A primed canvas as this painter bought or made it: linen of the
-    /// painter's usual kind and physical size, and the ground layers.
+    /// A primed canvas: this style's linen and physical width (`width_mm`),
+    /// with the ground layers applied bottom first.
     pub fn prepare(&self, width_px: usize, aspect: f32, seed: u64) -> Canvas {
         self.prepare_on(Canvas::new(width_px, aspect, self.raw), seed)
     }
@@ -189,26 +182,21 @@ impl Style {
     }
 }
 
-/// A brushed top ground, put on as a primer brushes out lead white in oil
-///: the paste is first spread with a broad hog
-/// brush in crossing strokes whose direction wanders over the canvas, then
-/// laid off while wet with light passes of the unloaded brush held low, which
+/// A brushed top ground: the paste is first spread with a broad hog brush
+/// in crossing strokes whose direction wanders over the canvas, then laid
+/// off while wet with light passes of the unloaded brush held low, which
 /// skim rather than plough, level the spreading's stroke edges and leave
-/// only fine, broken bristle striations. (Before loop 2 the paste went on in
-/// long, full, parallel strokes that set with their edge ridges a few mm
-/// apart: a horizontal wood-grain under every thin sky. Ploughed ridges
-/// were tall, sharp crests that thin sky paint drained off, leaving
-/// one-pixel lines of bare ground.)
+/// only fine, broken bristle striations.
 fn brush_ground(c: &mut Canvas, g: &Ground, s: u64) {
     let all = Mask::from_fn(c.frame(), |_, _| 1.0);
     let hog = Tool { lay: 1.2, ragged: 0.2, ..Tool::hog_flat(40.0) };
     let col = g.color;
-    // the direction the primer works in drifts over the canvas, patch by
-    // patch (~90 units = 40 mm; up to ±0.7 rad, across on average)
+    // the stroke direction drifts over the canvas, patch by patch (~90
+    // units = 40 mm; up to ±0.7 rad, horizontal on average)
     let turn = move |x: f32, y: f32| 1.4 * (crate::surface::vnoise(x / 90.0, y / 90.0, s ^ 0x9e37) - 0.5);
     // the paste is pushed a little ahead of the bristles, not ploughed
-    // into ridges (a hog's own push, 0.3, piled it 2x as thick at the
-    // stroke edges: tall sharp crests the thin sky drained off)
+    // into ridges (with a hog's own push, 0.3, it piles 2x as thick at the
+    // stroke edges: tall, sharp crests that thin paint drains off)
     let spread = Handling::new(Tool { push: 0.15, ..hog.clone() })
         .color(move |_, _| col)
         .paint(g.hiding, g.stiff)
@@ -249,10 +237,10 @@ fn brush_ground(c: &mut Canvas, g: &Ground, s: u64) {
 }
 
 impl Style {
-    /// Broad atmospheric passage (sky, fog, sea): long soft strokes of thin
-    /// paint swung from the elbow, so they bow into long arcs and their
-    /// direction wanders across the passage. Give it a direction (`angle`);
-    /// the default is across the canvas.
+    /// The broad tool with thin paint (`thin_medium`): strokes 80–220 units
+    /// long that bow into long arcs (`curve`) and whose direction wanders
+    /// over 350-unit patches (`drift`). Set the direction with `angle`; the
+    /// default is horizontal.
     pub fn broad(&self) -> Handling<'_> {
         Handling::new(self.broad.clone())
             .length(80.0, 220.0)
@@ -270,9 +258,9 @@ impl Style {
             .ramps(0.12, 0.4)
     }
 
-    /// Building a form in body color: shorter strokes from the wrist, more
-    /// bowed and broken, the direction wandering from patch to patch. Point
-    /// them along the form (`angle`).
+    /// The body tool with body color (`body_medium`): strokes 20–60 units
+    /// long, more bowed and broken than `broad`, the direction wandering
+    /// over 150-unit patches. Set the direction with `angle`.
     pub fn body(&self) -> Handling<'_> {
         Handling::new(self.body.clone())
             .length(20.0, 60.0)
@@ -289,7 +277,8 @@ impl Style {
             .swell(0.22)
     }
 
-    /// Small forms and edges, cut in precisely.
+    /// The detail tool with paint thinned by 0.1 medium: strokes 4–14 units
+    /// long, clipped to the mask (`clip`).
     pub fn detail(&self) -> Handling<'_> {
         Handling::new(self.detail.clone())
             .length(4.0, 14.0)
@@ -307,10 +296,9 @@ impl Style {
             .swell(0.2)
     }
 
-    /// Short hatched strokes side by side, "like a closely woven textile"
-    /// [NG pp.49–50]: conifers, grass, the texture of a far slope. One
-    /// family of short, nearly straight strokes laid passage by passage; give
-    /// them their direction (`angle`), or `cross` them.
+    /// Short hatched strokes side by side: one family of nearly straight
+    /// strokes 5–12 units long, clumped (`clump`), laid area by area. Set
+    /// their direction with `angle`, or `cross` them.
     pub fn hatch(&self) -> Handling<'_> {
         Handling::new(Tool { width: self.detail.width * 1.2, ..self.detail.clone() })
             .length(5.0, 12.0)
@@ -332,9 +320,8 @@ impl Style {
     /// A glaze or thin scumble brushed over dry paint: a soft brush, paint
     /// that is mostly medium (`medium` ≈ 0.85–0.95 for a transparent glaze,
     /// ≈ 0.6 for a veiling scumble), laid thinly in long strokes. Vary the
-    /// depth with `load_at`; fuse it afterwards with `blend()`. The color is
-    /// the glaze paint's masstone (not aimed: a veil's depth is the
-    /// painter's to vary); add `.aim(coats)` to aim it at a look instead.
+    /// depth with `load_at`. The color is the glaze paint's masstone (not
+    /// aimed); add `.aim(coats)` to aim it at a look instead.
     pub fn glaze(&self, medium: f32) -> Handling<'_> {
         let soft = Tool { stiffness: 0.3, lay: 0.8, pickup: 0.08, ragged: 0.2, ..Tool::filbert(self.broad.width * 1.2) };
         Handling::new(soft)
@@ -359,11 +346,10 @@ impl Style {
     /// drags paint back up a gradient (change with `order`/`sweep`).
     ///
     /// The blender stays inside the region it is given (`clip(true)`, soft
-    /// where the mask is soft): a painter fusing a cut passage keeps the
-    /// badger inside it, and an unclipped badger drags wet paint across the
-    /// mask's edge, where later passages show it in their gaps. To fuse
-    /// across an edge on purpose (softening a horizon), give it a mask that
-    /// spans the edge, or `.clip(false)`.
+    /// where the mask is soft). An unclipped blender drags wet paint across
+    /// the mask's edge, where later passages show it in their gaps. To blend
+    /// across an edge, give it a mask that spans the edge, or
+    /// `.clip(false)`.
     pub fn blend(&self) -> Option<Handling<'_>> {
         let t = self.blender.clone()?;
         Some(
@@ -388,7 +374,9 @@ impl Style {
         Tool { width, length: width * 5.0, ..self.line.clone() }
     }
 
-    /// Scumbling handling (not Friedrich's habit, for painters who use it).
+    /// Scumbling: the body tool worked back and forth (`scrub(3)`) with
+    /// paint thinned by 0.5 medium, strokes 10–20 units long, the brush's
+    /// wide axis across its travel (`Orient::Across`).
     pub fn scumble(&self) -> Handling<'_> {
         Handling::new(self.body.clone()).scrub(3).mixed(&self.palette, 0.5).length(10.0, 20.0).orient(Orient::Across)
     }

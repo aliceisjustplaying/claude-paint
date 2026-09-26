@@ -1,7 +1,7 @@
 //! Time and drying: the painting has a clock, and wet paint ages.
 //!
 //! Oil paint dries by oxidation: the oil takes up oxygen, cross-links and
-//! turns from a liquid into a gel into a solid film. A painter feels four
+//! turns from a liquid into a gel into a solid film. The film passes four
 //! stages:
 //!
 //! - **open**: fully workable. Blends wet into wet, brushes lift and push it,
@@ -26,8 +26,8 @@
 //! until it is touch-dry. So a pixel can hold new wet paint over a set layer.
 //!
 //! `Canvas::wait(minutes)` advances the clock. `Canvas::dry()` waits until all
-//! paint is touch-dry. A painting that never waits renders as it did before
-//! the clock existed (the drying state isn't even allocated).
+//! paint is touch-dry. The per-pixel drying state is allocated on the first
+//! `wait`; a painting that never waits doesn't allocate it.
 
 use crate::canvas::Canvas;
 use crate::pigment::Pigment;
@@ -46,22 +46,23 @@ pub const TOUCH_DRY_MIN: f32 = 24.0 * 60.0;
 pub const GEL: f32 = 0.15;
 /// How much a film's thickness slows its drying: time ∝ (h / 1 coat)^THICK.
 /// Surface skinning is reaction-limited in thin films and increasingly
-/// oxygen-limited in thick ones [E].
+/// oxygen-limited in thick ones (estimate).
 const THICK: f32 = 0.7;
 /// How much a fat, medium-rich paint (stiff 0) dries slower than stiff tube
-/// paint (stiff 1) [E].
+/// paint (stiff 1) (estimate).
 const FAT: f32 = 0.6;
-/// How much faster a tacky surface pulls paint off a brush [E].
+/// How much faster a tacky surface pulls paint off a brush (estimate).
 const GRAB: f32 = 2.0;
 /// Spread (sd, mm) of the patch over which a film's thickness sets its
 /// drying rate. A film skins over as a whole: the bristle ridges and
 /// furrows of a brushstroke (a fraction of a mm) don't dry on their own
 /// clocks, a stroke and its neighbors do. It also keeps the rate the same at
 /// any resolution: a coarse pixel averages thin and thick paint, a fine one
-/// sees them apart; both are judged over the same few millimeters [E].
+/// sees them apart; both are judged over the same few millimeters
+/// (estimate).
 pub const FILM_MM: f32 = 1.25;
 
-/// Relative drying rates of the period pigments ground in oil (1 = average;
+/// Relative drying rates of pigments ground in oil (1 = average;
 /// higher dries faster). From Mayer's comparative list (fast: lead white,
 /// umbers, chrome yellow, Prussian blue; medium: earths, cobalt; slow to very
 /// slow: vermilion, ivory/lamp/vine black, madder, alizarin) and touch-dry
@@ -206,9 +207,8 @@ impl Canvas {
     /// stiffens; paint that reaches its gel point levels (for as long as it
     /// stayed fluid) and sets; set paint loses its tack and becomes
     /// touch-dry. What happens to each pixel follows from its own paint and
-    /// history, so a painting can work wet into wet (`wait(0.0)`, or no wait),
-    /// come back to tacky paint (`wait(180.0)`) or to a dry layer
-    /// (`wait(24.0 * 60.0)`).
+    /// history. `wait(minutes)` advances simulated time. Use `drying_at` to
+    /// inspect a location; `dry()` waits until all paint is touch-dry.
     pub fn wait(&mut self, minutes: f32) {
         let dt = minutes.max(0.0);
         if !dt.is_finite() {
@@ -751,10 +751,9 @@ mod tests {
 
     /// A film dries by its thickness over a few millimeters, so a coarse
     /// render (each pixel averaging ridges and furrows) and a fine one (the
-    /// furrows apart) reach the same stages at the same times. (Judged per
-    /// pixel, the fine render's thin furrows set early and its ridges late:
-    /// 13% of its field was already tacky at 90 min and 17% still setting at
-    /// 150 min, where the coarse render's was uniform.)
+    /// furrows apart) reach the same stages at the same times, within 10% of
+    /// the field per stage. (A per-pixel rate would set the fine render's
+    /// thin furrows early and its ridges late.)
     #[test]
     fn stages_dont_depend_on_resolution() {
         for wait in [30.0, 90.0, 150.0] {
@@ -780,8 +779,8 @@ mod tests {
         assert!(a == b);
     }
 
-    /// A film of alternating thin fast-drying and thick slow-drying stripes
-    ///: its thin stripes set long before its thick ones.
+    /// A film of alternating thin fast-drying and thick slow-drying stripes:
+    /// its thin stripes set long before its thick ones.
     fn striped_film() -> Canvas {
         let mut c = Canvas::new(20, 1.0, [0.5; 3]).with_size_mm(20.0);
         let p = Paint::body([0.2; 3]);
@@ -801,9 +800,9 @@ mod tests {
     }
 
     /// Checking back often doesn't change the physics: `wait(7000)` and 70
-    /// waits of 100 minutes dry a heterogeneous film to the same stages (the
-    /// thick stripes used to lose their thin neighbors from the thickness
-    /// they dry by as those set, and ended tacky instead of dry).
+    /// waits of 100 minutes dry a heterogeneous film to the same stages (a
+    /// thick stripe's drying thickness stays fixed while its thin neighbors
+    /// set, see `Px::th`).
     #[test]
     fn splitting_a_wait_changes_nothing() {
         let (mut a, mut b) = (striped_film(), striped_film());
@@ -827,8 +826,7 @@ mod tests {
     /// linen, checked back every 30 minutes for 50 hours: the same stage
     /// everywhere, the same picture within rounding (films bake in
     /// different groups, so leveling differs a little) and the same time to
-    /// dry out. (Before: 145 pixels at different stages and 8846 vs 12054
-    /// minutes to dry.)
+    /// dry out.
     #[test]
     fn splitting_a_wait_changes_nothing_under_the_brush() {
         let mut a = Canvas::new(180, 1.0, hex("#c8b89a")).with_linen(Linen::fine(3));

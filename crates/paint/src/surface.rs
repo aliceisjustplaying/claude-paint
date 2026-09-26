@@ -12,16 +12,15 @@
 //!   (Ranquet et al., Nat. Commun. 2023).
 //!
 //! Very thin fluid paint therefore flows into the valleys of the ground and
-//! thins on the peaks ("pooling", Friedrich: CATS proceedings III p.127),
-//! while stiff paint keeps its bristle striations.
+//! thins on the peaks ("pooling"), while stiff paint keeps its bristle
+//! striations.
 
 use crate::canvas::Canvas;
 use crate::rng::hash2;
 use rayon::prelude::*;
 
-/// Thickness of one coat of wet paint (wet volume 1.0), µm. Friedrich's
-/// layers are "gossamer-thin" (CATS p.127); brushed mock-up coats measure
-/// ~60–125 µm; one "coat" here is a lean, thin one.
+/// Thickness of one coat of wet paint (wet volume 1.0), µm. Brushed
+/// mock-up coats measure ~60–125 µm; one "coat" here is a lean, thin one.
 pub const COAT_UM: f32 = 25.0;
 /// Surface tension of drying oil, N/m.
 const SIGMA: f32 = 0.035;
@@ -47,9 +46,10 @@ pub struct Linen {
 }
 
 impl Linen {
-    /// Fine handwoven linen as Friedrich bought it ready primed in Dresden
-    /// (10–16 threads/cm, proxy from Eckersberg's Dresden canvases, CATS
-    /// p.45–47); the warp is more even than the weft (TCAP).
+    /// Fine plain-weave linen, 14 × 12 threads/cm (inside the 10–16
+    /// threads/cm proxy range in notes/research/friedrich_materials.md §1);
+    /// the warp is more even than the weft (TCAP,
+    /// notes/research/oil_paint_physics.md §4).
     pub fn fine(seed: u64) -> Self {
         Linen { warp_per_cm: 14.0, weft_per_cm: 12.0, crown_um: 160.0, slubs: 0.7, seed }
     }
@@ -342,7 +342,7 @@ impl Canvas {
     /// when the wet layer is thick next to the relief. A 2 µm varnish over
     /// 100–300 µm dry impasto can't level the impasto: leveling there puts
     /// the level below the ridge tops (no film) and far above the foot of
-    /// every step (tens of µm of film, dark brown lines at 3200px). Here the
+    /// every step (tens of µm of film). Here the
     /// film follows the relief and only flows along it (lubrication theory,
     /// ∂h/∂t = −∇·(h³σ/3η ∇∇²z)): on a convex spot of band amplitude A (above
     /// the yield floor a_c) it thins as dh/dt = −h³σAk⁴/3η, which integrates
@@ -509,7 +509,7 @@ mod tests {
         conserve_total(&add, &mut out, |_| 0.0, |_| 2.0);
         assert_eq!(out[1], 2.0, "{out:?}");
         assert!((total(&out) - 4.0).abs() < 1e-6, "{out:?}");
-        // no bound in the way: one factor for all, as before
+        // no bound in the way: one factor for all
         let mut out = [0.5f32, 2.0, 1.0, 1.0];
         conserve_total(&add, &mut out, |_| 0.0, |_| f32::INFINITY);
         let k = (4.0f64 / 4.5) as f32;
@@ -518,8 +518,7 @@ mod tests {
 
     /// A cascade that needs many pinning rounds (each round's stronger
     /// factor carries a few more pixels to the floor) still ends inside
-    /// the bounds: it used to stop after 8 rounds and leave pixels below
-    /// the floor (review of the maintenance round, finding 1).
+    /// the bounds: no pixel ends below the floor.
     #[test]
     fn a_long_pinning_cascade_keeps_the_bounds() {
         let n = 1024usize;

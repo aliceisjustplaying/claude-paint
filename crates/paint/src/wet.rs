@@ -104,7 +104,7 @@ impl Paint {
         Paint::tint(tint, 0.07, 0.3)
     }
     /// A paint named by its tint: one coat of it over white looks `tint`
-    /// (the old "appearance over white" meaning). Its masstone is deeper.
+    /// (its appearance over white). Its masstone is deeper.
     pub fn tint(tint: Rgb, hiding: f32, stiff: f32) -> Self {
         Paint::solve(tint, [1.0; 3], 1.0, hiding, stiff)
     }
@@ -254,9 +254,9 @@ const BEAD_ASPECT: f32 = 0.5;
 /// Linear in the paint, so a hairline's fringe keeps its share wherever the
 /// line falls between pixel centers; at 1000px (pixels of 0.2-0.9 mm) it
 /// takes a film over 100 µm on the sliver to act. At 3200 (0.1 mm pixels)
-/// the tens of µm that leveling pours into a pixel a hair only grazed no
-/// longer sit on a sliver of it and leave the rest bare (the lab 2 lime's
-/// pale pinholes).
+/// it spreads the tens of µm that leveling pours into a pixel a hair only
+/// grazed over the pixel, instead of leaving them on a sliver with the rest
+/// of the pixel bare.
 pub(crate) fn bead_cover(cover: f32, coats: f32, px_um: f32) -> f32 {
     if cover >= 1.0 || coats.is_nan() || coats <= 0.0 || px_um.is_nan() || px_um <= 0.0 {
         return cover;
@@ -266,7 +266,7 @@ pub(crate) fn bead_cover(cover: f32, coats: f32, px_um: f32) -> f32 {
 }
 
 impl Canvas {
-    /// What the painter sees at pixel `i`: the dry picture with any wet paint
+    /// The visible color at pixel `i`: the dry picture with any wet paint
     /// on it (at its laid thickness, before it levels).
     pub(crate) fn look_px(&self, i: usize) -> Rgb {
         let v = self.wet.vol[i];
@@ -277,7 +277,7 @@ impl Canvas {
         over_share(Pigment::masstone(c, self.wet.hide[i][0]), self.px[i], v, bead_cover(self.wet.cover[i], v, self.px_mm() * 1000.0))
     }
 
-    /// What the painter sees, pixel by pixel over the window: the dry
+    /// The visible colors, pixel by pixel over the window: the dry
     /// picture with any wet paint on it (at its laid thickness).
     pub fn seen(&self) -> Vec<Rgb> {
         use rayon::prelude::*;
@@ -376,7 +376,7 @@ mod tests {
     }
 
     /// `Paint::aimed` reaches any target made by a paint of the same hiding
-    /// (the review's repro: masstone 0.8, hiding 0.92, 0.1 coats over black),
+    /// (e.g. masstone 0.8, hiding 0.92, 0.1 coats over black),
     /// across lightening targets, thin films and substrates.
     #[test]
     fn aimed_reaches_targets_made_by_the_same_model() {

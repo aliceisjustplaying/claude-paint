@@ -1,8 +1,7 @@
 //! Craquelure: age cracks through paint and ground, grown one at a time in a
 //! stress field, then cut into the surface.
 //!
-//! Sources (notes/research/oil_paint_physics.md §5;
-//! notes/research/friedrich_materials.md §8):
+//! Sources (notes/research/oil_paint_physics.md §5):
 //! - **Sequential, not Voronoi.** Paquette, Poulin & Drettakis (GI 2002): a
 //!   grid of stress and strength; a crack starts where σ/S_b is highest,
 //!   runs perpendicular to the largest principal stress while σ > S_c
@@ -1503,8 +1502,8 @@ const WALL_THICK: f32 = 0.15;
 const SLOT: f32 = 0.35;
 /// The color a crack's walls show where they cut the ground, a
 /// fixed value independent of the canvas's ground color: a yellowed lead
-/// white and chalk layer over warm ocher and red earth layers
-/// (notes/research/friedrich_materials.md §2; assumption for the value).
+/// white and chalk layer over warm ocher and red earth layers (an
+/// assumption for the value).
 const GROUND_WALL: [f32; 3] = [0.52, 0.44, 0.32];
 /// Spacing of varnish microcracks, mm.
 const VEIL_CELL: f32 = 0.3;

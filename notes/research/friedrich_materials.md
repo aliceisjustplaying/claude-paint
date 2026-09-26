@@ -1,7 +1,5 @@
 # Caspar David Friedrich: painting materials and technique
 
-*Process and hand (sequence, studies and their transfer, edges, pace, what copies got wrong) are in `friedrich_process.md`.*
-
 *Sourced technical report for a physical paint simulator. Every claim cites a source key; full URLs are in the "Sources" list at the end. "Uncertain" marks claims that are unverified, disputed or taken from a single object.*
 
 ## Bottom line
@@ -112,7 +110,6 @@ Friedrich painted in oil on fine, plain-weave linen that he bought already prime
 - **Unverified (search-tool summary of the Most 2024 PDF, which I could not open; page not seen).** In *Ländliche ebene Gegend*, Rinmann's green reportedly lies in a light, pastose top layer applied in short dabs or zigzags over a yellow-green layer. An arsenic-free copper green reportedly appears in the green reflections of boats in *Ansicht eines Hafens*. Check these before use.
 - **Berlin, four paintings.** XRF covered only blue and yellow areas. "No Cu was detected in any investigated area" means blue areas only, not greens [ALF pp.346, 348].
 - **A cautionary misattribution.** *Landschaft mit kahlem Baum* was de-attributed partly because its leaves are cobalt blue mixed with chrome yellow, which were anachronistic for 1798/99 [MÄD p.102]. The pigment date rule works as a real test.
-- **No green data found** for *Hill and Ploughed Field*, *Meadows near Greifswald*, *Morning in the Riesengebirge*, *Chalk Cliffs*, *Lone Tree* or *Summer*. The ZKK 2024–25 issues are paywalled; page not seen.
 
 ### How he painted foliage and grass
 

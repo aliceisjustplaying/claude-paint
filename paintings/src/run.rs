@@ -1,28 +1,34 @@
 //! Running a painting from the command line: options, stages (timing,
 //! stopping early to look, checkpoints to resume from), crop renders, and
-//! the finishing recipe (varnish, cracks, raking light) paintings share.
+//! an optional finish (varnish, cracks, raking light).
 //!
-//!   cargo paint <name>                       1000px preview → out/<name>.png
-//!   cargo paint <name> -- --full             3200px         → out/<name>_full.png
-//!   cargo paint <name> -- --width 1600 --seed 7 --out path.png
+//!   cargo paint <name> -- --full             2400px         → out/<name>_full.png
+//!   cargo paint <name> -- --full --width 2400 --seed 7 --out path.png
 //!   cargo paint <name> -- --full --crop 600,380,760,500
 //!                                            only that window (units), at full
 //!                                            resolution → out/<name>_full_crop.png
-//!   cargo paint <name> -- --stop sky         save right after the "sky" stage
-//!   cargo paint <name> -- --ckpt             save a checkpoint after every stage
-//!   cargo paint <name> -- --resume mist      start from the "mist" checkpoint
-//!   cargo paint <name> -- --resume mist --stop mist
-//!                                            save the "mist" checkpoint as an image
-//!   cargo paint <name> -- --resume mist --stale-ok --ckpt
+//!   cargo paint <name> -- --full --stop first
+//!                                            save right after the "first" stage
+//!   cargo paint <name> -- --full --ckpt      save a checkpoint after every stage
+//!   cargo paint <name> -- --full --resume second
+//!                                            start from the "second" checkpoint
+//!   cargo paint <name> -- --full --resume second --stop second
+//!                                            save the "second" checkpoint as an image
+//!   cargo paint <name> -- --full --resume second --stale-ok --ckpt
 //!                                            use a stale checkpoint and adopt it
-//!   cargo paint <name> -- --no-cracks        skip craquelure in the finish
+//!   cargo paint <name> -- --full --no-cracks skip craquelure in the finish
+//!
+//! `--full` sets the width to 2400px (`--width N` overrides it) and names
+//! the output and checkpoints `<name>_full`. Give every run of a painting
+//! the same `--full`, `--width`, `--seed` and `--crop`: checkpoints are tied
+//! to them.
 //!
 //! Stage names on the command line match whatever the case, and spaces,
-//! underscores and hyphens are the same (`--stop far_range` stops at "far
-//! range"). A `--stop` or `--resume` naming no stage is an error that lists
-//! the stages (before painting, when the painting names its stages with
-//! string literals; otherwise when the run ends). `--stop` at the stage a
-//! run resumes from saves that checkpoint as it is; at a stage before it,
+//! underscores and hyphens are the same (`--stop second_pass` stops at
+//! "second pass"). A `--stop` or `--resume` naming no stage is an error that
+//! lists the stages (before painting, when the painting names its stages
+//! with string literals; otherwise when the run ends). `--stop` at the stage
+//! a run resumes from saves that checkpoint as it is; at a stage before it,
 //! it is an error.
 //!
 //! A painting is written as stages; each stage's painting goes inside its
@@ -30,17 +36,23 @@
 //!
 //! ```ignore
 //! let o = Run::new("my_painting");
+//! let st = Style::friedrich();
 //! let mut rng = Rng::new(o.seed);
 //! let mut c = o.canvas(|| st.prepare(o.width, 1.4, o.seed));
-//! let sky = Mask::from_fn(c.frame(), ...);        // outside stages: always runs
-//! if o.stage("sky", &mut c, &mut rng) {
-//!     c.work(&sky, ...);                          // skipped when resuming later
+//! let f = c.frame();
+//! let swatch = Mask::from_shape(f, Shape::new().rect(400.0, 250.0, 200.0, 200.0)); // outside stages: always runs
+//! if o.stage("first", &mut c, &mut rng) {
+//!     c.work(&swatch, &st.body().color(|_, _| hex("#808080")), 1); // skipped when resuming later
 //! }
-//! let land = Mask::from_fn(c.frame(), ...);       // setup for "land": doesn't
-//!                                                 // make "sky" stale
-//! if o.stage("land", &mut c, &mut rng) { ... }
-//! o.finish(&mut c, &mut rng, &Finish::aged(st.relief));
+//! let inner = swatch.erode(40.0);                  // setup for "second": doesn't
+//!                                                  // make "first" stale
+//! if o.stage("second", &mut c, &mut rng) { ... }
+//! o.end(&mut c, &mut rng);
+//! o.save(&mut c);
 //! ```
+//!
+//! `o.finish(&mut c, &mut rng, &finish)` instead of `end` and `save` also
+//! varnishes, cracks and lights the surface (see `Finish`).
 //!
 //! Rules for stages: paint only inside stage blocks (code between them runs
 //! on every run, resumed or not, so keep it to masks, fields and constants,
@@ -67,14 +79,15 @@
 //!   that ran before it), and everything after the item that holds it
 //!   (helper functions below `main`). Code after the block, between it and
 //!   the next stage, is setup for later stages and doesn't count;
-//! - minus code the painter marks as mattering only from a later stage on:
+//! - minus code tagged as mattering only from a later stage on:
 //!   a line ending in `// ckpt: from <stage>`, or the lines between a
 //!   `// ckpt: from <stage>` line and a `// ckpt: end` line. Stages before
-//!   <stage> leave them out; <stage> and later ones count them. That is the
-//!   painter's word (a tagged constant a sky stage does read makes a stale
-//!   sky look fresh); a tag naming no stage is an error.
+//!   <stage> leave them out; <stage> and later ones count them. A tag is
+//!   taken on trust (a tagged constant an earlier stage does read leaves
+//!   that stage's stale checkpoint looking fresh); a tag naming no stage is
+//!   an error.
 //!
-//! A stage call not directly followed by its block falls back to the old
+//! A stage call not directly followed by its block falls back to a coarser
 //! rule: the source before the call that ends the stage, or both files
 //! whole when that call is elsewhere (a `stage` in a loop is ended by
 //! itself on the next iteration; its block is found, so this is rare).
@@ -246,8 +259,8 @@ fn slug(stage: &str) -> String {
 
 /// Stage names as they are compared (`--stop`, `--resume`, tags, file
 /// names): case, spaces, underscores, hyphens and slashes don't matter, so
-/// `--stop far_range`, `--stop "Far Range"` and `far-range` all mean the
-/// stage "far range".
+/// `--stop second_pass`, `--stop "Second Pass"` and `second-pass` all mean the
+/// stage "second pass".
 pub fn key(stage: &str) -> String {
     stage.trim().to_lowercase().replace([' ', '/', '-'], "_")
 }
@@ -287,7 +300,7 @@ fn hash_src_with(start: (&str, u32), end: (&str, u32), read: impl Fn(&str) -> St
 ///   functions below `main`;
 /// - in both, lines tagged `// ckpt: from <later stage>` (or regions
 ///   between `// ckpt: from <later stage>` and `// ckpt: end`) are left out:
-///   the painter's word that they only matter from that stage on.
+///   the tag says they only matter from that stage on.
 ///
 /// `before` holds the keys of the stages up to and including this one.
 /// A stage call not followed by its block falls back to `hash_src_with`.
@@ -347,7 +360,7 @@ impl Run {
         };
         let stem = root.join(stem);
         let o = Run {
-            width: get("--width").and_then(|s| s.parse().ok()).unwrap_or(if full { 3200 } else { 1000 }),
+            width: get("--width").and_then(|s| s.parse().ok()).unwrap_or(if full { 2400 } else { 1000 }),
             seed: get("--seed").and_then(|s| s.parse().ok()).unwrap_or(1),
             out,
             stem,
@@ -401,8 +414,8 @@ impl Run {
     }
 
     /// The checkpoint file for `--resume stage`: `ckpt_path`, or the one
-    /// whose stage matches by `key` (`--resume "Far Range"` finds
-    /// `.far_range.ckpt`).
+    /// whose stage matches by `key` (`--resume "Second Pass"` finds
+    /// `.second_pass.ckpt`).
     fn find_ckpt(&self, stage: &str) -> PathBuf {
         let exact = self.ckpt_path(stage);
         if exact.exists() {
@@ -506,7 +519,7 @@ impl Run {
                     die(&format!("{msg}. Re-run with --ckpt to refresh it, or pass --stale-ok to use it anyway (with --ckpt too, that adopts it for the current code)."));
                 }
                 if self.ckpt {
-                    // the painter vouches for it: adopt it for the current
+                    // --stale-ok with --ckpt: adopt it for the current
                     // code, so the next resume needs no --stale-ok
                     let fresh = self.header(&name, src.clone(), &bytes);
                     let fresh = Header(fresh.0.into_iter().chain([("adopted".to_string(), h.get("saved").to_string())]).collect());
@@ -651,8 +664,9 @@ fn unhex(s: &str) -> Option<Vec<u8>> {
     (0..s.len() / 2).map(|i| u8::from_str_radix(&s[2 * i..2 * i + 2], 16).ok()).collect()
 }
 
-/// How a painting is finished: aged varnish (a clear, yellowing film,
-/// uneven), craquelure, then the surface lit by raking light.
+/// What `Run::finish` applies after the last stage: a varnish film (a
+/// clear film that only absorbs, its thickness varying across the canvas),
+/// optional craquelure, then the surface lit by raking light.
 pub struct Finish {
     pub varnish: Rgb,
     /// Varnish thickness in coats, and how much it varies across the canvas.
@@ -666,11 +680,12 @@ pub struct Finish {
 }
 
 impl Finish {
-    /// An old varnished painting. Its craquelure (`Cracks::aged`) fits
-    /// itself to the canvas when it cracks: islands and weave coupling from
-    /// the ground the canvas was primed with, openings from the island
-    /// size, density and opening from the paint under each crack, and a few
-    /// patches of milky, microcracked varnish.
+    /// Varnish `#e6d3a4` at 0.4 ± 0.12 coats, `Cracks::aged` and the given
+    /// relief. `Cracks::aged` fits itself to the canvas when it cracks:
+    /// islands and weave coupling from the ground the canvas was primed
+    /// with, openings from the island size, density and opening from the
+    /// paint under each crack, and a few patches of milky, microcracked
+    /// varnish.
     pub fn aged(relief: (f32, f32)) -> Self {
         Finish { varnish: hex("#e6d3a4"), varnish_coats: 0.4, varnish_vary: 0.12, cracks: Some(Cracks::aged(0)), relief }
     }
@@ -681,8 +696,8 @@ mod tests {
     use super::*;
 
     /// A stage in a loop is ended by its own call on the next iteration:
-    /// its fingerprint must cover its body (review finding: editing only the
-    /// loop body left the first iteration's checkpoint "fresh").
+    /// its fingerprint covers its body, so editing only the loop body makes
+    /// the first iteration's checkpoint stale.
     #[test]
     fn loop_stages_hash_their_body() {
         let src = |body: &str| format!("fn main() {{\n    for name in [\"first\", \"last\"] {{\n        if o.stage(name, &mut c, &mut ()) {{\n            {body}\n        }}\n    }}\n    o.end(&mut c, &mut ());\n}}\n");
@@ -734,8 +749,7 @@ mod tests {
     }
 
     /// `end` (and `finish`) save the last stage's `Keep` state, and resuming
-    /// from it restores it, also when a stage has been appended since (it
-    /// used to be saved empty, and restoring then panicked).
+    /// from it restores it, also when a stage has been appended since.
     #[test]
     fn last_stage_keeps_its_state() {
         let dir = scratch("keep_test");
@@ -763,7 +777,7 @@ mod tests {
         }
         o.end(&mut c, &mut rng);
         assert_eq!(rng.state(), painted);
-        // a stage appended after the old last one
+        // a stage appended after the saved last one
         let o = run(&dir, &["--resume", "last", "--stale-ok"]);
         let mut rng = Rng::new(o.seed);
         let mut c = o.canvas(|| unreachable!());
@@ -800,7 +814,7 @@ mod tests {
     fn three(o: &Run) {
         let mut rng = Rng::new(o.seed);
         let mut c = o.canvas(|| Canvas::new_window(o.width, 1.0, [0.1; 3], None));
-        for name in ["a", "far range", "last"] {
+        for name in ["a", "middle pass", "last"] {
             if o.stage(name, &mut c, &mut rng) {
                 rng.next_u64();
             }
@@ -813,7 +827,7 @@ mod tests {
     fn three_edited(o: &Run) {
         let mut rng = Rng::new(o.seed);
         let mut c = o.canvas(|| Canvas::new_window(o.width, 1.0, [0.1; 3], None));
-        for name in ["a", "far range", "last"] {
+        for name in ["a", "middle pass", "last"] {
             if o.stage(name, &mut c, &mut rng) {
                 rng.next_u64();
                 // an edit
@@ -823,28 +837,27 @@ mod tests {
     }
 
     /// Stage names match by `key`; `--resume X --stop X` stops; a `--stop`
-    /// before the resume point or naming no stage is an error (mountains
-    /// #5, winter #20).
+    /// before the resume point or naming no stage is an error.
     #[test]
     fn stop_and_resume_names() {
-        assert_eq!(key("Far Range"), "far_range");
-        assert_eq!(key("far-range"), key("far_range"));
+        assert_eq!(key("Middle Pass"), "middle_pass");
+        assert_eq!(key("middle-pass"), key("middle_pass"));
         let dir = scratch("names");
         assert_eq!(outcome(|| three(&run(&dir, &[]))), "ran to the end");
-        assert!(o_path(&dir, "far_range").exists());
+        assert!(o_path(&dir, "middle_pass").exists());
         let _ = std::fs::remove_file(dir.join("keep_test.png"));
-        assert_eq!(outcome(|| three(&run(&dir, &["--stop", "far_range"]))), "stopped");
+        assert_eq!(outcome(|| three(&run(&dir, &["--stop", "middle_pass"]))), "stopped");
         assert!(dir.join("keep_test.png").exists());
         // resumed and stopped at the same stage: saved as it was
         let _ = std::fs::remove_file(dir.join("keep_test.png"));
-        assert_eq!(outcome(|| three(&run(&dir, &["--resume", "Far Range", "--stop", "far range"]))), "stopped");
+        assert_eq!(outcome(|| three(&run(&dir, &["--resume", "Middle Pass", "--stop", "middle pass"]))), "stopped");
         assert!(dir.join("keep_test.png").exists());
-        let e = outcome(|| three(&run(&dir, &["--resume", "far_range", "--stop", "a"])));
+        let e = outcome(|| three(&run(&dir, &["--resume", "middle_pass", "--stop", "a"])));
         assert!(e.contains("comes before the resume point"), "{e}");
-        let e = outcome(|| three(&run(&dir, &["--stop", "far"])));
-        assert!(e.contains("--stop far: this painting has no stage") && e.contains("\"far range\""), "{e}");
+        let e = outcome(|| three(&run(&dir, &["--stop", "middle"])));
+        assert!(e.contains("--stop middle: this painting has no stage") && e.contains("\"middle pass\""), "{e}");
         let e = outcome(|| three(&run(&dir, &["--resume", "nope"])));
-        assert!(e.contains("no checkpoint") && e.contains("far_range"), "{e}");
+        assert!(e.contains("no checkpoint") && e.contains("middle_pass"), "{e}");
     }
 
     /// With the painting's file known, an unknown stage name fails before
@@ -853,73 +866,73 @@ mod tests {
     fn unknown_stage_fails_early() {
         let dir = scratch("early");
         let f = dir.join("p.rs");
-        std::fs::write(&f, "fn main() {\n    if o.stage(\"sky\", &mut c, &mut r) {}\n    if o.stage(\"far range\", &mut c, &mut r) {}\n}\n").unwrap();
+        std::fs::write(&f, "fn main() {\n    if o.stage(\"first\", &mut c, &mut r) {}\n    if o.stage(\"middle pass\", &mut c, &mut r) {}\n}\n").unwrap();
         let file: &'static str = Box::leak(f.to_string_lossy().to_string().into_boxed_str());
         let args = |a: &[&str]| std::iter::once("t").chain(a.iter().copied()).map(String::from).collect::<Vec<_>>();
-        let e = outcome(|| drop(Run::from_args("t", args(&["--stop", "far_rnge"]), Some(file))));
-        assert!(e.contains("no stage by that name (stages: \"sky\", \"far range\")"), "{e}");
-        assert_eq!(outcome(|| drop(Run::from_args("t", args(&["--stop", "FAR_RANGE"]), Some(file)))), "ran to the end");
-        let e = outcome(|| drop(Run::from_args("t", args(&["--resume", "land"]), Some(file))));
-        assert!(e.contains("--resume land"), "{e}");
+        let e = outcome(|| drop(Run::from_args("t", args(&["--stop", "middle_pss"]), Some(file))));
+        assert!(e.contains("no stage by that name (stages: \"first\", \"middle pass\")"), "{e}");
+        assert_eq!(outcome(|| drop(Run::from_args("t", args(&["--stop", "MIDDLE_PASS"]), Some(file)))), "ran to the end");
+        let e = outcome(|| drop(Run::from_args("t", args(&["--resume", "later"]), Some(file))));
+        assert!(e.contains("--resume later"), "{e}");
     }
 
     /// `--stale-ok --ckpt` adopts the checkpoint it resumed from, so the
-    /// next resume of the same code needs no `--stale-ok` (mountains #18);
+    /// next resume of the same code needs no `--stale-ok`;
     /// without `--ckpt` it is used, not refreshed.
     #[test]
     fn stale_ok_refreshes_with_ckpt() {
         let dir = scratch("refresh");
         three(&run(&dir, &[]));
-        let e = outcome(|| three_edited(&run(&dir, &["--resume", "far range"])));
+        let e = outcome(|| three_edited(&run(&dir, &["--resume", "middle pass"])));
         assert!(e.contains("is stale"), "{e}");
         let no_ckpt = |args: &[&str]| {
             let mut o = run(&dir, args);
             o.ckpt = false;
             o
         };
-        assert_eq!(outcome(|| three_edited(&no_ckpt(&["--resume", "far range", "--stale-ok"]))), "ran to the end");
-        assert!(outcome(|| three_edited(&no_ckpt(&["--resume", "far range"]))).contains("is stale"), "not refreshed without --ckpt");
-        assert_eq!(outcome(|| three_edited(&run(&dir, &["--resume", "far range", "--stale-ok"]))), "ran to the end");
-        assert_eq!(outcome(|| three_edited(&no_ckpt(&["--resume", "far range"]))), "ran to the end");
-        let h = Header::parse(&paint::checkpoint::read_header(&mut std::fs::File::open(o_path(&dir, "far_range")).unwrap()).unwrap());
+        assert_eq!(outcome(|| three_edited(&no_ckpt(&["--resume", "middle pass", "--stale-ok"]))), "ran to the end");
+        assert!(outcome(|| three_edited(&no_ckpt(&["--resume", "middle pass"]))).contains("is stale"), "not refreshed without --ckpt");
+        assert_eq!(outcome(|| three_edited(&run(&dir, &["--resume", "middle pass", "--stale-ok"]))), "ran to the end");
+        assert_eq!(outcome(|| three_edited(&no_ckpt(&["--resume", "middle pass"]))), "ran to the end");
+        let h = Header::parse(&paint::checkpoint::read_header(&mut std::fs::File::open(o_path(&dir, "middle_pass")).unwrap()).unwrap());
         assert!(!h.get("adopted").is_empty());
     }
 
-    /// The staleness model (winter #2, mountains #4, coast #19): a stage's
+    /// The staleness model: a stage's
     /// fingerprint covers its block and what comes before it, and helpers
     /// after `main`; not the setup for later stages written between blocks,
     /// and not lines tagged for a later stage.
     #[test]
     fn stage_fingerprint_model() {
         let prog = |top: &str, between: &str, body: &str, helper: &str| {
-            format!("const TOR: f32 = 1.0;\n{top}\nfn main() {{\n    let sky = 1;\n    if o.stage(\"sky\", &mut c, &mut r) {{\n        {body}\n    }}\n    {between}\n    if o.stage(\"oak\", &mut c, &mut r) {{\n        oak();\n    }}\n    o.end(&mut c, &mut r);\n}}\nfn helper() {{ {helper} }}\n")
+            format!("const TOR: f32 = 1.0;\n{top}\nfn main() {{\n    let first = 1;\n    if o.stage(\"first\", &mut c, &mut r) {{\n        {body}\n    }}\n    {between}\n    if o.stage(\"second\", &mut c, &mut r) {{\n        second();\n    }}\n    o.end(&mut c, &mut r);\n}}\nfn helper() {{ {helper} }}\n")
         };
         let hash = |text: &str, stage: (u32, &[&str])| {
             let before: Vec<String> = stage.1.iter().map(|s| key(s)).collect();
             hash_stage(("p.rs", stage.0, 8), ("p.rs", stage.0 + 4), &before, |_| text.to_string())
         };
-        let sky = (5, &["sky"][..]);
-        let oak = (9, &["sky", "oak"][..]);
-        let base = prog("", "let skel = grow(1);", "paint(sky);", "a()");
-        let h0 = hash(&base, sky).unwrap();
-        // geometry for the oak, built between the blocks: sky is unaffected
-        let edited = prog("", "let skel = grow(2);", "paint(sky);", "a()");
-        assert_eq!(hash(&edited, sky).unwrap(), h0);
-        assert_ne!(hash(&edited, oak).unwrap(), hash(&base, oak).unwrap());
-        // the sky's own body, and helpers after main, count
-        assert_ne!(hash(&prog("", "let skel = grow(1);", "paint(sky * 2);", "a()"), sky).unwrap(), h0);
-        assert_ne!(hash(&prog("", "let skel = grow(1);", "paint(sky);", "b()"), sky).unwrap(), h0);
+        let first = (5, &["first"][..]);
+        let second = (9, &["first", "second"][..]);
+        let base = prog("", "let geom = shape(1);", "paint(first);", "a()");
+        let h0 = hash(&base, first).unwrap();
+        // geometry for the second, built between the blocks: first is unaffected
+        let edited = prog("", "let geom = shape(2);", "paint(first);", "a()");
+        assert_eq!(hash(&edited, first).unwrap(), h0);
+        assert_ne!(hash(&edited, second).unwrap(), hash(&base, second).unwrap());
+        // the first's own body, and helpers after main, count
+        assert_ne!(hash(&prog("", "let geom = shape(1);", "paint(first * 2);", "a()"), first).unwrap(), h0);
+        assert_ne!(hash(&prog("", "let geom = shape(1);", "paint(first);", "b()"), first).unwrap(), h0);
         // a constant at the top counts, unless tagged for a later stage
-        let top = |v: &str| prog(&format!("const X: f32 = {v}; // ckpt: from oak"), "", "paint(sky);", "a()");
-        assert_eq!(hash(&top("1.0"), sky).unwrap(), hash(&top("2.0"), sky).unwrap());
-        assert_ne!(hash(&top("1.0"), oak).unwrap(), hash(&top("2.0"), oak).unwrap());
-        let region = |v: &str| prog(&format!("// ckpt: from Oak\nconst X: f32 = {v};\nconst Y: f32 = {v};\n// ckpt: end"), "", "paint(sky);", "a()");
-        assert_eq!(hash(&region("1.0"), sky).unwrap(), hash(&region("2.0"), sky).unwrap());
-        assert_ne!(hash(&region("1.0"), oak).unwrap(), hash(&region("2.0"), oak).unwrap());
-        let untagged = |v: &str| prog(&format!("const X: f32 = {v};"), "", "paint(sky);", "a()");
-        assert_ne!(hash(&untagged("1.0"), sky).unwrap(), hash(&untagged("2.0"), sky).unwrap());
+        let top = |v: &str| prog(&format!("const X: f32 = {v}; // ckpt: from second"), "", "paint(first);", "a()");
+        assert_eq!(hash(&top("1.0"), first).unwrap(), hash(&top("2.0"), first).unwrap());
+        assert_ne!(hash(&top("1.0"), second).unwrap(), hash(&top("2.0"), second).unwrap());
+        let region = |v: &str| prog(&format!("// ckpt: from Second\nconst X: f32 = {v};\nconst Y: f32 = {v};\n// ckpt: end"), "", "paint(first);", "a()");
+        assert_eq!(hash(&region("1.0"), first).unwrap(), hash(&region("2.0"), first).unwrap());
+        assert_ne!(hash(&region("1.0"), second).unwrap(), hash(&region("2.0"), second).unwrap());
+        let untagged = |v: &str| prog(&format!("const X: f32 = {v};"), "", "paint(first);", "a()");
+        assert_ne!(hash(&untagged("1.0"), first).unwrap(), hash(&untagged("2.0"), first).unwrap());
         // a tag naming no stage is an error, not a silent hole
-        let typo = prog("const X: f32 = 1.0; // ckpt: from oka", "", "paint(sky);", "a()");
-        assert!(hash(&typo, sky).unwrap_err().contains("names no stage"));
+        let typo = prog("const X: f32 = 1.0; // ckpt: from secnd", "", "paint(first);", "a()");
+        assert!(hash(&typo, first).unwrap_err().contains("names no stage"));
     }
 }

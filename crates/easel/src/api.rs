@@ -1261,7 +1261,7 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
         let stretch = pair(&o, "stretch")?.map(|(a, k)| paint::noise::Aniso::new(a, k));
         Ok(Noise { kind, warp, stretch })
     })?)?;
-    // worley{seed=, period=, jitter=}: cells (stones, cracked mud, clumps)
+    // worley{seed=, period=, jitter=}: cells
     g.set("worley", lua.create_function(|_, o: Option<Table>| {
         let (seed, period, jitter) = match &o {
             None => (1, 40.0, None),
@@ -1315,7 +1315,7 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
             let pts = curve_of(&c, f.width())?;
             Ok(wrap(Mask::from_shape(f, Shape::new().below(&pts, f.height() + 1.0)).invert()))
         })?)?;
-        // ribbon(points, widths): a band along a line (a limb, a path, a stream)
+        // ribbon(points, widths): a band along a line
         let st1 = st.clone();
         g.set("ribbon", lua.create_function(move |_, (p, w): (Value, Value)| {
             let pts = points(&p)?;

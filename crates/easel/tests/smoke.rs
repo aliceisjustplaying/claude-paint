@@ -37,13 +37,13 @@ impl Drop for Closing {
 const CANVAS: &str = r#"canvas{size=300, aspect=1.25, linen={16, 14}, seed=3, ground={{pile={{"lead white", 2}, {"red earth", 1}}, um=100, apply="knife"}, {pile={{"lead white", 6}, {"raw umber", 1}}, um=50, apply="brush"}}}"#;
 
 const PAINT: &str = r#"
-warm = pile{{"lead white", 6}, {"yellow ochre", 2}, {"vermilion", 0.3}, medium=0.2}
-cool = pile{{"lead white", 4}, {"cobalt blue", 1}, medium=0.35}
-print(warm, cool)
-work(rect(0, 0, 1000, 360), {hand="broad", pile=cool, angle=0, coverage=3})
+a = pile{{"lead white", 6}, {"yellow ochre", 2}, {"vermilion", 0.3}, medium=0.2}
+c = pile{{"lead white", 4}, {"cobalt blue", 1}, medium=0.35}
+print(a, c)
+work(rect(100, 100, 300, 250), {hand="body", pile=c, coverage=3})
 b = brush("filbert", 8)
-b:load(warm, 0.9)
-for i = 0, 5 do b:stroke({{120 + 120 * i, 560}, {180 + 120 * i, 520}, {230 + 120 * i, 600}}, {pressure={0.8, 0.3}}) end
+b:load(a, 0.9)
+for i = 0, 5 do b:stroke({{520, 120 + 40 * i}, {880, 140 + 40 * i}}, {pressure={0.8, 0.3}}) end
 print(wait(24 * 60))
 print(drying(300, 200))
 "#;
@@ -65,7 +65,7 @@ fn a_short_session_at_the_easel() {
     let look = ok(&["-s", "smoke", "look"]);
     let path = look.split_whitespace().next().unwrap();
     assert!(Path::new(path).exists(), "{look}");
-    let look = ok(&["-s", "smoke", "look", "--crop", "100,450,500,650", "--grid", "50", "--mode", "value,squint"]);
+    let look = ok(&["-s", "smoke", "look", "--crop", "450,80,950,380", "--grid", "50", "--mode", "value,squint"]);
     assert!(Path::new(look.split_whitespace().next().unwrap()).exists(), "{look}");
 
     // not in the easel: every one errors, and the log keeps its two chunks
@@ -85,7 +85,7 @@ fn a_short_session_at_the_easel() {
         "show(ellipse(500, 400, 50))",
         r##"b:load("#8090a0", 0.8)"##,
         r##"work(rect(0, 0, 100, 100), {hand="body", color="#8090a0"})"##,
-        r##"work(rect(0, 0, 100, 100), {hand="body", pile=warm, color=function(x, y) return "#ffffff" end})"##,
+        r##"work(rect(0, 0, 100, 100), {hand="body", pile=a, color=function(x, y) return "#ffffff" end})"##,
     ] {
         let e = fails(&["-s", "smoke", "do", chunk]);
         assert!(e.contains("the chunk failed and changed nothing"), "{chunk}: {e}");

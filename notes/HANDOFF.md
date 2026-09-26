@@ -16,18 +16,21 @@ repo sets `alice` locally (the per-directory git identity include for ~/src/a is
 this machine). Next: decide the direction with Alice after Fable's advice.
 
 **Morning of 2026-09-26 (for Alice):**
-- **Round 14** (the first chain) finished painters 1 and 2 (`notes/round14/look/p1.png`,
-  `p2.png`); painter 3 was still painting at 02:45 and lands in the same folder. Found
-  during it: painters' studios still had ready-made figures and rocks, every past
-  painting's program and the developer notes (`notes/round14/README.md`).
-- **Round 15** (a second chain, from an audited studio): `notes/round15/README.md`.
-  Astra reviewed the studio and briefs adversarially first (`astra_review.md`, 24
-  findings); most were fixed. Painters run without your global AGENTS.md or skills.
-  Paintings land in `~/src/a/paint-r15-p1..3/out/`, collected into `notes/round15/`.
-  Watch in the studio (http://100.82.115.34:8765).
-- **Decisions waiting for you** (engine behavior, Astra's findings 5, 7, 8): the
-  automatic color-recipe search (`aim`/`mix`), the gesture planning inside the
-  handling presets and the stipple defaults. All are still on.
+- **Round 14 chain, done:** `notes/round14/look/p1.png` (mountains), `p2.png` (evening town
+  on the coast), `p3.png` (Baltic shore, 87 min with the new time line). Its studio still had
+  ready-made figures and rocks, every past painting's program and the developer notes
+  (`notes/round14/README.md`).
+- **Round 15 chain, done** (`notes/round15/look/`, README there): studio audited and
+  reviewed adversarially by Astra first (`notes/round15/astra_review.md`); painters ran
+  without your AGENTS.md or skills. Paintings: misty mountains; an oak in snow with a church;
+  a Baltic shore. All three: dusk or dawn, a crescent, a figure from behind, even painter 1
+  with no notes. Round 15's painter 3 repainted Round 14's painter 3 picture unseen. The
+  craft notes still carry subjects and settings.
+- **Incident:** round 15 painter 2 hung twice on an SVG conversion (ImageMagick handing
+  off to Inkscape; pi's bash has no timeout); I killed the processes; ~3 h lost.
+- **Decisions waiting for you:** the color-recipe search (`aim`/`mix`), the handling
+  presets' gesture planning, the stipple defaults (Astra's findings 5, 7, 8). And the
+  sameness: the model paints the same Friedrich whatever we remove.
 
 **Round 14 restarted (2026-09-26) with the revised notebook** (notes/round14/README.md). First attempt kept on branch r14a-p1 (the ploughed field). Chain: p1 in ~/src/a/paint-r14-p1, then p2, then p3 (folders from r14-base + previous craft notes).
 

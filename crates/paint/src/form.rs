@@ -1,32 +1,28 @@
-//! Form and light for solids: the painter's model of a rock or a mountain.
-//!
-//! A painter doesn't copy a rock's colors; they think of it as a solid made
-//! of planes, some turned toward the light, some away, and paint that. This
-//! module gives a painting program that solid:
+//! Depth and lighting fields for caller-supplied solids: for every pixel,
+//! which solid is nearest, which plane of it, how that plane is turned to a
+//! light and how it is lit.
 //!
 //! - `Form` is a depth buffer over the canvas: for every pixel the nearest
 //!   solid, its distance toward the viewer `z` (units), its surface normal, a
 //!   part id (which solid) and a facet id (which plane of it), and its
 //!   distance from the viewer for aerial perspective.
-//! - Solids are either 3-D bodies (`Sdf`: ellipsoids, blocks, fracture planes
-//!   cut through them, weathering) seen straight on, or reliefs over the
-//!   canvas (`Ridge`: an eroded mountain face with spurs and gullies running
-//!   down from its crest; `Relief`: any height function).
+//! - Solids are either 3-D bodies (`Sdf`: ellipsoids, blocks, planes cut
+//!   through them, noise displacement) seen straight on, or reliefs over the
+//!   canvas (`Relief`: any height function).
 //! - `Form::light` casts shadows over it; then `shade` says, per point, how far
 //!   the plane turns toward the light, how much direct light it gets, whether
 //!   it lies in a cast shadow, how much reflected light and sky it sees.
-//! - Fields for brush handling: `fall` (the way water runs down the plane),
-//!   `across` (around the form), `edge_angle`; masks for parts, facets, lit
-//!   planes, shadows, silhouettes whose edges soften with distance, and the
+//! - Direction fields: `fall` (gravity projected onto the plane),
+//!   `across` (perpendicular to it), `edge_angle`; masks for parts, facets,
+//!   lit planes, shadows, silhouettes with a per-point edge width, and the
 //!   hard edges where planes break or one solid overlaps another.
 //!
-//! None of this paints anything: colors, brushes and the order of passes are
-//! the painter's. Coordinates: x right, y down (canvas units), z toward the
-//! viewer. Normals are unit vectors in that frame.
+//! None of this paints anything; it computes fields and masks. Coordinates:
+//! x right, y down (canvas units), z toward the viewer. Normals are unit
+//! vectors in that frame.
 
 use crate::canvas::Frame;
 use crate::mask::Mask;
-use crate::noise::Fbm;
 use noise::{NoiseFn, Perlin};
 use rayon::prelude::*;
 
@@ -57,8 +53,8 @@ fn cross(a: V3, b: V3) -> V3 {
 
 // ------------------------------------------------------------------ light
 
-/// One light (the sun or the sky's brightest quarter) plus what fills the
-/// shadows: ambient sky light and light reflected from lit surroundings.
+/// One directional light plus what fills the shadows: ambient sky light and
+/// light reflected from lit surroundings.
 #[derive(Clone, Copy, Debug)]
 pub struct Light {
     /// Unit vector toward the light (x right, y down, z toward the viewer).
@@ -69,24 +65,24 @@ pub struct Light {
     pub bounce: f32,
     pub bounce_dir: V3,
     /// Shadow penumbra: how fast shadow edges soften with distance from the
-    /// occluder (0.02 crisp sun .. 0.3 hazy).
+    /// occluder (0.02 narrow .. 0.3 wide).
     pub penumbra: f32,
     /// How far (units) shadows are traced.
     pub reach: f32,
     /// Occluders more than this far (units of z) in front of a shadow ray
     /// are taken to be in front of it, not blocking it.
     pub thickness: f32,
-    /// Whether one part casts shadows on another (a boulder on the ground:
-    /// yes; mountain ranges miles apart: no).
+    /// Whether one part casts shadows on another (false: each part is
+    /// shadowed only by itself).
     pub across_parts: bool,
 }
 
 impl Light {
     /// Light coming from `from` in the picture ((-1, -0.5): from the left, a
     /// little above), with `front` its component toward the viewer: 0 rakes
-    /// across the picture plane, 1 comes from behind the painter's shoulder,
-    /// negative comes from behind the motif (contre-jour: dark masses with
-    /// lit rims). Reflected light comes from below and the far side.
+    /// across the picture plane, 1 comes from behind the viewer, negative
+    /// comes from behind the solids, toward the viewer. Reflected light
+    /// comes from below and the far side.
     pub fn new(from: (f32, f32), front: f32) -> Self {
         let dir = unit([from.0, from.1, front]);
         Light {
@@ -196,8 +192,8 @@ pub trait Solid: Sync {
 }
 
 /// A 3-D body as a signed distance function (negative inside), in canvas
-/// units with z toward the viewer. Build it the way a stone is described:
-/// a mass (ellipsoid or block), turned, cut by fracture planes, weathered.
+/// units with z toward the viewer. Built from a primitive (ellipsoid or
+/// block), turned, cut by planes and displaced by noise.
 #[derive(Clone)]
 pub enum Sdf {
     Ellipsoid { c: V3, r: V3 },
@@ -239,8 +235,8 @@ impl Sdf {
     /// (in the block's own frame, so they follow it when turned).
     ///
     /// ```ignore
-    /// // a tor 120 wide and 80 tall, standing on the turf line at y = 600
-    /// let tor = Sdf::block([400.0, 600.0 - 40.0, 0.0], [120.0, 80.0, 90.0], 12.0);
+    /// // a block 120 wide and 80 tall with its foot at y = 600
+    /// let b = Sdf::block([400.0, 600.0 - 40.0, 0.0], [120.0, 80.0, 90.0], 12.0);
     /// ```
     pub fn block(c: V3, size: V3, round: f32) -> Sdf {
         Sdf::Block { c, half: [size[0] * 0.5, size[1] * 0.5, size[2] * 0.5], round }
@@ -251,9 +247,8 @@ impl Sdf {
         Sdf::Plane { at, n: unit(n) }
     }
     /// Split off everything beyond the plane through the point `at` (units)
-    /// facing `n` (a fracture plane); the new face becomes facet `facet`.
-    /// `round` (units) rounds the new edges (weathered arrises; 0 = fresh
-    /// break).
+    /// facing `n`; the new face becomes facet `facet`. `round` (units)
+    /// rounds the new edges (0 = sharp).
     pub fn cut(self, at: V3, n: V3, facet: u16, round: f32) -> Sdf {
         Sdf::Inter(vec![self, Sdf::Facet(Box::new(Sdf::half_space(at, n)), facet)], round)
     }
@@ -292,11 +287,10 @@ impl Sdf {
         let m = mul(rr, mul(rp, ry));
         Sdf::Turn { body: Box::new(self), c, m }
     }
-    /// Weather the surface: displace it in and out by about `amp`
-    /// units of 3-D fractal noise whose largest features are `period` units
-    /// across (a few units of `amp` on a rock tens of units across).
-    /// `ridged` makes sharp-lipped pits and crests (granite
-    /// grain, eroded sandstone) instead of soft lumps.
+    /// Displace the surface in and out by about `amp` units of 3-D fractal
+    /// noise whose largest features are `period` units across. `ridged`
+    /// sums `0.5 − |n|` per octave instead of `n`, which gives sharp creases
+    /// along the noise's zero set instead of rounded lumps.
     pub fn rough(self, amp: f32, period: f32, seed: u32, ridged: bool) -> Sdf {
         Sdf::Rough { body: Box::new(self), amp, period, noise: Box::new(Perlin::new(seed)), ridged }
     }
@@ -575,196 +569,6 @@ impl<F: Fn(f32, f32) -> Option<(f32, u16)> + Sync> Solid for Relief<F> {
     }
 }
 
-/// A mountain face or cliff seen from in front: a skyline (the crest), and
-/// below it a face that leans back from the viewer (`lean`), cut by gullies
-/// that start just under the crest and run down the fall lines, fanning out
-/// and widening as they descend, with rounded spurs between them. Optional
-/// strata make ledges across it.
-///
-/// Facets: 0 the face; 1 the top of a ledge, 2 its riser (with strata).
-pub struct Ridge {
-    x0: f32,
-    /// Crest y sampled every unit from x0, and its prefix sums.
-    crest: Vec<f32>,
-    sums: Vec<f64>,
-    /// How far below the crest the face reaches (units).
-    pub depth: f32,
-    /// How the face leans back: dz/dy (0 a sheer wall facing us, 1 a slope
-    /// tilted 45° toward the sky). Mountains ~0.6–1.2, cliffs ~0.1–0.3.
-    pub lean: f32,
-    /// Extra lean at the foot (a concave slope flattening out).
-    pub foot: f32,
-    /// Gully spacing just under the crest (units); they widen downhill.
-    pub gully: f32,
-    /// Gully depth, as a fraction of their spacing.
-    pub carve: f32,
-    /// How much the gullies follow the fall line (1) or run straight down (0).
-    pub fan: f32,
-    /// Ledges: (spacing, step height in z, tilt as dy/dx), or None.
-    pub strata: Option<(f32, f32, f32)>,
-    /// Added to every z (to place it in front of or behind other solids).
-    pub z0: f32,
-    /// Where the face meets level ground or water (y), if above its depth.
-    pub base: Option<f32>,
-    spurs: Fbm,
-    rills: Fbm,
-    wander: Fbm,
-}
-
-impl Ridge {
-    /// A ridge from `x0` to `x1` (units) whose crest line is at
-    /// `y = crest(x)` (units, y down; sampled once per unit), and whose face
-    /// reaches `depth` units below the crest at every x, whatever stands in
-    /// front of it (mask it where a nearer passage covers it). `seed` picks
-    /// its spurs and gullies. Defaults: `lean(0.8, 0.6)`, gullies every 40
-    /// units carved 0.35 deep, `fan(1.0)`, no strata, `z0(0.0)`.
-    pub fn new(x0: f32, x1: f32, crest: impl Fn(f32) -> f32, depth: f32, seed: u32) -> Self {
-        let n = (x1 - x0).ceil().max(1.0) as usize + 1;
-        let crest: Vec<f32> = (0..n).map(|i| crest(x0 + i as f32)).collect();
-        let mut sums = vec![0.0f64; n + 1];
-        for i in 0..n {
-            sums[i + 1] = sums[i] + crest[i] as f64;
-        }
-        Ridge {
-            x0,
-            crest,
-            sums,
-            depth,
-            lean: 0.8,
-            foot: 0.6,
-            gully: 40.0,
-            carve: 0.35,
-            fan: 1.0,
-            strata: None,
-            z0: 0.0,
-            base: None,
-            spurs: Fbm::new(seed, 3, 1.0),
-            rills: Fbm::new(seed + 7, 3, 1.0),
-            wander: Fbm::new(seed + 13, 2, 1.0),
-        }
-    }
-    /// How the face leans back (dz/dy, no units; see the `lean` field) and
-    /// how much more it leans at the foot.
-    pub fn lean(mut self, lean: f32, foot: f32) -> Self {
-        self.lean = lean;
-        self.foot = foot;
-        self
-    }
-    /// Gullies `spacing` units apart just under the crest (they widen
-    /// downhill), carved `carve` × their spacing deep.
-    pub fn gullies(mut self, spacing: f32, carve: f32) -> Self {
-        self.gully = spacing;
-        self.carve = carve;
-        self
-    }
-    /// 1: gullies follow the fall line; 0: they run straight down.
-    pub fn fan(mut self, f: f32) -> Self {
-        self.fan = f;
-        self
-    }
-    /// Ledges `spacing` units apart down the face, each stepping `step`
-    /// units in z, tilted `tilt` (dy/dx: 0.1 drops 1 unit every 10 across).
-    pub fn strata(mut self, spacing: f32, step: f32, tilt: f32) -> Self {
-        self.strata = Some((spacing, step, tilt));
-        self
-    }
-    /// Add `z` units toward the viewer to the whole face (to place it in
-    /// front of or behind other solids in the same `Form`).
-    pub fn z0(mut self, z: f32) -> Self {
-        self.z0 = z;
-        self
-    }
-    /// The face stops at the level line `y` (units): a beach, a lake, a
-    /// valley floor.
-    pub fn base(mut self, y: f32) -> Self {
-        self.base = Some(y);
-        self
-    }
-
-    /// The crest's y at x (linear between samples, flat past the ends).
-    pub fn crest(&self, x: f32) -> f32 {
-        let t = (x - self.x0).clamp(0.0, (self.crest.len() - 1) as f32);
-        let i = (t as usize).min(self.crest.len() - 2);
-        let u = t - i as f32;
-        self.crest[i] + (self.crest[i + 1] - self.crest[i]) * u
-    }
-
-    /// The crest averaged over ±r units (the shape of the mass seen from
-    /// further down its face, where the small notches no longer matter).
-    fn crest_smooth(&self, x: f32, r: f32) -> f32 {
-        if r < 0.5 {
-            return self.crest(x);
-        }
-        // the integral of the crest (piecewise constant per sample, from
-        // sample centers), continuous in x and r so the face has no steps
-        let n = self.crest.len();
-        let integral = |t: f32| -> f64 {
-            let t = (t - self.x0 + 0.5).clamp(0.0, n as f32);
-            let i = (t as usize).min(n - 1);
-            self.sums[i] + (t - i as f32) as f64 * self.crest[i] as f64
-        };
-        let (a, b) = (x - r, x + r);
-        let (ca, cb) = ((a - self.x0 + 0.5).clamp(0.0, n as f32), (b - self.x0 + 0.5).clamp(0.0, n as f32));
-        if cb - ca < 1e-3 {
-            return self.crest(x);
-        }
-        ((integral(b) - integral(a)) / (cb - ca) as f64) as f32
-    }
-
-    fn height(&self, x: f32, y: f32) -> Option<(f32, u16)> {
-        let d = y - self.crest(x);
-        if d < 0.0 || d > self.depth || self.base.is_some_and(|b| y > b) {
-            return None;
-        }
-        // the mass: a face leaning back, steepest near the crest, flattening
-        // toward the foot; deeper down, only the large shape of the crest counts
-        let r = (d * 0.8).min(200.0);
-        let cs = self.crest_smooth(x, r);
-        let h = (r * 0.5).max(3.0);
-        let slope = (self.crest_smooth(x + h, r) - self.crest_smooth(x - h, r)) / (2.0 * h);
-        let dd = (y - cs).max(0.0);
-        let s = self.lean + self.foot * 2.0 * dd / self.depth;
-        let mut z = self.lean * dd + self.foot * dd * dd / self.depth;
-        // follow the fall line back up to where it leaves the crest
-        let k = s * s * slope / (s * s * slope * slope + 1.0);
-        let u = x - self.fan * k * dd;
-        // gullies: they wander a little, and downhill the fine ones merge
-        // into fewer, wider ones (a fine set fading into a coarse one; the
-        // noise is sampled at fixed scales so nothing shears)
-        let g = self.gully;
-        let uw = u + 0.35 * g * self.wander.get(u / (g * 2.0), dd / (g * 6.0));
-        let merge = crate::smoothstep(0.0, self.depth * 0.7, dd);
-        let a = self.carve * g * (1.0 + 1.5 * dd / self.depth) * crate::smoothstep(0.0, g * 0.8, d);
-        let v = |n: f32, p: f32| n.abs().min(0.6).powf(p);
-        let fine = v(self.spurs.get(uw / g, dd / (g * 3.5)), 0.75);
-        let coarse = v(self.spurs.get(uw / (g * 2.2) + 17.3, dd / (g * 7.0)), 0.75);
-        let rills = v(self.rills.get(uw / (g * 0.3), dd / (g * 1.2)), 0.8);
-        z += a * (fine + (coarse - fine) * merge + 0.2 * rills);
-        let mut facet = 0;
-        if let Some((sp, step, tilt)) = self.strata {
-            // ledges: each bed leans back a little, then a riser
-            let q = (d + tilt * (x - self.x0) + 0.2 * sp * self.wander.get(x / (sp * 6.0), 3.0)) / sp;
-            let fr = q - q.floor();
-            let riser = crate::smoothstep(0.78, 1.0, fr);
-            z += step * (q.floor() + riser);
-            facet = if fr < 0.78 { 1 } else { 2 };
-        }
-        Some((z + self.z0, facet))
-    }
-}
-
-impl Solid for Ridge {
-    fn bounds(&self) -> [f32; 4] {
-        let top = self.crest.iter().cloned().fold(f32::INFINITY, f32::min);
-        let bot = self.crest.iter().cloned().fold(f32::NEG_INFINITY, f32::max);
-        let low = self.base.map_or(bot + self.depth, |b| b.min(bot + self.depth));
-        [self.x0, top, self.x0 + (self.crest.len() - 1) as f32, low]
-    }
-    fn hit(&self, x: f32, y: f32) -> Option<Hit> {
-        relief_hit(&|x, y| self.height(x, y), x, y)
-    }
-}
-
 // ------------------------------------------------------------------- form
 
 /// A part of the form, as added.
@@ -785,11 +589,11 @@ pub struct Sample {
 
 impl Sample {
     /// The fall line through this point, as a canvas angle (radians,
-    /// 0 = left→right, y down): the way water runs down the plane.
+    /// 0 = left→right, y down): gravity projected onto the plane.
     pub fn fall(&self) -> f32 {
         fall_angle(self.n)
     }
-    /// Around the form: perpendicular to the fall line.
+    /// Perpendicular to the fall line.
     pub fn across(&self) -> f32 {
         fall_angle(self.n) - std::f32::consts::FRAC_PI_2
     }
@@ -833,16 +637,15 @@ impl Form {
         }
     }
 
-    /// Add a solid at distance `dist` from the viewer (any unit the painter
-    /// likes, used only for aerial perspective). Where it is nearer than what
+    /// Add a solid at distance `dist` from the viewer (any unit, used only
+    /// for aerial perspective). Where it is nearer than what
     /// is already there, it hides it. Returns its part id (1, 2, …).
     pub fn add(&mut self, s: &dyn Solid, dist: f32) -> PartId {
         self.add_at(s, &|_, _, _| dist)
     }
 
     /// Like `add`, with the distance varying over the solid:
-    /// `dist(x, y, z)` (a ground plane running back, a ridge whose foot is
-    /// nearer than its crest).
+    /// `dist(x, y, z)` (e.g. a plane receding from the viewer).
     pub fn add_at(&mut self, s: &dyn Solid, dist: &(dyn Fn(f32, f32, f32) -> f32 + Sync)) -> PartId {
         self.add_by(s, dist, false)
     }
@@ -1004,13 +807,12 @@ impl Form {
         self.sample(x, y).map_or(Shade::default(), |s| s.shade)
     }
 
-    /// Fall-line angle at a point (straight down where no solid is): brush
-    /// strokes down the planes.
+    /// Fall-line angle at a point (straight down where no solid is).
     pub fn fall(&self, x: f32, y: f32) -> f32 {
         self.sample(x, y).map_or(std::f32::consts::FRAC_PI_2, |s| s.fall())
     }
 
-    /// Perpendicular to the fall line: strokes around the form.
+    /// Perpendicular to the fall line.
     pub fn across(&self, x: f32, y: f32) -> f32 {
         self.fall(x, y) - std::f32::consts::FRAC_PI_2
     }
@@ -1026,15 +828,15 @@ impl Form {
     }
 
     /// A mask from any per-point rule over the form (0 where no solid is):
-    /// `form.mask(|s| if s.part == rock { s.shade.lit(0.2) } else { 0.0 })`.
+    /// `form.mask(|s| if s.part == id { s.shade.lit(0.2) } else { 0.0 })`.
     pub fn mask(&self, g: impl Fn(&Sample) -> f32 + Sync) -> Mask {
         let data = (0..self.f.w * self.f.h).into_par_iter().map(|i| self.sample_i(i).map_or(0.0, |s| g(&s))).collect();
         Mask { f: self.f, data }
     }
 
     /// The silhouette of the given parts, its edge `soft(&sample)` units wide
-    /// (evaluated at the nearest point inside): crisp near, lost in haze far
-    /// off, softer where the form turns away than where a plane breaks.
+    /// (evaluated at the nearest point inside), so the width can vary with
+    /// the sample's distance, normal or facet.
     pub fn silhouette(&self, parts: &[PartId], soft: impl Fn(&Sample) -> f32 + Sync) -> Mask {
         let inside: Vec<bool> = self.part.par_iter().map(|p| *p != 0 && parts.contains(p)).collect();
         let f = self.f;
@@ -1043,8 +845,8 @@ impl Form {
 
     /// Hard edges inside the form: plane breaks (normals turning by more
     /// than `turn` radians within `span` units) and overlaps (depth jumping
-    /// by more than `step` units, where one solid or ledge stands in front of
-    /// another). 0..1, strongest at the sharpest breaks.
+    /// by more than `step` units, where one solid or part of one stands in
+    /// front of another). 0..1, strongest at the sharpest breaks.
     pub fn edges(&self, turn: f32, step: f32, span: f32) -> Mask {
         let f = self.f;
         let k = (span * f.scale).round().max(1.0) as isize;
@@ -1081,7 +883,7 @@ impl Form {
                     let surf = (run * run + dz * dz).sqrt();
                     e = e.max(crate::smoothstep(turn * 0.7, turn * 1.3, ang * run / surf.max(1e-6)));
                     // a jump in depth the slopes on either side don't explain:
-                    // one ledge standing in front of another
+                    // one surface standing in front of another
                     let slope = |n: V3| -(n[0] * ddx + n[1] * ddy) / n[2].max(0.2);
                     let pred = 0.5 * (slope(na) + slope(nb));
                     e = e.max(crate::smoothstep(step * 0.7, step * 1.3, (dz - pred).abs()));
@@ -1093,9 +895,9 @@ impl Form {
     }
 
     /// How the surface bends at a point, over `span` units: positive where it
-    /// is convex (an arris, a spur: catches light, often a light edge),
-    /// negative where concave (a joint, a gully, a crevice: a dark accent).
-    /// Roughly the turn in radians across the span, strongest of the two axes.
+    /// is convex (normals diverge), negative where concave (normals
+    /// converge). Roughly the turn in radians across the span, whichever of
+    /// the two axes turns more.
     pub fn bend(&self, x: f32, y: f32, span: f32) -> f32 {
         let s = |dx: f32, dy: f32| self.sample(x + dx, y + dy);
         let mut best = 0.0f32;
@@ -1175,8 +977,8 @@ mod tests {
     #[test]
     fn fracture_planes_are_facets_with_hard_edges() {
         let mut form = Form::new(frame());
-        let rock = Sdf::ellipsoid([500.0, 350.0, 0.0], [200.0, 150.0, 120.0]).cut([500.0, 300.0, 60.0], [-0.3, -0.5, 1.0], 1, 0.0);
-        let id = form.add(&rock, 1.0);
+        let body = Sdf::ellipsoid([500.0, 350.0, 0.0], [200.0, 150.0, 120.0]).cut([500.0, 300.0, 60.0], [-0.3, -0.5, 1.0], 1, 0.0);
+        let id = form.add(&body, 1.0);
         let s = form.sample(500.0, 300.0).unwrap();
         assert_eq!((s.part, s.facet), (id, 1));
         let n = unit([-0.3, -0.5, 1.0]);
@@ -1240,7 +1042,7 @@ mod tests {
             }
             assert_eq!(misses, (0, 0), "rx {rx}: misses (analytic, traced)");
         }
-        // the reviewer's pixel: the analytic front is z = 23.108446
+        // a pixel near the thin edge: the analytic front is z = 23.108446
         let h = Sdf::ellipsoid([500.0, 350.0, 0.0], [5.0, 100.0, 100.0]).hit(495.25, 329.0).unwrap();
         assert!((h.z - 23.108446).abs() < 1e-3, "{}", h.z);
         assert!(h.n[0] < -0.9, "{:?}", h.n);
@@ -1285,8 +1087,8 @@ mod tests {
         assert!(top[2] > 0.4 && top[1] < 0.0, "pitch: {top:?}");
         let right = body_to_view(unit_ball().turn([0.0; 3], 0.0, 0.0, a), [1.0, 0.0, 0.0]);
         assert!(right[1] > 0.4 && right[2].abs() < 1e-6, "roll: {right:?}");
-        // the reviewer's probe: a ball above the pivot, pitched a quarter
-        // turn, comes round to the front
+        // a ball above the pivot, pitched a quarter turn, comes round to the
+        // front
         let s = Sdf::ellipsoid([0.0, -10.0, 0.0], [1.0; 3]).turn([0.0; 3], 0.0, std::f32::consts::FRAC_PI_2, 0.0);
         let h = s.hit(0.0, 0.0).expect("in front of the pivot");
         assert!((h.z - 11.0).abs() < 0.1, "{}", h.z);
@@ -1294,22 +1096,5 @@ mod tests {
         let b = Sdf::block([0.0; 3], [40.0, 40.0, 40.0], 0.0).turn([0.0; 3], 0.0, 0.4, 0.0);
         assert_eq!(b.hit(0.0, -22.0).map(|h| h.facet), Some(4));
         assert_eq!(b.hit(0.0, 0.0).map(|h| h.facet), Some(5));
-    }
-
-    #[test]
-    fn a_ridge_has_flanks_and_gullies() {
-        let mut form = Form::new(frame());
-        // a peak at x = 500
-        let r = Ridge::new(0.0, 1000.0, |x| 200.0 + (x - 500.0).abs() * 0.5, 400.0, 3).gullies(40.0, 0.4);
-        form.add(&r, 1.0);
-        form.light(Light::new((-1.0, -0.5), 0.4));
-        assert!(form.sample(500.0, 190.0).is_none());
-        // averaged over the gullies, the left flank faces left, the right right
-        let mean_nx = |x0: f32| (0..40).map(|k| form.sample(x0 + k as f32 * 3.0, 380.0).unwrap().n[0]).sum::<f32>() / 40.0;
-        assert!(mean_nx(250.0) < -0.05 && mean_nx(650.0) > 0.05);
-        // the gullies make light and dark alternate across the face
-        let vals: Vec<f32> = (0..200).map(|k| form.shade(300.0 + k as f32 * 2.0, 450.0).direct).collect();
-        let (lo, hi) = vals.iter().fold((1.0f32, 0.0f32), |a, &v| (a.0.min(v), a.1.max(v)));
-        assert!(hi - lo > 0.3, "{lo}..{hi}");
     }
 }

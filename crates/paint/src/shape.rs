@@ -85,7 +85,7 @@ impl Shape {
         self
     }
 
-    /// Region below an open curve (e.g. a hill line or horizon) down to `bottom`.
+    /// Region below an open curve (e.g. y = f(x)) down to `bottom`.
     pub fn below(mut self, curve: &[(f32, f32)], bottom: f32) -> Self {
         if curve.len() < 2 {
             return self;

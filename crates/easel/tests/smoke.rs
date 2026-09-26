@@ -34,7 +34,7 @@ impl Drop for Closing {
     }
 }
 
-const CANVAS: &str = r#"canvas{size=300, aspect=1.25, linen={16, 14}, seed=3, ground={{pile={{"lead white", 2}, {"red earth", 1}}, um=100, apply="knife"}, {pile={{"lead white", 6}, {"raw umber", 1}}, um=50, apply="brush"}}}"#;
+const CANVAS: &str = r#"canvas{size=300, aspect=5, linen={16, 14}, seed=3, ground={{pile={{"lead white", 2}, {"red earth", 1}}, um=100, apply="knife"}, {pile={{"lead white", 6}, {"raw umber", 1}}, um=50, apply="brush"}}}"#;
 
 const PAINT: &str = r#"
 a = pile{{"lead white", 6}, {"yellow ochre", 2}, {"vermilion", 0.3}, medium=0.2}
@@ -53,7 +53,7 @@ fn a_short_session_at_the_easel() {
     let _ = std::fs::remove_dir_all(root());
     std::fs::create_dir_all(root().join("notes")).unwrap();
     let _closing = Closing;
-    ok(&["open", "smoke", "--width", "200"]);
+    ok(&["open", "smoke"]);
     let r = ok(&["-s", "smoke", "do", CANVAS]);
     assert!(r.contains("ok · chunk 1"), "{r}");
     let r = ok(&["-s", "smoke", "do", PAINT]);
@@ -65,7 +65,7 @@ fn a_short_session_at_the_easel() {
     let look = ok(&["-s", "smoke", "look"]);
     let path = look.split_whitespace().next().unwrap();
     assert!(Path::new(path).exists(), "{look}");
-    let look = ok(&["-s", "smoke", "look", "--crop", "450,80,950,380", "--grid", "50", "--mode", "value,squint"]);
+    let look = ok(&["-s", "smoke", "look", "--crop", "450,20,950,180", "--grid", "50", "--mode", "value,squint"]);
     assert!(Path::new(look.split_whitespace().next().unwrap()).exists(), "{look}");
 
     // not in the easel: every one errors, and the log keeps its two chunks
@@ -100,20 +100,18 @@ fn a_short_session_at_the_easel() {
     ok(&["-s", "smoke", "close"]);
     let log = root().join("paintings/lua/smoke.lua");
     let replayed = root().join("replayed.png");
-    ok(&["run", log.to_str().unwrap(), "--width", "200", "--out", replayed.to_str().unwrap()]);
+    ok(&["run", log.to_str().unwrap(), "--width", "2400", "--out", replayed.to_str().unwrap()]);
     assert!(std::fs::read(&saved).unwrap() == std::fs::read(&replayed).unwrap(), "the replay's PNG differs from the session's");
 
     // reopening goes on from the log: a chunk that ran is there for good
-    let r = ok(&["open", "smoke", "--width", "200"]);
+    let r = ok(&["open", "smoke"]);
     assert!(r.contains("resumed 2 chunks"), "{r}");
-    ok(&["-s", "smoke", "close"]);
-
     // the journal only grows
     ok(&["note", "first entry"]);
     ok(&["note", "second entry", "in two words"]);
     let j = std::fs::read_to_string(root().join("notes/journal.md")).unwrap();
     let lines: Vec<&str> = j.lines().collect();
     assert_eq!(lines.len(), 2, "{j}");
-    assert!(lines[0].starts_with("- ") && lines[0].ends_with(" UTC: first entry"), "{j}");
-    assert!(lines[1].ends_with(" UTC: second entry in two words"), "{j}");
+    assert!(lines[0].starts_with("- day 2, ") && lines[0].ends_with(": first entry"), "{j}");
+    assert!(lines[1].ends_with(": second entry in two words"), "{j}");
 }

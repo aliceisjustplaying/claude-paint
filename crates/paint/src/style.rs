@@ -130,8 +130,7 @@ impl Style {
             body_medium: 0.2,
             thin_medium: 0.45,
             mix_jitter: 0.06,
-            // Alice's pick from the Round 6 relief A/B (notes/round6/relief/):
-            // 0.2 embossed every stroke into creases ("grooves"); 0.06 keeps
+            // relief light: 0.2 embossed every stroke into creases ("grooves"); 0.06 keeps
             // a hint of weave and ridge without them
             relief: (0.06, 0.006),
         }
@@ -191,7 +190,7 @@ impl Style {
 }
 
 /// A brushed top ground, put on as a primer brushes out lead white in oil
-/// (see notes/loop2_grain.md): the paste is first spread with a broad hog
+///: the paste is first spread with a broad hog
 /// brush in crossing strokes whose direction wanders over the canvas, then
 /// laid off while wet with light passes of the unloaded brush held low, which
 /// skim rather than plough, level the spreading's stroke edges and leave

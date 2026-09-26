@@ -256,7 +256,7 @@ const BEAD_ASPECT: f32 = 0.5;
 /// takes a film over 100 µm on the sliver to act. At 3200 (0.1 mm pixels)
 /// the tens of µm that leveling pours into a pixel a hair only grazed no
 /// longer sit on a sliver of it and leave the rest bare (the lab 2 lime's
-/// pale pinholes, notes/glitch.md P1).
+/// pale pinholes).
 pub(crate) fn bead_cover(cover: f32, coats: f32, px_um: f32) -> f32 {
     if cover >= 1.0 || coats.is_nan() || coats <= 0.0 || px_um.is_nan() || px_um <= 0.0 {
         return cover;

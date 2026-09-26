@@ -826,7 +826,7 @@ mod tests {
     }
 
     /// The guide is the drawn line: continuous along it where the deposit
-    /// breaks up into the grain (the beaded limbs of `pencil.lua`); lifted
+    /// breaks up into the grain; lifted
     /// by the eraser, kept by fixative, unchanged by paint over it.
     #[test]
     fn guide_follows_the_line() {

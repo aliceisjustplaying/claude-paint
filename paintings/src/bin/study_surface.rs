@@ -1,4 +1,4 @@
-//! Covering a passage (notes/surface.md). Dark body paint over the warm
+//! Covering a passage. Dark body paint over the warm
 //! Friedrich ground, four panels a row:
 //!
 //! Top, the body filbert: coverage 1 (strokes side by side, ground between

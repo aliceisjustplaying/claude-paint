@@ -33,7 +33,7 @@
 //! The numbers (units of brush width): found `a 0 b 0.12 c 0.06`, soft
 //! `0.02 / 0.25 / 0.8`, lost `0.1 / 0.4 / 2.2`, interpolated in between.
 //! The overrun stays short: a longer one only moves the edge out as a
-//! staircase of opaque stroke ends (tried: `notes/edges.md`). What makes an
+//! staircase of opaque stroke ends. What makes an
 //! edge soft or lost is the film thinning to nothing over a distance: the
 //! deposit past the fence falls with `f²` (`bristle::exchange`).
 //! `reach` scales `a` and `b`, `waver` the line's wander.

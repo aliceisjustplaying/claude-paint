@@ -1,5 +1,5 @@
-//! The hand's ledger: what the brushes actually did, and how long a
-//! painter's hand takes to do it.
+//! The hand's ledger: what the brushes did, and an estimate of the hand
+//! time it takes.
 //!
 //! Every mark the canvas makes is counted here as it is planned (strokes,
 //! their path length, stipple touches, trips to the palette to reload or mix
@@ -22,7 +22,7 @@ use crate::bristle::{Kind, Tool};
 use crate::canvas::Canvas;
 
 /// Seconds of hand time per kind of move. Sources and estimates:
-/// [S]: from a source; [E]: my estimate.
+/// [S]: from a source; [E]: an estimate.
 pub mod pace {
     /// Fitts's law for bringing the brush down where the next mark starts,
     /// `T = FITTS_A + FITTS_B · log2(1 + D / W)`. MacKenzie's stylus
@@ -34,11 +34,11 @@ pub mod pace {
     /// `T = STEER_B · L / W`, with b ≈ 0.11 s for a stylus in a linear
     /// tunnel (Accot & Zhai 1997) [S].
     pub const STEER_B: f64 = 0.11;
-    /// How loose a painter's path is: the tunnel a stroke steers through is
-    /// this many mark widths wide (a brushstroke isn't a tunnel task) [E].
+    /// The tunnel a stroke steers through, in mark widths (looser than a
+    /// strict tunnel task) [E].
     pub const TUNNEL: f64 = 4.0;
-    /// The narrowest tunnel (mm): a rigger line is drawn fluently, not
-    /// steered through a hair's width [E].
+    /// The narrowest tunnel (mm), so a hairline mark is not priced as if
+    /// steered through its own width [E].
     pub const TUNNEL_MIN_MM: f64 = 3.0;
     /// The fastest a brush travels (mm/s): a broad sweep of the arm [E].
     pub const V_MAX: f64 = 400.0;
@@ -60,8 +60,8 @@ pub mod pace {
     pub const REMIX: f64 = 20.0;
     /// Wiping the brush on the rag (a blender between passes) [E].
     pub const WIPE: f64 = 2.0;
-    /// A fill dab (looking over a passage and dabbing into the gaps) reuses
-    /// the paint of the passage: one reload serves about this many dabs [E].
+    /// A fill dab (`fill`: a dab into a gap of a passage) reuses the paint
+    /// of the passage: one reload serves about this many dabs [E].
     pub const DABS_PER_RELOAD: f64 = 8.0;
     /// Pencil and chalk: drawing speed (mm/s) and the set-down per line [E].
     pub const PENCIL_MM_S: f64 = 40.0;
@@ -108,8 +108,8 @@ pub struct Piles {
 impl Piles {
     /// Room on the palette [E].
     pub const PILES: usize = 16;
-    /// Colors closer than this (OKLab distance) come from the same pile: a
-    /// painter doesn't remix for the jitter of a hand-mixed pile [E].
+    /// Colors closer than this (OKLab distance) come from the same pile, so
+    /// color jitter within a pile doesn't count as a new mix [E].
     pub const SAME: f32 = 0.035;
 
     /// Dip into `c` (linear RGB): true if a new pile had to be mixed.
@@ -117,7 +117,7 @@ impl Piles {
         let l = crate::color::to_oklab(c);
         let d = |p: &[f32; 3]| ((p[0] - l[0]).powi(2) + (p[1] - l[1]).powi(2) + (p[2] - l[2]).powi(2)).sqrt();
         if let Some(i) = self.piles.iter().rposition(|p| d(p) < Self::SAME) {
-            // the pile in use moves to the front of the painter's mind
+            // the pile in use becomes the most recent
             let p = self.piles.remove(i);
             self.piles.push(p);
             return false;
@@ -262,7 +262,7 @@ impl std::fmt::Display for Tally {
 
 impl Canvas {
     /// Hand time: with `Some(slice)` (minutes), passes are painted in slices
-    /// of about that much hand time with the paint ageing between them
+    /// of about that much hand time with the paint aging between them
     /// (`wait`), and `clock_hand_min` puts the rest of the hand time counted on
     /// the clock. `None` (the default): marks take no time on the clock.
     /// Either way the ledger counts from here as already clocked.
@@ -333,15 +333,15 @@ mod tests {
         rayon::ThreadPoolBuilder::new().num_threads(threads).build().unwrap().install(f)
     }
 
-    /// A sky, a stipple over it and a few strokes, on a 440 mm canvas, with
-    /// hand time on (a short slice) or off.
+    /// Strokes over the upper region, a stipple across a band, on a 440 mm
+    /// canvas, with hand time on (a short slice) or off.
     fn scene(crop: Option<Crop>, hand: Option<f32>) -> Canvas {
         let mut c = Canvas::new_window(240, 1.4, hex("#c8b89a"), crop).with_size_mm(440.0);
         c.set_hand_time(hand);
         let f = c.frame();
-        let sky = Mask::from_fn(f, |_, y| if y < 420.0 { 1.0 } else { 0.0 });
+        let upper = Mask::from_fn(f, |_, y| if y < 420.0 { 1.0 } else { 0.0 });
         let hd = Handling::new(Tool::filbert(18.0)).color(|_, y| if y < 200.0 { hex("#6f84a8") } else { hex("#d8ccb0") }).coverage(3.0).fill(false);
-        c.work(&sky, &hd, 3);
+        c.work(&upper, &hd, 3);
         let band = Mask::from_fn(f, |_, y| if (300.0..500.0).contains(&y) { 1.0 } else { 0.0 });
         let mut sp = Stipple::new(Tool::stippler(6.0));
         sp.color = Box::new(|_, _| hex("#cfccc2"));
@@ -382,15 +382,14 @@ mod tests {
         assert!(((a.clock() - c0) - t.minutes()).abs() < 1e-3, "clock {} vs hand {}", a.clock() - c0, t.minutes());
         assert_eq!(t.clocked, t.secs);
         // (the paint aged but is still open: the dry picture can be the
-        // same, the wet paint is not. Before the plough was fixed, strokes
-        // left thin films between their rims, which set within the pass)
+        // same, the wet paint is not)
         let wet_bits = |c: &Canvas| c.wet.vol.iter().map(|v| v.to_bits()).collect::<Vec<_>>();
         assert_ne!(wet_bits(&a), wet_bits(&off), "paint that aged while the hand worked");
     }
 
     /// A checkpoint of a hand-timed painting resumes with its ledger, the
     /// time still owed and hand time on: a resumed run paints and clocks
-    /// exactly what an uninterrupted one does (review r6, finding 1).
+    /// exactly what an uninterrupted one does.
     #[test]
     fn a_checkpoint_keeps_hand_time_and_the_ledger() {
         let first = |c: &mut Canvas| {
@@ -421,10 +420,10 @@ mod tests {
     }
 
     /// With hand time on, only the default order becomes a sweep down: an
-    /// order the painter asked for is kept (review r6, finding 3). Seen in
-    /// the paint's age: a sweep paints the top in the first slices (older
-    /// than the bottom); scatter's slices each reach over the whole area. A
-    /// preset's order counts as asked for (`ruler()`, thermos B2).
+    /// order set explicitly is kept. Seen in the paint's age: a sweep paints
+    /// the top in the first slices (older than the bottom); scatter's slices
+    /// each reach over the whole area. A preset's order counts as set
+    /// explicitly (`ruler()`).
     #[test]
     fn hand_time_keeps_an_order_asked_for() {
         use crate::handling::Order;
@@ -454,8 +453,8 @@ mod tests {
 
     /// A wait between slices must see the strokes of the slices after it as
     /// fresh work (their ids above its watermark), or their paint takes the
-    /// cure and thickness of the film it went over: setting streaks along
-    /// the slices' seams (found in notes/time's example in sittings).
+    /// cure and thickness of the film it went over and sets in streaks along
+    /// the slices' seams.
     #[test]
     fn the_slices_after_a_wait_are_fresh_work() {
         let mut c = Canvas::new(240, 1.4, hex("#c8b89a")).with_size_mm(440.0);

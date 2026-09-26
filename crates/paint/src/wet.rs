@@ -488,35 +488,6 @@ mod tests {
         let tiny = super::over_share(pig, under, 5.0, 1e-30);
         assert!(tiny.iter().all(|v| v.is_finite() && (v - 1.0).abs() < 1e-6), "{tiny:?}");
     }
-    use crate::color::hex;
-    use crate::mask::Mask;
-    use crate::style::Style;
-
-    /// How thick the stock handlings lay paint (coats), for choosing `aim`.
-    #[test]
-    #[ignore]
-    fn probe_laid_thickness() {
-        let st = Style::friedrich();
-        for (name, k) in [("broad", 0), ("body", 1), ("detail", 2), ("glaze0.9", 3), ("broad load .3", 4)] {
-            let mut c = st.prepare(500, 1.0, 1);
-            let f0 = c.film.clone();
-            let m = Mask::from_fn(c.frame(), |x, y| if (x - 500.0).abs() < 300.0 && (y - 500.0).abs() < 300.0 { 1.0 } else { 0.0 });
-            let col = move |_: f32, _: f32| hex("#8a9ab0");
-            let h = match k {
-                0 => st.broad().color(col),
-                1 => st.body().color(col),
-                2 => st.detail().color(col),
-                3 => st.glaze(0.9).color(col),
-                _ => st.broad().color(col).load(0.3),
-            };
-            c.work(&m, &h, 3);
-            c.dry();
-            let mut d: Vec<f32> = (0..f0.len()).filter(|&i| m.data[i] > 0.5).map(|i| c.film[i] - f0[i]).collect();
-            d.sort_by(|a, b| a.total_cmp(b));
-            let p = |q: f32| d[((d.len() - 1) as f32 * q) as usize];
-            println!("{name:14} coats p10 {:.2} p50 {:.2} p90 {:.2} mean {:.2}", p(0.1), p(0.5), p(0.9), d.iter().sum::<f32>() / d.len() as f32);
-        }
-    }
 
     /// `Paint::aimed` reaches any target made by a paint of the same hiding
     /// (the review's repro: masstone 0.8, hiding 0.92, 0.1 coats over black),
@@ -583,10 +554,10 @@ mod tests {
             to_oklab(c.under(x, y, 2.0))[0]
         }
 
-        /// A loaded stiff light laid lightly into an open dark stays nearly
-        /// as light as over the dark dried; the same light from a lean
+        /// A loaded stiff light laid lightly into an open dark keeps most of
+        /// the lift it has over the dark dried; the same light from a lean
         /// brush pressed hard is worked into the dark. (Before the surface
-        /// film, the loaded one mixed a third to half of the dark in.)
+        /// film, the loaded one mixed nearly half of the dark in.)
         #[test]
         fn a_loaded_light_laid_lightly_stays_on_top() {
             let dark = Paint::body(hex("#262a24"));
@@ -608,7 +579,13 @@ mod tests {
             let (wet_loaded, wet_lean) = run(false);
             let (dry_loaded, dry_lean) = run(true);
             let (loaded, lean) = (wet_loaded / dry_loaded, wet_lean / dry_lean);
-            assert!(loaded > 0.85, "a loaded light laid lightly into wet dark keeps {loaded:.2} of its lift over the dark");
+            // (0.68 here, 0.65 at 1000 px and 0.63 at 2400; main's
+            // one-mixture engine keeps 0.55, 0.56 and 0.57. Before main's
+            // dry-rims fix, the hog flat's hairs, finer than a pixel at
+            // 500 px, ploughed the wet dark out of the light's track and it
+            // kept 0.97 here, but 0.58 at 2400 px, where they don't:
+            // notes/wet_merge/MERGE.md)
+            assert!(loaded > 0.62, "a loaded light laid lightly into wet dark keeps {loaded:.2} of its lift over the dark");
             assert!(lean < loaded - 0.1, "a lean brush pressed hard works the dark in more: {lean:.2} vs {loaded:.2}");
         }
 

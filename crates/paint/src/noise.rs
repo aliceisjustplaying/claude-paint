@@ -342,36 +342,6 @@ impl Worley {
         }
         Cell { f1, f2, id, at }
     }
-    /// 3-D: distance to the nearest feature point, in cells.
-    pub fn f1_3(&self, p: [f32; 3]) -> f32 {
-        let q = [p[0] / self.period, p[1] / self.period, p[2] / self.period];
-        let c = [q[0].floor() as i32, q[1].floor() as i32, q[2].floor() as i32];
-        let fr = [q[0] - c[0] as f32, q[1] - c[1] as f32, q[2] - c[2] as f32];
-        let mut f1 = f32::MAX;
-        // the nearest feature is within √3 of the point: out to 5×5×5,
-        // the 3×3×3 block first, then the outer shell where it could be nearer
-        for outer in [false, true] {
-            for dk in -2..=2i32 {
-                for dj in -2..=2i32 {
-                    for di in -2..=2i32 {
-                        if (di.abs().max(dj.abs()).max(dk.abs()) > 1) != outer {
-                            continue;
-                        }
-                        if outer {
-                            let (gx, gy, gz) = (gap(fr[0], di), gap(fr[1], dj), gap(fr[2], dk));
-                            if gx * gx + gy * gy + gz * gz >= f1 {
-                                continue;
-                            }
-                        }
-                        let f = self.point(c[0] + di, c[1] + dj, c[2] + dk);
-                        let d = (f[0] - q[0]).powi(2) + (f[1] - q[1]).powi(2) + (f[2] - q[2]).powi(2);
-                        f1 = f1.min(d);
-                    }
-                }
-            }
-        }
-        f1.sqrt()
-    }
 }
 
 /// Least distance along one axis from a point at fraction `f` (0..1) of its
@@ -510,7 +480,7 @@ mod tests {
             let _ = w.fbm(&n, x, y) + a.fbm(&n, x, y);
             let cl = c.get(x, y);
             assert!(cl.f1 <= cl.f2 && cl.edge() >= 0.0);
-            let _ = r.get3([x, y, 3.0], 20.0) + c.f1_3([x, y, 1.0]);
+            let _ = r.get3([x, y, 3.0], 20.0);
         }
         // level of detail: a huge footprint leaves only the first octave
         assert_eq!(p.get_lod(3.0, 4.0, 1e6), octave_tables(5, 4)[0].get([0.03, 0.04]) as f32);
@@ -533,7 +503,7 @@ mod tests {
 
     /// Worley finds the nearest and second-nearest features even when they
     /// lie two cells away (features sit anywhere in their cell): checked
-    /// against a brute-force 7×7 (2-D) and 5×5×5 (3-D) search.
+    /// against a brute-force 7×7 search.
     #[test]
     fn worley_finds_the_true_nearest_features() {
         fn wide(w: &Worley, x: f32, y: f32) -> Cell {
@@ -562,18 +532,6 @@ mod tests {
                 let (a, b) = (w.get(x, y), wide(&w, x, y));
                 assert_eq!(a.id, b.id, "seed {seed} ({x},{y})");
                 assert!((a.f1 - b.f1).abs() < 1e-6 && (a.f2 - b.f2).abs() < 1e-6, "seed {seed} ({x},{y}) {a:?} {b:?}");
-                let p = [x, y, rand01(i, 3, seed) * 20.0 - 10.0];
-                let c = [p[0].floor() as i32, p[1].floor() as i32, p[2].floor() as i32];
-                let mut f1 = f32::MAX;
-                for dk in -2..=2 {
-                    for dj in -2..=2 {
-                        for di in -2..=2 {
-                            let f = w.point(c[0] + di, c[1] + dj, c[2] + dk);
-                            f1 = f1.min((f[0] - p[0]).powi(2) + (f[1] - p[1]).powi(2) + (f[2] - p[2]).powi(2));
-                        }
-                    }
-                }
-                assert!((w.f1_3(p) - f1.sqrt()).abs() < 1e-6, "3-D seed {seed} {p:?}");
             }
         }
     }

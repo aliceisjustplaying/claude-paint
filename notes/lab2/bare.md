@@ -119,7 +119,8 @@ What I tried for the tone before this (logs undone, not kept):
   patches, then a cotton cloud. **Engine note:** a glaze thinner than about 1 µm
   doesn't form (`formed_film`, `MIN_FILM_UM` in `crates/paint/src/canvas.rs`). So
   `coats × mask` under about 0.27 cuts off, and a soft mask turns into hard-edged
-  patches. Vary a glaze by its color, not by thin coats.
+  patches. Vary a glaze by its color, not by thin coats. (Round 7: the
+  floor is now 0.05 µm, about 0.007 coats, so thin coats work.)
 - The dry-brush that worked has direction: strokes along the wood, not radial from
   one point (firework) and not a random scribble (steel wool).
 

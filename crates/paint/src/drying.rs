@@ -619,10 +619,13 @@ mod tests {
         assert_eq!(c.drying_at(500.0, 300.0), Stage::Open);
         c.wait(30.0);
         assert_eq!((c.drying_at(500.0, 300.0), c.drying_at(500.0, 700.0)), (Stage::Open, Stage::Open));
-        c.wait(150.0);
-        assert_eq!(c.drying_at(500.0, 300.0), Stage::Tacky, "lead white sets within 3 h");
-        assert!(matches!(c.drying_at(500.0, 700.0), Stage::Open | Stage::Setting), "bone black is still wet at 3 h");
-        c.wait(21.0 * 60.0);
+        // (the band is 1.8 coats where it is sampled: a stroke covers its
+        // middle instead of ploughing its paint into rims, notes/fixes/dry_rims/;
+        // at 1.2 coats it set within 3 h)
+        c.wait(180.0);
+        assert_eq!(c.drying_at(500.0, 300.0), Stage::Tacky, "lead white sets within 3.5 h");
+        assert!(matches!(c.drying_at(500.0, 700.0), Stage::Open | Stage::Setting), "bone black is still wet at 3.5 h");
+        c.wait(20.5 * 60.0);
         assert_eq!(c.drying_at(500.0, 300.0), Stage::Dry, "lead white is touch-dry the next day");
         assert_ne!(c.drying_at(500.0, 700.0), Stage::Dry, "bone black is not");
         assert!((c.clock() - 24.0 * 60.0).abs() < 1e-3);

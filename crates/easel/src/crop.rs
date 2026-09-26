@@ -47,6 +47,9 @@ struct Worker {
 #[derive(Default)]
 pub struct Crops {
     workers: Vec<Worker>,
+    /// The live session holds its sittings (notes/time.md): so do the
+    /// crop sessions replaying its log.
+    pub strict: bool,
 }
 
 /// What a crop look got: a canvas (maybe behind the live log) and a note.
@@ -75,7 +78,7 @@ impl Crops {
                     let old = (0..self.workers.len()).min_by_key(|&k| self.workers[k].used).unwrap();
                     self.workers.remove(old);
                 }
-                self.workers.push(spawn(width, window));
+                self.workers.push(spawn(width, window, self.strict));
                 self.workers.len() - 1
             }
         };
@@ -116,19 +119,19 @@ fn common(a: &[String], b: &[String]) -> usize {
     a.iter().zip(b).take_while(|(x, y)| x == y).count()
 }
 
-fn spawn(width: usize, window: [f32; 4]) -> Worker {
+fn spawn(width: usize, window: [f32; 4], strict: bool) -> Worker {
     let (tx, rx) = channel::<Vec<String>>();
     let shared: Arc<(Mutex<Shared>, Condvar)> = Arc::default();
     let sh = shared.clone();
     std::thread::Builder::new()
         .name(format!("crop-{width}"))
-        .spawn(move || follow(width, window, rx, sh))
+        .spawn(move || follow(width, window, strict, rx, sh))
         .expect("spawn a crop thread");
     Worker { width, window, tx, shared, used: Instant::now() }
 }
 
 /// The crop thread: follow the latest log it was sent.
-fn follow(width: usize, window: [f32; 4], rx: Receiver<Vec<String>>, shared: Arc<(Mutex<Shared>, Condvar)>) {
+fn follow(width: usize, window: [f32; 4], strict: bool, rx: Receiver<Vec<String>>, shared: Arc<(Mutex<Shared>, Condvar)>) {
     let (lock, cv) = &*shared;
     let mut sess: Option<Session> = None;
     let mut ran: Vec<String> = Vec::new();
@@ -159,7 +162,8 @@ fn follow(width: usize, window: [f32; 4], rx: Receiver<Vec<String>>, shared: Arc
         let mut s = match sess.take() {
             Some(s) => s,
             None => match Session::new(width, UNDO) {
-                Ok(s) => {
+                Ok(mut s) => {
+                    s.set_strict(strict);
                     // its canvas{} makes a canvas holding only the window
                     s.st.borrow_mut().crop = Some(Crop { units: window, margin: MARGIN });
                     s

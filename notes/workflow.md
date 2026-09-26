@@ -448,9 +448,9 @@ gestures via `footprint_checked`), reject non-finite points the way an
 invalid `Tool` is rejected. Panic with the point's index and value, e.g.
 `"Gesture point 10 is not finite: (505.5, NaN)"`. Also check that
 `pressure`, `attack`, `release` and `swell` are finite. Repro:
-`crates/paint/tests/curved_drag_nan.rs`. Three tests pin the diagnosis,
-and `a_nan_point_is_an_error` is `#[ignore]`d (it expects the panic to
-mention "point 10"). Un-ignore it with the fix.
+`crates/paint/tests/curved_drag_nan.rs`. With the fix in, two tests
+remain: `a_nan_point_is_an_error` (the panic names "point 10", so the
+coil's only NaN is its last point) and the finite-points control.
 
 ## Tests: two tiers (Round 6)
 - **Everyday:** `cargo test --workspace`. The test profile is optimized

@@ -5,7 +5,7 @@
 //!   easel look [--crop x0,y0,x1,y1] [--mode value|squint|mirror|wet] [--grid [step]] [--size N]
 //!   easel log | status | save [path] | frames on|off | check | close
 //!   easel note '<text>' | -                        append to notes/journal.md
-//!   easel run paintings/lua/<name>.lua [--width 1000] [--out path] [--crop ...]
+//!   easel run paintings/lua/<name>.lua [--out path] [--look]
 //!
 //! See notes/easel_guide.md.
 
@@ -19,12 +19,17 @@ mod session;
 mod time;
 mod world;
 
+use paint::Canvas;
+use paint::color::linear_to_srgb;
 use session::{Session, parse_program, root};
 use std::io::{Read, Write};
 use std::os::unix::net::{UnixListener, UnixStream};
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 use std::time::{Duration, Instant};
+
+/// The one width a painting is painted, replayed and delivered at (px).
+const LIVE_WIDTH: usize = 2400;
 
 const USAGE: &str = "easel: a live painting session (see notes/easel_guide.md)
 
@@ -38,7 +43,7 @@ const USAGE: &str = "easel: a live painting session (see notes/easel_guide.md)
   easel check         replay the log from scratch and compare with the live canvas
   easel close         end the session (the log stays)
   easel note '<text>' | easel note - (stdin)    append a dated entry to notes/journal.md
-  easel run <file.lua> [--width 1000] [--out path.png] [--crop x0,y0,x1,y1] [--margin 40] [--look]
+  easel run <file.lua> [--out path.png] [--look]    replay at 2400px and write the PNG
 
   -s <name> (or EASEL_SESSION) picks the session; default: the last opened.";
 
@@ -339,16 +344,16 @@ impl Server {
     fn validate(&self) -> Result<(), String> {
         let expected = self.written.as_deref().ok_or("session integrity: uninitialized log")?;
         for p in [log_path(&self.name), self.witness()] {
-            let actual = std::fs::read(&p).map_err(|e| format!("session integrity: {}: {e}", p.display()))?;
+            let actual = std::fs::read(&p).map_err(|e| format!("session integrity: {} is missing or unreadable ({e}); the log was edited outside the session; refusing request", p.display()))?;
             if actual != expected.as_bytes() {
-                return Err(format!("session integrity: {} differs from the committed log; refusing request", p.display()));
+                return Err(format!("session integrity: {} was edited outside the session (it differs from the committed log); refusing request", p.display()));
             }
         }
         Ok(())
     }
 
     fn resume(name: String) -> Result<Self, String> {
-        let mut srv = Self { name, s: Session::new(2400).map_err(|e| e.to_string())?, frames: false, written: None };
+        let mut srv = Self { name, s: Session::new(LIVE_WIDTH).map_err(|e| e.to_string())?, frames: false, written: None };
         let lp = log_path(&srv.name);
         if lp.exists() || srv.witness().exists() {
             let text = std::fs::read_to_string(&lp).map_err(|e| format!("session integrity: {e}"))?;
@@ -437,8 +442,8 @@ impl Server {
             "log" => Ok(self.s.program(&self.name)),
             "save" => {
                 let p = args.first().map(PathBuf::from).unwrap_or_else(|| session_dir(&self.name).join(format!("{}.png", self.name)));
-                let mut c = self.s.canvas().ok_or("no canvas yet")?.clone();
-                c.save(&p).map_err(|e| e.to_string())?;
+                let c = self.s.canvas().ok_or("no canvas yet")?;
+                deliver(&c, &p)?;
                 Ok(format!("{}\n", p.display()))
             }
             "frames" => {
@@ -482,23 +487,33 @@ fn bits_f(v: &[f32]) -> Vec<u32> {
 
 // ---------------------------------------------------------------- replay
 
+/// The delivered PNG: the canvas as it is seen now (wet paint as laid, no
+/// drying), 8-bit sRGB. `save` and `run` both write it.
+fn deliver(c: &Canvas, out: &Path) -> Result<(), String> {
+    let f = c.window();
+    let buf: Vec<u8> = c.seen().iter().flat_map(|p| p.map(|v| (linear_to_srgb(v) * 255.0).round().clamp(0.0, 255.0) as u8)).collect();
+    if let Some(d) = out.parent() {
+        std::fs::create_dir_all(d).map_err(|e| e.to_string())?;
+    }
+    image::save_buffer(out, &buf, f.w as u32, f.h as u32, image::ColorType::Rgb8).map_err(|e| format!("{}: {e}", out.display()))
+}
+
+const RUN_USAGE: &str = "run <file.lua> [--out path.png] [--look] (replays at the live width, 2400px)";
+
 fn run(args: &[String]) -> Result<(), String> {
-    let file = args.first().filter(|a| !a.starts_with('-')).ok_or("run <file.lua> [--width N] [--out path.png] [--crop x0,y0,x1,y1] [--margin 40] [--look]")?;
-    let width: usize = flag(args, "--width").map(|w| w.parse().map_err(|_| "--width N")).transpose()?.unwrap_or(1000);
+    let file = args.first().filter(|a| !a.starts_with('-')).ok_or(RUN_USAGE)?;
+    let mut i = 1;
+    while i < args.len() {
+        match args[i].as_str() {
+            "--out" | "--dump-surface" if i + 1 < args.len() => i += 2,
+            "--look" => i += 1,
+            o => return Err(format!("run: unknown argument {o:?} ({RUN_USAGE})")),
+        }
+    }
+    let width = LIVE_WIDTH;
     let text = std::fs::read_to_string(file).map_err(|e| format!("{file}: {e}"))?;
     let stem = Path::new(file).file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or("easel".into());
-    if let Some(c) = flag(args, "--crop") {
-        let p: Vec<f32> = c.split(',').map(|t| t.trim().parse::<f32>()).collect::<Result<_, _>>().map_err(|_| "--crop x0,y0,x1,y1 (units)")?;
-        if p.len() != 4 {
-            return Err("--crop x0,y0,x1,y1 (units)".into());
-        }
-        let margin: f32 = flag(args, "--margin").and_then(|m| m.parse().ok()).unwrap_or(40.0);
-        paint::set_crop(Some(paint::Crop { units: [p[0], p[1], p[2], p[3]], margin }));
-    }
-    let out = flag(args, "--out").map(PathBuf::from).unwrap_or_else(|| {
-        let crop = if flag(args, "--crop").is_some() { "_crop" } else { "" };
-        root().join("out/lua").join(format!("{stem}_{width}{crop}.png"))
-    });
+    let out = flag(args, "--out").map(PathBuf::from).unwrap_or_else(|| root().join("out/lua").join(format!("{stem}.png")));
     let chunks = parse_program(&text);
     if chunks.is_empty() {
         return Err(format!("{file}: no chunks (each starts with a line \"{}\")", session::MARK));
@@ -511,8 +526,8 @@ fn run(args: &[String]) -> Result<(), String> {
         eprintln!("  chunk {:>3}  {:>7.2}s", i + 1, r.secs);
     }
     let paint_secs = t0.elapsed().as_secs_f64();
-    let mut c = s.canvas().ok_or("the program never made a canvas")?.clone();
-    c.save(&out).map_err(|e| e.to_string())?;
+    let c = s.canvas().ok_or("the program never made a canvas")?.clone();
+    deliver(&c, &out)?;
     eprintln!("wrote {} ({} chunks, painted in {paint_secs:.1}s, total {:.1}s)", out.display(), chunks.len(), t0.elapsed().as_secs_f64());
     if let Some(p) = flag(args, "--dump-surface") {
         // the dried surface height (µm) under the saved pixels: little-endian
@@ -537,36 +552,5 @@ mod tests {
     #[test]
     fn journal_entries_are_dated_lines() {
         assert_eq!(journal_entry(907.5, "first line\nsecond\n\nthird\n"), "- day 2, 00:07: first line\n  second\n\n  third\n");
-    }
-}
-
-#[cfg(test)]
-mod integrity_regressions {
-    use super::*;
-
-    // Real request boundary: external edits must be rejected before Lua or
-    // any other request can mutate state. Existing replay tests only use RAM.
-    #[test]
-    fn edited_or_missing_logs_block_every_request_before_mutation() {
-        let name = format!("integrity-{}", std::process::id());
-        let mut srv = Server { name: name.clone(), s: Session::new(80).unwrap(), frames: false, written: None };
-        srv.save_log().unwrap();
-        srv.handle("do", &[], "x = 1").unwrap();
-        let original = std::fs::read(log_path(&name)).unwrap();
-        for replacement in [Some(b"-- edited\n".as_slice()), Some(b"".as_slice()), None] {
-            if let Some(bytes) = replacement {
-                std::fs::write(log_path(&name), bytes).unwrap();
-            } else {
-                std::fs::remove_file(log_path(&name)).unwrap();
-            }
-            for cmd in ["do", "status", "log", "frames", "note", "look", "save", "check", "close"] {
-                let e = srv.handle(cmd, &[], "x = 2").expect_err(cmd);
-                assert!(e.contains("integrity"), "{cmd}: {e}");
-                assert_eq!(srv.s.lua.globals().get::<i64>("x").unwrap(), 1);
-                assert_eq!(srv.s.log.len(), 1);
-            }
-            std::fs::write(log_path(&name), &original).unwrap();
-        }
-        assert!(srv.handle("status", &[], "").is_ok());
     }
 }

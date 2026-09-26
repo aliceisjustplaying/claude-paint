@@ -2,8 +2,7 @@
 //! against the engine's color model (Mixbox for mixing, KM per RGB channel
 //! for layering), on painter's questions. A measuring sheet, not a
 //! painting: each swatch is a computed color, laid flat so the models can
-//! be compared side by side. The numbers are printed to stderr and
-//! discussed in notes/spectral.md.
+//! be compared side by side. The numbers are printed to stderr.
 //!
 //! Layout (1000 units wide, top to bottom):
 //! A  greens, four pairs, blue → yellow in 11 steps by volume, each pair

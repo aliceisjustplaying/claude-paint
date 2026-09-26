@@ -12,10 +12,7 @@ const GLAZE_FILM: f32 = 0.3;
 /// Thinnest glaze film that forms, µm: a numerical floor, not a physical
 /// one. A float tail (a long soft falloff, a blurred mask's residue) ends
 /// here, fading smoothly from `MIN_FILM_UM` to half of it (no cut, so no
-/// edge). Real thin veils, a few tenths of a µm and up, are laid as asked
-/// (Round 7: the 1 µm floor of 1742baa erased the winter painter's 0.34 µm
-/// veil; the edge bug it was also meant to stop was the NaN in settle,
-/// guarded there).
+/// edge). Real thin veils, a few tenths of a µm and up, are laid as asked.
 pub const MIN_FILM_UM: f32 = 0.05;
 use rayon::prelude::*;
 
@@ -529,7 +526,7 @@ mod tests {
         bins
     }
 
-    /// Amnesia friction 2 (winter #11): a glaze with a long Gaussian falloff
+    /// A glaze with a long Gaussian falloff
     /// is tiny but positive far out (down to f32 denormals). It used to
     /// settle to NaN there and paint the glaze's full masstone in a ring
     /// ending where `exp` underflows: a hard pale edge. Now the change falls
@@ -551,7 +548,7 @@ mod tests {
         }
     }
 
-    /// Amnesia friction 2 (coast #0a): a blurred mask leaves float residue
+    /// A blurred mask leaves float residue
     /// out to the canvas edges; a glaze through it must not lay a rectangle.
     #[test]
     fn glaze_through_blurred_mask_leaves_no_rectangle() {
@@ -589,8 +586,7 @@ mod tests {
         assert_eq!(super::formed_film(3.0), 3.0);
     }
 
-    /// Round 7 (notes/round7/winter_ab.md): the winter painter's veil is
-    /// 0.045-0.06 coats, a film of 0.34-0.45 µm. The 1 µm floor erased it
+    /// A thin veil of 0.045-0.06 coats, a film of 0.34-0.45 µm. The 1 µm floor erased it
     /// and left a bare, lighter oval; a thin veil must lay what was asked,
     /// in proportion to a thicker one.
     #[test]

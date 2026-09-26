@@ -1,4 +1,4 @@
-//! Craquelure old vs new (notes/cracks.md). One Friedrich-primed canvas
+//! Craquelure old vs new. One Friedrich-primed canvas
 //! (`Style::friedrich`: 440 mm, 240 µm ground) with a pale smalt sky glaze,
 //! a band of stiff lead white and a dark umber glaze, varnished, then:
 //!

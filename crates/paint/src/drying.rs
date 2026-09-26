@@ -2,7 +2,7 @@
 //!
 //! Oil paint dries by oxidation: the oil takes up oxygen, cross-links and
 //! turns from a liquid into a gel into a solid film. A painter feels four
-//! stages (sources and numbers in notes/drying.md):
+//! stages:
 //!
 //! - **open**: fully workable. Blends wet into wet, brushes lift and push it,
 //!   it levels. It stiffens slowly as it ages.
@@ -38,7 +38,7 @@ use rayon::prelude::*;
 /// Minutes to touch-dry for one lean 25 µm coat of average paint
 /// (`drying` 1). Thin-film touch-dry times run 1–2 days (umber, lead white)
 /// to 2–5 days (blacks) and 7–14 (alizarin); one coat here is thinner than
-/// those test films. Estimate from those ranges, see notes/drying.md.
+/// those test films. Estimate from those ranges.
 pub const TOUCH_DRY_MIN: f32 = 24.0 * 60.0;
 /// Cure at the gel point: the film stops flowing and becomes tacky.
 /// Estimate: a lead-white-rich coat (`drying` 2) gels after ~1.8 h, an
@@ -65,7 +65,7 @@ pub const FILM_MM: f32 = 1.25;
 /// higher dries faster). From Mayer's comparative list (fast: lead white,
 /// umbers, chrome yellow, Prussian blue; medium: earths, cobalt; slow to very
 /// slow: vermilion, ivory/lamp/vine black, madder, alizarin) and touch-dry
-/// ranges for thin films; see notes/drying.md. Cobalt glass (smalt) was
+/// ranges for thin films. Cobalt glass (smalt) was
 /// itself used as a drier.
 pub mod drier {
     pub const LEAD_WHITE: f32 = 2.0;
@@ -781,7 +781,7 @@ mod tests {
     }
 
     /// A film of alternating thin fast-drying and thick slow-drying stripes
-    /// (review round 3): its thin stripes set long before its thick ones.
+    ///: its thin stripes set long before its thick ones.
     fn striped_film() -> Canvas {
         let mut c = Canvas::new(20, 1.0, [0.5; 3]).with_size_mm(20.0);
         let p = Paint::body([0.2; 3]);

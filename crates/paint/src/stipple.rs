@@ -757,8 +757,7 @@ mod tests {
     }
 
     /// A lighter stipple thinning out over a field fades into it instead of
-    /// ending in salt, aimed or not, over a mid tone or a dark (amnesia 2,
-    /// coast #9, mountains #10).
+    /// ending in salt, aimed or not, over a mid tone or a dark.
     #[test]
     fn thin_stipple_fades_instead_of_salt() {
         // a pale stipple thinning out over a mid-blue sky
@@ -879,9 +878,7 @@ mod tests {
 
     /// A veil stippled around dark motifs (the region cut out of it with a
     /// small gap) reaches its tone right up to the gap, not only out in the
-    /// open: no pale halo matting the motifs in (amnesia 3, easel3_free: the
-    /// sea veil left a 3–6 unit rim of the old, paler sea around the stones,
-    /// the figure and the trunk).
+    /// open: no pale halo matting the motifs in.
     #[test]
     fn veil_reaches_its_tone_up_to_dark_motifs() {
         let st = crate::style::Style::friedrich();
@@ -909,7 +906,6 @@ mod tests {
         c.stipple(&dark, &ink, 1);
         c.dry();
         // laid in thick body paint: a plateau ~0.6 mm proud of the thin
-        // field (the stones in easel3_free stand ~650 µm above the sea)
         for (hg, &m) in c.height.iter_mut().zip(&dark.data) {
             *hg += 600.0 * m;
         }

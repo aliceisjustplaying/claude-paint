@@ -5,8 +5,7 @@
 //! their path length, stipple touches, trips to the palette to reload or mix
 //! a new pile, wipes on the rag), and each is priced in seconds of hand time
 //! (`pace`). Painting nothing here: the ledger only counts. What a caller
-//! does with the time is up to it (the easel's hand clock turns it into
-//! `Canvas::wait`, so paint ages while the hand works; notes/time.md).
+//! does with the time is up to it.
 //!
 //! Counting happens where the engine plans marks, on the whole canvas and in
 //! a fixed order, before the tiles are split among threads or a crop drops
@@ -17,13 +16,13 @@
 //! so whether it is a reload or a new pile, and with a sitting's palette
 //! (`Piles`) the piles later dips find. With hand time on the ledger is the
 //! clock, so a crop can age its paint by a little more or less than the
-//! whole canvas does (notes/time.md, known issues).
+//! whole canvas does.
 
 use crate::bristle::{Kind, Tool};
 use crate::canvas::Canvas;
 
 /// Seconds of hand time per kind of move. Sources and estimates:
-/// notes/time.md. [S]: from a source; [E]: my estimate.
+/// [S]: from a source; [E]: my estimate.
 pub mod pace {
     /// Fitts's law for bringing the brush down where the next mark starts,
     /// `T = FITTS_A + FITTS_B · log2(1 + D / W)`. MacKenzie's stylus
@@ -99,8 +98,7 @@ pub struct Tally {
 /// The piles of mixed paint on the palette: a dip into a color close to a
 /// pile already there is a reload, a new color is a new pile to mix. The
 /// palette holds `PILES` at most; the oldest is scraped off for a new one.
-/// A sitting keeps one palette for its passes and held brushes (the easel's
-/// `Hand`, passed to `Canvas::work_with`); `Canvas::work` starts a clean one.
+/// A sitting keeps one palette for its passes and held brushes (passed to `Canvas::work_with`); `Canvas::work` starts a clean one.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct Piles {
     /// OKLab colors, oldest first.

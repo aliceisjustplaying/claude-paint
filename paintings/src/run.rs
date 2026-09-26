@@ -38,7 +38,7 @@
 //! let o = Run::new("my_painting");
 //! let st = Style::friedrich();
 //! let mut rng = Rng::new(o.seed);
-//! let mut c = o.canvas(|| st.prepare(o.width, 1.4, o.seed));
+//! let mut c = o.canvas(|| st.prepare(o.width, 1.0, o.seed));
 //! let f = c.frame();
 //! let swatch = Mask::from_shape(f, Shape::new().rect(400.0, 250.0, 200.0, 200.0)); // outside stages: always runs
 //! if o.stage("first", &mut c, &mut rng) {

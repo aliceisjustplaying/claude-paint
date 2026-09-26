@@ -41,32 +41,32 @@ Contents:
 - **Angles** are radians on the canvas, 0 pointing right, y pointing down.
 
 A painting is a binary in `paintings/src/bin/<name>.rs`. Cargo finds it by
-its file name, and `cargo paint <name> -- --width 2400` runs it (the
-`paint` alias is in `.cargo/config.toml`). A minimal program:
+its file name, and `cargo paint <name> -- --full` runs it at 2400 px wide
+(the `paint` alias is in `.cargo/config.toml`). A minimal program, one
+gray swatch on a primed canvas:
 
 ```rust
-use paint::{Mask, Rng, Style, hex};
-use paintings::run::{Finish, Run};
+use paint::{Mask, Rng, Shape, Style, hex};
+use paintings::run::Run;
 
 fn main() {
     let o = Run::new("my_painting");
     let st = Style::friedrich();
     let mut rng = Rng::new(o.seed);
-    let mut c = o.canvas(|| st.prepare(o.width, 1.4, o.seed));
+    let mut c = o.canvas(|| st.prepare(o.width, 1.0, o.seed));
     let f = c.frame();
-    let upper = Mask::from_fn(f, |_, y| if y < 300.0 { 1.0 } else { 0.0 });
-    if o.stage("first", &mut c, &mut rng) {
-        c.work(&upper, &st.broad().color(|_, _| hex("#8a8f96")), 1);
+    let swatch = Mask::from_shape(f, Shape::new().rect(400.0, 400.0, 200.0, 200.0));
+    if o.stage("swatch", &mut c, &mut rng) {
+        c.work(&swatch, &st.body().color(|_, _| hex("#808080")), 1);
     }
-    let lower = upper.clone().invert();
-    if o.stage("second", &mut c, &mut rng) {
-        c.work(&lower, &st.body().color(|_, _| hex("#5a4a3a")).angle(|_, _| 0.3), 2);
-    }
-    o.finish(&mut c, &mut rng, &Finish::aged(st.relief));
+    o.end(&mut c, &mut rng);
+    o.save(&mut c);
 }
 ```
 
-Section 12 explains `Run`, stages and what may go between them.
+Section 12 explains `Run`, stages and what may go between them. Section
+11 shows the optional finish (varnish, cracks, raking light), which
+replaces `end` and `save` with `o.finish(..)`.
 
 ## 2. Canvas, ground and style
 
@@ -287,9 +287,11 @@ Color and paint: `color(|x, y| rgb)`, `color_over(|x, y, under| rgb)`,
 
 ### Style presets
 
-Each preset is a `Handling` with the style's tool, palette and medium and
-a hand, but no direction of its own; set `angle`, `cross`, `order` and the
-rest on it.
+Each preset is a `Handling` with the style's tool, palette and medium.
+The presets choose stroke lengths, paths, pressure variation, placement
+and order; their fields are listed below and in section 4's table, and
+any of them can be set on the preset (`angle`, `cross`, `order` and the
+rest).
 
 | preset | tool | strokes | coverage | medium |
 |---|---|---|---|---|
@@ -588,8 +590,8 @@ polylines with inward normals.
 
 - `clip(true)` is a stencil: every bristle's contact is multiplied by the
   mask, so every stroke stops on the same line.
-- A **fence** (`paint::fence`) carries the passage to the edge the way a
-  brush does. `Fence::new(&region, &quality, width, waver, reach, seed)`:
+- A **fence** (`paint::fence`) sets how far each stroke runs past the
+  region's edge and how its film ends there. `Fence::new(&region, &quality, width, waver, reach, seed)`:
   the region's edge (moved by a slow waver) and a quality field (0 found,
   0.5 soft, 1 lost). Each stroke overruns the edge by its own amount; past
   the fence the hairs lift off the weave's hollows and the film thins to
@@ -638,9 +640,7 @@ let dir = |x: f32, y: f32| form.fall(x, y);                                // do
 
 - Solids: `Sdf::ellipsoid(center, radii)`, `Sdf::block(center, size,
   round)` (size is the whole extent), `half_space`, `cut`, `union`,
-  `subtract`, `turn`, `rough`, `facet`; `Ridge::new(x0, x1, crest, depth,
-  seed)` (a face with spurs and gullies down from a crest line: `lean`,
-  `gullies`, `fan`, `strata`, `z0`, `base`); `Relief::new(area, |x, y| ..)`
+  `subtract`, `turn`, `rough`, `facet`; `Relief::new(area, |x, y| ..)`
   for any height function. Coordinates: x right, y down, z toward the eye.
 - `Light::new(from, front)`: `from` is the light's direction in the
   picture, `front` its component toward the eye (negative: from behind the
@@ -655,12 +655,6 @@ let dir = |x: f32, y: f32| form.fall(x, y);                                // do
   color lost to the air.
 - Memory: about 28 bytes per pixel of the whole canvas (≈ 115 MB at
   2400 × 1714 px). Build one, take its masks and fields, then drop it.
-
-`paint::rock::Rock::grow(outline, corners, cracks, plane_lines, &spec,
-light, seed)` infers a faceted solid behind a drawn closed outline (optional
-crack and plane lines inside it) for `RockSpec::granite()`, `sandstone()`
-or `chalk()`, and returns masks for its planes, light and shadow families,
-cracks, contact seam and cast shadow, plus stroke directions.
 
 ### Scene: one camera, one sun
 
@@ -699,27 +693,6 @@ let reflected = view.reflections(&[id]);
   every pixel, with masks `visible`, `front`, `behind`, `at_depth`,
   `between`. `World::layer(name, mask, LayerDepth)` registers a hand-painted
   region at a depth so these masks account for it.
-
-### Atmosphere
-
-`paint::atmos` gives, for the same `Sun`, fields that paint nothing:
-
-- `Sky::new(sun).haze(h).uneven(amount, period, seed).layer(..)
-  .overcast(o)`: single scattering by air and haze in a spherical
-  atmosphere with ozone. `SkyField::new(sky, &world, cell)` samples it over
-  the camera and maps it into paint's range (`at(x, y)`, `value`,
-  `airlight(x)`, `exposure(k)`, `balance(light, amount)`).
-- `Cloud::cumulus`, `bank`, `stratus` (meters; `density`, `soft`, `wind`,
-  `breaks`, `heap`, `reach`), `Clouds::new(vec![..]).field(&sky_field,
-  &world, cell)`: a `CloudField` with `alpha`, `lit`, `glow`, `ambient`,
-  `soft`, `dist`, `color` and `mask`.
-- `Haze::new(visibility_m).height(h).mist(top, density, uneven, seed)` and
-  `loss(eye, dist, h, x)`: the share of a color lost to the air along a
-  line of sight.
-- `Ranges::new(near, far, count, seed).heights(..).irregular(k)
-  .oblique(k).build(&world)`: receding crest lines in world meters; each
-  `RangeLayer` gives `crest(&world, x)`, `haze(&world, &air, x, y)` and a
-  `form::Ridge` for its face.
 
 ## 10. Pencil
 
@@ -792,16 +765,17 @@ let fin = Finish { cracks: None, varnish_coats: 0.2, ..Finish::aged(st.relief) }
 o.finish(&mut c, &mut rng, &fin);
 ```
 
-To end without any of it: `o.end(&mut c, &mut rng);` then optionally
-`c.relief(..)`, then `o.save(&mut c);`.
+Without a finish, a program ends as in section 1: `o.end(&mut c, &mut
+rng);`, optionally `c.relief(..)`, then `o.save(&mut c);`.
 
 ## 12. The stage runner, crops and checkpoints
 
 ### Run
 
-`Run::new(name)` reads the command line: `--width N` (use 2400), `--seed N`
-(default 1), `--out path`, `--crop`, `--margin`, `--stop`, `--ckpt`,
-`--resume`, `--stale-ok`, `--no-cracks`. Call it from the painting's own
+`Run::new(name)` reads the command line: `--full` (2400 px wide; output
+and checkpoints named `<name>_full`), `--width N` (overrides the width),
+`--seed N` (default 1), `--out path`, `--crop`, `--margin`, `--stop`,
+`--ckpt`, `--resume`, `--stale-ok`, `--no-cracks`. Call it from the painting's own
 file: it reads that file's stage names. `o.width`, `o.seed` and `o.crop`
 are public.
 
@@ -831,19 +805,20 @@ Rules:
 
 ### Commands
 
-All runs of one painting use the same `--width`, `--seed` and crop, since
-checkpoints are tied to them.
+All runs of one painting use the same `--full`, `--width`, `--seed` and
+crop, since outputs and checkpoints are tied to them.
 
 ```
-cargo paint <name> -- --width 2400                          # → out/<name>.png
-cargo paint <name> -- --width 2400 --stop <stage>           # save right after a stage
-cargo paint <name> -- --width 2400 --ckpt                   # checkpoint after every stage
-cargo paint <name> -- --width 2400 --resume <stage>         # start after that stage
-cargo paint <name> -- --width 2400 --resume <s> --stop <s>  # the checkpoint as an image
-cargo paint <name> -- --width 2400 --resume <s> --stale-ok --ckpt
-cargo paint <name> -- --width 2400 --crop x0,y0,x1,y1       # → out/<name>_crop.png
-cargo paint <name> -- --width 2400 --crop x0,y0,x1,y1 --margin 80 --ckpt
-cargo paint <name> -- --width 2400 --no-cracks
+cargo paint <name> -- --full                                # 2400 px → out/<name>_full.png
+cargo paint <name> -- --full --width 2400                   # the same
+cargo paint <name> -- --full --stop <stage>                 # save right after a stage
+cargo paint <name> -- --full --ckpt                         # checkpoint after every stage
+cargo paint <name> -- --full --resume <stage>               # start after that stage
+cargo paint <name> -- --full --resume <s> --stop <s>        # the checkpoint as an image
+cargo paint <name> -- --full --resume <s> --stale-ok --ckpt
+cargo paint <name> -- --full --crop x0,y0,x1,y1             # → out/<name>_full_crop.png
+cargo paint <name> -- --full --crop x0,y0,x1,y1 --margin 80 --ckpt
+cargo paint <name> -- --full --no-cracks
 ```
 
 `--stop` saves the canvas as it is after that stage; saving dries the wet
@@ -868,13 +843,13 @@ there is estimated, and it enters the window about as loaded as in a whole
 render. The difference falls as the margin grows and is largest for long
 strokes. The look-and-fill dabs see only the pixels the crop holds.
 
-A crop's checkpoints are its own (`out/<name>_crop.<stage>.ckpt`), and a
+A crop's checkpoints are its own (`out/<name>_full_crop.<stage>.ckpt`), and a
 crop resumes only from a checkpoint made with the same crop and margin.
 
 ### Checkpoints
 
 `--ckpt` writes `out/<stem>.<stage>.ckpt` after each stage (stem
-`<name>` or `<name>_crop`; spaces and slashes in the stage name become
+`<name>_full` or `<name>_full_crop` with `--full`; spaces and slashes in the stage name become
 `_`). A checkpoint holds the whole canvas state after its stage: dry
 picture, surface, film, linen, size, the wet layer, stroke ids, clock and
 drying state, the drawing, the hand-time ledger, plus the `keep` state,
@@ -911,12 +886,12 @@ them through `scripts/peek`, which writes a JPEG at most 1000 px on a side
 (quality 95, full-resolution color), optionally cropping first.
 
 ```
-scripts/peek out/<name>.png $TMPDIR/view.jpg                     # whole image
-scripts/peek out/<name>.png $TMPDIR/detail.jpg 600 900 300 1200  # height width y-offset x-offset, px
+scripts/peek out/<name>_full.png $TMPDIR/view.jpg                     # whole image
+scripts/peek out/<name>_full.png $TMPDIR/detail.jpg 600 900 300 1200  # height width y-offset x-offset, px
 ```
 
 Crop offsets are pixels of the PNG: at 2400 px wide, units × 2.4. A
-`--crop` render (`out/<name>_crop.png`) holds only the window, at full
+`--crop` render (`out/<name>_full_crop.png`) holds only the window, at full
 resolution, so it can be peeked whole.
 
 ## 14. What is slow
@@ -936,7 +911,6 @@ Measured at 2400 px on a 12-core machine under other load
 | one `Form` body, lit | 0.1 s |
 | varnish, cracks and relief | 0.5 s |
 | checkpoint, whole canvas 2400 × 1500 | 274 MB, 0.1 s to write |
-| `study_stipple`: whole run / resumed from its third stage / a 200 × 150-unit crop | 78 s / 6.5 s / 11 s |
 
 - **Painting is the bristle simulation.** Its cost grows with the number
   of strokes × their length × bristles. Parallelism comes from tiles

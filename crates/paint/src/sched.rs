@@ -1,13 +1,12 @@
 //! Painting passages (tiles of strokes) in parallel without changing what
 //! gets painted.
 //!
-//! `Canvas::work` groups strokes into tiles and used to paint them in four
-//! checkerboard phases, each phase waiting for its slowest tile. But tiles
-//! whose pixel footprints are disjoint commute exactly (each has its own
-//! brush; they share no pixel), so only tiles that overlap need to keep
-//! their order. `run_ordered` starts a tile as soon as every earlier tile it
-//! overlaps has finished: the result is bit-for-bit that of running them one
-//! by one in order, and later phases no longer wait for unrelated tiles.
+//! `Canvas::work` groups strokes into tiles. Tiles whose pixel footprints
+//! are disjoint commute exactly (each has its own brush; they share no
+//! pixel), so only tiles that overlap need to keep their order.
+//! `run_ordered` starts a tile as soon as every earlier tile it overlaps has
+//! finished: the result is bit-for-bit that of running them one by one in
+//! order, and no tile waits for tiles it does not overlap.
 //!
 //! `Canvas::paint_pass` runs a covering verb's tiles (`work`'s strokes,
 //! `stipple`'s touches) through it: stroke ids, the crop, the dirty bounds
@@ -99,8 +98,7 @@ pub(crate) fn union(a: Bounds, b: Bounds) -> Bounds {
     }
 }
 
-/// A hand working down a passage: the tiles of a `tw` × `th` grid row by
-/// row from the top, alternate tiles within a row (so they can run side by
+/// A sweep down: the tiles of a `tw` × `th` grid row by row from the top, alternate tiles within a row (so they can run side by
 /// side).
 pub(crate) fn sweep_down((tw, th): (usize, usize)) -> Vec<usize> {
     let mut idx: Vec<usize> = (0..tw * th).collect();
@@ -110,7 +108,7 @@ pub(crate) fn sweep_down((tw, th): (usize, usize)) -> Vec<usize> {
 
 /// The order a pass's tiles are painted in.
 pub(crate) enum TileOrder {
-    /// An order the painter asked for: kept.
+    /// An order the caller asked for: kept.
     Asked(Vec<usize>),
     /// The verb's default (checkerboard phases that let tiles run in
     /// parallel): with hand time on, a sweep down instead.
@@ -143,9 +141,9 @@ impl Canvas {
     /// With a `slice` (hand time on), the tiles are painted in slices of
     /// about that much hand time (`batches`) with the paint ageing
     /// between them (`hand_pass`; the last slice is left owed, for the
-    /// caller's clock), and the default order becomes a sweep down: a hand
-    /// works down a passage, not in the phases that let tiles run in
-    /// parallel. An order asked for is kept. Each slice takes its stroke ids
+    /// caller's clock), and the default order becomes a sweep down
+    /// (`sweep_down`) instead of the checkerboard phases. An order asked for
+    /// is kept. Each slice takes its stroke ids
     /// together, in tile order (all at once for a single slice), so a wait
     /// between slices sees the next slice's strokes as fresh work; a crop
     /// render then skips the tiles that miss its window (they paint nothing

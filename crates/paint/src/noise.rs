@@ -1,6 +1,6 @@
 //! Noise in canvas units: fractal (fBm), ridged and billowed octaves, domain
-//! warping, cellular (Worley), anisotropic stretching, and helpers that
-//! break evenness (uneven spacing, clumping) for anything repeated.
+//! warping, cellular (Worley), anisotropic stretching, and nonuniform
+//! spacing and clumping of positions.
 
 use noise::{MultiFractal, NoiseFn, Perlin};
 use std::collections::HashMap;
@@ -57,13 +57,9 @@ impl Fbm {
 
 // ------------------------------------------------------------ toolkit
 //
-// Fbm alone makes even, isotropic, "digital" noise: the same grain in every
-// direction and at every place. The helpers below break that evenness the
-// way nature does: domain warping (fields that flow and fold), ridged and
-// billowed sums (sharp crests, heaped cloud tops), cellular noise (cells,
-// cracks, clumps), anisotropy (streaks along a wind or a bedding) and
-// irregular spacing for anything a painter repeats (layers, bands, posts).
-// All are `Copy` and cheap to make, like `Fbm`.
+// These helpers provide domain displacement, octave folding, cellular
+// distance fields, anisotropic coordinates and nonuniform spacing. All are
+// `Copy` and cheap to make, like `Fbm`.
 
 /// Per-octave Perlin sources, shared like `Fbm`'s tables.
 type OctaveCache = Mutex<HashMap<(u32, usize), &'static [Perlin]>>;
@@ -82,11 +78,11 @@ fn octave_tables(seed: u32, octaves: usize) -> &'static [Perlin] {
 pub enum Fold {
     /// Plain Perlin, signed (fBm).
     Plain,
-    /// `1 − |n|`, squared: sharp crests, broad hollows (ridges, rock veins,
-    /// the lit rims of cloud cells).
+    /// `1 − |n|`, squared: narrow maxima along the zero set of `n`, broad
+    /// minima between.
     Ridged,
-    /// `|n|`: rounded heaps with creases between (cumulus tops, billowing
-    /// smoke, soft hills).
+    /// `|n|`: rounded maxima with narrow minima (creases) along the zero set
+    /// of `n`.
     Billow,
 }
 
@@ -159,7 +155,7 @@ impl Octaves {
         }
         if norm > 0.0 { sum / norm } else { 0.0 }
     }
-    /// 3-D (cloud densities, volumes), normalized like `get`.
+    /// 3-D, normalized like `get`.
     pub fn get3(&self, p: [f32; 3], footprint: f32) -> f32 {
         let (n, last) = self.count(footprint);
         let (mut f, mut a, mut sum, mut norm) = (self.inv_period, 1.0f32, 0.0f32, 0.0f32);
@@ -216,8 +212,7 @@ impl Warp {
     }
 }
 
-/// Stretch a field along a direction: streaks along a wind, a bedding plane,
-/// a current. `angle` (radians, canvas y down) is the long axis, `stretch`
+/// Stretch a field along a direction. `angle` (radians, canvas y down) is the long axis, `stretch`
 /// how many times longer features are along it than across. `Copy`.
 #[derive(Clone, Copy, Debug)]
 pub struct Aniso {
@@ -284,8 +279,7 @@ impl Cell {
 }
 
 /// Cellular (Worley) noise: jittered feature points, one per cell of size
-/// `period`. Cells, cracked mud, clumps of foliage, the heaps of a cloud
-/// bank. `jitter` 1 is fully random, 0 a square grid. `Copy`.
+/// `period`. `jitter` 1 is fully random, 0 a square grid. `Copy`.
 #[derive(Clone, Copy, Debug)]
 pub struct Worley {
     seed: u32,
@@ -357,12 +351,10 @@ fn gap(f: f32, d: i32) -> f32 {
 
 /// Uneven placement: `n` positions from `lo` to `hi` (sorted, the first at
 /// `lo` and the last at `hi` when `n > 1`) whose gaps are not equal.
-/// `irregular` 0 spaces them evenly; 0.5 is a hand placing things by eye
-/// (gaps vary about ±50 %); 1 and more gives big gaps and near-touches.
-/// `clump` (0..1) pulls neighbors together into groups, leaving wider gaps
-/// between groups (ranges that crowd in one part of the view, posts that
-/// come in twos and threes). Parallel repeated bands with even gaps read as
-/// waves; this is the cure. Deterministic in `seed`.
+/// `irregular` 0 spaces them evenly; at 0.5 gaps vary about ±50 %; 1 and
+/// more gives large gaps and near-touches. `clump` (0..1) pulls neighbors
+/// together into groups, leaving wider gaps between groups. Deterministic in
+/// `seed`.
 pub fn uneven(n: usize, lo: f32, hi: f32, irregular: f32, clump: f32, seed: u32) -> Vec<f32> {
     if n == 0 {
         return vec![];
@@ -400,8 +392,8 @@ pub fn uneven(n: usize, lo: f32, hi: f32, irregular: f32, clump: f32, seed: u32)
     out
 }
 
-/// A value varied by a hand: `v × (1 + amount × z)` with z a stable random
-/// number in [-1, 1] for key `i` (heights, widths, loads of repeated things).
+/// A value varied per key: `v × (1 + amount × z)` with z a stable random
+/// number in [-1, 1] for key `i`.
 pub fn vary(v: f32, amount: f32, i: usize, seed: u32) -> f32 {
     v * (1.0 + amount * (2.0 * unit_of(hash3(i as i32, 3, 5, seed)) - 1.0))
 }
@@ -416,7 +408,7 @@ mod tests {
     use super::*;
 
     /// Copy and shared, with the same values as the noise crate's own Fbm
-    /// built the way `Fbm::new` always built it (output unchanged).
+    /// with the same seed, octaves, persistence and lacunarity 2.
     #[test]
     fn fbm_is_copy_and_unchanged() {
         let n = Fbm::new(7, 4, 120.0).with_persistence(0.6);
@@ -433,26 +425,25 @@ mod tests {
         assert!(!std::ptr::eq(Fbm::new(7, 4, 1.0).f, Fbm::new(8, 4, 1.0).f));
     }
 
-    /// Field objects a painter shares between closures are `Copy`
-    /// (winter #13, coast #7, mountains #6): a noise, a `per_column` profile
-    /// and a `move` closure built from them.
+    /// Field objects shared between closures are `Copy`: a noise, a
+    /// `per_column` profile and a `move` closure built from them.
     #[test]
     fn fields_are_copy() {
         fn copy<T: Copy + Sync>(_: &T) {}
         let f = crate::canvas::Frame::new(200, 100, 0.2);
         let n = Fbm::new(3, 3, 200.0);
-        let ridge = f.per_column(move |x| 300.0 + 40.0 * n.get(x, 0.0));
-        let mask = move |x: f32, y: f32| if y > ridge(x) { 1.0 } else { 0.0 };
-        let color = move |x: f32, y: f32| (y - ridge(x)) * 0.01 + n.get(x, y);
+        let profile = f.per_column(move |x| 300.0 + 40.0 * n.get(x, 0.0));
+        let mask = move |x: f32, y: f32| if y > profile(x) { 1.0 } else { 0.0 };
+        let color = move |x: f32, y: f32| (y - profile(x)) * 0.01 + n.get(x, y);
         copy(&n);
-        copy(&ridge);
+        copy(&profile);
         copy(&mask);
         copy(&color);
         let m = crate::Mask::from_fn(f, mask);
         assert!(m.data.contains(&1.0) && m.data.contains(&0.0));
         // exact at column centers and off them
-        assert_eq!(ridge(2.5), 300.0 + 40.0 * n.get(2.5, 0.0));
-        assert_eq!(ridge(3.1), 300.0 + 40.0 * n.get(3.1, 0.0));
+        assert_eq!(profile(2.5), 300.0 + 40.0 * n.get(2.5, 0.0));
+        assert_eq!(profile(3.1), 300.0 + 40.0 * n.get(3.1, 0.0));
         let _ = color(1.0, 1.0);
     }
 
@@ -520,7 +511,7 @@ mod tests {
             all.sort_by(|a, b| a.0.total_cmp(&b.0));
             Cell { f1: all[0].0, f2: all[1].0, id: all[0].1, at: all[0].2 }
         }
-        // the review's counterexample: a feature two cells away is nearest
+        // a point whose nearest feature is two cells away
         let w = Worley::new(15, 1.0);
         let c = w.get(-0.029999733, 0.7669997);
         assert_eq!(c.id, 409115953, "{c:?}");

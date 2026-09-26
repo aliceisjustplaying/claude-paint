@@ -115,21 +115,21 @@ impl Frame {
         let (x0, y0, x1, y1) = (r.0.max(a), r.1.max(b), r.2.min(c), r.3.min(d));
         if x1 <= x0 || y1 <= y0 { None } else { Some((x0 - a, y0 - b, x1 - a, y1 - b)) }
     }
-    /// A function of x (a horizon, a ridge line, the top of a ledge)
+    /// A function of x (e.g. a curve y = g(x))
     /// tabulated at every pixel column's center of the whole canvas, so a
     /// mask that calls it for every pixel evaluates it once per column.
     /// Exact: at any other x it calls `g`.
     ///
     /// It returns a reference, which is `Copy`: the same profile can go into
     /// a mask closure and any number of `move` color closures, and is called
-    /// as `ridge(x)`. The table (4 bytes per pixel column) and `g` live for
+    /// as `profile(x)`. The table (4 bytes per pixel column) and `g` live for
     /// the rest of the program, so make profiles once, not per stroke.
     ///
     /// ```ignore
     /// let n = Fbm::new(3, 4, 200.0);                     // Copy too
-    /// let ridge = f.per_column(move |x| 420.0 + 30.0 * n.get(x, 0.0));
-    /// let land = Mask::from_fn(f, move |x, y| if y > ridge(x) { 1.0 } else { 0.0 });
-    /// let color = move |x: f32, y: f32| if y - ridge(x) < 20.0 { lit } else { shade };
+    /// let profile = f.per_column(move |x| 420.0 + 30.0 * n.get(x, 0.0));
+    /// let below = Mask::from_fn(f, move |x, y| if y > profile(x) { 1.0 } else { 0.0 });
+    /// let color = move |x: f32, y: f32| if y - profile(x) < 20.0 { a } else { b };
     /// ```
     pub fn per_column<'a, G: Fn(f32) -> f32 + Sync + 'a>(&self, g: G) -> &'a (impl Fn(f32) -> f32 + Sync + 'a) {
         let (n, scale) = (self.full_w, self.scale);
@@ -477,7 +477,7 @@ impl Canvas {
     }
 
     /// Save as an 8-bit sRGB PNG with triangular dither (prevents banding in
-    /// the long, subtle gradients Friedrich loves). A crop render saves just
+    /// long, low-contrast gradients). A crop render saves just
     /// the crop (without its margin).
     pub fn save(&mut self, path: impl AsRef<std::path::Path>) -> std::io::Result<()> {
         self.dry();
@@ -527,10 +527,9 @@ mod tests {
     }
 
     /// A glaze with a long Gaussian falloff
-    /// is tiny but positive far out (down to f32 denormals). It used to
-    /// settle to NaN there and paint the glaze's full masstone in a ring
-    /// ending where `exp` underflows: a hard pale edge. Now the change falls
-    /// off monotonically with the thickness and is invisible in the tail.
+    /// is tiny but positive far out (down to f32 denormals). The pixels stay
+    /// finite there, and the change falls off with the thickness to below
+    /// half an 8-bit step in the tail.
     #[test]
     fn glaze_long_falloff_has_no_edge() {
         let st = Style::friedrich();
@@ -586,9 +585,9 @@ mod tests {
         assert_eq!(super::formed_film(3.0), 3.0);
     }
 
-    /// A thin veil of 0.045-0.06 coats, a film of 0.34-0.45 µm. The 1 µm floor erased it
-    /// and left a bare, lighter oval; a thin veil must lay what was asked,
-    /// in proportion to a thicker one.
+    /// A thin veil of 0.045-0.06 coats, a film of 0.34-0.45 µm, is laid as
+    /// asked: it darkens by more than a fifth as much as one four times as
+    /// thick.
     #[test]
     fn a_thin_veil_is_laid() {
         let st = Style::friedrich();

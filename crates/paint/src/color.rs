@@ -26,7 +26,7 @@ pub fn hex(s: &str) -> Rgb {
 pub enum Mix {
     /// Physical pigment mixing via Mixbox (blue + yellow = green).
     Pigment,
-    /// Perceptual blend in OKLab (good for light, haze, sky glow).
+    /// Perceptual interpolation in OKLab.
     Light,
     /// Plain linear-light interpolation.
     Linear,
@@ -83,8 +83,8 @@ pub fn gradient(stops: &[(f32, Rgb)], t: f32, mode: Mix) -> Rgb {
 
 // OKLab (Björn Ottosson, https://bottosson.github.io/posts/oklab/)
 /// `c` moved in OKLab: `dl` lighter (negative: darker), `da` toward red
-/// (negative: green), `db` toward yellow (negative: blue). For relative
-/// colors, e.g. "the snow here, darker and bluer":
+/// (negative: green), `db` toward yellow (negative: blue). For colors
+/// relative to another, e.g. slightly darker and bluer than `under`:
 /// `shift(under, -0.06, 0.0, -0.03)`.
 pub fn shift(c: Rgb, dl: f32, da: f32, db: f32) -> Rgb {
     let l = to_oklab(c);

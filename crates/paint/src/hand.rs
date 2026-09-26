@@ -1,7 +1,6 @@
-//! A painter's hand working at one spot: a local frame (origin, scale, and
-//! "up") so a small motif can be written as a list of brush gestures in its
-//! own coordinates. It knows nothing about what is painted; figures and other
-//! motifs are written stroke by stroke in the paintings themselves.
+//! A local frame (origin, scale and "up") in which a group of brush gestures
+//! is written in its own coordinates: `u` across (+ right), `v` up, both in
+//! local units that `p` maps to canvas units.
 
 use crate::bristle::{Gesture, Held, Orient, Tool};
 use crate::canvas::Canvas;
@@ -10,9 +9,10 @@ use crate::rng::Rng;
 use crate::wet::Paint;
 
 pub struct Hand {
-    /// Origin in canvas units (e.g. between a figure's feet).
+    /// Origin in canvas units (local (0, 0)).
     pub at: (f32, f32),
-    /// Canvas units per local unit (e.g. a figure's height).
+    /// Canvas units per local unit (an object of height h drawn from v = 0
+    /// to v = 1 has `size` = h).
     pub size: f32,
     /// Tremor: random offset of each control point, in local units.
     pub tremor: f32,

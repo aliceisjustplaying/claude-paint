@@ -100,7 +100,7 @@ fn a_short_session_at_the_easel() {
     ok(&["-s", "smoke", "close"]);
     let log = root().join("paintings/lua/smoke.lua");
     let replayed = root().join("replayed.png");
-    ok(&["run", log.to_str().unwrap(), "--width", "2400", "--out", replayed.to_str().unwrap()]);
+    ok(&["run", log.to_str().unwrap(), "--out", replayed.to_str().unwrap()]);
     assert!(std::fs::read(&saved).unwrap() == std::fs::read(&replayed).unwrap(), "the replay's PNG differs from the session's");
 
     // reopening goes on from the log: a chunk that ran is there for good

@@ -12,11 +12,11 @@ fn dir() -> PathBuf {
     d
 }
 
-/// Replay `src` at `width`; returns stdout and the PNG's bytes.
-fn replay(src: &Path, width: u32, threads: Option<usize>, tag: &str) -> (String, Vec<u8>) {
+/// Replay `src` (at the live width); returns stdout and the PNG's bytes.
+fn replay(src: &Path, threads: Option<usize>, tag: &str) -> (String, Vec<u8>) {
     let png = dir().join(format!("{tag}.png"));
     let mut cmd = Command::new(env!("CARGO_BIN_EXE_easel"));
-    cmd.args(["run", src.to_str().unwrap(), "--width", &width.to_string(), "--out", png.to_str().unwrap()]);
+    cmd.args(["run", src.to_str().unwrap(), "--out", png.to_str().unwrap()]);
     if let Some(n) = threads {
         cmd.env("RAYON_NUM_THREADS", n.to_string());
     }
@@ -25,7 +25,7 @@ fn replay(src: &Path, width: u32, threads: Option<usize>, tag: &str) -> (String,
     (String::from_utf8(out.stdout).unwrap(), std::fs::read(&png).unwrap())
 }
 
-const CANVAS: &str = r#"canvas{size=440, aspect=1, linen=15, seed=7, ground={{pile={{"lead white", 3}, {"yellow ochre", 1}}, um=120, apply="knife"}}}"#;
+const CANVAS: &str = r#"canvas{size=440, aspect=1.6, linen=15, seed=7, ground={{pile={{"lead white", 3}, {"yellow ochre", 1}}, um=120, apply="knife"}}}"#;
 
 #[test]
 fn object_keyed_tables_replay_the_same_in_every_process() {
@@ -48,7 +48,7 @@ work(rect(0, 0, 10 * first.index, 1000), {{hand="broad", pile=pile{{{{"bone blac
     );
     let src = dir().join("object-pairs.lua");
     std::fs::write(&src, program).unwrap();
-    let runs: Vec<_> = (0..3).map(|i| replay(&src, 80, None, &format!("object-pairs-{i}"))).collect();
+    let runs: Vec<_> = (0..3).map(|i| replay(&src, None, &format!("object-pairs-{i}"))).collect();
     let want: String = (1..=32).map(|i| i.to_string()).chain((1..=8).map(|i| i.to_string())).collect::<Vec<_>>().join(",");
     assert!(runs[0].0.contains(&format!("first\t1\t{want}")), "creation order: {}", runs[0].0);
     for r in &runs[1..] {
@@ -79,9 +79,9 @@ print(drying(500, 200), drying(500, 490))
     );
     let src = dir().join("hand-time.lua");
     std::fs::write(&src, program).unwrap();
-    let (o1, p1) = replay(&src, 200, Some(1), "hand-1");
-    let (o4, p4) = replay(&src, 200, Some(4), "hand-4");
-    let (o4b, p4b) = replay(&src, 200, Some(4), "hand-4b");
+    let (o1, p1) = replay(&src, Some(1), "hand-1");
+    let (o4, p4) = replay(&src, Some(4), "hand-4");
+    let (o4b, p4b) = replay(&src, Some(4), "hand-4b");
     assert!(o1 == o4 && o4 == o4b, "{o1}\n{o4}");
     assert!(p1 == p4 && p4 == p4b, "the pictures differ between replays");
     // the broad pass took the hand a while (later than 09:15 when it ended)

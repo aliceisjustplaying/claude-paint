@@ -4,7 +4,7 @@ use std::{
     process::{Command, Output},
 };
 fn root() -> PathBuf {
-    PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join(format!("integrity-live-{}", std::process::id()))
+    PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join(format!("il-{}", std::process::id()))
 }
 fn cmd(args: &[&str]) -> Output {
     Command::new(env!("CARGO_BIN_EXE_easel")).args(args).env("EASEL_ROOT", root()).env("EASEL_SESSION", "s").output().unwrap()
@@ -33,7 +33,7 @@ fn edited_or_truncated_logs_cannot_reopen() {
         std::fs::write(&log, bytes).unwrap();
         let o = cmd(&["open", "reopen"]);
         assert!(!o.status.success());
-        assert!(String::from_utf8_lossy(&o.stderr).contains("integrity"));
+        assert!(String::from_utf8_lossy(&o.stderr).contains("edited outside the session"));
     }
     std::fs::write(&log, original).unwrap();
     assert!(ok(&["open", "reopen"]).contains("resumed 1 chunks"));
@@ -67,4 +67,33 @@ fn journal_uses_the_selected_painting_clock() {
     assert!(result.status.success());
     let journal = std::fs::read_to_string(root().join("notes/journal.md")).unwrap();
     assert!(journal.lines().any(|l| l == "- day 1, 09:00: painting clock"), "{journal}");
+}
+
+// Every request to a running session checks the log first: an edited,
+// truncated or deleted log stops them all before anything runs, and the
+// genuine bytes put back let the session go on unchanged.
+#[test]
+fn a_running_session_refuses_every_request_while_its_log_is_edited() {
+    let s = ["-s", "gate"];
+    let with = |a: &[&'static str]| [&s[..], a].concat();
+    ok(&["open", "gate"]);
+    ok(&with(&["do", "x = 1"]));
+    let log = root().join("paintings/lua/gate.lua");
+    let original = std::fs::read(&log).unwrap();
+    for edit in [Some(b"-- edited\n".to_vec()), Some(Vec::new()), None] {
+        match edit {
+            Some(bytes) => std::fs::write(&log, bytes).unwrap(),
+            None => std::fs::remove_file(&log).unwrap(),
+        }
+        for req in [&["do", "x = 2"][..], &["status"], &["log"], &["look"], &["save"], &["check"], &["frames", "on"], &["note", "edited"], &["close"]] {
+            let o = cmd(&with(req));
+            assert!(!o.status.success(), "{req:?} ran over an edited log");
+            assert!(String::from_utf8_lossy(&o.stderr).contains("edited outside the session"), "{req:?}: {}", String::from_utf8_lossy(&o.stderr));
+        }
+        std::fs::write(&log, &original).unwrap();
+    }
+    assert!(ok(&with(&["status"])).starts_with("1 chunks"));
+    ok(&with(&["do", "assert(x == 1)"]));
+    assert!(!root().join("notes/journal.md").exists() || !std::fs::read_to_string(root().join("notes/journal.md")).unwrap().contains("edited"));
+    ok(&with(&["close"]));
 }

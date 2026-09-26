@@ -11,9 +11,10 @@ imagery.
 - `crates/paint/src`: the engine. The module docs at the top of each file
   are the reference.
 - `paintings/src/run.rs`: the stage runner (options, stages, crops,
-  checkpoints, the finish).
+  checkpoints, the optional finish).
 - `paintings/src/bin/`: one program per painting. The `study_*.rs`
-  programs exercise one part of the engine each.
+  programs are material test sheets: brushes, grounds, coverage, drying
+  and color models.
 - `notes/guide.md`: the engine as a painter uses it.
 - `notes/research/`: `friedrich_materials.md` (materials and working
   methods) and `oil_paint_physics.md` (the physics the engine models).
@@ -23,20 +24,22 @@ imagery.
 
 A painting `paintings/src/bin/<name>.rs` runs with `cargo paint <name>`
 (an alias in `.cargo/config.toml`). Everything after `--` goes to the
-program. Render at 2400 px wide, and give every run of a painting the same
-width and seed: crops and checkpoints are tied to them.
+program. `--full` renders 2400 px wide and names the output and
+checkpoints `<name>_full`. Give every run of a painting the same flags for
+width, seed and crop: outputs and checkpoints are tied to them.
 
 ```
-cargo paint <name> -- --width 2400                            # → out/<name>.png
-cargo paint <name> -- --width 2400 --seed 7 --out path.png
-cargo paint <name> -- --width 2400 --crop 280,440,460,580     # only that window, in units
-                                                              #   → out/<name>_crop.png (--margin 40)
-cargo paint <name> -- --width 2400 --ckpt                     # checkpoint after every stage
-cargo paint <name> -- --width 2400 --resume <stage>           # start after that stage
-cargo paint <name> -- --width 2400 --stop <stage>             # save right after a stage
-cargo paint <name> -- --width 2400 --resume <stage> --stale-ok --ckpt   # use a stale checkpoint and adopt it
-cargo paint <name> -- --width 2400 --no-cracks                # finish without craquelure
-cargo paint study_stipple -- --width 2400                     # a study
+cargo paint <name> -- --full                                  # 2400 px → out/<name>_full.png
+cargo paint <name> -- --full --width 2400                     # the same
+cargo paint <name> -- --full --seed 7 --out path.png
+cargo paint <name> -- --full --crop 280,440,460,580           # only that window, in units
+                                                              #   → out/<name>_full_crop.png (--margin 40)
+cargo paint <name> -- --full --ckpt                           # checkpoint after every stage
+cargo paint <name> -- --full --resume <stage>                 # start after that stage
+cargo paint <name> -- --full --stop <stage>                   # save right after a stage
+cargo paint <name> -- --full --resume <stage> --stale-ok --ckpt   # use a stale checkpoint and adopt it
+cargo paint <name> -- --full --no-cracks                      # finish without craquelure
+cargo paint study_brushes -- --full                           # a study
 ```
 
 Canvas coordinates are units: 1000 wide and `1000 / aspect` tall, at any
@@ -44,8 +47,8 @@ pixel width.
 
 A painting is written in stages (`if o.stage("name", &mut c, &mut rng) {
 ... }`). With `--ckpt` each stage's end is saved to
-`out/<name>.<stage>.ckpt`, and `--resume <stage>` starts from there,
-painting exactly what a full run paints. A checkpoint is refused as stale
+`out/<name>_full.<stage>.ckpt`, and `--resume <stage>` starts from there,
+painting exactly what an uninterrupted run paints. A checkpoint is refused as stale
 once the engine, the helpers in `paintings/src` or the painting's code up
 to the end of that stage's block has changed. A `--crop` render paints
 only its window (plus a margin) at full resolution and keeps its own
@@ -59,6 +62,6 @@ Renders are PNGs of several MB. View them through `scripts/peek`, which
 writes a JPEG at most 1000 px on a side:
 
 ```
-scripts/peek out/<name>.png $TMPDIR/view.jpg                       # whole image
-scripts/peek out/<name>.png $TMPDIR/detail.jpg 700 1000 300 1700   # height width y-offset x-offset, px
+scripts/peek out/<name>_full.png $TMPDIR/view.jpg                       # whole image
+scripts/peek out/<name>_full.png $TMPDIR/detail.jpg 700 1000 300 1700   # height width y-offset x-offset, px
 ```

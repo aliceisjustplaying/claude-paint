@@ -19,25 +19,6 @@
 //! use `Paint::over` and `Canvas::under`. Choose tube proportions explicitly
 //! with `Palette::pile` and thin the resulting mixture with medium.
 //!
-//! Color matching is not part of the physical paint API.
-//!
-//! No automatic `Paint::aimed`:
-//! ```compile_fail,E0599
-//! use paint::Paint;
-//! Paint::aimed([0.5; 3], [0.2; 3], 1.0, 0.5, 0.5);
-//! ```
-//!
-//! No automatic `Paint::tint`:
-//! ```compile_fail,E0599
-//! use paint::Paint;
-//! Paint::tint([0.5; 3], 0.5, 0.5);
-//! ```
-//!
-//! No automatic `Paint::glaze`:
-//! ```compile_fail,E0599
-//! use paint::Paint;
-//! Paint::glaze([0.5; 3]);
-//! ```
 
 use crate::canvas::Canvas;
 use crate::color::{Rgb, luminance};

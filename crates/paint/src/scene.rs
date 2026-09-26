@@ -1,44 +1,44 @@
 //! One world, one sun: where things stand, how big they look, and where
 //! their shadows, contacts and reflections fall.
 //!
-//! `form` gives a painter a solid lit by a `Light` of its own; nothing makes
-//! two solids in one picture agree. This module is the stage they share:
+//! `form` lights a solid by a `Light` of its own; nothing makes two solids
+//! in one picture agree. This module is the frame they share:
 //!
 //! - a **camera**: an eye `eye` meters above the ground, looking level, so the
 //!   horizon is a line across the picture at eye level; canvas points map to
 //!   points on the ground and back, and a thing at a depth has a scale
-//!   (units per meter): a 1.7 m figure standing at a canvas point is
-//!   `world.height(x, y, 1.7)` units tall (a figure as tall as the eye has its
-//!   head on the horizon wherever it stands);
+//!   (units per meter): an object h m tall standing at a canvas point is
+//!   `world.height(x, y, h)` units tall (an object as tall as the eye height
+//!   has its top on the horizon wherever it stands);
 //! - the **ground**: level, or any gentle height function; **water** fills it
-//!   below a level (a pond is a hollow in the ground, a shore is ground that
-//!   runs under the sea), still or rippled;
+//!   below a level (every part of the ground lower than the level is under
+//!   water), still or rippled;
 //! - **one sun** (azimuth, elevation). Below the horizon there is no direct
 //!   light and no cast shadow, only sky light and the afterglow on the side
 //!   facing the glow. `World::light` is the `form::Light` every solid is lit
 //!   with;
 //! - **bodies**: `Sdf` solids placed on the ground at a `Spot` and built in
 //!   canvas units there (`spot.p(right, up, toward)` in meters). A body can be
-//!   visible (it goes into the `Form` the painter paints from) or a proxy (a
-//!   figure the painter writes with gestures still casts a shadow and shows
-//!   in the water);
+//!   visible (it goes into the view's `Form`) or a proxy (not in the `Form`,
+//!   but it still casts a shadow and shows in the water);
 //! - a **`View`** of the world over a canvas frame: the `Form` of the visible
-//!   bodies lit by the world's sun, and fields and masks for the painter: what
-//!   is where (sky, ground, water, which body), cast shadows traced along the
-//!   sun in the world with a penumbra that grows with distance from the
-//!   caster, contact occlusion where solids meet the ground, mirror images in
+//!   bodies lit by the world's sun, and fields and masks: what is where
+//!   (sky, ground, water, which body), cast shadows traced along the sun in
+//!   the world with a penumbra that grows with distance from the caster,
+//!   contact occlusion where solids meet the ground, mirror images in
 //!   the water (with ripples, darkening and a Fresnel falloff), depth for
 //!   aerial perspective;
-//! - **perspective helpers**: ribbons on the ground (a path, a brook) that
-//!   narrow as they recede, spots at a depth, spacing that recedes.
+//! - **perspective helpers**: ribbons on the ground (bands of a given width
+//!   in meters) that narrow as they recede, spots at a depth, spacing that
+//!   recedes.
 //!
-//! Like `form`, none of this paints: every mark is still the painter's.
+//! Like `form`, none of this paints: it computes geometry, fields and masks.
 //!
 //! World coordinates are meters: X to the right, Y up (0 is the ground's
 //! datum), Z away from the viewer; the eye is at (0, eye, 0). The sun's
-//! azimuth is measured from straight ahead (0: the sun is behind the motif,
-//! contre-jour) toward the right (+90°: from the right; −90°: from the left;
-//! 180°: from behind the painter). Normals given to the painter are in the
+//! azimuth is measured from straight ahead (0: the sun is straight ahead,
+//! facing the viewer) toward the right (+90°: from the right; −90°: from the
+//! left; 180°: from behind the viewer). Normals returned are in the
 //! `form` frame (x right, y down, z toward the viewer), so `form::Light`,
 //! `Shade` and `Sample::fall` work unchanged.
 
@@ -77,7 +77,7 @@ const ZK: f32 = 1000.0;
 /// The one sun. Angles in radians (`Sun::deg` takes degrees).
 #[derive(Clone, Copy, Debug)]
 pub struct Sun {
-    /// From straight ahead (0, behind the motif) toward the right.
+    /// From straight ahead (0: facing the viewer) toward the right.
     pub azimuth: f32,
     /// Above the horizon (negative: set or not yet risen).
     pub elevation: f32,
@@ -116,9 +116,9 @@ impl Sun {
 /// Water lying in the ground's hollows up to `level` (m).
 pub struct Water {
     pub level: f32,
-    /// Ripple slope (0 still, 0.02 a breath of wind, 0.08 choppy).
+    /// Ripple slope amplitude (0 still; e.g. 0.02 small, 0.08 large).
     pub ripple: f32,
-    /// Ripple wavelengths (m): along the wind (across the picture) and in depth.
+    /// Ripple wavelengths (m): across the picture and in depth.
     pub wave: (f32, f32),
     sx: Fbm,
     sz: Fbm,
@@ -142,7 +142,7 @@ impl Water {
             return [0.0, 1.0, 0.0];
         }
         let (u, v) = (x / self.wave.0, z / self.wave.1);
-        // the slope in depth is the strong one: ripples are long crests across
+        // the slope in depth is 2.5 times the slope across: crests run across
         let gx = 0.4 * self.ripple * self.sx.get(u, v);
         let gz = self.ripple * self.sz.get(u, v);
         unit([-gx, 1.0, -gz])
@@ -198,8 +198,7 @@ pub struct Body {
     pub sdf: Sdf,
     pub spot: Spot,
     /// Goes into the view's `Form` (false: a proxy that only casts shadows,
-    /// shows in the water and grounds itself, like a figure written with
-    /// gestures).
+    /// shows in the water and gets contact occlusion).
     pub visible: bool,
     /// Bounding sphere in the world (m).
     center: V3,
@@ -261,14 +260,14 @@ pub struct World {
     pub penumbra: f32,
     /// Distance (m) at which aerial perspective has taken 63 % of a color.
     pub visibility: f32,
-    /// Things beyond the modeled ground (a far shore, the sky) are taken to
-    /// stand on a screen this far off (m) when the water mirrors them.
+    /// Things beyond the modeled ground (anything not a body, the sky) are
+    /// taken to stand on a screen this far off (m) when the water mirrors them.
     pub backdrop: f32,
     /// How far the ground runs (m) before it is the horizon.
     pub far: f32,
     pub bodies: Vec<Body>,
-    /// Motifs the painter paints by hand, registered at a depth so the
-    /// world knows what is in front of what (see `Layer`).
+    /// Canvas masks registered at a depth so the world knows what is in
+    /// front of what (see `Layer`).
     pub layers: Vec<Layer>,
 }
 
@@ -277,7 +276,7 @@ impl World {
     /// canvas, looking level from `eye` meters up, with the horizon at canvas
     /// y `horizon`, a 45° horizontal field of view (change with `fov`), a
     /// level ground, no water and the sun from the upper left behind the
-    /// painter.
+    /// viewer (azimuth −120°, elevation 35°).
     pub fn new(view: [f32; 4], horizon: f32, eye: f32) -> Self {
         let mut w = World {
             view,
@@ -354,7 +353,7 @@ impl World {
     pub fn is_water(&self, x: f32, z: f32) -> bool {
         self.water.as_ref().is_some_and(|w| self.ground_at(x, z) < w.level)
     }
-    /// Water depth (m) at (X, Z), 0 on land.
+    /// Water depth (m) at (X, Z), 0 where the ground is above the water.
     pub fn water_depth(&self, x: f32, z: f32) -> f32 {
         self.water.as_ref().map_or(0.0, |w| (w.level - self.ground_at(x, z)).max(0.0))
     }
@@ -449,8 +448,8 @@ impl World {
     pub fn spot_at(&self, x: f32, z: f32) -> Spot {
         self.spot_world([x, self.surface(x, z), z])
     }
-    /// The spot at (X, Z) on the ground under the water (a pole's foot in a
-    /// pond stands on the bottom).
+    /// The spot at (X, Z) on the ground under the water (on the bottom, not
+    /// the water surface).
     pub fn spot_bed(&self, x: f32, z: f32) -> Spot {
         self.spot_world([x, self.ground_at(x, z), z])
     }
@@ -470,7 +469,7 @@ impl World {
     }
     /// The canvas angle (radians, y down) along which a shadow runs over the
     /// ground at a canvas point: away from the sun, foreshortened by the
-    /// ground. Stroke shadows this way. None in the sky or with the sun down.
+    /// ground. None in the sky or with the sun down.
     pub fn shadow_angle(&self, x: f32, y: f32) -> Option<f32> {
         if !self.sun.up() {
             return None;
@@ -499,8 +498,8 @@ impl World {
     pub fn place(&mut self, spot: Spot, sdf: Sdf) -> BodyId {
         self.add_body(spot, sdf, true)
     }
-    /// A proxy body: casts shadows, shows in the water and is grounded, but
-    /// the painter paints it some other way (a figure written with gestures).
+    /// A proxy body: casts shadows, shows in the water and gets contact
+    /// occlusion, but is not in the view's `Form`.
     pub fn proxy(&mut self, spot: Spot, sdf: Sdf) -> BodyId {
         self.add_body(spot, sdf, false)
     }
@@ -573,7 +572,7 @@ impl World {
                 steps += 1;
             }
         }
-        // the terrain itself (a bank shading the hollow behind it)
+        // the terrain itself (higher ground between the point and the sun)
         if self.ground.is_some() && l[1] < 0.5 {
             let mut t = 0.3;
             while t < 60.0 {
@@ -591,8 +590,8 @@ impl World {
 
     /// Occlusion (0..1) at a world point with normal `n`: how much of the
     /// sky nearby solids (and, for a solid, the ground) hide within `reach`
-    /// meters. It is the dark seam where a rock or a foot meets the ground
-    /// and the darkening under an overhang.
+    /// meters: highest in the crease where a solid meets the ground and
+    /// under an overhang.
     pub fn occlusion(&self, w: V3, n: V3, reach: f32, with_ground: bool) -> f32 {
         let mut occ = 0.0;
         let mut wt = 1.0;
@@ -636,8 +635,8 @@ impl World {
     // --------------------------------------------------- perspective
 
     /// A band lying on the ground along `pts` (X, Z in m, smoothed through
-    /// them), `width(t)` m wide (t 0..1 along it): a path, a brook, a
-    /// furrow. It narrows and foreshortens as it recedes by itself.
+    /// them), `width(t)` m wide (t 0..1 along it). Its projection narrows
+    /// and foreshortens with depth.
     pub fn ribbon(&self, pts: &[(f32, f32)], width: impl Fn(f32) -> f32) -> Shape {
         let c = self.resample(pts, 12);
         let n = c.len();
@@ -662,12 +661,12 @@ impl World {
         left.extend(right);
         Shape::new().poly(&left)
     }
-    /// The canvas line of a path on the ground (X, Z in m), smoothed.
+    /// The canvas line of a polyline on the ground (X, Z in m), smoothed.
     pub fn line(&self, pts: &[(f32, f32)]) -> Vec<(f32, f32)> {
         self.resample(pts, 12).into_iter().filter_map(|(x, z)| self.project([x, self.surface(x, z), z])).collect()
     }
-    /// `n` spots from `start` (X, Z) stepping by `step` (m) each time: fence
-    /// posts, stones along a path, footprints; the spacing recedes by itself.
+    /// `n` spots from `start` (X, Z) stepping by `step` (m) each time; their
+    /// canvas spacing shrinks with depth.
     pub fn recede(&self, start: (f32, f32), step: (f32, f32), n: usize) -> Vec<Spot> {
         (0..n).map(|i| self.spot_at(start.0 + step.0 * i as f32, start.1 + step.1 * i as f32)).collect()
     }
@@ -694,9 +693,9 @@ impl World {
     }
 
     /// A `Form` of the given bodies alone (visible or proxies), lit by this
-    /// world's sun with its cast shadows: the light side of a figure the
-    /// painter writes with gestures, from the same sun as everything else.
-    /// Part ids follow the order given (1, 2, …).
+    /// world's sun with its cast shadows (proxies included, so their lit
+    /// side can be read from the same sun as everything else). Part ids
+    /// follow the order given (1, 2, …).
     pub fn form_of(&self, f: Frame, bodies: &[BodyId]) -> Form {
         let mut form = Form::new(f);
         let mut spots = Vec::new();
@@ -747,7 +746,7 @@ pub struct Point {
 /// The mirror image seen in the water at a canvas point.
 #[derive(Clone, Copy, Debug)]
 pub struct Mirror {
-    /// The body seen in the water, if any (else sky or far shore).
+    /// The body seen in the water, if any (else the backdrop or the sky).
     pub body: Option<BodyId>,
     /// Where the reflected thing is seen directly on the canvas: sample the
     /// painted canvas there, or evaluate a color field there.
@@ -795,8 +794,8 @@ impl Solid for Placed<'_> {
 }
 
 /// A world seen over a canvas frame: the `Form` of its visible bodies lit by
-/// the world's one sun, the ground under them, and masks and fields for
-/// painting it. Build on the whole frame (`c.frame()`).
+/// the world's one sun, the ground under them, and masks and fields over
+/// the frame. Build on the whole frame (`c.frame()`).
 pub struct View<'w> {
     pub world: &'w World,
     pub f: Frame,
@@ -827,7 +826,7 @@ impl<'w> View<'w> {
         let mut parts = vec![0; world.bodies.len()];
         // far to near is not needed (the depth buffer sorts by world depth:
         // each body's form z is in its own spot's projection), but the
-        // bodies' ids follow the painter's order
+        // bodies' ids follow the order they were placed in
         for (i, b) in world.bodies.iter().enumerate() {
             if b.visible {
                 let p = Placed { world, body: b, depth: &depth, f };
@@ -916,7 +915,7 @@ impl<'w> View<'w> {
     pub fn sky(&self) -> Mask {
         self.mask(|p| (p.what == What::Sky) as u8 as f32)
     }
-    /// Where land is seen (not covered by a visible body).
+    /// Where the ground is seen (not water, not covered by a visible body).
     pub fn land(&self) -> Mask {
         self.mask(|p| (p.what == What::Ground) as u8 as f32)
     }
@@ -935,13 +934,14 @@ impl<'w> View<'w> {
 
     /// Contact occlusion: the dark seam where bodies (visible or proxy) meet
     /// the ground, and the ground darkened close around them, within
-    /// `reach` m (0.15 for a stone on sand, 0.05 for a foot). 0..1.
+    /// `reach` m (e.g. 0.05–0.15). 0..1.
     pub fn contact(&self, reach: f32) -> Mask {
         let w = self.world;
         self.mask(|p| match p.what {
             What::Ground | What::Water => w.occlusion(p.at, to_world(p.n_ground(w)), reach, false),
             What::Body(_) => {
-                // only near the ground: the seam, not every hollow of the stone
+                // only within 3 × reach of the ground: the seam, not every
+                // hollow of the body
                 let hgt = p.at[1] - w.surface(p.at[0], p.at[2]);
                 if hgt > reach * 3.0 { 0.0 } else { w.occlusion(p.at, to_world(p.n), reach, true) }
             }
@@ -978,7 +978,7 @@ impl<'w> View<'w> {
             let travel = ((hit[0] - p[0]).powi(2) + (hit[1] - p[1]).powi(2) + (hit[2] - p[2]).powi(2)).sqrt();
             return Some(Mirror { body: Some(b), src, at: hit, n: nf, shade, fresnel, travel });
         }
-        // the far shore and the sky, taken to stand on the backdrop
+        // everything else, taken to stand on the backdrop
         // (only ahead of the ray: water beyond the backdrop sees the sky)
         let (src, travel, at) = if r[2] > 1e-4 && w.backdrop > p[2] {
             let t = (w.backdrop - p[2]) / r[2];
@@ -1028,19 +1028,18 @@ impl Point {
 
 // ------------------------------------------------------------------ depth
 
-/// How deep a painter's layer lies.
+/// How deep a layer lies.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum LayerDepth {
-    /// At a fixed distance (m): a figure at its spot's depth (`spot.at[2]`).
+    /// At a fixed distance (m), e.g. a spot's depth (`spot.at[2]`).
     At(f32),
     /// On the ground or the water, at whatever depth that is seen at each
-    /// pixel: a path, a patch of heather, a glint on the sea.
+    /// pixel.
     Ground,
 }
 
-/// A motif the painter paints by hand (a figure written with gestures, a
-/// drawn tree, a boat), registered as a canvas mask at a depth, so the
-/// world knows what it hides and what hides it.
+/// A canvas mask registered at a depth, so the world knows what it hides
+/// and what hides it.
 #[derive(Clone)]
 pub struct Layer {
     pub name: String,
@@ -1059,7 +1058,7 @@ pub enum Thing {
 }
 
 impl World {
-    /// Register a motif painted by hand at a depth (see `Layer`). Returns
+    /// Register a canvas mask at a depth (see `Layer`). Returns
     /// its index; masks name it as `Thing::Layer(index)`.
     pub fn layer(&mut self, name: &str, mask: Mask, depth: LayerDepth) -> usize {
         self.layers.push(Layer { name: name.to_string(), mask, depth });
@@ -1121,8 +1120,8 @@ impl World {
     /// ground, if `with_ground`) hide from a world point with normal `n`
     /// (world), counting only what lies within `reach` m. Occluders fade out
     /// toward `reach`, so the darkening falls off smoothly with distance:
-    /// about 0.5 in the crease where a stone meets flat ground, nothing a
-    /// reach away. This is the contact shadow and the dark under an overhang.
+    /// about 0.5 in the crease where a convex solid meets flat ground,
+    /// nothing a reach away.
     pub fn sky_occlusion(&self, w: V3, n: V3, reach: f32, by: &(dyn Fn(BodyId) -> bool + Sync), with_ground: bool) -> f32 {
         let reach = reach.max(1e-3);
         let near: Vec<&Body> = self
@@ -1187,8 +1186,8 @@ struct Patch {
 /// What lies behind what at every pixel: the ground or water (or sky),
 /// every visible body (not proxies: they are never seen) and every layer, each with its coverage
 /// (soft at its edges) and its distance (m). Masks from it are
-/// front-to-back composites, so the soft edge of a figure over the sea
-/// hides the sea exactly as much as it covers it, and nothing is ever
+/// front-to-back composites, so the soft edge of a layer over the water
+/// hides the water exactly as much as it covers it, and nothing is ever
 /// subtracted twice. Pixels outside the world's `view` (another panel of
 /// the canvas) have no stack: every mask is 0 there. Build with
 /// `View::depths`.
@@ -1223,8 +1222,8 @@ impl Depths {
                 world.to_ground(x, y).is_some_and(|p| world.is_water(p[0], p[2]))
             })
             .collect();
-        // proxies are stand-ins (their shadow and reflection): what is seen of a
-        // figure written with gestures is the layer its outline is registered as
+        // proxies are stand-ins (their shadow and reflection): they are not
+        // seen; a layer registered for them is
         let bodies = world.bodies.iter().map(|b| if b.visible { Self::patch(world, b, f) } else { None }).collect();
         let layers = world
             .layers
@@ -1467,9 +1466,9 @@ impl View<'_> {
     /// Cast shadows on the ground and water where they are seen, softer
     /// than the world's own by `soft` (1: the sun's penumbra and the haze;
     /// 2: twice as wide), from the bodies `casters` picks. The penumbra grows
-    /// with distance from the caster, so a shadow is crisp at a stone's foot
-    /// and soft at its far end, as in nature. Figures and motifs registered
-    /// as layers hide it where they stand in front.
+    /// with distance from the caster, so a shadow is crisp next to the
+    /// caster and soft at its far end. Layers hide it where they stand in
+    /// front.
     pub fn soft_shadows(&self, soft: f32, casters: &(dyn Fn(BodyId) -> bool + Sync)) -> Mask {
         let w = self.world;
         if !w.sun.up() {
@@ -1515,12 +1514,11 @@ impl View<'_> {
     /// `by` picks the casters, not the receivers. The ground part is the
     /// sky the `by` bodies hide. On a body, the part of it within `reach`
     /// m of the ground is shaded by the ground itself and by the other `by`
-    /// bodies, whatever `by` picks: a body's foot is always in contact with
+    /// bodies, whatever `by` picks: a body's base is always in contact with
     /// the ground it stands on (with `by` picking nothing this is all that
     /// remains). Every share is weighted by how much of that surface is
-    /// seen, so it never darkens the sky, a layer (a figure painted by hand
-    /// and registered with `World::layer`) or anything in front of the
-    /// shaded surface.
+    /// seen, so it never darkens the sky, a layer (registered with
+    /// `World::layer`) or anything in front of the shaded surface.
     pub fn occlusion(&self, reach: f32, by: &(dyn Fn(BodyId) -> bool + Sync)) -> Mask {
         let w = self.world;
         let d = self.depths();
@@ -1579,13 +1577,13 @@ mod tests {
     }
 
     #[test]
-    fn projection_round_trips_and_figures_scale_with_depth() {
+    fn projection_round_trips_and_heights_scale_with_depth() {
         let w = world();
         let p = [2.0, 0.0, 12.0];
         let (x, y) = w.project(p).unwrap();
         let g = w.to_ground(x, y).unwrap();
         assert!((g[0] - 2.0).abs() < 1e-3 && (g[2] - 12.0).abs() < 1e-2, "{g:?}");
-        // a figure as tall as the eye has its head on the horizon
+        // an object as tall as the eye height has its top on the horizon
         let h = w.height(x, y, 1.6);
         assert!((y - h - w.horizon).abs() < 0.05, "{} vs {}", y - h, w.horizon);
         // twice as far, half as tall
@@ -1629,11 +1627,11 @@ mod tests {
     fn a_view_agrees_on_the_light_and_grounds_its_bodies() {
         let mut w = world().sun(Sun::deg(-70.0, 25.0));
         let s = w.spot_at(0.0, 8.0);
-        let rock = w.place(s, Sdf::ellipsoid(s.p(0.0, 0.3, 0.0), s.size(1.2, 0.9, 1.0)));
+        let body = w.place(s, Sdf::ellipsoid(s.p(0.0, 0.3, 0.0), s.size(1.2, 0.9, 1.0)));
         let v = w.view(Frame::new(500, 350, 0.5));
-        let part = v.part(rock);
+        let part = v.part(body);
         assert!(part > 0);
-        // the left of the rock is lit, the right in shadow, and on the
+        // the left of the body is lit, the right in shadow, and on the
         // ground the shadow lies right of it, not left
         let (x, y) = (s.x, s.y - s.m(0.5));
         let left = v.form.sample(x - s.m(0.5), y).unwrap();
@@ -1643,7 +1641,7 @@ mod tests {
         let r = shadows.sample(s.x + s.m(1.6), s.y - 1.0);
         let l = shadows.sample(s.x - s.m(1.6), s.y - 1.0);
         assert!(r > 0.5 && l < 0.05, "r {r} l {l}");
-        // the sunk part is hidden: nothing of the rock below its foot line
+        // the sunk part is hidden: nothing of the body below its foot line
         assert!(v.form.sample(s.x, s.y + s.m(0.35)).is_none());
         // the contact seam: darker right at the foot than a meter off
         let c = v.contact(0.2);
@@ -1674,7 +1672,7 @@ mod tests {
 
     #[test]
     fn a_distant_caster_does_not_panic_the_shadow_march() {
-        // at 310 m the march's growing minimum step used to pass its 0.5 m cap
+        // at 310 m the march's growing minimum step stays within its 0.5 m cap
         let mut w = world().sun(Sun::deg(0.0, 1.0));
         let s = w.spot_at(0.0, 310.0);
         w.place(s, Sdf::block(s.p(0.0, 5.5, 0.0), s.size(2.0, 12.0, 2.0), 0.0));
@@ -1739,49 +1737,49 @@ mod tests {
 
     #[test]
     fn depth_masks_know_what_is_in_front() {
-        // a sea from 20 m out, a boulder at 12 m, a painted figure at 9 m
-        // standing in front of the boulder's left half
+        // water from 20 m out, an ellipsoid body at 12 m, a layer (a
+        // 0.5 × 1.7 m rectangle) at 9 m in front of the body's left half
         let mut w = world().ground(|_, z| if z > 20.0 { -1.0 } else { 0.1 }).water(Water::new(0.0));
         let s = w.spot_at(0.0, 12.0);
-        let stone = w.place(s, Sdf::ellipsoid(s.p(0.0, 0.3, 0.0), s.size(1.2, 0.8, 1.0)));
+        let body = w.place(s, Sdf::ellipsoid(s.p(0.0, 0.3, 0.0), s.size(1.2, 0.8, 1.0)));
         let fs = w.spot_at(-0.6, 9.0);
         let f = Frame::new(500, 350, 0.5);
-        let fig = Mask::from_shape(f, Shape::new().rect(fs.x - fs.m(0.25), fs.y - fs.m(1.7), fs.m(0.5), fs.m(1.7)));
-        let li = w.layer("figure", fig, LayerDepth::At(fs.at[2]));
+        let slab = Mask::from_shape(f, Shape::new().rect(fs.x - fs.m(0.25), fs.y - fs.m(1.7), fs.m(0.5), fs.m(1.7)));
+        let li = w.layer("slab", slab, LayerDepth::At(fs.at[2]));
         let v = w.view(f);
         let d = v.depths();
         let is = |t: Thing| move |x: Thing| x == t;
-        // the stone is hidden where the figure stands in front of it
-        let vis = d.visible(&is(Thing::Body(stone)));
+        // the body is hidden where the layer stands in front of it
+        let vis = d.visible(&is(Thing::Body(body)));
         let (fx, fy) = (fs.x, s.y - s.m(0.4));
         assert!(vis.sample(fx, fy) < 0.01, "{}", vis.sample(fx, fy));
         assert!(vis.sample(s.x + s.m(0.6), fy) > 0.99);
-        let front = d.front(&is(Thing::Body(stone)));
+        let front = d.front(&is(Thing::Body(body)));
         assert!(front.sample(fx, fy) > 0.99 && front.sample(s.x + s.m(0.6), fy) < 0.01);
-        // a sea veil painted behind the figure keeps off it; one behind
-        // the stone keeps off the stone and the figure over it
-        let sea_y = w.project([0.0, 0.0, 60.0]).unwrap().1;
-        let behind_fig = d.behind(&is(Thing::Layer(li)));
-        assert!(behind_fig.sample(fx, fy) < 0.01 && behind_fig.sample(fx + 150.0, sea_y) > 0.99);
-        let behind_stone = d.behind(&is(Thing::Body(stone)));
-        assert!(behind_stone.sample(s.x + s.m(0.6), fy) < 0.01 && behind_stone.sample(fx, fy) < 0.01);
-        // the water, uncovered, is the water less the figure's shoulders over it
+        // a pass behind the layer keeps off it; one behind the body keeps
+        // off the body and the layer over it
+        let water_y = w.project([0.0, 0.0, 60.0]).unwrap().1;
+        let behind_slab = d.behind(&is(Thing::Layer(li)));
+        assert!(behind_slab.sample(fx, fy) < 0.01 && behind_slab.sample(fx + 150.0, water_y) > 0.99);
+        let behind_body = d.behind(&is(Thing::Body(body)));
+        assert!(behind_body.sample(s.x + s.m(0.6), fy) < 0.01 && behind_body.sample(fx, fy) < 0.01);
+        // the visible water is the water less the part of the layer over it
         let water = d.visible(&is(Thing::Water));
-        let head = (fs.x, fs.y - fs.m(1.2));
-        assert!(head.1 > w.horizon && head.1 < w.project([0.0, 0.0, 20.0]).unwrap().1, "the head is over the sea");
-        assert!(water.sample(head.0, head.1) < 0.01 && water.sample(head.0 - 150.0, head.1) > 0.99);
-        // a pass at 15 m: hidden by the stone and the figure, not by the far sea
+        let top = (fs.x, fs.y - fs.m(1.2));
+        assert!(top.1 > w.horizon && top.1 < w.project([0.0, 0.0, 20.0]).unwrap().1, "the top point is over the water");
+        assert!(water.sample(top.0, top.1) < 0.01 && water.sample(top.0 - 150.0, top.1) > 0.99);
+        // a pass at 15 m: hidden by the body and the layer, not by the far water
         let at = d.at_depth(15.0);
-        assert!(at.sample(fx, fy) < 0.01 && at.sample(s.x + s.m(0.6), fy) < 0.01 && at.sample(fx + 150.0, sea_y) > 0.99);
-        // between 8 and 13 m: the figure and the stone, not the sky
+        assert!(at.sample(fx, fy) < 0.01 && at.sample(s.x + s.m(0.6), fy) < 0.01 && at.sample(fx + 150.0, water_y) > 0.99);
+        // between 8 and 13 m: the layer and the body, not the sky
         let mid = d.between(8.0, 13.0);
         assert!(mid.sample(fx, fy) > 0.99 && mid.sample(fx, 50.0) < 0.01);
-        // the stone's silhouette is soft over a pixel, not stair-stepped
+        // the body's silhouette is soft over a pixel, not stair-stepped
         let partial = vis.data.iter().filter(|c| **c > 0.05 && **c < 0.95).count();
         assert!(partial > 20, "{partial}");
     }
 
-    /// Review 4 #3: `front` weighs by the selected coverage and counts
+    /// `front` weighs by the selected coverage and counts
     /// every selected thing, the ones between unselected ones included.
     #[test]
     fn front_weighs_coverage_and_every_selected_thing() {
@@ -1812,7 +1810,7 @@ mod tests {
         assert!(fr.abs() < 1e-6, "{fr}");
     }
 
-    /// Review 4 #4: off a world's panel is not its sky: no stack, and no
+    /// Off a world's panel is not its sky: no stack, and no
     /// mask lets a pass paint there.
     #[test]
     fn off_the_panel_is_nothing() {
@@ -1890,8 +1888,8 @@ mod tests {
         let (near, far) = (row(w.project([0.0, 0.0, 4.0]).unwrap().1), row(w.project([0.0, 0.0, 30.0]).unwrap().1));
         assert!(near > far * 4 && far >= 1, "near {near} far {far}");
         // spacing recedes
-        let posts = w.recede((2.0, 4.0), (0.0, 2.0), 5);
-        let gaps: Vec<f32> = posts.windows(2).map(|p| p[0].y - p[1].y).collect();
+        let spots = w.recede((2.0, 4.0), (0.0, 2.0), 5);
+        let gaps: Vec<f32> = spots.windows(2).map(|p| p[0].y - p[1].y).collect();
         assert!(gaps.windows(2).all(|g| g[1] < g[0]));
     }
 }

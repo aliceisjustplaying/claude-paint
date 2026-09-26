@@ -1,5 +1,5 @@
-//! Edges of a region, as a painter follows them when cutting in: the 0.5
-//! iso-line of a mask, traced with marching squares into polylines (units).
+//! Edges of a region: the 0.5 iso-line of a mask, traced with marching
+//! squares into polylines (units).
 
 use crate::mask::Mask;
 use std::collections::HashMap;

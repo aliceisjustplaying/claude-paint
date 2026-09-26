@@ -1,5 +1,28 @@
 # Handoff (2026-09-23 evening): moving to the M3 Pro
 
+**Round 16 (night of 2026-09-26/27), in progress. Plan agreed with Alice:**
+- Studio: branch r16-base (worktree ~/src/a/claude-paint-r16-base; BUILD.md in notes/r16/). The
+  Lua easel with no undo, no previews, no dry(), hand time always on, wait(minutes) any length,
+  piles knifed from tubes (no automatic matching), no per-pixel color or mix(), no subject
+  generators, 2400 px sessions, PNG looks, journal via `easel note`, binary-only export
+  (scripts/export_r16_studio friedrich|blank).
+- Four lanes x three painters (chains; a reader writes operations-and-effects notes between
+  painters, nothing says there were earlier painters): A winter (Friedrich), B summer
+  (Friedrich), C blank (no Friedrich), all claude-opus-5-5 high; D blank, gemini-3.8-flash high.
+  Studios ~/src/a/paint-studio-<hex> (mapping in the run folder). Runner, briefs, studio notes,
+  trees note: ~/tmp/gallery-fcf9c110/r16/ (r16_chains.py, brief_template.md, studio_notes.md,
+  trees.md, run/). Rules the easel can't enforce are stated in the brief; a monitor records each
+  session's history; a morning audit lists anything outside the rules.
+- Night steps: builder's cheap fixes -> one Astra review (low, fast off) -> kick off -> check all
+  painters' logs after 15 minutes -> if reward hacking: stop all, one round of fixes, review by
+  GPT-5.6 Sol (high, fast off), restart once; whatever happens the second time happens.
+- Not now (round 17 candidates): painting through tool calls (pi --no-builtin-tools plus an
+  extension), painter pairs. The wet merge (branch wet-merge) is not ready to become main:
+  notes/wet_merge/README.md on that branch.
+- The gallery: https://stillwet.art (repo ~/src/a/stillwet; the preview with highlights and
+  reactions isn't deployed yet; `./deploy.sh`). Alice to fix the Plausible site domain
+  (stillwet.net -> stillwet.art).
+
 **Update 2026-09-24 night (read first): Round 7.** Principles: `notes/principles.md`
 (tools give physics and constraints, not answers; entropy; feature freeze; against
 reward hacking). Alice's reviews: `notes/round6/alice_review.md` (last sections).

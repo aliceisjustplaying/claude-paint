@@ -1,4 +1,4 @@
-//! Looking at the canvas: small JPEGs an agent can read. The look shows
+//! Looking at the canvas: bounded PNGs an agent can read. The look shows
 //! the paint on the canvas as it is now (the dry picture with the wet
 //! paint on it as laid), whole or a window of it, and a few ways a painter
 //! looks at a picture: in grays, squinting, in a mirror, and where the
@@ -6,6 +6,7 @@
 //! canvas units can be laid over the look, as a painter squares up a
 //! drawing; it never touches the canvas.
 
+use image::ImageEncoder;
 use paint::color::{linear_to_srgb, luminance};
 use paint::{Canvas, Rgb};
 use std::path::Path;
@@ -20,7 +21,7 @@ pub struct View {
     /// Where the paint is in drying: open, setting, tacky and dry in false
     /// color over the picture, dimmed to gray.
     pub wet: bool,
-    /// Longest side of the image, px (None: 1000).
+    /// Whole-view longest side, px (None: 1000, capped at 1600). Crops stay 1:1.
     pub size: Option<usize>,
     /// Coordinate grid: Some(0) picks the step from the zoom.
     pub grid: Option<f32>,
@@ -46,7 +47,11 @@ impl View {
             match a {
                 "--crop" => {
                     let s = next()?;
-                    let p: Vec<f32> = s.split(',').map(|t| t.trim().parse::<f32>()).collect::<std::result::Result<_, _>>().map_err(|_| format!("--crop {s}: want x0,y0,x1,y1 in units"))?;
+                    let p: Vec<f32> = s
+                        .split(',')
+                        .map(|t| t.trim().parse::<f32>())
+                        .collect::<std::result::Result<_, _>>()
+                        .map_err(|_| format!("--crop {s}: want x0,y0,x1,y1 in units"))?;
                     if p.len() != 4 {
                         return Err(format!("--crop {s}: want x0,y0,x1,y1 in units"));
                     }
@@ -228,7 +233,11 @@ fn nice_step(min: f32) -> f32 {
 }
 
 fn fmt_units(v: f32) -> String {
-    if (v - v.round()).abs() < 1e-3 { format!("{}", v.round() as i64) } else { format!("{v:.1}") }
+    if (v - v.round()).abs() < 1e-3 {
+        format!("{}", v.round() as i64)
+    } else {
+        format!("{v:.1}")
+    }
 }
 
 /// Lines that read over light and dark paint: darken the light, lighten the dark.
@@ -313,11 +322,9 @@ fn draw_grid(img: &mut Img, m: &Map, step: f32, fs: i64) {
     img.text(2, img.h as i64 - 7 * fs - 2, &legend, fs, lab);
 }
 
-/// Render what the painter asked to see and write it as a JPEG.
+/// Render a PNG: whole views fit 1600 px and 3 MB; crops stay native, at most 1200 px per side.
 pub fn look(c: &Canvas, v: &View, out: &Path) -> std::result::Result<(usize, usize), String> {
     let f = c.window();
-    let px: Vec<Rgb> = c.seen();
-    let px = if v.wet { stage_colors(c, &px) } else { px };
     // crop: units -> whole-canvas pixels -> pixels of the held window
     let (wx0, wy0, wx1, wy1) = (f.x0, f.y0, f.x0 + f.w, f.y0 + f.h);
     let (x0, y0, x1, y1) = match v.crop {
@@ -334,80 +341,98 @@ pub fn look(c: &Canvas, v: &View, out: &Path) -> std::result::Result<(usize, usi
     };
     let (cw, ch) = (x1 - x0, y1 - y0);
     let long = cw.max(ch);
-    let size = v.size.unwrap_or(1000);
-    // fit to size: average down, or enlarge by whole pixels (so pixels stay honest)
-    let (ow, oh, img): (usize, usize, Vec<Rgb>) = if long > size {
-        let k = size as f32 / long as f32;
-        let (ow, oh) = (((cw as f32 * k).round() as usize).max(1), ((ch as f32 * k).round() as usize).max(1));
-        let mut img = vec![[0.0f32; 3]; ow * oh];
-        for oy in 0..oh {
-            let (sy0, sy1) = (y0 + oy * ch / oh, (y0 + (oy + 1) * ch / oh).max(y0 + oy * ch / oh + 1));
-            for ox in 0..ow {
-                let (sx0, sx1) = (x0 + ox * cw / ow, (x0 + (ox + 1) * cw / ow).max(x0 + ox * cw / ow + 1));
-                let mut acc = [0.0f32; 3];
-                for y in sy0..sy1 {
-                    for x in sx0..sx1 {
-                        let p = px[(y - wy0) * f.w + x - wx0];
-                        for q in 0..3 {
-                            acc[q] += p[q];
+    if v.crop.is_some() && (cw > 1200 || ch > 1200) {
+        return Err("--crop exceeds 1200 pixels per side; choose a smaller crop (crops stay 1:1)".into());
+    }
+    if long == 0 || cw == 0 || ch == 0 {
+        return Err("look: canvas is empty".into());
+    }
+    let mut size = if v.crop.is_some() { long } else { v.size.unwrap_or(1000).clamp(1, 1600) };
+    let px = c.seen();
+    let px = if v.wet { stage_colors(c, &px) } else { px };
+    loop {
+        // Average down from the original canvas on each attempt; never enlarge.
+        let (ow, oh, img): (usize, usize, Vec<Rgb>) = if long > size {
+            let k = size as f32 / long as f32;
+            let (ow, oh) = (((cw as f32 * k).round() as usize).max(1), ((ch as f32 * k).round() as usize).max(1));
+            let mut img = vec![[0.0f32; 3]; ow * oh];
+            for oy in 0..oh {
+                let (sy0, sy1) = (y0 + oy * ch / oh, (y0 + (oy + 1) * ch / oh).max(y0 + oy * ch / oh + 1));
+                for ox in 0..ow {
+                    let (sx0, sx1) = (x0 + ox * cw / ow, (x0 + (ox + 1) * cw / ow).max(x0 + ox * cw / ow + 1));
+                    let mut acc = [0.0f32; 3];
+                    for y in sy0..sy1 {
+                        for x in sx0..sx1 {
+                            let p = px[(y - wy0) * f.w + x - wx0];
+                            for q in 0..3 {
+                                acc[q] += p[q];
+                            }
                         }
                     }
+                    let n = ((sy1 - sy0) * (sx1 - sx0)) as f32;
+                    img[oy * ow + ox] = [acc[0] / n, acc[1] / n, acc[2] / n];
                 }
-                let n = ((sy1 - sy0) * (sx1 - sx0)) as f32;
-                img[oy * ow + ox] = [acc[0] / n, acc[1] / n, acc[2] / n];
+            }
+            (ow, oh, img)
+        } else {
+            let img = (0..cw * ch).map(|i| px[(y0 - wy0 + i / cw) * f.w + x0 - wx0 + i % cw]).collect();
+            (cw, ch, img)
+        };
+        let mut img = img;
+        if v.squint {
+            // half-closed eyes: detail goes, the big shapes and values stay
+            img = blur(&img, ow, oh, (ow.max(oh) as f32 * 0.012).max(2.0));
+        }
+        if v.value && !v.wet {
+            for p in img.iter_mut() {
+                let l = luminance(*p);
+                *p = [l; 3];
             }
         }
-        (ow, oh, img)
-    } else {
-        // round the enlargement up while the image stays within 1.6 × size
-        let up = size.div_ceil(long);
-        let k = if long * up * 5 <= size * 8 { up } else { (size / long).max(1) };
-        let (ow, oh) = (cw * k, ch * k);
-        let img = (0..ow * oh).map(|i| px[(y0 - wy0 + (i / ow) / k) * f.w + x0 - wx0 + (i % ow) / k]).collect();
-        (ow, oh, img)
-    };
-    let mut img = img;
-    if v.squint {
-        // half-closed eyes: detail goes, the big shapes and values stay
-        img = blur(&img, ow, oh, (ow.max(oh) as f32 * 0.012).max(2.0));
-    }
-    if v.value && !v.wet {
-        for p in img.iter_mut() {
-            let l = luminance(*p);
-            *p = [l; 3];
+        if v.mirror {
+            for row in img.chunks_mut(ow) {
+                row.reverse();
+            }
         }
-    }
-    if v.mirror {
-        for row in img.chunks_mut(ow) {
-            row.reverse();
+        // the aids, drawn over the picture in output pixels
+        let map = Map {
+            s: f.scale,
+            px0: x0 as f32,
+            py0: y0 as f32,
+            kx: ow as f32 / cw as f32,
+            ky: oh as f32 / ch as f32,
+            ow,
+            mirror: v.mirror,
+        };
+        let fs = if ow.max(oh) >= 1500 { 3 } else { 2 };
+        let mut im = Img { w: ow, h: oh, px: img };
+        if let Some(step) = v.grid {
+            draw_grid(&mut im, &map, step, fs);
         }
-    }
-    // the aids, drawn over the picture in output pixels
-    let map = Map { s: f.scale, px0: x0 as f32, py0: y0 as f32, kx: ow as f32 / cw as f32, ky: oh as f32 / ch as f32, ow, mirror: v.mirror };
-    let fs = if ow.max(oh) >= 1500 { 3 } else { 2 };
-    let mut im = Img { w: ow, h: oh, px: img };
-    if let Some(step) = v.grid {
-        draw_grid(&mut im, &map, step, fs);
-    }
-    if v.wet {
-        // the legend, top left
-        let (mut x, y) = (4 * fs, 4 * fs);
-        for (i, name) in ["OPEN", "SETTING", "TACKY", "DRY"].iter().enumerate() {
-            x += im.text(x, y, name, fs, STAGE_LEGEND[i]) + 2 * fs;
+        if v.wet {
+            // the legend, top left
+            let (mut x, y) = (4 * fs, 4 * fs);
+            for (i, name) in ["OPEN", "SETTING", "TACKY", "DRY"].iter().enumerate() {
+                x += im.text(x, y, name, fs, STAGE_LEGEND[i]) + 2 * fs;
+            }
         }
+        let buf: Vec<u8> = im.px.iter().flat_map(|p| p.map(|c| (linear_to_srgb(c) * 255.0).round().clamp(0.0, 255.0) as u8)).collect();
+        let mut png = Vec::new();
+        image::codecs::png::PngEncoder::new(&mut png)
+            .write_image(&buf, ow as u32, oh as u32, image::ExtendedColorType::Rgb8)
+            .map_err(|e| e.to_string())?;
+        if v.crop.is_none() && png.len() > 3_000_000 {
+            // Reduce both dimensions, then redraw aids at the new output resolution.
+            // Strict progress guarantees termination, even for incompressible images.
+            size = (ow.max(oh) * 4 / 5).max(1);
+            continue;
+        }
+        if let Some(d) = out.parent().filter(|d| !d.as_os_str().is_empty()) {
+            std::fs::create_dir_all(d).map_err(|e| e.to_string())?;
+        }
+        std::fs::write(out, png).map_err(|e| e.to_string())?;
+        return Ok((ow, oh));
     }
-    let buf: Vec<u8> = im.px.iter().flat_map(|p| p.map(|c| (linear_to_srgb(c) * 255.0).round().clamp(0.0, 255.0) as u8)).collect();
-    if let Some(d) = out.parent() {
-        std::fs::create_dir_all(d).map_err(|e| e.to_string())?;
-    }
-    // quality 95 with full-resolution color (4:4:4), so thin colored
-    // strokes and edges keep their color
-    let file = std::fs::File::create(out).map_err(|e| e.to_string())?;
-    let mut enc = jpeg_encoder::Encoder::new(std::io::BufWriter::new(file), 95);
-    enc.set_sampling_factor(jpeg_encoder::SamplingFactor::R_4_4_4);
-    let (w16, h16) = (u16::try_from(ow).map_err(|_| "look: image too wide")?, u16::try_from(oh).map_err(|_| "look: image too tall")?);
-    enc.encode(&buf, w16, h16, jpeg_encoder::ColorType::Rgb).map_err(|e| e.to_string())?;
-    Ok((ow, oh))
 }
 
 /// False colors for the drying stages (linear RGB): open, setting, tacky,
@@ -480,7 +505,11 @@ mod tests {
     const W: usize = 160;
 
     fn bits(c: &Canvas) -> Vec<u32> {
-        c.seen().iter().flat_map(|p| p.map(f32::to_bits)).chain(c.surface_um().iter().map(|v| v.to_bits())).collect()
+        c.seen()
+            .iter()
+            .flat_map(|p| p.map(f32::to_bits))
+            .chain(c.surface_um().iter().map(|v| v.to_bits()))
+            .collect()
     }
 
     const CANVAS: &str = r#"canvas{size=440, aspect=1.5, linen=15, seed=3, ground={{pile={{"lead white", 3}, {"yellow ochre", 1}}, um=120, apply="knife"}}}"#;
@@ -490,15 +519,22 @@ mod tests {
         let mut s = Session::new(W).unwrap();
         s.run(CANVAS).unwrap();
         // the left half laid yesterday, the right half just now; the top band stays bare
-        s.run(r#"p = pile{{"lead white", 4}, {"raw umber", 1}, medium=0.3}
+        s.run(
+            r#"p = pile{{"lead white", 4}, {"raw umber", 1}, medium=0.3}
                   work(rect(0, 200, 480, 460), {hand="broad", pile=p}); wait(20 * 60)
-                  work(rect(520, 200, 480, 460), {hand="broad", pile=p})"#).unwrap();
+                  work(rect(520, 200, 480, 460), {hand="broad", pile=p})"#,
+        )
+        .unwrap();
         let c = s.canvas().unwrap().clone();
         let f = c.window();
         let at = |x: f32, y: f32| f.index(x, y);
         let st = c.stages();
         assert_eq!(st[at(760.0, 420.0)], paint::Stage::Open);
-        assert!(matches!(st[at(240.0, 420.0)], paint::Stage::Tacky | paint::Stage::Setting | paint::Stage::Dry), "{:?}", st[at(240.0, 420.0)]);
+        assert!(
+            matches!(st[at(240.0, 420.0)], paint::Stage::Tacky | paint::Stage::Setting | paint::Stage::Dry),
+            "{:?}",
+            st[at(240.0, 420.0)]
+        );
         assert_eq!(st[at(500.0, 60.0)], paint::Stage::Dry, "bare ground");
         let px = stage_colors(&c, &c.seen());
         let (open, bare) = (px[at(760.0, 420.0)], px[at(500.0, 60.0)]);
@@ -508,8 +544,8 @@ mod tests {
         let before = bits(&c);
         let v = View::parse(&["--mode".into(), "wet,squint".into()]).unwrap();
         assert!(v.wet && v.squint);
-        let out = root().join("target/easel-look-test/wet.jpg");
-        assert_eq!(look(&c, &v, &out).unwrap(), (1120, 749));
+        let out = root().join("target/easel-look-test/wet.png");
+        assert_eq!(look(&c, &v, &out).unwrap(), (160, 107));
         assert!(out.exists());
         assert_eq!(before, bits(&c));
     }
@@ -518,17 +554,100 @@ mod tests {
     fn looks_draw_the_grid_without_touching_the_canvas() {
         let mut s = Session::new(W).unwrap();
         s.run(CANVAS).unwrap();
-        s.run(r#"b = brush("round", 4); b:load(pile{{"bone black", 1}}, 0.9); b:stroke({{100, 450}, {700, 400}})"#).unwrap();
+        s.run(r#"b = brush("round", 4); b:load(pile{{"bone black", 1}}, 0.9); b:stroke({{100, 450}, {700, 400}})"#)
+            .unwrap();
         let dir = root().join("target/easel-look-test");
         let c = s.canvas().unwrap().clone();
         let before = bits(&c);
         let v = View::parse(&[]).unwrap();
-        assert_eq!(look(&c, &v, &dir.join("plain.jpg")).unwrap(), (1120, 749), "enlarged 7x (rounded up)");
+        assert_eq!(look(&c, &v, &dir.join("plain.png")).unwrap(), (160, 107), "never enlarged");
         let args: Vec<String> = ["--grid", "100", "--crop", "100,50,600,500", "--mirror"].iter().map(|s| s.to_string()).collect();
         let v = View::parse(&args).unwrap();
         assert_eq!(v.grid, Some(100.0));
-        let (w, h) = look(&c, &v, &dir.join("grid.jpg")).unwrap();
-        assert_eq!((w, h), (1040, 936), "a 500 x 450 unit crop at 0.16 px/unit (80 x 72 px), enlarged 13x (rounded up)");
+        let (w, h) = look(&c, &v, &dir.join("grid.png")).unwrap();
+        assert_eq!((w, h), (80, 72), "crop stays at one output pixel per canvas pixel");
         assert_eq!(before, bits(&c));
+    }
+    #[test]
+    fn whole_looks_are_bounded_pngs_without_enlargement() {
+        for (name, width, aspect, size, expected) in [
+            ("small", 40, 2.0, None, (40, 20)),
+            ("wide", 2000, 2.0, Some(9999), (1600, 800)),
+            ("tall", 100, 0.05, Some(9999), (80, 1600)),
+            ("requested", 100, 2.0, Some(40), (40, 20)),
+        ] {
+            let c = Canvas::new_window(width, aspect, [0.2; 3], None);
+            let out = root().join(format!("target/easel-look-test/{name}.png"));
+            assert_eq!(look(&c, &View { size, ..View::default() }, &out).unwrap(), expected);
+            let bytes = std::fs::read(out).unwrap();
+            assert_eq!(image::guess_format(&bytes).unwrap(), image::ImageFormat::Png);
+            let decoded = image::load_from_memory(&bytes).unwrap();
+            assert_eq!((decoded.width() as usize, decoded.height() as usize), expected);
+        }
+    }
+
+    #[test]
+    fn crops_keep_native_pixels_and_reject_either_oversize_axis() {
+        let mut c = Canvas::new_window(1300, 1.0, [0.0; 3], None);
+        c.apply(|x, y, _| if x < 500.0 && y < 500.0 { [1.0, 0.0, 0.0] } else { [0.0, 0.0, 1.0] });
+        let out = root().join("target/easel-look-test/native-crop.png");
+        for size in [None, Some(40), Some(9999)] {
+            let v = View {
+                crop: Some([0.0, 0.0, 1200.0 / 1.3, 1200.0 / 1.3]),
+                size,
+                ..View::default()
+            };
+            assert_eq!(look(&c, &v, &out).unwrap(), (1200, 1200));
+            let decoded = image::load_from_memory(&std::fs::read(&out).unwrap()).unwrap().to_rgb8();
+            assert_eq!(decoded.dimensions(), (1200, 1200));
+            assert_eq!(decoded.get_pixel(100, 100).0, [255, 0, 0]);
+            assert_eq!(decoded.get_pixel(1000, 1000).0, [0, 0, 255]);
+        }
+        for crop in [[0.0, 0.0, 1201.0 / 1.3, 100.0], [0.0, 0.0, 100.0, 1201.0 / 1.3]] {
+            let v = View {
+                crop: Some(crop),
+                ..View::default()
+            };
+            let err = look(&c, &v, &out).expect_err("oversize crop must not silently scale");
+            assert!(err.contains("1200"), "{err}");
+        }
+    }
+
+    #[test]
+    fn whole_pngs_reduce_dimensions_to_meet_the_byte_budget() {
+        use image::ImageEncoder;
+        let mut c = Canvas::new_window(1600, 1.0, [0.0; 3], None);
+        c.apply(|x, y, _| {
+            let mut n = (x.to_bits() as u64) << 32 | y.to_bits() as u64;
+            std::array::from_fn(|_| {
+                n = n.wrapping_add(0x9e3779b97f4a7c15);
+                let mut z = n;
+                z = (z ^ (z >> 30)).wrapping_mul(0xbf58476d1ce4e5b9);
+                z = (z ^ (z >> 27)).wrapping_mul(0x94d049bb133111eb);
+                paint::color::srgb_to_linear(((z ^ (z >> 31)) & 255) as f32 / 255.0)
+            })
+        });
+        let raw: Vec<u8> = c.seen().iter().flat_map(|p| p.map(|v| (linear_to_srgb(v) * 255.0).round() as u8)).collect();
+        let mut full = Vec::new();
+        image::codecs::png::PngEncoder::new(&mut full)
+            .write_image(&raw, 1600, 1600, image::ExtendedColorType::Rgb8)
+            .unwrap();
+        assert!(full.len() > 3_000_000, "fixture must exercise byte-budget reduction");
+        let out = root().join("target/easel-look-test/byte-budget.png");
+        let (w, h) = look(
+            &c,
+            &View {
+                size: Some(1600),
+                ..View::default()
+            },
+            &out,
+        )
+        .unwrap();
+        let bytes = std::fs::read(out).unwrap();
+        assert_eq!(image::guess_format(&bytes).unwrap(), image::ImageFormat::Png);
+        assert!(bytes.len() <= 3_000_000, "{} bytes", bytes.len());
+        assert!(w < 1600 && h == w, "must reduce dimensions, got {w}x{h}");
+        let decoded = image::load_from_memory(&bytes).unwrap();
+        assert_eq!((decoded.width() as usize, decoded.height() as usize), (w, h));
     }
 }

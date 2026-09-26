@@ -1,8 +1,9 @@
-//! Calibration sheet for the physical surface: a Friedrich canvas as bought
-//! (linen + ground), then thin fluid paint (should pool in the ground's
-//! hollows), a lean sky scumble and stiff body paint (should keep its marks).
-//! Top band: bare ground. Then thin smalt-blue paint, a stiff white stroke
-//! band, and a dark glaze.
+//! Calibration sheet for the physical surface on `Style::friedrich()`'s
+//! prepared canvas (linen + ground), in four horizontal bands: the bare
+//! ground; thin fluid blue-gray paint (hiding 0.35, stiffness 0.15) in long
+//! soft-filbert strokes, which levels into the ground's hollows; stiff lead
+//! white (hiding 0.9, stiffness 1.0) with a hog flat, which keeps its stroke
+//! relief; and a transparent umber glaze.
 
 use paint::{Gesture, Held, Mask, Orient, Paint, Pigment, Style, Tool, hex};
 
@@ -11,7 +12,7 @@ fn main() {
     let st = Style::friedrich();
     let mut c = st.prepare(o.width, 2.0, o.seed);
     let h = c.height();
-    // band 2: thin fluid blue, laid with a soft filbert in long strokes
+    // band 2: thin fluid blue-gray, laid with a soft filbert in long strokes
     let fr = c.frame();
     let band = |a: f32, b: f32| Mask::from_fn(fr, move |_, y| if y >= a * h && y < b * h { 1.0 } else { 0.0 });
     let b2 = band(0.25, 0.5);

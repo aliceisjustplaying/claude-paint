@@ -799,7 +799,7 @@ fn work(st: &S, mask: Rc<Mask>, o: Table, preset: Option<&str>) -> Result<()> {
         "body" => sty.body(),
         "detail" => sty.detail(),
         "hatch" => sty.hatch(),
-        "glaze" => sty.glaze(0.9),
+        "glaze" => sty.glaze(),
         "scumble" => sty.scumble(),
         "blend" => sty.blend().ok_or_else(|| mlua::Error::runtime("this style has no blender"))?,
         o => return err(format!("hand {o:?}: broad, body, detail, hatch, glaze, scumble or blend")),
@@ -1061,9 +1061,7 @@ fn wet_share(c: &Canvas) -> f64 {
     sh[0] + sh[1] + sh[2]
 }
 
-/// A verb that lays a film over dry paint (`glaze`, `varnish`) or works on
-/// the dry picture (`cracks`, `relief`) goes ahead only once every film on
-/// the canvas is touch-dry: it would otherwise dry them all at once.
+/// Whole-picture finishing requires every film to be touch-dry.
 fn needs_dry(st: &S, what: &str) -> Result<()> {
     let s = st.borrow();
     let c = s.canvas.as_ref().ok_or_else(no_canvas)?;
@@ -1071,6 +1069,20 @@ fn needs_dry(st: &S, what: &str) -> Result<()> {
     if w > 0.0 {
         let pc = if w < 0.005 { "under 1%".to_string() } else { format!("{:.0}%", 100.0 * w) };
         return err(format!("{what}: the paint is not all dry yet ({pc} of the canvas is still open, setting or tacky; look --mode wet shows where): wait first"));
+    }
+    Ok(())
+}
+
+/// Even fractional mask coverage touches the substrate. Report the first
+/// wet covered pixel in canvas units so the painter can locate it with look.
+fn needs_dry_under(st: &S, mask: Option<&Mask>) -> Result<()> {
+    let s = st.borrow();
+    let c = s.canvas.as_ref().ok_or_else(no_canvas)?;
+    let f = c.window();
+    for (i, stage) in c.stages().into_iter().enumerate() {
+        if stage != paint::Stage::Dry && mask.is_none_or(|m| m.data[f.whole_index(i)] > 0.0) {
+            return err(format!("glaze: paint under the mask is not touch-dry at ({:.1}, {:.1}); look --mode wet shows where: wait first", f.ux(i % f.w), f.uy(i / f.w)));
+        }
     }
     Ok(())
 }
@@ -1367,7 +1379,7 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
             let pig = Pigment::with_hiding(paint.color, paint.hiding());
             let b = support(m.as_deref(), f, 4.0);
             let th = scalar_field(&st1, &o.get::<Option<Value>>("coats")?.unwrap_or(Value::Number(0.5)), b, "coats")?;
-            needs_dry(&st1, "glaze")?;
+            needs_dry_under(&st1, m.as_deref())?;
             time::trip(&st1, p.mix.color);
             time::verb(&st1, Verb::Pass, |s| {
                 let c = s.canvas.as_mut().ok_or_else(no_canvas)?;
@@ -1512,4 +1524,51 @@ fn ground_of(tubes: &Palette, v: &Value) -> Result<Vec<Ground>> {
         return err(format!("canvas: ground= needs at least one layer\n{CANVAS_HELP}"));
     }
     Ok(out)
+}
+
+#[cfg(test)]
+mod owner_regressions {
+    use crate::session::Session;
+
+    // API contract: a dry region can be glazed beside wet paint. The
+    // rejected region identifies a usable canvas location. Finishing verbs
+    // still require the whole picture dry. No existing test covers locality.
+    #[test]
+    fn glaze_checks_only_its_mask_but_finishing_checks_everywhere() {
+        for crop in [None, Some(paint::Crop { units: [50.0, 100.0, 950.0, 950.0], margin: 0.0 })] {
+            check_glaze(crop);
+        }
+    }
+
+    fn check_glaze(crop: Option<paint::Crop>) {
+        let mut s = Session::new(100).unwrap();
+        s.run(r#"canvas{size=300, aspect=1, linen=15,
+                ground={{pile={{"lead white",1}},um=100,apply="knife"}}}"#).unwrap();
+        if crop.is_some() {
+            let mut st = s.st.borrow_mut();
+            st.canvas = Some(st.style.as_ref().unwrap().prepare_window(100, 1.0, st.seed, crop));
+        }
+        s.run(r#"
+            p = pile{{"bone black",1}}
+            b = brush("flat", 20); b:load(p)
+            b:stroke({100,200,400,200})
+        "#).unwrap();
+        let wet = {
+            let st = s.st.borrow();
+            let c = st.canvas.as_ref().unwrap();
+            let f = c.window();
+            let i = c.stages().iter().position(|v| *v != paint::Stage::Dry).unwrap();
+            (f.ux(i % f.w), f.uy(i / f.w))
+        };
+        s.run("glaze(rect(700,700,900,900), {pile=p})").expect("dry mask must glaze beside wet paint");
+        let e = s.run(&format!("glaze(rect({},{},{},{}), {{pile=p}})", wet.0-5.0, wet.1-5.0, wet.0+5.0, wet.1+5.0)).unwrap_err();
+        assert!(e.contains(&format!("glaze: paint under the mask is not touch-dry at ({:.1}, {:.1})", wet.0, wet.1)) && e.contains("wait"), "{e}");
+        let e = s.run("glaze(nil, {pile=p})").unwrap_err();
+        assert!(e.contains("not touch-dry at ("), "unmasked glaze covers wet paint: {e}");
+        for verb in ["varnish()", "cracks()", "relief()"] {
+            let e = s.run(verb).unwrap_err();
+            assert!(e.contains("not all dry yet"), "{verb}: {e}");
+        }
+        s.run("wait(90*24*60); glaze(nil, {pile=p})").unwrap();
+    }
 }

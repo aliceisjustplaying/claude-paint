@@ -11,7 +11,8 @@
 # dest:    a folder that doesn't exist yet (or is empty)
 #
 # The files come from `git archive` of the r16-base branch through a fixed
-# list (no .git, no target, no out, no developer notes). The easel is then
+# list (no .git, no target, no out, no developer notes, no smoke test of the
+# build). The easel is then
 # built fresh in dest (`cargo build --release -p easel`), and dest gets an
 # empty notes/journal.md.
 set -euo pipefail
@@ -51,6 +52,8 @@ if [ "$profile" = friedrich ]; then
 fi
 
 git -C "$repo" archive --format=tar "$branch" -- "${files[@]}" | tar -x -C "$dest"
+# the build's smoke test lists what the easel doesn't have; a painter needn't
+rm -f "$dest/crates/easel/tests/smoke.rs"
 : > "$dest/notes/journal.md"
 mkdir -p "$dest/paintings/lua"
 

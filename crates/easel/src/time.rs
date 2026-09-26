@@ -165,15 +165,21 @@ mod tests {
         assert!(clock(&s) - t0 > 5.0, "a body passage 300 × 200 units takes minutes: {}", clock(&s) - t0);
     }
 
-    /// The paint ages while the hand works: a passage laid and then worked
-    /// on for a long while by hand has begun to set without any wait.
+    /// The paint ages while the hand works: a passage laid first has begun
+    /// to set by the time a long spell of handwork after it is done, with
+    /// no wait.
     #[test]
     fn hand_time_is_always_on() {
         let mut s = Session::new(W).unwrap();
         run(&mut s, CANVAS);
         assert!(s.canvas().unwrap().hand_time().is_some());
-        let e = s.run("hand_time(false)").unwrap_err();
-        assert!(e.contains("hand_time"), "{e}");
+        run(&mut s, r#"work(rect(100, 100, 300, 200), {hand="body", pile=pile{{"lead white", 1}}, coverage=3})
+                        b = brush("rigger", 0.5); b:load(pile{{"raw umber", 1}}, 0.9)
+                        for i = 1, 600 do b:stroke({{500, 100 + i}, {900, 100 + i}}) end"#);
+        assert!(clock(&s) > 60.0, "600 fine lines take the hand a while: {} min", clock(&s));
+        let f = s.canvas().unwrap().frame();
+        let st = s.canvas().unwrap().stages()[f.index(250.0, 200.0)];
+        assert_ne!(st, paint::Stage::Open, "the first passage has begun to set");
     }
 
     /// `wait` returns the time of day; days are fine.

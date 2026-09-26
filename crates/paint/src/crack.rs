@@ -1,7 +1,7 @@
 //! Craquelure: age cracks through paint and ground, grown one at a time in a
 //! stress field, then cut into the surface.
 //!
-//! Sources (notes/research/oil_paint_physics.md §5 and "Implications" E;
+//! Sources (notes/research/oil_paint_physics.md §5;
 //! notes/research/friedrich_materials.md §8):
 //! - **Sequential, not Voronoi.** Paquette, Poulin & Drettakis (GI 2002): a
 //!   grid of stress and strength; a crack starts where σ/S_b is highest,
@@ -24,7 +24,7 @@
 //!   subcritical growth) lets free tips creep a little farther and join a
 //!   crack they reach, so most ends are T-junctions.
 //! - **Spacing.** D_r ≈ S/2 for a target spacing S. Canvas craquelure islands
-//!   are about 1–6 mm; Friedrich's centers ~2–6 mm (assumption), corners
+//!   are about 1–6 mm; toward the center ~2–6 mm (assumption), corners
 //!   6 ± 3 mm (Bury & Bratasz mock-up).
 //! - **Weave coupling.** "Jagged cracks with a rectangular pattern are
 //!   associated with characteristically thin brittle grounds which allow
@@ -42,7 +42,7 @@
 //! - **Geometry.** Age cracks are sharp and narrow, 50–100 µm wide (OCT: 70 µm
 //!   wide, 370 µm deep) and go through paint and ground; islands cup up at
 //!   their edges (raking light shows it); grime collects in the cracks and
-//!   makes them read darker (Getty *Conserving Canvas*; CAMEO).
+//!   makes them darker (Getty *Conserving Canvas*; CAMEO).
 
 use crate::canvas::Canvas;
 use crate::noise::Fbm;
@@ -58,14 +58,13 @@ use std::collections::BinaryHeap;
 /// cracks (`Canvas::crack`): the ground it was primed with, the island size
 /// that ground and paint give, the opening that size gives.
 ///
-/// How strongly cracks read in the picture: an age crack is narrower than a
+/// How visible cracks are: an age crack is narrower than a
 /// pixel (0.14 mm on a 440 mm canvas at 3200 px), so it shows as the part
 /// of the pixel it opens (`width_um`, `hierarchy` and `vary` in thick
 /// paint) times how far its dark slot or pale walls differ from the paint
 /// there. What fills it (`dirt`, `grime`) moves that a little; `depth_um`
 /// and `cupping_um` shape the surface relief, which only the finish's relief
-/// lighting shows (clearly in raking light; under a quiet light such as
-/// Friedrich's, `relief` 0.06, not at all). To quiet a network, narrow it.
+/// lighting shows (clearly in raking light; at `relief` 0.06 not at all).
 #[derive(Clone, Copy, Debug)]
 pub struct Cracks {
     /// Target median island size (square root of island area), mm.
@@ -85,9 +84,10 @@ pub struct Cracks {
     /// `depth_um`).
     pub cupping_um: f32,
     /// Grime in the cracks, 0 (clean) .. 1 (heavily soiled): in lights a
-    /// soiled crack reads a little darker, in darks it hides the pale walls.
-    /// A clean crack is still a shadowed slot, so this tunes a crack's tone
-    /// by a few percent of the pixel; `width_um` sets how strongly it reads.
+    /// soiled crack is a little darker, in darks it hides the pale walls.
+    /// A clean crack is still a shadowed slot, so this changes a crack's tone
+    /// by a few percent of the pixel; `width_um` sets how much of the pixel
+    /// it covers.
     pub dirt: f32,
     /// Corner cracks perpendicular to the diagonals.
     pub corners: bool,
@@ -98,12 +98,11 @@ pub struct Cracks {
     /// oily dark glazes stay tougher) and how wide cracks open (thicker
     /// film, wider).
     pub vary: f32,
-    /// Microcracked varnish, 0 (none) .. 1: patches where the old varnish
-    /// has crazed finely and its crack edges scatter light "like a milky
-    /// veil" [SMB-blog], strongest over darks.
+    /// Microcracked varnish, 0 (none) .. 1: patches where aged varnish has
+    /// crazed finely and its crack edges scatter light, a milky veil
+    /// (notes/research/oil_paint_physics.md §6), strongest over darks.
     pub veil: f32,
-    /// How much the first cracks dominate, 0 (every crack opens alike, the
-    /// old even web) .. 1. A crack keeps opening while the islands on
+    /// How much the first cracks dominate, 0 (every crack opens alike) .. 1. A crack keeps opening while the islands on
     /// either side shrink into it, so the first cracks, which formed when
     /// the islands were whole, open widest, go deepest and cup most; each
     /// later crack, splitting a smaller island, opens less (by the stress it
@@ -121,18 +120,19 @@ pub struct Cracks {
     /// tighter along its length (keying out, the weave's crimp), so the
     /// first cracks run across it; the direction drifts over the canvas.
     pub grain: f32,
-    /// What fills the cracks, 0 (the old even soot) .. 1: gray-brown grime
-    /// that differs crack to crack (wide ones hold more; a cleaning took it
-    /// out of some; old varnish stayed amber in others) over walls that
-    /// show the pale ground, so in darks a crack reads as a faint light line.
+    /// What fills the cracks, 0 (the same dark soot in every crack) .. 1:
+    /// gray-brown grime that differs crack to crack (wide ones hold more; a
+    /// cleaning took it out of some; aged varnish stayed amber in others)
+    /// over walls that show the pale ground, so in darks a crack is a faint
+    /// light line.
     pub grime: f32,
     pub seed: u64,
 }
 
 /// Island size per µm of layer (ground + paint): channel cracks in a film
 /// on a compliant support saturate at a spacing of some ten to twenty film
-/// thicknesses. 14 puts a 240 µm Friedrich ground at ~3.6 mm, inside the
-/// 2–6 mm the research notes give (assumption, calibrated to that range).
+/// thicknesses. 14 puts a 240 µm ground at ~3.6 mm, inside the 1–6 mm of
+/// notes/research/oil_paint_physics.md §5 (assumption, fitted to that range).
 pub const ISLAND_PER_UM: f32 = 14.0e-3;
 /// Paint film over the ground assumed when sizing islands, µm.
 const PAINT_UM: f32 = 20.0;
@@ -142,10 +142,11 @@ const PAINT_UM: f32 = 20.0;
 pub const STRAIN: f32 = 0.009;
 
 impl Cracks {
-    /// A quietly aged canvas, fitted to the canvas it cracks: islands and
+    /// Every effect switched on, fitted to the canvas it cracks: islands and
     /// weave coupling from its ground, openings from the island size (about
-    /// 30 µm on a Friedrich ground), 20 µm deep after varnish, a little
-    /// grime and cupping, uneven aging and a few patches of milky varnish.
+    /// 30 µm on a 240 µm ground), `depth_um` 20, `cupping_um` 15, `dirt` 0.4,
+    /// corner cracks, `vary` 1, `veil` 0.5, `hierarchy` 1, `patchy` 1,
+    /// `grain` 0.15 and `grime` 1.
     pub fn aged(seed: u64) -> Self {
         Cracks {
             island_mm: None,
@@ -165,9 +166,9 @@ impl Cracks {
         }
     }
 
-    /// One even network (every crack alike, no patchy
-    /// development, no direction, the old soot in the cracks), fitted to
-    /// the canvas like `aged`.
+    /// One even network (every crack alike, no patchy development, no
+    /// direction, the same dark soot in every crack: `hierarchy`, `patchy`,
+    /// `grain` and `grime` 0), otherwise like `aged`.
     pub fn even(seed: u64) -> Self {
         Cracks { hierarchy: 0.0, patchy: 0.0, grain: 0.0, grime: 0.0, ..Cracks::aged(seed) }
     }
@@ -454,7 +455,7 @@ impl Builder {
         let corners = k.corners;
         let vary = k.vary.clamp(0.0, 1.0);
         // uneven aging: the film shrank more here than there (drying,
-        // humidity, old restorations), over some centimeters
+        // humidity, restorations), over some centimeters
         let uneven = Fbm::new(seed as u32 ^ 0x54, 3, 60.0);
         let bars = stretcher(size);
         let wob = Fbm::new(seed as u32 ^ 0x55, 2, 40.0);
@@ -726,7 +727,7 @@ impl Builder {
                     let hw = rot(h, a.wob);
                     let run = 1.0 / (hw[0].abs() / px + hw[1].abs() / py).max(1e-6);
                     a.acc = addv(a.acc, mul(hw, run));
-                    // never step back against the heading (old error from
+                    // never step back against the heading (error accumulated
                     // before a turn would make notches)
                     for (e, hc) in a.acc.iter_mut().zip(hw) {
                         if *e * hc < 0.0 {
@@ -1044,7 +1045,7 @@ struct RSeg {
     generation: f32,
     /// How far its island edges lift, relative to `cupping_um`.
     cup: f32,
-    /// Grime in it (0..1 of `dirt`), and the part of that which is old
+    /// Grime in it (0..1 of `dirt`), and the part of that which is aged
     /// amber varnish rather than gray grime.
     grime: f32,
     amber: f32,
@@ -1063,7 +1064,7 @@ struct RSeg {
 const HIER_EXP: i32 = 2;
 /// A primary crack's opening relative to `Cracks::width` when `hierarchy`
 /// is 1 (the later generations are narrower, so the primaries are wider
-/// than the old even crack).
+/// than the cracks at `hierarchy` 0).
 const HIER_PRIMARY: f32 = 1.7;
 
 /// Smooth 1D value noise along a crack, in 0..1, feature size `l` (mm).
@@ -1178,8 +1179,8 @@ fn rsegs(net: &Network, k: &Cracks) -> Vec<RSeg> {
         let wide = (0.45 * 1.7 * (hash2(a.crack as i64, 0, k.seed ^ 0x73) - 0.5)).exp();
         let open = open0 + h * (HIER_PRIMARY * gf * wide - open0);
         let cup = 1.0 + h * (1.3 * rel - 1.0);
-        // grime: wide cracks hold more; some were cleaned out; in some the
-        // old varnish stayed, amber
+        // grime: wide cracks hold more; some were cleaned out; in some aged
+        // varnish stayed, amber
         let (grime, amber) = if gr > 0.0 {
             let p0 = a.pts[0];
             let clean = crate::smoothstep(0.1, 0.6, cleaned.get(p0[0], p0[1]));
@@ -1228,8 +1229,8 @@ pub(crate) fn raster_window(net: &Network, k: &Cracks, local: &Local, win: (usiz
     let width = k.width() * 1e-3; // mm
     let sh = 0.4 * width; // worn shoulder each side
     let lc = 0.18 * k.island(); // cupping falls off over ~10–20% of an island
-    // lift ∝ 1 / distance near the crack (research notes, E.5), reaching
-    // zero at lc; ℓ0 keeps it finite at the edge
+    // lift ∝ 1 / distance near the crack (assumed profile), reaching zero
+    // at lc; ℓ0 keeps it finite at the edge
     let l0 = 0.06 * k.island();
     let tail = l0 / (l0 + lc);
     // averaged over the pixel (a box of half width px/2 across the crack):
@@ -1359,7 +1360,7 @@ impl Canvas {
         // an open crack is a deep narrow slot: it traps light (its walls and
         // floor are in shadow), and soot and dust in a little oil settle in it
         let dirt = Pigment::from_appearance([0.065, 0.054, 0.042], [0.014, 0.012, 0.01]);
-        // grime: house dust and some soot, gray-brown; old varnish, amber
+        // grime: house dust and some soot, gray-brown; aged varnish, amber
         let grime = Pigment::from_appearance([0.26, 0.22, 0.18], [0.045, 0.039, 0.032]);
         let amber = Pigment::from_appearance([0.62, 0.45, 0.2], [0.02, 0.016, 0.01]);
         let th = 2.5 * k.dirt;
@@ -1438,7 +1439,7 @@ impl Canvas {
                 let thick = crate::smoothstep(THICK_UM[0], THICK_UM[1], paint);
                 let reach = GENERATIONS as f32 - k.vary * (tough + thick);
                 // (the film bookkeeping runs high: the physical film is taken
-                // as 20 µm where it reads thin and 300 µm where fully thick)
+                // as 20 µm below THICK_UM[0] and 300 µm at THICK_UM[1])
                 let film = PAINT_UM + (300.0 - PAINT_UM) * thick;
                 let open = (1.0 + k.vary * (((ground + film) / (ground + PAINT_UM).max(1.0)).sqrt() - 1.0)).clamp(0.7, 1.8);
                 (reach, open, WALL_THIN + (WALL_THICK - WALL_THIN) * thick)
@@ -1453,7 +1454,7 @@ impl Canvas {
         Local { cell: n as f32 * px, o: [(gx0 * n) as f32 * px, (gy0 * n) as f32 * px], nx, ny, reach, open, walls }
     }
 
-    /// Patches of old varnish crazed into microcracks a few tenths of a mm
+    /// Patches of aged varnish crazed into microcracks a few tenths of a mm
     /// apart; the crack edges scatter light, a milky veil over the picture
     /// (strongest over darks). Resolved as fine light lines where a pixel is
     /// finer than the crazing, as their mean haze where it is coarser.
@@ -1490,10 +1491,9 @@ impl Canvas {
 }
 
 /// Paint film over the ground (the canvas's `film` bookkeeping, µm) from
-/// which a passage counts as thin, and as fully thick. The film counts every
-/// coat laid, also paint that was blended or wiped into its neighbors, so
-/// it runs high: in the wet-engine *Evening at a Mountain Lake* the sky
-/// reads ~250 µm and the fir wood 500–1000 (calibrated there).
+/// which a passage counts as thin, and as fully thick. Effective
+/// film-thickness thresholds, µm; the count includes paint later blended or
+/// wiped, so these are not direct measurements.
 const THICK_UM: [f32; 2] = [150.0, 700.0];
 /// Fraction of a crack's visible walls that is ground under thin and under
 /// thick paint.
@@ -1501,10 +1501,10 @@ const WALL_THIN: f32 = 0.5;
 const WALL_THICK: f32 = 0.15;
 /// Reflectance left in an open crack (its shadowed slot) before grime.
 const SLOT: f32 = 0.35;
-/// The ground seen in a crack's walls: lead white and chalk over the warm
-/// lower layers, yellowed (a Dresden ground: a patchy whitish top over
-/// ocher and red earth, notes/research/friedrich_materials.md §2;
-/// assumption for the value).
+/// The color a crack's walls show where they cut the ground, a
+/// fixed value independent of the canvas's ground color: a yellowed lead
+/// white and chalk layer over warm ocher and red earth layers
+/// (notes/research/friedrich_materials.md §2; assumption for the value).
 const GROUND_WALL: [f32; 3] = [0.52, 0.44, 0.32];
 /// Spacing of varnish microcracks, mm.
 const VEIL_CELL: f32 = 0.3;
@@ -1859,9 +1859,7 @@ mod tests {
     /// the islands were whole, open widest"). With `patchy` a tough passage
     /// only starts cracking a few generations late; its first long cracks
     /// still split whole islands, so they open like the canvas's primaries,
-    /// and wider than the late cracks that subdivide an island. (On main
-    /// the opening followed the global generation: a tough passage's first
-    /// cracks opened at a third of a primary and read as the finest.)
+    /// and wider than the late cracks that subdivide an island.
     #[test]
     fn first_cracks_open_widest_wherever_they_formed() {
         let k = Cracks { corners: false, vary: 0.0, grain: 0.0, ..Cracks::aged(11).fit(240.0) };
@@ -1965,23 +1963,22 @@ mod tests {
     }
 
     /// In the darks a crack shows its pale ground walls under gray grime: a
-    /// faint light line, where the old soot left it invisible.
+    /// faint light line; with `grime` 0 (dark soot) it stays within 1.3× the
+    /// paint.
     #[test]
-    fn cracks_in_darks_read_light() {
-        let (old, paint) = crack_in_dark(0.0);
-        let (new, _) = crack_in_dark(1.0);
-        eprintln!("dark paint {paint:.4}: crack pixels, soot {old:.4}, grime and ground {new:.4}");
-        assert!(old < 1.3 * paint, "old {old} vs {paint}");
-        assert!(new > 1.3 * paint && new < 4.0 * paint, "new {new} vs {paint}");
+    fn cracks_in_darks_show_light() {
+        let (soot, paint) = crack_in_dark(0.0);
+        let (grime, _) = crack_in_dark(1.0);
+        eprintln!("dark paint {paint:.4}: crack pixels, soot {soot:.4}, grime and ground {grime:.4}");
+        assert!(soot < 1.3 * paint, "soot {soot} vs {paint}");
+        assert!(grime > 1.3 * paint && grime < 4.0 * paint, "grime {grime} vs {paint}");
     }
 
     /// A crop render cracks exactly like the whole canvas away from its
-    /// edge: every new variation hangs on canvas millimeters or crack ids.
-    /// That includes the paint judged under the cracks: its averaging grid
-    /// is anchored to the canvas, not to the crop's corner, so the crop
-    /// must not start on a cell boundary (a crop used to see light and dark
-    /// strips averaged differently and grow a generation-4 crack the whole
-    /// render didn't have; review3 physics #2).
+    /// edge: every variation hangs on canvas millimeters or crack ids.
+    /// That includes the paint sampled under the cracks: its averaging grid
+    /// is anchored to the canvas, not to the crop's corner, so the test crop
+    /// deliberately does not start on a cell boundary.
     #[test]
     fn crop_cracks_like_the_whole() {
         let k = Cracks::aged(4);

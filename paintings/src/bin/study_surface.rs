@@ -1,14 +1,14 @@
-//! Covering a passage. Dark body paint over the warm
-//! Friedrich ground, four panels a row:
+//! Covering a region. Dark body paint over `Style::friedrich()`'s prepared
+//! ground, four panels a row:
 //!
-//! Top, the body filbert: coverage 1 (strokes side by side, ground between
-//! them, as asked); 2.5 without looking (`fill(false)`: the gaps a hand
-//! leaves between its strokes, the old flecks); 2.5 as painted now (the
-//! painter looks and dabs the gaps); 2.5 with a nearly dry brush (load
-//! 0.12: dry brush, broken on purpose, never filled).
+//! Top, the body handling: coverage 1 (strokes side by side, ground between
+//! them); coverage 2.5 with `fill(false)` (the gaps between strokes stay
+//! open); coverage 2.5 with the default fill (bare cells between strokes
+//! get extra dabs); coverage 2.5 at load 0.12 (below the fill threshold of
+//! load 0.25, so the gaps are never filled).
 //!
-//! Bottom, the same with the broad filbert, and last a light-pressure
-//! scumble (pressure 0.15–0.3, load 0.1) that skims the weave's peaks.
+//! Bottom, the same with the broad handling, and last a light-pressure
+//! pass (pressure 0.15–0.3, load 0.1) that touches only the weave's peaks.
 
 use paint::{Handling, Mask, Style, hex};
 

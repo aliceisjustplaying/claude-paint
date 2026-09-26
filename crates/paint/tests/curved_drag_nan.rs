@@ -1,13 +1,12 @@
-//! A curved multi-point `drag` with a fine brush that laid nothing. An
-//! 11-point U,
+//! A curved multi-point `drag` with a fine brush through an 11-point U,
 //! `y = py + 1.3 + drop * sin(a).powf(0.8)` for `a = PI * k / 10`. In f32,
-//! `sin(PI)` is -8.7e-8, so the last point's y is NaN, and a gesture with a
-//! NaN point laid nothing anywhere along it (and said nothing). Now such a
-//! gesture is rejected loudly.
+//! `sin(PI)` is -8.7e-8, so the last point's y is NaN. A gesture with a NaN
+//! point panics, naming the point.
 
 use paint::{Canvas, Gesture, Held, Orient, Paint, Tool, hex};
 
-/// The rope coil's points, exactly as the coast painting builds them.
+/// The U's 11 points: `half` either side of `px + 5.5`, from `py + 1.3`
+/// down by up to `drop`.
 fn coil(px: f32, py: f32, drop: f32, half: f32) -> Vec<(f32, f32)> {
     (0..=10)
         .map(|k| {
@@ -37,14 +36,14 @@ fn the_same_curve_with_finite_points_lays_paint() {
     let mut pts = coil(500.0, 372.0, 12.0, 2.3);
     pts[10].1 = 372.0 + 1.3;
     assert!(laid(pts) > 50);
-    // the half that painted in the coast session: bottom to left end, no NaN
+    // the first half reversed, bottom to left end, has no NaN and paints
     let pts = coil(500.0, 372.0, 12.0, 2.3);
     assert!(laid(pts[..=5].iter().rev().copied().collect()) > 20);
 }
 
-/// What the painter saw was next to nothing: `drag_on` summed a NaN arc
-/// length, `nsteps` cast to 0 then 1, and the brush took one step and lifted
-/// (12 pixels at 1000px against 106). Now the gesture is rejected loudly.
+/// A NaN point panics with its index. Without the check, `drag_on` would sum
+/// a NaN arc length, cast the step count to 0 then 1, and the brush would
+/// take one step and lift.
 #[test]
 #[should_panic(expected = "point 10")]
 fn a_nan_point_is_an_error() {

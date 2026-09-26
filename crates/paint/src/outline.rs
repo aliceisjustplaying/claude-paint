@@ -1,19 +1,19 @@
 //! Drawn outlines: a few rough points become a line a hand drew.
 //!
-//! A painter places a handful of points (marking which are corners, or
-//! letting the hand decide from the angle) and gets back:
+//! The caller places a handful of points (marking which are corners, or
+//! letting the turning angle decide) and gets back:
 //!
 //! - the line: a centripetal Catmull-Rom curve through the points, broken at
-//!   the corners, then moved in and out along its normal the way a hand
-//!   moves: a slow wobble, and depending on the character, straight facets
-//!   with small notches (a broken rock edge) or rounded lobes (a leafy edge);
-//! - how the hand drew it: strokes that lift and start again, overlap or
-//!   leave small gaps, overshoot at corners, restate a stretch slightly off
-//!   the line (a searching sketch), each with its own pressure along it;
+//!   the corners, then displaced in and out along its normal: a slow wobble
+//!   and, depending on the `Character`, straight facets with small notches
+//!   or rounded lobes;
+//! - the strokes that draw it: strokes that lift and start again, overlap or
+//!   leave small gaps, overshoot at corners and restate a stretch slightly
+//!   off the line, each with its own pressure along it;
 //! - a mask whose edge is that same line (crisp, or soft in places);
 //! - helpers: an offset or inset outline, a band along the line, the region
 //!   below or above an open line, and a silhouette grown from a skeleton
-//!   (a spine and limbs with widths: a sheep from five points).
+//!   (a spine and limbs, each a polyline with widths).
 //!
 //! It's geometry only: nothing is painted until a brush is dragged along
 //! the strokes (`Outline::paint`). Everything is deterministic by seed and
@@ -34,21 +34,20 @@ use std::f32::consts::{PI, TAU};
 pub type P = (f32, f32);
 
 /// How a hand draws a line. Lengths are fractions of the hand's scale
-/// (`Outline::scale`, which grows a little slower than the drawing's size:
-/// a small thing is drawn with the fingers, a big one with the arm).
+/// (`Outline::scale`, which grows sublinearly with the drawing's size).
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Character {
     /// Slow wobble of the line: amplitude and wavelength.
     pub wobble: f32,
     pub wobble_period: f32,
-    /// Straight facets with small kinks between them (a broken edge): mean
-    /// facet length (0 = none) and how far the kinks sit off the curve.
+    /// Straight facets with small kinks between them: mean facet length
+    /// (0 = none) and how far the kinks sit off the curve.
     pub facet: f32,
     pub facet_amp: f32,
-    /// Chance that a kink is a notch: a small step in, as if a chip broke off.
+    /// Chance that a kink is a notch: a small step inward.
     pub notch: f32,
-    /// Rounded lobes bulging out (a leafy edge): mean lobe width (0 = none)
-    /// and lobe height as a fraction of the width.
+    /// Rounded lobes bulging out: mean lobe width (0 = none) and lobe height
+    /// as a fraction of the width.
     pub lobe: f32,
     pub lobe_height: f32,
     /// How long the hand draws before it lifts (min, max).
@@ -64,8 +63,9 @@ pub struct Character {
     /// and how far any stroke drifts off the line.
     pub restate: f32,
     pub restate_off: f32,
-    /// Pressure: mean, variation along the line, and extra weight where the
-    /// line faces down (the shadowed underside a draftsman presses into).
+    /// Pressure: mean, variation along the line, and extra pressure where the
+    /// line's outward normal points down (`underside` × its downward
+    /// component).
     pub pressure: f32,
     pub pressure_var: f32,
     pub underside: f32,
@@ -83,7 +83,8 @@ pub struct Character {
 }
 
 impl Character {
-    /// A sure contour: little wobble, long strokes, slight overshoots.
+    /// Little wobble, long strokes (0.35–0.8 of the scale), frequent slight
+    /// overshoots; no facets, lobes or restatements.
     pub fn firm() -> Self {
         Character {
             wobble: 0.009,
@@ -110,8 +111,8 @@ impl Character {
         }
     }
 
-    /// A sketch line feeling for the form: short strokes, restated slightly
-    /// off each other, running past corners.
+    /// Short strokes, restated slightly off each other, overshooting most
+    /// corners; a slightly soft mask edge.
     pub fn searching() -> Self {
         Character {
             wobble: 0.01,
@@ -133,8 +134,7 @@ impl Character {
         }
     }
 
-    /// A broken edge (rock, stone, bark): straight facets, kinks and chips,
-    /// short strokes with gaps.
+    /// Straight facets, kinks and notches, short strokes with gaps.
     pub fn broken() -> Self {
         Character {
             wobble: 0.006,
@@ -159,8 +159,8 @@ impl Character {
         }
     }
 
-    /// A soft edge (foliage, wool, a far tree line): rounded lobes, light
-    /// short strokes with gaps, a mask edge that softens and is lost in places.
+    /// Rounded lobes, light short strokes with gaps, a mask edge that softens
+    /// and varies strongly along the line.
     pub fn soft() -> Self {
         Character {
             wobble: 0.01,
@@ -376,7 +376,7 @@ fn turning(pts: &[P], closed: bool, k: usize) -> Vec<f32> {
         .collect()
 }
 
-/// Which of a painter's points are corners, judged by the angle the line
+/// Which of the given points are corners, judged by the angle the line
 /// turns there (degrees). A line's two ends are always corners.
 pub fn auto_corners(pts: &[P], closed: bool, degrees: f32) -> Vec<bool> {
     let n = pts.len();
@@ -497,12 +497,12 @@ struct Plan {
     closed: bool,
     corners: Vec<usize>,
     /// Half the local thickness of the shape at each point (empty: ample).
-    /// Lobes and facets shrink where it is thin (a leg, a neck).
+    /// Lobes and facets shrink where it is thin.
     room: Vec<f32>,
 }
 
 impl Outline {
-    /// Draw through a painter's points. `corners[i]` marks point i as a
+    /// Draw through the given points. `corners[i]` marks point i as a
     /// corner (empty: decided from the angle, over 60°). Open lines always
     /// have corners at their ends. `size`: the hand's scale in units
     /// (None: from the points' extent).
@@ -550,7 +550,7 @@ impl Outline {
                 }
                 spans.push(span);
             }
-            // a hand's "straight" line from corner to corner bows a little
+            // a straight span from corner to corner bows a little
             let mut brng = Rng::new(seed ^ 0xB0B0_5EED);
             let bow = 0.025 * (ch.applied().wobble / 0.01).min(2.0);
             for span in spans.iter_mut().filter(|s| s.len() == 2) {
@@ -578,12 +578,11 @@ impl Outline {
     }
 
     /// A silhouette grown from a skeleton: the first limb is the spine, the
-    /// others (legs, neck, arms) join it smoothly over `blend` times their
-    /// width. Every limb is a smooth curve through its points, as wide as
+    /// others join it smoothly over `blend` times their width. Every limb is a smooth curve through its points, as wide as
     /// `widths` there.
     pub fn body(limbs: &[Bone], blend: f32, ch: Character, seed: u64, size: Option<f32>) -> Outline {
-        // a limb that starts outside the spine reaches into it (a leg drawn
-        // a little below the belly still joins the body)
+        // a limb that starts outside the spine is extended into it, so a
+        // limb starting a little off the spine still joins it
         let limbs: Vec<Bone> = limbs
             .iter()
             .enumerate()
@@ -815,8 +814,7 @@ impl Outline {
         self.edge(Mask::from_shape(f, s))
     }
 
-    /// A band `width` units wide centered on the line (a rim, a crack, a
-    /// shadow line along a contour). `taper`: 0 = even, 1 = as wide as the
+    /// A band `width` units wide centered on the line. `taper`: 0 = even, 1 = as wide as the
     /// line's pressure (full width at the heaviest point).
     pub fn band(&self, f: Frame, width: f32, taper: f32) -> Mask {
         let mut s = Shape::new();
@@ -1027,8 +1025,7 @@ fn contour_of(x0: f32, y0: f32, x1: f32, y1: f32, g: f32, field: impl Fn(f32, f3
 
 /// Contours as plans: drop specks, smooth the grid out, resample, find corners.
 fn loops_to_plans(loops: Vec<Vec<P>>, step: f32, scale: f32) -> Vec<Plan> {
-    // specks go; so do small holes (a chink between an arm and a coat reads
-    // as a buttonhole once it is outlined)
+    // specks go (area under (0.01 scale)²); so do holes under (0.08 scale)²
     let min_area = (scale * 0.01).powi(2);
     let min_hole = (scale * 0.08).powi(2);
     loops
@@ -1075,8 +1072,8 @@ fn hand_line(plan: Plan, ch: &Character, seed: u32, scale: f32, step: f32, rng: 
         (ks, vs, Along::new(seed.wrapping_add(505), 2, 0.3 * scale, total, closed))
     });
     // lobes: rounded bulges with pinched dips between
-    // (two sizes: crowns and the smaller masses on them; sizes lognormal,
-    // the big ones taller in groups)
+    // (two sizes: large lobes and smaller ones on them; sizes lognormal,
+    // the large ones taller in groups)
     let lobes = (ch.lobe > 0.0).then(|| {
         let group = Along::new(seed.wrapping_add(303), 2, ch.lobe * scale * 4.0, total, closed);
         let mut layers = Vec::new();
@@ -1100,7 +1097,7 @@ fn hand_line(plan: Plan, ch: &Character, seed: u32, scale: f32, step: f32, rng: 
         let s = cum[i];
         let mut d = ch.wobble * scale * wob.get(s);
         if let Some((ks, vs, env)) = &facet {
-            // quiet runs and broken stretches, not an even tear
+            // an envelope varies the facet amplitude along the line (0.08–1.8×)
             d += knot_value(ks, vs, s) * (0.5 + 1.1 * env.get(s)).clamp(0.08, 1.8) * fit(i, ch.facet * scale);
         }
         for (ks, hs, bs) in lobes.iter().flatten() {
@@ -1135,7 +1132,7 @@ fn lobe_troughs(hs: &[f32], closed: bool) -> Vec<f32> {
 
 /// Displacement at arc length `s` of the lobes on knots `ks`: the dips
 /// `bs` joined straight, and on each interval a rounded bulge of height
-/// `hs` that vanishes at both ends (so equal neighbors give the old
+/// `hs` that vanishes at both ends (so equal neighbors give
 /// `h·(sin(πu)^0.6 − 0.55)` exactly and unequal ones meet without a step).
 fn lobe_offset(ks: &[f32], hs: &[f32], bs: &[f32], s: f32) -> f32 {
     if hs.is_empty() {
@@ -1274,15 +1271,15 @@ fn plan_strokes(l: &Line, ch: &Character, scale: f32, step: f32, rng: &mut Rng, 
 mod tests {
     use super::*;
 
-    fn rock() -> Vec<P> {
+    fn heptagon() -> Vec<P> {
         vec![(300.0, 600.0), (320.0, 450.0), (420.0, 380.0), (560.0, 400.0), (650.0, 480.0), (680.0, 600.0), (500.0, 620.0)]
     }
 
     #[test]
     fn deterministic_and_seeded() {
-        let a = Outline::draw(&rock(), &[], true, Character::broken(), 7, None);
-        let b = Outline::draw(&rock(), &[], true, Character::broken(), 7, None);
-        let c = Outline::draw(&rock(), &[], true, Character::broken(), 8, None);
+        let a = Outline::draw(&heptagon(), &[], true, Character::broken(), 7, None);
+        let b = Outline::draw(&heptagon(), &[], true, Character::broken(), 7, None);
+        let c = Outline::draw(&heptagon(), &[], true, Character::broken(), 8, None);
         assert_eq!(a.lines[0].pts, b.lines[0].pts);
         assert_eq!(a.strokes.len(), b.strokes.len());
         assert_ne!(a.lines[0].pts, c.lines[0].pts);
@@ -1290,7 +1287,7 @@ mod tests {
 
     #[test]
     fn line_stays_near_the_points_and_passes_the_corners() {
-        let pts = rock();
+        let pts = heptagon();
         let mut cor = vec![false; pts.len()];
         cor[2] = true;
         cor[5] = true;
@@ -1299,7 +1296,7 @@ mod tests {
             let l = &o.lines[0];
             assert!(l.closed && l.pts.len() > 200);
             assert_eq!(l.corners.len(), 2);
-            // every painter's point has the line within a few units
+            // every input point has the line within a few units
             for p in &pts {
                 let d = l.pts.iter().map(|q| dist(*p, *q)).fold(f32::MAX, f32::min);
                 assert!(d < 0.05 * o.scale, "{ch:?}: {d} from {p:?}");
@@ -1318,7 +1315,7 @@ mod tests {
     #[test]
     fn mask_edge_is_the_line() {
         let f = Frame::new(500, 375, 0.5);
-        let o = Outline::draw(&rock(), &[], true, Character::firm(), 1, None);
+        let o = Outline::draw(&heptagon(), &[], true, Character::firm(), 1, None);
         let m = o.mask(f);
         assert!(m.sample(480.0, 500.0) > 0.99);
         assert!(m.sample(100.0, 100.0) < 0.01);
@@ -1337,11 +1334,12 @@ mod tests {
 
     #[test]
     fn body_from_a_skeleton_and_offsets() {
-        // a sheep: spine rump -> head, four legs
+        // a five-bone body: a spine left to right, four short bones hanging
+        // from it
         let spine = Bone { pts: vec![(100.0, 100.0), (110.0, 99.0), (120.0, 100.0), (126.0, 97.0), (130.0, 99.0)], widths: vec![9.0, 11.0, 10.0, 5.0, 4.0] };
-        let legs: Vec<Bone> = [102.0, 106.0, 116.0, 119.0].iter().map(|&x| Bone { pts: vec![(x, 102.0), (x, 110.0)], widths: vec![1.6, 1.1] }).collect();
+        let hanging: Vec<Bone> = [102.0, 106.0, 116.0, 119.0].iter().map(|&x| Bone { pts: vec![(x, 102.0), (x, 110.0)], widths: vec![1.6, 1.1] }).collect();
         let mut limbs = vec![spine];
-        limbs.extend(legs);
+        limbs.extend(hanging);
         let o = Outline::body(&limbs, 0.6, Character::soft(), 5, None);
         assert_eq!(o.lines.len(), 1, "one silhouette");
         let (x0, y0, x1, y1) = bbox(o.lines[0].pts.iter().copied());
@@ -1353,7 +1351,7 @@ mod tests {
         assert!(a(&grown) > a(&o) && a(&shrunk) < a(&o), "{} {} {}", a(&shrunk), a(&o), a(&grown));
     }
 
-    /// Review 4 #8: lobes of different heights meet without a step, and a
+    /// Lobes of different heights meet without a step, and a
     /// closed line's lobes meet across its seam.
     #[test]
     fn lobes_are_continuous_at_joins_and_the_seam() {
@@ -1387,7 +1385,7 @@ mod tests {
         assert!(steps.iter().all(|&d| d < 12.0 * med), "max step {} vs median {med}", sorted[n - 1]);
     }
 
-    /// Review 4 #6: `amount` scales lobes and facets however they were set,
+    /// `amount` scales lobes and facets however they were set,
     /// before it or after it; 0 is a clean curve.
     #[test]
     fn amount_scales_lobes_set_after_it() {
@@ -1396,7 +1394,7 @@ mod tests {
             let o = Outline::draw(&line, &[], false, ch, 1, None);
             o.lines[0].pts.iter().map(|p| (p.1 - 200.0).abs()).fold(0.0, f32::max)
         };
-        // amount, then an explicit lobe (the binding's default height)
+        // amount, then an explicitly assigned lobe height
         let lobed = |k: f32| {
             let mut ch = Character::firm().amount(k);
             ch.lobe = 24.0 / 100.0;
@@ -1419,9 +1417,9 @@ mod tests {
         assert_eq!(dev(before), dev(lobed(0.5)));
     }
 
-    /// Review 4 #5: an inset that consumes a closed shape is empty, not
-    /// open: its mask is empty (so `o:mask() - o:inset(d):mask()` keeps the
-    /// shape). A drawn open line is open.
+    /// An inset that consumes a closed shape is empty, not open: its mask
+    /// is empty (so `o.mask(f).subtract(&o.offset(-d, 0.4).mask(f))` keeps
+    /// the shape). A drawn open line is open.
     #[test]
     fn consumed_inset_is_an_empty_region() {
         let sq = [(100.0, 100.0), (110.0, 100.0), (110.0, 110.0), (100.0, 110.0)];

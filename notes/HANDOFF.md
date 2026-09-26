@@ -15,6 +15,20 @@ horizontal line through a grass patch in painting A = arm 1); git identity: this
 repo sets `alice` locally (the per-directory git identity include for ~/src/a is missing on
 this machine). Next: decide the direction with Alice after Fable's advice.
 
+**Morning of 2026-09-26 (for Alice):**
+- **Round 14** (the first chain) finished painters 1 and 2 (`notes/round14/look/p1.png`,
+  `p2.png`); painter 3 was still painting at 02:45 and lands in the same folder. Found
+  during it: painters' studios still had ready-made figures and rocks, every past
+  painting's program and the developer notes (`notes/round14/README.md`).
+- **Round 15** (a second chain, from an audited studio): `notes/round15/README.md`.
+  Astra reviewed the studio and briefs adversarially first (`astra_review.md`, 24
+  findings); most were fixed. Painters run without your global AGENTS.md or skills.
+  Paintings land in `~/src/a/paint-r15-p1..3/out/`, collected into `notes/round15/`.
+  Watch in the studio (http://100.82.115.34:8765).
+- **Decisions waiting for you** (engine behavior, Astra's findings 5, 7, 8): the
+  automatic color-recipe search (`aim`/`mix`), the gesture planning inside the
+  handling presets and the stipple defaults. All are still on.
+
 **Round 14 restarted (2026-09-26) with the revised notebook** (notes/round14/README.md). First attempt kept on branch r14a-p1 (the ploughed field). Chain: p1 in ~/src/a/paint-r14-p1, then p2, then p3 (folders from r14-base + previous craft notes).
 
 **Day of 2026-09-25 (with Alice):**

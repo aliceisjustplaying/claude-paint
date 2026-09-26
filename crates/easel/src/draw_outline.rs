@@ -30,21 +30,6 @@ fn pts_table(lua: &Lua, pts: &[(f32, f32)]) -> Result<Table> {
     Ok(t)
 }
 
-/// The drawn line of an outline value (its first line), for other tools
-/// that take an outline where they take points.
-pub(crate) fn outline_path(v: &AnyUserData) -> Option<(Vec<(f32, f32)>, bool)> {
-    let o = v.borrow::<OutlineU>().ok()?;
-    let l = o.o.lines.first()?;
-    Some((l.pts.clone(), l.closed))
-}
-
-/// The corners of an outline value's first line (points), for tools that
-/// build on a drawn outline's corners (rocks).
-pub(crate) fn outline_corners(v: &AnyUserData) -> Option<Vec<(f32, f32)>> {
-    let o = v.borrow::<OutlineU>().ok()?;
-    let l = o.o.lines.first()?;
-    Some(l.corners.iter().filter_map(|&i| l.pts.get(i).copied()).collect())
-}
 
 const CHARS: &str = "firm, searching, broken, soft";
 
@@ -360,12 +345,11 @@ mod tests {
 
     fn run(src: &str) -> Result<String, String> {
         let mut s = Session::replay(200).unwrap();
-        s.run(r#"canvas{aspect=1.4, seed=11}"#).unwrap();
+        s.run(r#"canvas{size=440, aspect=1.4, linen=15, seed=11, ground={{pile={{"lead white", 3}, {"yellow ochre", 1}}, um=120, apply="knife"}}}"#).unwrap();
         s.run(src).map(|r| r.out)
     }
 
-    // review 4 (drawing), finding 5: an inset that eats a closed shape is an
-    // empty outline, and its mask is empty (so a rim keeps the whole shape)
+    // an inset that eats a closed shape is an empty outline, and its mask is empty (so a rim keeps the whole shape)
     #[test]
     fn an_inset_that_consumes_the_shape_masks_nothing() {
         run(r#"local o = outline{{100,100},{110,100},{110,110},{100,110}, corners=true, amount=0, edge=0, seed=1}

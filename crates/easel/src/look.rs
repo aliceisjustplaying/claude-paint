@@ -461,7 +461,12 @@ fn blur(img: &[Rgb], w: usize, h: usize, r: f32) -> Vec<Rgb> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::session::{Session, root};
+    use crate::session::Session;
+    use std::path::PathBuf;
+
+    fn out_dir() -> PathBuf {
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../target/easel-look-test")
+    }
 
     const W: usize = 160;
 
@@ -481,7 +486,7 @@ mod tests {
         s.run(CANVAS).unwrap();
         s.run(r#"b = brush("round", 4); b:load(pile{{"bone black", 1}}, 0.9); b:stroke({{100, 450}, {700, 400}})"#)
             .unwrap();
-        let dir = root().join("target/easel-look-test");
+        let dir = out_dir();
         let c = s.canvas().unwrap().clone();
         let before = bits(&c);
         let v = View::parse(&[]).unwrap();
@@ -502,7 +507,7 @@ mod tests {
             ("requested", 100, 2.0, Some(40), (40, 20)),
         ] {
             let c = Canvas::new_window(width, aspect, [0.2; 3], None);
-            let out = root().join(format!("target/easel-look-test/{name}.png"));
+            let out = out_dir().join(format!("{name}.png"));
             assert_eq!(look(&c, &View { size, ..View::default() }, &out).unwrap(), expected);
             let bytes = std::fs::read(out).unwrap();
             assert_eq!(image::guess_format(&bytes).unwrap(), image::ImageFormat::Png);
@@ -515,7 +520,7 @@ mod tests {
     fn crops_keep_native_pixels_and_reject_either_oversize_axis() {
         let mut c = Canvas::new_window(1300, 1.0, [0.0; 3], None);
         c.apply(|x, y, _| if x < 500.0 && y < 500.0 { [1.0, 0.0, 0.0] } else { [0.0, 0.0, 1.0] });
-        let out = root().join("target/easel-look-test/native-crop.png");
+        let out = out_dir().join("native-crop.png");
         for size in [None, Some(40), Some(9999)] {
             let v = View {
                 crop: Some([0.0, 0.0, 1200.0 / 1.3, 1200.0 / 1.3]),
@@ -558,7 +563,7 @@ mod tests {
             .write_image(&raw, 1600, 1600, image::ExtendedColorType::Rgb8)
             .unwrap();
         assert!(full.len() > 3_000_000, "fixture must exercise byte-budget reduction");
-        let out = root().join("target/easel-look-test/byte-budget.png");
+        let out = out_dir().join("byte-budget.png");
         let (w, h) = look(
             &c,
             &View {

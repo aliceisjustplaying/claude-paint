@@ -2,6 +2,8 @@
 //! keyed by objects walk in the same order in every run, and a program with
 //! hand time (a long pass painted in slices, the paint ageing between them)
 //! paints the same picture at any thread count.
+// The replay build: EASEL_ROOT, named sessions and `easel run`.
+#![cfg(feature = "replay")]
 
 use std::path::{Path, PathBuf};
 use std::process::Command;

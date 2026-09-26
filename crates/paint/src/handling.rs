@@ -17,34 +17,7 @@ use crate::sched::TileOrder;
 use crate::tally::Piles;
 use crate::wet::Paint;
 
-/// How a handling reads its color field.
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub enum Aim {
-    /// The color is the paint's masstone (`Palette::mix`): how it looks laid
-    /// thick, or over paint of its own color.
-    Masstone,
-    /// The color is the look wanted on the canvas: each pile is judged by
-    /// how it will look over what is under the stroke (sampled along it
-    /// before the pass), laid as thick as this handling lays paint where
-    /// its strokes land (see `Handling::laid_coats`).
-    Laid,
-    /// As `Laid`, expecting this many coats.
-    Coats(f32),
-}
-
-/// Coats one stroke lays per unit of load where it lands, by brush kind:
-/// a round (detail, hatch) packs its load into a narrow track, a filbert
-/// (broad, body) spreads it. Measured by `probe_laid_by_coverage` (median
-/// film where paint landed, `Style::oil()` ground, coverage 0.2–4,
-/// load 0.3 and 0.7): filberts 1.2–1.35; rounds, whose pointed-tip marks are
-/// narrow and concentrate paint where they land, ~3.7–4.2 at coverage 2.5–4.
-pub const LAID_PER_LOAD_FILBERT: f32 = 1.3;
-pub const LAID_PER_LOAD_ROUND: f32 = 4.0;
-
 type Field<'a, T> = Box<dyn Fn(f32, f32) -> T + Sync + 'a>;
-/// A color field that sees the canvas: (x, y, what is under the stroke).
-pub(crate) type OverField<'a> = Box<dyn Fn(f32, f32, Rgb) -> Rgb + Sync + 'a>;
-
 pub struct Handling<'a> {
     pub tool: Tool,
     /// Stroke length range in units.
@@ -54,30 +27,20 @@ pub struct Handling<'a> {
     /// Stroke direction field (radians, 0 = left→right).
     pub angle: Field<'a, f32>,
     pub angle_jitter: f32,
-    /// Color mixed on the palette for a stroke centered at a point.
+    /// Raw paint color for a stroke centered at a point.
     pub color: Field<'a, Rgb>,
-    /// A color relative to what is on the canvas (see `color_over`); when
-    /// set, it replaces `color`.
-    pub color_over: Option<OverField<'a>>,
-    /// Palette-mixing inconsistency per dip: OKLab L and a/b sd.
+    /// Raw paint color variation per dip: OKLab L and a/b sd.
     pub jitter: (f32, f32),
-    /// Hiding and stiffness of the paint when it isn't mixed from a
-    /// palette (see `Paint`).
+    /// Hiding and stiffness of raw paint (see `Paint`).
     pub hiding: f32,
     pub stiff: f32,
-    /// Mix each pile from these tube paints, thinned with this fraction of
-    /// oil medium (0..1). The color field is then the target.
-    pub palette: Option<(&'a Palette, f32)>,
     /// How unevenly each pile is mixed: relative sd of the proportions.
     pub mix_jitter: f32,
     /// Dip into this pile (knifed from `palette`'s tubes in the given
     /// parts, thinned with this fraction of medium) for every stroke. When
-    /// set, the color field, `color_over`, `palette` and `aim` are not
+    /// set, the color field is not
     /// used: the paint is the pile's (`piled`).
     pub pile: Option<(&'a Palette, crate::palette::Mixture, f32)>,
-    /// How `color` is read (see `Aim`). `None`: aim at the look (`Aim::Laid`)
-    /// when mixing from a palette, masstone for a fixed paint.
-    pub aim: Option<Aim>,
     /// Where the brush is loaded more or less (multiplies `load`,
     /// evaluated at each stroke's center): a glaze goes on deeper where the
     /// brush carries more.
@@ -109,8 +72,7 @@ pub struct Handling<'a> {
     /// along the contour as the fence's quality says. Set by `fence()`.
     pub fence: Option<std::sync::Arc<crate::fence::Fence>>,
     /// Look and fill: after the strokes, dab paint into the bare spots the
-    /// strokes left in the region (see `fill`). `None`: on when coverage ≥
-    /// `FILL_FROM`, load ≥ 0.25 and the pass is not a blender or a scrub.
+    /// strokes left in the region (see `fill`). `None`: off.
     pub fill: Option<bool>,
     /// Hug the region's edges: strokes seeded just outside it (within half a
     /// brush) are moved onto its edge, so coverage doesn't thin there
@@ -175,7 +137,6 @@ impl<'a> Handling<'a> {
             angle: Box::new(|_, _| 0.0),
             angle_jitter: 0.08,
             color: Box::new(|_, _| [0.5; 3]),
-            color_over: None,
             jitter: (0.02, 0.006),
             hiding: 0.85,
             stiff: 0.8,
@@ -194,10 +155,8 @@ impl<'a> Handling<'a> {
             threshold: 0.3,
             ramps: (0.08, 0.15),
             shake: 1.0,
-            palette: None,
             mix_jitter: 0.08,
             pile: None,
-            aim: None,
             load_at: None,
             cut_in: None,
             curve: 0.05,
@@ -268,22 +227,6 @@ impl<'a> Handling<'a> {
     pub fn sweep(self, angle: f32) -> Self {
         self.order(Order::Sweep(angle))
     }
-    /// How thick this handling lays paint where its strokes land (coats),
-    /// the thickness `Aim::Laid` judges piles at: one stroke's film (per
-    /// unit of load, by brush kind) times how many strokes overlap on
-    /// average at a point that gets paint at all, `c / (1 − e^−c)` for
-    /// coverage `c` (Poisson). A sparse pass of light touches lays each
-    /// touch full thickness, not `coverage` × it. Clamped to 0.2–8 coats.
-    pub fn laid_coats(&self) -> f32 {
-        use crate::bristle::Kind;
-        let per = match self.tool.kind {
-            Kind::Round | Kind::Rigger => LAID_PER_LOAD_ROUND,
-            _ => LAID_PER_LOAD_FILBERT,
-        };
-        let c = self.coverage.max(1e-3);
-        let overlap = c / (1.0 - (-c).exp());
-        (per * self.load * overlap).clamp(0.2, 8.0)
-    }
     /// Mean stroke length including the tails of the distribution.
     fn mean_length(&self) -> f32 {
         let (a, b) = self.length;
@@ -311,20 +254,6 @@ impl<'a> Handling<'a> {
     }
     pub fn color(mut self, f: impl Fn(f32, f32) -> Rgb + Sync + 'a) -> Self {
         self.color = Box::new(f);
-        self.color_over = None;
-        self
-    }
-    /// A color that sees the canvas: `f(x, y, under)` gets what is on the
-    /// canvas under each stroke (dry picture and wet paint, judged along the
-    /// stroke as the aim does, before this pass lays anything) and returns
-    /// the target there, e.g. 0.06 lower in OKLab L and 0.03 lower in b than
-    /// what is there: `color_over(|_, _, u| shift(u, -0.06, 0.0, -0.03))`.
-    /// Deterministic: every stroke is judged against the canvas as it was
-    /// before the pass, whatever order the strokes are painted in. In a crop
-    /// render, strokes are judged by the part of the canvas the crop holds
-    /// (as `Aim::Laid` is).
-    pub fn color_over(mut self, f: impl Fn(f32, f32, Rgb) -> Rgb + Sync + 'a) -> Self {
-        self.color_over = Some(Box::new(f));
         self
     }
     pub fn jitter(mut self, l: f32, hue: f32) -> Self {
@@ -335,15 +264,6 @@ impl<'a> Handling<'a> {
     pub fn paint(mut self, hiding: f32, stiff: f32) -> Self {
         self.hiding = hiding;
         self.stiff = stiff;
-        self.palette = None;
-        self
-    }
-    /// Mix every pile from `palette`'s tubes, thinned with `medium` (0..1).
-    /// The color field is the look wanted on the canvas: piles are aimed at
-    /// it over what is already there, at the thickness this handling lays
-    /// (`Aim::Laid`; change with `aim`, or mix by masstone with `by_masstone`).
-    pub fn mixed(mut self, palette: &'a Palette, medium: f32) -> Self {
-        self.palette = Some((palette, medium));
         self
     }
     /// Dip every stroke into `pile` (parts of `palette`'s tubes), thinned
@@ -352,39 +272,6 @@ impl<'a> Handling<'a> {
     /// drying at its tubes' rate. Nothing is aimed or matched.
     pub fn piled(mut self, palette: &'a Palette, pile: crate::palette::Mixture, medium: f32) -> Self {
         self.pile = Some((palette, pile, medium.clamp(0.0, 1.0)));
-        self
-    }
-    /// Mix from another palette, keeping the medium, e.g. a subset of the
-    /// tubes, `palette.only(&names)`.
-    pub fn palette(mut self, palette: &'a Palette) -> Self {
-        let (_, medium) = self.palette.expect("palette() needs a palette already: use mixed()");
-        self.palette = Some((palette, medium));
-        self
-    }
-    /// Mix piles to the color field as masstone, without looking at the
-    /// canvas (the paint's own color, laid thick; see `Palette::mix`).
-    pub fn by_masstone(mut self) -> Self {
-        self.aim = Some(Aim::Masstone);
-        self
-    }
-    /// Aim every pile at the look wanted on the canvas, expecting paint laid
-    /// about `coats` thick (see `Aim`). A broad passage of `coverage` 2–3 lays
-    /// roughly 1–2 coats; a single dab or stipple dot, 0.3–1. Also works for
-    /// a fixed paint (`paint()`): its masstone is solved for its hiding.
-    pub fn aim(mut self, coats: f32) -> Self {
-        self.aim = Some(Aim::Coats(coats));
-        self
-    }
-    /// Aim at the look, expecting the thickness this handling lays (the
-    /// default when mixing from a palette).
-    pub fn aim_laid(mut self) -> Self {
-        self.aim = Some(Aim::Laid);
-        self
-    }
-    /// Change how much medium goes into the palette mixtures.
-    pub fn medium(mut self, medium: f32) -> Self {
-        let (p, _) = self.palette.expect("medium() needs a palette: use mixed()");
-        self.palette = Some((p, medium));
         self
     }
     /// Cut the region's edges in with `tool` (see `cut_in`).
@@ -441,17 +328,15 @@ impl<'a> Handling<'a> {
         self
     }
     /// Look and fill: after the strokes, lay a short dab into each bare spot
-    /// they left in the region (see `fill_gaps`). Default: on when coverage
-    /// ≥ `FILL_FROM`, load ≥ 0.25 and the pass is not a blender or a scrub
-    /// (see `fills`). `false` leaves the gaps; `true` fills them at any
-    /// coverage.
+    /// they left in the region (see `fill_gaps`). Off by default;
+    /// `true` explicitly fills them at any nonzero coverage.
     pub fn fill(mut self, on: bool) -> Self {
         self.fill = Some(on);
         self
     }
     /// Whether this pass fills the gaps its strokes leave (see `fill`).
     pub fn fills(&self) -> bool {
-        self.fill.unwrap_or(self.coverage >= FILL_FROM && self.load >= FILL_LOAD && !self.blender && self.scrub == 0)
+        self.fill.unwrap_or(false)
     }
     /// Never paint outside `m` (see `limit`).
     pub fn limit(mut self, m: std::sync::Arc<Mask>) -> Self {
@@ -499,7 +384,7 @@ struct Plan {
     fresh: bool,
     /// Its stroke id, if fixed in advance (see `fill_gaps`); else the next.
     id: Option<u32>,
-    /// The color asked for (before aiming it over what's there): which pile
+    /// The paint color: which pile
     /// on the palette the dip comes from (`tally::Piles`).
     want: Rgb,
 }
@@ -946,101 +831,22 @@ fn finish_plan(cv: &Canvas, hd: &Handling, tool: &Tool, c: (f32, f32), pts: Vec<
     let fade = rng.range(0.75, 1.05);
     let load_k = hd.load_at.as_ref().map_or(1.0, |f| f(c.0, c.1).max(0.0));
     if let Some((pal, pile, medium)) = &hd.pile {
-        // the pile on the palette, as knifed (its own generator, as below)
+        // the pile on the palette, as knifed (its own mixing generator)
         let mut prng = Rng::new(rng.next_u64());
         let paint = pal.remix(pile, hd.mix_jitter, &mut prng).laid(*medium);
         let load = hd.load * load_k;
         return (rect, Plan { pts, pressure, fade, dip: Some(paint), load, swell: Vec::new(), passage: 0, fresh: false, id: None, want: pile.color });
     }
-    // aiming at the result: what the stroke will sit on, and how thick
-    let aim = hd.aim.unwrap_or(if hd.palette.is_some() { Aim::Laid } else { Aim::Masstone });
-    let coats = match aim {
-        Aim::Masstone => None,
-        Aim::Laid => Some(laid_coats(hd, load_k)),
-        Aim::Coats(x) => Some(x),
-    };
-    let seen = (coats.is_some() || hd.color_over.is_some()).then(|| stroke_under(cv, &pts, tool.width * 0.5));
-    let target = match (&hd.color_over, seen) {
-        (Some(g), Some(u)) => g(c.0, c.1, u),
-        _ => (hd.color)(c.0, c.1),
-    };
-    let under = coats.zip(seen).map(|(x, u)| (u, x));
-    let paint = match hd.palette {
-        // on the palette: mix the pile from tubes, never twice alike
-        Some((pal, medium)) => {
-            let m = match under {
-                Some((u, coats)) => pal.aim_for(target, u, medium, coats, crate::palette::Marks::of(tool)),
-                None => pal.mix(target),
-            };
-            // the pile's mixing jitter draws from its own generator: how many
-            // draws a recipe takes then can't shift every later stroke's
-            // randomness (a crop render aims strokes outside its window at
-            // a different underlayer, so their recipes may differ)
-            let mut prng = Rng::new(rng.next_u64());
-            pal.remix(&m, hd.mix_jitter, &mut prng).paint(medium)
-        }
-        None => {
-            let lab = to_oklab(target);
-            let col = from_oklab([
-                lab[0] + rng.normal() * hd.jitter.0,
-                lab[1] + rng.normal() * hd.jitter.1,
-                lab[2] + rng.normal() * hd.jitter.1,
-            ]);
-            match under {
-                Some((u, coats)) => Paint::aimed(col, u, coats, hd.hiding, hd.stiff),
-                None => Paint::new(col, hd.hiding, hd.stiff),
-            }
-        }
-    };
+    let target = (hd.color)(c.0, c.1);
+    let lab = to_oklab(target);
+    let col = from_oklab([
+        lab[0] + rng.normal() * hd.jitter.0,
+        lab[1] + rng.normal() * hd.jitter.1,
+        lab[2] + rng.normal() * hd.jitter.1,
+    ]);
+    let paint = Paint::new(col, hd.hiding, hd.stiff);
     let load = hd.load * load_k;
     (rect, Plan { pts, pressure, fade, dip: Some(paint), load, swell: Vec::new(), passage: 0, fresh: false, id: None, want: target })
-}
-
-/// Coats a handling lays where its strokes land (the `Aim::Laid` estimate).
-fn laid_coats(hd: &Handling, load_k: f32) -> f32 {
-    hd.laid_coats() * load_k
-}
-
-/// What a stroke along `pts` will sit on: samples
-/// (discs of radius `r`) spread evenly along the path, weighted by where the
-/// paint lands (a stroke starts loaded and runs thinner toward its end), and
-/// combined by a weighted median per OKLab channel, so a fleck of bare ground
-/// or a stray pile under one sample can't skew the whole pile. (A mean in
-/// linear light would let one light fleck among dark samples pull the
-/// judged underlayer far toward it.)
-fn stroke_under(cv: &Canvas, pts: &[(f32, f32)], r: f32) -> Rgb {
-    const N: usize = 9;
-    // points evenly spaced by arc length, with their position along (0..1)
-    let mut cum = vec![0.0f32];
-    for w in pts.windows(2) {
-        let d = ((w[1].0 - w[0].0).powi(2) + (w[1].1 - w[0].1).powi(2)).sqrt();
-        cum.push(cum.last().unwrap() + d);
-    }
-    let total = *cum.last().unwrap();
-    let at = |s: f32| -> (f32, f32) {
-        if pts.len() < 2 || total <= 1e-6 {
-            return pts[0];
-        }
-        let d = s * total;
-        let k = cum.partition_point(|&c| c < d).clamp(1, pts.len() - 1);
-        let seg = (cum[k] - cum[k - 1]).max(1e-6);
-        let t = ((d - cum[k - 1]) / seg).clamp(0.0, 1.0);
-        (pts[k - 1].0 + (pts[k].0 - pts[k - 1].0) * t, pts[k - 1].1 + (pts[k].1 - pts[k - 1].1) * t)
-    };
-    let n = if total < 2.0 * r.max(0.5) { 1 } else { N };
-    let samples: Vec<((f32, f32), f32)> = (0..n)
-        .map(|k| {
-            let s = if n == 1 { 0.5 } else { (k as f32 + 0.5) / n as f32 };
-            (at(s), 1.0 - 0.5 * s)
-        })
-        .collect();
-    // (a crop render sees only its window: judge by the points it holds)
-    let f = cv.window();
-    let on = |p: &(f32, f32)| p.0 >= 0.0 && p.1 >= 0.0 && p.0 < f.width() && p.1 < f.height();
-    let held: Vec<&((f32, f32), f32)> = samples.iter().filter(|(p, _)| !on(p) || f.holds(p.0, p.1)).collect();
-    let use_: Vec<&((f32, f32), f32)> = if held.is_empty() { samples.iter().collect() } else { held };
-    let labs: Vec<(Rgb, f32)> = use_.iter().map(|&&(p, w)| (to_oklab(cv.under(p.0, p.1, r)), w)).collect();
-    from_oklab(std::array::from_fn(|q| crate::palette::weighted_median(labs.iter().map(|(l, w)| (l[q], *w)).collect())))
 }
 
 /// The part of a stroke through `c` that stays inside `mask` (≥ 0.5), pulled
@@ -1187,12 +993,6 @@ fn carry_in(mask: &Mask, pts: &[(f32, f32)], c: (f32, f32), width: f32, threshol
 
 /// Share of the length tail that is short dabs (the rest are long sweeps).
 const DAB_SHARE: f32 = 0.6;
-/// A pass with at least this coverage fills the gaps its strokes leave by
-/// default (see `Handling::fill`); below it, the gaps are left.
-pub const FILL_FROM: f32 = 1.5;
-/// Least load (share of a full brush) for filling by default: below it
-/// the gaps are left.
-const FILL_LOAD: f32 = 0.25;
 /// Film (coats) under which a pixel of the region counts as bare.
 const FILL_BARE: f32 = 0.04;
 
@@ -1379,6 +1179,26 @@ fn hand_trace(hd: &Handling, drift: &crate::noise::Fbm, cx: f32, cy: f32, len: f
 mod tests {
     use super::*;
 
+    #[test]
+    fn filling_requires_explicit_opt_in() {
+        let pal = Palette::tube_box();
+        let pile = pal.pile(vec![(0, 1.0)]);
+        let run = |fill: Option<bool>| {
+            let mut c = Canvas::new(160, 1.0, [0.8; 3]);
+            let mask = Mask::full(c.frame());
+            let mut hd = Handling::new(Tool::filbert(6.0)).piled(&pal, pile.clone(), 0.2).load(0.3).coverage(1.5);
+            if let Some(on) = fill {
+                hd = hd.fill(on);
+            }
+            c.work(&mask, &hd, 3);
+            (c.tally().strokes, c.wet_total())
+        };
+        let off = run(Some(false));
+        assert_eq!(run(None), off, "default must leave the strokes' gaps alone");
+        let on = run(Some(true));
+        assert!(on.0 > off.0 && on.1 != off.1, "explicit fill must add paint dabs");
+    }
+
     /// A pass from a pile lays that pile: its paint and drying rate,
     /// whatever the color field says, every dip from the same pile
     /// (remixed a little: a pile knifed by hand is uneven), never a recipe
@@ -1501,169 +1321,6 @@ mod tests {
         }
     }
 
-    /// Sparse light marks aimed over a dark passage (with flecks of the warm
-    /// ground showing through it): (share of marked pixels pushed warmer
-    /// than both the target and the underlayer, mean a/b miss, mean L miss).
-    fn light_over_dark(pal_names: Option<&[&str]>, tool: &str, w: usize) -> (f32, f32, f32) {
-        use crate::color::hex;
-        let st = crate::style::Style::oil();
-        let pal = match pal_names {
-            Some(n) => st.palette.only(n),
-            None => st.palette.clone(),
-        };
-        let mut c = st.prepare(w, 1.0, 5);
-        let all = Mask::full(c.frame());
-        // a dark brown lay-in, thin enough that the ground flecks through
-        c.work(&all, &st.body().color(|_, _| hex("#3a3128")).by_masstone().coverage(1.6).fill(false), 1);
-        c.dry();
-        let (px0, f0) = (c.pixels().to_vec(), c.film.clone());
-        let want = hex("#9a8f80");
-        let h = match tool {
-            "detail" => st.detail(),
-            _ => st.body(),
-        }
-        .palette(&pal)
-        .color(move |_, _| want)
-        .coverage(0.3)
-        .clip(false);
-        c.work(&all, &h, 2);
-        c.dry();
-        let wl = to_oklab(want);
-        let idx: Vec<usize> = (0..f0.len()).filter(|&i| c.film[i] - f0[i] > 0.5).collect();
-        assert!(idx.len() > 100, "marks laid: {}", idx.len());
-        let (mut warm, mut ab, mut dl, mut nb) = (0usize, 0.0f32, 0.0f32, 0usize);
-        for &i in &idx {
-            let l = to_oklab(c.pixels()[i]);
-            let u = to_oklab(px0[i]);
-            // pushed warmer (redder or yellower) than both the target and the underlayer
-            if l[1] - wl[1].max(u[1]) > 0.02 || l[2] - wl[2].max(u[2]) > 0.035 {
-                warm += 1;
-            }
-            ab += ((l[1] - wl[1]).powi(2) + (l[2] - wl[2]).powi(2)).sqrt();
-            // value is judged on the body of each mark (film > 2 coats): a
-            // pointed brush's thin edges and dry tails are semi-transparent
-            // over the dark and dry darker (measured: > 4 coats -0.006 L,
-            // 0.5-2 coats -0.02 to -0.05; the aim itself hits the target
-            // where the paint is laid as expected)
-            if c.film[i] - f0[i] > 2.0 {
-                dl += (l[0] - wl[0]).abs();
-                nb += 1;
-            }
-        }
-        let n = idx.len() as f32;
-        // (the marks' mean look, as seen at a distance, vs the target)
-        let mut acc = [0.0f32; 3];
-        let mut sl = 0.0f32;
-        for &i in &idx {
-            for k in 0..3 {
-                acc[k] += c.pixels()[i][k] / n;
-            }
-            if c.film[i] - f0[i] > 2.0 {
-                sl += to_oklab(c.pixels()[i])[0] - wl[0];
-            }
-        }
-        println!("  mean look L miss {:+.3}, body signed L miss {:+.3}", to_oklab(acc)[0] - wl[0], sl / nb.max(1) as f32);
-        (warm as f32 / n, ab / n, dl / nb.max(1) as f32)
-    }
-
-    /// How a sparse pass's film is spread over its marks' area, in units of
-    /// the expected thickness (`laid_coats`): the share of the marked area
-    /// in log2 bins centered at 1/8 .. 8 (for `MARKS_BLUNT` and
-    /// `MARKS_POINTED` in palette.rs).
-    /// `cargo test --release -p paint probe_mark_thickness -- --ignored --nocapture`
-    #[test]
-    #[ignore]
-    fn probe_mark_thickness() {
-        use crate::color::hex;
-        let st = crate::style::Style::oil();
-        for w in [500usize, 1000, 2000] {
-            for tool in ["detail", "body", "broad"] {
-                let mut c = st.prepare(w, 1.0, 5);
-                let all = Mask::full(c.frame());
-                let f0 = c.film.clone();
-                let h = match tool {
-                    "detail" => st.detail(),
-                    "broad" => st.broad(),
-                    _ => st.body(),
-                }
-                .color(move |_, _| hex("#9a8f80"))
-                .coverage(0.3)
-                .clip(false);
-                let lc = h.laid_coats();
-                c.work(&all, &h, 2);
-                c.dry();
-                let mut bins = [0.0f32; 7];
-                let mut n = 0.0;
-                for i in 0..f0.len() {
-                    let t = (c.film[i] - f0[i]) / lc;
-                    if t > 1.0 / 16.0 {
-                        let b = (t.log2().round() + 3.0).clamp(0.0, 6.0) as usize;
-                        bins[b] += 1.0;
-                        n += 1.0;
-                    }
-                }
-                let sh: Vec<String> = bins.iter().map(|b| format!("{:.3}", b / n)).collect();
-                println!("{w}px {tool:6} laid {lc:.2}: shares at 1/8..8 × laid: [{}]", sh.join(", "));
-            }
-        }
-    }
-
-    #[test]
-    fn light_marks_over_a_dark_stay_in_hue() {
-        // pointed detail marks are judged at 750px: at 500px a fine mark's
-        // body is mostly pixels it only partly covers, which show the dark
-        // beside it (the body's L miss: -0.043 at 500px, -0.027 at 750,
-        // -0.020 at 1000, -0.009 at 2000), a sampling effect, not the pile.
-        // (Unsigned: 0.030 at 750px, 0.024 at 1000px; 1000px would allow
-        // 0.025 but takes minutes in a debug build.)
-        for (label, names, tool, w) in [("full/detail", None, "detail", 750), ("full/body", None, "body", 500), ("earth/detail", Some(&["lead white", "yellow ochre", "raw umber", "bone black", "red earth"][..]), "detail", 750)] {
-            let (warm, ab, dl) = light_over_dark(names, tool, w);
-            println!("{label}: warm share {warm:.3}, mean a/b miss {ab:.4}, mean L miss {dl:.3}");
-            assert!(warm < 0.05, "{label}: {warm:.3} of the marks dried warm");
-            assert!(ab < 0.02, "{label}: marks off hue by {ab:.4}");
-            let bound = if tool == "detail" { 0.035 } else { 0.025 };
-            assert!(dl < bound, "{label}: marks off value by {dl:.3}");
-        }
-    }
-
-    /// `color_over` sees the canvas: a shift of -0.08 L and -0.03 b over a
-    /// field that runs from light to dull comes out darker and bluer than
-    /// the field at both ends, strokes and stipple alike.
-    #[test]
-    fn color_over_sees_the_canvas() {
-        use crate::color::{hex, shift};
-        let st = crate::style::Style::oil();
-        let mut c = Canvas::new(200, 1.0, hex("#b0a898"));
-        let f = c.frame();
-        c.apply(|x, _, _| crate::color::lerp3(hex("#e8ecf0"), hex("#8e949c"), x / 1000.0));
-        let before = c.pixels().to_vec();
-        let top = Mask::from_fn(f, |_, y| if y < 480.0 { 1.0 } else { 0.0 });
-        let bottom = Mask::from_fn(f, |_, y| if y > 520.0 { 1.0 } else { 0.0 });
-        let dl = -0.08;
-        c.work(&top, &st.body().color_over(move |_, _, u| shift(u, dl, 0.0, -0.03)).coverage(3.0).clip(true), 1);
-        let sp = crate::stipple::Stipple::new(Tool::stippler(4.0)).mixed(&st.palette, 0.4).color_over(move |_, _, u| shift(u, dl, 0.0, -0.03)).coverage(|_, _| 3.0).clip(true);
-        c.stipple(&bottom, &sp, 2);
-        c.dry();
-        for (name, ys) in [("strokes", 100.0..460.0), ("stipple", 540.0..900.0)] {
-            for xs in [50.0..250.0, 750.0..950.0] {
-                let (mut dsum, mut bsum, mut n) = (0.0f32, 0.0f32, 0);
-                for (i, p) in c.pixels().iter().enumerate() {
-                    let (x, y) = ((i % f.w) as f32 / f.scale, (i / f.w) as f32 / f.scale);
-                    if xs.contains(&x) && ys.contains(&y) {
-                        let (a, b) = (to_oklab(*p), to_oklab(before[i]));
-                        dsum += a[0] - b[0];
-                        bsum += a[2] - b[2];
-                        n += 1;
-                    }
-                }
-                let (d, db) = (dsum / n as f32, bsum / n as f32);
-                println!("{name} x {xs:?}: ΔL {d:+.3} Δb {db:+.3}");
-                assert!(d < 0.5 * dl && d > 2.0 * dl, "{name} at x {xs:?}: ΔL {d} (asked {dl})");
-                assert!(db < -0.01, "{name} at x {xs:?}: not bluer ({db})");
-            }
-        }
-    }
-
     /// `Style::blend()` fuses a masked passage without dragging its wet
     /// paint across the mask's edge;
     /// `.clip(false)` fuses across it.
@@ -1726,8 +1383,9 @@ mod tests {
         } else {
             Mask::from_fn(f, |_, y| if (400.0..460.0).contains(&y) { 1.0 } else { 0.0 })
         };
-        let hd = if thin { st.broad().by_masstone() } else { st.body() };
-        c.work(&m, &hd.color(|_, _| hex("#2e2a28")).coverage(2.5).clip(clip).hug(hug), seed + 4);
+        let hd = if thin { st.broad() } else { st.body() };
+        let dark = st.palette.pile(vec![(st.palette.tubes.iter().position(|t| t.name == "bone black").unwrap(), 1.0)]);
+        c.work(&m, &hd.piled(&st.palette, dark, 0.2).coverage(2.5).fill(true).clip(clip).hug(hug), seed + 4);
         c.dry();
         let sd = m.distance();
         let (mut e, mut en, mut inn, mut sp, mut spn) = (0, 0, 0, 0, 0);
@@ -1791,46 +1449,6 @@ mod tests {
         let unhugged = std::env::var_os("EDGE_UNHUGGED").map(|_| edge_stats_in(true, false, true, false, 3).0);
         println!("thin clipped band: bare edge {bare:.4} (hug off {unhugged:?})");
         assert!(bare < 0.05, "thin band: {bare:.4} of its edges bare");
-    }
-
-    /// How thick handlings lay paint where they land, across coverages
-    /// (for the aim's thickness model). `cargo test --release -p paint
-    /// probe_laid_by_coverage -- --ignored --nocapture`
-    #[test]
-    #[ignore]
-    fn probe_laid_by_coverage() {
-        use crate::color::hex;
-        let st = crate::style::Style::oil();
-        for name in std::env::var("PROBE").map(|s| s.split(',').map(String::from).collect::<Vec<_>>()).unwrap_or(vec!["broad".into(), "body".into(), "detail".into(), "hatch".into()]) {
-            let name = name.as_str();
-            let w: usize = std::env::var("PROBE_W").ok().and_then(|s| s.parse().ok()).unwrap_or(500);
-            for cov in [0.2f32, 0.5, 1.0, 2.5, 4.0] {
-                for load in [0.3f32, 0.7] {
-                    let mut c = st.prepare(w, 1.0, 1);
-                    let f0 = c.film.clone();
-                    let half = 150000.0 / w as f32;
-                    let m = Mask::from_fn(c.frame(), |x, y| if (x - 500.0).abs() < half && (y - 500.0).abs() < half { 1.0 } else { 0.0 });
-                    let col = move |_: f32, _: f32| hex("#8a9ab0");
-                    let h = match name {
-                        "broad" => st.broad(),
-                        "body" => st.body(),
-                        "detail" => st.detail(),
-                        _ => st.hatch(),
-                    }
-                    .color(col)
-                    .coverage(cov);
-                    let h = Handling { load, ..h };
-                    let model = laid_coats(&h, 1.0);
-                    c.work(&m, &h, 3);
-                    c.dry();
-                    let inside: Vec<usize> = (0..f0.len()).filter(|&i| m.data[i] > 0.5).collect();
-                    let mut d: Vec<f32> = inside.iter().map(|&i| c.film[i] - f0[i]).filter(|&v| v > 0.03).collect();
-                    d.sort_by(|a, b| a.total_cmp(b));
-                    let p = |q: f32| d[((d.len() - 1) as f32 * q) as usize];
-                    println!("{name:7} cov {cov:3.1} load {load:.1}: covered {:.2} coats p25 {:.2} p50 {:.2} p90 {:.2} | model {model:.2}", d.len() as f32 / inside.len() as f32, p(0.25), p(0.5), p(0.9));
-                }
-            }
-        }
     }
 
     /// A long hand-timed pass ages as it goes: its first slices can set (and

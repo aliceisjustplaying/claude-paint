@@ -4,7 +4,8 @@
 //! A `Style` is data: linen, ground layers, five tools (`broad`, `body`,
 //! `detail`, `line`, `blender`), a palette, medium fractions and blending
 //! settings. Paintings ask the style for a `Handling` and supply geometry
-//! and color.
+//! and paint, using `Handling::piled` for explicit tube mixtures. Presets
+//! do not choose recipes or match colors.
 //!
 //! The handling presets (`broad`, `body`, `detail`, `hatch`, `glaze`,
 //! `blend`) choose stroke lengths, paths, pressure variation, placement and
@@ -81,10 +82,10 @@ pub struct Style {
     pub blend_passes: usize,
     /// Pressure used when blending (light = gentle fusing).
     pub blend_pressure: f32,
-    /// The tube paints every preset mixes from.
+    /// Tube paints available for explicitly knifed piles.
     pub palette: Palette,
-    /// Fraction of oil medium in the paint for body color (`body`) and for
-    /// thin paint (`broad`).
+    /// Suggested oil medium fractions for explicit body and thin piles.
+    /// Pass the chosen fraction to `Handling::piled`.
     pub body_medium: f32,
     pub thin_medium: f32,
     /// How unevenly each pile is mixed (relative sd of proportions).
@@ -208,6 +209,7 @@ fn brush_ground(c: &mut Canvas, g: &Ground, s: u64) {
         .swell(0.12)
         .length(100.0, 250.0)
         .coverage(3.5)
+        .fill(true)
         .pressure(0.8, 0.95)
         .dips(1, (g.um / BRUSHED_UM_AT_FULL).powf(1.0 / BRUSHED_EXP).min(1.0), 0.3)
         .jitter(0.004, 0.002)
@@ -235,7 +237,7 @@ fn brush_ground(c: &mut Canvas, g: &Ground, s: u64) {
 }
 
 impl Style {
-    /// The broad tool with thin paint (`thin_medium`): strokes 80–220 units
+    /// The broad tool: strokes 80–220 units
     /// long that bow into long arcs (`curve`) and whose direction wanders
     /// over 350-unit patches (`drift`). Set the direction with `angle`; the
     /// default is horizontal.
@@ -243,7 +245,6 @@ impl Style {
         Handling::new(self.broad.clone())
             .length(80.0, 220.0)
             .coverage(2.5)
-            .mixed(&self.palette, self.thin_medium)
             .mix_jitter(self.mix_jitter)
             .pressure(0.55, 0.8)
             .dips(2, 0.4, 0.5)
@@ -256,14 +257,13 @@ impl Style {
             .ramps(0.12, 0.4)
     }
 
-    /// The body tool with body color (`body_medium`): strokes 20–60 units
+    /// The body tool: strokes 20–60 units
     /// long, more bowed and broken than `broad`, the direction wandering
     /// over 150-unit patches. Set the direction with `angle`.
     pub fn body(&self) -> Handling<'_> {
         Handling::new(self.body.clone())
             .length(20.0, 60.0)
             .coverage(2.5)
-            .mixed(&self.palette, self.body_medium)
             .mix_jitter(self.mix_jitter * 1.4)
             .pressure(0.6, 0.9)
             .dips(2, 0.56, 0.6)
@@ -275,13 +275,11 @@ impl Style {
             .swell(0.22)
     }
 
-    /// The detail tool with paint thinned by 0.1 medium: strokes 4–14 units
-    /// long, clipped to the mask (`clip`).
+    /// The detail tool: strokes 4–14 units long, clipped to the mask (`clip`).
     pub fn detail(&self) -> Handling<'_> {
         Handling::new(self.detail.clone())
             .length(4.0, 14.0)
             .coverage(3.0)
-            .mixed(&self.palette, 0.1)
             .mix_jitter(self.mix_jitter)
             .pressure(0.7, 0.95)
             .dips(3, 0.9 * 0.8, 0.8)
@@ -301,7 +299,6 @@ impl Style {
         Handling::new(Tool { width: self.detail.width * 1.2, ..self.detail.clone() })
             .length(5.0, 12.0)
             .coverage(2.5)
-            .mixed(&self.palette, 0.15)
             .mix_jitter(self.mix_jitter)
             .pressure(0.6, 0.9)
             .dips(4, 0.7, 0.7)
@@ -315,16 +312,12 @@ impl Style {
             .ramps(0.05, 0.3)
     }
 
-    /// A glaze or thin scumble brushed over dry paint: a soft brush, paint
-    /// that is mostly medium (`medium` ≈ 0.85–0.95 for a transparent glaze,
-    /// ≈ 0.6 for a veiling scumble), laid thinly in long strokes. Vary the
-    /// depth with `load_at`. The color is the glaze paint's masstone (not
-    /// aimed); add `.aim(coats)` to aim it at a look instead.
-    pub fn glaze(&self, medium: f32) -> Handling<'_> {
+    /// A soft brush for a glaze or thin scumble, laid in long strokes.
+    /// Supply an explicit pile with `piled`, choosing its medium there.
+    /// Vary the depth with `load_at`.
+    pub fn glaze(&self) -> Handling<'_> {
         let soft = Tool { stiffness: 0.3, lay: 0.8, pickup: 0.08, ragged: 0.2, ..Tool::filbert(self.broad.width * 1.2) };
         Handling::new(soft)
-            .mixed(&self.palette, medium)
-            .by_masstone()
             .mix_jitter(self.mix_jitter * 0.5)
             .length(120.0, 300.0)
             .coverage(2.5)
@@ -373,9 +366,9 @@ impl Style {
     }
 
     /// Scumbling: the body tool worked back and forth (`scrub(3)`) with
-    /// paint thinned by 0.5 medium, strokes 10–20 units long, the brush's
+    /// strokes 10–20 units long, the brush's
     /// wide axis across its travel (`Orient::Across`).
     pub fn scumble(&self) -> Handling<'_> {
-        Handling::new(self.body.clone()).scrub(3).mixed(&self.palette, 0.5).length(10.0, 20.0).orient(Orient::Across)
+        Handling::new(self.body.clone()).scrub(3).length(10.0, 20.0).orient(Orient::Across)
     }
 }

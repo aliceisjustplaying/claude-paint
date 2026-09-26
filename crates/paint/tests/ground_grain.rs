@@ -181,10 +181,11 @@ fn parallel_brushed(width: usize, seed: u64, crop: Crop) -> paint::Canvas {
 /// Pixels of bare (saturated) ground under a thin broad pass over the whole
 /// canvas, blended as the style blends it, on a prepared canvas.
 fn bare_after_blend(mut c: paint::Canvas, margin: f32) -> usize {
-    use paint::{Mask, hex};
+    use paint::Mask;
     let base = Style::oil();
     let whole = Mask::from_fn(c.frame(), |_, _| 1.0);
-    c.work(&whole, &base.broad().color(|_, _| hex("#d9dcd6")).angle(|_, _| 0.0).coverage(4.5).medium(0.3), 11);
+    let pal = base.palette.only(&["lead white", "bone black"]);
+    c.work(&whole, &base.broad().piled(&pal, pal.pile(vec![(0, 8.0 / 9.0), (1, 1.0 / 9.0)]), 0.3).angle(|_, _| 0.0).coverage(4.5), 11);
     if let Some(b) = base.blend() {
         c.work(&whole, &b, 12);
     }
@@ -205,7 +206,7 @@ fn bare_after_blend(mut c: paint::Canvas, margin: f32) -> usize {
 
 /// A thin blended broad pass leaves at most twice as many pixels of bare
 /// ground (plus 20) over the style's brushed ground as over the parallel
-/// reference ground: three seeds at 3200 px, parallel 98 in all, style 164.
+/// reference ground, across three seeds at 3200 px.
 /// What is left are thin spots in the pass's own strokes, not ridge crests
 /// (see `tests::diag_blend_bare_pixels`). Ignored: ~1 min in release, far
 /// longer in debug; run with

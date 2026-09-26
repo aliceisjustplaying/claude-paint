@@ -82,15 +82,16 @@ fn dry_is_idempotent_and_clears_wet() {
     assert!(snap.0 == c.px && snap.1 == c.height && snap.2 == c.film);
 }
 
-/// A fixture through most of the engine: in the upper half a two-color
-/// broad pass and the style's blend; after drying, in the lower half a
+/// A fixture through most of the engine: in the upper half a broad pass
+/// from a hand-knifed pile and the style's blend; after drying, in the lower half a
 /// hog-flat pass, three held-brush drags, a glaze; then relief.
 fn fixture() -> Canvas {
     let st = Style::oil();
     let mut c = st.prepare(240, 1.5, 7);
     let (w, h) = (c.width(), c.height());
     let upper = Mask::from_fn(c.f, |_, y| if y < h * 0.5 { 1.0 } else { 0.0 });
-    c.work(&upper, &st.broad().color(|_, y| if y < 200.0 { hex("#5a6d8c") } else { hex("#c9b48e") }).angle(|_, _| 0.0), 11);
+    let pal = st.palette.only(&["lead white", "cobalt blue"]);
+    c.work(&upper, &st.broad().piled(&pal, pal.pile(vec![(0, 0.75), (1, 0.25)]), 0.45).angle(|_, _| 0.0), 11);
     if let Some(b) = st.blend() {
         c.work(&upper, &b, 12);
     }
@@ -442,29 +443,6 @@ fn brushed_ground_honors_thickness() {
     }
 }
 
-#[test]
-fn palette_mixes_what_it_can() {
-    use crate::palette::Palette;
-    let p = Palette::cobalt_box();
-    // a tube's own color is reachable exactly
-    for t in &p.tubes {
-        let m = p.mix(t.color);
-        assert!(m.error < 0.01, "{}: {} ({})", t.name, m.error, p.recipe(&m));
-    }
-    // a mid gray from white and black
-    let g = p.mix([0.2, 0.2, 0.2]);
-    assert!(g.error < 0.03, "{} {}", g.error, p.recipe(&g));
-    // a saturated green is out of this palette's gamut: comes out duller
-    let green = [0.05, 0.6, 0.1];
-    let m = p.mix(green);
-    let (a, b) = (crate::color::to_oklab(green), crate::color::to_oklab(m.color));
-    assert!((b[1].hypot(b[2])) < (a[1].hypot(a[2])) * 0.8, "chroma {} vs {}", b[1].hypot(b[2]), a[1].hypot(a[2]));
-    // fractions sum to 1, deterministic
-    assert!((m.parts.iter().map(|x| x.1).sum::<f32>() - 1.0).abs() < 1e-4);
-    assert_eq!(p.recipe(&p.mix(green)), Palette::cobalt_box().recipe(&m));
-}
-
-
 /// Cutting in keeps paint within about a brush width of the region, and
 /// fills forms narrower than the body brush.
 #[test]
@@ -599,7 +577,8 @@ fn diag_blend_bare_pixels() {
         eprintln!("  ground films µm on its row: {}", fr.join(" "));
     }
     let whole = Mask::from_fn(c.frame(), |_, _| 1.0);
-    c.work(&whole, &base.broad().color(|_, _| hex("#d9dcd6")).angle(|_, _| 0.0).coverage(4.5).medium(0.3), 11);
+    let pal = base.palette.only(&["lead white", "bone black"]);
+    c.work(&whole, &base.broad().piled(&pal, pal.pile(vec![(0, 8.0 / 9.0), (1, 1.0 / 9.0)]), 0.3).angle(|_, _| 0.0).coverage(4.5), 11);
     let vol_a = c.wet.vol.clone();
     if let Some(b) = base.blend() {
         c.work(&whole, &b, 12);

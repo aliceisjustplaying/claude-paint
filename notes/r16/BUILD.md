@@ -9,6 +9,10 @@ are not part of this build.
 
 ## In short
 
+> The last section, **Binary-only studio**, replaces earlier text about
+> the export, `easel run`, sessions, poured `glaze()`, `look --mode wet`
+> and `drawing_mask()`.
+
 - **The engine** is Round 15's cleaned `crates/paint` (from `r15-base`),
   plus three small additions made test-first: piles laid as knifed
   (`Handling::piled`, `Stipple::piled`), tubes that dry at their own rates
@@ -567,3 +571,80 @@ The local-integrity trust limit, fail-closed crash recovery, native crop
 byte size and scratch-worktree deviation are documented above rather
 than treated as new policy decisions. All later commits update only this
 unexported build record; the tested export contents are unchanged.
+
+## Binary-only studio (after the overnight review)
+
+The owner took six cheap fixes from `~/tmp/gallery-fcf9c110/r16/review/REVIEW.md`
+and left the rest (palette-time flush, masks as images, relief, service
+isolation) alone. Nothing here is a sandbox: a painter with a shell can
+still copy files, decode PNGs or restore the log and its record together.
+
+1. **Export ships no source.** `scripts/export_r16_studio` builds the
+   painter's easel from a `git archive` of the branch in
+   `target/studio-build/<commit>` (`cargo build --release -p easel
+   --no-default-features`) and ships `bin/easel`, `notes/` (guide, research
+   per profile, empty `journal.md`), an empty `paintings/lua/` and
+   `THIRD_PARTY_NOTICES.md`. No crates, Cargo files, tests or README. The
+   script fails on any other file, checks the notes and the binary's
+   strings for painters' names, then runs a session in a throwaway copy
+   from `/` (open, canvas, stroke, look, save, check, close) and confirms
+   `run` is refused.
+2. **Two builds from one crate** (`crates/easel/Cargo.toml`, feature
+   `replay`, on by default). The **replay build** (`cargo build --release
+   -p easel`, `target/release/easel` in r16-base) keeps `run`,
+   `--dump-surface`, `hash-probe`, `EASEL_ROOT`, `-s`/`EASEL_SESSION` and
+   named sessions; delivery renders and tests use it. The **painter build**
+   (`--no-default-features`) compiles those out: one session, fixed name
+   `painting`; `open` takes no name; `-s` is an error; the studio root is
+   the parent of the executable's folder (`current_exe`, canonicalized),
+   whatever the cwd or environment. The log header no longer names
+   `easel run` (`f225d32`).
+3. **No poured glaze.** The Lua `glaze()` is gone; `work(m, {hand="glaze",
+   pile=p})` brushes a glaze into the wet-paint model. Varnish, cracks and
+   relief are unchanged and need the whole canvas dry.
+4. **`wait` limits.** `wait(minutes)` refuses non-finite, negative and
+   anything above 5,259,600 minutes (10 years) before time passes.
+   `Canvas::wait` panics on a non-finite value instead of calling
+   `Canvas::dry` (the easel reports a failed chunk that changed nothing).
+5. **Removed views.** `look --mode wet` (and `drying`/`stages`) and
+   `drawing_mask()`. Value, squint, mirror, grid, crop and `drying(x, y)`
+   stay.
+6. **Guide.** Commands use `bin/easel` from the studio folder; the Starting
+   block ends with `note`, `save` and `close` and names
+   `out/easel/painting/painting.png` and `paintings/lua/painting.lua`.
+   Ground and pile examples are `<tube>`/`<parts>` placeholders (the one
+   runnable canvas uses a single tube, lead white); the world example is a
+   camera over a flat plane with one block, other `world{}` options only
+   listed; finishing is titled optional; the Time section says only
+   painting operations and `wait` advance the clock, not real time.
+
+Left as they are: the hidden `serve` command (painter build refuses any
+name but `painting`); `save <relative path>` resolves against the cwd of
+`open`; a symlink to `bin/easel` uses the target's studio.
+
+### Commits
+
+```
+40ab8a3 Limit wait to 0..10 years and stop an infinite engine wait from drying
+c917ef3 Remove the poured glaze() global; glazes are brushed
+9e6327a Remove look --mode wet and drawing_mask() from the easel
+7b7cfa8 Build a painter easel without the replay feature
+f225d32 Log header without the replay command the painter build lacks
+afda9b3 Binary-only studio export; guide for one painting at bin/easel
+```
+
+### Verification (at `afda9b3`)
+
+- `cargo test --workspace`: 198 passed, 14 ignored (easel unit 25,
+  delivery 2, determinism 2, session_integrity 5, smoke 1, painter 0
+  compiled out; paint lib 160 + 7 ignored, curved_drag_nan 2, ground_grain
+  1 + 3 ignored, doc-tests 4 ignored). Log: `~/tmp/r16-build-247d8e71/cheap-tests.log`.
+- `cargo test -p easel --no-default-features`: easel unit 25, painter 1
+  (the others are gated to `replay`). Log: `cheap-painter-tests.log`.
+- `cargo build --release --workspace`: passes (`cheap-build.log`).
+- Exports: `~/tmp/r16-build-247d8e71/studio-blank-binonly` and
+  `studio-friedrich-binonly`, each `bin/easel` (5.3 MB), the notes, the
+  notice and an empty `paintings/lua/`. The guide's Starting commands ran
+  as printed in a copy of the blank studio.
+- Red logs for the new behavior: `r16cheap-wait-red.log`,
+  `r16cheap-removed-api-smoke-red.log`, `r16cheap-painter-red.log`.

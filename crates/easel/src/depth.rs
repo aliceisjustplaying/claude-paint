@@ -8,7 +8,7 @@
 //! - A view answers with masks: `v:visible(x)`, `v:front(x)`, `v:behind(x)`,
 //!   `v:at_depth(m)`, `v:between(a, b)`, and soft shadows that fall off
 //!   physically: `v:cast_shadow{}`, `v:contact_shadow{}`.
-//! - `work`, `stipple`, `glaze` and `blend` take `visible=`, `behind=` and
+//! - `work`, `stipple` and `blend` take `visible=`, `behind=` and
 //!   `at=`, resolved against the last view made (`w:view()`) or `view=v`.
 //!
 //! Things are named by body number (from `w:place`/`w:proxy`), layer name,
@@ -245,7 +245,7 @@ pub fn view_methods<M: UserDataMethods<ViewU>>(m: &mut M) {
 pub type Restricted = (Option<Rc<Mask>>, Option<Arc<Mask>>);
 
 /// Apply `visible=`, `behind=` and `at=` to a pass: the mask it seeds
-/// strokes in (None: the whole canvas, for `glaze(nil, ...)`) and a hard
+/// strokes in (None: the whole canvas) and a hard
 /// limit no bristle may cross (strokes still overshoot the region's own
 /// edges, but never into what is in front). Unchanged if none is given.
 pub fn restrict(st: &S, o: &Table, m: Option<Rc<Mask>>) -> Result<Restricted> {
@@ -367,8 +367,8 @@ v = w:view()"##;
         // glints only where the water is seen: none on the upright or the block
         s.run(r##"stipple(below(function() return 302 end), {width=2, pile=pile{{"lead white", 1}}, coverage=2, visible="water"})"##).unwrap();
         assert_eq!(before_in, px(&s, fxy.0, fxy.1));
-        // glaze too, and a mask in behind=
-        s.run(r##"wait(60 * 24 * 60); glaze(nil, {pile=pile{{"raw umber", 1}, medium=0.9}, coats=0.3, behind={"upright", block}, at=30})"##).unwrap();
+        // a brushed glaze too, and a mask in behind=
+        s.run(r##"wait(60 * 24 * 60); work(everywhere(), {hand="glaze", pile=pile{{"raw umber", 1}, medium=0.9}, behind={"upright", block}, at=30})"##).unwrap();
         assert_eq!(before_in, px(&s, fxy.0, fxy.1));
         // an unknown layer says what there is
         let e = s.run(r##"work(everywhere(), {pile=pile{{"lead white", 1}}, behind="nothing"})"##).unwrap_err();
@@ -399,10 +399,10 @@ v = w:view()"##;
             .unwrap();
         let (fx, fy): (f32, f32) = s.lua.load("return fx, fy").eval().unwrap();
         let (inside, sky, water) = (px(&s, 125.0, 125.0), px(&s, 300.0, 125.0), px(&s, fx - 120.0, fy));
-        s.run(r##"glaze(nil, {pile=pile{{"raw umber", 1}, medium=0.9}, coats=0.5, visible=box})"##).unwrap();
+        s.run(r##"work(everywhere(), {hand="glaze", pile=pile{{"raw umber", 1}, medium=0.9}, visible=box})"##).unwrap();
         assert_ne!(inside, px(&s, 125.0, 125.0), "the box is glazed");
         assert_eq!(sky, px(&s, 300.0, 125.0), "nothing else is");
-        s.run(r##"glaze(nil, {pile=pile{{"raw umber", 1}, medium=0.9}, coats=0.5, visible={box, "water"}})"##).unwrap();
+        s.run(r##"work(everywhere(), {hand="glaze", pile=pile{{"raw umber", 1}, medium=0.9}, visible={box, "water"}})"##).unwrap();
         assert_ne!(water, px(&s, fx - 120.0, fy), "the water is glazed too");
         assert_eq!(sky, px(&s, 300.0, 125.0));
     }

@@ -4,7 +4,7 @@
 //! The engine counts what the brushes do and prices it in seconds of hand
 //! time (`paint::tally`). The easel puts that time on the painting's clock
 //! as it is spent, with the drying model (`Canvas::wait`): after every
-//! covering verb (`work`, `blend`, `stipple`, `glaze`, pencil lines) and,
+//! covering verb (`work`, `blend`, `stipple`, `varnish`, pencil lines) and,
 //! for strokes and touches made one at a time (`b:stroke`, `b:touch` and
 //! the verbs built on them), whenever a minute has piled up, and at the end
 //! of every chunk. Hand time is always on. `wait(minutes)` lets time pass
@@ -41,7 +41,7 @@ pub enum Verb {
     /// Marks made one at a time (`b:stroke`, `b:touch`): their hand time
     /// goes on the clock once a `GRAIN_MIN` has piled up.
     Marks,
-    /// A covering verb (`work`, `stipple`, pencil lines, `glaze`): all its
+    /// A covering verb (`work`, `stipple`, pencil lines, `varnish`): all its
     /// hand time is on the clock when it ends (a long pass clocks its slices
     /// as it goes; the engine's `set_hand_time`).
     Pass,

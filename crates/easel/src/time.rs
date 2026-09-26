@@ -195,4 +195,24 @@ mod tests {
         assert_eq!(super::time_of_day(0.0), "day 1, 09:00");
         assert_eq!(super::time_of_day(15.0 * 60.0 + 7.5), "day 2, 00:07");
     }
+
+    /// `wait` takes 0 to 10 years of minutes. Anything else (a huge number
+    /// that would overflow the engine's clock, infinity, NaN, a negative) is
+    /// refused before any time passes: the canvas and clock stay as they were.
+    #[test]
+    fn wait_refuses_what_is_not_a_span_of_up_to_ten_years() {
+        let mut s = Session::new(W).unwrap();
+        run(&mut s, CANVAS);
+        run(&mut s, r#"work(rect(100, 100, 300, 200), {hand="body", pile=pile{{"lead white", 1}}, coverage=3})"#);
+        let bits = |s: &Session| s.canvas().unwrap().seen().iter().flat_map(|p| p.map(f32::to_bits)).collect::<Vec<_>>();
+        let (before, t0) = (bits(&s), clock(&s));
+        for m in ["1e100", "1/0", "-1/0", "0/0", "-1", "5259600.5"] {
+            let e = s.run(&format!("wait({m})")).unwrap_err();
+            assert!(e.contains("5259600") && e.contains("10 years"), "wait({m}): {e}");
+            assert_eq!(clock(&s), t0, "wait({m}) moved the clock");
+            assert!(bits(&s) == before, "wait({m}) changed the canvas");
+        }
+        run(&mut s, "wait(5259600)");
+        assert_eq!(clock(&s), t0 + 5259600.0);
+    }
 }

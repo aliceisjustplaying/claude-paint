@@ -209,11 +209,12 @@ impl Canvas {
     /// touch-dry. What happens to each pixel follows from its own paint and
     /// history. `wait(minutes)` advances simulated time. Use `drying_at` to
     /// inspect a location; `dry()` waits until all paint is touch-dry.
+    ///
+    /// Panics if `minutes` is infinite: a non-finite wait is a caller's
+    /// bug, not a way to dry the canvas (that is `dry()`).
     pub fn wait(&mut self, minutes: f32) {
         let dt = minutes.max(0.0);
-        if !dt.is_finite() {
-            return self.dry();
-        }
+        assert!(dt.is_finite(), "Canvas::wait: minutes must be finite (got {minutes}); use dry() to wait until touch-dry");
         let n = self.f.w * self.f.h;
         if self.wet.clock.px.len() != n {
             self.wet.clock.px = vec![Px::FRESH; n];
@@ -653,6 +654,17 @@ mod tests {
         b.wait(3.0 * 24.0 * 60.0);
         b.dry();
         assert!(a.px == b.px && a.height == b.height && a.film == b.film);
+    }
+
+    /// A non-finite wait is a caller's bug, not "wait until dry": it panics
+    /// (the easel turns a panic into a failed chunk that changes nothing)
+    /// instead of drying the canvas. `dry()` is the way to dry everything.
+    #[test]
+    #[should_panic(expected = "Canvas::wait: minutes must be finite")]
+    fn an_infinite_wait_does_not_dry() {
+        let mut c = canvas();
+        band(&mut c, lead_white(), 400.0, 1);
+        c.wait(f32::INFINITY);
     }
 
     /// A clean brush lifts wet paint, less as it sets, and nothing from set

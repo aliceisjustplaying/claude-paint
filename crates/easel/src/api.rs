@@ -1087,6 +1087,9 @@ fn needs_dry_under(st: &S, mask: Option<&Mask>) -> Result<()> {
     Ok(())
 }
 
+/// The longest `wait` (minutes): 10 years of 365.25 days.
+const MAX_WAIT_MIN: f64 = 10.0 * 365.25 * 24.0 * 60.0;
+
 pub(crate) fn current_frame(lua: &Lua) -> Result<Frame> {
     let st = lua.app_data_ref::<S>().ok_or_else(|| mlua::Error::runtime("no studio"))?;
     frame(&st)
@@ -1394,11 +1397,11 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
     {
         // wait(minutes): time passes with the hand away from the canvas; the
         // paint ages where it lies (open, setting, tacky, touch-dry by
-        // pigment, film and oil). Returns the time of day.
+        // pigment, film and oil). Returns the time of day. At most 10 years.
         let st1 = st.clone();
         g.set("wait", lua.create_function(move |_, minutes: f64| {
-            if !(minutes.is_finite() && minutes >= 0.0) {
-                return err("wait(minutes): want a number of minutes >= 0 (days are fine: wait(3 * 24 * 60))");
+            if !(0.0..=MAX_WAIT_MIN).contains(&minutes) {
+                return err(format!("wait({minutes}): want minutes from 0 to {MAX_WAIT_MIN} (10 years); days are fine: wait(3 * 24 * 60)"));
             }
             time::verb(&st1, Verb::Wait, |s| {
                 s.canvas.as_mut().ok_or_else(no_canvas)?.wait(minutes as f32);

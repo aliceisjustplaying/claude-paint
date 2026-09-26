@@ -95,7 +95,8 @@ fn main() {
         c.drag(&mut g, &Gesture::line((180.0, y), (520.0, y)).pressure(0.6, 0.6), None);
     }
 
-    // ---- row 5: Cézanne-style hatching with a flat at a fixed angle, and fan dabs
+    // ---- row 5: 60 short hog-flat strokes at a fixed angle (-0.9 rad) in
+    // five greens, and 14 fan scumble dabs
     let mut b = Held::new(Tool::hog_flat(12.0), 50);
     let greens = [hex("#5a7a3a"), hex("#7d9a4a"), hex("#3f5f3a"), hex("#9aa860"), hex("#6f8fa0")];
     let mut r = paint::Rng::new(5);
@@ -128,7 +129,7 @@ fn main() {
         let y = 505.0 + k as f32 * 40.0;
         c.drag(&mut b, &Gesture::line((25.0, y), (400.0, y + 8.0)).pressure(0.9, 0.9), None);
     }
-    // rigger twigs
+    // rigger: eight wavy upward strokes, pressure falling from 0.9 to 0.2
     let mut rg = Held::new(Tool::rigger(1.4), 62);
     for k in 0..8 {
         rg.reload(Paint::body(ivory_black), 1.0);

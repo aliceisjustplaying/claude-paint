@@ -5,17 +5,17 @@ members = ["crates/paint", "paintings"]
 [profile.release]
 opt-level = 3
 debug = false
-# Deterministic codegen: paintings must replay byte for byte, and an
+# Single-codegen-unit, non-incremental builds keep replay deterministic: an
 # incremental build (or several codegen units) can partition and optimize the
 # same code differently from one rebuild to the next, moving a few pixels by
-# 1/255 (found twice in Round 6). Slower rebuilds are the price.
+# 1/255.
 incremental = false
 codegen-units = 1
 
-# Tests run optimized (the physics tests took ~10 min unoptimized), with
+# Tests run optimized (unoptimized, the physics tests take ~10 min), with
 # debug assertions and overflow checks kept on. Not incremental, so a test
-# build's floats don't wobble between rebuilds either (the golden scene
-# and the debug replay hashes are recorded with this profile).
+# build's floats stay the same between rebuilds (the golden fingerprint and
+# the debug replay hashes are recorded with this profile).
 [profile.test]
 opt-level = 2
 incremental = false

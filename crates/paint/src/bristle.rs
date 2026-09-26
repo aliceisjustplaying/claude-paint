@@ -1648,7 +1648,7 @@ mod tip_tests {
     /// and filbert 2 at 1000px).
     #[test]
     fn a_stroke_over_dry_paint_covers_its_middle() {
-        let st = crate::style::Style::friedrich();
+        let st = crate::style::Style::oil();
         for (name, tool) in [("filbert 5", Tool::filbert(5.0)), ("filbert 2", Tool { lay: 0.5, stiffness: 0.3, ..Tool::filbert(2.0) }), ("body", st.body.clone())] {
             let prof = film_across_over_dry(1000, tool, 0.8);
             let peak = prof.iter().map(|p| p.1).fold(0.0f32, f32::max);
@@ -1679,7 +1679,7 @@ mod tip_tests {
     /// pressure) is opt-in.
     #[test]
     fn presets_are_blunt_and_lay_their_width() {
-        let st = crate::style::Style::friedrich();
+        let st = crate::style::Style::oil();
         for t in [Tool::round_sable(1.6), Tool::rigger(0.5), st.detail.clone(), st.line_tool(0.8)] {
             assert_eq!(t.point, 0.0, "{:?} is pointed by default", t.kind);
         }
@@ -1888,7 +1888,7 @@ mod cover_tests {
     /// drying, share that shows the ground after: closer to the ground's
     /// value than to the paint's).
     pub(crate) fn bare_share(w: usize, hd: &Handling, seed: u64) -> (f32, f32) {
-        let st = Style::friedrich_early();
+        let st = Style::oil_red_ground();
         let mut c: Canvas = st.prepare(w, 1.0, seed);
         let m = Mask::from_fn(c.frame(), |x, y| if (350.0..650.0).contains(&x) && (350.0..650.0).contains(&y) { 1.0 } else { 0.0 });
         let ground = c.px.clone();
@@ -1921,7 +1921,7 @@ mod cover_tests {
     /// light pressure breaks up (more than 10% bare).
     #[test]
     fn loaded_passage_covers() {
-        let st = Style::friedrich_early();
+        let st = Style::oil_red_ground();
         let dark = |_: f32, _: f32| hex("#2c2925");
         let body = || st.body().color(dark).clip(true).threshold(0.5).coverage(2.5);
         let broad = || st.broad().color(dark).clip(true).threshold(0.5).coverage(2.5);
@@ -1941,7 +1941,7 @@ mod cover_tests {
     #[test]
     #[ignore]
     fn probe_bare() {
-        let st = Style::friedrich_early();
+        let st = Style::oil_red_ground();
         let w: usize = std::env::var("PROBE_W").ok().and_then(|s| s.parse().ok()).unwrap_or(1000);
         let dark = |_: f32, _: f32| hex("#2c2925");
         let names: Vec<String> = std::env::var("PROBE").map(|s| s.split(',').map(String::from).collect()).unwrap_or(vec!["body".into(), "broad".into(), "detail".into()]);
@@ -1996,7 +1996,7 @@ mod cover_tests {
     fn probe_mark_area() {
         use crate::bristle::{Gesture, Held};
         use crate::wet::Paint;
-        let st = Style::friedrich_early();
+        let st = Style::oil_red_ground();
         for (name, tool, len, p, ramps, load) in [
             ("broad", st.broad.clone(), 150.0f32, 0.675f32, (0.12f32, 0.4f32), 0.4f32),
             ("body", st.body.clone(), 40.0, 0.75, (0.08, 0.15), 0.56),

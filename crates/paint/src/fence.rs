@@ -219,7 +219,7 @@ mod tests {
     fn rings(fence: Option<f32>) -> (f32, f32, f32) {
         use crate::canvas::Canvas;
         use crate::color::{hex, to_oklab};
-        let st = crate::style::Style::friedrich();
+        let st = crate::style::Style::oil();
         let mut c = Canvas::new(1000, 1.0, st.raw).with_size_mm(st.width_mm).with_linen(crate::surface::Linen { seed: 3, ..st.linen });
         c.prime(hex("#b08457"), 0.8, 120.0, 0.3, 0.3, 3);
         let before = c.pixels().to_vec();

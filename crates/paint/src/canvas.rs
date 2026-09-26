@@ -532,7 +532,7 @@ mod tests {
     /// half an 8-bit step in the tail.
     #[test]
     fn glaze_long_falloff_has_no_edge() {
-        let st = Style::friedrich();
+        let st = Style::oil();
         let mut c = st.prepare(300, 1.5, 3);
         let before = c.px.clone();
         let at = (500.0f32, 300.0f32);
@@ -551,7 +551,7 @@ mod tests {
     /// out to the canvas edges; a glaze through it must not lay a rectangle.
     #[test]
     fn glaze_through_blurred_mask_leaves_no_rectangle() {
-        let st = Style::friedrich();
+        let st = Style::oil();
         let mut c = st.prepare(300, 1.5, 4);
         let before = c.px.clone();
         let m = Mask::from_fn(c.frame(), |x, y| if (x - 300.0).abs() < 20.0 && (y - 200.0).abs() < 60.0 { 1.0 } else { 0.0 }).blur(1.6);
@@ -590,7 +590,7 @@ mod tests {
     /// thick.
     #[test]
     fn a_thin_veil_is_laid() {
-        let st = Style::friedrich();
+        let st = Style::oil();
         let dark = |coats: f32| {
             let mut c = st.prepare(200, 1.5, 5);
             let before = c.px.clone();

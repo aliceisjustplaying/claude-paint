@@ -750,7 +750,7 @@ mod tests {
     use crate::color::{hex, luminance};
 
     fn canvas() -> Canvas {
-        Style { width_mm: 440.0, ..Style::friedrich_early() }.prepare(400, 1.5, 3)
+        Style { width_mm: 440.0, ..Style::oil_red_ground() }.prepare(400, 1.5, 3)
     }
 
     fn mean_lum(c: &Canvas, x0: f32, y0: f32, x1: f32, y1: f32) -> f32 {
@@ -825,7 +825,7 @@ mod tests {
     /// by the eraser, kept by fixative, unchanged by paint over it.
     #[test]
     fn guide_follows_the_line() {
-        let mut c = Style { width_mm: 440.0, ..Style::friedrich_early() }.prepare(1000, 1.4, 11);
+        let mut c = Style { width_mm: 440.0, ..Style::oil_red_ground() }.prepare(1000, 1.4, 11);
         let m = hand_line(&[(779.0, 420.0), (812.0, 398.0), (838.0, 366.0), (858.0, 330.0)], &[0.5, 0.2], true, false, 0.15 / 0.44, 5);
         c.draw(&Lead::pencil("2B").unwrap(), &m, 400.0, 9);
         let (g, dm) = (c.drawing_guide(), c.drawing_mask());
@@ -835,7 +835,7 @@ mod tests {
         // off the line: nothing
         assert_eq!(g.sample(700.0, 300.0), 0.0);
         // a light 2H line reads fainter than a firm 2B one (band picks)
-        let mut c2 = Style { width_mm: 440.0, ..Style::friedrich_early() }.prepare(1000, 1.4, 11);
+        let mut c2 = Style { width_mm: 440.0, ..Style::oil_red_ground() }.prepare(1000, 1.4, 11);
         c2.draw(&Lead::pencil("2H").unwrap(), &hand_line(&[(100.0, 100.0), (400.0, 100.0)], &[0.3], false, true, 0.0, 1), 0.0, 1);
         c2.draw(&Lead::pencil("2B").unwrap(), &hand_line(&[(100.0, 200.0), (400.0, 200.0)], &[0.6], false, true, 0.0, 1), 0.0, 1);
         let g2 = c2.drawing_guide();
@@ -921,7 +921,7 @@ mod tests {
     /// A light line catches the tops of the tooth first.
     #[test]
     fn light_line_catches_the_tops() {
-        let mut c = Style { width_mm: 440.0, ..Style::friedrich_early() }.prepare(1600, 1.5, 3);
+        let mut c = Style { width_mm: 440.0, ..Style::oil_red_ground() }.prepare(1600, 1.5, 3);
         let before = c.surface_um().to_vec();
         let lead = Lead::pencil("HB").unwrap();
         for k in 0..30 {
@@ -1027,7 +1027,7 @@ mod probe {
     #[ignore]
     fn tooth_depths() {
         for (wmm, px) in [(440.0, 1000usize), (440.0, 3200), (1714.0, 1000), (1714.0, 3200)] {
-            for st in [Style { width_mm: wmm, ..Style::friedrich() }, Style { width_mm: wmm, ..Style::friedrich_early() }] {
+            for st in [Style { width_mm: wmm, ..Style::oil() }, Style { width_mm: wmm, ..Style::oil_red_ground() }] {
                 let c = st.prepare(px, 1.5, 3);
                 let f = c.window();
                 let h = c.surface_um();

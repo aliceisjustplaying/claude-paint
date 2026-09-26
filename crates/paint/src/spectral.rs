@@ -22,12 +22,6 @@
 //! laid over a substrate with the same layer formulas the engine uses per
 //! RGB channel (`pigment::layer1`), one wavelength at a time.
 //!
-//! Spectra are supplied directly or converted from RGB, not fitted to targets:
-//! ```compile_fail,E0425
-//! use paint::spectral;
-//! spectral::fit_shape([0.5; 3], &[0.5; spectral::N]);
-//! ```
-//!
 //! ---------------------------------------------------------------------
 //! spectral.js is used under the MIT License:
 //!

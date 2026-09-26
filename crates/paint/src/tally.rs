@@ -133,6 +133,13 @@ impl Piles {
     pub fn trip(&mut self, t: &mut Tally, c: crate::Rgb) {
         if self.dip(c) { t.remix() } else { t.reload(1.0) }
     }
+
+    /// Knife a pile of color `c` on the palette (no brush loaded): the
+    /// mixing time in `t`, and the pile on the palette for later dips.
+    pub fn knife(&mut self, t: &mut Tally, c: crate::Rgb) {
+        self.dip(c);
+        t.knife();
+    }
 }
 
 /// The width (mm) a mark of `tool` makes, for pacing it.
@@ -188,6 +195,12 @@ impl Tally {
     pub fn remix(&mut self) {
         self.remixes += 1;
         self.secs += pace::REMIX + pace::RELOAD;
+    }
+
+    /// A pile knifed on the palette, no brush loaded.
+    pub fn knife(&mut self) {
+        self.remixes += 1;
+        self.secs += pace::REMIX;
     }
 
     /// The brush wiped on the rag.
@@ -479,6 +492,20 @@ mod tests {
             assert!(p.dip([0.05 + 0.3 * (i % 4) as f32, 0.05 + 0.3 * (i / 4) as f32, 0.9]));
         }
         assert!(p.dip(hex("#d8ccb0")), "scraped off to make room");
+    }
+
+    /// Knifing a pile takes the mixing time and puts it on the palette:
+    /// the brush dipping into it afterwards is a reload.
+    #[test]
+    fn a_knifed_pile_is_on_the_palette() {
+        let (mut p, mut t) = (Piles::default(), Tally::default());
+        p.knife(&mut t, hex("#6f84a8"));
+        assert_eq!((t.remixes, t.reloads, t.secs), (1, 0.0, pace::REMIX));
+        p.trip(&mut t, hex("#6f84a8"));
+        assert_eq!((t.remixes, t.reloads, t.secs), (1, 1.0, pace::REMIX + pace::RELOAD));
+        // knifing it again is mixing again
+        p.knife(&mut t, hex("#6f84a8"));
+        assert_eq!(t.remixes, 2);
     }
 
     #[test]

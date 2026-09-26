@@ -1,19 +1,21 @@
-//! The scene and the air in Lua: one world (camera, ground, water, sun,
-//! bodies), what the eye sees in it (a view: sky, land, water, shadows,
-//! contact, reflections, and a form of the bodies), the sky and clouds for
-//! its sun, haze, and receding mountain ranges.
+//! The scene in Lua: one world (camera, ground, water, sun, and the bodies
+//! the painter places there) and what the eye sees in it (a view: where
+//! the sky, the land and the water are seen, shadows cast by the sun,
+//! contact, mirror images in still water, and a form of the bodies). It is
+//! a scaffold for placing things in perspective and for where light and
+//! shadow fall on the painter's shapes; it paints nothing and knows
+//! nothing of any subject.
 //!
 //! As everywhere in the easel, every value is immutable: `w:place` returns a
-//! new world, so undo and rollback never have to repair one. A world is kept
+//! new world, so a failed chunk never has to repair one. A world is kept
 //! as its recipe and rebuilt when a body is added (cheap: nothing is traced
 //! until `w:view()`).
 
-use crate::api::{Col, FromLuaValue, S, check_keys, err, frame, num, pair, points, wrap};
+use crate::api::{FromLuaValue, S, check_keys, err, frame, num, points, wrap};
 use crate::form::{FormHolder, FormU, SolidU, shade_table};
 use mlua::{Function, Lua, MetaMethod, Result, Table, UserData, UserDataMethods, Value};
-use paint::atmos::{CloudField, CloudPoint, RangeLayer, Silhouette};
 use paint::scene::{Point, View, What};
-use paint::{Cloud, Clouds, Form, Haze, Mask, Ranges, Sdf, Sky, SkyField, Spot, Sun, Water, World};
+use paint::{Form, Mask, Sdf, Spot, Sun, Water, World};
 use std::sync::Arc;
 
 // ---------------------------------------------------------------- ground
@@ -254,202 +256,6 @@ impl UserData for ViewU {
     }
 }
 
-// ---------------------------------------------------------------- sky, clouds
-
-#[derive(Clone)]
-pub struct SkyU(pub Arc<SkyField>);
-
-impl UserData for SkyU {
-    fn add_methods<M_: UserDataMethods<Self>>(m: &mut M_) {
-        m.add_method("at", |_, s, (x, y): (f32, f32)| Ok(Col(s.0.at(x, y))));
-        m.add_method("value", |_, s, (x, y): (f32, f32)| Ok(s.0.value(x, y)));
-        m.add_method("airlight", |_, s, x: f32| Ok(Col(s.0.airlight(x))));
-        m.add_method("sunlight", |_, s, ()| Ok(Col(s.0.paint(s.0.sky.sunlight()))));
-        m.add_meta_method(MetaMethod::ToString, |_, _, ()| Ok("sky (use as color=, or s:at(x, y))"));
-    }
-}
-
-#[derive(Clone)]
-pub struct CloudsU {
-    pub sky: Arc<SkyField>,
-    pub field: Arc<CloudField>,
-}
-
-fn cloud_point_table(lua: &Lua, p: &CloudPoint) -> Result<Table> {
-    let t = lua.create_table()?;
-    t.set("alpha", p.alpha)?;
-    t.set("lit", p.lit)?;
-    t.set("glow", p.glow)?;
-    t.set("ambient", p.ambient)?;
-    t.set("dist", p.dist)?;
-    Ok(t)
-}
-
-impl UserData for CloudsU {
-    fn add_methods<M_: UserDataMethods<Self>>(m: &mut M_) {
-        // the sky with its clouds, as paint (also usable directly as color=)
-        m.add_method("at", |_, c, (x, y): (f32, f32)| Ok(Col(c.field.color(&c.sky, x, y))));
-        m.add_method("cloud", |_, c, (x, y): (f32, f32)| Ok(Col(c.field.cloud_color(x, y))));
-        m.add_method("alpha", |_, c, (x, y): (f32, f32)| Ok(c.field.alpha(x, y)));
-        m.add_method("lit", |_, c, (x, y): (f32, f32)| Ok(c.field.lit(x, y)));
-        m.add_method("glow", |_, c, (x, y): (f32, f32)| Ok(c.field.glow(x, y)));
-        m.add_method("soft", |_, c, (x, y): (f32, f32)| Ok(c.field.soft(x, y)));
-        // c:mask{alpha={lo, hi}, lit={lo, hi}, shade={lo, hi}}: smoothsteps multiplied
-        // (shade = the shadowed bellies, 1 - lit); or c:mask(function(p) ... end)
-        m.add_method("mask", |lua, c, o: Value| {
-            match o {
-                Value::Function(g) => {
-                    // serial: sample the rule on the cloud grid's own cells
-                    let fr = crate::api::current_frame(lua)?;
-                    let inv = 1.0 / fr.scale;
-                    let mut data = vec![0.0f32; fr.w * fr.h];
-                    for y in 0..fr.h {
-                        for x in 0..fr.w {
-                            let (ux, uy) = ((x as f32 + 0.5) * inv, (y as f32 + 0.5) * inv);
-                            let p = CloudPoint { alpha: c.field.alpha(ux, uy), lit: c.field.lit(ux, uy), glow: c.field.glow(ux, uy), ambient: c.field.ambient(ux, uy), dist: c.field.dist(ux, uy) };
-                            if p.alpha > 0.0 {
-                                let r: f32 = g.call(cloud_point_table(lua, &p)?)?;
-                                data[y * fr.w + x] = r.clamp(0.0, 1.0);
-                            }
-                        }
-                    }
-                    Ok(wrap(Mask { f: fr, data }))
-                }
-                Value::Table(t) => {
-                    check_keys(&t, &["alpha", "lit", "shade"], "clouds mask")?;
-                    let a = pair(&t, "alpha")?.unwrap_or((0.3, 0.8));
-                    let l = pair(&t, "lit")?;
-                    let s = pair(&t, "shade")?;
-                    let fr = crate::api::current_frame(lua)?;
-                    Ok(wrap(c.field.mask(fr, |p| {
-                        let mut v = paint::smoothstep(a.0, a.1, p.alpha);
-                        if let Some(l) = l {
-                            v *= paint::smoothstep(l.0, l.1, p.lit);
-                        }
-                        if let Some(s) = s {
-                            v *= paint::smoothstep(s.0, s.1, 1.0 - p.lit);
-                        }
-                        v
-                    })))
-                }
-                Value::Nil => {
-                    let fr = crate::api::current_frame(lua)?;
-                    Ok(wrap(c.field.mask(fr, |p| paint::smoothstep(0.3, 0.8, p.alpha))))
-                }
-                o => err(format!("clouds mask: want {{alpha=, lit=, shade=}} or a function, got {}", o.type_name())),
-            }
-        });
-        m.add_meta_method(MetaMethod::ToString, |_, _, ()| Ok("clouds (use as color=, or c:at(x, y))"));
-    }
-}
-
-fn cloud_of(t: &Table) -> Result<Cloud> {
-    let kind: String = t.get::<Option<String>>("kind")?.or(t.get::<Option<String>>(1)?).unwrap_or_else(|| "cumulus".into());
-    let n = |k: &str| -> Result<f32> { num(t, k)?.ok_or_else(|| mlua::Error::runtime(format!("{kind} cloud: needs {k}"))) };
-    let seed = t.get::<Option<u32>>("seed")?.unwrap_or(1);
-    let mut c = match kind.as_str() {
-        "cumulus" => {
-            check_keys(t, &["kind", "x", "z", "base", "width", "height", "seed", "density", "soft", "wind", "breaks", "heap", "reach"], "cumulus")?;
-            Cloud::cumulus(n("x")?, n("z")?, n("base")?, n("width")?, n("height")?, seed)
-        }
-        "bank" => {
-            check_keys(t, &["kind", "x0", "x1", "z", "depth", "base", "top", "seed", "density", "soft", "wind", "breaks", "heap", "reach"], "bank")?;
-            Cloud::bank(n("x0")?, n("x1")?, n("z")?, n("depth")?, n("base")?, n("top")?, seed)
-        }
-        "stratus" => {
-            check_keys(t, &["kind", "base", "thick", "cover", "seed", "density", "soft", "wind", "breaks", "heap", "reach"], "stratus")?;
-            Cloud::stratus(n("base")?, n("thick")?, n("cover")?, seed)
-        }
-        o => return err(format!("cloud kind {o:?}: cumulus, bank or stratus")),
-    };
-    if let Some(d) = num(t, "density")? {
-        c = c.density(d);
-    }
-    if let Some(s) = num(t, "soft")? {
-        c = c.soft(s);
-    }
-    if let Some((a, s)) = pair(t, "wind")? {
-        c = c.wind(a, s);
-    }
-    if let Some((p, a)) = pair(t, "breaks")? {
-        c = c.breaks(p, a);
-    }
-    if let Some(h) = num(t, "heap")? {
-        c = c.heap(h);
-    }
-    if let Some((near, far)) = pair(t, "reach")? {
-        c = c.reach(near, far);
-    }
-    Ok(c)
-}
-
-// ---------------------------------------------------------------- haze, ranges
-
-#[derive(Clone, Copy)]
-pub struct HazeU(pub Haze);
-impl UserData for HazeU {
-    fn add_methods<M_: UserDataMethods<Self>>(m: &mut M_) {
-        // air:loss(eye_m, dist_m, height_m, x): how much of a color the air replaces
-        m.add_method("loss", |_, h, (eye, dist, hm, x): (f32, f32, Option<f32>, Option<f32>)| Ok(h.0.loss(eye, dist, hm.unwrap_or(0.0), x.unwrap_or(0.0))));
-    }
-}
-
-fn haze_of(v: &Value) -> Result<Haze> {
-    match v {
-        Value::UserData(u) => Ok(u.borrow::<HazeU>()?.0),
-        o => err(format!("want haze{{...}}, got {}", o.type_name())),
-    }
-}
-
-#[derive(Clone)]
-pub struct RangeU {
-    layer: Arc<RangeLayer>,
-    world: Arc<World>,
-}
-
-impl UserData for RangeU {
-    fn add_methods<M_: UserDataMethods<Self>>(m: &mut M_) {
-        m.add_method("crest", |_, r, x: f32| Ok(r.layer.crest(&r.world, x)));
-        m.add_method("z_at", |_, r, x: f32| Ok(r.layer.z_at(x)));
-        m.add_method("height_at", |_, r, (x, y): (f32, f32)| Ok(r.layer.height_at(&r.world, x, y)));
-        m.add_method("haze", |_, r, (air, x, y): (Value, f32, f32)| Ok(r.layer.haze(&r.world, &haze_of(&air)?, x, y)));
-        // l:mask(soft?): everything below the crest (hidden parts included)
-        m.add_method("mask", |lua, r, soft: Option<f32>| {
-            let f = crate::api::current_frame(lua)?;
-            let s = soft.unwrap_or(0.6).max(0.05);
-            let (l, w) = (r.layer.clone(), r.world.clone());
-            let crest: Vec<f32> = (0..f.w).map(|x| l.crest(&w, (x as f32 + 0.5) / f.scale)).collect();
-            Ok(wrap(Mask::from_fn(f, |x, y| {
-                let c = crest[((x * f.scale) as usize).min(f.w - 1)];
-                paint::smoothstep(c - s, c + s, y)
-            })))
-        });
-        // l:ridge{x0=0, x1=1000, depth=200, gully=260}: a form ridge sized for its distance
-        m.add_method("ridge", |_, r, o: Option<Table>| {
-            let (mut x0, mut x1, mut depth, mut gully) = (0.0, 1000.0, 200.0, 260.0);
-            if let Some(o) = &o {
-                check_keys(o, &["x0", "x1", "depth", "gully"], "range ridge")?;
-                x0 = num(o, "x0")?.unwrap_or(x0);
-                x1 = num(o, "x1")?.unwrap_or(x1);
-                depth = num(o, "depth")?.unwrap_or(depth);
-                gully = num(o, "gully")?.unwrap_or(gully);
-            }
-            Ok(SolidU::Ridge(Arc::new(r.layer.ridge(&r.world, x0, x1, depth, gully))))
-        });
-        m.add_meta_method(MetaMethod::ToString, |_, r, ()| Ok(format!("range({:.0} m off at x=500)", r.layer.z_at(500.0))));
-    }
-}
-
-fn silhouette_of(s: &str) -> Result<Silhouette> {
-    Ok(match s {
-        "peak" => Silhouette::Peak,
-        "dome" => Silhouette::Dome,
-        "plateau" => Silhouette::Plateau,
-        "saddle" => Silhouette::Saddle,
-        "cliff" => Silhouette::Cliff,
-        o => return err(format!("range kind {o:?}: peak, dome, plateau, saddle or cliff")),
-    })
-}
 
 // ---------------------------------------------------------------- world methods
 
@@ -525,81 +331,6 @@ impl UserData for WorldU {
             }
             Ok(vu)
         });
-        // w:sky{haze=, uneven={amount, period_m, seed}, layer={alt, thick, density, uneven, seed},
-        //       overcast=, fill=, altitude=, cell=6, exposure=, balance=}
-        m.add_method("sky", |_, w, o: Option<Table>| {
-            let mut sky = Sky::new(w.w.sun);
-            let mut cell = 6.0;
-            let (mut exposure, mut balance) = (None, None);
-            if let Some(o) = &o {
-                check_keys(o, &["haze", "uneven", "layer", "overcast", "fill", "altitude", "cell", "exposure", "balance"], "sky")?;
-                if let Some(h) = num(o, "haze")? {
-                    sky = sky.haze(h);
-                }
-                if let Some(t) = o.get::<Option<Table>>("uneven")? {
-                    sky = sky.uneven(t.get(1)?, t.get::<Option<f32>>(2)?.unwrap_or(30_000.0), t.get::<Option<u32>>(3)?.unwrap_or(1));
-                }
-                if let Some(t) = o.get::<Option<Table>>("layer")? {
-                    sky = sky.layer(t.get(1)?, t.get(2)?, t.get(3)?, t.get::<Option<f32>>(4)?.unwrap_or(0.5), t.get::<Option<u32>>(5)?.unwrap_or(1));
-                }
-                if let Some(v) = num(o, "overcast")? {
-                    sky = sky.overcast(v);
-                }
-                if let Some(v) = num(o, "fill")? {
-                    sky = sky.fill(v);
-                }
-                if let Some(v) = num(o, "altitude")? {
-                    sky = sky.altitude(v);
-                }
-                cell = num(o, "cell")?.unwrap_or(cell);
-                exposure = num(o, "exposure")?;
-                balance = num(o, "balance")?;
-            }
-            let mut f = SkyField::new(sky, &w.w, cell);
-            if let Some(k) = exposure {
-                f = f.exposure(k);
-            }
-            if let Some(b) = balance {
-                let l = f.sky.sunlight();
-                f = f.balance(l, b);
-            }
-            Ok(SkyU(Arc::new(f)))
-        });
-        // w:clouds{sky=s, cell=2, {kind="cumulus", ...}, {kind="bank", ...}, ...}
-        m.add_method("clouds", |_, w, o: Table| {
-            let sky = match o.get::<Value>("sky")? {
-                Value::UserData(u) => u.borrow::<SkyU>()?.0.clone(),
-                _ => return err("clouds: needs sky = w:sky{...}"),
-            };
-            let cell = num(&o, "cell")?.unwrap_or(2.0);
-            let list: Vec<Cloud> = o.sequence_values::<Table>().map(|t| cloud_of(&t?)).collect::<Result<_>>()?;
-            if list.is_empty() {
-                return err("clouds: list at least one {kind=\"cumulus\"|\"bank\"|\"stratus\", ...}");
-            }
-            let field = Clouds::new(list).field(&sky, &w.w, cell);
-            Ok(CloudsU { sky, field: Arc::new(field) })
-        });
-        // w:ranges{near=, far=, count=, seed=, heights={near_m, far_m}, irregular=, oblique=,
-        //          kinds={"peak", "dome", ...}, regular=false} -> layers, nearest first
-        m.add_method("ranges", |_, w, o: Table| {
-            check_keys(&o, &["near", "far", "count", "seed", "heights", "irregular", "oblique", "kinds", "regular"], "ranges")?;
-            let mut r = Ranges::new(num(&o, "near")?.unwrap_or(4000.0), num(&o, "far")?.unwrap_or(40_000.0), o.get::<Option<usize>>("count")?.unwrap_or(4), o.get::<Option<u32>>("seed")?.unwrap_or(1));
-            if let Some((a, b)) = pair(&o, "heights")? {
-                r = r.heights(a, b);
-            }
-            if let Some(k) = num(&o, "irregular")? {
-                r = r.irregular(k);
-            }
-            if let Some(k) = num(&o, "oblique")? {
-                r = r.oblique(k);
-            }
-            if let Some(k) = o.get::<Option<Vec<String>>>("kinds")? {
-                let ks: Vec<Silhouette> = k.iter().map(|s| silhouette_of(s)).collect::<Result<_>>()?;
-                r = r.kinds(&ks);
-            }
-            let layers = if o.get::<Option<bool>>("regular")?.unwrap_or(false) { r.regular(&w.w) } else { r.build(&w.w) };
-            Ok(layers.into_iter().map(|l| RangeU { layer: Arc::new(l), world: w.w.clone() }).collect::<Vec<_>>())
-        });
         m.add_meta_method(MetaMethod::ToString, |_, w, ()| {
             Ok(format!("world(horizon y {:.0}, eye {} m, sun az {:.0}° el {:.0}°, {} bodies)", w.w.horizon, w.w.eye, w.w.sun.azimuth.to_degrees(), w.w.sun.elevation.to_degrees(), w.w.bodies.len()))
         });
@@ -671,21 +402,5 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
         Ok(WorldU { recipe: Arc::new(r), w })
     })?)?;
 
-    // haze{visibility=28000, height=900, mist={top_m, density, uneven_m, seed}}
-    g.set("haze", lua.create_function(|_, o: Option<Table>| {
-        let o = match o {
-            Some(o) => o,
-            None => return Ok(HazeU(Haze::new(25_000.0))),
-        };
-        check_keys(&o, &["visibility", "height", "mist"], "haze")?;
-        let mut h = Haze::new(num(&o, "visibility")?.unwrap_or(25_000.0));
-        if let Some(k) = num(&o, "height")? {
-            h = h.height(k);
-        }
-        if let Some(t) = o.get::<Option<Table>>("mist")? {
-            h = h.mist(t.get(1)?, t.get(2)?, t.get::<Option<f32>>(3)?.unwrap_or(80.0), t.get::<Option<u32>>(4)?.unwrap_or(1));
-        }
-        Ok(HazeU(h))
-    })?)?;
     Ok(())
 }

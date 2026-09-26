@@ -1,20 +1,15 @@
-//! Losing an edge: `lose(region, {...})` drags the neighbor's paint back
-//! across the region's edge with a nearly dry brush, the way a painter
-//! loses a contour after the passage is laid (the sky mixture pulled down
-//! over a ridge, the water carried across a reflection's edge).
+//! Losing an edge: `lose(region, {pile=, ...})` drags a lightly loaded
+//! brush across the region's edge from the outside in, after the passage
+//! is laid.
 //!
 //! Along the region's edge, where `where` says (0 keep .. 1 lose), short
-//! strokes start out in the neighbor, cross the edge and lift off inside.
-//! Each is loaded lightly with what lies on the canvas out in the neighbor,
-//! where the stroke starts, dirtied with a little of the region's own
-//! color (`mix`, 0.35: a brush that has been across the edge), mixed from
-//! the palette in a lean medium, so it lays the neighbor's color thinner as
-//! it runs out: over dry paint a scumble that breaks on the weave; into wet
-//! paint it also picks up and drags what it crosses.
+//! strokes start out in the neighbor, cross the edge and lift off inside,
+//! each loaded lightly from the painter's pile, so it lays the pile thinner
+//! as it runs out: over dry paint a scumble that breaks on the weave; into
+//! wet paint it also picks up and drags what it crosses.
 //!
 //! ```lua
-//! lose(rangeM, {where={lost=0.4, soft=0.6, period=60}, tool="filbert 4"})
-//! lose(reflM, {where=function(x, y) return y > HZ + 20 and 1 or 0 end, angle=0})  -- level water strokes
+//! lose(m, {pile=p, where={lost=0.4, soft=0.6, period=60}, tool="filbert 4"})
 //! ```
 
 use crate::api::{S, check_keys, err, frame, num, pair, seed_of, support, tool_of};
@@ -26,7 +21,7 @@ use paint::{Gesture, Held};
 /// A stroke across the edge: its points, where its paint comes from, where it crosses into.
 type Planned = (Vec<(f32, f32)>, (f32, f32), (f32, f32));
 
-const KEYS: &[&str] = &["where", "tool", "reach", "load", "pressure", "angle", "every", "medium", "pal", "seed", "mix"];
+const KEYS: &[&str] = &["pile", "where", "tool", "reach", "load", "pressure", "angle", "every", "seed"];
 
 fn lose(lua: &Lua, st: &S, m: Value, o: Option<Table>) -> Result<usize> {
     let region = crate::api::mask_of(&m)?;
@@ -56,10 +51,9 @@ fn lose(lua: &Lua, st: &S, m: Value, o: Option<Table>) -> Result<usize> {
     let (p0, p1) = pair(&o, "pressure")?.unwrap_or((0.35, 0.02));
     let every = o.get::<Option<f32>>("every")?.unwrap_or(1.2).max(0.2);
     let fixed_angle = num(&o, "angle")?;
-    let pal = crate::api::palette_of(st, o.get("pal")?)?;
-    let medium = num(&o, "medium")?.unwrap_or(0.45);
-    // a dirty brush: the neighbor's mixture with some of the region's own
-    let dirt = num(&o, "mix")?.unwrap_or(0.35).clamp(0.0, 1.0);
+    let pile = crate::api::pile_of(&o.get::<Value>("pile")?, "lose")?;
+    let tubes = st.borrow().tubes.clone();
+    let jitter = crate::api::style(st)?.mix_jitter;
 
     // the edge, point by point (inward normals), a stroke every `every` brush widths
     let lines = paint::edge::contours(&region, (every * w).max(0.5));
@@ -104,17 +98,10 @@ fn lose(lua: &Lua, st: &S, m: Value, o: Option<Table>) -> Result<usize> {
     }
     let mut held = Held::new(tool, seed ^ 0x5EED);
     let n = plans.len();
-    for (pts, from, into) in plans {
-        // aimed at the look over what's there where it crosses (as `b:load{at=}`)
-        let (want, paint) = {
-            let s = st.borrow();
-            let cv = s.canvas.as_ref().ok_or_else(crate::api::no_canvas)?;
-            let fw = cv.frame();
-            let at = |p: (f32, f32)| cv.sample(p.0.clamp(0.0, fw.width() - 0.01), p.1.clamp(0.0, fw.height() - 0.01));
-            let want = paint::color::mix(at(from), at(into), dirt, paint::Mix::Light);
-            let mid = pts[pts.len() / 2];
-            (want, cv.aim(&pal, want, mid, (0.5 * w).max(1.0), medium, 0.8))
-        };
+    for (pts, _from, _into) in plans {
+        // a light load from the pile (remixed a little: a pile knifed by hand is uneven)
+        let paint = tubes.remix(&pile.mix, jitter, &mut Rng::new(rng.next_u64())).laid(pile.medium);
+        let want = pile.mix.color;
         held.wipe(0.9);
         held.load(paint, load);
         time::trip(st, want);
@@ -137,10 +124,11 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
 mod tests {
     use crate::session::Session;
 
-    const SETUP: &str = r##"canvas{style="friedrich", aspect=1.4, seed=5}
+    const SETUP: &str = r##"canvas{size=440, aspect=1.4, linen=15, seed=5, ground={{pile={{"lead white", 3}, {"yellow ochre", 1}}, um=120, apply="knife"}}}
+dark = pile{{"bone black", 1}, {"cobalt blue", 1}}
 light = everywhere()
-work(light, {hand="broad", color="#c9b99a", coverage=3, clip=true})
-dry()
+work(light, {hand="broad", pile=pile{{"lead white", 4}, {"yellow ochre", 1}}, coverage=3, clip=true})
+wait(60 * 24 * 60)
 hill = ellipse(500, 400, 220, 120)"##;
 
     fn dark_outside(s: &Session) -> usize {
@@ -158,38 +146,38 @@ hill = ellipse(500, 400, 220, 120)"##;
     }
 
     /// edge= carries a passage past its region's edge (the stencil stops on
-    /// it); lose drags the neighbor back across; a mask passed as clip= is
-    /// used (it used to be read as clip=true: the grown mask was ignored).
+    /// it); lose drags a pile back across; a mask passed as clip= clips to
+    /// that mask.
     #[test]
     fn edges_lose_and_the_clip_mask() {
-        let mut a = Session::new(400, 2).unwrap();
+        let mut a = Session::new(400).unwrap();
         a.run(SETUP).unwrap();
-        a.run(r##"work(hill, {hand="body", color="#2e2d33", coverage=3, clip=true})"##).unwrap();
+        a.run(r##"work(hill, {hand="body", pile=dark, coverage=3, clip=true})"##).unwrap();
         let stencil = dark_outside(&a);
-        let mut g = Session::new(400, 2).unwrap();
+        let mut g = Session::new(400).unwrap();
         g.run(SETUP).unwrap();
-        g.run(r##"work(hill, {hand="body", color="#2e2d33", coverage=3, clip=hill:grow(8)})"##).unwrap();
+        g.run(r##"work(hill, {hand="body", pile=dark, coverage=3, clip=hill:grow(8)})"##).unwrap();
         let grown = dark_outside(&g);
         assert!(grown > 10, "a grown clip mask is used: {grown} of 60 points 5 units out darkened");
-        let mut b = Session::new(400, 2).unwrap();
+        let mut b = Session::new(400).unwrap();
         b.run(SETUP).unwrap();
-        let r = b.run(r##"work(hill, {hand="body", color="#2e2d33", coverage=3, edge="lost"})"##).unwrap();
+        let r = b.run(r##"work(hill, {hand="body", pile=dark, coverage=3, edge="lost"})"##).unwrap();
         assert!(!r.out.contains("clip="), "{}", r.out);
         let lost = dark_outside(&b);
         assert!(stencil == 0 && lost > 10, "stencil {stencil}, lost {lost} of 60 points 5 units out darkened");
         // the other forms of edge=
-        b.run(r##"work(hill, {hand="body", color="#2e2d33", coverage=1, edge={found=0.5, soft=0.3, lost=0.2, period=30}})
-                  work(hill, {hand="body", color="#2e2d33", coverage=1, edge=function(x, y) return x / 1000 end})
-                  work(hill, {hand="body", color="#2e2d33", coverage=1, edge=0.3})"##)
+        b.run(r##"work(hill, {hand="body", pile=dark, coverage=1, edge={found=0.5, soft=0.3, lost=0.2, period=30}})
+                  work(hill, {hand="body", pile=dark, coverage=1, edge=function(x, y) return x / 1000 end})
+                  work(hill, {hand="body", pile=dark, coverage=1, edge=0.3})"##)
             .unwrap();
-        assert!(b.run(r##"work(hill, {hand="body", color="#2e2d33", edge="blurry"})"##).is_err());
-        assert!(b.run(r##"work(hill, {hand="body", color="#2e2d33", edge="soft", cut_in="round 2"})"##).is_err());
+        assert!(b.run(r##"work(hill, {hand="body", pile=dark, edge="blurry"})"##).is_err());
+        assert!(b.run(r##"work(hill, {hand="body", pile=dark, edge="soft", cut_in="round 2"})"##).is_err());
         // lose: strokes along the edge where asked, none where not
-        b.run("dry()").unwrap();
-        let r = b.run(r##"print(lose(hill, {where=function(x, y) return x < 500 and 1 or 0 end, tool="filbert 4"}))"##).unwrap();
+        b.run("wait(60 * 24 * 60)").unwrap();
+        let r = b.run(r##"print(lose(hill, {pile=pile{{"lead white", 4}, {"yellow ochre", 1}}, where=function(x, y) return x < 500 and 1 or 0 end, tool="filbert 4"}))"##).unwrap();
         let n: usize = r.out.trim().lines().next().unwrap().trim().parse().unwrap();
         assert!(n > 20, "{}", r.out);
-        let r = b.run(r##"print(lose(hill, {where=0}))"##).unwrap();
+        let r = b.run(r##"print(lose(hill, {pile=dark, where=0}))"##).unwrap();
         assert_eq!(r.out.trim().lines().next().unwrap().trim(), "0");
     }
 }

@@ -9,6 +9,10 @@ magick -size 1800x1700 xc:gray "$work/source.png"
 "$repo/scripts/peek" "$work/source.png" "$work/whole.png"
 [ "$(magick identify -format '%m %w' "$work/whole.png")" = 'PNG 1600' ]
 [ "$(wc -c < "$work/whole.png")" -lt 3000000 ]
+magick -size 1800x1700 xc:gray -seed 1 +noise Random "$work/noise.png"
+"$repo/scripts/peek" "$work/noise.png" "$work/noise-view.png"
+[ "$(magick identify -format '%w' "$work/noise-view.png")" -lt 1600 ]
+[ "$(wc -c < "$work/noise-view.png")" -lt 3000000 ]
 "$repo/scripts/peek" "$work/source.png" "$work/crop.png" 300 400 100 200
 [ "$(magick identify -format '%m %w %h' "$work/crop.png")" = 'PNG 400 300' ]
 if "$repo/scripts/peek" "$work/source.png" "$work/bad.jpg"; then exit 1; fi

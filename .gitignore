@@ -2,8 +2,5 @@ target/
 out/*.png
 out/*.ckpt
 out/*.ckpt.part
-out/easel/
-out/lua/
 out/**/*.png
 out/**/*.jpg
-out/easel/

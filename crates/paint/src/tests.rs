@@ -86,7 +86,7 @@ fn dry_is_idempotent_and_clears_wet() {
 /// broad pass and the style's blend; after drying, in the lower half a
 /// hog-flat pass, three held-brush drags, a glaze; then relief.
 fn fixture() -> Canvas {
-    let st = Style::friedrich();
+    let st = Style::oil();
     let mut c = st.prepare(240, 1.5, 7);
     let (w, h) = (c.width(), c.height());
     let upper = Mask::from_fn(c.f, |_, y| if y < h * 0.5 { 1.0 } else { 0.0 });
@@ -429,7 +429,7 @@ fn varnish_over_impasto_is_even() {
 fn brushed_ground_honors_thickness() {
     use crate::style::{Apply, Ground};
     let mean_um = |um: f32| {
-        let mut st = Style::friedrich();
+        let mut st = Style::oil();
         st.ground = vec![Ground { color: hex("#a9785a"), hiding: 0.8, um, stiff: 0.35, apply: Apply::Brush }];
         let c = st.prepare(300, 1.5, 3);
         c.film.iter().sum::<f32>() / c.film.len() as f32 * crate::surface::COAT_UM
@@ -445,7 +445,7 @@ fn brushed_ground_honors_thickness() {
 #[test]
 fn palette_mixes_what_it_can() {
     use crate::palette::Palette;
-    let p = Palette::friedrich_1820();
+    let p = Palette::cobalt_box();
     // a tube's own color is reachable exactly
     for t in &p.tubes {
         let m = p.mix(t.color);
@@ -461,7 +461,7 @@ fn palette_mixes_what_it_can() {
     assert!((b[1].hypot(b[2])) < (a[1].hypot(a[2])) * 0.8, "chroma {} vs {}", b[1].hypot(b[2]), a[1].hypot(a[2]));
     // fractions sum to 1, deterministic
     assert!((m.parts.iter().map(|x| x.1).sum::<f32>() - 1.0).abs() < 1e-4);
-    assert_eq!(p.recipe(&p.mix(green)), Palette::friedrich_1820().recipe(&m));
+    assert_eq!(p.recipe(&p.mix(green)), Palette::cobalt_box().recipe(&m));
 }
 
 
@@ -469,7 +469,7 @@ fn palette_mixes_what_it_can() {
 /// fills forms narrower than the body brush.
 #[test]
 fn cut_in_stays_near_the_region() {
-    let st = Style::friedrich();
+    let st = Style::oil();
     let mut c = Canvas::new(500, 1.0, hex("#c8b89a")).with_linen(crate::surface::Linen::fine(2));
     let (cx, cy, r) = (500.0f32, 500.0f32, 120.0f32);
     let disc = Mask::from_fn(c.frame(), move |x, y| crate::smoothstep(0.6, -0.6, ((x - cx).powi(2) + (y - cy).powi(2)).sqrt() - r));
@@ -519,7 +519,7 @@ fn crop_diff(c: &Canvas, whole: &Canvas) -> (f32, f32, f32) {
 /// A canvas with linen, a knife ground, then (`strokes`) a pass of short
 /// hog strokes and a pass of long ones, whole or cropped.
 fn crop_scene(crop: Option<crate::canvas::Crop>, strokes: usize) -> Canvas {
-    let st = Style::friedrich();
+    let st = Style::oil();
     let mut c = Canvas::new_window(400, 1.4, st.raw, crop).with_size_mm(st.width_mm).with_linen(crate::surface::Linen { seed: 1, ..st.linen });
     c.prime(st.ground[0].color, 0.8, 110.0, 0.25, 0.35, 5);
     let all = Mask::from_fn(c.frame(), |_, _| 1.0);
@@ -556,7 +556,7 @@ fn crop_matches_whole() {
 /// as well as the middle.
 #[test]
 fn work_covers_the_edges() {
-    let st = Style::friedrich();
+    let st = Style::oil();
     let mut c = Canvas::new(200, 1.0, hex("#ffffff"));
     let all = Mask::from_fn(c.f, |_, _| 1.0);
     c.work(&all, &st.broad().color(|_, _| hex("#304060")).coverage(4.0), 3);
@@ -583,7 +583,7 @@ fn work_covers_the_edges() {
 #[ignore]
 fn diag_blend_bare_pixels() {
     use crate::canvas::Crop;
-    let base = Style::friedrich();
+    let base = Style::oil();
     let crop = Crop { units: [400.0, 100.0, 560.0, 260.0], margin: 40.0 };
     let mut c = base.prepare_window(3200, 1.3, 23, Some(crop));
     let h0 = c.height.clone();

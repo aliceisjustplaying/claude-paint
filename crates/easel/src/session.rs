@@ -184,7 +184,7 @@ impl Session {
     pub fn program(&self, name: &str) -> String {
         let mut s = String::new();
         let _ = writeln!(s, "-- easel session {name:?}: a painting replayed chunk by chunk.");
-        let _ = writeln!(s, "--   easel run paintings/lua/{name}.lua --width {}", self.st.borrow().width);
+        let _ = writeln!(s, "--   easel run paintings/lua/{name}.lua");
         let _ = writeln!(s, "-- Each {MARK:?} line starts one chunk as it was run at the easel.");
         for (i, c) in self.log.iter().enumerate() {
             let _ = writeln!(s, "\n{MARK} {}", i + 1);

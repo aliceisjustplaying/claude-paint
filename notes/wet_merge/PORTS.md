@@ -72,6 +72,19 @@ every field out and set those six to 0 to keep round 2's one even web.
 Here the minimal change is `Some(..)`, so the new fields follow today's
 default. Both engines get the same value.
 
+The coast needed a second change: two NaN skips. Its `hem(x)` and the
+rope's coil use `sin(..).powf(..)`, and at the end of their range the sine
+of an f32 π comes out a hair below zero (−8.7e-8), so `powf` gives NaN.
+Round 2's engine took such a gesture and laid nothing for it. Today's
+engine panics instead: `Gesture::validate` ("a NaN point would otherwise
+make the brush take one step and lift, silently", `crates/paint/src/bristle.rs`).
+The port skips exactly those marks, which laid nothing in round 2:
+
+- the rope's last segment (`pts[9]` to `pts[10]`), whose end point is NaN;
+- the cork floats whose `y = hem(x) - 3.0` is NaN (from about x = 458 on).
+
+Each skip has a `(port: ..)` comment in the file.
+
 ### `ab_r1_coast.rs`, `ab_r1_mountains.rs`, `ab_r1_winter.rs`: round 1
 The three paintings of the first amnesia round (worktree
 `claude-paint-fresh`, 2026-09-22), archived on main as
@@ -107,6 +120,14 @@ written against a much older API.
    copied into the program as `mod oak`, unchanged except for its imports,
    `c.f` → `c.frame()` and its two `Paint` literals (as in 3). The
    painter's oak is grown and painted by the code they used.
+
+**The winter was not rendered.** Its snow-impasto loop never ends, on
+either engine. Once `xe` reaches `x1` its next step is
+`x = xe - r.range(20.0, 45.0)`, which moves `x` back from `x1`; the next
+`xe` is `x1` again, and so on forever. Both renders were stopped by
+`timeout 1800` (exit 124). The picture Alice saw must have come from a
+different version of the file than the one archived at `dddd9af`, so the
+port was left as it is rather than guessing a fix.
 
 All three build without warnings. The round 1 engine differed in much more
 than the API (paint optics, brushes, drying), so these are round 1's

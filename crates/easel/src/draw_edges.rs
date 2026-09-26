@@ -129,10 +129,10 @@ dark = pile{{"bone black", 1}, {"cobalt blue", 1}}
 light = everywhere()
 work(light, {hand="broad", pile=pile{{"lead white", 4}, {"yellow ochre", 1}}, coverage=3, clip=true})
 wait(60 * 24 * 60)
-hill = ellipse(500, 400, 220, 120)"##;
+shape = ellipse(500, 400, 220, 120)"##;
 
     fn dark_outside(s: &Session) -> usize {
-        // pixels a few units outside the hill that the dark passage darkened
+        // pixels a few units outside the shape that the dark passage darkened
         let c = s.canvas().unwrap();
         let f = c.frame();
         let mut n = 0;
@@ -152,32 +152,32 @@ hill = ellipse(500, 400, 220, 120)"##;
     fn edges_lose_and_the_clip_mask() {
         let mut a = Session::new(400).unwrap();
         a.run(SETUP).unwrap();
-        a.run(r##"work(hill, {hand="body", pile=dark, coverage=3, clip=true})"##).unwrap();
+        a.run(r##"work(shape, {hand="body", pile=dark, coverage=3, clip=true})"##).unwrap();
         let stencil = dark_outside(&a);
         let mut g = Session::new(400).unwrap();
         g.run(SETUP).unwrap();
-        g.run(r##"work(hill, {hand="body", pile=dark, coverage=3, clip=hill:grow(8)})"##).unwrap();
+        g.run(r##"work(shape, {hand="body", pile=dark, coverage=3, clip=shape:grow(8)})"##).unwrap();
         let grown = dark_outside(&g);
         assert!(grown > 10, "a grown clip mask is used: {grown} of 60 points 5 units out darkened");
         let mut b = Session::new(400).unwrap();
         b.run(SETUP).unwrap();
-        let r = b.run(r##"work(hill, {hand="body", pile=dark, coverage=3, edge="lost"})"##).unwrap();
+        let r = b.run(r##"work(shape, {hand="body", pile=dark, coverage=3, edge="lost"})"##).unwrap();
         assert!(!r.out.contains("clip="), "{}", r.out);
         let lost = dark_outside(&b);
         assert!(stencil == 0 && lost > 10, "stencil {stencil}, lost {lost} of 60 points 5 units out darkened");
         // the other forms of edge=
-        b.run(r##"work(hill, {hand="body", pile=dark, coverage=1, edge={found=0.5, soft=0.3, lost=0.2, period=30}})
-                  work(hill, {hand="body", pile=dark, coverage=1, edge=function(x, y) return x / 1000 end})
-                  work(hill, {hand="body", pile=dark, coverage=1, edge=0.3})"##)
+        b.run(r##"work(shape, {hand="body", pile=dark, coverage=1, edge={found=0.5, soft=0.3, lost=0.2, period=30}})
+                  work(shape, {hand="body", pile=dark, coverage=1, edge=function(x, y) return x / 1000 end})
+                  work(shape, {hand="body", pile=dark, coverage=1, edge=0.3})"##)
             .unwrap();
-        assert!(b.run(r##"work(hill, {hand="body", pile=dark, edge="blurry"})"##).is_err());
-        assert!(b.run(r##"work(hill, {hand="body", pile=dark, edge="soft", cut_in="round 2"})"##).is_err());
+        assert!(b.run(r##"work(shape, {hand="body", pile=dark, edge="blurry"})"##).is_err());
+        assert!(b.run(r##"work(shape, {hand="body", pile=dark, edge="soft", cut_in="round 2"})"##).is_err());
         // lose: strokes along the edge where asked, none where not
         b.run("wait(60 * 24 * 60)").unwrap();
-        let r = b.run(r##"print(lose(hill, {pile=pile{{"lead white", 4}, {"yellow ochre", 1}}, where=function(x, y) return x < 500 and 1 or 0 end, tool="filbert 4"}))"##).unwrap();
+        let r = b.run(r##"print(lose(shape, {pile=pile{{"lead white", 4}, {"yellow ochre", 1}}, where=function(x, y) return x < 500 and 1 or 0 end, tool="filbert 4"}))"##).unwrap();
         let n: usize = r.out.trim().lines().next().unwrap().trim().parse().unwrap();
         assert!(n > 20, "{}", r.out);
-        let r = b.run(r##"print(lose(hill, {pile=dark, where=0}))"##).unwrap();
+        let r = b.run(r##"print(lose(shape, {pile=dark, where=0}))"##).unwrap();
         assert_eq!(r.out.trim().lines().next().unwrap().trim(), "0");
     }
 }

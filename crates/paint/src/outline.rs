@@ -188,8 +188,8 @@ impl Character {
         Some(match name {
             "firm" => Self::firm(),
             "searching" | "sketch" => Self::searching(),
-            "broken" | "rock" => Self::broken(),
-            "soft" | "foliage" => Self::soft(),
+            "broken" => Self::broken(),
+            "soft" => Self::soft(),
             _ => return None,
         })
     }

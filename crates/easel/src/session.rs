@@ -431,11 +431,11 @@ mod tests {
 
     const CHUNKS: [&str; 4] = [
         CANVAS,
-        r#"sky = pile{{"lead white", 6}, {"cobalt blue", 1}, {"yellow ochre", 0.5}, medium=0.3}
-           work(above(function(x) return 300 + 20*math.sin(x/80) end), {hand="broad", pile=sky, angle=0, coverage=2})"#,
+        r#"p = pile{{"lead white", 6}, {"cobalt blue", 1}, {"yellow ochre", 0.5}, medium=0.3}
+           work(ellipse(500, 300, 300, 150), {hand="broad", pile=p, angle=0, coverage=2})"#,
         r#"b = brush("round", 4); b:load(pile{{"bone black", 1}, {"raw umber", 2}}, 0.9)
            for i = 1, 5 do b:stroke({{100 + i*60, 500}, {130 + i*60 + rand(-10, 10), 420}}) end"#,
-        r#"wait(90); stipple(below(function(x) return 380 end), {width=3, pile=pile{{"lead white", 1}}, coverage=1.5})"#,
+        r#"wait(90); stipple(rect(100, 380, 800, 200), {width=3, pile=pile{{"lead white", 1}}, coverage=1.5})"#,
     ];
 
     #[test]
@@ -446,7 +446,7 @@ mod tests {
             if i == 1 {
                 // a failing chunk that painted and set globals first changes nothing
                 let before = bits(&a);
-                let e = a.run(r#"junk = 1; b0 = brush("flat", 6); b0:load(sky); b0:stroke({0, 0, 900, 600}); work(everywhere(), {pile=sky, colour="red"})"#).unwrap_err();
+                let e = a.run(r#"junk = 1; b0 = brush("flat", 6); b0:load(p); b0:stroke({0, 0, 900, 600}); work(everywhere(), {pile=p, colour="red"})"#).unwrap_err();
                 assert!(e.contains("unknown option \"colour\""), "{e}");
                 assert_eq!(before, bits(&a));
                 assert!(a.run("assert(junk == nil and b0 == nil)").is_ok());

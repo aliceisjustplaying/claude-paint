@@ -1,6 +1,6 @@
 //! Working an area with a real (simulated) brush.
 //!
-//! `Handling` describes how a painter works a region: which tool, how long
+//! `Handling` describes how a region is worked: which tool, how long
 //! the strokes are and which way they run, how hard they press, how often
 //! they go back to the palette and whether they wipe the brush first.
 //! `Canvas::work` then drives a `Held` brush over the region stroke by
@@ -35,10 +35,9 @@ pub enum Aim {
 /// Coats one stroke lays per unit of load where it lands, by brush kind:
 /// a round (detail, hatch) packs its load into a narrow track, a filbert
 /// (broad, body) spreads it. Measured by `probe_laid_by_coverage` (median
-/// film where paint landed, Friedrich ground, coverage 0.2–4, load 0.3 and
-/// 0.7): filberts 1.2–1.35, rounds 2.0–2.4 at 1600px before the pointed-tip
-/// model; after it (narrower marks, paint concentrated where they land)
-/// rounds lay ~3.7–4.2 at coverage 2.5–4 (re-measured at the merge).
+/// film where paint landed, `Style::friedrich()` ground, coverage 0.2–4,
+/// load 0.3 and 0.7): filberts 1.2–1.35; rounds, whose pointed-tip marks are
+/// narrow and concentrate paint where they land, ~3.7–4.2 at coverage 2.5–4.
 pub const LAID_PER_LOAD_FILBERT: f32 = 1.3;
 pub const LAID_PER_LOAD_ROUND: f32 = 4.0;
 
@@ -67,14 +66,14 @@ pub struct Handling<'a> {
     pub hiding: f32,
     pub stiff: f32,
     /// Mix each pile from these tube paints, thinned with this fraction of
-    /// oil medium (0..1). The color field is then what the painter aims for.
+    /// oil medium (0..1). The color field is then the target.
     pub palette: Option<(&'a Palette, f32)>,
     /// How unevenly each pile is mixed: relative sd of the proportions.
     pub mix_jitter: f32,
     /// How `color` is read (see `Aim`). `None`: aim at the look (`Aim::Laid`)
     /// when mixing from a palette, masstone for a fixed paint.
     pub aim: Option<Aim>,
-    /// Where the painter loads the brush more or less (multiplies `load`,
+    /// Where the brush is loaded more or less (multiplies `load`,
     /// evaluated at each stroke's center): a glaze goes on deeper where the
     /// brush carries more.
     pub load_at: Option<Field<'a, f32>>,
@@ -96,18 +95,17 @@ pub struct Handling<'a> {
     pub scrub: usize,
     /// Clip bristle contact to the mask (crisp, cut-in edges).
     pub clip: bool,
-    /// A hard limit no bristle paints outside of, whatever `clip` says: the
-    /// part of a region that is seen (not hidden by a figure or a stone in
-    /// front of it), while strokes still overshoot the region's own edges.
+    /// A hard limit no bristle paints outside of, whatever `clip` says (e.g.
+    /// the part of a region not covered by another shape in front of it),
+    /// while strokes still overshoot the region's own edges.
     pub limit: Option<std::sync::Arc<Mask>>,
     /// Instead of a stencil clip, a fence (`crate::fence`): each stroke
     /// overruns the region's edge by its own amount, found, soft or lost
     /// along the contour as the fence's quality says. Set by `fence()`.
     pub fence: Option<std::sync::Arc<crate::fence::Fence>>,
     /// Look and fill: after the strokes, dab paint into the bare spots the
-    /// strokes left in the region (see `fill`). `None`: on when the pass
-    /// means to cover (coverage ≥ `FILL_FROM`, a loaded brush, not a
-    /// blender or a scrub).
+    /// strokes left in the region (see `fill`). `None`: on when coverage ≥
+    /// `FILL_FROM`, load ≥ 0.25 and the pass is not a blender or a scrub.
     pub fill: Option<bool>,
     /// Hug the region's edges: strokes seeded just outside it (within half a
     /// brush) are moved onto its edge, so coverage doesn't thin there
@@ -120,10 +118,10 @@ pub struct Handling<'a> {
     /// Hand unsteadiness (1 = normal).
     pub shake: f32,
 
-    // ---- the hand: how far strokes depart from ruler lines (see `ruler()`)
+    // ---- stroke geometry: how far strokes depart from ruler lines (see `ruler()`)
     /// Typical bow of a stroke: its sagitta as a fraction of its length (sd).
-    /// Strokes arc around the wrist or elbow, mostly bulging away from the
-    /// hand (a right hand below the stroke). 0 = straight.
+    /// 70% of simple arcs bulge up and to the left, away from a pivot below
+    /// and to the right of the stroke. 0 = straight.
     pub curve: f32,
     /// Share of curved strokes that are S-shaped instead of simple arcs.
     pub wave: f32,
@@ -148,16 +146,16 @@ pub struct Handling<'a> {
     pub order: Option<Order>,
 }
 
-/// The order a painter works an area in.
+/// The order an area's strokes are painted in.
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub enum Order {
     /// Passage by passage: the area is worked patch by patch, the strokes in a
-    /// patch laid side by side as the hand moves across it.
+    /// patch laid side by side, row after row across it.
     #[default]
     Passages,
     /// One sweep across the whole area in the given direction (radians;
-    /// `FRAC_PI_2` = top to bottom), band by band: a blender fusing a
-    /// gradient without dragging paint back across it.
+    /// `FRAC_PI_2` = top to bottom), band by band, so later strokes don't
+    /// drag paint back across bands already worked.
     Sweep(f32),
     /// Anywhere, in random order.
     Scatter,
@@ -207,9 +205,9 @@ impl<'a> Handling<'a> {
             order: None,
         }
     }
-    /// Ruler strokes: straight, even, evenly spread, in random order (the
-    /// engine's old default look; for mechanical work such as a priming coat
-    /// laid with a straightedge, or for comparison).
+    /// Ruler strokes: straight, even, evenly spread, in random order
+    /// (`curve`, `cross`, the `drift` amount, `tail`, `broken`, `swell` and
+    /// `clump` set to 0; `Order::Scatter`).
     pub fn ruler(mut self) -> Self {
         self.curve = 0.0;
         self.cross = 0.0;
@@ -269,9 +267,7 @@ impl<'a> Handling<'a> {
     /// unit of load, by brush kind) times how many strokes overlap on
     /// average at a point that gets paint at all, `c / (1 − e^−c)` for
     /// coverage `c` (Poisson). A sparse pass of light touches lays each
-    /// touch full thickness, not `coverage` × it: the old estimate
-    /// (1.1 × coverage × load, floored at 0.3) expected 0.3 coats from
-    /// marks that laid 1–1.7, and aimed piles overshot to salmon and orange.
+    /// touch full thickness, not `coverage` × it. Clamped to 0.2–8 coats.
     pub fn laid_coats(&self) -> f32 {
         use crate::bristle::Kind;
         let per = match self.tool.kind {
@@ -315,8 +311,8 @@ impl<'a> Handling<'a> {
     /// A color that sees the canvas: `f(x, y, under)` gets what is on the
     /// canvas under each stroke (dry picture and wet paint, judged along the
     /// stroke as the aim does, before this pass lays anything) and returns
-    /// the color wanted there: "the snow as it actually is here, darker and
-    /// bluer" is `color_over(|_, _, u| shift(u, -0.06, 0.0, -0.03))`.
+    /// the target there, e.g. 0.06 lower in OKLab L and 0.03 lower in b than
+    /// what is there: `color_over(|_, _, u| shift(u, -0.06, 0.0, -0.03))`.
     /// Deterministic: every stroke is judged against the canvas as it was
     /// before the pass, whatever order the strokes are painted in. In a crop
     /// render, strokes are judged by the part of the canvas the crop holds
@@ -344,9 +340,8 @@ impl<'a> Handling<'a> {
         self.palette = Some((palette, medium));
         self
     }
-    /// Mix from another palette, keeping the medium: e.g. the few paints set
-    /// out for one passage, `palette.only(&["lead white", "smalt"])`, so
-    /// neighboring piles stay in one family.
+    /// Mix from another palette, keeping the medium, e.g. a subset of the
+    /// tubes, `palette.only(&names)`.
     pub fn palette(mut self, palette: &'a Palette) -> Self {
         let (_, medium) = self.palette.expect("palette() needs a palette already: use mixed()");
         self.palette = Some((palette, medium));
@@ -431,11 +426,11 @@ impl<'a> Handling<'a> {
         self.clip = on;
         self
     }
-    /// Look and fill (default: on for a pass that means to cover). Strokes
-    /// placed by hand leave gaps between them where the ground shows; a
-    /// painter covering a passage sees them and dabs paint in. `false`
-    /// leaves them (broken color, a lay-in that lets the ground breathe);
-    /// `true` fills them at any coverage.
+    /// Look and fill: after the strokes, lay a short dab into each bare spot
+    /// they left in the region (see `fill_gaps`). Default: on when coverage
+    /// ≥ `FILL_FROM`, load ≥ 0.25 and the pass is not a blender or a scrub
+    /// (see `fills`). `false` leaves the gaps; `true` fills them at any
+    /// coverage.
     pub fn fill(mut self, on: bool) -> Self {
         self.fill = Some(on);
         self
@@ -444,14 +439,15 @@ impl<'a> Handling<'a> {
     pub fn fills(&self) -> bool {
         self.fill.unwrap_or(self.coverage >= FILL_FROM && self.load >= FILL_LOAD && !self.blender && self.scrub == 0)
     }
-    /// Hug the region's edges (default on): a painter carries a passage to
-    /// its edge as fully as through its middle. Off: stroke centers fall only
-    /// inside the region, and coverage halves along its edges.
     /// Never paint outside `m` (see `limit`).
     pub fn limit(mut self, m: std::sync::Arc<Mask>) -> Self {
         self.limit = Some(m);
         self
     }
+    /// Hug the region's edges (default on): stroke centers seeded just
+    /// outside the region (within half a brush) move onto its edge, so the
+    /// edge gets as many strokes as the middle. Off: stroke centers fall
+    /// only inside the region, and coverage halves along its edges.
     pub fn hug(mut self, on: bool) -> Self {
         self.hug = on;
         self
@@ -497,10 +493,12 @@ struct Plan {
 impl Canvas {
     /// Work the region `mask` with a simulated brush, stroke by stroke.
     ///
-    /// Strokes are planned up front, then grouped into square passages
-    /// (tiles) larger than twice any stroke's reach. Passages in a 2×2
-    /// checkerboard phase can't share a pixel, so each gets its own brush and
-    /// they are painted in parallel; phases run one after another.
+    /// Strokes are planned up front, then grouped into passages (tiles) at
+    /// least twice any stroke's reach on each axis. The tiles are painted in
+    /// an order set by `Order` (2×2 checkerboard phases in shuffled order,
+    /// or bands along a sweep), each with its own brush; tiles whose
+    /// footprints don't overlap run in parallel (`sched::run_ordered`), with
+    /// the same result as painting them one by one.
     pub fn work(&mut self, mask: &Mask, hd: &Handling, seed: u64) {
         self.work_with(&mut Piles::default(), mask, hd, seed);
     }
@@ -516,7 +514,7 @@ impl Canvas {
             t.assert_valid();
         }
         self.check_mask(mask);
-        // coverage 0 disables the pass (a painter who puts no strokes down)
+        // coverage 0 disables the pass
         assert!(hd.coverage.is_finite() && hd.coverage >= 0.0, "Handling::coverage must be finite and ≥ 0, got {}", hd.coverage);
         if hd.coverage == 0.0 {
             return;
@@ -654,8 +652,8 @@ impl Canvas {
     /// Look and fill: find the bare spots the pass (strokes with ids above
     /// `before`) left inside the region: pixels it didn't reach, or where
     /// it laid less than `FILL_BARE`, wet or (with `film0`, the dry film
-    /// before a hand-timed pass) set since. Lay a short stroke through each,
-    /// as a painter covering a passage does. The spots are gathered on a grid
+    /// before a hand-timed pass) set since. Lay a short stroke through each.
+    /// The spots are gathered on a grid
     /// of cells half a brush wide (units, so any resolution fills the same
     /// spots); a cell is filled when its bare area is at least 0.5% of a
     /// brush width squared, and it is filled once: this is one look, not a
@@ -750,7 +748,7 @@ impl Canvas {
     }
 
     /// Cut in the edges of `mask`: short strokes of the `tool` laid along the
-    /// region's outline, just inside it, the way a painter sharpens a form.
+    /// region's outline, just inside it.
     fn cut_in_edges(&mut self, mask: &Mask, tool: &Tool, hd: &Handling, seed: u64, rng: &mut Rng, piles: &mut Piles) {
         let f = mask.f;
         let step = (tool.width * 0.5).max(1.0 / f.scale);
@@ -814,7 +812,7 @@ impl Canvas {
     /// Paint planned strokes as one pass (`paint_pass`): group them into
     /// tiles, count them in the hand's ledger, then paint the tiles in
     /// order, in parallel wherever that can't change the result. With hand
-    /// time on, `slice` (s) cuts the pass into slices with the paint ageing
+    /// time on, `slice` (s) cuts the pass into slices with the paint aging
     /// between them (None for the fill and cut-in sub-passes: their time
     /// goes on the clock when the verb ends).
     #[allow(clippy::too_many_arguments)]
@@ -843,7 +841,7 @@ impl Canvas {
             }
         }
         // trips to the palette: every `dip_every` strokes within a tile, and
-        // whenever the hand moves on to a new passage
+        // whenever the next stroke is in a new passage
         // (and the hand's ledger: every planned stroke and trip, counted on
         // the whole canvas before a crop drops any tiles; see `tally`)
         let mpu = self.mm_per_unit;
@@ -982,13 +980,13 @@ fn laid_coats(hd: &Handling, load_k: f32) -> f32 {
     hd.laid_coats() * load_k
 }
 
-/// What a stroke along `pts` will sit on, as a painter judges it: samples
+/// What a stroke along `pts` will sit on: samples
 /// (discs of radius `r`) spread evenly along the path, weighted by where the
 /// paint lands (a stroke starts loaded and runs thinner toward its end), and
 /// combined by a weighted median per OKLab channel, so a fleck of bare ground
 /// or a stray pile under one sample can't skew the whole pile. (A mean in
-/// linear light let one light fleck among dark samples pull the judged
-/// underlayer far toward it.)
+/// linear light would let one light fleck among dark samples pull the
+/// judged underlayer far toward it.)
 fn stroke_under(cv: &Canvas, pts: &[(f32, f32)], r: f32) -> Rgb {
     const N: usize = 9;
     // points evenly spaced by arc length, with their position along (0..1)
@@ -1168,14 +1166,13 @@ fn carry_in(mask: &Mask, pts: &[(f32, f32)], c: (f32, f32), width: f32, threshol
 
 /// Share of the length tail that is short dabs (the rest are long sweeps).
 const DAB_SHARE: f32 = 0.6;
-/// A pass whose coverage is at least this means to cover its region: it
-/// fills the gaps its strokes leave (see `Handling::fill`). Below it the
-/// strokes lie side by side with ground between them, as asked.
+/// A pass with at least this coverage fills the gaps its strokes leave by
+/// default (see `Handling::fill`); below it, the gaps are left.
 pub const FILL_FROM: f32 = 1.5;
-/// Least load (share of a full brush) for filling: a nearly dry brush is
-/// dry-brushing on purpose.
+/// Least load (share of a full brush) for filling by default: below it
+/// the gaps are left.
 const FILL_LOAD: f32 = 0.25;
-/// Film (coats) under which a pixel of the region reads as bare.
+/// Film (coats) under which a pixel of the region counts as bare.
 const FILL_BARE: f32 = 0.04;
 
 /// Mask value at a point; the region continues past the canvas edges.
@@ -1250,7 +1247,7 @@ fn place(hd: &Handling, f: Frame, gap: f32, mean_len: f32, seed: u64, rng: &mut 
             let half = side * std::f32::consts::FRAC_1_SQRT_2;
             let (ou, ov) = (rng.f() * along, rng.f() * across);
             let (nu, nv) = ((half / along).ceil() as i32 + 1, (half / across).ceil() as i32 + 1);
-            // the hand moves across the passage one way or the other
+            // rows are worked across the passage in one direction or the other
             let dir = if rng.chance(0.5) { 1.0 } else { -1.0 };
             for j in -nv..nv {
                 for i in -nu..nu {
@@ -1300,10 +1297,10 @@ fn stroke_length(hd: &Handling, rng: &mut Rng) -> f32 {
     }
 }
 
-/// A stroke through (cx, cy) the way a hand makes it: along the direction
-/// field (wandering with `drift`, in one of two families when criss-crossing,
-/// turned by the per-stroke `bend`), bowed into an arc around the wrist or
-/// elbow or into an S, pulled in either direction.
+/// A stroke path through (cx, cy): along the direction field (wandering
+/// with `drift`, in one of two families when criss-crossing, turned by the
+/// per-stroke `bend`), bowed into an arc or an S (`curve`, `wave`), its
+/// direction reversed half the time.
 fn hand_trace(hd: &Handling, drift: &crate::noise::Fbm, cx: f32, cy: f32, len: f32, bend: f32, rng: &mut Rng) -> Vec<(f32, f32)> {
     let fam = if hd.cross != 0.0 && rng.chance(0.5) { -hd.cross } else { hd.cross };
     let bow = hd.curve * rng.normal();
@@ -1342,8 +1339,8 @@ fn hand_trace(hd: &Handling, drift: &crate::noise::Fbm, cx: f32, cy: f32, len: f
     };
     let mut pts = run(bow);
     if bow != 0.0 && !s_curve && flip {
-        // arcs mostly bulge away from the pivot (a right hand, below and to
-        // the right of the brush)
+        // 70% of arcs bulge away from a pivot below and to the right of the
+        // stroke
         let (a, b) = (pts[0], pts[pts.len() - 1]);
         let m = pts[pts.len() / 2];
         let bulge = (m.0 - 0.5 * (a.0 + b.0), m.1 - 0.5 * (a.1 + b.1));
@@ -1361,7 +1358,7 @@ fn hand_trace(hd: &Handling, drift: &crate::noise::Fbm, cx: f32, cy: f32, len: f
 mod tests {
     use super::*;
 
-    /// Stroke geometry is hand-like by default and ruler-straight on request.
+    /// Strokes bow by default and are straight with `ruler()`.
     #[test]
     fn strokes_bow_unless_ruled() {
         use crate::bristle::Tool;
@@ -1453,9 +1450,8 @@ mod tests {
     }
 
     /// Sparse light marks aimed over a dark passage (with flecks of the warm
-    /// ground showing through it) land in the color asked for: no salmon or
-    /// orange piles. Returns (share of
-    /// marked pixels pushed warm, mean a/b miss, mean L miss).
+    /// ground showing through it): (share of marked pixels pushed warmer
+    /// than both the target and the underlayer, mean a/b miss, mean L miss).
     fn light_over_dark(pal_names: Option<&[&str]>, tool: &str, w: usize) -> (f32, f32, f32) {
         use crate::color::hex;
         let st = crate::style::Style::friedrich();
@@ -1465,7 +1461,7 @@ mod tests {
         };
         let mut c = st.prepare(w, 1.0, 5);
         let all = Mask::full(c.frame());
-        // a dark sand lay-in, thin enough that the ground flecks through
+        // a dark brown lay-in, thin enough that the ground flecks through
         c.work(&all, &st.body().color(|_, _| hex("#3a3128")).by_masstone().coverage(1.6).fill(false), 1);
         c.dry();
         let (px0, f0) = (c.pixels().to_vec(), c.film.clone());
@@ -1494,10 +1490,9 @@ mod tests {
             ab += ((l[1] - wl[1]).powi(2) + (l[2] - wl[2]).powi(2)).sqrt();
             // value is judged on the body of each mark (film > 2 coats): a
             // pointed brush's thin edges and dry tails are semi-transparent
-            // over the dark and dry darker, as they do on a real canvas
-            // (measured at the tip merge: > 4 coats -0.006 L, 0.5-2 coats
-            // -0.02 to -0.05; the aim itself hits the target where the paint
-            // is laid as expected)
+            // over the dark and dry darker (measured: > 4 coats -0.006 L,
+            // 0.5-2 coats -0.02 to -0.05; the aim itself hits the target
+            // where the paint is laid as expected)
             if c.film[i] - f0[i] > 2.0 {
                 dl += (l[0] - wl[0]).abs();
                 nb += 1;
@@ -1521,7 +1516,8 @@ mod tests {
 
     /// How a sparse pass's film is spread over its marks' area, in units of
     /// the expected thickness (`laid_coats`): the share of the marked area
-    /// in log2 bins centered at 1/8 .. 8 (for `AIM_MARKS` in palette.rs).
+    /// in log2 bins centered at 1/8 .. 8 (for `MARKS_BLUNT` and
+    /// `MARKS_POINTED` in palette.rs).
     /// `cargo test --release -p paint probe_mark_thickness -- --ignored --nocapture`
     #[test]
     #[ignore]
@@ -1573,18 +1569,14 @@ mod tests {
             println!("{label}: warm share {warm:.3}, mean a/b miss {ab:.4}, mean L miss {dl:.3}");
             assert!(warm < 0.05, "{label}: {warm:.3} of the marks dried warm");
             assert!(ab < 0.02, "{label}: marks off hue by {ab:.4}");
-            // (the old thickness estimate, 0.3 coats for marks that lay 1–2,
-            // overshot: 0.049–0.050 L too light; aiming at one thickness
-            // instead of the mark's mean look, see `palette::Marks`, needed
-            // 0.05 for pointed marks)
             let bound = if tool == "detail" { 0.035 } else { 0.025 };
             assert!(dl < bound, "{label}: marks off value by {dl:.3}");
         }
     }
 
-    /// `color_over` sees the canvas: "the snow here, darker and bluer" over
-    /// a snow field that runs from bright to dull comes out darker and bluer
-    /// than the snow at both ends, strokes and stipple alike.
+    /// `color_over` sees the canvas: a shift of -0.08 L and -0.03 b over a
+    /// field that runs from light to dull comes out darker and bluer than
+    /// the field at both ends, strokes and stipple alike.
     #[test]
     fn color_over_sees_the_canvas() {
         use crate::color::{hex, shift};
@@ -1622,7 +1614,7 @@ mod tests {
 
     /// `Style::blend()` fuses a masked passage without dragging its wet
     /// paint across the mask's edge;
-    /// `.clip(false)` still fuses across it on purpose.
+    /// `.clip(false)` fuses across it.
     #[test]
     fn blender_stays_in_its_region() {
         use crate::color::hex;
@@ -1677,7 +1669,7 @@ mod tests {
         let m = if disk {
             Mask::from_fn(f, |x, y| if (x - 500.0).powi(2) + (y - 500.0).powi(2) < 250.0f32.powi(2) { 1.0 } else { 0.0 })
         } else if thin {
-            // a horizon band narrower than the broad brush (coast #3)
+            // a band narrower than the broad brush
             Mask::from_fn(f, |_, y| if (400.0..415.0).contains(&y) { 1.0 } else { 0.0 })
         } else {
             Mask::from_fn(f, |_, y| if (400.0..460.0).contains(&y) { 1.0 } else { 0.0 })
@@ -1723,7 +1715,7 @@ mod tests {
                         acc[2] += v.2 / 6.0;
                     }
                 }
-                println!("disk {disk} clip {clip}: bare edge {:.4} -> {:.4}, edge L excess {:+.4} -> {:+.4}, spill {:.3} -> {:.3}", o[0], n[0], o[1], n[1], o[2], n[2]);
+                println!("disk {disk} clip {clip}, hug off / on: bare edge {:.4} / {:.4}, edge L excess {:+.4} / {:+.4}, spill {:.3} / {:.3}", o[0], n[0], o[1], n[1], o[2], n[2]);
             }
         }
     }
@@ -1732,21 +1724,20 @@ mod tests {
     fn edges_are_covered_like_the_inside() {
         for disk in [false, true] {
             for clip in [false, true] {
-                // (`hug(false)` is the old placement: set EDGE_OLD to compare)
-                let old = std::env::var_os("EDGE_OLD").map(|_| edge_stats(clip, disk, false, 3));
-                let new = edge_stats(clip, disk, true, 3);
-                println!("disk {disk} clip {clip}: bare edge {:.4}, edge L excess {:+.4}, spill {:.3} (old {old:?})", new.0, new.1, new.2);
-                assert!(new.0 < 0.012, "disk {disk} clip {clip}: {:.4} of the edge band bare", new.0);
-                assert!(new.1 < 0.009, "disk {disk} clip {clip}: edge lighter than the inside by {:.4}", new.1);
+                // (set EDGE_UNHUGGED to also print the `hug(false)` stats)
+                let unhugged = std::env::var_os("EDGE_UNHUGGED").map(|_| edge_stats(clip, disk, false, 3));
+                let hugged = edge_stats(clip, disk, true, 3);
+                println!("disk {disk} clip {clip}: bare edge {:.4}, edge L excess {:+.4}, spill {:.3} (hug off {unhugged:?})", hugged.0, hugged.1, hugged.2);
+                assert!(hugged.0 < 0.012, "disk {disk} clip {clip}: {:.4} of the edge band bare", hugged.0);
+                assert!(hugged.1 < 0.009, "disk {disk} clip {clip}: edge lighter than the inside by {:.4}", hugged.1);
                 // strokes reach no farther past the edge than a brush width
-                assert!(new.2 < 0.03 || disk && !clip && new.2 < 0.2, "disk {disk} clip {clip}: spill {:.3}", new.2);
+                assert!(hugged.2 < 0.03 || disk && !clip && hugged.2 < 0.2, "disk {disk} clip {clip}: spill {:.3}", hugged.2);
             }
         }
         // a clipped band narrower than the broad brush, strokes along it
-        // (coast #3; six seeds: 13% of its edges bare before, 2% now)
         let (bare, _, _) = edge_stats_in(true, false, true, true, 3);
-        let old = std::env::var_os("EDGE_OLD").map(|_| edge_stats_in(true, false, true, false, 3).0);
-        println!("thin clipped band: bare edge {bare:.4} (old {old:?})");
+        let unhugged = std::env::var_os("EDGE_UNHUGGED").map(|_| edge_stats_in(true, false, true, false, 3).0);
+        println!("thin clipped band: bare edge {bare:.4} (hug off {unhugged:?})");
         assert!(bare < 0.05, "thin band: {bare:.4} of its edges bare");
     }
 
@@ -1792,16 +1783,15 @@ mod tests {
 
     /// A long hand-timed pass ages as it goes: its first slices can set (and
     /// bake into the dry film) before the look-and-fill. The look must see
-    /// that paint as laid, not as a gap, so the pass lays about the fill
-    /// dabs it does with hand time off (thermos B1; here 219 dabs off, 540 on
-    /// before the fix, 155 after).
+    /// that paint as laid, not as a gap, so the pass lays at most about 1.5×
+    /// the fill dabs it does with hand time off.
     #[test]
     fn a_long_timed_pass_fills_only_its_gaps() {
         let run = |hand: Option<f32>, fill: bool| {
             let mut c = Canvas::new(160, 1.4, crate::color::hex("#c8b89a")).with_size_mm(440.0);
             c.set_hand_time(hand);
             let all = Mask::from_fn(c.frame(), |_, _| 1.0);
-            // thin, lean paint, one reload a stroke: hours of work
+            // thin, lean paint, one reload a stroke: hours of hand time
             let hd = Handling::new(Tool::filbert(6.0)).color(|_, _| crate::color::hex("#6f84a8")).paint(0.85, 1.0).load(0.3).coverage(3.0).fill(fill);
             c.work(&all, &hd, 3);
             let set = c.wet.clock.px.iter().filter(|p| p.sub > 0.0 && p.sub < 1.0).count() as f32 / c.wet.vol.len() as f32;

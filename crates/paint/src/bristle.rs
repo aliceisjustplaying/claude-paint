@@ -29,16 +29,15 @@ use crate::wet::{LAT, Latent, Paint, Prop, mix_into};
 const TOOTH_UM: f32 = 60.0;
 /// The level a brush rests on around each pixel: the median height within
 /// about `r` px either side (a running median along the rows, then along the
-/// columns), smoothed a little. The weave and brush-mark relief, a tooth or
-/// so either side, sits about its median as it did about the old mean. A
-/// step of thick paint no longer lifts the level of the thin paint beside
-/// it: a plain mean (two box blurs of radius r) made the thin side read as a
-/// valley ~2r wide that no bristle reached, so a veil or glaze laid up to a
-/// thick dark motif stopped short of it and left a pale halo.
-/// Only the corner right at the foot of the step is missed.
+/// columns, over ±1.5 r), smoothed a little (a box blur of radius r/3).
+/// The weave and brush-mark relief, a tooth or so either side, sits about
+/// its median. A step of thick paint doesn't lift the level of the thin
+/// paint beside it (with a mean, the thin side would be a valley ~2r wide
+/// that no bristle reaches, and paint laid up to the step would stop short
+/// of it). Only the corner right at the foot of the step is missed.
 pub(crate) fn contact_level(height: &[f32], w: usize, h: usize, r: usize) -> Vec<f32> {
     use rayon::prelude::*;
-    // a window about as wide as the old kernel's reach
+    // a window of ±1.5 r
     let rm = (3 * r).div_ceil(2).max(1);
     let rows = |src: &[f32], w: usize| -> Vec<f32> {
         let mut out = vec![0.0f32; src.len()];
@@ -118,8 +117,7 @@ pub struct Tool {
     /// How finely the hairs converge to a point: 0 = a blunt tuft, 1 = a
     /// fine point. 0 for every preset (round sable and rigger included, so
     /// a mark is as wide as the brush and pressure ask): the pointed tip is
-    /// the painter's choice, `Tool { point: 1.0, ..Tool::round_sable(w) }`
-    ///. A pointed
+    /// opt-in, `Tool { point: 1.0, ..Tool::round_sable(w) }`. A pointed
     /// tuft is a cone: pressed lightly only the point touches (a hairline),
     /// pressed harder the belly spreads (width grows with pressure), and on
     /// the lift the mark draws down to a point. Its loaded tip wets the
@@ -148,7 +146,8 @@ impl Tool {
         }
     }
 
-    /// Soft pointed round: smooth, precise, little ploughing. Friedrich's detail brush.
+    /// Soft round; the pointed tip is opt-in (`point`). Smooth, precise,
+    /// little ploughing.
     pub fn round_sable(width: f32) -> Self {
         Tool { stiffness: 0.2, pickup: 0.1, push: 0.05, splay: 0.45, ragged: 0.15, ..Self::base(Kind::Round, width) }
     }
@@ -170,17 +169,17 @@ impl Tool {
         }
     }
 
-    /// Filbert: oval hog/synthetic, soft-ended marks, good for blending forms.
+    /// Filbert: oval hog/synthetic, soft-ended marks.
     pub fn filbert(width: f32) -> Self {
         Tool { bristles: 120, stiffness: 0.6, lay: 1.2, pickup: 0.18, push: 0.18, ragged: 0.3, ..Self::base(Kind::Filbert, width) }
     }
 
-    /// Fan: sparse spread bristles, for foliage, grasses and feathering.
+    /// Fan: sparse bristles spread in a fan.
     pub fn fan(width: f32) -> Self {
         Tool { bristles: 36, hair: 0.6, stiffness: 0.5, lay: 0.7, pickup: 0.1, push: 0.08, splay: 0.2, ragged: 0.5, ..Self::base(Kind::Fan, width) }
     }
 
-    /// Rigger / liner: a few very long soft hairs. Twigs, rigging, fine lines.
+    /// Rigger / liner: a few very long soft hairs; fine lines.
     pub fn rigger(width: f32) -> Self {
         Tool {
             bristles: 14,
@@ -415,7 +414,7 @@ impl Held {
 
     /// A full load's volume for one bristle.
     pub(crate) fn full(&self) -> f32 {
-        // neighbouring bristles overlap by ~hair², so each lays lay / hair²
+        // neighboring bristles overlap by ~hair², so each lays lay / hair²
         let track = 2.0 * self.tool.hair_radius();
         self.tool.lay.max(0.3) * track * self.tool.run / (self.tool.hair * self.tool.hair)
     }
@@ -459,7 +458,7 @@ pub enum Orient {
     Across,
     /// Wide axis along the travel (thin edge marks).
     Along,
-    /// Fixed angle in radians, regardless of travel (e.g. Cézanne hatching).
+    /// Fixed angle in radians, regardless of travel.
     Fixed(f32),
 }
 
@@ -476,8 +475,7 @@ pub struct Gesture {
     /// Hand unsteadiness: 1 = a normal hand, 0 = mechanically exact.
     pub shake: f32,
     /// Pressure swell along the stroke: multipliers at evenly spaced knots
-    /// from start to end, interpolated smoothly (empty = none). A hand
-    /// presses harder and lighter as it travels.
+    /// from start to end, interpolated smoothly (empty = none).
     pub swell: Vec<f32>,
 }
 
@@ -1258,12 +1256,12 @@ unsafe fn exchange(
         // bilinearly, below): the same paint moved the same distance at any
         // resolution. A hair finer than a pixel is drawn wider than it is
         // (`rb`, see `drag_on`), so each pixel of its drawn track gives up
-        // only its share of it, hair / rb. (Ploughed by the drawn track and
-        // thrown to the next pixel, a filbert 5 at 1000px, its hairs a
-        // quarter of a pixel, moved some 18 times the paint a hair's width
-        // does, compounding over the ~50 hairs over each pixel: every
-        // stroke ploughed its paint into rims, 399 µm on its edges and
-        // 11 µm inside, rounds 8 and 9.) A pressed tip's hairs lie together
+        // only its share of it, hair / rb. (Ploughing by the whole drawn
+        // track and throwing it to the next pixel would move many times the
+        // paint a hair's width does, e.g. some 18× for a filbert 5 at 1000px
+        // whose hairs are a quarter of a pixel, compounding over the ~50
+        // hairs over each pixel into rims along the stroke's edges.) A
+        // pressed tip's hairs lie together
         // (see `touch_rb`): its contact is its track.
         let hair = if fine || dep.is_some() { rb } else { (tool.hair_radius() * s).min(rb) };
         let push_k = tool.push * (seg / (2.0 * hair)).clamp(0.0, 1.0) * (hair / rb);
@@ -1586,7 +1584,7 @@ mod tip_tests {
     const BG: &str = "#e8e0d0";
     const INK: &str = "#1a1612";
 
-    /// A narrow strip of a Friedrich-sized canvas (440 mm wide) with one
+    /// A narrow strip of a 440 mm wide canvas with one
     /// mark of dark body paint on it, dried.
     fn canvas(px: usize, linen: bool, tool: Tool, g: &Gesture) -> Canvas {
         let mut c = Canvas::new(px, 4.0, hex(BG)).with_size_mm(440.0);
@@ -1622,7 +1620,7 @@ mod tip_tests {
     }
 
     /// Paint (coats) one stroke of `tool` lays across its mark over a dry
-    /// layer on a Friedrich-sized strip `px` wide: the mean film at each
+    /// layer on a strip of a 440 mm wide canvas, `px` wide: the mean film at each
     /// pixel row from 2 widths above the stroke's line to 2 below, over the
     /// middle of its length, as (offset from the line in units, coats).
     fn film_across_over_dry(px: usize, tool: Tool, pressure: f32) -> Vec<(f32, f32)> {
@@ -1645,12 +1643,9 @@ mod tip_tests {
 
     /// A body stroke over dry paint lays a covering film, thickest about
     /// where the brush pressed, not a ring: across the middle half of the
-    /// mark the film is not far below the thickest paint at its edges.
-    /// Rounds 8 and 9: a filbert 5 at 1000px ploughed its paint into rims
-    /// (399 µm on the edges, 11 µm inside), so the old paint showed through
-    /// every stroke as a net; thin filbert shadows at 3200px were dark
-    /// ridged tubes with pale middles. The brushes' hairs were finer than a
-    /// pixel (so too for the filbert 2, at 1000px as at 3200px).
+    /// mark the film is at least 0.6 of the thickest paint at its edges,
+    /// also for brushes whose hairs are finer than a pixel (the filbert 5
+    /// and filbert 2 at 1000px).
     #[test]
     fn a_stroke_over_dry_paint_covers_its_middle() {
         let st = crate::style::Style::friedrich();
@@ -1679,9 +1674,9 @@ mod tip_tests {
         }
     }
 
-    /// The presets are blunt, so a round, a
-    /// rigger, a line or a detail brush lays the width the painter asked
-    /// for; the pointed tip (a hairline at light pressure) is opt-in.
+    /// The presets are blunt, so a round, a rigger, a line or a detail brush
+    /// lays the width asked for; the pointed tip (a hairline at light
+    /// pressure) is opt-in.
     #[test]
     fn presets_are_blunt_and_lay_their_width() {
         let st = crate::style::Style::friedrich();
@@ -1708,24 +1703,21 @@ mod tip_tests {
         let f = canvas(800, false, t.clone(), &Gesture::line((50.0, 120.0), (450.0, 120.0)).pressure(0.8, 0.0).ramps(0.05, 0.8).shake(0.0));
         let (root, mid, tip) = (ink(&f, 80.0, 120.0), ink(&f, 230.0, 270.0), ink(&f, 400.0, 430.0));
         assert!(root > mid && mid > tip && tip < 0.3 * root, "flick ink root {root}, middle {mid}, tip {tip}");
-        // a blunt stippler of the same kind keeps its old footprint
+        // the stippler is blunt too
         assert_eq!(Tool::stippler(2.0).point, 0.0);
     }
 
-    /// A lifting brush draws down to its tip at the end of its path; it
-    /// doesn't leave the canvas before the hand does. Rounds 10 and 11: a
-    /// limb lifted off with `ramps` stopped painting where the pressure fell
-    /// below its first hair's threshold, up to a fifth of the path short of
-    /// its end, so a twig set on the limb's end started on bare canvas
-    /// ("floated"). See notes/fixes/twigs.
-    /// Blunt and pointed, the documented flick and a limb lifted at a fork.
+    /// A lifting brush deposits paint through the end of its path, even
+    /// where the pressure falls below its first hair's threshold: every
+    /// column up to the last pixel before the end has paint. Blunt and
+    /// pointed brushes, a flick lifted to zero and a stroke lifted to 0.36.
     #[test]
     fn a_lifted_stroke_paints_to_the_end_of_its_path() {
         let tools = [("blunt sable 3", Tool::round_sable(3.0)), ("blunt rigger 1", Tool::rigger(1.0)), ("pointed rigger 1.4", Tool { point: 0.9, ..Tool::rigger(1.4) }), ("pointed sable 3", sable(3.0))];
-        let strokes = [("flick", (0.75, 0.0), (0.1, 0.75)), ("limb lifted at a fork", (0.8, 0.36), (0.03, 0.35))];
+        let strokes = [("flick", (0.75, 0.0), (0.1, 0.75)), ("lifted to 0.36", (0.8, 0.36), (0.03, 0.35))];
         for (tn, tool) in &tools {
             for (gn, p, r) in strokes {
-                // a twig's length, within one load of every brush here
+                // 80 units, within one load of every brush here
                 let g = Gesture::line((100.0, 120.0), (180.0, 120.0)).pressure(p.0, p.1).ramps(r.0, r.1).shake(0.0);
                 let c = canvas(1000, false, tool.clone(), &g);
                 let s = c.f.scale;
@@ -1740,8 +1732,7 @@ mod tip_tests {
 
     /// A hair's track covers its own area of the pixel lattice, however it
     /// lies across the pixels: diagonal and oblique tracks keep their area
-    /// under sub-pixel translation (a track 45° across used to count twice
-    /// its area when shifted half a pixel, and nothing like it at others).
+    /// under sub-pixel translation.
     #[test]
     fn fine_cover_conserves_area_on_the_lattice() {
         let total = |a: (f32, f32), b: (f32, f32), rb: f32| {
@@ -1924,10 +1915,10 @@ mod cover_tests {
         (thin, bare)
     }
 
-    /// A loaded brush covers a passage it means to cover: no flecks of the
-    /// ground in a dark body passage at coverage 2.5 (they were the gaps
-    /// the strokes' hand placement left, 1.5% of the area; broad 11%); a
-    /// nearly dry brush at light pressure still breaks up (dry brush).
+    /// With look and fill, a loaded brush at coverage 2.5 leaves under 0.2%
+    /// of a dark body or broad passage showing the ground; with fill off
+    /// the strokes leave more than 0.5% as gaps; a nearly dry brush at
+    /// light pressure breaks up (more than 10% bare).
     #[test]
     fn loaded_passage_covers() {
         let st = Style::friedrich_early();

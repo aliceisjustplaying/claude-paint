@@ -1,20 +1,26 @@
 #!/usr/bin/env bash
-# Export the Round 16 studio for one painter.
+# Export the Round 16 studio for one painter: the easel binary and notes,
+# no source.
 #
 #   scripts/export_r16_studio <profile> <dest>
 #
-# profile: friedrich  the easel, the engine, the easel guide, the materials
-#                     note (notes/research/friedrich_materials.md) and the
-#                     physics note
-#          blank      the same without the materials note; nothing a painter
-#                     can read names a painter (checked below)
+# profile: friedrich  the guide, the materials note
+#                     (notes/research/friedrich_materials.md) and the physics note
+#          blank      the guide and the physics note; nothing a painter can
+#                     read names a painter (checked below)
 # dest:    a folder that doesn't exist yet (or is empty)
 #
-# The files come from `git archive` of the r16-base branch through a fixed
-# list (no .git, no target, no out, no developer notes, no smoke test of the
-# build). The easel is then
-# built fresh in dest (`cargo build --release -p easel`), and dest gets an
-# empty notes/journal.md.
+# dest gets:
+#   bin/easel                  the painter's easel (built without the `replay`
+#                              feature: no `run`, one session, no EASEL_ROOT)
+#   notes/easel_guide.md, notes/research/..., notes/journal.md (empty)
+#   paintings/lua/             (empty; the session log goes here)
+#   THIRD_PARTY_NOTICES.md     the license notices the binary requires
+#
+# The binary is built from a `git archive` of the branch (R16_BRANCH,
+# default r16-base) in <repo>/target/studio-build/<commit>, so it is built
+# from committed code only. Delivery renders use the replay build
+# (`cargo build --release -p easel`, default features) outside the studio.
 set -euo pipefail
 
 usage() { echo "usage: $0 friedrich|blank <dest>" >&2; exit 2; }
@@ -26,6 +32,7 @@ case "$profile" in friedrich|blank) ;; *) usage ;; esac
 repo=$(cd "$(dirname "$0")/.." && pwd)
 branch=${R16_BRANCH:-r16-base}
 git -C "$repo" rev-parse --verify -q "$branch" >/dev/null || { echo "no branch $branch in $repo" >&2; exit 1; }
+sha=$(git -C "$repo" rev-parse --short "$branch")
 
 if [ -e "$dest" ] && [ -n "$(ls -A "$dest" 2>/dev/null)" ]; then
   echo "$dest exists and isn't empty" >&2
@@ -34,28 +41,37 @@ fi
 mkdir -p "$dest"
 dest=$(cd "$dest" && pwd)
 
-# what a painter gets
-files=(
-  .cargo/config.toml
-  .gitignore
-  Cargo.lock
-  Cargo.toml
-  README.md
-  THIRD_PARTY_NOTICES.md
-  crates/easel
-  crates/paint
-  notes/easel_guide.md
-  notes/research/oil_paint_physics.md
-)
-if [ "$profile" = friedrich ]; then
-  files+=(notes/research/friedrich_materials.md)
+# build the painter's easel from the committed source
+src="$repo/target/studio-build/$sha"
+if [ ! -x "$src/target/release/easel" ]; then
+  rm -rf "$src"
+  mkdir -p "$src"
+  git -C "$repo" archive --format=tar "$branch" -- .cargo Cargo.toml Cargo.lock crates | tar -x -C "$src"
+  build() { (cd "$src" && env -u CARGO_TARGET_DIR cargo build --release -p easel --no-default-features); }
+  if ! out=$(build 2>&1); then
+    if echo "$out" | grep -qi 'license'; then
+      DEVELOPER_DIR=/Library/Developer/CommandLineTools build
+    else
+      echo "$out" >&2
+      exit 1
+    fi
+  fi
 fi
+[ -x "$src/target/release/easel" ] || { echo "no easel built in $src" >&2; exit 1; }
 
-git -C "$repo" archive --format=tar "$branch" -- "${files[@]}" | tar -x -C "$dest"
-# the build's smoke test lists what the easel doesn't have; a painter needn't
-rm -f "$dest/crates/easel/tests/smoke.rs"
+# what a painter gets
+mkdir -p "$dest/bin" "$dest/paintings/lua"
+cp "$src/target/release/easel" "$dest/bin/easel"
+notes=(notes/easel_guide.md notes/research/oil_paint_physics.md)
+if [ "$profile" = friedrich ]; then
+  notes+=(notes/research/friedrich_materials.md)
+fi
+git -C "$repo" archive --format=tar "$branch" -- THIRD_PARTY_NOTICES.md "${notes[@]}" | tar -x -C "$dest"
 : > "$dest/notes/journal.md"
-mkdir -p "$dest/paintings/lua"
+
+# nothing but those
+extra=$(cd "$dest" && find . -type f ! -path ./bin/easel ! -path ./THIRD_PARTY_NOTICES.md ! -path './notes/*' | sort)
+[ -z "$extra" ] || { echo "unexpected files in $dest:" >&2; echo "$extra" >&2; exit 1; }
 
 # names of painters: none anywhere a painter can read in the blank studio
 # (legal notices aside); in the friedrich studio only Friedrich's
@@ -64,26 +80,39 @@ case "$profile" in
   blank) pattern=$artists ;;
   friedrich) pattern=${artists#Friedrich|} ;;
 esac
-hits=$(cd "$dest" && grep -rIniwE "$pattern" --exclude=THIRD_PARTY_NOTICES.md . || true)
-if [ -n "$hits" ]; then
+hits=$(cd "$dest" && grep -rIniwE "$pattern" notes || true)
+if strings "$dest/bin/easel" | grep -qiwE "$pattern"; then
+  hits+=$'\n'"bin/easel: $(strings "$dest/bin/easel" | grep -iwoE "$pattern" | sort -u | tr '\n' ' ')"
+fi
+if [ -n "${hits//[$'\n']/}" ]; then
   echo "painters' names in the $profile studio:" >&2
   echo "$hits" >&2
   exit 1
 fi
 
-# build the easel fresh (fall back to the command line tools if Xcode's
-# license blocks linking)
-build() { (cd "$dest" && env -u CARGO_TARGET_DIR cargo build --release -p easel "$@"); }
-if ! out=$(build 2>&1); then
-  if echo "$out" | grep -qi 'license'; then
-    DEVELOPER_DIR=/Library/Developer/CommandLineTools build
-  else
-    echo "$out" >&2
-    exit 1
-  fi
+# the binary runs with no source present: a short session in a throwaway
+# copy of the studio, from another directory
+probe=$(mktemp -d "${TMPDIR:-$repo/target}/studio-probe.XXXXXX")
+cp -R "$dest/." "$probe/"
+E="$probe/bin/easel"
+(
+  cd /
+  "$E" open >/dev/null
+  trap '"$E" close >/dev/null 2>&1 || true' EXIT
+  "$E" do 'canvas{size=300, aspect=1.25, linen=15, ground={{pile={{"lead white", 1}}, um=80, apply="knife"}}}' >/dev/null
+  "$E" do 'b = brush("round", 4); b:load(pile{{"raw umber", 1}}, 0.8); b:stroke({{200, 300}, {800, 320}})' >/dev/null
+  "$E" look >/dev/null
+  "$E" save >/dev/null
+  "$E" check >/dev/null
+  "$E" close >/dev/null
+  trap - EXIT
+)
+[ -s "$probe/paintings/lua/painting.lua" ] && [ -s "$probe/out/easel/painting/painting.png" ] || { echo "the exported easel didn't paint in $probe" >&2; exit 1; }
+if "$E" run "$probe/paintings/lua/painting.lua" >/dev/null 2>&1; then
+  echo "the exported easel has a run command" >&2
+  exit 1
 fi
-[ -x "$dest/target/release/easel" ] || { echo "no easel built in $dest" >&2; exit 1; }
 
-echo "exported the $profile studio from $branch ($(git -C "$repo" rev-parse --short "$branch")) to $dest"
-echo "  easel: $dest/target/release/easel"
+echo "exported the $profile studio from $branch ($sha) to $dest"
+echo "  easel: $dest/bin/easel (checked in $probe)"
 echo "  notes: $(cd "$dest/notes" && find . -type f | sed 's|^\./||' | sort | tr '\n' ' ')"

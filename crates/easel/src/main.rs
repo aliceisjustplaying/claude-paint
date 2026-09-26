@@ -2,7 +2,7 @@
 //!
 //!   easel open <name>                start (or reattach to) a session
 //!   easel do '<lua>' | -f chunk.lua | -            run a chunk on the live canvas
-//!   easel look [--crop x0,y0,x1,y1] [--mode value|squint|mirror|wet] [--grid [step]] [--size N]
+//!   easel look [--crop x0,y0,x1,y1] [--mode value|squint|mirror] [--grid [step]] [--size N]
 //!   easel log | status | save [path] | frames on|off | check | close
 //!   easel note '<text>' | -                        append to notes/journal.md
 //!   easel run paintings/lua/<name>.lua [--out path] [--look]
@@ -35,7 +35,7 @@ const USAGE: &str = "easel: a live painting session (see notes/easel_guide.md)
 
   easel open <name>    start or reattach; replays paintings/lua/<name>.lua if it exists
   easel do '<lua>'  |  easel do -f chunk.lua  |  easel do - (stdin)     [--look] also looks afterwards
-  easel look [--crop x0,y0,x1,y1] [--mode value,squint,mirror,wet] [--grid [step]] [--size 1000]
+  easel look [--crop x0,y0,x1,y1] [--mode value,squint,mirror] [--grid [step]] [--size 1000]
   easel log           the session so far (= paintings/lua/<name>.lua)
   easel status        chunks, width, canvas
   easel save [path]   the canvas as a PNG (default out/easel/<name>/<name>.png)

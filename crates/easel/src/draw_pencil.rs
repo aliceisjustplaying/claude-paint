@@ -294,15 +294,6 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
             Ok(())
         })?)?;
     }
-    // drawing_mask(): where the drawing is (1 on a firm line), also under paint
-    {
-        let st1 = st.clone();
-        g.set("drawing_mask", lua.create_function(move |_, ()| {
-            let s = st1.borrow();
-            let c = s.canvas.as_ref().ok_or_else(|| mlua::Error::runtime("no canvas yet: call canvas{} first"))?;
-            Ok(wrap(c.drawing_mask()))
-        })?)?;
-    }
     // drawing_guide(): the drawn lines as geometry over the whole canvas (1
     // on a line, unbroken; the same in a crop): the mask to paint into the drawing
     {

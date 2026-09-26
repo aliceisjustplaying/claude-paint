@@ -1,8 +1,7 @@
 //! Looking at the canvas: bounded PNGs an agent can read. The look shows
 //! the paint on the canvas as it is now (the dry picture with the wet
 //! paint on it as laid), whole or a window of it, and a few ways a painter
-//! looks at a picture: in grays, squinting, in a mirror, and where the
-//! paint is wet or dry (as a painter feels it with a knuckle). A grid in
+//! looks at a picture: in grays, squinting and in a mirror. A grid in
 //! canvas units can be laid over the look, as a painter squares up a
 //! drawing; it never touches the canvas.
 
@@ -18,16 +17,13 @@ pub struct View {
     pub value: bool,
     pub squint: bool,
     pub mirror: bool,
-    /// Where the paint is in drying: open, setting, tacky and dry in false
-    /// color over the picture, dimmed to gray.
-    pub wet: bool,
     /// Whole-view longest side, px (None: 1000, capped at 1600). Crops stay 1:1.
     pub size: Option<usize>,
     /// Coordinate grid: Some(0) picks the step from the zoom.
     pub grid: Option<f32>,
 }
 
-const LOOK_ARGS: &str = "--crop x0,y0,x1,y1 --mode value,squint,mirror,wet --grid [step] --size N";
+const LOOK_ARGS: &str = "--crop x0,y0,x1,y1 --mode value,squint,mirror --grid [step] --size N";
 
 fn is_num(s: Option<&String>) -> bool {
     s.is_some_and(|s| s.parse::<f32>().is_ok())
@@ -64,8 +60,7 @@ impl View {
                             "value" | "gray" => v.value = true,
                             "squint" | "blur" => v.squint = true,
                             "mirror" => v.mirror = true,
-                            "wet" | "drying" | "stages" => v.wet = true,
-                            o => return Err(format!("--mode {o}: normal, value, squint, mirror, wet (comma-separated)")),
+                            o => return Err(format!("--mode {o}: normal, value, squint, mirror (comma-separated)")),
                         }
                     }
                 }
@@ -349,7 +344,6 @@ pub fn look(c: &Canvas, v: &View, out: &Path) -> std::result::Result<(usize, usi
     }
     let mut size = if v.crop.is_some() { long } else { v.size.unwrap_or(1000).clamp(1, 1600) };
     let px = c.seen();
-    let px = if v.wet { stage_colors(c, &px) } else { px };
     loop {
         // Average down from the original canvas on each attempt; never enlarge.
         let (ow, oh, img): (usize, usize, Vec<Rgb>) = if long > size {
@@ -383,7 +377,7 @@ pub fn look(c: &Canvas, v: &View, out: &Path) -> std::result::Result<(usize, usi
             // half-closed eyes: detail goes, the big shapes and values stay
             img = blur(&img, ow, oh, (ow.max(oh) as f32 * 0.012).max(2.0));
         }
-        if v.value && !v.wet {
+        if v.value {
             for p in img.iter_mut() {
                 let l = luminance(*p);
                 *p = [l; 3];
@@ -409,13 +403,6 @@ pub fn look(c: &Canvas, v: &View, out: &Path) -> std::result::Result<(usize, usi
         if let Some(step) = v.grid {
             draw_grid(&mut im, &map, step, fs);
         }
-        if v.wet {
-            // the legend, top left
-            let (mut x, y) = (4 * fs, 4 * fs);
-            for (i, name) in ["OPEN", "SETTING", "TACKY", "DRY"].iter().enumerate() {
-                x += im.text(x, y, name, fs, STAGE_LEGEND[i]) + 2 * fs;
-            }
-        }
         let buf: Vec<u8> = im.px.iter().flat_map(|p| p.map(|c| (linear_to_srgb(c) * 255.0).round().clamp(0.0, 255.0) as u8)).collect();
         let mut png = Vec::new();
         image::codecs::png::PngEncoder::new(&mut png)
@@ -433,32 +420,6 @@ pub fn look(c: &Canvas, v: &View, out: &Path) -> std::result::Result<(usize, usi
         std::fs::write(out, png).map_err(|e| e.to_string())?;
         return Ok((ow, oh));
     }
-}
-
-/// False colors for the drying stages (linear RGB): open, setting, tacky,
-/// and dry (none: the dimmed picture shows through).
-const STAGE_TINT: [Option<Rgb>; 4] = [Some([0.02, 0.22, 1.0]), Some([0.05, 0.75, 0.12]), Some([1.0, 0.36, 0.0]), None];
-const STAGE_LEGEND: [Rgb; 4] = [[0.25, 0.5, 1.0], [0.2, 0.9, 0.25], [1.0, 0.5, 0.1], [0.55, 0.55, 0.55]];
-
-/// The picture dimmed to gray, with each pixel tinted by where its paint
-/// is in drying (`--mode wet`).
-fn stage_colors(c: &Canvas, px: &[Rgb]) -> Vec<Rgb> {
-    let st = c.stages();
-    px.iter()
-        .zip(st)
-        .map(|(p, s)| {
-            // dimmed gray keeps the picture's values; the tint is scaled by
-            // them too, so forms still read through the color
-            let g = 0.015 + 0.4 * luminance(*p);
-            match STAGE_TINT[s as usize] {
-                Some(t) => {
-                    let k = 0.25 + 1.6 * g;
-                    [g + (t[0] * k - g) * 0.5, g + (t[1] * k - g) * 0.5, g + (t[2] * k - g) * 0.5]
-                }
-                None => [g; 3],
-            }
-        })
-        .collect()
 }
 
 /// Three box blurs ≈ a Gaussian of sd `r`.
@@ -513,42 +474,6 @@ mod tests {
     }
 
     const CANVAS: &str = r#"canvas{size=440, aspect=1.5, linen=15, seed=3, ground={{pile={{"lead white", 3}, {"yellow ochre", 1}}, um=120, apply="knife"}}}"#;
-
-    #[test]
-    fn the_wet_look_shows_open_setting_tacky_and_dry() {
-        let mut s = Session::new(W).unwrap();
-        s.run(CANVAS).unwrap();
-        // the left half laid yesterday, the right half just now; the top band stays bare
-        s.run(
-            r#"p = pile{{"lead white", 4}, {"raw umber", 1}, medium=0.3}
-                  work(rect(0, 200, 480, 460), {hand="broad", pile=p}); wait(20 * 60)
-                  work(rect(520, 200, 480, 460), {hand="broad", pile=p})"#,
-        )
-        .unwrap();
-        let c = s.canvas().unwrap().clone();
-        let f = c.window();
-        let at = |x: f32, y: f32| f.index(x, y);
-        let st = c.stages();
-        assert_eq!(st[at(760.0, 420.0)], paint::Stage::Open);
-        assert!(
-            matches!(st[at(240.0, 420.0)], paint::Stage::Tacky | paint::Stage::Setting | paint::Stage::Dry),
-            "{:?}",
-            st[at(240.0, 420.0)]
-        );
-        assert_eq!(st[at(500.0, 60.0)], paint::Stage::Dry, "bare ground");
-        let px = stage_colors(&c, &c.seen());
-        let (open, bare) = (px[at(760.0, 420.0)], px[at(500.0, 60.0)]);
-        assert!(open[2] > 2.0 * open[0], "open is blue: {open:?}");
-        assert!((bare[0] - bare[2]).abs() < 1e-6 && bare[0] < 0.4, "dry is the picture dimmed to gray: {bare:?}");
-        // the look itself, with its legend, leaves the canvas alone
-        let before = bits(&c);
-        let v = View::parse(&["--mode".into(), "wet,squint".into()]).unwrap();
-        assert!(v.wet && v.squint);
-        let out = root().join("target/easel-look-test/wet.png");
-        assert_eq!(look(&c, &v, &out).unwrap(), (160, 107));
-        assert!(out.exists());
-        assert_eq!(before, bits(&c));
-    }
 
     #[test]
     fn looks_draw_the_grid_without_touching_the_canvas() {

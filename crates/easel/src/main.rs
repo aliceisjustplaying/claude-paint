@@ -1,6 +1,6 @@
 //! easel: a live Lua painting session over the claude-paint engine.
 //!
-//!   easel open <name> [--width 1000]                start (or reattach to) a session
+//!   easel open <name>                start (or reattach to) a session
 //!   easel do '<lua>' | -f chunk.lua | -            run a chunk on the live canvas
 //!   easel look [--crop x0,y0,x1,y1] [--mode value|squint|mirror|wet] [--grid [step]] [--size N]
 //!   easel log | status | save [path] | frames on|off | check | close
@@ -28,7 +28,7 @@ use std::time::{Duration, Instant};
 
 const USAGE: &str = "easel: a live painting session (see notes/easel_guide.md)
 
-  easel open <name> [--width 1000]    start or reattach; replays paintings/lua/<name>.lua if it exists
+  easel open <name>    start or reattach; replays paintings/lua/<name>.lua if it exists
   easel do '<lua>'  |  easel do -f chunk.lua  |  easel do - (stdin)     [--look] also looks afterwards
   easel look [--crop x0,y0,x1,y1] [--mode value,squint,mirror,wet] [--grid [step]] [--size 1000]
   easel log           the session so far (= paintings/lua/<name>.lua)
@@ -60,7 +60,7 @@ fn main() -> ExitCode {
         "open" => open(&rest),
         "serve" => serve(&rest),
         "run" => run(&rest),
-        "note" => note(&rest),
+        "note" => note(&rest, name),
         "hash-probe" => {
             println!("{}", session::hash_probe());
             Ok(())
@@ -107,27 +107,12 @@ fn valid_name(n: &str) -> Result<(), String> {
 
 // ---------------------------------------------------------------- journal
 
-/// Days since 1970-01-01 to a civil date (proleptic Gregorian).
-fn civil(days: i64) -> (i64, u32, u32) {
-    let z = days + 719_468;
-    let era = z.div_euclid(146_097);
-    let doe = z.rem_euclid(146_097);
-    let yoe = (doe - doe / 1460 + doe / 36_524 - doe / 146_096) / 365;
-    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
-    let mp = (5 * doy + 2) / 153;
-    let d = (doy - (153 * mp + 2) / 5 + 1) as u32;
-    let m = if mp < 10 { mp + 3 } else { mp - 9 } as u32;
-    (yoe + era * 400 + i64::from(m <= 2), m, d)
-}
-
 /// The entry `easel note` appends: a dated line, the text's further lines
 /// indented under it.
-fn journal_entry(unix_secs: i64, text: &str) -> String {
-    let (y, m, d) = civil(unix_secs.div_euclid(86_400));
-    let t = unix_secs.rem_euclid(86_400);
+fn journal_entry(clock: f64, text: &str) -> String {
     let mut lines = text.trim_end().lines();
     let first = lines.next().unwrap_or("").trim_end();
-    let mut s = format!("- {y:04}-{m:02}-{d:02} {:02}:{:02} UTC: {first}\n", t / 3600, t / 60 % 60);
+    let mut s = format!("- {}: {first}\n", time::time_of_day(clock));
     for l in lines {
         if l.trim().is_empty() {
             s.push('\n');
@@ -142,7 +127,7 @@ fn journal_entry(unix_secs: i64, text: &str) -> String {
 
 /// Append an entry to the journal. The file only ever grows: the entry is
 /// written at its end, after what is there.
-fn note(args: &[String]) -> Result<(), String> {
+fn note(args: &[String], name: Option<String>) -> Result<(), String> {
     let text = match args.first().map(|s| s.as_str()) {
         Some("-") => {
             let mut b = String::new();
@@ -150,14 +135,22 @@ fn note(args: &[String]) -> Result<(), String> {
             b
         }
         Some(_) => args.join(" "),
-        None => return Err("note: give the text: easel note '<text>' | easel note - (stdin)".into()),
+        None => return Err("note: give text".into()),
     };
+    let (ok, body) = request(&current(name)?, "note", &[], text.as_bytes())?;
+    if !ok {
+        return Err(body);
+    }
+    print!("{body}");
+    Ok(())
+}
+
+fn append_note(clock: f64, text: &str) -> Result<String, String> {
     if text.trim().is_empty() {
         return Err("note: empty".into());
     }
     let p = journal_path();
     std::fs::create_dir_all(p.parent().unwrap()).map_err(|e| e.to_string())?;
-    let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_err(|e| e.to_string())?.as_secs() as i64;
     let mut f = std::fs::OpenOptions::new().create(true).append(true).open(&p).map_err(|e| format!("{}: {e}", p.display()))?;
     // an entry starts on a line of its own
     let len = f.metadata().map(|m| m.len()).unwrap_or(0);
@@ -172,10 +165,9 @@ fn note(args: &[String]) -> Result<(), String> {
             entry.push('\n');
         }
     }
-    entry.push_str(&journal_entry(now, &text));
+    entry.push_str(&journal_entry(clock, text));
     f.write_all(entry.as_bytes()).map_err(|e| e.to_string())?;
-    println!("noted in {}", p.display());
-    Ok(())
+    Ok(format!("noted in {}\n", p.display()))
 }
 
 // ---------------------------------------------------------------- client
@@ -200,9 +192,7 @@ fn current(name: Option<String>) -> Result<String, String> {
     if let Some(n) = name {
         return Ok(n);
     }
-    std::fs::read_to_string(root().join("out/easel/current"))
-        .map(|s| s.trim().to_string())
-        .map_err(|_| "no session: easel open <name> first (or pass -s <name>)".to_string())
+    std::fs::read_to_string(root().join("out/easel/current")).map(|s| s.trim().to_string()).map_err(|_| "no session: easel open <name> first (or pass -s <name>)".to_string())
 }
 
 fn client(cmd: &str, args: &[String], name: Option<String>) -> Result<(), String> {
@@ -224,7 +214,9 @@ fn client(cmd: &str, args: &[String], name: Option<String>) -> Result<(), String
                 b
             }
             Some(src) => src.as_bytes().to_vec(),
-            None => return Err("do: give a chunk: easel do '<lua>' | -f file.lua | - (stdin)".into()),
+            None => {
+                return Err("do: give a chunk: easel do '<lua>' | -f file.lua | - (stdin)".into());
+            }
         };
         args = if look { vec!["--look".into()] } else { vec![] };
     }
@@ -238,20 +230,18 @@ fn client(cmd: &str, args: &[String], name: Option<String>) -> Result<(), String
 }
 
 fn open(args: &[String]) -> Result<(), String> {
-    let name = args.first().filter(|a| !a.starts_with('-')).ok_or("open <name> [--width 1000]")?.clone();
+    let name = args.first().filter(|a| !a.starts_with('-')).ok_or("open <name>")?.clone();
     valid_name(&name)?;
-    let mut i = 1;
-    while i < args.len() {
-        match args[i].as_str() {
-            "--width" => i += 2,
-            o => return Err(format!("open: unknown argument {o:?} (open <name> [--width 1000])")),
-        }
+    if args.len() != 1 {
+        return Err("open: live sessions are fixed at 2400px; no width option".into());
     }
-    let width: usize = flag(args, "--width").map(|w| w.parse().map_err(|_| "--width N")).transpose()?.unwrap_or(1000);
     let dir = session_dir(&name);
     std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
-    std::fs::write(root().join("out/easel/current"), &name).map_err(|e| e.to_string())?;
-    if let Ok((true, st)) = request(&name, "status", &[], &[]) {
+    if let Ok((ok, st)) = request(&name, "status", &[], &[]) {
+        if !ok {
+            return Err(st);
+        }
+        std::fs::write(root().join("out/easel/current"), &name).map_err(|e| e.to_string())?;
         print!("reattached to {name:?}: {st}");
         return Ok(());
     }
@@ -260,7 +250,7 @@ fn open(args: &[String]) -> Result<(), String> {
     let exe = std::env::current_exe().map_err(|e| e.to_string())?;
     use std::os::unix::process::CommandExt;
     std::process::Command::new(exe)
-        .args(["serve", &name, "--width", &width.to_string()])
+        .args(["serve", &name])
         .stdin(std::process::Stdio::null())
         .stdout(log.try_clone().map_err(|e| e.to_string())?)
         .stderr(log)
@@ -275,6 +265,7 @@ fn open(args: &[String]) -> Result<(), String> {
             for l in resumed.lines().filter(|l| l.starts_with("resumed") || l.starts_with("warning")) {
                 println!("{l}");
             }
+            std::fs::write(root().join("out/easel/current"), &name).map_err(|e| e.to_string())?;
             print!("easel {name:?} open: {st}");
             return Ok(());
         }
@@ -301,28 +292,15 @@ struct Server {
 
 fn serve(args: &[String]) -> Result<(), String> {
     let name = args.first().ok_or("serve <name>")?.clone();
-    let width: usize = flag(args, "--width").and_then(|w| w.parse().ok()).unwrap_or(1000);
-    let mut s = Session::new(width).map_err(|e| format!("easel: fatal: {e}"))?;
-    // resume from the log
-    let lp = log_path(&name);
-    let mut written = None;
-    if let Ok(text) = std::fs::read_to_string(&lp) {
-        written = Some(text.clone());
-        let chunks = parse_program(&text);
-        let t0 = Instant::now();
-        for (i, c) in chunks.iter().enumerate() {
-            if let Err(e) = s.run(c) {
-                println!("warning: chunk {} of {} failed on replay:\n{e}", i + 1, lp.display());
-                break;
-            }
-        }
-        println!("resumed {} chunks from {} in {:.1}s", s.log.len(), lp.display(), t0.elapsed().as_secs_f64());
+    valid_name(&name)?;
+    if args.len() != 1 {
+        return Err("easel: fatal: live sessions are fixed at 2400px".into());
     }
+    let mut srv = Server::resume(name.clone()).map_err(|e| format!("easel: fatal: {e}"))?;
     let sock = sock_path(&name);
-    let _ = std::fs::remove_file(&sock);
     let l = UnixListener::bind(&sock).map_err(|e| format!("easel: fatal: bind {}: {e}", sock.display()))?;
     let _ = std::io::stdout().flush();
-    let mut srv = Server { name, s, frames: false, written };
+
     for conn in l.incoming() {
         let Ok(mut conn) = conn else { continue };
         let mut req = Vec::new();
@@ -342,7 +320,7 @@ fn serve(args: &[String]) -> Result<(), String> {
         };
         let _ = conn.write_all(reply.as_bytes());
         eprintln!("{cmd} {:.2}s {}", t0.elapsed().as_secs_f64(), if r.is_ok() { "ok" } else { "err" });
-        if cmd == "close" {
+        if cmd == "close" && r.is_ok() {
             let _ = std::fs::remove_file(&sock);
             break;
         }
@@ -351,32 +329,69 @@ fn serve(args: &[String]) -> Result<(), String> {
 }
 
 impl Server {
-    /// Write the session log. If the file was changed outside the session
-    /// since the easel last wrote it, that version is kept beside it
-    /// (`<name>.edited-N.lua`) and a note says so; the session's own log is
-    /// what it painted.
+    // Independent local witness, not a signature or an access-control boundary.
+    // Editing the log alone is detected; coordinated edits of both files or
+    // restoring the entire directory are outside this local integrity model.
+    fn witness(&self) -> PathBuf {
+        session_dir(&self.name).join("committed.lua")
+    }
+
+    fn validate(&self) -> Result<(), String> {
+        let expected = self.written.as_deref().ok_or("session integrity: uninitialized log")?;
+        for p in [log_path(&self.name), self.witness()] {
+            let actual = std::fs::read(&p).map_err(|e| format!("session integrity: {}: {e}", p.display()))?;
+            if actual != expected.as_bytes() {
+                return Err(format!("session integrity: {} differs from the committed log; refusing request", p.display()));
+            }
+        }
+        Ok(())
+    }
+
+    fn resume(name: String) -> Result<Self, String> {
+        let mut srv = Self { name, s: Session::new(2400).map_err(|e| e.to_string())?, frames: false, written: None };
+        let lp = log_path(&srv.name);
+        if lp.exists() || srv.witness().exists() {
+            let text = std::fs::read_to_string(&lp).map_err(|e| format!("session integrity: {e}"))?;
+            srv.written = Some(text.clone());
+            srv.validate()?;
+            for (i, chunk) in parse_program(&text).iter().enumerate() {
+                srv.s.run(chunk).map_err(|e| format!("session integrity: replay failed at chunk {}: {e}; refusing partial session", i + 1))?;
+            }
+            if srv.s.program(&srv.name) != text {
+                return Err("session integrity: noncanonical or incomplete log; refusing replay".into());
+            }
+            println!("resumed {} chunks from {}", srv.s.log.len(), lp.display());
+        } else {
+            srv.save_log()?;
+        }
+        Ok(srv)
+    }
+
+    /// Append only the new suffix. Commit the redundant witness afterward.
+    /// A crash between writes fails closed on reopen, never partial replay.
     fn save_log(&mut self) -> Result<String, String> {
         let p = log_path(&self.name);
-        std::fs::create_dir_all(p.parent().unwrap()).map_err(|e| e.to_string())?;
-        let mut note = String::new();
-        if let Ok(disk) = std::fs::read_to_string(&p)
-            && self.written.as_deref() != Some(disk.as_str())
-        {
-            let mut k = 1;
-            let kept = loop {
-                let q = p.with_file_name(format!("{}.edited-{k}.lua", self.name));
-                if !q.exists() {
-                    break q;
-                }
-                k += 1;
-            };
-            std::fs::write(&kept, &disk).map_err(|e| e.to_string())?;
-            note = format!("note: {} was changed outside the session; that version is kept as {}; the log is what this session painted.\n", p.display(), kept.display());
-        }
         let text = self.s.program(&self.name);
-        std::fs::write(&p, &text).map_err(|e| e.to_string())?;
+        let previous = self.written.as_deref().unwrap_or("");
+        if self.written.is_some() {
+            self.validate()?;
+        }
+        let suffix = text.strip_prefix(previous).ok_or("session integrity: log would rewrite history")?;
+        std::fs::create_dir_all(p.parent().unwrap()).map_err(|e| e.to_string())?;
+        std::fs::create_dir_all(session_dir(&self.name)).map_err(|e| e.to_string())?;
+        let mut opts = std::fs::OpenOptions::new();
+        opts.append(true);
+        if self.written.is_none() {
+            opts.create_new(true);
+        }
+        let mut f = opts.open(&p).map_err(|e| format!("session integrity: {e}"))?;
+        f.write_all(suffix.as_bytes()).and_then(|_| f.sync_all()).map_err(|e| format!("session integrity: {e}"))?;
+        let pending = self.witness().with_extension("pending");
+        let mut f = std::fs::File::create(&pending).map_err(|e| e.to_string())?;
+        f.write_all(text.as_bytes()).and_then(|_| f.sync_all()).map_err(|e| e.to_string())?;
+        std::fs::rename(pending, self.witness()).map_err(|e| e.to_string())?;
         self.written = Some(text);
-        Ok(note)
+        Ok(String::new())
     }
 
     fn look(&mut self, args: &[String], path: Option<PathBuf>) -> Result<String, String> {
@@ -386,14 +401,19 @@ impl Server {
         let dir = session_dir(&self.name);
         let path = path.unwrap_or_else(|| {
             let n = std::fs::read_dir(&dir).map(|d| d.filter_map(|e| e.ok()).filter(|e| e.file_name().to_string_lossy().starts_with("look-")).count()).unwrap_or(0);
-            dir.join(format!("look-{:04}.jpg", n + 1))
+            dir.join(format!("look-{:04}.png", n + 1))
         });
         let (w, h) = look::look(&c, &v, &path)?;
         Ok(format!("{} ({w}x{h}, {:.2}s)\n", path.display(), t0.elapsed().as_secs_f64()))
     }
 
     fn handle(&mut self, cmd: &str, args: &[String], payload: &str) -> Result<String, String> {
+        self.validate()?;
+        if self.written.as_deref() != Some(self.s.program(&self.name).as_str()) {
+            return Err("session integrity: uncommitted state; restart required".into());
+        }
         match cmd {
+            "note" => append_note(self.s.st.borrow().clock, payload),
             "status" => Ok(format!("{}\n", self.s.status())),
             "do" => match self.s.run(payload) {
                 Ok(ran) => {
@@ -403,7 +423,7 @@ impl Server {
                     out.push_str(&ran.out);
                     out.push_str(&format!("ok · chunk {n} ({:.2} s to compute)\n", ran.secs));
                     if self.frames {
-                        let p = session_dir(&self.name).join("frames").join(format!("{n:04}.jpg"));
+                        let p = session_dir(&self.name).join("frames").join(format!("{n:04}.png"));
                         self.look(&[], Some(p))?;
                     }
                     if args.iter().any(|a| a == "--look") {
@@ -440,7 +460,8 @@ impl Server {
                 if same {
                     Ok(format!("replay matches the live canvas exactly ({} chunks, {:.1}s)\n", self.s.log.len(), t0.elapsed().as_secs_f64()))
                 } else {
-                    Err("replay DIFFERS from the live canvas: a chunk depended on state from a failed chunk (e.g. a table it changed); the log is the painting: close and reopen to continue from it".into())
+                    Err("replay DIFFERS from the live canvas: a chunk depended on state from a failed chunk (e.g. a table it changed); the log is the painting: close and reopen to continue from it"
+                        .into())
                 }
             }
             "close" => {
@@ -502,7 +523,7 @@ fn run(args: &[String]) -> Result<(), String> {
         eprintln!("surface {w}x{h} µm → {p}");
     }
     if args.iter().any(|a| a == "--look") {
-        let jpg = out.with_extension("jpg");
+        let jpg = out.with_extension("look.png");
         let (w, h) = look::look(&c, &look::View::default(), &jpg)?;
         println!("{} ({w}x{h})", jpg.display());
     }
@@ -515,11 +536,37 @@ mod tests {
 
     #[test]
     fn journal_entries_are_dated_lines() {
-        // 2026-09-26 21:43 UTC
-        let t = 1_790_458_980;
-        assert_eq!(journal_entry(t, "first line\nsecond\n\nthird\n"), "- 2026-09-26 21:43 UTC: first line\n  second\n\n  third\n");
-        assert_eq!(civil(0), (1970, 1, 1));
-        assert_eq!(civil(-1), (1969, 12, 31));
-        assert_eq!(civil(11_016), (2000, 2, 29));
+        assert_eq!(journal_entry(907.5, "first line\nsecond\n\nthird\n"), "- day 2, 00:07: first line\n  second\n\n  third\n");
+    }
+}
+
+#[cfg(test)]
+mod integrity_regressions {
+    use super::*;
+
+    // Real request boundary: external edits must be rejected before Lua or
+    // any other request can mutate state. Existing replay tests only use RAM.
+    #[test]
+    fn edited_or_missing_logs_block_every_request_before_mutation() {
+        let name = format!("integrity-{}", std::process::id());
+        let mut srv = Server { name: name.clone(), s: Session::new(80).unwrap(), frames: false, written: None };
+        srv.save_log().unwrap();
+        srv.handle("do", &[], "x = 1").unwrap();
+        let original = std::fs::read(log_path(&name)).unwrap();
+        for replacement in [Some(b"-- edited\n".as_slice()), Some(b"".as_slice()), None] {
+            if let Some(bytes) = replacement {
+                std::fs::write(log_path(&name), bytes).unwrap();
+            } else {
+                std::fs::remove_file(log_path(&name)).unwrap();
+            }
+            for cmd in ["do", "status", "log", "frames", "note", "look", "save", "check", "close"] {
+                let e = srv.handle(cmd, &[], "x = 2").expect_err(cmd);
+                assert!(e.contains("integrity"), "{cmd}: {e}");
+                assert_eq!(srv.s.lua.globals().get::<i64>("x").unwrap(), 1);
+                assert_eq!(srv.s.log.len(), 1);
+            }
+            std::fs::write(log_path(&name), &original).unwrap();
+        }
+        assert!(srv.handle("status", &[], "").is_ok());
     }
 }

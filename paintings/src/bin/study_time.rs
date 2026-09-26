@@ -3,14 +3,14 @@
 //!
 //! Top row: the same wet-into-wet blend (a dark blue brought up into a warm
 //! light field, then worked across the join with a clean brush), started
-//! at 0 min, 30 min, 3 h and the next day after the light field was laid.
+//! at 0 min, 30 min, 3 h and 24 h after the light field was laid.
 //! Open paint blends; at 3 h the lead-white field is tacky, so the blue
-//! catches and drags in broken patches; the next day it is touch-dry and
-//! the blue sits on top with a crisp join.
+//! catches and drags in broken patches; at 24 h it is touch-dry and the
+//! blue sits on top with a crisp join.
 //!
 //! Bottom row: a light scumble dragged over an umber underlayer that is
-//! tacky (3 h) and touch-dry (next day); a pale glaze with a long soft
-//! falloff over a dark field (no edge where its thickness runs out).
+//! tacky (3 h) and touch-dry (24 h); a pale glaze with a Gaussian falloff
+//! (1/e radius 55 units) over a dark bone-black field.
 
 use paint::drying::drier;
 use paint::{Canvas, Gesture, Held, Mask, Orient, Paint, Pigment, Stage, Style, Tool, hex};

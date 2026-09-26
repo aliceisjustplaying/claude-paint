@@ -3,10 +3,8 @@
 # PNG renders of canvas texture compress badly (1–20 MB), so never view them directly.
 #
 #   scripts/peek SRC OUT.jpg [H W Y X]     optional crop: height width offsetY offsetX
-#   max dimension 1000px, JPEG quality 95 with full-resolution color (4:4:4):
-#   quality 80 with half-resolution color (the old setting) smeared thin colored
-#   strokes and edges, the very things a painter judges at 3200 (Round 6).
-#   Sheets for Alice are built lossless from the PNG renders, never from these.
+#   Resizes to at most 1000px on the longer side (never enlarges), JPEG quality
+#   95 with full-resolution color (chroma sampling 4:4:4).
 set -e
 src=$1
 out=$2

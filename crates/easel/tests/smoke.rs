@@ -90,6 +90,22 @@ fn a_short_session_at_the_easel() {
         let e = fails(&["-s", "smoke", "do", chunk]);
         assert!(e.contains("the chunk failed and changed nothing"), "{chunk}: {e}");
     }
+    // removed from the painter's API: a poured glaze (glazes are brushed:
+    // work(m, {hand="glaze", ...})), the drawing mask, the false-color
+    // drying look, and waits past 10 years
+    for (chunk, want) in [
+        ("glaze(rect(0, 0, 10, 10), {pile=a})", "global 'glaze'"),
+        ("m = drawing_mask()", "global 'drawing_mask'"),
+        ("wait(5259601)", "10 years"),
+        ("wait(1e100)", "10 years"),
+    ] {
+        let e = fails(&["-s", "smoke", "do", chunk]);
+        assert!(e.contains(want) && e.contains("the chunk failed and changed nothing"), "{chunk}: {e}");
+    }
+    for mode in ["wet", "drying", "stages"] {
+        let e = fails(&["-s", "smoke", "look", "--mode", mode]);
+        assert!(e.contains(&format!("--mode {mode}:")), "--mode {mode}: {e}");
+    }
     assert!(ok(&["-s", "smoke", "status"]).starts_with("2 chunks"));
 
     // the log replays to the live canvas exactly, in the session and from the file

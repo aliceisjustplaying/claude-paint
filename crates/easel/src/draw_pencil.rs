@@ -3,7 +3,7 @@
 //!
 //! A pencil is a plain Lua table (`{grade="2B", kind="graphite", worn=0}`)
 //! with shared methods, so how far its point has worn is part of the Lua
-//! heap: undo and rollback restore it with everything else, and a replay
+//! heap: a failed chunk restores it with everything else, and a replay
 //! blunts it the same way.
 
 use crate::api::{S, check_keys, err, frame, mask_of, num, points, seed_of, wrap};

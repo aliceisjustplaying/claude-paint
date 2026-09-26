@@ -3,12 +3,12 @@
 //! skeleton). Geometry only: a brush paints the line with `o:paint(b)`.
 //!
 //! ```lua
-//! rock = outline{{300,600}, {320,450,"c"}, {420,380}, {560,400,"c"}, {650,480}, {680,600,"c"}, {500,620},
-//!                char="broken", seed=3}
-//! work(rock:mask(), {...})             -- fill it
-//! rock:paint(b, {pressure=0.8})        -- draw its contour with a pointed brush
-//! sheep = body_of{spine={{100,500},{110,499},{120,500},{126,497},{130,499}}, widths={9,11,10,5,4},
-//!                 limbs={{{102,502},{102,510}}, ...}, char="soft"}
+//! o = outline{{300,600}, {320,450,"c"}, {420,380}, {560,400,"c"}, {650,480}, {680,600,"c"}, {500,620},
+//!             char="broken", seed=3}
+//! work(o:mask(), {pile=p})             -- fill it
+//! o:paint(b, {pressure=0.8})           -- draw its contour with a brush
+//! s = body_of{spine={{100,500},{110,499},{120,500},{126,497},{130,499}}, widths={9,11,10,5,4},
+//!             limbs={{{102,502},{102,510}}}, char="soft"}
 //! ```
 
 use crate::api::{S, check_keys, err, frame, mask_of, num, points, seed_of, wrap};

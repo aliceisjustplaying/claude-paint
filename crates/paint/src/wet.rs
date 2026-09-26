@@ -16,9 +16,28 @@
 //! color of the field it sits in disappears into it, whether it is body
 //! color or a thin scumble; a thin coat over a different color lands between
 //! the two, as real paint does. To ask "what will this look like *here*",
-//! use `Paint::over`, `Canvas::under` and the aiming calls in `palette`
-//! (`Palette::aim`, `Canvas::aim`). Glazes named by the tint they give a
-//! white ground use `Paint::tint`/`Paint::glaze`.
+//! use `Paint::over` and `Canvas::under`. Choose tube proportions explicitly
+//! with `Palette::pile` and thin the resulting mixture with medium.
+//!
+//! Color matching is not part of the physical paint API.
+//!
+//! No automatic `Paint::aimed`:
+//! ```compile_fail,E0599
+//! use paint::Paint;
+//! Paint::aimed([0.5; 3], [0.2; 3], 1.0, 0.5, 0.5);
+//! ```
+//!
+//! No automatic `Paint::tint`:
+//! ```compile_fail,E0599
+//! use paint::Paint;
+//! Paint::tint([0.5; 3], 0.5, 0.5);
+//! ```
+//!
+//! No automatic `Paint::glaze`:
+//! ```compile_fail,E0599
+//! use paint::Paint;
+//! Paint::glaze([0.5; 3]);
+//! ```
 
 use crate::canvas::Canvas;
 use crate::color::{Rgb, luminance};
@@ -42,7 +61,7 @@ fn lerp_prop(p: &mut Prop, q: Prop, a: f32) {
 /// A paint as squeezed from the tube and thinned with medium.
 ///
 /// It carries its Kubelka–Munk scattering `scatter` directly, so a mixture
-/// handed to the brush keeps the S it was scored with, however opaque it is
+/// handed to the brush keeps the S it was mixed with, however opaque it is
 /// (hiding saturates near 1 and can't carry a large S). Name paints by
 /// hiding with `Paint::new`/`with_hiding`; `hiding()` reports it back.
 #[derive(Clone, Copy, Debug)]
@@ -99,58 +118,6 @@ impl Paint {
     pub fn hiding(&self) -> f32 {
         hiding_of(luminance(self.color), self.scatter)
     }
-    /// A transparent glaze that tints a white ground to `tint` at one coat.
-    pub fn glaze(tint: Rgb) -> Self {
-        Paint::tint(tint, 0.07, 0.3)
-    }
-    /// A paint named by its tint: one coat of it over white looks `tint`
-    /// (its appearance over white). Its masstone is deeper.
-    pub fn tint(tint: Rgb, hiding: f32, stiff: f32) -> Self {
-        Paint::solve(tint, [1.0; 3], 1.0, hiding, stiff)
-    }
-    /// The paint of this hiding that, laid `coats` thick over `under`,
-    /// looks `want` (or as near as a paint can: a light glaze cannot
-    /// lighten a dark underlayer, so it comes out as light as it can).
-    pub fn aimed(want: Rgb, under: Rgb, coats: f32, hiding: f32, stiff: f32) -> Self {
-        Paint::solve(want, under, coats, hiding, stiff)
-    }
-    fn solve(want: Rgb, under: Rgb, coats: f32, hiding: f32, stiff: f32) -> Self {
-        // For a trial masstone luminance `l` the scattering is fixed
-        // (`scatter_for(l, hiding)`) and each channel's masstone follows by
-        // bisection. The answer is a root of `luminance(m(l)) − l`, which is
-        // ≥ 0 at the darkest masstone and ≤ 0 at the lightest, so bisecting
-        // on `l` always converges (a plain fixed-point iteration can
-        // oscillate and stop far from it). Whatever `l` it lands on, the
-        // paint carries the scattering its channels were solved with, so
-        // its look over `under` is exact wherever the target is reachable.
-        let fit = |l: f32| -> (Rgb, f32) {
-            let s = scatter_for(l, hiding);
-            let m = std::array::from_fn(|c| {
-                let (mut lo, mut hi) = (0.002f32, 0.995f32);
-                for _ in 0..30 {
-                    let mid = 0.5 * (lo + hi);
-                    if Pigment::masstone([mid; 3], s).over([under[c]; 3], coats)[0] < want[c] {
-                        lo = mid;
-                    } else {
-                        hi = mid;
-                    }
-                }
-                0.5 * (lo + hi)
-            });
-            (m, s)
-        };
-        let (mut lo, mut hi) = (0.002f32, 0.995f32);
-        for _ in 0..24 {
-            let mid = 0.5 * (lo + hi);
-            if luminance(fit(mid).0) > mid {
-                lo = mid;
-            } else {
-                hi = mid;
-            }
-        }
-        let (color, scatter) = fit(0.5 * (lo + hi));
-        Paint { color, scatter, stiff, drying: 1.0 }
-    }
     pub fn latent(&self) -> Latent {
         mixbox::linear_float_rgb_to_latent(&self.color)
     }
@@ -204,7 +171,6 @@ impl Wet {
             Some((a, b, c, d)) => (a.min(x0), b.min(y0), c.max(x1), d.max(y1)),
         });
     }
-
 }
 
 /// Mix `v` of (`lat`, `hide`) into a reservoir (`rv`, `rl`, `rh`).
@@ -373,29 +339,5 @@ mod tests {
         assert_eq!(super::over_share(pig, under, 0.1, 0.0), under);
         let tiny = super::over_share(pig, under, 5.0, 1e-30);
         assert!(tiny.iter().all(|v| v.is_finite() && (v - 1.0).abs() < 1e-6), "{tiny:?}");
-    }
-
-    /// `Paint::aimed` reaches any target made by a paint of the same hiding
-    /// (e.g. masstone 0.8, hiding 0.92, 0.1 coats over black),
-    /// across lightening targets, thin films and substrates.
-    #[test]
-    fn aimed_reaches_targets_made_by_the_same_model() {
-        use crate::wet::Paint;
-        let mut worst = (0.0f32, String::new());
-        for hiding in [0.07, 0.3, 0.5, 0.92] {
-            for under in [[0.0; 3], [1.0; 3], [0.2, 0.3, 0.45], [0.7, 0.5, 0.3]] {
-                for coats in [0.1, 0.3, 0.6, 1.0, 2.5] {
-                    for m in [[0.8; 3], [0.95, 0.9, 0.8], [0.05, 0.1, 0.3], [0.5, 0.2, 0.1], [0.3; 3]] {
-                        let want = Paint::new(m, hiding, 0.5).over(under, coats);
-                        let got = Paint::aimed(want, under, coats, hiding, 0.5).over(under, coats);
-                        let e = (0..3).map(|c| (want[c] - got[c]).abs()).fold(0.0, f32::max);
-                        if e > worst.0 {
-                            worst = (e, format!("m {m:?} hiding {hiding} under {under:?} coats {coats}: want {want:?} got {got:?}"));
-                        }
-                    }
-                }
-            }
-        }
-        assert!(worst.0 < 2e-3, "worst miss {}: {}", worst.0, worst.1);
     }
 }

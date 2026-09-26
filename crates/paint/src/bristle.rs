@@ -1925,8 +1925,8 @@ mod cover_tests {
         let dark = |_: f32, _: f32| hex("#2c2925");
         let body = || st.body().color(dark).clip(true).threshold(0.5).coverage(2.5);
         let broad = || st.broad().color(dark).clip(true).threshold(0.5).coverage(2.5);
-        let (_, bare) = bare_share(500, &body(), 5);
-        let (_, bare_broad) = bare_share(500, &broad(), 5);
+        let (_, bare) = bare_share(500, &body().fill(true), 5);
+        let (_, bare_broad) = bare_share(500, &broad().fill(true), 5);
         let (_, gaps) = bare_share(500, &broad().fill(false), 5);
         let h = body().pressure(0.15, 0.3);
         let (_, dry) = bare_share(500, &Handling { load: 0.1, ..h }, 5);

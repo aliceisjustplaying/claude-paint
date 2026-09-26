@@ -2,6 +2,4 @@
 //! is a fixed sequence of brush gestures, the way a painter who has painted a
 //! figure many times puts it down: which brush, which stroke, in what order.
 
-pub mod figures;
-pub mod rocks;
 pub mod run;

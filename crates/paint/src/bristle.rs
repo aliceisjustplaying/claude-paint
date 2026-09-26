@@ -34,8 +34,7 @@ const TOOTH_UM: f32 = 60.0;
 /// step of thick paint no longer lifts the level of the thin paint beside
 /// it: a plain mean (two box blurs of radius r) made the thin side read as a
 /// valley ~2r wide that no bristle reached, so a veil or glaze laid up to a
-/// thick dark motif stopped short of it and left a pale halo (amnesia 3,
-/// easel3_free: the stones, the figure and the trunk looked matted in).
+/// thick dark motif stopped short of it and left a pale halo.
 /// Only the corner right at the foot of the step is missed.
 pub(crate) fn contact_level(height: &[f32], w: usize, h: usize, r: usize) -> Vec<f32> {
     use rayon::prelude::*;
@@ -120,13 +119,13 @@ pub struct Tool {
     /// fine point. 0 for every preset (round sable and rigger included, so
     /// a mark is as wide as the brush and pressure ask): the pointed tip is
     /// the painter's choice, `Tool { point: 1.0, ..Tool::round_sable(w) }`
-    /// (Lua `brush{kind="round", width=w, point=1}`). A pointed
+    ///. A pointed
     /// tuft is a cone: pressed lightly only the point touches (a hairline),
     /// pressed harder the belly spreads (width grows with pressure), and on
     /// the lift the mark draws down to a point. Its loaded tip wets the
     /// weave's valleys (a continuous line, not dry-brush dots), paint runs
     /// down from the belly to the tip as the tip lays it, and a tip run dry
-    /// loses its point and splits. See `notes/tip.md`.
+    /// loses its point and splits.
     pub point: f32,
 }
 
@@ -1680,7 +1679,7 @@ mod tip_tests {
         }
     }
 
-    /// Round 7 (winter A/B): the presets are blunt again, so a round, a
+    /// The presets are blunt, so a round, a
     /// rigger, a line or a detail brush lays the width the painter asked
     /// for; the pointed tip (a hairline at light pressure) is opt-in.
     #[test]

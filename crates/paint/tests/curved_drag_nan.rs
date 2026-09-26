@@ -1,11 +1,9 @@
-//! Coast FRICTION #17 (notes/amnesia2/fresh2_coast.md): "a curved
-//! multi-point `drag` with a fine brush laid nothing". The coil of rope in
-//! paintings/fresh2/fresh2_coast.rs is an 11-point U,
+//! A curved multi-point `drag` with a fine brush that laid nothing. An
+//! 11-point U,
 //! `y = py + 1.3 + drop * sin(a).powf(0.8)` for `a = PI * k / 10`. In f32,
 //! `sin(PI)` is -8.7e-8, so the last point's y is NaN, and a gesture with a
 //! NaN point laid nothing anywhere along it (and said nothing). Now such a
-//! gesture is rejected loudly; the diagnosis and the fix are in
-//! notes/workflow.md, "Fixed: a gesture with a NaN point".
+//! gesture is rejected loudly.
 
 use paint::{Canvas, Gesture, Held, Orient, Paint, Tool, hex};
 

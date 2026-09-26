@@ -7,7 +7,7 @@
 //! 4. criss-cross: two families at ±0.5 rad (`cross`)
 //! 5. drift: the direction wandering across the passage (`drift`)
 //!
-//! Top row: the lay-in only (two passes, as in friedrich_moonrise_valley),
+//! Top row: the lay-in only (two passes),
 //! dried. Bottom row: the same lay-in fused with
 //! the badger (the blender worked top to bottom, `sweep`), dried.
 //!
@@ -45,7 +45,7 @@ fn main() {
             let (x1, y1) = (x0 + pw - 8.0, y0 + ph - 8.0);
             let panel = Mask::from_fn(f, move |x, y| if x >= x0 && x < x1 && y >= y0 && y < y1 { 1.0 } else { 0.0 });
             let s = o.seed * 1000 + (row * 10 + i) as u64 * 7;
-            // the sky recipe of friedrich_moonrise_valley: a full lay-in,
+            // a full lay-in,
             // then a leaner second pass in shorter strokes
             c.work(&panel, &way(st.broad().color(sky).medium(0.3).load(0.64).pressure(0.7, 0.9).coverage(4.0).clip(true)), s);
             c.work(&panel, &way(st.broad().color(sky).coverage(2.0).length(60.0, 150.0).medium(0.55).clip(true)), s + 5);

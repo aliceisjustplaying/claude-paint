@@ -1,18 +1,26 @@
 #!/bin/sh
-# Make a small JPEG preview for viewing (keeps image payloads ~150–300 KB).
-# PNG renders of canvas texture compress badly (1–20 MB), so never view them directly.
-#
-#   scripts/peek SRC OUT.jpg [H W Y X]     optional crop: height width offsetY offsetX
-#   max dimension 1000px, JPEG quality 95 with full-resolution color (4:4:4):
-#   quality 80 with half-resolution color (the old setting) smeared thin colored
-#   strokes and edges, the very things a painter judges at 3200 (Round 6).
-#   Sheets for Alice are built lossless from the PNG renders, never from these.
-set -e
+# Write a bounded PNG view of an existing image.
+# scripts/peek SRC OUT.png [H W Y X]
+# Whole views step back; crops keep source pixels at 1:1.
+set -eu
+[ "$#" -eq 2 ] || [ "$#" -eq 6 ] || { echo 'usage: scripts/peek SRC OUT.png [H W Y X]' >&2; exit 2; }
 src=$1
 out=$2
-if [ -n "$6" ]; then
-  magick "$src" -crop "${4}x${3}+${6}+${5}" +repage -resize '1000x1000>' -quality 95 -sampling-factor 4:4:4 "$out"
+case "$out" in *.png) ;; *) echo 'peek output must end in .png' >&2; exit 2 ;; esac
+if [ "$#" -eq 6 ]; then
+  for value in "$3" "$4" "$5" "$6"; do
+    case "$value" in ''|*[!0-9]*) echo 'crop dimensions and offsets must be nonnegative integers' >&2; exit 2 ;; esac
+  done
+  [ "$3" -gt 0 ] && [ "$4" -gt 0 ] && [ "$3" -le 1200 ] && [ "$4" -le 1200 ] || { echo 'crop sides must be 1 to 1200 pixels' >&2; exit 2; }
+  magick "$src" -crop "${4}x${3}+${6}+${5}" +repage -alpha off -depth 8 "PNG24:$out"
 else
-  magick "$src" -resize '1000x1000>' -quality 95 -sampling-factor 4:4:4 "$out"
+  side=1600
+  while :; do
+    magick "$src" -resize "${side}x${side}>" -alpha off -depth 8 "PNG24:$out"
+    bytes=$(wc -c < "$out")
+    [ "$bytes" -lt 3000000 ] && break
+    side=$((side * 9 / 10))
+  done
 fi
-ls -la "$out" | awk '{print $5, $9}'
+bytes=$(wc -c < "$out")
+printf '%s %s\n' "$bytes" "$out"

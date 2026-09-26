@@ -409,6 +409,8 @@ main, `notes/loops/*.lua`) use removed verbs and don't run here.
     place or project names (e.g. `cdfriedrich.de`). The physics note's
     source 10 lost its URL (the URL named a painter).
 15. **The names check is a fixed list** in the export script; a name not
-    on it would pass.
+    on it would pass. The built binary holds its build path (the easel
+    finds its folder from it), so a destination folder named after a
+    painter puts that name in the binary: name blank studios neutrally.
 16. **The `studio/` viewer** reads pi session logs, not easel logs, so it
     is unaffected; it isn't in the export.

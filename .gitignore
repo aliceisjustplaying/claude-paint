@@ -7,3 +7,4 @@ out/lua/
 out/**/*.png
 out/**/*.jpg
 out/easel/
+__pycache__/

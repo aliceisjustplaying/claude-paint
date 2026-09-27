@@ -22,3 +22,9 @@ cargo test --workspace                # the engine's and the easel's tests
   pigments, palette, cracks).
 - `crates/easel`: the live Lua session over it.
 - `THIRD_PARTY_NOTICES.md`: licenses of the code this builds on.
+
+## License
+
+The code is under the MIT License (`LICENSE`). The paintings, painting logs,
+session logs and texts are under CC BY 4.0
+(https://creativecommons.org/licenses/by/4.0/).

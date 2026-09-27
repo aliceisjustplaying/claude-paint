@@ -131,8 +131,13 @@ def lane(profile, m, painters=1):
 OPUS = model("anthropic", "claude-opus-5-5", "high", black=True)
 READER = ["--provider", "anthropic", "--model", "claude-opus-5-5", "--thinking", "medium"]
 
+# GPT-6 Luna through the ChatGPT subscription (dev runs), thinking max
+LUNA = model("openai-codex", "gpt-6-luna", "max")
+
 LANES = {
     "F": lane("friedrich", OPUS, painters=3),
+    "LUNAF": lane("friedrich", LUNA),        # a Friedrich, one painter
+    "LUNAB": lane("blank", LUNA),            # a picture of its choosing
     # Blank studio, one painter each: uncomment the lanes to run.
     # "OPUS": lane("blank", model("anthropic", "claude-opus-5-5", "high", black=True)),
     # "BUN": lane("blank", model("opencode-go", "space-bunny-free", "xhigh")),       # its map goes to max

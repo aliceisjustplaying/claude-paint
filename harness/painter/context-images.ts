@@ -16,6 +16,10 @@
  * provider's prompt cache) changes once every STEP new images rather than with every look.
  * The number dropped depends only on the images in the messages, so the same messages
  * always give the same request.
+ *
+ * A launcher can lower (or raise) the limits for a lane with PAINTER_MAX_IMAGES and
+ * PAINTER_MAX_IMAGE_MB (see limitsFromEnv): round 18g's Gemini lane keeps 8, since every
+ * request counts against Google's input tokens per minute.
  */
 
 export const MAX_IMAGES = 20;
@@ -29,6 +33,24 @@ export interface PruneLimits {
 }
 
 export const LIMITS: PruneLimits = { maxImages: MAX_IMAGES, maxImageChars: MAX_IMAGE_CHARS, step: STEP };
+
+/** LIMITS, with PAINTER_MAX_IMAGES (a count, at least 1) and PAINTER_MAX_IMAGE_MB (MB of base64) from `env` where set. */
+export function limitsFromEnv(env: Record<string, string | undefined> = process.env): PruneLimits {
+	const num = (name: string, min: number): number | undefined => {
+		const raw = env[name];
+		if (raw === undefined || raw.trim() === "") return undefined;
+		const v = Number(raw);
+		if (!Number.isFinite(v) || v < min) throw new Error(`${name}=${raw}: want a number >= ${min}`);
+		return v;
+	};
+	const images = num("PAINTER_MAX_IMAGES", 1);
+	const mb = num("PAINTER_MAX_IMAGE_MB", 0.001);
+	return {
+		maxImages: images === undefined ? MAX_IMAGES : Math.floor(images),
+		maxImageChars: mb === undefined ? MAX_IMAGE_CHARS : Math.round(mb * 1_000_000),
+		step: STEP,
+	};
+}
 
 type Block = { type?: string; data?: string; text?: string; [k: string]: unknown };
 type Message = { role?: string; content?: unknown; toolCallId?: string; [k: string]: unknown };

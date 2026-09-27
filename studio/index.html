@@ -301,7 +301,7 @@ function journal(i) {
       html += `<div class="th${k === lastThink ? ' last' : ''}" data-k="${k}">${typing ? '' : esc(e.text.trim())}</div>`; }
     else if (e.kind === 'sitting') { flush(); const gap = (t - Date.parse(events[k - 1].ts)) / 1000;
       html += `<div class="sit">🪑 ${esc(sitLabel(e))}${gap > 120 ? ` <span>· after ${ago(gap).replace(' ago', '')} away</span>` : ''}</div>`; lastTm = t; }
-    else if (e.kind === 'say') { flush(); html += `<div class="say">${esc(e.text.trim().slice(0, 1500))}</div>`; }
+    else if (e.kind === 'say') { flush(); html += `<div class="say">${esc(e.text.trim())}</div>`; }
     else { const c = kindOf(e); if (!c || e.kind === 'image' && k > 0 && events[k-1].kind === 'read') continue;
       const title = esc(e.kind === 'cmd' ? e.text.slice(0, 2000) : (e.path || ''));
       chips.push(`<span class="chip ${c[0]}" title="${title}"${e.kind === 'image' ? ` data-i="${k}"` : ''}>${c[1]} ${esc(c[2])}</span>`); } }

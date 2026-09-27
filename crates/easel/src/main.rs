@@ -468,9 +468,9 @@ impl Server {
     fn validate(&self) -> Result<(), String> {
         let expected = self.written.as_deref().ok_or("session integrity: uninitialized log")?;
         for p in [log_path(&self.name), self.witness()] {
-            let actual = std::fs::read(&p).map_err(|e| format!("session integrity: {} is missing or unreadable ({e}); the log was edited outside the session; refusing request", p.display()))?;
+            let actual = std::fs::read(&p).map_err(|e| format!("session integrity: {} can't be read ({e}). The easel goes on only from the log it wrote; nothing ran.", p.display()))?;
             if actual != expected.as_bytes() {
-                return Err(format!("session integrity: {} was edited outside the session (it differs from the committed log); refusing request", p.display()));
+                return Err(format!("session integrity: {} differs from the log the session wrote. The easel goes on only from the log it wrote; nothing ran.", p.display()));
             }
         }
         Ok(())

@@ -70,6 +70,15 @@ def list_sessions():
         d = os.path.basename(os.path.dirname(f))
         out.append({"path": f, "folder": d.strip("-").split("-src-a-")[-1], "model": session_model(f), "painter": bool(PAINTER.match(d.strip("-").split("-src-a-")[-1])),
                     "mtime": os.path.getmtime(f), "size": os.path.getsize(f)})
+    # a painter's sittings are separate sessions in one folder: number them by start time
+    # (session file names begin with it)
+    by = {}
+    for s in out:
+        by.setdefault(s["folder"], []).append(s)
+    for group in by.values():
+        if len(group) > 1 and group[0]["painter"]:
+            for k, s in enumerate(sorted(group, key=lambda s: os.path.basename(s["path"])), 1):
+                s["sitting"] = k
     out.sort(key=lambda s: -s["mtime"])
     return out
 

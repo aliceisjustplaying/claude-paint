@@ -12,7 +12,7 @@
 #
 # dest gets:
 #   bin/easel                  the painter's easel (built without the `replay`
-#                              feature: no `run`, one session, no EASEL_ROOT)
+#                              feature: no `run`, no `check`, one session, no EASEL_ROOT)
 #   notes/easel_guide.md, notes/research/..., notes/journal.md (empty)
 #   paintings/lua/             (empty; the session log goes here)
 #   THIRD_PARTY_NOTICES.md     the license notices the binary requires
@@ -103,13 +103,17 @@ E="$probe/bin/easel"
   "$E" do 'b = brush("round", 4); b:load(pile{{"raw umber", 1}}, 0.8); b:stroke({{200, 300}, {800, 320}})' >/dev/null
   "$E" look >/dev/null
   "$E" save >/dev/null
-  "$E" check >/dev/null
   "$E" close >/dev/null
   trap - EXIT
 )
 [ -s "$probe/paintings/lua/painting.lua" ] && [ -s "$probe/out/easel/painting/painting.png" ] || { echo "the exported easel didn't paint in $probe" >&2; exit 1; }
 if "$E" run "$probe/paintings/lua/painting.lua" >/dev/null 2>&1; then
   echo "the exported easel has a run command" >&2
+  exit 1
+fi
+# replaying the log against the canvas is the runner's (scripts/check_painting)
+if ! "$E" check 2>&1 | grep -q 'no command "check"' || "$E" help | grep -q 'easel check'; then
+  echo "the exported easel has a check command" >&2
   exit 1
 fi
 

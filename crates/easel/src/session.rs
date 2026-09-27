@@ -94,7 +94,8 @@ impl Session {
     }
 
     /// A session that replays a program: a failed chunk ends it, so it
-    /// keeps no snapshot.
+    /// keeps no snapshot. (`easel run` and `check`: the replay build.)
+    #[cfg(any(feature = "replay", test))]
     pub fn replay(width: usize) -> mlua::Result<Self> {
         let mut s = Self::new(width)?;
         s.replay = true;

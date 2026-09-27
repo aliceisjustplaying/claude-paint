@@ -3,13 +3,14 @@
 //!   easel open [<name>]              start (or reattach to) a session
 //!   easel do '<lua>' | -f chunk.lua | -            run a chunk on the live canvas
 //!   easel look [--crop x0,y0,x1,y1] [--mode value|squint|mirror] [--grid [step]] [--size N]
-//!   easel log | status | save [path] | frames on|off | check | close
+//!   easel log | status | save [path] | frames on|off | close
+//!   easel check                                    (replay build) replay the log, compare
 //!   easel note '<text>' | -                        append to notes/journal.md
 //!   easel run paintings/lua/<name>.lua [--out path] [--look]
 //!
 //! Two builds (see `USAGE`). The replay build (feature `replay`, on by
 //! default: developers, tests and the outside runner) has named sessions
-//! (`-s`, `EASEL_SESSION`), `EASEL_ROOT`, `run` and `hash-probe`. The
+//! (`-s`, `EASEL_SESSION`), `EASEL_ROOT`, `run`, `check` and `hash-probe`. The
 //! painter build (`--no-default-features`) has none of them: its studio is
 //! the directory above the executable's (`<studio>/bin/easel`) and holds one
 //! painting, `PAINTING`. See notes/easel_guide.md.
@@ -55,7 +56,6 @@ const USAGE: &str = "easel: a live painting session (see notes/easel_guide.md)
   easel status        chunks, width, canvas
   easel save [path]   the canvas as a PNG (default out/easel/painting/painting.png)
   easel frames on|off save a look after every chunk
-  easel check         replay the log from scratch and compare with the live canvas
   easel close         end the session (the log stays)
   easel note '<text>' | easel note - (stdin)    append a dated entry to notes/journal.md";
 
@@ -106,7 +106,11 @@ fn main() -> ExitCode {
             println!("{USAGE}");
             Ok(())
         }
-        "do" | "look" | "log" | "status" | "save" | "frames" | "check" | "close" => client(&cmd, &rest, name),
+        "do" | "look" | "log" | "status" | "save" | "frames" | "close" => client(&cmd, &rest, name),
+        // replaying the log to compare it with the live canvas is the runner's, after the
+        // painter's session (scripts/check_painting); the painter build has no `check`
+        #[cfg(feature = "replay")]
+        "check" => client(&cmd, &rest, name),
         o => Err(format!("easel: no command {o:?}\n\n{USAGE}")),
     };
     match r {
@@ -398,7 +402,8 @@ fn serve(args: &[String]) -> Result<(), String> {
     let sock = sock_path(&name);
     let l = UnixListener::bind(&sock).map_err(|e| format!("easel: fatal: bind {}: {e}", sock.display()))?;
     let _ = std::io::stdout().flush();
-    // the check running on its own thread, if any (check.rs)
+    // the check running on its own thread, if any (check.rs; replay build only)
+    #[cfg(feature = "replay")]
     let mut checking: Option<check::Job> = None;
 
     for conn in l.incoming() {
@@ -418,6 +423,7 @@ fn serve(args: &[String]) -> Result<(), String> {
             eprintln!("{cmd} skipped: the client went away before it ran");
             continue;
         }
+        #[cfg(feature = "replay")]
         if cmd == "check" {
             if let Some(j) = checking.take() {
                 j.stop();
@@ -440,6 +446,7 @@ fn serve(args: &[String]) -> Result<(), String> {
         let _ = conn.write_all(reply.as_bytes());
         eprintln!("{cmd} {:.2}s {}", t0.elapsed().as_secs_f64(), if r.is_ok() { "ok" } else { "err" });
         if cmd == "close" && r.is_ok() {
+            #[cfg(feature = "replay")]
             if let Some(j) = checking.take() {
                 j.stop();
             }
@@ -539,6 +546,7 @@ impl Server {
     }
 
     /// What `check` replays and compares with (check.rs runs it on its own thread).
+    #[cfg(feature = "replay")]
     fn check_input(&self) -> Result<check::Input, String> {
         self.ready()?;
         Ok(check::Input {
@@ -592,9 +600,11 @@ impl Server {
     }
 }
 
+#[cfg(feature = "replay")]
 fn bits(v: &[paint::Rgb]) -> Vec<u32> {
     v.iter().flat_map(|p| p.map(f32::to_bits)).collect()
 }
+#[cfg(feature = "replay")]
 fn bits_f(v: &[f32]) -> Vec<u32> {
     v.iter().map(|x| x.to_bits()).collect()
 }

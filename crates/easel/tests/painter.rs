@@ -1,7 +1,7 @@
 //! The painter build (`--no-default-features`): the easel shipped in a
 //! studio as `<studio>/bin/easel`. Run from anywhere, it works in that
 //! studio on its one painting; what the replay build adds (named sessions,
-//! EASEL_ROOT, `run`) is not there.
+//! EASEL_ROOT, `run`, `check`) is not there.
 //!
 //!   cargo test -p easel --no-default-features --test painter
 #![cfg(not(feature = "replay"))]
@@ -67,10 +67,10 @@ fn the_shipped_easel_paints_its_one_painting_in_its_own_studio() {
 
     // the usage lists only what exists
     let usage = ok(&["help"]);
-    for cmd in ["open", "do", "look", "log", "status", "save", "frames", "check", "close", "note"] {
+    for cmd in ["open", "do", "look", "log", "status", "save", "frames", "close", "note"] {
         assert!(usage.contains(&format!("easel {cmd}")), "{cmd}: {usage}");
     }
-    for gone in ["easel run", "-s ", "EASEL_SESSION", "<name>", "wet"] {
+    for gone in ["easel run", "easel check", "-s ", "EASEL_SESSION", "<name>", "wet"] {
         assert!(!usage.contains(gone), "{gone}: {usage}");
     }
 
@@ -85,7 +85,6 @@ fn the_shipped_easel_paints_its_one_painting_in_its_own_studio() {
     let saved = ok(&["save"]);
     assert_eq!(saved.trim_end(), studio.join("out/easel/painting/painting.png").display().to_string());
     assert!(studio.join("out/easel/painting/painting.png").exists());
-    assert!(ok(&["check"]).contains("replay matches the live canvas exactly (2 chunks"));
 
     // what the painter build doesn't have
     let log = studio.join("paintings/lua/painting.lua");
@@ -95,6 +94,9 @@ fn the_shipped_easel_paints_its_one_painting_in_its_own_studio() {
     assert!(e.contains("no command \"run\""), "{e}");
     let e = fails(&["hash-probe"]);
     assert!(e.contains("no command \"hash-probe\""), "{e}");
+    // replaying the log against the canvas is the runner's (scripts/check_painting), not the painter's
+    let e = fails(&["check"]);
+    assert!(e.contains("no command \"check\"") && !e.contains("easel check"), "{e}");
     for args in [&["-s", "painting", "status"][..], &["--session", "painting", "status"], &["status", "-s", "painting"]] {
         let e = fails(args);
         assert!(e.contains("one painting"), "{args:?}: {e}");

@@ -69,6 +69,14 @@ test("an image without a matching read call gets a generic line", () => {
 	assert.equal(r.messages[2].content[1].text, "[an earlier image]");
 });
 
+test("an image from the look tool gets a line saying it was a look", () => {
+	const msgs = session(21).map((m) => (m.role === "assistant"
+		? { ...m, content: m.content.map((c: any) => ({ ...c, name: "look", arguments: { crop: "0,0,100,100" } })) }
+		: m));
+	const r = pruneImages(msgs, L);
+	assert.equal(r.messages[2].content[1].text, "[an earlier look]");
+});
+
 test("the same messages give the same request", () => {
 	const a = pruneImages(session(40), L);
 	const b = pruneImages(session(40), L);

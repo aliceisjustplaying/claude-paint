@@ -397,22 +397,6 @@ thick, oily paint of slow pigments can stay open for weeks. Wet paint
 under a new stroke comes up into it; paint laid over dry paint sits on
 top of it.
 
-## Finishing (optional)
-
-Each of these is optional.
-
-```lua
-varnish{coats=0.4, vary=0.12}     -- a mastic varnish film over the whole canvas, as it looks aged
-cracks{}                          -- craquelure through paint and ground
-relief(0.3, 0.02)                 -- light the surface's relief from the upper left
-```
-
-Each needs all the paint on the canvas to be touch-dry. `cracks{}` grows
-cracks one at a time from the film's stress, fitted to this canvas's
-ground; its options are `island_mm`, `ground_um`, `width_um`, `depth_um`,
-`cupping_um`, `dirt`, `corners`, `vary`, `veil`, `hierarchy`, `patchy`,
-`grain`, `grime` and `seed`.
-
 ## Looking
 
 `bin/easel look` prints the path of a PNG of the canvas as it is now, with

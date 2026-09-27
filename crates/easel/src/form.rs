@@ -401,8 +401,15 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
         let area = [a[0].min(a[2]), a[1].min(a[3]), a[0].max(a[2]), a[1].max(a[3])];
         let h: mlua::Function = o.get("height")?;
         let step = num(&o, "step")?.unwrap_or(1.0).max(0.25);
+        if !area.iter().all(|v| v.is_finite()) || !step.is_finite() || area[2] - area[0] < step || area[3] - area[1] < step {
+            return err("terrain: area = {x0, y0, x1, y1} with x1 - x0 and y1 - y0 at least one step");
+        }
         let nx = ((area[2] - area[0]) / step).ceil() as usize + 1;
         let ny = ((area[3] - area[1]) / step).ceil() as usize + 1;
+        // a whole 1000-unit canvas at the finest step is 4001 x 4001 samples
+        if nx.saturating_mul(ny) > 4001 * 4001 {
+            return err("terrain: at most 4001 x 4001 samples (a larger step or a smaller area)");
+        }
         let mut z = Vec::with_capacity(nx * ny);
         for j in 0..ny {
             for i in 0..nx {

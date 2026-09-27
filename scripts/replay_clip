@@ -68,6 +68,11 @@ dir=${dir:-$out.frames}
 
 if [ "$reuse" = 0 ]; then
   [ -x "$easel" ] || { echo "replay_clip: no easel at $easel (cargo build --release -p easel)" >&2; exit 1; }
+  # only a frames folder of ours (or nothing, or an empty folder) is replaced
+  if [ -e "$dir" ] && [ ! -f "$dir/frames.tsv" ] && [ -n "$(ls -A "$dir" 2>/dev/null)" ]; then
+    echo "replay_clip: $dir exists and isn't a frames folder (no frames.tsv); not replacing it" >&2
+    exit 1
+  fi
   rm -rf "$dir"
   t0=$(date +%s)
   "$easel" run "$log" --out "$dir/final-full.png" --frames-every "$every" --frames-dir "$dir" --frame-width "$width" >/dev/null 2>"$dir.log" \

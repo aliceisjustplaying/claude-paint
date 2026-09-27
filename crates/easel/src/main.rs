@@ -18,6 +18,8 @@ mod api;
 mod depth;
 mod draw_edges;
 mod draw_outline;
+#[cfg(feature = "finish")]
+mod finish;
 mod form;
 mod look;
 mod session;

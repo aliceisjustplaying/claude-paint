@@ -75,13 +75,14 @@ function readPaths(messages: readonly Message[]): Map<string, string> {
 		if (m?.role !== "assistant" || !Array.isArray(m.content)) continue;
 		for (const c of m.content as { type?: string; id?: string; arguments?: { path?: unknown } }[]) {
 			if (c?.type === "toolCall" && c.id && typeof c.arguments?.path === "string") paths.set(c.id, c.arguments.path);
+			else if (c?.type === "toolCall" && c.id && (c as { name?: string }).name === "look") paths.set(c.id, "");
 		}
 	}
 	return paths;
 }
 
 export function placeholder(path: string | undefined): string {
-	return path ? `[an earlier look: ${path}]` : "[an earlier image]";
+	return path ? `[an earlier look: ${path}]` : path === "" ? "[an earlier look]" : "[an earlier image]";
 }
 
 export interface PruneResult<M> {

@@ -1,8 +1,7 @@
 # The easel
 
-The easel is a live oil painting in a background process. You send it Lua
-chunks from the shell, one at a time, and look at the canvas as a small
-PNG between them. Under it is a physical paint simulator: simulated
+The easel is a live oil painting. You send it Lua chunks with its `paint`
+tool, one at a time, and look at the canvas between them with `look`. Under it is a physical paint simulator: simulated
 bristles carry wet paint over a primed linen canvas, the paint levels and
 dries on a clock, and layers combine by Kubelka–Munk optics.
 
@@ -14,40 +13,23 @@ Three things hold for every session:
   variables, the paint on your brushes and the clock are as they were
   before it, and it isn't written to the log.
 - **The log is the painting.** Every chunk that ran is appended to
-  `paintings/lua/painting.lua`, and `bin/easel open` replays it to pick the
-  painting up again. The easel goes on only from the log it wrote: a log
-  changed, shortened or removed outside the session stops it.
+  `paintings/lua/painting.lua`, and replaying it paints the same canvas.
 
 ## Starting
 
-The easel is the program `bin/easel` in this folder. The studio holds one
-painting, and every command works on it. Run the commands from this
-folder:
+The studio holds one painting, and the easel is open on it. Its tools:
 
-```sh
-bin/easel open                                # start the session (2400 px wide), or reattach to it
-bin/easel do 'canvas{...}'                    # the first chunk: the canvas and its ground (see The canvas)
-bin/easel look                                # prints the path of a PNG of the canvas: read it
-bin/easel note 'what I did and why'           # an entry in notes/journal.md
-bin/easel save                                # the canvas as it is now: out/easel/painting/painting.png
-bin/easel close                               # the log stays in paintings/lua/painting.lua
-```
-
-| command | what it does |
+| tool | what it does |
 |---|---|
-| `bin/easel open` | starts the 2400-pixel-wide session, or reattaches to it if it is running. If `paintings/lua/painting.lua` exists, the session replays it first and goes on from there; a long log takes minutes to replay |
-| `bin/easel do '<lua>'`, `do -f file.lua`, `do -` | runs a chunk. The reply is what the chunk printed, then `ok · chunk N`. Add `--look` to look afterwards |
-| `bin/easel look [...]` | writes a PNG of the canvas and prints its path (see [Looking](#looking)) |
-| `bin/easel log` | prints the painting so far (the log file: each chunk after a line `--@ chunk N`) |
-| `bin/easel status` | chunks, width and the canvas's setup |
-| `bin/easel save` | writes the canvas as it is now to `out/easel/painting/painting.png` and prints the path |
-| `bin/easel frames on\|off` | saves a look after every chunk in `out/easel/painting/frames/` |
-| `bin/easel close` | ends the session |
-| `bin/easel note '<text>'`, `note -` | adds an entry to your journal (see [The journal](#the-journal)) |
+| `paint` | runs a chunk of Lua. The reply is what the chunk printed, then `ok · chunk N` |
+| `look` | shows you the canvas as it is now (see [Looking](#looking)) |
+| `note` | adds an entry to your journal (see [The journal](#the-journal)) |
+| `status` | the number of chunks, the canvas width in pixels and the canvas's setup |
+| `log` | the painting so far: every chunk that ran, each after a line `--@ chunk N` |
 
-The first chunk is `canvas{}`. When the painting is done, `bin/easel save`
-writes the picture to `out/easel/painting/painting.png`; the program that
-paints it is `paintings/lua/painting.lua`.
+The first chunk is `canvas{}` (see [The canvas](#the-canvas)). The canvas
+is 2400 pixels wide. `read` reads the files in this folder: your brief and
+your notes.
 
 In the examples below, `<tube>` stands for a name from the tube box and
 `<parts>` for a number of parts you choose.
@@ -371,7 +353,7 @@ mask's own edges, never what is in front.
 
 Painting takes time, and paint dries on the painting's clock. Only
 painting operations (strokes, touches, passes, trips to the palette) and
-`wait(minutes)` advance it. Real time between commands does not: paint
+`wait(minutes)` advance it. Real time between chunks does not: paint
 doesn't dry while you think. `wait(minutes)` passes painting time at once;
 it doesn't make you wait that many real minutes.
 
@@ -398,22 +380,22 @@ top of it.
 
 ## Looking
 
-`bin/easel look` prints the path of a PNG of the canvas as it is now, with
-wet paint as laid. The live canvas is 2400 pixels wide. A whole view is
+`look` shows you the canvas as it is now, with wet paint as laid. The live canvas is 2400 pixels wide. A whole view is
 scaled down to at most 1600 pixels on its long side and kept below 3 MB,
 like stepping back. A crop shows the original pixels at 1:1 and may be
-at most 1200 pixels on either side. `--crop x0,y0,x1,y1` gives two
+at most 1200 pixels on either side. `crop: "x0,y0,x1,y1"` gives two
 opposite corners in canvas units, not a position and width/height.
 
-```sh
-bin/easel look --crop 300,200,500,350          # a window in canvas units, shown at 1:1 pixels
-bin/easel look --mode value                    # in grays
-bin/easel look --mode squint                   # blurred, as through half-closed eyes
-bin/easel look --mode mirror                   # flipped left to right
-bin/easel look --mode value,squint --size 600  # modes combine; --size sets the long side
-bin/easel look --grid                          # a squared grid in canvas units, labeled along the edges
-bin/easel look --crop 300,200,500,350 --grid 10
-```
+| `look` with | shows |
+|---|---|
+| nothing | the whole canvas, scaled down |
+| `crop: "300,200,500,350"` | a window in canvas units, at 1:1 pixels |
+| `mode: "value"` | in grays |
+| `mode: "squint"` | blurred, as through half-closed eyes |
+| `mode: "mirror"` | flipped left to right |
+| `mode: "value,squint"`, `size: 600` | modes combine; `size` sets the long side |
+| `grid: true` | a squared grid in canvas units, labeled along the edges |
+| `crop: "300,200,500,350"`, `grid: 10` | a window with a grid every 10 units |
 
 The grid is drawn on the PNG only, never on the canvas, like the squares
 ruled over a drawing to transfer it.
@@ -443,8 +425,6 @@ ruled over a drawing to transfer it.
 
 ## The journal
 
-`notes/journal.md` is your working journal. `bin/easel note '<text>'` (or
-`bin/easel note -` to read the text from stdin) appends an entry stamped
-with the session's painting time, such as `day 2, 09:40`; the session must
-be open. Entries already there stay as they were written; writing a note
+`notes/journal.md` is your working journal. `note` appends an entry
+stamped with the painting's time, such as `day 2, 09:40`. Entries already there stay as they were written; writing a note
 doesn't advance painting time.

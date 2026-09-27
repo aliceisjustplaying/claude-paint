@@ -96,6 +96,12 @@ def schedule(c, h, a):
     w = np.zeros(n)
     w[1:] = (1 - a.floor) * ch / max(ch.sum(), 1e-12) + a.floor * hand / max(hand.sum(), 1e-12)
     w[0] = 0.0  # the bare ground arrives with no change: its time comes from the next frame's
+    if a.ramp < 1:
+        # speed up the opening: moments in the first --ramp-span of hand time get
+        # their weight scaled from --ramp up to 1 (smoothstep), so the lay-in
+        # and first washes go by quickly and the later work keeps its time
+        u = np.clip(h[: n] / max(h[-1], 1e-12) / max(a.ramp_span, 1e-6), 0, 1)
+        w *= a.ramp + (1 - a.ramp) * (u * u * (3 - 2 * u))
     want = a.length - a.hold
     k = want / w.sum()
     for _ in range(50):
@@ -147,6 +153,8 @@ def main():
     ap.add_argument("--gamma", type=float, default=0.7)
     ap.add_argument("--hand-pace", type=float, default=0.6)
     ap.add_argument("--min-frames", type=int, default=2)
+    ap.add_argument("--ramp", type=float, default=1.0, help="opening speed-up: weight factor at the start (1 = none)")
+    ap.add_argument("--ramp-span", type=float, default=0.35, help="share of hand time over which the ramp eases to 1")
     ap.add_argument("--eval", action="store_true", help="print evenness for this schedule and for plain --hand-pace")
     a = ap.parse_args()
     if a.length <= a.hold:

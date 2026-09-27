@@ -64,7 +64,7 @@ def test_the_stop_count_for_a_sitting_that_only_queried():
 
 
 def test_next_sitting_stops_after_a_sitting_that_only_queried():
-    from r19_chains import next_sitting
+    from r18r_open import next_sitting
     s1 = dict(sitting=1, status="completed", chunks_before=0, chunks_after=40, painting_before=0, painting_after=31)
     s2 = dict(sitting=2, status="completed", chunks_before=40, chunks_after=43, painting_before=31, painting_after=31)
     assert next_sitting([s1]) == 2
@@ -74,7 +74,7 @@ def test_next_sitting_stops_after_a_sitting_that_only_queried():
 
 
 def test_a_crashed_sitting_is_no_judgment_and_counts_only_if_it_painted():
-    from r19_chains import next_sitting
+    from r18r_open import next_sitting
     s1 = dict(sitting=1, status="crashed", exit=1, chunks_before=0, chunks_after=33, painting_before=0, painting_after=23)
     s2 = dict(sitting=2, status="crashed", exit=1, chunks_before=33, chunks_after=33, painting_before=23, painting_after=23)
     assert next_sitting([s1, s2]) == 3                     # no new painting, but a crash: another sitting
@@ -89,56 +89,9 @@ def test_a_crashed_sitting_is_no_judgment_and_counts_only_if_it_painted():
 
 
 def test_the_wait_after_a_crash_honors_the_providers_retry_hint():
-    from r19_chains import crash_wait, retry_hint
+    from r18r_open import crash_wait, retry_hint
     google = 'Quota exceeded ... \\nPlease retry in 53.812706879s.\\", ... \\"retryDelay\\": \\"53s\\"'
     assert retry_hint(google) == 53.812706879
     assert crash_wait(1, google) == 90                       # the backoff is longer
     assert crash_wait(1, "Please retry in 200s") == 215      # the hint is longer
     assert crash_wait(2, "") == 180 and crash_wait(99, "") == 1200
-
-
-def test_etime_reads_every_form_macos_ps_prints():
-    from r19_chains import etime_seconds
-    assert etime_seconds("00:45") == 45
-    assert etime_seconds("31:02") == 31 * 60 + 2
-    assert etime_seconds("01:20:59") == 3600 + 20 * 60 + 59
-    assert etime_seconds("07-00:28:52") == 7 * 86400 + 28 * 60 + 52
-    assert etime_seconds("COMMAND") is None
-
-
-STUDIO = "/h/src/a/paint-studio-abc123"
-
-
-def test_the_watchdog_stops_long_runners_in_its_studios_whatever_their_name():
-    from r19_chains import overdue
-    ps = [
-        "101 45:00 python3 grid.py",                                  # a painter's script (rounds 17-18 spared python3)
-        "102 45:00 node draw.js",
-        "103 45:00 /bin/bash -c sleep 99999",
-        "104 45:00 pi",                                               # the painter's pi: spared
-        f"105 45:00 {STUDIO}/bin/easel serve painting",               # the easel server: spared
-        f"106 45:00 /bin/bash ~/src/a/claude-paint-r19-base/scripts/check_painting {STUDIO} /r/F/p1_check",
-        "107 05:00 python3 young.py",                                 # not long enough
-        "108 45:00 python3 other.py",                                 # another round's studio
-        f"109 45:00 {STUDIO}/bin/easel do -",                         # its cwd elsewhere, the studio in its command
-        "110 45:00 sleep 99999",                                      # the runner itself
-        f"111 45:00 {STUDIO}/bin/easel open",                         # a replay: spared (it stops itself when stalled)
-    ]
-    cwds = {p: STUDIO for p in ("101", "102", "103", "104", "105", "107", "110", "111")}
-    cwds.update({"106": "/r", "108": "/h/src/a/paint-studio-ffffff", "109": "/"})
-    got = [pid for pid, *_ in overdue(ps, cwds, [STUDIO], 30 * 60, me="110")]
-    assert got == ["101", "102", "103", "109"]
-
-
-def test_the_watchdog_finds_a_real_process_in_a_studio(tmp_path):
-    import subprocess
-    from r19_chains import cwds_of_all, overdue
-    studio = tmp_path / "paint-studio-test"
-    studio.mkdir()
-    p = subprocess.Popen(["sleep", "30"], cwd=studio)
-    try:
-        ps = subprocess.run(["/bin/ps", "-Ao", "pid=,etime=,command="], capture_output=True, text=True).stdout.splitlines()
-        found = overdue(ps, cwds_of_all(), [str(studio.resolve())], 0)
-        assert [pid for pid, *_ in found] == [str(p.pid)]
-    finally:
-        p.kill()

@@ -144,7 +144,9 @@ LANES = {
     # # (harness/painter pace.ts), as round 18g; provider google's map has xhigh/max null, so high is the top
     # "GEM": lane("blank", model("google", "gemini-3.8-flash", "high",
     #                            env={"PAINTER_MAX_IMAGES": "8", "PAINTER_INPUT_TPM": "1500000"})),
-    # "MIMO": lane("blank", model("opencode-go", "mimo-v2.6-pro", "medium")),
+    # # MiMo v2.6 answers about an earlier image once 5+ are in the conversation
+    # # (github.com/XiaomiMiMo/MiMo-Code/issues/2508): keep 4
+    # "MIMO": lane("blank", model("opencode-go", "mimo-v2.6-pro", "medium", env={"PAINTER_MAX_IMAGES": "4"})),
     # "DSK": lane("blank", model("opencode-go", "deepseek-v4.1-flash", "high")),
 }
 DRY = False
@@ -202,6 +204,13 @@ def count_painting(d):
     return count_painting_chunks(f.read_text(errors="replace")) if f.exists() else 0
 
 
+def added_painting(s):
+    """Whether a sitting added painting chunks (chunk counts for records without painting counts)."""
+    before, after = (("painting_before", "painting_after") if s.get("painting_after") is not None
+                     else ("chunks_before", "chunks_after"))
+    return s.get(after) is not None and s.get(before) is not None and s[after] > s[before]
+
+
 def next_sitting(sittings, max_sittings=MAX_SITTINGS, max_crashes=MAX_CRASHES):
     """The number of the next sitting, or None when the painter is done.
 
@@ -209,8 +218,10 @@ def next_sitting(sittings, max_sittings=MAX_SITTINGS, max_crashes=MAX_CRASHES):
     'chunks_before', 'chunks_after', 'status'}). Sittings are numbered in order, retakes included.
     Only completed sittings are judged. A sitting that crashed (status 'crashed': pi exited
     non-zero, or its session ended on a provider error) or was cut off by the runner itself
-    stopping ('interrupted') is followed by another that doesn't count toward max_sittings;
-    after max_crashes crashes in all, the painter stops.
+    stopping ('interrupted') is followed by another that doesn't count toward max_sittings,
+    unless it added painting chunks: a sitting cut off after it painted (a provider's usage
+    limit, say) counts toward max_sittings, though it isn't judged. After max_crashes crashes
+    in all, the painter stops.
     Stop after a completed sitting that added no painting chunks (this includes a first sitting
     that painted nothing: no painting to come back to), or after max_sittings completed sittings.
     A record without painting counts (from an older runner) is judged by its chunk counts.
@@ -218,14 +229,11 @@ def next_sitting(sittings, max_sittings=MAX_SITTINGS, max_crashes=MAX_CRASHES):
     if not sittings:
         return 1
     done = [s for s in sittings if s.get("status") == "completed"]
-    if done:
-        last = done[-1]
-        before, after = (("painting_before", "painting_after") if last.get("painting_after") is not None
-                         else ("chunks_before", "chunks_after"))
-        if last[after] <= last[before]:
-            return None
-        if len(done) >= max_sittings:
-            return None
+    if done and not added_painting(done[-1]):
+        return None
+    counted = [s for s in sittings if s in done or (s.get("status") == "crashed" and added_painting(s))]
+    if len(counted) >= max_sittings:
+        return None
     if sum(1 for s in sittings if s.get("status") == "crashed") >= max_crashes:
         return None
     return max(s["sitting"] for s in sittings) + 1
@@ -292,6 +300,20 @@ def close_easel(d):
     stop_leftovers(d)
 
 
+def open_easel(d, tag):
+    """Replay the painting before Pi starts, with progress in the runner log, so the sitting message
+    ("the painting is as you left it") is true when the painter reads it."""
+    p = subprocess.Popen([str(d / "bin/easel"), "open"], cwd=d, stdin=subprocess.DEVNULL,
+                         stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+    for line in p.stdout:
+        if not line.startswith("resuming "):
+            log(f"{tag}: {line.rstrip()}")
+    rc = p.wait()
+    if rc:
+        log(f"{tag}: EASEL OPEN FAILED (exit {rc})")
+    return rc == 0
+
+
 def paint(name, n, d, rd):
     """Run the painter's sittings until next_sitting says stop; resumable from p<n>_sittings.json."""
     m = LANES[name]["model"]
@@ -308,6 +330,9 @@ def paint(name, n, d, rd):
     save_sittings(rd, n, sittings)
     while (k := next_sitting(sittings)) is not None:
         close_easel(d)
+        if count_chunks(d) and not open_easel(d, tag):
+            log(f"{tag}: painter stops (the easel didn't open); rerun to retry")
+            return None
         before = count_chunks(d)
         painting_before = count_painting(d)
         msg = PAINTER_MSG if before == 0 else SITTING_MESSAGE
@@ -491,9 +516,12 @@ def etime_seconds(etime):
 
 def spared(cmd):
     """Processes in a studio the watchdog leaves alone: the painter's pi (it titles itself "pi"),
-    the easel server (it lives for the whole session) and the runner's own check and finishing."""
+    the easel server (it lives for the whole session), `easel open` (it replays the log, tens of
+    minutes for a big painting, and gives up by itself when the replay stalls) and the runner's own
+    check and finishing."""
     exe = os.path.basename(cmd.split()[0]) if cmd.split() else ""
-    return exe == "pi" or " serve " in f" {cmd} " or "finish_painting" in cmd or "check_painting" in cmd
+    return (exe == "pi" or " serve " in f" {cmd} " or "finish_painting" in cmd or "check_painting" in cmd
+            or cmd.rstrip().endswith("easel open"))    # a replay; `open` stops itself after 30 min without progress
 
 
 def overdue(ps_lines, cwds, studios, limit_s, me=None):
@@ -566,7 +594,8 @@ def chain(name):
                       f"BRIEF.md as briefs/{t['profile']}.md with this studio's path)", export_cmd(t["profile"], d), BASE, env)
             show(tag, "sitting 1 (painter)", painter_cmd(t["model"]), d, t["model"]["env"])
             show(tag, f"after each sitting: close the easel ({d / 'bin/easel'} close), stop leftovers, count painting chunks;\n"
-                      f"    sittings 2..{MAX_SITTINGS} (crashes not counted) while the last one added painting chunks, each",
+                      f"    sittings 2..{MAX_SITTINGS} while the last one added painting chunks (crashes count only if they painted),\n"
+                      f"    each after the runner replays the easel ({d / 'bin/easel'} open, progress in the log)",
                  painter_cmd(t["model"], SITTING_MESSAGE), d, t["model"]["env"])
             show(tag, "check (background, after the last sitting; result in the log)", check_cmd(d, name, n), RUN)
             show(tag, "finishing (background, after the last sitting)", finish_cmd(d, name, n), RUN)
@@ -595,7 +624,9 @@ def chain(name):
         (d / "BRIEF.md").write_text(brief(t["profile"], d))
         clear_settings(d)
         if not (rd / f"p{n}.painted").exists():
-            paint(name, n, d, rd)
+            if paint(name, n, d, rd) is None:
+                log(f"{name}: chain stops")
+                return
         check(name, n, d)
         finish(name, n, d)
         logs = [p for s in load_sittings(rd, n) for p in s.get("sessions", []) if Path(p).exists()]

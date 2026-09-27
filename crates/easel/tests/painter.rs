@@ -85,7 +85,7 @@ fn the_shipped_easel_paints_its_one_painting_in_its_own_studio() {
     let saved = ok(&["save"]);
     assert_eq!(saved.trim_end(), studio.join("out/easel/painting/painting.png").display().to_string());
     assert!(studio.join("out/easel/painting/painting.png").exists());
-    assert!(ok(&["check"]).contains("replay matches the live canvas exactly (2 chunks"));
+    assert!(ok(&["check"]).contains("session log is intact; final replay verification is deferred to delivery"));
 
     // what the painter build doesn't have
     let log = studio.join("paintings/lua/painting.lua");

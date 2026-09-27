@@ -74,13 +74,13 @@ impl Mask {
     /// `amount` units (fbm with features of `period` units), and the new
     /// edge ramps from 0 to 1 over `edge` units, centered on it (0 = as
     /// crisp as a pixel allows). Works the same on a hard mask (a `Shape`)
-    /// and a soft one: the old ramp is replaced, not added to. Away from the
+    /// and a soft one: the input's ramp is replaced, not added to. Away from the
     /// edge nothing changes: a pixel farther than `amount + edge` from it
     /// keeps its side (0 stays 0, 1 stays 1).
     ///
     /// ```ignore
-    /// // a bank that wanders ±3 units every ~25 units, edge 1.5 units soft
-    /// let bank = Mask::from_shape(f, brook).roughen(7, 25.0, 3.0, 1.5);
+    /// // an edge moved by up to ±3 units with ~25-unit features, 1.5 units soft
+    /// let m = Mask::from_shape(f, shape).roughen(7, 25.0, 3.0, 1.5);
     /// ```
     pub fn roughen(self, seed: u32, period: f32, amount: f32, edge: f32) -> Self {
         let n = Fbm::new(seed, 5, period);
@@ -192,8 +192,8 @@ impl Mask {
         self.offset(-d.abs())
     }
 
-    /// The inside of the region within `width` units of its edge (a rim to
-    /// cut in or catch light along), fading out over `soft` units inward.
+    /// The inside of the region within `width` units of its edge, fading out
+    /// over `soft` units inward.
     pub fn rim(&self, width: f32, soft: f32) -> Mask {
         let (sd, _) = self.signed_distance_px();
         let (w0, s) = (width * self.f.scale, soft.max(1e-3) * self.f.scale);
@@ -213,8 +213,8 @@ impl Mask {
 
     /// Re-edge the region with a softness that varies over the canvas:
     /// `width(x, y)` units of ramp across the edge (0 = crisp), evaluated at
-    /// the nearest point inside, so a silhouette can be hard in one place and
-    /// lost in the next. The ramp is centered on the old edge.
+    /// the nearest point inside, so the edge can be crisp in one place and
+    /// wide in another. The ramp is centered on the input's edge.
     pub fn soften(&self, width: impl Fn(f32, f32) -> f32 + Sync) -> Mask {
         let inside: Vec<bool> = self.data.par_iter().map(|&v| v >= 0.5).collect();
         soften_region(self.f, inside, width)
@@ -428,9 +428,8 @@ mod tests {
     }
 
     /// `roughen` moves a hard edge by canvas units, the same at any
-    /// resolution, and leaves the rest of the mask alone (winter #10, #16:
-    /// it used to do nothing to a hard mask, and an `edge` of 1 turned 0
-    /// into 0.16 everywhere).
+    /// resolution, and leaves the rest of the mask alone (0 stays 0 and 1
+    /// stays 1 away from the edge).
     #[test]
     fn roughen_moves_hard_edges_in_units() {
         let rect = |scale: f32| Mask::from_fn(Frame::new((1000.0 * scale) as usize, (750.0 * scale) as usize, scale), |x, y| if (300.0..700.0).contains(&x) && (200.0..500.0).contains(&y) { 1.0 } else { 0.0 });
@@ -440,7 +439,7 @@ mod tests {
             assert_eq!(m.sample(500.0, 350.0), 1.0);
             assert_eq!(m.sample(100.0, 100.0), 0.0);
             assert!(m.data.iter().all(|&v| (0.0..=1.0).contains(&v)));
-            // along the old edge the contour now wanders: some points of the
+            // along the input's edge the contour wanders: some points of the
             // left edge ended up outside, some band beyond it inside
             let (mut moved_in, mut moved_out, mut far) = (0, 0, 0.0f32);
             for k in 0..300 {

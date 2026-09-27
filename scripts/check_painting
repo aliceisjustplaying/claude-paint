@@ -1,0 +1,91 @@
+#!/usr/bin/env bash
+# Check a painter's log after the painter's last sitting, with the replay
+# build: what `easel check` did in the painter's hands before round 19. The
+# painter build has no `check`; the runner runs this in the background and
+# logs the result.
+#
+#   scripts/check_painting <studio> <workdir>
+#
+# <workdir> is a new (or empty) folder. The studio is only read: its log
+# (paintings/lua/painting.lua) is copied into <workdir> as the log and the
+# committed record, and a session of the replay build (EASEL_ROOT=<workdir>)
+#   1. opens it, which replays the log (a chunk that fails to replay fails
+#      here),
+#   2. runs `easel check`: a second replay in a fresh session, compared bit
+#      for bit with the first,
+#   3. saves the replayed canvas (<workdir>/replayed.png) and compares it
+#      byte for byte with the painter's last save
+#      (<studio>/out/easel/painting/painting.png), if there is one.
+# It also says whether the studio's committed record
+# (out/easel/painting/committed.lua) equals its log.
+#
+# Prints a report and, last, one line starting "check:". Exit 0 when the
+# log replays and the check matches, 1 otherwise (2: usage). The saved-PNG
+# comparison is reported, not judged: a painter may have painted after its
+# last save.
+set -euo pipefail
+
+usage() { sed -n '7,7p' "$0" | sed 's/^# \{0,1\}//' >&2; exit 2; }
+[ $# -eq 2 ] || usage
+studio=$(cd "$1" && pwd)
+work=$2
+log=$studio/paintings/lua/painting.lua
+[ -s "$log" ] || { echo "check: no log at $log"; exit 1; }
+if [ -e "$work" ] && [ -n "$(ls -A "$work" 2>/dev/null)" ]; then
+  echo "$work exists and isn't empty" >&2
+  exit 2
+fi
+mkdir -p "$work/paintings/lua" "$work/out/easel/painting" "$work/notes"
+work=$(cd "$work" && pwd)
+
+repo=$(cd "$(dirname "$0")/.." && pwd)
+(cd "$repo" && cargo build --release -q -p easel)
+easel=$repo/target/release/easel
+
+cp "$log" "$work/paintings/lua/painting.lua"
+cp "$log" "$work/out/easel/painting/committed.lua"
+chunks=$(grep -c '^--@ chunk' "$log" || true)
+committed=$studio/out/easel/painting/committed.lua
+if [ ! -f "$committed" ]; then
+  record="no committed record in the studio"
+elif cmp -s "$committed" "$log"; then
+  record="the studio's committed record equals its log"
+else
+  record="the studio's committed record DIFFERS from its log"
+fi
+echo "log: $log ($chunks chunks); $record"
+
+E() { EASEL_ROOT="$work" EASEL_SESSION=painting "$easel" "$@"; }
+trap 'E close >/dev/null 2>&1 || true' EXIT
+t0=$(date +%s)
+if ! out=$(cd "$work" && E open painting 2>&1); then
+  echo "$out"
+  echo "check: FAILED: the log doesn't reopen ($(echo "$out" | tail -1))"
+  exit 1
+fi
+echo "$out"
+t1=$(date +%s)
+if out=$(cd "$work" && E check 2>&1); then ok=1; else ok=0; fi
+echo "$out"
+t2=$(date +%s)
+(cd "$work" && E save "$work/replayed.png" >/dev/null)
+E close >/dev/null
+trap - EXIT
+
+saved=$studio/out/easel/painting/painting.png
+if [ ! -f "$saved" ]; then
+  png="the painter saved no picture"
+elif cmp -s "$saved" "$work/replayed.png"; then
+  png="the replay's PNG equals the painter's last save"
+else
+  if [ "$saved" -ot "$log" ]; then when="saved before the log's last change"; else when="saved after the log's last change"; fi
+  png="the replay's PNG differs from the painter's last save ($when)"
+fi
+echo "$png"
+echo "times: reopen $((t1 - t0)) s, check $((t2 - t1)) s"
+if [ $ok = 1 ]; then
+  echo "check: ok: $chunks chunks replay to the same canvas; $png; $record"
+else
+  echo "check: DIFFERS: $(echo "$out" | tail -1); $png; $record"
+  exit 1
+fi

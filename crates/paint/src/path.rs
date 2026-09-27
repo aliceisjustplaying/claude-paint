@@ -1,5 +1,5 @@
 //! Path geometry: polyline lengths shared by everything that walks a line
-//! (trees, graphite, rocks, outlines, the easel's stroke planners) and the
+//! (graphite, outlines, stroke planners) and the
 //! brushes' resampling.
 
 /// Length of a segment.

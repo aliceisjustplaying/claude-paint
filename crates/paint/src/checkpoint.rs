@@ -12,27 +12,24 @@
 //! from the relief and rebuilt on demand). Restoring is exact: a resumed run
 //! paints bit-for-bit what an uninterrupted one does.
 //!
-//! Version 2 (`PAINTCK2`) added the drying rate, stroke ids, clock and
-//! drying state; version 3 (`PAINTCK3`) adds the canvas's ground thickness
-//! (for craquelure fitted to the ground); version 4 (`PAINTCK4`) adds each
-//! wet pixel's paint coverage (pointed-tip marks); version 5 (`PAINTCK5`)
-//! adds each open film's neighborhood thickness (it sets the film's drying
-//! rate until the film is worked again); version 6 (`PAINTCK6`) adds the
-//! drawing (`graphite::Drawing`): every cell of the deposit (coverage,
-//! flake reflectance, lift, fixed floor, film when drawn) and the
-//! whole-canvas guide with its fixed floor; version 7 (`PAINTCK7`) adds
-//! hand time (`tally`): the slice setting and the complete ledger, with the
-//! part already on the clock, so a resumed hand-timed painting keeps ageing
-//! its passes and owes the time it owed. Older files are refused (re-run to
-//! checkpoint again).
-//!
-//! Numbering: 7 is hand time (branch r6-time, merged first). The r6-wet
-//! branch's two-layer film was drafted as version 7 too; merged after this,
-//! it becomes version 8 (`PAINTCK8`), appended after the hand-time block.
-//!
 //! Format: little-endian binary, `MAGIC`, then a free-form UTF-8 header
 //! (length-prefixed; the caller's key=value lines), then the canvas. If you
 //! add state to `Canvas` or `Wet`, add it here and bump `MAGIC`.
+//!
+//! The format is version 7 (`MAGIC` is `PAINTCK7`); files of any other
+//! version are refused (re-run to checkpoint again). After the header the
+//! writer stores, in order: the frame and crop window, the scale and mm per
+//! unit, the linen (if any), the surface generation, the stroke counter and
+//! dirty box, then per pixel the color, relief, film, wet volume, pigment
+//! mix, hiding and the ids of the last stroke to lay and to touch paint;
+//! the clock with its tacky box and each pixel's drying state; the ground
+//! thickness (for craquelure fitted to the ground); each wet pixel's paint
+//! coverage (pointed-tip marks); the drawing (`graphite::Drawing`), if any:
+//! every cell of the deposit (coverage, flake reflectance, lift, fixed
+//! floor, film when drawn) and the whole-canvas guide with its fixed floor;
+//! and hand time (`tally`): the slice setting and the complete ledger, with
+//! the part already on the clock, so a resumed hand-timed painting keeps
+//! aging its passes and owes the time it owed.
 
 use crate::canvas::{Canvas, Frame};
 use crate::surface::Linen;
@@ -349,7 +346,7 @@ mod tests {
         assert_eq!((h.as_str(), d.keep, d.wet.dirty), ("x=1\n", (0, 0, 2, 2), Some((0, 0, 2, 1))));
     }
 
-    /// Review 4 #2: a resumed canvas keeps its drawing: the deposit (so the
+    /// A resumed canvas keeps its drawing: the deposit (so the
     /// eraser and fixative still act on it and `drawing_mask` has it) and
     /// the guide, bit for bit; erasing, redrawing and painting into the
     /// drawing after resuming does what it does without the checkpoint.
@@ -389,8 +386,8 @@ mod tests {
         rejected(b, "nan in the guide");
     }
 
-    /// Corrupt geometry is an error when loading, not a panic later (cases
-    /// from the review: keep past the buffer, an overflowing frame).
+    /// Corrupt geometry is an error when loading, not a panic later (keep
+    /// past the buffer, an overflowing frame).
     #[test]
     fn malformed_geometry_is_invalid_data() {
         let o = original();

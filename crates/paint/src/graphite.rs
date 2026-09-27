@@ -1,11 +1,4 @@
-//! Drawing on the ground: graphite pencils and black chalk, the underdrawing.
-//!
-//! Friedrich drew his compositions on the primed canvas with graphite pencils
-//! of different hardness and black chalk, sometimes in two passes (a faint
-//! outline, then a bolder one), the straights against a ruler. In the early
-//! works the drawing stays visible through the very thin paint; lines "still
-//! partly shimmer through" [CATS pp.128–132; NG p.49; see
-//! notes/research/friedrich_materials.md §3].
+//! Drawing on the ground: graphite pencils and black chalk.
 //!
 //! The model, from first principles and kept simple:
 //! - **A point dragged over the tooth.** The point rides on the local tops of
@@ -249,9 +242,9 @@ pub fn pressure_along(profile: &[f32], s: &[f32]) -> Vec<f32> {
         .collect()
 }
 
-/// A hand-drawn line through `pts`: smoothed (unless `ruler` or `!smooth`),
-/// with the hand's slight tremor (`tremor` units; none against a ruler), and
-/// the pressure profile along it.
+/// A line through `pts`: smoothed (unless `ruler` or `!smooth`), displaced
+/// sideways by a small tremor (`tremor` units; none with `ruler`), with the
+/// pressure profile along it.
 pub fn hand_line(pts: &[(f32, f32)], profile: &[f32], smooth: bool, ruler: bool, tremor: f32, seed: u64) -> Mark {
     let step = 0.25;
     let mut p = resample(pts, smooth && !ruler, step);
@@ -260,7 +253,7 @@ pub fn hand_line(pts: &[(f32, f32)], profile: &[f32], smooth: bool, ruler: bool,
         let q = p.clone();
         for i in 0..p.len() {
             let n = normal(&q, i);
-            // a slow sway of the arm and a finer tremor of the fingers
+            // a slow sway (30-unit scale) and a finer tremor (4-unit scale)
             let w = tremor * (1.4 * (vnoise(s[i] / 30.0, 0.5, seed) - 0.5) + 0.6 * (vnoise(s[i] / 4.0, 3.5, seed + 1) - 0.5));
             p[i] = (q[i].0 + n.0 * w, q[i].1 + n.1 * w);
         }
@@ -270,9 +263,11 @@ pub fn hand_line(pts: &[(f32, f32)], profile: &[f32], smooth: bool, ruler: bool,
     Mark { pts: p, pressure }
 }
 
-/// A searching line: `passes` light strokes along the same path, each
-/// wandering off it a little (`wander` units), starting and ending a little
-/// early or late, and now and then lifting off; the first pass lightest.
+/// Repeated passes over one path: `passes` light strokes along it, each
+/// displaced sideways by amounts on the order of `wander` units, starting
+/// and ending a few percent of the length short of or past the ends, and
+/// broken into more pieces the longer the path (about one per 120-400
+/// units); the first pass at 0.75 of `pressure`.
 pub fn sketch_marks(pts: &[(f32, f32)], pressure: f32, passes: usize, wander: f32, smooth: bool, tremor: f32, seed: u64) -> Vec<Mark> {
     let base = resample(pts, smooth, 0.25);
     let s = arclen(&base);
@@ -285,13 +280,13 @@ pub fn sketch_marks(pts: &[(f32, f32)], pressure: f32, passes: usize, wander: f3
     for k in 0..passes.max(1) {
         let ps = seed.wrapping_add(k as u64 * 7919);
         let amp = wander * rng.range(0.6, 1.2);
-        // each pass is its own guess: a little to one side, bowed its own way
+        // each pass has its own sideways offset and bow
         let side = wander * rng.range(-0.6, 0.6);
         let press = pressure * if k == 0 { 0.75 } else { rng.range(0.85, 1.15) };
         // start and end: short of the ends or past them
         let a0 = rng.range(-0.04, 0.06) * total;
         let a1 = total + rng.range(-0.06, 0.05) * total;
-        // lift-offs: the hand breaks a long line into a few strokes
+        // lift-offs: a long line is broken into a few strokes
         let pieces = 1 + (total / 120.0 * rng.range(0.3, 1.2)) as usize;
         let mut cuts: Vec<f32> = (1..pieces).map(|j| a0 + (a1 - a0) * (j as f32 + rng.range(-0.25, 0.25)) / pieces as f32).collect();
         cuts.insert(0, a0);
@@ -336,8 +331,8 @@ fn point_at(p: &[(f32, f32)], s: &[f32], a: f32) -> ((f32, f32), (f32, f32)) {
 }
 
 /// Hatching: short parallel strokes across `m` (where it is > 0.5) at
-/// `angle`, `spacing` units apart, each at most `length` units, bowed a
-/// little by the wrist, heavy where it starts and lifting off at the end.
+/// `angle`, `spacing` units apart, each at most `length` units, bowed by up
+/// to 6% of its length, heavy where it starts and lifting off at the end.
 pub fn hatch_marks(m: &Mask, angle: f32, spacing: f32, length: f32, pressure: f32, seed: u64) -> Vec<Mark> {
     let f = m.f;
     let (w, h) = (f.width(), f.height());
@@ -685,7 +680,7 @@ impl Canvas {
     }
 
     /// The graphite deposit as a mask: 1 on a firm line, fading with the
-    /// deposit (0.5 of a pixel covered or more reads as 1). Includes drawing
+    /// deposit (0.5 of a pixel covered or more counts as 1). Includes drawing
     /// that paint has since covered, until something is drawn over it.
     ///
     /// It is the physical deposit, broken by the tooth and the grain of the
@@ -755,7 +750,7 @@ mod tests {
     use crate::color::{hex, luminance};
 
     fn canvas() -> Canvas {
-        Style { width_mm: 440.0, ..Style::friedrich_early() }.prepare(400, 1.5, 3)
+        Style { width_mm: 440.0, ..Style::oil_red_ground() }.prepare(400, 1.5, 3)
     }
 
     fn mean_lum(c: &Canvas, x0: f32, y0: f32, x1: f32, y1: f32) -> f32 {
@@ -788,7 +783,7 @@ mod tests {
         assert_eq!(softness("F"), Some(-0.5));
         assert_eq!(softness("12B"), None);
         assert_eq!(softness("2X"), None);
-        // not a grade, and never a panic (review 4 #9: "é" split mid-char)
+        // not a grade, and never a panic ("é" must not be split mid-char)
         for g in ["é", "éB", "2é", "Bé", "🙂", "2🙂", "", " ", "+2B", "1.5B", "0B", "HH"] {
             assert_eq!(softness(g), None, "{g:?}");
             assert!(Lead::pencil(g).is_none());
@@ -808,7 +803,7 @@ mod tests {
         (c, dark)
     }
 
-    /// Review 4 #7: no pressure, no line; the deposit fades continuously to
+    /// No pressure, no line; the deposit fades continuously to
     /// nothing as the pressure goes to zero, and a lifting stroke fades out.
     #[test]
     fn zero_pressure_lays_nothing() {
@@ -826,11 +821,11 @@ mod tests {
     }
 
     /// The guide is the drawn line: continuous along it where the deposit
-    /// breaks up into the grain (the beaded limbs of `pencil.lua`); lifted
+    /// breaks up into the grain; lifted
     /// by the eraser, kept by fixative, unchanged by paint over it.
     #[test]
     fn guide_follows_the_line() {
-        let mut c = Style { width_mm: 440.0, ..Style::friedrich_early() }.prepare(1000, 1.4, 11);
+        let mut c = Style { width_mm: 440.0, ..Style::oil_red_ground() }.prepare(1000, 1.4, 11);
         let m = hand_line(&[(779.0, 420.0), (812.0, 398.0), (838.0, 366.0), (858.0, 330.0)], &[0.5, 0.2], true, false, 0.15 / 0.44, 5);
         c.draw(&Lead::pencil("2B").unwrap(), &m, 400.0, 9);
         let (g, dm) = (c.drawing_guide(), c.drawing_mask());
@@ -840,7 +835,7 @@ mod tests {
         // off the line: nothing
         assert_eq!(g.sample(700.0, 300.0), 0.0);
         // a light 2H line reads fainter than a firm 2B one (band picks)
-        let mut c2 = Style { width_mm: 440.0, ..Style::friedrich_early() }.prepare(1000, 1.4, 11);
+        let mut c2 = Style { width_mm: 440.0, ..Style::oil_red_ground() }.prepare(1000, 1.4, 11);
         c2.draw(&Lead::pencil("2H").unwrap(), &hand_line(&[(100.0, 100.0), (400.0, 100.0)], &[0.3], false, true, 0.0, 1), 0.0, 1);
         c2.draw(&Lead::pencil("2B").unwrap(), &hand_line(&[(100.0, 200.0), (400.0, 200.0)], &[0.6], false, true, 0.0, 1), 0.0, 1);
         let g2 = c2.drawing_guide();
@@ -870,9 +865,10 @@ mod tests {
         c.draw(&Lead::pencil("2B").unwrap(), &k, 0.0, 10);
     }
 
-    /// Review 4 #1: painting into the drawing in a crop render paints what a
-    /// whole render does (the guide has the whole drawing; the deposit mask
-    /// doesn't, so it changed every stroke's random stream).
+    /// Painting into the drawing in a crop render paints what a whole
+    /// render does (the guide has the whole drawing; the deposit mask in a
+    /// crop does not, and planning from it would change every stroke's
+    /// random stream).
     #[test]
     fn guide_is_the_same_in_a_crop() {
         use crate::bristle::Tool;
@@ -925,7 +921,7 @@ mod tests {
     /// A light line catches the tops of the tooth first.
     #[test]
     fn light_line_catches_the_tops() {
-        let mut c = Style { width_mm: 440.0, ..Style::friedrich_early() }.prepare(1600, 1.5, 3);
+        let mut c = Style { width_mm: 440.0, ..Style::oil_red_ground() }.prepare(1600, 1.5, 3);
         let before = c.surface_um().to_vec();
         let lead = Lead::pencil("HB").unwrap();
         for k in 0..30 {
@@ -1031,7 +1027,7 @@ mod probe {
     #[ignore]
     fn tooth_depths() {
         for (wmm, px) in [(440.0, 1000usize), (440.0, 3200), (1714.0, 1000), (1714.0, 3200)] {
-            for st in [Style { width_mm: wmm, ..Style::friedrich() }, Style { width_mm: wmm, ..Style::friedrich_early() }] {
+            for st in [Style { width_mm: wmm, ..Style::oil() }, Style { width_mm: wmm, ..Style::oil_red_ground() }] {
                 let c = st.prepare(px, 1.5, 3);
                 let f = c.window();
                 let h = c.surface_um();

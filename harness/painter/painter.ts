@@ -18,10 +18,13 @@
  *    the input tokens of the last minute's requests plus its own fit that budget; and a
  *    per-minute quota 429 (Google's `...PerMinute` quota ids) is made retryable for pi's
  *    retry, which otherwise skips it for mentioning "quota exceeded" and "billing".
+ * 5. Every painter sees its looks at its provider's best image resolution (vision.ts): Gemini's
+ *    ultra-high media resolution, OpenAI's `detail: "high"`.
  * The PAINTER_* variables are read once and removed from the environment.
  */
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { registerEaselTools } from "./easel-tools.ts";
+import vision from "./vision.ts";
 import { limitsFromEnv, pruneImages } from "./context-images.ts";
 import { requestTokens, retryablePerMinuteQuota, TokenPace } from "./pace.ts";
 
@@ -69,4 +72,5 @@ export default function painter(pi: ExtensionAPI) {
 	});
 
 	registerEaselTools(pi, process.cwd());
+	vision(pi);
 }

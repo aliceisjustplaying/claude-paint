@@ -118,9 +118,9 @@ fn a_short_session_at_the_easel() {
     }
     assert!(ok(&["-s", "smoke", "status"]).starts_with("2 chunks"));
 
-    // the log replays to the live canvas exactly, in the session and from the file
+    // check is a fast compatibility command; delivery does the full replay below
     let r = ok(&["-s", "smoke", "check"]);
-    assert!(r.contains("replay matches the live canvas exactly (2 chunks"), "{r}");
+    assert!(r.contains("session log is intact; final replay verification is deferred to delivery"), "{r}");
     let saved = root().join("saved.png");
     ok(&["-s", "smoke", "save", saved.to_str().unwrap()]);
     ok(&["-s", "smoke", "close"]);

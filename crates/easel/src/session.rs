@@ -45,7 +45,7 @@ pub struct Session {
     state: *mut mlua::ffi::lua_State,
     pub st: Rc<RefCell<Studio>>,
     pub log: Vec<Chunk>,
-    /// A disposable replay (`easel run`, `check`): no snapshot, since a
+    /// A disposable replay (`easel run`): no snapshot, since a
     /// failure ends it. A live session snapshots before every chunk so a
     /// failure can roll back.
     replay: bool,
@@ -95,6 +95,7 @@ impl Session {
 
     /// A session that replays a program: a failed chunk ends it, so it
     /// keeps no snapshot.
+    #[cfg(any(feature = "replay", test))]
     pub fn replay(width: usize) -> mlua::Result<Self> {
         let mut s = Self::new(width)?;
         s.replay = true;

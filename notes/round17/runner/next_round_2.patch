@@ -1,0 +1,266 @@
+Round runner change (after round 18g): a crashed sitting is not the painter's judgment.
+
+Round 18g's GEM lane (gemini-3.8-flash) hit Google's 2M input tokens/min: sitting 1 exited 1
+on the 429 after painting 23 chunks, sitting 2 exited 1 on the next 429 after 9 s, and the
+runner took sitting 2's "no new painting chunks" for the painter being done. With this patch a
+sitting that exits non-zero, or whose pi session ends on a provider error (stopReason
+"error"), is a crash: the runner waits (90, 180, 300, 600, 900, 1200 s, or the provider's
+"retry in Ns" + 15 s if longer) and starts another sitting that doesn't count toward
+MAX_SITTINGS; after MAX_CRASHES (6) crashes it stops the painter and logs STOPPED. Only a
+clean sitting with no new painting chunks ends the painter. Sittings are numbered in order,
+retakes included (files p1_s<k>_*.txt never overwritten); records an older runner marked
+"completed" with a non-zero exit are reclassified as crashes on resume. Also: model(...,
+env={...}) passes per-lane environment to the painter's pi (harness/painter reads
+PAINTER_MAX_IMAGES, PAINTER_MAX_IMAGE_MB, PAINTER_INPUT_TPM; r17-base 76eccdf).
+
+Written against r18/r18_open.py (and its test_painting_chunks.py); applied as is to
+r18g/r18g_open.py. Not applied to any running runner. Apply to a copy of the next runner:
+    cd <new round dir> && patch -p1 < ~/tmp/gallery-fcf9c110/r17/next_round_2.patch
+(for a runner with another name, rename the file in the patch headers first).
+
+diff -ruN a/r18_open.py b/r18_open.py
+--- a/r18_open.py	2026-09-27 14:48:49
++++ b/r18_open.py	2026-09-27 14:48:49
+@@ -18,9 +18,15 @@
+ leftovers stopped, and the chunks of the painting's log that put marks on
+ the canvas are counted (painting_chunks.py: a chunk that only queries, waits,
+ mixes or loads doesn't count). The painter stops after a sitting that added no
+-such chunks, or after sitting MAX_SITTINGS (see next_sitting). Each sitting is
+-recorded in run/<lane>/p1_sittings.json.
++such chunks, or after MAX_SITTINGS completed sittings (see next_sitting). Each
++sitting is recorded in run/<lane>/p1_sittings.json.
+ 
++A sitting that crashes (pi exits non-zero, or its session ends on a provider
++error such as a 429) is no judgment of the painter's: the runner waits
++(CRASH_WAITS, or longer if the error says "retry in Ns") and starts another
++sitting, which doesn't count toward MAX_SITTINGS. After MAX_CRASHES crashes the
++painter stops, and the log says so.
++
+ Each painter gets a fresh blank studio exported from branch r17-base, with
+ studio_notes.md as notes/studio_notes.md. Painters run in the clean harness
+ (claude-paint-r17-base/harness/painter): no global extensions, our system
+@@ -45,6 +51,7 @@
+ import hashlib
+ import json
+ import os
++import re
+ import shlex
+ import shutil
+ import subprocess
+@@ -80,6 +87,8 @@
+                    "`bin/easel open` picks it up where you stopped. Your brief is in BRIEF.md and "
+                    "your journal in notes/journal.md. Your FINAL message is the reply the brief asks for.")
+ MAX_SITTINGS = 4
++MAX_CRASHES = 6                                   # crashed sittings (in all) before a painter is stopped
++CRASH_WAITS = [90, 180, 300, 600, 900, 1200]      # s before the sitting after the 1st, 2nd, ... crash
+ 
+ BLANK_READING = "notes/easel_guide.md; notes/studio_notes.md;\nnotes/research/oil_paint_physics.md as needed."
+ OPENING = ("Paint one picture of your choosing in oil, at the easel of claude-paint, a\n"
+@@ -90,8 +99,9 @@
+ REDACTED = "<opencode-go key from auth.json>"
+ 
+ 
+-def model(provider, name, thinking, key=False):
+-    return dict(args=["--provider", provider, "--model", name, "--thinking", thinking], key=key, name=name)
++def model(provider, name, thinking, key=False, env=None):
++    """env: extra environment for the painter's pi (e.g. harness/painter's PAINTER_MAX_IMAGES, PAINTER_INPUT_TPM)."""
++    return dict(args=["--provider", provider, "--model", name, "--thinking", thinking], key=key, name=name, env=env or {})
+ 
+ 
+ LANES = {
+@@ -165,29 +175,76 @@
+     return count_painting_chunks(f.read_text(errors="replace")) if f.exists() else 0
+ 
+ 
+-def next_sitting(sittings, max_sittings=MAX_SITTINGS):
++def next_sitting(sittings, max_sittings=MAX_SITTINGS, max_crashes=MAX_CRASHES):
+     """The number of the next sitting, or None when the painter is done.
+ 
+     sittings: the records so far, in order ({'sitting', 'painting_before', 'painting_after',
+-    'chunks_before', 'chunks_after', 'status'}).
+-    A sitting cut off by the runner itself stopping (status 'interrupted') is taken again.
++    'chunks_before', 'chunks_after', 'status'}). Sittings are numbered in order, retakes included.
++    Only completed sittings are judged. A sitting that crashed (status 'crashed': pi exited
++    non-zero, or its session ended on a provider error) or was cut off by the runner itself
++    stopping ('interrupted') is followed by another that doesn't count toward max_sittings;
++    after max_crashes crashes in all, the painter stops.
+     Stop after a completed sitting that added no painting chunks (this includes a first sitting
+-    that painted nothing: no painting to come back to), or after sitting max_sittings. A record
+-    without painting counts (from an older runner) is judged by its chunk counts.
++    that painted nothing: no painting to come back to), or after max_sittings completed sittings.
++    A record without painting counts (from an older runner) is judged by its chunk counts.
+     """
+-    done = [s for s in sittings if s.get("status") == "completed"]
+-    if not done:
++    if not sittings:
+         return 1
+-    last = done[-1]
+-    before, after = (("painting_before", "painting_after") if last.get("painting_after") is not None
+-                     else ("chunks_before", "chunks_after"))
+-    if last[after] <= last[before]:
++    done = [s for s in sittings if s.get("status") == "completed"]
++    if done:
++        last = done[-1]
++        before, after = (("painting_before", "painting_after") if last.get("painting_after") is not None
++                         else ("chunks_before", "chunks_after"))
++        if last[after] <= last[before]:
++            return None
++        if len(done) >= max_sittings:
++            return None
++    if sum(1 for s in sittings if s.get("status") == "crashed") >= max_crashes:
+         return None
+-    if last["sitting"] >= max_sittings:
+-        return None
+-    return last["sitting"] + 1
++    return max(s["sitting"] for s in sittings) + 1
+ 
+ 
++def session_error(files):
++    """The provider error the last of these pi session files ended on (its last assistant message
++    has stopReason 'error'), or None."""
++    for f in reversed(files):
++        try:
++            with open(f, "rb") as fh:
++                fh.seek(0, 2)
++                fh.seek(max(0, fh.tell() - 4_000_000))
++                lines = fh.read().decode(errors="replace").splitlines()
++        except OSError:
++            continue
++        for line in reversed(lines):
++            try:
++                m = json.loads(line).get("message") or {}
++            except ValueError:
++                continue
++            if m.get("role") == "assistant":
++                return (m.get("errorMessage") or "unknown provider error") if m.get("stopReason") == "error" else None
++    return None
++
++
++def retry_hint(text):
++    """The longest "retry in Ns" (or "retryDelay": "Ns") a provider error asks for, in s (0 if none)."""
++    hints = re.findall(r"retry in ([\d.]+)\s*s", text, re.I) + re.findall(r'retryDelay\W+([\d.]+)s', text)
++    return max((float(h) for h in hints), default=0.0)
++
++
++def crash_wait(n_crashes, text):
++    """Seconds to wait after the n-th crash: CRASH_WAITS, at least the provider's retry hint plus 15 s."""
++    return max(CRASH_WAITS[min(n_crashes, len(CRASH_WAITS)) - 1], retry_hint(text) + 15)
++
++
++def gist(text, n=240):
++    """One line of an error for the log."""
++    t = " ".join(text.split())
++    code = re.search(r'"code"\W+(\d{3})', text)
++    quota = re.search(r'quotaId\W+(\w+)', text)
++    head = " ".join(x for x in (code and f"HTTP {code.group(1)}", quota and quota.group(1)) if x)
++    return (head + ": " if head else "") + (t[:n] + ("..." if len(t) > n else ""))
++
++
+ def load_sittings(rd, n):
+     f = rd / f"p{n}_sittings.json"
+     return json.loads(f.read_text()) if f.exists() else []
+@@ -216,6 +273,10 @@
+         if s.get("status") == "running":      # the runner stopped during this sitting
+             s.update(status="interrupted", chunks_after=count_chunks(d), painting_after=count_painting(d))
+             log(f"{tag}: sitting {s['sitting']} was interrupted; it will be taken again")
++    for s in sittings:
++        if s.get("status") == "completed" and s.get("exit") not in (0, None):   # an older runner judged a crash
++            s.update(status="crashed", reclassified=time.strftime("%F %T"))
++            log(f"{tag}: sitting {s['sitting']} exited {s['exit']}: counted as a crash, not a judgment")
+     save_sittings(rd, n, sittings)
+     while (k := next_sitting(sittings)) is not None:
+         close_easel(d)
+@@ -230,17 +291,32 @@
+         save_sittings(rd, n, sittings)
+         log(f"{tag}: sitting {k} ({LANES[lane]['name']}, painter harness, {before} chunks on the easel, {painting_before} painting)")
+         t0 = time.time()
+-        rc = run(painter_cmd(lane, msg), d, rd / f"p{n}_s{k}_final.txt", rd / f"p{n}_s{k}_err.txt")
++        rc = run(painter_cmd(lane, msg), d, rd / f"p{n}_s{k}_final.txt", rd / f"p{n}_s{k}_err.txt",
++                 env=LANES[lane].get("env"))
+         close_easel(d)
+         new = sorted(set(session_dir(d).glob("*.jsonl")) - known, key=lambda f: f.stat().st_mtime)
+-        rec.update(status="completed", end=time.strftime("%F %T"), chunks_after=count_chunks(d),
+-                   painting_after=count_painting(d), exit=rc,
+-                   sessions=[str(f) for f in new],
++        api_error = session_error(new)
++        err_text = (rd / f"p{n}_s{k}_err.txt").read_text(errors="replace")
++        crashed = rc != 0 or api_error is not None
++        why = api_error or err_text.strip() or f"exit {rc}"
++        rec.update(status="crashed" if crashed else "completed", end=time.strftime("%F %T"),
++                   chunks_after=count_chunks(d), painting_after=count_painting(d), exit=rc,
++                   sessions=[str(f) for f in new], error=why[-4000:] if crashed else None,
+                    final=(rd / f"p{n}_s{k}_final.txt").read_text(errors="replace"))
+         save_sittings(rd, n, sittings)
+-        log(f"{tag}: sitting {k} ended (exit {rc}) after {(time.time() - t0) / 60:.0f} min: "
++        log(f"{tag}: sitting {k} ended (exit {rc}{', CRASHED' if crashed else ''}) after {(time.time() - t0) / 60:.0f} min: "
+             f"chunks {rec['chunks_before']} -> {rec['chunks_after']} "
+             f"(painting {rec['painting_before']} -> {rec['painting_after']}), {len(new)} session file(s)")
++        if crashed:
++            crashes = sum(1 for s in sittings if s.get("status") == "crashed")
++            if crashes >= MAX_CRASHES:
++                log(f"{tag}: STOPPED: sitting {k} was crash {crashes}, the cap (MAX_CRASHES={MAX_CRASHES}); "
++                    f"last error: {gist(why)}")
++                break
++            wait = crash_wait(crashes, why + "\n" + err_text)
++            log(f"{tag}: sitting {k} crashed ({gist(why)}); crash {crashes} of at most {MAX_CRASHES}, "
++                f"not a judgment: another sitting (not counted toward {MAX_SITTINGS}) in {wait:.0f} s")
++            time.sleep(wait)
+     shutil.copy(rd / f"p{n}_s{sittings[-1]['sitting']}_final.txt", rd / f"p{n}_final.txt")
+     (rd / f"p{n}.painted").write_text(f"{time.strftime('%F %T')} {len(sittings)} sitting(s)")
+     return sittings
+@@ -254,9 +330,10 @@
+     return [str(FINISH), str(d / "paintings/lua/painting.lua"), str(RUN / f"{lane}_finished.png")]
+ 
+ 
+-def run(cmd, cwd, out, err):
++def run(cmd, cwd, out, err, env=None):
+     with open(out, "w") as o, open(err, "w") as e:
+-        return subprocess.run(cmd, cwd=cwd, stdin=subprocess.DEVNULL, stdout=o, stderr=e).returncode
++        return subprocess.run(cmd, cwd=cwd, stdin=subprocess.DEVNULL, stdout=o, stderr=e,
++                              env={**os.environ, **env} if env else None).returncode
+ 
+ 
+ def show(tag, what, cmd, cwd, env=None):
+@@ -373,10 +450,10 @@
+         return
+     if DRY:
+         show(lane, f"export blank studio (then studio_notes.md, BRIEF.md = {rd}/p1_brief.md)", export_cmd(d), BASE, env)
+-        show(lane, "sitting 1 (painter)", painter_cmd(lane, redact=True), d)
++        show(lane, "sitting 1 (painter)", painter_cmd(lane, redact=True), d, LANES[lane].get("env"))
+         show(lane, f"after each sitting: close the easel ({d / 'bin/easel'} close), stop leftovers, count painting chunks;\n"
+                    f"    sittings 2..{MAX_SITTINGS} while the last one added painting chunks (next_sitting), each",
+-             painter_cmd(lane, SITTING_MESSAGE, redact=True), d)
++             painter_cmd(lane, SITTING_MESSAGE, redact=True), d, LANES[lane].get("env"))
+         show(lane, "finishing (background, after the last sitting)", finish_cmd(d, lane), RUN)
+         return
+     (rd / f"p{n}_brief.md").write_text(brief(d))
+diff -ruN a/test_painting_chunks.py b/test_painting_chunks.py
+--- a/test_painting_chunks.py	2026-09-27 14:48:49
++++ b/test_painting_chunks.py	2026-09-27 14:48:49
+@@ -71,3 +71,26 @@
+     assert next_sitting([s1, s2]) is None                  # three new chunks, none of them painting
+     old = dict(sitting=2, status="completed", chunks_before=40, chunks_after=43)   # an older runner's record
+     assert next_sitting([s1, old]) == 3
++
++
++def test_a_crashed_sitting_is_no_judgment_and_does_not_count():
++    from r18_open import next_sitting
++    s1 = dict(sitting=1, status="crashed", exit=1, chunks_before=0, chunks_after=33, painting_before=0, painting_after=23)
++    s2 = dict(sitting=2, status="crashed", exit=1, chunks_before=33, chunks_after=33, painting_before=23, painting_after=23)
++    assert next_sitting([s1, s2]) == 3                     # no new painting, but a crash: another sitting
++    done = [dict(sitting=i, status="completed", chunks_before=i, chunks_after=i + 1, painting_before=i, painting_after=i + 1)
++            for i in (3, 4, 5)]
++    assert next_sitting([s1, s2] + done, max_sittings=4) == 6   # three counted of four
++    assert next_sitting([s1, s2] + done, max_sittings=3) is None
++    crashes = [dict(s2, sitting=i) for i in range(1, 7)]
++    assert next_sitting(crashes[:5], max_crashes=6) == 6
++    assert next_sitting(crashes, max_crashes=6) is None      # the cap
++
++
++def test_the_wait_after_a_crash_honors_the_providers_retry_hint():
++    from r18_open import crash_wait, retry_hint
++    google = 'Quota exceeded ... \\nPlease retry in 53.812706879s.\\", ... \\"retryDelay\\": \\"53s\\"'
++    assert retry_hint(google) == 53.812706879
++    assert crash_wait(1, google) == 90                       # the backoff is longer
++    assert crash_wait(1, "Please retry in 200s") == 215      # the hint is longer
++    assert crash_wait(2, "") == 180 and crash_wait(99, "") == 1200

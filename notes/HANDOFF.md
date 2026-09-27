@@ -1,5 +1,38 @@
 # Handoff (2026-09-23 evening): moving to the M3 Pro
 
+**Afternoon of 2026-09-27: rounds 17 and 18 ran, round 19 is ready (not launched).**
+Runners, briefs and notes are copied into `notes/round17/runner/`, `notes/round18/runner/`,
+`notes/round18g/runner/`, `notes/round19/` (run data stays in `~/tmp/gallery-fcf9c110/r17|r18|r18g|r19/run/`).
+- **Harness (r17-base, pushed):** painters run on a clean pi setup (`harness/painter/`: our system prompt,
+  `--no-extensions`, only bash+read, per-studio TMPDIR, image pruning against 413s, deterministic compaction
+  with no next-steps list, 429 quota errors retried, optional request pacing for Gemini). Varnish/cracks/relief
+  left the painter build; `scripts/finish_painting` applies them after the last sitting. Painters work in up to
+  4 sittings (fresh session, same canvas); a sitting that paints nothing ends the painter.
+- **Round 17 (Opus 5.5 high, chains):** F (Friedrich, "a landscape on a June day"): F1, F2 done (both titled
+  *June Morning on the Meadows before the Town*), F3 (`paint-studio-358aea`) was painting. O (free subject):
+  O1-O3 done, all estuaries at evening. F1, F2, O1-O3 are on stillwet.art (update the round line when F3 ends).
+- **Round 18 (one painter per model, free subject):** Muse (Zen, standard) done and out ("not very good");
+  GLM stopped (stuck in `check`); Gemini ended after a check hang + 429s; DeepSeek and MiMo crashed on OpenCode
+  Go's usage limit (429 GoUsageLimitError) at the start of a sitting: resume both after the Go reset with the
+  crash-aware runner (Alice pings). Space Bunny was still painting. MiMo sees stale/blurred looks (to diagnose).
+- **Found and fixed today:** painters shared `~/tmp` as TMPDIR (r17 F1 ran r16 B2's `c2.lua`); `easel check`
+  blocked the server for 10-70 min (now on its own thread, and gone from the painter build in r19);
+  crashed sittings counted as finished; the r16-r18 watchdog never worked on macOS (`ps etimes`).
+- **Tests of subject choice** (`notes/round19/jug_test_report.md`): jug+lemons is the models' own default
+  (Opus with no studio 6/6); Opus's evening estuary comes from the studio/brief, not from the guide example or
+  the reflection rule. Audits by Astra and Fable: `notes/round19/audit_*.md`.
+- **Round 19 (r19-base, pushed; `notes/round19/runner/CHANGES.md`):** the audit fixes (no `check` for painters,
+  neutral examples, reader brief without subjects or timings, no pressure to finish, no model names, watchdog
+  rewritten). Planned: a Friedrich chain with no directions ("The place, subject and composition are yours to
+  invent.") and free-subject painters (Opus, Space Bunny, GLM, Gemini, DeepSeek; MiMo after its image issue).
+- **Replay clips:** `easel run --frames-every` + `scripts/replay_clip` (hand-time frames, `--pace dynamic`,
+  `--ramp`): Alice likes them; round 16 batch in `~/tmp/stroke-replay-*/r16-batch/`; pacing still being chosen.
+- **stillwet.art today:** redesign (best work first, ideas sections), round 16 and 17, chains, hover delay
+  2.5 s, play button on phones, "What the painter was given" and "The painter's journal". The stillwet repo
+  has no remote.
+- **Next:** nudges (O3 saw its flaws and stopped: anchored by its journal's "finished"); reopen from a saved
+  canvas instead of a full replay; a faster machine is being considered (easel servers take 2-11 GB each).
+
 **Morning of 2026-09-27 (for Alice): Round 16 ran.** 11 paintings in `notes/round16/look/`
 (README there: titles, chunks, studio folders for the studio viewer at :8765).
 - **Honesty: clean.** The audit (`~/tmp/gallery-fcf9c110/r16/run/audit.md`) found no replays,

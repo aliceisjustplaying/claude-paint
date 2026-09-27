@@ -5,41 +5,27 @@
  *    preamble, and this handler drops everything pi would otherwise add around it from the
  *    machine's global setup (the agent-directory APPEND_SYSTEM.md "addendum", context files,
  *    skills, tool guidelines). Pi's own <cwd> section stays.
- * 2. `bash` and `read` run one at a time. Pi runs the tool calls of one assistant message in
- *    parallel; round 16 painters had Alice's global pi-batch-order extension serializing
- *    them. Without that, two easel commands batched in one message would race. Same tool
- *    definitions (name, description, parameters) as pi's built-ins; only the execution
- *    mode differs.
+ * 2. The painter's tools are the easel's (easel-tools.ts: paint, look, note, status, log) and
+ *    `read` inside the studio. No shell: no network, no other studios, no processes to see,
+ *    nothing of this machine's setup in the environment. They run one at a time (pi runs the
+ *    tool calls of one message in parallel; two chunks must not race).
  * 3. Old images stay out of the request (context-images.ts): before each provider request,
  *    the images of older tool results are replaced by a line naming the file, keeping the
  *    newest 20 and at most 12 MB of base64 (PAINTER_MAX_IMAGES and PAINTER_MAX_IMAGE_MB change
  *    that for a lane). Pi runs `context` handlers on a copy of the messages, so the session
  *    file keeps every image.
- * 4. TMPDIR (and TMP, TEMP) is the studio's own scratch folder, ~/tmp/painter-<studio>, the
- *    same in every sitting. A painter's `export TMPDIR=...` lasts one bash call; the rest ran
- *    with the persistent-temp default, the shared ~/tmp root, where painters' chunk files
- *    (c2.lua, ...) collide: in round 17 F1's `$TMPDIR/c2.lua` ran round 16 B2's pencil
- *    drawing. persistent-temp (loaded after this) keeps a TMPDIR already under ~/tmp.
- * 5. Input tokens per minute (pace.ts): with PAINTER_INPUT_TPM set, each request waits until
+ * 4. Input tokens per minute (pace.ts): with PAINTER_INPUT_TPM set, each request waits until
  *    the input tokens of the last minute's requests plus its own fit that budget; and a
  *    per-minute quota 429 (Google's `...PerMinute` quota ids) is made retryable for pi's
  *    retry, which otherwise skips it for mentioning "quota exceeded" and "billing".
- * The PAINTER_* variables are read once and removed from the environment the painter's
- * bash sees.
+ * The PAINTER_* variables are read once and removed from the environment.
  */
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
-import { createBashToolDefinition, createReadToolDefinition } from "@earendil-works/pi-coding-agent";
-import { mkdirSync } from "node:fs";
-import { homedir } from "node:os";
-import { basename, join } from "node:path";
+import { registerEaselTools } from "./easel-tools.ts";
 import { limitsFromEnv, pruneImages } from "./context-images.ts";
 import { requestTokens, retryablePerMinuteQuota, TokenPace } from "./pace.ts";
 
 export default function painter(pi: ExtensionAPI) {
-	const scratch = join(homedir(), "tmp", `painter-${basename(process.cwd())}`);
-	mkdirSync(scratch, { recursive: true });
-	Object.assign(process.env, { TMPDIR: scratch, TMP: scratch, TEMP: scratch });
-
 	pi.on("before_agent_start", (event) => {
 		const options = event.systemPromptOptions;
 		// system_prompt.md may open with an HTML comment for us (e.g. its DRAFT marker): not for the painter.
@@ -82,7 +68,5 @@ export default function painter(pi: ExtensionAPI) {
 		return retryable ? { message: { ...event.message, errorMessage: retryable } as typeof event.message } : undefined;
 	});
 
-	const cwd = process.cwd();
-	pi.registerTool({ ...createBashToolDefinition(cwd), executionMode: "sequential" });
-	pi.registerTool({ ...createReadToolDefinition(cwd), executionMode: "sequential" });
+	registerEaselTools(pi, process.cwd());
 }

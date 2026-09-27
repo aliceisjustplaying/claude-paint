@@ -112,7 +112,10 @@ if "$E" run "$probe/paintings/lua/painting.lua" >/dev/null 2>&1; then
   exit 1
 fi
 # replaying the log against the canvas is the runner's (scripts/check_painting)
-if ! "$E" check 2>&1 | grep -q 'no command "check"' || "$E" help | grep -q 'easel check'; then
+# (outputs captured first: under pipefail, `"$E" check | grep` fails with the command it tests)
+check_reply=$("$E" check 2>&1 || true)
+help_text=$("$E" help 2>&1 || true)
+if [[ $check_reply != *'no command "check"'* || $help_text == *'easel check'* ]]; then
   echo "the exported easel has a check command" >&2
   exit 1
 fi

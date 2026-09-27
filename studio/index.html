@@ -124,8 +124,11 @@ async function poll() {
 function thumb(e, i) {
   const im = document.createElement('img'); im.src = imgURL(e.img); im.dataset.i = i; im.title = hhmm(e.ts) + '  ' + fname(e.path);
   im.onclick = () => { live = false; stop(); show(i); }; $('strip').appendChild(im);
-  if (live) $('strip').scrollLeft = 1e9;
+  // the width is only known once the thumbnail has loaded: scroll to the end then too
+  im.onload = () => { if (live) stripEnd(); };
+  if (live) stripEnd();
 }
+function stripEnd() { const s = $('strip'); s.scrollLeft = s.scrollWidth; }
 
 // ---- what an event is, in a few words
 function kindOf(e) {
@@ -261,12 +264,13 @@ function show(i) {
   let img = null, imgK = -1; for (let k = pos; k >= 0; k--) if (events[k].kind === 'image') { img = events[k]; imgK = k; break; }
   if (img) { const u = imgURL(img.img); if (!$('img').src.endsWith(u)) $('img').src = u; $('cap').textContent = hhmm(img.ts) + '  ' + fname(img.path); }
   for (const t of $('strip').children) { const on = +t.dataset.i === imgK; t.classList.toggle('on', on); if (on && !live) t.scrollIntoView({ inline:'center', block:'nearest' }); }
+  if (live) stripEnd();
   codeAt(pos); journal(pos); status();
   $('pos').textContent = `${pos + 1}/${events.length}`;
 }
 function looks() { const r = []; events.forEach((e, k) => e.kind === 'image' && r.push(k)); return r; }
 function stop() { if (playing) { clearInterval(playing); playing = null; } $('play').textContent = '▶'; }
-function goLive() { stop(); live = true; show(events.length - 1); refreshLiveCode(); }
+function goLive() { stop(); live = true; show(events.length - 1); stripEnd(); refreshLiveCode(); }
 $('play').onclick = () => {
   if (playing) { stop(); status(); return; } live = false; if (pos >= events.length - 1) show(0);
   $('play').textContent = '❚❚'; let simT = Date.parse(events[pos].ts);

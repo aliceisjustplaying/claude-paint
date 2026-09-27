@@ -18,7 +18,7 @@
 
   /* top: which painter, what it's doing now, live state */
   header { display:flex; align-items:center; gap:14px; padding:9px 14px; background:var(--panel); border-bottom:1px solid var(--line); min-width:0 }
-  #sess { max-width:360px; flex:none } #allwrap { font-size:12px; color:var(--dim); display:flex; align-items:center; gap:3px; flex:none; cursor:pointer }
+  #sess { max-width:440px; flex:none } #allwrap { font-size:12px; color:var(--dim); display:flex; align-items:center; gap:3px; flex:none; cursor:pointer }
   #doing { flex:1; min-width:0; display:flex; align-items:baseline; gap:10px; white-space:nowrap; overflow:hidden }
   #doing .what { font-size:18px; font-weight:600 } #doing .detail { color:var(--dim); font:13px var(--mono); overflow:hidden; text-overflow:ellipsis; min-width:0 }
   #badge { flex:none; font-size:11.5px; font-weight:700; letter-spacing:.12em; padding:3px 10px; border-radius:999px; border:1px solid var(--line); color:var(--dim) }
@@ -60,7 +60,13 @@
   #strip img { height:58px; width:81px; object-fit:contain; background:var(--panel2); border-radius:3px; cursor:pointer; opacity:.6; transition:opacity .12s; flex:none }
   #strip img:hover { opacity:.8 } #strip img.on { opacity:1; outline:2px solid var(--acc); outline-offset:1px }
   #transport { display:flex; align-items:center; gap:8px }
-  #scrub { flex:1; accent-color:var(--acc) }
+  #scrubwrap { flex:1; position:relative; display:flex; min-width:0 } #scrub { flex:1; min-width:0; accent-color:var(--acc) }
+  #ticks { position:absolute; inset:0; pointer-events:none }
+  #ticks span { position:absolute; top:-13px; transform:translateX(-50%); font:10px var(--mono); color:var(--acc); white-space:nowrap }
+  #ticks span::after { content:''; position:absolute; left:50%; top:13px; width:2px; height:14px; margin-left:-1px; background:var(--acc); opacity:.8 }
+  #strip .sep { flex:none; align-self:stretch; height:58px; width:18px; border-left:2px solid var(--acc); color:var(--acc); font:10px var(--mono); writing-mode:vertical-rl; text-align:center; padding-left:2px; opacity:.85; white-space:nowrap }
+  .sit { margin:22px 0 10px; padding:5px 0 0; border-top:2px solid var(--acc); color:var(--acc); font-size:13px; font-weight:600; letter-spacing:.04em }
+  .sit span { color:var(--dim); font-weight:400; letter-spacing:0 }
   #golive { font-weight:700; letter-spacing:.06em }
   #golive.on { color:#fff; background:var(--live); border-color:var(--live) }
   #pos { font:12px var(--mono); color:var(--dim); min-width:9ch; text-align:right }
@@ -69,7 +75,7 @@
 </style></head>
 <body class="nocode">
 <header>
-  <select id="sess" title="painter session"></select>
+  <select id="sess" title="painter (all its sittings) or session"></select>
   <label id="allwrap" title="also show sessions that aren't painters (judges, tests, work on the project)"><input type="checkbox" id="all"> all</label>
   <div id="doing"><span class="what"></span><span class="detail"></span></div>
   <span id="badge"></span>
@@ -87,7 +93,7 @@
     <button id="play" title="replay  space">▶</button>
     <select id="speed" title="replay speed"><option value="1">1×</option><option value="10">10×</option><option value="60" selected>60×</option><option value="300">300×</option></select>
     <button id="nextlook" title="next look  ]">⏭</button>
-    <input type="range" id="scrub" min="0" max="0" value="0">
+    <div id="scrubwrap"><input type="range" id="scrub" min="0" max="0" value="0"><div id="ticks"></div></div>
     <span id="pos"></span>
     <button id="togglecode" title="show/hide code  c">code</button>
     <button id="golive" title="jump to live  l">● LIVE</button>
@@ -96,41 +102,77 @@
 <div id="zoom"><img id="zimg" alt=""></div>
 <script>
 const $ = id => document.getElementById(id);
-let S = null, events = [], pos = 0, live = true, playing = null, cwd = '';
+// Q: what we watch, as a query: 'p=<painter folder>' (all its sittings, stitched) or 's=<session file>' (one session)
+let Q = null, epoch = null, events = [], pos = 0, live = true, playing = null, cwd = '', sitStarts = [0], nSittings = 1;
 const esc = s => String(s).replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
 const fname = p => (p || '').split('/').slice(-1)[0];
 const fmt = s => { s = Math.max(0, s|0); return `${(s/3600)|0}:${String(((s%3600)/60)|0).padStart(2,'0')}:${String(s%60).padStart(2,'0')}`; };
 const hhmm = ts => new Date(ts).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
 const ago = s => s < 90 ? Math.round(s) + ' s ago' : s < 5400 ? Math.round(s/60) + ' min ago' : Math.round(s/3600) + ' h ago';
-const imgURL = i => `/img?s=${encodeURIComponent(S)}&i=${i}`;
+const imgURL = i => `/img?${Q}&i=${i}`;
+const sitLabel = e => `sitting ${e.n} · ${hhmm(e.ts)}`;
+const qOf = s => s.p ? 'p=' + encodeURIComponent(s.p) : 's=' + encodeURIComponent(s.s);
 
 let allSessions = [];
+const when = t => new Date(t*1000).toLocaleString([], {month:'short', day:'numeric', hour:'2-digit', minute:'2-digit'});
 function renderSessions() {
-  const all = $('all').checked, ss = allSessions.filter(s => all || s.painter || s.path === S);
-  $('sess').innerHTML = ss.map(s => `<option value="${s.path}">${esc(s.folder.replace(/^claude-paint-/, ''))}${s.model ? ' · ' + esc(s.model) : ''}${s.sitting ? ' · sitting ' + s.sitting : ''} · ${new Date(s.mtime*1000).toLocaleString([], {month:'short', day:'numeric', hour:'2-digit', minute:'2-digit'})}</option>`).join('');
-  if (S) $('sess').value = S;
+  const all = $('all').checked, ss = allSessions.filter(s => all || s.painter || qOf(s) === Q);
+  const opts = ss.map(s => `<option value="${esc(qOf(s))}">${esc(s.folder.replace(/^claude-paint-/, ''))}${s.model ? ' · ' + esc(s.model) : ''}${s.sittings > 1 ? ' · ' + s.sittings + ' sittings' : ''} · ${when(s.mtime)}</option>`);
+  // an old ?s= link to one sitting of a painter: keep it selectable as itself
+  if (Q && !ss.some(s => qOf(s) === Q)) {
+    const path = Q.startsWith('s=') ? decodeURIComponent(Q.slice(2)) : '', owner = allSessions.find(s => s.files && s.files.includes(path));
+    const label = owner ? `${owner.folder} · sitting ${owner.files.indexOf(path) + 1} of ${owner.sittings} only` : decodeURIComponent(Q.slice(2)).split('/').slice(-2).join('/');
+    opts.unshift(`<option value="${esc(Q)}">${esc(label)}</option>`);
+  }
+  $('sess').innerHTML = opts.join('');
+  if (Q) $('sess').value = Q;
 }
 async function loadSessions() {
   allSessions = await (await fetch('/api/sessions')).json();
-  $('all').checked = localStorage.getItem('studio.all') === '1';
-  const first = allSessions.find(s => $('all').checked || s.painter) || allSessions[0];
-  S = new URLSearchParams(location.search).get('s') || (first && first.path);
-  renderSessions();
+  if (Q === null) {
+    $('all').checked = localStorage.getItem('studio.all') === '1';
+    const u = new URLSearchParams(location.search), first = allSessions.find(s => $('all').checked || s.painter) || allSessions[0];
+    Q = u.get('p') ? 'p=' + encodeURIComponent(u.get('p')) : u.get('s') ? 's=' + encodeURIComponent(u.get('s')) : first ? qOf(first) : null;
+  }
+  if (document.activeElement !== $('sess')) renderSessions();  // don't rebuild the list under an open picker
 }
 $('all').onchange = () => { localStorage.setItem('studio.all', $('all').checked ? '1' : '0'); renderSessions(); };
+let gen = 0, busy = false;  // one poll at a time; a reset (new painter, rebuilt stream) makes in-flight polls stale
+function reset() { gen++; busy = false; stop(); events = []; epoch = null; cwd = ''; liveText = null; typed = -1; sitStarts = [0]; nSittings = 1; $('strip').innerHTML = ''; $('ticks').innerHTML = ''; }
 async function poll() {
-  if (!S) return;
-  const r = await (await fetch(`/api/events?s=${encodeURIComponent(S)}&since=${events.length}`)).json();
+  if (!Q || busy) return;
+  const g = gen; busy = true; let r;
+  try { r = await (await fetch(`/api/events?${Q}&since=${events.length}${epoch === null ? '' : '&epoch=' + epoch}`)).json(); }
+  finally { if (g === gen) busy = false; }
+  if (g !== gen) return;  // switched painters meanwhile
+  if (epoch !== null && r.epoch !== epoch) { const wasLive = live; reset(); live = wasLive; }  // the stream was rebuilt: start over
+  epoch = r.epoch; nSittings = r.sittings;
   if (r.events.length) {
     const base = events.length; events.push(...r.events);
     for (const e of r.events) if (e.kind === 'start') cwd = e.cwd;
     $('scrub').max = events.length - 1;
-    r.events.forEach((e, j) => { if (e.kind === 'image') thumb(e, base + j); });
+    r.events.forEach((e, j) => { if (e.kind === 'image') thumb(e, base + j); else if (e.kind === 'sitting') { sitStarts.push(base + j); sitDivider(e, base + j); } });
+    ticks();
     if (live) show(events.length - 1);
   }
   if (live) refreshLiveCode();
   status();
 }
+// a new sitting: a divider in the looks strip and a tick on the scrub bar
+function sitDivider(e, i) {
+  const d = document.createElement('div'); d.className = 'sep'; d.textContent = 'sitting ' + e.n; d.title = sitLabel(e); $('strip').appendChild(d);
+}
+function ticks() {
+  const n = Math.max(1, events.length - 1);
+  $('ticks').innerHTML = sitStarts.slice(1).map(k => `<span style="left:calc(8px + (100% - 16px) * ${k / n})" title="${esc(sitLabel(events[k]))}">${events[k].n}</span>`).join('');
+}
+// time spent painting up to event i (at time t): the sittings' durations summed, the gaps between them not counted
+function paintedFor(i, t) {
+  let total = 0, s0 = 0;
+  for (const b of sitStarts.slice(1)) { if (b > i) break; total += Date.parse(events[b - 1].ts) - Date.parse(events[s0].ts); s0 = b; }
+  return (total + t - Date.parse(events[s0].ts)) / 1000;
+}
+const sittingAt = i => sitStarts.filter(b => b <= i).length;
 function thumb(e, i) {
   const im = document.createElement('img'); im.loading = 'lazy'; im.src = imgURL(e.img); im.dataset.i = i; im.title = hhmm(e.ts) + '  ' + fname(e.path);
   im.onclick = () => { live = false; stop(); show(i); }; $('strip').appendChild(im);
@@ -175,14 +217,17 @@ function status() {
   else if (playing) { b.className = 'replay'; b.textContent = 'REPLAY ' + $('speed').value + '×'; b.title = ''; }
   else { b.className = 'replay'; b.textContent = 'REWOUND'; b.title = (events.length - 1 - pos) + ' events behind live'; }
   $('golive').classList.toggle('on', atLive);
-  const t0 = Date.parse(events[0].ts), t = atLive && active ? Date.now() : Date.parse(events[pos].ts);
-  $('clock').textContent = fmt((t - t0) / 1000); $('clocklbl').textContent = atLive ? (active ? 'painting for' : 'painted for') : 'at';
+  const t = atLive && active ? Date.now() : Date.parse(events[pos].ts), n = sitStarts.length;
+  $('clock').textContent = fmt(paintedFor(pos, t));
+  $('clocklbl').textContent = (atLive ? (active ? 'painting for' : 'painted for') : 'at') + (n > 1 ? (atLive ? ` · ${n} sittings` : ` · sitting ${sittingAt(pos)} of ${n}`) : '');
+  $('clockbox').title = n > 1 ? `time spent painting, summed over ${n} sittings (the gaps between sittings don't count)` : 'time since the session began';
   doing(atLive && active);
 }
 function doing(isLive) {
   const e = events[pos]; let c = kindOf(e), what, detail = '';
   const busy = ['cmd','tool','write','edit','read'].includes(e.kind) && e.out === undefined;
-  if (e.kind === 'think') { what = '💭 thinking'; detail = e.text.split('\n').filter(Boolean).slice(-1)[0] || ''; }
+  if (e.kind === 'sitting') { what = '🪑 ' + sitLabel(e); detail = 'a new session begins'; }
+  else if (e.kind === 'think') { what = '💭 thinking'; detail = e.text.split('\n').filter(Boolean).slice(-1)[0] || ''; }
   else if (e.kind === 'say') { what = '💬 says'; detail = e.text.split('\n')[0]; }
   else if (isLive && !busy) { what = '💭 thinking about the next step'; detail = c ? 'after: ' + c[2] : ''; }
   else if (c) { what = c[1] + ' ' + c[2].replace(/^(\S+)s /, (m, v) => v.endsWith('e') ? v.slice(0,-1) + 'ing ' : v + 'ing ').replace(/^edited |^wrote /, m => m === 'edited ' ? 'editing ' : 'writing '); detail = e.kind === 'cmd' ? e.text.split('\n')[0] : (e.path || ''); }
@@ -211,7 +256,7 @@ let liveText = null;
 async function refreshLiveCode() {
   const p = paintingFile(events.length - 1); if (!p || !cwd) return;
   const rel = p.startsWith(cwd + '/') ? p.slice(cwd.length + 1) : p;
-  const r = await fetch(`/api/file?s=${encodeURIComponent(S)}&p=${encodeURIComponent(rel)}`); if (!r.ok) return;
+  const q = Q, r = await fetch(`/api/file?${q}&f=${encodeURIComponent(rel)}`); if (!r.ok || q !== Q) return;
   const t = await r.text(); if (t !== liveText) { const old = liveText; liveText = t; if (live && pos === events.length - 1) renderCode(p, t, diffLines(old, t)); }
 }
 function diffLines(a, b) { if (a == null) return new Set(); const A = new Set(a.split('\n')); const out = new Set(); b.split('\n').forEach((l, i) => { if (!A.has(l) && l.trim()) out.add(i); }); return out; }
@@ -254,6 +299,8 @@ function journal(i) {
     if (t - lastTm > 5 * 60e3 && (e.kind === 'think' || e.kind === 'say')) { flush(); html += `<span class="tm">${hhmm(e.ts)}</span>`; lastTm = t; }
     if (e.kind === 'think') { flush(); const typing = k === lastThink && live && k === events.length - 1 && k !== typed;
       html += `<div class="th${k === lastThink ? ' last' : ''}" data-k="${k}">${typing ? '' : esc(e.text.trim())}</div>`; }
+    else if (e.kind === 'sitting') { flush(); const gap = (t - Date.parse(events[k - 1].ts)) / 1000;
+      html += `<div class="sit">🪑 ${esc(sitLabel(e))}${gap > 120 ? ` <span>· after ${ago(gap).replace(' ago', '')} away</span>` : ''}</div>`; lastTm = t; }
     else if (e.kind === 'say') { flush(); html += `<div class="say">${esc(e.text.trim().slice(0, 1500))}</div>`; }
     else { const c = kindOf(e); if (!c || e.kind === 'image' && k > 0 && events[k-1].kind === 'read') continue;
       const title = esc(e.kind === 'cmd' ? e.text.slice(0, 2000) : (e.path || ''));
@@ -284,6 +331,7 @@ $('play').onclick = () => {
   if (playing) { stop(); status(); return; } live = false; if (pos >= events.length - 1) show(0);
   $('play').textContent = '❚❚'; let simT = Date.parse(events[pos].ts);
   playing = setInterval(() => { simT += 100 * +$('speed').value; let k = pos;
+    if (k + 1 < events.length && events[k + 1].kind === 'sitting') simT = Math.max(simT, Date.parse(events[k + 1].ts));  // skip the gap between sittings
     while (k + 1 < events.length && Date.parse(events[k + 1].ts) <= simT) k++;
     if (k !== pos) show(k); if (pos >= events.length - 1) { stop(); goLive(); } }, 100);
 };
@@ -294,12 +342,11 @@ $('scrub').oninput = e => { stop(); live = +e.target.value >= events.length - 1;
 $('togglecode').onclick = () => document.body.classList.toggle('nocode');
 $('img').onclick = () => { $('zimg').src = $('img').src; $('zoom').style.display = 'flex'; };
 $('zoom').onclick = () => { $('zoom').style.display = 'none'; };
-$('sess').onchange = e => { stop(); S = e.target.value; events = []; cwd = ''; liveText = null; typed = -1; $('strip').innerHTML = ''; live = true;
-  history.replaceState(null, '', '?s=' + encodeURIComponent(S)); poll(); };
+$('sess').onchange = e => { reset(); Q = e.target.value; live = true; history.replaceState(null, '', '?' + Q); renderSessions(); poll(); };
 document.onkeydown = e => { if (e.target.tagName === 'SELECT') return;
   const k = e.key; if (k === 'ArrowRight') { stop(); live = false; show(pos + 1); } else if (k === 'ArrowLeft') { stop(); live = false; show(pos - 1); }
   else if (k === '[') $('prevlook').click(); else if (k === ']') $('nextlook').click(); else if (k === 'l') goLive(); else if (k === 'c') $('togglecode').click();
   else if (k === 'Escape') $('zoom').style.display = 'none'; else if (k === ' ') { e.preventDefault(); $('play').click(); } };
-loadSessions().then(() => { poll(); setInterval(poll, 2000); setInterval(status, 1000); });
+loadSessions().then(() => { poll(); setInterval(poll, 2000); setInterval(status, 1000); setInterval(loadSessions, 30000); });
 </script>
 </body></html>

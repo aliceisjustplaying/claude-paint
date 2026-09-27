@@ -4,7 +4,8 @@
 # ///
 """The studio: watch a painter paint, live or replayed.
 
-Reads a painter's pi session log (~/.pi/agent/sessions/<folder>/*.jsonl):
+Reads a painter's pi session logs (~/.pi/agent/sessions/<folder>/*.jsonl, one
+per sitting, stitched into one timeline):
 every program write and edit, every command, every image the painter
 looked at (the log holds the image bytes it saw) and its words. Serves a
 page with the code on the left, the latest look on the right and a
@@ -21,11 +22,21 @@ import http.server
 import json
 import os
 import re
+import threading
 import urllib.parse
+from datetime import datetime
 
 SESSIONS = os.path.expanduser("~/.pi/agent/sessions")
 HERE = os.path.dirname(os.path.abspath(__file__))
-_cache = {}  # path -> {"size", "offset", "events", "images"}
+_cache = {}  # path -> {"offset", "events", "images", "calls"}: one session file, parsed so far
+_streams = {}  # key -> a stitched stream of session files (see stream())
+_locks = {}
+_locks_lock = threading.Lock()
+
+
+def _lock(key):
+    with _locks_lock:
+        return _locks.setdefault(key, threading.Lock())
 
 
 _models = {}  # path -> the painter's model (it doesn't change within a session)
@@ -64,23 +75,43 @@ def session_model(path):
 PAINTER = re.compile(r"^(paint-studio-[0-9a-f]+|paint-r\d+-p\d+|claude-paint-r\d+-(arm\d|tree\d|astra|fable|flash|p\d))$")
 
 
+def short(d):
+    """A session folder's short name: --Users-<you>-src-a-paint-studio-cfa19c-- -> paint-studio-cfa19c."""
+    return d.strip("-").split("-src-a-")[-1]
+
+
 def list_sessions():
-    out = []
+    """One entry per painter folder (its sittings stitched: {"p": short name}) and, for
+    everything else, one per session file ({"s": path}); newest activity first."""
+    files = {}
     for f in glob.glob(os.path.join(SESSIONS, "*paint*", "*.jsonl")):
-        d = os.path.basename(os.path.dirname(f))
-        out.append({"path": f, "folder": d.strip("-").split("-src-a-")[-1], "model": session_model(f), "painter": bool(PAINTER.match(d.strip("-").split("-src-a-")[-1])),
-                    "mtime": os.path.getmtime(f), "size": os.path.getsize(f)})
-    # a painter's sittings are separate sessions in one folder: number them by start time
-    # (session file names begin with it)
-    by = {}
-    for s in out:
-        by.setdefault(s["folder"], []).append(s)
-    for group in by.values():
-        if len(group) > 1 and group[0]["painter"]:
-            for k, s in enumerate(sorted(group, key=lambda s: os.path.basename(s["path"])), 1):
-                s["sitting"] = k
+        files.setdefault(os.path.basename(os.path.dirname(f)), []).append(f)
+    out = []
+    for d, fs in files.items():
+        name = short(d)
+        fs.sort(key=os.path.basename)  # session file names begin with the start time
+        info = [{"path": f, "model": session_model(f), "mtime": os.path.getmtime(f), "size": os.path.getsize(f)} for f in fs]
+        if PAINTER.match(name):
+            models = []
+            for i in info:
+                if i["model"] and i["model"] not in models:
+                    models.append(i["model"])
+            out.append({"p": name, "folder": name, "painter": True, "model": " → ".join(models), "sittings": len(fs),
+                        "files": fs, "mtime": max(i["mtime"] for i in info), "size": sum(i["size"] for i in info)})
+        else:
+            out += [dict(i, s=i["path"], folder=name, painter=False) for i in info]
     out.sort(key=lambda s: -s["mtime"])
     return out
+
+
+def painter_files(name):
+    """The session files of a painter folder (given by its short name), in start order."""
+    if not name or "/" in name or name.startswith("."):
+        return []
+    for d in glob.glob(os.path.join(SESSIONS, "*" + name + "*")):
+        if short(os.path.basename(d)) == name:
+            return sorted(glob.glob(os.path.join(d, "*.jsonl")), key=os.path.basename)
+    return []
 
 
 def _text(content):
@@ -91,6 +122,11 @@ def _text(content):
 
 def parse(path):
     """Parse the log incrementally; returns (events, images)."""
+    with _lock("f:" + path):
+        return _parse(path)
+
+
+def _parse(path):
     c = _cache.setdefault(path, {"offset": 0, "events": [], "images": [], "calls": {}})
     size = os.path.getsize(path)
     if size < c["offset"]:  # rewritten
@@ -159,6 +195,58 @@ def parse(path):
     return c["events"], c["images"]
 
 
+def _hhmm(ts):
+    try:
+        return datetime.fromisoformat(ts.replace("Z", "+00:00")).astimezone().strftime("%H:%M")
+    except ValueError:
+        return ""
+
+
+def stream(key, files):
+    """The events of several session files (a painter's sittings) as one stream, in start
+    order, with a {"kind": "sitting"} event before each sitting after the first. Image
+    indices are renumbered to be unique across files. Built incrementally: each file is
+    parsed from where it stopped, and only the new events are appended. If an earlier
+    part changes (it shouldn't: a sitting ends before the next begins) the stream is
+    rebuilt and its epoch bumped, so clients know to start over."""
+    with _lock("s:" + key):
+        st = _streams.get(key)
+        parsed = [parse(f) for f in files]
+        parts = [(f, len(ev), len(im)) for f, (ev, im) in zip(files, parsed)]
+        if st:
+            old = st["parts"]
+            same = (len(old) <= len(parts) and all(o[0] == n[0] for o, n in zip(old, parts))
+                    and all(o == n for o, n in zip(old[:-1], parts))
+                    and (not old or parts[len(old) - 1][1] >= old[-1][1] and parts[len(old) - 1][2] >= old[-1][2]))
+            if not same:
+                st = {"epoch": st["epoch"] + 1, "parts": [], "events": []}
+        else:
+            st = {"epoch": 0, "parts": [], "events": []}
+        _streams[key] = st
+        old, ioff = st["parts"], 0
+        for k, (f, n, ni) in enumerate(parts):
+            ev = parsed[k][0]
+            seen = old[k][1] if k < len(old) else 0
+            if seen == 0 and n and k > 0:
+                st["events"].append({"ts": ev[0]["ts"], "kind": "sitting", "n": k + 1,
+                                     "text": f"sitting {k + 1} · {_hhmm(ev[0]['ts'])}"})
+            for e in ev[seen:n]:
+                st["events"].append(dict(e, img=e["img"] + ioff) if e["kind"] == "image" else e)
+            ioff += ni
+        st["parts"] = parts
+        return st
+
+
+def image(st, i):
+    """Image i of a stitched stream: (mime, base64 data), or None."""
+    for f, _, ni in st["parts"]:
+        if i < ni:
+            imgs = _cache[f]["images"]
+            return imgs[i] if 0 <= i < len(imgs) else None
+        i -= ni
+    return None
+
+
 class H(http.server.BaseHTTPRequestHandler):
     def log_message(self, *a):
         pass
@@ -173,40 +261,49 @@ class H(http.server.BaseHTTPRequestHandler):
     def do_GET(self):
         u = urllib.parse.urlparse(self.path)
         q = urllib.parse.parse_qs(u.query)
-        path = q.get("s", [""])[0]
-        if path and not os.path.realpath(path).startswith(os.path.realpath(SESSIONS)):
+        # what to show: ?p=<painter folder> (all its sittings) or ?s=<session file> (one session)
+        painter, path = q.get("p", [""])[0], q.get("s", [""])[0]
+        if path and not os.path.realpath(path).startswith(os.path.realpath(SESSIONS) + os.sep):
             return self._send(403, b"no", "text/plain")
         if u.path == "/":
             with open(os.path.join(HERE, "index.html"), "rb") as fh:
                 return self._send(200, fh.read(), "text/html; charset=utf-8")
         if u.path == "/api/sessions":
             return self._send(200, json.dumps(list_sessions()).encode(), "application/json")
+        if u.path not in ("/api/events", "/api/file", "/img"):
+            return self._send(404, b"not found", "text/plain")
+        files = painter_files(painter) if painter else [path] if path and os.path.isfile(path) else []
+        if not files:
+            return self._send(404, b"no such session", "text/plain")
+        st = stream(("p:" + painter) if painter else ("s:" + path), files)
         if u.path == "/api/events":
-            since = int(q.get("since", ["0"])[0])
-            ev, _ = parse(path)
-            return self._send(200, json.dumps({"events": ev[since:], "total": len(ev)}).encode(), "application/json")
+            since, ev = int(q.get("since", ["0"])[0]), st["events"]
+            if q.get("epoch", [str(st["epoch"])])[0] != str(st["epoch"]):
+                since = 0  # the stream was rebuilt: the client starts over
+            return self._send(200, json.dumps({"events": ev[since:], "total": len(ev), "epoch": st["epoch"],
+                                               "sittings": len(files)}).encode(), "application/json")
         if u.path == "/api/file":  # the painting's current source, from the painter's folder
-            ev, _ = parse(path)
-            cwd = next((e["cwd"] for e in ev if e["kind"] == "start"), "")
-            want = os.path.realpath(os.path.join(cwd, q.get("p", [""])[0]))
+            cwd = next((e["cwd"] for e in reversed(st["events"]) if e["kind"] == "start"), "")
+            want = os.path.realpath(os.path.join(cwd, q.get("f", [""])[0]))
             if cwd and want.startswith(os.path.realpath(cwd) + os.sep) and os.path.isfile(want):
                 with open(want, "rb") as fh:
                     return self._send(200, fh.read(), "text/plain; charset=utf-8")
             return self._send(404, b"", "text/plain")
         if u.path == "/img":
-            _, imgs = parse(path)
-            i = int(q.get("i", ["0"])[0])
-            if 0 <= i < len(imgs):
-                mime, data = imgs[i]
-                return self._send(200, base64.b64decode(data), mime)
+            im = image(st, int(q.get("i", ["0"])[0]))
+            if im:
+                return self._send(200, base64.b64decode(im[1]), im[0])
         self._send(404, b"not found", "text/plain")
 
 
 def main():
+    global SESSIONS
     ap = argparse.ArgumentParser()
     ap.add_argument("--port", type=int, default=8765)
     ap.add_argument("--host", default="127.0.0.1", help="e.g. this machine's Tailscale IP to watch from another of your devices")
+    ap.add_argument("--sessions", default=SESSIONS, help="where pi keeps its session logs")
     a = ap.parse_args()
+    SESSIONS = os.path.abspath(os.path.expanduser(a.sessions))
     print(f"studio: http://{a.host}:{a.port}")
     http.server.ThreadingHTTPServer((a.host, a.port), H).serve_forever()
 

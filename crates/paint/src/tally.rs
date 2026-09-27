@@ -273,6 +273,39 @@ impl std::fmt::Display for Tally {
     }
 }
 
+/// A callback run after every slice of hand time put on the clock (a
+/// slice of a long pass, or the rest of a verb's time): the canvas as it is
+/// then, with `tally().clocked` the hand time so far. One per thread; it
+/// only reads. For replays that record the painting as it is made.
+#[cfg(feature = "hand-hook")]
+pub mod hand_hook {
+    use crate::Canvas;
+    use std::cell::RefCell;
+
+    type Hook = Box<dyn FnMut(&Canvas)>;
+
+    thread_local! {
+        static HOOK: RefCell<Option<Hook>> = const { RefCell::new(None) };
+    }
+
+    /// Set (or with None, clear) this thread's hook; returns the old one.
+    pub fn set(f: Option<Hook>) -> Option<Hook> {
+        HOOK.with(|h| std::mem::replace(&mut *h.borrow_mut(), f))
+    }
+
+    pub(crate) fn call(c: &Canvas) {
+        // taken out while it runs, so a hook that paints can't re-enter it
+        let Some(mut f) = HOOK.with(|h| h.borrow_mut().take()) else { return };
+        f(c);
+        HOOK.with(|h| {
+            let mut h = h.borrow_mut();
+            if h.is_none() {
+                *h = Some(f);
+            }
+        });
+    }
+}
+
 impl Canvas {
     /// Hand time: with `Some(slice)` (minutes), passes are painted in slices
     /// of about that much hand time with the paint aging between them
@@ -313,6 +346,8 @@ impl Canvas {
     pub(crate) fn hand_pass(&mut self, secs: f64) {
         self.wait((secs / 60.0) as f32);
         self.tally.clocked += secs;
+        #[cfg(feature = "hand-hook")]
+        hand_hook::call(self);
     }
 
     /// The hand's ledger so far (since the canvas was made).

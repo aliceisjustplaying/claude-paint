@@ -5,13 +5,17 @@ edition = "2024"
 publish = false
 
 [features]
-default = ["replay"]
+default = ["replay", "finish"]
 # The developer/runner build: EASEL_ROOT, named sessions (-s, EASEL_SESSION),
 # `easel run` (with --dump-surface) and `hash-probe`. Without it (the
 # painter build, `--no-default-features`) the studio is the directory above
 # the one holding the executable (<studio>/bin/easel) and it holds one
 # painting, "painting".
 replay = []
+# varnish{}, cracks{} and relief(): whole-picture finishing, applied after
+# the painter's session by scripts/finish_painting. Not in the painter build,
+# so finishing can't become the painter's way of ending.
+finish = []
 
 [[bin]]
 name = "easel"

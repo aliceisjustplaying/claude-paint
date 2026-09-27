@@ -15,6 +15,7 @@
 //! painting, `PAINTING`. See notes/easel_guide.md.
 
 mod api;
+mod check;
 mod depth;
 mod draw_edges;
 mod draw_outline;
@@ -249,6 +250,9 @@ fn request(name: &str, cmd: &str, args: &[String], payload: &[u8]) -> Result<(bo
     s.shutdown(std::net::Shutdown::Write).map_err(|e| e.to_string())?;
     let mut resp = String::new();
     s.read_to_string(&mut resp).map_err(|e| e.to_string())?;
+    if resp.is_empty() {
+        return Err(format!("the easel closed without answering {cmd:?}"));
+    }
     let (status, body) = resp.split_once('\n').unwrap_or((&resp, ""));
     Ok((status == "ok", body.to_string()))
 }
@@ -394,6 +398,8 @@ fn serve(args: &[String]) -> Result<(), String> {
     let sock = sock_path(&name);
     let l = UnixListener::bind(&sock).map_err(|e| format!("easel: fatal: bind {}: {e}", sock.display()))?;
     let _ = std::io::stdout().flush();
+    // the check running on its own thread, if any (check.rs)
+    let mut checking: Option<check::Job> = None;
 
     for conn in l.incoming() {
         let Ok(mut conn) = conn else { continue };
@@ -406,6 +412,25 @@ fn serve(args: &[String]) -> Result<(), String> {
         let mut parts = head.split('\t').map(|s| s.to_string());
         let cmd = parts.next().unwrap_or_default();
         let args: Vec<String> = parts.collect();
+        // a client that gave up (timed out) waiting behind a long request: its request
+        // doesn't run (a `do` it no longer waits for would go into the log unseen)
+        if check::client_gone(&conn) {
+            eprintln!("{cmd} skipped: the client went away before it ran");
+            continue;
+        }
+        if cmd == "check" {
+            if let Some(j) = checking.take() {
+                j.stop();
+            }
+            match srv.check_input().and_then(|input| check::start(conn.try_clone().map_err(|e| e.to_string())?, input)) {
+                Ok(j) => checking = Some(j),
+                Err(e) => {
+                    let _ = conn.write_all(format!("err\n{e}\n").as_bytes());
+                    eprintln!("check 0.00s err");
+                }
+            }
+            continue;
+        }
         let t0 = Instant::now();
         let r = srv.handle(&cmd, &args, payload);
         let reply = match &r {
@@ -415,6 +440,9 @@ fn serve(args: &[String]) -> Result<(), String> {
         let _ = conn.write_all(reply.as_bytes());
         eprintln!("{cmd} {:.2}s {}", t0.elapsed().as_secs_f64(), if r.is_ok() { "ok" } else { "err" });
         if cmd == "close" && r.is_ok() {
+            if let Some(j) = checking.take() {
+                j.stop();
+            }
             let _ = std::fs::remove_file(&sock);
             break;
         }
@@ -501,11 +529,27 @@ impl Server {
         Ok(format!("{} ({w}x{h}, {:.2}s)\n", path.display(), t0.elapsed().as_secs_f64()))
     }
 
-    fn handle(&mut self, cmd: &str, args: &[String], payload: &str) -> Result<String, String> {
+    /// The log on disk is the one the session wrote, and holds everything it ran.
+    fn ready(&self) -> Result<(), String> {
         self.validate()?;
         if self.written.as_deref() != Some(self.s.program(&self.name).as_str()) {
             return Err("session integrity: uncommitted state; restart required".into());
         }
+        Ok(())
+    }
+
+    /// What `check` replays and compares with (check.rs runs it on its own thread).
+    fn check_input(&self) -> Result<check::Input, String> {
+        self.ready()?;
+        Ok(check::Input {
+            width: self.s.st.borrow().width,
+            chunks: self.s.log.iter().map(|c| c.src.clone()).collect(),
+            live: self.s.canvas().map(|a| (bits(&a.seen()), bits_f(a.surface_um()))),
+        })
+    }
+
+    fn handle(&mut self, cmd: &str, args: &[String], payload: &str) -> Result<String, String> {
+        self.ready()?;
         match cmd {
             "note" => append_note(self.s.st.borrow().clock, payload),
             "status" => Ok(format!("{}\n", self.s.status())),
@@ -538,25 +582,6 @@ impl Server {
             "frames" => {
                 self.frames = matches!(args.first().map(|s| s.as_str()), Some("on") | None);
                 Ok(format!("frames {} ({})\n", if self.frames { "on" } else { "off" }, session_dir(&self.name).join("frames").display()))
-            }
-            "check" => {
-                let t0 = Instant::now();
-                let width = self.s.st.borrow().width;
-                let mut fresh = Session::replay(width).map_err(|e| e.to_string())?;
-                for (i, c) in self.s.log.iter().enumerate() {
-                    fresh.run(&c.src).map_err(|e| format!("replay failed at chunk {}: {e}", i + 1))?;
-                }
-                let same = match (self.s.canvas(), fresh.canvas()) {
-                    (Some(a), Some(b)) => bits(&a.seen()) == bits(&b.seen()) && bits_f(a.surface_um()) == bits_f(b.surface_um()),
-                    (None, None) => true,
-                    _ => false,
-                };
-                if same {
-                    Ok(format!("replay matches the live canvas exactly ({} chunks, {:.1}s)\n", self.s.log.len(), t0.elapsed().as_secs_f64()))
-                } else {
-                    Err("replay DIFFERS from the live canvas: a chunk depended on state from a failed chunk (e.g. a table it changed); the log is the painting: close and reopen to continue from it"
-                        .into())
-                }
             }
             "close" => {
                 let note = self.save_log()?;

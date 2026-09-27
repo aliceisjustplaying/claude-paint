@@ -494,7 +494,7 @@ fn parts_of(tubes: &Palette, t: &Table, what: &str) -> Result<(Vec<(usize, f32)>
     let mut given = Vec::new();
     for e in t.sequence_values::<Value>() {
         let Value::Table(e) = e? else {
-            return err(format!("{what}: each part is {{\"tube name\", parts}}, e.g. {{\"lead white\", 6}}"));
+            return err(format!("{what}: each part is {{\"tube name\", parts}} (tubes() lists the names)"));
         };
         let name: String = e.get::<Option<String>>(1)?.ok_or_else(|| mlua::Error::runtime(format!("{what}: each part is {{\"tube name\", parts}}")))?;
         let k: f32 = e.get::<Option<f32>>(2)?.ok_or_else(|| mlua::Error::runtime(format!("{what}: {name:?} needs a number of parts")))?;
@@ -511,7 +511,7 @@ fn parts_of(tubes: &Palette, t: &Table, what: &str) -> Result<(Vec<(usize, f32)>
         given.push((name, k));
     }
     if parts.is_empty() {
-        return err(format!("{what}: needs at least one tube, e.g. {{{{\"lead white\", 6}}, {{\"yellow ochre\", 1}}}}"));
+        return err(format!("{what}: needs at least one tube: {{{{\"tube name\", parts}}, ...}} (tubes() lists the names)"));
     }
     let sum: f32 = parts.iter().map(|p| p.1).sum();
     for p in parts.iter_mut() {
@@ -523,7 +523,7 @@ fn parts_of(tubes: &Palette, t: &Table, what: &str) -> Result<(Vec<(usize, f32)>
 pub(crate) fn pile_of(v: &Value, what: &str) -> Result<PileU> {
     match v {
         Value::UserData(u) if u.borrow::<PileU>().is_ok() => Ok(u.borrow::<PileU>()?.clone()),
-        Value::Nil => err(format!("{what}: needs a pile (p = pile{{{{\"lead white\", 6}}, {{\"yellow ochre\", 1}}}})")),
+        Value::Nil => err(format!("{what}: needs a pile (p = pile{{{{\"tube name\", parts}}, ...}})")),
         o => err(format!("{what}: want a pile (made with pile{{...}}), got {}", o.type_name())),
     }
 }
@@ -1368,7 +1368,7 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
 
 
 
-const CANVAS_HELP: &str = "canvas{size=440, aspect=1.4, linen=15, ground={{pile={{\"lead white\", 3}, {\"yellow ochre\", 1}}, um=100, apply=\"knife\"}}, seed=1}\n  size: width in mm; aspect: width / height; linen: threads per cm (or {warp, weft});\n  ground: layers bottom first, each a pile of tubes, a thickness in µm and how it is put on (\"knife\", \"roller\" or \"brush\"; a knife takes texture=0..1)";
+const CANVAS_HELP: &str = "canvas{size=<mm>, aspect=<width / height>, linen=<threads per cm>, ground={{pile={{\"<tube>\", <parts>}, ...}, um=<µm>, apply=\"<knife|roller|brush>\"}, ...}, seed=<n>}\n  size: width in mm; aspect: width / height; linen: threads per cm (or {warp, weft});\n  ground: layers bottom first, each a pile of tubes, a thickness in µm and how it is put on (\"knife\", \"roller\" or \"brush\"; a knife takes texture=0..1)";
 
 /// Ground layers from `{{pile={{tube, parts}, ...}, um=, apply=, texture=}, ...}`,
 /// bottom first: each the paste its tubes make (masstone, hiding, stiffness).

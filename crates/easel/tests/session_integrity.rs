@@ -35,7 +35,7 @@ fn edited_or_truncated_logs_cannot_reopen() {
         std::fs::write(&log, bytes).unwrap();
         let o = cmd(&["open", "reopen"]);
         assert!(!o.status.success());
-        assert!(String::from_utf8_lossy(&o.stderr).contains("edited outside the session"));
+        assert!(String::from_utf8_lossy(&o.stderr).contains("The easel goes on only from the log it wrote"));
     }
     std::fs::write(&log, original).unwrap();
     assert!(ok(&["open", "reopen"]).contains("resumed 1 chunks"));
@@ -90,7 +90,7 @@ fn a_running_session_refuses_every_request_while_its_log_is_edited() {
         for req in [&["do", "x = 2"][..], &["status"], &["log"], &["look"], &["save"], &["check"], &["frames", "on"], &["note", "edited"], &["close"]] {
             let o = cmd(&with(req));
             assert!(!o.status.success(), "{req:?} ran over an edited log");
-            assert!(String::from_utf8_lossy(&o.stderr).contains("edited outside the session"), "{req:?}: {}", String::from_utf8_lossy(&o.stderr));
+            assert!(String::from_utf8_lossy(&o.stderr).contains("The easel goes on only from the log it wrote"), "{req:?}: {}", String::from_utf8_lossy(&o.stderr));
         }
         std::fs::write(&log, &original).unwrap();
     }

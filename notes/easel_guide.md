@@ -27,7 +27,6 @@ folder:
 ```sh
 bin/easel open                                # start the session (2400 px wide), or reattach to it
 bin/easel do 'canvas{size=400, aspect=1.25, linen=15, ground={{pile={{"lead white", 1}}, um=100, apply="knife"}}}'
-bin/easel do -f <file>                        # a chunk you wrote to a file (or `do -` for stdin)
 bin/easel look                                # prints the path of a PNG of the canvas: read it
 bin/easel note 'what I did and why'           # an entry in notes/journal.md
 bin/easel save                                # the finished canvas: out/easel/painting/painting.png

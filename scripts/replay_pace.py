@@ -7,7 +7,7 @@
 
     replay_pace.py <frames-dir> --length T [--max-hold 1] [--hold 3] [--fps 24]
                    [--floor 0.2] [--gamma 0.7] [--hand-pace 0.6] [--min-frames 2]
-                   [--eval]
+                   [--ramp 1] [--ramp-span 0.35] [--open-hold 0] [--eval]
 
 Writes <frames-dir>/concat.txt (ffmpeg concat list) from frames.tsv, where a
 frame's screen time follows how much the picture visibly changed when it
@@ -26,7 +26,8 @@ arrived, not how long the hand took:
             frames is skipped and its time given to the next one shown, so
             nothing flickers past
 
-The final picture is held --hold seconds. With --eval, prints how evenly the
+The final picture is held --hold seconds; with --open-hold S the bare canvas
+opens the clip for S seconds, taken out of the rest. With --eval, prints how evenly the
 visible change is spread over the clip (per tenth).
 """
 
@@ -154,11 +155,13 @@ def main():
     ap.add_argument("--hand-pace", type=float, default=0.6)
     ap.add_argument("--min-frames", type=int, default=2)
     ap.add_argument("--ramp", type=float, default=1.0, help="opening speed-up: weight factor at the start (1 = none)")
+    ap.add_argument("--open-hold", type=float, default=0.0, help="seconds the bare canvas is shown first")
     ap.add_argument("--ramp-span", type=float, default=0.35, help="share of hand time over which the ramp eases to 1")
     ap.add_argument("--eval", action="store_true", help="print evenness for this schedule and for plain --hand-pace")
     a = ap.parse_args()
-    if a.length <= a.hold:
-        sys.exit(f"replay_pace: --length must exceed the {a.hold} s final hold")
+    if a.length <= a.hold + a.open_hold:
+        sys.exit(f"replay_pace: --length must exceed the {a.hold} s final hold plus the {a.open_hold} s opening hold")
+    opening = round(a.open_hold * a.fps)
     ms = moments(a.dir)
     h = np.array([x[1] for x in ms])
     c = changes(a.dir, ms)
@@ -166,8 +169,9 @@ def main():
     # little long until the clip lands on --length
     target, aim = a.length, a.length
     for _ in range(5):
-        a.length = aim
+        a.length = aim - opening / a.fps
         fr = quantize(schedule(c, h, a), a.fps, a.min_frames)
+        fr[0] += opening  # the bare canvas: its weight is 0, so it's shown only if held
         got = sum(fr[:-1]) / a.fps + a.hold
         if abs(got - target) < 0.5 / a.fps:
             break

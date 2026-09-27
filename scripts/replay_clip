@@ -19,6 +19,8 @@
 #   --gamma G        dynamic: the change exponent (default 0.7)
 #   --ramp R         dynamic: the opening plays faster, weight x R at the start
 #                    easing to x1 over --ramp-span (share of hand time, 0.35)
+#   --open-hold S    dynamic: show the bare canvas for S seconds first (default
+#                    0), taken out of the rest so the clip still runs --length
 #   --width W        frame and clip width, px (default 1000)
 #   --frames-dir D   where the frames go (default: <out>.frames); with
 #                    --reuse, an existing frames dir to cut from
@@ -37,10 +39,10 @@
 # 24 fps.
 set -euo pipefail
 
-usage() { sed -n '2,24p' "$0" | sed 's/^# \{0,1\}//'; exit 2; }
+usage() { awk 'NR > 1 && !/^#/ { exit } NR > 1' "$0" | sed 's/^# \{0,1\}//'; exit 2; }
 [ $# -ge 2 ] || usage
 log=$1 out=$2; shift 2
-every=60 length=75 pace=0.6 width=1000 dir="" sheet="" floor=0.2 gamma=0.7 ramp=1 rampspan=0.35 reuse=0 maxhold=1 fps=24 hold=3
+every=60 length=75 pace=0.6 width=1000 dir="" sheet="" floor=0.2 gamma=0.7 ramp=1 rampspan=0.35 openhold=0 reuse=0 maxhold=1 fps=24 hold=3
 easel=$(cd "$(dirname "$0")/.." && pwd)/target/release/easel
 while [ $# -gt 0 ]; do
   case $1 in
@@ -51,6 +53,7 @@ while [ $# -gt 0 ]; do
     --gamma) gamma=$2; shift 2 ;;
     --ramp) ramp=$2; shift 2 ;;
     --ramp-span) rampspan=$2; shift 2 ;;
+    --open-hold) openhold=$2; shift 2 ;;
     --width) width=$2; shift 2 ;;
     --frames-dir) dir=$2; shift 2 ;;
     --reuse) reuse=1; shift ;;
@@ -83,7 +86,7 @@ list=$dir/concat.txt
 if [ "$pace" = dynamic ]; then
   command -v uv >/dev/null || { echo "replay_clip: --pace dynamic needs uv" >&2; exit 1; }
   uv run -q --script "$(dirname "$0")/replay_pace.py" "$dir" --length "$length" --max-hold "$maxhold" --hold "$hold" \
-    --fps "$fps" --floor "$floor" --gamma "$gamma" --ramp "$ramp" --ramp-span "$rampspan" --eval
+    --fps "$fps" --floor "$floor" --gamma "$gamma" --ramp "$ramp" --ramp-span "$rampspan" --open-hold "$openhold" --eval
 else
 awk -F'\t' -v fps="$fps" -v length_="$length" -v pace="$pace" -v hold="$hold" -v maxhold="$maxhold" -v dir="$dir" '
   NR == 1 { next }

@@ -10,6 +10,13 @@
 #                    painting's first hours play slower and later hours
 #                    faster, so the long fine-detail stretch at the end doesn't
 #                    drag; 1 plays hand time evenly throughout
+#   --pace dynamic   screen time follows how much the picture visibly changes
+#                    (scripts/replay_pace.py, needs uv): each frame is held
+#                    for (1 - floor) of its change^gamma share plus floor of
+#                    its hand_time^0.6 share; frames under 2 video frames are
+#                    skipped, so nothing flickers
+#   --floor F        dynamic: the hand-time share (default 0.2)
+#   --gamma G        dynamic: the change exponent (default 0.7)
 #   --width W        frame and clip width, px (default 1000)
 #   --frames-dir D   where the frames go (default: <out>.frames); with
 #                    --reuse, an existing frames dir to cut from
@@ -31,13 +38,15 @@ set -euo pipefail
 usage() { sed -n '2,24p' "$0" | sed 's/^# \{0,1\}//'; exit 2; }
 [ $# -ge 2 ] || usage
 log=$1 out=$2; shift 2
-every=60 length=75 pace=0.6 width=1000 dir="" sheet="" reuse=0 maxhold=1 fps=24 hold=3
+every=60 length=75 pace=0.6 width=1000 dir="" sheet="" floor=0.2 gamma=0.7 reuse=0 maxhold=1 fps=24 hold=3
 easel=$(cd "$(dirname "$0")/.." && pwd)/target/release/easel
 while [ $# -gt 0 ]; do
   case $1 in
     --every) every=$2; shift 2 ;;
     --length) length=$2; shift 2 ;;
     --pace) pace=$2; shift 2 ;;
+    --floor) floor=$2; shift 2 ;;
+    --gamma) gamma=$2; shift 2 ;;
     --width) width=$2; shift 2 ;;
     --frames-dir) dir=$2; shift 2 ;;
     --reuse) reuse=1; shift ;;
@@ -67,7 +76,12 @@ fi
 # so the clip runs --length (holds capped at --max-hold, the rest stretched
 # to make up for them)
 list=$dir/concat.txt
-awk -F'\t' -v length_="$length" -v pace="$pace" -v hold="$hold" -v maxhold="$maxhold" -v dir="$dir" '
+if [ "$pace" = dynamic ]; then
+  command -v uv >/dev/null || { echo "replay_clip: --pace dynamic needs uv" >&2; exit 1; }
+  uv run -q --script "$(dirname "$0")/replay_pace.py" "$dir" --length "$length" --max-hold "$maxhold" --hold "$hold" \
+    --fps "$fps" --floor "$floor" --gamma "$gamma" --eval
+else
+awk -F'\t' -v fps="$fps" -v length_="$length" -v pace="$pace" -v hold="$hold" -v maxhold="$maxhold" -v dir="$dir" '
   NR == 1 { next }
   { if (n > 0 && $2 + 0 == h[n]) { f[n] = $1 } else { n++; f[n] = $1; h[n] = $2 + 0 } }
   END {
@@ -91,9 +105,13 @@ awk -F'\t' -v length_="$length" -v pace="$pace" -v hold="$hold" -v maxhold="$max
       printf "file '\''%s/%s'\''\nduration %.5f\n", dir, f[i], d
       secs += d
     }
-    printf "file '\''%s/%s'\''\nduration %.5f\nfile '\''%s/%s'\''\n", dir, f[n], hold, dir, f[n]
+    # the last entry of a concat list takes the duration before it, so the
+    # hold is followed by a one-frame repeat and then the frame again
+    printf "file '\''%s/%s'\''\nduration %.5f\n", dir, f[n], hold
+    printf "file '\''%s/%s'\''\nduration %.5f\nfile '\''%s/%s'\''\n", dir, f[n], 1 / fps, dir, f[n]
     printf "%d moments, %.1f min of hand time, pace %s: about %.1f s of clip\n", n, h[n] / 60, pace, secs + hold > "/dev/stderr"
   }' "$dir/frames.tsv" > "$list"
+fi
 
 ffmpeg -loglevel error -y -f concat -safe 0 -i "$list" \
   -vf "fps=$fps,scale='min($width,iw)':-2:flags=lanczos,format=yuv420p" \

@@ -40,7 +40,9 @@ export class TokenPace {
 			used -= s.tokens;
 			if (used + next <= this.budget) return Math.max(0, s.t + this.windowMs - t);
 		}
-		return Math.max(0, this.sent[this.sent.length - 1].t + this.windowMs - t);
+		// more than the whole budget on its own: it goes once the window is empty
+		const newest = this.sent[this.sent.length - 1];
+		return newest ? Math.max(0, newest.t + this.windowMs - t) : 0;
 	}
 }
 

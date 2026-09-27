@@ -117,7 +117,12 @@ let allSessions = [];
 const when = t => new Date(t*1000).toLocaleString([], {month:'short', day:'numeric', hour:'2-digit', minute:'2-digit'});
 function renderSessions() {
   const all = $('all').checked, ss = allSessions.filter(s => all || s.painter || qOf(s) === Q);
-  const opts = ss.map(s => `<option value="${esc(qOf(s))}">${esc(s.folder.replace(/^claude-paint-/, ''))}${s.model ? ' · ' + esc(s.model) : ''}${s.sittings > 1 ? ' · ' + s.sittings + ' sittings' : ''} · ${when(s.mtime)}</option>`);
+  const label = s => {
+    if (!s.painter || !s.model) return `${s.folder.replace(/^claude-paint-/, '')}${s.model ? ' · ' + s.model : ''}${s.sittings > 1 ? ' · ' + s.sittings + ' sittings' : ''} · ${when(s.mtime)}`;
+    const where = s.round ? `${s.round} ${s.chain ? `chain ${s.lane}, ${s.n} of ${s.chain}` : s.lane + (s.n > 1 ? s.n : '')}` : '';
+    return [s.model + (s.thinking ? ' ' + s.thinking : ''), s.subject, where, 'sitting ' + s.sittings, when(s.mtime), s.folder.replace(/^paint-studio-/, '')].filter(Boolean).join(' · ');
+  };
+  const opts = ss.map(s => `<option value="${esc(qOf(s))}">${esc(label(s))}</option>`);
   // an old ?s= link to one sitting of a painter: keep it selectable as itself
   if (Q && !ss.some(s => qOf(s) === Q)) {
     const path = Q.startsWith('s=') ? decodeURIComponent(Q.slice(2)) : '', owner = allSessions.find(s => s.files && s.files.includes(path));

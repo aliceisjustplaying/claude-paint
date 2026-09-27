@@ -57,7 +57,7 @@
   /* bottom: looks + transport */
   footer { background:var(--panel); border-top:1px solid var(--line); padding:8px 14px 10px }
   #strip { display:flex; gap:6px; overflow-x:auto; padding-bottom:8px; height:74px }
-  #strip img { height:58px; border-radius:3px; cursor:pointer; opacity:.6; transition:opacity .12s; flex:none }
+  #strip img { height:58px; width:81px; object-fit:contain; background:var(--panel2); border-radius:3px; cursor:pointer; opacity:.6; transition:opacity .12s; flex:none }
   #strip img:hover { opacity:.8 } #strip img.on { opacity:1; outline:2px solid var(--acc); outline-offset:1px }
   #transport { display:flex; align-items:center; gap:8px }
   #scrub { flex:1; accent-color:var(--acc) }
@@ -122,10 +122,9 @@ async function poll() {
   status();
 }
 function thumb(e, i) {
-  const im = document.createElement('img'); im.src = imgURL(e.img); im.dataset.i = i; im.title = hhmm(e.ts) + '  ' + fname(e.path);
+  const im = document.createElement('img'); im.loading = 'lazy'; im.src = imgURL(e.img); im.dataset.i = i; im.title = hhmm(e.ts) + '  ' + fname(e.path);
   im.onclick = () => { live = false; stop(); show(i); }; $('strip').appendChild(im);
-  // the width is only known once the thumbnail has loaded: scroll to the end then too
-  im.onload = () => { if (live) stripEnd(); };
+  // fixed thumbnail size (CSS): the strip's width is known before the images load
   if (live) stripEnd();
 }
 function stripEnd() { const s = $('strip'); s.scrollLeft = s.scrollWidth; }

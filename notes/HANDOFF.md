@@ -1,5 +1,54 @@
 # Handoff (2026-09-23 evening): moving to the M3 Pro
 
+**Night of 2026-09-27/28 (read first): round 17 done, round 18 finishing, eval harness v1 built and merged.**
+
+*Running at 00:35 (all resumable; the Mac runs `caffeinate -i -s` so it can't idle-sleep):*
+- Round 18 resume (`~/tmp/gallery-fcf9c110/r18r/r18r_open.py`, log `r18/run/runner.log`): MIMO and GLM done
+  (finished paintings written); DSK and BUN replaying for their last sitting. `lane_cap.py`
+  (`notes/round18/resume/`) applies the new sitting rule to that already-running runner.
+- Round 19 test lanes (`~/tmp/gallery-fcf9c110/r19/r19_chains.py`, log `r19/run/chains.log`): LUNAF, LUNAB
+  (gpt-6-luna max, openai-codex) done and checked; GEMF, GEMB (gemini-3.8-flash high, AI Studio, 900K TPM each)
+  painting. Luna stopped early: 18 and 36 chunks.
+- Studio viewer on Tailscale: `uv run studio/studio.py --host <tailscale ip>`; its picker names painters by
+  model, thinking, Friedrich/free, round and lane.
+
+*What happened, and what's true now:*
+- **The reboot (~18:15):** the "review-sol" subagent (GPT-5.6 Sol) spawned sub-reviewers recursively: 156
+  gpt-5.6-sol sessions in 6 minutes froze the machine. Any review subagent gets tools read,bash only and a
+  no-spawn rule. The code review was then done by Alice in Codex; its fixes are merged (chunk time limit,
+  terrain cap, script guards, studio XSS, pacing crash).
+- **The r18 "deadlock" was a slow, silent replay:** a sample showed one rayon worker in
+  `paint::bristle::exchange`, the others waiting; replays take 12-50 min. `easel open` now prints progress and
+  fails only after 30 min without progress.
+- **F3 (round 17) finished** after a hand-marked sitting 2 (reboot during its final check) and sittings 3-4.
+- **Sitting rule (r18 resume and r19):** a crashed sitting that added painting counts toward the 4 (not
+  judged). Every sitting is numbered, retakes included, so studio "sitting N" counts session files.
+- **Eval harness v1 (r19-base, merged):** painters have the easel's own tools (`paint`, `look` returning the
+  image, `note`, `status`, `log`) and `read` inside the studio; no shell (no network, no `ps`, no PI_* model
+  names). One easel session stays open across sittings (a replay only after a crash). Each provider sees looks
+  at its best resolution (`vision.ts`: Gemini ultra-high, moving tool-result images to a user turn; OpenAI
+  detail high; Claude needs nothing, Opus 5.5 takes 1600 px whole). `trees.md` lost its recursion-recipe
+  wording (the four recursive tree generators were all round 16 bare winter trees).
+- **Clips:** new pacing (dynamic, gamma 0.4, ramp 0.3, 20 s, 0.25 s opening hold): rounds 16, 17, 18 (Muse,
+  Gemini, MiMo) and rounds 3-9 (replayed on each round's own engine; ports in
+  `~/tmp/old-rounds-frames-bcfee9a9/`). All in `~/tmp/stroke-replay-df2d4b79/batch2/clips/`; not on the site yet.
+- **Findings to publish with the paintings:** MiMo v2.6 reads stale images once 5+ are in context
+  (github.com/XiaomiMiMo/MiMo-Code/issues/2508): 149 of its 158 images were past that point. OpenCode Go serves
+  glm-5.3-flash from at least 3 backends (three responseId formats, different reasoning rates). Gemini (r18g)
+  noticed "an automated evaluation runner" through `ps` (fixed by the tools). pi-black puts "You are a Claude
+  agent, built on Anthropic's Claude Agent SDK." before Opus painters' system prompt.
+- **Repo:** MIT license (code), CC BY 4.0 (paintings, logs, texts), training-data canary in the README.
+
+*Open, in order:*
+1. Let round 18 finish (DSK, BUN), then clips for DSK/BUN/GLM and F3/Luna/Gemini as wanted.
+2. Website: new clips, round 17-18 paintings, the MiMo and GLM notes.
+3. r19 protocol (one page): real runs on API credits without pi-black; one pinned provider per model (GLM:
+   decide); best vision per model; lanes and counts; metrics (1:1-look share, done reversals, recursion via
+   `luac -l -l`, marks per chunk, eval-awareness grep); blind judging. Fast models to try: Gemini 3.8 Flash
+   (2.5 s/turn), Haiku 4.5 (standard-tier vision: 1568 px), GPT-6 Astra, Grok 4.7, Kimi K3.
+4. OpenRouter credits (Alice asking; ~$1,000 for ~80 paintings).
+5. A public studio would need a static exporter (painters only, home path scrubbed), not the live server.
+
 **Afternoon of 2026-09-27: rounds 17 and 18 ran, round 19 is ready (not launched).**
 Runners, briefs and notes are copied into `notes/round17/runner/`, `notes/round18/runner/`,
 `notes/round18g/runner/`, `notes/round19/` (run data stays in `~/tmp/gallery-fcf9c110/r17|r18|r18g|r19/run/`).

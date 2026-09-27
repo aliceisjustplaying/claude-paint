@@ -45,6 +45,17 @@ cp "$here/studio_notes.md" "$w/new/studio_notes.md (base)"
 cp "$g/r17/reader_brief.md" "$w/old/reader_brief.md (reader; its record reaches the next painter)"
 cp "$here/reader_brief.md" "$w/new/reader_brief.md (reader; its record reaches the next painter)"
 
+# the system prompt, and the tools as the model is told about them (name and description)
+cp "$old_repo/harness/painter/system_prompt.md" "$w/old/system_prompt.md"
+cp "$new_repo/harness/painter/system_prompt.md" "$w/new/system_prompt.md"
+printf 'bash: pi'"'"'s built-in shell tool\nread: pi'"'"'s built-in read tool (any file)\n' > "$w/old/tools (names and descriptions)"
+node -e '
+  const s = require("fs").readFileSync(process.argv[1], "utf8");
+  for (const m of s.matchAll(/name: "(\w+)",[\s\S]*?description:\s*([\s\S]*?),\n\t\t\tparameters/g))
+    console.log(m[1] + ": " + eval(m[2]));
+  console.log("read: pi\x27s built-in read tool, refused outside the studio");
+' "$new_repo/harness/painter/easel-tools.ts" > "$w/new/tools (names and descriptions)"
+
 # the painter build's help and the replies round 19 changed, as the painter build prints them
 # (capture_easel_replies.sh; r17's painter easel is target/studio-build/5656ef2: crates/ unchanged
 # from there to r17-base's tip). EASEL_NEW: the r19-base painter build.
@@ -54,7 +65,7 @@ tm='s/\([0-9.]* s to compute\)/(… s to compute)/'
 
 cd "$w"
 : > "$here/painter_text.diff"
-for f in "BRIEF.md (Friedrich lane; r17 lane F, June)" "BRIEF.md (blank lane; r17 lane O, r18, r18g)" \
+for f in "system_prompt.md" "tools (names and descriptions)" "BRIEF.md (Friedrich lane; r17 lane F, June)" "BRIEF.md (blank lane; r17 lane O, r18, r18g)" \
          "message: sitting 1 (launch)" "message: sittings 2 and later" "compaction summary: header line" \
          "easel_guide.md" "oil_paint_physics.md" "friedrich_materials.md" "trees.md (Friedrich studio)" \
          "studio_notes.md (base)" "bin-easel replies (painter build)" \

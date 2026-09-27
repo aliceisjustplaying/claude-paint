@@ -77,22 +77,19 @@ FINISH = BASE / "scripts/finish_painting"
 CHECK = BASE / "scripts/check_painting"
 H = BASE / "harness/painter"
 BLACK = HOME / ".pi/agent/git/github.com/aliceisjustplaying/pi-black/extensions/pi-black.ts"
-TEMP_GUARD = HOME / ".pi/agent/extensions/persistent-temp.ts"
 HERE = Path(__file__).resolve().parent
 RUN = HERE / "run"
 SESS = HOME / ".pi/agent/sessions"
 WATCHDOG_MIN = 30
-EASEL_HOWTO = os.environ.get("EASEL_HOWTO", "The easel is `bin/easel` in your studio;\n  notes/easel_guide.md has its commands (`open`, `do`, `look`, `note`, `save`,\n  `close`).")
-EASEL_SAVE = os.environ.get("EASEL_SAVE", "`bin/easel save`")
 
+# the painter's tools (harness/painter/easel-tools.ts): the easel and reading the studio; no shell
+TOOLS = "paint,look,note,status,log,read"
 HARNESS = ["--no-extensions", "-e", str(H / "painter.ts"), "-e", str(H / "compaction.ts"),
-           "-e", str(TEMP_GUARD),
-           "--system-prompt", str(H / "system_prompt.md"), "--tools", "bash,read",
+           "--system-prompt", str(H / "system_prompt.md"), "--tools", TOOLS,
            "--no-context-files", "--no-skills", "--no-prompt-templates", "--no-approve"]
-PAINTER_MSG = ("Your brief is in BRIEF.md in this folder. Your last message is your reply: the paths "
-               "of the saved painting and its log, its title if you give it one and, if you like, a few "
-               "sentences about the picture.")
-SITTING_MESSAGE = ("You're back at the easel. The painting is as you left it; `bin/easel open` picks it up. "
+PAINTER_MSG = ("Your brief is in BRIEF.md in this folder. Your last message is your reply: the "
+               "painting's title if you give it one and a few sentences about the picture.")
+SITTING_MESSAGE = ("You're back at the easel. The painting is as you left it. "
                    "Your brief is in BRIEF.md and your journal in notes/journal.md.")
 MAX_SITTINGS = 4
 MAX_CRASHES = 6                                   # crashed sittings (in all) before a painter is stopped
@@ -183,8 +180,7 @@ def session_dir(d):
 def brief(profile, d):
     tpl = (HERE / "brief_template.md").read_text()
     return (tpl.replace("{OPENING}", OPENING[profile]).replace("{STUDIO}", f"~/src/a/{d.name}")
-               .replace("{EASEL_HOWTO}", EASEL_HOWTO).replace("{EASEL_SAVE}", EASEL_SAVE)
-               .replace("{SLUG}", d.name.replace("paint-", "")).replace("{READING}", READING[profile]))
+               .replace("{READING}", READING[profile]))
 
 
 def painter_cmd(m, message=PAINTER_MSG):
@@ -329,8 +325,9 @@ def paint(name, n, d, rd):
             log(f"{tag}: sitting {s['sitting']} exited {s['exit']}: counted as a crash, not a judgment")
     save_sittings(rd, n, sittings)
     while (k := next_sitting(sittings)) is not None:
-        close_easel(d)
-        if count_chunks(d) and not open_easel(d, tag):
+        # one session across sittings: reattaches at once; replays the log only if the server is gone
+        stop_leftovers(d, keep_server=True)
+        if not open_easel(d, tag):
             log(f"{tag}: painter stops (the easel didn't open); rerun to retry")
             return None
         before = count_chunks(d)
@@ -345,7 +342,7 @@ def paint(name, n, d, rd):
         log(f"{tag}: sitting {k} ({m['name']}, painter harness, {before} chunks on the easel, {painting_before} painting)")
         t0 = time.time()
         rc = run(painter_cmd(m, msg), d, rd / f"p{n}_s{k}_final.txt", rd / f"p{n}_s{k}_err.txt", env=m["env"])
-        close_easel(d)
+        stop_leftovers(d, keep_server=True)
         new = sorted(set(session_dir(d).glob("*.jsonl")) - known, key=lambda f: f.stat().st_mtime)
         api_error = session_error(new)
         err_text = (rd / f"p{n}_s{k}_err.txt").read_text(errors="replace")
@@ -369,6 +366,7 @@ def paint(name, n, d, rd):
             log(f"{tag}: sitting {k} crashed ({gist(why)}); crash {crashes} of at most {MAX_CRASHES}, "
                 f"not a judgment: another sitting (not counted toward {MAX_SITTINGS}) in {wait:.0f} s")
             time.sleep(wait)
+    close_easel(d)
     shutil.copy(rd / f"p{n}_s{sittings[-1]['sitting']}_final.txt", rd / f"p{n}_final.txt")
     (rd / f"p{n}.painted").write_text(f"{time.strftime('%F %T')} {len(sittings)} sitting(s)")
     return sittings
@@ -472,10 +470,14 @@ def check(name, n, d):
     in_background(go)
 
 
-def stop_leftovers(d):
+def stop_leftovers(d, keep_server=False):
+    """Stop easel processes of this studio (not the runner's check and finishing; not the
+    server with keep_server: the session stays open across sittings)."""
     r = subprocess.run(["/bin/ps", "-Ao", "pid=,command="], capture_output=True, text=True).stdout
     for line in r.splitlines():
         pid, _, cmd = line.strip().partition(" ")
+        if keep_server and " serve " in f" {cmd} ":
+            continue
         if str(d) in cmd and "easel" in cmd and "finish_painting" not in cmd and "check_painting" not in cmd:
             subprocess.run(["kill", pid])
             log(f"stopped leftover {pid}: {cmd[:100]}")
@@ -592,10 +594,11 @@ def chain(name):
             extra = " + trees.md" if t["profile"] == "friedrich" else ""
             show(tag, f"export {t['profile']} studio (then studio_notes.md{' + records' if n > 1 else ''}{extra}, "
                       f"BRIEF.md as briefs/{t['profile']}.md with this studio's path)", export_cmd(t["profile"], d), BASE, env)
+            show(tag, f"open the easel ({d / 'bin/easel'} open); it stays open across sittings", [str(d / "bin/easel"), "open"], d)
             show(tag, "sitting 1 (painter)", painter_cmd(t["model"]), d, t["model"]["env"])
-            show(tag, f"after each sitting: close the easel ({d / 'bin/easel'} close), stop leftovers, count painting chunks;\n"
+            show(tag, f"after each sitting: count painting chunks;\n"
                       f"    sittings 2..{MAX_SITTINGS} while the last one added painting chunks (crashes count only if they painted),\n"
-                      f"    each after the runner replays the easel ({d / 'bin/easel'} open, progress in the log)",
+                      f"    at the same open easel (reopened, replaying the log, only if its server is gone); closed after the last",
                  painter_cmd(t["model"], SITTING_MESSAGE), d, t["model"]["env"])
             show(tag, "check (background, after the last sitting; result in the log)", check_cmd(d, name, n), RUN)
             show(tag, "finishing (background, after the last sitting)", finish_cmd(d, name, n), RUN)

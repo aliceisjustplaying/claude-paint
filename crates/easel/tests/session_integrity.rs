@@ -38,7 +38,9 @@ fn edited_or_truncated_logs_cannot_reopen() {
         assert!(String::from_utf8_lossy(&o.stderr).contains("The easel goes on only from the log it wrote"));
     }
     std::fs::write(&log, original).unwrap();
-    assert!(ok(&["open", "reopen"]).contains("resumed 1 chunks"));
+    let reopened = ok(&["open", "reopen"]);
+    assert!(reopened.contains("resumed chunk 1/1"), "{reopened}");
+    assert!(reopened.contains("resumed 1 chunks"), "{reopened}");
     ok(&["-s", "reopen", "close"]);
 }
 

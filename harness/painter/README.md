@@ -12,7 +12,6 @@ from the machine's global pi setup (packages, `~/.pi/agent/extensions`,
 | `pace.ts` | input tokens per minute: with `PAINTER_INPUT_TPM`, `painter.ts` holds each request until the last minute's input tokens plus its own fit that budget; and it makes a per-minute quota 429 (Google's `...PerMinute` quota ids) retryable for pi's retry, which skips errors that mention "quota exceeded" or "billing". `PAINTER_MAX_IMAGES` / `PAINTER_MAX_IMAGE_MB` set `context-images.ts`'s limits for a lane (round 18g's Gemini lane: 8 images, 1.5M tokens a minute under Google's 2M). `test/pace.test.ts` tests it |
 | `compaction.ts` | extension: `session_before_compact` with a deterministic summary, no model call; also sets the compaction thresholds (see "Settings") |
 | `system_prompt.md` | the painter's system prompt (approved by Alice, 2026-09-27) |
-| `studio-settings.json` | round 17's copy of the compaction settings, which `r17_chains.py` puts in each studio as `.pi/settings.json`. `compaction.ts` now sets the same values itself; later rounds don't copy it (see "Settings") |
 
 ## Launch
 
@@ -31,7 +30,7 @@ pi --print --no-extensions -e "$H/painter.ts" -e "$H/compaction.ts" -e "$TEMP_GU
    --system-prompt "$H/system_prompt.md" --tools bash,read \
    --no-context-files --no-skills --no-prompt-templates --no-approve \
    --provider anthropic --model claude-opus-5-5 --thinking high \
-   "Complete your task autonomously. Read BRIEF.md in this folder and follow it exactly. That file is your whole brief. Your FINAL message is the reply it asks for."
+   "Your brief is in BRIEF.md in this folder. Your last message is your reply: the paths of the saved painting and its log, its title if you give it one and, if you like, a few sentences about the picture."
 
 # Gemini lane (openrouter, API key): the same without -e "$BLACK"
 pi --print --no-extensions -e "$H/painter.ts" -e "$H/compaction.ts" -e "$TEMP_GUARD" \
@@ -41,8 +40,11 @@ pi --print --no-extensions -e "$H/painter.ts" -e "$H/compaction.ts" -e "$TEMP_GU
    "<same message>"
 ```
 
-The message is round 16's (`r16_chains.py`). From a Python launcher, pass
-the same list with `stdin=DEVNULL`, as round 16 did.
+The message is round 19's (`r19_chains.py`; rounds 16 to 18 sent "Complete
+your task autonomously. Read BRIEF.md in this folder and follow it exactly.
+That file is your whole brief. Your FINAL message is the reply it asks
+for."). From a Python launcher, pass the same list with `stdin=DEVNULL`, as
+round 16 did.
 
 - `--no-extensions` disables every configured and discovered extension,
   including pi-anthropic-compat's native compaction and pi-codex-compaction;
@@ -107,8 +109,9 @@ exactly those ranges. The stored session entries were byte-identical afterward.
 and manual) with this summary, built from the studio's files and the session
 entries:
 
-1. one neutral line: "Earlier parts of this conversation were condensed.
-   Look at the canvas to see where the painting stands."
+1. one neutral line: "Earlier parts of this session were condensed." (to
+   round 18: "Earlier parts of this conversation were condensed. Look at
+   the canvas to see where the painting stands.", an instruction)
 2. `BRIEF.md`, verbatim
 3. `notes/journal.md`, verbatim (only the last 120,000 characters if it's
    longer, with a pointer to the file)

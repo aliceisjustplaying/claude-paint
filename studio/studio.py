@@ -72,6 +72,73 @@ def session_model(path):
 # Painters' sessions, by folder: round 16+ studios, the round 14-15 chain painters and the
 # earlier rounds' painter worktrees. Everything else (judges, tests, work on the project)
 # shows only with "all".
+_thinking = {}  # path -> the session's thinking level
+
+
+def session_thinking(path):
+    """The thinking level a session ran at: its first thinking_level_change entry."""
+    if path not in _thinking:
+        t = ""
+        try:
+            with open(path, "rb") as fh:
+                for _, line in zip(range(50), fh):
+                    try:
+                        d = json.loads(line)
+                    except ValueError:
+                        continue
+                    if d.get("type") == "thinking_level_change":
+                        t = d.get("thinkingLevel", "")
+                        break
+        except OSError:
+            pass
+        if not t:
+            return ""
+        _thinking[path] = t
+    return _thinking[path]
+
+
+# the runners' studio lists: ~/tmp/gallery-*/r<round>/run/studios.json, {"<lane><n>": "paint-studio-..."}
+RUNS = os.path.expanduser("~/tmp/gallery-*/r*/run/studios.json")
+_lanes = {"at": 0.0, "map": {}}
+
+
+def lanes():
+    """paint-studio-... -> (round, lane, painter number, painters in the lane), from the runners'
+    studio lists (reread every 30 s)."""
+    import time
+    if time.time() - _lanes["at"] > 30:
+        m = {}
+        for f in glob.glob(RUNS):
+            rnd = os.path.basename(os.path.dirname(os.path.dirname(f)))  # r17, r18g, r19, ...
+            try:
+                names = json.load(open(f))
+            except (OSError, ValueError):
+                continue
+            keys = {k: re.match(r"^(.*?)(\d*)$", k).groups() for k in names}
+            for k, studio in names.items():
+                lane, n = keys[k]
+                size = sum(1 for l, _ in keys.values() if l == lane)
+                m[studio] = (rnd, lane, int(n) if n else 0, size)
+        _lanes.update(at=time.time(), map=m)
+    return _lanes["map"]
+
+
+_subjects = {}  # studio -> (BRIEF.md mtime, "Friedrich" or "free")
+
+
+def subject(folder):
+    """"Friedrich" if the studio's brief asks for one, else "free" ("" without a brief)."""
+    f = os.path.join(os.path.expanduser("~/src/a"), folder, "BRIEF.md")
+    try:
+        mt = os.path.getmtime(f)
+    except OSError:
+        return ""
+    if folder not in _subjects or _subjects[folder][0] != mt:
+        with open(f, errors="replace") as fh:
+            _subjects[folder] = (mt, "Friedrich" if "Friedrich" in fh.read(4000) else "free")
+    return _subjects[folder][1]
+
+
 PAINTER = re.compile(r"^(paint-studio-[0-9a-f]+|paint-r\d+-p\d+|claude-paint-r\d+-(arm\d|tree\d|astra|fable|flash|p\d))$")
 
 
@@ -96,7 +163,10 @@ def list_sessions():
             for i in info:
                 if i["model"] and i["model"] not in models:
                     models.append(i["model"])
+            rnd, lane, n, size = lanes().get(name, ("", "", 0, 0))
             out.append({"p": name, "folder": name, "painter": True, "model": " → ".join(models), "sittings": len(fs),
+                        "thinking": session_thinking(fs[-1]), "subject": subject(name),
+                        "round": rnd, "lane": lane, "n": n, "chain": size if size > 1 else 0,
                         "files": fs, "mtime": max(i["mtime"] for i in info), "size": sum(i["size"] for i in info)})
         else:
             out += [dict(i, s=i["path"], folder=name, painter=False) for i in info]

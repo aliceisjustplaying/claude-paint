@@ -7,7 +7,8 @@ from the machine's global pi setup (packages, `~/.pi/agent/extensions`,
 
 | file | what it is |
 |---|---|
-| `painter.ts` | extension: drops pi's `APPEND_SYSTEM.md` addendum, context files, skills and guidelines from the system prompt, strips the leading `<!-- -->` comment of `system_prompt.md`, and makes `bash`/`read` run one at a time |
+| `painter.ts` | extension: drops pi's `APPEND_SYSTEM.md` addendum, context files, skills and guidelines from the system prompt, strips the leading `<!-- -->` comment of `system_prompt.md`, makes `bash`/`read` run one at a time, and keeps old images out of each request (`context-images.ts`) |
+| `context-images.ts` | the image pruning `painter.ts` runs before each request (see "Images in the request"); `test/context-images.test.ts` tests it (`node --test harness/painter/test/context-images.test.ts`) |
 | `compaction.ts` | extension: `session_before_compact` with a deterministic summary, no model call |
 | `system_prompt.md` | the painter's system prompt (approved by Alice, 2026-09-27) |
 | `studio-settings.json` | compaction settings; copied into each studio as `.pi/settings.json` |
@@ -77,6 +78,28 @@ the same list with `stdin=DEVNULL`, as round 16 did.
   serializes conflicting tool calls in one assistant message, for example two
   `bin/easel` commands in one message. `painter.ts` gets the same effect by
   registering pi's own `bash` and `read` with `executionMode: "sequential"`.
+
+## Images in the request
+
+Every look the painter reads is a PNG tool result of 50 to 750 KB of base64, and
+pi sends all of them again with each request. A round 17 painter got
+`413 request_too_large` after 74 looks (33.7 MB of base64) with its token count
+far below the compaction point; pi recovered only by overflow compaction.
+
+`painter.ts` has a `context` handler, which pi runs before each provider request
+on a copy of the messages (`structuredClone` in pi's `emitContext`), so the
+session file keeps every image for the studio viewer. It replaces the image of
+older tool results with a line naming the file, `[an earlier look:
+out/easel/painting/look-0031.png]`, and keeps the newest images: at most 20,
+and at most 12 MB of base64. Old images go 5 at a time, so the request prefix
+(and the prompt cache) changes once every 5 looks, not with every look.
+
+Checked 2026-09-27 on a fake session holding the 74 looks of that session,
+resumed with Haiku 4.5 and a probe extension logging `before_provider_request`:
+without the handler the request was 33,797,791 characters with 74 images (413,
+then overflow compaction); with it, one request of 9,158,275 characters with 19
+images and 55 placeholders (look-0001 to look-0055), and the model named
+exactly those ranges. The stored session entries were byte-identical afterward.
 
 ## Compaction
 

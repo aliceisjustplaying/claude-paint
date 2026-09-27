@@ -10,9 +10,14 @@
  *    them. Without that, two easel commands batched in one message would race. Same tool
  *    definitions (name, description, parameters) as pi's built-ins; only the execution
  *    mode differs.
+ * 3. Old images stay out of the request (context-images.ts): before each provider request,
+ *    the images of older tool results are replaced by a line naming the file, keeping the
+ *    newest 20 and at most 12 MB of base64. Pi runs `context` handlers on a copy of the
+ *    messages, so the session file keeps every image.
  */
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { createBashToolDefinition, createReadToolDefinition } from "@earendil-works/pi-coding-agent";
+import { pruneImages } from "./context-images.ts";
 
 export default function painter(pi: ExtensionAPI) {
 	pi.on("before_agent_start", (event) => {
@@ -24,6 +29,11 @@ export default function painter(pi: ExtensionAPI) {
 		options.skills = [];
 		options.promptGuidelines = [];
 		options.toolGuidelines = {};
+	});
+
+	pi.on("context", (event) => {
+		const { messages, dropped } = pruneImages(event.messages);
+		return dropped > 0 ? { messages } : undefined;
 	});
 
 	const cwd = process.cwd();

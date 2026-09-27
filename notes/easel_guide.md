@@ -26,7 +26,7 @@ folder:
 
 ```sh
 bin/easel open                                # start the session (2400 px wide), or reattach to it
-bin/easel do 'canvas{size=400, aspect=1.25, linen=15, ground={{pile={{"lead white", 1}}, um=100, apply="knife"}}}'
+bin/easel do 'canvas{...}'                    # the first chunk: the canvas and its ground (see The canvas)
 bin/easel look                                # prints the path of a PNG of the canvas: read it
 bin/easel note 'what I did and why'           # an entry in notes/journal.md
 bin/easel save                                # the canvas as it is now: out/easel/painting/painting.png
@@ -55,7 +55,7 @@ In the examples below, `<tube>` stands for a name from the tube box and
 ## The canvas
 
 ```lua
-canvas{size=400, aspect=1.25, linen={16, 14}, seed=1,
+canvas{size=<mm>, aspect=<width / height>, linen={16, 14}, seed=1,
        ground={{pile={{"<tube>", <parts>}, {"<tube>", <parts>}}, um=100, apply="knife", texture=0.3},
                {pile={{"<tube>", <parts>}}, um=50, apply="brush"}}}
 ```
@@ -98,7 +98,7 @@ hand is a little uneven: each brushload takes slightly different
 proportions (about 6%). The palette has room for 16 piles; the oldest is
 scraped off to make room.
 
-The tube box (all made by the 1820s):
+The tube box:
 
 | tube | pigment | hiding | stiffness | tinting strength | drying |
 |---|---|---|---|---|---|
@@ -134,7 +134,7 @@ b:load(p, 0.8)                           -- dip into a pile: 0..1 of a full load
 b:reload(q, 0.8)                         -- wipe most of the old paint off, then load
 b:wipe(0.85)                             -- remove 85% of the paint onto the rag
 b:fullness()                             -- paint left, 0..1
-b:stroke({{100, 500}, {300, 520}, {500, 510}},
+b:stroke({{120, 640}, {260, 470}, {430, 420}},
   {pressure={0.9, 0.3}, ramps={0.05, 0.4}, orient="across", shake=1, swell={1, 1.3, 0.8}, clip=m})
 b:touch(400, 300, {pressure=0.6, drag={1, 0}, twist=0.2, angle=0.3, clip=m})
 b:mark_width(0.4)                        -- the width of a mark at this pressure (units)
@@ -237,7 +237,7 @@ masks.
 ```lua
 everywhere()   rect(x, y, w, h)   ellipse(cx, cy, rx, ry)
 poly({{x, y}, ...})   poly(pts, true)                  -- true: smoothed
-below(function(x) return 400 + 30 * math.sin(x / 90) end)   -- under a curve (or a point list)
+below(function(x) return 150 + 0.6 * x end)   -- under a curve (or a point list)
 above(curve)
 ribbon(points, widths)   ribbon(points, 3)             -- a band along a line
 mask(function(x, y) return x < 500 and 1 or 0 end)    -- any function, at every pixel
@@ -292,7 +292,7 @@ h = pencil("2H")                  -- or pencil{grade="2H"}: 9H..H, F, HB, B..9B
 c = chalk()                       -- black chalk
 h:sketch(pts, {pressure=0.3})     -- a few light passes (passes=3, wander= units, smooth=true)
 h:line(pts, {pressure={0.5, 0.7, 0.4}})    -- one line through the points (smooth=false keeps corners)
-h:rule({0, 400}, {1000, 400}, {pressure=0.3})   -- straight, against a ruler
+h:rule({120, 700}, {860, 180}, {pressure=0.3})  -- straight, against a ruler
 h:hatch(m, {angle=-1.1, pressure=0.35})         -- short parallel strokes (spacing=, length=)
 h:width()   h.worn   h:sharpen()  -- the point blunts as you draw
 erase(pts, {strength=0.9, width=9})  -- a kneaded eraser along a path, or erase(mask, {strength=})
@@ -317,7 +317,7 @@ and shadow fall and what lies in front of what. They paint nothing.
 s = body.ellipsoid({400, 500, 0}, {120, 90, 80}):turn({400, 500, 0}, 0.3, 0.1, 0)
       :cut({400, 430, 0}, {-0.3, -1, 0.4}, 1, 3):rough(6, 120, 1)
 k = body.block({650, 520, 0}, {160, 60, 90}, 3)       -- center, size, rounding
-t = terrain{area={0, 400, 1000, 800}, height=function(x, y) return 10 * math.sin(x / 60) end}
+t = terrain{area={250, 200, 650, 500}, height=function(x, y) return 10 * math.sin(x / 60) end}
 f = form{ {s, dist=0.3}, {k}, light={from={-1, -0.7}, front=0.5, ambient=0.2} }
 f:value(x, y)   f:lit_at(x, y, soft)   f:part(x, y)   f:sample(x, y)   f:fall(x, y)   f:across(x, y)
 f:lit{parts={1}, soft=0.12}   f:shadow{parts={1}}   f:silhouette{parts={1}}   f:edges{turn=0.8}   f:parts_mask{1}
@@ -328,29 +328,29 @@ Solids combine with `s:union(o)` and `s:subtract(o)`; `body.half_space(at,
 normal)` cuts. The light also takes `bounce`, `bounce_from`, `penumbra`,
 `reach`, `thickness` and `across_parts`.
 
-**World.** A space in meters seen in perspective: a camera over a
-supporting surface, one directional light, and the bodies you place
-there. A flat plane with one block:
+**World (reference).** A space in meters seen in perspective: a camera
+over a supporting surface, one directional light, and the bodies you
+place there. Its calls:
 
 ```lua
-w = world{eye=1.6, fov=45}               -- camera height (m) and field of view (degrees)
-s = w:spot(500, 600)                     -- the plane seen at a canvas point (or w:spot_at(X, Z))
-w, n = w:place(s, body.block(s:p(0, 0.5, 0), s:size(1, 1, 1), s:m(0.05)))   -- meters to units
+w = world{eye=<m>, fov=<degrees>}        -- camera height and field of view
+s = w:spot(x, y)                         -- the surface seen at a canvas point (or w:spot_at(X, Z))
+w, n = w:place(s, body.block(s:p(0, 0.5, 0), s:size(1, 1, 1), s:m(0.05)))   -- s:p, s:size, s:m: meters to units
 v = w:view()                             -- trace once and keep it
 v:bodies_mask{n}   v:shadows()   v:contact(0.25)   v:at(x, y)   v.form
 w:to_ground(x, y)   w:project(X, Y, Z)   w:scale_at(Z)   w:height(x, y, meters)
 w:shadow_angle(x, y)   w:sun_canvas()   w:ribbon(pts, width)   w:recede({X, Z}, {dX, dZ}, n)
 ```
 
-`world{}` takes, all optional: `view` (the canvas rectangle it covers),
-`horizon` (the canvas y of eye level), `eye`, `fov`, `ground` (a function
-`(X, Z)` giving the surface's height in meters; flat by default), `water`
-(`{level=, ripple=}`: a level reflecting surface), `sun` (`{azimuth=,
-elevation=}` in degrees: the light's direction; azimuth 0 is straight
-ahead, -90 to the left, 180 behind you), `visibility` and `backdrop`.
-With water, `v:water()` and `v:mirror(x, y)` say where it is seen and
-what it reflects; `v:land()` and `v:sky()` are where the surface and the
-space above it are seen. `w:proxy(s, body)` places a body that casts a
+`world{}` options, all optional: `view` (the canvas rectangle it
+covers), `horizon` (the canvas y of eye level), `eye`, `fov`, `ground` (a
+function `(X, Z)` giving the surface's height in meters; flat by
+default), `water` (`{level=, ripple=}`: a level reflecting surface),
+`sun` (`{azimuth=, elevation=}` in degrees: the light's direction;
+azimuth 0 is straight ahead, -90 to the left, 180 behind the eye),
+`visibility` and `backdrop`. View queries: `v:water()` and `v:mirror(x,
+y)` (with `water`), `v:land()` and `v:sky()` (where the surface and the
+space above it are seen). `w:proxy(s, body)` places a body that casts a
 shadow but isn't seen. `w:aerial(Z)` and `aerial(dist, visibility)` give
 how much air lies between the eye and a distance (0..1).
 

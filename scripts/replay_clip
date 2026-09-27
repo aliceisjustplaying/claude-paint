@@ -1,0 +1,82 @@
+#!/usr/bin/env bash
+# replay_clip: a clip of an easel painting being made at the pace of the hand.
+#
+#   scripts/replay_clip <painting.lua> <out.mp4> [options]
+#
+#   --every S        record a frame every S seconds of hand time (default 60)
+#   --length T       aim for a clip about T seconds long, final hold included
+#                    (default: 24 frames of video per frame interval, i.e.
+#                    S seconds of hand time per video frame)
+#   --width W        frame and clip width, px (default 1000)
+#   --frames-dir D   where the frames go (default: <out>.frames); with
+#                    --reuse, an existing frames dir to cut from
+#   --reuse          don't replay; cut the clip from --frames-dir
+#   --max-hold F     no frame is held longer than F seconds (default 1)
+#   --easel PATH     the easel binary (default target/release/easel)
+#
+# The replay (`easel run --frames-every`) writes a frame whenever the hand
+# time crosses the next multiple of S (the waits for drying are not hand
+# time, so they vanish), one per chunk and the final canvas, plus
+# frames.tsv with each frame's hand time. Each frame is then shown for as
+# long as the hand took until the next one (at the clip's speed, capped by
+# --max-hold); the final picture is held 3 s. H.264, yuv420p, faststart,
+# 24 fps.
+set -euo pipefail
+
+usage() { sed -n '2,24p' "$0" | sed 's/^# \{0,1\}//'; exit 2; }
+[ $# -ge 2 ] || usage
+log=$1 out=$2; shift 2
+every=60 length="" width=1000 dir="" reuse=0 maxhold=1 fps=24 hold=3
+easel=$(cd "$(dirname "$0")/.." && pwd)/target/release/easel
+while [ $# -gt 0 ]; do
+  case $1 in
+    --every) every=$2; shift 2 ;;
+    --length) length=$2; shift 2 ;;
+    --width) width=$2; shift 2 ;;
+    --frames-dir) dir=$2; shift 2 ;;
+    --reuse) reuse=1; shift ;;
+    --max-hold) maxhold=$2; shift 2 ;;
+    --easel) easel=$2; shift 2 ;;
+    *) usage ;;
+  esac
+done
+command -v ffmpeg >/dev/null || { echo "replay_clip: needs ffmpeg" >&2; exit 1; }
+dir=${dir:-$out.frames}
+
+if [ "$reuse" = 0 ]; then
+  [ -x "$easel" ] || { echo "replay_clip: no easel at $easel (cargo build --release -p easel)" >&2; exit 1; }
+  rm -rf "$dir"
+  t0=$(date +%s)
+  "$easel" run "$log" --out "$dir/final-full.png" --frames-every "$every" --frames-dir "$dir" --frame-width "$width" >/dev/null 2>"$dir.log" \
+    || { tail -20 "$dir.log" >&2; exit 1; }
+  grep -E '^(frames|wrote)' "$dir.log" >&2
+  echo "replay took $(( $(date +%s) - t0 )) s" >&2
+fi
+[ -f "$dir/frames.tsv" ] || { echo "replay_clip: no $dir/frames.tsv" >&2; exit 1; }
+
+# the concat list: each distinct moment (frames at the same hand time: the
+# last one, as it is after any wait) held for the hand time to the next,
+# at `speed` seconds of hand time per clip second
+list=$dir/concat.txt
+awk -F'\t' -v every="$every" -v length_="$length" -v fps="$fps" -v hold="$hold" -v maxhold="$maxhold" -v dir="$dir" '
+  NR == 1 { next }
+  { if (n > 0 && $2 + 0 == h[n]) { f[n] = $1 } else { n++; f[n] = $1; h[n] = $2 + 0 } }
+  END {
+    total = h[n]
+    speed = (length_ != "" && length_ > hold) ? total / (length_ - hold) : every * fps
+    secs = 0
+    for (i = 1; i < n; i++) {
+      d = (h[i + 1] - h[i]) / speed
+      if (d > maxhold) d = maxhold
+      if (d <= 0) continue
+      printf "file '\''%s/%s'\''\nduration %.5f\n", dir, f[i], d
+      secs += d
+    }
+    printf "file '\''%s/%s'\''\nduration %.5f\nfile '\''%s/%s'\''\n", dir, f[n], hold, dir, f[n]
+    printf "%d moments, %.1f min of hand time at %.0fx (%.1f s of hand time per clip second): about %.1f s of clip\n", n, total / 60, speed, speed, secs + hold > "/dev/stderr"
+  }' "$dir/frames.tsv" > "$list"
+
+ffmpeg -loglevel error -y -f concat -safe 0 -i "$list" \
+  -vf "fps=$fps,scale='min($width,iw)':-2:flags=lanczos,format=yuv420p" \
+  -c:v libx264 -crf 23 -preset slow -movflags +faststart "$out"
+ffprobe -v error -show_entries format=duration,size:stream=width,height,nb_frames -of compact "$out" >&2

@@ -104,6 +104,14 @@ fn a_short_session_at_the_easel() {
         let e = fails(&["-s", "smoke", "do", chunk]);
         assert!(e.contains(want) && e.contains("the chunk failed and changed nothing"), "{chunk}: {e}");
     }
+    // finishing is applied after the session (scripts/finish_painting): the
+    // painter build (`--no-default-features`; test it with `--features replay`)
+    // has no finishing verbs
+    #[cfg(not(feature = "finish"))]
+    for verb in ["varnish", "cracks", "relief"] {
+        let e = fails(&["-s", "smoke", "do", &format!("{verb}()")]);
+        assert!(e.contains(&format!("global '{verb}'")) && e.contains("the chunk failed and changed nothing"), "{verb}: {e}");
+    }
     for mode in ["wet", "drying", "stages"] {
         let e = fails(&["-s", "smoke", "look", "--mode", mode]);
         assert!(e.contains(&format!("--mode {mode}:")), "--mode {mode}: {e}");

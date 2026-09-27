@@ -190,6 +190,10 @@ function kindOf(e) {
   }
   if (e.kind === 'read') return /\.(jpe?g|png)$/i.test(f) ? ['look', '👁', 'looks at the canvas'] : ['read', '📖', 'reads ' + f];
   if (e.kind === 'image') return ['look', '👁', 'looks at ' + (f || 'the canvas')];
+  if (e.kind === 'look') return ['look', '👁', 'looks' + (e.text ? ' (' + e.text + ')' : ' at the canvas')];
+  if (e.kind === 'paint') { const ok = /ok · chunk/.test(e.out || ''), n = ((e.out || '').match(/ok · chunk (\d+)/) || [])[1];
+    return [ok ? 'code' : 'fail', '🖌', ok ? 'paints chunk ' + n : (e.out ? 'a chunk fails' : 'paints')]; }
+  if (e.kind === 'jnote') return ['notes', '📝', 'writes in the journal'];
   if (e.kind === 'cmd') {
     const c = (e.text || '').replace(/^\s*((cd\s+\S+|export\s+[^;&\n]*|source\s+\S+|set\s+-\S+)\s*(&&|;|\n)\s*)+/, ''), fail = /error(\[|:)|panicked|FAILED/.test(e.out || '');
     if (/cargo paint/.test(c)) { const w = (c.match(/--crop\s+(\S+)/)||[])[1], r = (c.match(/--resume\s+("[^"]+"|\S+)/)||[])[1];
@@ -237,7 +241,10 @@ function doing(isLive) {
 }
 
 // ---- code
+// easel tool sessions: the painting is the chunks that ran, in order
+const PAINTED = 'paintings/lua/painting.lua';
 function paintingFile(upto) {
+  for (let k = 0; k <= upto; k++) if (events[k].kind === 'paint') return cwd + '/' + PAINTED;
   const n = {};
   for (let k = 0; k <= upto; k++) { const e = events[k];
     if ((e.kind === 'write' || e.kind === 'edit') && /\.(rs|lua)$/.test(e.path)) n[e.path] = (n[e.path]||0) + 1;
@@ -245,6 +252,12 @@ function paintingFile(upto) {
   let best = null, m = 0; for (const p in n) if (n[p] > m) { m = n[p]; best = p; } return best;
 }
 function source(path, upto) {
+  if (path.endsWith('/' + PAINTED) && events.some(e => e.kind === 'paint')) {
+    let text = '', changed = [], n = 0;
+    for (let k = 0; k <= upto; k++) { const e = events[k]; if (e.kind !== 'paint' || !/ok · chunk/.test(e.out || '')) continue;
+      const head = `--@ chunk ${++n}\n`; changed = [[text.length, text.length + head.length + e.code.length]]; text += head + e.code + '\n\n'; }
+    return { text, changed, known: true };
+  }
   let text = '', changed = [], known = false;
   for (let k = 0; k <= upto; k++) { const e = events[k]; if (e.path !== path) continue;
     if (e.kind === 'write') { text = e.content; changed = []; known = true; }
@@ -302,8 +315,8 @@ function journal(i) {
     else if (e.kind === 'sitting') { flush(); const gap = (t - Date.parse(events[k - 1].ts)) / 1000;
       html += `<div class="sit">🪑 ${esc(sitLabel(e))}${gap > 120 ? ` <span>· after ${ago(gap).replace(' ago', '')} away</span>` : ''}</div>`; lastTm = t; }
     else if (e.kind === 'say') { flush(); html += `<div class="say">${esc(e.text.trim())}</div>`; }
-    else { const c = kindOf(e); if (!c || e.kind === 'image' && k > 0 && events[k-1].kind === 'read') continue;
-      const title = esc(e.kind === 'cmd' ? e.text.slice(0, 2000) : (e.path || ''));
+    else { const c = kindOf(e); if (!c || e.kind === 'image' && k > 0 && (events[k-1].kind === 'read' || events[k-1].kind === 'look')) continue;
+      const title = esc(e.kind === 'cmd' || e.kind === 'jnote' ? e.text.slice(0, 2000) : e.kind === 'paint' ? e.code.slice(0, 2000) : (e.path || ''));
       chips.push(`<span class="chip ${c[0]}" title="${title}"${e.kind === 'image' ? ` data-i="${k}"` : ''}>${c[1]} ${esc(c[2])}</span>`); } }
   flush(); $('jbody').innerHTML = html; $('jbody').scrollTop = 1e9;
   for (const el of $('jbody').querySelectorAll('.chip.look[data-i]')) el.onclick = () => { live = false; stop(); show(+el.dataset.i); };

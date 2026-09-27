@@ -173,6 +173,12 @@ def _parse(path):
                         ev.update(kind="cmd", text=a.get("command", ""))
                     elif name == "read":
                         ev.update(kind="read", path=a.get("path", ""))
+                    elif name == "paint":  # the painter harness's easel tools (round 19 on)
+                        ev.update(kind="paint", code=a.get("lua", ""))
+                    elif name == "look":
+                        ev.update(kind="look", text=", ".join(f"{k} {v}" for k, v in a.items()))
+                    elif name == "note":
+                        ev.update(kind="jnote", text=a.get("text", ""))
                     else:
                         ev.update(text=json.dumps(a)[:300])
                     c["calls"][x.get("id")] = len(c["events"])

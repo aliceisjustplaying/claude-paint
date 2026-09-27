@@ -21,6 +21,8 @@ mod draw_outline;
 #[cfg(feature = "finish")]
 mod finish;
 mod form;
+#[cfg(feature = "replay")]
+mod frames;
 mod look;
 mod session;
 mod time;
@@ -70,6 +72,7 @@ const USAGE: &str = "easel: a live painting session (see notes/easel_guide.md)
   easel close         end the session (the log stays)
   easel note '<text>' | easel note - (stdin)    append a dated entry to notes/journal.md
   easel run <file.lua> [--out path.png] [--look]    replay at 2400px and write the PNG
+      [--frames-every <s> --frames-dir <dir> [--frame-width 1000]]   and a frame per <s> of hand time
 
   -s <name> (or EASEL_SESSION) picks the session; default: the last opened.";
 
@@ -585,7 +588,7 @@ fn deliver(c: &Canvas, out: &Path) -> Result<(), String> {
 }
 
 #[cfg(feature = "replay")]
-const RUN_USAGE: &str = "run <file.lua> [--out path.png] [--look] (replays at the live width, 2400px)";
+const RUN_USAGE: &str = "run <file.lua> [--out path.png] [--look] [--frames-every <s> --frames-dir <dir> [--frame-width 1000]] (replays at the live width, 2400px)";
 
 #[cfg(feature = "replay")]
 fn run(args: &[String]) -> Result<(), String> {
@@ -593,7 +596,7 @@ fn run(args: &[String]) -> Result<(), String> {
     let mut i = 1;
     while i < args.len() {
         match args[i].as_str() {
-            "--out" | "--dump-surface" if i + 1 < args.len() => i += 2,
+            "--out" | "--dump-surface" | "--frames-every" | "--frames-dir" | "--frame-width" if i + 1 < args.len() => i += 2,
             "--look" => i += 1,
             o => return Err(format!("run: unknown argument {o:?} ({RUN_USAGE})")),
         }
@@ -606,15 +609,46 @@ fn run(args: &[String]) -> Result<(), String> {
     if chunks.is_empty() {
         return Err(format!("{file}: no chunks (each starts with a line \"{}\")", session::MARK));
     }
+    // hand-time frames (frames.rs): only read the canvas, so the replay is
+    // the same with or without them
+    let frames = match (flag(args, "--frames-every"), flag(args, "--frames-dir")) {
+        (None, None) => false,
+        (Some(e), Some(d)) => {
+            let every: f64 = e.parse().map_err(|_| format!("--frames-every {e}: want seconds of hand time"))?;
+            let fw = flag(args, "--frame-width").map(|w| w.parse::<u32>().map_err(|_| format!("--frame-width {w}: want px"))).transpose()?.unwrap_or(1000);
+            frames::start(every, PathBuf::from(d), fw)?;
+            true
+        }
+        _ => return Err(format!("run: --frames-every and --frames-dir go together ({RUN_USAGE})")),
+    };
     let mut s = Session::replay(width).map_err(|e| e.to_string())?;
     let t0 = Instant::now();
     for (i, c) in chunks.iter().enumerate() {
         let r = s.run(c).map_err(|e| format!("chunk {} failed:\n{e}", i + 1))?;
         print!("{}", r.out);
         eprintln!("  chunk {:>3}  {:>7.2}s", i + 1, r.secs);
+        if frames && let Some(c) = s.canvas() {
+            frames::chunk_end(&c, i + 1);
+        }
     }
     let paint_secs = t0.elapsed().as_secs_f64();
     let c = s.canvas().ok_or("the program never made a canvas")?.clone();
+    if frames {
+        frames::finish(&c);
+        let rec = frames::stop().ok_or("frames: the recorder went away")?;
+        if let Some(e) = rec.err {
+            return Err(format!("frames: {e}"));
+        }
+        eprintln!(
+            "frames: {} written ({} hand-time intervals of {}s crossed, {} chunks) over {:.1} min of hand time → {}",
+            rec.written,
+            rec.ticks,
+            flag(args, "--frames-every").unwrap_or_default(),
+            chunks.len(),
+            rec.hand / 60.0,
+            flag(args, "--frames-dir").unwrap_or_default()
+        );
+    }
     deliver(&c, &out)?;
     eprintln!("wrote {} ({} chunks, painted in {paint_secs:.1}s, total {:.1}s)", out.display(), chunks.len(), t0.elapsed().as_secs_f64());
     if let Some(p) = flag(args, "--dump-surface") {

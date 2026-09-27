@@ -71,6 +71,10 @@ pub fn verb<R>(st: &S, kind: Verb, f: impl FnOnce(&mut Studio) -> mlua::Result<R
         Verb::Pass | Verb::Wait => flush(st, true),
         Verb::Query => {}
     }
+    #[cfg(feature = "replay")]
+    if let Some(c) = st.borrow().canvas.as_ref() {
+        crate::frames::after_verb(c);
+    }
     Ok(r)
 }
 
@@ -93,6 +97,8 @@ pub(crate) fn flush(st: &S, force: bool) {
 /// Hand time on: the paint ages while the hand works.
 pub fn start(c: &mut paint::Canvas) {
     c.set_hand_time(Some(SLICE_MIN));
+    #[cfg(feature = "replay")]
+    crate::frames::begin(c);
 }
 
 /// A held brush went to the palette for a pile of this color: a reload if

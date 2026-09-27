@@ -9,29 +9,32 @@ from the machine's global pi setup (packages, `~/.pi/agent/extensions`,
 |---|---|
 | `painter.ts` | extension: drops pi's `APPEND_SYSTEM.md` addendum, context files, skills and guidelines from the system prompt, strips the leading `<!-- -->` comment of `system_prompt.md`, and makes `bash`/`read` run one at a time |
 | `compaction.ts` | extension: `session_before_compact` with a deterministic summary, no model call |
-| `system_prompt.md` | the painter's system prompt (**DRAFT**, waiting for Alice's approval) |
+| `system_prompt.md` | the painter's system prompt (approved by Alice, 2026-09-27) |
 | `studio-settings.json` | compaction settings; copied into each studio as `.pi/settings.json` |
 
 ## Launch
 
 Run from the studio folder (pi's cwd is the studio). `H` is this folder,
-`BLACK` is Alice's installed pi-black extension:
+`BLACK` is Alice's installed pi-black extension, `TEMP_GUARD` her persistent-temp
+extension (sets TMPDIR under ~/tmp and blocks writes to OS temp folders, with the
+reason shown to the painter; it adds no prompt text):
 
 ```sh
 H=~/src/a/claude-paint-r17-base/harness/painter
 BLACK=~/.pi/agent/git/github.com/aliceisjustplaying/pi-black/extensions/pi-black.ts
+TEMP_GUARD=~/.pi/agent/extensions/persistent-temp.ts
 
 mkdir -p .pi && cp "$H/studio-settings.json" .pi/settings.json
 
 # Opus lane (anthropic, Claude subscription login)
-pi --print --no-extensions -e "$H/painter.ts" -e "$H/compaction.ts" -e "$BLACK" \
+pi --print --no-extensions -e "$H/painter.ts" -e "$H/compaction.ts" -e "$TEMP_GUARD" -e "$BLACK" \
    --system-prompt "$H/system_prompt.md" --tools bash,read \
    --no-context-files --no-skills --no-prompt-templates --approve \
    --provider anthropic --model claude-opus-5-5 --thinking high \
    "Complete your task autonomously. Read BRIEF.md in this folder and follow it exactly. That file is your whole brief. Your FINAL message is the reply it asks for."
 
 # Gemini lane (openrouter, API key): the same without -e "$BLACK"
-pi --print --no-extensions -e "$H/painter.ts" -e "$H/compaction.ts" \
+pi --print --no-extensions -e "$H/painter.ts" -e "$H/compaction.ts" -e "$TEMP_GUARD" \
    --system-prompt "$H/system_prompt.md" --tools bash,read \
    --no-context-files --no-skills --no-prompt-templates --approve \
    --provider openrouter --model google/gemini-3.8-flash --thinking high \
@@ -131,8 +134,8 @@ above plus `--session-dir`, and a haiku-only `keepRecentTokens: 1` override
 so a short session could compact. Then `{"type":"compact"}`. From the
 session `.jsonl`:
 
-- system message: `sections` = `preamble` (the text of `system_prompt.md`
-  without its DRAFT comment) and `cwd`; `toolsAdded` = `bash`, `read`
+- system message: `sections` = `preamble` (the text of `system_prompt.md`,
+  then still carrying a DRAFT comment that painter.ts strips) and `cwd`; `toolsAdded` = `bash`, `read`
 - compaction entry: `"fromHook": true`,
   `"details": {"type": "claude-paint-painter-compaction", "version": 1, "reason": "manual", "settings": {"enabled": true, "reserveTokens": 100000, "keepRecentTokens": 1}, "chunks": 3, "lastChunk": 3, "globals": 6, "clock": "day 2, 16:05", "journalStamp": "day 2, 16:05"}`
   (`reserveTokens` 100000 is the studio file's; the global value is 27200)

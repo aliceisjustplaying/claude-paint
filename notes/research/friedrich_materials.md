@@ -111,7 +111,7 @@ the network of cracks in paint or varnish.
 | Prussian blue | "Possibly" [NG p.56]; inferred from K and Fe [ALF Table 2] | |
 | Cobalt blue | From 1818/24 [ALF]; "almost entirely replaced smalt… after about 1820" [NG p.56] | |
 | Chrome yellow (lead chromate) | 1817 and 1818/24 [ALF] | |
-| Green pigments | "a few… green" pigments [CATS p.127]; copper greens and green earth [MÄD p.102] | See §9 |
+| Green pigments | "a few… green" pigments [CATS p.127]; copper greens and green earth [MÄD p.102] | See §8 |
 | Copper blues | No copper detected in the blue areas tested, which excludes azurite there [ALF p.348] | Natural or synthetic ultramarine was *not reported* |
 
 ## 5. Binding media
@@ -119,7 +119,7 @@ the network of cracks in paint or varnish.
 - **Walnut oil** in ground and paint of one small canvas [NG p.55], the
   only published medium analysis found. Linseed or poppy oil, resins and
   driers are *unverified*.
-- **Egg white** as a temporary coating (§7) [CATS p.127; KÖR p.283].
+- **Egg white** as a temporary coating over fresh paintings [CATS p.127; KÖR p.283].
 
 ## 6. Layers and application
 
@@ -148,18 +148,7 @@ the network of cracks in paint or varnish.
   over finished passages [NG p.56; CATS p.130]. Brush types (sable or
   bristle) are *undocumented* in these sources.
 
-## 7. Varnish
-
-- **Original coating.** Egg white: his letters say he coated fresh
-  paintings with a temporary egg-white film; buyers were to wash it off and
-  apply a mastic resin varnish within a year [KÖR p.283]. Egg-white
-  remains were detected on two paintings [CATS p.127; KÖR p.283].
-- **Later coatings.** Up to seven yellowed varnish layers on one pair of
-  canvases, parts of them finely microcracked, their edges reflecting
-  light "like a milky veil" [SMB-blog]. Yellowed dammar, possibly with
-  copaiba balsam residues, on another [NG p.55].
-
-## 8. Condition and aging
+## 7. Condition and aging
 
 - **Fragility.** The thin paint made the paintings "exceptionally prone to
   damage" [SMB-proj]; many micro-losses come from abrasion in past
@@ -170,14 +159,10 @@ the network of cracks in paint or varnish.
   comes out cooler and bluer [NPJ25; SMB-blog]. Smalt can turn brown over
   time [HH].
 - **Craquelure.** One painting has an elongated craquelure, probably from
-  pressure on the back [HH]. No quantitative crack study of his paintings
-  was found. **Generic mechanics:** corner cracks form perpendicular to the
-  diagonal within about 5–10% of the diagonal length; a mock-up corner
-  showed about 6 ± 3 mm crack spacing; central cracks come from isotropic
-  drying shrinkage of the paint [NPJ24].
+  pressure on the back [HH].
 - **Pentimenti.** Few [NG p.49; ART; CATS p.129].
 
-## 9. Greens
+## 8. Greens
 
 - **Mostly mixed.** The Dresden team (14 paintings) writes that "the
   palette was very sparing" but the greens show a "lush variety"
@@ -226,7 +211,6 @@ p.129].
 - **[SKD]** SKD research project page. https://forschung.skd.museum/projekte/detail/forschungen-zur-maltechnik-caspar-david-friedrichs/
 - **[ART]** Slenczka, review of Mösl 2021, ArtHist.net 2025. https://arthist.net/reviews/43869
 - **[HH]** Hamburger Kunsthalle, GigaPixel commentary. https://cdfriedrich.de/gigapixel/
-- **[NPJ24]** Bury and Bratasz, *npj Heritage Science* (2024). https://www.nature.com/articles/s40494-024-01493-x
 - **[MÄD]** Mäder, Körber, Hohenstein, Fuhrmann, Stege, Wagner and Birkholz, *METALLA* Sonderheft 13 (2025), pp.101–103. https://metalla.org/index.php/METALLA/en/issue/download/393/75 (DOI 10.46586/metalla.v.2025.i13)
 - **[MOST-abs]** Most et al. 2024, abstract (DataCite). https://api.datacite.org/dois/10.25360/01-2024-00012
 - **[AP1]** Feller (ed.), *Artists' Pigments* vol. 1 (1986). https://www.nga.gov/sites/default/files/migrate_images/content/dam/ngaweb/research/publications/pdfs/artists-pigments-vol1.pdf

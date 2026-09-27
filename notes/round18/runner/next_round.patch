@@ -1,0 +1,325 @@
+diff -ruN a/painting_chunks.py b/painting_chunks.py
+--- a/painting_chunks.py	1970-01-01 01:00:00
++++ b/painting_chunks.py	2026-09-27 12:25:17
+@@ -0,0 +1,85 @@
++"""Which chunks of a painting's log put marks on the canvas.
++
++The sitting stop rule used to count `--@ chunk` lines, so a sitting whose chunks only asked
++questions (`print(wait(60))`, `print(drying(400, 300))`, `print(table.concat(tubes(), ", "))`)
++or only mixed piles and loaded brushes counted as painting and earned another sitting.
++
++A chunk paints if its code (comments and strings removed) refers to a mark-making verb of
++the easel (notes/easel_guide.md): the globals `canvas work blend stipple lose erase fix` (and the finishing verbs of older
++builds), or
++the methods `stroke touch paint sketch line rule hatch` (brush, outline and pencil marks).
++Painters wrap verbs in helpers (`function dab(x, y) b:touch(x, y) end`), so every function a
++painting chunk defines, and every alias it makes of a painting name, becomes a painting name
++for the chunks after it. It errs toward "paints": a chunk that only defines a helper around a
++verb counts, as does one that mentions a verb it doesn't call. A chunk that queries, mixes,
++loads, waits or defines masks and nothing else doesn't.
++"""
++import re
++
++VERBS = {"canvas", "work", "blend", "stipple", "lose", "erase", "fix",
++         "varnish", "cracks", "relief"}   # finishing verbs of older builds (not in the painter build)
++METHODS = {"stroke", "touch", "paint", "sketch", "line", "rule", "hatch"}
++
++_CHUNK = re.compile(r"^--@ chunk (\d+)", re.M)
++# Long comments/strings first, then comments, then quoted strings (with escapes).
++_STRIP = re.compile(
++    r"--\[(=*)\[.*?\]\1\]"          # --[[ ... ]] / --[==[ ... ]==]
++    r"|\[(=*)\[.*?\]\2\]"           # [[ ... ]]
++    r"|--[^\n]*"                    # -- ...
++    r'|"(?:\\.|[^"\\\n])*"'         # "..."
++    r"|'(?:\\.|[^'\\\n])*'",        # '...'
++    re.S,
++)
++_NAME = r"[A-Za-z_]\w*"
++_FUNC_DEFS = [
++    re.compile(rf"\bfunction\s+(?:{_NAME}\s*[.:]\s*)*({_NAME})\s*\("),     # function f( / function T:m( / local function f(
++    re.compile(rf"(?:\blocal\s+)?\b({_NAME})\s*=\s*function\b"),           # f = function( / local f = function(
++]
++
++
++def _code(chunk: str) -> str:
++    """The chunk without comments; strings become empty strings (so `f""` calls still look like calls)."""
++    return _STRIP.sub(lambda m: "" if m.group(0).startswith("--") else '""', chunk)
++
++
++def _refers(code: str, names: set[str], methods: set[str]) -> bool:
++    if names:
++        # a bare name, not a field (`x.work`, `o:work`), not a table key or assignment (`blend=0.8`)
++        alt = "|".join(sorted(map(re.escape, names)))
++        if re.search(rf"(?<![\w.:])(?:{alt})(?!\w)(?!\s*=(?!=))", code):
++            return True
++    if methods:
++        alt = "|".join(sorted(map(re.escape, methods)))
++        if re.search(rf"[.:]\s*(?:{alt})\s*[({{\"]", code):
++            return True
++    return False
++
++
++def split_chunks(source: str) -> list[tuple[int, str]]:
++    marks = list(_CHUNK.finditer(source))
++    return [(int(m.group(1)), source[m.end(): marks[i + 1].start() if i + 1 < len(marks) else len(source)])
++            for i, m in enumerate(marks)]
++
++
++def classify(source: str) -> list[tuple[int, bool]]:
++    """(chunk number, paints) for each chunk of a log, in order."""
++    names, methods = set(VERBS), set(METHODS)
++    out = []
++    for n, chunk in split_chunks(source):
++        code = _code(chunk)
++        paints = _refers(code, names, methods)
++        if paints:
++            for pat in _FUNC_DEFS:
++                for m in pat.finditer(code):
++                    names.add(m.group(1))
++                    methods.add(m.group(1))
++            # aliases: `dab = work`, `local s = b.stroke`
++            alt = "|".join(sorted(map(re.escape, names | methods)))
++            for m in re.finditer(rf"(?:\blocal\s+)?\b({_NAME})\s*=\s*(?:{_NAME}\s*[.:]\s*)?(?:{alt})\b(?!\s*[({{\"])", code):
++                names.add(m.group(1))
++        out.append((n, paints))
++    return out
++
++
++def count_painting_chunks(source: str) -> int:
++    return sum(1 for _, paints in classify(source) if paints)
+diff -ruN a/r17_chains.py b/r17_chains.py
+--- a/r17_chains.py	2026-09-27 12:25:17
++++ b/r17_chains.py	2026-09-27 12:25:29
+@@ -10,9 +10,10 @@
+ Sittings: each painter works in up to MAX_SITTINGS sittings, each a new pi
+ session (same harness, studio and settings). Sitting 1 is the plain launch;
+ later ones get SITTING_MESSAGE. After each sitting the easel is closed and
+-leftovers stopped, and the `--@ chunk` lines of the painting's log are
+-counted. The painter stops after a sitting that added no chunks, or after
+-sitting MAX_SITTINGS (see next_sitting). Each sitting is recorded in
++leftovers stopped, and the chunks of the painting's log that put marks on
++the canvas are counted (painting_chunks.py: a chunk that only queries, waits,
++mixes or loads doesn't count). The painter stops after a sitting that added no
++such chunks, or after sitting MAX_SITTINGS (see next_sitting). Each sitting is recorded in
+ run/<lane>/p<n>_sittings.json.
+ 
+ Each painter gets a fresh studio exported from branch r17-base (profile
+@@ -20,8 +21,9 @@
+ earlier painters in its chain merged into notes/studio_notes.md (nothing in
+ them says there were earlier painters). Painters run in the clean harness
+ (claude-paint-r17-base/harness/painter): no global extensions, our system
+-prompt, bash and read only, our compaction. After a painter finishes, its
+-leftover easel processes are stopped, finishing (varnish and cracks, which
++prompt, bash and read only, our compaction (its thresholds set by
++compaction.ts; nothing of ours in the studio's .pi/, which --no-approve
++ignores). After a painter finishes, its leftover easel processes are stopped, finishing (varnish and cracks, which
+ the painter build lacks) starts in the background on a replay of its log
+ (run/<lane><n>_finished.png; the painter's own save is untouched), and a
+ reader writes the record for the next painter.
+@@ -48,6 +50,8 @@
+ import time
+ from pathlib import Path
+ 
++from painting_chunks import count_painting_chunks
++
+ HOME = Path.home()
+ A = HOME / "src/a"
+ BASE = A / "claude-paint-r17-base"
+@@ -69,7 +73,7 @@
+ HARNESS = ["--no-extensions", "-e", str(H / "painter.ts"), "-e", str(H / "compaction.ts"),
+            "-e", str(TEMP_GUARD), "-e", str(BLACK),
+            "--system-prompt", str(H / "system_prompt.md"), "--tools", "bash,read",
+-           "--no-context-files", "--no-skills", "--no-prompt-templates", "--approve"]
++           "--no-context-files", "--no-skills", "--no-prompt-templates", "--no-approve"]
+ PAINTER_MSG = ("Complete your task autonomously. Read BRIEF.md in this folder and follow it exactly. "
+                "That file is your whole brief. Your FINAL message is the reply it asks for.")
+ # DRAFT for Alice: the user message of sittings 2..MAX_SITTINGS.
+@@ -165,19 +169,29 @@
+     return sum(1 for line in f.read_text(errors="replace").splitlines() if line.startswith("--@ chunk"))
+ 
+ 
++def count_painting(d):
++    """Chunks of the log that put marks on the canvas (see painting_chunks.py)."""
++    f = d / "paintings/lua/painting.lua"
++    return count_painting_chunks(f.read_text(errors="replace")) if f.exists() else 0
++
++
+ def next_sitting(sittings, max_sittings=MAX_SITTINGS):
+     """The number of the next sitting, or None when the painter is done.
+ 
+-    sittings: the records so far, in order ({'sitting', 'chunks_before', 'chunks_after', 'status'}).
++    sittings: the records so far, in order ({'sitting', 'painting_before', 'painting_after',
++    'chunks_before', 'chunks_after', 'status'}).
+     A sitting cut off by the runner itself stopping (status 'interrupted') is taken again.
+-    Stop after a completed sitting that added no chunks (this includes a first sitting that
+-    painted nothing: no painting to come back to), or after sitting max_sittings.
++    Stop after a completed sitting that added no painting chunks (this includes a first sitting
++    that painted nothing: no painting to come back to), or after sitting max_sittings. A record
++    without painting counts (from an older runner) is judged by its chunk counts.
+     """
+     done = [s for s in sittings if s.get("status") == "completed"]
+     if not done:
+         return 1
+     last = done[-1]
+-    if last["chunks_after"] <= last["chunks_before"]:
++    before, after = (("painting_before", "painting_after") if last.get("painting_after") is not None
++                     else ("chunks_before", "chunks_after"))
++    if last[after] <= last[before]:
+         return None
+     if last["sitting"] >= max_sittings:
+         return None
+@@ -211,30 +225,33 @@
+     sittings = load_sittings(rd, n)
+     for s in sittings:
+         if s.get("status") == "running":      # the runner stopped during this sitting
+-            s.update(status="interrupted", chunks_after=count_chunks(d))
++            s.update(status="interrupted", chunks_after=count_chunks(d), painting_after=count_painting(d))
+             log(f"{tag}: sitting {s['sitting']} was interrupted; it will be taken again")
+     save_sittings(rd, n, sittings)
+     while (k := next_sitting(sittings)) is not None:
+         close_easel(d)
+         before = count_chunks(d)
++        painting_before = count_painting(d)
+         msg = PAINTER_MSG if before == 0 else SITTING_MESSAGE
+         known = set(session_dir(d).glob("*.jsonl"))
+         rec = dict(sitting=k, status="running", start=time.strftime("%F %T"), end=None,
+-                   chunks_before=before, chunks_after=None, message=msg, sessions=[], exit=None,
++                   chunks_before=before, chunks_after=None, painting_before=painting_before, painting_after=None, message=msg, sessions=[], exit=None,
+                    final_file=str(rd / f"p{n}_s{k}_final.txt"), final=None)
+         sittings.append(rec)
+         save_sittings(rd, n, sittings)
+-        log(f"{tag}: sitting {k} ({t['model'][3]}, painter harness, {before} chunks on the easel)")
++        log(f"{tag}: sitting {k} ({t['model'][3]}, painter harness, {before} chunks on the easel, {painting_before} painting)")
+         t0 = time.time()
+         rc = run(painter_cmd(t["model"], msg), d, rd / f"p{n}_s{k}_final.txt", rd / f"p{n}_s{k}_err.txt")
+         close_easel(d)
+         new = sorted(set(session_dir(d).glob("*.jsonl")) - known, key=lambda f: f.stat().st_mtime)
+-        rec.update(status="completed", end=time.strftime("%F %T"), chunks_after=count_chunks(d), exit=rc,
++        rec.update(status="completed", end=time.strftime("%F %T"), chunks_after=count_chunks(d),
++                   painting_after=count_painting(d), exit=rc,
+                    sessions=[str(f) for f in new],
+                    final=(rd / f"p{n}_s{k}_final.txt").read_text(errors="replace"))
+         save_sittings(rd, n, sittings)
+         log(f"{tag}: sitting {k} ended (exit {rc}) after {(time.time() - t0) / 60:.0f} min: "
+-            f"chunks {rec['chunks_before']} -> {rec['chunks_after']}, {len(new)} session file(s)")
++            f"chunks {rec['chunks_before']} -> {rec['chunks_after']} "
++            f"(painting {rec['painting_before']} -> {rec['painting_after']}), {len(new)} session file(s)")
+     shutil.copy(rd / f"p{n}_s{sittings[-1]['sitting']}_final.txt", rd / f"p{n}_final.txt")
+     (rd / f"p{n}.painted").write_text(f"{time.strftime('%F %T')} {len(sittings)} sitting(s)")
+     return sittings
+@@ -263,9 +280,13 @@
+     log(f"{tag}: {what}:\n    cd {shlex.quote(str(cwd))} && {pre + ' ' if pre else ''}{shlex.join(cmd)}")
+ 
+ 
+-def install_settings(d):
+-    (d / ".pi").mkdir(exist_ok=True)
+-    shutil.copy(H / "studio-settings.json", d / ".pi" / "settings.json")
++def clear_settings(d):
++    """No settings file in the studio (compaction.ts sets the thresholds); remove one an earlier round left."""
++    f = d / ".pi" / "settings.json"
++    if f.exists():
++        f.unlink()
++    if (d / ".pi").is_dir() and not any((d / ".pi").iterdir()):
++        (d / ".pi").rmdir()
+ 
+ 
+ def finish(track, n, d):
+@@ -370,10 +391,9 @@
+             show(tag, f"export {t['profile']} studio (then studio_notes.md + records"
+                       f"{' + trees.md' if t['profile'] == 'friedrich' else ''}, BRIEF.md = {rd}/p{n}_brief.md)",
+                  export_cmd(t["profile"], d), BASE, env)
+-            show(tag, "painter settings", ["cp", str(H / "studio-settings.json"), str(d / ".pi/settings.json")], d)
+             show(tag, "sitting 1 (painter)", painter_cmd(t["model"]), d)
+-            show(tag, f"after each sitting: close the easel ({d / 'bin/easel'} close), stop leftovers, count chunks;\n"
+-                      f"    sittings 2..{MAX_SITTINGS} while the last one added chunks (next_sitting), each", painter_cmd(t["model"], SITTING_MESSAGE), d)
++            show(tag, f"after each sitting: close the easel ({d / 'bin/easel'} close), stop leftovers, count painting chunks;\n"
++                      f"    sittings 2..{MAX_SITTINGS} while the last one added painting chunks (next_sitting), each", painter_cmd(t["model"], SITTING_MESSAGE), d)
+             show(tag, "finishing (background, after the last sitting)", finish_cmd(d, track, n), RUN)
+             if n < PAINTERS:
+                 show(tag, "reader", reader_cmd(f"Read {rd}/p{n}_reader_brief.md and do what it says."), rd)
+@@ -398,7 +418,7 @@
+                 shutil.copy(HERE / "trees.md", d / "notes" / "research" / "trees.md")
+             (rd / f"p{n}.exported").write_text(time.strftime("%F %T"))
+         (d / "BRIEF.md").write_text(brief(track, n))
+-        install_settings(d)
++        clear_settings(d)
+         if not (rd / f"p{n}.painted").exists():
+             paint(track, n, d, rd)
+         finish(track, n, d)
+diff -ruN a/test_painting_chunks.py b/test_painting_chunks.py
+--- a/test_painting_chunks.py	1970-01-01 01:00:00
++++ b/test_painting_chunks.py	2026-09-27 12:25:29
+@@ -0,0 +1,73 @@
++from painting_chunks import classify, count_painting_chunks
++
++
++def log(*chunks):
++    return "-- easel session\n\n" + "".join(f"--@ chunk {i}\n{c}\n\n" for i, c in enumerate(chunks, 1))
++
++
++def paints(*chunks):
++    return [p for _, p in classify(log(*chunks))]
++
++
++def test_queries_waits_and_mixing_are_not_painting():
++    assert paints(
++        'print(table.concat(tubes(), ", "))',
++        "print(wait(60))",
++        "print(drying(400, 300), drying(10, 10))",
++        'p = pile{{"lead white", 3}, {"smalt", 1}}\nb = brush("filbert", 8)\nb:load(p, 0.8)',
++        "m = rect(0, 0, 1000, 400):roughen(4, 40, 1)\nprint(m:area())",
++        'o = outline{{1, 2}, {3, 4}, char="firm"}\nprint(o:length())',
++    ) == [False] * 6
++
++
++def test_mark_making_verbs_are_painting():
++    assert paints(
++        'canvas{size=400, aspect=1.25, ground={{pile={{"lead white", 1}}, um=100, apply="knife"}}}',
++        "work(m, {hand=\"body\", pile=p})",
++        "blend(rect(0, 0, 1000, 446), {angle=0})",
++        "b:stroke({{100, 500}, {300, 520}}, {pressure={0.9, 0.3}})",
++        "b:touch(400, 300, {pressure=0.6})",
++        "o:paint(b, {pressure=0.8, dip={p, 0.6}})",
++        'h = pencil("HB")\nh:rule({0, 440}, {1000, 440}, {pressure=0.25})',
++        "print(lose(m, {pile=p}))",
++        "erase(pts, {strength=0.9})",
++        "print(wait(30))\nstipple(m, {pile=p})",
++    ) == [True] * 10
++
++
++def test_verbs_in_comments_strings_and_keys_do_not_count():
++    assert paints(
++        "-- next: work the sky, then blend it\nprint(wait(20))",
++        '--[[ b:stroke(...) later ]]\nprint("work(m) after it dries")',
++        "f = body_of{spine={{1, 2}, {3, 4}}, widths={3, 4}, blend=0.8}",
++        'print(work_left, m.work)',
++    ) == [False] * 4
++
++
++def test_helpers_defined_in_a_painting_chunk_paint_later():
++    assert paints(
++        "function dab(x, y) b:touch(x, y, {pressure=0.5}) end",
++        "dab(100, 200)",
++        "local function band(y0, y1) return rect(0, y0, 1000, y1 - y0) end\nprint(band(1, 2):area())",
++        "sweep = function(m) work(m, {hand=\"broad\", pile=p}) end",
++        "for i = 1, 3 do sweep(rect(0, i * 10, 100, 10)) end",
++        "go = sweep",
++        "go(everywhere())",
++    ) == [True, True, False, True, True, True, True]   # an alias mentions a painting name: counts (errs toward painting)
++
++
++def test_the_stop_count_for_a_sitting_that_only_queried():
++    before = log('canvas{size=400}', "work(m, {pile=p})")
++    after = log('canvas{size=400}', "work(m, {pile=p})", "print(wait(120))", "print(drying(500, 300))")
++    assert after.count("--@ chunk") - before.count("--@ chunk") == 2      # the old count: two more chunks
++    assert count_painting_chunks(after) - count_painting_chunks(before) == 0
++
++
++def test_next_sitting_stops_after_a_sitting_that_only_queried():
++    from r17_chains import next_sitting
++    s1 = dict(sitting=1, status="completed", chunks_before=0, chunks_after=40, painting_before=0, painting_after=31)
++    s2 = dict(sitting=2, status="completed", chunks_before=40, chunks_after=43, painting_before=31, painting_after=31)
++    assert next_sitting([s1]) == 2
++    assert next_sitting([s1, s2]) is None                  # three new chunks, none of them painting
++    old = dict(sitting=2, status="completed", chunks_before=40, chunks_after=43)   # an older runner's record
++    assert next_sitting([s1, old]) == 3

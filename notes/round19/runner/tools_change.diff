@@ -1,0 +1,210 @@
+diff --git a/harness/painter/system_prompt.md b/harness/painter/system_prompt.md
+index 4010fb1..e2018c1 100644
+--- a/harness/painter/system_prompt.md
++++ b/harness/painter/system_prompt.md
+@@ -1,3 +1,3 @@
+-You are a painter working at an easel in your studio. The studio is the folder you are in. You work in it through a shell (the bash tool) and by reading files and images (the read tool).
++You are a painter working at an easel in your studio. The studio is the folder you are in. You paint with the easel's tools and read the studio's notes with the read tool.
+ 
+ Your brief follows in the first message.
+diff --git a/notes/easel_guide.md b/notes/easel_guide.md
+index 2258600..309c924 100644
+--- a/notes/easel_guide.md
++++ b/notes/easel_guide.md
+@@ -1,8 +1,7 @@
+ # The easel
+ 
+-The easel is a live oil painting in a background process. You send it Lua
+-chunks from the shell, one at a time, and look at the canvas as a small
+-PNG between them. Under it is a physical paint simulator: simulated
++The easel is a live oil painting. You send it Lua chunks with its `paint`
++tool, one at a time, and look at the canvas between them with `look`. Under it is a physical paint simulator: simulated
+ bristles carry wet paint over a primed linen canvas, the paint levels and
+ dries on a clock, and layers combine by Kubelka–Munk optics.
+ 
+@@ -14,40 +13,23 @@ Three things hold for every session:
+   variables, the paint on your brushes and the clock are as they were
+   before it, and it isn't written to the log.
+ - **The log is the painting.** Every chunk that ran is appended to
+-  `paintings/lua/painting.lua`, and `bin/easel open` replays it to pick the
+-  painting up again. The easel goes on only from the log it wrote: a log
+-  changed, shortened or removed outside the session stops it.
++  `paintings/lua/painting.lua`, and replaying it paints the same canvas.
+ 
+ ## Starting
+ 
+-The easel is the program `bin/easel` in this folder. The studio holds one
+-painting, and every command works on it. Run the commands from this
+-folder:
++The studio holds one painting, and the easel is open on it. Its tools:
+ 
+-```sh
+-bin/easel open                                # start the session (2400 px wide), or reattach to it
+-bin/easel do 'canvas{...}'                    # the first chunk: the canvas and its ground (see The canvas)
+-bin/easel look                                # prints the path of a PNG of the canvas: read it
+-bin/easel note 'what I did and why'           # an entry in notes/journal.md
+-bin/easel save                                # the canvas as it is now: out/easel/painting/painting.png
+-bin/easel close                               # the log stays in paintings/lua/painting.lua
+-```
+-
+-| command | what it does |
++| tool | what it does |
+ |---|---|
+-| `bin/easel open` | starts the 2400-pixel-wide session, or reattaches to it if it is running. If `paintings/lua/painting.lua` exists, the session replays it first and goes on from there; a long log takes minutes to replay |
+-| `bin/easel do '<lua>'`, `do -f file.lua`, `do -` | runs a chunk. The reply is what the chunk printed, then `ok · chunk N`. Add `--look` to look afterwards |
+-| `bin/easel look [...]` | writes a PNG of the canvas and prints its path (see [Looking](#looking)) |
+-| `bin/easel log` | prints the painting so far (the log file: each chunk after a line `--@ chunk N`) |
+-| `bin/easel status` | chunks, width and the canvas's setup |
+-| `bin/easel save` | writes the canvas as it is now to `out/easel/painting/painting.png` and prints the path |
+-| `bin/easel frames on\|off` | saves a look after every chunk in `out/easel/painting/frames/` |
+-| `bin/easel close` | ends the session |
+-| `bin/easel note '<text>'`, `note -` | adds an entry to your journal (see [The journal](#the-journal)) |
++| `paint` | runs a chunk of Lua. The reply is what the chunk printed, then `ok · chunk N` |
++| `look` | shows you the canvas as it is now (see [Looking](#looking)) |
++| `note` | adds an entry to your journal (see [The journal](#the-journal)) |
++| `status` | the number of chunks, the canvas width in pixels and the canvas's setup |
++| `log` | the painting so far: every chunk that ran, each after a line `--@ chunk N` |
+ 
+-The first chunk is `canvas{}`. When the painting is done, `bin/easel save`
+-writes the picture to `out/easel/painting/painting.png`; the program that
+-paints it is `paintings/lua/painting.lua`.
++The first chunk is `canvas{}` (see [The canvas](#the-canvas)). The canvas
++is 2400 pixels wide. `read` reads the files in this folder: your brief and
++your notes.
+ 
+ In the examples below, `<tube>` stands for a name from the tube box and
+ `<parts>` for a number of parts you choose.
+@@ -371,7 +353,7 @@ mask's own edges, never what is in front.
+ 
+ Painting takes time, and paint dries on the painting's clock. Only
+ painting operations (strokes, touches, passes, trips to the palette) and
+-`wait(minutes)` advance it. Real time between commands does not: paint
++`wait(minutes)` advance it. Real time between chunks does not: paint
+ doesn't dry while you think. `wait(minutes)` passes painting time at once;
+ it doesn't make you wait that many real minutes.
+ 
+@@ -398,22 +380,22 @@ top of it.
+ 
+ ## Looking
+ 
+-`bin/easel look` prints the path of a PNG of the canvas as it is now, with
+-wet paint as laid. The live canvas is 2400 pixels wide. A whole view is
++`look` shows you the canvas as it is now, with wet paint as laid. The live canvas is 2400 pixels wide. A whole view is
+ scaled down to at most 1600 pixels on its long side and kept below 3 MB,
+ like stepping back. A crop shows the original pixels at 1:1 and may be
+-at most 1200 pixels on either side. `--crop x0,y0,x1,y1` gives two
++at most 1200 pixels on either side. `crop: "x0,y0,x1,y1"` gives two
+ opposite corners in canvas units, not a position and width/height.
+ 
+-```sh
+-bin/easel look --crop 300,200,500,350          # a window in canvas units, shown at 1:1 pixels
+-bin/easel look --mode value                    # in grays
+-bin/easel look --mode squint                   # blurred, as through half-closed eyes
+-bin/easel look --mode mirror                   # flipped left to right
+-bin/easel look --mode value,squint --size 600  # modes combine; --size sets the long side
+-bin/easel look --grid                          # a squared grid in canvas units, labeled along the edges
+-bin/easel look --crop 300,200,500,350 --grid 10
+-```
++| `look` with | shows |
++|---|---|
++| nothing | the whole canvas, scaled down |
++| `crop: "300,200,500,350"` | a window in canvas units, at 1:1 pixels |
++| `mode: "value"` | in grays |
++| `mode: "squint"` | blurred, as through half-closed eyes |
++| `mode: "mirror"` | flipped left to right |
++| `mode: "value,squint"`, `size: 600` | modes combine; `size` sets the long side |
++| `grid: true` | a squared grid in canvas units, labeled along the edges |
++| `crop: "300,200,500,350"`, `grid: 10` | a window with a grid every 10 units |
+ 
+ The grid is drawn on the PNG only, never on the canvas, like the squares
+ ruled over a drawing to transfer it.
+@@ -443,8 +425,6 @@ ruled over a drawing to transfer it.
+ 
+ ## The journal
+ 
+-`notes/journal.md` is your working journal. `bin/easel note '<text>'` (or
+-`bin/easel note -` to read the text from stdin) appends an entry stamped
+-with the session's painting time, such as `day 2, 09:40`; the session must
+-be open. Entries already there stay as they were written; writing a note
++`notes/journal.md` is your working journal. `note` appends an entry
++stamped with the painting's time, such as `day 2, 09:40`. Entries already there stay as they were written; writing a note
+ doesn't advance painting time.
+--- old/brief_template.md
++++ new/brief_template.md
+@@ -3,27 +3,20 @@
+ {OPENING}
+ 
+ ## Your studio
+-- The folder {STUDIO}. Work only there, and in your scratch folder.
+-- You paint at the easel: open it, paint a chunk, look at the canvas,
+-  paint the next. {EASEL_HOWTO}
++- The folder {STUDIO}: this brief, your notes and the easel.
++- You paint at the easel: paint a chunk, look at the canvas, paint the
++  next. Its tools are `paint`, `look`, `note`, `status` and `log`;
++  notes/easel_guide.md explains them.
+ - What is painted stays painted. There is no undo: paint over what you
+   don't want.
+ - You mix your own paint on the palette, from the tubes, in the
+   proportions you choose.
+ - Time passes on the painting's own clock: every mark takes the time a
+   hand takes, and `wait(minutes)` lets it rest, as long as you like; paint
+-  dries as that time passes. Real time between commands doesn't count. The
++  dries as that time passes. Real time between chunks doesn't count. The
+   clock isn't a budget or a target.
+-- Scratch: run `~/.local/bin/agent-tmp {SLUG}`, then
+-  `export TMPDIR="<that folder>" TMP="<that folder>" TEMP="<that folder>"`;
+-  write temporary files only there.
+ 
+ ## The rules of the studio
+-- The easel is the only way to paint and to see the painting. Don't replay
+-  or copy the session yourself, open a second one, or edit or restore its
+-  files.
+-- Look at the canvas with the easel's views. Don't read pixel values with
+-  other programs.
+ - Paint shapes and marks, not computed pictures: don't encode an image in
+   masks, amounts or proportions.
+ - Shapes are drawn, not copied: don't make a mask or stroke by reflecting,
+@@ -37,12 +30,10 @@
+ ## Working
+ - You make every artistic decision.
+ - Look at your painting often, whole and close up.
+-- Keep a working journal with `bin/easel note "..."` as you go: your own
+-  working notes. Add to it; don't rewrite earlier entries.
+-- Develop the painting until you judge it complete. Then save it
+-  ({EASEL_SAVE}) and close the session.
++- Keep a working journal with `note` as you go: your own working notes.
++  Entries stay as written.
++- Develop the painting until you judge it complete.
+ 
+ ## Your reply
+-When you stop working, reply with the paths of the saved painting and its
+-log, the painting's title if you give it one and, if you like, a few
+-sentences about the picture.
++When you stop working, reply with the painting's title if you give it one
++and a few sentences about the picture.
+--- old/trees.md
++++ new/trees.md
+@@ -15,8 +15,8 @@
+ ## 1. How a tree is built
+ 
+ - **Growth rules.** Branches that develop mostly in the distal part of a parent shoot (acrotony) are what give a tree its tree-like rather than bushy habit [BC pp.383–384]. Upright (orthotropic) axes "are generally associated with plant skeleton construction." Sideways (plagiotropic) axes explore horizontal space and carry leaves and flowers [BC p.385]. If a shoot's tip dies, aborts or turns into a flower, one, two or more branches take over below it (sympodial branching). A string of such takeovers can still look like one straight axis [BC pp.381–382].
+-- **Branch order.** The trunk (order 1) bears branches (order 2), which bear their own (order 3), and so on. In sympodial systems the order climbs fast [BC p.382]. **General knowledge:** a mature broadleaved crown commonly has five or more orders from trunk to current-year twig. I found no source that counts them species by species.
+-- **The tree repeats itself.** As a crown matures, the tree builds new sub-crowns that duplicate its own architecture on big limbs. This "sequential" reiteration is a normal part of crown construction [BC p.391]. After damage, dormant buds produce "traumatic" reiteration: new sub-crowns on the wounded frame [BC p.390].
++- **Limbs, branches, twigs.** Branches carry branches, and those carry twigs; in sympodial trees the steps pile up quickly [BC p.382]. **General knowledge:** a mature broadleaved crown commonly has five or more such steps from trunk to this year's twig; I found no source that counts them species by species. Seen from any distance, only the trunk and the first limbs or two read as separate shapes; the finer branching merges into the crown's texture and the ragged edge of its outline.
++- **Crowns within the crown.** As a crown matures, big limbs grow crowns of their own, each shaped by where it sits in the tree; this "sequential" reiteration is a normal part of crown construction [BC p.391]. After damage, dormant buds produce "traumatic" reiteration: new small crowns on the wounded frame [BC p.390]. **General knowledge:** an old crown therefore reads as a few uneven masses, not one even dome.
+ - **Long shoots and short shoots set the crown edge.** In a vigorous tree the leader and some side shoots at the top are long shoots, making a "network structure" that extends the crown. Next comes a "spikey outline," with bottle-brush tips of long leaders carrying only short side shoots. Then a "short shoot-mode" with "bushy structure, on hold." Last is "retraction mode": "leader die-back, crown reduction" [ROL17]. Roloff measured these stages on 100- to 160-year-old beech [ROL17]. He sorts species by life expectancy. Short-lived (80–100 years) includes alder and birch. Medium-lived (150–300) includes beech, spruce, pine and white willow. Long-lived (over 400) includes lime and oak [ROL17].
+ - **What distress looks like.** In an ancient tree the outer crown shrinks episodically, and new epicormic shoots grow in the mid and lower crown [WT]. Old trees survive through epicormic growth, adventitious rooting, layering and suckering [WT]. *My inference:* a crown whose every limb is covered in straight upright shoots reads as a tree reacting to heavy damage or cutting. A healthy mature crown edge is a fine net of long shoots.
+ 
+--- old/r19_chains.py (messages)
++++ new/r19_chains.py (messages)
+@@ -1,7 +1,6 @@
+-PAINTER_MSG = ("Your brief is in BRIEF.md in this folder. Your last message is your reply: the paths "
+-               "of the saved painting and its log, its title if you give it one and, if you like, a few "
+-               "sentences about the picture.")
+-SITTING_MESSAGE = ("You're back at the easel. The painting is as you left it; `bin/easel open` picks it up. "
++PAINTER_MSG = ("Your brief is in BRIEF.md in this folder. Your last message is your reply: the "
++               "painting's title if you give it one and a few sentences about the picture.")
++SITTING_MESSAGE = ("You're back at the easel. The painting is as you left it. "
+                    "Your brief is in BRIEF.md and your journal in notes/journal.md.")
+ MAX_SITTINGS = 4
+ MAX_CRASHES = 6                                   # crashed sittings (in all) before a painter is stopped

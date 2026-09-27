@@ -1,14 +1,14 @@
-//! Depth from the world, in Lua: what lies behind what, so a painter never
-//! subtracts earlier motifs from a mask by hand.
+//! Depth from the world, in Lua: what lies behind what, so a painter
+//! needn't subtract earlier shapes from a mask by hand.
 //!
-//! - `w:layer(name, mask, depth)` registers a motif painted by hand (a
-//!   figure, a drawn boat) at a depth: meters, a spot, a canvas point
-//!   `{x, y}` (the depth of the ground seen there: the figure's feet) or
-//!   `"ground"` (it lies on the ground: a path, a glint on the water).
+//! - `w:layer(name, mask, depth)` registers a shape painted by hand at a
+//!   depth: meters, a spot, a canvas point `{x, y}` (the depth of the
+//!   ground seen there, where the shape stands) or `"ground"` (it lies
+//!   flat on the ground).
 //! - A view answers with masks: `v:visible(x)`, `v:front(x)`, `v:behind(x)`,
 //!   `v:at_depth(m)`, `v:between(a, b)`, and soft shadows that fall off
 //!   physically: `v:cast_shadow{}`, `v:contact_shadow{}`.
-//! - `work`, `stipple`, `glaze` and `blend` take `visible=`, `behind=` and
+//! - `work`, `stipple` and `blend` take `visible=`, `behind=` and
 //!   `at=`, resolved against the last view made (`w:view()`) or `view=v`.
 //!
 //! Things are named by body number (from `w:place`/`w:proxy`), layer name,
@@ -245,7 +245,7 @@ pub fn view_methods<M: UserDataMethods<ViewU>>(m: &mut M) {
 pub type Restricted = (Option<Rc<Mask>>, Option<Arc<Mask>>);
 
 /// Apply `visible=`, `behind=` and `at=` to a pass: the mask it seeds
-/// strokes in (None: the whole canvas, for `glaze(nil, ...)`) and a hard
+/// strokes in (None: the whole canvas) and a hard
 /// limit no bristle may cross (strokes still overshoot the region's own
 /// edges, but never into what is in front). Unchanged if none is given.
 pub fn restrict(st: &S, o: &Table, m: Option<Rc<Mask>>) -> Result<Restricted> {
@@ -323,14 +323,14 @@ pub(crate) fn layer_args(w: &World, name: &Value, mask: &Value, depth: &Value) -
 mod tests {
     use crate::session::Session;
 
-    const SETUP: &str = r##"canvas{style="friedrich", aspect=1.5, seed=3}
+    const SETUP: &str = r##"canvas{size=440, aspect=1.5, linen=15, seed=3, ground={{pile={{"lead white", 3}, {"yellow ochre", 1}}, um=120, apply="knife"}}}
 w = world{horizon=300, eye=1.6, sun={azimuth=-80, elevation=20},
   ground=function(X, Z) return Z > 20 and -1 or 0.1 end, water={level=0}}
 local s = w:spot_at(0, 12)
-w, stone = w:place(s, body.ellipsoid(s:p(0, 0.3, 0), s:size(1.2, 0.8, 1.0)))
+w, block = w:place(s, body.ellipsoid(s:p(0, 0.3, 0), s:size(1.2, 0.8, 1.0)))
 fs = w:spot_at(-2.5, 9)
-fig = rect(fs.x - fs:m(0.3), fs.y - fs:m(1.7), fs:m(0.6), fs:m(1.7))
-w = w:layer("figure", fig, fs)
+shape = rect(fs.x - fs:m(0.3), fs.y - fs:m(1.7), fs:m(0.6), fs:m(1.7))
+w = w:layer("upright", shape, fs)
 v = w:view()"##;
 
     fn px(s: &Session, x: f32, y: f32) -> [f32; 3] {
@@ -341,17 +341,17 @@ v = w:view()"##;
 
     #[test]
     fn passes_keep_behind_what_is_in_front() {
-        let mut s = Session::new(240, 2).unwrap();
+        let mut s = Session::new(240).unwrap();
         s.run(SETUP).unwrap();
-        // the masks know the figure stands over the sea
+        // the masks know the upright stands over the water
         s.run(r#"local sea = v:visible("water")
                  local y = fs.y - fs:m(1.2)
                  assert(sea:at(fs.x, y) < 0.01, sea:at(fs.x, y))
                  assert(sea:at(fs.x - 120, y) > 0.99)
-                 assert(v:behind("figure"):at(fs.x, y) < 0.01)
-                 assert(v:front(stone):at(500, 380) < 0.01)
+                 assert(v:behind("upright"):at(fs.x, y) < 0.01)
+                 assert(v:front(block):at(500, 380) < 0.01)
                  local seen = v:seen(fs.x, y)
-                 assert(seen[1].what == "layer" and seen[1].layer == "figure" and seen[1].share == 1 and seen[2] == nil, seen[1].what)
+                 assert(seen[1].what == "layer" and seen[1].layer == "upright" and seen[1].share == 1 and seen[2] == nil, seen[1].what)
                  local beside = v:seen(fs.x - 120, y)
                  assert(beside[1].what == "water" and beside[1].share == 1)
                  assert(#v:layers() == 1)"#)
@@ -360,19 +360,19 @@ v = w:view()"##;
         let fxy: (f32, f32) = s.lua.load("return fx, fy").eval().unwrap();
         let before_in = px(&s, fxy.0, fxy.1);
         let before_out = px(&s, fxy.0 - 120.0, fxy.1);
-        // a sea veil behind the figure
-        s.run(r##"work(below(function() return 302 end), {hand="broad", color="#20304a", coverage=3, behind="figure"})"##).unwrap();
-        assert_eq!(before_in, px(&s, fxy.0, fxy.1), "the figure's place is untouched");
+        // a veil behind the upright
+        s.run(r##"work(below(function() return 302 end), {hand="broad", pile=pile{{"cobalt blue", 1}, {"bone black", 1}}, coverage=3, behind="upright"})"##).unwrap();
+        assert_eq!(before_in, px(&s, fxy.0, fxy.1), "the upright's place is untouched");
         assert_ne!(before_out, px(&s, fxy.0 - 120.0, fxy.1), "the sea beside it is painted");
-        // glints only where the water is seen: none on the figure or the stone
-        s.run(r##"stipple(below(function() return 302 end), {width=2, color="#e0e0d0", coverage=2, visible="water"})"##).unwrap();
+        // glints only where the water is seen: none on the upright or the block
+        s.run(r##"stipple(below(function() return 302 end), {width=2, pile=pile{{"lead white", 1}}, coverage=2, visible="water"})"##).unwrap();
         assert_eq!(before_in, px(&s, fxy.0, fxy.1));
-        // glaze too, and a mask in behind=
-        s.run(r##"glaze(nil, {color="#402010", coats=0.3, behind={"figure", stone}, at=30})"##).unwrap();
+        // a brushed glaze too, and a mask in behind=
+        s.run(r##"wait(60 * 24 * 60); work(everywhere(), {hand="glaze", pile=pile{{"raw umber", 1}, medium=0.9}, behind={"upright", block}, at=30})"##).unwrap();
         assert_eq!(before_in, px(&s, fxy.0, fxy.1));
         // an unknown layer says what there is
-        let e = s.run(r##"work(everywhere(), {color="#fff", behind="boat"})"##).unwrap_err();
-        assert!(e.contains("no layer \"boat\"") && e.contains("figure"), "{e}");
+        let e = s.run(r##"work(everywhere(), {pile=pile{{"lead white", 1}}, behind="nothing"})"##).unwrap_err();
+        assert!(e.contains("no layer \"nothing\"") && e.contains("upright"), "{e}");
         // the replay agrees
         let mut r = Session::replay(240).unwrap();
         for c in &s.log {
@@ -381,8 +381,7 @@ v = w:view()"##;
         assert_eq!(s.canvas().unwrap().seen(), r.canvas().unwrap().seen());
     }
 
-    // review 4 (drawing), finding 10: visible= takes masks and mixed lists,
-    // as documented; a mask is a thing in front of everything (as in behind=)
+    // visible= takes masks and mixed lists; a mask is a thing in front of everything (as in behind=)
     #[test]
     fn visible_takes_masks_and_mixed_lists() {
         let mut s = Session::replay(240).unwrap();
@@ -395,32 +394,30 @@ v = w:view()"##;
                  local mix = v:visible({box, "water"})
                  assert(mix:at(125, 125) == 1)
                  assert(mix:at(fx - 120, fy) > 0.99, mix:at(fx - 120, fy))
-                 assert(mix:at(fx, fy) < 0.01, "the figure hides the water")
+                 assert(mix:at(fx, fy) < 0.01, "the upright hides the water")
                  assert(mix:at(300, 125) == 0, "sky")"#)
             .unwrap();
         let (fx, fy): (f32, f32) = s.lua.load("return fx, fy").eval().unwrap();
         let (inside, sky, water) = (px(&s, 125.0, 125.0), px(&s, 300.0, 125.0), px(&s, fx - 120.0, fy));
-        s.run(r##"glaze(nil, {color="#402010", coats=0.5, visible=box})"##).unwrap();
+        s.run(r##"work(everywhere(), {hand="glaze", pile=pile{{"raw umber", 1}, medium=0.9}, visible=box})"##).unwrap();
         assert_ne!(inside, px(&s, 125.0, 125.0), "the box is glazed");
         assert_eq!(sky, px(&s, 300.0, 125.0), "nothing else is");
-        s.run(r##"glaze(nil, {color="#402010", coats=0.5, visible={box, "water"}})"##).unwrap();
+        s.run(r##"work(everywhere(), {hand="glaze", pile=pile{{"raw umber", 1}, medium=0.9}, visible={box, "water"}})"##).unwrap();
         assert_ne!(water, px(&s, fx - 120.0, fy), "the water is glazed too");
         assert_eq!(sky, px(&s, 300.0, 125.0));
     }
 
     #[test]
     fn the_current_view_rolls_back() {
-        let mut s = Session::new(160, 2).unwrap();
-        s.run(r#"canvas{aspect=1.5, seed=2}"#).unwrap();
-        let e = s.run(r##"work(everywhere(), {color="#fff", visible="ground"})"##).unwrap_err();
+        let mut s = Session::new(160).unwrap();
+        s.run(r#"canvas{size=440, aspect=1.5, linen=15, seed=2, ground={{pile={{"lead white", 3}, {"yellow ochre", 1}}, um=120, apply="knife"}}}"#).unwrap();
+        let e = s.run(r##"work(everywhere(), {pile=pile{{"lead white", 1}}, visible="ground"})"##).unwrap_err();
         assert!(e.contains("need a world view"), "{e}");
         // a failed chunk's view is not left behind
         let _ = s.run(r#"local w = world{horizon=200}; local v = w:view(); error("stop")"#).unwrap_err();
         assert!(s.st.borrow().view.is_none());
         s.run(r#"w = world{horizon=200}; v = w:view()"#).unwrap();
         assert!(s.st.borrow().view.is_some());
-        s.undo(1).unwrap();
-        assert!(s.st.borrow().view.is_none());
     }
 
     /// The shadow verbs take their options and give masks where the shadows
@@ -431,9 +428,9 @@ v = w:view()"##;
         let mut s = Session::replay(200).unwrap();
         s.run(SETUP).unwrap();
         s.run(r#"local sh = v:cast_shadow{soft=2}
-                 local c = v:contact_shadow{reach=0.5, from=stone}
+                 local c = v:contact_shadow{reach=0.5, from=block}
                  local st = w:spot_at(0, 12)
-                 -- nothing above the stone in the sky: no ring
+                 -- nothing above the block in the sky: no ring
                  assert(c:at(st.x, st.y - st:m(1.5)) == 0)
                  assert(c:at(st.x - st:m(1.3), st.y + 2) > 0.1, c:at(st.x - st:m(1.3), st.y + 2))
                  assert(sh:area() > 100)"#)

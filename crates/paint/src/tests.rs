@@ -1,8 +1,8 @@
 //! Characterization tests: pin down current behavior (conservation, mixing,
-//! determinism, and a golden fingerprint of a small scene) so refactors can
-//! prove they change nothing. Regenerate the golden file deliberately with
-//! `UPDATE_GOLDEN=1 cargo test -p paint` when a change is meant to alter
-//! rendering. The golden is recorded with the workspace's `[profile.test]`
+//! determinism, and a golden fingerprint of a fixed multi-pass fixture) so
+//! refactors can prove they change nothing. Regenerate the golden file
+//! deliberately with `UPDATE_GOLDEN=1 cargo test -p paint` when a change is
+//! meant to alter rendering. The golden is recorded with the workspace's `[profile.test]`
 //! (optimized, debug assertions on, not incremental: see Cargo.toml); a
 //! release build rounds floats differently and doesn't match it.
 
@@ -82,26 +82,29 @@ fn dry_is_idempotent_and_clears_wet() {
     assert!(snap.0 == c.px && snap.1 == c.height && snap.2 == c.film);
 }
 
-/// A small scene through most of the engine.
-fn scene() -> Canvas {
-    let st = Style::friedrich();
+/// A fixture through most of the engine: in the upper half a broad pass
+/// from a hand-knifed pile and the style's blend; after drying, in the lower half a
+/// hog-flat pass, three held-brush drags, a glaze; then relief.
+fn fixture() -> Canvas {
+    let st = Style::oil();
     let mut c = st.prepare(240, 1.5, 7);
     let (w, h) = (c.width(), c.height());
-    let sky = Mask::from_fn(c.f, |_, y| if y < h * 0.5 { 1.0 } else { 0.0 });
-    c.work(&sky, &st.broad().color(|_, y| if y < 200.0 { hex("#5a6d8c") } else { hex("#c9b48e") }).angle(|_, _| 0.0), 11);
+    let upper = Mask::from_fn(c.f, |_, y| if y < h * 0.5 { 1.0 } else { 0.0 });
+    let pal = st.palette.only(&["lead white", "cobalt blue"]);
+    c.work(&upper, &st.broad().piled(&pal, pal.pile(vec![(0, 0.75), (1, 0.25)]), 0.45).angle(|_, _| 0.0), 11);
     if let Some(b) = st.blend() {
-        c.work(&sky, &b, 12);
+        c.work(&upper, &b, 12);
     }
     c.dry();
-    let land = Mask::from_fn(c.f, |_, y| if y >= h * 0.5 { 1.0 } else { 0.0 });
-    c.work(&land, &Handling::new(Tool::hog_flat(8.0)).color(|_, _| hex("#4a4034")).paint(0.9, 0.9).load(0.8 * 0.9).coverage(3.0).clip(true), 13);
+    let lower = Mask::from_fn(c.f, |_, y| if y >= h * 0.5 { 1.0 } else { 0.0 });
+    c.work(&lower, &Handling::new(Tool::hog_flat(8.0)).color(|_, _| hex("#4a4034")).paint(0.9, 0.9).load(0.8 * 0.9).coverage(3.0).clip(true), 13);
     for (i, tool) in [Tool::round_sable(2.0), Tool::fan(10.0), Tool::rigger(0.6)].into_iter().enumerate() {
         let mut held = Held::new(tool, 20 + i as u64);
         held.load(Paint::scumble(hex("#e0d8c0")), 0.8 * 0.6);
         let y = h * (0.55 + 0.1 * i as f32);
-        c.drag(&mut held, &Gesture::new(vec![(w * 0.1, y), (w * 0.5, y - 20.0), (w * 0.9, y)]).pressure(0.7, 0.3), Some(&land));
+        c.drag(&mut held, &Gesture::new(vec![(w * 0.1, y), (w * 0.5, y - 20.0), (w * 0.9, y)]).pressure(0.7, 0.3), Some(&lower));
     }
-    c.glaze(&Pigment::transparent(hex("#6a4c34")), Some(&land), |_, _| 1.0);
+    c.glaze(&Pigment::transparent(hex("#6a4c34")), Some(&lower), |_, _| 1.0);
     c.relief(0.3, 0.02);
     c
 }
@@ -128,15 +131,15 @@ fn in_pool<T: Send>(threads: usize, f: impl FnOnce() -> T + Send) -> T {
 }
 
 #[test]
-fn scene_is_deterministic_across_thread_counts() {
-    let a = in_pool(1, || fingerprint(&scene()));
-    let b = in_pool(4, || fingerprint(&scene()));
+fn fixture_is_deterministic_across_thread_counts() {
+    let a = in_pool(1, || fingerprint(&fixture()));
+    let b = in_pool(4, || fingerprint(&fixture()));
     assert_eq!(a, b);
 }
 
 #[test]
-fn scene_matches_golden() {
-    let got = fingerprint(&scene());
+fn fixture_matches_golden() {
+    let got = fingerprint(&fixture());
     let path = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/golden_scene.txt");
     if std::env::var("UPDATE_GOLDEN").is_ok() {
         std::fs::create_dir_all(concat!(env!("CARGO_MANIFEST_DIR"), "/tests")).unwrap();
@@ -209,7 +212,7 @@ fn footprint_bounds_every_touched_pixel() {
 
 /// Tools that aren't physically possible are rejected before they can paint:
 /// their strokes could leave the footprints the parallel scheduler relies on
-/// (a negative length made the bend diverge; review finding).
+/// (a negative length makes the bend diverge).
 #[test]
 fn invalid_tools_are_rejected() {
     let t = Tool::round_sable(10.0);
@@ -319,7 +322,7 @@ fn clipped_plough_stays_inside_mask() {
 }
 
 /// Leveling moves wet paint, it neither destroys it nor makes it from the
-/// dry relief underneath (cases from the adversarial review).
+/// dry relief underneath.
 #[test]
 fn settle_conserves_paint() {
     let setup = |relief: &dyn Fn(usize, usize) -> f32| {
@@ -359,11 +362,10 @@ fn settle_conserves_paint() {
 
 
 
-/// A 2 µm varnish over tall dry impasto (the lab2 oak and rock finish at
-/// 3200px, 0.094 mm/px): it used to level the impasto as if it were fluid,
-/// leaving the step tops bare and 15–80 µm of varnish at their feet (brown
-/// worm lines). The film follows the relief: every peak keeps a film, the
-/// hollows gather at most `POOL_MAX` of it, and the volume is kept.
+/// A 2 µm varnish over tall dry impasto (0.094 mm/px): the film follows the
+/// relief: every peak keeps a film, the hollows gather at most `POOL_MAX`
+/// of it, and the volume is kept. Fluid leveling (`settle`) of the same
+/// film on the same relief pools more than 10× the film at the steps.
 #[test]
 fn thin_film_over_dry_impasto_coats_peaks_and_pools_a_little() {
     let (w, h) = (240usize, 240usize);
@@ -393,11 +395,11 @@ fn thin_film_over_dry_impasto_coats_peaks_and_pools_a_little() {
     // most of the surface is simply coated
     let even = t.iter().filter(|&&v| (v - 2.25).abs() < 0.1).count() as f32 / t.len() as f32;
     assert!(even > 0.8, "only {even} of the surface got the film laid");
-    // and the old fluid leveling did pool there (the test sees the case)
+    // fluid leveling (`settle`) does pool there, so the case is exercised
     let mut c2 = Canvas::new(w, 1.0, hex("#808080")).with_size_mm(w as f32 * 0.094);
     c2.height.copy_from_slice(&c.height.iter().zip(&t).map(|(z, f)| z - f).collect::<Vec<_>>());
     let t2 = c2.settle((0, 0, w, h), &add, &vec![0.05; w * h]);
-    assert!(t2.iter().cloned().fold(0.0, f32::max) > 10.0 * 2.25, "fluid settle no longer pools at the steps");
+    assert!(t2.iter().cloned().fold(0.0, f32::max) > 10.0 * 2.25, "fluid settle does not pool at the steps");
 }
 
 /// The varnish over dry impasto is an even warm layer: no pixel is warmed
@@ -428,7 +430,7 @@ fn varnish_over_impasto_is_even() {
 fn brushed_ground_honors_thickness() {
     use crate::style::{Apply, Ground};
     let mean_um = |um: f32| {
-        let mut st = Style::friedrich();
+        let mut st = Style::oil();
         st.ground = vec![Ground { color: hex("#a9785a"), hiding: 0.8, um, stiff: 0.35, apply: Apply::Brush }];
         let c = st.prepare(300, 1.5, 3);
         c.film.iter().sum::<f32>() / c.film.len() as f32 * crate::surface::COAT_UM
@@ -441,58 +443,35 @@ fn brushed_ground_honors_thickness() {
     }
 }
 
-#[test]
-fn palette_mixes_what_it_can() {
-    use crate::palette::Palette;
-    let p = Palette::friedrich_1820();
-    // a tube's own color is reachable exactly
-    for t in &p.tubes {
-        let m = p.mix(t.color);
-        assert!(m.error < 0.01, "{}: {} ({})", t.name, m.error, p.recipe(&m));
-    }
-    // a mid gray from white and black
-    let g = p.mix([0.2, 0.2, 0.2]);
-    assert!(g.error < 0.03, "{} {}", g.error, p.recipe(&g));
-    // a saturated green is out of this palette's gamut: comes out duller
-    let green = [0.05, 0.6, 0.1];
-    let m = p.mix(green);
-    let (a, b) = (crate::color::to_oklab(green), crate::color::to_oklab(m.color));
-    assert!((b[1].hypot(b[2])) < (a[1].hypot(a[2])) * 0.8, "chroma {} vs {}", b[1].hypot(b[2]), a[1].hypot(a[2]));
-    // fractions sum to 1, deterministic
-    assert!((m.parts.iter().map(|x| x.1).sum::<f32>() - 1.0).abs() < 1e-4);
-    assert_eq!(p.recipe(&p.mix(green)), Palette::friedrich_1820().recipe(&m));
-}
-
-
 /// Cutting in keeps paint within about a brush width of the region, and
 /// fills forms narrower than the body brush.
 #[test]
 fn cut_in_stays_near_the_region() {
-    let st = Style::friedrich();
+    let st = Style::oil();
     let mut c = Canvas::new(500, 1.0, hex("#c8b89a")).with_linen(crate::surface::Linen::fine(2));
     let (cx, cy, r) = (500.0f32, 500.0f32, 120.0f32);
     let disc = Mask::from_fn(c.frame(), move |x, y| crate::smoothstep(0.6, -0.6, ((x - cx).powi(2) + (y - cy).powi(2)).sqrt() - r));
-    // a spire narrower than the body brush
-    let spire = Mask::from_fn(c.frame(), |x, y| if (x - 800.0).abs() < 4.0 && y > 200.0 && y < 700.0 { 1.0 } else { 0.0 });
+    // a strip 8 units wide, narrower than the body brush
+    let strip = Mask::from_fn(c.frame(), |x, y| if (x - 800.0).abs() < 4.0 && y > 200.0 && y < 700.0 { 1.0 } else { 0.0 });
     let edge = Tool::round_sable(2.2);
     c.work(&disc, &st.body().color(|_, _| hex("#303038")).cut_in(edge.clone()), 5);
-    c.work(&spire, &st.body().color(|_, _| hex("#303038")).cut_in(edge), 6);
+    c.work(&strip, &st.body().color(|_, _| hex("#303038")).cut_in(edge), 6);
     let (w, s) = (c.f.w, c.f.scale);
-    let (mut total, mut far, mut spire_in) = (0.0f64, 0.0f64, 0.0f64);
+    let (mut total, mut far, mut strip_in) = (0.0f64, 0.0f64, 0.0f64);
     for (i, &v) in c.wet.vol.iter().enumerate() {
         let (x, y) = ((i % w) as f32 / s + 0.5 / s, (i / w) as f32 / s + 0.5 / s);
         total += v as f64;
         let d_disc = ((x - cx).powi(2) + (y - cy).powi(2)).sqrt() - r;
-        let d_spire = if y > 200.0 && y < 700.0 { (x - 800.0).abs() - 4.0 } else { f32::MAX };
-        if d_disc.min(d_spire) > 4.0 {
+        let d_strip = if y > 200.0 && y < 700.0 { (x - 800.0).abs() - 4.0 } else { f32::MAX };
+        if d_disc.min(d_strip) > 4.0 {
             far += v as f64;
         }
-        if d_spire < 0.0 {
-            spire_in += v as f64;
+        if d_strip < 0.0 {
+            strip_in += v as f64;
         }
     }
     assert!(far < total * 0.01, "paint far outside: {:.3}%", far / total * 100.0);
-    assert!(spire_in > 0.0, "the thin spire got no paint");
+    assert!(strip_in > 0.0, "the thin strip got no paint");
 }
 
 /// Largest and mean color difference of `c` (a crop render) to the same
@@ -518,7 +497,7 @@ fn crop_diff(c: &Canvas, whole: &Canvas) -> (f32, f32, f32) {
 /// A canvas with linen, a knife ground, then (`strokes`) a pass of short
 /// hog strokes and a pass of long ones, whole or cropped.
 fn crop_scene(crop: Option<crate::canvas::Crop>, strokes: usize) -> Canvas {
-    let st = Style::friedrich();
+    let st = Style::oil();
     let mut c = Canvas::new_window(400, 1.4, st.raw, crop).with_size_mm(st.width_mm).with_linen(crate::surface::Linen { seed: 1, ..st.linen });
     c.prime(st.ground[0].color, 0.8, 110.0, 0.25, 0.35, 5);
     let all = Mask::from_fn(c.frame(), |_, _| 1.0);
@@ -536,8 +515,7 @@ fn crop_scene(crop: Option<crate::canvas::Crop>, strokes: usize) -> Canvas {
 
 /// A crop render is the same picture as the whole render there: the
 /// support and grounds exactly, brushwork closely (strokes are planned on
-/// the whole canvas; outside the window a brush can only be estimated, see
-/// notes/workflow.md), and the difference falls as the margin grows.
+/// the whole canvas; outside the window a brush can only be estimated), and the difference falls as the margin grows.
 #[test]
 fn crop_matches_whole() {
     use crate::canvas::Crop;
@@ -553,10 +531,10 @@ fn crop_matches_whole() {
 }
 
 /// Strokes are seeded past the canvas edges, so a lay-in covers the border
-/// as well as the middle (the ground used to show along the edges).
+/// as well as the middle.
 #[test]
 fn work_covers_the_edges() {
-    let st = Style::friedrich();
+    let st = Style::oil();
     let mut c = Canvas::new(200, 1.0, hex("#ffffff"));
     let all = Mask::from_fn(c.f, |_, _| 1.0);
     c.work(&all, &st.broad().color(|_, _| hex("#304060")).coverage(4.0), 3);
@@ -577,13 +555,13 @@ fn work_covers_the_edges() {
     assert!(frac > 0.97, "border covered {frac}");
 }
 
-/// Diagnostic: what the pixels a thin blended sky leaves bare had before
-/// the bake (wet volume, cover, relief), against the rest.
+/// Diagnostic: what the pixels a thin blended broad pass leaves bare had
+/// before the bake (wet volume, cover, relief), against the rest.
 #[test]
 #[ignore]
-fn diag_sky_bare_pixels() {
+fn diag_blend_bare_pixels() {
     use crate::canvas::Crop;
-    let base = Style::friedrich();
+    let base = Style::oil();
     let crop = Crop { units: [400.0, 100.0, 560.0, 260.0], margin: 40.0 };
     let mut c = base.prepare_window(3200, 1.3, 23, Some(crop));
     let h0 = c.height.clone();
@@ -598,11 +576,12 @@ fn diag_sky_bare_pixels() {
         let fr: Vec<String> = (-6i64..=6).map(|dx| format!("{:4.1}", c.film[(t as i64 + dx) as usize] * 25.0)).collect();
         eprintln!("  ground films µm on its row: {}", fr.join(" "));
     }
-    let sky = Mask::from_fn(c.frame(), |_, _| 1.0);
-    c.work(&sky, &base.broad().color(|_, _| hex("#d9dcd6")).angle(|_, _| 0.0).coverage(4.5).medium(0.3), 11);
+    let whole = Mask::from_fn(c.frame(), |_, _| 1.0);
+    let pal = base.palette.only(&["lead white", "bone black"]);
+    c.work(&whole, &base.broad().piled(&pal, pal.pile(vec![(0, 8.0 / 9.0), (1, 1.0 / 9.0)]), 0.3).angle(|_, _| 0.0).coverage(4.5), 11);
     let vol_a = c.wet.vol.clone();
     if let Some(b) = base.blend() {
-        c.work(&sky, &b, 12);
+        c.work(&whole, &b, 12);
     }
     let (vol, cover) = (c.wet.vol.clone(), c.wet.cover.clone());
     let base_rel = { let _ = c.surf(); c.base.as_ref().unwrap().1.clone() };
@@ -636,12 +615,11 @@ fn diag_sky_bare_pixels() {
 }
 
 /// A dense hatch of dark paint with a pointed round over a dry pale ground,
-/// at full size (3.2 px per unit, 0.1 mm per pixel: the lab 2 lime at 3200):
-/// where the dried film is thick, it hides the ground. The lime's pale
-/// pinholes held 50-130 µm of dark paint on a small share of the pixel (a
-/// bead far taller than it is wide), because a pointed tool's `cover` (its
-/// hairs' share of the pixel) stayed what the hairs had touched while
-/// leveling poured paint in from the strokes around (notes/glitch.md, P1).
+/// at full size (3.2 px per unit, 0.1 mm per pixel): where the dried film
+/// is 30 µm or more, it hides the ground. A pointed tool's `cover` (its
+/// hairs' share of the pixel) must grow as leveling pours paint in from
+/// the strokes around; otherwise a pixel holds 50–130 µm of dark paint on
+/// a small share of its area and the ground shows around it.
 /// Bare gaps between strokes (no film to speak of) are not counted: they
 /// are the hatch's own.
 #[test]

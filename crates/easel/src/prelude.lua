@@ -148,8 +148,8 @@ end
 -- ---------------------------------------------------------------- gmatch
 
 -- Lua's `string.gmatch` keeps its position in C, where a rollback can't reach
--- it: an iterator kept in a global would stay advanced after a failed or
--- undone chunk. This one keeps it in upvalues (which rollback restores) and
+-- it: an iterator kept in a global would stay advanced after a failed
+-- chunk. This one keeps it in upvalues (which rollback restores) and
 -- matches exactly as Lua 5.5's does.
 local function gmatch(s, p, init)
   local ts, tp = type(s), type(p)

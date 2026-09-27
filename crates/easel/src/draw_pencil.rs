@@ -3,7 +3,7 @@
 //!
 //! A pencil is a plain Lua table (`{grade="2B", kind="graphite", worn=0}`)
 //! with shared methods, so how far its point has worn is part of the Lua
-//! heap: undo and rollback restore it with everything else, and a replay
+//! heap: a failed chunk restores it with everything else, and a replay
 //! blunts it the same way.
 
 use crate::api::{S, check_keys, err, frame, mask_of, num, points, seed_of, wrap};
@@ -292,15 +292,6 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
             let c = s.canvas.as_mut().ok_or_else(|| mlua::Error::runtime("no canvas yet: call canvas{} first"))?;
             c.fix_drawing(m.as_deref());
             Ok(())
-        })?)?;
-    }
-    // drawing_mask(): where the drawing is (1 on a firm line), also under paint
-    {
-        let st1 = st.clone();
-        g.set("drawing_mask", lua.create_function(move |_, ()| {
-            let s = st1.borrow();
-            let c = s.canvas.as_ref().ok_or_else(|| mlua::Error::runtime("no canvas yet: call canvas{} first"))?;
-            Ok(wrap(c.drawing_mask()))
         })?)?;
     }
     // drawing_guide(): the drawn lines as geometry over the whole canvas (1

@@ -1,5 +1,6 @@
-//! A live painting: a Lua state over a canvas, the chunks run so far (the
-//! log, which is also the replayable program) and snapshots for undo.
+//! A live painting: a Lua state over a canvas and the chunks run so far
+//! (the log, which is also the replayable program). A chunk that fails
+//! changes nothing; a chunk that succeeds is part of the painting for good.
 
 use crate::api::{self, Studio};
 use mlua::{Function, Lua, StdLib, Table, Value};
@@ -16,20 +17,12 @@ use std::time::Instant;
 
 /// Marks the start of a chunk in a session file.
 pub const MARK: &str = "--@ chunk";
-/// The header line of a log whose sittings are enforced: the easel writes it
-/// for every session it starts, and a replay of a log with it is held to
-/// the same rule (`time::at_easel`). Logs from before have no such line and
-/// replay as they were painted.
-pub const STRICT: &str = "-- sittings enforced: a sitting ends at its length; the easel refuses marks until rest(hours) (notes/time.md)";
 
 pub struct Chunk {
     pub src: String,
-    /// Painting clock (minutes) when the chunk started.
-    pub clock: f64,
-    pub secs: f64,
 }
 
-/// Everything a failed or undone chunk could have changed.
+/// Everything a failed chunk could have changed, taken before it runs.
 struct Snap {
     canvas: Option<Canvas>,
     style: Option<Rc<Style>>,
@@ -37,17 +30,12 @@ struct Snap {
     seed: u64,
     clock: f64,
     clock0: f64,
-    /// The hand's clock (hand time, sittings).
     hand: crate::time::Hand,
     /// The last world view made (depth options resolve against it).
     view: Option<crate::world::ViewU>,
     /// The Lua heap (heap.lua's snapshot).
     heap: Table,
     brushes: Vec<(Rc<RefCell<Held>>, Held)>,
-    /// The overlay as it stood (a live session's only). Only an edit goes
-    /// back to it, since it replays the chunks after the snapshot: undo and
-    /// a failed chunk leave the overlay as it is (a `try` shows through it).
-    marks: Option<crate::look::Marks>,
 }
 
 pub struct Session {
@@ -57,18 +45,9 @@ pub struct Session {
     state: *mut mlua::ffi::lua_State,
     pub st: Rc<RefCell<Studio>>,
     pub log: Vec<Chunk>,
-    /// Snapshots by the number of chunks run before them: the last
-    /// `undo_depth` (undo) and up to `keep` older ones on a grid whose
-    /// spacing doubles as the log grows (checkpoints to edit from). All in
-    /// memory: a snapshot holds the Lua heap, which can't be written out.
-    snaps: BTreeMap<usize, Snap>,
-    pub undo_depth: usize,
-    /// Checkpoints kept beyond the undo snapshots.
-    pub keep: usize,
-    spacing: usize,
-    /// A disposable replay (`easel run`, `check`): no snapshots, since a
-    /// failure ends it. A live session always snapshots before a chunk,
-    /// even at undo depth 0, so a failure can roll back.
+    /// A disposable replay (`easel run`, `check`): no snapshot, since a
+    /// failure ends it. A live session snapshots before every chunk so a
+    /// failure can roll back.
     replay: bool,
     /// heap.lua's snap and restore, prelude.lua's per-chunk reset and the
     /// private objects snapshots skip (dropped before the state is closed).
@@ -76,36 +55,17 @@ pub struct Session {
     prelude: Option<(Function, Table)>,
     /// Creation serials of the state's objects (outlives the state).
     _serials: Box<Serials>,
-    /// Time spent snapshotting and restoring the Lua heap (s), for status.
-    pub heap_secs: (f64, f64),
-}
-
-/// What `splice` did.
-#[derive(Debug)]
-pub struct Spliced {
-    /// The code of the chunks taken out.
-    pub removed: Vec<String>,
-    /// The checkpoint it replayed from (chunks run before it).
-    pub from: usize,
-    /// Chunks run.
-    pub replayed: usize,
-    pub secs: f64,
 }
 
 #[derive(Debug)]
 pub struct Ran {
     pub out: String,
+    /// Seconds the machine took to run it.
     pub secs: f64,
-    pub field_secs: f64,
 }
 
-/// The tools that grow or compute a motif or a scene for the painter (trees,
-/// firs, rocks, meadows, solids, mountains, the world with its sky, light and
-/// aerial perspective), which `EASEL_WITHOUT=procedural` removes.
-pub const PROCEDURAL: &[&str] = &["tree", "tree_in", "tree_group", "fir", "fir_wood", "rock", "sward", "form", "terrain", "ridge", "world", "aerial", "haze"];
-
 impl Session {
-    pub fn new(width: usize, undo_depth: usize) -> mlua::Result<Self> {
+    pub fn new(width: usize) -> mlua::Result<Self> {
         if !hash_seed_fixed() {
             return Err(mlua::Error::runtime(
                 "this Lua was built with a random hash seed, so `pairs` order would differ between runs and replays would not be exact; build with CFLAGS=\"-Dluai_makeseed()=0x5eedu\" (see .cargo/config.toml)",
@@ -130,62 +90,35 @@ impl Session {
         let prelude: (Function, Table) = lua.load(include_str!("prelude.lua")).set_name("prelude.lua").call((id, getmt))?;
         let st = Rc::new(RefCell::new(Studio::new(width)));
         api::install(&lua, st.clone())?;
-        // An experiment can take tools away from the painter (Round 7:
-        // painting without the procedural motif and scene generators):
-        // EASEL_WITHOUT="procedural" (the set below) or a comma list of
-        // globals. Replays are unaffected: a log painted without them never
-        // calls them.
-        if let Ok(w) = std::env::var("EASEL_WITHOUT") {
-            for k in w.split(',').map(str::trim).filter(|k| !k.is_empty()) {
-                let names: &[&str] = if k == "procedural" { PROCEDURAL } else { &[k] };
-                for &n in names {
-                    lua.globals().raw_set(n, Value::Nil)?;
-                }
-            }
-        }
-        Ok(Session { lua: ManuallyDrop::new(lua), state, st, log: Vec::new(), snaps: BTreeMap::new(), undo_depth, keep: 0, spacing: 1, replay: false, heap: Some((snap_f, restore_f)), prelude: Some(prelude), _serials: serials, heap_secs: (0.0, 0.0) })
+        Ok(Session { lua: ManuallyDrop::new(lua), state, st, log: Vec::new(), replay: false, heap: Some((snap_f, restore_f)), prelude: Some(prelude), _serials: serials })
     }
 
     /// A session that replays a program: a failed chunk ends it, so it
-    /// keeps no snapshots.
+    /// keeps no snapshot. (`easel run` and `check`: the replay build.)
+    #[cfg(any(feature = "replay", test))]
     pub fn replay(width: usize) -> mlua::Result<Self> {
-        let mut s = Self::new(width, 0)?;
+        let mut s = Self::new(width)?;
         s.replay = true;
         Ok(s)
     }
 
-    /// Hold the painting to its sittings (a new session, or a log whose
-    /// header says so: `STRICT`).
-    pub fn set_strict(&mut self, on: bool) {
-        self.st.borrow_mut().strict = on;
-    }
-
-    pub fn strict(&self) -> bool {
-        self.st.borrow().strict
-    }
-
     fn snap(&mut self) -> mlua::Result<Snap> {
-        let t0 = Instant::now();
         let (snap_f, _) = self.heap.as_ref().unwrap();
         let strings = self.lua.load("return getmetatable('')").eval::<Value>().ok();
         let skip = self.prelude.as_ref().unwrap().1.clone();
         let heap: Table = snap_f.call((skip, self.lua.globals(), strings))?;
-        self.heap_secs.0 += t0.elapsed().as_secs_f64();
         let mut s = self.st.borrow_mut();
         let brushes = s.live_brushes().into_iter().map(|b| {
             let h = b.borrow().clone();
             (b, h)
         }).collect();
-        Ok(Snap { canvas: s.canvas.clone(), style: s.style.clone(), setup: s.setup.clone(), seed: s.seed, clock: s.clock, clock0: s.clock0, hand: s.hand.clone(), view: s.view.clone(), heap, brushes, marks: crate::look::saved(&self.lua) })
+        Ok(Snap { canvas: s.canvas.clone(), style: s.style.clone(), setup: s.setup.clone(), seed: s.seed, clock: s.clock, clock0: s.clock0, hand: s.hand.clone(), view: s.view.clone(), heap, brushes })
     }
 
-    /// Put everything back as it was at `snap`, which stays usable (heap.lua
-    /// restores from its copy without changing it).
+    /// Put everything back as it was at `snap`.
     fn restore(&mut self, snap: &Snap) -> mlua::Result<()> {
-        let t0 = Instant::now();
         let (_, restore_f) = self.heap.as_ref().unwrap();
         restore_f.call::<()>(snap.heap.clone())?;
-        self.heap_secs.1 += t0.elapsed().as_secs_f64();
         for (b, h) in &snap.brushes {
             *b.borrow_mut() = h.clone();
         }
@@ -201,25 +134,9 @@ impl Session {
         Ok(())
     }
 
-    /// Keep the undo snapshots and the checkpoint grid; drop the rest.
-    fn retain(&mut self) {
-        let ring = self.log.len().saturating_sub(self.undo_depth);
-        if self.keep == 0 {
-            self.snaps.retain(|&k, _| k >= ring);
-            return;
-        }
-        loop {
-            let sp = self.spacing;
-            self.snaps.retain(|&k, _| k >= ring || k % sp == 0);
-            if self.snaps.range(..ring).count() <= self.keep {
-                break;
-            }
-            self.spacing *= 2;
-        }
-    }
-
     /// Run one chunk. On error nothing it did survives (canvas, globals,
-    /// brushes, clock) and it is not logged.
+    /// brushes, clock) and it is not logged; on success it is in the log
+    /// for good.
     pub fn run(&mut self, src: &str) -> Result<Ran, String> {
         let src = src.trim_end().to_string();
         if src.lines().any(|l| l.trim_start().starts_with(MARK)) {
@@ -228,11 +145,8 @@ impl Session {
         if src.trim().is_empty() {
             return Err("empty chunk".into());
         }
-        // a live session snapshots even at undo depth 0 (to roll back a
-        // failure); a replay needs none, since a failure ends it
         let snap = if !self.replay { Some(self.snap().map_err(|e| e.to_string())?) } else { None };
         let n = self.log.len() as u64 + 1;
-        let clock = self.st.borrow().clock;
         self.prelude.as_ref().unwrap().0.call::<()>(()).map_err(|e| e.to_string())?;
         self.st.borrow_mut().begin(n);
         let t0 = Instant::now();
@@ -243,10 +157,7 @@ impl Session {
             crate::time::flush(&self.st, true);
         }
         let secs = t0.elapsed().as_secs_f64();
-        let (out, field_secs) = {
-            let s = self.st.borrow();
-            (s.out.clone(), s.field_secs)
-        };
+        let out = self.st.borrow().out.clone();
         let fail = match r {
             Ok(Ok(())) => None,
             Ok(Err(e)) => Some(clean_error(&e.to_string())),
@@ -262,107 +173,8 @@ impl Session {
             msg.push_str(&e);
             return Err(msg);
         }
-        if let Some(snap) = snap.filter(|_| self.undo_depth > 0 || self.keep > 0) {
-            self.snaps.insert(self.log.len(), snap);
-        }
-        self.log.push(Chunk { src, clock, secs });
-        self.retain();
-        Ok(Ran { out, secs, field_secs })
-    }
-
-    /// Take back the last `n` chunks; returns their code (so the easel can
-    /// keep it). Instant within the undo snapshots; further back it replays
-    /// from the nearest checkpoint.
-    pub fn undo(&mut self, n: usize) -> Result<Vec<String>, String> {
-        if n == 0 {
-            return Ok(Vec::new());
-        }
-        let len = self.log.len();
-        if n > len {
-            return Err(format!("only {len} chunks to undo"));
-        }
-        if let Some(snap) = self.snaps.remove(&(len - n)) {
-            let r = self.restore(&snap).map_err(|e| e.to_string());
-            self.snaps.insert(len - n, snap);
-            r?;
-            let gone: Vec<String> = self.log.drain(len - n..).map(|c| c.src).collect();
-            self.snaps.retain(|&k, _| k <= len - n);
-            self.retain();
-            return Ok(gone);
-        }
-        if self.snaps.range(..len - n).next().is_none() {
-            return Err(format!("can undo at most {} chunks (snapshots kept: open with --undo N or --checkpoints N for more)", self.snaps.range(..len).count()));
-        }
-        // undo leaves the overlay alone, however far back it goes
-        let marks = crate::look::saved(&self.lua);
-        let r = self.splice(len - n + 1, n, &[]).map(|r| r.removed);
-        crate::look::restore(&self.lua, marks);
-        r
-    }
-
-    /// Replace chunks `at..at+remove` (1-based) with `insert` and replay
-    /// everything after them from the nearest checkpoint before `at`: edit
-    /// a chunk in place (`remove` 1, one chunk in), insert before it
-    /// (`remove` 0) or drop it (nothing in). If any chunk fails, the session
-    /// is left exactly as it was.
-    pub fn splice(&mut self, at: usize, remove: usize, insert: &[String]) -> Result<Spliced, String> {
-        let len = self.log.len();
-        if at == 0 || at > len + 1 {
-            return Err(format!("chunk {at}: the log has chunks 1 to {len}"));
-        }
-        if at + remove > len + 1 {
-            return Err(format!("chunks {at} to {}: the log has {len}", at + remove - 1));
-        }
-        let t0 = Instant::now();
-        // where to start from: the nearest snapshot at or before the change
-        let Some(base) = self.snaps.range(..at).next_back().map(|(k, _)| *k) else {
-            return Err("no checkpoint to replay from (open with --checkpoints N)".into());
-        };
-        // everything needed to put the session back if a chunk fails
-        let now = self.snap().map_err(|e| e.to_string())?;
-        let marks = crate::look::saved(&self.lua);
-        let old_log = std::mem::take(&mut self.log);
-        let later = self.snaps.split_off(&(base + 1));
-        let spacing = self.spacing;
-        let srcs: Vec<String> = old_log[base..at - 1]
-            .iter()
-            .map(|c| c.src.clone())
-            .chain(insert.iter().cloned())
-            .chain(old_log[at - 1 + remove..].iter().map(|c| c.src.clone()))
-            .collect();
-        self.log = old_log[..base].iter().map(|c| Chunk { src: c.src.clone(), clock: c.clock, secs: c.secs }).collect();
-        let mut fail = None;
-        let from = self.snaps.remove(&base).expect("the base checkpoint");
-        let r = self.restore(&from);
-        // the overlay the chunks before the change left, for the replayed
-        // ones to replace as they did when they ran
-        crate::look::rewind(&self.lua, from.marks.clone());
-        self.snaps.insert(base, from);
-        match r {
-            Err(e) => fail = Some(e.to_string()),
-            Ok(()) => {
-                for (i, src) in srcs.iter().enumerate() {
-                    // in a live session each replayed chunk's first show()
-                    // replaces the overlay, as when it ran
-                    crate::look::begin_replayed(&self.lua, &format!("chunk {}", base + i + 1));
-                    if let Err(e) = self.run(src) {
-                        fail = Some(format!("chunk {} failed:\n{e}", base + i + 1));
-                        break;
-                    }
-                }
-            }
-        }
-        if let Some(e) = fail {
-            self.restore(&now).map_err(|e| e.to_string())?;
-            crate::look::restore(&self.lua, marks);
-            self.log = old_log;
-            self.snaps.retain(|&k, _| k <= base);
-            self.snaps.extend(later);
-            self.spacing = spacing;
-            return Err(format!("{e}\n(nothing changed: the session is as it was before the edit)"));
-        }
-        let removed = old_log[at - 1..at - 1 + remove].iter().map(|c| c.src.clone()).collect();
-        Ok(Spliced { removed, from: base, replayed: srcs.len(), secs: t0.elapsed().as_secs_f64() })
+        self.log.push(Chunk { src });
+        Ok(Ran { out, secs })
     }
 
     pub fn canvas(&self) -> Option<std::cell::Ref<'_, Canvas>> {
@@ -373,13 +185,9 @@ impl Session {
     pub fn program(&self, name: &str) -> String {
         let mut s = String::new();
         let _ = writeln!(s, "-- easel session {name:?}: a painting replayed chunk by chunk.");
-        let _ = writeln!(s, "--   easel run paintings/lua/{name}.lua [--width 3200]");
-        let _ = writeln!(s, "-- Each {MARK:?} line starts one chunk as it was run at the easel (clock = painting minutes).");
-        if self.strict() {
-            let _ = writeln!(s, "{STRICT}");
-        }
+        let _ = writeln!(s, "-- Each {MARK:?} line starts one chunk as it was run at the easel.");
         for (i, c) in self.log.iter().enumerate() {
-            let _ = writeln!(s, "\n{MARK} {} · clock {}", i + 1, c.clock);
+            let _ = writeln!(s, "\n{MARK} {}", i + 1);
             s.push_str(&c.src);
             s.push('\n');
         }
@@ -388,34 +196,13 @@ impl Session {
 
     pub fn status(&self) -> String {
         let s = self.st.borrow();
-        let secs: f64 = self.log.iter().map(|c| c.secs).sum::<f64>() + 0.0;
-        format!(
-            "{} chunks · {}px · {} · clock {} min · {} · undo {} deep · checkpoints at {} · painted {secs:.0}s · rollback bookkeeping {:.2}s",
-            self.log.len(),
-            s.width,
-            s.setup.as_deref().unwrap_or("no canvas yet"),
-            clock_str(s.clock),
-            crate::time::summary(&s),
-            self.snaps.range(self.log.len().saturating_sub(self.undo_depth)..).count(),
-            {
-                let k: Vec<String> = self.snaps.range(..self.log.len().saturating_sub(self.undo_depth)).map(|(k, _)| k.to_string()).collect();
-                if k.is_empty() { "none".to_string() } else { k.join(",") }
-            },
-            self.heap_secs.0 + self.heap_secs.1
-        )
+        format!("{} chunks · {}px · {}", self.log.len(), s.width, s.setup.as_deref().unwrap_or("no canvas yet"))
     }
-}
-
-/// The clock for the status line: whole minutes unless it has a fraction
-/// (hand time runs in seconds).
-fn clock_str(m: f64) -> String {
-    if m.fract() == 0.0 { format!("{m}") } else { format!("{m:.1}") }
 }
 
 impl Drop for Session {
     fn drop(&mut self) {
         // everything holding references into the state goes first
-        self.snaps.clear();
         self.heap = None;
         self.prelude = None;
         let _ = self.lua.gc_collect();
@@ -588,12 +375,6 @@ fn clean_error(e: &str) -> String {
     out.join("\n")
 }
 
-/// Whether a session file holds its sittings: the `STRICT` line in its
-/// header (before the first chunk).
-pub fn program_is_strict(text: &str) -> bool {
-    text.lines().take_while(|l| !l.trim_start().starts_with(MARK)).any(|l| l.trim_end() == STRICT)
-}
-
 /// Split a session file into chunks.
 pub fn parse_program(text: &str) -> Vec<String> {
     let mut chunks: Vec<String> = Vec::new();
@@ -616,11 +397,12 @@ pub fn parse_program(text: &str) -> Vec<String> {
 }
 
 /// The checkout the easel works in (session logs in `paintings/lua`, renders
-/// in `out/`): `EASEL_ROOT` if set, else the nearest directory at or above
+/// in `out/`) in the replay build: `EASEL_ROOT` if set, else the nearest directory at or above
 /// the working directory that holds `crates/easel/Cargo.toml`, else the
 /// checkout this binary was built from. Looking from the working directory
 /// keeps git worktrees apart: a binary built in (or copied from) another
 /// checkout still writes into the worktree it's run in.
+#[cfg(feature = "replay")]
 pub fn root() -> PathBuf {
     if let Some(r) = std::env::var_os("EASEL_ROOT").filter(|r| !r.is_empty()) {
         let r = PathBuf::from(r);
@@ -636,6 +418,15 @@ pub fn root() -> PathBuf {
     r.canonicalize().unwrap_or(r)
 }
 
+/// The studio the painter build works in: the parent of the directory
+/// holding the executable (the studio ships it as `<studio>/bin/easel`),
+/// wherever it is run from. Nothing in the environment moves it.
+#[cfg(not(feature = "replay"))]
+pub fn root() -> PathBuf {
+    let exe = std::env::current_exe().and_then(|e| e.canonicalize()).unwrap_or_else(|e| panic!("easel: cannot locate its own executable: {e}"));
+    exe.parent().and_then(Path::parent).unwrap_or_else(|| panic!("easel: {} is not inside <studio>/bin", exe.display())).to_path_buf()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -646,138 +437,53 @@ mod tests {
         s.canvas().unwrap().seen().iter().flat_map(|p| p.map(f32::to_bits)).collect()
     }
 
-    const CHUNKS: [&str; 4] = [
-        r##"canvas{style="friedrich", aspect=1.5, seed=2}"##,
-        r##"sky = above(function(x) return 300 + 20*math.sin(x/80) end)
-           work(sky, {hand="broad", color=function(x, y) return mix("#6f84a8", "#e0d4b0", y/300) end, angle=0, coverage=2})"##,
-        r##"b = brush("round", 4); b:load("#303830", 0.9)
-           for i = 1, 5 do b:stroke({{100 + i*60, 500}, {130 + i*60 + rand(-10, 10), 420}}) end"##,
-        r##"wait(90); stipple(below(function(x) return 380 end), {width=3, color="#c8c6bc", coverage=1.5})"##,
-    ];
+    pub(crate) const CANVAS: &str = r#"canvas{size=440, aspect=1.5, linen=15, seed=2, ground={{pile={{"lead white", 3}, {"red earth", 1}}, um=110, apply="knife"}, {pile={{"lead white", 5}, {"yellow ochre", 1}}, um=60, apply="brush"}}}"#;
 
-    /// A strict session's log says so in its header, and only then.
-    #[test]
-    fn the_log_header_carries_strictness() {
-        for on in [false, true] {
-            let mut a = Session::new(W, 0).unwrap();
-            a.set_strict(on);
-            a.run(CHUNKS[0]).unwrap();
-            let prog = a.program("t");
-            assert_eq!(program_is_strict(&prog), on, "{prog}");
-            assert_eq!(parse_program(&prog), vec![CHUNKS[0].to_string()]);
-        }
-        // (a chunk quoting the line isn't the header)
-        assert!(!program_is_strict(&format!("--@ chunk 1\n{STRICT}\n")));
-    }
+    const CHUNKS: [&str; 4] = [
+        CANVAS,
+        r#"p = pile{{"lead white", 6}, {"cobalt blue", 1}, {"yellow ochre", 0.5}, medium=0.3}
+           work(ellipse(500, 300, 300, 150), {hand="broad", pile=p, angle=0, coverage=2})"#,
+        r#"b = brush("round", 4); b:load(pile{{"bone black", 1}, {"raw umber", 2}}, 0.9)
+           for i = 1, 5 do b:stroke({{100 + i*60, 500}, {130 + i*60 + rand(-10, 10), 420}}) end"#,
+        r#"wait(90); stipple(rect(100, 380, 800, 200), {width=3, pile=pile{{"lead white", 1}}, coverage=1.5})"#,
+    ];
 
     #[test]
     fn replay_is_exact_and_failures_roll_back() {
-        let mut a = Session::new(W, 4).unwrap();
+        let mut a = Session::new(W).unwrap();
         for (i, c) in CHUNKS.iter().enumerate() {
             a.run(c).unwrap();
             if i == 1 {
                 // a failing chunk that painted and set globals first changes nothing
                 let before = bits(&a);
-                let e = a.run(r##"junk = 1; b0 = brush("flat", 6); b0:load("#ff0000"); b0:stroke({0, 0, 900, 600}); work(everywhere(), {colour="#fff"})"##).unwrap_err();
+                let e = a.run(r#"junk = 1; b0 = brush("flat", 6); b0:load(p); b0:stroke({0, 0, 900, 600}); work(everywhere(), {pile=p, colour="red"})"#).unwrap_err();
                 assert!(e.contains("unknown option \"colour\""), "{e}");
                 assert_eq!(before, bits(&a));
                 assert!(a.run("assert(junk == nil and b0 == nil)").is_ok());
-                a.undo(1).unwrap();
             }
         }
-        assert_eq!(a.log.len(), CHUNKS.len());
-        assert_eq!(a.st.borrow().clock, 90.0, "painting minutes since canvas{{}}");
+        assert_eq!(a.log.len(), CHUNKS.len() + 1);
         // the log replays to the same canvas, bit for bit
         let prog = a.program("t");
         let chunks = parse_program(&prog);
-        assert_eq!(chunks, CHUNKS.iter().map(|c| c.trim_end().to_string()).collect::<Vec<_>>());
+        assert_eq!(chunks.len(), CHUNKS.len() + 1);
         let mut b = Session::replay(W).unwrap();
         for c in &chunks {
             b.run(c).unwrap();
         }
         assert_eq!(bits(&a), bits(&b));
-    }
-
-    fn replayed(chunks: &[&str]) -> Vec<u32> {
-        replayed_clock(chunks).0
-    }
-    fn replayed_clock(chunks: &[&str]) -> (Vec<u32>, f64) {
-        let mut r = Session::replay(W).unwrap();
-        for c in chunks {
-            r.run(c).unwrap();
-        }
-        let clock = r.st.borrow().clock;
-        (bits(&r), clock)
-    }
-
-    const MORE: [&str; 4] = [
-        r##"n = (n or 0) + 1; b:load("#8a4030", 0.8); b:stroke({{200, 200}, {600, 260}})"##,
-        r##"n = n + 1; stipple(ellipse(500, 300, 200, 80), {width=3, color="#e0d8c0", coverage=1.2})"##,
-        r##"n = n + 1; wait(30); b:stroke({{100, 100}, {rand(700, 900), 500}})"##,
-        r##"assert(n == 3, n); glaze(ellipse(300, 400, 150, 100), {color="#402a20", coats=0.3})"##,
-    ];
-
-    #[test]
-    fn edit_a_chunk_in_place_from_a_checkpoint() {
-        let mut s = Session::new(W, 2).unwrap();
-        s.keep = 2;
-        let all: Vec<&str> = CHUNKS.iter().chain(MORE.iter()).copied().collect();
-        for c in &all {
-            s.run(c).unwrap();
-        }
-        assert_eq!(s.log.len(), 8);
-        // undo ring: 6, 7; checkpoints on a grid below it
-        let cp: Vec<usize> = s.snaps.keys().copied().collect();
-        assert!(cp.contains(&6) && cp.contains(&7) && cp.len() <= 4, "{cp:?}");
-        // replace chunk 5 (a stroke): the log and the canvas are as if it
-        // had been painted that way
-        let new5 = r##"n = (n or 0) + 1; b:load("#304a70", 0.8); b:stroke({{200, 300}, {600, 360}})"##;
-        let r = s.splice(5, 1, &[new5.to_string()]).unwrap();
-        assert_eq!(r.removed, vec![MORE[0].to_string()]);
-        assert!(r.from <= 4 && r.replayed == 8 - r.from, "{r:?}");
-        let mut want = all.clone();
-        want[4] = new5;
-        assert_eq!(bits(&s), replayed(&want));
-        assert_eq!(s.log.iter().map(|c| c.src.as_str()).collect::<Vec<_>>(), want);
-        assert_eq!(s.st.borrow().clock, replayed_clock(&want).1);
-        // an edit that fails changes nothing, and undo still works after it
-        let before = bits(&s);
-        let e = s.splice(6, 1, &["n = n + 1; error('no')".to_string()]).unwrap_err();
-        assert!(e.contains("no") && e.contains("nothing changed"), "{e}");
-        let e = s.splice(5, 1, &["n = 7".to_string()]).unwrap_err();
-        assert!(e.contains("chunk 8 failed"), "a later chunk's assert: {e}");
-        assert_eq!(before, bits(&s));
-        assert_eq!(s.log.iter().map(|c| c.src.as_str()).collect::<Vec<_>>(), want);
-        s.run("assert(n == 3)").unwrap();
-        s.undo(1).unwrap();
-        assert_eq!(before, bits(&s));
-        // insert before chunk 8 and drop it again
-        s.splice(8, 0, &["n = n - 1; n = n + 1".to_string()]).unwrap();
-        assert_eq!(s.log.len(), 9);
-        let gone = s.splice(8, 1, &[]).unwrap().removed;
-        assert_eq!(gone, vec!["n = n - 1; n = n + 1".to_string()]);
-        assert_eq!(s.log.len(), 8);
-        assert_eq!(before, bits(&s), "same chunks, same numbers: the same canvas");
-        // undo past the undo ring replays from a checkpoint
-        let gone = s.undo(5).unwrap();
-        assert_eq!(gone.len(), 5);
-        assert_eq!(bits(&s), replayed(&want[..3]));
-        s.run("assert(n == nil and b ~= nil)").unwrap();
+        assert_eq!(a.st.borrow().clock, b.st.borrow().clock);
     }
 
     #[test]
     fn rollback_restores_tables_and_upvalues_exactly() {
-        let mut s = Session::new(W, 4).unwrap();
+        let mut s = Session::new(W).unwrap();
         s.run(CHUNKS[0]).unwrap();
-        s.run(r##"trees = {1, 2, {x = 3}}; local n = 0; function bump() n = n + 1; return n end; setmetatable(trees, {tag = "a"})"##).unwrap();
+        s.run(r##"things = {1, 2, {x = 3}}; local n = 0; function bump() n = n + 1; return n end; setmetatable(things, {tag = "a"})"##).unwrap();
         // a failing chunk that edits old tables, an upvalue and a metatable
-        let e = s.run(r##"trees[1] = 99; trees[3].x = nil; trees[4] = {}; bump(); getmetatable(trees).tag = "b"; string.custom = 1; error("stop")"##).unwrap_err();
+        let e = s.run(r##"things[1] = 99; things[3].x = nil; things[4] = {}; bump(); getmetatable(things).tag = "b"; string.custom = 1; error("stop")"##).unwrap_err();
         assert!(e.contains("stop"), "{e}");
-        s.run(r##"assert(trees[1] == 1 and trees[3].x == 3 and trees[4] == nil); assert(bump() == 1); assert(getmetatable(trees).tag == "a"); assert(string.custom == nil)"##).unwrap();
-        // undo takes the same care
-        s.run(r##"trees[2] = "changed"; bump()"##).unwrap();
-        s.undo(1).unwrap();
-        s.run(r##"assert(trees[2] == 2); assert(bump() == 2)"##).unwrap();
+        s.run(r##"assert(things[1] == 1 and things[3].x == 3 and things[4] == nil); assert(bump() == 1); assert(getmetatable(things).tag == "a"); assert(string.custom == nil)"##).unwrap();
         // and the live session still replays exactly
         let mut b = Session::replay(W).unwrap();
         for c in &s.log {
@@ -786,50 +492,27 @@ mod tests {
         assert_eq!(bits(&s), bits(&b));
     }
 
+    /// A failed chunk takes back what it did to a brush and the clock too.
     #[test]
-    fn undo_restores_canvas_and_brush() {
-        let mut s = Session::new(W, 4).unwrap();
+    fn a_failed_chunk_leaves_brush_and_clock_alone() {
+        let mut s = Session::new(W).unwrap();
         s.run(CHUNKS[0]).unwrap();
-        s.run(r##"b = brush("round", 4); b:load("#303830", 0.9)"##).unwrap();
-        // every verb is where the guide says (no module shadows another)
-        s.run(r##"for _, v in ipairs{"relief", "varnish", "cracks", "terrain", "ridge", "form", "wait", "dry", "drying", "work", "stipple", "glaze", "blend", "tree"} do assert(type(_G[v]) == "function", v) end"##).unwrap();
-        s.run(r##"assert(wait(30) == 30 and clock() == 30)"##).unwrap();
-        s.undo(2).unwrap();
+        s.run(r#"b = brush("round", 4); b:load(pile{{"bone black", 1}}, 0.9); full0 = b:fullness()"#).unwrap();
+        let clock = s.st.borrow().clock;
         let before = bits(&s);
-        s.run("full0 = b:fullness(); b:stroke({100, 300, 400, 320}); assert(b:fullness() < full0)").unwrap();
-        assert_ne!(before, bits(&s));
-        s.undo(1).unwrap();
-        assert_eq!(before, bits(&s));
-        s.run("assert(full0 == nil); print(b:fullness())").unwrap();
-        let full: f32 = s.st.borrow().out.trim().parse().unwrap();
-        assert!(full > 0.5, "the brush got its paint back: {full}");
-        assert!(s.undo(5).is_err());
-    }
-
-    // review 3, finding 1: `--undo 0` kept no pre-chunk snapshot, so a
-    // failed chunk's paint and globals survived
-    #[test]
-    fn live_session_without_undo_still_rolls_back() {
-        let mut s = Session::new(W, 0).unwrap();
-        s.run("canvas{aspect=1.5, seed=2}; a = 1; t = {n = 1}").unwrap();
-        let before = bits(&s);
-        let e = s.run(r##"a = 2; t.n = 2; b = brush("round", 4); wait(30); glaze(everywhere(), {color="#ff0000", coats=0.5}); error("stop")"##).unwrap_err();
+        let e = s.run("b:stroke({100, 300, 400, 320}); wait(600); error('stop')").unwrap_err();
         assert!(e.contains("stop"), "{e}");
-        assert_eq!(before, bits(&s), "the failed glaze is gone");
-        s.run("assert(a == 1 and t.n == 1 and b == nil and clock() == 0)").unwrap();
-        assert!(s.undo(1).is_err(), "no undo history at depth 0");
-        let mut r = Session::replay(W).unwrap();
-        for c in &s.log {
-            r.run(&c.src).unwrap();
-        }
-        assert_eq!(bits(&s), bits(&r));
+        assert_eq!(before, bits(&s));
+        assert_eq!(clock, s.st.borrow().clock);
+        s.run("assert(b:fullness() == full0)").unwrap();
     }
 
     /// The order `pairs` and `next` walk a table keyed by tables, closures
     /// and userdata in, as printed by a fresh session.
     fn object_key_order() -> String {
-        let mut s = Session::new(W, 2).unwrap();
-        s.run("canvas{aspect=1, seed=7}; items = {}; for i = 1, 64 do items[{index = i}] = i end").unwrap();
+        let mut s = Session::new(W).unwrap();
+        s.run(&CANVAS.replace("aspect=1.5", "aspect=1")).unwrap();
+        s.run("items = {}; for i = 1, 64 do items[{index = i}] = i end").unwrap();
         // garbage and failed chunks in between must not matter
         let _ = s.run("for i = 1, 500 do local _ = {i} end; items[{index = 0}] = 0; error('x')");
         s.run(r#"fs = {}; for i = 1, 16 do fs[function() return i end] = i end
@@ -848,12 +531,12 @@ mod tests {
         out
     }
 
-    // review 3, finding 2: tables keyed by objects walked in address order
+    // tables keyed by objects walk in creation order, not address order
     #[test]
     fn object_keys_walk_in_creation_order() {
         let a = object_key_order();
         // a different heap layout in the same process
-        let _pad: Vec<Session> = (0..3).map(|_| Session::new(W, 0).unwrap()).collect();
+        let _pad: Vec<Session> = (0..3).map(|_| Session::new(W).unwrap()).collect();
         let b = object_key_order();
         assert_eq!(a, b);
         let first: String = (1..=64).map(|i| format!("{i},")).collect();
@@ -884,19 +567,19 @@ mod tests {
         s.run("local p = setmetatable({}, {__pairs = function(t) return function(_, k) if not k then return 1, 'one' end end, t, nil end}); for k, v in pairs(p) do assert(k == 1 and v == 'one') end").unwrap();
     }
 
-    // review 3, finding 3: a gmatch iterator kept across chunks advanced
-    // during a failed chunk
+    // a gmatch iterator kept across chunks does not advance during a
+    // failed chunk
     #[test]
     fn gmatch_iterators_roll_back() {
-        let mut s = Session::new(W, 4).unwrap();
-        s.run("canvas{aspect=1, seed=7}").unwrap();
+        let mut s = Session::new(W).unwrap();
+        s.run(CANVAS).unwrap();
         s.run(r#"it = string.gmatch("red green blue", "%a+")"#).unwrap();
         let e = s.run(r#"assert(it() == "red"); error("stop")"#).unwrap_err();
         assert!(e.contains("stop"), "{e}");
         s.run(r#"assert(it() == "red")"#).unwrap();
         s.run(r#"assert(it() == "green")"#).unwrap();
-        s.undo(1).unwrap();
-        s.run(r#"w = it(); assert(w == "green", w)"#).unwrap();
+        let _ = s.run("it(); error('stop')").unwrap_err();
+        s.run(r#"w = it(); assert(w == "blue", w)"#).unwrap();
         // a method-call iterator and a word-pair iterator too
         s.run(r#"it2 = ("a=1, b=2"):gmatch("(%w+)=(%w+)")"#).unwrap();
         let _ = s.run("it2(); error('stop')").unwrap_err();
@@ -940,11 +623,11 @@ mod tests {
         assert!(e.contains("malformed pattern"), "{e}");
     }
 
-    // review 3, finding 4: a view's form counted proxies as visible parts
+    // a view's form counts visible bodies only, not proxies
     #[test]
     fn view_form_counts_visible_parts_only() {
         let mut s = Session::replay(W).unwrap();
-        s.run("canvas{aspect=1.5, seed=2}").unwrap();
+        s.run(CANVAS).unwrap();
         s.run(r#"local w = world{horizon=300}
                   local s = w:spot_at(0, 10)
                   w = w:proxy(s, body.ellipsoid(s:p(0, 1, 0), s:size(1, 1, 1)))

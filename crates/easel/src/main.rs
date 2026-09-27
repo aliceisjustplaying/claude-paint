@@ -351,24 +351,34 @@ fn open(args: &[String]) -> Result<(), String> {
         .process_group(0)
         .spawn()
         .map_err(|e| format!("could not start the session: {e}"))?;
-    let t0 = Instant::now();
+    // Replaying a real painting can take tens of minutes. Follow the server's
+    // startup log so `open` shows that work instead of looking dead, and only
+    // time out when the replay itself has made no progress for 30 minutes.
+    let mut shown = 0usize;
+    let mut last_progress = Instant::now();
     loop {
         std::thread::sleep(Duration::from_millis(100));
-        if let Ok((true, st)) = request(&name, "status", &[], &[]) {
-            let resumed = std::fs::read_to_string(dir.join("server.log")).unwrap_or_default();
-            for l in resumed.lines().filter(|l| l.starts_with("resumed") || l.starts_with("warning")) {
-                println!("{l}");
+        let log = std::fs::read_to_string(dir.join("server.log")).unwrap_or_default();
+        if let Some(end) = log[shown..].rfind('\n').map(|i| shown + i + 1) {
+            for line in log[shown..end].lines() {
+                if line.starts_with("resuming ") || line.starts_with("resumed ") || line.starts_with("warning") {
+                    println!("{line}");
+                }
             }
+            std::io::stdout().flush().map_err(|e| e.to_string())?;
+            shown = end;
+            last_progress = Instant::now();
+        }
+        if let Ok((true, st)) = request(&name, "status", &[], &[]) {
             set_current(&name)?;
             print!("easel {name:?} open: {st}");
             return Ok(());
         }
-        let log = std::fs::read_to_string(dir.join("server.log")).unwrap_or_default();
         if log.contains("easel: fatal") {
             return Err(log);
         }
-        if t0.elapsed() > Duration::from_secs(1800) {
-            return Err(format!("session did not come up; see {}", dir.join("server.log").display()));
+        if last_progress.elapsed() > Duration::from_secs(1800) {
+            return Err(format!("session made no replay progress for 30 minutes; see {}", dir.join("server.log").display()));
         }
     }
 }
@@ -476,8 +486,12 @@ impl Server {
             let text = std::fs::read_to_string(&lp).map_err(|e| format!("session integrity: {e}"))?;
             srv.written = Some(text.clone());
             srv.validate()?;
-            for (i, chunk) in parse_program(&text).iter().enumerate() {
+            let chunks = parse_program(&text);
+            for (i, chunk) in chunks.iter().enumerate() {
+                let t0 = Instant::now();
+                eprintln!("resuming chunk {}/{}", i + 1, chunks.len());
                 srv.s.run(chunk).map_err(|e| format!("session integrity: replay failed at chunk {}: {e}; refusing partial session", i + 1))?;
+                eprintln!("resumed chunk {}/{} {:.2}s", i + 1, chunks.len(), t0.elapsed().as_secs_f64());
             }
             if srv.s.program(&srv.name) != text {
                 return Err("session integrity: noncanonical or incomplete log; refusing replay".into());

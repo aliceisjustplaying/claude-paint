@@ -14,12 +14,24 @@
  *    the images of older tool results are replaced by a line naming the file, keeping the
  *    newest 20 and at most 12 MB of base64. Pi runs `context` handlers on a copy of the
  *    messages, so the session file keeps every image.
+ * 4. TMPDIR (and TMP, TEMP) is the studio's own scratch folder, ~/tmp/painter-<studio>, the
+ *    same in every sitting. A painter's `export TMPDIR=...` lasts one bash call; the rest ran
+ *    with the persistent-temp default, the shared ~/tmp root, where painters' chunk files
+ *    (c2.lua, ...) collide: in round 17 F1's `$TMPDIR/c2.lua` ran round 16 B2's pencil
+ *    drawing. persistent-temp (loaded after this) keeps a TMPDIR already under ~/tmp.
  */
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { createBashToolDefinition, createReadToolDefinition } from "@earendil-works/pi-coding-agent";
+import { mkdirSync } from "node:fs";
+import { homedir } from "node:os";
+import { basename, join } from "node:path";
 import { pruneImages } from "./context-images.ts";
 
 export default function painter(pi: ExtensionAPI) {
+	const scratch = join(homedir(), "tmp", `painter-${basename(process.cwd())}`);
+	mkdirSync(scratch, { recursive: true });
+	Object.assign(process.env, { TMPDIR: scratch, TMP: scratch, TEMP: scratch });
+
 	pi.on("before_agent_start", (event) => {
 		const options = event.systemPromptOptions;
 		// system_prompt.md may open with an HTML comment for us (e.g. its DRAFT marker): not for the painter.

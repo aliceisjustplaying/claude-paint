@@ -107,7 +107,7 @@ const imgURL = i => `/img?s=${encodeURIComponent(S)}&i=${i}`;
 let allSessions = [];
 function renderSessions() {
   const all = $('all').checked, ss = allSessions.filter(s => all || s.painter || s.path === S);
-  $('sess').innerHTML = ss.map(s => `<option value="${s.path}">${esc(s.folder.replace(/^claude-paint-/, ''))}${s.model ? ' · ' + esc(s.model) : ''} · ${new Date(s.mtime*1000).toLocaleString([], {month:'short', day:'numeric', hour:'2-digit', minute:'2-digit'})}</option>`).join('');
+  $('sess').innerHTML = ss.map(s => `<option value="${s.path}">${esc(s.folder.replace(/^claude-paint-/, ''))}${s.model ? ' · ' + esc(s.model) : ''}${s.sitting ? ' · sitting ' + s.sitting : ''} · ${new Date(s.mtime*1000).toLocaleString([], {month:'short', day:'numeric', hour:'2-digit', minute:'2-digit'})}</option>`).join('');
   if (S) $('sess').value = S;
 }
 async function loadSessions() {

@@ -27,11 +27,41 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 _cache = {}  # path -> {"size", "offset", "events", "images"}
 
 
+_models = {}  # path -> the painter's model (it doesn't change within a session)
+
+
+def session_model(path):
+    """The model a session ran on: its first model_change entry (or the first
+    assistant message's model), read from the top of the log once."""
+    if path not in _models:
+        m = ""
+        try:
+            with open(path, "rb") as fh:
+                for _, line in zip(range(200), fh):
+                    try:
+                        d = json.loads(line)
+                    except ValueError:
+                        continue
+                    if d.get("type") == "model_change" and d.get("modelId"):
+                        m = d["modelId"]
+                        break
+                    msg = d.get("message") or {}
+                    if msg.get("role") == "assistant" and msg.get("model"):
+                        m = msg["model"]
+                        break
+        except OSError:
+            pass
+        if not m:
+            return ""  # not written yet: ask again next time
+        _models[path] = m.split("/")[-1]
+    return _models[path]
+
+
 def list_sessions():
     out = []
     for f in glob.glob(os.path.join(SESSIONS, "*paint*", "*.jsonl")):
         d = os.path.basename(os.path.dirname(f))
-        out.append({"path": f, "folder": d.strip("-").split("-src-a-")[-1],
+        out.append({"path": f, "folder": d.strip("-").split("-src-a-")[-1], "model": session_model(f),
                     "mtime": os.path.getmtime(f), "size": os.path.getsize(f)})
     out.sort(key=lambda s: -s["mtime"])
     return out

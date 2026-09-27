@@ -53,8 +53,8 @@ function sameSettings(s: unknown): boolean {
 	return t?.enabled === COMPACTION.enabled && t?.reserveTokens === COMPACTION.reserveTokens && t?.keepRecentTokens === COMPACTION.keepRecentTokens;
 }
 
-const HEADER =
-	"Earlier parts of this conversation were condensed. Look at the canvas to see where the painting stands.";
+/** A statement, not an instruction: the sections after it say what they hold. */
+const HEADER = "Earlier parts of this session were condensed.";
 
 const MAX_BRIEF_CHARS = 60_000;
 const MAX_JOURNAL_CHARS = 120_000;

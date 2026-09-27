@@ -74,3 +74,16 @@ test("the same messages give the same request", () => {
 	const b = pruneImages(session(40), L);
 	assert.equal(JSON.stringify(a.messages), JSON.stringify(b.messages));
 });
+
+test("the limits come from PAINTER_MAX_IMAGES and PAINTER_MAX_IMAGE_MB, else the defaults", async () => {
+	const { limitsFromEnv, LIMITS } = await import("../context-images.ts");
+	assert.deepEqual(limitsFromEnv({}), LIMITS);
+	assert.deepEqual(limitsFromEnv({ PAINTER_MAX_IMAGES: "8" }), { ...LIMITS, maxImages: 8 });
+	assert.deepEqual(limitsFromEnv({ PAINTER_MAX_IMAGE_MB: "4" }), { ...LIMITS, maxImageChars: 4_000_000 });
+	assert.throws(() => limitsFromEnv({ PAINTER_MAX_IMAGES: "0" }));
+	assert.throws(() => limitsFromEnv({ PAINTER_MAX_IMAGES: "lots" }));
+	// 13 looks with 8 kept at most: 5 dropped, then 10 once there are 14
+	const L8 = limitsFromEnv({ PAINTER_MAX_IMAGES: "8" });
+	assert.equal(imagesToDrop(Array(13).fill(1000), L8), 5);
+	assert.equal(imagesToDrop(Array(14).fill(1000), L8), 10);
+});

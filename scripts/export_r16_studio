@@ -13,9 +13,10 @@
 # dest gets:
 #   bin/easel                  the painter's easel (built without the `replay`
 #                              feature: no `run`, no `check`, one session, no EASEL_ROOT)
+#   bin/THIRD_PARTY_NOTICES.md the license notices the binary requires, shipped
+#                              next to it (not at the studio root, where painters browse)
 #   notes/easel_guide.md, notes/research/..., notes/journal.md (empty)
 #   paintings/lua/             (empty; the session log goes here)
-#   THIRD_PARTY_NOTICES.md     the license notices the binary requires
 #
 # The binary is built from a `git archive` of the branch (R16_BRANCH,
 # default r16-base) in <repo>/target/studio-build/<commit>, so it is built
@@ -66,15 +67,17 @@ notes=(notes/easel_guide.md notes/research/oil_paint_physics.md)
 if [ "$profile" = friedrich ]; then
   notes+=(notes/research/friedrich_materials.md)
 fi
-git -C "$repo" archive --format=tar "$branch" -- THIRD_PARTY_NOTICES.md "${notes[@]}" | tar -x -C "$dest"
+git -C "$repo" archive --format=tar "$branch" -- "${notes[@]}" | tar -x -C "$dest"
+git -C "$repo" archive --format=tar "$branch" -- THIRD_PARTY_NOTICES.md | tar -x -C "$dest/bin"
+[ -s "$dest/bin/THIRD_PARTY_NOTICES.md" ] || { echo "no bin/THIRD_PARTY_NOTICES.md in $dest" >&2; exit 1; }
 : > "$dest/notes/journal.md"
 
 # nothing but those
-extra=$(cd "$dest" && find . -type f ! -path ./bin/easel ! -path ./THIRD_PARTY_NOTICES.md ! -path './notes/*' | sort)
+extra=$(cd "$dest" && find . -type f ! -path ./bin/easel ! -path ./bin/THIRD_PARTY_NOTICES.md ! -path './notes/*' | sort)
 [ -z "$extra" ] || { echo "unexpected files in $dest:" >&2; echo "$extra" >&2; exit 1; }
 
 # names of painters: none anywhere a painter can read in the blank studio
-# (legal notices aside); in the friedrich studio only Friedrich's
+# (bin/THIRD_PARTY_NOTICES.md, the legal notices, aside); in the friedrich studio only Friedrich's
 artists='Friedrich|Turner|C[eé]zanne|Rembrandt|Vermeer|Renoir|Van Gogh|Eckersberg|Carus|Kersting|Constable|Monet|Manet|Bruegel|Brueghel|Hockney|Ruisdael|Hobbema|Cuyp|Lorrain|Poussin|Corot|Titian|Tiziano|Rubens|Vel[aá]zquez|Goya|Leonardo|Michelangelo|Raphael|Ingres|Delacroix|Boucher|Troyon|Oudry|Desportes|Dahl|Blechen|Runge|Oehme|Kobell|Gainsborough|Whistler|Sargent|Degas|Hopper|Munch|Picasso|Matisse|Kandinsky|Bob Ross'
 case "$profile" in
   blank) pattern=$artists ;;
@@ -122,4 +125,5 @@ fi
 
 echo "exported the $profile studio from $branch ($sha) to $dest"
 echo "  easel: $dest/bin/easel (checked in $probe)"
+echo "  notices: $dest/bin/THIRD_PARTY_NOTICES.md"
 echo "  notes: $(cd "$dest/notes" && find . -type f | sed 's|^\./||' | sort | tr '\n' ' ')"

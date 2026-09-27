@@ -494,12 +494,15 @@ impl Server {
             srv.written = Some(text.clone());
             srv.validate()?;
             let chunks = parse_program(&text);
+            // a failed chunk refuses the whole reopen: no snapshots, no time limit (session.rs)
+            srv.s.set_replaying(true);
             for (i, chunk) in chunks.iter().enumerate() {
                 let t0 = Instant::now();
                 eprintln!("resuming chunk {}/{}", i + 1, chunks.len());
                 srv.s.run(chunk).map_err(|e| format!("session integrity: replay failed at chunk {}: {e}; refusing partial session", i + 1))?;
                 eprintln!("resumed chunk {}/{} {:.2}s", i + 1, chunks.len(), t0.elapsed().as_secs_f64());
             }
+            srv.s.set_replaying(false);
             if srv.s.program(&srv.name) != text {
                 return Err("session integrity: noncanonical or incomplete log; refusing replay".into());
             }

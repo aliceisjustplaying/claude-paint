@@ -1,0 +1,62 @@
+#!/usr/bin/env bash
+# Finish a painter's painting after the session: replay its log, let it dry
+# right through, then varnish it and crack it. Painters don't finish their
+# own pictures (the painter build has no varnish{}, cracks{} or relief()),
+# so that varnishing can't become their way of ending.
+#
+#   scripts/finish_painting <studio>/paintings/lua/painting.lua <out.png> [options]
+#
+# options:
+#   --coats C     varnish coats (default 0.4, the easel's default)
+#   --no-varnish  skip the varnish
+#   --no-cracks   skip the cracks
+#   --relief      also light the surface's relief (the easel's default strength)
+#
+# Writes <out.png> (2400 px, like `easel save`) and, beside it, <out>.lua:
+# the painter's log with the finishing chunk appended, which `easel run`
+# replays to the same picture. Uses the replay build (default features:
+# `replay` and `finish`), built from this checkout.
+set -euo pipefail
+
+usage() { sed -n '7,14p' "$0" | sed 's/^# \{0,1\}//' >&2; exit 2; }
+[ $# -ge 2 ] || usage
+log=$1; out=$2; shift 2
+coats=0.4; varnish=1; cracks=1; relief=0
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --coats) [ $# -ge 2 ] || usage; coats=$2; shift 2 ;;
+    --no-varnish) varnish=0; shift ;;
+    --no-cracks) cracks=0; shift ;;
+    --relief) relief=1; shift ;;
+    *) usage ;;
+  esac
+done
+[[ $coats =~ ^([0-9]+\.?[0-9]*|\.[0-9]+)$ ]] || { echo "--coats takes a number, not '$coats'" >&2; exit 2; }
+[ -f "$log" ] || { echo "no log at $log" >&2; exit 1; }
+[ $((varnish + cracks + relief)) -gt 0 ] || { echo "nothing to do" >&2; exit 1; }
+
+repo=$(cd "$(dirname "$0")/.." && pwd)
+(cd "$repo" && cargo build --release -q -p easel)
+easel=$repo/target/release/easel
+
+# Wait a month at a time until every film is touch-dry (the finishing verbs
+# refuse wet paint), for at most ten years, then finish.
+finishing="-- finishing, applied after the session by scripts/finish_painting
+local function when_dry(f)
+  for _ = 1, 120 do
+    local ok, e = pcall(f)
+    if ok then return end
+    if not tostring(e):find('not all dry', 1, true) then error(e, 0) end
+    wait(30 * 24 * 60)
+  end
+  error('still not dry after ten years', 0)
+end"
+[ $varnish = 1 ] && finishing+=$'\n'"when_dry(function() varnish{coats=$coats} end)"
+[ $cracks = 1 ] && finishing+=$'\n'"when_dry(function() cracks{} end)"
+[ $relief = 1 ] && finishing+=$'\n'"when_dry(function() relief() end)"
+
+mkdir -p "$(dirname "$out")"
+finished=${out%.png}.lua
+{ cat "$log"; printf '\n--@ chunk (finishing)\n%s\n' "$finishing"; } > "$finished"
+"$easel" run "$finished" --out "$out"
+echo "finished: $out (log: $finished)"

@@ -1,29 +1,23 @@
 //! Stippling: covering an area with many small touches of a brush tip.
 //!
-//! Friedrich stippled his skies, mist and distant hills, which "enhance[s]
-//! the transparency and light scattering" [NG p.56]; his smooth gradations
-//! come from stippling and from thin paint pooling in the ground texture,
-//! not from thick blending [CATS p.127] (notes/research/friedrich_materials.md).
-//!
-//! A painter stippling holds a small soft round upright and touches the
-//! canvas again and again with its tip, in a thin, lean paint, moving
-//! around a passage and going back to the palette every so often. Tone is
-//! built by how densely the touches fall and by their color; the marks have
-//! no direction, so the brushwork disappears into a fine, even grain.
-//! Passes are layered: a coarser, darker pass, then a finer, lighter one.
+//! A stipple pass is many separate touches of a tip held upright: each
+//! touch presses the tip into the canvas and lifts it, with no path between
+//! touches. Touches fall on a jittered grid thinned by `coverage` (the mean
+//! number of touches per point), optionally in clumps, and the tip is
+//! reloaded from the palette every `dip_every` touches. The tone of the
+//! passage is set by how densely the touches fall and by the paint's color,
+//! hiding and thickness.
 //!
 //! Every touch is a `Touch` of a simulated `Held` brush (see `bristle`): it
-//! deposits and lifts wet paint, so stippling into a wet lay-in fuses softly,
-//! and it dries with the rest of the wet layer (Kubelka–Munk).
+//! deposits and lifts wet paint, so touches into a wet layer pick some of it
+//! up and mix with it, and it dries with the rest of the wet layer
+//! (Kubelka–Munk).
 //!
 //! ```ignore
-//! // a thin sky already laid in; stipple it twice, coarse then fine
-//! let coarse = Stipple::new(Tool::stippler(3.0)).mixed(&pal, 0.5)
-//!     .color(|x, y| sky(x, y)).coverage(|_, y| 1.2 - y / 800.0).pressure(0.4, 0.8);
-//! c.stipple(&sky_mask, &coarse, 1);
-//! let fine = Stipple::new(Tool::stippler(1.6)).mixed(&pal, 0.55)
-//!     .color(|x, y| lighter(sky(x, y))).coverage(|_, _| 1.0);
-//! c.stipple(&sky_mask, &fine, 2);
+//! // a region `m`, coverage falling from 1.2 at y = 0 to 0.2 at y = 800
+//! let sp = Stipple::new(Tool::stippler(3.0)).piled(&pal, pile, 0.5)
+//!     .coverage(|_, y| 1.2 - y / 800.0).pressure(0.4, 0.8);
+//! c.stipple(&m, &sp, 1);
 //! c.dry();
 //! ```
 
@@ -38,7 +32,7 @@ use rayon::prelude::*;
 
 type Field<'a, T> = Box<dyn Fn(f32, f32) -> T + Sync + 'a>;
 
-/// How a painter stipples a region (see the module docs).
+/// The parameters of a stipple pass over a region (see the module docs).
 pub struct Stipple<'a> {
     /// The brush (default `Tool::stippler(2.0)`): its width sets the mark size.
     pub tool: Tool,
@@ -47,58 +41,46 @@ pub struct Stipple<'a> {
     pub pressure: (f32, f32),
     /// Coverage: how many touches fall on each point on average (a touch
     /// covers about π(0.4·width)²). Where it is higher the stipple is denser
-    /// and its color stronger; this is how a painter grades tone.
+    /// and its color stronger.
     pub coverage: Field<'a, f32>,
-    /// What the painter wants to see at a point, on the canvas (the paint is
-    /// mixed so that a touch there dries to this; see `paint_for`).
+    /// Raw paint color at a point, without matching the canvas.
     pub color: Field<'a, Rgb>,
-    /// A color relative to what is on the canvas (see `color_over`); when
-    /// set, it replaces `color`.
-    pub color_over: Option<crate::handling::OverField<'a>>,
-    /// Mix each pile from these tubes, thinned with this fraction of medium.
-    pub palette: Option<(&'a Palette, f32)>,
     /// Hiding and stiffness of the paint without a palette.
     pub hiding: f32,
     pub stiff: f32,
-    /// Palette-mixing inconsistency per dip: OKLab L and a/b sd (no palette).
+    /// Raw paint color variation per dip: OKLab L and a/b sd.
     pub jitter: (f32, f32),
-    /// Relative sd of the tube proportions per dip (palette).
+    /// Relative sd of the pile's tube proportions per dip.
     pub mix_jitter: f32,
+    /// Dip into this pile (parts of the palette's tubes, thinned with this
+    /// medium) on every trip; the raw color field is then not used.
+    pub pile: Option<(&'a Palette, crate::palette::Mixture, f32)>,
     /// Touches between trips to the palette, how much of a full load a dip
     /// takes and how much old paint is wiped off first. A stippler's tip
     /// carries paint for many touches; each lays a little less.
     pub dip_every: usize,
     pub load: f32,
     pub wipe: f32,
-    /// How far the hand drifts while the tip is down (units, mean); 0 = a
-    /// clean vertical touch.
+    /// How far the tip drifts while it is down (units, mean); 0 = a straight
+    /// down-and-up touch.
     pub drag: f32,
-    /// Direction of the drift (radians); None = any direction (no stroke
-    /// direction survives).
+    /// Direction of the drift (radians); None = a random direction per
+    /// touch.
     pub drag_angle: Option<f32>,
     /// Roll of the handle while down (radians, sd).
     pub twist: f32,
-    /// 0 = touches spread evenly (a practiced hand), 1 = in clumps.
+    /// 0 = touches spread evenly, 1 = in clumps.
     pub cluster: f32,
     /// Size of the clumps (units); default 5 marks.
     pub clump: Option<f32>,
-    /// Where the coverage is thin (< 1), the hand also lightens: touches
-    /// press less (smaller, fainter marks), so a veil feathers out instead
-    /// of ending in isolated specks. 0 = off, 1 = pressure ∝ coverage.
+    /// Where the coverage `c` is below 1, each touch's pressure is scaled by
+    /// `1 - feather·(1 - c)`: smaller, fainter marks where the touches are
+    /// sparse. 0 = off, 1 = pressure ∝ coverage; default 0.6.
     pub feather: f32,
-    /// Contrast falls with density: where the coverage is thin (< 1) each
-    /// touch is aimed that much nearer to what it sits on, `min(1, c)^fade`
-    /// of the way from the underlayer to `color`. A lighter stipple thinning
-    /// out over a field then fades into it instead of ending in salt. 0 = off
-    /// (every touch aims at `color`, for deliberate specks); default 1.
-    pub fade: f32,
     /// Clip the hairs' contact to the mask.
     pub clip: bool,
     /// A hard limit no touch paints outside of, whatever `clip` says.
     pub limit: Option<std::sync::Arc<Mask>>,
-    /// Aim the paint at the result on the canvas (default). Off: the paint
-    /// is simply mixed to `color`.
-    pub aim: bool,
 }
 
 impl<'a> Stipple<'a> {
@@ -108,12 +90,11 @@ impl<'a> Stipple<'a> {
             pressure: (0.4, 0.75),
             coverage: Box::new(|_, _| 1.0),
             color: Box::new(|_, _| [0.5; 3]),
-            color_over: None,
-            palette: None,
             hiding: 0.4,
             stiff: 0.3,
             jitter: (0.015, 0.004),
             mix_jitter: 0.05,
+            pile: None,
             dip_every: 24,
             load: 0.5,
             wipe: 0.5,
@@ -123,10 +104,8 @@ impl<'a> Stipple<'a> {
             cluster: 0.15,
             clump: None,
             feather: 0.6,
-            fade: 1.0,
             clip: false,
             limit: None,
-            aim: true,
         }
     }
     pub fn pressure(mut self, a: f32, b: f32) -> Self {
@@ -139,28 +118,19 @@ impl<'a> Stipple<'a> {
     }
     pub fn color(mut self, f: impl Fn(f32, f32) -> Rgb + Sync + 'a) -> Self {
         self.color = Box::new(f);
-        self.color_over = None;
         self
     }
-    /// A color that sees the canvas: `f(x, y, under)` gets what is on the
-    /// canvas where a load of touches will land (judged before the pass, see
-    /// `Canvas::judge_under`) and returns the look wanted there, e.g. a cast
-    /// shadow on snow as "the snow here, darker and bluer":
-    /// `color_over(|_, _, u| shift(u, -0.06, 0.0, -0.03))`.
-    pub fn color_over(mut self, f: impl Fn(f32, f32, Rgb) -> Rgb + Sync + 'a) -> Self {
-        self.color_over = Some(Box::new(f));
-        self
-    }
-    /// Mix every pile from `palette`'s tubes, thinned with `medium` (0..1).
-    pub fn mixed(mut self, palette: &'a Palette, medium: f32) -> Self {
-        self.palette = Some((palette, medium));
+    /// Load every trip from `pile` (parts of `palette`'s tubes), thinned
+    /// with `medium` (0..1), remixed a little per dip by `mix_jitter`,
+    /// drying at its tubes' rate.
+    pub fn piled(mut self, palette: &'a Palette, pile: crate::palette::Mixture, medium: f32) -> Self {
+        self.pile = Some((palette, pile, medium.clamp(0.0, 1.0)));
         self
     }
     /// A fixed paint (no palette mixing).
     pub fn paint(mut self, hiding: f32, stiff: f32) -> Self {
         self.hiding = hiding;
         self.stiff = stiff;
-        self.palette = None;
         self
     }
     pub fn jitter(mut self, l: f32, hue: f32) -> Self {
@@ -177,7 +147,7 @@ impl<'a> Stipple<'a> {
         self.wipe = wipe;
         self
     }
-    /// Hand drift while down: mean length (units) and direction (None = any).
+    /// Tip drift while down: mean length (units) and direction (None = any).
     pub fn drag(mut self, len: f32, angle: Option<f32>) -> Self {
         self.drag = len;
         self.drag_angle = angle;
@@ -206,113 +176,29 @@ impl<'a> Stipple<'a> {
         self.limit = Some(m);
         self
     }
-    /// Contrast falls where the coverage thins (see `fade`; 0 = off).
-    pub fn fade(mut self, k: f32) -> Self {
-        self.fade = k.max(0.0);
-        self
-    }
-    /// The look one load of touches aims at, where the canvas looks `seen`,
-    /// the passage should look `want` and the coverage is `c`.
-    fn touch_target(&self, want: Rgb, seen: Rgb, c: f32) -> Rgb {
-        let t = if self.fade > 0.0 { c.clamp(0.0, 1.0).powf(self.fade) } else { 1.0 };
-        if t >= 1.0 {
-            return want;
-        }
-        crate::color::from_oklab(crate::color::lerp3(to_oklab(seen), to_oklab(want), t))
-    }
-    pub fn aim(mut self, on: bool) -> Self {
-        self.aim = on;
-        self
-    }
-
     /// Area (units²) one touch covers at mid pressure.
     fn mark_area(&self) -> f32 {
         let r = 0.4 * self.tool.width;
         std::f32::consts::PI * r * r
     }
 
-    /// Thickness (coats) a touch lays on average: the tip's film at the
-    /// load, run down a little over the touches of a dip, less where a
-    /// light touch only catches the tooth.
-    fn touch_coats(&self) -> f32 {
-        self.tool.lay * self.load.min(1.0) * 0.8
-    }
-
-    /// The paint for one trip to the palette: what the painter mixes so that
-    /// the stippled passage around a point where the canvas looks like
-    /// `seen` dries to `want`. The painter judges the passage, not one dot:
-    /// with `coverage` touches falling on each point, the film there is
-    /// about `coverage` touches thick (at least one).
-    ///
-    /// INTEGRATION POINT: this is the only place stippling chooses paint.
-    /// When `Palette` gains its substrate-aware "aim at the result on the
-    /// canvas" API (color stream), call that here (with `coats`) instead of
-    /// the `aim_km` workaround.
-    fn paint_for(&self, want: Rgb, seen: Rgb, coverage: f32, memo: &mut Memo, rng: &mut Rng) -> Paint {
-        let coats = self.touch_coats() * coverage.max(1.0);
-        let aim = self.aim;
-        match self.palette {
-            Some((pal, medium0)) => {
-                if !aim {
-                    return pal.remix(&pal.mix(want), self.mix_jitter, rng).paint(medium0);
-                }
-                // aim at the look over what's there (Palette::aim); if the
-                // thinned paint can't get there over this substrate, the
-                // painter thins it less (more body, more hiding). The painter
-                // remembers a recipe for a tone over a tone.
-                let q = |c: Rgb, k: f32| {
-                    let l = to_oklab(c);
-                    [(l[0] * k).round() as i32, (l[1] * k).round() as i32, (l[2] * k).round() as i32]
-                };
-                let key = (q(want, 200.0), q(seen, 120.0), (coats * 20.0).round() as i32);
-                let (m, medium) = if let Some(v) = memo.get(&key) {
-                    v.clone()
-                } else {
-                    // the recipe for the key's center, so it doesn't depend on
-                    // which touch asked first (a crop or a reordered run must
-                    // mix what a whole one does)
-                    let c = |k: [i32; 3], s: f32| crate::color::from_oklab([k[0] as f32 / s, k[1] as f32 / s, k[2] as f32 / s]);
-                    let (want, seen, coats) = (c(key.0, 200.0), c(key.1, 120.0), key.2 as f32 / 20.0);
-                    let wl = to_oklab(want);
-                    let mut best: Option<(f32, crate::palette::Mixture, f32)> = None;
-                    for medium in [medium0, medium0 * 0.5, 0.0] {
-                        let m = pal.aim(want, seen, medium, coats);
-                        let got = to_oklab(m.paint(medium).over(seen, coats));
-                        let err = ((got[0] - wl[0]).powi(2) + (got[1] - wl[1]).powi(2) + (got[2] - wl[2]).powi(2)).sqrt();
-                        if best.as_ref().is_none_or(|b| err < b.0 - 0.005) {
-                            best = Some((err, m, medium));
-                        }
-                        if err < 0.02 {
-                            break;
-                        }
-                    }
-                    let (_, m, medium) = best.unwrap();
-                    memo.insert(key, (m.clone(), medium));
-                    (m, medium)
-                };
-                pal.remix(&m, self.mix_jitter, rng).paint(medium)
-            }
-            None => {
-                let lab = to_oklab(want);
-                let col = from_oklab([lab[0] + rng.normal() * self.jitter.0, lab[1] + rng.normal() * self.jitter.1, lab[2] + rng.normal() * self.jitter.1]);
-                if aim { Paint::aimed(col, seen, coats, self.hiding, self.stiff) } else { Paint::new(col, self.hiding, self.stiff) }
-            }
-        }
+    /// Raw paint for one dip, with color variation but no canvas compensation.
+    fn paint_for(&self, color: Rgb, rng: &mut Rng) -> Paint {
+        let lab = to_oklab(color);
+        let col = from_oklab([lab[0] + rng.normal() * self.jitter.0, lab[1] + rng.normal() * self.jitter.1, lab[2] + rng.normal() * self.jitter.1]);
+        Paint::new(col, self.hiding, self.stiff)
     }
 }
-
-type Memo = std::collections::HashMap<([i32; 3], [i32; 3], i32), (crate::palette::Mixture, f32)>;
 
 /// One planned touch.
 struct Plan {
     touch: Touch,
     /// Paint to dip into first (None = keep going with what's on the brush).
     dip: Option<Paint>,
-    /// Where the touches this dip serves are centered, and their coverage:
-    /// the painter mixes for that spot.
-    aim_at: (f32, f32, f32),
+    /// Center of the touches served by this dip, for sampling raw color.
+    color_at: (f32, f32),
     rect: Rect,
-    /// The color asked for there (before aiming it over what's there):
+    /// The raw color or explicit pile color:
     /// which pile on the palette the dip comes from (`tally::Piles`).
     want: Rgb,
 }
@@ -323,8 +209,9 @@ impl Canvas {
     ///
     /// Touches are planned up front on a jittered grid thinned by the
     /// coverage, then grouped into square passages larger than twice any
-    /// touch's reach, and passages in a 2×2 checkerboard phase are painted in
-    /// parallel, each with its own brush.
+    /// touch's reach. Passages are ordered by 2×2 checkerboard phase and
+    /// painted with `run_ordered` (see `sched`), each with its own brush:
+    /// passages whose footprints don't overlap run in parallel.
     pub fn stipple(&mut self, mask: &Mask, sp: &Stipple, seed: u64) {
         self.stipple_with(&mut crate::tally::Piles::default(), mask, sp, seed);
     }
@@ -407,7 +294,7 @@ impl Canvas {
                     if c <= 0.0 {
                         return None;
                     }
-                    // clumps: the hand lingers here and hurries there
+                    // clumps: a noise field raises the keep rate in places and lowers it in others
                     let k = ((1.0 - sp.cluster) + sp.cluster * 2.0 * cl.get01(x, y).powf(1.5) * 1.6).max(0.0);
                     (keep < c / dmax * k).then_some((x, y))
                 })
@@ -429,17 +316,17 @@ impl Canvas {
             let (tx, ty) = (((x / tile) as usize).min(tw - 1), ((y / tile) as usize).min(th - 1));
             tiles[ty * tw + tx].push((x, y));
         }
-        // plan each passage: the order the hand visits the touches, each
-        // touch's pressure, drift and roll, and the trips to the palette
+        // plan each passage: the order of the touches, each touch's
+        // pressure, drift and roll, and the trips to the palette
         let plans: Vec<Vec<Plan>> = tiles
             .par_iter()
             .enumerate()
             .map(|(ti, pts)| {
                 let mut rng = Rng::new(seed ^ 0x7111E ^ (ti as u64).wrapping_mul(0xD1B5_4A32_D192_ED03));
-                // the hand works through the passage in small patches, row
-                // by row, back and forth, dabbing about at random within a
-                // patch; a load serves about one patch, so each pile of paint
-                // lands where it was mixed for
+                // touches are ordered in small patches, row by row,
+                // alternating direction, in random order within a patch; a
+                // load serves about one patch, so each dip's paint lands
+                // near the spot where its color was sampled
                 let cell = (g * (sp.dip_every as f32).sqrt()).max(sp.tool.width * 2.0);
                 let (tx0, ty0) = ((ti % tw) as f32 * tile, (ti / tw) as f32 * tile);
                 let mut keyed: Vec<(u64, (f32, f32))> = pts
@@ -459,13 +346,13 @@ impl Canvas {
                         let cv = cov(x, y);
                         // the paint is chosen below, in order
                         let dip = (k % sp.dip_every == 0).then_some(Paint::km([0.0; 3], 0.0, 0.0));
-                        let aim_at = if dip.is_some() {
+                        let color_at = if dip.is_some() {
                             let grp = &pts[k..(k + sp.dip_every).min(pts.len())];
                             let (sx, sy) = grp.iter().fold((0.0, 0.0), |a, p| (a.0 + p.0, a.1 + p.1));
                             let (mx, my) = (sx / grp.len() as f32, sy / grp.len() as f32);
-                            (mx, my, cov(mx, my).max(cv * 0.5))
+                            (mx, my)
                         } else {
-                            (x, y, cv)
+                            (x, y)
                         };
                         let a = sp.drag_angle.map_or(rng.range(0.0, std::f32::consts::TAU), |a| a + rng.normal() * 0.2);
                         let len = sp.drag * rng.range(0.4, 1.6);
@@ -477,35 +364,29 @@ impl Canvas {
                             angle: rng.range(0.0, std::f32::consts::TAU),
                         };
                         let rect = touch_footprint(&sp.tool, &touch, f.scale, f.w, f.h).unwrap_or((0, 0, 0, 0));
-                        Plan { touch, dip, aim_at, rect, want: [0.0; 3] }
+                        Plan { touch, dip, color_at, rect, want: [0.0; 3] }
                     })
                     .collect()
             })
             .collect();
-        // trips to the palette, one passage after another (the palette's
-        // mixing cache makes the result depend on the order of requests)
+        // Trips to the palette in passage order keep per-dip variation stable.
         let mut plans = plans;
         let t_geom = t0.elapsed().as_secs_f32();
         let mut prng = Rng::new(seed ^ 0xD1B);
-        let mut memo = std::collections::HashMap::new();
         for t in plans.iter_mut() {
             for p in t.iter_mut() {
                 if let Some(d) = p.dip.as_mut() {
-                    let (x, y, cv) = p.aim_at;
-                    // (a fresh generator per dip, so a recipe's draws can't shift the
-                    // rest; see `finish_plan`)
-                    let seen = self.judge_under(x, y, sp.tool.width * 0.6);
-                    let want = match &sp.color_over {
-                        Some(g) => g(x, y, seen),
-                        None => (sp.color)(x, y),
-                    };
-                    p.want = want;
-                    let want = sp.touch_target(want, seen, cv);
-                    *d = sp.paint_for(want, seen, cv, &mut memo, &mut Rng::new(prng.next_u64()));
+                    if let Some((pal, pile, medium)) = &sp.pile {
+                        p.want = pile.color;
+                        *d = pal.remix(pile, sp.mix_jitter, &mut Rng::new(prng.next_u64())).laid(*medium);
+                        continue;
+                    }
+                    let (x, y) = p.color_at;
+                    p.want = (sp.color)(x, y);
+                    *d = sp.paint_for(p.want, &mut Rng::new(prng.next_u64()));
                 }
             }
         }
-        let n_memo = memo.len();
         // the hand's ledger: every planned touch and trip to the palette (on
         // the whole canvas, before a crop drops passages; see `tally`)
         let mut tile_secs = Vec::with_capacity(plans.len());
@@ -540,7 +421,6 @@ impl Canvas {
         }
         // passages in phase order; each passage's footprint is the union of
         // its touches'. run_ordered keeps overlapping passages in this order
-        // (as the phases did)
         let rects: Vec<Option<Rect>> = plans
             .iter()
             .map(|t| t.iter().filter(|p| p.rect.2 > p.rect.0).map(|p| p.rect).reduce(|a, r| (a.0.min(r.0), a.1.min(r.1), a.2.max(r.2), a.3.max(r.3))))
@@ -570,7 +450,7 @@ impl Canvas {
             b
         });
         if std::env::var_os("PAINT_DEBUG").is_some() {
-            eprintln!("stipple: {n} touches, reach {reach:.1}, tiles {tw}x{th} ({tile:.0} units), plan {t_geom:.2}s + paint {:.2}s ({} recipes), total {:.2}s", t_plan - t_geom, n_memo, t0.elapsed().as_secs_f32());
+            eprintln!("stipple: {n} touches, reach {reach:.1}, tiles {tw}x{th} ({tile:.0} units), plan {t_geom:.2}s + paint {:.2}s, total {:.2}s", t_plan - t_geom, t0.elapsed().as_secs_f32());
         }
     }
 }
@@ -578,6 +458,25 @@ impl Canvas {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Stippling from a pile lays that pile at its drying rate, whatever
+    /// the color field says, without matching the canvas.
+    #[test]
+    fn stippling_from_a_pile_lays_the_pile() {
+        let pal = Palette::tube_box();
+        let at = |n: &str| pal.tubes.iter().position(|t| t.name == n).unwrap();
+        let white = pal.pile(vec![(at("lead white"), 1.0)]);
+        let mut c = Canvas::new(200, 1.0, [0.1; 3]);
+        let m = Mask::from_fn(c.frame(), |x, y| if (300.0..700.0).contains(&x) && (300.0..700.0).contains(&y) { 1.0 } else { 0.0 });
+        let sp = Stipple::new(Tool::stippler(6.0)).color(|_, _| [0.9, 0.05, 0.05]).coverage(|_, _| 0.5).mix_jitter(0.0).piled(&pal, white.clone(), 0.3);
+        c.stipple(&m, &sp, 5);
+        let f = c.frame();
+        let painted: Vec<usize> = (0..f.w * f.h).filter(|&i| c.wet.vol[i] > 0.05).collect();
+        assert!(painted.len() > 50, "{}", painted.len());
+        assert!(painted.iter().all(|&i| c.wet.hide[i][2] == white.drying));
+        let px = painted.iter().map(|&i| c.seen()[i]).fold([0.0f32; 3], |a, p| [a[0] + p[0], a[1] + p[1], a[2] + p[2]]);
+        assert!(px[0] < 1.3 * px[2] && px[1] > 0.5 * px[0], "white touches, not red: {px:?}");
+    }
     use crate::bristle::{Gesture, Kind};
     use crate::color::hex;
 
@@ -715,78 +614,11 @@ mod tests {
         }
     }
 
-    #[test]
-    fn aimed_touch_paint_reaches_reachable_targets() {
-        let seen = hex("#5a6878");
-        // reachable: near the underlayer's tone (a half-hiding paint at 0.6
-        // coats can't lift a dark blue to a pale sky; see the next assert)
-        for want in [hex("#6a7488"), hex("#5f6d80"), hex("#55606e"), hex("#66707a")] {
-            let got = Paint::aimed(want, seen, 0.6, 0.5, 0.5).over(seen, 0.6);
-            for k in 0..3 {
-                assert!((got[k] - want[k]).abs() < 0.01, "{want:?}: {got:?}");
-            }
-        }
-    }
-
-    #[test]
-    fn aimed_touch_paint_gets_as_near_as_it_can() {
-        let seen = hex("#5a6878");
-        let want = hex("#7d8fae");
-        let got = Paint::aimed(want, seen, 0.6, 0.5, 0.5).over(seen, 0.6);
-        let lightest = Paint::new([0.995; 3], 0.5, 0.5).over(seen, 0.6);
-        for k in 0..3 {
-            assert!(got[k] <= want[k] + 0.01 && got[k] >= seen[k].min(want[k]) - 0.01, "{got:?}");
-            assert!(got[k] <= lightest[k] + 1e-3);
-        }
-    }
-
-    /// Speckle of a stipple over a flat field: (std of L, mean L lift) over
-    /// x in `xs`. Coverage runs 0 → `cmax` across the canvas.
-    fn speckle(field: Rgb, want: Rgb, cmax: f32, xs: std::ops::Range<f32>, set: impl Fn(Stipple) -> Stipple) -> (f32, f32) {
-        let st = crate::style::Style::friedrich();
-        let mut c = Canvas::new(400, 1.0, field);
-        let f = c.frame();
-        let before = to_oklab(field)[0];
-        let sp = set(Stipple::new(Tool::stippler(3.0)).mixed(&st.palette, 0.45).color(move |_, _| want).coverage(move |x, _| cmax * x / 1000.0));
-        c.stipple(&Mask::full(f), &sp, 4);
-        c.dry();
-        let ls: Vec<f32> = c.pixels().iter().enumerate().filter(|(i, _)| xs.contains(&((i % f.w) as f32 / f.scale))).map(|(_, p)| to_oklab(*p)[0]).collect();
-        let n = ls.len() as f32;
-        let m = ls.iter().sum::<f32>() / n;
-        ((ls.iter().map(|l| (l - m).powi(2)).sum::<f32>() / n).sqrt(), m - before)
-    }
-
-    /// A lighter stipple thinning out over a field fades into it instead of
-    /// ending in salt, aimed or not, over a mid tone or a dark (amnesia 2,
-    /// coast #9, mountains #10).
-    #[test]
-    fn thin_stipple_fades_instead_of_salt() {
-        // a pale stipple thinning out over a mid-blue sky
-        let (sky, pale) = (hex("#7d8fae"), hex("#b8c2d2"));
-        let (salt, lift0) = speckle(sky, pale, 1.2, 150.0..400.0, |s| s.fade(0.0));
-        let (faded, lift1) = speckle(sky, pale, 1.2, 150.0..400.0, |s| s);
-        println!("thin pale stipple (coverage 0.18-0.48): L sd {salt:.4} -> {faded:.4}, lift {lift0:+.4} -> {lift1:+.4}");
-        assert!(faded < 0.6 * salt, "thin stipple still salty: {faded} vs {salt}");
-        assert!(lift1 > 0.0, "it still lifts the tone: {lift1}");
-        // where it is dense, it reaches the same tone
-        let (_, dense0) = speckle(sky, pale, 1.2, 900.0..1000.0, |s| s.fade(0.0));
-        let (_, dense1) = speckle(sky, pale, 1.2, 900.0..1000.0, |s| s);
-        assert!((dense0 - dense1).abs() < 0.3 * dense0.abs(), "dense tone {dense0} vs {dense1}");
-        // the thin fringe of a pale mist over a dark, masstone-mixed (aim
-        // off, as mountains #10 did): pale dots on the dark fade out instead
-        let (dark, mist) = (hex("#2c3038"), hex("#9aa0a8"));
-        let (dots, l0) = speckle(dark, mist, 1.2, 150.0..400.0, |s| s.aim(false).fade(0.0));
-        let (fringe, l1) = speckle(dark, mist, 1.2, 150.0..400.0, |s| s.aim(false));
-        println!("mist fringe over dark (coverage 0.18-0.48): L sd {dots:.4} -> {fringe:.4}, lift {l0:+.4} -> {l1:+.4}");
-        assert!(fringe < 0.6 * dots, "mist fringe still static: {fringe} vs {dots}");
-        assert!(l1 > 0.0, "the fringe still lifts the dark: {l1}");
-    }
-
-    fn stipple_scene() -> Canvas {
-        let st = crate::style::Style::friedrich();
+    fn stippled_canvas() -> Canvas {
+        let st = crate::style::Style::oil();
         let mut c = st.prepare(300, 1.5, 7);
         let m = Mask::from_fn(c.f, |x, y| crate::smoothstep(100.0, 300.0, x) * (1.0 - crate::smoothstep(400.0, 450.0, y)));
-        let sp = Stipple::new(Tool::stippler(4.0)).mixed(&st.palette, 0.5).color(|_, y| if y < 200.0 { hex("#7d8fae") } else { hex("#e0d4b0") }).coverage(|x, _| x / 500.0).drag(1.0, None);
+        let sp = Stipple::new(Tool::stippler(4.0)).piled(&st.palette, st.palette.pile(vec![(0, 0.7), (1, 0.3)]), 0.5).coverage(|x, _| x / 500.0).drag(1.0, None);
         c.stipple(&m, &sp, 3);
         c.dry();
         c
@@ -805,8 +637,8 @@ mod tests {
 
     #[test]
     fn stipple_is_deterministic_across_thread_counts() {
-        let a = rayon::ThreadPoolBuilder::new().num_threads(1).build().unwrap().install(|| fp(&stipple_scene()));
-        let b = rayon::ThreadPoolBuilder::new().num_threads(4).build().unwrap().install(|| fp(&stipple_scene()));
+        let a = rayon::ThreadPoolBuilder::new().num_threads(1).build().unwrap().install(|| fp(&stippled_canvas()));
+        let b = rayon::ThreadPoolBuilder::new().num_threads(4).build().unwrap().install(|| fp(&stippled_canvas()));
         assert_eq!(a, b);
     }
 
@@ -816,7 +648,7 @@ mod tests {
     fn stipple_follows_coverage_and_mask() {
         let mut c = Canvas::new(400, 1.0, hex("#c8b89a")).with_linen(crate::surface::Linen::fine(3));
         let m = Mask::from_fn(c.f, |x, _| if (100.0..900.0).contains(&x) { 1.0 } else { 0.0 });
-        let sp = Stipple::new(Tool::stippler(5.0)).color(|_, _| hex("#304060")).coverage(|x, _| if x < 500.0 { 0.4 } else { 2.0 }).aim(false).feather(0.0);
+        let sp = Stipple::new(Tool::stippler(5.0)).color(|_, _| hex("#304060")).coverage(|x, _| if x < 500.0 { 0.4 } else { 2.0 }).feather(0.0);
         c.stipple(&m, &sp, 5);
         let frac = |x0: f32, x1: f32| {
             let (a, b) = ((x0 * c.f.scale) as usize, (x1 * c.f.scale) as usize);
@@ -839,14 +671,14 @@ mod tests {
     }
 
     /// Small, narrow and scattered regions get stippled however they sit on
-    /// any probe lattice (reviews: a radius-10 disk with a 20-unit stippler,
-    /// and a 2-unit band at y 100 vs y 102, came out empty).
+    /// any probe lattice (a radius-10 disk with a 20-unit stippler, a 2-unit
+    /// band at several offsets, islands of radius 4).
     #[test]
     fn small_and_narrow_regions_are_not_skipped() {
-        // compact disk narrower than the old probe spacing
+        // a compact disk narrower than the tool
         let mut c = Canvas::new_window(1000, 1.0, [0.5; 3], None);
         let mask = Mask::from_fn(c.frame(), |x, y| if (x - 500.0).powi(2) + (y - 500.0).powi(2) < 100.0 { 1.0 } else { 0.0 });
-        let sp = Stipple::new(Tool::stippler(20.0)).coverage(|_, _| 10.0).aim(false).color(|_, _| [0.1; 3]);
+        let sp = Stipple::new(Tool::stippler(20.0)).coverage(|_, _| 10.0).color(|_, _| [0.1; 3]);
         c.stipple(&mask, &sp, 123);
         assert!(c.wet_total() > 0.0, "radius-10 disk, 20-unit stippler: wet_total {}", c.wet_total());
 
@@ -856,19 +688,18 @@ mod tests {
             let m = Mask::full(c.frame());
             let sp = Stipple::new(Tool::stippler(2.0))
                 .coverage(move |_, y| if y >= lo && y < lo + 2.0 { 10.0 } else { 0.0 })
-                .color(|_, _| [0.8; 3])
-                .aim(false);
+                .color(|_, _| [0.8; 3]);
             c.stipple(&m, &sp, 7);
             c.dry();
             let changed = c.pixels().iter().filter(|p| **p != [0.1; 3]).count();
             assert!(changed > 1000, "band [{lo}, {}): {changed} pixels changed", lo + 2.0);
         }
 
-        // separated islands, each smaller than the old probe spacing
+        // separated islands of radius 4
         let mut c = Canvas::new_window(1000, 1.0, [0.5; 3], None);
         let isl = [(101.0f32, 97.0f32), (333.0, 251.0), (470.0, 520.0)];
         let mask = Mask::from_fn(c.frame(), |x, y| if isl.iter().any(|&(a, b)| (x - a).powi(2) + (y - b).powi(2) < 16.0) { 1.0 } else { 0.0 });
-        let sp = Stipple::new(Tool::stippler(6.0)).coverage(|_, _| 3.0).aim(false).color(|_, _| [0.1; 3]);
+        let sp = Stipple::new(Tool::stippler(6.0)).coverage(|_, _| 3.0).color(|_, _| [0.1; 3]);
         c.stipple(&mask, &sp, 5);
         c.dry();
         for &(a, b) in &isl {
@@ -877,17 +708,15 @@ mod tests {
         }
     }
 
-    /// A veil stippled around dark motifs (the region cut out of it with a
-    /// small gap) reaches its tone right up to the gap, not only out in the
-    /// open: no pale halo matting the motifs in (amnesia 3, easel3_free: the
-    /// sea veil left a 3–6 unit rim of the old, paler sea around the stones,
-    /// the figure and the trunk).
+    /// A veil stippled around dark shapes (the region cut out of it with a
+    /// small gap) darkens the field next to the gap at least 0.8 as much as
+    /// out in the open.
     #[test]
-    fn veil_reaches_its_tone_up_to_dark_motifs() {
-        let st = crate::style::Style::friedrich();
+    fn veil_reaches_its_tone_up_to_dark_shapes() {
+        let st = crate::style::Style::oil();
         let mut c = Canvas::new_window(2000, 4.0, hex("#8a8894"), None).with_size_mm(440.0);
         let f = c.frame();
-        // dark bars and blocks, like trunks, a figure and standing stones
+        // dark bars of three widths and four heights
         let bars: Vec<(f32, f32, f32, f32)> = (0..9)
             .map(|k| {
                 let x = 60.0 + k as f32 * 105.0;
@@ -905,22 +734,21 @@ mod tests {
                 .fold(f32::MAX, f32::min)
         };
         let dark = Mask::from_fn(f, |x, y| if dist(x, y) <= 0.0 { 1.0 } else { 0.0 });
-        let ink = Stipple::new(Tool::stippler(3.0)).paint(1.0, 0.4).color(|_, _| hex("#24221e")).coverage(|_, _| 8.0).aim(false).fade(0.0).clip(true);
+        let ink = Stipple::new(Tool::stippler(3.0)).paint(1.0, 0.4).color(|_, _| hex("#24221e")).coverage(|_, _| 8.0).clip(true);
         c.stipple(&dark, &ink, 1);
         c.dry();
         // laid in thick body paint: a plateau ~0.6 mm proud of the thin
-        // field (the stones in easel3_free stand ~650 µm above the sea)
         for (hg, &m) in c.height.iter_mut().zip(&dark.data) {
             *hg += 600.0 * m;
         }
         c.surf_gen += 1;
-        // the veil: the field minus the motifs grown by 1.5 units, clipped
+        // the veil: the field minus the shapes grown by 1.5 units, clipped
         let veil = Mask::from_fn(f, |x, y| if dist(x, y) > 1.5 && (20.0..230.0).contains(&y) { 1.0 } else { 0.0 });
         let before: Vec<f32> = c.pixels().iter().map(|p| to_oklab(*p)[0]).collect();
-        let sp = Stipple::new(Tool::stippler(2.2)).mixed(&st.palette, 0.5).color(|_, _| hex("#4a5068")).coverage(|_, _| 2.6).pressure(0.4, 0.8).dips(20, 0.35, 0.6).clip(true);
+        let sp = Stipple::new(Tool::stippler(2.2)).piled(&st.palette, st.palette.pile(vec![(st.palette.tubes.iter().position(|t| t.name == "bone black").unwrap(), 1.0)]), 0.5).coverage(|_, _| 2.6).pressure(0.4, 0.8).dips(20, 0.35, 0.6).clip(true);
         c.stipple(&veil, &sp, 9);
         c.dry();
-        // mean darkening at a distance band from the motifs, inside the veil
+        // mean darkening at a distance band from the shapes, inside the veil
         let drop = |d0: f32, d1: f32| {
             let (mut s, mut n) = (0.0, 0);
             for (i, p) in c.pixels().iter().enumerate() {
@@ -934,8 +762,8 @@ mod tests {
             s / n as f32
         };
         let (near, far) = (drop(1.5, 4.0), drop(12.0, 40.0));
-        println!("veil darkening: {near:.4} near the motifs, {far:.4} in the open");
+        println!("veil darkening: {near:.4} near the shapes, {far:.4} in the open");
         assert!(far > 0.05, "the veil didn't darken the field: {far}");
-        assert!(near > 0.8 * far, "pale halo: the veil darkens {near:.4} next to the motifs vs {far:.4} in the open");
+        assert!(near > 0.8 * far, "the veil darkens {near:.4} next to the shapes vs {far:.4} in the open");
     }
 }

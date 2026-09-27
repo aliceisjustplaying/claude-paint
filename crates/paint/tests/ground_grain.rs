@@ -1,10 +1,6 @@
-//! The Friedrich ground must read as a painted ground seen through thin
-//! paint, not as a mechanical wood-grain of parallel horizontal streaks
-//! (loop-2 critic: "a horizontal wood-grain streaking covers the sky and
-//! snow, which looks like the tool rather than a painting choice"; see
-//! notes/loop2_grain.md). These tests measure the direction of the ground's
-//! relief: how much of its slope runs down the columns (horizontal ridges)
-//! against along the rows.
+//! Direction of the relief of `Style::oil()`'s ground: how much of its
+//! slope runs down the columns (horizontal ridges) against along the rows,
+//! and how many pixels of bare ground a thin blended pass over it leaves.
 
 use paint::{Crop, Ground, Style};
 
@@ -17,7 +13,7 @@ struct Grain {
     /// an unbiased surface is ~1.
     fine: f32,
     /// The same for the height blurred over ~1 mm: the ridges strokes leave
-    /// at their edges, whose parallel rows made the wood-grain.
+    /// at their edges.
     coarse: f32,
     /// How high the surface stands above its ~1 mm mean at the 99.5th
     /// percentile, µm: stroke-end lumps, where thin paint runs off and the
@@ -81,8 +77,7 @@ fn grain(h: &[f32], w: usize, ht: usize, pad: usize, px_mm: f32) -> Grain {
 }
 
 /// A canvas prepared in `st`'s manner, `width` px wide, in a 400 × 300
-/// unit window of the upper middle (where the sky goes), and the grain of
-/// its surface.
+/// unit window of the upper middle, and the grain of its surface.
 fn surface_grain(st: &Style, width: usize, seed: u64) -> Grain {
     let margin = 30.0;
     let crop = Crop { units: [300.0, 100.0, 700.0, 400.0], margin };
@@ -98,26 +93,24 @@ fn only(st: &Style, g: Vec<Ground>) -> Style {
     Style { ground: g, ..st.clone() }
 }
 
-/// The brushed top ground is not a field of parallel horizontal ridges: a
-/// primer's hand still favors the across direction a little, but its
-/// relief runs every way. At 1200 px the knife-spread layers under it
-/// measure 1.05 fine and 1.04 coarse; the brushed ground 1.29 and 1.61
-/// (before loop 2: 2.63 and 5.6, the wood-grain). At 3200 px
-/// (`print_ground_grain`, seeds 1, 23, 5) it is 1.73–1.76 and 2.04–2.50
-/// (before: 3.6–4.1 and 7.4–8.5; linen + knives 1.5 and 2.5).
+/// The brushed top ground's relief favors horizontal ridges only a little:
+/// `fine` under 2.2 and `coarse` under 3.0 at 1200 px. At 1200 px the
+/// knife-spread layers under it measure 1.05 fine and 1.04 coarse; the
+/// brushed ground 1.29 and 1.61. At 3200 px (`print_ground_grain`, seeds 1,
+/// 23, 5) it is 1.73–1.76 and 2.04–2.50 (linen + knives 1.5 and 2.5).
 #[test]
-fn friedrich_ground_has_no_horizontal_grain() {
-    let st = Style::friedrich();
+fn the_brushed_ground_has_no_horizontal_grain() {
+    let st = Style::oil();
     let knives = only(&st, st.ground[..2].to_vec());
     // (1200 px keeps it quick in the debug profile; the full-resolution
     // numbers are in `print_ground_grain`)
     let seed = 1u64;
     let under = surface_grain(&knives, 1200, seed);
     let g = surface_grain(&st, 1200, seed);
-    eprintln!("seed {seed}: knives {under:?}\n        friedrich {g:?}");
+    eprintln!("seed {seed}: knives {under:?}\n        brushed {g:?}");
     assert!(g.fine < 2.2, "seed {seed}: horizontal striations dominate: {g:?}");
-    assert!(g.coarse < 3.0, "seed {seed}: horizontal ridges (wood-grain): {g:?} vs knives {under:?}");
-    // but the brush marks are still there to show through thin paint
+    assert!(g.coarse < 3.0, "seed {seed}: horizontal ridges (parallel streaks): {g:?} vs knives {under:?}");
+    // and it keeps more relief than the knife layers under it
     assert!(g.rms > 1.2 * under.rms, "seed {seed}: the brushed ground lost its striations: {g:?} vs knives {under:?}");
 }
 
@@ -126,12 +119,12 @@ fn friedrich_ground_has_no_horizontal_grain() {
 #[test]
 #[ignore]
 fn print_ground_grain() {
-    let base = Style::friedrich();
+    let base = Style::oil();
     let cases: Vec<(&str, Style)> = vec![
         ("linen", only(&base, vec![])),
         ("linen+knives", only(&base, base.ground[..2].to_vec())),
-        ("friedrich", base.clone()),
-        ("friedrich_early (roller)", Style::friedrich_early()),
+        ("brushed", base.clone()),
+        ("red ground (roller)", Style::oil_red_ground()),
     ];
     for (name, st) in &cases {
         for seed in [1u64, 23, 5] {
@@ -145,8 +138,8 @@ fn print_ground_grain() {
 #[ignore]
 fn save_ground_crops() {
     let dir = std::env::var("GRAIN_OUT").unwrap_or_else(|_| "grain_out".into());
-    let base = Style::friedrich();
-    for (name, st) in [("knives", only(&base, base.ground[..2].to_vec())), ("friedrich", base.clone()), ("early", Style::friedrich_early())] {
+    let base = Style::oil();
+    for (name, st) in [("knives", only(&base, base.ground[..2].to_vec())), ("brushed", base.clone()), ("red ground", Style::oil_red_ground())] {
         let crop = Crop { units: [400.0, 100.0, 560.0, 260.0], margin: 30.0 };
         let mut c = st.prepare_window(3200, 1.3, 23, Some(crop));
         c.relief(0.35, 0.02);
@@ -154,11 +147,11 @@ fn save_ground_crops() {
     }
 }
 
-/// The top ground as it was brushed before loop 2 (long parallel strokes
-/// across the canvas), for comparison.
-fn old_brushed(width: usize, seed: u64, crop: Crop) -> paint::Canvas {
+/// A reference top ground of long parallel horizontal strokes across the
+/// canvas, for comparison.
+fn parallel_brushed(width: usize, seed: u64, crop: Crop) -> paint::Canvas {
     use paint::{Handling, Mask, Tool};
-    let st = Style::friedrich();
+    let st = Style::oil();
     let g = st.ground[2];
     let mut c = Style { ground: st.ground[..2].to_vec(), ..st.clone() }.prepare_window(width, 1.3, seed, Some(crop));
     let all = Mask::from_fn(c.frame(), |_, _| 1.0);
@@ -185,15 +178,16 @@ fn old_brushed(width: usize, seed: u64, crop: Crop) -> paint::Canvas {
     c
 }
 
-/// Pixels of bare (saturated) ground under a thin broad sky, blended as
-/// the style blends it, on a prepared canvas.
-fn sky_bare(mut c: paint::Canvas, margin: f32) -> usize {
-    use paint::{Mask, hex};
-    let base = Style::friedrich();
-    let sky = Mask::from_fn(c.frame(), |_, _| 1.0);
-    c.work(&sky, &base.broad().color(|_, _| hex("#d9dcd6")).angle(|_, _| 0.0).coverage(4.5).medium(0.3), 11);
+/// Pixels of bare (saturated) ground under a thin broad pass over the whole
+/// canvas, blended as the style blends it, on a prepared canvas.
+fn bare_after_blend(mut c: paint::Canvas, margin: f32) -> usize {
+    use paint::Mask;
+    let base = Style::oil();
+    let whole = Mask::from_fn(c.frame(), |_, _| 1.0);
+    let pal = base.palette.only(&["lead white", "bone black"]);
+    c.work(&whole, &base.broad().piled(&pal, pal.pile(vec![(0, 8.0 / 9.0), (1, 1.0 / 9.0)]), 0.3).angle(|_, _| 0.0).coverage(4.5), 11);
     if let Some(b) = base.blend() {
-        c.work(&sky, &b, 12);
+        c.work(&whole, &b, 12);
     }
     c.dry();
     let f = c.window();
@@ -210,27 +204,26 @@ fn sky_bare(mut c: paint::Canvas, margin: f32) -> usize {
     n
 }
 
-/// A thin blended sky (as the easel's `hand="broad"` lays it) leaves
-/// about as few pixels of bare ground over the new brushed ground as over
-/// the old one: three seeds at 3200 px, old 98 in all, new 164 (before the
-/// fix, 883, as one-pixel dotted contours along the ridges the priming
-/// brush had ploughed up). What is left are thin spots in the sky's own
-/// strokes, not ridge crests (see `tests::diag_sky_bare_pixels`). Ignored:
-/// ~1 min in release, far longer in debug; run with
-/// `cargo test --release -p paint --test ground_grain -- --ignored sky_bares --nocapture`.
+/// A thin blended broad pass leaves at most twice as many pixels of bare
+/// ground (plus 20) over the style's brushed ground as over the parallel
+/// reference ground, across three seeds at 3200 px.
+/// What is left are thin spots in the pass's own strokes, not ridge crests
+/// (see `tests::diag_blend_bare_pixels`). Ignored: ~1 min in release, far
+/// longer in debug; run with
+/// `cargo test --release -p paint --test ground_grain -- --ignored thin_blend_bares --nocapture`.
 #[test]
 #[ignore]
-fn sky_bares_ground() {
+fn thin_blend_bares_ground() {
     let crop = Crop { units: [400.0, 100.0, 560.0, 260.0], margin: 40.0 };
-    let st = Style::friedrich();
-    let (mut old, mut new) = (0, 0);
+    let st = Style::oil();
+    let (mut parallel, mut style) = (0, 0);
     for seed in [23u64, 1, 5] {
-        let o = sky_bare(old_brushed(3200, seed, crop), 40.0);
-        let n = sky_bare(st.prepare_window(3200, 1.3, seed, Some(crop)), 40.0);
-        eprintln!("seed {seed:2}: bare px old ground {o:4}, new ground {n:4}");
-        old += o;
-        new += n;
+        let o = bare_after_blend(parallel_brushed(3200, seed, crop), 40.0);
+        let n = bare_after_blend(st.prepare_window(3200, 1.3, seed, Some(crop)), 40.0);
+        eprintln!("seed {seed:2}: bare px parallel ground {o:4}, style ground {n:4}");
+        parallel += o;
+        style += n;
     }
-    eprintln!("total: old {old}, new {new}");
-    assert!(new <= 2 * old + 20, "the thin sky leaves bare ground along the new ground's ridges: {new} px vs {old} on the old ground");
+    eprintln!("total: parallel {parallel}, style {style}");
+    assert!(style <= 2 * parallel + 20, "the thin blended pass leaves bare ground along the style ground's ridges: {style} px vs {parallel} on the parallel ground");
 }

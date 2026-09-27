@@ -1,22 +1,22 @@
-//! Form in Lua: solids the painter models (bodies, ridges, reliefs), a lit
-//! depth buffer over the canvas, and what it tells a painter: light and
-//! shadow, planes, fall lines, silhouettes and edges. It paints nothing.
+//! Form in Lua: solids the painter models (bodies and height fields the
+//! painter gives), a lit depth buffer over the canvas, and what it tells a
+//! painter about those shapes: light and shadow, planes, fall lines,
+//! silhouettes and edges. It paints nothing and invents no shape.
 //!
 //! Every value here is immutable (a solid operation returns a new solid;
-//! `form{}` builds and lights the whole depth buffer in one call), so undo
-//! and rollback never have to repair them.
+//! `form{}` builds and lights the whole depth buffer in one call), so a
+//! failed chunk never has to repair them.
 
 use crate::api::{FromLuaValue, S, check_keys, err, frame, num, pair, wrap};
 use mlua::{Lua, MetaMethod, Result, Table, UserData, UserDataMethods, Value};
 use paint::form::{Sample, V3, aerial};
-use paint::{Form, Light, Mask, Relief, Ridge, Sdf, Shade, Solid};
+use paint::{Form, Light, Mask, Relief, Sdf, Shade, Solid};
 use std::sync::Arc;
 
 /// A solid a painter has modeled.
 #[derive(Clone)]
 pub enum SolidU {
     Body(Arc<Sdf>),
-    Ridge(Arc<Ridge>),
     Relief(Arc<ReliefGrid>),
 }
 
@@ -65,7 +65,7 @@ fn body_of(v: &Value) -> Result<Arc<Sdf>> {
     match v {
         Value::UserData(u) => match &*u.borrow::<SolidU>()? {
             SolidU::Body(b) => Ok(b.clone()),
-            _ => err("want a body (body.ellipsoid, body.block); ridges and terrain don't combine"),
+            _ => err("want a body (body.ellipsoid, body.block); terrain doesn't combine"),
         },
         o => err(format!("want a body, got {}", o.type_name())),
     }
@@ -74,7 +74,7 @@ fn body_of(v: &Value) -> Result<Arc<Sdf>> {
 pub(crate) fn solid_of(v: &Value) -> Result<SolidU> {
     match v {
         Value::UserData(u) => Ok(u.borrow::<SolidU>()?.clone()),
-        o => err(format!("want a solid (body.ellipsoid, body.block, ridge{{}}, terrain{{}}), got {}", o.type_name())),
+        o => err(format!("want a solid (body.ellipsoid, body.block, terrain{{}}), got {}", o.type_name())),
     }
 }
 
@@ -112,7 +112,6 @@ impl UserData for SolidU {
             let b = solid_bounds(s);
             let kind = match s {
                 SolidU::Body(_) => "body",
-                SolidU::Ridge(_) => "ridge",
                 SolidU::Relief(_) => "terrain",
             };
             Ok(format!("{kind}(bounds {:.0}, {:.0}, {:.0}, {:.0})", b[0], b[1], b[2], b[3]))
@@ -123,14 +122,13 @@ impl UserData for SolidU {
 fn body_of_self(s: &SolidU) -> Result<Arc<Sdf>> {
     match s {
         SolidU::Body(b) => Ok(b.clone()),
-        _ => err("only bodies turn, cut, weather and combine (not ridges or terrain)"),
+        _ => err("only bodies turn, cut, weather and combine (not terrain)"),
     }
 }
 
 fn solid_bounds(s: &SolidU) -> [f32; 4] {
     match s {
         SolidU::Body(b) => (**b).bounds(),
-        SolidU::Ridge(r) => (**r).bounds(),
         SolidU::Relief(g) => g.area,
     }
 }
@@ -391,58 +389,6 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
     body.set("half_space", lua.create_function(|_, (at, n): (Value, Value)| Ok(SolidU::Body(Arc::new(Sdf::half_space(v3(&at, "at")?, v3(&n, "normal")?)))))?)?;
     g.set("body", body)?;
 
-    // ridge{x0=, x1=, crest=fn(x) or points, depth=, seed=, lean={lean, foot},
-    //       gullies={spacing, carve}, fan=, strata={spacing, step, tilt}, z0=, base=}
-    g.set("ridge", lua.create_function(|_, o: Table| {
-        check_keys(&o, &["x0", "x1", "crest", "depth", "seed", "lean", "gullies", "fan", "strata", "z0", "base"], "ridge")?;
-        let x0 = num(&o, "x0")?.unwrap_or(0.0);
-        let x1 = num(&o, "x1")?.unwrap_or(1000.0);
-        let crest: Vec<f32> = match o.get::<Value>("crest")? {
-            Value::Function(f) => {
-                let n = (x1 - x0).ceil().max(1.0) as usize + 1;
-                (0..n).map(|i| f.call::<f32>(x0 + i as f32)).collect::<Result<_>>()?
-            }
-            v @ Value::Table(_) => {
-                let pts = crate::api::points(&v)?;
-                if pts.len() < 2 {
-                    return err("ridge crest: at least two points");
-                }
-                let n = (x1 - x0).ceil().max(1.0) as usize + 1;
-                (0..n)
-                    .map(|i| {
-                        let x = x0 + i as f32;
-                        let k = pts.windows(2).position(|w| x <= w[1].0).unwrap_or(pts.len() - 2);
-                        let (a, b) = (pts[k], pts[k + 1]);
-                        let t = ((x - a.0) / (b.0 - a.0).max(1e-6)).clamp(0.0, 1.0);
-                        Ok(a.1 + (b.1 - a.1) * t)
-                    })
-                    .collect::<Result<_>>()?
-            }
-            _ => return err("ridge: needs crest = function(x) or a list of points"),
-        };
-        let depth = num(&o, "depth")?.unwrap_or(300.0);
-        let seed = o.get::<Option<u32>>("seed")?.unwrap_or(1);
-        let mut r = Ridge::new(x0, x1, |x| crest[((x - x0).round().max(0.0) as usize).min(crest.len() - 1)], depth, seed);
-        if let Some((l, f)) = pair(&o, "lean")? {
-            r = r.lean(l, f);
-        }
-        if let Some((s, c)) = pair(&o, "gullies")? {
-            r = r.gullies(s, c);
-        }
-        if let Some(f) = num(&o, "fan")? {
-            r = r.fan(f);
-        }
-        if let Some(t) = o.get::<Option<Table>>("strata")? {
-            r = r.strata(t.get(1)?, t.get(2)?, t.get::<Option<f32>>(3)?.unwrap_or(0.0));
-        }
-        if let Some(z) = num(&o, "z0")? {
-            r = r.z0(z);
-        }
-        if let Some(b) = num(&o, "base")? {
-            r = r.base(b);
-        }
-        Ok(SolidU::Ridge(Arc::new(r)))
-    })?)?;
 
     // terrain{area={x0, y0, x1, y1}, height=function(x, y) return z (or nil) end, step=1, facet=0}
     // (the engine's Relief; `relief()` is the finishing verb)
@@ -499,7 +445,6 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
             let dist = move |_: f32, _: f32, z: f32| at + per_z * z;
             match &solid {
                 SolidU::Body(b) => form.add_at(&**b, &dist),
-                SolidU::Ridge(r) => form.add_at(&**r, &dist),
                 SolidU::Relief(g) => {
                     let g = g.clone();
                     let rel = Relief::new(g.area, move |x, y| g.get(x, y));

@@ -1,5 +1,8 @@
 //! `easel check` off the request thread, and requests whose client is gone.
 //!
+//! `check` is in the replay build only: the runner checks a painter's log after the
+//! painter's last sitting (scripts/check_painting). The painter build keeps `client_gone`.
+//!
 //! `check` replays the whole log in a fresh session, which takes as long as painting it did
 //! (minutes; 630 s for round 18g's 33 chunks on a busy machine). It used to run on the one
 //! thread that serves every request, so while it ran nothing else was answered: a painter's
@@ -19,16 +22,23 @@
 //! The check's own thread also gets its own mask garbage collection (api.rs keeps it per
 //! thread): on the server thread, the check's throwaway state took it over from the live one.
 
+#[cfg(feature = "replay")]
 use crate::session::Session;
+#[cfg(feature = "replay")]
 use std::io::Write;
 use std::os::unix::io::AsRawFd;
 use std::os::unix::net::UnixStream;
+#[cfg(feature = "replay")]
 use std::sync::Arc;
+#[cfg(feature = "replay")]
 use std::sync::atomic::{AtomicBool, Ordering};
+#[cfg(feature = "replay")]
 use std::time::Instant;
 
+#[cfg(feature = "replay")]
 /// Lua instructions between two looks at whether the check should stop.
 const HOOK_EVERY: u32 = 1_000_000;
+#[cfg(feature = "replay")]
 const STOPPED: &str = "check stopped";
 
 #[repr(C)]
@@ -65,6 +75,7 @@ pub fn client_gone(conn: &UnixStream) -> bool {
     if cfg!(target_os = "linux") { p.revents & POLLHUP != 0 } else { p.revents & POLLHUP != 0 && p.revents & POLLOUT == 0 }
 }
 
+#[cfg(feature = "replay")]
 /// What a check compares: the log's chunks and the live canvas (None: no canvas yet) as
 /// bits of what's seen and of the surface.
 pub struct Input {
@@ -73,11 +84,13 @@ pub struct Input {
     pub live: Option<(Vec<u32>, Vec<u32>)>,
 }
 
+#[cfg(feature = "replay")]
 /// A check running on its own thread.
 pub struct Job {
     stop: Arc<AtomicBool>,
 }
 
+#[cfg(feature = "replay")]
 impl Job {
     /// Ask the check to stop (it answers its client "check stopped").
     pub fn stop(&self) {
@@ -85,6 +98,7 @@ impl Job {
     }
 }
 
+#[cfg(feature = "replay")]
 /// Start checking `input` on a new thread; it answers `conn` itself.
 pub fn start(conn: UnixStream, input: Input) -> Result<Job, String> {
     let stop = Arc::new(AtomicBool::new(false));
@@ -125,6 +139,7 @@ pub fn start(conn: UnixStream, input: Input) -> Result<Job, String> {
     Ok(job)
 }
 
+#[cfg(feature = "replay")]
 /// Replay the chunks in a fresh session and compare with the live canvas: Ok(same), or Err
 /// if a chunk failed or the check was stopped.
 fn replay(conn: &UnixStream, input: &Input, stop: &Arc<AtomicBool>) -> Result<bool, String> {

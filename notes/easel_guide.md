@@ -14,9 +14,9 @@ Three things hold for every session:
   variables, the paint on your brushes and the clock are as they were
   before it, and it isn't written to the log.
 - **The log is the painting.** Every chunk that ran is appended to
-  `paintings/lua/painting.lua`, and replaying that file paints the same
-  canvas, bit for bit. The easel verifies the log before reopening it and
-  before each request; changing or shortening it causes a refusal.
+  `paintings/lua/painting.lua`, and `bin/easel open` replays it to pick the
+  painting up again. The easel goes on only from the log it wrote: a log
+  changed, shortened or removed outside the session stops it.
 
 ## Starting
 
@@ -29,20 +29,19 @@ bin/easel open                                # start the session (2400 px wide)
 bin/easel do 'canvas{size=400, aspect=1.25, linen=15, ground={{pile={{"lead white", 1}}, um=100, apply="knife"}}}'
 bin/easel look                                # prints the path of a PNG of the canvas: read it
 bin/easel note 'what I did and why'           # an entry in notes/journal.md
-bin/easel save                                # the finished canvas: out/easel/painting/painting.png
+bin/easel save                                # the canvas as it is now: out/easel/painting/painting.png
 bin/easel close                               # the log stays in paintings/lua/painting.lua
 ```
 
 | command | what it does |
 |---|---|
-| `bin/easel open` | starts the 2400-pixel-wide session, or reattaches to it if it is running. If `paintings/lua/painting.lua` exists, the session verifies and replays it first and goes on from there |
+| `bin/easel open` | starts the 2400-pixel-wide session, or reattaches to it if it is running. If `paintings/lua/painting.lua` exists, the session replays it first and goes on from there; a long log takes minutes to replay |
 | `bin/easel do '<lua>'`, `do -f file.lua`, `do -` | runs a chunk. The reply is what the chunk printed, then `ok · chunk N`. Add `--look` to look afterwards |
 | `bin/easel look [...]` | writes a PNG of the canvas and prints its path (see [Looking](#looking)) |
-| `bin/easel log` | prints the painting so far (the log file) |
+| `bin/easel log` | prints the painting so far (the log file: each chunk after a line `--@ chunk N`) |
 | `bin/easel status` | chunks, width and the canvas's setup |
 | `bin/easel save` | writes the canvas as it is now to `out/easel/painting/painting.png` and prints the path |
 | `bin/easel frames on\|off` | saves a look after every chunk in `out/easel/painting/frames/` |
-| `bin/easel check` | replays the log in a fresh session and confirms it matches the live canvas |
 | `bin/easel close` | ends the session |
 | `bin/easel note '<text>'`, `note -` | adds an entry to your journal (see [The journal](#the-journal)) |
 
@@ -449,11 +448,3 @@ ruled over a drawing to transfer it.
 with the session's painting time, such as `day 2, 09:40`; the session must
 be open. Entries already there stay as they were written; writing a note
 doesn't advance painting time.
-
-## The log
-
-`bin/easel check` replays the log in a fresh session and compares it with
-the live canvas. The log, `paintings/lua/painting.lua`, is plain Lua with
-a line `--@ chunk N` before each chunk. The easel keeps a record of it in
-`out/easel/painting/committed.lua`. If the log is changed, shortened or
-missing, the easel refuses to continue.

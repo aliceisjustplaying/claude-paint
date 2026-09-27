@@ -57,6 +57,12 @@ end"
 
 mkdir -p "$(dirname "$out")"
 finished=${out%.png}.lua
-{ cat "$log"; printf '\n--@ chunk (finishing)\n%s\n' "$finishing"; } > "$finished"
+# the finished log goes next to the PNG: never over the log being finished
+if [ "$finished" -ef "$log" ]; then
+  echo "finish_painting: $finished is the log itself; write the PNG under another name or folder" >&2
+  exit 1
+fi
+{ cat "$log"; printf '\n--@ chunk (finishing)\n%s\n' "$finishing"; } > "$finished.part"
+mv "$finished.part" "$finished"
 "$easel" run "$finished" --out "$out"
 echo "finished: $out (log: $finished)"

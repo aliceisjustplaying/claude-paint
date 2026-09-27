@@ -13,12 +13,45 @@
  *     painter's names keep working: name, chunk and defining line, bounded
  *   - the canvas clock: chunks in the log, the latest painting time seen in the easel's replies
  * It deliberately has no next steps, remaining tasks or progress checklist.
+ *
+ * It also sets when compaction happens (COMPACTION below), so no settings file has to sit in
+ * the studio where the painter would read it. Pi has no extension API for settings, and no
+ * CLI flag or environment variable for a settings file apart from moving the whole agent
+ * directory (which moves auth.json and its OAuth refresh lock). So this module overrides the
+ * compaction getters of pi's SettingsManager in this process: pi's own threshold check, cut
+ * point and overflow recovery then run with these values, whatever the global
+ * ~/.pi/agent/settings.json or a studio .pi/settings.json says. Each compaction entry's
+ * `details.settings` records the values pi used, and `details.harnessSettings` whether they
+ * were these.
  */
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import { type ExtensionAPI, SettingsManager } from "@earendil-works/pi-coding-agent";
 
 export const DETAILS_TYPE = "claude-paint-painter-compaction";
+
+/**
+ * Compact when the context passes the window minus reserveTokens (about 900K of both lanes'
+ * 1M windows), keeping the last keepRecentTokens verbatim (pi's default). Round 16's point
+ * for Opus; see README "Compaction".
+ */
+export const COMPACTION = { enabled: true, reserveTokens: 100_000, keepRecentTokens: 20_000 } as const;
+
+/** Make pi's settings answer COMPACTION for every model. Returns false if pi's SettingsManager has changed shape. */
+export function applyCompactionSettings(proto: Record<string, unknown> = SettingsManager.prototype as never): boolean {
+	const names = ["getCompactionSettings", "getCompactionEnabled", "getCompactionReserveTokens", "getCompactionKeepRecentTokens"];
+	if (!names.every((n) => typeof proto[n] === "function")) return false;
+	proto.getCompactionSettings = () => ({ ...COMPACTION });
+	proto.getCompactionEnabled = () => COMPACTION.enabled;
+	proto.getCompactionReserveTokens = () => COMPACTION.reserveTokens;
+	proto.getCompactionKeepRecentTokens = () => COMPACTION.keepRecentTokens;
+	return true;
+}
+
+function sameSettings(s: unknown): boolean {
+	const t = s as Partial<typeof COMPACTION> | undefined;
+	return t?.enabled === COMPACTION.enabled && t?.reserveTokens === COMPACTION.reserveTokens && t?.keepRecentTokens === COMPACTION.keepRecentTokens;
+}
 
 const HEADER =
 	"Earlier parts of this conversation were condensed. Look at the canvas to see where the painting stands.";
@@ -176,6 +209,9 @@ export function buildSummary(cwd: string, entries: readonly unknown[]) {
 }
 
 export default function painterCompaction(pi: ExtensionAPI) {
+	if (!applyCompactionSettings()) {
+		console.error("painter compaction: pi's SettingsManager has no compaction getters to override; pi's own settings apply");
+	}
 	pi.on("session_before_compact", async (event, ctx) => {
 		const { preparation, branchEntries, reason } = event;
 		let summary: string;
@@ -192,7 +228,10 @@ export default function painterCompaction(pi: ExtensionAPI) {
 				summary,
 				firstKeptEntryId: preparation.firstKeptEntryId,
 				tokensBefore: preparation.tokensBefore,
-				details: { type: DETAILS_TYPE, version: 1, reason, settings: preparation.settings, ...facts },
+				details: {
+					type: DETAILS_TYPE, version: 1, reason, settings: preparation.settings,
+					harnessSettings: sameSettings(preparation.settings), ...facts,
+				},
 			},
 		};
 	});

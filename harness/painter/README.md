@@ -9,9 +9,9 @@ from the machine's global pi setup (packages, `~/.pi/agent/extensions`,
 |---|---|
 | `painter.ts` | extension: drops pi's `APPEND_SYSTEM.md` addendum, context files, skills and guidelines from the system prompt, strips the leading `<!-- -->` comment of `system_prompt.md`, makes `bash`/`read` run one at a time, and keeps old images out of each request (`context-images.ts`) |
 | `context-images.ts` | the image pruning `painter.ts` runs before each request (see "Images in the request"); `test/context-images.test.ts` tests it (`node --test harness/painter/test/context-images.test.ts`) |
-| `compaction.ts` | extension: `session_before_compact` with a deterministic summary, no model call |
+| `compaction.ts` | extension: `session_before_compact` with a deterministic summary, no model call; also sets the compaction thresholds (see "Settings") |
 | `system_prompt.md` | the painter's system prompt (approved by Alice, 2026-09-27) |
-| `studio-settings.json` | compaction settings; copied into each studio as `.pi/settings.json` |
+| `studio-settings.json` | round 17's copy of the compaction settings, which `r17_chains.py` puts in each studio as `.pi/settings.json`. `compaction.ts` now sets the same values itself; later rounds don't copy it (see "Settings") |
 
 ## Launch
 
@@ -25,19 +25,17 @@ H=~/src/a/claude-paint-r17-base/harness/painter
 BLACK=~/.pi/agent/git/github.com/aliceisjustplaying/pi-black/extensions/pi-black.ts
 TEMP_GUARD=~/.pi/agent/extensions/persistent-temp.ts
 
-mkdir -p .pi && cp "$H/studio-settings.json" .pi/settings.json
-
 # Opus lane (anthropic, Claude subscription login)
 pi --print --no-extensions -e "$H/painter.ts" -e "$H/compaction.ts" -e "$TEMP_GUARD" -e "$BLACK" \
    --system-prompt "$H/system_prompt.md" --tools bash,read \
-   --no-context-files --no-skills --no-prompt-templates --approve \
+   --no-context-files --no-skills --no-prompt-templates --no-approve \
    --provider anthropic --model claude-opus-5-5 --thinking high \
    "Complete your task autonomously. Read BRIEF.md in this folder and follow it exactly. That file is your whole brief. Your FINAL message is the reply it asks for."
 
 # Gemini lane (openrouter, API key): the same without -e "$BLACK"
 pi --print --no-extensions -e "$H/painter.ts" -e "$H/compaction.ts" -e "$TEMP_GUARD" \
    --system-prompt "$H/system_prompt.md" --tools bash,read \
-   --no-context-files --no-skills --no-prompt-templates --approve \
+   --no-context-files --no-skills --no-prompt-templates --no-approve \
    --provider openrouter --model google/gemini-3.8-flash --thinking high \
    "<same message>"
 ```
@@ -48,9 +46,10 @@ the same list with `stdin=DEVNULL`, as round 16 did.
 - `--no-extensions` disables every configured and discovered extension,
   including pi-anthropic-compat's native compaction and pi-codex-compaction;
   the explicit `-e` paths still load.
-- `--approve` trusts the studio's `.pi/` for this process, so
-  `.pi/settings.json` loads in print mode (without it, print mode skips
-  untrusted project settings). Nothing else is put in the studio's `.pi/`.
+- `--no-approve` ignores the studio's `.pi/`, so nothing a painter writes
+  there takes effect in a later sitting. The studio has no `.pi/` from us:
+  `compaction.ts` sets the compaction thresholds. (Round 17 launched with
+  `--approve` and a `.pi/settings.json`, which its painters read.)
 - pi-black is loaded only for the Anthropic lane: see below.
 
 ## Why pi-black, and not pi-anthropic-compat
@@ -127,13 +126,10 @@ settings, chunk count, clock and number of globals.
 
 ### Settings
 
-`studio-settings.json`, copied into the studio as `.pi/settings.json`:
+`compaction.ts` sets them, for every model, in `COMPACTION`:
 
-```json
-{ "compaction": { "enabled": true, "reserveTokens": 100000, "keepRecentTokens": 20000,
-    "modelOverrides": {
-      "anthropic/claude-opus-5-5":          { "reserveTokens": 100000, "keepRecentTokens": 20000 },
-      "openrouter/google/gemini-3.8-flash": { "reserveTokens": 100000, "keepRecentTokens": 20000 } } } }
+```ts
+export const COMPACTION = { enabled: true, reserveTokens: 100_000, keepRecentTokens: 20_000 } as const;
 ```
 
 Compaction triggers when context exceeds window minus `reserveTokens`: about
@@ -142,12 +138,32 @@ point for Opus (Alice's global override) and about 1,021K for Gemini (global
 `reserveTokens` 27200). `keepRecentTokens` 20000 is pi's default, which round
 16 also used.
 
-Project settings merge over `~/.pi/agent/settings.json`, and a global
-per-model override beats a project-wide value. That's why the file repeats
-both models under `modelOverrides`. Everything else in the global settings
-still applies (for example `retry`: 120 retries, 60 s apart). Pointing
-`PI_CODING_AGENT_DIR` at a harness folder would drop those too, but it also
-moves `auth.json` and its OAuth refresh, so this harness doesn't do that.
+Round 17's painters read the settings file in their studio (`cat
+.pi/settings.json` was the first thing both did), so the values moved out of
+the studio. Pi has no extension API for settings and no flag or environment
+variable for a settings file. `PI_CODING_AGENT_DIR` moves the whole agent
+directory, `auth.json` included, and pi locks `auth.json` for an OAuth refresh
+at `<path>.lock` without resolving links, so a linked `auth.json` would get a
+second lock and two pi processes could refresh the same token at once. So
+`compaction.ts` overrides the four compaction getters of pi's `SettingsManager`
+(the class `@earendil-works/pi-coding-agent` exports, the same module pi runs)
+in the painter's process. Pi's own threshold check, cut point and overflow
+recovery then use `COMPACTION`, whatever the global settings or a studio
+`.pi/settings.json` say. If pi's `SettingsManager` ever lacks those getters,
+it prints a line to stderr and pi's settings apply. Each compaction entry
+records `details.settings` (what pi used) and `details.harnessSettings`
+(whether that was `COMPACTION`). Everything else in the global settings still
+applies (for example `retry`: 120 retries, 60 s apart).
+
+Checked 2026-09-27 with Haiku 4.5 (200K window) on a fake session of about 31K
+tokens whose last reply reported 130,010 input tokens, launched as above with
+no `.pi/` in the studio: with the committed `compaction.ts` of before this
+change (global settings: `reserveTokens` 27200) nothing compacted; with this
+one pi compacted before the prompt, `"reason": "threshold"`, `"settings":
+{"enabled": true, "reserveTokens": 100000, "keepRecentTokens": 20000}`,
+`"harnessSettings": true`, and the reply's input fell from 31,190 to 21,296
+tokens. Opus 5.5 with the Opus launch above (pi-black, `--no-approve`)
+answered a one-line prompt (`stopReason: "stop"`, $0.0013).
 
 ## Verification (2026-09-27)
 

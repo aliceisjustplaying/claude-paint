@@ -18,7 +18,7 @@
 
   /* top: which painter, what it's doing now, live state */
   header { display:flex; align-items:center; gap:14px; padding:9px 14px; background:var(--panel); border-bottom:1px solid var(--line); min-width:0 }
-  #sess { max-width:360px; flex:none }
+  #sess { max-width:360px; flex:none } #allwrap { font-size:12px; color:var(--dim); display:flex; align-items:center; gap:3px; flex:none; cursor:pointer }
   #doing { flex:1; min-width:0; display:flex; align-items:baseline; gap:10px; white-space:nowrap; overflow:hidden }
   #doing .what { font-size:18px; font-weight:600 } #doing .detail { color:var(--dim); font:13px var(--mono); overflow:hidden; text-overflow:ellipsis; min-width:0 }
   #badge { flex:none; font-size:11.5px; font-weight:700; letter-spacing:.12em; padding:3px 10px; border-radius:999px; border:1px solid var(--line); color:var(--dim) }
@@ -70,6 +70,7 @@
 <body class="nocode">
 <header>
   <select id="sess" title="painter session"></select>
+  <label id="allwrap" title="also show sessions that aren't painters (judges, tests, work on the project)"><input type="checkbox" id="all"> all</label>
   <div id="doing"><span class="what"></span><span class="detail"></span></div>
   <span id="badge"></span>
   <div id="clockbox"><span id="clocklbl">painting for</span><span id="clock">0:00:00</span></div>
@@ -103,11 +104,20 @@ const hhmm = ts => new Date(ts).toLocaleTimeString([], {hour:'2-digit', minute:'
 const ago = s => s < 90 ? Math.round(s) + ' s ago' : s < 5400 ? Math.round(s/60) + ' min ago' : Math.round(s/3600) + ' h ago';
 const imgURL = i => `/img?s=${encodeURIComponent(S)}&i=${i}`;
 
-async function loadSessions() {
-  const ss = await (await fetch('/api/sessions')).json();
+let allSessions = [];
+function renderSessions() {
+  const all = $('all').checked, ss = allSessions.filter(s => all || s.painter || s.path === S);
   $('sess').innerHTML = ss.map(s => `<option value="${s.path}">${esc(s.folder.replace(/^claude-paint-/, ''))}${s.model ? ' · ' + esc(s.model) : ''} · ${new Date(s.mtime*1000).toLocaleString([], {month:'short', day:'numeric', hour:'2-digit', minute:'2-digit'})}</option>`).join('');
-  S = new URLSearchParams(location.search).get('s') || (ss[0] && ss[0].path); $('sess').value = S;
+  if (S) $('sess').value = S;
 }
+async function loadSessions() {
+  allSessions = await (await fetch('/api/sessions')).json();
+  $('all').checked = localStorage.getItem('studio.all') === '1';
+  const first = allSessions.find(s => $('all').checked || s.painter) || allSessions[0];
+  S = new URLSearchParams(location.search).get('s') || (first && first.path);
+  renderSessions();
+}
+$('all').onchange = () => { localStorage.setItem('studio.all', $('all').checked ? '1' : '0'); renderSessions(); };
 async function poll() {
   if (!S) return;
   const r = await (await fetch(`/api/events?s=${encodeURIComponent(S)}&since=${events.length}`)).json();

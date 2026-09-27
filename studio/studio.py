@@ -20,6 +20,7 @@ import glob
 import http.server
 import json
 import os
+import re
 import urllib.parse
 
 SESSIONS = os.path.expanduser("~/.pi/agent/sessions")
@@ -57,11 +58,17 @@ def session_model(path):
     return _models[path]
 
 
+# Painters' sessions, by folder: round 16+ studios, the round 14-15 chain painters and the
+# earlier rounds' painter worktrees. Everything else (judges, tests, work on the project)
+# shows only with "all".
+PAINTER = re.compile(r"^(paint-studio-[0-9a-f]+|paint-r\d+-p\d+|claude-paint-r\d+-(arm\d|tree\d|astra|fable|flash|p\d))$")
+
+
 def list_sessions():
     out = []
     for f in glob.glob(os.path.join(SESSIONS, "*paint*", "*.jsonl")):
         d = os.path.basename(os.path.dirname(f))
-        out.append({"path": f, "folder": d.strip("-").split("-src-a-")[-1], "model": session_model(f),
+        out.append({"path": f, "folder": d.strip("-").split("-src-a-")[-1], "model": session_model(f), "painter": bool(PAINTER.match(d.strip("-").split("-src-a-")[-1])),
                     "mtime": os.path.getmtime(f), "size": os.path.getsize(f)})
     out.sort(key=lambda s: -s["mtime"])
     return out

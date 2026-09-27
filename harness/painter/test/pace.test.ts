@@ -42,3 +42,11 @@ test("daily quotas, billing errors and other errors are left alone", () => {
 	assert.equal(retryablePerMinuteQuota(undefined), undefined);
 });
 
+test("a request over the whole budget goes at once when the window is empty", () => {
+	const p = new TokenPace(1_000_000);
+	assert.equal(p.waitMs(2_000_000, 0), 0);
+	p.record(2_000_000, 0);
+	assert.equal(p.waitMs(2_000_000, 30_000), 30_000);
+	assert.equal(p.waitMs(2_000_000, 61_000), 0); // the oversized one aged out: no crash
+});
+

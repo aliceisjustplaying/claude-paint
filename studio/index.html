@@ -104,7 +104,7 @@
 const $ = id => document.getElementById(id);
 // Q: what we watch, as a query: 'p=<painter folder>' (all its sittings, stitched) or 's=<session file>' (one session)
 let Q = null, epoch = null, events = [], pos = 0, live = true, playing = null, cwd = '', sitStarts = [0], nSittings = 1;
-const esc = s => String(s).replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));  // text and quoted attributes
 const fname = p => (p || '').split('/').slice(-1)[0];
 const fmt = s => { s = Math.max(0, s|0); return `${(s/3600)|0}:${String(((s%3600)/60)|0).padStart(2,'0')}:${String(s%60).padStart(2,'0')}`; };
 const hhmm = ts => new Date(ts).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});

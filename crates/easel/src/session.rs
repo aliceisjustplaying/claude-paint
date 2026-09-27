@@ -13,10 +13,18 @@ use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 use std::mem::ManuallyDrop;
 use std::rc::Rc;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 /// Marks the start of a chunk in a session file.
 pub const MARK: &str = "--@ chunk";
+
+/// The longest a chunk of a live session may run (the longest of 2,502 painters' chunks on
+/// 2026-09-27 took 94 s). A chunk that runs longer is stopped like a failed one: nothing it
+/// did is kept. Replays have no limit: a chunk in the log succeeded once and must replay the
+/// same on a slower or busier machine.
+pub const CHUNK_LIMIT: Duration = Duration::from_secs(600);
+/// Lua instructions between two looks at the clock.
+const HOOK_EVERY: u32 = 1_000_000;
 
 pub struct Chunk {
     pub src: String,
@@ -49,6 +57,9 @@ pub struct Session {
     /// failure ends it. A live session snapshots before every chunk so a
     /// failure can roll back.
     replay: bool,
+    /// When the running chunk must stop (live sessions only), and how long a chunk may run.
+    deadline: Rc<Cell<Option<Instant>>>,
+    pub chunk_limit: Duration,
     /// heap.lua's snap and restore, prelude.lua's per-chunk reset and the
     /// private objects snapshots skip (dropped before the state is closed).
     heap: Option<(Function, Function)>,
@@ -90,7 +101,16 @@ impl Session {
         let prelude: (Function, Table) = lua.load(include_str!("prelude.lua")).set_name("prelude.lua").call((id, getmt))?;
         let st = Rc::new(RefCell::new(Studio::new(width)));
         api::install(&lua, st.clone())?;
-        Ok(Session { lua: ManuallyDrop::new(lua), state, st, log: Vec::new(), replay: false, heap: Some((snap_f, restore_f)), prelude: Some(prelude), _serials: serials })
+        let deadline = Rc::new(Cell::new(None::<Instant>));
+        let d = deadline.clone();
+        lua.set_hook(mlua::HookTriggers::new().every_nth_instruction(HOOK_EVERY), move |_, _| match d.get() {
+            Some(t) if Instant::now() > t => Err(mlua::Error::runtime(format!(
+                "the chunk ran longer than {} minutes and was stopped; nothing it did was kept",
+                CHUNK_LIMIT.as_secs() / 60
+            ))),
+            _ => Ok(mlua::VmState::Continue),
+        })?;
+        Ok(Session { lua: ManuallyDrop::new(lua), state, st, log: Vec::new(), replay: false, deadline, chunk_limit: CHUNK_LIMIT, heap: Some((snap_f, restore_f)), prelude: Some(prelude), _serials: serials })
     }
 
     /// A session that replays a program: a failed chunk ends it, so it
@@ -100,6 +120,12 @@ impl Session {
         let mut s = Self::new(width)?;
         s.replay = true;
         Ok(s)
+    }
+
+    /// Replaying (reopening a log): no snapshot before each chunk, since a failed chunk ends
+    /// the reopen anyway, and no time limit. Off again once the log is in.
+    pub fn set_replaying(&mut self, on: bool) {
+        self.replay = on;
     }
 
     fn snap(&mut self) -> mlua::Result<Snap> {
@@ -151,7 +177,9 @@ impl Session {
         self.st.borrow_mut().begin(n);
         let t0 = Instant::now();
         let chunk = self.lua.load(src.as_str()).set_name(format!("chunk {n}"));
+        self.deadline.set((!self.replay).then(|| t0 + self.chunk_limit));
         let r = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| chunk.exec()));
+        self.deadline.set(None);
         // the hand time the chunk spent goes on the clock before it ends
         if matches!(r, Ok(Ok(()))) {
             crate::time::flush(&self.st, true);
@@ -473,6 +501,31 @@ mod tests {
         }
         assert_eq!(bits(&a), bits(&b));
         assert_eq!(a.st.borrow().clock, b.st.borrow().clock);
+    }
+
+    #[test]
+    fn terrain_refuses_huge_and_empty_areas_before_allocating() {
+        let mut s = Session::new(64).unwrap();
+        let h = "height=function(x, y) return 0 end";
+        let e = s.run(&format!("terrain{{area={{0, 0, 1e9, 1e9}}, {h}}}")).unwrap_err();
+        assert!(e.contains("at most 4001 x 4001"), "{e}");
+        let e = s.run(&format!("terrain{{area={{5, 5, 5, 50}}, {h}}}")).unwrap_err();
+        assert!(e.contains("at least one step"), "{e}");
+        s.run(&format!("t = terrain{{area={{0, 0, 20, 20}}, {h}}}")).unwrap();
+    }
+
+    #[test]
+    fn a_live_chunk_over_the_limit_stops_and_keeps_nothing_but_a_replay_runs_it() {
+        let busy = "x = 1; for i = 1, 3000000 do end; x = 2";
+        let mut s = Session::new(64).unwrap();
+        s.chunk_limit = Duration::ZERO;
+        let e = s.run(busy).unwrap_err();
+        assert!(e.contains("was stopped"), "{e}");
+        assert!(s.log.is_empty());
+        assert!(s.lua.globals().get::<Value>("x").unwrap().is_nil());
+        s.set_replaying(true);
+        s.run(busy).unwrap();
+        assert_eq!(s.lua.globals().get::<i64>("x").unwrap(), 2);
     }
 
     #[test]

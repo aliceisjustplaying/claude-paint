@@ -109,7 +109,11 @@ const fname = p => (p || '').split('/').slice(-1)[0];
 const fmt = s => { s = Math.max(0, s|0); return `${(s/3600)|0}:${String(((s%3600)/60)|0).padStart(2,'0')}:${String(s%60).padStart(2,'0')}`; };
 const hhmm = ts => new Date(ts).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
 const ago = s => s < 90 ? Math.round(s) + ' s ago' : s < 5400 ? Math.round(s/60) + ' min ago' : Math.round(s/3600) + ' h ago';
-const imgURL = i => `/img?${Q}&i=${i}`;
+// the static export (studio/export_static.py) sets STUDIO_STATIC: the same data, read from files, loaded once
+const STATIC = !!window.STUDIO_STATIC;
+let IMGEXT = [];
+const P = () => Q && Q.startsWith('p=') ? decodeURIComponent(Q.slice(2)) : '';
+const imgURL = i => STATIC ? `data/${encodeURIComponent(P())}/img/${i}.${IMGEXT[i] || 'png'}` : `/img?${Q}&i=${i}`;
 const sitLabel = e => `sitting ${e.n} · ${hhmm(e.ts)}`;
 const qOf = s => s.p ? 'p=' + encodeURIComponent(s.p) : 's=' + encodeURIComponent(s.s);
 
@@ -133,7 +137,7 @@ function renderSessions() {
   if (Q) $('sess').value = Q;
 }
 async function loadSessions() {
-  allSessions = await (await fetch('/api/sessions')).json();
+  allSessions = await (await fetch(STATIC ? 'data/sessions.json' : '/api/sessions')).json();
   if (Q === null) {
     $('all').checked = localStorage.getItem('studio.all') === '1';
     const u = new URLSearchParams(location.search), first = allSessions.find(s => $('all').checked || s.painter) || allSessions[0];
@@ -145,13 +149,14 @@ $('all').onchange = () => { localStorage.setItem('studio.all', $('all').checked 
 let gen = 0, busy = false;  // one poll at a time; a reset (new painter, rebuilt stream) makes in-flight polls stale
 function reset() { gen++; busy = false; stop(); events = []; epoch = null; cwd = ''; liveText = null; typed = -1; sitStarts = [0]; nSittings = 1; $('strip').innerHTML = ''; $('ticks').innerHTML = ''; }
 async function poll() {
-  if (!Q || busy) return;
+  if (!Q || busy || (STATIC && epoch !== null)) return;  // a static export is complete: one load per painter
   const g = gen; busy = true; let r;
-  try { r = await (await fetch(`/api/events?${Q}&since=${events.length}${epoch === null ? '' : '&epoch=' + epoch}`)).json(); }
+  try { r = await (await fetch(STATIC ? `data/${encodeURIComponent(P())}/events.json`
+                                      : `/api/events?${Q}&since=${events.length}${epoch === null ? '' : '&epoch=' + epoch}`)).json(); }
   finally { if (g === gen) busy = false; }
   if (g !== gen) return;  // switched painters meanwhile
   if (epoch !== null && r.epoch !== epoch) { const wasLive = live; reset(); live = wasLive; }  // the stream was rebuilt: start over
-  epoch = r.epoch; nSittings = r.sittings;
+  epoch = r.epoch; nSittings = r.sittings; if (r.imgext) IMGEXT = r.imgext;
   if (r.events.length) {
     const base = events.length; events.push(...r.events);
     for (const e of r.events) if (e.kind === 'start') cwd = e.cwd;
@@ -274,7 +279,7 @@ let liveText = null;
 async function refreshLiveCode() {
   const p = paintingFile(events.length - 1); if (!p || !cwd) return;
   const rel = p.startsWith(cwd + '/') ? p.slice(cwd.length + 1) : p;
-  const q = Q, r = await fetch(`/api/file?${q}&f=${encodeURIComponent(rel)}`); if (!r.ok || q !== Q) return;
+  const q = Q, r = await fetch(STATIC ? `data/${encodeURIComponent(P())}/file/${rel.split('/').map(encodeURIComponent).join('/')}` : `/api/file?${q}&f=${encodeURIComponent(rel)}`); if (!r.ok || q !== Q) return;
   const t = await r.text(); if (t !== liveText) { const old = liveText; liveText = t; if (live && pos === events.length - 1) renderCode(p, t, diffLines(old, t)); }
 }
 function diffLines(a, b) { if (a == null) return new Set(); const A = new Set(a.split('\n')); const out = new Set(); b.split('\n').forEach((l, i) => { if (!A.has(l) && l.trim()) out.add(i); }); return out; }

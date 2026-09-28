@@ -23,6 +23,8 @@ use crate::wet::Paint;
 #[derive(Clone, Debug)]
 pub struct Tube {
     pub name: &'static str,
+    /// What the paint is made of, in a few words (the guide's tube table).
+    pub pigment: &'static str,
     /// Masstone color, linear RGB (the paint laid thick).
     pub color: Rgb,
     /// Hiding power of one coat of the tube paint (0 transparent .. 1
@@ -38,8 +40,86 @@ pub struct Tube {
     pub drying: f32,
 }
 
-fn tube(name: &'static str, color: &str, hiding: f32, stiff: f32, strength: f32, drying: f32) -> Tube {
-    Tube { name, color: hex(color), hiding, stiff, strength, drying }
+fn tube(name: &'static str, pigment: &'static str, color: &str, hiding: f32, stiff: f32, strength: f32, drying: f32) -> Tube {
+    Tube { name, pigment, color: hex(color), hiding, stiff, strength, drying }
+}
+
+/// Every tube the engine knows, each defined once: `tube(name, pigment,
+/// masstone, hiding, stiffness, tinting strength, drying)`. Boxes
+/// (`Palette::tube_box`, `Palette::named_box`) take their tubes from here by
+/// name.
+///
+/// The first fourteen are the tube box's (unchanged since round 19: old
+/// paintings replay with them bit for bit). The rest came with round 20's
+/// boxes; notes/r20/TUBES.md gives each one's numbers, the proposal they
+/// come from and why. All numbers are estimates from the pigment literature,
+/// not measurements.
+pub fn catalog() -> Vec<Tube> {
+    vec![
+        // ---- the tube box (round 19)
+        tube("lead white", "basic lead carbonate", "#efe9dc", 0.82, 0.8, 1.0, drier::LEAD_WHITE),
+        // semi-transparent cobalt glass, weak
+        tube("smalt", "cobalt potash glass, coarse", "#5a6e9e", 0.3, 0.55, 0.45, drier::SMALT),
+        tube("pale smalt", "a paler grade of smalt", "#8d9bb8", 0.35, 0.55, 0.35, drier::SMALT),
+        tube("yellow ochre", "hydrated iron oxide earth", "#b98a36", 0.8, 0.7, 0.8, drier::OCHRE),
+        tube("red earth", "iron oxide earth", "#9c4a30", 0.85, 0.7, 0.9, drier::RED_EARTH),
+        tube("vermilion", "mercuric sulfide", "#cf3a24", 0.9, 0.75, 1.0, drier::VERMILION),
+        tube("raw umber", "iron and manganese oxide earth", "#5c4c3a", 0.8, 0.65, 0.9, drier::UMBER),
+        tube("bone black", "charred bone (carbon, calcium phosphate)", "#1e1b19", 0.9, 0.7, 1.1, drier::BONE_BLACK),
+        tube("cobalt blue", "cobalt aluminate", "#2f55a8", 0.55, 0.6, 0.8, drier::COBALT_BLUE),
+        tube("chrome yellow", "lead chromate", "#e8b21c", 0.9, 0.7, 1.0, drier::CHROME_YELLOW),
+        // Prussian blue transparent and very strong [AP3 pp.196–197]
+        // (tinting strength 3, below the sourced "very high", because
+        // Mixbox's latent already carries some of a dark pigment's strength)
+        tube("Prussian blue", "iron ferrocyanide", "#172440", 0.35, 0.45, 3.0, drier::PRUSSIAN_BLUE),
+        // green earth translucent, weak, short of body [AP1 p.146; FIELD
+        // p.129], its masstone from Munsell 7.5G/2.9/1.5 [AP1 Table 1]; its
+        // drying rate is an estimate (an earth: medium)
+        tube("green earth", "celadonite and glauconite clay", "#3a4843", 0.2, 0.35, 0.3, drier::OCHRE),
+        // cobalt-zinc oxide: semi-transparent, weak, permanent [WEB-co];
+        // drying estimated as cobalt's
+        tube("Rinmann's green", "cobalt-zinc oxide", "#5f8f76", 0.35, 0.5, 0.4, drier::COBALT_BLUE),
+        // verdigris ground in oil: "poor hiding power in oil" [AP2 p.132];
+        // copper is a drier (drying rate estimated as smalt's)
+        tube("copper green", "verdigris ground in oil", "#3f7f6a", 0.25, 0.4, 1.0, drier::SMALT),
+        // ---- round 20 (notes/r20/TUBES.md)
+        tube("zinc white", "zinc oxide", "#f3f3ef", 0.6, 0.6, 1.0, drier::ZINC_WHITE),
+        tube("Naples yellow", "lead antimonate", "#e2b964", 0.85, 0.75, 0.6, drier::NAPLES_YELLOW),
+        tube("lemon chrome", "pale lead chromate with lead sulfate", "#eed83c", 0.8, 0.7, 0.8, drier::CHROME_YELLOW),
+        tube("pale cadmium", "cadmium sulfide, a pale grade", "#f0c63c", 0.85, 0.7, 1.1, drier::CADMIUM),
+        tube("cadmium yellow", "cadmium sulfide", "#e8a51f", 0.85, 0.7, 1.1, drier::CADMIUM),
+        tube("Indian yellow", "magnesium and calcium euxanthate", "#e1a11e", 0.15, 0.4, 0.8, drier::INDIAN_YELLOW),
+        tube("Mars yellow", "synthetic iron oxide hydroxide", "#c4872b", 0.85, 0.7, 1.1, drier::MARS),
+        tube("brown ochre", "iron oxide earth, a darker grade", "#86592e", 0.8, 0.7, 0.8, drier::OCHRE),
+        tube("raw sienna", "sienna earth, unroasted", "#9a6a2b", 0.4, 0.5, 0.7, drier::SIENNA),
+        tube("orange chrome", "basic lead chromate", "#e0712a", 0.88, 0.75, 0.9, drier::CHROME_YELLOW),
+        tube("red lead", "lead tetroxide", "#e0542b", 0.85, 0.8, 0.8, drier::RED_LEAD),
+        tube("orange vermilion", "mercuric sulfide, a yellower grade", "#dd4a22", 0.9, 0.75, 1.0, drier::VERMILION),
+        tube("Chinese vermilion", "mercuric sulfide, a deeper grade", "#b8282e", 0.9, 0.75, 1.0, drier::VERMILION),
+        tube("cadmium red", "cadmium sulfoselenide", "#c3321f", 0.9, 0.7, 1.1, drier::CADMIUM),
+        tube("Mars red", "synthetic iron oxide", "#a33f2a", 0.9, 0.7, 1.2, drier::MARS),
+        tube("Indian red", "nearly pure ferric oxide", "#7a3a33", 0.92, 0.7, 1.2, drier::RED_EARTH),
+        tube("rose madder", "madder lake on alumina", "#8e2238", 0.1, 0.35, 0.9, drier::MADDER_LAKE),
+        tube("burnt sienna", "roasted sienna earth", "#7c3f24", 0.45, 0.55, 0.9, drier::SIENNA),
+        // Mars brown at sienna's rate: iron oxides dry well but lack umber's
+        // manganese (notes/r20/TUBES.md)
+        tube("Mars brown", "synthetic iron oxide, roasted", "#5a3a28", 0.85, 0.65, 1.0, drier::SIENNA),
+        tube("bitumen", "asphaltum", "#2e2017", 0.12, 0.3, 0.7, drier::BITUMEN),
+        tube("cerulean blue", "cobalt stannate", "#3f82b3", 0.7, 0.6, 0.6, drier::COBALT_BLUE),
+        tube("French ultramarine", "synthetic ultramarine", "#26318c", 0.3, 0.5, 1.2, drier::ULTRAMARINE),
+        tube("Antwerp blue", "Prussian blue on an alumina base", "#26406c", 0.4, 0.45, 1.6, drier::ANTWERP_BLUE),
+        tube("viridian", "hydrated chromium oxide", "#1c4a40", 0.3, 0.5, 0.9, drier::VIRIDIAN),
+        tube("emerald green", "copper aceto-arsenite", "#23a57a", 0.6, 0.6, 0.6, drier::COPPER),
+        // cobalt pigments are siccative in oil; set at cobalt blue's rate
+        tube("cobalt violet", "cobalt phosphate or arsenate", "#7e4c8e", 0.35, 0.55, 0.35, drier::COBALT_BLUE),
+    ]
+}
+
+/// The named tubes from the catalog, in the order given. Unknown names panic
+/// (boxes are fixed lists, checked by the tests).
+fn pick(names: &[&str]) -> Vec<Tube> {
+    let all = catalog();
+    names.iter().map(|n| all.iter().find(|t| t.name == *n).unwrap_or_else(|| panic!("no tube {n:?} in the catalog")).clone()).collect()
 }
 
 /// A mixture on the palette: parts of tubes.
@@ -61,6 +141,42 @@ pub struct Mixture {
     /// laid as knifed carries this rate (`Mixture::laid`).
     pub drying: f32,
 }
+
+/// The box a painting is painted from when nothing names another.
+pub const DEFAULT_BOX: &str = "tube box";
+
+/// The default box's tubes, in its order.
+const TUBE_BOX: &[&str] = &[
+    "lead white", "smalt", "pale smalt", "yellow ochre", "red earth", "vermilion", "raw umber", "bone black", "cobalt blue", "chrome yellow", "Prussian blue", "green earth", "Rinmann's green", "copper green",
+];
+
+/// The other boxes: (name, tubes), each exactly the tubes its research note
+/// documents (notes/r20/TUBES.md). Each is in the build only with its
+/// `box-*` feature, so a painter's build names no other studio's box.
+const BOXES: &[(&str, &[&str])] = &[
+    #[cfg(feature = "box-sargent")]
+    (
+        "sargent",
+        &[
+            "lead white", "zinc white", "lemon chrome", "chrome yellow", "cadmium yellow", "Indian yellow", "yellow ochre", "Mars yellow", "red lead", "vermilion", "cadmium red", "Mars red", "red earth", "rose madder",
+            "burnt sienna", "Mars brown", "bone black", "cerulean blue", "cobalt blue", "French ultramarine", "viridian", "emerald green", "cobalt violet",
+        ],
+    ),
+    #[cfg(feature = "box-inness")]
+    (
+        "inness",
+        &[
+            "lead white", "lemon chrome", "cadmium yellow", "yellow ochre", "raw sienna", "orange chrome", "red earth", "Indian red", "raw umber", "bitumen", "bone black", "cobalt blue", "Antwerp blue",
+        ],
+    ),
+    #[cfg(feature = "box-alma-tadema")]
+    (
+        "alma-tadema",
+        &[
+            "lead white", "Naples yellow", "pale cadmium", "yellow ochre", "brown ochre", "orange vermilion", "Chinese vermilion", "red earth", "rose madder", "burnt sienna", "bone black", "cobalt blue", "viridian",
+        ],
+    ),
+];
 
 pub struct Palette {
     pub name: &'static str,
@@ -103,19 +219,7 @@ impl Palette {
     /// Naples yellow is not included. With green tubes added:
     /// `smalt_box_greens`.
     pub fn smalt_box() -> Self {
-        Palette::new(
-            "smalt box",
-            vec![
-                tube("lead white", "#efe9dc", 0.82, 0.8, 1.0, drier::LEAD_WHITE),
-                tube("smalt", "#5a6e9e", 0.3, 0.55, 0.45, drier::SMALT),
-                tube("pale smalt", "#8d9bb8", 0.35, 0.55, 0.35, drier::SMALT),
-                tube("yellow ochre", "#b98a36", 0.8, 0.7, 0.8, drier::OCHRE),
-                tube("red earth", "#9c4a30", 0.85, 0.7, 0.9, drier::RED_EARTH),
-                tube("vermilion", "#cf3a24", 0.9, 0.75, 1.0, drier::VERMILION),
-                tube("raw umber", "#5c4c3a", 0.8, 0.65, 0.9, drier::UMBER),
-                tube("bone black", "#1e1b19", 0.9, 0.7, 1.1, drier::BONE_BLACK),
-            ],
-        )
+        Palette::new("smalt box", pick(&["lead white", "smalt", "pale smalt", "yellow ochre", "red earth", "vermilion", "raw umber", "bone black"]))
     }
 
     /// `smalt_box` without smalt (pale smalt stays), plus cobalt blue
@@ -123,20 +227,14 @@ impl Palette {
     pub fn cobalt_box() -> Self {
         let mut t = Palette::smalt_box().tubes;
         t.retain(|t| t.name != "smalt");
-        t.push(tube("cobalt blue", "#2f55a8", 0.55, 0.6, 0.8, drier::COBALT_BLUE));
-        t.push(tube("chrome yellow", "#e8b21c", 0.9, 0.7, 1.0, drier::CHROME_YELLOW));
+        t.extend(pick(&["cobalt blue", "chrome yellow"]));
         Palette::new("cobalt box", t)
     }
 
-    /// Two tubes: Prussian blue and green earth. Masstones and numbers are
-    /// documented approximations: Prussian blue transparent and very strong
-    /// [AP3 pp.196–197] (tinting strength 3, below the sourced "very high",
-    /// because Mixbox's latent already carries some of a dark pigment's
-    /// strength); green earth translucent, weak, short of body [AP1 p.146;
-    /// FIELD p.129], its masstone from Munsell 7.5G/2.9/1.5 [AP1 Table 1].
-    /// Green earth's drying rate is an estimate (an earth: medium).
+    /// Two tubes: Prussian blue and green earth (see `catalog` for their
+    /// sources).
     pub fn green_tubes() -> Vec<Tube> {
-        vec![tube("Prussian blue", "#172440", 0.35, 0.45, 3.0, drier::PRUSSIAN_BLUE), tube("green earth", "#3a4843", 0.2, 0.35, 0.3, drier::OCHRE)]
+        pick(&["Prussian blue", "green earth"])
     }
 
     /// `smalt_box` plus `green_tubes`: Prussian blue (hiding 0.35,
@@ -151,22 +249,19 @@ impl Palette {
     /// stiffness 0.5, tinting strength 0.4; drying estimated as cobalt's).
     pub fn cobalt_box_greens() -> Self {
         let mut t = Palette::green_tubes();
-        t.push(tube("Rinmann's green", "#5f8f76", 0.35, 0.5, 0.4, drier::COBALT_BLUE));
+        t.extend(pick(&["Rinmann's green"]));
         Palette::cobalt_box().with(t).named("cobalt box, greens")
     }
 
-    /// Every tube the engine knows, in one box: lead white, smalt, pale
-    /// smalt, yellow ochre, red earth, vermilion, raw umber, bone black,
-    /// cobalt blue, chrome yellow, Prussian blue, green earth, Rinmann's
-    /// green and copper green. All were made by the 1820s (cobalt blue from
-    /// 1802, chrome yellow sold in Germany from about 1820, Rinmann's green
-    /// rare and costly [AP3; WEB-co]).
+    /// The default box, `DEFAULT_BOX`: lead white, smalt, pale smalt, yellow
+    /// ochre, red earth, vermilion, raw umber, bone black, cobalt blue,
+    /// chrome yellow, Prussian blue, green earth, Rinmann's green and copper
+    /// green. All were made by the 1820s (cobalt blue from 1802, chrome
+    /// yellow sold in Germany from about 1820, Rinmann's green rare and
+    /// costly [AP3; WEB-co]). A painting whose log names no box is painted
+    /// from it.
     pub fn tube_box() -> Self {
-        let mut t = Palette::smalt_box().tubes;
-        let later = Palette::cobalt_box_greens().tubes;
-        t.extend(later.into_iter().filter(|x| !["lead white", "pale smalt", "yellow ochre", "red earth", "vermilion", "raw umber", "bone black"].contains(&x.name)));
-        t.push(Palette::copper_green());
-        Palette::new("tube box", t)
+        Palette::new(DEFAULT_BOX, pick(TUBE_BOX))
     }
 
     /// The same tubes under another name.
@@ -179,7 +274,34 @@ impl Palette {
     /// "poor hiding power in oil" [AP2 p.132]; copper is a drier (drying
     /// rate estimated as smalt's).
     pub fn copper_green() -> Tube {
-        tube("copper green", "#3f7f6a", 0.25, 0.4, 1.0, drier::SMALT)
+        pick(&["copper green"]).remove(0)
+    }
+
+    /// The names of the boxes this build knows: the default first, then
+    /// those its features include (the `box-*` features; the replay build
+    /// has them all, a painter's build only its studio's).
+    pub fn box_names() -> Vec<&'static str> {
+        let mut v = vec![DEFAULT_BOX];
+        v.extend(BOXES.iter().map(|b| b.0));
+        v
+    }
+
+    /// The box called `name`, if this build knows it.
+    pub fn named_box(name: &str) -> Option<Palette> {
+        if name == DEFAULT_BOX {
+            return Some(Palette::tube_box());
+        }
+        BOXES.iter().find(|b| b.0 == name).map(|b| Palette::new(b.0, pick(b.1)))
+    }
+
+    /// The tubes as a markdown table: name, pigment, hiding, stiffness,
+    /// tinting strength and drying (the guide's "The tube box:" table).
+    pub fn table(&self) -> String {
+        let mut s = String::from("| tube | pigment | hiding | stiffness | tinting strength | drying |\n|---|---|---|---|---|---|\n");
+        for t in &self.tubes {
+            s.push_str(&format!("| {} | {} | {:?} | {:?} | {:?} | {:?} |\n", t.name, t.pigment, t.hiding, t.stiff, t.strength, t.drying));
+        }
+        s
     }
 
     /// This palette with extra tubes appended.
@@ -280,19 +402,76 @@ mod tests {
         assert_eq!((half.color, half.scatter, half.stiff), (p.paint(0.2).color, p.paint(0.2).scatter, p.paint(0.2).stiff));
     }
 
-    /// The tube box holds every tube the engine knows, each once.
+    /// The tube box is round 19's, tube for tube and number for number:
+    /// paintings made from it replay bit for bit.
     #[test]
-    fn the_tube_box_holds_every_tube_once() {
-        let names: Vec<&str> = Palette::tube_box().tubes.iter().map(|t| t.name).collect();
-        let mut known: Vec<&str> = Palette::smalt_box().tubes.iter().chain(Palette::cobalt_box_greens().tubes.iter()).map(|t| t.name).collect();
-        known.push(Palette::copper_green().name);
-        known.sort();
-        known.dedup();
-        let mut sorted = names.clone();
-        sorted.sort();
-        assert_eq!(sorted, known);
-        assert_eq!(names.len(), 14);
-        assert!(Palette::tube_box().tubes.iter().all(|t| t.drying > 0.0));
+    fn the_tube_box_is_unchanged() {
+        let r19: [(&str, &str, &str, f32, f32, f32, f32); 14] = [
+            ("lead white", "basic lead carbonate", "#efe9dc", 0.82, 0.8, 1.0, 2.0),
+            ("smalt", "cobalt potash glass, coarse", "#5a6e9e", 0.3, 0.55, 0.45, 1.6),
+            ("pale smalt", "a paler grade of smalt", "#8d9bb8", 0.35, 0.55, 0.35, 1.6),
+            ("yellow ochre", "hydrated iron oxide earth", "#b98a36", 0.8, 0.7, 0.8, 0.8),
+            ("red earth", "iron oxide earth", "#9c4a30", 0.85, 0.7, 0.9, 1.0),
+            ("vermilion", "mercuric sulfide", "#cf3a24", 0.9, 0.75, 1.0, 0.4),
+            ("raw umber", "iron and manganese oxide earth", "#5c4c3a", 0.8, 0.65, 0.9, 2.4),
+            ("bone black", "charred bone (carbon, calcium phosphate)", "#1e1b19", 0.9, 0.7, 1.1, 0.4),
+            ("cobalt blue", "cobalt aluminate", "#2f55a8", 0.55, 0.6, 0.8, 1.4),
+            ("chrome yellow", "lead chromate", "#e8b21c", 0.9, 0.7, 1.0, 1.8),
+            ("Prussian blue", "iron ferrocyanide", "#172440", 0.35, 0.45, 3.0, 1.8),
+            ("green earth", "celadonite and glauconite clay", "#3a4843", 0.2, 0.35, 0.3, 0.8),
+            ("Rinmann's green", "cobalt-zinc oxide", "#5f8f76", 0.35, 0.5, 0.4, 1.4),
+            ("copper green", "verdigris ground in oil", "#3f7f6a", 0.25, 0.4, 1.0, 1.6),
+        ];
+        let b = Palette::tube_box();
+        assert_eq!(b.name, DEFAULT_BOX);
+        assert_eq!(b.tubes.len(), r19.len());
+        for (t, (name, pigment, color, hiding, stiff, strength, drying)) in b.tubes.iter().zip(r19) {
+            assert_eq!((t.name, t.pigment), (name, pigment));
+            assert_eq!(t.color.map(f32::to_bits), hex(color).map(f32::to_bits), "{name}");
+            assert_eq!([t.hiding, t.stiff, t.strength, t.drying].map(f32::to_bits), [hiding, stiff, strength, drying].map(f32::to_bits), "{name}");
+        }
+        // and the older boxes built from the same definitions
+        assert_eq!(Palette::named_box(DEFAULT_BOX).unwrap().tubes.len(), 14);
+        let names = |p: Palette| p.tubes.iter().map(|t| t.name).collect::<Vec<_>>();
+        assert_eq!(names(Palette::cobalt_box_greens()), ["lead white", "pale smalt", "yellow ochre", "red earth", "vermilion", "raw umber", "bone black", "cobalt blue", "chrome yellow", "Prussian blue", "green earth", "Rinmann's green"]);
+        assert_eq!(names(Palette::smalt_box_greens()).len(), 10);
+    }
+
+    /// One definition per tube: no name twice in the catalog, and every
+    /// tube's numbers in range.
+    #[test]
+    fn the_catalog_defines_each_tube_once() {
+        let cat = catalog();
+        let mut names: Vec<&str> = cat.iter().map(|t| t.name).collect();
+        names.sort();
+        names.dedup();
+        assert_eq!(names.len(), cat.len(), "a tube is defined twice");
+        for t in &cat {
+            assert!(t.hiding > 0.0 && t.hiding <= 1.0 && t.stiff > 0.0 && t.stiff <= 1.0 && t.strength > 0.0 && t.drying > 0.0, "{t:?}");
+            assert!(!t.pigment.is_empty(), "{}", t.name);
+        }
+    }
+
+    /// Every box's tubes come from the catalog, each once, and a box is
+    /// found by its name; an unknown name finds none.
+    #[test]
+    fn every_box_resolves_in_the_catalog() {
+        let cat = catalog();
+        for name in Palette::box_names() {
+            let b = Palette::named_box(name).unwrap_or_else(|| panic!("box {name:?}"));
+            assert_eq!(b.name, name);
+            let mut seen: Vec<&str> = b.tubes.iter().map(|t| t.name).collect();
+            seen.sort();
+            seen.dedup();
+            assert_eq!(seen.len(), b.tubes.len(), "{name}: a tube twice");
+            for t in &b.tubes {
+                let c = cat.iter().find(|c| c.name == t.name).unwrap();
+                assert_eq!(format!("{c:?}"), format!("{t:?}"));
+            }
+        }
+        assert!(Palette::named_box("no such box").is_none());
+        #[cfg(feature = "all-boxes")]
+        assert_eq!(Palette::box_names(), [DEFAULT_BOX, "sargent", "inness", "alma-tadema"]);
     }
 }
 
@@ -321,8 +500,8 @@ mod canvas_tests {
     #[test]
     fn mixture_to_paint_preserves_scattering() {
         let pal = Palette::new("opaque neutral tubes", vec![
-            Tube { name: "white", color: [0.99; 3], hiding: 0.99, stiff: 0.5, strength: 1.0, drying: 1.0 },
-            Tube { name: "black", color: [0.01; 3], hiding: 0.99, stiff: 0.5, strength: 1.0, drying: 1.0 },
+            Tube { name: "white", pigment: "", color: [0.99; 3], hiding: 0.99, stiff: 0.5, strength: 1.0, drying: 1.0 },
+            Tube { name: "black", pigment: "", color: [0.01; 3], hiding: 0.99, stiff: 0.5, strength: 1.0, drying: 1.0 },
         ]);
         for (white, medium) in [(0.1, 0.0), (0.1, 0.5), (0.6, 0.0), (0.6, 0.9)] {
             let m = pal.pile(vec![(0, white), (1, 1.0 - white)]);

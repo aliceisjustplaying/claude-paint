@@ -341,7 +341,8 @@ class H(http.server.BaseHTTPRequestHandler):
             body = scrub(body)
         self.send_response(code)
         self.send_header("Content-Type", ctype)
-        self.send_header("Cache-Control", "no-store")
+        # a look never changes: the browser keeps it (and asks again for everything else)
+        self.send_header("Cache-Control", "private, max-age=86400, immutable" if ctype.startswith("image/") else "no-store")
         if PUBLIC:
             self.send_header("Content-Security-Policy", "default-src 'self'; script-src 'self' 'unsafe-inline'; "
                              "style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:")
@@ -406,7 +407,12 @@ def main():
     global PUBLIC
     PUBLIC = a.public
     print(f"studio: http://{a.host}:{a.port}" + (" (public: painters only, scrubbed)" if PUBLIC else ""))
-    http.server.ThreadingHTTPServer((a.host, a.port), H).serve_forever()
+    # a thumbnail strip asks for dozens of images at once: the default queue of 5 connections
+    # reset the rest ("Connection reset by peer")
+    class Server(http.server.ThreadingHTTPServer):
+        request_queue_size = 128
+        daemon_threads = True
+    Server((a.host, a.port), H).serve_forever()
 
 
 if __name__ == "__main__":

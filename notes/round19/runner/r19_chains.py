@@ -324,12 +324,19 @@ def limit_reset_s(text):
     return sum(float(v) * unit[u[0].lower()] for v, u in re.findall(r"([\d.]+)\s*([a-z]+)", m.group(1), re.I))
 
 
-def wait_out_limit(m, tag, text):
+def first_probe_wait(text, ended, now):
+    """Seconds before the first probe after a sitting that ended on a usage limit at `ended`
+    (epoch s): the reset time the error named (or LIMIT_PROBE_S), less the time since then (a
+    resumed runner asks at once when that has passed)."""
+    reset = limit_reset_s(text)
+    return max(0.0, (reset + 60 if reset else LIMIT_PROBE_S) - (now - ended))
+
+
+def wait_out_limit(m, tag, text, ended):
     """Wait until the provider answers again (probing it), or give up after LIMIT_GIVE_UP_H hours.
     True when the painter can go on."""
     t0 = time.time()
-    first = limit_reset_s(text)
-    wait = first + 60 if first else LIMIT_PROBE_S
+    wait = first_probe_wait(text, ended, t0)
     while True:
         if time.time() + wait - t0 > LIMIT_GIVE_UP_H * 3600:
             log(f"{tag}: the usage limit hasn't lifted in {LIMIT_GIVE_UP_H} h; painter stops (rerun to go on)")
@@ -418,7 +425,9 @@ def paint(name, n, d, rd):
     save_sittings(rd, n, sittings)
     while (k := next_sitting(sittings)) is not None:
         if sittings and sittings[-1].get("status") == "limited":
-            if not wait_out_limit(m, tag, sittings[-1].get("error") or ""):
+            last = sittings[-1]
+            ended = time.mktime(time.strptime(last["end"], "%Y-%m-%d %H:%M:%S")) if last.get("end") else time.time()
+            if not wait_out_limit(m, tag, last.get("error") or "", ended):
                 return None
         # one session across sittings: reattaches at once; replays the log only if the server is gone
         stop_leftovers(d, keep_server=True)

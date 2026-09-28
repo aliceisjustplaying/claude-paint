@@ -5,27 +5,29 @@ Gemini 3 Pro Image, MiMo v2.5, OpenAI's -pro variants, gpt-chat-latest (ChatGPT'
 (multi-model orchestration, not one painter) and Namazu (a Japanese fine-tune of Kimi K2.6). One pass = one light, one
 typical and one heavy painting (profiles and method: vision_models_2026-09-28.xlsx). List prices with caching; ballpark x0.5 to x2.
 
-One pass: $2,046 (light $89, typical $663, heavy $1,295). Three passes: $6,139. No routers or orchestrators: one model per painter, with one exception kept on purpose: Unbiased's Pareto, an ensemble (several unnamed models on every request, answers merged), because it's fun horrible.
+One pass: $1,903 (light $84, typical $615, heavy $1,204). Three passes: $5,708. No routers or orchestrators: one model per painter, with one exception kept on purpose: Unbiased's Pareto, an ensemble (several unnamed models on every request, answers merged), because it's fun horrible.
+
+Mistral Medium 3.5: OpenRouter lists no cache price; Mistral bills cached tokens at 10% of input ($0.15/M), used here.
 
 | # | Model | Released | Light | Typical | Heavy | One pass |
 |---|---|---|---|---|---|---|
 | 1 | `openai/gpt-6-astra` | 2026-09-04 | $13.10 | $93.60 | $184.87 | $291.57 |
 | 2 | `anthropic/claude-fable-5.1` | 2026-09-01 | $10.03 | $66.90 | $134.81 | $211.74 |
-| 3 | `mistralai/mistral-medium-3-5` | 2026-04-30 | $7.44 | $61.65 | $117.00 | $186.09 |
-| 4 | `qwen/qwen3.8-max-prime` | 2026-09-23 | $4.93 | $38.04 | $73.58 | $116.55 |
-| 5 | `anthropic/claude-opus-5.5` | 2026-09-22 | $4.42 | $30.32 | $60.60 | $95.34 |
-| 6 | `fireworks/ember-1` | 2026-09-24 | $3.83 | $27.18 | $53.77 | $84.78 |
-| 7 | `moonshotai/kimi-k3` | 2026-07-16 | $3.83 | $27.18 | $53.77 | $84.78 |
-| 8 | `xiaomi/mimo-v2.6-pro-ultraspeed` | 2026-09-21 | $2.97 | $22.34 | $43.51 | $68.82 |
-| 9 | `x-ai/grok-4.7` | 2026-09-21 | $2.79 | $22.34 | $42.78 | $67.91 |
-| 10 | `unbiased/pareto` (ensemble: kept on purpose) | 2026-09-18 | $2.83 | $21.55 | $41.81 | $66.19 |
-| 11 | `bytedance-seed/seed-2.0-code` | 2026-08-12 | $2.52 | $20.66 | $39.30 | $62.48 |
-| 12 | `bytedance-seed/seed-2-1-turbo` | 2026-08-12 | $2.48 | $20.55 | $39.00 | $62.03 |
-| 13 | `openai/gpt-5.6-terra` | 2026-07-09 | $2.76 | $19.16 | $38.18 | $60.10 |
-| 14 | `qwen/qwen3.8-max-0902` | 2026-09-03 | $2.54 | $19.62 | $37.91 | $60.07 |
-| 15 | `openai/gpt-6-sol` | 2026-09-22 | $2.62 | $18.72 | $36.98 | $58.31 |
-| 16 | `anthropic/claude-sonnet-5` | 2026-06-30 | $2.62 | $18.72 | $36.98 | $58.31 |
-| 17 | `z-ai/glm-5v-turbo` | 2026-04-01 | $1.88 | $14.70 | $28.32 | $44.90 |
+| 3 | `qwen/qwen3.8-max-prime` | 2026-09-23 | $4.93 | $38.04 | $73.58 | $116.55 |
+| 4 | `anthropic/claude-opus-5.5` | 2026-09-22 | $4.42 | $30.32 | $60.60 | $95.34 |
+| 5 | `fireworks/ember-1` | 2026-09-24 | $3.83 | $27.18 | $53.77 | $84.78 |
+| 6 | `moonshotai/kimi-k3` | 2026-07-16 | $3.83 | $27.18 | $53.77 | $84.78 |
+| 7 | `xiaomi/mimo-v2.6-pro-ultraspeed` | 2026-09-21 | $2.97 | $22.34 | $43.51 | $68.82 |
+| 8 | `x-ai/grok-4.7` | 2026-09-21 | $2.79 | $22.34 | $42.78 | $67.91 |
+| 9 | `unbiased/pareto` (ensemble: kept on purpose) | 2026-09-18 | $2.83 | $21.55 | $41.81 | $66.19 |
+| 10 | `bytedance-seed/seed-2.0-code` | 2026-08-12 | $2.52 | $20.66 | $39.30 | $62.48 |
+| 11 | `bytedance-seed/seed-2-1-turbo` | 2026-08-12 | $2.48 | $20.55 | $39.00 | $62.03 |
+| 12 | `openai/gpt-5.6-terra` | 2026-07-09 | $2.76 | $19.16 | $38.18 | $60.10 |
+| 13 | `qwen/qwen3.8-max-0902` | 2026-09-03 | $2.54 | $19.62 | $37.91 | $60.07 |
+| 14 | `openai/gpt-6-sol` | 2026-09-22 | $2.62 | $18.72 | $36.98 | $58.31 |
+| 15 | `anthropic/claude-sonnet-5` | 2026-06-30 | $2.62 | $18.72 | $36.98 | $58.31 |
+| 16 | `z-ai/glm-5v-turbo` | 2026-04-01 | $1.88 | $14.70 | $28.32 | $44.90 |
+| 17 | `mistralai/mistral-medium-3-5` (cached tokens at 10%, per Mistral) | 2026-04-30 | $1.91 | $13.59 | $26.89 | $42.39 |
 | 18 | `x-ai/grok-build-0.1` | 2026-05-20 | $1.47 | $11.96 | $22.80 | $36.23 |
 | 19 | `meta/muse-spark-1.3` | 2026-09-02 | $1.55 | $11.78 | $22.88 | $36.20 |
 | 20 | `thinkingmachines/inkling` | 2026-07-17 | $1.49 | $11.34 | $22.03 | $34.86 |

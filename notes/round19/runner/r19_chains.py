@@ -116,11 +116,18 @@ OPENING = {
 }
 
 
-def model(provider, name, thinking, black=False, env=None):
+def api_key(entry):
+    """A provider key stored in pi's auth.json (read at run time; never printed or written)."""
+    a = json.loads((HOME / ".pi/agent/auth.json").read_text())
+    e = a.get(entry) or {}
+    return e.get("key") or e.get("apiKey") or ""
+
+
+def model(provider, name, thinking, black=False, env=None, key_from=None):
     """black: load pi-black (Anthropic OAuth through the Claude subscription). env: extra environment
     for the painter's pi (harness/painter's PAINTER_MAX_IMAGES, PAINTER_MAX_IMAGE_MB, PAINTER_INPUT_TPM)."""
     return dict(args=["--provider", provider, "--model", name, "--thinking", thinking], name=name,
-                black=black, env=env or {})
+                black=black, env=env or {}, key_from=key_from)
 
 
 def lane(profile, m, painters=1):
@@ -133,11 +140,22 @@ READER = ["--provider", "anthropic", "--model", "claude-opus-5-5", "--thinking",
 
 # GPT-6 Luna through the ChatGPT subscription (dev runs), thinking max
 LUNA = model("openai-codex", "gpt-6-luna", "max")
+GEM2 = model("google", "gemini-3.8-flash", "high", env={"PAINTER_MAX_IMAGES": "8", "PAINTER_INPUT_TPM": "900000"})
 
 LANES = {
     "F": lane("friedrich", OPUS, painters=3),
     "LUNAF": lane("friedrich", LUNA),        # a Friedrich, one painter
     "LUNAB": lane("blank", LUNA),            # a picture of its choosing
+    # Gemini through AI Studio: its 2M input tokens a minute for gemini-3.8-flash is shared by the
+    # two painters (each paces only itself), so 900K each; 8 images; high is the provider's top
+    "GEMF": lane("friedrich", GEM2),
+    "GEMB": lane("blank", GEM2),
+    # 2026-09-28 night, Friedrich each: Kimi K3 and MiMo v2.6 Pro on OpenCode Go (MiMo keeps 4 images:
+    # github.com/XiaomiMiMo/MiMo-Code/issues/2508), Muse Spark 1.3 on OpenCode Zen (its key is a
+    # placeholder in auth.json: the opencode-go key is passed), each at its highest thinking level
+    "KIMIF": lane("friedrich", model("opencode-go", "kimi-k3", "max")),
+    "MIMOF": lane("friedrich", model("opencode-go", "mimo-v2.6-pro", "max", env={"PAINTER_MAX_IMAGES": "4"})),
+    "MUSEF": lane("friedrich", model("opencode", "muse-spark-1.3", "xhigh", key_from="opencode-go")),
     # Blank studio, one painter each: uncomment the lanes to run.
     # "OPUS": lane("blank", model("anthropic", "claude-opus-5-5", "high", black=True)),
     # "BUN": lane("blank", model("opencode-go", "space-bunny-free", "xhigh")),       # its map goes to max
@@ -189,7 +207,10 @@ def brief(profile, d):
 
 
 def painter_cmd(m, message=PAINTER_MSG):
-    return ["pi", "--print"] + HARNESS + (["-e", str(BLACK)] if m["black"] else []) + m["args"] + [message]
+    # key_from: a provider whose stored key is a placeholder (opencode Zen) gets another entry's key
+    key = (["--api-key", f"<{m['key_from']} key from auth.json>" if DRY else api_key(m["key_from"])]
+           if m.get("key_from") else [])
+    return ["pi", "--print"] + HARNESS + (["-e", str(BLACK)] if m["black"] else []) + m["args"] + key + [message]
 
 
 def count_chunks(d):

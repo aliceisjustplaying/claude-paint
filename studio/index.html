@@ -343,11 +343,27 @@ function journal(i) {
 function show(i) {
   if (!events.length) return; pos = Math.max(0, Math.min(i, events.length - 1)); $('scrub').value = pos;
   let img = null, imgK = -1; for (let k = pos; k >= 0; k--) if (events[k].kind === 'image') { img = events[k]; imgK = k; break; }
+  // at the live edge of a sitting that's over, show the whole painting, not the last crop or squint it looked at
+  if (live && pos === events.length - 1 && sittingOver()) { const k = lastWhole(); if (k >= 0) { img = events[k]; imgK = k; } }
   if (img) { const u = imgURL(img.img); if (!$('img').src.endsWith(u)) $('img').src = u; $('cap').textContent = hhmm(img.ts) + '  ' + fname(img.path); }
   for (const t of $('strip').children) { const on = +t.dataset.i === imgK; t.classList.toggle('on', on); if (on && !live) t.scrollIntoView({ inline:'center', block:'nearest' }); }
   if (live) stripEnd();
   codeAt(pos); journal(pos); status();
   $('pos').textContent = `${pos + 1}/${events.length}`;
+}
+// a look is whole if it asked for no crop and no mode (value, squint...); its images follow it
+function lastWhole() {
+  let img = -1;
+  for (let k = events.length - 1; k >= 0; k--) {
+    if (events[k].kind === 'image') { if (img < 0) img = k; }
+    else if (events[k].kind === 'look') { if (img >= 0 && !/crop|mode/.test(events[k].text || '')) return img; img = -1; }
+  }
+  return -1;
+}
+// the sitting is over: its closing words said and a couple of quiet minutes since, or half an hour of nothing
+function sittingOver() {
+  const last = events[events.length - 1], age = (Date.now() - Date.parse(last.ts)) / 1000;
+  return age >= 1800 || (last.kind === 'say' && age >= 120);
 }
 function looks() { const r = []; events.forEach((e, k) => e.kind === 'image' && r.push(k)); return r; }
 function stop() { if (playing) { clearInterval(playing); playing = null; } $('play').textContent = '▶'; }
@@ -372,6 +388,6 @@ document.onkeydown = e => { if (e.target.tagName === 'SELECT') return;
   const k = e.key; if (k === 'ArrowRight') { stop(); live = false; show(pos + 1); } else if (k === 'ArrowLeft') { stop(); live = false; show(pos - 1); }
   else if (k === '[') $('prevlook').click(); else if (k === ']') $('nextlook').click(); else if (k === 'l') goLive(); else if (k === 'c') $('togglecode').click();
   else if (k === 'Escape') $('zoom').style.display = 'none'; else if (k === ' ') { e.preventDefault(); $('play').click(); } };
-loadSessions().then(() => { poll(); setInterval(poll, 2000); setInterval(status, 1000); setInterval(loadSessions, 30000); });
+loadSessions().then(() => { poll(); setInterval(poll, 2000); setInterval(() => { status(); if (live && events.length && pos === events.length - 1 && sittingOver()) { const k = lastWhole(); if (k >= 0 && !$('img').src.endsWith(imgURL(events[k].img))) show(pos); } }, 1000); setInterval(loadSessions, 30000); });
 </script>
 </body></html>

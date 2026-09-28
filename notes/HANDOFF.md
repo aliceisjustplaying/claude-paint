@@ -39,6 +39,21 @@
   agent, built on Anthropic's Claude Agent SDK." before Opus painters' system prompt.
 - **Repo:** MIT license (code), CC BY 4.0 (paintings, logs, texts), training-data canary in the README.
 
+*Later that night (01:00-01:45), while Alice slept:*
+- **"easel do failed" (Gemini F, sitting 2):** a `paint` client hung 31 min until the runner's watchdog killed
+  it; the server then skipped the request ("the client went away before it ran"). Not reproducible (the same
+  chunk runs in 0.8 s), but its two weaknesses are fixed (r19-base b90a6ee): the server drops a request not
+  fully sent within 60 s instead of blocking every client, and the tools stop an easel client after 12 min
+  (a chunk) or 3 min (anything else) and say so plainly. `look` errors now say `crop`, not `--crop`.
+- **Viewer thumbnails:** Python's server queued only 5 connections; a thumbnail strip's burst got
+  "Connection reset" (20 of 40). Now 128, and looks are browser-cached. Public link (Funnel):
+  https://m3p.tailec2dc.ts.net/ (`studio.py --public` on 127.0.0.1:8766; off: `tailscale funnel --https=443 off`).
+- **New painters (Friedrich, harness v1 with the fixes):** KIMIF (kimi-k3 max, Go), MIMOF (mimo-v2.6-pro max,
+  Go, 4 images), MUSEF (muse-spark-1.3 xhigh, Zen with the Go key passed at run time). No new Gemini: the
+  running GEMF picks up the fixed harness at its next sitting, and Alice's Google balance is ~11.68 GBP.
+- **Luna vs Gemini on the r19 brief:** Luna stopped after 18 and 36 chunks; Gemini went on (93+ chunks for
+  GEMB by sitting 3). The early stop is Luna's, not the brief's.
+
 *Open, in order:*
 1. Let round 18 finish (DSK, BUN), then clips for DSK/BUN/GLM and F3/Luna/Gemini as wanted.
 2. Website: new clips, round 17-18 paintings, the MiMo and GLM notes.

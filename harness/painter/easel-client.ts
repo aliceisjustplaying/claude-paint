@@ -91,3 +91,8 @@ export function lookArgs(p: { crop?: string; mode?: string; size?: number; grid?
 	else if (typeof p.grid === "number") a.push("--grid", String(p.grid));
 	return a;
 }
+
+/** An easel `look` message in the tool's words: `--crop` is the look tool's `crop`, and so on. */
+export function toolWords(t: string): string {
+	return t.replace(/--(crop|mode|size|grid)\b/g, "$1");
+}

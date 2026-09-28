@@ -1,0 +1,110 @@
+diff --git a/crates/paint/src/bristle.rs b/crates/paint/src/bristle.rs
+index d6fafd8..4e5e428 100644
+--- a/crates/paint/src/bristle.rs
++++ b/crates/paint/src/bristle.rs
+@@ -653,6 +653,7 @@ impl Canvas {
+         if let Some(m) = clip {
+             self.check_mask(m);
+         }
++        let secs0 = self.tally.secs;
+         self.tally.stroke(&held.tool, &g.pts, self.mm_per_unit);
+         let id = self.next_stroke_ids(1);
+         let surf = self.surf();
+@@ -662,6 +663,7 @@ impl Canvas {
+         if let Some((x0, y0, x1, y1)) = b {
+             self.wet.touch(x0, y0, x1, y1);
+         }
++        crate::frames::painted(self, self.tally.secs - secs0);
+     }
+ }
+ 
+@@ -1485,6 +1487,7 @@ impl Canvas {
+         if let Some(m) = clip {
+             self.check_mask(m);
+         }
++        let secs0 = self.tally.secs;
+         self.tally.touch();
+         let id = self.next_stroke_ids(1);
+         let surf = self.surf();
+@@ -1494,6 +1497,7 @@ impl Canvas {
+         if let Some((x0, y0, x1, y1)) = b {
+             self.wet.touch(x0, y0, x1, y1);
+         }
++        crate::frames::painted(self, self.tally.secs - secs0);
+     }
+ }
+ 
+diff --git a/crates/paint/src/canvas.rs b/crates/paint/src/canvas.rs
+index bd2fe60..2b869b8 100644
+--- a/crates/paint/src/canvas.rs
++++ b/crates/paint/src/canvas.rs
+@@ -484,6 +484,7 @@ impl Canvas {
+     /// the crop (without its margin).
+     pub fn save(&mut self, path: impl AsRef<std::path::Path>) -> std::io::Result<()> {
+         self.dry();
++        crate::frames::finish(self);
+         let (bw, (kx0, ky0, kx1, ky1)) = (self.f.w, self.keep);
+         let (w, h) = (kx1 - kx0, ky1 - ky0);
+         // dither by whole-canvas pixel, so a crop matches a whole render
+diff --git a/crates/paint/src/lib.rs b/crates/paint/src/lib.rs
+index a24efb3..c2331d9 100644
+--- a/crates/paint/src/lib.rs
++++ b/crates/paint/src/lib.rs
+@@ -37,6 +37,7 @@ pub mod stipple;
+ pub mod tally;
+ pub mod style;
+ pub mod hand;
++pub mod frames;
+ pub mod outline;
+ pub mod surface;
+ 
+diff --git a/crates/paint/src/sched.rs b/crates/paint/src/sched.rs
+index 6866613..4f6bf42 100644
+--- a/crates/paint/src/sched.rs
++++ b/crates/paint/src/sched.rs
+@@ -175,13 +175,38 @@ impl Canvas {
+             if std::env::var_os("PAINT_DEBUG").is_some() {
+                 eprintln!("  {} tiles", order.len());
+             }
+-            let surf = self.surf();
+-            // tiles run in parallel wherever that can't change the result: a
+-            // tile starts once every earlier tile (in `order`) it overlaps is
+-            // done
+-            let dirty = run_ordered(&order, &rects, |t| paint(surf, t, first.wrapping_add(offsets[t]))).into_iter().fold(None, union);
+-            if let Some((x0, y0, x1, y1)) = dirty {
+-                self.wet.touch(x0, y0, x1, y1);
++            // frames on (crate::frames): the batch's tiles run in consecutive groups of about one frame's
++            // hand time, in the same order with the same stroke ids, with a frame taken between groups; a
++            // group starts once the one before is done, so this paints what one run over `order` does
++            let groups: Vec<Vec<usize>> = if crate::frames::on() {
++                let (every, mut gs, mut cur, mut acc) = (crate::frames::every(), Vec::new(), Vec::new(), 0.0);
++                for &t in &order {
++                    cur.push(t);
++                    acc += secs[t];
++                    if acc >= every {
++                        gs.push(std::mem::take(&mut cur));
++                        acc = 0.0;
++                    }
++                }
++                if !cur.is_empty() {
++                    gs.push(cur);
++                }
++                gs
++            } else {
++                vec![order]
++            };
++            for group in groups {
++                let surf = self.surf();
++                // tiles run in parallel wherever that can't change the result: a
++                // tile starts once every earlier tile (in `order`) it overlaps is
++                // done
++                let dirty = run_ordered(&group, &rects, |t| paint(surf, t, first.wrapping_add(offsets[t]))).into_iter().fold(None, union);
++                if let Some((x0, y0, x1, y1)) = dirty {
++                    self.wet.touch(x0, y0, x1, y1);
++                }
++                if crate::frames::on() {
++                    crate::frames::painted(self, group.iter().map(|&t| secs[t]).sum());
++                }
+             }
+             if bi + 1 < n_batches {
+                 self.hand_pass(bsecs);

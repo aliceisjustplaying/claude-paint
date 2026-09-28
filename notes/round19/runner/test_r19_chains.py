@@ -175,3 +175,10 @@ def test_sittings_ended_by_a_usage_limit_never_reach_the_crash_cap():
             for i in (12, 13)]
     assert next_sitting([s1] + empty + done, max_sittings=4) == 14
     assert next_sitting([s1] + empty + done, max_sittings=3) is None
+
+
+def test_the_first_probe_after_a_usage_limit_counts_from_when_the_sitting_ended():
+    from r19_chains import first_probe_wait, LIMIT_PROBE_S
+    assert first_probe_wait(GO_LIMIT, ended=1000, now=1000) == LIMIT_PROBE_S
+    assert first_probe_wait(GO_LIMIT, ended=1000, now=1000 + 10 * 3600) == 0      # a resume hours later asks at once
+    assert first_probe_wait("usage limit reached. Resets in 2hr", ended=0, now=3600) == 3600 + 60

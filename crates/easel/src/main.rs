@@ -236,6 +236,51 @@ fn append_note(clock: f64, text: &str) -> Result<String, String> {
     Ok(format!("noted in {}\n", p.display()))
 }
 
+// ---------------------------------------------------------------- requests
+
+/// The largest request the server reads (a chunk is a few KB; a note or a -f file more).
+const MAX_REQUEST: usize = 64 << 20;
+
+/// Send a request: a line with the byte length of what follows, then the head line and the
+/// payload. The server reads exactly that many bytes, so it never waits for the client's end
+/// of file: on macOS a client's shutdown of its sending side sometimes never reaches the
+/// server (1 request in a few hundred), and a server reading to the end of file waited until
+/// the client was killed (round 19: three paint calls hung for 12-31 minutes).
+fn send_request(s: &mut impl Write, head: &[u8], payload: &[u8]) -> std::io::Result<()> {
+    let mut buf = format!("{}\n", head.len() + payload.len()).into_bytes();
+    buf.extend_from_slice(head);
+    buf.extend_from_slice(payload);
+    s.write_all(&buf)?;
+    s.flush()
+}
+
+/// Read one request as `send_request` sent it: the head line and the payload, without
+/// waiting for the end of file.
+fn read_request(s: &mut impl Read) -> Result<Vec<u8>, String> {
+    let mut len = Vec::new();
+    let mut b = [0u8; 1];
+    loop {
+        let n = s.read(&mut b).map_err(|e| format!("the client didn't send its request within 60 s ({e})"))?;
+        if n == 0 {
+            return Err("the client closed before sending a request".into());
+        }
+        if b[0] == b'\n' {
+            break;
+        }
+        if !b[0].is_ascii_digit() || len.len() >= 20 {
+            return Err("the request has no length line: the easel client and server are different versions; close and reopen the easel".into());
+        }
+        len.push(b[0]);
+    }
+    let n: usize = std::str::from_utf8(&len).ok().and_then(|t| t.parse().ok()).ok_or("the request's length line is empty")?;
+    if n > MAX_REQUEST {
+        return Err(format!("a request of {n} bytes is more than the easel reads ({MAX_REQUEST})"));
+    }
+    let mut req = vec![0u8; n];
+    s.read_exact(&mut req).map_err(|e| format!("the client didn't send its whole request within 60 s ({e})"))?;
+    Ok(req)
+}
+
 // ---------------------------------------------------------------- client
 
 fn request(name: &str, cmd: &str, args: &[String], payload: &[u8]) -> Result<(bool, String), String> {
@@ -250,8 +295,7 @@ fn request(name: &str, cmd: &str, args: &[String], payload: &[u8]) -> Result<(bo
         head.push_str(&a.replace(['\t', '\n'], " "));
     }
     head.push('\n');
-    s.write_all(head.as_bytes()).and_then(|_| s.write_all(payload)).map_err(|e| e.to_string())?;
-    s.shutdown(std::net::Shutdown::Write).map_err(|e| e.to_string())?;
+    send_request(&mut s, head.as_bytes(), payload).map_err(|e| e.to_string())?;
     let mut resp = String::new();
     s.read_to_string(&mut resp).map_err(|e| e.to_string())?;
     if resp.is_empty() {
@@ -421,11 +465,14 @@ fn serve(args: &[String]) -> Result<(), String> {
         // a request is a few KB sent at once: a client that stalls mid-request must not hold
         // the one thread that serves every request
         let _ = conn.set_read_timeout(Some(Duration::from_secs(60)));
-        let mut req = Vec::new();
-        if conn.read_to_end(&mut req).is_err() {
-            eprintln!("request dropped: the client didn't finish sending it within 60 s");
-            continue;
-        }
+        let req = match read_request(&mut conn) {
+            Ok(r) => r,
+            Err(e) => {
+                let _ = conn.write_all(format!("err\nthe easel couldn't read the request: {e}\n").as_bytes());
+                eprintln!("request dropped: {e}");
+                continue;
+            }
+        };
         let _ = conn.set_read_timeout(None);
         let text = String::from_utf8_lossy(&req).to_string();
         let (head, payload) = text.split_once('\n').unwrap_or((&text, ""));
@@ -727,6 +774,37 @@ fn run(args: &[String]) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A request is served from its length line, even when the client's end of file never
+    /// comes (macOS sometimes loses a half-close; the server then waited for it until the
+    /// client was killed). The client here keeps its socket open, as a lost end of file looks.
+    #[test]
+    fn a_request_is_read_without_the_clients_end_of_file() {
+        let (mut client, mut server) = UnixStream::pair().unwrap();
+        server.set_read_timeout(Some(Duration::from_secs(2))).unwrap();
+        // more than a socket buffer holds: the client writes while the server reads
+        let payload = "-- ünïcode\n".repeat(2000);
+        let sent = payload.clone();
+        let (done_tx, done_rx) = std::sync::mpsc::channel();
+        let t = std::thread::spawn(move || {
+            send_request(&mut client, b"do\n", sent.as_bytes()).unwrap();
+            // keep the socket open until the server has read: no end of file
+            let _ = done_rx.recv();
+            drop(client);
+        });
+        let req = read_request(&mut server).expect("the server waited for an end of file");
+        done_tx.send(()).unwrap();
+        t.join().unwrap();
+        assert_eq!(req, [b"do\n".as_slice(), payload.as_bytes()].concat());
+    }
+
+    #[test]
+    fn a_request_from_an_older_client_is_refused_with_a_reason() {
+        let (mut client, mut server) = UnixStream::pair().unwrap();
+        client.write_all(b"status\n").unwrap();
+        let e = read_request(&mut server).unwrap_err();
+        assert!(e.contains("different versions"), "{e}");
+    }
 
     #[test]
     fn journal_entries_are_dated_lines() {

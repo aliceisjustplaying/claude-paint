@@ -1,5 +1,18 @@
 # Handoff (2026-09-23 evening): moving to the M3 Pro
 
+**Afternoon of 2026-09-28 (read first): the painter decides when it's done; compaction tested; viewers on launchd.**
+- **Runner rules (9dd39d6):** no 4-sitting cap: the painter stops after a sitting it ends itself without adding
+  paint; 20 completed sittings is only a safety cap (logged NOT FINISHED). Crashes and usage limits count for
+  nothing. A sitting cut off by a usage limit carries on in its own session (`pi --session`, "The connection
+  dropped for a while. Carry on where you left off."), same sitting number, judged over the whole sitting.
+  Kimi and MiMo (Go limit again at 12:39) will continue their sitting 7 when Go answers (probe every 30 min).
+  Muse (stopped by the old cap while still painting) and the Geminis (credits) could be resumed under these rules.
+- **Compaction test (lane CTEST, Luna compacting at ~45K via PAINTER_COMPACT_RESERVE, harness 5069814):**
+  three compactions in the first 17 min, each after real growth (one right after Luna reread the notes, which
+  the summary doesn't carry); 0 tool errors before or after; Luna reread the guide and looked 3x to reorient.
+  No r19 sitting came near the production point (900K; the largest was Gemini's 328K).
+- **Studio viewers under launchd** (`notes/launchd/`, install.sh): restart on death (checked), start at login.
+
 **Morning of 2026-09-28 (read first): the paint hang found and fixed; Kimi and MiMo resumed.**
 - **The paint hang was macOS losing a unix-socket half-close:** the client sent its request and shut down
   its sending side; the server, reading to end of file, sometimes never saw it (both sides in `recvfrom`,

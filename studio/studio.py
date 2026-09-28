@@ -27,6 +27,15 @@ import urllib.parse
 from datetime import datetime
 
 SESSIONS = os.path.expanduser("~/.pi/agent/sessions")
+# --public: painters only, nothing that names this machine's owner (for a link shown to others)
+PUBLIC = False
+HOME = os.path.expanduser("~")
+USER = os.path.basename(HOME)
+
+
+def scrub(body):
+    """The home folder as ~ and the account name as `user`, in a response's text."""
+    return re.sub(re.escape(USER.encode()), b"user", body.replace(HOME.encode(), b"~"), flags=re.I)
 HERE = os.path.dirname(os.path.abspath(__file__))
 _cache = {}  # path -> {"offset", "events", "images", "calls"}: one session file, parsed so far
 _streams = {}  # key -> a stitched stream of session files (see stream())
@@ -328,9 +337,14 @@ class H(http.server.BaseHTTPRequestHandler):
         pass
 
     def _send(self, code, body, ctype):
+        if PUBLIC and not ctype.startswith("image/"):
+            body = scrub(body)
         self.send_response(code)
         self.send_header("Content-Type", ctype)
         self.send_header("Cache-Control", "no-store")
+        if PUBLIC:
+            self.send_header("Content-Security-Policy", "default-src 'self'; script-src 'self' 'unsafe-inline'; "
+                             "style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:")
         self.end_headers()
         self.wfile.write(body)
 
@@ -339,13 +353,21 @@ class H(http.server.BaseHTTPRequestHandler):
         q = urllib.parse.parse_qs(u.query)
         # what to show: ?p=<painter folder> (all its sittings) or ?s=<session file> (one session)
         painter, path = q.get("p", [""])[0], q.get("s", [""])[0]
+        if PUBLIC and (path or (painter and not PAINTER.match(painter))):
+            return self._send(404, b"not found", "text/plain")
         if path and not os.path.realpath(path).startswith(os.path.realpath(SESSIONS) + os.sep):
             return self._send(403, b"no", "text/plain")
         if u.path == "/":
             with open(os.path.join(HERE, "index.html"), "rb") as fh:
-                return self._send(200, fh.read(), "text/html; charset=utf-8")
+                page = fh.read()
+            if PUBLIC:
+                page = page.replace(b'<label id="allwrap"', b'<label id="allwrap" hidden')
+            return self._send(200, page, "text/html; charset=utf-8")
         if u.path == "/api/sessions":
-            return self._send(200, json.dumps(list_sessions()).encode(), "application/json")
+            ss = list_sessions()
+            if PUBLIC:
+                ss = [{k: v for k, v in s.items() if k != "files"} for s in ss if s.get("painter")]
+            return self._send(200, json.dumps(ss).encode(), "application/json")
         if u.path not in ("/api/events", "/api/file", "/img"):
             return self._send(404, b"not found", "text/plain")
         files = painter_files(painter) if painter else [path] if path and os.path.isfile(path) else []
@@ -378,9 +400,12 @@ def main():
     ap.add_argument("--port", type=int, default=8765)
     ap.add_argument("--host", default="127.0.0.1", help="e.g. this machine's Tailscale IP to watch from another of your devices")
     ap.add_argument("--sessions", default=SESSIONS, help="where pi keeps its session logs")
+    ap.add_argument("--public", action="store_true", help="painters only, home path and account name scrubbed (a link for others)")
     a = ap.parse_args()
     SESSIONS = os.path.abspath(os.path.expanduser(a.sessions))
-    print(f"studio: http://{a.host}:{a.port}")
+    global PUBLIC
+    PUBLIC = a.public
+    print(f"studio: http://{a.host}:{a.port}" + (" (public: painters only, scrubbed)" if PUBLIC else ""))
     http.server.ThreadingHTTPServer((a.host, a.port), H).serve_forever()
 
 

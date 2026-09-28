@@ -35,7 +35,22 @@ export const DETAILS_TYPE = "claude-paint-painter-compaction";
  * 1M windows), keeping the last keepRecentTokens verbatim (pi's default). Round 16's point
  * for Opus; see README "Compaction".
  */
-export const COMPACTION = { enabled: true, reserveTokens: 100_000, keepRecentTokens: 20_000 } as const;
+export const COMPACTION = { enabled: true, reserveTokens: reserveFromEnv(), keepRecentTokens: 20_000 } as const;
+
+/**
+ * PAINTER_COMPACT_RESERVE (tokens) moves the point: compaction then comes at the window minus
+ * this. For a painter whose window is smaller than 1M, or to make compaction happen early in a
+ * test run (none of round 19's sittings came near 900K: the largest was 328K). Read once and
+ * removed from the environment, like painter.ts's PAINTER_* variables.
+ */
+function reserveFromEnv(): number {
+	const v = process.env.PAINTER_COMPACT_RESERVE;
+	delete process.env.PAINTER_COMPACT_RESERVE;
+	if (v === undefined) return 100_000;
+	const n = Number(v);
+	if (!(Number.isInteger(n) && n > 0)) throw new Error(`PAINTER_COMPACT_RESERVE=${v}: want a number of tokens`);
+	return n;
+}
 
 /** Make pi's settings answer COMPACTION for every model. Returns false if pi's SettingsManager has changed shape. */
 export function applyCompactionSettings(proto: Record<string, unknown> = SettingsManager.prototype as never): boolean {

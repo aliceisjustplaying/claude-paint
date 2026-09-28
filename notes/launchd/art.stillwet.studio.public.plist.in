@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key><string>art.stillwet.studio.public</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>@UVBIN@/uv</string>
+        <string>run</string>
+        <string>studio/studio.py</string>
+        <string>--public</string>
+        <string>--host</string>
+        <string>127.0.0.1</string>
+        <string>--port</string>
+        <string>8766</string>
+    </array>
+    <key>WorkingDirectory</key><string>@HOME@/src/a/claude-paint</string>
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key><string>@UVBIN@:/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin</string>
+        <key>HOME</key><string>@HOME@</string>
+    </dict>
+    <key>RunAtLoad</key><true/>
+    <key>KeepAlive</key><true/>
+    <key>ThrottleInterval</key><integer>15</integer>
+    <key>StandardOutPath</key><string>@HOME@/tmp/studio-viewer-logs/art.stillwet.studio.public.log</string>
+    <key>StandardErrorPath</key><string>@HOME@/tmp/studio-viewer-logs/art.stillwet.studio.public.log</string>
+</dict>
+</plist>

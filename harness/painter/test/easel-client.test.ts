@@ -3,7 +3,7 @@ import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, symlink
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
-import { atEasel, easel, inStudio, lookArgs, tail } from "../easel-client.ts";
+import { atEasel, easel, inStudio, lookArgs, tail, toolWords } from "../easel-client.ts";
 
 test("read stays inside the studio, links included", () => {
 	const studio = mkdtempSync(join(tmpdir(), "studio-"));
@@ -61,4 +61,9 @@ test("a client that hangs is stopped and reported, not waited on forever", async
 	const r = await easel(studio, ["do", "-"], "print(1)", undefined, 300);
 	assert.equal(r.timedOut, true);
 	assert.ok(Date.now() - t0 < 5000);
+});
+
+test("look's errors name the tool's options, not the easel's flags", () => {
+	assert.equal(toolWords("--crop exceeds 1200 pixels per side; choose a smaller crop"), "crop exceeds 1200 pixels per side; choose a smaller crop");
+	assert.equal(toolWords("--mode x: normal, value, squint, mirror"), "mode x: normal, value, squint, mirror");
 });

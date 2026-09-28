@@ -9,19 +9,33 @@ import { isAbsolute, join, relative, resolve } from "node:path";
 export interface Ran {
 	code: number | null;
 	out: string;
+	timedOut?: boolean;
 }
 
 /** Run the studio's easel client with `args`, `input` on stdin; stdout and stderr together, in order. */
-export function easel(studio: string, args: string[], input?: string, signal?: AbortSignal): Promise<Ran> {
+/** How long a tool waits for the easel: a chunk may run 10 minutes (the easel's own limit). */
+export const WAIT_MS = { do: 12 * 60_000, other: 3 * 60_000 };
+
+export function easel(studio: string, args: string[], input?: string, signal?: AbortSignal, waitMs?: number): Promise<Ran> {
 	return new Promise((done, fail) => {
 		const env = { PATH: "/usr/bin:/bin", HOME: process.env.HOME ?? "" };
-		const p = spawn(join(studio, "bin", "easel"), args, { cwd: studio, env, stdio: ["pipe", "pipe", "pipe"] });
+		// its own process group: a timeout or an abort stops it and anything it started
+		const p = spawn(join(studio, "bin", "easel"), args, { cwd: studio, env, stdio: ["pipe", "pipe", "pipe"], detached: true });
+		const kill = () => {
+			try {
+				process.kill(-p.pid!, "SIGTERM");
+			} catch {
+				p.kill("SIGTERM");
+			}
+		};
 		let out = "";
 		p.stdout.on("data", (d) => (out += d));
 		p.stderr.on("data", (d) => (out += d));
 		p.on("error", fail);
-		p.on("close", (code) => done({ code, out }));
-		const stop = () => p.kill("SIGTERM");
+		let timedOut = false;
+		const timer = waitMs ? setTimeout(() => ((timedOut = true), kill()), waitMs) : undefined;
+		p.on("close", (code) => (clearTimeout(timer), done({ code: timedOut ? null : code, out: timedOut ? "" : out, timedOut } as Ran)));
+		const stop = kill;
 		signal?.addEventListener("abort", stop, { once: true });
 		p.stdin.end(input ?? "");
 	});
@@ -38,9 +52,13 @@ export async function ensureOpen(studio: string, signal?: AbortSignal): Promise<
 /** Run an easel command at an open easel; a failure becomes the tool's error, with the easel's words. */
 export async function atEasel(studio: string, args: string[], input: string | undefined, signal?: AbortSignal): Promise<string> {
 	await ensureOpen(studio, signal);
-	const r = await easel(studio, args, input, signal);
+	const wait = args[0] === "do" ? WAIT_MS.do : WAIT_MS.other;
+	const r = await easel(studio, args, input, signal, wait);
+	if (r.timedOut) {
+		throw new Error(`the easel didn't answer within ${wait / 60_000} minutes; \`status\` shows whether the chunk count changed`);
+	}
 	const text = r.out.trimEnd();
-	if (r.code !== 0) throw new Error(text || `easel ${args[0]} failed`);
+	if (r.code !== 0) throw new Error(text || "the easel gave no answer");
 	return text;
 }
 

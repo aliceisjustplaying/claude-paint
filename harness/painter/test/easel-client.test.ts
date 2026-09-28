@@ -52,3 +52,13 @@ test("paint, look, note and status at a real easel", { skip: !bin || !existsSync
 		await easel(studio, ["close"]);
 	}
 });
+
+test("a client that hangs is stopped and reported, not waited on forever", async () => {
+	const studio = mkdtempSync(join(tmpdir(), "studio-"));
+	mkdirSync(join(studio, "bin"));
+	writeFileSync(join(studio, "bin", "easel"), "#!/bin/sh\nsleep 30\n", { mode: 0o755 });
+	const t0 = Date.now();
+	const r = await easel(studio, ["do", "-"], "print(1)", undefined, 300);
+	assert.equal(r.timedOut, true);
+	assert.ok(Date.now() - t0 < 5000);
+});

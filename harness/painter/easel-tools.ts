@@ -11,7 +11,7 @@
  */
 import { Type } from "@earendil-works/pi-ai";
 import { createReadToolDefinition, defineTool, type ExtensionAPI } from "@earendil-works/pi-coding-agent";
-import { atEasel, inStudio, lookArgs, tail, text } from "./easel-client.ts";
+import { atEasel, inStudio, lookArgs, tail, text, toolWords } from "./easel-client.ts";
 
 export function registerEaselTools(pi: ExtensionAPI, studio: string): void {
 	const read = createReadToolDefinition(studio);
@@ -47,7 +47,12 @@ export function registerEaselTools(pi: ExtensionAPI, studio: string): void {
 				grid: Type.Optional(Type.Union([Type.Boolean(), Type.Number()])),
 			}),
 			async execute(id, p, signal, onUpdate, ctx) {
-				const said = await atEasel(studio, ["look", ...lookArgs(p)], undefined, signal);
+				let said: string;
+				try {
+					said = await atEasel(studio, ["look", ...lookArgs(p)], undefined, signal);
+				} catch (e) {
+					throw new Error(toolWords((e as Error).message)); // the easel's messages name its command-line flags
+				}
 				const path = said.split("\n").pop()!.replace(/ \(.*\)$/, "");
 				const img = await read.execute(id, { path }, signal, onUpdate, ctx);
 				return { ...img, content: [{ type: "text" as const, text: said }, ...img.content.filter((c) => c.type === "image")] };

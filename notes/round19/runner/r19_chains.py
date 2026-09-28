@@ -25,7 +25,9 @@ completed sitting that added no such chunks, or after MAX_SITTINGS completed sit
 A sitting that crashes (pi exits non-zero, or its session ends on a provider error such as a
 429) is no judgment of the painter's: the runner waits (CRASH_WAITS, or longer if the error
 says "retry in Ns") and starts another sitting, which doesn't count toward MAX_SITTINGS.
-After MAX_CRASHES crashes the painter stops, and the log says so. Each sitting is recorded
+After MAX_CRASHES crashes the painter stops, and the log says so. A usage limit (OpenCode Go's
+5-hour or weekly window) is no crash: the sitting is marked 'limited', and the runner probes the
+provider until it answers (LIMIT_PROBE_S, up to LIMIT_GIVE_UP_H hours) before the next sitting. Each sitting is recorded
 in run/<lane>/p<n>_sittings.json.
 
 After a painter's last sitting, in the background (the next painter doesn't wait):
@@ -94,6 +96,12 @@ SITTING_MESSAGE = ("You're back at the easel. The painting is as you left it. "
 MAX_SITTINGS = 4
 MAX_CRASHES = 6                                   # crashed sittings (in all) before a painter is stopped
 CRASH_WAITS = [90, 180, 300, 600, 900, 1200]      # s before the sitting after the 1st, 2nd, ... crash
+# A provider's usage limit (OpenCode Go: 5-hour, weekly and monthly windows) is no crash: the
+# painter waits it out. The runner asks the provider every LIMIT_PROBE_S (or at the reset time
+# the error names) with a one-line prompt outside the studio, and starts the next sitting once
+# it answers; after LIMIT_GIVE_UP_H hours it stops the painter (rerun to go on).
+LIMIT_PROBE_S = 30 * 60
+LIMIT_GIVE_UP_H = 24
 
 READING = {
     "friedrich": ("notes/easel_guide.md; notes/studio_notes.md;\n"
@@ -206,11 +214,21 @@ def brief(profile, d):
                .replace("{READING}", READING[profile]))
 
 
-def painter_cmd(m, message=PAINTER_MSG):
+def key_args(m):
     # key_from: a provider whose stored key is a placeholder (opencode Zen) gets another entry's key
-    key = (["--api-key", f"<{m['key_from']} key from auth.json>" if DRY else api_key(m["key_from"])]
-           if m.get("key_from") else [])
-    return ["pi", "--print"] + HARNESS + (["-e", str(BLACK)] if m["black"] else []) + m["args"] + key + [message]
+    return (["--api-key", f"<{m['key_from']} key from auth.json>" if DRY else api_key(m["key_from"])]
+            if m.get("key_from") else [])
+
+
+def painter_cmd(m, message=PAINTER_MSG):
+    return ["pi", "--print"] + HARNESS + (["-e", str(BLACK)] if m["black"] else []) + m["args"] + key_args(m) + [message]
+
+
+def probe_cmd(m):
+    """A one-line request to the painter's provider and model: no tools, no session, no studio."""
+    return (["pi", "--print", "--no-session", "--no-extensions", "--no-tools", "--no-context-files", "--no-skills",
+             "--no-prompt-templates"] + (["-e", str(BLACK)] if m["black"] else []) + m["args"] + key_args(m)
+            + ["Reply with the word ok."])
 
 
 def count_chunks(d):
@@ -242,8 +260,10 @@ def next_sitting(sittings, max_sittings=MAX_SITTINGS, max_crashes=MAX_CRASHES):
     non-zero, or its session ended on a provider error) or was cut off by the runner itself
     stopping ('interrupted') is followed by another that doesn't count toward max_sittings,
     unless it added painting chunks: a sitting cut off after it painted (a provider's usage
-    limit, say) counts toward max_sittings, though it isn't judged. After max_crashes crashes
-    in all, the painter stops.
+    limit, say) counts toward max_sittings, though it isn't judged. A sitting ended by a usage
+    limit (status 'limited') is treated like a crash but never counts toward max_crashes (the
+    runner waits the limit out before the next one). After max_crashes crashes in all, the
+    painter stops.
     Stop after a completed sitting that added no painting chunks (this includes a first sitting
     that painted nothing: no painting to come back to), or after max_sittings completed sittings.
     A record without painting counts (from an older runner) is judged by its chunk counts.
@@ -253,7 +273,7 @@ def next_sitting(sittings, max_sittings=MAX_SITTINGS, max_crashes=MAX_CRASHES):
     done = [s for s in sittings if s.get("status") == "completed"]
     if done and not added_painting(done[-1]):
         return None
-    counted = [s for s in sittings if s in done or (s.get("status") == "crashed" and added_painting(s))]
+    counted = [s for s in sittings if s in done or (s.get("status") in ("crashed", "limited") and added_painting(s))]
     if len(counted) >= max_sittings:
         return None
     if sum(1 for s in sittings if s.get("status") == "crashed") >= max_crashes:
@@ -286,6 +306,48 @@ def retry_hint(text):
     """The longest "retry in Ns" (or "retryDelay": "Ns") a provider error asks for, in s (0 if none)."""
     hints = re.findall(r"retry in ([\d.]+)\s*s", text, re.I) + re.findall(r'retryDelay\W+([\d.]+)s', text)
     return max((float(h) for h in hints), default=0.0)
+
+
+def usage_limit(text):
+    """Whether a provider error is a usage limit that resets with time (OpenCode Go's 5-hour,
+    weekly and monthly windows), not a crash. An empty balance (Google's 402 "credits are
+    depleted") is not: waiting doesn't refill it."""
+    return bool(re.search(r"GoUsageLimitError|FreeUsageLimitError|usage limit (exceeded|reached)", text, re.I))
+
+
+def limit_reset_s(text):
+    """Seconds until a usage limit resets, from "Resets in 2hr 15min" (or "Resets in 2 days"), or None."""
+    m = re.search(r"resets? in ((?:\s*[\d.]+\s*(?:days?|d|hours?|hrs?|h|minutes?|mins?|m|seconds?|secs?|s)\b)+)", text, re.I)
+    if not m:
+        return None
+    unit = {"d": 86400, "h": 3600, "m": 60, "s": 1}
+    return sum(float(v) * unit[u[0].lower()] for v, u in re.findall(r"([\d.]+)\s*([a-z]+)", m.group(1), re.I))
+
+
+def wait_out_limit(m, tag, text):
+    """Wait until the provider answers again (probing it), or give up after LIMIT_GIVE_UP_H hours.
+    True when the painter can go on."""
+    t0 = time.time()
+    first = limit_reset_s(text)
+    wait = first + 60 if first else LIMIT_PROBE_S
+    while True:
+        if time.time() + wait - t0 > LIMIT_GIVE_UP_H * 3600:
+            log(f"{tag}: the usage limit hasn't lifted in {LIMIT_GIVE_UP_H} h; painter stops (rerun to go on)")
+            return False
+        log(f"{tag}: usage limit; asking the provider again in {wait / 60:.0f} min (not a crash)")
+        time.sleep(wait)
+        (RUN / "probe").mkdir(exist_ok=True)
+        try:
+            r = subprocess.run(probe_cmd(m), cwd=RUN / "probe", stdin=subprocess.DEVNULL,
+                               capture_output=True, text=True, timeout=600)
+            out = r.stdout + r.stderr
+        except subprocess.TimeoutExpired:
+            out = "probe timed out"
+        if not usage_limit(out):
+            log(f"{tag}: the provider answers again after {(time.time() - t0) / 3600:.1f} h: {gist(out, 80)}")
+            return True
+        reset = limit_reset_s(out)
+        wait = reset + 60 if reset else LIMIT_PROBE_S
 
 
 def crash_wait(n_crashes, text):
@@ -349,8 +411,15 @@ def paint(name, n, d, rd):
         if s.get("status") == "completed" and s.get("exit") not in (0, None):   # an older runner judged a crash
             s.update(status="crashed", reclassified=time.strftime("%F %T"))
             log(f"{tag}: sitting {s['sitting']} exited {s['exit']}: counted as a crash, not a judgment")
+    for s in sittings:
+        if s.get("status") == "crashed" and usage_limit(s.get("error") or ""):   # an older runner counted it
+            s.update(status="limited", reclassified=time.strftime("%F %T"))
+            log(f"{tag}: sitting {s['sitting']} ended on a usage limit: not a crash")
     save_sittings(rd, n, sittings)
     while (k := next_sitting(sittings)) is not None:
+        if sittings and sittings[-1].get("status") == "limited":
+            if not wait_out_limit(m, tag, sittings[-1].get("error") or ""):
+                return None
         # one session across sittings: reattaches at once; replays the log only if the server is gone
         stop_leftovers(d, keep_server=True)
         if not open_easel(d, tag):
@@ -374,15 +443,18 @@ def paint(name, n, d, rd):
         err_text = (rd / f"p{n}_s{k}_err.txt").read_text(errors="replace")
         crashed = rc != 0 or api_error is not None
         why = api_error or err_text.strip() or f"exit {rc}"
-        rec.update(status="crashed" if crashed else "completed", end=time.strftime("%F %T"),
+        limited = crashed and usage_limit(why + "\n" + err_text)
+        rec.update(status="limited" if limited else "crashed" if crashed else "completed", end=time.strftime("%F %T"),
                    chunks_after=count_chunks(d), painting_after=count_painting(d), exit=rc,
                    sessions=[str(f) for f in new], error=why[-4000:] if crashed else None,
                    final=(rd / f"p{n}_s{k}_final.txt").read_text(errors="replace"))
         save_sittings(rd, n, sittings)
-        log(f"{tag}: sitting {k} ended (exit {rc}{', CRASHED' if crashed else ''}) after {(time.time() - t0) / 60:.0f} min: "
+        log(f"{tag}: sitting {k} ended (exit {rc}{', USAGE LIMIT' if limited else ', CRASHED' if crashed else ''}) after {(time.time() - t0) / 60:.0f} min: "
             f"chunks {rec['chunks_before']} -> {rec['chunks_after']} "
             f"(painting {rec['painting_before']} -> {rec['painting_after']}), {len(new)} session file(s)")
-        if crashed:
+        if limited:
+            log(f"{tag}: sitting {k} ended on a usage limit ({gist(why)}): not a crash; the painter waits it out")
+        elif crashed:
             crashes = sum(1 for s in sittings if s.get("status") == "crashed")
             if crashes >= MAX_CRASHES:
                 log(f"{tag}: STOPPED: sitting {k} was crash {crashes}, the cap (MAX_CRASHES={MAX_CRASHES}); "

@@ -77,22 +77,21 @@ def test_the_painter_is_done_after_a_sitting_it_ends_without_painting():
     assert next_step([s1, old]) == ("new", 3)
 
 
-def test_no_sitting_count_ends_a_painter_that_keeps_painting():
+def test_a_painter_that_keeps_painting_stops_after_four_sittings():
     from r19_chains import next_step
-    # round 19's Muse was stopped after 4 sittings while it still painted (127 -> 155)
-    painting = [done(k, 10 * k, 10 * k + 10) for k in range(1, 5)]
-    assert next_step(painting) == ("new", 5)
-    step, why = next_step([done(k, 10 * k, 10 * k + 10) for k in range(1, 21)])   # only the safety cap
-    assert step is None and why.startswith("NOT FINISHED")
+    painting = [done(k, 10 * k, 10 * k + 10) for k in range(1, 4)]
+    assert next_step(painting) == ("new", 4)
+    assert next_step(painting + [done(4, 40, 50)])[0] is None
 
 
-def test_a_crash_is_no_judgment_and_counts_for_nothing():
+def test_a_crashed_sitting_is_no_judgment_and_counts_only_if_it_painted():
     from r19_chains import next_step
     s1 = dict(sitting=1, status="crashed", exit=1, chunks_before=0, chunks_after=33, painting_before=0, painting_after=23)
     s2 = dict(sitting=2, status="crashed", exit=1, chunks_before=33, chunks_after=33, painting_before=23, painting_after=23)
     assert next_step([s1, s2]) == ("new", 3)              # no new painting, but a crash: another sitting
-    assert next_step([s1, s2] + [done(k, k, k + 1) for k in (3, 4)], max_sittings=2)[0] is None   # completed ones count
-    assert next_step([s1, s2] + [done(3, 3, 4)], max_sittings=2) == ("new", 4)                     # crashes don't
+    two = [done(k, 23 + k, 24 + k) for k in (3, 4)]
+    assert next_step([s1, s2] + two, max_sittings=4) == ("new", 5)   # s1 painted: it counts (three of four); s2 doesn't
+    assert next_step([s1, s2] + two, max_sittings=3)[0] is None
     crashes = [dict(s2, sitting=i) for i in range(1, 7)]
     assert next_step(crashes[:5], max_crashes=6) == ("new", 6)
     step, why = next_step(crashes, max_crashes=6)
@@ -183,7 +182,9 @@ def test_a_sitting_cut_off_by_a_usage_limit_carries_on_in_its_session():
     assert next_step([s7]) == ("continue", 7)
     # a limited sitting that never got a reply starts over, and none of them counts toward anything
     empty = [dict(s7, sitting=k, worked=False, chunks_before=50, painting_before=42) for k in range(8, 30)]
-    assert next_step([s7] + empty, max_sittings=2, max_crashes=6) == ("new", 30)
+    assert next_step([s7] + empty, max_sittings=4, max_crashes=6) == ("new", 30)    # limited ones never count
+    # a sitting the runner itself cut off carries on in its session too
+    assert next_step([dict(s7, status="interrupted")]) == ("continue", 7)
     # the continued part ends: judged over the whole sitting (26 -> 42), so the painter goes on
     part2 = dict(s7, part=2, status="completed", chunks_after=50, painting_after=42)
     assert next_step([s7, part2]) == ("new", 8)

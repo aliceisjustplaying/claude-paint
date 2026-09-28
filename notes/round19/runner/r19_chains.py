@@ -94,9 +94,9 @@ PAINTER_MSG = ("Your brief is in BRIEF.md in this folder. Your last message is y
                "painting's title if you give it one and a few sentences about the picture.")
 SITTING_MESSAGE = ("You're back at the easel. The painting is as you left it. "
                    "Your brief is in BRIEF.md and your journal in notes/journal.md.")
-# The painter decides when it's done (a sitting it ends without adding paint); MAX_SITTINGS
-# completed sittings is only a safety cap against a painter that never stops (logged as not finished)
-MAX_SITTINGS = 20
+# A painter works in up to MAX_SITTINGS sittings (completed ones, and crashed ones that painted); it stops
+# earlier after a sitting it ends itself without adding paint
+MAX_SITTINGS = 4
 MAX_CRASHES = 6                                   # crashed sittings (in all) before a painter is stopped
 CONTINUE_MESSAGE = "The connection dropped for a while. Carry on where you left off."
 CRASH_WAITS = [90, 180, 300, 600, 900, 1200]      # s before the sitting after the 1st, 2nd, ... crash
@@ -170,6 +170,9 @@ LANES = {
     "MUSEF": lane("friedrich", model("opencode", "muse-spark-1.3", "xhigh", key_from="opencode-go")),
     # compaction test: Luna (272K window) compacting at about 45K (272K - 227K) instead of 172K;
     # no round 19 sitting came near the usual point (900K for 1M windows)
+    # Claude Sonnet 5.5 through the Claude subscription (pi-black, as the Opus lanes), thinking max
+    "SONF": lane("friedrich", model("anthropic", "claude-sonnet-5-5", "max", black=True)),
+    "SONB": lane("blank", model("anthropic", "claude-sonnet-5-5", "max", black=True)),
     "CTEST": lane("friedrich", model("openai-codex", "gpt-6-luna", "max", env={"PAINTER_COMPACT_RESERVE": "227000"})),
     # Blank studio, one painter each: uncomment the lanes to run.
     # "OPUS": lane("blank", model("anthropic", "claude-opus-5-5", "high", black=True)),
@@ -268,13 +271,13 @@ def next_step(sittings, max_sittings=MAX_SITTINGS, max_crashes=MAX_CRASHES):
     sittings: the records so far, in order ({'sitting', 'painting_before', 'painting_after',
     'chunks_before', 'chunks_after', 'status', 'worked'}); a continued sitting's later parts
     repeat its number and carry its painting_before, so a record's counts cover the whole sitting.
-    The painter decides when it's done: it stops after a sitting it ended itself (status
-    'completed') that added no painting chunks (this includes a first sitting that painted
-    nothing). Sittings cut off by a usage limit ('limited'), a crash ('crashed') or the runner
-    stopping ('interrupted') are no judgment and count for nothing. A limited sitting whose
-    painter had already worked (a reply that wasn't an error: 'worked') is continued once the
-    limit lifts; otherwise a fresh sitting follows. max_sittings (completed sittings) and
-    max_crashes are safety caps: stopping there is logged as not finished.
+    The painter stops after a sitting it ended itself (status 'completed') that added no painting
+    chunks (this includes a first sitting that painted nothing), or after max_sittings sittings:
+    completed ones, and crashed ones that added painting (cut off after it painted, not judged).
+    Sittings cut off by a usage limit ('limited') or the runner stopping ('interrupted') count for
+    nothing; if the painter had worked in one (a reply that wasn't an error: 'worked'), its session
+    carries on (a limited one once the limit lifts); otherwise a fresh sitting follows. After
+    max_crashes crashes the painter stops (not finished).
     A record without painting counts (from an older runner) is judged by its chunk counts.
     """
     if not sittings:
@@ -282,12 +285,14 @@ def next_step(sittings, max_sittings=MAX_SITTINGS, max_crashes=MAX_CRASHES):
     done = [s for s in sittings if s.get("status") == "completed"]
     if done and not added_painting(done[-1]):
         return (None, f"the painter is done: sitting {done[-1]['sitting']} added no painting")
-    if max_sittings and len(done) >= max_sittings:
-        return (None, f"NOT FINISHED: the safety cap of {max_sittings} sittings (MAX_SITTINGS)")
+    counted = {s["sitting"] for s in sittings if s.get("status") == "completed"
+               or (s.get("status") == "crashed" and added_painting(s))}
+    if max_sittings and len(counted) >= max_sittings:
+        return (None, f"stopped after {max_sittings} sittings (MAX_SITTINGS)")
     if sum(1 for s in sittings if s.get("status") == "crashed") >= max_crashes:
         return (None, f"NOT FINISHED: {max_crashes} crashes (MAX_CRASHES)")
     last = sittings[-1]
-    if last.get("status") == "limited" and last.get("worked") and last.get("sessions"):
+    if last.get("status") in ("limited", "interrupted") and last.get("worked") and last.get("sessions"):
         return ("continue", last["sitting"])
     return ("new", max(s["sitting"] for s in sittings) + 1)
 
@@ -438,8 +443,13 @@ def paint(name, n, d, rd):
     sittings = load_sittings(rd, n)
     for s in sittings:
         if s.get("status") == "running":      # the runner stopped during this sitting
-            s.update(status="interrupted", chunks_after=count_chunks(d), painting_after=count_painting(d))
-            log(f"{tag}: sitting {s['sitting']} was interrupted; it will be taken again")
+            t0 = time.mktime(time.strptime(s["start"], "%Y-%m-%d %H:%M:%S")) - 5
+            files = s.get("sessions") or sorted((f for f in session_dir(d).glob("*.jsonl") if f.stat().st_mtime >= t0),
+                                                key=lambda f: f.stat().st_mtime)[-1:]
+            s.update(status="interrupted", chunks_after=count_chunks(d), painting_after=count_painting(d),
+                     end=time.strftime("%F %T"), sessions=[str(f) for f in files], worked=session_worked(files))
+            log(f"{tag}: sitting {s['sitting']} was interrupted (the runner stopped); "
+                + ("it carries on in its session" if s["worked"] else "it will be taken again"))
     for s in sittings:
         if s.get("status") == "completed" and s.get("exit") not in (0, None):   # an older runner judged a crash
             s.update(status="crashed", reclassified=time.strftime("%F %T"))

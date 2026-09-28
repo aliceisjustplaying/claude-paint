@@ -418,10 +418,15 @@ fn serve(args: &[String]) -> Result<(), String> {
 
     for conn in l.incoming() {
         let Ok(mut conn) = conn else { continue };
+        // a request is a few KB sent at once: a client that stalls mid-request must not hold
+        // the one thread that serves every request
+        let _ = conn.set_read_timeout(Some(Duration::from_secs(60)));
         let mut req = Vec::new();
         if conn.read_to_end(&mut req).is_err() {
+            eprintln!("request dropped: the client didn't finish sending it within 60 s");
             continue;
         }
+        let _ = conn.set_read_timeout(None);
         let text = String::from_utf8_lossy(&req).to_string();
         let (head, payload) = text.split_once('\n').unwrap_or((&text, ""));
         let mut parts = head.split('\t').map(|s| s.to_string());

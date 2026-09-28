@@ -142,3 +142,36 @@ def test_the_watchdog_finds_a_real_process_in_a_studio(tmp_path):
         assert [pid for pid, *_ in found] == [str(p.pid)]
     finally:
         p.kill()
+
+
+GO_LIMIT = '429: {"type":"GoUsageLimitError","message":"Go usage limit exceeded"}'      # round 19, KIMIF and MIMOF
+GOOGLE_EMPTY = ('{"error":{"message":"{\\n  \\"error\\": {\\n    \\"code\\": 402,\\n    \\"message\\": \\"Your prepayment '
+                'credits are depleted. Please go to AI Studio","status":"Payment Required"}}')   # round 19, GEMF
+
+
+def test_a_usage_limit_is_waited_out_but_an_empty_balance_is_a_crash():
+    from r19_chains import usage_limit
+    assert usage_limit(GO_LIMIT)
+    assert usage_limit("5-hour usage limit reached. Resets in 2hr 15min")
+    assert not usage_limit(GOOGLE_EMPTY)
+    assert not usage_limit("Please retry in 53s")                 # a per-minute quota: the crash backoff handles it
+
+
+def test_the_reset_time_a_usage_limit_names():
+    from r19_chains import limit_reset_s
+    assert limit_reset_s("5-hour usage limit reached. Resets in 2hr 15min") == 2 * 3600 + 15 * 60
+    assert limit_reset_s("Weekly usage limit reached. Resets in 2 days.") == 2 * 86400
+    assert limit_reset_s(GO_LIMIT) is None
+
+
+def test_sittings_ended_by_a_usage_limit_never_reach_the_crash_cap():
+    from r19_chains import next_sitting
+    # round 19's Kimi: sitting 1 painted 26 chunks, then the Go limit; five empty retakes
+    s1 = dict(sitting=1, status="limited", chunks_before=0, chunks_after=30, painting_before=0, painting_after=26)
+    empty = [dict(s1, sitting=i, chunks_before=30, painting_before=26) for i in range(2, 12)]
+    assert next_sitting([s1] + empty, max_crashes=6) == 12
+    # the one that painted counts toward the sittings, the empty ones don't
+    done = [dict(sitting=i, status="completed", chunks_before=i, chunks_after=i + 1, painting_before=i, painting_after=i + 1)
+            for i in (12, 13)]
+    assert next_sitting([s1] + empty + done, max_sittings=4) == 14
+    assert next_sitting([s1] + empty + done, max_sittings=3) is None

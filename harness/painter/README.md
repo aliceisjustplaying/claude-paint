@@ -140,7 +140,9 @@ Compaction triggers when context exceeds window minus `reserveTokens`: about
 900K tokens for both lanes (both have a 1M window). Round 16 had the same
 point for Opus (Alice's global override) and about 1,021K for Gemini (global
 `reserveTokens` 27200). `keepRecentTokens` 20000 is pi's default, which round
-16 also used.
+16 also used. `PAINTER_COMPACT_RESERVE` (tokens) sets `reserveTokens` for one
+run: for a smaller window, or a test that makes compaction happen early (no
+round 19 sitting came near 900K; the largest was Gemini's 328K).
 
 Round 17's painters read the settings file in their studio (`cat
 .pi/settings.json` was the first thing both did), so the values moved out of

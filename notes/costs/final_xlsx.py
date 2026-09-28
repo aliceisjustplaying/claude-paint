@@ -10,6 +10,7 @@ OUT = "notes/costs/painting_models_final_2026-09-28.xlsx"
 ms = {m["id"]: m for m in json.load(open(f"{D}/or_models.json"))["data"]}
 sets = json.load(open(f"{D}/sets.json"))
 latest = re.findall(r"`([^`]+)`", open("notes/costs/latest_models.md").read().split("| # |")[1])
+latest = [i for i in latest if i != "perceptron/perceptron-mk1.5"]
 def f(x):
     try: return float(x)
     except (TypeError, ValueError): return None
@@ -26,11 +27,23 @@ def reason(i):
     if i == "sakana/sakana-namazu": return "Japanese fine-tune of Kimi K2.6"
     if re.match(r"openai/(.*-pro|o\d-pro)$", i): return "OpenAI Pro: thinks far longer, costs far more than its list price suggests"
     if "-image" in i: return "image-generation model"
+    if i in ("rekaai/reka-edge", "perceptron/perceptron-mk1.5", "z-ai/glm-4.5v"):
+        return "context too small for a painting session (16K / 36K / 65K)" + (": a robotics model" if "perceptron" in i else "")
+    if i == "openai/o1": return "Pro-like: built to think far longer (about $1,049 a pass at list price)"
+    DUP = {"google/gemini-3.1-flash-lite-preview": "google/gemini-3.1-flash-lite", "google/gemini-3.1-pro-preview-customtools": "google/gemini-3.1-pro-preview",
+           "google/gemini-2.5-pro-preview": "google/gemini-2.5-pro", "openai/gpt-4o": "openai/gpt-4o-2024-05-13 and -2024-11-20 (first and last GPT-4o kept)",
+           "openai/gpt-4o-2024-08-06": "openai/gpt-4o-2024-05-13 and -2024-11-20 (first and last GPT-4o kept)",
+           "openai/gpt-4o-mini-2024-07-18": "openai/gpt-4o-mini", "qwen/qwen3.5-plus-02-15": "qwen/qwen3.5-plus-20260420"}
+    if i in DUP: return "duplicate of " + DUP[i]
     return None
 allp = [i for i in sets["all"] if not reason(i)]
 excluded = sorted({i: reason(i) for i in sets["all"] if reason(i)}.items())
+excluded = [(i, w) for i, w in excluded]
 excluded += [("openai/gpt-5.5", "superseded by GPT-6 (latest list only)"), ("openai/gpt-chat-latest", "ChatGPT's rolling alias (latest list only)"),
              ("xiaomi/mimo-v2.5", "older MiMo (latest list only)")]
+NOTE.update({"openai/gpt-4-turbo": "historical: kept for fun (no cache price)", "anthropic/claude-opus-4.1": "historical Opus (old pricing)",
+             "openai/o4-mini-high": "o4-mini with reasoning effort high (kept separate)", "openai/gpt-4o-2024-05-13": "first GPT-4o",
+             "openai/gpt-4o-2024-11-20": "last GPT-4o"})
 bold = Font(bold=True); hdr = PatternFill("solid", fgColor="DDD6C8"); ours = PatternFill("solid", fgColor="F3E6B8"); blue = Font(color="1F4E9A")
 wb = Workbook()
 # Profiles
@@ -99,7 +112,8 @@ notes = ["",
  "One pass = one light, one typical and one heavy painting per model (4 sittings each; profiles on the Profiles sheet).",
  "Latest: the newest model per line released since 2026-03-28. Present & past: every version still on OpenRouter.",
  "Both: images in, tool calls, interactive; no routers or orchestrators (Unbiased's Pareto, an ensemble, kept on purpose);",
- "no OpenAI Pro models; no image-generation models. The sum counts the latest models twice (they're in both sets).",
+ "no OpenAI Pro models or o1; no image-generation models; no duplicates (o4-mini and -high kept apart; first and last GPT-4o);",
+ "no model whose context can't hold a session (under 128K). The sum counts the latest models twice (they're in both sets).",
  "Cost = prompt x (8% input + 89% cache read + 3% cache write) + output + images, at list prices; no cache price = input price.",
  "Ballpark: x0.5 to x2 (tokenizers, image tokens and thinking length differ). If caching fails, x3 to x5.",
  "Source: https://openrouter.ai/api/v1/models (fetched 2026-09-28); token profiles from our session logs.",

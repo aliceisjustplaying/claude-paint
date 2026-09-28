@@ -63,29 +63,40 @@ def test_the_stop_count_for_a_sitting_that_only_queried():
     assert count_painting_chunks(after) - count_painting_chunks(before) == 0
 
 
-def test_next_sitting_stops_after_a_sitting_that_only_queried():
-    from r19_chains import next_sitting
+def done(k, before, after):
+    return dict(sitting=k, status="completed", chunks_before=before, chunks_after=after, painting_before=before, painting_after=after)
+
+
+def test_the_painter_is_done_after_a_sitting_it_ends_without_painting():
+    from r19_chains import next_step
     s1 = dict(sitting=1, status="completed", chunks_before=0, chunks_after=40, painting_before=0, painting_after=31)
     s2 = dict(sitting=2, status="completed", chunks_before=40, chunks_after=43, painting_before=31, painting_after=31)
-    assert next_sitting([s1]) == 2
-    assert next_sitting([s1, s2]) is None                  # three new chunks, none of them painting
+    assert next_step([s1]) == ("new", 2)
+    assert next_step([s1, s2])[0] is None                  # three new chunks, none of them painting
     old = dict(sitting=2, status="completed", chunks_before=40, chunks_after=43)   # an older runner's record
-    assert next_sitting([s1, old]) == 3
+    assert next_step([s1, old]) == ("new", 3)
 
 
-def test_a_crashed_sitting_is_no_judgment_and_counts_only_if_it_painted():
-    from r19_chains import next_sitting
+def test_no_sitting_count_ends_a_painter_that_keeps_painting():
+    from r19_chains import next_step
+    # round 19's Muse was stopped after 4 sittings while it still painted (127 -> 155)
+    painting = [done(k, 10 * k, 10 * k + 10) for k in range(1, 5)]
+    assert next_step(painting) == ("new", 5)
+    step, why = next_step([done(k, 10 * k, 10 * k + 10) for k in range(1, 21)])   # only the safety cap
+    assert step is None and why.startswith("NOT FINISHED")
+
+
+def test_a_crash_is_no_judgment_and_counts_for_nothing():
+    from r19_chains import next_step
     s1 = dict(sitting=1, status="crashed", exit=1, chunks_before=0, chunks_after=33, painting_before=0, painting_after=23)
     s2 = dict(sitting=2, status="crashed", exit=1, chunks_before=33, chunks_after=33, painting_before=23, painting_after=23)
-    assert next_sitting([s1, s2]) == 3                     # no new painting, but a crash: another sitting
-    done = [dict(sitting=i, status="completed", chunks_before=i, chunks_after=i + 1, painting_before=i, painting_after=i + 1)
-            for i in (3, 4)]
-    assert next_sitting([s1, s2] + done, max_sittings=4) == 5   # s1 painted: it counts (three of four); s2 doesn't
-    assert next_sitting([s1, s2] + done, max_sittings=3) is None
-    assert next_sitting([s2] + done, max_sittings=3) == 5       # a crash that painted nothing doesn't count
+    assert next_step([s1, s2]) == ("new", 3)              # no new painting, but a crash: another sitting
+    assert next_step([s1, s2] + [done(k, k, k + 1) for k in (3, 4)], max_sittings=2)[0] is None   # completed ones count
+    assert next_step([s1, s2] + [done(3, 3, 4)], max_sittings=2) == ("new", 4)                     # crashes don't
     crashes = [dict(s2, sitting=i) for i in range(1, 7)]
-    assert next_sitting(crashes[:5], max_crashes=6) == 6
-    assert next_sitting(crashes, max_crashes=6) is None      # the cap
+    assert next_step(crashes[:5], max_crashes=6) == ("new", 6)
+    step, why = next_step(crashes, max_crashes=6)
+    assert step is None and why.startswith("NOT FINISHED")
 
 
 def test_the_wait_after_a_crash_honors_the_providers_retry_hint():
@@ -164,17 +175,18 @@ def test_the_reset_time_a_usage_limit_names():
     assert limit_reset_s(GO_LIMIT) is None
 
 
-def test_sittings_ended_by_a_usage_limit_never_reach_the_crash_cap():
-    from r19_chains import next_sitting
-    # round 19's Kimi: sitting 1 painted 26 chunks, then the Go limit; five empty retakes
-    s1 = dict(sitting=1, status="limited", chunks_before=0, chunks_after=30, painting_before=0, painting_after=26)
-    empty = [dict(s1, sitting=i, chunks_before=30, painting_before=26) for i in range(2, 12)]
-    assert next_sitting([s1] + empty, max_crashes=6) == 12
-    # the one that painted counts toward the sittings, the empty ones don't
-    done = [dict(sitting=i, status="completed", chunks_before=i, chunks_after=i + 1, painting_before=i, painting_after=i + 1)
-            for i in (12, 13)]
-    assert next_sitting([s1] + empty + done, max_sittings=4) == 14
-    assert next_sitting([s1] + empty + done, max_sittings=3) is None
+def test_a_sitting_cut_off_by_a_usage_limit_carries_on_in_its_session():
+    from r19_chains import next_step
+    # round 19's Kimi: sitting 7 painted 16 chunks in 32 min, then the Go limit
+    s7 = dict(sitting=7, status="limited", worked=True, sessions=["s7.jsonl"],
+              chunks_before=30, chunks_after=50, painting_before=26, painting_after=42)
+    assert next_step([s7]) == ("continue", 7)
+    # a limited sitting that never got a reply starts over, and none of them counts toward anything
+    empty = [dict(s7, sitting=k, worked=False, chunks_before=50, painting_before=42) for k in range(8, 30)]
+    assert next_step([s7] + empty, max_sittings=2, max_crashes=6) == ("new", 30)
+    # the continued part ends: judged over the whole sitting (26 -> 42), so the painter goes on
+    part2 = dict(s7, part=2, status="completed", chunks_after=50, painting_after=42)
+    assert next_step([s7, part2]) == ("new", 8)
 
 
 def test_the_first_probe_after_a_usage_limit_counts_from_when_the_sitting_ended():

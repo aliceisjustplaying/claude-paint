@@ -1,5 +1,18 @@
 # Handoff (2026-09-23 evening): moving to the M3 Pro
 
+**Morning of 2026-09-28 (read first): the paint hang found and fixed; Kimi and MiMo resumed.**
+- **The paint hang was macOS losing a unix-socket half-close:** the client sent its request and shut down
+  its sending side; the server, reading to end of file, sometimes never saw it (both sides in `recvfrom`,
+  by `sample`). 1 request in 150-300 through the painter's spawn path (stress: `~/tmp/r19-log-audit-9fc99725/catch.mts`);
+  3 real hangs in round 19 (GEMF s2, GEMB s3, GEMB s4). Fix (r19-base 1b8a4c3): a request starts with its
+  byte length; the server reads exactly that. 0 stalls in 1500 after. Old and new binaries refuse each other with a reason.
+- **Runner (notes/round19/runner, 4ea830b, 84d5339):** a usage limit (Go's windows) is status `limited`, never a
+  crash; the runner probes the provider every 30 min (or at the named reset) up to 24 h. Kimi and MiMo had burned
+  all 6 crash slots in 35 min of Go's 5-hour window.
+- **Resumed 12:00:** KIMIF and MIMOF (`run/resume_kimi_mimo.out`), their studios on the new easel binary
+  (old ones in `run/<lane>/easel.before_length_line`, the early finished images in `run/<lane>/before_resume/`).
+- Why every r19 painter stopped: Luna x2 by choice; Gemini x2 out of Google credits (402); Muse used its 4 sittings.
+
 **Night of 2026-09-27/28 (read first): round 17 done, round 18 finishing, eval harness v1 built and merged.**
 
 *Running at 00:35 (all resumable; the Mac runs `caffeinate -i -s` so it can't idle-sleep):*

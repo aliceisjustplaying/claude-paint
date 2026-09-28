@@ -168,6 +168,9 @@ LANES = {
     "KIMIF": lane("friedrich", model("opencode-go", "kimi-k3", "max")),
     "MIMOF": lane("friedrich", model("opencode-go", "mimo-v2.6-pro", "max", env={"PAINTER_MAX_IMAGES": "4"})),
     "MUSEF": lane("friedrich", model("opencode", "muse-spark-1.3", "xhigh", key_from="opencode-go")),
+    # compaction test: Luna (272K window) compacting at about 45K (272K - 227K) instead of 172K;
+    # no round 19 sitting came near the usual point (900K for 1M windows)
+    "CTEST": lane("friedrich", model("openai-codex", "gpt-6-luna", "max", env={"PAINTER_COMPACT_RESERVE": "227000"})),
     # Blank studio, one painter each: uncomment the lanes to run.
     # "OPUS": lane("blank", model("anthropic", "claude-opus-5-5", "high", black=True)),
     # "BUN": lane("blank", model("opencode-go", "space-bunny-free", "xhigh")),       # its map goes to max

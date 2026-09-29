@@ -263,32 +263,19 @@ margin*: the canvas folded over the side of the stretcher.
 
 ## 9. The tubes here
 
-This studio's box represents the documented pigment families with a
-limited set of tubes; it is not a reconstruction of a single dated
-palette. Names map as follows: lead (flake) white → lead white; bone or
-ivory black → bone black (one tube); red iron oxide → red earth; madder
-lakes → rose madder (several lakes combined); pale lemon chrome → lemon
-chrome; the two cadmium yellow grades → one cadmium yellow. "Sienna" is
-supplied as burnt sienna; its historical grade is unknown. Red lead
-(one object) and Indian yellow (found in a paint box, uncertain in
-paintings) are uncertain inclusions. Not supplied: Mars orange and the
-magenta and bone brown bought in tubes. Prussian blue was not reported
-and is not supplied.
+The historical names in this note correspond to these tubes: lead
+(flake) white → lead white; bone or ivory black → bone black; red iron
+oxide → red earth; madder lakes → rose madder; pale lemon chrome → lemon
+chrome; cadmium yellow (two grades) → cadmium yellow; sienna → burnt
+sienna. Red lead and Indian yellow each rest on a single find (§4).
 
 ## 10. At this easel
 
-- **Support.** The easel's support is plain-weave linen with ground
-  layers mixed from the tube box. There are no panels, boards or other
-  rigid supports.
-- **Medium.** Paint has one control for added medium: an oil-medium
-  share. There are no solvents, driers, resins, copal, megilp or varnish
-  controls.
-- **Removing paint.** There is no tool for scraping or abrading paint on
-  the canvas.
-- **This note.** The supports, media and ways of removing paint named
-  above that the easel lacks are historical context; the easel guide
-  documents what is available. Wiping a brush unloads the brush; it does
-  not lift paint off the canvas.
+- **Support.** Plain-weave linen with ground layers laid from the tubes.
+- **Paint.** Pigment from the tubes with an oil-medium share.
+- **Taking paint off.** A brush picks up wet paint as it passes; that is
+  how paint comes off the canvas.
+- **Everything else** the easel does is in the easel guide.
 
 ## Sources
 

@@ -163,6 +163,10 @@ pub fn catalog() -> Vec<Tube> {
         tube("cerulean blue", "cobalt stannate", "#3f82b3", 0.8, 0.7, 0.6, drier::COBALT_BLUE),
         #[cfg(any(feature = "box-sargent", feature = "box-tonn"))]
         tube("ultramarine blue", "synthetic ultramarine", "#232a8c", 0.3, 0.5, 1.1, drier::ULTRAMARINE),
+        // the last, palest extraction of natural ultramarine: mostly
+        // colorless matter, so weak and transparent
+        #[cfg(feature = "box-sargent")]
+        tube("ultramarine ash", "natural ultramarine, a pale last extraction", "#7d8aa8", 0.15, 0.5, 0.3, drier::ULTRAMARINE),
         #[cfg(feature = "box-inness")]
         tube("Antwerp blue", "Prussian blue on an alumina base", "#26406c", 0.4, 0.45, 1.6, drier::ANTWERP_BLUE),
         #[cfg(any(feature = "box-sargent", feature = "box-alma-tadema"))]
@@ -230,7 +234,8 @@ const BOXES: &[(&str, &[&str])] = &[
         "sargent",
         &[
             "lead white", "zinc white", "lemon chrome", "chrome yellow", "cadmium yellow", "Indian yellow", "yellow ochre", "Mars yellow", "raw sienna", "Mars orange", "red lead", "vermilion", "cadmium red", "Mars red",
-            "red earth", "rose madder", "magenta", "burnt sienna", "Mars brown", "bone brown", "bone black", "cerulean blue", "cobalt blue", "ultramarine blue", "viridian", "emerald green", "cobalt violet",
+            "red earth", "rose madder", "magenta", "burnt sienna", "Mars brown", "bone brown", "bone black", "cerulean blue", "cobalt blue", "ultramarine blue", "ultramarine ash", "viridian", "emerald green",
+            "cobalt violet",
         ],
     ),
     #[cfg(feature = "box-inness")]

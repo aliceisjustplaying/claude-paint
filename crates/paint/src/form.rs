@@ -157,8 +157,12 @@ pub struct Shade {
 
 impl Shade {
     /// Membership of the light family (1) versus the shadow family (0), with
-    /// a soft halftone of width `soft` around the terminator.
+    /// a soft halftone of width `soft` around the terminator (a hard step at
+    /// 0: lit only where direct light arrives).
     pub fn lit(&self, soft: f32) -> f32 {
+        if soft <= 0.0 {
+            return if self.direct > 0.0 { 1.0 } else { 0.0 };
+        }
         crate::smoothstep(-soft * 0.5, soft * 0.5, self.direct - soft * 0.5)
     }
 }

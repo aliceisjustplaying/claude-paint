@@ -37,6 +37,9 @@
 # (<commit>/target/<box>) under its own lock, so one studio can't get
 # another's easel. STUDIO_BUILDS moves <repo>/target/studio-build elsewhere
 # (scripts/tests/export_concurrent.sh builds from nothing there).
+# STUDIO_BUILD_HOOK, for that test: a program run with the box's variant
+# name (a box, or "default") after its build and before the easel is copied
+# from it, so a test can hold one export there while another builds.
 #
 # Delivery renders use the replay build (`cargo build --release -p easel`,
 # default features) outside the studio; it replays every box, reading the
@@ -115,6 +118,7 @@ if [ ! -x "$built" ]; then
       fi
     fi
     [ -x "$target/release/easel" ] || { echo "no easel built in $target" >&2; exit 1; }
+    [ -z "${STUDIO_BUILD_HOOK:-}" ] || "$STUDIO_BUILD_HOOK" "$variant" || { echo "STUDIO_BUILD_HOOK failed" >&2; exit 1; }
     mkdir -p "$(dirname "$built")"
     cp "$target/release/easel" "$built.part"
     mv "$built.part" "$built"

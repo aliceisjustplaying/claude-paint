@@ -81,3 +81,31 @@ Branch `r20-base`, cut from `r19-base` (5069814); worktree
   canvas exactly", and the PNG equals the painter's save).
   `finish_painting` and `replay_clip` rendered the sargent painting. Their
   scripts are unchanged.
+
+## After the code and materials reviews
+
+- **A box painter build holds only its box's tubes.** Each `catalog()`
+  entry is compiled in only with a box that holds it. `cfg(tube_box)`
+  (from `crates/paint/build.rs`) is on unless exactly one `box-*` feature
+  is on. So a painter build for one box has no default box, no smalt or
+  cobalt box, and neither the name "tube box" nor any tube or pigment
+  record outside its box. With no `bin/box` it paints from its own box,
+  and it refuses a log that names no box. `canvas{}` builds its style with
+  `Style::oil_with(box)`, so the older boxes aren't linked into any easel.
+  The default and replay builds are unchanged: `the_tube_box_is_unchanged`
+  and the round 19 golden replay pass.
+- **Export.** Exports can run at once. The archive is extracted under a
+  lock (perl `flock`, which the kernel drops if the process dies). Each
+  variant builds in its own `CARGO_TARGET_DIR` (`<commit>/target/<box>`)
+  under its own lock, and its easel is copied from there. The name check
+  is now `scripts/check_studio_names`. It searches captured `strings`
+  output rather than a `| grep -q` pipe, which under pipefail read a hit
+  as none. Names match whole-word, case-insensitively, with a space, a
+  hyphen or nothing between their parts; da Vinci, Vinci and Winsor are
+  added. A box studio's easel must hold no catalog tube name outside its
+  box (its own names and pigments are blanked out first) and no "smalt
+  box", "cobalt box" or "tube box".
+- **EASEL_BOX** is unset by `check_painting`, `finish_painting` and
+  `replay_clip`, like the export.
+- **Tests:** `scripts/tests/studio_names.sh`, `export_concurrent.sh` and
+  `replay_env.sh` (each needs TMPDIR; the export tests need R16_BRANCH).

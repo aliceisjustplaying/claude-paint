@@ -108,3 +108,21 @@ Branch `r20-base`, cut from `r19-base` (5069814); worktree
   `replay_clip`, like the export.
 - **Tests:** `scripts/tests/studio_names.sh`, `export_concurrent.sh` and
   `replay_env.sh` (each needs TMPDIR; the export tests need R16_BRANCH).
+
+## Boxes reconciled with the notes (2026-09-29)
+
+- The box rule and each change are in `TUBES.md` ("The boxes", "Owned or
+  past, not in the box", "Reconciled with the notes"). Sargent 23 tubes
+  (raw sienna for Indian yellow), inness 13 (unchanged), alma-tadema 15
+  (raw umber and deep cadmium added), tonn 13 (red earth out).
+- **`scripts/tests/box_notes.sh`** (TMPDIR; R16_BRANCH, or exported
+  studios as arguments): for each box studio, every tube `bin/easel tubes`
+  prints is named in the painter's copy of the note (§4 table or §9), §9
+  names and maps only the box's tubes, and the guide's table is `easel
+  tubes --markdown`.
+- Verification: `cargo test --release -p paint` 165 passed; `--lib
+  --no-default-features --features box-<name>` 133 passed for each box.
+  `-p easel` 50 passed; `--no-default-features --features replay` 49;
+  painter build (`--no-default-features`) 35; `--test painter` with each
+  box 3 passed. `box_tubes.sh`, `box_features.sh`, `studio_names.sh`,
+  `export_profiles.sh` and `box_notes.sh` passed.

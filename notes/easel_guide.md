@@ -73,7 +73,8 @@ print(table.concat(tubes(), ", "))   -- the names in the box
 
 A pile is parts by volume of named tubes, plus `medium`: the share of oil
 medium mixed in (0, as from the tube, to 0.95). Medium makes the paint more
-transparent and more fluid, and slower to dry. What a pile looks like is
+transparent and more fluid, and slower to dry. It is added oil only: there
+are no separate solvents, driers, resins or varnishes. What a pile looks like is
 what its pigments make together, thick or thin, over what is already on
 the canvas; you find out by painting with it and looking. A pile mixed by
 hand is a little uneven: each brushload takes slightly different
@@ -181,13 +182,15 @@ Where an option takes `function(x, y)`, it is sampled every 2 units over
 the area and interpolated. A mistyped option is an error that lists the
 valid ones.
 
-**What stays inside the mask.** `work` starts every stroke inside the
-mask. With `detail` and `blend` the bristles also stop at the mask's edge.
-With the other hands (`body`, `broad`, `hatch`, `glaze`, `scumble`) `clip`
-is off unless you set it: a stroke that starts inside runs on past the
-edge by as much as its length (a `glaze` stroke is 120–300 units) and lays
-paint on whatever is there. `clip=true`, `clip=` a mask, or `edge=` (below)
-stop them at the edge.
+**What stays inside the mask.** `work` plans its strokes from the mask:
+each stroke is anchored in it, but its path can begin outside and cross
+the edge. By default `detail` and `blend` keep their paint inside the
+mask. The other hands (`body`, `broad`, `hatch`, `glaze`, `scumble`) can
+carry paint past the edge onto whatever is there, by as much as a stroke's
+length (a `glaze` stroke is 120–300 units by default). `clip=true` keeps
+every bristle inside the mask; `clip=` another mask keeps them inside that
+one instead. `edge=` (below) shapes how the passage meets the edge, with
+an overrun that varies and can reach beyond it.
 
 **Edges.** `edge=` carries the passage up to the mask's edge the way a
 brush does: each stroke stops by its own amount, and past the line its

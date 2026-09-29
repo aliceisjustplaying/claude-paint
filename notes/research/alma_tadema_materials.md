@@ -154,7 +154,8 @@ accessible source. The palette below is documentary.
 
 - **Thin layers.** An unfinished work has thin paint layers [LABEL]. The
   early panel has thin wet-in-wet brush application and lead-white-rich
-  paint, with varying radiopacity [NGC].
+  paint of varying radiopacity; its density in X-rays suggests
+  lead-white-rich paint, an inference, not a pigment analysis [NGC].
 - **Order on the early panel.** Examination establishes successive
   applications, with accents added last [NGC]. *Single early object.*
 - **Passages at different stages.** In the unfinished canvas some
@@ -228,8 +229,10 @@ Not supplied: raw umber and deep cadmium, which the manual says he used
   controls.
 - **Removing paint.** There is no tool for scraping or abrading paint on
   the canvas.
-- **This note.** The historical practices above are context, not
-  available controls.
+- **This note.** The supports, media and ways of removing paint named
+  above that the easel lacks are historical context; the easel guide
+  documents what is available. Wiping a brush unloads the brush; it does
+  not lift paint off the canvas.
 
 ## Sources
 

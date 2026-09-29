@@ -19,8 +19,8 @@ with oil and turpentine. Passages were laid into wet paint [CH pp.182,
 184; APOLLO "Application of Paint", "The Painter's Palette"]. When a
 passage failed he scraped it down or brushed it together and began again
 [CH pp.184–187; BAS "Pentimenti"]. Documented pigments are listed in §4.
-No thread counts or systematic film-thickness measurements were found in
-the consulted sources.
+<!-- research: No thread counts or systematic film-thickness measurements were found in
+the consulted sources. -->
 
 **Terms.** *Ground/priming*: the preparatory layers between canvas and
 paint. *Cross-section*: a microscopic sample cut through all layers.
@@ -46,8 +46,8 @@ margin*: the canvas folded over the side of the stretcher.
   Italy", "London"]. His restorer wrote in 1926 that he had "an affection
   for a particular sort of French canvas… not primed and kept in stock.
   Only got ready for him when he wanted it" [APOLLO; NPG].
-- **Thread count.** No count for any of his canvases appeared in
-  accessible sources. *Gap.*
+<!-- research: - **Thread count.** No count for any of his canvases appeared in
+  accessible sources (searched 2026-09-29: APOLLO, BAS, NGA, MMX, MMJ53, VCB excerpts, Tate project pages). -->
 - **Cut from the roll, generously stretched.** "In every case, the
   generously stretched canvas is primed right to the edge, demonstrating
   that it was cut from a larger length" [APOLLO]. He often left excess
@@ -89,7 +89,8 @@ margin*: the canvas folded over the side of the stretcher.
 - **Ground left exposed.** Gray priming sometimes remained exposed or
   visible through thin paint, including after reworking [APOLLO
   "Conclusion", "Application of Paint"].
-- **Thickness.** No micron values found. *Gap.*
+<!-- research: - **Thickness.** No micron values for any ground found (searched 2026-09-29; the likeliest
+  source is Hellen and Townsend 2016 in the catalogue raisonné vol. 9, not accessible). -->
 
 ## 3. Drawing and lay-in
 
@@ -108,8 +109,8 @@ margin*: the canvas folded over the side of the stretcher.
 - **Turpentine lay-in.** A pupil described a brief initial lay-in using a
   little turpentine: "this was a matter of a few moments" [CH
   pp.181–182].
-- **Brush drawing.** A witness described brush drawing that began with
-  broad tonal masses [quoted in APOLLO]. X-radiographs of finished
+- **Brush drawing.** A witness quoted by the examiners described brush
+  drawing that began with broad tonal masses [APOLLO]. X-radiographs of finished
   canvases show "an almost complete absence of actual contours" [APOLLO
   "Conclusion"].
 - **Studies.** Some works have loose preparatory pencil sketches on
@@ -126,7 +127,7 @@ margin*: the canvas folded over the side of the stretcher.
 | Bone or ivory black | [APOLLO]; [MMX p.129 n.11] | "Liberal use of bone black in much of Sargent's oeuvre" [BAS] |
 | Mars (synthetic iron oxide) yellow, red and brown | [APOLLO]; [BAS] | Mars orange also in a paint box [BAS] |
 | Yellow ocher, red iron oxide | [MMX p.127; p.129 nn.14–15]; [MMJ53 p.175] | |
-| Sienna | [APOLLO] | Raw or burnt not stated |
+| Sienna, raw and burnt | [APOLLO]; a paint box of about 1884–88 held two tubes of raw sienna and one of burnt [VCB] | |
 | Cadmium yellow | [APOLLO]; two grades in a paint box [BAS] | Available from the 1840s [BAS "Appendix"] |
 | Chrome yellow | "A pale shade" at times [APOLLO]; [HAM]; "pale lemon chrome" in a paint box [BAS] | |
 | Viridian | [APOLLO]; [MMX p.129 n.11]; [MET20] | Widespread from the 1860s [BAS "Appendix"] |
@@ -137,8 +138,10 @@ margin*: the canvas folded over the side of the stretcher.
 | Cobalt violet | [APOLLO]; [HAM] | "Less commonly" found, costly and weak [HAM] |
 | Cadmium red | Found "on occasion" [APOLLO]; in a paint box [BAS] | |
 | Red lead | In one painting of 1885–86 [BAS] | *Single object* |
-| Indian yellow | In a paint box [BAS] | *Uncertain* in paintings |
-| Prussian blue | Not reported in any analysis consulted | |
+
+<!-- research: dropped rows. Indian yellow: in a paint box [BAS], not found in any painting consulted.
+Prussian blue: not reported in any analysis of his paintings consulted; a painter's blog quoting the
+analysis of the Signet Society palette lists Prussian blue among its colors (check VCB before using). -->
 
 - **Extenders.** His tube paints hold "easily detectable quantities of
   extenders such as kaolin, chalk, talc and barytes" [APOLLO]. In
@@ -164,13 +167,13 @@ margin*: the canvas folded over the side of the stretcher.
 - **Megilp.** Poppy and linseed oil and "a medium modifier such as
   Megilp" were found in a painting of 1885–86, and "tubes of Megilp were
   also found in Sargent's paint box"; in one sample a madder mixed with
-  megilp lies thickly over opaque paint [BAS "Materials"]. Spilled oil in
-  one paint box was heat-bodied linseed oil with thinner [VCB, via
-  summary]. *Uncertain* (not read in the original).
+  megilp lies thickly over opaque paint [BAS "Materials"]. A paint box of
+  about 1884–88 holds three of them; oil spilled in it was
+  heat-bodied linseed oil "with some thinner included" [VCB].
 - **A matting medium.** From 1902 to 1913 he bought, "in greater
-  quantities," a medium sold "for mixing with oil colours to achieve a
-  Matt finish" [NPG "Paints and paint medium"]. *How he used it is
-  undocumented.*
+  quantities," Marble Medium, sold "for mixing with oil colours to
+  achieve a Matt finish" [NPG "Paints and paint medium"].
+<!-- research: How he used the matting medium is undocumented in the sources read. -->
 - **Varnish.** Little evidence of varnish between layers in the later
   canvases [APOLLO]. A thin "retouching varnish" lies between the
   campaigns of one 1885–86 painting [BAS "Varnishing"], and a varnish
@@ -183,8 +186,11 @@ margin*: the canvas folded over the side of the stretcher.
 - **Brushes.** Hog bristles are embedded in the paint. Examined strokes
   indicate brushes about ¼–½ inch wide in the first layers and up to 1
   inch for some finishing strokes [APOLLO]. A pupil reported his
-  preference for large brushes [CH pp.181, 187]. Brush shapes (flat,
-  filbert, round) are *undocumented* in the sources read.
+  preference for large brushes [CH pp.181, 187]; he dismissed hers in favor of
+  "good thick brushes that will hold the paint and that will resist in a
+  sense the stroke on the canvas" [CH p.181]. The brush slot of a paint
+  box of about 1884–88 holds about ten hog's-hair brushes, "some flat and
+  others round," and a flat palette knife [VCB].
 - **Palette.** Witnesses describe large quantities of paint set out on
   the palette [CH p.181]. Surviving palettes arrange the colors broadly
   by hue: white, yellow, red, brown, green/blue and sometimes black
@@ -266,8 +272,8 @@ margin*: the canvas folded over the side of the stretcher.
 The historical names in this note correspond to these tubes: lead
 (flake) white → lead white; bone or ivory black → bone black; red iron
 oxide → red earth; madder lakes → rose madder; pale lemon chrome → lemon
-chrome; cadmium yellow (two grades) → cadmium yellow; sienna → burnt
-sienna. Red lead and Indian yellow each rest on a single find (§4).
+chrome; cadmium yellow (two grades) → cadmium yellow; burnt sienna →
+burnt sienna. Red lead rests on a single find (§4).
 
 ## 10. At this easel
 
@@ -282,10 +288,10 @@ sienna. Red lead and Indian yellow each rest on a single find (§4).
 - **[APOLLO]** Ridge, J. and Townsend, J. H., "John Singer Sargent's later portraits: The artist's technique and materials," *Apollo* 148 (September 1998), pp.23–30. Web transcription (cited by section heading): http://www.jssgallery.org/Essay/Articles/Apollo/Apollo1998-Right.html
 - **[CH]** Charteris, E., *John Sargent* (London/New York 1927); pupils' accounts on pp.181–187. https://archive.org/details/johnsargent00char
 - **[MMX]** Mahon, D. and Centeno, S. A., *Metropolitan Museum Journal* 40 (2005), pp.121–129. https://doi.org/10.1086/met.40.20320648
-- **[MET20]** Conservation examination, Metropolitan Museum of Art, 2020 (read through a search summary).
+- **[MET20]** Mahon, D. and Centeno, S. A., scanning-XRF study, "Conservation Stories" 2020, Metropolitan Museum of Art website (27 August 2020); element maps record cerulean (Co), viridian (Cr), iron earths, bone black and vermilion. Read through search excerpts.
 - **[MMJ53]** Shibayama, N., Mahon, D., Centeno, S. A. and Carò, F., *Metropolitan Museum Journal* 53 (2018), pp.172–179. https://resources.metmuseum.org/resources/metpublications/pdf/ShibayamaMahonCentenoCaro_Metropolitan_Museum_Journal_v_53_2018.pdf
 - **[BAS]** Hellen, R. and Kilmurray, E., "One Object" article, *British Art Studies* 2 (2016), sections "Pentimenti," "Sargent's materials and the paint box" (cited as "Materials"), "Varnishing" and "Appendix." https://doi.org/10.17658/issn.2058-5462/issue-02/rhellen-ekilmurray
 - **[NPG]** Simon, J., "John Singer Sargent's suppliers of artists' materials," National Portrait Gallery, London, 2013/2014. https://www.npg.org.uk/collections/research/programmes/artists-their-materials-and-suppliers/john-singer-sargents-suppliers-of-artists-materials
 - **[HAM]** "Sargent's Colorful Past," *Index Magazine*, Harvard Art Museums, 12 June 2018. https://harvardartmuseums.org/article/sargent-s-colorful-past
-- **[VCB]** Townsend, J. H. and Rayner, G., *Visual Culture in Britain* 19:1 (2018), pp.89–111, abstract. https://doi.org/10.1080/14714787.2018.1441745
+- **[VCB]** Townsend, J. H. and Rayner, G., "Sargent's Painting Materials: New Discoveries and Their Implications," *Visual Culture in Britain* 19:1 (2018), pp.89–111; paint box on loan to the Tate conservation archive, c.1884–88. Read through the Academia.edu copy (excerpts). https://doi.org/10.1080/14714787.2018.1441745
 - **[NGA]** Torchia, R. W. et al., *American Paintings of the Nineteenth Century, Part II*, National Gallery of Art Systematic Catalogue (1998), technical notes pp.103–125. https://www.nga.gov/content/dam/ngaweb/research/publications/pdfs/american-paintings-of-the-nineteenth-century-part-II.pdf

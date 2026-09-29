@@ -130,7 +130,7 @@ tier is shown only in photographs [SHELF25].
 |---|---|---|
 | Lead white (flake, PW1) | His reported standard white [WHITE21; LEAD24; PAL25] | He cites film durability and drying behavior as reasons for using it [WHITE21; DRY23] |
 | Titanium white (PW6) | Added in 2021 [WHITE21]; "I basically don't use titanium" (July 2022) [TI22] | Never his primary white "for structural reasons" [WHITE21]. A "notoriously slow" dryer [DRY23]. Later practice not documented |
-| Zinc white | Avoided | "I couldn't recommend anyone use zinc-containing paints" [ZINC20] |
+| Zinc white | Avoided | He reports avoiding zinc-containing paints [ZINC20] |
 | Yellow ochre | [LIM21]; [MAT23]; [COLV22]; [PAL25] | |
 | Lead-tin yellow | First reported use Sept. 2025 [LTY25] | Subsequently placed in his frequent-use tier [LTY25] |
 | Transparent oxide yellow | On the 2025 palette [PAL25] | *Uncertain* how often |
@@ -254,9 +254,8 @@ tier is shown only in photographs [SHELF25].
   example is a crack pattern from "a fast-drying earth brown ... over a
   slower-drying paint" [CRACK21]. He expects oil paint to become "more
   transparent with age" [CRACK21].
-- **Varnish readiness.** Conservators he knows use a thumbnail test: "if
-  moderate pressure with your thumbnail won't dent the impasto, it's fine
-  to varnish" [VAR21].
+- **Varnish readiness.** He reports checking the paint's resistance to
+  indentation before varnishing [VAR21].
 
 ## 9. The tubes here
 
@@ -279,8 +278,12 @@ supplied: titanium white (reported basically unused in 2022), zinc white
   controls.
 - **Removing paint.** There is no tool for scraping or abrading paint on
   the canvas.
-- **This note.** The historical practices above are context, not
-  available controls.
+- **This note.** The supports, media and ways of removing paint named
+  above that the easel lacks are historical context; the easel guide
+  documents what is available. Wiping a brush unloads the brush; it does
+  not lift paint off the canvas.
+- **Other.** Synthetic fabric, adhesives, projected transfer and acrylic
+  grounds are not available; grounds are laid from the tubes.
 
 ## Sources
 

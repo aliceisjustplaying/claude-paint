@@ -170,9 +170,9 @@ listed [WAL]. The table lists pigments named by witnesses.
 - **Two starts.** A friend with "full opportunity to witness his
   processes" says his method depended on "whether it was a new canvas or
   an old one" [MAN pp.30–31].
-- **Transparent start on a new canvas.** Tones were "not extremely
-  varied," and the full contrast was not sought. As the thin paint "set or
-  grew tacky, it was rubbed and scrubbed into the canvas, lights were
+- **Transparent start on a new canvas.** The witness describes thin
+  transparent paint. As it "set or grew tacky, it was rubbed and scrubbed
+  into the canvas, lights were
   scratched out with thumb nail or brush handle, or wiped out with a rag."
   The witness described forceful scrubbing. As the color "tightened in
   the drying, the forms were sharpened … with clear, thin color." There
@@ -275,8 +275,10 @@ the sources).
   controls.
 - **Removing paint.** There is no tool for scraping or abrading paint on
   the canvas.
-- **This note.** The historical practices above are context, not
-  available controls.
+- **This note.** The supports, media and ways of removing paint named
+  above that the easel lacks are historical context; the easel guide
+  documents what is available. Wiping a brush unloads the brush; it does
+  not lift paint off the canvas.
 
 ## Sources
 

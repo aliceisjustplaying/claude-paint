@@ -145,7 +145,7 @@ yellow deep, cadmium yellow light, flake white [PAL25]. In September
 | Ivory black | [LIM21]; [MAT23]; [COLV22]; [PAL25] | A slow dryer [DRY23] |
 | Permanent alizarin (quinacridone) | [BLACK21]; [COLV22]; [PAL25] | "The alizarin I use is quinacridone based" (2025) [ALIZ25]. Earlier posts say only "alizarin" [BLACK21] |
 | Terre verte | Occasional, as a glaze [TV22]; on the 2025 palette [PAL25] | "Very weak tinting strength ... transparent" [TV22] |
-| Cobalt violet | Infrequent; mentioned again in 2025 [CVI20; CVI25] | |
+| Cobalt violet | Used rarely; mentioned in 2020 and in May 2025 [CVI20; CVI25] | "I haven't used cobalt violet much" (2025) [CVI25] |
 
 <!-- research: pigments dropped as not used now: titanium white (added in 2021 as a second white, WHITE21, never his primary white "for structural reasons"; "I basically don't use titanium", TI22, July 2022; a "notoriously slow" dryer, DRY23); zinc white (he warns against zinc-containing paints, ZINC20); English red ("haven't even put [it] on my palette in a million years", ERED21, 2021); cobalt blue ("haven't used it in ages", BLUE21, 2021); vermilion (owns a tube "that I never used", VERM20; CAD22). -->
 - **Paint.** He prefers paints with few added modifiers, just

@@ -6,14 +6,18 @@
 #
 #   scripts/tests/replay_env.sh
 #
-# Requires a caller-provided persistent scratch directory (TMPDIR). Uses the
-# replay build of this checkout (built if needed) and ffmpeg for the clip.
+# Requires a caller-provided persistent scratch directory (TMPDIR) and ffmpeg
+# (for replay_clip; without it the test fails before it starts). Uses the
+# replay build of this checkout, built if needed in the target directory
+# cargo builds into (CARGO_TARGET_DIR too; scripts/replay_easel), the easel
+# the three scripts use.
 set -euo pipefail
 : "${TMPDIR:?set TMPDIR to persistent scratch storage}"
 repo=$(cd "$(dirname "$0")/../.." && pwd)
+command -v ffmpeg >/dev/null || { echo "replay_env: needs ffmpeg (replay_clip is one of the three scripts it tests); nothing tested" >&2; exit 1; }
 work=$(mktemp -d "$TMPDIR/replay-env.XXXXXX")
-(cd "$repo" && cargo build --release -q -p easel)
-easel=$repo/target/release/easel
+easel=$("$repo/scripts/replay_easel")
+[ -x "$easel" ] || { echo "replay_env: no easel at $easel" >&2; exit 1; }
 
 # a two-chunk painting from the sargent box, with tubes the default box doesn't have
 studio=$work/studio
@@ -36,10 +40,6 @@ grep -q '^check: ok' "$work/check.log" || fail "check_painting didn't pass" "$wo
 grep -q "the replay's PNG equals the painter's last save" "$work/check.log" || fail "check_painting's replay differs from the save" "$work/check.log"
 "$repo/scripts/finish_painting" "$log" "$work/finished.png" --no-cracks >"$work/finish.log" 2>&1 || fail "finish_painting failed" "$work/finish.log"
 [ -s "$work/finished.png" ] || fail "finish_painting wrote no picture" "$work/finish.log"
-if command -v ffmpeg >/dev/null; then
-  "$repo/scripts/replay_clip" "$log" "$work/clip.mp4" --every 1 --length 5 --width 300 >"$work/clip.log" 2>&1 || fail "replay_clip failed" "$work/clip.log"
-  [ -s "$work/clip.mp4" ] || fail "replay_clip wrote no clip" "$work/clip.log"
-else
-  echo "replay_env: no ffmpeg, replay_clip not tried"
-fi
+"$repo/scripts/replay_clip" "$log" "$work/clip.mp4" --every 1 --length 5 --width 300 >"$work/clip.log" 2>&1 || fail "replay_clip failed" "$work/clip.log"
+[ -s "$work/clip.mp4" ] || fail "replay_clip wrote no clip" "$work/clip.log"
 echo "replay_env: check_painting, finish_painting and replay_clip replayed a sargent-box log with EASEL_BOX=inness set ($work)"

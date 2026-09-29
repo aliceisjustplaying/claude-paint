@@ -15,15 +15,15 @@ usual support is synthetic canvas glued to a cradled plywood panel; he
 paints small works on hardboard or commercial boards [SUB; MASON; MAT23].
 He primes with an oil ground applied with a wide taping knife, described
 in 2020 as "a tinted lead ground" and in 2025 as a "greenish ground"
-[LEAD20; PRIME19; GRND25]. Lead (flake) white is his standard white; in
-2022 he "basically [didn't] use titanium" [WHITE21; TI22]. His documented
-pigments are listed in §4. He reports using very little medium, basically
-no liquid oil and no solvent in the paint [PAL20; MED25; SOLV21]. He
-paints mostly with natural-bristle flats and uses nylon brushes to smooth
-[BR21; BR22]. He calls himself "85% a direct painting guy" (2026)
+[LEAD20; PRIME19; GRND25]. Lead (flake) white is his standard white
+[WHITE21; LEAD24]. His documented pigments are listed in §4. He reports
+using very little medium, basically no liquid oil and no solvent in the
+paint [PAL20; MED25; SOLV21]. He paints mostly with natural-bristle
+flats and uses nylon brushes to smooth [BR21; BR22]. He calls himself "85% a direct painting guy" (2026)
 [DIR26]. For layered works he describes drawing, a thin first painting, a
 second painting and final glazes, working over the whole surface at once
 [SEQ22; IMPR].
+<!-- research: titanium white is left out of the painter's copy: added in 2021 as a second white [WHITE21], and in 2022 he "basically [didn't] use titanium" [TI22]. -->
 <!-- research: No technical study of his paintings was found in the consulted sources. Thread counts, ground thickness and the ground recipes are not documented (posts, interviews and web search rechecked 29 Sept. 2026). -->
 
 **Terms.** *Ground/priming*: the preparatory layer between support and
@@ -133,7 +133,6 @@ yellow deep, cadmium yellow light, flake white [PAL25]. In September
 | Pigment | Evidence | Notes |
 |---|---|---|
 | Lead white (flake, PW1) | His reported standard white [WHITE21; LEAD24; PAL25] | He cites film durability and drying behavior as reasons for using it [WHITE21; DRY23] |
-| Titanium white (PW6) | Added in 2021 as a second white [WHITE21]; "I basically don't use titanium" (July 2022) [TI22] | Never his primary white "for structural reasons" [WHITE21]. A "notoriously slow" dryer [DRY23] |
 | Yellow ochre | [LIM21]; [MAT23]; [COLV22]; [PAL25] | |
 | Lead-tin yellow | First reported use Sept. 2025 [LTY25] | Subsequently placed in his frequent-use tier [LTY25] |
 | Transparent oxide yellow | On the 2025 palette [PAL25] | *Uncertain* how often |
@@ -148,7 +147,7 @@ yellow deep, cadmium yellow light, flake white [PAL25]. In September
 | Terre verte | Occasional, as a glaze [TV22]; on the 2025 palette [PAL25] | "Very weak tinting strength ... transparent" [TV22] |
 | Cobalt violet | Infrequent; mentioned again in 2025 [CVI20; CVI25] | |
 
-<!-- research: pigments dropped as not used: zinc white (he warns against zinc-containing paints, ZINC20); English red ("haven't even put [it] on my palette in a million years", ERED21, 2021); cobalt blue ("haven't used it in ages", BLUE21, 2021); vermilion (owns a tube "that I never used", VERM20; CAD22). -->
+<!-- research: pigments dropped as not used now: titanium white (added in 2021 as a second white, WHITE21, never his primary white "for structural reasons"; "I basically don't use titanium", TI22, July 2022; a "notoriously slow" dryer, DRY23); zinc white (he warns against zinc-containing paints, ZINC20); English red ("haven't even put [it] on my palette in a million years", ERED21, 2021); cobalt blue ("haven't used it in ages", BLUE21, 2021); vermilion (owns a tube "that I never used", VERM20; CAD22). -->
 - **Paint.** He prefers paints with few added modifiers, just
   "oil+pigment," and reports using pigment drying differences in his
   work [DRY23]. He reports using commercial professional-grade paints
@@ -246,11 +245,12 @@ yellow deep, cadmium yellow light, flake white [PAL25]. In September
 ## 8. Condition and aging
 
 - **Drying rates.** "Earth tones (umbers, siennas) ... and
-  lead white are rapid dryers, whereas ivory black and titanium white are
-  notoriously slow" (2023) [DRY23]. Rates also depend on "atmospheric
+  lead white are rapid dryers," while ivory black is "notoriously slow"
+  (2023) [DRY23]. Rates also depend on "atmospheric
   conditions, painting mediums," and "thickness of paint layer" [VAR21].
   "Even the fast drying pigments won't really dry during a working
   session" [FAST20].
+  <!-- research: the DRY23 quotation reads "whereas ivory black and titanium white are notoriously slow"; titanium white is left out of the painter's copy (see §4). -->
 - **Structure.** He avoids complicating the layer structure. His
   example is a crack pattern from "a fast-drying earth brown ... over a
   slower-drying paint" [CRACK21]. He expects oil paint to become "more

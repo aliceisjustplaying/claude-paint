@@ -12,10 +12,9 @@ Branch `r20-base`, cut from `r19-base` (5069814); worktree
   numbers, and 29 new tubes come from round 20's four tube proposals.
   `TUBES.md` gives each new tube's numbers, the proposal they come from
   and why. New `drier::` rates: `RED_LEAD`, `NAPLES_YELLOW`,
-  `ANTWERP_BLUE`, `COPPER`, `MARS`, `VIRIDIAN`, `INDIAN_YELLOW`, `CADMIUM`
-  and `BITUMEN`.
-- **Named boxes** `sargent` (23 tubes), `inness` (13), `alma-tadema` (13)
-  and `tonn` (14), next to the default `tube box`, which is unchanged.
+  `ANTWERP_BLUE`, `COPPER`, `MARS`, `VIRIDIAN`, `CADMIUM` and `BITUMEN`.
+- **Named boxes** `sargent` (23 tubes), `inness` (13), `alma-tadema` (15)
+  and `tonn` (13), next to the default `tube box`, which is unchanged.
   Each box is compiled in only with its feature (`box-sargent`,
   `box-inness`, `box-alma-tadema`, `box-tonn`). The replay build has them
   all (`replay` turns on `all-boxes`). A painter's build has only its

@@ -1623,6 +1623,7 @@ mod tip_tests {
     /// layer on a strip of a 440 mm wide canvas, `px` wide: the mean film at each
     /// pixel row from 2 widths above the stroke's line to 2 below, over the
     /// middle of its length, as (offset from the line in units, coats).
+    #[cfg(tube_box)]
     fn film_across_over_dry(px: usize, tool: Tool, pressure: f32) -> Vec<(f32, f32)> {
         let mut c = Canvas::new(px, 4.0, hex(BG)).with_size_mm(440.0).with_linen(crate::surface::Linen::fine(3));
         // a light layer, laid in overlapping bands and let dry
@@ -1647,6 +1648,7 @@ mod tip_tests {
     /// also for brushes whose hairs are finer than a pixel (the filbert 5
     /// and filbert 2 at 1000px).
     #[test]
+    #[cfg(tube_box)]
     fn a_stroke_over_dry_paint_covers_its_middle() {
         let st = crate::style::Style::oil();
         for (name, tool) in [("filbert 5", Tool::filbert(5.0)), ("filbert 2", Tool { lay: 0.5, stiffness: 0.3, ..Tool::filbert(2.0) }), ("body", st.body.clone())] {
@@ -1678,6 +1680,7 @@ mod tip_tests {
     /// lays the width asked for; the pointed tip (a hairline at light
     /// pressure) is opt-in.
     #[test]
+    #[cfg(tube_box)]
     fn presets_are_blunt_and_lay_their_width() {
         let st = crate::style::Style::oil();
         for t in [Tool::round_sable(1.6), Tool::rigger(0.5), st.detail.clone(), st.line_tool(0.8)] {
@@ -1871,7 +1874,8 @@ impl Touch {
     }
 }
 
-#[cfg(test)]
+// every test here paints on the default box's style
+#[cfg(all(test, tube_box))]
 mod cover_tests {
     use crate::canvas::Canvas;
     use crate::color::hex;

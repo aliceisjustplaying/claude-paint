@@ -84,6 +84,42 @@ pub mod drier {
     pub const LAMP_BLACK: f32 = 0.35;
     pub const MADDER_LAKE: f32 = 0.3;
     pub const ZINC_WHITE: f32 = 0.35;
+
+    // Round 20's tubes (notes/r20/TUBES.md). Estimates from the tube
+    // proposals' sources, not measurements.
+
+    /// Red lead "exerts a powerful action on drying oils" (Artists'
+    /// Pigments vol. 1 p.114): a little above lead white.
+    pub const RED_LEAD: f32 = 2.2;
+    /// Naples yellow (lead antimonate): lead compounds promote drying; set
+    /// between average and lead white. Unsourced estimate.
+    pub const NAPLES_YELLOW: f32 = 1.6;
+    /// Antwerp blue: Prussian blue on an inert white base, which dilutes its
+    /// fast drying a little. Estimate.
+    pub const ANTWERP_BLUE: f32 = 1.6;
+    /// Copper pigments promote the drying of oil (Artists' Pigments vol. 2
+    /// p.136): emerald green, at copper green's rate.
+    pub const COPPER: f32 = 1.6;
+    /// Mars (synthetic iron oxide) colors are "good driers for oil paints"
+    /// (MFA CAMEO, "Mars colors"): a little above the natural red earth.
+    pub const MARS: f32 = 1.1;
+    /// Viridian: no drier action reported; average. Estimate.
+    pub const VIRIDIAN: f32 = 1.0;
+    /// Indian yellow: an early account has it drying in oil "nearly as soon
+    /// or sooner than" other colors (Artists' Pigments vol. 1 p.24); set near
+    /// average. Uncertain.
+    pub const INDIAN_YELLOW: f32 = 0.8;
+    /// Bone brown (bone roasted short of black): "bad driers in oil"
+    /// (Field's Chromatography, revised by Salter, 1869, §243): below bone
+    /// black. Estimate.
+    pub const BONE_BROWN: f32 = 0.3;
+    /// Cadmium pigments "do not retard drying … and may be regarded as slow
+    /// but reliable driers" (Artists' Pigments vol. 1 p.72): slower than the
+    /// earths, faster than vermilion.
+    pub const CADMIUM: f32 = 0.6;
+    /// Bitumen (asphaltum) slows the drying of linseed oil and never fully
+    /// cures (MFA CAMEO, "Asphaltum"): the slowest tube, below madder lake.
+    pub const BITUMEN: f32 = 0.15;
 }
 
 /// Cure gained per minute by an open film `vol` coats thick, of stiffness

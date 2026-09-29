@@ -1,0 +1,52 @@
+#!/usr/bin/env bash
+# Tube names in a box studio's easel: the strings of the binary hold no tube
+# of the catalog outside the easel's box.
+#
+#   scripts/check_box_tubes <easel> <tube table> <catalog>
+#
+# tube table: the easel's `easel tubes --markdown` (the box's records: each
+#             tube's name and pigment)
+# catalog:    every tube name the engine knows, one per line
+#
+# Each occurrence of an outside tube's name in the strings (as captured, in
+# full: the names are matched against the original text) counts unless it
+# lies wholly inside an occurrence of one of the box's own records: vermilion
+# inside an allowed "orange vermilion" doesn't count, Prussian blue inside
+# Antwerp blue's pigment doesn't, but an "orange vermilion" or a "Chinese
+# vermilion" in a box that holds only vermilion does. Exits 1 and prints the
+# outside names found, one per line.
+# (scripts/export_r16_studio runs it; scripts/tests/box_tubes.sh tests it.)
+set -euo pipefail
+[ $# -eq 3 ] || { echo "usage: $0 <easel> <tube table> <catalog>" >&2; exit 2; }
+easel=$1
+table=$(cat "$2")
+catalog=$(cat "$3")
+# the records: the name and pigment columns of the table's rows (the first two
+# lines are its header and rule)
+records=$(awk -F' [|] ' 'NR > 2 { sub(/^[|] /, "", $1); print $1; print $2 }' <<<"$table")
+in_box=$(awk -F' [|] ' 'NR > 2 { sub(/^[|] /, "", $1); print $1 }' <<<"$table")
+[ -n "$in_box" ] || { echo "check_box_tubes: no tubes in the table $2" >&2; exit 2; }
+# captured in full first (a stream cut short under pipefail reads as no hit)
+bin_strings=$(strings "$easel")
+outside=$(RECORDS=$records IN_BOX=$in_box CATALOG=$catalog perl -e '
+  local $/; my $s = <STDIN>;
+  # every occurrence of every record: the spans an outside name may lie in
+  my @spans;
+  for my $r (grep { length } split /\n/, $ENV{RECORDS}) {
+    for (my $p = index($s, $r); $p >= 0; $p = index($s, $r, $p + 1)) { push @spans, [$p, $p + length $r] }
+  }
+  my %in = map { $_ => 1 } split /\n/, $ENV{IN_BOX};
+  my @catalog = split /\n/, $ENV{CATALOG};
+  NAME: for my $t (grep { length && !$in{$_} } @catalog) {
+    for (my $p = index($s, $t); $p >= 0; $p = index($s, $t, $p + 1)) {
+      my $e = $p + length $t;
+      next if grep { $_->[0] <= $p && $e <= $_->[1] } @spans;
+      print "$t\n";
+      next NAME;
+    }
+  }
+' <<<"$bin_strings")
+if [ -n "$outside" ]; then
+  echo "$outside"
+  exit 1
+fi

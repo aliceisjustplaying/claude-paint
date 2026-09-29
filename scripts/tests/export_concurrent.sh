@@ -61,7 +61,7 @@ for p in "${profiles[@]}"; do
   [ "$known" = "$want" ] || { echo "$p: its easel knows the boxes [$known], not [$want] ($err)" >&2; exit 1; }
   # and its strings name no other box (inside words too: they run together)
   others=()
-  for b in sargent inness tadema tonn "tube box"; do
+  for b in sargent inness tadema tonn hopper "tube box"; do
     [ "$b" = "$p" ] || { [ "$b" = "tube box" ] && [ "$p" = blank ]; } || others+=("$b")
   done
   hit=$(grep -ioE "$(IFS='|'; echo "${others[*]}")" <<<"$(strings "$e")" | sort -u | tr '\n' ' ' || true)

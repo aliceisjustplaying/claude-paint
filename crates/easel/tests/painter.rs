@@ -153,8 +153,9 @@ fn the_studio_box_file_sets_the_box() {
     let o = run(&["open"]);
     assert!(!o.status.success());
     let err = String::from_utf8_lossy(&o.stdout).to_string() + &String::from_utf8_lossy(&o.stderr);
+    // (a build for one box doesn't have the default box either)
     let boxes = match OWN_BOX {
-        Some(b) => format!("(its boxes: \"tube box\", \"{b}\")"),
+        Some(b) => format!("(its boxes: \"{b}\")"),
         None => "(its boxes: \"tube box\")".to_string(),
     };
     assert!(err.contains(&format!("no box \"{other}\" {boxes}")), "{err}");
@@ -179,4 +180,31 @@ fn the_studio_box_file_sets_the_box() {
     assert!(run(&["close"]).status.success());
     let log = std::fs::read_to_string(dir.join("paintings/lua/painting.lua")).unwrap();
     assert_eq!(log.lines().nth(2), Some(format!("--@ box {own}").as_str()), "{log}");
+
+    // with no bin/box a new painting still takes the build's one box; a log
+    // that names no box (the default box's) is refused
+    std::fs::remove_file(dir.join("bin/box")).unwrap();
+    assert_eq!(String::from_utf8(run(&["tubes"]).stdout).unwrap(), tubes);
+    let unboxed: String = log.lines().filter(|l| !l.starts_with("--@ box")).map(|l| format!("{l}\n")).collect();
+    for f in ["paintings/lua/painting.lua", "out/easel/painting/committed.lua"] {
+        std::fs::write(dir.join(f), &unboxed).unwrap();
+    }
+    let o = run(&["open"]);
+    let err = String::from_utf8_lossy(&o.stdout).to_string() + &String::from_utf8_lossy(&o.stderr);
+    assert!(!o.status.success() && err.contains("the default box, which this easel doesn't have"), "{err}");
+}
+
+/// A painter's build for one box holds that box's tubes and no other tube
+/// (the catalog is gated by the `box-*` features), and knows no other box,
+/// the default included. Without a box feature: the default box, as before.
+#[test]
+fn the_build_holds_only_its_box_s_tubes() {
+    use paint::palette::{Palette, catalog};
+    let own = OWN_BOX.unwrap_or("tube box");
+    assert_eq!(Palette::box_names(), [own]);
+    let mut want: Vec<&str> = Palette::named_box(own).unwrap().tubes.iter().map(|t| t.name).collect();
+    let mut have: Vec<&str> = catalog().iter().map(|t| t.name).collect();
+    want.sort();
+    have.sort();
+    assert_eq!(have, want);
 }

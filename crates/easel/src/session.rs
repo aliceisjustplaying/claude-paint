@@ -240,7 +240,7 @@ impl Session {
         let _ = writeln!(s, "-- easel session {name:?}: a painting replayed chunk by chunk.");
         let _ = writeln!(s, "-- Each {MARK:?} line starts one chunk as it was run at the easel.");
         let tubes = self.st.borrow().tubes.name;
-        if tubes != paint::palette::DEFAULT_BOX {
+        if paint::palette::default_box() != Some(tubes) {
             let _ = writeln!(s, "{BOX_MARK} {tubes}");
         }
         for (i, c) in self.log.iter().enumerate() {
@@ -482,26 +482,34 @@ pub fn configured_box() -> Result<Option<(String, String)>, String> {
 
 /// The box called `name`, or an error naming the boxes this easel has.
 pub fn find_box(name: &str) -> Result<Palette, String> {
-    Palette::named_box(name).ok_or_else(|| format!("this easel has no box {name:?} (its boxes: {})", Palette::box_names().iter().map(|b| format!("{b:?}")).collect::<Vec<_>>().join(", ")))
+    Palette::named_box(name).ok_or_else(|| format!("this easel has no box {name:?} (its boxes: {})", box_list()))
+}
+
+/// The boxes this easel has, quoted: `"tube box", "sargent"`.
+fn box_list() -> String {
+    Palette::box_names().iter().map(|b| format!("{b:?}")).collect::<Vec<_>>().join(", ")
 }
 
 /// The box a painting is painted from. A new painting (`log` None) takes the
-/// configured box (`configured_box`), else the default. An existing one takes
+/// configured box (`configured_box`), else the default (in a painter's build
+/// for one box, which has no default box: that box). An existing one takes
 /// the box its log names (none: the default), whatever easel replays it; if a
 /// box is configured too, it must be the same one.
 pub fn box_for(log: Option<&str>) -> Result<Palette, String> {
     let configured = configured_box()?;
     let Some(text) = log else {
-        return find_box(configured.as_ref().map_or(paint::palette::DEFAULT_BOX, |c| c.0.as_str()));
+        return find_box(configured.as_ref().map_or(Palette::fallback_box(), |c| c.0.as_str()));
     };
     let logged = logged_box(text)?;
-    let name = logged.as_deref().unwrap_or(paint::palette::DEFAULT_BOX);
+    let Some(name) = logged.as_deref().or(paint::palette::default_box()) else {
+        return Err(format!("the log names no box, so it was painted from the default box, which this easel doesn't have (its boxes: {}); nothing ran", box_list()));
+    };
     if let Some((c, from)) = &configured
         && c != name
     {
         let log_says = match &logged {
             Some(n) => format!("the log was painted from the box {n:?} (its {BOX_MARK} line)"),
-            None => format!("the log names no box, so it was painted from the default box {:?}", paint::palette::DEFAULT_BOX),
+            None => format!("the log names no box, so it was painted from the default box {name:?}"),
         };
         return Err(format!("{log_says}, but {from} says {c:?}: a painting is replayed with the box it was painted from; nothing ran"));
     }

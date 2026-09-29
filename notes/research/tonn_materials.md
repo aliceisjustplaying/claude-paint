@@ -3,7 +3,6 @@
 *A sourced technical report. Every claim cites a source key; the sources
 are listed at the end. Almost all of it comes from the painter's own
 words: posts on X (2019–2026), a materials thread of 2023 and interviews.
-No technical study of his paintings was found in the consulted sources.
 "Uncertain" marks claims that rest on a single remark, may have changed
 since or are inferred. Dated self-reports can differ; a later statement
 does not establish an unchanged current practice.*
@@ -24,8 +23,8 @@ paints mostly with natural-bristle flats and uses nylon brushes to smooth
 [BR21; BR22]. He calls himself "85% a direct painting guy" (2026)
 [DIR26]. For layered works he describes drawing, a thin first painting, a
 second painting and final glazes, working over the whole surface at once
-[SEQ22; IMPR]. Thread counts, ground thickness and the ground recipes are
-not documented.
+[SEQ22; IMPR].
+<!-- research: No technical study of his paintings was found in the consulted sources. Thread counts, ground thickness and the ground recipes are not documented (posts, interviews and web search rechecked 29 Sept. 2026). -->
 
 **Terms.** *Ground/priming*: the preparatory layer between support and
 paint. *Imprimatura*: a thin toned wash over the ground. *Grisaille*: a
@@ -46,21 +45,22 @@ over. *Black mirror*: a darkened mirror that simplifies values.
 - **Adhesive.** First an acrylic adhesive; from 2020 BEVA film,
   "reversable with low-ish heat," chosen so a conservator could separate
   fabric and panel later [SUB 9/–12/]. After gluing he trims and staples
-  the canvas around the panel [LEAD20]. Later use of BEVA is not stated.
-  *Uncertain.*
+  the canvas around the panel [LEAD20].
+<!-- research: Later use of BEVA is not stated in any post found (rechecked 29 Sept. 2026). -->
 - **Stretched canvas.** In 2025 he oil-primed "a bunch of canvases" and
   had a 24 × 48 in. oil-primed canvas "all ready to go" [GRND25; CAN25].
   For a canvas about 6 ft long he would consider an aluminum stretcher
   bar [STR25].
-- **Linen.** He bought "a roll of linen" in 2020 [KIT20]. Which fabric
-  goes on which panel is not stated. *Uncertain.* Listings of 2011 give
-  "oil on canvas affixed to panel" and oil on stretched canvas [SAA].
+- **Linen.** He bought "a roll of linen" in 2020 [KIT20]. Listings of
+  2011 give "oil on canvas affixed to panel" and oil on stretched canvas
+  [SAA].
+<!-- research: Which fabric (synthetic or linen) goes on which panel is not stated. -->
 - **Rigid boards for small works.** He reports using hardboard and
   commercial acrylic-ground boards for small works and buying ready-made
   wooden panels [MASON; MAT23; PANELS21].
 - **Sizes.** Reported sizes include about 30 × 40 in. [BC]; listings range
   from 9 × 12 to 36 × 48 in., all "oil on panel" [FAA].
-- **Thread count.** Not documented. *Gap.*
+<!-- research: - **Thread count.** Not documented in posts, interviews or listings. -->
 
 ## 2. Grounds
 
@@ -69,11 +69,14 @@ over. *Black mirror*: a darkened mirror that simplifies values.
   with a taping knife" (a drywall knife) [PRIME19].
 - **Lead ground, tinted (2020).** "Prime them with a tinted lead
   ground." He adds that lead "produces a uniquely strong paint film, and
-  dries rapidly" [LEAD20]. The tint is not stated.
+  dries rapidly" [LEAD20].
+<!-- research: The tint of the 2020 lead ground is not stated (post and syndication record rechecked; no alt text). -->
 - **Greenish oil ground (2025).** In June 2025 he primed custom panels
   with an oil ground that "will be a while drying" and called it "the
-  greenish ground" [GRND25]. Whether it contains lead, and its recipe,
-  are not stated. *Uncertain.*
+  greenish ground" [GRND25]. The next day he wrote that he had
+  "oil-primed a bunch of canvases" and the house smelled "strongly of
+  linseed oil" [GRND25].
+<!-- research: Whether the greenish ground contains lead, and its recipe, are not stated. -->
 - **Acrylic ground when time is short.** In 2021 he applied acrylic
   "gesso" to a new canvas panel: "I usually prefer the feel of an oil
   primed surface, but I don't care to wait a few months for it to dry"
@@ -81,9 +84,10 @@ over. *Black mirror*: a darkened mirror that simplifies values.
 - **Texture.** He reports varying the ground texture. A rougher-than-planned
   surface led him to use heavier impasto on one canvas [TEX21; TEX-B].
 - **Toning.** He reported discontinuing a mid-gray imprimatura in 2021. A
-  2024 example used "a flat brownish ground layer, or imprimatura" [IMPR;
-  AP24]. The current frequency of either practice is undocumented.
-- **Thickness.** Not documented. *Gap.*
+  2024 example used "a flat brownish ground layer, or imprimatura"
+  [IMPR; AP24].
+<!-- research: The current frequency of either toning practice is undocumented. -->
+<!-- research: - **Thickness** of the ground: not documented. -->
 
 ## 3. Drawing and lay-in
 
@@ -100,8 +104,8 @@ over. *Black mirror*: a darkened mirror that simplifies values.
   [COV26]. *Uncertain* as a general practice.
 - **Drawing on the canvas.** He has documented drawing directly in
   charcoal on canvas [SEQ22] and revising the drawing during painting:
-  "that never stops" [IMPR]. His use of raw umber for the initial lay-in
-  is undocumented.
+  "that never stops" [IMPR].
+<!-- research: His own use of raw umber for the initial lay-in is undocumented; he describes raw-umber rough-ins only as general practice (1707554341022994432, 29 Sept. 2023). -->
 - **Aids to seeing.** Squinting, a black mirror and, above all, a regular
   mirror [MIR20; ICK; BC; BM26]. He occasionally measures by holding up a
   brush, "but mostly I'm purely operating on visual comparison" (2026)
@@ -123,31 +127,28 @@ yellows": ivory black, ultramarine blue, terre verte, permanent
 alizarin, burnt sienna, transparent oxide yellow, yellow ochre, cadmium
 yellow deep, cadmium yellow light, flake white [PAL25]. In September
 2025 he sorted his tubes into a "standard rotation" tier, a tier for
-"as circumstances call for it" and spares; which colors sit in which
-tier is shown only in photographs [SHELF25].
+"as circumstances call for it" and spares [SHELF25].
+<!-- research: Which colors sit in which tier is shown only in photographs (no alt text in the syndication records); only lead-tin yellow is named in text. -->
 
 | Pigment | Evidence | Notes |
 |---|---|---|
 | Lead white (flake, PW1) | His reported standard white [WHITE21; LEAD24; PAL25] | He cites film durability and drying behavior as reasons for using it [WHITE21; DRY23] |
-| Titanium white (PW6) | Added in 2021 [WHITE21]; "I basically don't use titanium" (July 2022) [TI22] | Never his primary white "for structural reasons" [WHITE21]. A "notoriously slow" dryer [DRY23]. Later practice not documented |
-| Zinc white | Avoided | He reports avoiding zinc-containing paints [ZINC20] |
+| Titanium white (PW6) | Added in 2021 as a second white [WHITE21]; "I basically don't use titanium" (July 2022) [TI22] | Never his primary white "for structural reasons" [WHITE21]. A "notoriously slow" dryer [DRY23] |
 | Yellow ochre | [LIM21]; [MAT23]; [COLV22]; [PAL25] | |
 | Lead-tin yellow | First reported use Sept. 2025 [LTY25] | Subsequently placed in his frequent-use tier [LTY25] |
 | Transparent oxide yellow | On the 2025 palette [PAL25] | *Uncertain* how often |
-| Cadmium yellow (deep and light) and cadmium red | "The cadmium equivalent I use normally" [CAD22]; both yellows on the 2025 palette [PAL25] | |
+| Cadmium yellow (deep and light) and cadmium red | "The cadmium [red] equivalent I use normally" [CAD22]; both yellows on the 2025 palette [PAL25] | |
 | Raw umber | [MAT23]; [UMB22]; [RU25] | With white it "will tend to dry v quickly" [UMB20] |
 | Red umber | [RUMB20] | |
-| English red (iron oxide) | In 2021 "I haven't even put [it] on my palette in a million years" [ERED21] | Current use *uncertain* |
 | Burnt sienna | [BS20]; [SIEN22]; [PAL25]; [DIR26] | |
-| Ultramarine blue (synthetic) | "I use ultramarine quite a bit" [BLUE21]; [PAL25] | Chosen as "darker, more transparent (and cheaper!)" than cobalt blue [BLUE21] |
+| Ultramarine blue (synthetic) | "I use ultramarine quite a bit" [BLUE21]; [PAL25] | "The darker, more transparent (and cheaper!) ultramarine was more versatile on the pallet for me" [BLUE21] |
 | Cerulean blue | [BLUE21]; [BS20]; [DIR26] | |
-| Cobalt blue | "Haven't used it in ages" (2021) [BLUE21] | |
 | Ivory black | [LIM21]; [MAT23]; [COLV22]; [PAL25] | A slow dryer [DRY23] |
 | Permanent alizarin (quinacridone) | [BLACK21]; [COLV22]; [PAL25] | "The alizarin I use is quinacridone based" (2025) [ALIZ25]. Earlier posts say only "alizarin" [BLACK21] |
 | Terre verte | Occasional, as a glaze [TV22]; on the 2025 palette [PAL25] | "Very weak tinting strength ... transparent" [TV22] |
 | Cobalt violet | Infrequent; mentioned again in 2025 [CVI20; CVI25] | |
-| Vermilion | Owns a tube, has not used it [VERM20; CAD22] | Not on the working palette |
 
+<!-- research: pigments dropped as not used: zinc white (he warns against zinc-containing paints, ZINC20); English red ("haven't even put [it] on my palette in a million years", ERED21, 2021); cobalt blue ("haven't used it in ages", BLUE21, 2021); vermilion (owns a tube "that I never used", VERM20; CAD22). -->
 - **Paint.** He prefers paints with few added modifiers, just
   "oil+pigment," and reports using pigment drying differences in his
   work [DRY23]. He reports using commercial professional-grade paints
@@ -182,11 +183,11 @@ tier is shown only in photographs [SHELF25].
   varnish between layers of paint" on grounds of long-term condition
   [IVAR19].
 - **Final varnish.** He reports using high-gloss Gamvar (a Regalrez
-  resin) and applying two coats before works leave his studio [VAR21;
-  VARN24; VARN25]. Paintings rest about six months before final varnish;
+  resin) and applying two coats before works leave his studio
+  [VAR21; VARN24; VARN25]. Paintings rest about six months before final varnish;
   touch-dry is not enough [SIX19; VAR21; VARN23]. When he reworks a
-  painting, which is rare, he strips and re-varnishes it [STRIP22;
-  STRIP24].
+  painting, which is rare, he strips and re-varnishes it
+  [STRIP22; STRIP24].
 
 ## 6. Layers and application
 
@@ -244,7 +245,7 @@ tier is shown only in photographs [SHELF25].
 
 ## 8. Condition and aging
 
-- **Drying rates.** "Earth tones (umbers, siennas), cobalt blue, and
+- **Drying rates.** "Earth tones (umbers, siennas) ... and
   lead white are rapid dryers, whereas ivory black and titanium white are
   notoriously slow" (2023) [DRY23]. Rates also depend on "atmospheric
   conditions, painting mediums," and "thickness of paint layer" [VAR21].
@@ -261,8 +262,7 @@ tier is shown only in photographs [SHELF25].
 
 The historical names in this note correspond to these tubes: flake
 white → lead white; cadmium yellow light and deep → cadmium yellow;
-English red → red earth; terre verte → green earth; ivory black → bone
-black.
+terre verte → green earth; ivory black → bone black.
 
 ## 10. At this easel
 

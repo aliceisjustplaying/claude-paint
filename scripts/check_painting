@@ -42,8 +42,8 @@ mkdir -p "$work/paintings/lua" "$work/out/easel/painting" "$work/notes"
 work=$(cd "$work" && pwd)
 
 repo=$(cd "$(dirname "$0")/.." && pwd)
-(cd "$repo" && cargo build --release -q -p easel)
-easel=$repo/target/release/easel
+# the replay build, in the target directory cargo builds into (CARGO_TARGET_DIR too)
+easel=$("$repo/scripts/replay_easel")
 
 cp "$log" "$work/paintings/lua/painting.lua"
 cp "$log" "$work/out/easel/painting/committed.lua"

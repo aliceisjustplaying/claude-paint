@@ -72,7 +72,7 @@ pub fn catalog() -> Vec<Tube> {
         tube("red earth", "iron oxide earth", "#9c4a30", 0.85, 0.7, 0.9, drier::RED_EARTH),
         #[cfg(any(tube_box, feature = "box-sargent"))]
         tube("vermilion", "mercuric sulfide", "#cf3a24", 0.9, 0.75, 1.0, drier::VERMILION),
-        #[cfg(any(tube_box, feature = "box-inness", feature = "box-tonn"))]
+        #[cfg(any(tube_box, feature = "box-inness", feature = "box-alma-tadema", feature = "box-tonn"))]
         tube("raw umber", "iron and manganese oxide earth", "#5c4c3a", 0.8, 0.65, 0.9, drier::UMBER),
         tube("bone black", "charred bone (carbon, calcium phosphate)", "#1e1b19", 0.9, 0.7, 1.1, drier::BONE_BLACK),
         #[cfg(any(tube_box, feature = "box-sargent", feature = "box-inness", feature = "box-alma-tadema"))]
@@ -108,6 +108,8 @@ pub fn catalog() -> Vec<Tube> {
         tube("lemon chrome", "pale lead chromate with lead sulfate", "#eed83c", 0.8, 0.7, 0.8, drier::CHROME_YELLOW),
         #[cfg(feature = "box-alma-tadema")]
         tube("pale cadmium", "cadmium sulfide, a pale grade", "#f0c63c", 0.85, 0.7, 1.1, drier::CADMIUM),
+        #[cfg(feature = "box-alma-tadema")]
+        tube("deep cadmium", "cadmium sulfide, a deep grade", "#e8861e", 0.9, 0.6, 1.2, drier::CADMIUM),
         #[cfg(any(feature = "box-sargent", feature = "box-inness", feature = "box-tonn"))]
         tube("cadmium yellow", "cadmium sulfide", "#e8a51f", 0.85, 0.7, 1.1, drier::CADMIUM),
         #[cfg(feature = "box-sargent")]
@@ -229,7 +231,8 @@ const BOXES: &[(&str, &[&str])] = &[
     (
         "alma-tadema",
         &[
-            "lead white", "Naples yellow", "pale cadmium", "yellow ochre", "brown ochre", "orange vermilion", "Chinese vermilion", "red earth", "rose madder", "burnt sienna", "bone black", "cobalt blue", "viridian",
+            "lead white", "Naples yellow", "pale cadmium", "deep cadmium", "yellow ochre", "brown ochre", "orange vermilion", "Chinese vermilion", "red earth", "rose madder", "burnt sienna", "raw umber",
+            "bone black", "cobalt blue", "viridian",
         ],
     ),
     #[cfg(feature = "box-tonn")]

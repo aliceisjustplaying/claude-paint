@@ -4,7 +4,10 @@
 # The sargent, inness and blank exports start together, so they extract the
 # archive and build at the same time; then each studio's easel must know
 # exactly its own box (the list its refusal of an unknown box gives) and
-# its strings must hold no other box's name.
+# its strings must hold no other box's name. The sargent export is held
+# between its build and its copy (STUDIO_BUILD_HOOK) until the inness and
+# blank builds have finished, so an export that copied from a build output
+# the others share would copy another box's easel every time.
 #
 #   R16_BRANCH=<branch> scripts/tests/export_concurrent.sh
 #
@@ -17,6 +20,22 @@ repo=$(cd "$(dirname "$0")/../.." && pwd)
 work=$(mktemp -d "$TMPDIR/export-concurrent.XXXXXX")
 unset EASEL_BOX
 export STUDIO_BUILDS=$work/builds
+# the barrier: each build says it's done; sargent's waits for the other two
+hook=$work/hook
+cat > "$hook" <<HOOK
+#!/usr/bin/env bash
+set -eu
+touch "$work/built-\$1"
+[ "\$1" = sargent ] || exit 0
+for i in \$(seq 1 1800); do
+  [ -e "$work/built-inness" ] && [ -e "$work/built-default" ] && exit 0
+  sleep 1
+done
+echo "the inness and blank builds didn't finish in 30 minutes" >&2
+exit 1
+HOOK
+chmod +x "$hook"
+export STUDIO_BUILD_HOOK=$hook
 profiles=(sargent inness blank)
 pids=()
 for p in "${profiles[@]}"; do
@@ -28,6 +47,7 @@ for i in "${!profiles[@]}"; do
   wait "${pids[$i]}" || { echo "${profiles[$i]}: the export failed:" >&2; cat "$work/${profiles[$i]}.log" >&2; failed=1; }
 done
 [ $failed = 0 ] || exit 1
+for v in sargent inness default; do [ -e "$work/built-$v" ] || { echo "the $v build never reached the hook" >&2; exit 1; }; done
 for p in "${profiles[@]}"; do
   case $p in blank) want='"tube box"' ;; *) want="\"$p\"" ;; esac
   e=$work/$p/bin/easel

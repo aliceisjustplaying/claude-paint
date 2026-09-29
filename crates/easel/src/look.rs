@@ -245,8 +245,14 @@ fn grid_line(img: &mut Img, x: i64, y: i64, a: f32) {
     img.blend(x, y, c, a);
 }
 
-fn draw_grid(img: &mut Img, m: &Map, step: f32, fs: i64) {
+/// Grid lines and labels in output pixels. Lines closer than an output
+/// pixel are refused (they'd be more lines than pixels).
+fn draw_grid(img: &mut Img, m: &Map, step: f32, fs: i64) -> std::result::Result<(), String> {
     let ppu = m.s * m.kx;
+    if step > 0.0 && step * m.s * m.kx.min(m.ky) < 1.0 {
+        let min = 1.0 / (m.s * m.kx.min(m.ky));
+        return Err(format!("--grid {step}: lines closer than a pixel of this look; want at least {min:.2} units"));
+    }
     let major = if step > 0.0 { step } else { nice_step(90.0 / ppu) };
     let minor = [5.0, 4.0, 2.0].into_iter().map(|d| major / d).find(|s| s * ppu >= 14.0);
     let (u0, v0) = m.from(0.0, 0.0);
@@ -255,25 +261,25 @@ fn draw_grid(img: &mut Img, m: &Map, step: f32, fs: i64) {
     let (va, vb) = (v0.min(v1), v0.max(v1));
     let thick = if fs >= 3 { 2 } else { 1 };
     let mut lines = |st: f32, alpha: f32, w: i64| {
-        let mut k = (ua / st).ceil();
-        while k * st <= ub {
-            let (ox, _) = m.to(k * st, 0.0);
+        let mut k = (ua / st).ceil() as i64;
+        while k as f32 * st <= ub {
+            let (ox, _) = m.to(k as f32 * st, 0.0);
             for dx in 0..w {
                 for y in 0..img.h as i64 {
                     grid_line(img, ox.floor() as i64 + dx, y, alpha);
                 }
             }
-            k += 1.0;
+            k += 1;
         }
-        let mut k = (va / st).ceil();
-        while k * st <= vb {
-            let (_, oy) = m.to(0.0, k * st);
+        let mut k = (va / st).ceil() as i64;
+        while k as f32 * st <= vb {
+            let (_, oy) = m.to(0.0, k as f32 * st);
             for dy in 0..w {
                 for x in 0..img.w as i64 {
                     grid_line(img, x, oy.floor() as i64 + dy, alpha);
                 }
             }
-            k += 1.0;
+            k += 1;
         }
     };
     if let Some(mi) = minor {
@@ -282,12 +288,12 @@ fn draw_grid(img: &mut Img, m: &Map, step: f32, fs: i64) {
     lines(major, 0.55, thick);
     // labels along the top and left edges
     let lab: Rgb = [0.95, 0.95, 0.85];
-    let mut k = (ua / major).ceil();
+    let mut k = (ua / major).ceil() as i64;
     let mut last = -1000;
     let mut xs = Vec::new();
-    while k * major <= ub {
-        xs.push(k * major);
-        k += 1.0;
+    while k as f32 * major <= ub {
+        xs.push(k as f32 * major);
+        k += 1;
     }
     if m.mirror {
         xs.reverse();
@@ -299,22 +305,23 @@ fn draw_grid(img: &mut Img, m: &Map, step: f32, fs: i64) {
             last = x + img.text(x, 2, &fmt_units(u), fs, lab) + 4 * fs;
         }
     }
-    let mut k = (va / major).ceil();
+    let mut k = (va / major).ceil() as i64;
     let mut last = 7 * fs + 4;
-    while k * major <= vb {
-        let (_, oy) = m.to(0.0, k * major);
+    while k as f32 * major <= vb {
+        let (_, oy) = m.to(0.0, k as f32 * major);
         let y = oy.round() as i64 + 3;
         if y > last && y < img.h as i64 - 16 * fs {
-            img.text(2, y, &fmt_units(k * major), fs, lab);
+            img.text(2, y, &fmt_units(k as f32 * major), fs, lab);
             last = y + 9 * fs;
         }
-        k += 1.0;
+        k += 1;
     }
     let legend = match minor {
         Some(mi) => format!("GRID {} / {} UNITS", fmt_units(major), fmt_units(mi)),
         None => format!("GRID {} UNITS", fmt_units(major)),
     };
     img.text(2, img.h as i64 - 7 * fs - 2, &legend, fs, lab);
+    Ok(())
 }
 
 /// Render a PNG: whole views fit 1600 px and 3 MB; crops stay native, at most 1200 px per side.
@@ -401,7 +408,7 @@ pub fn look(c: &Canvas, v: &View, out: &Path) -> std::result::Result<(usize, usi
         let fs = if ow.max(oh) >= 1500 { 3 } else { 2 };
         let mut im = Img { w: ow, h: oh, px: img };
         if let Some(step) = v.grid {
-            draw_grid(&mut im, &map, step, fs);
+            draw_grid(&mut im, &map, step, fs)?;
         }
         let buf: Vec<u8> = im.px.iter().flat_map(|p| p.map(|c| (linear_to_srgb(c) * 255.0).round().clamp(0.0, 255.0) as u8)).collect();
         let mut png = Vec::new();
@@ -503,6 +510,16 @@ mod tests {
         assert_eq!((w, h), (80, 72), "crop stays at one output pixel per canvas pixel");
         assert_eq!(before, bits(&c));
     }
+    #[test]
+    fn grids_finer_than_a_pixel_are_refused() {
+        let c = Canvas::new_window(100, 1.0, [0.2; 3], None);
+        let out = out_dir().join("fine-grid.png");
+        let grid = |g: f32| look(&c, &View { grid: Some(g), ..View::default() }, &out);
+        let err = grid(1e-6).expect_err("a grid finer than a pixel");
+        assert!(err.contains("want at least 10.00 units"), "{err}");
+        assert_eq!(grid(10.0).unwrap(), (100, 100), "one line per pixel still draws");
+    }
+
     #[test]
     fn whole_looks_are_bounded_pngs_without_enlargement() {
         for (name, width, aspect, size, expected) in [

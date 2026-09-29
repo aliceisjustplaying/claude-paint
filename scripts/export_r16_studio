@@ -32,9 +32,15 @@
 #
 # The binary is built from a `git archive` of the branch (R16_BRANCH,
 # default r16-base) in <repo>/target/studio-build/<commit>, so it is built
-# from committed code only. Delivery renders use the replay build
-# (`cargo build --release -p easel`, default features) outside the studio;
-# it replays every box, reading the box from the log.
+# from committed code only. Exports may run at once: the archive is
+# extracted under a lock, and each box builds in its own target directory
+# (<commit>/target/<box>) under its own lock, so one studio can't get
+# another's easel. STUDIO_BUILDS moves <repo>/target/studio-build elsewhere
+# (scripts/tests/export_concurrent.sh builds from nothing there).
+#
+# Delivery renders use the replay build (`cargo build --release -p easel`,
+# default features) outside the studio; it replays every box, reading the
+# box from the log.
 set -euo pipefail
 
 usage() { echo "usage: $0 friedrich|blank|sargent|inness|alma-tadema|tonn <dest>" >&2; exit 2; }
@@ -68,33 +74,52 @@ fi
 mkdir -p "$dest"
 dest=$(cd "$dest" && pwd)
 
+# lock <file>: an exclusive lock on <file>, held on fd 9 until `unlock` (or
+# exit; the kernel drops it with the process, so a killed export leaves no
+# stale lock). perl's flock locks the open file the shell holds on fd 9.
+lock() {
+  exec 9>"$1"
+  perl -MFcntl=:flock -e 'open(my $f, ">&=", 9) or die "lock: fd 9: $!\n"; flock($f, LOCK_EX) or die "lock: $!\n"'
+}
+unlock() { exec 9>&-; }
+
 # build the painter's easel from the committed source, with the profile's
 # box (a box-* feature) and no other; each variant is kept in built/<box>
-src="$repo/target/studio-build/$sha"
+builds=${STUDIO_BUILDS:-$repo/target/studio-build}
+src="$builds/$sha"
 variant=${box:-default}
 built="$src/built/$variant/easel"
 if [ ! -x "$built" ]; then
+  mkdir -p "$builds"
+  lock "$builds/$sha.lock"
   if [ ! -f "$src/.extracted" ]; then
     rm -rf "$src"
     mkdir -p "$src"
     git -C "$repo" archive --format=tar "$branch" -- .cargo Cargo.toml Cargo.lock crates | tar -x -C "$src"
     touch "$src/.extracted"
   fi
-  features=(--no-default-features)
-  [ -z "$box" ] || features+=(--features "box-$box")
-  build() { (cd "$src" && env -u CARGO_TARGET_DIR cargo build --release -p easel "${features[@]}"); }
-  if ! out=$(build 2>&1); then
-    if echo "$out" | grep -qi 'license'; then
-      DEVELOPER_DIR=/Library/Developer/CommandLineTools build
-    else
-      echo "$out" >&2
-      exit 1
+  unlock
+  mkdir -p "$src/built"
+  lock "$src/built/$variant.lock"
+  if [ ! -x "$built" ]; then
+    features=(--no-default-features)
+    [ -z "$box" ] || features+=(--features "box-$box")
+    target="$src/target/$variant"
+    build() { (cd "$src" && CARGO_TARGET_DIR="$target" cargo build --release -p easel "${features[@]}"); }
+    if ! out=$(build 2>&1); then
+      if grep -qi 'license' <<<"$out"; then
+        DEVELOPER_DIR=/Library/Developer/CommandLineTools build
+      else
+        echo "$out" >&2
+        exit 1
+      fi
     fi
+    [ -x "$target/release/easel" ] || { echo "no easel built in $target" >&2; exit 1; }
+    mkdir -p "$(dirname "$built")"
+    cp "$target/release/easel" "$built.part"
+    mv "$built.part" "$built"
   fi
-  [ -x "$src/target/release/easel" ] || { echo "no easel built in $src" >&2; exit 1; }
-  mkdir -p "$(dirname "$built")"
-  cp "$src/target/release/easel" "$built.part"
-  mv "$built.part" "$built"
+  unlock
 fi
 
 # what a painter gets
@@ -134,32 +159,34 @@ extra=$(cd "$dest" && find . -type f ! -path ./bin/easel ! -path ./bin/box ! -pa
 # names of painters: none anywhere a painter can read in the blank studio
 # (bin/THIRD_PARTY_NOTICES.md, the legal notices, aside); in an artist's
 # studio only that artist's
-artists=(Friedrich Turner 'C[eé]zanne' Rembrandt Vermeer Renoir 'Van Gogh' Eckersberg Carus Kersting Constable Monet Manet Bruegel Brueghel Hockney Ruisdael Hobbema Cuyp Lorrain Poussin Corot Titian Tiziano Rubens 'Vel[aá]zquez' Goya Leonardo Michelangelo Raphael Ingres Delacroix Boucher Troyon Oudry Desportes Dahl Blechen Runge Oehme Kobell Gainsborough Whistler Sargent Degas Hopper Munch Picasso Matisse Kandinsky 'Bob Ross' Inness Alma-Tadema Tadema Tonn)
-others=()
-for a in "${artists[@]}"; do
-  mine=0
-  for o in ${own[@]+"${own[@]}"}; do [ "$a" = "$o" ] && mine=1; done
-  [ $mine = 1 ] || others+=("$a")
+"$repo/scripts/check_studio_names" "$dest" ${own[@]+"${own[@]}"} || { echo "the $profile studio names painters it shouldn't" >&2; exit 1; }
+
+# the tubes in the binary: a studio with a box of its own holds that box's
+# tube records (names and pigments) and no other tube's name, and no other
+# box's name (the default box's included); the default-box studios hold the
+# tube box's, and no older box's name ("smalt box", "cobalt box")
+bin_strings=$(strings "$dest/bin/easel")
+catalog=$(git -C "$repo" show "$branch:crates/paint/src/palette.rs" | sed -n 's/^ *tube("\([^"]*\)".*/\1/p')
+[ "$(wc -l <<<"$catalog")" -ge 14 ] || { echo "can't read the tube catalog from palette.rs" >&2; exit 1; }
+# the box's own records (the table's name and pigment columns) are blanked
+# out, longest first, so an outside name inside one of them (vermilion in
+# orange vermilion, Prussian blue in Antwerp blue's pigment) doesn't count
+# (perl: bash's ${s//x/y} crawls over the strings under a UTF-8 locale)
+records=$(awk -F' [|] ' 'NR > 2 { sub(/^[|] /, "", $1); print $1; print $2 }' <<<"$table")
+in_box=$(awk -F' [|] ' 'NR > 2 { sub(/^[|] /, "", $1); print $1 }' <<<"$table")
+outside=$(RECORDS=$records IN_BOX=$in_box CATALOG=$catalog perl -e '
+  local $/; my $s = <STDIN>;
+  for my $r (sort { length $b <=> length $a } split /\n/, $ENV{RECORDS}) { $s =~ s/\Q$r\E/ /g if length $r }
+  my %in = map { $_ => 1 } split /\n/, $ENV{IN_BOX};
+  for my $t (split /\n/, $ENV{CATALOG}) { print "$t\n" if !$in{$t} && index($s, $t) >= 0 }
+' <<<"$bin_strings")
+stray=()
+while IFS= read -r t; do [ -z "$t" ] || stray+=("$t"); done <<<"$outside"
+for label in "smalt box" "cobalt box" ${box:+"tube box"}; do
+  ! grep -qF "$label" <<<"$bin_strings" || stray+=("$label")
 done
-pattern=$(IFS='|'; echo "${others[*]}")
-hits=$(cd "$dest" && grep -rIniwE "$pattern" notes bin/box 2>/dev/null || true)
-if strings "$dest/bin/easel" | grep -qiwE "$pattern"; then
-  hits+=$'\n'"bin/easel: $(strings "$dest/bin/easel" | grep -iwoE "$pattern" | sort -u | tr '\n' ' ')"
-fi
-# the easel's strings run together (a box's name between two tube names), so
-# the names that are boxes are looked for inside words too
-box_names=()
-for a in Sargent Inness Tadema Tonn; do
-  for o in ${own[@]+"${own[@]}"}; do [ "$a" = "$o" ] && continue 2; done
-  box_names+=("$a")
-done
-boxes_pattern=$(IFS='|'; echo "${box_names[*]}")
-if strings "$dest/bin/easel" | grep -qiE "$boxes_pattern"; then
-  hits+=$'\n'"bin/easel: $(strings "$dest/bin/easel" | grep -ioE "$boxes_pattern" | sort -u | tr '\n' ' ')"
-fi
-if [ -n "${hits//[$'\n']/}" ]; then
-  echo "painters' names in the $profile studio:" >&2
-  echo "$hits" >&2
+if [ ${#stray[@]} -gt 0 ]; then
+  echo "bin/easel of the $profile studio names tubes or boxes outside its box: $(printf '"%s" ' "${stray[@]}")" >&2
   exit 1
 fi
 

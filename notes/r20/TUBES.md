@@ -1,8 +1,8 @@
 # Round 20: the tube catalog and the boxes (not for painters)
 
-Round 20's research wrote four tube proposals, one per artist:
+Round 20's research wrote five tube proposals, one per artist:
 `sargent_tubes.md` (S), `inness_tubes.md` (I), `alma_tadema_tubes.md`
-(A) and `tonn_tubes.md` (T), in `~/tmp/r20-f7522c31/research/`. They overlap and sometimes
+(A), `tonn_tubes.md` (T) and `hopper_tubes.md` (H), in `~/tmp/r20-f7522c31/research/`. They overlap and sometimes
 disagree. This note records how they became one catalog
 (`crates/paint/src/palette.rs`, `catalog()`), with each tube defined once,
 and which tubes each box holds (`BOXES`). It stays in the repo. The export
@@ -65,7 +65,7 @@ Columns: masstone, hiding, stiffness, tinting strength, drying.
 | Naples yellow | lead antimonate | `#e2b964` | 0.85 | 0.75 | 0.6 | 1.6 `NAPLES_YELLOW` | A | only A. What an 1880s tube of this name held is unverified (A) |
 | lemon chrome | pale lead chromate with lead sulfate | `#eed83c` | 0.8 | 0.7 | 0.8 | 1.8 `CHROME_YELLOW` | I | S: `#f0d32a` 0.85/0.7/0.9. Both say the pale grade hides and tints less than chrome yellow (0.9/1.0). I ties both cuts to the coprecipitated lead sulfate [AP1 p.187], while S marks its cuts as estimates ("assumed slightly lower", "a little weaker"), so I's values. Stiffness and drying agree |
 | pale cadmium | cadmium sulfide, a pale grade | `#f0c63c` | 0.85 | 0.7 | 1.1 | 0.6 `CADMIUM` | A, adjusted | A: stiffness 0.6, drying 0.5. It is the same pigment as cadmium yellow, so it gets the same body (0.7) and the sourced cadmium rate (0.6). A's masstone, hiding and strength are kept (they match the other cadmium lines) |
-| deep cadmium | cadmium sulfide, a deep grade | `#e8861e` | 0.9 | 0.6 | 1.2 | 0.6 `CADMIUM` | A, adjusted | only A (its optional tube 9): masstone, hiding, stiffness and strength as A wrote them ("as for pale cadmium, with a deeper orange masstone and slightly higher hiding"; all estimates). A's drying 0.5 is replaced by the sourced cadmium rate, as for pale cadmium |
+| deep cadmium | cadmium sulfide, a deep grade | `#e8861e` | 0.9 | 0.6 | 1.2 | 0.6 `CADMIUM` | A, adjusted | A's optional tube 9: masstone, hiding, stiffness and strength as A wrote them ("as for pale cadmium, with a deeper orange masstone and slightly higher hiding"; all estimates). A's drying 0.5 is replaced by the sourced cadmium rate, as for pale cadmium. H proposed it later for "cadmium deep": `#e2861e` 0.88/0.7/1.1/0.6, also all estimates and nearly the same. The tube was already in the alma-tadema box, whose paintings must replay as painted, so its numbers stay A's and the hopper box shares it |
 | Indian yellow | magnesium and calcium euxanthate | `#e1a11e` | 0.15 | 0.4 | 0.8 | 0.8 `INDIAN_YELLOW` | S | only S. Hiding: particles "uniformly clear and transparent" [AP1 p.22]; stiffness and strength are estimates |
 | cadmium yellow | cadmium sulfide | `#e8a51f` | 0.85 | 0.7 | 1.1 | 0.6 `CADMIUM` | I | S: `#efb512` 0.85/0.65/1.1/0.6; T: `#f0b000` 0.9/0.7/1.1/0.6. Strength and drying agree. Hiding: S's 0.85 ("good hiding power" [AP1 p.71]) and T's 0.9 (Old Holland: opaque) are both sourced, so the majority (S, I) gives 0.85. Stiffness 0.7 (I, and T from Old Holland's "l" oil content). The masstone is an estimate in all three, and the tie goes to I, whose drying rate is the sourced one |
 | Mars yellow | synthetic iron oxide hydroxide | `#c4872b` | 0.85 | 0.7 | 1.1 | 1.1 `MARS` | S | only S |
@@ -259,6 +259,56 @@ bone black, ultramarine blue, cerulean blue, green earth, cobalt violet.
   doesn't name them. Cobalt violet is in the note's table ("used rarely;
   mentioned in 2020 and in May 2025").
 
+### `hopper` (13)
+
+lead white, zinc white, pale cadmium, cadmium yellow, deep cadmium,
+yellow ochre, red earth, burnt sienna, bone black, cerulean blue, cobalt
+blue, ultramarine blue, viridian.
+
+H's proposed box, all tier 1 (named in his record books or his 1959
+interview [LED; MORSE]), with no new catalog tube. Lead white, yellow
+ochre and bone black are in every build; the other ten were in the
+catalog for other boxes and are now compiled in with `box-hopper` too.
+
+- Existing tubes from H's table: lead white (flake, silver and Cremnitz
+  white), zinc white (early, and given up for lead white [MORSE; LEV]),
+  cerulean blue, cobalt blue, ultramarine blue ("ultramarine"; "permanent
+  blue" in his wife's diary), viridian, pale cadmium ("cad. yellow
+  light"), cadmium yellow, yellow ochre and burnt sienna.
+- Judgment calls:
+  - *Deep cadmium* for "cadmium deep" (two entries). The hue isn't
+    stated; H reads a deep yellow or orange from a mixture with viridian
+    described as "slightly olive". The catalog's deep cadmium (A's, see
+    the catalog table) is that.
+  - *Light red maps to red earth.* Light red is a red iron oxide (a
+    roasted ochre) in period color lists, and the evidence is one
+    pigment list in one entry [LED]. H proposed a separate optional
+    `light red` (`#b4533a`) but calls its description unsourced and red
+    earth "close enough". The alma-tadema box already maps its pupil's
+    "light red" to red earth, so the same pigment gets the same tube.
+  - *Black maps to bone black.* The one entry says "touch of black" and
+    doesn't name the kind; bone (ivory) black was the usual artists'
+    black of the period (H's inference). The note labels both red earth
+    and bone black "a proxy" in §9.
+  - *Burnt sienna is in, uncertain.* Its two mentions may be color
+    words rather than pigments [LED]. They name the pigment itself, in
+    his own record book, so they count as documented use; brown pink
+    (inness) is out because the word itself may not be there. The note
+    marks it *Uncertain*.
+  - *Zinc white is in.* He used it (record books, a canvas of 1935, his
+    own account) before giving it up; the rule counts use at any time
+    for a historical painter.
+- Tiers 2 and 3 add nothing: no paint box, palette or purchase of his in
+  the sources names a pigment (his record books name makers, whites and
+  oils).
+- Not documented for him in the sources consulted (H): vermilion,
+  cadmium red, madder or alizarin, the chromes, Prussian blue, emerald
+  green, Naples yellow, umbers, raw sienna, Mars colors, smalt, green
+  earth and copper greens. Not documented isn't the same as not used,
+  but the rule needs a document, so they're out.
+- The fugitive yellow that turned a green blue on one canvas [NGA-E] is
+  unidentified; no tube stands for it.
+
 ## Left out under the rule
 
 Pigments the notes or research connect with the artist that the box
@@ -283,6 +333,10 @@ leaves out, with their evidence. Keys are the research notes'.
   stability is too doubtful") [MANUAL p.13]. The Mommen and Blockx
   supplies [BARR; NPG-B] name no colors, and the Madderton palette
   (1902–04) [NPG-M] was not found, so tiers 2 and 3 add nothing.
+- **Hopper:** H's light red tube (not in the catalog; see the hopper
+  box). Nothing he is documented as not using is in the box; he gave up
+  zinc white and poppy oil for lead white and linseed oil [MORSE], and
+  zinc white is in because he used it before that.
 - **Tonn** (past, owned but unused, or avoided):
   - English red (red earth's pigment): recommended for limited palettes
     (2021, 2023) but "haven't even put [it] on my palette in a million
@@ -328,7 +382,9 @@ The boxes were changed to follow the first version of the rule
 - **inness, alma-tadema:** unchanged. Their notes' research comments
   hold no paint box, palette or purchase naming a pigment (see "Left out
   under the rule").
-- **hopper:** a new box under this rule; see its section.
+- **hopper:** a new box under this rule (13, see its section), with its
+  note `notes/research/hopper_materials.md`, the export profile `hopper`
+  and the feature `box-hopper`.
 
 ## Ordering
 
@@ -348,3 +404,7 @@ pile names its tubes, and a log replays with the same box.
   modeled.
 - I suggests traction crackle for bitumen over faster layers. It is not
   modeled.
+- H notes his turpentine-rich start ("almost pure turpentine" to "pure
+  oil"): the easel has no solvent, only the oil-medium share. H also
+  notes his whites in poppy oil (1939–45), which would dry slower than
+  the catalog's lead white; not modeled, like S's poppy-oil white.

@@ -135,8 +135,20 @@ def lanes():
 _subjects = {}  # studio -> (BRIEF.md mtime, "Friedrich" or "free")
 
 
+def _subject_of(brief):
+    """The artist a brief names ("in the manner of Edward Hopper" -> "Hopper"; a surname like "Alma-Tadema"
+    whole), "self-portrait" for one, else "free"."""
+    m = re.search(r"in\s+the\s+manner\s+of\s+((?:[A-Z][\w.'-]*\s+)*[A-Z][\w.'-]*)", brief)
+    if m:
+        return m.group(1).split()[-1]
+    if "self-portrait" in brief.lower():
+        return "self-portrait"
+    return "free"
+
+
 def subject(folder):
-    """"Friedrich" if the studio's brief asks for one, else "free" ("" without a brief)."""
+    """The artist the studio's brief names (e.g. "Friedrich", "Hopper"), "self-portrait", else "free" ("" without
+    a brief)."""
     f = os.path.join(os.path.expanduser("~/src/a"), folder, "BRIEF.md")
     try:
         mt = os.path.getmtime(f)
@@ -144,7 +156,7 @@ def subject(folder):
         return ""
     if folder not in _subjects or _subjects[folder][0] != mt:
         with open(f, errors="replace") as fh:
-            _subjects[folder] = (mt, "Friedrich" if "Friedrich" in fh.read(4000) else "free")
+            _subjects[folder] = (mt, _subject_of(fh.read(4000)))
     return _subjects[folder][1]
 
 

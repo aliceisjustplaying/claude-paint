@@ -36,9 +36,19 @@ def drop_empty_columns(lines):
             rows = [[c.strip() for c in l.strip().strip("|").split("|")] for l in lines[i:j]]
             n = len(rows[0])
             keep = [k for k in range(n) if any(r[k] for r in rows[2:] if k < len(r))] if j - i > 2 else list(range(n))
+            rows = [[r[k] if k < len(r) else "" for k in keep] for r in rows]
+            # a column the stripping left with holes joins the one to its right ("Evidence" + "Notes")
+            body = rows[2:]
+            for k in range(len(keep) - 2, 0, -1):
+                if body and any(not r[k] for r in body):
+                    rows[0][k] = rows[0][k] + " and " + rows[0][k + 1].lower()
+                    for r in body:
+                        a, b = r[k], r[k + 1]
+                        r[k] = (a.rstrip(".") + (". " if b[:1].isupper() else "; ") + b) if a and b else (a or b)
+                    for r in rows:
+                        del r[k + 1]
             for r in rows:
-                cells = [r[k] if k < len(r) else "" for k in keep]
-                out.append("| " + " | ".join(cells) + " |")
+                out.append("| " + " | ".join(r) + " |")
             i = j
         else:
             out.append(lines[i])

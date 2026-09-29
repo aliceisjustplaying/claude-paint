@@ -88,7 +88,7 @@ def changes(d: Path, ms):
 
 
 def schedule(c, h, a):
-    """Seconds per moment (the last one excluded: it's the final hold)."""
+    """Seconds per moment but the last, which the final hold shows."""
     n = len(c)
     cs = c.copy()
     cs[1:-1] = 0.25 * c[:-2] + 0.5 * c[1:-1] + 0.25 * c[2:]
@@ -103,6 +103,7 @@ def schedule(c, h, a):
         # and first washes go by quickly and the later work keeps its time
         u = np.clip(h[: n] / max(h[-1], 1e-12) / max(a.ramp_span, 1e-6), 0, 1)
         w *= a.ramp + (1 - a.ramp) * (u * u * (3 - 2 * u))
+    w = w[:-1]  # the last moment's time is the hold, not a share of the rest
     want = a.length - a.hold
     k = want / w.sum()
     for _ in range(50):
@@ -174,30 +175,32 @@ def main():
     # quantizing drops a little time (skipped frames' remainders): aim a
     # little long until the clip lands on --length
     target, aim = a.length, a.length
-    for _ in range(5):
+    for _ in range(20):
         a.length = aim - opening / a.fps
         fr = quantize(schedule(c, h, a), a.fps, a.min_frames)
         fr[0] += opening  # the bare canvas: its weight is 0, so it's shown only if held
-        got = sum(fr[:-1]) / a.fps + a.hold
+        got = sum(fr) / a.fps + a.hold
         if abs(got - target) < 0.5 / a.fps:
             break
         aim += target - got
+    if abs(got - target) >= 0.5 / a.fps:
+        sys.exit(f"replay_pace: the schedule runs {got:.3f} s, not the {target} s asked for")
     a.length = target
     lines, shown = [], 0
     # moment i is shown for fr[i] frames, the time its own arrival earned
-    for (f, _), n in zip(ms[:-1], fr[:-1]):
+    for (f, _), n in zip(ms[:-1], fr):
         if n > 0:
             lines.append(f"{entry(f)}duration {n / a.fps:.5f}\n")
             shown += 1
     last = entry(ms[-1][0])
-    # the last entry of a concat list takes the duration before it: the hold,
-    # then a one-frame repeat, then the frame again
-    lines.append(f"{last}duration {a.hold:.5f}\n{last}duration {1 / a.fps:.5f}\n{last}")
+    # the last entry of a concat list takes the duration before it: the hold
+    # (less a frame), then a one-frame repeat, then the frame again
+    lines.append(f"{last}duration {a.hold - 1 / a.fps:.5f}\n{last}duration {1 / a.fps:.5f}\n{last}")
     (a.dir / "concat.txt").write_text("".join(lines))
-    total = sum(fr[:-1]) / a.fps + a.hold
+    total = sum(fr) / a.fps + a.hold
     print(f"{len(ms)} moments, {shown + 1} shown, {h[-1] / 60:.1f} min of hand time, pace dynamic (floor {a.floor}, gamma {a.gamma}): about {total:.1f} s of clip", file=sys.stderr)
     if a.eval:
-        secs = [n / a.fps for n in fr[:-1]] + [0.0]
+        secs = [n / a.fps for n in fr] + [0.0]
         e = evenness(c, secs)
         # the numeric --pace schedule: each frame held for the hand time to
         # the next, on the curve hand_time^pace

@@ -132,8 +132,8 @@ awk -F'\t' -v fps="$fps" -v length_="$plength" -v pace="$pace" -v hold="$hold" -
       secs += d
     }
     # the last entry of a concat list takes the duration before it, so the
-    # hold is followed by a one-frame repeat and then the frame again
-    printf "file '\''%s'\''\nduration %.5f\n", esc(f[n]), hold
+    # hold (less a frame) is followed by a one-frame repeat and then the frame again
+    printf "file '\''%s'\''\nduration %.5f\n", esc(f[n]), hold - 1 / fps
     printf "file '\''%s'\''\nduration %.5f\nfile '\''%s'\''\n", esc(f[n]), 1 / fps, esc(f[n])
     printf "%d moments, %.1f min of hand time, pace %s: about %.1f s of clip\n", n, h[n] / 60, pace, secs + hold > "/dev/stderr"
   }' "$dir/frames.tsv" > "$list"

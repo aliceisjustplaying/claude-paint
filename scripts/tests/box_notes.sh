@@ -9,7 +9,7 @@
 #
 #   scripts/tests/box_notes.sh [<studio>...]
 #
-# With no studios, exports sargent, inness, alma-tadema and tonn from
+# With no studios, exports sargent, inness, alma-tadema, tonn and hopper from
 # R16_BRANCH (scripts/export_r16_studio) and checks those. The catalog's
 # tube names come from R16_BRANCH's palette.rs (HEAD if unset).
 #
@@ -21,7 +21,7 @@ unset EASEL_BOX
 work=$(mktemp -d "$TMPDIR/box-notes.XXXXXX")
 if [ $# -eq 0 ]; then
   : "${R16_BRANCH:?set R16_BRANCH to the branch to export, or name exported studios}"
-  for profile in sargent inness alma-tadema tonn; do
+  for profile in sargent inness alma-tadema tonn hopper; do
     "$repo/scripts/export_r16_studio" "$profile" "$work/$profile" >"$work/$profile.log" 2>&1 || { cat "$work/$profile.log" >&2; echo "$profile: the export failed" >&2; exit 1; }
     set -- "$@" "$work/$profile"
   done

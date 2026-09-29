@@ -24,7 +24,7 @@ shift
 artists=(Friedrich Turner 'C[eé]zanne' Rembrandt Vermeer Renoir 'Van Gogh' Eckersberg Carus Kersting Constable Monet Manet Bruegel Brueghel Hockney Ruisdael Hobbema Cuyp Lorrain Poussin Corot Titian Tiziano Rubens 'Vel[aá]zquez' Goya Leonardo 'da Vinci' Vinci Michelangelo Raphael Ingres Delacroix Boucher Troyon Oudry Desportes Dahl Blechen Runge Oehme Kobell Gainsborough Whistler Sargent Degas Hopper Munch Picasso Matisse Kandinsky 'Bob Ross' Winsor Inness Alma-Tadema Tadema Tonn)
 # the names that are also boxes (looked for inside words in the binary, with
 # the names of more than one word and the accented ones)
-box_artists=(Sargent Inness Tadema Tonn)
+box_artists=(Sargent Inness Tadema Tonn Hopper)
 
 # every search reads a whole file, never a stream it stops early (under
 # pipefail, `strings | grep -q` fails with SIGPIPE when grep finds a name,

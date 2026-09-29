@@ -15,3 +15,6 @@ body.nocode main { grid-template-columns: minmax(0,54fr) minmax(0,46fr) !importa
 #clock { font-size: 28px !important } #clocklbl { font-size: 15px !important }
 #sess { font-size: 17px !important; max-width: 520px !important }
 #cap { font-size: 17px !important }
+/* the site's address in the header, right of the clock */
+header::after { content: "stillwet.art"; flex: none; margin-left: 18px; padding-left: 18px; border-left: 1px solid var(--line); font: 600 26px -apple-system, system-ui, sans-serif; color: var(--acc); letter-spacing: .01em }
+#allwrap { display: none !important }

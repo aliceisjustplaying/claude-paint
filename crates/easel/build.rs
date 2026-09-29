@@ -6,7 +6,7 @@
 fn main() {
     println!("cargo::rustc-check-cfg=cfg(tube_box)");
     let on = |f: &str| std::env::var_os(format!("CARGO_FEATURE_{f}")).is_some();
-    let named = ["BOX_SARGENT", "BOX_INNESS", "BOX_ALMA_TADEMA", "BOX_TONN"].iter().filter(|f| on(f)).count();
+    let named = ["BOX_SARGENT", "BOX_INNESS", "BOX_ALMA_TADEMA", "BOX_TONN", "BOX_HOPPER"].iter().filter(|f| on(f)).count();
     if named == 0 || on("ALL_BOXES") {
         println!("cargo::rustc-cfg=tube_box");
     }

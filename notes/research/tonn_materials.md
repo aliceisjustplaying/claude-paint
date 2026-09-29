@@ -68,8 +68,8 @@ over. *Black mirror*: a darkened mirror that simplifies values.
 - **Oil ground, knifed.** "The oil primer I use has a heavy, roughly
   wet-mud consistency, and I want it pretty smooth, so I've been going
   with a taping knife" (a drywall knife) [PRIME19].
-- **Lead ground, tinted (2020).** "Prime them with a tinted lead
-  ground." He adds that lead "produces a uniquely strong paint film, and
+- **Lead ground, tinted (2020).** In 2020 he reported priming with a
+  tinted lead ground [LEAD20]. He adds that lead "produces a uniquely strong paint film, and
   dries rapidly" [LEAD20].
 <!-- research: The tint of the 2020 lead ground is not stated (post and syndication record rechecked; no alt text). -->
 - **Greenish oil ground (2025).** In June 2025 he primed custom panels
@@ -141,7 +141,7 @@ yellow deep, cadmium yellow light, flake white [PAL25]. In September
 | Raw umber | [MAT23]; [UMB22]; [RU25] | With white it "will tend to dry v quickly" [UMB20] |
 | Red umber | [RUMB20] | |
 | Burnt sienna | [BS20]; [SIEN22]; [PAL25]; [DIR26] | |
-| Ultramarine blue (synthetic) | "I use ultramarine quite a bit" [BLUE21]; [PAL25] | "The darker, more transparent (and cheaper!) ultramarine was more versatile on the pallet for me" [BLUE21] |
+| Ultramarine blue (synthetic) | "I use ultramarine quite a bit" [BLUE21]; [PAL25] | He uses the darker, more transparent grade [BLUE21] |
 | Cerulean blue | [BLUE21]; [BS20]; [DIR26] | |
 | Ivory black | [LIM21]; [MAT23]; [COLV22]; [PAL25] | A slow dryer [DRY23] |
 | Permanent alizarin (quinacridone) | [BLACK21]; [COLV22]; [PAL25] | "The alizarin I use is quinacridone based" (2025) [ALIZ25]. Earlier posts say only "alizarin" [BLACK21] |

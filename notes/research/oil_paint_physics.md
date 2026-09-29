@@ -80,7 +80,7 @@ In profilometry of oil paintings, the height features that best identify the pai
 
   Lead white's strain at break fell from **7.3% at 0.2 years** to under 1% at 31 years [12][S]. Chalk-glue grounds are modeled with a break strain of **0.002** [21][V].
 - **Layer thicknesses.** A three-layer commercial ground from about 1880 measured **1.5–30 µm (chalk), 5–35 µm and 10–45 µm (lead white)** [9][V]. Mock-up oil layers measured **59–125 µm for one coat** and 110–188 µm for two [29][S]. Single paint layers run roughly 10–200+ µm [S; general cross-section ranges, low confidence].
-- **Conformal vs. filling.** That ground is "thicker and smoother, greatly diminishing the texture of the canvas weave" [9][V]. Orchard's law explains the physics: with the weave pitch λ ≈ 0.3–0.8 mm, a film only 10–20 µm thick has τ ∝ h⁻³ that is huge, and it may also have a yield floor. Thin paint therefore stays conformal to the weave, while thick fluid paint levels over it [E, from 3].
+- **Conformal vs. filling.** That ground is "thicker and smoother, greatly diminishing the texture of the canvas weave" [9][V]. Orchard's law explains the physics: with the weave pitch λ ≈ 0.3–0.8 mm, a film only 10–20 µm thick has τ ∝ h⁻³ that is huge, and it may also have a yield floor. Thin paint therefore stays conformal to the weave, while thick fluid paint levels over it [E].
 
 ## 4. Canvas and ground
 
@@ -100,7 +100,7 @@ A usable range for 19th-century canvases is **10–38 threads/cm**, which is a *
 
 - **Irregularity.** Density along the warp is always more consistent than along the weft [16][V]. Weft "slubs" (thick spots) are the usual irregularity [16][S].
 - **Cusping (scalloping).** This is "a regular scalloping of the threads at the perimeter" left by the tacks used while the canvas was sized and grounded [13][V]. On the 1879/80 canvas the original tacks were **5.5–6 cm apart** [9][V]. Commercial pre-primed rolls often show *no* cusping on edges cut from the roll [16][V].
-- **Ground and texture.** Late-19th-century commercial grounds were either *à grain* (one layer, so more weave texture shows) or *lisse* (two layers, fills the interstices) [10][S]. These sources give no measured residual weave-relief amplitudes. An **estimate is 5–40 µm** peak to valley under *à grain* and about 2–10 µm under *lisse* **[E, unverified]**.
+- **Ground and texture.** Late-19th-century commercial grounds were either *à grain* (one layer, so more weave texture shows) or *lisse* (two layers, fills the interstices) [10][S]. An **estimate is 5–40 µm** peak to valley under *à grain* and about 2–10 µm under *lisse* **[E, unverified]**.
 - **Mechanics.** Above about 80% RH the canvas *shrinks* as crimp increases, and once dry the glue size, not the canvas, carries the tension [18][V][25].
 
 ## Sources

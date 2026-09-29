@@ -144,8 +144,7 @@ The table lists pigments named by witnesses.
 
 - **A short start.** One witnessed demonstration began with three
   pigments and introduced another later [MAN pp.33–34].
-- **Greens.** In one picture scrubbed thinly on white canvas, greens were
-  mixed "with umber or some such color" [SON p.235].
+<!-- research: - **Greens.** In one picture scrubbed thinly on white canvas, greens were mixed "with umber or some such color" [SON p.235]. (Out of the painter's copy after the final review: a color recipe.) -->
   <!-- research: No green pigment is identified by name in the consulted accounts (SON, MAN, MI95, SHEL, AW17 full texts searched). White type (lead or zinc) is not stated either. -->
 
 ## 5. Media and varnish
@@ -269,7 +268,7 @@ The table lists pigments named by witnesses.
 ## 9. The tubes here
 
 The historical names in this note correspond to these tubes: white →
-lead white; black and ivory black → bone black; yellow ocher → yellow
+lead white (assumed); black and ivory black → bone black; yellow ocher → yellow
 ochre; umber → raw umber; sienna → raw sienna; cadmium → cadmium yellow;
 Venetian red → red earth.
 Indian red, Antwerp blue and lemon chrome each rest on one witness;

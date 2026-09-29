@@ -240,7 +240,7 @@ The palette below is documentary: a list his pupil published as his
 The historical names in this note correspond to these tubes: flake
 white → lead white; brown ocher and yellow ocher → brown ochre and
 yellow ochre; light red → red earth; cobalt → cobalt blue; ivory
-black → bone black; Naples yellow → Naples yellow (lead antimonate); raw
+black → bone black; Naples yellow → Naples yellow (modeled as lead antimonate); raw
 umber → raw umber; deep cadmium → deep cadmium. Pale cadmium and
 viridian are in the manual's palette; his own use of them is uncertain
 (§4).

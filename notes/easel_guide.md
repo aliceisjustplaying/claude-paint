@@ -438,3 +438,4 @@ ruled over a drawing to transfer it.
 `notes/journal.md` is your working journal. `note` appends an entry
 stamped with the painting's time, such as `day 2, 09:40`. Entries already there stay as they were written; writing a note
 doesn't advance painting time.
+MOVED-BRANCH-MARKER

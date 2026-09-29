@@ -67,16 +67,9 @@ def main():
         n_img += n
         text(os.path.join(out, "data", p, "events.json"),
              json.dumps({"events": ev, "total": len(ev), "epoch": st["epoch"], "sittings": len(files), "imgext": exts}))
-        # the painting's source, as the live server's /api/file gives it: every .rs/.lua the page may ask for
-        cwd = next((e["cwd"] for e in reversed(ev) if e["kind"] == "start"), "")
-        rels = {"paintings/lua/painting.lua"}
-        for e in ev:
-            if e["kind"] in ("write", "edit") and re.search(r"\.(rs|lua)$", e.get("path", "")) and e["path"].startswith(cwd + "/"):
-                rels.add(e["path"][len(cwd) + 1:])
-            m = re.search(r"cargo paint (\w+)", e.get("text", "") or "") if e["kind"] == "cmd" else None
-            if m:
-                rels.add(f"paintings/src/bin/{m.group(1)}.rs")
-        for rel in rels:
+        # the painting's source, as the live server's /api/file gives it
+        cwd, rels = S.painting_sources(ev)
+        for rel in sorted(rels):
             src = os.path.realpath(os.path.join(cwd, rel))
             if cwd and src.startswith(os.path.realpath(cwd) + os.sep) and os.path.isfile(src):
                 with open(src, "rb") as fh:

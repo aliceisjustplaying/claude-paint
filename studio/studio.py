@@ -334,6 +334,24 @@ def stream(key, files):
         return st
 
 
+def painting_sources(events):
+    """The painting's source files, relative to the painter's folder (its last start): the ones
+    the page may ask for. paintings/lua/painting.lua and, from the events, every .lua under
+    paintings/lua/ and .rs under paintings/ the painter wrote or edited or rendered with
+    `cargo paint <bin>`. Nothing else in the folder (the brief, notes, bin/, settings) is served."""
+    cwd = next((e["cwd"] for e in reversed(events) if e["kind"] == "start"), "")
+    rels = {"paintings/lua/painting.lua"}
+    for e in events:
+        if e["kind"] in ("write", "edit"):
+            p = e.get("path", "")
+            rels.add(p[len(cwd) + 1:] if cwd and p.startswith(cwd + "/") else p)
+        m = re.search(r"cargo paint (\w+)", e.get("text", "") or "") if e["kind"] == "cmd" else None
+        if m:
+            rels.add(f"paintings/src/bin/{m.group(1)}.rs")
+    ok = re.compile(r"paintings/(lua/[^/]+\.lua|(?:[^/]+/)*[^/]+\.rs)")
+    return cwd, {r for r in rels if ok.fullmatch(r) and ".." not in r.split("/")}
+
+
 def image(st, i):
     """Image i of a stitched stream: (mime, base64 data), or None."""
     for f, _, ni in st["parts"]:
@@ -394,9 +412,10 @@ class H(http.server.BaseHTTPRequestHandler):
             return self._send(200, json.dumps({"events": ev[since:], "total": len(ev), "epoch": st["epoch"],
                                                "sittings": len(files)}).encode(), "application/json")
         if u.path == "/api/file":  # the painting's current source, from the painter's folder
-            cwd = next((e["cwd"] for e in reversed(st["events"]) if e["kind"] == "start"), "")
-            want = os.path.realpath(os.path.join(cwd, q.get("f", [""])[0]))
-            if cwd and want.startswith(os.path.realpath(cwd) + os.sep) and os.path.isfile(want):
+            cwd, rels = painting_sources(st["events"])
+            rel = q.get("f", [""])[0]
+            want = os.path.realpath(os.path.join(cwd, rel))
+            if cwd and rel in rels and want.startswith(os.path.realpath(cwd) + os.sep) and os.path.isfile(want):
                 with open(want, "rb") as fh:
                     return self._send(200, fh.read(), "text/plain; charset=utf-8")
             return self._send(404, b"", "text/plain")

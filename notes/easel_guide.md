@@ -73,8 +73,7 @@ print(table.concat(tubes(), ", "))   -- the names in the box
 
 A pile is parts by volume of named tubes, plus `medium`: the share of oil
 medium mixed in (0, as from the tube, to 0.95). Medium makes the paint more
-transparent and more fluid, and slower to dry. It is added oil only: there
-are no separate solvents, driers, resins or varnishes. What a pile looks like is
+transparent and more fluid, and slower to dry. It is added oil only. What a pile looks like is
 what its pigments make together, thick or thin, over what is already on
 the canvas; you find out by painting with it and looking. A pile mixed by
 hand is a little uneven: each brushload takes slightly different
@@ -176,7 +175,7 @@ change:
 | `fill` | `false` by default: gaps between strokes stay. Set `true` to follow the strokes with dabs into the gaps they left |
 | `order` | `"passages"` (default), `"scatter"`, `"down"`, `"across"` or a sweep angle |
 | `angle_jitter`, `curve` (`{bow, wave}`), `cross`, `drift` (`{amount, scale}`), `tail`, `broken`, `swell`, `clump`, `ruler` | how far the strokes depart from even ruler lines (`ruler=true` sets them straight and even) |
-| `orient`, `shake`, `threshold`, `cut_in` (a tool), `scrub`, `blender`, `mix_jitter`, `seed` | the brush's orientation, the hand's unsteadiness, the mask level strokes start at, cutting in the edge with a second tool, back-and-forth strokes, a clean brush, how uneven each dip of the pile is, the randomness |
+| `orient`, `shake`, `threshold`, `cut_in` (a tool), `scrub`, `blender`, `mix_jitter`, `seed` | the brush's orientation, the hand's unsteadiness, the mask level strokes are anchored at, cutting in the edge with a second tool, back-and-forth strokes, a clean brush, how uneven each dip of the pile is, the randomness |
 
 Where an option takes `function(x, y)`, it is sampled every 2 units over
 the area and interpolated. A mistyped option is an error that lists the

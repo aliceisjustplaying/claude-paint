@@ -543,6 +543,18 @@ fn serve(args: &[String]) -> Result<(), String> {
             let _ = std::fs::remove_file(&sock);
             break;
         }
+        // a failed chunk left the state inexact (session.rs `stale`): rebuild it from the log
+        // now, after the reply, so the next request waits for it rather than timing out in it
+        if srv.s.stale {
+            drop(conn);
+            let t0 = Instant::now();
+            eprintln!("rebuilding from the log ({} chunks)", srv.s.log.len());
+            if let Err(e) = srv.s.rebuild() {
+                let _ = std::fs::remove_file(&sock);
+                return Err(format!("easel: fatal: {e}"));
+            }
+            eprintln!("rebuilt {:.2}s", t0.elapsed().as_secs_f64());
+        }
     }
     Ok(())
 }
@@ -689,6 +701,9 @@ impl Server {
                     }
                     Ok(out)
                 }
+                Err(e) if self.s.stale => Err(format!(
+                    "{e}\n(the chunk failed and changed nothing. It had changed tables from earlier chunks, and though what they hold is back, how they are laid out (which decides the order `pairs` walks them in) can't be put back, so the easel now rebuilds the painting from its log, as a reopen does; the next command waits for that)"
+                )),
                 Err(e) => Err(format!("{e}\n(the chunk failed and changed nothing)")),
             },
             "look" => self.look(args, None),

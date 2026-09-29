@@ -7,6 +7,7 @@
 -- so their order is the order the program made them, in every process.
 local id, getmt = ...
 local rawnext, rawget, type, select, error, tostring = next, rawget, type, select, error, tostring
+local setmt = setmetatable
 local sort, pack, unpack = table.sort, table.pack, table.unpack
 local find, sub = string.find, string.sub
 local tointeger = math.tointeger
@@ -87,7 +88,7 @@ end
 
 -- the order of a table's last traversal by `next`, per table; cleared before
 -- every chunk (a rollback may have rewritten any table)
-local box = { cache = setmetatable({}, { __mode = "k" }) }
+local box = { cache = setmt({}, { __mode = "k" }) }
 
 local function from(t, keys, i)
   for j = i + 1, keys.n do
@@ -194,9 +195,37 @@ local function gmatch(s, p, init)
   end
 end
 
+-- ---------------------------------------------------------------- setmetatable
+
+-- Finalizers (__gc) and weak tables (__mode) act when the collector gets to
+-- them, and it gets there at other times in a live session (which holds a
+-- snapshot of the heap) than in a replay: a painting can't use them. Lua
+-- reads __mode at every collection, so it can't be added to a metatable
+-- later either: `check` looks at every metatable set, after every chunk.
+local REFUSED = "__gc and __mode aren't allowed in a painting: finalizers and weak tables act when the garbage collector gets to them, which differs between the live easel and a replay of the log"
+local set = setmt({}, { __mode = "k" }) -- metatables given to setmetatable
+
+local function refused(mt)
+  return type(mt) == "table" and (rawget(mt, "__gc") ~= nil or rawget(mt, "__mode") ~= nil)
+end
+
+local function det_setmetatable(t, mt)
+  if refused(mt) then error("setmetatable: " .. REFUSED, 2) end
+  local r = setmt(t, mt)
+  if type(mt) == "table" then set[mt] = true end
+  return r
+end
+
+-- called after every chunk: an error fails the chunk
+local function check()
+  for mt in rawnext, set do
+    if refused(mt) then error("a metatable holds __gc or __mode: " .. REFUSED, 0) end
+  end
+end
+
 -- ---------------------------------------------------------------- install
 
-next, pairs, string.gmatch = det_next, det_pairs, gmatch
+next, pairs, string.gmatch, setmetatable = det_next, det_pairs, gmatch, det_setmetatable
 name_all(_G, "")
 for _, lib in ipairs { "string", "table", "math", "utf8" } do
   if type(_G[lib]) == "table" then name_all(_G[lib], lib .. ".") end
@@ -204,8 +233,8 @@ end
 
 -- called before every chunk
 local function fresh()
-  box.cache = setmetatable({}, { __mode = "k" })
+  box.cache = setmt({}, { __mode = "k" })
 end
 
 -- private state the heap snapshot must not walk
-return fresh, { box, names }
+return fresh, { box, names, set }, check

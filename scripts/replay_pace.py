@@ -134,6 +134,12 @@ def quantize(t, fps, min_frames):
     return frames
 
 
+def entry(name: str) -> str:
+    """A concat list's file line for a frame beside the list (ffmpeg reads it
+    relative to the list): each quote in the name closes, escapes and reopens."""
+    return "file '" + name.replace("'", "'\\''") + "'\n"
+
+
 def evenness(c, secs):
     """sqrt-change shown per tenth of the clip (%), as a vector."""
     t = np.cumsum(secs) / max(sum(secs), 1e-12)
@@ -181,12 +187,12 @@ def main():
     # moment i is shown for fr[i] frames, the time its own arrival earned
     for (f, _), n in zip(ms[:-1], fr[:-1]):
         if n > 0:
-            lines.append(f"file '{a.dir / f}'\nduration {n / a.fps:.5f}\n")
+            lines.append(f"{entry(f)}duration {n / a.fps:.5f}\n")
             shown += 1
-    last = a.dir / ms[-1][0]
+    last = entry(ms[-1][0])
     # the last entry of a concat list takes the duration before it: the hold,
     # then a one-frame repeat, then the frame again
-    lines.append(f"file '{last}'\nduration {a.hold:.5f}\nfile '{last}'\nduration {1 / a.fps:.5f}\nfile '{last}'\n")
+    lines.append(f"{last}duration {a.hold:.5f}\n{last}duration {1 / a.fps:.5f}\n{last}")
     (a.dir / "concat.txt").write_text("".join(lines))
     total = sum(fr[:-1]) / a.fps + a.hold
     print(f"{len(ms)} moments, {shown + 1} shown, {h[-1] / 60:.1f} min of hand time, pace dynamic (floor {a.floor}, gamma {a.gamma}): about {total:.1f} s of clip", file=sys.stderr)

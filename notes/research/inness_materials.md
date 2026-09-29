@@ -133,12 +133,13 @@ The table lists pigments named by witnesses.
 | Antwerp blue | [SHEL p.32] | A Prussian blue on a white base: "less transparent and less intense … than Prussian blue" [CHEM p.192]. *Uncertain* |
 | Lemon chrome | [SHEL p.32] | Pale lead chromate [AP1 p.187]. *Uncertain* |
 | Cobalt blue | [SHEL p.32]; [SON pp.234, 253] | Glazing color, added "when the pigments were sufficiently dry" [SHEL] |
-| Brown pink | [SHEL p.32] | A yellow lake; lakes of this kind are "very bad driers" in oil [CHEM p.143]. *Uncertain* (the source may instead read "brown and pink") |
 | Sienna / raw sienna | [SON pp.233, 236, 253] | Documented in glazes |
 | Cadmium (yellow) | [SON p.253] | Scumbling color. Sold commercially in England by 1846 [AP1 p.67] |
 | Orange chrome | [MI95 pp.263–264, 267] | Documented in scumbles |
 | Bitumen | [MI95 pp.263–264]; [NGA96 p.355] | "in earlier days bitumen" [MI95]; probable, from traction crackle [NGA96]. *Uncertain* |
 | Blue (unspecified) | [MI95 pp.263–264, 267]; [MAN p.34] | Named with black and umber [MI95]; "a touch of blue" added late in one demonstration [MAN p.34] |
+
+<!-- research: dropped row, since even its reading is uncertain. Brown pink [SHEL p.32]: a yellow lake; lakes of this kind are "very bad driers" in oil [CHEM p.143]; the source may instead read "brown and pink". -->
 
 - **A short start.** One witnessed demonstration began with three
   pigments and introduced another later [MAN pp.33–34].

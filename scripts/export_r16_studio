@@ -168,20 +168,15 @@ extra=$(cd "$dest" && find . -type f ! -path ./bin/easel ! -path ./bin/box ! -pa
 bin_strings=$(strings "$dest/bin/easel")
 catalog=$(git -C "$repo" show "$branch:crates/paint/src/palette.rs" | sed -n 's/^ *tube("\([^"]*\)".*/\1/p')
 [ "$(wc -l <<<"$catalog")" -ge 14 ] || { echo "can't read the tube catalog from palette.rs" >&2; exit 1; }
-# the box's own records (the table's name and pigment columns) are blanked
-# out, longest first, so an outside name inside one of them (vermilion in
-# orange vermilion, Prussian blue in Antwerp blue's pigment) doesn't count
-# (perl: bash's ${s//x/y} crawls over the strings under a UTF-8 locale)
-records=$(awk -F' [|] ' 'NR > 2 { sub(/^[|] /, "", $1); print $1; print $2 }' <<<"$table")
-in_box=$(awk -F' [|] ' 'NR > 2 { sub(/^[|] /, "", $1); print $1 }' <<<"$table")
-outside=$(RECORDS=$records IN_BOX=$in_box CATALOG=$catalog perl -e '
-  local $/; my $s = <STDIN>;
-  for my $r (sort { length $b <=> length $a } split /\n/, $ENV{RECORDS}) { $s =~ s/\Q$r\E/ /g if length $r }
-  my %in = map { $_ => 1 } split /\n/, $ENV{IN_BOX};
-  for my $t (split /\n/, $ENV{CATALOG}) { print "$t\n" if !$in{$t} && index($s, $t) >= 0 }
-' <<<"$bin_strings")
+# an outside tube's name counts unless it lies inside one of the box's own
+# records (vermilion in orange vermilion, Prussian blue in Antwerp blue's
+# pigment); an outside name that holds an inside one (orange vermilion in a
+# box with vermilion) counts (scripts/check_box_tubes)
 stray=()
-while IFS= read -r t; do [ -z "$t" ] || stray+=("$t"); done <<<"$outside"
+if ! outside=$("$repo/scripts/check_box_tubes" "$dest/bin/easel" <(printf '%s\n' "$table") <(printf '%s\n' "$catalog")); then
+  [ -n "$outside" ] || { echo "can't check the tubes in bin/easel" >&2; exit 1; }
+  while IFS= read -r t; do [ -z "$t" ] || stray+=("$t"); done <<<"$outside"
+fi
 for label in "smalt box" "cobalt box" ${box:+"tube box"}; do
   ! grep -qF "$label" <<<"$bin_strings" || stray+=("$label")
 done

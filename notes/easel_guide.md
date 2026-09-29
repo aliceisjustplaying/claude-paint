@@ -181,6 +181,14 @@ Where an option takes `function(x, y)`, it is sampled every 2 units over
 the area and interpolated. A mistyped option is an error that lists the
 valid ones.
 
+**What stays inside the mask.** `work` starts every stroke inside the
+mask. With `detail` and `blend` the bristles also stop at the mask's edge.
+With the other hands (`body`, `broad`, `hatch`, `glaze`, `scumble`) `clip`
+is off unless you set it: a stroke that starts inside runs on past the
+edge by as much as its length (a `glaze` stroke is 120–300 units) and lays
+paint on whatever is there. `clip=true`, `clip=` a mask, or `edge=` (below)
+stop them at the edge.
+
 **Edges.** `edge=` carries the passage up to the mask's edge the way a
 brush does: each stroke stops by its own amount, and past the line its
 film thins out over the weave. It takes a number from 0 (found: crisp) to

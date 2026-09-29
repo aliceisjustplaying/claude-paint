@@ -126,3 +126,32 @@ Branch `r20-base`, cut from `r19-base` (5069814); worktree
   painter build (`--no-default-features`) 35; `--test painter` with each
   box 3 passed. `box_tubes.sh`, `box_features.sh`, `studio_names.sh`,
   `export_profiles.sh` and `box_notes.sh` passed.
+
+## The revised box rule and the hopper studio (2026-09-29)
+
+- **The rule** (`TUBES.md`, "The boxes"; to be revisited): a historical
+  painter's box holds pigments documented in use, in his working
+  materials (a paint box or palette he painted from, repeated purchases)
+  or bought once with nothing contradicting it; Tonn's holds his current
+  practice, rare use included.
+- **sargent** 28: Indian yellow, Mars orange and ultramarine ash (the
+  paint box of about 1884–88), magenta (bought 1888) and bone brown
+  (bought 1899) in. Four new catalog tubes (Mars orange, magenta, bone
+  brown, ultramarine ash) and Indian yellow back; `drier::INDIAN_YELLOW`
+  back, `drier::BONE_BROWN` new. **tonn** 14: cobalt violet in.
+  **inness** 13 and **alma-tadema** 15 unchanged.
+- **hopper** 13 (`box-hopper`): lead white, zinc white, pale cadmium,
+  cadmium yellow, deep cadmium, yellow ochre, red earth, burnt sienna,
+  bone black, cerulean blue, cobalt blue, ultramarine blue, viridian. No
+  new tube. Export profile `hopper`: its materials note
+  (`notes/research/hopper_materials.md`, the review's fixes and the gap
+  pass applied) and `bin/box`; the name check exempts only Hopper and
+  looks for "hopper" inside the binary's words like the other box names.
+- Verification: `cargo test --release -p paint` 166 passed; `--lib
+  --no-default-features --features box-<name>` 133 passed for each of
+  the five boxes. `-p easel` 50 passed; `--no-default-features
+  --features replay` 49; painter build (`--no-default-features`) 35;
+  `--test painter` with each box 3 passed. `box_features.sh` (six
+  configurations and two refused), `export_profiles.sh` (seven profiles),
+  `box_notes.sh` (five box studios), `box_tubes.sh`, `studio_names.sh`,
+  `export_concurrent.sh` and `replay_env.sh` passed.

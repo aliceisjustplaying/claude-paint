@@ -211,28 +211,19 @@ accessible source. The palette below is documentary.
 
 ## 9. The tubes here
 
-This studio's box follows the palette the manual attributes to him.
-Names map as follows: flake white → lead white; light red → red earth;
-cobalt → cobalt blue; ivory black → bone black. Naples yellow is supplied
-as lead antimonate; what his tube contained is unverified. Pale cadmium
-and viridian are supplied although his use of them is uncertain (§4).
-Not supplied: raw umber and deep cadmium, which the manual says he used
-"very little, if at all," and chrome yellow, which the manual rejects.
+The historical names in this note correspond to these tubes: flake
+white → lead white; light red → red earth; cobalt → cobalt blue; ivory
+black → bone black; Naples yellow → Naples yellow (lead antimonate). Pale
+cadmium and viridian are in the manual's palette; his own use of them is
+uncertain (§4).
 
 ## 10. At this easel
 
-- **Support.** The easel's support is plain-weave linen with ground
-  layers mixed from the tube box. There are no panels, boards or other
-  rigid supports.
-- **Medium.** Paint has one control for added medium: an oil-medium
-  share. There are no solvents, driers, resins, copal, megilp or varnish
-  controls.
-- **Removing paint.** There is no tool for scraping or abrading paint on
-  the canvas.
-- **This note.** The supports, media and ways of removing paint named
-  above that the easel lacks are historical context; the easel guide
-  documents what is available. Wiping a brush unloads the brush; it does
-  not lift paint off the canvas.
+- **Support.** Plain-weave linen with ground layers laid from the tubes.
+- **Paint.** Pigment from the tubes with an oil-medium share.
+- **Taking paint off.** A brush picks up wet paint as it passes; that is
+  how paint comes off the canvas.
+- **Everything else** the easel does is in the easel guide.
 
 ## Sources
 

@@ -111,14 +111,12 @@ pub fn catalog() -> Vec<Tube> {
         #[cfg(any(feature = "box-sargent", feature = "box-inness", feature = "box-tonn"))]
         tube("cadmium yellow", "cadmium sulfide", "#e8a51f", 0.85, 0.7, 1.1, drier::CADMIUM),
         #[cfg(feature = "box-sargent")]
-        tube("Indian yellow", "magnesium and calcium euxanthate", "#e1a11e", 0.15, 0.4, 0.8, drier::INDIAN_YELLOW),
-        #[cfg(feature = "box-sargent")]
         tube("Mars yellow", "synthetic iron oxide hydroxide", "#c4872b", 0.85, 0.7, 1.1, drier::MARS),
         #[cfg(feature = "box-tonn")]
         tube("transparent oxide yellow", "transparent synthetic iron oxide", "#7a4a14", 0.2, 0.5, 0.9, drier::RED_EARTH),
         #[cfg(feature = "box-alma-tadema")]
         tube("brown ochre", "iron oxide earth, a darker grade", "#86592e", 0.8, 0.7, 0.8, drier::OCHRE),
-        #[cfg(feature = "box-inness")]
+        #[cfg(any(feature = "box-sargent", feature = "box-inness"))]
         tube("raw sienna", "sienna earth, unroasted", "#9a6a2b", 0.4, 0.5, 0.7, drier::SIENNA),
         #[cfg(feature = "box-inness")]
         tube("orange chrome", "basic lead chromate", "#e0712a", 0.88, 0.75, 0.9, drier::CHROME_YELLOW),
@@ -216,7 +214,7 @@ const BOXES: &[(&str, &[&str])] = &[
     (
         "sargent",
         &[
-            "lead white", "zinc white", "lemon chrome", "chrome yellow", "cadmium yellow", "Indian yellow", "yellow ochre", "Mars yellow", "red lead", "vermilion", "cadmium red", "Mars red", "red earth", "rose madder",
+            "lead white", "zinc white", "lemon chrome", "chrome yellow", "cadmium yellow", "yellow ochre", "Mars yellow", "raw sienna", "red lead", "vermilion", "cadmium red", "Mars red", "red earth", "rose madder",
             "burnt sienna", "Mars brown", "bone black", "cerulean blue", "cobalt blue", "ultramarine blue", "viridian", "emerald green", "cobalt violet",
         ],
     ),

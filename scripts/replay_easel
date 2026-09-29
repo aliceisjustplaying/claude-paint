@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+# The replay build of the easel (`cargo build --release -p easel`, default
+# features): builds it unless --no-build, then prints the executable's path
+# in the target directory cargo builds into (CARGO_TARGET_DIR, a config's
+# build.target-dir or <repo>/target, as `cargo metadata` resolves it).
+#
+#   scripts/replay_easel [--no-build]
+#
+# (scripts/check_painting, scripts/finish_painting and scripts/replay_clip
+# take their easel from here.)
+set -euo pipefail
+repo=$(cd "$(dirname "$0")/.." && pwd)
+cd "$repo"
+case ${1:-} in
+  "") cargo build --release -q -p easel >&2 ;;
+  --no-build) ;;
+  *) echo "usage: $0 [--no-build]" >&2; exit 2 ;;
+esac
+target=$(cargo metadata --format-version 1 --no-deps | perl -MJSON::PP -0777 -ne 'print decode_json($_)->{target_directory}')
+[ -n "$target" ] || { echo "replay_easel: cargo metadata names no target directory" >&2; exit 1; }
+echo "$target/release/easel"

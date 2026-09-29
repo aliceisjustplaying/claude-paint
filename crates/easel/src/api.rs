@@ -58,8 +58,8 @@ pub struct Studio {
 }
 
 impl Studio {
-    pub fn new(width: usize) -> Self {
-        Studio { width, canvas: None, style: None, setup: None, seed: 1, chunk: 0, calls: 0, clock: 0.0, clock0: 0.0, rng: Rng::new(1), brushes: Vec::new(), out: String::new(), field_secs: 0.0, view: None, hand: crate::time::Hand::default(), tubes: Rc::new(Palette::tube_box()) }
+    pub fn new(width: usize, tubes: Palette) -> Self {
+        Studio { width, canvas: None, style: None, setup: None, seed: 1, chunk: 0, calls: 0, clock: 0.0, clock0: 0.0, rng: Rng::new(1), brushes: Vec::new(), out: String::new(), field_secs: 0.0, view: None, hand: crate::time::Hand::default(), tubes: Rc::new(tubes) }
     }
     /// Start chunk `n`: its randomness depends only on the seed and `n`.
     pub fn begin(&mut self, n: u64) {
@@ -1128,7 +1128,7 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
                 let tubes = st.borrow().tubes.clone();
                 let ground = ground_of(&tubes, &o.get::<Value>("ground")?)?;
                 let seed = o.get::<Option<u64>>("seed")?.unwrap_or(1);
-                let sty = Style { name: "oil", width_mm: mm, linen: Linen { warp_per_cm: warp, weft_per_cm: weft, ..Linen::fine(1) }, ground, palette: (*tubes).clone(), ..Style::oil() };
+                let sty = Style { name: "oil", width_mm: mm, linen: Linen { warp_per_cm: warp, weft_per_cm: weft, ..Linen::fine(1) }, ground, ..Style::oil_with((*tubes).clone()) };
                 let width = st.borrow().width;
                 let mut c = sty.prepare(width, aspect, seed);
                 let h = c.height();

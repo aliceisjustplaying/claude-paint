@@ -507,14 +507,19 @@ impl Canvas {
 
 #[cfg(test)]
 mod tests {
+    #[cfg(tube_box)]
     use crate::color::hex;
+    #[cfg(tube_box)]
     use crate::mask::Mask;
+    #[cfg(tube_box)]
     use crate::pigment::Pigment;
+    #[cfg(tube_box)]
     use crate::style::Style;
 
     // Engine contract: glazing a dry patch must not advance time or cure
     // other paint. The Lua guard alone cannot prevent an engine dry().
     #[test]
+    #[cfg(tube_box)]
     fn masked_glaze_preserves_wet_paint_and_clock_elsewhere() {
         let mut c = Style::oil().prepare(100, 1.0, 3);
         let pal = crate::Palette::tube_box();
@@ -532,6 +537,7 @@ mod tests {
     }
 
     /// Largest channel change per distance band (40 units) from `at`.
+    #[cfg(tube_box)]
     fn change_by_distance(c: &super::Canvas, before: &[crate::color::Rgb], at: (f32, f32)) -> Vec<f32> {
         let f = c.f;
         let mut bins = vec![0.0f32; 16];
@@ -550,6 +556,7 @@ mod tests {
     /// finite there, and the change falls off with the thickness to below
     /// half an 8-bit step in the tail.
     #[test]
+    #[cfg(tube_box)]
     fn glaze_long_falloff_has_no_edge() {
         let st = Style::oil();
         let mut c = st.prepare(300, 1.5, 3);
@@ -569,6 +576,7 @@ mod tests {
     /// A blurred mask leaves float residue
     /// out to the canvas edges; a glaze through it must not lay a rectangle.
     #[test]
+    #[cfg(tube_box)]
     fn glaze_through_blurred_mask_leaves_no_rectangle() {
         let st = Style::oil();
         let mut c = st.prepare(300, 1.5, 4);
@@ -608,6 +616,7 @@ mod tests {
     /// asked: it darkens by more than a fifth as much as one four times as
     /// thick.
     #[test]
+    #[cfg(tube_box)]
     fn a_thin_veil_is_laid() {
         let st = Style::oil();
         let dark = |coats: f32| {

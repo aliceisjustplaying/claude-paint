@@ -319,7 +319,8 @@ pub(crate) fn layer_args(w: &World, name: &Value, mask: &Value, depth: &Value) -
     Ok((name, (*m).clone(), layer_depth(w, depth)?))
 }
 
-#[cfg(test)]
+// every test here paints from the default box
+#[cfg(all(test, tube_box))]
 mod tests {
     use crate::session::Session;
 

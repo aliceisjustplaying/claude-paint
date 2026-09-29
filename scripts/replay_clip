@@ -29,7 +29,8 @@
 #                    --reuse, an existing frames dir to cut from
 #   --reuse          don't replay; cut the clip from --frames-dir
 #   --max-hold F     no frame is held longer than F seconds (default 1)
-#   --easel PATH     the easel binary (default target/release/easel)
+#   --easel PATH     the easel binary (default: the replay build in the target
+#                    directory cargo builds into, CARGO_TARGET_DIR too; not built here)
 #   --sheet PATH     also a contact sheet: 12 frames spread evenly over the
 #                    clip, 4 x 3 at 400 px (JPEG)
 #
@@ -41,12 +42,15 @@
 # by --max-hold; the final picture is held 3 s. H.264, yuv420p, faststart,
 # 24 fps.
 set -euo pipefail
+# the log names its box, and the replay takes it from there: a box set in
+# the caller's environment (EASEL_BOX) would only make the easel refuse the log
+unset EASEL_BOX
 
 usage() { awk 'NR > 1 && !/^#/ { exit } NR > 1' "$0" | sed 's/^# \{0,1\}//'; exit 2; }
 [ $# -ge 2 ] || usage
 log=$1 out=$2; shift 2
 every=60 length=75 pace=0.6 width=1000 dir="" sheet="" floor=0.2 gamma=0.7 ramp=1 rampspan=0.35 openhold=0 finalfirst=0 reuse=0 maxhold=1 fps=24 hold=3
-easel=$(cd "$(dirname "$0")/.." && pwd)/target/release/easel
+easel=""
 while [ $# -gt 0 ]; do
   case $1 in
     --every) every=$2; shift 2 ;;
@@ -71,6 +75,7 @@ command -v ffmpeg >/dev/null || { echo "replay_clip: needs ffmpeg" >&2; exit 1; 
 dir=${dir:-$out.frames}
 
 if [ "$reuse" = 0 ]; then
+  [ -n "$easel" ] || easel=$("$(dirname "$0")/replay_easel" --no-build)
   [ -x "$easel" ] || { echo "replay_clip: no easel at $easel (cargo build --release -p easel)" >&2; exit 1; }
   # only a frames folder of ours (or nothing, or an empty folder) is replaced
   if [ -e "$dir" ] && [ ! -f "$dir/frames.tsv" ] && [ -n "$(ls -A "$dir" 2>/dev/null)" ]; then

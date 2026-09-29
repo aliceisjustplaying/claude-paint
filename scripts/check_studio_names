@@ -1,0 +1,74 @@
+#!/usr/bin/env bash
+# Painters' names in an exported studio: none anywhere a painter can read
+# (notes/, bin/box and bin/easel; bin/THIRD_PARTY_NOTICES.md, the legal
+# notices, aside) but the studio's own artist's.
+#
+#   scripts/check_studio_names <studio> [own name ...]
+#
+# Names match case-insensitively as whole words; a name's space or hyphen
+# matches a space, a hyphen or nothing ("Alma-Tadema", "Alma Tadema",
+# "da Vinci", "da-Vinci", "DaVinci"). The notes and bin/box are read as
+# UTF-8 text; bin/easel is read whole, as raw bytes decoded as UTF-8 (not
+# through `strings`, which cuts "Cézanne" down to "zanne"). The easel's
+# strings run together (a box's name between two tube names), so there the
+# names that are boxes, the names of more than one word and the accented
+# names are looked for inside words too ("bonedaVincilead"). Exits 1 and
+# lists the hits if there are any.
+# (scripts/export_r16_studio runs it; scripts/tests/studio_names.sh tests it.)
+set -euo pipefail
+[ $# -ge 1 ] || { echo "usage: $0 <studio> [own name ...]" >&2; exit 2; }
+dest=$1
+shift
+
+# each a pattern: [..] a letter's spellings, a space or a hyphen any joining
+artists=(Friedrich Turner 'C[eé]zanne' Rembrandt Vermeer Renoir 'Van Gogh' Eckersberg Carus Kersting Constable Monet Manet Bruegel Brueghel Hockney Ruisdael Hobbema Cuyp Lorrain Poussin Corot Titian Tiziano Rubens 'Vel[aá]zquez' Goya Leonardo 'da Vinci' Vinci Michelangelo Raphael Ingres Delacroix Boucher Troyon Oudry Desportes Dahl Blechen Runge Oehme Kobell Gainsborough Whistler Sargent Degas Hopper Munch Picasso Matisse Kandinsky 'Bob Ross' Winsor Inness Alma-Tadema Tadema Tonn)
+# the names that are also boxes (looked for inside words in the binary, with
+# the names of more than one word and the accented ones)
+box_artists=(Sargent Inness Tadema Tonn Hopper)
+
+# every search reads a whole file, never a stream it stops early (under
+# pipefail, `strings | grep -q` fails with SIGPIPE when grep finds a name,
+# and reads as no hit)
+ARTISTS=$(printf '%s\n' "${artists[@]}") BOXES=$(printf '%s\n' "${box_artists[@]}") OWN=$(printf '%s\n' ${@+"$@"}) perl -e '
+  use strict; use warnings;
+  use Encode qw(decode FB_DEFAULT);
+  use File::Find;
+  binmode STDERR, ":encoding(UTF-8)";
+  my $dest = shift;
+  my @env = map { [grep { length } split /\n/, decode("UTF-8", $ENV{$_} // "")] } qw(ARTISTS BOXES OWN);
+  my ($artists, $boxes, $own) = @env;
+  my %own = map { $_ => 1 } @$own;
+  my @others = grep { !$own{$_} } @$artists;
+  # a name as a pattern: its spaces and hyphens match a space, a hyphen or nothing
+  my $pat = sub { join "[- ]?", split /[- ]/, $_[0] };
+  my $words = join "|", map { $pat->($_) } @others;
+  my %box = map { $_ => 1 } @$boxes;
+  my $inside = join "|", map { $pat->($_) } grep { $box{$_} || /[- \[]/ } @others;
+  my $read = sub { open my $f, "<:raw", $_[0] or die "check_studio_names: $_[0]: $!\n"; local $/; my $b = <$f>; decode("UTF-8", $b, FB_DEFAULT) };
+  my @hits;
+  # the notes and bin/box: text (files with a NUL byte are skipped, as grep -I would)
+  my @texts;
+  find({ no_chdir => 1, wanted => sub { push @texts, $_ if -f } }, "$dest/notes") if -d "$dest/notes";
+  push @texts, "$dest/bin/box" if -f "$dest/bin/box";
+  for my $p (sort @texts) {
+    my $t = $read->($p);
+    next if $t =~ /\0/;
+    my $n = 0;
+    (my $rel = $p) =~ s/^\Q$dest\E\/?//;
+    for my $line (split /\n/, $t) { $n++; push @hits, "$rel:$n:$line" if $line =~ /\b(?:$words)\b/i }
+  }
+  # bin/easel: its bytes, whole
+  if (-f "$dest/bin/easel") {
+    my $b = $read->("$dest/bin/easel");
+    my %found; $found{$1} = 1 while $b =~ /\b($words)\b/gi;
+    push @hits, "bin/easel: " . join(" ", sort keys %found) if %found;
+    if (length $inside) {
+      my %in; $in{$1} = 1 while $b =~ /($inside)/gi;
+      push @hits, "bin/easel (inside words): " . join(" ", sort keys %in) if %in;
+    }
+  }
+  if (@hits) {
+    print STDERR "painters\x27 names in $dest:\n", map { "$_\n" } @hits;
+    exit 1;
+  }
+' "$dest"

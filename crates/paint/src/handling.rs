@@ -1180,6 +1180,7 @@ mod tests {
     use super::*;
 
     #[test]
+    #[cfg(tube_box)]
     fn filling_requires_explicit_opt_in() {
         let pal = Palette::tube_box();
         let pile = pal.pile(vec![(0, 1.0)]);
@@ -1204,6 +1205,7 @@ mod tests {
     /// (remixed a little: a pile knifed by hand is uneven), never a recipe
     /// the engine chose.
     #[test]
+    #[cfg(tube_box)]
     fn a_pass_from_a_pile_lays_the_pile() {
         use crate::bristle::Tool;
         let pal = Palette::tube_box();
@@ -1325,6 +1327,7 @@ mod tests {
     /// paint across the mask's edge;
     /// `.clip(false)` fuses across it.
     #[test]
+    #[cfg(tube_box)]
     fn blender_stays_in_its_region() {
         use crate::color::hex;
         let st = crate::style::Style::oil();
@@ -1362,10 +1365,12 @@ mod tests {
     /// inside the mask's edges, the band's L above the interior's, the share
     /// of a 12–30-unit band outside the edges, past the brush that got darker by 0.1 L), for a
     /// band region parallel to the strokes or a disk (edges at every angle).
+    #[cfg(tube_box)]
     fn edge_stats(clip: bool, disk: bool, hug: bool, seed: u64) -> (f32, f32, f32) {
         edge_stats_in(clip, disk, false, hug, seed)
     }
 
+    #[cfg(tube_box)]
     fn edge_stats_in(clip: bool, disk: bool, thin: bool, hug: bool, seed: u64) -> (f32, f32, f32) {
         use crate::color::hex;
         let st = crate::style::Style::oil();
@@ -1412,6 +1417,7 @@ mod tests {
     /// unclipped strokes that brush into it are carried in from the edge.
     #[test]
     #[ignore]
+    #[cfg(tube_box)]
     fn probe_edges_over_seeds() {
         for disk in [false, true] {
             for clip in [false, true] {
@@ -1431,6 +1437,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(tube_box)]
     fn edges_are_covered_like_the_inside() {
         for disk in [false, true] {
             for clip in [false, true] {

@@ -12,6 +12,7 @@ use crate::color::hex;
 use crate::handling::Handling;
 use crate::mask::Mask;
 use crate::pigment::Pigment;
+#[cfg(tube_box)]
 use crate::style::Style;
 use crate::wet::{Paint, mix_into};
 
@@ -85,6 +86,7 @@ fn dry_is_idempotent_and_clears_wet() {
 /// A fixture through most of the engine: in the upper half a broad pass
 /// from a hand-knifed pile and the style's blend; after drying, in the lower half a
 /// hog-flat pass, three held-brush drags, a glaze; then relief.
+#[cfg(tube_box)]
 fn fixture() -> Canvas {
     let st = Style::oil();
     let mut c = st.prepare(240, 1.5, 7);
@@ -109,6 +111,7 @@ fn fixture() -> Canvas {
     c
 }
 
+#[cfg(tube_box)]
 fn fingerprint(c: &Canvas) -> String {
     // FNV-1a over the exact bits of every state buffer
     let mut hsh = 0xcbf2_9ce4_8422_2325u64;
@@ -126,11 +129,13 @@ fn fingerprint(c: &Canvas) -> String {
     format!("{hsh:016x}")
 }
 
+#[cfg(tube_box)]
 fn in_pool<T: Send>(threads: usize, f: impl FnOnce() -> T + Send) -> T {
     rayon::ThreadPoolBuilder::new().num_threads(threads).build().unwrap().install(f)
 }
 
 #[test]
+#[cfg(tube_box)]
 fn fixture_is_deterministic_across_thread_counts() {
     let a = in_pool(1, || fingerprint(&fixture()));
     let b = in_pool(4, || fingerprint(&fixture()));
@@ -138,6 +143,7 @@ fn fixture_is_deterministic_across_thread_counts() {
 }
 
 #[test]
+#[cfg(tube_box)]
 fn fixture_matches_golden() {
     let got = fingerprint(&fixture());
     let path = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/golden_scene.txt");
@@ -427,6 +433,7 @@ fn varnish_over_impasto_is_even() {
 
 /// A brushed ground lays about the thickness it asks for, and none at 0.
 #[test]
+#[cfg(tube_box)]
 fn brushed_ground_honors_thickness() {
     use crate::style::{Apply, Ground};
     let mean_um = |um: f32| {
@@ -446,6 +453,7 @@ fn brushed_ground_honors_thickness() {
 /// Cutting in keeps paint within about a brush width of the region, and
 /// fills forms narrower than the body brush.
 #[test]
+#[cfg(tube_box)]
 fn cut_in_stays_near_the_region() {
     let st = Style::oil();
     let mut c = Canvas::new(500, 1.0, hex("#c8b89a")).with_linen(crate::surface::Linen::fine(2));
@@ -476,6 +484,7 @@ fn cut_in_stays_near_the_region() {
 
 /// Largest and mean color difference of `c` (a crop render) to the same
 /// pixels of `whole` over the kept crop, and the largest height difference.
+#[cfg(tube_box)]
 fn crop_diff(c: &Canvas, whole: &Canvas) -> (f32, f32, f32) {
     let (f, k) = (c.f, c.keep);
     let (mut mx, mut sum, mut hmx, mut n) = (0.0f32, 0.0f64, 0.0f32, 0usize);
@@ -496,6 +505,7 @@ fn crop_diff(c: &Canvas, whole: &Canvas) -> (f32, f32, f32) {
 
 /// A canvas with linen, a knife ground, then (`strokes`) a pass of short
 /// hog strokes and a pass of long ones, whole or cropped.
+#[cfg(tube_box)]
 fn crop_scene(crop: Option<crate::canvas::Crop>, strokes: usize) -> Canvas {
     let st = Style::oil();
     let mut c = Canvas::new_window(400, 1.4, st.raw, crop).with_size_mm(st.width_mm).with_linen(crate::surface::Linen { seed: 1, ..st.linen });
@@ -517,6 +527,7 @@ fn crop_scene(crop: Option<crate::canvas::Crop>, strokes: usize) -> Canvas {
 /// support and grounds exactly, brushwork closely (strokes are planned on
 /// the whole canvas; outside the window a brush can only be estimated), and the difference falls as the margin grows.
 #[test]
+#[cfg(tube_box)]
 fn crop_matches_whole() {
     use crate::canvas::Crop;
     let crop = |m: f32| Some(Crop { units: [300.0, 250.0, 460.0, 400.0], margin: m });
@@ -533,6 +544,7 @@ fn crop_matches_whole() {
 /// Strokes are seeded past the canvas edges, so a lay-in covers the border
 /// as well as the middle.
 #[test]
+#[cfg(tube_box)]
 fn work_covers_the_edges() {
     let st = Style::oil();
     let mut c = Canvas::new(200, 1.0, hex("#ffffff"));
@@ -559,6 +571,7 @@ fn work_covers_the_edges() {
 /// before the bake (wet volume, cover, relief), against the rest.
 #[test]
 #[ignore]
+#[cfg(tube_box)]
 fn diag_blend_bare_pixels() {
     use crate::canvas::Crop;
     let base = Style::oil();

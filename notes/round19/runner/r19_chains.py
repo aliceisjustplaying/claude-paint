@@ -37,7 +37,10 @@ After a painter's last sitting, in the background (the next painter doesn't wait
     (run/<lane>/p<n>_check.log, workdir run/<lane>/p<n>_check/);
   - finishing: varnish and cracks on a replay of the log (run/<lane><n>_finished.png; the
     painter's own save is untouched).
-Then, in a chain, a reader writes the record for the next painter.
+Then, in a chain, a reader writes the record for the next painter, launched as isolated as the
+painter (reader.ts, reader_system_prompt.md; read and write only). The record reaches the next
+studio only if it passes record_problems; if not, it is set aside as p<n>_record.rejected.md,
+the painter isn't marked done and the lane stops (a rerun runs the reader again).
 
 Painters run in the clean harness (claude-paint-r19-base/harness/painter): no global
 extensions, our system prompt, bash and read only, our compaction (its thresholds set by
@@ -65,6 +68,7 @@ import re
 import shlex
 import shutil
 import subprocess
+import tempfile
 import threading
 import time
 from pathlib import Path
@@ -149,6 +153,10 @@ def lane(profile, m, painters=1):
 
 OPUS = model("anthropic", "claude-opus-5-5", "high", black=True)
 READER = ["--provider", "anthropic", "--model", "claude-opus-5-5", "--thinking", "medium"]
+# the reader's launch, as isolated as the painter's (HARNESS); pi-black for its Anthropic model
+READER_HARNESS = ["--no-extensions", "-e", str(HERE / "reader.ts"), "-e", str(BLACK),
+                  "--system-prompt", str(HERE / "reader_system_prompt.md"), "--tools", "read,write",
+                  "--no-context-files", "--no-skills", "--no-prompt-templates", "--no-approve"]
 
 # GPT-6 Luna through the ChatGPT subscription (dev runs), thinking max
 LUNA = model("openai-codex", "gpt-6-luna", "max")
@@ -537,8 +545,77 @@ def paint(name, n, d, rd):
 
 
 def reader_cmd(prompt):
-    """Round 16's reader launch: the machine's own pi setup, cwd the run folder (no painter harness)."""
-    return ["pi", "--print", "--no-context-files", "--no-skills", "--no-prompt-templates"] + READER + [prompt]
+    """The reader's launch (READER_HARNESS), cwd the run folder."""
+    return ["pi", "--print"] + READER_HARNESS + READER + [prompt]
+
+
+# What reader_brief.md excludes, as far as a pattern can tell. Painters' names are the studio
+# check's (scripts/check_studio_names), less the studio's own artist (export_r16_studio's own=).
+NAMES = HERE.parents[2] / "scripts/check_studio_names"
+OWN_NAMES = {"friedrich": ["Friedrich"], "blank": []}
+RECORD_MAX_LINES = 60
+# another painter: the word, or a name a lane's painter goes by (its model or maker)
+PAINTER_WORDS = re.compile(r"\b(?:painters?|claude|opus|sonnet|gpt|gemini|kimi|mimo|codex|anthropic|openai)\b", re.I)
+# a line of code: a Lua statement, not an operation named in prose (`b:stroke`, `m:grow(14)`)
+CODE_LINE = re.compile(r"^\s*(?:[-*]\s+)?(?:local\s|function\b|(?:for|while)\s.*\bdo\b|if\s.*\bthen\b|end\s*$"
+                       r"|[A-Za-z_][\w.]*(?:\[[^\]]*\])?\s*=[^=])")
+# a color recipe: a pile's makeup ({"<tube>", <parts>})
+RECIPE = re.compile(r'\bpile\s*\{|\{\s*"[^"]+"\s*,\s*[\d.]+\s*[,}]')
+
+
+def record_problems(path, own):
+    """Why the record at path can't go into the next studio's notes (empty if it can)."""
+    if not path.exists():
+        return ["no record was written"]
+    text = path.read_text(errors="replace")
+    if not text.strip():
+        return ["the record is empty"]
+    lines = text.strip().splitlines()
+    problems = []
+    if len(lines) > RECORD_MAX_LINES:
+        problems.append(f"{len(lines)} lines (at most {RECORD_MAX_LINES})")
+    if "```" in text:
+        problems.append("a code block")
+    for what, pat in (("code", CODE_LINE), ("a color recipe", RECIPE)):
+        hits = [str(i) for i, line in enumerate(lines, 1) if pat.search(line)]
+        if hits:
+            problems.append(f"{what} on line {', '.join(hits)}")
+    words = sorted({w.lower() for w in PAINTER_WORDS.findall(text)})
+    if words:
+        problems.append(f"another painter ({', '.join(words)})")
+    with tempfile.TemporaryDirectory(dir=path.parent) as t:
+        (Path(t) / "notes").mkdir()
+        shutil.copy(path, Path(t) / "notes" / path.name)
+        r = subprocess.run([str(NAMES), t] + own, capture_output=True, text=True)
+    if r.returncode:
+        hits = [h for h in r.stderr.splitlines()[1:] if h] or [gist(r.stderr)]
+        problems.append(f"painters' names ({'; '.join(hits)})")
+    return problems
+
+
+def read_painter(tag, rd, n, d, logs, own):
+    """The reader writes p<n>_record.md from the painter's session logs and journal. True if the
+    record passed record_problems; if not, it is set aside as p<n>_record.rejected.md."""
+    out = rd / f"p{n}_record.md"
+    if not logs:
+        log(f"{tag}: RECORD MISSING: no session logs to read; rerun to try again")
+        return False
+    out.unlink(missing_ok=True)                   # an earlier attempt's record isn't this one's
+    rb = ((HERE / "reader_brief.md").read_text().replace("{LOG}", ", ".join(logs))
+          .replace("{JOURNAL}", str(d / "notes/journal.md")).replace("{OUT}", str(out)))
+    (rd / f"p{n}_reader_brief.md").write_text(rb)
+    log(f"{tag}: reader")
+    rc = run(reader_cmd(f"Read {rd}/p{n}_reader_brief.md and do what it says."), rd,
+             rd / f"p{n}_reader_final.txt", rd / f"p{n}_reader_err.txt")
+    problems = ([f"the reader exited {rc}"] if rc else []) + record_problems(out, own)
+    if problems:
+        if out.exists():
+            out.replace(rd / f"p{n}_record.rejected.md")
+        log(f"{tag}: RECORD REJECTED: {'; '.join(problems)} (see {rd}/p{n}_reader_err.txt and "
+            f"p{n}_record.rejected.md); the painter isn't done, rerun to read it again")
+        return False
+    log(f"{tag}: record written")
+    return True
 
 
 def export_cmd(profile, d):
@@ -797,15 +874,9 @@ def chain(name):
         check(name, n, d)
         finish(name, n, d)
         logs = [p for s in load_sittings(rd, n) for p in s.get("sessions", []) if Path(p).exists()]
-        if logs and n < t["painters"]:
-            out = rd / f"p{n}_record.md"
-            rb = ((HERE / "reader_brief.md").read_text().replace("{LOG}", ", ".join(logs))
-                  .replace("{JOURNAL}", str(d / "notes/journal.md")).replace("{OUT}", str(out)))
-            (rd / f"p{n}_reader_brief.md").write_text(rb)
-            log(f"{tag}: reader")
-            run(reader_cmd(f"Read {rd}/p{n}_reader_brief.md and do what it says."), rd,
-                rd / f"p{n}_reader_final.txt", rd / f"p{n}_reader_err.txt")
-            log(f"{tag}: record {'written' if out.exists() else 'MISSING'}")
+        if n < t["painters"] and not read_painter(tag, rd, n, d, logs, OWN_NAMES[t["profile"]]):
+            log(f"{name}: chain stops")
+            return
         (rd / f"p{n}.done").write_text(time.strftime("%F %T"))
     log(f"lane {name} finished")
 

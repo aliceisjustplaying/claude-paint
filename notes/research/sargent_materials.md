@@ -125,10 +125,12 @@ margin*: the canvas folded over the side of the stretcher.
 | Vermilion | [APOLLO]; [MMX p.129 nn.14–15]; [MMJ53 p.175] | Found mixed with lead white [APOLLO] |
 | Madder lakes | [APOLLO]; [MMX p.126]; [MMJ53 pp.174–175] | One is a purpurin-rich lake of a type made from 1861 [MMJ53 p.175]; several madders and other red lakes in one 1885–86 painting [BAS] |
 | Bone or ivory black | [APOLLO]; [MMX p.129 n.11] | "Liberal use of bone black in much of Sargent's oeuvre" [BAS] |
-| Mars (synthetic iron oxide) yellow, red and brown | [APOLLO]; [BAS] | Mars orange also in a paint box [BAS] |
+| Mars (synthetic iron oxide) yellow, red and brown | [APOLLO]; [BAS] | |
+| Mars orange | In a paint box of about 1884–88 [BAS] | |
 | Yellow ocher, red iron oxide | [MMX p.127; p.129 nn.14–15]; [MMJ53 p.175] | |
 | Sienna, raw and burnt | [APOLLO]; a paint box of about 1884–88 held two tubes of raw sienna and one of burnt [VCB] | |
 | Cadmium yellow | [APOLLO]; two grades in a paint box [BAS] | Available from the 1840s [BAS "Appendix"] |
+| Indian yellow | In a paint box of about 1884–88 [BAS] | "Genuine Indian yellow" [BAS] |
 | Chrome yellow | "A pale shade" at times [APOLLO]; [HAM]; "pale lemon chrome" in a paint box [BAS] | |
 | Viridian | [APOLLO]; [MMX p.129 n.11]; [MET20] | Widespread from the 1860s [BAS "Appendix"] |
 | Emerald green | [APOLLO]; [BAS] | Sometimes mixed with viridian [APOLLO] |
@@ -138,10 +140,13 @@ margin*: the canvas folded over the side of the stretcher.
 | Cobalt violet | [APOLLO]; [HAM] | "Less commonly" found, costly and weak [HAM] |
 | Cadmium red | Found "on occasion" [APOLLO]; in a paint box [BAS] | |
 | Red lead | In one painting of 1885–86 [BAS] | *Single object* |
+| Magenta | "Magenta in tubes," bought in 1888 from a London colorman [NPG] | A London colorman's magenta of 1896 was an aniline lake [CAR p.506]; that his was the same kind is an *inference* |
+| Bone brown | Bought in 1899 from the same colorman [NPG] | Bone roasted until it is brown throughout [SAL §243] |
 
-<!-- research: dropped rows. Indian yellow: in a paint box [BAS], not found in any painting consulted.
-Prussian blue: not reported in any analysis of his paintings consulted; a painter's blog quoting the
-analysis of the Signet Society palette lists Prussian blue among its colors (check VCB before using). -->
+<!-- research: dropped rows. Prussian blue: not reported in any analysis of his paintings consulted; a painter's blog quoting the
+analysis of the Signet Society palette lists Prussian blue and umber among its colors; the museum's own
+summary of the palettes [HAM] names neither (check VCB before using: under the box rule a confirmed palette
+would admit both). -->
 
 - **Extenders.** His tube paints hold "easily detectable quantities of
   extenders such as kaolin, chalk, talc and barytes" [APOLLO]. In
@@ -271,11 +276,13 @@ analysis of the Signet Society palette lists Prussian blue among its colors (che
 
 The historical names in this note correspond to these tubes: lead
 (flake) white → lead white; bone or ivory black → bone black; yellow
-ocher → yellow ochre; red iron oxide → red earth; Mars yellow, red and
-brown → Mars yellow, Mars red and Mars brown; madder lakes → rose madder;
-pale lemon chrome → lemon chrome; cadmium yellow (two grades) → cadmium
-yellow; sienna → raw sienna and burnt sienna; synthetic ultramarine →
-ultramarine blue. Red lead rests on a single find (§4).
+ocher → yellow ochre; red iron oxide → red earth; Mars yellow, orange,
+red and brown → Mars yellow, Mars orange, Mars red and Mars brown;
+madder lakes → rose madder; Indian yellow → Indian yellow; magenta →
+magenta; bone brown → bone brown; pale lemon chrome → lemon chrome;
+cadmium yellow (two grades) → cadmium yellow; sienna → raw sienna and
+burnt sienna; synthetic ultramarine → ultramarine blue. Red lead rests
+on a single find (§4).
 
 ## 10. At this easel
 
@@ -296,4 +303,6 @@ ultramarine blue. Red lead rests on a single find (§4).
 - **[NPG]** Simon, J., "John Singer Sargent's suppliers of artists' materials," National Portrait Gallery, London, 2013/2014. https://www.npg.org.uk/collections/research/programmes/artists-their-materials-and-suppliers/john-singer-sargents-suppliers-of-artists-materials
 - **[HAM]** "Sargent's Colorful Past," *Index Magazine*, Harvard Art Museums, 12 June 2018. https://harvardartmuseums.org/article/sargent-s-colorful-past
 - **[VCB]** Townsend, J. H. and Rayner, G., "Sargent's Painting Materials: New Discoveries and Their Implications," *Visual Culture in Britain* 19:1 (2018), pp.89–111; paint box on loan to the Tate conservation archive, c.1884–88. Read through the Academia.edu copy (excerpts). https://doi.org/10.1080/14714787.2018.1441745
+- **[CAR]** Carlyle, L., *The Artist's Assistant: Oil Painting Instruction Manuals and Handbooks in Britain 1800–1900* (London 2001), p.506, on a London colorman's 1896 "Magenta" as an "Aniline Lake." Read through the quotation in Dootson, K. S., "The Texture of Capitalism," *British Art Studies* 14 (2019). https://britishartstudies.ac.uk/issues/14/texture-of-capitalism
+- **[SAL]** *Field's Chromatography*, revised by T. W. Salter (London 1869), §243 "Bone Brown." https://www.gutenberg.org/ebooks/20915
 - **[NGA]** Torchia, R. W. et al., *American Paintings of the Nineteenth Century, Part II*, National Gallery of Art Systematic Catalogue (1998), technical notes pp.103–125. https://www.nga.gov/content/dam/ngaweb/research/publications/pdfs/american-paintings-of-the-nineteenth-century-part-II.pdf

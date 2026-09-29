@@ -114,6 +114,8 @@ pub fn catalog() -> Vec<Tube> {
         #[cfg(any(feature = "box-sargent", feature = "box-inness", feature = "box-tonn"))]
         tube("cadmium yellow", "cadmium sulfide", "#e8a51f", 0.85, 0.7, 1.1, drier::CADMIUM),
         #[cfg(feature = "box-sargent")]
+        tube("Indian yellow", "magnesium and calcium euxanthate", "#e1a11e", 0.15, 0.4, 0.8, drier::INDIAN_YELLOW),
+        #[cfg(feature = "box-sargent")]
         tube("Mars yellow", "synthetic iron oxide hydroxide", "#c4872b", 0.85, 0.7, 1.1, drier::MARS),
         #[cfg(feature = "box-tonn")]
         tube("transparent oxide yellow", "transparent synthetic iron oxide", "#7a4a14", 0.2, 0.5, 0.9, drier::RED_EARTH),
@@ -123,6 +125,10 @@ pub fn catalog() -> Vec<Tube> {
         tube("raw sienna", "sienna earth, unroasted", "#9a6a2b", 0.4, 0.5, 0.7, drier::SIENNA),
         #[cfg(feature = "box-inness")]
         tube("orange chrome", "basic lead chromate", "#e0712a", 0.88, 0.75, 0.9, drier::CHROME_YELLOW),
+        // Mars orange: "much transparency" in the period account (Salter's
+        // Field, 1869), so less hiding than the other Mars tubes
+        #[cfg(feature = "box-sargent")]
+        tube("Mars orange", "synthetic iron oxide, an orange grade", "#b8602a", 0.5, 0.7, 1.1, drier::MARS),
         #[cfg(feature = "box-sargent")]
         tube("red lead", "lead tetroxide", "#e0542b", 0.85, 0.8, 0.8, drier::RED_LEAD),
         #[cfg(feature = "box-alma-tadema")]
@@ -139,12 +145,18 @@ pub fn catalog() -> Vec<Tube> {
         tube("rose madder", "madder lake on alumina", "#8e2238", 0.1, 0.35, 0.9, drier::MADDER_LAKE),
         #[cfg(feature = "box-tonn")]
         tube("permanent alizarin", "a quinacridone", "#5e1624", 0.15, 0.45, 1.3, drier::MADDER_LAKE),
+        // an aniline dye laked on alumina: transparent, strong, at madder
+        // lake's rate; it fades in light, which the engine doesn't model
+        #[cfg(feature = "box-sargent")]
+        tube("magenta", "fuchsine (aniline) lake on alumina", "#8f1650", 0.1, 0.35, 1.5, drier::MADDER_LAKE),
         #[cfg(any(feature = "box-sargent", feature = "box-alma-tadema", feature = "box-tonn"))]
         tube("burnt sienna", "roasted sienna earth", "#7c3f24", 0.45, 0.55, 0.9, drier::SIENNA),
         // Mars brown at sienna's rate: iron oxides dry well but lack umber's
         // manganese (notes/r20/TUBES.md)
         #[cfg(feature = "box-sargent")]
         tube("Mars brown", "synthetic iron oxide, roasted", "#5a3a28", 0.85, 0.65, 1.0, drier::SIENNA),
+        #[cfg(feature = "box-sargent")]
+        tube("bone brown", "bone roasted until brown", "#4b3527", 0.6, 0.6, 0.9, drier::BONE_BROWN),
         #[cfg(feature = "box-inness")]
         tube("bitumen", "asphaltum", "#2e2017", 0.12, 0.3, 0.7, drier::BITUMEN),
         #[cfg(any(feature = "box-sargent", feature = "box-tonn"))]
@@ -217,8 +229,8 @@ const BOXES: &[(&str, &[&str])] = &[
     (
         "sargent",
         &[
-            "lead white", "zinc white", "lemon chrome", "chrome yellow", "cadmium yellow", "yellow ochre", "Mars yellow", "raw sienna", "red lead", "vermilion", "cadmium red", "Mars red", "red earth", "rose madder",
-            "burnt sienna", "Mars brown", "bone black", "cerulean blue", "cobalt blue", "ultramarine blue", "viridian", "emerald green", "cobalt violet",
+            "lead white", "zinc white", "lemon chrome", "chrome yellow", "cadmium yellow", "Indian yellow", "yellow ochre", "Mars yellow", "raw sienna", "Mars orange", "red lead", "vermilion", "cadmium red", "Mars red",
+            "red earth", "rose madder", "magenta", "burnt sienna", "Mars brown", "bone brown", "bone black", "cerulean blue", "cobalt blue", "ultramarine blue", "viridian", "emerald green", "cobalt violet",
         ],
     ),
     #[cfg(feature = "box-inness")]

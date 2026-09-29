@@ -28,6 +28,7 @@ for profile in blank friedrich sargent inness alma-tadema tonn; do
   else
     [ "$(cat "$dest/bin/box")" = "$box" ] || { echo "$profile: bin/box isn't $box" >&2; exit 1; }
     [ -s "$dest/notes/research/${profile//-/_}_materials.md" ] || { echo "$profile: no materials note" >&2; exit 1; }
+    ! grep -lE '^## Sources|\[[A-Z]{2}[^]]*\]' "$dest"/notes/research/*.md || { echo "$profile: sources left in a painter's note" >&2; exit 1; }
     # the guide outside the table is the committed guide's
     strip() { awk -v head="$head" '$0 == head { skip = 1; next } skip && /^\|/ { next } { skip = 0; print }'; }
     [ "$(strip < "$dest/notes/easel_guide.md")" = "$(strip <<<"$committed")" ] || { echo "$profile: the guide differs outside its tube table" >&2; exit 1; }

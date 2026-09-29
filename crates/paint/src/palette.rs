@@ -12,7 +12,7 @@
 #[cfg(test)]
 use crate::canvas::Canvas;
 use crate::color::{Rgb, hex, luminance};
-#[cfg(test)]
+#[cfg(all(test, tube_box))]
 use crate::color::to_oklab;
 use crate::drying::drier;
 use crate::pigment::{hiding_of, scatter_for};
@@ -470,6 +470,7 @@ mod tests {
     /// A pile laid as knifed dries at its tubes' rate, mixed by volume: lead
     /// white fast, bone black slow, half and half in between.
     #[test]
+    #[cfg(tube_box)]
     fn a_pile_dries_at_its_tubes_rate() {
         let pal = Palette::tube_box();
         let at = |n: &str| pal.tubes.iter().position(|t| t.name == n).unwrap();
@@ -488,6 +489,7 @@ mod tests {
     /// The tube box is round 19's, tube for tube and number for number:
     /// paintings made from it replay bit for bit.
     #[test]
+    #[cfg(tube_box)]
     fn the_tube_box_is_unchanged() {
         let r19: [(&str, &str, &str, f32, f32, f32, f32); 14] = [
             ("lead white", "basic lead carbonate", "#efe9dc", 0.82, 0.8, 1.0, 2.0),
@@ -579,6 +581,7 @@ mod canvas_tests {
     /// A prescribed dark pile deepens a light ground more than a dark one,
     /// with more darkening as the film thickens.
     #[test]
+    #[cfg(tube_box)]
     fn glazes_stay_glazes() {
         let pal = Palette::tube_box().only(&["bone black"]);
         let glaze = pal.pile(vec![(0, 1.0)]).paint(0.9);

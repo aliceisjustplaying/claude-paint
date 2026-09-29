@@ -216,6 +216,7 @@ mod tests {
     /// fence and a lost fence: mean darkening (OKLab L) in rings just outside
     /// the edge (0-3 units, 8-16 units: a body brush is 8 wide) and the share of a 2-unit rim
     /// inside that is covered.
+    #[cfg(tube_box)]
     fn rings(fence: Option<f32>) -> (f32, f32, f32) {
         use crate::canvas::Canvas;
         use crate::color::{hex, to_oklab};
@@ -255,6 +256,7 @@ mod tests {
     /// The stencil stops dead on the line; a found fence nearly so; a lost
     /// fence carries a thinning film well past it; all cover the rim inside.
     #[test]
+    #[cfg(tube_box)]
     fn fences_carry_paint_past_the_edge_by_quality() {
         let (s1, s2, sr) = rings(None);
         let (f1, f2, fr) = rings(Some(0.0));

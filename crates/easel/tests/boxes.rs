@@ -62,7 +62,7 @@ impl Drop for Closing {
 }
 
 const CANVAS: &str = r#"canvas{size=300, aspect=4, seed=5, linen=15, ground={{pile={{"lead white", 5}, {"yellow ochre", 1}}, um=80, apply="knife"}}}"#;
-const MADDER: &str = r#"b = brush("round", 4); b:load(pile{{"rose madder", 1}, {"French ultramarine", 1}, {"zinc white", 2}}, 0.9); for i = 1, 6 do b:stroke({{100 + i * 110, 200}, {150 + i * 110, 60}}) end"#;
+const MADDER: &str = r#"b = brush("round", 4); b:load(pile{{"rose madder", 1}, {"ultramarine blue", 1}, {"zinc white", 2}}, 0.9); for i = 1, 6 do b:stroke({{100 + i * 110, 200}, {150 + i * 110, 60}}) end"#;
 
 /// In a studio whose box file says sargent, a new painting's log names the
 /// box; the plain replay build (no box file, no EASEL_BOX) replays it with

@@ -9,7 +9,8 @@
 The repo keeps every note with its sources; painters have no web and no use for citation keys, URLs or
 source lists, so the exported studio gets the note without them. What goes: inline source keys
 ([BAS], [MMX p.128], [BAS; MET20], the physics note's [9]), the "## Sources" section, a table column left
-empty by that, and the intro's sentence about keys and the list. What stays: every claim, and the words
+empty by that, the intro's sentence about keys and the list, and research-only remarks
+in HTML comments (<!-- ... -->: what the research could not find). What stays: every claim, and the words
 that say how solid it is ("a witness described", "he reports", "Uncertain", the physics note's [V], [S], [E]).
 """
 import re
@@ -47,6 +48,8 @@ def drop_empty_columns(lines):
 
 def strip(text):
     text = re.split(r"(?m)^## Sources\s*$", text)[0].rstrip() + "\n"
+    text = re.sub(r"(?m)^[ \t]*<!--.*?-->[ \t]*\n", "", text, flags=re.S)  # research-only remarks on their own lines
+    text = re.sub(r"[ \t]*<!--.*?-->", "", text, flags=re.S)                # and inside a line
     for a, b in INTRO:
         text = text.replace(a, b)
     text = KEY.sub("", text)

@@ -1,20 +1,42 @@
 import assert from "node:assert/strict";
-import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, symlinkSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
-import { atEasel, easel, inStudio, lookArgs, tail, toolWords } from "../easel-client.ts";
+import { atEasel, easel, lookArgs, studioPath, tail, toolWords } from "../easel-client.ts";
 
-test("read stays inside the studio, links included", () => {
-	const studio = mkdtempSync(join(tmpdir(), "studio-"));
-	mkdirSync(join(studio, "notes"));
-	writeFileSync(join(studio, "notes", "a.md"), "a");
-	symlinkSync("/etc/hosts", join(studio, "notes", "out"));
-	assert.equal(inStudio(studio, "notes/a.md"), true);
-	assert.equal(inStudio(studio, join(studio, "BRIEF.md")), true); // not there yet: still the studio
-	assert.equal(inStudio(studio, "../other/BRIEF.md"), false);
-	assert.equal(inStudio(studio, "/etc/hosts"), false);
-	assert.equal(inStudio(studio, "notes/out"), false);
+test("read opens only studio files, however the path is spelled", () => {
+	const top = realpathSync(mkdtempSync(join(tmpdir(), "studio-")));
+	const real = join(top, "studio");
+	mkdirSync(join(real, "notes"), { recursive: true });
+	writeFileSync(join(real, "notes", "a.md"), "a");
+	mkdirSync(join(top, "outside"));
+	const secret = join(top, "outside", "secret.txt");
+	writeFileSync(secret, "secret");
+	symlinkSync(secret, join(real, "notes", "out"));
+	const studio = join(top, "link"); // pi's cwd may be a link to the studio
+	symlinkSync(real, studio);
+	const home = process.env.HOME;
+	process.env.HOME = join(top, "outside"); // pi's read expands ~ with os.homedir()
+	try {
+		const cases: [string, string | undefined][] = [
+			["notes/a.md", join(real, "notes", "a.md")],
+			["BRIEF.md", join(real, "BRIEF.md")], // not there yet: still the studio
+			[join(studio, "notes", "new.md"), join(real, "notes", "new.md")],
+			["@notes/a.md", join(real, "notes", "a.md")],
+			[`file://${real}/notes/a.md`, join(real, "notes", "a.md")],
+			["../outside/secret.txt", undefined],
+			["notes/../../outside/secret.txt", undefined],
+			[secret, undefined],
+			["notes/out", undefined],
+			["~/secret.txt", undefined],
+			[`@${secret}`, undefined],
+			[`file://${secret}`, undefined],
+		];
+		for (const [path, want] of cases) assert.equal(studioPath(studio, path), want, path);
+	} finally {
+		process.env.HOME = home;
+	}
 });
 
 test("look's options become the easel's arguments", () => {

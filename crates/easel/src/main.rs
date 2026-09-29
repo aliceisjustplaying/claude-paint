@@ -57,7 +57,8 @@ const USAGE: &str = "easel: a live painting session (see notes/easel_guide.md)
   easel save [path]   the canvas as a PNG (default out/easel/painting/painting.png)
   easel frames on|off save a look after every chunk
   easel close         end the session (the log stays)
-  easel note '<text>' | easel note - (stdin)    append a dated entry to notes/journal.md";
+  easel note '<text>' | easel note - (stdin)    append a dated entry to notes/journal.md
+  easel tubes [--markdown]   the tubes in the box (--markdown: as a table)";
 
 #[cfg(feature = "replay")]
 const USAGE: &str = "easel: a live painting session (see notes/easel_guide.md)
@@ -74,6 +75,11 @@ const USAGE: &str = "easel: a live painting session (see notes/easel_guide.md)
   easel note '<text>' | easel note - (stdin)    append a dated entry to notes/journal.md
   easel run <file.lua> [--out path.png] [--look]    replay at 2400px and write the PNG
       [--frames-every <s> --frames-dir <dir> [--frame-width 1000]]   and a frame per <s> of hand time
+  easel tubes [--markdown]   the tubes in the box a new painting takes (--markdown: as a table)
+
+  A new painting takes its box from a file `box` next to this executable, else EASEL_BOX,
+  else the default tube box; its log names the box (a line \"--@ box <name>\"), and every
+  replay of the log uses that box.
 
   -s <name> (or EASEL_SESSION) picks the session; default: the last opened.";
 
@@ -97,6 +103,7 @@ fn main() -> ExitCode {
         #[cfg(feature = "replay")]
         "run" => run(&rest),
         "note" => note(&rest, name),
+        "tubes" => tubes(&rest),
         #[cfg(feature = "replay")]
         "hash-probe" => {
             println!("{}", session::hash_probe());
@@ -167,6 +174,27 @@ fn flag(args: &[String], f: &str) -> Option<String> {
 fn valid_name(n: &str) -> Result<(), String> {
     if n.is_empty() || !n.chars().all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-') {
         return Err(format!("session name {n:?}: letters, digits, _ and - only"));
+    }
+    Ok(())
+}
+
+// ---------------------------------------------------------------- tubes
+
+/// `easel tubes [--markdown]`: the box a new painting here takes, as a list
+/// of names or as the guide's table.
+fn tubes(args: &[String]) -> Result<(), String> {
+    let md = match args {
+        [] => false,
+        [a] if a == "--markdown" => true,
+        _ => return Err("tubes [--markdown]".into()),
+    };
+    let b = session::box_for(None)?;
+    if md {
+        print!("{}", b.table());
+    } else {
+        for t in &b.tubes {
+            println!("{}", t.name);
+        }
     }
     Ok(())
 }
@@ -519,32 +547,46 @@ fn serve(args: &[String]) -> Result<(), String> {
     Ok(())
 }
 
+/// The session's committed record: the log as the session last wrote it.
+fn witness_path(name: &str) -> PathBuf {
+    session_dir(name).join("committed.lua")
+}
+
+/// The log and the committed record on disk both hold `expected`.
+fn validate_log(name: &str, expected: &str) -> Result<(), String> {
+    for p in [log_path(name), witness_path(name)] {
+        let actual = std::fs::read(&p).map_err(|e| format!("session integrity: {} can't be read ({e}). The easel goes on only from the log it wrote; nothing ran.", p.display()))?;
+        if actual != expected.as_bytes() {
+            return Err(format!("session integrity: {} differs from the log the session wrote. The easel goes on only from the log it wrote; nothing ran.", p.display()));
+        }
+    }
+    Ok(())
+}
+
 impl Server {
     // Independent local witness, not a signature or an access-control boundary.
     // Editing the log alone is detected; coordinated edits of both files or
     // restoring the entire directory are outside this local integrity model.
     fn witness(&self) -> PathBuf {
-        session_dir(&self.name).join("committed.lua")
+        witness_path(&self.name)
     }
 
     fn validate(&self) -> Result<(), String> {
-        let expected = self.written.as_deref().ok_or("session integrity: uninitialized log")?;
-        for p in [log_path(&self.name), self.witness()] {
-            let actual = std::fs::read(&p).map_err(|e| format!("session integrity: {} can't be read ({e}). The easel goes on only from the log it wrote; nothing ran.", p.display()))?;
-            if actual != expected.as_bytes() {
-                return Err(format!("session integrity: {} differs from the log the session wrote. The easel goes on only from the log it wrote; nothing ran.", p.display()));
-            }
-        }
-        Ok(())
+        validate_log(&self.name, self.written.as_deref().ok_or("session integrity: uninitialized log")?)
     }
 
     fn resume(name: String) -> Result<Self, String> {
-        let mut srv = Self { name, s: Session::new(LIVE_WIDTH).map_err(|e| e.to_string())?, frames: false, written: None };
-        let lp = log_path(&srv.name);
-        if lp.exists() || srv.witness().exists() {
-            let text = std::fs::read_to_string(&lp).map_err(|e| format!("session integrity: {e}"))?;
+        let lp = log_path(&name);
+        let text = if lp.exists() || witness_path(&name).exists() { Some(std::fs::read_to_string(&lp).map_err(|e| format!("session integrity: {e}"))?) } else { None };
+        if let Some(t) = &text {
+            validate_log(&name, t)?;
+        }
+        // an existing painting goes on with the box its log names; a new one takes the
+        // configured box (session::box_for)
+        let tubes = session::box_for(text.as_deref())?;
+        let mut srv = Self { name, s: Session::with_box(LIVE_WIDTH, tubes).map_err(|e| e.to_string())?, frames: false, written: None };
+        if let Some(text) = text {
             srv.written = Some(text.clone());
-            srv.validate()?;
             let chunks = parse_program(&text);
             // a failed chunk refuses the whole reopen: no snapshots, no time limit (session.rs)
             srv.s.set_replaying(true);
@@ -620,6 +662,7 @@ impl Server {
         self.ready()?;
         Ok(check::Input {
             width: self.s.st.borrow().width,
+            tubes: self.s.tube_box(),
             chunks: self.s.log.iter().map(|c| c.src.clone()).collect(),
             live: self.s.canvas().map(|a| (bits(&a.seen()), bits_f(a.surface_um()))),
         })
@@ -713,6 +756,8 @@ fn run(args: &[String]) -> Result<(), String> {
     if chunks.is_empty() {
         return Err(format!("{file}: no chunks (each starts with a line \"{}\")", session::MARK));
     }
+    // the box the log was painted from, whatever this easel's own box is
+    let tubes = session::box_for(Some(&text)).map_err(|e| format!("{file}: {e}"))?;
     // hand-time frames (frames.rs): only read the canvas, so the replay is
     // the same with or without them
     let frames = match (flag(args, "--frames-every"), flag(args, "--frames-dir")) {
@@ -725,7 +770,7 @@ fn run(args: &[String]) -> Result<(), String> {
         }
         _ => return Err(format!("run: --frames-every and --frames-dir go together ({RUN_USAGE})")),
     };
-    let mut s = Session::replay(width).map_err(|e| e.to_string())?;
+    let mut s = Session::replay_with(width, tubes).map_err(|e| e.to_string())?;
     let t0 = Instant::now();
     for (i, c) in chunks.iter().enumerate() {
         let r = s.run(c).map_err(|e| format!("chunk {} failed:\n{e}", i + 1))?;

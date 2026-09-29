@@ -17,6 +17,9 @@
 # replays to the same picture. Uses the replay build (default features:
 # `replay` and `finish`), built from this checkout.
 set -euo pipefail
+# the log names its box, and the replay takes it from there: a box set in
+# the caller's environment (EASEL_BOX) would only make the easel refuse the log
+unset EASEL_BOX
 
 usage() { sed -n '7,14p' "$0" | sed 's/^# \{0,1\}//' >&2; exit 2; }
 [ $# -ge 2 ] || usage
@@ -36,8 +39,8 @@ done
 [ $((varnish + cracks + relief)) -gt 0 ] || { echo "nothing to do" >&2; exit 1; }
 
 repo=$(cd "$(dirname "$0")/.." && pwd)
-(cd "$repo" && cargo build --release -q -p easel)
-easel=$repo/target/release/easel
+# the replay build, in the target directory cargo builds into (CARGO_TARGET_DIR too)
+easel=$("$repo/scripts/replay_easel")
 
 # Wait a month at a time until every film is touch-dry (the finishing verbs
 # refuse wet paint), for at most ten years, then finish.

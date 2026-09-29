@@ -131,7 +131,8 @@ pub fn time_of_day(clock: f64) -> String {
     format!("day {day}, {:02}:{:02}", m / 60, m % 60)
 }
 
-#[cfg(test)]
+// every test here paints from the default box
+#[cfg(all(test, tube_box))]
 mod tests {
     use crate::session::Session;
     use paint::tally::{pace, stroke_secs, touch_secs};

@@ -4,7 +4,7 @@
 
 use crate::api::{self, Studio};
 use mlua::{Function, Lua, StdLib, Table, Value};
-use paint::{Canvas, Held, Style};
+use paint::{Canvas, Held, Palette, Style};
 use std::alloc::Layout;
 use std::cell::{Cell, RefCell};
 use std::collections::BTreeMap;
@@ -17,6 +17,10 @@ use std::time::{Duration, Instant};
 
 /// Marks the start of a chunk in a session file.
 pub const MARK: &str = "--@ chunk";
+/// Names the box a painting is painted from, in the head of its session file
+/// (before the first chunk). A log without it was painted from the default
+/// box (`paint::palette::DEFAULT_BOX`): every log before round 20.
+pub const BOX_MARK: &str = "--@ box";
 
 /// The longest a chunk of a live session may run (the longest of 2,502 painters' chunks on
 /// 2026-09-27 took 94 s). A chunk that runs longer is stopped like a failed one: nothing it
@@ -76,7 +80,14 @@ pub struct Ran {
 }
 
 impl Session {
+    /// A session painting from the default box (tests).
+    #[cfg(all(test, tube_box))]
     pub fn new(width: usize) -> mlua::Result<Self> {
+        Self::with_box(width, Palette::tube_box())
+    }
+
+    /// A session painting from `tubes` (a box: `Palette::named_box`).
+    pub fn with_box(width: usize, tubes: Palette) -> mlua::Result<Self> {
         if !hash_seed_fixed() {
             return Err(mlua::Error::runtime(
                 "this Lua was built with a random hash seed, so `pairs` order would differ between runs and replays would not be exact; build with CFLAGS=\"-Dluai_makeseed()=0x5eedu\" (see .cargo/config.toml)",
@@ -99,7 +110,7 @@ impl Session {
         let id = serials.id_fn(&lua)?;
         let getmt: Function = dbg.get("getmetatable")?;
         let prelude: (Function, Table) = lua.load(include_str!("prelude.lua")).set_name("prelude.lua").call((id, getmt))?;
-        let st = Rc::new(RefCell::new(Studio::new(width)));
+        let st = Rc::new(RefCell::new(Studio::new(width, tubes)));
         api::install(&lua, st.clone())?;
         let deadline = Rc::new(Cell::new(None::<Instant>));
         let d = deadline.clone();
@@ -113,13 +124,27 @@ impl Session {
         Ok(Session { lua: ManuallyDrop::new(lua), state, st, log: Vec::new(), replay: false, deadline, chunk_limit: CHUNK_LIMIT, heap: Some((snap_f, restore_f)), prelude: Some(prelude), _serials: serials })
     }
 
-    /// A session that replays a program: a failed chunk ends it, so it
-    /// keeps no snapshot. (`easel run` and `check`: the replay build.)
-    #[cfg(any(feature = "replay", test))]
+    /// A session that replays a program from the default box (tests;
+    /// `easel run` and `check` use `replay_with`).
+    #[cfg(all(test, tube_box))]
     pub fn replay(width: usize) -> mlua::Result<Self> {
-        let mut s = Self::new(width)?;
+        Self::replay_with(width, Palette::tube_box())
+    }
+
+    /// A session that replays a program painted from `tubes`: a failed chunk
+    /// ends it, so it keeps no snapshot. (`easel run` and `check`: the replay
+    /// build.)
+    #[cfg(any(feature = "replay", all(test, tube_box)))]
+    pub fn replay_with(width: usize, tubes: Palette) -> mlua::Result<Self> {
+        let mut s = Self::with_box(width, tubes)?;
         s.replay = true;
         Ok(s)
+    }
+
+    /// The box this session paints from.
+    #[cfg(feature = "replay")]
+    pub fn tube_box(&self) -> Palette {
+        (*self.st.borrow().tubes).clone()
     }
 
     /// Replaying (reopening a log): no snapshot before each chunk, since a failed chunk ends
@@ -214,6 +239,10 @@ impl Session {
         let mut s = String::new();
         let _ = writeln!(s, "-- easel session {name:?}: a painting replayed chunk by chunk.");
         let _ = writeln!(s, "-- Each {MARK:?} line starts one chunk as it was run at the easel.");
+        let tubes = self.st.borrow().tubes.name;
+        if paint::palette::default_box() != Some(tubes) {
+            let _ = writeln!(s, "{BOX_MARK} {tubes}");
+        }
         for (i, c) in self.log.iter().enumerate() {
             let _ = writeln!(s, "\n{MARK} {}", i + 1);
             s.push_str(&c.src);
@@ -403,6 +432,90 @@ fn clean_error(e: &str) -> String {
     out.join("\n")
 }
 
+/// The box a session file names in its head (`BOX_MARK` lines before the
+/// first chunk): None if it names none (it was painted from the default box).
+pub fn logged_box(text: &str) -> Result<Option<String>, String> {
+    let mut found = None;
+    for l in text.lines() {
+        let l = l.trim();
+        if l.starts_with(MARK) {
+            break;
+        }
+        if let Some(rest) = l.strip_prefix(BOX_MARK) {
+            let name = rest.trim();
+            if name.is_empty() || !rest.starts_with(' ') {
+                return Err(format!("the log's line {l:?} names no box ({BOX_MARK} <name>)"));
+            }
+            if found.is_some() {
+                return Err(format!("the log names its box twice ({BOX_MARK} lines)"));
+            }
+            found = Some(name.to_string());
+        }
+    }
+    Ok(found)
+}
+
+/// Where the box of a new painting is set: a file `box` next to the easel's
+/// executable (one line, the box's name; a studio ships it as
+/// `<studio>/bin/box`), else `EASEL_BOX`. None: neither is set (the default
+/// box). The two naming different boxes is an error.
+pub fn configured_box() -> Result<Option<(String, String)>, String> {
+    let file = std::env::current_exe().ok().and_then(|e| e.canonicalize().ok()).and_then(|e| e.parent().map(|d| d.join("box")));
+    let from_file = match file {
+        Some(f) if f.exists() => {
+            let text = std::fs::read_to_string(&f).map_err(|e| format!("{}: {e}", f.display()))?;
+            let name = text.trim();
+            if name.is_empty() || name.contains('\n') {
+                return Err(format!("{} holds one line, the name of a box (it holds {text:?})", f.display()));
+            }
+            Some((name.to_string(), f.display().to_string()))
+        }
+        _ => None,
+    };
+    let from_env = std::env::var("EASEL_BOX").ok().map(|v| v.trim().to_string()).filter(|v| !v.is_empty()).map(|v| (v, "EASEL_BOX".to_string()));
+    match (from_file, from_env) {
+        (Some(f), Some(e)) if f.0 != e.0 => Err(format!("{} says box {:?} but EASEL_BOX says {:?}: set one, or both the same", f.1, f.0, e.0)),
+        (Some(f), _) => Ok(Some(f)),
+        (None, e) => Ok(e),
+    }
+}
+
+/// The box called `name`, or an error naming the boxes this easel has.
+pub fn find_box(name: &str) -> Result<Palette, String> {
+    Palette::named_box(name).ok_or_else(|| format!("this easel has no box {name:?} (its boxes: {})", box_list()))
+}
+
+/// The boxes this easel has, quoted: `"tube box", "sargent"`.
+fn box_list() -> String {
+    Palette::box_names().iter().map(|b| format!("{b:?}")).collect::<Vec<_>>().join(", ")
+}
+
+/// The box a painting is painted from. A new painting (`log` None) takes the
+/// configured box (`configured_box`), else the default (in a painter's build
+/// for one box, which has no default box: that box). An existing one takes
+/// the box its log names (none: the default), whatever easel replays it; if a
+/// box is configured too, it must be the same one.
+pub fn box_for(log: Option<&str>) -> Result<Palette, String> {
+    let configured = configured_box()?;
+    let Some(text) = log else {
+        return find_box(configured.as_ref().map_or(Palette::fallback_box(), |c| c.0.as_str()));
+    };
+    let logged = logged_box(text)?;
+    let Some(name) = logged.as_deref().or(paint::palette::default_box()) else {
+        return Err(format!("the log names no box, so it was painted from the default box, which this easel doesn't have (its boxes: {}); nothing ran", box_list()));
+    };
+    if let Some((c, from)) = &configured
+        && c != name
+    {
+        let log_says = match &logged {
+            Some(n) => format!("the log was painted from the box {n:?} (its {BOX_MARK} line)"),
+            None => format!("the log names no box, so it was painted from the default box {name:?}"),
+        };
+        return Err(format!("{log_says}, but {from} says {c:?}: a painting is replayed with the box it was painted from; nothing ran"));
+    }
+    find_box(name)
+}
+
 /// Split a session file into chunks.
 pub fn parse_program(text: &str) -> Vec<String> {
     let mut chunks: Vec<String> = Vec::new();
@@ -459,14 +572,18 @@ pub fn root() -> PathBuf {
 mod tests {
     use super::*;
 
+    #[cfg(tube_box)]
     const W: usize = 160;
 
+    #[cfg(tube_box)]
     fn bits(s: &Session) -> Vec<u32> {
         s.canvas().unwrap().seen().iter().flat_map(|p| p.map(f32::to_bits)).collect()
     }
 
+    #[cfg(tube_box)]
     pub(crate) const CANVAS: &str = r#"canvas{size=440, aspect=1.5, linen=15, seed=2, ground={{pile={{"lead white", 3}, {"red earth", 1}}, um=110, apply="knife"}, {pile={{"lead white", 5}, {"yellow ochre", 1}}, um=60, apply="brush"}}}"#;
 
+    #[cfg(tube_box)]
     const CHUNKS: [&str; 4] = [
         CANVAS,
         r#"p = pile{{"lead white", 6}, {"cobalt blue", 1}, {"yellow ochre", 0.5}, medium=0.3}
@@ -477,6 +594,7 @@ mod tests {
     ];
 
     #[test]
+    #[cfg(tube_box)]
     fn replay_is_exact_and_failures_roll_back() {
         let mut a = Session::new(W).unwrap();
         for (i, c) in CHUNKS.iter().enumerate() {
@@ -504,6 +622,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(tube_box)]
     fn terrain_refuses_huge_and_empty_areas_before_allocating() {
         let mut s = Session::new(64).unwrap();
         let h = "height=function(x, y) return 0 end";
@@ -515,6 +634,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(tube_box)]
     fn a_live_chunk_over_the_limit_stops_and_keeps_nothing_but_a_replay_runs_it() {
         let busy = "x = 1; for i = 1, 3000000 do end; x = 2";
         let mut s = Session::new(64).unwrap();
@@ -529,6 +649,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(tube_box)]
     fn rollback_restores_tables_and_upvalues_exactly() {
         let mut s = Session::new(W).unwrap();
         s.run(CHUNKS[0]).unwrap();
@@ -547,6 +668,7 @@ mod tests {
 
     /// A failed chunk takes back what it did to a brush and the clock too.
     #[test]
+    #[cfg(tube_box)]
     fn a_failed_chunk_leaves_brush_and_clock_alone() {
         let mut s = Session::new(W).unwrap();
         s.run(CHUNKS[0]).unwrap();
@@ -562,6 +684,7 @@ mod tests {
 
     /// The order `pairs` and `next` walk a table keyed by tables, closures
     /// and userdata in, as printed by a fresh session.
+    #[cfg(tube_box)]
     fn object_key_order() -> String {
         let mut s = Session::new(W).unwrap();
         s.run(&CANVAS.replace("aspect=1.5", "aspect=1")).unwrap();
@@ -586,6 +709,7 @@ mod tests {
 
     // tables keyed by objects walk in creation order, not address order
     #[test]
+    #[cfg(tube_box)]
     fn object_keys_walk_in_creation_order() {
         let a = object_key_order();
         // a different heap layout in the same process
@@ -602,6 +726,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(tube_box)]
     fn plain_tables_keep_lua_order() {
         // tables without object keys walk in stock Lua's order (same seed),
         // so existing paintings replay as before
@@ -623,6 +748,7 @@ mod tests {
     // a gmatch iterator kept across chunks does not advance during a
     // failed chunk
     #[test]
+    #[cfg(tube_box)]
     fn gmatch_iterators_roll_back() {
         let mut s = Session::new(W).unwrap();
         s.run(CANVAS).unwrap();
@@ -641,6 +767,7 @@ mod tests {
 
     // the rollback-aware gmatch matches Lua's own, match for match
     #[test]
+    #[cfg(tube_box)]
     fn gmatch_matches_lua() {
         let cases: &[(&str, &str, Option<i64>)] = &[
             ("red green blue", "%a+", None),
@@ -676,8 +803,76 @@ mod tests {
         assert!(e.contains("malformed pattern"), "{e}");
     }
 
+    /// A painting from the default box names no box in its log: its log is
+    /// what round 19 wrote.
+    #[test]
+    #[cfg(tube_box)]
+    fn a_default_log_names_no_box() {
+        let mut a = Session::new(W).unwrap();
+        a.run(CANVAS).unwrap();
+        let prog = a.program("t");
+        let want = format!("-- easel session \"t\": a painting replayed chunk by chunk.\n-- Each \"--@ chunk\" line starts one chunk as it was run at the easel.\n\n--@ chunk 1\n{CANVAS}\n");
+        assert_eq!(prog, want);
+        assert_eq!(logged_box(&prog).unwrap(), None);
+        assert_eq!(box_for(Some(&prog)).map(|b| b.name), Ok(paint::palette::DEFAULT_BOX), "(EASEL_BOX set in the test's environment?)");
+    }
+
+    /// Only the log's head names its box: a `--@ box` line inside a chunk is
+    /// the chunk's; two in the head, or one without a name, are errors.
+    #[test]
+    fn the_box_line_is_read_from_the_head_only() {
+        let head = "-- easel session \"t\": a painting replayed chunk by chunk.\n-- Each \"--@ chunk\" line starts one chunk as it was run at the easel.\n";
+        assert_eq!(logged_box(&format!("{head}--@ box inness\n\n--@ chunk 1\nx = 1\n")).unwrap().as_deref(), Some("inness"));
+        assert_eq!(logged_box(&format!("{head}\n--@ chunk 1\n--@ box inness\nx = 1\n")).unwrap(), None);
+        assert!(logged_box(&format!("{head}--@ box inness\n--@ box sargent\n--@ chunk 1\n")).unwrap_err().contains("twice"));
+        assert!(logged_box(&format!("{head}--@ box\n--@ chunk 1\n")).unwrap_err().contains("names no box"));
+        assert!(logged_box(&format!("{head}--@ boxes x\n--@ chunk 1\n")).unwrap_err().contains("names no box"));
+        // the boxes of this build: the default box, or a painter's build's own
+        let own = paint::palette::default_box().unwrap_or_else(|| Palette::box_names()[0]);
+        assert!(find_box("no such box").unwrap_err().contains(&format!("its boxes: {own:?}")));
+    }
+
+    /// A painting from another box names it in its log; the log replays with
+    /// that box to the same canvas, bit for bit, and the default box can't
+    /// paint it.
+    #[cfg(tube_box)]
+    #[cfg(feature = "box-sargent")]
+    #[test]
+    fn a_box_is_named_in_the_log_and_replays_with_it() {
+        let chunks = [CANVAS, r#"b = brush("round", 4); b:load(pile{{"rose madder", 1}, {"ultramarine blue", 2}, {"zinc white", 1}}, 0.9)
+           for i = 1, 5 do b:stroke({{100 + i*60, 500}, {130 + i*60, 420}}) end
+           work(ellipse(500, 300, 200, 100), {hand="glaze", pile=pile{{"viridian", 1}, medium=0.6}})"#];
+        let mut a = Session::with_box(W, find_box("sargent").unwrap()).unwrap();
+        for c in chunks {
+            a.run(c).unwrap();
+        }
+        let prog = a.program("t");
+        assert_eq!(prog.lines().nth(2), Some("--@ box sargent"), "{prog}");
+        assert_eq!(logged_box(&prog).unwrap().as_deref(), Some("sargent"));
+        let mut b = Session::replay_with(W, box_for(Some(&prog)).expect("(EASEL_BOX set in the test's environment?)")).unwrap();
+        for c in parse_program(&prog) {
+            b.run(&c).unwrap();
+        }
+        assert_eq!(bits(&a), bits(&b));
+        assert_eq!(b.program("t"), prog);
+        let mut d = Session::replay(W).unwrap();
+        d.run(CANVAS).unwrap();
+        let e = d.run(chunks[1]).unwrap_err();
+        assert!(e.contains("no tube \"rose madder\""), "{e}");
+    }
+
+    /// The guide's tube table is the default box's.
+    #[test]
+    #[cfg(tube_box)]
+    fn the_guide_shows_the_default_box() {
+        let guide = include_str!("../../../notes/easel_guide.md");
+        let table: String = guide.lines().skip_while(|l| !l.starts_with("| tube | pigment |")).take_while(|l| l.starts_with('|')).map(|l| format!("{l}\n")).collect();
+        assert_eq!(table, Palette::tube_box().table());
+    }
+
     // a view's form counts visible bodies only, not proxies
     #[test]
+    #[cfg(tube_box)]
     fn view_form_counts_visible_parts_only() {
         let mut s = Session::replay(W).unwrap();
         s.run(CANVAS).unwrap();

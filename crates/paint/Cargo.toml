@@ -8,6 +8,20 @@ edition = "2024"
 # clock (easel's replay build uses it for hand-time frames). Off by default,
 # so the painter build has no hook at all.
 hand-hook = []
+# The boxes besides the default tube box (palette.rs `BOXES`), one feature
+# each: the replay build has them all, a painter's build at most its own
+# studio's, so it names no other studio's box. On by default here (paint's
+# own tests); the easel turns them on itself. The default tube box is in a
+# build with no box-* feature or with all-boxes; one box-* feature alone is a
+# painter's build with only that box; two or more without all-boxes don't
+# compile (build.rs).
+default = ["all-boxes"]
+all-boxes = ["box-sargent", "box-inness", "box-alma-tadema", "box-tonn", "box-hopper"]
+box-sargent = []
+box-inness = []
+box-alma-tadema = []
+box-tonn = []
+box-hopper = []
 
 [dependencies]
 image = { version = "0.25", default-features = false, features = ["png"] }

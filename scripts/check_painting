@@ -24,6 +24,9 @@
 # comparison is reported, not judged: a painter may have painted after its
 # last save.
 set -euo pipefail
+# the log names its box, and the replay takes it from there: a box set in
+# the caller's environment (EASEL_BOX) would only make the easel refuse the log
+unset EASEL_BOX
 
 usage() { sed -n '7,7p' "$0" | sed 's/^# \{0,1\}//' >&2; exit 2; }
 [ $# -eq 2 ] || usage
@@ -39,8 +42,8 @@ mkdir -p "$work/paintings/lua" "$work/out/easel/painting" "$work/notes"
 work=$(cd "$work" && pwd)
 
 repo=$(cd "$(dirname "$0")/.." && pwd)
-(cd "$repo" && cargo build --release -q -p easel)
-easel=$repo/target/release/easel
+# the replay build, in the target directory cargo builds into (CARGO_TARGET_DIR too)
+easel=$("$repo/scripts/replay_easel")
 
 cp "$log" "$work/paintings/lua/painting.lua"
 cp "$log" "$work/out/easel/painting/committed.lua"

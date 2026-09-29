@@ -63,6 +63,16 @@ fn replay_failure_is_fatal() {
     assert!(!cmd(&["-s", name, "status"]).status.success());
 }
 
+// A chunk that ran is in the log even when the look asked for after it fails: the reply
+// says both, so the chunk isn't sent again.
+#[test]
+fn a_failed_look_after_a_chunk_still_reports_the_chunk() {
+    ok(&["open", "looked"]);
+    let out = ok(&["-s", "looked", "do", "x = 1", "--look"]);
+    ok(&["-s", "looked", "close"]);
+    assert!(out.contains("ok · chunk 1") && out.contains("no canvas yet"), "{out}");
+}
+
 #[test]
 fn journal_uses_the_selected_painting_clock() {
     ok(&["open", "journal"]);

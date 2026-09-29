@@ -468,6 +468,9 @@ struct Server {
     /// The log text as the easel last wrote (or read) it: if the file on
     /// disk differs, it was changed outside the session.
     written: Option<String>,
+    /// How many of the log's chunks the state was replayed from (at reopen or rebuild),
+    /// not painted live.
+    replayed: usize,
 }
 
 fn serve(args: &[String]) -> Result<(), String> {
@@ -553,6 +556,7 @@ fn serve(args: &[String]) -> Result<(), String> {
                 let _ = std::fs::remove_file(&sock);
                 return Err(format!("easel: fatal: {e}"));
             }
+            srv.replayed = srv.s.log.len();
             eprintln!("rebuilt {:.2}s", t0.elapsed().as_secs_f64());
         }
     }
@@ -596,7 +600,7 @@ impl Server {
         // an existing painting goes on with the box its log names; a new one takes the
         // configured box (session::box_for)
         let tubes = session::box_for(text.as_deref())?;
-        let mut srv = Self { name, s: Session::with_box(LIVE_WIDTH, tubes).map_err(|e| e.to_string())?, frames: false, written: None };
+        let mut srv = Self { name, s: Session::with_box(LIVE_WIDTH, tubes).map_err(|e| e.to_string())?, frames: false, written: None, replayed: 0 };
         if let Some(text) = text {
             srv.written = Some(text.clone());
             let chunks = parse_program(&text);
@@ -609,6 +613,7 @@ impl Server {
                 eprintln!("resumed chunk {}/{} {:.2}s", i + 1, chunks.len(), t0.elapsed().as_secs_f64());
             }
             srv.s.set_replaying(false);
+            srv.replayed = chunks.len();
             if srv.s.program(&srv.name) != text {
                 return Err("session integrity: noncanonical or incomplete log; refusing replay".into());
             }
@@ -644,6 +649,22 @@ impl Server {
         std::fs::rename(pending, self.witness()).map_err(|e| e.to_string())?;
         self.written = Some(text);
         Ok(String::new())
+    }
+
+    /// The live canvas as a PNG, `save`'s (`live.png`, next to the committed log), and in
+    /// `live.txt` how many chunks it holds and how many of them were replayed: the runner's
+    /// check (scripts/check_painting) compares a replay of the log with it.
+    fn save_live(&self) -> Result<String, String> {
+        let dir = session_dir(&self.name);
+        let (png, txt) = (dir.join("live.png"), dir.join("live.txt"));
+        let _ = std::fs::remove_file(&txt);
+        let Some(c) = self.s.canvas() else {
+            let _ = std::fs::remove_file(&png);
+            return Ok(String::new());
+        };
+        deliver(&c, &png)?;
+        std::fs::write(&txt, format!("chunks {}\nreplayed {}\n", self.s.log.len(), self.replayed)).map_err(|e| format!("{}: {e}", txt.display()))?;
+        Ok(format!("the live canvas is in {}\n", png.display()))
     }
 
     fn look(&mut self, args: &[String], path: Option<PathBuf>) -> Result<String, String> {
@@ -727,7 +748,8 @@ impl Server {
             }
             "close" => {
                 let note = self.save_log()?;
-                Ok(format!("{note}closed; the session is in {}\n", log_path(&self.name).display()))
+                let live = self.save_live().unwrap_or_else(|e| format!("the live canvas couldn't be saved: {e}\n"));
+                Ok(format!("{note}{live}closed; the session is in {}\n", log_path(&self.name).display()))
             }
             o => Err(format!("unknown command {o:?}")),
         }

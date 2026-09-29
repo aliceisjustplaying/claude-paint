@@ -462,6 +462,7 @@ mod tests {
     /// Stippling from a pile lays that pile at its drying rate, whatever
     /// the color field says, without matching the canvas.
     #[test]
+    #[cfg(tube_box)]
     fn stippling_from_a_pile_lays_the_pile() {
         let pal = Palette::tube_box();
         let at = |n: &str| pal.tubes.iter().position(|t| t.name == n).unwrap();
@@ -614,6 +615,7 @@ mod tests {
         }
     }
 
+    #[cfg(tube_box)]
     fn stippled_canvas() -> Canvas {
         let st = crate::style::Style::oil();
         let mut c = st.prepare(300, 1.5, 7);
@@ -624,6 +626,7 @@ mod tests {
         c
     }
 
+    #[cfg(tube_box)]
     fn fp(c: &Canvas) -> u64 {
         let mut h = 0xcbf2_9ce4_8422_2325u64;
         for v in c.px.iter().flatten().chain(c.height.iter()) {
@@ -636,6 +639,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(tube_box)]
     fn stipple_is_deterministic_across_thread_counts() {
         let a = rayon::ThreadPoolBuilder::new().num_threads(1).build().unwrap().install(|| fp(&stippled_canvas()));
         let b = rayon::ThreadPoolBuilder::new().num_threads(4).build().unwrap().install(|| fp(&stippled_canvas()));
@@ -712,6 +716,7 @@ mod tests {
     /// small gap) darkens the field next to the gap at least 0.8 as much as
     /// out in the open.
     #[test]
+    #[cfg(tube_box)]
     fn veil_reaches_its_tone_up_to_dark_shapes() {
         let st = crate::style::Style::oil();
         let mut c = Canvas::new_window(2000, 4.0, hex("#8a8894"), None).with_size_mm(440.0);

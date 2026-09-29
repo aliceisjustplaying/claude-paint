@@ -179,3 +179,18 @@ fn the_box_file_and_easel_box_must_agree_on_a_box_there_is() {
     assert!(fails(&e, &root, None, &["tubes"]).contains("holds one line"));
     assert!(fails(&plain(), &root, Some("x"), &["tubes"]).contains("no box \"x\""));
 }
+
+/// The replay build holds every box, the default tube box first (its
+/// `all-boxes` turns on paint's, which keeps the default box in), and every
+/// tube of the catalog is in one of them.
+#[test]
+fn the_replay_build_holds_every_box() {
+    use paint::palette::{Palette, catalog};
+    assert_eq!(Palette::box_names(), ["tube box", "sargent", "inness", "alma-tadema", "tonn"]);
+    let mut want: Vec<&str> = Palette::box_names().into_iter().flat_map(|b| Palette::named_box(b).unwrap().tubes.into_iter().map(|t| t.name)).collect();
+    want.sort();
+    want.dedup();
+    let mut have: Vec<&str> = catalog().iter().map(|t| t.name).collect();
+    have.sort();
+    assert_eq!(have, want);
+}

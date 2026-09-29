@@ -102,7 +102,15 @@ impl Style {
     ///   weave, then a brushed top layer (60 µm) whose striations stay;
     ///   total 240 µm.
     /// - `Palette::cobalt_box`.
+    #[cfg(tube_box)]
     pub fn oil() -> Self {
+        Style::oil_with(Palette::cobalt_box())
+    }
+
+    /// `oil` with another palette (the easel's canvas{}: the painting's box).
+    /// The older boxes aren't built for it, so a build that paints only from
+    /// its box (the easel) holds none of their names.
+    pub fn oil_with(palette: Palette) -> Self {
         Style {
             name: "oil",
             width_mm: 440.0,
@@ -120,7 +128,7 @@ impl Style {
             blender: Some(Tool { pickup: 0.15, run: 45.0, ..Tool::badger(40.0) }),
             blend_passes: 3,
             blend_pressure: 0.5,
-            palette: Palette::cobalt_box(),
+            palette,
             body_medium: 0.2,
             thin_medium: 0.45,
             mix_jitter: 0.06,
@@ -132,6 +140,7 @@ impl Style {
     /// `Palette::smalt_box` and a three-layer ground: bright red, then two
     /// light brown layers, the first two knifed, the third rolled on (a fine
     /// texture).
+    #[cfg(tube_box)]
     pub fn oil_red_ground() -> Self {
         Style {
             width_mm: 1714.0,

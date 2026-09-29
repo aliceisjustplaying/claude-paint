@@ -1128,7 +1128,7 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
                 let tubes = st.borrow().tubes.clone();
                 let ground = ground_of(&tubes, &o.get::<Value>("ground")?)?;
                 let seed = o.get::<Option<u64>>("seed")?.unwrap_or(1);
-                let sty = Style { name: "oil", width_mm: mm, linen: Linen { warp_per_cm: warp, weft_per_cm: weft, ..Linen::fine(1) }, ground, palette: (*tubes).clone(), ..Style::oil() };
+                let sty = Style { name: "oil", width_mm: mm, linen: Linen { warp_per_cm: warp, weft_per_cm: weft, ..Linen::fine(1) }, ground, ..Style::oil_with((*tubes).clone()) };
                 let width = st.borrow().width;
                 let mut c = sty.prepare(width, aspect, seed);
                 let h = c.height();

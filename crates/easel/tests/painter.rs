@@ -128,6 +128,8 @@ const OWN_BOX: Option<&str> = if cfg!(feature = "box-sargent") {
     Some("alma-tadema")
 } else if cfg!(feature = "box-tonn") {
     Some("tonn")
+} else if cfg!(feature = "box-hopper") {
+    Some("hopper")
 } else {
     None
 };

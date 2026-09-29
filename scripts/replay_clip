@@ -38,6 +38,9 @@
 # by --max-hold; the final picture is held 3 s. H.264, yuv420p, faststart,
 # 24 fps.
 set -euo pipefail
+# the log names its box, and the replay takes it from there: a box set in
+# the caller's environment (EASEL_BOX) would only make the easel refuse the log
+unset EASEL_BOX
 
 usage() { awk 'NR > 1 && !/^#/ { exit } NR > 1' "$0" | sed 's/^# \{0,1\}//'; exit 2; }
 [ $# -ge 2 ] || usage

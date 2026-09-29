@@ -46,9 +46,11 @@ proposal gives no source.
 | `COPPER` | 1.6 | S | copper pigments promote drying [AP2 p.136]; the same rate as copper green, which keeps its own `SMALT` constant (same value) |
 | `MARS` | 1.1 | S | Mars colors are "good driers for oil paints" [CAMEO-mars]; a little above red earth (1.0) |
 | `VIRIDIAN` | 1.0 | S, A | no drier action reported; average (both estimate 1.0) |
-| `INDIAN_YELLOW` | 0.8 | S | an early account says it dries "nearly as soon or sooner than" other colors [AP1 p.24]; uncertain |
 | `CADMIUM` | 0.6 | I (S and T agree; T cites Old Holland's "m") | "slow but reliable driers" [AP1 p.72]. A proposed 0.5 without a source and flagged it for checking; I's 0.6 rests on the quotation |
 | `BITUMEN` | 0.15 | I | slows linseed oil's drying and never fully cures [CAMEO]; below madder lake (0.3) |
+
+`INDIAN_YELLOW` (0.8, from S) went out with the Indian yellow tube (see
+"Reconciled with the notes" below).
 
 ## The catalog: new tubes
 
@@ -61,12 +63,12 @@ Columns: masstone, hiding, stiffness, tinting strength, drying.
 | Naples yellow | lead antimonate | `#e2b964` | 0.85 | 0.75 | 0.6 | 1.6 `NAPLES_YELLOW` | A | only A. What an 1880s tube of this name held is unverified (A) |
 | lemon chrome | pale lead chromate with lead sulfate | `#eed83c` | 0.8 | 0.7 | 0.8 | 1.8 `CHROME_YELLOW` | I | S: `#f0d32a` 0.85/0.7/0.9. Both say the pale grade hides and tints less than chrome yellow (0.9/1.0). I ties both cuts to the coprecipitated lead sulfate [AP1 p.187], while S marks its cuts as estimates ("assumed slightly lower", "a little weaker"), so I's values. Stiffness and drying agree |
 | pale cadmium | cadmium sulfide, a pale grade | `#f0c63c` | 0.85 | 0.7 | 1.1 | 0.6 `CADMIUM` | A, adjusted | A: stiffness 0.6, drying 0.5. It is the same pigment as cadmium yellow, so it gets the same body (0.7) and the sourced cadmium rate (0.6). A's masstone, hiding and strength are kept (they match the other cadmium lines) |
+| deep cadmium | cadmium sulfide, a deep grade | `#e8861e` | 0.9 | 0.6 | 1.2 | 0.6 `CADMIUM` | A, adjusted | only A (its optional tube 9): masstone, hiding, stiffness and strength as A wrote them ("as for pale cadmium, with a deeper orange masstone and slightly higher hiding"; all estimates). A's drying 0.5 is replaced by the sourced cadmium rate, as for pale cadmium |
 | cadmium yellow | cadmium sulfide | `#e8a51f` | 0.85 | 0.7 | 1.1 | 0.6 `CADMIUM` | I | S: `#efb512` 0.85/0.65/1.1/0.6; T: `#f0b000` 0.9/0.7/1.1/0.6. Strength and drying agree. Hiding: S's 0.85 ("good hiding power" [AP1 p.71]) and T's 0.9 (Old Holland: opaque) are both sourced, so the majority (S, I) gives 0.85. Stiffness 0.7 (I, and T from Old Holland's "l" oil content). The masstone is an estimate in all three, and the tie goes to I, whose drying rate is the sourced one |
-| Indian yellow | magnesium and calcium euxanthate | `#e1a11e` | 0.15 | 0.4 | 0.8 | 0.8 `INDIAN_YELLOW` | S | only S |
 | Mars yellow | synthetic iron oxide hydroxide | `#c4872b` | 0.85 | 0.7 | 1.1 | 1.1 `MARS` | S | only S |
 | transparent oxide yellow | transparent synthetic iron oxide | `#7a4a14` | 0.2 | 0.5 | 0.9 | 1.0 `RED_EARTH` | T | only T; all estimates |
 | brown ochre | iron oxide earth, a darker grade | `#86592e` | 0.8 | 0.7 | 0.8 | 0.8 `OCHRE` | A | only A (it copies yellow ochre's numbers) |
-| raw sienna | sienna earth, unroasted | `#9a6a2b` | 0.4 | 0.5 | 0.7 | 1.2 `SIENNA` | I | only I |
+| raw sienna | sienna earth, unroasted | `#9a6a2b` | 0.4 | 0.5 | 0.7 | 1.2 `SIENNA` | I | only I (S proposed burnt sienna only; the sargent box took raw sienna later, at I's numbers) |
 | orange chrome | basic lead chromate | `#e0712a` | 0.88 | 0.75 | 0.9 | 1.8 `CHROME_YELLOW` | I | only I; hiding, strength and drying sourced [AP1 pp.207–208] |
 | red lead | lead tetroxide | `#e0542b` | 0.85 | 0.8 | 0.8 | 2.2 `RED_LEAD` | S | only S |
 | orange vermilion | mercuric sulfide, a yellower grade | `#dd4a22` | 0.9 | 0.75 | 1.0 | 0.4 `VERMILION` | A | only A. The shade is inferred from the name (A marks it uncertain). The body is vermilion's |
@@ -86,26 +88,41 @@ Columns: masstone, hiding, stiffness, tinting strength, drying.
 | emerald green | copper aceto-arsenite | `#23a57a` | 0.6 | 0.6 | 0.6 | 1.6 `COPPER` | S | only S |
 | cobalt violet | cobalt phosphate or arsenate | `#7e4c8e` | 0.35 | 0.55 | 0.35 | 1.4 `COBALT_BLUE` | S | only S |
 
-Not in the catalog, because no box uses them: brown pink (I: an uncertain
-reading of one OCR'd line), deep cadmium (A: "very little, if at all")
-and titanium white (T: demoted; "I basically don't use titanium" since
-2022).
+Not in the catalog, because no box uses them: Indian yellow (S; out of
+the sargent box, paint box only), brown pink (I: an uncertain reading of
+one OCR'd line) and titanium white (T: demoted; "I basically don't use
+titanium" since 2022).
 Mars orange and ultramarine ash (S: paint box only) were not proposed as
 tubes.
 
 ## The boxes
 
-A box holds exactly the tubes its research note documents the artist
-using. Existing tubes count when the proposal maps a documented pigment to
-them. The default `tube box` is unchanged and stays the default.
+The rule (decided by the user, 2026-09-29):
+
+- **Historical painters** (Sargent, Inness, Alma-Tadema): a tube is in
+  the box if the research note documents the artist using the pigment at
+  least once, in paintings or in practice. A pigment he only owned (a
+  paint box, a receipt) or never used is not in the box.
+- **A living painter** (Tonn): the box follows his current practice.
+  Pigments he used only in the past, owns but doesn't use, or avoids are
+  left out for now (to be revisited).
+- Each artist's "owned or past, not in the box" pigments are listed
+  below, with their evidence. The list stays in this file; no studio gets
+  it.
+
+Existing tubes count when the proposal maps a documented pigment to
+them. A note's "the tubes here" (§9) maps only to tubes in its box, and
+every tube in the box is named in the note's pigment table or in §9
+(`scripts/tests/box_notes.sh` checks both on the exported studios). The
+default `tube box` is unchanged and stays the default.
 
 ### `sargent` (23)
 
 lead white, zinc white, lemon chrome, chrome yellow, cadmium yellow,
-Indian yellow, yellow ochre, Mars yellow, red lead, vermilion, cadmium
-red, Mars red, red earth, rose madder, burnt sienna, Mars brown, bone
-black, cerulean blue, cobalt blue, ultramarine blue, viridian, emerald
-green, cobalt violet.
+yellow ochre, Mars yellow, raw sienna, red lead, vermilion, cadmium red,
+Mars red, red earth, rose madder, burnt sienna, Mars brown, bone black,
+cerulean blue, cobalt blue, ultramarine blue, viridian, emerald green,
+cobalt violet.
 
 (S's "French ultramarine" is the catalog's `ultramarine blue`: one
 pigment, one tube.)
@@ -117,21 +134,20 @@ pigment, one tube.)
 - Judgment calls:
   - *Chrome yellow and lemon chrome both.* HAM names chrome yellow with no
     grade, and APOLLO and BAS name a pale grade.
-  - *Burnt sienna.* APOLLO says "sienna" and doesn't say raw or burnt.
-    Burnt is S's choice (uncertain), and the box holds one sienna, not
-    two.
-  - *Indian yellow.* It is documented only in a paint box [BAS], and S
-    marks it uncertain for portraits. It is kept because the paint box is
-    documentary evidence that he had the tube.
+  - *Raw and burnt sienna both.* APOLLO finds "sienna" in his paintings
+    and doesn't say raw or burnt; a paint box of about 1884–88 held two
+    tubes of raw sienna and one of burnt [VCB]. The grade used is
+    unknown, so the box holds both (the note maps "sienna → raw sienna
+    and burnt sienna"). S proposed burnt only.
   - *Red lead.* It was found in one painting [BAS]. It is documented, so
     it is kept.
   - *Zinc white.* He used it "very rarely" [APOLLO], and it is on palettes
     [HAM]. It is kept.
 - Left out: smalt, pale smalt, Prussian blue, green earth, Rinmann's
   green, copper green and raw umber (S: not used as far as the sources
-  go). Also left out: Mars orange and ultramarine ash (paint box only, no
-  tube proposed), and magenta and bone brown (purchases, not found in any
-  analysis).
+  go). Also left out: Indian yellow, Mars orange and ultramarine ash
+  (paint box only), and magenta and bone brown (purchases, not found in
+  any analysis). See "Owned or past, not in the box".
 
 ### `inness` (13)
 
@@ -151,17 +167,18 @@ cobalt blue, Antwerp blue.
   - *Burnt sienna is out.* I calls it "optional" because only "sienna"
     is named, and raw sienna is named explicitly.
   - *Brown pink is out.* It depends on an uncertain OCR reading ("cobalt*
-    brown and pink").
+    brown and pink"). The note's table row is now a research comment, so
+    the painter's copy doesn't name it.
 - The single-witness pigments (Antwerp blue, Indian red and lemon chrome
   [SHEL]; orange chrome [MI95]; cadmium [SON]) are in. Each rests on one
   witness, and I ranks all of them among its top three priorities.
 - No green is documented, so the box has none.
 
-### `alma-tadema` (13)
+### `alma-tadema` (15)
 
-lead white, Naples yellow, pale cadmium, yellow ochre, brown ochre, orange
-vermilion, Chinese vermilion, red earth, rose madder, burnt sienna, bone
-black, cobalt blue, viridian.
+lead white, Naples yellow, pale cadmium, deep cadmium, yellow ochre,
+brown ochre, orange vermilion, Chinese vermilion, red earth, rose madder,
+burnt sienna, raw umber, bone black, cobalt blue, viridian.
 
 - The pupil's palette [MANUAL]: flake white (lead white), brown and yellow
   ochre, Naples yellow, orange and Chinese vermilion, light red (red
@@ -173,31 +190,32 @@ black, cobalt blue, viridian.
     statement that "so far" the palette is his, so they fall inside what
     it attributes to him. A marks both uncertain and suggests them as a
     reserve.
-  - *Raw umber and deep cadmium are out.* The pupil says he "uses very
-    little, if at all" of them. A lists raw umber only as an optional
-    reserve.
+  - *Raw umber and deep cadmium are in.* The manual adds both to the
+    palette and says he "uses very little, if at all" of them [MANUAL
+    p.13]. That is on his palette in practice, so under the rule they are
+    in. Deep cadmium is A's optional tube 9, new to the catalog; raw
+    umber is the tube box's.
   - *Chrome yellow is out.* The same manual rejects it.
 
-### `tonn` (14)
+### `tonn` (13)
 
 lead white, lead-tin yellow, cadmium yellow, yellow ochre, transparent
-oxide yellow, cadmium red, red earth, permanent alizarin, burnt sienna,
-raw umber, bone black, ultramarine blue, cerulean blue, green earth.
+oxide yellow, cadmium red, permanent alizarin, burnt sienna, raw umber,
+bone black, ultramarine blue, cerulean blue, green earth.
 
-- T's suggested box, plus transparent oxide yellow from its optional
-  list. Existing tubes from T's table: lead white, yellow ochre, red earth
-  (for English red, a synthetic red iron oxide), raw umber (also standing
-  in for red umber, the nearest tube), bone black (for ivory black; the
-  same pigment [OH]) and green earth (terre verte, an occasional glaze).
+- T's suggested box less red earth, plus transparent oxide yellow from
+  its optional list. Existing tubes from T's table: lead white, yellow
+  ochre, raw umber (also standing in for red umber, the nearest tube),
+  bone black (for ivory black; the same pigment [OH]) and green earth
+  (terre verte, an occasional glaze).
 - Judgment calls:
-  - *Red earth is in.* He recommends English red in limited palettes (2021,
-    2023), but also said in 2021 that he hadn't put it on his palette "in a
-    million years" (T: "used, at least earlier"; the materials note:
-    uncertain for current use). T keeps it, and so does the box.
+  - *Red earth is out.* It stood for English red, which he recommends in
+    limited palettes (2021, 2023) but said in 2021 he hadn't put on his
+    palette "in a million years". Not current practice. T kept it; the
+    box doesn't. The note's §9 maps nothing to red earth.
   - *Transparent oxide yellow is in.* It was on a posted palette of 2025
-    [PAL25], which is documented use. T lists it as optional because
-    nothing says how often he uses it. The sargent box keeps Indian yellow
-    on similar evidence (a paint box).
+    [PAL25], which is current use. T lists it as optional because
+    nothing says how often he uses it.
   - *Titanium white is out.* He used it for highlights in 2021 and said in
     2022 that he basically doesn't use it; T demotes it to optional, and
     the materials note treats the 2022 statement as current.
@@ -206,6 +224,61 @@ raw umber, bone black, ultramarine blue, cerulean blue, green earth.
     much" (2025). T leaves both out of its box.
   - *Vermilion and zinc white are out.* He owns vermilion but hasn't used
     it, and he avoids zinc.
+- English red, cobalt blue, titanium white, vermilion and zinc white are
+  named in the note only in research comments, so the painter's copy
+  doesn't name them. Cobalt violet stays in the note's table (rare, but
+  mentioned in 2025) and out of the box.
+
+## Owned or past, not in the box
+
+Pigments the notes document the artist owning or once using that the
+box leaves out under the rule above. Keys are the research notes'.
+
+- **Sargent** (owned, never found in a painting):
+  - Indian yellow: in a paint box [BAS]; not found in any painting
+    consulted.
+  - Mars orange: in a paint box [BAS].
+  - Ultramarine ash: in a paint box [BAS] (S's table).
+  - Magenta: "Magenta in tubes" bought from a London colorman in 1888
+    [NPG]; not found in any analysis.
+  - Bone brown: bought from the same colorman in 1899 [NPG]; not found in
+    any analysis.
+- **Inness:** none owned only. Brown pink is left out because its one
+  witness may read "brown and pink" instead [SHEL p.32].
+- **Alma-Tadema:** none owned only. Chrome yellow is not his: the manual
+  rejects it ("its stability is too doubtful") [MANUAL p.13]. The Mommen
+  and Blockx supplies [BARR; NPG-B] name no colors.
+- **Tonn** (past, owned but unused, or avoided):
+  - English red (red earth's pigment): recommended for limited palettes
+    (2021, 2023) but "haven't even put [it] on my palette in a million
+    years" [ERED21, 2021].
+  - Cobalt blue: "haven't used it in ages" [BLUE21, 2021].
+  - Titanium white: added in 2021 as a second white [WHITE21]; "I
+    basically don't use titanium" [TI22, July 2022].
+  - Vermilion: owns a tube "that I never used" [VERM20; CAD22].
+  - Zinc white: he warns against zinc-containing paints [ZINC20].
+  - Cobalt violet: infrequent; "I haven't used cobalt violet much"
+    [CVI20; CVI25, 2025].
+
+## Reconciled with the notes (2026-09-29)
+
+The boxes were changed to follow the rule above.
+
+- **sargent:** Indian yellow out (paint box only). Raw sienna in:
+  sienna is documented in his paintings [APOLLO], grade unknown, and his
+  paint box held raw and burnt [VCB]. The note's §9 maps "sienna → raw
+  sienna and burnt sienna". The `INDIAN_YELLOW` drying rate went with the
+  tube. Still 23 tubes.
+- **inness:** unchanged (13). The note's brown pink row became a research
+  comment, since even its reading is uncertain.
+- **alma-tadema:** raw umber and deep cadmium in (the manual lists both on
+  his palette, used "very little, if at all"); 15 tubes. Deep cadmium is a
+  new catalog tube (above). The note's §9 maps both to their tubes.
+- **tonn:** red earth out (English red is not on his palette now); 13
+  tubes. Red earth is now compiled in only with the boxes that hold it
+  (the default, sargent, inness, alma-tadema). Titanium white's table
+  row, its clause in the summary and its mention in a drying quotation
+  became research comments, like the other pigments he doesn't use now.
 
 ## Ordering
 

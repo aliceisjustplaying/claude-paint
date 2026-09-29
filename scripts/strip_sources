@@ -1,0 +1,66 @@
+#!/usr/bin/env -S uv run --quiet --script
+# /// script
+# requires-python = ">=3.10"
+# ///
+"""Strip the sources from a research note, for the copy a painter reads.
+
+    scripts/strip_sources <note.md> [<out.md>]     (in place without <out.md>)
+
+The repo keeps every note with its sources; painters have no web and no use for citation keys, URLs or
+source lists, so the exported studio gets the note without them. What goes: inline source keys
+([BAS], [MMX p.128], [BAS; MET20], the physics note's [9]), the "## Sources" section, a table column left
+empty by that, and the intro's sentence about keys and the list. What stays: every claim, and the words
+that say how solid it is ("a witness described", "he reports", "Uncertain", the physics note's [V], [S], [E]).
+"""
+import re
+import sys
+
+K = r"\[(?:[A-Z]{2}|\d)[^\]\n]*\](?!\()"
+# a key or a run of keys ("[A]; [B], [C]"), with the space (or line break) before it
+KEY = re.compile(rf"[ \t]*\n?[ \t]*{K}(?:[ \t]*[;,][ \t]*{K})*")
+INTRO = (
+    ("A sourced technical report. Every claim cites a source key; the sources\nare listed at the end. ",
+     "A technical report from documented sources. "),
+    (" Source numbers in brackets point to the list at the end.", ""),
+)
+
+
+def drop_empty_columns(lines):
+    out, i = [], 0
+    while i < len(lines):
+        if lines[i].startswith("|") and i + 1 < len(lines) and re.match(r"^\|[ :|-]+\|\s*$", lines[i + 1]):
+            j = i
+            while j < len(lines) and lines[j].startswith("|"):
+                j += 1
+            rows = [[c.strip() for c in l.strip().strip("|").split("|")] for l in lines[i:j]]
+            n = len(rows[0])
+            keep = [k for k in range(n) if any(r[k] for r in rows[2:] if k < len(r))] if j - i > 2 else list(range(n))
+            for r in rows:
+                cells = [r[k] if k < len(r) else "" for k in keep]
+                out.append("| " + " | ".join(cells) + " |")
+            i = j
+        else:
+            out.append(lines[i])
+            i += 1
+    return out
+
+
+def strip(text):
+    text = re.split(r"(?m)^## Sources\s*$", text)[0].rstrip() + "\n"
+    for a, b in INTRO:
+        text = text.replace(a, b)
+    text = KEY.sub("", text)
+    text = re.sub(r"[ \t]+([.,;:)])", r"\1", text)      # "claim [KEY]." -> "claim."
+    text = re.sub(r"\([ \t]*\)", "", text)               # a parenthesis that held only keys
+    text = re.sub(r"\|[ \t]*[;,][ \t]*", "| ", text)       # a table cell that began with keys
+    text = re.sub(r"[ \t]+\n", "\n", text)
+    return "\n".join(drop_empty_columns(text.split("\n")))
+
+
+if __name__ == "__main__":
+    src = sys.argv[1]
+    dst = sys.argv[2] if len(sys.argv) > 2 else src
+    out = strip(open(src, encoding="utf-8").read())
+    if re.search(r"\[(?:[A-Z]{2}|\d)[^\]\n]*\](?!\()", out) or "## Sources" in out:
+        sys.exit(f"strip_sources: keys or a Sources section left in {src}")
+    open(dst, "w", encoding="utf-8").write(out)

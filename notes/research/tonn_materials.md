@@ -259,31 +259,18 @@ tier is shown only in photographs [SHELF25].
 
 ## 9. The tubes here
 
-This studio's box is a selection from his documented pigments. Names map
-as follows: flake white → lead white; cadmium yellow light and deep → one
-cadmium yellow; English red → red earth; terre verte → green earth; ivory
-black → bone black. English red was reported unused in 2021. Not
-supplied: titanium white (reported basically unused in 2022), zinc white
-(avoided), cobalt blue (unused "in ages" in 2021), cobalt violet
-(infrequent), vermilion (owned, not used) and red umber (documented in
-2020).
+The historical names in this note correspond to these tubes: flake
+white → lead white; cadmium yellow light and deep → cadmium yellow;
+English red → red earth; terre verte → green earth; ivory black → bone
+black.
 
 ## 10. At this easel
 
-- **Support.** The easel's support is plain-weave linen with ground
-  layers mixed from the tube box. There are no panels, boards or other
-  rigid supports.
-- **Medium.** Paint has one control for added medium: an oil-medium
-  share. There are no solvents, driers, resins, copal, megilp or varnish
-  controls.
-- **Removing paint.** There is no tool for scraping or abrading paint on
-  the canvas.
-- **This note.** The supports, media and ways of removing paint named
-  above that the easel lacks are historical context; the easel guide
-  documents what is available. Wiping a brush unloads the brush; it does
-  not lift paint off the canvas.
-- **Other.** Synthetic fabric, adhesives, projected transfer and acrylic
-  grounds are not available; grounds are laid from the tubes.
+- **Support.** Plain-weave linen with ground layers laid from the tubes.
+- **Paint.** Pigment from the tubes with an oil-medium share.
+- **Taking paint off.** A brush picks up wet paint as it passes; that is
+  how paint comes off the canvas.
+- **Everything else** the easel does is in the easel guide.
 
 ## Sources
 

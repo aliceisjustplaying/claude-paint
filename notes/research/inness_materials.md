@@ -255,30 +255,19 @@ listed [WAL]. The table lists pigments named by witnesses.
 
 ## 9. The tubes here
 
-This studio's box is a selection; a supplied tube is not confirmation of
-use, and several rest on a single witness (Indian red, Antwerp blue,
-lemon chrome). The white is supplied as lead white as an assumption; the
-historical white is unidentified. Names map as follows: black and
-ivory-black → bone black; umber → raw umber; sienna → raw sienna;
-cadmium → cadmium yellow; Venetian red → red earth. Bitumen is supplied
-although it is probable rather than analyzed. Not supplied: brown pink
-(its reading and identity are uncertain) and any green (none is named in
-the sources).
+The historical names in this note correspond to these tubes: white →
+lead white; black and ivory black → bone black; umber → raw umber;
+sienna → raw sienna; cadmium → cadmium yellow; Venetian red → red earth.
+Indian red, Antwerp blue and lemon chrome each rest on one witness;
+bitumen is probable from the paint's crackle (§4).
 
 ## 10. At this easel
 
-- **Support.** The easel's support is plain-weave linen with ground
-  layers mixed from the tube box. There are no panels, boards or other
-  rigid supports.
-- **Medium.** Paint has one control for added medium: an oil-medium
-  share. There are no solvents, driers, resins, copal, megilp or varnish
-  controls.
-- **Removing paint.** There is no tool for scraping or abrading paint on
-  the canvas.
-- **This note.** The supports, media and ways of removing paint named
-  above that the easel lacks are historical context; the easel guide
-  documents what is available. Wiping a brush unloads the brush; it does
-  not lift paint off the canvas.
+- **Support.** Plain-weave linen with ground layers laid from the tubes.
+- **Paint.** Pigment from the tubes with an oil-medium share.
+- **Taking paint off.** A brush picks up wet paint as it passes; that is
+  how paint comes off the canvas.
+- **Everything else** the easel does is in the easel guide.
 
 ## Sources
 

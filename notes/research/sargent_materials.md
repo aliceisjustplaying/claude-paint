@@ -135,6 +135,7 @@ margin*: the canvas folded over the side of the stretcher.
 | Viridian | [APOLLO]; [MMX p.129 n.11]; [MET20] | Widespread from the 1860s [BAS "Appendix"] |
 | Emerald green | [APOLLO]; [BAS] | Sometimes mixed with viridian [APOLLO] |
 | Synthetic ultramarine | [APOLLO]; [HAM]; [BAS] | "Synthetic ultramarine or cobalt blue" [APOLLO] |
+| Ultramarine ash | "Natural ultramarine ash" in a paint box of about 1884–88 [BAS] | The last extraction of natural ultramarine: few, small blue particles, highly transparent [AP2 p.39] |
 | Cobalt blue | [APOLLO]; [HAM]; "an intense and dark grade" [BAS] | |
 | Cerulean blue | [MMX p.129 n.11]; [BAS]; [MET20] | Used from 1860 [BAS "Appendix"] |
 | Cobalt violet | [APOLLO]; [HAM] | "Less commonly" found, costly and weak [HAM] |
@@ -281,8 +282,8 @@ red and brown → Mars yellow, Mars orange, Mars red and Mars brown;
 madder lakes → rose madder; Indian yellow → Indian yellow; magenta →
 magenta; bone brown → bone brown; pale lemon chrome → lemon chrome;
 cadmium yellow (two grades) → cadmium yellow; sienna → raw sienna and
-burnt sienna; synthetic ultramarine → ultramarine blue. Red lead rests
-on a single find (§4).
+burnt sienna; synthetic ultramarine → ultramarine blue; ultramarine ash
+→ ultramarine ash. Red lead rests on a single find (§4).
 
 ## 10. At this easel
 
@@ -305,4 +306,5 @@ on a single find (§4).
 - **[VCB]** Townsend, J. H. and Rayner, G., "Sargent's Painting Materials: New Discoveries and Their Implications," *Visual Culture in Britain* 19:1 (2018), pp.89–111; paint box on loan to the Tate conservation archive, c.1884–88. Read through the Academia.edu copy (excerpts). https://doi.org/10.1080/14714787.2018.1441745
 - **[CAR]** Carlyle, L., *The Artist's Assistant: Oil Painting Instruction Manuals and Handbooks in Britain 1800–1900* (London 2001), p.506, on a London colorman's 1896 "Magenta" as an "Aniline Lake." Read through the quotation in Dootson, K. S., "The Texture of Capitalism," *British Art Studies* 14 (2019). https://britishartstudies.ac.uk/issues/14/texture-of-capitalism
 - **[SAL]** *Field's Chromatography*, revised by T. W. Salter (London 1869), §243 "Bone Brown." https://www.gutenberg.org/ebooks/20915
+- **[AP2]** Roy, A. (ed.), *Artists' Pigments* vol. 2 (1993), p.39 on ultramarine ash. https://www.nga.gov/sites/default/files/migrate_images/content/dam/ngaweb/research/publications/pdfs/artists-pigments-vol2.pdf
 - **[NGA]** Torchia, R. W. et al., *American Paintings of the Nineteenth Century, Part II*, National Gallery of Art Systematic Catalogue (1998), technical notes pp.103–125. https://www.nga.gov/content/dam/ngaweb/research/publications/pdfs/american-paintings-of-the-nineteenth-century-part-II.pdf

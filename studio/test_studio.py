@@ -77,6 +77,21 @@ def test_file_endpoint_serves_the_painting_source_only(home, server):
         assert server(f"/api/file?p={PAINTER}&f={f}")[0] == 404, f
 
 
+def test_a_late_result_reaches_a_client_that_already_had_the_call(home, server):
+    _, studio, log = home
+    log.write_text(start(str(studio)) + call("c1", "canvas{}"))
+    r = json.loads(server(f"/api/events?p={PAINTER}&since=0")[1])
+    i = next(k for k, e in enumerate(r["events"]) if e["kind"] == "paint")
+    assert "out" not in r["events"][i]
+    with open(log, "a") as fh:
+        fh.write(result("c1", "ok · chunk 1"))
+    r2 = json.loads(server(f"/api/events?p={PAINTER}&since={r['total']}&epoch={r['epoch']}&u={r['nupdates']}")[1])
+    assert [(k, e["out"]) for k, e in r2["updates"]] == [(i, "ok · chunk 1")]
+    # and only once
+    r3 = json.loads(server(f"/api/events?p={PAINTER}&since={r2['total']}&epoch={r2['epoch']}&u={r2['nupdates']}")[1])
+    assert r3["updates"] == []
+
+
 def export(tmp_path, out):
     env = dict(os.environ, HOME=str(tmp_path))
     return subprocess.run([sys.executable, os.path.join(HERE, "export_static.py"), str(out)],

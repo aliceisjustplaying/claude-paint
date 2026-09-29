@@ -136,6 +136,10 @@ git -C "$repo" archive --format=tar "$branch" -- "${notes[@]}" | tar -x -C "$des
 git -C "$repo" archive --format=tar "$branch" -- THIRD_PARTY_NOTICES.md | tar -x -C "$dest/bin"
 [ -s "$dest/bin/THIRD_PARTY_NOTICES.md" ] || { echo "no bin/THIRD_PARTY_NOTICES.md in $dest" >&2; exit 1; }
 : > "$dest/notes/journal.md"
+# the painter's copy of each research note has no sources (keys, URLs, the Sources list); the repo keeps them
+for n in "$dest"/notes/research/*.md; do
+  "$repo/scripts/strip_sources" "$n" < /dev/null || { echo "can't strip the sources from $n" >&2; exit 1; }
+done
 
 # the guide's tube table: the box of this studio's easel (it reads bin/box)
 guide=$dest/notes/easel_guide.md

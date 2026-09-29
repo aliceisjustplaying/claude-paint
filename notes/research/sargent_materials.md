@@ -208,7 +208,7 @@ margin*: the canvas folded over the side of the stretcher.
   thin overpaint that leaves lower layers optically active, and
   occasional unmixed rose madder [MMX pp.126–127].
 - **Other identifications.** Cobalt blue, emerald green and viridian
-  were identified in examined dark passages [BAS; MET20].
+  were identified in examined passages [BAS; MET20].
 
 ## 7. Working sequence and reworking
 
@@ -285,8 +285,10 @@ and is not supplied.
   controls.
 - **Removing paint.** There is no tool for scraping or abrading paint on
   the canvas.
-- **This note.** The historical practices above are context, not
-  available controls.
+- **This note.** The supports, media and ways of removing paint named
+  above that the easel lacks are historical context; the easel guide
+  documents what is available. Wiping a brush unloads the brush; it does
+  not lift paint off the canvas.
 
 ## Sources
 

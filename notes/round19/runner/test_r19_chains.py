@@ -1,3 +1,7 @@
+import json
+
+import pytest
+
 from painting_chunks import classify, count_painting_chunks
 
 
@@ -195,3 +199,59 @@ def test_the_first_probe_after_a_usage_limit_counts_from_when_the_sitting_ended(
     assert first_probe_wait(GO_LIMIT, ended=1000, now=1000) == LIMIT_PROBE_S
     assert first_probe_wait(GO_LIMIT, ended=1000, now=1000 + 10 * 3600) == 0      # a resume hours later asks at once
     assert first_probe_wait("usage limit reached. Resets in 2hr", ended=0, now=3600) == 3600 + 60
+
+
+def test_the_reader_is_launched_as_isolated_as_the_painter():
+    from r19_chains import HARNESS, reader_cmd
+    cmd = reader_cmd("Read the brief.")
+    assert [f for f in HARNESS if f.startswith("--no-")] == [f for f in cmd if f.startswith("--no-")]
+    for flag in ("--system-prompt", "--tools"):                 # no default system prompt or tools
+        assert flag in cmd
+
+
+GOOD_RECORD = "## Blending\n- The badger only moves wet paint; `blend(m, {clip=true})` stayed inside.\n"
+
+
+@pytest.mark.parametrize("record, rc, why", [
+    (GOOD_RECORD, 0, None),
+    (None, 0, "no record was written"),
+    ("\n", 0, "the record is empty"),
+    (GOOD_RECORD, 1, "the reader exited 1"),
+    (GOOD_RECORD + "- Turner's scumbles were thinner.\n", 0, "painters' names"),
+    (GOOD_RECORD + "- The earlier painter glazed twice.\n", 0, "another painter"),
+    (GOOD_RECORD + "local p = pile{{\"smalt\", 1}}\n", 0, "code on line 3"),
+    (GOOD_RECORD + "- Sky: pile{{\"lead white\", 3}, {\"smalt\", 1}}.\n", 0, "a color recipe"),
+])
+def test_a_reader_record_reaches_the_next_studio_only_if_it_passes(tmp_path, monkeypatch, record, rc, why):
+    import r19_chains as rc19
+    lines = []
+    monkeypatch.setattr(rc19, "RUN", tmp_path / "run")
+    monkeypatch.setattr(rc19, "A", tmp_path)
+    monkeypatch.setattr(rc19, "LANES", {"T": rc19.lane("friedrich", rc19.OPUS, painters=2)})
+    monkeypatch.setattr(rc19, "log", lines.append)
+    monkeypatch.setattr(rc19, "check", lambda *a: None)
+    monkeypatch.setattr(rc19, "finish", lambda *a: None)
+    monkeypatch.setattr(rc19, "export_cmd", lambda profile, d: ["mkdir", "-p", str(d / "notes/research")])
+
+    def reader(cmd, cwd, out, err, env=None):                  # the reader: writes the record, or doesn't
+        if record is not None:
+            (rd / "p1_record.md").write_text(record)
+        return rc
+    monkeypatch.setattr(rc19, "run", reader)
+    rd = tmp_path / "run/T"
+    rd.mkdir(parents=True)
+    session = tmp_path / "s1.jsonl"
+    session.write_text("{}\n")
+    (rd / "p1_sittings.json").write_text(json.dumps([{"sitting": 1, "sessions": [str(session)]}]))
+    for marker in ("p1.exported", "p1.painted", "p2.painted"):   # painter 1 has painted; painter 2 won't paint
+        (rd / marker).write_text("")
+    rc19.studio("T1").mkdir()
+
+    rc19.chain("T")
+    if why is None:
+        assert (rd / "p1.done").exists()
+        assert GOOD_RECORD in (rc19.studio("T2") / "notes/studio_notes.md").read_text()
+    else:
+        assert not (rd / "p1.done").exists() and not (rd / "p2.exported").exists()
+        assert not (rd / "p1_record.md").exists()
+        assert any("RECORD REJECTED" in l and why in l for l in lines), lines

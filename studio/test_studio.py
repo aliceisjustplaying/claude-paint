@@ -5,6 +5,7 @@
 import http.server
 import json
 import os
+import subprocess
 import sys
 import threading
 import urllib.error
@@ -74,3 +75,35 @@ def test_file_endpoint_serves_the_painting_source_only(home, server):
     assert server(f"/api/file?p={PAINTER}&f=paintings/lua/painting.lua") == (200, b"canvas{}")
     for f in ("BRIEF.md", "notes/materials.md", "bin/easel"):
         assert server(f"/api/file?p={PAINTER}&f={f}")[0] == 404, f
+
+
+def export(tmp_path, out):
+    env = dict(os.environ, HOME=str(tmp_path))
+    return subprocess.run([sys.executable, os.path.join(HERE, "export_static.py"), str(out)],
+                          env=env, capture_output=True, text=True)
+
+
+def test_export_refuses_a_folder_it_does_not_own(home):
+    tmp_path, studio, log = home
+    log.write_text(start(str(studio)) + call("c1", "canvas{}") + result("c1", "ok · chunk 1"))
+    out = tmp_path / "out"
+    out.mkdir()
+    (out / "keep.txt").write_text("not the exporter's")
+    r = export(tmp_path, out)
+    assert r.returncode != 0 and ".studio-export" in r.stderr
+    assert sorted(os.listdir(out)) == ["keep.txt"]
+
+
+def test_export_prunes_only_files_it_wrote(home):
+    tmp_path, studio, log = home
+    log.write_text(start(str(studio)) + call("c1", "canvas{}") + result("c1", "ok · chunk 1"))
+    out = tmp_path / "out"
+    assert export(tmp_path, out).returncode == 0
+    source = out / "data" / PAINTER / "file" / "paintings" / "lua" / "painting.lua"
+    assert source.read_text() == "canvas{}"
+    (out / "data" / "mine.txt").write_text("added by hand")
+    (studio / "paintings" / "lua" / "painting.lua").unlink()
+    r = export(tmp_path, out)
+    assert r.returncode == 0, r.stderr
+    assert not source.exists()  # the export's own file, stale now
+    assert (out / "data" / "mine.txt").read_text() == "added by hand"

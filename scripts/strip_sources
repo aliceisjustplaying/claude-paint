@@ -16,7 +16,7 @@ that say how solid it is ("a witness described", "he reports", "Uncertain", the 
 import re
 import sys
 
-K = r"\[(?:[A-Z]{2}|\d)[^\]\n]*\](?!\()"
+K = r"\[(?:[A-Z]{2}|\d)[^\]\[]{0,200}?\](?!\()"   # may run over a line break
 # a key or a run of keys ("[A]; [B], [C]"), with the space (or line break) before it
 KEY = re.compile(rf"[ \t]*\n?[ \t]*{K}(?:[ \t]*[;,][ \t]*{K})*")
 INTRO = (
@@ -64,6 +64,6 @@ if __name__ == "__main__":
     src = sys.argv[1]
     dst = sys.argv[2] if len(sys.argv) > 2 else src
     out = strip(open(src, encoding="utf-8").read())
-    if re.search(r"\[(?:[A-Z]{2}|\d)[^\]\n]*\](?!\()", out) or "## Sources" in out:
+    if re.search(K, out) or re.search(r"\[(?:[A-Z]{2}|\d)[^\]\[]*$", out, re.M) or "## Sources" in out:
         sys.exit(f"strip_sources: keys or a Sources section left in {src}")
     open(dst, "w", encoding="utf-8").write(out)

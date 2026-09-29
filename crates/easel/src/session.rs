@@ -64,10 +64,16 @@ pub struct Session {
     /// When the running chunk must stop (live sessions only), and how long a chunk may run.
     deadline: Rc<Cell<Option<Instant>>>,
     pub chunk_limit: Duration,
-    /// heap.lua's snap and restore, prelude.lua's per-chunk reset and the
-    /// private objects snapshots skip (dropped before the state is closed).
+    /// heap.lua's snap and restore, prelude.lua's per-chunk reset, the
+    /// private objects snapshots skip and its after-chunk check (dropped
+    /// before the state is closed).
     heap: Option<(Function, Function)>,
-    prelude: Option<(Function, Table)>,
+    prelude: Option<(Function, Table, Function)>,
+    /// A failed chunk touched tables from earlier chunks. Their entries are
+    /// back but maybe not their layout (which Lua gives a program no way to
+    /// set), so `pairs` could walk them in another order than a replay of the
+    /// log: the state is rebuilt from the log (`rebuild`) before the next chunk.
+    pub stale: bool,
     /// Creation serials of the state's objects (outlives the state).
     _serials: Box<Serials>,
 }
@@ -109,7 +115,7 @@ impl Session {
         let (snap_f, restore_f): (Function, Function) = lua.load(include_str!("heap.lua")).set_name("heap.lua").call(dbg.clone())?;
         let id = serials.id_fn(&lua)?;
         let getmt: Function = dbg.get("getmetatable")?;
-        let prelude: (Function, Table) = lua.load(include_str!("prelude.lua")).set_name("prelude.lua").call((id, getmt))?;
+        let prelude: (Function, Table, Function) = lua.load(include_str!("prelude.lua")).set_name("prelude.lua").call((id, getmt))?;
         let st = Rc::new(RefCell::new(Studio::new(width, tubes)));
         api::install(&lua, st.clone())?;
         let deadline = Rc::new(Cell::new(None::<Instant>));
@@ -121,7 +127,7 @@ impl Session {
             ))),
             _ => Ok(mlua::VmState::Continue),
         })?;
-        Ok(Session { lua: ManuallyDrop::new(lua), state, st, log: Vec::new(), replay: false, deadline, chunk_limit: CHUNK_LIMIT, heap: Some((snap_f, restore_f)), prelude: Some(prelude), _serials: serials })
+        Ok(Session { lua: ManuallyDrop::new(lua), state, st, log: Vec::new(), replay: false, deadline, chunk_limit: CHUNK_LIMIT, heap: Some((snap_f, restore_f)), prelude: Some(prelude), stale: false, _serials: serials })
     }
 
     /// A session that replays a program from the default box (tests;
@@ -166,10 +172,11 @@ impl Session {
         Ok(Snap { canvas: s.canvas.clone(), style: s.style.clone(), setup: s.setup.clone(), seed: s.seed, clock: s.clock, clock0: s.clock0, hand: s.hand.clone(), view: s.view.clone(), heap, brushes })
     }
 
-    /// Put everything back as it was at `snap`.
-    fn restore(&mut self, snap: &Snap) -> mlua::Result<()> {
+    /// Put everything back as it was at `snap`. Returns how many Lua tables
+    /// the chunk touched (see `stale`).
+    fn restore(&mut self, snap: &Snap) -> mlua::Result<usize> {
         let (_, restore_f) = self.heap.as_ref().unwrap();
-        restore_f.call::<()>(snap.heap.clone())?;
+        let touched = restore_f.call::<usize>(snap.heap.clone())?;
         for (b, h) in &snap.brushes {
             *b.borrow_mut() = h.clone();
         }
@@ -182,6 +189,24 @@ impl Session {
         s.clock0 = snap.clock0;
         s.hand = snap.hand.clone();
         s.view = snap.view.clone();
+        Ok(touched)
+    }
+
+    /// Replace the state with a replay of the log in a fresh one: the state
+    /// the log gives, exactly (see `stale`). Takes as long as a reopen.
+    pub fn rebuild(&mut self) -> Result<(), String> {
+        let (width, tubes) = {
+            let s = self.st.borrow();
+            (s.width, (*s.tubes).clone())
+        };
+        let mut fresh = Session::with_box(width, tubes).map_err(|e| e.to_string())?;
+        fresh.chunk_limit = self.chunk_limit;
+        fresh.replay = true;
+        for (i, c) in self.log.iter().enumerate() {
+            fresh.run(&c.src).map_err(|e| format!("rebuilding from the log failed at chunk {}: {e}", i + 1))?;
+        }
+        fresh.replay = self.replay;
+        *self = fresh;
         Ok(())
     }
 
@@ -196,14 +221,19 @@ impl Session {
         if src.trim().is_empty() {
             return Err("empty chunk".into());
         }
-        let snap = if !self.replay { Some(self.snap().map_err(|e| e.to_string())?) } else { None };
+        if self.stale {
+            self.rebuild()?;
+        }
+        let mut snap = if !self.replay { Some(self.snap().map_err(|e| e.to_string())?) } else { None };
         let n = self.log.len() as u64 + 1;
         self.prelude.as_ref().unwrap().0.call::<()>(()).map_err(|e| e.to_string())?;
         self.st.borrow_mut().begin(n);
         let t0 = Instant::now();
         let chunk = self.lua.load(src.as_str()).set_name(format!("chunk {n}"));
-        self.deadline.set((!self.replay).then(|| t0 + self.chunk_limit));
-        let r = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| chunk.exec()));
+        let check = self.prelude.as_ref().unwrap().2.clone();
+        let deadline = (!self.replay).then(|| t0 + self.chunk_limit);
+        self.deadline.set(deadline);
+        let r = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| chunk.exec().and_then(|()| check.call::<()>(()))));
         self.deadline.set(None);
         // the hand time the chunk spent goes on the clock before it ends
         if matches!(r, Ok(Ok(()))) {
@@ -216,12 +246,19 @@ impl Session {
             Ok(Err(e)) => Some(clean_error(&e.to_string())),
             Err(p) => Some(format!("engine panic: {}", p.downcast_ref::<String>().cloned().or(p.downcast_ref::<&str>().map(|s| s.to_string())).unwrap_or_default())),
         };
-        // masks and brushes hold memory Lua can't see: collect between chunks
+        // put back what a failed chunk did (no painter code runs in restore)
+        if fail.is_some()
+            && let Some(snap) = snap.take()
+        {
+            self.stale = self.restore(&snap).map_err(|e| e.to_string())? > 0;
+        }
+        // masks and brushes hold memory Lua can't see: collect between chunks, without the
+        // snapshot, as a replay does, and within the chunk's time
+        drop(snap);
+        self.deadline.set(deadline);
         let _ = self.lua.gc_collect();
+        self.deadline.set(None);
         if let Some(e) = fail {
-            if let Some(snap) = snap {
-                self.restore(&snap).map_err(|e| e.to_string())?;
-            }
             let mut msg = out;
             msg.push_str(&e);
             return Err(msg);
@@ -666,6 +703,29 @@ mod tests {
         assert_eq!(bits(&s), bits(&b));
     }
 
+    /// A failed chunk can leave a table laid out differently (grown, or refilled by the
+    /// rollback) though its contents are back: `pairs` then walks it in another order than
+    /// a replay of the log does, unless the session rebuilds from the log.
+    #[test]
+    #[cfg(tube_box)]
+    fn after_a_failed_chunk_pairs_walks_tables_as_the_replay_does() {
+        let order = "local o = {}; for k in pairs(t) do o[#o + 1] = k end; print(table.concat(o, ' '))";
+        let mut s = Session::new(W).unwrap();
+        let mut live = vec![s.run("t = {}; for i = 1, 30 do t['k' .. i] = i end").unwrap().out];
+        // a failure that touched no earlier table costs no rebuild
+        s.run("local u = {}; u.x = pencil(); error('stop')").unwrap_err();
+        assert!(!s.stale);
+        // grows the table and empties it again: the same contents, a bigger table
+        s.run("for i = 1, 200 do t['x' .. i] = i end; for i = 1, 200 do t['x' .. i] = nil end; error('stop')").unwrap_err();
+        live.push(s.run(order).unwrap().out);
+        // leaves keys behind for the rollback to take out
+        s.run("for i = 1, 200 do t['y' .. i] = i end; error('stop')").unwrap_err();
+        live.push(s.run(order).unwrap().out);
+        let mut b = Session::replay(W).unwrap();
+        let replayed: Vec<String> = s.log.iter().map(|c| b.run(&c.src).unwrap().out).collect();
+        assert_eq!(live, replayed);
+    }
+
     /// The pencil's shared methods are out of a chunk's reach, so a failed chunk can't
     /// take one away (nor add one a replay wouldn't have).
     #[test]
@@ -674,6 +734,23 @@ mod tests {
         let mut s = Session::new(W).unwrap();
         s.run("local p = pencil(); getmetatable(p).__index.line = nil; error('stop')").unwrap_err();
         s.run("assert(type(pencil().line) == 'function')").unwrap();
+    }
+
+    /// Finalizers and weak tables act when the collector gets to them, which differs between
+    /// a live session (it holds a snapshot) and a replay: a painting can't use them.
+    #[test]
+    #[cfg(tube_box)]
+    fn finalizers_and_weak_tables_are_refused() {
+        let mut s = Session::new(W).unwrap();
+        for mt in ["{__gc = function() end}", "{__mode = 'v'}"] {
+            let e = s.run(&format!("w = setmetatable({{}}, {mt})")).unwrap_err();
+            assert!(e.contains("__gc and __mode"), "{e}");
+        }
+        // nor put in a metatable after it is set
+        s.run("mt = {}; w = setmetatable({}, mt)").unwrap();
+        let e = s.run("mt.__mode = 'k'").unwrap_err();
+        assert!(e.contains("__gc and __mode"), "{e}");
+        s.run("assert(getmetatable(w).__mode == nil)").unwrap();
     }
 
     /// A failed chunk takes back what it did to a brush and the clock too.

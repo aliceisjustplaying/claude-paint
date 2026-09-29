@@ -30,15 +30,17 @@ local function snap(skip, ...)
     stack[n] = nil
     n = n - 1
     if type(v) == "table" then
-      local copy = {}
+      local copy, order, m = {}, {}, 0
       for k, x in next, v do
         copy[k] = x
+        m = m + 1
+        order[m] = k
         push(k)
         push(x)
       end
       local mt = getmt(v)
       push(mt)
-      tabs[v] = { copy, mt }
+      tabs[v] = { copy, mt, order, m }
       ntab = ntab + 1
     else
       local info = getinfo(v, "Su")
@@ -57,6 +59,19 @@ local function snap(skip, ...)
   return { tabs, funs, ntab, nfun }
 end
 
+-- as snapped, walked by `next` in the same order (a table that grew and
+-- shrank again during a failed chunk holds the same entries in another order)
+local function untouched(t, rec)
+  local copy, order = rec[1], rec[3]
+  if not rawequal(getmt(t), rec[2]) then return false end
+  local i = 0
+  for k, x in next, t do
+    i = i + 1
+    if not rawequal(order[i], k) or not rawequal(copy[k], x) then return false end
+  end
+  return i == rec[4]
+end
+
 local function same(t, copy, mt)
   if not rawequal(getmt(t), mt) then return false end
   local k1 = 0
@@ -70,20 +85,25 @@ end
 
 -- Put every table and upvalue back as it was; tables that didn't change are
 -- left alone (their internal layout, so their `pairs` order, is untouched).
+-- Returns how many tables the chunk touched: their entries are back, but not
+-- necessarily their layout, which Lua doesn't let a program set, so their
+-- `next` order may now differ from a replay's (session.rs then rebuilds).
 local function restore(s)
   local changed = 0
   for t, rec in next, s[1] do
     local copy, mt = rec[1], rec[2]
-    if not same(t, copy, mt) then
-      local keys, m = {}, 0
-      for k in next, t do
-        m = m + 1
-        keys[m] = k
-      end
-      for i = 1, m do rawset(t, keys[i], nil) end
-      for k, x in next, copy do rawset(t, k, x) end
-      setmt(t, mt)
+    if not untouched(t, rec) then
       changed = changed + 1
+      if not same(t, copy, mt) then
+        local keys, m = {}, 0
+        for k in next, t do
+          m = m + 1
+          keys[m] = k
+        end
+        for i = 1, m do rawset(t, keys[i], nil) end
+        for k, x in next, copy do rawset(t, k, x) end
+        setmt(t, mt)
+      end
     end
   end
   for f, ups in next, s[2] do

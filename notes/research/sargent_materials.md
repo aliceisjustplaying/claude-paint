@@ -270,10 +270,12 @@ analysis of the Signet Society palette lists Prussian blue among its colors (che
 ## 9. The tubes here
 
 The historical names in this note correspond to these tubes: lead
-(flake) white → lead white; bone or ivory black → bone black; red iron
-oxide → red earth; madder lakes → rose madder; pale lemon chrome → lemon
-chrome; cadmium yellow (two grades) → cadmium yellow; sienna → raw sienna
-and burnt sienna. Red lead rests on a single find (§4).
+(flake) white → lead white; bone or ivory black → bone black; yellow
+ocher → yellow ochre; red iron oxide → red earth; Mars yellow, red and
+brown → Mars yellow, Mars red and Mars brown; madder lakes → rose madder;
+pale lemon chrome → lemon chrome; cadmium yellow (two grades) → cadmium
+yellow; sienna → raw sienna and burnt sienna; synthetic ultramarine →
+ultramarine blue. Red lead rests on a single find (§4).
 
 ## 10. At this easel
 

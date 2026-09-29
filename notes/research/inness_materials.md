@@ -268,8 +268,9 @@ The table lists pigments named by witnesses.
 ## 9. The tubes here
 
 The historical names in this note correspond to these tubes: white →
-lead white; black and ivory black → bone black; umber → raw umber;
-sienna → raw sienna; cadmium → cadmium yellow; Venetian red → red earth.
+lead white; black and ivory black → bone black; yellow ocher → yellow
+ochre; umber → raw umber; sienna → raw sienna; cadmium → cadmium yellow;
+Venetian red → red earth.
 Indian red, Antwerp blue and lemon chrome each rest on one witness;
 bitumen is probable from the paint's crackle (§4).
 

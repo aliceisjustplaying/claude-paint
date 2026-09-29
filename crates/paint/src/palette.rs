@@ -50,7 +50,12 @@ fn tube(name: &'static str, pigment: &'static str, color: &str, hiding: f32, sti
 /// name.
 ///
 /// The first fourteen are the tube box's (unchanged since round 19: old
-/// paintings replay with them bit for bit). The rest came with round 20's
+/// paintings replay with them bit for bit).
+///
+/// Each tube is in the build only with a box that holds it (the `box-*`
+/// features; `tube_box`, from build.rs, for the default box): a painter's
+/// build for one box holds that box's tube records and no others
+/// (`the_catalog_is_this_builds_boxes`). The rest came with round 20's
 /// boxes; notes/r20/TUBES.md gives each one's numbers, the proposal they
 /// come from and why. All numbers are estimates from the pigment literature,
 /// not measurements.
@@ -59,61 +64,100 @@ pub fn catalog() -> Vec<Tube> {
         // ---- the tube box (round 19)
         tube("lead white", "basic lead carbonate", "#efe9dc", 0.82, 0.8, 1.0, drier::LEAD_WHITE),
         // semi-transparent cobalt glass, weak
+        #[cfg(tube_box)]
         tube("smalt", "cobalt potash glass, coarse", "#5a6e9e", 0.3, 0.55, 0.45, drier::SMALT),
+        #[cfg(tube_box)]
         tube("pale smalt", "a paler grade of smalt", "#8d9bb8", 0.35, 0.55, 0.35, drier::SMALT),
         tube("yellow ochre", "hydrated iron oxide earth", "#b98a36", 0.8, 0.7, 0.8, drier::OCHRE),
         tube("red earth", "iron oxide earth", "#9c4a30", 0.85, 0.7, 0.9, drier::RED_EARTH),
+        #[cfg(any(tube_box, feature = "box-sargent"))]
         tube("vermilion", "mercuric sulfide", "#cf3a24", 0.9, 0.75, 1.0, drier::VERMILION),
+        #[cfg(any(tube_box, feature = "box-inness", feature = "box-tonn"))]
         tube("raw umber", "iron and manganese oxide earth", "#5c4c3a", 0.8, 0.65, 0.9, drier::UMBER),
         tube("bone black", "charred bone (carbon, calcium phosphate)", "#1e1b19", 0.9, 0.7, 1.1, drier::BONE_BLACK),
+        #[cfg(any(tube_box, feature = "box-sargent", feature = "box-inness", feature = "box-alma-tadema"))]
         tube("cobalt blue", "cobalt aluminate", "#2f55a8", 0.55, 0.6, 0.8, drier::COBALT_BLUE),
+        #[cfg(any(tube_box, feature = "box-sargent"))]
         tube("chrome yellow", "lead chromate", "#e8b21c", 0.9, 0.7, 1.0, drier::CHROME_YELLOW),
         // Prussian blue transparent and very strong [AP3 pp.196–197]
         // (tinting strength 3, below the sourced "very high", because
         // Mixbox's latent already carries some of a dark pigment's strength)
+        #[cfg(tube_box)]
         tube("Prussian blue", "iron ferrocyanide", "#172440", 0.35, 0.45, 3.0, drier::PRUSSIAN_BLUE),
         // green earth translucent, weak, short of body [AP1 p.146; FIELD
         // p.129], its masstone from Munsell 7.5G/2.9/1.5 [AP1 Table 1]; its
         // drying rate is an estimate (an earth: medium)
+        #[cfg(any(tube_box, feature = "box-tonn"))]
         tube("green earth", "celadonite and glauconite clay", "#3a4843", 0.2, 0.35, 0.3, drier::OCHRE),
         // cobalt-zinc oxide: semi-transparent, weak, permanent [WEB-co];
         // drying estimated as cobalt's
+        #[cfg(tube_box)]
         tube("Rinmann's green", "cobalt-zinc oxide", "#5f8f76", 0.35, 0.5, 0.4, drier::COBALT_BLUE),
         // verdigris ground in oil: "poor hiding power in oil" [AP2 p.132];
         // copper is a drier (drying rate estimated as smalt's)
+        #[cfg(tube_box)]
         tube("copper green", "verdigris ground in oil", "#3f7f6a", 0.25, 0.4, 1.0, drier::SMALT),
         // ---- round 20 (notes/r20/TUBES.md)
+        #[cfg(feature = "box-sargent")]
         tube("zinc white", "zinc oxide", "#f3f3ef", 0.6, 0.6, 1.0, drier::ZINC_WHITE),
+        #[cfg(feature = "box-tonn")]
         tube("lead-tin yellow", "lead-tin oxide", "#e3cc6a", 0.85, 0.75, 0.6, drier::LEAD_WHITE),
+        #[cfg(feature = "box-alma-tadema")]
         tube("Naples yellow", "lead antimonate", "#e2b964", 0.85, 0.75, 0.6, drier::NAPLES_YELLOW),
+        #[cfg(any(feature = "box-sargent", feature = "box-inness"))]
         tube("lemon chrome", "pale lead chromate with lead sulfate", "#eed83c", 0.8, 0.7, 0.8, drier::CHROME_YELLOW),
+        #[cfg(feature = "box-alma-tadema")]
         tube("pale cadmium", "cadmium sulfide, a pale grade", "#f0c63c", 0.85, 0.7, 1.1, drier::CADMIUM),
+        #[cfg(any(feature = "box-sargent", feature = "box-inness", feature = "box-tonn"))]
         tube("cadmium yellow", "cadmium sulfide", "#e8a51f", 0.85, 0.7, 1.1, drier::CADMIUM),
+        #[cfg(feature = "box-sargent")]
         tube("Indian yellow", "magnesium and calcium euxanthate", "#e1a11e", 0.15, 0.4, 0.8, drier::INDIAN_YELLOW),
+        #[cfg(feature = "box-sargent")]
         tube("Mars yellow", "synthetic iron oxide hydroxide", "#c4872b", 0.85, 0.7, 1.1, drier::MARS),
+        #[cfg(feature = "box-tonn")]
         tube("transparent oxide yellow", "transparent synthetic iron oxide", "#7a4a14", 0.2, 0.5, 0.9, drier::RED_EARTH),
+        #[cfg(feature = "box-alma-tadema")]
         tube("brown ochre", "iron oxide earth, a darker grade", "#86592e", 0.8, 0.7, 0.8, drier::OCHRE),
+        #[cfg(feature = "box-inness")]
         tube("raw sienna", "sienna earth, unroasted", "#9a6a2b", 0.4, 0.5, 0.7, drier::SIENNA),
+        #[cfg(feature = "box-inness")]
         tube("orange chrome", "basic lead chromate", "#e0712a", 0.88, 0.75, 0.9, drier::CHROME_YELLOW),
+        #[cfg(feature = "box-sargent")]
         tube("red lead", "lead tetroxide", "#e0542b", 0.85, 0.8, 0.8, drier::RED_LEAD),
+        #[cfg(feature = "box-alma-tadema")]
         tube("orange vermilion", "mercuric sulfide, a yellower grade", "#dd4a22", 0.9, 0.75, 1.0, drier::VERMILION),
+        #[cfg(feature = "box-alma-tadema")]
         tube("Chinese vermilion", "mercuric sulfide, a deeper grade", "#b8282e", 0.9, 0.75, 1.0, drier::VERMILION),
+        #[cfg(any(feature = "box-sargent", feature = "box-tonn"))]
         tube("cadmium red", "cadmium sulfoselenide", "#c3321f", 0.9, 0.7, 1.1, drier::CADMIUM),
+        #[cfg(feature = "box-sargent")]
         tube("Mars red", "synthetic iron oxide", "#a33f2a", 0.9, 0.7, 1.2, drier::MARS),
+        #[cfg(feature = "box-inness")]
         tube("Indian red", "nearly pure ferric oxide", "#7a3a33", 0.92, 0.7, 1.2, drier::RED_EARTH),
+        #[cfg(any(feature = "box-sargent", feature = "box-alma-tadema"))]
         tube("rose madder", "madder lake on alumina", "#8e2238", 0.1, 0.35, 0.9, drier::MADDER_LAKE),
+        #[cfg(feature = "box-tonn")]
         tube("permanent alizarin", "a quinacridone", "#5e1624", 0.15, 0.45, 1.3, drier::MADDER_LAKE),
+        #[cfg(any(feature = "box-sargent", feature = "box-alma-tadema", feature = "box-tonn"))]
         tube("burnt sienna", "roasted sienna earth", "#7c3f24", 0.45, 0.55, 0.9, drier::SIENNA),
         // Mars brown at sienna's rate: iron oxides dry well but lack umber's
         // manganese (notes/r20/TUBES.md)
+        #[cfg(feature = "box-sargent")]
         tube("Mars brown", "synthetic iron oxide, roasted", "#5a3a28", 0.85, 0.65, 1.0, drier::SIENNA),
+        #[cfg(feature = "box-inness")]
         tube("bitumen", "asphaltum", "#2e2017", 0.12, 0.3, 0.7, drier::BITUMEN),
+        #[cfg(any(feature = "box-sargent", feature = "box-tonn"))]
         tube("cerulean blue", "cobalt stannate", "#3f82b3", 0.8, 0.7, 0.6, drier::COBALT_BLUE),
+        #[cfg(any(feature = "box-sargent", feature = "box-tonn"))]
         tube("ultramarine blue", "synthetic ultramarine", "#232a8c", 0.3, 0.5, 1.1, drier::ULTRAMARINE),
+        #[cfg(feature = "box-inness")]
         tube("Antwerp blue", "Prussian blue on an alumina base", "#26406c", 0.4, 0.45, 1.6, drier::ANTWERP_BLUE),
+        #[cfg(any(feature = "box-sargent", feature = "box-alma-tadema"))]
         tube("viridian", "hydrated chromium oxide", "#1c4a40", 0.3, 0.5, 0.9, drier::VIRIDIAN),
+        #[cfg(feature = "box-sargent")]
         tube("emerald green", "copper aceto-arsenite", "#23a57a", 0.6, 0.6, 0.6, drier::COPPER),
         // cobalt pigments are siccative in oil; set at cobalt blue's rate
+        #[cfg(feature = "box-sargent")]
         tube("cobalt violet", "cobalt phosphate or arsenate", "#7e4c8e", 0.35, 0.55, 0.35, drier::COBALT_BLUE),
     ]
 }
@@ -146,9 +190,20 @@ pub struct Mixture {
 }
 
 /// The box a painting is painted from when nothing names another.
+#[cfg(tube_box)]
 pub const DEFAULT_BOX: &str = "tube box";
 
+/// `DEFAULT_BOX`, if this build has it: a painter's build for one box has no
+/// default box (a log naming no box is not its studio's) and no name for it.
+pub fn default_box() -> Option<&'static str> {
+    #[cfg(tube_box)]
+    return Some(DEFAULT_BOX);
+    #[cfg(not(tube_box))]
+    None
+}
+
 /// The default box's tubes, in its order.
+#[cfg(tube_box)]
 const TUBE_BOX: &[&str] = &[
     "lead white", "smalt", "pale smalt", "yellow ochre", "red earth", "vermilion", "raw umber", "bone black", "cobalt blue", "chrome yellow", "Prussian blue", "green earth", "Rinmann's green", "copper green",
 ];
@@ -229,12 +284,14 @@ impl Palette {
     /// smalt, yellow ochre, red earth, vermilion, raw umber, bone black.
     /// Naples yellow is not included. With green tubes added:
     /// `smalt_box_greens`.
+    #[cfg(tube_box)]
     pub fn smalt_box() -> Self {
         Palette::new("smalt box", pick(&["lead white", "smalt", "pale smalt", "yellow ochre", "red earth", "vermilion", "raw umber", "bone black"]))
     }
 
     /// `smalt_box` without smalt (pale smalt stays), plus cobalt blue
     /// and chrome yellow. With green tubes added: `cobalt_box_greens`.
+    #[cfg(tube_box)]
     pub fn cobalt_box() -> Self {
         let mut t = Palette::smalt_box().tubes;
         t.retain(|t| t.name != "smalt");
@@ -244,6 +301,7 @@ impl Palette {
 
     /// Two tubes: Prussian blue and green earth (see `catalog` for their
     /// sources).
+    #[cfg(tube_box)]
     pub fn green_tubes() -> Vec<Tube> {
         pick(&["Prussian blue", "green earth"])
     }
@@ -251,6 +309,7 @@ impl Palette {
     /// `smalt_box` plus `green_tubes`: Prussian blue (hiding 0.35,
     /// stiffness 0.45, tinting strength 3) and green earth (hiding 0.2,
     /// stiffness 0.35, tinting strength 0.3).
+    #[cfg(tube_box)]
     pub fn smalt_box_greens() -> Self {
         Palette::smalt_box().with(Palette::green_tubes()).named("smalt box, greens")
     }
@@ -258,6 +317,7 @@ impl Palette {
     /// `cobalt_box` plus `green_tubes` and Rinmann's green (cobalt-zinc
     /// oxide: semi-transparent, weak, permanent [WEB-co]; hiding 0.35,
     /// stiffness 0.5, tinting strength 0.4; drying estimated as cobalt's).
+    #[cfg(tube_box)]
     pub fn cobalt_box_greens() -> Self {
         let mut t = Palette::green_tubes();
         t.extend(pick(&["Rinmann's green"]));
@@ -271,6 +331,7 @@ impl Palette {
     /// yellow sold in Germany from about 1820, Rinmann's green rare and
     /// costly [AP3; WEB-co]). A painting whose log names no box is painted
     /// from it.
+    #[cfg(tube_box)]
     pub fn tube_box() -> Self {
         Palette::new(DEFAULT_BOX, pick(TUBE_BOX))
     }
@@ -284,21 +345,32 @@ impl Palette {
     /// palettes (add it with `with`). Masstone and numbers are assumptions;
     /// "poor hiding power in oil" [AP2 p.132]; copper is a drier (drying
     /// rate estimated as smalt's).
+    #[cfg(tube_box)]
     pub fn copper_green() -> Tube {
         pick(&["copper green"]).remove(0)
     }
 
     /// The names of the boxes this build knows: the default first, then
     /// those its features include (the `box-*` features; the replay build
-    /// has them all, a painter's build only its studio's).
+    /// has them all). A painter's build for one box knows only that box,
+    /// not the default.
     pub fn box_names() -> Vec<&'static str> {
-        let mut v = vec![DEFAULT_BOX];
+        let mut v = Vec::new();
+        #[cfg(tube_box)]
+        v.push(DEFAULT_BOX);
         v.extend(BOXES.iter().map(|b| b.0));
         v
     }
 
+    /// The box a new painting takes when nothing names one: the default
+    /// box, or in a painter's build for one box (no default box), that box.
+    pub fn fallback_box() -> &'static str {
+        Palette::box_names()[0]
+    }
+
     /// The box called `name`, if this build knows it.
     pub fn named_box(name: &str) -> Option<Palette> {
+        #[cfg(tube_box)]
         if name == DEFAULT_BOX {
             return Some(Palette::tube_box());
         }
@@ -461,6 +533,19 @@ mod tests {
             assert!(t.hiding > 0.0 && t.hiding <= 1.0 && t.stiff > 0.0 && t.stiff <= 1.0 && t.strength > 0.0 && t.drying > 0.0, "{t:?}");
             assert!(!t.pigment.is_empty(), "{}", t.name);
         }
+    }
+
+    /// The catalog holds exactly the tubes of this build's boxes: a
+    /// painter's build for one box (`--no-default-features --features
+    /// box-<name>`, see crates/easel/tests/painter.rs) carries no other tube.
+    #[test]
+    fn the_catalog_is_this_builds_boxes() {
+        let mut want: Vec<&str> = Palette::box_names().into_iter().flat_map(|b| Palette::named_box(b).unwrap().tubes.into_iter().map(|t| t.name)).collect();
+        want.sort();
+        want.dedup();
+        let mut have: Vec<&str> = catalog().iter().map(|t| t.name).collect();
+        have.sort();
+        assert_eq!(have, want);
     }
 
     /// Every box's tubes come from the catalog, each once, and a box is

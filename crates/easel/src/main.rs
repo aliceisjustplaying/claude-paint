@@ -692,12 +692,19 @@ impl Server {
                     let mut out = note;
                     out.push_str(&ran.out);
                     out.push_str(&format!("ok · chunk {n} ({:.2} s to compute)\n", ran.secs));
+                    // the chunk is in the log: a look that fails now is reported with it, not
+                    // as a failed `do` (which would be sent again)
                     if self.frames {
                         let p = session_dir(&self.name).join("frames").join(format!("{n:04}.png"));
-                        self.look(&[], Some(p))?;
+                        if let Err(e) = self.look(&[], Some(p)) {
+                            out.push_str(&format!("(no frame saved: {e})\n"));
+                        }
                     }
                     if args.iter().any(|a| a == "--look") {
-                        out.push_str(&self.look(&[], None)?);
+                        match self.look(&[], None) {
+                            Ok(l) => out.push_str(&l),
+                            Err(e) => out.push_str(&format!("(no look: {e})\n")),
+                        }
                     }
                     Ok(out)
                 }

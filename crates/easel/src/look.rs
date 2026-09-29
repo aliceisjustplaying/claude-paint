@@ -461,6 +461,7 @@ fn blur(img: &[Rgb], w: usize, h: usize, r: f32) -> Vec<Rgb> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[cfg(tube_box)]
     use crate::session::Session;
     use std::path::PathBuf;
 
@@ -468,8 +469,10 @@ mod tests {
         Path::new(env!("CARGO_MANIFEST_DIR")).join("../../target/easel-look-test")
     }
 
+    #[cfg(tube_box)]
     const W: usize = 160;
 
+    #[cfg(tube_box)]
     fn bits(c: &Canvas) -> Vec<u32> {
         c.seen()
             .iter()
@@ -478,9 +481,11 @@ mod tests {
             .collect()
     }
 
+    #[cfg(tube_box)]
     const CANVAS: &str = r#"canvas{size=440, aspect=1.5, linen=15, seed=3, ground={{pile={{"lead white", 3}, {"yellow ochre", 1}}, um=120, apply="knife"}}}"#;
 
     #[test]
+    #[cfg(tube_box)]
     fn looks_draw_the_grid_without_touching_the_canvas() {
         let mut s = Session::new(W).unwrap();
         s.run(CANVAS).unwrap();

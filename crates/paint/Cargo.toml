@@ -13,10 +13,11 @@ hand-hook = []
 # studio's, so it names no other studio's box. On by default here (paint's
 # own tests); the easel turns them on itself.
 default = ["all-boxes"]
-all-boxes = ["box-sargent", "box-inness", "box-alma-tadema"]
+all-boxes = ["box-sargent", "box-inness", "box-alma-tadema", "box-tonn"]
 box-sargent = []
 box-inness = []
 box-alma-tadema = []
+box-tonn = []
 
 [dependencies]
 image = { version = "0.25", default-features = false, features = ["png"] }

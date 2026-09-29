@@ -20,10 +20,11 @@ finish = []
 # replay build has them all, so it replays any log; a painter's build is
 # built with its studio's only (scripts/export_r16_studio), so nothing in it
 # names another studio's box.
-all-boxes = ["box-sargent", "box-inness", "box-alma-tadema"]
+all-boxes = ["box-sargent", "box-inness", "box-alma-tadema", "box-tonn"]
 box-sargent = ["paint/box-sargent"]
 box-inness = ["paint/box-inness"]
 box-alma-tadema = ["paint/box-alma-tadema"]
+box-tonn = ["paint/box-tonn"]
 
 [[bin]]
 name = "easel"

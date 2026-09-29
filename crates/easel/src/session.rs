@@ -813,7 +813,7 @@ mod tests {
     #[cfg(feature = "box-sargent")]
     #[test]
     fn a_box_is_named_in_the_log_and_replays_with_it() {
-        let chunks = [CANVAS, r#"b = brush("round", 4); b:load(pile{{"rose madder", 1}, {"French ultramarine", 2}, {"zinc white", 1}}, 0.9)
+        let chunks = [CANVAS, r#"b = brush("round", 4); b:load(pile{{"rose madder", 1}, {"ultramarine blue", 2}, {"zinc white", 1}}, 0.9)
            for i = 1, 5 do b:stroke({{100 + i*60, 500}, {130 + i*60, 420}}) end
            work(ellipse(500, 300, 200, 100), {hand="glaze", pile=pile{{"viridian", 1}, medium=0.6}})"#];
         let mut a = Session::with_box(W, find_box("sargent").unwrap()).unwrap();

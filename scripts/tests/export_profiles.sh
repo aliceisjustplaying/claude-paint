@@ -18,7 +18,7 @@ unset EASEL_BOX
 head='| tube | pigment | hiding | stiffness | tinting strength | drying |'
 table_of() { awk -v head="$head" '$0 == head { on = 1 } on && !/^\|/ { exit } on { print }' "$1"; }
 committed=$(git -C "$repo" show "$R16_BRANCH:notes/easel_guide.md")
-for profile in blank friedrich sargent inness alma-tadema tonn; do
+for profile in blank friedrich sargent inness alma-tadema tonn hopper; do
   dest=$work/$profile
   "$repo/scripts/export_r16_studio" "$profile" "$dest" >"$work/$profile.log" 2>&1 || { cat "$work/$profile.log" >&2; echo "$profile: the export failed" >&2; exit 1; }
   case $profile in blank|friedrich) box= ;; *) box=$profile ;; esac

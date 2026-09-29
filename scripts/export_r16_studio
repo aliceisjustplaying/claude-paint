@@ -12,7 +12,7 @@
 #          inness       physics note, the artist's materials note
 #          alma-tadema  (notes/research/<artist>_materials.md) and bin/box, which
 #          tonn         sets the box the painting is painted from; nothing a
-#                       painter can read names another painter
+#          hopper       painter can read names another painter
 # dest:    a folder that doesn't exist yet (or is empty)
 #
 # dest gets:
@@ -46,7 +46,7 @@
 # box from the log.
 set -euo pipefail
 
-usage() { echo "usage: $0 friedrich|blank|sargent|inness|alma-tadema|tonn <dest>" >&2; exit 2; }
+usage() { echo "usage: $0 friedrich|blank|sargent|inness|alma-tadema|tonn|hopper <dest>" >&2; exit 2; }
 [ $# -eq 2 ] || usage
 profile=$1
 dest=$2
@@ -59,6 +59,7 @@ case "$profile" in
   inness) box=inness; materials=inness_materials.md; own=(Inness) ;;
   alma-tadema) box=alma-tadema; materials=alma_tadema_materials.md; own=(Alma-Tadema Tadema) ;;
   tonn) box=tonn; materials=tonn_materials.md; own=(Tonn) ;;
+  hopper) box=hopper; materials=hopper_materials.md; own=(Hopper) ;;
   *) usage ;;
 esac
 # the studio's easel reads its box from bin/box, else EASEL_BOX: not from the

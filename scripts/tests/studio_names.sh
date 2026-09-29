@@ -6,7 +6,10 @@
 # - names match case-insensitively as whole words, with a space, a hyphen or
 #   nothing between their parts ("da-Vinci", "alma tadema", "WINSOR"), and
 #   not inside other words ("convincing");
-# - the studio's own artist is exempt, and only that artist.
+# - the studio's own artist is exempt, and only that artist;
+# - bin/easel is read as bytes: an accented name ("C\xc3\xa9zanne" in UTF-8,
+#   which `strings` cuts down to "zanne") is found, and so is a name of two
+#   words run into a longer token ("bonedaVincilead"), which prose may hold.
 #
 #   scripts/tests/studio_names.sh
 #
@@ -64,4 +67,22 @@ d=$(studio run-together "Nothing here.")
 printf 'bone blacktonnlead white\n' > "$d/bin/easel"
 expect fail "$d" Sargent
 expect pass "$d" Tonn
+# an accented name in the binary's bytes, between NULs
+d=$(studio accented "Nothing here.")
+printf 'lead white\0C\303\251zanne\0bone black\0' > "$d/bin/easel"
+[ -z "$(strings "$d/bin/easel" | grep -i 'c.*zanne' || true)" ] || { echo "studio_names: strings kept the accented name; the fixture tests nothing" >&2; exit 1; }
+expect fail "$d" Tonn
+grep -q 'bin/easel: Cézanne' "$d.out" || { echo "studio_names: the accented name isn't reported" >&2; cat "$d.out" >&2; exit 1; }
+d=$(studio accented-velazquez "Nothing here.")
+printf 'lead white\0Vel\303\241zquez\0' > "$d/bin/easel"
+expect fail "$d" Tonn
+# a name of two words run into a longer token, and its other spellings
+for token in bonedaVincilead "boneda Vincilead" leadvangoghwhite BobRossblack blackalmatademawhite; do
+  d=$(studio "joined-$(tr -c 'A-Za-z0-9' _ <<<"$token")" "Nothing here.")
+  printf 'lead white\n%s\n' "$token" > "$d/bin/easel"
+  expect fail "$d" Sargent
+done
+# but not in the notes' prose, where names are whole words
+d=$(studio joined-prose "bonedaVincilead")
+expect pass "$d" Sargent
 echo "studio_names: all fixture studios checked as expected ($work)"

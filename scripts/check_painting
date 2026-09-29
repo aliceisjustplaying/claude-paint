@@ -24,6 +24,9 @@
 # comparison is reported, not judged: a painter may have painted after its
 # last save.
 set -euo pipefail
+# the log names its box, and the replay takes it from there: a box set in
+# the caller's environment (EASEL_BOX) would only make the easel refuse the log
+unset EASEL_BOX
 
 usage() { sed -n '7,7p' "$0" | sed 's/^# \{0,1\}//' >&2; exit 2; }
 [ $# -eq 2 ] || usage

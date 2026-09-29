@@ -17,6 +17,9 @@
 # replays to the same picture. Uses the replay build (default features:
 # `replay` and `finish`), built from this checkout.
 set -euo pipefail
+# the log names its box, and the replay takes it from there: a box set in
+# the caller's environment (EASEL_BOX) would only make the easel refuse the log
+unset EASEL_BOX
 
 usage() { sed -n '7,14p' "$0" | sed 's/^# \{0,1\}//' >&2; exit 2; }
 [ $# -ge 2 ] || usage

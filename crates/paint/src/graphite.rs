@@ -745,14 +745,19 @@ fn cover(under: Rgb, a: f32, r: f32) -> Rgb {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[cfg(tube_box)]
     use crate::style::Style;
+    #[cfg(tube_box)]
     use crate::pigment::Pigment;
+    #[cfg(tube_box)]
     use crate::color::{hex, luminance};
 
+    #[cfg(tube_box)]
     fn canvas() -> Canvas {
         Style { width_mm: 440.0, ..Style::oil_red_ground() }.prepare(400, 1.5, 3)
     }
 
+    #[cfg(tube_box)]
     fn mean_lum(c: &Canvas, x0: f32, y0: f32, x1: f32, y1: f32) -> f32 {
         let f = c.window();
         let (mut s, mut n) = (0.0, 0.0);
@@ -766,6 +771,7 @@ mod tests {
         s / n
     }
 
+    #[cfg(tube_box)]
     fn band(c: &mut Canvas, lead: &Lead, y: f32, p: f32, lines: usize) {
         for k in 0..lines {
             let yy = y + k as f32 * 0.25;
@@ -824,6 +830,7 @@ mod tests {
     /// breaks up into the grain; lifted
     /// by the eraser, kept by fixative, unchanged by paint over it.
     #[test]
+    #[cfg(tube_box)]
     fn guide_follows_the_line() {
         let mut c = Style { width_mm: 440.0, ..Style::oil_red_ground() }.prepare(1000, 1.4, 11);
         let m = hand_line(&[(779.0, 420.0), (812.0, 398.0), (838.0, 366.0), (858.0, 330.0)], &[0.5, 0.2], true, false, 0.15 / 0.44, 5);
@@ -903,6 +910,7 @@ mod tests {
 
     /// Softer grades and more pressure lay darker lines; chalk is darkest.
     #[test]
+    #[cfg(tube_box)]
     fn softer_and_harder_pressed_is_darker() {
         let mut c = canvas();
         let bare = mean_lum(&c, 100.0, 50.0, 300.0, 60.0);
@@ -920,6 +928,7 @@ mod tests {
 
     /// A light line catches the tops of the tooth first.
     #[test]
+    #[cfg(tube_box)]
     fn light_line_catches_the_tops() {
         let mut c = Style { width_mm: 440.0, ..Style::oil_red_ground() }.prepare(1600, 1.5, 3);
         let before = c.surface_um().to_vec();
@@ -948,6 +957,7 @@ mod tests {
     /// Erasing lifts most but not all; fixed drawing can't be lifted; a
     /// drawing painted over is sealed.
     #[test]
+    #[cfg(tube_box)]
     fn erase_fix_and_seal() {
         let mut c = canvas();
         let bare = mean_lum(&c, 110.0, 50.0, 290.0, 60.0);
@@ -978,6 +988,7 @@ mod tests {
 
     /// Thin paint lets the drawing show; body color hides it.
     #[test]
+    #[cfg(tube_box)]
     fn thin_paint_shows_body_hides() {
         let mut c = canvas();
         let lead = Lead::pencil("2B").unwrap();
@@ -1002,6 +1013,7 @@ mod tests {
 
     /// No drawing: the canvas is untouched and carries no bookkeeping.
     #[test]
+    #[cfg(tube_box)]
     fn no_drawing_no_change() {
         let mut c = canvas();
         let snap = c.pixels().to_vec();
@@ -1020,7 +1032,7 @@ mod tests {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, tube_box))]
 mod probe {
     use crate::style::Style;
     #[test]

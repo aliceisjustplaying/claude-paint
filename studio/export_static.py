@@ -9,6 +9,9 @@ Writes <out>/index.html (the viewer, reading files instead of the live API), <ou
 per painter, data/<painter>/events.json (with the image extensions), data/<painter>/img/<i>.<ext> and
 data/<painter>/file/<the painting's source>. Every text response is scrubbed like the public server's
 (home folder -> ~, account name -> user); the export stops if a scrubbed file still names either.
+
+The export owns <out>: it keeps a list of the files it wrote in <out>/.studio-export and, on the next run,
+deletes only the listed files it didn't write again. It won't write into a folder that has files and no list.
 """
 import argparse, base64, json, os, re, sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -18,6 +21,30 @@ EXT = {"image/png": "png", "image/jpeg": "jpg", "image/webp": "webp", "image/gif
 
 
 WRITTEN = set()
+MARKER = ".studio-export"  # the files the last export wrote, one path (relative to out) per line
+
+
+def inside(out, *parts):
+    """out/parts..., refusing a relative part that's absolute or has a `..`, or a path that lands outside out."""
+    for r in parts:
+        if os.path.isabs(r) or ".." in r.replace("\\", "/").split("/"):
+            sys.exit(f"export: refusing the path {r!r}")
+    dest = os.path.join(out, *parts)
+    if not os.path.realpath(dest).startswith(os.path.realpath(out) + os.sep):
+        sys.exit(f"export: {dest} is outside {out}")
+    return dest
+
+
+def owned(out):
+    """The files the last export into out wrote (relative paths); exits if out has files but no list."""
+    marker = os.path.join(out, MARKER)
+    if os.path.isfile(marker):
+        with open(marker) as fh:
+            return [l for l in fh.read().splitlines() if l]
+    if os.path.isdir(out) and os.listdir(out):
+        sys.exit(f"export: {out} is not empty and has no {MARKER}: not an earlier export, so nothing written "
+                 f"(pick an empty or new folder; to adopt an old export, create an empty {MARKER} in it)")
+    return []
 
 
 def write(path, data):
@@ -48,6 +75,7 @@ def main():
     a = ap.parse_args()
     S.PUBLIC = True
     out = os.path.abspath(a.out)
+    before = owned(out)
     ss = [{k: v for k, v in s.items() if k != "files"} for s in S.list_sessions() if s.get("painter") and s["p"] not in a.skip]
     text(os.path.join(out, "data", "sessions.json"), json.dumps(ss))
     n_img = 0
@@ -73,20 +101,26 @@ def main():
             src = os.path.realpath(os.path.join(cwd, rel))
             if cwd and src.startswith(os.path.realpath(cwd) + os.sep) and os.path.isfile(src):
                 with open(src, "rb") as fh:
-                    text(os.path.join(out, "data", p, "file", rel), fh.read())
+                    text(inside(out, "data", p, "file", rel), fh.read())
         print(f"{p}: {len(ev)} events, {n} images", flush=True)
     with open(os.path.join(S.HERE, "index.html"), "rb") as fh:
         page = fh.read().replace(b'<label id="allwrap"', b'<label id="allwrap" hidden')
     page = page.replace(b"<script>\nconst $ =", b"<script>window.STUDIO_STATIC = true;</script>\n<script>\nconst $ =", 1)
     assert b"STUDIO_STATIC = true" in page, "index.html changed: the static switch didn't go in"
     text(os.path.join(out, "index.html"), page)
+    now = sorted(os.path.relpath(f, out) for f in WRITTEN)
     stale = 0
-    for root, _, fs in os.walk(out, topdown=False):
-        for f in fs:
-            if os.path.abspath(os.path.join(root, f)) not in WRITTEN:
-                os.remove(os.path.join(root, f)); stale += 1
-        if root != out and not os.listdir(root):
-            os.rmdir(root)
+    for rel in set(before) - set(now):
+        if os.path.isabs(rel) or ".." in rel.split("/") or rel == MARKER:
+            continue
+        f = os.path.join(out, rel)
+        if os.path.isfile(f):
+            os.remove(f); stale += 1
+        d = os.path.dirname(f)
+        while d != out and os.path.isdir(d) and not os.listdir(d):
+            os.rmdir(d); d = os.path.dirname(d)
+    with open(os.path.join(out, MARKER), "w") as fh:
+        fh.write("".join(r + "\n" for r in now))
     print(f"exported {len(ss)} painters, {n_img} images to {out} ({stale} stale files removed)")
 
 

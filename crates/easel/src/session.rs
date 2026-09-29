@@ -666,6 +666,16 @@ mod tests {
         assert_eq!(bits(&s), bits(&b));
     }
 
+    /// The pencil's shared methods are out of a chunk's reach, so a failed chunk can't
+    /// take one away (nor add one a replay wouldn't have).
+    #[test]
+    #[cfg(tube_box)]
+    fn a_failed_chunk_cannot_change_pencil_methods() {
+        let mut s = Session::new(W).unwrap();
+        s.run("local p = pencil(); getmetatable(p).__index.line = nil; error('stop')").unwrap_err();
+        s.run("assert(type(pencil().line) == 'function')").unwrap();
+    }
+
     /// A failed chunk takes back what it did to a brush and the clock too.
     #[test]
     #[cfg(tube_box)]

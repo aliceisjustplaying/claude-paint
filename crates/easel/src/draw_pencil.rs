@@ -201,8 +201,11 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
             Ok(lead.width_mm(worn) / mm_per_unit(c))
         })?)?;
     }
+    // shared by every pencil and held here, out of the heap snapshot's reach: sealed, as
+    // the engine's userdata are, so a failed chunk can't change it for good
     let meta = lua.create_table()?;
     meta.set("__index", methods)?;
+    meta.set("__metatable", false)?;
     meta.set("__tostring", lua.create_function(|_, p: Table| {
         let kind: String = p.get::<Option<String>>("kind")?.unwrap_or_else(|| "graphite".into());
         let worn: f32 = p.get::<Option<f32>>("worn")?.unwrap_or(0.0);

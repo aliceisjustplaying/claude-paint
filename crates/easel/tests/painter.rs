@@ -119,9 +119,23 @@ fn the_shipped_easel_paints_its_one_painting_in_its_own_studio() {
     assert!(!studio.join("out/easel/other").exists() && !studio.join("paintings/lua/other.lua").exists());
 }
 
+/// The box this painter build was built with (a `box-*` feature), if any.
+const OWN_BOX: Option<&str> = if cfg!(feature = "box-sargent") {
+    Some("sargent")
+} else if cfg!(feature = "box-inness") {
+    Some("inness")
+} else if cfg!(feature = "box-alma-tadema") {
+    Some("alma-tadema")
+} else if cfg!(feature = "box-tonn") {
+    Some("tonn")
+} else {
+    None
+};
+
 /// A studio's `bin/box` sets the box its painting is painted from. A painter
-/// build knows only the boxes it was built with (`box-*` features): the
-/// export builds each studio's easel with its own box and no other.
+/// build knows only the default box and the one it was built with (the
+/// export builds each studio's easel with its own box and no other): a box
+/// file naming another is refused before anything is painted.
 #[test]
 fn the_studio_box_file_sets_the_box() {
     let dir = Path::new(env!("CARGO_TARGET_TMPDIR")).join(format!("painter-box-{}", std::process::id()));
@@ -129,34 +143,40 @@ fn the_studio_box_file_sets_the_box() {
     std::fs::create_dir_all(dir.join("bin")).unwrap();
     let e = dir.join("bin/easel");
     std::fs::copy(env!("CARGO_BIN_EXE_easel"), &e).unwrap();
-    std::fs::write(dir.join("bin/box"), "sargent\n").unwrap();
     let run = |args: &[&str]| Command::new(&e).args(args).current_dir(&dir).env_remove("EASEL_BOX").output().unwrap();
     let usage = String::from_utf8(run(&["help"]).stdout).unwrap();
     assert!(usage.contains("easel tubes"), "{usage}");
-    #[cfg(feature = "box-sargent")]
-    {
-        struct Close<'a>(&'a dyn Fn(&[&str]) -> Output);
-        impl Drop for Close<'_> {
-            fn drop(&mut self) {
-                let _ = (self.0)(&["close"]);
-            }
+
+    // a box this build doesn't have
+    let other = if OWN_BOX == Some("sargent") { "inness" } else { "sargent" };
+    std::fs::write(dir.join("bin/box"), format!("{other}\n")).unwrap();
+    let o = run(&["open"]);
+    assert!(!o.status.success());
+    let err = String::from_utf8_lossy(&o.stdout).to_string() + &String::from_utf8_lossy(&o.stderr);
+    let boxes = match OWN_BOX {
+        Some(b) => format!("(its boxes: \"tube box\", \"{b}\")"),
+        None => "(its boxes: \"tube box\")".to_string(),
+    };
+    assert!(err.contains(&format!("no box \"{other}\" {boxes}")), "{err}");
+    assert!(!dir.join("paintings/lua/painting.lua").exists());
+
+    // its own box
+    let Some(own) = OWN_BOX else { return };
+    std::fs::write(dir.join("bin/box"), format!("{own}\n")).unwrap();
+    struct Close<'a>(&'a dyn Fn(&[&str]) -> Output);
+    impl Drop for Close<'_> {
+        fn drop(&mut self) {
+            let _ = (self.0)(&["close"]);
         }
-        let _close = Close(&run);
-        let tubes = String::from_utf8(run(&["tubes"]).stdout).unwrap();
-        assert!(tubes.lines().any(|l| l == "rose madder") && !tubes.lines().any(|l| l == "smalt"), "{tubes}");
-        assert!(run(&["open"]).status.success());
-        let o = run(&["do", r#"canvas{size=300, aspect=4, seed=5, linen=15, ground={{pile={{"lead white", 5}, {"rose madder", 1}}, um=80, apply="knife"}}}"#]);
-        assert!(o.status.success(), "{}", String::from_utf8_lossy(&o.stderr));
-        assert!(run(&["close"]).status.success());
-        let log = std::fs::read_to_string(dir.join("paintings/lua/painting.lua")).unwrap();
-        assert_eq!(log.lines().nth(2), Some("--@ box sargent"), "{log}");
     }
-    #[cfg(not(feature = "box-sargent"))]
-    {
-        let o = run(&["open"]);
-        assert!(!o.status.success());
-        let err = String::from_utf8_lossy(&o.stdout).to_string() + &String::from_utf8_lossy(&o.stderr);
-        assert!(err.contains("no box \"sargent\" (its boxes: \"tube box\")"), "{err}");
-        assert!(!dir.join("paintings/lua/painting.lua").exists());
-    }
+    let _close = Close(&run);
+    let tubes = String::from_utf8(run(&["tubes"]).stdout).unwrap();
+    assert!(tubes.lines().count() > 5 && !tubes.lines().any(|l| l == "smalt"), "{tubes}");
+    assert!(run(&["open"]).status.success());
+    // a tube of the box's
+    let o = run(&["do", r#"local t = tubes(); canvas{size=300, aspect=4, seed=5, linen=15, ground={{pile={{"lead white", 5}, {t[#t - 1], 1}}, um=80, apply="knife"}}}"#]);
+    assert!(o.status.success(), "{}", String::from_utf8_lossy(&o.stderr));
+    assert!(run(&["close"]).status.success());
+    let log = std::fs::read_to_string(dir.join("paintings/lua/painting.lua")).unwrap();
+    assert_eq!(log.lines().nth(2), Some(format!("--@ box {own}").as_str()), "{log}");
 }

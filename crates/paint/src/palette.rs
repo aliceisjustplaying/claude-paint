@@ -174,7 +174,7 @@ pub fn catalog() -> Vec<Tube> {
         #[cfg(feature = "box-sargent")]
         tube("emerald green", "copper aceto-arsenite", "#23a57a", 0.6, 0.6, 0.6, drier::COPPER),
         // cobalt pigments are siccative in oil; set at cobalt blue's rate
-        #[cfg(feature = "box-sargent")]
+        #[cfg(any(feature = "box-sargent", feature = "box-tonn"))]
         tube("cobalt violet", "cobalt phosphate or arsenate", "#7e4c8e", 0.35, 0.55, 0.35, drier::COBALT_BLUE),
     ]
 }
@@ -258,7 +258,7 @@ const BOXES: &[(&str, &[&str])] = &[
         "tonn",
         &[
             "lead white", "lead-tin yellow", "cadmium yellow", "yellow ochre", "transparent oxide yellow", "cadmium red", "permanent alizarin", "burnt sienna", "raw umber", "bone black", "ultramarine blue", "cerulean blue",
-            "green earth",
+            "green earth", "cobalt violet",
         ],
     ),
 ];

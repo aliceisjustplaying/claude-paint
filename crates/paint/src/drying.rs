@@ -105,6 +105,14 @@ pub mod drier {
     pub const MARS: f32 = 1.1;
     /// Viridian: no drier action reported; average. Estimate.
     pub const VIRIDIAN: f32 = 1.0;
+    /// Indian yellow: an early account has it drying in oil "nearly as soon
+    /// or sooner than" other colors (Artists' Pigments vol. 1 p.24); set near
+    /// average. Uncertain.
+    pub const INDIAN_YELLOW: f32 = 0.8;
+    /// Bone brown (bone roasted short of black): "bad driers in oil"
+    /// (Field's Chromatography, revised by Salter, 1869, §243): below bone
+    /// black. Estimate.
+    pub const BONE_BROWN: f32 = 0.3;
     /// Cadmium pigments "do not retard drying … and may be regarded as slow
     /// but reliable driers" (Artists' Pigments vol. 1 p.72): slower than the
     /// earths, faster than vermilion.

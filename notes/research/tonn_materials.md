@@ -242,6 +242,21 @@ yellow deep, cadmium yellow light, flake white [PAL25]. In September
 - **Reworking.** He wipes or scrapes off early drawing (§3); reworking a
   varnished painting is rare [STRIP22; STRIP24].
 
+- **One small painting, filmed (2026).** A timelapse he posted of a small
+  painting from blank canvas to finish shows about eight sessions [VID26].
+  He drew contours freehand at the easel on a white ground, with no
+  imprimatura. In the second session he laid the background from the top
+  down and the darkest accents first, painting up to the drawn lines and
+  leaving the lightest shapes as bare canvas; he then blocked each light
+  shape as a flat value plane, one at a time, until no canvas showed. The
+  remaining sessions refined the whole surface: he returned to every area
+  each session, edges that began hard where the background met the
+  drawing softened on the shadow side, and a shape could stay a flat
+  silhouette for several sessions before he modeled it. The paint was
+  opaque from the first strokes, broke over the weave at the edges of
+  strokes and grew scumbled in later passes; the most heavily loaded paint
+  went into the last light accents. No glazing was visible.
+
 ## 8. Condition and aging
 
 - **Drying rates.** "Earth tones (umbers, siennas) ... and
@@ -340,3 +355,4 @@ verification records are kept outside this note.
 - **[DOC]** UA Creative Studios, video profile, 2019 (YouTube captions). https://www.youtube.com/watch?v=yYfvOPgTa0E
 - **[FAA]** Florence Academy of Art, alumni page. https://www.florenceacademyofart.edu/faa-alumni/kendric-tonn/
 - **[SAA]** Two online sale listings of 2011 (support records).
+- **[VID26]** Timelapse video of one painting, posted on X, 29 Sept. 2026: 2104953090180792321 (observed from the video; the stages' timing is not studio time).

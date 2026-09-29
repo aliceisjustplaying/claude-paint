@@ -81,7 +81,7 @@ pub struct Ran {
 
 impl Session {
     /// A session painting from the default box (tests).
-    #[cfg(test)]
+    #[cfg(all(test, tube_box))]
     pub fn new(width: usize) -> mlua::Result<Self> {
         Self::with_box(width, Palette::tube_box())
     }
@@ -126,7 +126,7 @@ impl Session {
 
     /// A session that replays a program from the default box (tests;
     /// `easel run` and `check` use `replay_with`).
-    #[cfg(test)]
+    #[cfg(all(test, tube_box))]
     pub fn replay(width: usize) -> mlua::Result<Self> {
         Self::replay_with(width, Palette::tube_box())
     }
@@ -134,7 +134,7 @@ impl Session {
     /// A session that replays a program painted from `tubes`: a failed chunk
     /// ends it, so it keeps no snapshot. (`easel run` and `check`: the replay
     /// build.)
-    #[cfg(any(feature = "replay", test))]
+    #[cfg(any(feature = "replay", all(test, tube_box)))]
     pub fn replay_with(width: usize, tubes: Palette) -> mlua::Result<Self> {
         let mut s = Self::with_box(width, tubes)?;
         s.replay = true;
@@ -142,7 +142,7 @@ impl Session {
     }
 
     /// The box this session paints from.
-    #[cfg(any(feature = "replay", test))]
+    #[cfg(feature = "replay")]
     pub fn tube_box(&self) -> Palette {
         (*self.st.borrow().tubes).clone()
     }
@@ -572,14 +572,18 @@ pub fn root() -> PathBuf {
 mod tests {
     use super::*;
 
+    #[cfg(tube_box)]
     const W: usize = 160;
 
+    #[cfg(tube_box)]
     fn bits(s: &Session) -> Vec<u32> {
         s.canvas().unwrap().seen().iter().flat_map(|p| p.map(f32::to_bits)).collect()
     }
 
+    #[cfg(tube_box)]
     pub(crate) const CANVAS: &str = r#"canvas{size=440, aspect=1.5, linen=15, seed=2, ground={{pile={{"lead white", 3}, {"red earth", 1}}, um=110, apply="knife"}, {pile={{"lead white", 5}, {"yellow ochre", 1}}, um=60, apply="brush"}}}"#;
 
+    #[cfg(tube_box)]
     const CHUNKS: [&str; 4] = [
         CANVAS,
         r#"p = pile{{"lead white", 6}, {"cobalt blue", 1}, {"yellow ochre", 0.5}, medium=0.3}
@@ -590,6 +594,7 @@ mod tests {
     ];
 
     #[test]
+    #[cfg(tube_box)]
     fn replay_is_exact_and_failures_roll_back() {
         let mut a = Session::new(W).unwrap();
         for (i, c) in CHUNKS.iter().enumerate() {
@@ -617,6 +622,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(tube_box)]
     fn terrain_refuses_huge_and_empty_areas_before_allocating() {
         let mut s = Session::new(64).unwrap();
         let h = "height=function(x, y) return 0 end";
@@ -628,6 +634,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(tube_box)]
     fn a_live_chunk_over_the_limit_stops_and_keeps_nothing_but_a_replay_runs_it() {
         let busy = "x = 1; for i = 1, 3000000 do end; x = 2";
         let mut s = Session::new(64).unwrap();
@@ -642,6 +649,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(tube_box)]
     fn rollback_restores_tables_and_upvalues_exactly() {
         let mut s = Session::new(W).unwrap();
         s.run(CHUNKS[0]).unwrap();
@@ -660,6 +668,7 @@ mod tests {
 
     /// A failed chunk takes back what it did to a brush and the clock too.
     #[test]
+    #[cfg(tube_box)]
     fn a_failed_chunk_leaves_brush_and_clock_alone() {
         let mut s = Session::new(W).unwrap();
         s.run(CHUNKS[0]).unwrap();
@@ -675,6 +684,7 @@ mod tests {
 
     /// The order `pairs` and `next` walk a table keyed by tables, closures
     /// and userdata in, as printed by a fresh session.
+    #[cfg(tube_box)]
     fn object_key_order() -> String {
         let mut s = Session::new(W).unwrap();
         s.run(&CANVAS.replace("aspect=1.5", "aspect=1")).unwrap();
@@ -699,6 +709,7 @@ mod tests {
 
     // tables keyed by objects walk in creation order, not address order
     #[test]
+    #[cfg(tube_box)]
     fn object_keys_walk_in_creation_order() {
         let a = object_key_order();
         // a different heap layout in the same process
@@ -715,6 +726,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(tube_box)]
     fn plain_tables_keep_lua_order() {
         // tables without object keys walk in stock Lua's order (same seed),
         // so existing paintings replay as before
@@ -736,6 +748,7 @@ mod tests {
     // a gmatch iterator kept across chunks does not advance during a
     // failed chunk
     #[test]
+    #[cfg(tube_box)]
     fn gmatch_iterators_roll_back() {
         let mut s = Session::new(W).unwrap();
         s.run(CANVAS).unwrap();
@@ -754,6 +767,7 @@ mod tests {
 
     // the rollback-aware gmatch matches Lua's own, match for match
     #[test]
+    #[cfg(tube_box)]
     fn gmatch_matches_lua() {
         let cases: &[(&str, &str, Option<i64>)] = &[
             ("red green blue", "%a+", None),
@@ -792,6 +806,7 @@ mod tests {
     /// A painting from the default box names no box in its log: its log is
     /// what round 19 wrote.
     #[test]
+    #[cfg(tube_box)]
     fn a_default_log_names_no_box() {
         let mut a = Session::new(W).unwrap();
         a.run(CANVAS).unwrap();
@@ -812,12 +827,15 @@ mod tests {
         assert!(logged_box(&format!("{head}--@ box inness\n--@ box sargent\n--@ chunk 1\n")).unwrap_err().contains("twice"));
         assert!(logged_box(&format!("{head}--@ box\n--@ chunk 1\n")).unwrap_err().contains("names no box"));
         assert!(logged_box(&format!("{head}--@ boxes x\n--@ chunk 1\n")).unwrap_err().contains("names no box"));
-        assert!(find_box("no such box").unwrap_err().contains("its boxes: \"tube box\""));
+        // the boxes of this build: the default box, or a painter's build's own
+        let own = paint::palette::default_box().unwrap_or_else(|| Palette::box_names()[0]);
+        assert!(find_box("no such box").unwrap_err().contains(&format!("its boxes: {own:?}")));
     }
 
     /// A painting from another box names it in its log; the log replays with
     /// that box to the same canvas, bit for bit, and the default box can't
     /// paint it.
+    #[cfg(tube_box)]
     #[cfg(feature = "box-sargent")]
     #[test]
     fn a_box_is_named_in_the_log_and_replays_with_it() {
@@ -845,6 +863,7 @@ mod tests {
 
     /// The guide's tube table is the default box's.
     #[test]
+    #[cfg(tube_box)]
     fn the_guide_shows_the_default_box() {
         let guide = include_str!("../../../notes/easel_guide.md");
         let table: String = guide.lines().skip_while(|l| !l.starts_with("| tube | pigment |")).take_while(|l| l.starts_with('|')).map(|l| format!("{l}\n")).collect();
@@ -853,6 +872,7 @@ mod tests {
 
     // a view's form counts visible bodies only, not proxies
     #[test]
+    #[cfg(tube_box)]
     fn view_form_counts_visible_parts_only() {
         let mut s = Session::replay(W).unwrap();
         s.run(CANVAS).unwrap();

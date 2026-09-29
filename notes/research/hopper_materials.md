@@ -155,7 +155,8 @@ survey of his oils was found; the Huntington's analyses of the 1935 canvas are a
 | "Cadmium deep" | Two entries [LED] | Probably a deep cadmium yellow or orange (*inference*; cadmium names ran from pale yellow to "orange" for darker shades [AP1 p.67]) |
 | Light red (a red iron oxide) | One pigment list in an entry; a second mention may be a color word [LED] | |
 | Yellow ochre | One pigment list in an entry; other mentions may be color words [LED] | |
-| Black | "touch of black" in one entry [LED] | Kind not stated |
+| Black | "touch of black" in one entry [LED] | |
+<!-- research: the kind of black is not stated. -->
 | Burnt sienna | Two entries [LED] | *Uncertain*: possibly a color description, not a pigment |
 
 - **Brands.** He named one London colorman as his maker in 1959

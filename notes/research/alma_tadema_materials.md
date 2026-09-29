@@ -130,8 +130,7 @@ The palette below is documentary: a list his pupil published as his
 
 - **Source and date of the palette.** The manual (2nd edition, 1887) is by
   a pupil, who attributes the listed palette to Alma-Tadema. The printed
-  arrangement is the author's own; Alma-Tadema's arrangement is unstated
-  [MANUAL pp.13–14].
+  arrangement is the author's own [MANUAL pp.13–14]. <!-- research: Alma-Tadema's own palette arrangement is unstated. -->
 - **Suppliers.** In 1885 a contemporary wrote that he himself used "one or
   two colours (Tadema I think _all_) from Mommen's in Brussels" [BARR
   vol.2 p.292]. *Uncertain* (hearsay). Blockx (a Belgian maker) sold him

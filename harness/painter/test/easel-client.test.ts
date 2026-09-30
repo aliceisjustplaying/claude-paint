@@ -136,33 +136,35 @@ test("advancing rebuilds outlive the tool budget and leave a fresh budget for th
 	const studio = stubStudio(`if [ "$1" = status ]; then
  n=0; [ ! -f progress ] || n=$(cat progress)
  n=$((n + 1)); echo "$n" > progress
- sleep 0.12
+ if [ "$n" = 1 ]; then sleep 0.12; else sleep 0.4; fi
  if [ "$n" -le 4 ]; then echo "rebuilding from the log ($n of 4 chunks)"; exit 0; fi
  echo ready; exit 0
 fi
 sleep 0.2
 echo painted`);
 	const other = WAIT_MS.other;
+	const rebuild = WAIT_MS.rebuild;
 	WAIT_MS.other = 300;
+	WAIT_MS.rebuild = 800;
 	try {
 		assert.equal(await atEasel(studio, ["look"], undefined), "painted");
 		assert.deepEqual(calls(studio), [...Array(5).fill("status"), "look"]);
-	} finally { WAIT_MS.other = other; }
+	} finally { WAIT_MS.other = other; WAIT_MS.rebuild = rebuild; }
 });
 
 test("a rebuild returned by open is polled and a stalled count is bounded", async () => {
 	const studio = stubStudio(`if [ "$1" = status ] && [ ! -f opened ]; then exit 1; fi
  touch opened
  echo 'rebuilding from the log (1 of 3 chunks)'`);
-	const other = WAIT_MS.other;
-	WAIT_MS.other = 250;
+	const rebuild = WAIT_MS.rebuild;
+	WAIT_MS.rebuild = 250;
 	try {
 		const start = Date.now();
 		await assert.rejects(atEasel(studio, ["look"], undefined), /rebuild.*(stalled|progress)/);
 		assert.ok(Date.now() - start < 2000);
 		assert.equal(calls(studio).filter(c => c === "open").length, 1);
 		assert.ok(!calls(studio).includes("look"));
-	} finally { WAIT_MS.other = other; }
+	} finally { WAIT_MS.rebuild = rebuild; }
 });
 
 test("abort during rebuild polling stops admission and removes listeners", async () => {
@@ -174,4 +176,24 @@ test("abort during rebuild polling stops admission and removes listeners", async
 		assert.ok(calls(studio).every(c => c === "status"));
 		assert.equal(getEventListeners(ac.signal, "abort").length, 0);
 	} finally { clearTimeout(timer); }
+});
+
+test("invalid rebuild replies never admit a command or open another session", async () => {
+	const other = WAIT_MS.other;
+	WAIT_MS.other = 2000;
+	try {
+		for (const reply of [
+			"echo 'rebuilding from the log (1 of 3 chunks)'; exit 1",
+			"echo 'rebuilding from the log (0 of 3 chunks)'",
+			"echo 'rebuilding from the log (2 of 4 chunks)'",
+			"echo 'rebuilding from the log (4 of 3 chunks)'",
+		]) {
+			const studio = stubStudio(`if [ ! -f started ]; then
+ touch started; echo 'rebuilding from the log (1 of 3 chunks)'; exit 0
+fi
+${reply}`);
+			await assert.rejects(atEasel(studio, ["look"], undefined), /invalid rebuild progress/);
+			assert.ok(calls(studio).every(c => c === "status"));
+		}
+	} finally { WAIT_MS.other = other; }
 });

@@ -7,7 +7,7 @@
 -- so their order is the order the program made them, in every process.
 local id, getmt, getinfo = ...
 local rawnext, rawget, type, select, error, tostring = next, rawget, type, select, error, tostring
-local rawload = load
+local rawload, pcall = load, pcall
 local setmt = setmetatable
 local sort, pack, unpack = table.sort, table.pack, table.unpack
 local find, sub = string.find, string.sub

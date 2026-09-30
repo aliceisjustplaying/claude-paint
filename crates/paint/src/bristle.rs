@@ -705,8 +705,10 @@ pub(crate) enum Clip<'a> {
 }
 
 impl Clip<'_> {
-    /// (contact factor, lift) at whole-canvas pixel `i`.
-    #[inline]
+    /// (contact factor, lift) at whole-canvas pixel `i`. (Always inlined:
+    /// the plough calls it per destination pixel; as a call it was a sixth
+    /// of a replay's time.)
+    #[inline(always)]
     pub(crate) fn at(&self, i: usize) -> (f32, f32) {
         match self {
             Clip::Mask(m) => (m.data[i], 0.0),
@@ -1383,6 +1385,12 @@ unsafe fn exchange(
                             to[0] = (tx, ty, 1.0);
                             1
                         };
+                        // the source's paint, read once: nothing below writes
+                        // lat or hide at `i` (`take` lowers its volume, `add`
+                        // writes `j != i`). Its cure is read per destination:
+                        // `take` zeroes it when the film goes bare (see the
+                        // kernel_traps tests)
+                        let (l, hd) = (*sf.lat.add(i), *sf.hide.add(i));
                         for &(tx, ty, share) in &to[..n_to] {
                             if share <= 0.0 {
                                 continue;
@@ -1397,8 +1405,6 @@ unsafe fn exchange(
                                 // only the accepted share moves, the rest stays
                                 let m = m * share * clip.map_or(1.0, |c| c.at(ty * w + tx).0);
                                 if j != i && m > 0.0 {
-                                    let l = *sf.lat.add(i);
-                                    let hd = *sf.hide.add(i);
                                     let cure = if sf.dry.is_null() { 0.0 } else { (*sf.dry.add(i)).cure };
                                     // the paint moved covers its share of
                                     // the pixel it came from

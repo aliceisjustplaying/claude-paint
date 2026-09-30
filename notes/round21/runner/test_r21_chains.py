@@ -362,6 +362,9 @@ def test_a_structured_record_reaches_the_next_studio_as_the_rendered_notes(tmp_p
     (CANVAS.replace("canvas{", "--[[ canvas{linen={40,40}, apply=\"always\"} ]]\ncanvas{"),
      {"kind": "linen", "linen": [15, 13], "ground_layers": ["knife", "roller"]},
      "Observed on linen 15 by 13 threads per cm, over a ground laid by knife, then roller."),
+    (CANVAS.replace("canvas{size=900, linen={15,13},", "-- canvas{linen={40,40}}\ncanvas{size=900, linen={15,13}, -- apply=\"brush\"\n"),
+     {"kind": "linen", "linen": [15, 13], "ground_layers": ["knife", "roller"]},
+     "Observed on linen 15 by 13 threads per cm, over a ground laid by knife, then roller."),
     # one number is both thread counts (the easel's linen=15)
     (CANVAS.replace("linen={15,13}", "linen=15"), {"kind": "linen", "linen": [15, 15], "ground_layers": ["knife", "roller"]},
      "Observed on linen 15 by 15 threads per cm, over a ground laid by knife, then roller."),

@@ -203,6 +203,9 @@ pub struct Body {
     /// Bounding sphere in the world (m).
     center: V3,
     radius: f32,
+    /// How far (units) its depth was moved from the frame it was built in
+    /// (`World::add_body`): a form sample's z plus this is the builder's z.
+    z0: f32,
 }
 
 impl Body {
@@ -269,6 +272,9 @@ pub struct World {
     /// Canvas masks registered at a depth so the world knows what is in
     /// front of what (see `Layer`).
     pub layers: Vec<Layer>,
+    /// The engine version (`crate::ENGINE`): 1 keeps every body at its
+    /// spot's `z` and steps rays as before.
+    pub engine: u32,
 }
 
 impl World {
@@ -295,6 +301,7 @@ impl World {
             far: 20000.0,
             bodies: Vec::new(),
             layers: Vec::new(),
+            engine: crate::ENGINE,
         };
         w.set_fov(view[2], 45.0);
         w
@@ -335,6 +342,11 @@ impl World {
     }
     pub fn backdrop(mut self, meters: f32) -> Self {
         self.backdrop = meters;
+        self
+    }
+    /// Place and trace bodies as engine version `v` does (`crate::ENGINE`).
+    pub fn engine(mut self, v: u32) -> Self {
+        self.engine = v;
         self
     }
 
@@ -504,11 +516,15 @@ impl World {
         self.add_body(spot, sdf, false)
     }
     fn add_body(&mut self, spot: Spot, sdf: Sdf, visible: bool) -> BodyId {
+        // (engine 2) its depth from its own foot: a far spot's `z` is
+        // hundreds of thousands of units, where an f32 steps by more than a
+        // thin body is deep
+        let (spot, sdf, z0) = if self.engine >= 2 { (Spot { z: 0.0, ..spot }, sdf.shifted([0.0, 0.0, -spot.z]), spot.z) } else { (spot, sdf, 0.0) };
         let (lo, hi) = sdf.aabb();
         let (a, b) = (spot.world(lo), spot.world(hi));
         let center = [(a[0] + b[0]) * 0.5, (a[1] + b[1]) * 0.5, (a[2] + b[2]) * 0.5];
         let radius = 0.5 * ((a[0] - b[0]).powi(2) + (a[1] - b[1]).powi(2) + (a[2] - b[2]).powi(2)).sqrt() + 0.05;
-        self.bodies.push(Body { sdf, spot, visible, center, radius });
+        self.bodies.push(Body { sdf, spot, visible, center, radius, z0 });
         self.bodies.len() - 1
     }
     /// The nearest body surface from a world point: distance (m) and body.
@@ -617,6 +633,14 @@ impl World {
         for (i, b) in self.bodies.iter().enumerate() {
             let Some((t0, t1)) = b.span(o, d, 0.0) else { continue };
             let t1 = t1.min(reach).min(best.map_or(f32::INFINITY, |bb| bb.0));
+            if self.engine >= 2 {
+                if let Some(t) = march(b, o, d, t0, t1) {
+                    best = Some((t, i));
+                }
+                continue;
+            }
+            // (engine 1: the least step grows with distance, so a ray from
+            // far off steps over a body thinner than it)
             let mut t = t0;
             let mut steps = 0;
             while t < t1 && steps < 200 {
@@ -700,8 +724,9 @@ impl World {
         let mut form = Form::new(f);
         let mut spots = Vec::new();
         for &b in bodies {
-            form.add(&self.bodies[b].sdf, self.bodies[b].spot.at[2]);
-            spots.push(self.bodies[b].spot);
+            let spot = self.bodies[b].spot;
+            form.add_nearest(&self.bodies[b].sdf, &move |x, y, z| spot.world([x, y, z])[2]);
+            spots.push(spot);
         }
         form.light_given(self.light(), |x, y, s| {
             let w = spots[s.part as usize - 1].world([x, y, s.z]);
@@ -714,6 +739,44 @@ impl World {
     pub fn view(&self, f: Frame) -> View<'_> {
         View::new(self, f)
     }
+}
+
+/// Where a ray (world, unit direction) first meets body `b` between `t0` and
+/// `t1` m. Sphere tracing: a step no longer than the distance to the body
+/// can't pass through it, however thin. Where it crawls (a ray grazing the
+/// body), after `CRAWL` steps it goes on in steps of at least 1/`CRAWL` of
+/// what is left of the span and bisects where it crosses into the body: a
+/// ray that runs out of steps is not taken for a miss, it goes on to the end
+/// of the span.
+fn march(b: &Body, o: V3, d: V3, t0: f32, t1: f32) -> Option<f32> {
+    const HIT: f32 = 2e-3;
+    const CRAWL: usize = 256;
+    let mut t = t0;
+    let mut last = t0;
+    let mut least = HIT;
+    let mut steps = 0;
+    while t < t1 {
+        let dist = b.dist(add(o, d, t));
+        if dist < HIT {
+            if dist >= 0.0 || steps == 0 {
+                return Some(t);
+            }
+            // stepped in: the surface lies between the last point and this
+            let (mut lo, mut hi) = (last, t);
+            for _ in 0..24 {
+                let mid = 0.5 * (lo + hi);
+                if b.dist(add(o, d, mid)) < HIT { hi = mid } else { lo = mid }
+            }
+            return Some(hi);
+        }
+        last = t;
+        steps += 1;
+        if steps == CRAWL {
+            least = ((t1 - t) / CRAWL as f32).max(HIT);
+        }
+        t += dist.max(least);
+    }
+    None
 }
 
 // ------------------------------------------------------------------- view
@@ -866,6 +929,11 @@ impl<'w> View<'w> {
     /// The form part of a body (0 for a proxy).
     pub fn part(&self, b: BodyId) -> PartId {
         self.parts[b]
+    }
+    /// A form sample's depth `z` on part `part` in the frame its body was
+    /// built in (its `Spot::z`, `Spot::p`).
+    pub fn built_z(&self, part: PartId, z: f32) -> f32 {
+        self.body_at(part).map_or(z, |b| z + self.world.bodies[b].z0)
     }
     fn body_at(&self, part: PartId) -> Option<BodyId> {
         self.parts.iter().position(|p| *p == part && part != 0)
@@ -1891,5 +1959,47 @@ mod tests {
         let spots = w.recede((2.0, 4.0), (0.0, 2.0), 5);
         let gaps: Vec<f32> = spots.windows(2).map(|p| p[0].y - p[1].y).collect();
         assert!(gaps.windows(2).all(|g| g[1] < g[0]));
+    }
+
+    /// A block `deep` m deep, 4 m wide and 1 m tall standing `z` m off.
+    fn thin_block(z: f32, deep: f32) -> (World, Spot) {
+        let mut w = World::new([0.0, 0.0, 1000.0, 1000.0], 500.0, 1.6);
+        let s = w.spot_at(0.0, z);
+        w.place(s, Sdf::block(s.p(0.0, 0.5, 0.0), s.size(4.0, 1.0, deep), 0.0));
+        (w, s)
+    }
+
+    /// A thin body far off is in the view, at its depth: its spot's form
+    /// depth (hundreds of thousands of units there) doesn't swallow it. A
+    /// form sample's z is still in the frame the body was built in.
+    #[test]
+    fn a_thin_far_body_is_in_the_view() {
+        for (z, deep) in [(600.0, 0.1), (1000.0, 0.05)] {
+            let (w, s) = thin_block(z, deep);
+            let (x, y) = w.project([0.0, 0.5, z]).unwrap();
+            let v = w.view(Frame::new(1000, 1000, 1.0));
+            let p = v.at(x, y);
+            assert!(matches!(p.what, What::Body(0)) && (p.dist - (z - deep * 0.5)).abs() < 0.01, "{deep} m at {z} m: {:?} at {}", p.what, p.dist);
+            let smp = v.form.sample(x, y).unwrap();
+            assert!((v.built_z(smp.part, smp.z) - s.p(0.0, 0.5, deep * 0.5)[2]).abs() < 0.5);
+        }
+    }
+
+    /// A ray from far off (a reflection's, from the water) meets a thin body
+    /// at any incidence: it doesn't step over it.
+    #[test]
+    fn far_rays_meet_thin_bodies() {
+        for (z, deep) in [(150.0, 0.05), (300.0, 0.1), (600.0, 0.1)] {
+            let (w, _) = thin_block(z, deep);
+            for a in [0.0f32, 20.0, 45.0, 70.0] {
+                let d = unit([a.to_radians().sin(), 0.0, a.to_radians().cos()]);
+                for k in 0..12 {
+                    let back = 0.8 * z + k as f32 / 12.0 * (0.2 * z - 1.0);
+                    let o = [-d[0] * back, 0.5, z - d[2] * back];
+                    let hit = w.trace(o, d, 1e5);
+                    assert!(hit.is_some_and(|(p, b)| b == 0 && (p[2] - (z - deep * 0.5)).abs() < 0.01), "{deep} m at {z} m, {a}°, from {back} m: {hit:?}");
+                }
+            }
+        }
     }
 }

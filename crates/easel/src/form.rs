@@ -51,6 +51,14 @@ impl ReliefGrid {
     }
 }
 
+/// A light/shadow halftone width: 0.12 by default, 0 for a hard edge.
+fn softness(soft: Option<f32>, what: &str) -> Result<f32> {
+    match soft.unwrap_or(0.12) {
+        s if s.is_finite() && s >= 0.0 => Ok(s),
+        s => err(format!("{what}: soft must be a finite width of 0 or more, got {s}")),
+    }
+}
+
 pub(crate) fn v3(v: &Value, what: &str) -> Result<V3> {
     match v {
         Value::Table(t) => {
@@ -138,6 +146,11 @@ fn solid_bounds(s: &SolidU) -> [f32; 4] {
 /// Anything that holds a lit form: a standalone `Form` or a scene's view.
 pub trait FormHolder: Send + Sync {
     fn form(&self) -> &Form;
+    /// A sample's depth on part `part` as the painter built it (a view's
+    /// bodies are held nearer depth 0 than their spots: `View::built_z`).
+    fn built_z(&self, _part: u16, z: f32) -> f32 {
+        z
+    }
 }
 impl FormHolder for Form {
     fn form(&self) -> &Form {
@@ -214,10 +227,10 @@ pub(crate) fn shade_table(lua: &Lua, s: &Shade) -> Result<Table> {
 }
 
 /// Fill `t` with a sample (the same table is reused by `f:mask`).
-fn fill_sample(lua: &Lua, t: &Table, s: &Sample) -> Result<()> {
+fn fill_sample(lua: &Lua, t: &Table, s: &Sample, src: &dyn FormHolder) -> Result<()> {
     t.set("part", s.part)?;
     t.set("facet", s.facet)?;
-    t.set("z", s.z)?;
+    t.set("z", src.built_z(s.part, s.z))?;
     t.set("n", lua.create_sequence_from(s.n)?)?;
     t.set("dist", s.dist)?;
     t.set("fall", s.fall())?;
@@ -245,12 +258,12 @@ impl UserData for FormU {
             None => Ok(Value::Nil),
             Some(s) => {
                 let t = lua.create_table()?;
-                fill_sample(lua, &t, &s)?;
+                fill_sample(lua, &t, &s, &*fu.src)?;
                 Ok(Value::Table(t))
             }
         });
         m.add_method("shade", |lua, fu, (x, y): (f32, f32)| shade_table(lua, &fu.f().shade(x, y)));
-        m.add_method("lit_at", |_, fu, (x, y, soft): (f32, f32, Option<f32>)| Ok(fu.f().shade(x, y).lit(soft.unwrap_or(0.12))));
+        m.add_method("lit_at", |_, fu, (x, y, soft): (f32, f32, Option<f32>)| Ok(fu.f().shade(x, y).lit(softness(soft, "lit_at")?)));
         m.add_method("value", |_, fu, (x, y): (f32, f32)| Ok(fu.f().shade(x, y).value));
         m.add_method("fall", |_, fu, (x, y): (f32, f32)| Ok(fu.f().fall(x, y)));
         m.add_method("across", |_, fu, (x, y): (f32, f32)| Ok(fu.f().across(x, y)));
@@ -284,7 +297,7 @@ impl UserData for FormU {
                 check_keys(o, &["parts", "soft"], "lit")?;
             }
             let ps = parts_of(o.as_ref(), fu.parts)?;
-            let soft = o.as_ref().map(|o| num(o, "soft")).transpose()?.flatten().unwrap_or(0.12);
+            let soft = softness(o.as_ref().map(|o| num(o, "soft")).transpose()?.flatten(), "lit")?;
             Ok(wrap(fu.f().mask(|s| if ps.contains(&s.part) { s.shade.lit(soft) } else { 0.0 })))
         });
         m.add_method("shadow", |_, fu, o: Option<Table>| {
@@ -292,7 +305,7 @@ impl UserData for FormU {
                 check_keys(o, &["parts", "soft"], "shadow")?;
             }
             let ps = parts_of(o.as_ref(), fu.parts)?;
-            let soft = o.as_ref().map(|o| num(o, "soft")).transpose()?.flatten().unwrap_or(0.12);
+            let soft = softness(o.as_ref().map(|o| num(o, "soft")).transpose()?.flatten(), "shadow")?;
             Ok(wrap(fu.f().mask(|s| if ps.contains(&s.part) { 1.0 - s.shade.lit(soft) } else { 0.0 })))
         });
         // f:silhouette{parts=, soft=0.4, haze={k, visibility}}: the outline, its
@@ -338,7 +351,7 @@ impl UserData for FormU {
             for y in 0..f.h {
                 for x in 0..f.w {
                     if let Some(s) = fu.f().sample((x as f32 + 0.5) * inv, (y as f32 + 0.5) * inv) {
-                        fill_sample(lua, &t, &s)?;
+                        fill_sample(lua, &t, &s, &*fu.src)?;
                         let v: f32 = g.call(t.clone())?;
                         data[y * f.w + x] = v.clamp(0.0, 1.0);
                     }
@@ -469,4 +482,32 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
 
     g.set("aerial", lua.create_function(|_, (d, vis): (f32, f32)| Ok(aerial(d, vis)))?)?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::session::Session;
+
+    /// A hard shadow (soft=0) covers the whole shadow side, the core shadow
+    /// included; a negative width is refused.
+    #[test]
+    fn a_hard_shadow_covers_the_core_shadow() {
+        let mut s = Session::new(240).unwrap();
+        s.run(r#"canvas{size=440, aspect=1.5, linen=15, seed=3, ground={{pile={{"lead white", 1}}, um=120, apply="knife"}}}
+                 f = form{ {body.ellipsoid({500, 350, 0}, {150, 150, 150}), dist=1}, light={from={-1, -0.4}, front=0.5} }
+                 local sh, n = f:shadow{soft=0}, 0
+                 for x = 500, 640 do
+                   -- in shadow, and so are the pixels around it
+                   local d = f:shade(x - 3, 350).direct + f:shade(x, 350).direct + f:shade(x + 3, 350).direct
+                   if d == 0 then
+                     n = n + 1
+                     assert(sh:at(x, 350) == 1, x .. ': ' .. sh:at(x, 350))
+                     assert(f:lit_at(x, 350, 0) == 0, x)
+                   end
+                 end
+                 assert(n > 10, n)"#)
+            .unwrap();
+        let e = s.run("f:shadow{soft=-1}").unwrap_err();
+        assert!(e.contains("soft must be a finite width"), "{e}");
+    }
 }

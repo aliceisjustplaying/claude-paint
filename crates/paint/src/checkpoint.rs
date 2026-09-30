@@ -16,7 +16,7 @@
 //! (length-prefixed; the caller's key=value lines), then the canvas. If you
 //! add state to `Canvas` or `Wet`, add it here and bump `MAGIC`.
 //!
-//! The format is version 7 (`MAGIC` is `PAINTCK7`); files of any other
+//! The format is version 8 (`MAGIC` is `PAINTCK8`); files of any other
 //! version are refused (re-run to checkpoint again). After the header the
 //! writer stores, in order: the frame and crop window, the scale and mm per
 //! unit, the linen (if any), the surface generation, the stroke counter and
@@ -29,14 +29,15 @@
 //! floor, film when drawn) and the whole-canvas guide with its fixed floor;
 //! and hand time (`tally`): the slice setting and the complete ledger, with
 //! the part already on the clock, so a resumed hand-timed painting keeps
-//! aging its passes and owes the time it owed.
+//! aging its passes and owes the time it owed; and the engine version it is
+//! painted with (`crate::ENGINE`).
 
 use crate::canvas::{Canvas, Frame};
 use crate::surface::Linen;
 use crate::wet::LAT;
 use std::io::{self, Read, Write};
 
-const MAGIC: &[u8; 8] = b"PAINTCK7";
+const MAGIC: &[u8; 8] = b"PAINTCK8";
 
 fn put_u64(w: &mut impl Write, v: u64) -> io::Result<()> {
     w.write_all(&v.to_le_bytes())
@@ -173,6 +174,7 @@ impl Canvas {
         for v in self.tally.to_words() {
             put_u64(w, v)?;
         }
+        put_u64(w, self.engine as u64)?;
         Ok(())
     }
 
@@ -297,6 +299,10 @@ impl Canvas {
             *v = get_u64(r)?;
         }
         c.tally = crate::tally::Tally::from_words(words).ok_or_else(|| bad("checkpoint hand-time ledger is invalid"))?;
+        c.engine = match get_u64(r)? {
+            v if (1..=crate::ENGINE as u64).contains(&v) => v as u32,
+            _ => return Err(bad("checkpoint engine version is invalid")),
+        };
         Ok((c, header))
     }
 }

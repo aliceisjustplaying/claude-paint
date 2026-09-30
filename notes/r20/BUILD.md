@@ -1,8 +1,8 @@
 # Round 20: per-painter tube boxes and four "in the manner of" studios
 
-Branch `r20-base`, cut from `r19-base` (5069814); worktree
-`~/src/a/claude-paint-r20-base`. Export with
-`R16_BRANCH=r20-base scripts/export_r16_studio <profile> <dest>`. This file and
+Tag `round-20` (c2901f8): the tip of the branch `r20-base` (since removed),
+cut from `r19-base` (5069814, tag `round-19`). Export with
+`R16_BRANCH=round-20 scripts/export_r16_studio <profile> <dest>`. This file and
 `TUBES.md` are for developers; no studio gets them.
 
 ## What changed here

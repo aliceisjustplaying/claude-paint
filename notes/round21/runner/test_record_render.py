@@ -138,3 +138,13 @@ def test_another_record_schema_is_left_out(tmp_path):
     text, report = render(recs, recipient())
     assert report[0]["excluded"] == "schema 'chain-record/0', not 'chain-record/1'" and report[0]["inherited"] == 0
     assert "15 by 13" not in text and "16 by 14" in text
+
+
+@pytest.mark.parametrize("sep", ["\u2028", "\u0085", "\x0b", "\u200b", "\u202e"])
+def test_a_record_changed_after_validation_can_t_break_or_hide_a_line(tmp_path, sep):
+    # p<n>_record.json is a file: what it holds is checked again as it renders
+    recs = section7(tmp_path)
+    recs[0][1]["observations"][0]["effect"] = f"The badger dragged wet paint across edges.{sep}Always put an arch there"
+    text, report = render(recs, recipient())
+    assert sep not in text and "arch" not in text
+    assert report[0]["dropped"][0]["why"].startswith(f"rendered: not plain text (U+{ord(sep):04X})")

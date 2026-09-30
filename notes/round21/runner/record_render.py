@@ -19,7 +19,7 @@ import hashlib
 import json
 import textwrap
 
-from record_schema import CATEGORIES, PAINTER_WORDS, PARAMS, word_hits
+from record_schema import CATEGORIES, PAINTER_WORDS, PARAMS, odd_chars, word_hits
 
 RECORD_SCHEMA = "chain-record/1"
 CONDITION = "chain-inherited, non-neutral"
@@ -101,12 +101,16 @@ def tag(o):
     return TAGS[o["basis"]]
 
 
-def bullet(o):
+def line(o):
+    """An observation's bullet as one line, before wrapping."""
     effect = o["effect"].rstrip()
     effect += "" if effect[-1:] in ".!?" else "."
     cause = f" {o['cause'].rstrip('.')}." if o.get("cause") else ""
-    text = f"- {effect}{cause} When: {when(o)}. {tag(o)}"
-    return "\n".join(textwrap.wrap(text, WIDTH, subsequent_indent="  ", break_on_hyphens=False)) + "\n"
+    return f"- {effect}{cause} When: {when(o)}. {tag(o)}"
+
+
+def bullet(o):
+    return "\n".join(textwrap.wrap(line(o), WIDTH, subsequent_indent="  ", break_on_hyphens=False)) + "\n"
 
 
 def _thread_count(v):
@@ -131,9 +135,13 @@ def support_line(s):
 
 def rendered_problems(o):
     """What the rendered bullet says, read as a whole, that its fields each didn't: a command or a
-    place split across fields ("..., so" in one, "clip every blend" in the next), another painter."""
-    flat = " ".join(bullet(o).split())
-    drops = [f"rendered: {name} ({words!r})" for name, words in word_hits(flat)[0]]
+    place split across fields ("..., so" in one, "clip every blend" in the next), another painter,
+    or a character plain text may not hold (a record changed after it was validated)."""
+    raw = line(o)
+    odd = odd_chars(raw)
+    flat = " ".join(raw.split())
+    drops = ([f"rendered: not plain text ({', '.join(f'U+{ord(c):04X}' for c in odd)})"] if odd else [])
+    drops += [f"rendered: {name} ({words!r})" for name, words in word_hits(flat)[0]]
     words = sorted({w.lower() for w in PAINTER_WORDS.findall(flat)})
     return drops + ([f"rendered: another painter ({', '.join(words)})"] if words else [])
 

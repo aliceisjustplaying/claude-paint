@@ -5,13 +5,14 @@
 -- `id(v)` is the session's creation serial of a table, closure, userdata or
 -- thread (nil for anything else): objects are numbered as Lua allocates them,
 -- so their order is the order the program made them, in every process.
-local id, getmt, getinfo = ...
+local id, getmt, getinfo, fail = ...
 local rawnext, rawget, type, select, error, tostring = next, rawget, type, select, error, tostring
 local setmt = setmetatable
 local sort, pack, unpack = table.sort, table.pack, table.unpack
 local find, sub = string.find, string.sub
 local tointeger = math.tointeger
 local format, pcall = string.format, pcall
+local gsub = string.gsub
 
 -- ---------------------------------------------------------------- pairs, next
 
@@ -243,13 +244,25 @@ local function hidden(v)
   return (type(name) == "string" and name or type(v)) .. ": (hidden)"
 end
 
+-- An error the easel raised (a Rust error, `fail`'s kind) shows as its text,
+-- which can hold an object's address: Lua turned an error object raised in a
+-- painter's function the easel called (a mask's, a curve's) into text before
+-- the painting could see it. That text shows the address hidden.
+local errmt = getmt(select(2, pcall(fail)))
+local function unaddressed(s)
+  return (gsub(s, ": 0x%x%x%x%x%x%x%x%x*", ": (hidden)"))
+end
+
 local function det_tostring(...)
   if select("#", ...) == 0 then error("bad argument #1 to 'tostring' (value expected)", 2) end
   local v = ...
   local h = hidden(v)
   if h then return h end
   local ok, r = pcall(tostring, v)
-  if ok then return r end
+  if ok then
+    if getmt(v) == errmt then return unaddressed(r) end
+    return r
+  end
   -- Lua's own complaint (a __tostring giving no string), from where the painting called
   if type(r) == "string" and not r:find("^[^\n]-:%d+: ") then error(r, 2) end
   error(r, 0)
@@ -286,7 +299,10 @@ local function det_format(...)
         if e == nil then break end -- Lua reports it
         a = a + 1
         if conv == "p" then format_error(getinfo(1, "n"), "bad argument #" .. a .. " to '?' (" .. NO_P .. ")") end
-        if conv == "s" and a <= n then args[a] = hidden(args[a]) or args[a] end
+        if conv == "s" and a <= n then
+          local v = args[a]
+          args[a] = hidden(v) or (getmt(v) == errmt and det_tostring(v)) or v
+        end
         i = e + 1
       end
     end

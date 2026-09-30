@@ -126,7 +126,9 @@ impl Session {
         let id = serials.id_fn(&lua)?;
         let getmt: Function = dbg.get("getmetatable")?;
         let getinfo: Function = dbg.get("getinfo")?;
-        let prelude: (Function, Table, Function, Function) = lua.load(include_str!("prelude.lua")).set_name("prelude.lua").call((id, getmt, getinfo))?;
+        // an error of the easel's own, for the prelude to know them by
+        let fail = lua.create_function(|_, ()| Err::<(), _>(mlua::Error::runtime("")))?;
+        let prelude: (Function, Table, Function, Function) = lua.load(include_str!("prelude.lua")).set_name("prelude.lua").call((id, getmt, getinfo, fail))?;
         let st = Rc::new(RefCell::new(Studio::new(width, tubes)));
         api::install(&lua, st.clone())?;
         let deadline = Rc::new(Cell::new(None::<Instant>));
@@ -598,7 +600,28 @@ fn clean_error(e: &str) -> String {
         }
         out.push(l);
     }
-    out.join("\n")
+    unaddressed(&out.join("\n"))
+}
+
+/// `<name>: 0x<8+ hex digits>` (Lua's text for an object without __tostring, which Lua
+/// makes of an error object raised in a painter's function the easel called) as
+/// `<name>: (hidden)`, as prelude.lua's `unaddressed`: the address differs from process
+/// to process.
+fn unaddressed(e: &str) -> String {
+    let mut out = String::with_capacity(e.len());
+    let mut rest = e;
+    while let Some(i) = rest.find(": 0x") {
+        let hex = rest[i + 4..].bytes().take_while(u8::is_ascii_hexdigit).count();
+        out.push_str(&rest[..i + 2]);
+        if hex >= 8 {
+            out.push_str("(hidden)");
+            rest = &rest[i + 4 + hex..];
+        } else {
+            rest = &rest[i + 2..];
+        }
+    }
+    out.push_str(rest);
+    out
 }
 
 /// The box a session file names in its head (`BOX_MARK` lines before the
@@ -878,6 +901,42 @@ mod tests {
         assert_eq!(a, b, "two processes show different text");
         for want in ["table: (hidden)\tfunction: (hidden)\tfunction: (hidden)\ttable: (hidden)\tThing: (hidden)", "mine\t1.5\tnil\ts", "table: (hidden)|table: (hidden)|function: (hidden)|tab"] {
             assert!(a.contains(want), "{want:?} not in\n{a}");
+        }
+    }
+
+    /// An error object raised in a painter's function the easel calls (a mask's, a curve's)
+    /// reaches the painting, caught or not, without an address either: Lua's conversion of
+    /// it to text happens outside the painting's reach (mlua's handler), so it's the text
+    /// that hides the address.
+    #[test]
+    #[cfg(tube_box)]
+    fn no_memory_address_escapes_a_callback() {
+        let raised = ["{}", "function() end", "setmetatable({}, {__name = 'Thing'})", "noise()"];
+        let mut chunks = Vec::new();
+        for v in raised {
+            for call in ["mask(function() error(V) end)", "below(function() error(V) end)"] {
+                let call = call.replace('V', v);
+                chunks.push(format!("local ok, e = pcall(function() return {call} end); assert(not ok); print(e, tostring(e), string.format('%s|%-9s', e, e), ('%s'):format(e))"));
+                chunks.push(call);
+            }
+        }
+        for run in 0..100 {
+            let mut s = Session::new(64).unwrap();
+            s.run(r#"canvas{size=100, aspect=1, seed=5, linen=15, ground={{pile={{"lead white", 1}}, um=80, apply="knife"}}}"#).unwrap();
+            let mut text = String::new();
+            for c in &chunks {
+                match s.run(c) {
+                    Ok(r) => text.push_str(&r.out),
+                    Err(e) => text.push_str(&e),
+                }
+                text.push('\n');
+            }
+            assert!(!text.contains(": 0x"), "run {run}: an address shows:\n{text}");
+            if run == 0 {
+                for want in ["table: (hidden)", "function: (hidden)", "Thing: (hidden)", "Noise: (hidden)"] {
+                    assert!(text.contains(want), "{want:?} not in\n{text}");
+                }
+            }
         }
     }
 

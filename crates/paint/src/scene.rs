@@ -273,7 +273,7 @@ pub struct World {
     /// front of what (see `Layer`).
     pub layers: Vec<Layer>,
     /// The engine version (`crate::ENGINE`): 1 keeps every body at its
-    /// spot's `z`.
+    /// spot's `z` and steps rays as before.
     pub engine: u32,
 }
 
@@ -633,6 +633,14 @@ impl World {
         for (i, b) in self.bodies.iter().enumerate() {
             let Some((t0, t1)) = b.span(o, d, 0.0) else { continue };
             let t1 = t1.min(reach).min(best.map_or(f32::INFINITY, |bb| bb.0));
+            if self.engine >= 2 {
+                if let Some(t) = march(b, o, d, t0, t1) {
+                    best = Some((t, i));
+                }
+                continue;
+            }
+            // (engine 1: the least step grows with distance, so a ray from
+            // far off steps over a body thinner than it)
             let mut t = t0;
             let mut steps = 0;
             while t < t1 && steps < 200 {
@@ -731,6 +739,44 @@ impl World {
     pub fn view(&self, f: Frame) -> View<'_> {
         View::new(self, f)
     }
+}
+
+/// Where a ray (world, unit direction) first meets body `b` between `t0` and
+/// `t1` m. Sphere tracing: a step no longer than the distance to the body
+/// can't pass through it, however thin. Where it crawls (a ray grazing the
+/// body), after `CRAWL` steps it goes on in steps of at least 1/`CRAWL` of
+/// what is left of the span and bisects where it crosses into the body: a
+/// ray that runs out of steps is not taken for a miss, it goes on to the end
+/// of the span.
+fn march(b: &Body, o: V3, d: V3, t0: f32, t1: f32) -> Option<f32> {
+    const HIT: f32 = 2e-3;
+    const CRAWL: usize = 256;
+    let mut t = t0;
+    let mut last = t0;
+    let mut least = HIT;
+    let mut steps = 0;
+    while t < t1 {
+        let dist = b.dist(add(o, d, t));
+        if dist < HIT {
+            if dist >= 0.0 || steps == 0 {
+                return Some(t);
+            }
+            // stepped in: the surface lies between the last point and this
+            let (mut lo, mut hi) = (last, t);
+            for _ in 0..24 {
+                let mid = 0.5 * (lo + hi);
+                if b.dist(add(o, d, mid)) < HIT { hi = mid } else { lo = mid }
+            }
+            return Some(hi);
+        }
+        last = t;
+        steps += 1;
+        if steps == CRAWL {
+            least = ((t1 - t) / CRAWL as f32).max(HIT);
+        }
+        t += dist.max(least);
+    }
+    None
 }
 
 // ------------------------------------------------------------------- view
@@ -1936,6 +1982,24 @@ mod tests {
             assert!(matches!(p.what, What::Body(0)) && (p.dist - (z - deep * 0.5)).abs() < 0.01, "{deep} m at {z} m: {:?} at {}", p.what, p.dist);
             let smp = v.form.sample(x, y).unwrap();
             assert!((v.built_z(smp.part, smp.z) - s.p(0.0, 0.5, deep * 0.5)[2]).abs() < 0.5);
+        }
+    }
+
+    /// A ray from far off (a reflection's, from the water) meets a thin body
+    /// at any incidence: it doesn't step over it.
+    #[test]
+    fn far_rays_meet_thin_bodies() {
+        for (z, deep) in [(150.0, 0.05), (300.0, 0.1), (600.0, 0.1)] {
+            let (w, _) = thin_block(z, deep);
+            for a in [0.0f32, 20.0, 45.0, 70.0] {
+                let d = unit([a.to_radians().sin(), 0.0, a.to_radians().cos()]);
+                for k in 0..12 {
+                    let back = 0.8 * z + k as f32 / 12.0 * (0.2 * z - 1.0);
+                    let o = [-d[0] * back, 0.5, z - d[2] * back];
+                    let hit = w.trace(o, d, 1e5);
+                    assert!(hit.is_some_and(|(p, b)| b == 0 && (p[2] - (z - deep * 0.5)).abs() < 0.01), "{deep} m at {z} m, {a}°, from {back} m: {hit:?}");
+                }
+            }
         }
     }
 }

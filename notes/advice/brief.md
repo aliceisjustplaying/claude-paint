@@ -31,7 +31,7 @@ guide) to understand the tools.
   geometry (branches, planes, masks, stroke paths); the painter paints it.
 
 Score history: notes/scores.md (raw critiques: notes/review_scores_loop*_raw.md).
-Plans and status: notes/round5_plan.md, notes/HANDOFF.md.
+Plans and status: notes/round5_plan.md.
 
 ## Images to look at (existing, no new renders)
 notes/showcase/: 1_near_round4_start.jpg → 2_near_loop5_best.jpg (a

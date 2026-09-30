@@ -25,6 +25,8 @@ mod finish;
 mod form;
 #[cfg(feature = "replay")]
 mod frames;
+#[cfg(feature = "replay")]
+mod legacy;
 mod look;
 mod session;
 mod time;

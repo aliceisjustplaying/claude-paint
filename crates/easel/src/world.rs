@@ -271,6 +271,12 @@ impl UserData for WorldU {
         f.add_field_method_get("bodies", |_, w| Ok(w.w.bodies.len()));
     }
     fn add_methods<M_: UserDataMethods<Self>>(m: &mut M_) {
+        // an old log's w:sky{}, w:clouds{}, w:ranges{} (legacy.rs; nil otherwise)
+        #[cfg(feature = "replay")]
+        m.add_meta_function(MetaMethod::Index, |lua, (_, k): (Value, Value)| match k {
+            Value::String(k) => crate::legacy::world_method(lua, &k.to_str()?),
+            _ => Ok(Value::Nil),
+        });
         m.add_method("spot", |_, w, (x, y): (f32, f32)| Ok(w.w.spot(x, y).map(SpotU)));
         m.add_method("spot_at", |_, w, (x, z): (f32, f32)| Ok(SpotU(w.w.spot_at(x, z))));
         m.add_method("spot_bed", |_, w, (x, z): (f32, f32)| Ok(SpotU(w.w.spot_bed(x, z))));

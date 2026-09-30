@@ -44,6 +44,18 @@ READER_SCOPE: the logs, the journal and its brief to read, the record to write).
 like what to do or where things go in the picture (record_flags) only warn: they are logged and
 listed in p<n>_record.flags.md, and the record still goes on.
 
+That is a lane's default record (record_kind="free-text", as imported). A lane with
+record_kind="structured" gets structured records instead: the reader writes observations as JSON
+(reader_brief_structured.md, p<n>_observations.json), record_schema.py checks each against the
+session logs it cites, the box and the words and names a record may not hold (an observation that
+fails is dropped and logged; a record with none left, or not of the schema, stops the lane), the
+runner keeps it with its metadata (round 21, the commit BRANCH names) as p<n>_record.json, and
+record_render.py writes the next studio's notes from the records through fixed templates, leaving
+out what doesn't fit that studio (p<n>_inherited.json). Such a lane is labeled chain-inherited,
+non-neutral in run/<lane>/condition.json; the painter isn't told the notes are inherited.
+record_kind="none" runs no reader. A lane keeps one kind of record: a run folder holding the other
+kind is refused. See CHANGES.md.
+
 Painters run in the clean harness (claude-paint-r19-base/harness/painter): no global
 extensions, our system prompt, bash and read only, our compaction (its thresholds set by
 compaction.ts), --no-approve and no .pi/ in the studio. pi-black for Anthropic lanes only.
@@ -877,6 +889,8 @@ def chain(name):
     rd = RUN / name
     if not DRY:
         rd.mkdir(parents=True, exist_ok=True)
+        if t["painters"] > 1 and t["record_kind"] == "structured":
+            (rd / "condition.json").write_text(json.dumps(condition(name, t), indent=1))
     env = {"R16_BRANCH": BRANCH}
     for n in range(1, t["painters"] + 1):
         d = studio(f"{name}{n}")
@@ -1142,6 +1156,17 @@ def inherit_structured(tag, rd, n, d):
     (d / "notes" / "studio_notes.md").write_text(notes)
     (rd / f"p{n}_inherited.json").write_text(json.dumps(record_render.inherited(report, rcp, notes.encode()), indent=1))
     log(record_render.summary(tag, report))
+
+
+def condition(name, t):
+    """run/<lane>/condition.json for a lane that inherits structured records: its label (a later
+    painter's results aren't comparable with a blank studio's without it), the reader, and the
+    hashes of the reader's briefs and of the code that checks and renders its records."""
+    return {"condition": "chain-inherited, non-neutral", "lane": name, "painters": t["painters"],
+            "record_kind": t["record_kind"], "profile": t["profile"],
+            "reader": {"model": reader_model(), "system_sha256": sha256_file(HERE / "reader_system_prompt.md")},
+            "reader_briefs_sha256": {f.name: sha256_file(f) for f in sorted(HERE.glob("reader_brief*.md"))},
+            "renderer_sha256": {f: sha256_file(HERE / f) for f in ("record_schema.py", "record_render.py")}}
 
 
 def mixed_records(name, kind):

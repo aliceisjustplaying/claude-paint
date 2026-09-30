@@ -107,3 +107,64 @@ def test_a_probe_that_answers_ok_is_available_whatever_its_stderr_says():
     # a warning on stderr that reads like a fatal error doesn't undo a reply of ok
     r = subprocess.CompletedProcess(["probe"], 0, "ok\n", "warning: set up billing to keep access after the trial\n")
     assert rc21.probe_outcome(r)[0] == "available"
+
+
+def test_the_reader_is_launched_as_isolated_as_the_painter():
+    cmd = rc21.reader_cmd("Read the brief.")
+    assert [f for f in rc21.HARNESS if f.startswith("--no-")] == [f for f in cmd if f.startswith("--no-")]
+    assert cmd[cmd.index("--tools") + 1] == "read,write"          # reader.ts checks both (READER_SCOPE)
+    assert cmd[cmd.index("--system-prompt") + 1] == str(rc21.HERE / "reader_system_prompt.md")
+    exts = [cmd[i + 1] for i, f in enumerate(cmd) if f == "-e"]
+    assert exts == [str(rc21.HERE / "reader.ts"), str(rc21.BLACK)]  # pi-black for its Anthropic model
+
+
+GOOD_RECORD = "## Blending\n- The badger only moves wet paint; `blend(m, {clip=true})` stayed inside.\n"
+
+
+def chain_one_record(tmp_path, monkeypatch, record, rc, journal=True, lanes=None):
+    """Run lane T's chain (two painters) with painter 1 painted and a reader that writes record (unless
+    None) and exits rc: the log lines and the READER_SCOPE the reader got."""
+    lines, scopes = [], []
+    monkeypatch.setattr(rc21, "RUN", tmp_path / "run")
+    monkeypatch.setattr(rc21, "A", tmp_path)
+    monkeypatch.setattr(rc21, "LANES", lanes or {"T": rc21.lane("sargent", rc21.OPUS, painters=2)})
+    monkeypatch.setattr(rc21, "log", lines.append)
+    monkeypatch.setattr(rc21, "check", lambda *a: None)
+    monkeypatch.setattr(rc21, "finish", lambda *a: None)
+    monkeypatch.setattr(rc21, "export_cmd", lambda profile, d: ["mkdir", "-p", str(d / "notes/research")])
+    rd = tmp_path / "run/T"
+
+    def reader(cmd, cwd, out, err, env=None):                  # the reader: writes the record, or doesn't
+        scopes.append(json.loads(env["READER_SCOPE"]))
+        if record is not None:
+            (rd / "p1_record.md").write_text(record)
+        return rc
+    monkeypatch.setattr(rc21, "run", reader)
+    rd.mkdir(parents=True)
+    session = tmp_path / "s1.jsonl"
+    session.write_text("{}\n")
+    (rd / "p1_sittings.json").write_text(json.dumps([{"sitting": 1, "sessions": [str(session)]}]))
+    for marker in ("p1.exported", "p1.painted", "p2.painted"):   # painter 1 has painted; painter 2 won't paint
+        (rd / marker).write_text("")
+    (rc21.studio("T1") / "notes").mkdir(parents=True)
+    if journal:
+        (rc21.studio("T1") / "notes/journal.md").write_text("- day one\n")
+    rc21.chain("T")
+    return lines, scopes
+
+
+@pytest.mark.parametrize("journal", [True, False])
+def test_the_reader_may_read_the_logs_journal_and_brief_and_write_only_its_record(tmp_path, monkeypatch, journal):
+    lines, scopes = chain_one_record(tmp_path, monkeypatch, GOOD_RECORD, 0, journal=journal)
+    rd = tmp_path / "run/T"
+    j = [str(rc21.studio("T1") / "notes/journal.md")] if journal else []   # a journal never written isn't one
+    assert scopes == [{"read": [str(tmp_path / "s1.jsonl"), *j, str(rd / "p1_reader_brief.md")],
+                       "write": str(rd / "p1_record.md")}]
+    assert GOOD_RECORD in (rc21.studio("T2") / "notes/studio_notes.md").read_text()
+    assert any(l.endswith("record written") for l in lines), lines
+
+
+def test_a_reader_that_fails_says_so(tmp_path, monkeypatch):
+    # pi exits 1 when reader.ts refuses to load (no valid READER_SCOPE): the log names the exit
+    lines, _ = chain_one_record(tmp_path, monkeypatch, None, 1)
+    assert any("record MISSING (the reader exited 1" in l for l in lines), lines

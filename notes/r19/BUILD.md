@@ -1,10 +1,11 @@
 # Round 19: prompting fixes from the two audits of 2026-09-27
 
-Branch `r19-base`, cut from `r17-base` (40db9c4); worktree
-`~/src/a/claude-paint-r19-base`. Round 19's runner
-(`~/tmp/gallery-fcf9c110/r19/r19_chains.py`) exports its studios from this
-branch and runs its painters in this worktree's harness. Rounds 17 and 18
-keep running from `r17-base`. The full list of changes, with before and
+Tag `round-19` (5069814): the tip of the branch `r19-base`, cut from
+`r17-base` (40db9c4); the branch and its worktree
+`~/src/a/claude-paint-r19-base` since removed. Round 19's runner
+(`notes/round19/runner/r19_chains.py`) exports its studios from the tag and
+runs its painters in the tag's harness (a `git archive` of it in `run/code`).
+Rounds 17 and 18 ran from `r17-base` (tag `archive/r17-base`). The full list of changes, with before and
 after quotes, is `~/tmp/gallery-fcf9c110/r19/CHANGES.md`; every text a
 painter can read, old against new, is `r19/painter_text.diff`.
 

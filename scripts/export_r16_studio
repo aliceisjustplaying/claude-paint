@@ -31,7 +31,7 @@
 # guide's own, byte for byte (checked below).
 #
 # The binary is built from a `git archive` of the branch or tag (R16_BRANCH,
-# default r16-base) in <repo>/target/studio-build/<commit>, so it is built
+# default round-16, round 16's code) in <repo>/target/studio-build/<commit>, so it is built
 # from committed code only. Exports may run at once: the archive is
 # extracted under a lock, and each box builds in its own target directory
 # (<commit>/target/<box>) under its own lock, so one studio can't get
@@ -67,7 +67,7 @@ esac
 unset EASEL_BOX
 
 repo=$(cd "$(dirname "$0")/.." && pwd)
-branch=${R16_BRANCH:-r16-base}
+branch=${R16_BRANCH:-round-16}
 git -C "$repo" rev-parse --verify -q "$branch^{commit}" >/dev/null || { echo "no branch or tag $branch in $repo" >&2; exit 1; }
 # the commit, also for a tag (whose own hash would name another build of the same code)
 sha=$(git -C "$repo" rev-parse --short "$branch^{commit}")

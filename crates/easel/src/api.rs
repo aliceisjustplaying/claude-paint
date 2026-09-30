@@ -1743,6 +1743,11 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
             }
             // (the paint dries first)
             time::verb(&st1, Verb::Jump { rest: Rest::IfLong, note: Some(("cracks", "the paint")) }, |s| {
+                if let Ok(path) = std::env::var("EASEL_CRACK_DUMP") {
+                    let c = s.canvas.as_ref().ok_or_else(no_canvas)?;
+                    let mut f = std::io::BufWriter::new(std::fs::File::create(&path).unwrap());
+                    c.write_state(&mut f, "before cracks").unwrap(); eprintln!("CRACKS {:?} ground {}", k, c.ground_um());
+                }
                 s.canvas.as_mut().ok_or_else(no_canvas)?.crack(&k);
                 Ok(())
             })

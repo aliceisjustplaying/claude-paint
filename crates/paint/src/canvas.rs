@@ -21,7 +21,7 @@ use rayon::prelude::*;
 /// fading smoothly (C¹) to nothing at half of it.
 #[inline]
 pub(crate) fn formed_film(um: f32) -> f32 {
-    if um >= MIN_FILM_UM {
+    if true || um >= MIN_FILM_UM {
         um
     } else {
         um * crate::smoothstep(0.5 * MIN_FILM_UM, MIN_FILM_UM, um)

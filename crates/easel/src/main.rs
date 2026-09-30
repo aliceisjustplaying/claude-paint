@@ -662,6 +662,29 @@ fn validate_log(name: &str, expected: &str) -> Result<(), String> {
     Ok(())
 }
 
+/// Write a look as `dir/look-NNNN.png`, NNNN one above the highest there, never over a file
+/// that exists (a pruned look or a stray look-prefixed file doesn't make it reuse a name).
+fn new_look(dir: &Path, png: &[u8]) -> Result<PathBuf, String> {
+    std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
+    let number = |name: &str| name.strip_prefix("look-")?.strip_suffix(".png")?.parse::<u64>().ok();
+    let mut n = std::fs::read_dir(dir).map_err(|e| e.to_string())?.filter_map(|e| number(&e.ok()?.file_name().to_string_lossy())).max().unwrap_or(0);
+    loop {
+        n += 1;
+        let p = dir.join(format!("look-{n:04}.png"));
+        match std::fs::OpenOptions::new().write(true).create_new(true).open(&p) {
+            Ok(mut f) => {
+                if let Err(e) = f.write_all(png).and_then(|_| f.sync_all()) {
+                    let _ = std::fs::remove_file(&p);
+                    return Err(format!("{}: {e}", p.display()));
+                }
+                return Ok(p);
+            }
+            Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => continue,
+            Err(e) => return Err(format!("{}: {e}", p.display())),
+        }
+    }
+}
+
 impl Server {
     // Independent local witness, not a signature or an access-control boundary.
     // Editing the log alone is detected; coordinated edits of both files or
@@ -754,12 +777,16 @@ impl Server {
         let v = look::View::parse(args)?;
         let t0 = Instant::now();
         let c = self.s.canvas().ok_or("no canvas yet: the first chunk is canvas{...}")?;
-        let dir = session_dir(&self.name);
-        let path = path.unwrap_or_else(|| {
-            let n = std::fs::read_dir(&dir).map(|d| d.filter_map(|e| e.ok()).filter(|e| e.file_name().to_string_lossy().starts_with("look-")).count()).unwrap_or(0);
-            dir.join(format!("look-{:04}.png", n + 1))
-        });
-        let (w, h) = look::look(&c, &v, &path)?;
+        let (w, h, path) = match path {
+            Some(p) => {
+                let (w, h) = look::look(&c, &v, &p)?;
+                (w, h, p)
+            }
+            None => {
+                let (w, h, png) = look::render(&c, &v)?;
+                (w, h, new_look(&session_dir(&self.name), &png)?)
+            }
+        };
         Ok(format!("{} ({w}x{h}, {:.2}s)\n", path.display(), t0.elapsed().as_secs_f64()))
     }
 

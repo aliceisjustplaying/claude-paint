@@ -324,8 +324,18 @@ fn draw_grid(img: &mut Img, m: &Map, step: f32, fs: i64) -> std::result::Result<
     Ok(())
 }
 
-/// Render a PNG: whole views fit 1600 px and 3 MB; crops stay native, at most 1200 px per side.
+/// Render a PNG to `out`: whole views fit 1600 px and 3 MB; crops stay native, at most 1200 px per side.
 pub fn look(c: &Canvas, v: &View, out: &Path) -> std::result::Result<(usize, usize), String> {
+    let (w, h, png) = render(c, v)?;
+    if let Some(d) = out.parent().filter(|d| !d.as_os_str().is_empty()) {
+        std::fs::create_dir_all(d).map_err(|e| e.to_string())?;
+    }
+    std::fs::write(out, png).map_err(|e| e.to_string())?;
+    Ok((w, h))
+}
+
+/// `look`'s PNG bytes and size, written nowhere.
+pub fn render(c: &Canvas, v: &View) -> std::result::Result<(usize, usize, Vec<u8>), String> {
     let f = c.window();
     // crop: units -> whole-canvas pixels -> pixels of the held window
     let (wx0, wy0, wx1, wy1) = (f.x0, f.y0, f.x0 + f.w, f.y0 + f.h);
@@ -421,11 +431,7 @@ pub fn look(c: &Canvas, v: &View, out: &Path) -> std::result::Result<(usize, usi
             size = (ow.max(oh) * 4 / 5).max(1);
             continue;
         }
-        if let Some(d) = out.parent().filter(|d| !d.as_os_str().is_empty()) {
-            std::fs::create_dir_all(d).map_err(|e| e.to_string())?;
-        }
-        std::fs::write(out, png).map_err(|e| e.to_string())?;
-        return Ok((ow, oh));
+        return Ok((ow, oh, png));
     }
 }
 

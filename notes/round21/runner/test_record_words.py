@@ -64,6 +64,8 @@ def test_no_studio_note_drops(notes):
     ("Wait a day before any glaze over lead white passages.", ["PRESCRIPTION"]),
     ("The badger smeared the edges; paint the sky before the arch.", ["PRESCRIPTION"]),
     ("The badger dragged wet paint... Stipple the hedge before the sky.", ["PRESCRIPTION"]),
+    ("then clip every blend near others", ["PRESCRIPTION"]),          # a cause, after the effect's stop
+    ("So glaze the edges once the mask is off.", ["PRESCRIPTION"]),
     # where things sit in the picture
     ("The dark mass sits in the lower third of the picture.", ["PLACEMENT"]),
     ("A stipple in the foreground read as a hedge of dabs.", ["PLACEMENT"]),
@@ -98,6 +100,8 @@ def test_ambiguous_words_only_warn(text, warn):
     "The knife left paint only on the top of the weave.",
     "Lay-in strokes over the wet ground picked up its color.",
     "Clip on a body pass kept a narrow band's edge crisp.",
+    "Then the glaze dried to a skin overnight.",
+    "So the sky stayed wet for two days.",
     "A whole-field blend at 1000 x 520 units took 32 s.",
 ])
 def test_material_facts_that_look_like_commands_pass(text):

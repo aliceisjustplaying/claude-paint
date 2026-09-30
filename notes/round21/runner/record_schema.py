@@ -387,9 +387,12 @@ _OBJECT = r"(?:the|a|an|it|them|each|every|all|both|more|less|your|longer|shorte
 # "Mix the darks ..."): material facts start with the verb as an adjective or noun ("Thin paint
 # lets ...", "Clip on a body pass ..."), not with the verb and the/every/it (review C, finding 2)
 _EASEL_VERBS = _THEN_COMMANDS + r"|stipple|scumble|hatch|mask|erase|cut|restate|lift|crop"
+# a command may follow "then" or "so" at the start of a sentence or field ("then clip every blend"
+# in a cause, rendered after the effect's full stop)
+_THEN = r"(?:(?:and )?then,?\s+|so\s+)?"
 PRESCRIPTION_DROP = re.compile(
-    _LEAD + r"(?:" + _COMMANDS + r")\b(?!-|\s+of\b)"
-    r"|" + _LEAD + r"(?:" + _EASEL_VERBS + r")\s+" + _OBJECT + r"\b"
+    _LEAD + _THEN + r"(?:" + _COMMANDS + r")\b(?!-|\s+of\b)"
+    r"|" + _LEAD + _THEN + r"(?:" + _EASEL_VERBS + r")\s+" + _OBJECT + r"\b"
     r"|,\s*(?:so|then|and then)\s+(?:(?:" + _COMMANDS + r")\b(?!-)|(?:" + _THEN_COMMANDS + r")\s+" + _OBJECT + r"\b)"
     r"|\b(?:you|one) (?:should|must|need to|have to|can|could|will want|'ll want|may want)\b"
     r"|\b(?:should|must) (?:always|never|be)\b|\b(?:be sure|make sure|it is best|it's best|best to|better to)\b"

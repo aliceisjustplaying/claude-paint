@@ -1,6 +1,7 @@
 # Round 16: the studio build
 
-Branch `r16-base` (from main `4abe5b4`), worktree `~/src/a/claude-paint-r16-base`.
+Tag `round-16`: the tip of the branch `r16-base` (from main `4abe5b4`; the
+branch and its worktree `~/src/a/claude-paint-r16-base` since removed).
 This note lists every change, what was removed, what was kept and why,
 the Lua API before and after, the test results and the owner's follow-up
 decisions. The owner's task messages are authoritative; agent-authored

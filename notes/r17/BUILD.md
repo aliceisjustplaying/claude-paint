@@ -1,6 +1,7 @@
 # Round 17: finishing moves out of the painter's build
 
-Branch `r17-base`, cut from `r16-base`; worktree `~/src/a/claude-paint-r17-base`.
+Tag `archive/r17-base`: the tip of the branch `r17-base`, cut from `r16-base`
+(the branch and its worktree `~/src/a/claude-paint-r17-base` since removed).
 
 ## What changed
 

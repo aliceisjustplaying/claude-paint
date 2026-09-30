@@ -11,7 +11,9 @@ data/<painter>/file/<the painting's source>. Every text response is scrubbed lik
 (home folder -> ~, account name -> user); the export stops if a scrubbed file still names either.
 
 The export owns <out>: it keeps a list of the files it wrote in <out>/.studio-export and, on the next run,
-deletes only the listed files it didn't write again. It won't write into a folder that has files and no list.
+deletes only the listed files it didn't write again. It won't write into a folder that has files and no list,
+except an export from before the list (index.html with the static switch, data/sessions.json, nothing else
+at the top), which it adopts, owning all of data/ as the old exporter did.
 """
 import argparse, base64, json, os, re, sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -35,12 +37,24 @@ def inside(out, *parts):
     return dest
 
 
+def old_export(out):
+    """out as an export from before the list: just index.html (the static page) and data/ with sessions.json."""
+    if sorted(os.listdir(out)) != ["data", "index.html"] or not os.path.isfile(os.path.join(out, "data", "sessions.json")):
+        return False
+    with open(os.path.join(out, "index.html"), "rb") as fh:
+        return b"STUDIO_STATIC = true" in fh.read()
+
+
 def owned(out):
     """The files the last export into out wrote (relative paths); exits if out has files but no list."""
     marker = os.path.join(out, MARKER)
     if os.path.isfile(marker):
         with open(marker) as fh:
             return [l for l in fh.read().splitlines() if l]
+    if os.path.isdir(out) and os.listdir(out) and old_export(out):
+        # adopt it: everything under data/ was the old exporter's, as it pruned all it didn't write
+        return ["index.html"] + [os.path.relpath(os.path.join(root, f), out)
+                                 for root, _, fs in os.walk(os.path.join(out, "data")) for f in fs]
     if os.path.isdir(out) and os.listdir(out):
         sys.exit(f"export: {out} is not empty and has no {MARKER}: not an earlier export, so nothing written "
                  f"(pick an empty or new folder; to adopt an old export, create an empty {MARKER} in it)")

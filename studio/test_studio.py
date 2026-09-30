@@ -98,15 +98,40 @@ def export(tmp_path, out):
                           env=env, capture_output=True, text=True)
 
 
-def test_export_refuses_a_folder_it_does_not_own(home):
+def old_export(tmp_path, out):
+    """out as the exporter before the list left it: index.html and data/, no .studio-export."""
+    assert export(tmp_path, out).returncode == 0
+    (out / ".studio-export").unlink()
+
+
+@pytest.mark.parametrize("old", [False, True], ids=["other folder", "old export plus a stray file"])
+def test_export_refuses_a_folder_it_does_not_own(home, old):
     tmp_path, studio, log = home
     log.write_text(start(str(studio)) + call("c1", "canvas{}") + result("c1", "ok · chunk 1"))
     out = tmp_path / "out"
     out.mkdir()
+    if old:
+        old_export(tmp_path, out)
+    before = sorted(str(p.relative_to(out)) for p in out.rglob("*"))
     (out / "keep.txt").write_text("not the exporter's")
     r = export(tmp_path, out)
     assert r.returncode != 0 and ".studio-export" in r.stderr
-    assert sorted(os.listdir(out)) == ["keep.txt"]
+    assert sorted(str(p.relative_to(out)) for p in out.rglob("*")) == sorted(before + ["keep.txt"])
+
+
+def test_export_adopts_an_export_from_before_the_list(home):
+    tmp_path, studio, log = home
+    log.write_text(start(str(studio)) + call("c1", "canvas{}") + result("c1", "ok · chunk 1"))
+    out = tmp_path / "out"
+    old_export(tmp_path, out)
+    gone = out / "data" / "paint-studio-gone00" / "events.json"
+    gone.parent.mkdir()
+    gone.write_text("{}")  # a painter the old exporter wrote who is no longer listed
+    r = export(tmp_path, out)
+    assert r.returncode == 0, r.stderr
+    assert not gone.parent.exists()
+    assert (out / "data" / PAINTER / "events.json").exists()
+    assert "data/sessions.json" in (out / ".studio-export").read_text().splitlines()
 
 
 def test_export_prunes_only_files_it_wrote(home):

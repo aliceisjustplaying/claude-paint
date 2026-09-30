@@ -28,7 +28,9 @@
 #   --frames-dir D   where the frames go (default: <out>.frames); with
 #                    --reuse, an existing frames dir to cut from
 #   --reuse          don't replay; cut the clip from --frames-dir
-#   --max-hold F     no frame is held longer than F seconds (default 1)
+#   --max-hold F     no frame is held longer than F seconds (default 1); a
+#                    --length that would need longer holds is refused, with
+#                    the longest the cap allows
 #   --easel PATH     the easel binary (default: the replay build in the target
 #                    directory cargo builds into, CARGO_TARGET_DIR too; not built here)
 #   --sheet PATH     also a contact sheet: 12 frames spread evenly over the
@@ -40,7 +42,8 @@
 # frames.tsv with each frame's hand time. Each frame is then shown for as
 # long as the hand took until the next one, compressed by --pace and capped
 # by --max-hold; the final picture is held 3 s. H.264, yuv420p, faststart,
-# 24 fps.
+# 24 fps. A clip that doesn't come out --length long, to within a video
+# frame, is an error.
 set -euo pipefail
 # the log names its box, and the replay takes it from there: a box set in
 # the caller's environment (EASEL_BOX) would only make the easel refuse the log
@@ -102,10 +105,11 @@ plength=$(awk -v l="$length" -v f="$finalfirst" 'BEGIN { printf "%.5f", l - f }'
 if [ "$pace" = dynamic ]; then
   command -v uv >/dev/null || { echo "replay_clip: --pace dynamic needs uv" >&2; exit 1; }
   uv run -q --script "$(dirname "$0")/replay_pace.py" "$dir" --length "$plength" --max-hold "$maxhold" --hold "$hold" \
-    --fps "$fps" --floor "$floor" --gamma "$gamma" --ramp "$ramp" --ramp-span "$rampspan" --open-hold "$openhold" --eval
+    --fps "$fps" --floor "$floor" --gamma "$gamma" --ramp "$ramp" --ramp-span "$rampspan" --open-hold "$openhold" \
+    --before "$finalfirst" --eval
 else
 # entries are file names: ffmpeg reads them relative to the list, which is in $dir
-awk -F'\t' -v fps="$fps" -v length_="$plength" -v pace="$pace" -v hold="$hold" -v maxhold="$maxhold" -v q="'" '
+awk -F'\t' -v fps="$fps" -v length_="$plength" -v pace="$pace" -v hold="$hold" -v maxhold="$maxhold" -v ff="$finalfirst" -v q="'" '
   # a name in quotes in the list: each quote in it closes, escapes and reopens
   function esc(s,  r, i) { r = ""; while ((i = index(s, q)) > 0) { r = r substr(s, 1, i - 1) q "\\" q q; s = substr(s, i + 1) } return r s }
   NR == 1 { next }
@@ -113,8 +117,18 @@ awk -F'\t' -v fps="$fps" -v length_="$plength" -v pace="$pace" -v hold="$hold" -
   END {
     if (length_ <= hold) { print "replay_clip: --length must exceed the " hold " s final hold" > "/dev/stderr"; exit 1 }
     for (i = 1; i < n; i++) w[i] = h[i + 1] ^ pace - h[i] ^ pace
+    want = length_ - hold; m = 0
+    for (i = 1; i < n; i++) if (w[i] > 0) m++
+    # the moments shown, each held at most --max-hold, may not fill --length
+    if (want > m * maxhold + 1e-6) {
+      msg = sprintf("replay_clip: --length %s is longer than the clip can run: %d moment%s held at most %s s each (--max-hold) plus the %s s final hold", length_ + ff, m, m == 1 ? "" : "s", maxhold, hold)
+      if (ff > 0) msg = msg sprintf(" plus the %s s --final-first", ff)
+      msg = msg sprintf(" come to at most %.2f s; ", int((m * maxhold + hold + ff) * 100 + 1e-6) / 100)
+      if (m > 0) msg = msg sprintf("raise --max-hold to at least %.2f or ", int(want / m * 100 + 0.999999) / 100)
+      print msg "lower --length" > "/dev/stderr"; exit 1
+    }
     # scale: capped holds take max-hold, the rest share the remaining time
-    want = length_ - hold; k = 0
+    k = 0
     for (it = 0; it < 20; it++) {
       capped = 0; free = 0
       for (i = 1; i < n; i++) if (k > 0 && w[i] * k > maxhold) capped += maxhold; else free += w[i]
@@ -131,9 +145,11 @@ awk -F'\t' -v fps="$fps" -v length_="$plength" -v pace="$pace" -v hold="$hold" -
       printf "file '\''%s'\''\nduration %.5f\n", esc(f[i]), d
       secs += d
     }
+    if (secs - want > 0.5 / fps || want - secs > 0.5 / fps) { printf "replay_clip: the holds come to %.3f s, not %.3f\n", secs, want > "/dev/stderr"; exit 1 }
     # the last entry of a concat list takes the duration before it, so the
-    # hold (less a frame) is followed by a one-frame repeat and then the frame again
-    printf "file '\''%s'\''\nduration %.5f\n", esc(f[n]), hold - 1 / fps
+    # hold (less the two frames after it) is followed by a one-frame repeat
+    # and then the frame again (a frame)
+    printf "file '\''%s'\''\nduration %.5f\n", esc(f[n]), hold - 2 / fps
     printf "file '\''%s'\''\nduration %.5f\nfile '\''%s'\''\n", esc(f[n]), 1 / fps, esc(f[n])
     printf "%d moments, %.1f min of hand time, pace %s: about %.1f s of clip\n", n, h[n] / 60, pace, secs + hold > "/dev/stderr"
   }' "$dir/frames.tsv" > "$list"
@@ -149,6 +165,9 @@ ffmpeg -loglevel error -y -f concat -safe 0 -i "$list" \
   -vf "fps=$fps,scale='min($width,iw)':-2:flags=lanczos,format=yuv420p" \
   -c:v libx264 -crf 23 -preset slow -movflags +faststart "$out"
 ffprobe -v error -show_entries format=duration,size:stream=width,height,nb_frames -of compact "$out" >&2
+got=$(ffprobe -v error -show_entries format=duration -of csv=p=0 "$out")
+awk -v g="$got" -v l="$length" -v fps="$fps" 'BEGIN { d = g - l; exit !(d * d <= (1 / fps + 1e-6) ^ 2) }' \
+  || { echo "replay_clip: $out runs $got s, not the $length s asked for" >&2; exit 1; }
 
 if [ -n "$sheet" ]; then
   dur=$(ffprobe -v error -show_entries format=duration -of csv=p=0 "$out")

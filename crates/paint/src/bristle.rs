@@ -342,8 +342,9 @@ pub(crate) struct Bristle {
     cure: f32,
 }
 
-/// A brush in the hand, with paint in its bristles.
-#[derive(Clone)]
+/// A brush in the hand, with paint in its bristles. (`Debug` is part of
+/// `easel run --state-digest`.)
+#[derive(Clone, Debug)]
 pub struct Held {
     pub tool: Tool,
     pub(crate) bristles: Vec<Bristle>,
@@ -704,8 +705,10 @@ pub(crate) enum Clip<'a> {
 }
 
 impl Clip<'_> {
-    /// (contact factor, lift) at whole-canvas pixel `i`.
-    #[inline]
+    /// (contact factor, lift) at whole-canvas pixel `i`. (Always inlined:
+    /// the plough calls it per destination pixel; as a call it was a sixth
+    /// of a replay's time.)
+    #[inline(always)]
     pub(crate) fn at(&self, i: usize) -> (f32, f32) {
         match self {
             Clip::Mask(m) => (m.data[i], 0.0),
@@ -1382,6 +1385,12 @@ unsafe fn exchange(
                             to[0] = (tx, ty, 1.0);
                             1
                         };
+                        // the source's paint, read once: nothing below writes
+                        // lat or hide at `i` (`take` lowers its volume, `add`
+                        // writes `j != i`). Its cure is read per destination:
+                        // `take` zeroes it when the film goes bare (see the
+                        // kernel_traps tests)
+                        let (l, hd) = (*sf.lat.add(i), *sf.hide.add(i));
                         for &(tx, ty, share) in &to[..n_to] {
                             if share <= 0.0 {
                                 continue;
@@ -1396,8 +1405,6 @@ unsafe fn exchange(
                                 // only the accepted share moves, the rest stays
                                 let m = m * share * clip.map_or(1.0, |c| c.at(ty * w + tx).0);
                                 if j != i && m > 0.0 {
-                                    let l = *sf.lat.add(i);
-                                    let hd = *sf.hide.add(i);
                                     let cure = if sf.dry.is_null() { 0.0 } else { (*sf.dry.add(i)).cure };
                                     // the paint moved covers its share of
                                     // the pixel it came from
@@ -2064,5 +2071,169 @@ mod cover_tests {
             }
             println!("{name:6}: area {:.0} (any paint {:.0}) of nominal {:.0}: {:.2}; mark_width {:.2} of {:.2}", tot.0, tot.1, tool.width * len, tot.0 / (tool.width * len), tool.mark_width(p), tool.width);
         }
+    }
+}
+
+/// Two arithmetic traps for exact (bit-identical) speedups of the brush
+/// kernel and its contact surface. Each pins what the code on main does, so
+/// a faster version that changes a bit fails here before it reaches a replay.
+#[cfg(test)]
+mod kernel_traps {
+    use super::*;
+    use crate::color::hex;
+
+    fn fnv(h: &mut u64, bits: u32) {
+        for b in bits.to_le_bytes() {
+            *h ^= b as u64;
+            *h = h.wrapping_mul(0x100_0000_01b3);
+        }
+    }
+
+    /// An engine-2 canvas that has waited (drying state allocated), wet all
+    /// over: every other pixel (at random) a film just over the 1e-5 coats
+    /// `wait` counts as a film (up to 1.05e-5), with cure 0.1, the rest
+    /// thick wet paint with cure 0.05.
+    fn thin_and_thick() -> Canvas {
+        let mut c = Canvas::new(600, 2.0, hex("#e8e0d0")).with_size_mm(440.0);
+        assert!(c.engine >= 2);
+        c.wait(1.0);
+        let n = c.f.w * c.f.h;
+        assert_eq!(c.wet.clock.px.len(), n, "drying state allocated");
+        let lat = Paint::body(hex("#50586a")).latent();
+        let mut rng = Rng::new(9);
+        for i in 0..n {
+            let thin = rng.f() < 0.5;
+            c.wet.vol[i] = if thin { 1.0e-5 * (1.0 + 0.05 * rng.f()) } else { 2e-3 };
+            c.wet.lat[i] = lat;
+            c.wet.clock.px[i].cure = if thin { 0.1 } else { 0.05 };
+        }
+        c.wet.dirty = Some((0, 0, c.f.w, c.f.h));
+        c
+    }
+
+    /// Trap A, the transfer: a plough transfer lifts paint off the source
+    /// (`Surf::take`), which zeroes the source's cure once its film falls
+    /// under 1e-5 coats (engine 2, drying state allocated), then lays it on
+    /// the destination (`Surf::add`) with the cure it read. The plough reads
+    /// the source's cure again for every destination it shares paint with,
+    /// so the destinations after the crossing get cure 0, not the cure the
+    /// source had before the first transfer.
+    #[test]
+    fn a_plough_transfer_rereads_the_source_cure_after_each_take() {
+        let mut c = thin_and_thick();
+        let w = c.f.w;
+        let i = 50 * w + 50;
+        let js = [49 * w + 50, 50 * w + 49, 50 * w + 51, 51 * w + 50];
+        c.wet.vol[i] = 1.03e-5;
+        c.wet.clock.px[i].cure = 0.1;
+        for &j in &js {
+            c.wet.vol[j] = 1e-3;
+            c.wet.clock.px[j].cure = 0.0;
+        }
+        let sf = c.surf();
+        let m = 1.44e-6f32 * 0.25;
+        let mut carried = Vec::new();
+        for &j in &js {
+            // as the plough block in `exchange` does, per accepted destination
+            unsafe {
+                let l = *sf.lat.add(i);
+                let hd = *sf.hide.add(i);
+                let cure = (*sf.dry.add(i)).cure;
+                carried.push(cure);
+                sf.take(i, m);
+                sf.add(j, m, &l, hd, cure);
+            }
+        }
+        // the first take crossed the threshold: only the first destination
+        // got the source's cure
+        assert_eq!(carried, [0.1, 0.0, 0.0, 0.0]);
+        assert!(c.wet.vol[i] < 1e-5 && c.wet.clock.px[i].cure == 0.0);
+        let got: Vec<u32> = js.iter().map(|&j| c.wet.clock.px[j].cure.to_bits()).collect();
+        let t = 1e-3f32 + m;
+        let first = (0.0 + (0.1f32 - 0.0) * (m / t)).to_bits();
+        assert_eq!(got, [first, 0, 0, 0], "destination cures {:?}", js.iter().map(|&j| c.wet.clock.px[j].cure).collect::<Vec<_>>());
+        // (a cure read once before the loop would have given every
+        // destination the first one's cure: 3.6e-5, not 0)
+        assert!(f32::from_bits(first) > 3e-5);
+    }
+
+    /// Trap A, the kernel: an empty filbert that doesn't pick up (so it only
+    /// ploughs, sharing each pixel's paint bilinearly among four
+    /// destinations) dragged through films at the threshold leaves exactly
+    /// the wet volume and cure recorded from main (4ec3169). A plough that
+    /// hoisted the source's cure out of its destination loop fails this.
+    #[test]
+    fn ploughing_films_at_the_threshold_leaves_the_recorded_cure() {
+        let mut c = thin_and_thick();
+        let before: Vec<f32> = c.wet.clock.px.iter().map(|p| p.cure).collect();
+        let tool = Tool { pickup: 0.0, push: 1.0, ..Tool::filbert(12.0) };
+        let mut h = Held::new(tool, 4);
+        for (k, y) in [150.0f32, 250.0, 350.0].into_iter().enumerate() {
+            let g = Gesture::line((80.0, y), (920.0, y + 30.0 * k as f32)).pressure(0.8, 0.8);
+            c.drag(&mut h, &g, None);
+        }
+        let n = c.f.w * c.f.h;
+        let zeroed = (0..n).filter(|&i| before[i] > 0.0 && c.wet.clock.px[i].cure == 0.0).count();
+        let (mut hv, mut hc) = (0xcbf2_9ce4_8422_2325u64, 0xcbf2_9ce4_8422_2325u64);
+        for i in 0..n {
+            fnv(&mut hv, c.wet.vol[i].to_bits());
+            fnv(&mut hc, c.wet.clock.px[i].cure.to_bits());
+        }
+        // the strokes did plough thin films under the threshold
+        assert!(zeroed > 1000, "{zeroed} films ploughed bare");
+        assert_eq!(format!("vol={hv:016x} cure={hc:016x} zeroed={zeroed}"), "vol=216de608ff085476 cure=322c7a06e7dcb3f4 zeroed=7536", "the plough no longer moves paint and cure as main did");
+    }
+
+    /// Trap B, the medians: the contact level's running median of a pixel
+    /// is the median of the pixels within its window, whatever else is in
+    /// the row, so recomputing it over a crop that holds each output's
+    /// whole window (or reaches the row's own ends) gives the full row's
+    /// result bit for bit.
+    #[test]
+    fn a_running_median_over_a_crop_with_its_window_is_bit_identical() {
+        let mut rng = Rng::new(20260930);
+        let row: Vec<f32> = (0..400).map(|_| rng.range(-80.0, 200.0)).collect();
+        let r = 23;
+        let mut full = vec![0.0; row.len()];
+        running_median(&row, r, &mut full);
+        for (a, b) in [(100usize, 180usize), (0, 60), (350, 400), (0, 400)] {
+            let (ca, cb) = (a.saturating_sub(r), (b + r).min(row.len()));
+            let mut local = vec![0.0; cb - ca];
+            running_median(&row[ca..cb], r, &mut local);
+            let same = (a..b).all(|x| full[x].to_bits() == local[x - ca].to_bits());
+            assert!(same, "median over [{ca}, {cb}) differs from the full row in [{a}, {b})");
+        }
+    }
+
+    /// Trap B, the blur: `surface::box_blur` keeps a running sum from the
+    /// start of each row and column. The same blur over a crop, even one
+    /// holding every output's whole window, restarts that sum and rounds
+    /// differently: it is NOT bit-identical to the full frame. Recomputing
+    /// only part of the contact level must keep the full rows' and columns'
+    /// sums (or recompute the blur in full).
+    #[test]
+    fn a_box_blur_over_a_crop_is_not_bit_identical() {
+        let (w, h, r) = (160, 120, 3);
+        let mut rng = Rng::new(20260930);
+        let src: Vec<f32> = (0..w * h).map(|_| rng.range(0.0, 200.0)).collect();
+        let full = crate::surface::box_blur(&src, w, h, r);
+        // the interior [60, 100) × [40, 80), cropped with a halo of r
+        let (x0, y0, x1, y1) = (60 - r, 40 - r, 100 + r, 80 + r);
+        let crop: Vec<f32> = (y0..y1).flat_map(|y| src[y * w + x0..y * w + x1].to_vec()).collect();
+        let local = crate::surface::box_blur(&crop, x1 - x0, y1 - y0, r);
+        let (mut differ, mut max) = (0, 0.0f32);
+        for y in 40..80 {
+            for x in 60..100 {
+                let (a, b) = (full[y * w + x], local[(y - y0) * (x1 - x0) + x - x0]);
+                if a.to_bits() != b.to_bits() {
+                    differ += 1;
+                    max = max.max((a - b).abs());
+                }
+                // the same value, but for rounding
+                assert!((a - b).abs() <= 1e-3, "{a} vs {b} at ({x}, {y})");
+            }
+        }
+        assert!(differ > 0, "the cropped blur is bit-identical here: box_blur no longer keeps a running sum?");
+        eprintln!("cropped box blur: {differ} of 1600 pixels differ, by up to {max:e}");
     }
 }

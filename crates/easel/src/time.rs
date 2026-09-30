@@ -157,6 +157,9 @@ pub fn verb<R>(st: &S, kind: Verb, f: impl FnOnce(&mut Studio) -> Result<R>) -> 
         Verb::Pass | Verb::Jump { .. } => flush(st, true),
         Verb::Query => {}
     }
+    if let Some(c) = st.borrow().canvas.as_ref() {
+        crate::frames::after_verb(c);
+    }
     Ok(r)
 }
 
@@ -220,6 +223,7 @@ fn over(s: &Studio) -> Option<String> {
 /// Hand time on or off.
 pub fn set(c: &mut paint::Canvas, on: bool) {
     c.set_hand_time(on.then_some(SLICE_MIN));
+    crate::frames::begin(c);
 }
 
 /// A sitting that runs over its hours is reported once per hour over (in a

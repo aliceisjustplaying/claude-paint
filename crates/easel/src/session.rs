@@ -72,7 +72,7 @@ pub struct Session {
     /// private objects snapshots skip and its after-chunk check (dropped
     /// before the state is closed).
     heap: Option<(Function, Function)>,
-    prelude: Option<(Function, Table, Function)>,
+    prelude: Option<(Function, Table, Function, Function)>,
     /// A failed chunk left tables different after restoration. Their entries are
     /// back but maybe not their layout (which Lua gives a program no way to
     /// set), so `pairs` could walk them in another order than a replay of the
@@ -126,7 +126,9 @@ impl Session {
         let id = serials.id_fn(&lua)?;
         let getmt: Function = dbg.get("getmetatable")?;
         let getinfo: Function = dbg.get("getinfo")?;
-        let prelude: (Function, Table, Function) = lua.load(include_str!("prelude.lua")).set_name("prelude.lua").call((id, getmt, getinfo))?;
+        // an error of the easel's own, for the prelude to know them by
+        let fail = lua.create_function(|_, ()| Err::<(), _>(mlua::Error::runtime("")))?;
+        let prelude: (Function, Table, Function, Function) = lua.load(include_str!("prelude.lua")).set_name("prelude.lua").call((id, getmt, getinfo, fail))?;
         let st = Rc::new(RefCell::new(Studio::new(width, tubes)));
         api::install(&lua, st.clone())?;
         let deadline = Rc::new(Cell::new(None::<Instant>));
@@ -251,10 +253,11 @@ impl Session {
         let t0 = Instant::now();
         // text only: mlua would take a chunk starting with Lua's binary signature as bytecode
         let chunk = self.lua.load(src.as_str()).set_name(format!("chunk {n}")).set_mode(mlua::chunk::ChunkMode::Text);
-        let check = self.prelude.as_ref().unwrap().2.clone();
+        let (check, guard) = { let p = self.prelude.as_ref().unwrap(); (p.2.clone(), p.3.clone()) };
         let deadline = (!self.replay).then(|| t0 + self.chunk_limit);
         self.deadline.set(deadline);
-        let r = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| chunk.exec().and_then(|()| check.call::<()>(()))));
+        // through prelude.lua's guard: an error value is shown without its address
+        let r = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| chunk.into_function().and_then(|f| guard.call::<()>(f)).and_then(|()| check.call::<()>(()))));
         self.deadline.set(None);
         // the hand time the chunk spent goes on the clock before it ends
         if matches!(r, Ok(Ok(()))) {
@@ -598,7 +601,28 @@ fn clean_error(e: &str) -> String {
         }
         out.push(l);
     }
-    out.join("\n")
+    unaddressed(&out.join("\n"))
+}
+
+/// `<name>: 0x<8+ hex digits>` (Lua's text for an object without __tostring, which Lua
+/// makes of an error object raised in a painter's function the easel called) as
+/// `<name>: (hidden)`, as prelude.lua's `unaddressed`: the address differs from process
+/// to process.
+fn unaddressed(e: &str) -> String {
+    let mut out = String::with_capacity(e.len());
+    let mut rest = e;
+    while let Some(i) = rest.find(": 0x") {
+        let hex = rest[i + 4..].bytes().take_while(u8::is_ascii_hexdigit).count();
+        out.push_str(&rest[..i + 2]);
+        if hex >= 8 {
+            out.push_str("(hidden)");
+            rest = &rest[i + 4 + hex..];
+        } else {
+            rest = &rest[i + 2..];
+        }
+    }
+    out.push_str(rest);
+    out
 }
 
 /// The box a session file names in its head (`BOX_MARK` lines before the
@@ -884,6 +908,80 @@ mod tests {
             failed.push(format!("\\x1bLua chunk loaded as binary: {e}"));
         }
         assert!(failed.is_empty(), "{failed:#?}");
+    }
+
+    /// Nothing a painting can print or branch on shows a memory address (which differs from
+    /// process to process, so between the live easel and a replay of its log): objects print
+    /// as `<type>: (hidden)`, `%p` is refused, and errors carrying objects say no address.
+    #[test]
+    #[cfg(tube_box)]
+    fn no_memory_address_reaches_a_painting() {
+        let shown = |s: &mut Session| {
+            let mut text = String::new();
+            for chunk in [
+                "local t, f = {}, function() end\nprint(t, f, print, string, setmetatable({}, {__name = 'Thing'}))\nprint(tostring(t), tostring(f), tostring(print))",
+                "local t = {}\nprint(string.format('%s|%8s|%-8s|%.3s', t, t, print, t), ('%s'):format(function() end))",
+                "print(setmetatable({}, {__tostring = function() return 'mine' end}), tostring(1.5), tostring(nil), tostring('s'))",
+                "for _, a in ipairs{{}, 's', 1} do local ok, e = pcall(string.format, '%p', a); assert(not ok, 'no %p'); print(e) end",
+                "error({})",
+                "error(function() end)",
+                "error(setmetatable({}, {}))",
+                "local t = {}; t = t .. 1",
+            ] {
+                match s.run(chunk) {
+                    Ok(r) => text.push_str(&r.out),
+                    Err(e) => text.push_str(&e),
+                }
+                text.push('\n');
+            }
+            text
+        };
+        let a = shown(&mut Session::new(64).unwrap());
+        // another state, its objects elsewhere in memory
+        let _elsewhere: Vec<Vec<u8>> = (0..1000).map(|i| vec![0; i]).collect();
+        let b = shown(&mut Session::new(64).unwrap());
+        let hexes = a.split(|c: char| !c.is_ascii_hexdigit()).filter(|w| w.len() >= 8).collect::<Vec<_>>();
+        assert!(!a.contains("0x") && hexes.is_empty(), "an address shows:\n{a}");
+        assert_eq!(a, b, "two processes show different text");
+        for want in ["table: (hidden)\tfunction: (hidden)\tfunction: (hidden)\ttable: (hidden)\tThing: (hidden)", "mine\t1.5\tnil\ts", "table: (hidden)|table: (hidden)|function: (hidden)|tab"] {
+            assert!(a.contains(want), "{want:?} not in\n{a}");
+        }
+    }
+
+    /// An error object raised in a painter's function the easel calls (a mask's, a curve's)
+    /// reaches the painting, caught or not, without an address either: Lua's conversion of
+    /// it to text happens outside the painting's reach (mlua's handler), so it's the text
+    /// that hides the address.
+    #[test]
+    #[cfg(tube_box)]
+    fn no_memory_address_escapes_a_callback() {
+        let raised = ["{}", "function() end", "setmetatable({}, {__name = 'Thing'})", "noise()"];
+        let mut chunks = Vec::new();
+        for v in raised {
+            for call in ["mask(function() error(V) end)", "below(function() error(V) end)"] {
+                let call = call.replace('V', v);
+                chunks.push(format!("local ok, e = pcall(function() return {call} end); assert(not ok); print(e, tostring(e), string.format('%s|%-9s', e, e), ('%s'):format(e))"));
+                chunks.push(call);
+            }
+        }
+        for run in 0..100 {
+            let mut s = Session::new(64).unwrap();
+            s.run(r#"canvas{size=100, aspect=1, seed=5, linen=15, ground={{pile={{"lead white", 1}}, um=80, apply="knife"}}}"#).unwrap();
+            let mut text = String::new();
+            for c in &chunks {
+                match s.run(c) {
+                    Ok(r) => text.push_str(&r.out),
+                    Err(e) => text.push_str(&e),
+                }
+                text.push('\n');
+            }
+            assert!(!text.contains(": 0x"), "run {run}: an address shows:\n{text}");
+            if run == 0 {
+                for want in ["table: (hidden)", "function: (hidden)", "Thing: (hidden)", "Noise: (hidden)"] {
+                    assert!(text.contains(want), "{want:?} not in\n{text}");
+                }
+            }
+        }
     }
 
     #[test]

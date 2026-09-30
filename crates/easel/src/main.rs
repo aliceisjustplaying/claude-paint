@@ -662,6 +662,29 @@ fn validate_log(name: &str, expected: &str) -> Result<(), String> {
     Ok(())
 }
 
+/// Write a look as `dir/look-NNNN.png`, NNNN one above the highest there, never over a file
+/// that exists (a pruned look or a stray look-prefixed file doesn't make it reuse a name).
+fn new_look(dir: &Path, png: &[u8]) -> Result<PathBuf, String> {
+    std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
+    let number = |name: &str| name.strip_prefix("look-")?.strip_suffix(".png")?.parse::<u64>().ok();
+    let mut n = std::fs::read_dir(dir).map_err(|e| e.to_string())?.filter_map(|e| number(&e.ok()?.file_name().to_string_lossy())).max().unwrap_or(0);
+    loop {
+        n = n.checked_add(1).ok_or_else(|| format!("{}: no look number above look-{n}.png is left", dir.display()))?;
+        let p = dir.join(format!("look-{n:04}.png"));
+        match std::fs::OpenOptions::new().write(true).create_new(true).open(&p) {
+            Ok(mut f) => {
+                if let Err(e) = f.write_all(png).and_then(|_| f.sync_all()) {
+                    let _ = std::fs::remove_file(&p);
+                    return Err(format!("{}: {e}", p.display()));
+                }
+                return Ok(p);
+            }
+            Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => continue,
+            Err(e) => return Err(format!("{}: {e}", p.display())),
+        }
+    }
+}
+
 impl Server {
     // Independent local witness, not a signature or an access-control boundary.
     // Editing the log alone is detected; coordinated edits of both files or
@@ -754,12 +777,16 @@ impl Server {
         let v = look::View::parse(args)?;
         let t0 = Instant::now();
         let c = self.s.canvas().ok_or("no canvas yet: the first chunk is canvas{...}")?;
-        let dir = session_dir(&self.name);
-        let path = path.unwrap_or_else(|| {
-            let n = std::fs::read_dir(&dir).map(|d| d.filter_map(|e| e.ok()).filter(|e| e.file_name().to_string_lossy().starts_with("look-")).count()).unwrap_or(0);
-            dir.join(format!("look-{:04}.png", n + 1))
-        });
-        let (w, h) = look::look(&c, &v, &path)?;
+        let (w, h, path) = match path {
+            Some(p) => {
+                let (w, h) = look::look(&c, &v, &p)?;
+                (w, h, p)
+            }
+            None => {
+                let (w, h, png) = look::render(&c, &v)?;
+                (w, h, new_look(&session_dir(&self.name), &png)?)
+            }
+        };
         Ok(format!("{} ({w}x{h}, {:.2}s)\n", path.display(), t0.elapsed().as_secs_f64()))
     }
 
@@ -947,6 +974,22 @@ fn run(args: &[String]) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A stray look numbered at the top of u64 leaves no number above it: the look is
+    /// refused, not a panic (debug) or a wrap back to look-0000 (release).
+    #[test]
+    fn a_look_above_the_last_number_is_refused() {
+        let dir = std::env::temp_dir().join(format!("easel-look-top-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join(format!("look-{}.png", u64::MAX)), b"stray").unwrap();
+        let r = std::panic::catch_unwind(|| new_look(&dir, b"png"));
+        let names: Vec<_> = std::fs::read_dir(&dir).unwrap().map(|e| e.unwrap().file_name().to_string_lossy().into_owned()).collect();
+        let _ = std::fs::remove_dir_all(&dir);
+        let r = r.expect("new_look panicked");
+        assert!(r.as_ref().is_err_and(|e| e.contains("look")), "{r:?}");
+        assert_eq!(names.len(), 1, "a look was written: {names:?}");
+    }
 
     /// A request is served from its length line, even when the client's end of file never
     /// comes (macOS sometimes loses a half-close; the server then waited for it until the

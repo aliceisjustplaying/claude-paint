@@ -407,6 +407,27 @@ fn set_current(name: &str) -> Result<(), String> {
     Ok(())
 }
 
+/// The session's lock: a file its one server holds locked (flock) for its whole life, and
+/// an `open` while it starts that server. A session has at most one server, and only its
+/// holder may remove the socket or start the server log.
+fn lock_path(name: &str) -> PathBuf {
+    session_dir(name).join("lock")
+}
+
+/// The session's lock, if no one holds it (None: a server, or an `open` starting one, does).
+fn try_lock(name: &str) -> Result<Option<std::fs::File>, String> {
+    let p = lock_path(name);
+    let f = std::fs::OpenOptions::new().read(true).write(true).create(true).truncate(false).open(&p).map_err(|e| format!("{}: {e}", p.display()))?;
+    match f.try_lock() {
+        Ok(()) => Ok(Some(f)),
+        Err(std::fs::TryLockError::WouldBlock) => Ok(None),
+        Err(std::fs::TryLockError::Error(e)) => Err(format!("{}: {e}", p.display())),
+    }
+}
+
+/// Set on the server `open` starts: its stdin is the session's lock, held for it.
+const LOCK_ON_STDIN: &str = "EASEL_LOCK_ON_STDIN";
+
 fn open(args: &[String]) -> Result<(), String> {
     let name = open_name(args)?;
     let dir = session_dir(&name);
@@ -419,26 +440,43 @@ fn open(args: &[String]) -> Result<(), String> {
         print!("reattached to {name:?}: {st}");
         return Ok(());
     }
-    let _ = std::fs::remove_file(sock_path(&name));
-    let log = std::fs::File::create(dir.join("server.log")).map_err(|e| e.to_string())?;
-    let exe = std::env::current_exe().map_err(|e| e.to_string())?;
-    use std::os::unix::process::CommandExt;
-    std::process::Command::new(exe)
-        .args(["serve", &name])
-        .stdin(std::process::Stdio::null())
-        .stdout(log.try_clone().map_err(|e| e.to_string())?)
-        .stderr(log)
-        .process_group(0)
-        .spawn()
-        .map_err(|e| format!("could not start the session: {e}"))?;
     // Replaying a real painting can take tens of minutes. Follow the server's
     // startup log so `open` shows that work instead of looking dead, and only
     // time out when the replay itself has made no progress for 30 minutes.
+    // The server is started only by the `open` that takes the session's lock; any
+    // other waits for it (or, if it has gone, takes the lock in turn).
+    let mut started = false;
     let mut shown = 0usize;
     let mut last_progress = Instant::now();
     loop {
+        if let Some(lock) = try_lock(&name)? {
+            if started {
+                return Err(format!("the session's server stopped without saying why; see {}", dir.join("server.log").display()));
+            }
+            // no server holds the session: a socket left there is a dead one's
+            let _ = std::fs::remove_file(sock_path(&name));
+            let log = std::fs::File::create(dir.join("server.log")).map_err(|e| e.to_string())?;
+            let exe = std::env::current_exe().map_err(|e| e.to_string())?;
+            use std::os::unix::process::CommandExt;
+            std::process::Command::new(exe)
+                .args(["serve", &name])
+                .env(LOCK_ON_STDIN, "1")
+                // the server holds the lock from here on (the same open file)
+                .stdin(lock)
+                .stdout(log.try_clone().map_err(|e| e.to_string())?)
+                .stderr(log)
+                .process_group(0)
+                .spawn()
+                .map_err(|e| format!("could not start the session: {e}"))?;
+            started = true;
+            shown = 0;
+        }
         std::thread::sleep(Duration::from_millis(100));
         let log = std::fs::read_to_string(dir.join("server.log")).unwrap_or_default();
+        // started again by another open since we last read it
+        if log.len() < shown {
+            shown = 0;
+        }
         if let Some(end) = log[shown..].rfind('\n').map(|i| shown + i + 1) {
             for line in log[shown..end].lines() {
                 if line.starts_with("resuming ") || line.starts_with("resumed ") || line.starts_with("warning") {
@@ -461,6 +499,44 @@ fn open(args: &[String]) -> Result<(), String> {
             return Err(format!("session made no replay progress for 30 minutes; see {}", dir.join("server.log").display()));
         }
     }
+}
+
+/// The session's lock for `serve`, held until it exits: the one `open` passed on its
+/// stdin, else taken here. A session that has a server already gets no second one.
+fn serve_lock(name: &str) -> Result<std::fs::File, String> {
+    let on_stdin = std::env::var_os(LOCK_ON_STDIN).is_some();
+    // The signal is this server's alone: a child it starts must not take its stdin for the
+    // lock. (fd 0 itself is inherited by any child all the same, not close-on-exec: a child
+    // would hold the lock after the server died, and every open would wait for it. The
+    // server starts no children.)
+    // SAFETY: read and removed before the server starts any thread
+    unsafe { std::env::remove_var(LOCK_ON_STDIN) };
+    let lock = if on_stdin {
+        use std::os::fd::AsFd;
+        use std::os::unix::fs::MetadataExt;
+        // a duplicate of stdin: the same open file, so the same lock
+        let f = std::fs::File::from(std::io::stdin().as_fd().try_clone_to_owned().map_err(|e| e.to_string())?);
+        let (held, want) = (f.metadata().map_err(|e| e.to_string())?, std::fs::metadata(lock_path(name)).map_err(|e| e.to_string())?);
+        if (held.dev(), held.ino()) != (want.dev(), want.ino()) {
+            return Err(format!("{LOCK_ON_STDIN} is set but stdin isn't {}", lock_path(name).display()));
+        }
+        // already ours (the open file `open` locked): this doesn't wait
+        f.try_lock().map_err(|e| format!("{}: {e}", lock_path(name).display()))?;
+        f
+    } else {
+        std::fs::create_dir_all(session_dir(name)).map_err(|e| e.to_string())?;
+        match try_lock(name)? {
+            Some(f) => f,
+            None => {
+                let pid = std::fs::read_to_string(lock_path(name)).unwrap_or_default();
+                return Err(format!("another easel serves session {name:?} (pid {}); nothing ran", pid.trim()));
+            }
+        }
+    };
+    // who holds it, for anyone looking
+    let mut f = &lock;
+    let _ = f.set_len(0).and_then(|_| writeln!(f, "{}", std::process::id()));
+    Ok(lock)
 }
 
 // ---------------------------------------------------------------- server
@@ -487,8 +563,11 @@ fn serve(args: &[String]) -> Result<(), String> {
     if args.len() != 1 {
         return Err("easel: fatal: live sessions are fixed at 2400px".into());
     }
+    let _lock = serve_lock(&name).map_err(|e| format!("easel: fatal: {e}"))?;
     let mut srv = Server::resume(name.clone()).map_err(|e| format!("easel: fatal: {e}"))?;
     let sock = sock_path(&name);
+    // the lock is ours: a socket there is a dead server's
+    let _ = std::fs::remove_file(&sock);
     let l = UnixListener::bind(&sock).map_err(|e| format!("easel: fatal: bind {}: {e}", sock.display()))?;
     let _ = std::io::stdout().flush();
     // the check running on its own thread, if any (check.rs; replay build only)
@@ -992,6 +1071,18 @@ mod tests {
         let r = r.expect("new_look panicked");
         assert!(r.as_ref().is_err_and(|e| e.contains("look")), "{r:?}");
         assert_eq!(names.len(), 1, "a look was written: {names:?}");
+    }
+
+    /// The lock-on-stdin signal is for this server only: once read it leaves the
+    /// environment, so no child the server ever starts takes it (or its stdin) as the lock.
+    #[test]
+    fn the_lock_on_stdin_signal_is_not_passed_on() {
+        // SAFETY: no other test reads or writes this variable
+        unsafe { std::env::set_var(LOCK_ON_STDIN, "1") };
+        // stdin here is no lock file: refused, but the signal is read all the same
+        let r = serve_lock("lock-signal-test");
+        assert!(r.is_err(), "a test's stdin was taken as the lock");
+        assert_eq!(std::env::var_os(LOCK_ON_STDIN), None, "{LOCK_ON_STDIN} is still set");
     }
 
     /// A request is served from its length line, even when the client's end of file never

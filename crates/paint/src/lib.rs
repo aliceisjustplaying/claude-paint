@@ -37,6 +37,7 @@ pub mod stipple;
 pub mod tally;
 pub mod style;
 pub mod hand;
+pub mod frames;
 pub mod outline;
 pub mod surface;
 

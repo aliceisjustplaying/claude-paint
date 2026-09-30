@@ -7,7 +7,7 @@
 
     replay_pace.py <frames-dir> --length T [--max-hold 1] [--hold 3] [--fps 24]
                    [--floor 0.2] [--gamma 0.7] [--hand-pace 0.6] [--min-frames 2]
-                   [--ramp 1] [--ramp-span 0.35] [--open-hold 0] [--eval]
+                   [--ramp 1] [--ramp-span 0.35] [--open-hold 0] [--before 0] [--eval]
 
 Writes <frames-dir>/concat.txt (ffmpeg concat list) from frames.tsv, where a
 frame's screen time follows how much the picture visibly changed when it
@@ -27,11 +27,15 @@ arrived, not how long the hand took:
             nothing flickers past
 
 The final picture is held --hold seconds; with --open-hold S the bare canvas
-opens the clip for S seconds, taken out of the rest. With --eval, prints how evenly the
+opens the clip for S seconds, taken out of the rest. A --length the moments
+can't fill, held at most --max-hold each, is refused with the longest they
+can (--before: seconds of clip before this list, replay_clip's --final-first,
+counted in that message). With --eval, prints how evenly the
 visible change is spread over the clip (per tenth).
 """
 
 import argparse
+import math
 import sys
 from pathlib import Path
 
@@ -126,8 +130,8 @@ def quantize(t, fps, min_frames):
     frames, carry = [], 0.0
     for x in t:
         carry += x * fps
-        if carry >= min_frames:
-            n = int(carry)
+        if carry + 1e-6 >= min_frames:
+            n = int(carry + 1e-6)  # a whole frame summed as 23.9999... is a frame
             frames.append(n)
             carry -= n
         else:
@@ -164,6 +168,7 @@ def main():
     ap.add_argument("--ramp", type=float, default=1.0, help="opening speed-up: weight factor at the start (1 = none)")
     ap.add_argument("--open-hold", type=float, default=0.0, help="seconds the bare canvas is shown first")
     ap.add_argument("--ramp-span", type=float, default=0.35, help="share of hand time over which the ramp eases to 1")
+    ap.add_argument("--before", type=float, default=0.0, help="seconds of clip before this list, for the length message")
     ap.add_argument("--eval", action="store_true", help="print evenness for this schedule and for plain --hand-pace")
     a = ap.parse_args()
     if a.length <= a.hold + a.open_hold:
@@ -172,6 +177,20 @@ def main():
     ms = moments(a.dir)
     h = np.array([x[1] for x in ms])
     c = changes(a.dir, ms)
+    # the moments shown, each held at most --max-hold (in whole video frames),
+    # may not fill --length
+    m = int((schedule(c, h, a) > 0).sum())
+    want = a.length - a.hold - opening / a.fps
+    most = math.floor(m * a.max_hold * a.fps + 1e-6) / a.fps
+    if want > most + 1e-6:
+        before = f" plus the {a.before:g} s --final-first" if a.before > 0 else ""
+        opened = f" plus the {opening / a.fps:g} s --open-hold" if opening else ""
+        raise_ = f"raise --max-hold to at least {math.ceil(math.ceil(want * a.fps - 1e-6) / a.fps / m * 100) / 100:.2f} or " if m else ""
+        sys.exit(
+            f"replay_pace: --length {a.length + a.before:g} is longer than the clip can run: {m} moment{'' if m == 1 else 's'} held at most {a.max_hold:g} s each (--max-hold)"
+            f" plus the {a.hold:g} s final hold{opened}{before} come to at most {math.floor((most + a.hold + opening / a.fps + a.before) * 100 + 1e-6) / 100:.2f} s;"
+            f" {raise_}lower --length"
+        )
     # quantizing drops a little time (skipped frames' remainders): aim a
     # little long until the clip lands on --length
     target, aim = a.length, a.length
@@ -194,8 +213,9 @@ def main():
             shown += 1
     last = entry(ms[-1][0])
     # the last entry of a concat list takes the duration before it: the hold
-    # (less a frame), then a one-frame repeat, then the frame again
-    lines.append(f"{last}duration {a.hold - 1 / a.fps:.5f}\n{last}duration {1 / a.fps:.5f}\n{last}")
+    # (less the two frames after it), then a one-frame repeat, then the frame
+    # again (a frame)
+    lines.append(f"{last}duration {a.hold - 2 / a.fps:.5f}\n{last}duration {1 / a.fps:.5f}\n{last}")
     (a.dir / "concat.txt").write_text("".join(lines))
     total = sum(fr) / a.fps + a.hold
     print(f"{len(ms)} moments, {shown + 1} shown, {h[-1] / 60:.1f} min of hand time, pace dynamic (floor {a.floor}, gamma {a.gamma}): about {total:.1f} s of clip", file=sys.stderr)

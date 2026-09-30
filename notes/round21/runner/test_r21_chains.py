@@ -140,7 +140,7 @@ def chain_one_record(tmp_path, monkeypatch, record, rc, journal=True, lanes=None
             (rd / "p1_record.md").write_text(record)
         return rc
     monkeypatch.setattr(rc21, "run", reader)
-    rd.mkdir(parents=True)
+    rd.mkdir(parents=True, exist_ok=True)
     session = tmp_path / "s1.jsonl"
     session.write_text("{}\n")
     (rd / "p1_sittings.json").write_text(json.dumps([{"sitting": 1, "sessions": [str(session)]}]))
@@ -168,3 +168,38 @@ def test_a_reader_that_fails_says_so(tmp_path, monkeypatch):
     # pi exits 1 when reader.ts refuses to load (no valid READER_SCOPE): the log names the exit
     lines, _ = chain_one_record(tmp_path, monkeypatch, None, 1)
     assert any("record MISSING (the reader exited 1" in l for l in lines), lines
+
+
+# what to do and where things go in the picture are flagged, not rejected: the record goes on and
+# the flagged lines are logged and listed in p1_record.flags.md
+@pytest.mark.parametrize("record, flagged", [
+    ("Always put a tall arch at the center of the picture. Keep the brightest patch on the left.\n",
+     ["line 1 (what to do)", "line 1 (where things go in the picture)"]),
+    (GOOD_RECORD + "- Glazing: never glaze before the underlayer is dry.\n", ["line 3 (what to do)"]),
+    (GOOD_RECORD + "- Stippling: the dark mass sits in the lower third of the picture.\n",
+     ["line 3 (where things go in the picture)"]),
+    (GOOD_RECORD + "- Masks: the horizon line stayed crisp under the mask.\n",
+     ["line 3 (where things go in the picture)"]),
+])
+def test_a_record_with_flagged_lines_still_reaches_the_next_studio(tmp_path, monkeypatch, record, flagged):
+    lines, _ = chain_one_record(tmp_path, monkeypatch, record, 0)
+    rd = tmp_path / "run/T"
+    assert (rd / "p1.done").exists()
+    assert record in (rc21.studio("T2") / "notes/studio_notes.md").read_text()
+    flags = (rd / "p1_record.flags.md").read_text()
+    for f in flagged:
+        assert f in flags
+        assert any("RECORD FLAGGED" in l and f in l for l in lines), lines
+    assert any("record written" in l and "flagged lines went on with it" in l for l in lines), lines
+
+
+def test_observations_of_what_the_paint_did_are_not_flagged(tmp_path, monkeypatch):
+    record = (GOOD_RECORD + "- The knife left paint only on the top of the weave; a denser pass covered it.\n"
+              "- A glaze over a dry passage stayed transparent; over a wet one it mixed in.\n")
+    rd = tmp_path / "run/T"
+    rd.mkdir(parents=True, exist_ok=True)
+    (rd / "p1_record.flags.md").write_text("an earlier attempt's flags\n")
+    lines, _ = chain_one_record(tmp_path, monkeypatch, record, 0)
+    assert not (rd / "p1_record.flags.md").exists()
+    assert not any("FLAGGED" in l for l in lines), lines
+    assert record in (rc21.studio("T2") / "notes/studio_notes.md").read_text()

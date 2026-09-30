@@ -21,7 +21,7 @@ extension (sets TMPDIR under ~/tmp and blocks writes to OS temp folders, with th
 reason shown to the painter; it adds no prompt text):
 
 ```sh
-H=~/src/a/claude-paint-r17-base/harness/painter
+H=~/src/a/claude-paint/harness/painter
 BLACK=~/.pi/agent/git/github.com/aliceisjustplaying/pi-black/extensions/pi-black.ts
 TEMP_GUARD=~/.pi/agent/extensions/persistent-temp.ts
 

@@ -191,5 +191,5 @@ branch and 0.81 with `hierarchy` 0.
   doc calls it the primary's opening. Main's bug hid that (its canvas
   primaries opened ~1.1×). Whether 1.7 stays is a calibration for Alice,
   not part of this fix.
-- **Direction** (diagonal, down-right, ~0.3): untouched, per the plan in
-  `notes/HANDOFF.md`.
+- **Direction** (diagonal, down-right, ~0.3, per painting): untouched; it
+  was planned as a later step (`notes/cracks_lab/README.md`).

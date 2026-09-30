@@ -477,3 +477,23 @@ def test_the_round_and_commit_are_round_21_s(tmp_path, monkeypatch):
 
 def test_every_profile_has_its_own_artist_s_names():
     assert set(rc21.OPENING) <= set(rc21.OWN_NAMES)
+
+
+def test_only_a_structured_chain_lane_is_labeled_non_neutral(tmp_path, monkeypatch):
+    chain_structured(tmp_path, monkeypatch, None, rc=1)
+    c = json.loads((tmp_path / "run/T/condition.json").read_text())
+    assert c["condition"] == "chain-inherited, non-neutral" and c["record_kind"] == "structured"
+    assert set(c["reader_briefs_sha256"]) == {"reader_brief.md", "reader_brief_structured.md"}
+    assert set(c["renderer_sha256"]) == {"record_schema.py", "record_render.py"}
+    # a free-text chain and a single painter get none
+    (tmp_path / "ft").mkdir()
+    chain_one_record(tmp_path / "ft", monkeypatch, GOOD_RECORD, 0)
+    assert not (tmp_path / "ft/run/T/condition.json").exists()
+    (tmp_path / "one").mkdir()
+    monkeypatch.setattr(rc21, "RUN", tmp_path / "one/run")
+    monkeypatch.setattr(rc21, "LANES", {"S": rc21.lane("sargent", rc21.OPUS, record_kind="structured")})
+    (tmp_path / "one/run/S").mkdir(parents=True)
+    (tmp_path / "one/run/S/p1.done").write_text("")
+    monkeypatch.setattr(rc21, "studio", lambda key: tmp_path / "one" / key)
+    rc21.chain("S")
+    assert not (tmp_path / "one/run/S/condition.json").exists()

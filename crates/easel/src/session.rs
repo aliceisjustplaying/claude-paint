@@ -72,12 +72,14 @@ pub struct Session {
     /// private objects snapshots skip and its after-chunk check (dropped
     /// before the state is closed).
     heap: Option<(Function, Function)>,
-    prelude: Option<(Function, Table, Function)>,
+    prelude: Option<(Function, Table, Function, Function)>,
     /// A failed chunk left tables different after restoration. Their entries are
     /// back but maybe not their layout (which Lua gives a program no way to
     /// set), so `pairs` could walk them in another order than a replay of the
     /// log: the state is rebuilt from the log (`rebuild`) before the next chunk.
     pub stale: bool,
+    /// Stale because putting back what a failed chunk did failed (not just a layout).
+    pub unrestored: bool,
     /// Every global as the last successful chunk left it, with the chunk that last assigned it
     /// (0: the easel's own). `run` updates it by comparing the globals after each chunk with
     /// it, in a live session and a replay alike, so a reopen or rebuild gives the same answer.
@@ -86,6 +88,9 @@ pub struct Session {
     own: BTreeMap<String, Value>,
     /// Creation serials of the state's objects (outlives the state).
     _serials: Box<Serials>,
+    /// Tests: the step of `run` that fails ("flush", "globals" or "restore").
+    #[cfg(test)]
+    pub fail_at: Cell<Option<&'static str>>,
 }
 
 #[derive(Debug)]
@@ -126,7 +131,9 @@ impl Session {
         let id = serials.id_fn(&lua)?;
         let getmt: Function = dbg.get("getmetatable")?;
         let getinfo: Function = dbg.get("getinfo")?;
-        let prelude: (Function, Table, Function) = lua.load(include_str!("prelude.lua")).set_name("prelude.lua").call((id, getmt, getinfo))?;
+        // an error of the easel's own, for the prelude to know them by
+        let fail = lua.create_function(|_, ()| Err::<(), _>(mlua::Error::runtime("")))?;
+        let prelude: (Function, Table, Function, Function) = lua.load(include_str!("prelude.lua")).set_name("prelude.lua").call((id, getmt, getinfo, fail))?;
         let st = Rc::new(RefCell::new(Studio::new(width, tubes)));
         api::install(&lua, st.clone())?;
         let deadline = Rc::new(Cell::new(None::<Instant>));
@@ -140,7 +147,7 @@ impl Session {
         })?;
         let own = global_values(&lua)?;
         let globals = own.iter().map(|(k, v)| (k.clone(), (v.clone(), 0))).collect();
-        Ok(Session { lua: ManuallyDrop::new(lua), state, st, log: Vec::new(), replay: false, deadline, chunk_limit: CHUNK_LIMIT, heap: Some((snap_f, restore_f)), prelude: Some(prelude), stale: false, globals, own, _serials: serials })
+        Ok(Session { lua: ManuallyDrop::new(lua), state, st, log: Vec::new(), replay: false, deadline, chunk_limit: CHUNK_LIMIT, heap: Some((snap_f, restore_f)), prelude: Some(prelude), stale: false, unrestored: false, globals, own, _serials: serials, #[cfg(test)] fail_at: Cell::new(None) })
     }
 
     /// A session that replays a program from the default box (tests;
@@ -190,6 +197,7 @@ impl Session {
     fn restore(&mut self, snap: &Snap) -> mlua::Result<usize> {
         let (_, restore_f) = self.heap.as_ref().unwrap();
         let mismatches = restore_f.call::<usize>(snap.heap.clone())?;
+        self.inject("restore")?;
         for (b, h) in &snap.brushes {
             *b.borrow_mut() = h.clone();
         }
@@ -203,6 +211,15 @@ impl Session {
         s.hand = snap.hand.clone();
         s.view = snap.view.clone();
         Ok(mismatches)
+    }
+
+    /// Tests: fail here if `fail_at` says so (nothing, outside tests).
+    fn inject(&self, _at: &str) -> mlua::Result<()> {
+        #[cfg(test)]
+        if self.fail_at.get() == Some(_at) {
+            return Err(mlua::Error::runtime(format!("injected failure: {_at}")));
+        }
+        Ok(())
     }
 
     /// Replace the state with a replay of the log in a fresh one: the state
@@ -251,34 +268,58 @@ impl Session {
         let t0 = Instant::now();
         // text only: mlua would take a chunk starting with Lua's binary signature as bytecode
         let chunk = self.lua.load(src.as_str()).set_name(format!("chunk {n}")).set_mode(mlua::chunk::ChunkMode::Text);
-        let check = self.prelude.as_ref().unwrap().2.clone();
+        let (check, guard) = { let p = self.prelude.as_ref().unwrap(); (p.2.clone(), p.3.clone()) };
         let deadline = (!self.replay).then(|| t0 + self.chunk_limit);
         self.deadline.set(deadline);
-        let r = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| chunk.exec().and_then(|()| check.call::<()>(()))));
-        self.deadline.set(None);
-        // the hand time the chunk spent goes on the clock before it ends
-        if matches!(r, Ok(Ok(()))) {
+        // Everything that can fail before the chunk is kept is inside this guard: the chunk,
+        // prelude.lua's check, putting its hand time on the clock and reading the globals it
+        // left. A failure anywhere in it is a failed chunk, rolled back below.
+        let r = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            // through prelude.lua's guard: an error value is shown without its address
+            guard.call::<()>(chunk.into_function()?)?;
+            check.call::<()>(())?;
+            // the hand time the chunk spent goes on the clock before it ends
+            if self.inject("flush").is_err() {
+                panic!("injected failure: flush");
+            }
             crate::time::flush(&self.st, true);
-        }
+            self.next_globals(n as usize)
+        }));
+        self.deadline.set(None);
         let secs = t0.elapsed().as_secs_f64();
         let out = self.st.borrow().out.clone();
-        let fail = match r {
-            Ok(Ok(())) => None,
-            Ok(Err(e)) => Some(clean_error(&e.to_string())),
-            Err(p) => Some(format!("engine panic: {}", p.downcast_ref::<String>().cloned().or(p.downcast_ref::<&str>().map(|s| s.to_string())).unwrap_or_default())),
+        let (mut fail, globals) = match r {
+            Ok(Ok(g)) => (None, Some(g)),
+            Ok(Err(e)) => (Some(clean_error(&e.to_string())), None),
+            Err(p) => (Some(format!("engine panic: {}", panic_text(&p))), None),
         };
         // Rollback must finish even after the chunk exhausted its deadline. The
         // private restore uses raw operations and runs no painter code; collection
         // below reinstates the deadline because it can run Lua work.
         // put back what a failed chunk did (no painter code runs in restore)
-        if fail.is_some()
+        if let Some(e) = fail.as_mut()
             && let Some(snap) = snap.take()
         {
-            self.stale = self.restore(&snap).map_err(|e| e.to_string())? > 0;
+            // A rollback that fails may have left anything half put back: the state is
+            // no longer one the log gives, so it is rebuilt from the log (`stale`) before
+            // anything paints on it.
+            match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| self.restore(&snap))) {
+                Ok(Ok(mismatches)) => self.stale = mismatches > 0,
+                r => {
+                    self.stale = true;
+                    self.unrestored = true;
+                    let why = match r {
+                        Ok(Err(e)) => e.to_string(),
+                        Err(p) => format!("engine panic: {}", panic_text(&p)),
+                        Ok(Ok(_)) => unreachable!(),
+                    };
+                    e.push_str(&format!("\n(the easel couldn't put back what the chunk did ({why}), so it rebuilds the painting from its log before it paints again)"));
+                }
+            }
         }
         // before collecting: the values the chunk replaced aren't held here any more
-        if fail.is_none() {
-            self.note_globals(n as usize).map_err(|e| e.to_string())?;
+        if let Some(g) = globals {
+            self.globals = g;
         }
         // masks and brushes hold memory Lua can't see: collect between chunks, without the
         // snapshot, as a replay does, and within the chunk's time
@@ -320,20 +361,21 @@ impl Session {
         s
     }
 
-    /// Chunk `n` succeeded: the globals it set, changed or removed.
-    fn note_globals(&mut self, n: usize) -> mlua::Result<()> {
+    /// The globals as chunk `n` left them: the ones it set, changed or removed are its.
+    fn next_globals(&self, n: usize) -> mlua::Result<BTreeMap<String, (Value, usize)>> {
+        self.inject("globals")?;
         let now = global_values(&self.lua)?;
-        let mut before = std::mem::take(&mut self.globals);
+        let mut next = BTreeMap::new();
         for (k, v) in now {
-            let chunk = match before.remove(&k) {
-                Some((old, c)) if same(&old, &v) => c,
+            let chunk = match self.globals.get(&k) {
+                Some((old, c)) if same(old, &v) => *c,
                 // back to the easel's own value: the easel's again
                 _ if self.own.get(&k).is_some_and(|o| same(o, &v)) => 0,
                 _ => n,
             };
-            self.globals.insert(k, (v, chunk));
+            next.insert(k, (v, chunk));
         }
-        Ok(())
+        Ok(next)
     }
 
     /// The painting's globals, the most recently assigned last: one line each,
@@ -589,6 +631,11 @@ fn hash_seed_fixed() -> bool {
     hash_probe() == HASH_PROBE
 }
 
+/// What a caught panic said.
+fn panic_text(p: &Box<dyn std::any::Any + Send>) -> String {
+    p.downcast_ref::<String>().cloned().or(p.downcast_ref::<&str>().map(|s| s.to_string())).unwrap_or_default()
+}
+
 /// Lua errors carry a traceback; the painter needs the first lines.
 fn clean_error(e: &str) -> String {
     let mut out = Vec::new();
@@ -598,7 +645,28 @@ fn clean_error(e: &str) -> String {
         }
         out.push(l);
     }
-    out.join("\n")
+    unaddressed(&out.join("\n"))
+}
+
+/// `<name>: 0x<8+ hex digits>` (Lua's text for an object without __tostring, which Lua
+/// makes of an error object raised in a painter's function the easel called) as
+/// `<name>: (hidden)`, as prelude.lua's `unaddressed`: the address differs from process
+/// to process.
+fn unaddressed(e: &str) -> String {
+    let mut out = String::with_capacity(e.len());
+    let mut rest = e;
+    while let Some(i) = rest.find(": 0x") {
+        let hex = rest[i + 4..].bytes().take_while(u8::is_ascii_hexdigit).count();
+        out.push_str(&rest[..i + 2]);
+        if hex >= 8 {
+            out.push_str("(hidden)");
+            rest = &rest[i + 4 + hex..];
+        } else {
+            rest = &rest[i + 2..];
+        }
+    }
+    out.push_str(rest);
+    out
 }
 
 /// The box a session file names in its head (`BOX_MARK` lines before the
@@ -884,6 +952,129 @@ mod tests {
             failed.push(format!("\\x1bLua chunk loaded as binary: {e}"));
         }
         assert!(failed.is_empty(), "{failed:#?}");
+    }
+
+    /// Nothing a painting can print or branch on shows a memory address (which differs from
+    /// process to process, so between the live easel and a replay of its log): objects print
+    /// as `<type>: (hidden)`, `%p` is refused, and errors carrying objects say no address.
+    #[test]
+    #[cfg(tube_box)]
+    fn no_memory_address_reaches_a_painting() {
+        let shown = |s: &mut Session| {
+            let mut text = String::new();
+            for chunk in [
+                "local t, f = {}, function() end\nprint(t, f, print, string, setmetatable({}, {__name = 'Thing'}))\nprint(tostring(t), tostring(f), tostring(print))",
+                "local t = {}\nprint(string.format('%s|%8s|%-8s|%.3s', t, t, print, t), ('%s'):format(function() end))",
+                "print(setmetatable({}, {__tostring = function() return 'mine' end}), tostring(1.5), tostring(nil), tostring('s'))",
+                "for _, a in ipairs{{}, 's', 1} do local ok, e = pcall(string.format, '%p', a); assert(not ok, 'no %p'); print(e) end",
+                "error({})",
+                "error(function() end)",
+                "error(setmetatable({}, {}))",
+                "local t = {}; t = t .. 1",
+            ] {
+                match s.run(chunk) {
+                    Ok(r) => text.push_str(&r.out),
+                    Err(e) => text.push_str(&e),
+                }
+                text.push('\n');
+            }
+            text
+        };
+        let a = shown(&mut Session::new(64).unwrap());
+        // another state, its objects elsewhere in memory
+        let _elsewhere: Vec<Vec<u8>> = (0..1000).map(|i| vec![0; i]).collect();
+        let b = shown(&mut Session::new(64).unwrap());
+        let hexes = a.split(|c: char| !c.is_ascii_hexdigit()).filter(|w| w.len() >= 8).collect::<Vec<_>>();
+        assert!(!a.contains("0x") && hexes.is_empty(), "an address shows:\n{a}");
+        assert_eq!(a, b, "two processes show different text");
+        for want in ["table: (hidden)\tfunction: (hidden)\tfunction: (hidden)\ttable: (hidden)\tThing: (hidden)", "mine\t1.5\tnil\ts", "table: (hidden)|table: (hidden)|function: (hidden)|tab"] {
+            assert!(a.contains(want), "{want:?} not in\n{a}");
+        }
+    }
+
+    /// An error object raised in a painter's function the easel calls (a mask's, a curve's)
+    /// reaches the painting, caught or not, without an address either: Lua's conversion of
+    /// it to text happens outside the painting's reach (mlua's handler), so it's the text
+    /// that hides the address.
+    #[test]
+    #[cfg(tube_box)]
+    fn no_memory_address_escapes_a_callback() {
+        let raised = ["{}", "function() end", "setmetatable({}, {__name = 'Thing'})", "noise()"];
+        let mut chunks = Vec::new();
+        for v in raised {
+            for call in ["mask(function() error(V) end)", "below(function() error(V) end)"] {
+                let call = call.replace('V', v);
+                chunks.push(format!("local ok, e = pcall(function() return {call} end); assert(not ok); print(e, tostring(e), string.format('%s|%-9s', e, e), ('%s'):format(e))"));
+                chunks.push(call);
+            }
+        }
+        for run in 0..100 {
+            let mut s = Session::new(64).unwrap();
+            s.run(r#"canvas{size=100, aspect=1, seed=5, linen=15, ground={{pile={{"lead white", 1}}, um=80, apply="knife"}}}"#).unwrap();
+            let mut text = String::new();
+            for c in &chunks {
+                match s.run(c) {
+                    Ok(r) => text.push_str(&r.out),
+                    Err(e) => text.push_str(&e),
+                }
+                text.push('\n');
+            }
+            assert!(!text.contains(": 0x"), "run {run}: an address shows:\n{text}");
+            if run == 0 {
+                for want in ["table: (hidden)", "function: (hidden)", "Thing: (hidden)", "Noise: (hidden)"] {
+                    assert!(text.contains(want), "{want:?} not in\n{text}");
+                }
+            }
+        }
+    }
+
+    /// A chunk that ran but whose ending failed (putting its hand time on the clock,
+    /// reading the globals it left) is a failed chunk: nothing it did is kept, and the
+    /// session goes on as a replay of its log does.
+    #[test]
+    #[cfg(tube_box)]
+    fn a_chunk_whose_ending_fails_changes_nothing() {
+        for at in ["globals", "flush"] {
+            let mut s = Session::new(W).unwrap();
+            s.run(CHUNKS[0]).unwrap();
+            s.run(CHUNKS[1]).unwrap();
+            let (before, clock, globals) = (bits(&s), s.st.borrow().clock, s.globals());
+            s.fail_at.set(Some(at));
+            let r = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| s.run(r#"junk = 1; work(everywhere(), {hand="broad", pile=p, coverage=1})"#)));
+            s.fail_at.set(None);
+            let e = match r {
+                Ok(r) => r.expect_err(at),
+                Err(_) => panic!("{at}: the failure escaped the chunk's guard"),
+            };
+            assert!(e.contains(&format!("injected failure: {at}")), "{at}: {e}");
+            assert!(before == bits(&s), "{at}: the canvas kept what the chunk painted");
+            assert_eq!((clock, globals, s.log.len()), (s.st.borrow().clock, s.globals(), 2), "{at}");
+            s.run("assert(junk == nil)").unwrap();
+            s.run(CHUNKS[2]).unwrap();
+            let mut b = Session::replay(W).unwrap();
+            for c in parse_program(&s.program("t")) {
+                b.run(&c).unwrap();
+            }
+            assert!(bits(&s) == bits(&b), "{at}: the session went on differently from its log");
+        }
+    }
+
+    /// Putting back what a failed chunk did can fail too: the session then paints no more
+    /// from that state, but rebuilds from its log first, and says so.
+    #[test]
+    #[cfg(tube_box)]
+    fn a_failed_rollback_rebuilds_from_the_log_before_painting_again() {
+        let mut s = Session::new(W).unwrap();
+        s.run(CHUNKS[0]).unwrap();
+        s.run(CHUNKS[1]).unwrap();
+        let before = bits(&s);
+        s.fail_at.set(Some("restore"));
+        let e = s.run(r#"junk = 1; work(everywhere(), {hand="broad", pile=p, coverage=1}); error("no")"#).unwrap_err();
+        s.fail_at.set(None);
+        assert!(e.contains("no") && e.contains("couldn't put back"), "{e}");
+        assert!(s.stale, "a session that couldn't roll back went on");
+        s.run("assert(junk == nil)").unwrap();
+        assert!(before == bits(&s), "the canvas kept what the failed chunk painted");
     }
 
     #[test]

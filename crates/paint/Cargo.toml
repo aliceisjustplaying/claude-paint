@@ -3,6 +3,11 @@ name = "paint"
 version = "0.1.0"
 edition = "2024"
 
+[features]
+# `tally::hand_hook` (ported from 57137d4): a callback after each slice of
+# hand time goes on the clock, for replay frames.
+hand-hook = []
+
 [dependencies]
 image = { version = "0.25", default-features = false, features = ["png"] }
 mixbox = "2"

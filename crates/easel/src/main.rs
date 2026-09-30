@@ -24,6 +24,7 @@ mod draw_edges;
 mod look;
 mod session;
 mod time;
+mod frames;
 
 use session::{Session, parse_program, program_is_strict, root};
 use std::io::{Read, Write};
@@ -498,6 +499,17 @@ fn run(args: &[String]) -> Result<(), String> {
     if chunks.is_empty() {
         return Err(format!("{file}: no chunks (each starts with a line \"{}\")", session::MARK));
     }
+    // hand-time frames (frames.rs, ported from 57137d4): only read the canvas
+    let frames = match (flag(args, "--frames-every"), flag(args, "--frames-dir")) {
+        (None, None) => false,
+        (Some(e), Some(d)) => {
+            let every: f64 = e.parse().map_err(|_| format!("--frames-every {e}: want seconds of hand time"))?;
+            let fw = flag(args, "--frame-width").map(|w| w.parse::<u32>().map_err(|_| format!("--frame-width {w}: want px"))).transpose()?.unwrap_or(1000);
+            frames::start(every, PathBuf::from(d), fw)?;
+            true
+        }
+        _ => return Err("run: --frames-every and --frames-dir go together".into()),
+    };
     let mut s = Session::replay(width).map_err(|e| e.to_string())?;
     s.set_strict(program_is_strict(&text));
     let t0 = Instant::now();
@@ -505,9 +517,23 @@ fn run(args: &[String]) -> Result<(), String> {
         let r = s.run(c).map_err(|e| format!("chunk {} failed:\n{e}", i + 1))?;
         print!("{}", r.out);
         eprintln!("  chunk {:>3}  {:>7.2}s", i + 1, r.secs);
+        if frames && let Some(c) = s.canvas() {
+            frames::chunk_end(&c, i + 1);
+        }
     }
     let paint_secs = t0.elapsed().as_secs_f64();
     let mut c = s.canvas().ok_or("the program never made a canvas")?.clone();
+    if frames {
+        frames::finish(&c);
+        let rec = frames::stop().ok_or("frames: the recorder went away")?;
+        if let Some(e) = rec.err {
+            return Err(format!("frames: {e}"));
+        }
+        eprintln!(
+            "frames: {} written ({} hand-time intervals of {}s crossed, {} chunks) over {:.1} min of hand time → {}",
+            rec.written, rec.ticks, flag(args, "--frames-every").unwrap_or_default(), chunks.len(), rec.hand / 60.0, flag(args, "--frames-dir").unwrap_or_default()
+        );
+    }
     c.save(&out).map_err(|e| e.to_string())?;
     eprintln!("wrote {} ({} chunks, painted in {paint_secs:.1}s, total {:.1}s)", out.display(), chunks.len(), t0.elapsed().as_secs_f64());
     if let Some(p) = flag(args, "--dump-surface") {

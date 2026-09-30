@@ -12,6 +12,9 @@
  *   - at most MAX_IMAGES images, and
  *   - at most MAX_IMAGE_CHARS characters of base64 among them.
  *
+ * The newest image is kept unless it alone is over MAX_IMAGE_CHARS; then it is dropped too,
+ * and its line says it was left out and why.
+ *
  * Images are dropped STEP at a time, oldest first, so the request's prefix (and the
  * provider's prompt cache) changes once every STEP new images rather than with every look.
  * The number dropped depends only on the images in the messages, so the same messages
@@ -55,7 +58,10 @@ export function limitsFromEnv(env: Record<string, string | undefined> = process.
 type Block = { type?: string; data?: string; text?: string; [k: string]: unknown };
 type Message = { role?: string; content?: unknown; toolCallId?: string; [k: string]: unknown };
 
-/** How many of `sizes` (oldest first) to drop so the rest fit the limits; a multiple of `step`, never all of them. */
+/**
+ * How many of `sizes` (oldest first) to drop so the rest fit the limits; a multiple of `step`,
+ * but never the newest unless it alone is over the size limit.
+ */
 export function imagesToDrop(sizes: readonly number[], limits: PruneLimits = LIMITS): number {
 	const total = sizes.length;
 	if (total === 0) return 0;
@@ -65,7 +71,8 @@ export function imagesToDrop(sizes: readonly number[], limits: PruneLimits = LIM
 	let first = 0;
 	while (first < total && chars > limits.maxImageChars) chars -= sizes[first++];
 	const byChars = roundUp(first);
-	return Math.min(Math.max(byCount, byChars), total - 1);
+	const most = sizes[total - 1] > limits.maxImageChars ? total : total - 1;
+	return Math.min(Math.max(byCount, byChars), most);
 }
 
 /** The file each tool call read, by tool call id (from the assistant messages' `read` calls). */
@@ -83,6 +90,12 @@ function readPaths(messages: readonly Message[]): Map<string, string> {
 
 export function placeholder(path: string | undefined): string {
 	return path ? `[an earlier look: ${path}]` : path === "" ? "[an earlier look]" : "[an earlier image]";
+}
+
+/** What stands for an image that alone is over the size limit. */
+export function oversize(chars: number, limit: number): string {
+	const mb = (n: number) => `${Number((n / 1_000_000).toFixed(1))} MB`;
+	return `[this image was left out of the request: it is ${mb(chars)}, over the ${mb(limit)} limit for the images in one request]`;
 }
 
 export interface PruneResult<M> {
@@ -111,17 +124,21 @@ export function pruneImages<M extends Message>(messages: readonly M[], limits: P
 
 	const paths = readPaths(messages);
 	const out = messages.slice();
-	const byMessage = new Map<number, Set<number>>();
-	for (const f of found.slice(0, dropped)) {
-		if (!byMessage.has(f.m)) byMessage.set(f.m, new Set());
-		byMessage.get(f.m)!.add(f.c);
-	}
+	const byMessage = new Map<number, Map<number, number>>();
+	found.slice(0, dropped).forEach((f, i) => {
+		if (!byMessage.has(f.m)) byMessage.set(f.m, new Map());
+		byMessage.get(f.m)!.set(f.c, i);
+	});
 	for (const [m, blocks] of byMessage) {
 		const msg = messages[m];
 		const path = msg.role === "toolResult" && msg.toolCallId ? paths.get(msg.toolCallId) : undefined;
-		const content = (msg.content as Block[]).map((block, c) =>
-			blocks.has(c) ? { type: "text", text: placeholder(path) } : block,
-		);
+		const content = (msg.content as Block[]).map((block, c) => {
+			const i = blocks.get(c);
+			if (i === undefined) return block;
+			// the newest image goes only when it alone is over the limit: say so, not "an earlier look"
+			const text = i === found.length - 1 ? oversize(found[i].chars, limits.maxImageChars) : placeholder(path);
+			return { type: "text", text };
+		});
 		out[m] = { ...msg, content } as M;
 	}
 	return { messages: out, images: found.length, dropped, keptChars };

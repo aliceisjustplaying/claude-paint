@@ -8,7 +8,7 @@
  *
  * The summary holds only material from the studio, not a retelling of the conversation:
  *   - BRIEF.md, verbatim
- *   - notes/journal.md, verbatim (the painter's own words)
+ *   - notes/journal.md, verbatim but quoted line by line (the painter's own words)
  *   - the painting's Lua globals as the easel holds them (`easel globals`), so the painter's
  *     names keep working: name, the chunk that last assigned it, what it holds; bounded.
  *     If the easel can't answer, the summary says so.

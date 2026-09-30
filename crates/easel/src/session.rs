@@ -864,6 +864,14 @@ mod tests {
             "assert(load('return x', 'c', 't', {x = 5})() == 5); assert(load('return x', 'c', nil, {x = 6})() == 6)",
             "assert(not pcall(load('return x', 'c', 't', nil)))",
             "assert(load('return 1', 'c', 'b') == nil)",
+            // load's own helpers are its own: replacing the global pcall, string.find or
+            // string.gsub hands a painting no function that loads bytecode
+            "local got, real = {}, {pcall, string.find, string.gsub}; \
+             local function spy(f) return function(g, ...) got[#got + 1] = g; return f(g, ...) end end; \
+             pcall, string.find, string.gsub = spy(real[1]), spy(real[2]), spy(real[3]); \
+             load('return 1'); load(bin); load('return (', 'c'); load('x', 'c', 1); \
+             pcall, string.find, string.gsub = real[1], real[2], real[3]; \
+             for _, g in ipairs(got) do assert(type(g) ~= 'function' or not pcall(g, bin), 'a load of bytecode leaked') end",
         ] {
             if let Err(e) = s.run(chunk) {
                 failed.push(format!("{chunk}: {e}"));

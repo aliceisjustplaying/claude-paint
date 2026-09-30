@@ -6,7 +6,7 @@
 //!   easel log | status | globals | save [path] | frames on|off | close
 //!   easel check                                    (replay build) replay the log, compare
 //!   easel note '<text>' | -                        append to notes/journal.md
-//!   easel run paintings/lua/<name>.lua [--out path] [--look]
+//!   easel run paintings/lua/<name>.lua [--out path] [--look] [--state-digest digests.txt]
 //!
 //! Two builds (see `USAGE`). The replay build (feature `replay`, on by
 //! default: developers, tests and the outside runner) has named sessions
@@ -77,7 +77,7 @@ const USAGE: &str = "easel: a live painting session (see notes/easel_guide.md)
   easel check         replay the log from scratch and compare with the live canvas
   easel close         end the session (the log stays)
   easel note '<text>' | easel note - (stdin)    append a dated entry to notes/journal.md
-  easel run <file.lua> [--out path.png] [--look]    replay at 2400px and write the PNG
+  easel run <file.lua> [--out path.png] [--look] [--state-digest digests.txt]    replay at 2400px and write the PNG
       [--frames-every <s> --frames-dir <dir> [--frame-width 1000]]   and a frame per <s> of hand time
   easel tubes [--markdown]   the tubes in the box a new painting takes (--markdown: as a table)
 
@@ -863,7 +863,7 @@ fn deliver(c: &Canvas, out: &Path) -> Result<(), String> {
 }
 
 #[cfg(feature = "replay")]
-const RUN_USAGE: &str = "run <file.lua> [--out path.png] [--look] [--frames-every <s> --frames-dir <dir> [--frame-width 1000]] (replays at the live width, 2400px)";
+const RUN_USAGE: &str = "run <file.lua> [--out path.png] [--look] [--state-digest digests.txt] [--frames-every <s> --frames-dir <dir> [--frame-width 1000]] (replays at the live width, 2400px)";
 
 #[cfg(feature = "replay")]
 fn run(args: &[String]) -> Result<(), String> {
@@ -871,7 +871,7 @@ fn run(args: &[String]) -> Result<(), String> {
     let mut i = 1;
     while i < args.len() {
         match args[i].as_str() {
-            "--out" | "--dump-surface" | "--frames-every" | "--frames-dir" | "--frame-width" if i + 1 < args.len() => i += 2,
+            "--out" | "--dump-surface" | "--frames-every" | "--frames-dir" | "--frame-width" | "--state-digest" if i + 1 < args.len() => i += 2,
             "--look" => i += 1,
             o => return Err(format!("run: unknown argument {o:?} ({RUN_USAGE})")),
         }
@@ -899,11 +899,16 @@ fn run(args: &[String]) -> Result<(), String> {
         _ => return Err(format!("run: --frames-every and --frames-dir go together ({RUN_USAGE})")),
     };
     let mut s = Session::replay_with(width, tubes).map_err(|e| e.to_string())?;
+    // --state-digest: one line of state digests after every chunk (see `state_digest_line`)
+    let mut digests = flag(args, "--state-digest").map(|p| std::fs::File::create(&p).map_err(|e| format!("{p}: {e}"))).transpose()?;
     let t0 = Instant::now();
     for (i, c) in chunks.iter().enumerate() {
         let r = s.run(c).map_err(|e| format!("chunk {} failed:\n{e}", i + 1))?;
         print!("{}", r.out);
         eprintln!("  chunk {:>3}  {:>7.2}s", i + 1, r.secs);
+        if let Some(f) = digests.as_mut() {
+            f.write_all(state_digest_line(&s, i + 1, r.secs).as_bytes()).map_err(|e| format!("--state-digest: {e}"))?;
+        }
         if frames && let Some(c) = s.canvas() {
             frames::chunk_end(&c, i + 1);
         }
@@ -942,6 +947,62 @@ fn run(args: &[String]) -> Result<(), String> {
         println!("{} ({w}x{h})", jpg.display());
     }
     Ok(())
+}
+
+/// FNV-1a, 64 bit.
+#[cfg(feature = "replay")]
+fn fnv1a(bytes: &[u8]) -> u64 {
+    let mut h: u64 = 0xcbf29ce484222325;
+    for &b in bytes {
+        h ^= b as u64;
+        h = h.wrapping_mul(0x100000001b3);
+    }
+    h
+}
+
+/// `run --state-digest`'s line for the state after chunk `n` (which took
+/// `secs`): the receipt that a change to the engine left a replay's physical
+/// state bit for bit as it was, not just its PNG. Compare two files with the
+/// `secs=` field dropped: every other field is a digest of state.
+///
+///   chunk <n> secs=<s> canvas=<16 hex> brushes=<16 hex> nbrushes=<k> studio=<16 hex>
+///
+/// - `canvas`: FNV-1a-64 of the canvas checkpoint bytes (`Canvas::write_state`
+///   with an empty header, see paint's checkpoint.rs): dry picture, relief,
+///   film, the wet layer (volume, pigment mix, hiding, stroke ids, coverage),
+///   the clock with every pixel's drying state, the drawing, hand time and
+///   the engine version. 0 before `canvas{}`.
+/// - `brushes`: FNV-1a-64 of the live held brushes' `Debug` text, one a line,
+///   in the order they were made: tool and every bristle (load, pigment mix,
+///   bend). `nbrushes` counts them (a brush Lua has dropped counts until it
+///   is collected).
+/// - `studio`: FNV-1a-64 of the studio's seed, clocks, chunk and call
+///   counters, `canvas{}` arguments, the piles on the palette and the
+///   chunk's RNG, as `Debug` text.
+///
+/// Floats are hashed by their bits (checkpoint) or their shortest round-trip
+/// `Debug` text, which tells every value apart but NaN payloads. Not covered:
+/// the Lua state (globals, masks and fields a later chunk may use), the style
+/// object and world view in the studio, and derived caches (brush contact
+/// surface, film floors of past strokes) that checkpoints leave out too.
+/// The format is fixed (recorded goldens depend on it): a field added to
+/// `Held`, `Hand` or the checkpoint changes the digests.
+#[cfg(feature = "replay")]
+fn state_digest_line(s: &Session, n: usize, secs: f64) -> String {
+    let mut st = s.st.borrow_mut();
+    let canvas = match st.canvas.as_ref() {
+        Some(c) => {
+            let mut buf = Vec::new();
+            c.write_state(&mut buf, "").expect("checkpoint to memory");
+            fnv1a(&buf)
+        }
+        None => 0,
+    };
+    let brushes: Vec<String> = st.live_brushes().iter().map(|b| format!("{:?}", b.borrow())).collect();
+    let brushes_h = fnv1a(brushes.join("\n").as_bytes());
+    let studio = format!("seed={} clock={:?} clock0={:?} chunk={} calls={} setup={:?} piles={:?} rng={:?}", st.seed, st.clock, st.clock0, st.chunk, st.calls, st.setup, st.hand.piles, st.rng);
+    let studio_h = fnv1a(studio.as_bytes());
+    format!("chunk {n} secs={secs:.3} canvas={canvas:016x} brushes={brushes_h:016x} nbrushes={} studio={studio_h:016x}\n", brushes.len())
 }
 
 #[cfg(test)]

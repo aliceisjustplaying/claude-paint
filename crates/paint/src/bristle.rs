@@ -653,6 +653,7 @@ impl Canvas {
         if let Some(m) = clip {
             self.check_mask(m);
         }
+        let secs0 = self.tally.secs;
         self.tally.stroke(&held.tool, &g.pts, self.mm_per_unit);
         let id = self.next_stroke_ids(1);
         let surf = self.surf();
@@ -662,6 +663,7 @@ impl Canvas {
         if let Some((x0, y0, x1, y1)) = b {
             self.wet.touch(x0, y0, x1, y1);
         }
+        crate::frames::painted(self, self.tally.secs - secs0);
     }
 }
 
@@ -1485,6 +1487,7 @@ impl Canvas {
         if let Some(m) = clip {
             self.check_mask(m);
         }
+        let secs0 = self.tally.secs;
         self.tally.touch();
         let id = self.next_stroke_ids(1);
         let surf = self.surf();
@@ -1494,6 +1497,7 @@ impl Canvas {
         if let Some((x0, y0, x1, y1)) = b {
             self.wet.touch(x0, y0, x1, y1);
         }
+        crate::frames::painted(self, self.tally.secs - secs0);
     }
 }
 

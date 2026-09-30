@@ -1073,13 +1073,48 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
         let s1 = st.clone();
         math.set(
             "random",
-            lua.create_function(move |_, (a, b): (Option<i64>, Option<i64>)| {
-                let r = s1.borrow_mut().rng.f() as f64;
-                Ok(match (a, b) {
-                    (None, _) => Value::Number(r),
-                    (Some(m), None) => Value::Integer(1 + ((r * m as f64).floor() as i64).min(m - 1)),
-                    (Some(m), Some(n)) => Value::Integer(m + ((r * (n - m + 1) as f64).floor() as i64).min(n - m)),
-                })
+            // Stock Lua 5.4's arguments and errors. Ranges up to 2^24 wide
+            // draw from one f32 as they always have (old logs replay the
+            // same); wider ones draw 64-bit integers.
+            lua.create_function(move |lua, args: Variadic<Value>| {
+                let int = |i: usize| -> Result<i64> {
+                    let v = args[i].clone();
+                    match lua.coerce_integer(v.clone())? {
+                        Some(k) => Ok(k),
+                        None if lua.coerce_number(v.clone())?.is_some() => {
+                            err(format!("bad argument #{} to 'random' (number has no integer representation)", i + 1))
+                        }
+                        None => err(format!("bad argument #{} to 'random' (number expected, got {})", i + 1, v.type_name())),
+                    }
+                };
+                let (m, n) = match args.len() {
+                    0 => return Ok(Value::Number(s1.borrow_mut().rng.f() as f64)),
+                    1 => match int(0)? {
+                        0 => return Ok(Value::Integer(s1.borrow_mut().rng.next_u64() as i64)),
+                        n => (1, n),
+                    },
+                    2 => (int(0)?, int(1)?),
+                    _ => return err("wrong number of arguments to 'random'"),
+                };
+                if m > n {
+                    return err("bad argument #1 to 'random' (interval is empty)");
+                }
+                let rng = &mut s1.borrow_mut().rng;
+                let lim = n.wrapping_sub(m) as u64;
+                if lim < 1 << 24 {
+                    let w = lim as i64 + 1;
+                    let r = rng.f() as f64;
+                    return Ok(Value::Integer(m + ((r * w as f64).floor() as i64).min(w - 1)));
+                }
+                // uniform in 0..=lim: draw under the smallest all-ones mask, retry above lim
+                let mask = u64::MAX >> lim.leading_zeros();
+                let x = loop {
+                    let x = rng.next_u64() & mask;
+                    if x <= lim {
+                        break x;
+                    }
+                };
+                Ok(Value::Integer((m as u64).wrapping_add(x) as i64))
             })?,
         )?;
         let s2 = st.clone();
@@ -1402,3 +1437,47 @@ fn ground_of(tubes: &Palette, v: &Value) -> Result<Vec<Ground>> {
     Ok(out)
 }
 
+#[cfg(test)]
+mod tests {
+    use crate::session::Session;
+
+    fn run(src: &str) -> Result<String, String> {
+        Session::replay(200).unwrap().run(src).map(|r| r.out)
+    }
+
+    // math.random: stock Lua's errors, whole 64-bit ranges, and the draws
+    // old logs made from small ordered ranges unchanged
+    #[test]
+    fn math_random_keeps_old_draws_and_refuses_empty_ranges() {
+        let draws = r#"math.randomseed(7)
+            local t = {}
+            for _ = 1, 6 do t[#t + 1] = math.random(2, 4) end
+            for _ = 1, 3 do t[#t + 1] = math.random(100) end
+            t[#t + 1] = math.random(-3, 3)
+            t[#t + 1] = math.random(5.0)
+            t[#t + 1] = string.format("%.9f", math.random())
+            print(table.concat(t, " "))"#;
+        assert_eq!(run(draws).unwrap(), "4 4 3 2 2 3 85 32 34 0 3 0.080516815\n");
+        for (call, want) in [
+            ("math.random(5, 1)", "interval is empty"),
+            ("math.random(-5)", "interval is empty"),
+            ("math.random(1.5)", "number has no integer representation"),
+            ("math.random(1, 2, 3)", "wrong number of arguments"),
+        ] {
+            let e = run(call).unwrap_err();
+            assert!(e.contains(want), "{call}: {e}");
+        }
+        run("math.randomseed(7)
+             local a = math.random(math.mininteger, math.maxinteger)
+             assert(math.type(a) == 'integer')
+             local odd = false
+             for _ = 1, 64 do
+               local x = math.random(0, 1 << 40)
+               assert(x >= 0 and x <= 1 << 40)
+               odd = odd or x % 2 == 1
+             end
+             assert(odd, 'wide ranges reach every integer')
+             assert(math.type(math.random(0)) == 'integer')")
+        .unwrap();
+    }
+}

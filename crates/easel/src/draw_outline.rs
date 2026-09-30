@@ -33,14 +33,19 @@ fn pts_table(lua: &Lua, pts: &[(f32, f32)]) -> Result<Table> {
 
 const CHARS: &str = "firm, searching, broken, soft";
 
+/// Smallest `size=` and nonzero `lobe=` (units): below these the hand's
+/// features are finer than the line is sampled.
+const MIN_SIZE: f32 = 1.0;
+const MIN_LOBE: f32 = 0.5;
+
 /// The character from `char=`, `amount=` and `lobe=` (units), and the hand's
 /// scale (`size=`, or from the extent of `pts`).
 fn character(o: &Table, pts: &[(f32, f32)], default: &str) -> Result<(Character, f32)> {
     let name: String = o.get::<Option<String>>("char")?.unwrap_or_else(|| default.into());
     let mut ch = Character::named(&name).ok_or_else(|| mlua::Error::runtime(format!("char {name:?}: one of {CHARS}")))?;
     let scale = match num(o, "size")? {
-        Some(s) if s > 0.0 => s,
-        Some(s) => return err(format!("size {s}: want > 0 (the hand's scale in units)")),
+        Some(s) if s >= MIN_SIZE => s,
+        Some(s) => return err(format!("size {s}: want at least {MIN_SIZE} (the hand's scale in units)")),
         None => {
             let (x0, y0, x1, y1) = pts.iter().fold((f32::MAX, f32::MAX, f32::MIN, f32::MIN), |b, p| (b.0.min(p.0), b.1.min(p.1), b.2.max(p.0), b.3.max(p.1)));
             hand_scale(((x1 - x0).powi(2) + (y1 - y0).powi(2)).sqrt())
@@ -51,6 +56,8 @@ fn character(o: &Table, pts: &[(f32, f32)], default: &str) -> Result<(Character,
     if let Some(l) = num(o, "lobe")? {
         if l <= 0.0 {
             ch.lobe = 0.0;
+        } else if !(l >= MIN_LOBE) {
+            return err(format!("lobe {l}: want 0 (none) or at least {MIN_LOBE} units"));
         } else {
             ch.lobe = l / scale;
             if ch.lobe_height == 0.0 {
@@ -364,6 +371,17 @@ mod tests {
         // a nonempty open line still has no inside
         let e = run(r#"outline{{100,100},{200,120},{300,100}, closed=false}:mask()"#).unwrap_err();
         assert!(e.contains("this line is open"), "{e}");
+    }
+
+    // lobes and hands finer than the line is sampled are refused, not drawn
+    #[test]
+    fn tiny_lobes_and_sizes_are_refused() {
+        let tri = "{100,100},{900,100},{900,600}";
+        for (opt, want) in [("lobe=1e-4", "lobe 0.0001: want 0 (none) or at least 0.5 units"), ("size=1e-45", "want at least 1")] {
+            let e = run(&format!("outline{{{tri}, char=\"broken\", {opt}}}")).unwrap_err();
+            assert!(e.contains(want), "{opt}: {e}");
+        }
+        run(&format!("outline{{{tri}, char=\"soft\", lobe=0}}; outline{{{tri}, char=\"soft\", lobe=0.5, size=1}}")).unwrap();
     }
 
     // finding 6: explicit character options come before amount=, so

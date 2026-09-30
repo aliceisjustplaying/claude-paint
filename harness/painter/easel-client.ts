@@ -18,7 +18,7 @@ export interface Ran {
 /** Tool budgets include opening, except advancing log rebuilds get a separate stall budget.
  * A chunk may run 10 minutes (the easel's own limit).
  */
-export const WAIT_MS = { do: 12 * 60_000, other: 3 * 60_000 };
+export const WAIT_MS = { do: 12 * 60_000, other: 3 * 60_000, rebuild: 30 * 60_000 };
 
 /** Run the studio's easel client with `args`, `input` on stdin; stdout and stderr together, in order. */
 export function easel(studio: string, args: string[], input?: string, signal?: AbortSignal, waitMs?: number): Promise<Ran> {
@@ -60,15 +60,21 @@ export async function ensureOpen(studio: string, signal?: AbortSignal, deadline 
 	let opened = false;
 	let rebuilding = false;
 	let completed = -1;
+	let total: number | undefined;
 	let progressDeadline = deadline;
 	for (;;) {
 		if (r.timedOut) throw new Error(rebuilding ? "the easel rebuild stalled without progress" : opened ? "the easel didn't open in time" : "the easel isn't answering");
 		const progress = /^rebuilding from the log \((\d+) of (\d+) chunks\)$/.exec(r.out.trim());
 		if (progress) {
 			const k = Number(progress[1]);
+			const n = Number(progress[2]);
+			if (r.code !== 0 || !Number.isSafeInteger(k) || !Number.isSafeInteger(n) || k > n || k < completed || (total !== undefined && n !== total)) {
+				throw new Error(`the easel returned invalid rebuild progress: ${r.out.trim()}`);
+			}
+			total = n;
 			if (!rebuilding || k > completed) {
 				completed = k;
-				progressDeadline = Date.now() + WAIT_MS.other;
+				progressDeadline = Date.now() + WAIT_MS.rebuild;
 			}
 			rebuilding = true;
 			if (Date.now() >= progressDeadline) throw new Error("the easel rebuild stalled without progress");

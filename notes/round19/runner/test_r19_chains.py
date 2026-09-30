@@ -1,4 +1,5 @@
 import json
+import os
 
 import pytest
 
@@ -131,7 +132,7 @@ def test_the_watchdog_stops_long_runners_in_its_studios_whatever_their_name():
         "103 45:00 /bin/bash -c sleep 99999",
         "104 45:00 pi",                                               # the painter's pi: spared
         f"105 45:00 {STUDIO}/bin/easel serve painting",               # the easel server: spared
-        f"106 45:00 /bin/bash ~/src/a/claude-paint-r19-base/scripts/check_painting {STUDIO} /r/F/p1_check",
+        f"106 45:00 /bin/bash /r/code/scripts/check_painting {STUDIO} /r/F/p1_check",
         "107 05:00 python3 young.py",                                 # not long enough
         "108 45:00 python3 other.py",                                 # another round's studio
         f"109 45:00 {STUDIO}/bin/easel do -",                         # its cwd elsewhere, the studio in its command
@@ -255,3 +256,32 @@ def test_a_reader_record_reaches_the_next_studio_only_if_it_passes(tmp_path, mon
         assert not (rd / "p1.done").exists() and not (rd / "p2.exported").exists()
         assert not (rd / "p1_record.md").exists()
         assert any("RECORD REJECTED" in l and why in l for l in lines), lines
+
+
+def test_the_code_is_the_tag_s_even_with_its_branch_gone(tmp_path, monkeypatch):
+    # round 19's scripts and harness come from the round-19 tag, not a branch or a worktree; the
+    # export script, in the extracted tree (no .git), reads the tag from the repo's git
+    import subprocess
+    import r19_chains as rc19
+    repo = tmp_path / "claude-paint"
+    git = lambda *a: subprocess.run(["git", "-C", str(repo), *a], check=True, capture_output=True, text=True).stdout
+    (repo / "scripts").mkdir(parents=True)
+    git("init", "-q", "-b", "r19-base")
+    git("config", "user.email", "t@t"); git("config", "user.name", "t")
+    (repo / "scripts/export_r16_studio").write_text("round 19's export\n")
+    git("add", "-A"); git("commit", "-qm", "round 19")
+    git("tag", "-a", "round-19", "-m", "round 19")
+    (repo / "scripts/export_r16_studio").write_text("later\n")
+    git("commit", "-qam", "later")
+    git("checkout", "-q", "--detach"); git("branch", "-D", "r19-base")
+    monkeypatch.setattr(rc19, "REPO", repo)
+    monkeypatch.setattr(rc19, "BASE", tmp_path / "run/code")
+    monkeypatch.setattr(rc19, "log", lambda msg: None)
+
+    rc19.checkout()
+    assert (tmp_path / "run/code/scripts/export_r16_studio").read_text() == "round 19's export\n"
+    assert not (tmp_path / "run/code/.git").exists()
+    env = rc19.export_env()
+    shown = subprocess.run(["git", "-C", str(tmp_path / "run/code"), "show", f"{env['R16_BRANCH']}:scripts/export_r16_studio"],
+                           env={**os.environ, **env}, capture_output=True, text=True)
+    assert shown.stdout == "round 19's export\n", shown.stderr

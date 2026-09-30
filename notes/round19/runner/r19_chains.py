@@ -42,7 +42,11 @@ painter (reader.ts, reader_system_prompt.md; read and write only). The record re
 studio only if it passes record_problems; if not, it is set aside as p<n>_record.rejected.md,
 the painter isn't marked done and the lane stops (a rerun runs the reader again).
 
-Painters run in the clean harness (claude-paint-r19-base/harness/painter): no global
+Round 19's code (the easel export, check and finishing scripts and the painter harness) is the
+round-19 tag (the tip of the r19-base branch, since removed): the runner extracts it with `git
+archive` into run/code once and runs everything from there.
+
+Painters run in the clean harness (run/code/harness/painter): no global
 extensions, our system prompt, bash and read only, our compaction (its thresholds set by
 compaction.ts), --no-approve and no .pi/ in the studio. pi-black for Anthropic lanes only.
 Per-lane environment (model(..., env=)) reaches the painter's pi: PAINTER_MAX_IMAGES,
@@ -77,15 +81,16 @@ from painting_chunks import count_painting_chunks
 
 HOME = Path.home()
 A = HOME / "src/a"
-BASE = A / "claude-paint-r19-base"
-BRANCH = "r19-base"
-EXPORT = BASE / "scripts/export_r16_studio"      # honors R16_BRANCH
+HERE = Path(__file__).resolve().parent
+RUN = HERE / "run"
+REPO = A / "claude-paint"                        # the repo holding TAG (the runner runs from a copy elsewhere)
+TAG = "round-19"
+BASE = RUN / "code"                               # TAG's tree (checkout()); no .git of its own
+EXPORT = BASE / "scripts/export_r16_studio"      # honors R16_BRANCH, a tag here (export_env())
 FINISH = BASE / "scripts/finish_painting"
 CHECK = BASE / "scripts/check_painting"
 H = BASE / "harness/painter"
 BLACK = HOME / ".pi/agent/git/github.com/aliceisjustplaying/pi-black/extensions/pi-black.ts"
-HERE = Path(__file__).resolve().parent
-RUN = HERE / "run"
 SESS = HOME / ".pi/agent/sessions"
 WATCHDOG_MIN = 30
 
@@ -618,6 +623,32 @@ def read_painter(tag, rd, n, d, logs, own):
     return True
 
 
+def checkout():
+    """TAG's tree in BASE, from `git archive` (the scripts build their easels in BASE/target). Extracted
+    once; a BASE from another commit is replaced."""
+    sha = subprocess.run(["git", "-C", str(REPO), "rev-parse", "--verify", f"{TAG}^{{commit}}"],
+                         capture_output=True, text=True, check=True).stdout.strip()
+    mark = BASE / ".commit"
+    if mark.exists() and mark.read_text().strip() == sha:
+        return
+    log(f"extracting {TAG} ({sha[:7]}) from {REPO} to {BASE}")
+    if BASE.exists():
+        shutil.rmtree(BASE)
+    BASE.mkdir(parents=True)
+    git = subprocess.Popen(["git", "-C", str(REPO), "archive", sha], stdout=subprocess.PIPE)
+    tar = subprocess.run(["tar", "-x", "-C", str(BASE)], stdin=git.stdout)
+    git.stdout.close()
+    if git.wait() or tar.returncode:
+        raise SystemExit(f"couldn't extract {TAG} from {REPO} to {BASE}")
+    mark.write_text(sha + "\n")
+
+
+def export_env():
+    """The export's environment: the studio from TAG, read from REPO's git (BASE, where the export
+    script lives, has none)."""
+    return {"R16_BRANCH": TAG, "GIT_DIR": str(REPO / ".git")}
+
+
 def export_cmd(profile, d):
     return [str(EXPORT), profile, str(d)]
 
@@ -821,7 +852,7 @@ def chain(name):
     rd = RUN / name
     if not DRY:
         rd.mkdir(parents=True, exist_ok=True)
-    env = {"R16_BRANCH": BRANCH}
+    env = export_env()
     for n in range(1, t["painters"] + 1):
         d = studio(f"{name}{n}")
         tag = f"{name}{n}"
@@ -849,7 +880,7 @@ def chain(name):
         if not (rd / f"p{n}.exported").exists():
             if d.exists():
                 shutil.rmtree(d)
-            log(f"{tag}: exporting {t['profile']} studio from {BRANCH} to {d}")
+            log(f"{tag}: exporting {t['profile']} studio from {TAG} to {d}")
             r = subprocess.run(export_cmd(t["profile"], d), capture_output=True, text=True, env={**os.environ, **env})
             (rd / f"p{n}_export.log").write_text(r.stdout + r.stderr)
             if r.returncode:
@@ -905,8 +936,11 @@ def main():
     for l in lanes:
         if l not in LANES:
             raise SystemExit(f"no lane {l}; lanes: {', '.join(LANES)}")
-    if not DRY:
+    if DRY:
+        print(f"code: {TAG} from {REPO}, extracted with git archive to {BASE}")
+    else:
         RUN.mkdir(parents=True, exist_ok=True)
+        checkout()
     stop = threading.Event()
     if not DRY:
         threading.Thread(target=watchdog, args=(stop,), daemon=True).start()

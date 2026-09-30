@@ -6,7 +6,7 @@ import { spawn } from "node:child_process";
 import { setTimeout as pause } from "node:timers/promises";
 import { realpathSync } from "node:fs";
 import { homedir } from "node:os";
-import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
+import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
 export interface Ran {
@@ -129,7 +129,8 @@ export function studioPath(studio: string, path: string): string | undefined {
 	const root = realpathSync(studio);
 	const real = realOf(resolve(root, p));
 	const rel = relative(root, real);
-	return rel === "" || (!rel.startsWith("..") && !isAbsolute(rel)) ? real : undefined;
+	// outside: a first step that is exactly ".." (not a name like "..draft.md"), or another drive
+	return rel === "" || (rel !== ".." && !rel.startsWith(`..${sep}`) && !isAbsolute(rel)) ? real : undefined;
 }
 
 /** `full` with links followed; for a missing file, its nearest existing folder's. */

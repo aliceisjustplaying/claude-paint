@@ -40,6 +40,28 @@ test("read opens only studio files, however the path is spelled", () => {
 	}
 });
 
+test("a name that only begins with two dots is a studio file; a '..' folder step out is not", () => {
+	const top = realpathSync(mkdtempSync(join(tmpdir(), "studio-")));
+	const real = join(top, "studio");
+	mkdirSync(join(real, "notes"), { recursive: true });
+	mkdirSync(join(top, "..outside"));
+	const cases: [string, string | undefined][] = [
+		["..draft.md", join(real, "..draft.md")],
+		["notes/..old/a.md", join(real, "notes", "..old", "a.md")],
+		["...", join(real, "...")],
+		[".", real],
+		[real, real],
+		["notes/..", real],
+		["..", undefined],
+		["../", undefined],
+		["../..outside/a.md", undefined],
+		[join(top, "..outside", "a.md"), undefined],
+		["notes/../../studio/x", join(real, "x")],
+		["notes/../..", undefined],
+	];
+	for (const [path, want] of cases) assert.equal(studioPath(real, path), want, path);
+});
+
 test("look's options become the easel's arguments", () => {
 	assert.deepEqual(lookArgs({}), []);
 	assert.deepEqual(lookArgs({ crop: "300,200,500,350", mode: "value,squint", size: 600, grid: 10 }),

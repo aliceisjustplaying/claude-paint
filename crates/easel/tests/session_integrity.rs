@@ -236,3 +236,79 @@ fn a_look_never_overwrites_an_earlier_observation() {
     assert_eq!(std::fs::read(dir.join("look-0002.png")).unwrap(), b"kept observation", "a look overwrote an earlier one");
     assert_eq!(std::fs::read(dir.join("look-notes.txt")).unwrap(), b"not an observation");
 }
+
+// The servers running for a session (this test binary's, by its session name).
+fn servers(name: &str) -> Vec<u32> {
+    let o = Command::new("pgrep").args(["-f", &format!("^{} serve {name}$", env!("CARGO_BIN_EXE_easel"))]).output().unwrap();
+    String::from_utf8_lossy(&o.stdout).lines().filter_map(|l| l.trim().parse().ok()).collect()
+}
+
+// Kills what a failed assertion would leave running.
+struct Reaper(&'static str);
+impl Drop for Reaper {
+    fn drop(&mut self) {
+        for pid in servers(self.0) {
+            let _ = Command::new("kill").arg(pid.to_string()).status();
+        }
+    }
+}
+
+// One session has one server for good: opens racing to start it, while its log replays,
+// all end up talking to the one that won, and no second server starts, even for a moment.
+#[test]
+fn racing_opens_start_one_server() {
+    for round in 0..3 {
+        let name: &'static str = Box::leak(format!("race{round}").into_boxed_str());
+        let _reaper = Reaper(name);
+        // a log that takes a while to replay
+        ok(&["open", name]);
+        ok(&["-s", name, "do", "local sum = 0; for i = 1, 100000000 do sum = sum + i end; assert(sum > 0)"]);
+        ok(&["-s", name, "close"]);
+        let racers: Vec<_> = (0..8)
+            .map(|_| Command::new(env!("CARGO_BIN_EXE_easel")).args(["open", name]).env("EASEL_ROOT", root()).stdout(std::process::Stdio::piped()).stderr(std::process::Stdio::piped()).spawn().unwrap())
+            .collect();
+        let mut most = 0;
+        let watch = std::time::Instant::now();
+        while watch.elapsed() < std::time::Duration::from_secs(3) {
+            most = most.max(servers(name).len());
+            std::thread::sleep(std::time::Duration::from_millis(20));
+        }
+        let outs: Vec<_> = racers.into_iter().map(|c| c.wait_with_output().unwrap()).collect();
+        let failed: Vec<_> = outs.iter().filter(|o| !o.status.success()).map(|o| String::from_utf8_lossy(&o.stderr).to_string()).collect();
+        assert!(failed.is_empty(), "round {round}: opens failed: {failed:?}");
+        assert_eq!(most, 1, "round {round}: servers running at once for one session");
+        assert_eq!(servers(name).len(), 1, "round {round}");
+        assert!(ok(&["-s", name, "status"]).starts_with("1 chunks"), "round {round}");
+        ok(&["-s", name, "close"]);
+    }
+}
+
+// A second server for a session that has one is refused before it touches anything, and
+// a server that died without closing (its socket left behind) is replaced by the next open.
+#[test]
+fn a_second_server_is_refused_and_a_dead_ones_socket_is_recovered() {
+    use std::os::unix::fs::MetadataExt;
+    let name = "owner";
+    let _reaper = Reaper(name);
+    ok(&["open", name]);
+    ok(&["-s", name, "do", "x = 1"]);
+    let sock = root().join("out/easel/owner/sock");
+    let ino = std::fs::metadata(&sock).unwrap().ino();
+    let o = Command::new(env!("CARGO_BIN_EXE_easel")).args(["serve", name]).env("EASEL_ROOT", root()).output().unwrap();
+    assert!(!o.status.success() && String::from_utf8_lossy(&o.stderr).contains("another easel serves"), "{}", String::from_utf8_lossy(&o.stderr));
+    assert_eq!(std::fs::metadata(&sock).unwrap().ino(), ino, "the second server replaced the socket");
+    assert!(ok(&["-s", name, "status"]).starts_with("1 chunks"));
+    let pids = servers(name);
+    assert_eq!(pids.len(), 1);
+    Command::new("kill").args(["-9", &pids[0].to_string()]).status().unwrap();
+    let t0 = std::time::Instant::now();
+    while !servers(name).is_empty() {
+        assert!(t0.elapsed() < std::time::Duration::from_secs(10));
+        std::thread::sleep(std::time::Duration::from_millis(20));
+    }
+    assert!(sock.exists(), "a killed server leaves its socket");
+    assert!(ok(&["open", name]).contains("open: 1 chunks"));
+    assert_eq!(servers(name).len(), 1);
+    ok(&["-s", name, "do", "assert(x == 1)"]);
+    ok(&["-s", name, "close"]);
+}

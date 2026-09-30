@@ -111,6 +111,7 @@ dependencies = [
  "image",
  "mlua",
  "paint",
+ "rayon",
 ]
 
 [[package]]

@@ -70,7 +70,7 @@ impl Studio {
         self.field_secs = 0.0;
     }
 
-    fn auto_seed(&mut self) -> u64 {
+    pub(crate) fn auto_seed(&mut self) -> u64 {
         self.calls += 1;
         mixseed(self.seed, self.chunk, self.calls)
     }
@@ -108,7 +108,7 @@ pub(crate) struct Grid<const N: usize> {
 }
 
 impl<const N: usize> Grid<N> {
-    fn get(&self, x: f32, y: f32) -> [f32; N] {
+    pub(crate) fn get(&self, x: f32, y: f32) -> [f32; N] {
         let fx = ((x - self.x0) / self.step).clamp(0.0, (self.nx - 1) as f32);
         let fy = ((y - self.y0) / self.step).clamp(0.0, (self.ny - 1) as f32);
         let (i, j) = ((fx as usize).min(self.nx.saturating_sub(2)), (fy as usize).min(self.ny.saturating_sub(2)));
@@ -144,7 +144,7 @@ pub(crate) fn support(m: Option<&Mask>, f: Frame, pad: f32) -> (f32, f32, f32, f
     (((x0 as f32) / s - pad).max(0.0), ((y0 as f32) / s - pad).max(0.0), ((x1 + 1) as f32 / s + pad).min(w), ((y1 + 1) as f32 / s + pad).min(h))
 }
 
-fn sample<const N: usize>(st: &S, fun: &Function, b: (f32, f32, f32, f32), conv: impl Fn(Value) -> Result<[f32; N]>) -> Result<Grid<N>> {
+pub(crate) fn sample<const N: usize>(st: &S, fun: &Function, b: (f32, f32, f32, f32), conv: impl Fn(Value) -> Result<[f32; N]>) -> Result<Grid<N>> {
     let t0 = std::time::Instant::now();
     let step = FIELD_STEP;
     let nx = (((b.2 - b.0) / step).ceil() as usize + 1).max(2);
@@ -157,6 +157,23 @@ fn sample<const N: usize>(st: &S, fun: &Function, b: (f32, f32, f32, f32), conv:
             let (x, y) = ((b.0 + i as f32 * step).min(b.2 - 0.01).max(b.0), (b.1 + j as f32 * step).min(b.3 - 0.01).max(b.1));
             let r: Value = fun.call((x, y))?;
             v.push(conv(r)?);
+        }
+    }
+    st.borrow_mut().field_secs += t0.elapsed().as_secs_f64();
+    Ok(Grid { x0: b.0, y0: b.1, step, nx, ny, v })
+}
+
+/// `f` sampled on the field grid over `b`, as `sample` samples a Lua function.
+#[cfg(feature = "replay")]
+pub(crate) fn grid<const N: usize>(st: &S, b: (f32, f32, f32, f32), mut f: impl FnMut(f32, f32) -> Result<[f32; N]>) -> Result<Grid<N>> {
+    let t0 = std::time::Instant::now();
+    let step = FIELD_STEP;
+    let nx = (((b.2 - b.0) / step).ceil() as usize + 1).max(2);
+    let ny = (((b.3 - b.1) / step).ceil() as usize + 1).max(2);
+    let mut v = Vec::with_capacity(nx * ny);
+    for j in 0..ny {
+        for i in 0..nx {
+            v.push(f((b.0 + i as f32 * step).min(b.2 - 0.01).max(b.0), (b.1 + j as f32 * step).min(b.3 - 0.01).max(b.1))?);
         }
     }
     st.borrow_mut().field_secs += t0.elapsed().as_secs_f64();
@@ -203,6 +220,11 @@ fn angle_field(st: &S, v: &Value, b: (f32, f32, f32, f32)) -> Result<FieldBox<f3
         && let Ok(fu) = u.borrow::<crate::form::FieldU>()
     {
         return Ok(fu.angle(0.0));
+    }
+    // an old log's rock field (r:field("plane"), legacy.rs): read natively too
+    #[cfg(feature = "replay")]
+    if let Some(f) = crate::legacy::angle_field(v) {
+        return Ok(f);
     }
     if let Value::Function(f) = v {
         let g = sample::<2>(st, f, b, |r| {
@@ -531,6 +553,11 @@ pub(crate) fn pile_of(v: &Value, what: &str) -> Result<PileU> {
 /// Paint for one brushload from a pile: the pile, remixed a little (a pile
 /// knifed by hand is uneven), and the pile's color (for the palette ledger).
 fn brushload(st: &S, p: &Value, extra: &Value, what: &str) -> Result<(paint::Paint, Rgb)> {
+    // a legacy canvas's brushes load colors (legacy.rs)
+    #[cfg(feature = "replay")]
+    if let Some(r) = crate::legacy::brushload(st, p, extra)? {
+        return Ok(r);
+    }
     if !extra.is_nil() {
         return err(format!("b:{what}(pile, amount): a pile carries its own medium; mix another pile for other paint"));
     }
@@ -776,6 +803,9 @@ pub(crate) fn edge_quality(st: &S, v: &Value, region: &Mask, b: (f32, f32, f32, 
 }
 
 fn work(st: &S, mask: Rc<Mask>, o: Table, preset: Option<&str>) -> Result<()> {
+    #[cfg(feature = "replay")]
+    check_keys(&o, &crate::legacy::work_keys(st, WORK_KEYS), "work")?;
+    #[cfg(not(feature = "replay"))]
     check_keys(&o, WORK_KEYS, "work")?;
     let (mask, limit) = crate::depth::restrict_mask(st, &o, mask)?;
     let sty = style(st)?;
@@ -784,6 +814,9 @@ fn work(st: &S, mask: Rc<Mask>, o: Table, preset: Option<&str>) -> Result<()> {
     let blending = hand == "blend" || o.get::<Option<bool>>("blender")?.unwrap_or(false);
     let pile = match o.get::<Value>("pile")? {
         Value::Nil if blending => None,
+        // a legacy canvas's passes paint colors (legacy.rs)
+        #[cfg(feature = "replay")]
+        Value::Nil if crate::legacy::on(st) => None,
         v => Some(pile_of(&v, "work")?),
     };
     let tubes = st.borrow().tubes.clone();
@@ -820,6 +853,10 @@ fn work(st: &S, mask: Rc<Mask>, o: Table, preset: Option<&str>) -> Result<()> {
     }
     if let Some(p) = &pile {
         h = h.piled(&tubes, p.mix.clone(), p.medium);
+    }
+    #[cfg(feature = "replay")]
+    if pile.is_none() && crate::legacy::on(st) {
+        crate::legacy::work(st, &o, &mut h, &hand, blending, b)?;
     }
     if let Some(on) = o.get::<Option<bool>>("fill")? {
         h = h.fill(on);
@@ -983,6 +1020,9 @@ const STIPPLE_KEYS: &[&str] = &[
 ];
 
 fn stipple(st: &S, mask: Rc<Mask>, o: Table) -> Result<()> {
+    #[cfg(feature = "replay")]
+    check_keys(&o, &crate::legacy::stipple_keys(st, STIPPLE_KEYS), "stipple")?;
+    #[cfg(not(feature = "replay"))]
     check_keys(&o, STIPPLE_KEYS, "stipple")?;
     let (mask, limit) = crate::depth::restrict_mask(st, &o, mask)?;
     let f = frame(st)?;
@@ -991,9 +1031,22 @@ fn stipple(st: &S, mask: Rc<Mask>, o: Table) -> Result<()> {
         None => Tool::stippler(num(&o, "width")?.unwrap_or(2.0)),
     };
     let b = support(Some(&mask), f, tool.width * 2.0 + 4.0);
-    let pile = pile_of(&o.get::<Value>("pile")?, "stipple")?;
     let tubes = st.borrow().tubes.clone();
-    let mut sp = Stipple::new(tool).piled(&tubes, pile.mix.clone(), pile.medium);
+    // a legacy canvas stipples colors (legacy.rs)
+    #[cfg(feature = "replay")]
+    let legacy = o.get::<Value>("pile")?.is_nil() && crate::legacy::on(st);
+    #[cfg(not(feature = "replay"))]
+    let legacy = false;
+    let mut sp = if legacy {
+        Stipple::new(tool)
+    } else {
+        let pile = pile_of(&o.get::<Value>("pile")?, "stipple")?;
+        Stipple::new(tool).piled(&tubes, pile.mix.clone(), pile.medium)
+    };
+    #[cfg(feature = "replay")]
+    if legacy {
+        crate::legacy::stipple(st, &o, &mut sp, b)?;
+    }
     // the touches' pressure is the painter's unless `feather` is asked for
     sp = sp.feather(num(&o, "feather")?.unwrap_or(0.0));
     if let Some(v) = o.get::<Option<Value>>("coverage")? {
@@ -1144,6 +1197,11 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
             "canvas",
             lua.create_function(move |lua, o: Option<Table>| {
                 let o = o.ok_or_else(|| mlua::Error::runtime(CANVAS_HELP))?;
+                // an old log's canvas: a named style and palette (legacy.rs)
+                #[cfg(feature = "replay")]
+                if crate::legacy::asks(&o)? {
+                    return crate::legacy::canvas(lua, &st, o);
+                }
                 check_keys(&o, &["size", "aspect", "linen", "ground", "seed"], "canvas")?;
                 if st.borrow().canvas.is_some() {
                     return err("the canvas is already set up (canvas{} is the first chunk)");

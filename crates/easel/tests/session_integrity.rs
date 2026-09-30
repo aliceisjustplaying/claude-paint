@@ -201,3 +201,38 @@ fn rebuilding_serves_progress_and_refuses_nonstatus_requests() {
     assert!(request("do", "assert(t.unexpected == nil); local n = 0; for _ in pairs(t) do n = n + 1 end; assert(n == 30)", normal).starts_with("ok\n"));
     assert!(request("close", "", normal).starts_with("ok\n"));
 }
+
+// A look names its file one above the highest look-NNNN.png there, and never
+// writes over a file that exists: a gap (look-0002 removed) or a stray
+// look-prefixed file must not make the next look land on an older observation.
+#[test]
+fn a_look_never_overwrites_an_earlier_observation() {
+    let s = ["-s", "gaps"];
+    let with = |a: &[&'static str]| [&s[..], a].concat();
+    ok(&["open", "gaps"]);
+    // a failing assertion must not leave the server running
+    struct Closing;
+    impl Drop for Closing {
+        fn drop(&mut self) {
+            let _ = cmd(&["-s", "gaps", "close"]);
+        }
+    }
+    let _closing = Closing;
+    ok(&with(&["do", r#"canvas{size=300, aspect=4, seed=5, linen=15, ground={{pile={{"lead white", 5}, {"yellow ochre", 1}}, um=80, apply="knife"}}}"#]));
+    let dir = root().join("out/easel/gaps");
+    for n in 1..=2 {
+        let l = ok(&with(&["look", "--size", "40"]));
+        assert!(l.starts_with(dir.join(format!("look-{n:04}.png")).to_str().unwrap()), "{l}");
+    }
+    // look-0001 pruned, look-0002 kept (marked), and an unrelated look-prefixed file
+    std::fs::remove_file(dir.join("look-0001.png")).unwrap();
+    std::fs::write(dir.join("look-0002.png"), b"kept observation").unwrap();
+    let next = ok(&with(&["look", "--size", "40"]));
+    assert!(next.starts_with(dir.join("look-0003.png").to_str().unwrap()), "{next}");
+    std::fs::write(dir.join("look-notes.txt"), b"not an observation").unwrap();
+    let after = ok(&with(&["look", "--size", "40"]));
+    ok(&with(&["close"]));
+    assert!(after.starts_with(dir.join("look-0004.png").to_str().unwrap()), "{after}");
+    assert_eq!(std::fs::read(dir.join("look-0002.png")).unwrap(), b"kept observation", "a look overwrote an earlier one");
+    assert_eq!(std::fs::read(dir.join("look-notes.txt")).unwrap(), b"not an observation");
+}

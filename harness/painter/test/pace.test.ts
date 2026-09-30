@@ -1,6 +1,5 @@
 // node --test harness/painter/test/pace.test.ts
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import { requestTokens, retryablePerMinuteQuota, TokenPace } from "../pace.ts";
 
@@ -43,13 +42,3 @@ test("daily quotas, billing errors and other errors are left alone", () => {
 	assert.equal(retryablePerMinuteQuota(undefined), undefined);
 });
 
-test("the real error text from the round 18g session file is recognized", () => {
-	const f = `${process.env.HOME}/tmp/gallery-fcf9c110/r18g/run/GEM/p1_s1_err.txt`;
-	let text: string;
-	try {
-		text = readFileSync(f, "utf8");
-	} catch {
-		return; // not on this machine
-	}
-	assert.ok(retryablePerMinuteQuota(text));
-});

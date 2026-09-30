@@ -1,20 +1,43 @@
 import assert from "node:assert/strict";
-import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, symlinkSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
+import { getEventListeners } from "node:events";
 import { join } from "node:path";
 import { test } from "node:test";
-import { atEasel, easel, inStudio, lookArgs, tail, toolWords } from "../easel-client.ts";
+import { atEasel, easel, lookArgs, WAIT_MS, studioPath, tail, toolWords } from "../easel-client.ts";
 
-test("read stays inside the studio, links included", () => {
-	const studio = mkdtempSync(join(tmpdir(), "studio-"));
-	mkdirSync(join(studio, "notes"));
-	writeFileSync(join(studio, "notes", "a.md"), "a");
-	symlinkSync("/etc/hosts", join(studio, "notes", "out"));
-	assert.equal(inStudio(studio, "notes/a.md"), true);
-	assert.equal(inStudio(studio, join(studio, "BRIEF.md")), true); // not there yet: still the studio
-	assert.equal(inStudio(studio, "../other/BRIEF.md"), false);
-	assert.equal(inStudio(studio, "/etc/hosts"), false);
-	assert.equal(inStudio(studio, "notes/out"), false);
+test("read opens only studio files, however the path is spelled", () => {
+	const top = realpathSync(mkdtempSync(join(tmpdir(), "studio-")));
+	const real = join(top, "studio");
+	mkdirSync(join(real, "notes"), { recursive: true });
+	writeFileSync(join(real, "notes", "a.md"), "a");
+	mkdirSync(join(top, "outside"));
+	const secret = join(top, "outside", "secret.txt");
+	writeFileSync(secret, "secret");
+	symlinkSync(secret, join(real, "notes", "out"));
+	const studio = join(top, "link"); // pi's cwd may be a link to the studio
+	symlinkSync(real, studio);
+	const home = process.env.HOME;
+	process.env.HOME = join(top, "outside"); // pi's read expands ~ with os.homedir()
+	try {
+		const cases: [string, string | undefined][] = [
+			["notes/a.md", join(real, "notes", "a.md")],
+			["BRIEF.md", join(real, "BRIEF.md")], // not there yet: still the studio
+			[join(studio, "notes", "new.md"), join(real, "notes", "new.md")],
+			["@notes/a.md", join(real, "notes", "a.md")],
+			[`file://${real}/notes/a.md`, join(real, "notes", "a.md")],
+			["../outside/secret.txt", undefined],
+			["notes/../../outside/secret.txt", undefined],
+			[secret, undefined],
+			["notes/out", undefined],
+			["~/secret.txt", undefined],
+			[`@${secret}`, undefined],
+			[`file://${secret}`, undefined],
+		];
+		for (const [path, want] of cases) assert.equal(studioPath(studio, path), want, path);
+	} finally {
+		process.env.HOME = home;
+	}
 });
 
 test("look's options become the easel's arguments", () => {
@@ -61,6 +84,44 @@ test("a client that hangs is stopped and reported, not waited on forever", async
 	const r = await easel(studio, ["do", "-"], "print(1)", undefined, 300);
 	assert.equal(r.timedOut, true);
 	assert.ok(Date.now() - t0 < 5000);
+});
+
+/** A studio whose bin/easel logs each command to `calls` and then runs `body`. */
+function stubStudio(body: string): string {
+	const studio = mkdtempSync(join(tmpdir(), "studio-"));
+	mkdirSync(join(studio, "bin"));
+	writeFileSync(join(studio, "bin", "easel"), `#!/bin/sh\necho "$1" >> calls\n${body}\n`, { mode: 0o755 });
+	return studio;
+}
+const calls = (studio: string) => readFileSync(join(studio, "calls"), "utf8").trim().split("\n");
+
+test("a tool's opening status keeps to the tool's time limit, and a busy easel isn't opened again", async () => {
+	const studio = stubStudio('[ "$1" = status ] && sleep 30\necho ok');
+	const other = WAIT_MS.other;
+	WAIT_MS.other = 300;
+	try {
+		const t0 = Date.now();
+		await assert.rejects(atEasel(studio, ["status"], undefined), /isn't answering/);
+		assert.ok(Date.now() - t0 < 5000);
+		assert.deepEqual(calls(studio), ["status"]);
+	} finally {
+		WAIT_MS.other = other;
+	}
+});
+
+test("an abort stops the tool's chain: nothing after it runs, and no listener is left behind", async () => {
+	const studio = stubStudio('[ "$1" = status ] && [ -f slow ] && { sleep 2; exit 1; }\necho ok');
+	const kept = new AbortController();
+	for (let i = 0; i < 3; i++) await atEasel(studio, ["status"], undefined, kept.signal);
+	assert.equal(getEventListeners(kept.signal, "abort").length, 0);
+
+	writeFileSync(join(studio, "slow"), "");
+	writeFileSync(join(studio, "calls"), "");
+	const ac = new AbortController();
+	setTimeout(() => ac.abort(), 300);
+	await assert.rejects(atEasel(studio, ["do", "-"], "print(1)", ac.signal), /aborted/);
+	await assert.rejects(atEasel(studio, ["do", "-"], "print(1)", ac.signal), /aborted/);
+	assert.deepEqual(calls(studio), ["status"]);
 });
 
 test("look's errors name the tool's options, not the easel's flags", () => {

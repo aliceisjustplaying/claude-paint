@@ -4,14 +4,15 @@
  * Each tool runs the studio's `bin/easel` client (no shell, a bare environment) and returns
  * what it printed. `look` hands the PNG the easel wrote to pi's own read tool, so the image
  * reaches the model exactly as a read image does (resized to the model's limits). `read` is
- * pi's read tool, refused outside the studio folder.
+ * pi's read tool, refused outside the studio folder and given the checked path.
  *
  * The easel is opened by the runner before the painter starts and stays open across sittings;
  * if it isn't (a first run, a crash), the first tool call opens it, which replays the log.
  */
+import { existsSync } from "node:fs";
 import { Type } from "@earendil-works/pi-ai";
 import { createReadToolDefinition, defineTool, type ExtensionAPI } from "@earendil-works/pi-coding-agent";
-import { atEasel, inStudio, lookArgs, tail, text, toolWords } from "./easel-client.ts";
+import { atEasel, studioPath, lookArgs, tail, text, toolWords } from "./easel-client.ts";
 
 export function registerEaselTools(pi: ExtensionAPI, studio: string): void {
 	const read = createReadToolDefinition(studio);
@@ -100,10 +101,15 @@ export function registerEaselTools(pi: ExtensionAPI, studio: string): void {
 		executionMode: "sequential",
 	});
 
-	pi.registerTool({ ...read, executionMode: "sequential" });
-	pi.on("tool_call", (event) => {
-		if (event.toolName !== "read") return undefined;
-		const path = String((event.input as { path?: unknown }).path ?? "");
-		return inStudio(studio, path) ? undefined : { block: true, reason: `${path} is outside the studio` };
+	// read gets the path that was checked, so it can't resolve the painter's spelling to another file
+	pi.registerTool({
+		...read,
+		async execute(id, p, signal, onUpdate, ctx) {
+			const real = studioPath(studio, p.path);
+			if (!real) throw new Error(`${p.path} is outside the studio`);
+			if (!existsSync(real)) throw new Error(`${p.path}: no such file in the studio`);
+			return read.execute(id, { ...p, path: real }, signal, onUpdate, ctx);
+		},
+		executionMode: "sequential",
 	});
 }

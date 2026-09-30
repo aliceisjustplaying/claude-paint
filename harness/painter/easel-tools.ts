@@ -1,7 +1,7 @@
 /**
  * The painter's tools: the easel, and reading the studio's notes. No shell.
  *
- * Each tool runs the studio's `bin/easel` client (no shell, a bare environment) and returns
+ * Each tool runs the studio's `bin/easel` client (no shell, a bare environment but for RAYON_NUM_THREADS) and returns
  * what it printed. `look` hands the PNG the easel wrote to pi's own read tool, so the image
  * reaches the model exactly as a read image does (resized to the model's limits). `read` is
  * pi's read tool, refused outside the studio folder and given the checked path.

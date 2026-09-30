@@ -35,12 +35,12 @@ test("the newest image is kept when it fits the size limit, and dropped when it 
 });
 
 test("an image alone over the size limit leaves the request, and a line says so and why", () => {
-	const msgs = [{ role: "toolResult", content: [{ type: "text", text: "look-0001.png" }, { type: "image", data: "A".repeat(2000), mimeType: "image/png" }] }];
-	const r = pruneImages(msgs, { maxImages: 1, maxImageChars: 1000, step: 5 });
+	const msgs = [{ role: "toolResult", content: [{ type: "text", text: "look-0001.png" }, { type: "image", data: "A".repeat(13_460_000), mimeType: "image/png" }] }];
+	const r = pruneImages(msgs, { maxImages: 1, maxImageChars: 12_000_000, step: 5 });
 	assert.equal(r.dropped, 1);
 	assert.equal(r.keptChars, 0);
 	assert.equal(r.messages[0].content[1].text,
-		"[this image was left out of the request: its 2000 characters of base64 are over the 1000-character image limit (PAINTER_MAX_IMAGE_MB)]");
+		"[this image was left out of the request: it is 13.5 MB, over the 12 MB limit for the images in one request]");
 });
 
 function session(n: number, chars = 10) {

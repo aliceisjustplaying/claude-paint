@@ -94,7 +94,8 @@ export function placeholder(path: string | undefined): string {
 
 /** What stands for an image that alone is over the size limit. */
 export function oversize(chars: number, limit: number): string {
-	return `[this image was left out of the request: its ${chars} characters of base64 are over the ${limit}-character image limit (PAINTER_MAX_IMAGE_MB)]`;
+	const mb = (n: number) => `${Number((n / 1_000_000).toFixed(1))} MB`;
+	return `[this image was left out of the request: it is ${mb(chars)}, over the ${mb(limit)} limit for the images in one request]`;
 }
 
 export interface PruneResult<M> {

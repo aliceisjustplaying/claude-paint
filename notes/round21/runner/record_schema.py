@@ -11,6 +11,7 @@ MAX_OBSERVATIONS). A single observation that fails a check is dropped and listed
 with why; the record goes on if any remain. Stdlib only (the runner is a uv script).
 """
 import copy
+import json
 import math
 import re
 import unicodedata
@@ -233,6 +234,135 @@ def normalized(o):
     return o
 
 
+# a chunk's line in a tool result: it ran (ok · chunk 129 ...) or failed (the chunk failed ...)
+CHUNK_RAN = re.compile(r"\bok · chunk (\d+)\b")
+CHUNK_FAILED = re.compile(r"the chunk failed")
+# result lines that say nothing the easel printed about the paint: the chunk line, a look's file, a note
+PLAIN_LINE = re.compile(r"^\s*$|\bchunk \d+\b|\.png\b|^noted in |^Successfully wrote ")
+PNG = re.compile(r"\.png\b", re.I)
+# a bash command that runs a chunk at the easel (easel do, as round 16 and 17 painters did)
+EASEL_DO = re.compile(r"\beasel\s+do\b")
+
+
+class LogIndex:
+    """The tool calls of one pi session log (JSON lines): id -> where it is, what it ran and what
+    came back. Ids are opaque (toolu_..., call_...). A result's isError is kept but not trusted:
+    a chunk that failed can come back with isError false, so failure is read from the text."""
+
+    ARGS_MAX = 64_000
+    TEXT_MAX = 16_000
+
+    def __init__(self, path):
+        self.path = str(path)
+        self.calls = {}
+        self.duplicates = set()                   # ids more than one call used: evidence can't cite them
+        with open(path, errors="replace") as f:
+            for i, line in enumerate(f, 1):
+                if '"toolCall"' not in line and '"toolResult"' not in line:
+                    continue
+                try:
+                    m = json.loads(line).get("message") or {}
+                except ValueError:
+                    continue
+                if not isinstance(m, dict):
+                    continue
+                if m.get("role") == "assistant":
+                    for p in m.get("content") or []:
+                        if isinstance(p, dict) and p.get("type") == "toolCall" and isinstance(p.get("id"), str):
+                            if p["id"] in self.calls:
+                                self.duplicates.add(p["id"])
+                            self.calls[p["id"]] = {"line": i, "tool": p.get("name"),
+                                                   "args": json.dumps(p.get("arguments"))[:self.ARGS_MAX],
+                                                   "result_line": None, "text": "", "image": False, "is_error": None}
+                elif m.get("role") == "toolResult" and m.get("toolCallId") in self.calls:
+                    c = self.calls[m["toolCallId"]]
+                    if c["result_line"] is not None:
+                        continue
+                    parts = [p for p in m.get("content") or [] if isinstance(p, dict)]
+                    c.update(result_line=i, is_error=m.get("isError"),
+                             text="\n".join(p.get("text") or "" for p in parts if p.get("type") == "text")[:self.TEXT_MAX],
+                             image=any(p.get("type") == "image" for p in parts))
+
+
+def _call_facts(c):
+    ran = CHUNK_RAN.search(c["text"])
+    return {"line": c["line"], "tool": c["tool"], "result_line": c["result_line"],
+            "chunk": int(ran.group(1)) if ran else None, "failed": bool(CHUNK_FAILED.search(c["text"]))}
+
+
+def _runs_chunk(c):
+    """A call that ran a chunk at the easel: the paint tool, or bash running `easel do` (a read,
+    a grep or a cat of an earlier reply shows the same chunk line and isn't one)."""
+    return c["tool"] == "paint" or (c["tool"] == "bash" and bool(EASEL_DO.search(c["args"])))
+
+
+def _shows_image(c):
+    """A call that put an image in front of the painter: a look, a read of a .png, or a result
+    that carries an image (a result that only names a .png, like an ls or a bash `easel look`,
+    showed a file name, not a picture)."""
+    return c["tool"] == "look" or c["image"] or (c["tool"] == "read" and bool(PNG.search(c["args"])))
+
+
+def _code(c):
+    """A call's arguments as the painter wrote them (JSON's escaped line breaks read as breaks)."""
+    return c["args"].replace("\\n", "\n").replace("\\t", "\t")
+
+
+def _printed(c):
+    """Whether a result holds easel output beyond the chunk line (a value, a state, an error)."""
+    return any(not PLAIN_LINE.search(l) for l in c["text"].splitlines())
+
+
+def evidence_problems(o, logs):
+    """Whether o's evidence resolves in logs (LogIndex, in the brief's order) and backs its basis
+    and category. Returns (problems, resolved)."""
+    out, resolved, found = [], [], []
+    for i, e in enumerate(o["evidence"]):
+        if not 1 <= e["log"] <= len(logs):
+            out.append(f"evidence {i}: log {e['log']} is not one of the {len(logs)} logs")
+            continue
+        c = logs[e["log"] - 1].calls.get(e["call"])
+        if e["call"] in logs[e["log"] - 1].duplicates:
+            out.append(f"evidence {i}: log {e['log']} has more than one tool call {e['call']} (ambiguous)")
+            continue
+        if c is None:
+            out.append(f"evidence {i}: log {e['log']} has no tool call {e['call']}")
+            continue
+        if c["result_line"] is None:
+            out.append(f"evidence {i}: log {e['log']} call {e['call']} has no result")
+            continue
+        found.append((e, c))
+        resolved.append(dict(log=e["log"], call=e["call"], role=e["role"], **_call_facts(c)))
+    if out:
+        return out, resolved
+    ops = [(e, c) for e, c in found if e["role"] == "operation"]
+    if not ops:
+        return ["no operation evidence"], resolved
+    ran = [(e, c) for e, c in ops if _runs_chunk(c) and (CHUNK_RAN.search(c["text"]) or CHUNK_FAILED.search(c["text"]))]
+    if not ran:
+        return ["no operation evidence shows a chunk that ran or failed (a paint call or bash running easel do)"], resolved
+    first = min((e["log"], c["line"]) for e, c in ran)
+    if o["basis"] == "seen" and not any(e["role"] == "image" and _shows_image(c) and (e["log"], c["line"]) >= first
+                                        for e, c in found):
+        out.append("basis seen: no image evidence looked at after the operation")
+    if o["basis"] == "printed" and not any(_printed(c) for _, c in ran):
+        out.append("basis printed: the operation's result holds nothing beyond the chunk line")
+    if o["category"] == "easel_errors" and not any(CHUNK_FAILED.search(c["text"]) for _, c in ran):
+        out.append("easel_errors: no operation evidence shows a chunk that failed")
+    return out, resolved
+
+
+def evidence_warnings(o, i, logs):
+    """A warning when the chunk code the evidence holds (a paint call's, or a cited source's)
+    doesn't name the observation's operation; nothing when no code was cited (easel do -f)."""
+    code = [_code(c) for e in o["evidence"] if 1 <= e["log"] <= len(logs)
+            for c in [logs[e["log"] - 1].calls.get(e["call"])]
+            if c and (e["role"] == "source" or (e["role"] == "operation" and c["tool"] == "paint"))]
+    if code and not any(re.search(r"\b" + re.escape(o["operation"]) + r"\b", t) for t in code):
+        return [{"index": i, "field": "operation", "pattern": "OPERATION_NOT_IN_CODE", "words": o["operation"]}]
+    return []
+
+
 def texts(o):
     """An observation's free text and structured strings, as (field, text)."""
     c = o.get("conditions") or {}
@@ -241,9 +371,11 @@ def texts(o):
     return [(f, t) for f, t in out if isinstance(t, str)]
 
 
-def validate(doc, tubes=None):
+def validate(doc, tubes=None, logs=None):
     """The observations of a reader's p<n>_observations.json (parsed): kept, dropped and warned.
-    Raises Rejected if the record can't be used at all. tubes: the source box's tube names."""
+    Raises Rejected if the record can't be used at all. tubes: the source box's tube names; logs:
+    the session logs (LogIndex) in the brief's order, against which evidence is resolved (None
+    checks the shape only). A kept observation carries "resolved": its evidence's calls."""
     if not isinstance(doc, dict):
         raise Rejected("the record is not a JSON object")
     if doc.get("schema") != SCHEMA:
@@ -256,13 +388,18 @@ def validate(doc, tubes=None):
     if len(obs) > MAX_OBSERVATIONS:
         raise Rejected(f"{len(obs)} observations (at most {MAX_OBSERVATIONS})")
     obs = [normalized(o) for o in obs]
-    kept, dropped = [], []
+    kept, dropped, warnings = [], [], []
     for i, o in enumerate(obs):
         why = shape_problems(o, tubes)
+        resolved = None
+        if not why and logs is not None:
+            why, resolved = evidence_problems(o, logs)
+            if not why:
+                warnings += evidence_warnings(o, i, logs)
         if why:
             dropped.append({"index": i, "why": why})
         else:
-            kept.append(dict(o, index=i))
+            kept.append(dict(o, index=i, **({"resolved": resolved} if resolved is not None else {})))
     if not kept:
         raise Rejected(f"every observation was dropped ({len(dropped)})")
-    return {"observations": kept, "dropped": dropped, "warnings": []}
+    return {"observations": kept, "dropped": dropped, "warnings": warnings}

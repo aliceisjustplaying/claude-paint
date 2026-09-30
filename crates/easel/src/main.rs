@@ -504,7 +504,14 @@ fn open(args: &[String]) -> Result<(), String> {
 /// The session's lock for `serve`, held until it exits: the one `open` passed on its
 /// stdin, else taken here. A session that has a server already gets no second one.
 fn serve_lock(name: &str) -> Result<std::fs::File, String> {
-    let lock = if std::env::var_os(LOCK_ON_STDIN).is_some() {
+    let on_stdin = std::env::var_os(LOCK_ON_STDIN).is_some();
+    // The signal is this server's alone: a child it starts must not take its stdin for the
+    // lock. (fd 0 itself is inherited by any child all the same, not close-on-exec: a child
+    // would hold the lock after the server died, and every open would wait for it. The
+    // server starts no children.)
+    // SAFETY: read and removed before the server starts any thread
+    unsafe { std::env::remove_var(LOCK_ON_STDIN) };
+    let lock = if on_stdin {
         use std::os::fd::AsFd;
         use std::os::unix::fs::MetadataExt;
         // a duplicate of stdin: the same open file, so the same lock
@@ -1019,6 +1026,18 @@ fn run(args: &[String]) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The lock-on-stdin signal is for this server only: once read it leaves the
+    /// environment, so no child the server ever starts takes it (or its stdin) as the lock.
+    #[test]
+    fn the_lock_on_stdin_signal_is_not_passed_on() {
+        // SAFETY: no other test reads or writes this variable
+        unsafe { std::env::set_var(LOCK_ON_STDIN, "1") };
+        // stdin here is no lock file: refused, but the signal is read all the same
+        let r = serve_lock("lock-signal-test");
+        assert!(r.is_err(), "a test's stdin was taken as the lock");
+        assert_eq!(std::env::var_os(LOCK_ON_STDIN), None, "{LOCK_ON_STDIN} is still set");
+    }
 
     /// A request is served from its length line, even when the client's end of file never
     /// comes (macOS sometimes loses a half-close; the server then waited for it until the

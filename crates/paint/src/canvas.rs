@@ -484,6 +484,7 @@ impl Canvas {
     /// the crop (without its margin).
     pub fn save(&mut self, path: impl AsRef<std::path::Path>) -> std::io::Result<()> {
         self.dry();
+        crate::frames::finish(self);
         let (bw, (kx0, ky0, kx1, ky1)) = (self.f.w, self.keep);
         let (w, h) = (kx1 - kx0, ky1 - ky0);
         // dither by whole-canvas pixel, so a crop matches a whole render

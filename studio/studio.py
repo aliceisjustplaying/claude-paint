@@ -350,10 +350,15 @@ def stream(key, files):
         return st
 
 
+# the painting sources of painters whose folder is gone (a round's worktree, removed), by folder name
+ARCHIVE = os.path.join(os.path.dirname(HERE), "archive", "sources")
+
+
 def painting_sources(events):
-    """The painting's source files, relative to the painter's folder (its last start): the ones
-    the page may ask for. paintings/lua/painting.lua and, from the events, every .lua under
-    paintings/lua/ and .rs under paintings/ the painter wrote or edited or rendered with
+    """The folder to read the painting's source files from and those files, relative to it: the ones
+    the page may ask for. The folder is the painter's (its last start) or, once that is gone,
+    archive/sources/<its name>. The files: paintings/lua/painting.lua and, from the events, every .lua
+    under paintings/lua/ and .rs under paintings/ the painter wrote or edited or rendered with
     `cargo paint <bin>`. Nothing else in the folder (the brief, notes, bin/, settings) is served."""
     cwd = next((e["cwd"] for e in reversed(events) if e["kind"] == "start"), "")
     rels = {"paintings/lua/painting.lua"}
@@ -365,6 +370,8 @@ def painting_sources(events):
         if m:
             rels.add(f"paintings/src/bin/{m.group(1)}.rs")
     ok = re.compile(r"paintings/(lua/[^/]+\.lua|(?:[^/]+/)*[^/]+\.rs)")
+    if cwd and not os.path.isdir(cwd):
+        cwd = os.path.join(ARCHIVE, os.path.basename(cwd.rstrip("/")))
     return cwd, {r for r in rels if ok.fullmatch(r) and ".." not in r.split("/")}
 
 

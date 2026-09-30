@@ -21,6 +21,10 @@ pub const MARK: &str = "--@ chunk";
 /// (before the first chunk). A log without it was painted from the default
 /// box (`paint::palette::DEFAULT_BOX`): every log before round 20.
 pub const BOX_MARK: &str = "--@ box";
+/// Names the engine version a painting is painted with (`paint::ENGINE`), in
+/// the head of its session file. A log without it was painted with engine 1:
+/// every log before the version was recorded.
+pub const ENGINE_MARK: &str = "--@ engine";
 
 /// The longest a chunk of a live session may run (the longest of 2,502 painters' chunks on
 /// 2026-09-27 took 94 s). A chunk that runs longer is stopped like a failed one: nothing it
@@ -243,6 +247,10 @@ impl Session {
         if paint::palette::default_box() != Some(tubes) {
             let _ = writeln!(s, "{BOX_MARK} {tubes}");
         }
+        let engine = self.st.borrow().tubes.engine;
+        if engine != 1 {
+            let _ = writeln!(s, "{ENGINE_MARK} {engine}");
+        }
         for (i, c) in self.log.iter().enumerate() {
             let _ = writeln!(s, "\n{MARK} {}", i + 1);
             s.push_str(&c.src);
@@ -455,6 +463,29 @@ pub fn logged_box(text: &str) -> Result<Option<String>, String> {
     Ok(found)
 }
 
+/// The engine version a session file names in its head (its `ENGINE_MARK`
+/// line before the first chunk): 1 if it names none.
+pub fn logged_engine(text: &str) -> Result<u32, String> {
+    let mut found = None;
+    for l in text.lines() {
+        let l = l.trim();
+        if l.starts_with(MARK) {
+            break;
+        }
+        if let Some(rest) = l.strip_prefix(ENGINE_MARK) {
+            let v = rest.strip_prefix(' ').and_then(|v| v.trim().parse::<u32>().ok()).filter(|v| (1..=paint::ENGINE).contains(v));
+            let Some(v) = v else {
+                return Err(format!("the log's line {l:?} names no engine this easel has ({ENGINE_MARK} <1 to {}>)", paint::ENGINE));
+            };
+            if found.is_some() {
+                return Err(format!("the log names its engine twice ({ENGINE_MARK} lines)"));
+            }
+            found = Some(v);
+        }
+    }
+    Ok(found.unwrap_or(1))
+}
+
 /// Where the box of a new painting is set: a file `box` next to the easel's
 /// executable (one line, the box's name; a studio ships it as
 /// `<studio>/bin/box`), else `EASEL_BOX`. None: neither is set (the default
@@ -494,12 +525,15 @@ fn box_list() -> String {
 /// configured box (`configured_box`), else the default (in a painter's build
 /// for one box, which has no default box: that box). An existing one takes
 /// the box its log names (none: the default), whatever easel replays it; if a
-/// box is configured too, it must be the same one.
+/// box is configured too, it must be the same one. The box carries the
+/// engine version the painting is painted with: a new one the current
+/// (`paint::ENGINE`), an existing one its log's (`logged_engine`).
 pub fn box_for(log: Option<&str>) -> Result<Palette, String> {
     let configured = configured_box()?;
     let Some(text) = log else {
         return find_box(configured.as_ref().map_or(Palette::fallback_box(), |c| c.0.as_str()));
     };
+    let engine = logged_engine(text)?;
     let logged = logged_box(text)?;
     let Some(name) = logged.as_deref().or(paint::palette::default_box()) else {
         return Err(format!("the log names no box, so it was painted from the default box, which this easel doesn't have (its boxes: {}); nothing ran", box_list()));
@@ -513,7 +547,9 @@ pub fn box_for(log: Option<&str>) -> Result<Palette, String> {
         };
         return Err(format!("{log_says}, but {from} says {c:?}: a painting is replayed with the box it was painted from; nothing ran"));
     }
-    find_box(name)
+    let mut b = find_box(name)?;
+    b.engine = engine;
+    Ok(b)
 }
 
 /// Split a session file into chunks.
@@ -804,14 +840,14 @@ mod tests {
     }
 
     /// A painting from the default box names no box in its log: its log is
-    /// what round 19 wrote.
+    /// what round 19 wrote, and the engine it is painted with.
     #[test]
     #[cfg(tube_box)]
     fn a_default_log_names_no_box() {
         let mut a = Session::new(W).unwrap();
         a.run(CANVAS).unwrap();
         let prog = a.program("t");
-        let want = format!("-- easel session \"t\": a painting replayed chunk by chunk.\n-- Each \"--@ chunk\" line starts one chunk as it was run at the easel.\n\n--@ chunk 1\n{CANVAS}\n");
+        let want = format!("-- easel session \"t\": a painting replayed chunk by chunk.\n-- Each \"--@ chunk\" line starts one chunk as it was run at the easel.\n--@ engine 2\n\n--@ chunk 1\n{CANVAS}\n");
         assert_eq!(prog, want);
         assert_eq!(logged_box(&prog).unwrap(), None);
         assert_eq!(box_for(Some(&prog)).map(|b| b.name), Ok(paint::palette::DEFAULT_BOX), "(EASEL_BOX set in the test's environment?)");
@@ -890,5 +926,54 @@ mod tests {
                   local v = w:view()
                   assert(v.form.parts == 2, 'mixed: ' .. v.form.parts)
                   assert(v:part(1) == 1 and v:part(2) == 0 and v:part(3) == 2)"#).unwrap();
+    }
+
+    /// A new painting's log names the engine it is painted with; a log
+    /// without the line was painted with engine 1, and replays and goes on
+    /// as engine 1 (its log stays without the line).
+    #[test]
+    #[cfg(tube_box)]
+    fn the_log_names_its_engine() {
+        let mut a = Session::new(W).unwrap();
+        a.run(CANVAS).unwrap();
+        let line = format!("{ENGINE_MARK} {}\n", paint::ENGINE);
+        let prog = a.program("t");
+        assert!(prog.contains(&format!("{line}\n{MARK} 1\n")), "{prog}");
+        assert_eq!(logged_engine(&prog), Ok(paint::ENGINE));
+        let old = prog.replace(&line, "");
+        let tubes = box_for(Some(&old)).expect("(EASEL_BOX set in the test's environment?)");
+        let mut b = Session::with_box(W, tubes).unwrap();
+        for c in parse_program(&old) {
+            b.run(&c).unwrap();
+        }
+        assert_eq!(b.canvas().unwrap().engine(), 1);
+        assert_eq!(b.program("t"), old);
+        for bad in ["--@ engine 0", "--@ engine 99", "--@ engine two", "--@ engine 1\n--@ engine 1"] {
+            assert!(logged_engine(&format!("{bad}\n{MARK} 1\n")).is_err(), "{bad}");
+        }
+    }
+
+    /// Paintings from before the engine version was recorded (no `--@ engine`
+    /// line) replay as engine 1, bit for bit as they did (recorded at 08f6324,
+    /// before engine 2, at a small width to keep the test short): two
+    /// studios' paintings (paint-studio-6399ad and -db6324), hand-timed, with
+    /// paint worked over drying paint.
+    #[test]
+    #[cfg(feature = "replay")]
+    fn logs_without_an_engine_line_replay_as_before() {
+        for (name, want) in [("studio_6399ad", "4f3abae7eb080221"), ("studio_db6324", "009ec933d082a252")] {
+            let text = std::fs::read_to_string(format!("{}/tests/engine1/{name}.lua", env!("CARGO_MANIFEST_DIR"))).unwrap();
+            let mut s = Session::replay_with(320, box_for(Some(&text)).expect("(EASEL_BOX set in the test's environment?)")).unwrap();
+            for (i, c) in parse_program(&text).iter().enumerate() {
+                s.run(c).unwrap_or_else(|e| panic!("{name} chunk {}: {e}", i + 1));
+            }
+            let c = s.canvas().unwrap();
+            let mut h = 0xcbf2_9ce4_8422_2325u64;
+            for b in c.seen().iter().flat_map(|p| p.map(f32::to_bits)).chain(c.kept_surface_um().2.iter().map(|v| v.to_bits())) {
+                h ^= b as u64;
+                h = h.wrapping_mul(0x100_0000_01b3);
+            }
+            assert_eq!(format!("{h:016x}"), want, "{name} no longer replays as it did");
+        }
     }
 }

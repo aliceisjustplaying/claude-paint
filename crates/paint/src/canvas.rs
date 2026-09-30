@@ -202,6 +202,8 @@ pub struct Canvas {
     /// Hand time on (`set_hand_time`): the slice of hand time (minutes) a
     /// long pass is painted in, the paint ageing between slices.
     pub(crate) hand_slice: Option<f32>,
+    /// The engine version it is painted with (`crate::ENGINE`).
+    pub(crate) engine: u32,
 }
 
 impl Canvas {
@@ -244,7 +246,18 @@ impl Canvas {
             drawing: None,
             tally: crate::tally::Tally::default(),
             hand_slice: None,
+            engine: crate::ENGINE,
         }
+    }
+
+    /// Paint with engine version `v` (see `crate::ENGINE`): a replay
+    /// paints as the version its painting was painted with.
+    pub fn with_engine(mut self, v: u32) -> Self {
+        self.engine = v;
+        self
+    }
+    pub fn engine(&self) -> u32 {
+        self.engine
     }
 
     /// Physical width of the painting in mm (default 700).

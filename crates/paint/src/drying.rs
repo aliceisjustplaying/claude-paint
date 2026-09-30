@@ -20,10 +20,10 @@
 //! pigment (`Paint::drying`: lead white and umber are driers, bone black and
 //! lakes slow), thickness (thick films dry slower) and oil content (fat,
 //! medium-rich paint dries slower than lean). Fresh paint worked into an older
-//! film dilutes its cure by volume. When the film reaches the gel point it
-//! levels for as long as it was fluid, then it bakes into the dry picture:
-//! from then on it is part of the surface and its tack lives on in `sub`
-//! until it is touch-dry. So a pixel can hold new wet paint over a set layer.
+//! film dilutes its cure by volume as it is laid (engine 1: at the next
+//! `wait`). When the film reaches the gel point it levels for as long as it
+//! was fluid, then it bakes into the dry picture: from then on it is part of
+//! the surface and its tack lives on in `sub` until it is touch-dry. So a pixel can hold new wet paint over a set layer.
 //!
 //! `Canvas::wait(minutes)` advances the clock. `Canvas::dry()` waits until all
 //! paint is touch-dry. The per-pixel drying state is allocated on the first
@@ -192,8 +192,10 @@ pub(crate) struct Px {
     /// Seconds the open film levels for when it sets (it levels for
     /// `SET_TIME` after it is worked, at the fluidity it had then).
     pub lev: f32,
-    /// Volume of the open film at the last `wait` (fresh paint since then
-    /// dilutes the cure).
+    /// Volume of the open film at the last `wait`. A film whose volume
+    /// changed since was worked, even where no bristle touched it (paint
+    /// ploughed into it); in engine 1, fresh paint since then dilutes the
+    /// cure at the next wait.
     pub seen: f32,
     /// Cure of the top set film, baked into the dry picture (≥ 1: dry).
     pub sub: f32,
@@ -431,9 +433,11 @@ impl Canvas {
         self.wet.clock.now += left as f64;
     }
 
-    /// Fold what was painted since the last `wait` into the drying state:
-    /// fresh paint dilutes the cure of the film it went into, and a film that
-    /// was worked levels again, at the fluidity it has now.
+    /// Fold what was painted since the last `wait` into the drying state: a
+    /// film that was worked levels again, at the fluidity it has now, and
+    /// its thickness is judged afresh. (Fresh paint diluted its cure as it
+    /// was laid, in `Surf::add`. Engine 1 diluted it here, so until the
+    /// next wait a brush felt the film as it was before: see `ENGINE`.)
     fn absorb(&mut self) {
         let Some((x0, y0, x1, y1)) = self.wet.dirty else {
             self.wet.clock.mark = self.wet.current;
@@ -444,7 +448,9 @@ impl Canvas {
         let mark = self.wet.clock.mark;
         // a worked film's thickness is judged afresh over the paint that's
         // wet around it now; an untouched one keeps its own (see `Px::th`)
-        let fresh = |wet: &crate::wet::Wet, i: usize| wet.touched[i] > mark || wet.stroke[i] > mark || wet.clock.px[i].th <= 0.0;
+        let now = self.engine >= 2;
+        let worked = |wet: &crate::wet::Wet, i: usize| wet.touched[i] > mark || wet.stroke[i] > mark || (now && wet.clock.px[i].seen != wet.vol[i]);
+        let fresh = |wet: &crate::wet::Wet, i: usize| worked(wet, i) || wet.clock.px[i].th <= 0.0;
         let any = (y0..y1).any(|y| (x0..x1).any(|x| self.wet.vol[y * w + x] >= 1e-5 && fresh(&self.wet, y * w + x)));
         let th = if any { self.film_thickness((x0, y0, x1, y1)) } else { Vec::new() };
         let bw = x1 - x0;
@@ -459,9 +465,11 @@ impl Canvas {
                     (p.cure, p.lev, p.seen, p.th) = (0.0, SET_TIME, 0.0, 0.0);
                     continue;
                 }
-                let worked = touched[i] > mark || stroke[i] > mark;
+                let worked = touched[i] > mark || stroke[i] > mark || (now && p.seen != v);
                 if worked {
-                    p.cure *= p.seen.min(v) / v;
+                    if !now {
+                        p.cure *= p.seen.min(v) / v;
+                    }
                     p.lev = SET_TIME * fluid(p.cure);
                 }
                 if worked || p.th <= 0.0 {
@@ -692,6 +700,29 @@ mod tests {
         assert!(a.px == b.px && a.height == b.height && a.film == b.film);
     }
 
+    /// Fresh paint over setting paint is open at once: a blending stroke
+    /// right after it does what it does after a zero wait (the brush
+    /// doesn't feel the old film's cure until the clock is next read).
+    #[test]
+    fn fresh_paint_over_setting_paint_is_open_before_the_next_wait() {
+        let mut a = canvas();
+        band(&mut a, Paint::body(hex("#2040a0")), 500.0, 1);
+        a.wait(175.0);
+        assert_eq!(a.drying_at(500.0, 500.0), Stage::Setting);
+        let mut h = Held::new(Tool::filbert(40.0), 2);
+        h.load(Paint::body(hex("#c02020")), 1.0);
+        a.drag(&mut h, &Gesture::new(vec![(400.0, 500.0), (600.0, 500.0)]).pressure(0.9, 0.9), None);
+        assert_eq!(a.drying_at(500.0, 500.0), Stage::Open);
+        let mut b = a.clone();
+        b.wait(0.0);
+        for c in [&mut a, &mut b] {
+            let mut h = Held::new(Tool::filbert(30.0), 7);
+            c.drag(&mut h, &Gesture::new(vec![(350.0, 480.0), (650.0, 520.0)]).pressure(0.8, 0.8), None);
+            c.dry();
+        }
+        assert!(a.px == b.px && a.height == b.height && a.film == b.film);
+    }
+
     /// A non-finite wait is a caller's bug, not "wait until dry": it panics
     /// (the easel turns a panic into a failed chunk that changes nothing)
     /// instead of drying the canvas. `dry()` is the way to dry everything.
@@ -710,7 +741,7 @@ mod tests {
     fn brushes_feel_the_stage() {
         let mut lifted = Vec::new();
         let mut laid = Vec::new();
-        for wait in [0.0, 60.0, 180.0, 36.0 * 60.0] {
+        for wait in [0.0, 60.0, 300.0, 36.0 * 60.0] {
             let mut c = canvas();
             band(&mut c, Paint::body(hex("#203050")).with_drying(drier::UMBER), 500.0, 1);
             c.wait(wait);
@@ -729,7 +760,8 @@ mod tests {
             laid.push(early(&c) - before);
         }
         assert!(lifted[0] > 0.0 && lifted[1] < lifted[0], "setting paint lifts less: {lifted:?}");
-        // (at 3 h only the thickest ridges of the umber are still open)
+        // (at 5 h the umber has set: a tacky film, not open paint that fresh
+        // paint thins)
         assert!(lifted[2] < 0.05 * lifted[0] && lifted[3] == 0.0, "nothing lifts from set paint: {lifted:?}");
         assert!(laid[2] > laid[3] * 1.2, "tack pulls paint off the brush: {laid:?}");
     }

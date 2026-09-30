@@ -169,6 +169,7 @@ impl Style {
 
     fn prepare_on(&self, c: Canvas, seed: u64) -> Canvas {
         let mut c = c
+            .with_engine(self.palette.engine)
             .with_size_mm(self.width_mm)
             .with_linen(Linen { seed, ..self.linen });
         for (k, g) in self.ground.iter().enumerate() {

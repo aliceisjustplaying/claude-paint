@@ -273,6 +273,9 @@ const BOXES: &[(&str, &[&str])] = &[
 pub struct Palette {
     pub name: &'static str,
     pub tubes: Vec<Tube>,
+    /// The engine version paint from this box is painted with (`ENGINE`;
+    /// a replay sets its log's). A canvas prepared by a `Style` takes it.
+    pub engine: u32,
     lat: Vec<[f32; mixbox::LATENT_SIZE]>,
     /// Scattering per coat of each tube paint.
     scat: Vec<f32>,
@@ -280,7 +283,7 @@ pub struct Palette {
 
 impl Clone for Palette {
     fn clone(&self) -> Self {
-        Palette::new(self.name, self.tubes.clone())
+        Palette { engine: self.engine, ..Palette::new(self.name, self.tubes.clone()) }
     }
 }
 
@@ -294,7 +297,7 @@ impl Palette {
     pub fn new(name: &'static str, tubes: Vec<Tube>) -> Self {
         let lat = tubes.iter().map(|t| mixbox::linear_float_rgb_to_latent(&t.color)).collect();
         let scat = tubes.iter().map(|t| scatter_for(luminance(t.color), t.hiding)).collect();
-        Palette { name, tubes, lat, scat }
+        Palette { name, tubes, engine: crate::ENGINE, lat, scat }
     }
 
     /// Return a palette restricted to the named tubes. Unknown names panic.
@@ -303,7 +306,7 @@ impl Palette {
             .iter()
             .map(|n| self.tubes.iter().find(|t| t.name == *n).unwrap_or_else(|| panic!("no tube {n:?} in palette {}", self.name)).clone())
             .collect();
-        Palette::new(self.name, tubes)
+        Palette { engine: self.engine, ..Palette::new(self.name, tubes) }
     }
 
     /// Lead white, smalt (semi-transparent cobalt glass, weak) and pale

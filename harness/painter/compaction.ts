@@ -12,7 +12,7 @@
  *   - the painting's Lua globals as the easel holds them (`easel globals`), so the painter's
  *     names keep working: name, the chunk that last assigned it, what it holds; bounded.
  *     If the easel can't answer, the summary says so.
- *   - the canvas clock: chunks in the log, the latest painting time seen in the easel's replies
+ *   - the canvas clock: chunks in the log, the latest valid painting time a successful paint call printed
  * summary.ts builds it. It deliberately has no next steps, remaining tasks or progress checklist.
  *
  * It also sets when compaction happens (COMPACTION below), so no settings file has to sit in

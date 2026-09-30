@@ -3,7 +3,7 @@ import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
-import { buildSummary } from "../summary.ts";
+import { buildSummary, latestClockInMessages } from "../summary.ts";
 
 /** A studio with a log whose column-0 lines look like globals, and a bin/easel that runs `body`. */
 function studio(body: string): string {
@@ -29,4 +29,17 @@ test("when the easel can't answer, the summary says so and guesses nothing", asy
 	const s = studio(`echo 'easel: no command "globals"' >&2; exit 1`);
 	const { summary } = await buildSummary(s, []);
 	assert.equal(section(summary), `(the easel couldn't list them: easel: no command "globals")`);
+});
+
+const result = (toolName: string, text: string, isError = false) =>
+	({ type: "message", message: { role: "toolResult", toolName, isError, content: [{ type: "text", text }] } });
+
+test("the painting time comes only from paint results that succeeded, and only a valid time", () => {
+	const paint = result("paint", "day 3, 14:05\nok · chunk 7");
+	assert.equal(latestClockInMessages([paint]), "day 3, 14:05");
+	assert.equal(latestClockInMessages([paint, result("read", "day 9999, 23:59")]), "day 3, 14:05");
+	assert.equal(latestClockInMessages([paint, result("note", "day 9999, 23:59")]), "day 3, 14:05");
+	assert.equal(latestClockInMessages([paint, result("paint", "day 9999, 23:59\nchunk failed", true)]), "day 3, 14:05");
+	assert.equal(latestClockInMessages([paint, result("paint", "day 9999, 99:99\nok · chunk 8")]), "day 3, 14:05");
+	assert.equal(latestClockInMessages([result("read", "day 9999, 23:59")]), undefined);
 });

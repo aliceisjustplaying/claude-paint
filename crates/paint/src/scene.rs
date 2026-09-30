@@ -203,6 +203,9 @@ pub struct Body {
     /// Bounding sphere in the world (m).
     center: V3,
     radius: f32,
+    /// How far (units) its depth was moved from the frame it was built in
+    /// (`World::add_body`): a form sample's z plus this is the builder's z.
+    z0: f32,
 }
 
 impl Body {
@@ -269,6 +272,9 @@ pub struct World {
     /// Canvas masks registered at a depth so the world knows what is in
     /// front of what (see `Layer`).
     pub layers: Vec<Layer>,
+    /// The engine version (`crate::ENGINE`): 1 keeps every body at its
+    /// spot's `z`.
+    pub engine: u32,
 }
 
 impl World {
@@ -295,6 +301,7 @@ impl World {
             far: 20000.0,
             bodies: Vec::new(),
             layers: Vec::new(),
+            engine: crate::ENGINE,
         };
         w.set_fov(view[2], 45.0);
         w
@@ -335,6 +342,11 @@ impl World {
     }
     pub fn backdrop(mut self, meters: f32) -> Self {
         self.backdrop = meters;
+        self
+    }
+    /// Place and trace bodies as engine version `v` does (`crate::ENGINE`).
+    pub fn engine(mut self, v: u32) -> Self {
+        self.engine = v;
         self
     }
 
@@ -504,11 +516,15 @@ impl World {
         self.add_body(spot, sdf, false)
     }
     fn add_body(&mut self, spot: Spot, sdf: Sdf, visible: bool) -> BodyId {
+        // (engine 2) its depth from its own foot: a far spot's `z` is
+        // hundreds of thousands of units, where an f32 steps by more than a
+        // thin body is deep
+        let (spot, sdf, z0) = if self.engine >= 2 { (Spot { z: 0.0, ..spot }, sdf.shifted([0.0, 0.0, -spot.z]), spot.z) } else { (spot, sdf, 0.0) };
         let (lo, hi) = sdf.aabb();
         let (a, b) = (spot.world(lo), spot.world(hi));
         let center = [(a[0] + b[0]) * 0.5, (a[1] + b[1]) * 0.5, (a[2] + b[2]) * 0.5];
         let radius = 0.5 * ((a[0] - b[0]).powi(2) + (a[1] - b[1]).powi(2) + (a[2] - b[2]).powi(2)).sqrt() + 0.05;
-        self.bodies.push(Body { sdf, spot, visible, center, radius });
+        self.bodies.push(Body { sdf, spot, visible, center, radius, z0 });
         self.bodies.len() - 1
     }
     /// The nearest body surface from a world point: distance (m) and body.
@@ -700,8 +716,9 @@ impl World {
         let mut form = Form::new(f);
         let mut spots = Vec::new();
         for &b in bodies {
-            form.add(&self.bodies[b].sdf, self.bodies[b].spot.at[2]);
-            spots.push(self.bodies[b].spot);
+            let spot = self.bodies[b].spot;
+            form.add_nearest(&self.bodies[b].sdf, &move |x, y, z| spot.world([x, y, z])[2]);
+            spots.push(spot);
         }
         form.light_given(self.light(), |x, y, s| {
             let w = spots[s.part as usize - 1].world([x, y, s.z]);
@@ -866,6 +883,11 @@ impl<'w> View<'w> {
     /// The form part of a body (0 for a proxy).
     pub fn part(&self, b: BodyId) -> PartId {
         self.parts[b]
+    }
+    /// A form sample's depth `z` on part `part` in the frame its body was
+    /// built in (its `Spot::z`, `Spot::p`).
+    pub fn built_z(&self, part: PartId, z: f32) -> f32 {
+        self.body_at(part).map_or(z, |b| z + self.world.bodies[b].z0)
     }
     fn body_at(&self, part: PartId) -> Option<BodyId> {
         self.parts.iter().position(|p| *p == part && part != 0)
@@ -1891,5 +1913,29 @@ mod tests {
         let spots = w.recede((2.0, 4.0), (0.0, 2.0), 5);
         let gaps: Vec<f32> = spots.windows(2).map(|p| p[0].y - p[1].y).collect();
         assert!(gaps.windows(2).all(|g| g[1] < g[0]));
+    }
+
+    /// A block `deep` m deep, 4 m wide and 1 m tall standing `z` m off.
+    fn thin_block(z: f32, deep: f32) -> (World, Spot) {
+        let mut w = World::new([0.0, 0.0, 1000.0, 1000.0], 500.0, 1.6);
+        let s = w.spot_at(0.0, z);
+        w.place(s, Sdf::block(s.p(0.0, 0.5, 0.0), s.size(4.0, 1.0, deep), 0.0));
+        (w, s)
+    }
+
+    /// A thin body far off is in the view, at its depth: its spot's form
+    /// depth (hundreds of thousands of units there) doesn't swallow it. A
+    /// form sample's z is still in the frame the body was built in.
+    #[test]
+    fn a_thin_far_body_is_in_the_view() {
+        for (z, deep) in [(600.0, 0.1), (1000.0, 0.05)] {
+            let (w, s) = thin_block(z, deep);
+            let (x, y) = w.project([0.0, 0.5, z]).unwrap();
+            let v = w.view(Frame::new(1000, 1000, 1.0));
+            let p = v.at(x, y);
+            assert!(matches!(p.what, What::Body(0)) && (p.dist - (z - deep * 0.5)).abs() < 0.01, "{deep} m at {z} m: {:?} at {}", p.what, p.dist);
+            let smp = v.form.sample(x, y).unwrap();
+            assert!((v.built_z(smp.part, smp.z) - s.p(0.0, 0.5, deep * 0.5)[2]).abs() < 0.5);
+        }
     }
 }

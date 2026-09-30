@@ -146,6 +146,11 @@ fn solid_bounds(s: &SolidU) -> [f32; 4] {
 /// Anything that holds a lit form: a standalone `Form` or a scene's view.
 pub trait FormHolder: Send + Sync {
     fn form(&self) -> &Form;
+    /// A sample's depth on part `part` as the painter built it (a view's
+    /// bodies are held nearer depth 0 than their spots: `View::built_z`).
+    fn built_z(&self, _part: u16, z: f32) -> f32 {
+        z
+    }
 }
 impl FormHolder for Form {
     fn form(&self) -> &Form {
@@ -222,10 +227,10 @@ pub(crate) fn shade_table(lua: &Lua, s: &Shade) -> Result<Table> {
 }
 
 /// Fill `t` with a sample (the same table is reused by `f:mask`).
-fn fill_sample(lua: &Lua, t: &Table, s: &Sample) -> Result<()> {
+fn fill_sample(lua: &Lua, t: &Table, s: &Sample, src: &dyn FormHolder) -> Result<()> {
     t.set("part", s.part)?;
     t.set("facet", s.facet)?;
-    t.set("z", s.z)?;
+    t.set("z", src.built_z(s.part, s.z))?;
     t.set("n", lua.create_sequence_from(s.n)?)?;
     t.set("dist", s.dist)?;
     t.set("fall", s.fall())?;
@@ -253,7 +258,7 @@ impl UserData for FormU {
             None => Ok(Value::Nil),
             Some(s) => {
                 let t = lua.create_table()?;
-                fill_sample(lua, &t, &s)?;
+                fill_sample(lua, &t, &s, &*fu.src)?;
                 Ok(Value::Table(t))
             }
         });
@@ -346,7 +351,7 @@ impl UserData for FormU {
             for y in 0..f.h {
                 for x in 0..f.w {
                     if let Some(s) = fu.f().sample((x as f32 + 0.5) * inv, (y as f32 + 0.5) * inv) {
-                        fill_sample(lua, &t, &s)?;
+                        fill_sample(lua, &t, &s, &*fu.src)?;
                         let v: f32 = g.call(t.clone())?;
                         data[y * f.w + x] = v.clamp(0.0, 1.0);
                     }

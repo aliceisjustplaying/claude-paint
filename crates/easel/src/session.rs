@@ -78,6 +78,12 @@ pub struct Session {
     /// set), so `pairs` could walk them in another order than a replay of the
     /// log: the state is rebuilt from the log (`rebuild`) before the next chunk.
     pub stale: bool,
+    /// Every global as the last successful chunk left it, with the chunk that last assigned it
+    /// (0: the easel's own). `run` updates it by comparing the globals after each chunk with
+    /// it, in a live session and a replay alike, so a reopen or rebuild gives the same answer.
+    globals: BTreeMap<String, (Value, usize)>,
+    /// The easel's own globals (its verbs, prelude.lua's replacements, Lua's libraries).
+    own: BTreeMap<String, Value>,
     /// Creation serials of the state's objects (outlives the state).
     _serials: Box<Serials>,
 }
@@ -131,7 +137,9 @@ impl Session {
             ))),
             _ => Ok(mlua::VmState::Continue),
         })?;
-        Ok(Session { lua: ManuallyDrop::new(lua), state, st, log: Vec::new(), replay: false, deadline, chunk_limit: CHUNK_LIMIT, heap: Some((snap_f, restore_f)), prelude: Some(prelude), stale: false, _serials: serials })
+        let own = global_values(&lua)?;
+        let globals = own.iter().map(|(k, v)| (k.clone(), (v.clone(), 0))).collect();
+        Ok(Session { lua: ManuallyDrop::new(lua), state, st, log: Vec::new(), replay: false, deadline, chunk_limit: CHUNK_LIMIT, heap: Some((snap_f, restore_f)), prelude: Some(prelude), stale: false, globals, own, _serials: serials })
     }
 
     /// A session that replays a program from the default box (tests;
@@ -266,6 +274,10 @@ impl Session {
         {
             self.stale = self.restore(&snap).map_err(|e| e.to_string())? > 0;
         }
+        // before collecting: the values the chunk replaced aren't held here any more
+        if fail.is_none() {
+            self.note_globals(n as usize).map_err(|e| e.to_string())?;
+        }
         // masks and brushes hold memory Lua can't see: collect between chunks, without the
         // snapshot, as a replay does, and within the chunk's time
         drop(snap);
@@ -306,6 +318,34 @@ impl Session {
         s
     }
 
+    /// Chunk `n` succeeded: the globals it set, changed or removed.
+    fn note_globals(&mut self, n: usize) -> mlua::Result<()> {
+        let now = global_values(&self.lua)?;
+        let mut before = std::mem::take(&mut self.globals);
+        for (k, v) in now {
+            let chunk = match before.remove(&k) {
+                Some((old, c)) if same(&old, &v) => c,
+                // back to the easel's own value: the easel's again
+                _ if self.own.get(&k).is_some_and(|o| same(o, &v)) => 0,
+                _ => n,
+            };
+            self.globals.insert(k, (v, chunk));
+        }
+        Ok(())
+    }
+
+    /// The painting's globals, the most recently assigned last: one line each,
+    /// `<chunk>\t<name>\t<what it holds>`, for a name a chunk can use (not the easel's own).
+    pub fn globals(&self) -> String {
+        let mut g: Vec<_> = self.globals.iter().filter(|(k, (_, c))| *c > 0 && is_name(k)).collect();
+        g.sort_by_key(|(k, (_, c))| (*c, *k));
+        let mut s = String::new();
+        for (k, (v, c)) in g {
+            let _ = writeln!(s, "{c}\t{k}\t{}", describe(v));
+        }
+        s
+    }
+
     pub fn status(&self) -> String {
         let s = self.st.borrow();
         format!("{} chunks · {}px · {}", self.log.len(), s.width, s.setup.as_deref().unwrap_or("no canvas yet"))
@@ -317,11 +357,83 @@ impl Drop for Session {
         // everything holding references into the state goes first
         self.heap = None;
         self.prelude = None;
+        self.globals.clear();
+        self.own.clear();
         let _ = self.lua.gc_collect();
         unsafe {
             ManuallyDrop::drop(&mut self.lua);
             mlua::ffi::lua_close(self.state);
         }
+    }
+}
+
+/// The globals with a string key, read raw.
+fn global_values(lua: &Lua) -> mlua::Result<BTreeMap<String, Value>> {
+    let mut m = BTreeMap::new();
+    lua.globals().for_each(|k: Value, v: Value| {
+        if let Value::String(k) = k {
+            m.insert(k.to_string_lossy(), v);
+        }
+        Ok(())
+    })?;
+    Ok(m)
+}
+
+/// Lua's rawequal, except that a NaN is the same as itself.
+fn same(a: &Value, b: &Value) -> bool {
+    match (a, b) {
+        (Value::Number(x), Value::Number(y)) => x.to_bits() == y.to_bits(),
+        (Value::Integer(_), Value::Number(_)) | (Value::Number(_), Value::Integer(_)) => false,
+        _ => a == b,
+    }
+}
+
+fn is_name(k: &str) -> bool {
+    let mut c = k.chars();
+    c.next().is_some_and(|f| f == '_' || f.is_ascii_alphabetic()) && c.all(|c| c == '_' || c.is_ascii_alphanumeric())
+}
+
+/// What a global holds, in a few words. Runs no painter code: a table's is counted raw, and
+/// only the engine's own `__tostring` describes a userdata.
+fn describe(v: &Value) -> String {
+    match v {
+        Value::Nil => "nil".into(),
+        Value::Boolean(b) => b.to_string(),
+        Value::Integer(i) => format!("number {i}"),
+        Value::Number(x) => format!("number {x}"),
+        Value::String(s) => {
+            let t = s.to_string_lossy();
+            let n = t.chars().count();
+            if n <= 60 { format!("string {t:?}") } else { format!("string {:?}… ({n} characters)", t.chars().take(40).collect::<String>()) }
+        }
+        Value::Table(t) => {
+            let mut n = 0;
+            let _ = t.for_each(|_: Value, _: Value| {
+                n += 1;
+                Ok(())
+            });
+            format!("table with {n} {}", if n == 1 { "entry" } else { "entries" })
+        }
+        Value::Function(f) => {
+            let i = f.info();
+            let src = i.source.as_deref().map(|s| s.trim_start_matches(['=', '@']));
+            match (i.what, src, i.line_defined) {
+                ("C", ..) => "function (the easel's)".into(),
+                (_, Some(src), Some(line)) if src.starts_with("chunk ") => format!("function ({src}, line {line})"),
+                _ => "function".into(),
+            }
+        }
+        Value::UserData(u) => {
+            let shown = u.metatable().and_then(|m| m.get::<Value>("__tostring")).ok().and_then(|f| match f {
+                Value::Function(f) => f.call::<String>(u.clone()).ok(),
+                _ => None,
+            });
+            shown.unwrap_or_else(|| {
+                let t = u.type_name().map(|t| t.to_string_lossy()).unwrap_or_else(|_| "userdata".into());
+                t.strip_suffix('U').unwrap_or(&t).to_lowercase()
+            })
+        }
+        o => o.type_name().into(),
     }
 }
 
@@ -702,6 +814,31 @@ mod tests {
         }
         assert_eq!(bits(&a), bits(&b));
         assert_eq!(a.st.borrow().clock, b.st.borrow().clock);
+    }
+
+    #[test]
+    #[cfg(tube_box)]
+    fn globals_are_the_painting_s_as_the_state_holds_them_live_and_replayed() {
+        let chunks = [
+            CANVAS,
+            "local dm = nil\ndm = 3\na = 1; b = 2\ndo\n  inner = \"x\"\nend\nif true then\n  deep = {1, 2, 3}\nend\nlocal s = [[\nfake = 1\n]]\n-- ghost = 2\n--[[\nphantom = 3\n]]\nfunction tree(x)\n  return x\nend\ngone = 1\nn = 0/0\nm = rect(0, 0, 10, 10)",
+            "gone = nil; b = 2; a = 5",
+        ];
+        let mut live = Session::new(W).unwrap();
+        for (i, c) in chunks.iter().enumerate() {
+            live.run(c).unwrap();
+            if i == 1 {
+                live.run("c = 1; b = 7; error('no')").unwrap_err();
+            }
+        }
+        // canvas{} sets W and H
+        let want = "1\tH\tnumber 668.75\n1\tW\tnumber 1000\n2\tb\tnumber 2\n2\tdeep\ttable with 3 entries\n2\tinner\tstring \"x\"\n2\tm\tmask(88 sq units)\n2\tn\tnumber NaN\n2\ttree\tfunction (chunk 2, line 17)\n3\ta\tnumber 5\n";
+        assert_eq!(live.globals(), want);
+        let mut replay = Session::replay(W).unwrap();
+        for c in parse_program(&live.program("t")) {
+            replay.run(&c).unwrap();
+        }
+        assert_eq!(replay.globals(), want);
     }
 
     #[test]

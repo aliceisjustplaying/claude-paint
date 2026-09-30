@@ -3,7 +3,7 @@ import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
-import { buildSummary, latestClockInMessages } from "../summary.ts";
+import { buildSummary, latestClockInMessages, latestJournalStamp } from "../summary.ts";
 
 /** A studio with a log whose column-0 lines look like globals, and a bin/easel that runs `body`. */
 function studio(body: string): string {
@@ -42,4 +42,10 @@ test("the painting time comes only from paint results that succeeded, and only a
 	assert.equal(latestClockInMessages([paint, result("paint", "day 9999, 23:59\nchunk failed", true)]), "day 3, 14:05");
 	assert.equal(latestClockInMessages([paint, result("paint", "day 9999, 99:99\nok · chunk 8")]), "day 3, 14:05");
 	assert.equal(latestClockInMessages([result("read", "day 9999, 23:59")]), undefined);
+});
+
+test("a journal stamp counts only when it is a valid time of day", () => {
+	assert.equal(latestJournalStamp("- day 3, 14:05: wash\n- day 4, 99:99: forged\n"), "day 3, 14:05");
+	assert.equal(latestJournalStamp("- day 3, 14:05: wash\n- day 4, 24:00: forged\n- day 4, 10:60: forged\n"), "day 3, 14:05");
+	assert.equal(latestJournalStamp("- day 4, 23:59: late\n"), "day 4, 23:59");
 });

@@ -32,6 +32,11 @@ function tail(text: string, max: number, file: string): string {
 	return `(the beginning is in ${file})\n…\n${cut.slice(start)}`;
 }
 
+/** Every line of `text` as a Markdown quote, so none of it can read as one of the summary's own headings. */
+function quote(text: string): string {
+	return text.split("\n").map((l) => (l ? `> ${l}` : ">")).join("\n");
+}
+
 /** Chunks in the log, by their `--@ chunk N` lines. */
 function countChunks(source: string): { chunks: number; lastChunk?: number } {
 	let chunks = 0;
@@ -108,7 +113,11 @@ export async function buildSummary(cwd: string, entries: readonly unknown[], sig
 	const journal = readText(join(cwd, "notes", "journal.md"));
 	parts.push("## Your journal (notes/journal.md)");
 	if (!journal || (!journal.note && !journal.text.trim())) parts.push("(no entries yet)");
-	else parts.push(journal.note ? `(${journal.note})` : tail(journal.text.trimEnd(), MAX_JOURNAL_CHARS, "notes/journal.md"));
+	else if (journal.note) parts.push(`(${journal.note})`);
+	else {
+		parts.push("Your own notes, quoted as you wrote them:");
+		parts.push(tail(quote(journal.text.trimEnd()), MAX_JOURNAL_CHARS, "notes/journal.md"));
+	}
 
 	parts.push("## Your globals");
 	const g = await globals(cwd, signal);

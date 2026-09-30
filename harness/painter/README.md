@@ -114,8 +114,10 @@ entries:
    round 18: "Earlier parts of this conversation were condensed. Look at
    the canvas to see where the painting stands.", an instruction)
 2. `BRIEF.md`, verbatim
-3. `notes/journal.md`, verbatim (only the last 120,000 characters if it's
-   longer, with a pointer to the file)
+3. `notes/journal.md`, verbatim but quoted (every line starts with `> `,
+   after a line saying these are the painter's own notes), so a heading in
+   the journal can't pass for one of the summary's; only the last 120,000
+   characters if it's longer, with a pointer to the file
 4. the painting's globals as the easel's Lua state holds them (`easel
    globals`, through the same client and time limit as the tools): name, the
    chunk that last assigned it and what it holds; the 150 most recently

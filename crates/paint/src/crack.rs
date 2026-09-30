@@ -1525,6 +1525,10 @@ fn voronoi_edge(x: f32, y: f32, seed: u64) -> f32 {
 }
 
 #[cfg(test)]
+#[path = "crack_lab.rs"]
+mod lab;
+
+#[cfg(test)]
 mod tests {
     use super::*;
 

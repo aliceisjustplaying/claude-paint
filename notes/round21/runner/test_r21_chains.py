@@ -45,6 +45,9 @@ def probe_waits(monkeypatch, tmp_path, *replies):
     ((1, "", '429: {"error":{"code":429,"message":"You exceeded your current quota, please check your plan and '
              'billing details.","status":"RESOURCE_EXHAUSTED"}}'), "exited 1"),
     ((1, "", "Error: something went wrong"), "exited 1"),
+    # OpenCode Zen, real: a provider's server error is an outage, not a malformed request
+    ((1, "", '400: {"type":"server_error","message":"Error from provider (Console): Upstream request failed: '
+             'Model is unavailable."}'), "exited 1"),
     ((0, "", ""), "no reply"),
     ((0, "I can't help with that.\n", ""), "unexpected reply"),
 ])
@@ -86,6 +89,12 @@ GOOGLE_402 = ('HTTP 402: {"error":{"message":"{\\n  \\"error\\": {\\n    \\"code
     ((1, "", 'Error: 404 {"error":{"type":"not_found_error","message":"model: claude-x"}}'), "model"),
     ((1, "", '400: {"type":"invalid_request_error","message":"Upstream request failed: [invalid_request_error] '
              'native reasoning control reasoning_effort is not allowed"}'), "malformed"),
+    # real errors from pi session logs (review E, L2)
+    ((1, "", 'opencode API error (403): {"type":"FreeTierError","message":"free tier not available"}'), "API key"),
+    ((1, "", "Provided authentication token is expired."), "API key"),
+    ((1, "", "Codex error: The 'gpt-5.4' model is not supported when using Codex with a ChatGPT account."), "model"),
+    ((1, "", 'Error: 429 {"type":"error","error":{"type":"rate_limit_error","error_code":"credits_required",'
+             '"message":"out_of_credits"}}'), "no credit"),
 ])
 def test_a_probe_error_waiting_wont_fix_stops_the_painter_at_once(monkeypatch, tmp_path, reply, why):
     # a refused key, no credit, an unknown model or a malformed request: stop now, say why and to rerun
@@ -548,3 +557,39 @@ def test_only_a_structured_chain_lane_is_labeled_non_neutral(tmp_path, monkeypat
     monkeypatch.setattr(rc21, "studio", lambda key: tmp_path / "one" / key)
     rc21.chain("S")
     assert not (tmp_path / "one/run/S/condition.json").exists()
+
+
+def test_a_chain_lane_can_t_start_without_the_reader_s_files(tmp_path, monkeypatch):
+    # a runner copied without reader.ts & co. would fail every reader at launch: refuse at startup instead
+    here = tmp_path / "runner"
+    here.mkdir()
+    black = tmp_path / "pi-black.ts"
+    black.write_text("")
+    monkeypatch.setattr(rc21, "HERE", here)
+    monkeypatch.setattr(rc21, "BLACK", black)
+    monkeypatch.setattr(rc21, "LANES", {"C": rc21.lane("sargent", rc21.OPUS, painters=2),
+                                        "S": rc21.lane("sargent", rc21.OPUS)})
+    assert rc21.preflight(["S"]) == []                              # a single painter needs no reader
+    [why] = rc21.preflight(["C", "S"])
+    assert "chain lanes C need reader.ts, reader-scope.ts, reader_system_prompt.md, reader_brief.md" in why
+    for f in ("reader.ts", "reader-scope.ts", "reader_system_prompt.md", "reader_brief.md"):
+        (here / f).write_text("")
+    assert rc21.preflight(["C", "S"]) == []
+    black.unlink()
+    assert ["the reader loads pi-black" in w for w in rc21.preflight(["C"])] == [True]
+
+
+def test_the_runner_folder_holds_every_file_a_chain_lane_needs():
+    # what gets copied to the run folder is this folder: it must have what preflight asks for
+    lanes = {"C": rc21.lane("sargent", rc21.OPUS, painters=2, record_kind="structured")}
+    missing = [f for f in ("reader.ts", "reader-scope.ts", "reader_system_prompt.md", "reader_brief.md",
+                           "reader_brief_structured.md", "record_schema.py", "record_render.py")
+               if not (rc21.HERE / f).exists()]
+    assert missing == [] and lanes
+
+
+def test_a_structured_lane_can_t_start_without_its_commit(tmp_path, monkeypatch):
+    monkeypatch.setattr(rc21, "LANES", {"C": rc21.lane("sargent", rc21.OPUS, painters=2, record_kind="structured")})
+    monkeypatch.setattr(rc21, "DRY", False)
+    monkeypatch.setattr(rc21, "BASE", tmp_path / "no-checkout")
+    assert any("no commit for" in w for w in rc21.preflight(["C"]))

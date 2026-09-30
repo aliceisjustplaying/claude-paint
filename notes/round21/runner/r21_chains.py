@@ -410,27 +410,34 @@ def first_probe_wait(text, ended, now):
 # an outage. Matched only in an error that isn't a usage limit or a transient one (TRANSIENT); when
 # unsure, the probe is asked again. HTTP statuses as providers and pi print them: "code": 402,
 # HTTP 401, status 403, or a leading "400: {...}".
-STATUS = r'(?:"code"\W{0,3}|\bHTTP\W{0,2}|\bstatus(?: code)?\W{0,3}|(?:^|\s)(?=\d{3}:\s))'
+STATUS = r'(?:"code"\W{0,3}|\bHTTP\W{0,2}|\bstatus(?: code)?\W{0,3}|\berror \((?=\d{3}\))|(?:^|\s)(?=\d{3}:\s))'
 PROBE_FATAL = [
     ("the API key or its access was refused", re.compile(
         STATUS + r"40[13]\b|no API key|(?:invalid|incorrect|missing)\W+(?:x-)?api\W?key|authentication_error"
-        r"|permission_error|\bunauthorized\b|\bforbidden\b", re.I)),
+        r"|permission_error|\bunauthorized\b|\bforbidden\b|token is expired|expired (?:token|credentials)", re.I)),
     ("no credit or billing on the account", re.compile(
         STATUS + r"402\b|payment required|credit balance|credits are depleted|\bbilling\b", re.I)),
     ("the model isn't known to the provider", re.compile(
         r"\bmodel\b[^\n.]{0,80}\b(?:not found|does not exist)(?![^\n]{0,40}custom model id)|unknown model"
-        r"|model_not_found|not_found_error", re.I)),
+        r"|model_not_found|not_found_error|\bmodel\b[^\n.]{0,80}\bis not supported\b", re.I)),
     ("the request was malformed", re.compile(STATUS + r"400\b|invalid_request_error", re.I)),
 ]
 # an outage, overload or rate limit: asked again even if a fatal-looking word is in it (Google's
 # 429 "check your plan and billing details")
 TRANSIENT = re.compile(STATUS + r"(?:429|5\d\d)\b|rate.?limit|too many requests|exceeded your current quota"
-                       r"|overloaded|timed? ?out|ECONNRESET|ECONNREFUSED|ENOTFOUND|EAI_AGAIN|network", re.I)
+                       r"|overloaded|timed? ?out|ECONNRESET|ECONNREFUSED|ENOTFOUND|EAI_AGAIN|network"
+                       r"|server_error|\bis unavailable\b", re.I)
+# no credit, whatever status it comes with (Anthropic's 429 credits_required): fatal before TRANSIENT
+OUT_OF_CREDIT = re.compile(r"credits_required|out_of_credits", re.I)
 
 
 def probe_fatal(text):
     """Why a probe error means the painter should stop now (see PROBE_FATAL), or None."""
-    if usage_limit(text) or TRANSIENT.search(text):
+    if usage_limit(text):
+        return None
+    if OUT_OF_CREDIT.search(text):
+        return "no credit or billing on the account"
+    if TRANSIENT.search(text):
         return None
     return next((why for why, pat in PROBE_FATAL if pat.search(text)), None)
 
@@ -1242,6 +1249,29 @@ def render_briefs(out):
         print(out / f"{profile}.md")
 
 
+def preflight(lanes):
+    """Why these lanes can't start (empty if they can): a chain lane's reader needs its files next to
+    this runner (a runner copied without them fails every reader at launch), and a structured lane
+    stamps each record with BRANCH's commit in BASE."""
+    problems = []
+    chains = [l for l in lanes if LANES[l]["painters"] > 1 and LANES[l].get("record_kind") != "none"]
+    if chains:
+        need = ["reader.ts", "reader-scope.ts", "reader_system_prompt.md", "reader_brief.md"]
+        if any(LANES[l].get("record_kind") == "structured" for l in chains):
+            need += ["reader_brief_structured.md", "record_schema.py", "record_render.py"]
+        missing = [f for f in need if not (HERE / f).exists()]
+        if missing:
+            problems.append(f"chain lanes {', '.join(chains)} need {', '.join(missing)} next to {Path(__file__).name} in {HERE}")
+        if not BLACK.exists():
+            problems.append(f"the reader loads pi-black, which isn't at {BLACK}")
+    if not DRY and any(LANES[l]["painters"] > 1 and LANES[l].get("record_kind") == "structured" for l in lanes):
+        try:
+            code_commit()
+        except RuntimeError as e:
+            problems.append(str(e))
+    return problems
+
+
 def main():
     global DRY
     ap = argparse.ArgumentParser()
@@ -1260,6 +1290,9 @@ def main():
         mixed = mixed_records(l, LANES[l].get("record_kind", "free-text"))
         if mixed:
             raise SystemExit(mixed)
+    problems = preflight(lanes)
+    if problems:
+        raise SystemExit("can't start: " + "; ".join(problems))
     if not DRY:
         RUN.mkdir(parents=True, exist_ok=True)
     stop = threading.Event()

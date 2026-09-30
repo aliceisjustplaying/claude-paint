@@ -1591,14 +1591,16 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
     // covering areas
     {
         let st1 = st.clone();
-        g.set("work", lua.create_function(move |_, (m, o): (Value, Table)| work(&st1, mask_of(&m)?, o, None))?)?;
+        g.set("work", lua.create_function(move |_, (m, o): (Value, Table)| { let r = work(&st1, mask_of(&m)?, o, None); crate::frames::step(&st1); r })?)?;
         let st1 = st.clone();
         g.set("blend", lua.create_function(move |lua, (m, o): (Value, Option<Table>)| {
             let o = o.unwrap_or(lua.create_table()?);
-            work(&st1, mask_of(&m)?, o, Some("blend"))
+            let r = work(&st1, mask_of(&m)?, o, Some("blend"));
+            crate::frames::step(&st1);
+            r
         })?)?;
         let st1 = st.clone();
-        g.set("stipple", lua.create_function(move |_, (m, o): (Value, Table)| stipple(&st1, mask_of(&m)?, o))?)?;
+        g.set("stipple", lua.create_function(move |_, (m, o): (Value, Table)| { let r = stipple(&st1, mask_of(&m)?, o); crate::frames::step(&st1); r })?)?;
         // glaze(mask or nil, {color=, coats=number|fn, pigment=})
         let st1 = st.clone();
         g.set("glaze", lua.create_function(move |_, (m, o): (Value, Table)| {
@@ -1620,6 +1622,8 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
                 s.out.push_str(&note);
             }
             s.clock = now;
+            drop(s);
+            crate::frames::step(&st1);
             Ok(now)
         })?)?;
     }

@@ -4,7 +4,7 @@
 local dbg = ...
 local getupvalue, setupvalue, getinfo = dbg.getupvalue, dbg.setupvalue, dbg.getinfo
 local getmt, setmt = dbg.getmetatable, dbg.setmetatable
-local next, type, rawset, rawequal, select = next, type, rawset, rawequal, select
+local next, type, rawset, rawequal, rawlen, select = next, type, rawset, rawequal, rawlen, select
 
 -- Everything reachable from the roots through tables (keys, values,
 -- metatables) and Lua functions (upvalues): each table's contents and
@@ -40,7 +40,7 @@ local function snap(skip, ...)
       end
       local mt = getmt(v)
       push(mt)
-      tabs[v] = { copy, mt, order, m }
+      tabs[v] = { copy, mt, order, m, rawlen(v) }
       ntab = ntab + 1
     else
       local info = getinfo(v, "Su")
@@ -60,10 +60,11 @@ local function snap(skip, ...)
 end
 
 -- as snapped, walked by `next` in the same order (a table that grew and
--- shrank again during a failed chunk holds the same entries in another order)
+-- shrank again during a failed chunk can change traversal order or its sparse
+-- array length even when the entries are identical)
 local function untouched(t, rec)
   local copy, order = rec[1], rec[3]
-  if not rawequal(getmt(t), rec[2]) then return false end
+  if not rawequal(getmt(t), rec[2]) or rawlen(t) ~= rec[5] then return false end
   local i = 0
   for k, x in next, t do
     i = i + 1
@@ -85,7 +86,7 @@ end
 
 -- Put every table and upvalue back as it was; tables that didn't change are
 -- left alone (their internal layout, so their `pairs` order, is untouched).
--- Returns how many tables the chunk touched: their entries are back, but not
+-- Returns how many tables still differ after restoration: entries are back, but not
 -- necessarily their layout, which Lua doesn't let a program set, so their
 -- `next` order may now differ from a replay's (session.rs then rebuilds).
 local function restore(s)
@@ -93,7 +94,6 @@ local function restore(s)
   for t, rec in next, s[1] do
     local copy, mt = rec[1], rec[2]
     if not untouched(t, rec) then
-      changed = changed + 1
       if not same(t, copy, mt) then
         local keys, m = {}, 0
         for k in next, t do
@@ -111,6 +111,9 @@ local function restore(s)
       local _, x = getupvalue(f, i)
       if not rawequal(x, ups[i]) then setupvalue(f, i, ups[i]) end
     end
+  end
+  for t, rec in next, s[1] do
+    if not untouched(t, rec) then changed = changed + 1 end
   end
   return changed
 end

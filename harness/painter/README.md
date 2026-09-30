@@ -124,7 +124,7 @@ entries:
    assigned. If the easel can't answer, the summary says so
 5. the canvas clock: chunks in the log, the last valid `day N, HH:MM` line
    a successful `paint` call printed (`wait()` returns it; other tools'
-   results and failed chunks don't count), the last journal stamp
+   results and failed chunks don't count), the last valid journal stamp
 
 It has no next steps, remaining tasks or progress checklist. It keeps
 `firstKeptEntryId` and `tokensBefore` from pi's preparation, so the recent

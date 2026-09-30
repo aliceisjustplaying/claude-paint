@@ -69,7 +69,7 @@ async function globals(studio: string, signal?: AbortSignal): Promise<{ lines: s
 }
 
 const CLOCK_LINE = /^day \d+, ([01]\d|2[0-3]):[0-5]\d$/;
-const JOURNAL_STAMP = /^- (day \d+, \d\d:\d\d):/;
+const JOURNAL_STAMP = /^- (day \d+, (?:[01]\d|2[0-3]):[0-5]\d):/;
 
 /**
  * The latest painting time printed on a line of its own in a paint result (what `wait()`

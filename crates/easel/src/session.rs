@@ -125,7 +125,8 @@ impl Session {
         let (snap_f, restore_f): (Function, Function) = lua.load(include_str!("heap.lua")).set_name("heap.lua").call(dbg.clone())?;
         let id = serials.id_fn(&lua)?;
         let getmt: Function = dbg.get("getmetatable")?;
-        let prelude: (Function, Table, Function) = lua.load(include_str!("prelude.lua")).set_name("prelude.lua").call((id, getmt))?;
+        let getinfo: Function = dbg.get("getinfo")?;
+        let prelude: (Function, Table, Function) = lua.load(include_str!("prelude.lua")).set_name("prelude.lua").call((id, getmt, getinfo))?;
         let st = Rc::new(RefCell::new(Studio::new(width, tubes)));
         api::install(&lua, st.clone())?;
         let deadline = Rc::new(Cell::new(None::<Instant>));
@@ -248,7 +249,8 @@ impl Session {
         self.prelude.as_ref().unwrap().0.call::<()>(()).map_err(|e| e.to_string())?;
         self.st.borrow_mut().begin(n);
         let t0 = Instant::now();
-        let chunk = self.lua.load(src.as_str()).set_name(format!("chunk {n}"));
+        // text only: mlua would take a chunk starting with Lua's binary signature as bytecode
+        let chunk = self.lua.load(src.as_str()).set_name(format!("chunk {n}")).set_mode(mlua::chunk::ChunkMode::Text);
         let check = self.prelude.as_ref().unwrap().2.clone();
         let deadline = (!self.replay).then(|| t0 + self.chunk_limit);
         self.deadline.set(deadline);
@@ -839,6 +841,49 @@ mod tests {
             replay.run(&c).unwrap();
         }
         assert_eq!(replay.globals(), want);
+    }
+
+    /// Lua loads precompiled chunks, which it doesn't verify (a crafted one can crash the
+    /// easel): a painting loads text only, by every way in, and can't dump functions.
+    #[test]
+    #[cfg(tube_box)]
+    fn binary_chunks_are_refused_and_text_load_still_works() {
+        let mut s = Session::new(64).unwrap();
+        // a benign binary chunk, dumped by another state of the same Lua
+        let other = Lua::new();
+        let bin = other.load("return 7").into_function().unwrap().dump(true);
+        s.lua.globals().set("bin", s.lua.create_string(&bin).unwrap()).unwrap();
+        let mut failed = Vec::new();
+        for chunk in [
+            "assert(string.dump == nil, 'string.dump is there')",
+            "local f, e = load(bin); assert(f == nil and e:find('binary chunk'), e)",
+            "for _, m in ipairs{'b', 'bt', 'tb'} do assert(load(bin, 'x', m) == nil, m) end",
+            "local n = 0; local f = load(function() n = n + 1; if n == 1 then return bin end end); assert(f == nil)",
+            // text loading is as Lua's, with and without an environment
+            "assert(load('return 1 + 1')() == 2); x = 9; assert(load('return x')() == 9)",
+            "assert(load('return x', 'c', 't', {x = 5})() == 5); assert(load('return x', 'c', nil, {x = 6})() == 6)",
+            "assert(not pcall(load('return x', 'c', 't', nil)))",
+            "assert(load('return 1', 'c', 'b') == nil)",
+            // load's own helpers are its own: replacing the global pcall, string.find or
+            // string.gsub hands a painting no function that loads bytecode
+            "local got, real = {}, {pcall, string.find, string.gsub}; \
+             local function spy(f) return function(g, ...) got[#got + 1] = g; return f(g, ...) end end; \
+             pcall, string.find, string.gsub = spy(real[1]), spy(real[2]), spy(real[3]); \
+             load('return 1'); load(bin); load('return (', 'c'); load('x', 'c', 1); \
+             pcall, string.find, string.gsub = real[1], real[2], real[3]; \
+             for _, g in ipairs(got) do assert(type(g) ~= 'function' or not pcall(g, bin), 'a load of bytecode leaked') end",
+        ] {
+            if let Err(e) = s.run(chunk) {
+                failed.push(format!("{chunk}: {e}"));
+            }
+        }
+        // a chunk sent to the easel is loaded as text: one starting like a binary chunk is
+        // refused as one, not read as bytecode
+        let e = s.run("\x1bLua = 1").unwrap_err();
+        if !e.contains("attempt to load a binary chunk (mode is 't')") {
+            failed.push(format!("\\x1bLua chunk loaded as binary: {e}"));
+        }
+        assert!(failed.is_empty(), "{failed:#?}");
     }
 
     #[test]

@@ -5,12 +5,13 @@
 -- `id(v)` is the session's creation serial of a table, closure, userdata or
 -- thread (nil for anything else): objects are numbered as Lua allocates them,
 -- so their order is the order the program made them, in every process.
-local id, getmt = ...
+local id, getmt, getinfo = ...
 local rawnext, rawget, type, select, error, tostring = next, rawget, type, select, error, tostring
 local setmt = setmetatable
 local sort, pack, unpack = table.sort, table.pack, table.unpack
 local find, sub = string.find, string.sub
 local tointeger = math.tointeger
+local format, pcall = string.format, pcall
 
 -- ---------------------------------------------------------------- pairs, next
 
@@ -223,9 +224,90 @@ local function check()
   end
 end
 
+-- ---------------------------------------------------------------- tostring, format
+
+-- Lua shows a table, function, userdata or thread without __tostring by its
+-- memory address ("table: 0x6000..."), which differs from process to
+-- process: a painting that printed or branched on it would not replay the
+-- same. A painting sees "<type>: (hidden)" instead (its __name for the type,
+-- as Lua's), and string.format's %s the same; %p (an address) is refused.
+local objects = { table = true, ["function"] = true, userdata = true, thread = true }
+
+-- nil, or what an object Lua would show by its address shows instead
+local function hidden(v)
+  if not objects[type(v)] then return nil end
+  local mt = getmt(v)
+  if type(mt) ~= "table" then return type(v) .. ": (hidden)" end
+  if rawget(mt, "__tostring") ~= nil then return nil end
+  local name = rawget(mt, "__name")
+  return (type(name) == "string" and name or type(v)) .. ": (hidden)"
+end
+
+local function det_tostring(...)
+  if select("#", ...) == 0 then error("bad argument #1 to 'tostring' (value expected)", 2) end
+  local v = ...
+  local h = hidden(v)
+  if h then return h end
+  local ok, r = pcall(tostring, v)
+  if ok then return r end
+  -- Lua's own complaint (a __tostring giving no string), from where the painting called
+  if type(r) == "string" and not r:find("^[^\n]-:%d+: ") then error(r, 2) end
+  error(r, 0)
+end
+
+local NO_P = "%p shows a memory address, which differs between the live easel and a replay of the log"
+
+-- string.format's own complaint, worded and placed as Lua's (called straight from the
+-- painting's code): the name it was called by, arguments counted as for a method, and
+-- the position of the call. (`info` is how det_format was called.)
+local function format_error(info, msg)
+  local k, rest = msg:match("^bad argument #(%d+) to '%?' (.*)$")
+  if k then
+    k = tointeger(k)
+    if info.namewhat == "method" then k = k - 1 end
+    msg = "bad argument #" .. k .. " to '" .. (info.name or "string.format") .. "' " .. rest
+  end
+  error(msg, 3)
+end
+
+local function det_format(...)
+  local args, n = pack(...), select("#", ...)
+  local fmt = args[1]
+  if type(fmt) == "string" then
+    -- each conversion takes the next argument (after Lua's flags, width and precision)
+    local i, a = 1, 1
+    while true do
+      local p = find(fmt, "%", i, true)
+      if p == nil then break end
+      if sub(fmt, p + 1, p + 1) == "%" then
+        i = p + 2
+      else
+        local _, e, conv = find(fmt, "^[-+ #0]*%d*%.?%d*(.)", p + 1)
+        if e == nil then break end -- Lua reports it
+        a = a + 1
+        if conv == "p" then format_error(getinfo(1, "n"), "bad argument #" .. a .. " to '?' (" .. NO_P .. ")") end
+        if conv == "s" and a <= n then args[a] = hidden(args[a]) or args[a] end
+        i = e + 1
+      end
+    end
+  end
+  local ok, r = pcall(format, unpack(args, 1, n))
+  if ok then return r end
+  -- format's own errors carry no position under pcall; a __tostring's pass through
+  if type(r) == "string" and not r:find("^[^\n]-:%d+: ") then format_error(getinfo(1, "n"), r) end
+  error(r, 0)
+end
+
+-- runs a chunk: an error value Lua would show by its address shows as tostring does
+local function guard(f)
+  local ok, e = pcall(f)
+  if not ok then error(hidden(e) or e, 0) end
+end
+
 -- ---------------------------------------------------------------- install
 
 next, pairs, string.gmatch, setmetatable = det_next, det_pairs, gmatch, det_setmetatable
+_G.tostring, string.format = det_tostring, det_format
 name_all(_G, "")
 for _, lib in ipairs { "string", "table", "math", "utf8" } do
   if type(_G[lib]) == "table" then name_all(_G[lib], lib .. ".") end
@@ -237,4 +319,4 @@ local function fresh()
 end
 
 -- private state the heap snapshot must not walk
-return fresh, { box, names, set }, check
+return fresh, { box, names, set }, check, guard

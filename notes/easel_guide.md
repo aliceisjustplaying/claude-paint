@@ -430,6 +430,11 @@ ruled over a drawing to transfer it.
   table with any other key walks in a fixed order (booleans, numbers,
   strings, then other keys in the order they were made). For a big list,
   `ipairs` is faster.
+- **No memory addresses.** A table, function or userdata without
+  `__tostring` prints as `table: (hidden)` (its `__name` for the type),
+  in `print`, `tostring`, `string.format`'s `%s` and errors alike, and
+  `%p` is refused: an address differs from run to run, so a replay would
+  print or choose differently.
 - **Memory.** A mask costs 4 bytes a pixel, a form 28. Keep big things
   `local` when later chunks don't need them.
 

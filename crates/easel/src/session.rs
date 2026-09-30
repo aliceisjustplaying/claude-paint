@@ -72,7 +72,7 @@ pub struct Session {
     /// private objects snapshots skip and its after-chunk check (dropped
     /// before the state is closed).
     heap: Option<(Function, Function)>,
-    prelude: Option<(Function, Table, Function)>,
+    prelude: Option<(Function, Table, Function, Function)>,
     /// A failed chunk left tables different after restoration. Their entries are
     /// back but maybe not their layout (which Lua gives a program no way to
     /// set), so `pairs` could walk them in another order than a replay of the
@@ -125,7 +125,8 @@ impl Session {
         let (snap_f, restore_f): (Function, Function) = lua.load(include_str!("heap.lua")).set_name("heap.lua").call(dbg.clone())?;
         let id = serials.id_fn(&lua)?;
         let getmt: Function = dbg.get("getmetatable")?;
-        let prelude: (Function, Table, Function) = lua.load(include_str!("prelude.lua")).set_name("prelude.lua").call((id, getmt))?;
+        let getinfo: Function = dbg.get("getinfo")?;
+        let prelude: (Function, Table, Function, Function) = lua.load(include_str!("prelude.lua")).set_name("prelude.lua").call((id, getmt, getinfo))?;
         let st = Rc::new(RefCell::new(Studio::new(width, tubes)));
         api::install(&lua, st.clone())?;
         let deadline = Rc::new(Cell::new(None::<Instant>));
@@ -249,10 +250,11 @@ impl Session {
         self.st.borrow_mut().begin(n);
         let t0 = Instant::now();
         let chunk = self.lua.load(src.as_str()).set_name(format!("chunk {n}"));
-        let check = self.prelude.as_ref().unwrap().2.clone();
+        let (check, guard) = { let p = self.prelude.as_ref().unwrap(); (p.2.clone(), p.3.clone()) };
         let deadline = (!self.replay).then(|| t0 + self.chunk_limit);
         self.deadline.set(deadline);
-        let r = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| chunk.exec().and_then(|()| check.call::<()>(()))));
+        // through prelude.lua's guard: an error value is shown without its address
+        let r = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| chunk.into_function().and_then(|f| guard.call::<()>(f)).and_then(|()| check.call::<()>(()))));
         self.deadline.set(None);
         // the hand time the chunk spent goes on the clock before it ends
         if matches!(r, Ok(Ok(()))) {
@@ -839,6 +841,44 @@ mod tests {
             replay.run(&c).unwrap();
         }
         assert_eq!(replay.globals(), want);
+    }
+
+    /// Nothing a painting can print or branch on shows a memory address (which differs from
+    /// process to process, so between the live easel and a replay of its log): objects print
+    /// as `<type>: (hidden)`, `%p` is refused, and errors carrying objects say no address.
+    #[test]
+    #[cfg(tube_box)]
+    fn no_memory_address_reaches_a_painting() {
+        let shown = |s: &mut Session| {
+            let mut text = String::new();
+            for chunk in [
+                "local t, f = {}, function() end\nprint(t, f, print, string, setmetatable({}, {__name = 'Thing'}))\nprint(tostring(t), tostring(f), tostring(print))",
+                "local t = {}\nprint(string.format('%s|%8s|%-8s|%.3s', t, t, print, t), ('%s'):format(function() end))",
+                "print(setmetatable({}, {__tostring = function() return 'mine' end}), tostring(1.5), tostring(nil), tostring('s'))",
+                "for _, a in ipairs{{}, 's', 1} do local ok, e = pcall(string.format, '%p', a); assert(not ok, 'no %p'); print(e) end",
+                "error({})",
+                "error(function() end)",
+                "error(setmetatable({}, {}))",
+                "local t = {}; t = t .. 1",
+            ] {
+                match s.run(chunk) {
+                    Ok(r) => text.push_str(&r.out),
+                    Err(e) => text.push_str(&e),
+                }
+                text.push('\n');
+            }
+            text
+        };
+        let a = shown(&mut Session::new(64).unwrap());
+        // another state, its objects elsewhere in memory
+        let _elsewhere: Vec<Vec<u8>> = (0..1000).map(|i| vec![0; i]).collect();
+        let b = shown(&mut Session::new(64).unwrap());
+        let hexes = a.split(|c: char| !c.is_ascii_hexdigit()).filter(|w| w.len() >= 8).collect::<Vec<_>>();
+        assert!(!a.contains("0x") && hexes.is_empty(), "an address shows:\n{a}");
+        assert_eq!(a, b, "two processes show different text");
+        for want in ["table: (hidden)\tfunction: (hidden)\tfunction: (hidden)\ttable: (hidden)\tThing: (hidden)", "mine\t1.5\tnil\ts", "table: (hidden)|table: (hidden)|function: (hidden)|tab"] {
+            assert!(a.contains(want), "{want:?} not in\n{a}");
+        }
     }
 
     #[test]

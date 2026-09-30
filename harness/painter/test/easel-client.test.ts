@@ -202,3 +202,20 @@ test("an easel that exits before reading a large chunk is the tool's error, with
 	const studio = stubStudio('[ "$1" = status ] && exit 0\necho "the easel stopped"; exit 1');
 	await assert.rejects(atEasel(studio, ["do", "-"], "x = 1\n".repeat(1_500_000)), /^Error: the easel stopped$/);
 });
+
+test("the easel gets the operator's RAYON_NUM_THREADS and nothing else of the painter's environment", async () => {
+	const studio = stubStudio(`printf 'threads=%s set=%s other=%s\\n' "$RAYON_NUM_THREADS" "\${RAYON_NUM_THREADS+yes}" "$PAINTER_SECRET"`);
+	const saved = { threads: process.env.RAYON_NUM_THREADS, secret: process.env.PAINTER_SECRET };
+	try {
+		process.env.PAINTER_SECRET = "s";
+		process.env.RAYON_NUM_THREADS = "6";
+		assert.equal((await easel(studio, ["x"], undefined, undefined, 5000)).out, "threads=6 set=yes other=\n");
+		delete process.env.RAYON_NUM_THREADS;
+		assert.equal((await easel(studio, ["x"], undefined, undefined, 5000)).out, "threads= set= other=\n");
+	} finally {
+		for (const [k, v] of [["RAYON_NUM_THREADS", saved.threads], ["PAINTER_SECRET", saved.secret]] as const) {
+			if (v === undefined) delete process.env[k];
+			else process.env[k] = v;
+		}
+	}
+});

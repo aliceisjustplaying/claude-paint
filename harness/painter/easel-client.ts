@@ -24,7 +24,9 @@ export const WAIT_MS = { do: 12 * 60_000, other: 3 * 60_000, rebuild: 30 * 60_00
 export function easel(studio: string, args: string[], input?: string, signal?: AbortSignal, waitMs?: number): Promise<Ran> {
 	return new Promise((done, fail) => {
 		if (signal?.aborted) return fail(new Error("Operation aborted"));
-		const env = { PATH: "/usr/bin:/bin", HOME: process.env.HOME ?? "" };
+		const env: Record<string, string> = { PATH: "/usr/bin:/bin", HOME: process.env.HOME ?? "" };
+		// the operator's thread budget, as an easel the runner opened gets it
+		if (process.env.RAYON_NUM_THREADS !== undefined) env.RAYON_NUM_THREADS = process.env.RAYON_NUM_THREADS;
 		// its own process group: a timeout or an abort stops it and anything it started
 		const p = spawn(join(studio, "bin", "easel"), args, { cwd: studio, env, stdio: ["pipe", "pipe", "pipe"], detached: true });
 		const kill = () => {

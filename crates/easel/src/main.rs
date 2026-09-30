@@ -3,7 +3,7 @@
 //!   easel open [<name>]              start (or reattach to) a session
 //!   easel do '<lua>' | -f chunk.lua | -            run a chunk on the live canvas
 //!   easel look [--crop x0,y0,x1,y1] [--mode value|squint|mirror] [--grid [step]] [--size N]
-//!   easel log | status | save [path] | frames on|off | close
+//!   easel log | status | globals | save [path] | frames on|off | close
 //!   easel check                                    (replay build) replay the log, compare
 //!   easel note '<text>' | -                        append to notes/journal.md
 //!   easel run paintings/lua/<name>.lua [--out path] [--look]
@@ -54,6 +54,7 @@ const USAGE: &str = "easel: a live painting session (see notes/easel_guide.md)
   easel look [--crop x0,y0,x1,y1] [--mode value,squint,mirror] [--grid [step]] [--size 1000]
   easel log           the painting so far (= paintings/lua/painting.lua)
   easel status        chunks, width, canvas
+  easel globals       the painting's globals, one a line: chunk that last set it, name, what it holds
   easel save [path]   the canvas as a PNG (default out/easel/painting/painting.png)
   easel frames on|off save a look after every chunk
   easel close         end the session (the log stays)
@@ -68,6 +69,7 @@ const USAGE: &str = "easel: a live painting session (see notes/easel_guide.md)
   easel look [--crop x0,y0,x1,y1] [--mode value,squint,mirror] [--grid [step]] [--size 1000]
   easel log           the session so far (= paintings/lua/<name>.lua)
   easel status        chunks, width, canvas
+  easel globals       the painting's globals, one a line: chunk that last set it, name, what it holds
   easel save [path]   the canvas as a PNG (default out/easel/<name>/<name>.png)
   easel frames on|off save a look after every chunk
   easel check         replay the log from scratch and compare with the live canvas
@@ -113,7 +115,7 @@ fn main() -> ExitCode {
             println!("{USAGE}");
             Ok(())
         }
-        "do" | "look" | "log" | "status" | "save" | "frames" | "close" => client(&cmd, &rest, name),
+        "do" | "look" | "log" | "status" | "globals" | "save" | "frames" | "close" => client(&cmd, &rest, name),
         // replaying the log to compare it with the live canvas is the runner's, after the
         // painter's session (scripts/check_painting); the painter build has no `check`
         #[cfg(feature = "replay")]
@@ -785,6 +787,7 @@ impl Server {
         match cmd {
             "note" => append_note(self.s.st.borrow().clock, payload),
             "status" => Ok(format!("{}\n", self.s.status())),
+            "globals" => Ok(self.s.globals()),
             "do" => match self.s.run(payload) {
                 Ok(ran) => {
                     let note = self.save_log()?;

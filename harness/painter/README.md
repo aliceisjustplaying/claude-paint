@@ -11,6 +11,7 @@ from the machine's global pi setup (packages, `~/.pi/agent/extensions`,
 | `context-images.ts` | the image pruning `painter.ts` runs before each request (see "Images in the request"); `test/context-images.test.ts` tests it (`node --test harness/painter/test/context-images.test.ts`) |
 | `pace.ts` | input tokens per minute: with `PAINTER_INPUT_TPM`, `painter.ts` holds each request until the last minute's input tokens plus its own fit that budget; and it makes a per-minute quota 429 (Google's `...PerMinute` quota ids) retryable for pi's retry, which skips errors that mention "quota exceeded" or "billing". `PAINTER_MAX_IMAGES` / `PAINTER_MAX_IMAGE_MB` set `context-images.ts`'s limits for a lane (round 18g's Gemini lane: 8 images, 1.5M tokens a minute under Google's 2M). `test/pace.test.ts` tests it |
 | `compaction.ts` | extension: `session_before_compact` with a deterministic summary, no model call; also sets the compaction thresholds (see "Settings") |
+| `summary.ts` | the summary `compaction.ts` returns; `test/summary.test.ts` tests it |
 | `system_prompt.md` | the painter's system prompt (approved by Alice, 2026-09-27) |
 
 ## Launch
@@ -115,8 +116,10 @@ entries:
 2. `BRIEF.md`, verbatim
 3. `notes/journal.md`, verbatim (only the last 120,000 characters if it's
    longer, with a pointer to the file)
-4. the top-level globals of `paintings/lua/painting.lua`: name, chunk and
-   defining line; the 150 most recently defined
+4. the painting's globals as the easel's Lua state holds them (`easel
+   globals`, through the same client and time limit as the tools): name, the
+   chunk that last assigned it and what it holds; the 150 most recently
+   assigned. If the easel can't answer, the summary says so
 5. the canvas clock: chunks in the log, the last `day N, HH:MM` line the
    easel printed (`wait()` returns it), the last journal stamp
 

@@ -63,14 +63,19 @@ async function globals(studio: string, signal?: AbortSignal): Promise<{ lines: s
 	return { lines: lines.slice(Math.max(0, lines.length - MAX_GLOBALS)), total: lines.length };
 }
 
-const CLOCK_LINE = /^day \d+, \d\d:\d\d$/;
+const CLOCK_LINE = /^day \d+, ([01]\d|2[0-3]):[0-5]\d$/;
 const JOURNAL_STAMP = /^- (day \d+, \d\d:\d\d):/;
 
-/** The latest painting time printed on a line of its own in a tool result (what `wait()` returns). */
+/**
+ * The latest painting time printed on a line of its own in a paint result (what `wait()`
+ * returns). Only paint calls that succeeded count: a file the painter read, a note or a failed
+ * chunk can hold any text.
+ */
 export function latestClockInMessages(entries: readonly unknown[]): string | undefined {
 	for (let i = entries.length - 1; i >= 0; i--) {
-		const entry = entries[i] as { type?: string; message?: { role?: string; content?: unknown } };
+		const entry = entries[i] as { type?: string; message?: { role?: string; toolName?: string; isError?: boolean; content?: unknown } };
 		if (entry?.type !== "message" || entry.message?.role !== "toolResult") continue;
+		if (entry.message.toolName !== "paint" || entry.message.isError !== false) continue;
 		const content = Array.isArray(entry.message.content) ? entry.message.content : [];
 		const text = content
 			.map((c: { type?: string; text?: string }) => (c?.type === "text" ? (c.text ?? "") : ""))

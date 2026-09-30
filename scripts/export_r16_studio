@@ -30,7 +30,7 @@
 # (`easel tubes --markdown`); for the default box that is the committed
 # guide's own, byte for byte (checked below).
 #
-# The binary is built from a `git archive` of the branch (R16_BRANCH,
+# The binary is built from a `git archive` of the branch or tag (R16_BRANCH,
 # default r16-base) in <repo>/target/studio-build/<commit>, so it is built
 # from committed code only. Exports may run at once: the archive is
 # extracted under a lock, and each box builds in its own target directory
@@ -68,8 +68,9 @@ unset EASEL_BOX
 
 repo=$(cd "$(dirname "$0")/.." && pwd)
 branch=${R16_BRANCH:-r16-base}
-git -C "$repo" rev-parse --verify -q "$branch" >/dev/null || { echo "no branch $branch in $repo" >&2; exit 1; }
-sha=$(git -C "$repo" rev-parse --short "$branch")
+git -C "$repo" rev-parse --verify -q "$branch^{commit}" >/dev/null || { echo "no branch or tag $branch in $repo" >&2; exit 1; }
+# the commit, also for a tag (whose own hash would name another build of the same code)
+sha=$(git -C "$repo" rev-parse --short "$branch^{commit}")
 
 if [ -e "$dest" ] && [ -n "$(ls -A "$dest" 2>/dev/null)" ]; then
   echo "$dest exists and isn't empty" >&2

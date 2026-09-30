@@ -104,7 +104,7 @@
 <script>
 const $ = id => document.getElementById(id);
 // Q: what we watch, as a query: 'p=<painter folder>' (all its sittings, stitched) or 's=<session file>' (one session)
-let Q = null, epoch = null, events = [], pos = 0, live = true, playing = null, cwd = '', sitStarts = [0], nSittings = 1;
+let Q = null, epoch = null, events = [], nUpd = 0, pos = 0, live = true, playing = null, cwd = '', sitStarts = [0], nSittings = 1;
 const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));  // text and quoted attributes
 const fname = p => (p || '').split('/').slice(-1)[0];
 const fmt = s => { s = Math.max(0, s|0); return `${(s/3600)|0}:${String(((s%3600)/60)|0).padStart(2,'0')}:${String(s%60).padStart(2,'0')}`; };
@@ -148,18 +148,25 @@ async function loadSessions() {
 }
 $('all').onchange = () => { localStorage.setItem('studio.all', $('all').checked ? '1' : '0'); renderSessions(); };
 let gen = 0, busy = false;  // one poll at a time; a reset (new painter, rebuilt stream) makes in-flight polls stale
-function reset() { gen++; busy = false; stop(); events = []; epoch = null; cwd = ''; liveText = null; typed = -1; sitStarts = [0]; nSittings = 1; $('strip').innerHTML = ''; $('ticks').innerHTML = ''; }
+function reset() { gen++; busy = false; stop(); events = []; nUpd = 0; epoch = null; cwd = ''; liveText = null; typed = -1; sitStarts = [0]; nSittings = 1; $('strip').innerHTML = ''; $('ticks').innerHTML = ''; noPicture(); }
+function noPicture() { $('img').removeAttribute('src'); $('cap').textContent = ''; $('zimg').removeAttribute('src'); $('zoom').style.display = 'none'; }
 async function poll() {
   // a static export is re-uploaded every minute or so while painters work: read it again at most once a minute
   if (!Q || busy || (STATIC && epoch !== null && Date.now() - lastStatic < 60000)) return;
   const g = gen; busy = true; let r;
   try { r = await (await fetch(STATIC ? `data/${encodeURIComponent(P())}/events.json?t=${Date.now()}`
-                                      : `/api/events?${Q}&since=${events.length}${epoch === null ? '' : '&epoch=' + epoch}`)).json(); }
+                                      : `/api/events?${Q}&since=${events.length}${epoch === null ? '' : '&epoch=' + epoch + '&u=' + nUpd}`)).json(); }
   finally { if (g === gen) busy = false; }
   if (g !== gen) return;  // switched painters meanwhile
   if (epoch !== null && r.epoch !== epoch) { const wasLive = live; reset(); live = wasLive; }  // the stream was rebuilt: start over
-  if (STATIC) { lastStatic = Date.now(); r.events = r.events.slice(events.length); }  // the file holds every event: keep the new ones
-  epoch = r.epoch; nSittings = r.sittings; if (r.imgext) IMGEXT = r.imgext;
+  // events we already have whose result came in since: the server lists them; the static file just has them as they are now
+  let ups = r.updates || [];
+  if (STATIC) { lastStatic = Date.now(); ups = [];
+    for (let i = 0; i < events.length && i < r.events.length; i++) if (r.events[i].out !== events[i].out || r.events[i].err !== events[i].err) ups.push([i, r.events[i]]);
+    r.events = r.events.slice(events.length); }  // the file holds every event: keep the new ones
+  epoch = r.epoch; nSittings = r.sittings; if (r.imgext) IMGEXT = r.imgext; if (r.nupdates !== undefined) nUpd = r.nupdates;
+  for (const [i, e] of ups) if (i < events.length) events[i] = e;
+  if (ups.length && !(live && r.events.length)) show(pos);  // (at the live edge, the new events show below)
   if (r.events.length) {
     const base = events.length; events.push(...r.events);
     for (const e of r.events) if (e.kind === 'start') cwd = e.cwd;
@@ -273,6 +280,7 @@ function source(path, upto) {
   }
   let text = '', changed = [], known = false;
   for (let k = 0; k <= upto; k++) { const e = events[k]; if (e.path !== path) continue;
+    if ((e.kind === 'write' || e.kind === 'edit') && (e.err || e.out === undefined)) continue;  // failed, or no result yet
     if (e.kind === 'write') { text = e.content; changed = []; known = true; }
     else if (e.kind === 'edit') { changed = []; for (const ed of e.edits) { const at = text.indexOf(ed.oldText); if (at < 0) continue;
       text = text.slice(0, at) + ed.newText + text.slice(at + ed.oldText.length); changed.push([at, at + ed.newText.length]); } } }
@@ -347,6 +355,7 @@ function show(i) {
   // at the live edge of a sitting that's over, show the whole painting, not the last crop or squint it looked at
   if (live && pos === events.length - 1 && sittingOver()) { const k = lastWhole(); if (k >= 0) { img = events[k]; imgK = k; } }
   if (img) { const u = imgURL(img.img); if (!$('img').src.endsWith(u)) $('img').src = u; $('cap').textContent = hhmm(img.ts) + '  ' + fname(img.path); }
+  else noPicture();
   for (const t of $('strip').children) { const on = +t.dataset.i === imgK; t.classList.toggle('on', on); if (on && !live) t.scrollIntoView({ inline:'center', block:'nearest' }); }
   if (live) stripEnd();
   codeAt(pos); journal(pos); status();

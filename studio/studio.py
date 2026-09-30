@@ -218,10 +218,11 @@ def parse(path):
 
 
 def _parse(path):
-    c = _cache.setdefault(path, {"offset": 0, "events": [], "images": [], "calls": {}})
+    # changed: indices of events whose result came in after them, in arrival order (see stream())
+    c = _cache.setdefault(path, {"offset": 0, "events": [], "images": [], "calls": {}, "changed": []})
     size = os.path.getsize(path)
     if size < c["offset"]:  # rewritten
-        c.update(offset=0, events=[], images=[], calls={})
+        c.update(offset=0, events=[], images=[], calls={}, changed=[])
     with open(path, "rb") as fh:
         fh.seek(c["offset"])
         chunk = fh.read()
@@ -277,8 +278,12 @@ def _parse(path):
         elif role == "toolResult" and isinstance(content, list):
             parent = c["calls"].get(m.get("toolCallId"))
             txt = _text(content)
-            if parent is not None and txt:
-                c["events"][parent]["out"] = txt[-1500:]
+            if parent is not None and (txt or m.get("isError")):
+                if txt:
+                    c["events"][parent]["out"] = txt[-1500:]
+                if m.get("isError"):
+                    c["events"][parent]["err"] = True
+                c["changed"].append(parent)
             for x in content:
                 if x.get("type") == "image" and x.get("data"):
                     idx = len(c["images"])
@@ -305,7 +310,9 @@ def stream(key, files):
     indices are renumbered to be unique across files. Built incrementally: each file is
     parsed from where it stopped, and only the new events are appended. If an earlier
     part changes (it shouldn't: a sitting ends before the next begins) the stream is
-    rebuilt and its epoch bumped, so clients know to start over."""
+    rebuilt and its epoch bumped, so clients know to start over. An event already in the
+    stream whose result comes in later is listed in "updates" (its stream index, in
+    arrival order), so clients that have it can fetch it again."""
     with _lock("s:" + key):
         st = _streams.get(key)
         parsed = [parse(f) for f in files]
@@ -316,9 +323,9 @@ def stream(key, files):
                     and all(o == n for o, n in zip(old[:-1], parts))
                     and (not old or parts[len(old) - 1][1] >= old[-1][1] and parts[len(old) - 1][2] >= old[-1][2]))
             if not same:
-                st = {"epoch": st["epoch"] + 1, "parts": [], "events": []}
+                st = {"epoch": st["epoch"] + 1, "parts": [], "events": [], "base": [], "chg": [], "updates": []}
         else:
-            st = {"epoch": 0, "parts": [], "events": []}
+            st = {"epoch": 0, "parts": [], "events": [], "base": [], "chg": [], "updates": []}
         _streams[key] = st
         old, ioff = st["parts"], 0
         for k, (f, n, ni) in enumerate(parts):
@@ -327,11 +334,38 @@ def stream(key, files):
             if seen == 0 and n and k > 0:
                 st["events"].append({"ts": ev[0]["ts"], "kind": "sitting", "n": k + 1,
                                      "text": f"sitting {k + 1} · {_hhmm(ev[0]['ts'])}"})
+            if k == len(st["base"]):
+                st["base"].append(len(st["events"]))  # where this file's events begin in the stream
+            if k == len(st["chg"]):
+                st["chg"].append(0)
+            changed = _cache[f]["changed"]
+            for j in changed[st["chg"][k]:]:
+                if j < seen:  # already sent without its result
+                    st["updates"].append(st["base"][k] + j)
+            st["chg"][k] = len(changed)
             for e in ev[seen:n]:
                 st["events"].append(dict(e, img=e["img"] + ioff) if e["kind"] == "image" else e)
             ioff += ni
         st["parts"] = parts
         return st
+
+
+def painting_sources(events):
+    """The painting's source files, relative to the painter's folder (its last start): the ones
+    the page may ask for. paintings/lua/painting.lua and, from the events, every .lua under
+    paintings/lua/ and .rs under paintings/ the painter wrote or edited or rendered with
+    `cargo paint <bin>`. Nothing else in the folder (the brief, notes, bin/, settings) is served."""
+    cwd = next((e["cwd"] for e in reversed(events) if e["kind"] == "start"), "")
+    rels = {"paintings/lua/painting.lua"}
+    for e in events:
+        if e["kind"] in ("write", "edit"):
+            p = e.get("path", "")
+            rels.add(p[len(cwd) + 1:] if cwd and p.startswith(cwd + "/") else p)
+        m = re.search(r"cargo paint (\w+)", e.get("text", "") or "") if e["kind"] == "cmd" else None
+        if m:
+            rels.add(f"paintings/src/bin/{m.group(1)}.rs")
+    ok = re.compile(r"paintings/(lua/[^/]+\.lua|(?:[^/]+/)*[^/]+\.rs)")
+    return cwd, {r for r in rels if ok.fullmatch(r) and ".." not in r.split("/")}
 
 
 def image(st, i):
@@ -391,12 +425,17 @@ class H(http.server.BaseHTTPRequestHandler):
             since, ev = int(q.get("since", ["0"])[0]), st["events"]
             if q.get("epoch", [str(st["epoch"])])[0] != str(st["epoch"]):
                 since = 0  # the stream was rebuilt: the client starts over
+            # u: how many updates the client has seen; it gets the rest as [index, event], for indices < since
+            u = int(q.get("u", ["0"])[0]) if q.get("epoch", [""])[0] == str(st["epoch"]) else 0
+            ups = [[i, ev[i]] for i in st["updates"][u:] if i < since]
             return self._send(200, json.dumps({"events": ev[since:], "total": len(ev), "epoch": st["epoch"],
-                                               "sittings": len(files)}).encode(), "application/json")
+                                               "sittings": len(files), "updates": ups,
+                                               "nupdates": len(st["updates"])}).encode(), "application/json")
         if u.path == "/api/file":  # the painting's current source, from the painter's folder
-            cwd = next((e["cwd"] for e in reversed(st["events"]) if e["kind"] == "start"), "")
-            want = os.path.realpath(os.path.join(cwd, q.get("f", [""])[0]))
-            if cwd and want.startswith(os.path.realpath(cwd) + os.sep) and os.path.isfile(want):
+            cwd, rels = painting_sources(st["events"])
+            rel = q.get("f", [""])[0]
+            want = os.path.realpath(os.path.join(cwd, rel))
+            if cwd and rel in rels and want.startswith(os.path.realpath(cwd) + os.sep) and os.path.isfile(want):
                 with open(want, "rb") as fh:
                     return self._send(200, fh.read(), "text/plain; charset=utf-8")
             return self._send(404, b"", "text/plain")

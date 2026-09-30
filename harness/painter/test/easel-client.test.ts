@@ -128,3 +128,50 @@ test("look's errors name the tool's options, not the easel's flags", () => {
 	assert.equal(toolWords("--crop exceeds 1200 pixels per side; choose a smaller crop"), "crop exceeds 1200 pixels per side; choose a smaller crop");
 	assert.equal(toolWords("--mode x: normal, value, squint, mirror"), "mode x: normal, value, squint, mirror");
 });
+
+// These client-boundary regressions protect command admission, progress liveness and
+// cancellation. Existing hang tests cover only an unresponsive process, not rebuild replies.
+// The executable fixture uses the real subprocess boundary; no production test seam.
+test("advancing rebuilds outlive the tool budget and leave a fresh budget for the command", async () => {
+	const studio = stubStudio(`if [ "$1" = status ]; then
+ n=0; [ ! -f progress ] || n=$(cat progress)
+ n=$((n + 1)); echo "$n" > progress
+ sleep 0.12
+ if [ "$n" -le 4 ]; then echo "rebuilding from the log ($n of 4 chunks)"; exit 0; fi
+ echo ready; exit 0
+fi
+sleep 0.2
+echo painted`);
+	const other = WAIT_MS.other;
+	WAIT_MS.other = 300;
+	try {
+		assert.equal(await atEasel(studio, ["look"], undefined), "painted");
+		assert.deepEqual(calls(studio), [...Array(5).fill("status"), "look"]);
+	} finally { WAIT_MS.other = other; }
+});
+
+test("a rebuild returned by open is polled and a stalled count is bounded", async () => {
+	const studio = stubStudio(`if [ "$1" = status ] && [ ! -f opened ]; then exit 1; fi
+ touch opened
+ echo 'rebuilding from the log (1 of 3 chunks)'`);
+	const other = WAIT_MS.other;
+	WAIT_MS.other = 250;
+	try {
+		const start = Date.now();
+		await assert.rejects(atEasel(studio, ["look"], undefined), /rebuild.*(stalled|progress)/);
+		assert.ok(Date.now() - start < 2000);
+		assert.equal(calls(studio).filter(c => c === "open").length, 1);
+		assert.ok(!calls(studio).includes("look"));
+	} finally { WAIT_MS.other = other; }
+});
+
+test("abort during rebuild polling stops admission and removes listeners", async () => {
+	const studio = stubStudio("echo 'rebuilding from the log (0 of 9 chunks)'");
+	const ac = new AbortController();
+	const timer = setTimeout(() => ac.abort(), 250);
+	try {
+		await assert.rejects(atEasel(studio, ["look"], undefined, ac.signal), /aborted/i);
+		assert.ok(calls(studio).every(c => c === "status"));
+		assert.equal(getEventListeners(ac.signal, "abort").length, 0);
+	} finally { clearTimeout(timer); }
+});

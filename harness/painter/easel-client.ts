@@ -3,6 +3,7 @@
  * imports so node --test can load them.
  */
 import { spawn } from "node:child_process";
+import { setTimeout as pause } from "node:timers/promises";
 import { realpathSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
@@ -14,7 +15,9 @@ export interface Ran {
 	timedOut?: boolean;
 }
 
-/** How long a tool waits for the easel, opening it included: a chunk may run 10 minutes (the easel's own limit). */
+/** Tool budgets include opening, except advancing log rebuilds get a separate stall budget.
+ * A chunk may run 10 minutes (the easel's own limit).
+ */
 export const WAIT_MS = { do: 12 * 60_000, other: 3 * 60_000 };
 
 /** Run the studio's easel client with `args`, `input` on stdin; stdout and stderr together, in order. */
@@ -51,22 +54,41 @@ async function step(studio: string, args: string[], input: string | undefined, s
 	return r;
 }
 
-/** Open the easel if no session is running (the runner normally has). */
-export async function ensureOpen(studio: string, signal?: AbortSignal, deadline = Date.now() + WAIT_MS.other): Promise<void> {
-	const st = await step(studio, ["status"], undefined, signal, deadline);
-	if (st.code === 0) return;
-	// a busy easel isn't a closed one: don't open a second beside it
-	if (st.timedOut) throw new Error("the easel isn't answering");
-	const op = await step(studio, ["open"], undefined, signal, deadline);
-	if (op.timedOut) throw new Error("the easel didn't open in time");
-	if (op.code !== 0) throw new Error(op.out.trim() || "the easel didn't open");
+/** Open if needed, waiting for replay readiness. Returns whether a rebuild was awaited. */
+export async function ensureOpen(studio: string, signal?: AbortSignal, deadline = Date.now() + WAIT_MS.other): Promise<boolean> {
+	let r = await step(studio, ["status"], undefined, signal, deadline);
+	let opened = false;
+	let rebuilding = false;
+	let completed = -1;
+	let progressDeadline = deadline;
+	for (;;) {
+		if (r.timedOut) throw new Error(rebuilding ? "the easel rebuild stalled without progress" : opened ? "the easel didn't open in time" : "the easel isn't answering");
+		const progress = /^rebuilding from the log \((\d+) of (\d+) chunks\)$/.exec(r.out.trim());
+		if (progress) {
+			const k = Number(progress[1]);
+			if (!rebuilding || k > completed) {
+				completed = k;
+				progressDeadline = Date.now() + WAIT_MS.other;
+			}
+			rebuilding = true;
+			if (Date.now() >= progressDeadline) throw new Error("the easel rebuild stalled without progress");
+			await pause(Math.min(100, progressDeadline - Date.now()), undefined, { signal });
+			r = await step(studio, ["status"], undefined, signal, progressDeadline);
+			continue;
+		}
+		if (r.code === 0) return rebuilding;
+		// Never open a second easel after an open or a rebuild failure.
+		if (opened || rebuilding) throw new Error(r.out.trim() || "the easel didn't open");
+		opened = true;
+		r = await step(studio, ["open"], undefined, signal, deadline);
+	}
 }
 
 /** Run an easel command at an open easel; a failure becomes the tool's error, with the easel's words. */
 export async function atEasel(studio: string, args: string[], input: string | undefined, signal?: AbortSignal): Promise<string> {
 	const wait = args[0] === "do" ? WAIT_MS.do : WAIT_MS.other;
-	const deadline = Date.now() + wait;
-	await ensureOpen(studio, signal, deadline);
+	let deadline = Date.now() + wait;
+	if (await ensureOpen(studio, signal, deadline)) deadline = Date.now() + wait;
 	const r = await step(studio, args, input, signal, deadline);
 	if (r.timedOut) {
 		throw new Error(`the easel didn't answer within ${wait / 60_000} minutes; \`status\` shows whether the chunk count changed`);

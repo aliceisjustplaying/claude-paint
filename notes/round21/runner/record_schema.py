@@ -5,7 +5,7 @@ The reader writes only observations, each a few short fields; the runner validat
 stamps the metadata and renders the notes through fixed templates (render.py), so the reader
 controls no headings, emphasis, quotes or layout.
 
-validate(doc, ctx) returns {"observations", "dropped", "warnings"} or raises Rejected for a
+validate(doc, tubes, logs, names) returns {"observations", "dropped", "warnings"} or raises Rejected for a
 record that can't be used at all (not an object, the wrong schema, no observations or more than
 MAX_OBSERVATIONS). A single observation that fails a check is dropped and listed in "dropped"
 with why; the record goes on if any remain. Stdlib only (the runner is a uv script).
@@ -15,6 +15,9 @@ import json
 import math
 import re
 import unicodedata
+import subprocess
+import tempfile
+from pathlib import Path
 
 SCHEMA = "chain-observations/1"
 MAX_OBSERVATIONS = 40
@@ -363,6 +366,87 @@ def evidence_warnings(o, i, logs):
     return []
 
 
+# What reader_brief.md excludes, in the short declarative fields of a structured record. Two tiers:
+# a clear hit drops the observation (what to do: a command or a directive to the reader; where
+# things sit in the picture: a part of the picture, the foreground, a position), an ambiguous one
+# only warns (the same words in plain material facts: "the edge of the canvas", "a background
+# wash", "the pile's composition"). Measured on every real record and studio_notes.md
+# (test_record_words.py). Patterns only: a paraphrase, another language or a hint gets past them.
+# a sentence, a "Label: " clause, a parenthesis or "To darken it, ..."
+_LEAD = r"(?:^|[.;!?]\s+|:\s+|\(\s*|^to [\w ]{1,40},\s+)"
+# commands that start a sentence; not the easel's names (clip, check, work, blend...) or words that
+# start plain facts as adjectives or nouns (thin, set, run, mix, load, paint)
+_COMMANDS = (r"always|never|don'?t|do not|avoid|try|remember|use|put|place|keep|make|let|leave|save|lay(?!-)|pass"
+             r"|add|give|subtract|repaint|restate|shorten|lengthen|judge|prefer|reserve|be (?:careful|sure)"
+             r"|consider|choose|pick|stop|start|begin|dilute|wipe|reload|aim")
+# after ", so" or ", then" a command; the easel's verbs and the like only with an object: ", so run
+# it with a long limit"
+_THEN_COMMANDS = _COMMANDS + r"|run|mix|load|set|paint|glaze|blend|wait|work|thin|clip|check"
+_OBJECT = r"(?:the|a|an|it|them|each|every|all|both|more|less|your|longer|shorter)"
+# an easel verb that starts a sentence with an object is a command too ("Clip every blend ...",
+# "Mix the darks ..."): material facts start with the verb as an adjective or noun ("Thin paint
+# lets ...", "Clip on a body pass ..."), not with the verb and the/every/it (review C, finding 2)
+_EASEL_VERBS = _THEN_COMMANDS + r"|stipple|scumble|hatch|mask|erase|cut|restate|lift|crop"
+PRESCRIPTION_DROP = re.compile(
+    _LEAD + r"(?:" + _COMMANDS + r")\b(?!-|\s+of\b)"
+    r"|" + _LEAD + r"(?:" + _EASEL_VERBS + r")\s+" + _OBJECT + r"\b"
+    r"|,\s*(?:so|then|and then)\s+(?:(?:" + _COMMANDS + r")\b(?!-)|(?:" + _THEN_COMMANDS + r")\s+" + _OBJECT + r"\b)"
+    r"|\b(?:you|one) (?:should|must|need to|have to|can|could|will want|'ll want|may want)\b"
+    r"|\b(?:should|must) (?:always|never|be)\b|\b(?:be sure|make sure|it is best|it's best|best to|better to)\b"
+    r"|\bthe (?:trick|fix|cure|answer|remedy|way) is\b", re.I)
+PRESCRIPTION_WARN = re.compile(r"\b(?:always|never|instead|works? (?:well|best)|worked well|is best|reads? (?:best|well)"
+                               r"|suits?|should)\b",
+                               re.I)
+# the picture, not the canvas: "one side of the canvas" is where the noise fell, a material fact
+_PICTURE = r"(?:picture|painting|composition|image|frame|scene|view)"
+PLACEMENT_DROP = re.compile(
+    r"\b(?:center|centre|middle|top|bottom|upper|lower|left|right|third|quarter|half|side)s? of the " + _PICTURE
+    + r"\b|\bon the (?:left|right)(?: side)? of the " + _PICTURE + r"\b"
+    r"|\b(?:in|into|across|over|through) the (?:foreground|middle ?ground|distance)\b|\bfocal point\b", re.I)
+PLACEMENT_WARN = re.compile(
+    r"\b(?:edge|corner|border)s? of the " + _PICTURE + r"\b|\bon the (?:left|right)\b|\b\w+ of the canvas\b"
+    r"|\b(?:at|in|near|toward|towards) the (?:center|centre|middle)\b(?! of)"
+    r"|\b(?:horizon|foreground|background|middle ?ground|composition|focal|motif)\b"
+    # a position (y 330, x~500, y at 340; not a size, 20 x 30): also how far a tool's paint reached
+    # ("a curve that stopped at x 620 painted out to x 700")
+    r"|(?<!\d )(?<!\d)\b[xy]\s?[~≈]\s?\d|(?<!\d )(?<!\d)\b[xy] (?:(?:at|of|near|about|around) )?\d{2,}\b", re.I)
+
+
+# as round 19's free-text gate (r19_chains.py): another painter, and a line of code (only a warning here:
+# markdown-inert text can't hold code, so a hit is a word like "function" at the start)
+PAINTER_WORDS = re.compile(r"\b(?:painters?|claude|opus|sonnet|gpt|gemini|kimi|mimo|codex|anthropic|openai)\b", re.I)
+CODE_LINE = re.compile(r"^\s*(?:[-*]\s+)?(?:local\s|function\b|(?:for|while)\s.*\bdo\b|if\s.*\bthen\b|end\s*$"
+                       r"|[A-Za-z_][\w.]*(?:\[[^\]]*\])?\s*=[^=])")
+
+
+def studio_names(script, own, tmp):
+    """A names check for validate: strings -> the indices of those holding a painter's name, by
+    scripts/check_studio_names (less the studio's own artist), run on a scratch studio in tmp."""
+    def check(strings):
+        with tempfile.TemporaryDirectory(dir=tmp) as t:
+            (Path(t) / "notes").mkdir()
+            (Path(t) / "notes" / "fields.md").write_text("".join(x.replace("\n", " ") + "\n" for x in strings))
+            r = subprocess.run([str(script), t, *own], capture_output=True, text=True)
+        if r.returncode == 0:
+            return set()
+        hits = {int(m.group(1)) - 1 for m in re.finditer(r"^notes/fields\.md:(\d+):", r.stderr, re.M)}
+        if not hits:
+            raise RuntimeError(f"check_studio_names failed: {r.stderr.strip()[:300]}")
+        return hits
+    return check
+
+
+def word_hits(text):
+    """(drops, warnings) for one field's text: [(pattern name, matched words)]."""
+    def hits(pairs):
+        return [(name, m.group(0).strip(" .;:!?,")) for name, pat in pairs for m in [pat.search(text)] if m]
+    drops = hits((("PRESCRIPTION", PRESCRIPTION_DROP), ("PLACEMENT", PLACEMENT_DROP)))
+    dropped = {n for n, _ in drops}
+    warns = [(n, w) for n, w in hits((("PRESCRIPTION", PRESCRIPTION_WARN), ("PLACEMENT", PLACEMENT_WARN)))
+             if n not in dropped]
+    return drops, warns
+
+
 def texts(o):
     """An observation's free text and structured strings, as (field, text)."""
     c = o.get("conditions") or {}
@@ -371,11 +455,32 @@ def texts(o):
     return [(f, t) for f, t in out if isinstance(t, str)]
 
 
-def validate(doc, tubes=None, logs=None):
+def word_problems(o, i, names_hit):
+    """Hard drops (another painter, a painter's name, a clear prescription or placement) and
+    warnings for observation o (index i). names_hit: the fields (field, text) holding a name."""
+    drops, warns = [], []
+    for field, text in texts(o):
+        words = sorted({w.lower() for w in PAINTER_WORDS.findall(text)})
+        if words:
+            drops.append(f"{field}: another painter ({', '.join(words)})")
+        if (field, text) in names_hit:
+            drops.append(f"{field}: a painter's name")
+        if field == "tubes":
+            continue
+        d, w = word_hits(text)
+        drops += [f"{field}: {name} ({words!r})" for name, words in d]
+        warns += [{"index": i, "field": field, "pattern": name, "words": words} for name, words in w]
+        if CODE_LINE.search(text):
+            warns.append({"index": i, "field": field, "pattern": "CODE_LINE", "words": text[:40]})
+    return drops, warns
+
+
+def validate(doc, tubes=None, logs=None, names=None):
     """The observations of a reader's p<n>_observations.json (parsed): kept, dropped and warned.
     Raises Rejected if the record can't be used at all. tubes: the source box's tube names; logs:
     the session logs (LogIndex) in the brief's order, against which evidence is resolved (None
-    checks the shape only). A kept observation carries "resolved": its evidence's calls."""
+    checks the shape only); names: a names check (studio_names) over every string field. A kept
+    observation carries "resolved": its evidence's calls."""
     if not isinstance(doc, dict):
         raise Rejected("the record is not a JSON object")
     if doc.get("schema") != SCHEMA:
@@ -389,13 +494,20 @@ def validate(doc, tubes=None, logs=None):
         raise Rejected(f"{len(obs)} observations (at most {MAX_OBSERVATIONS})")
     obs = [normalized(o) for o in obs]
     kept, dropped, warnings = [], [], []
+    shaped = [shape_problems(o, tubes) for o in obs]
+    fields = [(i, f, t) for i, o in enumerate(obs) if not shaped[i] for f, t in texts(o)]
+    hit = names([t for _, _, t in fields]) if names and fields else set()
+    named = {(i, f, t) for k, (i, f, t) in enumerate(fields) if k in hit}
     for i, o in enumerate(obs):
-        why = shape_problems(o, tubes)
+        why = shaped[i]
         resolved = None
+        if not why:
+            why, warns = word_problems(o, i, {(f, t) for j, f, t in named if j == i})
         if not why and logs is not None:
             why, resolved = evidence_problems(o, logs)
-            if not why:
-                warnings += evidence_warnings(o, i, logs)
+            warns += [] if why else evidence_warnings(o, i, logs)
+        if not why:
+            warnings += warns
         if why:
             dropped.append({"index": i, "why": why})
         else:

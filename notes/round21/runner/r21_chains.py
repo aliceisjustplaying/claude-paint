@@ -82,6 +82,7 @@ import re
 import shlex
 import shutil
 import subprocess
+import tempfile
 import threading
 import time
 from pathlib import Path
@@ -680,6 +681,47 @@ NAMES = BASE / "scripts/check_studio_names"
 OWN_NAMES = {"friedrich": ["Friedrich"], "blank": [], "sargent": ["Sargent"], "inness": ["Inness"],
              "alma-tadema": ["Alma-Tadema", "Tadema"], "tonn": ["Tonn"], "hopper": ["Hopper"]}
 
+# The free-text record's hard checks, round 19's (notes/round19/runner/r19_chains.py record_problems): a
+# record that fails one isn't passed on; it is set aside as p<n>_record.rejected.md and the lane stops
+RECORD_MAX_LINES = 60
+# another painter: the word, or a name a lane's painter goes by (its model or maker)
+PAINTER_WORDS = re.compile(r"\b(?:painters?|claude|opus|sonnet|gpt|gemini|kimi|mimo|codex|anthropic|openai|deepseek)\b", re.I)
+# a line of code: a Lua statement, not an operation named in prose (`b:stroke`, `m:grow(14)`)
+CODE_LINE = re.compile(r"^\s*(?:[-*]\s+)?(?:local\s|function\b|(?:for|while)\s.*\bdo\b|if\s.*\bthen\b|end\s*$"
+                       r"|[A-Za-z_][\w.]*(?:\[[^\]]*\])?\s*=[^=])")
+# a color recipe: a pile's makeup ({"<tube>", <parts>})
+RECIPE = re.compile(r'\bpile\s*\{|\{\s*"[^"]+"\s*,\s*[\d.]+\s*[,}]')
+
+
+def record_problems(path, own):
+    """Why the free-text record at path can't go into the next studio's notes (empty if it can)."""
+    if not path.exists():
+        return ["no record was written"]
+    text = path.read_text(errors="replace")
+    if not text.strip():
+        return ["the record is empty"]
+    lines = text.strip().splitlines()
+    problems = []
+    if len(lines) > RECORD_MAX_LINES:
+        problems.append(f"{len(lines)} lines (at most {RECORD_MAX_LINES})")
+    if "```" in text:
+        problems.append("a code block")
+    for what, pat in (("code", CODE_LINE), ("a color recipe", RECIPE)):
+        hits = [str(i) for i, line in enumerate(lines, 1) if pat.search(line)]
+        if hits:
+            problems.append(f"{what} on line {', '.join(hits)}")
+    words = sorted({w.lower() for w in PAINTER_WORDS.findall(text)})
+    if words:
+        problems.append(f"another painter ({', '.join(words)})")
+    with tempfile.TemporaryDirectory(dir=path.parent) as t:
+        (Path(t) / "notes").mkdir()
+        shutil.copy(path, Path(t) / "notes" / path.name)
+        r = subprocess.run([str(NAMES), t] + own, capture_output=True, text=True)
+    if r.returncode:
+        hits = [h for h in r.stderr.splitlines()[1:] if h] or [gist(r.stderr)]
+        problems.append(f"painters' names ({'; '.join(hits)})")
+    return problems
+
 
 def reader_cmd(prompt):
     """The reader's launch (READER_HARNESS), cwd the run folder."""
@@ -962,8 +1004,13 @@ def chain(name):
                 tag, rd, n, d, logs, OWN_NAMES[t["profile"]], name, t["profile"]):
             log(f"{name}: chain stops")
             return
-        if logs and n < t["painters"] and t["record_kind"] == "free-text":
+        if n < t["painters"] and t["record_kind"] == "free-text":
             out = rd / f"p{n}_record.md"
+            if not logs:
+                log(f"{tag}: RECORD MISSING: no session logs to read; rerun to try again")
+                log(f"{name}: chain stops")
+                return
+            out.unlink(missing_ok=True)                   # an earlier attempt's record isn't this one's
             rb = ((HERE / "reader_brief.md").read_text().replace("{LOG}", ", ".join(logs))
                   .replace("{JOURNAL}", str(d / "notes/journal.md")).replace("{OUT}", str(out)))
             (rd / f"p{n}_reader_brief.md").write_text(rb)
@@ -976,14 +1023,21 @@ def chain(name):
                      "write": str(out)}
             rc = run(reader_cmd(f"Read {rd}/p{n}_reader_brief.md and do what it says."), rd,
                      rd / f"p{n}_reader_final.txt", rd / f"p{n}_reader_err.txt", {"READER_SCOPE": json.dumps(scope)})
+            problems = ([f"the reader exited {rc}"] if rc else []) + record_problems(out, OWN_NAMES[t["profile"]])
+            if problems:
+                if out.exists():
+                    out.replace(rd / f"p{n}_record.rejected.md")
+                log(f"{tag}: RECORD REJECTED: {'; '.join(problems)} (see {rd}/p{n}_reader_err.txt and "
+                    f"p{n}_record.rejected.md); the painter isn't done, rerun to read it again")
+                log(f"{name}: chain stops")
+                return
             flags = record_flags(out)
             if flags:
                 flagged.write_text(f"# p{n}_record.md: lines the pattern gate flagged (a warning, not a rejection)\n"
                                    + "".join(f"- line {i} ({what}): {line.strip()}\n" for what, i, line in flags))
                 log(f"{tag}: RECORD FLAGGED ({len(flags)} lines, see {flagged}): "
                     + "; ".join(f"line {i} ({what}): {line.strip()[:120]}" for what, i, line in flags))
-            log(f"{tag}: record {'written' if out.exists() else 'MISSING'}"
-                + (f" (the reader exited {rc}, see {rd}/p{n}_reader_err.txt)" if rc else "")
+            log(f"{tag}: record written"
                 + (f" ({len(flags)} flagged lines went on with it, not a review of what it says)" if flags else ""))
         (rd / f"p{n}.done").write_text(time.strftime("%F %T"))
     log(f"lane {name} finished")

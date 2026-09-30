@@ -118,10 +118,11 @@ def test_the_reader_is_launched_as_isolated_as_the_painter():
     assert exts == [str(rc21.HERE / "reader.ts"), str(rc21.BLACK)]  # pi-black for its Anthropic model
 
 
+REPO_NAMES = rc21.HERE.parents[2] / "scripts/check_studio_names"
 GOOD_RECORD = "## Blending\n- The badger only moves wet paint; `blend(m, {clip=true})` stayed inside.\n"
 
 
-def chain_one_record(tmp_path, monkeypatch, record, rc, journal=True, lanes=None):
+def chain_one_record(tmp_path, monkeypatch, record, rc, journal=True, lanes=None, no_logs=False):
     """Run lane T's chain (two painters) with painter 1 painted and a reader that writes record (unless
     None) and exits rc: the log lines and the READER_SCOPE the reader got."""
     lines, scopes = [], []
@@ -132,6 +133,7 @@ def chain_one_record(tmp_path, monkeypatch, record, rc, journal=True, lanes=None
     monkeypatch.setattr(rc21, "check", lambda *a: None)
     monkeypatch.setattr(rc21, "finish", lambda *a: None)
     monkeypatch.setattr(rc21, "export_cmd", lambda profile, d: ["mkdir", "-p", str(d / "notes/research")])
+    monkeypatch.setattr(rc21, "NAMES", REPO_NAMES)              # the round-21 checkout's copy at run time
     rd = tmp_path / "run/T"
 
     def reader(cmd, cwd, out, err, env=None):                  # the reader: writes the record, or doesn't
@@ -142,7 +144,8 @@ def chain_one_record(tmp_path, monkeypatch, record, rc, journal=True, lanes=None
     monkeypatch.setattr(rc21, "run", reader)
     rd.mkdir(parents=True, exist_ok=True)
     session = tmp_path / "s1.jsonl"
-    session.write_text("{}\n")
+    if not no_logs:
+        session.write_text("{}\n")
     (rd / "p1_sittings.json").write_text(json.dumps([{"sitting": 1, "sessions": [str(session)]}]))
     for marker in ("p1.exported", "p1.painted", "p2.painted"):   # painter 1 has painted; painter 2 won't paint
         (rd / marker).write_text("")
@@ -164,10 +167,57 @@ def test_the_reader_may_read_the_logs_journal_and_brief_and_write_only_its_recor
     assert any(l.endswith("record written") for l in lines), lines
 
 
-def test_a_reader_that_fails_says_so(tmp_path, monkeypatch):
+def test_a_reader_that_fails_says_so_and_the_lane_stops(tmp_path, monkeypatch):
     # pi exits 1 when reader.ts refuses to load (no valid READER_SCOPE): the log names the exit
     lines, _ = chain_one_record(tmp_path, monkeypatch, None, 1)
-    assert any("record MISSING (the reader exited 1" in l for l in lines), lines
+    rd = tmp_path / "run/T"
+    assert any("RECORD REJECTED: the reader exited 1; no record was written" in l for l in lines), lines
+    assert not (rd / "p1.done").exists() and not (rc21.studio("T2") / "notes/studio_notes.md").exists()
+
+
+# a record that fails round 19's hard checks isn't passed on: it's set aside and the lane stops (a
+# rerun reads again); the pattern flags above are only warnings
+@pytest.mark.parametrize("record, why", [
+    ("", "the record is empty"),
+    ("  \n\n", "the record is empty"),
+    ("".join(f"- The paint did thing {i}.\n" for i in range(61)), "61 lines (at most 60)"),
+    (GOOD_RECORD + "```lua\nb:stroke(p)\n```\n", "a code block"),
+    (GOOD_RECORD + "local b = brush{size=20}\n", "code on line 3"),
+    (GOOD_RECORD + '- The warm dark was pile{{"burnt sienna", 2}, {"bone black", 1}}.\n', "a color recipe on line 3"),
+    (GOOD_RECORD + "- The earlier painter left the sky wet.\n", "another painter (painter)"),
+    (GOOD_RECORD + "- DeepSeek laid the ground thin.\n", "another painter (deepseek)"),
+    (GOOD_RECORD + "- The glaze behaved as in Friedrich's skies.\n", "painters' names"),
+])
+def test_a_record_that_fails_the_hard_checks_is_set_aside_and_the_lane_stops(tmp_path, monkeypatch, record, why):
+    lines, _ = chain_one_record(tmp_path, monkeypatch, record, 0)
+    rd = tmp_path / "run/T"
+    assert any("RECORD REJECTED" in l and why in l for l in lines), lines
+    assert (rd / "p1_record.rejected.md").read_text() == record
+    assert not (rd / "p1_record.md").exists() and not (rd / "p1.done").exists()
+    assert not (rc21.studio("T2") / "notes/studio_notes.md").exists()
+
+
+def test_the_studio_s_own_artist_may_be_named(tmp_path, monkeypatch):
+    record = GOOD_RECORD + "- A thin gray ground stayed visible, as in Sargent's lay-ins.\n"
+    lines, _ = chain_one_record(tmp_path, monkeypatch, record, 0)
+    assert not any("REJECTED" in l for l in lines), lines
+    assert record in (rc21.studio("T2") / "notes/studio_notes.md").read_text()
+
+
+def test_an_earlier_attempt_s_record_is_not_passed_on(tmp_path, monkeypatch):
+    rd = tmp_path / "run/T"
+    rd.mkdir(parents=True)
+    (rd / "p1_record.md").write_text(GOOD_RECORD)               # a record from an earlier attempt
+    lines, _ = chain_one_record(tmp_path, monkeypatch, None, 0)  # this reader writes nothing
+    assert any("RECORD REJECTED: no record was written" in l for l in lines), lines
+    assert not (rc21.studio("T2") / "notes/studio_notes.md").exists()
+
+
+def test_a_painter_without_session_logs_stops_the_lane(tmp_path, monkeypatch):
+    lines, scopes = chain_one_record(tmp_path, monkeypatch, GOOD_RECORD, 0, no_logs=True)
+    assert scopes == []                                         # no reader ran
+    assert any("RECORD MISSING: no session logs to read" in l for l in lines), lines
+    assert not (tmp_path / "run/T/p1.done").exists()
 
 
 # what to do and where things go in the picture are flagged, not rejected: the record goes on and
@@ -229,6 +279,7 @@ def free_text_notes(mod, tmp_path, monkeypatch, record, other_lane=None):
     monkeypatch.setattr(mod, "check", lambda *a: None)
     monkeypatch.setattr(mod, "finish", lambda *a: None)
     monkeypatch.setattr(mod, "export_cmd", lambda profile, d: ["mkdir", "-p", str(d / "notes/research")])
+    monkeypatch.setattr(mod, "NAMES", REPO_NAMES, raising=False)   # the imported runner has no gate
     rd = tmp_path / "run/T"
 
     def reader(cmd, cwd, out, err, env=None):

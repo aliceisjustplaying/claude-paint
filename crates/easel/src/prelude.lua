@@ -5,8 +5,9 @@
 -- `id(v)` is the session's creation serial of a table, closure, userdata or
 -- thread (nil for anything else): objects are numbered as Lua allocates them,
 -- so their order is the order the program made them, in every process.
-local id, getmt = ...
+local id, getmt, getinfo = ...
 local rawnext, rawget, type, select, error, tostring = next, rawget, type, select, error, tostring
+local rawload, pcall = load, pcall
 local setmt = setmetatable
 local sort, pack, unpack = table.sort, table.pack, table.unpack
 local find, sub = string.find, string.sub
@@ -223,9 +224,53 @@ local function check()
   end
 end
 
+-- ---------------------------------------------------------------- load
+
+-- Lua's `load` also takes precompiled (binary) chunks, which Lua doesn't
+-- verify: a crafted one can crash the easel. A painting loads text only,
+-- whatever mode it asks for (one without "t" loads nothing), from a string
+-- or a reader function alike. Everything else is Lua's load: an environment
+-- given, even nil, is passed on, and its complaints are worded and placed as
+-- Lua's (the name it was called by, at the painting's call).
+local function text_load(...)
+  local n, mode = select("#", ...), select(3, ...)
+  local m = mode
+  if mode == nil then
+    m = "t"
+  elseif type(mode) == "string" or type(mode) == "number" then
+    m = find(tostring(mode), "t", 1, true) and "t" or ""
+  end
+  local r
+  if n == 0 then
+    r = pack(pcall(rawload))
+  elseif n >= 4 then
+    local chunk, name, _, env = ...
+    r = pack(pcall(rawload, chunk, name, m, env))
+  else
+    local chunk, name = ...
+    r = pack(pcall(rawload, chunk, name, m))
+  end
+  if not r[1] then
+    local e = r[2]
+    -- load's own complaints carry no position under pcall; a reader's pass through
+    if type(e) == "string" and not e:find("^[^\n]-:%d+: ") then
+      local info = getinfo(1, "n")
+      e = e:gsub("^bad argument (#%d+) to '%?'", function(k) return "bad argument " .. k .. " to '" .. (info.name or "load") .. "'" end)
+      error(e, 2)
+    end
+    error(e, 0)
+  end
+  if r[2] == nil and m == "" and r[3] == "attempt to load a text chunk (mode is '')" then
+    r[3] = "attempt to load a text chunk (mode is '" .. tostring(mode) .. "')"
+  end
+  return unpack(r, 2, r.n)
+end
+
 -- ---------------------------------------------------------------- install
 
-next, pairs, string.gmatch, setmetatable = det_next, det_pairs, gmatch, det_setmetatable
+next, pairs, string.gmatch, setmetatable, load = det_next, det_pairs, gmatch, det_setmetatable, text_load
+-- no dumping functions into binary chunks either
+string.dump = nil
 name_all(_G, "")
 for _, lib in ipairs { "string", "table", "math", "utf8" } do
   if type(_G[lib]) == "table" then name_all(_G[lib], lib .. ".") end

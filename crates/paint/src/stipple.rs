@@ -123,7 +123,7 @@ impl<'a> Stipple<'a> {
             cluster: 0.15,
             clump: None,
             feather: 0.6,
-            fade: 1.0,
+            fade: if std::env::var("AB_FADE").is_ok_and(|v| v == "1") { 0.0 } else { 1.0 },
             clip: false,
             limit: None,
             aim: true,

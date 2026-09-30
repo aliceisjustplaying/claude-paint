@@ -21,7 +21,8 @@ use rayon::prelude::*;
 /// fading smoothly (C¹) to nothing at half of it.
 #[inline]
 pub(crate) fn formed_film(um: f32) -> f32 {
-    if um >= MIN_FILM_UM {
+    static AB: std::sync::LazyLock<bool> = std::sync::LazyLock::new(|| std::env::var("AB_MINFILM").is_ok_and(|v| v == "1"));
+    if *AB || um >= MIN_FILM_UM {
         um
     } else {
         um * crate::smoothstep(0.5 * MIN_FILM_UM, MIN_FILM_UM, um)

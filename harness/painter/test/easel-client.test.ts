@@ -197,3 +197,8 @@ ${reply}`);
 		}
 	} finally { WAIT_MS.other = other; }
 });
+
+test("an easel that exits before reading a large chunk is the tool's error, with its words", async () => {
+	const studio = stubStudio('[ "$1" = status ] && exit 0\necho "the easel stopped"; exit 1');
+	await assert.rejects(atEasel(studio, ["do", "-"], "x = 1\n".repeat(1_500_000)), /^Error: the easel stopped$/);
+});

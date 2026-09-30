@@ -43,6 +43,9 @@ export function easel(studio: string, args: string[], input?: string, signal?: A
 		p.stderr.on("data", (d) => (out += d));
 		p.on("error", (e) => (end(), fail(e)));
 		p.on("close", (code) => (end(), done({ code: timedOut ? null : code, out: timedOut ? "" : out, timedOut } as Ran)));
+		// an easel that exits before reading all of the input (EPIPE): its output and exit
+		// status, on close, are the answer
+		p.stdin.on("error", () => {});
 		p.stdin.end(input ?? "");
 	});
 }

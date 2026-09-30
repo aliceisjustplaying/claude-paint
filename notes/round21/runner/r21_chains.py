@@ -27,7 +27,8 @@ judgment and counts for nothing: the runner waits (CRASH_WAITS, or longer if the
 "retry in Ns") and starts another sitting; after MAX_CRASHES crashes the painter stops (NOT
 FINISHED). A usage limit (OpenCode Go's 5-hour or weekly window) is no crash: the sitting is
 marked 'limited', the runner probes the provider until it answers (LIMIT_PROBE_S, up to
-LIMIT_GIVE_UP_H hours), and then the painter carries on in the same session (CONTINUE_MESSAGE,
+LIMIT_GIVE_UP_H hours; a probe error waiting won't fix, like a refused key or no credit, stops
+the painter at once), and then the painter carries on in the same session (CONTINUE_MESSAGE,
 same sitting number) if it had worked in it, or starts a fresh sitting if not. Each attempt is
 recorded in run/<lane>/p<n>_sittings.json (a continued sitting's parts share its number).
 
@@ -371,29 +372,97 @@ def first_probe_wait(text, ended, now):
     return max(0.0, (reset + 60 if reset else LIMIT_PROBE_S) - (now - ended))
 
 
+# A probe error that waiting won't fix: how the provider is used (key, credit, model, request), not
+# an outage. Matched only in an error that isn't a usage limit or a transient one (TRANSIENT); when
+# unsure, the probe is asked again. HTTP statuses as providers and pi print them: "code": 402,
+# HTTP 401, status 403, or a leading "400: {...}".
+STATUS = r'(?:"code"\W{0,3}|\bHTTP\W{0,2}|\bstatus(?: code)?\W{0,3}|(?:^|\s)(?=\d{3}:\s))'
+PROBE_FATAL = [
+    ("the API key or its access was refused", re.compile(
+        STATUS + r"40[13]\b|no API key|(?:invalid|incorrect|missing)\W+(?:x-)?api\W?key|authentication_error"
+        r"|permission_error|\bunauthorized\b|\bforbidden\b", re.I)),
+    ("no credit or billing on the account", re.compile(
+        STATUS + r"402\b|payment required|credit balance|credits are depleted|\bbilling\b", re.I)),
+    ("the model isn't known to the provider", re.compile(
+        r"\bmodel\b[^\n.]{0,80}\b(?:not found|does not exist)(?![^\n]{0,40}custom model id)|unknown model"
+        r"|model_not_found|not_found_error", re.I)),
+    ("the request was malformed", re.compile(STATUS + r"400\b|invalid_request_error", re.I)),
+]
+# an outage, overload or rate limit: asked again even if a fatal-looking word is in it (Google's
+# 429 "check your plan and billing details")
+TRANSIENT = re.compile(STATUS + r"(?:429|5\d\d)\b|rate.?limit|too many requests|exceeded your current quota"
+                       r"|overloaded|timed? ?out|ECONNRESET|ECONNREFUSED|ENOTFOUND|EAI_AGAIN|network", re.I)
+
+
+def probe_fatal(text):
+    """Why a probe error means the painter should stop now (see PROBE_FATAL), or None."""
+    if usage_limit(text) or TRANSIENT.search(text):
+        return None
+    return next((why for why, pat in PROBE_FATAL if pat.search(text)), None)
+
+
+def probe_outcome(r):
+    """What a probe's result (a CompletedProcess, or the TimeoutExpired it raised) says: ("available",
+    reply) only when the probe exited 0 and the reply has the word ok or okay (any case); ("limited",
+    text) for a usage limit; otherwise ("unavailable", why): a timeout, an error or an odd reply is no
+    recovery; ("fatal", why) for an error waiting won't fix (probe_fatal)."""
+    if isinstance(r, subprocess.TimeoutExpired):
+        return "unavailable", f"the probe timed out after {r.timeout:.0f} s"
+    out = (r.stdout or "") + (r.stderr or "")
+    if usage_limit(out):
+        return "limited", out
+    if not (r.returncode == 0 and re.search(r"\bok(ay)?\b", r.stdout or "", re.I)):
+        why = probe_fatal(out)
+        if why:
+            return "fatal", f"{why} (exit {r.returncode}): {gist(out, 160)}"
+    if r.returncode:
+        return "unavailable", f"the probe exited {r.returncode}: {gist(out, 160)}"
+    if not (r.stdout or "").strip():
+        return "unavailable", f"no reply to the probe: {gist(out, 160)}"
+    if not re.search(r"\bok(ay)?\b", r.stdout, re.I):
+        return "unavailable", f"an unexpected reply to the probe: {gist(out, 160)}"
+    return "available", r.stdout
+
+
 def wait_out_limit(m, tag, text, ended):
     """Wait until the provider answers again (probing it), or give up after LIMIT_GIVE_UP_H hours.
-    True when the painter can go on."""
+    True when the painter can go on: only a probe that got its reply (probe_outcome) counts; a
+    probe that timed out or failed is logged as such and asked again, like a continuing limit. A
+    probe error waiting won't fix (a refused key, no credit, an unknown model, a malformed request)
+    stops the painter at once."""
     t0 = time.time()
     wait = first_probe_wait(text, ended, t0)
+    attempt = 0
     while True:
         if time.time() + wait - t0 > LIMIT_GIVE_UP_H * 3600:
-            log(f"{tag}: the usage limit hasn't lifted in {LIMIT_GIVE_UP_H} h; painter stops (rerun to go on)")
+            log(f"{tag}: the usage limit hasn't lifted in {LIMIT_GIVE_UP_H} h ({attempt} probes); "
+                f"painter stops (rerun to go on)")
             return False
         log(f"{tag}: usage limit; asking the provider again in {wait / 60:.0f} min (not a crash)")
         time.sleep(wait)
         (RUN / "probe").mkdir(exist_ok=True)
+        attempt += 1
         try:
             r = subprocess.run(probe_cmd(m), cwd=RUN / "probe", stdin=subprocess.DEVNULL,
                                capture_output=True, text=True, timeout=600)
-            out = r.stdout + r.stderr
-        except subprocess.TimeoutExpired:
-            out = "probe timed out"
-        if not usage_limit(out):
-            log(f"{tag}: the provider answers again after {(time.time() - t0) / 3600:.1f} h: {gist(out, 80)}")
+        except subprocess.TimeoutExpired as e:
+            r = e
+        state, what = probe_outcome(r)
+        if state == "available":
+            log(f"{tag}: the provider answers again after {(time.time() - t0) / 3600:.1f} h "
+                f"(attempt {attempt}): {gist(what, 80)}")
             return True
-        reset = limit_reset_s(out)
-        wait = reset + 60 if reset else LIMIT_PROBE_S
+        if state == "fatal":
+            log(f"{tag}: PROBE ERROR, painter stops now (attempt {attempt}): {what}; waiting won't fix it, "
+                f"rerun after fixing")
+            return False
+        if state == "limited":
+            log(f"{tag}: still limited (attempt {attempt}): {gist(what, 80)}")
+            reset = limit_reset_s(what)
+            wait = reset + 60 if reset else LIMIT_PROBE_S
+        else:
+            log(f"{tag}: PROBE FAILED (attempt {attempt}), not a recovery: {what}")
+            wait = LIMIT_PROBE_S
 
 
 def crash_wait(n_crashes, text):

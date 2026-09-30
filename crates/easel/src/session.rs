@@ -69,7 +69,7 @@ pub struct Session {
     /// before the state is closed).
     heap: Option<(Function, Function)>,
     prelude: Option<(Function, Table, Function)>,
-    /// A failed chunk touched tables from earlier chunks. Their entries are
+    /// A failed chunk left tables different after restoration. Their entries are
     /// back but maybe not their layout (which Lua gives a program no way to
     /// set), so `pairs` could walk them in another order than a replay of the
     /// log: the state is rebuilt from the log (`rebuild`) before the next chunk.
@@ -173,10 +173,10 @@ impl Session {
     }
 
     /// Put everything back as it was at `snap`. Returns how many Lua tables
-    /// the chunk touched (see `stale`).
+    /// still differ in contents, traversal order or raw length after restoration (see `stale`).
     fn restore(&mut self, snap: &Snap) -> mlua::Result<usize> {
         let (_, restore_f) = self.heap.as_ref().unwrap();
-        let touched = restore_f.call::<usize>(snap.heap.clone())?;
+        let mismatches = restore_f.call::<usize>(snap.heap.clone())?;
         for (b, h) in &snap.brushes {
             *b.borrow_mut() = h.clone();
         }
@@ -189,12 +189,18 @@ impl Session {
         s.clock0 = snap.clock0;
         s.hand = snap.hand.clone();
         s.view = snap.view.clone();
-        Ok(touched)
+        Ok(mismatches)
     }
 
     /// Replace the state with a replay of the log in a fresh one: the state
     /// the log gives, exactly (see `stale`). Takes as long as a reopen.
     pub fn rebuild(&mut self) -> Result<(), String> {
+        self.rebuild_with_progress(|_, _| {})
+    }
+
+    /// Reports completed chunks, including zero before starting the replay.
+    pub fn rebuild_with_progress(&mut self, mut progress: impl FnMut(usize, usize)) -> Result<(), String> {
+        progress(0, self.log.len());
         let (width, tubes) = {
             let s = self.st.borrow();
             (s.width, (*s.tubes).clone())
@@ -204,6 +210,7 @@ impl Session {
         fresh.replay = true;
         for (i, c) in self.log.iter().enumerate() {
             fresh.run(&c.src).map_err(|e| format!("rebuilding from the log failed at chunk {}: {e}", i + 1))?;
+            progress(i + 1, self.log.len());
         }
         fresh.replay = self.replay;
         *self = fresh;
@@ -246,6 +253,9 @@ impl Session {
             Ok(Err(e)) => Some(clean_error(&e.to_string())),
             Err(p) => Some(format!("engine panic: {}", p.downcast_ref::<String>().cloned().or(p.downcast_ref::<&str>().map(|s| s.to_string())).unwrap_or_default())),
         };
+        // Rollback must finish even after the chunk exhausted its deadline. The
+        // private restore uses raw operations and runs no painter code; collection
+        // below reinstates the deadline because it can run Lua work.
         // put back what a failed chunk did (no painter code runs in restore)
         if fail.is_some()
             && let Some(snap) = snap.take()
@@ -715,6 +725,17 @@ mod tests {
         // a failure that touched no earlier table costs no rebuild
         s.run("local u = {}; u.x = pencil(); error('stop')").unwrap_err();
         assert!(!s.stale);
+        // Updating an existing array value restores both contents and next order;
+        // it must not pay for an unnecessary replay.
+        s.run("a = {1, 2, 3}").unwrap();
+        live.push(String::new());
+        s.run("a[2] = 99; error('stop')").unwrap_err();
+        assert!(!s.stale, "an exactly restored table should not rebuild");
+        assert_eq!(s.lua.globals().get::<Table>("a").unwrap().get::<i64>(2).unwrap(), 2);
+        // Sparse-array length is observable too, even if next order is unchanged.
+        live.push(s.run("sparse = {}; sparse[2] = 2; sparse_length = #sparse").unwrap().out);
+        s.run("for i = 9, 13 do sparse[i] = i end; for i = 9, 13 do sparse[i] = nil end; sparse[2] = 99; error('stop')").unwrap_err();
+        live.push(s.run("assert(#sparse == sparse_length)").unwrap().out);
         // grows the table and empties it again: the same contents, a bigger table
         s.run("for i = 1, 200 do t['x' .. i] = i end; for i = 1, 200 do t['x' .. i] = nil end; error('stop')").unwrap_err();
         live.push(s.run(order).unwrap().out);

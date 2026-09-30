@@ -547,12 +547,12 @@ fn serve(args: &[String]) -> Result<(), String> {
             break;
         }
         // a failed chunk left the state inexact (session.rs `stale`): rebuild it from the log
-        // now, after the reply, so the next request waits for it rather than timing out in it
+        // after the reply; status stays available and other requests are refused until done
         if srv.s.stale {
             drop(conn);
             let t0 = Instant::now();
             eprintln!("rebuilding from the log ({} chunks)", srv.s.log.len());
-            if let Err(e) = srv.s.rebuild() {
+            if let Err(e) = rebuild_serving_status(&l, &mut srv) {
                 let _ = std::fs::remove_file(&sock);
                 return Err(format!("easel: fatal: {e}"));
             }
@@ -561,6 +561,85 @@ fn serve(args: &[String]) -> Result<(), String> {
         }
     }
     Ok(())
+}
+
+/// Only the socket and immutable integrity witness cross threads. Lua (and its
+/// Rc-backed engine state) stays on the serving thread throughout the replay.
+fn rebuild_serving_status(listener: &UnixListener, srv: &mut Server) -> Result<(), String> {
+    use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+    let completed = AtomicUsize::new(0);
+    let done = AtomicBool::new(false);
+    struct Stop<'a>(&'a AtomicBool);
+    impl Drop for Stop<'_> {
+        fn drop(&mut self) {
+            self.0.store(true, Ordering::Release);
+        }
+    }
+    // An absolute request deadline also bounds clients that trickle bytes.
+    struct Reader<'a> {
+        conn: &'a mut UnixStream,
+        until: Instant,
+        done: &'a AtomicBool,
+    }
+    impl Read for Reader<'_> {
+        fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+            let remaining = self.until.saturating_duration_since(Instant::now());
+            if remaining.is_zero() || self.done.load(Ordering::Acquire) {
+                return Err(std::io::Error::new(std::io::ErrorKind::TimedOut, "rebuild request deadline reached"));
+            }
+            self.conn.set_read_timeout(Some(remaining))?;
+            self.conn.read(buf)
+        }
+    }
+    let total = srv.s.log.len();
+
+    let name = &srv.name;
+    let written = srv.written.as_deref().ok_or("session integrity: uninitialized log")?;
+    listener.set_nonblocking(true).map_err(|e| e.to_string())?;
+    let result = std::thread::scope(|scope| {
+        let worker = scope.spawn(|| -> Result<(), String> {
+            while !done.load(Ordering::Acquire) {
+                let mut conn = match listener.accept() {
+                    Ok((conn, _)) => conn,
+                    Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {
+                        std::thread::park_timeout(Duration::from_millis(5));
+                        continue;
+                    }
+                    Err(e) => return Err(e.to_string()),
+                };
+                // A stalled reader/writer must neither block status indefinitely nor
+                // keep the scoped helper alive after replay finishes.
+                conn.set_nonblocking(false).map_err(|e| e.to_string())?;
+                let _ = conn.set_read_timeout(Some(Duration::from_millis(100)));
+                let _ = conn.set_write_timeout(Some(Duration::from_millis(100)));
+                let mut reader = Reader { conn: &mut conn, until: Instant::now() + Duration::from_millis(100), done: &done };
+                let reply = match read_request(&mut reader) {
+                    Err(e) => format!("err\n{e}\n"),
+                    Ok(req) => match validate_log(name, written) {
+                        Err(e) => format!("err\n{e}\n"),
+                        Ok(()) => {
+                            let head = req.split(|b| *b == b'\n').next().unwrap_or_default();
+                            if head.split(|b| *b == b'\t').next() == Some(b"status".as_slice()) {
+                                format!("ok\nrebuilding from the log ({} of {total} chunks)\n", completed.load(Ordering::Acquire))
+                            } else {
+                                "err\nthe easel is rebuilding from the log; retry after it finishes\n".into()
+                            }
+                        }
+                    },
+                };
+                let _ = conn.write_all(reply.as_bytes());
+            }
+            Ok(())
+        });
+        let stop = Stop(&done);
+        let replay = srv.s.rebuild_with_progress(|k, _| completed.store(k, Ordering::Release));
+        drop(stop);
+        worker.thread().unpark();
+        let served = worker.join().map_err(|_| "rebuild status listener panicked".to_string())?;
+        replay.and(served)
+    });
+    let blocking = listener.set_nonblocking(false).map_err(|e| e.to_string());
+    result.and(blocking)
 }
 
 /// The session's committed record: the log as the session last wrote it.
@@ -730,7 +809,7 @@ impl Server {
                     Ok(out)
                 }
                 Err(e) if self.s.stale => Err(format!(
-                    "{e}\n(the chunk failed and changed nothing. It had changed tables from earlier chunks, and though what they hold is back, how they are laid out (which decides the order `pairs` walks them in) can't be put back, so the easel now rebuilds the painting from its log, as a reopen does; the next command waits for that)"
+                    "{e}\n(the chunk failed and changed nothing. It had changed tables from earlier chunks, and though what they hold is back, how they are laid out (which decides the order `pairs` walks them in) can't be put back, so the easel now rebuilds the painting from its log, as a reopen does; status reports progress and other commands must retry after that)"
                 )),
                 Err(e) => Err(format!("{e}\n(the chunk failed and changed nothing)")),
             },

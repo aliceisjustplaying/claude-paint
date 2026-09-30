@@ -111,3 +111,93 @@ fn a_running_session_refuses_every_request_while_its_log_is_edited() {
     assert!(!root().join("notes/journal.md").exists() || !std::fs::read_to_string(root().join("notes/journal.md")).unwrap().contains("edited"));
     ok(&with(&["close"]));
 }
+
+// Unlike the Session rollback test, this exercises concurrent clients of the real
+// server: replay must not occupy the only listener or silently queue mutations.
+#[test]
+fn rebuilding_serves_progress_and_refuses_nonstatus_requests() {
+    use std::{
+        io::{Read, Write},
+        os::unix::net::UnixStream,
+        process::{Child, Stdio},
+        time::{Duration, Instant},
+    };
+    struct Server(Child);
+    impl Drop for Server {
+        fn drop(&mut self) {
+            let _ = self.0.kill();
+            let _ = self.0.wait();
+        }
+    }
+    let name = "rebuild-boundary";
+    let dir = root().join("out/easel").join(name);
+    std::fs::create_dir_all(&dir).unwrap();
+    let socket = dir.join("sock");
+    let mut server = Server(Command::new(env!("CARGO_BIN_EXE_easel"))
+        .args(["serve", name])
+        .env("EASEL_ROOT", root())
+        .stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null())
+        .spawn().unwrap());
+    let start = Instant::now();
+    while !socket.exists() {
+        assert!(server.0.try_wait().unwrap().is_none(), "server exited at startup");
+        assert!(start.elapsed() < Duration::from_secs(10), "server did not bind");
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    let request = |head: &str, payload: &str, timeout: Duration| {
+        let mut conn = UnixStream::connect(&socket).unwrap();
+        conn.set_read_timeout(Some(timeout)).unwrap();
+        conn.set_write_timeout(Some(timeout)).unwrap();
+        let body = format!("{head}\n{payload}");
+        write!(conn, "{}\n{body}", body.len()).unwrap();
+        let mut reply = String::new();
+        conn.read_to_string(&mut reply).unwrap_or_else(|e| panic!("{head} did not answer within {timeout:?}: {e}; partial reply: {reply:?}"));
+        reply
+    };
+    let normal = Duration::from_secs(60);
+    let prompt = Duration::from_secs(1);
+    assert!(request("do", "t = {}; for i = 1, 30 do t['k' .. i] = i end", normal).starts_with("ok\n"));
+    // CPU only, fixed bounds and constant memory. Three slow committed chunks
+    // leave time to observe both zero and intermediate replay progress.
+    for _ in 0..3 {
+        assert!(request("do", "local sum = 0; for i = 1, 150000000 do sum = sum + i end; assert(sum > 0)", normal).starts_with("ok\n"));
+    }
+    let log = root().join("paintings/lua").join(format!("{name}.lua"));
+    let original = std::fs::read(&log).unwrap();
+    let failed = request("do", "for i = 1, 1000 do t['x' .. i] = i end; for i = 1, 1000 do t['x' .. i] = nil end; error('force rebuild')", normal);
+    assert!(failed.starts_with("err\n") && failed.contains("force rebuild") && failed.contains("rebuild"), "{failed}");
+    let progress = |reply: &str| -> Option<usize> {
+        reply.strip_prefix("ok\nrebuilding from the log (")
+            .and_then(|s| s.strip_suffix(" of 4 chunks)\n"))
+            .map(|k| k.parse::<usize>().expect("numeric completed-chunk count"))
+    };
+    let first = request("status", "", prompt);
+    let mut previous = progress(&first).unwrap_or_else(|| panic!("expected rebuilding progress, got {first:?}"));
+    assert!(previous < 4, "rebuild finished before concurrent requests");
+    // These requests have observable side effects if queued instead of refused;
+    // include check, whose server dispatch bypasses ordinary handle().
+    for (head, payload) in [("do", "t.unexpected = true"), ("note", "must not be journaled"), ("frames\ton", ""), ("check", ""), ("close", "")] {
+        assert_eq!(request(head, payload, prompt), "err\nthe easel is rebuilding from the log; retry after it finishes\n", "{head}");
+    }
+    let deadline = Instant::now() + Duration::from_secs(60);
+    let mut saw_intermediate = false;
+    loop {
+        assert!(Instant::now() < deadline, "rebuild did not finish");
+        let reply = request("status", "", prompt);
+        if let Some(k) = progress(&reply) {
+            assert!(k >= previous && k <= 4, "progress regressed or exceeded total: {reply:?}");
+            saw_intermediate |= k > 1 && k < 4;
+            previous = k;
+        } else {
+            assert_eq!(reply, "ok\n4 chunks · 2400px · no canvas yet\n");
+            break;
+        }
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    assert!(saw_intermediate, "never observed a completed slow chunk during rebuild");
+    assert_eq!(std::fs::read(&log).unwrap(), original, "refused requests or failed chunk changed the log");
+    assert_eq!(std::fs::read(dir.join("committed.lua")).unwrap(), original);
+    assert!(!root().join("notes/journal.md").exists() || !std::fs::read_to_string(root().join("notes/journal.md")).unwrap().contains("must not be journaled"));
+    assert!(request("do", "assert(t.unexpected == nil); local n = 0; for _ in pairs(t) do n = n + 1 end; assert(n == 30)", normal).starts_with("ok\n"));
+    assert!(request("close", "", normal).starts_with("ok\n"));
+}

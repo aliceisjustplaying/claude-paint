@@ -175,13 +175,38 @@ impl Canvas {
             if std::env::var_os("PAINT_DEBUG").is_some() {
                 eprintln!("  {} tiles", order.len());
             }
-            let surf = self.surf();
-            // tiles run in parallel wherever that can't change the result: a
-            // tile starts once every earlier tile (in `order`) it overlaps is
-            // done
-            let dirty = run_ordered(&order, &rects, |t| paint(surf, t, first.wrapping_add(offsets[t]))).into_iter().fold(None, union);
-            if let Some((x0, y0, x1, y1)) = dirty {
-                self.wet.touch(x0, y0, x1, y1);
+            // frames on (crate::frames): the batch's tiles run in consecutive groups of about one frame's
+            // hand time, in the same order with the same stroke ids, with a frame taken between groups; a
+            // group starts once the one before is done, so this paints what one run over `order` does
+            let groups: Vec<Vec<usize>> = if crate::frames::on() {
+                let (every, mut gs, mut cur, mut acc) = (crate::frames::every(), Vec::new(), Vec::new(), 0.0);
+                for &t in &order {
+                    cur.push(t);
+                    acc += secs[t];
+                    if acc >= every {
+                        gs.push(std::mem::take(&mut cur));
+                        acc = 0.0;
+                    }
+                }
+                if !cur.is_empty() {
+                    gs.push(cur);
+                }
+                gs
+            } else {
+                vec![order]
+            };
+            for group in groups {
+                let surf = self.surf();
+                // tiles run in parallel wherever that can't change the result: a
+                // tile starts once every earlier tile (in `order`) it overlaps is
+                // done
+                let dirty = run_ordered(&group, &rects, |t| paint(surf, t, first.wrapping_add(offsets[t]))).into_iter().fold(None, union);
+                if let Some((x0, y0, x1, y1)) = dirty {
+                    self.wet.touch(x0, y0, x1, y1);
+                }
+                if crate::frames::on() {
+                    crate::frames::painted(self, group.iter().map(|&t| secs[t]).sum());
+                }
             }
             if bi + 1 < n_batches {
                 self.hand_pass(bsecs);

@@ -669,7 +669,7 @@ fn new_look(dir: &Path, png: &[u8]) -> Result<PathBuf, String> {
     let number = |name: &str| name.strip_prefix("look-")?.strip_suffix(".png")?.parse::<u64>().ok();
     let mut n = std::fs::read_dir(dir).map_err(|e| e.to_string())?.filter_map(|e| number(&e.ok()?.file_name().to_string_lossy())).max().unwrap_or(0);
     loop {
-        n += 1;
+        n = n.checked_add(1).ok_or_else(|| format!("{}: no look number above look-{n}.png is left", dir.display()))?;
         let p = dir.join(format!("look-{n:04}.png"));
         match std::fs::OpenOptions::new().write(true).create_new(true).open(&p) {
             Ok(mut f) => {
@@ -974,6 +974,22 @@ fn run(args: &[String]) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A stray look numbered at the top of u64 leaves no number above it: the look is
+    /// refused, not a panic (debug) or a wrap back to look-0000 (release).
+    #[test]
+    fn a_look_above_the_last_number_is_refused() {
+        let dir = std::env::temp_dir().join(format!("easel-look-top-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join(format!("look-{}.png", u64::MAX)), b"stray").unwrap();
+        let r = std::panic::catch_unwind(|| new_look(&dir, b"png"));
+        let names: Vec<_> = std::fs::read_dir(&dir).unwrap().map(|e| e.unwrap().file_name().to_string_lossy().into_owned()).collect();
+        let _ = std::fs::remove_dir_all(&dir);
+        let r = r.expect("new_look panicked");
+        assert!(r.as_ref().is_err_and(|e| e.contains("look")), "{r:?}");
+        assert_eq!(names.len(), 1, "a look was written: {names:?}");
+    }
 
     /// A request is served from its length line, even when the client's end of file never
     /// comes (macOS sometimes loses a half-close; the server then waited for it until the

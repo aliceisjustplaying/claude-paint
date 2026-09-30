@@ -67,7 +67,8 @@ pub use shape::Shape;
 /// changes a past painting:
 /// - 1: every painting before the version was recorded.
 /// - 2: fresh paint over drying paint mixes into its cure as it is laid (a
-///   stroke right after it feels the film as it would after `wait(0)`).
+///   stroke right after it feels the film as it would after `wait(0)`); a
+///   world's thin far bodies keep their depth (`World::add_body`).
 pub const ENGINE: u32 = 2;
 
 /// Hermite smoothstep.

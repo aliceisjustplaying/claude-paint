@@ -429,6 +429,23 @@ impl Sdf {
         }
     }
 
+    /// The same body moved by `d` (units). Noise (`rough`) stays with the
+    /// frame, not the body.
+    pub fn shifted(&self, d: V3) -> Sdf {
+        let m = |c: &V3| [c[0] + d[0], c[1] + d[1], c[2] + d[2]];
+        match self {
+            Sdf::Ellipsoid { c, r } => Sdf::Ellipsoid { c: m(c), r: *r },
+            Sdf::Block { c, half, round } => Sdf::Block { c: m(c), half: *half, round: *round },
+            Sdf::Plane { at, n } => Sdf::Plane { at: m(at), n: *n },
+            Sdf::Union(v, k) => Sdf::Union(v.iter().map(|s| s.shifted(d)).collect(), *k),
+            Sdf::Inter(v, k) => Sdf::Inter(v.iter().map(|s| s.shifted(d)).collect(), *k),
+            Sdf::Subtract(a, b, k) => Sdf::Subtract(Box::new(a.shifted(d)), Box::new(b.shifted(d)), *k),
+            Sdf::Turn { body, c, m: r } => Sdf::Turn { body: Box::new(body.shifted(d)), c: m(c), m: *r },
+            Sdf::Rough { body, amp, period, noise, ridged } => Sdf::Rough { body: Box::new(body.shifted(d)), amp: *amp, period: *period, noise: noise.clone(), ridged: *ridged },
+            Sdf::Facet(b, id) => Sdf::Facet(Box::new(b.shifted(d)), *id),
+        }
+    }
+
     /// Unit normal (gradient of the distance) at `p`.
     pub fn normal(&self, p: V3, h: f32) -> V3 {
         // tetrahedron of samples

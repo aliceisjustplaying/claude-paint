@@ -68,7 +68,8 @@ pub use shape::Shape;
 /// - 1: every painting before the version was recorded.
 /// - 2: fresh paint over drying paint mixes into its cure as it is laid (a
 ///   stroke right after it feels the film as it would after `wait(0)`); a
-///   world's thin far bodies keep their depth (`World::add_body`).
+///   world's thin far bodies keep their depth (`World::add_body`), and rays
+///   from far off (reflections) don't step over them (`World::trace`).
 pub const ENGINE: u32 = 2;
 
 /// Hermite smoothstep.

@@ -92,6 +92,22 @@ def test_a_late_result_reaches_a_client_that_already_had_the_call(home, server):
     assert r3["updates"] == []
 
 
+def test_a_painter_whose_folder_is_gone_is_served_from_the_archive(home, server):
+    # a round's worktree, removed: its painting's source is kept in archive/sources/<folder name>
+    tmp_path, _, log = home
+    gone = tmp_path / "src" / "a" / "claude-paint-r7-arm2"
+    rel = "paintings/src/bin/pond_poplars.rs"
+    log.write_text(start(str(gone)) + line({"type": "message", "message": {"role": "assistant", "content": [
+        {"type": "toolCall", "id": "c1", "name": "bash", "arguments": {"command": "cargo paint pond_poplars"}}]}}))
+    with open(os.path.join(os.path.dirname(HERE), "archive", "sources", "claude-paint-r7-arm2", rel), "rb") as fh:
+        kept = fh.read()
+    assert server(f"/api/file?p={PAINTER}&f={rel}") == (200, kept)
+    out = tmp_path / "out"
+    r = export(tmp_path, out)
+    assert r.returncode == 0, r.stderr
+    assert (out / "data" / PAINTER / "file" / rel).read_bytes() == kept
+
+
 def export(tmp_path, out):
     env = dict(os.environ, HOME=str(tmp_path))
     return subprocess.run([sys.executable, os.path.join(HERE, "export_static.py"), str(out)],

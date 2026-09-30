@@ -7,7 +7,7 @@
 
 Writes <out>/index.html (the viewer, reading files instead of the live API), <out>/data/sessions.json and,
 per painter, data/<painter>/events.json (with the image extensions), data/<painter>/img/<i>.<ext> and
-data/<painter>/file/<the painting's source>. Every text response is scrubbed like the public server's
+data/<painter>/file/<the painting's source> (from archive/sources/ once the painter's folder is gone). Every text response is scrubbed like the public server's
 (home folder -> ~, account name -> user); the export stops if a scrubbed file still names either.
 
 The export owns <out>: it keeps a list of the files it wrote in <out>/.studio-export and, on the next run,

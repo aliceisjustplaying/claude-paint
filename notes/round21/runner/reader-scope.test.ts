@@ -4,7 +4,7 @@ import { mkdirSync, mkdtempSync, realpathSync, symlinkSync, writeFileSync } from
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
-import { readerScope, readPath, writePath } from "./reader-scope.ts";
+import { checkRecordContent, readerScope, readPath, writePath } from "./reader-scope.ts";
 
 function fixture() {
 	const top = realpathSync(mkdtempSync(join(tmpdir(), "reader-")));
@@ -81,4 +81,16 @@ test("a run folder reached through a link (as macOS's temp folder is) reads its 
 	}
 	writeFileSync(out, "record");
 	assert.equal(readPath(scope, run, "p1_record.md"), f.out);
+});
+
+test("a structured record must be JSON, so the reader fixes its syntax in the session", () => {
+	const f = fixture();
+	const out = join(f.run, "p1_observations.json");
+	const scope = readerScope(JSON.stringify({ read: [f.log], write: out }));
+	assert.equal(writePath(scope, f.run, "p1_observations.json"), out);
+	checkRecordContent(scope, JSON.stringify({ schema: "chain-observations/1", observations: [] }));
+	for (const bad of ["## Blending\n- The badger only moves wet paint.\n", '{"schema": "chain-observations/1",}', "", undefined])
+		assert.throws(() => checkRecordContent(scope, bad), /^Error: not JSON/, String(bad));
+	// a free-text record is written as it is
+	checkRecordContent(f.scope, "## Blending\n- The badger only moves wet paint.\n");
 });

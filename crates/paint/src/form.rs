@@ -157,8 +157,12 @@ pub struct Shade {
 
 impl Shade {
     /// Membership of the light family (1) versus the shadow family (0), with
-    /// a soft halftone of width `soft` around the terminator.
+    /// a soft halftone of width `soft` around the terminator (a hard step at
+    /// 0: lit only where direct light arrives).
     pub fn lit(&self, soft: f32) -> f32 {
+        if soft <= 0.0 {
+            return if self.direct > 0.0 { 1.0 } else { 0.0 };
+        }
         crate::smoothstep(-soft * 0.5, soft * 0.5, self.direct - soft * 0.5)
     }
 }
@@ -422,6 +426,23 @@ impl Sdf {
                 ([lo[0] - a, lo[1] - a, lo[2] - a], [hi[0] + a, hi[1] + a, hi[2] + a])
             }
             Sdf::Facet(b, _) => b.aabb(),
+        }
+    }
+
+    /// The same body moved by `d` (units). Noise (`rough`) stays with the
+    /// frame, not the body.
+    pub fn shifted(&self, d: V3) -> Sdf {
+        let m = |c: &V3| [c[0] + d[0], c[1] + d[1], c[2] + d[2]];
+        match self {
+            Sdf::Ellipsoid { c, r } => Sdf::Ellipsoid { c: m(c), r: *r },
+            Sdf::Block { c, half, round } => Sdf::Block { c: m(c), half: *half, round: *round },
+            Sdf::Plane { at, n } => Sdf::Plane { at: m(at), n: *n },
+            Sdf::Union(v, k) => Sdf::Union(v.iter().map(|s| s.shifted(d)).collect(), *k),
+            Sdf::Inter(v, k) => Sdf::Inter(v.iter().map(|s| s.shifted(d)).collect(), *k),
+            Sdf::Subtract(a, b, k) => Sdf::Subtract(Box::new(a.shifted(d)), Box::new(b.shifted(d)), *k),
+            Sdf::Turn { body, c, m: r } => Sdf::Turn { body: Box::new(body.shifted(d)), c: m(c), m: *r },
+            Sdf::Rough { body, amp, period, noise, ridged } => Sdf::Rough { body: Box::new(body.shifted(d)), amp: *amp, period: *period, noise: noise.clone(), ridged: *ridged },
+            Sdf::Facet(b, id) => Sdf::Facet(Box::new(b.shifted(d)), *id),
         }
     }
 

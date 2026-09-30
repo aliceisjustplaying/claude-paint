@@ -61,6 +61,17 @@ pub use graphite::{Lead, Medium};
 pub use rng::Rng;
 pub use shape::Shape;
 
+/// The engine version new paintings are painted with. A painting replays
+/// with the version it was painted with (its log's `--@ engine` line; a log
+/// without one is version 1), so a fix that changes what paint does never
+/// changes a past painting:
+/// - 1: every painting before the version was recorded.
+/// - 2: fresh paint over drying paint mixes into its cure as it is laid (a
+///   stroke right after it feels the film as it would after `wait(0)`); a
+///   world's thin far bodies keep their depth (`World::add_body`), and rays
+///   from far off (reflections) don't step over them (`World::trace`).
+pub const ENGINE: u32 = 2;
+
 /// Hermite smoothstep.
 #[inline]
 pub fn smoothstep(e0: f32, e1: f32, x: f32) -> f32 {

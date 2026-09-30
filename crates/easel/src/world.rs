@@ -63,11 +63,13 @@ struct Recipe {
     bodies: Vec<(Spot, Sdf, bool)>,
     /// Motifs painted by hand, at a depth (depth.rs).
     layers: Vec<(String, Arc<Mask>, paint::scene::LayerDepth)>,
+    /// The painting's engine version (`paint::ENGINE`).
+    engine: u32,
 }
 
 impl Recipe {
     fn build(&self) -> World {
-        let mut w = World::new(self.view, self.horizon, self.eye).fov(self.view[2], self.fov);
+        let mut w = World::new(self.view, self.horizon, self.eye).fov(self.view[2], self.fov).engine(self.engine);
         if let Some(g) = &self.ground {
             let g = g.clone();
             w = w.ground(move |x, z| g.get(x, z));
@@ -158,6 +160,9 @@ pub struct ViewBox {
 impl FormHolder for ViewBox {
     fn form(&self) -> &Form {
         &self.view.form
+    }
+    fn built_z(&self, part: u16, z: f32) -> f32 {
+        self.view.built_z(part, z)
     }
 }
 
@@ -380,7 +385,7 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
             }
             None => None,
         };
-        let mut r = Recipe { view, horizon, eye, fov, ground: None, water, sun, visibility: num(&o, "visibility")?, backdrop: num(&o, "backdrop")?, bodies: Vec::new(), layers: Vec::new() };
+        let mut r = Recipe { view, horizon, eye, fov, ground: None, water, sun, visibility: num(&o, "visibility")?, backdrop: num(&o, "backdrop")?, bodies: Vec::new(), layers: Vec::new(), engine: st1.borrow().tubes.engine };
         if let Some(gf) = o.get::<Option<Function>>("ground")? {
             // sample over the view: X/Z across, log Z along
             let cam = r.build();

@@ -38,7 +38,9 @@ After a painter's last sitting, in the background (the next painter doesn't wait
     (run/<lane>/p<n>_check.log, workdir run/<lane>/p<n>_check/);
   - finishing: varnish and cracks on a replay of the log (run/<lane><n>_finished.png; the
     painter's own save is untouched).
-Then, in a chain, a reader writes the record for the next painter.
+Then, in a chain, a reader writes the record for the next painter, launched as isolated as the
+painter (reader.ts, reader_system_prompt.md; read and write only, checked by reader.ts against
+READER_SCOPE: the logs, the journal and its brief to read, the record to write).
 
 Painters run in the clean harness (claude-paint-r19-base/harness/painter): no global
 extensions, our system prompt, bash and read only, our compaction (its thresholds set by
@@ -175,6 +177,10 @@ def lane(profile, m, painters=1, records=()):
 
 OPUS = model("anthropic", "claude-opus-5-5", "high", black=True)
 READER = ["--provider", "anthropic", "--model", "claude-opus-5-5", "--thinking", "medium"]
+# the reader's launch, as isolated as the painter's (HARNESS); pi-black for its Anthropic model
+READER_HARNESS = ["--no-extensions", "-e", str(HERE / "reader.ts"), "-e", str(BLACK),
+                  "--system-prompt", str(HERE / "reader_system_prompt.md"), "--tools", "read,write",
+                  "--no-context-files", "--no-skills", "--no-prompt-templates", "--no-approve"]
 
 # GPT-6 Luna through the ChatGPT subscription (dev runs), thinking max
 LUNA = model("openai-codex", "gpt-6-luna", "max")
@@ -614,8 +620,8 @@ def paint(name, n, d, rd):
 
 
 def reader_cmd(prompt):
-    """Round 16's reader launch: the machine's own pi setup, cwd the run folder (no painter harness)."""
-    return ["pi", "--print", "--no-context-files", "--no-skills", "--no-prompt-templates"] + READER + [prompt]
+    """The reader's launch (READER_HARNESS), cwd the run folder."""
+    return ["pi", "--print"] + READER_HARNESS + READER + [prompt]
 
 
 def export_cmd(profile, d):
@@ -885,9 +891,14 @@ def chain(name):
                   .replace("{JOURNAL}", str(d / "notes/journal.md")).replace("{OUT}", str(out)))
             (rd / f"p{n}_reader_brief.md").write_text(rb)
             log(f"{tag}: reader")
-            run(reader_cmd(f"Read {rd}/p{n}_reader_brief.md and do what it says."), rd,
-                rd / f"p{n}_reader_final.txt", rd / f"p{n}_reader_err.txt")
-            log(f"{tag}: record {'written' if out.exists() else 'MISSING'}")
+            # reader.ts lets it read these files only (a journal the painter never wrote isn't one) and write only out
+            journal = d / "notes/journal.md"
+            scope = {"read": [*logs, *([str(journal)] if journal.exists() else []), str(rd / f"p{n}_reader_brief.md")],
+                     "write": str(out)}
+            rc = run(reader_cmd(f"Read {rd}/p{n}_reader_brief.md and do what it says."), rd,
+                     rd / f"p{n}_reader_final.txt", rd / f"p{n}_reader_err.txt", {"READER_SCOPE": json.dumps(scope)})
+            log(f"{tag}: record {'written' if out.exists() else 'MISSING'}"
+                + (f" (the reader exited {rc}, see {rd}/p{n}_reader_err.txt)" if rc else ""))
         (rd / f"p{n}.done").write_text(time.strftime("%F %T"))
     log(f"lane {name} finished")
 

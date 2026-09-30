@@ -342,8 +342,9 @@ pub(crate) struct Bristle {
     cure: f32,
 }
 
-/// A brush in the hand, with paint in its bristles.
-#[derive(Clone)]
+/// A brush in the hand, with paint in its bristles. (`Debug` is part of
+/// `easel run --state-digest`.)
+#[derive(Clone, Debug)]
 pub struct Held {
     pub tool: Tool,
     pub(crate) bristles: Vec<Bristle>,

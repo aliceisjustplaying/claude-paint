@@ -90,3 +90,48 @@ print(drying(500, 200), drying(500, 490))
     let first = o1.lines().next().unwrap();
     assert!(first.starts_with("day 1, ") && first > "day 1, 09:15", "{o1}");
 }
+
+/// `run --state-digest` writes one line of state digests per chunk, and two
+/// replays of a log (here at different thread counts) write the same digests:
+/// canvas (wet layer and drying state included), held brushes and studio.
+#[test]
+fn state_digests_are_the_same_in_every_replay() {
+    let program = r#"
+--@ chunk 1
+canvas{size=440, aspect=5, linen=15, seed=5, ground={{pile={{"lead white", 3}, {"yellow ochre", 1}}, um=120, apply="knife"}}}
+--@ chunk 2
+p = pile{{"lead white", 4}, {"cobalt blue", 1}, medium=0.3}
+work(rect(0, 0, 1000, 90), {hand="broad", pile=p, angle=0, coverage=3})
+wait(30)
+--@ chunk 3
+b = brush("filbert", 5); b:load(pile{{"raw umber", 1}, {"bone black", 1}}, 0.8)
+for i = 1, 12 do b:stroke({{60 + 70 * i, 150}, {90 + 70 * i, 40}}) end
+"#;
+    let src = dir().join("digest.lua");
+    std::fs::write(&src, program).unwrap();
+    let digests = |threads: &str, tag: &str| {
+        let (png, txt) = (dir().join(format!("{tag}.png")), dir().join(format!("{tag}.txt")));
+        let out = Command::new(env!("CARGO_BIN_EXE_easel"))
+            .args(["run", src.to_str().unwrap(), "--out", png.to_str().unwrap(), "--state-digest", txt.to_str().unwrap()])
+            .env("RAYON_NUM_THREADS", threads)
+            .output()
+            .unwrap();
+        assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
+        // drop the chunk's timing: every other field is state
+        let text = std::fs::read_to_string(&txt).unwrap();
+        text.lines().map(|l| l.split(' ').filter(|f| !f.starts_with("secs=")).collect::<Vec<_>>().join(" ")).collect::<Vec<_>>()
+    };
+    let a = digests("1", "digest-1");
+    let b = digests("4", "digest-4");
+    assert_eq!(a, b, "the state digests differ between two replays");
+    assert_eq!(a.len(), 3, "{a:?}");
+    for (n, l) in a.iter().enumerate() {
+        let f: Vec<&str> = l.split(' ').collect();
+        assert_eq!(f[..2], ["chunk", &(n + 1).to_string()], "{l}");
+        assert!(f[2].starts_with("canvas=") && f[2] != "canvas=0000000000000000" && f[3].starts_with("brushes=") && f[5].starts_with("studio="), "{l}");
+    }
+    // the brush made in chunk 3 is held
+    assert!(a[1].contains("nbrushes=0") && a[2].contains("nbrushes=1"), "{a:?}");
+    // the wait and the brush changed the canvas
+    assert!(a[0][8..30] != a[1][8..30] && a[1][8..30] != a[2][8..30], "{a:?}");
+}

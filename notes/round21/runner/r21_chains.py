@@ -40,7 +40,9 @@ After a painter's last sitting, in the background (the next painter doesn't wait
     painter's own save is untouched).
 Then, in a chain, a reader writes the record for the next painter, launched as isolated as the
 painter (reader.ts, reader_system_prompt.md; read and write only, checked by reader.ts against
-READER_SCOPE: the logs, the journal and its brief to read, the record to write).
+READER_SCOPE: the logs, the journal and its brief to read, the record to write). Lines that look
+like what to do or where things go in the picture (record_flags) only warn: they are logged and
+listed in p<n>_record.flags.md, and the record still goes on.
 
 Painters run in the clean harness (claude-paint-r19-base/harness/painter): no global
 extensions, our system prompt, bash and read only, our compaction (its thresholds set by
@@ -619,6 +621,34 @@ def paint(name, n, d, rd):
     return sittings
 
 
+# What reader_brief.md says a record isn't, in plain English words a pattern can catch (not a
+# semantic review: a paraphrase, another language or a hint gets past it). Flagged, not rejected:
+# the same words turn up in plain observations. What to do: a sentence that starts with a command
+# (after a bullet, a "Label:" or a full stop).
+PRESCRIPTION = re.compile(r"(?:^|[.;!?]\s)\s*(?:[-*]\s+|\d+[.)]\s+)?(?:[\w ]{1,30}:\s+)?"
+                          r"(?:always|never|don't|do not|keep|put|place|make|use|avoid|try|start|begin|"
+                          r"remember|leave|let|save|you should|you must|one should)\b", re.I)
+# where things go in the picture: a part of the picture, left or right, or composition words
+PLACEMENT = re.compile(r"\b(?:center|centre|middle|top|bottom|upper|lower|corner|edge|third|quarter)"
+                       r" of the (?:picture|canvas|painting|composition|image|frame)\b|\bon the (?:left|right)\b"
+                       r"|\b(?:horizon|foreground|background|middle ground|composition|focal|motif)\b", re.I)
+
+
+def record_flags(path):
+    """Lines of the record at path that look like what to do or where things go in the picture:
+    [(what, line number, line)]. A warning, not a rejection: the patterns also catch plain
+    observations, so a flagged record still reaches the next studio."""
+    if not path.exists():
+        return []
+    lines = path.read_text(errors="replace").strip().splitlines()
+    # a line that carries on the sentence before it (a wrapped line) doesn't start a sentence
+    cont = ["\u2026" + line if i and lines[i - 1].strip() and not re.search(r"[.!?:]\s*$|^\s*#", lines[i - 1])
+            and not re.match(r"\s*(?:[-*]|\d+[.)])\s", line) else line for i, line in enumerate(lines)]
+    return [(what, i, lines[i - 1]) for what, pat, ls in (("what to do", PRESCRIPTION, cont),
+                                                           ("where things go in the picture", PLACEMENT, lines))
+            for i, line in enumerate(ls, 1) if pat.search(line)]
+
+
 def reader_cmd(prompt):
     """The reader's launch (READER_HARNESS), cwd the run folder."""
     return ["pi", "--print"] + READER_HARNESS + READER + [prompt]
@@ -890,6 +920,8 @@ def chain(name):
             rb = ((HERE / "reader_brief.md").read_text().replace("{LOG}", ", ".join(logs))
                   .replace("{JOURNAL}", str(d / "notes/journal.md")).replace("{OUT}", str(out)))
             (rd / f"p{n}_reader_brief.md").write_text(rb)
+            flagged = rd / f"p{n}_record.flags.md"
+            flagged.unlink(missing_ok=True)               # an earlier attempt's flags aren't this record's
             log(f"{tag}: reader")
             # reader.ts lets it read these files only (a journal the painter never wrote isn't one) and write only out
             journal = d / "notes/journal.md"
@@ -897,8 +929,15 @@ def chain(name):
                      "write": str(out)}
             rc = run(reader_cmd(f"Read {rd}/p{n}_reader_brief.md and do what it says."), rd,
                      rd / f"p{n}_reader_final.txt", rd / f"p{n}_reader_err.txt", {"READER_SCOPE": json.dumps(scope)})
+            flags = record_flags(out)
+            if flags:
+                flagged.write_text(f"# p{n}_record.md: lines the pattern gate flagged (a warning, not a rejection)\n"
+                                   + "".join(f"- line {i} ({what}): {line.strip()}\n" for what, i, line in flags))
+                log(f"{tag}: RECORD FLAGGED ({len(flags)} lines, see {flagged}): "
+                    + "; ".join(f"line {i} ({what}): {line.strip()[:120]}" for what, i, line in flags))
             log(f"{tag}: record {'written' if out.exists() else 'MISSING'}"
-                + (f" (the reader exited {rc}, see {rd}/p{n}_reader_err.txt)" if rc else ""))
+                + (f" (the reader exited {rc}, see {rd}/p{n}_reader_err.txt)" if rc else "")
+                + (f" ({len(flags)} flagged lines went on with it, not a review of what it says)" if flags else ""))
         (rd / f"p{n}.done").write_text(time.strftime("%F %T"))
     log(f"lane {name} finished")
 

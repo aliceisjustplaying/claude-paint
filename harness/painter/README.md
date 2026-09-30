@@ -95,7 +95,9 @@ session file keeps every image for the studio viewer. It replaces the image of
 older tool results with a line naming the file, `[an earlier look:
 out/easel/painting/look-0031.png]`, and keeps the newest images: at most 20,
 and at most 12 MB of base64. Old images go 5 at a time, so the request prefix
-(and the prompt cache) changes once every 5 looks, not with every look.
+(and the prompt cache) changes once every 5 looks, not with every look. The
+newest image stays unless it alone is over the size limit; then it goes too,
+and its line says it was left out and why (its size and the limit).
 
 Checked 2026-09-27 on a fake session holding the 74 looks of that session,
 resumed with Haiku 4.5 and a probe extension logging `before_provider_request`:

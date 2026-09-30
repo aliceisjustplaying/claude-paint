@@ -27,9 +27,20 @@ test("the size limit drops enough old images (in steps) to fit", () => {
 	assert.equal(imagesToDrop(Array(18).fill(750_000), L), 5);
 });
 
-test("the newest image is always kept, even alone over the size limit", () => {
-	assert.equal(imagesToDrop([20_000_000], L), 0);
-	assert.equal(imagesToDrop([1, 20_000_000], L), 1);
+test("the newest image is kept when it fits the size limit, and dropped when it alone is over it", () => {
+	assert.equal(imagesToDrop([12_000_000], L), 0);
+	assert.equal(imagesToDrop([20_000_000, 1], L), 1);
+	assert.equal(imagesToDrop([20_000_000], L), 1);
+	assert.equal(imagesToDrop([1, 20_000_000], L), 2);
+});
+
+test("an image alone over the size limit leaves the request, and a line says so and why", () => {
+	const msgs = [{ role: "toolResult", content: [{ type: "text", text: "look-0001.png" }, { type: "image", data: "A".repeat(13_460_000), mimeType: "image/png" }] }];
+	const r = pruneImages(msgs, { maxImages: 1, maxImageChars: 12_000_000, step: 5 });
+	assert.equal(r.dropped, 1);
+	assert.equal(r.keptChars, 0);
+	assert.equal(r.messages[0].content[1].text,
+		"[this image was left out of the request: it is 13.5 MB, over the 12 MB limit for the images in one request]");
 });
 
 function session(n: number, chars = 10) {

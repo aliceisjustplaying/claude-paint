@@ -337,6 +337,9 @@ pub(crate) struct Bristle {
     pub(crate) vol: f32,
     lat: Latent,
     hide: Prop,
+    /// Cure of the paint in it (0 fresh from the palette; paint lifted off
+    /// a drying film brings the film's).
+    cure: f32,
 }
 
 /// A brush in the hand, with paint in its bristles.
@@ -406,6 +409,7 @@ impl Held {
                     vol: 0.0,
                     lat: [0.0; LAT],
                     hide: [0.5, 0.5, 1.0],
+                    cure: 0.0,
                 }
             })
             .collect();
@@ -427,6 +431,7 @@ impl Held {
         let scatter = paint.scatter();
         for (i, b) in self.bristles.iter_mut().enumerate() {
             let k = 0.75 + 0.5 * crate::rng::hash2(i as i64, 17, 3);
+            b.cure = mix_cure(b.cure, b.vol, 0.0, amount * full * k);
             mix_into(&mut b.vol, &mut b.lat, &mut b.hide, amount * full * k, &lat, [scatter, paint.stiff, paint.drying]);
         }
     }
@@ -554,7 +559,10 @@ pub(crate) struct Surf {
     base: *const f32,
     /// Drying state (null until the canvas has waited): how open or tacky
     /// the paint under a bristle is (see `drying::feel`).
-    dry: *const crate::drying::Px,
+    dry: *mut crate::drying::Px,
+    /// Paint laid or moved updates the film's cure at once (see `add`;
+    /// engine 2). Engine 1 left it to the next `wait`.
+    cure_now: bool,
 }
 // SAFETY: callers only run brushes concurrently on pixel sets that cannot
 // overlap (tiles separated by more than the largest stroke extent).
@@ -572,8 +580,11 @@ fn grow(b: &mut Bounds, x0: usize, y0: usize, x1: usize, y1: usize) {
 }
 
 impl Surf {
+    /// Lay `v` coats of paint of cure `cure` (0: fresh) at pixel `i`: it
+    /// mixes by volume into the color and into the film's cure, so the next
+    /// bristle feels the film as it now is, not as it was at the last wait.
     #[inline]
-    unsafe fn add(&self, i: usize, v: f32, lat: &Latent, hide: Prop) {
+    unsafe fn add(&self, i: usize, v: f32, lat: &Latent, hide: Prop, cure: f32) {
         unsafe {
             if v <= 0.0 {
                 return;
@@ -589,7 +600,25 @@ impl Surf {
             for k in 0..hd.len() {
                 hd[k] += (hide[k] - hd[k]) * a;
             }
+            if self.cure_now && !self.dry.is_null() {
+                // (a film too thin for `wait` to count is bare: no cure)
+                let p = &mut *self.dry.add(i);
+                p.cure = if t < 1e-5 { 0.0 } else { p.cure + (cure - p.cure) * a };
+            }
             *vol = t;
+        }
+    }
+
+    /// Lift `v` coats off pixel `i`. The paint left keeps its cure; a pixel
+    /// left bare (as `wait` judges it) holds no film to have one.
+    #[inline]
+    unsafe fn take(&self, i: usize, v: f32) {
+        unsafe {
+            let vol = &mut *self.vol.add(i);
+            *vol -= v;
+            if self.cure_now && *vol < 1e-5 && !self.dry.is_null() {
+                (*self.dry.add(i)).cure = 0.0;
+            }
         }
     }
 }
@@ -634,7 +663,8 @@ impl Canvas {
             floor: self.wet.floor.as_mut_ptr(),
             cover: self.wet.cover.as_mut_ptr(),
             base: self.base.as_ref().unwrap().1.as_ptr(),
-            dry: if self.wet.clock.px.len() == n { self.wet.clock.px.as_ptr() } else { std::ptr::null() },
+            dry: if self.wet.clock.px.len() == n { self.wet.clock.px.as_mut_ptr() } else { std::ptr::null_mut() },
+            cure_now: self.engine >= 2,
         }
     }
 
@@ -720,6 +750,13 @@ fn cohesion(held: &Held, full: f32) -> f32 {
     smoothstep(0.02, 0.2, fill)
 }
 
+/// Cure of `v` coats of paint of cure `c` mixed into `vol` coats of cure
+/// `cure`.
+#[inline]
+fn mix_cure(cure: f32, vol: f32, c: f32, v: f32) -> f32 {
+    if v <= 0.0 { cure } else { cure + (c - cure) * v / (vol + v) }
+}
+
 /// Capillary feed: paint in a soft tuft runs from full hairs to spent ones
 /// (the belly feeds the tip). Moves the share `k` of every hair's paint into
 /// a common pool and shares it out evenly; volume is conserved exactly and
@@ -728,9 +765,10 @@ fn feed(bristles: &mut [Bristle], k: f32) {
     if k <= 0.0 || bristles.is_empty() {
         return;
     }
-    let (mut tv, mut lat, mut hide) = (0.0f32, [0.0f32; LAT], [0.0f32; 3]);
+    let (mut tv, mut lat, mut hide, mut cure) = (0.0f32, [0.0f32; LAT], [0.0f32; 3], 0.0f32);
     for b in bristles.iter() {
         tv += b.vol;
+        cure += b.cure * b.vol;
         for (l, bl) in lat.iter_mut().zip(&b.lat) {
             *l += bl * b.vol;
         }
@@ -745,9 +783,11 @@ fn feed(bristles: &mut [Bristle], k: f32) {
         *l /= tv;
     }
     hide = [hide[0] / tv, hide[1] / tv, hide[2] / tv];
+    cure /= tv;
     let share = k * tv / bristles.len() as f32;
     for b in bristles.iter_mut() {
         b.vol *= 1.0 - k;
+        b.cure = mix_cure(b.cure, b.vol, cure, share);
         mix_into(&mut b.vol, &mut b.lat, &mut b.hide, share, &lat, hide);
     }
 }
@@ -1271,7 +1311,8 @@ unsafe fn exchange(
         let mut got_v = 0.0f32;
         let mut got_l = [0.0f32; LAT];
         let mut got_h: Prop = [0.0; 3];
-        let (blat, bhide) = (br.lat, br.hide);
+        let mut got_c = 0.0f32;
+        let (blat, bhide, bcure) = (br.lat, br.hide, br.cure);
         for y in y0..y1 {
             for x in x0..x1 {
                 let wt = wts[(y - y0) * bw + (x - x0)];
@@ -1279,20 +1320,18 @@ unsafe fn exchange(
                     continue;
                 }
                 let i = (y - oy) * bw_buf + x - ox;
-                let vol = &mut *sf.vol.add(i);
+                let v = *sf.vol.add(i);
                 // paint that is setting is stiff: it comes up and moves less
                 let fl = if sf.dry.is_null() { 1.0 } else { crate::drying::fluid((*sf.dry.add(i)).cure) };
                 // one stroke lifts only part of the film
                 if *sf.touched.add(i) != id {
                     *sf.touched.add(i) = id;
-                    *sf.floor.add(i) = *vol * (1.0 - tool.pickup * fl);
+                    *sf.floor.add(i) = v * (1.0 - tool.pickup * fl);
                 }
-                let v = *vol;
                 if v > 1e-6 {
                     let own = if *sf.stroke.add(i) == id { 0.15 } else { 1.0 };
                     let take = (v * tool.pickup * wt * hunger * own * fl).min((v - *sf.floor.add(i)).max(0.0));
                     if take > 0.0 {
-                        *vol -= take;
                         let tv = take * px_area;
                         got_v += tv;
                         let l = &*sf.lat.add(i);
@@ -1303,6 +1342,10 @@ unsafe fn exchange(
                         for k in 0..hp.len() {
                             got_h[k] += hp[k] * tv;
                         }
+                        if !sf.dry.is_null() {
+                            got_c += (*sf.dry.add(i)).cure * tv;
+                        }
+                        sf.take(i, take);
                     }
                 }
                 if dep_per_w > 0.0 {
@@ -1311,7 +1354,7 @@ unsafe fn exchange(
                     // the hairs of a gathered point lie over each other)
                     let cv = &mut *sf.cover.add(i);
                     *cv = if fine { ((if *sf.vol.add(i) < 1e-6 { 0.0 } else { *cv }) + wt * excl).min(1.0) } else { 1.0 };
-                    sf.add(i, dep_per_w * wt, &blat, bhide);
+                    sf.add(i, dep_per_w * wt, &blat, bhide, bcure);
                     *sf.stroke.add(i) = id;
                 }
                 // plough: move paint outward from the bristle's path, and ahead
@@ -1355,13 +1398,14 @@ unsafe fn exchange(
                                 if j != i && m > 0.0 {
                                     let l = *sf.lat.add(i);
                                     let hd = *sf.hide.add(i);
+                                    let cure = if sf.dry.is_null() { 0.0 } else { (*sf.dry.add(i)).cure };
                                     // the paint moved covers its share of
                                     // the pixel it came from
                                     // (its film there thins but still covers it)
                                     let cj = &mut *sf.cover.add(j);
                                     *cj = if fine { ((if *sf.vol.add(j) < 1e-6 { 0.0 } else { *cj }) + (m / v.max(1e-9)).min(1.0) * *sf.cover.add(i)).min(1.0) } else { 1.0 };
-                                    *sf.vol.add(i) -= m;
-                                    sf.add(j, m, &l, hd);
+                                    sf.take(i, m);
+                                    sf.add(j, m, &l, hd, cure);
                                 }
                             }
                         }
@@ -1377,6 +1421,7 @@ unsafe fn exchange(
             for g in &mut got_h {
                 *g /= got_v;
             }
+            br.cure = mix_cure(br.cure, br.vol, got_c / got_v, got_v);
             mix_into(&mut br.vol, &mut br.lat, &mut br.hide, got_v, &got_l, got_h);
         }
         let pad = (off + 2.0) as usize;

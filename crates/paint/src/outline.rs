@@ -429,12 +429,22 @@ impl Along {
     }
 }
 
-/// Knots with lognormal spacing (median `mean`, spread `sigma`).
+/// Most knots `knots_ln` lays along one line.
+const MAX_KNOTS: usize = 100_000;
+
+/// Knots with lognormal spacing (median `mean`, spread `sigma`), at most
+/// `MAX_KNOTS` (a mean too small for the line's length is raised).
 fn knots_ln(rng: &mut Rng, total: f32, mean: f32, sigma: f32) -> Vec<f32> {
+    let mean = mean.max(total / MAX_KNOTS as f32);
     let mut s = vec![0.0];
     let mut x = 0.0;
     loop {
-        x += mean * (sigma * rng.normal()).exp().clamp(0.3, 3.0);
+        let nx = x + mean * (sigma * rng.normal()).exp().clamp(0.3, 3.0);
+        // f32 stops advancing when the step is under half an ulp of x
+        if nx <= x || s.len() >= MAX_KNOTS {
+            break;
+        }
+        x = nx;
         if x >= total - mean * 0.4 {
             break;
         }
@@ -1283,6 +1293,20 @@ mod tests {
         assert_eq!(a.lines[0].pts, b.lines[0].pts);
         assert_eq!(a.strokes.len(), b.strokes.len());
         assert_ne!(a.lines[0].pts, c.lines[0].pts);
+    }
+
+    /// Lobes and facets far smaller than the line is long still end: the
+    /// knots stop when f32 can't advance and are capped.
+    #[test]
+    fn tiny_lobes_and_facets_end() {
+        let pts = [(100.0, 100.0), (900.0, 100.0), (900.0, 600.0)];
+        let mut soft = Character::soft();
+        soft.lobe = 1e-4 / 481.0;
+        let broken = Character::broken();
+        for (ch, size) in [(soft, Some(481.0)), (broken, Some(1e-45))] {
+            let o = Outline::draw(&pts, &[], true, ch, 1, size);
+            assert!(o.lines[0].pts.iter().all(|p| p.0.is_finite() && p.1.is_finite()));
+        }
     }
 
     #[test]

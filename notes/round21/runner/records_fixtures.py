@@ -125,3 +125,20 @@ def write_logs(d, logs):
         p.write_text("".join(json.dumps(e) + "\n" for e in [{"type": "session", "version": 3}] + entries))
         paths.append(p)
     return paths
+
+
+BOX = {"name": "default", "tubes_sha256": "0" * 64}
+COMMIT = "c0ffee" * 6 + "c0ff"
+
+
+def record(validated, slot=1, support=None, commit=COMMIT, box=BOX, medium="oil"):
+    """A chain-record/1 as the runner keeps it, around validate()'s result."""
+    return {"schema": "chain-record/1", "condition": "chain-inherited, non-neutral", "round": 21, "lane": "T",
+            "slot": slot, "profile": "sargent", "code": {"tag": "round-21", "commit": commit},
+            "medium": medium, "box": dict(box),
+            "support": support or {"kind": "linen", "linen": [15, 13], "ground_layers": ["knife", "roller"]},
+            "reader": {}, "logs": [], **validated}
+
+
+def recipient(commit=COMMIT, box=BOX, tubes=TUBES, medium="oil", support_kind="linen"):
+    return {"medium": medium, "support_kind": support_kind, "commit": commit, "box": dict(box), "tubes": list(tubes)}

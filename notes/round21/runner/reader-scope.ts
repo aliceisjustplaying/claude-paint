@@ -50,6 +50,19 @@ export function writePath(scope: ReaderScope, cwd: string, path: string): string
 	return scope.write;
 }
 
+/** The content the reader may write: a structured record (a .json record) must be JSON, so the
+ * reader fixes its syntax in the session; what the JSON says is checked by the runner. Throws "not
+ * JSON: ..." if it isn't. A free-text record (.md) is written as it is. */
+export function checkRecordContent(scope: ReaderScope, content: unknown): void {
+	if (!scope.write.endsWith(".json")) return;
+	if (typeof content !== "string") throw new Error("not JSON: the content isn't text");
+	try {
+		JSON.parse(content);
+	} catch (e) {
+		throw new Error(`not JSON: ${(e as Error).message}; write ${basename(scope.write)} again as JSON`);
+	}
+}
+
 /** An absolute path as pi's tools would read `path` (`@` prefix, `~`, `file://`, relative to cwd). */
 function spelled(cwd: string, path: string): string {
 	let p = path.replace(/[\u00A0\u2000-\u200A\u202F\u205F\u3000]/g, " ");

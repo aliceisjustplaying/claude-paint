@@ -101,3 +101,9 @@ def test_a_probe_that_answers_ends_the_wait_and_a_limit_keeps_it_going(monkeypat
     assert ok is True and sum("answers again" in l for l in lines) == 1
     ok, lines = probe_waits(monkeypatch, tmp_path, (1, "", GO_LIMIT), (0, "ok\n", ""))
     assert ok is True and any("still limited" in l and "attempt 1" in l for l in lines), lines
+
+
+def test_a_probe_that_answers_ok_is_available_whatever_its_stderr_says():
+    # a warning on stderr that reads like a fatal error doesn't undo a reply of ok
+    r = subprocess.CompletedProcess(["probe"], 0, "ok\n", "warning: set up billing to keep access after the trial\n")
+    assert rc21.probe_outcome(r)[0] == "available"

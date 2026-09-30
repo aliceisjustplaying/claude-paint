@@ -27,8 +27,7 @@ judgment and counts for nothing: the runner waits (CRASH_WAITS, or longer if the
 "retry in Ns") and starts another sitting; after MAX_CRASHES crashes the painter stops (NOT
 FINISHED). A usage limit (OpenCode Go's 5-hour or weekly window) is no crash: the sitting is
 marked 'limited', the runner probes the provider until it answers (LIMIT_PROBE_S, up to
-LIMIT_GIVE_UP_H hours; a probe error waiting won't fix, like a refused key or no credit, stops
-the painter at once), and then the painter carries on in the same session (CONTINUE_MESSAGE,
+LIMIT_GIVE_UP_H hours), and then the painter carries on in the same session (CONTINUE_MESSAGE,
 same sitting number) if it had worked in it, or starts a fresh sitting if not. Each attempt is
 recorded in run/<lane>/p<n>_sittings.json (a continued sitting's parts share its number).
 
@@ -38,11 +37,7 @@ After a painter's last sitting, in the background (the next painter doesn't wait
     (run/<lane>/p<n>_check.log, workdir run/<lane>/p<n>_check/);
   - finishing: varnish and cracks on a replay of the log (run/<lane><n>_finished.png; the
     painter's own save is untouched).
-Then, in a chain, a reader writes the record for the next painter, launched as isolated as the
-painter (reader.ts, reader_system_prompt.md; read and write only, checked by reader.ts against
-READER_SCOPE: the logs, the journal and its brief to read, the record to write). Lines that look
-like what to do or where things go in the picture (record_flags) only warn: they are logged and
-listed in p<n>_record.flags.md, and the record still goes on.
+Then, in a chain, a reader writes the record for the next painter.
 
 Painters run in the clean harness (claude-paint-r19-base/harness/painter): no global
 extensions, our system prompt, bash and read only, our compaction (its thresholds set by
@@ -170,32 +165,15 @@ def model(provider, name, thinking, black=False, env=None, key_from=None):
                 black=black, env=env or {}, key_from=key_from)
 
 
-RECORD_KINDS = ("free-text", "structured", "none")
-
-
-def lane(profile, m, painters=1, records=(), record_kind="free-text"):
+def lane(profile, m, painters=1, records=()):
     """profile: the studio (friedrich or blank). painters > 1: a chain, with a reader between painters.
     records: reader records from another lane's painters (paths), merged into this lane's first painter's
-    studio notes as a chain's are: this painter continues that chain.
-    record_kind: what the reader writes for the next painter: free-text (p<n>_record.md, the default,
-    round 21's record as it was), structured (p<n>_observations.json, validated by record_schema into
-    p<n>_record.json and rendered into the next studio's notes by record_render) or none (no reader;
-    the next studio gets the plain notes and the records of another lane, if any). A structured lane
-    can't continue another lane's free-text records."""
-    if record_kind not in RECORD_KINDS:
-        raise ValueError(f"record_kind={record_kind!r}: want one of {', '.join(RECORD_KINDS)}")
-    if record_kind == "structured" and records:
-        raise ValueError("a structured lane can't continue another lane's free-text records (records=)")
-    return dict(profile=profile, model=m, painters=painters, records=[Path(r) for r in records],
-                record_kind=record_kind)
+    studio notes as a chain's are: this painter continues that chain."""
+    return dict(profile=profile, model=m, painters=painters, records=[Path(r) for r in records])
 
 
 OPUS = model("anthropic", "claude-opus-5-5", "high", black=True)
 READER = ["--provider", "anthropic", "--model", "claude-opus-5-5", "--thinking", "medium"]
-# the reader's launch, as isolated as the painter's (HARNESS); pi-black for its Anthropic model
-READER_HARNESS = ["--no-extensions", "-e", str(HERE / "reader.ts"), "-e", str(BLACK),
-                  "--system-prompt", str(HERE / "reader_system_prompt.md"), "--tools", "read,write",
-                  "--no-context-files", "--no-skills", "--no-prompt-templates", "--no-approve"]
 
 # GPT-6 Luna through the ChatGPT subscription (dev runs), thinking max
 LUNA = model("openai-codex", "gpt-6-luna", "max")
@@ -393,97 +371,29 @@ def first_probe_wait(text, ended, now):
     return max(0.0, (reset + 60 if reset else LIMIT_PROBE_S) - (now - ended))
 
 
-# A probe error that waiting won't fix: how the provider is used (key, credit, model, request), not
-# an outage. Matched only in an error that isn't a usage limit or a transient one (TRANSIENT); when
-# unsure, the probe is asked again. HTTP statuses as providers and pi print them: "code": 402,
-# HTTP 401, status 403, or a leading "400: {...}".
-STATUS = r'(?:"code"\W{0,3}|\bHTTP\W{0,2}|\bstatus(?: code)?\W{0,3}|(?:^|\s)(?=\d{3}:\s))'
-PROBE_FATAL = [
-    ("the API key or its access was refused", re.compile(
-        STATUS + r"40[13]\b|no API key|(?:invalid|incorrect|missing)\W+(?:x-)?api\W?key|authentication_error"
-        r"|permission_error|\bunauthorized\b|\bforbidden\b", re.I)),
-    ("no credit or billing on the account", re.compile(
-        STATUS + r"402\b|payment required|credit balance|credits are depleted|\bbilling\b", re.I)),
-    ("the model isn't known to the provider", re.compile(
-        r"\bmodel\b[^\n.]{0,80}\b(?:not found|does not exist)(?![^\n]{0,40}custom model id)|unknown model"
-        r"|model_not_found|not_found_error", re.I)),
-    ("the request was malformed", re.compile(STATUS + r"400\b|invalid_request_error", re.I)),
-]
-# an outage, overload or rate limit: asked again even if a fatal-looking word is in it (Google's
-# 429 "check your plan and billing details")
-TRANSIENT = re.compile(STATUS + r"(?:429|5\d\d)\b|rate.?limit|too many requests|exceeded your current quota"
-                       r"|overloaded|timed? ?out|ECONNRESET|ECONNREFUSED|ENOTFOUND|EAI_AGAIN|network", re.I)
-
-
-def probe_fatal(text):
-    """Why a probe error means the painter should stop now (see PROBE_FATAL), or None."""
-    if usage_limit(text) or TRANSIENT.search(text):
-        return None
-    return next((why for why, pat in PROBE_FATAL if pat.search(text)), None)
-
-
-def probe_outcome(r):
-    """What a probe's result (a CompletedProcess, or the TimeoutExpired it raised) says: ("available",
-    reply) only when the probe exited 0 and the reply has the word ok or okay (any case); ("limited",
-    text) for a usage limit; otherwise ("unavailable", why): a timeout, an error or an odd reply is no
-    recovery; ("fatal", why) for an error waiting won't fix (probe_fatal)."""
-    if isinstance(r, subprocess.TimeoutExpired):
-        return "unavailable", f"the probe timed out after {r.timeout:.0f} s"
-    out = (r.stdout or "") + (r.stderr or "")
-    if usage_limit(out):
-        return "limited", out
-    if not (r.returncode == 0 and re.search(r"\bok(ay)?\b", r.stdout or "", re.I)):
-        why = probe_fatal(out)
-        if why:
-            return "fatal", f"{why} (exit {r.returncode}): {gist(out, 160)}"
-    if r.returncode:
-        return "unavailable", f"the probe exited {r.returncode}: {gist(out, 160)}"
-    if not (r.stdout or "").strip():
-        return "unavailable", f"no reply to the probe: {gist(out, 160)}"
-    if not re.search(r"\bok(ay)?\b", r.stdout, re.I):
-        return "unavailable", f"an unexpected reply to the probe: {gist(out, 160)}"
-    return "available", r.stdout
-
-
 def wait_out_limit(m, tag, text, ended):
     """Wait until the provider answers again (probing it), or give up after LIMIT_GIVE_UP_H hours.
-    True when the painter can go on: only a probe that got its reply (probe_outcome) counts; a
-    probe that timed out or failed is logged as such and asked again, like a continuing limit. A
-    probe error waiting won't fix (a refused key, no credit, an unknown model, a malformed request)
-    stops the painter at once."""
+    True when the painter can go on."""
     t0 = time.time()
     wait = first_probe_wait(text, ended, t0)
-    attempt = 0
     while True:
         if time.time() + wait - t0 > LIMIT_GIVE_UP_H * 3600:
-            log(f"{tag}: the usage limit hasn't lifted in {LIMIT_GIVE_UP_H} h ({attempt} probes); "
-                f"painter stops (rerun to go on)")
+            log(f"{tag}: the usage limit hasn't lifted in {LIMIT_GIVE_UP_H} h; painter stops (rerun to go on)")
             return False
         log(f"{tag}: usage limit; asking the provider again in {wait / 60:.0f} min (not a crash)")
         time.sleep(wait)
         (RUN / "probe").mkdir(exist_ok=True)
-        attempt += 1
         try:
             r = subprocess.run(probe_cmd(m), cwd=RUN / "probe", stdin=subprocess.DEVNULL,
                                capture_output=True, text=True, timeout=600)
-        except subprocess.TimeoutExpired as e:
-            r = e
-        state, what = probe_outcome(r)
-        if state == "available":
-            log(f"{tag}: the provider answers again after {(time.time() - t0) / 3600:.1f} h "
-                f"(attempt {attempt}): {gist(what, 80)}")
+            out = r.stdout + r.stderr
+        except subprocess.TimeoutExpired:
+            out = "probe timed out"
+        if not usage_limit(out):
+            log(f"{tag}: the provider answers again after {(time.time() - t0) / 3600:.1f} h: {gist(out, 80)}")
             return True
-        if state == "fatal":
-            log(f"{tag}: PROBE ERROR, painter stops now (attempt {attempt}): {what}; waiting won't fix it, "
-                f"rerun after fixing")
-            return False
-        if state == "limited":
-            log(f"{tag}: still limited (attempt {attempt}): {gist(what, 80)}")
-            reset = limit_reset_s(what)
-            wait = reset + 60 if reset else LIMIT_PROBE_S
-        else:
-            log(f"{tag}: PROBE FAILED (attempt {attempt}), not a recovery: {what}")
-            wait = LIMIT_PROBE_S
+        reset = limit_reset_s(out)
+        wait = reset + 60 if reset else LIMIT_PROBE_S
 
 
 def crash_wait(n_crashes, text):
@@ -634,44 +544,9 @@ def paint(name, n, d, rd):
     return sittings
 
 
-# What reader_brief.md says a record isn't, in plain English words a pattern can catch (not a
-# semantic review: a paraphrase, another language or a hint gets past it). Flagged, not rejected:
-# the same words turn up in plain observations. What to do: a sentence that starts with a command
-# (after a bullet, a "Label:" or a full stop).
-PRESCRIPTION = re.compile(r"(?:^|[.;!?]\s)\s*(?:[-*]\s+|\d+[.)]\s+)?(?:[\w ]{1,30}:\s+)?"
-                          r"(?:always|never|don't|do not|keep|put|place|make|use|avoid|try|start|begin|"
-                          r"remember|leave|let|save|you should|you must|one should)\b", re.I)
-# where things go in the picture: a part of the picture, left or right, or composition words
-PLACEMENT = re.compile(r"\b(?:center|centre|middle|top|bottom|upper|lower|corner|edge|third|quarter)"
-                       r" of the (?:picture|canvas|painting|composition|image|frame)\b|\bon the (?:left|right)\b"
-                       r"|\b(?:horizon|foreground|background|middle ground|composition|focal|motif)\b", re.I)
-
-
-def record_flags(path):
-    """Lines of the record at path that look like what to do or where things go in the picture:
-    [(what, line number, line)]. A warning, not a rejection: the patterns also catch plain
-    observations, so a flagged record still reaches the next studio."""
-    if not path.exists():
-        return []
-    lines = path.read_text(errors="replace").strip().splitlines()
-    # a line that carries on the sentence before it (a wrapped line) doesn't start a sentence
-    cont = ["\u2026" + line if i and lines[i - 1].strip() and not re.search(r"[.!?:]\s*$|^\s*#", lines[i - 1])
-            and not re.match(r"\s*(?:[-*]|\d+[.)])\s", line) else line for i, line in enumerate(lines)]
-    return [(what, i, lines[i - 1]) for what, pat, ls in (("what to do", PRESCRIPTION, cont),
-                                                           ("where things go in the picture", PLACEMENT, lines))
-            for i, line in enumerate(ls, 1) if pat.search(line)]
-
-
-# Painters' names a record may not hold: the round's names check (the one the export runs), less
-# the studio's own artist (export_r16_studio's own=)
-NAMES = BASE / "scripts/check_studio_names"
-OWN_NAMES = {"friedrich": ["Friedrich"], "blank": [], "sargent": ["Sargent"], "inness": ["Inness"],
-             "alma-tadema": ["Alma-Tadema", "Tadema"], "tonn": ["Tonn"], "hopper": ["Hopper"]}
-
-
 def reader_cmd(prompt):
-    """The reader's launch (READER_HARNESS), cwd the run folder."""
-    return ["pi", "--print"] + READER_HARNESS + READER + [prompt]
+    """Round 16's reader launch: the machine's own pi setup, cwd the run folder (no painter harness)."""
+    return ["pi", "--print", "--no-context-files", "--no-skills", "--no-prompt-templates"] + READER + [prompt]
 
 
 def export_cmd(profile, d):
@@ -889,9 +764,7 @@ def chain(name):
             continue
         if DRY:
             extra = " + trees.md" if t["profile"] == "friedrich" else ""
-            merged = {"free-text": " + records", "structured": " + the records rendered for this studio (p<k>_record.json, "
-                      f"see p{n}_inherited.json)", "none": ""}[t["record_kind"]]
-            show(tag, f"export {t['profile']} studio (then studio_notes.md{merged if n > 1 else ''}{extra}, "
+            show(tag, f"export {t['profile']} studio (then studio_notes.md{' + records' if n > 1 else ''}{extra}, "
                       f"BRIEF.md as briefs/{t['profile']}.md with this studio's path)", export_cmd(t["profile"], d), BASE, env)
             show(tag, f"open the easel ({d / 'bin/easel'} open); it stays open across sittings", [str(d / "bin/easel"), "open"], d)
             show(tag, "sitting 1 (painter)", painter_cmd(t["model"]), d, t["model"]["env"])
@@ -901,12 +774,8 @@ def chain(name):
                  painter_cmd(t["model"], SITTING_MESSAGE), d, t["model"]["env"])
             show(tag, "check (background, after the last sitting; result in the log)", check_cmd(d, name, n), RUN)
             show(tag, "finishing (background, after the last sitting)", finish_cmd(d, name, n), RUN)
-            if n < t["painters"] and t["record_kind"] == "free-text":
+            if n < t["painters"]:
                 show(tag, "reader", reader_cmd(f"Read {rd}/p{n}_reader_brief.md and do what it says."), rd)
-            elif n < t["painters"] and t["record_kind"] == "structured":
-                show(tag, f"reader (structured: writes p{n}_observations.json from reader_brief_structured.md; "
-                          f"record_schema validates it into p{n}_record.json)",
-                     reader_cmd(f"Read {rd}/p{n}_reader_brief.md and do what it says."), rd)
             continue
         if not (rd / f"p{n}.exported").exists():
             if d.exists():
@@ -917,20 +786,17 @@ def chain(name):
             if r.returncode:
                 log(f"{tag}: EXPORT FAILED, lane stops (see {rd}/p{n}_export.log)")
                 return
-            if t["record_kind"] == "structured" and n > 1:
-                inherit_structured(tag, rd, n, d)
-            else:
-                notes = [(HERE / "studio_notes.md").read_text()]
-                for rec in t["records"]:
-                    if not rec.exists():
-                        log(f"{tag}: RECORD MISSING {rec}, lane stops")
-                        return
+            notes = [(HERE / "studio_notes.md").read_text()]
+            for rec in t["records"]:
+                if not rec.exists():
+                    log(f"{tag}: RECORD MISSING {rec}, lane stops")
+                    return
+                notes.append("\n## More notes from the studio\n\n" + rec.read_text())
+            for k in range(1, n):
+                rec = rd / f"p{k}_record.md"
+                if rec.exists():
                     notes.append("\n## More notes from the studio\n\n" + rec.read_text())
-                for k in range(1, n if t["record_kind"] == "free-text" else 1):
-                    rec = rd / f"p{k}_record.md"
-                    if rec.exists():
-                        notes.append("\n## More notes from the studio\n\n" + rec.read_text())
-                (d / "notes" / "studio_notes.md").write_text("\n".join(notes))
+            (d / "notes" / "studio_notes.md").write_text("\n".join(notes))
             if t["profile"] == "friedrich":
                 shutil.copy(HERE / "trees.md", d / "notes" / "research" / "trees.md")
             (rd / f"p{n}.exported").write_text(time.strftime("%F %T"))
@@ -944,214 +810,17 @@ def chain(name):
         check(name, n, d)
         finish(name, n, d)
         logs = [p for s in load_sittings(rd, n) for p in s.get("sessions", []) if Path(p).exists()]
-        if n < t["painters"] and t["record_kind"] == "structured" and not read_structured(
-                tag, rd, n, d, logs, OWN_NAMES[t["profile"]], name, t["profile"]):
-            log(f"{name}: chain stops")
-            return
-        if logs and n < t["painters"] and t["record_kind"] == "free-text":
+        if logs and n < t["painters"]:
             out = rd / f"p{n}_record.md"
             rb = ((HERE / "reader_brief.md").read_text().replace("{LOG}", ", ".join(logs))
                   .replace("{JOURNAL}", str(d / "notes/journal.md")).replace("{OUT}", str(out)))
             (rd / f"p{n}_reader_brief.md").write_text(rb)
-            flagged = rd / f"p{n}_record.flags.md"
-            flagged.unlink(missing_ok=True)               # an earlier attempt's flags aren't this record's
             log(f"{tag}: reader")
-            # reader.ts lets it read these files only (a journal the painter never wrote isn't one) and write only out
-            journal = d / "notes/journal.md"
-            scope = {"read": [*logs, *([str(journal)] if journal.exists() else []), str(rd / f"p{n}_reader_brief.md")],
-                     "write": str(out)}
-            rc = run(reader_cmd(f"Read {rd}/p{n}_reader_brief.md and do what it says."), rd,
-                     rd / f"p{n}_reader_final.txt", rd / f"p{n}_reader_err.txt", {"READER_SCOPE": json.dumps(scope)})
-            flags = record_flags(out)
-            if flags:
-                flagged.write_text(f"# p{n}_record.md: lines the pattern gate flagged (a warning, not a rejection)\n"
-                                   + "".join(f"- line {i} ({what}): {line.strip()}\n" for what, i, line in flags))
-                log(f"{tag}: RECORD FLAGGED ({len(flags)} lines, see {flagged}): "
-                    + "; ".join(f"line {i} ({what}): {line.strip()[:120]}" for what, i, line in flags))
-            log(f"{tag}: record {'written' if out.exists() else 'MISSING'}"
-                + (f" (the reader exited {rc}, see {rd}/p{n}_reader_err.txt)" if rc else "")
-                + (f" ({len(flags)} flagged lines went on with it, not a review of what it says)" if flags else ""))
+            run(reader_cmd(f"Read {rd}/p{n}_reader_brief.md and do what it says."), rd,
+                rd / f"p{n}_reader_final.txt", rd / f"p{n}_reader_err.txt")
+            log(f"{tag}: record {'written' if out.exists() else 'MISSING'}")
         (rd / f"p{n}.done").write_text(time.strftime("%F %T"))
     log(f"lane {name} finished")
-
-
-def round_number():
-    """The round, from BRANCH (round-21): what a structured record is stamped with."""
-    return int(re.fullmatch(r"round-(\d+)", BRANCH).group(1))
-
-
-def code_commit():
-    """The commit BRANCH names in BASE (the export builds the studio's easel from it); it stands
-    in for the easel's version."""
-    r = subprocess.run(["git", "-C", str(BASE), "rev-parse", "--verify", f"{BRANCH}^{{commit}}"],
-                       capture_output=True, text=True)
-    if r.returncode:
-        raise RuntimeError(f"no commit for {BRANCH} in {BASE}: {r.stderr.strip()[:200]}")
-    return r.stdout.strip()
-
-
-TUBE_TABLE = "| tube | pigment | hiding | stiffness | tinting strength | drying |"
-
-
-def box_of(d):
-    """A studio's box: its name (bin/box, else default), the hash of the tube table its guide shows
-    (the easel's `tubes --markdown`, put there by the export) and the tube names in it."""
-    guide = (d / "notes/easel_guide.md").read_text().splitlines()
-    start = guide.index(TUBE_TABLE)
-    table = [guide[start]]
-    for line in guide[start + 1:]:
-        if not line.startswith("|"):
-            break
-        table.append(line)
-    tubes = [line.split("|")[1].strip() for line in table[2:]]
-    name = (d / "bin/box").read_text().strip() if (d / "bin/box").exists() else "default"
-    return {"name": name, "tubes_sha256": hashlib.sha256("\n".join(table).encode()).hexdigest()}, tubes
-
-
-LUA_TOKEN = re.compile(r'--\[(=*)\[.*?\]\1\]|--[^\n]*|"(?:\\.|[^"\\\n])*"|\'(?:\\.|[^\'\\\n])*\'|\[(=*)\[.*?\]\2\]', re.S)
-
-
-def lua_code(text):
-    """Lua text with its comments blanked out (strings kept)."""
-    return LUA_TOKEN.sub(lambda m: " " if m.group(0).startswith("--") else m.group(0), text)
-
-
-LUA_STRING = re.compile(r'"(?:\\.|[^"\\\n])*"|\'(?:\\.|[^\'\\\n])*\'|\[(=*)\[.*?\]\1\]', re.S)
-
-
-def canvas_call(code):
-    """The table of the first canvas{...} call in Lua code (comments already out), or "": the call
-    and its braces are found outside strings."""
-    masked = LUA_STRING.sub(lambda m: m.group(0)[0] + "x" * (len(m.group(0)) - 2) + m.group(0)[-1], code)
-    m = re.search(r"\bcanvas\s*\{", masked)
-    if not m:
-        return ""
-    depth = 0
-    for i in range(m.end() - 1, len(masked)):
-        depth += {"{": 1, "}": -1}.get(masked[i], 0)
-        if depth == 0:
-            return code[m.end() - 1:i + 1]
-    return ""
-
-
-def support_of(d):
-    """The painting's support, read from the code of its canvas{} call (comments left out): the
-    linen's threads per cm ({warp, weft}, or one number for both) and how each ground layer was
-    applied, the easel's own words only (record_render.GROUND_APPLY); the ground piles are recipes,
-    left out."""
-    from record_render import GROUND_APPLY
-    f = d / "paintings/lua/painting.lua"
-    text = f.read_text(errors="replace") if f.exists() else ""
-    chunks = [lua_code(c) for c in re.split(r"^--@ chunk \d+\n", text, flags=re.M)[1:]]
-    call = next((canvas_call(c) for c in chunks if canvas_call(c)), "")
-    number = r"(\d+(?:\.\d+)?)"
-    pair = re.search(r"\blinen\s*=\s*\{\s*" + number + r"\s*,\s*" + number + r"\s*\}", call)
-    one = re.search(r"\blinen\s*=\s*" + number + r"\b", call)
-    linen = pair.groups() if pair else (one.group(1),) * 2 if one else None
-    return {"kind": "linen", "linen": [float(x) if "." in x else int(x) for x in linen] if linen else None,
-            "ground_layers": [a for a in re.findall(r'\bapply\s*=\s*"(\w+)"', call) if a in GROUND_APPLY]}
-
-
-def recipient_of(d):
-    box, tubes = box_of(d)
-    return {"medium": "oil", "support_kind": "linen", "commit": code_commit(), "box": box, "tubes": tubes}
-
-
-def sha256_file(f):
-    return hashlib.sha256(Path(f).read_bytes()).hexdigest()
-
-
-def reader_model():
-    return f"{READER[READER.index('--provider') + 1]}/{READER[READER.index('--model') + 1]}"
-
-
-def read_structured(tag, rd, n, d, logs, own, name, profile):
-    """The reader writes p<n>_observations.json (reader_brief_structured.md); record_schema checks
-    it against the session logs, the studio's box and the names check, and the runner keeps it
-    with its metadata as p<n>_record.json. True if the record passed (some observations may be
-    dropped, each logged with why); if not, the observations are set aside as
-    p<n>_observations.rejected.json and the lane stops."""
-    import record_render                          # only structured lanes need them (a free-text runner
-    import record_schema                          # copy runs without record_*.py beside it)
-    out = rd / f"p{n}_observations.json"
-    rec = rd / f"p{n}_record.json"
-    if not logs:
-        log(f"{tag}: RECORD MISSING: no session logs to read; rerun to try again")
-        return False
-    out.unlink(missing_ok=True)                   # an earlier attempt's record isn't this one's
-    rec.unlink(missing_ok=True)
-    brief_file = rd / f"p{n}_reader_brief.md"
-    brief_file.write_text((HERE / "reader_brief_structured.md").read_text()
-                          .replace("{LOGS}", "\n".join(f"- log {i}: {p}" for i, p in enumerate(logs, 1)))
-                          .replace("{JOURNAL}", str(d / "notes/journal.md")).replace("{OUT}", str(out)))
-    log(f"{tag}: reader (structured)")
-    journal = d / "notes/journal.md"
-    scope = {"read": [*logs, *([str(journal)] if journal.exists() else []), str(brief_file)], "write": str(out)}
-    rc = run(reader_cmd(f"Read {brief_file} and do what it says."), rd,
-             rd / f"p{n}_reader_final.txt", rd / f"p{n}_reader_err.txt", {"READER_SCOPE": json.dumps(scope)})
-
-    def reject(why):
-        if out.exists():
-            out.replace(rd / f"p{n}_observations.rejected.json")
-        log(f"{tag}: RECORD REJECTED: {why} (see {rd}/p{n}_reader_err.txt and p{n}_observations.rejected.json); "
-            f"the painter isn't done, rerun to read it again")
-        return False
-
-    if rc:
-        return reject(f"the reader exited {rc}")
-    if not out.exists():
-        return reject("no record was written")
-    try:
-        obs = json.loads(out.read_text())
-    except ValueError as e:
-        return reject(f"not JSON ({e})")
-    box, tubes = box_of(d)
-    try:
-        v = record_schema.validate(obs, tubes, [record_schema.LogIndex(p) for p in logs],
-                                   record_schema.studio_names(NAMES, own, rd))
-    except record_schema.Rejected as e:
-        return reject(str(e))
-    record = {"schema": record_render.RECORD_SCHEMA, "condition": record_render.CONDITION,
-              "round": round_number(), "lane": name, "slot": n, "profile": profile,
-              "code": {"tag": BRANCH, "commit": code_commit()}, "medium": "oil", "box": box, "support": support_of(d),
-              "reader": {"model": reader_model(), "brief_sha256": sha256_file(brief_file),
-                         "system_sha256": sha256_file(HERE / "reader_system_prompt.md")},
-              "logs": list(logs), **v}
-    rec.write_text(json.dumps(record, indent=1, ensure_ascii=False))
-    for x in v["dropped"]:
-        log(f"{tag}: RECORD DROPPED observation {x['index']}: {'; '.join(x['why'])}")
-    for w in v["warnings"]:
-        log(f"{tag}: RECORD FLAGGED observation {w['index']} {w['field']} ({w['pattern']}: {w['words']})")
-    log(f"{tag}: record written ({len(v['observations'])} of {len(obs['observations'])} observations passed the "
-        f"hard checks, schema, evidence, words and names, not a review of what they say"
-        + (f"; {len(v['warnings'])} flagged went on with them)" if v["warnings"] else ")"))
-    return True
-
-
-def inherit_structured(tag, rd, n, d):
-    """The notes the n-th studio inherits: p1..p<n-1>_record.json rendered for this studio
-    (record_render), with what was left out and why in p<n>_inherited.json and the log."""
-    import record_render
-    recs = []
-    for k in range(1, n):
-        f = rd / f"p{k}_record.json"
-        recs.append((k, json.loads(f.read_text()) if f.exists() else None))
-    rcp = recipient_of(d)
-    text, report = record_render.render(recs, rcp, record_render.load_compat(HERE / "record_compat.json"))
-    notes = (HERE / "studio_notes.md").read_text() + ("\n" + text if text else "")
-    (d / "notes" / "studio_notes.md").write_text(notes)
-    (rd / f"p{n}_inherited.json").write_text(json.dumps(record_render.inherited(report, rcp, notes.encode()), indent=1))
-    log(record_render.summary(tag, report))
-
-
-def mixed_records(name, kind):
-    """Why lane name's run folder can't go on with this kind of record (a lane keeps one kind), or None."""
-    rd = RUN / name
-    other = {"structured": ["p*_record.md", "p*_record.rejected.md"],
-             "free-text": ["p*_record.json", "p*_observations*.json"], "none": []}[kind]
-    found = sorted(str(f.name) for pat in other for f in rd.glob(pat)) if rd.exists() else []
-    return (f"lane {name} is record_kind={kind!r} but {rd} holds {', '.join(found)} (one kind of record per lane)"
-            if found else None)
 
 
 def render_briefs(out):
@@ -1178,9 +847,6 @@ def main():
     for l in lanes:
         if l not in LANES:
             raise SystemExit(f"no lane {l}; lanes: {', '.join(LANES)}")
-        mixed = mixed_records(l, LANES[l].get("record_kind", "free-text"))
-        if mixed:
-            raise SystemExit(mixed)
     if not DRY:
         RUN.mkdir(parents=True, exist_ok=True)
     stop = threading.Event()

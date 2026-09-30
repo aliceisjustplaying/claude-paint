@@ -203,3 +203,274 @@ def test_observations_of_what_the_paint_did_are_not_flagged(tmp_path, monkeypatc
     assert not (rd / "p1_record.flags.md").exists()
     assert not any("FLAGGED" in l for l in lines), lines
     assert record in (rc21.studio("T2") / "notes/studio_notes.md").read_text()
+
+
+# structured records (record_kind="structured"): the reader writes observations, the runner checks
+# them against the logs and renders them into the next studio's notes
+
+def imported_runner():
+    """r21_chains.py as it was imported (fixtures/r21_chains_as_imported.py, verbatim), as a module."""
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("r21_chains_as_imported", rc21.HERE / "fixtures/r21_chains_as_imported.py")
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def free_text_notes(mod, tmp_path, monkeypatch, record, other_lane=None):
+    """The notes painter 2 of a free-text lane T gets from runner module mod, painter 1's reader
+    writing record (and another lane's record merged first, if given)."""
+    monkeypatch.setattr(mod, "RUN", tmp_path / "run")
+    monkeypatch.setattr(mod, "A", tmp_path)
+    monkeypatch.setattr(mod, "HERE", rc21.HERE)
+    monkeypatch.setattr(mod, "LANES", {"T": mod.lane("sargent", mod.OPUS, painters=2,
+                                                     records=[other_lane] if other_lane else ())})
+    monkeypatch.setattr(mod, "log", lambda *a: None)
+    monkeypatch.setattr(mod, "check", lambda *a: None)
+    monkeypatch.setattr(mod, "finish", lambda *a: None)
+    monkeypatch.setattr(mod, "export_cmd", lambda profile, d: ["mkdir", "-p", str(d / "notes/research")])
+    rd = tmp_path / "run/T"
+
+    def reader(cmd, cwd, out, err, env=None):
+        (rd / "p1_record.md").write_text(record)
+        return 0
+    monkeypatch.setattr(mod, "run", reader)
+    rd.mkdir(parents=True)
+    (tmp_path / "s1.jsonl").write_text("{}\n")
+    (rd / "p1_sittings.json").write_text(json.dumps([{"sitting": 1, "sessions": [str(tmp_path / "s1.jsonl")]}]))
+    for marker in ("p1.exported", "p1.painted", "p2.painted"):
+        (rd / marker).write_text("")
+    (mod.studio("T1") / "notes").mkdir(parents=True)
+    mod.chain("T")
+    return (mod.studio("T2") / "notes/studio_notes.md").read_text(), sorted(f.name for f in rd.iterdir())
+
+
+@pytest.mark.parametrize("other_lane", [False, True])
+def test_a_free_text_lane_s_next_studio_gets_exactly_what_the_imported_runner_gave(tmp_path, monkeypatch, other_lane):
+    old = imported_runner()
+    for mod, d in ((old, tmp_path / "old"), (rc21, tmp_path / "new")):
+        d.mkdir()
+        other = None
+        if other_lane:
+            other = d / "X_p1_record.md"
+            other.write_text("## Glazing\n- A glaze over dry paint stayed clear.\n")
+        notes, files = free_text_notes(mod, d, monkeypatch, GOOD_RECORD, other)
+        if mod is old:
+            want, old_files = notes, files
+    assert notes == want
+    assert notes.endswith("\n## More notes from the studio\n\n" + GOOD_RECORD)
+    assert [f for f in files if f not in old_files] == []          # no record.json, condition.json or the like
+
+
+def code_repo(path):
+    """A git repo at path with the round-21 tag (BASE, as the export reads it); its commit."""
+    git = lambda *a: subprocess.run(["git", "-C", str(path), *a], check=True, capture_output=True, text=True).stdout
+    path.mkdir()
+    git("init", "-q")
+    (path / "x").write_text("round 21's code\n")
+    git("add", "x")
+    git("-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "code")
+    git("tag", "round-21")
+    return git("rev-parse", "HEAD").strip()
+
+
+CANVAS = ('-- easel session "painting"\n\n--@ chunk 1\ncanvas{size=900, linen={15,13}, ground={{pile={{"lead white",1}},'
+          'um=90,apply="knife"},{pile={{"lead white",5}},um=45,apply="roller"}}}\n\n--@ chunk 2\nwork(m, {pile=p})\n')
+
+
+def chain_structured(tmp_path, monkeypatch, observations, rc=0, kind="structured", canvas=CANVAS, before=()):
+    """Run lane T (two painters, record_kind) with painter 1 painted in the r17 F fixture logs and a
+    reader that writes observations (a dict as JSON, a str as it is, None nothing) and exits rc;
+    files named in before are in the run folder from an earlier attempt."""
+    from records_fixtures import R17F_LOGS, write_logs
+    lines = []
+    guide = rc21.HERE.parents[1] / "easel_guide.md"
+    monkeypatch.setattr(rc21, "RUN", tmp_path / "run")
+    monkeypatch.setattr(rc21, "A", tmp_path)
+    monkeypatch.setattr(rc21, "BASE", tmp_path / "code")
+    monkeypatch.setattr(rc21, "NAMES", rc21.HERE.parents[2] / "scripts/check_studio_names")
+    monkeypatch.setattr(rc21, "LANES", {"T": rc21.lane("sargent", rc21.OPUS, painters=2, record_kind=kind)})
+    monkeypatch.setattr(rc21, "log", lines.append)
+    monkeypatch.setattr(rc21, "check", lambda *a: None)
+    monkeypatch.setattr(rc21, "finish", lambda *a: None)
+    monkeypatch.setattr(rc21, "export_cmd", lambda profile, d: [
+        "sh", "-c", f'mkdir -p "{d}/notes/research" && cp "{guide}" "{d}/notes/easel_guide.md"'])
+    code_repo(tmp_path / "code")
+    rd = tmp_path / "run/T"
+    rd.mkdir(parents=True)
+    for f in before:
+        (rd / f).write_text("{}")
+    (tmp_path / "logs").mkdir()
+    sessions = [str(p) for p in write_logs(tmp_path / "logs", R17F_LOGS)]
+    calls = []
+
+    def reader(cmd, cwd, out, err, env=None):
+        scope = json.loads(env["READER_SCOPE"])
+        calls.append(scope)
+        assert scope["write"] == str(rd / "p1_observations.json")
+        assert scope["read"][:2] == sessions
+        if observations is not None:
+            (rd / "p1_observations.json").write_text(
+                observations if isinstance(observations, str) else json.dumps(observations))
+        return rc
+    monkeypatch.setattr(rc21, "run", reader)
+    (rd / "p1_sittings.json").write_text(json.dumps([{"sitting": 1, "sessions": sessions[:1]},
+                                                     {"sitting": 2, "sessions": sessions[1:]}]))
+    for marker in ("p1.exported", "p1.painted", "p2.painted"):
+        (rd / marker).write_text("")
+    d1 = rc21.studio("T1")
+    for sub in ("notes", "paintings/lua"):
+        (d1 / sub).mkdir(parents=True)
+    (d1 / "notes/journal.md").write_text("- day one\n")
+    (d1 / "notes/easel_guide.md").write_text(guide.read_text())
+    (d1 / "paintings/lua/painting.lua").write_text(canvas)
+    rc21.chain("T")
+    return lines, calls
+
+
+def test_a_structured_record_reaches_the_next_studio_as_the_rendered_notes(tmp_path, monkeypatch):
+    import hashlib
+    from records_fixtures import R17F, doc
+    lines, calls = chain_structured(tmp_path, monkeypatch, doc(R17F))
+    rd = tmp_path / "run/T"
+    assert (rd / "p1.done").exists() and len(calls) == 1
+    golden = (rc21.HERE / "fixtures/section7_render.md").read_text().split("\nObserved on linen 16")[0]
+    notes = (rc21.studio("T2") / "notes/studio_notes.md").read_text()
+    assert notes == (rc21.HERE / "studio_notes.md").read_text() + "\n" + golden
+    rec = json.loads((rd / "p1_record.json").read_text())
+    # stamped with round 21's own constants (BRANCH, the commit it names in BASE), not round 19's
+    assert (rec["schema"], rec["condition"], rec["round"], rec["lane"], rec["slot"], rec["medium"], rec["profile"]) == (
+        "chain-record/1", "chain-inherited, non-neutral", 21, "T", 1, "oil", "sargent")
+    assert rec["code"] == {"tag": "round-21", "commit": rc21.code_commit()} and len(rec["code"]["commit"]) == 40
+    assert rec["box"]["name"] == "default"
+    assert rec["support"] == {"kind": "linen", "linen": [15, 13], "ground_layers": ["knife", "roller"]}
+    assert rec["reader"]["model"] == "anthropic/claude-opus-5-5" and len(rec["logs"]) == 2
+    assert [o["resolved"][0]["chunk"] for o in rec["observations"]] == [129, None, 162]
+    inh = json.loads((rd / "p2_inherited.json").read_text())
+    assert (inh["inherited"], inh["of"]) == (3, 3)
+    assert inh["notes_sha256"] == hashlib.sha256(notes.encode()).hexdigest()
+    assert "T2: inherited 3 of 3 observations (p1: 3/3)" in lines
+    brief = (rd / "p1_reader_brief.md").read_text()
+    assert f"- log 1: {rec['logs'][0]}\n- log 2: {rec['logs'][1]}" in brief and "{" + "OUT}" not in brief
+
+
+@pytest.mark.parametrize("canvas, support, line", [
+    # a comment's words never reach the notes (review C, finding 5)
+    (CANVAS.replace("apply=\"roller\"}}}", "apply=\"roller\"}}} -- apply=\"Claude\""),
+     {"kind": "linen", "linen": [15, 13], "ground_layers": ["knife", "roller"]},
+     "Observed on linen 15 by 13 threads per cm, over a ground laid by knife, then roller."),
+    (CANVAS.replace("canvas{", "--[[ canvas{linen={40,40}, apply=\"always\"} ]]\ncanvas{"),
+     {"kind": "linen", "linen": [15, 13], "ground_layers": ["knife", "roller"]},
+     "Observed on linen 15 by 13 threads per cm, over a ground laid by knife, then roller."),
+    # one number is both thread counts (the easel's linen=15)
+    (CANVAS.replace("linen={15,13}", "linen=15"), {"kind": "linen", "linen": [15, 15], "ground_layers": ["knife", "roller"]},
+     "Observed on linen 15 by 15 threads per cm, over a ground laid by knife, then roller."),
+    # only the easel's knife, roller or brush
+    (CANVAS.replace('apply="roller"', 'apply="sponge"'), {"kind": "linen", "linen": [15, 13], "ground_layers": ["knife"]},
+     "Observed on linen 15 by 13 threads per cm, over a ground laid by knife."),
+    ('-- easel session "painting"\n\n--@ chunk 1\nprint("canvas{linen=9}")\n', {"kind": "linen", "linen": None,
+     "ground_layers": []}, "Observed on linen."),
+])
+def test_the_support_line_comes_from_the_canvas_call_s_parsed_fields(tmp_path, monkeypatch, canvas, support, line):
+    from records_fixtures import R17F, doc
+    chain_structured(tmp_path, monkeypatch, doc(R17F), canvas=canvas)
+    assert json.loads((tmp_path / "run/T/p1_record.json").read_text())["support"] == support
+    notes = (rc21.studio("T2") / "notes/studio_notes.md").read_text()
+    assert line + "\n" in notes and "Claude" not in notes and "always" not in notes.lower()
+
+
+def test_a_dropped_observation_is_logged_and_the_record_goes_on(tmp_path, monkeypatch):
+    from records_fixtures import R17F, doc
+    probe = dict(R17F[2], effect="Always put a tall arch at the center of the picture.")
+    wash = dict(R17F[2], effect="A background wash at medium 0.6 stayed tacky for two days.")
+    lines, _ = chain_structured(tmp_path, monkeypatch, doc([R17F[0], probe, wash]))
+    rd = tmp_path / "run/T"
+    assert (rd / "p1.done").exists()
+    rec = json.loads((rd / "p1_record.json").read_text())
+    assert [o["index"] for o in rec["observations"]] == [0, 2] and rec["dropped"][0]["index"] == 1
+    assert any(l.startswith("T1: RECORD DROPPED observation 1: effect: PRESCRIPTION ('Always')") for l in lines), lines
+    assert any("RECORD FLAGGED observation 2 effect (PLACEMENT: background)" in l for l in lines), lines
+    notes = (rc21.studio("T2") / "notes/studio_notes.md").read_text()
+    assert "tall arch" not in notes and "background wash" in notes
+    assert "T2: inherited 2 of 2 observations (p1: 2/2)" in lines
+
+
+def test_the_studio_s_own_artist_passes_and_another_painter_s_name_drops(tmp_path, monkeypatch):
+    from records_fixtures import R17F, doc
+    own = dict(R17F[2], conditions={"params": {"wait_minutes": 1800}, "note": "thin, as Sargent laid it"})
+    turner = dict(R17F[2], conditions={"params": {"wait_minutes": 1800}, "note": "a Turner scumble, thin"})
+    lines, _ = chain_structured(tmp_path, monkeypatch, doc([own, turner]))
+    rec = json.loads((tmp_path / "run/T/p1_record.json").read_text())
+    assert [o["index"] for o in rec["observations"]] == [0]
+    assert rec["dropped"] == [{"index": 1, "why": ["note: a painter's name"]}]
+
+
+@pytest.mark.parametrize("observations, rc, why", [
+    (None, 0, "no record was written"),
+    ("## Blending\n- The badger only moves wet paint.\n", 0, "not JSON"),
+    ({"schema": "chain-observations/1", "observations": []}, 0, "no observations"),
+    ({"schema": "chain-observations/1", "observations": [{"category": "sky"}]}, 0, "every observation was dropped"),
+    ({"schema": "chain-observations/1", "observations": []}, 1, "the reader exited 1"),
+])
+def test_a_structured_record_that_cant_be_used_stops_the_lane(tmp_path, monkeypatch, observations, rc, why):
+    # an earlier attempt's p1_record.json isn't this one's: it is gone even when this one fails
+    lines, _ = chain_structured(tmp_path, monkeypatch, observations, rc, before=["p1_record.json"])
+    rd = tmp_path / "run/T"
+    assert not (rd / "p1.done").exists() and not (rd / "p2.exported").exists() and not (rd / "p1_record.json").exists()
+    assert any("RECORD REJECTED" in l and why in l for l in lines), lines
+    assert (rd / "p1_observations.rejected.json").exists() == (observations is not None)
+
+
+def test_a_lane_without_records_runs_no_reader_and_inherits_nothing(tmp_path, monkeypatch):
+    lines, calls = chain_structured(tmp_path, monkeypatch, None, kind="none")
+    assert calls == [] and (tmp_path / "run/T/p1.done").exists()
+    assert (rc21.studio("T2") / "notes/studio_notes.md").read_text() == (rc21.HERE / "studio_notes.md").read_text()
+
+
+def test_a_lane_keeps_one_kind_of_record(tmp_path, monkeypatch):
+    import sys
+    monkeypatch.setattr(rc21, "RUN", tmp_path / "run")
+    (tmp_path / "run/T").mkdir(parents=True)
+    (tmp_path / "run/T/p1_record.md").write_text(GOOD_RECORD)
+    assert rc21.mixed_records("T", "free-text") is None
+    assert "p1_record.md" in rc21.mixed_records("T", "structured")
+    monkeypatch.setattr(rc21, "LANES", {"T": rc21.lane("sargent", rc21.OPUS, painters=2, record_kind="structured")})
+    monkeypatch.setattr(sys, "argv", ["r21_chains.py", "--only", "T", "--dry"])
+    monkeypatch.setattr(rc21, "DRY", False)                     # main() sets it; restored after the test
+    with pytest.raises(SystemExit, match="one kind of record per lane"):
+        rc21.main()
+    (tmp_path / "run/T/p1_record.md").unlink()
+    (tmp_path / "run/T/p1_record.json").write_text("{}")
+    assert "p1_record.json" in rc21.mixed_records("T", "free-text")
+    with pytest.raises(ValueError):
+        rc21.lane("sargent", rc21.OPUS, record_kind="markdown")
+    with pytest.raises(ValueError, match="another lane's free-text records"):
+        rc21.lane("sargent", rc21.OPUS, records=["x.md"], record_kind="structured")
+
+
+def test_dry_shows_a_structured_lane_s_reader_and_merge(tmp_path, monkeypatch):
+    lines = []
+    monkeypatch.setattr(rc21, "RUN", tmp_path / "run")
+    monkeypatch.setattr(rc21, "A", tmp_path)
+    monkeypatch.setattr(rc21, "DRY", True)
+    monkeypatch.setattr(rc21, "log", lines.append)
+    monkeypatch.setattr(rc21, "LANES", {"T": rc21.lane("sargent", rc21.OPUS, painters=2, record_kind="structured")})
+    rc21.chain("T")
+    out = "\n".join(lines)
+    assert "T1: reader (structured: writes p1_observations.json" in out
+    assert "T2: export sargent studio (then studio_notes.md + the records rendered for this studio" in out
+    assert not (tmp_path / "run").exists()
+
+
+def test_the_round_and_commit_are_round_21_s(tmp_path, monkeypatch):
+    assert rc21.round_number() == 21
+    sha = code_repo(tmp_path / "code")
+    monkeypatch.setattr(rc21, "BASE", tmp_path / "code")
+    assert rc21.code_commit() == sha
+    monkeypatch.setattr(rc21, "BRANCH", "round-99")
+    with pytest.raises(RuntimeError, match="no commit for round-99"):
+        rc21.code_commit()
+
+
+def test_every_profile_has_its_own_artist_s_names():
+    assert set(rc21.OPENING) <= set(rc21.OWN_NAMES)

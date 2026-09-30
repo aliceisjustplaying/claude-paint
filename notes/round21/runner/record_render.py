@@ -166,11 +166,15 @@ def load_compat(path):
 
 
 def render(records, recipient, compat=()):
-    """records: [(slot, chain-record/1)], in slot order. recipient: {"medium", "support_kind",
+    """records: [(slot, chain-record/1 or None if it is missing)], in slot order. recipient: {"medium", "support_kind",
     "commit", "box": {"name", "tubes_sha256"}, "tubes": [names]}. Returns (notes text, report)."""
     compat = [list(p) for p in compat]
     blocks, report = [], []
     for slot, r in records:
+        if r is None:
+            report.append({"slot": slot, "observations": 0, "inherited": 0, "dropped": [],
+                           "excluded": f"no record (p{slot}_record.json is missing)"})
+            continue
         obs = r["observations"]
         entry = {"slot": slot, "observations": len(obs), "inherited": 0, "excluded": None, "dropped": []}
         report.append(entry)

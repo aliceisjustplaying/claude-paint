@@ -22,6 +22,24 @@ pub struct OutlineU {
     st: S,
 }
 
+/// The first line of an outline value (points, closed?), for the legacy
+/// tools that build on a drawn outline (legacy.rs).
+#[cfg(feature = "replay")]
+pub(crate) fn outline_path(v: &AnyUserData) -> Option<(Vec<(f32, f32)>, bool)> {
+    let o = v.borrow::<OutlineU>().ok()?;
+    let l = o.o.lines.first()?;
+    Some((l.pts.clone(), l.closed))
+}
+
+/// The corners of an outline value's first line (points), for the legacy
+/// rocks (legacy.rs).
+#[cfg(feature = "replay")]
+pub(crate) fn outline_corners(v: &AnyUserData) -> Option<Vec<(f32, f32)>> {
+    let o = v.borrow::<OutlineU>().ok()?;
+    let l = o.o.lines.first()?;
+    Some(l.corners.iter().filter_map(|&i| l.pts.get(i).copied()).collect())
+}
+
 fn pts_table(lua: &Lua, pts: &[(f32, f32)]) -> Result<Table> {
     let t = lua.create_table_with_capacity(pts.len(), 0)?;
     for (i, p) in pts.iter().enumerate() {

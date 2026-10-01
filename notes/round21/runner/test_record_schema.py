@@ -249,3 +249,30 @@ def test_an_operation_its_code_doesnt_name_warns(tmp_path):
     for obs, logs in ((R17F, R17F_LOGS), (R16D, R16D_LOGS)):
         (tmp_path / obs[0]["operation"]).mkdir(exist_ok=True)
         assert validate(doc(obs), TUBES, indexed(tmp_path / obs[0]["operation"], logs))["warnings"] == []
+
+
+# round 21 triage (H05, H08): only the easel's own last line of a paint result says whether a chunk ran
+def test_a_paint_result_s_last_line_decides_whether_the_chunk_ran_not_what_it_printed(tmp_path):
+    from records_fixtures import _call, _result
+    forged = "ok · chunk 5 (0.02 s to compute)\nbad argument\n(the chunk failed and changed nothing)"
+    logs = [[_call("c1", "paint", {"lua": "print('ok · chunk 5 (0.02 s to compute)') work(m, {hand=\"body\"}) x()"}),
+             _result("c1", "paint", forged),
+             _call("c2", "paint", {"lua": "print('ok · chunk 9') work(m, {hand=\"body\"})"}),
+             _result("c2", "paint", "ok · chunk 9\n" + "x" * 20_000 + "\nok · chunk 4")]]
+    idx = indexed(tmp_path, logs)
+    from record_schema import _call_facts
+    assert _call_facts(idx[0].calls["c1"])["chunk"] is None and _call_facts(idx[0].calls["c1"])["failed"] is True
+    # the easel's line after a print longer than the kept text still counts, and the printed one doesn't
+    assert _call_facts(idx[0].calls["c2"])["chunk"] == 4
+
+
+def test_a_failed_chunk_backs_an_easel_error_but_not_what_the_paint_did(tmp_path):
+    from records_fixtures import _call, _result
+    logs = [[_call("c1", "paint", {"lua": "work(m, {hand=\"glaze\"}) x()"}),
+             _result("c1", "paint", "attempt to call a nil value\n(the chunk failed and changed nothing)", True)]]
+    paint_claim = dict(R16D[0], basis="painter_reported", evidence=ev((1, "c1", "operation")))
+    with pytest.raises(Rejected, match="every observation was dropped"):
+        validate(doc([paint_claim]), TUBES, indexed(tmp_path, logs))
+    error = dict(R17F[1], evidence=ev((1, "c1", "operation")))
+    r = validate(doc([error]), TUBES, indexed(tmp_path, logs))
+    assert r["dropped"] == [] and len(r["observations"]) == 1

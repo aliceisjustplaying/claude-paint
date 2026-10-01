@@ -331,7 +331,7 @@ def code_repo(path):
     (path / "x").write_text("round 21's code\n")
     git("add", "x")
     git("-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "code")
-    git("tag", "round-21")
+    git("tag", rc21.BRANCH)
     return git("rev-parse", "HEAD").strip()
 
 
@@ -403,7 +403,7 @@ def test_a_structured_record_reaches_the_next_studio_as_the_rendered_notes(tmp_p
     # stamped with round 21's own constants (BRANCH, the commit it names in BASE), not round 19's
     assert (rec["schema"], rec["condition"], rec["round"], rec["lane"], rec["slot"], rec["medium"], rec["profile"]) == (
         "chain-record/1", "chain-inherited, non-neutral", 21, "T", 1, "oil", "sargent")
-    assert rec["code"] == {"tag": "round-21", "commit": rc21.code_commit()} and len(rec["code"]["commit"]) == 40
+    assert rec["code"] == {"tag": rc21.BRANCH, "commit": rc21.code_commit()} and len(rec["code"]["commit"]) == 40
     assert rec["box"]["name"] == "default"
     assert rec["support"] == {"kind": "linen", "linen": [15, 13], "ground_layers": ["knife", "roller"]}
     assert rec["reader"]["model"] == "openai-codex/gpt-6.1-sol" and len(rec["logs"]) == 2

@@ -91,12 +91,17 @@ unlock() { exec 9>&-; }
 # build the painter's easel from the committed source, with the profile's
 # box (a box-* feature) and no other; each variant is kept in built/<box>
 builds=${STUDIO_BUILDS:-$repo/target/studio-build}
-src="$builds/$sha"
+# the build is named by the code it compiles (the trees of crates/ and .cargo and the Cargo files at
+# $branch), not by the commit: commits that change only notes or scripts reuse the same build
+code=$(for p in crates .cargo Cargo.toml Cargo.lock; do
+         git -C "$repo" rev-parse -q --verify "$branch^{commit}:$p" || echo "no $p"
+       done | shasum | cut -c1-12)
+src="$builds/code-$code"
 variant=${box:-default}
 built="$src/built/$variant/easel"
 if [ ! -x "$built" ]; then
   mkdir -p "$builds"
-  lock "$builds/$sha.lock"
+  lock "$builds/code-$code.lock"
   if [ ! -f "$src/.extracted" ]; then
     rm -rf "$src"
     mkdir -p "$src"

@@ -16,8 +16,7 @@ p.127]. He used few pigments. Before about 1820 his main blue was smalt, a
 semi-transparent cobalt glass; after that, cobalt blue, with chrome yellow
 among the yellows [ALF pp.341, 348–349]. Gradations come from stippling
 and from thin paint pooling in the fine texture of the ground, not from
-thick blending [CATS p.127; NG p.56]. No accessible source gives thread
-counts or paint-film thicknesses in microns for his paintings.
+thick blending [CATS p.127; NG p.56].
 
 **Terms.** *Ground/priming*: the preparatory layers between canvas and
 paint. *Cross-section*: a microscopic sample cut through all layers.
@@ -35,8 +34,7 @@ the network of cracks in paint or varnish.
   densely woven canvases" [KÖR p.283].
 - **One piece of cloth.** A single strip of canvas whatever the size, so
   even large formats have no seams [KÖR p.283].
-- **Thread count.** No count for any of his canvases appeared in
-  accessible sources. **Proxy:** canvases bought ready-primed in Dresden in
+- **Thread count.** Canvases bought ready-primed in Dresden in
   1827–34 by another painter measure 10–16 threads/cm in both directions
   [CATS-E pp.45–47].
 - **Sizes.** From about 32.5 × 45 cm [RSC p.42] to 110.6 × 171.4 cm [CATS
@@ -45,8 +43,6 @@ the network of cracks in paint or varnish.
   corners and hardwood wedges [KÖR p.283]. Uneven pull marks (cusping) on
   one edge only of a small canvas suggest it was cut from a larger,
   already-primed length [NG pp.51, 55].
-- **Panels.** None documented for his oils in the sources consulted.
-  *Uncertain.*
 
 ## 2. Grounds
 
@@ -75,7 +71,6 @@ the network of cracks in paint or varnish.
 - **Weave.** The lower layers level the weave [KÖR p.284]; the visible
   micro-texture comes mainly from the top ground (brush striations or
   roller texture).
-- **Thickness.** No micron values found. *Gap.*
 
 ## 3. Underdrawing
 
@@ -108,12 +103,10 @@ the network of cracks in paint or varnish.
 | Vermilion/cinnabar | [NPJ25]; [KÖR fig. 6] | Small admixtures |
 | Red iron oxide | [NG p.56] | A few particles |
 | Bone black | [NG p.56] | In a mixture with smalt, Naples yellow, ochre and possibly Prussian blue |
-| Naples yellow | [NG p.56] | *Disputed:* XRF found no antimony in the areas it tested [ALF p.349] |
 | Prussian blue | "Possibly" [NG p.56]; inferred from K and Fe [ALF Table 2] | |
 | Cobalt blue | From 1818/24 [ALF]; "almost entirely replaced smalt… after about 1820" [NG p.56] | |
 | Chrome yellow (lead chromate) | 1817 and 1818/24 [ALF] | |
 | Green pigments | "a few… green" pigments [CATS p.127]; copper greens and green earth [MÄD p.102] | See §8 |
-| Copper blues | No copper detected in the blue areas tested, which excludes azurite there [ALF p.348] | Natural or synthetic ultramarine was *not reported* |
 
 ## 5. Binding media
 
@@ -133,7 +126,7 @@ the network of cracks in paint or varnish.
   thin violet layer (smalt splinters and cinnabar), then a very thin
   pale-yellow layer [KÖR fig. 6].
 - **Film thickness.** "Very, very fine layers" [SPK]; a "gossamer-thin
-  film" [CATS p.127]. No micron values found. *Gap.*
+  film" [CATS p.127].
 - **Pooling.** The thin paint "accumulated in the depths of the textured
   ground layers," producing the finest dots of color and "almost
   continuous gradations" without visible brushstrokes [CATS p.127].
@@ -196,6 +189,21 @@ the network of cracks in paint or varnish.
 
 Green earth is translucent, weak and short of body [AP1 p.146; FIELD
 p.129].
+
+## 9. The tubes here
+
+The historical names in this note correspond to these tubes: ochers and
+yellow earths → yellow ochre; red earths and red iron oxide → red earth;
+cinnabar → vermilion; the green pigments → green earth, copper green and
+Rinmann's green.
+
+## 10. At this easel
+
+- **Support.** Plain-weave linen with ground layers laid from the tubes.
+- **Paint.** Pigment from the tubes with an oil-medium share.
+- **Taking paint off.** A brush picks up wet paint as it passes; that is
+  how paint comes off the canvas.
+- **Everything else** the easel does is in the easel guide.
 
 ## Sources
 

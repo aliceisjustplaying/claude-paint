@@ -100,9 +100,26 @@ export function latestJournalStamp(journal: string): string | undefined {
 	return stamp;
 }
 
-/** `cwd` is the studio. */
-export async function buildSummary(cwd: string, entries: readonly unknown[], signal?: AbortSignal) {
-	const parts: string[] = [HEADER];
+/** The line naming the canvas view a summary was made with; painter.ts shows that image after it. */
+export const CANVAS_VIEW = /^The whole canvas as it was when this was written: (\S+\.png)$/m;
+
+/** A fresh whole-canvas look at the easel: its PNG's path, or an error. */
+async function canvasLook(studio: string, signal?: AbortSignal): Promise<{ path: string } | { error: string }> {
+	try {
+		const said = await atEasel(studio, ["look"], undefined, signal);
+		const path = said.split("\n").pop()!.replace(/ \(.*\)$/, "");
+		return /\.png$/.test(path) ? { path } : { error: `the easel's look named no image: ${said.slice(0, 200)}` };
+	} catch (error) {
+		return { error: error instanceof Error ? error.message : String(error) };
+	}
+}
+
+/**
+ * `cwd` is the studio. The same sections serve a compaction (header HEADER) and the start of a
+ * later sitting (no header: the runner's sitting message comes first).
+ */
+export async function buildSummary(cwd: string, entries: readonly unknown[], signal?: AbortSignal, header: string | undefined = HEADER) {
+	const parts: string[] = header ? [header] : [];
 	const facts: Record<string, unknown> = {};
 
 	const brief = readText(join(cwd, "BRIEF.md"));
@@ -150,6 +167,16 @@ export async function buildSummary(cwd: string, entries: readonly unknown[], sig
 	if (stamp) clockLines.push(`- Latest journal entry stamped: ${stamp}`);
 	parts.push("## The canvas clock");
 	parts.push(clockLines.join("\n"));
+
+	parts.push("## The canvas");
+	const look = await canvasLook(cwd, signal);
+	if ("error" in look) {
+		parts.push(`(the easel couldn't show it: ${look.error})`);
+		facts.canvasLookError = look.error;
+	} else {
+		parts.push(`The whole canvas as it was when this was written: ${look.path}`);
+		facts.canvasLook = look.path;
+	}
 
 	return { summary: parts.join("\n\n"), facts };
 }

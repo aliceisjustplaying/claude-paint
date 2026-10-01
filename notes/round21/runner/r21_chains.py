@@ -25,7 +25,9 @@ chunks. MAX_SITTINGS completed sittings is only a safety cap (logged as NOT FINI
 A sitting that crashes (pi exits non-zero, or its session ends on a provider error) is no
 judgment and counts for nothing: the runner waits (CRASH_WAITS, or longer if the error says
 "retry in Ns") and starts another sitting; after MAX_CRASHES crashes the painter stops (NOT
-FINISHED). A usage limit (OpenCode Go's 5-hour or weekly window) is no crash: the sitting is
+FINISHED). A usage limit (OpenCode Go's 5-hour or weekly window) is no crash. The painter's pi
+waits it out itself (harness/painter/limits.ts) and goes on with nothing added to the
+conversation; only a limit that holds for a day ends the session. Then the sitting is
 marked 'limited', the runner probes the provider until it answers (LIMIT_PROBE_S, up to
 LIMIT_GIVE_UP_H hours; a probe error waiting won't fix, like a refused key or no credit, stops
 the painter at once), and then the painter carries on in the same session (CONTINUE_MESSAGE,
@@ -88,6 +90,7 @@ import time
 from pathlib import Path
 
 from painting_chunks import count_painting_chunks
+from defaults_used import defaults_used
 
 # a studio's box comes from its bin/box and a painting's log; an inherited EASEL_BOX would conflict with both
 # (review 2026-09-29): the runner and everything it starts run without it
@@ -121,7 +124,8 @@ SITTING_MESSAGE = ("You're back at the easel. The painting is as you left it. "
 # earlier after a sitting it ends itself without adding paint
 MAX_SITTINGS = 4
 MAX_CRASHES = 6                                   # crashed sittings (in all) before a painter is stopped
-CONTINUE_MESSAGE = "The connection dropped for a while. Carry on where you left off."
+# only after a usage limit that held for a day (painter.ts waits out shorter ones with nothing added)
+CONTINUE_MESSAGE = "Carry on where you left off."
 CRASH_WAITS = [90, 180, 300, 600, 900, 1200]      # s before the sitting after the 1st, 2nd, ... crash
 # A provider's usage limit (OpenCode Go: 5-hour, weekly and monthly windows) is no crash: the
 # painter waits it out. The runner asks the provider every LIMIT_PROBE_S (or at the reset time
@@ -282,6 +286,13 @@ def painter_cmd(m, message=PAINTER_MSG, session=None):
     cont = ["--session", str(session)] if session else []
     return (["pi", "--print"] + HARNESS + (["-e", str(BLACK)] if m["black"] else []) + m["args"] + key_args(m)
             + cont + [message])
+
+
+def painter_env(m, message):
+    """The painter's environment: a later sitting (SITTING_MESSAGE) gets PAINTER_SITTING_RECOVERY=1,
+    so painter.ts opens it with what a compaction summary holds (brief, journal, globals, clock)
+    and a fresh look at the canvas."""
+    return {**(m["env"] or {}), **({"PAINTER_SITTING_RECOVERY": "1"} if message == SITTING_MESSAGE else {})}
 
 
 def probe_cmd(m):
@@ -623,7 +634,7 @@ def paint(name, n, d, rd):
         log(f"{tag}: sitting {k}{f' continues (part {part}, in its session)' if cont else ''} ({m['name']}, painter harness, "
             f"{before} chunks on the easel, {painting_before} painting)")
         t0 = time.time()
-        rc = run(painter_cmd(m, msg, session), d, rd / f"{stem}_final.txt", rd / f"{stem}_err.txt", env=m["env"])
+        rc = run(painter_cmd(m, msg, session), d, rd / f"{stem}_final.txt", rd / f"{stem}_err.txt", env=painter_env(m, msg))
         stop_leftovers(d, keep_server=True)
         new = sorted(set(session_dir(d).glob("*.jsonl")) - known, key=lambda f: f.stat().st_mtime)
         if session:
@@ -787,6 +798,8 @@ def finish(name, n, d):
     if not lua.exists() or not lua.stat().st_size:
         log(f"{tag}: no log to finish at {lua}")
         return
+    # which of the easel's ready-made handlings the painting called on (defaults_used.py)
+    (rd / f"p{n}_defaults.json").write_text(json.dumps(defaults_used(lua.read_text(errors="replace")), indent=1) + "\n")
 
     def go():
         log(f"{tag}: finishing in the background -> {RUN / f'{tag}_finished.png'}")
@@ -965,7 +978,7 @@ def chain(name):
             show(tag, f"after each sitting: count painting chunks;\n"
                       f"    more sittings until one the painter ends adds no painting chunks (safety cap {MAX_SITTINGS}; a usage limit continues its session),\n"
                       f"    at the same open easel (reopened, replaying the log, only if its server is gone); closed after the last",
-                 painter_cmd(t["model"], SITTING_MESSAGE), d, t["model"]["env"])
+                 painter_cmd(t["model"], SITTING_MESSAGE), d, painter_env(t["model"], SITTING_MESSAGE))
             show(tag, "check (background, after the last sitting; result in the log)", check_cmd(d, name, n), RUN)
             show(tag, "finishing (background, after the last sitting)", finish_cmd(d, name, n), RUN)
             if n < t["painters"] and t["record_kind"] == "free-text":

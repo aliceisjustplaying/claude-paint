@@ -159,3 +159,13 @@ export function lookArgs(p: { crop?: string; mode?: string; size?: number; grid?
 export function toolWords(t: string): string {
 	return t.replace(/--(crop|mode|size|grid)\b/g, "$1");
 }
+
+/**
+ * A paint reply without the easel's compute time: `ok · chunk 12 (76.50 s to compute)` reads
+ * `ok · chunk 12`. How long the machine took isn't the painter's to weigh (the painting's own
+ * clock is); a chunk that runs out of the easel's time limit still says so in its error.
+ */
+export function hideComputeTime(reply: string): string {
+	// the easel's line is the reply's last; a line the chunk printed above it is left as it is
+	return reply.replace(/(^|\n)(ok · chunk \d+) \(\d+(?:\.\d+)? s to compute\)(\n?)$/, "$1$2$3");
+}

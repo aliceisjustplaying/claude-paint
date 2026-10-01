@@ -208,7 +208,7 @@ def model(provider, name, thinking, black=False, env=None, key_from=None):
 RECORD_KINDS = ("free-text", "structured", "none")
 
 
-def lane(profile, m, painters=1, records=(), record_kind="free-text"):
+def lane(profile, m, painters=1, records=(), record_kind="free-text", read_last=False):
     """profile: the studio (friedrich or blank). painters > 1: a chain, with a reader between painters.
     records: reader records from another lane's painters (paths), merged into this lane's first painter's
     studio notes as a chain's are: this painter continues that chain.
@@ -216,13 +216,26 @@ def lane(profile, m, painters=1, records=(), record_kind="free-text"):
     round 21's record as it was), structured (p<n>_observations.json, validated by record_schema into
     p<n>_record.json and rendered into the next studio's notes by record_render) or none (no reader;
     the next studio gets the plain notes and the records of another lane, if any). A structured lane
-    can't continue another lane's free-text records."""
+    can't continue another lane's free-text records.
+    read_last: the reader also reads the lane's last painter (its record is kept; no painter follows),
+    so a single painter gets a record too. A rerun reads a last painter that is done but unread."""
     if record_kind not in RECORD_KINDS:
         raise ValueError(f"record_kind={record_kind!r}: want one of {', '.join(RECORD_KINDS)}")
     if record_kind == "structured" and records:
         raise ValueError("a structured lane can't continue another lane's free-text records (records=)")
     return dict(profile=profile, model=m, painters=painters, records=[Path(r) for r in records],
-                record_kind=record_kind)
+                record_kind=record_kind, read_last=read_last)
+
+
+def reads(t, n):
+    """Whether the reader reads painter n of lane t: between painters, and after the last with read_last."""
+    return t["record_kind"] != "none" and (n < t["painters"] or (t.get("read_last", False) and n == t["painters"]))
+
+
+def unread(t, rd, n):
+    """A painter the reader should have read whose record isn't there (a run that ended before read_last)."""
+    rec = rd / (f"p{n}_record.json" if t["record_kind"] == "structured" else f"p{n}_record.md")
+    return reads(t, n) and not rec.exists()
 
 
 OPUS = model("anthropic", "claude-opus-5-5", "high", black=True)
@@ -254,7 +267,9 @@ BUNNY = model("opencode-go", "space-bunny-free", "max")
 # minutes, costs or pixel limits in what the painter sees (sizes in canvas units)
 # A single painter: no records, so round_number() (which wants round-<n>) isn't reached.
 LANES = {
-    "SONF": lane("friedrich", model("anthropic", "claude-sonnet-5-5", "max", black=True)),
+    # read_last (added during its sitting, 2026-10-02): GPT-6.1 Sol reads the painting's logs and keeps a structured
+    # record, and no second painter follows
+    "SONF": lane("friedrich", model("anthropic", "claude-sonnet-5-5", "max", black=True), record_kind="structured", read_last=True),
 }
 DRY = False
 
@@ -989,7 +1004,9 @@ def chain(name):
             if not DRY:
                 check(name, n, d)
                 finish(name, n, d)
-            continue
+            if DRY or not unread(t, rd, n):
+                continue
+            log(f"{tag}: not read yet")
         if DRY:
             extra = " + trees.md" if t["profile"] == "friedrich" else ""
             merged = {"free-text": " + records", "structured": " + the records rendered for this studio (p<k>_record.json, "
@@ -1004,9 +1021,9 @@ def chain(name):
                  painter_cmd(t["model"], SITTING_MESSAGE), d, painter_env(t["model"], SITTING_MESSAGE))
             show(tag, "check (background, after the last sitting; result in the log)", check_cmd(d, name, n), RUN)
             show(tag, "finishing (background, after the last sitting)", finish_cmd(d, name, n), RUN)
-            if n < t["painters"] and t["record_kind"] == "free-text":
+            if reads(t, n) and t["record_kind"] == "free-text":
                 show(tag, "reader", reader_cmd(f"Read {rd}/p{n}_reader_brief.md and do what it says."), rd)
-            elif n < t["painters"] and t["record_kind"] == "structured":
+            elif reads(t, n) and t["record_kind"] == "structured":
                 show(tag, f"reader (structured: writes p{n}_observations.json from reader_brief_structured.md; "
                           f"record_schema validates it into p{n}_record.json)",
                      reader_cmd(f"Read {rd}/p{n}_reader_brief.md and do what it says."), rd)
@@ -1050,11 +1067,11 @@ def chain(name):
         check(name, n, d)
         finish(name, n, d)
         logs = [p for s in load_sittings(rd, n) for p in s.get("sessions", []) if Path(p).exists()]
-        if n < t["painters"] and t["record_kind"] == "structured" and not read_structured(
+        if reads(t, n) and t["record_kind"] == "structured" and not read_structured(
                 tag, rd, n, d, logs, OWN_NAMES[t["profile"]], name, t["profile"]):
             log(f"{name}: chain stops")
             return
-        if n < t["painters"] and t["record_kind"] == "free-text":
+        if reads(t, n) and t["record_kind"] == "free-text":
             out = rd / f"p{n}_record.md"
             if not logs:
                 log(f"{tag}: RECORD MISSING: no session logs to read; rerun to try again")
@@ -1310,7 +1327,7 @@ def preflight(lanes):
     this runner (a runner copied without them fails every reader at launch), and a structured lane
     stamps each record with BRANCH's commit in BASE."""
     problems = []
-    chains = [l for l in lanes if LANES[l]["painters"] > 1 and LANES[l].get("record_kind") != "none"]
+    chains = [l for l in lanes if any(reads(LANES[l], n) for n in range(1, LANES[l]["painters"] + 1))]
     if chains:
         need = ["reader.ts", "reader-scope.ts", "reader_system_prompt.md", "reader_brief.md"]
         if any(LANES[l].get("record_kind") == "structured" for l in chains):
@@ -1320,7 +1337,8 @@ def preflight(lanes):
             problems.append(f"chain lanes {', '.join(chains)} need {', '.join(missing)} next to {Path(__file__).name} in {HERE}")
         if READER_BLACK and not BLACK.exists():
             problems.append(f"the reader loads pi-black, which isn't at {BLACK}")
-    if not DRY and any(LANES[l]["painters"] > 1 and LANES[l].get("record_kind") == "structured" for l in lanes):
+    if not DRY and any(LANES[l].get("record_kind") == "structured" and any(reads(LANES[l], n) for n in range(1, LANES[l]["painters"] + 1))
+                       for l in lanes):
         try:
             code_commit()
         except RuntimeError as e:

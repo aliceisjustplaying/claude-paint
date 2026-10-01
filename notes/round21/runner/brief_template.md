@@ -19,10 +19,10 @@
 ## The rules of the studio
 - Paint shapes and marks, not computed pictures: don't encode an image in
   masks, amounts or proportions.
-- Shapes are drawn, not copied: don't make a mask or stroke by reflecting,
-  flipping, rotating or translating another mask's or stroke's coordinates.
-  A shape that mirrors another is drawn as its own shape, not as
-  `m:at(x, 2*H - y)` or `m:at(W - x, y)`.
+- Shapes are drawn, not copied: don't make a mask or stroke by mirroring
+  or rotating another mask's or stroke's coordinates. A shape that mirrors
+  another is drawn as its own shape, not as `m:at(x, 2*H - y)` or
+  `m:at(W - x, y)`. Moving a shape and reusing your own helpers are fine.
 
 ## What to read
 {READING}

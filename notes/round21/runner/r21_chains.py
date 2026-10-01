@@ -93,6 +93,7 @@ from pathlib import Path
 from painting_chunks import count_painting_chunks
 from defaults_used import defaults_used
 from log_copy import copy_logs
+from copied_shapes import copied_shapes
 
 # a studio's box comes from its bin/box and a painting's log; an inherited EASEL_BOX would conflict with both
 # (review 2026-09-29): the runner and everything it starts run without it
@@ -802,6 +803,11 @@ def finish(name, n, d):
         return
     # which of the easel's ready-made handlings the painting called on (defaults_used.py)
     (rd / f"p{n}_defaults.json").write_text(json.dumps(defaults_used(lua.read_text(errors="replace")), indent=1) + "\n")
+    # mirrored or rotated coordinate reads (the brief's rule; copied_shapes.py): flags for a person to read
+    copied = copied_shapes(lua.read_text(errors="replace"))
+    (rd / f"p{n}_copied_shapes.json").write_text(json.dumps(copied, indent=1) + "\n")
+    if copied:
+        log(f"{tag}: COPIED SHAPES? {len(copied)} mirrored or rotated coordinate reads (see {rd}/p{n}_copied_shapes.json)")
 
     def go():
         log(f"{tag}: finishing in the background -> {RUN / f'{tag}_finished.png'}")

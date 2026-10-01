@@ -16,6 +16,7 @@ open the logs, and nothing tells it there was another painter). The support line
 earlier canvas.
 """
 import hashlib
+import re
 import json
 import textwrap
 
@@ -167,11 +168,19 @@ def load_compat(path):
     return json.loads(path.read_text()) if path.exists() else []
 
 
+def same_claim(o):
+    """What makes two observations the same for the notes: category, operation and the effect's
+    words (case, spacing and punctuation aside). Only exact repeats; a paraphrase stays."""
+    words = " ".join(re.findall(r"[a-z0-9]+", o["effect"].lower()))
+    return (o["category"], o["operation"], words)
+
+
 def render(records, recipient, compat=()):
     """records: [(slot, chain-record/1 or None if it is missing)], in slot order. recipient: {"medium", "support_kind",
     "commit", "box": {"name", "tubes_sha256"}, "tubes": [names]}. Returns (notes text, report)."""
     compat = [list(p) for p in compat]
     blocks, report = [], []
+    said = set()                                  # what earlier records already passed on (same_claim)
     for slot, r in records:
         if r is None:
             report.append({"slot": slot, "observations": 0, "inherited": 0, "dropped": [],
@@ -211,7 +220,14 @@ def render(records, recipient, compat=()):
                 entry["dropped"].append({"index": o["index"], "why": "; ".join(why)})
             else:
                 whole.append(o)
-        kept = whole
+        kept = []
+        for o in whole:
+            key = same_claim(o)
+            if key in said:
+                entry["dropped"].append({"index": o["index"], "why": "duplicate: an earlier record has the same observation"})
+            else:
+                said.add(key)
+                kept.append(o)
         entry["inherited"] = len(kept)
         if kept:
             blocks.append(block(r, kept))
@@ -227,8 +243,10 @@ def summary(tag, report):
              for e in report]
     box = sum(1 for e in report for d in e["dropped"] if d["why"].startswith("box"))
     whole = sum(1 for e in report for d in e["dropped"] if d["why"].startswith("rendered"))
+    dup = sum(1 for e in report for d in e["dropped"] if d["why"].startswith("duplicate"))
     return (f"{tag}: inherited {got} of {of} observations ("
-            + ", ".join(parts + ([f"{box} box"] if box else []) + ([f"{whole} rendered"] if whole else [])) + ")")
+            + ", ".join(parts + ([f"{box} box"] if box else []) + ([f"{whole} rendered"] if whole else [])
+                        + ([f"{dup} duplicate"] if dup else [])) + ")")
 
 
 def inherited(report, recipient, notes_bytes):

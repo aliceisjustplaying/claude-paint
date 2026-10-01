@@ -6,8 +6,7 @@ the first minutes of a round-21 Sonnet 5.5 painter (killed) planned for a tool-c
 Round 21's FRDC chain goes on, unchanged, on round 21's prompts.
 
 - `harness/painter/system_prompt.md`: "Your brief follows in the first message." (the first message
-  points to BRIEF.md) is now "Your brief is BRIEF.md in the studio.", and a line is added: "Nothing
-  in this session is rationed: there's no limit on tool calls, chunks, looks, tokens or time."
+  points to BRIEF.md) is now "Your brief is BRIEF.md in the studio."
 - `brief_template.md`: the clock bullet loses "The clock isn't a budget or a target."
 - `r21_chains.py`: `BRANCH = "round-21.1"`; the painter's harness `H` comes from the round-21.1
   checkout (`claude-paint-r21.1`), the export, check and finishing scripts still from `claude-paint-r21`,

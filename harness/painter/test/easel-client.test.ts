@@ -241,3 +241,17 @@ test("the easel gets the operator's RAYON_NUM_THREADS and nothing else of the pa
 		}
 	}
 });
+
+test("a paint reply doesn't show the easel's compute time", async () => {
+	const { hideComputeTime } = await import("../easel-client.ts");
+	assert.equal(hideComputeTime("drawn and laid in\nok · chunk 1 (76.50 s to compute)\n"), "drawn and laid in\nok · chunk 1\n");
+	assert.equal(hideComputeTime("ok · chunk 12 (0.03 s to compute)"), "ok · chunk 12");
+	// a chunk's own print that happens to say so is left alone, as is an error
+	assert.equal(hideComputeTime("we took 3 s to compute this\nok · chunk 2 (1.00 s to compute)"), "we took 3 s to compute this\nok · chunk 2");
+	assert.equal(hideComputeTime("the chunk failed: boom"), "the chunk failed: boom");
+});
+
+test("only the easel's last line loses its compute time, not a line the chunk printed", async () => {
+	const { hideComputeTime } = await import("../easel-client.ts");
+	assert.equal(hideComputeTime("ok · chunk 9 (1.00 s to compute)\nok · chunk 3 (2.00 s to compute)\n"), "ok · chunk 9 (1.00 s to compute)\nok · chunk 3\n");
+});

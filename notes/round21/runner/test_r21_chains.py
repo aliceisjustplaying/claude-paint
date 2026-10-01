@@ -476,8 +476,6 @@ def test_the_studio_s_own_artist_passes_and_another_painter_s_name_drops(tmp_pat
 @pytest.mark.parametrize("observations, rc, why", [
     (None, 0, "no record was written"),
     ("## Blending\n- The badger only moves wet paint.\n", 0, "not JSON"),
-    ({"schema": "chain-observations/1", "observations": []}, 0, "no observations"),
-    ({"schema": "chain-observations/1", "observations": [{"category": "sky"}]}, 0, "every observation was dropped"),
     ({"schema": "chain-observations/1", "observations": []}, 1, "the reader exited 1"),
 ])
 def test_a_structured_record_that_cant_be_used_stops_the_lane(tmp_path, monkeypatch, observations, rc, why):
@@ -609,3 +607,12 @@ def test_a_later_sitting_opens_with_the_recovery_sections_and_a_first_or_continu
     assert "PAINTER_SITTING_RECOVERY" not in rc21.painter_env(m, rc21.CONTINUE_MESSAGE)
     gem = rc21.GEM2                                               # a lane's own variables stay
     assert rc21.painter_env(gem, rc21.SITTING_MESSAGE)["PAINTER_MAX_IMAGES"] == "8"
+
+
+@pytest.mark.parametrize("observations", [[], [{"category": "sky"}]])
+def test_an_empty_record_lets_the_chain_go_on_with_nothing_new_inherited(tmp_path, monkeypatch, observations):
+    lines, _ = chain_structured(tmp_path, monkeypatch, {"schema": "chain-observations/1", "observations": observations})
+    rd = tmp_path / "run/T"
+    assert (rd / "p1.done").exists() and json.loads((rd / "p1_record.json").read_text())["observations"] == []
+    assert any("RECORD EMPTY" in l for l in lines), lines
+    assert (rc21.studio("T2") / "notes/studio_notes.md").read_text() == (rc21.HERE / "studio_notes.md").read_text()

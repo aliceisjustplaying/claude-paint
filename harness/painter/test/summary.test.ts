@@ -20,9 +20,9 @@ const section = (summary: string) => summary.split("## Your globals\n\n")[1].spl
 test("the summary lists the globals the easel reports, not names read off the log", async () => {
 	const s = studio(`[ "$1" = globals ] && printf '1\\tOB\\ttable with 2 entries\\n2\\ttree\\tfunction (chunk 2, line 9)\\n'`);
 	const { summary, facts } = await buildSummary(s, []);
-	assert.equal(section(summary), "- `OB` (chunk 1): table with 2 entries\n- `tree` (chunk 2): function (chunk 2, line 9)");
+	assert.equal(section(summary), "- `OB`: table with 2 entries\n- `tree`: function");
 	assert.equal(facts.globals, 2);
-	assert.match(summary, /Chunks in the log: 2 \(last: chunk 2\)/);
+	assert.doesNotMatch(summary, /chunk \d|chunks/i);
 });
 
 test("when the easel can't answer, the summary says so and guesses nothing", async () => {

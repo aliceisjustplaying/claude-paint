@@ -21,11 +21,11 @@ The studio holds one painting, and the easel is open on it. Its tools:
 
 | tool | what it does |
 |---|---|
-| `paint` | runs a chunk of Lua. The reply is what the chunk printed, then `ok · chunk N` |
+| `paint` | runs a chunk of Lua. The reply is what the chunk printed, then `ok` |
 | `look` | shows you the canvas as it is now (see [Looking](#looking)) |
 | `note` | adds an entry to your journal (see [The journal](#the-journal)) |
-| `status` | the number of chunks, the canvas width in pixels and the canvas's setup |
-| `log` | the painting so far: every chunk that ran, each after a line `--@ chunk N` |
+| `status` | the canvas width in pixels and the canvas's setup |
+| `log` | the painting so far: every chunk that ran, each after a line `--@ chunk` |
 
 The first chunk is `canvas{}` (see [The canvas](#the-canvas)). The canvas
 is 2400 pixels wide. `read` reads the files in this folder: your brief and

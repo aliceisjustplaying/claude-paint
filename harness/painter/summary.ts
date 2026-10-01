@@ -4,7 +4,7 @@
  */
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { atEasel } from "./easel-client.ts";
+import { atEasel, renameLook } from "./easel-client.ts";
 
 /** A statement, not an instruction: the sections after it say what they hold. */
 export const HEADER = "Earlier parts of this session were condensed.";
@@ -64,7 +64,7 @@ async function globals(studio: string, signal?: AbortSignal): Promise<{ lines: s
 	}
 	const rows = out === "" ? [] : out.split("\n").map((l) => /^(\d+)\t([A-Za-z_]\w*)\t(.*)$/.exec(l));
 	if (rows.some((r) => !r)) return { error: `the easel's answer isn't a list of globals: ${out.slice(0, 200)}` };
-	const lines = rows.map((r) => `- \`${r![2]}\` (chunk ${r![1]}): ${r![3]}`);
+	const lines = rows.map((r) => `- \`${r![2]}\`: ${r![3].replace(/ \(chunk \d+, line \d+\)/g, "")}`);
 	return { lines: lines.slice(Math.max(0, lines.length - MAX_GLOBALS)), total: lines.length };
 }
 
@@ -107,7 +107,7 @@ export const CANVAS_VIEW = /^The whole canvas as it was when this was written: (
 async function canvasLook(studio: string, signal?: AbortSignal): Promise<{ path: string } | { error: string }> {
 	try {
 		const said = await atEasel(studio, ["look"], undefined, signal);
-		const path = said.split("\n").pop()!.replace(/ \(.*\)$/, "");
+		const { path } = renameLook(studio, said);
 		return /\.png$/.test(path) ? { path } : { error: `the easel's look named no image: ${said.slice(0, 200)}` };
 	} catch (error) {
 		return { error: error instanceof Error ? error.message : String(error) };
@@ -160,13 +160,11 @@ export async function buildSummary(cwd: string, entries: readonly unknown[], sig
 	const stamp = journal && !journal.note ? latestJournalStamp(journal.text) : undefined;
 	facts.clock = clock;
 	facts.journalStamp = stamp;
-	const clockLines = [
-		`- Chunks in the log: ${logFacts ? `${logFacts.chunks}${logFacts.lastChunk !== undefined ? ` (last: chunk ${logFacts.lastChunk})` : ""}` : "0"}`,
-	];
+	const clockLines: string[] = [];
 	if (clock) clockLines.push(`- Latest painting time the easel printed: ${clock}`);
 	if (stamp) clockLines.push(`- Latest journal entry stamped: ${stamp}`);
 	parts.push("## The canvas clock");
-	parts.push(clockLines.join("\n"));
+	parts.push(clockLines.length ? clockLines.join("\n") : "(no painting time printed yet)");
 
 	parts.push("## The canvas");
 	const look = await canvasLook(cwd, signal);

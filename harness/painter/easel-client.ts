@@ -4,7 +4,8 @@
  */
 import { spawn } from "node:child_process";
 import { setTimeout as pause } from "node:timers/promises";
-import { realpathSync } from "node:fs";
+import { realpathSync, renameSync } from "node:fs";
+import { randomUUID } from "node:crypto";
 import { homedir } from "node:os";
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -102,7 +103,7 @@ export async function atEasel(studio: string, args: string[], input: string | un
 	if (await ensureOpen(studio, signal, deadline)) deadline = Date.now() + wait;
 	const r = await step(studio, args, input, signal, deadline);
 	if (r.timedOut) {
-		throw new Error(`the easel didn't answer within ${wait / 60_000} minutes; \`status\` shows whether the chunk count changed`);
+		throw new Error(`the easel didn't answer within ${wait / 60_000} minutes; \`log\` shows whether the chunk ran`);
 	}
 	const text = r.out.trimEnd();
 	if (r.code !== 0) throw new Error(text || "the easel gave no answer");
@@ -161,11 +162,45 @@ export function toolWords(t: string): string {
 }
 
 /**
- * A paint reply without the easel's compute time: `ok · chunk 12 (76.50 s to compute)` reads
- * `ok · chunk 12`. How long the machine took isn't the painter's to weigh (the painting's own
- * clock is); a chunk that runs out of the easel's time limit still says so in its error.
+ * Nothing that counts the painter's work or times the machine reaches the painter: no chunk
+ * numbers, no look numbers, no compute seconds. The painting's own clock (`wait()`'s `day 3,
+ * 14:20`, the journal's stamps) is the only time it sees. A Lua error names its chunk
+ * `[string "chunk 12"]` (the easel loads each chunk as "chunk N"); it reads `[string "chunk"]`.
  */
-export function hideComputeTime(reply: string): string {
+export function hideCounters(t: string): string {
+	return t.replace(/\[string "chunk \d+"\]/g, '[string "chunk"]');
+}
+
+/**
+ * A paint reply without the chunk's number and the easel's compute time: `ok · chunk 12 (76.50 s
+ * to compute)` reads `ok`. A chunk that runs out of the easel's time limit still says so in its error.
+ */
+export function paintReply(reply: string): string {
 	// the easel's line is the reply's last; a line the chunk printed above it is left as it is
-	return reply.replace(/(^|\n)(ok · chunk \d+) \(\d+(?:\.\d+)? s to compute\)(\n?)$/, "$1$2$3");
+	return hideCounters(reply.replace(/(^|\n)ok · chunk \d+(?: \(\d+(?:\.\d+)? s to compute\))?(\n?)$/, "$1ok$2"));
+}
+
+/** A status reply without the chunk count: `12 chunks · 2400px · <setup>` reads `2400px · <setup>`. */
+export function statusReply(reply: string): string {
+	return reply.replace(/^\d+ chunks? · /, "");
+}
+
+/** The log with its chunk lines unnumbered: `--@ chunk 12` reads `--@ chunk`. */
+export function logReply(log: string): string {
+	return log.replace(/^--@ chunk \d+[ \t]*$/gm, "--@ chunk");
+}
+
+/**
+ * A look under a random name and without the machine's seconds: the easel's last line
+ * `<dir>/look-0012.png (1000x714, 0.04s)` becomes `<dir>/<uuid>.png (1000x714)`, and the file is
+ * renamed to match. `studio` resolves a relative path. Anything else is returned as it was.
+ */
+export function renameLook(studio: string, said: string): { said: string; path: string } {
+	const lines = said.split("\n");
+	const m = /^(.*\.png)(?: \((\d+x\d+)(?:, \d+(?:\.\d+)?s)?\))?$/.exec(lines[lines.length - 1]);
+	if (!m) return { said, path: lines[lines.length - 1].replace(/ \(.*\)$/, "") };
+	const path = join(dirname(m[1]), `${randomUUID()}.png`);
+	renameSync(resolve(studio, m[1]), resolve(studio, path));
+	lines[lines.length - 1] = m[2] ? `${path} (${m[2]})` : path;
+	return { said: lines.join("\n"), path };
 }

@@ -13,7 +13,7 @@ import { existsSync } from "node:fs";
 import { Type } from "@earendil-works/pi-ai";
 import { createReadToolDefinition, defineTool, type ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { reviseJournal } from "./journal.ts";
-import { atEasel, hideComputeTime, studioPath, lookArgs, tail, text, toolWords } from "./easel-client.ts";
+import { atEasel, hideCounters, logReply, paintReply, renameLook, statusReply, studioPath, lookArgs, tail, text, toolWords } from "./easel-client.ts";
 
 export function registerEaselTools(pi: ExtensionAPI, studio: string): void {
 	const read = createReadToolDefinition(studio);
@@ -23,11 +23,15 @@ export function registerEaselTools(pi: ExtensionAPI, studio: string): void {
 			name: "paint",
 			label: "paint",
 			description:
-				"Run a chunk of Lua at the easel (notes/easel_guide.md). The reply is what the chunk printed, then `ok · chunk N`. " +
+				"Run a chunk of Lua at the easel (notes/easel_guide.md). The reply is what the chunk printed, then `ok`. " +
 				"A chunk that stops with an error changes nothing.",
 			parameters: Type.Object({ lua: Type.String({ description: "the chunk" }) }),
 			async execute(_id, p, signal) {
-				return text(hideComputeTime(await atEasel(studio, ["do", "-"], p.lua, signal)));
+				try {
+					return text(paintReply(await atEasel(studio, ["do", "-"], p.lua, signal)));
+				} catch (e) {
+					throw new Error(hideCounters((e as Error).message));
+				}
 			},
 		}),
 		executionMode: "sequential",
@@ -55,7 +59,8 @@ export function registerEaselTools(pi: ExtensionAPI, studio: string): void {
 				} catch (e) {
 					throw new Error(toolWords((e as Error).message)); // the easel's messages name its command-line flags
 				}
-				const path = said.split("\n").pop()!.replace(/ \(.*\)$/, "");
+				let path: string;
+				({ said, path } = renameLook(studio, said));
 				const img = await read.execute(id, { path }, signal, onUpdate, ctx);
 				return { ...img, content: [{ type: "text" as const, text: said }, ...img.content.filter((c) => c.type === "image")] };
 			},
@@ -82,10 +87,10 @@ export function registerEaselTools(pi: ExtensionAPI, studio: string): void {
 		...defineTool({
 			name: "status",
 			label: "status",
-			description: "The number of chunks, the canvas width in pixels and the canvas's setup.",
+			description: "The canvas width in pixels and the canvas's setup.",
 			parameters: Type.Object({}),
 			async execute(_id, _p, signal) {
-				return text(await atEasel(studio, ["status"], undefined, signal));
+				return text(statusReply(await atEasel(studio, ["status"], undefined, signal)));
 			},
 		}),
 		executionMode: "sequential",
@@ -98,7 +103,7 @@ export function registerEaselTools(pi: ExtensionAPI, studio: string): void {
 			description: "The painting so far: every chunk that ran, in order (paintings/lua/painting.lua).",
 			parameters: Type.Object({}),
 			async execute(_id, _p, signal) {
-				return text(tail(await atEasel(studio, ["log"], undefined, signal)));
+				return text(tail(logReply(await atEasel(studio, ["log"], undefined, signal))));
 			},
 		}),
 		executionMode: "sequential",

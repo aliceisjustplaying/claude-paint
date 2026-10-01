@@ -242,16 +242,31 @@ test("the easel gets the operator's RAYON_NUM_THREADS and nothing else of the pa
 	}
 });
 
-test("a paint reply doesn't show the easel's compute time", async () => {
-	const { hideComputeTime } = await import("../easel-client.ts");
-	assert.equal(hideComputeTime("drawn and laid in\nok · chunk 1 (76.50 s to compute)\n"), "drawn and laid in\nok · chunk 1\n");
-	assert.equal(hideComputeTime("ok · chunk 12 (0.03 s to compute)"), "ok · chunk 12");
-	// a chunk's own print that happens to say so is left alone, as is an error
-	assert.equal(hideComputeTime("we took 3 s to compute this\nok · chunk 2 (1.00 s to compute)"), "we took 3 s to compute this\nok · chunk 2");
-	assert.equal(hideComputeTime("the chunk failed: boom"), "the chunk failed: boom");
+test("no reply counts the painter's work or times the machine", async () => {
+	const { paintReply, statusReply, logReply, hideCounters } = await import("../easel-client.ts");
+	const cases: [(t: string) => string, string, string][] = [
+		[paintReply, "drawn and laid in\nok · chunk 1 (76.50 s to compute)\n", "drawn and laid in\nok\n"],
+		[paintReply, "ok · chunk 12 (0.03 s to compute)", "ok"],
+		[paintReply, "ok · chunk 12", "ok"],
+		// a chunk's own print that happens to look like the easel's line is left alone; only the last line is the easel's
+		[paintReply, "we took 3 s to compute this\nok · chunk 2 (1.00 s to compute)", "we took 3 s to compute this\nok"],
+		[paintReply, "ok · chunk 9 (1.00 s to compute)\nok · chunk 3 (2.00 s to compute)\n", "ok · chunk 9 (1.00 s to compute)\nok\n"],
+		[hideCounters, 'runtime error: [string "chunk 12"]:3: boom\nstack traceback:\n\t[string "chunk 4"]:9: in function \'tree\'', 'runtime error: [string "chunk"]:3: boom\nstack traceback:\n\t[string "chunk"]:9: in function \'tree\''],
+		[statusReply, "12 chunks · 2400px · canvas{size=900}", "2400px · canvas{size=900}"],
+		[statusReply, "0 chunks · 2400px · no canvas yet", "2400px · no canvas yet"],
+		[logReply, "-- easel session\n--@ engine 2\n\n--@ chunk 1\nx = 1\n\n--@ chunk 12\ny = 2\n", "-- easel session\n--@ engine 2\n\n--@ chunk\nx = 1\n\n--@ chunk\ny = 2\n"],
+	];
+	for (const [f, input, want] of cases) assert.equal(f(input), want, input);
 });
 
-test("only the easel's last line loses its compute time, not a line the chunk printed", async () => {
-	const { hideComputeTime } = await import("../easel-client.ts");
-	assert.equal(hideComputeTime("ok · chunk 9 (1.00 s to compute)\nok · chunk 3 (2.00 s to compute)\n"), "ok · chunk 9 (1.00 s to compute)\nok · chunk 3\n");
+test("a look is renamed at random and shown without the machine's seconds", async () => {
+	const { renameLook } = await import("../easel-client.ts");
+	const s = mkdtempSync(join(tmpdir(), "studio-"));
+	mkdirSync(join(s, "out"));
+	writeFileSync(join(s, "out", "look-0012.png"), "png");
+	const { said, path } = renameLook(s, "out/look-0012.png (1000x714, 0.04s)");
+	assert.match(path, /^out\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.png$/);
+	assert.equal(said, `${path} (1000x714)`);
+	assert.equal(readFileSync(join(s, path), "utf8"), "png");
+	assert.ok(!existsSync(join(s, "out", "look-0012.png")));
 });

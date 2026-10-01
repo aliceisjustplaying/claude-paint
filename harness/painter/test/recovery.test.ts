@@ -18,12 +18,12 @@ function studio(): { dir: string; studio: string } {
 	writeFileSync(join(s, "BRIEF.md"), "# Paint a picture\n");
 	writeFileSync(join(s, "notes/journal.md"), "- day 1, 09:00: began\n");
 	writeFileSync(join(s, "paintings/lua/painting.lua"), "--@ chunk 1\ncanvas{}\n");
-	writeFileSync(join(s, "out/easel/painting/look-0007.png"), Buffer.from(PNG, "base64"));
+	writeFileSync(join(s, "out/easel/painting/fresh.png"), Buffer.from(PNG, "base64"));
 	writeFileSync(join(s, "bin/easel"), `#!/bin/sh
 case "$1" in
   status) echo '1 chunks · 2400px';;
   globals) printf '1\\tsky\\ttable with 2 entries\\n';;
-  look) echo 'out/easel/painting/look-0007.png (1x1, 0.01s)';;
+  look) cp out/easel/painting/fresh.png out/easel/painting/look-0007.png; echo 'out/easel/painting/look-0007.png (1x1, 0.01s)';;
   *) echo "no $1" >&2; exit 1;;
 esac
 `, { mode: 0o755 });
@@ -48,8 +48,10 @@ test("a later sitting opens with the brief, journal, globals, clock and a fresh 
 	assert.equal(reply, "done");
 	const [user] = requests[0].filter((m) => m.role === "user");
 	assert.match(user.text, /^You're back at the easel\.\n\n## BRIEF\.md/);
-	for (const s of ["## Your journal", "> - day 1, 09:00: began", "## Your globals", "`sky` (chunk 1)", "## The canvas clock", "## The canvas",
-		"The whole canvas as it was when this was written: out/easel/painting/look-0007.png"]) assert.ok(user.text.includes(s), s);
+	for (const s of ["## Your journal", "> - day 1, 09:00: began", "## Your globals", "`sky`: table with 2 entries", "## The canvas clock", "## The canvas",
+		]) assert.ok(user.text.includes(s), s);
+	assert.match(user.text, /The whole canvas as it was when this was written: out\/easel\/painting\/[0-9a-f-]{36}\.png/);
+	assert.doesNotMatch(user.text, /chunk \d|chunks|look-\d|\d s\)/);
 	assert.doesNotMatch(user.text, /condensed/);   // not a compaction
 	assert.equal(user.images, 1);
 });
@@ -69,7 +71,7 @@ test("after a compaction the painter sees the canvas as it was when the summary 
 	const after = requests[0];
 	const i = after.findIndex((m) => m.text.startsWith("The conversation history before this point was compacted") || m.text.includes("Earlier parts of this session were condensed."));
 	assert.ok(i >= 0, JSON.stringify(after.map((m) => [m.role, m.text.slice(0, 60)])));
-	assert.match(after[i].text, /The whole canvas as it was when this was written: out\/easel\/painting\/look-0007\.png/);
-	assert.match(after[i + 1].text, /^The canvas as it was when this was written \(out\/easel\/painting\/look-0007\.png\):/);
+	assert.match(after[i].text, /The whole canvas as it was when this was written: out\/easel\/painting\/[0-9a-f-]{36}\.png/);
+	assert.match(after[i + 1].text, /^The canvas as it was when this was written \(out\/easel\/painting\/[0-9a-f-]{36}\.png\):/);
 	assert.equal(after[i + 1].images, 1);
 });

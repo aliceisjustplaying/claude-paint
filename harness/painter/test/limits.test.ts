@@ -59,4 +59,8 @@ test("a run cut off by usage limits goes on when they lift, asking with the conv
 	const errored = entries.filter((e) => e.type === "message" && e.message.stopReason === "error").map((e) => e.id);
 	assert.equal(errored.length, 2);
 	assert.deepEqual(entries.filter((e) => e.type === "context_edit").map((e) => [e.targetId, e.replacement]), errored.map((id) => [id, null]));
+	// each request records what it showed of the images (none here), outside the model's context
+	const shown = entries.filter((e) => e.type === "custom" && e.customType === "painter-request-images");
+	assert.equal(shown.length, 3);
+	assert.deepEqual(shown[0].data, { images: 0, kept: 0, dropped: 0, keptChars: 0, maxImages: 20, maxImageChars: 12_000_000 });
 });

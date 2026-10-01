@@ -90,6 +90,7 @@ import time
 from pathlib import Path
 
 from painting_chunks import count_painting_chunks
+from defaults_used import defaults_used
 
 # a studio's box comes from its bin/box and a painting's log; an inherited EASEL_BOX would conflict with both
 # (review 2026-09-29): the runner and everything it starts run without it
@@ -797,6 +798,8 @@ def finish(name, n, d):
     if not lua.exists() or not lua.stat().st_size:
         log(f"{tag}: no log to finish at {lua}")
         return
+    # which of the easel's ready-made handlings the painting called on (defaults_used.py)
+    (rd / f"p{n}_defaults.json").write_text(json.dumps(defaults_used(lua.read_text(errors="replace")), indent=1) + "\n")
 
     def go():
         log(f"{tag}: finishing in the background -> {RUN / f'{tag}_finished.png'}")

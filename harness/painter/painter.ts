@@ -13,7 +13,8 @@
  *    the images of older tool results are replaced by a line naming the file, keeping the
  *    newest 20 and at most 12 MB of base64 (PAINTER_MAX_IMAGES and PAINTER_MAX_IMAGE_MB change
  *    that for a lane). Pi runs `context` handlers on a copy of the messages, so the session
- *    file keeps every image.
+ *    file keeps every image, and a `painter-request-images` entry records what each request
+ *    kept and dropped.
  * 4. Input tokens per minute (pace.ts): with PAINTER_INPUT_TPM set, each request waits until
  *    the input tokens of the last minute's requests plus its own fit that budget; and a
  *    per-minute quota 429 (Google's `...PerMinute` quota ids) is made retryable for pi's
@@ -103,7 +104,10 @@ export default function painter(pi: ExtensionAPI) {
 				shown = true;
 			}
 		}
-		const { messages, dropped } = pruneImages(withViews, limits);
+		const { messages, dropped, images, keptChars } = pruneImages(withViews, limits);
+		// what this request showed of the images (the session file only, not the model): with each
+		// response's token usage, the record for deciding whether more images could be kept
+		pi.appendEntry("painter-request-images", { images, kept: images - dropped, dropped, keptChars, maxImages: limits.maxImages, maxImageChars: limits.maxImageChars });
 		if (pace) {
 			const wait = pace.waitMs(lastRequest, Date.now());
 			if (wait > 0) await new Promise<void>((resolve) => {

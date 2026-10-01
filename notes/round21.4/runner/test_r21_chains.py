@@ -339,7 +339,7 @@ CANVAS = ('-- easel session "painting"\n\n--@ chunk 1\ncanvas{size=900, linen={1
           'um=90,apply="knife"},{pile={{"lead white",5}},um=45,apply="roller"}}}\n\n--@ chunk 2\nwork(m, {pile=p})\n')
 
 
-def chain_structured(tmp_path, monkeypatch, observations, rc=0, kind="structured", canvas=CANVAS, before=()):
+def chain_structured(tmp_path, monkeypatch, observations, rc=0, kind="structured", canvas=CANVAS, before=(), painters=2, read_last=False):
     """Run lane T (two painters, record_kind) with painter 1 painted in the r17 F fixture logs and a
     reader that writes observations (a dict as JSON, a str as it is, None nothing) and exits rc;
     files named in before are in the run folder from an earlier attempt."""
@@ -350,7 +350,7 @@ def chain_structured(tmp_path, monkeypatch, observations, rc=0, kind="structured
     monkeypatch.setattr(rc21, "A", tmp_path)
     monkeypatch.setattr(rc21, "BASE", tmp_path / "code")
     monkeypatch.setattr(rc21, "NAMES", rc21.HERE.parents[2] / "scripts/check_studio_names")
-    monkeypatch.setattr(rc21, "LANES", {"T": rc21.lane("sargent", rc21.OPUS, painters=2, record_kind=kind)})
+    monkeypatch.setattr(rc21, "LANES", {"T": rc21.lane("sargent", rc21.OPUS, painters=painters, record_kind=kind, read_last=read_last)})
     monkeypatch.setattr(rc21, "log", lines.append)
     monkeypatch.setattr(rc21, "check", lambda *a: None)
     monkeypatch.setattr(rc21, "finish", lambda *a: None)
@@ -485,6 +485,19 @@ def test_a_structured_record_that_cant_be_used_stops_the_lane(tmp_path, monkeypa
     assert not (rd / "p1.done").exists() and not (rd / "p2.exported").exists() and not (rd / "p1_record.json").exists()
     assert any("RECORD REJECTED" in l and why in l for l in lines), lines
     assert (rd / "p1_observations.rejected.json").exists() == (observations is not None)
+
+
+@pytest.mark.parametrize("done_before", [False, True])
+def test_read_last_reads_a_single_painter_once_and_starts_no_other(tmp_path, monkeypatch, done_before):
+    # done_before: a runner without read_last finished the painter; the rerun reads it
+    from records_fixtures import R17F, doc
+    lines, calls = chain_structured(tmp_path, monkeypatch, doc(R17F), painters=1, read_last=True,
+                                    before=("p1.done",) if done_before else ())
+    rd = tmp_path / "run/T"
+    assert len(calls) == 1 and (rd / "p1_record.json").exists() and (rd / "p1.done").exists()
+    assert not (rd / "p2_brief.md").exists() and not rc21.studio("T2").exists()
+    rc21.chain("T")                                  # a rerun: read already, nothing to do
+    assert len(calls) == 1
 
 
 def test_a_lane_without_records_runs_no_reader_and_inherits_nothing(tmp_path, monkeypatch):

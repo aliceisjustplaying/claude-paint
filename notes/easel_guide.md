@@ -24,11 +24,10 @@ The studio holds one painting, and the easel is open on it. Its tools:
 | `paint` | runs a chunk of Lua. The reply is what the chunk printed, then `ok` |
 | `look` | shows you the canvas as it is now (see [Looking](#looking)) |
 | `note` | adds an entry to your journal (see [The journal](#the-journal)) |
-| `status` | the canvas width in pixels and the canvas's setup |
+| `status` | the canvas's setup |
 | `log` | the painting so far: every chunk that ran, each after a line `--@ chunk` |
 
-The first chunk is `canvas{}` (see [The canvas](#the-canvas)). The canvas
-is 2400 pixels wide. `read` reads the files in this folder: your brief and
+The first chunk is `canvas{}` (see [The canvas](#the-canvas)). `read` reads the files in this folder: your brief and
 your notes.
 
 In the examples below, `<tube>` stands for a name from the tube box and
@@ -391,16 +390,16 @@ top of it.
 
 ## Looking
 
-`look` shows you the canvas as it is now, with wet paint as laid. The live canvas is 2400 pixels wide. A whole view is
-scaled down to at most 1600 pixels on its long side and kept below 3 MB,
-like stepping back. A crop shows the original pixels at 1:1 and may be
-at most 1200 pixels on either side. `crop: "x0,y0,x1,y1"` gives two
-opposite corners in canvas units, not a position and width/height.
+`look` shows you the canvas as it is now, with wet paint as laid. A whole
+view shows all of it, scaled down, like stepping back. A crop shows the
+canvas at its full detail, 2.4 pixels to a canvas unit, and may be at most
+500 units on either side. `crop: "x0,y0,x1,y1"` gives two opposite corners
+in canvas units, not a position and width/height.
 
 | `look` with | shows |
 |---|---|
 | nothing | the whole canvas, scaled down |
-| `crop: "300,200,500,350"` | a window in canvas units, at 1:1 pixels |
+| `crop: "300,200,500,350"` | a window in canvas units, at full detail |
 | `mode: "value"` | in grays |
 | `mode: "squint"` | blurred, as through half-closed eyes |
 | `mode: "mirror"` | flipped left to right |
@@ -436,8 +435,8 @@ ruled over a drawing to transfer it.
   in `print`, `tostring`, `string.format`'s `%s` and errors alike, and
   `%p` is refused: an address differs from run to run, so a replay would
   print or choose differently.
-- **Memory.** A mask costs 4 bytes a pixel, a form 28. Keep big things
-  `local` when later chunks don't need them.
+- **Memory.** Masks and forms are large: keep big ones `local` when
+  later chunks don't need them.
 
 ## The journal
 

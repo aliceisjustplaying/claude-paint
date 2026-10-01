@@ -103,7 +103,7 @@ export async function atEasel(studio: string, args: string[], input: string | un
 	if (await ensureOpen(studio, signal, deadline)) deadline = Date.now() + wait;
 	const r = await step(studio, args, input, signal, deadline);
 	if (r.timedOut) {
-		throw new Error(`the easel didn't answer within ${wait / 60_000} minutes; \`log\` shows whether the chunk ran`);
+		throw new Error("the easel didn't answer; `log` shows whether the chunk ran");
 	}
 	const text = r.out.trimEnd();
 	if (r.code !== 0) throw new Error(text || "the easel gave no answer");
@@ -156,9 +156,14 @@ export function lookArgs(p: { crop?: string; mode?: string; size?: number; grid?
 	return a;
 }
 
-/** An easel `look` message in the tool's words: `--crop` is the look tool's `crop`, and so on. */
+/**
+ * An easel `look` message in the tool's words: `--crop` is the look tool's `crop`, and so on, and
+ * a crop's limit is in canvas units (1200 of the live canvas's 2400 pixels are 500 units), not pixels.
+ */
 export function toolWords(t: string): string {
-	return t.replace(/--(crop|mode|size|grid)\b/g, "$1");
+	return t
+		.replace(/--crop exceeds 1200 pixels per side; choose a smaller crop \(crops stay 1:1\)/g, "a crop may be at most 500 units on either side; choose a smaller crop")
+		.replace(/--(crop|mode|size|grid)\b/g, "$1");
 }
 
 /**
@@ -168,7 +173,10 @@ export function toolWords(t: string): string {
  * `[string "chunk 12"]` (the easel loads each chunk as "chunk N"); it reads `[string "chunk"]`.
  */
 export function hideCounters(t: string): string {
-	return t.replace(/\[string "chunk \d+"\]/g, '[string "chunk"]');
+	return t
+		.replace(/\[string "chunk \d+"\]/g, '[string "chunk"]')
+		// the easel's limit on a chunk's machine time (it has never been reached: the longest chunk took under 4 minutes)
+		.replace(/the chunk ran longer than \d+ minutes and was stopped/g, "the chunk didn't finish and was stopped");
 }
 
 /**
@@ -180,9 +188,9 @@ export function paintReply(reply: string): string {
 	return hideCounters(reply.replace(/(^|\n)ok · chunk \d+(?: \(\d+(?:\.\d+)? s to compute\))?(\n?)$/, "$1ok$2"));
 }
 
-/** A status reply without the chunk count: `12 chunks · 2400px · <setup>` reads `2400px · <setup>`. */
+/** A status reply without the chunk count or the pixel width: `12 chunks · 2400px · <setup>` reads `<setup>`. */
 export function statusReply(reply: string): string {
-	return reply.replace(/^\d+ chunks? · /, "");
+	return reply.replace(/^\d+ chunks? · /, "").replace(/^\d+px · /, "");
 }
 
 /** The log with its chunk lines unnumbered: `--@ chunk 12` reads `--@ chunk`. */

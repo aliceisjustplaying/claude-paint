@@ -87,7 +87,7 @@ export function registerEaselTools(pi: ExtensionAPI, studio: string): void {
 		...defineTool({
 			name: "status",
 			label: "status",
-			description: "The canvas width in pixels and the canvas's setup.",
+			description: "The canvas's setup.",
 			parameters: Type.Object({}),
 			async execute(_id, _p, signal) {
 				return text(statusReply(await atEasel(studio, ["status"], undefined, signal)));

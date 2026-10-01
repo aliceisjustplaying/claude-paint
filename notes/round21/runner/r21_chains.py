@@ -230,16 +230,12 @@ GEM2 = model("google", "gemini-3.8-flash", "high", env={"PAINTER_MAX_IMAGES": "8
 # reader was blocked on 2026-09-29). DeepSeek V4.1 Flash, thinking high, through OpenCode Zen (billed per
 # token with the opencode-go key; the Go allowance was used up), as MUSEF ran in round 19.
 DSF = model("opencode", "deepseek-v4.1-flash", "high", key_from="opencode-go")
+# Round 21: one chain. Three painters in Hopper's studio (his box and materials note), each studio after
+# the first inheriting the structured records of the painters before it (record_render.py). The round's
+# other lanes (SARG, INNS, ALMA, TONN on DSF and the NEW slot) were dropped before launch (2026-10-01).
+BUNNY = model("opencode-go", "space-bunny-free", "max")
 LANES = {
-    "SARG": lane("sargent", DSF),
-    "INNS": lane("inness", DSF),
-    "ALMA": lane("alma-tadema", DSF),
-    "TONN": lane("tonn", DSF),
-    # launch day (2026-09-29): a new model in one of these studios; profile and model from the environment
-    # (NEW_PROFILE, default hopper; NEW_PROVIDER, default openai-codex; NEW_MODEL; NEW_THINKING, default high)
-    "NEW": lane(os.environ.get("NEW_PROFILE", "hopper"),
-                model(os.environ.get("NEW_PROVIDER", "openai-codex"), os.environ.get("NEW_MODEL", "UNSET"),
-                      os.environ.get("NEW_THINKING", "high"))),
+    "HOPC": lane("hopper", BUNNY, painters=3, record_kind="structured"),
 }
 DRY = False
 

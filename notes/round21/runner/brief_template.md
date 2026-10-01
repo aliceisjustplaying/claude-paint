@@ -31,7 +31,7 @@
 - You make every artistic decision.
 - Look at your painting often, whole and close up.
 - Keep a working journal with `note` as you go: your own working notes.
-  Entries stay as written.
+  You can revise them.
 - Develop the painting until you judge it complete.
 
 ## Your reply

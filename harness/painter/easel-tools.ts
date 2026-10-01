@@ -12,7 +12,8 @@
 import { existsSync } from "node:fs";
 import { Type } from "@earendil-works/pi-ai";
 import { createReadToolDefinition, defineTool, type ExtensionAPI } from "@earendil-works/pi-coding-agent";
-import { atEasel, studioPath, lookArgs, tail, text, toolWords } from "./easel-client.ts";
+import { reviseJournal } from "./journal.ts";
+import { atEasel, hideComputeTime, studioPath, lookArgs, tail, text, toolWords } from "./easel-client.ts";
 
 export function registerEaselTools(pi: ExtensionAPI, studio: string): void {
 	const read = createReadToolDefinition(studio);
@@ -26,7 +27,7 @@ export function registerEaselTools(pi: ExtensionAPI, studio: string): void {
 				"A chunk that stops with an error changes nothing.",
 			parameters: Type.Object({ lua: Type.String({ description: "the chunk" }) }),
 			async execute(_id, p, signal) {
-				return text(await atEasel(studio, ["do", "-"], p.lua, signal));
+				return text(hideComputeTime(await atEasel(studio, ["do", "-"], p.lua, signal)));
 			},
 		}),
 		executionMode: "sequential",
@@ -66,9 +67,11 @@ export function registerEaselTools(pi: ExtensionAPI, studio: string): void {
 		...defineTool({
 			name: "note",
 			label: "note",
-			description: "Add an entry to your journal, notes/journal.md, stamped with the painting's time.",
-			parameters: Type.Object({ text: Type.String() }),
+			description: "Add an entry to your journal, notes/journal.md, stamped with the painting's time. " +
+				"To revise what is already there, give the exact passage to change as `replaces`: `text` takes its place.",
+			parameters: Type.Object({ text: Type.String(), replaces: Type.Optional(Type.String()) }),
 			async execute(_id, p, signal) {
+				if (p.replaces !== undefined) return text(reviseJournal(studio, p.replaces, p.text));
 				return text(await atEasel(studio, ["note", "-"], p.text, signal));
 			},
 		}),

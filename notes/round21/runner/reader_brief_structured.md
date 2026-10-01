@@ -20,7 +20,8 @@ studio. Write nothing else; the file must be JSON.
 {"schema": "chain-observations/1", "observations": []}
 ```
 
-The list holds one object per observation, with these fields:
+An empty list is a valid record. The list holds one object per
+observation, with these fields:
 
 - `category`: one of ground, pencil, mixing_piles, strokes, brushes,
   blending, wet_into_wet, glazing, stippling, drying_and_time,

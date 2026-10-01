@@ -91,6 +91,7 @@ from pathlib import Path
 
 from painting_chunks import count_painting_chunks
 from defaults_used import defaults_used
+from log_copy import copy_logs
 
 # a studio's box comes from its bin/box and a painting's log; an inherited EASEL_BOX would conflict with both
 # (review 2026-09-29): the runner and everything it starts run without it
@@ -1035,7 +1036,8 @@ def chain(name):
                 log(f"{name}: chain stops")
                 return
             out.unlink(missing_ok=True)                   # an earlier attempt's record isn't this one's
-            rb = ((HERE / "reader_brief.md").read_text().replace("{LOG}", ", ".join(logs))
+            copies, images = reader_logs(rd, n, d, logs)
+            rb = ((HERE / "reader_brief.md").read_text().replace("{LOG}", ", ".join(copies))
                   .replace("{JOURNAL}", str(d / "notes/journal.md")).replace("{OUT}", str(out)))
             (rd / f"p{n}_reader_brief.md").write_text(rb)
             flagged = rd / f"p{n}_record.flags.md"
@@ -1043,7 +1045,7 @@ def chain(name):
             log(f"{tag}: reader")
             # reader.ts lets it read these files only (a journal the painter never wrote isn't one) and write only out
             journal = d / "notes/journal.md"
-            scope = {"read": [*logs, *([str(journal)] if journal.exists() else []), str(rd / f"p{n}_reader_brief.md")],
+            scope = {"read": [*copies, *images, *([str(journal)] if journal.exists() else []), str(rd / f"p{n}_reader_brief.md")],
                      "write": str(out)}
             rc = run(reader_cmd(f"Read {rd}/p{n}_reader_brief.md and do what it says."), rd,
                      rd / f"p{n}_reader_final.txt", rd / f"p{n}_reader_err.txt", {"READER_SCOPE": json.dumps(scope)})
@@ -1153,6 +1155,13 @@ def sha256_file(f):
     return hashlib.sha256(Path(f).read_bytes()).hexdigest()
 
 
+def reader_logs(rd, n, d, logs):
+    """The reader's copies of the painter's logs (log_copy.py: images out of the lines, every line
+    readable) in run/<lane>/p<n>_reader_logs, and the image files they name. Evidence ids are the
+    originals', and record_schema checks evidence against the original logs."""
+    return copy_logs(logs, d, rd / f"p{n}_reader_logs")
+
+
 def reader_model():
     return f"{READER[READER.index('--provider') + 1]}/{READER[READER.index('--model') + 1]}"
 
@@ -1173,12 +1182,13 @@ def read_structured(tag, rd, n, d, logs, own, name, profile):
     out.unlink(missing_ok=True)                   # an earlier attempt's record isn't this one's
     rec.unlink(missing_ok=True)
     brief_file = rd / f"p{n}_reader_brief.md"
+    copies, images = reader_logs(rd, n, d, logs)
     brief_file.write_text((HERE / "reader_brief_structured.md").read_text()
-                          .replace("{LOGS}", "\n".join(f"- log {i}: {p}" for i, p in enumerate(logs, 1)))
+                          .replace("{LOGS}", "\n".join(f"- log {i}: {p}" for i, p in enumerate(copies, 1)))
                           .replace("{JOURNAL}", str(d / "notes/journal.md")).replace("{OUT}", str(out)))
-    log(f"{tag}: reader (structured)")
+    log(f"{tag}: reader (structured; {len(images)} images)")
     journal = d / "notes/journal.md"
-    scope = {"read": [*logs, *([str(journal)] if journal.exists() else []), str(brief_file)], "write": str(out)}
+    scope = {"read": [*copies, *images, *([str(journal)] if journal.exists() else []), str(brief_file)], "write": str(out)}
     rc = run(reader_cmd(f"Read {brief_file} and do what it says."), rd,
              rd / f"p{n}_reader_final.txt", rd / f"p{n}_reader_err.txt", {"READER_SCOPE": json.dumps(scope)})
 

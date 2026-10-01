@@ -2,7 +2,8 @@
 
 A painter worked at an easel that simulates oil paint on linen. Its
 session logs, in this order: {LOG} (JSON lines: its messages, the commands
-it ran, what they printed and the images it looked at). Its working
+it ran, what they printed and the images it looked at; each image
+is a line `[image: <file>]`, and reading that file shows you the image). Its working
 journal is {JOURNAL}.
 
 Read every log in that order, each from the first line to the last, taking

@@ -170,7 +170,7 @@ def test_the_reader_may_read_the_logs_journal_and_brief_and_write_only_its_recor
     lines, scopes = chain_one_record(tmp_path, monkeypatch, GOOD_RECORD, 0, journal=journal)
     rd = tmp_path / "run/T"
     j = [str(rc21.studio("T1") / "notes/journal.md")] if journal else []   # a journal never written isn't one
-    assert scopes == [{"read": [str(tmp_path / "s1.jsonl"), *j, str(rd / "p1_reader_brief.md")],
+    assert scopes == [{"read": [str(rd / "p1_reader_logs/log1.jsonl"), *j, str(rd / "p1_reader_brief.md")],
                        "write": str(rd / "p1_record.md")}]
     assert GOOD_RECORD in (rc21.studio("T2") / "notes/studio_notes.md").read_text()
     assert any(l.endswith("record written") for l in lines), lines
@@ -319,7 +319,8 @@ def test_a_free_text_lane_s_next_studio_gets_exactly_what_the_imported_runner_ga
             want, old_files = notes, files
     assert notes == want
     assert notes.endswith("\n## More notes from the studio\n\n" + GOOD_RECORD)
-    assert [f for f in files if f not in old_files] == []          # no record.json, condition.json or the like
+    # no record.json, condition.json or the like; only the reader's copies of the logs (round 21, H06)
+    assert [f for f in files if f not in old_files] == ["p1_reader_logs"]
 
 
 def code_repo(path):
@@ -368,7 +369,8 @@ def chain_structured(tmp_path, monkeypatch, observations, rc=0, kind="structured
         scope = json.loads(env["READER_SCOPE"])
         calls.append(scope)
         assert scope["write"] == str(rd / "p1_observations.json")
-        assert scope["read"][:2] == sessions
+        copies = [str(rd / "p1_reader_logs" / f"log{i}.jsonl") for i in range(1, len(sessions) + 1)]
+        assert scope["read"][:2] == copies                       # the reader's copies (log_copy.py)
         if observations is not None:
             (rd / "p1_observations.json").write_text(
                 observations if isinstance(observations, str) else json.dumps(observations))
@@ -411,7 +413,10 @@ def test_a_structured_record_reaches_the_next_studio_as_the_rendered_notes(tmp_p
     assert inh["notes_sha256"] == hashlib.sha256(notes.encode()).hexdigest()
     assert "T2: inherited 3 of 3 observations (p1: 3/3)" in lines
     brief = (rd / "p1_reader_brief.md").read_text()
-    assert f"- log 1: {rec['logs'][0]}\n- log 2: {rec['logs'][1]}" in brief and "{" + "OUT}" not in brief
+    # the brief lists the reader's copies; the record keeps the original logs its evidence is checked against
+    copies = [rd / "p1_reader_logs" / f"log{i}.jsonl" for i in (1, 2)]
+    assert f"- log 1: {copies[0]}\n- log 2: {copies[1]}" in brief and "{" + "OUT}" not in brief
+    assert rec["logs"][0].endswith("logs/log1.jsonl") and all(c.exists() for c in copies)
 
 
 @pytest.mark.parametrize("canvas, support, line", [

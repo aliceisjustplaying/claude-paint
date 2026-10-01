@@ -148,3 +148,16 @@ def test_a_record_changed_after_validation_can_t_break_or_hide_a_line(tmp_path, 
     text, report = render(recs, recipient())
     assert sep not in text and "arch" not in text
     assert report[0]["dropped"][0]["why"].startswith(f"rendered: not plain text (U+{ord(sep):04X})")
+
+
+def test_an_observation_an_earlier_record_already_passed_on_is_left_out(tmp_path):
+    import copy
+    recs = section7(tmp_path)
+    later = copy.deepcopy(recs[1][1])
+    repeat = copy.deepcopy(recs[0][1]["observations"][1])          # the same category, operation and words,
+    repeat["effect"] = repeat["effect"].upper().replace(" ", "  ")  # in other case and spacing
+    later["observations"].append(dict(repeat, index=3))
+    text, report = render([recs[0], (2, later)], recipient())
+    assert text == GOLDEN.read_text()
+    assert report[1]["dropped"] == [{"index": 3, "why": "duplicate: an earlier record has the same observation"}]
+    assert summary("T3", report) == "T3: inherited 6 of 7 observations (p1: 3/3, p2: 3/4, 1 duplicate)"

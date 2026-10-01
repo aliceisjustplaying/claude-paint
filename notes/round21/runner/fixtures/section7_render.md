@@ -10,11 +10,11 @@ Observed on linen 15 by 13 threads per cm, over a ground laid by knife, then rol
 
 ### Drying and time
 - The wait counted in minutes, so 1800 of them moved the canvas clock on by 30 hours. When:
-  wait, 1800 minutes. (printed by the easel)
+  wait, 1800 minutes. (printed by the chunk)
 
 ### Easel errors
 - work refused a function as its coverage and the chunk changed nothing. When: work, hatch hand,
-  coverage given as a function. (printed by the easel)
+  coverage given as a function. (printed by the chunk)
 
 Observed on linen 16 by 14 threads per cm, over a ground laid by knife, then brush.
 
@@ -31,4 +31,4 @@ Observed on linen 16 by 14 threads per cm, over a ground laid by knife, then bru
 ### Drying and time
 - Queried at the same moment, the earth-and-black layer read setting while a later
   lead-white-rich layer read open. When: drying, medium 0.2–0.25, the later layer at medium
-  0.15. (printed by the easel)
+  0.15. (printed by the chunk)

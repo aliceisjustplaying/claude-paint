@@ -237,9 +237,13 @@ def normalized(o):
     return o
 
 
-# a chunk's line in a tool result: it ran (ok · chunk 129 ...) or failed (the chunk failed ...)
-CHUNK_RAN = re.compile(r"\bok · chunk (\d+)\b")
-CHUNK_FAILED = re.compile(r"the chunk failed")
+# the easel's own line: the chunk ran (ok · chunk 129, with its compute time before round 21) or
+# failed ("(the chunk failed and changed nothing)"). In a paint result only the last line counts:
+# what the chunk printed above it is the painter's code's output and can say anything, "ok · chunk
+# 5" too. A bash result (rounds 16-17: `easel do ...; easel look`) mixes the easel's lines with
+# other commands', so there a whole line anywhere counts, as before.
+CHUNK_RAN = re.compile(r"^ok · chunk (\d+)(?: \([^()]*\))?$")
+CHUNK_FAILED = re.compile(r"^\(the chunk failed\b")
 # result lines that say nothing the easel printed about the paint: the chunk line, a look's file, a note
 PLAIN_LINE = re.compile(r"^\s*$|\bchunk \d+\b|\.png\b|^noted in |^Successfully wrote ")
 PNG = re.compile(r"\.png\b", re.I)
@@ -282,15 +286,40 @@ class LogIndex:
                     if c["result_line"] is not None:
                         continue
                     parts = [p for p in m.get("content") or [] if isinstance(p, dict)]
-                    c.update(result_line=i, is_error=m.get("isError"),
-                             text="\n".join(p.get("text") or "" for p in parts if p.get("type") == "text")[:self.TEXT_MAX],
+                    text = "\n".join(p.get("text") or "" for p in parts if p.get("type") == "text")
+                    c.update(result_line=i, is_error=m.get("isError"), text=text[:self.TEXT_MAX], last=_last_line(text),
                              image=any(p.get("type") == "image" for p in parts))
 
 
+def _last_line(text):
+    """A result's last line that isn't blank: where the easel says whether the chunk ran."""
+    lines = [l.strip() for l in text.splitlines() if l.strip()]
+    return lines[-1] if lines else ""
+
+
+def _status_lines(c):
+    """The lines that can be the easel's own: a paint result's last line, any line of another result."""
+    if c["tool"] == "paint":
+        return [c.get("last", "")]
+    return [l.strip() for l in c["text"].splitlines()] + [c.get("last", "")]
+
+
+def _ran(c):
+    """The chunk number if the easel's own line says the chunk ran, else None."""
+    for l in _status_lines(c):
+        m = CHUNK_RAN.match(l)
+        if m:
+            return int(m.group(1))
+    return None
+
+
+def _failed(c):
+    return any(CHUNK_FAILED.match(l) for l in _status_lines(c))
+
+
 def _call_facts(c):
-    ran = CHUNK_RAN.search(c["text"])
     return {"line": c["line"], "tool": c["tool"], "result_line": c["result_line"],
-            "chunk": int(ran.group(1)) if ran else None, "failed": bool(CHUNK_FAILED.search(c["text"]))}
+            "chunk": _ran(c), "failed": _failed(c)}
 
 
 def _runs_chunk(c):
@@ -312,8 +341,10 @@ def _code(c):
 
 
 def _printed(c):
-    """Whether a result holds easel output beyond the chunk line (a value, a state, an error)."""
-    return any(not PLAIN_LINE.search(l) for l in c["text"].splitlines())
+    """Whether a result holds output beyond the easel's own line: what the chunk's code printed (a
+    value it asked the easel for, or any text) or the error a failed chunk stopped on."""
+    return any(not PLAIN_LINE.search(l) for l in c["text"].splitlines()
+               if not (c["tool"] == "paint" and l.strip() == c.get("last")))
 
 
 def evidence_problems(o, logs):
@@ -341,16 +372,19 @@ def evidence_problems(o, logs):
     ops = [(e, c) for e, c in found if e["role"] == "operation"]
     if not ops:
         return ["no operation evidence"], resolved
-    ran = [(e, c) for e, c in ops if _runs_chunk(c) and (CHUNK_RAN.search(c["text"]) or CHUNK_FAILED.search(c["text"]))]
+    ran = [(e, c) for e, c in ops if _runs_chunk(c) and (_ran(c) is not None or _failed(c))]
     if not ran:
         return ["no operation evidence shows a chunk that ran or failed (a paint call or bash running easel do)"], resolved
+    # a failed chunk changed nothing: it can show an easel error, not what the paint did
+    if o["category"] != "easel_errors" and not any(_ran(c) is not None for _, c in ran):
+        return ["only failed chunks as operation evidence: a failed chunk changed nothing, so it shows only an easel error"], resolved
     first = min((e["log"], c["line"]) for e, c in ran)
     if o["basis"] == "seen" and not any(e["role"] == "image" and _shows_image(c) and (e["log"], c["line"]) >= first
                                         for e, c in found):
         out.append("basis seen: no image evidence looked at after the operation")
     if o["basis"] == "printed" and not any(_printed(c) for _, c in ran):
         out.append("basis printed: the operation's result holds nothing beyond the chunk line")
-    if o["category"] == "easel_errors" and not any(CHUNK_FAILED.search(c["text"]) for _, c in ran):
+    if o["category"] == "easel_errors" and not any(_failed(c) for _, c in ran):
         out.append("easel_errors: no operation evidence shows a chunk that failed")
     return out, resolved
 

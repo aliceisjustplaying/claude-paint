@@ -143,6 +143,11 @@ READING = {
         + " and\nnotes/research/oil_paint_physics.md as needed.")
     for p, f in [("sargent", "sargent"), ("inness", "inness"), ("alma-tadema", "alma_tadema"), ("tonn", "tonn"), ("hopper", "hopper")]
 }
+# round 21's studio (round 19's reading list for it)
+READING["friedrich"] = ("notes/easel_guide.md; notes/studio_notes.md;\n"
+                        "notes/research/friedrich_materials.md (his materials and method, sourced);\n"
+                        "notes/research/trees.md (how trees are built) and\n"
+                        "notes/research/oil_paint_physics.md as needed.")
 EXPORT_AS = {}
 OPENING = {
     "sargent": (
@@ -168,6 +173,12 @@ OPENING = {
         "subject, setting and composition are yours to invent. Work from knowledge\n"
         "and the notes in your studio; don't use reference images, image models or\n"
         "pictures of his work."),
+    "friedrich": (
+        "Compose and paint one original landscape in the manner of Caspar David\n"
+        "Friedrich, at the easel, a simulator of oil paint on linen. The place,\n"
+        "subject and composition are yours to invent. Work from knowledge and the\n"
+        "notes in your studio; don't use reference images, image models or pictures\n"
+        "of his work."),
     "tonn": (
         "Compose and paint one original picture in the manner of Kendric Tonn, at\n"
         "the easel, a simulator of oil paint on linen. The subject and composition\n"
@@ -230,12 +241,13 @@ GEM2 = model("google", "gemini-3.8-flash", "high", env={"PAINTER_MAX_IMAGES": "8
 # reader was blocked on 2026-09-29). DeepSeek V4.1 Flash, thinking high, through OpenCode Zen (billed per
 # token with the opencode-go key; the Go allowance was used up), as MUSEF ran in round 19.
 DSF = model("opencode", "deepseek-v4.1-flash", "high", key_from="opencode-go")
-# Round 21: one chain. Three painters in Hopper's studio (his box and materials note), each studio after
+# Round 21: one chain. Three painters in Friedrich's studio (the default box, his materials note and
+# trees.md), each studio after
 # the first inheriting the structured records of the painters before it (record_render.py). The round's
 # other lanes (SARG, INNS, ALMA, TONN on DSF and the NEW slot) were dropped before launch (2026-10-01).
 BUNNY = model("opencode-go", "space-bunny-free", "max")
 LANES = {
-    "HOPC": lane("hopper", BUNNY, painters=3, record_kind="structured"),
+    "FRDC": lane("friedrich", BUNNY, painters=3, record_kind="structured"),
 }
 DRY = False
 

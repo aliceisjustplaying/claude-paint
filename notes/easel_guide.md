@@ -302,7 +302,7 @@ sealed: thin paint lets it show through, body paint hides it.
 ## Solids, light and space
 
 These are scaffolds for shapes you give them: they answer where light
-and shadow fall and what lies in front of what. They paint nothing.
+and shadow fall and what lies in front of what.
 
 **Form.** Solids in canvas units, z toward you, lit by one light:
 

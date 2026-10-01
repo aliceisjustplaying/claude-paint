@@ -8,7 +8,7 @@ and `BRANCH` pointing at the round-21 checkout). Since then (`git log -- notes/r
   an error waiting won't fix (a refused key, no credit, an unknown model, a malformed request)
   stops the painter at once with `PROBE ERROR`.
 - **The reader** (round 19's reader launch and N11): it runs as isolated as the painter
-  (`reader.ts`, `reader_system_prompt.md`, read and write only, pi-black for its model) and reads
+  (`reader.ts`, `reader_system_prompt.md`, read and write only; GPT-6.1 Sol through openai-codex since 2026-10-01, pi-black only if the reader is Anthropic) and reads
   only the logs, the journal and its brief and writes only its record (`READER_SCOPE`,
   `reader-scope.ts`). A reader that fails is logged with its exit.
 - **Free-text flags** (round 19's N12): lines that look like what to do or where things go in the

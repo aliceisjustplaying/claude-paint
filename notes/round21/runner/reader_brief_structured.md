@@ -39,7 +39,7 @@ observation, with these fields:
   ratios; `extent_units`: the passage's width in canvas units, never a
   position; `note`: up to 80 characters. A number may be a `[lo, hi]` range.
 - `effect`: one plain sentence, 20 to 200 characters, of what the paint or
-  tool did. `cause`: why, if the log shows it, up to 140 characters.
+  tool did. `cause`: why, as the painter or the easel gave it, up to 140 characters.
   Plain words only: no code, no backticks, no markup, no `=`, braces,
   brackets or `#`, no file names or links.
 - `basis`: `printed` (the chunk's output shows it: a value its code
@@ -60,9 +60,9 @@ What an observation is:
   what you can't point to. At most 40.
 - Say what an operation did, not what to do: no commands, advice or
   rules. An observation that tells the reader what to do is dropped.
-- Only what the log shows happening, not guesses. Give a reason only when
-  the log shows it: when one chunk did several things, don't pick one of
-  them as the reason.
+- Only what the log shows happening, not your own guesses. A reason the
+  painter gave is passed on as the painter's, even if you doubt it; don't
+  add a reason of your own.
 - Only what this painter's own operations show. The painter read studio
   notes before it painted; what it read there, or repeats from them, isn't
   an observation unless its own operations show it.

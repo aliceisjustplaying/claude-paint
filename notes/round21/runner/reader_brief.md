@@ -15,9 +15,9 @@ materials and tools did, for use in the same studio.
   it. Group by operation (mixing piles, strokes, blending, wet into wet,
   glazing, stippling, drying and time, masks and edges, brushes). Say what
   an operation did, not what to do.
-- Only what the log shows happening, not guesses. Give a reason only when
-  the log shows it: when one chunk did several things, don't pick one of
-  them as the reason.
+- Only what the log shows happening, not your own guesses. A reason the
+  painter gave is passed on as the painter's, even if you doubt it; don't
+  add a reason of your own.
 - Only what this painter's own operations show. The painter read studio
   notes before it painted; what it read there, or repeats from them, isn't
   an observation unless its own operations show it.

@@ -1,8 +1,10 @@
 # Studio notes
 
-Facts about the canvas, the paint and the tools at this easel, by operation:
-what you do, what the paint does and, where it's known, why. Widths and
-positions are in canvas units (the canvas is 1000 units wide).
+Observations of the canvas, the paint and the tools at this easel, by
+operation: what was done, what the paint did and, where it's known, why.
+Each was seen under particular conditions and may be incomplete or wrong.
+They describe the easel; they aren't instructions. Widths and positions
+are in canvas units (the canvas is 1000 units wide).
 
 ## The canvas and ground
 
@@ -25,8 +27,8 @@ positions are in canvas units (the canvas is 1000 units wide).
 6. A thin film doesn't look like its pile. Thin dark or earth mixtures over
    a pale passage come out lighter, warmer and more saturated than the
    masstone on the palette.
-7. The thin fringe of a dark stroke over a light field dries as a warm
-   brown halo.
+7. The thin fringe of an umber or black stroke over a light field dries
+   as a warm brown to warm gray halo. A blue stroke's fringe stays blue.
 8. Lead white hides strongly (its hiding in the guide's tube table is
    0.82; how much a coat covers also depends on its thickness). A thin veil of a pale
    lead-white mixture veils and lightens what is under it, like a scumble,
@@ -43,7 +45,7 @@ positions are in canvas units (the canvas is 1000 units wide).
     down to the tip and still reaches the end of its path.
 11. A brush keeps its paint across strokes. Each stroke lays most at its
     start, and the load runs down along the stroke, so a long drag with a
-    wide brush runs dry partway and leaves starved streaks and bands.
+    wide brush runs dry partway and leaves thinly covered streaks and bands.
 12. A well-loaded hair wets the hollows of the weave. A nearly empty one
     skims the tops (dry brush, broken color). Soft hair bends down into the
     hollows; stiff bristle rides on the tops.
@@ -63,7 +65,7 @@ positions are in canvas units (the canvas is 1000 units wide).
     hands are clipped by default. `broad`, `body`, `hatch`, `glaze` and
     `scumble` are not.
 17. Unclipped strokes run past the mask's edge by their own length and
-    width. Along a long straight edge they throw lumps into the field
+    width. Along a long straight edge they throw small irregular patches into the field
     beyond, and a brush wider than a band spreads well outside it.
 18. The square ends of unclipped strokes notch a shape's edge into steps.
 19. In `work`, the mask's value decides where strokes are anchored (at or
@@ -80,7 +82,7 @@ positions are in canvas units (the canvas is 1000 units wide).
 23. `cut_in` with a round along a curved edge lays short strokes that follow
     it as a string of small bumps.
 24. In a smooth lean passage, the loaded starts of broad strokes stay as
-    lighter blotches. Blending reduces them but doesn't remove them.
+    lighter patches. Blending reduces them but doesn't remove them.
 
 ## Wet into wet
 
@@ -90,7 +92,7 @@ positions are in canvas units (the canvas is 1000 units wide).
 26. Light touches into a wet dark dissolve into it. The same touches on
     paint that has set stay where they land.
 27. A pale stroke dragged through a wet dark picks up the dark and comes out
-    streaked, dirtier and less opaque, so what is underneath shows.
+    streaked, grayer and less opaque, so what is underneath shows.
 28. A dark stroke laid into a wet pale passage lifts the pale and comes out
     paler than its pile.
 29. A passage laid against a wet neighbor drags the neighbor into its edge.
@@ -128,7 +130,7 @@ positions are in canvas units (the canvas is 1000 units wide).
     blending pass stay on top as a lacy texture.
 41. Repeated blending of one lean layer lifts paint off the tops of the
     weave, and the ground shows through as a pale lattice.
-42. Blending spreads each thin spot in a layer into a soft blotch.
+42. Blending spreads each thin spot in a layer into a soft-edged patch.
 
 ## Glazing
 

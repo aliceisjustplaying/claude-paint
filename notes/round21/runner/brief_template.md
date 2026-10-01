@@ -7,8 +7,8 @@
 - You paint at the easel: paint a chunk, look at the canvas, paint the
   next. Its tools are `paint`, `look`, `note`, `status` and `log`;
   notes/easel_guide.md explains them.
-- What is painted stays painted. There is no undo: paint over what you
-  don't want.
+- There is no undo. To change a passage, paint over it, or lift wet
+  paint off with a brush.
 - You mix your own paint on the palette, from the tubes, in the
   proportions you choose.
 - Time passes on the painting's own clock: every mark takes the time a

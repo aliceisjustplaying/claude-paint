@@ -31,7 +31,9 @@ TITLES = {"ground": "The canvas and ground", "pencil": "Pencil", "mixing_piles":
 SURFACE = {"bare_ground": "on bare ground", "open": "into open paint", "setting": "into setting paint",
            "tacky": "on tacky paint", "touch_dry": "on touch-dry paint", "dry": "on dry paint",
            "mixed": "over paint in mixed states", "unknown": None}
-TAGS = {"printed": "(printed by the easel)", "painter_reported": "(reported, not verified)"}
+# "printed": what the chunk's own code printed (or the error it stopped on), not a line the easel
+# vouches for: the painter's code can print anything
+TAGS = {"printed": "(printed by the chunk)", "painter_reported": "(reported, not verified)"}
 WIDTH = 96
 # how a ground layer is put on: the easel's own words (canvas{ground={{apply=...}}}), the only ones
 # a support line renders

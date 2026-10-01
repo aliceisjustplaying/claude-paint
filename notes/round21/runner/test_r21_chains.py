@@ -124,7 +124,7 @@ def test_the_reader_is_launched_as_isolated_as_the_painter():
     assert cmd[cmd.index("--tools") + 1] == "read,write"          # reader.ts checks both (READER_SCOPE)
     assert cmd[cmd.index("--system-prompt") + 1] == str(rc21.HERE / "reader_system_prompt.md")
     exts = [cmd[i + 1] for i, f in enumerate(cmd) if f == "-e"]
-    assert exts == [str(rc21.HERE / "reader.ts"), str(rc21.BLACK)]  # pi-black for its Anthropic model
+    assert exts == [str(rc21.HERE / "reader.ts")] + ([str(rc21.BLACK)] if rc21.READER_BLACK else [])
 
 
 REPO_NAMES = rc21.HERE.parents[2] / "scripts/check_studio_names"
@@ -404,7 +404,7 @@ def test_a_structured_record_reaches_the_next_studio_as_the_rendered_notes(tmp_p
     assert rec["code"] == {"tag": "round-21", "commit": rc21.code_commit()} and len(rec["code"]["commit"]) == 40
     assert rec["box"]["name"] == "default"
     assert rec["support"] == {"kind": "linen", "linen": [15, 13], "ground_layers": ["knife", "roller"]}
-    assert rec["reader"]["model"] == "anthropic/claude-opus-5-5" and len(rec["logs"]) == 2
+    assert rec["reader"]["model"] == "openai-codex/gpt-6.1-sol" and len(rec["logs"]) == 2
     assert [o["resolved"][0]["chunk"] for o in rec["observations"]] == [129, None, 162]
     inh = json.loads((rd / "p2_inherited.json").read_text())
     assert (inh["inherited"], inh["of"]) == (3, 3)
@@ -576,6 +576,8 @@ def test_a_chain_lane_can_t_start_without_the_reader_s_files(tmp_path, monkeypat
         (here / f).write_text("")
     assert rc21.preflight(["C", "S"]) == []
     black.unlink()
+    assert rc21.preflight(["C"]) == []                              # an OpenAI reader doesn't load pi-black
+    monkeypatch.setattr(rc21, "READER_BLACK", True)
     assert ["the reader loads pi-black" in w for w in rc21.preflight(["C"])] == [True]
 
 

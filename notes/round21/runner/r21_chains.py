@@ -204,9 +204,13 @@ def lane(profile, m, painters=1, records=(), record_kind="free-text"):
 
 
 OPUS = model("anthropic", "claude-opus-5-5", "high", black=True)
-READER = ["--provider", "anthropic", "--model", "claude-opus-5-5", "--thinking", "medium"]
-# the reader's launch, as isolated as the painter's (HARNESS); pi-black for its Anthropic model
-READER_HARNESS = ["--no-extensions", "-e", str(HERE / "reader.ts"), "-e", str(BLACK),
+# the reader: GPT-6.1 Sol through the ChatGPT subscription. Round 19's Anthropic reader was refused
+# ("reverse engineering or duplicating model outputs"); Sol and GPT-6 Astra both read round 19's
+# SONF logs without a refusal (2026-10-01), and Sol's record was the better of the two.
+READER = ["--provider", "openai-codex", "--model", "gpt-6.1-sol", "--thinking", "medium"]
+READER_BLACK = READER[READER.index("--provider") + 1] == "anthropic"     # pi-black only for an Anthropic reader
+# the reader's launch, as isolated as the painter's (HARNESS)
+READER_HARNESS = ["--no-extensions", "-e", str(HERE / "reader.ts"), *(["-e", str(BLACK)] if READER_BLACK else []),
                   "--system-prompt", str(HERE / "reader_system_prompt.md"), "--tools", "read,write",
                   "--no-context-files", "--no-skills", "--no-prompt-templates", "--no-approve"]
 
@@ -1262,7 +1266,7 @@ def preflight(lanes):
         missing = [f for f in need if not (HERE / f).exists()]
         if missing:
             problems.append(f"chain lanes {', '.join(chains)} need {', '.join(missing)} next to {Path(__file__).name} in {HERE}")
-        if not BLACK.exists():
+        if READER_BLACK and not BLACK.exists():
             problems.append(f"the reader loads pi-black, which isn't at {BLACK}")
     if not DRY and any(LANES[l]["painters"] > 1 and LANES[l].get("record_kind") == "structured" for l in lanes):
         try:

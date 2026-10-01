@@ -50,7 +50,8 @@ That is a lane's default record (record_kind="free-text", as imported). A lane w
 record_kind="structured" gets structured records instead: the reader writes observations as JSON
 (reader_brief_structured.md, p<n>_observations.json), record_schema.py checks each against the
 session logs it cites, the box and the words and names a record may not hold (an observation that
-fails is dropped and logged; a record with none left, or not of the schema, stops the lane), the
+fails is dropped and logged; a record with none, or none left, goes on as an empty record; one
+not of the schema, or a reader that failed, stops the lane), the
 runner keeps it with its metadata (round 21, the commit BRANCH names) as p<n>_record.json, and
 record_render.py writes the next studio's notes from the records through fixed templates, leaving
 out what doesn't fit that studio (p<n>_inherited.json). Such a lane is labeled chain-inherited,
@@ -1224,6 +1225,9 @@ def read_structured(tag, rd, n, d, logs, own, name, profile):
         log(f"{tag}: RECORD DROPPED observation {x['index']}: {'; '.join(x['why'])}")
     for w in v["warnings"]:
         log(f"{tag}: RECORD FLAGGED observation {w['index']} {w['field']} ({w['pattern']}: {w['words']})")
+    if not v["observations"]:
+        log(f"{tag}: RECORD EMPTY: {len(obs['observations'])} observations written, none passed; the chain goes on "
+            f"and the next studio inherits nothing new from this painter")
     log(f"{tag}: record written ({len(v['observations'])} of {len(obs['observations'])} observations passed the "
         f"hard checks, schema, evidence, words and names, not a review of what they say"
         + (f"; {len(v['warnings'])} flagged went on with them)" if v["warnings"] else ")"))

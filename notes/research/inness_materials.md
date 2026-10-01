@@ -280,6 +280,11 @@ bitumen is probable from the paint's crackle (§4).
 - **Paint.** Pigment from the tubes with an oil-medium share.
 - **Taking paint off.** A brush picks up wet paint as it passes; that is
   how paint comes off the canvas.
+- **Not here.** The practices above that go beyond tubes, oil medium,
+  linen, grounds and brushes (solvents, resins and varnishes, scraping
+  tools, panels, photographs and other aids) aren't at this easel. The
+  medium share is oil only; it doesn't stand in for turpentine or a resin
+  medium.
 - **Everything else** the easel does is in the easel guide.
 
 ## Sources

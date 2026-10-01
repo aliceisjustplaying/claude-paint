@@ -74,10 +74,8 @@ def test_decimals_and_one_final_stop_are_one_sentence():
 @pytest.mark.parametrize("d, why", [
     ([], "not a JSON object"),
     ({"schema": "chain-observations/2", "observations": R17F}, "schema"),
-    ({"schema": "chain-observations/1", "observations": [], }, "no observations"),
     ({"schema": "chain-observations/1", "observations": R17F, "round": 20}, "unknown keys"),
     (doc(R17F * 14), "42 observations (at most 40)"),
-    (doc([one(category="sky")]), "every observation was dropped"),
 ])
 def test_a_record_that_cant_be_used_at_all_is_rejected(d, why):
     with pytest.raises(Rejected, match=re.escape(why)):
@@ -271,8 +269,14 @@ def test_a_failed_chunk_backs_an_easel_error_but_not_what_the_paint_did(tmp_path
     logs = [[_call("c1", "paint", {"lua": "work(m, {hand=\"glaze\"}) x()"}),
              _result("c1", "paint", "attempt to call a nil value\n(the chunk failed and changed nothing)", True)]]
     paint_claim = dict(R16D[0], basis="painter_reported", evidence=ev((1, "c1", "operation")))
-    with pytest.raises(Rejected, match="every observation was dropped"):
-        validate(doc([paint_claim]), TUBES, indexed(tmp_path, logs))
+    r = validate(doc([paint_claim]), TUBES, indexed(tmp_path, logs))
+    assert r["observations"] == [] and "only failed chunks" in r["dropped"][0]["why"][0]
     error = dict(R17F[1], evidence=ev((1, "c1", "operation")))
     r = validate(doc([error]), TUBES, indexed(tmp_path, logs))
     assert r["dropped"] == [] and len(r["observations"]) == 1
+
+
+def test_an_empty_record_or_one_with_every_observation_dropped_is_still_a_record():
+    assert validate({"schema": "chain-observations/1", "observations": []})["observations"] == []
+    r = validate(doc([one(category="sky")]))
+    assert r["observations"] == [] and len(r["dropped"]) == 1

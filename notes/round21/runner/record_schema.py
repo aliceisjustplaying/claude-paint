@@ -525,8 +525,8 @@ def validate(doc, tubes=None, logs=None, names=None):
     if set(doc) != {"schema", "observations"}:
         raise Rejected(f"unknown keys {sorted(set(doc) - {'schema', 'observations'})}")
     obs = doc["observations"]
-    if not isinstance(obs, list) or not obs:
-        raise Rejected("no observations")
+    if not isinstance(obs, list):
+        raise Rejected("observations is not a list")
     if len(obs) > MAX_OBSERVATIONS:
         raise Rejected(f"{len(obs)} observations (at most {MAX_OBSERVATIONS})")
     obs = [normalized(o) for o in obs]
@@ -549,6 +549,6 @@ def validate(doc, tubes=None, logs=None, names=None):
             dropped.append({"index": i, "why": why})
         else:
             kept.append(dict(o, index=i, **({"resolved": resolved} if resolved is not None else {})))
-    if not kept:
-        raise Rejected(f"every observation was dropped ({len(dropped)})")
+    # an empty record (none written, or every one dropped) is a record: the next studio inherits nothing
+    # new from it and the chain goes on (round 21 triage); only a record that can't be used stops it
     return {"observations": kept, "dropped": dropped, "warnings": warnings}

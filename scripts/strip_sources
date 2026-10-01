@@ -23,6 +23,8 @@ INTRO = (
     ("A sourced technical report. Every claim cites a source key; the sources\nare listed at the end. ",
      "A technical report from documented sources. "),
     (" Source numbers in brackets point to the list at the end.", ""),
+    ("A sourced note on how trees grow, branch and taper. Every claim carries a source key in brackets; "
+     "the sources are listed at the end. ", "A note on how trees grow, branch and taper, from documented sources. "),
 )
 
 

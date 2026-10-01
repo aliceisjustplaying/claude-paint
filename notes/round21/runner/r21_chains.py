@@ -25,7 +25,9 @@ chunks. MAX_SITTINGS completed sittings is only a safety cap (logged as NOT FINI
 A sitting that crashes (pi exits non-zero, or its session ends on a provider error) is no
 judgment and counts for nothing: the runner waits (CRASH_WAITS, or longer if the error says
 "retry in Ns") and starts another sitting; after MAX_CRASHES crashes the painter stops (NOT
-FINISHED). A usage limit (OpenCode Go's 5-hour or weekly window) is no crash: the sitting is
+FINISHED). A usage limit (OpenCode Go's 5-hour or weekly window) is no crash. The painter's pi
+waits it out itself (harness/painter/limits.ts) and goes on with nothing added to the
+conversation; only a limit that holds for a day ends the session. Then the sitting is
 marked 'limited', the runner probes the provider until it answers (LIMIT_PROBE_S, up to
 LIMIT_GIVE_UP_H hours; a probe error waiting won't fix, like a refused key or no credit, stops
 the painter at once), and then the painter carries on in the same session (CONTINUE_MESSAGE,
@@ -121,7 +123,8 @@ SITTING_MESSAGE = ("You're back at the easel. The painting is as you left it. "
 # earlier after a sitting it ends itself without adding paint
 MAX_SITTINGS = 4
 MAX_CRASHES = 6                                   # crashed sittings (in all) before a painter is stopped
-CONTINUE_MESSAGE = "The connection dropped for a while. Carry on where you left off."
+# only after a usage limit that held for a day (painter.ts waits out shorter ones with nothing added)
+CONTINUE_MESSAGE = "Carry on where you left off."
 CRASH_WAITS = [90, 180, 300, 600, 900, 1200]      # s before the sitting after the 1st, 2nd, ... crash
 # A provider's usage limit (OpenCode Go: 5-hour, weekly and monthly windows) is no crash: the
 # painter waits it out. The runner asks the provider every LIMIT_PROBE_S (or at the reset time

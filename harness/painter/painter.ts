@@ -20,6 +20,9 @@
  *    retry, which otherwise skips it for mentioning "quota exceeded" and "billing".
  * 5. Every painter sees its looks at its provider's best image resolution (vision.ts): Gemini's
  *    ultra-high media resolution, OpenAI's `detail: "high"`.
+ * 6. A usage limit that resets with time (limits.ts) doesn't end the sitting: the run waits until
+ *    the limit should have lifted and then asks again with the conversation as it was, nothing
+ *    added (PAINTER_LIMIT_PROBE_S and PAINTER_LIMIT_GIVE_UP_H change the waits).
  * The PAINTER_* variables are read once and removed from the environment.
  */
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
@@ -27,6 +30,7 @@ import { registerEaselTools } from "./easel-tools.ts";
 import vision from "./vision.ts";
 import { limitsFromEnv, pruneImages } from "./context-images.ts";
 import { requestTokens, retryablePerMinuteQuota, TokenPace } from "./pace.ts";
+import { limitWaitFromEnv, limitWaitMs, usageLimit } from "./limits.ts";
 
 export default function painter(pi: ExtensionAPI) {
 	pi.on("before_agent_start", (event) => {
@@ -43,9 +47,13 @@ export default function painter(pi: ExtensionAPI) {
 	const limits = limitsFromEnv();
 	const tpm = process.env.PAINTER_INPUT_TPM ? Number(process.env.PAINTER_INPUT_TPM) : undefined;
 	if (tpm !== undefined && !(tpm > 0)) throw new Error(`PAINTER_INPUT_TPM=${process.env.PAINTER_INPUT_TPM}: want tokens per minute`);
-	for (const k of ["PAINTER_MAX_IMAGES", "PAINTER_MAX_IMAGE_MB", "PAINTER_INPUT_TPM"]) delete process.env[k];
+	const limitWait = limitWaitFromEnv();
+	for (const k of ["PAINTER_MAX_IMAGES", "PAINTER_MAX_IMAGE_MB", "PAINTER_INPUT_TPM", "PAINTER_LIMIT_PROBE_S", "PAINTER_LIMIT_GIVE_UP_H"]) delete process.env[k];
 	const pace = tpm ? new TokenPace(tpm) : undefined;
 	let lastRequest = 0;
+	// the latest usage-limit error of this run, and since when the limit has held
+	let limited: { text: string; since: number } | undefined;
+	let pendingLimit = false;
 
 	pi.on("context", async (event, ctx) => {
 		const { messages, dropped } = pruneImages(event.messages, limits);
@@ -67,8 +75,30 @@ export default function painter(pi: ExtensionAPI) {
 			lastRequest = tokens;
 			pace?.record(tokens, Date.now());
 		}
+		if (m.stopReason === "error" && usageLimit(m.errorMessage)) {
+			limited = { text: m.errorMessage!, since: limited?.since ?? Date.now() };
+			pendingLimit = true;
+		} else if (m.stopReason !== "error") limited = undefined;
 		const retryable = m.stopReason === "error" ? retryablePerMinuteQuota(m.errorMessage) : undefined;
 		return retryable ? { message: { ...event.message, errorMessage: retryable } as typeof event.message } : undefined;
+	});
+
+	// a run that ended on a usage limit waits, then goes on with nothing added to the conversation:
+	// the errored response is left out of the model's context (a context_edit; the session file
+	// keeps it), so the next request is the conversation as it was before the limit
+	pi.on("agent_before_settle", async (event) => {
+		if (!pendingLimit || !limited) return undefined;
+		pendingLimit = false;
+		const wait = limitWaitMs(limited.text, limited.since, Date.now(), limitWait);
+		const last = event.context.contextEntries.at(-1);
+		const m = last?.sourceEntry.type === "message" ? (last.sourceEntry as { message: { role?: string; stopReason?: string } }).message : undefined;
+		if (wait === undefined || !last || m?.role !== "assistant" || m.stopReason !== "error") {
+			console.error(`painter: usage limit since ${new Date(limited.since).toISOString()}; settling on it`);
+			return undefined;
+		}
+		console.error(`painter: usage limit; asking again in ${Math.round(wait / 60_000)} min`);
+		await new Promise<void>((resolve) => setTimeout(resolve, wait));
+		return { entries: [{ type: "context_edit" as const, targetId: last.sourceEntry.id, replacement: null }], continue: true };
 	});
 
 	registerEaselTools(pi, process.cwd());

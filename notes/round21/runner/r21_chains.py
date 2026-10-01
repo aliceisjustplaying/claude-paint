@@ -287,6 +287,13 @@ def painter_cmd(m, message=PAINTER_MSG, session=None):
             + cont + [message])
 
 
+def painter_env(m, message):
+    """The painter's environment: a later sitting (SITTING_MESSAGE) gets PAINTER_SITTING_RECOVERY=1,
+    so painter.ts opens it with what a compaction summary holds (brief, journal, globals, clock)
+    and a fresh look at the canvas."""
+    return {**(m["env"] or {}), **({"PAINTER_SITTING_RECOVERY": "1"} if message == SITTING_MESSAGE else {})}
+
+
 def probe_cmd(m):
     """A one-line request to the painter's provider and model: no tools, no session, no studio."""
     return (["pi", "--print", "--no-session", "--no-extensions", "--no-tools", "--no-context-files", "--no-skills",
@@ -626,7 +633,7 @@ def paint(name, n, d, rd):
         log(f"{tag}: sitting {k}{f' continues (part {part}, in its session)' if cont else ''} ({m['name']}, painter harness, "
             f"{before} chunks on the easel, {painting_before} painting)")
         t0 = time.time()
-        rc = run(painter_cmd(m, msg, session), d, rd / f"{stem}_final.txt", rd / f"{stem}_err.txt", env=m["env"])
+        rc = run(painter_cmd(m, msg, session), d, rd / f"{stem}_final.txt", rd / f"{stem}_err.txt", env=painter_env(m, msg))
         stop_leftovers(d, keep_server=True)
         new = sorted(set(session_dir(d).glob("*.jsonl")) - known, key=lambda f: f.stat().st_mtime)
         if session:
@@ -968,7 +975,7 @@ def chain(name):
             show(tag, f"after each sitting: count painting chunks;\n"
                       f"    more sittings until one the painter ends adds no painting chunks (safety cap {MAX_SITTINGS}; a usage limit continues its session),\n"
                       f"    at the same open easel (reopened, replaying the log, only if its server is gone); closed after the last",
-                 painter_cmd(t["model"], SITTING_MESSAGE), d, t["model"]["env"])
+                 painter_cmd(t["model"], SITTING_MESSAGE), d, painter_env(t["model"], SITTING_MESSAGE))
             show(tag, "check (background, after the last sitting; result in the log)", check_cmd(d, name, n), RUN)
             show(tag, "finishing (background, after the last sitting)", finish_cmd(d, name, n), RUN)
             if n < t["painters"] and t["record_kind"] == "free-text":

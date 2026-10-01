@@ -20,12 +20,17 @@
  *    retry, which otherwise skips it for mentioning "quota exceeded" and "billing".
  * 5. Every painter sees its looks at its provider's best image resolution (vision.ts): Gemini's
  *    ultra-high media resolution, OpenAI's `detail: "high"`.
- * 6. A usage limit that resets with time (limits.ts) doesn't end the sitting: the run waits until
+ * 6. After a compaction the painter sees the canvas as it was when the summary was written: the
+ *    summary names a fresh whole-canvas look (summary.ts), and each request shows that image
+ *    right after the summary. A later sitting (PAINTER_SITTING_RECOVERY=1, set by the runner)
+ *    opens with the same sections as a compaction summary and the same fresh look.
+ * 7. A usage limit that resets with time (limits.ts) doesn't end the sitting: the run waits until
  *    the limit should have lifted and then asks again with the conversation as it was, nothing
  *    added (PAINTER_LIMIT_PROBE_S and PAINTER_LIMIT_GIVE_UP_H change the waits).
  * The PAINTER_* variables are read once and removed from the environment.
  */
-import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import { createReadToolDefinition, type ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import { buildSummary, CANVAS_VIEW } from "./summary.ts";
 import { registerEaselTools } from "./easel-tools.ts";
 import vision from "./vision.ts";
 import { limitsFromEnv, pruneImages } from "./context-images.ts";
@@ -48,7 +53,35 @@ export default function painter(pi: ExtensionAPI) {
 	const tpm = process.env.PAINTER_INPUT_TPM ? Number(process.env.PAINTER_INPUT_TPM) : undefined;
 	if (tpm !== undefined && !(tpm > 0)) throw new Error(`PAINTER_INPUT_TPM=${process.env.PAINTER_INPUT_TPM}: want tokens per minute`);
 	const limitWait = limitWaitFromEnv();
-	for (const k of ["PAINTER_MAX_IMAGES", "PAINTER_MAX_IMAGE_MB", "PAINTER_INPUT_TPM", "PAINTER_LIMIT_PROBE_S", "PAINTER_LIMIT_GIVE_UP_H"]) delete process.env[k];
+	let sittingRecovery = process.env.PAINTER_SITTING_RECOVERY === "1";
+	for (const k of ["PAINTER_MAX_IMAGES", "PAINTER_MAX_IMAGE_MB", "PAINTER_INPUT_TPM", "PAINTER_LIMIT_PROBE_S", "PAINTER_LIMIT_GIVE_UP_H", "PAINTER_SITTING_RECOVERY"]) delete process.env[k];
+	const studio = process.cwd();
+	const read = createReadToolDefinition(studio);
+	const views = new Map<string, unknown[]>();
+	/** The image blocks of a canvas view in the studio (read once). */
+	async function viewImages(path: string, ctx: Parameters<typeof read.execute>[4]): Promise<unknown[]> {
+		let imgs = views.get(path);
+		if (!imgs) {
+			try {
+				const r = await read.execute("canvas-view", { path }, undefined, undefined, ctx);
+				imgs = r.content.filter((c) => c.type === "image");
+			} catch {
+				imgs = [];
+			}
+			views.set(path, imgs);
+		}
+		return imgs;
+	}
+
+	// a later sitting opens with what a compaction summary holds, and the canvas as it is
+	pi.on("input", async (event, ctx) => {
+		if (!sittingRecovery) return { action: "continue" as const };
+		sittingRecovery = false;
+		const { summary } = await buildSummary(studio, [], undefined, "");
+		const view = CANVAS_VIEW.exec(summary)?.[1];
+		const images = view ? await viewImages(view, ctx) : [];
+		return { action: "transform" as const, text: `${event.text}\n\n${summary}`, images: [...(event.images ?? []), ...(images as never[])] };
+	});
 	const pace = tpm ? new TokenPace(tpm) : undefined;
 	let lastRequest = 0;
 	// the latest usage-limit error of this run, and since when the limit has held
@@ -56,7 +89,21 @@ export default function painter(pi: ExtensionAPI) {
 	let pendingLimit = false;
 
 	pi.on("context", async (event, ctx) => {
-		const { messages, dropped } = pruneImages(event.messages, limits);
+		// after each compaction summary, the canvas view it names (the session file holds the summary only)
+		let shown = false;
+		const withViews: typeof event.messages = [];
+		for (const m of event.messages) {
+			withViews.push(m);
+			const summary = (m as { role?: string; summary?: string }).role === "compactionSummary" ? (m as { summary?: string }).summary : undefined;
+			const view = summary ? CANVAS_VIEW.exec(summary)?.[1] : undefined;
+			const images = view ? await viewImages(view, ctx) : [];
+			if (images.length) {
+				withViews.push({ role: "custom", customType: "painter-canvas-view", display: false, timestamp: (m as { timestamp?: number }).timestamp ?? 0,
+					content: [{ type: "text", text: `The canvas as it was when this was written (${view}):` }, ...images] } as never);
+				shown = true;
+			}
+		}
+		const { messages, dropped } = pruneImages(withViews, limits);
 		if (pace) {
 			const wait = pace.waitMs(lastRequest, Date.now());
 			if (wait > 0) await new Promise<void>((resolve) => {
@@ -64,7 +111,7 @@ export default function painter(pi: ExtensionAPI) {
 				ctx.signal?.addEventListener("abort", () => (clearTimeout(timer), resolve()), { once: true });
 			});
 		}
-		return dropped > 0 ? { messages } : undefined;
+		return dropped > 0 || shown ? { messages } : undefined;
 	});
 
 	pi.on("message_end", (event) => {

@@ -8,7 +8,7 @@ dries on a clock, and layers combine by Kubelka–Munk optics.
 Three things hold for every session:
 
 - **Every chunk that runs stays on the canvas.** There is no undo. To
-  change something, paint over it.
+  change something, paint over it, or lift wet paint off with a brush.
 - **A chunk that stops with an error changes nothing.** The canvas, your
   variables, the paint on your brushes and the clock are as they were
   before it, and it isn't written to the log.
@@ -32,14 +32,15 @@ is 2400 pixels wide. `read` reads the files in this folder: your brief and
 your notes.
 
 In the examples below, `<tube>` stands for a name from the tube box and
-`<parts>` for a number of parts you choose.
+`<parts>` for a number of parts you choose. Other numbers in the examples
+only show how a call is written; they aren't recommended values.
 
 ## The canvas
 
 ```lua
-canvas{size=<mm>, aspect=<width / height>, linen={16, 14}, seed=1,
-       ground={{pile={{"<tube>", <parts>}, {"<tube>", <parts>}}, um=100, apply="knife", texture=0.3},
-               {pile={{"<tube>", <parts>}}, um=50, apply="brush"}}}
+canvas{size=<mm>, aspect=<width / height>, linen={<warp>, <weft>}, seed=<seed>,
+       ground={{pile={{"<tube>", <parts>}, {"<tube>", <parts>}}, um=<µm>, apply="<how>", texture=<0..1>},
+               ...}}
 ```
 
 - `size`: the canvas's width in mm (50 to 5000).
@@ -138,9 +139,9 @@ whose pressure falls to 0 ends in a point.
 ## Covering an area
 
 ```lua
-work(m, {hand="body", pile=p, angle=0.3, coverage=3})
-blend(m, {angle=0})                      -- a clean blender over wet paint (= work with hand="blend")
-stipple(m, {pile=p, width=3, coverage=1.2})
+work(m, {hand="<hand>", pile=p, angle=<radians>, coverage=<layers>})
+blend(m, {angle=<radians>})              -- a clean blender over wet paint (= work with hand="blend")
+stipple(m, {pile=p, width=<units>, coverage=<layers>})
 work(m, {hand="glaze", pile=q})          -- a thin layer brushed on with a soft brush
 lose(m, {pile=p, where=0.5})
 ```

@@ -243,20 +243,12 @@ yellow deep, cadmium yellow light, flake white [PAL25]. In September
 - **Reworking.** He wipes or scrapes off early drawing (§3); reworking a
   varnished painting is rare [STRIP22; STRIP24].
 
-- **One small painting, filmed (2026).** A timelapse he posted of a small
-  painting from blank canvas to finish shows about eight sessions [VID26].
-  He drew contours freehand at the easel on a white ground, with no
-  imprimatura. In the second session he laid the background from the top
-  down and the darkest accents first, painting up to the drawn lines and
-  leaving the lightest shapes as bare canvas; he then blocked each light
-  shape as a flat value plane, one at a time, until no canvas showed. The
-  remaining sessions refined the whole surface: he returned to every area
-  each session, edges that began hard where the background met the
-  drawing softened on the shadow side, and a shape could stay a flat
-  silhouette for several sessions before he modeled it. The paint was
-  opaque from the first strokes, broke over the weave at the edges of
-  strokes and grew scumbled in later passes; the most heavily loaded paint
-  went into the last light accents. No glazing was visible.
+- **One small painting, filmed (2026).** A timelapse he posted of one
+  small painting shows how the paint went on [VID26]. The ground was
+  white, with no imprimatura. The paint was opaque from the first strokes
+  and broke over the weave at the edges of strokes; later passes were
+  scumbled. The most heavily loaded paint was in the lightest accents. No
+  glazing was visible.
 
 ## 8. Condition and aging
 
@@ -278,7 +270,8 @@ yellow deep, cadmium yellow light, flake white [PAL25]. In September
 
 The historical names in this note correspond to these tubes: flake
 white → lead white; cadmium yellow light and deep → cadmium yellow;
-terre verte → green earth; ivory black → bone black.
+terre verte → green earth; ivory black → bone black; red umber → raw
+umber (the nearest tube).
 
 ## 10. At this easel
 
@@ -286,6 +279,11 @@ terre verte → green earth; ivory black → bone black.
 - **Paint.** Pigment from the tubes with an oil-medium share.
 - **Taking paint off.** A brush picks up wet paint as it passes; that is
   how paint comes off the canvas.
+- **Not here.** The practices above that go beyond tubes, oil medium,
+  linen, grounds and brushes (solvents, resins and varnishes, scraping
+  tools, panels, photographs and other aids) aren't at this easel. The
+  medium share is oil only; it doesn't stand in for turpentine or a resin
+  medium.
 - **Everything else** the easel does is in the easel guide.
 
 ## Sources

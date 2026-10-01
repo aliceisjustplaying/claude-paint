@@ -1029,6 +1029,9 @@ def chain(name):
                 (d / "notes" / "studio_notes.md").write_text("\n".join(notes))
             if t["profile"] == "friedrich":
                 shutil.copy(HERE / "trees.md", d / "notes" / "research" / "trees.md")
+                # without its source keys and list, as the export leaves the other research notes
+                subprocess.run([str(BASE / "scripts/strip_sources"), str(d / "notes" / "research" / "trees.md")],
+                               stdin=subprocess.DEVNULL, check=True)
             (rd / f"p{n}.exported").write_text(time.strftime("%F %T"))
         (rd / f"p{n}_brief.md").write_text(brief(t["profile"], d))
         (d / "BRIEF.md").write_text(brief(t["profile"], d))

@@ -595,3 +595,12 @@ def test_a_structured_lane_can_t_start_without_its_commit(tmp_path, monkeypatch)
     monkeypatch.setattr(rc21, "DRY", False)
     monkeypatch.setattr(rc21, "BASE", tmp_path / "no-checkout")
     assert any("no commit for" in w for w in rc21.preflight(["C"]))
+
+
+def test_a_later_sitting_opens_with_the_recovery_sections_and_a_first_or_continued_one_doesn_t():
+    m = rc21.lane("sargent", rc21.DSF)["model"]
+    assert rc21.painter_env(m, rc21.SITTING_MESSAGE)["PAINTER_SITTING_RECOVERY"] == "1"
+    assert "PAINTER_SITTING_RECOVERY" not in rc21.painter_env(m, rc21.PAINTER_MSG)
+    assert "PAINTER_SITTING_RECOVERY" not in rc21.painter_env(m, rc21.CONTINUE_MESSAGE)
+    gem = rc21.GEM2                                               # a lane's own variables stay
+    assert rc21.painter_env(gem, rc21.SITTING_MESSAGE)["PAINTER_MAX_IMAGES"] == "8"

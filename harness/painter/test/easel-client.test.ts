@@ -147,7 +147,7 @@ test("an abort stops the tool's chain: nothing after it runs, and no listener is
 });
 
 test("look's errors name the tool's options, not the easel's flags", () => {
-	assert.equal(toolWords("--crop exceeds 1200 pixels per side; choose a smaller crop"), "crop exceeds 1200 pixels per side; choose a smaller crop");
+	assert.equal(toolWords("--crop exceeds 1200 pixels per side; choose a smaller crop (crops stay 1:1)"), "a crop may be at most 500 units on either side; choose a smaller crop");
 	assert.equal(toolWords("--mode x: normal, value, squint, mirror"), "mode x: normal, value, squint, mirror");
 });
 
@@ -252,8 +252,9 @@ test("no reply counts the painter's work or times the machine", async () => {
 		[paintReply, "we took 3 s to compute this\nok · chunk 2 (1.00 s to compute)", "we took 3 s to compute this\nok"],
 		[paintReply, "ok · chunk 9 (1.00 s to compute)\nok · chunk 3 (2.00 s to compute)\n", "ok · chunk 9 (1.00 s to compute)\nok\n"],
 		[hideCounters, 'runtime error: [string "chunk 12"]:3: boom\nstack traceback:\n\t[string "chunk 4"]:9: in function \'tree\'', 'runtime error: [string "chunk"]:3: boom\nstack traceback:\n\t[string "chunk"]:9: in function \'tree\''],
-		[statusReply, "12 chunks · 2400px · canvas{size=900}", "2400px · canvas{size=900}"],
-		[statusReply, "0 chunks · 2400px · no canvas yet", "2400px · no canvas yet"],
+		[statusReply, "12 chunks · 2400px · canvas{size=900}", "canvas{size=900}"],
+		[statusReply, "0 chunks · 2400px · no canvas yet", "no canvas yet"],
+		[hideCounters, "the chunk ran longer than 10 minutes and was stopped; nothing it did was kept", "the chunk didn't finish and was stopped; nothing it did was kept"],
 		[logReply, "-- easel session\n--@ engine 2\n\n--@ chunk 1\nx = 1\n\n--@ chunk 12\ny = 2\n", "-- easel session\n--@ engine 2\n\n--@ chunk\nx = 1\n\n--@ chunk\ny = 2\n"],
 	];
 	for (const [f, input, want] of cases) assert.equal(f(input), want, input);

@@ -12,7 +12,7 @@
 import { existsSync } from "node:fs";
 import { Type } from "@earendil-works/pi-ai";
 import { createReadToolDefinition, defineTool, type ExtensionAPI } from "@earendil-works/pi-coding-agent";
-import { atEasel, studioPath, lookArgs, tail, text, toolWords } from "./easel-client.ts";
+import { atEasel, hideComputeTime, studioPath, lookArgs, tail, text, toolWords } from "./easel-client.ts";
 
 export function registerEaselTools(pi: ExtensionAPI, studio: string): void {
 	const read = createReadToolDefinition(studio);
@@ -26,7 +26,7 @@ export function registerEaselTools(pi: ExtensionAPI, studio: string): void {
 				"A chunk that stops with an error changes nothing.",
 			parameters: Type.Object({ lua: Type.String({ description: "the chunk" }) }),
 			async execute(_id, p, signal) {
-				return text(await atEasel(studio, ["do", "-"], p.lua, signal));
+				return text(hideComputeTime(await atEasel(studio, ["do", "-"], p.lua, signal)));
 			},
 		}),
 		executionMode: "sequential",

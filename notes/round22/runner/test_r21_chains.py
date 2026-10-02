@@ -630,3 +630,98 @@ def test_an_empty_record_lets_the_chain_go_on_with_nothing_new_inherited(tmp_pat
     assert any("RECORD EMPTY" in l for l in lines), lines
     assert (rc21.studio("T2") / "notes/studio_notes.md").read_text() == (rc21.HERE / "studio_notes.md").read_text()
 
+
+# round 22: pictures of the artist's paintings in the studio's reference/
+
+def pictures(folder, *names, size=(8, 6)):
+    """Tiny pictures named names in folder (made with Pillow, in the format their suffix names)."""
+    from PIL import Image
+    folder.mkdir(parents=True, exist_ok=True)
+    for i, n in enumerate(names):
+        Image.new("RGB", size, (40 * i, 90, 160)).save(folder / n)
+    return folder
+
+
+def tonn_studio(tmp_path, monkeypatch, ref):
+    """Run lane TONN up to its painter, with REFERENCE at ref: the studio, the log and the painters started."""
+    lines, painted = [], []
+    monkeypatch.setattr(rc21, "RUN", tmp_path / "run")
+    monkeypatch.setattr(rc21, "A", tmp_path)
+    monkeypatch.setattr(rc21, "REFERENCE", ref)
+    monkeypatch.setattr(rc21, "NAMES", REPO_NAMES)
+    monkeypatch.setattr(rc21, "LANES", {"TONN": rc21.lane("tonn", rc21.OPUS, record_kind="none")})
+    monkeypatch.setattr(rc21, "log", lines.append)
+    monkeypatch.setattr(rc21, "export_cmd", lambda profile, d: ["mkdir", "-p", str(d / "notes/research")])
+    monkeypatch.setattr(rc21, "paint", lambda name, n, d, rd: painted.append(d))     # returns None: the lane stops
+    (tmp_path / "run/TONN").mkdir(parents=True)
+    rc21.chain("TONN")
+    return rc21.studio("TONN1"), lines, painted
+
+
+@pytest.mark.parametrize("names, readme, opening", [
+    (["a.jpg"], None, "A picture of one of his\npaintings is in reference/, there with his permission: study it for his\n"),
+    (["b.png", "a.jpg", "c.webp"], None, "Pictures of his paintings are\nin reference/, there with his permission: study them for his manner."),
+    (["a.jpeg", "b.JPG"], "# Two still lifes\n\n- a.jpeg: grapes, 2019\n- b.JPG: a jug\n", "Pictures of his paintings are\n"),
+])
+def test_a_tonn_studio_gets_his_pictures_and_a_brief_for_as_many(tmp_path, monkeypatch, names, readme, opening):
+    ref = pictures(tmp_path / "ref", *names)
+    if readme:
+        (ref / "README.md").write_text(readme)
+    (ref / ".DS_Store").write_bytes(b"\0")
+    originals = {n: (ref / n).read_bytes() for n in names}
+    d, lines, painted = tonn_studio(tmp_path, monkeypatch, ref)
+    assert painted == [d]
+    assert sorted(f.name for f in (d / "reference").iterdir()) == sorted(names + ["README.md"])
+    assert all((d / "reference" / n).read_bytes() == b for n, b in originals.items())
+    want = readme or "# reference/\n\nPictures of paintings by Kendric Tonn:\n\n" + "".join(f"- {n}\n" for n in sorted(names))
+    assert (d / "reference/README.md").read_text() == want
+    brief = (d / "BRIEF.md").read_text()
+    assert opening in brief
+    assert ("reference/ (his paintings; reference/README.md lists them) and\nnotes/research/oil_paint_physics.md as needed."
+            in brief)
+    assert brief == (tmp_path / "run/TONN/p1_brief.md").read_text()
+
+
+def test_a_picture_pi_would_resize_or_show_turned_is_copied_to_fit_upright_and_hers_stays_as_it_is(tmp_path, monkeypatch):
+    from PIL import Image
+    ref = pictures(tmp_path / "ref", "wide.png", size=(2400, 120))
+    exif = Image.Exif()
+    exif[0x0112] = 6                                                 # EXIF: turn 90 degrees to show
+    Image.new("RGB", (8, 6)).save(ref / "phone.jpg", exif=exif)
+    before = {n: (ref / n).read_bytes() for n in ("wide.png", "phone.jpg")}
+    d, lines, _ = tonn_studio(tmp_path, monkeypatch, ref)
+    with Image.open(d / "reference/wide.png") as im:
+        assert (im.format, im.size) == ("PNG", (2000, 100))
+    with Image.open(d / "reference/phone.jpg") as im:
+        assert (im.format, im.size, im.getexif().get(0x0112, 1)) == ("JPEG", (6, 8), 1)
+    assert {n: (ref / n).read_bytes() for n in before} == before
+    assert any("wide.png: 2400x120 copied as 2000x100" in l for l in lines), lines
+
+
+@pytest.mark.parametrize("make, why", [
+    (lambda ref: None, "there is no folder"),
+    (lambda ref: ref.mkdir(), "there is no picture in"),
+    (lambda ref: (ref.mkdir(), (ref / "README.md").write_text("# Tonn\n"), (ref / "notes.pdf").write_bytes(b"%PDF")),
+     "there is no picture in"),
+    (lambda ref: (ref.mkdir(), (ref / "a.jpg").write_bytes(b"\0\0\0\x18ftypheic")), "isn't a picture pi's read tool shows"),
+    (lambda ref: (pictures(ref, "a.jpg"), (ref / "README.md").write_text("A still life after Rembrandt.\n")),
+     "name other painters"),
+    (lambda ref: pictures(ref, "after-Vermeer.jpg"), "name other painters"),
+])
+def test_without_his_pictures_nothing_starts(tmp_path, monkeypatch, make, why):
+    import sys
+    ref = tmp_path / "tonn-reference"
+    make(ref)
+    started = []
+    monkeypatch.setattr(rc21, "RUN", tmp_path / "run")
+    monkeypatch.setattr(rc21, "REFERENCE", ref)
+    monkeypatch.setattr(rc21, "NAMES", REPO_NAMES)
+    monkeypatch.setattr(rc21, "LANES", {"TONN": rc21.lane("tonn", rc21.OPUS, record_kind="none")})
+    monkeypatch.setattr(rc21, "chain", started.append)               # a lane that starts would export and paint
+    monkeypatch.setattr(rc21, "watchdog", lambda stop: None)
+    monkeypatch.setattr(sys, "argv", ["r21_chains.py"])
+    monkeypatch.setattr(rc21, "DRY", False)
+    with pytest.raises(SystemExit, match="can't start") as e:
+        rc21.main()
+    assert why in str(e.value) and str(ref) in str(e.value)          # says what's wrong, and where
+    assert started == [] and not (tmp_path / "run").exists()

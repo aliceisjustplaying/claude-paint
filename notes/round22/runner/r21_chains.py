@@ -1,7 +1,17 @@
 # /// script
 # requires-python = ">=3.11"
+# dependencies = ["pillow"]
 # ///
-"""Round 19: the Friedrich chain (lane F: three painters, one after another) and, if switched
+"""Round 22: one Claude Fable 5.1 painter (thinking xhigh) in Kendric Tonn's studio (lane TONN), the
+first studio with pictures of the artist's paintings. They are there with his permission: the owner
+puts them (jpg, jpeg, png or webp, and if she likes a README.md describing them) in REFERENCE
+(~/src/a/tonn-reference, outside the repo), and the studio gets a copy in reference/ (a picture
+larger than pi's read tool shows is copied resized to fit; her files stay as they are). Without a
+picture there the runner stops before anything starts. The painter looks at them with its read tool,
+as it reads its notes. The brief's opening says one picture or several (OPENING, OPENING_ONE). No
+reader. Everything below is as in round 21.5's runner unless it says otherwise.
+
+Round 19: the Friedrich chain (lane F: three painters, one after another) and, if switched
 on in LANES, blank-studio single painters, all run in parallel.
 
 Lanes (LANES): F, a chain of PAINTERS=3 Opus 5.5 (thinking high) painters in Friedrich
@@ -72,10 +82,10 @@ longer than WATCHDOG_MIN minutes, except the painter's pi, the easel server and 
 own check and finishing; it logs each stop. It also watches that each painting's log only
 grows.
 
-    uv run r19_chains.py                  # the lanes in LANES
-    uv run r19_chains.py --only F         # some of them
-    uv run r19_chains.py --dry            # print the exact commands, run nothing
-    uv run r19_chains.py --briefs DIR     # render every profile's brief into DIR, run nothing
+    uv run r21_chains.py                  # the lanes in LANES
+    uv run r21_chains.py --only TONN      # some of them
+    uv run r21_chains.py --dry            # print the exact commands, run nothing
+    uv run r21_chains.py --briefs DIR     # render every profile's brief into DIR, run nothing
 """
 import argparse
 import hashlib
@@ -150,6 +160,11 @@ READING = {
         + " and\nnotes/research/oil_paint_physics.md as needed.")
     for p, f in [("sargent", "sargent"), ("inness", "inness"), ("alma-tadema", "alma_tadema"), ("tonn", "tonn"), ("hopper", "hopper")]
 }
+# round 22: pictures of his paintings in reference/
+READING["tonn"] = ("notes/easel_guide.md; notes/studio_notes.md;\n"
+                   "notes/research/tonn_materials.md (his materials and method);\n"
+                   "reference/ (his paintings; reference/README.md lists them) and\n"
+                   "notes/research/oil_paint_physics.md as needed.")
 # round 21's studio (round 19's reading list for it)
 READING["friedrich"] = ("notes/easel_guide.md; notes/studio_notes.md;\n"
                         "notes/research/friedrich_materials.md (his materials and method, sourced);\n"
@@ -186,12 +201,37 @@ OPENING = {
         "subject and composition are yours to invent. Work from knowledge and the\n"
         "notes in your studio; don't use reference images, image models or pictures\n"
         "of his work."),
+    # round 22: with pictures of his paintings (reference/); OPENING_ONE when there is one
     "tonn": (
         "Compose and paint one original picture in the manner of Kendric Tonn, at\n"
-        "the easel, a simulator of oil paint on linen. The subject and composition\n"
-        "are yours to invent. Work from knowledge and the notes in your studio;\n"
-        "don't use reference images, image models or pictures of his work."),
+        "the easel, a simulator of oil paint on linen. Pictures of his paintings are\n"
+        "in reference/, there with his permission: study them for his manner. The\n"
+        "subject and composition are yours to invent; your picture isn't a copy or a\n"
+        "version of any of his. Work from those pictures, from knowledge and from the\n"
+        "notes in your studio; don't use other reference images or image models."),
 }
+# a studio whose reference/ holds exactly one picture
+OPENING_ONE = {
+    "tonn": (
+        "Compose and paint one original picture in the manner of Kendric Tonn, at\n"
+        "the easel, a simulator of oil paint on linen. A picture of one of his\n"
+        "paintings is in reference/, there with his permission: study it for his\n"
+        "manner. The subject and composition are yours to invent; your picture isn't\n"
+        "a copy or a version of his. Work from that picture, from knowledge and from\n"
+        "the notes in your studio; don't use other reference images or image models."),
+}
+
+# Round 22: pictures of the artist's paintings, there with his permission. The owner puts them in REFERENCE
+# (outside the repo); a studio of a profile in ARTIST gets a copy in <studio>/reference/ (copy_reference).
+REFERENCE = A / "tonn-reference"
+ARTIST = {"tonn": "Kendric Tonn"}
+IMAGE_SUFFIXES = (".jpg", ".jpeg", ".png", ".webp")
+# pi's read tool shows an image as it is if it fits 2000x2000 px and 4.5 MB of base64; a larger one it
+# resizes at every read and says so to the model ("[Image: original WxH, displayed at ...]"). The limits are
+# claude-fable-5-1's inputLimits.images.resize in pi-ai's providers/data/anthropic.json (pi's defaults too,
+# utils/image-resize-core.js). A picture larger than that is copied resized to fit, in its own format.
+READ_MAX_SIDE = 2000
+READ_MAX_BASE64 = 4718592
 
 
 def api_key(entry):
@@ -305,10 +345,143 @@ def session_dir(d):
     return SESS / ("--" + str(d).strip("/").replace("/", "-") + "--")
 
 
-def brief(profile, d):
+def brief(profile, d, pictures=None):
+    """pictures: how many pictures the studio's reference/ holds (profiles in ARTIST; counted there if None):
+    the opening says one picture or several."""
+    opening = OPENING[profile]
+    if profile in ARTIST:
+        n = len(reference_pictures(d / "reference")) if pictures is None else pictures
+        if n < 1:
+            raise RuntimeError(f"{d / 'reference'} holds no picture, and the {profile} brief sends the painter there")
+        opening = OPENING_ONE[profile] if n == 1 else opening
     tpl = (HERE / "brief_template.md").read_text()
-    return (tpl.replace("{OPENING}", OPENING[profile]).replace("{STUDIO}", f"~/src/a/{d.name}")
+    return (tpl.replace("{OPENING}", opening).replace("{STUDIO}", f"~/src/a/{d.name}")
                .replace("{READING}", READING[profile]))
+
+
+def reference_pictures(src):
+    """The picture files in src (by suffix, not hidden), by name."""
+    if not src.is_dir():
+        return []
+    return sorted((f for f in src.iterdir() if f.is_file() and not f.name.startswith(".")
+                   and f.suffix.lower() in IMAGE_SUFFIXES), key=lambda f: f.name)
+
+
+def reference_readme(src):
+    """The owner's README.md in src (any case), or None."""
+    return next((f for f in sorted(src.iterdir()) if f.is_file() and f.name.lower() == "readme.md"), None) if src.is_dir() else None
+
+
+PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
+
+
+def image_kind(f):
+    """What pi's read tool would show f as (it goes by the content: utils/mime.js): "jpeg", "png" (not an
+    animated one) or "webp"; None if it wouldn't show it as an image (it would read it as text)."""
+    with open(f, "rb") as fh:
+        b = fh.read(4100)
+    if b[:3] == b"\xff\xd8\xff":
+        return "jpeg" if b[3:4] != b"\xf7" else None
+    if b[:8] == PNG_SIGNATURE and len(b) >= 16 and b[12:16] == b"IHDR":
+        at = 8
+        while at + 8 <= len(b):
+            kind = b[at + 4:at + 8]
+            if kind == b"acTL":
+                return None
+            if kind == b"IDAT":
+                break
+            at += 12 + int.from_bytes(b[at:at + 4], "big")
+        return "png"
+    if b[:4] == b"RIFF" and b[8:12] == b"WEBP":
+        return "webp"
+    return None
+
+
+def listed_readme(profile, pictures):
+    """reference/README.md when the owner gave none: the files, plainly."""
+    return (f"# reference/\n\nPictures of paintings by {ARTIST[profile]}:\n\n"
+            + "".join(f"- {p.name}\n" for p in pictures))
+
+
+def names_in(text, own):
+    """Painters' names in text a studio may not hold (the export's names check, less own): the hits, or []."""
+    with tempfile.TemporaryDirectory() as t:
+        (Path(t) / "notes").mkdir()
+        (Path(t) / "notes" / "README.md").write_text(text)
+        r = subprocess.run([str(NAMES), t] + own, stdin=subprocess.DEVNULL, capture_output=True, text=True)
+    return ([h for h in r.stderr.splitlines()[1:] if h] or [gist(r.stderr)]) if r.returncode else []
+
+
+def reference_problems(profile, src):
+    """Why src can't give a studio of profile its pictures (empty if it can)."""
+    put = (f"put pictures of {ARTIST[profile]}'s paintings (jpg, jpeg, png or webp files) in {src}, and if you like "
+           f"a README.md there describing them")
+    if not src.is_dir():
+        return [f"there is no folder {src}: {put}"]
+    pictures = reference_pictures(src)
+    if not pictures:
+        return [f"there is no picture in {src}: {put}"]
+    problems = [f"{src / p.name} isn't a picture pi's read tool shows (a JPEG, a PNG that isn't animated or a WebP)"
+                for p in pictures if not image_kind(p)]
+    if not NAMES.exists():
+        return problems + [f"can't check {src}'s README and file names for painters' names: no {NAMES}"]
+    readme = reference_readme(src)
+    # what the painter can read of them: the README (hers, or the list of files) and the file names
+    text = (readme.read_text(errors="replace") if readme else listed_readme(profile, pictures)) + "".join(
+        f"\n{p.name}" for p in pictures)
+    hits = names_in(text, OWN_NAMES[profile])
+    if hits:
+        problems.append(f"{src}'s README or file names name other painters, which no studio holds: {'; '.join(hits)}")
+    return problems
+
+
+def copy_reference(profile, src, dest):
+    """Copy the pictures in src into dest (<studio>/reference), and src's README.md or, if there is none,
+    one listing them. A picture larger than pi's read tool shows (READ_MAX_SIDE) is copied resized to
+    fit, in its own format, its colors kept; one its EXIF turns is copied upright (pi sends a picture that
+    fits as its bytes are, EXIF and all). src's files stay as they are. Returns lines for the log."""
+    from PIL import Image, ImageOps
+    Image.MAX_IMAGE_PIXELS = None                 # the owner's own files: no decompression-bomb guard
+    pictures = reference_pictures(src)
+    dest.mkdir(parents=True, exist_ok=True)
+    said = []
+    for p in pictures:
+        out = dest / p.name
+        with Image.open(p) as im:
+            size = im.size
+            turned = im.getexif().get(0x0112, 1) not in (0, 1)       # EXIF Orientation
+            if max(size) <= READ_MAX_SIDE and not turned:
+                shutil.copyfile(p, out)
+            else:
+                small = ImageOps.exif_transpose(im)
+                small.thumbnail((READ_MAX_SIDE, READ_MAX_SIDE), Image.LANCZOS)
+                kind = image_kind(p)
+                keep = {"icc_profile": im.info["icc_profile"]} if im.info.get("icc_profile") else {}
+                if kind == "jpeg":
+                    small.save(out, "JPEG", quality=92, **keep)
+                elif kind == "webp":
+                    small.save(out, "WEBP", quality=92, **keep)
+                else:
+                    small.save(out, "PNG", optimize=True, **keep)
+                said.append(f"{p.name}: {size[0]}x{size[1]} copied as {small.size[0]}x{small.size[1]}"
+                            + (", upright (its EXIF turned it)" if turned else "")
+                            + (f" (pi's read tool shows at most {READ_MAX_SIDE} px a side)" if max(size) > READ_MAX_SIDE else ""))
+        b64 = (out.stat().st_size + 2) // 3 * 4
+        if b64 >= READ_MAX_BASE64:
+            said.append(f"{p.name}: {b64 / 1e6:.1f} MB of base64, over pi's {READ_MAX_BASE64 / 1e6:.1f} MB: "
+                        f"its read tool re-encodes it as JPEG at each read")
+    readme = reference_readme(src)
+    if readme:
+        shutil.copyfile(readme, dest / "README.md")
+    else:
+        (dest / "README.md").write_text(listed_readme(profile, pictures))
+    total = sum((f.stat().st_size + 2) // 3 * 4 for f in dest.iterdir() if f.suffix.lower() in IMAGE_SUFFIXES)
+    said.append(f"{len(pictures)} picture(s) in reference/ ({total / 1e6:.1f} MB of base64; a request keeps at most 12 MB "
+                f"of images, context-images.ts), README.md {'from ' + str(src) if readme else 'listing them'}")
+    left = sorted(f.name for f in src.iterdir() if not f.name.startswith(".") and f not in pictures and f != readme)
+    if left:
+        said.append(f"left out of reference/ (not jpg, jpeg, png or webp): {', '.join(left)}")
+    return said
 
 
 def key_args(m):
@@ -1044,6 +1217,8 @@ def chain(name):
             log(f"{tag}: not read yet")
         if DRY:
             extra = " + trees.md" if t["profile"] == "friedrich" else ""
+            if t["profile"] in ARTIST:
+                extra += f" + reference/ from {REFERENCE} ({len(reference_pictures(REFERENCE))} pictures)"
             merged = {"free-text": " + records", "structured": " + the records rendered for this studio (p<k>_record.json, "
                       f"see p{n}_inherited.json)", "none": ""}[t["record_kind"]]
             show(tag, f"export {t['profile']} studio (then studio_notes.md{merged if n > 1 else ''}{extra}, "
@@ -1091,7 +1266,19 @@ def chain(name):
                 # without its source keys and list, as the export leaves the other research notes
                 subprocess.run([str(BASE / "scripts/strip_sources"), str(d / "notes" / "research" / "trees.md")],
                                stdin=subprocess.DEVNULL, check=True)
+            if t["profile"] in ARTIST:
+                # pictures of the artist's paintings (round 22); checked again here as main() checks them
+                problems = reference_problems(t["profile"], REFERENCE)
+                if problems:
+                    log(f"{tag}: NO REFERENCE PICTURES, lane stops: {'; '.join(problems)}")
+                    return
+                for line in copy_reference(t["profile"], REFERENCE, d / "reference"):
+                    log(f"{tag}: reference: {line}")
             (rd / f"p{n}.exported").write_text(time.strftime("%F %T"))
+        if t["profile"] in ARTIST and not reference_pictures(d / "reference"):
+            log(f"{tag}: NO REFERENCE PICTURES in {d / 'reference'}, lane stops (remove {rd}/p{n}.exported and rerun "
+                f"to export the studio again)")
+            return
         (rd / f"p{n}_brief.md").write_text(brief(t["profile"], d))
         (d / "BRIEF.md").write_text(brief(t["profile"], d))
         clear_settings(d)
@@ -1353,15 +1540,22 @@ def render_briefs(out):
     out.mkdir(parents=True, exist_ok=True)
     d = A / "paint-studio-000000"
     for profile in OPENING:
-        (out / f"{profile}.md").write_text(brief(profile, d))
+        (out / f"{profile}.md").write_text(brief(profile, d, pictures=2))
         print(out / f"{profile}.md")
+        if profile in OPENING_ONE:                 # a studio with one picture in reference/
+            (out / f"{profile}-one-picture.md").write_text(brief(profile, d, pictures=1))
+            print(out / f"{profile}-one-picture.md")
 
 
 def preflight(lanes):
     """Why these lanes can't start (empty if they can): a chain lane's reader needs its files next to
-    this runner (a runner copied without them fails every reader at launch), and a structured lane
-    stamps each record with BRANCH's commit in BASE."""
+    this runner (a runner copied without them fails every reader at launch), a structured lane
+    stamps each record with BRANCH's commit in BASE, and a studio of a profile in ARTIST needs the
+    artist's pictures in REFERENCE (reference_problems)."""
     problems = []
+    # a studio with pictures of the artist's paintings (round 22): they must be there before anything starts
+    for profile in sorted({LANES[l]["profile"] for l in lanes} & set(ARTIST)):
+        problems += reference_problems(profile, REFERENCE)
     chains = [l for l in lanes if any(reads(LANES[l], n) for n in range(1, LANES[l]["painters"] + 1))]
     if chains:
         need = ["reader.ts", "reader-scope.ts", "reader_system_prompt.md", "reader_brief.md"]

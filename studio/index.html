@@ -117,6 +117,10 @@
   #strip .refthumb { position:relative; flex:none; height:58px; cursor:pointer; border-bottom:3px solid var(--ref); box-sizing:content-box }
   #strip .refthumb b { position:absolute; left:0; top:0; font-size:9px; font-weight:700; letter-spacing:.08em; color:#0b0b0d; background:var(--ref); padding:0 4px; border-radius:3px 0 3px 0; line-height:14px }
   #strip .refthumb.on img { opacity:1; outline:2px solid var(--acc); outline-offset:1px }
+  /* a swipe along the strip moves only the strip (not the page, not the browser's back gesture) */
+  #strip { overscroll-behavior-x:contain }
+  /* touch screens: no scrollbar under the thumbnails (the finger is the scrollbar) */
+  @media (pointer:coarse) { #strip { scrollbar-width:none } #strip::-webkit-scrollbar { display:none } }
   #transport { display:flex; align-items:center; gap:8px }
   #scrubwrap { flex:1; position:relative; display:flex; min-width:0 } #scrub { flex:1; min-width:0; accent-color:var(--acc) }
   #ticks { position:absolute; inset:0; pointer-events:none }
@@ -135,15 +139,18 @@
   /* phone: stacked panes, touch transport, home-indicator safe area. LAST in the sheet so it
      overrides the base rules above (equal specificity, later wins). The 1920px stream is untouched. */
   @media (max-width: 720px) {
-    /* phone: painting + text take almost everything. Thin header, no look-strip, one small
-       transport line. Placed last so it overrides the base rules above. 1920px stream untouched. */
-    main { grid-template-columns: minmax(0,1fr) !important; grid-template-rows: minmax(0,44fr) minmax(0,56fr) }
+    /* phone: painting + text take almost everything. Thin header, the look-strip as one row of
+       thumbnails big enough to tap, one small transport line. The strip's height comes out of the
+       journal's share (48:52 instead of 44:56), so the painting keeps its size. */
+    main { grid-template-columns: minmax(0,1fr) !important; grid-template-rows: minmax(0,48fr) minmax(0,52fr) }
     #viewpane { border-right:none; border-bottom:1px solid var(--line) } #view { padding:4px; gap:4px }
     #view.two { grid-template-rows:minmax(0,2fr) minmax(0,1fr) } #cap { font-size:10.5px } #cap2 { font-size:11.5px; line-height:1.3 } #cap2 b { font-size:10.5px }
     #finished { top:4px; right:6px; font-size:11.5px; padding:2px 7px }
     #picker { top:42px; left:0; width:100vw; max-height:calc(100dvh - 42px); border-radius:0 0 10px 10px; border-left:none; border-right:none; padding:8px 8px 12px }
     .pkgrid { grid-template-columns:minmax(0,1fr); gap:6px } .pki { width:84px; height:60px }
-    #strip { display:none }
+    /* (3px around the thumbnails: room for the current one's outline) */
+    #strip { height:auto; gap:5px; padding:3px 3px 4px; margin:0 -3px 2px; touch-action:pan-x }
+    #strip img { height:48px; width:67px } #strip .refthumb, #strip .sep { height:48px }
     header { gap:6px; padding:4px 8px; flex-wrap:nowrap; row-gap:0 }
     #who { flex:1 1 auto; min-width:0; max-width:none; flex-direction:column; align-items:flex-start; gap:0; padding:2px 8px; line-height:1.25 }
     #who .t { font-size:12.5px; max-width:100% } #who .m { font-size:10.5px } #who .caret { display:none } #doing { display:none }

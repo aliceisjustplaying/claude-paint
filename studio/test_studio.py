@@ -56,7 +56,9 @@ def server(home, monkeypatch):
     monkeypatch.setattr(S, "SESSIONS", str(home[0] / ".pi" / "agent" / "sessions"))
     srv = http.server.ThreadingHTTPServer(("127.0.0.1", 0), S.H)
     threading.Thread(target=srv.serve_forever, daemon=True).start()
-    yield lambda q: get(f"http://127.0.0.1:{srv.server_address[1]}{q}")
+    fetch = lambda q: get(fetch.base + q)
+    fetch.base = f"http://127.0.0.1:{srv.server_address[1]}"
+    yield fetch
     srv.shutdown()
     srv.server_close()
 
@@ -115,9 +117,10 @@ def export(tmp_path, out):
 
 
 def old_export(tmp_path, out):
-    """out as the exporter before the list left it: index.html and data/, no .studio-export."""
+    """out as the exporter before the list left it: index.html and data/, no .studio-export (and no stream.css)."""
     assert export(tmp_path, out).returncode == 0
     (out / ".studio-export").unlink()
+    (out / "stream.css").unlink()
 
 
 @pytest.mark.parametrize("old", [False, True], ids=["other folder", "old export plus a stray file"])
@@ -243,3 +246,19 @@ def test_the_picker_gets_the_newest_whole_look_and_the_title_from_the_closing_re
         picture = (out / "data" / PAINTER / "img" / f"{p['look']}.png").read_bytes()
     assert (p["look"], p["title"]) == (1, "The Blue Barn")
     assert picture == png_of("blue")
+
+
+def test_the_stream_layout_is_beside_the_page_on_the_public_server_and_in_the_export(home, server, monkeypatch):
+    # the page asks for stream.css next to itself when its address has ?stream=1 (the livestream runs --public);
+    # a browser only applies it as a stylesheet if it is served as text/css
+    tmp_path, studio, log = home
+    log.write_text(start(str(studio)) + call("c1", "canvas{}") + result("c1", "ok · chunk 1"))
+    with open(os.path.join(HERE, "stream.css"), "rb") as fh:
+        css = fh.read()
+    monkeypatch.setattr(S, "PUBLIC", True)
+    with urllib.request.urlopen(server.base + "/stream.css") as r:
+        assert (r.status, r.headers.get_content_type(), r.read()) == (200, "text/css", css)
+    out = tmp_path / "out"
+    r = export(tmp_path, out)
+    assert r.returncode == 0, r.stderr
+    assert (out / "stream.css").read_bytes() == css

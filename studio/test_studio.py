@@ -262,3 +262,66 @@ def test_the_stream_layout_is_beside_the_page_on_the_public_server_and_in_the_ex
     r = export(tmp_path, out)
     assert r.returncode == 0, r.stderr
     assert (out / "stream.css").read_bytes() == css
+
+
+def read_picture(i, path, png):
+    """A read of an image file and its result, as pi's read tool writes it."""
+    import base64
+    return (line({"type": "message", "message": {"role": "assistant", "content": [
+                {"type": "toolCall", "id": i, "name": "read", "arguments": {"path": path}}]}})
+            + line({"type": "message", "message": {"role": "toolResult", "toolCallId": i, "toolName": "read", "isError": False,
+                    "content": [{"type": "text", "text": "Read image file [image/png]"},
+                                {"type": "image", "mimeType": "image/png", "data": base64.b64encode(png).decode()}]}}))
+
+
+@pytest.mark.parametrize("via", ["live server", "static export"])
+def test_a_reference_picture_is_marked_and_is_never_the_painters_picture(home, server, via):
+    # pictures read from the studio's reference/ are another painter's work, given to this one to study
+    pytest.importorskip("PIL")
+    tmp_path, studio, log = home
+    out = tmp_path / "out"
+
+    def painter_and_events():
+        if via == "live server":
+            p = next(s for s in json.loads(server("/api/sessions")[1]) if s.get("p") == PAINTER)
+            code, picture = server(f"/api/glance?p={PAINTER}&i={p['look']}")
+            return p, picture if code == 200 else None, json.loads(server(f"/api/events?p={PAINTER}&since=0")[1])["events"]
+        r = export(tmp_path, out)
+        assert r.returncode == 0, r.stderr
+        p = next(s for s in json.loads((out / "data" / "sessions.json").read_text()) if s["p"] == PAINTER)
+        picture = None if p["look"] is None else (out / "data" / PAINTER / "img" / f"{p['look']}.png").read_bytes()
+        return p, picture, json.loads((out / "data" / PAINTER / "events.json").read_text())["events"]
+
+    # it has only studied a reference so far: it has no picture yet
+    log.write_text(start(str(studio)) + read_picture("r1", "reference/his.png", png_of("green")))
+    p, picture, _ = painter_and_events()
+    assert (p["look"], picture) == (None, None)
+
+    # its own canvas, then the reference again (by its full path), then a render it reads as the early painters did
+    with open(log, "a") as fh:
+        fh.write(look("l1", png_of("blue")) + read_picture("r2", f"{studio}/reference/his.png", png_of("green"))
+                 + read_picture("r3", "out/easel/look-0001.png", png_of("red")))
+    p, picture, events = painter_and_events()
+    assert (p["look"], picture) == (1, png_of("blue"))
+    assert [bool(e.get("ref")) for e in events if e["kind"] == "image"] == [True, False, True, False]
+    assert [bool(e.get("ref")) for e in events if e["kind"] == "read"] == [True, True, False]
+
+
+TONN = ("Compose and paint one original picture in the manner of Kendric Tonn, at\nthe easel, a simulator of oil paint "
+        "on linen. {}, there with his permission: study {} for his\nmanner.")
+
+
+@pytest.mark.parametrize("brief, says", [
+    (TONN.format("Pictures of his paintings are\nin reference/", "them"), ("Tonn", "Kendric Tonn", "Kendric Tonn")),
+    (TONN.format("A picture of one of his\npaintings is in reference/", "it"), ("Tonn", "Kendric Tonn", "Kendric Tonn")),
+    ("Compose and paint one original landscape in the manner of Caspar David\nFriedrich, at the easel. Work from "
+     "knowledge and the\nnotes in your studio; don't use reference images, image models or pictures\nof his work.",
+     ("Friedrich", "Caspar David Friedrich", "")),
+], ids=["his pictures in reference/", "one picture in reference/", "no reference pictures"])
+def test_the_brief_names_the_artist_and_whose_paintings_the_reference_pictures_are(home, server, monkeypatch, brief, says):
+    tmp_path, studio, log = home
+    monkeypatch.setenv("HOME", str(tmp_path))  # the brief is read from ~/src/a/<the painter's folder>/BRIEF.md
+    (studio / "BRIEF.md").write_text("# Paint a picture\n\n" + brief + "\n")
+    log.write_text(start(str(studio)) + call("c1", "canvas{}") + result("c1", "ok · chunk 1"))
+    p = next(s for s in json.loads(server("/api/sessions")[1]) if s.get("p") == PAINTER)
+    assert (p["subject"], p["artist"], p["reference_artist"]) == says

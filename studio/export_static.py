@@ -6,7 +6,8 @@
 
     uv run studio/export_static.py <out-dir> [--skip paint-studio-xxxxxx ...]
 
-Writes <out>/index.html (the viewer, reading files instead of the live API), <out>/data/sessions.json and,
+Writes <out>/index.html (the viewer, reading files instead of the live API), <out>/stream.css (its livestream
+layout, loaded with ?stream=1), <out>/data/sessions.json and,
 per painter, data/<painter>/events.json (with the image extensions), data/<painter>/img/<i>.<ext> and
 data/<painter>/file/<the painting's source> (from archive/sources/ once the painter's folder is gone). Every text response is scrubbed like the public server's
 (home folder -> ~, account name -> user); the export stops if a scrubbed file still names either.
@@ -180,6 +181,8 @@ def main():
     # the gallery's page-view counter (Plausible, served from stillwet.art/v/), on the public copy only
     page = page.replace(b"</head>", PLAUSIBLE + b"</head>", 1)
     text(os.path.join(out, "index.html"), page)
+    with open(os.path.join(S.HERE, "stream.css"), "rb") as fh:  # the livestream's layout, for ?stream=1
+        text(os.path.join(out, "stream.css"), fh.read())
     now = sorted(os.path.relpath(f, out) for f in WRITTEN)
     stale = 0
     for rel in set(before) - set(now):

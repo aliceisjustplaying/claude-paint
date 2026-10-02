@@ -514,6 +514,9 @@ class H(http.server.BaseHTTPRequestHandler):
             if PUBLIC:
                 page = page.replace(b'<label id="allwrap"', b'<label id="allwrap" hidden')
             return self._send(200, page, "text/html; charset=utf-8")
+        if u.path == "/stream.css":  # the livestream's layout: the page loads it itself with ?stream=1
+            with open(os.path.join(HERE, "stream.css"), "rb") as fh:
+                return self._send(200, fh.read(), "text/css; charset=utf-8")
         if u.path == "/api/sessions":
             ss = list_sessions()
             for s in ss:

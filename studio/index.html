@@ -211,6 +211,11 @@ const hhmm = ts => new Date(ts).toLocaleTimeString([], {hour:'2-digit', minute:'
 const ago = s => s < 90 ? Math.round(s) + ' s ago' : s < 5400 ? Math.round(s/60) + ' min ago' : Math.round(s/3600) + ' h ago';
 // the static export (studio/export_static.py) sets STUDIO_STATIC: the same data, read from files, loaded once
 const STATIC = !!window.STUDIO_STATIC;
+// ?stream=1: the livestream's layout. The page loads its own stream.css after its styles (so it overrides them)
+// and keeps the parameter in the address whatever else changes there
+const STREAM = (v => v !== null && v !== '0')(new URLSearchParams(location.search).get('stream'));
+if (STREAM) { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 'stream.css'; document.head.appendChild(l); }
+const addr = q => '?' + q + (STREAM ? '&stream=1' : '');
 let IMGEXT = [], lastStatic = 0;  // static: when events.json was last read (it's re-read every minute)
 const P = () => Q && Q.startsWith('p=') ? decodeURIComponent(Q.slice(2)) : '';
 const imgURL = i => STATIC ? `data/${encodeURIComponent(P())}/img/${i}.${IMGEXT[i] || 'png'}` : `/img?${Q}&i=${i}`;
@@ -298,7 +303,7 @@ function openPicker() {
 function closePicker(refocus) { if ($('picker').hidden) return; $('picker').hidden = true; $('who').setAttribute('aria-expanded', 'false'); if (refocus) $('who').focus(); }
 function choose(q) {
   closePicker(true); if (q === Q) return;
-  reset(); Q = q; live = true; history.replaceState(null, '', '?' + Q); renderHeader(); poll();
+  reset(); Q = q; live = true; history.replaceState(null, '', addr(Q)); renderHeader(); poll();
 }
 $('who').onclick = () => $('picker').hidden ? openPicker() : closePicker(true);
 $('pkclose').onclick = () => closePicker(true);
@@ -667,7 +672,7 @@ document.onkeydown = e => {
 Promise.all([loadGallery(), loadSessions()]).then(() => { renderHeader(); if ($('picker').hidden) renderPicker(); poll(); setInterval(poll, 2000); setInterval(status, 1000); setInterval(loadSessions, 30000); });
 if (STATIC) {
   document.body.classList.add('static');
-  if (!localStorage.getItem('studio.intro')) $('intro').hidden = false;
+  if (!localStorage.getItem('studio.intro') && !STREAM) $('intro').hidden = false;  // (not over a livestream)
   $('introok').onclick = () => { $('intro').hidden = true; localStorage.setItem('studio.intro', '1'); };
 }
 </script>

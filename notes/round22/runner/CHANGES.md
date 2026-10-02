@@ -41,6 +41,37 @@ owner supplies them:
   Anthropic/pi-black path once while the session kept the text; stdout is the fallback. The sitting-1
   reply ("The Old Oak above the Fog") was recovered from the session and is back in `p1_s1_final.txt`.
 
+## The warmup: lane BUNT, Tonn's studio without the pictures
+
+Before the Fable painter, one Space Bunny painter (`opencode-go/space-bunny-free`, thinking max, as
+round 21's FRDC chain: `BUNNY`, no extra environment, the key pi keeps for opencode-go) paints in
+Tonn's studio as it was designed before the pictures: `"BUNT": lane("tonn", BUNNY, record_kind="none",
+reference=False)`. Lane `TONN` is unchanged (its briefs are byte for byte the ones before this change).
+
+- **`lane(..., reference=False)`:** the studio gets no `reference/` folder, and its brief is round
+  21.5's for tonn, byte for byte but for the studio's path (`OPENING_PLAIN`, `READING_PLAIN`: "Work
+  from knowledge and the notes in your studio; don't use reference images, image models or pictures
+  of his work.", no reference line in the reading list). `--briefs` writes it as `tonn-no-pictures.md`.
+- **Preflight:** only a lane that is among the lanes to run and gets pictures needs `REFERENCE`.
+  `--only BUNT` starts with no `~/src/a/tonn-reference` at all; `--only TONN` (or both) still stops
+  without pictures.
+- **Two processes, one run folder:** the lanes are started as two processes from this folder, hours
+  apart (`--only BUNT`, later `--only TONN`). Each lane's markers, sittings and logs are in its own
+  `run/<lane>/`; `run/chains.log` is appended a line at a time by both. What changed:
+  - a process watches only its own lanes' studios (`MY_LANES`, `our_studios`). Before, each process's
+    watchdog also recorded the other lane's painting log in `run/monitor/`, and two processes
+    comparing one log against what the other last recorded could report a history that "got
+    shorter" when it hadn't;
+  - `run/studios.json` is written whole (a temporary file, then renamed), so the other process's
+    watchdog never reads half of it.
+  - Not changed: each process needs its own output file, since `>` empties the file it names:
+    `run/runner.BUNT.out` and `run/runner.TONN.out`.
+- Against round 21's runner (which FRDC runs on), what a Space Bunny painter gets differently here is
+  the harness: `H` is round 21.5's (no counters or machine time in the tools' replies, "Your brief is
+  BRIEF.md in the studio", "You are not being evaluated in a quantifiable way"); round 21's harness
+  is `BASE`'s. The launch command, the usage-limit waiting (`limits.ts`, the runner's probes) and the
+  sitting rules are the same.
+
 # Round 21.5: round 21.4 with trees.md's old-oak lead taken out
 
 A copy of round 21.4's runner (SONF: one Sonnet 5.5 painter, read by GPT-6.1 Sol after it, no

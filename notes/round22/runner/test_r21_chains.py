@@ -642,14 +642,15 @@ def pictures(folder, *names, size=(8, 6)):
     return folder
 
 
-def tonn_studio(tmp_path, monkeypatch, ref):
-    """Run lane TONN up to its painter, with REFERENCE at ref: the studio, the log and the painters started."""
+def tonn_studio(tmp_path, monkeypatch, ref, reference=True):
+    """Run lane TONN up to its painter, with REFERENCE at ref (reference=False: a lane without the
+    pictures): the studio, the log and the painters started."""
     lines, painted = [], []
     monkeypatch.setattr(rc21, "RUN", tmp_path / "run")
     monkeypatch.setattr(rc21, "A", tmp_path)
     monkeypatch.setattr(rc21, "REFERENCE", ref)
     monkeypatch.setattr(rc21, "NAMES", REPO_NAMES)
-    monkeypatch.setattr(rc21, "LANES", {"TONN": rc21.lane("tonn", rc21.OPUS, record_kind="none")})
+    monkeypatch.setattr(rc21, "LANES", {"TONN": rc21.lane("tonn", rc21.OPUS, record_kind="none", reference=reference)})
     monkeypatch.setattr(rc21, "log", lines.append)
     monkeypatch.setattr(rc21, "export_cmd", lambda profile, d: ["mkdir", "-p", str(d / "notes/research")])
     monkeypatch.setattr(rc21, "paint", lambda name, n, d, rd: painted.append(d))     # returns None: the lane stops
@@ -725,3 +726,42 @@ def test_without_his_pictures_nothing_starts(tmp_path, monkeypatch, make, why):
         rc21.main()
     assert why in str(e.value) and str(ref) in str(e.value)          # says what's wrong, and where
     assert started == [] and not (tmp_path / "run").exists()
+
+
+# round 22's warmup: a studio of the same profile without the pictures (lane(..., reference=False))
+
+def test_a_tonn_studio_without_the_pictures_has_no_reference_folder_and_the_plain_brief(tmp_path, monkeypatch):
+    ref = pictures(tmp_path / "ref", "a.jpg", "b.jpg")               # there, and not for this studio
+    d, lines, painted = tonn_studio(tmp_path, monkeypatch, ref, reference=False)
+    assert painted == [d] and not (d / "reference").exists()
+    brief = (d / "BRIEF.md").read_text()
+    assert ("Compose and paint one original picture in the manner of Kendric Tonn, at\n"
+            "the easel, a simulator of oil paint on linen. The subject and composition\n"
+            "are yours to invent. Work from knowledge and the notes in your studio;\n"
+            "don't use reference images, image models or pictures of his work.\n\n## Your studio") in brief
+    assert ("## What to read\nnotes/easel_guide.md; notes/studio_notes.md;\n"
+            "notes/research/tonn_materials.md (his materials and method) and\n"
+            "notes/research/oil_paint_physics.md as needed.\n") in brief
+    assert "reference/" not in brief and brief == (tmp_path / "run/TONN/p1_brief.md").read_text()
+
+
+def test_only_a_lane_that_runs_and_gets_pictures_needs_them(tmp_path, monkeypatch):
+    import sys
+    started = []
+    monkeypatch.setattr(rc21, "RUN", tmp_path / "run")
+    monkeypatch.setattr(rc21, "REFERENCE", tmp_path / "tonn-reference")          # no such folder
+    monkeypatch.setattr(rc21, "LANES", {"BUNT": rc21.lane("tonn", rc21.BUNNY, record_kind="none", reference=False),
+                                        "TONN": rc21.lane("tonn", rc21.OPUS, record_kind="none")})
+    monkeypatch.setattr(rc21, "chain", started.append)
+    monkeypatch.setattr(rc21, "watchdog", lambda stop: None)
+    monkeypatch.setattr(rc21.time, "sleep", lambda s: None)
+    monkeypatch.setattr(rc21, "DRY", False)
+    for only in ("TONN", "BUNT,TONN"):
+        monkeypatch.setattr(sys, "argv", ["r21_chains.py", "--only", only])
+        with pytest.raises(SystemExit, match="can't start: there is no folder"):
+            rc21.main()
+    assert started == []
+    monkeypatch.setattr(sys, "argv", ["r21_chains.py", "--only", "BUNT"])
+    rc21.main()
+    assert started == ["BUNT"]
+

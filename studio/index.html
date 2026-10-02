@@ -620,10 +620,12 @@ function placeCrop() {
   const w = nw * f, h = nh * f, u = w / 1000, H = 1000 * nh / nw, cl = (v, hi) => Math.max(0, Math.min(hi, v));
   const [x0, y0, x1, y1] = [cl(crop[0], 1000), cl(crop[1], H), cl(crop[2], 1000), cl(crop[3], H)];
   if (x1 <= x0 || y1 <= y0) { cb.hidden = true; return; }
-  Object.assign(cb.style, {left: (bw - w) / 2 + x0 * u + 'px', top: (bh - h) / 2 + y0 * u + 'px', width: (x1 - x0) * u + 'px', height: (y1 - y0) * u + 'px'});
+  const [px, py] = getComputedStyle(im).objectPosition.split(' ').map(v => { const f = parseFloat(v) / 100; return isNaN(f) ? .5 : f; });  // where the picture sits in its box
+  Object.assign(cb.style, {left: (bw - w) * px + x0 * u + 'px', top: (bh - h) * (py === undefined ? .5 : py) + y0 * u + 'px', width: (x1 - x0) * u + 'px', height: (y1 - y0) * u + 'px'});
   cb.hidden = false;
 }
-$('img').addEventListener('load', placeCrop);
+// a tall canvas (portrait, square or nearly): stream.css puts the two pictures side by side instead of stacked
+$('img').addEventListener('load', () => { $('view').classList.toggle('tall', $('img').naturalWidth < $('img').naturalHeight * 1.15); placeCrop(); });
 new ResizeObserver(placeCrop).observe($('whole'));
 
 // ---- show event i everywhere

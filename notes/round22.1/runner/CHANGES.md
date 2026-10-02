@@ -1,3 +1,20 @@
+# Round 22.1: George Inness, one Opus 5.5 painter
+
+A copy of round 22's runner (its tracked files, not its `run/` data). One lane, `INNS`: one Claude
+Opus 5.5 painter (`anthropic/claude-opus-5-5`, thinking xhigh, pi-black) in Inness's studio, the
+first painter in it (his box, his materials note), `record_kind="none"`: no reader.
+
+- `BRANCH = "round-22.1"`: the export reads the notes from the tag, and `inness_materials.md` was
+  edited on main on 2026-10-02 (`be06229`: his working times, a caveat and an anecdote out of the
+  painter's copy), which `round-22` doesn't have. Code, harness and export scripts are round 21.5's,
+  so `BASE` and `H` stay; the inness easel is already built in `BASE`'s `target/studio-build`.
+- The brief is the plain inness one (`OPENING["inness"]`, `READING["inness"]`), byte for byte
+  round 21.5's and round 22's `--briefs` output. No `trees.md` (friedrich only), no reference
+  pictures: inness isn't in `ARTIST`, so the lane gets no `reference/` and `--only INNS` doesn't need
+  `~/src/a/tonn-reference`.
+- `LANES` is INNS alone. Round 22's `TONN` and `BUNT` run from round 22's runner; their code paths
+  are kept here, unchanged.
+
 # Round 22: Kendric Tonn, with pictures of his paintings
 
 A copy of round 21.5's runner (its tracked files, not its `run/` data). One lane, `TONN`: one Claude

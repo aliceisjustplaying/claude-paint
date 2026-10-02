@@ -32,7 +32,7 @@ body.nocode main { grid-template-columns: minmax(0,54fr) minmax(0,46fr) !importa
 #doing .what { font-size: 28px !important }
 #doing .detail { font-size: 19px !important }
 #badge { font-size: 17px !important; padding: 4px 14px !important }
-#clock { font-size: 28px !important } #clocklbl { font-size: 15px !important }
+#clock { font-size: 28px !important } #clocklbl { font-size: 15px !important } #pclock { font-size: 15px !important } #pclock b { font-size: 22px !important }
 #who { max-width: 820px !important } #who .t { font-size: 24px !important } #who .m { font-size: 18px !important } #who .caret { display: none !important }
 #cap { font-size: 17px !important }
 /* the site's address in the header, right of the clock */

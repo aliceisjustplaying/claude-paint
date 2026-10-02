@@ -1,3 +1,41 @@
+# Round 22: Kendric Tonn, with pictures of his paintings
+
+A copy of round 21.5's runner (its tracked files, not its `run/` data). One lane, `TONN`: one Claude
+Fable 5.1 painter (`anthropic/claude-fable-5-1`, thinking xhigh, pi-black) in Tonn's studio (his box,
+his materials note), `record_kind="none"`: no reader. `BRANCH = "round-22"`; the harness, the Rust code
+and the export scripts are unchanged since round-21.5, so `H` stays the `claude-paint-r21.5` checkout
+and `BASE` stays `claude-paint-r21` (the export builds the tonn box's easel in its
+`target/studio-build`).
+
+New: until now painters never saw pictures of the artist's work. Tonn gave his permission, and the
+owner supplies them:
+
+- **Where they go:** `REFERENCE` (`~/src/a/tonn-reference`, outside the repo): jpg, jpeg, png or webp
+  files and, if she likes, a `README.md` describing them. When the tonn studio is exported the runner
+  copies them into `<studio>/reference/` with her README, or with one that lists the files
+  (`copy_reference`). Her files stay as they are.
+- **What pi shows:** the painter looks at them with its `read` tool (pi's, limited to the studio). pi's
+  read goes by the content (`utils/mime.js`: JPEG, PNG unless animated, GIF, WebP, BMP) and shows a
+  picture as it is if it fits 2000x2000 px and 4.5 MB of base64. A larger one it resizes at every read
+  and tells the model the original size. The limits are Fable 5.1's `inputLimits.images.resize` in
+  pi-ai's `anthropic.json`. The runner copies a picture over 2000 px a side resized to fit, in its own
+  format, and copies a picture its EXIF turns upright (pi sends one that fits byte for byte, EXIF and
+  all). The harness keeps the newest 20 images and at most 12 MB of base64 in a request
+  (`context-images.ts`); the runner logs how much the pictures come to.
+- **Nothing starts without them:** with no folder, no picture in it, a file pi wouldn't show as an
+  image, or another painter's name in the README or a file name (the export's
+  `check_studio_names`, which reads only `notes/`), `main()` stops before any export or painter and
+  says what to put where.
+- **The brief:** the tonn opening says the pictures are in `reference/`, there with his permission, to
+  study for his manner, and that the picture isn't a copy or a version of any of his; it still rules out
+  other reference images and image models. With exactly one picture it reads in the singular
+  (`OPENING_ONE`). The reading list names `reference/ (his paintings; reference/README.md lists them)`
+  between the materials note and the physics note. Nothing else a painter reads changes: the brief
+  template, the system prompt, the sitting messages and every other profile's brief are round 21.5's,
+  byte for byte. `--briefs` writes `tonn.md` (several pictures) and `tonn-one-picture.md`.
+- The runner now needs Pillow (`# dependencies` in the script header; the tests run with
+  `--with pillow`).
+
 - The painter's reply is read from the session file (its last assistant message that is text with no
   pending tool call) rather than from `pi --print`'s stdout, which came back empty on the
   Anthropic/pi-black path once while the session kept the text; stdout is the fallback. The sitting-1

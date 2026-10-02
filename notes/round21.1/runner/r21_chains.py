@@ -387,6 +387,35 @@ def session_worked(files):
     return False
 
 
+def session_reply(files):
+    """The painter's reply: the last assistant message in the last of these session files that is
+    text with no pending tool call (a completed turn). pi --print emits the same text on stdout, but
+    not always (the Anthropic/pi-black path left stdout empty once, while the session kept the text);
+    the session file is the authoritative record, so prefer it and fall back to stdout."""
+    for f in reversed(files):
+        try:
+            with open(f, "rb") as fh:
+                fh.seek(0, 2)
+                fh.seek(max(0, fh.tell() - 4_000_000))
+                lines = fh.read().decode(errors="replace").splitlines()
+        except OSError:
+            continue
+        for line in reversed(lines):
+            try:
+                m = json.loads(line).get("message") or {}
+            except ValueError:
+                continue
+            if m.get("role") != "assistant" or m.get("stopReason") in ("error", "aborted"):
+                continue
+            content = m.get("content")
+            if not isinstance(content, list) or any(p.get("type") == "toolCall" for p in content):
+                continue
+            text = "\n".join(p.get("text", "") for p in content if p.get("type") == "text").strip()
+            if text:
+                return text
+    return None
+
+
 def session_error(files):
     """The provider error the last of these pi session files ended on (its last assistant message
     has stopReason 'error'), or None."""
@@ -661,10 +690,13 @@ def paint(name, n, d, rd):
         crashed = rc != 0 or api_error is not None
         why = api_error or err_text.strip() or f"exit {rc}"
         limited = crashed and usage_limit(why + "\n" + err_text)
+        stdout_reply = (rd / f"{stem}_final.txt").read_text(errors="replace")
+        # the painter's reply: from the session (authoritative) when the sitting ended cleanly, else stdout
+        final_reply = (session_reply(new) if not (crashed or limited) else None) or stdout_reply
         rec.update(status="limited" if limited else "crashed" if crashed else "completed", end=time.strftime("%F %T"),
                    chunks_after=count_chunks(d), painting_after=count_painting(d), exit=rc,
                    sessions=[str(f) for f in new], error=why[-4000:] if crashed else None,
-                   worked=session_worked(new), final=(rd / f"{stem}_final.txt").read_text(errors="replace"))
+                   worked=session_worked(new), final=final_reply)
         save_sittings(rd, n, sittings)
         log(f"{tag}: sitting {k} ended (exit {rc}{', USAGE LIMIT' if limited else ', CRASHED' if crashed else ''}) after {(time.time() - t0) / 60:.0f} min: "
             f"chunks {rec['chunks_before']} -> {rec['chunks_after']} "

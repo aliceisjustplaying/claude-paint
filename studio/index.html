@@ -447,7 +447,7 @@ function kindOf(e) {
 function status() {
   if (!events.length) return;
   const last = events[events.length - 1], age = (Date.now() - Date.parse(last.ts)) / 1000, atLive = live && pos === events.length - 1;
-  const b = $('badge'), active = age < 1800;
+  const b = $('badge'), active = !stopped();  // (as the picture: at work until its closing words are two minutes old, or half an hour quiet)
   if (atLive && active) { b.className = 'live'; b.textContent = 'LIVE'; b.title = 'last action ' + ago(age); }
   else if (atLive) { b.className = ''; b.textContent = 'FINISHED'; b.title = 'last action ' + ago(age); }
   else if (playing) { b.className = 'replay'; b.textContent = 'REPLAY'; b.title = ''; }

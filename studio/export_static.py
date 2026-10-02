@@ -30,6 +30,8 @@ except ImportError:  # the web copies are an optimization: without Pillow the vi
     Image = None
 
 EXT = {"image/png": "png", "image/jpeg": "jpg", "image/webp": "webp", "image/gif": "gif"}
+PLAUSIBLE = (b'<script async src="/v/app.js"></script><script>window.plausible=window.plausible||function(){(plausible.q=plausible.q||[]).push(arguments)},'
+             b'plausible.init=plausible.init||function(i){plausible.o=i||{}};plausible.init({endpoint:"/v/e"})</script>')
 THUMB = (168, 120)  # the look-strip shows 81x58: twice that, for sharp screens
 VIEW = 1600         # the main view's copy, long side
 
@@ -123,7 +125,6 @@ def main():
     out = os.path.abspath(a.out)
     before = owned(out)
     ss = [{k: v for k, v in s.items() if k != "files"} for s in S.list_sessions() if s.get("painter") and s["p"] not in a.skip]
-    text(os.path.join(out, "data", "sessions.json"), json.dumps(ss))
     n_img = n_web = 0
     pool = ThreadPoolExecutor(os.cpu_count() or 4) if Image else None
     for s in ss:
@@ -151,6 +152,15 @@ def main():
             web[i] = int(job.result())
             n_web += 1
         n_img += n
+        # the newest whole look with a web copy (no crop, no mode), for a glimpse of the canvas elsewhere (the gallery's index)
+        whole, s["look"] = False, None
+        for e in ev:
+            if e["kind"] == "look":
+                whole = not re.search(r"crop|mode", e.get("text") or "")
+            elif e["kind"] == "image" and whole and 0 <= e["img"] < n and web[e["img"]]:
+                s["look"] = e["img"]
+        if s["look"] is None:  # painters from before the look tool read their renders as files: the last picture they saw
+            s["look"] = next((i for i in range(n - 1, -1, -1) if web[i]), None)
         text(os.path.join(out, "data", p, "events.json"),
              json.dumps({"events": ev, "total": len(ev), "epoch": st["epoch"], "sittings": len(files), "imgext": exts, "web": web}))
         # the painting's source, as the live server's /api/file gives it
@@ -161,10 +171,13 @@ def main():
                 with open(src, "rb") as fh:
                     text(inside(out, "data", p, "file", rel), fh.read())
         print(f"{p}: {len(ev)} events, {n} images", flush=True)
+    text(os.path.join(out, "data", "sessions.json"), json.dumps(ss))
     with open(os.path.join(S.HERE, "index.html"), "rb") as fh:
         page = fh.read().replace(b'<label id="allwrap"', b'<label id="allwrap" hidden')
     page = page.replace(b"<script>\nconst $ =", b"<script>window.STUDIO_STATIC = true;</script>\n<script>\nconst $ =", 1)
     assert b"STUDIO_STATIC = true" in page, "index.html changed: the static switch didn't go in"
+    # the gallery's page-view counter (Plausible, served from stillwet.art/v/), on the public copy only
+    page = page.replace(b"</head>", PLAUSIBLE + b"</head>", 1)
     text(os.path.join(out, "index.html"), page)
     now = sorted(os.path.relpath(f, out) for f in WRITTEN)
     stale = 0

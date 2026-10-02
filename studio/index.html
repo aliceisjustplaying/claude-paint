@@ -222,7 +222,7 @@ const STATIC = !!window.STUDIO_STATIC;
 const STREAM = (v => v !== null && v !== '0')(new URLSearchParams(location.search).get('stream'));
 if (STREAM) { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 'stream.css'; document.head.appendChild(l); }
 const addr = q => '?' + q + (STREAM ? '&stream=1' : '');
-let IMGEXT = [], lastStatic = 0;  // static: when events.json was last read (it's re-read every minute)
+let IMGEXT = [], lastStatic = 0, staticV = null;  // static: when events.json was last read (it's re-read every minute)
 const P = () => Q && Q.startsWith('p=') ? decodeURIComponent(Q.slice(2)) : '';
 const imgURL = i => STATIC ? `data/${encodeURIComponent(P())}/img/${i}.${IMGEXT[i] || 'png'}` : `/img?${Q}&i=${i}`;
 // the static export's small JPEG copies of a look (t: the strip's thumbnail, v: the main view); the original is for the zoom
@@ -306,11 +306,40 @@ function openPicker() {
   renderPicker(); $('picker').hidden = false; $('who').setAttribute('aria-expanded', 'true');
   const on = $('pklist').querySelector('.on') || pickable()[0]; if (on) { on.focus({preventScroll:true}); on.scrollIntoView({block:'nearest'}); }
 }
+// the pictures the picker shows first, fetched ahead (once the painting is in) so it opens with them, not empty
+// boxes: a screenful, its columns and rows estimated as the CSS lays them out
+let warmed = null;
+const warmSoon = () => { const im = $('img'); if (!warmed && events.length && im.complete && im.naturalWidth && !im.src.includes('/t/')) warmed = setTimeout(warmPicker, 0); };  // (after the painting and its events)
+function warmPicker() {
+  const n = Math.max(1, Math.floor((Math.min(1040, innerWidth - 24) - 24) / 308)) * Math.ceil(innerHeight / 74);
+  warmed = [...$('pklist').querySelectorAll('img')].slice(0, n).map(im => { const p = new Image(); p.src = im.src; return p; });
+}
 function closePicker(refocus) { if ($('picker').hidden) return; $('picker').hidden = true; $('who').setAttribute('aria-expanded', 'false'); if (refocus) $('who').focus(); }
 function choose(q) {
   closePicker(true); if (q === Q) return;
-  reset(); Q = q; live = true; history.replaceState(null, '', addr(Q)); renderHeader(); poll();
+  reset(); Q = q; live = true; history.replaceState(null, '', addr(Q)); renderHeader(); glimpse(); poll();
 }
+// before a painter's events arrive: its newest whole look (sessions.json has it) in the painting's place, the
+// thumbnail at once (the picker has just shown it) and the view copy once it's in, so the place isn't black meanwhile
+function glimpse() {
+  const s = allSessions.find(x => qOf(x) === Q), t = s && ownThumb(s); if (events.length || !t) return;
+  const im = $('img'); im.src = t;
+  if (STATIC) setPic(im, [`data/${encodeURIComponent(s.p)}/v/${s.look}.jpg`, t]);
+}
+// a picture into one of the view's places. The one there stays until the new one has loaded, so a place never goes
+// empty while a picture is known; one that fails is tried again, then the next of urls (the original, the
+// thumbnail), and the first again a little later (a few times), for as long as it's the picture wanted there
+function setPic(im, urls) {
+  if (im.dataset.want === urls[0]) return; const want = im.dataset.want = urls[0]; let k = 0, tries = 0, rounds = 0;
+  const again = () => { if (++rounds < 6) { k = 0; tries = 0; setTimeout(go, 5000); } };
+  const go = () => { if (im.dataset.want !== want) return; const p = new Image(), u = urls[k];
+    if (im === $('img')) p.fetchPriority = 'high';
+    p.onload = () => { if (im.dataset.want !== want) return; if (!im.src.endsWith(u)) im.src = u; if (k) again(); };
+    p.onerror = () => { if (++tries < 2) return setTimeout(go, 1000); tries = 0; if (++k < urls.length) go(); else again(); };
+    p.src = u; };
+  go();
+}
+function clearPic(im) { delete im.dataset.want; im.removeAttribute('src'); }
 $('who').onclick = () => $('picker').hidden ? openPicker() : closePicker(true);
 $('pkclose').onclick = () => closePicker(true);
 $('pklist').onclick = e => {
@@ -348,16 +377,19 @@ async function loadSessions() {
 }
 $('all').onchange = () => { localStorage.setItem('studio.all', $('all').checked ? '1' : '0'); renderPicker(); };
 let gen = 0, busy = false;  // one poll at a time; a reset (new painter, rebuilt stream) makes in-flight polls stale
-function reset() { gen++; busy = false; stop(); events = []; nUpd = 0; epoch = null; cwd = ''; liveText = null; typed = -1; sitStarts = [0]; nSittings = 1; hasLooks = false; $('strip').innerHTML = ''; $('ticks').innerHTML = ''; noPicture(); }
+function reset() { gen++; busy = false; staticV = null; stop(); events = []; nUpd = 0; epoch = null; cwd = ''; liveText = null; typed = -1; sitStarts = [0]; nSittings = 1; hasLooks = false; $('strip').innerHTML = ''; $('ticks').innerHTML = ''; noPicture(); }
 const NOPIC = "No picture yet: the painter hasn't looked at its canvas.<br>Its first look will show here.";
-function noPainting() { $('nopic').innerHTML = NOPIC; $('nopic').hidden = !events.length; $('img').removeAttribute('src'); $('cap').textContent = ''; viewI = -1; }  // the painting's place, empty
+function noPainting() { $('nopic').innerHTML = NOPIC; $('nopic').hidden = !events.length; clearPic($('img')); $('cap').textContent = ''; viewI = -1; }  // the painting's place, empty
 function noPicture() { noPainting(); second(-1); $('zimg').removeAttribute('src'); $('zoom').style.display = 'none'; }
 async function poll() {
   // a static export is re-uploaded every minute or so while painters work: read it again at most once a minute
   if (!Q || busy || (STATIC && epoch !== null && Date.now() - lastStatic < 60000)) return;
   const g = gen; busy = true; let r;
-  try { r = await (await fetch(STATIC ? `data/${encodeURIComponent(P())}/events.json?t=${Date.now()}`
-                                      : `/api/events?${Q}&since=${events.length}${epoch === null ? '' : '&epoch=' + epoch + '&u=' + nUpd}`)).json(); }
+  try { // (static: asked again of the server each time, so a file that hasn't changed comes from the browser's cache, and isn't read again)
+        const a = await fetch(STATIC ? `data/${encodeURIComponent(P())}/events.json` : `/api/events?${Q}&since=${events.length}${epoch === null ? '' : '&epoch=' + epoch + '&u=' + nUpd}`, STATIC ? {cache: 'no-cache'} : {});
+        const v = STATIC && a.ok && [a.headers.get('etag'), a.headers.get('last-modified')].join();
+        if (v && v !== ',' && v === staticV && g === gen && epoch !== null) { lastStatic = Date.now(); return; }
+        r = await a.json(); if (g === gen) staticV = v; }
   catch (e) {  // no such painter (yet): a stream opened before its painter begins waits for it
     if (g === gen && !events.length) { $('nopic').innerHTML = "This painter hasn't started yet.<br>Its canvas will show here when it does."; $('nopic').hidden = false; $('clockbox').hidden = true;
       $('badge').textContent = ''; $('badge').className = ''; for (const x of $('doing').children) x.textContent = ''; }
@@ -377,17 +409,19 @@ async function poll() {
     const base = events.length; events.push(...r.events);
     for (const e of r.events) if (e.kind === 'start') cwd = e.cwd;
     $('scrub').max = events.length - 1;
-    r.events.forEach((e, j) => { if (e.kind === 'image') thumb(e, base + j); else if (e.kind === 'look') hasLooks = true; else if (e.kind === 'sitting') { sitStarts.push(base + j); sitDivider(e, base + j); } });
+    const f = document.createDocumentFragment();  // (the strip's new thumbnails, added at once)
+    r.events.forEach((e, j) => { if (e.kind === 'image') thumb(e, base + j, f); else if (e.kind === 'look') hasLooks = true; else if (e.kind === 'sitting') { sitStarts.push(base + j); sitDivider(e, base + j, f); } });
+    $('strip').appendChild(f); if (live) stripEnd();  // (fixed thumbnail sizes in the CSS: the strip's width is known before they load)
     ticks();
     if (live) show(events.length - 1);
     if (!base && !allSessions.some(s => qOf(s) === Q)) loadSessions();  // a painter that has just begun: its name for the header
   }
   if (live) refreshLiveCode();
-  status();
+  status(); warmSoon();
 }
 // a new sitting: a divider in the looks strip and a tick on the scrub bar
-function sitDivider(e, i) {
-  const d = document.createElement('div'); d.className = 'sep'; d.textContent = 'sitting ' + e.n; d.title = sitLabel(e); $('strip').appendChild(d);
+function sitDivider(e, i, to) {
+  const d = document.createElement('div'); d.className = 'sep'; d.textContent = 'sitting ' + e.n; d.title = sitLabel(e); to.appendChild(d);
 }
 function ticks() {
   const n = Math.max(1, events.length - 1);
@@ -400,14 +434,12 @@ function paintedFor(i, t) {
   return (total + t - Date.parse(events[s0].ts)) / 1000;
 }
 const sittingAt = i => sitStarts.filter(b => b <= i).length;
-function thumb(e, i) {
+function thumb(e, i, to) {
   const im = document.createElement('img'); im.loading = 'lazy'; im.src = thumbURL(e.img);
   let t = im;  // (a reference picture: the thumbnail in a marked frame)
   if (e.ref) { t = document.createElement('span'); t.className = 'refthumb'; t.appendChild(im); const b = document.createElement('b'); b.textContent = 'REF'; t.appendChild(b); }
   t.dataset.i = i; t.title = hhmm(e.ts) + '  ' + (e.ref ? 'reference picture: ' : '') + fname(e.path);
-  t.onclick = () => { live = false; stop(); show(i); }; $('strip').appendChild(t);
-  // fixed thumbnail size (CSS): the strip's width is known before the images load
-  if (live) stripEnd();
+  t.onclick = () => { live = false; stop(); show(i); }; to.appendChild(t);
 }
 function stripEnd() { const s = $('strip'); s.scrollLeft = s.scrollWidth; }
 
@@ -502,7 +534,10 @@ function source(path, upto) {
   return { text, changed, known };
 }
 let liveText = null;
+// the code pane is drawn (and its file fetched) only while it shows: a painting's program can be tens of thousands of lines
+const codeShown = () => !document.body.classList.contains('nocode');
 async function refreshLiveCode() {
+  if (!codeShown()) return;
   const p = paintingFile(events.length - 1); if (!p || !cwd) return;
   const rel = p.startsWith(cwd + '/') ? p.slice(cwd.length + 1) : p;
   const q = Q, r = await fetch(STATIC ? `data/${encodeURIComponent(P())}/file/${rel.split('/').map(encodeURIComponent).join('/')}?t=${Date.now()}` : `/api/file?${q}&f=${encodeURIComponent(rel)}`); if (!r.ok || q !== Q) return;
@@ -530,6 +565,7 @@ function renderCode(path, text, newLines) {
   $('code').innerHTML = html; if (first !== null) $('code').children[first].scrollIntoView({ block:'center' });
 }
 function codeAt(i) {
+  if (!codeShown()) return;
   const p = paintingFile(i); if (!p) return renderCode('', '', new Set());
   const atLive = live && i === events.length - 1;
   if (atLive && liveText != null) return renderCode(p, liveText, new Set());
@@ -539,23 +575,30 @@ function codeAt(i) {
 }
 
 // ---- journal: thoughts as prose, actions condensed into chips
-let typed = -1, typer = null;
+let typed = -1, typer = null, jgen = 0;
+// (a look's chip shows that look)
+$('jbody').onclick = e => { const el = e.target.closest('.chip.look[data-i]'); if (el) { live = false; stop(); show(+el.dataset.i); } };
 function journal(i) {
-  const from = Math.max(0, i - 250); let html = '', chips = [], lastTm = 0, lastThink = -1;
+  const from = Math.max(0, i - 250); let html = [], chips = [], lastTm = 0, lastThink = -1;  // html: its blocks, in order
   for (let k = i; k >= from; k--) if (events[k].kind === 'think') { lastThink = k; break; }
-  const flush = () => { if (chips.length) { html += `<div class="chips">${chips.join('')}</div>`; chips = []; } };
+  const flush = () => { if (chips.length) { html.push(`<div class="chips">${chips.join('')}</div>`); chips = []; } };
   for (let k = from; k <= i; k++) { const e = events[k], t = Date.parse(e.ts);
-    if (t - lastTm > 5 * 60e3 && (e.kind === 'think' || e.kind === 'say')) { flush(); html += `<span class="tm">${hhmm(e.ts)}</span>`; lastTm = t; }
+    if (t - lastTm > 5 * 60e3 && (e.kind === 'think' || e.kind === 'say')) { flush(); html.push(`<span class="tm">${hhmm(e.ts)}</span>`); lastTm = t; }
     if (e.kind === 'think') { flush(); const typing = k === lastThink && live && k === events.length - 1 && k !== typed;
-      html += `<div class="th${k === lastThink ? ' last' : ''}" data-k="${k}">${typing ? '' : md(e.text.trim())}</div>`; }
+      html.push(`<div class="th${k === lastThink ? ' last' : ''}" data-k="${k}">${typing ? '' : md(e.text.trim())}</div>`); }
     else if (e.kind === 'sitting') { flush(); const gap = (t - Date.parse(events[k - 1].ts)) / 1000;
-      html += `<div class="sit">🪑 ${esc(sitLabel(e))}${gap > 120 ? ` <span>· after ${ago(gap).replace(' ago', '')} away</span>` : ''}</div>`; lastTm = t; }
-    else if (e.kind === 'say') { flush(); html += `<div class="say">${md(e.text.trim())}</div>`; }
+      html.push(`<div class="sit">🪑 ${esc(sitLabel(e))}${gap > 120 ? ` <span>· after ${ago(gap).replace(' ago', '')} away</span>` : ''}</div>`); lastTm = t; }
+    else if (e.kind === 'say') { flush(); html.push(`<div class="say">${md(e.text.trim())}</div>`); }
     else { const c = kindOf(e); if (!c || e.kind === 'image' && (e.ref || e.look !== undefined || k > 0 && (events[k-1].kind === 'read' || events[k-1].kind === 'look'))) continue;
       const title = esc(e.kind === 'cmd' || e.kind === 'jnote' ? e.text.slice(0, 2000) : e.kind === 'paint' ? e.code.slice(0, 2000) : (e.path || ''));
       chips.push(`<span class="chip ${c[0]}" title="${title}"${e.kind === 'image' ? ` data-i="${k}"` : ''}>${c[1]} ${esc(c[2])}</span>`); } }
-  flush(); $('jbody').innerHTML = html || '<p class="jempty">The painter has just begun.<br>What it thinks and does will show here.</p>'; $('jbody').scrollTop = 1e9;
-  for (const el of $('jbody').querySelectorAll('.chip.look[data-i]')) el.onclick = () => { live = false; stop(); show(+el.dataset.i); };
+  flush();
+  // the newest blocks at once, the older ones above them a piece at a time, what's in view kept where it is: laying
+  // out a long painter's last 250 events at once blocks the page for a moment
+  const jb = $('jbody'), g = ++jgen, piece = () => { let n = 0, a = html.length; while (a > 0 && n < 12000) n += html[--a].length; return html.splice(a).join(''); };
+  jb.innerHTML = piece() || '<p class="jempty">The painter has just begun.<br>What it thinks and does will show here.</p>'; jb.scrollTop = 1e9;
+  const older = () => { if (g !== jgen || !html.length) return; const h = jb.scrollHeight; jb.insertAdjacentHTML('afterbegin', piece()); jb.scrollTop += jb.scrollHeight - h; setTimeout(older, 0); };
+  if (html.length) setTimeout(older, 0);
   if (lastThink >= 0 && live && lastThink === events.length - 1 && lastThink !== typed) {
     typed = lastThink; clearInterval(typer); const el = $('jbody').querySelector(`.th[data-k="${lastThink}"]`), txt = events[lastThink].text.trim(); let n = 0;
     typer = setInterval(() => { n = Math.min(txt.length, n + Math.max(3, txt.length / 120 | 0)); if (!el.isConnected) return clearInterval(typer);
@@ -642,11 +685,11 @@ function second(k) {
   const on = k >= 0; $('other').hidden = !on; $('view').classList.toggle('two', on); viewI2 = on ? events[k].img : -1; otherK = k;
   crop = null; $('other').classList.toggle('ref', on && !!events[k].ref);
   if (on) { const e = events[k], [t, why] = e.ref ? refWords() : lookWords(e.look), u = viewURL(e.img);
-    if (!$('img2').src.endsWith(u)) $('img2').src = u;
+    setPic($('img2'), [u, imgURL(e.img), thumbURL(e.img)]);
     $('cap2').querySelector('b').textContent = t; crop = e.ref ? null : cropOf(e.look);
     $('cap2').querySelector('span').textContent = e.ref ? why : `What the painter is looking at now${why ? ': ' + why : ''}${crop ? '. Outlined on the painting.' : '.'}`;
     $('img2').alt = e.ref ? 'a reference picture' : t; }
-  else $('img2').removeAttribute('src');
+  else clearPic($('img2'));
   placeCrop(); placeTag();
 }
 // where a picture sits in its box as displayed (object-fit: contain, so it may be letterboxed): [left, top, width, height]
@@ -678,7 +721,7 @@ function shape() {
   if (im.naturalWidth) $('view').classList.toggle('tall', im.naturalWidth < im.naturalHeight * 1.15);
   placeCrop(); placeTag();
 }
-$('img').addEventListener('load', shape); $('img2').addEventListener('load', shape);
+$('img').addEventListener('load', shape); $('img').addEventListener('load', warmSoon); $('img2').addEventListener('load', shape);
 { const ro = new ResizeObserver(() => { placeCrop(); placeTag(); }); ro.observe($('whole')); ro.observe($('other')); }
 
 // ---- show event i everywhere
@@ -686,7 +729,7 @@ let rested = false;  // the view as last drawn was resting
 function pictures() {
   rested = resting();
   const [w, o] = picturesAt(pos, rested);
-  if (w >= 0) { const img = events[w], u = viewURL(img.img); viewI = img.img; $('nopic').hidden = true; if (!$('img').src.endsWith(u)) $('img').src = u;
+  if (w >= 0) { const img = events[w]; viewI = img.img; $('nopic').hidden = true; setPic($('img'), [viewURL(img.img), imgURL(img.img), thumbURL(img.img)]);
     $('cap').textContent = !hasLooks ? hhmm(img.ts) + '  ' + fname(img.path) : isWhole(img) ? `The painting, as it looked at ${hhmm(img.ts)}` : `${lookWords(img.look)[0]} · ${hhmm(img.ts)} (no look at the whole canvas yet)`;
     second(o); }
   else if (o >= 0) { noPainting(); second(o); shape(); }  // only a reference picture so far: it shows beside the painting's empty place
@@ -719,7 +762,7 @@ $('prevlook').onclick = () => { stop(); live = false; const L = looks().filter(k
 $('nextlook').onclick = () => { stop(); const L = looks().filter(k => k > pos); if (L.length) { live = false; show(L[0]); } else goLive(); };
 $('golive').onclick = goLive;
 $('scrub').oninput = e => { stop(); live = +e.target.value >= events.length - 1; show(+e.target.value); };
-$('togglecode').onclick = () => document.body.classList.toggle('nocode');
+$('togglecode').onclick = () => { document.body.classList.toggle('nocode'); if (codeShown() && events.length) { codeAt(pos); if (live) refreshLiveCode(); } };
 $('img').onclick = () => { $('zimg').src = viewI >= 0 ? imgURL(viewI) : $('img').src; $('zoom').style.display = 'flex'; };
 $('img2').onclick = () => { $('zimg').src = viewI2 >= 0 ? imgURL(viewI2) : $('img2').src; $('zoom').style.display = 'flex'; };
 $('zoom').onclick = () => { $('zoom').style.display = 'none'; };
@@ -731,7 +774,7 @@ document.onkeydown = e => {
   if (k === 'ArrowRight') { if (pos + 1 >= events.length - 1) goLive(); else { stop(); live = false; show(pos + 1); } } else if (k === 'ArrowLeft') { stop(); live = false; show(pos - 1); }
   else if (k === '[') $('prevlook').click(); else if (k === ']') $('nextlook').click(); else if (k === 'l') goLive(); else if (k === 'c') $('togglecode').click();
   else if (k === 'Escape') $('zoom').style.display = 'none'; else if (k === ' ') { e.preventDefault(); $('play').click(); } };
-Promise.all([loadGallery(), loadSessions()]).then(() => { renderHeader(); if ($('picker').hidden) renderPicker(); poll(); setInterval(poll, 2000);
+Promise.all([loadGallery(), loadSessions()]).then(() => { renderHeader(); if ($('picker').hidden) renderPicker(); glimpse(); poll(); setInterval(poll, 2000);
   setInterval(() => { status(); if (events.length && resting() !== rested) pictures(); }, 1000);  // (a page left open comes to rest on its own when the painter stops)
   setInterval(loadSessions, 30000); });
 if (STATIC) {

@@ -159,7 +159,7 @@
     #who { flex:1 1 auto; min-width:0; max-width:none; flex-direction:column; align-items:flex-start; gap:0; padding:2px 8px; line-height:1.25 }
     #who .t { font-size:12.5px; max-width:100% } #who .m { font-size:10.5px } #who .caret { display:none } #doing { display:none }
     #home { font-size:15px; padding-right:0 } #intro { top:44px; font-size:13.5px; padding:12px 14px }
-    #clock { font-size:13px } #clocklbl { display:none } #clockbox { flex-direction:column-reverse; gap:0 } #pclock .pl, #pclock .pe { display:none } #pclock b { font-size:9.5px; line-height:1.1 } #badge { font-size:9px; padding:1px 6px }
+    #clock { font-size:13px } #clocklbl { display:none } #clockbox { flex-direction:column-reverse; gap:0 } #pclock .pl { display:none } #pclock b { font-size:9.5px; line-height:1.1 } #badge { font-size:9px; padding:1px 6px }
     .pane > h4 { padding:4px 10px 2px; font-size:10px } #jbody { padding:2px 12px 12px }
     .th, .say { font-size:14px } .chip { font-size:12px } .tm { font-size:10px }
     /* one small transport line: scrubber, LIVE, back/forward/play */
@@ -177,7 +177,7 @@
   <button id="who" type="button" aria-haspopup="dialog" aria-expanded="false" aria-controls="picker" title="choose another painter"><span class="t">Choose a painter</span><span class="m"></span><span class="caret">▼</span></button>
   <div id="doing"><span class="what"></span><span class="detail"></span></div>
   <span id="badge"></span>
-  <div id="clockbox"><span id="pclock" hidden><span class="pl">on the painting's own clock</span><b></b><span class="pe"></span></span><span id="realclock"><span id="clocklbl">painting for</span><span id="clock">0:00:00</span></span></div>
+  <div id="clockbox"><span id="pclock" hidden><span class="pl">on the painting's own clock</span><b></b></span><span id="realclock"><span id="clocklbl">painting for</span><span id="clock">0:00:00</span></span></div>
 </header>
 <main>
   <section class="pane" id="codepane"><h4>code <span id="file"></span></h4><pre id="code"></pre></section>
@@ -517,8 +517,8 @@ function status() {
   $('clock').textContent = fmt(paintedFor(pos, t)); $('clockbox').hidden = false;
   $('clocklbl').textContent = (atLive ? (active ? 'painting for' : 'painted for') : 'at') + (n > 1 ? (atLive ? ` · ${n} sittings` : ` · sitting ${sittingAt(pos)} of ${n}`) : '');
   const ec = easelClockAt(pos), pc = $('pclock'); pc.hidden = !ec;
-  if (ec) { pc.querySelector('b').textContent = ec.text; pc.querySelector('.pe').textContent = ` · ${stretch(ec.min)} in`;
-    pc.title = `The easel keeps its own clock: every stroke takes the time a hand would take, and the painter can let hours or months pass for paint to dry. It began at 09:00 on day 1; this is the time the painter last read (${stretch(ec.min)} in).`; }
+  if (ec) { pc.querySelector('b').textContent = stretch(ec.min);  // (one figure: time passed, as the real clock beside it; the easel's own reading goes in the tooltip)
+    pc.title = `The easel keeps its own clock: every stroke takes the time a hand would take, and the painter can let hours or months pass for paint to dry. This is how much of that time has passed, as the painter last read it (the easel said "${ec.text}"; it counts from 09:00 on day 1).`; }
   $('clockbox').title = n > 1 ? `time spent painting, summed over ${n} sittings (the gaps between sittings don't count)` : 'time since the session began';
   doing(atLive && active);
 }

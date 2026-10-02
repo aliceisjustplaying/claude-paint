@@ -55,6 +55,7 @@
   #doing { flex:1; min-width:0; display:flex; align-items:baseline; gap:10px; white-space:nowrap; overflow:hidden }
   #doing .what { font-size:18px; font-weight:600 } #doing .detail { color:var(--dim); font:13px var(--mono); overflow:hidden; text-overflow:ellipsis; min-width:0 }
   #badge { flex:none; font-size:11.5px; font-weight:700; letter-spacing:.12em; padding:3px 10px; border-radius:999px; border:1px solid var(--line); color:var(--dim) }
+  #badge:empty { display:none }
   #badge.live { color:#fff; background:var(--live); border-color:var(--live); animation:glow 2s infinite }
   #badge.replay { color:var(--blue); border-color:#2b3b58 }
   @keyframes glow { 0% { box-shadow:0 0 0 0 rgba(224,86,79,.45) } 70% { box-shadow:0 0 0 8px rgba(224,86,79,0) } 100% { box-shadow:none } }
@@ -102,7 +103,7 @@
   .chips { display:flex; flex-wrap:wrap; gap:5px; margin:6px 0 }
   .chip { font-size:13px; color:var(--soft); background:#202027; border:1px solid var(--line); border-radius:6px; padding:1px 8px; white-space:nowrap; max-width:100%; overflow:hidden; text-overflow:ellipsis; cursor:default }
   .chip.code { color:var(--acc) } .chip.render { color:#a9c9f2 } .chip.look { color:#dcb8ea; cursor:pointer } .chip.fail { color:#ff9d93 }
-  .tm { font:11px var(--mono); color:var(--faint); display:block; margin-top:12px }
+  .tm { font:11px var(--mono); color:var(--faint); display:block; margin-top:12px } .jempty { color:var(--dim); line-height:1.6; margin:14px 0 }
   .cursor { display:inline-block; width:7px; height:1em; vertical-align:text-bottom; background:var(--acc); animation:blink 1s infinite }
 
   /* bottom: looks + transport */
@@ -270,7 +271,7 @@ function renderHeader() {
     w.title = `${a.title} · ${a.model}${subj(cur) ? ' · ' + subj(cur) : ''}: choose another painter`;
     $('finished').hidden = !a.url; if (a.url) $('finished').href = a.url;
     if (STATIC) document.title = `${a.title} · ${a.model} painting · stillwet studio`; }
-  else { w.querySelector('.t').textContent = cur ? sessLabel(cur) : Q ? oneSitting() : 'Choose a painter'; w.querySelector('.m').textContent = ''; $('finished').hidden = true; }
+  else { w.querySelector('.t').textContent = cur ? sessLabel(cur) : !Q ? 'Choose a painter' : Q.startsWith('s=') ? oneSitting() : events.length ? P() : 'Waiting for the painter to start'; w.querySelector('.m').textContent = ''; $('finished').hidden = true; }
 }
 let showMore = false;
 function card(s) {
@@ -343,13 +344,18 @@ async function loadSessions() {
 $('all').onchange = () => { localStorage.setItem('studio.all', $('all').checked ? '1' : '0'); renderPicker(); };
 let gen = 0, busy = false;  // one poll at a time; a reset (new painter, rebuilt stream) makes in-flight polls stale
 function reset() { gen++; busy = false; stop(); events = []; nUpd = 0; epoch = null; cwd = ''; liveText = null; typed = -1; sitStarts = [0]; nSittings = 1; hasLooks = false; $('strip').innerHTML = ''; $('ticks').innerHTML = ''; noPicture(); }
-function noPicture() { $('nopic').hidden = !events.length; $('img').removeAttribute('src'); $('cap').textContent = ''; viewI = -1; second(-1); $('zimg').removeAttribute('src'); $('zoom').style.display = 'none'; }
+const NOPIC = "No picture yet: the painter hasn't looked at its canvas.<br>Its first look will show here.";
+function noPicture() { $('nopic').innerHTML = NOPIC; $('nopic').hidden = !events.length; $('img').removeAttribute('src'); $('cap').textContent = ''; viewI = -1; second(-1); $('zimg').removeAttribute('src'); $('zoom').style.display = 'none'; }
 async function poll() {
   // a static export is re-uploaded every minute or so while painters work: read it again at most once a minute
   if (!Q || busy || (STATIC && epoch !== null && Date.now() - lastStatic < 60000)) return;
   const g = gen; busy = true; let r;
   try { r = await (await fetch(STATIC ? `data/${encodeURIComponent(P())}/events.json?t=${Date.now()}`
                                       : `/api/events?${Q}&since=${events.length}${epoch === null ? '' : '&epoch=' + epoch + '&u=' + nUpd}`)).json(); }
+  catch (e) {  // no such painter (yet): a stream opened before its painter begins waits for it
+    if (g === gen && !events.length) { $('nopic').innerHTML = "This painter hasn't started yet.<br>Its canvas will show here when it does."; $('nopic').hidden = false; $('clockbox').hidden = true;
+      $('badge').textContent = ''; $('badge').className = ''; for (const x of $('doing').children) x.textContent = ''; }
+    return; }
   finally { if (g === gen) busy = false; }
   if (g !== gen) return;  // switched painters meanwhile
   if (epoch !== null && r.epoch !== epoch) { const wasLive = live; reset(); live = wasLive; }  // the stream was rebuilt: start over
@@ -368,6 +374,7 @@ async function poll() {
     r.events.forEach((e, j) => { if (e.kind === 'image') thumb(e, base + j); else if (e.kind === 'look') hasLooks = true; else if (e.kind === 'sitting') { sitStarts.push(base + j); sitDivider(e, base + j); } });
     ticks();
     if (live) show(events.length - 1);
+    if (!base && !allSessions.some(s => qOf(s) === Q)) loadSessions();  // a painter that has just begun: its name for the header
   }
   if (live) refreshLiveCode();
   status();
@@ -440,7 +447,7 @@ function status() {
   const g = $('golive'); g.classList.toggle('on', atLive && active); g.classList.toggle('end', !active);
   g.textContent = active ? '● LIVE' : 'End ⇥'; g.title = active ? 'jump to live  l' : 'go to the end  l';
   const t = atLive && active ? Date.now() : Date.parse(events[pos].ts), n = sitStarts.length;
-  $('clock').textContent = fmt(paintedFor(pos, t));
+  $('clock').textContent = fmt(paintedFor(pos, t)); $('clockbox').hidden = false;
   $('clocklbl').textContent = (atLive ? (active ? 'painting for' : 'painted for') : 'at') + (n > 1 ? (atLive ? ` · ${n} sittings` : ` · sitting ${sittingAt(pos)} of ${n}`) : '');
   $('clockbox').title = n > 1 ? `time spent painting, summed over ${n} sittings (the gaps between sittings don't count)` : 'time since the session began';
   doing(atLive && active);
@@ -538,7 +545,7 @@ function journal(i) {
     else { const c = kindOf(e); if (!c || e.kind === 'image' && k > 0 && (events[k-1].kind === 'read' || events[k-1].kind === 'look')) continue;
       const title = esc(e.kind === 'cmd' || e.kind === 'jnote' ? e.text.slice(0, 2000) : e.kind === 'paint' ? e.code.slice(0, 2000) : (e.path || ''));
       chips.push(`<span class="chip ${c[0]}" title="${title}"${e.kind === 'image' ? ` data-i="${k}"` : ''}>${c[1]} ${esc(c[2])}</span>`); } }
-  flush(); $('jbody').innerHTML = html; $('jbody').scrollTop = 1e9;
+  flush(); $('jbody').innerHTML = html || '<p class="jempty">The painter has just begun.<br>What it thinks and does will show here.</p>'; $('jbody').scrollTop = 1e9;
   for (const el of $('jbody').querySelectorAll('.chip.look[data-i]')) el.onclick = () => { live = false; stop(); show(+el.dataset.i); };
   if (lastThink >= 0 && live && lastThink === events.length - 1 && lastThink !== typed) {
     typed = lastThink; clearInterval(typer); const el = $('jbody').querySelector(`.th[data-k="${lastThink}"]`), txt = events[lastThink].text.trim(); let n = 0;
@@ -653,7 +660,8 @@ $('play').onclick = () => {
   live = false; let j = W.findIndex(k => k > pos);
   if (j < 0 || pos >= W[W.length - 1]) j = 0;  // from the end (or past the last look): from the first
   $('play').textContent = '❚❚ Pause'; $('play').title = 'pause  space';
-  const step = () => { show(W[j]); if (++j >= W.length) { playing = null; stop(); status(); return; } playing = setTimeout(step, 1000 / +$('speed').value); };
+  // after the last look, back to now: the end of the session (FINISHED) or the painter at work (LIVE)
+  const step = () => { if (j >= W.length) { playing = null; goLive(); return; } show(W[j++]); playing = setTimeout(step, 1000 / +$('speed').value); };
   playing = true; step();
 };
 $('prevlook').onclick = () => { stop(); live = false; const L = looks().filter(k => k < pos); if (L.length) show(L[L.length - 1]); };

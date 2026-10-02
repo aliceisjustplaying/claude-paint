@@ -1,0 +1,3585 @@
+{
+"about": "Every sentence of the 11 released r16 and r17 reader records (run/<lane>/p<n>_record.md of rounds 16 and 17; backticks removed), each as it would stand as one short field of a structured record. clear: a reviewer's label for a clear prescription or placement (the observation drops); null for everything else, which must not drop.",
+"sentences": [
+{
+"at": "r16/A/p1:3",
+"text": "Lead white dominates a mix.",
+"clear": null
+},
+{
+"at": "r16/A/p1:3",
+"text": "Even with four parts smalt to one of white, the paint was only a mid value.",
+"clear": null
+},
+{
+"at": "r16/A/p1:3",
+"text": "Deep or mid tones need little white.",
+"clear": null
+},
+{
+"at": "r16/A/p1:4",
+"text": "New paint mixed to match an older passage that had been glazed over came out too light at three parts white to one of blue.",
+"clear": null
+},
+{
+"at": "r16/A/p1:4",
+"text": "One and a half to two parts white matched.",
+"clear": null
+},
+{
+"at": "r16/A/p1:4",
+"text": "Small test swatches on a dry spot found the mix.",
+"clear": null
+},
+{
+"at": "r16/A/p1:5",
+"text": "print(pile) shows a pile's parts and medium.",
+"clear": null
+},
+{
+"at": "r16/A/p1:5",
+"text": "Piles kept as globals were still usable 100 painting days later.",
+"clear": null
+},
+{
+"at": "r16/A/p1:7",
+"text": "On dry paint, work with the detail hand, load=1, pressure={0.6,0.9} and coverage 3 to 4 laid a fully opaque fill every time.",
+"clear": null
+},
+{
+"at": "r16/A/p1:8",
+"text": "The same dark pile at ordinary load and pressure came out pale and mauve-gray.",
+"clear": null
+},
+{
+"at": "r16/A/p1:8",
+"text": "Its thin film looked lighter than the pile.",
+"clear": null
+},
+{
+"at": "r16/A/p1:9",
+"text": "Thin lines of an earth-rich dark (rigger and pointed round) came out tan, lighter than a mid blue-gray field around them.",
+"clear": null
+},
+{
+"at": "r16/A/p1:9",
+"text": "Restroking the same paths with a pile rich in bone black made them read dark.",
+"clear": null
+},
+{
+"at": "r16/A/p1:10",
+"text": "A broad-hand wash at coverage 2 with fill=true came out lighter and more opaque than planned and hid the pencil drawing.",
+"clear": null
+},
+{
+"at": "r16/A/p1:10",
+"text": "Where the bands overlapped it left a row of lumps.",
+"clear": null
+},
+{
+"at": "r16/A/p1:11",
+"text": "Thin pale strokes laid along the upper edge of dark lines read gray and metallic, and some looked detached from the line, with pointed ends.",
+"clear": null
+},
+{
+"at": "r16/A/p1:12",
+"text": "Pale ridges drawn with a pointed round (pressure 0.35 to 0.15) over a dark mass came out too bright and scratchy.",
+"clear": null
+},
+{
+"at": "r16/A/p1:13",
+"text": "Pairs of short dragged filbert marks along a path read as a row of pills.",
+"clear": null
+},
+{
+"at": "r16/A/p1:13",
+"text": "A light rim on the far edge made each hollow look raised.",
+"clear": null
+},
+{
+"at": "r16/A/p1:14",
+"text": "Short horizontal scumbled dabs (filbert 3, pressure 0.35 to 0.15) laid lighter than the pile promised.",
+"clear": null
+},
+{
+"at": "r16/A/p1:15",
+"text": "The body hand with edge=\"soft\" over a small patch laid a flat, opaque slab with a hard lower edge, even at medium 0.55.",
+"clear": null
+},
+{
+"at": "r16/A/p1:16",
+"text": "Opaque rectangular repair patches showed as rectangles.",
+"clear": null
+},
+{
+"at": "r16/A/p1:16",
+"text": "A patch whose edges ran along existing shape edges left no seam.",
+"clear": null
+},
+{
+"at": "r16/A/p1:18",
+"text": "A dark full-load pass into a wet mid tone only lifted it, even at coverage 5 and load=1.",
+"clear": null
+},
+{
+"at": "r16/A/p1:18",
+"text": "The result stayed mid-gray.",
+"clear": null
+},
+{
+"at": "r16/A/p1:19",
+"text": "Pale over wet dark went gray and dirty.",
+"clear": null
+},
+{
+"at": "r16/A/p1:19",
+"text": "Dark over wet pale went gray, streaky and ragged-edged.",
+"clear": null
+},
+{
+"at": "r16/A/p1:19",
+"text": "Both happened again every time the underlayer was still wet.",
+"clear": null
+},
+{
+"at": "r16/A/p1:20",
+"text": "New paint laid over test swatches that were 20 minutes old came out lighter where it crossed them.",
+"clear": null
+},
+{
+"at": "r16/A/p1:21",
+"text": "A full-load dark pass over tacky paint gave a solid, continuous dark mass.",
+"clear": null
+},
+{
+"at": "r16/A/p1:22",
+"text": "Once the underlayer was dry, both light over dark and dark over light sat cleanly on top.",
+"clear": null
+},
+{
+"at": "r16/A/p1:24",
+"text": "Two blending passes over a wet banded layer softened it but left faint bands.",
+"clear": null
+},
+{
+"at": "r16/A/p1:24",
+"text": "A stipple and then a blend left speckles in the transition, and one more blend fused them.",
+"clear": null
+},
+{
+"at": "r16/A/p1:25",
+"text": "A clipped blend at a mask's edge left the hard edge.",
+"clear": null
+},
+{
+"at": "r16/A/p1:25",
+"text": "Two unclipped blends across a 50-unit band dragged the wet paint over the line and softened it.",
+"clear": null
+},
+{
+"at": "r16/A/p1:26",
+"text": "Blending a rectangle that held a wet patch among older dry paint smeared the patch's paint into pale blurs around it.",
+"clear": null
+},
+{
+"at": "r16/A/p1:27",
+"text": "A blend ring around a dry patch's edge only partly hid the edge.",
+"clear": null
+},
+{
+"at": "r16/A/p1:29",
+"text": "The glaze hand isn't clipped.",
+"clear": null
+},
+{
+"at": "r16/A/p1:29",
+"text": "On a band about 50 units tall its long horizontal strokes ran well past the mask on both sides and filled the neighboring passages.",
+"clear": null
+},
+{
+"at": "r16/A/p1:30",
+"text": "A dark pile at medium 0.65, brushed on with the detail hand and a filbert 5 at coverage 2, was nearly opaque and flattened the texture under it.",
+"clear": null
+},
+{
+"at": "r16/A/p1:30",
+"text": "Where its mask was cut by a rect it left a lighter seam.",
+"clear": null
+},
+{
+"at": "r16/A/p1:31",
+"text": "A glaze at medium 0.75 and coverage 1.2 over a broad dry field, clipped below a curve, left a hard straight top edge.",
+"clear": null
+},
+{
+"at": "r16/A/p1:31",
+"text": "It went down in cool swirls, and it was dry within 5 days.",
+"clear": null
+},
+{
+"at": "r16/A/p1:33",
+"text": "Coverage driven by noise (mask:times(noise) and then work) laid a mottle far stronger and more even than intended, like a leopard skin.",
+"clear": null
+},
+{
+"at": "r16/A/p1:34",
+"text": "Stippling into a wet layer and then blending fused the touches.",
+"clear": null
+},
+{
+"at": "r16/A/p1:36",
+"text": "Lead-white-rich layers at medium 0.15 to 0.2 were mostly touch-dry in 20 hours and fully dry in 26.",
+"clear": null
+},
+{
+"at": "r16/A/p1:36",
+"text": "Smalt-rich strips were still tacky after 22 hours.",
+"clear": null
+},
+{
+"at": "r16/A/p1:37",
+"text": "Dark piles with little white (umber, bone black, medium 0.05 to 0.1) laid thick were setting at 6 hours and still tacky at 16 and 26 hours.",
+"clear": null
+},
+{
+"at": "r16/A/p1:38",
+"text": "Stacked dark passes stayed tacky for 5 days and were dry by about 10.",
+"clear": null
+},
+{
+"at": "r16/A/p1:38",
+"text": "Pale caps over dark and repeated repairs often needed 7 to 9 days.",
+"clear": null
+},
+{
+"at": "r16/A/p1:39",
+"text": "drying(x,y) at several points before crossing a passage prevented the muddying.",
+"clear": null
+},
+{
+"at": "r16/A/p1:39",
+"text": "After a wait, check again: different spots dried days apart.",
+"clear": null
+},
+{
+"at": "r16/A/p1:40",
+"text": "Varnish needed every point to be touch-dry. varnish{coats=0.3} warmed the pale passages slightly.",
+"clear": null
+},
+{
+"at": "r16/A/p1:42",
+"text": "ribbon(pts, w) takes the full width: a 100-unit ribbon of width 10 has an area of 1078.",
+"clear": null
+},
+{
+"at": "r16/A/p1:43",
+"text": "m:grow() on a shape's mask spread paint onto an adjacent shape.",
+"clear": null
+},
+{
+"at": "r16/A/p1:43",
+"text": "It had to be painted back.",
+"clear": null
+},
+{
+"at": "r16/A/p1:44",
+"text": "noise{stretch=...} takes positional values {angle, k}.",
+"clear": null
+},
+{
+"at": "r16/A/p1:44",
+"text": "Named keys failed with \"error converting Lua nil to f32\".",
+"clear": null
+},
+{
+"at": "r16/A/p1:45",
+"text": "A chunk that stopped with a runtime or syntax error changed nothing, as the guide says.",
+"clear": null
+},
+{
+"at": "r16/A/p1:46",
+"text": "clip=true on a body pass kept a narrow band's edge crisp.",
+"clear": null
+},
+{
+"at": "r16/A/p1:48",
+"text": "A round 4 with point=1 stays at 0.58 wide up to pressure 0.2.",
+"clear": null
+},
+{
+"at": "r16/A/p1:48",
+"text": "It is 1.2 at 0.4, 3.0 at 0.7 and 4.9 at 1.",
+"clear": null
+},
+{
+"at": "r16/A/p1:49",
+"text": "A rigger 1.5 stays at 0.56 up to pressure 0.4, then 1.16 at 0.7 and 1.95 at 1. pressure_for a width below that minimum returns about 0.",
+"clear": null
+},
+{
+"at": "r16/A/p1:50",
+"text": "Short strokes with pressure falling to 0 and ramps of 0.6 drew noticeably shorter marks than their paths.",
+"clear": null
+},
+{
+"at": "r16/A/p1:52",
+"text": "A crop may be at most 1200 px per side, which is about 500 canvas units.",
+"clear": null
+},
+{
+"at": "r16/A/p1:52",
+"text": "A 1000-unit crop was refused, so use --size 1000 for a whole view.",
+"clear": "prescription"
+},
+{
+"at": "r16/A/p1:53",
+"text": "--mode squint showed that the lower field was as light as the lightest band, which the color view had hidden. --mode value confirmed the dark and light masses.",
+"clear": null
+},
+{
+"at": "r16/A/p1:54",
+"text": "Close crops at 1:1 caught seams, streaks and wet-mixing damage that a whole view didn't show.",
+"clear": null
+},
+{
+"at": "r16/A/p1:55",
+"text": "Compute time: 6,200 thin strokes took 23 s, and one blend over the upper half of the canvas took 47 s.",
+"clear": null
+},
+{
+"at": "r16/A/p2:3",
+"text": "A mid-dark pile with about as much lead white as umber, laid on a dark passage, came out as a pale disc, far lighter than the dark around it.",
+"clear": null
+},
+{
+"at": "r16/A/p2:4",
+"text": "A pile for shallow hollows with about 2.6 parts white barely differed from a pale field mixed at 3.6 to 5 parts white.",
+"clear": null
+},
+{
+"at": "r16/A/p2:4",
+"text": "Cutting the white to 1 part made it read darker.",
+"clear": null
+},
+{
+"at": "r16/A/p2:5",
+"text": "Piles that were mostly lead white kept the whole lay-in pale and close in value.",
+"clear": null
+},
+{
+"at": "r16/A/p2:5",
+"text": "The value and squint views showed the upper and lower fields at nearly the same value.",
+"clear": null
+},
+{
+"at": "r16/A/p2:6",
+"text": "A pile defined as local in one chunk was gone in the next: b:load failed with \"needs a pile\", and the chunk changed nothing. rng() doesn't exist, and that chunk failed cleanly too.",
+"clear": null
+},
+{
+"at": "r16/A/p2:8",
+"text": "A broad-hand pass (coverage 2, fill=true) in horizontal bands left half of one band thin, with the pencil showing, and the other half blotchy.",
+"clear": null
+},
+{
+"at": "r16/A/p2:8",
+"text": "A body-hand pass over it (strokes 40 to 90 long, coverage 2.5) evened it.",
+"clear": null
+},
+{
+"at": "r16/A/p2:9",
+"text": "Unclipped body strokes near a mask's edge threw a thin stray arm of paint out past the shape.",
+"clear": null
+},
+{
+"at": "r16/A/p2:10",
+"text": "The detail hand at load=1, pressure 0.6 to 0.9, coverage 3.5 to 4 and fill=true laid opaque fills of small shapes every time.",
+"clear": null
+},
+{
+"at": "r16/A/p2:11",
+"text": "A band built from half-ellipse lumps read as regular domes with hard square bottoms.",
+"clear": null
+},
+{
+"at": "r16/A/p2:11",
+"text": "Many small overlapping ellipses of mixed sizes, roughened, gave a broken, irregular top edge.",
+"clear": null
+},
+{
+"at": "r16/A/p2:12",
+"text": "A pointed round (width 3, point 1), with pressure running from pressure_for(width) to near 0, laid about 4,000 tapering lines in 2.3 s of compute.",
+"clear": null
+},
+{
+"at": "r16/A/p2:12",
+"text": "Lines grown long this way read as long and flowing.",
+"clear": null
+},
+{
+"at": "r16/A/p2:13",
+"text": "About 1,500 short two-part strokes (2.5 to 6 units, then 2 to 5), with pressure falling to 0.02, read as short crooked spurs.",
+"clear": null
+},
+{
+"at": "r16/A/p2:14",
+"text": "Dark strokes that began clear of the lines around them looked like they were floating.",
+"clear": null
+},
+{
+"at": "r16/A/p2:14",
+"text": "A ribbon joining each one to the nearest thicker line fixed that.",
+"clear": null
+},
+{
+"at": "r16/A/p2:15",
+"text": "Thin dark lines drawn at load 0.5 across a dark shape came out lighter than the shape.",
+"clear": null
+},
+{
+"at": "r16/A/p2:15",
+"text": "Going over them with the shape's own pile at coverage 5 and load 1 hid them.",
+"clear": null
+},
+{
+"at": "r16/A/p2:16",
+"text": "Pale ribbons along the upper edges of dark lines became the lightest marks on the canvas.",
+"clear": null
+},
+{
+"at": "r16/A/p2:17",
+"text": "Pale strokes along the tops of 70% of the tiers in a small stacked shape swamped its lower half.",
+"clear": null
+},
+{
+"at": "r16/A/p2:17",
+"text": "Dark strokes along the undersides, laid once the pale strokes had dried, brought the contrast back.",
+"clear": null
+},
+{
+"at": "r16/A/p2:18",
+"text": "Closely spaced small ellipses along a path read as a chain of pills.",
+"clear": null
+},
+{
+"at": "r16/A/p2:18",
+"text": "A roughened ribbon filled over them read as a pale streak.",
+"clear": null
+},
+{
+"at": "r16/A/p2:19",
+"text": "Rigger clumps (width 1.6, pressure 0.45 to 0.7 falling to 0) scattered evenly over a field read as a spotted pattern.",
+"clear": null
+},
+{
+"at": "r16/A/p2:21",
+"text": "Pale paint laid over a dark passage that was still setting or tacky came out dirty gray.",
+"clear": null
+},
+{
+"at": "r16/A/p2:21",
+"text": "Laid again once the dark was dry, it stayed clean.",
+"clear": null
+},
+{
+"at": "r16/A/p2:22",
+"text": "A stipple of lighter grains into a wet dark body mostly disappeared.",
+"clear": null
+},
+{
+"at": "r16/A/p2:22",
+"text": "Only a few light blobs were left.",
+"clear": null
+},
+{
+"at": "r16/A/p2:23",
+"text": "A dark pile over wet mid-tone hollows partly lifted the paint under it, so they darkened only a little.",
+"clear": null
+},
+{
+"at": "r16/A/p2:24",
+"text": "Thin dark crescents covered with a mid pile and blended with a badger 6 left a light lower lip and a gradient.",
+"clear": null
+},
+{
+"at": "r16/A/p2:24",
+"text": "The hollows read as raised.",
+"clear": null
+},
+{
+"at": "r16/A/p2:26",
+"text": "Four wet horizontal bands and then two badger passes at angle 0 blended smoothly, with a slight mottle left.",
+"clear": null
+},
+{
+"at": "r16/A/p2:26",
+"text": "The two passes over about 60% of the canvas took 46 s.",
+"clear": null
+},
+{
+"at": "r16/A/p2:27",
+"text": "A clipped body pass with fill=true ended in a hard straight lower edge.",
+"clear": null
+},
+{
+"at": "r16/A/p2:27",
+"text": "A stipple with coverage ramped down by a function and feather=0.8, then a denser stipple (up to 2.0) and a blend while wet, softened the edge.",
+"clear": null
+},
+{
+"at": "r16/A/p2:28",
+"text": "Wide, flat ellipses of pale paint blended with a badger 8 dried as flat discs, lighter than the field around them.",
+"clear": null
+},
+{
+"at": "r16/A/p2:29",
+"text": "Three fresh bands laid across the full width and blended covered an unwanted patch without a seam.",
+"clear": null
+},
+{
+"at": "r16/A/p2:31",
+"text": "A clipped glaze-hand pass (medium 0.75, coverage 1.2) over a dry pale field went down as an opaque blue-violet block with swirls.",
+"clear": null
+},
+{
+"at": "r16/A/p2:32",
+"text": "At medium 0.92, load=0.25 and pressure 0.2 to 0.35, the same hand left only a few starved streaks.",
+"clear": null
+},
+{
+"at": "r16/A/p2:33",
+"text": "A pale semi-transparent blue pile at medium 0.85, load=0.5 and pressure 0.3 to 0.5, blended afterward, laid an even cool veil that was a little blotchy.",
+"clear": null
+},
+{
+"at": "r16/A/p2:34",
+"text": "Over a whole lower field, a load_at ramp from 0.04 to about 0.64 with depth, then a blend, darkened the field gradually with no visible top edge.",
+"clear": null
+},
+{
+"at": "r16/A/p2:34",
+"text": "It left soft cool swirls.",
+"clear": null
+},
+{
+"at": "r16/A/p2:34",
+"text": "A second pass after drying deepened the bottom band.",
+"clear": null
+},
+{
+"at": "r16/A/p2:36",
+"text": "A clean flat 8 with wipe(1) before every stroke (pressure 0.8, three horizontal passes) lifted most of a wet glaze.",
+"clear": null
+},
+{
+"at": "r16/A/p2:36",
+"text": "Streaks stayed in the weave hollows until crossing vertical and horizontal passes with a flat 6 cleared nearly all of them.",
+"clear": null
+},
+{
+"at": "r16/A/p2:36",
+"text": "The brush's fullness() afterward was 0.015.",
+"clear": null
+},
+{
+"at": "r16/A/p2:36",
+"text": "Lifting also took color from thin lines under the glaze, and they turned pale.",
+"clear": null
+},
+{
+"at": "r16/A/p2:37",
+"text": "Lifting a wet mid patch off dry dark paint left a lighter rectangle, which had to be covered once dry.",
+"clear": null
+},
+{
+"at": "r16/A/p2:39",
+"text": "A stipple (width 2) along the rim of a band read as speckles, like bare ground showing through.",
+"clear": null
+},
+{
+"at": "r16/A/p2:40",
+"text": "A pale stipple at medium 0.3 (width 2.2, feather=0.8, coverage falling off over an ellipse and scaled 1.4 to 2.5) over dry thin lines veiled them to faint tips.",
+"clear": null
+},
+{
+"at": "r16/A/p2:41",
+"text": "A light stipple at coverage 0.35 and width 1.4 on a dark field read as a uniform dust.",
+"clear": null
+},
+{
+"at": "r16/A/p2:43",
+"text": "A lead-white-rich lay-in at medium 0.12 to 0.15 was dry in thin areas at 30 hours and still tacky in fuller ones.",
+"clear": null
+},
+{
+"at": "r16/A/p2:43",
+"text": "All of it was dry by 44 hours.",
+"clear": null
+},
+{
+"at": "r16/A/p2:44",
+"text": "Dark piles (umber and black, medium 0.06 to 0.1): setting at 16 hours and tacky at 5 days.",
+"clear": null
+},
+{
+"at": "r16/A/p2:44",
+"text": "The trunk-sized passes were dry by about 9 days.",
+"clear": null
+},
+{
+"at": "r16/A/p2:44",
+"text": "Stacked dark passes were still tacky in places at 8 to 10 days, while points a few units away were already dry.",
+"clear": null
+},
+{
+"at": "r16/A/p2:45",
+"text": "A light body pass of mostly white was setting after a few hours and dry after 30.",
+"clear": null
+},
+{
+"at": "r16/A/p2:46",
+"text": "The veil glazes at medium 0.85 were dry within 5 days.",
+"clear": null
+},
+{
+"at": "r16/A/p2:47",
+"text": "varnish{coats=0.3} after a 10-day wait warmed the whole canvas and pulled it together.",
+"clear": null
+},
+{
+"at": "r16/A/p2:49",
+"text": "A curve passed to above()/below() that stopped at x=620 painted a rectangle beyond its end, out to x 700.",
+"clear": null
+},
+{
+"at": "r16/A/p2:49",
+"text": "Every curve must span the full canvas width.",
+"clear": null
+},
+{
+"at": "r16/A/p2:50",
+"text": "A mask that wasn't intersected with the lower field ran above the dividing edge into the upper field.",
+"clear": null
+},
+{
+"at": "r16/A/p2:50",
+"text": "A small wedge restated the edge.",
+"clear": null
+},
+{
+"at": "r16/A/p2:51",
+"text": "Subtracting grown masks (m:grow(0.5 to 1)) of the finished shapes kept later passes off them.",
+"clear": null
+},
+{
+"at": "r16/A/p2:52",
+"text": "mask(function) comparing S:at(x, y) with S:at(x, y - d) picked out a thin top crescent of each shape in a mask.",
+"clear": null
+},
+{
+"at": "r16/A/p2:54",
+"text": "A crop 640 units wide (1536 px) was refused. 500 units is the limit.",
+"clear": null
+},
+{
+"at": "r16/A/p2:55",
+"text": "Value plus squint showed only the darkest masses standing out from a field of nearly equal lights.",
+"clear": null
+},
+{
+"at": "r16/A/p2:56",
+"text": "A whole view caught the stray rectangle.",
+"clear": null
+},
+{
+"at": "r16/A/p2:56",
+"text": "A close crop of a distant band looked rocky, but it read correctly at full size.",
+"clear": null
+},
+{
+"at": "r16/A/p2:57",
+"text": "bin/easel check replayed 97 chunks in 293 s and matched the canvas exactly.",
+"clear": null
+},
+{
+"at": "r16/A/p2:58",
+"text": "A 2H pencil at pressure 0.2 to 0.35 drew very faint lines, which showed through wherever the first paint was thin.",
+"clear": null
+},
+{
+"at": "r16/B/p1:3",
+"text": "medium above 0.95 is an error, and the chunk changes nothing.",
+"clear": null
+},
+{
+"at": "r16/B/p1:3",
+"text": "There's no color sampling: print(pile) lists a pile, and matches are made by eye (one patch took three tries: too dark, too light, close, with a faint edge left).",
+"clear": null
+},
+{
+"at": "r16/B/p1:4",
+"text": "Repainting a built-up passage with its first lay-in piles came out paler and warmer than the passage.",
+"clear": null
+},
+{
+"at": "r16/B/p1:5",
+"text": "A pale fill laid against a wet strong-colored neighbor picked up that color and came out blotched.",
+"clear": null
+},
+{
+"at": "r16/B/p1:7",
+"text": "ribbon on straight point lists gives stiff shapes.",
+"clear": null
+},
+{
+"at": "r16/B/p1:7",
+"text": "Densifying points on a spline, varying width with noise and roughening gives an irregular edge.",
+"clear": null
+},
+{
+"at": "r16/B/p1:8",
+"text": "A pointed round from pressure_for(w) down to 0 tapers blades and twigs: 900 short blades took about 1 s, 1,450 clumps about 3 s.",
+"clear": null
+},
+{
+"at": "r16/B/p1:9",
+"text": "Separate light blades on a dark field read as contrasty cutouts.",
+"clear": null
+},
+{
+"at": "r16/B/p1:9",
+"text": "Many fine dark and mid blades over a dry dark field unify it.",
+"clear": null
+},
+{
+"at": "r16/B/p1:9",
+"text": "Blades read best crossing a dark edge against a lighter field.",
+"clear": null
+},
+{
+"at": "r16/B/p1:10",
+"text": "A detail ribbon tapering from 3 to 0.7 units reads as a ruled rope.",
+"clear": null
+},
+{
+"at": "r16/B/p1:11",
+"text": "Unclipped body work (filbert 5) threw strokes well past a band's mask across its neighbors.",
+"clear": null
+},
+{
+"at": "r16/B/p1:12",
+"text": "A lower shape painted first showed through a dark shape laid over it as a pale band.",
+"clear": null
+},
+{
+"at": "r16/B/p1:12",
+"text": "Restating at coverage 4.5 covered it.",
+"clear": null
+},
+{
+"at": "r16/B/p1:13",
+"text": "Brushes have no :dab; :touch lays a single mark.",
+"clear": null
+},
+{
+"at": "r16/B/p1:15",
+"text": "Badger passes over freshly laid bands, all still open, softened the seams but left the strongest one.",
+"clear": null
+},
+{
+"at": "r16/B/p1:15",
+"text": "It took several passes plus an intermediate band.",
+"clear": null
+},
+{
+"at": "r16/B/p1:16",
+"text": "A blend whose mask takes in an unpainted gap drags paint into the gap.",
+"clear": null
+},
+{
+"at": "r16/B/p1:16",
+"text": "With clip=false it drags one shape into its neighbor.",
+"clear": null
+},
+{
+"at": "r16/B/p1:17",
+"text": "Blends bounded by rect masks leave seams at the rect edges.",
+"clear": null
+},
+{
+"at": "r16/B/p1:17",
+"text": "Crossing blends leave swirls.",
+"clear": null
+},
+{
+"at": "r16/B/p1:18",
+"text": "Long level blends (ruler=true, lengths 120 to 400) over open paint give a smooth, even passage.",
+"clear": null
+},
+{
+"at": "r16/B/p1:19",
+"text": "Blending wet light blades into a wet dark field smeared them into gray and pale blotches.",
+"clear": null
+},
+{
+"at": "r16/B/p1:20",
+"text": "Blending a wet dark coat laid over lighter paint lightened it each time: the blender lifted the lighter paint into it.",
+"clear": null
+},
+{
+"at": "r16/B/p1:21",
+"text": "Blending fresh touches over a dry layer barely changed them.",
+"clear": null
+},
+{
+"at": "r16/B/p1:21",
+"text": "Blending a fresh glaze over dry paint lifted the glaze and didn't even it out.",
+"clear": null
+},
+{
+"at": "r16/B/p1:22",
+"text": "Blending narrow wet strokes on a grown, softened mask turned them into soft bands with blunt, rounded ends.",
+"clear": null
+},
+{
+"at": "r16/B/p1:24",
+"text": "Stipple touches onto a wet dark fill of the same area vanished into it.",
+"clear": null
+},
+{
+"at": "r16/B/p1:24",
+"text": "They held once it was dry.",
+"clear": null
+},
+{
+"at": "r16/B/p1:25",
+"text": "A darker second pass over a wet light shape still came out light, mixed with the paint under it.",
+"clear": null
+},
+{
+"at": "r16/B/p1:26",
+"text": "Blades laid on tacky paint held.",
+"clear": null
+},
+{
+"at": "r16/B/p1:28",
+"text": "hand=\"glaze\" (a 26-unit brush) isn't clipped.",
+"clear": null
+},
+{
+"at": "r16/B/p1:28",
+"text": "On a rect it spilled over a dark shape as a pale band, left halos and ended in a hard edge.",
+"clear": null
+},
+{
+"at": "r16/B/p1:28",
+"text": "With clip=true it stayed inside.",
+"clear": null
+},
+{
+"at": "r16/B/p1:29",
+"text": "A thin glaze (medium 0.9, load_at fading) went on as visible streaks.",
+"clear": null
+},
+{
+"at": "r16/B/p1:29",
+"text": "Three rounds of level and vertical badger passes while wet made it smooth (30 s of compute), with a faint seam at its boundary.",
+"clear": null
+},
+{
+"at": "r16/B/p1:30",
+"text": "A clipped dark glaze (medium 0.75) over dry, textured blades, its load graded down the passage, darkened them without streaks.",
+"clear": null
+},
+{
+"at": "r16/B/p1:30",
+"text": "Over a dry smooth area (medium 0.55) it went on blotchy.",
+"clear": null
+},
+{
+"at": "r16/B/p1:32",
+"text": "Clustered stipple on a union of ellipses gives solid, scalloped, blobby masses.",
+"clear": null
+},
+{
+"at": "r16/B/p1:32",
+"text": "A sparse ring outside them (feather 0.5) reads as a fuzzy halo of dots.",
+"clear": null
+},
+{
+"at": "r16/B/p1:33",
+"text": "Sparse pale stipple (coverage 0.18, cluster 0.9) in a dry dark mass reads as bright specks, not openings.",
+"clear": null
+},
+{
+"at": "r16/B/p1:33",
+"text": "A day later, dark stipple at coverage 1.3 covered most of them.",
+"clear": null
+},
+{
+"at": "r16/B/p1:34",
+"text": "Coarse stipple (width 4.5) over a dry light layer leaves pale gaps where the layer shows through.",
+"clear": null
+},
+{
+"at": "r16/B/p1:34",
+"text": "From close up, the specks later called for a smooth repaint.",
+"clear": null
+},
+{
+"at": "r16/B/p1:35",
+"text": "Stipple on a ring minus a shrunken interior leaves a dark ring around a lighter center.",
+"clear": null
+},
+{
+"at": "r16/B/p1:36",
+"text": "Dense stipple over dry dark round patches absorbed their outlines.",
+"clear": null
+},
+{
+"at": "r16/B/p1:37",
+"text": "Sparse fine stipple (width 1.3, coverage 0.25) along a thin band read as a row of marks like lettering.",
+"clear": null
+},
+{
+"at": "r16/B/p1:39",
+"text": "A lean, lead-white-rich layer (medium 0.25) was dry at two heights after 22 h and still tacky between them.",
+"clear": null
+},
+{
+"at": "r16/B/p1:40",
+"text": "Green earth, umber and ochre paint (medium 0.15) was tacky at 30 and 50 h.",
+"clear": null
+},
+{
+"at": "r16/B/p1:40",
+"text": "At 86 h one point was dry and others were still tacky.",
+"clear": null
+},
+{
+"at": "r16/B/p1:41",
+"text": "Dark earth and bone-black paint (medium 0.08 to 0.1) was tacky at 40 h and dry in places at 88 h.",
+"clear": null
+},
+{
+"at": "r16/B/p1:41",
+"text": "Dark stippled masses were still tacky after 3 days.",
+"clear": null
+},
+{
+"at": "r16/B/p1:42",
+"text": "A thick dark repaint (coverage 4, then blended) was still tacky 3.5 days later.",
+"clear": null
+},
+{
+"at": "r16/B/p1:43",
+"text": "varnish needs everything touch-dry, so it was left off while passages were tacky.",
+"clear": null
+},
+{
+"at": "r16/B/p1:44",
+"text": "A canvas with two ground layers took 35 s to compute.",
+"clear": null
+},
+{
+"at": "r16/B/p1:44",
+"text": "Big repaint and blend chunks took 30 to 35 s.",
+"clear": null
+},
+{
+"at": "r16/B/p1:46",
+"text": "above(f, true) came out nearly empty inside the intended region, and a blend over it did nothing. m - above(f) worked.",
+"clear": null
+},
+{
+"at": "r16/B/p1:47",
+"text": "m:offset exists; there's no translate.",
+"clear": null
+},
+{
+"at": "r16/B/p1:48",
+"text": "A rim made as (m - m:shrink(2.5)) * rect also traces the rect's cut edges and any holes.",
+"clear": null
+},
+{
+"at": "r16/B/p1:48",
+"text": "Intersecting with m:shrink keeps only the true contour.",
+"clear": null
+},
+{
+"at": "r16/B/p1:49",
+"text": "Subtracting a protecting mask also shuts out patches inside it that need paint.",
+"clear": null
+},
+{
+"at": "r16/B/p1:50",
+"text": "Masks split by a y threshold paint a form as stacked horizontal bands.",
+"clear": null
+},
+{
+"at": "r16/B/p1:50",
+"text": "Diagonal facet polygons plus a crack stroke broke it up.",
+"clear": null
+},
+{
+"at": "r16/B/p1:51",
+"text": "Noise-threshold masks make hard-edged islands.",
+"clear": null
+},
+{
+"at": "r16/B/p1:51",
+"text": "A clipped fill cut by a rect leaves a straight edge.",
+"clear": null
+},
+{
+"at": "r16/B/p1:52",
+"text": "Repainting a strip beside a dark shape left a pale line at its very edge.",
+"clear": null
+},
+{
+"at": "r16/B/p1:52",
+"text": "Growing the dark shape 1.6 units past its mask covered it.",
+"clear": null
+},
+{
+"at": "r16/B/p1:53",
+"text": "An edge mask built from a shape's own mask landed mid-band, because the paint had spread past that mask.",
+"clear": null
+},
+{
+"at": "r16/B/p1:55",
+"text": "--crop is 1:1 at 2.4 px a unit, up to 1,200 px a side (about 500 units).",
+"clear": null
+},
+{
+"at": "r16/B/p1:55",
+"text": "A bigger crop is an error, reported after the chunk has run.",
+"clear": null
+},
+{
+"at": "r16/B/p1:56",
+"text": "Specks, seams and halos showed only in crops.",
+"clear": null
+},
+{
+"at": "r16/B/p1:56",
+"text": "Flat or busy passages showed in the whole view at 1600.",
+"clear": null
+},
+{
+"at": "r16/C/p1:4",
+"text": "A wet mix rich in lead white takes over.",
+"clear": null
+},
+{
+"at": "r16/C/p1:4",
+"text": "Opaque shadow mixes with 1 to 3 parts white came out far paler than planned once laid or blended, even on a dry layer.",
+"clear": null
+},
+{
+"at": "r16/C/p1:6",
+"text": "Hand-planned strips painted side by side from a graded row of 5 or 7 piles read as separate stripes or stepped bands.",
+"clear": null
+},
+{
+"at": "r16/C/p1:7",
+"text": "Seven piles with curved strokes 0.075 of the form's height apart, overlapping and painted dark to light with no blending, gave a continuous turn.",
+"clear": null
+},
+{
+"at": "r16/C/p1:7",
+"text": "The stroke ends left a scalloped texture.",
+"clear": null
+},
+{
+"at": "r16/C/p1:8",
+"text": "Low-load strips (load 0.35 to 0.45) over a dry mottled layer read as light sausage shapes, not as a darkening.",
+"clear": null
+},
+{
+"at": "r16/C/p1:9",
+"text": "Strokes of field color clipped to run along the outside of a contour left a scalloped edge and dried darker than the field.",
+"clear": null
+},
+{
+"at": "r16/C/p1:10",
+"text": "A dark broad pass with edge=\"firm\" around an excluded shape left a warm orange halo along that shape's edge.",
+"clear": null
+},
+{
+"at": "r16/C/p1:12",
+"text": "A work pass on a soft value-derived mask with threshold=0.4 came out as separate short dabs, a scaly look.",
+"clear": null
+},
+{
+"at": "r16/C/p1:13",
+"text": "Scumble and glaze passes clipped to a smoothstep mask did not fade at the ramp.",
+"clear": null
+},
+{
+"at": "r16/C/p1:13",
+"text": "They cut hard bands or blotches at the threshold.",
+"clear": null
+},
+{
+"at": "r16/C/p1:14",
+"text": "A scumble on a soft radial mask (threshold=0.25, edge=\"soft\") came out as a hard-edged, scalloped patch.",
+"clear": null
+},
+{
+"at": "r16/C/p1:15",
+"text": "A body pass on a band softened by 20 units with threshold=0.35 left blotchy stripes.",
+"clear": null
+},
+{
+"at": "r16/C/p1:17",
+"text": "With a white-containing glaze (medium 0.45, coverage 1.6), the strokes stayed too opaque and blotchy.",
+"clear": null
+},
+{
+"at": "r16/C/p1:18",
+"text": "A glaze of umber, green earth and black at medium 0.6 and coverage 3 went on far too dark.",
+"clear": null
+},
+{
+"at": "r16/C/p1:19",
+"text": "An umber glaze at medium 0.85 to 0.88 and coverage 1.5 to 2 went on as separate strokes with a hard edge.",
+"clear": null
+},
+{
+"at": "r16/C/p1:19",
+"text": "Two or three badger passes then turned it into a mottled half tone.",
+"clear": null
+},
+{
+"at": "r16/C/p1:20",
+"text": "A glaze of ochre, umber and green earth with a soft value mask covered nearly the whole small shape, and blending smeared it into an olive mottle.",
+"clear": null
+},
+{
+"at": "r16/C/p1:22",
+"text": "A dark strip laid into a wet pale layer lifted the pale and came out mid-light.",
+"clear": null
+},
+{
+"at": "r16/C/p1:24",
+"text": "Blending a zone with a soft edge left the zone's outline as a hard seam, twice.",
+"clear": null
+},
+{
+"at": "r16/C/p1:24",
+"text": "Blending the whole field twice at crossing angles dissolved the seam.",
+"clear": null
+},
+{
+"at": "r16/C/p1:25",
+"text": "A 40-unit badger over a whole small shape averaged its modeling to one flat mid value.",
+"clear": null
+},
+{
+"at": "r16/C/p1:26",
+"text": "A blend over a layer of strips rich in lead white pulled the whole shape to its palest value.",
+"clear": null
+},
+{
+"at": "r16/C/p1:27",
+"text": "A 10-unit badger at one slant over small shapes dragged them into diagonal streaks.",
+"clear": null
+},
+{
+"at": "r16/C/p1:28",
+"text": "A 12-unit badger along a narrow band lifted paint rather than fusing it.",
+"clear": null
+},
+{
+"at": "r16/C/p1:29",
+"text": "A blend mask that reached still-wet neighboring paint dragged that paint out as a large blot.",
+"clear": null
+},
+{
+"at": "r16/C/p1:30",
+"text": "A thin band excluded from a field blend by a 2-unit margin still got smeared.",
+"clear": null
+},
+{
+"at": "r16/C/p1:31",
+"text": "A horizontal blend band across fresh light strokes dragged the light over the adjacent dark and left a line at the band's top edge.",
+"clear": null
+},
+{
+"at": "r16/C/p1:32",
+"text": "A freshly painted band blended with the field around it pulled out into flame-like streaks.",
+"clear": null
+},
+{
+"at": "r16/C/p1:32",
+"text": "Three more passes with a 40-unit badger at three angles melted them into a soft glow.",
+"clear": null
+},
+{
+"at": "r16/C/p1:33",
+"text": "A shadow painted wet into a re-laid field, followed by one horizontal blend of the whole field (clipped), came out soft and clean.",
+"clear": null
+},
+{
+"at": "r16/C/p1:35",
+"text": "A clean flat (stiffness 0.6) wiped fully after every stroke lifted most of a wet glaze.",
+"clear": null
+},
+{
+"at": "r16/C/p1:35",
+"text": "It left streaks along the stroke direction, or a faint grid when the strokes were short.",
+"clear": null
+},
+{
+"at": "r16/C/p1:36",
+"text": "A badger pass afterward evened those streaks.",
+"clear": null
+},
+{
+"at": "r16/C/p1:37",
+"text": "A wider, softer flat (14 units, stiffness 0.4) in four passes lifted a fresh dark line where an 8-unit flat had only streaked it.",
+"clear": null
+},
+{
+"at": "r16/C/p1:39",
+"text": "A 2-unit stipple at coverage 0.12 over a dry layer left separate dark dots, strongest on the light areas.",
+"clear": null
+},
+{
+"at": "r16/C/p1:41",
+"text": "Lean mixes rich in lead white, and dark field mixes with medium 0.1 to 0.2, were all tacky after 24 h.",
+"clear": null
+},
+{
+"at": "r16/C/p1:42",
+"text": "After 42 h a twice-laid lean band was dry and the rest still tacky.",
+"clear": null
+},
+{
+"at": "r16/C/p1:42",
+"text": "After 66 h only the most-layered part of the dark field was tacky.",
+"clear": null
+},
+{
+"at": "r16/C/p1:43",
+"text": "A second layer rich in lead white over dry paint was tacky at 40 h and 60 h and dry at 96 h.",
+"clear": null
+},
+{
+"at": "r16/C/p1:44",
+"text": "A chrome yellow layer was tacky at 48 h and dry by 84 h.",
+"clear": null
+},
+{
+"at": "r16/C/p1:44",
+"text": "Umber glazes at medium 0.85 to 0.88 were dry by 72 to 96 h.",
+"clear": null
+},
+{
+"at": "r16/C/p1:45",
+"text": "A few thick strokes of umber, black and red earth were still tacky at 60 h while the lean paint beside them was dry.",
+"clear": null
+},
+{
+"at": "r16/C/p1:47",
+"text": "form:value is low off the solid, so a mask built from \"value below x\" spills past the solid's outline onto everything around it. f:silhouette{} gives the solid's own outline.",
+"clear": null
+},
+{
+"at": "r16/C/p1:49",
+"text": "varnish{coats=0.3, vary=0.08} on a touch-dry canvas warmed the picture slightly and brought neighboring areas together.",
+"clear": null
+},
+{
+"at": "r16/C/p1:51",
+"text": "A chunk with an endless loop hung the easel, and status and close then timed out as well.",
+"clear": null
+},
+{
+"at": "r16/C/p1:51",
+"text": "Stopping the process and running open replayed the log with globals intact, and the hung chunk left nothing.",
+"clear": null
+},
+{
+"at": "r16/C/p1:52",
+"text": "Chunk times seen: the canvas with two ground layers took 41 s, a whole-field blend at 1000 x 520 units took 32 to 55 s, and check replayed 94 chunks in 529 s.",
+"clear": null
+},
+{
+"at": "r16/C/p1:54",
+"text": "A crop is shown at 2.4 px per canvas unit.",
+"clear": null
+},
+{
+"at": "r16/C/p1:54",
+"text": "Close crops showed faults that the whole view hid: halos, specks and lines left at a band's edge.",
+"clear": null
+},
+{
+"at": "r16/C/p2:4",
+"text": "Neighboring piles of 3 to 4 parts lead white with small amounts of blue and earth laid down as nearly the same flat pale gray.",
+"clear": null
+},
+{
+"at": "r16/C/p2:5",
+"text": "A glaze pile of umber, bone black and red earth at medium 0.7 over a dry dark layer went on too warm and too saturated.",
+"clear": null
+},
+{
+"at": "r16/C/p2:5",
+"text": "The same glaze with cobalt in place of red earth (medium 0.65 to 0.7) darkened the layer and stayed cool.",
+"clear": null
+},
+{
+"at": "r16/C/p2:6",
+"text": "A patch of a mid pile painted over and beside partly wet dark paint came out paler and whiter than planned.",
+"clear": null
+},
+{
+"at": "r16/C/p2:8",
+"text": "work in wide horizontal bands (filbert 14, coverage 2.5, fill=true) left the bands as separate stripes with the ground showing between strokes.",
+"clear": null
+},
+{
+"at": "r16/C/p2:8",
+"text": "Only blending fused them.",
+"clear": null
+},
+{
+"at": "r16/C/p2:9",
+"text": "detail strokes (round 4, 6 to 16 units, steep angle) along a mask with a jagged top turned every bump into a sharp spike.",
+"clear": null
+},
+{
+"at": "r16/C/p2:10",
+"text": "A body pass with vertical strokes on a soft mask (threshold=0.4) laid crude vertical streaks.",
+"clear": null
+},
+{
+"at": "r16/C/p2:11",
+"text": "Low-load dabs from a flat 3 to 5 (load_at 0.25 to 0.65, coverage 0.9) in three piles over a dry layer read as a cobbled patchwork until a horizontal blend fused them.",
+"clear": null
+},
+{
+"at": "r16/C/p2:12",
+"text": "Hand-placed horizontal flat strokes of one width across a field read as stacked slabs.",
+"clear": null
+},
+{
+"at": "r16/C/p2:12",
+"text": "Widths and spacing that grew toward the bottom read as a flat plane receding.",
+"clear": null
+},
+{
+"at": "r16/C/p2:13",
+"text": "Thin pale strokes (flat 0.9 to 3, load 0.2 to 0.6, pressure falling to 0.05) on a dry dark or mid field stayed crisp and stark, like dashes or painted lines.",
+"clear": null
+},
+{
+"at": "r16/C/p2:14",
+"text": "A flat stroke pressed to 0.8 to 0.9 with default ramps gave a vertical bar with rounded ends. ramps={0.02, 0.02} on a stiffer flat (0.7) squared the ends, and a light dragged touch across the top flattened it further.",
+"clear": null
+},
+{
+"at": "r16/C/p2:15",
+"text": "Reflection strokes along sine-wave paths read as wriggles.",
+"clear": null
+},
+{
+"at": "r16/C/p2:16",
+"text": "A rigger (point 1) pressed 0.9 to 0.4 drew a clean thin line.",
+"clear": null
+},
+{
+"at": "r16/C/p2:16",
+"text": "At 0.1 to 0.45 in two short strokes it made small V marks.",
+"clear": null
+},
+{
+"at": "r16/C/p2:17",
+"text": "Strokes offset along both sides of a polyline edge (a dark band outside, a pale line inside) looked piped, like icing.",
+"clear": null
+},
+{
+"at": "r16/C/p2:18",
+"text": "work rejects a function for coverage (\"expected number\"). load_at takes one.",
+"clear": null
+},
+{
+"at": "r16/C/p2:20",
+"text": "Two full-field blends at crossing angles (0 and 0.12 to 0.25) of a wet banded layer gave a soft gradient and dissolved narrow lobed shapes laid wet into it into soft streaks.",
+"clear": null
+},
+{
+"at": "r16/C/p2:21",
+"text": "A blend inside a rectangle over fresh vertical strokes smeared them into a hard-edged block that also spread over dry paint beside them.",
+"clear": null
+},
+{
+"at": "r16/C/p2:22",
+"text": "Blending a wet dark to light gradient with a pale rim modelled a smooth rounded form.",
+"clear": null
+},
+{
+"at": "r16/C/p2:23",
+"text": "A blend mask grown and softened around shapes on a dry field softened their edges but not their outlines, and pulled wet paint in from a tacky neighbor.",
+"clear": null
+},
+{
+"at": "r16/C/p2:24",
+"text": "A narrow badger (14) in a ring along an edge softened it but smeared wet marks nearby and left a patch of pale lattice.",
+"clear": null
+},
+{
+"at": "r16/C/p2:25",
+"text": "A soft rectangle blend (badger 20) over thin wet strokes on a dry field took most of them away.",
+"clear": null
+},
+{
+"at": "r16/C/p2:26",
+"text": "A blend mask shaped like the passage itself (grown 4, softened 4) fused broken strokes into a mottled mass with no rectangle edge.",
+"clear": null
+},
+{
+"at": "r16/C/p2:26",
+"text": "Paint lifted off the weave tops left a pale lattice.",
+"clear": null
+},
+{
+"at": "r16/C/p2:27",
+"text": "A narrow badger (16) over crisp strokes on a dry field sank them into the layer.",
+"clear": null
+},
+{
+"at": "r16/C/p2:29",
+"text": "Dark strokes into a setting or tacky pale field came out lighter and streaky, left gray lifted patches and once a ring where an edge was disturbed.",
+"clear": null
+},
+{
+"at": "r16/C/p2:29",
+"text": "A second dark pass did not cover them.",
+"clear": null
+},
+{
+"at": "r16/C/p2:30",
+"text": "A pale fill painted up against a dry edge left a paler strip along the join.",
+"clear": null
+},
+{
+"at": "r16/C/p2:31",
+"text": "Dark horizontal strokes into a fresh pale band, then one horizontal blend, gave a soft hazy dark mass.",
+"clear": null
+},
+{
+"at": "r16/C/p2:33",
+"text": "hand=\"glaze\" clipped to its mask, then two blends, darkened a dry area and left a fine crackle-like texture visible close up.",
+"clear": null
+},
+{
+"at": "r16/C/p2:34",
+"text": "A scumble (medium 0.3 to 0.35, load 0.35, coverage 1) went on as an opaque block with a scalloped edge.",
+"clear": null
+},
+{
+"at": "r16/C/p2:34",
+"text": "Three blends over the whole area dragged it into a light-to-dark gradient.",
+"clear": null
+},
+{
+"at": "r16/C/p2:35",
+"text": "A body pass of a white-rich pile at medium 0.35 (load 0.5, coverage 1.5) then two badger 30 blends in a softened ellipse gave a subtle soft brightening with a faint edge at one end.",
+"clear": null
+},
+{
+"at": "r16/C/p2:37",
+"text": "A stipple (width 2.4, coverage 0.9, feather 0.4) on a mask of a shape's upper-left rim showed as a warmer broken edge.",
+"clear": null
+},
+{
+"at": "r16/C/p2:38",
+"text": "A stipple on ellipse:rim(4, 2) * mask:grow(3) made no visible change.",
+"clear": null
+},
+{
+"at": "r16/C/p2:38",
+"text": "About 40 round-brush touches placed around the ellipse did reshape its edge into small lobes.",
+"clear": null
+},
+{
+"at": "r16/C/p2:39",
+"text": "Small stippled clumps of one size read as uniform specks.",
+"clear": null
+},
+{
+"at": "r16/C/p2:39",
+"text": "Larger ones with drag read as blotches.",
+"clear": null
+},
+{
+"at": "r16/C/p2:41",
+"text": "A lead-white-rich lay-in was setting 4 h after it went on, mostly tacky at 6 h, still tacky at 25 h and dry at about 55 h.",
+"clear": null
+},
+{
+"at": "r16/C/p2:42",
+"text": "Umber and bone black paint was still tacky 3 days after it was laid and dry by 5.5 days.",
+"clear": null
+},
+{
+"at": "r16/C/p2:42",
+"text": "A bone black mix laid in body was tacky at 36 h and dry at 84 h.",
+"clear": null
+},
+{
+"at": "r16/C/p2:43",
+"text": "Small dark detail touches were tacky at 40 and 61 h and dry by 110 h.",
+"clear": null
+},
+{
+"at": "r16/C/p2:43",
+"text": "A glaze at medium 0.7 was dry within 72 h.",
+"clear": null
+},
+{
+"at": "r16/C/p2:44",
+"text": "After 120 days every point sampled on a grid was dry. varnish{coats=0.3, vary=0.08} then warmed and unified the canvas.",
+"clear": null
+},
+{
+"at": "r16/C/p2:46",
+"text": "A union of roughened ellipses gave a lobed silhouette.",
+"clear": null
+},
+{
+"at": "r16/C/p2:46",
+"text": "Where the ellipses and a base strip failed to overlap, a gap stayed unpainted and later passes clipped around it showed through.",
+"clear": null
+},
+{
+"at": "r16/C/p2:47",
+"text": "A smoothed poly made rounded domes.",
+"clear": null
+},
+{
+"at": "r16/C/p2:47",
+"text": "Straight poly edges read as ruled lines.",
+"clear": null
+},
+{
+"at": "r16/C/p2:48",
+"text": "Lens masks built from sine profiles came out as sausage shapes with even hard edges.",
+"clear": null
+},
+{
+"at": "r16/C/p2:48",
+"text": "Clipped fills of them (clip=true) looked cut out and pasted on.",
+"clear": null
+},
+{
+"at": "r16/C/p2:49",
+"text": "Thresholded stretched noise showed only where the noise crossed the threshold, sometimes on one side of the canvas only.",
+"clear": null
+},
+{
+"at": "r16/C/p2:50",
+"text": "noise{stretch={angle=, k=}} errors (\"nil to f32\"). stretch={angle, k} works.",
+"clear": null
+},
+{
+"at": "r16/C/p2:51",
+"text": "Clipping a pass to a field minus a dark shape (- mask:grow(0.5)) kept that shape's edge crisp.",
+"clear": null
+},
+{
+"at": "r16/C/p2:53",
+"text": "Crops are 2.4 px per unit, so a crop wider than 500 units fails.",
+"clear": null
+},
+{
+"at": "r16/C/p2:53",
+"text": "A 500-unit crop showed smears, rings and lattice patches the whole view hid.",
+"clear": null
+},
+{
+"at": "r16/C/p2:54",
+"text": "--mode mirror showed a hard edge the normal view hid. --mode value,squint showed a value range too narrow to see in color.",
+"clear": null
+},
+{
+"at": "r16/C/p2:55",
+"text": "Two whole-field blends took 39 to 45 s. check replayed 80 chunks in 399 s.",
+"clear": null
+},
+{
+"at": "r16/D/p1:4",
+"text": "A two-layer ground (a knifed pale layer under a thin brushed warm layer) gave an even buff field with faint brush striations and a few pale streaks.",
+"clear": null
+},
+{
+"at": "r16/D/p1:5",
+"text": "chalk() lines on the dry ground came out as grainy gray lines broken by the weave. sketch with wander 1–2 doubled some contours slightly.",
+"clear": null
+},
+{
+"at": "r16/D/p1:6",
+"text": "Body paint laid over the chalk hid it completely; no line showed through the dark lay-in.",
+"clear": null
+},
+{
+"at": "r16/D/p1:9",
+"text": "A dark pile of earths and black with a little lead white (about one part in eight) and medium 0.2 dried on the canvas as a pale mauve gray, far lighter than its masstone.",
+"clear": null
+},
+{
+"at": "r16/D/p1:10",
+"text": "The same kind of dark pile without white, laid over it, came out mid brown, not near black, even after two coats and a blend.",
+"clear": null
+},
+{
+"at": "r16/D/p1:11",
+"text": "A pile with a green-earth share, laid as the dark side of a light form, read olive green against the lights.",
+"clear": null
+},
+{
+"at": "r16/D/p1:14",
+"text": "work with hand=\"broad\" and no fill (coverage 1.2–1.8) left bright gaps of bare ground in places, as small crescents with crisp edges.",
+"clear": null
+},
+{
+"at": "r16/D/p1:15",
+"text": "broad strokes stayed visible as long dragged marks after one clipped blend at coverage 1.0.",
+"clear": null
+},
+{
+"at": "r16/D/p1:16",
+"text": "A thin horizontal band (about 18 units tall) worked with a 16-wide filbert came out as a row of stacked square dabs with a lumpy top edge.",
+"clear": null
+},
+{
+"at": "r16/D/p1:17",
+"text": "A wider band (about 100 units) worked with body, a 20-wide filbert and fill=true came out as a patchwork of separate rectangular dabs in two tones, not a smooth plane.",
+"clear": null
+},
+{
+"at": "r16/D/p1:18",
+"text": "Unclipped vertical body strokes in a lower block ran up past the mask's top edge as a row of dark notches into the band above.",
+"clear": null
+},
+{
+"at": "r16/D/p1:19",
+"text": "fill=true inside a clipped shape left many small round dabs that read as a bubbly texture in the lights.",
+"clear": null
+},
+{
+"at": "r16/D/p1:20",
+"text": "work with body and a filbert 9–12, unclipped at coverage 1.4 and no fill, over open pale paint, laid separate short dashes instead of a solid dark shape.",
+"clear": null
+},
+{
+"at": "r16/D/p1:21",
+"text": "One flat brush 3 wide, loaded 0.9 at pressure 0.6–0.75, drew a continuous thin pale line across the full 1000 units without running dry.",
+"clear": null
+},
+{
+"at": "r16/D/p1:22",
+"text": "A poly about 4 units wide filled with the detail hand and a round 2 came out as a single thin line.",
+"clear": null
+},
+{
+"at": "r16/D/p1:23",
+"text": "A pointed round 2.5 at pressure 0.15–0.65 laid a hairline highlight that swelled only slightly in the middle.",
+"clear": null
+},
+{
+"at": "r16/D/p1:24",
+"text": "A filbert 8 loaded 0.45–0.5 at pressure 0.2–0.5 laid narrow streaks, not soft washes.",
+"clear": null
+},
+{
+"at": "r16/D/p1:27",
+"text": "A clipped badger blend at a shallow angle over three overlapping ramps fused them only partly.",
+"clear": null
+},
+{
+"at": "r16/D/p1:27",
+"text": "Its passes stayed as broad bands at the blend angle, across the underlying strokes.",
+"clear": null
+},
+{
+"at": "r16/D/p1:28",
+"text": "A clipped blend over a shape with lobed edges left diagonal light stripes over the form at the blend angle.",
+"clear": null
+},
+{
+"at": "r16/D/p1:29",
+"text": "A vertical blend over a dark block left vertical streaks.",
+"clear": null
+},
+{
+"at": "r16/D/p1:32",
+"text": "A lead-white-rich unclipped broad pass with a filbert 22 and fill=true, then a blend, over a still-open band covered the earlier dark dashes and gave a smoother, cloudier surface.",
+"clear": null
+},
+{
+"at": "r16/D/p1:33",
+"text": "The same pass ran past its mask (which excluded shapes shrunk by 2 units) into the open paint of neighboring shapes and veiled their lower parts pale.",
+"clear": null
+},
+{
+"at": "r16/D/p1:34",
+"text": "Dark strokes (filbert 8, pressure fading to 0.1) laid into that open pale band afterward came out faint gray, much paler than their pile.",
+"clear": null
+},
+{
+"at": "r16/D/p1:35",
+"text": "A later broad pass with medium 0.35 over a setting dark layer unified it.",
+"clear": null
+},
+{
+"at": "r16/D/p1:35",
+"text": "The lower layer survived only as scattered streaks where the strokes thinned.",
+"clear": null
+},
+{
+"at": "r16/D/p1:38",
+"text": "Neither hand=\"glaze\" nor stipple was used.",
+"clear": null
+},
+{
+"at": "r16/D/p1:41",
+"text": "Chunk clock times: a chalk chunk about 1 minute; a full background and shelf lay-in about 73 minutes; a second large lay-in about 50 minutes; blocking in three shapes with blends about 46 minutes.",
+"clear": null
+},
+{
+"at": "r16/D/p1:42",
+"text": "At 2 hours in, drying() found a dark earth-and-black layer (medium 0.2–0.35, last worked early in the previous chunk) setting.",
+"clear": null
+},
+{
+"at": "r16/D/p1:42",
+"text": "A lead-white-rich band laid later in that chunk was still open.",
+"clear": null
+},
+{
+"at": "r16/D/p1:43",
+"text": "wait(0) returns the clock without advancing it; a chunk that only calls it still becomes a logged chunk.",
+"clear": null
+},
+{
+"at": "r16/D/p1:46",
+"text": "clip=true with a firm outline gave a perfectly smooth, crisp silhouette, like cut paper.",
+"clear": null
+},
+{
+"at": "r16/D/p1:47",
+"text": "clip=true with a soft outline gave a ragged, lobed and fringed silhouette.",
+"clear": null
+},
+{
+"at": "r16/D/p1:48",
+"text": "A ribbon along a few points, filled clipped, came out as a hard-edged band with angular joints at the points.",
+"clear": null
+},
+{
+"at": "r16/D/p1:49",
+"text": "Two overlapping ramp masks worked with unclipped broad strokes, one after the other, did not grade into each other.",
+"clear": null
+},
+{
+"at": "r16/D/p1:49",
+"text": "The second pass's stroke ends formed a ragged feathered seam over the first.",
+"clear": null
+},
+{
+"at": "r16/D/p1:50",
+"text": "Shapes reserved from a pass by subtracting a shrunk mask still took unclipped strokes that ran into them, leaving the reserved ground with ragged edges.",
+"clear": null
+},
+{
+"at": "r16/D/p1:51",
+"text": "A small clipped ellipse filled with a filbert 6 kept specks of the lighter layer underneath inside it.",
+"clear": null
+},
+{
+"at": "r16/D/p1:54",
+"text": "A whole look is 1000×800 pixels for a 1.25 canvas.",
+"clear": null
+},
+{
+"at": "r16/D/p1:54",
+"text": "Crops are 2.4 pixels per unit, so a crop can span at most 500 units a side; a 700-unit crop was refused.",
+"clear": null
+},
+{
+"at": "r16/D/p1:55",
+"text": "A do whose shell timeout (30 s) ran out still ran; status then showed the chunk logged.",
+"clear": null
+},
+{
+"at": "r16/D/p1:56",
+"text": "Compute times: large broad lay-ins about 27 s, three clipped shapes with blends 16 s, many single strokes 7 s.",
+"clear": null
+},
+{
+"at": "r16/D/p1:57",
+"text": "Close crops showed the fill dabs, blend bands and stroke ends that the whole view hid.",
+"clear": null
+},
+{
+"at": "r16/D/p2:4",
+"text": "A ground with a knifed pale layer (80 µm, texture 0.25) under a thin brushed warm layer (35 µm) gave an even buff field with visible tooth. canvas{} took 41 s to compute.",
+"clear": null
+},
+{
+"at": "r16/D/p2:5",
+"text": "chalk() sketch and line over the dry ground were quick: a whole drawing chunk took under 0.5 s to compute and about 2 minutes of clock time.",
+"clear": null
+},
+{
+"at": "r16/D/p2:6",
+"text": "The first body passes hid the chalk completely.",
+"clear": null
+},
+{
+"at": "r16/D/p2:9",
+"text": "Near-masstone strokes vanish: filbert strokes from a pile close to the passage beneath (the mid tones) barely showed.",
+"clear": null
+},
+{
+"at": "r16/D/p2:9",
+"text": "Only the lead-white-rich and near-black strokes read.",
+"clear": null
+},
+{
+"at": "r16/D/p2:10",
+"text": "About half a part of Prussian blue in roughly a dozen parts of an earth mix pushed the whole mix visibly toward blue-green.",
+"clear": null
+},
+{
+"at": "r16/D/p2:11",
+"text": "A dark earth-and-black pile laid in a thin dark stroke over a dark field came out as a pale gray hairline, lighter than the field.",
+"clear": null
+},
+{
+"at": "r16/D/p2:14",
+"text": "work with hand=\"body\", unclipped, with fill=true at coverage 1.5–1.6 laid a shape as many short, separate dashes.",
+"clear": null
+},
+{
+"at": "r16/D/p2:14",
+"text": "It read as a stippled or pixelated patch with a ragged outline of stroke ends, not a solid mass.",
+"clear": null
+},
+{
+"at": "r16/D/p2:15",
+"text": "The same hand over a ribbon about 14 units wide scattered stubby dashes across and past the band, so it read as a ring of bristles.",
+"clear": null
+},
+{
+"at": "r16/D/p2:16",
+"text": "body at coverage 1.4 with no fill laid a dark oval as a heap of separate short dark strokes.",
+"clear": null
+},
+{
+"at": "r16/D/p2:16",
+"text": "A later medium-rich pass and a blend darkened it but didn't fuse the strokes.",
+"clear": null
+},
+{
+"at": "r16/D/p2:17",
+"text": "Single filbert 10–12 strokes of lead-white-rich paint over setting paint stayed as crisp, separate pale bars with square ends.",
+"clear": null
+},
+{
+"at": "r16/D/p2:18",
+"text": "A filbert 10 stroke of a dark pile over a light passage that was setting, at pressure 0.7–0.9, came out as a thin, translucent streak narrower than the brush.",
+"clear": null
+},
+{
+"at": "r16/D/p2:19",
+"text": "A filbert 5 stroke about 50 units long, with pressure rising then falling (0.5, 0.7, 0.2), laid a narrow lens-shaped mark that tapered at both ends and had crisp edges.",
+"clear": null
+},
+{
+"at": "r16/D/p2:19",
+"text": "A second stroke offset by about 4 units gave a two-tone version with a dark lower edge.",
+"clear": null
+},
+{
+"at": "r16/D/p2:20",
+"text": "A pointed round 2.2–3 laid pale hairlines at pressure 0.2–0.7, and a pressed touch laid a small round dot.",
+"clear": null
+},
+{
+"at": "r16/D/p2:21",
+"text": "A curved band drawn with a round 6 (dark, pressure 0.7–0.85) plus pointed-round strokes read only as thin pale arcs, not as a band of that width.",
+"clear": null
+},
+{
+"at": "r16/D/p2:21",
+"text": "The dark stroke disappeared into the dark field under it.",
+"clear": null
+},
+{
+"at": "r16/D/p2:22",
+"text": "Two long horizontal strokes about 1000 units long, a pale one from a pointed round 2.5 and a dark one from a round 4 just below it, didn't read as a distinct crisp line in a close crop.",
+"clear": null
+},
+{
+"at": "r16/D/p2:23",
+"text": "Flat 8 strokes at pressure 0.5 over a pale band left only thin streaks.",
+"clear": null
+},
+{
+"at": "r16/D/p2:26",
+"text": "A clipped blend at coverage 0.8–1.0 over open body dashes didn't fuse them.",
+"clear": null
+},
+{
+"at": "r16/D/p2:26",
+"text": "The dashes stayed.",
+"clear": null
+},
+{
+"at": "r16/D/p2:27",
+"text": "A blend at coverage 1.8 over a whole field, right after a medium-rich (0.35) broad pass on a sine ramp, removed a hard vertical seam between two open passages and left a broad soft transition.",
+"clear": null
+},
+{
+"at": "r16/D/p2:27",
+"text": "Stroke streaks survived at the far end.",
+"clear": null
+},
+{
+"at": "r16/D/p2:28",
+"text": "A medium-rich (0.25) filbert glaze over separate pale bars, followed by a blend in an ellipse in the same chunk, covered the bars and gave a smoother passage.",
+"clear": null
+},
+{
+"at": "r16/D/p2:31",
+"text": "An unclipped broad pass with fill=true over a patch next to an open, freshly painted shape ran over it.",
+"clear": null
+},
+{
+"at": "r16/D/p2:31",
+"text": "The pass buried about a third of the shape, including its whole thin projecting loop.",
+"clear": null
+},
+{
+"at": "r16/D/p2:32",
+"text": "An unclipped body fill of a rectangle, using the same pile as the field under it, came out as a lighter patch with hard edges.",
+"clear": null
+},
+{
+"at": "r16/D/p2:32",
+"text": "By then the field had been changed by a darker medium-rich pass and blend.",
+"clear": null
+},
+{
+"at": "r16/D/p2:35",
+"text": "A flat 12 loaded 0.6 with a lean-dark pile at medium 0.4, at pressure 0.4–0.5 over a dark stroked patch, made no visible change.",
+"clear": null
+},
+{
+"at": "r16/D/p2:36",
+"text": "Neither hand=\"glaze\" nor stipple was used.",
+"clear": null
+},
+{
+"at": "r16/D/p2:39",
+"text": "With medium 0.15, the dark passages were still open after about 75 minutes and again at 2.5 hours.",
+"clear": null
+},
+{
+"at": "r16/D/p2:39",
+"text": "Paint at medium 0.1 laid 1–1.5 hours earlier was also still open.",
+"clear": null
+},
+{
+"at": "r16/D/p2:40",
+"text": "After wait(180), three passages (medium 0.1–0.35, the oldest about 3 hours old, the newest about 20 minutes) were all setting.",
+"clear": null
+},
+{
+"at": "r16/D/p2:41",
+"text": "Right after that wait, the middle of the field showed the weave as a fine pale speckle, most visible in value mode.",
+"clear": null
+},
+{
+"at": "r16/D/p2:41",
+"text": "That part had taken several broad passes and blends of up to 1.8 coverage.",
+"clear": null
+},
+{
+"at": "r16/D/p2:41",
+"text": "The speckle hadn't shown before the wait.",
+"clear": null
+},
+{
+"at": "r16/D/p2:42",
+"text": "Clock times: a broad lay-in of three large bands with blends took about 76 minutes; a single broad ramp pass with a whole-field blend took 19; blocking in two shapes with body passes and blends took 53; a chunk of fills, ribbons and blends took 35.",
+"clear": null
+},
+{
+"at": "r16/D/p2:42",
+"text": "A chunk of about 20 single strokes, one clipped fill and one blend took 21 minutes, and about 30 strokes and touches took 4.",
+"clear": null
+},
+{
+"at": "r16/D/p2:43",
+"text": "wait(0) returns the clock without advancing it, and a chunk that only queries drying still becomes a logged chunk.",
+"clear": null
+},
+{
+"at": "r16/D/p2:46",
+"text": "Two broad passes on ramp masks (0 to 1 over 200 units) laid one after the other met in a hard vertical seam.",
+"clear": null
+},
+{
+"at": "r16/D/p2:46",
+"text": "The later pass's stroke ends formed a lobed, ragged column along it, because the ramp only decided where strokes started.",
+"clear": null
+},
+{
+"at": "r16/D/p2:47",
+"text": "Unclipped broad bands laid under and over a straight horizontal edge left it lumpy, with stroke ends running across it both ways.",
+"clear": null
+},
+{
+"at": "r16/D/p2:48",
+"text": "A clipped body or detail fill of an ellipse or a smoothed poly gave a solid shape with a crisp, smooth outline.",
+"clear": null
+},
+{
+"at": "r16/D/p2:48",
+"text": "A small clipped detail fill in a thin ellipse showed fine parallel stroke lines inside it.",
+"clear": null
+},
+{
+"at": "r16/D/p2:49",
+"text": "A rotated oval with a soft ramp was built with mask(function).",
+"clear": null
+},
+{
+"at": "r16/D/p2:50",
+"text": "A shape split into two halves by complementary ramp masks, filled one half after the other, showed a straight seam where they met.",
+"clear": null
+},
+{
+"at": "r16/D/p2:53",
+"text": "Whole looks are 1000×800.",
+"clear": null
+},
+{
+"at": "r16/D/p2:53",
+"text": "Crops of about 200–340 units a side came back at 2.4 pixels per unit.",
+"clear": null
+},
+{
+"at": "r16/D/p2:53",
+"text": "In the whole view the value and squint modes showed the tonal masses, and value mode showed the weave speckle clearly.",
+"clear": null
+},
+{
+"at": "r16/D/p2:54",
+"text": "Compute times: large broad passes 33–58 s, body block-ins 11–17 s, stroke-only chunks 1–2 s. check replayed 14 chunks in 158 s and matched exactly.",
+"clear": null
+},
+{
+"at": "r17/F/p1:3",
+"text": "In a pale mix, lead white overwhelms the weak blues: pale smalt added little, and a second graded layer came out far paler than planned.",
+"clear": null
+},
+{
+"at": "r17/F/p1:3",
+"text": "Matching a mid blue took nearly as much blue as white.",
+"clear": null
+},
+{
+"at": "r17/F/p1:4",
+"text": "Fresh lead-white paint reads paler than aged paint of the same mix.",
+"clear": null
+},
+{
+"at": "r17/F/p1:4",
+"text": "Patches that should have matched showed as pale ghosts and were still paler five days later.",
+"clear": null
+},
+{
+"at": "r17/F/p1:5",
+"text": "Correcting patches with deeper mixes gave dark, smoky spots.",
+"clear": null
+},
+{
+"at": "r17/F/p1:5",
+"text": "A single film doesn't fully hide what is under it, so every patch came out differently.",
+"clear": null
+},
+{
+"at": "r17/F/p1:6",
+"text": "Earth darks that contain a fair share of white read reddish or pinkish tan, not grey.",
+"clear": null
+},
+{
+"at": "r17/F/p1:6",
+"text": "To darken them, add more bone black and less white.",
+"clear": "prescription"
+},
+{
+"at": "r17/F/p1:8",
+"text": "broad passes over stacked rectangles ran past each rectangle by a stroke length and left scalloped seams.",
+"clear": null
+},
+{
+"at": "r17/F/p1:8",
+"text": "The lowest band ran down over the drawing, and a band laid below a wet field ran up into it and left a lumpy edge.",
+"clear": null
+},
+{
+"at": "r17/F/p1:9",
+"text": "body strokes on a shrunk mask escaped past the mask's edge as short dash tails.",
+"clear": null
+},
+{
+"at": "r17/F/p1:10",
+"text": "poly(pts, true) smooths every corner, so points and gables came out rounded.",
+"clear": null
+},
+{
+"at": "r17/F/p1:10",
+"text": "Plain poly with detail, clip=true and edge=\"found\" gives crisp corners and thin points.",
+"clear": null
+},
+{
+"at": "r17/F/p1:11",
+"text": "edge=\"soft\" let paint run past the mask even with clip=true and ate into thin shapes beside it.",
+"clear": null
+},
+{
+"at": "r17/F/p1:12",
+"text": "Bands painted from separate zone masks meet as hard stripes.",
+"clear": null
+},
+{
+"at": "r17/F/p1:12",
+"text": "A long field painted around rectangular exclusions shows the rectangles as hard boundaries in its texture.",
+"clear": null
+},
+{
+"at": "r17/F/p1:13",
+"text": "hatch with a pointed round aimed upward, lengths 4–18, coverage about 1.3, reads as grass.",
+"clear": null
+},
+{
+"at": "r17/F/p1:13",
+"text": "In a receding field, strokes that are too long read as tall stalks, so shorten them with distance.",
+"clear": "prescription"
+},
+{
+"at": "r17/F/p1:14",
+"text": "A thin clipped ribbon of pale paint reads as a bright, even line.",
+"clear": null
+},
+{
+"at": "r17/F/p1:14",
+"text": "Hatching over it through a noise mask left only glints.",
+"clear": null
+},
+{
+"at": "r17/F/p1:15",
+"text": "hatch rejected a coverage function (error converting a function to a number).",
+"clear": null
+},
+{
+"at": "r17/F/p1:15",
+"text": "Pass it a number.",
+"clear": "prescription"
+},
+{
+"at": "r17/F/p1:17",
+"text": "The badger only moves wet paint, but unclipped it drags that paint across mask edges.",
+"clear": null
+},
+{
+"at": "r17/F/p1:17",
+"text": "A 40-wide pass broke a dark silhouette into separate lumps and nearly erased a soft form next to it.",
+"clear": null
+},
+{
+"at": "r17/F/p1:17",
+"text": "An earlier pass smeared pale paint over thin shapes that weren't dry yet.",
+"clear": null
+},
+{
+"at": "r17/F/p1:17",
+"text": "Use clip=true on every blend near anything else.",
+"clear": "prescription"
+},
+{
+"at": "r17/F/p1:18",
+"text": "Over dry surroundings, a clipped, low-pressure small badger (pressure 0.2–0.35) softens only the edge of a fresh patch.",
+"clear": null
+},
+{
+"at": "r17/F/p1:19",
+"text": "A vertical badger pass through a narrow band that held dark marks smeared the dark through the whole band, leaving it mottled.",
+"clear": null
+},
+{
+"at": "r17/F/p1:20",
+"text": "Small blends inside ellipse zones left the ellipses' edges visible.",
+"clear": null
+},
+{
+"at": "r17/F/p1:20",
+"text": "One light pass along the full length of the band (coverage 1) smoothed it into streaks.",
+"clear": null
+},
+{
+"at": "r17/F/p1:21",
+"text": "Blending along the edge of a darker zone pulled it into horizontal streaks.",
+"clear": null
+},
+{
+"at": "r17/F/p1:21",
+"text": "Lit rims that were badgered downward turned into dragged white streaks.",
+"clear": null
+},
+{
+"at": "r17/F/p1:22",
+"text": "One badger pass barely touched a blotchy glaze.",
+"clear": null
+},
+{
+"at": "r17/F/p1:22",
+"text": "Three crossing clipped passes (coverage 2.2, 1.5, 1) while it was wet turned it into a soft, mottled mass.",
+"clear": null
+},
+{
+"at": "r17/F/p1:24",
+"text": "Dark paint laid into a wet pale passage picks up the pale and comes out lighter.",
+"clear": null
+},
+{
+"at": "r17/F/p1:24",
+"text": "Lay the darks after the pale has set.",
+"clear": "prescription"
+},
+{
+"at": "r17/F/p1:25",
+"text": "A dark pass laid into a wet pale form barely darkened it, and a repair painted into wet pale left a translucent pale veil.",
+"clear": null
+},
+{
+"at": "r17/F/p1:27",
+"text": "glaze with a high-medium pile (0.5–0.6) over dry paint went on as blotchy, worm-like marks.",
+"clear": null
+},
+{
+"at": "r17/F/p1:27",
+"text": "The same happened with a soft filbert (stiffness 0.3) in 25–60-unit strokes.",
+"clear": null
+},
+{
+"at": "r17/F/p1:28",
+"text": "A glaze that holds much white lightens: over darker paint it laid pale streaks instead of darkening.",
+"clear": null
+},
+{
+"at": "r17/F/p1:29",
+"text": "A thin glaze (medium 0.7) over a small dry dark shape left vertical streaks.",
+"clear": null
+},
+{
+"at": "r17/F/p1:29",
+"text": "A clipped horizontal badger smoothed them, and the shape ended half a step darker.",
+"clear": null
+},
+{
+"at": "r17/F/p1:30",
+"text": "A dark glaze laid into wet pale ghost shapes turned them into dark ghosts.",
+"clear": null
+},
+{
+"at": "r17/F/p1:30",
+"text": "A low-load scumble (lost edge) over small patches made them larger, soft and pale.",
+"clear": null
+},
+{
+"at": "r17/F/p1:32",
+"text": "Clustered stipple in a bright light pile looked like scattered confetti.",
+"clear": null
+},
+{
+"at": "r17/F/p1:32",
+"text": "Lighting each small lobe separately made them all read alike, as repeated balls.",
+"clear": null
+},
+{
+"at": "r17/F/p1:32",
+"text": "One large form driving the shadow stipple unified them.",
+"clear": null
+},
+{
+"at": "r17/F/p1:33",
+"text": "Closing a clumped silhouette with m:grow(14):shrink(14) filled the gaps between lobes.",
+"clear": null
+},
+{
+"at": "r17/F/p1:33",
+"text": "Holes carved back into it with roughened polys read as punched out until leaf sprays were stippled in from their rims (drag and twist).",
+"clear": null
+},
+{
+"at": "r17/F/p1:34",
+"text": "A sparse dull stipple (coverage under 1, feather 0.8) over a dry dark mass shows as faint, subtle clusters.",
+"clear": null
+},
+{
+"at": "r17/F/p1:34",
+"text": "A stippled ring around the foot of a form looks too regular.",
+"clear": null
+},
+{
+"at": "r17/F/p1:36",
+"text": "wait() takes minutes: wait(60*30) passes 30 hours.",
+"clear": null
+},
+{
+"at": "r17/F/p1:37",
+"text": "A thin lean layer rich in lead white (medium 0.12) was dry in 20 hours.",
+"clear": null
+},
+{
+"at": "r17/F/p1:37",
+"text": "The thick body over it and an oily umber wash (medium 0.45) were still tacky at 24 hours.",
+"clear": null
+},
+{
+"at": "r17/F/p1:38",
+"text": "A lead-white-rich layer laid over set paint stayed tacky for more than three days.",
+"clear": null
+},
+{
+"at": "r17/F/p1:38",
+"text": "A dark body with lead white stayed tacky about four days.",
+"clear": null
+},
+{
+"at": "r17/F/p1:39",
+"text": "Over tacky paint, new strokes sit on top and don't take up more paint: darkening a line took two full loads after another day.",
+"clear": null
+},
+{
+"at": "r17/F/p1:40",
+"text": "A chunk that only prints is still logged as a chunk.",
+"clear": null
+},
+{
+"at": "r17/F/p1:42",
+"text": "Subtract whatever stands in front from a mask before painting behind it, or the paint goes over it.",
+"clear": "prescription"
+},
+{
+"at": "r17/F/p1:43",
+"text": "Every repaint cut around a grown or older, wider exclusion mask left a pale ring.",
+"clear": null
+},
+{
+"at": "r17/F/p1:43",
+"text": "Patching the ring never matched.",
+"clear": null
+},
+{
+"at": "r17/F/p1:43",
+"text": "Repainting the whole passage, cut only by the current shape grown by 0.2, removed it.",
+"clear": null
+},
+{
+"at": "r17/F/p1:44",
+"text": "In a large even passage, local corrections kept failing: repaint the whole passage instead.",
+"clear": "prescription"
+},
+{
+"at": "r17/F/p1:45",
+"text": "Restating a shape in pieces leaves seams and mismatched parts, and the old outline shows past the new one.",
+"clear": null
+},
+{
+"at": "r17/F/p1:45",
+"text": "Repaint it as one shape, then paint the surroundings over the old outline.",
+"clear": "prescription"
+},
+{
+"at": "r17/F/p1:46",
+"text": "A keep test that only checks each stroke's start lets strokes run across the kept shape.",
+"clear": null
+},
+{
+"at": "r17/F/p1:47",
+"text": "mask + number and mask:bounds() are errors (use :map). form:field takes only \"fall\", \"across\" or \"edge\".",
+"clear": "prescription"
+},
+{
+"at": "r17/F/p1:48",
+"text": "locals are gone in the next chunk, but globals persist, even through close and reopen.",
+"clear": null
+},
+{
+"at": "r17/F/p1:50",
+"text": "A rigger (point 1) with pressure falling to 0 tapers to a hair and suits tufts and stems.",
+"clear": null
+},
+{
+"at": "r17/F/p1:50",
+"text": "At width 1.2 it read thin, and a round 1.8 with point 0.8 at pressure 0.8→0 was bolder.",
+"clear": null
+},
+{
+"at": "r17/F/p1:51",
+"text": "Pale stems against a dark ground read as lollipops.",
+"clear": null
+},
+{
+"at": "r17/F/p1:51",
+"text": "Dark blades woven over them set them into the ground.",
+"clear": null
+},
+{
+"at": "r17/F/p1:52",
+"text": "Short vertical flat strokes clipped to a very narrow band were cut into a row of beads.",
+"clear": null
+},
+{
+"at": "r17/F/p1:54",
+"text": "A crop can be at most 500 units wide (1200 px at 2400 px). --grid helps with placing coordinates, and --mode squint helps with judging the whole.",
+"clear": null
+},
+{
+"at": "r17/F/p1:55",
+"text": "Streaks that show in a close crop can pass in the whole view, so judge both.",
+"clear": "prescription"
+},
+{
+"at": "r17/F/p1:56",
+"text": "Shell exports don't persist between commands, so pass chunk files by full path.",
+"clear": "prescription"
+},
+{
+"at": "r17/F/p1:56",
+"text": "An unset variable in a -f path pointed the easel at the wrong file.",
+"clear": null
+},
+{
+"at": "r17/F/p1:57",
+"text": "Replay time grows with the log: check took 574 s at 147 chunks and 787 s at 208. open at 208 took over 900 s.",
+"clear": null
+},
+{
+"at": "r17/F/p1:57",
+"text": "A timeout that kills open leaves no session, so run it with a long limit.",
+"clear": "prescription"
+},
+{
+"at": "r17/F/p2:3",
+"text": "A glaze (medium 0.6) that still held some lead white greyed and lightened dry saturated shapes into pale ghosts with darker rims.",
+"clear": null
+},
+{
+"at": "r17/F/p2:3",
+"text": "A solid repaint with no white fixed them.",
+"clear": null
+},
+{
+"at": "r17/F/p2:4",
+"text": "A shadow mix with little white and much Prussian blue and umber went on far too dark and crisp over a pale field.",
+"clear": null
+},
+{
+"at": "r17/F/p2:4",
+"text": "The shapes read as holes.",
+"clear": null
+},
+{
+"at": "r17/F/p2:5",
+"text": "Marks from a pile close in value to what lies under them vanish.",
+"clear": null
+},
+{
+"at": "r17/F/p2:5",
+"text": "Short strokes over a dark band of the same value disappeared, and small stippled shapes at the field's value merged into it.",
+"clear": null
+},
+{
+"at": "r17/F/p2:5",
+"text": "A darker pile and a lighter pile laid together made the texture read.",
+"clear": null
+},
+{
+"at": "r17/F/p2:6",
+"text": "A lighter pile with extra white, hatched over a dry mid passage, came out frosty and too pale.",
+"clear": null
+},
+{
+"at": "r17/F/p2:8",
+"text": "broad in six soft-edged horizontal bands (coverage 2.2, fill, edge soft) gave stripes with scalloped seams.",
+"clear": null
+},
+{
+"at": "r17/F/p2:9",
+"text": "Zones filled with body from separate masks, even clipped and filled, met as hard stripes.",
+"clear": null
+},
+{
+"at": "r17/F/p2:9",
+"text": "A repaint bounded by a rectangle left a straight seam at its edge.",
+"clear": null
+},
+{
+"at": "r17/F/p2:9",
+"text": "One full-width pass graded by smoothstep masks (hatch, coverage 1.3, threshold 0.5) removed the seams.",
+"clear": null
+},
+{
+"at": "r17/F/p2:10",
+"text": "A repaint around subtracted shapes left haloes of the old color round each one.",
+"clear": null
+},
+{
+"at": "r17/F/p2:10",
+"text": "A clipped ring pass (coverage 2, fill) closed them but also covered their cast shadows and edges, which then had to be restated.",
+"clear": null
+},
+{
+"at": "r17/F/p2:11",
+"text": "A repaint mask that subtracted a thin band (3–5 units) shrunk by 0.8 let body strokes run over most of the band.",
+"clear": null
+},
+{
+"at": "r17/F/p2:12",
+"text": "An unclipped glaze pass along a narrow shape threw long smears into the fields beside it.",
+"clear": null
+},
+{
+"at": "r17/F/p2:13",
+"text": "detail with clip=true and edge=\"found\" gave crisp small silhouettes.",
+"clear": null
+},
+{
+"at": "r17/F/p2:13",
+"text": "A row of near-identical small polys read as repeats, and a row of rect blocks each in a different pile read as a barcode.",
+"clear": null
+},
+{
+"at": "r17/F/p2:14",
+"text": "A ribbon stays thick along its whole length, so a receding band read as a tube.",
+"clear": null
+},
+{
+"at": "r17/F/p2:14",
+"text": "A pointed round (point 0.2–0.3), with pressure falling from about 0.55 to 0.15 over several reloads, drew a tapering thin line.",
+"clear": null
+},
+{
+"at": "r17/F/p2:14",
+"text": "Each reload showed as a slight break.",
+"clear": null
+},
+{
+"at": "r17/F/p2:15",
+"text": "Hatch at coverage 0.15–0.3 with a round 1.0 read as a fine, short texture.",
+"clear": null
+},
+{
+"at": "r17/F/p2:15",
+"text": "Rigger hatch 16–34 long, ramped to the tip, read as tall upright strokes.",
+"clear": null
+},
+{
+"at": "r17/F/p2:16",
+"text": "Hatch with an angle function fanning out from a base point, clipped to a lobed mask, built a broom-shaped mass.",
+"clear": null
+},
+{
+"at": "r17/F/p2:16",
+"text": "A mask with one sine-shaped peak made pointed flame shapes; two smaller off-center fans broadened the top. stipple also takes a coverage function.",
+"clear": null
+},
+{
+"at": "r17/F/p2:18",
+"text": "Two clipped horizontal badger passes over wet bands gave a soft, slightly mottled gradient.",
+"clear": null
+},
+{
+"at": "r17/F/p2:19",
+"text": "Crossing clipped badger passes (coverage 2.2, 1.2, 1.2) over wet opaque blocks turned them into soft forms.",
+"clear": null
+},
+{
+"at": "r17/F/p2:20",
+"text": "16-wide badgers crossing along wet seams left smeary zigzags.",
+"clear": null
+},
+{
+"at": "r17/F/p2:20",
+"text": "A badger at angle 0.12 left diagonal smears.",
+"clear": null
+},
+{
+"at": "r17/F/p2:21",
+"text": "Hard badgering of wet dark crisp shapes spread them out and left them rounded and blunt-ended.",
+"clear": null
+},
+{
+"at": "r17/F/p2:22",
+"text": "A width-6 clipped badger over a wet row of contrasting blocks fused it into a hazy mottle.",
+"clear": null
+},
+{
+"at": "r17/F/p2:23",
+"text": "A blend across a seam between wet and set paint softened the edge but kept the color step.",
+"clear": null
+},
+{
+"at": "r17/F/p2:25",
+"text": "Dark shapes and dark hatch laid into a wet pale passage dissolved and barely showed.",
+"clear": null
+},
+{
+"at": "r17/F/p2:25",
+"text": "The same pass a day later, on tacky paint, darkened it.",
+"clear": null
+},
+{
+"at": "r17/F/p2:26",
+"text": "Paint laid against a wet neighbor ate into it: a cover pass beside a wet narrow band narrowed it more than planned.",
+"clear": null
+},
+{
+"at": "r17/F/p2:26",
+"text": "A pale band painted over a wet dark edge dragged the dark into a grey marble.",
+"clear": null
+},
+{
+"at": "r17/F/p2:27",
+"text": "Thin dark strokes laid into wet pale patches dissolved.",
+"clear": null
+},
+{
+"at": "r17/F/p2:27",
+"text": "A light stipple went over a dark one only after the dark had rested 8 hours.",
+"clear": null
+},
+{
+"at": "r17/F/p2:29",
+"text": "A semi-transparent blue glaze (medium 0.6, detail hand, load 0.35, two passes, then a width-6 clipped badger) over a dry pale band darkened it, more on one side where the second pass went.",
+"clear": null
+},
+{
+"at": "r17/F/p2:30",
+"text": "A glaze (medium 0.7, load 0.35, coverage 0.8) over a patch of over-bright marks knocked it down into one dark mass.",
+"clear": null
+},
+{
+"at": "r17/F/p2:31",
+"text": "Scumble at load 0.4–0.5 on thin ellipses laid opaque blocks, not veils.",
+"clear": null
+},
+{
+"at": "r17/F/p2:31",
+"text": "A seam scumble came out darker than the band above it and made a new edge.",
+"clear": null
+},
+{
+"at": "r17/F/p2:31",
+"text": "A scumble with a fading mask and threshold 0.25 left a scalloped edge.",
+"clear": null
+},
+{
+"at": "r17/F/p2:33",
+"text": "Dense stipple (width 3.2, coverage 4.5) over a union of ellipses with punched holes read as a flat blob with round holes.",
+"clear": null
+},
+{
+"at": "r17/F/p2:33",
+"text": "Clumps set along drawn branching strokes read as structure.",
+"clear": null
+},
+{
+"at": "r17/F/p2:34",
+"text": "Lighting a whole mass with one mask left a hard diagonal split.",
+"clear": null
+},
+{
+"at": "r17/F/p2:34",
+"text": "A clustered stipple of a middle tone across the split softened it.",
+"clear": null
+},
+{
+"at": "r17/F/p2:35",
+"text": "A darker stipple at normal pressure barely changed a pale one.",
+"clear": null
+},
+{
+"at": "r17/F/p2:35",
+"text": "With less white, width 2.6, coverage 3, pressure 0.55–0.8 and dips {8, 0.8, 0.5} it darkened.",
+"clear": null
+},
+{
+"at": "r17/F/p2:36",
+"text": "A rim stipple with drag, twist and feather read as a fuzzy halo.",
+"clear": null
+},
+{
+"at": "r17/F/p2:36",
+"text": "Pairs of dragged touches along a light, low-pressure stroke read as feathery sprays.",
+"clear": null
+},
+{
+"at": "r17/F/p2:37",
+"text": "Six small touches per spot read as specks.",
+"clear": null
+},
+{
+"at": "r17/F/p2:37",
+"text": "Small flat ellipses stippled in two tones read as flat clusters.",
+"clear": null
+},
+{
+"at": "r17/F/p2:38",
+"text": "A feathered, clustered stipple laid across the seam between two stippled masses hid the seam.",
+"clear": null
+},
+{
+"at": "r17/F/p2:39",
+"text": "A dense dark stipple over a region buried the small marks laid there earlier.",
+"clear": null
+},
+{
+"at": "r17/F/p2:41",
+"text": "Lead-white-rich bands (medium 0.08) were dry after 22 hours; lower passages were tacky at 22 hours and mostly dry at 46.",
+"clear": null
+},
+{
+"at": "r17/F/p2:42",
+"text": "Thicker lead-white passages were tacky at 30 and 50 hours, and dry in places by 98.",
+"clear": null
+},
+{
+"at": "r17/F/p2:42",
+"text": "A lead-white patch was still tacky at 3 days and dry at 5.",
+"clear": null
+},
+{
+"at": "r17/F/p2:43",
+"text": "A dark passage with bone black was still tacky 5 days after it was laid.",
+"clear": null
+},
+{
+"at": "r17/F/p2:44",
+"text": "Light touches on tacky paint left only tiny dots.",
+"clear": null
+},
+{
+"at": "r17/F/p2:44",
+"text": "On dry paint, a wider brush laid visible marks.",
+"clear": null
+},
+{
+"at": "r17/F/p2:45",
+"text": "Glazes were held back until the paint under them was dry, not just tacky.",
+"clear": null
+},
+{
+"at": "r17/F/p2:47",
+"text": "A noise mask scaled for perspective turned too fine toward the far band and read as camouflage.",
+"clear": null
+},
+{
+"at": "r17/F/p2:48",
+"text": "A mask helper with a slope error put a pass in the wrong place, so the pass barely changed anything.",
+"clear": null
+},
+{
+"at": "r17/F/p2:48",
+"text": "An explicit below() curve fixed it.",
+"clear": null
+},
+{
+"at": "r17/F/p2:49",
+"text": "A keep-out mask built from the shapes in front and subtracted from each later pass protected them.",
+"clear": null
+},
+{
+"at": "r17/F/p2:51",
+"text": "A 2H pencil at pressure 0.2–0.3 barely showed in the whole view and needed a crop to see.",
+"clear": null
+},
+{
+"at": "r17/F/p2:52",
+"text": "A pale-loaded rigger 0.9 over a pale field laid stick-thin lines too faint to read.",
+"clear": null
+},
+{
+"at": "r17/F/p2:53",
+"text": "A rigger 1.1, with two strokes ramped in pressure from 0.1 to 0.55 and back, made small V marks.",
+"clear": null
+},
+{
+"at": "r17/F/p2:54",
+"text": "An unclipped thick vertical stroke overshot onto a neighboring shape and left a dark streak.",
+"clear": null
+},
+{
+"at": "r17/F/p2:56",
+"text": "Crops over 1200 px (500 units) are refused.",
+"clear": null
+},
+{
+"at": "r17/F/p2:56",
+"text": "A grid crop helped with placing coordinates, and --mode value and squint helped judge the whole.",
+"clear": null
+},
+{
+"at": "r17/F/p2:57",
+"text": "A line that looked zigzag and too white in a 1:1 crop read correctly in the whole view.",
+"clear": null
+},
+{
+"at": "r17/F/p2:58",
+"text": "Globals persisted through close and reopen.",
+"clear": null
+},
+{
+"at": "r17/F/p2:58",
+"text": "At 184 chunks, an open under a 600 s timeout left no session; one run with 900 s resumed.",
+"clear": null
+},
+{
+"at": "r17/O/p1:3",
+"text": "Piles mostly of lead white, laid in broad bands, came out paler and higher in key than wanted.",
+"clear": null
+},
+{
+"at": "r17/O/p1:3",
+"text": "Deeper passages needed far less white.",
+"clear": null
+},
+{
+"at": "r17/O/p1:4",
+"text": "A dark earth pile with a little white, laid as body and then blended, came out lighter and redder than the same pile left unblended beside it.",
+"clear": null
+},
+{
+"at": "r17/O/p1:5",
+"text": "A dark body pile with some white over a dry dark field read too light.",
+"clear": null
+},
+{
+"at": "r17/O/p1:5",
+"text": "The same pile with no white, loaded 0.9 at coverage 3.5, gave a solid dark mass.",
+"clear": null
+},
+{
+"at": "r17/O/p1:6",
+"text": "Small shapes filled with a pile heavy in lead white stayed the brightest things in their area and read as cut out.",
+"clear": null
+},
+{
+"at": "r17/O/p1:8",
+"text": "Body strokes planned inside a noise-shaped mask came out stroky and wormy until blended.",
+"clear": null
+},
+{
+"at": "r17/O/p1:9",
+"text": "detail work along a band 4 to 7 units wide came out as a row of dots or beads, not a line.",
+"clear": null
+},
+{
+"at": "r17/O/p1:10",
+"text": "A filbert 7 dragged at pressure 0.35 falling to 0.05 left thin, even, mechanical streaks.",
+"clear": null
+},
+{
+"at": "r17/O/p1:11",
+"text": "Short filbert 4 dashes stacked in a narrow band looked choppy and regular.",
+"clear": null
+},
+{
+"at": "r17/O/p1:11",
+"text": "Long thin strokes (60–220 units, pressure 0.15–0.45) crossing a passage read as quiet horizontal texture and hid hard seams under them.",
+"clear": null
+},
+{
+"at": "r17/O/p1:12",
+"text": "A rigger 2.2–2.4 with a full point, load 0.7–0.8 and pressure 0.65 falling to 0.4, laid a clean dark line over dry paint.",
+"clear": null
+},
+{
+"at": "r17/O/p1:13",
+"text": "A rigger 1.4 flicked up from a line at pressure 0.4–0.7 to 0 made tufts too small to read, and dark ones vanished on a dark field.",
+"clear": null
+},
+{
+"at": "r17/O/p1:13",
+"text": "A rigger 1.8 with 14–40 unit strokes, after a 3-hour wait, read.",
+"clear": null
+},
+{
+"at": "r17/O/p1:14",
+"text": "A flat 4.5 (load 0.9, pressure 0.9 to 0.8, orient=\"across\") laid solid narrow verticals over a tacky field.",
+"clear": null
+},
+{
+"at": "r17/O/p1:15",
+"text": "A rigger 1.5 in two short curved strokes, pressure rising then falling, made a small clean V-shaped mark.",
+"clear": null
+},
+{
+"at": "r17/O/p1:16",
+"text": "A clipped detail fill of thin tapering shapes 3–5 units wide came out as spikes, too thin.",
+"clear": null
+},
+{
+"at": "r17/O/p1:17",
+"text": "Two flat 5 strokes (load 0.6–0.8, pressure 0.5–0.7) clipped to a shape covered an unwanted pale patch cleanly.",
+"clear": null
+},
+{
+"at": "r17/O/p1:18",
+"text": "A pointed round 1.6 at load 0.3–0.35 and pressure 0.35 falling to 0.15, clipped, laid a faint hairline.",
+"clear": null
+},
+{
+"at": "r17/O/p1:20",
+"text": "Subtracting a shape from a mask doesn't protect it: the unclipped strokes of the next pass ran over it and buried it.",
+"clear": null
+},
+{
+"at": "r17/O/p1:20",
+"text": "Passing the same mask as clip= kept them off.",
+"clear": null
+},
+{
+"at": "r17/O/p1:21",
+"text": "edge={found=0.5, soft=0.5} on a body pass gave a serrated, spiky edge.",
+"clear": null
+},
+{
+"at": "r17/O/p1:21",
+"text": "Its strokes also stopped short of the canvas's bottom edge and left pale bumps until a clipped band was laid there.",
+"clear": null
+},
+{
+"at": "r17/O/p1:22",
+"text": "A rim band made as m - m:shrink(2.2), limited by a side mask, also caught the shape's bottom edge and laid a pale hatched patch there.",
+"clear": null
+},
+{
+"at": "r17/O/p1:23",
+"text": "A pale rigger line clipped to m:shrink(0.3) landed as a faint stripe inside the edge, not on it.",
+"clear": null
+},
+{
+"at": "r17/O/p1:24",
+"text": "above(446) with a bare number is an error (\"points: want ...\").",
+"clear": null
+},
+{
+"at": "r17/O/p1:24",
+"text": "A function or a point list works.",
+"clear": null
+},
+{
+"at": "r17/O/p1:25",
+"text": "A chunk that errors changes nothing and can be rerun as is.",
+"clear": null
+},
+{
+"at": "r17/O/p1:27",
+"text": "Blending a whole shape after accents spread the accents across it and dragged fresh dark lines into streaks.",
+"clear": null
+},
+{
+"at": "r17/O/p1:27",
+"text": "Blending only a narrow seam with tool=\"filbert 8\" kept most of a line.",
+"clear": null
+},
+{
+"at": "r17/O/p1:28",
+"text": "blend with clip=false on a grown mask dragged wet paint far sideways.",
+"clear": null
+},
+{
+"at": "r17/O/p1:28",
+"text": "It pulled a dark edge into the light field beside it as a fuzzy lump and lifted a dark shape.",
+"clear": null
+},
+{
+"at": "r17/O/p1:29",
+"text": "Clipped blends of horizontal bands left hard straight seams where the blend masks ended.",
+"clear": null
+},
+{
+"at": "r17/O/p1:30",
+"text": "Dotted light touches along a wet edge fused into a soft edge when a band across that edge was blended.",
+"clear": null
+},
+{
+"at": "r17/O/p1:31",
+"text": "Thin light streaks blended within a shrunk mask faded almost to nothing.",
+"clear": null
+},
+{
+"at": "r17/O/p1:32",
+"text": "A patch repainted over dry paint stayed visible as a lighter disc.",
+"clear": null
+},
+{
+"at": "r17/O/p1:32",
+"text": "Blending its edge and later a thin scumble softened it but left a halo.",
+"clear": null
+},
+{
+"at": "r17/O/p1:34",
+"text": "Dark hatched dashes (hatch, clipped) laid into a wet pale passage and then blended came out lighter and pinker than their pile, as a flat block.",
+"clear": null
+},
+{
+"at": "r17/O/p1:34",
+"text": "The same kind of dashes, unclipped and unblended with ragged ends, in a freshly laid wet passage read as broken horizontal marks.",
+"clear": null
+},
+{
+"at": "r17/O/p1:35",
+"text": "A white-heavy scumble (filbert 6, load 0.25, pressure 0.12–0.3, coverage 0.5) over a dry dark field went on as opaque pale blobs.",
+"clear": null
+},
+{
+"at": "r17/O/p1:35",
+"text": "Two blends spread the pale over the whole field.",
+"clear": null
+},
+{
+"at": "r17/O/p1:36",
+"text": "A light opaque pile scumbled with a filbert 3 went on as hot opaque patches.",
+"clear": null
+},
+{
+"at": "r17/O/p1:36",
+"text": "The same color at medium 0.3, in a pointed round 3 at load 0.35, laid a subtle line.",
+"clear": null
+},
+{
+"at": "r17/O/p1:38",
+"text": "A width-3 stipple into a wet passage came out lighter than its pile.",
+"clear": null
+},
+{
+"at": "r17/O/p1:38",
+"text": "Four hours later (setting to tacky) it was still lighter. detail strokes over it a day later, when it was tacky, gave the dark.",
+"clear": null
+},
+{
+"at": "r17/O/p1:40",
+"text": "Glazes at medium 0.6–0.7 over tacky or dry mid tones barely darkened them.",
+"clear": null
+},
+{
+"at": "r17/O/p1:40",
+"text": "Clipped over tacky paint, the glaze came out streaky with a lighter fringe along the clip.",
+"clear": null
+},
+{
+"at": "r17/O/p1:40",
+"text": "Blending it while wet softened the streaks.",
+"clear": null
+},
+{
+"at": "r17/O/p1:41",
+"text": "A glaze at medium 0.45 over a dry passage went on near-black and streaky, far stronger than those, with a hard top edge.",
+"clear": null
+},
+{
+"at": "r17/O/p1:42",
+"text": "A glaze at medium 0.72 over dry paint left dark blobs.",
+"clear": null
+},
+{
+"at": "r17/O/p1:42",
+"text": "Two horizontal blends while it was wet turned them into soft smudges.",
+"clear": null
+},
+{
+"at": "r17/O/p1:43",
+"text": "A glaze at medium 0.75 over a dry pale passage sank into the weave as crossing streaks.",
+"clear": null
+},
+{
+"at": "r17/O/p1:43",
+"text": "Two blends and then a light one (pressure 0.2–0.35) evened it without clearing it.",
+"clear": null
+},
+{
+"at": "r17/O/p1:44",
+"text": "A glaze at medium 0.55 over light shapes that were still setting didn't dull them.",
+"clear": null
+},
+{
+"at": "r17/O/p1:44",
+"text": "Once they were dry, a clipped detail fill (round 2.5, medium 0.6) changed their tone fully.",
+"clear": null
+},
+{
+"at": "r17/O/p1:46",
+"text": "White-rich body passages were tacky about 22 hours after laying and dry a day later.",
+"clear": null
+},
+{
+"at": "r17/O/p1:47",
+"text": "Earth-and-umber body on a shape was tacky at 23 and 43 hours and dry by about 3.3 days.",
+"clear": null
+},
+{
+"at": "r17/O/p1:48",
+"text": "Broad body bands were dry after 32 hours.",
+"clear": null
+},
+{
+"at": "r17/O/p1:48",
+"text": "Dashes worked wet into them and blended were still tacky then and dry a day later.",
+"clear": null
+},
+{
+"at": "r17/O/p1:49",
+"text": "A dark black-and-umber body at coverage 3.5 was still tacky after 52 hours.",
+"clear": null
+},
+{
+"at": "r17/O/p1:50",
+"text": "Dark earth body was tacky 36 hours later.",
+"clear": null
+},
+{
+"at": "r17/O/p1:50",
+"text": "A second coat laid on the tacky one was still tacky 30 hours after that.",
+"clear": null
+},
+{
+"at": "r17/O/p1:51",
+"text": "Small, thick white-heavy fills were still setting or tacky about 1.3 days later and dry after 3 more days.",
+"clear": null
+},
+{
+"at": "r17/O/p1:52",
+"text": "wait() prints the new time, and drying(x, y) reports open, setting, tacky or dry.",
+"clear": null
+},
+{
+"at": "r17/O/p1:54",
+"text": "A crop can be at most 500 units wide at 2400 px.",
+"clear": null
+},
+{
+"at": "r17/O/p1:54",
+"text": "Crops 560–600 units wide were refused.",
+"clear": null
+},
+{
+"at": "r17/O/p1:55",
+"text": "Value mode showed values bunched in the light-to-mid range when the color view hid it.",
+"clear": null
+},
+{
+"at": "r17/O/p1:55",
+"text": "Squint and mirror views were used to check the masses.",
+"clear": null
+},
+{
+"at": "r17/O/p1:56",
+"text": "bin/easel check took about 300 s for 77–81 chunks and needs the session open.",
+"clear": null
+},
+{
+"at": "r17/O/p1:56",
+"text": "After close it replies \"no painting open\".",
+"clear": null
+},
+{
+"at": "r17/O/p1:57",
+"text": "open replays the log, so globals from earlier chunks (masks, piles) are there again in later sittings.",
+"clear": null
+},
+{
+"at": "r17/O/p1:58",
+"text": "Shell state doesn't carry between commands. cd to the studio and export the scratch variables in every call.",
+"clear": null
+},
+{
+"at": "r17/O/p2:3",
+"text": "Body piles with as much lead white as all their other tubes together read pale, even where the pile was meant as the dark of a passage.",
+"clear": null
+},
+{
+"at": "r17/O/p2:3",
+"text": "Only a pile with a trace of white (about 2%) at coverage 3.5 and load 0.9 gave a solid dark.",
+"clear": null
+},
+{
+"at": "r17/O/p2:4",
+"text": "A narrow band filled with an earth pile holding about 12% white came out lighter and pinker than the dry dark around it.",
+"clear": null
+},
+{
+"at": "r17/O/p2:4",
+"text": "A second coat at 15% white laid while the first was wet was still light.",
+"clear": null
+},
+{
+"at": "r17/O/p2:4",
+"text": "Once the band was tacky, a coat with less white and more black matched the dark.",
+"clear": null
+},
+{
+"at": "r17/O/p2:5",
+"text": "A thin line from a dark pile with some white (0.6 part in 3) came out too pale over dry dark paint.",
+"clear": null
+},
+{
+"at": "r17/O/p2:5",
+"text": "A pile of black and umber alone laid a dark line.",
+"clear": null
+},
+{
+"at": "r17/O/p2:7",
+"text": "broad at coverage 2.5, clipped, left gaps with the ground showing in blotches. body with a filbert 14 at coverage 3 and fill=true covered.",
+"clear": null
+},
+{
+"at": "r17/O/p2:8",
+"text": "Single flat 3.5–5 strokes of a pale pile at low load (0.3–0.6) and light pressure (0.15–0.45) came out as even, ruled stripes.",
+"clear": null
+},
+{
+"at": "r17/O/p2:9",
+"text": "A flat pressed at 0.9 with orient=\"across\" laid a short solid bar with rounded ends.",
+"clear": null
+},
+{
+"at": "r17/O/p2:10",
+"text": "A flat on a wavering path, pressure 0.7 falling to 0.1 (ramps 0.05, 0.6), laid a tapering bar.",
+"clear": null
+},
+{
+"at": "r17/O/p2:10",
+"text": "Two such strokes end to end over dry paint (load 0.75, then 0.45) left a lighter gap between them.",
+"clear": null
+},
+{
+"at": "r17/O/p2:11",
+"text": "A rigger 1.4 at pressure 0.3 laid a hairline.",
+"clear": null
+},
+{
+"at": "r17/O/p2:11",
+"text": "A rigger 1.5 in two short curved strokes (0.1 to 0.6, then 0.6 to 0.1) made a small clean V.",
+"clear": null
+},
+{
+"at": "r17/O/p2:12",
+"text": "A round 2.2 (point 0.6) at pressure 0.7 laid clean dark lines over tacky paint.",
+"clear": null
+},
+{
+"at": "r17/O/p2:13",
+"text": "Short flat 2.2 strokes of a white pile, pressure 0.25–0.45 falling to 0.1, made small lozenge-shaped marks.",
+"clear": null
+},
+{
+"at": "r17/O/p2:14",
+"text": "A round 2.5 of a pale pile (medium 0.2, load 0.35, pressure 0.1 to 0.35) laid a crisp, too-white line over dry dark.",
+"clear": null
+},
+{
+"at": "r17/O/p2:14",
+"text": "One pressed flat 4 stroke of the dark over it hid it.",
+"clear": null
+},
+{
+"at": "r17/O/p2:15",
+"text": "A clipped detail fill (flat 4, coverage 4) of a dark pile with a little white came out mid-grey over dry paint.",
+"clear": null
+},
+{
+"at": "r17/O/p2:15",
+"text": "A second coat with no white at load 1 went darker.",
+"clear": null
+},
+{
+"at": "r17/O/p2:17",
+"text": "Three clipped band passes followed by a clipped blend left hard seams where the bands met.",
+"clear": null
+},
+{
+"at": "r17/O/p2:17",
+"text": "While the paint was wet, unclipped blends near vertical (angle about 1.5, strokes 30–70 units) across the seams removed them.",
+"clear": null
+},
+{
+"at": "r17/O/p2:18",
+"text": "A blend at angle 1.3 (and later 0.9) over a wet body passage combed it into parallel streaks.",
+"clear": null
+},
+{
+"at": "r17/O/p2:18",
+"text": "A horizontal blend over it while wet took them out.",
+"clear": null
+},
+{
+"at": "r17/O/p2:19",
+"text": "Thin roughened ellipses filled clipped read as crisp cut-out bars.",
+"clear": null
+},
+{
+"at": "r17/O/p2:19",
+"text": "A horizontal blend over the wet area fused them into the field.",
+"clear": null
+},
+{
+"at": "r17/O/p2:20",
+"text": "A dark pass blended over a wider wet area lost most of its dark into the lighter paint around it.",
+"clear": null
+},
+{
+"at": "r17/O/p2:21",
+"text": "blend(m:grow(15), {clip=true}) left the lower edge of a wet mass hard and dripping.",
+"clear": null
+},
+{
+"at": "r17/O/p2:21",
+"text": "Blends along a rim band softened it only partly.",
+"clear": null
+},
+{
+"at": "r17/O/p2:22",
+"text": "An unclipped badger 24 over an area part wet and part dry dragged the wet paint into swirls and washed out small light accents.",
+"clear": null
+},
+{
+"at": "r17/O/p2:23",
+"text": "An unclipped badger across the line between two wet passages smeared each into the other.",
+"clear": null
+},
+{
+"at": "r17/O/p2:23",
+"text": "An unclipped horizontal blend whose area reached a nearby dark shape smeared its end.",
+"clear": null
+},
+{
+"at": "r17/O/p2:24",
+"text": "A blend can't move dry paint: where it met dry paint a hard edge stayed.",
+"clear": null
+},
+{
+"at": "r17/O/p2:24",
+"text": "A band of an in-between pile laid across the edge and blended while wet hid it.",
+"clear": null
+},
+{
+"at": "r17/O/p2:25",
+"text": "A blend mask's edge inside a wet passage left a faint line.",
+"clear": null
+},
+{
+"at": "r17/O/p2:25",
+"text": "A second, narrower blend over the line removed it.",
+"clear": null
+},
+{
+"at": "r17/O/p2:26",
+"text": "A patch repainted next to dry paint and blended clipped around itself stayed visible as a lighter rectangle.",
+"clear": null
+},
+{
+"at": "r17/O/p2:28",
+"text": "A body pass into a wet pale field came out paler and pinker than its pile.",
+"clear": null
+},
+{
+"at": "r17/O/p2:28",
+"text": "Small dark detail strokes into a wet pale field also came out pale.",
+"clear": null
+},
+{
+"at": "r17/O/p2:29",
+"text": "A strip laid wet against a wet neighbor came up dirty and streaked.",
+"clear": null
+},
+{
+"at": "r17/O/p2:30",
+"text": "A dark coat over a wet layer lifted it and came out mid-dark grey.",
+"clear": null
+},
+{
+"at": "r17/O/p2:30",
+"text": "A pale coat over a wet dark came out streaky.",
+"clear": null
+},
+{
+"at": "r17/O/p2:31",
+"text": "Filbert 3 strokes of a dark pile dragged into a wet pale shape came out lighter than their pile.",
+"clear": null
+},
+{
+"at": "r17/O/p2:32",
+"text": "A darker detail fill into a wet pale shape, then a badger 6 blend, barely darkened it.",
+"clear": null
+},
+{
+"at": "r17/O/p2:32",
+"text": "The same fill laid once the pale had set (5 hours) held its value.",
+"clear": null
+},
+{
+"at": "r17/O/p2:34",
+"text": "hand=\"glaze\" at medium 0.7 (coverage 1.6, pressure 0.2–0.35, clipped) over a dry dark area darkened it slightly, with faint streaks.",
+"clear": null
+},
+{
+"at": "r17/O/p2:35",
+"text": "Two clipped glaze passes with a filbert 6 at medium 0.8 over dry pale shapes darkened them unevenly, in streaks.",
+"clear": null
+},
+{
+"at": "r17/O/p2:36",
+"text": "A glaze with a soft filbert 10 (medium 0.75, edge=\"lost\") over paint laid minutes before dragged it into horizontal streaks.",
+"clear": null
+},
+{
+"at": "r17/O/p2:37",
+"text": "A detail pass at medium 0.3 over dry dark, then blended, came out lighter than the dark around it.",
+"clear": null
+},
+{
+"at": "r17/O/p2:39",
+"text": "Small separate lobes painted along an edge read as detached islands.",
+"clear": null
+},
+{
+"at": "r17/O/p2:39",
+"text": "One continuous new edge painted over them joined them.",
+"clear": null
+},
+{
+"at": "r17/O/p2:40",
+"text": "Clipped fills on the two sides of a redrawn boundary left lighter patchy triangles along it.",
+"clear": null
+},
+{
+"at": "r17/O/p2:41",
+"text": "Small smoothed poly lens shapes filled clipped with a pale pile read as bright pills with hard edges.",
+"clear": null
+},
+{
+"at": "r17/O/p2:42",
+"text": "lose with a filbert 3 (reach {4,5}, load 0.3, where 0.6) laid 109 strokes, covered much of the small shapes and left a lighter halo around them against a glazed surround.",
+"clear": null
+},
+{
+"at": "r17/O/p2:43",
+"text": "edge=\"soft\" on a clipped band made its lower edge dissolve into the dark below it.",
+"clear": null
+},
+{
+"at": "r17/O/p2:44",
+"text": "A mask term multiplied by 0 gives a number, not a mask: \"want a mask, got integer\".",
+"clear": null
+},
+{
+"at": "r17/O/p2:44",
+"text": "The chunk changed nothing.",
+"clear": null
+},
+{
+"at": "r17/O/p2:46",
+"text": "White-rich bands were still open about 4 hours after laying.",
+"clear": null
+},
+{
+"at": "r17/O/p2:46",
+"text": "One band was setting.",
+"clear": null
+},
+{
+"at": "r17/O/p2:47",
+"text": "The first body layer was tacky at 36 hours and dry at 66.",
+"clear": null
+},
+{
+"at": "r17/O/p2:47",
+"text": "A second layer was tacky at 26 hours and dry at 50.",
+"clear": null
+},
+{
+"at": "r17/O/p2:48",
+"text": "Passages laid on one day were all tacky at 30 hours.",
+"clear": null
+},
+{
+"at": "r17/O/p2:48",
+"text": "At 60 hours some were dry and others tacky.",
+"clear": null
+},
+{
+"at": "r17/O/p2:48",
+"text": "At 96 hours only an umber and black body (coverage 3.2, load 0.9) was still tacky.",
+"clear": null
+},
+{
+"at": "r17/O/p2:49",
+"text": "A clipped detail fill of black and umber with no white (coverage 4, load 1) laid over dry paint was tacky at 50 and 90 hours and dry at 162.",
+"clear": null
+},
+{
+"at": "r17/O/p2:50",
+"text": "A white-rich scumble with a body pass over it was still tacky at 40 and 70 hours.",
+"clear": null
+},
+{
+"at": "r17/O/p2:51",
+"text": "Small pale body fills were tacky at 30 and 54 hours and dry at 126.",
+"clear": null
+},
+{
+"at": "r17/O/p2:51",
+"text": "A narrow band of two wet coats of umber-rich paint was tacky at 24 and 48 hours.",
+"clear": null
+},
+{
+"at": "r17/O/p2:53",
+"text": "A 500-unit crop is 1200 px and works.",
+"clear": null
+},
+{
+"at": "r17/O/p2:53",
+"text": "Crops 560–720 units wide were refused. --size 1400 gives a larger whole view.",
+"clear": null
+},
+{
+"at": "r17/O/p2:54",
+"text": "Value mode showed values bunched pale.",
+"clear": null
+},
+{
+"at": "r17/O/p2:54",
+"text": "Squint showed the masses. --grid gave coordinates.",
+"clear": null
+},
+{
+"at": "r17/O/p2:55",
+"text": "bin/easel check took 338 s for 95 chunks and 420 s for 120. open replays the log, so earlier globals come back.",
+"clear": null
+}
+]
+}

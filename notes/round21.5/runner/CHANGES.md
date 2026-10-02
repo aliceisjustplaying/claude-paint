@@ -1,3 +1,8 @@
+- The painter's reply is read from the session file (its last assistant message that is text with no
+  pending tool call) rather than from `pi --print`'s stdout, which came back empty on the
+  Anthropic/pi-black path once while the session kept the text; stdout is the fallback. The sitting-1
+  reply ("The Old Oak above the Fog") was recovered from the session and is back in `p1_s1_final.txt`.
+
 # Round 21.5: round 21.4 with trees.md's old-oak lead taken out
 
 A copy of round 21.4's runner (SONF: one Sonnet 5.5 painter, read by GPT-6.1 Sol after it, no

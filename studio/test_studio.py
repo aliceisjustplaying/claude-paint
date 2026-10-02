@@ -197,3 +197,49 @@ def test_export_makes_small_web_copies_of_each_look_and_remakes_them_when_it_cha
     log.write_text(start(str(studio)) + look("l1", png(1200, 800, (30, 30, 200))))
     assert export(tmp_path, out).returncode == 0
     assert Image.open(d / "v" / "0.jpg").convert("RGB").getpixel((5, 5))[2] > 150
+
+
+def png_of(color):
+    from PIL import Image
+    import io
+    buf = io.BytesIO()
+    Image.new("RGB", (300, 200), color).save(buf, "PNG")
+    return buf.getvalue()
+
+
+def looks_at_once(*calls):
+    """Several looks in one message ((id, arguments, png) each), their pictures coming back one result at a time."""
+    import base64
+    out = line({"type": "message", "message": {"role": "assistant", "content": [
+        {"type": "toolCall", "id": i, "name": "look", "arguments": a} for i, a, _ in calls]}})
+    for i, _, png in calls:
+        out += line({"type": "message", "message": {"role": "toolResult", "toolCallId": i, "isError": False, "content": [
+            {"type": "image", "mimeType": "image/png", "data": base64.b64encode(png).decode()}]}})
+    return out
+
+
+def say(text):
+    return line({"type": "message", "message": {"role": "assistant", "content": [{"type": "text", "text": text}]}})
+
+
+@pytest.mark.parametrize("via", ["live server", "static export"])
+def test_the_picker_gets_the_newest_whole_look_and_the_title_from_the_closing_reply(home, server, via):
+    # a whole look, then a whole look and a squint asked for together: the picture is the second whole look,
+    # not the squint whose result came last; the title is the one the closing reply begins with
+    pytest.importorskip("PIL")
+    tmp_path, studio, log = home
+    log.write_text(start(str(studio)) + look("l1", png_of("red"))
+                   + looks_at_once(("l2", {"size": 800}, png_of("blue")), ("l3", {"mode": "squint"}, png_of("green")))
+                   + say("**The Blue Barn**\n\nA barn at dusk."))
+    if via == "live server":
+        p = next(s for s in json.loads(server("/api/sessions")[1]) if s.get("p") == PAINTER)
+        code, picture = server(f"/api/glance?p={PAINTER}&i={p['look']}")
+        assert code == 200
+    else:
+        out = tmp_path / "out"
+        r = export(tmp_path, out)
+        assert r.returncode == 0, r.stderr
+        p = next(s for s in json.loads((out / "data" / "sessions.json").read_text()) if s["p"] == PAINTER)
+        picture = (out / "data" / PAINTER / "img" / f"{p['look']}.png").read_bytes()
+    assert (p["look"], p["title"]) == (1, "The Blue Barn")
+    assert picture == png_of("blue")

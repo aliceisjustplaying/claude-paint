@@ -2,7 +2,14 @@
 # requires-python = ">=3.11"
 # dependencies = ["pillow"]
 # ///
-"""Round 22: one Claude Fable 5.1 painter (thinking xhigh) in Kendric Tonn's studio (lane TONN), the
+"""Round 22.1: one Claude Opus 5.5 painter (thinking xhigh, pi-black) in George Inness's studio (lane
+INNS), the first painter in it: his box, his materials note (as edited on main on 2026-10-02, which the
+round-22 tag doesn't have; hence BRANCH round-22.1) and the plain inness brief (OPENING, READING, as in
+round 21.5). No reader, no reference pictures (they are Tonn's: inness isn't in ARTIST, so the lane
+gets no reference/ folder and doesn't need REFERENCE). Round 22's lanes (TONN, BUNT) run from round
+22's runner; their code paths are kept here unchanged, and LANES is INNS alone.
+
+Round 22: one Claude Fable 5.1 painter (thinking xhigh) in Kendric Tonn's studio (lane TONN), the
 first studio with pictures of the artist's paintings. They are there with his permission: the owner
 puts them (jpg, jpeg, png or webp, and if she likes a README.md describing them) in REFERENCE
 (~/src/a/tonn-reference, outside the repo), and the studio gets a copy in reference/ (a picture
@@ -127,7 +134,9 @@ A = HOME / "src/a"
 # Rust code and the export scripts are round 21.5's, so H stays the round-21.5 checkout and BASE round 21's.
 # The export builds the tonn box's easel in BASE's target/studio-build.
 BASE = A / "claude-paint-r21"
-BRANCH = "round-22"
+# round 22.1: the notes at round-22.1 (inness_materials.md as edited on 2026-10-02); code, harness and export
+# scripts still round 21.5's (the inness easel is built in BASE's target/studio-build)
+BRANCH = "round-22.1"
 EXPORT = BASE / "scripts/export_r16_studio"      # honors R16_BRANCH
 FINISH = BASE / "scripts/finish_painting"
 CHECK = BASE / "scripts/check_painting"
@@ -342,8 +351,8 @@ BUNNY = model("opencode-go", "space-bunny-free", "max")
 # The warmup before it: one Space Bunny painter (thinking max, through OpenCode Go with its own key in pi's
 # auth.json, as round 21's FRDC chain) in Tonn's studio without the pictures. No reader.
 LANES = {
-    "BUNT": lane("tonn", BUNNY, record_kind="none", reference=False),
-    "TONN": lane("tonn", model("anthropic", "claude-fable-5-1", "xhigh", black=True), record_kind="none"),
+    # round 22.1: one Opus 5.5 painter (thinking xhigh, through the Claude subscription: pi-black) in Inness's studio
+    "INNS": lane("inness", model("anthropic", "claude-opus-5-5", "xhigh", black=True), record_kind="none"),
 }
 DRY = False
 

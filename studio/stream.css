@@ -3,8 +3,8 @@
 footer { padding: 8px 14px !important }
 body.nocode main { grid-template-columns: minmax(0,54fr) minmax(0,46fr) !important }
 #view img { width: 100% !important; height: 100% !important; object-fit: contain !important; box-shadow: none !important }
-.th { font-size: 28px !important; line-height: 1.5 !important }
-.say { font-size: 27px !important }
+.th { font-size: 28px !important; line-height: 1.5 !important; padding-left: 18px !important; border-left: 3px solid #5e5e6d !important }
+.say { font-size: 27px !important; margin: 18px 0 !important }
 .chip { font-size: 21px !important; padding: 2px 10px !important }
 .tm { font-size: 17px !important }
 .pane > h4 { font-size: 16px !important }

@@ -106,8 +106,11 @@ A = HOME / "src/a"
 # from claude-paint-r21 (its target/studio-build holds round 21's easel build; round-21.1's code trees are
 # round-21's, so the export reuses it: nothing recompiles); they git-archive BRANCH from the shared repo.
 # Only the painter's harness (H, with its system prompt) comes from the round-21.1 checkout.
+# round 22: the runner (Tonn's studio, his pictures in reference/) and the notes change; the harness, the
+# Rust code and the export scripts are round 21.5's, so H stays the round-21.5 checkout and BASE round 21's.
+# The export builds the tonn box's easel in BASE's target/studio-build.
 BASE = A / "claude-paint-r21"
-BRANCH = "round-21.5"
+BRANCH = "round-22"
 EXPORT = BASE / "scripts/export_r16_studio"      # honors R16_BRANCH
 FINISH = BASE / "scripts/finish_painting"
 CHECK = BASE / "scripts/check_painting"
@@ -266,10 +269,10 @@ BUNNY = model("opencode-go", "space-bunny-free", "max")
 # Round 21.5: one Sonnet 5.5 painter in Friedrich's studio (round 19's SONF), as round 21.4, with trees.md
 # without its old-oak lead (no "In short" point 5, no stag-headed, species in alphabetical order)
 # A single painter: no records, so round_number() (which wants round-<n>) isn't reached.
+# Round 22: one Claude Fable 5.1 painter (thinking xhigh, through the Claude subscription: pi-black) in Tonn's
+# studio, with pictures of his paintings in reference/. No reader.
 LANES = {
-    # read_last (added during its sitting, 2026-10-02): GPT-6.1 Sol reads the painting's logs and keeps a structured
-    # record, and no second painter follows
-    "SONF": lane("friedrich", model("anthropic", "claude-sonnet-5-5", "max", black=True), record_kind="structured", read_last=True),
+    "TONN": lane("tonn", model("anthropic", "claude-fable-5-1", "xhigh", black=True), record_kind="none"),
 }
 DRY = False
 

@@ -1,6 +1,6 @@
-"""Tests of the round-21 runner (r21_chains.py).
+"""Tests of the round-22 runner (r21_chains.py, round 21's runner with round 22's changes).
 
-    uv run --no-project --with pytest pytest -q -p no:cacheprovider notes/round21/runner/
+    uv run --no-project --with pytest --with pillow pytest -q -p no:cacheprovider notes/round22/runner/
 """
 import json
 import subprocess
@@ -400,9 +400,9 @@ def test_a_structured_record_reaches_the_next_studio_as_the_rendered_notes(tmp_p
     notes = (rc21.studio("T2") / "notes/studio_notes.md").read_text()
     assert notes == (rc21.HERE / "studio_notes.md").read_text() + "\n" + golden
     rec = json.loads((rd / "p1_record.json").read_text())
-    # stamped with round 21's own constants (BRANCH, the commit it names in BASE), not round 19's
+    # stamped with the runner's own constants (BRANCH round-22, the commit it names in BASE), not an older round's
     assert (rec["schema"], rec["condition"], rec["round"], rec["lane"], rec["slot"], rec["medium"], rec["profile"]) == (
-        "chain-record/1", "chain-inherited, non-neutral", 21, "T", 1, "oil", "sargent")
+        "chain-record/1", "chain-inherited, non-neutral", 22, "T", 1, "oil", "sargent")
     assert rec["code"] == {"tag": rc21.BRANCH, "commit": rc21.code_commit()} and len(rec["code"]["commit"]) == 40
     assert rec["box"]["name"] == "default"
     assert rec["support"] == {"kind": "linen", "linen": [15, 13], "ground_layers": ["knife", "roller"]}
@@ -541,8 +541,8 @@ def test_dry_shows_a_structured_lane_s_reader_and_merge(tmp_path, monkeypatch):
     assert not (tmp_path / "run").exists()
 
 
-def test_the_round_and_commit_are_round_21_s(tmp_path, monkeypatch):
-    assert rc21.round_number() == 21
+def test_the_round_and_commit_are_round_22_s(tmp_path, monkeypatch):
+    assert rc21.round_number() == 22
     sha = code_repo(tmp_path / "code")
     monkeypatch.setattr(rc21, "BASE", tmp_path / "code")
     assert rc21.code_commit() == sha
@@ -629,3 +629,4 @@ def test_an_empty_record_lets_the_chain_go_on_with_nothing_new_inherited(tmp_pat
     assert (rd / "p1.done").exists() and json.loads((rd / "p1_record.json").read_text())["observations"] == []
     assert any("RECORD EMPTY" in l for l in lines), lines
     assert (rc21.studio("T2") / "notes/studio_notes.md").read_text() == (rc21.HERE / "studio_notes.md").read_text()
+

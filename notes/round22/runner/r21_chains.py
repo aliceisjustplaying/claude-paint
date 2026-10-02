@@ -14,7 +14,9 @@ reader. Everything below is as in round 21.5's runner unless it says otherwise.
 A warmup before it (lane BUNT): one Space Bunny painter (thinking max, opencode-go, as round 21's FRDC
 chain) in Tonn's studio without the pictures (lane(..., reference=False)): no reference/ folder, and
 the brief is round 21.5's for this studio, from knowledge and the notes. Only a lane that gets pictures
-needs REFERENCE.
+needs REFERENCE. The two lanes can run as two processes from this folder, started at different times
+(--only BUNT, later --only TONN): each process watches only its own lanes' studios, and each needs its
+own output file (run/runner.BUNT.out, run/runner.TONN.out; `>` empties the file it names).
 
 Round 19: the Friedrich chain (lane F: three painters, one after another) and, if switched
 on in LANES, blank-studio single painters, all run in parallel.
@@ -366,7 +368,10 @@ def studio(key):
         if key not in names:
             names[key] = "paint-studio-" + hashlib.sha1(f"r19{key}{time.time()}".encode()).hexdigest()[:6]
             if not DRY:
-                m.write_text(json.dumps(names, indent=1))
+                # whole or not at all: another process of this runner (another lane) may be reading it
+                tmp = m.with_name(f"studios.json.{os.getpid()}.tmp")
+                tmp.write_text(json.dumps(names, indent=1))
+                tmp.replace(m)
         return A / names[key]
 
 
@@ -1136,9 +1141,19 @@ def stop_leftovers(d, keep_server=False):
             log(f"stopped leftover {pid}: {cmd[:100]}")
 
 
+# The lanes this process runs (main() sets it; None: every lane). run/studios.json is shared by every process
+# started from this folder, and a process watches only its own lanes' studios (our_studios).
+MY_LANES = None
+
+
 def our_studios():
+    """This process's studios (key, folder name): those in run/studios.json of the lanes it runs. Two
+    processes watching one painting's log would each compare it with what the other last recorded, and a
+    log read a moment apart would look as if it had got shorter."""
     m = RUN / "studios.json"
-    return list(json.loads(m.read_text()).items()) if m.exists() else []
+    mine = None if MY_LANES is None else {f"{l}{n}" for l in MY_LANES for n in range(1, LANES[l]["painters"] + 1)}
+    return [(k, v) for k, v in (json.loads(m.read_text()).items() if m.exists() else [])
+            if mine is None or k in mine]
 
 
 def monitor_histories():
@@ -1615,7 +1630,7 @@ def preflight(lanes):
 
 
 def main():
-    global DRY
+    global DRY, MY_LANES
     ap = argparse.ArgumentParser()
     ap.add_argument("--only")
     ap.add_argument("--dry", action="store_true")
@@ -1635,6 +1650,7 @@ def main():
     problems = preflight(lanes)
     if problems:
         raise SystemExit("can't start: " + "; ".join(problems))
+    MY_LANES = lanes
     if not DRY:
         RUN.mkdir(parents=True, exist_ok=True)
     stop = threading.Event()

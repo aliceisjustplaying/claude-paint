@@ -756,6 +756,7 @@ def test_only_a_lane_that_runs_and_gets_pictures_needs_them(tmp_path, monkeypatc
     monkeypatch.setattr(rc21, "watchdog", lambda stop: None)
     monkeypatch.setattr(rc21.time, "sleep", lambda s: None)
     monkeypatch.setattr(rc21, "DRY", False)
+    monkeypatch.setattr(rc21, "MY_LANES", None)                      # main() sets it; restored after the test
     for only in ("TONN", "BUNT,TONN"):
         monkeypatch.setattr(sys, "argv", ["r21_chains.py", "--only", only])
         with pytest.raises(SystemExit, match="can't start: there is no folder"):
@@ -765,3 +766,20 @@ def test_only_a_lane_that_runs_and_gets_pictures_needs_them(tmp_path, monkeypatc
     rc21.main()
     assert started == ["BUNT"]
 
+
+def test_a_process_watches_only_its_own_lanes_paintings(tmp_path, monkeypatch):
+    # two processes from one run folder (--only BUNT, later --only TONN) share run/studios.json
+    monkeypatch.setattr(rc21, "RUN", tmp_path / "run")
+    monkeypatch.setattr(rc21, "A", tmp_path)
+    monkeypatch.setattr(rc21, "LANES", {"BUNT": rc21.lane("tonn", rc21.BUNNY, record_kind="none", reference=False),
+                                        "TONN": rc21.lane("tonn", rc21.OPUS, record_kind="none")})
+    (tmp_path / "run").mkdir()
+    for key in ("BUNT1", "TONN1"):
+        log = rc21.studio(key) / "paintings/lua/painting.lua"
+        log.parent.mkdir(parents=True)
+        log.write_text("--@ chunk 1\n")
+    assert set(json.loads((tmp_path / "run/studios.json").read_text())) == {"BUNT1", "TONN1"}
+    monkeypatch.setattr(rc21, "MY_LANES", ["TONN"])
+    rc21.monitor_histories()
+    assert sorted(f.name for f in (tmp_path / "run/monitor").iterdir()) == ["TONN1.last"]
+    assert [k for k, _ in rc21.our_studios()] == ["TONN1"]

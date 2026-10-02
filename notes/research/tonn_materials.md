@@ -5,8 +5,7 @@
 are listed at the end. Almost all of it comes from the painter's own
 words: posts on X (2019–2026), a materials thread of 2023 and interviews.
 "Uncertain" marks claims that rest on a single remark, may have changed
-since or are inferred. Dated self-reports can differ; a later statement
-does not establish an unchanged current practice.*
+since or are inferred.*
 
 ## Summary
 

@@ -93,7 +93,8 @@ over. *Black mirror*: a darkened mirror that simplifies values.
 
 - **Preparatory drawing.** He reports detailed preparatory drawings in
   pencil and chalk before some paintings, with a cited sheet size of
-  22 × 30 in. and about 20 hours of model time [STUD20; DRW21; PROJ].
+  22 × 30 in. [STUD20; DRW21; PROJ]
+<!-- research: the drawings took "about 20 hours of model time" [STUD20]; left out of the painter's copy with the other working times (see §7). -->
 - **Transfer by projector.** He does not draw at painting scale and
   "absolutely hate[s] using a grid-transfer," so he photographs the
   drawing and projects it (2024). In 2026 he described the step as "throw
@@ -197,7 +198,8 @@ yellow deep, cadmium yellow light, flake white [PAL25]. In September
   of drawing, thin first painting, second painting and final glazes, and
   calls it "a sort of idealized process, often strayed from" [SEQ22].
 - **Single-layer studies.** He reports some studies painted in one wet
-  layer over a brownish imprimatura, in about three hours [AP24; AP26].
+  layer over a brownish imprimatura [AP24; AP26].
+<!-- research: these studies took about three hours [AP24; AP26]; left out of the painter's copy (see §7). -->
 - **Whole surface at once.** He reports repeated work over the whole
   surface, "tightening and refining each time"; some details follow the
   initial block-in [IMPR; PAT20].
@@ -231,9 +233,8 @@ yellow deep, cadmium yellow light, flake white [PAL25]. In September
 
 - **From life.** "I almost always work from life" [ICK]; "I draw and
   paint from life" (2026) [PROJ].
-- **Duration.** Reported working times include about two months with
-  40–60 model hours for one larger work and about three hours for some
-  studies. He works on two or three pieces concurrently [BC; DOC; AP26].
+- **Several at once.** He works on two or three pieces concurrently [BC; DOC; AP26].
+<!-- research: reported working times: about two months with 40–60 model hours for one larger work, about three hours for some studies, about 20 hours of model time for a set of preparatory drawings [BC; DOC; AP26; STUD20]. Left out of the painter's copy: the easel's clock is in the same unit (hours of painting), and a painter can take them for a target. Drying times stay. -->
 - **Setup.** For some arrangements he reports a delay of several days
   between setup and starting to paint [BC].
 - **Light.** A 2021 post reports LED illumination; a September 2026 post

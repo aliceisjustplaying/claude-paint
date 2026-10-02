@@ -11,7 +11,7 @@
   :root {
     --bg:#0b0b0d; --panel:#111114; --panel2:#16161b; --line:#1f1f26;
     --fg:#f0f0f2; --soft:#d4d4da; --dim:#aeaeb6; --faint:#85858e;
-    --acc:#f2b865; --live:#e0564f; --blue:#7d9fd4;
+    --acc:#f2b865; --live:#e0564f; --blue:#7d9fd4; --ref:#7fd6c2;
     --mono: ui-monospace, "SF Mono", Menlo, monospace;
   }
   * { box-sizing:border-box } html, body { height:100% } [hidden] { display:none !important }
@@ -90,7 +90,9 @@
   #cropbox { position:absolute; border:2px solid #dcb8ea; box-shadow:0 0 0 1px rgba(0,0,0,.6), inset 0 0 0 1px rgba(0,0,0,.6); pointer-events:none; border-radius:1px }
   #finished { position:absolute; top:8px; right:12px; z-index:2; font-size:13px; color:var(--acc); background:rgba(11,11,13,.8); border:1px solid #3a3226; border-radius:6px; padding:3px 10px; text-decoration:none }
   #finished:hover { color:var(--fg) }
-  #nopic { position:absolute; inset:40% 10% auto; margin:0; text-align:center; color:var(--dim); font-size:15px; line-height:1.6 }
+  #nopic { position:absolute; inset:0; margin:0; padding:0 8%; display:flex; align-items:center; justify-content:center; text-align:center; color:var(--dim); font-size:15px; line-height:1.6 }
+  /* a reference picture the painter is studying (read from its studio's reference/): someone else's painting, never this painter's. Its own color, and a tag on the picture itself */
+  #other.ref #cap2 b { color:var(--ref) } #reftag { position:absolute; font-size:11px; font-weight:700; letter-spacing:.1em; text-transform:uppercase; color:#0b0b0d; background:var(--ref); padding:2px 8px; border-radius:0 0 4px 0; pointer-events:none; white-space:nowrap }
   #journal { background:var(--panel2); border-right:none }
   #jbody { flex:1; min-height:0; overflow:auto; padding:4px 16px 16px }
   .th { margin:10px 0 12px; padding:2px 0 2px 13px; border-left:2px solid #5e5e6d; font-size:15px; line-height:1.6; color:var(--soft); word-break:break-word }
@@ -102,7 +104,7 @@
   .th code, .say code { font:.88em var(--mono); background:#24242c; border-radius:4px; padding:0 4px } .th hr, .say hr { border:none; border-top:1px solid var(--line); margin:.6em 0 }
   .chips { display:flex; flex-wrap:wrap; gap:5px; margin:6px 0 }
   .chip { font-size:13px; color:var(--soft); background:#202027; border:1px solid var(--line); border-radius:6px; padding:1px 8px; white-space:nowrap; max-width:100%; overflow:hidden; text-overflow:ellipsis; cursor:default }
-  .chip.code { color:var(--acc) } .chip.render { color:#a9c9f2 } .chip.look { color:#dcb8ea; cursor:pointer } .chip.fail { color:#ff9d93 }
+  .chip.code { color:var(--acc) } .chip.render { color:#a9c9f2 } .chip.look { color:#dcb8ea; cursor:pointer } .chip.ref { color:var(--ref) } .chip.fail { color:#ff9d93 }
   .tm { font:11px var(--mono); color:var(--faint); display:block; margin-top:12px } .jempty { color:var(--dim); line-height:1.6; margin:14px 0 }
   .cursor { display:inline-block; width:7px; height:1em; vertical-align:text-bottom; background:var(--acc); animation:blink 1s infinite }
 
@@ -111,6 +113,10 @@
   #strip { display:flex; gap:6px; overflow-x:auto; padding-bottom:8px; height:74px }
   #strip img { height:58px; width:81px; object-fit:contain; background:var(--panel2); border-radius:3px; cursor:pointer; opacity:.6; transition:opacity .12s; flex:none }
   #strip img:hover { opacity:.8 } #strip img.on { opacity:1; outline:2px solid var(--acc); outline-offset:1px }
+  /* a reference picture in the strip: marked, so it doesn't read as a state of the canvas */
+  #strip .refthumb { position:relative; flex:none; height:58px; cursor:pointer; border-bottom:3px solid var(--ref); box-sizing:content-box }
+  #strip .refthumb b { position:absolute; left:0; top:0; font-size:9px; font-weight:700; letter-spacing:.08em; color:#0b0b0d; background:var(--ref); padding:0 4px; border-radius:3px 0 3px 0; line-height:14px }
+  #strip .refthumb.on img { opacity:1; outline:2px solid var(--acc); outline-offset:1px }
   #transport { display:flex; align-items:center; gap:8px }
   #scrubwrap { flex:1; position:relative; display:flex; min-width:0 } #scrub { flex:1; min-width:0; accent-color:var(--acc) }
   #ticks { position:absolute; inset:0; pointer-events:none }
@@ -166,10 +172,9 @@
   <section class="pane" id="codepane"><h4>code <span id="file"></span></h4><pre id="code"></pre></section>
   <section class="pane" id="viewpane">
     <div id="view">
-      <figure class="pic" id="whole"><div class="box"><img id="img" alt="the painting"><div id="cropbox" hidden></div></div><figcaption id="cap"></figcaption></figure>
-      <figure class="pic" id="other" hidden><figcaption id="cap2"><b></b><span></span></figcaption><div class="box"><img id="img2" alt=""></div></figure>
+      <figure class="pic" id="whole"><div class="box"><img id="img" alt="the painting"><div id="cropbox" hidden></div><p id="nopic" hidden>No picture yet: the painter hasn't looked at its canvas.<br>Its first look will show here.</p></div><figcaption id="cap"></figcaption></figure>
+      <figure class="pic" id="other" hidden><figcaption id="cap2"><b></b><span></span></figcaption><div class="box"><img id="img2" alt=""><span id="reftag" hidden>Reference</span></div></figure>
     </div>
-    <p id="nopic" hidden>No picture yet: the painter hasn't looked at its canvas.<br>Its first look will show here.</p>
     <a id="finished" hidden>See the finished painting →</a>
   </section>
   <section class="pane" id="journal"><h4>thoughts &amp; actions</h4><div id="jbody"></div></section>
@@ -249,7 +254,7 @@ async function loadGallery() {
 const ACTIVE = 1800, RECENT = 6 * 3600;  // working now: an action in the last half hour; a run quiet for 6 h, not in the gallery, is tucked away
 const ageOf = s => Date.now() / 1000 - s.mtime, isLive = s => ageOf(s) < ACTIVE;
 const SUBJ = {Friedrich:'after Friedrich', free:'free subject', 'self-portrait':'self-portrait'};
-const subj = s => s.subject ? SUBJ[s.subject] || 'after ' + s.subject : '';
+const subj = s => s.subject ? SUBJ[s.subject] || 'after ' + (s.artist || s.subject) : '';  // (the artist in full when the brief names one: 'after Kendric Tonn')
 const models = s => (s.model || '').split(' → ').map(modelName).join(' → ');
 const ownThumb = s => s.look == null ? null : STATIC ? `data/${encodeURIComponent(s.p)}/t/${s.look}.jpg` : `/api/glance?p=${encodeURIComponent(s.p)}&i=${s.look}`;
 // what the picker and the header say about a painter: the gallery's title and picture if it has them, else its own
@@ -338,14 +343,15 @@ async function loadSessions() {
     }
     Q = u.get('p') ? 'p=' + encodeURIComponent(u.get('p')) : s ? 's=' + encodeURIComponent(s) : first ? qOf(first) : null;
   }
-  renderHeader();
+  renderHeader(); if (otherK >= 0 && events[otherK] && events[otherK].ref) second(otherK);  // (the reference's label names the artist once the list has it)
   if ($('picker').hidden) renderPicker();  // don't rebuild the list under the visitor's focus
 }
 $('all').onchange = () => { localStorage.setItem('studio.all', $('all').checked ? '1' : '0'); renderPicker(); };
 let gen = 0, busy = false;  // one poll at a time; a reset (new painter, rebuilt stream) makes in-flight polls stale
 function reset() { gen++; busy = false; stop(); events = []; nUpd = 0; epoch = null; cwd = ''; liveText = null; typed = -1; sitStarts = [0]; nSittings = 1; hasLooks = false; $('strip').innerHTML = ''; $('ticks').innerHTML = ''; noPicture(); }
 const NOPIC = "No picture yet: the painter hasn't looked at its canvas.<br>Its first look will show here.";
-function noPicture() { $('nopic').innerHTML = NOPIC; $('nopic').hidden = !events.length; $('img').removeAttribute('src'); $('cap').textContent = ''; viewI = -1; second(-1); $('zimg').removeAttribute('src'); $('zoom').style.display = 'none'; }
+function noPainting() { $('nopic').innerHTML = NOPIC; $('nopic').hidden = !events.length; $('img').removeAttribute('src'); $('cap').textContent = ''; viewI = -1; }  // the painting's place, empty
+function noPicture() { noPainting(); second(-1); $('zimg').removeAttribute('src'); $('zoom').style.display = 'none'; }
 async function poll() {
   // a static export is re-uploaded every minute or so while painters work: read it again at most once a minute
   if (!Q || busy || (STATIC && epoch !== null && Date.now() - lastStatic < 60000)) return;
@@ -395,8 +401,11 @@ function paintedFor(i, t) {
 }
 const sittingAt = i => sitStarts.filter(b => b <= i).length;
 function thumb(e, i) {
-  const im = document.createElement('img'); im.loading = 'lazy'; im.src = thumbURL(e.img); im.dataset.i = i; im.title = hhmm(e.ts) + '  ' + fname(e.path);
-  im.onclick = () => { live = false; stop(); show(i); }; $('strip').appendChild(im);
+  const im = document.createElement('img'); im.loading = 'lazy'; im.src = thumbURL(e.img);
+  let t = im;  // (a reference picture: the thumbnail in a marked frame)
+  if (e.ref) { t = document.createElement('span'); t.className = 'refthumb'; t.appendChild(im); const b = document.createElement('b'); b.textContent = 'REF'; t.appendChild(b); }
+  t.dataset.i = i; t.title = hhmm(e.ts) + '  ' + (e.ref ? 'reference picture: ' : '') + fname(e.path);
+  t.onclick = () => { live = false; stop(); show(i); }; $('strip').appendChild(t);
   // fixed thumbnail size (CSS): the strip's width is known before the images load
   if (live) stripEnd();
 }
@@ -411,8 +420,8 @@ function kindOf(e) {
     let d = ''; if (e.kind === 'edit') { let a = 0, r = 0; for (const x of e.edits || []) { a += (x.newText||'').split('\n').length; r += (x.oldText||'').split('\n').length; } d = ` +${a} −${r}`; }
     return /\.(rs|lua)$/.test(f) ? ['code', '✍️', (e.kind === 'write' ? 'wrote ' : 'edited ') + f + d] : /\.md$/.test(f) ? ['notes', '📝', (e.kind === 'write' ? 'wrote ' : 'edited ') + f] : ['code', '✍️', 'wrote ' + f];
   }
-  if (e.kind === 'read') return /\.(jpe?g|png)$/i.test(f) ? ['look', '👁', 'looks at the canvas'] : ['read', '📖', 'reads ' + f];
-  if (e.kind === 'image') return ['look', '👁', 'looks at ' + (f || 'the canvas')];
+  if (e.kind === 'read') return e.ref && /\.(jpe?g|png|webp|gif)$/i.test(f) ? ['ref', '🖼', 'studies a reference picture'] : /\.(jpe?g|png)$/i.test(f) ? ['look', '👁', 'looks at the canvas'] : ['read', '📖', 'reads ' + f];
+  if (e.kind === 'image') return e.ref ? ['ref', '🖼', 'studies a reference picture'] : ['look', '👁', 'looks at ' + (f || 'the canvas')];
   if (e.kind === 'look') return ['look', '👁', lookWords(e.text)[2]];
   if (e.kind === 'paint') { const ok = paintOK(e), n = ((e.out || '').match(/ok · chunk (\d+)/) || [])[1];
     return [ok ? 'code' : e.err ? 'fail' : 'code', '🖌', ok ? 'paints' + (n ? ' (strokes #' + n + ')' : '') : (e.err ? 'paints, but its code has an error' : 'paints')]; }
@@ -460,7 +469,7 @@ function doing(isLive) {
   else if (e.kind === 'say') { what = '💬 says'; detail = plain(e.text.split('\n').find(l => l.trim()) || ''); }
   else if (isLive && !busy) { what = '💭 thinking about the next step'; detail = c ? 'after: ' + c[2] : ''; }
   else if (c && c[0] === 'fail') what = c[1] + ' ' + c[2];
-  else if (c) { what = c[1] + ' ' + c[2].replace(/^(\S+)s /, (m, v) => v.endsWith('e') ? v.slice(0,-1) + 'ing ' : v + 'ing ').replace(/^edited |^wrote /, m => m === 'edited ' ? 'editing ' : 'writing '); detail = e.kind === 'cmd' ? e.text.split('\n')[0] : (e.path || ''); }
+  else if (c) { what = c[1] + ' ' + c[2].replace(/^(\S+)s /, (m, v) => v.endsWith('ie') ? v.slice(0,-2) + 'ying ' : v.endsWith('e') ? v.slice(0,-1) + 'ing ' : v + 'ing ').replace(/^edited |^wrote /, m => m === 'edited ' ? 'editing ' : 'writing '); detail = e.kind === 'cmd' ? e.text.split('\n')[0] : (e.path || ''); }
   else what = '💭 thinking';
   if (isLive) detail += (detail ? '  ·  ' : '') + 'for ' + fmt((Date.now() - Date.parse(e.ts)) / 1000);
   $('doing').querySelector('.what').textContent = what; $('doing').querySelector('.detail').textContent = detail;
@@ -542,7 +551,7 @@ function journal(i) {
     else if (e.kind === 'sitting') { flush(); const gap = (t - Date.parse(events[k - 1].ts)) / 1000;
       html += `<div class="sit">🪑 ${esc(sitLabel(e))}${gap > 120 ? ` <span>· after ${ago(gap).replace(' ago', '')} away</span>` : ''}</div>`; lastTm = t; }
     else if (e.kind === 'say') { flush(); html += `<div class="say">${md(e.text.trim())}</div>`; }
-    else { const c = kindOf(e); if (!c || e.kind === 'image' && k > 0 && (events[k-1].kind === 'read' || events[k-1].kind === 'look')) continue;
+    else { const c = kindOf(e); if (!c || e.kind === 'image' && (e.ref || e.look !== undefined || k > 0 && (events[k-1].kind === 'read' || events[k-1].kind === 'look'))) continue;
       const title = esc(e.kind === 'cmd' || e.kind === 'jnote' ? e.text.slice(0, 2000) : e.kind === 'paint' ? e.code.slice(0, 2000) : (e.path || ''));
       chips.push(`<span class="chip ${c[0]}" title="${title}"${e.kind === 'image' ? ` data-i="${k}"` : ''}>${c[1]} ${esc(c[2])}</span>`); } }
   flush(); $('jbody').innerHTML = html || '<p class="jempty">The painter has just begun.<br>What it thinks and does will show here.</p>'; $('jbody').scrollTop = 1e9;
@@ -608,44 +617,69 @@ function stopped() {
 }
 // the view rests: we're at the end of what a stopped painter did (a stream left running overnight ends up here)
 const resting = () => live && events.length > 0 && pos === events.length - 1 && stopped();
-// what the view shows at event i: the newest whole look at or before it and, if the painter is now on another look
-// made since (a close-up, a squint, a check in grays), that one too. Only the whole painting when the view rests
-// (rest), and from the start of a sitting until its first look: what the painter studied before it stopped isn't
-// what it's looking at now. Before the look tool, or with no whole look yet: the last picture seen.
+// what the view shows at event i: the painting (the newest whole look at or before it) and, if the painter is now on
+// another picture seen since (a close-up, a squint, a check in grays, or a reference picture it reads), that one too.
+// Only the painting when the view rests (rest), and from the start of a sitting until its first look: what the
+// painter studied before it stopped isn't what it's looking at now. Before the look tool, or with no whole look
+// yet: the last picture of its canvas. A reference picture is never the painting: with only reference pictures so
+// far there is no painting (-1), and the reference shows beside its empty place.
 function picturesAt(i, rest) {
-  let cur = -1, whole = -1, before = false, old = false;  // before: k is before the start of i's sitting (or turn)
+  let cur = -1, mine = -1, whole = -1, before = false, old = false;  // before: k is before the start of i's sitting (or turn)
   for (let k = i; k >= 0; k--) { const e = events[k];
     if (e.kind === 'sitting' || e.kind === 'user') before = true;
-    else if (e.kind === 'image') { if (cur < 0) { cur = k; old = before; } if (!hasLooks || isWhole(e)) { whole = k; break; } } }
-  return whole < 0 ? [cur, -1] : [whole, cur !== whole && !old && !rest ? cur : -1];
+    else if (e.kind === 'image') { if (cur < 0) { cur = k; old = before; }
+      if (!e.ref) { if (mine < 0) mine = k; if (!hasLooks || isWhole(e)) { whole = k; break; } } } }
+  const main = whole >= 0 ? whole : mine;
+  return [main, cur >= 0 && cur !== main && !old && !rest && (whole >= 0 || events[cur].ref) ? cur : -1];
 }
-let crop = null;  // the second look's window, outlined on the painting
+// a reference picture in words: whose painting it is when the studio's brief says (reference_artist, from the server)
+function refWords() {
+  const cur = allSessions.find(s => qOf(s) === Q), by = cur && cur.reference_artist;
+  return ['Reference', by ? `A painting by ${by} that the painter is studying: not the painter's own picture.` : "A reference picture the painter is studying: not the painter's own picture."];
+}
+let crop = null, otherK = -1;  // the second look's window, outlined on the painting; the second picture's event
 function second(k) {
-  const on = k >= 0; $('other').hidden = !on; $('view').classList.toggle('two', on); viewI2 = on ? events[k].img : -1;
-  crop = null;
-  if (on) { const e = events[k], [t, why] = lookWords(e.look), u = viewURL(e.img);
+  const on = k >= 0; $('other').hidden = !on; $('view').classList.toggle('two', on); viewI2 = on ? events[k].img : -1; otherK = k;
+  crop = null; $('other').classList.toggle('ref', on && !!events[k].ref);
+  if (on) { const e = events[k], [t, why] = e.ref ? refWords() : lookWords(e.look), u = viewURL(e.img);
     if (!$('img2').src.endsWith(u)) $('img2').src = u;
-    $('cap2').querySelector('b').textContent = t; crop = cropOf(e.look);
-    $('cap2').querySelector('span').textContent = `What the painter is looking at now${why ? ': ' + why : ''}${crop ? '. Outlined on the painting.' : '.'}`;
-    $('img2').alt = t; }
+    $('cap2').querySelector('b').textContent = t; crop = e.ref ? null : cropOf(e.look);
+    $('cap2').querySelector('span').textContent = e.ref ? why : `What the painter is looking at now${why ? ': ' + why : ''}${crop ? '. Outlined on the painting.' : '.'}`;
+    $('img2').alt = e.ref ? 'a reference picture' : t; }
   else $('img2').removeAttribute('src');
-  placeCrop();
+  placeCrop(); placeTag();
+}
+// where a picture sits in its box as displayed (object-fit: contain, so it may be letterboxed): [left, top, width, height]
+function shownAt(im) {
+  const bw = im.clientWidth, bh = im.clientHeight, f = Math.min(bw / im.naturalWidth, bh / im.naturalHeight), w = im.naturalWidth * f, h = im.naturalHeight * f;
+  const [px, py] = getComputedStyle(im).objectPosition.split(' ').map(v => { const f = parseFloat(v) / 100; return isNaN(f) ? .5 : f; });
+  return [(bw - w) * px, (bh - h) * (py === undefined ? .5 : py), w, h];
+}
+// the REFERENCE tag in the corner of a reference picture
+function placeTag() {
+  const im = $('img2'), tag = $('reftag'), on = otherK >= 0 && events[otherK] && events[otherK].ref && im.naturalWidth > 0 && !!im.getAttribute('src');
+  tag.hidden = !on; if (!on) return;
+  const [x, y] = shownAt(im); tag.style.left = x + 'px'; tag.style.top = y + 'px';
 }
 // the crop's outline on the painting as displayed (object-fit: contain, so the picture may be letterboxed in its box)
 function placeCrop() {
   const im = $('img'), cb = $('cropbox');
   if (!crop || !im.naturalWidth || !im.src) { cb.hidden = true; return; }
-  const bw = im.clientWidth, bh = im.clientHeight, nw = im.naturalWidth, nh = im.naturalHeight, f = Math.min(bw / nw, bh / nh);
-  const w = nw * f, h = nh * f, u = w / 1000, H = 1000 * nh / nw, cl = (v, hi) => Math.max(0, Math.min(hi, v));
+  const [left, top, w] = shownAt(im), u = w / 1000, H = 1000 * im.naturalHeight / im.naturalWidth, cl = (v, hi) => Math.max(0, Math.min(hi, v));
   const [x0, y0, x1, y1] = [cl(crop[0], 1000), cl(crop[1], H), cl(crop[2], 1000), cl(crop[3], H)];
   if (x1 <= x0 || y1 <= y0) { cb.hidden = true; return; }
-  const [px, py] = getComputedStyle(im).objectPosition.split(' ').map(v => { const f = parseFloat(v) / 100; return isNaN(f) ? .5 : f; });  // where the picture sits in its box
-  Object.assign(cb.style, {left: (bw - w) * px + x0 * u + 'px', top: (bh - h) * (py === undefined ? .5 : py) + y0 * u + 'px', width: (x1 - x0) * u + 'px', height: (y1 - y0) * u + 'px'});
+  Object.assign(cb.style, {left: left + x0 * u + 'px', top: top + y0 * u + 'px', width: (x1 - x0) * u + 'px', height: (y1 - y0) * u + 'px'});
   cb.hidden = false;
 }
-// a tall canvas (portrait, square or nearly): stream.css puts the two pictures side by side instead of stacked
-$('img').addEventListener('load', () => { $('view').classList.toggle('tall', $('img').naturalWidth < $('img').naturalHeight * 1.15); placeCrop(); });
-new ResizeObserver(placeCrop).observe($('whole'));
+// a tall canvas (portrait, square or nearly): stream.css puts the two pictures side by side instead of stacked.
+// With no picture of the canvas yet (a reference picture beside its empty place), the reference's shape decides.
+function shape() {
+  const im = $('img').getAttribute('src') ? $('img') : $('img2');
+  if (im.naturalWidth) $('view').classList.toggle('tall', im.naturalWidth < im.naturalHeight * 1.15);
+  placeCrop(); placeTag();
+}
+$('img').addEventListener('load', shape); $('img2').addEventListener('load', shape);
+{ const ro = new ResizeObserver(() => { placeCrop(); placeTag(); }); ro.observe($('whole')); ro.observe($('other')); }
 
 // ---- show event i everywhere
 let rested = false;  // the view as last drawn was resting
@@ -655,6 +689,7 @@ function pictures() {
   if (w >= 0) { const img = events[w], u = viewURL(img.img); viewI = img.img; $('nopic').hidden = true; if (!$('img').src.endsWith(u)) $('img').src = u;
     $('cap').textContent = !hasLooks ? hhmm(img.ts) + '  ' + fname(img.path) : isWhole(img) ? `The painting, as it looked at ${hhmm(img.ts)}` : `${lookWords(img.look)[0]} · ${hhmm(img.ts)} (no look at the whole canvas yet)`;
     second(o); }
+  else if (o >= 0) { noPainting(); second(o); shape(); }  // only a reference picture so far: it shows beside the painting's empty place
   else noPicture();
   const curK = o >= 0 ? o : w;
   for (const t of $('strip').children) { const on = +t.dataset.i === curK; t.classList.toggle('on', on); if (on && !live) t.scrollIntoView({ inline:'center', block:'nearest' }); }
@@ -667,7 +702,7 @@ function show(i) {
 }
 function looks() { const r = []; events.forEach((e, k) => e.kind === 'image' && r.push(k)); return r; }
 // replay steps through the painting: each whole look in turn (before the look tool, each picture), with the thinking that led to it
-const steps = () => looks().filter(k => !hasLooks || isWhole(events[k]));
+const steps = () => looks().filter(k => !events[k].ref && (!hasLooks || isWhole(events[k])));
 function stop() { if (playing) { clearTimeout(playing); playing = null; } $('play').textContent = '▶ Replay'; $('play').title = 'watch the painting grow, one look at a time  space'; }
 function goLive() { stop(); live = true; show(events.length - 1); stripEnd(); refreshLiveCode(); }
 $('play').onclick = () => {

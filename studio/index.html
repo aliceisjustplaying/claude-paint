@@ -77,23 +77,23 @@
   /* phone: stacked panes, touch transport, home-indicator safe area. LAST in the sheet so it
      overrides the base rules above (equal specificity, later wins). The 1920px stream is untouched. */
   @media (max-width: 720px) {
-    main { grid-template-columns: minmax(0,1fr) !important; grid-template-rows: minmax(0,40fr) minmax(0,60fr) }
-    #viewpane { border-right:none; border-bottom:1px solid var(--line) } #view { padding:8px }
-    header { gap:8px; padding:7px 10px; flex-wrap:wrap; row-gap:4px }
-    #sess { max-width:none; flex:1 1 auto; min-width:0 } #doing .what { font-size:15px }
-    #doing { flex:1 1 100% } #clock { font-size:16px } #allwrap { display:none }
-    .pane > h4 { padding:6px 10px 4px } #jbody { padding:2px 12px 12px }
+    /* phone: painting + text take almost everything. Thin header, no look-strip, one small
+       transport line. Placed last so it overrides the base rules above. 1920px stream untouched. */
+    main { grid-template-columns: minmax(0,1fr) !important; grid-template-rows: minmax(0,44fr) minmax(0,56fr) }
+    #viewpane { border-right:none; border-bottom:1px solid var(--line) } #view { padding:4px }
+    #strip { display:none }
+    header { gap:6px; padding:4px 8px; flex-wrap:nowrap; row-gap:0 }
+    #sess { flex:1 1 auto; min-width:0; max-width:70%; font-size:12px } #doing { display:none } #allwrap { display:none }
+    #clock { font-size:13px } #clocklbl { display:none } #badge { font-size:9px; padding:1px 6px }
+    .pane > h4 { padding:4px 10px 2px; font-size:10px } #jbody { padding:2px 12px 12px }
     .th, .say { font-size:14px } .chip { font-size:12px } .tm { font-size:10px }
-    #strip { height:72px } #strip img { height:62px; width:86px } #strip .sep { height:62px }
-    /* transport: grid, not order-hacked flex — scrubber + LIVE on row 1, buttons on row 2 */
-    #transport { display:grid; grid-template-columns:repeat(4,auto); gap:8px; align-items:center; justify-content:start }
-    #scrubwrap { grid-row:1; grid-column:1 / 4; min-width:0 }
-    #golive { grid-row:1; grid-column:4; justify-self:end }
-    #prevlook { grid-row:2; grid-column:1 } #play { grid-row:2; grid-column:2 }
-    #speed { grid-row:2; grid-column:3 } #nextlook { grid-row:2; grid-column:4; justify-self:start }
-    #togglecode, #pos { display:none }
-    #transport button, #transport select { min-height:44px; min-width:44px; padding:4px 10px; font-size:15px }
-    footer { padding:6px 8px calc(10px + env(safe-area-inset-bottom)) }
+    /* one small transport line: scrubber, LIVE, back/forward/play */
+    #transport { display:flex; gap:5px; align-items:center }
+    #golive { order:-1; flex:none; font-size:10px; padding:2px 7px; min-height:0; letter-spacing:.04em }
+    #prevlook, #play, #nextlook { order:0; flex:none; min-height:0; min-width:0; padding:2px 9px; font-size:12px; line-height:1.1 }
+    #scrubwrap { order:1; flex:1 1 0; min-width:0; overflow:hidden } #scrub { width:100%; min-width:0 }
+    #speed, #pos, #togglecode { display:none }
+    footer { padding:4px 8px calc(4px + env(safe-area-inset-bottom)) }
   }
 </style></head>
 <body class="nocode">

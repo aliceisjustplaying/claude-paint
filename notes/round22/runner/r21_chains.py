@@ -1221,8 +1221,10 @@ def chain(name):
                 extra += f" + reference/ from {REFERENCE} ({len(reference_pictures(REFERENCE))} pictures)"
             merged = {"free-text": " + records", "structured": " + the records rendered for this studio (p<k>_record.json, "
                       f"see p{n}_inherited.json)", "none": ""}[t["record_kind"]]
+            as_brief = (f"{t['profile']}-one-picture" if t["profile"] in OPENING_ONE and len(reference_pictures(REFERENCE)) == 1
+                        else t["profile"])
             show(tag, f"export {t['profile']} studio (then studio_notes.md{merged if n > 1 else ''}{extra}, "
-                      f"BRIEF.md as briefs/{t['profile']}.md with this studio's path)", export_cmd(t["profile"], d), BASE, env)
+                      f"BRIEF.md as briefs/{as_brief}.md with this studio's path)", export_cmd(t["profile"], d), BASE, env)
             show(tag, f"open the easel ({d / 'bin/easel'} open); it stays open across sittings", [str(d / "bin/easel"), "open"], d)
             show(tag, "sitting 1 (painter)", painter_cmd(t["model"]), d, t["model"]["env"])
             show(tag, f"after each sitting: count painting chunks;\n"

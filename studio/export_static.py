@@ -152,13 +152,14 @@ def main():
             web[i] = int(job.result())
             n_web += 1
         n_img += n
-        # the newest whole look with a web copy (no crop, no mode), for a glimpse of the canvas elsewhere (the gallery's index)
-        whole, s["look"] = False, None
+        # the newest whole look with a web copy (no crop, no mode), for a glimpse of the canvas elsewhere (the gallery's
+        # index, the studio's picker)
+        s["look"] = None
         for e in ev:
-            if e["kind"] == "look":
-                whole = not re.search(r"crop|mode", e.get("text") or "")
-            elif e["kind"] == "image" and whole and 0 <= e["img"] < n and web[e["img"]]:
+            if e["kind"] == "image" and S.is_whole(e.get("look")) and 0 <= e["img"] < n and web[e["img"]]:
                 s["look"] = e["img"]
+        # the painting's title, if the painter's last words begin with one
+        s["title"] = S.title_of(next((e["text"] for e in reversed(ev) if e["kind"] == "say"), ""))
         if s["look"] is None:  # painters from before the look tool read their renders as files: the last picture they saw
             s["look"] = next((i for i in range(n - 1, -1, -1) if web[i]), None)
         text(os.path.join(out, "data", p, "events.json"),

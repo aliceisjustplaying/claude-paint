@@ -268,7 +268,7 @@ def _parse(path):
                     elif name == "paint":  # the painter harness's easel tools (round 19 on)
                         ev.update(kind="paint", code=a.get("lua", ""))
                     elif name == "look":
-                        ev.update(kind="look", text=", ".join(f"{k} {v}" for k, v in a.items()))
+                        ev.update(kind="look", text=look_text(a))
                     elif name == "note":
                         ev.update(kind="jnote", text=a.get("text", ""))
                     else:
@@ -289,12 +289,109 @@ def _parse(path):
                     idx = len(c["images"])
                     c["images"].append((x.get("mimeType", "image/jpeg"), x["data"]))
                     src = c["events"][parent].get("path", "") if parent is not None else ""
-                    c["events"].append({"ts": ts, "kind": "image", "img": idx, "path": src})
+                    ev = {"ts": ts, "kind": "image", "img": idx, "path": src}
+                    if parent is not None and c["events"][parent]["kind"] == "look":
+                        ev["look"] = c["events"][parent]["text"]  # what the painter asked to see (see is_whole)
+                    c["events"].append(ev)
         elif role == "user":
             t = _text(content)
             if t.strip():
                 c["events"].append({"ts": ts, "kind": "user", "text": t[:2000]})
     return c["events"], c["images"]
+
+
+def look_text(args):
+    """A look call's request as one line: "crop 110,540,610,900, size 800", "mode squint" ("" for the plain look)."""
+    return ", ".join(f"{k} {v}" for k, v in args.items())
+
+
+def is_whole(look):
+    """A look request that shows the whole canvas as it is: no crop and no mode (value, squint, mirror)."""
+    return look is not None and not re.search(r"crop|mode", look)
+
+
+# a closing reply that begins with the painting's title: "**The Silent Shore**", "### *Hünengrab im Abendlicht* (...)",
+# also after an opening kaomoji ("(ᵔᴥᵔ) **The Old Willow at Evening**")
+TITLE = re.compile(r"\s*(?:\([^)\n]{1,16}\)\S{0,3}\s+)?(?:#{1,6}\s*)?(\*\*?|__?)([^*_\n]{2,100}?)\1(?![*_\w])")
+
+
+def title_of(say):
+    """The painting's title from the painter's last words, if they begin with one; else None."""
+    m = TITLE.match(say or "")
+    return m.group(2).strip() if m else None
+
+
+_warm = None  # the server's first scan of every painter for the picker: set when done (None: scan on request)
+_glances = {}  # path -> what the picker needs from one session file, read incrementally without keeping images
+
+
+def _glance_file(path):
+    """One session file, scanned from where the last scan stopped: its image count, its newest whole look and its
+    last picture (each as (index in the file, byte offset of the line, which image in the line)) and its last words.
+    Images are counted as parse() counts them, so the indices match the stream's."""
+    with _lock("g:" + path):
+        g = _glances.get(path)
+        size = os.path.getsize(path)
+        if not g or size < g["offset"]:
+            g = _glances[path] = {"offset": 0, "calls": {}, "n": 0, "whole": None, "last": None, "say": ""}
+        with open(path, "rb") as fh:
+            fh.seek(g["offset"])
+            while True:
+                at, line = fh.tell(), fh.readline()
+                if not line.endswith(b"\n"):
+                    break
+                g["offset"] = fh.tell()
+                try:
+                    d = json.loads(line)
+                except ValueError:
+                    continue
+                m = (d.get("message") or {}) if d.get("type") == "message" else {}
+                content = m.get("content")
+                if not isinstance(content, list):
+                    continue
+                if m.get("role") == "assistant":
+                    for x in content:
+                        if x.get("type") == "text" and x.get("text", "").strip():
+                            g["say"] = x["text"]
+                        elif x.get("type") == "toolCall":
+                            g["calls"][x.get("id")] = look_text(x.get("arguments") or {}) if x.get("name") == "look" else None
+                elif m.get("role") == "toolResult":
+                    look, k = g["calls"].get(m.get("toolCallId")), 0
+                    for x in content:
+                        if x.get("type") == "image" and x.get("data"):
+                            g["last"] = (g["n"], at, k)
+                            if is_whole(look):
+                                g["whole"] = g["last"]
+                            g["n"] += 1
+                            k += 1
+        return g
+
+
+def glance(files):
+    """A painter's picture and title for the picker: {"look": its newest whole look (or, before the look tool, the
+    last picture it saw) as a stream image index, "title": from its last words or None}, and where that look's
+    bytes are, for /api/glance."""
+    gs, base, look, src, last, lsrc = [_glance_file(f) for f in files], 0, None, None, None, None
+    for f, g in zip(files, gs):
+        if g["whole"]:
+            look, src = base + g["whole"][0], (f,) + g["whole"][1:]
+        if g["last"]:
+            last, lsrc = base + g["last"][0], (f,) + g["last"][1:]
+        base += g["n"]
+    say = next((g["say"] for g in reversed(gs) if g["say"]), "")
+    if look is None:
+        look, src = last, lsrc
+    return {"look": look, "title": title_of(say), "src": src}
+
+
+def glance_image(src):
+    """The bytes of the image at src (a file, a line's byte offset, which image in the line): (mime, data) or None."""
+    path, at, k = src
+    with open(path, "rb") as fh:
+        fh.seek(at)
+        d = json.loads(fh.readline())
+    imgs = [x for x in d["message"]["content"] if x.get("type") == "image" and x.get("data")]
+    return (imgs[k].get("mimeType", "image/jpeg"), base64.b64decode(imgs[k]["data"])) if k < len(imgs) else None
 
 
 def _hhmm(ts):
@@ -419,9 +516,18 @@ class H(http.server.BaseHTTPRequestHandler):
             return self._send(200, page, "text/html; charset=utf-8")
         if u.path == "/api/sessions":
             ss = list_sessions()
+            for s in ss:
+                if s.get("painter") and (_warm is None or _warm.is_set()):  # (until the first scan is done, without)  # the picker's picture and title (the static export has them in sessions.json)
+                    g = glance(s["files"])
+                    s.update(look=g["look"], title=g["title"])
             if PUBLIC:
                 ss = [{k: v for k, v in s.items() if k != "files"} for s in ss if s.get("painter")]
             return self._send(200, json.dumps(ss).encode(), "application/json")
+        if u.path == "/api/glance":  # a painter's picture in the picker, read alone (not the painter's whole log)
+            files = painter_files(painter)
+            g = glance(files) if files else None
+            im = glance_image(g["src"]) if g and g["src"] else None
+            return self._send(200, im[1], im[0]) if im else self._send(404, b"not found", "text/plain")
         if u.path not in ("/api/events", "/api/file", "/img"):
             return self._send(404, b"not found", "text/plain")
         files = painter_files(painter) if painter else [path] if path and os.path.isfile(path) else []
@@ -464,6 +570,18 @@ def main():
     SESSIONS = os.path.abspath(os.path.expanduser(a.sessions))
     global PUBLIC
     PUBLIC = a.public
+    global _warm
+    _warm = threading.Event()
+
+    def warm():  # the picker's pictures and titles, read ahead (the first scan reads every log once: seconds)
+        import time
+        while True:
+            for s in list_sessions():
+                if s.get("painter"):
+                    glance(s["files"])
+            _warm.set()
+            time.sleep(30)
+    threading.Thread(target=warm, daemon=True).start()
     print(f"studio: http://{a.host}:{a.port}" + (" (public: painters only, scrubbed)" if PUBLIC else ""))
     # a thumbnail strip asks for dozens of images at once: the default queue of 5 connections
     # reset the rest ("Connection reset by peer")

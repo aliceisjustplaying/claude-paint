@@ -148,8 +148,9 @@
     #finished { top:4px; right:6px; font-size:11.5px; padding:2px 7px }
     #picker { top:42px; left:0; width:100vw; max-height:calc(100dvh - 42px); border-radius:0 0 10px 10px; border-left:none; border-right:none; padding:8px 8px 12px }
     .pkgrid { grid-template-columns:minmax(0,1fr); gap:6px } .pki { width:84px; height:60px }
-    /* (3px around the thumbnails: room for the current one's outline) */
-    #strip { height:auto; gap:5px; padding:3px 3px 4px; margin:0 -3px 2px; touch-action:pan-x }
+    /* (3px around the thumbnails: room for the current one's outline; min-height: room for a reference's
+       underline from the start, so the strip doesn't grow when the painter first reads one) */
+    #strip { height:auto; min-height:58px; gap:5px; padding:3px 3px 4px; margin:0 -3px 2px; touch-action:pan-x }
     #strip img { height:48px; width:67px } #strip .refthumb, #strip .sep { height:48px }
     header { gap:6px; padding:4px 8px; flex-wrap:nowrap; row-gap:0 }
     #who { flex:1 1 auto; min-width:0; max-width:none; flex-direction:column; align-items:flex-start; gap:0; padding:2px 8px; line-height:1.25 }

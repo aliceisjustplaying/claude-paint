@@ -33,6 +33,17 @@
   /* middle: code | picture | journal */
   main { display:grid; grid-template-columns: minmax(0,26fr) minmax(0,44fr) minmax(0,30fr); min-height:0 }
   body.nocode main { grid-template-columns: minmax(0,60fr) minmax(0,40fr) } body.nocode #codepane { display:none }
+  @media (max-width: 720px) {
+    /* phone: stack the panes, trim the header, keep the app model (panes scroll, page doesn't) */
+    main { grid-template-columns: minmax(0,1fr) !important; grid-template-rows: minmax(0,42fr) minmax(0,58fr) }
+    #viewpane { border-right:none; border-bottom:1px solid var(--line) }
+    #strip { height:60px } footer { padding:6px 8px 8px }
+    header { gap:8px; padding:7px 10px; flex-wrap:wrap; row-gap:4px }
+    #sess { max-width:none; flex:1 1 auto; min-width:0 } #doing .what { font-size:15px }
+    #doing { flex:1 1 100% } #clock { font-size:16px } #allwrap { display:none }
+    .pane > h4 { padding:6px 10px 4px } #jbody { padding:2px 12px 12px } #view { padding:8px }
+    .th, .say { font-size:14px } .chip { font-size:12px } .tm { font-size:10px }
+  }
   .pane { min-height:0; display:flex; flex-direction:column; border-right:1px solid var(--line) }
   .pane > h4 { margin:0; padding:8px 14px 6px; font-size:11px; font-weight:600; letter-spacing:.14em; color:var(--dim); text-transform:uppercase; display:flex; gap:8px; align-items:center }
   .pane > h4 span { text-transform:none; letter-spacing:0; font:12px var(--mono); color:var(--faint); overflow:hidden; text-overflow:ellipsis; white-space:nowrap }

@@ -528,11 +528,10 @@ function doing(isLive) {
   if (e.kind === 'sitting') { what = '🪑 ' + sitLabel(e); detail = 'a new session begins'; }
   else if (e.kind === 'think') { what = '💭 thinking'; detail = plain(e.text.split('\n').filter(l => l.trim()).slice(-1)[0] || ''); }
   else if (e.kind === 'say') { what = '💬 says'; detail = plain(e.text.split('\n').find(l => l.trim()) || ''); }
-  else if (isLive && !busy) { what = '💭 thinking about the next step'; detail = c ? 'after: ' + c[2] : ''; }
+  else if (isLive && !busy) what = '💭 thinking';
   else if (c && c[0] === 'fail') what = c[1] + ' ' + c[2];
   else if (c) { what = c[1] + ' ' + c[2].replace(/^(\S+)s /, (m, v) => v.endsWith('ie') ? v.slice(0,-2) + 'ying ' : v.endsWith('e') ? v.slice(0,-1) + 'ing ' : v + 'ing ').replace(/^edited |^wrote /, m => m === 'edited ' ? 'editing ' : 'writing '); detail = e.kind === 'cmd' ? e.text.split('\n')[0] : (e.path || ''); }
   else what = '💭 thinking';
-  if (isLive) detail += (detail ? '  ·  ' : '') + 'for ' + fmt((Date.now() - Date.parse(e.ts)) / 1000);
   $('doing').querySelector('.what').textContent = what; $('doing').querySelector('.detail').textContent = detail;
 }
 
@@ -716,7 +715,9 @@ function second(k) {
   if (on) { const e = events[k], [t, why] = e.ref ? refWords() : lookWords(e.look), u = viewURL(e.img);
     setPic($('img2'), [u, imgURL(e.img), thumbURL(e.img)]);
     $('cap2').querySelector('b').textContent = t; crop = e.ref ? null : cropOf(e.look);
-    $('cap2').querySelector('span').textContent = e.ref ? why : `What the painter is looking at now${why ? ': ' + why : ''}${crop ? '. Outlined on the painting.' : '.'}`;
+    const sq = !e.ref && /squint|blur/.test(e.look || ''), gray = !e.ref && /value|gray/.test(e.look || ''), by = e.ref && why.match(/^A painting by (.+?) that/);
+    $('cap2').querySelector('span').textContent = e.ref ? (by ? 'a painting by ' + by[1] : '') : [sq && 'blurred on purpose', gray && 'in grays'].filter(Boolean).join(', ');
+    $('cap2').title = e.ref ? why : `What the painter is looking at now${why ? ': ' + why : ''}${crop ? '. Outlined on the painting.' : '.'}`;
     $('img2').alt = e.ref ? 'a reference picture' : t; }
   else clearPic($('img2'));
   placeCrop(); placeTag();

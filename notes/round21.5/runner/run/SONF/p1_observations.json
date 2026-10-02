@@ -1,0 +1,47 @@
+{
+  "schema": "chain-observations/1",
+  "observations": [
+    {
+      "category": "strokes",
+      "operation": "work",
+      "conditions": {"surface": "bare_ground", "params": {"hand": "broad", "coverage": 2.2, "medium": 0.3}},
+      "effect": "The broad pass left pale ground showing in gaps between strokes.",
+      "cause": "",
+      "basis": "painter_reported",
+      "evidence": [
+        {"log": 1, "call": "toolu_011s2a1EQ6kGcQfHCSLhkuVs", "role": "operation"},
+        {"log": 1, "call": "toolu_0118wNDvtNukeUJ3pWErV6SN", "role": "report"}
+      ]
+    },
+    {
+      "category": "wet_into_wet",
+      "operation": "work",
+      "conditions": {"surface": "open", "clip": true, "params": {"hand": "broad", "coverage": 4, "medium": 0.2}},
+      "effect": "The pale pass pulled dark paint into itself and left gray streaks.",
+      "cause": "The painter attributed the streaks to dark paint underneath still being wet.",
+      "basis": "painter_reported",
+      "evidence": [
+        {"log": 1, "call": "toolu_01DDcwpTNjwGn9HrAKTDmBs3", "role": "operation"},
+        {"log": 1, "call": "toolu_0118wNDvtNukeUJ3pWErV6SN", "role": "report"}
+      ]
+    },
+    {
+      "category": "drying_and_time",
+      "operation": "wait",
+      "conditions": {"surface": "open", "params": {"wait_minutes": 180}},
+      "effect": "After the wait, two sampled passages were setting while two others remained open.",
+      "cause": "",
+      "basis": "printed",
+      "evidence": [{"log": 1, "call": "toolu_01PR6dxwRzEQmfymQsWAN6Q4", "role": "operation"}]
+    },
+    {
+      "category": "drying_and_time",
+      "operation": "wait",
+      "conditions": {"surface": "mixed", "params": {"wait_minutes": 240}},
+      "effect": "The previously setting samples became tacky while the previously open samples became setting.",
+      "cause": "",
+      "basis": "printed",
+      "evidence": [{"log": 1, "call": "toolu_016KWimpvxn9KiwBfdrj1mt5", "role": "operation"}]
+    }
+  ]
+}

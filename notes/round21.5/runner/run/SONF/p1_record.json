@@ -1,0 +1,66 @@
+{
+ "schema": "chain-record/1",
+ "condition": "chain-inherited, non-neutral",
+ "round": 21,
+ "lane": "SONF",
+ "slot": 1,
+ "profile": "friedrich",
+ "code": {
+  "tag": "round-21.5",
+  "commit": "0bffd5e17b51b744ea7ca0c776b5e4c4f99345eb"
+ },
+ "medium": "oil",
+ "box": {
+  "name": "default",
+  "tubes_sha256": "72707b78bf707c265a509c0dc0035a119df8d684eb1948ada5277beef98e4021"
+ },
+ "support": {
+  "kind": "linen",
+  "linen": [
+   16,
+   16
+  ],
+  "ground_layers": [
+   "knife",
+   "roller"
+  ]
+ },
+ "reader": {
+  "model": "openai-codex/gpt-6.1-sol",
+  "brief_sha256": "63b211ed862fc9c92224ded5fa8ee7ffaacc4ad01f03b7169f80b478813b9889",
+  "system_sha256": "c781b5c7e132c1c8406231b791178828ef2d84b1e474287b16c21a73ae7a0671"
+ },
+ "logs": [
+  "~/.pi/agent/sessions/--Users-REDACTED-src-a-paint-studio-3a958c--/2026-10-01T23-54-04-870Z_01a0f9e3-b4c5-76bb-900c-4a00030d5547.jsonl",
+  "~/.pi/agent/sessions/--Users-REDACTED-src-a-paint-studio-3a958c--/2026-10-02T07-27-21-315Z_01a0fb82-b0e3-7799-9243-d9abccc8c30a.jsonl",
+  "~/.pi/agent/sessions/--Users-REDACTED-src-a-paint-studio-3a958c--/2026-10-02T08-31-45-465Z_01a0fbbd-a738-7233-9ab2-4f7f420e7f43.jsonl"
+ ],
+ "observations": [],
+ "dropped": [
+  {
+   "index": 0,
+   "why": [
+    "cause: 0 characters (want 1-140)"
+   ]
+  },
+  {
+   "index": 1,
+   "why": [
+    "cause: another painter (painter)"
+   ]
+  },
+  {
+   "index": 2,
+   "why": [
+    "cause: 0 characters (want 1-140)"
+   ]
+  },
+  {
+   "index": 3,
+   "why": [
+    "cause: 0 characters (want 1-140)"
+   ]
+  }
+ ],
+ "warnings": []
+}

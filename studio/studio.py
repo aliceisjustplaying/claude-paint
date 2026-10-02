@@ -132,32 +132,68 @@ def lanes():
     return _lanes["map"]
 
 
-_subjects = {}  # studio -> (BRIEF.md mtime, "Friedrich" or "free")
+_subjects = {}  # studio -> (BRIEF.md mtime, what its brief says: see about_brief)
+
+
+def _artist_of(brief):
+    """The artist a brief names, in full ("in the manner of Kendric Tonn" -> "Kendric Tonn"), or ""."""
+    m = re.search(r"in\s+the\s+manner\s+of\s+((?:[A-Z][\w.'-]*\s+)*[A-Z][\w.'-]*)", brief)
+    return " ".join(m.group(1).split()) if m else ""
 
 
 def _subject_of(brief):
     """The artist a brief names ("in the manner of Edward Hopper" -> "Hopper"; a surname like "Alma-Tadema"
     whole), "self-portrait" for one, else "free"."""
-    m = re.search(r"in\s+the\s+manner\s+of\s+((?:[A-Z][\w.'-]*\s+)*[A-Z][\w.'-]*)", brief)
-    if m:
-        return m.group(1).split()[-1]
+    artist = _artist_of(brief)
+    if artist:
+        return artist.split()[-1]
     if "self-portrait" in brief.lower():
         return "self-portrait"
     return "free"
 
 
-def subject(folder):
-    """The artist the studio's brief names (e.g. "Friedrich", "Hopper"), "self-portrait", else "free" ("" without
-    a brief)."""
+def _reference_artist(brief):
+    """The artist whose paintings the studio's reference/ folder holds, when the brief says so ("Pictures of his
+    paintings are in reference/", "A picture of one of his paintings is in reference/"), else ""."""
+    said = re.search(r"\b(?:his|her|their)\s+paintings?\b[^.]*?\breference/", brief)
+    return _artist_of(brief) if said else ""
+
+
+def about_brief(folder):
+    """What the studio's brief says: {"subject": the artist's surname (e.g. "Friedrich", "Hopper"), "self-portrait"
+    or "free", "artist": the artist's full name or "", "reference_artist": the artist whose paintings are in
+    reference/ or ""}; all "" without a brief."""
     f = os.path.join(os.path.expanduser("~/src/a"), folder, "BRIEF.md")
     try:
         mt = os.path.getmtime(f)
     except OSError:
-        return ""
+        return {"subject": "", "artist": "", "reference_artist": ""}
     if folder not in _subjects or _subjects[folder][0] != mt:
         with open(f, errors="replace") as fh:
-            _subjects[folder] = (mt, _subject_of(fh.read(4000)))
+            brief = fh.read(4000)
+        _subjects[folder] = (mt, {"subject": _subject_of(brief), "artist": _artist_of(brief),
+                                  "reference_artist": _reference_artist(brief)})
     return _subjects[folder][1]
+
+
+def subject(folder):
+    """The artist the studio's brief names (e.g. "Friedrich", "Hopper"), "self-portrait", else "free" ("" without
+    a brief)."""
+    return about_brief(folder)["subject"]
+
+
+def in_reference(path, cwd):
+    """A file the painter read is in its studio's reference/ folder: a picture given to it to study, not its canvas.
+    path as the read tool got it (relative to the studio, absolute or with ~), cwd the studio's folder."""
+    if not path:
+        return False
+    p = os.path.normpath(os.path.expanduser(path))
+    if os.path.isabs(p):
+        if not cwd:
+            return False
+        p = os.path.relpath(p, os.path.normpath(cwd))
+    parts = p.split(os.sep)
+    return len(parts) > 1 and parts[0].lower() == "reference"
 
 
 PAINTER = re.compile(r"^(paint-studio-[0-9a-f]+|paint-r\d+-p\d+|claude-paint-r\d+-(arm\d|tree\d|astra|fable|flash|p\d))$")
@@ -186,7 +222,7 @@ def list_sessions():
                     models.append(i["model"])
             rnd, lane, n, size = lanes().get(name, ("", "", 0, 0))
             out.append({"p": name, "folder": name, "painter": True, "model": " → ".join(models), "sittings": len(fs),
-                        "thinking": session_thinking(fs[-1]), "subject": subject(name),
+                        "thinking": session_thinking(fs[-1]), **about_brief(name),
                         "round": rnd, "lane": lane, "n": n, "chain": size if size > 1 else 0,
                         "files": fs, "mtime": max(i["mtime"] for i in info), "size": sum(i["size"] for i in info)})
         else:
@@ -219,10 +255,10 @@ def parse(path):
 
 def _parse(path):
     # changed: indices of events whose result came in after them, in arrival order (see stream())
-    c = _cache.setdefault(path, {"offset": 0, "events": [], "images": [], "calls": {}, "changed": []})
+    c = _cache.setdefault(path, {"offset": 0, "events": [], "images": [], "calls": {}, "changed": [], "cwd": ""})
     size = os.path.getsize(path)
     if size < c["offset"]:  # rewritten
-        c.update(offset=0, events=[], images=[], calls={}, changed=[])
+        c.update(offset=0, events=[], images=[], calls={}, changed=[], cwd="")
     with open(path, "rb") as fh:
         fh.seek(c["offset"])
         chunk = fh.read()
@@ -237,7 +273,8 @@ def _parse(path):
             continue
         ts = d.get("timestamp", "")
         if d.get("type") == "session":
-            c["events"].append({"ts": ts, "kind": "start", "cwd": d.get("cwd", "")})
+            c["cwd"] = d.get("cwd", "")
+            c["events"].append({"ts": ts, "kind": "start", "cwd": c["cwd"]})
             continue
         if d.get("type") == "model_change":
             c["events"].append({"ts": ts, "kind": "note", "text": "model " + d.get("modelId", "")})
@@ -265,6 +302,8 @@ def _parse(path):
                         ev.update(kind="cmd", text=a.get("command", ""))
                     elif name == "read":
                         ev.update(kind="read", path=a.get("path", ""))
+                        if in_reference(ev["path"], c["cwd"]):
+                            ev["ref"] = True  # it reads from reference/ (see in_reference)
                     elif name == "paint":  # the painter harness's easel tools (round 19 on)
                         ev.update(kind="paint", code=a.get("lua", ""))
                     elif name == "look":
@@ -292,6 +331,8 @@ def _parse(path):
                     ev = {"ts": ts, "kind": "image", "img": idx, "path": src}
                     if parent is not None and c["events"][parent]["kind"] == "look":
                         ev["look"] = c["events"][parent]["text"]  # what the painter asked to see (see is_whole)
+                    if parent is not None and c["events"][parent].get("ref"):
+                        ev["ref"] = True  # a reference picture: never the painting
                     c["events"].append(ev)
         elif role == "user":
             t = _text(content)
@@ -321,6 +362,7 @@ def title_of(say):
     return m.group(2).strip() if m else None
 
 
+REFERENCE = object()  # in a glance's calls: a read of a reference picture
 _warm = None  # the server's first scan of every painter for the picker: set when done (None: scan on request)
 _glances = {}  # path -> what the picker needs from one session file, read incrementally without keeping images
 
@@ -328,12 +370,13 @@ _glances = {}  # path -> what the picker needs from one session file, read incre
 def _glance_file(path):
     """One session file, scanned from where the last scan stopped: its image count, its newest whole look and its
     last picture (each as (index in the file, byte offset of the line, which image in the line)) and its last words.
-    Images are counted as parse() counts them, so the indices match the stream's."""
+    Images are counted as parse() counts them, so the indices match the stream's. Reference pictures (read from
+    the studio's reference/) are counted but are never the whole look or the last picture."""
     with _lock("g:" + path):
         g = _glances.get(path)
         size = os.path.getsize(path)
         if not g or size < g["offset"]:
-            g = _glances[path] = {"offset": 0, "calls": {}, "n": 0, "whole": None, "last": None, "say": ""}
+            g = _glances[path] = {"offset": 0, "calls": {}, "n": 0, "whole": None, "last": None, "say": "", "cwd": ""}
         with open(path, "rb") as fh:
             fh.seek(g["offset"])
             while True:
@@ -345,6 +388,8 @@ def _glance_file(path):
                     d = json.loads(line)
                 except ValueError:
                     continue
+                if d.get("type") == "session":
+                    g["cwd"] = d.get("cwd", "")
                 m = (d.get("message") or {}) if d.get("type") == "message" else {}
                 content = m.get("content")
                 if not isinstance(content, list):
@@ -353,15 +398,19 @@ def _glance_file(path):
                     for x in content:
                         if x.get("type") == "text" and x.get("text", "").strip():
                             g["say"] = x["text"]
-                        elif x.get("type") == "toolCall":
-                            g["calls"][x.get("id")] = look_text(x.get("arguments") or {}) if x.get("name") == "look" else None
+                        elif x.get("type") == "toolCall":  # a look's request; REFERENCE for a read from reference/
+                            a = x.get("arguments") or {}
+                            g["calls"][x.get("id")] = (look_text(a) if x.get("name") == "look" else REFERENCE
+                                                       if x.get("name") == "read" and in_reference(a.get("path", ""), g["cwd"])
+                                                       else None)
                 elif m.get("role") == "toolResult":
                     look, k = g["calls"].get(m.get("toolCallId")), 0
                     for x in content:
                         if x.get("type") == "image" and x.get("data"):
-                            g["last"] = (g["n"], at, k)
-                            if is_whole(look):
-                                g["whole"] = g["last"]
+                            if look is not REFERENCE:
+                                g["last"] = (g["n"], at, k)
+                                if is_whole(look):
+                                    g["whole"] = g["last"]
                             g["n"] += 1
                             k += 1
         return g
@@ -369,8 +418,8 @@ def _glance_file(path):
 
 def glance(files):
     """A painter's picture and title for the picker: {"look": its newest whole look (or, before the look tool, the
-    last picture it saw) as a stream image index, "title": from its last words or None}, and where that look's
-    bytes are, for /api/glance."""
+    last picture it saw; never a reference picture; None if it has seen none of its own) as a stream image index,
+    "title": from its last words or None}, and where that look's bytes are, for /api/glance."""
     gs, base, look, src, last, lsrc = [_glance_file(f) for f in files], 0, None, None, None, None
     for f, g in zip(files, gs):
         if g["whole"]:

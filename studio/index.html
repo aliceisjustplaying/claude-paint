@@ -60,7 +60,10 @@
   #badge.replay { color:var(--blue); border-color:#2b3b58 }
   @keyframes glow { 0% { box-shadow:0 0 0 0 rgba(224,86,79,.45) } 70% { box-shadow:0 0 0 8px rgba(224,86,79,0) } 100% { box-shadow:none } }
   @keyframes blink { 50% { opacity:.3 } }
-  #clockbox { flex:none; text-align:right; line-height:1.1 } #clocklbl { font-size:11px; color:var(--dim); display:block }
+  #clockbox { flex:none; text-align:right; line-height:1.1; display:flex; gap:18px; align-items:flex-end } #clockbox[hidden] { display:none } #realclock { display:block } #clocklbl { font-size:11px; color:var(--dim); display:block }
+  /* the easel's own time, as the painter last read it (it can run to days, months, years) */
+  #pclock { display:block; white-space:nowrap; color:var(--dim); font-size:11px } #pclock[hidden] { display:none } #pclock .pl { display:block }
+  #pclock b { font:600 15px var(--mono); color:var(--acc); line-height:1.35 }
   #clock { font:20px var(--mono); font-variant-numeric:tabular-nums }
 
   /* middle: code | picture | journal */
@@ -156,7 +159,7 @@
     #who { flex:1 1 auto; min-width:0; max-width:none; flex-direction:column; align-items:flex-start; gap:0; padding:2px 8px; line-height:1.25 }
     #who .t { font-size:12.5px; max-width:100% } #who .m { font-size:10.5px } #who .caret { display:none } #doing { display:none }
     #home { font-size:15px; padding-right:0 } #intro { top:44px; font-size:13.5px; padding:12px 14px }
-    #clock { font-size:13px } #clocklbl { display:none } #badge { font-size:9px; padding:1px 6px }
+    #clock { font-size:13px } #clocklbl { display:none } #clockbox { flex-direction:column-reverse; gap:0 } #pclock .pl, #pclock .pe { display:none } #pclock b { font-size:9.5px; line-height:1.1 } #badge { font-size:9px; padding:1px 6px }
     .pane > h4 { padding:4px 10px 2px; font-size:10px } #jbody { padding:2px 12px 12px }
     .th, .say { font-size:14px } .chip { font-size:12px } .tm { font-size:10px }
     /* one small transport line: scrubber, LIVE, back/forward/play */
@@ -174,7 +177,7 @@
   <button id="who" type="button" aria-haspopup="dialog" aria-expanded="false" aria-controls="picker" title="choose another painter"><span class="t">Choose a painter</span><span class="m"></span><span class="caret">▼</span></button>
   <div id="doing"><span class="what"></span><span class="detail"></span></div>
   <span id="badge"></span>
-  <div id="clockbox"><span id="clocklbl">painting for</span><span id="clock">0:00:00</span></div>
+  <div id="clockbox"><span id="pclock" hidden><span class="pl">on the painting's own clock</span><b></b><span class="pe"></span></span><span id="realclock"><span id="clocklbl">painting for</span><span id="clock">0:00:00</span></span></div>
 </header>
 <main>
   <section class="pane" id="codepane"><h4>code <span id="file"></span></h4><pre id="code"></pre></section>
@@ -436,6 +439,21 @@ function ticks() {
   $('ticks').innerHTML = sitStarts.slice(1).map(k => `<span style="left:calc(8px + (100% - 16px) * ${k / n})" title="${esc(sitLabel(events[k]))}">${events[k].n}</span>`).join('');
 }
 // time spent painting up to event i (at time t): the sittings' durations summed, the gaps between them not counted
+// the painting's own clock at event i: the easel's time of day ("day 3, 14:20"; it began at 09:00 on day 1), from the last
+// chunk that printed it (wait() returns it and most painters print it). null before the first.
+function easelClockAt(i) {
+  for (let k = Math.min(i, events.length - 1); k >= 0; k--) { const e = events[k]; if (e.kind !== 'paint' || !e.out || e.err) continue;
+    const m = [...e.out.matchAll(/day (\d+), (\d\d):(\d\d)/g)].pop(); if (m) return { text: m[0], min: (+m[1] - 1) * 1440 + +m[2] * 60 + +m[3] - 540 }; }
+  return null;
+}
+// a stretch of the painting's clock in words: minutes up to years
+function stretch(min) {
+  const q = (n, w) => `${n} ${w}${n === 1 ? '' : 's'}`, h = Math.floor(min / 60), d = Math.floor(min / 1440);
+  if (min < 60) return `${Math.max(0, Math.round(min))} min`; if (h < 24) return `${h} h ${Math.round(min % 60)} min`;
+  if (d < 14) return `${q(d, 'day')} ${h % 24} h`; if (d < 61) return `${q(Math.floor(d / 7), 'week')} ${q(d % 7, 'day')}`;
+  const mo = Math.floor(d / 30.44); if (mo < 24) return q(mo, 'month');
+  const y = Math.floor(d / 365.25); return `${q(y, 'year')} ${q(Math.floor((d - y * 365.25) / 30.44), 'month')}`;
+}
 function paintedFor(i, t) {
   let total = 0, s0 = 0;
   for (const b of sitStarts.slice(1)) { if (b > i) break; total += Date.parse(events[b - 1].ts) - Date.parse(events[s0].ts); s0 = b; }
@@ -498,6 +516,9 @@ function status() {
   const t = atLive && active ? Date.now() : Date.parse(events[pos].ts), n = sitStarts.length;
   $('clock').textContent = fmt(paintedFor(pos, t)); $('clockbox').hidden = false;
   $('clocklbl').textContent = (atLive ? (active ? 'painting for' : 'painted for') : 'at') + (n > 1 ? (atLive ? ` · ${n} sittings` : ` · sitting ${sittingAt(pos)} of ${n}`) : '');
+  const ec = easelClockAt(pos), pc = $('pclock'); pc.hidden = !ec;
+  if (ec) { pc.querySelector('b').textContent = ec.text; pc.querySelector('.pe').textContent = ` · ${stretch(ec.min)} in`;
+    pc.title = `The easel keeps its own clock: every stroke takes the time a hand would take, and the painter can let hours or months pass for paint to dry. It began at 09:00 on day 1; this is the time the painter last read (${stretch(ec.min)} in).`; }
   $('clockbox').title = n > 1 ? `time spent painting, summed over ${n} sittings (the gaps between sittings don't count)` : 'time since the session began';
   doing(atLive && active);
 }

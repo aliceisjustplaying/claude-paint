@@ -163,3 +163,37 @@ def test_export_prunes_only_files_it_wrote(home):
     assert r.returncode == 0, r.stderr
     assert not source.exists()  # the export's own file, stale now
     assert (out / "data" / "mine.txt").read_text() == "added by hand"
+
+
+def look(i, png):
+    """A look and the picture it returned."""
+    import base64
+    return (line({"type": "message", "message": {"role": "assistant", "content": [
+                {"type": "toolCall", "id": i, "name": "look", "arguments": {}}]}})
+            + line({"type": "message", "message": {"role": "toolResult", "toolCallId": i, "isError": False, "content": [
+                {"type": "image", "mimeType": "image/png", "data": base64.b64encode(png).decode()}]}}))
+
+
+def test_export_makes_small_web_copies_of_each_look_and_remakes_them_when_it_changes(home):
+    Image = pytest.importorskip("PIL.Image")
+    import io
+
+    def png(w, h, color):
+        buf = io.BytesIO()
+        Image.new("RGB", (w, h), color).save(buf, "PNG")
+        return buf.getvalue()
+
+    tmp_path, studio, log = home
+    log.write_text(start(str(studio)) + look("l1", png(2400, 1600, (200, 30, 30))))
+    out = tmp_path / "out"
+    assert export(tmp_path, out).returncode == 0
+    d = out / "data" / PAINTER
+    assert json.loads((d / "events.json").read_text())["web"] == [1]
+    assert Image.open(d / "img" / "0.png").size == (2400, 1600)  # the original, for the zoom
+    assert max(Image.open(d / "v" / "0.jpg").size) == 1600
+    assert max(Image.open(d / "t" / "0.jpg").size) <= 168
+
+    # the session is rewritten with a different picture at the same index: its copies follow it
+    log.write_text(start(str(studio)) + look("l1", png(1200, 800, (30, 30, 200))))
+    assert export(tmp_path, out).returncode == 0
+    assert Image.open(d / "v" / "0.jpg").convert("RGB").getpixel((5, 5))[2] > 150

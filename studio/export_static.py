@@ -161,8 +161,10 @@ def main():
                 s["look"] = e["img"]
         # the painting's title, if the painter's last words begin with one
         s["title"] = S.title_of(next((e["text"] for e in reversed(ev) if e["kind"] == "say"), ""))
-        if s["look"] is None:  # painters from before the look tool read their renders as files: the last picture they saw
-            s["look"] = next((i for i in range(n - 1, -1, -1) if web[i]), None)
+        if s["look"] is None:  # painters from before the look tool read their renders as files: the last picture they
+            # saw (a reference picture, read from the studio's reference/, is never the painter's picture)
+            refs = {e["img"] for e in ev if e["kind"] == "image" and e.get("ref")}
+            s["look"] = next((i for i in range(n - 1, -1, -1) if web[i] and i not in refs), None)
         text(os.path.join(out, "data", p, "events.json"),
              json.dumps({"events": ev, "total": len(ev), "epoch": st["epoch"], "sittings": len(files), "imgext": exts, "web": web}))
         # the painting's source, as the live server's /api/file gives it

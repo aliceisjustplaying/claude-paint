@@ -28,7 +28,7 @@ body.nocode main { grid-template-columns: minmax(0,54fr) minmax(0,46fr) !importa
 .chip { font-size: 21px !important; padding: 2px 10px !important }
 .tm { font-size: 17px !important }
 .pane > h4 { font-size: 16px !important }
-#jbody { padding: 6px 26px 20px !important }
+#jbody { padding: 16px 26px 20px !important }
 #doing .what { font-size: 28px !important }
 #doing .detail { font-size: 19px !important }
 #badge { font-size: 17px !important; padding: 4px 14px !important }

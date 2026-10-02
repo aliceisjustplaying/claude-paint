@@ -97,7 +97,7 @@
   /* a reference picture the painter is studying (read from its studio's reference/): someone else's painting, never this painter's. Its own color, and a tag on the picture itself */
   #other.ref #cap2 b { color:var(--ref) } #reftag { position:absolute; font-size:11px; font-weight:700; letter-spacing:.1em; text-transform:uppercase; color:#0b0b0d; background:var(--ref); padding:2px 8px; border-radius:0 0 4px 0; pointer-events:none; white-space:nowrap }
   #journal { background:var(--panel2); border-right:none }
-  #jbody { flex:1; min-height:0; overflow:auto; padding:4px 16px 16px }
+  #jbody { flex:1; min-height:0; overflow:auto; padding:12px 16px 16px }
   .th { margin:10px 0 12px; padding:2px 0 2px 13px; border-left:2px solid #5e5e6d; font-size:15px; line-height:1.6; color:var(--soft); word-break:break-word }
   .th.last { color:#ffffff } .say { margin:13px 0; color:var(--fg); font-size:15px; line-height:1.6; word-break:break-word }
   /* the painter's markdown, rendered (escaped first: see md()) */
@@ -160,7 +160,7 @@
     #who .t { font-size:12.5px; max-width:100% } #who .m { font-size:10.5px } #who .caret { display:none } #doing { display:none }
     #home { font-size:15px; padding-right:0 } #intro { top:44px; font-size:13.5px; padding:12px 14px }
     #clock { font-size:13px } #clocklbl { display:none } #clockbox { flex-direction:column-reverse; gap:0 } #pclock .pl { display:none } #pclock b { font-size:9.5px; line-height:1.1 } #badge { font-size:9px; padding:1px 6px }
-    .pane > h4 { padding:4px 10px 2px; font-size:10px } #jbody { padding:2px 12px 12px }
+    .pane > h4 { padding:4px 10px 2px; font-size:10px } #jbody { padding:8px 12px 12px }
     .th, .say { font-size:14px } .chip { font-size:12px } .tm { font-size:10px }
     /* one small transport line: scrubber, LIVE, back/forward/play */
     #transport { display:flex; gap:5px; align-items:center }
@@ -188,7 +188,7 @@
     </div>
     <a id="finished" hidden>See the finished painting →</a>
   </section>
-  <section class="pane" id="journal"><h4>thoughts &amp; actions</h4><div id="jbody"></div></section>
+  <section class="pane" id="journal"><div id="jbody"></div></section>
 </main>
 <footer>
   <div id="strip"></div>
@@ -481,8 +481,8 @@ function kindOf(e) {
   if (e.kind === 'read') return e.ref && /\.(jpe?g|png|webp|gif)$/i.test(f) ? ['ref', '🖼', 'studies a reference picture'] : /\.(jpe?g|png)$/i.test(f) ? ['look', '👁', 'looks at the canvas'] : ['read', '📖', 'reads ' + f];
   if (e.kind === 'image') return e.ref ? ['ref', '🖼', 'studies a reference picture'] : ['look', '👁', 'looks at ' + (f || 'the canvas')];
   if (e.kind === 'look') return ['look', '👁', lookWords(e.text)[2]];
-  if (e.kind === 'paint') { const ok = paintOK(e), n = ((e.out || '').match(/ok · chunk (\d+)/) || [])[1];
-    return [ok ? 'code' : e.err ? 'fail' : 'code', '🖌', ok ? 'paints' + (n ? ' (strokes #' + n + ')' : '') : (e.err ? 'paints, but its code has an error' : 'paints')]; }
+  if (e.kind === 'paint') { const ok = paintOK(e);
+    return [ok ? 'code' : e.err ? 'fail' : 'code', '🖌', ok ? 'paints' : (e.err ? 'paints, but its code has an error' : 'paints')]; }
   if (e.kind === 'jnote') return ['notes', '📝', 'writes in the journal'];
   if (e.kind === 'cmd') {
     const c = (e.text || '').replace(/^\s*((cd\s+\S+|export\s+[^;&\n]*|source\s+\S+|set\s+-\S+)\s*(&&|;|\n)\s*)+/, ''), fail = /error(\[|:)|panicked|FAILED/.test(e.out || '');
@@ -760,7 +760,7 @@ function pictures() {
   rested = resting();
   const [w, o] = picturesAt(pos, rested);
   if (w >= 0) { const img = events[w]; viewI = img.img; $('nopic').hidden = true; setPic($('img'), [viewURL(img.img), imgURL(img.img), thumbURL(img.img)]);
-    $('cap').textContent = !hasLooks ? hhmm(img.ts) + '  ' + fname(img.path) : isWhole(img) ? `The painting, as it looked at ${hhmm(img.ts)}` : `${lookWords(img.look)[0]} · ${hhmm(img.ts)} (no look at the whole canvas yet)`;
+    $('cap').textContent = !hasLooks ? hhmm(img.ts) + '  ' + fname(img.path) : isWhole(img) ? hhmm(img.ts) : `${lookWords(img.look)[0]} · ${hhmm(img.ts)}`;
     second(o); }
   else if (o >= 0) { noPainting(); second(o); shape(); }  // only a reference picture so far: it shows beside the painting's empty place
   else noPicture();

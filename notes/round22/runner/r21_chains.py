@@ -11,6 +11,11 @@ picture there the runner stops before anything starts. The painter looks at them
 as it reads its notes. The brief's opening says one picture or several (OPENING, OPENING_ONE). No
 reader. Everything below is as in round 21.5's runner unless it says otherwise.
 
+A warmup before it (lane BUNT): one Space Bunny painter (thinking max, opencode-go, as round 21's FRDC
+chain) in Tonn's studio without the pictures (lane(..., reference=False)): no reference/ folder, and
+the brief is round 21.5's for this studio, from knowledge and the notes. Only a lane that gets pictures
+needs REFERENCE.
+
 Round 19: the Friedrich chain (lane F: three painters, one after another) and, if switched
 on in LANES, blank-studio single painters, all run in parallel.
 
@@ -220,6 +225,20 @@ OPENING_ONE = {
         "a copy or a version of his. Work from that picture, from knowledge and from\n"
         "the notes in your studio; don't use other reference images or image models."),
 }
+# a studio of the same profile without the pictures (lane(..., reference=False)): round 21.5's opening and
+# reading list for it, word for word
+OPENING_PLAIN = {
+    "tonn": (
+        "Compose and paint one original picture in the manner of Kendric Tonn, at\n"
+        "the easel, a simulator of oil paint on linen. The subject and composition\n"
+        "are yours to invent. Work from knowledge and the notes in your studio;\n"
+        "don't use reference images, image models or pictures of his work."),
+}
+READING_PLAIN = {
+    "tonn": ("notes/easel_guide.md; notes/studio_notes.md;\n"
+             "notes/research/tonn_materials.md (his materials and method) and\n"
+             "notes/research/oil_paint_physics.md as needed."),
+}
 
 # Round 22: pictures of the artist's paintings, there with his permission. The owner puts them in REFERENCE
 # (outside the repo); a studio of a profile in ARTIST gets a copy in <studio>/reference/ (copy_reference).
@@ -251,7 +270,7 @@ def model(provider, name, thinking, black=False, env=None, key_from=None):
 RECORD_KINDS = ("free-text", "structured", "none")
 
 
-def lane(profile, m, painters=1, records=(), record_kind="free-text", read_last=False):
+def lane(profile, m, painters=1, records=(), record_kind="free-text", read_last=False, reference=True):
     """profile: the studio (friedrich or blank). painters > 1: a chain, with a reader between painters.
     records: reader records from another lane's painters (paths), merged into this lane's first painter's
     studio notes as a chain's are: this painter continues that chain.
@@ -261,13 +280,20 @@ def lane(profile, m, painters=1, records=(), record_kind="free-text", read_last=
     the next studio gets the plain notes and the records of another lane, if any). A structured lane
     can't continue another lane's free-text records.
     read_last: the reader also reads the lane's last painter (its record is kept; no painter follows),
-    so a single painter gets a record too. A rerun reads a last painter that is done but unread."""
+    so a single painter gets a record too. A rerun reads a last painter that is done but unread.
+    reference: False for a studio of a profile in ARTIST without the artist's pictures: no reference/
+    folder, the profile's plain brief (OPENING_PLAIN, READING_PLAIN), and REFERENCE isn't needed."""
     if record_kind not in RECORD_KINDS:
         raise ValueError(f"record_kind={record_kind!r}: want one of {', '.join(RECORD_KINDS)}")
     if record_kind == "structured" and records:
         raise ValueError("a structured lane can't continue another lane's free-text records (records=)")
     return dict(profile=profile, model=m, painters=painters, records=[Path(r) for r in records],
-                record_kind=record_kind, read_last=read_last)
+                record_kind=record_kind, read_last=read_last, reference=reference)
+
+
+def referenced(t):
+    """Whether lane t's studios get the artist's pictures in reference/."""
+    return t["profile"] in ARTIST and t.get("reference", True)
 
 
 def reads(t, n):
@@ -311,7 +337,10 @@ BUNNY = model("opencode-go", "space-bunny-free", "max")
 # A single painter: no records, so round_number() (which wants round-<n>) isn't reached.
 # Round 22: one Claude Fable 5.1 painter (thinking xhigh, through the Claude subscription: pi-black) in Tonn's
 # studio, with pictures of his paintings in reference/. No reader.
+# The warmup before it: one Space Bunny painter (thinking max, through OpenCode Go with its own key in pi's
+# auth.json, as round 21's FRDC chain) in Tonn's studio without the pictures. No reader.
 LANES = {
+    "BUNT": lane("tonn", BUNNY, record_kind="none", reference=False),
     "TONN": lane("tonn", model("anthropic", "claude-fable-5-1", "xhigh", black=True), record_kind="none"),
 }
 DRY = False
@@ -345,18 +374,21 @@ def session_dir(d):
     return SESS / ("--" + str(d).strip("/").replace("/", "-") + "--")
 
 
-def brief(profile, d, pictures=None):
+def brief(profile, d, pictures=None, reference=True):
     """pictures: how many pictures the studio's reference/ holds (profiles in ARTIST; counted there if None):
-    the opening says one picture or several."""
-    opening = OPENING[profile]
-    if profile in ARTIST:
+    the opening says one picture or several. reference=False: a studio without the pictures gets the
+    profile's plain opening and reading list."""
+    opening, reading = OPENING[profile], READING[profile]
+    if profile in ARTIST and not reference:
+        opening, reading = OPENING_PLAIN[profile], READING_PLAIN[profile]
+    elif profile in ARTIST:
         n = len(reference_pictures(d / "reference")) if pictures is None else pictures
         if n < 1:
             raise RuntimeError(f"{d / 'reference'} holds no picture, and the {profile} brief sends the painter there")
         opening = OPENING_ONE[profile] if n == 1 else opening
     tpl = (HERE / "brief_template.md").read_text()
     return (tpl.replace("{OPENING}", opening).replace("{STUDIO}", f"~/src/a/{d.name}")
-               .replace("{READING}", READING[profile]))
+               .replace("{READING}", reading))
 
 
 def reference_pictures(src):
@@ -1217,11 +1249,12 @@ def chain(name):
             log(f"{tag}: not read yet")
         if DRY:
             extra = " + trees.md" if t["profile"] == "friedrich" else ""
-            if t["profile"] in ARTIST:
+            if referenced(t):
                 extra += f" + reference/ from {REFERENCE} ({len(reference_pictures(REFERENCE))} pictures)"
             merged = {"free-text": " + records", "structured": " + the records rendered for this studio (p<k>_record.json, "
                       f"see p{n}_inherited.json)", "none": ""}[t["record_kind"]]
-            as_brief = (f"{t['profile']}-one-picture" if t["profile"] in OPENING_ONE and len(reference_pictures(REFERENCE)) == 1
+            as_brief = (f"{t['profile']}-no-pictures" if t["profile"] in ARTIST and not referenced(t)
+                        else f"{t['profile']}-one-picture" if referenced(t) and len(reference_pictures(REFERENCE)) == 1
                         else t["profile"])
             show(tag, f"export {t['profile']} studio (then studio_notes.md{merged if n > 1 else ''}{extra}, "
                       f"BRIEF.md as briefs/{as_brief}.md with this studio's path)", export_cmd(t["profile"], d), BASE, env)
@@ -1268,7 +1301,7 @@ def chain(name):
                 # without its source keys and list, as the export leaves the other research notes
                 subprocess.run([str(BASE / "scripts/strip_sources"), str(d / "notes" / "research" / "trees.md")],
                                stdin=subprocess.DEVNULL, check=True)
-            if t["profile"] in ARTIST:
+            if referenced(t):
                 # pictures of the artist's paintings (round 22); checked again here as main() checks them
                 problems = reference_problems(t["profile"], REFERENCE)
                 if problems:
@@ -1277,12 +1310,12 @@ def chain(name):
                 for line in copy_reference(t["profile"], REFERENCE, d / "reference"):
                     log(f"{tag}: reference: {line}")
             (rd / f"p{n}.exported").write_text(time.strftime("%F %T"))
-        if t["profile"] in ARTIST and not reference_pictures(d / "reference"):
+        if referenced(t) and not reference_pictures(d / "reference"):
             log(f"{tag}: NO REFERENCE PICTURES in {d / 'reference'}, lane stops (remove {rd}/p{n}.exported and rerun "
                 f"to export the studio again)")
             return
-        (rd / f"p{n}_brief.md").write_text(brief(t["profile"], d))
-        (d / "BRIEF.md").write_text(brief(t["profile"], d))
+        (rd / f"p{n}_brief.md").write_text(brief(t["profile"], d, reference=referenced(t)))
+        (d / "BRIEF.md").write_text(brief(t["profile"], d, reference=referenced(t)))
         clear_settings(d)
         if not (rd / f"p{n}.painted").exists():
             if paint(name, n, d, rd) is None:
@@ -1547,16 +1580,20 @@ def render_briefs(out):
         if profile in OPENING_ONE:                 # a studio with one picture in reference/
             (out / f"{profile}-one-picture.md").write_text(brief(profile, d, pictures=1))
             print(out / f"{profile}-one-picture.md")
+        if profile in OPENING_PLAIN:               # a studio without the pictures (lane(..., reference=False))
+            (out / f"{profile}-no-pictures.md").write_text(brief(profile, d, reference=False))
+            print(out / f"{profile}-no-pictures.md")
 
 
 def preflight(lanes):
     """Why these lanes can't start (empty if they can): a chain lane's reader needs its files next to
     this runner (a runner copied without them fails every reader at launch), a structured lane
-    stamps each record with BRANCH's commit in BASE, and a studio of a profile in ARTIST needs the
-    artist's pictures in REFERENCE (reference_problems)."""
+    stamps each record with BRANCH's commit in BASE, and a lane whose studios get the artist's
+    pictures (referenced) needs them in REFERENCE (reference_problems); a lane that isn't among
+    `lanes`, or gets no pictures, isn't held to that."""
     problems = []
     # a studio with pictures of the artist's paintings (round 22): they must be there before anything starts
-    for profile in sorted({LANES[l]["profile"] for l in lanes} & set(ARTIST)):
+    for profile in sorted({LANES[l]["profile"] for l in lanes if referenced(LANES[l])}):
         problems += reference_problems(profile, REFERENCE)
     chains = [l for l in lanes if any(reads(LANES[l], n) for n in range(1, LANES[l]["painters"] + 1))]
     if chains:

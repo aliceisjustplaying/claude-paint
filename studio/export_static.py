@@ -1,5 +1,6 @@
 # /// script
 # requires-python = ">=3.11"
+# dependencies = ["pillow"]
 # ///
 """Export the studio viewer as static files, painters only and scrubbed as --public is.
 
@@ -10,16 +11,46 @@ per painter, data/<painter>/events.json (with the image extensions), data/<paint
 data/<painter>/file/<the painting's source> (from archive/sources/ once the painter's folder is gone). Every text response is scrubbed like the public server's
 (home folder -> ~, account name -> user); the export stops if a scrubbed file still names either.
 
+Each look also gets two small JPEG copies for the web, made once (again only when the look itself changes):
+data/<painter>/t/<i>.jpg for the look-strip and data/<painter>/v/<i>.jpg for the main view; the original stays for
+the zoom. events.json's "web" lists which looks have them. Without Pillow there are none and the viewer uses the originals.
+
 The export owns <out>: it keeps a list of the files it wrote in <out>/.studio-export and, on the next run,
 deletes only the listed files it didn't write again. It won't write into a folder that has files and no list,
 except an export from before the list (index.html with the static switch, data/sessions.json, nothing else
 at the top), which it adopts, owning all of data/ as the old exporter did.
 """
-import argparse, base64, json, os, re, sys
+import argparse, base64, io, json, os, re, sys
+from concurrent.futures import ThreadPoolExecutor
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import studio as S
+try:
+    from PIL import Image
+except ImportError:  # the web copies are an optimization: without Pillow the viewer shows the originals
+    Image = None
 
 EXT = {"image/png": "png", "image/jpeg": "jpg", "image/webp": "webp", "image/gif": "gif"}
+THUMB = (168, 120)  # the look-strip shows 81x58: twice that, for sharp screens
+VIEW = 1600         # the main view's copy, long side
+
+
+def web_copies(data, thumb, view):
+    """The strip's thumbnail and the view's copy of one look, as JPEGs. False if the image can't be read."""
+    try:
+        im = Image.open(io.BytesIO(data))
+        im.load()
+    except Exception:
+        return False
+    im = im.convert("RGB")
+    for path, box, q in ((view, (VIEW, VIEW), 85), (thumb, THUMB, 72)):
+        c = im.copy()
+        c.thumbnail(box, Image.LANCZOS)
+        buf = io.BytesIO()
+        c.save(buf, "JPEG", quality=q, optimize=True, progressive=True)
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "wb") as fh:
+            fh.write(buf.getvalue())
+    return True
 
 
 WRITTEN = set()
@@ -70,9 +101,10 @@ def write(path, data):
     if os.path.isfile(path) and os.path.getsize(path) == len(data):
         with open(path, "rb") as fh:
             if fh.read() == data:
-                return
+                return False
     with open(path, "wb") as fh:
         fh.write(data)
+    return True
 
 
 def text(path, data):
@@ -92,23 +124,35 @@ def main():
     before = owned(out)
     ss = [{k: v for k, v in s.items() if k != "files"} for s in S.list_sessions() if s.get("painter") and s["p"] not in a.skip]
     text(os.path.join(out, "data", "sessions.json"), json.dumps(ss))
-    n_img = 0
+    n_img = n_web = 0
+    pool = ThreadPoolExecutor(os.cpu_count() or 4) if Image else None
     for s in ss:
         p = s["p"]
         files = S.painter_files(p)
         st = S.stream("p:" + p, files)
         ev = st["events"]
         n = sum(len(im) for _, _, im in [(f, 0, S._cache[f]["images"]) for f in files])
-        exts = []
+        exts, web, jobs = [], [0] * n, {}
         for i in range(n):
             im = S.image(st, i)
             ext = EXT.get(im[0], "bin") if im else "bin"
             exts.append(ext)
             if im:
-                write(os.path.join(out, "data", p, "img", f"{i}.{ext}"), base64.b64decode(im[1]))
+                data = base64.b64decode(im[1])
+                changed = write(os.path.join(out, "data", p, "img", f"{i}.{ext}"), data)
+                if Image:
+                    t, v = (os.path.join(out, "data", p, d, f"{i}.jpg") for d in ("t", "v"))
+                    if changed or not (os.path.isfile(t) and os.path.isfile(v)):
+                        jobs[i] = pool.submit(web_copies, data, t, v)
+                    else:
+                        web[i] = 1
+                    WRITTEN.update((os.path.abspath(t), os.path.abspath(v)))
+        for i, job in jobs.items():
+            web[i] = int(job.result())
+            n_web += 1
         n_img += n
         text(os.path.join(out, "data", p, "events.json"),
-             json.dumps({"events": ev, "total": len(ev), "epoch": st["epoch"], "sittings": len(files), "imgext": exts}))
+             json.dumps({"events": ev, "total": len(ev), "epoch": st["epoch"], "sittings": len(files), "imgext": exts, "web": web}))
         # the painting's source, as the live server's /api/file gives it
         cwd, rels = S.painting_sources(ev)
         for rel in sorted(rels):
@@ -135,7 +179,7 @@ def main():
             os.rmdir(d); d = os.path.dirname(d)
     with open(os.path.join(out, MARKER), "w") as fh:
         fh.write("".join(r + "\n" for r in now))
-    print(f"exported {len(ss)} painters, {n_img} images to {out} ({stale} stale files removed)")
+    print(f"exported {len(ss)} painters, {n_img} images ({n_web} new web copies) to {out} ({stale} stale files removed)")
 
 
 if __name__ == "__main__":

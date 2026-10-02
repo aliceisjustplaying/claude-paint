@@ -51,7 +51,8 @@ that shows lead-rich (dense) paint and hidden earlier compositions.
   ARTIC] to canvases of about 200 × 300 cm [MET]. Many late canvases
   (1884–94) measure about 76 × 114 cm (30 × 45 in.) [MET; ARTIC; SAAM].
   A friend describes a new canvas "about 20x30 inches" put on the easel
-  for a one-hour demonstration [MAN p.34].
+  for a demonstration [MAN p.34].
+<!-- research: the demonstration took one hour [MAN p.34]; left out of the painter's copy with the other working times (see §7). -->
 - **Reused canvases.** He painted on "a new canvas or an old one." When
   no fresh canvas was ready "he painted on anything that was convenient,"
   and "the older work was sacrificed to the new" [MAN p.31]. Once the
@@ -203,10 +204,11 @@ The table lists pigments named by witnesses.
   from generals to particulars," with glazing, "delicate touching and
   scumbling" last [SHEL p.32].
 - **Direct painting.** He sometimes "painted frankly" [SON p.254]. One
-  picture painted in a day had "no glazes, no building up of textures by
-  repeated paintings" [MAN p.24]. A one-hour demonstration used the
+  picture had "no glazes, no building up of textures by
+  repeated paintings" [MAN p.24]. A demonstration used the
   transparent method "except that he used partially opaque colors" [MAN
   p.34].
+<!-- research: that picture was painted in a day [MAN p.24] and the demonstration took one hour [MAN p.34]; left out of the painter's copy (see §7). -->
 - **Wholesale changes.** Late in a picture he would glaze a whole area
   with ivory black and wipe some of it out [SON p.129]. He would cover a
   passage with white paint "as if he were plastering a wall" [SON p.139].
@@ -237,12 +239,11 @@ The table lists pigments named by witnesses.
 
 - **Many canvases at once.** "On the dozen or more canvases in his studio
   he worked as the humor seized him, going from one to another with
-  palette and maul-stick, and always standing when painting." He "often …
-  painted fifteen hours a day" [SHEL p.32].
-- **Bare workrooms.** "His studios were nearly always old barns," with
-  "one chair, an easel, and his tubes of paint" [SON p.42].
-- **Outdoors, then indoors.** Outdoor studies could take "a week or more
-  at a time" [SON p.252]. He also made charcoal sketches [SON p.150].
+  palette and maul-stick, and always standing when painting" [SHEL p.32].
+<!-- research: reported working times: he "often … painted fifteen hours a day" [SHEL p.32]; outdoor studies could take "a week or more at a time" [SON p.252]; one picture was painted in a day [MAN p.24]; a demonstration took one hour [MAN p.34]. Left out of the painter's copy: the easel's clock counts the same hours and days of painting, and a painter can take them for a target. Drying times stay. -->
+<!-- research: - **Bare workrooms.** "His studios were nearly always old barns," with "one chair, an easel, and his tubes of paint" [SON p.42]. (Out of the painter's copy: an anecdote with a scene in it, not materials or method.) -->
+- **Outdoors, then indoors.** He made outdoor studies [SON p.252] and
+  charcoal sketches [SON p.150].
 - **Reworking finished pictures.** Accounts describe extensive repainting
   of sold and exhibited works, including scraping with a palette knife
   when the underlying paint was still too wet to rub off [SON pp.144–145;
@@ -271,8 +272,7 @@ The historical names in this note correspond to these tubes: white →
 lead white (assumed); black and ivory black → bone black; yellow ocher → yellow
 ochre; umber → raw umber; sienna → raw sienna; cadmium → cadmium yellow;
 Venetian red → red earth.
-Indian red, Antwerp blue and lemon chrome each rest on one witness;
-bitumen is probable from the paint's crackle (§4).
+<!-- research: Indian red, Antwerp blue and lemon chrome each rest on one witness; bitumen is probable from the paint's crackle (§4). Out of the painter's copy here: the table already marks them, and this section is the plain mapping of names to tubes. -->
 
 ## 10. At this easel
 

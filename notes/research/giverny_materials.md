@@ -56,10 +56,14 @@ yellow, emerald green (it reacts with the cadmium yellows) [TB28].
 
 ## 5. Media and varnish
 
-- **Oils.** Mostly poppy oil, the white in linseed oil. *Uncertain*: the
-  same research reported the reverse for his circle as a whole (the white
-  in poppy oil, the colors in linseed), and neither was tied to one source.
-  Linseed dries fastest and yellows most, then walnut, then poppy.
+- **Oils.** In a painting of after 1916 the colors sampled (greens, a
+  yellow, a red, a lilac) are bound in poppy oil and the one white sampled
+  in linseed oil; several paints of a second late painting are in poppy
+  oil too, with no white sampled there [TB28 p.61]. Two paintings and one
+  white: *Uncertain* as a rule for all his late work. In his paintings of
+  1869 to 1881 it is the other way about: the whites in poppy oil, the
+  grounds in linseed [TB14]. Linseed dries fastest and yellows most, then
+  walnut, then poppy.
 - **Varnish.** The painters of his circle preferred their pictures
   unvarnished: matte, and reading lighter than varnished. *Uncertain* (not
   tied to one source).
@@ -96,7 +100,8 @@ estimates.
 
 ## Sources
 
-- **[TB28]** Roy, A., on Monet's late palette, *National Gallery Technical Bulletin* 28 (2007).
+- **[TB28]** Roy, A., "Monet's Palette in the Twentieth Century: Water-Lilies and Irises", *National Gallery Technical Bulletin* 28 (2007). The passage on the medium (p.61) read. https://www.nationalgallery.org.uk/upload/pdf/roy2007.pdf
+- **[TB14]** White, R. and Pilc, J., "Analyses of Paint Media", *National Gallery Technical Bulletin* 14 (1993), table pp.89–91. Read (page scans). https://www.nationalgallery.org.uk/upload/pdf/white_pilc1993.pdf
 - **[MM22]** A paper of 2022 in *Microscopy and Microanalysis* on a Monet of 1887–89. Authors and title not recorded.
 - **[POZ]** Pozzi, F. et al., on red lakes in French paint of the late 19th century, *Journal of Raman Spectroscopy* (2014).
 - **[OTE]** Otero, V. et al., on barium, zinc and strontium yellows, *Heritage Science* 5:46 (2017).

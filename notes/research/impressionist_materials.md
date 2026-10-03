@@ -58,10 +58,18 @@ lake, aureolin, chromium oxide green, manganese violet) were not added to the ca
 
 ## 5. Media and varnish
 
-- **Oils.** Lead white usually in poppy oil, the colors in linseed
-  (*Uncertain*: for Monet's late paintings the same research reported the
-  reverse, mostly poppy oil and the white in linseed).
-  Drying and yellowing run linseed, then walnut, then poppy [AM].
+- **Oils.** In paintings of 1869 to the 1880s by Monet, Pissarro, Sisley,
+  Renoir and Morisot the white is usually bound in poppy oil; many colors
+  are in poppy oil too (greens, a pale blue, a red), some darks in walnut,
+  and linseed is the oil of most grounds, of blacks and of some dark
+  paints; a few paints hold two oils [TB14]. Not every white: in two of
+  three Renoirs sampled, whites are in linseed [TB14]. Seurat's lead white
+  was usually in poppy oil, his red lakes and vermilion mostly in linseed,
+  his blues sometimes in poppy [TB24 p.26]. Colormen's practice: poppy oil
+  for the light colors, linseed for the poor driers [AM p.72]. Monet's
+  late paintings differ (the colors sampled in poppy oil, the one white in
+  linseed [TB28 p.61]). Drying and yellowing run linseed, then walnut,
+  then poppy [AM].
 - **Driers.** Oil cooked with litharge, siccatif de Courtrai or de
   Harlem: much faster drying, darker and more brittle with too much [AM].
 - **Turpentine.** Lean, fast, matte films; in *peinture à l'essence* the
@@ -110,10 +118,11 @@ lake, yellow lake and vine black are estimates.
 
 ## Sources
 
-- **[AM]** Bomford, D. et al., *Art in the Making: Impressionism* (London: National Gallery, 1990). Read through ColourLex.
+- **[AM]** Bomford, D. et al., *Art in the Making: Impressionism* (London: National Gallery, 1990). Read through ColourLex; its section on paint media (p.72 and the table after it) through full-text search excerpts only.
+- **[TB14]** White, R. and Pilc, J., "Analyses of Paint Media", *National Gallery Technical Bulletin* 14 (1993), table pp.89–91. Read (page scans). https://www.nationalgallery.org.uk/upload/pdf/white_pilc1993.pdf
 - **[DG]** National Gallery, *Art in the Making: Degas* (London, 2004). Read through ColourLex.
-- **[TB24]** Kirby, J. et al., on Seurat, *National Gallery Technical Bulletin* 24 (2003).
-- **[TB28]** Roy, A., on Monet's late palette, *National Gallery Technical Bulletin* 28 (2007).
+- **[TB24]** Kirby, J. et al., on Seurat, *National Gallery Technical Bulletin* 24 (2003). The passage on oils (p.26) read.
+- **[TB28]** Roy, A., "Monet's Palette in the Twentieth Century: Water-Lilies and Irises", *National Gallery Technical Bulletin* 28 (2007). The passage on the medium (p.61) read. https://www.nationalgallery.org.uk/upload/pdf/roy2007.pdf
 - **[BUT]** Butler, M. H., on the materials of ten Cézannes of 1877–1906, AIC preprints (1984). Read through secondary summaries.
 - **[OTE]** Otero, V. et al., on barium, zinc and strontium yellows, *Heritage Science* 5:46 (2017).
 - **[NEW]** Newfields (Indianapolis Museum of Art), catalogue of its Pissarro paintings.

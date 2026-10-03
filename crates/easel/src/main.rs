@@ -952,7 +952,7 @@ impl Server {
                     "{e}\n(the chunk failed and is not in the log; status reports the rebuild's progress and other commands must retry after it)"
                 )),
                 Err(e) if self.s.stale => Err(format!(
-                    "{e}\n(the chunk failed and changed nothing. It had changed tables from earlier chunks, and though what they hold is back, how they are laid out (which decides the order `pairs` walks them in) can't be put back, so the easel now rebuilds the painting from its log, as a reopen does; status reports progress and other commands must retry after that)"
+                    "{e}\n(the chunk failed and changed nothing. It had changed tables from earlier chunks, and though what they hold is back, how they are laid out (which decides the order `pairs` walks them in, from engine 3 only the length `#` finds in a table with holes) can't be put back, so the easel now rebuilds the painting from its log, as a reopen does; status reports progress and other commands must retry after that)"
                 )),
                 Err(e) => Err(format!("{e}\n(the chunk failed and changed nothing)")),
             },

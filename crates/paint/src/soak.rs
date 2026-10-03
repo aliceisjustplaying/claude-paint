@@ -498,6 +498,7 @@ impl Canvas {
         if !(p.ml > 0.0 && p.ml.is_finite()) {
             return Err("pour: ml must be positive".into());
         }
+        self.check_mask(m);
         let (w, h) = (self.f.w, self.f.h);
         let f = self.f;
         let dx = self.px_mm();
@@ -588,7 +589,6 @@ impl Canvas {
         let off = hs.iter().cloned().fold(0.0f32, f32::max);
         // the front: Dijkstra over capillary travel, filling as it goes
         let mut key = vec![f32::INFINITY; nl];
-        let mut parent = vec![u32::MAX; nl];
         let mut done = vec![false; nl];
         let mut take = vec![0.0f32; nl];
         let mut order: Vec<u32> = Vec::new();
@@ -596,7 +596,6 @@ impl Canvas {
         for li in 0..nl {
             if landv[li] > 0.0 && cells[li].1 > 0.0 {
                 key[li] = off - hs[li];
-                parent[li] = li as u32;
                 heap.push(Reverse((kbits(key[li]), li as u32)));
             }
         }
@@ -644,7 +643,6 @@ impl Canvas {
                 let nk = key[li] + len * dx / v;
                 if nk < key[nli] {
                     key[nli] = nk;
-                    parent[nli] = li as u32;
                     heap.push(Reverse((kbits(nk), nli as u32)));
                 }
             }
@@ -968,9 +966,12 @@ impl Canvas {
     /// pigment still loose in it. Dry cloth gives nothing back. Returns the
     /// millilitres lifted.
     pub fn blot(&mut self, m: &Mask, strength: f32) -> Result<f32, String> {
-        let Some(s) = self.soak.as_mut() else {
+        if self.soak.is_none() {
             return Err("blot: the canvas has a ground (blotting lifts what soaked into a raw canvas)".into());
-        };
+        }
+        self.check_mask(m);
+        let film = &self.film;
+        let s = self.soak.as_mut().unwrap();
         let (w, h) = (self.f.w, self.f.h);
         let f = self.f;
         let area = self.mm_per_unit / f.scale;
@@ -985,8 +986,9 @@ impl Canvas {
                 continue;
             }
             n_px += 1;
+            // (a paint film keeps the rag off the cloth under it)
             let sn = s.solv_at(i, now);
-            if sn <= 0.0 {
+            if sn <= 0.0 || film[i] > 1e-3 {
                 continue;
             }
             let wet = (sn / s.cap[i].max(1.0)).min(1.0);
@@ -1185,6 +1187,46 @@ mod tests {
         let on_line = mean_lum(&c, 480.0, 497.0, 520.0, 503.0);
         let beside = mean_lum(&c, 480.0, 520.0, 520.0, 526.0);
         assert!(on_line < beside * 0.9, "line {line} on {on_line} beside {beside}");
+    }
+
+    #[test]
+    fn a_corrupt_soak_checkpoint_is_an_error() {
+        let base = raw(80, 300.0);
+        let refused = |edit: &dyn Fn(&mut Soak)| {
+            let mut c = base.clone();
+            edit(c.soak.as_mut().unwrap());
+            let mut b = Vec::new();
+            c.write_state(&mut b, "").unwrap();
+            Canvas::read_state(&mut std::io::Cursor::new(b)).is_err()
+        };
+        assert!(!refused(&|_| {}));
+        assert!(refused(&|s| s.active = Some((0, 0, 81, 10))));
+        assert!(refused(&|s| s.stained = Some((5, 0, 4, 10))));
+        assert!(refused(&|s| s.t0 = f64::NAN));
+        assert!(refused(&|s| s.fabric.cap_um = 0.0));
+        assert!(refused(&|s| s.kf[1] = f32::INFINITY));
+    }
+
+    #[test]
+    fn a_rag_does_not_reach_cloth_under_paint() {
+        let mut c = raw(160, 300.0);
+        c.pour(&disc(&c, 500.0, 500.0, 60.0), &blue_pour(20.0, 8.0)).unwrap();
+        let left = Mask::from_fn(c.frame(), |x, _| if x < 500.0 { 1.0 } else { 0.0 });
+        c.glaze(&Pigment::transparent(hex("#806040")), Some(&left), |_, _| 2.0);
+        let solv = |c: &Canvas, x: f32| c.soak.as_ref().unwrap().solv[c.window().index(x, 500.0)];
+        let (under, bare) = (solv(&c, 480.0), solv(&c, 520.0));
+        assert!(under > 0.0 && bare > 0.0);
+        c.blot(&disc(&c, 500.0, 500.0, 50.0), 1.0).unwrap();
+        assert_eq!(solv(&c, 480.0), under);
+        assert!(solv(&c, 520.0) < 0.5 * bare);
+    }
+
+    #[test]
+    #[should_panic(expected = "does not match canvas")]
+    fn a_pour_through_another_canvas_mask_panics() {
+        let mut c = raw(100, 300.0);
+        let other = raw(120, 300.0);
+        c.pour(&disc(&other, 500.0, 500.0, 30.0), &blue_pour(5.0, 4.0)).unwrap();
     }
 
     #[test]

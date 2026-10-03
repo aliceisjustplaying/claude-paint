@@ -1226,7 +1226,7 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
                 };
                 let ground = match (&fabric, o.get::<Value>("ground")?) {
                     (Some(_), Value::Nil) => Vec::new(),
-                    (Some(_), Value::Table(t)) if t.raw_len() == 0 => Vec::new(),
+                    (Some(_), Value::Table(t)) if t.is_empty() => Vec::new(),
                     (Some(_), _) => return err("canvas: a raw canvas has no ground (leave ground= out)"),
                     (None, g) => ground_of(&tubes, &g)?,
                 };
@@ -1594,6 +1594,19 @@ mod tests {
 
     fn run(src: &str) -> Result<String, String> {
         Session::replay(200).unwrap().run(src).map(|r| r.out)
+    }
+
+    // a raw canvas takes no ground: an empty table is none, anything in it
+    // (in either part of the table) is refused
+    #[test]
+    fn a_raw_canvas_refuses_a_ground() {
+        if let Err(e) = run(r#"canvas{size=300, aspect=1, linen=15, raw="cotton duck", ground={}}"#) {
+            panic!("{e}");
+        }
+        for g in ["{um=50}", r#"{{pile={{"lead white", 1}}, um=50, apply="knife"}}"#] {
+            let e = run(&format!(r#"canvas{{size=300, aspect=1, linen=15, raw="cotton duck", ground={g}}}"#)).unwrap_err();
+            assert!(e.contains("a raw canvas has no ground"), "{g}: {e}");
+        }
     }
 
     // math.random: stock Lua's errors, whole 64-bit ranges, and the draws

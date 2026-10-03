@@ -14,7 +14,9 @@
 //!
 //! Format: little-endian binary, `MAGIC`, then a free-form UTF-8 header
 //! (length-prefixed; the caller's key=value lines), then the canvas. If you
-//! add state to `Canvas` or `Wet`, add it here and bump `MAGIC`.
+//! add state to `Canvas` or `Wet`, add it here and bump `MAGIC` (unless, like
+//! the soak below, it is an optional section at the end that every canvas
+//! without it leaves out).
 //!
 //! The format is version 8 (`MAGIC` is `PAINTCK8`); files of any other
 //! version are refused (re-run to checkpoint again). After the header the
@@ -30,7 +32,16 @@
 //! and hand time (`tally`): the slice setting and the complete ledger, with
 //! the part already on the clock, so a resumed hand-timed painting keeps
 //! aging its passes and owes the time it owed; and the engine version it is
-//! painted with (`crate::ENGINE`).
+//! painted with (`crate::ENGINE`). A raw canvas (`soak`) then has a `SOAK`
+//! mark and what has soaked into it: the fabric (name, colour, pore volume,
+//! warp bias, the dry cloth's absorption), the clock it was set up at, its
+//! seed, the pour count, the active and stained boxes, then per pixel the
+//! weave, pore volume, pigment, oil (in place, still creeping, when it
+//! arrives, since when) and turpentine (amount, evaporating from and
+//! until), and the deposited pigments' absorption and scattering. Every
+//! other canvas stops at the engine version, so its checkpoint is byte for
+//! byte what it was and `MAGIC` stays `PAINTCK8`; a reader finds either the
+//! end of the file or the mark.
 
 use crate::canvas::{Canvas, Frame};
 use crate::surface::Linen;
@@ -135,6 +146,10 @@ fn read_soak(r: &mut impl Read, n: usize) -> io::Result<crate::soak::Soak> {
     fabric.cap_um = f[3];
     fabric.warp_bias = f[4];
     let t0 = f64::from_bits(get_u64(r)?);
+    // (a corrupt file is an error here, not a panic or NaN pixels later)
+    if !(t0.is_finite() && f.iter().all(|v| v.is_finite()) && fabric.cap_um > 0.0 && fabric.warp_bias > 0.0 && f[5..].iter().all(|&k| k >= 0.0)) {
+        return Err(bad("checkpoint soak is invalid"));
+    }
     let seed = get_u64(r)?;
     let pours = get_u64(r)?;
     let active = get_box(r)?;
@@ -409,7 +424,17 @@ impl Canvas {
         // a raw canvas's soak, if one was written
         let mut b = [0u8; 8];
         match r.read_exact(&mut b) {
-            Ok(()) if u64::from_le_bytes(b) == SOAK_MARK => c.soak = Some(Box::new(read_soak(r, n)?)),
+            Ok(()) if u64::from_le_bytes(b) == SOAK_MARK => {
+                let s = read_soak(r, n)?;
+                for sb in [s.active, s.stained] {
+                    if let Some((bx0, by0, bx1, by1)) = sb
+                        && !(bx0 <= bx1 && bx1 <= w && by0 <= by1 && by1 <= h)
+                    {
+                        return Err(bad("checkpoint soak box is invalid"));
+                    }
+                }
+                c.soak = Some(Box::new(s));
+            }
             Ok(()) => return Err(bad("checkpoint has trailing data")),
             Err(e) if e.kind() == io::ErrorKind::UnexpectedEof => {}
             Err(e) => return Err(e),

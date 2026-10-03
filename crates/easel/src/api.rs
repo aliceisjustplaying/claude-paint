@@ -565,10 +565,14 @@ impl UserData for PileU {
         });
         m.add_meta_method(MetaMethod::ToString, |_, p, ()| {
             let parts: Vec<String> = p.parts.iter().map(|(n, k)| format!("{n} {}", fmt_num(*k))).collect();
-            if p.medium < 0.0 {
-                return Ok(format!("pile({}; blotted {})", parts.join(", "), fmt_num(-p.medium)));
+            let mut tail = if p.medium < 0.0 { format!("blotted {}", fmt_num(-p.medium)) } else { format!("medium {}", fmt_num(p.medium)) };
+            if p.mix.solvent > 0.0 {
+                tail += &format!(", turps {}", fmt_num(p.mix.solvent));
             }
-            Ok(format!("pile({}; medium {})", parts.join(", "), fmt_num(p.medium)))
+            if p.mix.oil_rate != 1.0 {
+                tail += if p.mix.oil_rate < 0.7 { ", in poppy oil" } else { ", in walnut oil" };
+            }
+            Ok(format!("pile({}; {tail})", parts.join(", ")))
         });
     }
 }
@@ -1360,7 +1364,7 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
     {
         let st = st.clone();
         g.set("pile", lua.create_function(move |_, t: Table| {
-            check_keys(&t, &["medium", "blot"], "pile")?;
+            check_keys(&t, &["medium", "blot", "turps", "oil"], "pile")?;
             let medium = num(&t, "medium")?.unwrap_or(0.0);
             if !(0.0..=0.95).contains(&medium) {
                 return err("pile: medium is the share of oil medium mixed in, 0 (as from the tube) to 0.95");
@@ -1376,9 +1380,24 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
                 return err("pile: blot draws oil out and medium adds it; give one");
             }
             let medium = if blot > 0.0 { -blot } else { medium };
+            // turps=: thinned with that share of turpentine, which flows on
+            // the brush and evaporates as the paint is laid (engine 3)
+            let turps = num(&t, "turps")?.unwrap_or(0.0);
+            if !(0.0..=0.9).contains(&turps) {
+                return err("pile: turps is the share of turpentine the paint is thinned with, 0 to 0.9");
+            }
+            // oil=: what the paint is ground in, "linseed" (as the tubes come), "walnut" or "poppy"
+            let oil_rate = match t.get::<Option<String>>("oil")?.as_deref() {
+                None | Some("linseed") => 1.0,
+                Some("walnut") => 0.8,
+                Some("poppy") => 0.6,
+                Some(o) => return err(format!("pile: oil {o:?}: \"linseed\", \"walnut\" or \"poppy\"")),
+            };
             let tubes = st.borrow().tubes.clone();
             let (parts, given) = parts_of(&tubes, &t, "pile")?;
-            let mix = tubes.pile(parts);
+            let mut mix = tubes.pile(parts);
+            mix.solvent = turps;
+            mix.oil_rate = oil_rate;
             if st.borrow().canvas.is_none() {
                 return Err(no_canvas());
             }
@@ -1604,7 +1623,7 @@ fn ground_of(tubes: &Palette, v: &Value) -> Result<Vec<Ground>> {
     let mut out = Vec::new();
     for l in t.sequence_values::<Value>() {
         let Value::Table(l) = l? else { return err(format!("canvas: each ground layer is a table\n{CANVAS_HELP}")) };
-        check_keys(&l, &["pile", "um", "apply", "texture"], "ground layer")?;
+        check_keys(&l, &["pile", "um", "apply", "texture", "absorbent"], "ground layer")?;
         let Value::Table(p) = l.get::<Value>("pile")? else { return err(format!("canvas: a ground layer needs pile={{{{tube, parts}}, ...}}\n{CANVAS_HELP}")) };
         let (parts, _) = parts_of(tubes, &p, "ground")?;
         let m = tubes.pile(parts);
@@ -1619,7 +1638,16 @@ fn ground_of(tubes: &Palette, v: &Value) -> Result<Vec<Ground>> {
             Some("brush") => Apply::Brush,
             _ => return err("canvas: a ground layer's apply= is \"knife\", \"roller\" or \"brush\""),
         };
-        out.push(Ground { color: m.color, hiding: m.hiding, um, stiff: m.stiff, apply });
+        // absorbent=: a chalk and glue ground (true, or 0..1), which draws oil
+        // out of the paint laid on it
+        let absorbent = match l.get::<Value>("absorbent")? {
+            Value::Nil => 0.0,
+            Value::Boolean(b) => if b { 1.0 } else { 0.0 },
+            Value::Number(n) => (n as f32).clamp(0.0, 1.0),
+            Value::Integer(n) => (n as f32).clamp(0.0, 1.0),
+            _ => return err("canvas: a ground layer's absorbent= is true or 0..1"),
+        };
+        out.push(Ground { color: m.color, hiding: m.hiding, um, stiff: m.stiff, apply, absorbent });
     }
     if out.is_empty() {
         return err(format!("canvas: ground= needs at least one layer\n{CANVAS_HELP}"));

@@ -146,10 +146,11 @@ function realOf(full: string): string {
 	}
 }
 
-export function lookArgs(p: { crop?: string; mode?: string; size?: number; grid?: boolean | number }): string[] {
+export function lookArgs(p: { crop?: string; mode?: string; size?: number; grid?: boolean | number; light?: string }): string[] {
 	const a: string[] = [];
 	if (p.crop) a.push("--crop", p.crop);
 	if (p.mode) a.push("--mode", p.mode);
+	if (p.light) a.push("--light", p.light);
 	if (p.size !== undefined) a.push("--size", String(p.size));
 	if (p.grid === true) a.push("--grid");
 	else if (typeof p.grid === "number") a.push("--grid", String(p.grid));

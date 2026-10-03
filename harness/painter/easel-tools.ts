@@ -44,11 +44,13 @@ export function registerEaselTools(pi: ExtensionAPI, studio: string): void {
 			description:
 				"Look at the canvas as it is now. Without options: the whole canvas, scaled down. " +
 				"crop: \"x0,y0,x1,y1\" in canvas units (two opposite corners), shown at 1:1 pixels. " +
-				"mode: \"value\", \"squint\", \"mirror\" or several, comma-separated. size: the long side in pixels. " +
+				"mode: \"value\", \"squint\", \"mirror\", \"relief\" (a raking light on the paint's ridges and furrows) or several, comma-separated. " +
+				"light: \"azimuth,elevation\" in degrees for the relief light (default \"135,25\", from the upper left). size: the long side in pixels. " +
 				"grid: true, or a spacing in canvas units.",
 			parameters: Type.Object({
 				crop: Type.Optional(Type.String()),
 				mode: Type.Optional(Type.String()),
+				light: Type.Optional(Type.String()),
 				size: Type.Optional(Type.Number()),
 				grid: Type.Optional(Type.Union([Type.Boolean(), Type.Number()])),
 			}),

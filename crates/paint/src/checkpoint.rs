@@ -16,7 +16,8 @@
 //! (length-prefixed; the caller's key=value lines), then the canvas. If you
 //! add state to `Canvas` or `Wet`, add it here and bump `MAGIC`.
 //!
-//! The format is version 8 (`MAGIC` is `PAINTCK8`); files of any other
+//! The format is version 9 (`MAGIC` is `PAINTCK9`: engine 3's wet paint carries
+//! solvent and oil, and the canvas its gloss and the ground's absorbency); files of any other
 //! version are refused (re-run to checkpoint again). After the header the
 //! writer stores, in order: the frame and crop window, the scale and mm per
 //! unit, the linen (if any), the surface generation, the stroke counter and
@@ -37,7 +38,7 @@ use crate::surface::Linen;
 use crate::wet::LAT;
 use std::io::{self, Read, Write};
 
-const MAGIC: &[u8; 8] = b"PAINTCK8";
+const MAGIC: &[u8; 8] = b"PAINTCK9";
 
 fn put_u64(w: &mut impl Write, v: u64) -> io::Result<()> {
     w.write_all(&v.to_le_bytes())
@@ -133,6 +134,8 @@ impl Canvas {
         put_all(w, self.px.iter().flat_map(|p| *p))?;
         put_all(w, self.height.iter().copied())?;
         put_all(w, self.film.iter().copied())?;
+        put_all(w, self.gloss.iter().copied())?;
+        put_all(w, self.absorb.iter().copied())?;
         put_all(w, wt.vol.iter().copied())?;
         put_all(w, wt.lat.iter().flat_map(|l| *l))?;
         put_all(w, wt.hide.iter().flat_map(|h| *h))?;
@@ -243,12 +246,15 @@ impl Canvas {
         c.px = px.as_chunks::<3>().0.to_vec();
         c.height = get_all(r, n)?;
         c.film = get_all(r, n)?;
+        c.gloss = get_all(r, n)?;
+        c.absorb = get_all(r, n)?;
+        c.absorb_any = c.absorb.iter().any(|&a| a > 0.0);
         let mut wet = crate::wet::Wet::new(n);
         wet.vol = get_all(r, n)?;
         let lat = get_all(r, n * LAT)?;
         wet.lat = lat.as_chunks::<LAT>().0.to_vec();
-        let hide = get_all(r, n * 3)?;
-        wet.hide = hide.as_chunks::<3>().0.to_vec();
+        let hide = get_all(r, n * 5)?;
+        wet.hide = hide.as_chunks::<5>().0.to_vec();
         wet.stroke = get_all(r, n)?.into_iter().map(f32::to_bits).collect();
         wet.touched = get_all(r, n)?.into_iter().map(f32::to_bits).collect();
         wet.current = current;

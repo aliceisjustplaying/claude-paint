@@ -51,7 +51,24 @@ painter never saw relief either: looks showed color only.
 - **Sketches**: a session whose name starts with `sketch` paints at 600 px
   instead of 2400 (about 16 times faster) for trying out a composition; its
   log replays at the same width.
-- **The giverny box**: see `notes/giverny-box.md`.
+- **Materials** (`Paint::solvent`, `Paint::oil`, two more entries in the wet
+  paint's `Prop`, mixed by volume):
+  - `pile{turps=0..0.9}`: turpentine makes paint flow on the brush (it
+    doesn't clump) and evaporates as it is laid (`Surf::add`): the film is
+    that much thinner, of the paint's own body.
+  - `pile{oil="linseed"|"walnut"|"poppy"}`: drying ×1, 0.8, 0.6.
+  - `canvas{ground={{..., absorbent=true}}}`: a chalk and glue ground holds
+    `ABSORB_COATS` (0.6 coats) of oil it draws out of paint laid on it
+    (`Surf::add`): the film loses that oil, gets stiffer and leaner. Dry
+    paint seals it.
+  - **Gloss** (`Canvas::gloss`): a baked film's gloss follows its oil
+    (smoothstep 0.15..1.3), blended with the surface under it for thin
+    films; varnish sets it to 1. Engine 3 shows a matte surface with the
+    first-surface reflection it scatters back (`SURFACE_REFLECTANCE` 4%,
+    `haze`) in looks and saved pictures. Checkpoint format 9.
+  - Not modeled: yellowing, fading of lakes, color change of chromates.
+- **The giverny and impressionist boxes**: see `notes/giverny-box.md` and
+  `notes/impressionist-materials.md` (from analyses of the paintings).
 
 ## Not done
 
@@ -60,4 +77,3 @@ painter never saw relief either: looks showed color only.
 - The relief light in `finish`/`relief()` still uses its fixed light; a
   finished painting is best shown with `look --mode relief` at a gentle
   elevation, or `relief()` once it is retuned for engine 3's thicker paint.
-- The pi harness's look tool (harness/painter) does not pass `light` yet.

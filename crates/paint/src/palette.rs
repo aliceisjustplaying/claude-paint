@@ -226,6 +226,12 @@ pub struct Mixture {
     /// volume. `Mixture::paint` leaves paint at the average rate (1); a pile
     /// laid as knifed carries this rate (`Mixture::laid`).
     pub drying: f32,
+    /// The share of turpentine (volatile solvent) the pile is thinned with
+    /// (engine 3, see `Paint::solvent`).
+    pub solvent: f32,
+    /// The drying of the oil the paint is ground in, relative to linseed
+    /// (1): walnut about 0.8, poppy about 0.6 (it also yellows least).
+    pub oil_rate: f32,
 }
 
 /// The box a painting is painted from when nothing names another.
@@ -492,7 +498,7 @@ impl Palette {
     fn mixture(&self, parts: Vec<(usize, f32)>) -> Mixture {
         let (color, scatter, stiff) = self.eval(&parts);
         let drying = parts.iter().map(|&(i, f)| self.tubes[i].drying * f).sum::<f32>() / parts.iter().map(|p| p.1).sum::<f32>().max(1e-9);
-        Mixture { hiding: hiding_of(luminance(color), scatter), parts, color, scatter, stiff, drying }
+        Mixture { hiding: hiding_of(luminance(color), scatter), parts, color, scatter, stiff, drying, solvent: 0.0, oil_rate: 1.0 }
     }
 
     /// Jitter the proportions (relative sd `amount`) and remix, so repeated
@@ -504,7 +510,7 @@ impl Palette {
         let mut parts: Vec<(usize, f32)> = m.parts.iter().map(|&(i, f)| (i, (f * (1.0 + rng.normal() * amount)).max(0.0))).collect();
         let s: f32 = parts.iter().map(|p| p.1).sum();
         parts.iter_mut().for_each(|p| p.1 /= s.max(1e-9));
-        self.mixture(parts)
+        Mixture { solvent: m.solvent, oil_rate: m.oil_rate, ..self.mixture(parts) }
     }
 
     /// Human-readable recipe, e.g. "lead white 0.72 + yellow ochre 0.20 + raw umber 0.08".
@@ -523,14 +529,16 @@ impl Mixture {
         // concentration, the masstone stays; the paint flows (stiffness
         // falls faster than hiding). The paint carries S itself: hiding
         // rounds to 1 for strong scatterers and would lose it.
-        Paint::km(self.color, self.scatter * k.max(1e-3), (self.stiff * k * k).min(1.0))
+        let p = Paint::km(self.color, self.scatter * k.max(1e-3), (self.stiff * k * k).min(1.0));
+        // its oil relative to tube paint: medium adds oil, blotting draws it out
+        Paint { solvent: self.solvent, oil: (1.0 + 1.5 * medium).max(0.1), ..p }
     }
 
     /// This pile as paint on the brush, thinned with `medium` (0..1), drying
     /// at its tubes' rate (`drying`). Medium adds oil, which the drying
     /// model already counts (a fat film stays open longer).
     pub fn laid(&self, medium: f32) -> Paint {
-        self.paint(medium).with_drying(self.drying)
+        self.paint(medium).with_drying(self.drying * self.oil_rate)
     }
 }
 

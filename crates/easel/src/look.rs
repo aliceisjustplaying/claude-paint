@@ -564,7 +564,7 @@ mod tests {
 
     #[test]
     fn crops_keep_native_pixels_and_reject_either_oversize_axis() {
-        let mut c = Canvas::new_window(1300, 1.0, [0.0; 3], None);
+        let mut c = Canvas::new_window(1300, 1.0, [0.0; 3], None).with_engine(2); // (pure colors: no engine-3 matte veil)
         c.apply(|x, y, _| if x < 500.0 && y < 500.0 { [1.0, 0.0, 0.0] } else { [0.0, 0.0, 1.0] });
         let out = out_dir().join("native-crop.png");
         for size in [None, Some(40), Some(9999)] {

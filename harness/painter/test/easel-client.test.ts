@@ -68,6 +68,7 @@ test("look's options become the easel's arguments", () => {
 		["--crop", "300,200,500,350", "--mode", "value,squint", "--size", "600", "--grid", "10"]);
 	assert.deepEqual(lookArgs({ grid: true }), ["--grid"]);
 	assert.deepEqual(lookArgs({ grid: false }), []);
+	assert.deepEqual(lookArgs({ mode: "relief", light: "45,15" }), ["--mode", "relief", "--light", "45,15"]);
 });
 
 test("a long log keeps its end and says what was left out", () => {

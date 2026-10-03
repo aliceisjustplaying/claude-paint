@@ -6,6 +6,24 @@ use crate::pigment::Pigment;
 use crate::rng::hash2;
 use crate::surface::{COAT_UM, Linen, vnoise};
 
+/// How glossy an oil ground is (a lead white priming, semi-matte).
+pub(crate) const OIL_GROUND_GLOSS: f32 = 0.5;
+/// The share of light a paint surface reflects at its first surface (oil,
+/// n ≈ 1.5: about 4%). A glossy surface sends it away from the viewer; a
+/// matte one scatters it back, a veil of white over the colors (engine 3).
+pub(crate) const SURFACE_REFLECTANCE: f32 = 0.04;
+/// The oil a fresh absorbent (chalk and glue) ground can draw out of the
+/// paint laid on it, coats per unit of `absorbent` (about 15 µm of oil).
+pub(crate) const ABSORB_COATS: f32 = 0.6;
+
+/// A matte surface's veil: color `p` seen with the first-surface reflection
+/// a surface of gloss `g` scatters back to the viewer.
+#[inline]
+pub(crate) fn haze(p: Rgb, g: f32) -> Rgb {
+    let k = SURFACE_REFLECTANCE * (1.0 - g.clamp(0.0, 1.0));
+    [p[0] * (1.0 - k) + k, p[1] * (1.0 - k) + k, p[2] * (1.0 - k) + k]
+}
+
 /// Fraction of a glaze layer that stays as film (the rest of the "thickness"
 /// is how deep the color reads; a glaze is mostly medium, and thin).
 const GLAZE_FILM: f32 = 0.3;
@@ -181,6 +199,15 @@ pub struct Canvas {
     pub(crate) height: Vec<f32>,
     /// Accumulated paint film in coats (bookkeeping).
     pub(crate) film: Vec<f32>,
+    /// How glossy the dry surface is, 0 (matte: lean paint, an absorbent
+    /// ground) to 1 (oily paint, varnish). Engine 3 shows a matte surface
+    /// with the light its first surface scatters (`haze`).
+    pub(crate) gloss: Vec<f32>,
+    /// The oil an absorbent ground can still draw out of paint laid on it,
+    /// coats (0: an oil ground, or one sealed by paint). Engine 3.
+    pub(crate) absorb: Vec<f32>,
+    /// Whether any of the ground is absorbent (so the brushes look).
+    pub(crate) absorb_any: bool,
     /// Total thickness of the ground layers primed so far, µm (what
     /// `Cracks::aged` fits its craquelure to).
     pub(crate) ground_um: f32,
@@ -237,6 +264,9 @@ impl Canvas {
             px: vec![ground; n],
             height: vec![0.0; n],
             film: vec![0.0; n],
+            gloss: vec![OIL_GROUND_GLOSS; n],
+            absorb: vec![0.0; n],
+            absorb_any: false,
             ground_um: 0.0,
             linen: None,
             mm_per_unit: 0.7,
@@ -444,6 +474,22 @@ impl Canvas {
         self.film.par_iter_mut().zip(&t).for_each(|(f, &ti)| *f += ti / COAT_UM);
     }
 
+    /// The top ground layer just laid is absorbent (`absorbent` 0..1, a
+    /// chalk and glue ground: it draws oil out of the paint laid on it and
+    /// dries matte) or not (an oil ground: semi-matte, absorbs nothing).
+    pub fn ground_finish(&mut self, absorbent: f32) {
+        let a = absorbent.clamp(0.0, 1.0);
+        self.absorb.iter_mut().for_each(|v| *v = a * ABSORB_COATS);
+        let g = crate::lerp(OIL_GROUND_GLOSS, 0.05, a);
+        self.gloss.iter_mut().for_each(|v| *v = g);
+        self.absorb_any = a > 0.0;
+    }
+
+    /// A varnish was laid over the whole picture: its surface is glossy.
+    pub fn varnished(&mut self) {
+        self.gloss.iter_mut().for_each(|v| *v = 1.0);
+    }
+
     /// Light the surface relief (paint ridges + weave) from the upper left.
     /// `strength` ≈ 0.3–1.0; `gloss` adds a faint varnish sheen on ridges.
     pub fn relief(&mut self, strength: f32, gloss: f32) {
@@ -565,7 +611,8 @@ impl Canvas {
         let mut buf = vec![0u8; w * h * 3];
         buf.par_chunks_mut(w * 3).enumerate().for_each(|(y, row)| {
             for x in 0..w {
-                let p = self.px[(y + ky0) * bw + x + kx0];
+                let i = (y + ky0) * bw + x + kx0;
+                let p = if self.engine >= 3 { haze(self.px[i], self.gloss[i]) } else { self.px[i] };
                 let (gx, gy) = ((x + ox) as i64, (y + oy) as i64);
                 for c in 0..3 {
                     let d = hash2(gx, gy, c as u64 * 7 + 1) - hash2(gx, gy, c as u64 * 7 + 2);

@@ -53,6 +53,18 @@ canvas{size=<mm>, aspect=<width / height>, linen={<warp>, <weft>}, seed=<seed>,
   crossing strokes, its striations stay). The ground is dry when painting
   starts.
 - `seed`: the randomness of the linen, the ground and everything after.
+- A ground layer's `absorbent=true` (or 0..1) makes it a chalk and glue
+  ground: it draws oil out of the paint laid straight on it until its pores
+  are full, so thin paint there goes lean, stiff, quick to set and matte,
+  while thick paint barely notices. Paint that has dried over it seals it.
+  An oil ground (the default) absorbs nothing and is semi-matte.
+
+**Gloss.** Every dry surface is more or less glossy: oily paint (medium)
+dries glossy, lean paint (blotted, or drawn out by an absorbent ground)
+matte, a thin film shows the surface under it, a varnish makes all of it
+glossy. A matte surface scatters the light its first surface reflects back
+toward you, a faint veil of white over the colors that lifts the darks; a
+glossy one sends it away. The looks and the saved picture show it.
 
 It sets `W` (1000) and `H` (`1000 / aspect`). The canvas is always 1000
 units wide, whatever its pixel width. The origin `(0, 0)` is the upper
@@ -79,6 +91,13 @@ the canvas; you find out by painting with it and looking. A pile mixed by
 hand is a little uneven: each brushload takes slightly different
 proportions (about 6%). The palette has room for 16 piles; the oldest is
 scraped off to make room.
+
+`turps` thins the pile with that share of turpentine (0 to 0.9):
+`pile({{"<tube>", <parts>}, turps=0.6})`. It flows on the brush and
+evaporates as the paint is laid, so it leaves a film that much thinner, of
+the paint's own body: the lean, quick lay-in and wash. `oil` is what the
+paint is ground in: `"linseed"` (as the tubes come), `"walnut"` (dries a
+little slower) or `"poppy"` (dries much slower, yellows least).
 
 `blot` is the opposite of medium: the paint laid out on blotting paper
 first, which draws out that share of its own oil (0 to 0.5):

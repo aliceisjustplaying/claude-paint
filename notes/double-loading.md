@@ -33,12 +33,3 @@ In `work`, `streak=` makes every dip into the pile streaky and `second=` dips
 part of the brush into a second pile after it (a second trip to the palette in
 hand time). Each dip gets its own streak pattern, seeded from where its stroke
 starts.
-
-`paintings/lua/study2.lua` is the test sheet: double-loaded strokes, streaky
-strokes, three paints on one brush and two `work` passes.
-
-Note: on this x86 Linux machine `logs_without_an_engine_line_replay_as_before`
-fails with and without this change (checked on a clean stash: same hash
-mismatch), most likely because float results differ from the machine the
-hashes were taken on. `easel4_free_replays` also fails here; it was not
-rechecked on a clean stash.

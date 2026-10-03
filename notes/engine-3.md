@@ -3,8 +3,8 @@
 Engine 3 is what a new painting is painted with (`--@ engine 3` in its log).
 A log that names engine 1 or 2 replays exactly as before: every change below
 is gated on the canvas's engine, or is a new option an old log never uses.
-Checked: `paintings/lua/nympheas2.lua` (engine 2, 17 chunks) replays to a PNG
-byte-identical to the one saved when it was painted.
+Checked: an engine 2 painting of 17 chunks replays to a PNG byte-identical to
+the one saved when it was painted.
 
 ## Why
 
@@ -58,7 +58,7 @@ painter never saw relief either: looks showed color only.
   dabs keep 0.96 of their flat brightness; at 10° they shadow one another.
 - **Sketches**: a session whose name starts with `sketch` paints at 600 px
   instead of 2400 (about 16 times faster) for trying out a composition; its
-  log replays at the same width.
+  log says so (`--@ sketch`) and replays at the same width under any name.
 - **Materials** (`Paint::solvent`, `Paint::oil`, two more entries in the wet
   paint's `Prop`, mixed by volume):
   - `pile{turps=0..0.9}`: turpentine makes paint flow on the brush (it
@@ -75,8 +75,8 @@ painter never saw relief either: looks showed color only.
     first-surface reflection it scatters back (`SURFACE_REFLECTANCE` 4%,
     `haze`) in looks and saved pictures. Checkpoint format 9.
   - Not modeled: yellowing, fading of lakes, color change of chromates.
-- **The giverny and impressionist boxes**: see `notes/giverny-box.md` and
-  `notes/impressionist-materials.md` (from analyses of the paintings).
+- **The giverny and impressionist boxes**: see `notes/research/giverny_materials.md` and
+  `notes/research/impressionist_materials.md` (from analyses of the paintings).
 
 ## Not done
 

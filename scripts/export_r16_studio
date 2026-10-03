@@ -12,7 +12,9 @@
 #          inness       physics note, the artist's materials note
 #          alma-tadema  (notes/research/<artist>_materials.md) and bin/box, which
 #          tonn         sets the box the painting is painted from; nothing a
-#          hopper       painter can read names another painter
+#          hopper       painter can read names another painter (the
+#          giverny      impressionist studio's note names the painters whose
+#          impressionist paintings its box was found in)
 # dest:    a folder that doesn't exist yet (or is empty)
 #
 # dest gets:
@@ -23,7 +25,7 @@
 #                              others paint from the default tube box)
 #   bin/THIRD_PARTY_NOTICES.md the license notices the binary requires, shipped
 #                              next to it (not at the studio root, where painters browse)
-#   notes/easel_guide.md, notes/techniques.md, notes/research/..., notes/journal.md (empty)
+#   notes/easel_guide.md, notes/techniques.md (rounds that have it), notes/research/..., notes/journal.md (empty)
 #   paintings/lua/             (empty; the session log goes here)
 #
 # The guide's tube table is the one the studio's easel prints for its box
@@ -46,7 +48,7 @@
 # box from the log.
 set -euo pipefail
 
-usage() { echo "usage: $0 friedrich|blank|sargent|inness|alma-tadema|tonn|hopper <dest>" >&2; exit 2; }
+usage() { echo "usage: $0 friedrich|blank|sargent|inness|alma-tadema|tonn|hopper|giverny|impressionist <dest>" >&2; exit 2; }
 [ $# -eq 2 ] || usage
 profile=$1
 dest=$2
@@ -60,6 +62,8 @@ case "$profile" in
   alma-tadema) box=alma-tadema; materials=alma_tadema_materials.md; own=(Alma-Tadema Tadema) ;;
   tonn) box=tonn; materials=tonn_materials.md; own=(Tonn) ;;
   hopper) box=hopper; materials=hopper_materials.md; own=(Hopper) ;;
+  giverny) box=giverny; materials=giverny_materials.md; own=(Monet) ;;
+  impressionist) box=impressionist; materials=impressionist_materials.md; own=(Monet Renoir Pissarro Sisley Morisot Degas 'C[eé]zanne' Seurat) ;;
   *) usage ;;
 esac
 # the studio's easel reads its box from bin/box, else EASEL_BOX: not from the
@@ -137,7 +141,9 @@ fi
 mkdir -p "$dest/bin" "$dest/paintings/lua"
 cp "$built" "$dest/bin/easel"
 [ -z "$box" ] || echo "$box" > "$dest/bin/box"
-notes=(notes/easel_guide.md notes/techniques.md notes/research/oil_paint_physics.md)
+notes=(notes/easel_guide.md notes/research/oil_paint_physics.md)
+# (the techniques handbook came with engine 3: older rounds have none)
+! git -C "$repo" cat-file -e "$branch:notes/techniques.md" 2>/dev/null || notes+=(notes/techniques.md)
 [ -z "$materials" ] || notes+=("notes/research/$materials")
 git -C "$repo" archive --format=tar "$branch" -- "${notes[@]}" | tar -x -C "$dest"
 git -C "$repo" archive --format=tar "$branch" -- THIRD_PARTY_NOTICES.md | tar -x -C "$dest/bin"

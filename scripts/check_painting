@@ -11,23 +11,26 @@
 # committed record, and a session of the replay build (EASEL_ROOT=<workdir>)
 #   1. opens it, which replays the log (a chunk that fails to replay fails
 #      here),
-#   2. runs `easel check`: a second replay in a fresh session, compared bit
-#      for bit with the first,
-#   3. saves the replayed canvas (<workdir>/replayed.png) and compares it
+#   2. saves the replayed canvas (<workdir>/replayed.png) and compares it
 #      byte for byte with the live canvas the painter's session saved when it
 #      closed (<studio>/out/easel/painting/live.png; live.txt says how many
 #      chunks it holds and how many of those the session had replayed from
 #      the log rather than painted), and with the painter's last save
-#      (<studio>/out/easel/painting/painting.png), if there is one.
+#      (<studio>/out/easel/painting/painting.png), if there is one,
+#   3. closes, which writes the replay's save file (the canvas state and the
+#      studio fields, crates/easel/src/save.rs), and compares it byte for byte
+#      with the save the painter's session wrote at close
+#      (<studio>/out/easel/painting/live.ckpt, or live.ckpt.zst / .gz once
+#      scripts/finish_painting has compressed it). The replay's copy is
+#      deleted after.
 # It also says whether the studio's committed record
 # (out/easel/painting/committed.lua) equals its log.
 #
 # Prints a report and, last, one line starting "check:": "check: ok" when
-# the replays agree with each other and with the live canvas; "check:
-# replay-only agreement" when they agree with each other but there is no live
-# canvas of the whole log to compare with (none saved, one saved at another
-# chunk count, or one the session had replayed entirely); "check: DIFFERS"
-# otherwise. Exit 0 for the first two, 1 for DIFFERS or a log that doesn't
+# the replay agrees with the live canvas or the live save and differs from
+# neither; "check: replay only" when the log replays but there is neither of
+# the whole log to compare with (none saved, saved at another chunk count, or
+# by a session that had replayed every chunk); "check: DIFFERS" otherwise. Exit 0 for the first two, 1 for DIFFERS or a log that doesn't
 # replay (2: usage). The comparison with the painter's save is reported, not
 # judged: a painter may have painted after its last save.
 set -euo pipefail
@@ -75,21 +78,19 @@ if ! out=$(cd "$work" && E open painting 2>&1); then
 fi
 echo "$out"
 t1=$(date +%s)
-if out=$(cd "$work" && E check 2>&1); then ok=1; else ok=0; fi
-echo "$out"
-t2=$(date +%s)
 (cd "$work" && E save "$work/replayed.png" >/dev/null)
 E close >/dev/null
 trap - EXIT
+t2=$(date +%s)
 
 live=$studio/out/easel/painting/live.png
 livetxt=$studio/out/easel/painting/live.txt
 lk=none
+lchunks=; lrep=
+[ -f "$livetxt" ] && lchunks=$(awk '$1 == "chunks" { print $2 }' "$livetxt") && lrep=$(awk '$1 == "replayed" { print $2 }' "$livetxt")
 if [ ! -f "$live" ] || [ ! -f "$livetxt" ]; then
   livecmp="the session saved no live canvas at close"
 else
-  lchunks=$(awk '$1 == "chunks" { print $2 }' "$livetxt")
-  lrep=$(awk '$1 == "replayed" { print $2 }' "$livetxt")
   if [ "$lchunks" != "$chunks" ]; then
     livecmp="the live canvas saved at close holds ${lchunks:-an unknown number of} chunks, the log $chunks"
   elif cmp -s "$live" "$work/replayed.png"; then
@@ -106,6 +107,44 @@ else
 fi
 echo "$livecmp"
 
+# the save files: the session's at close against the replay's
+ours=$work/out/easel/painting/live.ckpt
+sk=none
+theirs=
+for f in "$studio/out/easel/painting/live.ckpt" "$studio/out/easel/painting/live.ckpt.zst" "$studio/out/easel/painting/live.ckpt.gz"; do
+  [ -f "$f" ] && { theirs=$f; break; }
+done
+same_save() { # cmp exits 2 if the file went (compressed meanwhile): try the compressed copy
+  case "$1" in
+    *.zst) zstd -dc "$1" | cmp -s - "$ours" ;;
+    *.gz) gzip -dc "$1" | cmp -s - "$ours" ;;
+    *) cmp -s "$1" "$ours" ;;
+  esac
+}
+if [ -z "$theirs" ]; then
+  savecmp="the session wrote no save file at close"
+elif [ ! -f "$ours" ]; then
+  savecmp="the replay wrote no save file"
+elif [ "${lchunks:-}" != "$chunks" ]; then
+  savecmp="the save written at close holds ${lchunks:-an unknown number of} chunks, the log $chunks"
+else
+  rc=0; same_save "$theirs" || rc=$?
+  if [ $rc = 2 ] && [ "$theirs" = "$studio/out/easel/painting/live.ckpt" ]; then
+    for f in "$theirs.zst" "$theirs.gz"; do [ -f "$f" ] && { theirs=$f; rc=0; same_save "$f" || rc=$?; break; }; done
+  fi
+  if [ $rc = 0 ]; then
+    savecmp="the replay's canvas state equals the save written at close"; sk=same
+  else
+    savecmp="the replay's canvas state DIFFERS from the save written at close"; sk=differs
+  fi
+  if [ "${lrep:-0}" -gt 0 ]; then
+    savecmp="$savecmp (the session had replayed $lrep of its $lchunks chunks from the log)"
+    if [ "$sk" = same ] && [ "$lrep" -ge "$lchunks" ]; then sk=none; fi
+  fi
+fi
+rm -f "$ours"
+echo "$savecmp"
+
 saved=$studio/out/easel/painting/painting.png
 if [ ! -f "$saved" ]; then
   png="the painter saved no picture"
@@ -116,15 +155,15 @@ else
   png="the replay's PNG differs from the painter's last save ($when)"
 fi
 echo "$png"
-echo "times: reopen $((t1 - t0)) s, check $((t2 - t1)) s"
-if [ $ok = 0 ]; then
-  echo "check: DIFFERS: $(echo "$out" | tail -1); $livecmp; $png; $record"
+echo "times: reopen $((t1 - t0)) s, save and close $((t2 - t1)) s"
+if [ $lk = differs ]; then
+  echo "check: DIFFERS from the live canvas: $livecmp; $savecmp; $png; $record"
   exit 1
-elif [ $lk = differs ]; then
-  echo "check: DIFFERS from the live canvas: $chunks chunks replay to the same canvas, but $livecmp; $png; $record"
+elif [ $sk = differs ]; then
+  echo "check: DIFFERS from the live save: $savecmp; $livecmp; $png; $record"
   exit 1
-elif [ $lk = same ]; then
-  echo "check: ok: $chunks chunks replay to the live canvas; $livecmp; $png; $record"
+elif [ $lk = same ] || [ $sk = same ]; then
+  echo "check: ok: $chunks chunks replay to the live canvas; $livecmp; $savecmp; $png; $record"
 else
-  echo "check: replay-only agreement: $chunks chunks replay to the same canvas twice, but $livecmp; $png; $record"
+  echo "check: replay only: $chunks chunks replay, but $livecmp; $savecmp; $png; $record"
 fi

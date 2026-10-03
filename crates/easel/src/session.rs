@@ -86,6 +86,10 @@ pub struct Session {
     globals: BTreeMap<String, (Value, usize)>,
     /// The easel's own globals (its verbs, prelude.lua's replacements, Lua's libraries).
     own: BTreeMap<String, Value>,
+    /// Chunks run before this session's own log (a session restored from a save,
+    /// `save::read`): its next chunk is chunk `chunks_before + log.len() + 1`, as at the end
+    /// of the log it was saved from. 0 for every other session.
+    pub chunks_before: usize,
     /// Creation serials of the state's objects (outlives the state).
     _serials: Box<Serials>,
     /// Tests: the step of `run` that fails ("flush", "globals" or "restore").
@@ -147,7 +151,7 @@ impl Session {
         })?;
         let own = global_values(&lua)?;
         let globals = own.iter().map(|(k, v)| (k.clone(), (v.clone(), 0))).collect();
-        Ok(Session { lua: ManuallyDrop::new(lua), state, st, log: Vec::new(), replay: false, deadline, chunk_limit: CHUNK_LIMIT, heap: Some((snap_f, restore_f)), prelude: Some(prelude), stale: false, unrestored: false, globals, own, _serials: serials, #[cfg(test)] fail_at: Cell::new(None) })
+        Ok(Session { lua: ManuallyDrop::new(lua), state, st, log: Vec::new(), replay: false, deadline, chunk_limit: CHUNK_LIMIT, heap: Some((snap_f, restore_f)), prelude: Some(prelude), stale: false, unrestored: false, globals, own, chunks_before: 0, _serials: serials, #[cfg(test)] fail_at: Cell::new(None) })
     }
 
     /// A session that replays a program from the default box (tests;
@@ -262,7 +266,7 @@ impl Session {
             self.rebuild()?;
         }
         let mut snap = if !self.replay { Some(self.snap().map_err(|e| e.to_string())?) } else { None };
-        let n = self.log.len() as u64 + 1;
+        let n = (self.chunks_before + self.log.len()) as u64 + 1;
         self.prelude.as_ref().unwrap().0.call::<()>(()).map_err(|e| e.to_string())?;
         self.st.borrow_mut().begin(n);
         let t0 = Instant::now();
@@ -388,6 +392,32 @@ impl Session {
             let _ = writeln!(s, "{c}\t{k}\t{}", describe(v));
         }
         s
+    }
+
+    /// The piles the painting's globals hold, in `globals`' order: (name, recipe, the paint
+    /// a brush loads from it before the hand's unevenness). Reads the userdata in Rust: runs
+    /// no Lua and changes nothing (the palette look, look.rs `palette`).
+    pub fn piles(&self) -> Vec<(String, String, paint::Paint)> {
+        let mut g: Vec<_> = self.globals.iter().filter(|(k, (_, c))| *c > 0 && is_name(k)).collect();
+        g.sort_by_key(|(k, (_, c))| (*c, *k));
+        g.into_iter()
+            .filter_map(|(k, (v, _))| match v {
+                Value::UserData(u) => u.borrow::<api::PileU>().ok().map(|p| (k.clone(), p.recipe(), p.mix.laid(p.medium))),
+                _ => None,
+            })
+            .collect()
+    }
+
+    /// The ground's color, from the `canvas{}` layers: each layer's paint over the raw linen
+    /// and the layers under it at its thickness (`Paint::over`; the weave left out).
+    pub fn ground_color(&self) -> Option<paint::Rgb> {
+        let st = self.st.borrow();
+        let sty = st.style.as_ref()?;
+        let mut c = sty.raw;
+        for g in &sty.ground {
+            c = paint::Paint::new(g.color, g.hiding, g.stiff).over(c, g.um / paint::COAT_UM);
+        }
+        Some(c)
     }
 
     pub fn status(&self) -> String {

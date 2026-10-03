@@ -43,6 +43,36 @@ fn needs_dry(st: &S, what: &str) -> Result<()> {
     Ok(())
 }
 
+/// The finishing chunk `scripts/finish_painting` appends to a painter's log (and `easel
+/// finish` runs on a save): wait a month at a time until every film is touch-dry (the
+/// finishing verbs refuse wet paint), for at most ten years, then varnish (`coats` as given,
+/// a number), crack and light the relief, each if asked. Byte for byte the chunk the script
+/// wrote before it asked the easel for it.
+pub fn chunk(coats: &str, varnish: bool, cracks: bool, relief: bool) -> String {
+    let mut s = String::from(
+        "-- finishing, applied after the session by scripts/finish_painting
+local function when_dry(f)
+  for _ = 1, 120 do
+    local ok, e = pcall(f)
+    if ok then return end
+    if not tostring(e):find('not all dry', 1, true) then error(e, 0) end
+    wait(30 * 24 * 60)
+  end
+  error('still not dry after ten years', 0)
+end",
+    );
+    if varnish {
+        s.push_str(&format!("\nwhen_dry(function() varnish{{coats={coats}}} end)"));
+    }
+    if cracks {
+        s.push_str("\nwhen_dry(function() cracks{} end)");
+    }
+    if relief {
+        s.push_str("\nwhen_dry(function() relief() end)");
+    }
+    s
+}
+
 pub(crate) fn install(lua: &Lua, st: S) -> Result<()> {
     let g = lua.globals();
     let st1 = st.clone();

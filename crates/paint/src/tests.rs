@@ -754,3 +754,19 @@ fn poppy_oil_dries_slower() {
     m.oil_rate = 0.6;
     assert!((m.laid(0.0).drying / linseed - 0.6).abs() < 1e-5);
 }
+
+/// A blotted pile stays blotted in a covering pass (a negative medium is oil
+/// drawn out; `piled` once clamped it to 0 and lost it).
+#[test]
+#[cfg(tube_box)]
+fn a_pass_keeps_a_blotted_pile_blotted() {
+    use crate::palette::Palette;
+    let pal = Palette::tube_box();
+    let stiff = |medium: f32| {
+        let mut c = Canvas::new(160, 1.0, [0.8; 3]);
+        let hd = Handling::new(Tool::filbert(8.0)).piled(&pal, pal.pile(vec![(10, 1.0)]), medium).coverage(2.0);
+        c.work(&Mask::full(c.frame()), &hd, 5);
+        c.wet.hide[c.f.index(500.0, 500.0)][1]
+    };
+    assert!(stiff(-0.4) > stiff(0.0) + 0.2, "blotted {} plain {}", stiff(-0.4), stiff(0.0));
+}

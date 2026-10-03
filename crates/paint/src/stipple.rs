@@ -124,7 +124,7 @@ impl<'a> Stipple<'a> {
     /// with `medium` (0..1), remixed a little per dip by `mix_jitter`,
     /// drying at its tubes' rate.
     pub fn piled(mut self, palette: &'a Palette, pile: crate::palette::Mixture, medium: f32) -> Self {
-        self.pile = Some((palette, pile, medium.clamp(0.0, 1.0)));
+        self.pile = Some((palette, pile, medium.clamp(-0.5, 1.0)));
         self
     }
     /// A fixed paint (no palette mixing).

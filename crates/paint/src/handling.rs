@@ -290,7 +290,7 @@ impl<'a> Handling<'a> {
     /// little per dip by `mix_jitter` (a pile mixed by hand is uneven),
     /// drying at its tubes' rate. Nothing is aimed or matched.
     pub fn piled(mut self, palette: &'a Palette, pile: crate::palette::Mixture, medium: f32) -> Self {
-        self.pile = Some((palette, pile, medium.clamp(0.0, 1.0)));
+        self.pile = Some((palette, pile, medium.clamp(-0.5, 1.0)));
         self
     }
     /// Cut the region's edges in with `tool` (see `cut_in`).

@@ -49,10 +49,12 @@ pub const TOUCH_DRY_MIN: f32 = 24.0 * 60.0;
 /// white in linseed oil without driers (Winsor & Newton and Natural
 /// Pigments: fast, about 2 days; Golden: fast, 1–2 days). Each tube's
 /// source range is checked at `STROKE` too, and a tube takes an engine-3
-/// rate where its engine-2 rate misses it (`drier::ENGINE_3`). Golden's
-/// titanium white, touch-dry by day 2 at 3 mil and at 4–6 days at 10 mil
-/// (`THICK`), would have a rate of about 3 here: faster than lead white,
-/// where the makers' classes call titanium white slow. No box has it.
+/// rate where its engine-2 rate misses it (`drier::engine3`). Titanium
+/// white (in no box) at 0.9, "average to slow" (Natural Pigments), takes
+/// 4.4 days (artists' guides: 3–5). Golden measured a titanium white without
+/// driers touch-dry by day 2 at 3 mil and at 4–6 days at 10 mil: their ratio
+/// checks `THICK`, but the days themselves are faster than these: such a
+/// paint here would be 16 days at 10 mil. That conflict is left standing.
 pub const TOUCH_DRY_MIN_3: f32 = 60.0 * 60.0;
 /// The thickness (coats) of a typical brushstroke, at which the painters'
 /// and makers' drying times are taken: a broad brush (filbert 40, flat 36)
@@ -153,44 +155,32 @@ pub mod drier {
 
     /// Engine 3's drying rates for the tubes whose own touch-dry range
     /// called for another rate than their `Tube::drying` (which engines 1
-    /// and 2 keep). A typical stroke (`super::STROKE`) of each is touch-dry
-    /// inside its range in engine 3 (`super::TOUCH_DRY_MIN_3`): Winsor &
-    /// Newton's Artists' Oil Colour classes (fast, about 2 days: cobalt
-    /// blues, Prussian blue, raw sienna, umbers, lead whites; medium, about
-    /// 5: cadmiums, ultramarines, ochres, burnt sienna, Mars colors, ivory and
-    /// lamp black; slow, over 5: alizarin, quinacridones), Natural Pigments'
-    /// (fast about 2 days, medium 2–5, slow over 5; its bone black medium),
-    /// Golden's (fast 1–2 days) and alizarin's 7–14 days. Tubes not here
-    /// have no source range or are inside theirs already.
-    pub const ENGINE_3: &[(&str, f32)] = &[
-        // medium, 2–5 days: 4.4 days (engine 2's rate, 0.4: 9.8)
-        ("bone black", 0.9),
-        // fast, about 2 days: 45 h (1.4: 71 h)
-        ("cobalt blue", 2.2),
-        // fast, about 2 days: 44 h (1.8: 59 h)
-        ("Prussian blue", 2.4),
-        // fast, about 2 days: 45 h (1.2: 86 h)
-        ("raw sienna", 2.3),
-        // medium, 2–5 days: 4.4–4.6 days (0.6: 6.5–6.9)
-        ("pale cadmium", 0.9),
-        ("cadmium yellow", 0.9),
-        ("deep cadmium", 0.9),
-        ("cadmium red", 0.9),
-        // medium, 2–5 days: 4.5 days (0.8: 5.4)
-        ("ultramarine blue", 0.95),
-        ("ultramarine ash", 0.95),
-        // alizarin, 7–14 days: 11–11.5 days (0.3: 14.7–15.4)
-        ("rose madder", 0.4),
-        ("permanent alizarin", 0.4),
-    ];
-
-    /// The drying rate of the tube `name`, whose `Tube::drying` is
-    /// `drying`, in engine `engine`.
-    pub fn of_tube(name: &str, drying: f32, engine: u32) -> f32 {
-        if engine >= 3 && let Some(&(_, d)) = ENGINE_3.iter().find(|t| t.0 == name) {
-            return d;
-        }
-        drying
+    /// and 2 keep); a tube carries its own as `Tube::drying_3`. A typical
+    /// stroke (`super::STROKE`) of each is touch-dry inside its range in
+    /// engine 3 (`super::TOUCH_DRY_MIN_3`): Winsor & Newton's Artists' Oil
+    /// Colour classes (fast, about 2 days: cobalt blues, Prussian blue, raw
+    /// sienna, umbers, lead whites; medium, about 5: cadmiums, ultramarines,
+    /// ochres, burnt sienna, Mars colors, ivory and lamp black; slow, over 5:
+    /// alizarin, quinacridones), Natural Pigments' (fast about 2 days, medium
+    /// 2–5, slow over 5; its bone black medium), Golden's (fast 1–2 days) and
+    /// alizarin's 7–14 days. Tubes without one have no source range or are
+    /// inside theirs already.
+    pub mod engine3 {
+        /// Bone black: medium, 2–5 days: 4.4 days (engine 2's 0.4: 9.8).
+        pub const BONE_BLACK: f32 = 0.9;
+        /// Cobalt blue: fast, about 2 days: 45 h (1.4: 71 h).
+        pub const COBALT_BLUE: f32 = 2.2;
+        /// Prussian blue: fast, about 2 days: 44 h (1.8: 59 h).
+        pub const PRUSSIAN_BLUE: f32 = 2.4;
+        /// Raw sienna: fast, about 2 days: 45 h (1.2: 86 h).
+        pub const RAW_SIENNA: f32 = 2.3;
+        /// The cadmiums: medium, 2–5 days: 4.4–4.6 days (0.6: 6.5–6.9).
+        pub const CADMIUM: f32 = 0.9;
+        /// The ultramarines: medium, 2–5 days: 4.5 days (0.8: 5.4).
+        pub const ULTRAMARINE: f32 = 0.95;
+        /// Rose madder and permanent alizarin (a quinacridone): alizarin,
+        /// 7–14 days, and slow, over 5: 11–11.5 days (0.3: 14.7–15.4).
+        pub const ALIZARIN: f32 = 0.4;
     }
 }
 
@@ -785,7 +775,7 @@ mod tests {
     fn stages_follow_the_clock_and_the_pigment() {
         let mut c = canvas();
         band(&mut c, lead_white(), 300.0, 1);
-        band(&mut c, Paint::body(hex("#202020")).with_drying(drier::of_tube("bone black", drier::BONE_BLACK, 3)), 700.0, 2);
+        band(&mut c, Paint::body(hex("#202020")).with_drying(drier::engine3::BONE_BLACK), 700.0, 2);
         assert_eq!(c.drying_at(500.0, 300.0), Stage::Open);
         c.wait(12.0 * 60.0);
         assert_eq!((c.drying_at(500.0, 300.0), c.drying_at(500.0, 700.0)), (Stage::Open, Stage::Open), "both are open after 12 h");
@@ -947,50 +937,83 @@ mod tests {
         at
     }
 
-    /// Each tube paint whose touch-dry time has a source range dries within
-    /// it in engine 3, at the thickness the source describes (see
-    /// `TOUCH_DRY_MIN_3`, `OPEN_SHARE`, `drier::ENGINE_3`): a typical stroke
-    /// (`STROKE`) of lead white is workable for at least 12 h, tacky around a
-    /// day (18–30 h) and touch-dry in 1–2 days; strokes of fast pigments are
-    /// touch-dry within 2 days, medium ones in 2–5, alizarin in 7–14; a
-    /// 10 mil film (10 coats) of a titanium white at rate 3 (not a tube) in
-    /// 4–6 days. (Set DRYING_TABLE to print every row, one coat and one
-    /// stroke, in both engines.)
+    /// The tube called `name`, from whichever box has it.
+    fn tube(name: &str) -> crate::palette::Tube {
+        crate::Palette::box_names().iter().filter_map(|b| crate::Palette::named_box(b)).flat_map(|p| p.tubes).find(|t| t.name == name).unwrap_or_else(|| panic!("no tube {name:?}"))
+    }
+
+    /// Titanium white, in no box: stiffness 0.7, drying 0.9 ("average to
+    /// slow", Natural Pigments) in engine 3; engine 2 would have had no
+    /// other rate.
+    const TITANIUM: (f32, f32) = (0.7, 0.9);
+
+    /// One typical stroke (`STROKE`) of each tube paint whose touch-dry time
+    /// has a source range dries within it in engine 3 (see
+    /// `TOUCH_DRY_MIN_3`, `OPEN_SHARE`, `drier::engine3`), all on the one
+    /// basis of ordinary brushed paint: lead white workable for at least 12 h,
+    /// tacky around a day (18–30 h) and touch-dry in 1–2 days; fast pigments
+    /// touch-dry within 2 days, medium ones in 2–5, titanium white in 3–5,
+    /// alizarin in 7–14. (Set DRYING_TABLE to print every row, one coat and
+    /// one stroke, in both engines.)
     #[test]
     fn strokes_dry_within_the_sources_ranges() {
         const D: f32 = 24.0;
-        // paint, stiffness, engine-2 rate, thickness checked (coats), touch-dry range (hours), source
-        let rows: &[(&str, f32, f32, f32, f32, f32, &str)] = &[
-            ("lead white", 0.8, drier::LEAD_WHITE, STROKE, 1.0 * D, 2.0 * D, "fast (W&N, NP, Golden); painters 1-2 days"),
-            ("raw umber", 0.65, drier::UMBER, STROKE, 1.0 * D, 2.0 * D, "fast (W&N, NP)"),
-            ("raw sienna", 0.5, drier::SIENNA, STROKE, 1.0 * D, 2.0 * D, "fast (W&N)"),
-            ("cobalt blue", 0.6, drier::COBALT_BLUE, STROKE, 1.0 * D, 2.0 * D, "fast (W&N)"),
-            ("Prussian blue", 0.45, drier::PRUSSIAN_BLUE, STROKE, 1.0 * D, 2.0 * D, "fast (W&N)"),
-            ("yellow ochre", 0.7, drier::OCHRE, STROKE, 2.0 * D, 5.0 * D, "medium (W&N, NP)"),
-            ("red earth", 0.7, drier::RED_EARTH, STROKE, 2.0 * D, 5.0 * D, "medium (W&N ochres)"),
-            ("Mars red", 0.7, drier::MARS, STROKE, 2.0 * D, 5.0 * D, "medium (W&N)"),
-            ("burnt sienna", 0.55, drier::SIENNA, STROKE, 2.0 * D, 5.0 * D, "medium (W&N)"),
-            ("cadmium red", 0.7, drier::CADMIUM, STROKE, 2.0 * D, 5.0 * D, "medium (W&N)"),
-            ("deep cadmium", 0.6, drier::CADMIUM, STROKE, 2.0 * D, 5.0 * D, "medium (W&N)"),
-            ("ultramarine blue", 0.5, drier::ULTRAMARINE, STROKE, 2.0 * D, 5.0 * D, "medium (W&N)"),
-            ("cobalt violet", 0.55, drier::COBALT_BLUE, STROKE, 2.0 * D, 5.0 * D, "medium (W&N)"),
-            ("bone black", 0.7, drier::BONE_BLACK, STROKE, 2.0 * D, 5.0 * D, "medium (NP, W&N ivory black)"),
-            ("rose madder", 0.35, drier::MADDER_LAKE, STROKE, 7.0 * D, 14.0 * D, "alizarin 7-14 days"),
-            ("permanent alizarin", 0.45, drier::MADDER_LAKE, STROKE, 7.0 * D, 14.0 * D, "slow (W&N quinacridones); alizarin 7-14 days"),
-            ("titanium white", 0.7, 3.0, 10.0, 4.0 * D, 6.0 * D, "4-6 days at 10 mil (Golden)"),
+        // tube, touch-dry range (hours), source
+        let rows: &[(&str, f32, f32, &str)] = &[
+            ("lead white", 1.0 * D, 2.0 * D, "fast (W&N, NP, Golden); painters 1-2 days"),
+            ("raw umber", 1.0 * D, 2.0 * D, "fast (W&N, NP)"),
+            ("raw sienna", 1.0 * D, 2.0 * D, "fast (W&N)"),
+            ("cobalt blue", 1.0 * D, 2.0 * D, "fast (W&N)"),
+            ("Prussian blue", 1.0 * D, 2.0 * D, "fast (W&N)"),
+            ("yellow ochre", 2.0 * D, 5.0 * D, "medium (W&N, NP)"),
+            ("red earth", 2.0 * D, 5.0 * D, "medium (W&N ochres)"),
+            ("Mars red", 2.0 * D, 5.0 * D, "medium (W&N)"),
+            ("burnt sienna", 2.0 * D, 5.0 * D, "medium (W&N)"),
+            ("cadmium red", 2.0 * D, 5.0 * D, "medium (W&N)"),
+            ("deep cadmium", 2.0 * D, 5.0 * D, "medium (W&N)"),
+            ("ultramarine blue", 2.0 * D, 5.0 * D, "medium (W&N)"),
+            ("cobalt violet", 2.0 * D, 5.0 * D, "medium (W&N)"),
+            ("bone black", 2.0 * D, 5.0 * D, "medium (NP, W&N ivory black)"),
+            ("titanium white", 3.0 * D, 5.0 * D, "artists' guides 3-5 days (not a tube)"),
+            ("rose madder", 7.0 * D, 14.0 * D, "alizarin 7-14 days"),
+            ("permanent alizarin", 7.0 * D, 14.0 * D, "slow (W&N quinacridones); alizarin 7-14 days"),
         ];
         let table = std::env::var_os("DRYING_TABLE").is_some();
-        for &(name, stiff, d2, coats, lo, hi, src) in rows {
-            let d3 = drier::of_tube(name, d2, 3);
-            let at = film(coats, d3, stiff, 3);
+        for &(name, lo, hi, src) in rows {
+            let (stiff, d2, d3) = if name == "titanium white" { (TITANIUM.0, TITANIUM.1, TITANIUM.1) } else { let t = tube(name); (t.stiff, t.drying, t.drying_3) };
+            let at = film(STROKE, d3, stiff, 3);
             if table {
                 let r = |c: f32, d: f32, e: u32| film(c, d, stiff, e).map(|h| (h * 4.0).round() / 4.0);
-                println!("TABLE | {name} | {d2} -> {d3} | 1 coat: e2 {:?} e3 {:?} | {STROKE} coats: e2 {:?} e3 {:?} | checked at {coats} coats: {}-{} h | {src}", r(1.0, d2, 2), r(1.0, d3, 3), r(STROKE, d2, 2), r(STROKE, d3, 3), lo, hi);
+                println!("TABLE | {name} | {d2} -> {d3} | 1 coat: e2 {:?} e3 {:?} | {STROKE} coats: e2 {:?} e3 {:?} | {lo}-{hi} h | {src}", r(1.0, d2, 2), r(1.0, d3, 3), r(STROKE, d2, 2), r(STROKE, d3, 3));
             }
-            assert!((lo..=hi).contains(&at[2]), "{name}: setting, tacky, dry at {at:?} h ({coats} coats); {src}: {lo}-{hi} h");
+            assert!((lo..=hi).contains(&at[2]), "{name}: setting, tacky, dry at {at:?} h; {src}: {lo}-{hi} h");
         }
         let lead = film(STROKE, drier::LEAD_WHITE, 0.8, 3);
         assert!(lead[0] >= 12.0 && (18.0..=30.0).contains(&lead[1]), "a lead white stroke: workable until {} h, tacky at {} h", lead[0], lead[1]);
+    }
+
+    /// At equal thickness, lead white and raw umber are touch-dry before
+    /// titanium white and bone black, and alizarin is the slowest of them
+    /// (every source orders them so).
+    #[test]
+    fn fast_pigments_dry_before_slow_ones() {
+        let dry = |name: &str| {
+            let (stiff, d) = if name == "titanium white" { TITANIUM } else { let t = tube(name); (t.stiff, t.drying_3) };
+            film(STROKE, d, stiff, 3)[2]
+        };
+        let [lead, umber, titanium, black, alizarin] = ["lead white", "raw umber", "titanium white", "bone black", "permanent alizarin"].map(dry);
+        assert!(lead.max(umber) < titanium.min(black), "lead white {lead} h, raw umber {umber} h before titanium white {titanium} h, bone black {black} h");
+        assert!(alizarin > titanium.max(black), "alizarin {alizarin} h is the slowest");
+    }
+
+    /// Golden's titanium white was touch-dry by day 2 at 3 mil and at 4–6
+    /// days at 10 mil: a 10-coat film takes 2–3 times as long as a 3-coat
+    /// one (`THICK`).
+    #[test]
+    fn thick_films_dry_as_much_slower_as_goldens() {
+        let (stiff, d) = TITANIUM;
+        let r = film(10.0, d, stiff, 3)[2] / film(3.0, d, stiff, 3)[2];
+        assert!((2.0..=3.0).contains(&r), "10 coats take {r} times as long as 3");
     }
 
     fn canvas_copy(c: &Canvas) -> Canvas {

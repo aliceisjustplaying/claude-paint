@@ -262,7 +262,10 @@ async function loadGallery() {
         const g = {}; for (const x of a) if (x && typeof x.studio === 'string' && !g[x.studio]) g[x.studio] = x; GALLERY = g; }
   catch (e) { GALLERY = null; }  // absent or not JSON: everything shows, with the painters' own pictures and titles
 }
-const ACTIVE = 1800;  // working now: an action in the last half hour
+const ACTIVE = 1800, RECENT = 6 * 3600;  // working now: an action in the last half hour; in progress (maybe between sittings): one in the last 6 h
+// the website lists the paintings in progress and the finished ones (in the gallery, or signed off with a title),
+// not the aborted runs; the local studio lists every run. The same at every screen size.
+const listed = s => !STATIC || ageOf(s) < RECENT || !!s.title || !!(GALLERY && GALLERY[s.p]) || qOf(s) === Q;
 const ageOf = s => Date.now() / 1000 - s.mtime, isLive = s => ageOf(s) < ACTIVE;
 const SUBJ = {Friedrich:'after Friedrich', free:'free subject', 'self-portrait':'self-portrait'};
 const subj = s => s.subject ? SUBJ[s.subject] || 'after ' + (s.artist || s.subject) : '';  // (the artist in full when the brief names one: 'after Kendric Tonn')
@@ -296,10 +299,10 @@ function card(s) {
     + `<span class="pks">${a.live ? '<span class="lv">● painting now</span> · ' : ''}${esc([subj(s), day(s.mtime)].filter(Boolean).join(' · '))}</span></span></button>`;
 }
 function renderPicker() {
-  const ps = allSessions.filter(s => s.painter), order = [...ps.filter(isLive), ...ps.filter(s => !isLive(s))];  // (already newest first)
+  const ps = allSessions.filter(s => s.painter && listed(s)), order = [...ps.filter(isLive), ...ps.filter(s => !isLive(s))];  // (already newest first)
   let html = '';
   if (Q && !allSessions.some(s => qOf(s) === Q)) html += `<div class="pksec">Watching</div><button type="button" class="pkrow on" data-q="${esc(Q)}" aria-current="true">${esc(oneSitting())}</button>`;
-  html += `<div class="pkgrid">${order.map(card).join('')}</div>`;  // every painter, the same on every screen
+  html += `<div class="pkgrid">${order.map(card).join('')}</div>`;
   if (!STATIC && $('all').checked) { const os = allSessions.filter(s => !s.painter);
     html += `<div class="pksec">Other sessions</div>` + os.map(s => `<button type="button" class="pkrow${qOf(s) === Q ? ' on' : ''}" data-q="${esc(qOf(s))}">${esc(sessLabel(s))}</button>`).join(''); }
   $('pklist').innerHTML = html;

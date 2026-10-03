@@ -13,7 +13,7 @@ fn main() {
     println!("cargo::rustc-check-cfg=cfg(tube_box)");
     println!("cargo::rustc-check-cfg=cfg(box_conflict)");
     let on = |f: &str| std::env::var_os(format!("CARGO_FEATURE_{f}")).is_some();
-    let named = ["BOX_SARGENT", "BOX_INNESS", "BOX_ALMA_TADEMA", "BOX_TONN", "BOX_HOPPER", "BOX_GIVERNY"].iter().filter(|f| on(f)).count();
+    let named = ["BOX_SARGENT", "BOX_INNESS", "BOX_ALMA_TADEMA", "BOX_TONN", "BOX_HOPPER", "BOX_GIVERNY", "BOX_IMPRESSIONIST"].iter().filter(|f| on(f)).count();
     let all = on("ALL_BOXES");
     if named == 0 || all {
         println!("cargo::rustc-cfg=tube_box");

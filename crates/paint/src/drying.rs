@@ -105,6 +105,10 @@ pub mod drier {
     pub const MARS: f32 = 1.1;
     /// Viridian: no drier action reported; average. Estimate.
     pub const VIRIDIAN: f32 = 1.0;
+    /// Strontium, barium and zinc chromates hold no lead, so none of lead
+    /// chromate's drier action: average. Estimate (materials research,
+    /// notes/impressionist-materials.md).
+    pub const CHROMATE: f32 = 1.0;
     /// Indian yellow: an early account has it drying in oil "nearly as soon
     /// or sooner than" other colors (Artists' Pigments vol. 1 p.24); set near
     /// average. Uncertain.

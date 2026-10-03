@@ -1,27 +1,27 @@
 # The giverny box
 
-A box for painting water and light in the manner of late Impressionism:
-bright, high-key, no blacks and no earth darks but yellow ochre.
+Late Monet's paints, as analyses of his paintings from 1887 to 1926 found
+them (notes/impressionist-materials.md, after Roy 2007 and others): no
+black, no earths but yellow ochre, no chrome yellow and no emerald green.
 
-| tube | why it is here |
+| tube | |
 |---|---|
 | lead white | the body of every light |
-| zinc white | a colder, cleaner white for scumbles and glints |
-| lemon chrome, chrome yellow, cadmium yellow | three yellows from cool to warm, for sunlight and greens |
-| yellow ochre | a quiet warm yellow |
+| zinc white | mixed into the colors |
+| cobalt blue, ultramarine blue | his two blues |
+| cobalt violet | his violet |
+| viridian | his green |
+| pale cadmium, cadmium yellow, deep cadmium | the cadmium yellows and orange |
+| barium yellow, zinc yellow | the chromate lemon yellows he used together |
 | vermilion | the warm red |
-| rose madder | a transparent cool red: true pinks with white, and glazes |
-| cobalt violet | violet without mixing a muddy red and blue |
-| cobalt blue, ultramarine blue, cerulean blue | a mid blue, a deep warm transparent blue, an opaque green-blue |
-| viridian | a transparent cool green, for glazes and deep water |
-| emerald green | a bright opaque green |
+| rose madder, carmine lake | madder and cochineal lakes: the cool reds and true pinks |
+| yellow ochre | still documented |
 
-Every tube is an existing catalog tube with its catalog numbers (palette.rs);
-the box adds no new pigment data. The choice of tubes is the painter's own,
-from memory of what the late Impressionists are generally held to have used,
-not a sourced materials study like `notes/research/*_materials.md`.
+The tubes are catalog tubes; barium yellow, zinc yellow and carmine lake
+were added for this box and the impressionist box with their sources
+(palette.rs). A painting in it writes `--@ box giverny` in its log, so it
+always replays with these tubes. To paint from it: `EASEL_BOX=giverny` (or a
+`box` file next to the easel naming it).
 
-A painting in this box writes `--@ box giverny` in its log, so it always
-replays with these tubes. Build an easel that paints from it with
-`cargo build --release -p easel --features box-giverny` plus a `box` file
-next to the executable (or `EASEL_BOX=giverny`) naming `giverny`.
+The impressionist box holds what the analyses found across Monet, Renoir,
+Pissarro, Sisley, Morisot, Degas, Cézanne and Seurat (30 tubes).

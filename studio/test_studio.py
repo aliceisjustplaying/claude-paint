@@ -344,3 +344,18 @@ def test_a_palette_look_is_not_the_painting():
     assert S.is_whole(S.look_text({"size": 800}))
     assert not S.is_whole(S.look_text({"palette": True}))
     assert S.is_whole(S.look_text({"palette": False}))
+
+
+@pytest.mark.parametrize("ending, said", [
+    (say("End of this sitting: the sky is laid in."), True),  # between sittings (or done): the website lists it a while
+    (line({"type": "message", "message": {"role": "assistant", "content": [
+        {"type": "toolCall", "id": "p1", "name": "paint", "arguments": {"code": "x = 1"}}]}}), False),  # cut off mid-step
+])
+def test_the_export_says_whether_a_run_stopped_on_its_own_words(home, ending, said):
+    tmp_path, studio, log = home
+    log.write_text(start(str(studio)) + say("I'll start by reading the brief.") + ending)
+    out = tmp_path / "out"
+    r = export(tmp_path, out)
+    assert r.returncode == 0, r.stderr
+    p = next(s for s in json.loads((out / "data" / "sessions.json").read_text()) if s["p"] == PAINTER)
+    assert p["said"] is said

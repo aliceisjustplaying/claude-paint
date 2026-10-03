@@ -161,6 +161,9 @@ def main():
                 s["look"] = e["img"]
         # the painting's title, if the painter's last words begin with one
         s["title"] = S.title_of(next((e["text"] for e in reversed(ev) if e["kind"] == "say"), ""))
+        # its last event is its own words: it ended a sitting (or the painting), not cut off mid-step; the website lists a
+        # quiet run as in progress only then
+        s["said"] = bool(ev) and ev[-1]["kind"] == "say"
         if s["look"] is None:  # painters from before the look tool read their renders as files: the last picture they
             # saw (a reference picture, read from the studio's reference/, is never the painter's picture)
             refs = {e["img"] for e in ev if e["kind"] == "image" and e.get("ref")}

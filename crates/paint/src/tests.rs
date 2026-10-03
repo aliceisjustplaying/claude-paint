@@ -772,3 +772,22 @@ fn a_pass_keeps_a_blotted_pile_blotted() {
     };
     assert!(stiff(-0.4) > stiff(0.0) + 0.2, "blotted {} plain {}", stiff(-0.4), stiff(0.0));
 }
+
+/// Engine 4: a knife-laid slab tears where it parts from the blade, so it
+/// covers less than engine 3's whole slab from the same pull and load; an
+/// engine 3 canvas keeps the whole slab. (At the painting's resolution: the
+/// tears are a millimetre or so across, finer than a pixel of a small canvas.)
+#[test]
+fn a_knife_laid_slab_tears_from_engine_4() {
+    let covered = |engine: u32| {
+        let mut c = Canvas::new(2400, 3.0, [0.8; 3]).with_engine(engine);
+        let mut k = crate::Knife::new(60.0);
+        k.load(Paint::body(hex("#445566")), 1.0);
+        c.knife(&mut k, &[(200.0, 160.0), (400.0, 160.0)], (0.5, 0.5), None, true, 0.1);
+        c.wet.vol.iter().filter(|&&v| v > 0.0).count()
+    };
+    let (whole, torn) = (covered(3), covered(4));
+    assert!(whole > 30_000, "engine 3 laid {whole} pixels");
+    assert!(torn > whole / 4 && torn < whole * 19 / 20, "engine 4 laid {torn} pixels of engine 3's {whole}");
+    assert_eq!(whole, covered(3), "the same pull lays the same slab");
+}

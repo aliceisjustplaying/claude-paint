@@ -25,6 +25,8 @@ use std::rc::{Rc, Weak};
 
 #[path = "draw_pencil.rs"]
 mod draw_pencil;
+#[path = "draw_rag.rs"]
+mod draw_rag;
 
 /// Grid spacing (units) that painter fields are sampled on.
 pub const FIELD_STEP: f32 = 2.0;
@@ -45,6 +47,8 @@ pub struct Studio {
     pub clock0: f64,
     pub rng: Rng,
     pub brushes: Vec<Weak<RefCell<Held>>>,
+    /// The rags in the hand (draw_rag.rs), held as the brushes are.
+    pub rags: Vec<Weak<RefCell<paint::rag::Rag>>>,
     pub out: String,
     /// Time spent evaluating Lua fields in this chunk (s).
     pub field_secs: f64,
@@ -59,7 +63,7 @@ pub struct Studio {
 
 impl Studio {
     pub fn new(width: usize, tubes: Palette) -> Self {
-        Studio { width, canvas: None, style: None, setup: None, seed: 1, chunk: 0, calls: 0, clock: 0.0, clock0: 0.0, rng: Rng::new(1), brushes: Vec::new(), out: String::new(), field_secs: 0.0, view: None, hand: crate::time::Hand::default(), tubes: Rc::new(tubes) }
+        Studio { width, canvas: None, style: None, setup: None, seed: 1, chunk: 0, calls: 0, clock: 0.0, clock0: 0.0, rng: Rng::new(1), brushes: Vec::new(), rags: Vec::new(), out: String::new(), field_secs: 0.0, view: None, hand: crate::time::Hand::default(), tubes: Rc::new(tubes) }
     }
     /// Start chunk `n`: its randomness depends only on the seed and `n`.
     pub fn begin(&mut self, n: u64) {
@@ -78,6 +82,11 @@ impl Studio {
     pub fn live_brushes(&mut self) -> Vec<Rc<RefCell<Held>>> {
         self.brushes.retain(|w| w.strong_count() > 0);
         self.brushes.iter().filter_map(|w| w.upgrade()).collect()
+    }
+
+    pub fn live_rags(&mut self) -> Vec<Rc<RefCell<paint::rag::Rag>>> {
+        self.rags.retain(|w| w.strong_count() > 0);
+        self.rags.iter().filter_map(|w| w.upgrade()).collect()
     }
 }
 
@@ -1458,6 +1467,9 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
     crate::form::install(lua, st.clone())?;
     crate::world::install(lua, st.clone())?;
     draw_pencil::install(lua, st.clone())?;
+    if draw_rag::has_rag(st.borrow().tubes.engine) {
+        draw_rag::install(lua, st.clone())?;
+    }
     crate::draw_outline::install(lua, st.clone())?;
     crate::draw_edges::install(lua, st.clone())?;
     Ok(())

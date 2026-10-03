@@ -21,6 +21,7 @@ pub mod edge;
 pub mod fence;
 pub mod form;
 pub mod graphite;
+pub mod rag;
 pub mod scene;
 pub mod palette;
 pub mod pigment;
@@ -70,7 +71,9 @@ pub use shape::Shape;
 ///   stroke right after it feels the film as it would after `wait(0)`); a
 ///   world's thin far bodies keep their depth (`World::add_body`), and rays
 ///   from far off (reflections) don't step over them (`World::trace`).
-pub const ENGINE: u32 = 2;
+/// - 3: the easel has a rag (`rag`, crates/easel/src/draw_rag.rs); an older
+///   log replays with exactly the globals it had.
+pub const ENGINE: u32 = 3;
 
 /// Hermite smoothstep.
 #[inline]

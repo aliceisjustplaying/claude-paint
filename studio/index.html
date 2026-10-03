@@ -683,13 +683,15 @@ function palette(k) {
 function lookWords(req) {
   if (req == null) return ['A picture it opened', 'an image file it looked at', 'looks at a picture'];
   if (/palette (?!False)/.test(req)) return ['Palette', 'the paints it has mixed, thick and thin', 'looks at its palette'];
-  const mode = (req.match(/mode\s+([a-z,]+)/) || [''])[0], crop = /crop/.test(req), sq = /squint|blur/.test(mode), val = /value|gray/.test(mode), mir = /mirror/.test(mode), gal = /gallery/.test(mode), rel = !gal && /relief|raking/.test(mode);
+  const mode = (req.match(/mode\s+([a-z,]+)/) || [''])[0], crop = /crop/.test(req), sq = /squint|blur/.test(mode), val = /value|gray/.test(mode), mir = /mirror/.test(mode);
+  // the light, as the easel takes it: the first of relief/raking/gallery in the mode list; a light given alone rakes
+  const lit = (mode.replace(/^mode\s+/, '').split(',').find(m => /^(relief|raking|gallery)$/.test(m)) || (/light\s/.test(req) ? 'relief' : '')), gal = lit === 'gallery', rel = lit !== '' && !gal;
   const why = [crop && 'up close, at full detail', sq && 'blurred on purpose, as through half-closed eyes, to judge the big shapes',
                val && 'in grays, to judge light against dark', mir && 'flipped left to right, to see it with fresh eyes',
                rel && 'under a raking light, to see the ridges and furrows of the paint', gal && 'lit from above, as it would hang'].filter(Boolean);
   if (!why.length) return ['The whole canvas', '', 'looks at the whole canvas'];
-  const lit = rel ? 'raking light' : gal && 'gallery light', plain = crop || sq || val || mir;
-  const title = [crop ? 'Close-up' : sq ? 'Squinting' : val ? 'Value check' : mir ? 'Mirrored' : rel ? 'Raking light' : 'Gallery light', crop && sq && 'squinting', (crop || sq) && val && 'in grays', (crop || sq || val) && mir && 'mirrored', plain && lit].filter(Boolean).join(', ');
+  const lw = rel ? 'raking light' : gal && 'gallery light', plain = crop || sq || val || mir;
+  const title = [crop ? 'Close-up' : sq ? 'Squinting' : val ? 'Value check' : mir ? 'Mirrored' : rel ? 'Raking light' : 'Gallery light', crop && sq && 'squinting', (crop || sq) && val && 'in grays', (crop || sq || val) && mir && 'mirrored', plain && lw].filter(Boolean).join(', ');
   return [title, why.join('; '), crop ? 'looks closer at a detail' : sq ? 'squints at the canvas' : val ? 'checks the picture in grays' : mir ? 'looks at it mirrored' : rel ? 'looks at the paint under a raking light' : 'looks at it in gallery light'];
 }
 // a crop's window in canvas units [x0, y0, x1, y1] (two opposite corners; the canvas is 1000 units wide, y down: notes/easel_guide.md)

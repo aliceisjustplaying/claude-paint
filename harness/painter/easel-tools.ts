@@ -62,8 +62,15 @@ export function registerEaselTools(pi: ExtensionAPI, studio: string): void {
 			}),
 			async execute(id, p, signal, onUpdate, ctx) {
 				let said: string;
+				if (p.survey && p.compare) throw new Error("look: survey and compare are two looks; ask for one");
+				// compare: an earlier look of this studio, nothing outside it (as `read`)
+				let compare = p.compare;
+				if (compare !== undefined) {
+					compare = studioPath(studio, compare);
+					if (compare === undefined) throw new Error("look: compare is the path of an earlier look in this studio");
+				}
 				try {
-					said = await atEasel(studio, ["look", ...lookArgs(p)], undefined, signal);
+					said = await atEasel(studio, ["look", ...lookArgs({ ...p, compare })], undefined, signal);
 				} catch (e) {
 					throw new Error(toolWords((e as Error).message)); // the easel's messages name its command-line flags
 				}

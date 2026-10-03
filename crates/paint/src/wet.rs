@@ -27,11 +27,10 @@ use crate::pigment::{Pigment, hiding_of, scatter_for};
 pub const LAT: usize = mixbox::LATENT_SIZE;
 pub type Latent = [f32; LAT];
 /// Paint properties mixed by volume alongside the pigment: [KM scattering per
-/// coat, stiffness, drying rate].
+/// coat, stiffness, drying rate, solvent, oil].
 /// Stiffness 0 = fluid, medium-rich glaze; 1 = stiff tube paint. Drying rate
-/// relative to average paint (see `drying::drier`).
-/// [scattering, stiffness, drying rate, solvent, oil] of wet paint, mixed by
-/// volume (see `Paint`: `solvent` and `oil` are engine 3's).
+/// relative to average paint (see `drying::drier`). Solvent and oil are
+/// engine 3's (see `Paint`).
 pub type Prop = [f32; 5];
 
 #[inline]
@@ -135,7 +134,7 @@ impl Paint {
 pub(crate) struct Wet {
     pub(crate) vol: Vec<f32>,
     pub(crate) lat: Vec<Latent>,
-    /// [scattering, stiffness, drying rate] of the wet paint.
+    /// [scattering, stiffness, drying rate, solvent, oil] of the wet paint.
     pub(crate) hide: Vec<Prop>,
     /// Which stroke last laid paint here (a stroke barely re-picks its own paint).
     pub(crate) stroke: Vec<u32>,
@@ -248,7 +247,8 @@ impl Canvas {
             return (0..self.px.len())
                 .into_par_iter()
                 .map(|i| {
-                    let g = if self.wet.vol[i] > 0.05 { 1.0 } else { self.gloss[i] };
+                    // (the thinnest wet film lets the surface under it show: no edge where it ends)
+                    let g = crate::lerp(self.gloss[i], 1.0, crate::smoothstep(0.0, 0.1, self.wet.vol[i]));
                     crate::canvas::haze(self.look_px(i), g)
                 })
                 .collect();

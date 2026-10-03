@@ -168,12 +168,13 @@ wide. In `work`, `streak=` does this on every dip and
 `second={pile=, load=, side=, share=, streak=}` dips part of the brush in a
 second pile after the first.
 
-**Gestures.** `b:gesture({{x, y, p}, ...}, {wobble=, orient=, clip=})` is one
+**Gestures.** `b:gesture({{x, y, p}, ...}, {wobble=, orient=, ramps=, shake=, clip=})` is one
 deliberate stroke along a smooth curve through the points, its pressure
 following each point's `p` (0..1; a point without one takes its
 neighbors'): pressed hard at a root and lifted to nothing at a tip, swelling
 through a turn. A pointed brush (`point=`) widens as it is pressed, so its
-mark swells and tapers with the pressure; a blunt one keeps its width.
+mark swells from a hairline and tapers back to one with the pressure; a
+blunt one narrows at a light touch too (to about a third), but has no point.
 `wobble` (units) lets the hand drift sideways. Use gestures for the marks
 that carry the picture: the few decisive strokes a passage needs.
 
@@ -485,7 +486,7 @@ other option, and nothing on the canvas or the clock changes.
 
 | `look` with | shows |
 |---|---|
-| `survey: true` | the whole canvas at full detail, as several tiles (2 × 2 for a landscape canvas), each a separate image; modes apply (`mode: "gallery"`) |
+| `survey: true` | the whole canvas at full detail, as several tiles of at most 500 units (2 × 2 for most canvases, 2 × 1 for one twice as wide as high), each a separate image; modes apply (`mode: "gallery"`) |
 | `compare: "<an earlier look's path>"` | that earlier look on the left and the same view now on the right, at the same height: what a change did |
 
 A whole view is the canvas scaled down to a fifth or less: small marks,

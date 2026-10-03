@@ -292,7 +292,8 @@ impl<'a> Handling<'a> {
         self
     }
     /// Dip every stroke into `pile` (parts of `palette`'s tubes), thinned
-    /// with `medium` (0..1): the pass lays that pile as knifed, remixed a
+    /// with `medium` (0..1; below 0, down to -0.5, that share of its oil
+    /// blotted out): the pass lays that pile as knifed, remixed a
     /// little per dip by `mix_jitter` (a pile mixed by hand is uneven),
     /// drying at its tubes' rate. Nothing is aimed or matched.
     pub fn piled(mut self, palette: &'a Palette, pile: crate::palette::Mixture, medium: f32) -> Self {
@@ -547,9 +548,11 @@ impl Canvas {
                 }
             };
             // cutting in: the body strokes stop short of the edge
-            let pts = if hd.cut_in.is_some() { trim_inside(mask, &pts, (cx, cy), hd.tool.width) } else { pts };
+            // (by this stroke's own brush, where the marks are sized)
+            let width = stool.as_ref().map_or(hd.tool.width, |t| t.width);
+            let pts = if hd.cut_in.is_some() { trim_inside(mask, &pts, (cx, cy), width) } else { pts };
             // carried in: from half a brush outside the edge, inward
-            let pts = if carry && !inside { carry_in(mask, &pts, (cx, cy), hd.tool.width, hd.threshold) } else { pts };
+            let pts = if carry && !inside { carry_in(mask, &pts, (cx, cy), width, hd.threshold) } else { pts };
             if pts.is_empty() {
                 continue;
             }
@@ -560,7 +563,9 @@ impl Canvas {
                 if stool.is_some() {
                     plan.tool = stool.clone();
                     plan.sized = true;
-                    plan.fresh = true;
+                    // (a brush of its size for the stroke; a broken stroke's
+                    // later pieces go on with it and the paint left on it)
+                    plan.fresh = kp == 0;
                 }
                 if kp > 0 {
                     // a restart carries on with the paint left on the brush
@@ -828,7 +833,7 @@ impl Canvas {
                 if p.dip.is_some() {
                     if hd.blender {
                         self.tally.wipe();
-                    } else if p.fresh {
+                    } else if p.fresh && !p.sized {
                         self.tally.reload(1.0 / crate::tally::pace::DABS_PER_RELOAD);
                     } else {
                         piles.trip(&mut self.tally, p.want);

@@ -551,7 +551,8 @@ impl Canvas {
                     let k = y * ew + x;
                     if add[k] > 0.0 {
                         let i = (ex.1 + y) * w + ex.0 + x;
-                        let coats = add[k] / COAT_UM;
+                        // (the film as it settled here, not as it was laid)
+                        let coats = t[k].max(0.0) / COAT_UM;
                         let g = smoothstep(0.15, 1.3, oil[k]);
                         self.gloss[i] += (g - self.gloss[i]) * smoothstep(0.05, 0.6, coats);
                         self.absorb[i] *= (-coats / 0.4).exp();

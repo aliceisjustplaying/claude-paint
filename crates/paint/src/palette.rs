@@ -532,8 +532,9 @@ impl Mixture {
         // falls faster than hiding). The paint carries S itself: hiding
         // rounds to 1 for strong scatterers and would lose it.
         let p = Paint::km(self.color, self.scatter * k.max(1e-3), (self.stiff * k * k).min(1.0));
-        // its oil relative to tube paint: medium adds oil, blotting draws it out
-        Paint { solvent: self.solvent, oil: (1.0 + 1.5 * medium).max(0.1), ..p }
+        // its oil relative to tube paint: medium adds oil, blotting draws
+        // that share of it out (blot 0.5 leaves half)
+        Paint { solvent: self.solvent, oil: if medium < 0.0 { (1.0 + medium).max(0.1) } else { 1.0 + 1.5 * medium }, ..p }
     }
 
     /// This pile as paint on the brush, thinned with `medium` (0..1), drying

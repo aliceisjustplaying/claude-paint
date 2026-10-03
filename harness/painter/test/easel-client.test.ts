@@ -292,4 +292,11 @@ test("every look a survey names is renamed, in order", async () => {
 	writeFileSync(join(s, "out", "look-0006.png"), "0006");
 	const one = renameLooks(s, "out/look-0006.png (1000x714, 0.04s)");
 	assert.equal(one.said, `${one.paths[0]} (1000x714)`, "without the machine's seconds");
+	// a studio whose folders have spaces in their names; a line that only ends like a look
+	mkdirSync(join(s, "my out"));
+	writeFileSync(join(s, "my out", "look-0007.png"), "0007");
+	const spaced = renameLooks(s, "my out/look-0007.png (1000x714, 0.04s)\nno such look.png");
+	assert.equal(spaced.paths.length, 1);
+	assert.equal(readFileSync(join(s, spaced.paths[0]), "utf8"), "0007");
+	assert.ok(spaced.said.endsWith("\nno such look.png"));
 });

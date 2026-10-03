@@ -370,7 +370,8 @@ impl Canvas {
                 for x in 0..rw {
                     let i = y * rw + x;
                     if add[i] > 0.0 {
-                        let keep = (-add[i] / BRIDGE_UM).exp();
+                        // (by the film as it leveled here: thin on a peak it drained from)
+                        let keep = (-out[i].max(0.0) / BRIDGE_UM).exp();
                         self.height[(y0 + y) * w + x0 + x] -= (old[i] - fine[i]) * (1.0 - keep);
                     }
                 }

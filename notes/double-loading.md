@@ -10,8 +10,9 @@ then come off side by side within one stroke and mingle as it goes.
 bristle takes `amount × full × weight` of the paint, mixed into what it
 already holds, as `load` does:
 
-- `side` (-1..1) and `share` (0..1): which edge of the wide axis goes into
+- `side` (-1 or 1) and `share` (0..1): which edge of the wide axis goes into
   the pile and how much of the width, with a soft margin as hairs splay.
+  `side` 0 is the whole width, whatever `share` says.
 - `streak` (0..1): bristles take paint up in bands a few bristles wide
   (neighbors share a band, plus each bristle's own variation). The weight
   is `(1 - streak) + streak × 3.3 n²` with `n` in 0..1, so a dip's total stays

@@ -82,7 +82,7 @@ the picture is yours.
   the same area; the eye mixes them. `mix_jitter=` in `work` varies each
   dip; a pile is never perfectly even.
 - **Two colors on one brush.** `b:load(p2, 0.5, {side=1, share=0.4})`, or
-  `work{second={pile=p2, side=1, share=0.45}}`: each stroke carries both,
+  `work(m, {pile=p, second={pile=p2, side=1, share=0.45}})`: each stroke carries both,
   side by side, mingling as it goes. `streak=` loads unevenly, in bands.
 - **Wet into wet.** A stroke dragged through wet paint picks some of it up
   and carries it along: color changes within the stroke. Work an area while
@@ -119,8 +119,9 @@ the picture is yours.
 ## The knife
 
 - `k = knife{width=30}; k:load(p, 1.0); k:lay(points, {pressure={0.5, 0.5}})`
-  lays a slab with a flat top and crisp edges: light pressure thick and
-  short, firm pressure thin and long.
+  lays a slab with a flat top, torn where it parts from the blade (its ends,
+  its leading edge): light pressure lays it thick, and the paint runs out
+  sooner; firm pressure thin, and it goes further. The points set its path.
 - Pulled lightly over **dry** impasto, it catches only the ridges: broken
   color over a textured underlayer, a sparkle of light paint on dark.
 - `k:scrape(points, {pressure=1})` takes wet paint off down to what is dry:

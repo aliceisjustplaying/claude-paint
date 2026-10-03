@@ -13,8 +13,8 @@
 #          alma-tadema  (notes/research/<artist>_materials.md) and bin/box, which
 #          tonn         sets the box the painting is painted from; nothing a
 #          hopper       painter can read names another painter (the
-#          giverny      impressionist studio's note names the painters whose
-#          impressionist paintings its box was found in)
+#          giverny      impressionist studio's note names the painters
+#          impressionist in whose paintings its box was found)
 # dest:    a folder that doesn't exist yet (or is empty)
 #
 # dest gets:

@@ -393,6 +393,10 @@ impl UserData for KnifeU {
         });
         m.add_method("wipe", |_, k, ()| {
             k.k.borrow_mut().wipe();
+            // (a wipe on the rag takes the hand's time, as a brush's)
+            if let Some(c) = k.st.borrow_mut().canvas.as_mut() {
+                c.tally_mut().wipe();
+            }
             Ok(())
         });
         m.add_method("fullness", |_, k, ()| Ok(k.k.borrow().fullness()));

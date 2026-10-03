@@ -485,9 +485,12 @@ impl Canvas {
         self.absorb_any = a > 0.0;
     }
 
-    /// A varnish was laid over the whole picture: its surface is glossy.
+    /// A varnish was laid over the whole picture: its surface is glossy, and
+    /// a ground still absorbent anywhere is sealed.
     pub fn varnished(&mut self) {
         self.gloss.iter_mut().for_each(|v| *v = 1.0);
+        self.absorb.iter_mut().for_each(|v| *v = 0.0);
+        self.absorb_any = false;
     }
 
     /// Light the surface relief (paint ridges + weave) from the upper left.
@@ -601,7 +604,9 @@ impl Canvas {
                         lit = lit.min(1.0 - (over / (0.5 * rise)).min(1.0));
                     }
                 }
-                let diffuse = ambient + (1.0 - ambient) * ndl * lit / lz;
+                // (a slope facing a low lamp is lit more than the flat canvas,
+                // 1; capped, so the lowest lights don't burn ridges out to white)
+                let diffuse = (ambient + (1.0 - ambient) * ndl * lit / lz).min(1.6);
                 let shade = (1.0 + strength * (diffuse - 1.0)).max(0.0);
                 // sheen: wet oil shines, dry paint barely
                 let wet = (self.wet.vol[i] * 4.0).min(1.0);

@@ -353,6 +353,13 @@ pub fn look(c: &Canvas, v: &View, out: &Path) -> std::result::Result<(usize, usi
 
 /// `look`'s PNG bytes and size, written nowhere.
 pub fn render(c: &Canvas, v: &View) -> std::result::Result<(usize, usize, Vec<u8>), String> {
+    render_seen(c, v, None)
+}
+
+/// `render`, from the canvas as already seen in the view's light (`seen`:
+/// `Canvas::seen` or `seen_lit`), so several views of one canvas (a survey's
+/// tiles) light it once.
+pub fn render_seen(c: &Canvas, v: &View, seen: Option<&[Rgb]>) -> std::result::Result<(usize, usize, Vec<u8>), String> {
     let f = c.window();
     // crop: units -> whole-canvas pixels -> pixels of the held window
     let (wx0, wy0, wx1, wy1) = (f.x0, f.y0, f.x0 + f.w, f.y0 + f.h);
@@ -377,9 +384,16 @@ pub fn render(c: &Canvas, v: &View) -> std::result::Result<(usize, usize, Vec<u8
         return Err("look: canvas is empty".into());
     }
     let mut size = if v.crop.is_some() { long } else { v.size.unwrap_or(1000).clamp(1, 1600) };
-    let px = match v.light {
-        Some((az, el)) => c.seen_lit(az, el, 1.0),
-        None => c.seen(),
+    let own;
+    let px: &[Rgb] = match seen {
+        Some(px) => px,
+        None => {
+            own = match v.light {
+                Some((az, el)) => c.seen_lit(az, el, 1.0),
+                None => c.seen(),
+            };
+            &own
+        }
     };
     loop {
         // Average down from the original canvas on each attempt; never enlarge.

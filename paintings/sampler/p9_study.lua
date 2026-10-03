@@ -1,6 +1,7 @@
-canvas{size=600, aspect=1.5, linen={16,17}, seed=77, ground={{pile={{"lead white",12},{"yellow ochre",0.25}}, um=130, apply="brush", texture=0.4}}}
+canvas{size=600, aspect=1.5, linen={16,17}, seed=77, ground={{pile={{"lead white",12},{"yellow ochre",0.25}}, um=130, apply="brush"}}}
 horizon = 380
 poplars = {}
+treesM = nil
 for i, x in ipairs({118, 160, 196, 612, 650, 695, 735, 782}) do
   poplars[#poplars+1] = {x = x + rand(-8, 8), h = 200 + 55 * math.sin(i * 1.7) + (i % 3) * 18, w = 15 + rand(0, 7)}
 end

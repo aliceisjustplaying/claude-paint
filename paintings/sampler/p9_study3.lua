@@ -6,7 +6,8 @@ for _, p in ipairs(poplars) do
     local t = rand(0.08, 0.9)
     local y = horizon - p.h * t
     local halfw = p.w * (1 - t * 0.85)
-    local x = p.x - halfw * rand(0.35, 0.95)
+    -- (the edge toward the light, which is at x 420)
+    local x = p.x + (p.x < 420 and 1 or -1) * halfw * rand(0.35, 0.95)
     d:reload(warmLeaf, 0.9)
     d:stroke({{x, y}, {x + rand(-1, 1), y + rand(8, 16)}}, {pressure={0.7, 0.2}})
   end
@@ -16,7 +17,7 @@ local b = brush{kind="filbert", width=6, stiffness=0.85, lay=8}
 for i = 1, 30 do b:reload(sunL, 1.0); local x, y = randn(410, 55), horizon - rand(14, 60); b:stroke({{x, y}, {x + rand(12, 26), y + rand(-1.5, 1.5)}}, {pressure={1.0, 0.35}}) end
 -- the sun's path on the water: thick horizontal dabs, narrowing toward us
 for i = 1, 70 do
-  local y = horizon + 14 + rand(0, 1) ^ 1.6 * 300
+  local y = math.min(horizon + 14 + rand(0, 1) ^ 1.6 * 300, H - 8)
   local spread = 40 + (y - horizon) * 0.18
   local x = 430 + randn(0, spread * 0.45)
   b:reload(sunL, 1.0)

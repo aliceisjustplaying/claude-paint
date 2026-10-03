@@ -5,7 +5,7 @@
 #   the catalog holds that box's tubes and no other;
 # - two box-* features without all-boxes: no build (a compile error);
 # - the replay build (easel's default, paint's all-boxes): the default box
-#   and all five named boxes.
+#   and all seven named boxes.
 # paint's catalog tests (palette::tests) run in each, and the easel's
 # painter test the_build_holds_only_its_box_s_tubes in each painter build.
 #

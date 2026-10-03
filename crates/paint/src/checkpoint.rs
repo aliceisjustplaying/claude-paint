@@ -17,8 +17,10 @@
 //! add state to `Canvas` or `Wet`, add it here and bump `MAGIC`.
 //!
 //! The format is version 9 (`MAGIC` is `PAINTCK9`: engine 3's wet paint carries
-//! solvent and oil, and the canvas its gloss and the ground's absorbency); files of any other
-//! version are refused (re-run to checkpoint again). After the header the
+//! solvent and oil, and the canvas its gloss and the ground's absorbency). A version 8
+//! file is still read (an oil ground's gloss, nothing absorbent, no solvent, a
+//! tube paint's oil); files of any other version are refused (re-run to
+//! checkpoint again). After the header the
 //! writer stores, in order: the frame and crop window, the scale and mm per
 //! unit, the linen (if any), the surface generation, the stroke counter and
 //! dirty box, then per pixel the color, relief, film, wet volume, pigment
@@ -39,6 +41,9 @@ use crate::wet::LAT;
 use std::io::{self, Read, Write};
 
 const MAGIC: &[u8; 8] = b"PAINTCK9";
+/// The format before it, still read (`read_state`): no gloss, no absorbency,
+/// and three properties to a pixel of wet paint.
+const MAGIC_8: &[u8; 8] = b"PAINTCK8";
 
 fn put_u64(w: &mut impl Write, v: u64) -> io::Result<()> {
     w.write_all(&v.to_le_bytes())
@@ -82,18 +87,27 @@ fn bad(msg: &str) -> io::Error {
 
 /// Read just the header of a checkpoint (to validate it before loading).
 pub fn read_header(r: &mut impl Read) -> io::Result<String> {
+    read_head(r).map(|h| h.1)
+}
+
+/// The format version (8 or 9) and the header.
+fn read_head(r: &mut impl Read) -> io::Result<(u32, String)> {
     let mut m = [0u8; 8];
     r.read_exact(&mut m)?;
-    if &m != MAGIC {
+    let version = if &m == MAGIC {
+        9
+    } else if &m == MAGIC_8 {
+        8
+    } else {
         return Err(bad("not a canvas checkpoint (or an older format)"));
-    }
+    };
     let n = get_u64(r)? as usize;
     if n > 1 << 20 {
         return Err(bad("checkpoint header too long"));
     }
     let mut h = vec![0u8; n];
     r.read_exact(&mut h)?;
-    String::from_utf8(h).map_err(|_| bad("checkpoint header is not UTF-8"))
+    Ok((version, String::from_utf8(h).map_err(|_| bad("checkpoint header is not UTF-8"))?))
 }
 
 impl Canvas {
@@ -183,7 +197,7 @@ impl Canvas {
 
     /// Read a canvas written by `write_state`; returns it and the header.
     pub fn read_state(r: &mut impl Read) -> io::Result<(Canvas, String)> {
-        let header = read_header(r)?;
+        let (version, header) = read_head(r)?;
         let mut u = [0usize; 10];
         for v in u.iter_mut() {
             *v = usize::try_from(get_u64(r)?).map_err(|_| bad("checkpoint frame is invalid"))?;
@@ -246,15 +260,25 @@ impl Canvas {
         c.px = px.as_chunks::<3>().0.to_vec();
         c.height = get_all(r, n)?;
         c.film = get_all(r, n)?;
-        c.gloss = get_all(r, n)?;
-        c.absorb = get_all(r, n)?;
+        // (a version 8 canvas: an oil ground's gloss, nothing absorbent)
+        if version >= 9 {
+            c.gloss = get_all(r, n)?;
+            c.absorb = get_all(r, n)?;
+        } else {
+            c.gloss = vec![crate::canvas::OIL_GROUND_GLOSS; n];
+            c.absorb = vec![0.0; n];
+        }
         c.absorb_any = c.absorb.iter().any(|&a| a > 0.0);
         let mut wet = crate::wet::Wet::new(n);
         wet.vol = get_all(r, n)?;
         let lat = get_all(r, n * LAT)?;
         wet.lat = lat.as_chunks::<LAT>().0.to_vec();
-        let hide = get_all(r, n * 5)?;
-        wet.hide = hide.as_chunks::<5>().0.to_vec();
+        wet.hide = if version >= 9 {
+            get_all(r, n * 5)?.as_chunks::<5>().0.to_vec()
+        } else {
+            // (version 8's paint: no solvent, a tube paint's oil)
+            get_all(r, n * 3)?.as_chunks::<3>().0.iter().map(|h| [h[0], h[1], h[2], 0.0, 1.0]).collect()
+        };
         wet.stroke = get_all(r, n)?.into_iter().map(f32::to_bits).collect();
         wet.touched = get_all(r, n)?.into_iter().map(f32::to_bits).collect();
         wet.current = current;

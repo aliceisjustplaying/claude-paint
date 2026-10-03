@@ -1,6 +1,7 @@
 # Engine 3: impasto, the knife, the relief look
 
-Engine 3 is what a new painting is painted with (`--@ engine 3` in its log).
+Engine 3 brought the changes below; a new painting is painted with engine 4
+(`--@ engine 4` in its log), which adds the knife's tears (at the end).
 A log that names engine 1 or 2 replays exactly as before: every change below
 is gated on the canvas's engine, or is a new option an old log never uses.
 Checked: an engine 2 painting of 17 chunks replays to a PNG byte-identical to
@@ -25,14 +26,16 @@ painter never saw relief either: looks showed color only.
   weave's relief fades from its surface over some tens of µm of paint (it
   printed through even millimetre impasto before).
 - **Clumping hair** (`bristle.rs` `exchange`, `Surf::clump`): in stiff paint
-  the hairs gather into clumps, `hair · (1 + 6·stiff²)` across. A clump lays
+  the hairs gather into clumps, `hair · (1 + 4·s²)` across, where `s` runs from 0 at a stiffness of 0.4 (as
+  on the brush, thinned by any solvent) to 1 at 1. A clump lays
   more paint and the gaps between clumps less (furrows along the stroke,
   averaging out across the brush), and a clump throws the paint each hair
   ploughs aside its own width (up to 3 px) instead of a sub-pixel hair's, so
   walls rise along the stroke's edges. Each hair still moves only its own
   share of paint.
 - **Blotting** (`pile{..., blot=0..0.5}`): oil drawn out of the paint, a
-  negative medium in `Mixture::paint`: stiffness × (1+blot)² (capped at 1),
+  negative medium in `Mixture::paint`: that share of the oil gone,
+  stiffness × (1+blot)² (capped at 1),
   scattering × (1+blot).
 - **The knife** (`Canvas::knife`, Lua `knife{width=}`): a flexible steel blade
   (it follows relief over `FLEX_MM` 4 mm and bridges finer hollows) resting on
@@ -73,7 +76,9 @@ painter never saw relief either: looks showed color only.
     (smoothstep 0.15..1.3), blended with the surface under it for thin
     films; varnish sets it to 1. Engine 3 shows a matte surface with the
     first-surface reflection it scatters back (`SURFACE_REFLECTANCE` 4%,
-    `haze`) in looks and saved pictures. Checkpoint format 9.
+    `haze`) in looks and saved pictures. Checkpoint format 9; a format 8
+    file (a save from before) is still read, as an oil ground with nothing
+    absorbent and tube paint's oil.
   - Not modeled: yellowing, fading of lakes, color change of chromates.
 - **The giverny and impressionist boxes**: see `notes/research/giverny_materials.md` and
   `notes/research/impressionist_materials.md` (from analyses of the paintings).

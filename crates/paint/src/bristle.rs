@@ -2458,7 +2458,7 @@ pub struct Knife {
 
 impl Knife {
     pub fn new(width: f32) -> Self {
-        Knife { width: width.max(1.0), vol: 0.0, lat: [0.0; LAT], hide: [0.0; 5], cure: 0.0 }
+        Knife { width: if width.is_finite() { width.clamp(1.0, 1000.0) } else { 1.0 }, vol: 0.0, lat: [0.0; LAT], hide: [0.0; 5], cure: 0.0 }
     }
     /// A full load: a bead along the blade twice its length deep and 12
     /// coats (300 µm) thick (about a millilitre on a 4 cm blade).
@@ -2495,7 +2495,8 @@ impl Canvas {
     /// top, or over dry impasto paint on its peaks only. When the blade
     /// lifts, the share `lift` of the bead stays where it last was.
     pub fn knife(&mut self, k: &mut Knife, pts: &[(f32, f32)], pressure: (f32, f32), angle: Option<f32>, lay: bool, lift: f32) {
-        if pts.is_empty() {
+        // (the blade's length is a public field: nothing to pull with one that is no length)
+        if pts.is_empty() || !(k.width.is_finite() && (1.0..=1000.0).contains(&k.width)) {
             return;
         }
         self.tally.stroke(&Tool::hog_flat(k.width), pts, self.mm_per_unit);
@@ -2691,7 +2692,8 @@ impl Canvas {
             }
         }
         k.vol += held;
-        if let Some((x0, y0, x1, y1)) = bounds {
+        // (the window's own pixels, as a brush's bounds: a crop's start at its corner)
+        if let Some((x0, y0, x1, y1)) = bounds.map(|(x0, y0, x1, y1)| (x0 - sf.ox, y0 - sf.oy, x1 - sf.ox, y1 - sf.oy)) {
             self.wet.touch(x0, y0, x1, y1);
         }
     }

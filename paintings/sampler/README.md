@@ -2,7 +2,8 @@
 
 Nine plates that show each material and technique of engine 3, in the
 giverny box (`EASEL_BOX=giverny`). Each plate is `common.lua` (the canvas)
-then its own chunk; plate 7 (grounds) is run twice, on
+then its own chunk (run from this folder, or give the files' paths:
+`-f paintings/sampler/common.lua`); plate 7 (grounds) is run twice, on
 `canvas{..., ground={{..., apply="roller"}}}` and with `absorbent=true`;
 plate 9 (a small study) is its three files in order, with its own canvas.
 

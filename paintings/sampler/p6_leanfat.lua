@@ -9,6 +9,13 @@ end
 local wash = pile({{"ultramarine blue",1},{"carmine lake",0.6}, turps=0.75})
 work(ellipse(260, 530, 220, 90), {hand="broad", pile=wash, coverage=1.2, angle=0.2})
 work(ellipse(700, 530, 220, 90), {hand="broad", pile=wash, coverage=1.2, angle=0.2})
-print(wait(2*60))
+-- the wash is still open after two hours and tacky after a day: body paint goes over it dry
+for _ = 1, 60 do
+  local wet = 0
+  for x = 580, 820, 20 do for y = 490, 560, 14 do if drying(x, y) ~= "dry" then wet = wet + 1 end end end
+  if wet == 0 then break end
+  wait(24*60)
+end
+print(wait(0))
 work(ellipse(700, 520, 150, 55), {hand="body", pile=pile{{"lead white",3},{"cadmium yellow",1},{"vermilion",0.2}}, coverage=1.8, angle=0.2, length={15,40}, tool="filbert 8"})
 print(wait(20*24*60))

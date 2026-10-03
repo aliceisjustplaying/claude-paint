@@ -908,6 +908,9 @@ impl Server {
             }
             i += 1;
         }
+        if survey && compare.is_some() {
+            return Err("look: --survey and --compare are two looks; ask for one".into());
+        }
         if survey {
             return self.survey(&rest);
         }
@@ -943,6 +946,11 @@ impl Server {
             return Err("look --survey covers the whole canvas at full detail: no --crop or --size".into());
         }
         let c = self.s.canvas().ok_or("no canvas yet: the first chunk is canvas{...}")?;
+        // (the canvas as it is seen, lit or not, once for all the tiles)
+        let seen = match look::View::parse(args)?.light {
+            Some((az, el)) => c.seen_lit(az, el, 1.0),
+            None => c.seen(),
+        };
         let (wu, hu) = (c.width(), c.height());
         let cols = (wu / 500.0).ceil().max(1.0) as usize;
         let rows = (hu / 500.0).ceil().max(1.0) as usize;
@@ -954,7 +962,7 @@ impl Server {
                 let mut a = args.to_vec();
                 a.extend(["--crop".to_string(), crop.clone()]);
                 let v = look::View::parse(&a)?;
-                let (w, h, png) = look::render(&c, &v)?;
+                let (w, h, png) = look::render_seen(&c, &v, Some(&seen))?;
                 let p = new_look(&session_dir(&self.name), &png)?;
                 out += &format!("{} ({w}x{h}): row {} column {} ({crop})\n", p.display(), r + 1, k + 1);
             }
@@ -973,7 +981,14 @@ impl Server {
         let c = self.s.canvas().ok_or("no canvas yet: the first chunk is canvas{...}")?;
         let (_, _, png) = look::render(&c, &v)?;
         let now = image::load_from_memory(&png).map_err(|e| e.to_string())?.to_rgb8();
-        let before = image::open(prev).map_err(|e| format!("--compare {}: {e}", prev.display()))?.to_rgb8();
+        // an earlier look of this studio: a picture under its folder, nothing outside it
+        let studio = root().canonicalize().map_err(|e| e.to_string())?;
+        let prev = if prev.is_absolute() { prev.to_path_buf() } else { studio.join(prev) };
+        let real = prev.canonicalize().map_err(|e| format!("--compare {}: {e}", prev.display()))?;
+        if !real.starts_with(&studio) {
+            return Err(format!("--compare {}: an earlier look is a picture in this studio ({})", prev.display(), studio.display()));
+        }
+        let before = image::open(&real).map_err(|e| format!("--compare {}: {e}", prev.display()))?.to_rgb8();
         let h = now.height();
         let bw = ((before.width() as f64 * h as f64 / before.height() as f64).round() as u32).max(1);
         let before = image::imageops::resize(&before, bw, h, image::imageops::FilterType::Lanczos3);
@@ -1087,7 +1102,7 @@ pub const GALLERY_LIGHT: (f32, f32) = (115.0, 55.0);
 /// `light az,el` (degrees) as a pair.
 pub(crate) fn light_of(s: &str) -> Result<(f32, f32), String> {
     let p: Vec<f32> = s.split(',').map(|t| t.trim().parse::<f32>()).collect::<Result<_, _>>().map_err(|_| format!("light {s}: want azimuth,elevation in degrees"))?;
-    if p.len() != 2 || !(1.0..=90.0).contains(&p[1]) {
+    if p.len() != 2 || !p[0].is_finite() || !(1.0..=90.0).contains(&p[1]) {
         return Err(format!("light {s}: want azimuth,elevation in degrees (elevation 1 to 90)"));
     }
     Ok((p[0], p[1]))
@@ -1482,7 +1497,7 @@ mod tests {
         assert_eq!(args(&["a.png"]), Ok((Some(PathBuf::from("a.png")), None)));
         assert_eq!(args(&["a.png", "--gallery"]), Ok((Some(PathBuf::from("a.png")), Some(GALLERY_LIGHT))));
         assert_eq!(args(&["--light", "135,25", "a.png"]), Ok((Some(PathBuf::from("a.png")), Some((135.0, 25.0)))));
-        for bad in [&["--light"][..], &["--light", "135"], &["--light", "135,91"], &["a.png", "b.png"], &["--lit"]] {
+        for bad in [&["--light"][..], &["--light", "135"], &["--light", "135,91"], &["--light", "nan,25"], &["--light", "inf,25"], &["a.png", "b.png"], &["--lit"]] {
             assert!(args(bad).is_err(), "{bad:?}");
         }
     }

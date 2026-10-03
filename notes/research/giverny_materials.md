@@ -8,12 +8,13 @@ media that analyses of the paintings found), and nothing of what the
 paintings look like.*
 
 <!-- research: The research pass that gathered this recorded its sources for the note as a whole: a key is
-given where it tied a finding to one source, and a claim without a key was not tied to one. The AIC catalogue pages were not reachable; their findings come from secondary summaries. No
+given where it tied a finding to one source, and a claim without a key was not tied to one. No
 page numbers were recovered. Each finding should be checked against its source before it is relied on. -->
 
 ## Summary
 
-From about 1880 Monet's paintings hold no black and no earths, and from
+From about 1880 Monet's paintings hold no black and no earths other than
+yellow ochre, and from
 the late 1880s zinc white is mixed into the colors. The paintings of 1899
 to 1926 were painted from a short list: lead white, cobalt blue, French
 ultramarine, cobalt violet, viridian, the cadmium yellows and orange, zinc
@@ -55,17 +56,19 @@ yellow, emerald green (it reacts with the cadmium yellows) [TB28].
 
 ## 5. Media and varnish
 
-- **Oils.** Mostly poppy oil, the white in linseed oil. *Uncertain*
-  (secondary summaries). Linseed dries fastest and yellows most, then
-  walnut, then poppy.
+- **Oils.** Mostly poppy oil, the white in linseed oil. *Uncertain*: the
+  same research reported the reverse for his circle as a whole (the white
+  in poppy oil, the colors in linseed), and neither was tied to one source.
+  Linseed dries fastest and yellows most, then walnut, then poppy.
 - **Varnish.** The painters of his circle preferred their pictures
-  unvarnished: matte, and reading lighter than varnished.
+  unvarnished: matte, and reading lighter than varnished. *Uncertain* (not
+  tied to one source).
 
 ## 8. Condition and aging
 
 Zinc yellow browns or turns green; madder and cochineal lakes fade; barium
-yellow turns green; zinc white forms brittle soaps with the oil. None of
-this is modeled at the easel.
+yellow turns green; zinc white forms brittle soaps with the oil.
+*Uncertain* (not tied to one source). None of this is modeled at the easel.
 
 ## 9. The tubes here
 

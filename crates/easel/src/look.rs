@@ -26,7 +26,7 @@ pub struct View {
     pub light: Option<(f32, f32)>,
 }
 
-const LOOK_ARGS: &str = "--crop x0,y0,x1,y1 --mode value,squint,mirror,relief --light azimuth,elevation --grid [step] --size N";
+const LOOK_ARGS: &str = "--crop x0,y0,x1,y1 --mode value,squint,mirror,relief,gallery --light azimuth,elevation --grid [step] --size N";
 
 /// The relief look's default light: from the upper left, raking at 25°.
 const RAKING: (f32, f32) = (135.0, 25.0);
@@ -67,7 +67,8 @@ impl View {
                             "squint" | "blur" => v.squint = true,
                             "mirror" => v.mirror = true,
                             "relief" | "raking" => v.light = Some(v.light.unwrap_or(RAKING)),
-                            o => return Err(format!("--mode {o}: normal, value, squint, mirror, relief (comma-separated)")),
+                            "gallery" => v.light = Some(v.light.unwrap_or(crate::GALLERY_LIGHT)),
+                            o => return Err(format!("--mode {o}: normal, value, squint, mirror, relief, gallery (comma-separated)")),
                         }
                     }
                 }

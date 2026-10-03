@@ -13,3 +13,12 @@ plate 9 (a small study) is its three files in order, with its own canvas.
     easel -s demo-p1 look --mode relief      # plates 3, 4, 5, 9
 
 See notes/techniques.md for what each technique is for.
+
+Plate 10 is plate 9 saved under six lights:
+
+    easel -s demo-p9 save flat.png
+    easel -s demo-p9 save gallery.png --gallery
+    easel -s demo-p9 save 40.png --light 125,40
+    easel -s demo-p9 save 25.png --light 135,25
+    easel -s demo-p9 save 10.png --light 135,10
+    easel -s demo-p9 save right.png --light 20,30

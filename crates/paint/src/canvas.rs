@@ -540,10 +540,15 @@ impl Canvas {
     /// the dry relief plus the wet paint's own thickness, lit from `azimuth`
     /// (degrees: 0 from the right, 90 from the top, 135 from the upper left)
     /// at `elevation` degrees above the canvas. Ridges cast shadows along the
-    /// light, and wet paint has an oily sheen.
+    /// light, and wet paint has an oily sheen. The higher the light, the
+    /// more of the room's light fills the shadows (a raking lamp in a dim
+    /// room, or a gallery's light from above).
     pub fn seen_lit(&self, azimuth: f32, elevation: f32, strength: f32) -> Vec<Rgb> {
         use rayon::prelude::*;
-        const AMBIENT: f32 = 0.35;
+        // the room's light that fills the shadows: little where one low lamp
+        // rakes across the picture in a dim room, much under a gallery's high
+        // light, where walls and ceiling light the picture too
+        let ambient = crate::lerp(0.3, 0.55, crate::smoothstep(10.0, 55.0, elevation));
         let base = self.seen();
         let (w, h) = (self.f.w, self.f.h);
         let um_px = self.px_mm() * 1000.0;
@@ -562,6 +567,11 @@ impl Canvas {
             (lx / m, ly / m)
         };
         let at = |x: isize, y: isize| surf[(y.clamp(0, h as isize - 1) as usize) * w + x.clamp(0, w as isize - 1) as usize];
+        // shadows are cast by the relief a pixel can resolve: bumps finer than
+        // a pixel (a stroke's furrows) shade by their slope, above, and don't
+        // shadow the paint around them
+        let shade_surf = crate::surface::box_blur(&surf, w, h, 1);
+        let sat = |x: isize, y: isize| shade_surf[(y.clamp(0, h as isize - 1) as usize) * w + x.clamp(0, w as isize - 1) as usize];
         let hv = {
             let v = [lx, ly, lz + 1.0];
             let hm = (v[0] * v[0] + v[1] * v[1] + v[2] * v[2]).sqrt();
@@ -573,21 +583,25 @@ impl Canvas {
                 let (x, y) = ((i % w) as isize, (i / w) as isize);
                 let dx = (at(x + 1, y) - at(x - 1, y)) * k;
                 let dy = (at(x, y + 1) - at(x, y - 1)) * k;
+                // paint edges round over (as `relief`): soft-limit the slope,
+                // so the furrows of a stroke model it and don't turn it to bark
+                let g = (dx * dx + dy * dy).sqrt();
+                let soft = 1.0 / (1.0 + g / 1.2);
+                let (dx, dy) = (dx * soft, dy * soft);
                 let m = (dx * dx + dy * dy + 1.0).sqrt();
                 let n = [-dx / m, -dy / m, 1.0 / m];
                 let ndl = (n[0] * lx + n[1] * ly + n[2] * lz).max(0.0);
                 // cast shadow: does the surface toward the light rise above the ray?
-                let h0 = surf[i];
+                let h0 = shade_surf[i];
                 let mut lit = 1.0f32;
                 for s in 1..=steps {
                     let (px, py) = (x as f32 + sx * s as f32, y as f32 + sy * s as f32);
-                    let over = at(px.round() as isize, py.round() as isize) - (h0 + rise * s as f32);
+                    let over = sat(px.round() as isize, py.round() as isize) - (h0 + rise * s as f32);
                     if over > 0.0 {
                         lit = lit.min(1.0 - (over / (0.5 * rise)).min(1.0));
                     }
                 }
-                // the room's light fills the shadows: a third of a flat surface's
-                let diffuse = AMBIENT + (1.0 - AMBIENT) * ndl * lit / lz;
+                let diffuse = ambient + (1.0 - ambient) * ndl * lit / lz;
                 let shade = (1.0 + strength * (diffuse - 1.0)).max(0.0);
                 // sheen: wet oil shines, dry paint barely
                 let wet = (self.wet.vol[i] * 4.0).min(1.0);

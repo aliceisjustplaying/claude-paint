@@ -456,7 +456,8 @@ in canvas units, not a position and width/height.
 | `mode: "squint"` | blurred, as through half-closed eyes |
 | `mode: "mirror"` | flipped left to right |
 | `mode: "relief"` | under a raking light from the upper left, so the paint's ridges, furrows and slabs show (wet paint shines) |
-| `mode: "relief"`, `light: "45,15"` | the light from that azimuth (degrees: 0 from the right, 90 from the top) and elevation |
+| `mode: "gallery"` | as the picture hangs: lit from above and a little left at 55°, so impasto models softly |
+| `mode: "relief"`, `light: "45,15"` | the light from that azimuth (degrees: 0 from the right, 90 from the top) and elevation; the lower the light, the harsher |
 | `mode: "value,squint"`, `size: 600` | modes combine; `size` sets the long side |
 | `grid: true` | a squared grid in canvas units, labeled along the edges |
 | `crop: "300,200,500,350"`, `grid: 10` | a window with a grid every 10 units |

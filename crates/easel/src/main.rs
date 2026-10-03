@@ -66,7 +66,7 @@ const USAGE: &str = "easel: a live painting session (see notes/easel_guide.md)
   easel log           the painting so far (= paintings/lua/painting.lua)
   easel status        chunks, width, canvas
   easel globals       the painting's globals, one a line: chunk that last set it, name, what it holds
-  easel save [path]   the canvas as a PNG (default out/easel/painting/painting.png)
+  easel save [path] [--light az,el | --gallery]   the canvas as a PNG (default out/easel/painting/painting.png), lit on its relief if asked
   easel frames on|off save a look after every chunk
   easel close         end the session (the log stays)
   easel note '<text>' | easel note - (stdin)    append a dated entry to notes/journal.md
@@ -81,7 +81,7 @@ const USAGE: &str = "easel: a live painting session (see notes/easel_guide.md)
   easel log           the session so far (= paintings/lua/<name>.lua)
   easel status        chunks, width, canvas
   easel globals       the painting's globals, one a line: chunk that last set it, name, what it holds
-  easel save [path]   the canvas as a PNG (default out/easel/<name>/<name>.png)
+  easel save [path] [--light az,el | --gallery]   the canvas as a PNG (default out/easel/<name>/<name>.png), lit on its relief if asked
   easel frames on|off save a look after every chunk
   easel check         replay the log from scratch and compare with the live canvas
   easel close         end the session (the log stays)
@@ -940,9 +940,11 @@ impl Server {
             "look" => self.look(args, None),
             "log" => Ok(self.s.program(&self.name)),
             "save" => {
-                let p = args.first().map(PathBuf::from).unwrap_or_else(|| session_dir(&self.name).join(format!("{}.png", self.name)));
+                // save [path] [--light az,el | --gallery]: lit on the paint's relief, or color only
+                let (path, light) = save_args(args)?;
+                let p = path.unwrap_or_else(|| session_dir(&self.name).join(format!("{}.png", self.name)));
                 let c = self.s.canvas().ok_or("no canvas yet")?;
-                deliver(&c, &p)?;
+                deliver_lit(&c, &p, light)?;
                 Ok(format!("{}\n", p.display()))
             }
             "frames" => {
@@ -970,11 +972,53 @@ fn bits_f(v: &[f32]) -> Vec<u32> {
 
 // ---------------------------------------------------------------- replay
 
+/// A gallery's light: from above and in front, high (55°) and a little from
+/// the left, as a picture hangs on a wall: impasto models softly.
+pub const GALLERY_LIGHT: (f32, f32) = (115.0, 55.0);
+
+/// `light az,el` (degrees) as a pair.
+fn light_of(s: &str) -> Result<(f32, f32), String> {
+    let p: Vec<f32> = s.split(',').map(|t| t.trim().parse::<f32>()).collect::<Result<_, _>>().map_err(|_| format!("light {s}: want azimuth,elevation in degrees"))?;
+    if p.len() != 2 || !(1.0..=90.0).contains(&p[1]) {
+        return Err(format!("light {s}: want azimuth,elevation in degrees (elevation 1 to 90)"));
+    }
+    Ok((p[0], p[1]))
+}
+
+/// `save`'s arguments: an optional path, then `--light az,el` or `--gallery`.
+fn save_args(args: &[String]) -> Result<(Option<PathBuf>, Option<(f32, f32)>), String> {
+    let (mut path, mut light) = (None, None);
+    let mut i = 0;
+    while i < args.len() {
+        match args[i].as_str() {
+            "--light" => {
+                light = Some(light_of(args.get(i + 1).ok_or("--light needs azimuth,elevation")?)?);
+                i += 1;
+            }
+            "--gallery" => light = Some(GALLERY_LIGHT),
+            a if !a.starts_with('-') && path.is_none() => path = Some(PathBuf::from(a)),
+            o => return Err(format!("save [path] [--light az,el | --gallery]: unknown {o:?}")),
+        }
+        i += 1;
+    }
+    Ok((path, light))
+}
+
 /// The delivered PNG: the canvas as it is seen now (wet paint as laid, no
 /// drying), 8-bit sRGB. `save` and `run` both write it.
 fn deliver(c: &Canvas, out: &Path) -> Result<(), String> {
+    deliver_lit(c, out, None)
+}
+
+/// `deliver`, lit from (azimuth, elevation) in degrees on the paint's relief
+/// (`Canvas::seen_lit`), or not lit (None: color only).
+fn deliver_lit(c: &Canvas, out: &Path, light: Option<(f32, f32)>) -> Result<(), String> {
     let f = c.window();
-    let buf: Vec<u8> = c.seen().iter().flat_map(|p| p.map(|v| (linear_to_srgb(v) * 255.0).round().clamp(0.0, 255.0) as u8)).collect();
+    let px = match light {
+        Some((az, el)) => c.seen_lit(az, el, 1.0),
+        None => c.seen(),
+    };
+    let buf: Vec<u8> = px.iter().flat_map(|p| p.map(|v| (linear_to_srgb(v) * 255.0).round().clamp(0.0, 255.0) as u8)).collect();
     if let Some(d) = out.parent() {
         std::fs::create_dir_all(d).map_err(|e| e.to_string())?;
     }
@@ -982,7 +1026,7 @@ fn deliver(c: &Canvas, out: &Path) -> Result<(), String> {
 }
 
 #[cfg(feature = "replay")]
-const RUN_USAGE: &str = "run <file.lua> [--out path.png] [--look] [--state-digest digests.txt] [--frames-every <s> --frames-dir <dir> [--frame-width 1000]] (replays at the live width, 2400px)";
+const RUN_USAGE: &str = "run <file.lua> [--out path.png] [--light az,el | --gallery] [--look] [--state-digest digests.txt] [--frames-every <s> --frames-dir <dir> [--frame-width 1000]] (replays at the live width, 2400px)";
 
 #[cfg(feature = "replay")]
 fn run(args: &[String]) -> Result<(), String> {
@@ -990,8 +1034,8 @@ fn run(args: &[String]) -> Result<(), String> {
     let mut i = 1;
     while i < args.len() {
         match args[i].as_str() {
-            "--out" | "--dump-surface" | "--frames-every" | "--frames-dir" | "--frame-width" | "--state-digest" if i + 1 < args.len() => i += 2,
-            "--look" => i += 1,
+            "--out" | "--dump-surface" | "--frames-every" | "--frames-dir" | "--frame-width" | "--state-digest" | "--light" if i + 1 < args.len() => i += 2,
+            "--look" | "--gallery" => i += 1,
             o => return Err(format!("run: unknown argument {o:?} ({RUN_USAGE})")),
         }
     }
@@ -1050,7 +1094,8 @@ fn run(args: &[String]) -> Result<(), String> {
             flag(args, "--frames-dir").unwrap_or_default()
         );
     }
-    deliver(&c, &out)?;
+    let light = if args.iter().any(|a| a == "--gallery") { Some(GALLERY_LIGHT) } else { flag(args, "--light").map(|l| light_of(&l)).transpose()? };
+    deliver_lit(&c, &out, light)?;
     eprintln!("wrote {} ({} chunks, painted in {paint_secs:.1}s, total {:.1}s)", out.display(), chunks.len(), t0.elapsed().as_secs_f64());
     if let Some(p) = flag(args, "--dump-surface") {
         // the dried surface height (µm) under the saved pixels: little-endian

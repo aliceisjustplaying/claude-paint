@@ -48,6 +48,14 @@ painter never saw relief either: looks showed color only.
   shadows marched along the light, a third of the light as ambient, and a
   sheen on wet paint. It changes nothing on the canvas. `relief()` (the
   finished picture's light) is unchanged.
+- **Lit saves and the gallery light**: `save [path] --light az,el` or
+  `--gallery` (and `run ... --gallery`) write the picture lit on its relief;
+  `look --mode gallery` lights it at 55° from above and a little left. The
+  lit view rounds paint edges (slopes soft-limited as in `relief`), casts
+  shadows only from relief a pixel resolves (the surface blurred by a
+  pixel), and fills shadows with more of the room's light the higher the
+  light (ambient 0.3 at 10°, 0.55 at 55°). At the gallery light thick light
+  dabs keep 0.96 of their flat brightness; at 10° they shadow one another.
 - **Sketches**: a session whose name starts with `sketch` paints at 600 px
   instead of 2400 (about 16 times faster) for trying out a composition; its
   log replays at the same width.

@@ -68,8 +68,9 @@ the picture is yours.
   furrows, walls rise along their sides, a bead where they end. Fluid paint
   levels flat: that is a glaze's job, not impasto's.
 - Check it with `look` and `mode: "relief"` (raking light from the upper
-  left; `light: "45,15"` for a lower, other light). Relief that only shows
-  in raking light is real but quiet; in the plain look the color carries it.
+  left at 25°: it exaggerates, as a raking lamp does) and with
+  `mode: "gallery"` (55°, as the picture is seen on a wall). Judge the
+  picture under the gallery light; use raking light to inspect the surface.
 - Let impasto set before painting into it, unless you want the new stroke
   to drag the old one along.
 
@@ -119,6 +120,9 @@ the picture is yours.
   campaigns; that is what lets the next one sit on top.
 
 ## Finishing
+
+- `save --gallery` (or `save --light az,el`) saves the picture lit on its
+  relief, as it would be seen on a wall; plain `save` is color only.
 
 - An unvarnished picture keeps its matte and glossy passages as painted.
   A varnish (where the easel has one) makes it all glossy: darks deepen.

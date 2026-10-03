@@ -215,6 +215,11 @@ impl Tally {
         self.secs += lines as f64 * pace::PENCIL_LINE + mm.max(0.0) / pace::PENCIL_MM_S;
     }
 
+    /// Pouring (or blotting) that took `secs`.
+    pub fn pour(&mut self, secs: f64) {
+        self.secs += secs.max(0.0);
+    }
+
     /// A glaze brushed over `area_mm2`.
     pub fn glaze(&mut self, area_mm2: f64) {
         self.secs += area_mm2.max(0.0) / pace::GLAZE_MM2_S;

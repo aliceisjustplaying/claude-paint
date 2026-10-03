@@ -14,7 +14,9 @@
 //!
 //! Format: little-endian binary, `MAGIC`, then a free-form UTF-8 header
 //! (length-prefixed; the caller's key=value lines), then the canvas. If you
-//! add state to `Canvas` or `Wet`, add it here and bump `MAGIC`.
+//! add state to `Canvas` or `Wet`, add it here and bump `MAGIC` (unless, like
+//! the soak below, it is an optional section at the end that every canvas
+//! without it leaves out).
 //!
 //! The format is version 8 (`MAGIC` is `PAINTCK8`); files of any other
 //! version are refused (re-run to checkpoint again). After the header the
@@ -30,7 +32,16 @@
 //! and hand time (`tally`): the slice setting and the complete ledger, with
 //! the part already on the clock, so a resumed hand-timed painting keeps
 //! aging its passes and owes the time it owed; and the engine version it is
-//! painted with (`crate::ENGINE`).
+//! painted with (`crate::ENGINE`). A raw canvas (`soak`) then has a `SOAK`
+//! mark and what has soaked into it: the fabric (name, colour, pore volume,
+//! warp bias, the dry cloth's absorption), the clock it was set up at, its
+//! seed, the pour count, the active and stained boxes, then per pixel the
+//! weave, pore volume, pigment, oil (in place, still creeping, when it
+//! arrives, since when) and turpentine (amount, evaporating from and
+//! until), and the deposited pigments' absorption and scattering. Every
+//! other canvas stops at the engine version, so its checkpoint is byte for
+//! byte what it was and `MAGIC` stays `PAINTCK8`; a reader finds either the
+//! end of the file or the mark.
 
 use crate::canvas::{Canvas, Frame};
 use crate::surface::Linen;
@@ -73,6 +84,124 @@ fn get_all(r: &mut impl Read, n: usize) -> io::Result<Vec<f32>> {
     let mut bytes = vec![0u8; n * 4];
     r.read_exact(&mut bytes)?;
     Ok(bytes.as_chunks::<4>().0.iter().map(|b| f32::from_le_bytes(*b)).collect())
+}
+
+/// Marks the soak of a raw canvas at the end of a checkpoint ("SOAK").
+const SOAK_MARK: u64 = 0x4b414f53;
+
+fn put_box(w: &mut impl Write, b: Option<(usize, usize, usize, usize)>) -> io::Result<()> {
+    match b {
+        None => put_u64(w, 0),
+        Some((a, b, c, d)) => {
+            put_u64(w, 1)?;
+            for v in [a, b, c, d] {
+                put_u64(w, v as u64)?;
+            }
+            Ok(())
+        }
+    }
+}
+
+fn get_box(r: &mut impl Read) -> io::Result<Option<(usize, usize, usize, usize)>> {
+    Ok(match get_u64(r)? {
+        0 => None,
+        1 => Some((get_u64(r)? as usize, get_u64(r)? as usize, get_u64(r)? as usize, get_u64(r)? as usize)),
+        _ => return Err(bad("checkpoint soak box flag is invalid")),
+    })
+}
+
+fn write_soak(w: &mut impl Write, s: &crate::soak::Soak) -> io::Result<()> {
+    let name = s.fabric.name.as_bytes();
+    put_u64(w, name.len() as u64)?;
+    w.write_all(name)?;
+    for v in [s.fabric.color[0], s.fabric.color[1], s.fabric.color[2], s.fabric.cap_um, s.fabric.warp_bias, s.kf[0], s.kf[1], s.kf[2]] {
+        put_f32(w, v)?;
+    }
+    put_u64(w, s.t0.to_bits())?;
+    put_u64(w, s.seed)?;
+    put_u64(w, s.pours)?;
+    put_box(w, s.active)?;
+    put_box(w, s.stained)?;
+    for v in [&s.weave, &s.cap, &s.pig, &s.oil, &s.oil_pend, &s.oil_t, &s.oil_since, &s.solv, &s.solv_t0, &s.solv_t1] {
+        put_all(w, v.iter().copied())?;
+    }
+    put_all(w, s.kp.iter().flat_map(|p| *p))?;
+    put_all(w, s.sp.iter().flat_map(|p| *p))
+}
+
+fn read_soak(r: &mut impl Read, n: usize) -> io::Result<crate::soak::Soak> {
+    let len = get_u64(r)? as usize;
+    if len > 64 {
+        return Err(bad("checkpoint fabric name is invalid"));
+    }
+    let mut name = vec![0u8; len];
+    r.read_exact(&mut name)?;
+    let name = String::from_utf8(name).map_err(|_| bad("checkpoint fabric name is not UTF-8"))?;
+    // a cloth of the caller's own keeps its name (64 bytes at most, kept
+    // for good); its numbers come from the file, as a named one's do
+    let mut fabric = crate::soak::Fabric::named(&name).unwrap_or_else(|| crate::soak::Fabric { name: Box::leak(name.into_boxed_str()), color: [0.0; 3], cap_um: 0.0, warp_bias: 0.0 });
+    let mut f = [0.0f32; 8];
+    for v in f.iter_mut() {
+        *v = get_f32(r)?;
+    }
+    fabric.color = [f[0], f[1], f[2]];
+    fabric.cap_um = f[3];
+    fabric.warp_bias = f[4];
+    let t0 = f64::from_bits(get_u64(r)?);
+    // (a corrupt file is an error here, not a panic or NaN pixels later)
+    if !(t0.is_finite() && f.iter().all(|v| v.is_finite()) && fabric.cap_um > 0.0 && fabric.warp_bias > 0.0 && f[5..].iter().all(|&k| k >= 0.0)) {
+        return Err(bad("checkpoint soak is invalid"));
+    }
+    let seed = get_u64(r)?;
+    let pours = get_u64(r)?;
+    let active = get_box(r)?;
+    let stained = get_box(r)?;
+    let mut v: Vec<Vec<f32>> = Vec::new();
+    for _ in 0..10 {
+        v.push(get_all(r, n)?);
+    }
+    let (kp, sp) = (get_all(r, 3 * n)?, get_all(r, 3 * n)?);
+    // per pixel, in the order written: weave and pore volume (positive),
+    // pigment, oil and oil on its way (not negative), when that arrives,
+    // since when oil is there (+inf: never), turpentine (not negative) and
+    // its evaporation times; the pigments' absorption and scattering (not
+    // negative). All finite but the one sentinel.
+    let ok = |k: usize, x: f32| match k {
+        0 | 1 => x.is_finite() && x > 0.0,
+        2 | 3 | 4 | 7 => x.is_finite() && x >= 0.0,
+        6 => !x.is_nan() && x > f32::NEG_INFINITY,
+        _ => x.is_finite(),
+    };
+    // (oil in place has a time it came: +inf only where none has)
+    let since = v[3].iter().zip(&v[6]).all(|(&oil, &t)| oil <= 0.0 || t.is_finite());
+    if !(v.iter().enumerate().all(|(k, a)| a.iter().all(|&x| ok(k, x))) && since && kp.iter().chain(&sp).all(|&x| x.is_finite() && x >= 0.0)) {
+        return Err(bad("checkpoint soak is invalid"));
+    }
+    let rgb = |a: Vec<f32>| a.as_chunks::<3>().0.to_vec();
+    let (kp, sp) = (rgb(kp), rgb(sp));
+    let mut it = v.into_iter();
+    let mut next = || it.next().unwrap();
+    Ok(crate::soak::Soak {
+        fabric,
+        t0,
+        seed,
+        kf: [f[5], f[6], f[7]],
+        weave: next(),
+        cap: next(),
+        pig: next(),
+        oil: next(),
+        oil_pend: next(),
+        oil_t: next(),
+        oil_since: next(),
+        solv: next(),
+        solv_t0: next(),
+        solv_t1: next(),
+        kp,
+        sp,
+        active,
+        stained,
+        pours,
+    })
 }
 
 fn bad(msg: &str) -> io::Error {
@@ -175,6 +304,13 @@ impl Canvas {
             put_u64(w, v)?;
         }
         put_u64(w, self.engine as u64)?;
+        // a raw canvas's soak (written only when there is one, after
+        // everything else, so the checkpoints of every other canvas are
+        // byte for byte what they were)
+        if let Some(s) = &self.soak {
+            put_u64(w, SOAK_MARK)?;
+            write_soak(w, s)?;
+        }
         Ok(())
     }
 
@@ -303,6 +439,31 @@ impl Canvas {
             v if (1..=crate::ENGINE as u64).contains(&v) => v as u32,
             _ => return Err(bad("checkpoint engine version is invalid")),
         };
+        // a raw canvas's soak, if one was written: the file ends here, or
+        // a whole mark and the soak and then the end
+        let mut b = Vec::with_capacity(8);
+        r.by_ref().take(8).read_to_end(&mut b)?;
+        match b.len() {
+            0 => {}
+            8 if u64::from_le_bytes(b[..].try_into().unwrap()) == SOAK_MARK => {
+                if !c.f.is_whole() {
+                    return Err(bad("checkpoint soak is on a crop render"));
+                }
+                let s = read_soak(r, n)?;
+                for sb in [s.active, s.stained] {
+                    if let Some((bx0, by0, bx1, by1)) = sb
+                        && !(bx0 <= bx1 && bx1 <= w && by0 <= by1 && by1 <= h)
+                    {
+                        return Err(bad("checkpoint soak box is invalid"));
+                    }
+                }
+                c.soak = Some(Box::new(s));
+                if r.read(&mut [0u8; 1])? != 0 {
+                    return Err(bad("checkpoint has trailing data"));
+                }
+            }
+            _ => return Err(bad("checkpoint has trailing data")),
+        }
         Ok((c, header))
     }
 }

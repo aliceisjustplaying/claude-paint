@@ -299,6 +299,7 @@ impl Canvas {
         // films past the gel point level and set
         self.bake(false);
         self.wet.clock.now += dt as f64;
+        self.soak_tick(dt);
     }
 
     /// The open film's thickness (coats) as it dries, for each pixel of the
@@ -388,7 +389,9 @@ impl Canvas {
     /// touch-dry. Each film levels over the surface for as long as it was
     /// fluid (thin fluid paint pools in the hollows, stiff paint keeps its
     /// marks), then it is composited over the dry picture with Kubelka–Munk
-    /// using the settled thickness, and the wet layer is cleared.
+    /// using the settled thickness, and the wet layer is cleared. On a raw
+    /// canvas it also waits until nothing soaked into the cloth moves: the
+    /// turpentine has gone and the creeping oil has arrived.
     pub fn dry(&mut self) {
         if !self.wet.clock.px.is_empty() {
             self.absorb();
@@ -430,7 +433,9 @@ impl Canvas {
             }
         }
         self.bake(true);
+        let left = left.max(self.soak_left());
         self.wet.clock.now += left as f64;
+        self.soak_tick(left);
     }
 
     /// Fold what was painted since the last `wait` into the drying state: a

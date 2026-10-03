@@ -44,13 +44,13 @@
   #allwrap { font-size:12.5px; color:var(--dim); display:flex; align-items:center; gap:4px; flex:none; cursor:pointer }
   .pkgrid { display:grid; grid-template-columns:repeat(auto-fill, minmax(300px, 1fr)); gap:8px }
   .pk { display:flex; gap:11px; align-items:center; text-align:left; padding:6px; border-radius:8px; min-width:0 }
-  .pk.on { border-color:var(--acc); background:#221e17 } .pk:focus-visible, #who:focus-visible, #pkmore:focus-visible { outline:2px solid var(--acc); outline-offset:1px }
+  .pk.on { border-color:var(--acc); background:#221e17 } .pk:focus-visible, #who:focus-visible { outline:2px solid var(--acc); outline-offset:1px }
   .pki { flex:none; width:96px; height:68px; background:#0b0b0d; border-radius:4px; overflow:hidden; display:flex; align-items:center; justify-content:center; color:var(--faint); font-size:11px }
   .pki img { width:100%; height:100%; object-fit:cover }
   .pkx { min-width:0; display:flex; flex-direction:column; gap:1px }
   .pkt { color:var(--fg); font-weight:600; font-size:14px; line-height:1.3; overflow:hidden; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical }
   .pkm { font-size:12.5px; color:var(--soft) } .pks { font-size:12px; color:var(--dim) } .lv { color:var(--live); font-weight:700 }
-  .pksec { margin:14px 0 8px; font-size:12.5px; color:var(--dim) } #pkmore { margin-top:12px; width:100%; padding:8px; color:var(--soft) }
+  .pksec { margin:14px 0 8px; font-size:12.5px; color:var(--dim) }
   .pkrow { display:block; width:100%; text-align:left; margin:3px 0; font:12px var(--mono); white-space:nowrap; overflow:hidden; text-overflow:ellipsis }
   #doing { flex:1; min-width:0; display:flex; align-items:baseline; gap:10px; white-space:nowrap; overflow:hidden }
   #doing .what { font-size:18px; font-weight:600 } #doing .detail { color:var(--dim); font:13px var(--mono); overflow:hidden; text-overflow:ellipsis; min-width:0 }
@@ -262,7 +262,7 @@ async function loadGallery() {
         const g = {}; for (const x of a) if (x && typeof x.studio === 'string' && !g[x.studio]) g[x.studio] = x; GALLERY = g; }
   catch (e) { GALLERY = null; }  // absent or not JSON: everything shows, with the painters' own pictures and titles
 }
-const ACTIVE = 1800, RECENT = 6 * 3600;  // working now: an action in the last half hour; a run quiet for 6 h, not in the gallery, is tucked away
+const ACTIVE = 1800;  // working now: an action in the last half hour
 const ageOf = s => Date.now() / 1000 - s.mtime, isLive = s => ageOf(s) < ACTIVE;
 const SUBJ = {Friedrich:'after Friedrich', free:'free subject', 'self-portrait':'self-portrait'};
 const subj = s => s.subject ? SUBJ[s.subject] || 'after ' + (s.artist || s.subject) : '';  // (the artist in full when the brief names one: 'after Kendric Tonn')
@@ -272,8 +272,7 @@ const ownThumb = s => s.look == null ? null : STATIC ? `data/${encodeURIComponen
 function about(s) {
   const g = GALLERY && s.p ? GALLERY[s.p] : null, live = isLive(s);
   return { title: (g && typeof g.title === 'string' && g.title) || s.title || (live ? 'Untitled, in progress' : 'Untitled'),
-           thumb: siteURL(g && g.thumb) || ownThumb(s), own: ownThumb(s), url: siteURL(g && g.url), live, model: models(s),
-           hidden: !!GALLERY && !g && !live && ageOf(s) > RECENT && qOf(s) !== Q };
+           thumb: siteURL(g && g.thumb) || ownThumb(s), own: ownThumb(s), url: siteURL(g && g.url), live, model: models(s) };
 }
 const sessLabel = s => `${s.folder.replace(/^claude-paint-/, '')}${s.model ? ' · ' + s.model : ''} · ${when(s.mtime)}`;
 // an old ?s= link to one sitting of a painter: what to call it
@@ -289,7 +288,6 @@ function renderHeader() {
     if (STATIC) document.title = `${a.title} · ${a.model} painting · stillwet studio`; }
   else { w.querySelector('.t').textContent = cur ? sessLabel(cur) : !Q ? 'Choose a painter' : Q.startsWith('s=') ? oneSitting() : events.length ? P() : 'Waiting for the painter to start'; w.querySelector('.m').textContent = ''; $('finished').hidden = true; }
 }
-let showMore = false;
 function card(s) {
   const a = about(s), on = qOf(s) === Q;
   return `<button type="button" class="pk${on ? ' on' : ''}" data-q="${esc(qOf(s))}"${on ? ' aria-current="true"' : ''}>`
@@ -299,12 +297,9 @@ function card(s) {
 }
 function renderPicker() {
   const ps = allSessions.filter(s => s.painter), order = [...ps.filter(isLive), ...ps.filter(s => !isLive(s))];  // (already newest first)
-  const shown = order.filter(s => !about(s).hidden), more = order.filter(s => about(s).hidden);
   let html = '';
   if (Q && !allSessions.some(s => qOf(s) === Q)) html += `<div class="pksec">Watching</div><button type="button" class="pkrow on" data-q="${esc(Q)}" aria-current="true">${esc(oneSitting())}</button>`;
-  html += `<div class="pkgrid">${shown.map(card).join('')}</div>`;
-  if (more.length) html += showMore ? `<div class="pksec">Other runs: not in the gallery and not working now (unfinished or abandoned)</div><div class="pkgrid">${more.map(card).join('')}</div>`
-                                    : `<button type="button" id="pkmore">Show ${more.length} more run${more.length > 1 ? 's' : ''} (unfinished or abandoned)</button>`;
+  html += `<div class="pkgrid">${order.map(card).join('')}</div>`;  // every painter, the same on every screen
   if (!STATIC && $('all').checked) { const os = allSessions.filter(s => !s.painter);
     html += `<div class="pksec">Other sessions</div>` + os.map(s => `<button type="button" class="pkrow${qOf(s) === Q ? ' on' : ''}" data-q="${esc(qOf(s))}">${esc(sessLabel(s))}</button>`).join(''); }
   $('pklist').innerHTML = html;
@@ -355,7 +350,6 @@ $('who').onclick = () => $('picker').hidden ? openPicker() : closePicker(true);
 $('pkclose').onclick = () => closePicker(true);
 $('pklist').onclick = e => {
   const b = e.target.closest('button'); if (!b) return;
-  if (b.id === 'pkmore') { const n = pickable().indexOf(b); showMore = true; renderPicker(); const next = pickable()[n]; if (next) next.focus(); return; }
   if (b.dataset.q) choose(b.dataset.q);
 };
 $('picker').onkeydown = e => {

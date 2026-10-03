@@ -377,7 +377,7 @@ async function loadSessions() {
   allSessions = await (await fetch(STATIC ? 'data/sessions.json' : '/api/sessions', STATIC ? {cache: 'no-store'} : {})).json();
   if (Q === null) {
     $('all').checked = localStorage.getItem('studio.all') === '1';
-    const u = new URLSearchParams(location.search), ps = allSessions.filter(s => $('all').checked || s.painter);
+    const u = new URLSearchParams(location.search), ps = allSessions.filter(s => $('all').checked || s.painter && listed(s));  // (only painters the list shows)
     // a first-time visitor lands on the painter at work that's furthest along (a blank ground minutes in shows
     // nothing yet), else the newest with a picture
     const first = ps.filter(s => isLive(s) && s.look != null).sort((a, b) => b.look - a.look)[0] || ps.find(s => s.look != null) || ps[0] || allSessions[0];

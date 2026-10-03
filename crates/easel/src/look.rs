@@ -21,11 +21,17 @@ pub struct View {
     pub size: Option<usize>,
     /// Coordinate grid: Some(0) picks the step from the zoom.
     pub grid: Option<f32>,
+    /// Raking light on the paint's relief (wet and dry): (azimuth, elevation)
+    /// in degrees, see `Canvas::seen_lit`.
+    pub light: Option<(f32, f32)>,
     /// The palette instead of the canvas (`palette`).
     pub palette: bool,
 }
 
-const LOOK_ARGS: &str = "--crop x0,y0,x1,y1 --mode value,squint,mirror --grid [step] --size N | --palette";
+const LOOK_ARGS: &str = "--crop x0,y0,x1,y1 --mode value,squint,mirror,relief,gallery --light azimuth,elevation --grid [step] --size N | --palette";
+
+/// The relief look's default light: from the upper left, raking at 25°.
+const RAKING: (f32, f32) = (135.0, 25.0);
 
 fn is_num(s: Option<&String>) -> bool {
     s.is_some_and(|s| s.parse::<f32>().is_ok())
@@ -62,13 +68,16 @@ impl View {
                             "value" | "gray" => v.value = true,
                             "squint" | "blur" => v.squint = true,
                             "mirror" => v.mirror = true,
-                            o => return Err(format!("--mode {o}: normal, value, squint, mirror (comma-separated)")),
+                            "relief" | "raking" => v.light = Some(v.light.unwrap_or(RAKING)),
+                            "gallery" => v.light = Some(v.light.unwrap_or(crate::GALLERY_LIGHT)),
+                            o => return Err(format!("--mode {o}: normal, value, squint, mirror, relief, gallery (comma-separated)")),
                         }
                     }
                 }
                 "--value" => v.value = true,
                 "--squint" => v.squint = true,
                 "--mirror" => v.mirror = true,
+                "--light" => v.light = Some(crate::light_of(&next()?).map_err(|e| format!("--{e}"))?),
                 "--size" => v.size = Some(next()?.parse().map_err(|_| "--size N (px)".to_string())?),
                 "--grid" => {
                     v.grid = Some(0.0);
@@ -86,7 +95,7 @@ impl View {
             }
             i += 1;
         }
-        if v.palette && (v.crop.is_some() || v.value || v.squint || v.mirror || v.size.is_some() || v.grid.is_some()) {
+        if v.palette && (v.crop.is_some() || v.value || v.squint || v.mirror || v.light.is_some() || v.size.is_some() || v.grid.is_some()) {
             return Err("look: --palette takes no other option".into());
         }
         Ok(v)
@@ -344,6 +353,13 @@ pub fn look(c: &Canvas, v: &View, out: &Path) -> std::result::Result<(usize, usi
 
 /// `look`'s PNG bytes and size, written nowhere.
 pub fn render(c: &Canvas, v: &View) -> std::result::Result<(usize, usize, Vec<u8>), String> {
+    render_seen(c, v, None)
+}
+
+/// `render`, from the canvas as already seen in the view's light (`seen`:
+/// `Canvas::seen` or `seen_lit`), so several views of one canvas (a survey's
+/// tiles) light it once.
+pub fn render_seen(c: &Canvas, v: &View, seen: Option<&[Rgb]>) -> std::result::Result<(usize, usize, Vec<u8>), String> {
     let f = c.window();
     // crop: units -> whole-canvas pixels -> pixels of the held window
     let (wx0, wy0, wx1, wy1) = (f.x0, f.y0, f.x0 + f.w, f.y0 + f.h);
@@ -368,7 +384,17 @@ pub fn render(c: &Canvas, v: &View) -> std::result::Result<(usize, usize, Vec<u8
         return Err("look: canvas is empty".into());
     }
     let mut size = if v.crop.is_some() { long } else { v.size.unwrap_or(1000).clamp(1, 1600) };
-    let px = c.seen();
+    let own;
+    let px: &[Rgb] = match seen {
+        Some(px) => px,
+        None => {
+            own = match v.light {
+                Some((az, el)) => c.seen_lit(az, el, 1.0),
+                None => c.seen(),
+            };
+            &own
+        }
+    };
     loop {
         // Average down from the original canvas on each attempt; never enlarge.
         let (ow, oh, img): (usize, usize, Vec<Rgb>) = if long > size {
@@ -644,7 +670,7 @@ mod tests {
 
     #[test]
     fn crops_keep_native_pixels_and_reject_either_oversize_axis() {
-        let mut c = Canvas::new_window(1300, 1.0, [0.0; 3], None);
+        let mut c = Canvas::new_window(1300, 1.0, [0.0; 3], None).with_engine(2); // (pure colors: no engine-3 matte veil)
         c.apply(|x, y, _| if x < 500.0 && y < 500.0 { [1.0, 0.0, 0.0] } else { [0.0, 0.0, 1.0] });
         let out = out_dir().join("native-crop.png");
         for size in [None, Some(40), Some(9999)] {
@@ -705,5 +731,37 @@ mod tests {
         assert!(w < 1600 && h == w, "must reduce dimensions, got {w}x{h}");
         let decoded = image::load_from_memory(&bytes).unwrap();
         assert_eq!((decoded.width() as usize, decoded.height() as usize), (w, h));
+    }
+
+    #[test]
+    fn the_relief_and_gallery_looks_take_a_light() {
+        let parse = |a: &[&str]| View::parse(&a.iter().map(|s| s.to_string()).collect::<Vec<_>>());
+        assert_eq!(parse(&[]).unwrap().light, None);
+        assert_eq!(parse(&["--mode", "relief"]).unwrap().light, Some(RAKING));
+        assert_eq!(parse(&["--mode", "gallery"]).unwrap().light, Some(crate::GALLERY_LIGHT));
+        assert_eq!(parse(&["--mode", "relief", "--light", "45,15"]).unwrap().light, Some((45.0, 15.0)));
+        assert_eq!(parse(&["--light", "45,15", "--mode", "relief,mirror"]).unwrap().light, Some((45.0, 15.0)));
+        for bad in [&["--light", "45"][..], &["--light", "45,0"], &["--light", "a,b"], &["--light"]] {
+            assert!(parse(bad).is_err(), "{bad:?}");
+        }
+    }
+
+    /// The lit look shows the same picture under a light: it differs from
+    /// the plain look where paint stands in relief and changes nothing.
+    #[test]
+    #[cfg(tube_box)]
+    fn the_relief_look_lights_the_paint_and_changes_nothing() {
+        let mut s = Session::new(W).unwrap();
+        s.run(r#"canvas{size=300, aspect=1.5, linen=15, seed=2, ground={{pile={{"lead white", 5}, {"yellow ochre", 1}}, um=60, apply="brush"}}}
+                 b = brush("flat", 20); b:load(pile{{"lead white", 1}}, 1); b:stroke({{200, 300}, {800, 300}})"#)
+            .unwrap();
+        let c = s.canvas().unwrap().clone();
+        let before = bits(&c);
+        let dir = out_dir();
+        let lit = View { light: Some(RAKING), ..View::parse(&[]).unwrap() };
+        look(&c, &View::parse(&[]).unwrap(), &dir.join("flat.png")).unwrap();
+        look(&c, &lit, &dir.join("relief.png")).unwrap();
+        assert_ne!(std::fs::read(dir.join("flat.png")).unwrap(), std::fs::read(dir.join("relief.png")).unwrap());
+        assert_eq!(before, bits(&c));
     }
 }

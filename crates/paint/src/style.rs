@@ -56,6 +56,10 @@ pub struct Ground {
     /// Stiffness of the priming paste (0 fluid .. 1 stiff).
     pub stiff: f32,
     pub apply: Apply,
+    /// How absorbent the layer is, 0 (an oil ground) to 1 (a chalk and glue
+    /// ground that draws oil out of the paint laid on it: matte, quick to
+    /// set; engine 3). Only the top layer's matters.
+    pub absorbent: f32,
 }
 
 #[derive(Clone, Debug)]
@@ -117,9 +121,9 @@ impl Style {
             linen: Linen { warp_per_cm: 15.0, weft_per_cm: 13.0, ..Linen::fine(1) },
             raw: hex("#a8966f"),
             ground: vec![
-                Ground { color: hex("#9a5a36"), hiding: 0.8, um: 110.0, stiff: 0.25, apply: Apply::Knife { texture: 0.35 } },
-                Ground { color: hex("#b08457"), hiding: 0.8, um: 70.0, stiff: 0.3, apply: Apply::Knife { texture: 0.3 } },
-                Ground { color: hex("#a9785a"), hiding: 0.8, um: 60.0, stiff: 0.35, apply: Apply::Brush },
+                Ground { color: hex("#9a5a36"), hiding: 0.8, um: 110.0, stiff: 0.25, apply: Apply::Knife { texture: 0.35 }, absorbent: 0.0 },
+                Ground { color: hex("#b08457"), hiding: 0.8, um: 70.0, stiff: 0.3, apply: Apply::Knife { texture: 0.3 }, absorbent: 0.0 },
+                Ground { color: hex("#a9785a"), hiding: 0.8, um: 60.0, stiff: 0.35, apply: Apply::Brush, absorbent: 0.0 },
             ],
             broad: Tool { lay: 0.55, push: 0.03, ragged: 0.4, ..Tool::filbert(22.0) },
             body: Tool { lay: 0.7, push: 0.06, ..Tool::filbert(9.0) },
@@ -146,9 +150,9 @@ impl Style {
             width_mm: 1714.0,
             linen: Linen { warp_per_cm: 12.0, weft_per_cm: 11.0, ..Linen::fine(1) },
             ground: vec![
-                Ground { color: hex("#b0583a"), hiding: 0.85, um: 110.0, stiff: 0.25, apply: Apply::Knife { texture: 0.35 } },
-                Ground { color: hex("#c9ad8a"), hiding: 0.8, um: 70.0, stiff: 0.3, apply: Apply::Knife { texture: 0.3 } },
-                Ground { color: hex("#d8c7ab"), hiding: 0.8, um: 30.0, stiff: 0.5, apply: Apply::Roller },
+                Ground { color: hex("#b0583a"), hiding: 0.85, um: 110.0, stiff: 0.25, apply: Apply::Knife { texture: 0.35 }, absorbent: 0.0 },
+                Ground { color: hex("#c9ad8a"), hiding: 0.8, um: 70.0, stiff: 0.3, apply: Apply::Knife { texture: 0.3 }, absorbent: 0.0 },
+                Ground { color: hex("#d8c7ab"), hiding: 0.8, um: 30.0, stiff: 0.5, apply: Apply::Roller, absorbent: 0.0 },
             ],
             palette: Palette::smalt_box(),
             ..Self::oil()
@@ -172,6 +176,10 @@ impl Style {
             .with_engine(self.palette.engine)
             .with_size_mm(self.width_mm)
             .with_linen(Linen { seed, ..self.linen });
+        // the canvas is prepared alike in every engine: engine 3's stiffer
+        // films and clumping hair are the painting's, not the primer's
+        let engine = c.engine;
+        c.engine = engine.min(2);
         for (k, g) in self.ground.iter().enumerate() {
             if g.um <= 0.0 {
                 continue;
@@ -186,7 +194,9 @@ impl Style {
                     c.ground_um += g.um;
                 }
             }
+            c.ground_finish(g.absorbent);
         }
+        c.engine = engine;
         c
     }
 }

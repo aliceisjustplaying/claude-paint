@@ -24,16 +24,17 @@ fn brush_volume(h: &Held) -> f64 {
 fn mix_into_is_volume_weighted() {
     let a = mixbox::linear_float_rgb_to_latent(&[0.8, 0.1, 0.1]);
     let b = mixbox::linear_float_rgb_to_latent(&[0.1, 0.1, 0.8]);
-    let (mut v, mut l, mut p) = (1.0f32, a, [0.2f32, 0.4, 1.0]);
-    mix_into(&mut v, &mut l, &mut p, 3.0, &b, [0.6, 0.8, 2.0]);
+    let (mut v, mut l, mut p) = (1.0f32, a, [0.2f32, 0.4, 1.0, 0.8, 0.4]);
+    mix_into(&mut v, &mut l, &mut p, 3.0, &b, [0.6, 0.8, 2.0, 0.0, 1.2]);
     assert!((v - 4.0).abs() < 1e-6);
     for k in 0..l.len() {
         assert!((l[k] - (0.25 * a[k] + 0.75 * b[k])).abs() < 1e-5);
     }
     assert!((p[0] - 0.5).abs() < 1e-6 && (p[1] - 0.7).abs() < 1e-6 && (p[2] - 1.75).abs() < 1e-6);
+    assert!((p[3] - 0.2).abs() < 1e-6 && (p[4] - 1.0).abs() < 1e-6, "solvent and oil mix by volume too: {p:?}");
     // zero or negative volume is a no-op
     let before = (v, l, p);
-    mix_into(&mut v, &mut l, &mut p, 0.0, &a, [0.0, 0.0, 0.0]);
+    mix_into(&mut v, &mut l, &mut p, 0.0, &a, [0.0, 0.0, 0.0, 0.0, 0.0]);
     assert_eq!(before, (v, l, p));
 }
 
@@ -88,7 +89,9 @@ fn dry_is_idempotent_and_clears_wet() {
 /// hog-flat pass, three held-brush drags, a glaze; then relief.
 #[cfg(tube_box)]
 fn fixture() -> Canvas {
-    let st = Style::oil();
+    // (the golden was recorded with engine 2: the scene stays that engine's)
+    let mut st = Style::oil();
+    st.palette.engine = 2;
     let mut c = st.prepare(240, 1.5, 7);
     let (w, h) = (c.width(), c.height());
     let upper = Mask::from_fn(c.f, |_, y| if y < h * 0.5 { 1.0 } else { 0.0 });
@@ -438,7 +441,7 @@ fn brushed_ground_honors_thickness() {
     use crate::style::{Apply, Ground};
     let mean_um = |um: f32| {
         let mut st = Style::oil();
-        st.ground = vec![Ground { color: hex("#a9785a"), hiding: 0.8, um, stiff: 0.35, apply: Apply::Brush }];
+        st.ground = vec![Ground { color: hex("#a9785a"), hiding: 0.8, um, stiff: 0.35, apply: Apply::Brush, absorbent: 0.0 }];
         let c = st.prepare(300, 1.5, 3);
         c.film.iter().sum::<f32>() / c.film.len() as f32 * crate::surface::COAT_UM
     };
@@ -673,4 +676,124 @@ fn thick_paint_from_a_pointed_hatch_hides_the_ground_at_full_size() {
     }
     assert!(thick > 50_000, "{thick} pixels with a thick film");
     assert!(pale <= thick / 20_000, "{pale} of {thick} pixels under 30 µm or more of dark paint show more ground than paint");
+}
+
+/// Engine 3: a lean (blotted) film dries matte and a matte surface reads a
+/// little lighter in the darks than an oily one (its first-surface veil).
+#[test]
+#[cfg(tube_box)]
+fn a_lean_film_dries_matte() {
+    use crate::palette::Palette;
+    let pal = Palette::tube_box();
+    let dark = pal.pile(vec![(10, 1.0)]); // Prussian blue
+    let mut c = Canvas::new(400, 1.0, [0.8; 3]);
+    assert!(c.engine() >= 3);
+    for (y, medium) in [(300.0, 0.0f32), (700.0, -0.4)] {
+        let mut h = Held::new(Tool::filbert(60.0), 3);
+        h.load(dark.laid(medium), 1.0);
+        c.drag(&mut h, &Gesture::new(vec![(100.0, y), (900.0, y)]).pressure(0.9, 0.9), None);
+    }
+    c.dry();
+    let at = |c: &Canvas, y: f32| c.f.index(500.0, y);
+    let (i_oil, i_lean) = (at(&c, 300.0), at(&c, 700.0));
+    assert!(c.gloss[i_lean] < c.gloss[i_oil] - 0.3, "gloss: lean {} oily {}", c.gloss[i_lean], c.gloss[i_oil]);
+    // the matte veil lifts the darks: about the surface reflectance's share
+    let (s_oil, s_lean) = (c.seen()[i_oil], c.seen()[i_lean]);
+    let lift = |s: crate::color::Rgb, p: crate::color::Rgb| s[0] - p[0];
+    assert!(lift(s_lean, c.px[i_lean]) > 2.0 * lift(s_oil, c.px[i_oil]), "veil: lean {:?} oily {:?}", s_lean, s_oil);
+}
+
+/// Engine 3: turpentine evaporates as the paint is laid: a stroke of paint
+/// thinned half with it leaves about half the film.
+#[test]
+#[cfg(tube_box)]
+fn turpentine_leaves_a_thinner_film() {
+    use crate::palette::Palette;
+    let pal = Palette::tube_box();
+    let film = |turps: f32| {
+        let mut m = pal.pile(vec![(10, 1.0)]);
+        m.solvent = turps;
+        let mut c = Canvas::new(300, 1.0, [0.8; 3]);
+        let mut h = Held::new(Tool::filbert(60.0), 3);
+        h.load(m.laid(0.0), 1.0);
+        c.drag(&mut h, &Gesture::new(vec![(100.0, 500.0), (900.0, 500.0)]).pressure(0.9, 0.9), None);
+        c.wet.vol.iter().sum::<f32>()
+    };
+    let (neat, thinned) = (film(0.0), film(0.5));
+    assert!((thinned / neat - 0.5).abs() < 0.08, "neat {neat} thinned {thinned}");
+}
+
+/// Engine 3: an absorbent ground draws oil out of a thin wash laid on it:
+/// the film is thinner, stiffer and dries matte; on an oil ground it doesn't.
+#[test]
+#[cfg(tube_box)]
+fn an_absorbent_ground_drinks_a_wash() {
+    use crate::palette::Palette;
+    let pal = Palette::tube_box();
+    let run = |absorbent: f32| {
+        let mut c = Canvas::new(300, 1.0, [0.8; 3]);
+        c.ground_finish(absorbent);
+        let mut h = Held::new(Tool::filbert(60.0), 3);
+        h.load(pal.pile(vec![(10, 1.0)]).laid(0.3), 0.3);
+        c.drag(&mut h, &Gesture::new(vec![(100.0, 500.0), (900.0, 500.0)]).pressure(0.9, 0.9), None);
+        let i = c.f.index(500.0, 500.0);
+        let (vol, stiff) = (c.wet.vol[i], c.wet.hide[i][1]);
+        c.dry();
+        (vol, stiff, c.gloss[i])
+    };
+    let (oil, chalk) = (run(0.0), run(1.0));
+    assert!(chalk.0 < oil.0 && chalk.1 > oil.1, "film and stiffness: oil ground {oil:?}, chalk {chalk:?}");
+    assert!(chalk.2 < oil.2 - 0.2, "gloss: oil ground {}, chalk {}", oil.2, chalk.2);
+}
+
+/// Poppy oil dries slower than linseed (walnut between).
+#[test]
+#[cfg(tube_box)]
+fn poppy_oil_dries_slower() {
+    use crate::palette::Palette;
+    let pal = Palette::tube_box();
+    let mut m = pal.pile(vec![(0, 1.0)]);
+    let linseed = m.laid(0.0).drying;
+    m.oil_rate = 0.6;
+    assert!((m.laid(0.0).drying / linseed - 0.6).abs() < 1e-5);
+}
+
+/// A blotted pile stays blotted in a covering pass (a negative medium is oil
+/// drawn out; `piled` once clamped it to 0 and lost it).
+#[test]
+#[cfg(tube_box)]
+fn a_pass_keeps_a_blotted_pile_blotted() {
+    use crate::palette::Palette;
+    let pal = Palette::tube_box();
+    let stiff = |medium: f32| {
+        let mut c = Canvas::new(160, 1.0, [0.8; 3]);
+        let hd = Handling::new(Tool::filbert(8.0)).piled(&pal, pal.pile(vec![(10, 1.0)]), medium).coverage(2.0);
+        c.work(&Mask::full(c.frame()), &hd, 5);
+        c.wet.hide[c.f.index(500.0, 500.0)][1]
+    };
+    assert!(stiff(-0.4) > stiff(0.0) + 0.2, "blotted {} plain {}", stiff(-0.4), stiff(0.0));
+}
+
+/// Engine 4: a knife-laid slab tears where it parts from the blade, so it
+/// covers less than engine 3's whole slab from the same pull and load: on a
+/// short pull, on a long one that runs the knife dry (the torn paint stays
+/// under the blade, it doesn't feed the bead), and on a small canvas, whose
+/// pixels are wider than a tear. An engine 3 canvas keeps the whole slab.
+#[test]
+fn a_knife_laid_slab_tears_from_engine_4() {
+    let covered = |engine: u32, width: usize, to: f32| {
+        let mut c = Canvas::new(width, 3.0, [0.8; 3]).with_engine(engine);
+        let mut k = crate::Knife::new(60.0);
+        k.load(Paint::body(hex("#445566")), 1.0);
+        let before = k.fullness();
+        c.knife(&mut k, &[(200.0, 160.0), (to, 160.0)], (0.5, 0.5), None, true, 0.1);
+        assert!(k.fullness() <= before);
+        c.wet.vol.iter().filter(|&&v| v > 0.0).count()
+    };
+    for (what, width, to) in [("a short pull", 2400, 400.0), ("a pull that runs dry", 2400, 800.0), ("a sketch", 600, 400.0)] {
+        let (whole, torn) = (covered(3, width, to), covered(4, width, to));
+        assert!(whole > 1500, "{what}: engine 3 laid {whole} pixels");
+        assert!(torn > whole / 4 && torn < whole * 19 / 20, "{what}: engine 4 laid {torn} pixels of engine 3's {whole}");
+        assert_eq!(whole, covered(3, width, to), "{what}: the same pull lays the same slab");
+    }
 }

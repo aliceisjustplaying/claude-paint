@@ -45,6 +45,17 @@ use std::time::{Duration, Instant};
 /// The one width a painting is painted, replayed and delivered at (px).
 const LIVE_WIDTH: usize = 2400;
 
+/// The width a painting paints at: an existing one its log's (a sketch if
+/// its head says so, `session::SKETCH_MARK`), a new one a sketch's if the
+/// session's name starts with "sketch".
+fn width_for(name: &str, log: Option<&str>) -> usize {
+    let sketch = match log {
+        Some(text) => session::logged_sketch(text),
+        None => name.starts_with("sketch"),
+    };
+    if sketch { session::SKETCH_WIDTH } else { LIVE_WIDTH }
+}
+
 /// The painter build's one session.
 #[cfg(not(feature = "replay"))]
 const PAINTING: &str = "painting";
@@ -54,12 +65,14 @@ const USAGE: &str = "easel: a live painting session (see notes/easel_guide.md)
 
   easel open          start or reattach; replays paintings/lua/painting.lua if it exists
   easel do '<lua>'  |  easel do -f chunk.lua  |  easel do - (stdin)     [--look] also looks afterwards
-  easel look [--crop x0,y0,x1,y1] [--mode value,squint,mirror] [--grid [step]] [--size 1000]
+  easel look [--crop x0,y0,x1,y1] [--mode value,squint,mirror,relief,gallery] [--grid [step]] [--size 1000]
+             [--survey]   the whole canvas at full detail, in tiles
+             [--compare <earlier look png>]   that look beside this one
   easel look --palette   the piles the globals hold: thick, thin and very thin over the ground, thin over a card
   easel log           the painting so far (= paintings/lua/painting.lua)
   easel status        chunks, width, canvas
   easel globals       the painting's globals, one a line: chunk that last set it, name, what it holds
-  easel save [path]   the canvas as a PNG (default out/easel/painting/painting.png)
+  easel save [path] [--light az,el | --gallery]   the canvas as a PNG (default out/easel/painting/painting.png), lit on its relief if asked
   easel frames on|off save a look after every chunk
   easel close         end the session (the log stays)
   easel note '<text>' | easel note - (stdin)    append a dated entry to notes/journal.md
@@ -70,12 +83,14 @@ const USAGE: &str = "easel: a live painting session (see notes/easel_guide.md)
 
   easel open <name>    start or reattach; replays paintings/lua/<name>.lua if it exists
   easel do '<lua>'  |  easel do -f chunk.lua  |  easel do - (stdin)     [--look] also looks afterwards
-  easel look [--crop x0,y0,x1,y1] [--mode value,squint,mirror] [--grid [step]] [--size 1000]
+  easel look [--crop x0,y0,x1,y1] [--mode value,squint,mirror,relief,gallery] [--grid [step]] [--size 1000]
+             [--survey]   the whole canvas at full detail, in tiles
+             [--compare <earlier look png>]   that look beside this one
   easel look --palette   the piles the globals hold: thick, thin and very thin over the ground, thin over a card
   easel log           the session so far (= paintings/lua/<name>.lua)
   easel status        chunks, width, canvas
   easel globals       the painting's globals, one a line: chunk that last set it, name, what it holds
-  easel save [path]   the canvas as a PNG (default out/easel/<name>/<name>.png)
+  easel save [path] [--light az,el | --gallery]   the canvas as a PNG (default out/easel/<name>/<name>.png), lit on its relief if asked
   easel frames on|off save a look after every chunk
   easel check         replay the log from scratch and compare with the live canvas
   easel close         end the session (the log stays)
@@ -800,7 +815,8 @@ impl Server {
         // an existing painting goes on with the box its log names; a new one takes the
         // configured box (session::box_for)
         let tubes = session::box_for(text.as_deref())?;
-        let mut srv = Self { name, s: Session::with_box(LIVE_WIDTH, tubes).map_err(|e| e.to_string())?, frames: false, written: None, replayed: 0 };
+        let width = width_for(&name, text.as_deref());
+        let mut srv = Self { name, s: Session::with_box(width, tubes).map_err(|e| e.to_string())?, frames: false, written: None, replayed: 0 };
         if let Some(text) = text {
             srv.written = Some(text.clone());
             let chunks = parse_program(&text);
@@ -877,6 +893,31 @@ impl Server {
     }
 
     fn look(&mut self, args: &[String], path: Option<PathBuf>) -> Result<String, String> {
+        // --survey: the whole canvas at full detail, in tiles; --compare <png>: an
+        // earlier look beside this one (taken out before the view's own arguments)
+        let (mut survey, mut compare, mut rest) = (false, None::<PathBuf>, Vec::new());
+        let mut i = 0;
+        while i < args.len() {
+            match args[i].as_str() {
+                "--survey" => survey = true,
+                "--compare" => {
+                    compare = Some(PathBuf::from(args.get(i + 1).ok_or("--compare needs an earlier look's png")?));
+                    i += 1;
+                }
+                a => rest.push(a.to_string()),
+            }
+            i += 1;
+        }
+        if survey && compare.is_some() {
+            return Err("look: --survey and --compare are two looks; ask for one".into());
+        }
+        if survey {
+            return self.survey(&rest);
+        }
+        if let Some(prev) = compare {
+            return self.compare(&rest, &prev);
+        }
+        let args = &rest[..];
         let v = look::View::parse(args)?;
         let t0 = Instant::now();
         if v.palette {
@@ -896,6 +937,69 @@ impl Server {
             }
         };
         Ok(format!("{} ({w}x{h}, {:.2}s)\n", path.display(), t0.elapsed().as_secs_f64()))
+    }
+
+    /// The whole canvas at full detail (1:1), in tiles of at most 500 units a side,
+    /// in reading order; the view's modes (gallery, value...) apply to each.
+    fn survey(&mut self, args: &[String]) -> Result<String, String> {
+        if args.iter().any(|a| a == "--crop" || a == "--size") {
+            return Err("look --survey covers the whole canvas at full detail: no --crop or --size".into());
+        }
+        let c = self.s.canvas().ok_or("no canvas yet: the first chunk is canvas{...}")?;
+        // (the canvas as it is seen, lit or not, once for all the tiles)
+        let seen = match look::View::parse(args)?.light {
+            Some((az, el)) => c.seen_lit(az, el, 1.0),
+            None => c.seen(),
+        };
+        let (wu, hu) = (c.width(), c.height());
+        let cols = (wu / 500.0).ceil().max(1.0) as usize;
+        let rows = (hu / 500.0).ceil().max(1.0) as usize;
+        let (tw, th) = (wu / cols as f32, hu / rows as f32);
+        let mut out = format!("survey: {rows} rows x {cols} columns of {tw:.0} x {th:.0} units, at full detail\n");
+        for r in 0..rows {
+            for k in 0..cols {
+                let crop = format!("{},{},{},{}", k as f32 * tw, r as f32 * th, (k + 1) as f32 * tw, (r + 1) as f32 * th);
+                let mut a = args.to_vec();
+                a.extend(["--crop".to_string(), crop.clone()]);
+                let v = look::View::parse(&a)?;
+                let (w, h, png) = look::render_seen(&c, &v, Some(&seen))?;
+                let p = new_look(&session_dir(&self.name), &png)?;
+                out += &format!("{} ({w}x{h}): row {} column {} ({crop})\n", p.display(), r + 1, k + 1);
+            }
+        }
+        Ok(out)
+    }
+
+    /// An earlier look (left) beside the same view of the canvas now (right), at
+    /// the same height, for judging what a change did.
+    fn compare(&mut self, args: &[String], prev: &Path) -> Result<String, String> {
+        let mut a = args.to_vec();
+        if !a.iter().any(|x| x == "--size" || x == "--crop") {
+            a.extend(["--size".to_string(), "800".to_string()]);
+        }
+        let v = look::View::parse(&a)?;
+        let c = self.s.canvas().ok_or("no canvas yet: the first chunk is canvas{...}")?;
+        let (_, _, png) = look::render(&c, &v)?;
+        let now = image::load_from_memory(&png).map_err(|e| e.to_string())?.to_rgb8();
+        // an earlier look of this studio: a picture under its folder, nothing outside it
+        let studio = root().canonicalize().map_err(|e| e.to_string())?;
+        let prev = if prev.is_absolute() { prev.to_path_buf() } else { studio.join(prev) };
+        let real = prev.canonicalize().map_err(|e| format!("--compare {}: {e}", prev.display()))?;
+        if !real.starts_with(&studio) {
+            return Err(format!("--compare {}: an earlier look is a picture in this studio ({})", prev.display(), studio.display()));
+        }
+        let before = image::open(&real).map_err(|e| format!("--compare {}: {e}", prev.display()))?.to_rgb8();
+        let h = now.height();
+        let bw = ((before.width() as f64 * h as f64 / before.height() as f64).round() as u32).max(1);
+        let before = image::imageops::resize(&before, bw, h, image::imageops::FilterType::Lanczos3);
+        let gap = 12;
+        let mut both = image::RgbImage::from_pixel(bw + gap + now.width(), h, image::Rgb([24, 24, 28]));
+        image::imageops::replace(&mut both, &before, 0, 0);
+        image::imageops::replace(&mut both, &now, (bw + gap) as i64, 0);
+        let mut bytes = Vec::new();
+        both.write_to(&mut std::io::Cursor::new(&mut bytes), image::ImageFormat::Png).map_err(|e| e.to_string())?;
+        let p = new_look(&session_dir(&self.name), &bytes)?;
+        Ok(format!("{} ({}x{}): left {}, right now\n", p.display(), both.width(), h, prev.display()))
     }
 
     /// The log on disk is the one the session wrote, and holds everything it ran.
@@ -959,9 +1063,11 @@ impl Server {
             "look" => self.look(args, None),
             "log" => Ok(self.s.program(&self.name)),
             "save" => {
-                let p = args.first().map(PathBuf::from).unwrap_or_else(|| session_dir(&self.name).join(format!("{}.png", self.name)));
+                // save [path] [--light az,el | --gallery]: lit on the paint's relief, or color only
+                let (path, light) = save_args(args)?;
+                let p = path.unwrap_or_else(|| session_dir(&self.name).join(format!("{}.png", self.name)));
                 let c = self.s.canvas().ok_or("no canvas yet")?;
-                deliver(&c, &p)?;
+                deliver_lit(&c, &p, light)?;
                 Ok(format!("{}\n", p.display()))
             }
             "frames" => {
@@ -989,11 +1095,53 @@ fn bits_f(v: &[f32]) -> Vec<u32> {
 
 // ---------------------------------------------------------------- replay
 
+/// A gallery's light: from above and in front, high (55°) and a little from
+/// the left, as a picture hangs on a wall: impasto models softly.
+pub const GALLERY_LIGHT: (f32, f32) = (115.0, 55.0);
+
+/// `light az,el` (degrees) as a pair.
+pub(crate) fn light_of(s: &str) -> Result<(f32, f32), String> {
+    let p: Vec<f32> = s.split(',').map(|t| t.trim().parse::<f32>()).collect::<Result<_, _>>().map_err(|_| format!("light {s}: want azimuth,elevation in degrees"))?;
+    if p.len() != 2 || !p[0].is_finite() || !(1.0..=90.0).contains(&p[1]) {
+        return Err(format!("light {s}: want azimuth,elevation in degrees (elevation 1 to 90)"));
+    }
+    Ok((p[0], p[1]))
+}
+
+/// `save`'s arguments: an optional path, then `--light az,el` or `--gallery`.
+fn save_args(args: &[String]) -> Result<(Option<PathBuf>, Option<(f32, f32)>), String> {
+    let (mut path, mut light) = (None, None);
+    let mut i = 0;
+    while i < args.len() {
+        match args[i].as_str() {
+            "--light" => {
+                light = Some(light_of(args.get(i + 1).ok_or("--light needs azimuth,elevation")?)?);
+                i += 1;
+            }
+            "--gallery" => light = Some(GALLERY_LIGHT),
+            a if !a.starts_with('-') && path.is_none() => path = Some(PathBuf::from(a)),
+            o => return Err(format!("save [path] [--light az,el | --gallery]: unknown {o:?}")),
+        }
+        i += 1;
+    }
+    Ok((path, light))
+}
+
 /// The delivered PNG: the canvas as it is seen now (wet paint as laid, no
 /// drying), 8-bit sRGB. `save` and `run` both write it.
 fn deliver(c: &Canvas, out: &Path) -> Result<(), String> {
+    deliver_lit(c, out, None)
+}
+
+/// `deliver`, lit from (azimuth, elevation) in degrees on the paint's relief
+/// (`Canvas::seen_lit`), or not lit (None: color only).
+fn deliver_lit(c: &Canvas, out: &Path, light: Option<(f32, f32)>) -> Result<(), String> {
     let f = c.window();
-    let buf: Vec<u8> = c.seen().iter().flat_map(|p| p.map(|v| (linear_to_srgb(v) * 255.0).round().clamp(0.0, 255.0) as u8)).collect();
+    let px = match light {
+        Some((az, el)) => c.seen_lit(az, el, 1.0),
+        None => c.seen(),
+    };
+    let buf: Vec<u8> = px.iter().flat_map(|p| p.map(|v| (linear_to_srgb(v) * 255.0).round().clamp(0.0, 255.0) as u8)).collect();
     if let Some(d) = out.parent() {
         std::fs::create_dir_all(d).map_err(|e| e.to_string())?;
     }
@@ -1001,7 +1149,7 @@ fn deliver(c: &Canvas, out: &Path) -> Result<(), String> {
 }
 
 #[cfg(feature = "replay")]
-const RUN_USAGE: &str = "run <file.lua> [--out path.png] [--look] [--state-digest digests.txt] [--frames-every <s> --frames-dir <dir> [--frame-width 1000]] [--width <px>] (replays at the live width, 2400px, unless --width: a smaller preview for development, not the painting)";
+const RUN_USAGE: &str = "run <file.lua> [--out path.png] [--light az,el | --gallery] [--look] [--state-digest digests.txt] [--frames-every <s> --frames-dir <dir> [--frame-width 1000]] [--width <px>] (replays at the width it was painted at, 2400px, a sketch 600px, unless --width: a smaller preview for development, not the painting)";
 
 #[cfg(feature = "replay")]
 fn run(args: &[String]) -> Result<(), String> {
@@ -1009,19 +1157,20 @@ fn run(args: &[String]) -> Result<(), String> {
     let mut i = 1;
     while i < args.len() {
         match args[i].as_str() {
-            "--out" | "--dump-surface" | "--frames-every" | "--frames-dir" | "--frame-width" | "--state-digest" | "--width" if i + 1 < args.len() => i += 2,
-            "--look" => i += 1,
+            "--out" | "--dump-surface" | "--frames-every" | "--frames-dir" | "--frame-width" | "--state-digest" | "--width" | "--light" if i + 1 < args.len() => i += 2,
+            "--look" | "--gallery" => i += 1,
             o => return Err(format!("run: unknown argument {o:?} ({RUN_USAGE})")),
         }
     }
-    // a development preview may replay narrower (kernel radii are in mm, so it is not the
-    // painting at a smaller size: see notes/workflow.md); the painting is LIVE_WIDTH
-    let width = match flag(args, "--width") {
-        None => LIVE_WIDTH,
-        Some(w) => w.parse::<usize>().ok().filter(|w| (16..=LIVE_WIDTH * 4).contains(w)).ok_or_else(|| format!("--width {w}: want px, 16 to {}", LIVE_WIDTH * 4))?,
-    };
     let text = std::fs::read_to_string(file).map_err(|e| format!("{file}: {e}"))?;
     let stem = Path::new(file).file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or("easel".into());
+    // a development preview may replay narrower (kernel radii are in mm, so it is not the
+    // painting at a smaller size: see notes/workflow.md); the painting is the width it was
+    // painted at (LIVE_WIDTH, a sketch's SKETCH_WIDTH)
+    let width = match flag(args, "--width") {
+        None => width_for(&stem, Some(&text)),
+        Some(w) => w.parse::<usize>().ok().filter(|w| (16..=LIVE_WIDTH * 4).contains(w)).ok_or_else(|| format!("--width {w}: want px, 16 to {}", LIVE_WIDTH * 4))?,
+    };
     let out = flag(args, "--out").map(PathBuf::from).unwrap_or_else(|| root().join("out/lua").join(format!("{stem}.png")));
     let chunks = parse_program(&text);
     if chunks.is_empty() {
@@ -1031,12 +1180,14 @@ fn run(args: &[String]) -> Result<(), String> {
     let tubes = session::box_for(Some(&text)).map_err(|e| format!("{file}: {e}"))?;
     // hand-time frames (frames.rs): only read the canvas, so the replay is
     // the same with or without them
+    // --light or --gallery: the picture (and its frames) lit on the paint's relief
+    let light = if args.iter().any(|a| a == "--gallery") { Some(GALLERY_LIGHT) } else { flag(args, "--light").map(|l| light_of(&l)).transpose()? };
     let frames = match (flag(args, "--frames-every"), flag(args, "--frames-dir")) {
         (None, None) => false,
         (Some(e), Some(d)) => {
             let every: f64 = e.parse().map_err(|_| format!("--frames-every {e}: want seconds of hand time"))?;
             let fw = flag(args, "--frame-width").map(|w| w.parse::<u32>().map_err(|_| format!("--frame-width {w}: want px"))).transpose()?.unwrap_or(1000);
-            frames::start(every, PathBuf::from(d), fw)?;
+            frames::start(every, PathBuf::from(d), fw, light)?;
             true
         }
         _ => return Err(format!("run: --frames-every and --frames-dir go together ({RUN_USAGE})")),
@@ -1074,7 +1225,7 @@ fn run(args: &[String]) -> Result<(), String> {
             flag(args, "--frames-dir").unwrap_or_default()
         );
     }
-    deliver(&c, &out)?;
+    deliver_lit(&c, &out, light)?;
     eprintln!("wrote {} ({} chunks, painted in {paint_secs:.1}s, total {:.1}s)", out.display(), chunks.len(), t0.elapsed().as_secs_f64());
     if let Some(p) = flag(args, "--dump-surface") {
         // the dried surface height (µm) under the saved pixels: little-endian
@@ -1205,7 +1356,10 @@ fn state_digest_line(s: &Session, n: usize, secs: f64) -> String {
     let brushes_h = fnv1a(brushes.join("\n").as_bytes());
     let studio = format!("seed={} clock={:?} clock0={:?} chunk={} calls={} setup={:?} piles={:?} rng={:?}", st.seed, st.clock, st.clock0, st.chunk, st.calls, st.setup, st.hand.piles, st.rng);
     let studio_h = fnv1a(studio.as_bytes());
-    format!("chunk {n} secs={secs:.3} canvas={canvas:016x} brushes={brushes_h:016x} nbrushes={} studio={studio_h:016x}\n", brushes.len())
+    // (knives came with engine 3: a painting without one keeps the line it had)
+    let knives: Vec<String> = st.live_knives().iter().map(|k| format!("{:?}", k.borrow())).collect();
+    let knives_s = if knives.is_empty() { String::new() } else { format!(" knives={:016x} nknives={}", fnv1a(knives.join("\n").as_bytes()), knives.len()) };
+    format!("chunk {n} secs={secs:.3} canvas={canvas:016x} brushes={brushes_h:016x} nbrushes={} studio={studio_h:016x}{knives_s}\n", brushes.len())
 }
 
 #[cfg(test)]
@@ -1334,5 +1488,27 @@ mod tests {
     #[test]
     fn journal_entries_are_dated_lines() {
         assert_eq!(journal_entry(907.5, "first line\nsecond\n\nthird\n"), "- day 2, 00:07: first line\n  second\n\n  third\n");
+    }
+
+    #[test]
+    fn save_takes_a_path_and_a_light() {
+        let args = |a: &[&str]| save_args(&a.iter().map(|s| s.to_string()).collect::<Vec<_>>());
+        assert_eq!(args(&[]), Ok((None, None)));
+        assert_eq!(args(&["a.png"]), Ok((Some(PathBuf::from("a.png")), None)));
+        assert_eq!(args(&["a.png", "--gallery"]), Ok((Some(PathBuf::from("a.png")), Some(GALLERY_LIGHT))));
+        assert_eq!(args(&["--light", "135,25", "a.png"]), Ok((Some(PathBuf::from("a.png")), Some((135.0, 25.0)))));
+        for bad in [&["--light"][..], &["--light", "135"], &["--light", "135,91"], &["--light", "nan,25"], &["--light", "inf,25"], &["a.png", "b.png"], &["--lit"]] {
+            assert!(args(bad).is_err(), "{bad:?}");
+        }
+    }
+
+    /// A new session is a sketch by its name; a log by what its head says.
+    #[test]
+    fn a_log_replays_at_the_width_it_was_painted_at() {
+        assert_eq!(width_for("sketch-1", None), session::SKETCH_WIDTH);
+        assert_eq!(width_for("painting", None), LIVE_WIDTH);
+        let head = |mark: &str| format!("-- easel session\n--@ engine 3\n{mark}\n--@ chunk 1\ncanvas{{}}\n");
+        assert_eq!(width_for("renamed", Some(&head(session::SKETCH_MARK))), session::SKETCH_WIDTH);
+        assert_eq!(width_for("sketchbook", Some(&head(""))), LIVE_WIDTH);
     }
 }

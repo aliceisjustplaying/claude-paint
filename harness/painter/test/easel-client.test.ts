@@ -68,9 +68,12 @@ test("look's options become the easel's arguments", () => {
 		["--crop", "300,200,500,350", "--mode", "value,squint", "--size", "600", "--grid", "10"]);
 	assert.deepEqual(lookArgs({ grid: true }), ["--grid"]);
 	assert.deepEqual(lookArgs({ grid: false }), []);
+	assert.deepEqual(lookArgs({ mode: "relief", light: "45,15" }), ["--mode", "relief", "--light", "45,15"]);
 	assert.deepEqual(lookArgs({ palette: true }), ["--palette"]);
 	assert.deepEqual(lookArgs({ palette: false }), []);
 	assert.equal(toolWords("look: --palette takes no other option"), "look: palette takes no other option");
+	assert.deepEqual(lookArgs({ survey: true, mode: "gallery" }), ["--survey", "--mode", "gallery"]);
+	assert.deepEqual(lookArgs({ compare: "out/easel/painting/a.png" }), ["--compare", "out/easel/painting/a.png"]);
 });
 
 test("a long log keeps its end and says what was left out", () => {
@@ -273,4 +276,27 @@ test("a look is renamed at random and shown without the machine's seconds", asyn
 	assert.equal(said, `${path} (1000x714)`);
 	assert.equal(readFileSync(join(s, path), "utf8"), "png");
 	assert.ok(!existsSync(join(s, "out", "look-0012.png")));
+});
+
+test("every look a survey names is renamed, in order", async () => {
+	const { renameLooks } = await import("../easel-client.ts");
+	const s = mkdtempSync(join(tmpdir(), "studio-"));
+	mkdirSync(join(s, "out"));
+	for (const n of ["0004", "0005"]) writeFileSync(join(s, "out", `look-${n}.png`), n);
+	const { said, paths } = renameLooks(s, "survey: 1 rows x 2 columns of 500 x 333 units, at full detail\nout/look-0004.png (1200x800): row 1 column 1 (0,0,500,333)\nout/look-0005.png (1200x800): row 1 column 2 (500,0,1000,333)\n");
+	assert.equal(paths.length, 2);
+	assert.equal(readFileSync(join(s, paths[0]), "utf8"), "0004");
+	assert.equal(readFileSync(join(s, paths[1]), "utf8"), "0005");
+	assert.match(said, /^survey: /);
+	assert.ok(said.includes(`${paths[1]} (1200x800): row 1 column 2`));
+	writeFileSync(join(s, "out", "look-0006.png"), "0006");
+	const one = renameLooks(s, "out/look-0006.png (1000x714, 0.04s)");
+	assert.equal(one.said, `${one.paths[0]} (1000x714)`, "without the machine's seconds");
+	// a studio whose folders have spaces in their names; a line that only ends like a look
+	mkdirSync(join(s, "my out"));
+	writeFileSync(join(s, "my out", "look-0007.png"), "0007");
+	const spaced = renameLooks(s, "my out/look-0007.png (1000x714, 0.04s)\nno such look.png");
+	assert.equal(spaced.paths.length, 1);
+	assert.equal(readFileSync(join(s, spaced.paths[0]), "utf8"), "0007");
+	assert.ok(spaced.said.endsWith("\nno such look.png"));
 });

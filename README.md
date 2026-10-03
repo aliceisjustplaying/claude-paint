@@ -16,6 +16,7 @@ cargo test --workspace                # the engine's and the easel's tests
 ```
 
 - `notes/easel_guide.md`: how to paint at the easel.
+- `notes/techniques.md`: the oil painter's techniques with these tools (broken color, impasto, the knife, glazing, lean and fat), and the traps.
 - `notes/journal.md`: your working journal (`easel note '...'` adds to it).
 - `notes/research/`: sourced notes on materials and paint physics.
 - `crates/paint`: the engine (canvas, ground, bristles, wet paint, drying,

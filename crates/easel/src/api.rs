@@ -492,12 +492,21 @@ pub struct PileU {
     pub medium: f32,
     /// The parts as the painter gave them (for printing).
     parts: Vec<(String, f32)>,
+    /// Whether the pile knows thinner (engine 3 on, `has_thinner`): an older
+    /// log's piles have no `thinner` field, as they never had.
+    thinner_known: bool,
+}
+
+/// Whether piles take `thinner` (and have the field): from engine 3, so an
+/// older log sees exactly the piles it saw (printed output included).
+pub fn has_thinner(engine: u32) -> bool {
+    engine >= 3
 }
 
 impl UserData for PileU {
     fn add_fields<F: mlua::UserDataFields<Self>>(f: &mut F) {
         f.add_field_method_get("medium", |_, p| Ok(p.medium));
-        f.add_field_method_get("thinner", |_, p| Ok(p.mix.thinner));
+        f.add_field_method_get("thinner", |_, p| Ok(p.thinner_known.then_some(p.mix.thinner)));
     }
     fn add_methods<M: UserDataMethods<Self>>(m: &mut M) {
         m.add_method("parts", |lua, p, ()| {
@@ -1277,12 +1286,13 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
     {
         let st = st.clone();
         g.set("pile", lua.create_function(move |_, t: Table| {
-            check_keys(&t, &["medium", "thinner"], "pile")?;
+            let thinner_known = has_thinner(st.borrow().tubes.engine);
+            check_keys(&t, if thinner_known { &["medium", "thinner"] } else { &["medium"] }, "pile")?;
             let medium = num(&t, "medium")?.unwrap_or(0.0);
             if !(0.0..=0.95).contains(&medium) {
                 return err("pile: medium is the share of oil medium mixed in, 0 (as from the tube) to 0.95");
             }
-            let thinner = num(&t, "thinner")?.unwrap_or(0.0);
+            let thinner = if thinner_known { num(&t, "thinner")?.unwrap_or(0.0) } else { 0.0 };
             if !(0.0..=paint::thinner::MAX).contains(&thinner) {
                 return err(format!("pile: thinner is the share of solvent mixed in, 0 (none) to {}", paint::thinner::MAX));
             }
@@ -1295,7 +1305,7 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
             }
             // knifing it takes the hand a while
             time::knife(&st, mix.color);
-            Ok(PileU { mix, medium, parts: given })
+            Ok(PileU { mix, medium, parts: given, thinner_known })
         })?)?;
     }
 

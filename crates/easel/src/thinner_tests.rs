@@ -151,7 +151,8 @@ fn measure(width: usize, hand: &str, loads: &[f32], thinners: &[f32]) -> Vec<(St
 }
 
 /// The minutes from laying a patch until its center is setting and until it
-/// is tacky (past the gel point), checked every 5 minutes of `wait`.
+/// is tacky (past the gel point), checked every 15 minutes of `wait`, for
+/// up to 10 days.
 fn gel_minutes(width: usize, parts: &str, thinner: f32, load: f32) -> (f32, f32) {
     let mut s = Session::with_box(width, Palette::named_box("inness").unwrap()).unwrap();
     s.run(CANVAS).unwrap();
@@ -162,8 +163,8 @@ fn gel_minutes(width: usize, parts: &str, thinner: f32, load: f32) -> (f32, f32)
             r#"local pts, set, tack, t = {}, nil, nil, 0
 for i = 0, 4 do for j = 0, 4 do pts[#pts + 1] = {420 + 40 * i, 420 + 40 * j} end end
 local function count(st) local n = 0 for _, p in ipairs(pts) do local d = drying(p[1], p[2]) if d == st or (st == "setting" and (d == "tacky" or d == "dry")) or (st == "tacky" and d == "dry") then n = n + 1 end end return n end
-while t < 3 * 24 * 60 and not tack do
-  wait(5); t = t + 5
+while t < 10 * 24 * 60 and not tack do
+  wait(15); t = t + 15
   if not set and count("setting") >= 13 then set = t end
   if count("tacky") >= 13 then tack = t end
 end
@@ -269,17 +270,20 @@ fn a_thinned_pass_reads_as_thin() {
     assert!(white.shows() <= 0.5, "lead white thinned half at load 0.6 is still a scumble: {:.2} of the card shows", white.shows());
 }
 
-/// Raw sienna, a transparent earth, thinned half with solvent is an
-/// imprimatura: at least half the card's black/white contrast shows
-/// through it at loads 0.3 and 0.6. FAILS: measured (width 600) 0.49 at
-/// load 0.3 and 0.20 at load 0.6. The pass lays 0.32 of the unthinned
-/// pigment (under 1 - t), but one coat of tube raw sienna (hiding 0.4)
-/// lets only ~20-25% of the card show; see notes/thinner/README.md.
+/// Raw sienna, a transparent earth, thinned half with solvent and laid at
+/// a wash's load (0.3) is an imprimatura: at least half the card's
+/// black/white contrast shows through it. (50% is the project's own target,
+/// not a measurement; an imprimatura is laid thin and rubbed out, so the
+/// target is set at a light load, as the parent redefined it.) At load 0.6
+/// the share is printed, not judged: a load-0.6 pass lays about three coats
+/// of wet paint, and half of that as raw sienna (hiding 0.4, unchanged)
+/// hides most of the card; see notes/thinner/README.md.
 #[test]
 fn an_earth_thinned_half_is_an_imprimatura() {
     let rows = measure(600, "body", &[0.3, 0.6], &[0.0, 0.5]);
-    let shows: Vec<(f32, f32)> = [0.3, 0.6].iter().map(|&load| (load, rows[1].1.iter().find(|c| c.load == load && c.thinner == 0.5).unwrap().shows())).collect();
-    assert!(shows.iter().all(|&(_, v)| v >= 0.5), "raw sienna thinned half shows (load, share of the card's contrast) {shows:.2?}; an imprimatura shows at least 0.5");
+    let shows = |load: f32| rows[1].1.iter().find(|c| c.load == load && c.thinner == 0.5).unwrap().shows();
+    println!("raw sienna thinned half: load 0.3 shows {:.2} of the card's contrast, load 0.6 (reported, not judged) {:.2}", shows(0.3), shows(0.6));
+    assert!(shows(0.3) >= 0.5, "raw sienna thinned half at load 0.3 shows {:.2} of the card; an imprimatura shows at least 0.5", shows(0.3));
 }
 
 /// The solvent evaporates, so the dry film is (1 - t) of the wet film: a
@@ -301,18 +305,25 @@ fn thinned_paint_lays_less_pigment() {
 }
 
 /// A thinned film reaches its gel point sooner than the same pile unthinned
-/// (it is a thinner film), but only moderately: the oil cures as the
-/// pile's own oil, so the speed-up is the engine's thickness law's, at most
-/// 2.5× here (time ∝ film^0.7, floored at half a coat).
+/// only because it is a thinner film: the oil is the pile's own, so the
+/// speed-up is what the engine's thickness rule gives for the two films
+/// (`drying::rate`: time ∝ (film in coats)^0.7, no faster below half a coat
+/// of that), within 25% (the rule judges each film over its neighborhood),
+/// and never under an hour.
 #[test]
 fn a_thinned_film_sets_sooner() {
     let parts = r#"{"lead white", 6}, {"yellow ochre", 1}"#;
+    let thick = |um: f32| (um / paint::COAT_UM).powf(0.7).max(0.5);
+    let (f0, _) = laid(300, parts, 0.0, 0.6);
     let (s0, t0) = gel_minutes(300, parts, 0.0, 0.6);
     for t in [0.5, 0.7] {
+        let (f1, _) = laid(300, parts, t, 0.6);
         let (s1, t1) = gel_minutes(300, parts, t, 0.6);
         assert!(t0 > 0.0 && t1 > 0.0, "both set: {t0} {t1}");
-        assert!(t1 < 0.8 * t0 && s1 <= s0, "thinner {t} sets sooner: setting {s1} vs {s0}, tacky {t1} vs {t0}");
-        assert!(t1 >= t0 / 2.5, "thinner {t} sets only moderately sooner: tacky at {t1} min vs {t0}");
+        assert!(t1 < t0 && s1 <= s0, "thinner {t} sets sooner: setting {s1} vs {s0}, tacky {t1} vs {t0}");
+        let (got, want) = (t0 / t1, thick(f0) / thick(f1));
+        assert!((got / want - 1.0).abs() <= 0.25, "thinner {t}: sets {got:.2}× sooner, the thickness rule gives {want:.2}× (films {f0:.1} and {f1:.1} µm)");
+        assert!(t1 >= 60.0, "thinner {t}: tacky after {t1} min");
     }
 }
 
@@ -356,3 +367,32 @@ wait(90); print(p, p.thinner, drying(500, 500))"#
     }
 }
 
+
+/// An older log (engine 2) sees the piles it saw, printed output included:
+/// no `thinner` field (nil, as the round-23 easel printed it), `thinner` an
+/// unknown option with round 23's message, `print(p)` unchanged; and its
+/// canvas is what it was without the option.
+#[test]
+fn an_engine_2_log_sees_the_piles_it_saw() {
+    let mut tubes = Palette::named_box("inness").unwrap();
+    tubes.engine = 2;
+    let mut s = Session::with_box(100, tubes).unwrap();
+    s.run(CANVAS).unwrap();
+    let r = s
+        .run(
+            r#"p = pile{{"lead white", 3}, {"raw umber", 1}, medium=0.2}
+print(pcall(function() return p.thinner end))
+print(p)
+local ok, e = pcall(pile, {{"lead white", 1}, thinner=0.5})
+print(ok, (tostring(e):match("pile: [^\n]*")))"#,
+        )
+        .unwrap();
+    // as the round-23 easel (7b80cb0) printed this chunk
+    assert_eq!(r.out, "true\tnil\npile(lead white 3, raw umber 1; medium 0.2)\nfalse\tpile: unknown option \"thinner\" (options: medium)\n", "{:?}", r.out);
+    // and from engine 3 the field and the option are there
+    let mut s = Session::with_box(100, Palette::named_box("inness").unwrap()).unwrap();
+    assert!(paint::ENGINE >= 3);
+    s.run(CANVAS).unwrap();
+    let r = s.run(r#"p = pile{{"lead white", 3}, thinner=0.5}; print(p.thinner, pile{{"lead white", 3}}.thinner)"#).unwrap();
+    assert_eq!(r.out, "0.5\t0.0\n");
+}

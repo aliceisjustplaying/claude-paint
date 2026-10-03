@@ -341,7 +341,9 @@ pub(crate) struct Bristle {
     /// a drying film brings the film's).
     cure: f32,
     /// Share of solvent in the paint in it (`thinner`): 0 unless it was
-    /// loaded with thinned paint. Thinned paint runs further (`run_of`).
+    /// loaded with thinned paint. Thinned paint runs further (`run_of`), and
+    /// only `1 - thin` of what it lays reaches the canvas (the solvent
+    /// flashes off).
     thin: f32,
 }
 
@@ -1362,6 +1364,9 @@ unsafe fn exchange(
         let mut got_h: Prop = [0.0; 3];
         let mut got_c = 0.0f32;
         let (blat, bhide, bcure) = (br.lat, br.hide, br.cure);
+        // thinned paint: the solvent flashes off as it is laid, and only the
+        // paint left reaches the canvas (`thinner`)
+        let bthin = br.thin;
         for y in y0..y1 {
             for x in x0..x1 {
                 let wt = wts[(y - y0) * bw + (x - x0)];
@@ -1403,7 +1408,8 @@ unsafe fn exchange(
                     // the hairs of a gathered point lie over each other)
                     let cv = &mut *sf.cover.add(i);
                     *cv = if fine { ((if *sf.vol.add(i) < 1e-6 { 0.0 } else { *cv }) + wt * excl).min(1.0) } else { 1.0 };
-                    sf.add(i, dep_per_w * wt, &blat, bhide, bcure);
+                    let d = dep_per_w * wt;
+                    sf.add(i, if bthin > 0.0 { d * (1.0 - bthin) } else { d }, &blat, bhide, bcure);
                     *sf.stroke.add(i) = id;
                 }
                 // plough: move paint outward from the bristle's path, and ahead

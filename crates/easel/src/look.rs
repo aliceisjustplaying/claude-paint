@@ -461,9 +461,14 @@ const GAP: usize = 8;
 
 /// One row's swatches, left to right: the pile laid thick over the ground, a thin and a
 /// very thin coat over the ground, and the thin coat over the black-and-white card. Each is
-/// the pile's own paint and `Paint::over`: nothing on the canvas is read or changed.
+/// the pile's own paint and `Paint::over` (a thinned pile's coats are what is left once
+/// its solvent has gone): nothing on the canvas is read or changed.
 pub fn swatches(p: &paint::Paint, ground: Rgb) -> [Rgb; 5] {
-    [p.over(ground, THICK), p.over(ground, THIN), p.over(ground, VERY_THIN), p.over(CARD_WHITE, THIN), p.over(CARD_BLACK, THIN)]
+    // a thinned pile's coats as laid: its solvent flashes off, leaving
+    // `1 - thinner` of each (`paint::thinner`)
+    let k = paint::thinner::left(p);
+    let (thick, thin, very) = if p.thinner > 0.0 { (THICK * k, THIN * k, VERY_THIN * k) } else { (THICK, THIN, VERY_THIN) };
+    [p.over(ground, thick), p.over(ground, thin), p.over(ground, very), p.over(CARD_WHITE, thin), p.over(CARD_BLACK, thin)]
 }
 
 /// Up to `n` characters a line, broken at spaces where it can.

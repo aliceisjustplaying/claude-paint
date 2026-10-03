@@ -78,11 +78,12 @@ A pile is parts by volume of named tubes, plus `medium`: the share of oil
 medium mixed in (0, as from the tube, to 0.95). Medium makes the paint more
 transparent and more fluid, and slower to dry. It is added oil only.
 `thinner` is the share of solvent (turpentine) mixed in, 0 (none) to 0.9.
-Solvent thins the paint without adding oil, and it evaporates once the
-paint is on the canvas. Each coat of thinned paint carries less pigment, so
-it is more transparent; the paint is more fluid and keeps fewer brush marks;
-a brushload of it spreads further, into a thinner film; and that film, lean,
-dries faster. A pile can hold both medium and thinner. What a pile looks like is
+Solvent thins the paint without adding oil. A brush loaded from a thinned
+pile spreads it further, and the solvent flashes off as the paint is laid:
+only the paint left reaches the canvas, so a stroke lays less pigment and a
+thinner film of the pile's own paint, which dries sooner because it is
+thinner. There is no wet, fluid stage while the solvent leaves. A pile can
+hold both medium and thinner. What a pile looks like is
 what its pigments make together, thick or thin, over what is already on
 the canvas; you find out by painting with it and looking. A pile mixed by
 hand is a little uneven: each brushload takes slightly different

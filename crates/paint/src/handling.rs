@@ -111,6 +111,23 @@ pub struct Handling<'a> {
     /// `ruler()`); None: the handling's default, `Order::Passages`, whose
     /// passages hand time paints in a sweep down (`Canvas::paint_pass`).
     pub order: Option<Order>,
+    /// Which bristles each dip into the pile reaches and how evenly
+    /// (`Part::ALL`: the whole brush alike).
+    pub part: crate::bristle::Part,
+    /// After each dip, part of the brush goes into a second pile (a
+    /// double-loaded brush): see `second`.
+    pub second: Option<Second<'a>>,
+}
+
+/// A second pile part of the brush is dipped into after the first (see
+/// `Handling::second`): its palette and mixture, medium, load and the part of
+/// the brush it reaches.
+pub struct Second<'a> {
+    pub palette: &'a Palette,
+    pub pile: crate::palette::Mixture,
+    pub medium: f32,
+    pub load: f32,
+    pub part: crate::bristle::Part,
 }
 
 /// The order an area's strokes are painted in.
@@ -168,6 +185,8 @@ impl<'a> Handling<'a> {
             swell: 0.15,
             clump: 0.3,
             order: None,
+            part: crate::bristle::Part::ALL,
+            second: None,
         }
     }
     /// Ruler strokes: straight, even, evenly spread, in random order
@@ -387,6 +406,9 @@ struct Plan {
     /// The paint color: which pile
     /// on the palette the dip comes from (`tally::Piles`).
     want: Rgb,
+    /// The second dip after it, if the brush is double-loaded: its paint,
+    /// load and pile color.
+    dip2: Option<(Paint, f32, Rgb)>,
 }
 
 impl Canvas {
@@ -500,6 +522,7 @@ impl Canvas {
                 if k > 0 {
                     // a restart carries on with the paint left on the brush
                     plan.dip = None;
+                    plan.dip2 = None;
                 }
                 plan.passage = passage as u32;
                 // a dab takes only a touch of paint, not a full stroke's load
@@ -753,6 +776,7 @@ impl Canvas {
                 last = Some(p.passage);
                 if since % hd.dip_every != 0 && !moved {
                     p.dip = None;
+                    p.dip2 = None;
                     since += 1;
                 } else {
                     since = 1;
@@ -765,6 +789,9 @@ impl Canvas {
                         self.tally.reload(1.0 / crate::tally::pace::DABS_PER_RELOAD);
                     } else {
                         piles.trip(&mut self.tally, p.want);
+                        if let Some((_, _, want2)) = p.dip2 {
+                            piles.trip(&mut self.tally, want2);
+                        }
                     }
                 }
             }
@@ -795,7 +822,17 @@ impl Canvas {
                         held.wipe(0.9);
                     } else {
                         held.wipe(hd.wipe);
-                        held.load(paint, p.load);
+                        if hd.part == crate::bristle::Part::ALL {
+                            held.load(paint, p.load);
+                        } else {
+                            // a new streak pattern every dip, from where the stroke starts
+                            let seed = (p.pts[0].0.to_bits() as u64) << 21 ^ p.pts[0].1.to_bits() as u64 ^ 0x57EA;
+                            held.load_part(paint, p.load, &crate::bristle::Part { seed, ..hd.part });
+                        }
+                        if let (Some((paint2, load2, _)), Some(s2)) = (p.dip2, hd.second.as_ref()) {
+                            let seed = (p.pts[0].1.to_bits() as u64) << 19 ^ p.pts[0].0.to_bits() as u64 ^ 0x5EC0;
+                            held.load_part(paint2, load2, &crate::bristle::Part { seed, ..s2.part });
+                        }
                     }
                 }
                 let g = Gesture::new(p.pts.clone())
@@ -835,7 +872,12 @@ fn finish_plan(cv: &Canvas, hd: &Handling, tool: &Tool, c: (f32, f32), pts: Vec<
         let mut prng = Rng::new(rng.next_u64());
         let paint = pal.remix(pile, hd.mix_jitter, &mut prng).laid(*medium);
         let load = hd.load * load_k;
-        return (rect, Plan { pts, pressure, fade, dip: Some(paint), load, swell: Vec::new(), passage: 0, fresh: false, id: None, want: pile.color });
+        // (its own generator, drawn only for a double-loaded brush: other passes plan as before)
+        let dip2 = hd.second.as_ref().map(|s2| {
+            let mut r2 = Rng::new(prng.next_u64() ^ 0x2D1F);
+            (s2.palette.remix(&s2.pile, hd.mix_jitter, &mut r2).laid(s2.medium), s2.load * load_k, s2.pile.color)
+        });
+        return (rect, Plan { pts, pressure, fade, dip: Some(paint), load, swell: Vec::new(), passage: 0, fresh: false, id: None, want: pile.color, dip2 });
     }
     let target = (hd.color)(c.0, c.1);
     let lab = to_oklab(target);
@@ -846,7 +888,7 @@ fn finish_plan(cv: &Canvas, hd: &Handling, tool: &Tool, c: (f32, f32), pts: Vec<
     ]);
     let paint = Paint::new(col, hd.hiding, hd.stiff);
     let load = hd.load * load_k;
-    (rect, Plan { pts, pressure, fade, dip: Some(paint), load, swell: Vec::new(), passage: 0, fresh: false, id: None, want: target })
+    (rect, Plan { pts, pressure, fade, dip: Some(paint), load, swell: Vec::new(), passage: 0, fresh: false, id: None, want: target, dip2: None })
 }
 
 /// The part of a stroke through `c` that stays inside `mask` (≥ 0.5), pulled

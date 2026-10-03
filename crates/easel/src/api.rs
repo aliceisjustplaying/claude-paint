@@ -373,7 +373,17 @@ impl UserData for Brush {
     }
     fn add_methods<M: UserDataMethods<Self>>(m: &mut M) {
         // b:load(pile, amount?): dip into a pile on the palette (amount 0..1 of a full load)
+        // b:load(pile, amount, {side=, share=, streak=}): only part of the brush goes in
         m.add_method("load", |_, b, (p, amount, extra): (Value, Option<f32>, Value)| {
+            if let Value::Table(t) = &extra {
+                check_keys(t, PART_KEYS, "b:load")?;
+                let mut part = part_of(t, "b:load")?;
+                part.seed = b.st.borrow_mut().rng.next_u64();
+                let (paint, color) = brushload(&b.st, &p, &Value::Nil, "load")?;
+                b.held.borrow_mut().load_part(paint, amount.unwrap_or(0.8), &part);
+                time::trip(&b.st, color);
+                return Ok(());
+            }
             let (paint, color) = brushload(&b.st, &p, &extra, "load")?;
             b.held.borrow_mut().load(paint, amount.unwrap_or(0.8));
             time::trip(&b.st, color);
@@ -756,8 +766,21 @@ impl UserData for WorleyU {
 const WORK_KEYS: &[&str] = &[
     "hand", "pile", "tool", "length", "coverage", "angle", "angle_jitter", "load_at", "cut_in", "pressure", "orient", "dips", "blender", "scrub", "clip",
     "threshold", "ramps", "shake", "curve", "cross", "drift", "tail", "broken", "swell", "clump", "order", "mix_jitter", "seed", "ruler", "load", "hug",
-    "fill", "visible", "behind", "at", "view", "edge",
+    "fill", "visible", "behind", "at", "view", "edge", "streak", "second",
 ];
+
+const PART_KEYS: &[&str] = &["side", "share", "streak"];
+
+/// The part of a brush a dip reaches: `{side=-1..1, share=0..1, streak=0..1}`.
+fn part_of(t: &Table, what: &str) -> Result<paint::Part> {
+    let side = t.get::<Option<f32>>("side")?.unwrap_or(0.0);
+    let share = t.get::<Option<f32>>("share")?.unwrap_or(if side != 0.0 { 0.5 } else { 1.0 });
+    let streak = t.get::<Option<f32>>("streak")?.unwrap_or(0.0);
+    if !(-1.0..=1.0).contains(&side) || !(0.0..=1.0).contains(&share) || !(0.0..=1.0).contains(&streak) {
+        return err(format!("{what}: side is -1..1 (which edge of the brush goes in), share 0..1 (how much of its width), streak 0..1 (how unevenly)"));
+    }
+    Ok(paint::Part { side, share, streak, seed: 0 })
+}
 
 const EDGE_KEYS: &[&str] = &["found", "soft", "lost", "period", "seed", "quality", "waver", "reach"];
 
@@ -853,6 +876,24 @@ fn work(st: &S, mask: Rc<Mask>, o: Table, preset: Option<&str>) -> Result<()> {
     }
     if let Some(p) = &pile {
         h = h.piled(&tubes, p.mix.clone(), p.medium);
+    }
+    // streak=: each dip taken up unevenly, in streaks across the brush
+    if let Some(v) = num(&o, "streak")? {
+        if !(0.0..=1.0).contains(&v) {
+            return err("work: streak is 0..1 (how unevenly each dip loads the brush)");
+        }
+        h.part = paint::Part { streak: v, ..paint::Part::ALL };
+    }
+    // second={pile=, load=, side=, share=, streak=}: then part of the brush in a second pile
+    if let Some(t) = o.get::<Option<Table>>("second")? {
+        check_keys(&t, &["pile", "load", "side", "share", "streak"], "work second")?;
+        if pile.is_none() {
+            return err("work: second= is a second dip after the pile's; give pile= too");
+        }
+        let p2 = pile_of(&t.get::<Value>("pile")?, "work second")?;
+        let part = part_of(&t, "work second")?;
+        let load = t.get::<Option<f32>>("load")?.unwrap_or(0.4);
+        h.second = Some(paint::handling::Second { palette: &tubes, pile: p2.mix.clone(), medium: p2.medium, load, part });
     }
     #[cfg(feature = "replay")]
     if pile.is_none() && crate::legacy::on(st) {

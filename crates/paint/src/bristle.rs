@@ -437,6 +437,27 @@ impl Held {
         }
     }
 
+    /// Dip only part of the brush: `amount` of `paint` goes into the bristles
+    /// `part` reaches, as much as each one takes. A painter double-loads a
+    /// brush this way (one side or corner in a second pile), and a brush
+    /// pulled through an unevenly knifed pile takes paint up in streaks; the
+    /// colors then come off side by side within one stroke and mingle as they
+    /// go. With `Part::ALL` this is `load`.
+    pub fn load_part(&mut self, paint: Paint, amount: f32, part: &Part) {
+        let lat = paint.latent();
+        let full = self.full();
+        let scatter = paint.scatter();
+        for (i, b) in self.bristles.iter_mut().enumerate() {
+            let w = part.weight(b.rx, i);
+            if w <= 0.0 {
+                continue;
+            }
+            let k = (0.75 + 0.5 * crate::rng::hash2(i as i64, 17, 3)) * w;
+            b.cure = mix_cure(b.cure, b.vol, 0.0, amount * full * k);
+            mix_into(&mut b.vol, &mut b.lat, &mut b.hide, amount * full * k, &lat, [scatter, paint.stiff, paint.drying]);
+        }
+    }
+
     /// Wipe the brush on a rag: remove `frac` of the paint in it.
     pub fn wipe(&mut self, frac: f32) {
         for b in &mut self.bristles {
@@ -454,6 +475,55 @@ impl Held {
     pub fn fullness(&self) -> f32 {
         let f = self.full();
         self.bristles.iter().map(|b| b.vol).sum::<f32>() / (f * self.bristles.len() as f32)
+    }
+}
+
+/// Which of a brush's bristles a dip reaches, and how much each takes up
+/// (see `Held::load_part`).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Part {
+    /// The edge of the brush's wide axis that goes into the pile: -1 one
+    /// edge, 1 the other, 0 the whole width alike.
+    pub side: f32,
+    /// The share of the width, from that edge, that reaches the paint (1 all).
+    pub share: f32,
+    /// How unevenly the bristles take it up: 0 alike, 1 in streaks (bands a
+    /// few bristles wide take much more, others little or none).
+    pub streak: f32,
+    /// The streaks' randomness (a new one for every dip).
+    pub seed: u64,
+}
+
+impl Part {
+    pub const ALL: Part = Part { side: 0.0, share: 1.0, streak: 0.0, seed: 0 };
+
+    /// How much of the dip bristle `i` (root offset `rx` across the wide
+    /// axis, about -1..1) takes, relative to an even dip (about 1 on
+    /// average over the part reached).
+    pub fn weight(&self, rx: f32, i: usize) -> f32 {
+        let mut w = 1.0;
+        if self.side != 0.0 && self.share < 1.0 {
+            // 0 at the far edge .. 1 at the dipped edge; a soft margin, as hairs splay
+            let t = (rx * self.side.signum() + 1.0) * 0.5;
+            let lo = 1.0 - self.share.clamp(0.0, 1.0);
+            w *= crate::smoothstep(lo - 0.08, lo + 0.08, t);
+        }
+        if self.streak > 0.0 {
+            // bands: neighboring bristles share a streak (a clump of hair goes in together)
+            let bands = 7.0;
+            let u = (rx + 1.0) * 0.5 * bands;
+            let (b0, f) = (u.floor(), u - u.floor());
+            let s = self.seed;
+            let a = crate::rng::hash2(b0 as i64, 91, s);
+            let c = crate::rng::hash2(b0 as i64 + 1, 91, s);
+            let band = a + (c - a) * crate::smoothstep(0.0, 1.0, f);
+            let own = crate::rng::hash2(i as i64, 92, s);
+            let n = 0.75 * band + 0.25 * own; // 0..1, mean 0.5
+            // n² has a mean of about 0.3: 3.3 n² keeps the dip's total about the same
+            let st = self.streak.clamp(0.0, 1.0);
+            w *= (1.0 - st) + st * (3.3 * n * n);
+        }
+        w.max(0.0)
     }
 }
 
@@ -2235,5 +2305,56 @@ mod kernel_traps {
         }
         assert!(differ > 0, "the cropped blur is bit-identical here: box_blur no longer keeps a running sum?");
         eprintln!("cropped box blur: {differ} of 1600 pixels differ, by up to {max:e}");
+    }
+}
+
+#[cfg(test)]
+mod part_tests {
+    use super::*;
+    use crate::color::hex;
+
+    fn vols(h: &Held) -> Vec<(f32, f32)> {
+        h.bristles.iter().map(|b| (b.rx, b.vol)).collect()
+    }
+
+    #[test]
+    fn whole_part_is_an_ordinary_load() {
+        let mut a = Held::new(Tool::filbert(12.0), 7);
+        let mut b = Held::new(Tool::filbert(12.0), 7);
+        a.load(Paint::body(hex("#445566")), 0.8);
+        b.load_part(Paint::body(hex("#445566")), 0.8, &Part::ALL);
+        assert_eq!(vols(&a), vols(&b));
+    }
+
+    #[test]
+    fn a_side_dip_reaches_only_that_side() {
+        let mut h = Held::new(Tool::filbert(12.0), 7);
+        h.load_part(Paint::body(hex("#c04040")), 0.8, &Part { side: 1.0, share: 0.4, streak: 0.0, seed: 1 });
+        for (rx, v) in vols(&h) {
+            if rx < -0.1 {
+                assert_eq!(v, 0.0, "bristle at {rx} took paint");
+            }
+            if rx > 0.6 {
+                assert!(v > 0.0, "bristle at {rx} took none");
+            }
+        }
+    }
+
+    #[test]
+    fn streaks_keep_about_the_same_paint() {
+        let mut even = Held::new(Tool::filbert(12.0), 7);
+        even.load(Paint::body(hex("#445566")), 0.8);
+        let mut sum = 0.0;
+        for seed in 0..40 {
+            let mut h = Held::new(Tool::filbert(12.0), 7);
+            h.load_part(Paint::body(hex("#445566")), 0.8, &Part { streak: 1.0, seed, ..Part::ALL });
+            sum += h.fullness() / even.fullness();
+            // and the bristles take it unevenly
+            let v: Vec<f32> = h.bristles.iter().map(|b| b.vol).collect();
+            let (lo, hi) = v.iter().fold((f32::MAX, 0f32), |(l, m), &x| (l.min(x), m.max(x)));
+            assert!(hi > 3.0 * lo.max(1e-9), "seed {seed}: {lo}..{hi}");
+        }
+        let mean = sum / 40.0;
+        assert!((0.8..1.2).contains(&mean), "mean {mean}");
     }
 }

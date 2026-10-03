@@ -83,7 +83,7 @@
   #view { flex:1; min-height:0; display:grid; grid-template-rows:minmax(0,1fr); gap:10px; padding:12px 12px 8px }
   #view.two, #view.pal { grid-template-rows:minmax(0,3fr) minmax(0,1fr) }
   /* the palette (its newest palette look) always has its own place beside what the painter studies now */
-  #view.two.pal { grid-template-columns:minmax(0,1fr) minmax(0,1fr); grid-template-areas:'w w' 'o p' } #whole { grid-area:w } #other { grid-area:o } #pal { grid-area:p }
+  #view.two.pal { grid-template-columns:minmax(0,1fr) minmax(0,1fr); grid-template-areas:'w w' 'o p' } #view.pal #whole { grid-area:w } #view.pal #other { grid-area:o } #view.pal #pal { grid-area:p }
   #view.pal:not(.two) { grid-template-areas:'w' 'p' }
   #pal { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:12px; align-items:center } #pal[hidden] { display:none }
   #pal .box { height:100% } #pal img { object-position:right center }

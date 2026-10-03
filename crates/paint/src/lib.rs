@@ -75,7 +75,7 @@ pub use shape::Shape;
 ///   white is open for 13 h and gels after 27 h (engine 2: 1.4 h and 2.7 h),
 ///   touch-dry after 45 h (18 h); bone black, cobalt blue, Prussian blue,
 ///   raw sienna, the cadmiums, the ultramarines, rose madder and permanent
-///   alizarin dry at new rates (`drying::drier::ENGINE_3`), and a box keeps
+///   alizarin dry at new rates (`Tube::drying_3`, `drying::drier::engine3`), and a box keeps
 ///   its engine when tubes are added (`Palette::with`).
 pub const ENGINE: u32 = 3;
 

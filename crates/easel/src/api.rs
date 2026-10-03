@@ -1485,8 +1485,8 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
             }
             let tilt = match pair(&o, "tilt")? {
                 None => None,
-                Some((a, g)) if (0.0..=1.0).contains(&g) => Some((a, g)),
-                Some(_) => return err("pour: tilt={angle, amount}: the direction it runs downhill (radians) and how steeply, 0 to 1"),
+                Some((a, g)) if a.is_finite() && (0.0..=1.0).contains(&g) => Some((a, g)),
+                Some(_) => return err("pour: tilt={angle, amount}: the direction it runs downhill (finite radians) and how steeply, 0 to 1"),
             };
             let tubes = st1.borrow().tubes.clone();
             let (mut pig, mut mob) = (0.0f32, 0.0f32);
@@ -1606,6 +1606,16 @@ mod tests {
         for g in ["{um=50}", r#"{{pile={{"lead white", 1}}, um=50, apply="knife"}}"#] {
             let e = run(&format!(r#"canvas{{size=300, aspect=1, linen=15, raw="cotton duck", ground={g}}}"#)).unwrap_err();
             assert!(e.contains("a raw canvas has no ground"), "{g}: {e}");
+        }
+    }
+
+    // a tilt runs downhill at a finite angle
+    #[test]
+    fn a_pour_refuses_a_tilt_without_an_angle() {
+        for a in ["0/0", "1/0"] {
+            let e = run(&format!(r#"canvas{{size=300, aspect=1, linen=15, raw="cotton duck"}}
+                print(pour(ellipse(500, 500, 30, 30), {{pile=pile{{{{"cobalt blue", 1}}}}, thinner=6, ml=5, tilt={{{a}, 0.5}}}}))"#)).unwrap_err();
+            assert!(e.contains("tilt"), "{a}: {e}");
         }
     }
 

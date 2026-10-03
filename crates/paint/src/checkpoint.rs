@@ -160,9 +160,23 @@ fn read_soak(r: &mut impl Read, n: usize) -> io::Result<crate::soak::Soak> {
     for _ in 0..10 {
         v.push(get_all(r, n)?);
     }
+    let (kp, sp) = (get_all(r, 3 * n)?, get_all(r, 3 * n)?);
+    // per pixel, in the order written: weave and pore volume (positive),
+    // pigment, oil and oil on its way (not negative), when that arrives,
+    // since when oil is there (+inf: never), turpentine (not negative) and
+    // its evaporation times; the pigments' absorption and scattering (not
+    // negative). All finite but the one sentinel.
+    let ok = |k: usize, x: f32| match k {
+        0 | 1 => x.is_finite() && x > 0.0,
+        2 | 3 | 4 | 7 => x.is_finite() && x >= 0.0,
+        6 => !x.is_nan() && x > f32::NEG_INFINITY,
+        _ => x.is_finite(),
+    };
+    if !(v.iter().enumerate().all(|(k, a)| a.iter().all(|&x| ok(k, x))) && kp.iter().chain(&sp).all(|&x| x.is_finite() && x >= 0.0)) {
+        return Err(bad("checkpoint soak is invalid"));
+    }
     let rgb = |a: Vec<f32>| a.as_chunks::<3>().0.to_vec();
-    let kp = rgb(get_all(r, 3 * n)?);
-    let sp = rgb(get_all(r, 3 * n)?);
+    let (kp, sp) = (rgb(kp), rgb(sp));
     let mut it = v.into_iter();
     let mut next = || it.next().unwrap();
     Ok(crate::soak::Soak {
@@ -423,10 +437,16 @@ impl Canvas {
             v if (1..=crate::ENGINE as u64).contains(&v) => v as u32,
             _ => return Err(bad("checkpoint engine version is invalid")),
         };
-        // a raw canvas's soak, if one was written
-        let mut b = [0u8; 8];
-        match r.read_exact(&mut b) {
-            Ok(()) if u64::from_le_bytes(b) == SOAK_MARK => {
+        // a raw canvas's soak, if one was written: the file ends here, or
+        // a whole mark and the soak and then the end
+        let mut b = Vec::with_capacity(8);
+        r.by_ref().take(8).read_to_end(&mut b)?;
+        match b.len() {
+            0 => {}
+            8 if u64::from_le_bytes(b[..].try_into().unwrap()) == SOAK_MARK => {
+                if !c.f.is_whole() {
+                    return Err(bad("checkpoint soak is on a crop render"));
+                }
                 let s = read_soak(r, n)?;
                 for sb in [s.active, s.stained] {
                     if let Some((bx0, by0, bx1, by1)) = sb
@@ -436,10 +456,11 @@ impl Canvas {
                     }
                 }
                 c.soak = Some(Box::new(s));
+                if r.read(&mut [0u8; 1])? != 0 {
+                    return Err(bad("checkpoint has trailing data"));
+                }
             }
-            Ok(()) => return Err(bad("checkpoint has trailing data")),
-            Err(e) if e.kind() == io::ErrorKind::UnexpectedEof => {}
-            Err(e) => return Err(e),
+            _ => return Err(bad("checkpoint has trailing data")),
         }
         Ok((c, header))
     }

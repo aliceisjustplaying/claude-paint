@@ -22,7 +22,9 @@
 //! (deep-bed filtration: the denser near the pour, the paler far from it;
 //! fine pigments travel further than coarse ones). What is still suspended
 //! when the turpentine evaporates is drawn toward the drying edge and left
-//! there (a ring: the more turpentine, the stronger).
+//! there (a ring: the more turpentine, the stronger). The pour lays the ring
+//! at once, not as the stain dries; the cloth keeps no separate account of
+//! loose and settled pigment (`blot` lifts a share of all of it).
 //!
 //! **Turpentine** darkens the cloth while it is there (liquid in the air
 //! gaps between the fibres: "darker when wet") and evaporates over the next
@@ -340,7 +342,7 @@ type Heap = BinaryHeap<Reverse<(u32, u32)>>;
 
 #[inline]
 fn kbits(k: f32) -> u32 {
-    k.max(0.0).to_bits()
+    if k > 0.0 { k.to_bits() } else { 0 }
 }
 
 /// How fast liquid passes from cell `a` to its neighbour `b` at offset
@@ -357,6 +359,24 @@ fn speed(cells: &[(f32, f32, f32)], a: usize, b: usize, ox: i32, oy: i32, tilt: 
             let d = (ox as f32 * ang.cos() + oy as f32 * ang.sin()) / l;
             v * (1.0 + 0.9 * g * d).max(0.15)
         }
+    }
+}
+
+/// Can liquid move from cell (`x`, `y`) of a box `rw` wide to its
+/// neighbour at offset (`ox`, `oy`)? Not into cloth sealed under a paint
+/// film (`Soak::wick_cells` gives it no permeability), and not past it: a
+/// diagonal or knight's move needs one of the cells it passes beside open.
+fn passes(cells: &[(f32, f32, f32)], rw: usize, x: i32, y: i32, ox: i32, oy: i32) -> bool {
+    let open = |dx: i32, dy: i32| cells[(y + dy) as usize * rw + (x + dx) as usize].1 > 0.0;
+    if !open(ox, oy) {
+        return false;
+    }
+    let (sx, sy) = (ox.signum(), oy.signum());
+    match (ox.abs(), oy.abs()) {
+        (0, _) | (_, 0) => true,
+        (1, 1) => open(sx, 0) || open(0, sy),
+        (2, _) => open(sx, 0) || open(sx, sy),
+        _ => open(0, sy) || open(sx, sy),
     }
 }
 
@@ -405,16 +425,34 @@ impl Soak {
             .collect()
     }
 
+    /// Oil `put` (µm) creeping into pixel `i`, to arrive at `at` (minutes
+    /// after `t0`; `now` is the time now). Oil already due by now lands
+    /// first; oil still on its way and this share one arrival, the mean of
+    /// the two by volume (a pixel keeps one pending arrival).
+    pub(crate) fn send_oil(&mut self, i: usize, put: f32, at: f32, now: f32) {
+        if self.oil_pend[i] > 0.0 && self.oil_t[i] <= now {
+            self.oil[i] += self.oil_pend[i];
+            self.oil_since[i] = self.oil_since[i].min(self.oil_t[i]);
+            self.oil_pend[i] = 0.0;
+        }
+        let old = self.oil_pend[i];
+        self.oil_t[i] = if old > 0.0 { (old * self.oil_t[i] + put * at) / (old + put) } else { at };
+        self.oil_pend[i] = old + put;
+    }
+
     /// Oil the cloth can't hold creeps on through it: from the `edge`
     /// cells (local indices of the box `b` = (x0, y0, width, height) of a
     /// buffer `w` wide, each with its group) outward into cells not
     /// `inside`, nearest first (by how readily the cloth there wicks), up to
     /// `HALO_MM`, filling each to `HALO_FILL` of its pores. A group's oil
     /// (`budget`, µm summed over cells) goes only where its own edge
-    /// reaches first; what is left of it stays in `budget`. Returns (cell,
-    /// oil µm, mm from the edge, the edge cell it came from).
+    /// reaches first; what is left of it stays in `budget`. Cloth under a
+    /// paint film takes none and passes none on. Returns (cell, oil µm, its
+    /// travel from the edge (mm, weighted by how slowly the cloth wicks:
+    /// what its arrival time follows), its distance from the edge (mm), the
+    /// edge cell it came from).
     #[allow(clippy::too_many_arguments)]
-    fn creep(&self, cells: &[(f32, f32, f32)], b: (usize, usize, usize, usize), w: usize, dx: f32, now: f32, inside: &[bool], edge: &[(usize, usize)], budget: &mut [f32]) -> Vec<(usize, f32, f32, usize)> {
+    fn creep(&self, cells: &[(f32, f32, f32)], b: (usize, usize, usize, usize), w: usize, dx: f32, now: f32, inside: &[bool], edge: &[(usize, usize)], budget: &mut [f32]) -> Vec<(usize, f32, f32, f32, usize)> {
         let (x0, y0, rw, rh) = b;
         let nl = rw * rh;
         let mut halo = Vec::new();
@@ -423,6 +461,7 @@ impl Soak {
             return halo;
         }
         let mut hkey = vec![f32::INFINITY; nl];
+        let mut hdist = vec![0.0f32; nl];
         let mut horig = vec![u32::MAX; nl];
         let mut hgroup = vec![0u32; nl];
         let mut hdone = vec![false; nl];
@@ -451,7 +490,7 @@ impl Soak {
                 if cells[li].1 > 0.0 && room > 0.0 {
                     let put = room.min(budget[g]);
                     budget[g] -= put;
-                    halo.push((li, put, hkey[li], horig[li] as usize));
+                    halo.push((li, put, hkey[li], hdist[li], horig[li] as usize));
                     if budget[g] <= 1e-4 {
                         open -= 1;
                         if open == 0 {
@@ -468,7 +507,7 @@ impl Soak {
                     continue;
                 }
                 let nli = ny as usize * rw + nx as usize;
-                if hdone[nli] || inside[nli] {
+                if hdone[nli] || inside[nli] || !passes(cells, rw, x, y, ox, oy) {
                     continue;
                 }
                 let v = speed(cells, li, nli, ox, oy, None);
@@ -480,6 +519,7 @@ impl Soak {
                 let nk = hkey[li] + len * dx / v.max(0.05);
                 if nk <= HALO_MM && nk < hkey[nli] {
                     hkey[nli] = nk;
+                    hdist[nli] = hdist[li] + len * dx;
                     horig[nli] = horig[li];
                     hgroup[nli] = g as u32;
                     heap.push(Reverse((kbits(nk), nli as u32)));
@@ -493,7 +533,10 @@ impl Soak {
 impl Canvas {
     /// Leave the canvas raw: no ground, the bare `fabric`, which soaks up
     /// what is poured on it (`pour`). Call it on a canvas with no ground.
+    /// Panics on a crop render (`set_crop`): a pour spreads past any
+    /// window, and the weave is measured over the whole cloth.
     pub fn raw_canvas(&mut self, fabric: Fabric, seed: u64) {
+        assert!(self.f.is_whole(), "a raw canvas is painted whole, not as a crop render: what is poured on it spreads past any window");
         let (w, h) = (self.f.w, self.f.h);
         let n = w * h;
         // the weave's relief: thread tops scatter more than the gaps
@@ -699,7 +742,8 @@ impl Canvas {
         let vol = p.ml * 1000.0; // mm³
         let t = p.thinner.max(0.0);
         let (s0, oil0, pig0) = (t / (1.0 + t), p.oil / (1.0 + t), p.pigment / (1.0 + t));
-        // how fast it wicks: Washburn, h² = 2Kt with K = rγ/(4μ); the
+        // how fast it wicks: Washburn, h² = 2Kt with K = rγcosθ/(4μ),
+        // cosθ ≈ 1 (oil and turpentine wet cellulose); the
         // liquid's viscosity by log-mixing turpentine and oil, raised by the
         // pigment in suspension (Krieger–Dougherty)
         let liq = (s0 + oil0).max(1e-6);
@@ -743,7 +787,9 @@ impl Canvas {
                 heap.push(Reverse((kbits(key[li]), li as u32)));
             }
         }
-        let mut left = vol;
+        // (in f64: a cell's take can be far below an f32 step of the
+        // volume left)
+        let mut left = vol as f64;
         while let Some(Reverse((kb, li))) = heap.pop() {
             let li = li as usize;
             if done[li] || f32::from_bits(kb) > key[li] {
@@ -751,8 +797,8 @@ impl Canvas {
             }
             done[li] = true;
             order.push(li as u32);
-            let tk = cells[li].0.min(left);
-            take[li] = tk;
+            let tk = (cells[li].0 as f64).min(left);
+            take[li] = tk as f32;
             left -= tk;
             if left <= 1e-6 {
                 break;
@@ -764,7 +810,7 @@ impl Canvas {
                     continue;
                 }
                 let nli = ny as usize * rw + nx as usize;
-                if done[nli] {
+                if done[nli] || !passes(&cells, rw, x, y, ox, oy) {
                     continue;
                 }
                 let v = speed(&cells, li, nli, ox, oy, p.tilt);
@@ -779,6 +825,7 @@ impl Canvas {
             }
         }
         let lost = left.max(0.0);
+        let soaked = (vol as f64 - lost).max(0.0);
         // the liquid through each cell: what still had to pass outward when
         // the front was there, shared by the cells of the front then (the
         // flow in the cloth is spread out between its pores, not channelled:
@@ -851,7 +898,7 @@ impl Canvas {
         // (the routing is approximate: make the pigment add up to what was
         // poured)
         let sum: f64 = order.iter().map(|&li| (dep[li as usize] + resident[li as usize]) as f64).sum();
-        let want = ((vol - lost) * pig0) as f64;
+        let want = soaked * pig0 as f64;
         if sum > 0.0 {
             let k = (want / sum) as f32;
             for &li in &order {
@@ -994,29 +1041,37 @@ impl Canvas {
             evap_end[li] = end;
         }
         // the halo's oil arrives over the next days, carrying a trace of
-        // the finest pigment
+        // the finest pigment from the edge it left (more with more oil, and
+        // never more than half of what that edge holds)
         let mut halo_mm = 0.0f32;
         let pc = p.paint;
-        for &(li, put, d, o) in &halo {
+        let tints: Vec<f32> = halo
+            .iter()
+            .map(|&(li, put, _, dist, o)| p.mobility.powi(2) * HALO_TINT * um(pigdep[o]) * (put / (HALO_FILL * s.cap[gi(li)]).max(1e-6)).min(1.0) * (-dist / (0.4 * HALO_MM)).exp())
+            .collect();
+        let mut sent = vec![0.0f32; nl];
+        for (&(.., o), &t) in halo.iter().zip(&tints) {
+            sent[o] += t;
+        }
+        let share = |o: usize| if sent[o] > 0.0 { (0.5 * um(pigdep[o]) / sent[o]).min(1.0) } else { 0.0 };
+        for (&(li, put, d, dist, o), &t) in halo.iter().zip(&tints) {
             let i = gi(li);
             let (x, y) = (i % w, i / w);
             box_ = (box_.0.min(x), box_.1.min(y), box_.2.max(x + 1), box_.3.max(y + 1));
-            halo_mm = halo_mm.max(d);
-            let at = evap_end[o] + HALO_DAYS * 1440.0 * (d / HALO_MM).powi(2);
-            if s.oil_pend[i] > 0.0 {
-                s.oil_t[i] = s.oil_t[i].min(at);
-            } else {
-                s.oil_t[i] = at;
-            }
-            s.oil_pend[i] += put;
-            let tint = p.mobility.powi(2) * HALO_TINT * um(pigdep[o]) * (-d / (0.4 * HALO_MM)).exp();
+            halo_mm = halo_mm.max(dist);
+            s.send_oil(i, put, evap_end[o] + HALO_DAYS * 1440.0 * (d / HALO_MM).powi(2), now);
+            let tint = t * share(o);
             if tint > 0.0 {
                 let c = tint * coats_per_um;
+                let io = gi(o);
                 for ch in 0..3 {
                     s.kp[i][ch] += c * pc.k[ch];
                     s.sp[i][ch] += c * pc.s[ch];
+                    s.kp[io][ch] = (s.kp[io][ch] - c * pc.k[ch]).max(0.0);
+                    s.sp[io][ch] = (s.sp[io][ch] - c * pc.s[ch]).max(0.0);
                 }
                 s.pig[i] += tint;
+                s.pig[io] = (s.pig[io] - tint).max(0.0);
             }
         }
         let b = (box_.0, box_.1, box_.2, box_.3);
@@ -1032,8 +1087,8 @@ impl Canvas {
             self.soak_render(b);
         }
         Ok(Poured {
-            soaked_ml: (vol - lost) / 1000.0,
-            lost_ml: lost / 1000.0,
+            soaked_ml: (soaked / 1000.0) as f32,
+            lost_ml: (lost / 1000.0) as f32,
             area_cm2: area_px as f32 * area / 100.0,
             spread_s,
             halo_mm,
@@ -1042,9 +1097,11 @@ impl Canvas {
     }
 
     /// Blot the wet stain under `m` with a rag or sponge (`strength` 0..1,
-    /// times the mask's coverage): it lifts turpentine, some oil and the
-    /// pigment still loose in it. Dry cloth gives nothing back. Returns the
-    /// millilitres lifted.
+    /// times the mask's coverage): where the cloth is wet with turpentine it
+    /// lifts some of it, some oil and a share of the pigment in the cloth (an
+    /// older stain wetted again gives some back too). Dry cloth, cloth under
+    /// a paint film and oil still creeping toward a pixel are out of reach.
+    /// Returns the millilitres lifted (turpentine, oil and pigment).
     pub fn blot(&mut self, m: &Mask, strength: f32) -> Result<f32, String> {
         if self.soak.is_none() {
             return Err("blot: the canvas has a ground (blotting lifts what soaked into a raw canvas)".into());
@@ -1078,10 +1135,9 @@ impl Canvas {
                 s.kp[i][ch] *= 1.0 - pk;
                 s.sp[i][ch] *= 1.0 - pk;
             }
+            lifted += (sn * lift + s.oil[i] * lift * 0.5 + s.pig[i] * pk) * 1.0e-3 * area;
             s.pig[i] *= 1.0 - pk;
-            lifted += (sn * lift + s.oil[i] * lift * 0.5) * 1.0e-3 * area;
             s.oil[i] *= 1.0 - 0.5 * lift;
-            s.oil_pend[i] *= 1.0 - lift;
             s.solv[i] *= 1.0 - lift;
             let (x, y) = (i % w, i / w);
             bx0 = bx0.min(x);
@@ -1221,16 +1277,24 @@ mod tests {
         // a pile rich in oil medium (half medium): oil beyond what the
         // pigment holds
         let p = Pour { pigment: 0.35 * 0.4, oil: 1.0 - 0.35 * 0.4, ..blue_pour(8.0, 3.0) };
+        let before = c.pixels().to_vec();
         let r = c.pour(&disc(&c, 300.0, 500.0, 30.0), &p).unwrap();
         assert!(r.halo_ml > 0.05 && r.halo_mm > 3.0, "{r:?}");
+        // the halo's cloth: oil on its way where no liquid came
+        let s = c.soak.as_ref().unwrap();
+        let halo: Vec<usize> = (0..s.oil_pend.len()).filter(|&i| s.oil_pend[i] > 0.0 && s.solv[i] == 0.0).collect();
+        assert!(halo.len() > 20, "{} halo pixels", halo.len());
         // lean paint (much turpentine, little oil) on clean cloth: none
         let lean = c.pour(&disc(&c, 800.0, 200.0, 20.0), &blue_pour(3.0, 20.0)).unwrap();
         assert!(lean.halo_ml < 1e-3, "{lean:?}");
-        // the halo creeps in over days
+        // the halo creeps in over days and darkens the cloth it reaches
         c.wait(10.0 * 1440.0);
         let s = c.soak.as_ref().unwrap();
         assert!(s.oil_pend.iter().all(|&v| v == 0.0));
         assert!(s.active.is_none());
+        assert!(halo.iter().all(|&i| s.oil[i] > 0.0));
+        let lum = |px: &[Rgb]| halo.iter().map(|&i| luminance(px[i])).sum::<f32>() / halo.len() as f32;
+        assert!(lum(c.pixels()) < 0.95 * lum(&before), "{} vs {}", lum(c.pixels()), lum(&before));
     }
 
     #[test]
@@ -1240,9 +1304,18 @@ mod tests {
         c.wait(30.0);
         let mut b = Vec::new();
         c.write_state(&mut b, "t").unwrap();
-        let (mut d, _) = Canvas::read_state(&mut std::io::Cursor::new(b)).unwrap();
-        c.wait(3.0 * 1440.0);
-        d.wait(3.0 * 1440.0);
+        let (mut d, _) = Canvas::read_state(&mut std::io::Cursor::new(b.clone())).unwrap();
+        // all of it came back: written again, it is the same file
+        let mut b2 = Vec::new();
+        d.write_state(&mut b2, "t").unwrap();
+        assert!(b == b2);
+        // and painting goes on alike: a tilted pour (the cloth's seed, warp
+        // bias, wetness), a blot, days
+        for e in [&mut c, &mut d] {
+            e.pour(&disc(e, 520.0, 470.0, 25.0), &Pour { tilt: Some((0.7, 0.4)), ..blue_pour(6.0, 6.0) }).unwrap();
+            e.blot(&disc(e, 500.0, 460.0, 15.0), 0.6).unwrap();
+            e.wait(3.0 * 1440.0);
+        }
         assert_eq!(c.pixels(), d.pixels());
         // a canvas with no soak writes what it always wrote
         let p = Canvas::new_window(8, 1.0, [0.5; 3], None);
@@ -1285,6 +1358,113 @@ mod tests {
         assert!(refused(&|s| s.t0 = f64::NAN));
         assert!(refused(&|s| s.fabric.cap_um = 0.0));
         assert!(refused(&|s| s.kf[1] = f32::INFINITY));
+        // per pixel
+        assert!(refused(&|s| s.kp[7][2] = f32::INFINITY));
+        assert!(refused(&|s| s.oil_t[3] = f32::NAN));
+        assert!(refused(&|s| s.cap[5] = 0.0));
+        assert!(refused(&|s| s.solv[9] = -1.0));
+        assert!(!refused(&|s| s.oil_since[9] = f32::INFINITY));
+        // the end of the file: a part of a mark, or anything after a soak
+        let mut b = Vec::new();
+        base.write_state(&mut b, "").unwrap();
+        let mut tail = b.clone();
+        tail.push(0);
+        assert!(Canvas::read_state(&mut std::io::Cursor::new(tail)).is_err());
+        let mut p = Vec::new();
+        Canvas::new_window(8, 1.0, [0.5; 3], None).write_state(&mut p, "").unwrap();
+        p.extend_from_slice(&SOAK_MARK_BYTES[..3]);
+        assert!(Canvas::read_state(&mut std::io::Cursor::new(p)).is_err());
+    }
+
+    /// The bytes that mark a soak in a checkpoint ("SOAK").
+    const SOAK_MARK_BYTES: [u8; 8] = 0x4b414f53u64.to_le_bytes();
+
+    #[test]
+    #[should_panic(expected = "painted whole")]
+    fn a_crop_render_cannot_be_raw() {
+        let crop = crate::canvas::Crop { units: [100.0, 100.0, 300.0, 300.0], margin: 10.0 };
+        let mut c = Canvas::new_window(200, 1.0, Fabric::cotton_duck().color, Some(crop)).with_size_mm(300.0);
+        c.raw_canvas(Fabric::cotton_duck(), 3);
+    }
+
+    #[test]
+    fn a_pour_does_not_cross_a_paint_film() {
+        let mut c = raw(200, 300.0);
+        // a stripe of glaze one pixel wide (pixels are 5 units), top to
+        // bottom; 8 ml would spread ~90 mm, well past it
+        let x = 502.5;
+        let stripe = Mask::from_fn(c.frame(), move |u, _| if (u - x).abs() < 2.0 { 1.0 } else { 0.0 });
+        c.glaze(&Pigment::transparent(hex("#806040")), Some(&stripe), |_, _| 2.0);
+        assert_eq!(c.film.iter().filter(|&&f| f > 1e-3).count(), 200);
+        let r = c.pour(&disc(&c, 440.0, 500.0, 25.0), &blue_pour(8.0, 6.0)).unwrap();
+        assert!(r.lost_ml < 1e-3, "{r:?}");
+        let s = c.soak.as_ref().unwrap();
+        let f = c.window();
+        let mut beyond = 0usize;
+        for i in 0..s.solv.len() {
+            if f.ux(i % f.w) > x + 2.5 && (s.solv[i] > 0.0 || s.pig[i] > 0.0) {
+                beyond += 1;
+            }
+        }
+        assert_eq!(beyond, 0, "the stain got past the film");
+        // and none of it went into the film's cloth
+        for i in 0..s.solv.len() {
+            if c.film[i] > 1e-3 {
+                assert!(s.solv[i] == 0.0 && s.pig[i] == 0.0);
+            }
+        }
+    }
+
+    #[test]
+    fn a_great_pour_on_a_small_canvas_fills_it_and_runs_off() {
+        // 50 mm at 200 px: each pixel's pores hold ~0.02 mm³, far below an
+        // f32 step of 5000 ml
+        let mut c = raw(200, 50.0);
+        let r = c.pour(&disc(&c, 500.0, 500.0, 200.0), &blue_pour(5000.0, 6.0)).unwrap();
+        // the cloth holds ~0.3 mm³ per mm² over 2500 mm²
+        assert!(r.soaked_ml > 0.5 && r.soaked_ml < 0.85, "{r:?}");
+        assert!((r.soaked_ml + r.lost_ml - 5000.0).abs() < 0.01, "{r:?}");
+    }
+
+    #[test]
+    fn pending_oil_keeps_one_arrival_by_volume() {
+        let mut c = raw(40, 300.0);
+        let s = c.soak.as_mut().unwrap();
+        s.send_oil(0, 1.0, 100.0, 0.0);
+        s.send_oil(0, 3.0, 200.0, 50.0);
+        assert_eq!((s.oil_pend[0], s.oil_t[0]), (4.0, 175.0));
+        // oil already due lands before new oil is sent
+        s.send_oil(0, 2.0, 400.0, 180.0);
+        assert_eq!((s.oil[0], s.oil_since[0], s.oil_pend[0], s.oil_t[0]), (4.0, 175.0, 2.0, 400.0));
+    }
+
+    #[test]
+    fn a_pour_puts_into_the_cloth_the_pigment_it_carried() {
+        // fine pigment (some of it rides out with the halo's oil)
+        let mut c = raw(240, 400.0);
+        let p = Pour { pigment: 0.14, oil: 0.86, mobility: 0.95, ..blue_pour(10.0, 3.0) };
+        let r = c.pour(&disc(&c, 500.0, 500.0, 30.0), &p).unwrap();
+        assert!(r.halo_ml > 0.01, "{r:?}");
+        let a = c.px_mm() * c.px_mm();
+        let in_cloth: f64 = c.soak.as_ref().unwrap().pig.iter().map(|&v| v as f64 * a as f64 * 1e-3).sum();
+        let poured = r.soaked_ml as f64 * 1000.0 * (p.pigment / (1.0 + p.thinner)) as f64;
+        assert!((in_cloth / poured - 1.0).abs() < 1e-4, "{in_cloth} mm³ in the cloth, {poured} poured");
+    }
+
+    #[test]
+    fn a_blot_counts_the_pigment_it_lifts() {
+        let mut c = raw(160, 300.0);
+        c.pour(&disc(&c, 500.0, 500.0, 40.0), &blue_pour(20.0, 6.0)).unwrap();
+        let a = c.px_mm() * c.px_mm();
+        let stock = |c: &Canvas| {
+            let s = c.soak.as_ref().unwrap();
+            let now = (c.clock() - s.t0) as f32;
+            (0..s.solv.len()).map(|i| (s.solv_at(i, now) + s.oil[i] + s.pig[i]) as f64 * a as f64 * 1e-6).sum::<f64>()
+        };
+        let before = stock(&c);
+        let ml = c.blot(&disc(&c, 500.0, 500.0, 30.0), 0.9).unwrap() as f64;
+        let gone = before - stock(&c);
+        assert!((ml / gone - 1.0).abs() < 0.01, "returned {ml} ml, {gone} ml left the cloth");
     }
 
     #[test]

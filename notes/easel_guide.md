@@ -221,6 +221,49 @@ strokes.
 `work`, `blend` and `stipple` also take `visible=`, `behind=`,
 `at=` and `view=` (see [Depth](#depth)).
 
+## Raw canvas: pouring and staining
+
+A canvas set up with `raw=` has no ground: it is the bare cloth, and thinned
+paint poured on it soaks *into* it instead of lying on it as a film (the
+soak-stain of Frankenthaler and Morris Louis). See
+`notes/research/soak_stain.md` for the physics and its sources.
+
+```lua
+canvas{size=<mm>, aspect=<w/h>, linen={<warp>, <weft>}, raw="cotton duck", seed=<n>}   -- or raw="linen"; no ground
+print(pour(m, {pile=p, thinner=<parts>, ml=<millilitres>, tilt={<angle>, <0..1>}, seed=<n>}))
+blot(m, {strength=<0..1>})            -- a rag or sponge on the wet stain
+print(soaked(x, y))                   -- what is in the cloth there, in words
+```
+
+- `pour` lands the pile, thinned with `thinner` parts of turpentine to one
+  part of paint (0.5 to 50), where the mask's coverage says, `ml` of it in
+  all. It wicks outward through the weave until the cloth has taken it all
+  (cotton duck holds about 0.3 mm of liquid): more poured, wider stain; where
+  more of the mask's coverage lands, it pushes further. The stain is a little
+  longer down the canvas (the warp), its edge feathers along the threads,
+  and it is densest where it landed: the fibres filter the pigment out as
+  the liquid travels (fine pigments, lakes and Prussian blue, travel
+  furthest; smalt and the heavy pigments least). It returns a line saying
+  how much soaked in, over what area, and how far oil will creep.
+- `tilt={angle, amount}`: the canvas is tilted, the liquid runs faster
+  downhill (`angle` as everywhere: 0 to the right, π/2 down the canvas).
+- The turpentine darkens the cloth while it is there and evaporates in about
+  an hour, the edges first: the stain dries lighter. As it goes, pigment
+  still loose in the liquid is drawn to the drying edge: a darker rim, more
+  with more turpentine.
+- Oil the fibres and the pigment can't hold (a pile with `medium=`, or
+  little thinner) creeps on past the colour for a day or two and leaves a
+  darker, slowly yellowing halo. Paint thinned so far that too little oil is
+  left to wet the pigment dries lean: paler, chalkier.
+- Stains overlap like glazes: each one's pigment is added in the cloth, and
+  earlier edges show through. Cloth still wet lets a new pour run through
+  it (it spreads further and mixes); cloth that holds oil from an earlier
+  stain takes less, so a pour over it stays smaller.
+- `blot` lifts turpentine, some oil and the pigment still loose where the
+  cloth is wet; dry cloth gives nothing back.
+- A brush works on a raw canvas as anywhere: its film lies on the cloth and
+  seals it, and nothing poured later soaks in under it.
+
 ## Masks and geometry
 
 Masks are coverage maps (0..1) of the whole canvas. Operations return new

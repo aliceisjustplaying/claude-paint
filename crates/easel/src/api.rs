@@ -1202,7 +1202,7 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
                 if crate::legacy::asks(&o)? {
                     return crate::legacy::canvas(lua, &st, o);
                 }
-                check_keys(&o, &["size", "aspect", "linen", "ground", "seed"], "canvas")?;
+                check_keys(&o, &["size", "aspect", "linen", "ground", "seed", "raw"], "canvas")?;
                 if st.borrow().canvas.is_some() {
                     return err("the canvas is already set up (canvas{} is the first chunk)");
                 }
@@ -1219,11 +1219,27 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
                     return err("canvas: linen threads per cm, 4 to 60");
                 }
                 let tubes = st.borrow().tubes.clone();
-                let ground = ground_of(&tubes, &o.get::<Value>("ground")?)?;
+                // a raw canvas: no ground, the bare cloth soaks up pours
+                let fabric = match o.get::<Option<String>>("raw")? {
+                    None => None,
+                    Some(n) => Some(paint::Fabric::named(&n).ok_or_else(|| mlua::Error::runtime(format!("canvas: raw= names the cloth: {}", paint::Fabric::names())))?),
+                };
+                let ground = match (&fabric, o.get::<Value>("ground")?) {
+                    (Some(_), Value::Nil) => Vec::new(),
+                    (Some(_), Value::Table(t)) if t.raw_len() == 0 => Vec::new(),
+                    (Some(_), _) => return err("canvas: a raw canvas has no ground (leave ground= out)"),
+                    (None, g) => ground_of(&tubes, &g)?,
+                };
                 let seed = o.get::<Option<u64>>("seed")?.unwrap_or(1);
-                let sty = Style { name: "oil", width_mm: mm, linen: Linen { warp_per_cm: warp, weft_per_cm: weft, ..Linen::fine(1) }, ground, ..Style::oil_with((*tubes).clone()) };
+                let mut sty = Style { name: "oil", width_mm: mm, linen: Linen { warp_per_cm: warp, weft_per_cm: weft, ..Linen::fine(1) }, ground, ..Style::oil_with((*tubes).clone()) };
+                if let Some(f) = fabric {
+                    sty.raw = f.color;
+                }
                 let width = st.borrow().width;
                 let mut c = sty.prepare(width, aspect, seed);
+                if let Some(f) = fabric {
+                    c.raw_canvas(f, seed);
+                }
                 let h = c.height();
                 {
                     let mut s = st.borrow_mut();
@@ -1236,7 +1252,10 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
                     s.hand = time::Hand::default();
                     s.canvas = Some(c);
                     s.style = Some(Rc::new(sty));
-                    s.setup = Some(format!("size={}, aspect={aspect}, linen={{{warp}, {weft}}}, seed={seed}", fmt_num(mm)));
+                    s.setup = Some(match fabric {
+                        None => format!("size={}, aspect={aspect}, linen={{{warp}, {weft}}}, seed={seed}", fmt_num(mm)),
+                        Some(f) => format!("size={}, aspect={aspect}, linen={{{warp}, {weft}}}, raw={:?}, seed={seed}", fmt_num(mm), f.name),
+                    });
                 }
                 let gl = lua.globals();
                 // whole numbers as Lua integers (so `print(H)` says 714, not 714.0)
@@ -1447,6 +1466,80 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
         })?)?;
     }
 
+    // soak-stain on a raw canvas
+    {
+        // pour(mask, {pile=, thinner=, ml=, tilt={angle, amount}, seed=}):
+        // the pile thinned with turpentine, poured where the mask says
+        let st1 = st.clone();
+        g.set("pour", lua.create_function(move |_, (m, o): (Value, Table)| {
+            let m = mask_of(&m)?;
+            check_keys(&o, &["pile", "thinner", "ml", "tilt", "seed"], "pour")?;
+            let p = pile_of(&o.get::<Value>("pile")?, "pour")?;
+            let thinner = num(&o, "thinner")?.ok_or_else(|| mlua::Error::runtime("pour: thinner= (parts of turpentine to one part of the pile)"))?;
+            if !(0.5..=50.0).contains(&thinner) {
+                return err("pour: thinner is parts of turpentine to one part of the pile, 0.5 to 50 (thicker paint doesn't soak in)");
+            }
+            let ml = num(&o, "ml")?.ok_or_else(|| mlua::Error::runtime("pour: ml= (how much is poured, millilitres)"))?;
+            if !(0.05..=5000.0).contains(&ml) {
+                return err("pour: ml is how much is poured, 0.05 to 5000 millilitres");
+            }
+            let tilt = match pair(&o, "tilt")? {
+                None => None,
+                Some((a, g)) if (0.0..=1.0).contains(&g) => Some((a, g)),
+                Some(_) => return err("pour: tilt={angle, amount}: the direction it runs downhill (radians) and how steeply, 0 to 1"),
+            };
+            let tubes = st1.borrow().tubes.clone();
+            let (mut pig, mut mob) = (0.0f32, 0.0f32);
+            for &(i, f) in &p.mix.parts {
+                let (phi, mb) = paint::soak::tube_soak(tubes.tubes[i].name);
+                pig += f * phi;
+                mob += f * mb;
+            }
+            let pigment = pig * (1.0 - p.medium);
+            let paint = paint::pigment::Pigment::masstone(p.mix.color, p.mix.scatter * (1.0 - p.medium).max(1e-3));
+            let seed = match o.get::<Option<u64>>("seed")? {
+                Some(s) => s,
+                None => st1.borrow_mut().auto_seed(),
+            };
+            let pour = paint::Pour { paint, pigment, oil: 1.0 - pigment, mobility: mob, thinner, ml, tilt, seed };
+            time::verb(&st1, Verb::Pass, |s| {
+                let c = s.canvas.as_mut().ok_or_else(no_canvas)?;
+                let r = c.pour(&m, &pour).map_err(mlua::Error::runtime)?;
+                let mut out = format!("soaked {:.1} ml over {:.0} cm² in {:.1} min", r.soaked_ml, r.area_cm2, r.spread_s / 60.0);
+                if r.lost_ml > 0.005 {
+                    out.push_str(&format!("; {:.1} ml found no room and pooled off", r.lost_ml));
+                }
+                if r.halo_ml > 0.001 {
+                    out.push_str(&format!("; oil will creep up to {:.0} mm past the colour ({:.2} ml)", r.halo_mm, r.halo_ml));
+                }
+                Ok(out)
+            })
+        })?)?;
+        // blot(mask, {strength=}): a rag or sponge pressed on the wet stain
+        let st1 = st.clone();
+        g.set("blot", lua.create_function(move |lua, (m, o): (Value, Option<Table>)| {
+            let m = mask_of(&m)?;
+            let o = o.unwrap_or(lua.create_table()?);
+            check_keys(&o, &["strength"], "blot")?;
+            let strength = num(&o, "strength")?.unwrap_or(0.7);
+            if !(0.0..=1.0).contains(&strength) {
+                return err("blot: strength 0 to 1");
+            }
+            time::verb(&st1, Verb::Pass, |s| {
+                let c = s.canvas.as_mut().ok_or_else(no_canvas)?;
+                c.blot(&m, strength).map_err(mlua::Error::runtime)
+            })
+        })?)?;
+        // soaked(x, y): what is in the cloth there, in words
+        let st1 = st.clone();
+        g.set("soaked", lua.create_function(move |_, (x, y): (f32, f32)| {
+            time::verb(&st1, Verb::Query, |s| {
+                let c = s.canvas.as_ref().ok_or_else(no_canvas)?;
+                Ok(c.soaked_at(x, y).unwrap_or_else(|| if c.is_raw() { "outside the canvas".into() } else { "primed (nothing soaks in)".into() }))
+            })
+        })?)?;
+    }
+
     #[cfg(feature = "finish")]
     crate::finish::install(lua, st.clone())?;
 
@@ -1461,7 +1554,7 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
 
 
 
-const CANVAS_HELP: &str = "canvas{size=<mm>, aspect=<width / height>, linen=<threads per cm>, ground={{pile={{\"<tube>\", <parts>}, ...}, um=<µm>, apply=\"<knife|roller|brush>\"}, ...}, seed=<n>}\n  size: width in mm; aspect: width / height; linen: threads per cm (or {warp, weft});\n  ground: layers bottom first, each a pile of tubes, a thickness in µm and how it is put on (\"knife\", \"roller\" or \"brush\"; a knife takes texture=0..1)";
+const CANVAS_HELP: &str = "canvas{size=<mm>, aspect=<width / height>, linen=<threads per cm>, ground={{pile={{\"<tube>\", <parts>}, ...}, um=<µm>, apply=\"<knife|roller|brush>\"}, ...}, seed=<n>}\n  size: width in mm; aspect: width / height; linen: threads per cm (or {warp, weft});\n  ground: layers bottom first, each a pile of tubes, a thickness in µm and how it is put on (\"knife\", \"roller\" or \"brush\"; a knife takes texture=0..1)\n  or raw=\"cotton duck\" (or \"linen\") and no ground: the bare cloth, for pour()";
 
 /// Ground layers from `{{pile={{tube, parts}, ...}, um=, apply=, texture=}, ...}`,
 /// bottom first: each the paste its tubes make (masstone, hiding, stiffness).

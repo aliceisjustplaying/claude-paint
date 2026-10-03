@@ -299,6 +299,7 @@ impl Canvas {
         // films past the gel point level and set
         self.bake(false);
         self.wet.clock.now += dt as f64;
+        self.soak_tick(dt);
     }
 
     /// The open film's thickness (coats) as it dries, for each pixel of the
@@ -431,6 +432,7 @@ impl Canvas {
         }
         self.bake(true);
         self.wet.clock.now += left as f64;
+        self.soak_tick(left);
     }
 
     /// Fold what was painted since the last `wait` into the drying state: a

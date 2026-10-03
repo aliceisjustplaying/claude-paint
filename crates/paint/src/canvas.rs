@@ -204,6 +204,9 @@ pub struct Canvas {
     pub(crate) hand_slice: Option<f32>,
     /// The engine version it is painted with (`crate::ENGINE`).
     pub(crate) engine: u32,
+    /// What has soaked into a raw canvas (None: a primed canvas, or a raw
+    /// one never set up for pouring): `soak`.
+    pub(crate) soak: Option<Box<crate::soak::Soak>>,
 }
 
 impl Canvas {
@@ -247,6 +250,7 @@ impl Canvas {
             tally: crate::tally::Tally::default(),
             hand_slice: None,
             engine: crate::ENGINE,
+            soak: None,
         }
     }
 

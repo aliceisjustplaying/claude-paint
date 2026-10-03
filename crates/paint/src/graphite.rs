@@ -728,6 +728,16 @@ impl Canvas {
     }
 }
 
+impl Drawing {
+    /// Pixel `i` of what lies under the drawing (`under`), with the loose
+    /// drawing there on top of it (a raw canvas recolors its cloth under
+    /// charcoal as stains soak in).
+    pub(crate) fn over(&self, i: usize, under: Rgb) -> Rgb {
+        let c = &self.cells[i];
+        if c.a <= 0.0 { under } else { cover(under, c.a, c.r) }
+    }
+}
+
 /// The ground under a deposit of coverage `a` and flake reflectance `r`.
 fn uncover(p: Rgb, a: f32, r: f32) -> Rgb {
     if a <= 0.0 {

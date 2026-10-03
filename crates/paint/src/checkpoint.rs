@@ -75,6 +75,102 @@ fn get_all(r: &mut impl Read, n: usize) -> io::Result<Vec<f32>> {
     Ok(bytes.as_chunks::<4>().0.iter().map(|b| f32::from_le_bytes(*b)).collect())
 }
 
+/// Marks the soak of a raw canvas at the end of a checkpoint ("SOAK").
+const SOAK_MARK: u64 = 0x4b414f53;
+
+fn put_box(w: &mut impl Write, b: Option<(usize, usize, usize, usize)>) -> io::Result<()> {
+    match b {
+        None => put_u64(w, 0),
+        Some((a, b, c, d)) => {
+            put_u64(w, 1)?;
+            for v in [a, b, c, d] {
+                put_u64(w, v as u64)?;
+            }
+            Ok(())
+        }
+    }
+}
+
+fn get_box(r: &mut impl Read) -> io::Result<Option<(usize, usize, usize, usize)>> {
+    Ok(match get_u64(r)? {
+        0 => None,
+        1 => Some((get_u64(r)? as usize, get_u64(r)? as usize, get_u64(r)? as usize, get_u64(r)? as usize)),
+        _ => return Err(bad("checkpoint soak box flag is invalid")),
+    })
+}
+
+fn write_soak(w: &mut impl Write, s: &crate::soak::Soak) -> io::Result<()> {
+    let name = s.fabric.name.as_bytes();
+    put_u64(w, name.len() as u64)?;
+    w.write_all(name)?;
+    for v in [s.fabric.color[0], s.fabric.color[1], s.fabric.color[2], s.fabric.cap_um, s.fabric.warp_bias, s.kf[0], s.kf[1], s.kf[2]] {
+        put_f32(w, v)?;
+    }
+    put_u64(w, s.t0.to_bits())?;
+    put_u64(w, s.seed)?;
+    put_u64(w, s.pours)?;
+    put_box(w, s.active)?;
+    put_box(w, s.stained)?;
+    for v in [&s.weave, &s.cap, &s.pig, &s.oil, &s.oil_pend, &s.oil_t, &s.oil_since, &s.solv, &s.solv_t0, &s.solv_t1] {
+        put_all(w, v.iter().copied())?;
+    }
+    put_all(w, s.kp.iter().flat_map(|p| *p))?;
+    put_all(w, s.sp.iter().flat_map(|p| *p))
+}
+
+fn read_soak(r: &mut impl Read, n: usize) -> io::Result<crate::soak::Soak> {
+    let len = get_u64(r)? as usize;
+    if len > 64 {
+        return Err(bad("checkpoint fabric name is invalid"));
+    }
+    let mut name = vec![0u8; len];
+    r.read_exact(&mut name)?;
+    let name = String::from_utf8(name).map_err(|_| bad("checkpoint fabric name is not UTF-8"))?;
+    let mut fabric = crate::soak::Fabric::named(&name).ok_or_else(|| bad("checkpoint fabric is unknown"))?;
+    let mut f = [0.0f32; 8];
+    for v in f.iter_mut() {
+        *v = get_f32(r)?;
+    }
+    fabric.color = [f[0], f[1], f[2]];
+    fabric.cap_um = f[3];
+    fabric.warp_bias = f[4];
+    let t0 = f64::from_bits(get_u64(r)?);
+    let seed = get_u64(r)?;
+    let pours = get_u64(r)?;
+    let active = get_box(r)?;
+    let stained = get_box(r)?;
+    let mut v: Vec<Vec<f32>> = Vec::new();
+    for _ in 0..10 {
+        v.push(get_all(r, n)?);
+    }
+    let rgb = |a: Vec<f32>| a.as_chunks::<3>().0.to_vec();
+    let kp = rgb(get_all(r, 3 * n)?);
+    let sp = rgb(get_all(r, 3 * n)?);
+    let mut it = v.into_iter();
+    let mut next = || it.next().unwrap();
+    Ok(crate::soak::Soak {
+        fabric,
+        t0,
+        seed,
+        kf: [f[5], f[6], f[7]],
+        weave: next(),
+        cap: next(),
+        pig: next(),
+        oil: next(),
+        oil_pend: next(),
+        oil_t: next(),
+        oil_since: next(),
+        solv: next(),
+        solv_t0: next(),
+        solv_t1: next(),
+        kp,
+        sp,
+        active,
+        stained,
+        pours,
+    })
+}
+
 fn bad(msg: &str) -> io::Error {
     io::Error::new(io::ErrorKind::InvalidData, msg.to_string())
 }
@@ -175,6 +271,13 @@ impl Canvas {
             put_u64(w, v)?;
         }
         put_u64(w, self.engine as u64)?;
+        // a raw canvas's soak (written only when there is one, after
+        // everything else, so the checkpoints of every other canvas are
+        // byte for byte what they were)
+        if let Some(s) = &self.soak {
+            put_u64(w, SOAK_MARK)?;
+            write_soak(w, s)?;
+        }
         Ok(())
     }
 
@@ -303,6 +406,14 @@ impl Canvas {
             v if (1..=crate::ENGINE as u64).contains(&v) => v as u32,
             _ => return Err(bad("checkpoint engine version is invalid")),
         };
+        // a raw canvas's soak, if one was written
+        let mut b = [0u8; 8];
+        match r.read_exact(&mut b) {
+            Ok(()) if u64::from_le_bytes(b) == SOAK_MARK => c.soak = Some(Box::new(read_soak(r, n)?)),
+            Ok(()) => return Err(bad("checkpoint has trailing data")),
+            Err(e) if e.kind() == io::ErrorKind::UnexpectedEof => {}
+            Err(e) => return Err(e),
+        }
         Ok((c, header))
     }
 }

@@ -1,0 +1,111 @@
+{
+ "schema": "chain-record/1",
+ "condition": "chain-inherited, non-neutral",
+ "round": 21,
+ "lane": "FRDC",
+ "slot": 2,
+ "profile": "friedrich",
+ "code": {
+  "tag": "round-21",
+  "commit": "83d4929ea3b0aa7169d8c9100571385746ef5380"
+ },
+ "medium": "oil",
+ "box": {
+  "name": "default",
+  "tubes_sha256": "72707b78bf707c265a509c0dc0035a119df8d684eb1948ada5277beef98e4021"
+ },
+ "support": {
+  "kind": "linen",
+  "linen": [
+   12,
+   11
+  ],
+  "ground_layers": [
+   "knife",
+   "knife",
+   "brush"
+  ]
+ },
+ "reader": {
+  "model": "openai-codex/gpt-6.1-sol",
+  "brief_sha256": "395119b645d4c245b022f7dbc2128194d3b980838e2d66d3c4fc8664e69c8af9",
+  "system_sha256": "c781b5c7e132c1c8406231b791178828ef2d84b1e474287b16c21a73ae7a0671"
+ },
+ "logs": [
+  "~/.pi/agent/sessions/--Users-alice-src-a-paint-studio-f99282--/2026-10-02T15-40-52-795Z_01a0fd46-86bb-7263-9e34-47e127827bcc.jsonl",
+  "~/.pi/agent/sessions/--Users-alice-src-a-paint-studio-f99282--/2026-10-02T17-48-35-784Z_01a0fdbb-7447-741c-b464-eb4dea6b027b.jsonl",
+  "~/.pi/agent/sessions/--Users-alice-src-a-paint-studio-f99282--/2026-10-02T19-27-52-754Z_01a0fe16-59b1-722f-8ad9-dacb0303f68e.jsonl",
+  "~/.pi/agent/sessions/--Users-alice-src-a-paint-studio-f99282--/2026-10-02T21-25-48-847Z_01a0fe82-52ae-7385-bae7-ebc795d4390c.jsonl"
+ ],
+ "observations": [
+  {
+   "category": "drying_and_time",
+   "operation": "wait",
+   "conditions": {
+    "surface": "open",
+    "params": {
+     "wait_minutes": 2880
+    }
+   },
+   "effect": "Three sampled patches changed from open to dry, dry and tacky after the wait.",
+   "cause": "The easel advanced painting time by two days.",
+   "basis": "printed",
+   "evidence": [
+    {
+     "log": 4,
+     "call": "call_01a0fe8e81ac76448422034f",
+     "role": "operation"
+    },
+    {
+     "log": 4,
+     "call": "call_01a0fe8e9da17243918336ba",
+     "role": "operation"
+    }
+   ],
+   "index": 1,
+   "resolved": [
+    {
+     "log": 4,
+     "call": "call_01a0fe8e81ac76448422034f",
+     "role": "operation",
+     "line": 231,
+     "tool": "paint",
+     "result_line": 232,
+     "chunk": 316,
+     "failed": false
+    },
+    {
+     "log": 4,
+     "call": "call_01a0fe8e9da17243918336ba",
+     "role": "operation",
+     "line": 234,
+     "tool": "paint",
+     "result_line": 235,
+     "chunk": 317,
+     "failed": false
+    }
+   ]
+  }
+ ],
+ "dropped": [
+  {
+   "index": 0,
+   "why": [
+    "cause: another painter (painter)"
+   ]
+  },
+  {
+   "index": 2,
+   "why": [
+    "cause: another painter (painter)"
+   ]
+  },
+  {
+   "index": 3,
+   "why": [
+    "cause: another painter (painter)"
+   ]
+  }
+ ],
+ "warnings": []
+}

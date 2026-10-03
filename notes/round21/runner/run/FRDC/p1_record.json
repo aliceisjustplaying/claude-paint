@@ -1,0 +1,207 @@
+{
+ "schema": "chain-record/1",
+ "condition": "chain-inherited, non-neutral",
+ "round": 21,
+ "lane": "FRDC",
+ "slot": 1,
+ "profile": "friedrich",
+ "code": {
+  "tag": "round-21",
+  "commit": "83d4929ea3b0aa7169d8c9100571385746ef5380"
+ },
+ "medium": "oil",
+ "box": {
+  "name": "default",
+  "tubes_sha256": "72707b78bf707c265a509c0dc0035a119df8d684eb1948ada5277beef98e4021"
+ },
+ "support": {
+  "kind": "linen",
+  "linen": [
+   14,
+   12
+  ],
+  "ground_layers": [
+   "knife",
+   "roller",
+   "brush"
+  ]
+ },
+ "reader": {
+  "model": "openai-codex/gpt-6.1-sol",
+  "brief_sha256": "6f752b2161ce8c1ea53c21c7538b89fc3336f5736e4f6ac20b821ce7a6817dfe",
+  "system_sha256": "c781b5c7e132c1c8406231b791178828ef2d84b1e474287b16c21a73ae7a0671"
+ },
+ "logs": [
+  "~/.pi/agent/sessions/--Users-alice-src-a-paint-studio-35c488--/2026-10-01T22-09-14-445Z_01a0f983-b8cc-7063-9b9a-f7a5a6b01672.jsonl",
+  "~/.pi/agent/sessions/--Users-alice-src-a-paint-studio-35c488--/2026-10-02T01-40-38-494Z_01a0fa45-43dd-704f-84d6-64234cf59a2b.jsonl",
+  "~/.pi/agent/sessions/--Users-alice-src-a-paint-studio-35c488--/2026-10-02T02-52-11-815Z_01a0fa86-c6a7-771e-a5cc-8bf42a9cc4bc.jsonl",
+  "~/.pi/agent/sessions/--Users-alice-src-a-paint-studio-35c488--/2026-10-02T08-57-58-020Z_01a0fbd5-a604-757d-b160-7ea350d1ea95.jsonl"
+ ],
+ "observations": [
+  {
+   "category": "drying_and_time",
+   "operation": "wait",
+   "conditions": {
+    "params": {
+     "wait_minutes": 7200
+    }
+   },
+   "effect": "After five painting days, four of five sampled paint passages were tacky and one was dry.",
+   "cause": null,
+   "basis": "printed",
+   "evidence": [
+    {
+     "log": 4,
+     "call": "call-7537dfa4-aa85-460e-b803-0b5e984d40fb",
+     "role": "operation"
+    }
+   ],
+   "index": 0,
+   "resolved": [
+    {
+     "log": 4,
+     "call": "call-7537dfa4-aa85-460e-b803-0b5e984d40fb",
+     "role": "operation",
+     "line": 613,
+     "tool": "paint",
+     "result_line": 614,
+     "chunk": 563,
+     "failed": false
+    }
+   ]
+  },
+  {
+   "category": "drying_and_time",
+   "operation": "wait",
+   "conditions": {
+    "surface": "mixed",
+    "params": {
+     "wait_minutes": 8640
+    }
+   },
+   "effect": "After six more painting days, three previously tacky samples were dry while another remained tacky.",
+   "cause": null,
+   "basis": "printed",
+   "evidence": [
+    {
+     "log": 4,
+     "call": "call-7537dfa4-aa85-460e-b803-0b5e984d40fb",
+     "role": "operation"
+    },
+    {
+     "log": 4,
+     "call": "call-d4910485-a538-4bc1-9ee7-65136c47b05c",
+     "role": "operation"
+    }
+   ],
+   "index": 1,
+   "resolved": [
+    {
+     "log": 4,
+     "call": "call-7537dfa4-aa85-460e-b803-0b5e984d40fb",
+     "role": "operation",
+     "line": 613,
+     "tool": "paint",
+     "result_line": 614,
+     "chunk": 563,
+     "failed": false
+    },
+    {
+     "log": 4,
+     "call": "call-d4910485-a538-4bc1-9ee7-65136c47b05c",
+     "role": "operation",
+     "line": 619,
+     "tool": "paint",
+     "result_line": 620,
+     "chunk": 564,
+     "failed": false
+    }
+   ]
+  },
+  {
+   "category": "easel_errors",
+   "operation": "stroke",
+   "conditions": {},
+   "effect": "A brush load given an integer instead of a paint pile stopped the entire operation and left the painting unchanged.",
+   "cause": "The easel reported that the brush load required a paint pile but received an integer.",
+   "basis": "printed",
+   "evidence": [
+    {
+     "log": 4,
+     "call": "call-c6570dee-1495-49a4-92dd-b78ee40d23f2",
+     "role": "operation"
+    }
+   ],
+   "index": 4,
+   "resolved": [
+    {
+     "log": 4,
+     "call": "call-c6570dee-1495-49a4-92dd-b78ee40d23f2",
+     "role": "operation",
+     "line": 631,
+     "tool": "paint",
+     "result_line": 632,
+     "chunk": null,
+     "failed": true
+    }
+   ]
+  },
+  {
+   "category": "easel_errors",
+   "operation": "work",
+   "conditions": {
+    "clip": true,
+    "params": {
+     "hand": "body",
+     "coverage": 1.1,
+     "fill": true
+    }
+   },
+   "effect": "A malformed stroke length table stopped the operation with a numeric conversion error and left the painting unchanged.",
+   "cause": "The easel reported that a missing value could not be converted to a number.",
+   "basis": "printed",
+   "evidence": [
+    {
+     "log": 4,
+     "call": "call-7b7c27ad-cef5-4c24-9a70-7df810f7eaa9",
+     "role": "operation"
+    }
+   ],
+   "index": 5,
+   "resolved": [
+    {
+     "log": 4,
+     "call": "call-7b7c27ad-cef5-4c24-9a70-7df810f7eaa9",
+     "role": "operation",
+     "line": 649,
+     "tool": "paint",
+     "result_line": 650,
+     "chunk": null,
+     "failed": true
+    }
+   ]
+  }
+ ],
+ "dropped": [
+  {
+   "index": 2,
+   "why": [
+    "effect: another painter (painter)"
+   ]
+  },
+  {
+   "index": 3,
+   "why": [
+    "effect: another painter (painter)"
+   ]
+  }
+ ],
+ "warnings": [
+  {
+   "index": 4,
+   "field": "effect",
+   "pattern": "PRESCRIPTION",
+   "words": "instead"
+  }
+ ]
+}

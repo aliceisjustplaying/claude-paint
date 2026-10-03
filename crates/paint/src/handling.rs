@@ -1461,11 +1461,12 @@ mod tests {
     /// A long hand-timed pass ages as it goes: its first slices can set (and
     /// bake into the dry film) before the look-and-fill. The look must see
     /// that paint as laid, not as a gap, so the pass lays at most about 1.5×
-    /// the fill dabs it does with hand time off.
+    /// the fill dabs it does with hand time off. (Engine 2, whose paint sets
+    /// within a pass of a few hours.)
     #[test]
     fn a_long_timed_pass_fills_only_its_gaps() {
         let run = |hand: Option<f32>, fill: bool| {
-            let mut c = Canvas::new(160, 1.4, crate::color::hex("#c8b89a")).with_size_mm(440.0);
+            let mut c = Canvas::new(160, 1.4, crate::color::hex("#c8b89a")).with_size_mm(440.0).with_engine(2);
             c.set_hand_time(hand);
             let all = Mask::from_fn(c.frame(), |_, _| 1.0);
             // thin, lean paint, one reload a stroke: hours of hand time

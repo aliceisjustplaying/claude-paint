@@ -411,7 +411,7 @@ impl Palette {
     pub fn table(&self) -> String {
         let mut s = String::from("| tube | pigment | hiding | stiffness | tinting strength | drying |\n|---|---|---|---|---|---|\n");
         for t in &self.tubes {
-            s.push_str(&format!("| {} | {} | {:?} | {:?} | {:?} | {:?} |\n", t.name, t.pigment, t.hiding, t.stiff, t.strength, t.drying));
+            s.push_str(&format!("| {} | {} | {:?} | {:?} | {:?} | {:?} |\n", t.name, t.pigment, t.hiding, t.stiff, t.strength, self.drying_of(t)));
         }
         s
     }
@@ -420,7 +420,13 @@ impl Palette {
     pub fn with(&self, extra: Vec<Tube>) -> Palette {
         let mut t = self.tubes.clone();
         t.extend(extra);
-        Palette::new(self.name, t)
+        Palette { engine: self.engine, ..Palette::new(self.name, t) }
+    }
+
+    /// How fast the tube `t` dries in this box's engine version
+    /// (`drier::of_tube`).
+    pub fn drying_of(&self, t: &Tube) -> f32 {
+        drier::of_tube(t.name, t.drying, self.engine)
     }
 
     /// Masstone, scattering per coat and stiffness of a mixture.
@@ -451,7 +457,7 @@ impl Palette {
 
     fn mixture(&self, parts: Vec<(usize, f32)>) -> Mixture {
         let (color, scatter, stiff) = self.eval(&parts);
-        let drying = parts.iter().map(|&(i, f)| self.tubes[i].drying * f).sum::<f32>() / parts.iter().map(|p| p.1).sum::<f32>().max(1e-9);
+        let drying = parts.iter().map(|&(i, f)| self.drying_of(&self.tubes[i]) * f).sum::<f32>() / parts.iter().map(|p| p.1).sum::<f32>().max(1e-9);
         Mixture { hiding: hiding_of(luminance(color), scatter), parts, color, scatter, stiff, drying }
     }
 
@@ -496,20 +502,29 @@ impl Mixture {
 mod tests {
     use super::*;
 
-    /// A pile laid as knifed dries at its tubes' rate, mixed by volume: lead
-    /// white fast, bone black slow, half and half in between.
+    /// A pile laid as knifed dries at its tubes' rate in its box's engine,
+    /// mixed by volume: lead white fast, bone black slower (engine 2: its
+    /// `Tube::drying`; engine 3: `drier::ENGINE_3`), half and half in
+    /// between.
     #[test]
     #[cfg(tube_box)]
     fn a_pile_dries_at_its_tubes_rate() {
+        for (engine, bone_black) in [(2, drier::BONE_BLACK), (3, 0.9)] {
+            let mut pal = Palette::tube_box();
+            pal.engine = engine;
+            let at = |n: &str| pal.tubes.iter().position(|t| t.name == n).unwrap();
+            let (w, k) = (at("lead white"), at("bone black"));
+            let white = pal.pile(vec![(w, 1.0)]).laid(0.2);
+            let black = pal.pile(vec![(k, 1.0)]).laid(0.2);
+            let half = pal.pile(vec![(w, 0.5), (k, 0.5)]).laid(0.2);
+            assert_eq!((white.drying, black.drying), (drier::LEAD_WHITE, bone_black), "engine {engine}");
+            assert!((half.drying - 0.5 * (drier::LEAD_WHITE + bone_black)).abs() < 1e-6, "engine {engine}: {}", half.drying);
+            assert_eq!(pal.with(vec![]).engine, engine, "a box with more tubes keeps its engine");
+        }
         let pal = Palette::tube_box();
         let at = |n: &str| pal.tubes.iter().position(|t| t.name == n).unwrap();
         let (w, k) = (at("lead white"), at("bone black"));
-        let white = pal.pile(vec![(w, 1.0)]).laid(0.2);
-        let black = pal.pile(vec![(k, 1.0)]).laid(0.2);
         let half = pal.pile(vec![(w, 0.5), (k, 0.5)]).laid(0.2);
-        assert_eq!(white.drying, drier::LEAD_WHITE);
-        assert_eq!(black.drying, drier::BONE_BLACK);
-        assert!((half.drying - 0.5 * (drier::LEAD_WHITE + drier::BONE_BLACK)).abs() < 1e-6, "{}", half.drying);
         // the paint is otherwise the pile's own
         let p = pal.pile(vec![(w, 0.5), (k, 0.5)]);
         assert_eq!((half.color, half.scatter, half.stiff), (p.paint(0.2).color, p.paint(0.2).scatter, p.paint(0.2).stiff));

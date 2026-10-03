@@ -354,12 +354,21 @@ def is_whole(look):
 # a closing reply that begins with the painting's title: "**The Silent Shore**", "### *Hünengrab im Abendlicht* (...)",
 # also after an opening kaomoji ("(ᵔᴥᵔ) **The Old Willow at Evening**")
 TITLE = re.compile(r"\s*(?:\([^)\n]{1,16}\)\S{0,3}\s+)?(?:#{1,6}\s*)?(\*\*?|__?)([^*_\n]{2,100}?)\1(?![*_\w])")
+# or one on a line of its own a little further down ("I'm stopping here. ...\n\n**Quinces, Raking Light**\n\n...")
+TITLE_LINE = re.compile(r"[ \t]*(?:#{1,6}[ \t]*)?(\*\*?|__?)([^*_\n]{2,100}?)\1[ \t]*")
 
 
 def title_of(say):
-    """The painting's title from the painter's last words, if they begin with one; else None."""
+    """The painting's title from the painter's last words, if they begin with one or have one alone on a line among
+    their first three paragraphs; else None."""
     m = TITLE.match(say or "")
-    return m.group(2).strip() if m else None
+    if m:
+        return m.group(2).strip()
+    for para in [p for p in re.split(r"\n\s*\n", say or "") if p.strip()][1:3]:
+        m = TITLE_LINE.fullmatch(para.strip("\n"))
+        if m:
+            return m.group(2).strip()
+    return None
 
 
 REFERENCE = object()  # in a glance's calls: a read of a reference picture

@@ -325,3 +325,14 @@ def test_the_brief_names_the_artist_and_whose_paintings_the_reference_pictures_a
     log.write_text(start(str(studio)) + call("c1", "canvas{}") + result("c1", "ok · chunk 1"))
     p = next(s for s in json.loads(server("/api/sessions")[1]) if s.get("p") == PAINTER)
     assert (p["subject"], p["artist"], p["reference_artist"]) == says
+
+
+@pytest.mark.parametrize("say, title", [
+    ("**The Blue Barn**\n\nA barn at dusk.", "The Blue Barn"),
+    # a sign-off line first, the title alone on the next paragraph (Space Bunny, paint-studio-ba1453)
+    ("I'm stopping here. The painting is finished as far as I can take it.\n\n**Quinces, Raking Light**\n\nA low-key still life.", "Quinces, Raking Light"),
+    ("I'll start by reading the brief.", None),
+    ("Next I'll **glaze** the sky.\n\nThen the trees.", None),
+])
+def test_the_title_is_where_painters_put_it_in_their_closing_words(say, title):
+    assert S.title_of(say) == title

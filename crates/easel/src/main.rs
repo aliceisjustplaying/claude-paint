@@ -1088,12 +1088,14 @@ fn run(args: &[String]) -> Result<(), String> {
     let tubes = session::box_for(Some(&text)).map_err(|e| format!("{file}: {e}"))?;
     // hand-time frames (frames.rs): only read the canvas, so the replay is
     // the same with or without them
+    // --light or --gallery: the picture (and its frames) lit on the paint's relief
+    let light = if args.iter().any(|a| a == "--gallery") { Some(GALLERY_LIGHT) } else { flag(args, "--light").map(|l| light_of(&l)).transpose()? };
     let frames = match (flag(args, "--frames-every"), flag(args, "--frames-dir")) {
         (None, None) => false,
         (Some(e), Some(d)) => {
             let every: f64 = e.parse().map_err(|_| format!("--frames-every {e}: want seconds of hand time"))?;
             let fw = flag(args, "--frame-width").map(|w| w.parse::<u32>().map_err(|_| format!("--frame-width {w}: want px"))).transpose()?.unwrap_or(1000);
-            frames::start(every, PathBuf::from(d), fw)?;
+            frames::start(every, PathBuf::from(d), fw, light)?;
             true
         }
         _ => return Err(format!("run: --frames-every and --frames-dir go together ({RUN_USAGE})")),
@@ -1131,7 +1133,6 @@ fn run(args: &[String]) -> Result<(), String> {
             flag(args, "--frames-dir").unwrap_or_default()
         );
     }
-    let light = if args.iter().any(|a| a == "--gallery") { Some(GALLERY_LIGHT) } else { flag(args, "--light").map(|l| light_of(&l)).transpose()? };
     deliver_lit(&c, &out, light)?;
     eprintln!("wrote {} ({} chunks, painted in {paint_secs:.1}s, total {:.1}s)", out.display(), chunks.len(), t0.elapsed().as_secs_f64());
     if let Some(p) = flag(args, "--dump-surface") {

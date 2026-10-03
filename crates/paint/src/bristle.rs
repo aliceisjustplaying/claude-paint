@@ -2500,6 +2500,11 @@ impl Canvas {
         }
         self.tally.stroke(&Tool::hog_flat(k.width), pts, self.mm_per_unit);
         let id = self.next_stroke_ids(1);
+        // engine 4: knife-laid paint tears where it parts from the blade:
+        // at the slab's ends, its leading edge, and where the blade's reach
+        // into the hollows runs out (`tn`, a noise along and across the blade)
+        let tears = self.engine >= 4;
+        let tseed = (id as u64).wrapping_mul(0x9E37_79B9_7F4A_7C15) ^ 0x7EA2;
         let height: *const f32 = self.height.as_ptr();
         let sf = self.surf();
         let s = sf.scale;
@@ -2571,6 +2576,8 @@ impl Canvas {
             let rest: Vec<f32> = (0..hs.len()).map(|q| hs[q.saturating_sub(reach)..(q + reach + 1).min(hs.len())].iter().cloned().fold(f32::MIN, f32::max)).collect();
             for (bi, &(i, u, (x, y))) in blade.iter().enumerate() {
                 let plane = rest[bi] + gap;
+                // the tear here: 0..1, coarse along the blade, finer along the path
+                let tn = if tears { crate::surface::vnoise(u * 4.0 + 7.0, d * s_mm * 0.9, tseed) * 0.7 + crate::surface::vnoise(u * 11.0, d * s_mm * 2.7, tseed ^ 0x51) * 0.3 } else { 0.5 };
                 // SAFETY: exclusive &mut self; the knife is one tool on its own
                 unsafe {
                     let v = *sf.vol.add(i);
@@ -2599,7 +2606,12 @@ impl Canvas {
                             k.cure = mix_cure(k.cure, k.vol, cure, tv);
                             crate::wet::mix_into(&mut k.vol, &mut k.lat, &mut k.hide, tv, &l, hd);
                         }
-                    } else if lay && top < plane && plane - top <= 2.0 * gap + PRESS_IN_UM && k.vol > 1e-9 {
+                    } else if lay
+                        && top < plane
+                        && plane - top <= (2.0 * gap + PRESS_IN_UM) * if tears { 0.45 + 1.1 * tn } else { 1.0 }
+                        && !(tears && (u.abs() > 0.72 && tn < (u.abs() - 0.72) / 0.28 * 1.1 || d < (1.0 + 7.0 * tn) / s_mm))
+                        && k.vol > 1e-9
+                    {
                         // the paint under the blade is pressed into the
                         // surface's hollows as deep as the gap and some tens
                         // of µm more (the weave, a ground's marks); deeper
@@ -2633,7 +2645,9 @@ impl Canvas {
                 for back in [0.0f32, 1.0, 2.0] {
                     let (x, y) = (c.0 + e.0 * u + dir.0 * back, c.1 + e.1 * u + dir.1 * back);
                     if let Some(i) = pix(x, y) {
-                        cells.push((i, (1.0 - (u / half).powi(2)).max(0.2) * (1.0 - 0.3 * back), (x, y)));
+                        // (where it tears, the ridge left at the lift breaks up)
+                        let t = if tears { smoothstep(0.25, 0.65, crate::surface::vnoise(u / half * 6.0 + 3.0, back, tseed ^ 0x11F7)) } else { 1.0 };
+                        cells.push((i, (1.0 - (u / half).powi(2)).max(0.2) * (1.0 - 0.3 * back) * t, (x, y)));
                     }
                 }
             }

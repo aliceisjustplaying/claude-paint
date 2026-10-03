@@ -78,6 +78,16 @@ painter never saw relief either: looks showed color only.
 - **The giverny and impressionist boxes**: see `notes/research/giverny_materials.md` and
   `notes/research/impressionist_materials.md` (from analyses of the paintings).
 
+## Engine 4: the knife tears
+
+A knife-laid slab parts from the blade raggedly: at its ends, along its
+leading edge (up to 8 mm in), where the blade's reach into the hollows runs
+out, and in the ridge left where the blade lifts (`Canvas::knife`, a value
+noise along and across the blade, gated on engine 4). Engine 3 logs keep the
+clean-edged knife and replay as they were (`falaise.lua` is one).
+`run --gallery` also lights the timelapse frames (`frames::start` takes a
+light).
+
 ## Not done
 
 - Drying cracks in thick paint, and through-drying (a thick film's skin

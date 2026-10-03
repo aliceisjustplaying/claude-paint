@@ -21,3 +21,13 @@ opt-level = 2
 incremental = false
 debug-assertions = true
 overflow-checks = true
+
+# Development iteration only (`cargo build --profile iter -p easel`, into
+# target/iter): release optimizations, but incremental with 16 codegen units,
+# so a one-line change rebuilds in seconds. Its floats may differ from the
+# release build's by a few pixels (see [profile.release]): real paintings,
+# goldens and studio exports keep the release profile (notes/workflow.md).
+[profile.iter]
+inherits = "release"
+incremental = true
+codegen-units = 16

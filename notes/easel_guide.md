@@ -22,7 +22,7 @@ The studio holds one painting, and the easel is open on it. Its tools:
 | tool | what it does |
 |---|---|
 | `paint` | runs a chunk of Lua. The reply is what the chunk printed, then `ok` |
-| `look` | shows you the canvas as it is now (see [Looking](#looking)) |
+| `look` | shows you the canvas as it is now, or your palette (see [Looking](#looking)) |
 | `note` | adds an entry to your journal (see [The journal](#the-journal)) |
 | `status` | the canvas's setup |
 | `log` | the painting so far: every chunk that ran, each after a line `--@ chunk` |
@@ -464,6 +464,14 @@ in canvas units, not a position and width/height.
 
 The grid is drawn on the PNG only, never on the canvas, like the squares
 ruled over a drawing to transfer it.
+
+`look` with `palette: true` shows the palette instead of the canvas: a row
+for each pile a global holds, labeled with the global's name and the pile
+(as `print` gives it). Each row shows the pile laid thick; one thin coat
+(12 µm) and a very thin coat (4 µm) over this canvas's ground color; and
+the thin coat over a white card with a black stripe across it. It shows
+the pile's own paint, before the unevenness of a brushload. It takes no
+other option, and nothing on the canvas or the clock changes.
 
 ## How chunks behave
 

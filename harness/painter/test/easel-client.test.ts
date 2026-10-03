@@ -69,6 +69,9 @@ test("look's options become the easel's arguments", () => {
 	assert.deepEqual(lookArgs({ grid: true }), ["--grid"]);
 	assert.deepEqual(lookArgs({ grid: false }), []);
 	assert.deepEqual(lookArgs({ mode: "relief", light: "45,15" }), ["--mode", "relief", "--light", "45,15"]);
+	assert.deepEqual(lookArgs({ palette: true }), ["--palette"]);
+	assert.deepEqual(lookArgs({ palette: false }), []);
+	assert.equal(toolWords("look: --palette takes no other option"), "look: palette takes no other option");
 });
 
 test("a long log keeps its end and says what was left out", () => {

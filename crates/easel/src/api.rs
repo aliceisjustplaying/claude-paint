@@ -570,17 +570,22 @@ impl UserData for PileU {
             }
             Ok(t)
         });
-        m.add_meta_method(MetaMethod::ToString, |_, p, ()| {
-            let parts: Vec<String> = p.parts.iter().map(|(n, k)| format!("{n} {}", fmt_num(*k))).collect();
-            let mut tail = if p.medium < 0.0 { format!("blotted {}", fmt_num(-p.medium)) } else { format!("medium {}", fmt_num(p.medium)) };
-            if p.mix.solvent > 0.0 {
-                tail += &format!(", turps {}", fmt_num(p.mix.solvent));
-            }
-            if p.mix.oil_rate != 1.0 {
-                tail += if p.mix.oil_rate < 0.7 { ", in poppy oil" } else { ", in walnut oil" };
-            }
-            Ok(format!("pile({}; {tail})", parts.join(", ")))
-        });
+        m.add_meta_method(MetaMethod::ToString, |_, p, ()| Ok(p.recipe()));
+    }
+}
+
+impl PileU {
+    /// What `print(p)` shows: `pile(lead white 6, smalt 1; medium 0.2)`.
+    pub fn recipe(&self) -> String {
+        let parts: Vec<String> = self.parts.iter().map(|(n, k)| format!("{n} {}", fmt_num(*k))).collect();
+        let mut tail = if self.medium < 0.0 { format!("blotted {}", fmt_num(-self.medium)) } else { format!("medium {}", fmt_num(self.medium)) };
+        if self.mix.solvent > 0.0 {
+            tail += &format!(", turps {}", fmt_num(self.mix.solvent));
+        }
+        if self.mix.oil_rate != 1.0 {
+            tail += if self.mix.oil_rate < 0.7 { ", in poppy oil" } else { ", in walnut oil" };
+        }
+        format!("pile({}; {tail})", parts.join(", "))
     }
 }
 

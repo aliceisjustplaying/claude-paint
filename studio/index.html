@@ -81,7 +81,14 @@
   /* the painting (its newest whole look) and, when the painter is studying something else right now (a close-up,
      a squint, a check in grays), that look too: secondary here, as big as the painting in stream.css */
   #view { flex:1; min-height:0; display:grid; grid-template-rows:minmax(0,1fr); gap:10px; padding:12px 12px 8px }
-  #view.two { grid-template-rows:minmax(0,3fr) minmax(0,1fr) }
+  #view.two, #view.pal { grid-template-rows:minmax(0,3fr) minmax(0,1fr) }
+  /* the palette (its newest palette look) always has its own place beside what the painter studies now */
+  #view.two.pal { grid-template-columns:minmax(0,1fr) minmax(0,1fr); grid-template-areas:'w w' 'o p' } #whole { grid-area:w } #other { grid-area:o } #pal { grid-area:p }
+  #view.pal:not(.two) { grid-template-areas:'w' 'p' }
+  #pal { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:12px; align-items:center } #pal[hidden] { display:none }
+  #pal .box { height:100% } #pal img { object-position:right center }
+  #cap3 { order:2; font-size:13px; line-height:1.4; color:var(--soft) } #cap3 b { display:block; color:#9fd0b4; font-size:12px; letter-spacing:.1em; text-transform:uppercase }
+  #view.two.pal #other, #view.two.pal #pal { grid-template-columns:minmax(0,1fr); grid-template-rows:auto minmax(0,1fr); gap:4px } #view.two.pal #cap2, #view.two.pal #cap3 { order:0 } #view.two.pal #cap2 b, #view.two.pal #cap3 b { display:inline; margin-right:8px }
   .pic { margin:0; min-height:0; min-width:0; display:flex; flex-direction:column; gap:5px }
   .pic .box { flex:1; min-height:0; position:relative }
   .pic img { position:absolute; inset:0; width:100%; height:100%; object-fit:contain; cursor:zoom-in; filter:drop-shadow(0 10px 30px rgba(0,0,0,.7)) }
@@ -147,7 +154,7 @@
        journal's share (48:52 instead of 44:56), so the painting keeps its size. */
     main { grid-template-columns: minmax(0,1fr) !important; grid-template-rows: minmax(0,48fr) minmax(0,52fr) }
     #viewpane { border-right:none; border-bottom:1px solid var(--line) } #view { padding:4px; gap:4px }
-    #view.two { grid-template-rows:minmax(0,2fr) minmax(0,1fr) } #cap { font-size:10.5px } #cap2 { font-size:11.5px; line-height:1.3 } #cap2 b { font-size:10.5px }
+    #view.two, #view.pal { grid-template-rows:minmax(0,2fr) minmax(0,1fr) } #cap3 { font-size:11.5px; line-height:1.3 } #cap3 b { font-size:10.5px } #cap { font-size:10.5px } #cap2 { font-size:11.5px; line-height:1.3 } #cap2 b { font-size:10.5px }
     #finished { top:4px; right:6px; font-size:11.5px; padding:2px 7px }
     #picker { top:42px; left:0; width:100vw; max-height:calc(100dvh - 42px); border-radius:0 0 10px 10px; border-left:none; border-right:none; padding:8px 8px 12px }
     .pkgrid { grid-template-columns:minmax(0,1fr); gap:6px } .pki { width:84px; height:60px }
@@ -185,6 +192,7 @@
     <div id="view">
       <figure class="pic" id="whole"><div class="box"><img id="img" alt="the painting"><div id="cropbox" hidden></div><p id="nopic" hidden>No picture yet: the painter hasn't looked at its canvas.<br>Its first look will show here.</p></div><figcaption id="cap"></figcaption></figure>
       <figure class="pic" id="other" hidden><figcaption id="cap2"><b></b><span></span></figcaption><div class="box"><img id="img2" alt=""><span id="reftag" hidden>Reference</span></div></figure>
+      <figure class="pic" id="pal" hidden><figcaption id="cap3" title="The paints it has mixed, as it last looked at them: each pile thick, thin and very thin over the ground, and thin over a black and white card"><b>Palette</b><span></span></figcaption><div class="box"><img id="img3" alt="the palette"></div></figure>
     </div>
     <a id="finished" hidden>See the finished painting →</a>
   </section>
@@ -388,7 +396,7 @@ let gen = 0, busy = false;  // one poll at a time; a reset (new painter, rebuilt
 function reset() { gen++; busy = false; staticV = null; stop(); events = []; nUpd = 0; epoch = null; cwd = ''; liveText = null; typed = -1; sitStarts = [0]; nSittings = 1; hasLooks = false; $('strip').innerHTML = ''; $('ticks').innerHTML = ''; noPicture(); }
 const NOPIC = "No picture yet: the painter hasn't looked at its canvas.<br>Its first look will show here.";
 function noPainting() { $('nopic').innerHTML = NOPIC; $('nopic').hidden = !events.length; clearPic($('img')); $('cap').textContent = ''; viewI = -1; }  // the painting's place, empty
-function noPicture() { noPainting(); second(-1); $('zimg').removeAttribute('src'); $('zoom').style.display = 'none'; }
+function noPicture() { noPainting(); second(-1); palette(-1); $('zimg').removeAttribute('src'); $('zoom').style.display = 'none'; }
 async function poll() {
   // a static export is re-uploaded every minute or so while painters work: read it again at most once a minute
   if (!Q || busy || (STATIC && epoch !== null && Date.now() - lastStatic < 60000)) return;
@@ -662,6 +670,15 @@ const plain = s => s.replace(/^\s*(#{1,6}\s+|[-*+•]\s+|\d{1,3}[.)]\s+|>\s*)/, 
 // ---- looks: the whole painting, and what the painter is studying
 // an image is a whole look if the look that made it asked for no crop, no mode and not the palette (studio.py's is_whole)
 const isWhole = e => e.look !== undefined && !/crop|mode|palette (?!False)/.test(e.look);
+const isPalette = e => e.kind === 'image' && /palette (?!False)/.test(e.look || '');
+// the newest palette look at or before event i (-1: none yet)
+function paletteAt(i) { for (let k = i; k >= 0; k--) if (isPalette(events[k])) return k; return -1; }
+let viewI3 = -1;
+function palette(k) {
+  const on = k >= 0; $('pal').hidden = !on; $('view').classList.toggle('pal', on); viewI3 = on ? events[k].img : -1;
+  if (on) { const e = events[k]; setPic($('img3'), [viewURL(e.img), imgURL(e.img), thumbURL(e.img)]); $('cap3').querySelector('span').textContent = hhmm(e.ts); }
+  else clearPic($('img3'));
+}
 // a look request in words: [title, what it's for, the chip's words]
 function lookWords(req) {
   if (req == null) return ['A picture it opened', 'an image file it looked at', 'looks at a picture'];
@@ -696,7 +713,7 @@ function picturesAt(i, rest) {
   let cur = -1, mine = -1, whole = -1, before = false, old = false;  // before: k is before the start of i's sitting (or turn)
   for (let k = i; k >= 0; k--) { const e = events[k];
     if (e.kind === 'sitting' || e.kind === 'user') before = true;
-    else if (e.kind === 'image') { if (cur < 0) { cur = k; old = before; }
+    else if (e.kind === 'image' && !isPalette(e)) { if (cur < 0) { cur = k; old = before; }
       if (!e.ref) { if (mine < 0) mine = k; if (!hasLooks || isWhole(e)) { whole = k; break; } } } }
   const main = whole >= 0 ? whole : mine;
   return [main, cur >= 0 && cur !== main && !old && !rest && (whole >= 0 || events[cur].ref) ? cur : -1];
@@ -762,6 +779,7 @@ function pictures() {
     second(o); }
   else if (o >= 0) { noPainting(); second(o); shape(); }  // only a reference picture so far: it shows beside the painting's empty place
   else noPicture();
+  palette(paletteAt(pos));
   const curK = o >= 0 ? o : w;
   for (const t of $('strip').children) { const on = +t.dataset.i === curK; t.classList.toggle('on', on); if (on && !live) t.scrollIntoView({ inline:'center', block:'nearest' }); }
   if (live) stripEnd();
@@ -793,6 +811,7 @@ $('scrub').oninput = e => { stop(); live = +e.target.value >= events.length - 1;
 $('togglecode').onclick = () => { document.body.classList.toggle('nocode'); if (codeShown() && events.length) { codeAt(pos); if (live) refreshLiveCode(); } };
 $('img').onclick = () => { $('zimg').src = viewI >= 0 ? imgURL(viewI) : $('img').src; $('zoom').style.display = 'flex'; };
 $('img2').onclick = () => { $('zimg').src = viewI2 >= 0 ? imgURL(viewI2) : $('img2').src; $('zoom').style.display = 'flex'; };
+$('img3').onclick = () => { $('zimg').src = viewI3 >= 0 ? imgURL(viewI3) : $('img3').src; $('zoom').style.display = 'flex'; };
 $('zoom').onclick = () => { $('zoom').style.display = 'none'; };
 document.onkeydown = e => {
   const t = e.target, k = e.key;

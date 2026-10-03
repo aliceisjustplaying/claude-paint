@@ -38,3 +38,14 @@ body.nocode main { grid-template-columns: minmax(0,54fr) minmax(0,46fr) !importa
 /* the site's address in the header, right of the clock */
 header::after { content: "stillwet.art"; flex: none; margin-left: 18px; padding-left: 18px; border-left: 1px solid var(--line); font: 600 26px -apple-system, system-ui, sans-serif; color: var(--acc); letter-spacing: .01em }
 #allwrap { display: none !important }
+/* the palette (its newest palette look): its own place, beside what the painter studies now (or alone under the painting) */
+#view.pal { grid-template-rows: minmax(0,1fr) minmax(0,1fr) !important; gap: 14px !important }
+#pal:not([hidden]) { display: flex !important; flex-direction: column !important; align-items: stretch !important; gap: 6px !important }
+#pal img { object-position: center !important }
+#cap3 { order: 0 !important; font-size: 19px !important; text-align: center !important; white-space: nowrap; overflow: hidden; text-overflow: ellipsis }
+#cap3 b { display: inline !important; font-size: 19px !important; margin-right: 10px }
+#view.two.pal { grid-template-rows: minmax(0,1fr) minmax(0,1fr) !important; grid-template-columns: minmax(0,1fr) minmax(0,1fr) !important }
+/* a tall canvas: the painting on the left, full height; the look and the palette stacked on the right */
+#view.pal.tall { grid-template-rows: minmax(0,1fr) !important; grid-template-columns: minmax(0,1fr) minmax(0,1fr) !important; grid-template-areas: 'w p' !important }
+#view.two.pal.tall { grid-template-rows: minmax(0,1fr) minmax(0,1fr) !important; grid-template-areas: 'w o' 'w p' !important }
+#view.two.pal.tall #cap, #view.two.pal.tall #cap2 { min-height: 0 !important }

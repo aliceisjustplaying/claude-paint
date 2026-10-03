@@ -1358,7 +1358,7 @@ mod tests {
         let mut a = Session::new(W).unwrap();
         a.run(CANVAS).unwrap();
         let prog = a.program("t");
-        let want = format!("-- easel session \"t\": a painting replayed chunk by chunk.\n-- Each \"--@ chunk\" line starts one chunk as it was run at the easel.\n--@ engine 2\n\n--@ chunk 1\n{CANVAS}\n");
+        let want = format!("-- easel session \"t\": a painting replayed chunk by chunk.\n-- Each \"--@ chunk\" line starts one chunk as it was run at the easel.\n--@ engine 3\n\n--@ chunk 1\n{CANVAS}\n");
         assert_eq!(prog, want);
         assert_eq!(logged_box(&prog).unwrap(), None);
         assert_eq!(box_for(Some(&prog)).map(|b| b.name), Ok(paint::palette::DEFAULT_BOX), "(EASEL_BOX set in the test's environment?)");
@@ -1473,18 +1473,46 @@ mod tests {
     #[cfg(feature = "replay")]
     fn logs_without_an_engine_line_replay_as_before() {
         for (name, want) in [("studio_6399ad", "4f3abae7eb080221"), ("studio_db6324", "009ec933d082a252")] {
-            let text = std::fs::read_to_string(format!("{}/tests/engine1/{name}.lua", env!("CARGO_MANIFEST_DIR"))).unwrap();
-            let mut s = Session::replay_with(320, box_for(Some(&text)).expect("(EASEL_BOX set in the test's environment?)")).unwrap();
-            for (i, c) in parse_program(&text).iter().enumerate() {
-                s.run(c).unwrap_or_else(|e| panic!("{name} chunk {}: {e}", i + 1));
-            }
-            let c = s.canvas().unwrap();
-            let mut h = 0xcbf2_9ce4_8422_2325u64;
-            for b in c.seen().iter().flat_map(|p| p.map(f32::to_bits)).chain(c.kept_surface_um().2.iter().map(|v| v.to_bits())) {
-                h ^= b as u64;
-                h = h.wrapping_mul(0x100_0000_01b3);
-            }
-            assert_eq!(format!("{h:016x}"), want, "{name} no longer replays as it did");
+            let (s, _) = replay_fixture(&format!("engine1/{name}"));
+            assert_eq!(canvas_hash(&s), want, "{name} no longer replays as it did");
         }
+    }
+
+    /// An engine-2 painting replays as engine 2, bit for bit as it did before
+    /// engine 3 (recorded at 7b80cb0, round 23): a test sheet of lead white
+    /// and bone black laid at different times over five days, lifted at
+    /// every stage of drying and painted across, with waits of hours and
+    /// days. Its log goes on naming engine 2.
+    #[test]
+    #[cfg(feature = "replay")]
+    fn engine_2_logs_replay_as_before() {
+        let (s, text) = replay_fixture("engine2/drying_sheet");
+        assert_eq!(s.canvas().unwrap().engine(), 2);
+        assert_eq!(s.program("painting"), text);
+        assert_eq!(canvas_hash(&s), "2d2bc0a5b6922d4a", "the engine-2 drying sheet no longer replays as it did");
+    }
+
+    /// Replay `tests/<name>.lua` at 320 px with the box and engine its log
+    /// names.
+    #[cfg(feature = "replay")]
+    fn replay_fixture(name: &str) -> (Session, String) {
+        let text = std::fs::read_to_string(format!("{}/tests/{name}.lua", env!("CARGO_MANIFEST_DIR"))).unwrap();
+        let mut s = Session::replay_with(320, box_for(Some(&text)).expect("(EASEL_BOX set in the test's environment?)")).unwrap();
+        for (i, c) in parse_program(&text).iter().enumerate() {
+            s.run(c).unwrap_or_else(|e| panic!("{name} chunk {}: {e}", i + 1));
+        }
+        (s, text)
+    }
+
+    /// FNV-1a of the canvas as seen and its surface relief.
+    #[cfg(feature = "replay")]
+    fn canvas_hash(s: &Session) -> String {
+        let c = s.canvas().unwrap();
+        let mut h = 0xcbf2_9ce4_8422_2325u64;
+        for b in c.seen().iter().flat_map(|p| p.map(f32::to_bits)).chain(c.kept_surface_um().2.iter().map(|v| v.to_bits())) {
+            h ^= b as u64;
+            h = h.wrapping_mul(0x100_0000_01b3);
+        }
+        format!("{h:016x}")
     }
 }

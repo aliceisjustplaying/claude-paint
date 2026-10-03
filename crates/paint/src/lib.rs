@@ -70,7 +70,14 @@ pub use shape::Shape;
 ///   stroke right after it feels the film as it would after `wait(0)`); a
 ///   world's thin far bodies keep their depth (`World::add_body`), and rays
 ///   from far off (reflections) don't step over them (`World::trace`).
-pub const ENGINE: u32 = 2;
+/// - 3: oil paint dries 2.5 times slower and stays open for 60% of its
+///   time to touch-dry, not 15% (`drying::Pace`): a brushstroke of lead
+///   white is open for 13 h and gels after 27 h (engine 2: 1.4 h and 2.7 h),
+///   touch-dry after 45 h (18 h); bone black, cobalt blue, Prussian blue,
+///   raw sienna, the cadmiums, the ultramarines, rose madder and permanent
+///   alizarin dry at new rates (`Tube::drying_3`, `drying::drier::engine3`), and a box keeps
+///   its engine when tubes are added (`Palette::with`).
+pub const ENGINE: u32 = 3;
 
 /// Hermite smoothstep.
 #[inline]

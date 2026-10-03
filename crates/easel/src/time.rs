@@ -174,10 +174,12 @@ mod tests {
 
     /// The paint ages while the hand works: a passage laid first has begun
     /// to set by the time a long spell of handwork after it is done, with
-    /// no wait.
+    /// no wait. (Engine 2, whose lead white sets within that hour or two.)
     #[test]
     fn hand_time_is_always_on() {
-        let mut s = Session::new(W).unwrap();
+        let mut tubes = crate::session::find_box(paint::Palette::fallback_box()).unwrap();
+        tubes.engine = 2;
+        let mut s = Session::with_box(W, tubes).unwrap();
         run(&mut s, CANVAS);
         assert!(s.canvas().unwrap().hand_time().is_some());
         run(&mut s, r#"work(rect(100, 100, 300, 200), {hand="body", pile=pile{{"lead white", 1}}, coverage=3})

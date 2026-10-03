@@ -91,10 +91,10 @@ The tube box:
 | red earth | iron oxide earth | 0.85 | 0.7 | 0.9 | 1.0 |
 | vermilion | mercuric sulfide | 0.9 | 0.75 | 1.0 | 0.4 |
 | raw umber | iron and manganese oxide earth | 0.8 | 0.65 | 0.9 | 2.4 |
-| bone black | charred bone (carbon, calcium phosphate) | 0.9 | 0.7 | 1.1 | 0.4 |
-| cobalt blue | cobalt aluminate | 0.55 | 0.6 | 0.8 | 1.4 |
+| bone black | charred bone (carbon, calcium phosphate) | 0.9 | 0.7 | 1.1 | 0.9 |
+| cobalt blue | cobalt aluminate | 0.55 | 0.6 | 0.8 | 2.2 |
 | chrome yellow | lead chromate | 0.9 | 0.7 | 1.0 | 1.8 |
-| Prussian blue | iron ferrocyanide | 0.35 | 0.45 | 3.0 | 1.8 |
+| Prussian blue | iron ferrocyanide | 0.35 | 0.45 | 3.0 | 2.4 |
 | green earth | celadonite and glauconite clay | 0.2 | 0.35 | 0.3 | 0.8 |
 | Rinmann's green | cobalt-zinc oxide | 0.35 | 0.5 | 0.4 | 1.4 |
 | copper green | verdigris ground in oil | 0.25 | 0.4 | 1.0 | 1.6 |
@@ -383,8 +383,14 @@ it doesn't make you wait that many real minutes.
   blends), `"tacky"` (set; it grabs the brush) or `"dry"` (touch-dry).
 
 Each film dries at its own pace, set by its pigments, its thickness and
-its oil. Thin lean paint of fast-drying pigments is touch-dry in a day;
-thick, oily paint of slow pigments can stay open for weeks. Wet paint
+its oil. It is open for the first 30% of its time to touch-dry, setting
+until 60%, then tacky until it is touch-dry. A stroke of lead white or raw
+umber from a loaded broad brush is open for 12 to 14 hours, tacky after
+about a day and touch-dry in under two days. Cobalt blue, Prussian blue
+and raw sienna are about as fast. Ochres, earths, cadmiums, ultramarine
+and bone black are touch-dry in 3½ to 5 days, madder in about 11.
+Thinner paint dries sooner and thicker paint later: twice a stroke's
+thickness takes 1.6 times as long. Thick, oily paint of slow pigments can stay open for weeks. Wet paint
 under a new stroke comes up into it; paint laid over dry paint sits on
 top of it.
 

@@ -336,3 +336,11 @@ def test_the_brief_names_the_artist_and_whose_paintings_the_reference_pictures_a
 ])
 def test_the_title_is_where_painters_put_it_in_their_closing_words(say, title):
     assert S.title_of(say) == title
+
+
+def test_a_palette_look_is_not_the_painting():
+    # the easel's palette look (look{palette=true}) shows the mixed piles, not the canvas
+    assert S.is_whole(S.look_text({}))
+    assert S.is_whole(S.look_text({"size": 800}))
+    assert not S.is_whole(S.look_text({"palette": True}))
+    assert S.is_whole(S.look_text({"palette": False}))

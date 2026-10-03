@@ -497,6 +497,7 @@ pub struct PileU {
 impl UserData for PileU {
     fn add_fields<F: mlua::UserDataFields<Self>>(f: &mut F) {
         f.add_field_method_get("medium", |_, p| Ok(p.medium));
+        f.add_field_method_get("thinner", |_, p| Ok(p.mix.thinner));
     }
     fn add_methods<M: UserDataMethods<Self>>(m: &mut M) {
         m.add_method("parts", |lua, p, ()| {
@@ -511,10 +512,12 @@ impl UserData for PileU {
 }
 
 impl PileU {
-    /// What `print(p)` shows: `pile(lead white 6, smalt 1; medium 0.2)`.
+    /// What `print(p)` shows: `pile(lead white 6, smalt 1; medium 0.2)`,
+    /// and `, thinner 0.5` after it for a pile with thinner.
     pub fn recipe(&self) -> String {
         let parts: Vec<String> = self.parts.iter().map(|(n, k)| format!("{n} {}", fmt_num(*k))).collect();
-        format!("pile({}; medium {})", parts.join(", "), fmt_num(self.medium))
+        let thinner = if self.mix.thinner > 0.0 { format!(", thinner {}", fmt_num(self.mix.thinner)) } else { String::new() };
+        format!("pile({}; medium {}{thinner})", parts.join(", "), fmt_num(self.medium))
     }
 }
 
@@ -1268,19 +1271,25 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
         g.set("tubes", lua.create_function(move |_, ()| Ok(st.borrow().tubes.tubes.iter().map(|t| t.name.to_string()).collect::<Vec<_>>()))?)?;
     }
 
-    // pile{{"lead white", 6}, {"smalt", 1}, ..., medium=0.2}: knife a pile
-    // from tubes, in parts by volume, with that share of oil medium
+    // pile{{"lead white", 6}, {"smalt", 1}, ..., medium=0.2, thinner=0.5}:
+    // knife a pile from tubes, in parts by volume, with that share of oil
+    // medium, then that share of solvent (paint::thinner)
     {
         let st = st.clone();
         g.set("pile", lua.create_function(move |_, t: Table| {
-            check_keys(&t, &["medium"], "pile")?;
+            check_keys(&t, &["medium", "thinner"], "pile")?;
             let medium = num(&t, "medium")?.unwrap_or(0.0);
             if !(0.0..=0.95).contains(&medium) {
                 return err("pile: medium is the share of oil medium mixed in, 0 (as from the tube) to 0.95");
             }
+            let thinner = num(&t, "thinner")?.unwrap_or(0.0);
+            if !(0.0..=paint::thinner::MAX).contains(&thinner) {
+                return err(format!("pile: thinner is the share of solvent mixed in, 0 (none) to {}", paint::thinner::MAX));
+            }
             let tubes = st.borrow().tubes.clone();
             let (parts, given) = parts_of(&tubes, &t, "pile")?;
             let mix = tubes.pile(parts);
+            let mix = if thinner > 0.0 { mix.thinned(thinner) } else { mix };
             if st.borrow().canvas.is_none() {
                 return Err(no_canvas());
             }

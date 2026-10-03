@@ -323,7 +323,7 @@ impl Tool {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub(crate) struct Bristle {
     /// Root offset in the brush frame (x along the wide axis), roughly −1..1.
     rx: f32,
@@ -340,6 +340,43 @@ pub(crate) struct Bristle {
     /// Cure of the paint in it (0 fresh from the palette; paint lifted off
     /// a drying film brings the film's).
     cure: f32,
+    /// Share of solvent in the paint in it (`thinner`): 0 unless it was
+    /// loaded with thinned paint. Thinned paint runs further (`run_of`).
+    thin: f32,
+}
+
+// The derived form, with `thin` only when there is solvent in the bristle:
+// a brush that never held thinned paint prints as it always did (`Held`'s
+// Debug is part of `easel run --state-digest`).
+impl std::fmt::Debug for Bristle {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let mut d = f.debug_struct("Bristle");
+        d.field("rx", &self.rx)
+            .field("ry", &self.ry)
+            .field("len", &self.len)
+            .field("thresh", &self.thresh)
+            .field("bend", &self.bend)
+            .field("seed", &self.seed)
+            .field("prev", &self.prev)
+            .field("vol", &self.vol)
+            .field("lat", &self.lat)
+            .field("hide", &self.hide)
+            .field("cure", &self.cure);
+        if self.thin != 0.0 {
+            d.field("thin", &self.thin);
+        }
+        d.finish()
+    }
+}
+
+/// How far a bristle carrying the share `thin` of solvent travels before
+/// its paint is laid (`Tool::run`): fluid, thinned paint is spread into a
+/// thinner film, so one load runs `1 / (1 - thin)` as far (estimate: the
+/// wet film laid falls with the solvent share, as the pigment per coat
+/// does, `thinner::thin`). Without solvent it is the tool's own `run`.
+#[inline]
+fn run_of(tool: &Tool, thin: f32) -> f32 {
+    if thin > 0.0 { tool.run / (1.0 - thin.min(crate::thinner::MAX)) } else { tool.run }
 }
 
 /// A brush in the hand, with paint in its bristles. (`Debug` is part of
@@ -411,6 +448,7 @@ impl Held {
                     lat: [0.0; LAT],
                     hide: [0.5, 0.5, 1.0],
                     cure: 0.0,
+                    thin: 0.0,
                 }
             })
             .collect();
@@ -433,6 +471,9 @@ impl Held {
         for (i, b) in self.bristles.iter_mut().enumerate() {
             let k = 0.75 + 0.5 * crate::rng::hash2(i as i64, 17, 3);
             b.cure = mix_cure(b.cure, b.vol, 0.0, amount * full * k);
+            if paint.thinner > 0.0 || b.thin > 0.0 {
+                b.thin = mix_cure(b.thin, b.vol, paint.thinner, amount * full * k);
+            }
             mix_into(&mut b.vol, &mut b.lat, &mut b.hide, amount * full * k, &lat, [scatter, paint.stiff, paint.drying]);
         }
     }
@@ -768,10 +809,11 @@ fn feed(bristles: &mut [Bristle], k: f32) {
     if k <= 0.0 || bristles.is_empty() {
         return;
     }
-    let (mut tv, mut lat, mut hide, mut cure) = (0.0f32, [0.0f32; LAT], [0.0f32; 3], 0.0f32);
+    let (mut tv, mut lat, mut hide, mut cure, mut thin) = (0.0f32, [0.0f32; LAT], [0.0f32; 3], 0.0f32, 0.0f32);
     for b in bristles.iter() {
         tv += b.vol;
         cure += b.cure * b.vol;
+        thin += b.thin * b.vol;
         for (l, bl) in lat.iter_mut().zip(&b.lat) {
             *l += bl * b.vol;
         }
@@ -787,10 +829,14 @@ fn feed(bristles: &mut [Bristle], k: f32) {
     }
     hide = [hide[0] / tv, hide[1] / tv, hide[2] / tv];
     cure /= tv;
+    thin /= tv;
     let share = k * tv / bristles.len() as f32;
     for b in bristles.iter_mut() {
         b.vol *= 1.0 - k;
         b.cure = mix_cure(b.cure, b.vol, cure, share);
+        if thin > 0.0 || b.thin > 0.0 {
+            b.thin = mix_cure(b.thin, b.vol, thin, share);
+        }
         mix_into(&mut b.vol, &mut b.lat, &mut b.hide, share, &lat, hide);
     }
 }
@@ -1172,7 +1218,7 @@ unsafe fn exchange(
             // window about as spent as in a whole render), lifting none
             let travel = (seg / s).max(rb / s * 0.5);
             br.vol = match dep {
-                None => br.vol * (1.0 - (1.0 - (-travel / tool.run).exp()) * GHOST_TOUCH),
+                None => br.vol * (1.0 - (1.0 - (-travel / run_of(tool, br.thin)).exp()) * GHOST_TOUCH),
                 Some(v) => (br.vol - v.min(br.vol * 0.5) * GHOST_TOUCH).max(0.0),
             };
             return;
@@ -1274,14 +1320,14 @@ unsafe fn exchange(
         // bristle skimming the weave peaks keeps most of its load
         let touch = (sum_w / sum_cov.max(1e-6)).min(1.0);
         let dep_total = match dep {
-            None => br.vol * (1.0 - (-travel / tool.run).exp()) * touch,
+            None => br.vol * (1.0 - (-travel / run_of(tool, br.thin)).exp()) * touch,
             Some(v) => v.min(br.vol * 0.5) * touch,
         };
         let dep_total = if matches!(clip, Some(Clip::Fence { .. })) { dep_total * (sum_k / sum_w).min(1.0) } else { dep_total };
         let dep_total = if tack > 0.0 {
             let g = crate::drying::grab(tack) * crate::drying::stick(b.0, b.1, rb, br.seed, tack);
             let d = match dep {
-                None => br.vol * (1.0 - (-travel * g / tool.run).exp()) * touch,
+                None => br.vol * (1.0 - (-travel * g / run_of(tool, br.thin)).exp()) * touch,
                 Some(_) => dep_total * g,
             };
             d.min(br.vol * 0.9)
@@ -1429,6 +1475,10 @@ unsafe fn exchange(
                 *g /= got_v;
             }
             br.cure = mix_cure(br.cure, br.vol, got_c / got_v, got_v);
+            // paint lifted off the canvas holds no solvent
+            if br.thin > 0.0 {
+                br.thin = mix_cure(br.thin, br.vol, 0.0, got_v);
+            }
             mix_into(&mut br.vol, &mut br.lat, &mut br.hide, got_v, &got_l, got_h);
         }
         let pad = (off + 2.0) as usize;

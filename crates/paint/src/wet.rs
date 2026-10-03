@@ -61,6 +61,10 @@ pub struct Paint {
     /// film thickness and fat (low `stiff`) it sets how long the paint stays
     /// open (see `Canvas::wait`).
     pub drying: f32,
+    /// Share of solvent in it (`thinner::thin`), 0 for paint without. A
+    /// brush loaded with it spreads it further (`Held::load`); the canvas
+    /// doesn't keep it (the solvent evaporates).
+    pub thinner: f32,
 }
 
 impl Paint {
@@ -68,11 +72,11 @@ impl Paint {
     /// ratio: over black ÷ over white; 0.05 = glaze, 0.5 = scumble,
     /// 0.92 = body).
     pub fn new(color: Rgb, hiding: f32, stiff: f32) -> Self {
-        Paint { color, scatter: scatter_for(luminance(color), hiding), stiff, drying: 1.0 }
+        Paint { color, scatter: scatter_for(luminance(color), hiding), stiff, drying: 1.0, thinner: 0.0 }
     }
     /// A paint of masstone `color` that scatters `scatter` per coat.
     pub fn km(color: Rgb, scatter: f32, stiff: f32) -> Self {
-        Paint { color, scatter, stiff, drying: 1.0 }
+        Paint { color, scatter, stiff, drying: 1.0, thinner: 0.0 }
     }
     pub fn body(color: Rgb) -> Self {
         Paint::new(color, 0.92, 1.0)
@@ -265,6 +269,14 @@ impl Canvas {
     /// Wet paint film at a point (units), µm: 0 where the paint is dry.
     pub fn wet_um(&self, x: f32, y: f32) -> f32 {
         self.wet.vol[self.f.index(x, y)] * crate::surface::COAT_UM
+    }
+
+    /// Wet paint at a point (units): its film, µm, and its Kubelka–Munk
+    /// scattering per coat (film × scattering is how much pigment lies
+    /// there). (0, 0) where the paint is dry. For tests and measurement.
+    pub fn wet_film(&self, x: f32, y: f32) -> (f32, f32) {
+        let i = self.f.index(x, y);
+        if self.wet.vol[i] <= 0.0 { (0.0, 0.0) } else { (self.wet.vol[i] * crate::surface::COAT_UM, self.wet.hide[i][0]) }
     }
 
     /// Total wet paint on the canvas (for tests / debugging).

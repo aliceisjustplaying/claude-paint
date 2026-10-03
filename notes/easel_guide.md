@@ -68,13 +68,21 @@ palette from the tubes in the box:
 ```lua
 p = pile{{"<tube>", <parts>}, {"<tube>", <parts>}}
 q = pile{{"<tube>", <parts>}, medium=0.3}
+r = pile{{"<tube>", <parts>}, thinner=0.5}
 print(p)                         -- pile(<tube> <parts>, <tube> <parts>; medium 0)
+print(r)                         -- pile(<tube> <parts>; medium 0, thinner 0.5)
 print(table.concat(tubes(), ", "))   -- the names in the box
 ```
 
 A pile is parts by volume of named tubes, plus `medium`: the share of oil
 medium mixed in (0, as from the tube, to 0.95). Medium makes the paint more
-transparent and more fluid, and slower to dry. It is added oil only. What a pile looks like is
+transparent and more fluid, and slower to dry. It is added oil only.
+`thinner` is the share of solvent (turpentine) mixed in, 0 (none) to 0.9.
+Solvent thins the paint without adding oil, and it evaporates once the
+paint is on the canvas. Each coat of thinned paint carries less pigment, so
+it is more transparent; the paint is more fluid and keeps fewer brush marks;
+a brushload of it spreads further, into a thinner film; and that film, lean,
+dries faster. A pile can hold both medium and thinner. What a pile looks like is
 what its pigments make together, thick or thin, over what is already on
 the canvas; you find out by painting with it and looking. A pile mixed by
 hand is a little uneven: each brushload takes slightly different

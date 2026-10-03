@@ -214,6 +214,10 @@ pub struct Mixture {
     /// volume. `Mixture::paint` leaves paint at the average rate (1); a pile
     /// laid as knifed carries this rate (`Mixture::laid`).
     pub drying: f32,
+    /// Share of solvent (turpentine, mineral spirits) knifed in, 0..0.9:
+    /// `Mixture::laid` thins the paint with it (`thinner::thin`). 0 for a
+    /// pile mixed from tubes; set with `thinned`. A remix keeps it.
+    pub thinner: f32,
 }
 
 /// The box a painting is painted from when nothing names another.
@@ -467,7 +471,7 @@ impl Palette {
     fn mixture(&self, parts: Vec<(usize, f32)>) -> Mixture {
         let (color, scatter, stiff) = self.eval(&parts);
         let drying = parts.iter().map(|&(i, f)| self.drying_of(&self.tubes[i]) * f).sum::<f32>() / parts.iter().map(|p| p.1).sum::<f32>().max(1e-9);
-        Mixture { hiding: hiding_of(luminance(color), scatter), parts, color, scatter, stiff, drying }
+        Mixture { hiding: hiding_of(luminance(color), scatter), parts, color, scatter, stiff, drying, thinner: 0.0 }
     }
 
     /// Jitter the proportions (relative sd `amount`) and remix, so repeated
@@ -479,7 +483,7 @@ impl Palette {
         let mut parts: Vec<(usize, f32)> = m.parts.iter().map(|&(i, f)| (i, (f * (1.0 + rng.normal() * amount)).max(0.0))).collect();
         let s: f32 = parts.iter().map(|p| p.1).sum();
         parts.iter_mut().for_each(|p| p.1 /= s.max(1e-9));
-        self.mixture(parts)
+        Mixture { thinner: m.thinner, ..self.mixture(parts) }
     }
 
     /// Human-readable recipe, e.g. "lead white 0.72 + yellow ochre 0.20 + raw umber 0.08".
@@ -501,9 +505,18 @@ impl Mixture {
 
     /// This pile as paint on the brush, thinned with `medium` (0..1), drying
     /// at its tubes' rate (`drying`). Medium adds oil, which the drying
-    /// model already counts (a fat film stays open longer).
+    /// model already counts (a fat film stays open longer). A pile with
+    /// `thinner` is then thinned with that share of solvent
+    /// (`thinner::thin`); without, the paint is as it always was.
     pub fn laid(&self, medium: f32) -> Paint {
-        self.paint(medium).with_drying(self.drying)
+        let p = self.paint(medium).with_drying(self.drying);
+        if self.thinner > 0.0 { crate::thinner::thin(p, self.thinner) } else { p }
+    }
+
+    /// This mixture with the share `t` of solvent knifed in (0 for none,
+    /// up to `thinner::MAX`).
+    pub fn thinned(self, t: f32) -> Mixture {
+        Mixture { thinner: t.clamp(0.0, crate::thinner::MAX), ..self }
     }
 }
 

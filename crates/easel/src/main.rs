@@ -30,6 +30,8 @@ mod legacy;
 mod look;
 mod save;
 mod session;
+#[cfg(test)]
+mod thinner_tests;
 mod time;
 mod world;
 

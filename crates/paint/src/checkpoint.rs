@@ -172,7 +172,9 @@ fn read_soak(r: &mut impl Read, n: usize) -> io::Result<crate::soak::Soak> {
         6 => !x.is_nan() && x > f32::NEG_INFINITY,
         _ => x.is_finite(),
     };
-    if !(v.iter().enumerate().all(|(k, a)| a.iter().all(|&x| ok(k, x))) && kp.iter().chain(&sp).all(|&x| x.is_finite() && x >= 0.0)) {
+    // (oil in place has a time it came: +inf only where none has)
+    let since = v[3].iter().zip(&v[6]).all(|(&oil, &t)| oil <= 0.0 || t.is_finite());
+    if !(v.iter().enumerate().all(|(k, a)| a.iter().all(|&x| ok(k, x))) && since && kp.iter().chain(&sp).all(|&x| x.is_finite() && x >= 0.0)) {
         return Err(bad("checkpoint soak is invalid"));
     }
     let rgb = |a: Vec<f32>| a.as_chunks::<3>().0.to_vec();

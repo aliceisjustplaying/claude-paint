@@ -37,6 +37,13 @@
 //! scattering is lowered where liquid fills the pores, and the deposited
 //! pigments' absorption and scattering are added to it, so a stain is
 //! colour *in* the cloth: the weave shows through it.
+//!
+//! **Limits.** A raw canvas is painted whole, never as a crop render. A
+//! pixel keeps one arrival of creeping oil, so where halos overlap their oil
+//! arrives together, at the mean of its times by volume (the cloth is right
+//! once all of it has arrived). Recolouring the cloth (oil arriving, oil
+//! yellowing) replaces those pixels' colour: lighting `relief` added there is
+//! lost, and a film thinner than 0.001 coats counts as bare cloth.
 
 use crate::canvas::{Canvas, Frame};
 use crate::color::{Rgb, hex};
@@ -365,7 +372,9 @@ fn speed(cells: &[(f32, f32, f32)], a: usize, b: usize, ox: i32, oy: i32, tilt: 
 /// Can liquid move from cell (`x`, `y`) of a box `rw` wide to its
 /// neighbour at offset (`ox`, `oy`)? Not into cloth sealed under a paint
 /// film (`Soak::wick_cells` gives it no permeability), and not past it: a
-/// diagonal or knight's move needs one of the cells it passes beside open.
+/// diagonal move needs one of the two cells beside it open, a knight's move
+/// a whole open path (through the cell beside its end, or along its long
+/// side and then across).
 fn passes(cells: &[(f32, f32, f32)], rw: usize, x: i32, y: i32, ox: i32, oy: i32) -> bool {
     let open = |dx: i32, dy: i32| cells[(y + dy) as usize * rw + (x + dx) as usize].1 > 0.0;
     if !open(ox, oy) {
@@ -375,8 +384,8 @@ fn passes(cells: &[(f32, f32, f32)], rw: usize, x: i32, y: i32, ox: i32, oy: i32
     match (ox.abs(), oy.abs()) {
         (0, _) | (_, 0) => true,
         (1, 1) => open(sx, 0) || open(0, sy),
-        (2, _) => open(sx, 0) || open(sx, sy),
-        _ => open(0, sy) || open(sx, sy),
+        (2, _) => open(sx, sy) || (open(sx, 0) && open(2 * sx, 0)),
+        _ => open(sx, sy) || (open(0, sy) && open(0, 2 * sy)),
     }
 }
 
@@ -428,7 +437,9 @@ impl Soak {
     /// Oil `put` (µm) creeping into pixel `i`, to arrive at `at` (minutes
     /// after `t0`; `now` is the time now). Oil already due by now lands
     /// first; oil still on its way and this share one arrival, the mean of
-    /// the two by volume (a pixel keeps one pending arrival).
+    /// the two by volume. (A pixel keeps one pending arrival, so where
+    /// halos overlap the earlier oil comes a little late and the later a
+    /// little early; once all of it has arrived the cloth is as it would be.)
     pub(crate) fn send_oil(&mut self, i: usize, put: f32, at: f32, now: f32) {
         if self.oil_pend[i] > 0.0 && self.oil_t[i] <= now {
             self.oil[i] += self.oil_pend[i];
@@ -629,7 +640,10 @@ impl Canvas {
     }
 
     /// Recolor the soaked cloth in buffer box `b` for the time now (only
-    /// where no paint or ground film lies on it).
+    /// where no paint or ground film lies on it). It replaces those pixels'
+    /// colour: lighting that `relief` added there is lost (light the picture
+    /// last), and a film thinner than 0.001 coats (0.025 µm, below anything
+    /// visible) counts as bare cloth and is recoloured with it.
     pub(crate) fn soak_render(&mut self, b: (usize, usize, usize, usize)) {
         let Some(s) = self.soak.as_ref() else { return };
         let now = (self.wet.clock.now - s.t0) as f32;
@@ -1364,6 +1378,11 @@ mod tests {
         assert!(refused(&|s| s.cap[5] = 0.0));
         assert!(refused(&|s| s.solv[9] = -1.0));
         assert!(!refused(&|s| s.oil_since[9] = f32::INFINITY));
+        assert!(refused(&|s| s.oil[4] = 1.0));
+        assert!(!refused(&|s| {
+            s.oil[4] = 1.0;
+            s.oil_since[4] = 5.0;
+        }));
         // the end of the file: a part of a mark, or anything after a soak
         let mut b = Vec::new();
         base.write_state(&mut b, "").unwrap();
@@ -1413,6 +1432,29 @@ mod tests {
                 assert!(s.solv[i] == 0.0 && s.pig[i] == 0.0);
             }
         }
+    }
+
+    #[test]
+    fn a_pour_does_not_slip_past_a_films_corners() {
+        // a bare pixel whose four sides are under a film: no move into it
+        // has an open path, diagonal or knight's
+        let mut c = raw(200, 300.0);
+        let (tx, ty) = (100i32, 100i32);
+        let walls = [(tx - 1, ty), (tx + 1, ty), (tx, ty - 1), (tx, ty + 1)];
+        let walled = Mask::from_fn(c.frame(), move |u, v| if walls.contains(&((u / 5.0) as i32, (v / 5.0) as i32)) { 1.0 } else { 0.0 });
+        c.glaze(&Pigment::transparent(hex("#806040")), Some(&walled), |_, _| 2.0);
+        assert_eq!(c.film.iter().filter(|&&f| f > 1e-3).count(), 4);
+        let (cx, cy) = (5.0 * tx as f32 + 2.5, 5.0 * ty as f32 + 2.5);
+        let ring = Mask::from_fn(c.frame(), move |u, v| {
+            let d = ((u - cx).powi(2) + (v - cy).powi(2)).sqrt();
+            if d > 9.0 && d < 40.0 { 1.0 } else { 0.0 }
+        });
+        c.pour(&ring, &blue_pour(6.0, 6.0)).unwrap();
+        let s = c.soak.as_ref().unwrap();
+        let i = c.window().index(cx, cy);
+        assert!(s.solv[i] == 0.0 && s.pig[i] == 0.0, "the walled pixel got {} µm", s.solv[i]);
+        // while the cloth all round it took the stain
+        assert!(s.solv[c.window().index(cx + 10.0, cy + 10.0)] > 0.0);
     }
 
     #[test]

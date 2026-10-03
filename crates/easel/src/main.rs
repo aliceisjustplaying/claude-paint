@@ -28,6 +28,7 @@ mod frames;
 #[cfg(feature = "replay")]
 mod legacy;
 mod look;
+mod save;
 mod session;
 mod time;
 mod world;
@@ -54,6 +55,7 @@ const USAGE: &str = "easel: a live painting session (see notes/easel_guide.md)
   easel open          start or reattach; replays paintings/lua/painting.lua if it exists
   easel do '<lua>'  |  easel do -f chunk.lua  |  easel do - (stdin)     [--look] also looks afterwards
   easel look [--crop x0,y0,x1,y1] [--mode value,squint,mirror] [--grid [step]] [--size 1000]
+  easel look --palette   the piles the globals hold: thick, thin and very thin over the ground, thin over a card
   easel log           the painting so far (= paintings/lua/painting.lua)
   easel status        chunks, width, canvas
   easel globals       the painting's globals, one a line: chunk that last set it, name, what it holds
@@ -69,6 +71,7 @@ const USAGE: &str = "easel: a live painting session (see notes/easel_guide.md)
   easel open <name>    start or reattach; replays paintings/lua/<name>.lua if it exists
   easel do '<lua>'  |  easel do -f chunk.lua  |  easel do - (stdin)     [--look] also looks afterwards
   easel look [--crop x0,y0,x1,y1] [--mode value,squint,mirror] [--grid [step]] [--size 1000]
+  easel look --palette   the piles the globals hold: thick, thin and very thin over the ground, thin over a card
   easel log           the session so far (= paintings/lua/<name>.lua)
   easel status        chunks, width, canvas
   easel globals       the painting's globals, one a line: chunk that last set it, name, what it holds
@@ -79,6 +82,9 @@ const USAGE: &str = "easel: a live painting session (see notes/easel_guide.md)
   easel note '<text>' | easel note - (stdin)    append a dated entry to notes/journal.md
   easel run <file.lua> [--out path.png] [--look] [--state-digest digests.txt]    replay at 2400px and write the PNG
       [--frames-every <s> --frames-dir <dir> [--frame-width 1000]]   and a frame per <s> of hand time
+      [--width <px>]   replay narrower, a preview for development (not the painting)
+  easel finish <save> <out.png> [--log painting.lua] [--coats C] [--no-varnish] [--no-cracks] [--relief]
+                      finish a closed session's save (out/easel/<name>/live.ckpt) without a replay
   easel tubes [--markdown]   the tubes in the box a new painting takes (--markdown: as a table)
 
   A new painting takes its box from a file `box` next to this executable, else EASEL_BOX,
@@ -106,6 +112,8 @@ fn main() -> ExitCode {
         "serve" => serve(&rest),
         #[cfg(feature = "replay")]
         "run" => run(&rest),
+        #[cfg(all(feature = "replay", feature = "finish"))]
+        "finish" => finish_cmd(&rest),
         "note" => note(&rest, name),
         "tubes" => tubes(&rest),
         #[cfg(feature = "replay")]
@@ -741,6 +749,13 @@ fn validate_log(name: &str, expected: &str) -> Result<(), String> {
     Ok(())
 }
 
+/// The palette look (look.rs `palette`): the piles the globals hold, over this canvas's
+/// ground. Only reads: no hand time, nothing in the log, the canvas and state untouched.
+fn palette_look(s: &Session) -> Result<(usize, usize, Vec<u8>), String> {
+    let ground = s.ground_color().ok_or("no canvas yet: the first chunk is canvas{...}")?;
+    look::palette(&s.piles(), ground)
+}
+
 /// Write a look as `dir/look-NNNN.png`, NNNN one above the highest there, never over a file
 /// that exists (a pruned look or a stray look-prefixed file doesn't make it reuse a name).
 fn new_look(dir: &Path, png: &[u8]) -> Result<PathBuf, String> {
@@ -836,18 +851,27 @@ impl Server {
         Ok(String::new())
     }
 
-    /// The live canvas as a PNG, `save`'s (`live.png`, next to the committed log), and in
-    /// `live.txt` how many chunks it holds and how many of them were replayed: the runner's
-    /// check (scripts/check_painting) compares a replay of the log with it.
+    /// The live canvas as a PNG, `save`'s (`live.png`, next to the committed log), its save
+    /// file (`live.ckpt`: the canvas and the studio fields the finishing verbs read, save.rs),
+    /// and in `live.txt` how many chunks they hold and how many of them were replayed: the
+    /// runner's check (scripts/check_painting) compares a replay of the log with them, and
+    /// scripts/finish_painting finishes from the save instead of replaying the log.
     fn save_live(&self) -> Result<String, String> {
         let dir = session_dir(&self.name);
-        let (png, txt) = (dir.join("live.png"), dir.join("live.txt"));
+        let (png, txt, ckpt) = (dir.join("live.png"), dir.join("live.txt"), dir.join("live.ckpt"));
         let _ = std::fs::remove_file(&txt);
         let Some(c) = self.s.canvas() else {
             let _ = std::fs::remove_file(&png);
+            let _ = std::fs::remove_file(&ckpt);
             return Ok(String::new());
         };
         deliver(&c, &png)?;
+        drop(c);
+        // a save that can't be written leaves none (finish_painting then replays the log)
+        if let Err(e) = save::write(&self.s, &self.s.program(&self.name), &ckpt) {
+            let _ = std::fs::remove_file(&ckpt);
+            eprintln!("the save file couldn't be written: {e}");
+        }
         std::fs::write(&txt, format!("chunks {}\nreplayed {}\n", self.s.log.len(), self.replayed)).map_err(|e| format!("{}: {e}", txt.display()))?;
         Ok(format!("the live canvas is in {}\n", png.display()))
     }
@@ -855,6 +879,11 @@ impl Server {
     fn look(&mut self, args: &[String], path: Option<PathBuf>) -> Result<String, String> {
         let v = look::View::parse(args)?;
         let t0 = Instant::now();
+        if v.palette {
+            let (w, h, png) = palette_look(&self.s)?;
+            let path = new_look(&session_dir(&self.name), &png)?;
+            return Ok(format!("{} ({w}x{h}, {:.2}s)\n", path.display(), t0.elapsed().as_secs_f64()));
+        }
         let c = self.s.canvas().ok_or("no canvas yet: the first chunk is canvas{...}")?;
         let (w, h, path) = match path {
             Some(p) => {
@@ -972,7 +1001,7 @@ fn deliver(c: &Canvas, out: &Path) -> Result<(), String> {
 }
 
 #[cfg(feature = "replay")]
-const RUN_USAGE: &str = "run <file.lua> [--out path.png] [--look] [--state-digest digests.txt] [--frames-every <s> --frames-dir <dir> [--frame-width 1000]] (replays at the live width, 2400px)";
+const RUN_USAGE: &str = "run <file.lua> [--out path.png] [--look] [--state-digest digests.txt] [--frames-every <s> --frames-dir <dir> [--frame-width 1000]] [--width <px>] (replays at the live width, 2400px, unless --width: a smaller preview for development, not the painting)";
 
 #[cfg(feature = "replay")]
 fn run(args: &[String]) -> Result<(), String> {
@@ -980,12 +1009,17 @@ fn run(args: &[String]) -> Result<(), String> {
     let mut i = 1;
     while i < args.len() {
         match args[i].as_str() {
-            "--out" | "--dump-surface" | "--frames-every" | "--frames-dir" | "--frame-width" | "--state-digest" if i + 1 < args.len() => i += 2,
+            "--out" | "--dump-surface" | "--frames-every" | "--frames-dir" | "--frame-width" | "--state-digest" | "--width" if i + 1 < args.len() => i += 2,
             "--look" => i += 1,
             o => return Err(format!("run: unknown argument {o:?} ({RUN_USAGE})")),
         }
     }
-    let width = LIVE_WIDTH;
+    // a development preview may replay narrower (kernel radii are in mm, so it is not the
+    // painting at a smaller size: see notes/workflow.md); the painting is LIVE_WIDTH
+    let width = match flag(args, "--width") {
+        None => LIVE_WIDTH,
+        Some(w) => w.parse::<usize>().ok().filter(|w| (16..=LIVE_WIDTH * 4).contains(w)).ok_or_else(|| format!("--width {w}: want px, 16 to {}", LIVE_WIDTH * 4))?,
+    };
     let text = std::fs::read_to_string(file).map_err(|e| format!("{file}: {e}"))?;
     let stem = Path::new(file).file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or("easel".into());
     let out = flag(args, "--out").map(PathBuf::from).unwrap_or_else(|| root().join("out/lua").join(format!("{stem}.png")));
@@ -1058,16 +1092,76 @@ fn run(args: &[String]) -> Result<(), String> {
     Ok(())
 }
 
-/// FNV-1a, 64 bit.
-#[cfg(feature = "replay")]
-fn fnv1a(bytes: &[u8]) -> u64 {
-    let mut h: u64 = 0xcbf29ce484222325;
-    for &b in bytes {
-        h ^= b as u64;
-        h = h.wrapping_mul(0x100000001b3);
+#[cfg(all(feature = "replay", feature = "finish"))]
+const FINISH_USAGE: &str = "finish <save file> <out.png> [--log painting.lua] [--coats C] [--no-varnish] [--no-cracks] [--relief]
+       finish --print-chunk [--coats C] [--no-varnish] [--no-cracks] [--relief]";
+
+/// `easel finish <save> <out.png> [options]`: restore a live session's save (live.ckpt,
+/// save.rs) into a fresh session, run the finishing chunk scripts/finish_painting builds
+/// (finish.rs `chunk`) and write the PNG, without replaying the log. With `--log`, the save
+/// must be of that log (its hash and chunk count). `--print-chunk` prints the chunk only.
+#[cfg(all(feature = "replay", feature = "finish"))]
+fn finish_cmd(args: &[String]) -> Result<(), String> {
+    let (mut coats, mut varnish, mut cracks, mut relief) = ("0.4".to_string(), true, true, false);
+    let (mut print_chunk, mut log, mut files) = (false, None::<String>, Vec::new());
+    let mut i = 0;
+    while i < args.len() {
+        match args[i].as_str() {
+            "--coats" if i + 1 < args.len() => {
+                coats = args[i + 1].clone();
+                i += 1;
+            }
+            "--log" if i + 1 < args.len() => {
+                log = Some(args[i + 1].clone());
+                i += 1;
+            }
+            "--no-varnish" => varnish = false,
+            "--no-cracks" => cracks = false,
+            "--relief" => relief = true,
+            "--print-chunk" => print_chunk = true,
+            a if !a.starts_with('-') => files.push(a.to_string()),
+            o => return Err(format!("finish: unknown argument {o:?}\n{FINISH_USAGE}")),
+        }
+        i += 1;
     }
-    h
+    // the script's own test: digits with at most one point
+    let number = !coats.is_empty() && coats.chars().all(|c| c.is_ascii_digit() || c == '.') && coats.matches('.').count() <= 1 && coats != ".";
+    if !number {
+        return Err(format!("--coats takes a number, not '{coats}'"));
+    }
+    if !(varnish || cracks || relief) {
+        return Err("nothing to do".into());
+    }
+    let chunk = finish::chunk(&coats, varnish, cracks, relief);
+    if print_chunk {
+        if !files.is_empty() {
+            return Err(FINISH_USAGE.into());
+        }
+        println!("{chunk}");
+        return Ok(());
+    }
+    let [save, out] = files.as_slice() else { return Err(FINISH_USAGE.into()) };
+    let t0 = Instant::now();
+    let r = save::read(Path::new(save))?;
+    if let Some(l) = &log {
+        let text = std::fs::read_to_string(l).map_err(|e| format!("{l}: {e}"))?;
+        let n = parse_program(&text).len();
+        if fnv1a(text.as_bytes()) != r.log_fnv || n != r.chunks {
+            return Err(format!("{save} is not a save of {l} ({} chunks in the save, {n} in the log, or the text differs)", r.chunks));
+        }
+    }
+    let restored = t0.elapsed().as_secs_f64();
+    let mut s = r.session;
+    let ran = s.run(&chunk).map_err(|e| format!("the finishing chunk failed:\n{e}"))?;
+    print!("{}", ran.out);
+    let c = s.canvas().ok_or("the save holds no canvas")?;
+    deliver(&c, Path::new(out))?;
+    eprintln!("wrote {out} (restored {} chunks in {restored:.1}s, finished in {:.1}s, total {:.1}s)", r.chunks, ran.secs, t0.elapsed().as_secs_f64());
+    Ok(())
 }
+
+#[cfg(feature = "replay")]
+use save::fnv1a;
 
 /// `run --state-digest`'s line for the state after chunk `n` (which took
 /// `secs`): the receipt that a change to the engine left a replay's physical
@@ -1175,6 +1269,66 @@ mod tests {
         client.write_all(b"status\n").unwrap();
         let e = read_request(&mut server).unwrap_err();
         assert!(e.contains("different versions"), "{e}");
+    }
+
+    const PALETTE_CANVAS: &str = r#"canvas{size=300, aspect=1.25, seed=3, linen=15, ground={{pile={{"lead white", 4}, {"red earth", 1}}, um=80, apply="knife"}}}"#;
+
+    /// A palette look only reads: the state digest (canvas, brushes, studio), the log and the
+    /// globals are the same before and after it, and it puts no time on the clock.
+    #[test]
+    #[cfg(tube_box)]
+    fn a_palette_look_changes_nothing() {
+        let mut s = Session::new(320).unwrap();
+        s.run(PALETTE_CANVAS).unwrap();
+        s.run(r#"skyP = pile{{"lead white", 6}, {"smalt", 1}, medium=0.2}; dk = pile{{"raw umber", 2}, {"bone black", 1}}
+                 b = brush("filbert", 8); b:load(skyP, 0.8); b:stroke({{100, 300}, {700, 340}})"#).unwrap();
+        let before = (state_digest_line(&s, 2, 0.0), s.program("t"), s.globals(), s.st.borrow().clock);
+        let (w, h, png) = palette_look(&s).unwrap();
+        assert!(w > 0 && h > 0 && png.starts_with(b"\x89PNG"));
+        assert_eq!(s.piles().iter().map(|p| p.0.as_str()).collect::<Vec<_>>(), ["dk", "skyP"]);
+        let after = (state_digest_line(&s, 2, 0.0), s.program("t"), s.globals(), s.st.borrow().clock);
+        assert_eq!(before, after);
+        // and the next chunk runs as it would have without the look
+        let mut t = Session::new(320).unwrap();
+        for c in &s.log {
+            t.run(&c.src).unwrap();
+        }
+        s.run("b:stroke({{100, 500}, {700, 520}})").unwrap();
+        t.run("b:stroke({{100, 500}, {700, 520}})").unwrap();
+        assert_eq!(state_digest_line(&s, 3, 0.0), state_digest_line(&t, 3, 0.0));
+    }
+
+    /// The palette's thick swatch is what `work` lays thick with that pile: within 2/255 of
+    /// the wet paint's mean in the middle of a heavily covered patch, for a few piles.
+    #[test]
+    #[cfg(tube_box)]
+    fn the_thick_swatch_matches_paint_laid_thick() {
+        let srgb = |c: paint::Rgb| c.map(|v| linear_to_srgb(v) * 255.0);
+        for recipe in [r#"{"lead white", 6}, {"smalt", 1}, medium=0.2"#, r#"{"raw umber", 2}, {"bone black", 1}"#, r#"{"yellow ochre", 3}, {"red earth", 1}, {"lead white", 2}"#] {
+            let mut s = Session::new(320).unwrap();
+            s.run(PALETTE_CANVAS).unwrap();
+            s.run(&format!(r#"p = pile{{{recipe}}}; work(rect(200, 200, 800, 600), {{hand="body", pile=p, coverage=6}})"#)).unwrap();
+            let (_, _, paint) = s.piles().into_iter().find(|p| p.0 == "p").unwrap();
+            let ground = s.ground_color().unwrap();
+            let want = srgb(look::swatches(&paint, ground)[0]);
+            let c = s.canvas().unwrap();
+            let f = c.window();
+            let seen = c.seen();
+            let mut acc = [0.0f64; 3];
+            let mut n = 0.0;
+            for y in (f.h * 3 / 8)..(f.h * 5 / 8) {
+                for x in (f.w * 3 / 8)..(f.w * 5 / 8) {
+                    for q in 0..3 {
+                        acc[q] += seen[y * f.w + x][q] as f64;
+                    }
+                    n += 1.0;
+                }
+            }
+            let got = srgb(acc.map(|v| (v / n) as f32));
+            for q in 0..3 {
+                assert!((got[q] - want[q]).abs() <= 2.0, "{recipe}: laid {got:?}, swatch {want:?}");
+            }
+        }
     }
 
     #[test]

@@ -6,10 +6,12 @@ Sources are listed at the end; [n] marks them. "Estimate" marks numbers not take
 - Frankenthaler, *Mountains and Sea* (1952): turpentine-thinned oil paint poured
   "from coffee cans onto an unprimed canvas on the floor"; "the paint completely
   permeated the canvas"; "the weave of the canvas emphasizing the flatness" [1][2].
-  Methods also included blotting with sponges/rags and layering after drying, and
-  tilting or rotating the canvas to steer the flow [3].
+  Accounts of the technique in general (not of her practice in particular) add
+  blotting with paper towels or sponges, layering once dry, and tilting or
+  rotating the canvas to steer the flow [3].
 - Thinned oil on raw canvas leaves "residual, halo-like marks of oil" around the
-  colour; she moved to acrylic in 1962-63 partly because it "didn't leave" them [4].
+  colour: in 1963 she started working with acrylic, which "didn't leave" them [4]
+  (the source gives no reason for the change).
   "The sinking of oil into unprimed canvas can lead to ... darkening, and halos of
   oil staining where raw canvas is exposed" [5]. Oil "will crawl to the back of the
   canvas and pool around the colors" [5].
@@ -21,9 +23,10 @@ Sources are listed at the end; [n] marks them. "Estimate" marks numbers not take
   - excess medium gave "a darkened halo around the color";
   - "an excess of turpentine thinner produced a bleeding effect in which the pigment
     feathers out along the edges of the pour";
-  - turpentine thinning has "a dulling effect" and a matte surface; thinned so far
-    that "the pigment particles became too separated to form a continuous film",
-    bright flecks remain;
+  - turpentine thinning has "a dulling effect" and gives a matte surface; dark
+    paint thinned so far that "the pigment particles became too separated to form
+    a continuous film" dried granular (the bright flecks in the same paintings are
+    paste Louis could not grind down, not thinning);
   - dark washes over bright ones: the surface "glows with the warmth of the
     underlying layers";
   - ~29 parts thinner (resin + turpentine) to 1 part paint over a year's supplies;
@@ -49,9 +52,10 @@ Sources are listed at the end; [n] marks them. "Estimate" marks numbers not take
   pigment" [14].
 
 ## Optics
-- Rough, porous, weakly absorbing materials are darker when wet: liquid in the
-  air gaps lowers the relative refractive index and adds total internal reflection,
-  so light scatters more times and is absorbed more [15][16]. Cotton fits ("cotton
+- Rough, porous, weakly absorbing materials are darker when wet: a liquid film over
+  a rough surface adds total internal reflection [15], and liquid in the gaps lowers
+  the relative refractive index, so light scatters more times and is absorbed more
+  [16]. Cotton fits ("cotton
   tick[s] both boxes") [17]. Turpentine evaporates, so its darkening is temporary;
   oil stays, so the oil halo is a permanent darkening (and linseed oil yellows).
 - Refractive indices (estimate from general knowledge, not from the sources above):
@@ -66,7 +70,9 @@ Sources are listed at the end; [n] marks them. "Estimate" marks numbers not take
   slowly for hours to days until it gels.
 
 ## Sources
-1. National Gallery of Art, Mountains and Sea: https://www.nga.gov/node/856101
+1. National Gallery of Art, Mountains and Sea: https://www.nga.gov/node/856101 (the
+   pouring quotes are in its audio stop 31:
+   https://www.nga.gov/visit/tours-and-guides/self-guided-tours/en/stops/stop-031.html)
 2. Wikipedia, Mountains and Sea: https://en.wikipedia.org/wiki/Mountains_and_Sea
 3. MyArtBroker, soak-stain technique: https://www.myartbroker.com/artist-helen-frankenthaler/articles/helen-frankenthalers-innovative-soak-stain-technique
 4. Sheldon Museum of Art, Red Frame: https://sheldonartmuseum.org/news/frankenthaler/

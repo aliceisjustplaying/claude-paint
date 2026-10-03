@@ -21,9 +21,11 @@ pub struct View {
     pub size: Option<usize>,
     /// Coordinate grid: Some(0) picks the step from the zoom.
     pub grid: Option<f32>,
+    /// The palette instead of the canvas (`palette`).
+    pub palette: bool,
 }
 
-const LOOK_ARGS: &str = "--crop x0,y0,x1,y1 --mode value,squint,mirror --grid [step] --size N";
+const LOOK_ARGS: &str = "--crop x0,y0,x1,y1 --mode value,squint,mirror --grid [step] --size N | --palette";
 
 fn is_num(s: Option<&String>) -> bool {
     s.is_some_and(|s| s.parse::<f32>().is_ok())
@@ -79,9 +81,13 @@ impl View {
                         v.grid = Some(s);
                     }
                 }
+                "--palette" => v.palette = true,
                 o => return Err(format!("look: unknown argument {o:?} ({LOOK_ARGS})")),
             }
             i += 1;
+        }
+        if v.palette && (v.crop.is_some() || v.value || v.squint || v.mirror || v.size.is_some() || v.grid.is_some()) {
+            return Err("look: --palette takes no other option".into());
         }
         Ok(v)
     }
@@ -177,6 +183,8 @@ fn glyph(c: char) -> [u8; 5] {
         '.' => [0, 0, 0, 0, 2],
         ',' => [0, 0, 0, 2, 4],
         ':' => [0, 2, 0, 2, 0],
+        ';' => [0, 2, 0, 2, 4],
+        '\'' => [2, 2, 0, 0, 0],
         '=' => [0, 7, 0, 7, 0],
         '/' => [1, 1, 2, 4, 4],
         '(' => [1, 2, 2, 2, 1],
@@ -433,6 +441,96 @@ pub fn render(c: &Canvas, v: &View) -> std::result::Result<(usize, usize, Vec<u8
         }
         return Ok((ow, oh, png));
     }
+}
+
+// ---------------------------------------------------------------- the palette
+
+/// The palette look's thicknesses, in coats (`paint::COAT_UM`, 25 µm, is one): a pile laid
+/// thick, one thin coat and a very thin one.
+pub const THICK: f32 = 8.0;
+pub const THIN: f32 = 0.48;
+pub const VERY_THIN: f32 = 0.16;
+/// The drawdown card under the last swatch: white, with a black stripe across it.
+const CARD_WHITE: Rgb = [0.85, 0.85, 0.85];
+const CARD_BLACK: Rgb = [0.01, 0.01, 0.01];
+
+const SW: usize = 136;
+const SH: usize = 48;
+const LABEL_W: usize = 540;
+const GAP: usize = 8;
+
+/// One row's swatches, left to right: the pile laid thick over the ground, a thin and a
+/// very thin coat over the ground, and the thin coat over the black-and-white card. Each is
+/// the pile's own paint and `Paint::over`: nothing on the canvas is read or changed.
+pub fn swatches(p: &paint::Paint, ground: Rgb) -> [Rgb; 5] {
+    [p.over(ground, THICK), p.over(ground, THIN), p.over(ground, VERY_THIN), p.over(CARD_WHITE, THIN), p.over(CARD_BLACK, THIN)]
+}
+
+/// Up to `n` characters a line, broken at spaces where it can.
+fn wrap(s: &str, n: usize) -> Vec<String> {
+    let mut out: Vec<String> = Vec::new();
+    let mut cur = String::new();
+    for w in s.split(' ') {
+        if !cur.is_empty() && cur.chars().count() + 1 + w.chars().count() > n {
+            out.push(std::mem::take(&mut cur));
+        }
+        if !cur.is_empty() {
+            cur.push(' ');
+        }
+        cur.push_str(w);
+        while cur.chars().count() > n {
+            let rest: String = cur.chars().skip(n).collect();
+            out.push(cur.chars().take(n).collect());
+            cur = rest;
+        }
+    }
+    if !cur.is_empty() {
+        out.push(cur);
+    }
+    out
+}
+
+/// The palette look: a row for every pile in `rows` (the global's name, the recipe, the
+/// pile's paint), its swatches (`swatches`) over this canvas's `ground`. A PNG, as `render`.
+pub fn palette(rows: &[(String, String, paint::Paint)], ground: Rgb) -> std::result::Result<(usize, usize, Vec<u8>), String> {
+    if rows.is_empty() {
+        return Err("look: no pile on the palette: no global holds a pile (p = pile{...})".into());
+    }
+    let fs = 2i64;
+    let line = (7 * fs + 2) as usize;
+    let chars = (LABEL_W - 2 * fs as usize) / (4 * fs as usize) - 1;
+    let labels: Vec<Vec<String>> = rows.iter().map(|(n, r, _)| [vec![n.clone()], wrap(r, chars)].concat()).collect();
+    let heights: Vec<usize> = labels.iter().map(|l| (l.len() * line + 6).max(SH + 2 * GAP)).collect();
+    let head = line + 2 * GAP;
+    let w = LABEL_W + 4 * (SW + GAP) + GAP;
+    let h = head + heights.iter().sum::<usize>();
+    let mut im = Img { w, h, px: vec![[0.18, 0.18, 0.18]; w * h] };
+    let x0 = LABEL_W as i64;
+    let col = |k: usize| x0 + (k * (SW + GAP)) as i64;
+    let titles = ["THICK", "12 UM ON GROUND", "4 UM ON GROUND", "12 UM ON CARD"];
+    for (k, t) in titles.iter().enumerate() {
+        im.text(col(k), GAP as i64, t, fs, [0.9; 3]);
+    }
+    let mut y = head as i64;
+    for ((label, rh), (_, _, paint)) in labels.iter().zip(&heights).zip(rows) {
+        for (j, l) in label.iter().enumerate() {
+            im.text(GAP as i64, y + 3 + (j * line) as i64, l, fs, if j == 0 { [1.0; 3] } else { [0.75; 3] });
+        }
+        let sw = swatches(paint, ground);
+        let sy = y + ((*rh - SH) / 2) as i64;
+        for k in 0..3 {
+            im.rect(col(k), sy, col(k) + SW as i64, sy + SH as i64, sw[k], 1.0);
+        }
+        // the card: white, a black stripe across its middle third
+        let (cy0, cy1) = (sy + SH as i64 / 3, sy + 2 * SH as i64 / 3);
+        im.rect(col(3), sy, col(3) + SW as i64, sy + SH as i64, sw[3], 1.0);
+        im.rect(col(3), cy0, col(3) + SW as i64, cy1, sw[4], 1.0);
+        y += *rh as i64;
+    }
+    let buf: Vec<u8> = im.px.iter().flat_map(|p| p.map(|c| (linear_to_srgb(c) * 255.0).round().clamp(0.0, 255.0) as u8)).collect();
+    let mut png = Vec::new();
+    image::codecs::png::PngEncoder::new(&mut png).write_image(&buf, w as u32, h as u32, image::ExtendedColorType::Rgb8).map_err(|e| e.to_string())?;
+    Ok((w, h, png))
 }
 
 /// Three box blurs ≈ a Gaussian of sd `r`.

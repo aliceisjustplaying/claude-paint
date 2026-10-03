@@ -67,16 +67,25 @@ fn save_delivers_the_wet_canvas_as_seen_and_replay_matches() {
     assert!(std::fs::read(&saved).unwrap() == std::fs::read(&replayed).unwrap(), "replay delivers a different PNG");
 }
 
+/// `run` replays at the live width unless `--width` asks for a smaller development preview
+/// (notes/workflow.md); crop replays stay refused.
 #[test]
-fn replays_render_only_at_the_live_width() {
-    let _ = std::fs::create_dir_all(root());
-    let log = root().join("one.lua");
+fn replays_render_at_the_live_width_unless_a_preview_width_is_given() {
+    // a folder of its own: the other test here empties root() when it starts
+    let dir = root().with_extension("width");
+    let _ = std::fs::create_dir_all(&dir);
+    let log = dir.join("one.lua");
     std::fs::write(&log, format!("--@ chunk 1\n{CANVAS}\n")).unwrap();
-    for extra in [&["--width", "1000"][..], &["--width", "2400"][..], &["--crop", "0,0,100,100"][..]] {
-        let mut args = vec!["run", log.to_str().unwrap()];
+    let o = easel(&["run", log.to_str().unwrap(), "--crop", "0,0,100,100"]);
+    assert!(!o.status.success(), "run --crop accepted: no crop renders");
+    assert!(String::from_utf8_lossy(&o.stderr).contains("unknown argument"), "{}", String::from_utf8_lossy(&o.stderr));
+    for (extra, want) in [(&[][..], 2400u32), (&["--width", "600"][..], 600)] {
+        let out = dir.join(format!("one-{want}.png"));
+        let mut args = vec!["run", log.to_str().unwrap(), "--out", out.to_str().unwrap()];
         args.extend_from_slice(extra);
         let o = easel(&args);
-        assert!(!o.status.success(), "run {extra:?} accepted: no alternate renders");
-        assert!(String::from_utf8_lossy(&o.stderr).contains("unknown argument"), "{extra:?}: {}", String::from_utf8_lossy(&o.stderr));
+        assert!(o.status.success(), "run {extra:?}: {}", String::from_utf8_lossy(&o.stderr));
+        assert_eq!(image::image_dimensions(&out).unwrap().0, want, "run {extra:?}");
     }
+    let _ = std::fs::remove_dir_all(&dir);
 }

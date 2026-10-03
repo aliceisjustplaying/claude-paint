@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
-# Finish a painter's painting after the session: replay its log, let it dry
+# Finish a painter's painting after the session: from the save file its
+# session wrote when it closed (<studio>/out/easel/<name>/live.ckpt; `easel
+# finish`, seconds), or, with no save, by replaying its log; let it dry
 # right through, then varnish it and crack it. Painters don't finish their
 # own pictures (the painter build has no varnish{}, cracks{} or relief()),
 # so that varnishing can't become their way of ending.
@@ -15,7 +17,10 @@
 # Writes <out.png> (2400 px, like `easel save`) and, beside it, <out>.lua:
 # the painter's log with the finishing chunk appended, which `easel run`
 # replays to the same picture. Uses the replay build (default features:
-# `replay` and `finish`), built from this checkout.
+# `replay` and `finish`), built from this checkout. A save that isn't of
+# this log (another chunk count or text) is passed over for the replay.
+# After a finish from the save, the save is compressed (zstd, else gzip:
+# live.ckpt.zst or .gz), which scripts/check_painting also reads.
 set -euo pipefail
 # the log names its box, and the replay takes it from there: a box set in
 # the caller's environment (EASEL_BOX) would only make the easel refuse the log
@@ -42,21 +47,14 @@ repo=$(cd "$(dirname "$0")/.." && pwd)
 # the replay build, in the target directory cargo builds into (CARGO_TARGET_DIR too)
 easel=$("$repo/scripts/replay_easel")
 
-# Wait a month at a time until every film is touch-dry (the finishing verbs
-# refuse wet paint), for at most ten years, then finish.
-finishing="-- finishing, applied after the session by scripts/finish_painting
-local function when_dry(f)
-  for _ = 1, 120 do
-    local ok, e = pcall(f)
-    if ok then return end
-    if not tostring(e):find('not all dry', 1, true) then error(e, 0) end
-    wait(30 * 24 * 60)
-  end
-  error('still not dry after ten years', 0)
-end"
-[ $varnish = 1 ] && finishing+=$'\n'"when_dry(function() varnish{coats=$coats} end)"
-[ $cracks = 1 ] && finishing+=$'\n'"when_dry(function() cracks{} end)"
-[ $relief = 1 ] && finishing+=$'\n'"when_dry(function() relief() end)"
+# The finishing chunk (crates/easel/src/finish.rs `chunk`): wait a month at a
+# time until every film is touch-dry (the finishing verbs refuse wet paint),
+# for at most ten years, then finish.
+opts=(--coats "$coats")
+[ $varnish = 1 ] || opts+=(--no-varnish)
+[ $cracks = 1 ] || opts+=(--no-cracks)
+[ $relief = 1 ] && opts+=(--relief)
+finishing=$("$easel" finish --print-chunk "${opts[@]}")
 
 mkdir -p "$(dirname "$out")"
 finished=${out%.png}.lua
@@ -67,5 +65,17 @@ if [ "$finished" -ef "$log" ]; then
 fi
 { cat "$log"; printf '\n--@ chunk (finishing)\n%s\n' "$finishing"; } > "$finished.part"
 mv "$finished.part" "$finished"
+
+# the save the painter's session wrote when it closed: <studio>/out/easel/<name>/live.ckpt
+name=$(basename "$log" .lua)
+save=$(cd "$(dirname "$log")/../.." && pwd)/out/easel/$name/live.ckpt
+if [ -f "$save" ]; then
+  if "$easel" finish "$save" "$out" --log "$log" "${opts[@]}"; then
+    if command -v zstd >/dev/null; then zstd -q -T0 --rm -f "$save"; else gzip -1 -f "$save"; fi
+    echo "finished from the save: $out (log: $finished; save compressed)"
+    exit 0
+  fi
+  echo "finish_painting: the save didn't finish (above); replaying the log instead" >&2
+fi
 "$easel" run "$finished" --out "$out"
 echo "finished: $out (log: $finished)"

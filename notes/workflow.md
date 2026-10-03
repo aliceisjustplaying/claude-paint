@@ -464,3 +464,18 @@ coil's only NaN is its last point) and the finite-points control.
   profile is deterministic (`incremental = false`, `codegen-units = 1`):
   two clean builds give byte-identical binaries and renders, so a hash
   mismatch is a real change, not build noise.
+
+## Fast builds and small previews (development only, 2026-10)
+
+- `cargo build --profile iter -p easel` builds the replay easel into
+  `target/iter/easel`: release optimizations, incremental, 16 codegen units.
+  After the first build a one-line change in `crates/paint` rebuilds in
+  seconds. Its floats can differ from the release build's (that is why
+  `[profile.release]` is not incremental and has one codegen unit), so it is
+  for trying things out only: **real paintings, goldens and studio exports
+  keep the exact release profile** (`cargo build --release`,
+  `scripts/replay_easel`, `scripts/export_r16_studio`).
+- `easel run <log.lua> --width 600 --out preview.png` replays a log narrower
+  than the 2400 px it was painted at. Kernel radii are in mm, so a preview is
+  not the painting at a smaller size: it tests code, not looks. Live sessions
+  stay at 2400 px.

@@ -45,6 +45,8 @@ pub struct Studio {
     pub clock0: f64,
     pub rng: Rng,
     pub brushes: Vec<Weak<RefCell<Held>>>,
+    /// The painting knives in hand (snapshotted with the brushes).
+    pub knives: Vec<Weak<RefCell<paint::Knife>>>,
     pub out: String,
     /// Time spent evaluating Lua fields in this chunk (s).
     pub field_secs: f64,
@@ -59,7 +61,7 @@ pub struct Studio {
 
 impl Studio {
     pub fn new(width: usize, tubes: Palette) -> Self {
-        Studio { width, canvas: None, style: None, setup: None, seed: 1, chunk: 0, calls: 0, clock: 0.0, clock0: 0.0, rng: Rng::new(1), brushes: Vec::new(), out: String::new(), field_secs: 0.0, view: None, hand: crate::time::Hand::default(), tubes: Rc::new(tubes) }
+        Studio { width, canvas: None, style: None, setup: None, seed: 1, chunk: 0, calls: 0, clock: 0.0, clock0: 0.0, rng: Rng::new(1), brushes: Vec::new(), knives: Vec::new(), out: String::new(), field_secs: 0.0, view: None, hand: crate::time::Hand::default(), tubes: Rc::new(tubes) }
     }
     /// Start chunk `n`: its randomness depends only on the seed and `n`.
     pub fn begin(&mut self, n: u64) {
@@ -73,6 +75,11 @@ impl Studio {
     pub(crate) fn auto_seed(&mut self) -> u64 {
         self.calls += 1;
         mixseed(self.seed, self.chunk, self.calls)
+    }
+
+    pub fn live_knives(&mut self) -> Vec<Rc<RefCell<paint::Knife>>> {
+        self.knives.retain(|w| w.strong_count() > 0);
+        self.knives.iter().filter_map(|w| w.upgrade()).collect()
     }
 
     pub fn live_brushes(&mut self) -> Vec<Rc<RefCell<Held>>> {
@@ -366,6 +373,55 @@ pub struct Brush {
     st: S,
 }
 
+/// A painting knife (`knife{width=}`): k:load(pile, amount), k:lay(points,
+/// {pressure=, angle=, lift=}), k:scrape(points, {pressure=, angle=}), k:wipe().
+pub struct KnifeU {
+    k: Rc<RefCell<paint::Knife>>,
+    st: S,
+}
+
+impl UserData for KnifeU {
+    fn add_fields<F: mlua::UserDataFields<Self>>(f: &mut F) {
+        f.add_field_method_get("width", |_, k| Ok(k.k.borrow().width));
+    }
+    fn add_methods<M: UserDataMethods<Self>>(m: &mut M) {
+        m.add_method("load", |_, k, (p, amount): (Value, Option<f32>)| {
+            let (paint, color) = brushload(&k.st, &p, &Value::Nil, "load")?;
+            k.k.borrow_mut().load(paint, amount.unwrap_or(0.6));
+            time::trip(&k.st, color);
+            Ok(())
+        });
+        m.add_method("wipe", |_, k, ()| {
+            k.k.borrow_mut().wipe();
+            Ok(())
+        });
+        m.add_method("fullness", |_, k, ()| Ok(k.k.borrow().fullness()));
+        for (name, lay) in [("lay", true), ("scrape", false)] {
+            m.add_method(name, move |_, k, (pts, o): (Value, Option<Table>)| {
+                let pts = points(&pts)?;
+                if pts.is_empty() {
+                    return err(format!("k:{name}: needs points"));
+                }
+                let (mut pressure, mut angle, mut lift) = (if lay { (0.5, 0.5) } else { (1.0, 1.0) }, None, if lay { 0.1 } else { 0.0 });
+                if let Some(o) = &o {
+                    check_keys(o, &["pressure", "angle", "lift"], &format!("k:{name}"))?;
+                    if let Some(p) = pair(o, "pressure")? {
+                        pressure = p;
+                    }
+                    angle = num(o, "angle")?;
+                    if let Some(l) = num(o, "lift")? {
+                        lift = l.clamp(0.0, 1.0);
+                    }
+                }
+                time::verb(&k.st, Verb::Marks, |s| {
+                    s.canvas.as_mut().ok_or_else(no_canvas)?.knife(&mut k.k.borrow_mut(), &pts, pressure, angle, lay, lift);
+                    Ok(())
+                })
+            });
+        }
+    }
+}
+
 impl UserData for Brush {
     fn add_fields<F: mlua::UserDataFields<Self>>(f: &mut F) {
         f.add_field_method_get("width", |_, b| Ok(b.held.borrow().tool.width));
@@ -509,6 +565,9 @@ impl UserData for PileU {
         });
         m.add_meta_method(MetaMethod::ToString, |_, p, ()| {
             let parts: Vec<String> = p.parts.iter().map(|(n, k)| format!("{n} {}", fmt_num(*k))).collect();
+            if p.medium < 0.0 {
+                return Ok(format!("pile({}; blotted {})", parts.join(", "), fmt_num(-p.medium)));
+            }
             Ok(format!("pile({}; medium {})", parts.join(", "), fmt_num(p.medium)))
         });
     }
@@ -1296,15 +1355,27 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
     }
 
     // pile{{"lead white", 6}, {"smalt", 1}, ..., medium=0.2}: knife a pile
-    // from tubes, in parts by volume, with that share of oil medium
+    // from tubes, in parts by volume, with that share of oil medium (or
+    // blot=0.3: that share of its oil drawn out)
     {
         let st = st.clone();
         g.set("pile", lua.create_function(move |_, t: Table| {
-            check_keys(&t, &["medium"], "pile")?;
+            check_keys(&t, &["medium", "blot"], "pile")?;
             let medium = num(&t, "medium")?.unwrap_or(0.0);
             if !(0.0..=0.95).contains(&medium) {
                 return err("pile: medium is the share of oil medium mixed in, 0 (as from the tube) to 0.95");
             }
+            // blot=: the paint laid on blotting paper first, which draws out
+            // that share of its oil (0..0.5): leaner, stiffer paint that holds
+            // a ridge. It is medium taken away, so not both.
+            let blot = num(&t, "blot")?.unwrap_or(0.0);
+            if !(0.0..=0.5).contains(&blot) {
+                return err("pile: blot is the share of the paint's oil drawn out on blotting paper, 0 to 0.5");
+            }
+            if blot > 0.0 && medium > 0.0 {
+                return err("pile: blot draws oil out and medium adds it; give one");
+            }
+            let medium = if blot > 0.0 { -blot } else { medium };
             let tubes = st.borrow().tubes.clone();
             let (parts, given) = parts_of(&tubes, &t, "pile")?;
             let mix = tubes.pile(parts);
@@ -1442,6 +1513,26 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
             let held = Rc::new(RefCell::new(Held::new(tool, seed)));
             st1.borrow_mut().brushes.push(Rc::downgrade(&held));
             Ok(Brush { held, st: st1.clone() })
+        })?)?;
+    }
+
+    // knife{width=}: a painting knife, its blade that many units long
+    {
+        let st1 = st.clone();
+        g.set("knife", lua.create_function(move |_, o: Option<Table>| {
+            let width = match &o {
+                Some(o) => {
+                    check_keys(o, &["width"], "knife")?;
+                    num(o, "width")?.unwrap_or(20.0)
+                }
+                None => 20.0,
+            };
+            if !(2.0..=200.0).contains(&width) {
+                return err("knife{width=}: the blade's length in units, 2 to 200");
+            }
+            let k = Rc::new(RefCell::new(paint::Knife::new(width)));
+            st1.borrow_mut().knives.push(Rc::downgrade(&k));
+            Ok(KnifeU { k, st: st1.clone() })
         })?)?;
     }
 

@@ -489,6 +489,70 @@ impl Canvas {
         });
     }
 
+    /// The picture as it is seen under a raking light, without changing
+    /// anything (the painter's look; `relief` lights the finished picture):
+    /// the dry relief plus the wet paint's own thickness, lit from `azimuth`
+    /// (degrees: 0 from the right, 90 from the top, 135 from the upper left)
+    /// at `elevation` degrees above the canvas. Ridges cast shadows along the
+    /// light, and wet paint has an oily sheen.
+    pub fn seen_lit(&self, azimuth: f32, elevation: f32, strength: f32) -> Vec<Rgb> {
+        use rayon::prelude::*;
+        const AMBIENT: f32 = 0.35;
+        let base = self.seen();
+        let (w, h) = (self.f.w, self.f.h);
+        let um_px = self.px_mm() * 1000.0;
+        // the surface: dry height plus the wet film where paint is wet
+        let surf = self.wet_surface();
+        let (az, el) = (azimuth.to_radians(), elevation.clamp(3.0, 89.0).to_radians());
+        // toward the light, in pixel axes (y runs down: light from the top is -y)
+        let (lx, ly, lz) = (el.cos() * az.cos(), -el.cos() * az.sin(), el.sin());
+        let k = 0.5 / um_px;
+        // µm the light ray climbs per pixel toward the light
+        let rise = el.tan() * um_px;
+        let (hi, lo) = surf.par_iter().fold(|| (f32::MIN, f32::MAX), |(a, b), &v| (a.max(v), b.min(v))).reduce(|| (f32::MIN, f32::MAX), |(a, b), (c, d)| (a.max(c), b.min(d)));
+        let steps = (((hi - lo) / rise).ceil() as usize).clamp(1, 64);
+        let (sx, sy) = {
+            let m = (lx * lx + ly * ly).sqrt().max(1e-6);
+            (lx / m, ly / m)
+        };
+        let at = |x: isize, y: isize| surf[(y.clamp(0, h as isize - 1) as usize) * w + x.clamp(0, w as isize - 1) as usize];
+        let hv = {
+            let v = [lx, ly, lz + 1.0];
+            let hm = (v[0] * v[0] + v[1] * v[1] + v[2] * v[2]).sqrt();
+            [v[0] / hm, v[1] / hm, v[2] / hm]
+        };
+        (0..w * h)
+            .into_par_iter()
+            .map(|i| {
+                let (x, y) = ((i % w) as isize, (i / w) as isize);
+                let dx = (at(x + 1, y) - at(x - 1, y)) * k;
+                let dy = (at(x, y + 1) - at(x, y - 1)) * k;
+                let m = (dx * dx + dy * dy + 1.0).sqrt();
+                let n = [-dx / m, -dy / m, 1.0 / m];
+                let ndl = (n[0] * lx + n[1] * ly + n[2] * lz).max(0.0);
+                // cast shadow: does the surface toward the light rise above the ray?
+                let h0 = surf[i];
+                let mut lit = 1.0f32;
+                for s in 1..=steps {
+                    let (px, py) = (x as f32 + sx * s as f32, y as f32 + sy * s as f32);
+                    let over = at(px.round() as isize, py.round() as isize) - (h0 + rise * s as f32);
+                    if over > 0.0 {
+                        lit = lit.min(1.0 - (over / (0.5 * rise)).min(1.0));
+                    }
+                }
+                // the room's light fills the shadows: a third of a flat surface's
+                let diffuse = AMBIENT + (1.0 - AMBIENT) * ndl * lit / lz;
+                let shade = (1.0 + strength * (diffuse - 1.0)).max(0.0);
+                // sheen: wet oil shines, dry paint barely
+                let wet = (self.wet.vol[i] * 4.0).min(1.0);
+                let ndh = (n[0] * hv[0] + n[1] * hv[1] + n[2] * hv[2]).max(0.0);
+                let spec = (0.02 + 0.10 * wet) * ndh.powf(40.0) * lit;
+                let p = base[i];
+                [(p[0] * shade + spec).max(0.0), (p[1] * shade + spec).max(0.0), (p[2] * shade + spec).max(0.0)]
+            })
+            .collect()
+    }
+
     /// Save as an 8-bit sRGB PNG with triangular dither (prevents banding in
     /// long, low-contrast gradients). A crop render saves just
     /// the crop (without its margin).

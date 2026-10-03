@@ -21,9 +21,15 @@ pub struct View {
     pub size: Option<usize>,
     /// Coordinate grid: Some(0) picks the step from the zoom.
     pub grid: Option<f32>,
+    /// Raking light on the paint's relief (wet and dry): (azimuth, elevation)
+    /// in degrees, see `Canvas::seen_lit`.
+    pub light: Option<(f32, f32)>,
 }
 
-const LOOK_ARGS: &str = "--crop x0,y0,x1,y1 --mode value,squint,mirror --grid [step] --size N";
+const LOOK_ARGS: &str = "--crop x0,y0,x1,y1 --mode value,squint,mirror,relief --light azimuth,elevation --grid [step] --size N";
+
+/// The relief look's default light: from the upper left, raking at 25°.
+const RAKING: (f32, f32) = (135.0, 25.0);
 
 fn is_num(s: Option<&String>) -> bool {
     s.is_some_and(|s| s.parse::<f32>().is_ok())
@@ -60,13 +66,22 @@ impl View {
                             "value" | "gray" => v.value = true,
                             "squint" | "blur" => v.squint = true,
                             "mirror" => v.mirror = true,
-                            o => return Err(format!("--mode {o}: normal, value, squint, mirror (comma-separated)")),
+                            "relief" | "raking" => v.light = Some(v.light.unwrap_or(RAKING)),
+                            o => return Err(format!("--mode {o}: normal, value, squint, mirror, relief (comma-separated)")),
                         }
                     }
                 }
                 "--value" => v.value = true,
                 "--squint" => v.squint = true,
                 "--mirror" => v.mirror = true,
+                "--light" => {
+                    let s = next()?;
+                    let p: Vec<f32> = s.split(',').map(|t| t.trim().parse::<f32>()).collect::<std::result::Result<_, _>>().map_err(|_| format!("--light {s}: want azimuth,elevation in degrees"))?;
+                    if p.len() != 2 || !(1.0..=90.0).contains(&p[1]) {
+                        return Err(format!("--light {s}: want azimuth,elevation in degrees (elevation 1 to 90)"));
+                    }
+                    v.light = Some((p[0], p[1]));
+                }
                 "--size" => v.size = Some(next()?.parse().map_err(|_| "--size N (px)".to_string())?),
                 "--grid" => {
                     v.grid = Some(0.0);
@@ -360,7 +375,10 @@ pub fn render(c: &Canvas, v: &View) -> std::result::Result<(usize, usize, Vec<u8
         return Err("look: canvas is empty".into());
     }
     let mut size = if v.crop.is_some() { long } else { v.size.unwrap_or(1000).clamp(1, 1600) };
-    let px = c.seen();
+    let px = match v.light {
+        Some((az, el)) => c.seen_lit(az, el, 1.0),
+        None => c.seen(),
+    };
     loop {
         // Average down from the original canvas on each attempt; never enlarge.
         let (ow, oh, img): (usize, usize, Vec<Rgb>) = if long > size {

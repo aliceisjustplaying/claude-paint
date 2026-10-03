@@ -43,6 +43,15 @@ use std::time::{Duration, Instant};
 
 /// The one width a painting is painted, replayed and delivered at (px).
 const LIVE_WIDTH: usize = 2400;
+/// A sketch: a session whose name starts with "sketch" paints at a quarter
+/// of the width, some 16 times faster, for trying out a composition before
+/// the painting; its log replays at the same width.
+const SKETCH_WIDTH: usize = 600;
+
+/// The width a session (or a log, by its file name) paints at.
+fn width_for(name: &str) -> usize {
+    if name.starts_with("sketch") { SKETCH_WIDTH } else { LIVE_WIDTH }
+}
 
 /// The painter build's one session.
 #[cfg(not(feature = "replay"))]
@@ -785,7 +794,8 @@ impl Server {
         // an existing painting goes on with the box its log names; a new one takes the
         // configured box (session::box_for)
         let tubes = session::box_for(text.as_deref())?;
-        let mut srv = Self { name, s: Session::with_box(LIVE_WIDTH, tubes).map_err(|e| e.to_string())?, frames: false, written: None, replayed: 0 };
+        let width = width_for(&name);
+        let mut srv = Self { name, s: Session::with_box(width, tubes).map_err(|e| e.to_string())?, frames: false, written: None, replayed: 0 };
         if let Some(text) = text {
             srv.written = Some(text.clone());
             let chunks = parse_program(&text);
@@ -985,9 +995,9 @@ fn run(args: &[String]) -> Result<(), String> {
             o => return Err(format!("run: unknown argument {o:?} ({RUN_USAGE})")),
         }
     }
-    let width = LIVE_WIDTH;
     let text = std::fs::read_to_string(file).map_err(|e| format!("{file}: {e}"))?;
     let stem = Path::new(file).file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or("easel".into());
+    let width = width_for(&stem);
     let out = flag(args, "--out").map(PathBuf::from).unwrap_or_else(|| root().join("out/lua").join(format!("{stem}.png")));
     let chunks = parse_program(&text);
     if chunks.is_empty() {

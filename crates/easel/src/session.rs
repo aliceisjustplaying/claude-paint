@@ -52,6 +52,7 @@ struct Snap {
     /// The Lua heap (heap.lua's snapshot).
     heap: Table,
     brushes: Vec<(Rc<RefCell<Held>>, Held)>,
+    knives: Vec<(Rc<RefCell<paint::Knife>>, paint::Knife)>,
 }
 
 pub struct Session {
@@ -189,7 +190,11 @@ impl Session {
             let h = b.borrow().clone();
             (b, h)
         }).collect();
-        Ok(Snap { canvas: s.canvas.clone(), style: s.style.clone(), setup: s.setup.clone(), seed: s.seed, clock: s.clock, clock0: s.clock0, hand: s.hand.clone(), view: s.view.clone(), heap, brushes })
+        let knives = s.live_knives().into_iter().map(|k| {
+            let h = k.borrow().clone();
+            (k, h)
+        }).collect();
+        Ok(Snap { canvas: s.canvas.clone(), style: s.style.clone(), setup: s.setup.clone(), seed: s.seed, clock: s.clock, clock0: s.clock0, hand: s.hand.clone(), view: s.view.clone(), heap, brushes, knives })
     }
 
     /// Put everything back as it was at `snap`. Returns how many Lua tables
@@ -200,6 +205,9 @@ impl Session {
         self.inject("restore")?;
         for (b, h) in &snap.brushes {
             *b.borrow_mut() = h.clone();
+        }
+        for (k, h) in &snap.knives {
+            *k.borrow_mut() = h.clone();
         }
         let mut s = self.st.borrow_mut();
         s.canvas = snap.canvas.clone();
@@ -1328,7 +1336,7 @@ mod tests {
         let mut a = Session::new(W).unwrap();
         a.run(CANVAS).unwrap();
         let prog = a.program("t");
-        let want = format!("-- easel session \"t\": a painting replayed chunk by chunk.\n-- Each \"--@ chunk\" line starts one chunk as it was run at the easel.\n--@ engine 2\n\n--@ chunk 1\n{CANVAS}\n");
+        let want = format!("-- easel session \"t\": a painting replayed chunk by chunk.\n-- Each \"--@ chunk\" line starts one chunk as it was run at the easel.\n--@ engine 3\n\n--@ chunk 1\n{CANVAS}\n");
         assert_eq!(prog, want);
         assert_eq!(logged_box(&prog).unwrap(), None);
         assert_eq!(box_for(Some(&prog)).map(|b| b.name), Ok(paint::palette::DEFAULT_BOX), "(EASEL_BOX set in the test's environment?)");

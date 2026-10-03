@@ -530,7 +530,7 @@ impl Canvas {
             }
             return;
         }
-        let t = self.settle_for(ex, &add, &stiff, &sets);
+        let t = self.settle_for(ex, &add, &stiff, &sets, self.engine >= 3);
         // wet paint closes pinholes: a pixel's share of paint is at least
         // what the two neighbors on opposite sides of it both hold (bare
         // neighbors hold none), so the gaps between the hairs of a wide

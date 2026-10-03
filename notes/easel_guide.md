@@ -80,6 +80,12 @@ hand is a little uneven: each brushload takes slightly different
 proportions (about 6%). The palette has room for 16 piles; the oldest is
 scraped off to make room.
 
+`blot` is the opposite of medium: the paint laid out on blotting paper
+first, which draws out that share of its own oil (0 to 0.5):
+`pile({{"<tube>", <parts>}, blot=0.3})`. Blotted paint is leaner, a little
+more opaque and much stiffer: it holds the ridges and furrows of the brush
+as it dries. A pile takes medium or blot, not both.
+
 The tube box:
 
 | tube | pigment | hiding | stiffness | tinting strength | drying |
@@ -134,6 +140,33 @@ Brushes are blunt unless given a `point` (0 blunt, 1 a full point). A
 pointed round or rigger lays a hairline at light pressure and spreads to
 its belly when pressed, so its width follows the pressure and a stroke
 whose pressure falls to 0 ends in a point.
+
+**Loading part of the brush.** `b:load(p, amount, {side=, share=, streak=})`
+dips only part of it: `side` (-1 or 1) and `share` (0..1) put one edge of
+the brush in the pile (a double-loaded brush: two paints side by side in
+one stroke), `streak` (0..1) takes it up unevenly in bands a few hairs
+wide. In `work`, `streak=` does this on every dip and
+`second={pile=, load=, side=, share=, streak=}` dips part of the brush in a
+second pile after the first.
+
+**Thick paint.** `lay` (a brush option) sets how much paint a full brush
+lays down: 1 for an ordinary load, 4 to 16 for impasto. Stiff paint
+(blotted, or a stiff tube with no medium) holds what the brush leaves: in
+it the hairs gather into clumps that lay the stroke in ridges and furrows
+and push walls up along its edges, the coarser the hair (`hair`) the
+coarser the clumps. Fluid paint levels out.
+
+**The knife.** `k = knife{width=<units>}` is a painting knife, its blade
+that long. `k:load(p, amount)` picks up paint, `k:wipe()` cleans it.
+`k:lay(points, {pressure={a, b}, angle=, lift=})` drags it along the points
+with the blade across the path (or at a fixed `angle`): it rests on the
+surface's high points and stands off them by less the harder it is pressed,
+filling what lies under it to the blade's level in a slab with a flat top,
+or over dry impasto catching only the ridges; wet paint standing above the
+blade is cut off into its bead or pressed out at its ends in ridges, and
+the share `lift` of the bead (0.1) stays where it lifts.
+`k:scrape(points, {pressure=})` scrapes wet paint off down to the blade
+(at full pressure, down to the dry paint) and keeps it on the blade.
 
 ## Covering an area
 
@@ -403,6 +436,8 @@ in canvas units, not a position and width/height.
 | `mode: "value"` | in grays |
 | `mode: "squint"` | blurred, as through half-closed eyes |
 | `mode: "mirror"` | flipped left to right |
+| `mode: "relief"` | under a raking light from the upper left, so the paint's ridges, furrows and slabs show (wet paint shines) |
+| `mode: "relief"`, `light: "45,15"` | the light from that azimuth (degrees: 0 from the right, 90 from the top) and elevation |
 | `mode: "value,squint"`, `size: 600` | modes combine; `size` sets the long side |
 | `grid: true` | a squared grid in canvas units, labeled along the edges |
 | `crop: "300,200,500,350"`, `grid: 10` | a window with a grid every 10 units |

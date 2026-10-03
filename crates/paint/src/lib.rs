@@ -41,7 +41,7 @@ pub mod surface;
 pub use canvas::{Canvas, Crop, Frame, set_crop};
 pub use crack::Cracks;
 pub use color::{Mix, Rgb, gradient, hex, shift};
-pub use bristle::{Gesture, Held, Kind, Orient, Part, Tool, Touch};
+pub use bristle::{Gesture, Held, Kind, Knife, Orient, Part, Tool, Touch};
 pub use wet::Paint;
 pub use drying::Stage;
 pub use palette::{Mixture, Palette, Tube};
@@ -70,7 +70,7 @@ pub use shape::Shape;
 ///   stroke right after it feels the film as it would after `wait(0)`); a
 ///   world's thin far bodies keep their depth (`World::add_body`), and rays
 ///   from far off (reflections) don't step over them (`World::trace`).
-pub const ENGINE: u32 = 2;
+pub const ENGINE: u32 = 3;
 
 /// Hermite smoothstep.
 #[inline]

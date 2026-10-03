@@ -146,9 +146,11 @@ function realOf(full: string): string {
 	}
 }
 
-export function lookArgs(p: { crop?: string; mode?: string; size?: number; grid?: boolean | number; light?: string; palette?: boolean }): string[] {
+export function lookArgs(p: { crop?: string; mode?: string; size?: number; grid?: boolean | number; light?: string; palette?: boolean; survey?: boolean; compare?: string }): string[] {
 	const a: string[] = [];
 	if (p.palette === true) a.push("--palette");
+	if (p.survey) a.push("--survey");
+	if (p.compare) a.push("--compare", p.compare);
 	if (p.crop) a.push("--crop", p.crop);
 	if (p.mode) a.push("--mode", p.mode);
 	if (p.light) a.push("--light", p.light);
@@ -205,6 +207,24 @@ export function logReply(log: string): string {
  * `<dir>/look-0012.png (1000x714, 0.04s)` becomes `<dir>/<uuid>.png (1000x714)`, and the file is
  * renamed to match. `studio` resolves a relative path. Anything else is returned as it was.
  */
+/**
+ * `renameLook` for every look an answer names (a survey names several): each
+ * line that begins with a look's png path gets a fresh name; the paths in order.
+ */
+export function renameLooks(studio: string, said: string): { said: string; paths: string[] } {
+	const paths: string[] = [];
+	const lines = said.split("\n").map((line) => {
+		const m = /^(\S+\.png)( \(.*)?$/.exec(line);
+		if (!m) return line;
+		const path = join(dirname(m[1]), `${randomUUID()}.png`);
+		renameSync(resolve(studio, m[1]), resolve(studio, path));
+		paths.push(path);
+		// (without the machine's seconds, as `renameLook`)
+		return path + (m[2] ?? "").replace(/^ \((\d+x\d+), \d+(?:\.\d+)?s\)/, " ($1)");
+	});
+	return { said: lines.join("\n"), paths };
+}
+
 export function renameLook(studio: string, said: string): { said: string; path: string } {
 	const lines = said.split("\n");
 	const m = /^(.*\.png)(?: \((\d+x\d+)(?:, \d+(?:\.\d+)?s)?\))?$/.exec(lines[lines.length - 1]);

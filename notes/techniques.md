@@ -39,6 +39,42 @@ the picture is yours.
   it: lay-in lean (turpentine, blotted), body as from the tube, glazes rich
   (medium). Lean over fat dries matte and patchy over a still-soft layer.
 
+## The whole picture, every time
+
+- **Step back after every campaign** and ask whether the picture still says
+  what it is for (height, glare, distance, weather), not only whether the
+  last thing you fixed is fixed. Then `survey` it at full detail: what you
+  can't see in a whole view is still on the canvas.
+- **The full value range.** Check `mode: "value,squint"`: there should be
+  real darks and real lights, not everything in the middle. A picture of
+  light needs darks for the light to read against.
+- **The sky is a light source.** It has a gradient (warmer, lighter toward
+  the light) and it explains every light and shadow below it. A flat band of
+  one tone is dead; a ruler-straight horizon is too hard: lose it in places.
+- **Forms meet each other physically.** Where a slope ends at water there is
+  a drop, a face, shadow and foam; where a path meets grass there is an edge
+  that belongs to the ground. A boundary drawn as a mask's edge and nothing
+  else flattens the space.
+- **Composition**: avoid a centered target. Unequal masses, a dominant side,
+  one place that is clearly the most important.
+
+## Marks
+
+- **A hierarchy of marks.** A few large decisive strokes (`b:gesture`), many
+  middle ones, some small accents. One stroke size and one shape over a whole
+  area reads as texture, not as the thing.
+- **Marks get smaller with distance.** Sea, field, flower beds: give the pass
+  a `scale_at` that shrinks toward the horizon or the far end, so the
+  brushwork itself recedes.
+- **Marks follow the form.** Leaves along the branch, water level, grass up
+  the slope. Strokes that wander in every direction read as noise.
+- **Light is soft and quiet.** Glare and sunlit openings have soft edges and
+  little texture; busy, outlined strokes turn light into an object (a disc,
+  a moon). Don't paint strokes circling a center inside the light.
+- **Glitter** on water is small, sharp and dense far off, breaking into
+  scattered flecks near you; big uniform dabs read as beads. Tie it to a
+  light in the sky.
+
 ## Color: broken, not mixed flat
 
 - **Many close piles.** Knife three to five piles of neighboring colors
@@ -60,6 +96,12 @@ the picture is yours.
   passages quiet.
 
 ## Impasto
+
+- **Thick where it counts.** Most of a canvas is thin: lay-in and shadows
+  lean (turpentine), middle tones as from the tube. Keep the thick, blotted
+  paint for the lights and the accents. Impasto everywhere is as flat as
+  impasto nowhere. `load_at=` varies the load across a pass; `scale_at` gives
+  ridges of different sizes.
 
 - Stiff paint holds the brush's marks: blot it (`blot=0.3`) or use it as it
   comes from the tube, with no medium. A full brush lays more with `lay=4`

@@ -502,6 +502,118 @@ impl UserData for Brush {
                 Ok(())
             })
         });
+        // b:gesture({{x, y, p}, ...}, {wobble=, orient=, ramps=, shake=, clip=}): one deliberate
+        // stroke along a smooth curve through the points, its pressure following each
+        // point's p (0..1; a point without one takes its neighbors')
+        m.add_method("gesture", |_, b, (pts, o): (Value, Option<Table>)| {
+            let Value::Table(t) = &pts else { return err("gesture: want {{x, y, p}, ...}") };
+            let mut ctl: Vec<(f32, f32, Option<f32>)> = Vec::new();
+            for p in t.sequence_values::<Table>() {
+                let p = p?;
+                let pr: Option<f32> = p.get(3)?;
+                if let Some(v) = pr {
+                    if !(0.0..=1.0).contains(&v) {
+                        return err("gesture: a point's pressure p is 0..1");
+                    }
+                }
+                ctl.push((p.get(1)?, p.get(2)?, pr));
+            }
+            if ctl.len() < 2 {
+                return err("gesture: needs at least two points");
+            }
+            // pressures: missing ones from their neighbors, the ends 0.8 if none is given
+            let given: Vec<(usize, f32)> = ctl.iter().enumerate().filter_map(|(i, c)| c.2.map(|p| (i, p))).collect();
+            let pres: Vec<f32> = (0..ctl.len())
+                .map(|i| {
+                    if given.is_empty() {
+                        return 0.8;
+                    }
+                    let before = given.iter().rev().find(|g| g.0 <= i);
+                    let after = given.iter().find(|g| g.0 >= i);
+                    match (before, after) {
+                        (Some(a), Some(c)) if c.0 > a.0 => a.1 + (c.1 - a.1) * (i - a.0) as f32 / (c.0 - a.0) as f32,
+                        (Some(a), _) => a.1,
+                        (_, Some(c)) => c.1,
+                        _ => 0.8,
+                    }
+                })
+                .collect();
+            let mut wobble = 0.0f32;
+            let mut g_orient = None;
+            let (mut ramps, mut shake, mut clip) = (None, None, None);
+            if let Some(o) = &o {
+                check_keys(o, &["wobble", "orient", "ramps", "shake", "clip"], "gesture")?;
+                wobble = num(o, "wobble")?.unwrap_or(0.0).max(0.0);
+                g_orient = orient_of(o.get("orient")?)?;
+                ramps = pair(o, "ramps")?;
+                shake = num(o, "shake")?;
+                clip = mask_opt(o.get("clip")?)?;
+            }
+            // a Catmull-Rom curve through the points, a sample every unit or so,
+            // with the pressure carried along it
+            let n = ctl.len();
+            let at = |i: isize| { let i = i.clamp(0, n as isize - 1) as usize; (ctl[i].0, ctl[i].1, pres[i]) };
+            let mut path: Vec<(f32, f32, f32)> = Vec::new();
+            for i in 0..n - 1 {
+                let (p0, p1, p2, p3) = (at(i as isize - 1), at(i as isize), at(i as isize + 1), at(i as isize + 2));
+                let seg = ((p2.0 - p1.0).powi(2) + (p2.1 - p1.1).powi(2)).sqrt();
+                let k = (seg / 1.5).ceil().max(2.0) as usize;
+                for j in 0..k {
+                    let t = j as f32 / k as f32;
+                    let (t2, t3) = (t * t, t * t * t);
+                    let cr = |a: f32, b: f32, c: f32, d: f32| 0.5 * (2.0 * b + (-a + c) * t + (2.0 * a - 5.0 * b + 4.0 * c - d) * t2 + (-a + 3.0 * b - 3.0 * c + d) * t3);
+                    path.push((cr(p0.0, p1.0, p2.0, p3.0), cr(p0.1, p1.1, p2.1, p3.1), p1.2 + (p2.2 - p1.2) * t));
+                }
+            }
+            path.push(at(n as isize - 1));
+            // a hand's wobble: a slow sideways drift, units
+            if wobble > 0.0 {
+                let seed = b.st.borrow_mut().rng.next_u64();
+                let nz = paint::Fbm::new(seed as u32, 2, 40.0);
+                let mut out = path.clone();
+                let mut s_len = 0.0f32;
+                for i in 1..path.len() - 1 {
+                    let (dx, dy) = (path[i + 1].0 - path[i - 1].0, path[i + 1].1 - path[i - 1].1);
+                    let m = (dx * dx + dy * dy).sqrt().max(1e-6);
+                    s_len += ((path[i].0 - path[i - 1].0).powi(2) + (path[i].1 - path[i - 1].1).powi(2)).sqrt();
+                    let w = wobble * nz.get(s_len, 0.0);
+                    out[i].0 += -dy / m * w;
+                    out[i].1 += dx / m * w;
+                }
+                path = out;
+            }
+            // pressure: evenly spaced knots along the curve
+            let mut arc = vec![0.0f32; path.len()];
+            for i in 1..path.len() {
+                arc[i] = arc[i - 1] + ((path[i].0 - path[i - 1].0).powi(2) + (path[i].1 - path[i - 1].1).powi(2)).sqrt();
+            }
+            let total = arc[arc.len() - 1].max(1e-6);
+            let knots: Vec<f32> = (0..=16)
+                .map(|q| {
+                    let d = total * q as f32 / 16.0;
+                    let j = arc.partition_point(|&a| a < d).clamp(1, arc.len() - 1);
+                    let (a0, a1) = (arc[j - 1], arc[j]);
+                    let f = if a1 > a0 { (d - a0) / (a1 - a0) } else { 0.0 };
+                    (path[j - 1].2 + (path[j].2 - path[j - 1].2) * f).max(0.0)
+                })
+                .collect();
+            let mut g = Gesture::new(path.iter().map(|p| (p.0, p.1)).collect()).pressure(1.0, 1.0).swell(knots);
+            if let Some((a, z)) = ramps {
+                g = g.ramps(a, z);
+            } else {
+                g = g.ramps(0.02, 0.05);
+            }
+            if let Some(or) = g_orient {
+                g = g.orient(or);
+            }
+            if let Some(s) = shake {
+                g = g.shake(s);
+            }
+            time::verb(&b.st, Verb::Marks, |s| {
+                s.canvas.as_mut().ok_or_else(no_canvas)?.drag(&mut b.held.borrow_mut(), &g, clip.as_deref());
+                Ok(())
+            })
+        });
         // b:touch(x, y, {pressure=, drag={dx,dy}, twist=, angle=, clip=})
         m.add_method("touch", |_, b, (x, y, o): (f32, f32, Option<Table>)| {
             let mut t = Touch::at(x, y);
@@ -841,7 +953,7 @@ impl UserData for WorleyU {
 const WORK_KEYS: &[&str] = &[
     "hand", "pile", "tool", "length", "coverage", "angle", "angle_jitter", "load_at", "cut_in", "pressure", "orient", "dips", "blender", "scrub", "clip",
     "threshold", "ramps", "shake", "curve", "cross", "drift", "tail", "broken", "swell", "clump", "order", "mix_jitter", "seed", "ruler", "load", "hug",
-    "fill", "visible", "behind", "at", "view", "edge", "streak", "second",
+    "fill", "visible", "behind", "at", "view", "edge", "streak", "second", "scale_at",
 ];
 
 const PART_KEYS: &[&str] = &["side", "share", "streak"];
@@ -979,6 +1091,11 @@ fn work(st: &S, mask: Rc<Mask>, o: Table, preset: Option<&str>) -> Result<()> {
     }
     if let Some(v) = o.get::<Option<Value>>("load_at")? {
         h.load_at = Some(scalar_field(st, &v, b, "load_at")?);
+    }
+    // scale_at=: the size of the marks across the area (a number or function(x, y)
+    // multiplying stroke length and brush width; more strokes where they are smaller)
+    if let Some(v) = o.get::<Option<Value>>("scale_at")? {
+        h.scale_at = Some(scalar_field(st, &v, b, "scale_at")?);
     }
     if let Some(t) = o.get::<Option<Value>>("cut_in")? {
         h = h.cut_in(tool_of(&t)?);

@@ -65,7 +65,9 @@ const USAGE: &str = "easel: a live painting session (see notes/easel_guide.md)
 
   easel open          start or reattach; replays paintings/lua/painting.lua if it exists
   easel do '<lua>'  |  easel do -f chunk.lua  |  easel do - (stdin)     [--look] also looks afterwards
-  easel look [--crop x0,y0,x1,y1] [--mode value,squint,mirror] [--grid [step]] [--size 1000]
+  easel look [--crop x0,y0,x1,y1] [--mode value,squint,mirror,relief,gallery] [--grid [step]] [--size 1000]
+             [--survey]   the whole canvas at full detail, in tiles
+             [--compare <earlier look png>]   that look beside this one
   easel look --palette   the piles the globals hold: thick, thin and very thin over the ground, thin over a card
   easel log           the painting so far (= paintings/lua/painting.lua)
   easel status        chunks, width, canvas
@@ -81,7 +83,9 @@ const USAGE: &str = "easel: a live painting session (see notes/easel_guide.md)
 
   easel open <name>    start or reattach; replays paintings/lua/<name>.lua if it exists
   easel do '<lua>'  |  easel do -f chunk.lua  |  easel do - (stdin)     [--look] also looks afterwards
-  easel look [--crop x0,y0,x1,y1] [--mode value,squint,mirror] [--grid [step]] [--size 1000]
+  easel look [--crop x0,y0,x1,y1] [--mode value,squint,mirror,relief,gallery] [--grid [step]] [--size 1000]
+             [--survey]   the whole canvas at full detail, in tiles
+             [--compare <earlier look png>]   that look beside this one
   easel look --palette   the piles the globals hold: thick, thin and very thin over the ground, thin over a card
   easel log           the session so far (= paintings/lua/<name>.lua)
   easel status        chunks, width, canvas
@@ -889,6 +893,28 @@ impl Server {
     }
 
     fn look(&mut self, args: &[String], path: Option<PathBuf>) -> Result<String, String> {
+        // --survey: the whole canvas at full detail, in tiles; --compare <png>: an
+        // earlier look beside this one (taken out before the view's own arguments)
+        let (mut survey, mut compare, mut rest) = (false, None::<PathBuf>, Vec::new());
+        let mut i = 0;
+        while i < args.len() {
+            match args[i].as_str() {
+                "--survey" => survey = true,
+                "--compare" => {
+                    compare = Some(PathBuf::from(args.get(i + 1).ok_or("--compare needs an earlier look's png")?));
+                    i += 1;
+                }
+                a => rest.push(a.to_string()),
+            }
+            i += 1;
+        }
+        if survey {
+            return self.survey(&rest);
+        }
+        if let Some(prev) = compare {
+            return self.compare(&rest, &prev);
+        }
+        let args = &rest[..];
         let v = look::View::parse(args)?;
         let t0 = Instant::now();
         if v.palette {
@@ -908,6 +934,57 @@ impl Server {
             }
         };
         Ok(format!("{} ({w}x{h}, {:.2}s)\n", path.display(), t0.elapsed().as_secs_f64()))
+    }
+
+    /// The whole canvas at full detail (1:1), in tiles of at most 500 units a side,
+    /// in reading order; the view's modes (gallery, value...) apply to each.
+    fn survey(&mut self, args: &[String]) -> Result<String, String> {
+        if args.iter().any(|a| a == "--crop" || a == "--size") {
+            return Err("look --survey covers the whole canvas at full detail: no --crop or --size".into());
+        }
+        let c = self.s.canvas().ok_or("no canvas yet: the first chunk is canvas{...}")?;
+        let (wu, hu) = (c.width(), c.height());
+        let cols = (wu / 500.0).ceil().max(1.0) as usize;
+        let rows = (hu / 500.0).ceil().max(1.0) as usize;
+        let (tw, th) = (wu / cols as f32, hu / rows as f32);
+        let mut out = format!("survey: {rows} rows x {cols} columns of {tw:.0} x {th:.0} units, at full detail\n");
+        for r in 0..rows {
+            for k in 0..cols {
+                let crop = format!("{},{},{},{}", k as f32 * tw, r as f32 * th, (k + 1) as f32 * tw, (r + 1) as f32 * th);
+                let mut a = args.to_vec();
+                a.extend(["--crop".to_string(), crop.clone()]);
+                let v = look::View::parse(&a)?;
+                let (w, h, png) = look::render(&c, &v)?;
+                let p = new_look(&session_dir(&self.name), &png)?;
+                out += &format!("{} ({w}x{h}): row {} column {} ({crop})\n", p.display(), r + 1, k + 1);
+            }
+        }
+        Ok(out)
+    }
+
+    /// An earlier look (left) beside the same view of the canvas now (right), at
+    /// the same height, for judging what a change did.
+    fn compare(&mut self, args: &[String], prev: &Path) -> Result<String, String> {
+        let mut a = args.to_vec();
+        if !a.iter().any(|x| x == "--size" || x == "--crop") {
+            a.extend(["--size".to_string(), "800".to_string()]);
+        }
+        let v = look::View::parse(&a)?;
+        let c = self.s.canvas().ok_or("no canvas yet: the first chunk is canvas{...}")?;
+        let (_, _, png) = look::render(&c, &v)?;
+        let now = image::load_from_memory(&png).map_err(|e| e.to_string())?.to_rgb8();
+        let before = image::open(prev).map_err(|e| format!("--compare {}: {e}", prev.display()))?.to_rgb8();
+        let h = now.height();
+        let bw = ((before.width() as f64 * h as f64 / before.height() as f64).round() as u32).max(1);
+        let before = image::imageops::resize(&before, bw, h, image::imageops::FilterType::Lanczos3);
+        let gap = 12;
+        let mut both = image::RgbImage::from_pixel(bw + gap + now.width(), h, image::Rgb([24, 24, 28]));
+        image::imageops::replace(&mut both, &before, 0, 0);
+        image::imageops::replace(&mut both, &now, (bw + gap) as i64, 0);
+        let mut bytes = Vec::new();
+        both.write_to(&mut std::io::Cursor::new(&mut bytes), image::ImageFormat::Png).map_err(|e| e.to_string())?;
+        let p = new_look(&session_dir(&self.name), &bytes)?;
+        Ok(format!("{} ({}x{}): left {}, right now\n", p.display(), both.width(), h, prev.display()))
     }
 
     /// The log on disk is the one the session wrote, and holds everything it ran.

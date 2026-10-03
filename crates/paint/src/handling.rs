@@ -45,6 +45,11 @@ pub struct Handling<'a> {
     /// evaluated at each stroke's center): a glaze goes on deeper where the
     /// brush carries more.
     pub load_at: Option<Field<'a, f32>>,
+    /// The size of the marks across the canvas (multiplies stroke length and
+    /// brush width, evaluated at each stroke's center): smaller marks where
+    /// things are far away, larger near. The pass lays more strokes where they
+    /// are smaller, so its coverage stays as asked (`scale_at`).
+    pub scale_at: Option<Field<'a, f32>>,
     /// Cut in the region's edges with this brush instead of clipping: body
     /// strokes stop short of the edge, then short strokes follow the outline.
     pub cut_in: Option<Tool>,
@@ -175,6 +180,7 @@ impl<'a> Handling<'a> {
             mix_jitter: 0.08,
             pile: None,
             load_at: None,
+            scale_at: None,
             cut_in: None,
             curve: 0.05,
             wave: 0.25,
@@ -409,6 +415,10 @@ struct Plan {
     /// The second dip after it, if the brush is double-loaded: its paint,
     /// load and pile color.
     dip2: Option<(Paint, f32, Rgb)>,
+    /// A brush of its own size for this stroke (`scale_at`), else the pass's.
+    tool: Option<Tool>,
+    /// Sized by `scale_at`: a fresh brush of its size that always dips.
+    sized: bool,
 }
 
 impl Canvas {
@@ -447,7 +457,31 @@ impl Canvas {
         let mean_len = hd.mean_length();
         // one stroke per gap² of area gives coverage = width · length / gap²
         let gap = (hd.tool.width * mean_len.max(hd.tool.width) / hd.coverage.max(0.05)).sqrt().max(0.5);
-        let centers = place(hd, f, gap, mean_len, seed, &mut rng);
+        // marks sized across the canvas (`scale_at`): centers placed as densely
+        // as the smallest marks need, then thinned where marks are larger, by
+        // (smallest / here)², so each place gets the coverage asked
+        const SCALE_RANGE: (f32, f32) = (0.15, 6.0);
+        let scale_here = |x: f32, y: f32| hd.scale_at.as_ref().map_or(1.0, |sf| sf(x.clamp(0.0, f.width()), y.clamp(0.0, f.height())).clamp(SCALE_RANGE.0, SCALE_RANGE.1));
+        let centers = match &hd.scale_at {
+            None => place(hd, f, gap, mean_len, 1.0, seed, &mut rng),
+            Some(_) => {
+                let mut kmin = f32::MAX;
+                let mut y = 0.0;
+                while y <= f.height() {
+                    let mut x = 0.0;
+                    while x <= f.width() {
+                        if mask_at(mask, x, y) >= hd.threshold {
+                            kmin = kmin.min(scale_here(x, y));
+                        }
+                        x += 8.0;
+                    }
+                    y += 8.0;
+                }
+                let kmin = if kmin == f32::MAX { 1.0 } else { kmin };
+                let all = place(hd, f, gap * kmin, mean_len * kmin, kmin, seed, &mut rng);
+                all.into_iter().filter(|&(x, y, _)| rng.f() < (kmin / scale_here(x, y)).powi(2)).collect()
+            }
+        };
         let drift = crate::noise::Fbm::new((seed as u32) ^ 0xD21F, 3, hd.drift.1);
         // clipped strokes may start outside the region and brush into it
         let reach_in = hd.clip && hd.cut_in.is_none();
@@ -480,7 +514,11 @@ impl Canvas {
             if !inside && !reach_in && !carry {
                 continue;
             }
-            let len = stroke_length(hd, &mut rng);
+            let len0 = stroke_length(hd, &mut rng);
+            // (sized marks: this stroke's length and brush, from where it is)
+            let k = scale_here(cx, cy);
+            let len = if hd.scale_at.is_some() { len0 * k } else { len0 };
+            let stool = hd.scale_at.as_ref().map(|_| Tool { width: hd.tool.width * k, ..hd.tool.clone() });
             let bend = rng.normal() * hd.angle_jitter;
             let pts: Vec<(f32, f32)> = if hd.scrub > 0 {
                 let a = (hd.angle)(cx, cy) + bend;
@@ -516,17 +554,22 @@ impl Canvas {
                 continue;
             }
             let pieces = if hd.scrub > 0 { vec![pts] } else { break_stroke(hd, pts, &mut rng) };
-            for (k, piece) in pieces.into_iter().enumerate() {
+            for (kp, piece) in pieces.into_iter().enumerate() {
                 let n_knots = 2 + (len / (4.0 * hd.tool.width.max(1.0))).clamp(1.0, 4.0) as usize;
-                let (rect, mut plan) = finish_plan(self, hd, &hd.tool, (cx, cy), piece, &mut rng);
-                if k > 0 {
+                let (rect, mut plan) = finish_plan(self, hd, stool.as_ref().unwrap_or(&hd.tool), (cx, cy), piece, &mut rng);
+                if stool.is_some() {
+                    plan.tool = stool.clone();
+                    plan.sized = true;
+                    plan.fresh = true;
+                }
+                if kp > 0 {
                     // a restart carries on with the paint left on the brush
                     plan.dip = None;
                     plan.dip2 = None;
                 }
                 plan.passage = passage as u32;
                 // a dab takes only a touch of paint, not a full stroke's load
-                plan.load *= (len / hd.length.0.max(1e-3)).clamp(0.25, 1.0);
+                plan.load *= (len0 / hd.length.0.max(1e-3)).clamp(0.25, 1.0);
                 if hd.swell > 0.0 {
                     plan.swell = (0..n_knots).map(|_| (1.0 + rng.normal() * hd.swell).clamp(0.35, 1.6)).collect();
                 }
@@ -774,7 +817,7 @@ impl Canvas {
             for p in t.iter_mut() {
                 let moved = last != Some(p.passage);
                 last = Some(p.passage);
-                if since % hd.dip_every != 0 && !moved {
+                if since % hd.dip_every != 0 && !moved && !p.sized {
                     p.dip = None;
                     p.dip2 = None;
                     since += 1;
@@ -815,7 +858,7 @@ impl Canvas {
                     first_id.wrapping_add(k - 1)
                 });
                 if p.fresh {
-                    held = Held::new(tool.clone(), seed ^ 0xF4E5 ^ (p.pts[0].0.to_bits() as u64) << 20 ^ p.pts[0].1.to_bits() as u64);
+                    held = Held::new(p.tool.clone().unwrap_or_else(|| tool.clone()), seed ^ 0xF4E5 ^ (p.pts[0].0.to_bits() as u64) << 20 ^ p.pts[0].1.to_bits() as u64);
                 }
                 if let Some(paint) = p.dip {
                     if hd.blender {
@@ -877,7 +920,7 @@ fn finish_plan(cv: &Canvas, hd: &Handling, tool: &Tool, c: (f32, f32), pts: Vec<
             let mut r2 = Rng::new(prng.next_u64() ^ 0x2D1F);
             (s2.palette.remix(&s2.pile, hd.mix_jitter, &mut r2).laid(s2.medium), s2.load * load_k, s2.pile.color)
         });
-        return (rect, Plan { pts, pressure, fade, dip: Some(paint), load, swell: Vec::new(), passage: 0, fresh: false, id: None, want: pile.color, dip2 });
+        return (rect, Plan { pts, pressure, fade, dip: Some(paint), load, swell: Vec::new(), passage: 0, fresh: false, id: None, want: pile.color, dip2, tool: None, sized: false });
     }
     let target = (hd.color)(c.0, c.1);
     let lab = to_oklab(target);
@@ -888,7 +931,7 @@ fn finish_plan(cv: &Canvas, hd: &Handling, tool: &Tool, c: (f32, f32), pts: Vec<
     ]);
     let paint = Paint::new(col, hd.hiding, hd.stiff);
     let load = hd.load * load_k;
-    (rect, Plan { pts, pressure, fade, dip: Some(paint), load, swell: Vec::new(), passage: 0, fresh: false, id: None, want: target, dip2: None })
+    (rect, Plan { pts, pressure, fade, dip: Some(paint), load, swell: Vec::new(), passage: 0, fresh: false, id: None, want: target, dip2: None, tool: None, sized: false })
 }
 
 /// The part of a stroke through `c` that stays inside `mask` (≥ 0.5), pulled
@@ -1082,8 +1125,8 @@ fn mask_at(mask: &Mask, x: f32, y: f32) -> f32 {
 /// side), jittered cell by cell so coverage stays even, and thinned or
 /// crowded by a slow density field (`clump`). Lattices of neighboring
 /// passages don't line up, so passages meet raggedly.
-fn place(hd: &Handling, f: Frame, gap: f32, mean_len: f32, seed: u64, rng: &mut Rng) -> Vec<(f32, f32, usize)> {
-    let w = hd.tool.width.max(0.3);
+fn place(hd: &Handling, f: Frame, gap: f32, mean_len: f32, wk: f32, seed: u64, rng: &mut Rng) -> Vec<(f32, f32, usize)> {
+    let w = hd.tool.width.max(0.3) * wk;
     let len = mean_len.max(w);
     // spacing along a row and between rows: the same overlap both ways
     let along = gap * (len / w).sqrt();

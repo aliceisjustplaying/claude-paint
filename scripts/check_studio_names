@@ -37,10 +37,11 @@ ARTISTS=$(printf '%s\n' "${artists[@]}") BOXES=$(printf '%s\n' "${box_artists[@]
   my $dest = shift;
   my @env = map { [grep { length } split /\n/, decode("UTF-8", $ENV{$_} // "")] } qw(ARTISTS BOXES OWN);
   my ($artists, $boxes, $own) = @env;
-  my %own = map { $_ => 1 } @$own;
-  my @others = grep { !$own{$_} } @$artists;
   # a name as a pattern: its spaces and hyphens match a space, a hyphen or nothing
   my $pat = sub { join "[- ]?", split /[- ]/, $_[0] };
+  # the own names of the studio: an artist as the list spells it, or a name its pattern
+  # matches ("Cézanne" for "C[eé]zanne"), so a caller does not copy the patterns
+  my @others = grep { my $a = $_; my $p = $pat->($a); !grep { $_ eq $a || /^(?:$p)$/i } @$own } @$artists;
   my $words = join "|", map { $pat->($_) } @others;
   my %box = map { $_ => 1 } @$boxes;
   my $inside = join "|", map { $pat->($_) } grep { $box{$_} || /[- \[]/ } @others;

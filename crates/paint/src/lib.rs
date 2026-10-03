@@ -76,7 +76,10 @@ pub use shape::Shape;
 ///   touch-dry after 45 h (18 h); bone black, cobalt blue, Prussian blue,
 ///   raw sienna, the cadmiums, the ultramarines, rose madder and permanent
 ///   alizarin dry at new rates (`Tube::drying_3`, `drying::drier::engine3`), and a box keeps
-///   its engine when tubes are added (`Palette::with`).
+///   its engine when tubes are added (`Palette::with`);
+///   and the easel's `pairs` and `next` walk every table in a fixed order, so
+///   a failed chunk is put back without a rebuild from the log (easel
+///   session.rs `canonical_tables`).
 pub const ENGINE: u32 = 3;
 
 /// Hermite smoothstep.

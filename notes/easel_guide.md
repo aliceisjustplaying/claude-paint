@@ -440,10 +440,10 @@ other option, and nothing on the canvas or the clock changes.
   `table.unpack`). Loop variables are read-only. Don't write `global`
   declarations (one switches its chunk to strict mode).
 - **`pairs` walks a table in the same order in every session and replay.**
-  Tables keyed by strings, numbers and booleans walk in Lua's order; a
-  table with any other key walks in a fixed order (booleans, numbers,
-  strings, then other keys in the order they were made). For a big list,
-  `ipairs` is faster.
+  Every table walks in a fixed order: booleans, numbers, strings (each
+  ascending), then other keys in the order they were made. (Paintings
+  begun before engine 3 walk tables keyed by strings, numbers and booleans
+  in Lua's order.) For a big list, `ipairs` is faster.
 - **No memory addresses.** A table, function or userdata without
   `__tostring` prints as `table: (hidden)` (its `__name` for the type),
   in `print`, `tostring`, `string.format`'s `%s` and errors alike, and

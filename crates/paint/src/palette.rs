@@ -186,7 +186,7 @@ pub fn catalog() -> Vec<Tube> {
         tube("barium yellow", "barium chromate (lemon yellow)", "#efd75c", 0.45, 0.7, 0.9, drier::CHROMATE),
         // zinc yellow darkens with time (to dichromate brown or Cr2O3 green)
         #[cfg(any(feature = "box-giverny", feature = "box-impressionist"))]
-        tube("zinc yellow", "potassium zinc chromate", "#fcc400", 0.4, 0.6, 0.65, drier::OCHRE),
+        tube("zinc yellow", "potassium zinc chromate", "#fcc400", 0.4, 0.6, 0.65, drier::ZINC_YELLOW),
         // cochineal lake: found with madder in late-19th-c. French paint
         // (Pozzi et al. 2014); fugitive. Estimates
         #[cfg(any(feature = "box-giverny", feature = "box-impressionist"))]
@@ -297,7 +297,7 @@ const BOXES: &[(&str, &[&str])] = &[
         ],
     ),
     // late Monet, as analyses of his paintings from 1887 to 1926 found it
-    // (notes/giverny-box.md)
+    // (notes/research/giverny_materials.md)
     #[cfg(feature = "box-giverny")]
     (
         "giverny",
@@ -306,7 +306,7 @@ const BOXES: &[(&str, &[&str])] = &[
         ],
     ),
     // what analyses found across the Impressionists, 1869 to the 1890s
-    // (notes/impressionist-materials.md)
+    // (notes/research/impressionist_materials.md)
     #[cfg(feature = "box-impressionist")]
     (
         "impressionist",

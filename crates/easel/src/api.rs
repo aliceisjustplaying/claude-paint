@@ -431,7 +431,14 @@ impl UserData for Brush {
         // b:load(pile, amount?): dip into a pile on the palette (amount 0..1 of a full load)
         // b:load(pile, amount, {side=, share=, streak=}): only part of the brush goes in
         m.add_method("load", |_, b, (p, amount, extra): (Value, Option<f32>, Value)| {
-            if let Value::Table(t) = &extra {
+            // (on a legacy canvas a table is its load's options: brushload's)
+            #[cfg(feature = "replay")]
+            let legacy = crate::legacy::on(&b.st);
+            #[cfg(not(feature = "replay"))]
+            let legacy = false;
+            if let Value::Table(t) = &extra
+                && !legacy
+            {
                 check_keys(t, PART_KEYS, "b:load")?;
                 let mut part = part_of(t, "b:load")?;
                 part.seed = b.st.borrow_mut().rng.next_u64();
@@ -1394,6 +1401,9 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
                 Some(o) => return err(format!("pile: oil {o:?}: \"linseed\", \"walnut\" or \"poppy\"")),
             };
             let tubes = st.borrow().tubes.clone();
+            if turps > 0.0 && tubes.engine < 3 {
+                return err(format!("pile: turps= needs engine 3; this painting is painted with engine {} (its log says so), where turpentine does nothing", tubes.engine));
+            }
             let (parts, given) = parts_of(&tubes, &t, "pile")?;
             let mut mix = tubes.pile(parts);
             mix.solvent = turps;
@@ -1647,6 +1657,9 @@ fn ground_of(tubes: &Palette, v: &Value) -> Result<Vec<Ground>> {
             Value::Integer(n) => (n as f32).clamp(0.0, 1.0),
             _ => return err("canvas: a ground layer's absorbent= is true or 0..1"),
         };
+        if absorbent > 0.0 && tubes.engine < 3 {
+            return err(format!("canvas: a ground layer's absorbent= needs engine 3; this painting is painted with engine {} (its log says so), where a ground absorbs nothing", tubes.engine));
+        }
         out.push(Ground { color: m.color, hiding: m.hiding, um, stiff: m.stiff, apply, absorbent });
     }
     if out.is_empty() {

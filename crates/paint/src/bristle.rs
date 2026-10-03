@@ -2237,8 +2237,8 @@ mod kernel_traps {
     /// `wait` counts as a film (up to 1.05e-5), with cure 0.1, the rest
     /// thick wet paint with cure 0.05.
     fn thin_and_thick() -> Canvas {
-        let mut c = Canvas::new(600, 2.0, hex("#e8e0d0")).with_size_mm(440.0);
-        assert!(c.engine >= 2);
+        // (the recorded hashes are engine 2's)
+        let mut c = Canvas::new(600, 2.0, hex("#e8e0d0")).with_size_mm(440.0).with_engine(2);
         c.wait(1.0);
         let n = c.f.w * c.f.h;
         assert_eq!(c.wet.clock.px.len(), n, "drying state allocated");
@@ -2552,14 +2552,11 @@ impl Canvas {
             // the blade's pixels, and the highest dry point under it
             let nb = ((2.0 * half / 0.7).ceil() as usize).max(2);
             let mut blade: Vec<(usize, f32, (f32, f32))> = Vec::with_capacity(nb + 1);
-            let mut top_dry = f32::MIN;
             for q in 0..=nb {
                 let u = -half + 2.0 * half * q as f32 / nb as f32;
                 let (x, y) = (c.0 + e.0 * u, c.1 + e.1 * u);
                 if let Some(i) = pix(x, y) {
                     if blade.last().map(|b| b.0) != Some(i) {
-                        // SAFETY: i indexes the window's buffers
-                        top_dry = top_dry.max(unsafe { *height.add(i) });
                         blade.push((i, u / half, (x, y)));
                     }
                 }
@@ -2567,7 +2564,6 @@ impl Canvas {
             if blade.is_empty() {
                 continue;
             }
-            let _ = top_dry;
             // the steel flexes over broad relief and bridges fine hollows: the
             // blade rests on the highest point within FLEX_MM along it
             let hs: Vec<f32> = blade.iter().map(|b| unsafe { *height.add(b.0) }).collect();
@@ -2589,14 +2585,15 @@ impl Canvas {
                         let (l, hd) = (*sf.lat.add(i), *sf.hide.add(i));
                         let cure = if sf.dry.is_null() { 0.0 } else { (*sf.dry.add(i)).cure };
                         sf.take(i, ex);
-                        if u.abs() > 0.85 {
-                            // pressed out past the blade's end into a ridge
-                            let o = half * u.signum() * 0.2 + 1.5 * u.signum();
-                            if let Some(jx) = pix(x + e.0 * o, y + e.1 * o) {
-                                sf.add(jx, ex, &l, hd, cure);
-                                *sf.cover.add(jx) = 1.0;
-                                grow(&mut bounds, (x + e.0 * o) as usize, (y + e.1 * o) as usize, (x + e.0 * o) as usize + 1, (y + e.1 * o) as usize + 1);
-                            }
+                        // pressed out past the blade's end into a ridge (off
+                        // the canvas's edge there is nowhere to press it: it
+                        // stays on the blade)
+                        let o = half * u.signum() * 0.2 + 1.5 * u.signum();
+                        let ridge = if u.abs() > 0.85 { pix(x + e.0 * o, y + e.1 * o) } else { None };
+                        if let Some(jx) = ridge {
+                            sf.add(jx, ex, &l, hd, cure);
+                            *sf.cover.add(jx) = 1.0;
+                            grow(&mut bounds, (x + e.0 * o) as usize, (y + e.1 * o) as usize, (x + e.0 * o) as usize + 1, (y + e.1 * o) as usize + 1);
                         } else {
                             let tv = ex * px_area;
                             k.cure = mix_cure(k.cure, k.vol, cure, tv);

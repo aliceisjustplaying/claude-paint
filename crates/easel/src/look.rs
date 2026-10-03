@@ -75,14 +75,7 @@ impl View {
                 "--value" => v.value = true,
                 "--squint" => v.squint = true,
                 "--mirror" => v.mirror = true,
-                "--light" => {
-                    let s = next()?;
-                    let p: Vec<f32> = s.split(',').map(|t| t.trim().parse::<f32>()).collect::<std::result::Result<_, _>>().map_err(|_| format!("--light {s}: want azimuth,elevation in degrees"))?;
-                    if p.len() != 2 || !(1.0..=90.0).contains(&p[1]) {
-                        return Err(format!("--light {s}: want azimuth,elevation in degrees (elevation 1 to 90)"));
-                    }
-                    v.light = Some((p[0], p[1]));
-                }
+                "--light" => v.light = Some(crate::light_of(&next()?).map_err(|e| format!("--{e}"))?),
                 "--size" => v.size = Some(next()?.parse().map_err(|_| "--size N (px)".to_string())?),
                 "--grid" => {
                     v.grid = Some(0.0);
@@ -626,5 +619,37 @@ mod tests {
         assert!(w < 1600 && h == w, "must reduce dimensions, got {w}x{h}");
         let decoded = image::load_from_memory(&bytes).unwrap();
         assert_eq!((decoded.width() as usize, decoded.height() as usize), (w, h));
+    }
+
+    #[test]
+    fn the_relief_and_gallery_looks_take_a_light() {
+        let parse = |a: &[&str]| View::parse(&a.iter().map(|s| s.to_string()).collect::<Vec<_>>());
+        assert_eq!(parse(&[]).unwrap().light, None);
+        assert_eq!(parse(&["--mode", "relief"]).unwrap().light, Some(RAKING));
+        assert_eq!(parse(&["--mode", "gallery"]).unwrap().light, Some(crate::GALLERY_LIGHT));
+        assert_eq!(parse(&["--mode", "relief", "--light", "45,15"]).unwrap().light, Some((45.0, 15.0)));
+        assert_eq!(parse(&["--light", "45,15", "--mode", "relief,mirror"]).unwrap().light, Some((45.0, 15.0)));
+        for bad in [&["--light", "45"][..], &["--light", "45,0"], &["--light", "a,b"], &["--light"]] {
+            assert!(parse(bad).is_err(), "{bad:?}");
+        }
+    }
+
+    /// The lit look shows the same picture under a light: it differs from
+    /// the plain look where paint stands in relief and changes nothing.
+    #[test]
+    #[cfg(tube_box)]
+    fn the_relief_look_lights_the_paint_and_changes_nothing() {
+        let mut s = Session::new(W).unwrap();
+        s.run(r#"canvas{size=300, aspect=1.5, linen=15, seed=2, ground={{pile={{"lead white", 5}, {"yellow ochre", 1}}, um=60, apply="brush"}}}
+                 b = brush("flat", 20); b:load(pile{{"lead white", 1}}, 1); b:stroke({{200, 300}, {800, 300}})"#)
+            .unwrap();
+        let c = s.canvas().unwrap().clone();
+        let before = bits(&c);
+        let dir = out_dir();
+        let lit = View { light: Some(RAKING), ..View::parse(&[]).unwrap() };
+        look(&c, &View::parse(&[]).unwrap(), &dir.join("flat.png")).unwrap();
+        look(&c, &lit, &dir.join("relief.png")).unwrap();
+        assert_ne!(std::fs::read(dir.join("flat.png")).unwrap(), std::fs::read(dir.join("relief.png")).unwrap());
+        assert_eq!(before, bits(&c));
     }
 }

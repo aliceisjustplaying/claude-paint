@@ -43,14 +43,16 @@ use std::time::{Duration, Instant};
 
 /// The one width a painting is painted, replayed and delivered at (px).
 const LIVE_WIDTH: usize = 2400;
-/// A sketch: a session whose name starts with "sketch" paints at a quarter
-/// of the width, some 16 times faster, for trying out a composition before
-/// the painting; its log replays at the same width.
-const SKETCH_WIDTH: usize = 600;
 
-/// The width a session (or a log, by its file name) paints at.
-fn width_for(name: &str) -> usize {
-    if name.starts_with("sketch") { SKETCH_WIDTH } else { LIVE_WIDTH }
+/// The width a painting paints at: an existing one its log's (a sketch if
+/// its head says so, `session::SKETCH_MARK`), a new one a sketch's if the
+/// session's name starts with "sketch".
+fn width_for(name: &str, log: Option<&str>) -> usize {
+    let sketch = match log {
+        Some(text) => session::logged_sketch(text),
+        None => name.starts_with("sketch"),
+    };
+    if sketch { session::SKETCH_WIDTH } else { LIVE_WIDTH }
 }
 
 /// The painter build's one session.
@@ -794,7 +796,7 @@ impl Server {
         // an existing painting goes on with the box its log names; a new one takes the
         // configured box (session::box_for)
         let tubes = session::box_for(text.as_deref())?;
-        let width = width_for(&name);
+        let width = width_for(&name, text.as_deref());
         let mut srv = Self { name, s: Session::with_box(width, tubes).map_err(|e| e.to_string())?, frames: false, written: None, replayed: 0 };
         if let Some(text) = text {
             srv.written = Some(text.clone());
@@ -977,7 +979,7 @@ fn bits_f(v: &[f32]) -> Vec<u32> {
 pub const GALLERY_LIGHT: (f32, f32) = (115.0, 55.0);
 
 /// `light az,el` (degrees) as a pair.
-fn light_of(s: &str) -> Result<(f32, f32), String> {
+pub(crate) fn light_of(s: &str) -> Result<(f32, f32), String> {
     let p: Vec<f32> = s.split(',').map(|t| t.trim().parse::<f32>()).collect::<Result<_, _>>().map_err(|_| format!("light {s}: want azimuth,elevation in degrees"))?;
     if p.len() != 2 || !(1.0..=90.0).contains(&p[1]) {
         return Err(format!("light {s}: want azimuth,elevation in degrees (elevation 1 to 90)"));
@@ -1026,7 +1028,7 @@ fn deliver_lit(c: &Canvas, out: &Path, light: Option<(f32, f32)>) -> Result<(), 
 }
 
 #[cfg(feature = "replay")]
-const RUN_USAGE: &str = "run <file.lua> [--out path.png] [--light az,el | --gallery] [--look] [--state-digest digests.txt] [--frames-every <s> --frames-dir <dir> [--frame-width 1000]] (replays at the live width, 2400px)";
+const RUN_USAGE: &str = "run <file.lua> [--out path.png] [--light az,el | --gallery] [--look] [--state-digest digests.txt] [--frames-every <s> --frames-dir <dir> [--frame-width 1000]] (replays at the width it was painted at: 2400px, a sketch 600px)";
 
 #[cfg(feature = "replay")]
 fn run(args: &[String]) -> Result<(), String> {
@@ -1041,7 +1043,7 @@ fn run(args: &[String]) -> Result<(), String> {
     }
     let text = std::fs::read_to_string(file).map_err(|e| format!("{file}: {e}"))?;
     let stem = Path::new(file).file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or("easel".into());
-    let width = width_for(&stem);
+    let width = width_for(&stem, Some(&text));
     let out = flag(args, "--out").map(PathBuf::from).unwrap_or_else(|| root().join("out/lua").join(format!("{stem}.png")));
     let chunks = parse_program(&text);
     if chunks.is_empty() {
@@ -1166,7 +1168,10 @@ fn state_digest_line(s: &Session, n: usize, secs: f64) -> String {
     let brushes_h = fnv1a(brushes.join("\n").as_bytes());
     let studio = format!("seed={} clock={:?} clock0={:?} chunk={} calls={} setup={:?} piles={:?} rng={:?}", st.seed, st.clock, st.clock0, st.chunk, st.calls, st.setup, st.hand.piles, st.rng);
     let studio_h = fnv1a(studio.as_bytes());
-    format!("chunk {n} secs={secs:.3} canvas={canvas:016x} brushes={brushes_h:016x} nbrushes={} studio={studio_h:016x}\n", brushes.len())
+    // (knives came with engine 3: a painting without one keeps the line it had)
+    let knives: Vec<String> = st.live_knives().iter().map(|k| format!("{:?}", k.borrow())).collect();
+    let knives_s = if knives.is_empty() { String::new() } else { format!(" knives={:016x} nknives={}", fnv1a(knives.join("\n").as_bytes()), knives.len()) };
+    format!("chunk {n} secs={secs:.3} canvas={canvas:016x} brushes={brushes_h:016x} nbrushes={} studio={studio_h:016x}{knives_s}\n", brushes.len())
 }
 
 #[cfg(test)]
@@ -1235,5 +1240,27 @@ mod tests {
     #[test]
     fn journal_entries_are_dated_lines() {
         assert_eq!(journal_entry(907.5, "first line\nsecond\n\nthird\n"), "- day 2, 00:07: first line\n  second\n\n  third\n");
+    }
+
+    #[test]
+    fn save_takes_a_path_and_a_light() {
+        let args = |a: &[&str]| save_args(&a.iter().map(|s| s.to_string()).collect::<Vec<_>>());
+        assert_eq!(args(&[]), Ok((None, None)));
+        assert_eq!(args(&["a.png"]), Ok((Some(PathBuf::from("a.png")), None)));
+        assert_eq!(args(&["a.png", "--gallery"]), Ok((Some(PathBuf::from("a.png")), Some(GALLERY_LIGHT))));
+        assert_eq!(args(&["--light", "135,25", "a.png"]), Ok((Some(PathBuf::from("a.png")), Some((135.0, 25.0)))));
+        for bad in [&["--light"][..], &["--light", "135"], &["--light", "135,91"], &["a.png", "b.png"], &["--lit"]] {
+            assert!(args(bad).is_err(), "{bad:?}");
+        }
+    }
+
+    /// A new session is a sketch by its name; a log by what its head says.
+    #[test]
+    fn a_log_replays_at_the_width_it_was_painted_at() {
+        assert_eq!(width_for("sketch-1", None), session::SKETCH_WIDTH);
+        assert_eq!(width_for("painting", None), LIVE_WIDTH);
+        let head = |mark: &str| format!("-- easel session\n--@ engine 3\n{mark}\n--@ chunk 1\ncanvas{{}}\n");
+        assert_eq!(width_for("renamed", Some(&head(session::SKETCH_MARK))), session::SKETCH_WIDTH);
+        assert_eq!(width_for("sketchbook", Some(&head(""))), LIVE_WIDTH);
     }
 }

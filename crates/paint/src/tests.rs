@@ -88,7 +88,9 @@ fn dry_is_idempotent_and_clears_wet() {
 /// hog-flat pass, three held-brush drags, a glaze; then relief.
 #[cfg(tube_box)]
 fn fixture() -> Canvas {
-    let st = Style::oil();
+    // (the golden was recorded with engine 2: the scene stays that engine's)
+    let mut st = Style::oil();
+    st.palette.engine = 2;
     let mut c = st.prepare(240, 1.5, 7);
     let (w, h) = (c.width(), c.height());
     let upper = Mask::from_fn(c.f, |_, y| if y < h * 0.5 { 1.0 } else { 0.0 });

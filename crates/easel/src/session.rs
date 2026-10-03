@@ -25,6 +25,12 @@ pub const BOX_MARK: &str = "--@ box";
 /// the head of its session file. A log without it was painted with engine 1:
 /// every log before the version was recorded.
 pub const ENGINE_MARK: &str = "--@ engine";
+/// Marks a sketch: a painting painted at `SKETCH_WIDTH`, not the live width.
+/// A log replays at the width it was painted at, whatever its file is named.
+pub const SKETCH_MARK: &str = "--@ sketch";
+/// A sketch's width (px): a quarter of the live width, some 16 times faster,
+/// for trying out a composition before the painting.
+pub const SKETCH_WIDTH: usize = 600;
 
 /// The longest a chunk of a live session may run (the longest of 2,502 painters' chunks on
 /// 2026-09-27 took 94 s). A chunk that runs longer is stopped like a failed one: nothing it
@@ -360,6 +366,9 @@ impl Session {
         let engine = self.st.borrow().tubes.engine;
         if engine != 1 {
             let _ = writeln!(s, "{ENGINE_MARK} {engine}");
+        }
+        if self.st.borrow().width == SKETCH_WIDTH {
+            let _ = writeln!(s, "{SKETCH_MARK}");
         }
         for (i, c) in self.log.iter().enumerate() {
             let _ = writeln!(s, "\n{MARK} {}", i + 1);
@@ -721,6 +730,12 @@ pub fn logged_engine(text: &str) -> Result<u32, String> {
         }
     }
     Ok(found.unwrap_or(1))
+}
+
+/// Whether a session file's head marks it a sketch (a `SKETCH_MARK` line
+/// before the first chunk).
+pub fn logged_sketch(text: &str) -> bool {
+    text.lines().map(str::trim).take_while(|l| !l.starts_with(MARK)).any(|l| l == SKETCH_MARK)
 }
 
 /// Where the box of a new painting is set: a file `box` next to the easel's
@@ -1464,5 +1479,100 @@ mod tests {
             }
             assert_eq!(format!("{h:016x}"), want, "{name} no longer replays as it did");
         }
+    }
+
+    /// The knife lays paint from its bead and scrapes wet paint back onto it.
+    #[test]
+    #[cfg(tube_box)]
+    fn the_knife_lays_and_scrapes() {
+        let mut s = Session::new(W).unwrap();
+        s.run(CANVAS).unwrap();
+        let bare = bits(&s);
+        s.run(r#"k = knife{width=30}; k:load(pile{{"bone black", 1}}, 0.5); full0 = k:fullness()
+                  k:lay({{200, 300}, {600, 300}}, {pressure=0.4})
+                  assert(k:fullness() < full0, "laying takes paint off the blade")"#).unwrap();
+        assert_ne!(bare, bits(&s), "the knife laid paint");
+        s.run(r#"k:wipe(); assert(k:fullness() == 0)
+                  k:scrape({{200, 300}, {600, 300}})
+                  assert(k:fullness() > 0, "scraping takes wet paint onto the blade")"#).unwrap();
+        let e = s.run("knife{width=1}").unwrap_err();
+        assert!(e.contains("2 to 200"), "{e}");
+    }
+
+    /// A failed chunk leaves a knife as it was, as it leaves a brush.
+    #[test]
+    #[cfg(tube_box)]
+    fn a_failed_chunk_leaves_the_knife_alone() {
+        let mut s = Session::new(W).unwrap();
+        s.run(CANVAS).unwrap();
+        s.run(r#"k = knife{width=30}; k:load(pile{{"bone black", 1}}, 0.5); full0 = k:fullness()"#).unwrap();
+        let before = bits(&s);
+        let e = s.run("k:lay({{200, 300}, {600, 300}}); error('stop')").unwrap_err();
+        assert!(e.contains("stop"), "{e}");
+        assert_eq!(before, bits(&s));
+        s.run("assert(k:fullness() == full0)").unwrap();
+    }
+
+    /// A double-loaded, streaky pass paints something else than the plain
+    /// pass, and the same again in a second session; a part-loaded brush too.
+    #[test]
+    #[cfg(tube_box)]
+    fn double_loads_and_streaks_paint_and_replay() {
+        let paint = |opts: &str| {
+            let mut s = Session::new(W).unwrap();
+            s.run(CANVAS).unwrap();
+            s.run(&format!(
+                r#"p = pile{{{{"lead white", 3}}, {{"cobalt blue", 1}}}}; q = pile{{{{"vermilion", 1}}}}
+                   work(rect(100, 100, 600, 300), {{pile=p{opts}}})
+                   b = brush("flat", 12); b:load(p, 0.8); b:load(q, 0.5, {{side=1, share=0.4, streak=0.5}}); b:stroke({{{{150, 500}}, {{700, 500}}}})"#
+            ))
+            .unwrap();
+            bits(&s)
+        };
+        let double = paint(", streak=0.8, second={pile=q, load=0.4, side=1, share=0.5}");
+        assert_eq!(double, paint(", streak=0.8, second={pile=q, load=0.4, side=1, share=0.5}"));
+        assert_ne!(double, paint(""));
+        let mut s = Session::new(W).unwrap();
+        s.run(CANVAS).unwrap();
+        let e = s.run(r#"b = brush("flat", 12); b:load(pile{{"vermilion", 1}}, 0.5, {side=2})"#).unwrap_err();
+        assert!(e.contains("side is -1..1"), "{e}");
+        let e = s.run(r#"work(everywhere(), {pile=pile{{"vermilion", 1}}, second={load=0.4}})"#).unwrap_err();
+        assert!(e.contains("work second"), "{e}");
+    }
+
+    /// A sketch's log says it is one, so it replays at its width under any
+    /// file name; a painting's log doesn't.
+    #[test]
+    #[cfg(tube_box)]
+    fn a_sketch_s_log_says_so() {
+        let mut a = Session::new(SKETCH_WIDTH).unwrap();
+        a.run(CANVAS).unwrap();
+        let prog = a.program("sketch-1");
+        assert!(prog.contains(&format!("\n{SKETCH_MARK}\n\n{MARK} 1\n")), "{prog}");
+        assert!(logged_sketch(&prog));
+        let mut b = Session::new(W).unwrap();
+        b.run(&format!("{CANVAS}\n-- {SKETCH_MARK} (in a chunk it is a comment)")).unwrap();
+        assert!(!logged_sketch(&b.program("sketchbook")));
+    }
+
+    /// What only engine 3 models is refused in a painting painted with an
+    /// older engine, where it would do nothing.
+    #[test]
+    #[cfg(tube_box)]
+    fn an_older_engine_s_painting_refuses_turps_and_absorbent_grounds() {
+        let old = || {
+            let mut tubes = Palette::tube_box();
+            tubes.engine = 2;
+            Session::with_box(W, tubes).unwrap()
+        };
+        let mut s = old();
+        let e = s.run(&CANVAS.replace(r#"apply="brush"}"#, r#"apply="brush", absorbent=true}"#)).unwrap_err();
+        assert!(e.contains("absorbent= needs engine 3"), "{e}");
+        s.run(CANVAS).unwrap();
+        let e = s.run(r#"pile{{"lead white", 1}, turps=0.5}"#).unwrap_err();
+        assert!(e.contains("turps= needs engine 3"), "{e}");
+        let mut s = Session::new(W).unwrap();
+        s.run(&CANVAS.replace(r#"apply="brush"}"#, r#"apply="brush", absorbent=true}"#)).unwrap();
+        s.run(r#"pile{{"lead white", 1}, turps=0.5}"#).unwrap();
     }
 }

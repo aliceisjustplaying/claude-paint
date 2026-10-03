@@ -36,7 +36,7 @@
 //! pigments' absorption and scattering are added to it, so a stain is
 //! colour *in* the cloth: the weave shows through it.
 
-use crate::canvas::Canvas;
+use crate::canvas::{Canvas, Frame};
 use crate::color::{Rgb, hex};
 use crate::mask::Mask;
 use crate::pigment::{Pigment, layer1};
@@ -343,6 +343,153 @@ fn kbits(k: f32) -> u32 {
     k.max(0.0).to_bits()
 }
 
+/// How fast liquid passes from cell `a` to its neighbour `b` at offset
+/// (`ox`, `oy`), by the cloth's `cells` (`Soak::wick_cells`), faster
+/// downhill on a tilted canvas.
+fn speed(cells: &[(f32, f32, f32)], a: usize, b: usize, ox: i32, oy: i32, tilt: Option<(f32, f32)>) -> f32 {
+    let (ca, cb) = (cells[a], cells[b]);
+    let (ax, ay) = (ox.unsigned_abs() as f32, oy.unsigned_abs() as f32);
+    let v = (ax * (ca.1 + cb.1) + ay * (ca.2 + cb.2)) / (2.0 * (ax + ay));
+    match tilt {
+        None => v,
+        Some((ang, g)) => {
+            let l = (ax * ax + ay * ay).sqrt();
+            let d = (ox as f32 * ang.cos() + oy as f32 * ang.sin()) / l;
+            v * (1.0 + 0.9 * g * d).max(0.15)
+        }
+    }
+}
+
+impl Soak {
+    /// The cloth in buffer box `b` (x0, y0, x1, y1; `f` the buffer's
+    /// frame, `dx` mm per pixel) at time `now`, cell by cell: the room left
+    /// in its pores (mm³) and how readily it passes liquid along x (the
+    /// weft) and y (the warp). Cloth under a paint film takes nothing.
+    /// `sig` is how strongly it feathers along the threads; a pour adds its
+    /// own unevenness (`pour_seed`).
+    #[allow(clippy::too_many_arguments)]
+    fn wick_cells(&self, film: &[f32], f: Frame, b: (usize, usize, usize, usize), now: f32, dx: f32, sig: f32, pour_seed: Option<u64>) -> Vec<(f32, f32, f32)> {
+        let (x0, y0, x1, y1) = b;
+        let (w, rw) = (f.w, x1 - x0);
+        let area = dx * dx;
+        let cseed = self.seed;
+        (0..rw * (y1 - y0))
+            .into_par_iter()
+            .map(|li| {
+                let i = (y0 + li / rw) * w + x0 + li % rw;
+                if film[i] > 1e-3 {
+                    return (0.0, 0.0, 0.0);
+                }
+                let cap = self.cap[i];
+                let sn = self.solv_at(i, now);
+                let oil = self.oil[i] + self.oil_pend[i];
+                let free = (cap - oil - sn).max(0.0) * 1.0e-3 * area;
+                let wet = (sn / cap).min(1.0);
+                let oily = (oil / (0.3 * cap)).min(1.0);
+                let mult = (1.0 + 1.5 * wet) * (1.0 - 0.85 * oily);
+                let (xm, ym) = (((li % rw + x0 + f.x0) as f32 + 0.5) * dx, ((li / rw + y0 + f.y0) as f32 + 0.5) * dx);
+                // lobes of looser and tighter weave (isotropic, 4-30 mm),
+                // fine streaks along the threads (feathering, stronger in a
+                // thin liquid), and a pour's own unevenness
+                let patch = 0.55 * vnoise(xm / 30.0, ym / 30.0, cseed ^ 0x55) + 0.3 * vnoise(xm / 11.0, ym / 11.0, cseed ^ 0x57) + 0.15 * vnoise(xm / 4.0, ym / 4.0, cseed ^ 0x58) - 0.5;
+                let nw = vnoise(xm / 0.9, ym / 9.0, cseed ^ 0x51) - 0.5;
+                let nf = vnoise(xm / 9.0, ym / 0.9, cseed ^ 0x53) - 0.5;
+                let own = match pour_seed {
+                    Some(ps) => 0.25 * (vnoise(xm / 7.0, ym / 7.0, ps ^ 0x56) - 0.5),
+                    None => 0.0,
+                };
+                let ky = self.fabric.warp_bias * (PATCH * patch + sig * nw + own).exp() * mult;
+                let kx = (PATCH * patch + sig * nf + own).exp() * mult;
+                (free, kx, ky)
+            })
+            .collect()
+    }
+
+    /// Oil the cloth can't hold creeps on through it: from the `edge`
+    /// cells (local indices of the box `b` = (x0, y0, width, height) of a
+    /// buffer `w` wide, each with its group) outward into cells not
+    /// `inside`, nearest first (by how readily the cloth there wicks), up to
+    /// `HALO_MM`, filling each to `HALO_FILL` of its pores. A group's oil
+    /// (`budget`, µm summed over cells) goes only where its own edge
+    /// reaches first; what is left of it stays in `budget`. Returns (cell,
+    /// oil µm, mm from the edge, the edge cell it came from).
+    #[allow(clippy::too_many_arguments)]
+    fn creep(&self, cells: &[(f32, f32, f32)], b: (usize, usize, usize, usize), w: usize, dx: f32, now: f32, inside: &[bool], edge: &[(usize, usize)], budget: &mut [f32]) -> Vec<(usize, f32, f32, usize)> {
+        let (x0, y0, rw, rh) = b;
+        let nl = rw * rh;
+        let mut halo = Vec::new();
+        let mut open = budget.iter().filter(|&&e| e > 1e-4).count();
+        if open == 0 {
+            return halo;
+        }
+        let mut hkey = vec![f32::INFINITY; nl];
+        let mut horig = vec![u32::MAX; nl];
+        let mut hgroup = vec![0u32; nl];
+        let mut hdone = vec![false; nl];
+        let mut heap = Heap::new();
+        for &(li, g) in edge {
+            if budget[g] > 1e-4 {
+                hkey[li] = 0.0;
+                horig[li] = li as u32;
+                hgroup[li] = g as u32;
+                heap.push(Reverse((kbits(0.0), li as u32)));
+            }
+        }
+        while let Some(Reverse((kb, li))) = heap.pop() {
+            let li = li as usize;
+            if hdone[li] || f32::from_bits(kb) > hkey[li] {
+                continue;
+            }
+            let g = hgroup[li] as usize;
+            if budget[g] <= 1e-4 {
+                continue;
+            }
+            hdone[li] = true;
+            if !inside[li] {
+                let i = (y0 + li / rw) * w + x0 + li % rw;
+                let room = (HALO_FILL * self.cap[i] - (self.oil[i] + self.oil_pend[i] + self.solv_at(i, now))).max(0.0);
+                if cells[li].1 > 0.0 && room > 0.0 {
+                    let put = room.min(budget[g]);
+                    budget[g] -= put;
+                    halo.push((li, put, hkey[li], horig[li] as usize));
+                    if budget[g] <= 1e-4 {
+                        open -= 1;
+                        if open == 0 {
+                            break;
+                        }
+                        continue;
+                    }
+                }
+            }
+            let (x, y) = ((li % rw) as i32, (li / rw) as i32);
+            for &(ox, oy, len) in NEIGH16.iter() {
+                let (nx, ny) = (x + ox, y + oy);
+                if nx < 0 || ny < 0 || nx >= rw as i32 || ny >= rh as i32 {
+                    continue;
+                }
+                let nli = ny as usize * rw + nx as usize;
+                if hdone[nli] || inside[nli] {
+                    continue;
+                }
+                let v = speed(cells, li, nli, ox, oy, None);
+                if v <= 1e-6 {
+                    continue;
+                }
+                // distance in mm, weighted by how readily the cloth
+                // wicks there (relative to its mean)
+                let nk = hkey[li] + len * dx / v.max(0.05);
+                if nk <= HALO_MM && nk < hkey[nli] {
+                    hkey[nli] = nk;
+                    horig[nli] = horig[li];
+                    hgroup[nli] = g as u32;
+                    heap.push(Reverse((kbits(nk), nli as u32)));
+                }
+            }
+        }
+        halo
+    }
+}
+
 impl Canvas {
     /// Leave the canvas raw: no ground, the bare `fabric`, which soaks up
     /// what is poured on it (`pour`). Call it on a canvas with no ground.
@@ -572,36 +719,7 @@ impl Canvas {
         // room in the pores (mm³) and how readily the cloth passes liquid
         // along x (the weft) and y (the warp)
         let sig = FEATHER_BASE + FEATHER_SOLV * s0;
-        let cseed = s.seed;
-        let pseed = p.seed;
-        let film = &self.film;
-        let cells: Vec<(f32, f32, f32)> = (0..nl)
-            .into_par_iter()
-            .map(|li| {
-                let i = gi(li);
-                if film[i] > 1e-3 {
-                    return (0.0, 0.0, 0.0);
-                }
-                let cap = s.cap[i];
-                let sn = s.solv_at(i, now);
-                let oil = s.oil[i] + s.oil_pend[i];
-                let free = (cap - oil - sn).max(0.0) * 1.0e-3 * area;
-                let wet = (sn / cap).min(1.0);
-                let oily = (oil / (0.3 * cap)).min(1.0);
-                let mult = (1.0 + 1.5 * wet) * (1.0 - 0.85 * oily);
-                let (xm, ym) = (((li % rw + x0 + f.x0) as f32 + 0.5) * dx, ((li / rw + y0 + f.y0) as f32 + 0.5) * dx);
-                // lobes of looser and tighter weave (isotropic, 4-30 mm),
-                // fine streaks along the threads (feathering, stronger in a
-                // thin liquid), and the pour's own unevenness
-                let patch = 0.55 * vnoise(xm / 30.0, ym / 30.0, cseed ^ 0x55) + 0.3 * vnoise(xm / 11.0, ym / 11.0, cseed ^ 0x57) + 0.15 * vnoise(xm / 4.0, ym / 4.0, cseed ^ 0x58) - 0.5;
-                let nw = vnoise(xm / 0.9, ym / 9.0, cseed ^ 0x51) - 0.5;
-                let nf = vnoise(xm / 9.0, ym / 0.9, cseed ^ 0x53) - 0.5;
-                let own = 0.25 * (vnoise(xm / 7.0, ym / 7.0, pseed ^ 0x56) - 0.5);
-                let ky = s.fabric.warp_bias * (PATCH * patch + sig * nw + own).exp() * mult;
-                let kx = (PATCH * patch + sig * nf + own).exp() * mult;
-                (free, kx, ky)
-            })
-            .collect();
+        let cells = s.wick_cells(&self.film, f, (x0, y0, x1, y1), now, dx, sig, Some(p.seed));
         // more poured here: it pushes further (a head start from the
         // liquid's local excess over what the cloth there holds)
         let mut landv = vec![0.0f32; nl];
@@ -625,19 +743,6 @@ impl Canvas {
                 heap.push(Reverse((kbits(key[li]), li as u32)));
             }
         }
-        let speed = |a: usize, b: usize, ox: i32, oy: i32, tilt: Option<(f32, f32)>| -> f32 {
-            let (ca, cb) = (cells[a], cells[b]);
-            let (ax, ay) = (ox.unsigned_abs() as f32, oy.unsigned_abs() as f32);
-            let v = (ax * (ca.1 + cb.1) + ay * (ca.2 + cb.2)) / (2.0 * (ax + ay));
-            match tilt {
-                None => v,
-                Some((ang, g)) => {
-                    let l = (ax * ax + ay * ay).sqrt();
-                    let d = (ox as f32 * ang.cos() + oy as f32 * ang.sin()) / l;
-                    v * (1.0 + 0.9 * g * d).max(0.15)
-                }
-            }
-        };
         let mut left = vol;
         while let Some(Reverse((kb, li))) = heap.pop() {
             let li = li as usize;
@@ -662,7 +767,7 @@ impl Canvas {
                 if done[nli] {
                     continue;
                 }
-                let v = speed(li, nli, ox, oy, p.tilt);
+                let v = speed(&cells, li, nli, ox, oy, p.tilt);
                 if v <= 1e-6 {
                     continue;
                 }
@@ -829,61 +934,10 @@ impl Canvas {
             e_total += e;
         }
         // the halo: from the edge outward, into cloth this pour didn't reach
-        let mut hkey = vec![f32::INFINITY; nl];
-        let mut horig = vec![u32::MAX; nl];
-        let mut hdone = vec![false; nl];
-        let mut halo: Vec<(usize, f32, f32, usize)> = Vec::new(); // (li, oil µm, mm, origin)
-        let mut e_left = e_total;
-        if e_total > 1e-4 {
-            let mut heap = Heap::new();
-            for &li in &edge_cells {
-                hkey[li] = 0.0;
-                horig[li] = li as u32;
-                heap.push(Reverse((kbits(0.0), li as u32)));
-            }
-            while let Some(Reverse((kb, li))) = heap.pop() {
-                let li = li as usize;
-                if hdone[li] || f32::from_bits(kb) > hkey[li] {
-                    continue;
-                }
-                hdone[li] = true;
-                if !done[li] {
-                    let i = gi(li);
-                    let room = (HALO_FILL * s.cap[i] - (s.oil[i] + s.oil_pend[i] + s.solv_at(i, now))).max(0.0);
-                    if cells[li].1 > 0.0 && room > 0.0 {
-                        let put = room.min(e_left);
-                        e_left -= put;
-                        halo.push((li, put, hkey[li], horig[li] as usize));
-                        if e_left <= 1e-4 {
-                            break;
-                        }
-                    }
-                }
-                let (x, y) = ((li % rw) as i32, (li / rw) as i32);
-                for &(ox, oy, len) in NEIGH16.iter() {
-                    let (nx, ny) = (x + ox, y + oy);
-                    if nx < 0 || ny < 0 || nx >= rw as i32 || ny >= rh as i32 {
-                        continue;
-                    }
-                    let nli = ny as usize * rw + nx as usize;
-                    if hdone[nli] || done[nli] {
-                        continue;
-                    }
-                    let v = speed(li, nli, ox, oy, None);
-                    if v <= 1e-6 {
-                        continue;
-                    }
-                    // distance in mm, weighted by how readily the cloth
-                    // wicks there (relative to its mean)
-                    let nk = hkey[li] + len * dx / v.max(0.05);
-                    if nk <= HALO_MM && nk < hkey[nli] {
-                        hkey[nli] = nk;
-                        horig[nli] = horig[li];
-                        heap.push(Reverse((kbits(nk), nli as u32)));
-                    }
-                }
-            }
-        }
+        let edge: Vec<(usize, usize)> = edge_cells.iter().map(|&li| (li, 0)).collect();
+        let mut budget = [e_total];
+        let halo = s.creep(&cells, (x0, y0, rw, rh), w, dx, now, &done, &edge, &mut budget);
+        let e_left = budget[0];
         let placed = (e_total - e_left).max(0.0);
         let keep = if e_total > 1e-6 { 1.0 - placed / e_total } else { 1.0 };
         // when things happen

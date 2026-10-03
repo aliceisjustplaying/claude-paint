@@ -60,8 +60,8 @@ Sources are listed at the end; [n] marks them. "Estimate" marks numbers not take
 ## Numbers used as estimates (not from the sources)
 - Viscosity: turpentine ~1.4 mPa·s, raw linseed oil ~30-50 mPa·s; mixtures by
   log-mixing; pigment raises viscosity (Krieger–Dougherty).
-- Pore volume of cotton duck: ~0.6 mm thick, porosity ~0.6 → ~0.35 mm³ of liquid
-  per mm² (about 14 of the engine's 25 µm coats).
+- Pore volume of cotton duck: ~0.5 mm thick, porosity ~0.6 → ~0.30 mm³ of liquid
+  per mm² (about 12 of the engine's 25 µm coats).
 - Turpentine leaves thin fabric in tens of minutes to hours; oil keeps wicking
   slowly for hours to days until it gels.
 

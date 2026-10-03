@@ -387,6 +387,30 @@ impl Canvas {
         self.soak_render((0, 0, w, h));
     }
 
+    /// Minutes until nothing soaked into a raw canvas moves any more: its
+    /// turpentine has evaporated and its creeping oil has arrived (0 if
+    /// nothing is moving, or on a primed canvas). With a margin of a few
+    /// float steps, so the clock is surely past the last of it.
+    pub(crate) fn soak_left(&self) -> f32 {
+        let Some(s) = self.soak.as_ref() else { return 0.0 };
+        let Some((x0, y0, x1, y1)) = s.active else { return 0.0 };
+        let w = self.f.w;
+        let now = (self.wet.clock.now - s.t0) as f32;
+        let mut end = now;
+        for y in y0..y1 {
+            for x in x0..x1 {
+                let i = y * w + x;
+                if s.solv[i] > 0.0 {
+                    end = end.max(s.solv_t1[i]);
+                }
+                if s.oil_pend[i] > 0.0 {
+                    end = end.max(s.oil_t[i]);
+                }
+            }
+        }
+        if end > now { end - now + 8.0 * f32::EPSILON * end.abs().max(1.0) } else { 0.0 }
+    }
+
     /// Is this a raw canvas (`raw_canvas`)?
     pub fn is_raw(&self) -> bool {
         self.soak.is_some()
@@ -443,17 +467,19 @@ impl Canvas {
 
     /// Time passed (`dt` minutes, the clock already moved): oil that has
     /// crept in lands, turpentine that has gone is cleared, and the cloth is
-    /// recolored where anything changed (all of it after a long wait: the
-    /// oil yellows).
+    /// recolored where anything changed, and all of it whenever the clock
+    /// passes a ten-hour mark (the oil yellows: slowly, so a stain is never
+    /// more than ten hours behind, however the time is waited out).
     pub(crate) fn soak_tick(&mut self, dt: f32) {
         let w = self.f.w;
         let Some(s) = self.soak.as_mut() else { return };
         let now = (self.wet.clock.now - s.t0) as f32;
         let mut redraw = s.active;
-        if dt >= 600.0 {
-            if let Some(b) = s.stained {
-                redraw = grow(redraw, b);
-            }
+        if dt > 0.0
+            && (now / 600.0).floor() > ((now - dt) / 600.0).floor()
+            && let Some(b) = s.stained
+        {
+            redraw = grow(redraw, b);
         }
         if let Some((x0, y0, x1, y1)) = s.active {
             let mut still = false;
@@ -1227,6 +1253,54 @@ mod tests {
         let mut c = raw(100, 300.0);
         let other = raw(120, 300.0);
         c.pour(&disc(&other, 500.0, 500.0, 30.0), &blue_pour(5.0, 4.0)).unwrap();
+    }
+
+    #[test]
+    fn a_cloth_of_ones_own_checkpoints() {
+        let silk = Fabric { name: "raw silk", color: hex("#efe6d2"), cap_um: 140.0, warp_bias: 1.1 };
+        let mut c = Canvas::new_window(80, 1.0, silk.color, None).with_size_mm(300.0).with_linen(Linen { seed: 3, ..Linen::fine(3) });
+        c.raw_canvas(silk, 3);
+        let mut b = Vec::new();
+        c.write_state(&mut b, "").unwrap();
+        let (d, _) = Canvas::read_state(&mut std::io::Cursor::new(b)).unwrap();
+        assert_eq!(d.fabric(), Some(silk));
+    }
+
+    #[test]
+    fn drying_waits_until_the_stain_has_settled() {
+        let mut c = raw(160, 400.0);
+        let p = Pour { pigment: 0.14, oil: 0.86, ..blue_pour(8.0, 3.0) };
+        let r = c.pour(&disc(&c, 500.0, 500.0, 30.0), &p).unwrap();
+        assert!(r.halo_ml > 0.0, "{r:?}");
+        let t = c.clock();
+        c.dry();
+        let s = c.soak.as_ref().unwrap();
+        assert!(s.active.is_none() && s.oil_pend.iter().all(|&v| v == 0.0) && s.solv.iter().all(|&v| v == 0.0));
+        assert!(c.clock() - t > 1440.0, "the halo takes a day or two: {}", c.clock() - t);
+        // and on a dry canvas it waits for nothing
+        let t = c.clock();
+        c.dry();
+        assert_eq!(c.clock(), t);
+    }
+
+    #[test]
+    fn oil_yellows_however_the_time_is_waited() {
+        let stain = || {
+            let mut c = raw(120, 300.0);
+            c.pour(&disc(&c, 500.0, 500.0, 40.0), &Pour { pigment: 0.14, oil: 0.86, ..blue_pour(10.0, 3.0) }).unwrap();
+            c.wait(4.0 * 1440.0);
+            assert!(c.soak.as_ref().unwrap().active.is_none());
+            c
+        };
+        let (mut a, mut b) = (stain(), stain());
+        let before = a.pixels().to_vec();
+        a.wait(30.0 * 1440.0);
+        for _ in 0..144 {
+            b.wait(300.0);
+        }
+        let diff = |p: &[Rgb], q: &[Rgb]| p.iter().zip(q).map(|(x, y)| (0..3).map(|k| (x[k] - y[k]).abs()).fold(0.0, f32::max)).fold(0.0, f32::max);
+        assert!(diff(&before, a.pixels()) > 1e-3, "a month yellows the oil");
+        assert!(diff(a.pixels(), b.pixels()) < 2e-4, "one wait or many: {}", diff(a.pixels(), b.pixels()));
     }
 
     #[test]

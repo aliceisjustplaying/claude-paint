@@ -137,7 +137,9 @@ fn read_soak(r: &mut impl Read, n: usize) -> io::Result<crate::soak::Soak> {
     let mut name = vec![0u8; len];
     r.read_exact(&mut name)?;
     let name = String::from_utf8(name).map_err(|_| bad("checkpoint fabric name is not UTF-8"))?;
-    let mut fabric = crate::soak::Fabric::named(&name).ok_or_else(|| bad("checkpoint fabric is unknown"))?;
+    // a cloth of the caller's own keeps its name (64 bytes at most, kept
+    // for good); its numbers come from the file, as a named one's do
+    let mut fabric = crate::soak::Fabric::named(&name).unwrap_or_else(|| crate::soak::Fabric { name: Box::leak(name.into_boxed_str()), color: [0.0; 3], cap_um: 0.0, warp_bias: 0.0 });
     let mut f = [0.0f32; 8];
     for v in f.iter_mut() {
         *v = get_f32(r)?;

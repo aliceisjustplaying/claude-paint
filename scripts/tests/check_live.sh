@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # scripts/check_painting judges a painting's replay against the live canvas
-# its session saved when it closed: equal is "check: ok", different fails,
-# and with no live canvas it only claims "replay-only agreement".
+# and the save file its session wrote when it closed: equal is "check: ok",
+# either different fails, and with neither it only claims "replay only".
 #
 #   scripts/tests/check_live.sh
 #
@@ -32,6 +32,8 @@ paint a 300
 paint b 500
 live=$work/a/out/easel/painting/live.png
 [ -s "$live" ] || fail "closing the session saved no live canvas" "$work/a"
+save=$work/a/out/easel/painting/live.ckpt
+[ -s "$save" ] || fail "closing the session wrote no save file" "$work/a"
 
 check() { # <tag>: runs check_painting on studio a; prints its exit code
   local rc=0
@@ -44,6 +46,15 @@ cp "$live" "$work/a-live.png"
 cp "$work/b/out/easel/painting/live.png" "$live"
 [ "$(check other)" = 1 ] && grep -q '^check: DIFFERS from the live canvas' "$work/c-other.log" || fail "a replay unlike the live canvas passed" "$work/c-other.log"
 
-rm "$live"
-[ "$(check none)" = 0 ] && grep -q '^check: replay-only agreement' "$work/c-none.log" || fail "without a live canvas the check didn't say replay-only" "$work/c-none.log"
-echo "check_live: check_painting passed the live canvas, failed another and said replay-only without one ($work)"
+cp "$work/a-live.png" "$live"
+cp "$save" "$work/a-live.ckpt"
+cp "$work/b/out/easel/painting/live.ckpt" "$save"
+[ "$(check othersave)" = 1 ] && grep -q '^check: DIFFERS from the live save' "$work/c-othersave.log" || fail "a replay unlike the live save passed" "$work/c-othersave.log"
+
+zstd -q --rm "$work/a-live.ckpt" -o "$save.zst" 2>/dev/null || gzip -c "$work/a-live.ckpt" > "$save.gz"
+rm -f "$save" "$work/a-live.ckpt"
+[ "$(check compressed)" = 0 ] && grep -q "the replay's canvas state equals the save" "$work/c-compressed.log" || fail "a replay equal to the compressed live save didn't pass" "$work/c-compressed.log"
+
+rm "$live" "$save".*
+[ "$(check none)" = 0 ] && grep -q '^check: replay only' "$work/c-none.log" || fail "without a live canvas or save the check didn't say replay only" "$work/c-none.log"
+echo "check_live: check_painting passed the live canvas and save (also compressed), failed another canvas and another save, and said replay only without either ($work)"

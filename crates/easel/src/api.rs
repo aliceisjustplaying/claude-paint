@@ -497,10 +497,15 @@ impl UserData for PileU {
             }
             Ok(t)
         });
-        m.add_meta_method(MetaMethod::ToString, |_, p, ()| {
-            let parts: Vec<String> = p.parts.iter().map(|(n, k)| format!("{n} {}", fmt_num(*k))).collect();
-            Ok(format!("pile({}; medium {})", parts.join(", "), fmt_num(p.medium)))
-        });
+        m.add_meta_method(MetaMethod::ToString, |_, p, ()| Ok(p.recipe()));
+    }
+}
+
+impl PileU {
+    /// What `print(p)` shows: `pile(lead white 6, smalt 1; medium 0.2)`.
+    pub fn recipe(&self) -> String {
+        let parts: Vec<String> = self.parts.iter().map(|(n, k)| format!("{n} {}", fmt_num(*k))).collect();
+        format!("pile({}; medium {})", parts.join(", "), fmt_num(self.medium))
     }
 }
 

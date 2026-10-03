@@ -8,3 +8,6 @@ out/**/*.png
 out/**/*.jpg
 out/easel/
 __pycache__/
+
+# runner output (logs, checks, markers): not committed; a finished painting's files are added by hand with git add -f
+notes/round*/runner/run/

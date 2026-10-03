@@ -774,20 +774,25 @@ fn a_pass_keeps_a_blotted_pile_blotted() {
 }
 
 /// Engine 4: a knife-laid slab tears where it parts from the blade, so it
-/// covers less than engine 3's whole slab from the same pull and load; an
-/// engine 3 canvas keeps the whole slab. (At the painting's resolution: the
-/// tears are a millimetre or so across, finer than a pixel of a small canvas.)
+/// covers less than engine 3's whole slab from the same pull and load: on a
+/// short pull, on a long one that runs the knife dry (the torn paint stays
+/// under the blade, it doesn't feed the bead), and on a small canvas, whose
+/// pixels are wider than a tear. An engine 3 canvas keeps the whole slab.
 #[test]
 fn a_knife_laid_slab_tears_from_engine_4() {
-    let covered = |engine: u32| {
-        let mut c = Canvas::new(2400, 3.0, [0.8; 3]).with_engine(engine);
+    let covered = |engine: u32, width: usize, to: f32| {
+        let mut c = Canvas::new(width, 3.0, [0.8; 3]).with_engine(engine);
         let mut k = crate::Knife::new(60.0);
         k.load(Paint::body(hex("#445566")), 1.0);
-        c.knife(&mut k, &[(200.0, 160.0), (400.0, 160.0)], (0.5, 0.5), None, true, 0.1);
+        let before = k.fullness();
+        c.knife(&mut k, &[(200.0, 160.0), (to, 160.0)], (0.5, 0.5), None, true, 0.1);
+        assert!(k.fullness() <= before);
         c.wet.vol.iter().filter(|&&v| v > 0.0).count()
     };
-    let (whole, torn) = (covered(3), covered(4));
-    assert!(whole > 30_000, "engine 3 laid {whole} pixels");
-    assert!(torn > whole / 4 && torn < whole * 19 / 20, "engine 4 laid {torn} pixels of engine 3's {whole}");
-    assert_eq!(whole, covered(3), "the same pull lays the same slab");
+    for (what, width, to) in [("a short pull", 2400, 400.0), ("a pull that runs dry", 2400, 800.0), ("a sketch", 600, 400.0)] {
+        let (whole, torn) = (covered(3, width, to), covered(4, width, to));
+        assert!(whole > 1500, "{what}: engine 3 laid {whole} pixels");
+        assert!(torn > whole / 4 && torn < whole * 19 / 20, "{what}: engine 4 laid {torn} pixels of engine 3's {whole}");
+        assert_eq!(whole, covered(3, width, to), "{what}: the same pull lays the same slab");
+    }
 }

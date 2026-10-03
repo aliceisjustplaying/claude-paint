@@ -2504,6 +2504,8 @@ impl Canvas {
         // at the slab's ends, its leading edge, and where the blade's reach
         // into the hollows runs out (`tn`, a noise along and across the blade)
         let tears = self.engine >= 4;
+        // (the paint the tears held back under the blade: back on it at the end)
+        let mut held = 0.0f32;
         let tseed = (id as u64).wrapping_mul(0x9E37_79B9_7F4A_7C15) ^ 0x7EA2;
         let height: *const f32 = self.height.as_ptr();
         let sf = self.surf();
@@ -2519,6 +2521,11 @@ impl Canvas {
         let half = k.width * s * 0.5;
         // mm per pixel
         let s_mm = self.px_mm();
+        // the tears' noise: cells per pixel along the path (0.9 and 2.7 to
+        // the mm, at most a cell to 3 and to 2 pixels) and cells across half
+        // the blade (4 and 11, at least 2 pixels each)
+        let tear_d = ((0.9 * s_mm).min(1.0 / 3.0), (2.7 * s_mm).min(0.5));
+        let tear_u = (4.0f32.min(half / 2.0).max(1.0), 11.0f32.min(half / 2.0).max(1.0));
         let (fw, fh) = (sf.fw as isize, sf.fh as isize);
         let pix = |x: f32, y: f32| -> Option<usize> {
             let (xi, yi) = (x.floor() as isize, y.floor() as isize);
@@ -2576,8 +2583,15 @@ impl Canvas {
             let rest: Vec<f32> = (0..hs.len()).map(|q| hs[q.saturating_sub(reach)..(q + reach + 1).min(hs.len())].iter().cloned().fold(f32::MIN, f32::max)).collect();
             for (bi, &(i, u, (x, y))) in blade.iter().enumerate() {
                 let plane = rest[bi] + gap;
-                // the tear here: 0..1, coarse along the blade, finer along the path
-                let tn = if tears { crate::surface::vnoise(u * 4.0 + 7.0, d * s_mm * 0.9, tseed) * 0.7 + crate::surface::vnoise(u * 11.0, d * s_mm * 2.7, tseed ^ 0x51) * 0.3 } else { 0.5 };
+                // the tear here: 0..1, coarse along the blade, finer along the
+                // path: about a millimetre across, but never finer than a few
+                // pixels, so a small canvas (a sketch, a preview) tears too,
+                // more coarsely, where a pixel is wider than a tear
+                let tn = if tears {
+                    crate::surface::vnoise(u * tear_u.0 + 7.0, d * tear_d.0, tseed) * 0.7 + crate::surface::vnoise(u * tear_u.1, d * tear_d.1, tseed ^ 0x51) * 0.3
+                } else {
+                    0.5
+                };
                 // SAFETY: exclusive &mut self; the knife is one tool on its own
                 unsafe {
                     let v = *sf.vol.add(i);
@@ -2608,10 +2622,20 @@ impl Canvas {
                         }
                     } else if lay
                         && top < plane
-                        && plane - top <= (2.0 * gap + PRESS_IN_UM) * if tears { 0.45 + 1.1 * tn } else { 1.0 }
-                        && !(tears && (u.abs() > 0.72 && tn < (u.abs() - 0.72) / 0.28 * 1.1 || d < (1.0 + 7.0 * tn) / s_mm))
-                        && k.vol > 1e-9
+                        && tears
+                        && plane - top <= 2.0 * gap + PRESS_IN_UM
+                        && (plane - top > (2.0 * gap + PRESS_IN_UM) * (0.45 + 1.1 * tn) || u.abs() > 0.72 && tn < (u.abs() - 0.72) / 0.28 * 1.1 || d < (1.0 + 7.0 * tn) / s_mm)
                     {
+                        // a tear: the paint a whole slab would have left here
+                        // parts with the blade and stays under it, out of the
+                        // bead, so a torn pull runs out where a whole one
+                        // does and covers less (once for each pixel)
+                        if k.vol > 1e-9 && *sf.stroke.add(i) != id {
+                            let hold = ((plane - top) / crate::surface::COAT_UM).min(k.vol / px_area * 0.25) * px_area;
+                            k.vol -= hold;
+                            held += hold;
+                        }
+                    } else if lay && top < plane && plane - top <= (2.0 * gap + PRESS_IN_UM) * if tears { 0.45 + 1.1 * tn } else { 1.0 } && k.vol > 1e-9 {
                         // the paint under the blade is pressed into the
                         // surface's hollows as deep as the gap and some tens
                         // of µm more (the weave, a ground's marks); deeper
@@ -2666,6 +2690,7 @@ impl Canvas {
                 k.vol -= leave;
             }
         }
+        k.vol += held;
         if let Some((x0, y0, x1, y1)) = bounds {
             self.wet.touch(x0, y0, x1, y1);
         }

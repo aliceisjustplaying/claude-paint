@@ -21,6 +21,7 @@ pub mod edge;
 pub mod fence;
 pub mod form;
 pub mod graphite;
+pub mod rag;
 pub mod scene;
 pub mod palette;
 pub mod pigment;
@@ -79,7 +80,9 @@ pub use shape::Shape;
 ///   its engine when tubes are added (`Palette::with`);
 ///   and the easel's `pairs` and `next` walk every table in a fixed order, so
 ///   a failed chunk is put back without a rebuild from the log (easel
-///   session.rs `canonical_tables`).
+///   session.rs `canonical_tables`);
+///   and the easel has a rag (`rag`, crates/easel/src/draw_rag.rs); an older
+///   log replays with exactly the globals it had.
 pub const ENGINE: u32 = 3;
 
 /// Hermite smoothstep.

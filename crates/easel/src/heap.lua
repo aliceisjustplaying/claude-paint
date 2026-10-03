@@ -1,10 +1,12 @@
 -- Snapshot and restore of the Lua heap a painting can reach, for exact
 -- rollback (see session.rs). Loaded with a private copy of the debug
--- library; painters never see it.
-local dbg = ...
+-- library; painters never see it. `canon`: engine 3 on (session.rs
+-- `canonical_tables`), where prelude.lua walks every table in a fixed order.
+local dbg, canon = ...
 local getupvalue, setupvalue, getinfo = dbg.getupvalue, dbg.setupvalue, dbg.getinfo
 local getmt, setmt = dbg.getmetatable, dbg.setmetatable
 local next, type, rawset, rawequal, rawlen, select = next, type, rawset, rawequal, rawlen, select
+local rawget, mtype = rawget, math.type
 
 -- Everything reachable from the roots through tables (keys, values,
 -- metatables) and Lua functions (upvalues): each table's contents and
@@ -40,7 +42,9 @@ local function snap(skip, ...)
       end
       local mt = getmt(v)
       push(mt)
-      tabs[v] = { copy, mt, order, m, rawlen(v) }
+      -- (from engine 3 no `#`: it moves the table's length hint, which a
+      -- replay, taking no snapshots, would not)
+      tabs[v] = { copy, mt, order, m, not canon and rawlen(v) or nil }
       ntab = ntab + 1
     else
       local info = getinfo(v, "Su")
@@ -64,7 +68,7 @@ end
 -- array length even when the entries are identical)
 local function untouched(t, rec)
   local copy, order = rec[1], rec[3]
-  if not rawequal(getmt(t), rec[2]) or rawlen(t) ~= rec[5] then return false end
+  if not rawequal(getmt(t), rec[2]) or (not canon and rawlen(t) ~= rec[5]) then return false end
   local i = 0
   for k, x in next, t do
     i = i + 1
@@ -84,16 +88,39 @@ local function same(t, copy, mt)
   return k1 == 0
 end
 
+-- More than one border (`#t` may be any of them, and which one Lua finds
+-- depends on the table's layout): its positive integer keys aren't 1..n.
+local function holey(t)
+  local n = 0
+  for k in next, t do
+    if mtype(k) == "integer" and k > 0 then n = n + 1 end
+  end
+  for i = 1, n do
+    if rawget(t, i) == nil then return true end
+  end
+  return false
+end
+
 -- Put every table and upvalue back as it was; tables that didn't change are
 -- left alone (their internal layout, so their `pairs` order, is untouched).
--- Returns how many tables still differ after restoration: entries are back, but not
--- necessarily their layout, which Lua doesn't let a program set, so their
--- `next` order may now differ from a replay's (session.rs then rebuilds).
+-- Returns how many tables may still act differently from a replay's
+-- (session.rs then rebuilds): entries are back, but not necessarily their
+-- layout, which Lua doesn't let a program set.
+-- - Engines 1 and 2: every table whose `next` order or `#` differs, since
+--   `pairs` walks tables keyed by values in layout order.
+-- - From engine 3 `pairs` walks every table in a fixed order (prelude.lua),
+--   so layout shows only in `#` of a table with more than one border: a
+--   table the chunk changed (entries or layout) that is holey now.
 local function restore(s)
   local changed = 0
+  local touched, nt = canon and {} or nil, 0
   for t, rec in next, s[1] do
     local copy, mt = rec[1], rec[2]
     if not untouched(t, rec) then
+      if canon then
+        nt = nt + 1
+        touched[nt] = t
+      end
       if not same(t, copy, mt) then
         local keys, m = {}, 0
         for k in next, t do
@@ -111,6 +138,12 @@ local function restore(s)
       local _, x = getupvalue(f, i)
       if not rawequal(x, ups[i]) then setupvalue(f, i, ups[i]) end
     end
+  end
+  if canon then
+    for i = 1, nt do
+      if holey(touched[i]) then changed = changed + 1 end
+    end
+    return changed
   end
   for t, rec in next, s[1] do
     if not untouched(t, rec) then changed = changed + 1 end

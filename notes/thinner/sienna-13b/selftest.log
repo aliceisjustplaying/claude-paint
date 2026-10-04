@@ -1,0 +1,21 @@
+ok:   --quick FAKE_= -> 0
+ok:   --card FAKE_= -> 0
+ok:   --all FAKE_= -> 0
+ok:   --quick FAKE_EXIT_ON=c05_an_emptying_brush_lays_less_and_a_fuller_load_lasts_farther -> 1
+ok:   --card FAKE_EXIT_ON=thinner_tests::c01_the_card_raw_sienna_thinned_half_keeps_half_the_contrast_at_2400px -> 1
+ok:   --all FAKE_DROP=c06_more_pressure_lays_more_paint_up_to_the_stroke_limit -> 1
+ok:   --all FAKE_SKIP=thinner_tests::c01_the_card_raw_sienna_thinned_half_keeps_half_the_contrast_at_2400px -> 1
+ok:   --all FAKE_FAIL=c09_the_solvent_evaporates_and_the_film_loses_its_volume -> 1
+ok:   --all FAKE_EMPTY=1 -> 1
+ok:   --quick FAKE_FAIL=c13_burnt_sienna_has_a_lower_contrast_ratio_than_raw_sienna_at_equal_film -> 1
+ok:   --card FAKE_FAIL=c13_burnt_sienna_has_a_lower_contrast_ratio_than_raw_sienna_at_equal_film -> 1
+ok:   --all FAKE_FAIL=c13_burnt_sienna_has_a_lower_contrast_ratio_than_raw_sienna_at_equal_film -> 1
+ok:   --card FAKE_DROP=c13_burnt_sienna_has_a_lower_contrast_ratio_than_raw_sienna_at_equal_film -> 1
+ok:   --quick FAKE_FAIL=c13_diagnostic_sienna_card_retained_absolute_substrate_difference -> 1
+ok:   --quick FAKE_CHECK2_FAIL=1 -> 1
+ok:   --all FAKE_NO_SHEET=1 -> 1
+ok:   --bogus FAKE_= -> 2
+ok:   --all THINNER_RAG_STUDY_DIR=$TMPDIR/thinner-runner-test.Hotm7S/sheetdir -> 0
+ok:   --all THINNER_RAG_STUDY_DIR: the sheet is in that directory, none in the checkout
+thinner_acceptance_runner: all cases pass
+exit 0

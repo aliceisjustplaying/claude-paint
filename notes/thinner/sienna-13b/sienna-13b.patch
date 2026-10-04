@@ -1,0 +1,673 @@
+diff --git a/crates/paint/tests/thinner_pigments.rs b/crates/paint/tests/thinner_pigments.rs
+index a7d2a8b..3c9fac1 100644
+--- a/crates/paint/tests/thinner_pigments.rs
++++ b/crates/paint/tests/thinner_pigments.rs
+@@ -1,16 +1,17 @@
+ //! Thinner check 13 (notes/thinner/ACCEPTANCE.md): the pigments stay as
+ //! they were, and burnt sienna is the more transparent of the two siennas
+-//! (Field/Salter 1869, §§50 and 155). Uses only the API af49348 already
+-//! had, so it runs on unchanged code too.
++//! (Field/Salter 1869, §§50 and 155), measured as the lower contrast ratio
++//! of equal films on the same named substrates. Uses only the API af49348
++//! already had, so it runs on unchanged code too.
+ //!
+-//!   cargo test -p paint --release --test thinner_pigments
++//!   cargo test -p paint --release --test thinner_pigments -- --show-output
+ //!
+ //! `tests/thinner/tubes_af49348.txt` is `tube_table()` as unchanged af49348
+ //! prints it (`print_tube_table`; commands in ACCEPTANCE.md).
+ 
+ use paint::color::luminance;
+-use paint::pigment::scatter_for;
+-use paint::{Canvas, Gesture, Held, Linen, Paint, Palette, Tool, hex};
++use paint::pigment::{hiding_of, scatter_for};
++use paint::{COAT_UM, Canvas, Gesture, Held, Linen, Paint, Palette, Rgb, Tool, hex};
+ 
+ /// Every tube the engine knows (`Debug`: name, pigment, masstone, hiding,
+ /// stiffness, strength, drying rates, floats in their shortest exact
+@@ -57,11 +58,104 @@ fn sargent(name: &str) -> Paint {
+     pal.pile(vec![(i, 1.0)]).laid(0.0)
+ }
+ 
++/// Check 13 (b)'s film thicknesses, µm of nonvolatile paint (the tube paint
++/// carries no solvent, so the whole film is nonvolatile), fixed before the
++/// check was restated: the thicknesses of the existing sienna diagnostic
++/// (`look_sienna.rs`, notes/look/logs/sienna.txt). 25 µm is one coat
++/// (`COAT_UM`).
++const FILMS_UM: [f32; 4] = [3.0, 10.0, 25.0, 30.0];
++
++/// How much lower burnt sienna's luminance contrast ratio must be than raw
++/// sienna's, at every film and substrate: an equality or an order inside
++/// numerical noise fails. Chosen from the arithmetic, not from the measured
++/// gap. The ratio (0..1) comes from a few dozen f32 operations, exp and
++/// sinh/cosh among them (`Pigment::over`); f32 resolves 6e-8 at 1, so even
++/// a pessimistic accumulation of rounding, and libm's last-place
++/// differences between platforms, stays near 1e-5. 1e-4 is ten times that,
++/// and forty times smaller than one 8-bit display step (1/255).
++const MARGIN: f32 = 1e-4;
++
++/// Check 13 (b)'s named substrates, (name, black, white) in linear RGB:
++/// the hiding chart's black (0) and white of 80% reflectance (the contrast
++/// ratio's usual chart, ASTM D2805 / ISO 6504-3), and the Sargent box's
++/// own bone black and lead white laid thick (their masstones, which 13 (a)
++/// freezes). Neither depends on how a brush lays paint.
++fn substrates() -> [(&'static str, Rgb, Rgb); 2] {
++    let pal = Palette::named_box("sargent").expect("the sargent box");
++    let masstone = |name: &str| pal.tubes.iter().find(|t| t.name == name).unwrap_or_else(|| panic!("no {name:?} in the sargent box")).color;
++    [("black/80% white chart", [0.0; 3], [0.8; 3]), ("bone black/lead white masstones", masstone("bone black"), masstone("lead white"))]
++}
++
++/// A film `um` µm thick of `paint` over `under`: the engine's own uniform-film
++/// optics (Kubelka-Munk, `Paint::over`), no brush involved.
++fn film(paint: &Paint, under: Rgb, um: f32) -> Rgb {
++    paint.over(under, um / COAT_UM)
++}
++
++/// Check 13 (b): at each of `FILMS_UM`, on each of `substrates()`, an equal
++/// film of burnt sienna has a lower RGB luminance contrast ratio (luminance
++/// over the black ÷ over the white; lower = more of the substrate shows
++/// through) than raw sienna, by at least `MARGIN`. Field/Salter 1869 §155
++/// calls burnt sienna "more transparent than the raw earth".
++///
++/// Prints, as diagnostics that aren't checked: the substrates' RGB and
++/// luminance; each film's RGB over each; each channel's contrast ratio
++/// (the channels need not rank alike); the retained absolute substrate
++/// difference (the card's old measure); and, for each tube, its catalog
++/// hiding beside the one-coat contrast ratio the rendered RGB film has.
++#[test]
++fn c13_burnt_sienna_has_a_lower_contrast_ratio_than_raw_sienna_at_equal_film() {
++    let siennas = [("raw sienna", sargent("raw sienna")), ("burnt sienna", sargent("burnt sienna"))];
++    for (name, p) in &siennas {
++        let t = paint::palette::catalog().into_iter().find(|t| t.name == *name).unwrap();
++        let y = luminance(t.color);
++        let ratio = |w: f32| luminance(film(p, [0.0; 3], COAT_UM)) / luminance(film(p, [w; 3], COAT_UM));
++        println!(
++            "{name}: catalog hiding {} = an input calibration scalar: the one-coat contrast ratio of a gray paint of the masstone's luminance {y:.4} over black/white 1.0 (`hiding_of`, here {:.4}), which fixes the scattering {:.4} per coat (`scatter_for`). The rendered RGB film (masstone {:.4?}, scattering {:.4}): one coat's luminance contrast ratio over black/white 1.0 {:.4}, over the black/80% white chart {:.4}",
++            t.hiding,
++            hiding_of(y, scatter_for(y, t.hiding)),
++            scatter_for(y, t.hiding),
++            p.color,
++            p.scatter,
++            ratio(1.0),
++            ratio(0.8)
++        );
++    }
++    let mut fails = Vec::new();
++    for (sub, black, white) in substrates() {
++        let (yb, yw) = (luminance(black), luminance(white));
++        println!("substrate {sub}: black RGB {black:.4?} Y {yb:.4}; white RGB {white:.4?} Y {yw:.4}");
++        for um in FILMS_UM {
++            let mut cr = [[0.0f32; 4]; 2];
++            for (k, (name, p)) in siennas.iter().enumerate() {
++                let (b, w) = (film(p, black, um), film(p, white, um));
++                cr[k] = [luminance(b) / luminance(w), b[0] / w[0], b[1] / w[1], b[2] / w[2]];
++                let kept = (luminance(w) - luminance(b)) / (yw - yb);
++                println!(
++                    "  {um:>4} µm {name:<12}: over black RGB {b:.4?}, over white RGB {w:.4?}; contrast ratio Y {:.4} (R {:.4} G {:.4} B {:.4}); retained absolute substrate difference {:.1}% (diagnostic)",
++                    cr[k][0],
++                    cr[k][1],
++                    cr[k][2],
++                    cr[k][3],
++                    100.0 * kept
++                );
++            }
++            let not_lower: Vec<&str> = ["R", "G", "B"].into_iter().enumerate().filter(|&(c, _)| cr[1][c + 1] >= cr[0][c + 1]).map(|(_, n)| n).collect();
++            println!("  {um:>4} µm: burnt - raw contrast ratio Y {:+.4}; channels where burnt's is not lower (diagnostic): {not_lower:?}", cr[1][0] - cr[0][0]);
++            if !(cr[1][0] <= cr[0][0] - MARGIN) {
++                fails.push(format!("{sub}, {um} µm: burnt {:.5}, raw {:.5}", cr[1][0], cr[0][0]));
++            }
++        }
++    }
++    assert!(fails.is_empty(), "burnt sienna's luminance contrast ratio is not lower than raw sienna's by {MARGIN} ({}): Field/Salter (§155) has burnt the more transparent", fails.join("; "));
++}
++
+ /// The card: a bone-black band and a lead-white band laid thick and dried,
+ /// then the same twenty filbert strokes of `paint` (unthinned, load 0.5)
+-/// across both. Returns the share of the card's black/white contrast still
+-/// showing and the open paint (µm) at every pixel.
+-fn card_kept(paint: Paint) -> (f32, Vec<f32>) {
++/// across both. Returns the bands' mean RGB before the strokes (black,
++/// white), after (black, white), the open paint (µm) at every pixel and its
++/// mean over the two bands.
++fn card(paint: Paint) -> ([Rgb; 4], Vec<f32>, f32) {
+     let mut c = Canvas::new(400, 1.0, hex("#d8cdb8")).with_engine(3).with_linen(Linen::fine(3));
+     c.prime(hex("#b9a98c"), 0.9, 60.0, 0.6, 0.2, 7);
+     for (name, y0) in [("bone black", 300.0f32), ("lead white", 500.0)] {
+@@ -74,7 +168,7 @@ fn card_kept(paint: Paint) -> (f32, Vec<f32>) {
+     }
+     c.dry();
+     let f = c.frame();
+-    let mean_l = |c: &Canvas, r: (f32, f32, f32, f32)| -> f32 {
++    let mean = |c: &Canvas, r: (f32, f32, f32, f32)| -> Rgb {
+         let pts: Vec<(f32, f32)> = (0..f.w * f.h).map(|i| (f.ux(i % f.w), f.uy(i / f.w))).filter(|&(x, y)| x >= r.0 && x < r.2 && y >= r.1 && y < r.3).collect();
+         let mut a = [0.0f64; 3];
+         for &(x, y) in &pts {
+@@ -83,38 +177,51 @@ fn card_kept(paint: Paint) -> (f32, Vec<f32>) {
+                 a[k] += p[k] as f64;
+             }
+         }
+-        luminance(a.map(|v| (v / pts.len() as f64) as f32))
++        a.map(|v| (v / pts.len() as f64) as f32)
+     };
+     let (black, white) = ((200.0, 330.0, 800.0, 470.0), (200.0, 530.0, 800.0, 670.0));
+-    let before = mean_l(&c, white) - mean_l(&c, black);
++    let before = [mean(&c, black), mean(&c, white)];
+     for k in 0..20 {
+         let mut h = Held::new(Tool::filbert(30.0), 100 + k);
+         h.load(paint, 0.5);
+         let y = 310.0 + 20.0 * k as f32;
+         c.drag(&mut h, &Gesture::new(vec![(150.0, y), (850.0, y)]).pressure(0.8, 0.8), None);
+     }
+-    let after = mean_l(&c, white) - mean_l(&c, black);
+     let film = (0..f.w * f.h).map(|i| c.wet_um(f.ux(i % f.w), f.uy(i / f.w))).collect();
+-    (after / before, film)
++    let on_bands: Vec<f32> = (0..f.w * f.h).map(|i| (f.ux(i % f.w), f.uy(i / f.w))).filter(|&(x, y)| [black, white].iter().any(|r| x >= r.0 && x < r.2 && y >= r.1 && y < r.3)).map(|(x, y)| c.wet_um(x, y)).collect();
++    ([before[0], before[1], mean(&c, black), mean(&c, white)], film, on_bands.iter().sum::<f32>() / on_bands.len() as f32)
+ }
+ 
+-/// Check 13 (b): measured the card's way, an equal (solvent-free) film of
+-/// burnt sienna lets at least as much of the card's black/white contrast
+-/// show as raw sienna. Field/Salter 1869 §155 calls burnt sienna "more
+-/// transparent than the raw earth". Prints both tubes' hiding and
+-/// scattering per coat alongside.
++/// A diagnostic, not an ordering check (until the restatement this was
++/// check 13 (b), which required burnt ≥ raw here): on the brush-painted
++/// card, the share of the bands' absolute black/white luminance difference
++/// that an equal film of each sienna still shows (the retained absolute
++/// substrate difference, an underpainting-value measure), beside the same
++/// bands' contrast ratio, per channel too. It depends on the brush's
++/// deposition, so its numbers belong to the code that ran it. It checks only
++/// its own fixture: the strokes laid paint and the two films are equal.
+ #[test]
+-fn c13_burnt_sienna_shows_the_card_at_least_as_well_as_raw_sienna() {
+-    for name in ["raw sienna", "burnt sienna"] {
+-        let t = paint::palette::catalog().into_iter().find(|t| t.name == name).unwrap();
+-        println!("{name}: hiding {} (contrast ratio of one coat), scattering {} per coat, masstone luminance {}", t.hiding, scatter_for(luminance(t.color), t.hiding), luminance(t.color));
+-    }
+-    let (raw, film_raw) = card_kept(sargent("raw sienna"));
+-    let (burnt, film_burnt) = card_kept(sargent("burnt sienna"));
++fn c13_diagnostic_sienna_card_retained_absolute_substrate_difference() {
++    let (raw, film_raw, um_raw) = card(sargent("raw sienna"));
++    let (burnt, film_burnt, um_burnt) = card(sargent("burnt sienna"));
+     let worst = film_raw.iter().zip(&film_burnt).map(|(a, b)| (a - b).abs()).fold(0.0, f32::max);
+     let total: f32 = film_raw.iter().sum();
+-    println!("card contrast showing: raw sienna {:.2}%, burnt sienna {:.2}% (films differ by at most {worst} µm; raw's mean {} µm)", 100.0 * raw, 100.0 * burnt, total / film_raw.len() as f32);
++    println!("card bands before the strokes: black RGB {:.4?} Y {:.4}, white RGB {:.4?} Y {:.4}", raw[0], luminance(raw[0]), raw[1], luminance(raw[1]));
++    for (name, m, um) in [("raw sienna", raw, um_raw), ("burnt sienna", burnt, um_burnt)] {
++        let kept = (luminance(m[3]) - luminance(m[2])) / (luminance(m[1]) - luminance(m[0]));
++        println!(
++            "{name}: mean film on the bands {um:.2} µm; over black RGB {:.4?}, over white RGB {:.4?}; retained absolute substrate difference {:.2}%; contrast ratio Y {:.4} (R {:.4} G {:.4} B {:.4})",
++            m[2],
++            m[3],
++            100.0 * kept,
++            luminance(m[2]) / luminance(m[3]),
++            m[2][0] / m[3][0],
++            m[2][1] / m[3][1],
++            m[2][2] / m[3][2]
++        );
++    }
++    println!("(films differ by at most {worst} µm at a pixel; raw's mean over the canvas {} µm)", total / film_raw.len() as f32);
+     assert!(total > 0.0, "the strokes laid paint");
+     assert!(worst <= 1e-3, "the two films are equal (solvent-free): they differ by up to {worst} µm at a pixel");
+-    assert!(burnt >= raw, "burnt sienna shows {:.2}% of the card, raw sienna {:.2}%: Field/Salter (§155) has burnt the more transparent", 100.0 * burnt, 100.0 * raw);
++    assert_eq!([raw[0], raw[1]], [burnt[0], burnt[1]], "both siennas go on the same card");
+ }
+diff --git a/notes/speed/SKIPPED.md b/notes/speed/SKIPPED.md
+index 78eab11..85b4893 100644
+--- a/notes/speed/SKIPPED.md
++++ b/notes/speed/SKIPPED.md
+@@ -87,16 +87,14 @@ dynamically. The live-width forms stay in `--all`.
+ 
+ `scripts/tests/cargo_tests.sh` (the `cargo-test` step, test profile) leaves
+ out the thinner's acceptance tests: the test binaries `thinner_physics` and
+-`thinner_pigments` and the easel binary's `thinner_tests::` module (27 tests,
++`thinner_pigments` and the easel binary's `thinner_tests::` module (28 tests,
+ 7 of them `#[ignore]`d slow ones). Their approved command is a release build,
+ `scripts/test_thinner_acceptance` (`notes/thinner/ACCEPTANCE.md`), which
+ `scripts/test` runs: `--quick` in the fast checks (60 s) and `--all`, the
+ 2400 px card included, in `--all` (300 s). Their release test binaries are
+-built by the build step `build-thinner-release-tests`. Check 13 (b)
+-(`c13_burnt_sienna_shows_the_card_at_least_as_well_as_raw_sienna`) fails
+-until the user decides; the runner then exits 3 and `scripts/test` reports
+-the known failure: "NOT ALL GREEN (known pre-existing failure: thinner check
+-13(b), user decision)", never a pass.
++built by the build step `build-thinner-release-tests`. Check 13 (b) was
++restated (`notes/thinner/sienna-13b/APPROVAL.md`); the steps no longer list
++a known failure.
+ 
+ ### Doc examples (`ignore` code blocks)
+ 
+diff --git a/notes/speed/test_lists/all.tsv b/notes/speed/test_lists/all.tsv
+index eb334ad..c3ab32d 100644
+--- a/notes/speed/test_lists/all.tsv
++++ b/notes/speed/test_lists/all.tsv
+@@ -19,7 +19,7 @@ script	baseline-state	60	6	^\S+: state equal on every baseline field	scripts/tes
+ cargo	slow-tests-by-name	240	4	-	cargo test -p easel --test boxes -- --ignored --exact a_round_19_log_replays_as_before >"$TMPDIR/slow-r19.out" 2>&1 & a=$!; cargo test -p easel --test determinism -- --ignored --exact hand_time_is_deterministic_across_thread_counts_at_the_live_width state_digests_are_the_same_in_every_replay_at_the_live_width the_rag_replays_the_same_at_the_live_width >"$TMPDIR/slow-det.out" 2>&1 & b=$!; wait $a; ra=$?; wait $b; rb=$?; cat "$TMPDIR/slow-r19.out" "$TMPDIR/slow-det.out"; [ $ra = 0 ] && [ $rb = 0 ]	s
+ cargo	slow-thin-blend	180	1	-	cargo test -p paint --test ground_grain -- --ignored --exact thin_blend_bares_ground	s
+ cargo	painter-build-inness	300	14	-	CARGO_TARGET_DIR="$CARGO_TARGET_DIR/p" cargo test -p easel --no-default-features --features box-inness	s
+-script	thinner-all	300	1	^thinner acceptance --all: \d+ of \d+ required tests passed	THINNER_RAG_STUDY_DIR="$TMPDIR" scripts/test_thinner_acceptance --all	s	3	^thinner acceptance --all: NOT ALL GREEN: every other required test passed; only check 13 \(b\)'s pre-existing failure remains$	thinner check 13(b), user decision
++script	thinner-all	300	1	^thinner acceptance --all: \d+ of \d+ required tests passed	THINNER_RAG_STUDY_DIR="$TMPDIR" scripts/test_thinner_acceptance --all	s
+ script	lockrun	60	17	^ok \d+ -	scripts/tests/lockrun.sh
+ script	replay-env	60	1	^replay_env: check_painting, finish_painting and replay_clip replayed	scripts/tests/replay_env.sh
+ script	check-live	60	1	^check_live: check_painting passed	scripts/tests/check_live.sh
+diff --git a/notes/speed/test_lists/fast.tsv b/notes/speed/test_lists/fast.tsv
+index 9b40aaa..f6fa844 100644
+--- a/notes/speed/test_lists/fast.tsv
++++ b/notes/speed/test_lists/fast.tsv
+@@ -7,4 +7,4 @@ cargo	cargo-test	60	271	-	scripts/tests/cargo_tests.sh -j 4
+ script	old-logs	60	11	^old_logs: \S+ ok	scripts/tests/old_logs.sh "$CARGO_TARGET_DIR/release/easel"
+ script	baseline-package	60	1	^verify_package: hashes ok	notes/thinner/baseline/tools/verify_package.sh
+ script	baseline-state	60	6	^\S+: state equal on every baseline field	scripts/tests/baseline_state.sh "$CARGO_TARGET_DIR/release/easel"
+-script	thinner-quick	60	1	^thinner acceptance --quick: \d+ of \d+ required tests passed	scripts/test_thinner_acceptance --quick	-	3	^thinner acceptance --quick: NOT ALL GREEN: every other required test passed; only check 13 \(b\)'s pre-existing failure remains$	thinner check 13(b), user decision
++script	thinner-quick	60	1	^thinner acceptance --quick: \d+ of \d+ required tests passed	scripts/test_thinner_acceptance --quick	-
+diff --git a/notes/thinner/ACCEPTANCE.md b/notes/thinner/ACCEPTANCE.md
+index 5bca819..d480242 100644
+--- a/notes/thinner/ACCEPTANCE.md
++++ b/notes/thinner/ACCEPTANCE.md
+@@ -26,8 +26,8 @@ approved lock, with these limits:
+ 
+ | command | runs | limit |
+ |---|---|---|
+-| `~/src/a/claude-paint-tools/lockrun --timeout 60 --owner <you> -- scripts/test_thinner_acceptance --quick` | check 2, check 13 (a), check 13 (b) as an expected failure, and every test that isn't slow | 60 s once built |
+-| `~/src/a/claude-paint-tools/lockrun --timeout 300 --owner <you> -- scripts/test_thinner_acceptance --card` | check 1, and check 13 (b) as an expected failure | 300 s |
++| `~/src/a/claude-paint-tools/lockrun --timeout 60 --owner <you> -- scripts/test_thinner_acceptance --quick` | check 2, check 13 (a) and (b), the sienna card's diagnostic, and every test that isn't slow | 60 s once built |
++| `~/src/a/claude-paint-tools/lockrun --timeout 300 --owner <you> -- scripts/test_thinner_acceptance --card` | check 1, check 13 (b) and the sienna card's diagnostic | 300 s |
+ | `~/src/a/claude-paint-tools/lockrun --timeout 600 --owner <you> -- scripts/test_thinner_acceptance --all` | everything: the slow tests, the rag study's sheet and the card | 600 s (also a first build) |
+ 
+ **What counts.** A test passes only if cargo exited 0 and printed
+@@ -45,24 +45,16 @@ study's sheet, `rag_study.png`, to `THINNER_RAG_STUDY_DIR` (default
+ `notes/thinner`; set it so a candidate checkout stays clean) and fails if
+ the file isn't written.
+ 
+-**Check 13 (b)** fails on unchanged code (below) and awaits the user.
+-Every mode runs it and expects it to fail at its ordering assertion: the
+-log must hold `panicked at crates/paint/tests/thinner_pigments.rs:119:` and
+-that assertion's message, `Field/Salter (§155) has burnt the more
+-transparent`. It is reported on its own line as
+-`EXPECTED FAIL (pre-existing; user decision, ACCEPTANCE.md check 13)`.
+-If it passes, doesn't run or fails anywhere else (a setup panic, another
+-assertion), the run fails.
++**Check 13 (b)** and the sienna card's diagnostic run in every mode with
++`--show-output`, so their measured numbers are in the log. The diagnostic
++checks only its own fixture (below).
+ 
+ **Exit codes:**
+ 
+-- 1: anything else failed;
+-- 3: every other required test passed and only 13 (b)'s expected failure
+-  remains, printed as `NOT ALL GREEN`;
++- 0: every required test passed, printed as `PASSED`;
++- 1: anything failed;
+ - 2: a usage error.
+ 
+-While 13 (b) stands, 0 is never returned.
+-
+ **Dependencies:** cargo (rustc 1.97.1 here), bash 5 (the baseline's
+ `run_scenes.sh` reads `EPOCHREALTIME`), python3 with only the standard
+ library (the baseline's `state_compare.py`, and `scripts/thinner_dump_fields.py`)
+@@ -77,14 +69,14 @@ These cases must exit 1:
+ - ok lines from a cargo that exits nonzero;
+ - a name missing, ignored or failed;
+ - empty output;
+-- 13 (b) passing, not running, or failing with another panic;
++- 13 (b) failing (each mode) or not running;
++- the sienna card's diagnostic failing;
+ - check 2 failing;
+ - no rag sheet.
+ 
+-Everything passing with 13 (b) failing at its assertion must exit 3 in all
+-three modes, and a usage error exits 2. With `THINNER_RAG_STUDY_DIR` set,
+-the sheet must land there and none in the checkout. It passes all 18
+-cases.
++Everything passing must exit 0 in all three modes, and a usage error
++exits 2. With `THINNER_RAG_STUDY_DIR` set, the sheet must land there and
++none in the checkout. It passes all 19 cases.
+ `scripts/tests/thinner_dump_fields_test.py` tests check 2's field checker
+ on tiny fake dumps (6 cases, all pass), and
+ `scripts/tests/thinner_clock_restart_fake.py` is check 17's demonstration
+@@ -463,31 +455,77 @@ with only this test file added:
+ `git show af49348:crates/paint/src/palette.rs`: 48 tubes and 6 boxes
+ match. **Passes today.**
+ 
+-**(b) `c13_burnt_sienna_shows_the_card_at_least_as_well_as_raw_sienna`.**
+-Measured the card's way:
++**(b) `c13_burnt_sienna_has_a_lower_contrast_ratio_than_raw_sienna_at_equal_film`.**
++Field/Salter 1869 §155 calls burnt sienna "more transparent than the raw
++earth". Restated (approval: notes/thinner/sienna-13b/APPROVAL.md) as the
++paint industry's hiding measure, the contrast ratio (luminance of a film
++over a black ÷ over a white; lower = more see-through; ASTM D2805 /
++ISO 6504-3), of equal films on the same named substrates. The film is the
++engine's own uniform-film optics (`Paint::over`, Kubelka-Munk), with no
++brush involved, so brush deposition can't move it.
++
++- Tubes: raw and burnt sienna of the Sargent box, unthinned, so the whole
++  film is nonvolatile paint.
++- Films: 3, 10, 25 and 30 µm (25 µm is one coat), fixed in advance: the
++  thicknesses of the existing sienna diagnostic (`look_sienna.rs`,
++  notes/look/logs/sienna.txt).
++- Substrates: the black/80% white chart (RGB 0 and 0.8 in every channel)
++  and the Sargent box's bone black and lead white masstones (frozen by (a)).
++
++Expected: at each film on each substrate, burnt sienna's luminance contrast
++ratio is lower than raw sienna's by at least 1e-4. The margin is set from
++the arithmetic, not from the measured gap: the ratio comes from a few dozen
++f32 operations, and f32 rounding and libm's last-place differences between
++platforms stay near 1e-5; 1e-4 is ten times that and forty times smaller
++than one 8-bit display step. A tie inside it fails. Measured afterward: the
++f32 ratios differ from an f64 port of the same formulas by at most 9.2e-8
++(notes/thinner/sienna-13b/EVIDENCE.md).
++
++Printed, not checked: the substrates' RGB and luminance; each film's RGB
++over each; each channel's ratio (the channels need not rank alike: green
++ranks the other way from 10 µm up); the retained absolute substrate
++difference; and each tube's catalog hiding beside the rendered one-coat
++ratio.
++
++**The catalog's hiding (0.40 raw, 0.45 burnt) is an input calibration
++scalar.** `scatter_for` turns it into the paint's scattering through a
++grayscale surrogate: a gray paint of the masstone's luminance, one coat
++over black and white 1.0. The renderer then absorbs per RGB channel, so a
++rendered coat's luminance contrast ratio is another number: 0.3884 raw and
++0.3778 burnt over black/white 1.0, 0.4516 and 0.4378 over the black/80%
++white chart. The serialized values and (a) are unchanged.
++
++Measured on d54b423 (2026-10-04), luminance contrast ratio:
++
++| film | chart: raw | chart: burnt | masstones: raw | masstones: burnt |
++|---|---|---|---|---|
++| 3 µm | 0.0471 | 0.0352 | 0.0586 | 0.0474 |
++| 10 µm | 0.1695 | 0.1537 | 0.1748 | 0.1590 |
++| 25 µm | 0.4516 | 0.4378 | 0.4450 | 0.4270 |
++| 30 µm | 0.5365 | 0.5117 | 0.5273 | 0.4983 |
++
++**Diagnostic: `c13_diagnostic_sienna_card_retained_absolute_substrate_difference`.**
++Until the restatement this was (b), `c13_burnt_sienna_shows_the_card_at_least_as_well_as_raw_sienna`,
++which required burnt ≥ raw here. It measures the card's way:
+ 
+ - a bone-black band and a lead-white band, laid thick and dried;
+ - the same 20 filbert strokes of unthinned raw sienna, then of burnt
+   sienna (Sargent box, load 0.5), across both, with the films equal pixel
+   for pixel.
+ 
+-Expected: burnt sienna lets at least as much of the black/white contrast
+-show as raw sienna. Field/Salter 1869 §155 calls burnt "more transparent
+-than the raw earth".
++It prints the share of the bands' absolute black/white luminance difference
++each sienna still shows (the retained absolute substrate difference, an
++underpainting-value measure) and the same bands' contrast ratio, per
++channel too. It depends on the brush's deposition, so its numbers belong
++to the code that ran it. It checks only its own fixture: the strokes laid
++paint, the two films are equal within 1e-3 µm, and both siennas go on the
++same card. It doesn't order the siennas.
+ 
+-**PRE-EXISTING FINDING, for the user's decision: (b) fails on unchanged
+-code** (paint sources equal af49348's, per (a); measured 2026-10-04):
+-
+-| | hiding (one coat's contrast ratio) | scattering per coat | masstone luminance | card contrast showing, equal 10.07 µm film |
+-|---|---|---|---|---|
+-| raw sienna | 0.40 | 0.296 | 0.174 | **17.91%** |
+-| burnt sienna | 0.45 | 0.199 | 0.080 | **9.85%** |
+-
+-Burnt sienna scatters less, but its darker masstone absorbs much more, so
+-on the card it hides more than raw sienna. The tube table agrees: hiding
+-0.45 against 0.40. The test body stays as written. The runner accepts only
+-this failure, at line 119 with its message, reports it as an expected
+-failure and exits 3, never 0, while it stands. Pigments are not changed.
++Measured on d54b423, an equal film of 37.92 µm mean on the bands: retained
++absolute substrate difference raw 17.91%, burnt 9.85%; contrast ratio raw
++0.4998, burnt 0.4642. Burnt sienna's darker masstone absorbs more, so it
++keeps less of the absolute difference while its contrast ratio is lower.
++Pigments are not changed.
+ 
+ ### 14. Stroke points
+ 
+@@ -757,12 +795,16 @@ Decided by the owner on 2026-10-04 (may be revisited):
+   alone was within 1e-7 of the law there and the flow accounted for the
+   rest. The constant was loosened rather than the selection restated.
+ 
++- **Check 13 (b) restated** (notes/thinner/sienna-13b/APPROVAL.md): the
++  card's retained absolute difference ranked the siennas against
++  Field/Salter, because burnt sienna's darker masstone absorbs more. (b)
++  now compares contrast ratios of equal direct films on named substrates;
++  the card's measure stays as a diagnostic. Pigments, the catalog's hiding
++  and (a) are unchanged.
++
+ For the user:
+ 
+-1. **Check 13 (b) fails today.** The sienna order on the card is the
+-   reverse of Field/Salter's. Is that a defect for a later pigment fix
+-   (not tonight), or should the check be restated?
+-2. Check 3's policy and check 8's allowance (above).
++1. Check 3's policy and check 8's allowance (above).
+ 
+ Risks the builder may hit; a fix goes back to review, never into a weaker
+ test:
+@@ -779,7 +821,7 @@ test:
+ |---|---|
+ | `1417fdda18d15fe32e532ca43d63f6fa42d410aef041a51013975ae00e025e87` | `crates/paint/tests/thinner_physics.rs` |
+ | `fe7d4e25e0e03a094d3c534dc2f8728c6ef4482e29f38a5b0b3ce01042d728ff` | `crates/paint/tests/thinner_support/mod.rs` |
+-| `53924605cde088b16056fd31d69d57f96c5eae8d5c4674858326823bb0ca06cc` | `crates/paint/tests/thinner_pigments.rs` |
++| `257c3d828815642ec091a4d3e6ff5e90490914afdb450ae9bb5ce2362f2f85df` | `crates/paint/tests/thinner_pigments.rs` |
+ | `542e25ab395446ea79c893640e5515702309b145f99a5da5ff7e617ea83e15c2` | `crates/paint/tests/thinner/tubes_af49348.txt` |
+ | `a8a8c6668bf71626032de47578a9c0810fc42cf3505cdb200bae6067e340b060` | `crates/easel/src/thinner_tests.rs` |
+ | `f94b50a428ef2e05285f2f4f6c634662eff85d945d2c0ab0c1033c06fd7cefd1` | `crates/easel/src/thinner_measure.rs` |
+@@ -791,8 +833,8 @@ test:
+ | `fc674bf8a45732cf52e56976279e2ecfd24ca2bba9fcecd43d7f31d3ef137a96` | `crates/easel/tests/thinner/failing.lua` |
+ | `83a9244e38ef0eca10903a4d7a4761ac3f8dd6861d564526cfe6c2f8c9325259` | `crates/easel/tests/thinner/next.lua` |
+ | `31e301b3f309913d55147c7c2a626bf3a8bb8ca57c8859b2884403e68d30919d` | `crates/easel/tests/thinner/thinned.lua` |
+-| `7c94dfe3cccc81760acf1e313f590558e2696ddbc7819117c517c77c03ef285b` | `scripts/test_thinner_acceptance` |
+-| `740434325f19204fb68ba3369c9f439076390ba4a83beb26ae6b93947866dc66` | `scripts/tests/thinner_acceptance_runner.sh` |
++| `e5509e4dd2be5196b007de5f650b27a1c7315b9e1bd0d569874122b41bf79487` | `scripts/test_thinner_acceptance` |
++| `b4df5e70bb5cf22602e755f2c7e636ae91286b7c9cd4a9c3a4dc414caa8a8341` | `scripts/tests/thinner_acceptance_runner.sh` |
+ | `a6af467b6309d948790c0e460f9b06bb79b05a17a360fba01bbc9e859fdbe18f` | `scripts/tests/thinner_dump_fields_test.py` |
+ | `93b580798dd2c21c464c382c8b5d4a00b3e069f7f4c51f5b8aa95e8c6ddebd6a` | `scripts/tests/thinner_clock_restart_fake.py` |
+ | `d921054862c2ba41be635c80ef756e0097d81accbd2699756c90ea77e776abf1` | `scripts/thinner_check2` |
+diff --git a/scripts/test_thinner_acceptance b/scripts/test_thinner_acceptance
+index baa1329..a93a584 100755
+--- a/scripts/test_thinner_acceptance
++++ b/scripts/test_thinner_acceptance
+@@ -3,7 +3,7 @@
+ # test name, in release builds.
+ #
+ #   scripts/test_thinner_acceptance --quick   ordinary edits: everything but the slow ones
+-#   scripts/test_thinner_acceptance --card    check 1 only: the 2400 px card (#[ignore = "slow"])
++#   scripts/test_thinner_acceptance --card    the cards: check 1's 2400 px card (#[ignore = "slow"]) and check 13's sienna card
+ #   scripts/test_thinner_acceptance --all     every agreed check, the slow ones and the card included
+ #
+ # A test counts as passed only if cargo exited 0 and printed `test NAME ...
+@@ -14,15 +14,12 @@
+ # the rag study's sheet, rag_study.png, to THINNER_RAG_STUDY_DIR (default
+ # notes/thinner; set it to keep a checkout clean) and fails without it.
+ #
+-# Check 13 (b) is a known failure on unchanged code, awaiting the user's
+-# decision (ACCEPTANCE.md, check 13). Every mode runs it and expects it to
+-# fail at its ordering assertion (thinner_pigments.rs:119, with that
+-# assertion's message). It is reported on its own line as EXPECTED FAIL; if
+-# it passes, doesn't run or fails anywhere else, the run fails.
++# Every mode runs check 13 (b) (the siennas' contrast ratios at equal
++# films) and the sienna card's diagnostic, with their printed numbers in the
++# log (--show-output). The diagnostic checks only its own fixture.
+ #
+-# Exit: 1 if anything else failed; 3 if every other required test passed
+-# and only check 13 (b)'s expected failure remains (NOT ALL GREEN); 2 on a
+-# usage error. While check 13 (b) stands, 0 is never returned.
++# Exit: 0 if every required test passed; 1 if anything failed; 2 on a
++# usage error.
+ #
+ # Needs cargo, bash 5, python3 and xz. One heavy job at a time: run it
+ # through ~/src/a/claude-paint-tools/lockrun with --timeout 60 (--quick,
+@@ -60,11 +57,11 @@ PAINT_SLOW=(
+ PIGMENTS=(
+   c13_every_pigment_value_is_af49348s
+ )
+-EXPECTED_FAIL=c13_burnt_sienna_shows_the_card_at_least_as_well_as_raw_sienna
+-# the known failure is the ordering assertion's own panic, nothing else
+-# (crates/paint/tests/thinner_pigments.rs:119)
+-EXPECTED_AT="panicked at crates/paint/tests/thinner_pigments.rs:119:"
+-EXPECTED_MSG="Field/Salter (§155) has burnt the more transparent"
++# check 13 (b) and the sienna card's diagnostic, run with --show-output
++SIENNA=(
++  c13_burnt_sienna_has_a_lower_contrast_ratio_than_raw_sienna_at_equal_film
++  c13_diagnostic_sienna_card_retained_absolute_substrate_difference
++)
+ # crates/easel/src/thinner_tests.rs (unit tests of the easel binary)
+ EASEL_QUICK=(
+   thinner_tests::c03_af49348_paintck8_saves_are_refused_naming_the_old_version
+@@ -89,7 +86,6 @@ logs=$(mktemp -d "${TMPDIR:-/tmp}/thinner-acceptance.XXXXXX")
+ required=0
+ passed=0
+ bad=()
+-expected=""
+ 
+ # cargo_test <label> <cargo args...> -- <libtest args...> ::: <names...>:
+ # runs it, leaves the log in $logs/<label>.log and cargo's exit in $status
+@@ -135,23 +131,6 @@ run() {
+   done
+ }
+ 
+-# check 13 (b), the known pre-existing failure: it must run and fail at its
+-# ordering assertion, with that assertion's message
+-expected_fail() {
+-  cargo_test check13b --release -p paint --test thinner_pigments -- --exact ::: "$EXPECTED_FAIL"
+-  if grep -qF "test $EXPECTED_FAIL ... FAILED" "$log" && [ "$status" != 0 ]; then
+-    if grep -qF "$EXPECTED_AT" "$log" && grep -qF "$EXPECTED_MSG" "$log"; then
+-      expected="$EXPECTED_FAIL"
+-    else
+-      bad+=("$EXPECTED_FAIL (failed, but not at its ordering assertion (thinner_pigments.rs:119, \"$EXPECTED_MSG\"): a different failure, see $log)")
+-    fi
+-  elif grep -qxF "test $EXPECTED_FAIL ... ok" "$log"; then
+-    bad+=("$EXPECTED_FAIL (passed unexpectedly: the pre-existing finding changed; review ACCEPTANCE.md check 13 before anything else)")
+-  else
+-    bad+=("$EXPECTED_FAIL (did not run: the expected failure must run and fail)")
+-  fi
+-}
+-
+ # check 2: the before-change baseline's own comparison (scripts/thinner_check2)
+ check2() {
+   local t0 t1 st
+@@ -176,18 +155,18 @@ case "$mode" in
+   --quick)
+     check2
+     run pigments --release -p paint --test thinner_pigments -- --exact ::: "${PIGMENTS[@]}"
+-    expected_fail
++    run sienna --release -p paint --test thinner_pigments -- --exact --show-output ::: "${SIENNA[@]}"
+     run paint --release -p paint --test thinner_physics -- --exact ::: "${PAINT_QUICK[@]}"
+     run easel --release -p easel --bin easel -- --exact ::: "${EASEL_QUICK[@]}"
+     ;;
+   --card)
+-    expected_fail
++    run sienna --release -p paint --test thinner_pigments -- --exact --show-output ::: "${SIENNA[@]}"
+     run card --release -p easel --bin easel -- --exact --ignored --show-output ::: "${CARD[@]}"
+     ;;
+   --all)
+     check2
+     run pigments --release -p paint --test thinner_pigments -- --exact ::: "${PIGMENTS[@]}"
+-    expected_fail
++    run sienna --release -p paint --test thinner_pigments -- --exact --show-output ::: "${SIENNA[@]}"
+     run paint --release -p paint --test thinner_physics -- --exact ::: "${PAINT_QUICK[@]}"
+     run paint-slow --release -p paint --test thinner_physics -- --exact --ignored --show-output ::: "${PAINT_SLOW[@]}"
+     run easel --release -p easel --bin easel -- --exact ::: "${EASEL_QUICK[@]}"
+@@ -203,13 +182,10 @@ esac
+ 
+ echo
+ echo "thinner acceptance $mode: $passed of $required required tests passed (logs: $logs)"
+-if [ -n "$expected" ]; then
+-  echo "  EXPECTED FAIL (pre-existing; user decision, ACCEPTANCE.md check 13): $expected"
+-fi
+ if [ ${#bad[@]} -gt 0 ]; then
+   printf '  NOT PASSED: %s\n' "${bad[@]}"
+   echo "thinner acceptance $mode: FAILED"
+   exit 1
+ fi
+-echo "thinner acceptance $mode: NOT ALL GREEN: every other required test passed; only check 13 (b)'s pre-existing failure remains"
+-exit 3
++echo "thinner acceptance $mode: PASSED"
++exit 0
+diff --git a/scripts/tests/thinner_acceptance_runner.sh b/scripts/tests/thinner_acceptance_runner.sh
+index cdff4cc..8b411e2 100755
+--- a/scripts/tests/thinner_acceptance_runner.sh
++++ b/scripts/tests/thinner_acceptance_runner.sh
+@@ -4,16 +4,16 @@
+ # so). Each case sets what the fake prints and how it exits, and checks the
+ # runner's exit code and summary:
+ #
+-#   every test ok, check 13 (b) failing as expected   -> 3, NOT ALL GREEN (--quick, --card, --all)
++#   every test ok                                     -> 0, PASSED (--quick, --card, --all)
+ #   ok lines but cargo exits nonzero                  -> 1
+ #   a name missing / ignored / failed                 -> 1
+ #   no output at all                                  -> 1
+-#   check 13 (b) passing, or not running              -> 1
+-#   check 13 (b) failing somewhere else (another panic) -> 1
++#   check 13 (b) failing, or not running              -> 1
++#   the sienna card's diagnostic failing (its fixture) -> 1
+ #   check 2 failing                                   -> 1
+ #   the rag study's sheet not written (--all)         -> 1
+ #   THINNER_RAG_STUDY_DIR set (--all): the sheet goes there, not into the
+-#   checkout                                          -> 3
++#   checkout                                          -> 0
+ #
+ #   scripts/tests/thinner_acceptance_runner.sh
+ set -euo pipefail
+@@ -40,26 +40,9 @@ for a in "$@"; do
+   names+=("$a")
+ done
+ has() { [[ " $1 " == *" $2 "* ]]; }
+-c13b=c13_burnt_sienna_shows_the_card_at_least_as_well_as_raw_sienna
+ failed=0; code=0
+ [ -n "${FAKE_EMPTY:-}" ] && exit 101
+ for n in "${names[@]}"; do
+-  if [ "$n" = $c13b ] && [ -z "${FAKE_13B_PASS:-}" ]; then
+-    [ -n "${FAKE_13B_DROP:-}" ] && continue
+-    echo "test $n ... FAILED"; failed=1
+-    echo
+-    echo "failures:"
+-    echo
+-    echo "---- $n stdout ----"
+-    if [ -n "${FAKE_13B_OTHER:-}" ]; then
+-      echo "thread '$n' panicked at crates/paint/tests/thinner_pigments.rs:116:5:"
+-      echo "the strokes laid paint"
+-    else
+-      echo "thread '$n' panicked at crates/paint/tests/thinner_pigments.rs:119:5:"
+-      echo "burnt sienna shows 9.85% of the card, raw sienna 17.91%: Field/Salter (§155) has burnt the more transparent"
+-    fi
+-    continue
+-  fi
+   if has "${FAKE_FAIL:-}" "$n"; then echo "test $n ... FAILED"; failed=1
+   elif has "${FAKE_SKIP:-}" "$n"; then echo "test $n ... ignored, slow"
+   elif has "${FAKE_DROP:-}" "$n"; then :
+@@ -87,26 +70,29 @@ expect() {
+   fi
+ }
+ 
++c13b=c13_burnt_sienna_has_a_lower_contrast_ratio_than_raw_sienna_at_equal_film
++c13card=c13_diagnostic_sienna_card_retained_absolute_substrate_difference
+ for m in --quick --card --all; do
+-  expect 3 $m "NOT ALL GREEN" FAKE_=
++  expect 0 $m "PASSED" FAKE_=
+ done
+-expect 3 --all "EXPECTED FAIL (pre-existing; user decision, ACCEPTANCE.md check 13)" FAKE_=
+ expect 1 --quick "cargo exited 101" FAKE_EXIT_ON=c05_an_emptying_brush_lays_less_and_a_fuller_load_lasts_farther
+ expect 1 --card "printed ok, but cargo exited 101" FAKE_EXIT_ON=thinner_tests::c01_the_card_raw_sienna_thinned_half_keeps_half_the_contrast_at_2400px
+ expect 1 --all "(did not run" FAKE_DROP=c06_more_pressure_lays_more_paint_up_to_the_stroke_limit
+ expect 1 --all "(skipped)" FAKE_SKIP=thinner_tests::c01_the_card_raw_sienna_thinned_half_keeps_half_the_contrast_at_2400px
+ expect 1 --all "(failed)" FAKE_FAIL=c09_the_solvent_evaporates_and_the_film_loses_its_volume
+ expect 1 --all "FAILED" FAKE_EMPTY=1
+-expect 1 --quick "passed unexpectedly" FAKE_13B_PASS=1
+-expect 1 --card "the expected failure must run and fail" FAKE_13B_DROP=1
+-expect 1 --quick "not at its ordering assertion" FAKE_13B_OTHER=1
++for m in --quick --card --all; do
++  expect 1 $m "$c13b (failed)" FAKE_FAIL=$c13b
++done
++expect 1 --card "$c13b (did not run" FAKE_DROP=$c13b
++expect 1 --quick "$c13card (failed)" FAKE_FAIL=$c13card
+ expect 1 --quick "check 2 (scripts/thinner_check2" FAKE_CHECK2_FAIL=1
+ expect 1 --all "rag study's sheet was not written" FAKE_NO_SHEET=1
+ expect 2 --bogus - FAKE_=
+ # the sheet's directory: given, it is used and the checkout stays clean
+ rm -f "$work/repo/notes/thinner/rag_study.png"
+ mkdir -p "$work/sheetdir"
+-expect 3 --all "NOT ALL GREEN" THINNER_RAG_STUDY_DIR="$work/sheetdir"
++expect 0 --all "PASSED" THINNER_RAG_STUDY_DIR="$work/sheetdir"
+ if [ -s "$work/sheetdir/rag_study.png" ] && [ ! -e "$work/repo/notes/thinner/rag_study.png" ]; then
+   echo "ok:   --all THINNER_RAG_STUDY_DIR: the sheet is in that directory, none in the checkout"
+ else

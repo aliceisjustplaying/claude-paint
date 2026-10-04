@@ -1,0 +1,26 @@
+lockrun: job 70a01484 started (process group 52536, timeout 300 s, log /tmp/lockrun-501/logs/20261004-203119-70a01484.log)
+    Finished `release` profile [optimized] target(s) in 0.34s
+
+running 1 test
+raw sienna 3 µm sub [0.0, 0.0, 0.0]: f32 0.047136616 f64 0.047136627 |diff| 1.07e-8
+raw sienna 10 µm sub [0.0, 0.0, 0.0]: f32 0.169452921 f64 0.169452941 |diff| 2.04e-8
+raw sienna 25 µm sub [0.0, 0.0, 0.0]: f32 0.451625019 f64 0.451625026 |diff| 6.64e-9
+raw sienna 30 µm sub [0.0, 0.0, 0.0]: f32 0.536530733 f64 0.536530716 |diff| 1.71e-8
+raw sienna 3 µm sub [0.012983031, 0.010960094, 0.009721218]: f32 0.058640350 f64 0.058640355 |diff| 5.18e-9
+raw sienna 10 µm sub [0.012983031, 0.010960094, 0.009721218]: f32 0.174752980 f64 0.174752974 |diff| 6.14e-9
+raw sienna 25 µm sub [0.012983031, 0.010960094, 0.009721218]: f32 0.444983780 f64 0.444983805 |diff| 2.45e-8
+raw sienna 30 µm sub [0.012983031, 0.010960094, 0.009721218]: f32 0.527345240 f64 0.527345332 |diff| 9.18e-8
+burnt sienna 3 µm sub [0.0, 0.0, 0.0]: f32 0.035240829 f64 0.035240824 |diff| 5.23e-9
+burnt sienna 10 µm sub [0.0, 0.0, 0.0]: f32 0.153708816 f64 0.153708804 |diff| 1.14e-8
+burnt sienna 25 µm sub [0.0, 0.0, 0.0]: f32 0.437835872 f64 0.437835855 |diff| 1.75e-8
+burnt sienna 30 µm sub [0.0, 0.0, 0.0]: f32 0.511737347 f64 0.511737410 |diff| 6.31e-8
+burnt sienna 3 µm sub [0.012983031, 0.010960094, 0.009721218]: f32 0.047388811 f64 0.047388809 |diff| 1.81e-9
+burnt sienna 10 µm sub [0.012983031, 0.010960094, 0.009721218]: f32 0.158966169 f64 0.158966166 |diff| 2.39e-9
+burnt sienna 25 µm sub [0.012983031, 0.010960094, 0.009721218]: f32 0.426955462 f64 0.426955410 |diff| 5.14e-8
+burnt sienna 30 µm sub [0.012983031, 0.010960094, 0.009721218]: f32 0.498268485 f64 0.498268459 |diff| 2.59e-8
+largest |f32 - f64| contrast ratio difference: 9.180e-8
+test probe ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+lockrun: finished: exit 0 in 0.7 s; log /tmp/lockrun-501/logs/20261004-203119-70a01484.log

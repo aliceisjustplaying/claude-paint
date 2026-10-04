@@ -1,0 +1,31 @@
+    Finished `release` profile [optimized] target(s) in 15.36s
+     Running tests/thinner_pigments.rs (target/release/deps/thinner_pigments-a25488fe715b8154)
+
+running 2 tests
+test c13_every_pigment_value_is_af49348s ... ok
+test c13_burnt_sienna_shows_the_card_at_least_as_well_as_raw_sienna ... FAILED
+
+successes:
+
+successes:
+    c13_every_pigment_value_is_af49348s
+
+failures:
+
+---- c13_burnt_sienna_shows_the_card_at_least_as_well_as_raw_sienna stdout ----
+raw sienna: hiding 0.4 (contrast ratio of one coat), scattering 0.29607835 per coat, masstone luminance 0.17352512
+burnt sienna: hiding 0.45 (contrast ratio of one coat), scattering 0.19887283 per coat, masstone luminance 0.07967474
+card contrast showing: raw sienna 17.91%, burnt sienna 9.85% (films differ by at most 0 µm; raw's mean 10.071717 µm)
+
+thread 'c13_burnt_sienna_shows_the_card_at_least_as_well_as_raw_sienna' (11577962) panicked at crates/paint/tests/thinner_pigments.rs:119:5:
+burnt sienna shows 9.85% of the card, raw sienna 17.91%: Field/Salter (§155) has burnt the more transparent
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    c13_burnt_sienna_shows_the_card_at_least_as_well_as_raw_sienna
+
+test result: FAILED. 1 passed; 1 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.98s
+
+error: test failed, to rerun pass `-p paint --test thinner_pigments`
+cargo exit 101

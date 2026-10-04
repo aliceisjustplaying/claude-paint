@@ -187,6 +187,19 @@ pub mod residue {
         DAMP.with(|c| c.get())
     }
 
+    thread_local! {
+        static EDGE_PRESS: Cell<bool> = const { Cell::new(false) };
+    }
+
+    /// EXPERIMENT: a wipe's rim presses lightly instead of fading out.
+    pub fn set_edge_press(on: bool) {
+        EDGE_PRESS.with(|c| c.set(on));
+    }
+
+    pub fn edge_press() -> bool {
+        EDGE_PRESS.with(|c| c.get())
+    }
+
     #[derive(Clone, Copy, Debug, PartialEq, Eq)]
     pub enum Rule {
         /// Today: the cloth can't take the last `STAIN_COATS × hollow`.
@@ -468,7 +481,7 @@ impl Canvas {
     /// the hollows by `SAG_UM` more as it is pressed: the wet paint above
     /// that level is in reach; below it, in the hollows of the weave and
     /// between ridges, the fibers wick only a share (`WICK`).
-    fn rag_contact(&mut self, rag: &mut Rag, bbox: (f32, f32, f32, f32), pressure: f32, mut pool: Option<&mut Pool>, expo: impl Fn(f32, f32) -> (f32, f32, f32)) -> f64 {
+    fn rag_contact(&mut self, rag: &mut Rag, bbox: (f32, f32, f32, f32), pressure: f32, mut pool: Option<&mut Pool>, expo: impl Fn(f32, f32) -> (f32, f32, f32, f32)) -> f64 {
         let f = self.f;
         let s = f.scale;
         let r = ((bbox.0 * s).floor().max(0.0) as usize, (bbox.1 * s).floor().max(0.0) as usize, ((bbox.2 * s).ceil().max(0.0) as usize + 1).min(f.full_w), ((bbox.3 * s).ceil().max(0.0) as usize + 1).min(f.full_h));
@@ -508,7 +521,7 @@ impl Canvas {
                 if v <= 1e-6 {
                     continue;
                 }
-                let (pad, c, _) = expo(f.ux(x), f.uy(y));
+                let (pad, c, _, press) = expo(f.ux(x), f.uy(y));
                 let e = pad * c;
                 if e <= 0.0 {
                     continue;
@@ -519,6 +532,12 @@ impl Canvas {
                 }
                 let j = (y - by0) * bw + (x - bx0);
                 // the film above the cloth's level, coats
+                let (reach, wick) = if e3 && press < 1.0 {
+                    let dm = residue::damp();
+                    (SAG_UM * (0.25 + 1.5 * p * press) * (1.0 + dm.reach * d), wick * press)
+                } else {
+                    (reach, wick)
+                };
                 let level = peaks[j] - reach;
                 let near = ((surf[j] - level) / COAT_UM).clamp(0.0, v);
                 let avail = near + wick * (v - near);
@@ -577,7 +596,7 @@ impl Canvas {
     /// presses lightly (`expo`'s third value), then this step's lift (`got`,
     /// sums by volume) joins what is left after a share `SOAK` has soaked
     /// in. Returns the paint and solvent laid back (coats × pixels).
-    fn rag_smear(&mut self, pl: &mut Pool, got: &Pool, px: (usize, usize, usize, usize), expo: &impl Fn(f32, f32) -> (f32, f32, f32)) -> (f64, f64) {
+    fn rag_smear(&mut self, pl: &mut Pool, got: &Pool, px: (usize, usize, usize, usize), expo: &impl Fn(f32, f32) -> (f32, f32, f32, f32)) -> (f64, f64) {
         let f = self.f;
         let (x0, y0, x1, y1) = px;
         let mut out = 0.0f32;
@@ -587,7 +606,7 @@ impl Canvas {
             let mut bounds: Option<(usize, usize, usize, usize)> = None;
             for y in y0..y1 {
                 for x in x0..x1 {
-                    let (pad, _, rim) = expo(f.ux(x), f.uy(y));
+                    let (pad, _, rim, _) = expo(f.ux(x), f.uy(y));
                     let a = (rate * rim).min(pl.vol - out);
                     if pad <= 0.0 || rim <= 0.0 || a <= 0.0 {
                         continue;
@@ -721,16 +740,16 @@ impl Canvas {
                     let d = qx * -ty + qy * tx - off;
                     let ad = d.abs();
                     if ad >= r {
-                        return (0.0, 0.0, 0.0);
+                        return (0.0, 0.0, 0.0, 0.0);
                     }
                     let c = (r * r - d * d).sqrt();
                     let over = ((sp + c).min(sl) - (sp - c).max(0.0)).max(0.0);
                     if over <= 0.0 {
-                        return (0.0, 0.0, 0.0);
+                        return (0.0, 0.0, 0.0, 0.0);
                     }
                     if !e3 {
                         let edge = 1.0 - smoothstep(0.55 * r, r, ad);
-                        return (over / (2.0 * r) * edge, cloth(d * mmu, (s0 + sp) * mmu, cs), 0.0);
+                        return (over / (2.0 * r) * edge, cloth(d * mmu, (s0 + sp) * mmu, cs), 0.0, 1.0);
                     }
                     // engine 3: frayed sides, and ends where the cloth comes
                     // down and lifts off unevenly across the pad
@@ -742,7 +761,15 @@ impl Canvas {
                     let end = ((len + r * (1.2 * vn(d * mmu / END_MM, 11.3, cs ^ 0xE5) - 0.4) - sg) / (0.25 * r)).clamp(0.0, 1.0);
                     // the light-pressed rim: the frayed sides and the trailing end
                     let rim = smoothstep(0.4 * re, re, ad).max(smoothstep(len - r, len + 0.5 * r, sg));
-                    (over / (2.0 * r) * edge * start * end, cloth3(d * mmu, sg * mmu, cs, p), rim)
+                    if residue::edge_press() {
+                        // EXPERIMENT: the cloth's outline stays fairly sharp
+                        // and its pressure falls off toward the rim, so
+                        // there it reaches only the tops of the weave
+                        let press = 1.0 - smoothstep(0.3 * re, re, ad);
+                        let edge = 1.0 - smoothstep(0.85 * re, re, ad);
+                        return (over / (2.0 * r) * edge * start * end, cloth3(d * mmu, sg * mmu, cs, p), rim, press);
+                    }
+                    (over / (2.0 * r) * edge * start * end, cloth3(d * mmu, sg * mmu, cs, p), rim, 1.0)
                 });
             }
             s_at += l;
@@ -770,12 +797,12 @@ impl Canvas {
             let lump = 2.0 * vn(3.0 * (ang.cos() + 1.0), 3.0 * (ang.sin() + 1.0), cs ^ 0xC3) - 1.0;
             let r = r0 * (1.0 + 0.18 * lump);
             if d >= r {
-                return (0.0, 0.0, 0.0);
+                return (0.0, 0.0, 0.0, 0.0);
             }
             let (u, v) = (qx * ct + qy * st, -qx * st + qy * ct);
             // crumpled: creases both ways
             let c = if e3 { cloth3(u * mmu, v * mmu * (SHIFT_MM / CREASE_MM), cs, pressure) } else { cloth(u * mmu, v * mmu * (SHIFT_MM / CREASE_MM), cs) };
-            (BLOT * (1.0 - smoothstep(0.5 * r, r, d)), c, 0.0)
+            (BLOT * (1.0 - smoothstep(0.5 * r, r, d)), c, 0.0, 1.0)
         })
     }
 
@@ -1607,18 +1634,11 @@ mod tests {
             brushed_in(&mut c0, sienna().with_thinner(0.5), 0.9, AREA);
             c0.clone().save(out.join("start.png")).unwrap();
             residue::set(Rule::Soft);
-            let cases = [
-                ("today", residue::DAMP0),
-                ("mild", Damp { rate: 1.0, soft: 1.0, wick: 0.3, reach: 0.3 }),
-                ("medium", Damp { rate: 2.0, soft: 2.0, wick: 0.3, reach: 0.3 }),
-                ("medium2", Damp { rate: 1.0, soft: 1.0, wick: 0.6, reach: 0.6 }),
-            ];
-            for (name, dm) in cases {
+            let mild = Damp { rate: 1.0, soft: 1.0, wick: 0.3, reach: 0.3 };
+            for (name, dm, edge) in [("mild", mild, false), ("mild-press", mild, true)] {
                 residue::set_damp(dm);
+                residue::set_edge_press(edge);
                 for damp in [false, true] {
-                    if !damp && name != "today" {
-                        continue;
-                    }
                     let mut c = c0.clone();
                     let mut r = Rag::new(100.0, 7);
                     if damp {
@@ -1627,12 +1647,13 @@ mod tests {
                     for k in 0..3u64 {
                         c.rag_wipe(&mut r, &PATH, &[0.8], 19 + k);
                         if k == 0 || k == 2 {
-                            let tag = if damp { format!("{name}-damp{}", k + 1) } else { format!("dry{}", k + 1) };
+                            let tag = format!("{name}-{}{}", if damp { "damp" } else { "dry" }, k + 1);
                             c.clone().save(out.join(format!("{tag}.png"))).unwrap();
                         }
                     }
                 }
             }
+            residue::set_edge_press(false);
             residue::set_damp(residue::DAMP0);
             residue::set(Rule::Floor);
         }

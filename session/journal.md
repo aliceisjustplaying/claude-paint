@@ -98,6 +98,6 @@ An append writes the entry and returns the journal path. A harness revision firs
 
 ## Open questions and verification
 
-Denied journal rewrite reproduced an appended history record with unchanged journal bytes in the [runtime pass](../verification/evidence/runtime-harness.md#journal-history-before-denied-rewrite-bug06). Concurrent editing and interruption during a write remain source-identified risks, not reproduced data loss. [Triage](../bug-triage.md) distinguishes them from observed CLI results.
+Denied journal rewrite reproduced an appended history record with unchanged journal bytes in the [runtime pass](../verification/evidence/runtime-harness.md#journal-history-before-denied-rewrite-bug06). A [controlled production-helper interleaving](../verification/evidence/matrix-harness.md#concurrent-journal-boundary) reproduced loss of a concurrent revision and append from the current journal. This is a scheduled filesystem interleaving, not a naturally timed race. [Triage](../bug-triage.md) distinguishes them from observed CLI results.
 
 Source-reviewed against `../claude-paint` commit `4e525e50897807e9b5f734071dfeb330f1a393d3`; see [verification](../verification/README.md).

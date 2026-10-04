@@ -1,0 +1,164 @@
+[
+  {
+    "id": "local-palette",
+    "empty": {
+      "args": [
+        "look",
+        "--palette"
+      ],
+      "out": "",
+      "err": "look: no pile on the palette: no global holds a pile (p = pile{...})\n",
+      "exit": 1
+    },
+    "local": {
+      "args": [
+        "do",
+        "local p=pile{{\"red earth\",1}}"
+      ],
+      "out": "ok · chunk 2 (0.00 s to compute)\n",
+      "err": "",
+      "exit": 0
+    },
+    "after_local": {
+      "args": [
+        "look",
+        "--palette"
+      ],
+      "out": "",
+      "err": "look: no pile on the palette: no global holds a pile (p = pile{...})\n",
+      "exit": 1
+    },
+    "global": {
+      "args": [
+        "do",
+        "p=pile{{\"red earth\",1}}"
+      ],
+      "out": "ok · chunk 3 (0.00 s to compute)\n",
+      "err": "",
+      "exit": 0
+    },
+    "after_global": {
+      "reply": "<root>/out/easel/extra/look-0001.png (1124x96, 0.01s)\n",
+      "path": "verification/evidence/matrix-extra/global-palette.png",
+      "sha": "0f9d1412d7f9a7a433d14554b4b32e5eadb9fa989a17e9d7a51ef0458c55078e"
+    }
+  },
+  {
+    "id": "coordinates",
+    "look": {
+      "reply": "<root>/out/easel/extra/look-0002.png (1000x200, 0.01s)\n",
+      "path": "verification/evidence/matrix-extra/coordinates.png",
+      "sha": "62840ea76b7ba8c39fcc72f6b2e0599a3b563a804df10ee322f3e74a5e7b4cda"
+    }
+  },
+  {
+    "id": "file-post-look",
+    "pending": true,
+    "cpu_advanced": true,
+    "reply": {
+      "args": [
+        "do",
+        "-f",
+        "<root>/capture.lua",
+        "--look"
+      ],
+      "out": "ok · chunk 5 (1.19 s to compute)\n<root>/out/easel/extra/look-0003.png (1000x200, 0.01s)\n",
+      "err": "",
+      "exit": 0
+    },
+    "check": {
+      "args": [
+        "do",
+        "assert(filecaptured)"
+      ],
+      "out": "ok · chunk 6 (0.00 s to compute)\n",
+      "err": "",
+      "exit": 0
+    }
+  },
+  {
+    "id": "live-versus-replay",
+    "observation": {
+      "cpu_before": "  0:02.34\n",
+      "cpu_after": "  0:02.36\n",
+      "pending": true
+    },
+    "replay": {
+      "args": [
+        "run",
+        "<root>/replay.lua",
+        "--width",
+        "64",
+        "--out",
+        "<root>/replayed.png"
+      ],
+      "out": "",
+      "err": "<root>/replay.lua: no chunks (each starts with a line \"--@ chunk\")\n",
+      "exit": 1
+    },
+    "live": "ok\nok · chunk 7 (1.18 s to compute)\n",
+    "check": {
+      "args": [
+        "do",
+        "assert(liveonly)"
+      ],
+      "out": "ok · chunk 8 (0.00 s to compute)\n",
+      "err": "",
+      "exit": 0
+    }
+  },
+  {
+    "id": "overlap-wet",
+    "before": {
+      "reply": "<root>/out/easel/wet/look-0001.png (1000x200, 0.01s)\n",
+      "path": "verification/evidence/matrix-extra/wet-before.png",
+      "sha": "f6191dc847ce95f778f08d879abd14127ab70874d093d1efd336e35705ee2b57"
+    },
+    "reply": {
+      "args": [
+        "do",
+        "b:load(q);b:stroke({{500,20},{500,150}})"
+      ],
+      "out": "ok · chunk 2 (0.04 s to compute)\n",
+      "err": "",
+      "exit": 0
+    },
+    "after": {
+      "reply": "<root>/out/easel/wet/look-0002.png (1000x200, 0.01s)\n",
+      "path": "verification/evidence/matrix-extra/wet-after.png",
+      "sha": "022ba8264641c4888ffcf1df1f97b09e0147ba241ade4cf0d76cdf84e7e20329"
+    }
+  },
+  {
+    "id": "overlap-dry",
+    "before": {
+      "reply": "<root>/out/easel/dry/look-0001.png (1000x200, 0.01s)\n",
+      "path": "verification/evidence/matrix-extra/dry-before.png",
+      "sha": "f6191dc847ce95f778f08d879abd14127ab70874d093d1efd336e35705ee2b57"
+    },
+    "reply": {
+      "args": [
+        "do",
+        "b:load(q);b:stroke({{500,20},{500,150}})"
+      ],
+      "out": "ok · chunk 3 (0.06 s to compute)\n",
+      "err": "",
+      "exit": 0
+    },
+    "after": {
+      "reply": "<root>/out/easel/dry/look-0002.png (1000x200, 0.01s)\n",
+      "path": "verification/evidence/matrix-extra/dry-after.png",
+      "sha": "a156cbd41e0514cdaa960d9144f6b7e0b8d4e614cfda6fcf742c634055a08abb"
+    }
+  },
+  {
+    "id": "not-invoked",
+    "before": [],
+    "prepared_arguments": [
+      "open",
+      "never"
+    ],
+    "after": [],
+    "invocation_made": false
+  }
+]

@@ -1,0 +1,12 @@
+{
+  "before": {
+    "log": "14f613687b0b5f7bd575600a0492417f92a8684be953f63c5bae5a10b5c7ae2d",
+    "png": "a56b5e3860e9733484f52912b925b2e8c994134496bf370b33d2a83c232ef960",
+    "clock": "- day 1, 09:03: before watching\n"
+  },
+  "after": {
+    "log": "14f613687b0b5f7bd575600a0492417f92a8684be953f63c5bae5a10b5c7ae2d",
+    "png": "a56b5e3860e9733484f52912b925b2e8c994134496bf370b33d2a83c232ef960",
+    "clock": "- day 1, 09:03: after watching\n"
+  }
+}

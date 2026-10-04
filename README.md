@@ -42,7 +42,7 @@ The variant axes are build/surface, input options, existing painting state and s
 
 ## Verification status
 
-All 15 documents are drafted. The [broad runtime pass](verification/runtime-pass.md) records 254 passing checklist assertions, 9 intended-behavior failures and 750 partial/unrun rows. [Recorded probes](verification/README.md#checklists-and-evidence) cover selected CLI and browser behavior; the coverage labels remain drafted because the human P1/P2 pass is not complete. [Triage](bug-triage.md) distinguishes reproduced mismatches from source-backed suspicions. The [private studio preview](http://<tailscale-host>:18765/?p=paint-studio-decafe) uses synthetic conversation records and real probe images; the other Mac's access has not been tested.
+All 15 documents are drafted. The [runtime matrix report](verification/runtime-pass.md) records current counts, reproduced defects and exact verification limits. [Recorded probes](verification/README.md#checklists-and-evidence) cover CLI, browser, harness and delivery behavior; the coverage labels remain drafted because the human P1/P2 pass is not complete. [Triage](bug-triage.md) distinguishes reproduced mismatches from source-backed suspicions. The [private studio preview](http://<tailscale-host>:18765/?p=paint-studio-decafe) uses synthetic conversation records and real probe images; the other Mac's access has not been tested.
 
 ## Source coverage boundary
 

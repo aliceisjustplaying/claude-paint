@@ -1,0 +1,81 @@
+[
+  {
+    "control": {
+      "out": "ok",
+      "err": "  % Total    % Received % Xferd  Average Speed   Time    Time     Time  Current\n                                 Dload  Upload   Total   Spent    Left  Speed\n\r  0     0    0     0    0     0      0      0 --:--:-- --:--:-- --:--:--     0\r100     2  100     2    0     0   4705      0 --:--:-- --:--:-- --:--:--  2000\n",
+      "exit": 0
+    }
+  },
+  {
+    "denied": {
+      "args": [
+        "/usr/bin/curl",
+        "--noproxy",
+        "*",
+        "--max-time",
+        "2",
+        "http://127.0.0.1:50270"
+      ],
+      "out": "",
+      "err": "  % Total    % Received % Xferd  Average Speed   Time    Time     Time  Current\n                                 Dload  Upload   Total   Spent    Left  Speed\n\r  0     0    0     0    0     0      0      0 --:--:-- --:--:-- --:--:--     0\r  0     0    0     0    0     0      0      0 --:--:-- --:--:-- --:--:--     0\ncurl: (7) Failed to connect to 127.0.0.1 port 50270 after 0 ms: Couldn't connect to server\n",
+      "exit": 7
+    }
+  },
+  {
+    "args": [
+      "<easel>",
+      "open",
+      "offline"
+    ],
+    "out": "easel \"offline\" open: 0 chunks · 2400px · no canvas yet\n",
+    "err": "",
+    "exit": 0
+  },
+  {
+    "args": [
+      "<easel>",
+      "do",
+      "canvas{size=100,aspect=5,linen=12,ground={{pile={{\"lead white\",1}},um=40,apply=\"knife\"}}};p=pile{{\"red earth\",1}};b=brush(\"round\",4);b:load(p);b:touch(100,80)"
+    ],
+    "out": "ok · chunk 1 (0.09 s to compute)\n",
+    "err": "",
+    "exit": 0
+  },
+  {
+    "args": [
+      "<easel>",
+      "look"
+    ],
+    "out": "<root>/out/easel/offline/look-0001.png (1000x200, 0.01s)\n",
+    "err": "",
+    "exit": 0
+  },
+  {
+    "args": [
+      "<easel>",
+      "note",
+      "offline journal"
+    ],
+    "out": "noted in <root>/notes/journal.md\n",
+    "err": "",
+    "exit": 0
+  },
+  {
+    "args": [
+      "<easel>",
+      "status"
+    ],
+    "out": "1 chunks · 2400px · size=100, aspect=5, linen={12, 12}, seed=1\n",
+    "err": "",
+    "exit": 0
+  },
+  {
+    "args": [
+      "<easel>",
+      "close"
+    ],
+    "out": "the live canvas is in <root>/out/easel/offline/live.png\nclosed; the session is in <root>/paintings/lua/offline.lua\n",
+    "err": "",
+    "exit": 0
+  }
+]

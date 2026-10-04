@@ -1,0 +1,80 @@
+[
+  {
+    "args": [
+      "open",
+      "native"
+    ],
+    "exit": 0,
+    "out": "easel \"native\" open: 0 chunks · 2400px · no canvas yet\n",
+    "err": "",
+    "seconds": 0.1126
+  },
+  {
+    "args": [
+      "do",
+      "canvas{size=100,aspect=5,linen=12,ground={{pile={{\"lead white\",1}},um=40,apply=\"knife\"}}}; p=pile{{\"red earth\",1}}; q=pile{{\"lead white\",1}}; m=rect(300,40,200,100); m=rect(350,50,100,60);work(m,{pile=p,hand=\"detail\",coverage=3,clip=true,seed=1});last=drying(400,80);for i=1,200 do wait(5);if drying(400,80)~=last then print(\"transition\",i*5,drying(400,80),wait(0));break end end"
+    ],
+    "exit": 0,
+    "out": "transition\t550\tsetting\tday 1, 18:33\nok · chunk 1 (0.49 s to compute)\n",
+    "err": "",
+    "seconds": 0.5072
+  },
+  {
+    "args": [
+      "close"
+    ],
+    "exit": 0,
+    "out": "the live canvas is in <root>/out/easel/native/live.png\nclosed; the session is in <root>/paintings/lua/native.lua\n",
+    "err": "",
+    "seconds": 0.0982
+  },
+  {
+    "args": [
+      "open",
+      "cross"
+    ],
+    "exit": 0,
+    "out": "easel \"cross\" open: 0 chunks · 2400px · no canvas yet\n",
+    "err": "",
+    "seconds": 0.1095
+  },
+  {
+    "args": [
+      "do",
+      "canvas{size=100,aspect=5,linen=12,ground={{pile={{\"lead white\",1}},um=40,apply=\"knife\"}}}; p=pile{{\"red earth\",1}}; q=pile{{\"lead white\",1}}; m=rect(300,40,200,100); m=rect(350,50,100,60);work(m,{pile=p,hand=\"detail\",coverage=3,clip=true,seed=1});wait(500);r=rag{width=2,seed=1};print(\"before\",drying(400,80),wait(0));"
+    ],
+    "exit": 0,
+    "out": "before\topen\tday 1, 17:43\nok · chunk 1 (0.45 s to compute)\n",
+    "err": "",
+    "seconds": 0.4656
+  },
+  {
+    "args": [
+      "do",
+      "r:wipe(m,{passes=20,refold=0.01});print(\"after\",drying(400,80),wait(0),r.fold,r.load)"
+    ],
+    "exit": 0,
+    "out": "after\tsetting\tday 1, 18:52\t1119\t0.99999916553497314\nok · chunk 2 (8.34 s to compute)\n",
+    "err": "",
+    "seconds": 8.3606
+  },
+  {
+    "args": [
+      "save",
+      "<scratch-file>"
+    ],
+    "exit": 0,
+    "out": "<scratch-file>\n",
+    "err": "",
+    "seconds": 0.0257
+  },
+  {
+    "args": [
+      "close"
+    ],
+    "exit": 0,
+    "out": "the live canvas is in <root>/out/easel/cross/live.png\nclosed; the session is in <root>/paintings/lua/cross.lua\n",
+    "err": "",
+    "seconds": 0.087
+  }
+]

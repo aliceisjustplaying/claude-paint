@@ -1,0 +1,106 @@
+{
+  "after-views.png": {
+    "dimensions": "2400x480",
+    "rgb_sha": "e141446373ba853fbdc9b4aeadd3f8dbb91a43f644464951b6d8b4568ac538e0"
+  },
+  "baseline.png": {
+    "dimensions": "2400x480",
+    "rgb_sha": "e141446373ba853fbdc9b4aeadd3f8dbb91a43f644464951b6d8b4568ac538e0"
+  },
+  "blur.png": {
+    "dimensions": "1000x200",
+    "rgb_sha": "dc3af169659d6f7696b603af64c63670c7604bb2cdebbd25c7a4fa7dc3147dce"
+  },
+  "combined-crop.png": {
+    "dimensions": "480x240",
+    "rgb_sha": "b46ce0368979a320b9c5383abe4b3543dd10ca8bcae75e0676d148d380036cd3"
+  },
+  "gray.png": {
+    "dimensions": "1000x200",
+    "rgb_sha": "664617a3f4e2eb70807e03c01aaaa0fa32a659a62c34af8a5f7f9605df29f9c9"
+  },
+  "grid.png": {
+    "dimensions": "1000x200",
+    "rgb_sha": "315bef32d082c0624d39d3b2dcf3c49d217d7050850d0b53cbb47a976c33edad"
+  },
+  "grid50.png": {
+    "dimensions": "1000x200",
+    "rgb_sha": "e549f030458ccb89b701ea1d6da4d49b8f776652e5ecdd4e109aa619ae431608"
+  },
+  "journal-after.png": {
+    "dimensions": "2400x480",
+    "rgb_sha": "7a72afb41843b3373942c8125260cba1378d0b5cb41a3c9a2439c36bd8669e88"
+  },
+  "journal-before.png": {
+    "dimensions": "2400x480",
+    "rgb_sha": "7a72afb41843b3373942c8125260cba1378d0b5cb41a3c9a2439c36bd8669e88"
+  },
+  "mirror-grid.png": {
+    "dimensions": "1000x200",
+    "rgb_sha": "e36440c093ca488151677fe0c96c6788c5bf150de861efbc669f307850f73989"
+  },
+  "mirror.png": {
+    "dimensions": "1000x200",
+    "rgb_sha": "80a4d64bf523028e4a3535e027f51e21e9e856dbdec3140a7a6f0cfb0a17ef18"
+  },
+  "palette.png": {
+    "dimensions": "1124x160",
+    "rgb_sha": "a8484c7171f0a14a015a48e35f68efc953e77fc5b9c886e0f0ebe90f5b714ac8"
+  },
+  "plain-again.png": {
+    "dimensions": "1000x200",
+    "rgb_sha": "8a47e4d7a0ccc1379ec3aa5cf508be8499415f497855056383b1a253333fa348"
+  },
+  "plain.png": {
+    "dimensions": "1000x200",
+    "rgb_sha": "8a47e4d7a0ccc1379ec3aa5cf508be8499415f497855056383b1a253333fa348"
+  },
+  "rand_a.png": {
+    "dimensions": "2400x480",
+    "rgb_sha": "c4a906e820eae1de5db29c87974f49990ee7c0e9ddee1e707d8a916a470fc365"
+  },
+  "rand_b.png": {
+    "dimensions": "2400x480",
+    "rgb_sha": "c4a906e820eae1de5db29c87974f49990ee7c0e9ddee1e707d8a916a470fc365"
+  },
+  "rollback-after.png": {
+    "dimensions": "2400x480",
+    "rgb_sha": "7a72afb41843b3373942c8125260cba1378d0b5cb41a3c9a2439c36bd8669e88"
+  },
+  "rollback-before.png": {
+    "dimensions": "2400x480",
+    "rgb_sha": "7a72afb41843b3373942c8125260cba1378d0b5cb41a3c9a2439c36bd8669e88"
+  },
+  "session-first.png": {
+    "dimensions": "1000x200",
+    "rgb_sha": "7244776b9bed57b7668292a8feff4bafc998a5c492365a90d30f4d18c3c70188"
+  },
+  "session-other.png": {
+    "dimensions": "1000x200",
+    "rgb_sha": "8fb2ff3765f1614e9b46ca02f2ae33a26cfa2de5e05797501603b9a6b6f2adcb"
+  },
+  "squint-mirror.png": {
+    "dimensions": "1000x200",
+    "rgb_sha": "2bf09e277039e8b5af25a5f64729ab2c9be4a7397bc214141063d04aa4333f29"
+  },
+  "squint.png": {
+    "dimensions": "1000x200",
+    "rgb_sha": "dc3af169659d6f7696b603af64c63670c7604bb2cdebbd25c7a4fa7dc3147dce"
+  },
+  "value-mirror.png": {
+    "dimensions": "1000x200",
+    "rgb_sha": "06d3e082304a8deb42647b6fe1da662b9c9d9868f7fa35c6b8553e49e0cd876d"
+  },
+  "value.png": {
+    "dimensions": "1000x200",
+    "rgb_sha": "664617a3f4e2eb70807e03c01aaaa0fa32a659a62c34af8a5f7f9605df29f9c9"
+  },
+  "value=gray": true,
+  "squint=blur": true,
+  "plain=plain-again": true,
+  "mirror_exact": true,
+  "value_mirror_exact": true,
+  "blur_mirror_exact": true,
+  "value_achromatic": true,
+  "blur_changed": true
+}

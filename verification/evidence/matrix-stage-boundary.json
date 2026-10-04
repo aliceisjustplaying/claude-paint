@@ -1,0 +1,41 @@
+[
+  {
+    "args": [
+      "open",
+      "rag-open"
+    ],
+    "exit": 0,
+    "out": "easel \"rag-open\" open: 0 chunks · 2400px · no canvas yet\n",
+    "err": "",
+    "seconds": 0.1069
+  },
+  {
+    "args": [
+      "do",
+      "canvas{size=100,aspect=5,linen=12,ground={{pile={{\"lead white\",1}},um=40,apply=\"knife\"}}}; p=pile{{\"red earth\",1}}; q=pile{{\"lead white\",1}}; m=rect(300,40,200,100); m=rect(350,50,100,60);work(m,{pile=p,hand=\"detail\",coverage=3,clip=true,seed=1});r=rag{width=40,seed=1};r:dip(1);print(drying(400,80));"
+    ],
+    "exit": 0,
+    "out": "open\nok · chunk 1 (0.44 s to compute)\n",
+    "err": "",
+    "seconds": 0.4567
+  },
+  {
+    "args": [
+      "do",
+      "r:wipe({{360,80},{440,80}},{pressure=1,seed=1});print(r.load,r.soaked,drying(400,80))"
+    ],
+    "exit": 0,
+    "out": "0.8408316969871521\t0.070069298148155212\topen\nok · chunk 2 (0.01 s to compute)\n",
+    "err": "",
+    "seconds": 0.0288
+  },
+  {
+    "args": [
+      "close"
+    ],
+    "exit": 0,
+    "out": "the live canvas is in <root>/out/easel/rag-open/live.png\nclosed; the session is in <root>/paintings/lua/rag-open.lua\n",
+    "err": "",
+    "seconds": 0.0911
+  }
+]

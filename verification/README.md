@@ -10,7 +10,7 @@ A document remains drafted until a person has run all its P1 and P2 rows. Automa
 
 ## Checklists and evidence
 
-The [broad runtime pass](runtime-pass.md) records the follow-up checks, test receipts, confirmed defects and remaining coverage. Its totals are 254 pass, 9 fail and 750 blocked or partial checklist rows.
+The [runtime matrix report](runtime-pass.md) records the current assertion counts, linked evidence, confirmed defects and exact coverage limits.
 
 | Checklist | Documents |
 |---|---|

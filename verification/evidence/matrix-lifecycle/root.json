@@ -1,0 +1,273 @@
+[
+  {
+    "id": "setup-queued-abort",
+    "observation": {
+      "cpu_before": "  0:00.00\n",
+      "cpu_after": "  0:00.02\n",
+      "pending": true
+    },
+    "status": {
+      "args": [
+        "status"
+      ],
+      "out": "1 chunks · 2400px · no canvas yet\n",
+      "err": "",
+      "exit": 0
+    }
+  },
+  {
+    "id": "setup-running-disconnect",
+    "observation": {
+      "cpu_before": "  0:01.19\n",
+      "cpu_after": "  0:01.53\n",
+      "pending": true
+    },
+    "second_pending": true,
+    "second": "err\nruntime error: the canvas is already set up (canvas{} is the first chunk)\n(the chunk failed and changed nothing)\n",
+    "status": {
+      "args": [
+        "status"
+      ],
+      "out": "2 chunks · 2400px · size=100, aspect=5, linen={12, 12}, seed=1\n",
+      "err": "",
+      "exit": 0
+    },
+    "check": {
+      "args": [
+        "do",
+        "assert(setupfinished);print(W,H)"
+      ],
+      "out": "1000\t199.99998474121094\nok · chunk 3 (0.00 s to compute)\n",
+      "err": "",
+      "exit": 0
+    }
+  },
+  {
+    "id": "setup-kill",
+    "observation": {
+      "cpu_before": "  0:00.00\n",
+      "cpu_after": "  0:00.01\n",
+      "pending": true
+    },
+    "reply": "",
+    "restricted": {
+      "args": [
+        "status"
+      ],
+      "out": "",
+      "err": "no easel session \"setupkill\" running: easel open setupkill\n",
+      "exit": 1
+    },
+    "reopen": {
+      "args": [
+        "open",
+        "setupkill"
+      ],
+      "out": "resumed 0 chunks from <root>/paintings/lua/setupkill.lua\neasel \"setupkill\" open: 0 chunks · 2400px · no canvas yet\n",
+      "err": "",
+      "exit": 0
+    },
+    "state": {
+      "args": [
+        "status"
+      ],
+      "out": "0 chunks · 2400px · no canvas yet\n",
+      "err": "",
+      "exit": 0
+    }
+  },
+  {
+    "id": "setup-external-before",
+    "reply": {
+      "args": [
+        "do",
+        "canvas{size=100,aspect=5,linen=12,ground={{pile={{\"lead white\",1}},um=40,apply=\"knife\"}},seed=1};p=pile{{\"red earth\",1}};q=pile{{\"cobalt blue\",1}};b=brush(\"round\",4);b:load(p,0.8);r=rag{width=20};r:dip(0.5);h=pencil(\"HB\");m=rect(100,40,80,80);b:touch(100,80);h:line({{300,40},{350,150}})"
+      ],
+      "out": "",
+      "err": "session integrity: <root>/paintings/lua/setupexternal.lua differs from the log the session wrote. The easel goes on only from the log it wrote; nothing ran.\n",
+      "exit": 1
+    }
+  },
+  {
+    "id": "setup-external",
+    "observation": {
+      "cpu_before": "  0:00.00\n",
+      "cpu_after": "  0:00.01\n",
+      "pending": true
+    },
+    "reply": "err\nsession integrity: <root>/paintings/lua/setupexternal.lua differs from the log the session wrote. The easel goes on only from the log it wrote; nothing ran.\n",
+    "restricted": {
+      "args": [
+        "status"
+      ],
+      "out": "",
+      "err": "session integrity: <root>/paintings/lua/setupexternal.lua differs from the log the session wrote. The easel goes on only from the log it wrote; nothing ran.\n",
+      "exit": 1
+    },
+    "reopen": {
+      "args": [
+        "open",
+        "setupexternal"
+      ],
+      "out": "resumed 0 chunks from <root>/paintings/lua/setupexternal.lua\neasel \"setupexternal\" open: 0 chunks · 2400px · no canvas yet\n",
+      "err": "",
+      "exit": 0
+    },
+    "state": {
+      "args": [
+        "status"
+      ],
+      "out": "0 chunks · 2400px · no canvas yet\n",
+      "err": "",
+      "exit": 0
+    }
+  },
+  {
+    "id": "setup-persistence",
+    "reply": {
+      "args": [
+        "do",
+        "canvas{size=100,aspect=5,linen=12,ground={{pile={{\"lead white\",1}},um=40,apply=\"knife\"}},seed=1};p=pile{{\"red earth\",1}};q=pile{{\"cobalt blue\",1}};b=brush(\"round\",4);b:load(p,0.8);r=rag{width=20};r:dip(0.5);h=pencil(\"HB\");m=rect(100,40,80,80);b:touch(100,80);h:line({{300,40},{350,150}})"
+      ],
+      "out": "",
+      "err": "Is a directory (os error 21)\n",
+      "exit": 1
+    },
+    "status": {
+      "args": [
+        "status"
+      ],
+      "out": "",
+      "err": "session integrity: <root>/paintings/lua/setuppersistence.lua differs from the log the session wrote. The easel goes on only from the log it wrote; nothing ran.\n",
+      "exit": 1
+    },
+    "diverged": true
+  },
+  {
+    "id": "setup-file",
+    "pending": true,
+    "cpu_advanced": true,
+    "reply": {
+      "args": [
+        "do",
+        "-f",
+        "<root>/setup.lua"
+      ],
+      "out": "ok · chunk 1 (1.38 s to compute)\n",
+      "err": "",
+      "exit": 0
+    },
+    "status": {
+      "args": [
+        "status"
+      ],
+      "out": "1 chunks · 2400px · size=100, aspect=5, linen={12, 12}, seed=1\n",
+      "err": "",
+      "exit": 0
+    }
+  },
+  {
+    "id": "retry",
+    "observation": {
+      "cpu_before": "  0:00.00\n",
+      "cpu_after": "  0:00.02\n",
+      "pending": true
+    },
+    "first": "1\nok · chunk 3 (0.00 s to compute)\n",
+    "second": "2\nok · chunk 5 (0.00 s to compute)\n"
+  },
+  {
+    "id": "close-checkpoint-fault",
+    "reply": {
+      "args": [
+        "close"
+      ],
+      "out": "the live canvas is in <root>/out/easel/closefault/live.png\nclosed; the session is in <root>/paintings/lua/closefault.lua\n",
+      "err": "",
+      "exit": 0
+    },
+    "files": [
+      "committed.lua",
+      "lock",
+      "live.ckpt.part",
+      "live.txt",
+      "server.log",
+      "live.png"
+    ],
+    "log_exists": true
+  },
+  {
+    "id": "log-only-reopen",
+    "reply": {
+      "args": [
+        "open",
+        "closefault"
+      ],
+      "out": "resuming chunk 1/1\nresumed chunk 1/1 0.09s\nresumed 1 chunks from <root>/paintings/lua/closefault.lua\neasel \"closefault\" open: 1 chunks · 2400px · size=100, aspect=5, linen={12, 12}, seed=1\n",
+      "err": "",
+      "exit": 0
+    },
+    "status": {
+      "args": [
+        "status"
+      ],
+      "out": "1 chunks · 2400px · size=100, aspect=5, linen={12, 12}, seed=1\n",
+      "err": "",
+      "exit": 0
+    }
+  },
+  {
+    "id": "deleted-checkpoint",
+    "reply": {
+      "args": [
+        "open",
+        "closefault"
+      ],
+      "out": "resuming chunk 1/1\nresumed chunk 1/1 0.09s\nresumed 1 chunks from <root>/paintings/lua/closefault.lua\neasel \"closefault\" open: 1 chunks · 2400px · size=100, aspect=5, linen={12, 12}, seed=1\n",
+      "err": "",
+      "exit": 0
+    },
+    "status": {
+      "args": [
+        "status"
+      ],
+      "out": "1 chunks · 2400px · size=100, aspect=5, linen={12, 12}, seed=1\n",
+      "err": "",
+      "exit": 0
+    }
+  },
+  {
+    "id": "stale-socket",
+    "before": {
+      "args": [
+        "status"
+      ],
+      "out": "",
+      "err": "no easel session \"stale\" running: easel open stale\n",
+      "exit": 1
+    },
+    "open": {
+      "args": [
+        "open",
+        "stale"
+      ],
+      "out": "easel \"stale\" open: 0 chunks · 2400px · no canvas yet\n",
+      "err": "",
+      "exit": 0
+    },
+    "after": {
+      "args": [
+        "status"
+      ],
+      "out": "0 chunks · 2400px · no canvas yet\n",
+      "err": "",
+      "exit": 0
+    }
+  },
+  {
+    "id": "denied-root",
+    "out": "",
+    "err": "Permission denied (os error 13)\n",
+    "exit": 1
+  }
+]

@@ -52,7 +52,7 @@ The successful open selects the session and returns status. Close saves the live
 | Painter build | One `painting` session rooted at the exported studio. | Session switching is unavailable. |
 | Existing log | Replays it using its recorded box and engine information. | Editing the log is not supported during replay. |
 | `EASEL_ROOT` | Developer build can isolate outputs under another root. | Already running server keeps its root. |
-| Box configuration | New painting takes the executable-adjacent box, then environment or default as supported. | Existing painting keeps the box in its log. |
+| Box configuration | New painting uses the executable-adjacent box when the environment is absent or agrees; conflicting names reject. With no adjacent file it uses the environment or default. | Existing painting keeps its recorded box; a conflicting configured box rejects reopening. |
 | Explicit session option | Directs this command to that named session. | Another command can select another target; the accepted one remains fixed. |
 
 ## Cancel and interrupt
@@ -93,6 +93,6 @@ The successful open selects the session and returns status. Close saves the live
 
 ## Open questions and verification
 
-The default build and a pinned blank-profile painter export were exercised separately in the [runtime pass](../verification/runtime-pass.md). Other exported profiles and the full historical-log matrix remain incomplete.
+The [matrix pass](../verification/runtime-pass.md) exercised both builds, all seven current export profiles and all 11 historical golden fixtures. The default historical export failed; a log edit during replay also exposed a waiting-open error path. These are recorded in [triage](../bug-triage.md).
 
 Source-reviewed against `../claude-paint` commit `4e525e50897807e9b5f734071dfeb330f1a393d3`; see [verification](../verification/README.md).

@@ -1,7 +1,7 @@
 # /// script
 # dependencies = ["pillow"]
 # ///
-"""Sheets for the thinner flow and wet-wash experiment (thinner::tests::flow_pictures, wet_rules).
+"""Sheets for the archived thinner flow experiment (thinner::tests::flow_pictures).
 
     uv run notes/thinner/wash-experiment/sheets.py <png dir> <out dir>
 
@@ -35,6 +35,3 @@ def strip(cells, path):
 ALL, CLOSE = box(270, 200, 730, 480), box(560, 255, 680, 300)
 strip([("old: never flows below 2 µm", img("flow-old", ALL, 0.6)), ("new: thin films flow slowly", img("flow-new", ALL, 0.6))], dst / "flow.jpg")
 strip([("old, close-up of the thinner-0.75 stroke", img("flow-old", CLOSE, 2.5)), ("new, same place", img("flow-new", CLOSE, 2.5))], dst / "flow-close.jpg")
-WASH = box(280, 245, 720, 455)
-for r in (0, 1, 2):
-    strip([("one pass", img(f"r{r}-1pass", WASH, 0.5)), ("three passes, wet", img(f"r{r}-3wet", WASH, 0.5)), ("three passes, dried between", img(f"r{r}-3dry", WASH, 0.5))], dst / f"wash-r{r}.jpg")

@@ -1,17 +1,11 @@
-<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Thinner: flow and wet washes</title>
+<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Thinner: archived flow comparison</title>
 <style>body{max-width:1650px;margin:24px auto;padding:0 20px;background:#1e1e1e;color:#eee;font:18px/1.55 system-ui}img{max-width:100%;display:block;margin:8px 0}h1{font-size:30px}h2{font-size:24px;margin:0 0 6px}.card{background:#2a2a2a;border-radius:10px;padding:18px 22px;margin:26px 0}.what{background:#25313d}p{max-width:1000px;margin:6px 0}.n{display:inline-block;background:#c9defa;color:#111;border-radius:50%;width:32px;height:32px;text-align:center;line-height:32px;font-weight:700;margin-right:8px}</style>
-<h1>Thinned paint: how it flows, and what a second pass over a wet wash does</h1>
-<p>Raw umber on a pale ground. Every picture shows the paint after it has finished flowing and dried.</p>
+<h1>Thinned paint: archived flow comparison</h1>
+<p>Raw umber on a pale ground. Pictures were captured after a five-minute wait.</p>
 
-<h2 style="margin-top:30px">Part 1: thin paint flowing (already changed; this is the check)</h2>
-<div class="card"><p>Top three lines: single strokes thinned with half, three quarters and nine tenths spirits. Below: a broad wash thinned half. Before the change, paint thinner than 2 µm never moved at all; now it moves, but very slowly (the thinner the film, the slower).</p>
+<h2 style="margin-top:30px">Thin-film flow experiment (reverted in 4e30c114)</h2>
+<div class="card"><p>Top three lines: single strokes thinned with half, three quarters and nine tenths spirits. Below: a broad wash thinned half. The old candidate retained a 2 µm floor; the experimental candidate allowed thinner films to move slowly. These are historical images, not the current implementation.</p>
 <a href="flow.jpg"><img src="flow.jpg"></a><a href="flow-close.jpg"><img src="flow-close.jpg"></a>
 <p>The difference is hard to see: on average 0.35 grey levels out of 255, at most 10. The change matters mostly so that very thin washes aren't frozen in place.</p></div>
 
-<h2 style="margin-top:30px">Part 2: going over a wet wash again (pick one)</h2>
-<div class="card what"><p>Your rule: <b>a pass over a wet wash mostly moves the paint around; a pass over dry paint adds a layer.</b> Each version shows one pass, three passes while still wet, and three passes with the paint left to dry in between. The numbers are the paint's average thickness in the middle.</p></div>
-<div class="card"><h2><span class="n">1</span>Today: every pass adds the same, wet or dry</h2><p>One pass 2.65 µm · three wet 5.20 µm · three dried between 8.07 µm.</p><a href="wash-r0.jpg"><img src="wash-r0.jpg"></a></div>
-<div class="card"><h2><span class="n">2</span>Strict: a pass over a wet wash adds nothing beyond one pass's worth</h2><p>One pass 2.00 µm · three wet 2.19 µm · three dried between 6.04 µm.</p><a href="wash-r1.jpg"><img src="wash-r1.jpg"></a></div>
-<div class="card"><h2><span class="n">3</span>Soft: the wetter it already is, the less a pass adds</h2><p>One pass 2.23 µm · three wet 3.21 µm · three dried between 6.76 µm.</p><a href="wash-r2.jpg"><img src="wash-r2.jpg"></a></div>
-<p style="opacity:.7">Versions 2 and 3 also make a single pass a little thinner where its own strokes overlap. Code: thinner::tests::wet_rules, flow_pictures.</p>
 </html>

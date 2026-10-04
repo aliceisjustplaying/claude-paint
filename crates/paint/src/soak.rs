@@ -1393,6 +1393,32 @@ mod tests {
         Canvas::new_window(8, 1.0, [0.5; 3], None).write_state(&mut p, "").unwrap();
         p.extend_from_slice(&SOAK_MARK_BYTES[..3]);
         assert!(Canvas::read_state(&mut std::io::Cursor::new(p)).is_err());
+        // times count from the soak's setup: none negative, and turpentine
+        // evaporates from one time until a later one
+        assert!(refused(&|s| s.oil_t[2] = -5.0));
+        assert!(refused(&|s| s.oil_since[2] = -1.0));
+        assert!(refused(&|s| {
+            s.solv[3] = 10.0;
+            s.solv_t0[3] = 50.0;
+            s.solv_t1[3] = 20.0;
+        }));
+        assert!(!refused(&|s| {
+            s.solv[3] = 10.0;
+            s.solv_t0[3] = 20.0;
+            s.solv_t1[3] = 50.0;
+        }));
+        // a raw canvas's checkpoint is version 9, any other version 8: a
+        // version 8 with a soak after it, or a version 9 without one, is
+        // refused (a reader of version 8 alone refuses a raw canvas's)
+        assert_eq!(&b[..8], b"PAINTCK9");
+        let mut primed = Vec::new();
+        Canvas::new_window(8, 1.0, [0.5; 3], None).write_state(&mut primed, "").unwrap();
+        assert_eq!(&primed[..8], b"PAINTCK8");
+        let mut v8 = b.clone();
+        v8[..8].copy_from_slice(b"PAINTCK8");
+        assert!(Canvas::read_state(&mut std::io::Cursor::new(v8)).is_err());
+        primed[..8].copy_from_slice(b"PAINTCK9");
+        assert!(Canvas::read_state(&mut std::io::Cursor::new(primed)).is_err());
     }
 
     /// The bytes that mark a soak in a checkpoint ("SOAK").

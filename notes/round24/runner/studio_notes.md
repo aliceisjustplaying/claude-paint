@@ -154,10 +154,9 @@ are in canvas units (the canvas is 1000 units wide).
 
 ## Drying and time
 
-49. Paint goes from open (workable) to setting (stiff, barely blends) to
-    tacky to touch-dry. Lead-white-rich paint gels in about 2 hours and
-    average paint in about 3.5. A lean coat is touch-dry in about a day;
-    bone black and lakes take days. Thick or oily paint dries slower.
+49. Paint goes from open (workable) to setting, tacky and touch-dry.
+    Drying depends on pigment, thickness and oil; the guide describes
+    the times at this easel.
 50. `wait` ages every point of the canvas at once. Which passages have set
     depends on their pigment, thickness and oil, not on where you worked.
 51. A long pass is painted in 15-minute slices that age
@@ -171,4 +170,3 @@ are in canvas units (the canvas is 1000 units wide).
     Thin paint lets a line show and body color hides it. Under a thin first
     layer a firm line reads as a thin dark line until a fuller layer covers
     it.
-

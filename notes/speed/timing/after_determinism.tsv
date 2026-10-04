@@ -1,0 +1,4 @@
+hand_time_is_deterministic_across_thread_counts	ok	6.69
+object_keyed_tables_replay_the_same_in_every_process	ok	2.33
+state_digests_are_the_same_in_every_replay	ok	0.63
+the_rag_replays_the_same	ok	2.94

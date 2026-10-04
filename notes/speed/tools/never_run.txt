@@ -1,0 +1,9 @@
+# Tests that replay whole paintings (overnight plan: never run them, not even in timing).
+# easel bin
+session::tests::logs_without_an_engine_line_replay_as_before   # studios 6399ad (7 chunks) and db6324 (18) at 320 px
+legacy::tests::easel3_free_replays    # notes/amnesia3/easel3_free.lua, 38 chunks, 200 px
+legacy::tests::easel3_green_replays   # 31 chunks
+legacy::tests::easel3_near_replays    # 26 chunks
+legacy::tests::easel4_free_replays    # notes/amnesia4, 20 chunks
+legacy::tests::easel4_green_replays   # 23 chunks
+legacy::tests::easel4_near_replays    # 20 chunks

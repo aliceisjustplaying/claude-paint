@@ -1,0 +1,217 @@
+#!/usr/bin/env python3
+"""The test commands.
+
+    scripts/test                      the fast checks (about a minute once built)
+    scripts/test --all                every required check: the fast ones, the slow
+                                      tests by exact name, the scripts' tests, the
+                                      painter builds and the Python tests
+    scripts/test --all --candidate C  test commit C in a fresh clean worktree and
+                                      record a receipt (scripts/test_candidate)
+    options: --summary FILE (JSON summary), --logs DIR (step logs; default a new
+             directory under $TMPDIR), --list FILE (a step list other than the
+             mode's), --only NAME (run the named steps of the list; the summary
+             says so and its verdict is never "pass")
+
+The steps are in notes/speed/test_lists/fast.tsv and all.tsv (reviewed lists:
+notes/speed/SKIPPED.md says what neither runs, and why). No step replays a
+painting. Each line: kind, name, time limit (s), the least number of tests it
+must run, a regex whose matching output lines count as its tests ("-" for
+cargo and pytest, which report counts), and a bash command run from the
+repository root:
+
+    build   a build; it has no tests (its time is reported as build time)
+    cargo   `cargo test ...`: counts from the "test result:" lines
+    pytest  counts from pytest's last line
+    script  counts the output lines that match the regex
+
+A step fails if its command fails, it runs past its time limit (its whole
+process group is stopped), or it runs fewer tests than its minimum: a test
+name that matches nothing fails. The run passes only if every step passes.
+The whole run holds the machine's heavy-job lock (scripts/lockrun) for at
+most 15 minutes; the lock is not taken again inside it.
+
+The summary (--summary) is JSON: mode, verdict ("pass", "fail" or
+"unfinished"), list (the list file, relative to the repository), its
+sha256, commit, whether the worktree was dirty, build and test seconds, and
+per step: name, kind, command, exit, seconds, tests_run, passed, failed,
+ignored, timed_out, ok, log and log_sha256. Exit 0 only on "pass".
+"""
+
+import argparse
+import datetime
+import hashlib
+import json
+import os
+import re
+import shutil
+import signal
+import subprocess
+import sys
+import tempfile
+import time
+
+REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+LISTS = {"fast": "notes/speed/test_lists/fast.tsv", "all": "notes/speed/test_lists/all.tsv"}
+OUTER_LIMIT = 900
+
+
+def git(*args):
+    return subprocess.run(["git", "-C", REPO, *args], capture_output=True, text=True).stdout.strip()
+
+
+def read_list(path):
+    steps = []
+    for n, line in enumerate(open(path), 1):
+        if not line.strip() or line.startswith("#"):
+            continue
+        f = line.rstrip("\n").split("\t")
+        if len(f) != 6:
+            raise SystemExit("scripts/test: %s line %d: want 6 tab-separated fields, found %d" % (path, n, len(f)))
+        kind, name, limit, least, regex, cmd = f
+        if kind not in ("build", "cargo", "pytest", "script"):
+            raise SystemExit("scripts/test: %s line %d: unknown kind %r" % (path, n, kind))
+        steps.append({"kind": kind, "name": name, "limit": float(limit), "least": int(least),
+                      "regex": None if regex == "-" else regex, "command": cmd})
+    if not steps:
+        raise SystemExit("scripts/test: %s lists no steps" % path)
+    names = [s["name"] for s in steps]
+    if len(set(names)) != len(names):
+        raise SystemExit("scripts/test: %s names a step twice" % path)
+    return steps
+
+
+def count(step, out):
+    """(tests_run, passed, failed, ignored) from a step's output."""
+    if step["kind"] == "cargo":
+        p = f = i = 0
+        for m in re.finditer(r"^test result: \w+\. (\d+) passed; (\d+) failed; (\d+) ignored", out, re.M):
+            p, f, i = p + int(m.group(1)), f + int(m.group(2)), i + int(m.group(3))
+        return p + f, p, f, i
+    if step["kind"] == "pytest":
+        last = [l for l in out.splitlines() if re.search(r"\d+ (passed|failed|error)", l)]
+        line = last[-1] if last else ""
+        get = lambda w: sum(int(x) for x in re.findall(r"(\d+) %s" % w, line))
+        p, f, e, s = get("passed"), get("failed"), get("errors?"), get("skipped")
+        return p + f + e, p, f + e, s
+    if step["kind"] == "script":
+        n = len(re.findall(step["regex"], out, re.M)) if step["regex"] else 0
+        return n, n, 0, 0
+    return 0, 0, 0, 0
+
+
+def run_step(step, logdir, env):
+    log = os.path.join(logdir, re.sub(r"[^A-Za-z0-9_.-]", "_", step["name"]) + ".log")
+    t0 = time.monotonic()
+    timed_out = False
+    with open(log, "wb") as lf:
+        lf.write(("$ %s\n" % step["command"]).encode())
+        lf.flush()
+        p = subprocess.Popen(["bash", "-c", step["command"]], cwd=REPO, stdout=lf, stderr=subprocess.STDOUT,
+                             stdin=subprocess.DEVNULL, env=env, start_new_session=True)
+        try:
+            p.wait(timeout=step["limit"])
+        except subprocess.TimeoutExpired:
+            timed_out = True
+            for sig, wait in ((signal.SIGTERM, 5), (signal.SIGKILL, 10)):
+                try:
+                    os.killpg(p.pid, sig)
+                except ProcessLookupError:
+                    break
+                try:
+                    p.wait(timeout=wait)
+                    break
+                except subprocess.TimeoutExpired:
+                    pass
+        except KeyboardInterrupt:
+            os.killpg(p.pid, signal.SIGKILL)
+            p.wait()
+            raise
+    secs = time.monotonic() - t0
+    out = open(log, "rb").read().decode("utf-8", "replace")
+    run, passed, failed, ignored = count(step, out)
+    code = p.returncode
+    ok = code == 0 and not timed_out and (step["kind"] == "build" or run >= step["least"]) and failed == 0
+    why = ("timed out after %g s" % step["limit"] if timed_out else "exit %s" % code if code != 0
+           else "%d failed" % failed if failed else "ran %d tests, fewer than %d" % (run, step["least"]) if not ok else "")
+    return {"name": step["name"], "kind": step["kind"], "command": step["command"], "limit": step["limit"],
+            "exit": code, "seconds": round(secs, 2), "tests_run": run if step["kind"] != "build" else None,
+            "passed": passed, "failed": failed, "ignored": ignored, "timed_out": timed_out, "ok": ok, "why": why,
+            "log": log, "log_sha256": hashlib.sha256(open(log, "rb").read()).hexdigest()}
+
+
+def main():
+    ap = argparse.ArgumentParser(prog="scripts/test", description=__doc__.split("\n\n")[0])
+    ap.add_argument("--all", action="store_true")
+    ap.add_argument("--candidate")
+    ap.add_argument("--summary")
+    ap.add_argument("--logs")
+    ap.add_argument("--list")
+    ap.add_argument("--only", action="append", default=[])
+    a, rest = ap.parse_known_args()
+    if a.candidate:
+        if not a.all:
+            ap.error("--candidate goes with --all")
+        tool = os.path.join(REPO, "scripts", "test_candidate")
+        os.execv(tool, [tool, a.candidate, *rest])
+    if rest:
+        ap.error("unknown arguments: %s" % " ".join(rest))
+    mode = "all" if a.all else "fast"
+    # one outer lock for the whole run (nested lockrun calls run directly)
+    if not os.environ.get("LOCKRUN_TOKEN"):
+        lockrun = os.path.join(REPO, "scripts", "lockrun")
+        os.execv(lockrun, [lockrun, "--timeout", str(OUTER_LIMIT), "--owner", "scripts/test %s (%s)" % (mode, REPO),
+                           "--", sys.executable, os.path.abspath(__file__), *sys.argv[1:]])
+    listfile = a.list or os.path.join(REPO, LISTS[mode])
+    steps = read_list(listfile)
+    if a.only:
+        missing = [n for n in a.only if n not in [s["name"] for s in steps]]
+        if missing:
+            raise SystemExit("scripts/test: no step named %s in %s" % (", ".join(missing), listfile))
+        steps = [s for s in steps if s["name"] in a.only]
+    logdir = a.logs or tempfile.mkdtemp(prefix="claude-paint-test-%s-" % mode)
+    os.makedirs(logdir, exist_ok=True)
+    # scripts' scratch: short (socket paths must stay under 104 bytes) and removed after
+    scratch = tempfile.mkdtemp(prefix="cpt.", dir="/tmp")
+    env = dict(os.environ, TMPDIR=scratch)
+    env.pop("EASEL_BOX", None)
+    started = datetime.datetime.now().astimezone().isoformat(timespec="seconds")
+    results = []
+    interrupted = False
+    try:
+        for s in steps:
+            print("scripts/test: %-34s ..." % s["name"], end="", flush=True)
+            r = run_step(s, logdir, env)
+            results.append(r)
+            counts = "" if r["kind"] == "build" else "  %d run, %d failed%s" % (
+                r["tests_run"], r["failed"], ", %d ignored/skipped" % r["ignored"] if r["ignored"] else "")
+            print(" %s %7.1f s%s%s" % ("ok  " if r["ok"] else "FAIL", r["seconds"], counts, "  (%s)" % r["why"] if r["why"] else ""), flush=True)
+    except KeyboardInterrupt:
+        interrupted = True
+    finally:
+        shutil.rmtree(scratch, ignore_errors=True)
+    verdict = "pass" if len(results) == len(steps) and all(r["ok"] for r in results) and not a.only else (
+        "unfinished" if interrupted or any(r["timed_out"] for r in results) or len(results) < len(steps) else "fail")
+    if a.only and all(r["ok"] for r in results) and not interrupted:
+        verdict = "unfinished"  # a partial run is never a pass
+    build = sum(r["seconds"] for r in results if r["kind"] == "build")
+    tests = sum(r["seconds"] for r in results if r["kind"] != "build")
+    summary = {
+        "mode": mode, "verdict": verdict, "list": os.path.relpath(listfile, REPO),
+        "list_sha256": hashlib.sha256(open(listfile, "rb").read()).hexdigest(),
+        "only": a.only, "commit": git("rev-parse", "HEAD"), "dirty": bool(git("status", "--porcelain")),
+        "started": started, "build_seconds": round(build, 1), "test_seconds": round(tests, 1),
+        "tests_run": sum(r["tests_run"] or 0 for r in results), "steps": results,
+    }
+    if a.summary:
+        with open(a.summary, "w") as f:
+            json.dump(summary, f, indent=1)
+            f.write("\n")
+    bad = [r["name"] for r in results if not r["ok"]]
+    print("scripts/test %s: %s. %d steps, %d tests; build %.0f s, tests %.0f s; logs in %s%s" % (
+        mode, verdict.upper(), len(results), summary["tests_run"], build, tests, logdir,
+        "; failed: " + ", ".join(bad) if bad else ""))
+    return 0 if verdict == "pass" else 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())

@@ -1,0 +1,3 @@
+tests::the_thick_swatch_matches_paint_laid_thick	ok	3.83
+tests::the_thick_swatch_matches_paint_laid_thick_dark	ok	3.76
+tests::the_thick_swatch_matches_paint_laid_thick_earths	ok	3.82

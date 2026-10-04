@@ -51,6 +51,17 @@ use std::time::{Duration, Instant};
 /// The one width a painting is painted, replayed and delivered at (px).
 const LIVE_WIDTH: usize = 2400;
 
+/// The width a painting paints at: an existing one its log's (a sketch if
+/// its head says so, `session::SKETCH_MARK`), a new one a sketch's if the
+/// session's name starts with "sketch".
+fn width_for(name: &str, log: Option<&str>) -> usize {
+    let sketch = match log {
+        Some(text) => session::logged_sketch(text),
+        None => name.starts_with("sketch"),
+    };
+    if sketch { session::SKETCH_WIDTH } else { LIVE_WIDTH }
+}
+
 /// The painter build's one session.
 #[cfg(not(feature = "replay"))]
 const PAINTING: &str = "painting";
@@ -810,7 +821,8 @@ impl Server {
         // an existing painting goes on with the box its log names; a new one takes the
         // configured box (session::box_for)
         let tubes = session::box_for(text.as_deref())?;
-        let mut srv = Self { name, s: Session::with_box(LIVE_WIDTH, tubes).map_err(|e| e.to_string())?, frames: false, written: None, replayed: 0 };
+        let width = width_for(&name, text.as_deref());
+        let mut srv = Self { name, s: Session::with_box(width, tubes).map_err(|e| e.to_string())?, frames: false, written: None, replayed: 0 };
         if let Some(text) = text {
             srv.written = Some(text.clone());
             let chunks = parse_program(&text);
@@ -1145,7 +1157,7 @@ fn deliver_lit(c: &Canvas, out: &Path, light: Option<(f32, f32)>) -> Result<(), 
 }
 
 #[cfg(feature = "replay")]
-const RUN_USAGE: &str = "run <file.lua> [--out path.png] [--light az,el | --gallery] [--look] [--state-digest digests.txt] [--frames-every <s> --frames-dir <dir> [--frame-width 1000]] [--width <px>] (replays at the live width, 2400px, unless --width: a smaller preview for development, not the painting)";
+const RUN_USAGE: &str = "run <file.lua> [--out path.png] [--light az,el | --gallery] [--look] [--state-digest digests.txt] [--frames-every <s> --frames-dir <dir> [--frame-width 1000]] [--width <px>] (replays at the width it was painted at, 2400px, a sketch 600px, unless --width: a smaller preview for development, not the painting)";
 
 #[cfg(feature = "replay")]
 fn run(args: &[String]) -> Result<(), String> {
@@ -1161,9 +1173,10 @@ fn run(args: &[String]) -> Result<(), String> {
     let text = std::fs::read_to_string(file).map_err(|e| format!("{file}: {e}"))?;
     let stem = Path::new(file).file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or("easel".into());
     // a development preview may replay narrower (kernel radii are in mm, so it is not the
-    // painting at a smaller size: see notes/workflow.md); the painting is LIVE_WIDTH
+    // painting at a smaller size: see notes/workflow.md); the painting is the width it was
+    // painted at (LIVE_WIDTH, a sketch's SKETCH_WIDTH)
     let width = match flag(args, "--width") {
-        None => LIVE_WIDTH,
+        None => width_for(&stem, Some(&text)),
         Some(w) => w.parse::<usize>().ok().filter(|w| (16..=LIVE_WIDTH * 4).contains(w)).ok_or_else(|| format!("--width {w}: want px, 16 to {}", LIVE_WIDTH * 4))?,
     };
     let out = flag(args, "--out").map(PathBuf::from).unwrap_or_else(|| root().join("out/lua").join(format!("{stem}.png")));
@@ -1520,5 +1533,15 @@ mod tests {
         for bad in [&["--light"][..], &["--light", "135"], &["--light", "135,91"], &["--light", "nan,25"], &["--light", "inf,25"], &["a.png", "b.png"], &["--lit"]] {
             assert!(args(bad).is_err(), "{bad:?}");
         }
+    }
+
+    /// A new session is a sketch by its name; a log by what its head says.
+    #[test]
+    fn a_log_replays_at_the_width_it_was_painted_at() {
+        assert_eq!(width_for("sketch-1", None), session::SKETCH_WIDTH);
+        assert_eq!(width_for("painting", None), LIVE_WIDTH);
+        let head = |mark: &str| format!("-- easel session\n--@ engine 3\n{mark}\n--@ chunk 1\ncanvas{{}}\n");
+        assert_eq!(width_for("renamed", Some(&head(session::SKETCH_MARK))), session::SKETCH_WIDTH);
+        assert_eq!(width_for("sketchbook", Some(&head(""))), LIVE_WIDTH);
     }
 }

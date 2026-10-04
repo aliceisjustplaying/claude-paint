@@ -41,7 +41,8 @@
 //!   viscous liquids and gels", Applied Scientific Research A 11, 451-464,
 //!   1962; notes/research/oil_paint_physics.md). The engine uses a
 //!   diffusion of the wet surface with one mobility, the ESTIMATE
-//!   `SPREAD_MM2_MIN` at thinner 0.5: σ = 0.03 N/m, h = 10 µm, η = 0.1 Pa·s
+//!   `SPREAD_MM2_MIN` at thinner 0.5, that leaves a wetting film
+//!   (`WET_FILM_UM`) where it runs off: σ = 0.03 N/m, h = 10 µm, η = 0.1 Pa·s
 //!   (paint thinned half; the note gives 1 Pa·s for a medium-rich glaze)
 //!   and λ = 2 mm give 0.06 mm²/min. Unthinned paint doesn't flow here, as
 //!   before (it levels when it sets, `drying`).
@@ -95,6 +96,11 @@ pub fn evaporation_tau_min(paint_um: f32) -> f64 {
 /// Mobility (mm²/min) of a wet film half solvent: how fast it levels.
 /// ESTIMATE (Orchard 1962, see the module notes).
 pub const SPREAD_MM2_MIN: f32 = 0.06;
+/// The flow doesn't drain a pixel below this much liquid (µm): a liquid
+/// that wets the paint under it leaves a film on the weave's tops, it
+/// doesn't run off them bare (Orchard's leveling rate goes as the film's
+/// thickness cubed, so the last of a film barely moves). ESTIMATE.
+pub const WET_FILM_UM: f32 = 2.0;
 
 /// Mobility of a film whose liquid holds the share `phi` of solvent: 0
 /// without solvent, `SPREAD_MM2_MIN` at one half, more the thinner it is
@@ -220,8 +226,10 @@ impl Canvas {
                             }
                         }
                     }
-                    if sum > MAX_OUT * l {
-                        let f = MAX_OUT * l / sum;
+                    // (down to the wetting film, no further)
+                    let avail = (l - WET_FILM_UM / COAT_UM).max(0.0);
+                    if sum > MAX_OUT * avail {
+                        let f = if sum > 0.0 { MAX_OUT * avail / sum } else { 0.0 };
                         for v in &mut q {
                             *v *= f;
                         }

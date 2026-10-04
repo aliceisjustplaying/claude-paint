@@ -6,7 +6,7 @@ Three tools check a version before it reaches main:
 - `scripts/golden_approve` records and checks approvals of protected test answers.
 - `scripts/merge_candidate` adds a commit to main only if its receipt, approvals and main's position check out.
 
-`scripts/safeguards_lib.py` holds their shared code. `scripts/tests/safeguards.sh` tests them on dummy repositories (111 checks). First built on branch `codex/safeguards` (on `codex/speed` at `af5beb3`). The review fixes are on `codex/safeguards2`, from `codex/speed` at `a0b2c25` (see Failure history). test_candidate has run for real: `c53d40a` passed (`notes/speed/PHASE2_REPORT.md`), with a local v1 receipt note. No approval has been recorded, merge_candidate has run only on dummy repositories, and main and the website are unchanged.
+`scripts/safeguards_lib.py` holds their shared code. `scripts/tests/safeguards.sh` tests them on dummy repositories (121 checks). First built on branch `codex/safeguards` (on `codex/speed` at `af5beb3`). The review fixes are on `codex/safeguards2`, from `codex/speed` at `a0b2c25` (see Failure history), and the pinned lockrun (review round 2, S2) on `codex/safeguards3`, from `codex/speed` at `0d802c2`. test_candidate has run for real: `c53d40a` passed (`notes/speed/PHASE2_REPORT.md`), with a local v1 receipt note. No approval has been recorded, merge_candidate has run only on dummy repositories, and main and the website are unchanged.
 
 ## Commands for the lead
 
@@ -70,7 +70,7 @@ git push origin refs/notes/test-receipts
    - `git status --porcelain --untracked-files=all --ignored` is empty.
 
    Otherwise it refuses (exit 2) and writes no receipt.
-5. One outer `lockrun --timeout 600` (`--timeout` changes it) runs `scripts/test --all --summary <file outside the worktree>` in the worktree, plus `--list LIST` for a non-default list, with `CARGO_TARGET_DIR=<worktree>/target`. The lockrun used is `$LOCKRUN`, else the candidate's own `scripts/lockrun`, else `~/src/a/claude-paint-tools/lockrun`.
+5. One outer `lockrun --timeout 600` (`--timeout` changes it) runs `scripts/test --all --summary <file outside the worktree>` in the worktree, plus `--list LIST` for a non-default list, with `CARGO_TARGET_DIR=<worktree>/target`. **The lockrun is pinned, never the candidate's** (see "The pinned lockrun" below). It is chosen before the worktree exists, and its checked bytes are copied to the `/tmp/cpc.*` directory, outside the worktree, and run from there.
 6. **After the run** the same evidence is collected again (HEAD, tree, index against the commit's tree, sparse, flags, `git status --untracked-files=no`). Any difference fails the run: a tracked file edited, the index changed, HEAD moved, a sparse checkout or a skip-worktree/assume-unchanged flag. Both snapshots go into the receipt (`checkout.before`, `checkout.after`), including up to 20 changed or flagged paths. Untracked files written by the tests (build output) are recorded but allowed.
 7. A pass needs all of the following:
    - lockrun exit 0;
@@ -85,6 +85,21 @@ git push origin refs/notes/test-receipts
 9. The receipt is written as a git note under an exclusive lock (`test-receipts.lock` in the repository's common git directory) and read back. Concurrent `git notes add` runs otherwise rewrite `refs/notes/test-receipts` from the same parent and silently drop each other's receipts. The suite's 36 parallel runs hit this before the lock was added.
 10. Exit codes: 0 pass, 1 fail, 3 unfinished, 2 refused before testing.
 
+### The pinned lockrun
+
+Review round 2 (S2, `~/src/a/claude-paint-reviews/safeguards-review-astra-r2.md`) found that test_candidate preferred the candidate's own `scripts/lockrun`, which was not protected, and that merge never checked the receipt's lockrun hash. A candidate lockrun that runs the command with no lock and writes a matching `record.json` made the real runner report PASS with no lock and no outer timeout. Because the forged record named the caller's process group, the runner's leftover sweep also stopped an unrelated lock holder.
+
+Now:
+
+- `LOCKRUN_SHA256` in `scripts/safeguards_lib.py` is the one pin: `cfcc8e51e276fb8692a7a74cff58a3ee0e7c5ac1afcdbb38d7843e9b02105185`. That's `scripts/lockrun` at `8b71762` and today, and the lead's stable copy `~/src/a/claude-paint-tools/lockrun`.
+- test_candidate uses only a file with that sha256. If `$LOCKRUN` is set, that file must match, or the run is refused (exit 2, nothing run). An explicit choice is never silently replaced. Without `$LOCKRUN`, the order is `~/src/a/claude-paint-tools/lockrun`, then the `scripts/lockrun` beside test_candidate (the tool's own checkout, not the candidate). A missing or different file is skipped with a message. If none matches, the run is refused (exit 2, nothing run).
+- The chosen file is read once and hashed. Those exact bytes are written to `<cpc dir>/lockrun` (mode 0500, outside the worktree) and run by absolute path. Neither the candidate nor a later edit of the source file can substitute another lockrun.
+- The receipt's `lockrun` records `path` (the source file, with `~`), `source` (`$LOCKRUN`, `~/src/a/claude-paint-tools/lockrun` or `scripts/lockrun beside test_candidate`), `sha256` (of the copy that ran), `pinned_sha256`, `ran` and `command`.
+- merge_candidate refuses a receipt whose `lockrun.sha256` isn't the pin, or that has none.
+- `scripts/lockrun` and `scripts/tests/lockrun.sh` are protected paths in `notes/golden_paths.txt`. A change to lockrun needs an approval and a new pin.
+
+The receipt's hash is self-reported, like the rest of the unsigned receipt (Known limits). The `8053fc1` receipt (N5) ran the candidate's own lockrun, but its sha256 is the pin, so merge accepts its lockrun field.
+
 ### Receipt format
 
 The receipt is written by `git notes --ref=test-receipts add -f` on the candidate commit, so it lives outside the commit. A newer run's note replaces the older one. Every run's files stay in `$TEST_RECEIPT_DIR/<commit>/<time>-<pid>/` (default `~/src/a/claude-paint-receipts`): `receipt.json`, `summary.json`, `lockrun.log` and `logs/NN-<step>.log`.
@@ -96,7 +111,7 @@ candidate         {commit, tree, requested (the argument)}
 base_main         {commit, source, is_ancestor}
 exit, timeout_s, started_at, ended_at, seconds
 tool              {name, sha256 over test_candidate + safeguards_lib.py}
-lockrun           {path (which one), sha256, command}
+lockrun           {path, source, sha256 (the pin), pinned_sha256, ran, command}
 manifest          {list, list_sha256, runner ("scripts/test"), runner_sha256,
                    steps [{kind, name, limit, least, regex, command, group}]}  (from the commit's blobs)
 checkout          {clean_before, before {...}, after {...}}, each snapshot:
@@ -147,7 +162,7 @@ By default it approves every protected entry at X. `--paths` takes files or `dir
 
 Run it from a working copy of the repository. Before it changes anything, it lists every failed check:
 
-1. A receipt exists on COMMIT in format v2 for exactly this commit and tree, with verdict pass, exit 0 and `cleanup_errors` `[]`.
+1. A receipt exists on COMMIT in format v2 for exactly this commit and tree, with verdict pass, exit 0 and `cleanup_errors` `[]`. Its `lockrun.sha256` is the pin `LOCKRUN_SHA256`; a receipt without one is refused.
 2. **Checkout evidence:** `checkout.clean_before` is true, and the `before` and `after` snapshots both show the candidate's HEAD and tree, an index equal to its tree, no sparse checkout, no flags and no tracked changes. Both snapshots must also give the commit's real file count. Missing or inconsistent evidence is refused.
 3. **The check set, re-derived from COMMIT's own blobs:** the receipt's list must be `notes/speed/test_lists/all.tsv`. That list at COMMIT, parsed fresh, must equal the receipt's manifest: list hash, runner hash and every step field. The summary must again pass every rule of test_candidate's step 7 against the fresh parse. So a receipt whose manifest and summary agree with each other but not with the commit is refused.
 4. `notes/speed/test_lists/all.tsv` and `scripts/test` are protected paths, and `golden_approve check` passes between the receipt's base main and COMMIT.
@@ -189,13 +204,13 @@ Exit codes:
 scripts/tests/safeguards.sh
 ```
 
-It builds a bare origin, a published clone and a dev clone under `$TMPDIR`. The dev clone has the same sparse post-checkout hook as the real repository, and its working copy stays dirty throughout. The candidate commits are made with plumbing. They carry a fake `scripts/test`, a three-step dummy `notes/speed/test_lists/all.tsv` (build, cargo, script with a group) and a copy of `scripts/lockrun`. The fake runner reads the committed list and emits the full summary contract above. A committed `fake_mode` file makes it misbehave in one specific way. 36 test_candidate runs go in parallel, eight at a time, each with its own `LOCKRUN_DIR`. The fake test fails unless it runs under lockrun, with its target directory inside the worktree, with `notes/pic.png` present (a full checkout) and without the dev clone's changes. Receipts are "forged" (copied and edited) only to test merge_candidate's refusals. Every pass comes from a real test_candidate run. The suite does not test the real `scripts/test`'s process handling; the parent does that.
+It builds a bare origin, a published clone and a dev clone under `$TMPDIR`. The dev clone has the same sparse post-checkout hook as the real repository, and its working copy stays dirty throughout. The candidate commits are made with plumbing. They carry a fake `scripts/test`, a three-step dummy `notes/speed/test_lists/all.tsv` (build, cargo, script with a group) and a copy of `scripts/lockrun`. The suite sets `LOCKRUN` to this checkout's `scripts/lockrun` (its hash is the pin). Only the forger cases unset it. The fake runner reads the committed list and emits the full summary contract above. A committed `fake_mode` file makes it misbehave in one specific way. 37 test_candidate runs go in parallel, eight at a time, each with its own `LOCKRUN_DIR`. The fake test fails unless it runs under lockrun, with its target directory inside the worktree, with `notes/pic.png` present (a full checkout) and without the dev clone's changes. Receipts are "forged" (copied and edited) only to test merge_candidate's refusals. Every pass comes from a real test_candidate run. The suite does not test the real `scripts/test`'s process handling; the parent does that.
 
-Result on 2026-10-04 (macOS, Python 3.13, git 2.54): `# 111 checks, 111 passed, 0 failed`, exit 0, in each of three runs under `scripts/lockrun --timeout 600`: 64.5 s, then 67 s and 67 s (the last two after the fixture race fix). The hooks run on every Git command, and that accounts for most of the time.
+Result on 2026-10-04 (macOS, Python 3.13, git 2.54): `# 111 checks, 111 passed, 0 failed`, exit 0, in each of three runs under `scripts/lockrun --timeout 600`: 64.5 s, then 67 s and 67 s (the last two after the fixture race fix). With the pinned lockrun (10 more checks): `# 121 checks, 121 passed, 0 failed`, exit 0, 69.9 s under `scripts/lockrun --timeout 600`. The hooks run on every Git command, and that accounts for most of the time.
 
-The 111 checks:
+The 121 checks:
 
-- **test_candidate pass path (9):** the receipt has the exact commit, tree, base and ancestry, with no cleanup errors. The logs were copied out with matching hashes. The manifest binds the list, the list and runner hashes of the commit's blobs and the parsed steps. Checkout evidence is recorded before and after. The receipt has build settings and the tool hash. The `/tmp/cpc.*` directory was removed. The sparse hook ran and the checkout was made full. The dirty dev clone did not leak in. A cleanup failure (an undeletable directory left by the test) gives verdict fail.
+- **test_candidate pass path (10):** the receipt names the lockrun that ran (`$LOCKRUN`, this checkout's `scripts/lockrun`) and its sha256 is the pin. the receipt has the exact commit, tree, base and ancestry, with no cleanup errors. The logs were copied out with matching hashes. The manifest binds the list, the list and runner hashes of the commit's blobs and the parsed steps. Checkout evidence is recorded before and after. The receipt has build settings and the tool hash. The `/tmp/cpc.*` directory was removed. The sparse hook ran and the checkout was made full. The dirty dev clone did not leak in. A cleanup failure (an undeletable directory left by the test) gives verdict fail.
 - **failures (25), each a fail receipt with the specific reason and the directory removed:**
   - a failing step, zero tests, no summary, exit 1 under a pass summary, a timed-out step under a pass verdict, no steps, a wrong list hash, a wrong log hash and only the build step reported;
   - the reviewer's two declared checks with one reported, plus an extra, a duplicated and a reordered step;
@@ -204,16 +219,17 @@ The 111 checks:
   - the reviewer's runner that edits a tracked file, plus a changed index, a moved HEAD, a skip-worktree flag hiding an edit and a sparse checkout;
   - a separate check that the edited-file receipt records the evidence.
 - **unfinished (3):** an inner step timeout (summary "unfinished", exit 1) gives unfinished, not fail; so do an outer timeout and SIGTERM.
-- **other test_candidate (3):** a candidate that changes its list is tested on its own list; `--list-file` binds another list; all 36 concurrent runs kept their receipts.
-- **refusals (11):** a commit without the list, without `scripts/test`, with a non-build step requiring 0 tests, with only build steps, with a malformed list or with a symlinked list. Also a branch name, an unknown id, an id that is also a branch, the reviewer's hex-prefix lightweight tag and an unclean checkout.
+- **other test_candidate (5):** a candidate that changes its list is tested on its own list; `--list-file` binds another list; all 37 concurrent runs kept their receipts. A candidate whose `scripts/lockrun` is a forger (it touches a marker, writes a `record.json` naming the caller's group and token like the reviewer's r2b driver and runs the command with no lock), with `$LOCKRUN` unset: the marker is absent and the run passes; the receipt's lockrun sha256 is the pin and its source is the tools copy or the one beside test_candidate, never the candidate's.
+- **refusals (15):** a `$LOCKRUN` that is a forger (refused, not run, no fallback, no receipt, no directory) or that doesn't exist. Without `$LOCKRUN`, with a fake `HOME` and `pick_lockrun` called in-process: a non-pinned tools copy is skipped for the pinned one beside test_candidate; with neither pinned, refused. Also a commit without the list, without `scripts/test`, with a non-build step requiring 0 tests, with only build steps, with a malformed list or with a symlinked list. Also a branch name, an unknown id, an id that is also a branch, the reviewer's hex-prefix lightweight tag and an unclean checkout.
 - **golden_approve (20):** the original ten (changed test, changed answer, self-approval, a hand-written self-approval note, a different blob, its own blob, deletion and approved deletion, the reviewer's list-entry removal, default record) plus:
   - the reviewer's protected file turned into a submodule, refused as an unsupported type;
   - an object-only approval does not cover it, while an exact mode+object approval does;
   - a symlink is refused;
   - a listed but absent path is fine, and needs approval once it appears;
   - list and runner changes need approval, the exact list blob's approval covers it, and another edit of the list is refused again.
-- **merge_candidate refusals (30):**
+- **merge_candidate refusals (33):**
   - missing receipt, failed receipt, and a receipt from a run that edited a tracked file;
+  - a pass receipt whose lockrun sha256 was edited to another value, one without the sha256 and one without the lockrun record;
   - another commit's receipt, and the reviewer's same-tree copy;
   - tree mismatch;
   - forged pass receipts with tracked changes, with flags, without after-evidence or with a cleanup error;
@@ -234,13 +250,15 @@ The 111 checks:
   - main moves right after a successful push: exit 5 with "at neither commit", not "PUSH FAILED".
 - **end to end (3):** the push used the exact guarded command; the published copy was fast-forwarded with its files updated and its status clean; every `/tmp/cpc.*` directory the suite's runs printed is gone, and only the dev clone is a worktree.
 
-Mutation runs (2026-10-04): I removed one new guard at a time from a copy of the tools and re-ran the suite. Each time the intended checks failed:
+Mutation runs (2026-10-04): I removed one new guard at a time from a copy of the tools and re-ran the suite. Each time the intended checks failed (check numbers from the 111-check suite):
 
 - without the step binding (`binding_problems`): 16 failures. They were checks 19 to 25 and 27 (omitted, extra, duplicated and reordered steps, plus a changed command, limit, least or group) and merge checks 83, 84, 86 and 89. Checks 92 to 94 also failed as a knock-on effect, because a merge then went through and moved main. Check 8 also failed in that run because of a fixture race, since fixed (P now runs alone).
 - without the after-test checkout check: checks 30 to 34 (edited file, changed index, moved HEAD, skip-worktree, sparse) and 75.
 - with the gitlink skip restored: checks 62 to 64.
 
 The first version's mutation runs (lease, sparse fix, self-approval, zero tests) are not repeated here.
+
+Pinned lockrun mutation (121-check suite): with `0d802c2`'s test_candidate in a copy of the tools, 7 checks failed, 114 passed. They were exactly the new test_candidate checks 41 to 43 and 51 to 54. In check 42, the old code ran the candidate's forging `scripts/lockrun` (`running: /private/tmp/cpc.*/wt/scripts/lockrun ...`) and got `VERDICT: PASS`, which is S2 reproduced. In check 51, it ran a non-pinned `$LOCKRUN`. The merge checks 90 to 92 test merge_candidate, which was unchanged in that copy, so they passed.
 
 ## Failure history
 
@@ -261,6 +279,8 @@ The first version's mutation runs (lease, sparse fix, self-approval, zero tests)
 B1 (runner process ownership), B4 (frozen thinner paths) and B6 (runner limits) belong to the parent session and are not addressed here.
 
 **Speed-tests review S5 (`speed-tests-review-astra.md`).** An inner step timeout was labeled fail. Now a summary verdict of "unfinished" gives an unfinished receipt (exit 3).
+
+**Safeguards review round 2, S2 (`safeguards-review-astra-r2.md`).** test_candidate ran the candidate's own `scripts/lockrun`, and a forging one got the real runner to PASS with no lock or timeout. Now the lockrun is pinned by sha256, chosen outside the candidate and run as a copy outside the worktree. merge refuses a receipt without the pinned hash, and lockrun and its tests are protected. See "The pinned lockrun".
 
 **Found while fixing:** parallel `git notes add` runs lost receipts, even though each printed "receipt recorded". Writes are now locked and read back (see test_candidate step 9).
 

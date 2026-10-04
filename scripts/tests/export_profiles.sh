@@ -5,7 +5,10 @@
 # default-box studios' guides are the committed guide byte for byte, and a
 # box studio's guide differs from the committed one only in the table.
 #
-#   R16_BRANCH=<branch> scripts/tests/export_profiles.sh [profile...]   (default: every profile)
+#   R16_BRANCH=<branch> scripts/tests/export_profiles.sh [profile...]
+#
+# By default every profile: blank and friedrich, and each box profile whose
+# materials note R16_BRANCH has (an older branch lacks the newer boxes).
 #
 # Requires a caller-provided persistent scratch directory (TMPDIR). Builds
 # one painter easel per box (a few minutes the first time).
@@ -18,9 +21,17 @@ unset EASEL_BOX
 head='| tube | pigment | hiding | stiffness | tinting strength | drying |'
 table_of() { awk -v head="$head" '$0 == head { on = 1 } on && !/^\|/ { exit } on { print }' "$1"; }
 committed=$(git -C "$repo" show "$R16_BRANCH:notes/easel_guide.md")
-# the profiles named on the command line, else all of them
+# the profiles named on the command line, else all of them that R16_BRANCH has
 profiles=("$@")
-[ ${#profiles[@]} -gt 0 ] || profiles=(blank friedrich sargent inness alma-tadema tonn hopper giverny impressionist)
+if [ ${#profiles[@]} -eq 0 ]; then
+  for p in blank friedrich sargent inness alma-tadema tonn hopper giverny impressionist; do
+    case $p in
+      blank|friedrich) ;;
+      *) git -C "$repo" cat-file -e "$R16_BRANCH:notes/research/${p//-/_}_materials.md" 2>/dev/null || continue ;;
+    esac
+    profiles+=("$p")
+  done
+fi
 for profile in "${profiles[@]}"; do
   dest=$work/$profile
   "$repo/scripts/export_r16_studio" "$profile" "$dest" >"$work/$profile.log" 2>&1 || { cat "$work/$profile.log" >&2; echo "$profile: the export failed" >&2; exit 1; }

@@ -67,8 +67,12 @@ impl Tube {
 /// build for one box holds that box's tube records and no others
 /// (`the_catalog_is_this_builds_boxes`). The rest came with round 20's
 /// boxes; notes/r20/TUBES.md gives each one's numbers, the proposal they
-/// come from and why. All numbers are estimates from the pigment literature,
-/// not measurements.
+/// come from and why. The last six (strontium yellow to vine black) came
+/// with the giverny and impressionist boxes; their materials notes
+/// (notes/research/{giverny,impressionist}_materials.md) map them to the
+/// pigments found, and the comment at each gives its basis. All numbers are
+/// estimates from the pigment literature, not measurements (the three
+/// chromate yellows' color and strength are from measured dry powders).
 pub fn catalog() -> Vec<Tube> {
     vec![
         // ---- the tube box (round 19)
@@ -188,6 +192,7 @@ pub fn catalog() -> Vec<Tube> {
         // cobalt pigments are siccative in oil; set at cobalt blue's rate
         #[cfg(any(feature = "box-sargent", feature = "box-tonn", feature = "box-giverny", feature = "box-impressionist"))]
         tube("cobalt violet", "cobalt phosphate or arsenate", "#7e4c8e", 0.35, 0.55, 0.35, drier::COBALT_BLUE),
+        // ---- the giverny and impressionist boxes (notes/research/{giverny,impressionist}_materials.md)
         // lead-free chromate yellows of the 1850s-80s: dry powders measured
         // (Otero et al. 2017, Heritage Science 5:46: L*a*b* 94/-11/55, 90/-8/52,
         // 87/5/89; tinting 78%, 92%, 65% of lead chromate), masstones
@@ -209,7 +214,7 @@ pub fn catalog() -> Vec<Tube> {
         // charcoal black: bluish, weak, without bone's phosphate (Butler
         // 1984 found it in 9 of 10 paintings examined). Estimates
         #[cfg(feature = "box-impressionist")]
-        tube("vine black", "charcoal of vine twigs", "#323538", 0.75, 0.45, 0.6, drier::LAMP_BLACK),
+        tube("vine black", "charcoal of vine twigs", "#323538", 0.75, 0.45, 0.6, drier::LAMP_BLACK).engine3(drier::engine3::LAMP_BLACK),
     ]
 }
 
@@ -302,7 +307,7 @@ const BOXES: &[(&str, &[&str])] = &[
             "lead white", "zinc white", "pale cadmium", "cadmium yellow", "deep cadmium", "yellow ochre", "red earth", "burnt sienna", "bone black", "cerulean blue", "cobalt blue", "ultramarine blue", "viridian",
         ],
     ),
-    // late Monet, as analyses of his paintings from 1887 to 1926 found it
+    // late Monet, as analyses of his paintings from 1897 to 1926 found it
     // (notes/research/giverny_materials.md)
     #[cfg(feature = "box-giverny")]
     (

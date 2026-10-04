@@ -1,0 +1,188 @@
+#!/usr/bin/env python3
+"""Record and check approvals of protected test answers ("golden" files).
+
+    scripts/golden_approve record --commit X --approver ROLE --builder ROLE --reason TEXT
+                                  [--method TEXT] [--paths PATH ...] [--list-from COMMIT] [--dry-run]
+    scripts/golden_approve check --candidate C --base B
+    scripts/golden_approve show
+
+The protected set is listed in notes/golden_paths.txt (one path per line, or a
+directory prefix ending in /; # comments). The list file itself is always
+protected. `check` uses the union of the base's and the candidate's lists.
+
+record: approves the exact entries of PATHS (default: every protected path
+at X) at commit X. Each approval is one JSON line appended to the git note on
+X in refs/notes/golden-approvals:
+    {"format", "commit", "approver", "builder", "reason", "method",
+     "approved_at", "paths": [{"path", "mode", "blob"}], "list_from", "tool_sha256"}
+blob is the entry's object id at X and mode its Git mode (100644, 100755;
+120000 symlink, 160000 submodule), or blob "deleted" (no mode) when PATH does
+not exist at X (approving a deletion). Refused when approver equals builder
+(case-insensitive). All agents share one Git identity, so this is a check on
+the declared role names; the rule is that only the lead or the user runs
+`record`.
+
+check: every protected path that differs between B and C (added, modified,
+deleted, type changed; a rename counts as a deletion plus an addition) must
+have its exact entry at C ("deleted" if gone) approved by a valid approval:
+the note sits on the commit it names, approver != builder, and the entry
+really is that path's at that commit. A symlink, submodule or other
+non-regular entry at a protected path is refused as an unsupported type unless
+an approval names exactly its mode and object. Listed paths need not exist at
+either commit. Prints what is unapproved; exit 1 if anything is.
+
+Notes are not pushed or fetched with branches:
+    git fetch origin refs/notes/golden-approvals:refs/notes/golden-approvals
+    git push origin refs/notes/golden-approvals
+"""
+
+import argparse
+import json
+import os
+import sys
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from safeguards_lib import (APPROVAL_FORMAT, APPROVALS_REF, GOLDEN_LIST, Refuse,  # noqa: E402
+                            assert_publishable, blob_bytes, describe_change, entry_at, git,
+                            golden_check, home_redact, unsupported, now_iso, protected, protected_files, read_approvals,
+                            read_patterns, resolve_exact_commit, run, sha256_bytes, toplevel,
+                            tools_sha256)
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+TOOL_FILES = [os.path.abspath(__file__), os.path.join(HERE, "safeguards_lib.py")]
+
+
+def say(msg):
+    sys.stderr.write("golden_approve: %s\n" % msg)
+
+
+def cmd_record(repo, a):
+    x = resolve_exact_commit(repo, a.commit, "--commit")
+    approver, builder = a.approver.strip(), a.builder.strip()
+    if not approver or not builder:
+        raise Refuse("--approver and --builder must be non-empty role names")
+    if approver.casefold() == builder.casefold():
+        raise Refuse("the approver (%s) is the builder (%s): a builder cannot approve its own "
+                     "answer changes" % (approver, builder))
+    if not a.reason.strip():
+        raise Refuse("--reason must say why these answers are right")
+    if a.list_from:
+        src = resolve_exact_commit(repo, a.list_from, "--list-from")
+    elif blob_bytes(repo, x, GOLDEN_LIST) is not None:
+        src = x
+    else:
+        src = git(repo, "rev-parse", "HEAD")
+    patterns = read_patterns(repo, src)
+    entries = {}
+    if a.paths:
+        names = [n for n in git(repo, "ls-tree", "-r", "-z", "--name-only", x).split("\0") if n]
+        for p in a.paths:
+            p = p.strip()
+            if p.endswith("/"):
+                under = [n for n in names if n.startswith(p)]
+                if not under:
+                    raise Refuse("no files under %s at %s" % (p, x[:12]))
+                for n in under:
+                    entries[n] = entry_at(repo, x, n)
+            else:
+                e = entry_at(repo, x, p)
+                if e is not None and e[0] == "040000":
+                    raise Refuse("%s is a directory at %s; write it with a trailing /" % (p, x[:12]))
+                entries[p] = e
+                if e is None:
+                    say("note: %s does not exist at %s: approving its DELETION" % (p, x[:12]))
+            if not protected(p, patterns) and not p.endswith("/"):
+                say("note: %s is not in the protected list at %s" % (p, src[:12]))
+    else:
+        if not patterns:
+            raise Refuse("no %s at %s; pass --paths or --list-from" % (GOLDEN_LIST, src[:12]))
+        for n in protected_files(repo, x, patterns):
+            entries[n] = entry_at(repo, x, n)
+    for p, e in sorted(entries.items()):
+        if e is not None and unsupported(e[0]):
+            say("note: %s is not a regular file at %s (mode %s): approving exactly that mode and object"
+                % (p, x[:12], e[0]))
+    if not entries:
+        raise Refuse("nothing to approve")
+    rec = {
+        "format": APPROVAL_FORMAT,
+        "commit": x,
+        "approver": approver,
+        "builder": builder,
+        "reason": a.reason,
+        "method": a.method or "",
+        "approved_at": now_iso(),
+        "paths": [{"path": p, "blob": "deleted"} if entries[p] is None
+                  else {"path": p, "mode": entries[p][0], "blob": entries[p][1]} for p in sorted(entries)],
+        "list_from": {"commit": src, "sha256": sha256_bytes(blob_bytes(repo, src, GOLDEN_LIST) or b"")},
+        "tool_sha256": tools_sha256(*TOOL_FILES),
+    }
+    line = home_redact(json.dumps(rec, sort_keys=True, separators=(",", ":")))
+    assert_publishable(line, "the approval")
+    print("approval for %s: %d path(s), approver %s, builder %s" % (x, len(entries), approver, builder))
+    for e in rec["paths"]:
+        print("  %s %s %s" % (e.get("mode", "-"), e["blob"], e["path"]))
+    if a.dry_run:
+        print("dry run: not recorded")
+        return 0
+    run(["git", "-C", repo, "notes", "--ref=golden-approvals", "append", "-m", line, x])
+    print("recorded in %s (git notes --ref=golden-approvals show %s)" % (APPROVALS_REF, x[:12]))
+    print("push it explicitly: git push origin %s" % APPROVALS_REF)
+    return 0
+
+
+def cmd_check(repo, a):
+    base = resolve_exact_commit(repo, a.base, "--base")
+    cand = resolve_exact_commit(repo, a.candidate, "--candidate")
+    patterns, changes, unapproved, by = golden_check(repo, base, cand)
+    if not patterns:
+        say("warning: neither commit has %s; only the list file itself is protected" % GOLDEN_LIST)
+    print("protected changes %s..%s: %d" % (base[:12], cand[:12], len(changes)))
+    for status, path, obj, mode in changes:
+        if path in by:
+            hit = by[path][0]
+            print("  approved   %s (by %s, builder %s, at %s)"
+                  % (describe_change(status, path, obj, mode), hit["approver"], hit["builder"], hit["commit"][:12]))
+    for change in unapproved:
+        print("  UNAPPROVED %s" % describe_change(*change))
+    if unapproved:
+        print("golden check FAILED: %d protected change(s) without approval" % len(unapproved))
+        return 1
+    print("golden check passed")
+    return 0
+
+
+def cmd_show(repo, a):
+    for ap in read_approvals(repo):
+        print(json.dumps(ap, sort_keys=True))
+    return 0
+
+
+def main():
+    ap = argparse.ArgumentParser(prog="golden_approve", description=__doc__.split("\n\n")[0])
+    sub = ap.add_subparsers(dest="cmd", required=True)
+    r = sub.add_parser("record")
+    r.add_argument("--commit", required=True)
+    r.add_argument("--approver", required=True, help="role name of who approves (lead or the user)")
+    r.add_argument("--builder", required=True, help="role name of who produced the change")
+    r.add_argument("--reason", required=True)
+    r.add_argument("--method", help="how the answers were verified: commands, builds, hashes")
+    r.add_argument("--paths", nargs="+", help="paths or dir/ prefixes (default: every protected file)")
+    r.add_argument("--list-from", help="commit whose notes/golden_paths.txt to use "
+                   "(default: --commit if it has one, else HEAD)")
+    r.add_argument("--dry-run", action="store_true")
+    c = sub.add_parser("check")
+    c.add_argument("--candidate", required=True)
+    c.add_argument("--base", required=True)
+    sub.add_parser("show")
+    a = ap.parse_args()
+    try:
+        repo = toplevel(".")
+        return {"record": cmd_record, "check": cmd_check, "show": cmd_show}[a.cmd](repo, a)
+    except Refuse as e:
+        say("REFUSED: %s" % e)
+        return 2
+
+
+if __name__ == "__main__":
+    sys.exit(main())

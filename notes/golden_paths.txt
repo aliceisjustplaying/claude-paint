@@ -1,0 +1,15 @@
+# Release checks and saved answers require independent approval.
+notes/golden_paths.txt
+notes/speed/test_lists/
+scripts/test
+scripts/lockrun
+scripts/test_candidate
+scripts/merge_candidate
+scripts/golden_approve
+scripts/safeguards_lib.py
+scripts/tests/test_runner.sh
+scripts/tests/lockrun.sh
+scripts/tests/safeguards.sh
+scripts/tests/old_logs.sh
+crates/easel/tests/old_logs/
+crates/easel/tests/r19_default_box.lua

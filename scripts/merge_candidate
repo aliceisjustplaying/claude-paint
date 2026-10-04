@@ -1,0 +1,403 @@
+#!/usr/bin/env python3
+"""Add a tested commit to main, only if its proof checks out and nothing moved.
+
+    scripts/merge_candidate COMMIT --local PUBLISHED_WORKING_COPY [--remote origin] [--branch main]
+
+Run it from a working copy of the repository that contains COMMIT and its
+notes. COMMIT must be an exact commit id. Before changing anything it checks
+ALL of the following and lists every problem it finds:
+
+1. A receipt exists (refs/notes/test-receipts on COMMIT) in the current
+   format (v3), for exactly this commit and tree, with verdict pass, exit 0,
+   no cleanup errors and checkout evidence from before the test, after the
+   build phase and after both phases that shows a full, unchanged checkout
+   of COMMIT (HEAD, tree, index equal to the commit's tree, not sparse, no
+   skip-worktree/assume-unchanged flags, no tracked changes). Missing or
+   inconsistent evidence is refused. Any other verdict is refused; a
+   known_failure receipt ("NOT ALL GREEN (known pre-existing failure: ...)")
+   is not mergeable. The receipt's lockrun sha256 is the approved lockrun's
+   pin (LOCKRUN_SHA256 in safeguards_lib.py); a receipt without one is
+   refused.
+2. Both phases are present, in order (build, then check), each run under a
+   limit over 0 and at most 600 s, with lockrun exit 0 and verdict pass.
+   The reviewed check set, re-derived from COMMIT's own blobs: the receipt's
+   list is notes/speed/test_lists/all.tsv; that list at COMMIT parses to
+   exactly the receipt's manifest and hashes to its list_sha256 (and both
+   summaries'); scripts/test at COMMIT hashes to the manifest's runner_sha256
+   (and both summaries'); the build phase's steps are exactly the list's
+   build steps and the check phase's exactly its other steps (list order;
+   same name, kind, command, limit, least, group, known failure) and all
+   passed: no known failure either.
+3. The list and scripts/test are protected paths (notes/golden_paths.txt at
+   the base or COMMIT), and golden_approve check passes between the
+   receipt's recorded base main and COMMIT: every protected change, the
+   check set included, has an approval of its exact blob by a non-builder.
+4. The recorded base main is in COMMIT's history.
+5. The remote's BRANCH (git ls-remote) is still the recorded base main.
+6. The published working copy: its HEAD is the recorded base main, it is on
+   BRANCH, its remote has the same URL, no merge/rebase is in progress,
+   `git status` shows no modified, staged or untracked files, no index
+   entry has a skip-worktree or assume-unchanged flag (they hide changes
+   from status), no ignored file sits where COMMIT adds a file, and no
+   existing non-directory (or symlink) sits where COMMIT needs a directory.
+
+Then the guarded update, exactly:
+    git push --force-with-lease=main:<recorded-main> origin <COMMIT>:main
+(The lease makes the push fail if main moved after the checks.) Then the
+published working copy: the checks of 6 again, `git fetch origin main` and
+`git merge --ff-only --no-overwrite-ignore <COMMIT>` there, so its files
+change too and an ignored file that appeared meanwhile is not overwritten.
+If anything after the push goes wrong it stops and prints what it observed
+(the remote's main, the local HEAD, whether the merge ran, the local status)
+and recovery steps, without claiming more than it saw.
+
+Hooks stay on; it never uses --no-verify.
+
+Exit: 0 merged and local copy updated; 1 refused (nothing changed); 2 usage;
+3 the push failed and the remote is confirmed unchanged by us; 4 the remote
+is confirmed at COMMIT but the local copy was not updated (recovery printed);
+5 the push ran but its result could not be confirmed (the remote query failed
+or the remote shows another commit; recovery printed).
+"""
+
+import argparse
+import json
+import os
+import subprocess
+import sys
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from safeguards_lib import (DEFAULT_LIST, HEX64, LOCKRUN_SHA256, PHASE_LIMIT, PHASES,  # noqa: E402
+                            RECEIPT_FORMAT, RUNNER, Refuse, checkout_problems, describe_change, git,
+                            golden_check, is_ancestor, manifest_at, phase_problems, protected,
+                            resolve_exact_commit, run, toplevel, tree_of)
+
+
+def say(msg):
+    print("merge_candidate: %s" % msg, flush=True)
+
+
+def remote_head(repo, remote, branch):
+    out = git(repo, "ls-remote", remote, "refs/heads/" + branch)
+    return out.split()[0] if out else None
+
+
+def norm_url(repo, url):
+    if "://" not in url and not url.startswith(("git@",)) and ":" not in url.split("/")[0]:
+        path = url if os.path.isabs(url) else os.path.join(repo, url)
+        return os.path.realpath(path)
+    return url.rstrip("/").removesuffix(".git")
+
+
+def receipt_problems(repo, sha, tree, r):
+    """Why receipt R does not prove that SHA passed the reviewed check set ([] if it does)."""
+    p = []
+    cand = r.get("candidate") or {}
+    if r.get("format") != RECEIPT_FORMAT:
+        p.append("the receipt format is %r, not %r" % (r.get("format"), RECEIPT_FORMAT))
+    if cand.get("commit") != sha:
+        p.append("the receipt is for another commit (%s), not %s" % (cand.get("commit"), sha))
+    if cand.get("tree") != tree:
+        p.append("the receipt's tree %s is not %s's tree %s" % (cand.get("tree"), sha[:12], tree))
+    if r.get("verdict") == "known_failure":
+        text = str(r.get("verdict_text") or "")
+        mark = "known pre-existing failure: "
+        what = text[text.index(mark) + len(mark):].rstrip(")") if mark in text else "?"
+        p.append("NOT ALL GREEN: known pre-existing failure (%s): not mergeable (receipt verdict "
+                 "'known_failure')" % what)
+    elif r.get("verdict") != "pass":
+        p.append("the receipt's verdict is %r, not pass" % r.get("verdict"))
+    if r.get("exit") != 0:
+        p.append("the receipt records exit %r" % r.get("exit"))
+    if r.get("cleanup_errors") != []:
+        p.append("the receipt records cleanup errors (or none recorded): %r" % r.get("cleanup_errors"))
+    lr = r.get("lockrun") if isinstance(r.get("lockrun"), dict) else {}
+    if lr.get("sha256") != LOCKRUN_SHA256:
+        p.append("the receipt's lockrun sha256 is %r, not the approved lockrun's %s (safeguards_lib.py)"
+                 % (lr.get("sha256"), LOCKRUN_SHA256))
+    # checkout evidence: a full clean checkout of exactly SHA before and after the test
+    co = r.get("checkout") if isinstance(r.get("checkout"), dict) else {}
+    if co.get("clean_before") is not True:
+        p.append("the receipt does not record a clean checkout before the test")
+    n_tree = len([x for x in git(repo, "ls-tree", "-r", "-z", "--name-only", sha).split("\0") if x])
+    for when, key in (("before the test", "before"), ("after the build phase", "between"),
+                      ("after the test", "after")):
+        p += ["checkout evidence: " + x for x in checkout_problems(co.get(key), sha, tree, when)]
+        if isinstance(co.get(key), dict) and co[key].get("files_tree") != n_tree:
+            p.append("checkout evidence: %r files %s, but %s has %d"
+                     % (co[key].get("files_tree"), when, sha[:12], n_tree))
+    # the check set, re-derived from SHA's own blobs
+    m = r.get("manifest") if isinstance(r.get("manifest"), dict) else {}
+    if m.get("list") != DEFAULT_LIST:
+        p.append("the receipt's test list is %r, not the reviewed %s" % (m.get("list"), DEFAULT_LIST))
+    try:
+        fresh = manifest_at(repo, sha, DEFAULT_LIST)
+    except Refuse as e:
+        p.append("the reviewed check set can't be read from %s: %s" % (sha[:12], e))
+        return p
+    for key in ("list", "list_sha256", "runner", "runner_sha256", "steps"):
+        if m.get(key) != fresh[key]:
+            p.append("the receipt's manifest %s differs from %s at %s (receipt %s, commit %s)"
+                     % (key, fresh["list"] if key.startswith("list") or key == "steps" else fresh["runner"],
+                        sha[:12], _short(m.get(key)), _short(fresh[key])))
+    if not HEX64.fullmatch(str(m.get("list_sha256", ""))):
+        p.append("the receipt has no valid list hash")
+    # both phases, each limited to at most PHASE_LIMIT s, re-verified against the fresh list
+    phases = r.get("phases")
+    names = [e.get("phase") if isinstance(e, dict) else None for e in phases] if isinstance(phases, list) else None
+    if names != list(PHASES):
+        p.append("the receipt's phases are %r, not %s" % (names, " then ".join(PHASES)))
+    for e in phases if isinstance(phases, list) else []:
+        if not isinstance(e, dict) or e.get("phase") not in PHASES:
+            continue
+        ph = e["phase"]
+        lim = e.get("limit")
+        if type(lim) not in (int, float) or not 0 < lim <= PHASE_LIMIT:
+            p.append("the %s phase's limit is %r, not over 0 and at most %g s" % (ph, lim, PHASE_LIMIT))
+        if e.get("ran") is not True:
+            p.append("the %s phase did not run" % ph)
+        if e.get("exit") != 0 or type(e.get("exit")) is not int:
+            p.append("the %s phase's lockrun exit is %r, not 0" % (ph, e.get("exit")))
+        if e.get("verdict") != "pass":
+            p.append("the %s phase's verdict is %r, not pass" % (ph, e.get("verdict")))
+        bad, known = phase_problems(e.get("summary"), fresh, ph)
+        p += ["receipt %s phase summary: %s" % (ph, x) for x in bad]
+        if known:
+            p.append("receipt %s phase summary: known failure(s) %s: NOT ALL GREEN, not mergeable"
+                     % (ph, ", ".join(known)))
+    return p
+
+
+def _short(x):
+    s = json.dumps(x, sort_keys=True)
+    return s if len(s) <= 80 else s[:77] + "..."
+
+
+def flagged_paths(local):
+    return [l for l in git(local, "ls-files", "-v").splitlines() if l[:1] == "S" or l[:1].islower()]
+
+
+def local_state_problems(local, base, branch, added, needed_dirs, tracked_at_base):
+    """Why the published working copy can't be fast-forwarded safely ([] if it can)."""
+    p = []
+    head = git(local, "rev-parse", "HEAD")
+    if head != base:
+        p.append("the published working copy's HEAD is %s, not the recorded main %s" % (head, base))
+    cur = run(["git", "-C", local, "symbolic-ref", "-q", "--short", "HEAD"], check=False).stdout.strip()
+    if cur != branch:
+        p.append("the published working copy is on %r, not on branch %s" % (cur or "detached HEAD", branch))
+    gitdir = git(local, "rev-parse", "--absolute-git-dir")
+    for marker in ("MERGE_HEAD", "CHERRY_PICK_HEAD", "REVERT_HEAD", "rebase-merge", "rebase-apply"):
+        if os.path.exists(os.path.join(gitdir, marker)):
+            p.append("the published working copy has an operation in progress (%s)" % marker)
+    status = git(local, "status", "--porcelain=v1", "--untracked-files=all")
+    if status:
+        p.append("the published working copy has uncommitted or untracked changes:\n    "
+                 + "\n    ".join(status.splitlines()[:20]))
+    flagged = flagged_paths(local)
+    if flagged:
+        p.append("the published working copy has skip-worktree/assume-unchanged entries (they hide "
+                 "changes from git status): %s" % ", ".join(flagged[:10]))
+    top = git(local, "rev-parse", "--show-toplevel")
+    hits = [a for a in added if os.path.lexists(os.path.join(top, a))]
+    if hits:
+        p.append("ignored files in the published working copy would be overwritten: %s" % ", ".join(hits[:10]))
+    blocked = []
+    for d in needed_dirs:
+        full = os.path.join(top, d)
+        if d not in tracked_at_base and os.path.lexists(full) and (os.path.islink(full) or not os.path.isdir(full)):
+            blocked.append(d)
+    if blocked:
+        p.append("files or symlinks in the published working copy sit where the candidate needs a "
+                 "directory: %s" % ", ".join(sorted(blocked)[:10]))
+    return p
+
+
+def observe(repo, local, remote, branch):
+    """What can be seen now: (remote main or None, description of it, local HEAD, status lines)."""
+    try:
+        rh = remote_head(repo, remote, branch)
+        rdesc = rh or "(no such branch)"
+    except Refuse as e:
+        rh, rdesc = None, "UNKNOWN: the query failed (%s)" % str(e).splitlines()[0]
+    head = run(["git", "-C", local, "rev-parse", "HEAD"], check=False).stdout.strip() or "UNKNOWN"
+    st = run(["git", "-C", local, "status", "--porcelain=v1", "--untracked-files=all"], check=False)
+    status = st.stdout.splitlines() if st.returncode == 0 else ["UNKNOWN: git status failed"]
+    return rh, rdesc, head, status
+
+
+def recovery(repo, local, remote, branch, sha, base, why, merge_ran):
+    """Print what was observed after the push and how to finish by hand. Returns the exit code."""
+    rh, rdesc, head, status = observe(repo, local, remote, branch)
+    if rh == sha:
+        state, code = "the remote is at the candidate: the push landed", 4
+    elif rh == base:
+        state, code = "the remote is at the recorded main: the push did not land, or was undone since", 5
+    elif rh is None:
+        state, code = "the remote's main could not be read: whether the push landed is not known", 5
+    else:
+        state, code = "the remote is at neither commit: something else moved main after or instead of the push", 5
+    head_desc = ("the recorded main (not updated)" if head == base else
+                 "the candidate" if head == sha else "neither the recorded main nor the candidate")
+    stat = "clean" if not status else "%d line(s):\n      %s" % (len(status), "\n      ".join(status[:20]))
+    print("""
+merge_candidate: STOPPED AFTER THE PUSH. Reason: %(why)s
+Observed just now (nothing below is assumed):
+  remote %(remote)s %(branch)s: %(rdesc)s
+      -> %(state)s
+  published copy %(local)s: HEAD %(head)s, %(head_desc)s
+  git merge --ff-only in the published copy: %(merged)s
+  git status there: %(stat)s
+Not known: whether a failed step changed files partway, or what else changed
+after these observations. Look before acting:
+  cd %(local)s
+  git status; git log -1 --oneline; git ls-remote %(remote)s refs/heads/%(branch)s
+If the remote is at %(sha)s and the copy is still at %(base)s with a clean
+status, finish with:
+  git fetch %(remote)s %(branch)s
+  git merge --ff-only --no-overwrite-ignore %(sha)s   # refuses instead of overwriting
+Commit or move your own changes yourself first. Do not run git reset --hard,
+git checkout -- . or git clean there. Putting the remote back would be a
+separate, deliberate decision:
+  git push --force-with-lease=%(branch)s:%(sha)s %(remote)s %(base)s:%(branch)s
+""" % dict(why=why, remote=remote, branch=branch, rdesc=rdesc, state=state, local=local, head=head,
+           head_desc=head_desc, merged=merge_ran, stat=stat, sha=sha, base=base), file=sys.stderr, flush=True)
+    return code
+
+
+def main():
+    ap = argparse.ArgumentParser(prog="merge_candidate", description=__doc__.split("\n\n")[0])
+    ap.add_argument("commit")
+    ap.add_argument("--local", required=True, help="the published working copy (on BRANCH)")
+    ap.add_argument("--remote", default="origin")
+    ap.add_argument("--branch", default="main")
+    a = ap.parse_args()
+    try:
+        repo = toplevel(".")
+        sha = resolve_exact_commit(repo, a.commit)
+        tree = tree_of(repo, sha)
+        local = toplevel(a.local)
+        if os.path.realpath(local) != os.path.realpath(a.local):
+            raise Refuse("--local %s is not the top of a working copy (that is %s)" % (a.local, local))
+    except Refuse as e:
+        say("REFUSED: %s" % e)
+        return 2
+
+    note = run(["git", "-C", repo, "notes", "--ref=test-receipts", "show", sha], check=False)
+    if note.returncode != 0:
+        say("REFUSED: no test receipt for %s (run scripts/test_candidate %s first, or fetch "
+            "refs/notes/test-receipts)" % (sha, sha))
+        return 1
+    try:
+        r = json.loads(note.stdout)
+        assert isinstance(r, dict)
+    except (ValueError, AssertionError):
+        say("REFUSED: the receipt on %s is not valid JSON" % sha)
+        return 1
+
+    try:
+        problems = receipt_problems(repo, sha, tree, r)
+        added, needed_dirs, tracked_at_base = [], [], set()
+        base = (r.get("base_main") or {}).get("commit")
+        base_ok = bool(base) and git(repo, "cat-file", "-t", base, check=False) == "commit"
+        if not base_ok:
+            problems.append("the receipt's base main %r is not a commit here" % base)
+        else:
+            if not is_ancestor(repo, base, sha):
+                problems.append("%s does not contain the recorded main %s in its history" % (sha[:12], base[:12]))
+            patterns, changes, unapproved, _ = golden_check(repo, base, sha)
+            for path in (DEFAULT_LIST, RUNNER):
+                if not protected(path, patterns):
+                    problems.append("%s is not a protected path (notes/golden_paths.txt at the base or the "
+                                    "candidate): changes to the check set would need no approval" % path)
+            for change in unapproved:
+                problems.append("unapproved protected change: %s" % describe_change(*change))
+            say("golden check: %d protected change(s), %d unapproved" % (len(changes), len(unapproved)))
+
+            rh = remote_head(repo, a.remote, a.branch)
+            if rh != base:
+                problems.append("remote %s %s is %s, not the recorded main %s (main moved since the test)"
+                                % (a.remote, a.branch, rh, base))
+            u_here = git(repo, "remote", "get-url", a.remote, check=False)
+            u_local = git(local, "remote", "get-url", a.remote, check=False)
+            if not u_here or norm_url(repo, u_here) != norm_url(local, u_local):
+                problems.append("the published working copy's %s (%s) is not this repository's (%s)"
+                                % (a.remote, u_local, u_here))
+            names = git(repo, "diff-tree", "-r", "-z", "--no-renames", "--name-status", base, sha).split("\0")
+            pairs = [(names[i], names[i + 1]) for i in range(0, len(names) - 1, 2)]
+            added = [path for st, path in pairs if st == "A"]
+            dirs = set()
+            for st, path in pairs:
+                if st != "D":
+                    parts = path.split("/")[:-1]
+                    dirs.update("/".join(parts[:k]) for k in range(1, len(parts) + 1))
+            needed_dirs = sorted(dirs)
+            tracked_at_base = set(x for x in git(repo, "ls-tree", "-r", "-z", "--name-only", base).split("\0") if x)
+            problems += local_state_problems(local, base, a.branch, added, needed_dirs, tracked_at_base)
+    except Refuse as e:
+        say("REFUSED: a check could not run, nothing was changed: %s" % e)
+        return 1
+
+    if problems:
+        say("REFUSED: %d problem(s); nothing was changed" % len(problems))
+        for p in problems:
+            say("  - %s" % p)
+        return 1
+    say("all checks passed for %s (tree %s) on main %s" % (sha, tree, base))
+
+    push = ["git", "-C", repo, "push", "--force-with-lease=%s:%s" % (a.branch, base), a.remote,
+            "%s:%s" % (sha, a.branch)]
+    say("running: %s" % " ".join(["git"] + push[3:]))
+    p = subprocess.run(push)
+    try:
+        now = remote_head(repo, a.remote, a.branch)
+    except Refuse as e:
+        return recovery(repo, local, a.remote, a.branch, sha, base,
+                        "the push exited %d, then reading the remote's %s failed (%s)"
+                        % (p.returncode, a.branch, str(e).splitlines()[0]), "not run")
+    if p.returncode != 0:
+        if now == base:
+            say("PUSH FAILED (exit %d); remote %s is still %s; nothing changed" % (p.returncode, a.branch, base))
+            return 3
+        if now != sha:
+            say("PUSH FAILED (exit %d): remote %s is now %s, not the recorded %s (it moved during the "
+                "update); our commit was not added; the published working copy was not touched"
+                % (p.returncode, a.branch, now, base))
+            return 3
+        return recovery(repo, local, a.remote, a.branch, sha, base,
+                        "the push exited %d, yet the remote's %s is the candidate" % (p.returncode, a.branch),
+                        "not run")
+    if now != sha:
+        return recovery(repo, local, a.remote, a.branch, sha, base,
+                        "the push reported success, but the remote's %s then read %s, not the candidate"
+                        % (a.branch, now), "not run")
+    say("remote %s %s is now %s" % (a.remote, a.branch, sha))
+
+    # The published working copy: re-check (it may have changed during the push), then fast-forward.
+    try:
+        again = local_state_problems(local, base, a.branch, added, needed_dirs, tracked_at_base)
+    except Refuse as e:
+        again = ["re-checking it failed: %s" % str(e).splitlines()[0]]
+    if again:
+        return recovery(repo, local, a.remote, a.branch, sha, base, "; ".join(again), "not run")
+    f = subprocess.run(["git", "-C", local, "fetch", a.remote, a.branch])
+    if f.returncode != 0:
+        return recovery(repo, local, a.remote, a.branch, sha, base,
+                        "git fetch failed (exit %d)" % f.returncode, "not run")
+    m = subprocess.run(["git", "-C", local, "merge", "--ff-only", "--no-overwrite-ignore", sha])
+    if m.returncode != 0:
+        return recovery(repo, local, a.remote, a.branch, sha, base,
+                        "git merge --ff-only --no-overwrite-ignore failed",
+                        "ran and failed (exit %d)" % m.returncode)
+    head = git(local, "rev-parse", "HEAD")
+    dirty = git(local, "status", "--porcelain=v1", "--untracked-files=all")
+    if head != sha or dirty:
+        return recovery(repo, local, a.remote, a.branch, sha, base,
+                        "after the merge the published copy is not exactly the candidate",
+                        "ran (exit 0)")
+    say("published working copy %s is now at %s with its files updated" % (local, sha))
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

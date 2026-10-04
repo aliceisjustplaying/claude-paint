@@ -1,0 +1,205 @@
+   69 µm damp 0: 12 wipes, 240 steps, 0 cut short by the face's room; load 0.767348, ledger 0.767349 faces, gross picked 650.09 laid 55.85 mm3
+   69 µm damp 1: 12 wipes, 240 steps, 0 cut short by the face's room; load 0.816011, ledger 0.816011 faces, gross picked 690.68 laid 58.76 mm3
+  300 µm damp 0: 12 wipes, 240 steps, 0 cut short by the face's room; load 1.000000, ledger 1.000002 faces, gross picked 851.72 laid 77.31 mm3
+  300 µm damp 1: 12 wipes, 240 steps, 14 cut short by the face's room; load 1.000000, ledger 1.000000 faces, gross picked 851.82 laid 77.42 mm3
+smooth film0.25-dry    film start/mid/end 0.250/0.250/0.250 -> 0.166/0.154/0.164 µm; picked 0.5823 laid 0.0486 net 0.5337 mm3; face load 0.00069 (0.534 mm3), cloth 0.534 mm3, mobile at lift 0.0704 mm3; capped 0; set paint kept true; bal 5e-11
+smooth film1-dry       film start/mid/end 1.000/1.000/1.000 -> 0.374/0.316/0.381 µm; picked 4.4542 laid 0.3757 net 4.0786 mm3; face load 0.00527 (4.079 mm3), cloth 4.079 mm3, mobile at lift 0.4955 mm3; capped 0; set paint kept true; bal 3e-10
+smooth film1-damp      film start/mid/end 1.000/1.000/1.000 -> 0.249/0.198/0.272 µm; picked 5.4735 laid 0.4650 net 5.0085 mm3; face load 0.00647 (5.008 mm3), cloth 5.008 mm3, mobile at lift 0.5713 mm3; capped 0; set paint kept true; bal 4e-10
+smooth film3-dry       film start/mid/end 3.000/3.000/3.000 -> 0.633/0.475/0.710 µm; picked 17.1323 laid 1.4547 net 15.6776 mm3; face load 0.02024 (15.678 mm3), cloth 15.678 mm3, mobile at lift 1.7961 mm3; capped 0; set paint kept true; bal 3e-9
+smooth film10-dry      film start/mid/end 10.000/10.000/10.000 -> 1.198/0.744/1.594 µm; picked 64.3106 laid 5.4800 net 58.8306 mm3; face load 0.07597 (58.831 mm3), cloth 58.831 mm3, mobile at lift 6.5215 mm3; capped 0; set paint kept true; bal 4e-9
+smooth film69-dry      film start/mid/end 69.000/69.000/69.000 -> 5.061/2.358/8.838 µm; picked 402.5144 laid 34.2362 net 368.2783 mm3; face load 0.47557 (368.278 mm3), cloth 368.278 mm3, mobile at lift 41.0453 mm3; capped 0; set paint kept true; bal 1e-9
+smooth film3-reversal  film start/mid/end 3.000/3.000/3.000 -> 0.264/0.262/0.242 µm; picked 22.2425 laid 2.0113 net 20.2312 mm3; face load 0.02613 (20.231 mm3), cloth 20.231 mm3, mobile at lift 0.4405 mm3; capped 0; set paint kept true; bal 8e-10
+smooth film3-corner    film start/mid/end 3.000/3.000/3.000 -> 2.186/2.113/1.358 µm; picked 17.3015 laid 1.4702 net 15.8313 mm3; face load 0.02044 (15.831 mm3), cloth 15.831 mm3, mobile at lift 1.8452 mm3; capped 0; set paint kept true; bal 6e-10
+smooth film3-blot      film start/mid/end 3.000/3.000/3.000 -> 3.000/1.678/3.000 µm; picked 2.1572 laid 0.0000 net 2.1572 mm3; face load 0.00279 (2.157 mm3), cloth 2.157 mm3, mobile at lift 2.1571 mm3; capped 0; set paint kept true; bal 6e-10
+smooth two-dirty       film start/mid/end 3.000/3.716/3.000 -> 0.550/0.652/0.484 µm; picked 19.5273 laid 1.7163 net 17.8110 mm3; face load 0.02300 (17.811 mm3), cloth 17.811 mm3, mobile at lift 1.9858 mm3; capped 0; set paint kept true; bal 2e-9
+smooth two-lifted      film start/mid/end 3.000/3.716/3.000 -> 0.547/1.945/0.518 µm; picked 15.9254 laid 1.2981 net 14.6273 mm3; face load 0.01889 (14.627 mm3), cloth 14.627 mm3, mobile at lift 1.4467 mm3; capped 0; set paint kept true; bal 1e-9
+smooth two-refold      film start/mid/end 3.000/3.716/3.000 -> 0.547/1.859/0.444 µm; picked 16.6647 laid 1.2981 net 15.3666 mm3; face load 0.01085 (8.398 mm3), cloth 15.367 mm3, mobile at lift 1.5449 mm3; capped 0; set paint kept true; bal 5e-10
+smooth under-damp      film start/mid/end 1.000/1.000/1.000 -> 0.185/0.141/0.218 µm; picked 6.0374 laid 0.5155 net 5.5219 mm3; face load 0.00713 (5.522 mm3), cloth 5.522 mm3, mobile at lift 0.6013 mm3; capped 0; set paint kept true; bal 2e-10
+linen  film0.25-dry    film start/mid/end 0.250/0.250/0.250 -> 0.166/0.154/0.164 µm; picked 0.5602 laid 0.0468 net 0.5134 mm3; face load 0.00066 (0.513 mm3), cloth 0.513 mm3, mobile at lift 0.0676 mm3; capped 0; set paint kept true; bal 4e-11
+linen  film1-dry       film start/mid/end 1.000/1.000/1.000 -> 0.374/0.316/0.381 µm; picked 4.2661 laid 0.3599 net 3.9062 mm3; face load 0.00504 (3.906 mm3), cloth 3.906 mm3, mobile at lift 0.4731 mm3; capped 0; set paint kept true; bal 4e-10
+linen  film1-damp      film start/mid/end 1.000/1.000/1.000 -> 0.249/0.198/0.272 µm; picked 5.3018 laid 0.4505 net 4.8514 mm3; face load 0.00626 (4.851 mm3), cloth 4.851 mm3, mobile at lift 0.5521 mm3; capped 0; set paint kept true; bal 2e-10
+linen  film3-dry       film start/mid/end 3.000/3.000/3.000 -> 0.633/0.475/0.710 µm; picked 16.3463 laid 1.3881 net 14.9582 mm3; face load 0.01932 (14.958 mm3), cloth 14.958 mm3, mobile at lift 1.7089 mm3; capped 0; set paint kept true; bal 1e-9
+linen  film10-dry      film start/mid/end 10.000/10.000/10.000 -> 1.197/0.743/1.593 µm; picked 60.9080 laid 5.1861 net 55.7219 mm3; face load 0.07195 (55.722 mm3), cloth 55.722 mm3, mobile at lift 6.2070 mm3; capped 0; set paint kept true; bal 2e-9
+linen  film69-dry      film start/mid/end 69.000/69.000/69.000 -> 5.198/2.427/8.888 µm; picked 384.4406 laid 32.6102 net 351.8304 mm3; face load 0.45433 (351.830 mm3), cloth 351.830 mm3, mobile at lift 40.1583 mm3; capped 0; set paint kept true; bal 4e-9
+linen  film3-reversal  film start/mid/end 3.000/3.000/3.000 -> 0.264/0.262/0.242 µm; picked 21.2331 laid 1.9200 net 19.3132 mm3; face load 0.02494 (19.313 mm3), cloth 19.313 mm3, mobile at lift 0.4229 mm3; capped 0; set paint kept true; bal 1e-9
+linen  film3-corner    film start/mid/end 3.000/3.000/3.000 -> 2.311/2.204/1.457 µm; picked 16.5089 laid 1.4025 net 15.1064 mm3; face load 0.01951 (15.106 mm3), cloth 15.106 mm3, mobile at lift 1.7696 mm3; capped 0; set paint kept true; bal 6e-10
+linen  film3-blot      film start/mid/end 3.000/3.000/3.000 -> 3.000/1.678/3.000 µm; picked 2.1572 laid 0.0000 net 2.1572 mm3; face load 0.00279 (2.157 mm3), cloth 2.157 mm3, mobile at lift 2.1571 mm3; capped 0; set paint kept true; bal 6e-10
+linen  two-dirty       film start/mid/end 3.000/3.716/3.000 -> 0.549/0.652/0.484 µm; picked 18.6725 laid 1.6406 net 17.0319 mm3; face load 0.02199 (17.032 mm3), cloth 17.032 mm3, mobile at lift 1.9093 mm3; capped 0; set paint kept true; bal 5e-10
+linen  two-lifted      film start/mid/end 3.000/3.716/3.000 -> 0.546/1.941/0.518 µm; picked 15.1215 laid 1.2334 net 13.8882 mm3; face load 0.01793 (13.888 mm3), cloth 13.888 mm3, mobile at lift 1.3629 mm3; capped 0; set paint kept true; bal 1e-9
+linen  two-refold      film start/mid/end 3.000/3.716/3.000 -> 0.546/1.855/0.443 µm; picked 15.8604 laid 1.2372 net 14.6233 mm3; face load 0.01034 (8.010 mm3), cloth 14.623 mm3, mobile at lift 1.4551 mm3; capped 0; set paint kept true; bal 8e-10
+linen  under-damp      film start/mid/end 1.000/1.000/1.000 -> 0.185/0.141/0.218 µm; picked 5.9032 laid 0.5040 net 5.3992 mm3; face load 0.00697 (5.399 mm3), cloth 5.399 mm3, mobile at lift 0.5875 mm3; capped 0; set paint kept true; bal 4e-10
+linen    1 µm dry  step ×1   :  20 steps, left  35.71%, max|Δ|  0.0000 µm mean|Δ| 0.00e0 µm, picked 4.266 laid 0.360 mm3
+linen    1 µm dry  step ×2   :  10 steps, left  41.19%, max|Δ|  0.5320 µm mean|Δ| 3.44e-3 µm, picked 3.871 laid 0.367 mm3
+linen    1 µm dry  step ×0.5 :  40 steps, left  32.40%, max|Δ|  0.2177 µm mean|Δ| 2.05e-3 µm, picked 4.509 laid 0.354 mm3
+linen    1 µm dry  step ×0.25:  80 steps, left  30.66%, max|Δ|  0.2435 µm mean|Δ| 3.08e-3 µm, picked 4.639 laid 0.348 mm3
+linen    1 µm damp step ×1   :  20 steps, left  23.96%, max|Δ|  0.0000 µm mean|Δ| 0.00e0 µm, picked 5.302 laid 0.450 mm3
+linen    1 µm damp step ×2   :  10 steps, left  29.98%, max|Δ|  0.5726 µm mean|Δ| 4.12e-3 µm, picked 4.831 laid 0.462 mm3
+linen    1 µm damp step ×0.5 :  40 steps, left  20.32%, max|Δ|  0.3159 µm mean|Δ| 2.47e-3 µm, picked 5.595 laid 0.442 mm3
+linen    1 µm damp step ×0.25:  80 steps, left  18.46%, max|Δ|  0.3161 µm mean|Δ| 3.71e-3 µm, picked 5.749 laid 0.434 mm3
+linen    3 µm dry  step ×1   :  20 steps, left  20.22%, max|Δ|  0.0000 µm mean|Δ| 0.00e0 µm, picked 16.346 laid 1.388 mm3
+linen    3 µm dry  step ×2   :  10 steps, left  23.39%, max|Δ|  1.7663 µm mean|Δ| 8.19e-3 µm, picked 15.545 laid 1.485 mm3
+linen    3 µm dry  step ×0.5 :  40 steps, left  18.43%, max|Δ|  0.7075 µm mean|Δ| 4.41e-3 µm, picked 16.804 laid 1.326 mm3
+linen    3 µm dry  step ×0.25:  80 steps, left  17.52%, max|Δ|  0.7028 µm mean|Δ| 6.49e-3 µm, picked 17.042 laid 1.284 mm3
+linen    3 µm damp step ×1   :  20 steps, left  12.87%, max|Δ|  0.0000 µm mean|Δ| 0.00e0 µm, picked 18.712 laid 1.601 mm3
+linen    3 µm damp step ×2   :  10 steps, left  16.10%, max|Δ|  1.9884 µm mean|Δ| 9.21e-3 µm, picked 17.809 laid 1.717 mm3
+linen    3 µm damp step ×0.5 :  40 steps, left  11.03%, max|Δ|  1.0358 µm mean|Δ| 5.05e-3 µm, picked 19.238 laid 1.527 mm3
+linen    3 µm damp step ×0.25:  80 steps, left  10.10%, max|Δ|  1.2197 µm mean|Δ| 7.45e-3 µm, picked 19.509 laid 1.477 mm3
+linen   69 µm dry  step ×1   :  20 steps, left   8.00%, max|Δ|  0.0000 µm mean|Δ| 0.00e0 µm, picked 384.441 laid 32.610 mm3
+linen   69 µm dry  step ×2   :  10 steps, left   9.05%, max|Δ| 25.0933 µm mean|Δ| 2.00e-1 µm, picked 363.316 laid 34.649 mm3
+linen   69 µm dry  step ×0.5 :  40 steps, left   7.50%, max|Δ| 14.2899 µm mean|Δ| 1.02e-1 µm, picked 395.216 laid 31.187 mm3
+linen   69 µm dry  step ×0.25:  80 steps, left   7.26%, max|Δ| 19.5422 µm mean|Δ| 1.48e-1 µm, picked 400.310 laid 30.160 mm3
+linen   69 µm damp step ×1   :  20 steps, left   5.27%, max|Δ|  0.0000 µm mean|Δ| 0.00e0 µm, picked 423.681 laid 36.184 mm3
+linen   69 µm damp step ×2   :  10 steps, left   6.29%, max|Δ| 27.3197 µm mean|Δ| 2.15e-1 µm, picked 400.856 laid 38.551 mm3
+linen   69 µm damp step ×0.5 :  40 steps, left   4.74%, max|Δ| 16.2453 µm mean|Δ| 1.07e-1 µm, picked 435.042 laid 34.517 mm3
+linen   69 µm damp step ×0.25:  80 steps, left   4.47%, max|Δ| 23.5287 µm mean|Δ| 1.56e-1 µm, picked 440.249 laid 33.324 mm3
+smooth  0.25 µm blot: lifted 0.0483 mm3 (0.04% of the film), load 0.00006, hand 0.94 s, bal 9e-13
+smooth     1 µm blot: lifted 0.4834 mm3 (0.33% of the film), load 0.00062, hand 0.94 s, bal 8e-11
+smooth     3 µm blot: lifted 2.1755 mm3 (1.07% of the film), load 0.00281, hand 0.94 s, bal 6e-10
+smooth    69 µm blot: lifted 65.7612 mm3 (3.30% of the film), load 0.08492, hand 0.94 s, bal 4e-9
+linen   0.25 µm blot: lifted 0.0483 mm3 (0.04% of the film), load 0.00006, hand 0.94 s, bal 9e-13
+linen      1 µm blot: lifted 0.4834 mm3 (0.33% of the film), load 0.00062, hand 0.94 s, bal 8e-11
+linen      3 µm blot: lifted 2.1755 mm3 (1.07% of the film), load 0.00281, hand 0.94 s, bal 6e-10
+linen     69 µm blot: lifted 63.5261 mm3 (3.19% of the film), load 0.08203, hand 0.94 s, bal 1e-9
+   69 µm damp 0:  w3: load 0.630529 ledger 0.630528  w6: load 0.682403 ledger 0.682403  w9: load 0.737282 ledger 0.737282  w12: load 0.767348 ledger 0.767349  soaked×FACES 0.767349
+   69 µm damp 1:  w3: load 0.682798 ledger 0.682798  w6: load 0.730729 ledger 0.730729  w9: load 0.786181 ledger 0.786181  w12: load 0.816011 ledger 0.816011  soaked×FACES 0.816011
+  300 µm damp 0:  w3: load 0.999998 ledger 0.999998  w6: load 1.000000 ledger 1.000000  w9: load 1.000000 ledger 1.000001  w12: load 1.000000 ledger 1.000002  soaked×FACES 1.000000
+  300 µm damp 1:  w3: load 1.000000 ledger 1.000000  w6: load 1.000000 ledger 1.000000  w9: load 1.000000 ledger 1.000000  w12: load 1.000000 ledger 1.000000  soaked×FACES 0.999999
+smooth a: umber->white, one wipe   : umber on white +0.0840 mm3, white region film -7.878 mm3, load 0.0230, bal 2e-9
+smooth b: umber, lift, white       : umber on white +0.0294 mm3, white region film -5.980 mm3, load 0.0175, bal 6e-10
+smooth c: umber, refold, white     : umber on white +0.0000 mm3, white region film -6.409 mm3, load 0.0091, bal 1e-9
+smooth d: clean face, white only   : umber on white +0.0000 mm3, white region film -6.007 mm3, load 0.0078, bal 2e-10
+linen  a: umber->white, one wipe   : umber on white +0.0858 mm3, white region film -7.549 mm3, load 0.0220, bal 5e-10
+linen  b: umber, lift, white       : umber on white +0.0291 mm3, white region film -5.705 mm3, load 0.0167, bal 2e-9
+linen  c: umber, refold, white     : umber on white +0.0000 mm3, white region film -6.113 mm3, load 0.0087, bal 3e-11
+linen  d: clean face, white only   : umber on white +0.0000 mm3, white region film -5.732 mm3, load 0.0074, bal 4e-10
+engine 1     line2: 5fac105f91b8fa11 lifted 1.779854e1 mm3 load 0.022984
+engine 1    line51: 572eedc842e037de lifted 1.779810e1 mm3 load 0.022983
+engine 1     damp2: 9802d98c02bb5245 lifted 1.983455e1 mm3 load 0.025613
+engine 1  reversal: 40afdf84dee11bbb lifted 1.888579e1 mm3 load 0.024388
+engine 1    corner: 7cbfac5d8a47691b lifted 1.908486e1 mm3 load 0.024645
+engine 1      blot: 1b0dd8f21a1b05a9 lifted 2.464903e0 mm3 load 0.003183
+engine 1    region: cb788fb19c516fc9 load 0.092099 fold 0
+engine 2     line2: 5fac105f91b8fa11 lifted 1.779854e1 mm3 load 0.022984
+engine 2    line51: 572eedc842e037de lifted 1.779810e1 mm3 load 0.022983
+engine 2     damp2: 9802d98c02bb5245 lifted 1.983455e1 mm3 load 0.025613
+engine 2  reversal: 40afdf84dee11bbb lifted 1.888579e1 mm3 load 0.024388
+engine 2    corner: 7cbfac5d8a47691b lifted 1.908486e1 mm3 load 0.024645
+engine 2      blot: 1b0dd8f21a1b05a9 lifted 2.464903e0 mm3 load 0.003183
+engine 2    region: cb788fb19c516fc9 load 0.092099 fold 0
+engine 3     line2: 154764a15eddb3fa lifted 1.495817e1 mm3 load 0.019316
+engine 3    line51: 2e0e1136148fb2d5 lifted 1.495817e1 mm3 load 0.019316
+engine 3     damp2: 9f26fd2c50288fba lifted 1.711108e1 mm3 load 0.022096
+engine 3  reversal: 86503166c476f1f2 lifted 1.931316e1 mm3 load 0.024940
+engine 3    corner: c8b1b75ea1de90e8 lifted 1.510640e1 mm3 load 0.019507
+engine 3      blot: 8f021db272e3b661 lifted 2.157153e0 mm3 load 0.002786
+engine 3    region: 4fc1fbbcdb052536 load 0.087284 fold 0
+smooth    1 µm dry      line   2 pts: left  35.72% max|Δ|   0.0000 µm mean|Δ| 0.00e0 µm load 0.00527 bal 3e-10
+smooth    1 µm dry      line  51 pts: left  35.72% max|Δ|   0.0000 µm mean|Δ| 4.45e-10 µm load 0.00527 bal 3e-10
+smooth    1 µm dry      line  11 pts: left  35.72% max|Δ|   0.0000 µm mean|Δ| 1.08e-10 µm load 0.00527 bal 2e-10
+smooth    1 µm dry  reversal   3 pts: left  19.68% max|Δ|   0.0000 µm mean|Δ| 0.00e0 µm load 0.00724 bal 2e-10
+smooth    1 µm dry  reversal  51 pts: left  19.68% max|Δ|   0.0000 µm mean|Δ| 3.39e-10 µm load 0.00724 bal 2e-10
+smooth    1 µm dry  reversal  21 pts: left  19.68% max|Δ|   0.0000 µm mean|Δ| 5.20e-9 µm load 0.00724 bal 3e-10
+smooth    1 µm dry    corner   3 pts: left  71.41% max|Δ|   0.0000 µm mean|Δ| 0.00e0 µm load 0.00534 bal 1e-9
+smooth    1 µm dry    corner  51 pts: left  71.41% max|Δ|   0.0000 µm mean|Δ| 4.19e-10 µm load 0.00534 bal 1e-9
+smooth    1 µm dry    corner  21 pts: left  71.41% max|Δ|   0.0000 µm mean|Δ| 3.94e-10 µm load 0.00534 bal 1e-9
+smooth    1 µm damp     line   2 pts: left  23.97% max|Δ|   0.0000 µm mean|Δ| 0.00e0 µm load 0.00647 bal 4e-10
+smooth    1 µm damp     line  51 pts: left  23.97% max|Δ|   0.0000 µm mean|Δ| 3.71e-10 µm load 0.00647 bal 3e-10
+smooth    1 µm damp     line  11 pts: left  23.97% max|Δ|   0.0000 µm mean|Δ| 9.15e-11 µm load 0.00647 bal 4e-10
+smooth    1 µm damp reversal   3 pts: left  11.55% max|Δ|   0.0000 µm mean|Δ| 0.00e0 µm load 0.00842 bal 3e-10
+smooth    1 µm damp reversal  51 pts: left  11.55% max|Δ|   0.0000 µm mean|Δ| 2.46e-10 µm load 0.00842 bal 2e-10
+smooth    1 µm damp reversal  21 pts: left  11.55% max|Δ|   0.0000 µm mean|Δ| 5.57e-9 µm load 0.00842 bal 3e-10
+smooth    1 µm damp   corner   3 pts: left  64.25% max|Δ|   0.0000 µm mean|Δ| 0.00e0 µm load 0.00659 bal 9e-10
+smooth    1 µm damp   corner  51 pts: left  64.25% max|Δ|   0.0000 µm mean|Δ| 3.78e-10 µm load 0.00659 bal 1e-9
+smooth    1 µm damp   corner  21 pts: left  64.25% max|Δ|   0.0000 µm mean|Δ| 2.99e-10 µm load 0.00659 bal 9e-10
+smooth    3 µm dry      line   2 pts: left  20.23% max|Δ|   0.0000 µm mean|Δ| 0.00e0 µm load 0.02024 bal 3e-9
+smooth    3 µm dry      line  51 pts: left  20.23% max|Δ|   0.0000 µm mean|Δ| 1.30e-9 µm load 0.02024 bal 3e-9
+smooth    3 µm dry      line  11 pts: left  20.23% max|Δ|   0.0000 µm mean|Δ| 3.53e-10 µm load 0.02024 bal 3e-9
+smooth    3 µm dry  reversal   3 pts: left   8.53% max|Δ|   0.0000 µm mean|Δ| 0.00e0 µm load 0.02613 bal 8e-10
+smooth    3 µm dry  reversal  51 pts: left   8.53% max|Δ|   0.0000 µm mean|Δ| 8.93e-10 µm load 0.02613 bal 7e-10
+smooth    3 µm dry  reversal  21 pts: left   8.53% max|Δ|   0.0001 µm mean|Δ| 1.70e-8 µm load 0.02613 bal 1e-9
+smooth    3 µm dry    corner   3 pts: left  62.80% max|Δ|   0.0000 µm mean|Δ| 0.00e0 µm load 0.02044 bal 6e-10
+smooth    3 µm dry    corner  51 pts: left  62.80% max|Δ|   0.0000 µm mean|Δ| 1.37e-9 µm load 0.02044 bal 8e-10
+smooth    3 µm dry    corner  21 pts: left  62.80% max|Δ|   0.0000 µm mean|Δ| 9.76e-10 µm load 0.02044 bal 7e-10
+smooth    3 µm damp     line   2 pts: left  12.87% max|Δ|   0.0000 µm mean|Δ| 0.00e0 µm load 0.02287 bal 2e-9
+smooth    3 µm damp     line  51 pts: left  12.87% max|Δ|   0.0000 µm mean|Δ| 1.12e-9 µm load 0.02287 bal 2e-9
+smooth    3 µm damp     line  11 pts: left  12.87% max|Δ|   0.0000 µm mean|Δ| 3.74e-10 µm load 0.02287 bal 2e-9
+smooth    3 µm damp reversal   3 pts: left   4.59% max|Δ|   0.0000 µm mean|Δ| 0.00e0 µm load 0.02851 bal 1e-9
+smooth    3 µm damp reversal  51 pts: left   4.59% max|Δ|   0.0000 µm mean|Δ| 6.59e-10 µm load 0.02851 bal 1e-9
+smooth    3 µm damp reversal  21 pts: left   4.59% max|Δ|   0.0001 µm mean|Δ| 1.75e-8 µm load 0.02851 bal 1e-9
+smooth    3 µm damp   corner   3 pts: left  57.32% max|Δ|   0.0000 µm mean|Δ| 0.00e0 µm load 0.02315 bal 3e-9
+smooth    3 µm damp   corner  51 pts: left  57.32% max|Δ|   0.0000 µm mean|Δ| 1.13e-9 µm load 0.02315 bal 3e-9
+smooth    3 µm damp   corner  21 pts: left  57.32% max|Δ|   0.0000 µm mean|Δ| 7.69e-10 µm load 0.02315 bal 3e-9
+smooth   69 µm dry      line   2 pts: left   7.88% max|Δ|   0.0000 µm mean|Δ| 0.00e0 µm load 0.47557 bal 1e-9
+smooth   69 µm dry      line  51 pts: left   7.88% max|Δ|   0.0000 µm mean|Δ| 4.22e-8 µm load 0.47557 bal 2e-10
+smooth   69 µm dry      line  11 pts: left   7.88% max|Δ|   0.0000 µm mean|Δ| 1.21e-8 µm load 0.47557 bal 1e-9
+smooth   69 µm dry  reversal   3 pts: left   1.25% max|Δ|   0.0000 µm mean|Δ| 0.00e0 µm load 0.58401 bal 8e-10
+smooth   69 µm dry  reversal  51 pts: left   1.25% max|Δ|   0.0000 µm mean|Δ| 2.48e-8 µm load 0.58401 bal 9e-11
+smooth   69 µm dry  reversal  21 pts: left   1.25% max|Δ|   0.0004 µm mean|Δ| 3.32e-7 µm load 0.58401 bal 5e-10
+smooth   69 µm dry    corner   3 pts: left  67.33% max|Δ|   0.0000 µm mean|Δ| 0.00e0 µm load 0.48338 bal 4e-9
+smooth   69 µm dry    corner  51 pts: left  67.33% max|Δ|   0.0000 µm mean|Δ| 3.71e-8 µm load 0.48338 bal 3e-9
+smooth   69 µm dry    corner  21 pts: left  67.33% max|Δ|   0.0000 µm mean|Δ| 3.42e-8 µm load 0.48338 bal 3e-9
+smooth   69 µm damp     line   2 pts: left   5.27% max|Δ|   0.0000 µm mean|Δ| 0.00e0 µm load 0.51797 bal 2e-9
+smooth   69 µm damp     line  51 pts: left   5.27% max|Δ|   0.0000 µm mean|Δ| 3.26e-8 µm load 0.51797 bal 2e-9
+smooth   69 µm damp     line  11 pts: left   5.27% max|Δ|   0.0000 µm mean|Δ| 9.42e-9 µm load 0.51797 bal 2e-9
+smooth   69 µm damp reversal   3 pts: left   0.52% max|Δ|   0.0000 µm mean|Δ| 0.00e0 µm load 0.62512 bal 3e-9
+smooth   69 µm damp reversal  51 pts: left   0.52% max|Δ|   0.0000 µm mean|Δ| 2.31e-8 µm load 0.62512 bal 3e-9
+smooth   69 µm damp reversal  21 pts: left   0.52% max|Δ|   0.0005 µm mean|Δ| 3.52e-7 µm load 0.62512 bal 3e-9
+smooth   69 µm damp   corner   3 pts: left  62.44% max|Δ|   0.0000 µm mean|Δ| 0.00e0 µm load 0.52725 bal 1e-10
+smooth   69 µm damp   corner  51 pts: left  62.44% max|Δ|   0.0000 µm mean|Δ| 3.47e-8 µm load 0.52725 bal 2e-10
+smooth   69 µm damp   corner  21 pts: left  62.44% max|Δ|   0.0000 µm mean|Δ| 2.64e-8 µm load 0.52725 bal 3e-10
+linen     1 µm dry      line   2 pts: left  35.71% max|Δ|   0.0000 µm mean|Δ| 0.00e0 µm load 0.00504 bal 4e-10
+linen     1 µm dry      line  51 pts: left  35.71% max|Δ|   0.0000 µm mean|Δ| 4.07e-10 µm load 0.00504 bal 5e-10
+linen     1 µm dry      line  11 pts: left  35.71% max|Δ|   0.0000 µm mean|Δ| 9.31e-11 µm load 0.00504 bal 5e-10
+linen     1 µm dry  reversal   3 pts: left  19.67% max|Δ|   0.0000 µm mean|Δ| 0.00e0 µm load 0.00693 bal 6e-11
+linen     1 µm dry  reversal  51 pts: left  19.67% max|Δ|   0.0000 µm mean|Δ| 3.79e-10 µm load 0.00693 bal 6e-11
+linen     1 µm dry  reversal  21 pts: left  19.67% max|Δ|   0.0000 µm mean|Δ| 4.69e-9 µm load 0.00693 bal 1e-10
+linen     1 µm dry    corner   3 pts: left  73.90% max|Δ|   0.0000 µm mean|Δ| 0.00e0 µm load 0.00512 bal 6e-10
+linen     1 µm dry    corner  51 pts: left  73.90% max|Δ|   0.0000 µm mean|Δ| 4.06e-10 µm load 0.00512 bal 7e-10
+linen     1 µm dry    corner  21 pts: left  73.90% max|Δ|   0.0000 µm mean|Δ| 2.56e-10 µm load 0.00512 bal 6e-10
+linen     1 µm damp     line   2 pts: left  23.96% max|Δ|   0.0000 µm mean|Δ| 0.00e0 µm load 0.00626 bal 2e-10
+linen     1 µm damp     line  51 pts: left  23.96% max|Δ|   0.0000 µm mean|Δ| 4.41e-10 µm load 0.00626 bal 2e-10
+linen     1 µm damp     line  11 pts: left  23.96% max|Δ|   0.0000 µm mean|Δ| 1.03e-10 µm load 0.00626 bal 2e-10
+linen     1 µm damp reversal   3 pts: left  11.55% max|Δ|   0.0000 µm mean|Δ| 0.00e0 µm load 0.00816 bal 5e-12
+linen     1 µm damp reversal  51 pts: left  11.55% max|Δ|   0.0000 µm mean|Δ| 4.09e-10 µm load 0.00816 bal 8e-11
+linen     1 µm damp reversal  21 pts: left  11.55% max|Δ|   0.0001 µm mean|Δ| 5.25e-9 µm load 0.00816 bal 2e-10
+linen     1 µm damp   corner   3 pts: left  66.49% max|Δ|   0.0000 µm mean|Δ| 0.00e0 µm load 0.00638 bal 8e-10
+linen     1 µm damp   corner  51 pts: left  66.49% max|Δ|   0.0000 µm mean|Δ| 4.27e-10 µm load 0.00638 bal 9e-10
+linen     1 µm damp   corner  21 pts: left  66.49% max|Δ|   0.0000 µm mean|Δ| 3.38e-10 µm load 0.00638 bal 7e-10
+linen     3 µm dry      line   2 pts: left  20.22% max|Δ|   0.0000 µm mean|Δ| 0.00e0 µm load 0.01932 bal 1e-9
+linen     3 µm dry      line  51 pts: left  20.22% max|Δ|   0.0000 µm mean|Δ| 1.65e-9 µm load 0.01932 bal 9e-10
+linen     3 µm dry      line  11 pts: left  20.22% max|Δ|   0.0000 µm mean|Δ| 3.62e-10 µm load 0.01932 bal 9e-10
+linen     3 µm dry  reversal   3 pts: left   8.52% max|Δ|   0.0000 µm mean|Δ| 0.00e0 µm load 0.02494 bal 1e-9
+linen     3 µm dry  reversal  51 pts: left   8.52% max|Δ|   0.0000 µm mean|Δ| 8.98e-10 µm load 0.02494 bal 1e-9
+linen     3 µm dry  reversal  21 pts: left   8.52% max|Δ|   0.0001 µm mean|Δ| 1.63e-8 µm load 0.02494 bal 7e-10
+linen     3 µm dry    corner   3 pts: left  66.30% max|Δ|   0.0000 µm mean|Δ| 0.00e0 µm load 0.01951 bal 6e-10
+linen     3 µm dry    corner  51 pts: left  66.30% max|Δ|   0.0000 µm mean|Δ| 1.33e-9 µm load 0.01951 bal 6e-10
+linen     3 µm dry    corner  21 pts: left  66.30% max|Δ|   0.0000 µm mean|Δ| 1.21e-9 µm load 0.01951 bal 6e-10
+linen     3 µm damp     line   2 pts: left  12.87% max|Δ|   0.0000 µm mean|Δ| 0.00e0 µm load 0.02210 bal 1e-9
+linen     3 µm damp     line  51 pts: left  12.87% max|Δ|   0.0000 µm mean|Δ| 1.20e-9 µm load 0.02210 bal 1e-9
+linen     3 µm damp     line  11 pts: left  12.87% max|Δ|   0.0000 µm mean|Δ| 3.33e-10 µm load 0.02210 bal 1e-9
+linen     3 µm damp reversal   3 pts: left   4.59% max|Δ|   0.0000 µm mean|Δ| 0.00e0 µm load 0.02758 bal 1e-10
+linen     3 µm damp reversal  51 pts: left   4.59% max|Δ|   0.0000 µm mean|Δ| 8.07e-10 µm load 0.02758 bal 3e-10
+linen     3 µm damp reversal  21 pts: left   4.59% max|Δ|   0.0001 µm mean|Δ| 1.73e-8 µm load 0.02758 bal 2e-11
+linen     3 µm damp   corner   3 pts: left  60.16% max|Δ|   0.0000 µm mean|Δ| 0.00e0 µm load 0.02239 bal 9e-10
+linen     3 µm damp   corner  51 pts: left  60.16% max|Δ|   0.0000 µm mean|Δ| 1.13e-9 µm load 0.02239 bal 8e-10
+linen     3 µm damp   corner  21 pts: left  60.16% max|Δ|   0.0000 µm mean|Δ| 7.61e-10 µm load 0.02239 bal 7e-10
+linen    69 µm dry      line   2 pts: left   8.00% max|Δ|   0.0000 µm mean|Δ| 0.00e0 µm load 0.45433 bal 4e-9
+linen    69 µm dry      line  51 pts: left   8.00% max|Δ|   0.0000 µm mean|Δ| 4.08e-8 µm load 0.45433 bal 4e-9
+linen    69 µm dry      line  11 pts: left   8.00% max|Δ|   0.0000 µm mean|Δ| 1.30e-8 µm load 0.45433 bal 4e-9
+linen    69 µm dry  reversal   3 pts: left   1.23% max|Δ|   0.0000 µm mean|Δ| 0.00e0 µm load 0.56286 bal 2e-9
+linen    69 µm dry  reversal  51 pts: left   1.23% max|Δ|   0.0000 µm mean|Δ| 3.33e-8 µm load 0.56286 bal 2e-9
+linen    69 µm dry  reversal  21 pts: left   1.23% max|Δ|   0.0004 µm mean|Δ| 3.38e-7 µm load 0.56286 bal 2e-9
+linen    69 µm dry    corner   3 pts: left  70.48% max|Δ|   0.0000 µm mean|Δ| 0.00e0 µm load 0.46191 bal 3e-9
+linen    69 µm dry    corner  51 pts: left  70.48% max|Δ|   0.0000 µm mean|Δ| 4.26e-8 µm load 0.46191 bal 3e-9
+linen    69 µm dry    corner  21 pts: left  70.48% max|Δ|   0.0000 µm mean|Δ| 2.73e-8 µm load 0.46191 bal 3e-9
+linen    69 µm damp     line   2 pts: left   5.27% max|Δ|   0.0000 µm mean|Δ| 0.00e0 µm load 0.50038 bal 1e-9
+linen    69 µm damp     line  51 pts: left   5.27% max|Δ|   0.0000 µm mean|Δ| 3.67e-8 µm load 0.50038 bal 1e-9
+linen    69 µm damp     line  11 pts: left   5.27% max|Δ|   0.0000 µm mean|Δ| 2.20e-8 µm load 0.50038 bal 1e-9
+linen    69 µm damp reversal   3 pts: left   0.51% max|Δ|   0.0000 µm mean|Δ| 0.00e0 µm load 0.60754 bal 3e-9
+linen    69 µm damp reversal  51 pts: left   0.51% max|Δ|   0.0000 µm mean|Δ| 2.55e-8 µm load 0.60754 bal 2e-9
+linen    69 µm damp reversal  21 pts: left   0.51% max|Δ|   0.0005 µm mean|Δ| 3.44e-7 µm load 0.60754 bal 1e-9
+linen    69 µm damp   corner   3 pts: left  65.16% max|Δ|   0.0000 µm mean|Δ| 0.00e0 µm load 0.50982 bal 4e-9
+linen    69 µm damp   corner  51 pts: left  65.16% max|Δ|   0.0000 µm mean|Δ| 4.16e-8 µm load 0.50982 bal 3e-9
+linen    69 µm damp   corner  21 pts: left  65.16% max|Δ|   0.0000 µm mean|Δ| 2.76e-8 µm load 0.50982 bal 4e-9
+smooth dry 20 µm under fresh 1 µm: film+height unchanged true, wet film left 5.33%, negative wet pixels 0
+linen  dry 20 µm under fresh 1 µm: film+height unchanged true, wet film left 5.33%, negative wet pixels 0

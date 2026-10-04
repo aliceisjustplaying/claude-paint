@@ -1,0 +1,81 @@
+lockrun: job 02450c15 started (process group 54141, timeout 600 s, log /tmp/lockrun-<uid>/logs/20261004-063256-02450c15.log)
+    Finished `release` profile [optimized] target(s) in 0.03s
+     Running unittests src/main.rs (target/release/deps/easel-00eda35bf27fd053)
+
+running 72 tests
+test check::tests::a_client_waiting_for_its_reply_is_there_and_one_that_closed_is_gone ... ok
+test api::tests::math_random_keeps_old_draws_and_refuses_empty_ranges ... ok
+test depth::tests::the_current_view_rolls_back ... ok
+test draw_outline::tests::an_inset_that_consumes_the_shape_masks_nothing ... ok
+test draw_outline::tests::tiny_lobes_and_sizes_are_refused ... ok
+test finish::tests::finishing_waits_for_the_whole_picture_to_dry ... ok
+test form::tests::a_hard_shadow_covers_the_core_shadow ... ok
+test draw_outline::tests::amount_zero_is_clean_even_with_explicit_lobes ... ok
+test depth::tests::shadow_verbs_take_their_options ... ok
+test frames::tests::frames_follow_hand_time_and_leave_the_replay_alone ... ok
+test api::draw_rag::tests::the_rag_takes_hand_time ... ok
+test api::draw_rag::tests::a_failed_chunk_takes_back_the_rag ... ok
+test api::draw_rag::tests::an_older_log_sees_the_globals_it_saw ... ok
+test api::draw_rag::tests::the_rag_refuses_what_it_cannot_do ... ok
+test look::tests::crops_keep_native_pixels_and_reject_either_oversize_axis ... ok
+test look::tests::grids_finer_than_a_pixel_are_refused ... ok
+test look::tests::looks_draw_the_grid_without_touching_the_canvas ... ok
+test look::tests::whole_looks_are_bounded_pngs_without_enlargement ... ok
+test look::tests::whole_pngs_reduce_dimensions_to_meet_the_byte_budget ... ok
+test api::draw_rag::tests::a_dipped_rag_dries_as_time_passes ... ok
+test api::draw_rag::tests::the_cloth_can_t_be_cleaned_by_assignment ... ok
+test session::tests::a_default_log_names_no_box ... ok
+test session::tests::a_failed_chunk_cannot_change_pencil_methods ... ok
+test session::tests::a_failed_chunk_leaves_brush_and_clock_alone ... ok
+test depth::tests::passes_keep_behind_what_is_in_front ... ok
+test session::tests::a_live_chunk_over_the_limit_stops_and_keeps_nothing_but_a_replay_runs_it ... ok
+test session::tests::after_a_failed_chunk_pairs_walks_tables_as_the_replay_does ... ok
+test session::tests::binary_chunks_are_refused_and_text_load_still_works ... ok
+test session::tests::a_box_is_named_in_the_log_and_replays_with_it ... ok
+test session::tests::finalizers_and_weak_tables_are_refused ... ok
+test session::tests::a_chunk_whose_ending_fails_changes_nothing ... ok
+test session::tests::engine_2_logs_replay_as_before ... ok
+test session::tests::gmatch_matches_lua ... ok
+test session::tests::gmatch_iterators_roll_back ... ok
+test session::tests::a_failed_rollback_rebuilds_from_the_log_before_painting_again ... ok
+test session::tests::no_memory_address_reaches_a_painting ... ok
+test session::tests::no_memory_address_escapes_a_callback ... ok
+test session::tests::plain_tables_keep_lua_order ... ok
+test session::tests::real_failed_chunks ... ignored
+test session::tests::object_keys_walk_in_creation_order ... ok
+test session::tests::globals_are_the_painting_s_as_the_state_holds_them_live_and_replayed ... ok
+test session::tests::terrain_refuses_huge_and_empty_areas_before_allocating ... ok
+test session::tests::the_box_line_is_read_from_the_head_only ... ok
+test session::tests::the_guide_shows_the_default_box ... ok
+test depth::tests::visible_takes_masks_and_mixed_lists ... ok
+test session::tests::under_engine_2_a_failed_chunk_that_grew_a_table_rebuilds ... ok
+test session::tests::rollback_restores_tables_and_upvalues_exactly ... ok
+test session::tests::under_engine_3_a_failed_chunk_that_moved_a_border_rebuilds ... ok
+test session::tests::under_engine_3_every_table_walks_in_a_fixed_order ... ok
+test session::tests::the_log_names_its_engine ... ok
+test tests::a_look_above_the_last_number_is_refused ... ok
+test session::tests::view_form_counts_visible_parts_only ... ok
+test tests::a_request_from_an_older_client_is_refused_with_a_reason ... ok
+test tests::a_request_is_read_without_the_clients_end_of_file ... ok
+test tests::journal_entries_are_dated_lines ... ok
+test tests::the_lock_on_stdin_signal_is_not_passed_on ... ok
+test session::tests::replay_is_exact_and_failures_roll_back ... ok
+test time::tests::hand_time_is_always_on ... ok
+test time::tests::the_clock_advances_by_the_hand_time_of_known_verbs ... ok
+test time::tests::wait_refuses_what_is_not_a_span_of_up_to_ten_years ... ok
+test time::tests::wait_returns_the_time_of_day ... ok
+test session::tests::under_engine_3_a_failed_chunk_needs_no_rebuild ... ok
+test tests::a_palette_look_changes_nothing ... ok
+test draw_edges::tests::edges_lose_and_the_clip_mask ... ok
+test legacy::tests::easel4_near_replays ... ok
+test session::tests::logs_without_an_engine_line_replay_as_before ... ok
+test tests::the_thick_swatch_matches_paint_laid_thick ... ok
+test legacy::tests::easel3_free_replays ... ok
+test legacy::tests::easel4_free_replays ... ok
+test legacy::tests::easel3_near_replays ... ok
+test legacy::tests::easel3_green_replays ... ok
+test legacy::tests::easel4_green_replays ... ok
+
+test result: ok. 71 passed; 0 failed; 1 ignored; 0 measured; 11 filtered out; finished in 49.21s
+
+lockrun: finished: exit 0 in 49.4 s; log /tmp/lockrun-<uid>/logs/20261004-063256-02450c15.log

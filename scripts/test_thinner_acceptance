@@ -1,0 +1,119 @@
+#!/usr/bin/env bash
+# The thinner's acceptance checks (notes/thinner/ACCEPTANCE.md), by exact
+# test name, in release builds.
+#
+#   scripts/test_thinner_acceptance --quick   ordinary edits: everything but the slow ones
+#   scripts/test_thinner_acceptance --card    check 1 only: the 2400 px card (#[ignore = "slow"])
+#   scripts/test_thinner_acceptance --all     every agreed check, the card included
+#
+# It passes only if every required test ran and reported `ok`: a test that
+# is missing, filtered out, ignored or failed fails the run, so a skipped
+# test never counts as passed and a run that matches no tests fails.
+#
+# One heavy job at a time: run it through scripts/lockrun once the lead has
+# approved it (limits: --quick 60 s once built, --card 300 s, --all and a
+# first build 600 s). Uses cargo and bash only. CARGO_TARGET_DIR is honored.
+set -euo pipefail
+
+usage() { sed -n '2,8p' "$0" | sed 's/^# \{0,1\}//' >&2; exit 2; }
+[ $# -eq 1 ] || usage
+mode=$1
+case "$mode" in --quick|--card|--all) ;; *) usage ;; esac
+
+repo=$(cd "$(dirname "$0")/.." && pwd)
+cd "$repo"
+
+# crates/paint/tests/thinner_physics.rs
+PAINT_QUICK=(
+  c04_a_stroke_and_a_wipe_account_for_all_paint_and_solvent
+  c05_an_emptying_brush_lays_less_and_a_fuller_load_lasts_farther
+  c06_more_pressure_lays_more_paint_up_to_the_stroke_limit
+  c08_a_hundredth_of_thinner_is_a_small_change
+  c09_the_solvent_evaporates_and_the_film_loses_its_volume
+  c10_a_solvent_wet_film_spreads_more_than_after_the_solvent_has_gone
+  c13_pigment_values_are_unchanged_and_burnt_sienna_is_the_more_transparent
+  c14_more_points_on_the_same_path_lay_the_same_paint_and_one_stroke_shares_one_limit
+  c15_solvent_does_not_slow_the_oil_cure
+  c16_brush_rag_and_spreading_carry_solvent_in_the_local_ratio
+  c17_a_wait_split_on_the_minute_grid_is_exact_and_off_it_within_1e4
+  c19_the_same_paint_with_more_or_less_solvent_looks_the_same
+)
+PAINT_SLOW=(
+  c10_thinned_and_unthinned_paint_of_equal_thickness_gel_and_dry_together
+)
+# crates/easel/src/thinner_tests.rs (unit tests of the easel binary)
+EASEL_QUICK=(
+  thinner_tests::c02_no_thinner_or_thinner_0_leaves_the_saved_paint_state_unchanged
+  thinner_tests::c03_a_paintck8_save_of_an_engine_3_canvas_is_refused_by_its_header_naming_the_old_version
+  thinner_tests::c03_a_baseline_paintck8_checkpoint_is_refused_naming_the_old_version
+  thinner_tests::c03_engines_1_and_2_have_no_thinner_and_engine_3_has
+  thinner_tests::c07_two_overlapping_thinned_passes_leave_more_paint_than_one
+  thinner_tests::c11_a_save_mid_evaporation_reopens_to_the_same_state_and_goes_on_the_same
+  thinner_tests::c12_the_same_log_saves_the_same_bytes_on_one_thread_and_four
+  thinner_tests::c18_a_failed_chunk_after_thinned_paint_takes_everything_back
+)
+EASEL_SLOW=(
+  thinner_tests::c08_more_thinner_never_hides_the_card_more
+  thinner_tests::rag_study
+)
+# #[ignore = "slow"]: run only by exact name with --ignored
+CARD=(
+  thinner_tests::c01_the_card_raw_sienna_thinned_half_keeps_half_the_contrast_at_2400px
+)
+
+logs=$(mktemp -d "${TMPDIR:-/tmp}/thinner-acceptance.XXXXXX")
+required=0
+passed=0
+bad=()
+
+# run <label> <cargo args...> -- <libtest args...> ::: <names...>
+run() {
+  local label=$1; shift
+  local cargo_args=() test_args=() names=()
+  while [ "$1" != "--" ]; do cargo_args+=("$1"); shift; done; shift
+  while [ "$1" != ":::" ]; do test_args+=("$1"); shift; done; shift
+  names=("$@")
+  local log="$logs/$label.log" status=0 t0 t1
+  t0=$(date +%s)
+  echo "== $label: cargo test ${cargo_args[*]} -- ${test_args[*]} (${#names[@]} tests)"
+  set +e
+  cargo test "${cargo_args[@]}" -- "${test_args[@]}" "${names[@]}" 2>&1 | tee "$log"
+  status=${PIPESTATUS[0]}
+  set -e
+  t1=$(date +%s)
+  echo "== $label: cargo exited $status after $((t1 - t0)) s"
+  for n in "${names[@]}"; do
+    required=$((required + 1))
+    if grep -qxF "test $n ... ok" "$log"; then
+      passed=$((passed + 1))
+    elif grep -qF "test $n ... ignored" "$log"; then
+      bad+=("$n (skipped)")
+    elif grep -qF "test $n ... FAILED" "$log"; then
+      bad+=("$n (failed)")
+    else
+      bad+=("$n (did not run: not found, not built or cut short)")
+    fi
+  done
+}
+
+case "$mode" in
+  --quick)
+    run paint --release -p paint --test thinner_physics -- --exact ::: "${PAINT_QUICK[@]}"
+    run easel --release -p easel --bin easel -- --exact ::: "${EASEL_QUICK[@]}"
+    ;;
+  --card)
+    run card --release -p easel --bin easel -- --exact --ignored --nocapture ::: "${CARD[@]}"
+    ;;
+  --all)
+    run paint --release -p paint --test thinner_physics -- --exact ::: "${PAINT_QUICK[@]}" "${PAINT_SLOW[@]}"
+    run easel --release -p easel --bin easel -- --exact --nocapture ::: "${EASEL_QUICK[@]}" "${EASEL_SLOW[@]}"
+    run card --release -p easel --bin easel -- --exact --ignored --nocapture ::: "${CARD[@]}"
+    ;;
+esac
+
+echo
+echo "thinner acceptance $mode: $passed of $required required tests passed (logs: $logs)"
+if [ ${#bad[@]} -gt 0 ]; then
+  printf '  NOT PASSED: %s\n' "${bad[@]}"
+  exit 1
+fi

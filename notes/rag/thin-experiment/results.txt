@@ -1,4 +1,4 @@
-rag::tests::thin::experiment, 2400 px, engine 3, linen 15 threads/cm; film left (µm) in the wipe's middle
+rag::tests::thin::experiment, raw umber, 2400 px, engine 3, linen 15 threads/cm; film left (µm) in the wipe's middle
 === film1: start p5 1.00 p25 1.00 p50 1.00 p75 1.00 p95 1.00 plateau 100%
 Floor  dry1:  -0.0% off, p5 1.00 p25 1.00 p50 1.00 p75 1.00 p95 1.00 plateau 100% (bal 2e-11)
 Floor  dry3:  -0.0% off, p5 1.00 p25 1.00 p50 1.00 p75 1.00 p95 1.00 plateau 100% (bal 1e-10)

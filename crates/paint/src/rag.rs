@@ -1396,7 +1396,8 @@ mod tests {
 
         pub fn sienna() -> Paint {
             let pal = Palette::named_box("inness").unwrap();
-            let i = pal.tubes.iter().position(|t| t.name == "raw sienna").unwrap();
+            let name = std::env::var("RAG_EXP_TUBE").unwrap_or_else(|_| "raw sienna".into());
+            let i = pal.tubes.iter().position(|t| t.name == name).unwrap();
             pal.pile(vec![(i, 1.0)]).laid(0.0)
         }
 

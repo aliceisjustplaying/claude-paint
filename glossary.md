@@ -127,3 +127,17 @@
 **Hatching.** Short, roughly parallel drawing marks laid within a supplied mask.
 
 **Tremor.** Small hand sway added to an unruled drawn line, controlled in canvas units.
+
+**Rag.** A held cloth pad that lifts open paint by wiping or blotting. Its face load, soaked paint, dampness and fold persist while the rag is held.
+
+**Face load.** How full the currently exposed part of a rag is, from zero clean to one full. A fuller face lifts less paint.
+
+**Soaked paint.** Paint accumulated through the whole rag. It limits how clean a newly refolded face can be.
+
+**Dampness.** Spirits remaining in a rag's exposed face, from zero dry to one fully dipped. It decreases with painting time and becomes zero after refolding.
+
+**Refold.** Turning another part of the same rag outward. It exposes a dry face whose load is limited by the paint already soaked through the cloth.
+
+**Blot.** Pressing a rag at one point and lifting it off, leaving an irregular cloth contact rather than dragging a wipe.
+
+**Gel point.** The drying boundary after which paint is no longer in the workable wet film. A rag cannot lift paint beyond this boundary.

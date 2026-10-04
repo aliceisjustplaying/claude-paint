@@ -8,6 +8,7 @@ import base64
 import datetime
 import hashlib
 import json
+import math
 import os
 import re
 import subprocess
@@ -15,10 +16,17 @@ import subprocess
 RECEIPTS_REF = "refs/notes/test-receipts"
 APPROVALS_REF = "refs/notes/golden-approvals"
 GOLDEN_LIST = "notes/golden_paths.txt"
-RECEIPT_FORMAT = "claude-paint test receipt v1"
+# the reviewed check set: the list scripts/test --all runs, and the runner itself
+DEFAULT_LIST = "notes/speed/test_lists/all.tsv"
+RUNNER = "scripts/test"
+RECEIPT_FORMAT = "claude-paint test receipt v2"
 APPROVAL_FORMAT = "claude-paint golden approval v1"
 HEX_ID = re.compile(r"[0-9a-f]{7,64}")
 HEX64 = re.compile(r"[0-9a-f]{64}")
+REGULAR_MODES = ("100644", "100755")
+STEP_KINDS = ("build", "cargo", "pytest", "script")
+# what a summary step must repeat from its list line, exactly
+STEP_KEYS = ("name", "kind", "command", "limit", "least", "group")
 # The privacy hooks' protected text, stored encoded like scripts/pre-commit-anonymity.
 _PROTECTED = base64.b64decode("c2FyYWg=").decode()
 
@@ -112,6 +120,29 @@ def blob_id(repo, commit, path):
     return p.stdout.strip() if p.returncode == 0 else None
 
 
+def entry_at(repo, commit, path):
+    """(mode, object id) of PATH's tree entry at COMMIT, or None if absent."""
+    out = git(repo, "ls-tree", "-z", "--full-tree", commit, "--", path)
+    for rec in out.split("\0"):
+        if not rec:
+            continue
+        meta, name = rec.split("\t", 1)
+        if name == path:
+            mode, _type, obj = meta.split()
+            return mode, obj
+    return None
+
+
+def regular_file_bytes(repo, commit, path):
+    """Contents of PATH at COMMIT if it is a regular file there; Refuse otherwise."""
+    e = entry_at(repo, commit, path)
+    if e is None:
+        raise Refuse("%s is not in %s" % (path, commit[:12]))
+    if e[0] not in REGULAR_MODES:
+        raise Refuse("%s at %s is not a regular file (mode %s)" % (path, commit[:12], e[0]))
+    return blob_bytes(repo, commit, path)
+
+
 def tools_sha256(*paths):
     """One hash over the given tool files (name and content), for receipts."""
     h = hashlib.sha256()
@@ -136,14 +167,122 @@ def assert_publishable(text, what):
         raise Refuse("%s contains text the privacy hooks protect; not recording it" % what)
 
 
-# ---------------------------------------------------------------- summaries
+# ---------------------------------------------------------------- the reviewed check set
+
+def parse_test_list(data, where):
+    """The steps of a scripts/test list file (bytes). Tab-separated lines: kind, name,
+    limit (s), least (minimum tests), regex ('-' for none), command, and an optional
+    group ('' or '-' for none). Blank lines and lines starting with '#' are skipped.
+    Refuse on anything malformed: a list that can't be read can't be bound."""
+    try:
+        text = data.decode("utf-8")
+    except UnicodeDecodeError:
+        raise Refuse("%s is not UTF-8" % where)
+    steps = []
+    for n, line in enumerate(text.replace("\r\n", "\n").replace("\r", "\n").split("\n"), 1):
+        if not line.strip() or line.startswith("#"):
+            continue
+        f = line.split("\t")
+        if len(f) not in (6, 7):
+            raise Refuse("%s line %d: want 6 or 7 tab-separated fields, found %d" % (where, n, len(f)))
+        kind, name, limit, least, regex, cmd = f[:6]
+        group = f[6] if len(f) == 7 else ""
+        if kind not in STEP_KINDS:
+            raise Refuse("%s line %d: unknown kind %r" % (where, n, kind))
+        if not name or not cmd.strip():
+            raise Refuse("%s line %d: empty name or command" % (where, n))
+        try:
+            lim = float(limit)
+        except ValueError:
+            lim = float("nan")
+        if not (math.isfinite(lim) and lim > 0):
+            raise Refuse("%s line %d: bad time limit %r" % (where, n, limit))
+        if not least.isdigit():
+            raise Refuse("%s line %d: bad minimum test count %r" % (where, n, least))
+        steps.append({"kind": kind, "name": name, "limit": lim, "least": int(least),
+                      "regex": None if regex == "-" else regex, "command": cmd,
+                      "group": None if group in ("", "-") else group})
+    if not steps:
+        raise Refuse("%s lists no steps" % where)
+    names = [s["name"] for s in steps]
+    dup = sorted({x for x in names if names.count(x) > 1})
+    if dup:
+        raise Refuse("%s names step(s) %s more than once" % (where, ", ".join(dup)))
+    return steps
+
+
+def manifest_problems(steps):
+    """Why a parsed list can't pass even if every step does ([] if it can)."""
+    p = ["step %s (kind %s) requires %d tests: every non-build step must require at least 1"
+         % (s["name"], s["kind"], s["least"]) for s in steps if s["kind"] != "build" and s["least"] < 1]
+    if not any(s["kind"] != "build" for s in steps):
+        p.append("the list has only build steps: no tests would run")
+    return p
+
+
+def manifest_at(repo, commit, list_path=DEFAULT_LIST):
+    """The reviewed check set at COMMIT: its list file parsed, and the hashes of the
+    list and of the runner (scripts/test) as committed. Refuse if either is missing,
+    not a regular file or (the list) malformed."""
+    data = regular_file_bytes(repo, commit, list_path)
+    runner = regular_file_bytes(repo, commit, RUNNER)
+    return {"list": list_path, "list_sha256": sha256_bytes(data),
+            "runner": RUNNER, "runner_sha256": sha256_bytes(runner),
+            "steps": parse_test_list(data, "%s at %s" % (list_path, commit[:12]))}
+
 
 def _int(x):
     return type(x) is int
 
 
-def summary_problems(summary):
-    """Reasons a scripts/test summary is not a full pass ([] means pass)."""
+def _num(x):
+    return type(x) in (int, float)
+
+
+def _same(key, got, want):
+    if key == "limit":
+        return _num(got) and float(got) == want
+    if key == "least":
+        return _int(got) and got == want
+    if key == "group":
+        return (got is None and want is None) or (isinstance(got, str) and got == want)
+    return isinstance(got, str) and got == want
+
+
+def binding_problems(manifest_steps, steps):
+    """Why the summary's steps are not exactly the list's steps ([] if they are):
+    same steps, same order, same name, kind, command, limit, least and group."""
+    p = []
+    got = [s.get("name") if isinstance(s, dict) else None for s in steps]
+    want = [m["name"] for m in manifest_steps]
+    missing = [n for n in want if n not in got]
+    extra = [n for n in got if n not in want]
+    dup = sorted({str(n) for n in got if got.count(n) > 1})
+    if missing:
+        p.append("the summary omits listed step(s): %s" % ", ".join(missing))
+    if extra:
+        p.append("the summary has step(s) the list does not: %s" % ", ".join(map(str, extra)))
+    if dup:
+        p.append("the summary reports step(s) more than once: %s" % ", ".join(dup))
+    if not missing and not extra and not dup and got != want:
+        p.append("the summary's step order (%s) is not the list's (%s)" % (", ".join(got), ", ".join(want)))
+    by_name = {}
+    for s in steps:
+        if isinstance(s, dict) and s.get("name") not in by_name:
+            by_name[s.get("name")] = s
+    for m in manifest_steps:
+        s = by_name.get(m["name"])
+        if s is None:
+            continue
+        for k in STEP_KEYS[1:]:
+            if not _same(k, s.get(k), m[k]):
+                p.append("step %s: the summary's %s is %r, the list's %r" % (m["name"], k, s.get(k), m[k]))
+    return p
+
+
+def summary_problems(summary, manifest=None):
+    """Reasons a scripts/test summary is not a full pass ([] means pass). With
+    MANIFEST (manifest_at), the summary must also be a run of exactly that check set."""
     if not isinstance(summary, dict):
         return ["the summary is missing or not a JSON object"]
     p = []
@@ -151,12 +290,23 @@ def summary_problems(summary):
         p.append("summary mode is %r, not 'all'" % summary.get("mode"))
     if summary.get("verdict") != "pass":
         p.append("summary verdict is %r, not 'pass'" % summary.get("verdict"))
-    if not HEX64.fullmatch(str(summary.get("list_sha256", ""))):
-        p.append("summary has no valid list_sha256")
+    for key in ("list_sha256", "runner_sha256"):
+        if not HEX64.fullmatch(str(summary.get(key, ""))):
+            p.append("summary has no valid %s" % key)
+    if manifest is not None:
+        if summary.get("list") != manifest["list"]:
+            p.append("the summary ran list %r, not %s" % (summary.get("list"), manifest["list"]))
+        if summary.get("list_sha256") != manifest["list_sha256"]:
+            p.append("the summary's list_sha256 is not the hash of %s in the commit" % manifest["list"])
+        if summary.get("runner_sha256") != manifest["runner_sha256"]:
+            p.append("the summary's runner_sha256 is not the hash of %s in the commit" % manifest["runner"])
     steps = summary.get("steps")
     if not isinstance(steps, list) or not steps:
         p.append("summary has no steps: an empty test selection never passes")
         return p
+    if manifest is not None:
+        p += binding_problems(manifest["steps"], steps)
+    least_of = {m["name"]: m["least"] for m in (manifest or {}).get("steps", [])}
     for i, s in enumerate(steps):
         if not isinstance(s, dict):
             p.append("step %d is not an object" % i)
@@ -168,15 +318,79 @@ def summary_problems(summary):
             p.append("step %s timed out (timed_out=%r)" % (name, s.get("timed_out")))
         if s.get("failed") != 0 or not _int(s.get("failed")):
             p.append("step %s has failures (failed=%r)" % (name, s.get("failed")))
+        if s.get("ok") is not True:
+            p.append("step %s is not ok (ok=%r, why=%r)" % (name, s.get("ok"), s.get("why")))
         # a build step (scripts/test kind "build") has no tests; every other step must run some
         if s.get("kind") == "build":
             continue
+        least = s.get("least")
+        if not _int(least) or least < 1:
+            p.append("step %s requires %r tests: a non-build step must require at least 1" % (name, least))
         if not _int(s.get("tests_run")) or s["tests_run"] < 1:
             p.append("step %s ran no tests (tests_run=%r)" % (name, s.get("tests_run")))
+        elif s["tests_run"] < max(least_of.get(name, 1), least if _int(least) else 1):
+            p.append("step %s ran %d tests, fewer than its minimum %r"
+                     % (name, s["tests_run"], least_of.get(name, least)))
         if not _int(s.get("passed")) or s["passed"] < 1:
             p.append("step %s passed no tests (passed=%r)" % (name, s.get("passed")))
     if not any(isinstance(s, dict) and s.get("kind") != "build" for s in steps):
         p.append("summary has only build steps: no tests ran")
+    return p
+
+
+# ---------------------------------------------------------------- checkout evidence
+
+def checkout_state(wt, commit):
+    """Evidence about the working copy WT of COMMIT: identity (HEAD, tree), whether
+    the index is exactly the commit's tree, sparse checkout, skip-worktree or
+    assume-unchanged flags, tracked changes and untracked files."""
+    s = {"head": git(wt, "rev-parse", "HEAD"), "tree": git(wt, "rev-parse", "HEAD^{tree}")}
+    s["sparse"] = git(wt, "config", "--bool", "core.sparseCheckout", check=False) == "true"
+    flagged = [l for l in git(wt, "ls-files", "-v").splitlines() if l[:1] == "S" or l[:1].islower()]
+    s["flagged"], s["flagged_count"] = flagged[:20], len(flagged)
+    index = set()
+    for rec in git(wt, "ls-files", "-s", "-z").split("\0"):
+        if rec:
+            meta, path = rec.split("\t", 1)
+            mode, obj, stage = meta.split()
+            index.add((mode, obj, stage, path))
+    tree = set()
+    for rec in git(wt, "ls-tree", "-r", "-z", "--full-tree", commit).split("\0"):
+        if rec:
+            meta, path = rec.split("\t", 1)
+            mode, _type, obj = meta.split()
+            tree.add((mode, obj, "0", path))
+    s["files_index"], s["files_tree"] = len(index), len(tree)
+    s["index_matches_commit"] = index == tree
+    status = git(wt, "status", "--porcelain=v1", "--untracked-files=no", "--ignore-submodules=none")
+    s["tracked_changes"] = status.splitlines()[:20]
+    s["tracked_changed"] = bool(status)
+    untracked = git(wt, "status", "--porcelain=v1", "--untracked-files=all").splitlines()
+    s["untracked"] = [l for l in untracked if l.startswith("??")][:20]
+    return s
+
+
+def checkout_problems(state, commit, tree, when):
+    """Why STATE (checkout_state) is not a full, unchanged checkout of COMMIT ([] if it is)."""
+    if not isinstance(state, dict):
+        return ["no checkout evidence %s" % when]
+    p = []
+    if state.get("head") != commit:
+        p.append("HEAD %s was %s, not the candidate %s" % (when, state.get("head"), commit))
+    if state.get("tree") != tree:
+        p.append("the tree %s was %s, not the candidate's %s" % (when, state.get("tree"), tree))
+    if state.get("sparse") is not False:
+        p.append("the working copy was a sparse checkout %s (sparse=%r)" % (when, state.get("sparse")))
+    if state.get("flagged_count") != 0:
+        p.append("%r index entries had skip-worktree/assume-unchanged flags %s: %s"
+                 % (state.get("flagged_count"), when, state.get("flagged")))
+    if not _int(state.get("files_index")) or state.get("files_index") != state.get("files_tree"):
+        p.append("the index listed %r files %s, the commit has %r"
+                 % (state.get("files_index"), when, state.get("files_tree")))
+    if state.get("index_matches_commit") is not True:
+        p.append("the index was not the commit's tree %s" % when)
+    if state.get("tracked_changed") is not False:
+        p.append("tracked files or the index changed %s: %s" % (when, state.get("tracked_changes")))
     return p
 
 
@@ -196,14 +410,15 @@ def read_patterns(repo, commit):
 
 
 def protected(path, patterns):
-    """PATH is protected if it equals an entry or lies under an entry ending in /.
-    The list file itself is always protected."""
+    """PATH is protected if it equals an entry, lies under an entry ending in /, or
+    lies under an entry (a file that became a directory). The list file itself is
+    always protected. Entries need not exist."""
     if path == GOLDEN_LIST:
         return True
     for pat in patterns:
         if pat.endswith("/") and path.startswith(pat):
             return True
-        if path == pat:
+        if path == pat or path.startswith(pat + "/"):
             return True
     return False
 
@@ -235,10 +450,14 @@ def read_approvals(repo):
     return out
 
 
-def approved_blobs(repo):
-    """{(path, blob): [approval, ...]} from approvals that are valid: the note
-    sits on the commit it names, approver != builder (case-insensitive), and each
-    listed blob is really that path's blob at the commit ("deleted" if absent)."""
+def approved_entries(repo):
+    """{(path, mode, object): [approval, ...]} from approvals that are valid: the
+    note sits on the commit it names, approver != builder (case-insensitive), and
+    each listed entry really is that path's entry at the commit. An entry is
+    {"path", "blob", "mode"}: blob is the object id ("deleted" if absent). An entry
+    without mode (older approvals) means the regular file's mode at the commit; a
+    symlink, submodule (gitlink) or other type is approved only by an entry naming
+    its exact mode."""
     ok = {}
     for a in read_approvals(repo):
         if a.get("invalid") or a.get("format") != APPROVAL_FORMAT:
@@ -249,19 +468,31 @@ def approved_blobs(repo):
         if a.get("commit") != a["attached_to"]:
             continue
         for e in a.get("paths") or []:
-            path, blob = e.get("path"), e.get("blob")
-            if not path or not blob:
+            if not isinstance(e, dict):
                 continue
-            actual = blob_id(repo, a["commit"], path)
-            if (blob == "deleted" and actual is None) or (blob != "deleted" and blob == actual):
-                ok.setdefault((path, blob), []).append(a)
+            path, obj, mode = e.get("path"), e.get("blob"), e.get("mode")
+            if not path or not obj:
+                continue
+            actual = entry_at(repo, a["commit"], path)
+            if obj == "deleted":
+                if actual is None:
+                    ok.setdefault((path, None, "deleted"), []).append(a)
+                continue
+            if actual is None or actual[1] != obj:
+                continue
+            if mode is None and actual[0] in REGULAR_MODES:
+                mode = actual[0]
+            if mode == actual[0]:
+                ok.setdefault((path, mode, obj), []).append(a)
     return ok
 
 
 def golden_changes(repo, base, cand):
-    """Protected paths that differ between BASE and CAND: [(status, path, blob)].
-    The protected set is the union of both commits' lists (so dropping a path
-    from the list does not unprotect it). Renames show as a deletion plus an addition."""
+    """Protected entries that differ between BASE and CAND: [(status, path, object, mode)].
+    object is "deleted" (mode None) for a deletion. Every entry type counts, also
+    submodule (gitlink 160000) and symlink (120000) entries. The protected set is the
+    union of both commits' lists (so dropping a path from the list does not unprotect
+    it); listed paths need not exist. Renames show as a deletion plus an addition."""
     patterns = sorted(set(read_patterns(repo, base)) | set(read_patterns(repo, cand)))
     raw = git(repo, "diff-tree", "-r", "-z", "--no-renames", "--raw", "--no-abbrev", base, cand)
     toks = raw.split("\0")
@@ -271,22 +502,39 @@ def golden_changes(repo, base, cand):
         header, path = toks[i], toks[i + 1]
         i += 2
         fields = header.lstrip(":").split()
-        new_mode, new_blob, status = fields[1], fields[3], fields[4]
-        if new_mode == "160000" or not protected(path, patterns):
+        new_mode, new_obj, status = fields[1], fields[3], fields[4]
+        if not protected(path, patterns):
             continue
-        changes.append((status[0], path, "deleted" if status[0] == "D" else new_blob))
+        if status[0] == "D":
+            changes.append(("D", path, "deleted", None))
+        else:
+            changes.append((status[0], path, new_obj, new_mode))
     return patterns, changes
 
 
+def unsupported(mode):
+    return mode is not None and mode not in REGULAR_MODES
+
+
 def golden_check(repo, base, cand):
-    """(changes, unapproved, approved_by) for the protected changes BASE..CAND."""
+    """(patterns, changes, unapproved, approved_by) for the protected changes BASE..CAND."""
     patterns, changes = golden_changes(repo, base, cand)
-    ok = approved_blobs(repo) if changes else {}
+    ok = approved_entries(repo) if changes else {}
     unapproved, by = [], {}
-    for status, path, blob in changes:
-        hits = ok.get((path, blob))
+    for status, path, obj, mode in changes:
+        hits = ok.get((path, mode, obj))
         if hits:
             by[path] = hits
         else:
-            unapproved.append((status, path, blob))
+            unapproved.append((status, path, obj, mode))
     return patterns, changes, unapproved, by
+
+
+def describe_change(status, path, obj, mode):
+    if obj == "deleted":
+        return "%s %s (deleted)" % (status, path)
+    s = "%s %s (mode %s, object %s)" % (status, path, mode, obj[:12])
+    if unsupported(mode):
+        s += " [unsupported type %s: refused unless an approval names mode %s and object %s]" % (
+            {"160000": "submodule", "120000": "symlink"}.get(mode, "mode " + mode), mode, obj)
+    return s

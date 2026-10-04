@@ -56,3 +56,106 @@ pixel 25572: ratio 0.6401502303750923 after one minute, outside its neighborhood
 test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 12 filtered out; finished in 0.84s
 
 lockrun: finished: exit 0 in 16.4 s; log /tmp/lockrun-<uid>/logs/20261004-061114-60a2c812.log
+
+
+# ---------------------------------------------------------------- to rerun
+# (added at the final phase; the runs above were made at 48be56a's code and tests)
+#
+# 1. Save the probe below as crates/paint/tests/zz_probe.rs (untracked).
+# 2. Save the demo script, set its cd path, and run it under lockrun:
+#      ~/src/a/claude-paint-tools/lockrun --timeout 600 --owner <you> -- demo.sh
+#    That is round (c), the current code.
+# 3. For (a): `git apply` mutation (a) below, run demo.sh, then
+#    `git checkout -- crates/paint/src/thinner.rs`. The same for (b).
+# 4. Delete zz_probe.rs.
+
+# ---- crates/paint/tests/zz_probe.rs
+// SCRATCH (untracked; deleted before commit): c16 part (3)'s setup and its
+// redistribution assertion alone, verbatim selection, numbers printed.
+use paint::{Canvas, Gesture, Held, Palette, Tool, hex};
+fn sienna() -> paint::Paint { let pal = Palette::named_box("inness").unwrap(); let i = pal.tubes.iter().position(|t| t.name == "raw sienna").unwrap(); pal.pile(vec![(i, 1.0)]).laid(0.0) }
+fn patch(c: &mut Canvas, p: paint::Paint, load: f32, pr: f32, x: (f32, f32), y: (f32, f32), seed: u64) {
+    let rows = ((y.1 - y.0) / 25.0).ceil().max(1.0) as usize;
+    for k in 0..rows { let yk = y.0 + (y.1 - y.0) * (k as f32 + 0.5) / rows as f32; let mut h = Held::new(Tool::hog_flat(40.0), seed + k as u64); h.load(p, load); c.drag(&mut h, &Gesture::new(vec![(x.0, yk), (x.1, yk + 3.0)]).pressure(pr, pr), None); }
+}
+#[test]
+fn redistribution_alone() {
+    let mut c = Canvas::new(300, 1.0, hex("#d8cdb8")).with_engine(3);
+    c.prime(hex("#b9a98c"), 0.9, 60.0, 0.6, 0.0, 7);
+    patch(&mut c, sienna().with_thinner(0.1), 0.05, 0.3, (400.0, 850.0), (300.0, 700.0), 300);
+    for k in 0..8 { patch(&mut c, sienna().with_thinner(0.5), 0.9, 0.85, (150.0, 500.0), (300.0, 700.0), 200 + 20 * k); }
+    let f = c.frame(); let n = f.w * f.h;
+    let get = |c: &Canvas| -> (Vec<f32>, Vec<f32>) { ((0..n).map(|i| c.wet_um(f.ux(i % f.w), f.uy(i / f.w))).collect(), (0..n).map(|i| c.solvent_um(f.ux(i % f.w), f.uy(i / f.w))).collect()) };
+    let (h0, s0) = get(&c);
+    c.wait(1.0);
+    let (h1, s1) = get(&c);
+    let e = |h: f32| -> f64 { (-1.0f64 / paint::thinner::evaporation_tau_min(h)).exp() };
+    let ratio0 = |j: usize| -> Option<f32> { if h0[j] >= 0.1 && s0[j] > 0.0 { Some(s0[j] / h0[j]) } else { None } };
+    let around = |i: usize, r: usize| -> Vec<usize> { let (x, y) = (i % f.w, i / f.w); let (x0, x1, y0, y1) = (x.saturating_sub(r), (x + r + 1).min(f.w), y.saturating_sub(r), (y + r + 1).min(f.h)); (y0..y1).flat_map(|yy| (x0..x1).map(move |xx| yy * f.w + xx)).collect() };
+    let mut rise = Vec::new();
+    for i in 0..n {
+        if h0[i] < 0.5 || !ratio0(i).is_some_and(|q| q <= 0.2) { continue; }
+        if !around(i, 2).into_iter().any(|j| ratio0(j).is_some_and(|q| q >= 0.5)) { continue; }
+        if h1[i] < 1.01 * h0[i] || s1[i] <= 0.0 { continue; }
+        rise.push((s1[i] as f64 / h1[i] as f64 / e(h1[i]), s0[i] as f64 / h0[i] as f64));
+    }
+    let (after, before) = if rise.is_empty() { (0.0, 0.0) } else { (rise.iter().map(|r| r.0).sum::<f64>() / rise.len() as f64, rise.iter().map(|r| r.1).sum::<f64>() / rise.len() as f64) };
+    println!("REDISTRIBUTION: {} low-ratio boundary pixels gained >= 1% paint; mean ratio {before:.5} before, {after:.5} after evaporation taken back ({:+.2}%)", rise.len(), if before > 0.0 { 100.0 * (after / before - 1.0) } else { 0.0 });
+    assert!(rise.len() >= 20, "the thick film spread into the thin one: {} low-ratio pixels at the boundary gained ≥ 1% paint", rise.len());
+    assert!(after > 1.01 * before, "the thin film's ratio where the thick film's liquid came in: {before} before, {after} after (evaporation taken back)");
+}
+
+# ---- demo.sh
+#!/usr/bin/env bash
+# one round of the demo: the isolated assertion, then the real c16
+cd <the thinner2 checkout>
+cargo test --release -p paint --test zz_probe -- --nocapture 2>&1 | grep -E "^REDISTRIBUTION|^test |panicked" -A1 | grep -v "^--$\|^note"
+cargo test --release -p paint --test thinner_physics -- c16 2>&1 | grep -E "^test |panicked" -A1 | grep -v "^--$\|^note"
+
+# ---- mutation (a): the flow moves paint and leaves its solvent behind
+diff --git a/crates/paint/src/thinner.rs b/crates/paint/src/thinner.rs
+index c46e176..24c6293 100644
+--- a/crates/paint/src/thinner.rs
++++ b/crates/paint/src/thinner.rs
+@@ -254,7 +254,7 @@ impl Canvas {
+                     let l = v + s;
+                     let gone: f32 = out[k2].iter().sum();
+                     let keep = if l > 0.0 { ((l - gone) / l).max(0.0) } else { 0.0 };
+-                    let (mut pv, mut ps, mut lat, mut hide, mut cure) = (v * keep, s * keep, wet.lat[i], wet.hide[i], cure_of(i));
++                    let (mut pv, mut ps, mut lat, mut hide, mut cure) = (v * keep, s /* MUTATION (a): the solvent stays behind */, wet.lat[i], wet.hide[i], cure_of(i));
+                     let mut changed = gone > 0.0;
+                     // from the left neighbor (its rightward flow), the right
+                     // (leftward), above (downward), below (upward)
+@@ -275,7 +275,7 @@ impl Canvas {
+                             cure = if pv + qp > 0.0 { cure + (cure_of(j) - cure) * qp / (pv + qp) } else { cure };
+                             crate::wet::mix_into(&mut pv, &mut lat, &mut hide, qp, &wet.lat[j], wet.hide[j]);
+                         }
+-                        ps += qs;
++                        let _ = qs; // MUTATION (a): no solvent comes in
+                         changed = true;
+                     }
+                     (pv, ps, lat, hide, cure, changed)
+
+# ---- mutation (b): the flow moves solvent without its paint
+diff --git a/crates/paint/src/thinner.rs b/crates/paint/src/thinner.rs
+index c46e176..4e1616c 100644
+--- a/crates/paint/src/thinner.rs
++++ b/crates/paint/src/thinner.rs
+@@ -254,7 +254,7 @@ impl Canvas {
+                     let l = v + s;
+                     let gone: f32 = out[k2].iter().sum();
+                     let keep = if l > 0.0 { ((l - gone) / l).max(0.0) } else { 0.0 };
+-                    let (mut pv, mut ps, mut lat, mut hide, mut cure) = (v * keep, s * keep, wet.lat[i], wet.hide[i], cure_of(i));
++                    let (mut pv, mut ps, mut lat, mut hide, mut cure) = (v /* MUTATION (b): the paint stays behind */, s * keep, wet.lat[i], wet.hide[i], cure_of(i));
+                     let mut changed = gone > 0.0;
+                     // from the left neighbor (its rightward flow), the right
+                     // (leftward), above (downward), below (upward)
+@@ -271,7 +271,7 @@ impl Canvas {
+                             continue;
+                         }
+                         let (qp, qs) = (q * wet.vol[j] / lj, q * (wet.solv[j] / COAT_UM) / lj);
+-                        if qp > 0.0 {
++                        if false && qp > 0.0 { // MUTATION (b): no paint comes in
+                             cure = if pv + qp > 0.0 { cure + (cure_of(j) - cure) * qp / (pv + qp) } else { cure };
+                             crate::wet::mix_into(&mut pv, &mut lat, &mut hide, qp, &wet.lat[j], wet.hide[j]);
+                         }

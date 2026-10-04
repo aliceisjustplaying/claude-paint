@@ -13,9 +13,10 @@ import { existsSync } from "node:fs";
 import { Type } from "@earendil-works/pi-ai";
 import { createReadToolDefinition, defineTool, type ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { reviseJournal } from "./journal.ts";
-import { atEasel, hideCounters, logReply, paintReply, renameLook, renameLooks, statusReply, studioPath, lookArgs, tail, text, toolWords } from "./easel-client.ts";
+import { atEasel, hideCounters, logReply, paintReply, renameLook, renameLooks, statusReply, studioPath, lookArgs, tail, text, toolWords, surveyReply } from "./easel-client.ts";
+import type { PruneLimits } from "./context-images.ts";
 
-export function registerEaselTools(pi: ExtensionAPI, studio: string): void {
+export function registerEaselTools(pi: ExtensionAPI, studio: string, limits: PruneLimits): void {
 	const read = createReadToolDefinition(studio);
 
 	pi.registerTool({
@@ -47,8 +48,8 @@ export function registerEaselTools(pi: ExtensionAPI, studio: string): void {
 				"mode: \"value\", \"squint\", \"mirror\", \"relief\" (a raking light on the paint's ridges and furrows), \"gallery\" (the light the picture hangs in) or several, comma-separated. " +
 				"light: \"azimuth,elevation\" in degrees for the relief light (default \"135,25\", from the upper left). size: the long side in pixels. " +
 				"grid: true, or a spacing in canvas units. " +
-				"survey: true shows the whole canvas at full detail, as several tiles (with mode, not crop or size). " +
-				"compare: the path of an earlier look, shown left of the same view now. " +
+				"survey: true surveys the whole canvas at full detail, as several tiles (with mode, not crop or size); a partial reply lists remaining tiles to read in separate turns. " +
+				"compare: the path of an earlier look, shown left of the current view; supply matching crop, mode and light options explicitly. " +
 				"palette: true shows the palette instead: each pile a global holds, laid thick, as a thin and a very thin coat over the ground, and the thin coat over a black and white card.",
 			parameters: Type.Object({
 				crop: Type.Optional(Type.String()),
@@ -81,6 +82,7 @@ export function registerEaselTools(pi: ExtensionAPI, studio: string): void {
 				const reads = [];
 				for (const path of paths) reads.push(await read.execute(id, { path }, signal, onUpdate, ctx));
 				const images = reads.flatMap((r) => r.content.filter((c) => c.type === "image"));
+				if (p.survey) return { ...reads[0], ...surveyReply(said, paths, images, limits) };
 				return { ...reads[0], content: [{ type: "text" as const, text: said }, ...images] };
 			},
 		}),

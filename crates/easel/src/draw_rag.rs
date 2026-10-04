@@ -3,7 +3,7 @@
 //!
 //! A rag is a userdata over a `Rag` the studio holds (`Studio::rags`), as a
 //! brush is over its `Held`: the painter reads its state (`r.load`,
-//! `r.soaked`, `r.damp`, `r.fold`, `r.width`) and can't write it, so a cleaner face
+//! `r.soaked`, `r.damp` as evaporated by now, `r.fold`, `r.width`) and can't write it, so a cleaner face
 //! costs a refold and a clean cloth a fresh rag, each with its hand time.
 //! A failed chunk puts the rags back with the brushes (session.rs), and a
 //! replay loads them the same way. Nothing new is kept on the canvas.
@@ -69,7 +69,12 @@ impl UserData for RagU {
         f.add_field_method_get("load", |_, r| Ok(r.rag.borrow().load));
         f.add_field_method_get("soaked", |_, r| Ok(r.rag.borrow().soaked));
         f.add_field_method_get("fold", |_, r| Ok(r.rag.borrow().fold));
-        f.add_field_method_get("damp", |_, r| Ok(r.rag.borrow().damp));
+        // as evaporated by now (rag.rs `evaporate`), without changing the rag
+        f.add_field_method_get("damp", |_, r| {
+            let now = r.st.borrow().canvas.as_ref().map(|c| c.now_min());
+            let g = r.rag.borrow();
+            Ok(now.map_or(g.damp, |n| g.damp_at(n)))
+        });
     }
     fn add_methods<M: UserDataMethods<Self>>(m: &mut M) {
         m.add_meta_method(MetaMethod::NewIndex, |_, _, (k, _): (Value, Value)| -> Result<()> {
@@ -163,7 +168,8 @@ impl UserData for RagU {
             }
             time::verb(&u.st, Verb::Marks, |s| {
                 let c = s.canvas.as_mut().ok_or_else(no_canvas)?;
-                u.rag.borrow_mut().dip(a, c.tally_mut());
+                let now = c.now_min();
+                u.rag.borrow_mut().dip(a, now, c.tally_mut());
                 Ok(())
             })
         });
@@ -257,6 +263,21 @@ mod tests {
         run(&mut s, "r:wipe(rect(150, 150, 700, 300), {pressure=0.5, passes=2, refold=0.6})");
         let dt = clock(&s) - t0;
         assert!(dt > 0.2 && dt < 5.0, "a region 300 × 130 mm wiped twice: {dt} min");
+    }
+
+    /// The spirits evaporate from a dipped rag as the painting's clock runs
+    /// (paint::rag `DAMP_HALF_MIN`, 3 minutes): `r.damp` falls by about half
+    /// over three minutes and is 0 a week later; a dip wets it again.
+    #[test]
+    fn a_dipped_rag_dries_as_time_passes() {
+        let mut s = Session::new(W).unwrap();
+        run(&mut s, CANVAS);
+        assert_eq!(run(&mut s, "r = rag(); r:dip(0.5); print(r.damp)").trim(), "0.5");
+        // damp as of the hand's return from the cup, half as damp three minutes later
+        let three: f64 = run(&mut s, "wait(3); print(r.damp)").trim().parse().unwrap();
+        assert!((three - 0.25).abs() < 1e-6, "{three}");
+        assert_eq!(run(&mut s, "wait(10080); print(r.damp)").trim(), "0.0");
+        assert_eq!(run(&mut s, "r:dip(0.5); print(r.damp)").trim(), "0.5");
     }
 
     /// A failed chunk takes back what the rag did: the canvas, the clock and

@@ -321,7 +321,8 @@ crumpled patch. Nothing it lifts goes back on the canvas.
 
 A rag dipped in spirits (`r:dip`, 0..1) lifts wet paint more readily.
 The part in use stays damp (`r.damp`) until a refold turns out a dry
-part.
+part or the spirits evaporate: half of it goes every 3 minutes of
+painting time, so dip again before wiping after a pause.
 
 What it lifts soaks into the cloth. `r.load` is how loaded the part in use
 is (0 clean, 1 full): the more loaded, the less it lifts. `r:refold()`

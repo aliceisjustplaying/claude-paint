@@ -162,6 +162,10 @@ records them (the old-log package with legacy_tiny, the r19 input,
 - `thin_blend_bares_ground`'s bound (item 1): a user decision.
 - S6: the comparator's added-zero stays as documented; a stricter one is a
   reviewed change to protected tools.
+- A step's scratch directory (`/tmp/cpt.*`) survives when its coordinator is
+  killed (SIGKILL) or stopped by the outer timeout before it can remove it:
+  test_runner.sh's crash and timeout cases left six small empty ones (removed
+  by hand). Harmless, but not cleaned automatically.
 - SIGINT from a terminal to `test_candidate` (helper) is untested; the
   runner's SIGINT path goes through the same handler as SIGTERM (test_runner
   case 5 tests SIGTERM).

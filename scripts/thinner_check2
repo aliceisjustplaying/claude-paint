@@ -1,0 +1,76 @@
+#!/usr/bin/env bash
+# Thinner check 2 (notes/thinner/ACCEPTANCE.md): no thinner, or thinner 0,
+# leaves engine 3's paint state exactly as unchanged af49348 left it on the
+# before-change scenes (notes/thinner/baseline/).
+#
+#   scripts/thinner_check2 <release easel with --dump-state>
+#
+# 1. The baseline's own comparison, `compare_build.sh <easel> --added-zero`:
+#    every baseline field of every chunk bit for bit, every added field
+#    (solvent) zero. It must pass, and every scene's PNG must be af49348's.
+# 2. The same six scenes with `thinner=0` written into every `pile{`: the
+#    same field comparison (state_compare.py --added-zero) and the same PNGs.
+# 3. The dumps declare the solvent (scripts/thinner_dump_fields.py:
+#    `wet.solvent` per pixel, `solvent` per bristle, `solvent_mm3` per rag),
+#    for the scenes as they are and with thinner=0, so --added-zero above
+#    can't pass by an unchanged dumper leaving the solvent out.
+# 4. The positive control: a tiny thinned scene of the thinner's own
+#    (crates/easel/tests/thinner/dump_solvent.lua, 128 px; not a baseline
+#    scene) dumps nonzero solvent in `wet.solvent`, on a bristle and on a
+#    rag (thinner_dump_fields.py --nonzero), so a dumper that writes the
+#    fields but always zero can't pass.
+# Needs bash 5, python3 (the baseline's tools) and the release easel.
+# The canvas= digest isn't a criterion: the new save format changes it by
+# itself. Prints "check 2: PASS" and exits 0 only if all of it holds.
+# A heavy job: run it under lockrun (60 s once built).
+set -euo pipefail
+[ $# -eq 1 ] || { echo "usage: thinner_check2 <easel>" >&2; exit 2; }
+easel=$(cd "$(dirname "$1")" && pwd)/$(basename "$1")
+[ -x "$easel" ] || { echo "thinner_check2: no easel at $easel" >&2; exit 2; }
+repo=$(cd "$(dirname "$0")/.." && pwd)
+base=$repo/notes/thinner/baseline
+work=$(mktemp -d "${TMPDIR:-/tmp}/thinner-check2.XXXXXX")
+trap 'rm -rf "$work"' EXIT
+unset EASEL_BOX
+fail=0
+
+echo "== check 2, part 1: compare_build.sh --added-zero"
+set +e
+"$base/tools/compare_build.sh" "$easel" --added-zero | tee "$work/compare_build.txt"
+cb=${PIPESTATUS[0]}
+set -e
+[ "$cb" = 0 ] || { echo "check 2: compare_build.sh failed (exit $cb)"; fail=1; }
+n=$(grep -c "png same as af49348's" "$work/compare_build.txt" || true)
+[ "$n" = 6 ] || { echo "check 2: $n of 6 scenes have af49348's PNG"; fail=1; }
+
+echo "== check 2, part 2: the scenes with thinner=0 on every pile"
+for lua in "$base"/scenes/*.lua; do
+  s=$(basename "$lua" .lua)
+  sed 's/pile{/pile{thinner=0, /g' "$lua" >"$work/$s.lua"
+  grep -q 'pile{thinner=0, ' "$work/$s.lua" || { echo "check 2: $s has no pile{ to set thinner=0 on"; fail=1; continue; }
+  if ! "$easel" run "$lua" --width 128 --out "$work/plain-$s.png" --dump-state "$work/plain/$s" >/dev/null 2>"$work/plain-$s.err"; then
+    echo "check 2: $s failed to replay:"; sed 's/^/  /' "$work/plain-$s.err"; fail=1
+  fi
+  if ! "$easel" run "$work/$s.lua" --width 128 --out "$work/$s.png" --dump-state "$work/state/$s" >"$work/$s.out" 2>"$work/$s.err"; then
+    echo "check 2: $s with thinner=0 failed to replay:"; sed 's/^/  /' "$work/$s.err"; fail=1; continue
+  fi
+  if python3 "$base/tools/state_compare.py" "$base/state/$s" "$work/state/$s" --quiet --added-zero >"$work/$s.cmp"; then
+    echo "$s (thinner=0): state equal on every baseline field ($(tail -1 "$work/$s.cmp" | sed 's/state_compare: //'))"
+  else
+    echo "$s (thinner=0): STATE DIFFERS"; sed 's/^/  /' "$work/$s.cmp"; fail=1
+  fi
+  if cmp -s "$base/ref/png/$s.png" "$work/$s.png"; then echo "  png same as af49348's"; else echo "  png DIFFERENT"; fail=1; fi
+  cmp -s "$base/ref/out/$s.txt" "$work/$s.out" && echo "  printed output same (not a criterion)" || echo "  printed output differs (not a criterion)"
+done
+
+echo "== check 2, part 3: the dumps declare the solvent"
+python3 "$repo/scripts/thinner_dump_fields.py" "$work"/plain/* "$work"/state/* || fail=1
+
+echo "== check 2, part 4: a thinned scene dumps nonzero solvent"
+if "$easel" run "$repo/crates/easel/tests/thinner/dump_solvent.lua" --width 128 --out "$work/positive.png" --dump-state "$work/positive" >/dev/null 2>"$work/positive.err"; then
+  python3 "$repo/scripts/thinner_dump_fields.py" --nonzero "$work/positive" || fail=1
+else
+  echo "check 2: the thinned scene failed to replay:"; sed 's/^/  /' "$work/positive.err"; fail=1
+fi
+
+if [ $fail = 0 ]; then echo "check 2: PASS"; else echo "check 2: FAIL"; exit 1; fi

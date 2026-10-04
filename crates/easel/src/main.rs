@@ -34,6 +34,10 @@ mod session;
 mod state_dump;
 mod time;
 mod world;
+#[cfg(all(test, feature = "replay"))]
+mod thinner_measure;
+#[cfg(all(test, feature = "replay"))]
+mod thinner_tests;
 
 use paint::Canvas;
 use paint::color::linear_to_srgb;

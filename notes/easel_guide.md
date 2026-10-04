@@ -107,6 +107,48 @@ pigment. Drying is the rate relative to average paint (higher dries
 faster); a pile dries at its tubes' rates mixed by volume. These numbers
 are estimates from the pigment literature, not measurements.
 
+### Thinner
+
+```lua
+w = pile{{"<tube>", <parts>}, thinner=0.5}          -- 0 (none) to 0.9
+print(w)                         -- pile(<tube> <parts>; medium 0, thinner 0.5)
+print(w.thinner)                 -- 0.5 (0.0 for a pile without it)
+```
+
+`thinner` is the share of solvent (turpentine, spirits) by volume knifed
+into the pile, 0 to 0.9. It is not `medium`: medium is oil and stays in
+the film; the solvent leaves it. What a pile is made of doesn't change
+with thinner: its pigments, oil, body and drying rate are the paint's own.
+
+What it does:
+
+- A brushload of thinned paint is liquid, part paint and part solvent.
+  One stroke of it lays only a thin film: each spot on the canvas takes
+  at most a set thickness of liquid from one stroke, however many hairs
+  or how many times the stroke passes over it. The more solvent, the
+  thinner that film (about 6 µm at thinner 0.5). What the stroke can't
+  lay stays in the brush, so a loaded brush goes a long way; another
+  stroke over the same spot lays more.
+- The solvent leaves over painting time, whether you wait or keep
+  painting: in a thin film a few minutes, longer in a thicker one. The
+  paint stays. Once it has gone, what is left is a thinner, leaner film
+  of the paint itself, and more of what is under it shows through.
+- While it is there the wet paint is more fluid: it levels and spreads a
+  little, carrying its solvent with it. As the solvent goes, the paint
+  firms up to its own body. The oil dries at its own rate all the while.
+- Solvent has no color: the picture shows the paint alone.
+- A brush or rag that lifts solvent-wet paint takes the solvent with it.
+
+What it doesn't do (left out on purpose): the solvent doesn't evaporate
+from the brush or the pile on the palette (a pile keeps its thinner), it
+doesn't soak into the ground, and it doesn't dissolve paint that has set
+or dried underneath. Solvent-wet paint comes up on a brush or rag no more
+readily than the same paint without it. The thickness limits and the
+evaporation times are estimates, not measurements.
+
+Thinner is new with this engine: a painting started on an older one
+doesn't have it.
+
 ## Brushes and strokes
 
 ```lua

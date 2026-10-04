@@ -4,6 +4,8 @@ The remaining matrix exposed five additional product defects: default studio exp
 
 Source was pinned to `4e525e50897807e9b5f734071dfeb330f1a393d3`. Product source and tests were unchanged. These are agent-run results; the documents remain drafted until a person completes their P1/P2 rows.
 
+A subsequent [real Space Bunny provider run](evidence/live-bunny.md) completed compaction, fresh-session recovery and exact replay. It exposed the missing painting clock (B23); its fix is preserved separately and is not integrated or deployed.
+
 ## Results
 
 <!-- matrix-counts:start -->
@@ -19,7 +21,7 @@ Source was pinned to `4e525e50897807e9b5f734071dfeb330f1a393d3`. Product source 
 | Total | 998 | 22 | 0 |
 <!-- matrix-counts:end -->
 
-Rows are assertions, not independent test executions. Several rows can share one observed scenario. A descriptive row can pass while describing a defect; its intended-behavior triage row fails. “Fail-document” records an inaccurate original description even when corrected here. This finite matrix does not prove that every possible combination is bug-free.
+These counts cover the original matrix, excluding the later B23 follow-up row. Rows are assertions, not independent test executions. Several rows can share one observed scenario. A descriptive row can pass while describing a defect; its intended-behavior triage row fails. “Fail-document” records an inaccurate original description even when corrected here. This finite matrix does not prove that every possible combination is bug-free.
 
 ## Evidence
 
@@ -50,6 +52,6 @@ The Rust default invocation used `cargo test --workspace --lib --bins --tests --
 
 ## Coverage limits
 
-External-provider sessions, a human P1/P2 pass and access from the other Mac were not run. Provider default 30-minute/24-hour scheduling uses a controlled clock; the actual 60-second token window, configured short retry waits and real startup timing are identified separately. A ten-year simulated wait is not ten years of real elapsed time or physical pigment calibration. Fault interleavings establish the recorded boundaries, not every possible crash instruction.
+One external-provider run is recorded in the [Space Bunny report](evidence/live-bunny.md). Other providers, a human P1/P2 pass and access from the other Mac remain unclaimed. Provider default 30-minute/24-hour scheduling uses a controlled clock; the actual 60-second token window, configured short retry waits and real startup timing are identified separately. A ten-year simulated wait is not ten years of real elapsed time or physical pigment calibration. Fault interleavings establish the recorded boundaries, not every possible crash instruction.
 
-The [private preview](http://<tailscale-host>:18765/?p=paint-studio-decafe) contains synthetic conversation records and real probe images. It is not a live model painter. Known product findings remain in [triage](../bug-triage.md); this task documents them and makes no source fixes.
+The [private preview](http://<tailscale-host>:18765/?p=paint-studio-decafe) contains synthetic conversation records and real probe images. It is not a live model painter. Known product findings remain in [triage](../bug-triage.md); the baseline matrix made no source fixes. The later clock fix remains isolated as described in the provider report.

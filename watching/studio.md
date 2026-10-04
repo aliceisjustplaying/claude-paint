@@ -200,6 +200,8 @@ After an event connection failure, the page can continue displaying a picture wh
 
 ## Open questions and verification
 
+- The painting clock can stay absent when successful paint calls do not print timestamps. [B23](../bug-triage.md#b23--painting-clock-can-stay-absent-during-painting) records the real-provider reproduction and an isolated fix; this baseline description remains unchanged.
+
 - Nonshrinking in-place history rewrites can leave the running parser with stale events; a fresh parser sees the new text. Append-only history is the exercised normal path; broader rewrite support is a [product call](../bug-triage.md#b22--equal-size-or-growing-history-rewrites-can-stay-stale).
 
 - The [runtime pass](../verification/evidence/runtime-viewer.md#expanded-static-and-public-browser-pass) found stream-header overflow at 390 pixels; ordinary public mode fit. Phone support for broadcast layout remains a product call in [B15](../bug-triage.md#b15--stream-header-overflows-at-phone-width).

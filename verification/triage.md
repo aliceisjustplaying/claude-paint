@@ -26,3 +26,11 @@ Each row tests the intended behavior stated here. A fail therefore indicates the
 | BUG20 | P1 | Native browser; changing event protocol fixture | [Rewound history](../bug-triage.md#b20--rewound-viewer-position-becomes-stale-when-history-changes) | Rewind to14/16 | Replace epoch with two-event history; separately append while rewound | Valid selection, counter and rendering | fail — Out-of-range timestamp exception after rebuild; stale denominator after append. [Receipt](evidence/matrix-viewer.md#late-result-and-rebuilt-history) |
 | BUG21 | P1 | Actual intermediate frame timestamps | [Aging threshold wording](../bug-triage.md#b21--description-overstated-exact-aging-slice-duration) | Long stipple with frame observer | Compare intervals against original exact15-minute claim | Description permits threshold crossing at work boundaries | pass after document correction — Time description now states a threshold; original T058 failure retained. [Receipt](evidence/matrix-passages.md#intermediate-aging-slices) |
 | BUG22 | P1 | Production studio parser and disposable history | [History rewrite detection](../bug-triage.md#b22--equal-size-or-growing-history-rewrites-can-stay-stale) | Already parsed session log | Replace earlier result with longer text; compare warm and fresh servers | Record behavior; arbitrary rewrite support remains a product call | pass for observation — Warm server kept old output; fresh server parsed replacement. [Receipt](evidence/matrix-viewer-parser.json) |
+
+## Provider-run follow-up
+
+This row is additional to the original 1,020-assertion matrix.
+
+| ID | P | Needs | Claim | Setup | Steps | Expected | Result |
+|---|---|---|---|---|---|---|---|
+| BUG23 | P1 | Real painter and viewer | [Painting clock](../bug-triage.md#b23--painting-clock-can-stay-absent-during-painting) | Baseline studio, then isolated fix | Create canvas and wait without printing timestamps; inspect viewer | Painting time appears without explicit printing | fail on baseline; pass on isolated fix, not integrated or deployed. [Evidence](evidence/live-bunny.md) |

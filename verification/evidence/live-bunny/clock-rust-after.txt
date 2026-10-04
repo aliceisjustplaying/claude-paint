@@ -1,0 +1,72 @@
+   Compiling libc v0.2.189
+   Compiling cfg-if v1.0.5
+   Compiling autocfg v1.5.1
+   Compiling simd-adler32 v0.3.10
+   Compiling shlex v2.0.1
+   Compiling crossbeam-utils v0.8.23
+   Compiling adler2 v2.0.1
+   Compiling find-msvc-tools v0.1.13
+   Compiling crc32fast v1.5.2
+   Compiling crossbeam-epoch v0.9.21
+   Compiling crossbeam-deque v0.8.8
+   Compiling rand_core v0.6.4
+   Compiling bitflags v2.13.2
+   Compiling cc v1.4.7
+   Compiling bytemuck v1.25.2
+   Compiling num-traits v0.2.19
+   Compiling rayon-core v1.13.0
+   Compiling miniz_oxide v0.9.1
+   Compiling fdeflate v0.3.7
+   Compiling miniz_oxide v0.8.9
+   Compiling libm v0.2.16
+   Compiling lua-src v551.0.2
+   Compiling parking_lot_core v0.9.12
+   Compiling pkg-config v0.3.34
+   Compiling smallvec v1.16.1
+   Compiling strict-num v0.1.1
+   Compiling either v1.18.0
+   Compiling pxfm v0.1.30
+   Compiling arrayref v0.3.9
+   Compiling scopeguard v1.2.0
+   Compiling rand_xorshift v0.3.0
+   Compiling tiny-skia-path v0.12.0
+   Compiling lock_api v0.4.14
+   Compiling rand v0.8.8
+   Compiling flate2 v1.1.10
+   Compiling byteorder-lite v0.1.0
+   Compiling log v0.4.34
+   Compiling memchr v2.8.3
+   Compiling paint v0.1.0 (/private/tmp/bunny.KUeYlZ/fix/crates/paint)
+   Compiling arrayvec v0.7.8
+   Compiling png v0.18.1
+   Compiling easel v0.1.0 (/private/tmp/bunny.KUeYlZ/fix/crates/easel)
+   Compiling rustc-hash v2.1.3
+   Compiling bstr v1.13.1
+   Compiling noise v0.9.0
+   Compiling tiny-skia v0.12.0
+   Compiling moxcms v0.8.1
+   Compiling mixbox v2.0.0
+   Compiling which v8.0.6
+   Compiling luajit-src v210.7.3+1ee778a
+   Compiling parking_lot v0.12.5
+   Compiling image v0.25.10
+   Compiling mlua-sys v0.12.0
+   Compiling rayon v1.12.0
+   Compiling mlua v0.12.1
+    Finished `test` profile [optimized + debuginfo] target(s) in 19.57s
+     Running tests/session_integrity.rs (target/debug/deps/session_integrity-0bdb089a493117f0)
+
+running 10 tests
+test replay_failure_is_fatal ... ok
+test a_failed_look_after_a_chunk_still_reports_the_chunk ... ok
+test live_resolution_is_fixed ... ok
+test journal_uses_the_selected_painting_clock ... ok
+test a_running_session_refuses_every_request_while_its_log_is_edited ... ok
+test a_look_never_overwrites_an_earlier_observation ... ok
+test a_second_server_is_refused_and_a_dead_ones_socket_is_recovered ... ok
+test edited_or_truncated_logs_cannot_reopen ... ok
+test rebuilding_serves_progress_and_refuses_nonstatus_requests ... ok
+test racing_opens_start_one_server ... ok
+
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 11.16s
+

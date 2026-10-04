@@ -86,7 +86,7 @@ the picture is yours.
   (warmer, cooler, lighter, darker) and lay them as separate strokes over
   the same area; the eye mixes them. `mix_jitter=` in `work` varies each
   dip; a pile is never perfectly even.
-- **Two colors on one brush.** `b:load(p2, 0.5, {side=1, share=0.4})`, or
+- **Two colors on one brush.** `b:load(p, 0.8); b:load(p2, 0.5, {side=1, share=0.4})`, or
   `work(m, {pile=p, second={pile=p2, side=1, share=0.45}})`: each stroke carries both,
   side by side, mingling as it goes. `streak=` loads unevenly, in bands.
 - **Wet into wet.** A stroke dragged through wet paint picks some of it up

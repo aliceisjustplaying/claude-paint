@@ -30,7 +30,7 @@ pub const ENGINE_MARK: &str = "--@ engine";
 pub const SKETCH_MARK: &str = "--@ sketch";
 /// A sketch's width (px): a quarter of the live width, some 16 times faster,
 /// for trying out a composition before the painting.
-pub const SKETCH_WIDTH: usize = 600;
+pub const SKETCH_WIDTH: usize = crate::LIVE_WIDTH / 4;
 
 /// What the engine version (`paint::ENGINE`) changes in the easel's Lua: from
 /// engine 3, `pairs` and `next` walk every table in a fixed order, not only

@@ -396,8 +396,8 @@ impl UserData for Brush {
             {
                 check_keys(t, PART_KEYS, "b:load")?;
                 let mut part = part_of(t, "b:load")?;
-                part.seed = b.st.borrow_mut().rng.next_u64();
                 let (paint, color) = brushload(&b.st, &p, &Value::Nil, "load")?;
+                part.seed = b.st.borrow_mut().rng.next_u64();
                 b.held.borrow_mut().load_part(paint, amount, &part);
                 time::trip(&b.st, color);
                 return Ok(());
@@ -517,7 +517,15 @@ impl UserData for Brush {
             // with the pressure carried along it
             let n = ctl.len();
             let at = |i: isize| { let i = i.clamp(0, n as isize - 1) as usize; (ctl[i].0, ctl[i].1, pres[i]) };
-            let mut path: Vec<(f32, f32, f32)> = Vec::new();
+            // Bound the whole sampled stroke before allocating its path and arc.
+            let samples: usize = ctl.windows(2).map(|p| {
+                let seg = ((p[1].0 - p[0].0).powi(2) + (p[1].1 - p[0].1).powi(2)).sqrt();
+                (seg / 1.5).ceil().max(2.0) as usize
+            }).sum();
+            if samples > 100_000 {
+                return err("gesture: the sampled stroke is too long (at most 100000 samples)");
+            }
+            let mut path: Vec<(f32, f32, f32)> = Vec::with_capacity(samples + 1);
             // (where each point lies on the path)
             let mut at_ctl: Vec<usize> = Vec::with_capacity(n);
             for i in 0..n - 1 {
@@ -1129,8 +1137,8 @@ fn work(st: &S, mask: Rc<Mask>, o: Table, preset: Option<&str>) -> Result<()> {
         }
         let p2 = pile_of(&t.get::<Value>("pile")?, "work second")?;
         let part = part_of(&t, "work second")?;
-        let load = t.get::<Option<f32>>("load")?.unwrap_or(0.4);
-        h.second = Some(paint::handling::Second { palette: &tubes, pile: p2.mix.clone(), medium: p2.medium, load, part });
+        let load = load_amount(t.get::<Option<f32>>("load")?, 0.4, "work second")?;
+        h.second = Some(paint::handling::Second { palette: &tubes, pile: p2.mix.clone(), medium: p2.medium, thinner: p2.thinner(), load, part });
     }
     #[cfg(feature = "replay")]
     if pile.is_none() && crate::legacy::on(st) {
@@ -1151,7 +1159,7 @@ fn work(st: &S, mask: Rc<Mask>, o: Table, preset: Option<&str>) -> Result<()> {
                 Value::Nil => return err("work piles: each entry is {pile, weight} (a number or function(x, y))"),
                 w => scalar_field(st, w, b, "work piles weight")?,
             };
-            ps.push((p.mix.clone(), p.medium, f));
+            ps.push((p.mix.clone(), p.medium, p.thinner(), f));
         }
         h.piles_at = Some(ps);
     }
@@ -1817,6 +1825,42 @@ mod tests {
     fn run(src: &str) -> Result<String, String> {
         Session::replay(200).unwrap().run(src).map(|r| r.out)
     }
+    #[test]
+    fn review_secondary_piles_keep_their_thinner() {
+        for opts in ["pile=p, second={pile=q, load=0.8}", "piles={{p,0},{q,1}}"] {
+            let mut s = Session::replay(80).unwrap();
+            s.run(r#"canvas{size=300, aspect=1, linen=15, ground={{pile={{"lead white",1}}, um=50, apply="knife"}}}
+                p=pile{{"vermilion",1}}; q=pile{{"cobalt blue",1}, thinner=0.5}"#).unwrap();
+            s.run(&format!("work(rect(100,100,700,500), {{length={{50,50}}, coverage=0.5, {opts}}})")).unwrap();
+            assert!(s.canvas().unwrap().solvent_total() > 0.0, "{opts}: a dip into the thinned pile must lay solvent");
+        }
+    }
+
+    #[test]
+    fn review_invalid_second_loads_are_rejected() {
+        for load in ["math.huge", "0/0"] {
+            let e = run(&format!(r#"canvas{{size=300, aspect=1, linen=15, ground={{{{pile={{{{"lead white",1}}}}, um=50, apply="knife"}}}}}}
+                p = pile{{{{"vermilion", 1}}}}; q = pile{{{{"cobalt blue", 1}}}}
+                work(rect(100,100,200,200), {{pile=p, second={{pile=q, load={load}}}}})"#)).unwrap_err();
+            assert!(e.contains("work second: the amount"), "{e}");
+        }
+    }
+
+    #[test]
+    fn review_refused_part_load_preserves_randomness() {
+        let draw = |fail: &str| run(&format!(r#"canvas{{size=300, aspect=1, linen=15, ground={{{{pile={{{{"lead white",1}}}}, um=50, apply="knife"}}}}}}
+            b = brush("flat", 6); {fail}; print(math.random())"#)).unwrap();
+        assert_eq!(draw(""), draw(r#"assert(not pcall(function() b:load(nil, 0.5, {streak=0.5}) end))"#));
+    }
+
+    #[test]
+    fn review_gesture_rejects_excessive_sample_count() {
+        let e = run(r#"canvas{size=300, aspect=1, linen=15, ground={{pile={{"lead white",1}}, um=50, apply="knife"}}}; b = brush("round", 1)
+            local p = {}; for i=1,8 do local x = i%2 == 0 and 20000 or -20000; p[i] = {x, x, 0} end
+            b:gesture(p, {ramps={0,0}})"#).unwrap_err();
+        assert!(e.contains("sampled stroke is too long"), "{e}");
+    }
+
 
     // math.random: stock Lua's errors, whole 64-bit ranges, and the draws
     // old logs made from small ordered ranges unchanged

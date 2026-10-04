@@ -1958,6 +1958,9 @@ impl Canvas {
     /// Flick a held brush (see `Spatter`); returns how many droplets landed.
     pub fn spatter(&mut self, held: &mut Held, sp: &Spatter, clip: Option<&Mask>) -> usize {
         held.tool.assert_valid();
+        if self.engine < 3 {
+            self.assert_thinner_supported(held.holds_solvent(), "Canvas::spatter");
+        }
         if let Some(m) = clip {
             self.check_mask(m);
         }
@@ -1978,10 +1981,11 @@ impl Canvas {
             .bristles
             .iter()
             .map(|b| {
-                let stiff = b.hide[1].clamp(0.0, 1.0);
+                let liquid = b.vol + b.solvent;
+                let stiff = (b.hide[1] * b.vol / liquid.max(1e-9)).clamp(0.0, 1.0);
                 let fluid = (1.0 - stiff).clamp(0.0, 1.5);
                 let hold = full * (0.2 + 0.6 * stiff);
-                let loose = (b.vol - hold).max(0.0);
+                let loose = (liquid - hold).max(0.0);
                 loose * (force.powf(0.8) * (0.15 + 0.6 * fluid)).clamp(0.0, 0.95)
             })
             .collect();
@@ -1989,7 +1993,7 @@ impl Canvas {
         if total <= 0.0 {
             return 0;
         }
-        let stiff_mean = held.bristles.iter().map(|b| b.hide[1]).sum::<f32>() / n;
+        let stiff_mean = held.bristles.iter().map(|b| b.hide[1] * b.vol / (b.vol + b.solvent).max(1e-9)).sum::<f32>() / n;
         // droplet sizes (radius in flight, mm): log-normal, smaller the harder the flick
         let r_med = (0.32 * (1.25 - force) * (0.6 + 0.8 * stiff_mean)).clamp(0.04, 1.2);
         let reach = (sp.toward.0 * sp.toward.0 + sp.toward.1 * sp.toward.1).sqrt().max(1e-3);
@@ -2023,13 +2027,15 @@ impl Canvas {
             left -= take;
             let vol_mm3 = take * per_vol;
             let b = &mut held.bristles[bi];
-            b.vol = (b.vol - take).max(0.0);
+            let solvent_share = b.solvent / (b.vol + b.solvent).max(1e-9);
+            b.vol = (b.vol - take * (1.0 - solvent_share)).max(0.0);
+            b.solvent = (b.solvent - take * solvent_share).max(0.0);
             // flight: off the flick's line by the cone, farther for heavier drops
             let th = dir + (0.5 * spread * rng.normal()).clamp(-1.2 * spread, 1.2 * spread);
             let d = reach * (0.35 + 0.65 * rng.f()) * (r / r_med).powf(0.25).clamp(0.5, 1.6);
             let (px, py) = (cx0 + th.cos() * d * s, cy0 + th.sin() * d * s);
             // on impact it spreads, less for stiff paint; a slanting arrival stretches it
-            let stiff = b.hide[1].clamp(0.0, 1.0);
+            let stiff = (b.hide[1] * (1.0 - solvent_share)).clamp(0.0, 1.0);
             let r_land = r * (2.2 - 0.9 * stiff) / mm_per_px;
             let stretch = 1.0 + 1.2 * force * (d / reach) * rng.f();
             let (ra, rb) = ((r_land * stretch.sqrt()).max(0.35), (r_land / stretch.sqrt()).max(0.35));
@@ -2076,7 +2082,11 @@ impl Canvas {
                 let i = (y - sf.oy) * sf.w + (x - sf.ox);
                 let v = coats_mean * area_px * w / wsum * m;
                 // SAFETY: exclusive &mut self; i is inside the buffer window.
-                unsafe { sf.add(i, v, &lat, hide, cure) };
+                unsafe {
+                    *sf.cover.add(i) = 1.0;
+                    sf.add(i, v * (1.0 - solvent_share), &lat, hide, cure);
+                    if !sf.solv.is_null() { *sf.solv.add(i) += v * solvent_share * crate::surface::COAT_UM; }
+                };
                 grow(&mut bounds, x - sf.ox, y - sf.oy, x - sf.ox + 1, y - sf.oy + 1);
                 landed = true;
             }
@@ -2764,6 +2774,19 @@ mod part_tests {
 mod spatter_tests {
     use super::*;
     use crate::color::hex;
+
+    #[test]
+    fn review_spatter_transfers_solvent_and_covers_its_drops() {
+        let mut c = Canvas::new(200, 1.0, hex("#e8e0d0")).with_size_mm(300.0);
+        c.wet.cover.fill(0.1);
+        let mut h = Held::new(Tool::round_sable(12.0), 3);
+        h.load(Paint::new(hex("#b03020"), 0.9, 0.1).with_thinner(0.5), 1.0);
+        let before: f32 = h.bristles.iter().map(|b| b.solvent).sum();
+        assert!(c.spatter(&mut h, &Spatter { at: (300.0, 400.0), toward: (100.0, 0.0), spread: 0.2, force: 0.9, seed: 9 }, None) > 0);
+        let after: f32 = h.bristles.iter().map(|b| b.solvent).sum();
+        assert!(after < before && c.solvent_total() > 0.0, "spatter must transfer the load's solvent");
+        assert!(c.wet.vol.iter().zip(&c.wet.cover).filter(|(v,_)| **v > 0.0).all(|(_,cover)| *cover == 1.0));
+    }
 
     fn flick(stiff: f32, force: f32) -> (usize, f32, f32) {
         let mut c = Canvas::new(400, 2.0, hex("#e8e0d0")).with_size_mm(300.0);

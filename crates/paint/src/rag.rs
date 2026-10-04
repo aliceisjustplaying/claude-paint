@@ -7,8 +7,11 @@
 //! along its path and a blot in a crumpled patch. What it lifts soaks into
 //! the cloth: the face in use loads up and lifts less, until the rag is
 //! refolded to a cleaner face (a rag that has soaked up a lot has no clean
-//! face left). It can't lift the last of the film: the pigment caught in
-//! the ground's tooth stays as a stain, more of it in the hollows.
+//! face left). Before engine 3 it can't lift the last of the film: the
+//! pigment caught in the ground's tooth stays as a stain, more of it in the
+//! hollows. On engine 3 the last of the film comes away more and more
+//! slowly instead (`SLOW_COATS`): a dry rag leaves a pale tint that more
+//! wiping thins, spirits take it nearly to the ground.
 //!
 //! It lifts only the wet layer, by how fluid the paint still is
 //! (`reach_fluid`, from `drying::fluid`): fresh paint comes away, paint
@@ -68,9 +71,9 @@ pub const PAD_MM: f32 = 40.0;
 const LIFT: f32 = 4.0;
 /// What a blot lifts, as a share of a full pass (no drag) [E].
 const BLOT: f32 = 0.8;
-/// The stain: coats of film the cloth can't take, pigment caught in the
-/// tooth, where the cloth reaches all the film; twice as much where it
-/// reaches none of it (the hollows) [E].
+/// The stain before engine 3: coats of film the cloth can't take, pigment
+/// caught in the tooth, where the cloth reaches all the film; twice as much
+/// where it reaches none of it (the hollows) [E]. Engine 3: `SLOW_COATS`.
 const STAIN_COATS: f32 = 0.04;
 /// How far the cloth bridges between peaks of the surface (mm): about the
 /// spacing of the threads of a 15-thread linen [E].
@@ -122,11 +125,33 @@ const SHIFT_MM: f32 = 25.0;
 const FOLD_MISS: (f32, f32) = (0.25, 0.5);
 const FOLD_PRESS: f32 = 0.2;
 /// Engine 3: the cloth's contact shares out what the pad's rate takes
-/// after that rate saturates, so a damp cloth (`DAMP_LIFT`) still leaves
-/// the creases' streaks; and spirits reach deeper into the hollows, by
-/// `1 + DAMP_REACH × damp` of the pad's sag, the fibers wicking up to all
-/// the paint below that (`WICK` → 1 at a full dip) [E].
-const DAMP_REACH: f32 = 1.5;
+/// after that rate saturates, so a damp cloth still leaves the creases'
+/// streaks. Spirits work gradually ("rub the paint off gradually", the
+/// wipe-out method as the Seattle Artist League describes it,
+/// https://www.seattleartistleague.com/2016/08/15/the-wipe-out-method/): a
+/// damp face lifts `1 + DAMP_LIFT3 × damp` times as fast as a dry one,
+/// reaches `1 + DAMP_REACH × damp` times as deep into the hollows, and its
+/// fibers wick up `WICK + (1 - WICK) × DAMP_WICK × damp` of the paint below
+/// that. Set by eye (notes/rag/thin-experiment, round 2, "mild"): one
+/// damp wipe of a thin wash takes about 80% of it, three about 93% [E].
+const DAMP_LIFT3: f32 = 1.0;
+const DAMP_REACH: f32 = 0.3;
+const DAMP_WICK: f32 = 0.3;
+/// Engine 3: no stain the cloth can't take. The last of a film comes away
+/// more and more slowly: a wipe takes `v / (v + h)` of what its rate would,
+/// `h` = `SLOW_COATS` where the cloth reaches all the film, twice that
+/// where it reaches none of it, and spirits shrink `h` by `1 + SLOW_DAMP ×
+/// damp`. So a dry rag leaves a pale tint that more wiping thins, and a
+/// damp one takes it nearly to the ground. Set by eye (notes/rag/
+/// thin-experiment, round 1, version 4); no source gives a thickness [E].
+const SLOW_COATS: f32 = 0.04;
+const SLOW_DAMP: f32 = 1.0;
+/// Engine 3: the pad presses less toward its rim, from `RIM_PRESS` of its
+/// half-width out, so there it reaches only the tops of the weave and its
+/// fibers wick less; its outline fades only over the outer `1 -
+/// RIM_EDGE` (notes/rag/thin-experiment, round 3) [E].
+const RIM_PRESS: f32 = 0.3;
+const RIM_EDGE: f32 = 0.85;
 /// Engine 3: the hand's wander along a wipe: the pad's width by up to
 /// ±`WANDER_W` and its line by up to ±`WANDER_OFF` pad widths, at two
 /// scales (2.5 or 3 and 0.7 pad widths along the path) [E].
@@ -150,134 +175,6 @@ const END_MM: f32 = 8.0;
 /// the rag's load [E].
 const SOAK: f32 = 0.35;
 const SMEAR: f32 = 0.2;
-
-/// What a wipe leaves of a thin film (engine 3). EXPERIMENT (rag work, step
-/// 1): four rules side by side, chosen per thread by `set`; the default is
-/// today's stain floor. Thicknesses are coats; `hollow` is 1 where the
-/// cloth reaches all the film and 2 where it reaches none of it; `damp` is
-/// the face's spirits (0..1).
-pub mod residue {
-    use super::{DAMP_LIFT, STAIN_COATS};
-    use std::cell::Cell;
-
-    // Engine 3, EXPERIMENT: what spirits do, per thread (`set_damp`). A
-    // face `damp` lifts `1 + rate × damp` times as fast; D's `h` shrinks by
-    // `1 + soft × damp`; the fibers wick `WICK + (1 - WICK) × min(1, wick ×
-    // damp)` of the paint out of reach; the cloth reaches `1 + reach × damp`
-    // times as deep. Default: as before.
-    #[derive(Clone, Copy, Debug)]
-    pub struct Damp {
-        pub rate: f32,
-        pub soft: f32,
-        pub wick: f32,
-        pub reach: f32,
-    }
-
-    pub const DAMP0: Damp = Damp { rate: DAMP_LIFT, soft: DAMP_LIFT, wick: 1.0, reach: super::DAMP_REACH };
-
-    thread_local! {
-        static DAMP: Cell<Damp> = const { Cell::new(DAMP0) };
-    }
-
-    pub fn set_damp(d: Damp) {
-        DAMP.with(|c| c.set(d));
-    }
-
-    pub fn damp() -> Damp {
-        DAMP.with(|c| c.get())
-    }
-
-    thread_local! {
-        static EDGE_PRESS: Cell<bool> = const { Cell::new(false) };
-    }
-
-    /// EXPERIMENT: a wipe's rim presses lightly instead of fading out.
-    pub fn set_edge_press(on: bool) {
-        EDGE_PRESS.with(|c| c.set(on));
-    }
-
-    pub fn edge_press() -> bool {
-        EDGE_PRESS.with(|c| c.get())
-    }
-
-    thread_local! {
-        static SPIRIT: Cell<f32> = const { Cell::new(0.0) };
-    }
-
-    /// EXPERIMENT: a face dipped fully leaves this much spirits (µm) in
-    /// the paint under one full pass of its contact (scaled by its
-    /// dampness); 0: none (as before).
-    pub fn set_spirit_um(um: f32) {
-        SPIRIT.with(|c| c.set(um));
-    }
-
-    pub fn spirit_um() -> f32 {
-        SPIRIT.with(|c| c.get())
-    }
-
-    thread_local! {
-        static FLOW: Cell<f32> = const { Cell::new(1.0) };
-    }
-
-    /// EXPERIMENT: every solvent-wet film flows this many times as fast
-    /// (`thinner::spread`); 1: as before.
-    pub fn set_flow_scale(k: f32) {
-        FLOW.with(|c| c.set(k));
-    }
-
-    pub fn flow_scale() -> f32 {
-        FLOW.with(|c| c.get())
-    }
-
-    #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-    pub enum Rule {
-        /// Today: the cloth can't take the last `STAIN_COATS × hollow`.
-        Floor,
-        /// B: no stain; the wipe takes its share of any film.
-        Zero,
-        /// C: the ground's tooth holds up to `RETAIN × hollow`; a dry cloth
-        /// can't take that part, spirits lift it at the wipe's rate × damp.
-        Fixed,
-        /// D: no compartment; the take slows as the film thins, by `v / (v
-        /// + h)`, `h = SOFT × hollow`, and spirits shrink `h`.
-        Soft,
-    }
-
-    /// C's tooth, coats (0.5 \u{b5}m) [E].
-    pub const RETAIN: f32 = 0.02;
-    /// D's half-speed film, coats (1 \u{b5}m), dry [E].
-    pub const SOFT: f32 = STAIN_COATS;
-
-    thread_local! {
-        static RULE: Cell<Rule> = const { Cell::new(Rule::Floor) };
-    }
-
-    pub fn set(r: Rule) {
-        RULE.with(|c| c.set(r));
-    }
-
-    pub fn rule() -> Rule {
-        RULE.with(|c| c.get())
-    }
-
-    /// How much of a film `v` the wipe takes when its rate would take `want`.
-    #[inline]
-    pub(super) fn take(want: f32, v: f32, hollow: f32, damp: f32) -> f32 {
-        match rule() {
-            Rule::Floor => want.min(v - STAIN_COATS * hollow),
-            Rule::Zero => want.min(v),
-            Rule::Fixed => {
-                let held = (RETAIN * hollow).min(v);
-                let share = (want / v).clamp(0.0, 1.0);
-                want.min(v - held).max(0.0) + held * share * damp.clamp(0.0, 1.0)
-            }
-            Rule::Soft => {
-                let h = SOFT * hollow / (1.0 + self::damp().soft * damp.clamp(0.0, 1.0));
-                (want * v / (v + h)).min(v)
-            }
-        }
-    }
-}
 
 /// Paint at the cloth's surface during one wipe (engine 3, `SMEAR`):
 /// coats × pixels, its mean color, hiding and cure, and its solvent (µm ×
@@ -534,15 +431,9 @@ impl Canvas {
         let d = rag.damp.clamp(0.0, 1.0);
         let e3 = self.engine >= 3;
         // (engine 3: spirits reach deeper, `DAMP_REACH`)
-        let (reach, wick) = if e3 { { let dm = residue::damp(); (SAG_UM * (0.25 + 1.5 * p) * (1.0 + dm.reach * d), WICK + (1.0 - WICK) * (dm.wick * d).min(1.0)) } } else { (SAG_UM * (0.25 + 1.5 * p), WICK) };
-        let k = LIFT * (0.7 + 0.6 * p) * rag.thirst() * (1.0 + if e3 { residue::damp().rate } else { DAMP_LIFT } * d);
+        let (reach, wick) = if e3 { (SAG_UM * (0.25 + 1.5 * p) * (1.0 + DAMP_REACH * d), WICK + (1.0 - WICK) * (DAMP_WICK * d).min(1.0)) } else { (SAG_UM * (0.25 + 1.5 * p), WICK) };
+        let k = LIFT * (0.7 + 0.6 * p) * rag.thirst() * (1.0 + if e3 { DAMP_LIFT3 } else { DAMP_LIFT } * d);
         let timed = self.wet.clock.px.len() == self.wet.vol.len();
-        // EXPERIMENT: a damp face leaves spirits in the paint it touches
-        let spirit = if e3 && d > 0.0 { residue::spirit_um() * d } else { 0.0 };
-        if spirit > 0.0 {
-            self.wet.ensure_solvent();
-        }
-        let mut laid_spirit = 0.0f64;
         let mut lifted = 0.0f64;
         let mut lifted_s = 0.0f64;
         let mut got = Pool::default();
@@ -567,9 +458,9 @@ impl Canvas {
                 }
                 let j = (y - by0) * bw + (x - bx0);
                 // the film above the cloth's level, coats
+                // (engine 3: the rim presses lightly, `RIM_PRESS`)
                 let (reach, wick) = if e3 && press < 1.0 {
-                    let dm = residue::damp();
-                    (SAG_UM * (0.25 + 1.5 * p * press) * (1.0 + dm.reach * d), wick * press)
+                    (SAG_UM * (0.25 + 1.5 * p * press) * (1.0 + DAMP_REACH * d), wick * press)
                 } else {
                     (reach, wick)
                 };
@@ -581,7 +472,13 @@ impl Canvas {
                 let frac = if e3 { (1.0 - (-k * fl * pad).exp()) * c } else { 1.0 - (-k * fl * e).exp() };
                 // the stain: more of it where the cloth didn't reach
                 let hollow = 2.0 - near / v;
-                let take = if e3 { residue::take(avail * frac, v, hollow, d) } else { (avail * frac).min(v - STAIN_COATS * hollow) };
+                let take = if e3 {
+                    // (the last of the film comes away slowly, `SLOW_COATS`)
+                    let h = SLOW_COATS * hollow / (1.0 + SLOW_DAMP * d);
+                    (avail * frac * v / (v + h)).min(v)
+                } else {
+                    (avail * frac).min(v - STAIN_COATS * hollow)
+                };
                 if take > 0.0 {
                     if pooled {
                         let l = &self.wet.lat[i];
@@ -602,11 +499,6 @@ impl Canvas {
                     row_s += ts;
                     row += take;
                 }
-                if spirit > 0.0 && self.wet.vol[i] > 1e-6 {
-                    let add = spirit * pad.min(1.0) * c;
-                    self.wet.solv[i] += add;
-                    laid_spirit += add as f64;
-                }
             }
             lifted += row as f64;
             lifted_s += row_s as f64;
@@ -617,8 +509,6 @@ impl Canvas {
             lifted_s -= laid_s;
         }
         let mm3 = lifted * (px_mm as f64).powi(2) * (COAT_UM as f64 / 1000.0);
-        // (the spirits laid: µm × pixels; the cloth's own dampness isn't drawn down: EXPERIMENT)
-        rag.solvent_mm3 -= laid_spirit * (px_mm as f64).powi(2) / 1000.0;
         rag.solvent_mm3 += lifted_s * (px_mm as f64).powi(2) * (COAT_UM as f64 / 1000.0);
         let w_mm = (rag.width * self.mm_per_unit) as f64;
         let cap = w_mm * w_mm * (CAP_UM as f64 / 1000.0);
@@ -798,20 +688,15 @@ impl Canvas {
                     let sg = s0 + sp;
                     let fray = 0.6 * vn(sg * mmu / FRAY_MM, if d > 0.0 { 3.1 } else { 7.3 }, cs ^ 0xD4) + 0.4 * vn(sg * mmu * 3.0 / FRAY_MM, if d > 0.0 { 5.2 } else { 9.4 }, cs ^ 0xD5);
                     let re = r * (1.0 - FRAY * fray);
-                    let edge = 1.0 - smoothstep(0.5 * re, re, ad);
                     let start = ((sg + r * (1.2 * vn(d * mmu / END_MM, 13.7, cs ^ 0xE6) - 0.4)) / (0.25 * r)).clamp(0.0, 1.0);
                     let end = ((len + r * (1.2 * vn(d * mmu / END_MM, 11.3, cs ^ 0xE5) - 0.4) - sg) / (0.25 * r)).clamp(0.0, 1.0);
                     // the light-pressed rim: the frayed sides and the trailing end
                     let rim = smoothstep(0.4 * re, re, ad).max(smoothstep(len - r, len + 0.5 * r, sg));
-                    if residue::edge_press() {
-                        // EXPERIMENT: the cloth's outline stays fairly sharp
-                        // and its pressure falls off toward the rim, so
-                        // there it reaches only the tops of the weave
-                        let press = 1.0 - smoothstep(0.3 * re, re, ad);
-                        let edge = 1.0 - smoothstep(0.85 * re, re, ad);
-                        return (over / (2.0 * r) * edge * start * end, cloth3(d * mmu, sg * mmu, cs, p), rim, press);
-                    }
-                    (over / (2.0 * r) * edge * start * end, cloth3(d * mmu, sg * mmu, cs, p), rim, 1.0)
+                    // the cloth's outline, and its pressure falling off toward
+                    // the rim, where it reaches only the tops of the weave
+                    let edge = 1.0 - smoothstep(RIM_EDGE * re, re, ad);
+                    let press = 1.0 - smoothstep(RIM_PRESS * re, re, ad);
+                    (over / (2.0 * r) * edge * start * end, cloth3(d * mmu, sg * mmu, cs, p), rim, press)
                 });
             }
             s_at += l;
@@ -1376,12 +1261,14 @@ mod tests {
         hard.rag_region(&mut fresh(), &wipe, &pass(0.9));
         let h = removed(&mut hard);
         assert!(h.2 > one.2 + 0.1 && h.1 > one.1, "pressure 0.9 {h:?} vs 0.5 {one:?}");
-        // a stain: even pressed hard and gone over five times, some stays
+        // even pressed hard and gone over five times, a dry rag thins the
+        // film without baring the ground anywhere (engine 3: `SLOW_COATS`)
         let mut many = c0.clone();
         let mut r = fresh();
         many.rag_region(&mut r, &wipe, &RagPass { passes: 5, refold: Some(0.3), ..pass(0.9) });
         let left = paint_at(&many, &gf);
-        assert!((0..left.len()).filter(|&i| inside(&many, &read, i) && before[i] > 0.1).all(|i| left[i] > 0.02));
+        let ins: Vec<usize> = (0..left.len()).filter(|&i| inside(&many, &read, i) && before[i] > 0.1).collect();
+        assert!(ins.iter().all(|&i| left[i] > 0.0 && left[i] < before[i]), "five passes thin every pixel and bare none");
     }
 
     /// A toning layer as the wipe-out handouts lay it: thin earth-brown
@@ -1442,7 +1329,7 @@ mod tests {
     /// half of the tone's color goes, but a tint stays (a fifth of it at
     /// least, well above a just-noticeable difference). With spirits, three
     /// times over: nearly all the film goes, from the tops of the weave and
-    /// from the hollows (95% of each), more than a dry rag takes from the
+    /// from the hollows (90% of each), more than a dry rag takes from the
     /// hollows, and a faint stain stays. (What the eye sees doesn't fall as
     /// far: the stain the cloth can't take is the same, dry or damp; see
     /// notes/rag/README.md.)
@@ -1467,7 +1354,8 @@ mod tests {
             100.0 * left_dry / tone, 100.0 * dry_film.0, 100.0 * dry_film.1, 100.0 * left_wet / tone, 100.0 * wet_film.0, 100.0 * wet_film.1);
         assert!(left_dry < 0.5 * tone, "a dry rag lifts the tone: {left_dry} of {tone}");
         assert!(left_dry > 0.2 * tone && left_dry > 0.02, "a dry rag leaves a pale tint: {left_dry} of {tone}");
-        assert!(wet_film.0 > 0.95 && wet_film.1 > 0.95, "spirits lift nearly all the film: {wet_film:?}");
+        // (engine 3: spirits work gradually, `DAMP_LIFT3`)
+        assert!(wet_film.0 > 0.9 && wet_film.1 > 0.9, "spirits lift nearly all the film: {wet_film:?}");
         assert!(dry_film.1 < wet_film.1, "a dry rag leaves more in the hollows: {dry_film:?} vs {wet_film:?}");
         assert!(wet_film.1 < 1.0 && left_wet > 0.0, "a faint stain stays");
         assert!(left_wet < left_dry, "spirits leave less color than a dry rag: {left_wet} vs {left_dry}");
@@ -1513,10 +1401,6 @@ mod tests {
         }
 
         /// Paint the band with heavy overlapping strokes of `paint`.
-        pub fn brushed(c: &mut Canvas, paint: Paint, load: f32) {
-            brushed_in(c, paint, load, PAINTED);
-        }
-
         pub fn brushed_in(c: &mut Canvas, paint: Paint, load: f32, r: (f32, f32, f32, f32)) {
             let rows = ((r.3 - r.1 - 20.0) / 22.5).round() as u64 + 1;
             for k in 0..rows {
@@ -1612,195 +1496,6 @@ mod tests {
                     }
                     println!();
                 }
-            }
-        }
-        /// Damp-wipe sweep for rule D on the brush wash: share removed by one,
-        /// two and three damp wipes (one face, dipped 0.5) for spirits'
-        /// effect on the lift rate and on D's slowing (`residue::set_damp`).
-        /// `RAG_EXP_TUBE="raw umber" cargo test --release -p paint --lib -- --ignored --nocapture --exact rag::tests::thin::damp_sweep`
-        #[test]
-        #[ignore]
-        fn damp_sweep() {
-            use residue::Rule;
-            const AREA: (f32, f32, f32, f32) = (280.0, 245.0, 720.0, 435.0);
-            const MID: (f32, f32, f32, f32) = (360.0, 322.0, 640.0, 358.0);
-            const PATH: [(f32, f32); 2] = [(300.0, 340.0), (700.0, 340.0)];
-            let mut c0 = blank(LIVE);
-            brushed_in(&mut c0, sienna().with_thinner(0.5), 0.9, AREA);
-            let idx = px_in(&c0, MID);
-            let a = total(&film_um(&c0, &idx));
-            residue::set(Rule::Soft);
-            let mut cases = vec![("today", residue::DAMP0)];
-            for (rate, soft) in [(1.0f32, 1.0f32), (2.0, 2.0)] {
-                for (wick, reach) in [(0.0f32, 0.0f32), (0.3, 0.3), (0.6, 0.6), (1.0, 1.5)] {
-                    cases.push(("", residue::Damp { rate, soft, wick, reach }));
-                }
-            }
-            for (name, dm) in cases {
-                residue::set_damp(dm);
-                let mut c = c0.clone();
-                let mut r = Rag::new(100.0, 7);
-                r.dip(0.5, c.now_min(), &mut c.tally);
-                print!("{name:>5} {dm:?}:");
-                for k in 0..3u64 {
-                    c.rag_wipe(&mut r, &PATH, &[0.8], 19 + k);
-                    print!("  damp{} {:5.1}%", k + 1, 100.0 * (1.0 - total(&film_um(&c, &idx)) / a));
-                }
-                println!();
-            }
-            {
-                residue::set_damp(residue::DAMP0);
-                let mut c = c0.clone();
-                let mut r = Rag::new(100.0, 7);
-                print!("  dry:");
-                for k in 0..3u64 {
-                    c.rag_wipe(&mut r, &PATH, &[0.8], 19 + k);
-                    print!("  dry{} {:5.1}%", k + 1, 100.0 * (1.0 - total(&film_um(&c, &idx)) / a));
-                }
-                println!();
-            }
-            residue::set_damp(residue::DAMP0);
-            residue::set(Rule::Floor);
-        }
-
-        /// Renders for the damp candidates (rule D, brush wash): dry 1 and 3
-        /// wipes, damp 1 and 3 wipes, per spirits setting, into `RAG_EXP_DIR`.
-        #[test]
-        #[ignore]
-        fn damp_render() {
-            use residue::{Damp, Rule};
-            const AREA: (f32, f32, f32, f32) = (280.0, 245.0, 720.0, 435.0);
-            const PATH: [(f32, f32); 2] = [(300.0, 340.0), (700.0, 340.0)];
-            let out = std::path::PathBuf::from(std::env::var("RAG_EXP_DIR").unwrap());
-            let mut c0 = blank(LIVE);
-            brushed_in(&mut c0, sienna().with_thinner(0.5), 0.9, AREA);
-            c0.clone().save(out.join("start.png")).unwrap();
-            residue::set(Rule::Soft);
-            let mild = Damp { rate: 1.0, soft: 1.0, wick: 0.3, reach: 0.3 };
-            for (name, dm, edge) in [("mild", mild, false), ("mild-press", mild, true)] {
-                residue::set_damp(dm);
-                residue::set_edge_press(edge);
-                for damp in [false, true] {
-                    let mut c = c0.clone();
-                    let mut r = Rag::new(100.0, 7);
-                    if damp {
-                        r.dip(0.5, c.now_min(), &mut c.tally);
-                    }
-                    for k in 0..3u64 {
-                        c.rag_wipe(&mut r, &PATH, &[0.8], 19 + k);
-                        if k == 0 || k == 2 {
-                            let tag = format!("{name}-{}{}", if damp { "damp" } else { "dry" }, k + 1);
-                            c.clone().save(out.join(format!("{tag}.png"))).unwrap();
-                        }
-                    }
-                }
-            }
-            residue::set_edge_press(false);
-            residue::set_damp(residue::DAMP0);
-            residue::set(Rule::Floor);
-        }
-
-        /// Spirits from a damp face running into the paint (rule D, mild
-        /// damp, light-pressed rim): one and three damp wipes, just after
-        /// and after a 3-minute wait, per amount of spirits laid.
-        #[test]
-        #[ignore]
-        fn spirit_render() {
-            use residue::{Damp, Rule};
-            const AREA: (f32, f32, f32, f32) = (280.0, 245.0, 720.0, 435.0);
-            const PATH: [(f32, f32); 2] = [(300.0, 340.0), (700.0, 340.0)];
-            let out = std::path::PathBuf::from(std::env::var("RAG_EXP_DIR").unwrap());
-            let mut c0 = blank(LIVE);
-            brushed_in(&mut c0, sienna().with_thinner(0.5), 0.9, AREA);
-            c0.wait(10.0);
-            c0.clone().save(out.join("start.png")).unwrap();
-            residue::set(Rule::Soft);
-            residue::set_damp(Damp { rate: 1.0, soft: 1.0, wick: 0.3, reach: 0.3 });
-            residue::set_edge_press(true);
-            for (um, flow) in [(0.0f32, 1.0f32), (10.0, 1.0), (10.0, 10.0), (10.0, 30.0), (0.0, 30.0)] {
-                residue::set_spirit_um(um);
-                residue::set_flow_scale(flow);
-                let mut c = c0.clone();
-                let mut r = Rag::new(100.0, 7);
-                r.dip(0.5, c.now_min(), &mut c.tally);
-                for k in 0..3u64 {
-                    c.rag_wipe(&mut r, &PATH, &[0.8], 19 + k);
-                    if k == 0 || k == 2 {
-                        // (save dries the paint first: the flow runs its course)
-                        c.clone().save(out.join(format!("s{um}-f{flow}-damp{}.png", k + 1))).unwrap();
-                    }
-                }
-            }
-            residue::set_flow_scale(1.0);
-            residue::set_spirit_um(0.0);
-            residue::set_edge_press(false);
-            residue::set_damp(residue::DAMP0);
-            residue::set(Rule::Floor);
-        }
-
-        /// The experiment (rag work, step 1): today's floor, B, C and D side
-        /// by side at the live width on linen, on direct 1 and 3 µm films and
-        /// a brush-laid wash at thinner 0.5; one dry wipe, three dry wipes,
-        /// one damp wipe. Prints the film left in the wipe's middle
-        /// (quantiles, µm, and the share of pixels on its most common value:
-        /// a plateau) and with `RAG_EXP_DIR` saves every state as PNG.
-        /// `RAG_EXP_DIR=/tmp/x cargo test --release -p paint --lib rag::tests::thin::experiment -- --ignored --nocapture`
-        #[test]
-        #[ignore]
-        fn experiment() {
-            use residue::Rule;
-            const AREA: (f32, f32, f32, f32) = (280.0, 245.0, 720.0, 435.0);
-            const MID: (f32, f32, f32, f32) = (360.0, 322.0, 640.0, 358.0);
-            const PATH: [(f32, f32); 2] = [(300.0, 340.0), (700.0, 340.0)];
-            let out = std::env::var("RAG_EXP_DIR").ok().map(std::path::PathBuf::from);
-            let save = |c: &Canvas, name: &str| {
-                if let Some(d) = &out {
-                    c.clone().save(d.join(format!("{name}.png"))).unwrap();
-                }
-            };
-            let starts: Vec<(&str, Canvas)> = vec![
-                ("film1", { let mut c = blank(LIVE); set_film(&mut c, 1.0, AREA); c }),
-                ("film3", { let mut c = blank(LIVE); set_film(&mut c, 3.0, AREA); c }),
-                ("wash05", { let mut c = blank(LIVE); brushed_in(&mut c, sienna().with_thinner(0.5), 0.9, AREA); c }),
-            ];
-            for (sname, c0) in &starts {
-                let idx = px_in(c0, MID);
-                let a = film_um(c0, &idx);
-                let q = |v: &[f32]| {
-                    let mut s = v.to_vec();
-                    s.sort_by(f32::total_cmp);
-                    let at = |p: f32| s[((s.len() - 1) as f32 * p) as usize];
-                    let bins = |x: f32| (x / 0.02).round() as i64;
-                    let mut counts = std::collections::HashMap::new();
-                    for &x in &s {
-                        *counts.entry(bins(x)).or_insert(0usize) += 1;
-                    }
-                    let top = counts.values().copied().max().unwrap_or(0) as f32 / s.len() as f32;
-                    format!("p5 {:.2} p25 {:.2} p50 {:.2} p75 {:.2} p95 {:.2} plateau {:.0}%", at(0.05), at(0.25), at(0.5), at(0.75), at(0.95), 100.0 * top)
-                };
-                println!("=== {sname}: start {}", q(&a));
-                save(c0, &format!("{sname}-start"));
-                for rule in [Rule::Floor, Rule::Zero, Rule::Fixed, Rule::Soft] {
-                    residue::set(rule);
-                    for (wname, damp, wipes) in [("dry1", false, 1u32), ("dry3", false, 3), ("damp1", true, 1)] {
-                        let mut c = c0.clone();
-                        let before = on_canvas(&c);
-                        let mut r = Rag::new(100.0, 7);
-                        if damp {
-                            r.dip(0.5, c.now_min(), &mut c.tally);
-                        }
-                        let mut lifted = 0.0;
-                        for k in 0..wipes {
-                            lifted += c.rag_wipe(&mut r, &PATH, &[0.8], 19 + k as u64);
-                        }
-                        let b = film_um(&c, &idx);
-                        let off = 1.0 - total(&b) / total(&a);
-                        let bal = (before - on_canvas(&c) - lifted).abs() / before;
-                        println!("{:>6?} {wname:>5}: {:5.1}% off, {} (bal {bal:.0e})", rule, 100.0 * off, q(&b));
-                        save(&c, &format!("{sname}-{rule:?}-{wname}"));
-                    }
-                }
-                residue::set(Rule::Floor);
             }
         }
     }

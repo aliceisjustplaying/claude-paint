@@ -1,0 +1,1 @@
+# probe1: unchanged code; probe2: brushed-ground push 0.15 -> 0.3; probe3: unchanged at 1600 px ('none'), then push -> 0.9 ('M1'). Probe test (removed): bare_after_blend of parallel_brushed and Style::oil at width W, crop 400,100,560,260, margin scaled 40*W/3200; test profile.

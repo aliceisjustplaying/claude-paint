@@ -14,10 +14,12 @@ fn dir() -> PathBuf {
     d
 }
 
-/// The width the quick tests replay at (`easel run --width`). The work passes'
-/// tiles are sized in canvas units, so a narrower replay paints the same tiles
-/// on the same threads: what thread counts could change is all still there,
-/// on fewer pixels. The live width (2400 px) runs in the slow tests below.
+/// The width the quick tests replay at (`easel run --width`): smaller cases of
+/// the same invariance (one and four threads, and two runs at four, give the
+/// same picture), not the same concurrency. Tiles are mostly sized in canvas
+/// units, but their pixel margins depend on the width and rayon schedules the
+/// work dynamically. The live width (2400 px) runs in the slow tests below
+/// (`scripts/test --all`).
 const QUICK: usize = 480;
 const LIVE: usize = 2400;
 

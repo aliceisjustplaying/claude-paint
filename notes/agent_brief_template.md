@@ -17,7 +17,7 @@ below hold for every builder, whatever the task.
 
 - **Fast checks:** `scripts/test`. It builds what it needs and runs
   `notes/speed/test_lists/fast.tsv`, about 75 s once built (build about
-  20 s on top). Use it after every change.
+  20 s on top; each test step's limit is 60 s). Use it after every change.
 - **All required checks:** `scripts/test --all`
   (`notes/speed/test_lists/all.tsv`): the fast checks, the slow tests by
   exact name, the scripts' tests, the painter build and the Python tests.
@@ -37,8 +37,12 @@ below hold for every builder, whatever the task.
 - `notes/thinner/baseline/` holds small before-change results from the
   unchanged engine-3 code (af49348): six tiny scenes with their full state
   after every chunk. `scripts/tests/baseline_state.sh` (in `scripts/test`)
-  checks the engine against them field by field. Fields an engine adds must
-  be zero there.
+  checks the engine against them field by field, with `--added-zero`: an
+  added numeric field must be all zero, and an added value inside the
+  brushes', rags' or studio's text must be 0, `false`, `None` or empty. Not
+  checked: a whole added text field, and the length of an added list (its
+  elements are). The tools are protected; a stricter check is a reviewed
+  change.
 - `crates/easel/tests/old_logs/` holds tiny old-log cases with goldens from
   the same code (`scripts/tests/old_logs.sh`).
 - Expected answers are never computed by the code under test. A new or

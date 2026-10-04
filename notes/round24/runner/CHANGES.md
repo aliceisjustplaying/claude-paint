@@ -4,7 +4,10 @@ A copy of round 23's runner (its tracked files, not its `run/` data). Lane `INNS
 - Painter-facing: engine 3 (crates/paint/src/lib.rs): the rag (`rag()`, notes/easel_guide.md "The rag"); oil paint open and drying on the sources' clock (lead white workable ~13 h, touch-dry ~2 days; burnt sienna before raw sienna, the historical order); a failed chunk is put back without a rebuild from the log.
 - The brief's undo line now reads "paint over it, or lift wet paint with a rag or a brush" (was "lift wet paint off with a brush"; plan-edition-2.md D9).
 - The guide: blending lifts paint as well as moving it (measured: ~15% of a thin wet film in one pass, ~40% in three); Lua: no `math.atan2` (use `math.atan(y, x)`), `%d` needs an integer, lists and tables use braces.
-- TO SET AT LAUNCH (not yet): `BRANCH = "round-24"` (a tag on the final round-24 commit) and `BASE`/`H` = a detached checkout of that tag at ~/src/a/claude-paint-r24run.
+- The painter: `anthropic/claude-opus-5-5`, thinking high (was xhigh), pi-black.
+- `TAG = "round-24"` (PENDING: the integration owner names the tag on the final engine-3 commit at freeze), `BRANCH = TAG`, `BASE` = its detached checkout at ~/src/a/claude-paint-r24run, `H` = `BASE`'s harness. `main()` won't start (except `--dry`) unless `BASE`'s HEAD is the tag's commit with no changes to tracked files (`checkout_problems`).
+- The guide's "The rag" follows the selected rag (`6f31f79`): no stain that always stays (the last of a film comes away more and more slowly; a dry rag leaves a pale tint), the light-pressed rim, spirits working gradually.
+- Runs from ~/tmp/gallery-fcf9c110/r24/ (a copy of this folder from the tag's checkout), its data in `run/` there; the studio viewer finds its `run/studios.json` there.
 
 # Round 23: round 22.1's Inness lane, with the palette look and the fast finish
 

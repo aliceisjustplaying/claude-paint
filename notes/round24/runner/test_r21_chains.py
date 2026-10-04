@@ -1,4 +1,4 @@
-"""Tests of the round-23 runner (r21_chains.py, round 21's runner with the changes of rounds 22 to 23).
+"""Tests of the round-24 runner (r21_chains.py, round 21's runner with the changes of rounds 22 to 24).
 
     uv run --no-project --with pytest --with pillow pytest -q -p no:cacheprovider notes/round22/runner/
 """
@@ -400,9 +400,9 @@ def test_a_structured_record_reaches_the_next_studio_as_the_rendered_notes(tmp_p
     notes = (rc21.studio("T2") / "notes/studio_notes.md").read_text()
     assert notes == (rc21.HERE / "studio_notes.md").read_text() + "\n" + golden
     rec = json.loads((rd / "p1_record.json").read_text())
-    # stamped with the runner's own constants (BRANCH round-23, the commit it names in BASE), not an older round's
+    # stamped with the runner's own constants (BRANCH round-24, the commit it names in BASE), not an older round's
     assert (rec["schema"], rec["condition"], rec["round"], rec["lane"], rec["slot"], rec["medium"], rec["profile"]) == (
-        "chain-record/1", "chain-inherited, non-neutral", 23, "T", 1, "oil", "sargent")
+        "chain-record/1", "chain-inherited, non-neutral", 24, "T", 1, "oil", "sargent")
     assert rec["code"] == {"tag": rc21.BRANCH, "commit": rc21.code_commit()} and len(rec["code"]["commit"]) == 40
     assert rec["box"]["name"] == "default"
     assert rec["support"] == {"kind": "linen", "linen": [15, 13], "ground_layers": ["knife", "roller"]}
@@ -541,8 +541,8 @@ def test_dry_shows_a_structured_lane_s_reader_and_merge(tmp_path, monkeypatch):
     assert not (tmp_path / "run").exists()
 
 
-def test_the_round_and_commit_are_round_23_s(tmp_path, monkeypatch):
-    assert rc21.round_number() == 23
+def test_the_round_and_commit_are_round_24_s(tmp_path, monkeypatch):
+    assert rc21.round_number() == 24
     sha = code_repo(tmp_path / "code")
     monkeypatch.setattr(rc21, "BASE", tmp_path / "code")
     assert rc21.code_commit() == sha
@@ -611,6 +611,20 @@ def test_a_structured_lane_can_t_start_without_its_commit(tmp_path, monkeypatch)
     monkeypatch.setattr(rc21, "DRY", False)
     monkeypatch.setattr(rc21, "BASE", tmp_path / "no-checkout")
     assert any("no commit for" in w for w in rc21.preflight(["C"]))
+
+
+def test_the_runner_starts_only_from_a_clean_checkout_of_its_tag(tmp_path, monkeypatch):
+    # round 24: the export archives the tag, the harness, check and finishing run from BASE's files
+    git = lambda *a: subprocess.run(["git", "-C", str(tmp_path / "code"), *a], check=True, capture_output=True)
+    monkeypatch.setattr(rc21, "BASE", tmp_path / "no-checkout")
+    assert ["no commit for" in w for w in rc21.checkout_problems()] == [True]
+    monkeypatch.setattr(rc21, "BASE", tmp_path / "code")
+    code_repo(tmp_path / "code")
+    assert rc21.checkout_problems() == []
+    (tmp_path / "code/x").write_text("edited\n")
+    assert ["uncommitted changes" in w for w in rc21.checkout_problems()] == [True]
+    git("-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qam", "after the tag")
+    assert [f"not {rc21.BRANCH}" in w for w in rc21.checkout_problems()] == [True]
 
 
 def test_a_later_sitting_opens_with_the_recovery_sections_and_a_first_or_continued_one_doesn_t():
@@ -757,6 +771,7 @@ def test_only_a_lane_that_runs_and_gets_pictures_needs_them(tmp_path, monkeypatc
     monkeypatch.setattr(rc21.time, "sleep", lambda s: None)
     monkeypatch.setattr(rc21, "DRY", False)
     monkeypatch.setattr(rc21, "MY_LANES", None)                      # main() sets it; restored after the test
+    monkeypatch.setattr(rc21, "checkout_problems", lambda: [])         # no tag checkout here
     for only in ("TONN", "BUNT,TONN"):
         monkeypatch.setattr(sys, "argv", ["r21_chains.py", "--only", only])
         with pytest.raises(SystemExit, match="can't start: there is no folder"):

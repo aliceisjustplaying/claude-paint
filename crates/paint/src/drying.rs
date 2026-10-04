@@ -172,8 +172,13 @@ pub mod drier {
         pub const COBALT_BLUE: f32 = 2.2;
         /// Prussian blue: fast, about 2 days: 44 h (1.8: 59 h).
         pub const PRUSSIAN_BLUE: f32 = 2.4;
-        /// Raw sienna: fast, about 2 days: 45 h (1.2: 86 h).
-        pub const RAW_SIENNA: f32 = 2.3;
+        /// Burnt sienna: dries better than raw sienna, as roasting improves
+        /// sienna's drying (Field, Chromatography, rev. Salter 1869, §§50 and
+        /// 155, https://www.gutenberg.org/files/20915/20915-h/20915-h.htm):
+        /// fast, about 2 days: 45 h (1.2: 86 h). Raw sienna keeps 1.2 (86 h,
+        /// medium). Modern makers (W&N) class raw sienna fast and burnt
+        /// medium; the box follows the historical order.
+        pub const BURNT_SIENNA: f32 = 2.3;
         /// The cadmiums: medium, 2–5 days: 4.4–4.6 days (0.6: 6.5–6.9).
         pub const CADMIUM: f32 = 0.9;
         /// The ultramarines: medium, 2–5 days: 4.5 days (0.8: 5.4).
@@ -937,9 +942,14 @@ mod tests {
         at
     }
 
-    /// The tube called `name`, from whichever box has it.
-    fn tube(name: &str) -> crate::palette::Tube {
-        crate::Palette::box_names().iter().filter_map(|b| crate::Palette::named_box(b)).flat_map(|p| p.tubes).find(|t| t.name == name).unwrap_or_else(|| panic!("no tube {name:?}"))
+    /// The tube called `name`, if this build has it: a painter's build for
+    /// one box holds only that box's tubes, and one with no box feature only
+    /// the default box's (palette.rs `catalog`). The build with every box
+    /// has every tube asked for, so there the measures cover them all.
+    fn tube(name: &str) -> Option<crate::palette::Tube> {
+        let t = crate::palette::catalog().into_iter().find(|t| t.name == name);
+        assert!(t.is_some() || !cfg!(feature = "all-boxes"), "no tube {name:?} in the build with every box");
+        t
     }
 
     /// Titanium white, in no box: stiffness 0.7, drying 0.9 ("average to
@@ -962,13 +972,13 @@ mod tests {
         let rows: &[(&str, f32, f32, &str)] = &[
             ("lead white", 1.0 * D, 2.0 * D, "fast (W&N, NP, Golden); painters 1-2 days"),
             ("raw umber", 1.0 * D, 2.0 * D, "fast (W&N, NP)"),
-            ("raw sienna", 1.0 * D, 2.0 * D, "fast (W&N)"),
+            ("burnt sienna", 1.0 * D, 2.0 * D, "fast (Field/Salter 1869: roasting improves drying)"),
             ("cobalt blue", 1.0 * D, 2.0 * D, "fast (W&N)"),
             ("Prussian blue", 1.0 * D, 2.0 * D, "fast (W&N)"),
             ("yellow ochre", 2.0 * D, 5.0 * D, "medium (W&N, NP)"),
             ("red earth", 2.0 * D, 5.0 * D, "medium (W&N ochres)"),
             ("Mars red", 2.0 * D, 5.0 * D, "medium (W&N)"),
-            ("burnt sienna", 2.0 * D, 5.0 * D, "medium (W&N)"),
+            ("raw sienna", 2.0 * D, 5.0 * D, "medium (slower than burnt: Field/Salter 1869)"),
             ("cadmium red", 2.0 * D, 5.0 * D, "medium (W&N)"),
             ("deep cadmium", 2.0 * D, 5.0 * D, "medium (W&N)"),
             ("ultramarine blue", 2.0 * D, 5.0 * D, "medium (W&N)"),
@@ -980,7 +990,13 @@ mod tests {
         ];
         let table = std::env::var_os("DRYING_TABLE").is_some();
         for &(name, lo, hi, src) in rows {
-            let (stiff, d2, d3) = if name == "titanium white" { (TITANIUM.0, TITANIUM.1, TITANIUM.1) } else { let t = tube(name); (t.stiff, t.drying, t.drying_3) };
+            let (stiff, d2, d3) = if name == "titanium white" {
+                (TITANIUM.0, TITANIUM.1, TITANIUM.1)
+            } else {
+                // a tube this build doesn't have (`tube`)
+                let Some(t) = tube(name) else { continue };
+                (t.stiff, t.drying, t.drying_3)
+            };
             let at = film(STROKE, d3, stiff, 3);
             if table {
                 let r = |c: f32, d: f32, e: u32| film(c, d, stiff, e).map(|h| (h * 4.0).round() / 4.0);
@@ -993,17 +1009,39 @@ mod tests {
     }
 
     /// At equal thickness, lead white and raw umber are touch-dry before
-    /// titanium white and bone black, and alizarin is the slowest of them
-    /// (every source orders them so).
+    /// titanium white and bone black, and alizarin (permanent alizarin, rose
+    /// madder) is the slowest of them (every source orders them so). Of the
+    /// tubes this build has (`tube`): lead white and bone black are in every
+    /// box, titanium white in none.
     #[test]
     fn fast_pigments_dry_before_slow_ones() {
-        let dry = |name: &str| {
-            let (stiff, d) = if name == "titanium white" { TITANIUM } else { let t = tube(name); (t.stiff, t.drying_3) };
-            film(STROKE, d, stiff, 3)[2]
-        };
-        let [lead, umber, titanium, black, alizarin] = ["lead white", "raw umber", "titanium white", "bone black", "permanent alizarin"].map(dry);
-        assert!(lead.max(umber) < titanium.min(black), "lead white {lead} h, raw umber {umber} h before titanium white {titanium} h, bone black {black} h");
-        assert!(alizarin > titanium.max(black), "alizarin {alizarin} h is the slowest");
+        fn dry(name: &'static str) -> Option<(&'static str, f32)> {
+            let (stiff, d) = if name == "titanium white" {
+                TITANIUM
+            } else {
+                let t = tube(name)?;
+                (t.stiff, t.drying_3)
+            };
+            Some((name, film(STROKE, d, stiff, 3)[2]))
+        }
+        let of = |names: &[&'static str]| names.iter().filter_map(|&n| dry(n)).collect::<Vec<_>>();
+        let (fast, medium, slow) = (of(&["lead white", "raw umber"]), of(&["titanium white", "bone black"]), of(&["permanent alizarin", "rose madder"]));
+        assert!(fast.iter().any(|f| f.0 == "lead white") && medium.len() == 2);
+        let first = |v: &[(&str, f32)]| v.iter().map(|x| x.1).fold(f32::MAX, f32::min);
+        let last = |v: &[(&str, f32)]| v.iter().map(|x| x.1).fold(f32::MIN, f32::max);
+        assert!(last(&fast) < first(&medium), "{fast:?} before {medium:?}");
+        if !slow.is_empty() {
+            assert!(first(&slow) > last(&medium), "{slow:?} the slowest, after {medium:?}");
+        }
+    }
+
+    /// Roasting improves sienna's drying (Field/Salter 1869, §§50 and 155):
+    /// in engine 3 burnt sienna is touch-dry before raw sienna.
+    #[test]
+    fn burnt_sienna_dries_before_raw_sienna() {
+        let (Some(raw), Some(burnt)) = (tube("raw sienna"), tube("burnt sienna")) else { return };
+        let (r, b) = (film(STROKE, raw.drying_3, raw.stiff, 3)[2], film(STROKE, burnt.drying_3, burnt.stiff, 3)[2]);
+        assert!(b < r, "burnt sienna touch-dry {b} min, raw sienna {r} min");
     }
 
     /// Golden's titanium white was touch-dry by day 2 at 3 mil and at 4–6

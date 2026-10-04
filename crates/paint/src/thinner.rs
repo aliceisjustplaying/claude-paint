@@ -51,8 +51,8 @@
 //!   the publisher dates it July 1963, https://doi.org/10.1007/BF03184629,
 //!   while some secondary sources give 1962; notes/research/oil_paint_physics.md).
 //!   The engine uses a diffusion of the wet surface with one mobility, the
-//!   ESTIMATE `SPREAD_MM2_MIN` at thinner 0.5, that leaves a wetting film
-//!   (`WET_FILM_UM`) where it runs off. Matching Orchard's decay at one
+//!   ESTIMATE `SPREAD_MM2_MIN` at thinner 0.5, slowed in a thin film as
+//!   Orchard's h³ says (`thin_film`, `THIN_FILM_UM`). Matching Orchard's decay at one
 //!   wavelength, D = σh³(2π/λ)² / 3η, with these inputs, all ESTIMATES
 //!   (none measured for this paint): surface tension σ = 0.03 N/m, film
 //!   h = 10 µm, viscosity η = 0.1 Pa·s (paint thinned half; the note gives
@@ -110,11 +110,27 @@ pub fn evaporation_tau_min(paint_um: f32) -> f64 {
 /// Mobility (mm²/min) of a wet film half solvent: how fast it levels.
 /// ESTIMATE (Orchard 1963, see the module notes).
 pub const SPREAD_MM2_MIN: f32 = 0.06;
-/// The flow doesn't drain a pixel below this much liquid (µm): a liquid
-/// that wets the paint under it leaves a film on the weave's tops, it
-/// doesn't run off them bare (Orchard's leveling rate goes as the film's
-/// thickness cubed, so the last of a film barely moves). ESTIMATE.
-pub const WET_FILM_UM: f32 = 2.0;
+/// The liquid (paint + solvent, µm) at which a film keeps half its
+/// mobility (`thin_film`). ESTIMATE, chosen, not measured: equal to the
+/// hard floor it replaces (`WET_FILM_UM` until engine-3 Lane B, 2026-10-04),
+/// so a film of 5 µm or more keeps at least 94% of the mobility it had.
+pub const THIN_FILM_UM: f32 = 2.0;
+
+/// The share of its mobility a film of `h_um` liquid (paint + solvent, µm)
+/// keeps: h³ / (h³ + `THIN_FILM_UM`³). Orchard's leveling rate goes as the
+/// film's thickness cubed (σh³/3η, module notes), so below `THIN_FILM_UM`
+/// the film slows as h³ and the last of it barely moves, but no thickness
+/// stops it outright (the hard floor this replaces stopped all outflow at or
+/// below 2 µm of liquid, so one stroke at thinner 0.75 or more never
+/// flowed: REVIEW_RESPONSE §3). Bounded: never above 1, so a thick film
+/// keeps the mobility `SPREAD_MM2_MIN` was estimated for (at 10 µm, 0.992)
+/// and the flow never runs faster than it did. The saturating form and its
+/// half point are ESTIMATES; only the h³ of a thin film comes from Orchard.
+#[inline]
+pub fn thin_film(h_um: f32) -> f32 {
+    let h3 = if h_um.is_finite() { h_um.max(0.0).powi(3) } else { 0.0 };
+    h3 / (h3 + THIN_FILM_UM.powi(3))
+}
 
 /// Mobility of a film whose liquid holds the share `phi` of solvent: 0
 /// without solvent, `SPREAD_MM2_MIN` at one half, more the thinner it is
@@ -177,11 +193,14 @@ use crate::surface::COAT_UM;
 use crate::wet::{Latent, Prop};
 use rayon::prelude::*;
 
-/// Most substeps of the flow in one step of the clock; past it the flow
+/// Most substeps of the flow in one call of `spread`; past it the flow
 /// is slowed to stay stable (a film that thin and that fine-grained flows a
-/// little less far per minute than its mobility says). A chosen numerical
-/// cutoff, not a physical constant, as are `MAX_OUT` and the explicit
-/// scheme's stability factor 0.2 in `spread`.
+/// little less far per minute than its mobility says). On the
+/// 1/64-minute grid it binds only above
+/// 819 dx² mm²/min (dx the pixel in mm): 27.5 at 2400 px across 440 mm,
+/// 1.1 at 12000 px, against 1.14 at the most solvent. A chosen numerical cutoff, not
+/// a physical constant, as are `MAX_OUT` and the explicit scheme's
+/// stability factor 0.2 in `spread`.
 const MAX_SUBSTEPS: usize = 64;
 /// Most of a pixel's liquid that can leave it in one substep. A chosen
 /// numerical cutoff.
@@ -217,13 +236,29 @@ impl Canvas {
     /// Solvent-wet paint flows for `dt` minutes: the wet surface (relief +
     /// paint + solvent) levels by diffusion, each pixel's liquid running to
     /// lower neighbors at its own mobility (`spread_mm2_min` of its solvent
-    /// share, slowed as its oil approaches the gel point, `drying::fluid`).
-    /// What moves carries the paint (pigment, scattering, stiffness, drying
-    /// rate, cure) and the solvent of the pixel it leaves, in their
-    /// proportions there; paint without solvent doesn't flow out. Each
-    /// substep computes every pixel's outflow from the state before it,
-    /// then every pixel gathers its inflow: the result doesn't depend on
-    /// the order pixels are visited in (or the threads).
+    /// share, slowed as its oil approaches the gel point, `drying::fluid`,
+    /// and in a thin film, `thin_film`). What moves carries the paint
+    /// (pigment, scattering, stiffness, drying rate, cure) and the solvent
+    /// of the pixel it leaves, in their proportions there; paint without
+    /// solvent doesn't flow out. Each substep computes every pixel's outflow
+    /// from the state before it, then every pixel gathers its inflow: the
+    /// result doesn't depend on the order pixels are visited in (or the
+    /// threads). A pixel gives at most `MAX_OUT` of its liquid a substep, so
+    /// none goes below zero; what one gives another gains.
+    ///
+    /// The substeps: the explicit scheme is stable while a substep moves at
+    /// most 0.2 of a pixel's difference to a neighbor (mobility × minutes /
+    /// pixel² ≤ 0.2). The largest mobility in the region sets that, and the
+    /// flow changes it (a thin film that receives liquid thickens and speeds
+    /// up; mixing changes the solvent share), so it is found afresh before
+    /// every substep and the time left is split into as many equal substeps
+    /// as it then needs. With an unchanging mobility that is the even split
+    /// of `dt` the flow always used.
+    ///
+    /// The paint keeps the cure it had where it came from, mixed by amount,
+    /// at any thickness (`Canvas::wait_on_grid` dries it over the whole
+    /// step); a bare pixel it reaches takes the drying thickness of the
+    /// films it came from too.
     pub(crate) fn spread(&mut self, dt: f32) {
         let Some((bx0, by0, bx1, by1)) = self.wet.dirty else { return };
         let (w, h) = (self.f.w, self.f.h);
@@ -231,21 +266,22 @@ impl Canvas {
         let timed = self.wet.clock.px.len() == w * h;
         // the mobility (mm²/min) of each pixel in the dirty box
         // (the canvas holds solvent in µm; the flow works in coats)
-        let mob = |wet: &crate::wet::Wet, i: usize| -> f32 {
-            let (v, s) = (wet.vol[i], wet.solv[i] / COAT_UM);
+        // (of paint `v` and solvent `s`, coats, at cure `cure`)
+        let mob_of = |v: f32, s: f32, cure: f32| -> f32 {
             if s <= 0.0 || v + s <= 0.0 {
                 return 0.0;
             }
-            let fl = if timed { crate::drying::fluid(wet.clock.px[i].cure) } else { 1.0 };
-            spread_mm2_min(s / (v + s)) * fl
+            let fl = if timed { crate::drying::fluid(cure) } else { 1.0 };
+            spread_mm2_min(s / (v + s)) * fl * thin_film((v + s) * COAT_UM)
         };
+        let mob = |wet: &crate::wet::Wet, i: usize| -> f32 { mob_of(wet.vol[i], wet.solv[i] / COAT_UM, if timed { wet.clock.px[i].cure } else { 0.0 }) };
         // the largest mobility, and the box of the pixels that have any
         // (only they can give liquid; each substep reaches one pixel further)
         let wet = &self.wet;
         type Acc = (f32, usize, usize, usize, usize);
         let none: Acc = (0.0, usize::MAX, usize::MAX, 0, 0);
         let join = |a: Acc, b: Acc| (a.0.max(b.0), a.1.min(b.1), a.2.min(b.2), a.3.max(b.3), a.4.max(b.4));
-        let (m_max, ax0, ay0, ax1, ay1) = (by0..by1.min(h))
+        let (m0, ax0, ay0, ax1, ay1) = (by0..by1.min(h))
             .into_par_iter()
             .map(|y| {
                 (bx0..bx1.min(w)).fold(none, |a, x| {
@@ -254,17 +290,24 @@ impl Canvas {
                 })
             })
             .reduce(|| none, join);
-        if m_max <= 0.0 {
+        if m0 <= 0.0 || dt <= 0.0 {
             return;
         }
-        let r_total = m_max * dt / (dx * dx);
-        let n = ((r_total / 0.2).ceil() as usize).clamp(1, MAX_SUBSTEPS);
-        // the flow's rate per substep, per mm²/min of mobility
-        let k = (dt / n as f32 / (dx * dx)).min(0.2 / m_max.max(1e-12));
+        let px2 = dx * dx;
         let (mut x0, mut y0, mut x1, mut y1) = (ax0, ay0, ax1, ay1);
         // the box of the pixels the flow changed
         let mut moved: Option<(usize, usize, usize, usize)> = None;
-        for _ in 0..n {
+        let mut m_max = m0;
+        let mut left = dt;
+        let mut used = 0;
+        while left > 0.0 && m_max > 0.0 && used < MAX_SUBSTEPS {
+            // the substeps the time left needs at today's largest mobility,
+            // each as long as the rest; if the cap would cut them short,
+            // the longest stable substep (and the time past the cap is lost)
+            let need = ((m_max * left / px2) / 0.2).ceil().max(1.0);
+            let sub = if need > (MAX_SUBSTEPS - used) as f32 { 0.2 * px2 / m_max } else { left / need };
+            // the flow's rate this substep, per mm²/min of mobility
+            let k = sub / px2;
             // liquid can reach one pixel further each substep
             (x0, y0, x1, y1) = (x0.saturating_sub(1), y0.saturating_sub(1), (x1 + 1).min(w), (y1 + 1).min(h));
             let (rw, rh) = (x1 - x0, y1 - y0);
@@ -296,10 +339,8 @@ impl Canvas {
                             }
                         }
                     }
-                    // (down to the wetting film, no further)
-                    let avail = (l - WET_FILM_UM / COAT_UM).max(0.0);
-                    if sum > MAX_OUT * avail {
-                        let f = if sum > 0.0 { MAX_OUT * avail / sum } else { 0.0 };
+                    if sum > MAX_OUT * l {
+                        let f = MAX_OUT * l / sum;
                         for v in &mut q {
                             *v *= f;
                         }
@@ -308,13 +349,19 @@ impl Canvas {
                 })
                 .collect();
             if out.iter().all(|q| q.iter().all(|&v| v <= 0.0)) {
+                // level: the rest of the time moves nothing either
                 break;
             }
+            used += 1;
+            left -= sub;
             // pass 2: each pixel keeps what didn't leave and gathers what came
             // in, each part with the paint and solvent of where it came from
             let cure_of = |i: usize| if timed { wet.clock.px[i].cure } else { 0.0 };
+            let th_of = |i: usize| if timed { wet.clock.px[i].th } else { 0.0 };
             let at = |x: usize, y: usize| (y - y0) * rw + x - x0;
-            type Cell = (f32, f32, Latent, Prop, f32, bool);
+            // (and the mobility it then has, for the next substep's length,
+            // and the drying thickness of the paint that came in)
+            type Cell = (f32, f32, Latent, Prop, f32, bool, f32, f32);
             let next: Vec<Cell> = (0..rw * rh)
                 .into_par_iter()
                 .map(|k2| {
@@ -326,6 +373,7 @@ impl Canvas {
                     let keep = if l > 0.0 { ((l - gone) / l).max(0.0) } else { 0.0 };
                     let (mut pv, mut ps, mut lat, mut hide, mut cure) = (v * keep, s * keep, wet.lat[i], wet.hide[i], cure_of(i));
                     let mut changed = gone > 0.0;
+                    let (mut qin, mut thin) = (0.0f32, 0.0f32);
                     // from the left neighbor (its rightward flow), the right
                     // (leftward), above (downward), below (upward)
                     let from = [(x > 0 && x > x0).then(|| (x - 1, y, 1usize)), (x + 1 < x1).then(|| (x + 1, y, 0usize)), (y > 0 && y > y0).then(|| (x, y - 1, 3usize)), (y + 1 < y1).then(|| (x, y + 1, 2usize))];
@@ -342,18 +390,28 @@ impl Canvas {
                         }
                         let (qp, qs) = (q * wet.vol[j] / lj, q * (wet.solv[j] / COAT_UM) / lj);
                         if qp > 0.0 {
+                            qin += qp;
+                            thin += qp * th_of(j);
                             cure = if pv + qp > 0.0 { cure + (cure_of(j) - cure) * qp / (pv + qp) } else { cure };
                             crate::wet::mix_into(&mut pv, &mut lat, &mut hide, qp, &wet.lat[j], wet.hide[j]);
                         }
                         ps += qs;
                         changed = true;
                     }
-                    (pv, ps, lat, hide, cure, changed)
+                    let cure = if pv <= 0.0 { 0.0 } else { cure };
+                    // (the drying thickness a bare pixel takes, by amount)
+                    let own = th_of(i);
+                    let th_in = if qin <= 0.0 { own } else if own > 0.0 && v * keep > 0.0 { (own * v * keep + thin) / (v * keep + qin) } else { thin / qin };
+                    (pv, ps, lat, hide, cure, changed, mob_of(pv, ps, cure), th_in)
                 })
                 .collect();
+            // the largest mobility now: every pixel that has any is in the
+            // region (the next substep reaches one pixel further, where
+            // nothing has any yet)
+            m_max = next.par_iter().map(|c| c.6).reduce(|| 0.0, f32::max);
             // write back
             let px_ok = timed;
-            for (k2, (pv, ps, lat, hide, cure, changed)) in next.into_iter().enumerate() {
+            for (k2, (pv, ps, lat, hide, cure, changed, _, th_in)) in next.into_iter().enumerate() {
                 if !changed {
                     continue;
                 }
@@ -373,12 +431,20 @@ impl Canvas {
                 }
                 if px_ok {
                     let p = &mut self.wet.clock.px[i];
-                    p.cure = if pv < 1e-5 { 0.0 } else { cure };
+                    p.cure = cure;
                     // the flow isn't a brush working the film: the film keeps
-                    // its own drying (its thickness is judged afresh only if
-                    // it was bare)
+                    // its own drying. A bare pixel it reaches takes the
+                    // drying thickness of the films it came from (when they
+                    // have one; else it is judged at the next drying step,
+                    // as a bare pixel's always was), so its drying doesn't
+                    // depend on when that step falls (`wait_on_grid`)
                     if !was_bare {
                         p.seen = pv;
+                    } else if th_in > 0.0 {
+                        p.th = th_in;
+                        if pv >= 1e-5 {
+                            (p.seen, p.lev) = (pv, crate::surface::SET_TIME * crate::drying::fluid(cure));
+                        }
                     }
                 }
             }

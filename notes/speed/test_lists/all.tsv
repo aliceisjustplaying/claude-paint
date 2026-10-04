@@ -11,7 +11,7 @@ cargo	slow-determinism-live-width	300	3	-	cargo test -p easel --test determinism
 cargo	painter-build-inness	300	14	-	cargo test -p easel --no-default-features --features box-inness
 script	box-features	600	14	^box_features: .*: (\d+ passed|refused)$	BOX_FEATURES_PROFILE=test scripts/tests/box_features.sh
 script	lockrun	120	17	^ok \d+ -	scripts/tests/lockrun.sh
-script	safeguards	180	51	^ok \d+ -	scripts/tests/safeguards.sh
+script	safeguards	180	53	^ok \d+ -	scripts/tests/safeguards.sh
 script	replay-env	120	1	^replay_env: check_painting, finish_painting and replay_clip replayed	scripts/tests/replay_env.sh
 script	check-live	180	1	^check_live: check_painting passed	scripts/tests/check_live.sh
 script	replay-clip	120	1	^replay_clip test: 	scripts/tests/replay_clip.sh

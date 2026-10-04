@@ -166,12 +166,17 @@ def summary_problems(summary):
             p.append("step %s exited %r" % (name, s.get("exit")))
         if s.get("timed_out") is not False:
             p.append("step %s timed out (timed_out=%r)" % (name, s.get("timed_out")))
+        if s.get("failed") != 0 or not _int(s.get("failed")):
+            p.append("step %s has failures (failed=%r)" % (name, s.get("failed")))
+        # a build step (scripts/test kind "build") has no tests; every other step must run some
+        if s.get("kind") == "build":
+            continue
         if not _int(s.get("tests_run")) or s["tests_run"] < 1:
             p.append("step %s ran no tests (tests_run=%r)" % (name, s.get("tests_run")))
         if not _int(s.get("passed")) or s["passed"] < 1:
             p.append("step %s passed no tests (passed=%r)" % (name, s.get("passed")))
-        if s.get("failed") != 0 or not _int(s.get("failed")):
-            p.append("step %s has failures (failed=%r)" % (name, s.get("failed")))
+    if not any(isinstance(s, dict) and s.get("kind") != "build" for s in steps):
+        p.append("summary has only build steps: no tests ran")
     return p
 
 

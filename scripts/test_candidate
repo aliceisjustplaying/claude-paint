@@ -18,7 +18,8 @@
   scripts/lockrun, else ~/src/a/claude-paint-tools/lockrun.
 - Pass needs all of: exit 0; a summary that parses with mode "all", verdict
   "pass", a list_sha256, at least one step, and every step exit 0,
-  timed_out false, tests_run >= 1, passed >= 1, failed 0; every step's log
+  timed_out false, failed 0, and tests_run >= 1 and passed >= 1 unless its
+  kind is "build" (at least one step must not be a build); every step's log
   present with the sha256 the summary claims; and the test list file in the
   commit (summary field "list", or --list-file, or $TEST_LIST_FILE) hashing to
   the summary's list_sha256. A timeout, cancellation or busy lock is
@@ -283,7 +284,9 @@ def main():
 
     receipt_root = os.environ.get("TEST_RECEIPT_DIR") or os.path.expanduser("~/src/a/claude-paint-receipts")
     receipt_dir = os.path.join(receipt_root, sha, time.strftime("%Y%m%dT%H%M%S") + "-%d" % os.getpid())
-    tmp = tempfile.mkdtemp(prefix="claude-paint-candidate-")
+    # under /tmp, not a deep $TMPDIR: the easel's tests bind Unix sockets under the build
+    # dir's tmp/, and macOS refuses socket paths of 104 bytes or more
+    tmp = tempfile.mkdtemp(prefix="cpc.", dir="/tmp")
     wt = os.path.join(tmp, "wt")
     summary_path = os.path.join(tmp, "summary.json")
     say("temporary working copy: %s" % wt)

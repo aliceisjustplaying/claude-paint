@@ -164,3 +164,37 @@ left open.
    weakened.
 
 I disagree with none of R1-R15.
+
+## Round 3 (review round 2: APPROVE WITH REQUIRED CHANGES, B1, B2, S1)
+
+**Tests commit: b2a0e14**, on top of 4e0cf98. The review is
+`~/src/a/claude-paint-reviews/thinner-tests-review-astra-r2.md`. The
+protected baseline and dumper are still untouched since a97c3a6.
+
+| item | change | where (at b2a0e14) |
+|---|---|---|
+| B1 | The runner accepts 13 (b)'s failure only at its ordering assertion. The log must hold `panicked at crates/paint/tests/thinner_pigments.rs:119:` and `Field/Salter (§155) has burnt the more transparent`. Any other failure of that test (a setup panic, another assertion) fails the run with exit 1. New self-test case: 13 (b) failing with another panic (line 116, "the strokes laid paint") must exit 1, and does | `scripts/test_thinner_acceptance:65`, `:145`; `scripts/tests/thinner_acceptance_runner.sh:100` |
+| B2 | Check 17 gains two byte-equal cases. One: from a quarter minute, `wait(0.25); wait(0.75); wait(14)` against `wait(0.25); wait(14.75)`. Two: the same after hand time (15 s in the ledger, `clock_hand_min`, the `hand_pass` → `wait` path of brushwork) put the clock on the quarter minute, asserted to be exactly 0.25 min. Binary-exact values. The existing cases stay. `scripts/tests/thinner_clock_restart_fake.py` shows a per-wait clock failing them (below) | `crates/paint/tests/thinner_physics.rs:596`, `:611`, doc `:526`; ACCEPTANCE.md check 17 |
+| S1 | Check 2 part 4, the positive control. A tiny thinned scene of the thinner's own (`crates/easel/tests/thinner/dump_solvent.lua`, 128 px: a thinned stroke from a held brush, then a rag wiped through it) must dump nonzero `wet.solvent`, a nonzero bristle `solvent` and a nonzero rag `solvent_mm3` (`thinner_dump_fields.py --nonzero`). Self-test on fake dumps: an all-zero dumper passes the field check but fails `--nonzero`; missing or wrong-shaped fields fail both | `scripts/thinner_check2:69`; `scripts/thinner_dump_fields.py:74`; `scripts/tests/thinner_dump_fields_test.py` |
+
+What ran:
+
+- **13 (b) on the real code, through lockrun:** it fails as before. The
+  log holds both strings the runner now requires (1 match each).
+- **Compile check of `thinner_physics`:** 54 errors, all missing thinner
+  API. The hand-time calls the new case uses (`set_hand_time`,
+  `tally_mut`, `clock_hand_min`) exist at af49348 and compile.
+- **Self-tests:** the runner, 16 of 16; the field checker, 6 of 6.
+- **The clock fake**, over 10,000 random (solvent, τ) pairs of one
+  pixel's f32 evaporation:
+
+  | clock model | bit-different |
+  |---|---|
+  | shared grid | 0 |
+  | restart at each wait | 7513 |
+  | one closed-form step per wait | 4529 |
+
+  So a restarting clock fails the exact cases. Spreading and cure only
+  add differences.
+
+I disagree with none of B1, B2 or S1.

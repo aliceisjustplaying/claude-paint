@@ -3,6 +3,47 @@
 Work is on local branch `rag`. This status supersedes the historical state
 in START_HERE.md and follows HANDOVER.md section 6.
 
+## Goal and done condition
+
+The current milestone is **the tools ready for an Inness painting**.
+Then run the painting, inspect how it turns out and use that evidence to
+choose what needs tweaking. This is not a requirement to finish every
+engine-3 release task or perfect the simulation before a painter uses it.
+
+Ready means the selected rag and completed thinner work run together,
+relevant correctness checks and a short save/reopen/replay smoke sequence
+pass without unexplained failures, and the Inness runner and viewer are
+configured for the exact candidate. Known limitations must be explicit;
+they are not automatically launch blockers. The scope is the specified
+mechanics and the checks needed for painting readiness.
+
+## Remaining route to the painting
+
+Use `reviews/engine3-review-response/AGENT_BRIEF_V2.md` as the technical
+scope, retaining the selected appearance rather than restarting its search.
+
+1. Resolve the preserved uncommitted thinner work below. The strict/soft
+   experiment is already removed.
+2. Complete thinner flow and finite-supply brush/canvas exchange (§4).
+   Verify elapsed-time and mixed-field behavior; the historical timing and
+   substep claims below are not proof that all review checks are satisfied.
+   Show the exact behavior-changing candidate before selecting defaults.
+3. Finish rag path consistency (§3) and check bounded pickup, dirty
+   carryover and refolding (§2) on the integrated candidate. Fix demonstrated
+   correctness defects without reopening a general cloth redesign.
+4. Address the documented sienna requirement (§5), with approval for any
+   protected changes. Keep pigment constants unchanged initially.
+5. Run relevant checks and a short connected tool/save/reopen/replay
+   sequence (§6). Distinguish known baseline/approval issues from actual
+   tool failures; do not silently waive either or make the whole release
+   process a prerequisite for an experimental painting.
+6. Freeze the candidate, configure the existing round-24 Inness runner and
+   tailnet viewer, then launch. Judge further appearance work from the
+   painting.
+
+Full release closure and the product-description refresh remain separate
+from this painting-readiness milestone (brief §6).
+
 ## Current scope and starting point
 
 - Selected rag appearance: `6f31f790`; retain these choices.
@@ -96,7 +137,7 @@ is not done. 6.1 (2)-(4) were not started.
   `~/src/a/claude-paint-r24run`, `BRANCH`/`BASE`/`H` in its
   `r21_chains.py` (lines 146-155; lane thinking is `xhigh`, line 367), a
   read of the guide's "The rag" against the new rag, and a launch with the
-  studio viewer on the tailnet. The owner wants this once 6.2 (2) is done.
+  studio viewer on the tailnet. Launch follows the painting-readiness condition above.
 - `description/` waits until after engine 3.
 
 ## Retained diagnostic probes (all `#[ignore]`)

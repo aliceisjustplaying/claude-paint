@@ -37,6 +37,50 @@ THUMB = (168, 120)  # the look-strip shows 81x58: twice that, for sharp screens
 VIEW = 1600         # the main view's copy, long side
 
 
+def palette_chips(data, names):
+    """Match look.rs chart glyphs before browser color processing or canvas protections."""
+    im = Image.open(io.BytesIO(data)).convert("RGB")
+    if im.width != 1124:
+        return None
+    px, rows = im.load(), []
+    for y in range(32, im.height):
+        white = [x for x in range(8, 532) if px[x, y] == (255, 255, 255)]
+        if not white:
+            continue
+        if rows and y - rows[-1][1] <= 16:
+            rows[-1][1] = y
+            rows[-1][2] = max(rows[-1][2], white[-1])
+        else:
+            rows.append([y, y, white[-1]])
+    glyphs = dict(zip("0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_", (
+        "75557 26227 71747 71317 55711 74717 74757 71122 75757 75717 "
+        "25755 65656 34443 65556 74647 74644 34553 55755 72227 11152 55655 44447 "
+        "57755 65555 25552 65644 25563 65655 34216 72222 55557 55552 55775 55255 55222 71247 00007"
+    ).split()))
+    signatures = {}
+    for name in names:
+        if len(name) > 66:
+            continue
+        points = [(x, y) for y in range(5) for x in range(len(name) * 4)
+                  if x % 4 < 3 and int(glyphs[name[x // 4].upper()][y]) & (4 >> (x % 4))]
+        top = min(y for _, y in points)
+        key = tuple((x, y - top) for x, y in points)
+        signatures[key] = name if key not in signatures else None
+    chips = []
+    for i, (top, bottom, right) in enumerate(rows):
+        key = tuple(((x - 10) // 2, (y - top) // 2)
+                    for y in range(top, bottom + 1, 2) for x in range(10, right + 1, 2)
+                    if px[x, y] == (255, 255, 255))
+        name = signatures.get(key)
+        if name is None:
+            return None
+        end = rows[i + 1][0] - 3 if i + 1 < len(rows) else im.height
+        y = (top - 3 + end) // 2
+        chips.append({"name": name, "thick": "#%02x%02x%02x" % px[608, y],
+                      "thin": "#%02x%02x%02x" % px[752, y]})
+    return chips or None
+
+
 def web_copies(data, thumb, view):
     """The strip's thumbnail and the view's copy of one look, as JPEGs. False if the image can't be read."""
     try:
@@ -133,6 +177,15 @@ def main():
         files = S.painter_files(p)
         st = S.stream("p:" + p, files)
         ev = st["events"]
+        names = set()
+        if Image:
+            for e in ev:
+                names.update(re.findall(r"[A-Za-z_][A-Za-z0-9_]*", e.get("code", "")))
+                if e["kind"] == "image" and re.search(r"palette (?!False)", e.get("look", "")):
+                    im = S.image(st, e["img"])
+                    chips = palette_chips(base64.b64decode(im[1]), names) if im else None
+                    if chips:
+                        e["palette"] = chips
         n = sum(len(im) for _, _, im in [(f, 0, S._cache[f]["images"]) for f in files])
         exts, web, jobs = [], [0] * n, {}
         for i in range(n):

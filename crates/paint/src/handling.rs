@@ -55,9 +55,9 @@ pub struct Handling<'a> {
     pub scale_at: Option<Field<'a, f32>>,
     /// Graded color: several piles, each with its weight across the area;
     /// every dip takes a mix of them by the weights at the stroke's center
-    /// (the brush dipped into neighboring piles on the palette). Their tubes
-    /// and medium mix as knifed (`piles_at`); `pile` gives the palette.
-    pub piles_at: Option<Vec<(crate::palette::Mixture, f32, Field<'a, f32>)>>,
+    /// (the brush dipped into neighboring piles on the palette). Their tubes,
+    /// medium and thinner mix as knifed (`piles_at`); `pile` gives the palette.
+    pub piles_at: Option<Vec<(crate::palette::Mixture, f32, f32, Field<'a, f32>)>>,
     /// Cut in the region's edges with this brush instead of clipping: body
     /// strokes stop short of the edge, then short strokes follow the outline.
     pub cut_in: Option<Tool>,
@@ -133,12 +133,13 @@ pub struct Handling<'a> {
 }
 
 /// A second pile part of the brush is dipped into after the first (see
-/// `Handling::second`): its palette and mixture, medium, load and the part of
+/// `Handling::second`): its palette and mixture, medium, thinner, load and the part of
 /// the brush it reaches.
 pub struct Second<'a> {
     pub palette: &'a Palette,
     pub pile: crate::palette::Mixture,
     pub medium: f32,
+    pub thinner: f32,
     pub load: f32,
     pub part: crate::bristle::Part,
 }
@@ -459,7 +460,7 @@ impl Canvas {
     /// pile, `Handling::piled`) and the canvas's engine is before 3.
     pub fn work_with(&mut self, piles: &mut Piles, mask: &Mask, hd: &Handling, seed: u64) {
         hd.tool.assert_valid();
-        self.assert_thinner_supported(hd.thinner > 0.0 && hd.pile.is_some(), "Canvas::work");
+        self.assert_thinner_supported((hd.thinner > 0.0 && hd.pile.is_some()) || hd.second.as_ref().is_some_and(|s| s.thinner > 0.0) || hd.piles_at.as_ref().is_some_and(|ps| ps.iter().any(|p| p.2 > 0.0)), "Canvas::work");
         if let Some(t) = &hd.cut_in {
             t.assert_valid();
         }
@@ -524,7 +525,7 @@ impl Canvas {
             let (cx, cy) = if inside || hd.cut_in.is_some() || !hd.hug {
                 (cx, cy)
             } else {
-                match hug_edge(hd, mask, (cx, cy)) {
+                match hug_edge(hd, mask, (cx, cy), hd.tool.width * scale_here(cx, cy)) {
                     Some(p) => {
                         inside = true;
                         p
@@ -546,7 +547,7 @@ impl Canvas {
                 let (ca, sa) = (a.cos(), a.sin());
                 let (nx, ny) = (-sa, ca);
                 let amp = len * 0.5;
-                let adv = hd.tool.width * 0.35;
+                let adv = stool.as_ref().unwrap_or(&hd.tool).width * 0.35;
                 (0..=hd.scrub * 2)
                     .map(|k| {
                         let s = if k % 2 == 0 { -amp } else { amp };
@@ -578,7 +579,7 @@ impl Canvas {
             }
             let pieces = if hd.scrub > 0 { vec![pts] } else { break_stroke(hd, pts, &mut rng) };
             for (kp, piece) in pieces.into_iter().enumerate() {
-                let n_knots = 2 + (len / (4.0 * hd.tool.width.max(1.0))).clamp(1.0, 4.0) as usize;
+                let n_knots = 2 + (len / (4.0 * stool.as_ref().unwrap_or(&hd.tool).width.max(1.0))).clamp(1.0, 4.0) as usize;
                 let (rect, mut plan) = finish_plan(self, hd, stool.as_ref().unwrap_or(&hd.tool), (cx, cy), piece, &mut rng);
                 if stool.is_some() {
                     plan.tool = stool.clone();
@@ -854,7 +855,7 @@ impl Canvas {
                 if p.dip.is_some() {
                     if hd.blender {
                         self.tally.wipe();
-                    } else if p.fresh && !p.sized {
+                    } else if p.fresh && !p.sized && p.dip2.is_none() {
                         self.tally.reload(1.0 / crate::tally::pace::DABS_PER_RELOAD);
                     } else {
                         piles.trip(&mut self.tally, p.want);
@@ -939,14 +940,15 @@ fn finish_plan(cv: &Canvas, hd: &Handling, tool: &Tool, c: (f32, f32), pts: Vec<
     if let Some((pal, pile0, medium0)) = &hd.pile {
         // graded color: the piles mixed by their weights here
         let graded = hd.piles_at.as_ref().and_then(|ps| {
-            let w: Vec<f32> = ps.iter().map(|p| (p.2)(c.0, c.1).max(0.0)).collect();
+            let w: Vec<f32> = ps.iter().map(|p| (p.3)(c.0, c.1).max(0.0)).collect();
             let tot: f32 = w.iter().sum();
             if tot <= 1e-6 {
                 return None;
             }
             let mut parts: Vec<(usize, f32)> = Vec::new();
             let mut med = 0.0f32;
-            for (k, (m, md, _)) in ps.iter().enumerate() {
+            let mut thinner = 0.0f32;
+            for (k, (m, md, th, _)) in ps.iter().enumerate() {
                 let wk = w[k] / tot;
                 if wk <= 0.0 {
                     continue;
@@ -959,22 +961,23 @@ fn finish_plan(cv: &Canvas, hd: &Handling, tool: &Tool, c: (f32, f32), pts: Vec<
                     }
                 }
                 med += wk * md;
+                thinner += wk * th;
             }
-            Some((pal.pile(parts), med))
+            Some((pal.pile(parts), med, thinner))
         });
-        let (pile, medium) = match &graded {
-            Some((m, md)) => (m, md),
-            None => (pile0, medium0),
+        let (pile, medium, thinner) = match &graded {
+            Some((m, md, th)) => (m, md, *th),
+            None => (pile0, medium0, hd.thinner),
         };
         // the pile on the palette, as knifed (its own mixing generator)
         let mut prng = Rng::new(rng.next_u64());
         let paint = pal.remix(pile, hd.mix_jitter, &mut prng).laid(*medium);
-        let paint = if hd.thinner > 0.0 { paint.with_thinner(hd.thinner) } else { paint };
+        let paint = if thinner > 0.0 { paint.with_thinner(thinner) } else { paint };
         let load = hd.load * load_k;
         // (its own generator, drawn only for a double-loaded brush: other passes plan as before)
         let dip2 = hd.second.as_ref().map(|s2| {
             let mut r2 = Rng::new(prng.next_u64() ^ 0x2D1F);
-            (s2.palette.remix(&s2.pile, hd.mix_jitter, &mut r2).laid(s2.medium), s2.load * load_k, s2.pile.color)
+            (s2.palette.remix(&s2.pile, hd.mix_jitter, &mut r2).laid(s2.medium).with_thinner(s2.thinner), s2.load * load_k, s2.pile.color)
         });
         return (rect, Plan { pts, pressure, fade, dip: Some(paint), load, swell: Vec::new(), passage: 0, fresh: false, id: None, want: pile.color, dip2, tool: None, sized: false });
     }
@@ -1047,11 +1050,10 @@ fn trim_inside(mask: &Mask, pts: &[(f32, f32)], c: (f32, f32), width: f32) -> Ve
 
 /// A point on the region's edge within half a brush of `c` (across the
 /// stroke direction there), nearest first; None if the region isn't there.
-fn hug_edge(hd: &Handling, mask: &Mask, c: (f32, f32)) -> Option<(f32, f32)> {
+fn hug_edge(hd: &Handling, mask: &Mask, c: (f32, f32), w: f32) -> Option<(f32, f32)> {
     let f = mask.f;
     let a = (hd.angle)(c.0.clamp(0.0, f.width()), c.1.clamp(0.0, f.height()));
     let (nx, ny) = (-a.sin(), a.cos());
-    let w = hd.tool.width;
     let at = |p: (f32, f32)| p.0 >= 0.0 && p.1 >= 0.0 && p.0 < f.width() && p.1 < f.height() && mask_at(mask, p.0, p.1) >= hd.threshold;
     // the first offset that reaches the region; unclipped, a quarter brush
     // further in (a stroke on the very edge line bows and wanders out of it;

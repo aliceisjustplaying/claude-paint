@@ -685,7 +685,7 @@ fn sized_marks_are_timed_with_their_own_brush() {
     let pal = Palette::tube_box();
     let secs = |width: f32, len: f32, scale: Option<f32>| {
         let mut c = Canvas::new(160, 1.0, [0.8; 3]);
-        let mut hd = Handling::new(Tool::filbert(width)).piled(&pal, pal.pile(vec![(10, 1.0)]), 0.0).length(len, len).coverage(1.0);
+        let mut hd = Handling::new(Tool::filbert(width)).piled(&pal, pal.pile(vec![(10, 1.0)]), 0.0).length(len, len).coverage(1.0).ruler().angle_jitter(0.0).shake(0.0);
         if let Some(k) = scale {
             hd.scale_at = Some(Box::new(move |_, _| k));
         }

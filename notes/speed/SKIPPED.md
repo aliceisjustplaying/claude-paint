@@ -83,6 +83,21 @@ dynamically. The live-width forms stay in `--all`.
 | `paint tests::diag_blend_bare_pixels` | experiment: the pixels a thin blend leaves bare | unknown |
 | `easel session::tests::real_failed_chunks` | experiment: rollback timings on real failed chunks (`EASEL_ROLLBACK_CASES`; replays the logs it names: run only on logs that aren't paintings) | unknown |
 
+### The thinner's acceptance tests: run by their own runner, not the cargo step
+
+`scripts/tests/cargo_tests.sh` (the `cargo-test` step, test profile) leaves
+out the thinner's acceptance tests: the test binaries `thinner_physics` and
+`thinner_pigments` and the easel binary's `thinner_tests::` module (27 tests,
+7 of them `#[ignore]`d slow ones). Their approved command is a release build,
+`scripts/test_thinner_acceptance` (`notes/thinner/ACCEPTANCE.md`), which
+`scripts/test` runs: `--quick` in the fast checks (60 s) and `--all`, the
+2400 px card included, in `--all` (300 s). Their release test binaries are
+built by the build step `build-thinner-release-tests`. Check 13 (b)
+(`c13_burnt_sienna_shows_the_card_at_least_as_well_as_raw_sienna`) fails
+until the user decides; the runner then exits 3 and `scripts/test` reports
+the known failure: "NOT ALL GREEN (known pre-existing failure: thinner check
+13(b), user decision)", never a pass.
+
 ### Doc examples (`ignore` code blocks)
 
 `cargo test` doesn't build them (`scripts/tests/cargo_tests.sh` runs

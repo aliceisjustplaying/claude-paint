@@ -96,7 +96,7 @@ scraped off to make room.
 `turps` thins the pile with that share of turpentine (0 to 0.9):
 `pile({{"<tube>", <parts>}, turps=0.6})`. It flows on the brush and
 evaporates as the paint is laid, so it leaves a film that much thinner, of
-the paint's own body: the lean, quick lay-in and wash. (`thinner`, above,
+the paint's own body: the lean, quick lay-in and wash. (`thinner`, below,
 is the other way to thin a pile: its solvent stays in the film for a while
 and leaves over painting time.) `oil` is what the paint is ground in: `"linseed"` (as the tubes come), `"walnut"` (dries a
 little slower) or `"poppy"` (dries much slower, yellows least).
@@ -615,12 +615,10 @@ in canvas units, not a position and width/height.
 The grid is drawn on the PNG only, never on the canvas, like the squares
 ruled over a drawing to transfer it.
 
-`look` with `palette: true` shows the palette instead of the canvas: a row
-for each pile a global holds, labeled with the global's name and the pile
-(as `print` gives it). Each row shows the pile laid thick; one thin coat
-(12 µm) and a very thin coat (4 µm) over this canvas's ground color; and
-the thin coat over a white card with a black stripe across it. It shows
-the pile's own paint, before the unevenness of a brushload. It takes no
+`look` with `palette: true` shows the palette board instead of the canvas:
+each live heap's masstone and body paint, with a smear dragged across a
+black stripe. It shows the heap's paint before the unevenness of a
+brushload. It takes no
 other option, and nothing on the canvas or the clock changes.
 
 | `look` with | shows |

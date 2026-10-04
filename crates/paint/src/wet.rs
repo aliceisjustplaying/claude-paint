@@ -306,7 +306,10 @@ impl Canvas {
                 .into_par_iter()
                 .map(|i| {
                     // (the thinnest wet film lets the surface under it show: no edge where it ends)
-                    let g = crate::lerp(self.gloss[i], 1.0, crate::smoothstep(0.0, 0.1, self.wet.vol[i]));
+                    let v = self.wet.vol[i];
+                    let cover = bead_cover(self.wet.cover[i], v, self.px_mm() * 1000.0);
+                    let gloss_share = if cover > 0.0 { cover * crate::smoothstep(0.0, 0.1, v / cover) } else { 0.0 };
+                    let g = crate::lerp(self.gloss[i], 1.0, gloss_share);
                     crate::canvas::haze(self.look_px(i), g)
                 })
                 .collect();
@@ -370,6 +373,21 @@ impl Canvas {
 
 #[cfg(test)]
 mod tests {
+
+    #[test]
+    fn a_partial_wet_mark_keeps_the_uncovered_surface_matte() {
+        let mut c = crate::Canvas::new(32, 1.0, [0.1; 3]).with_engine(4);
+        c.gloss.fill(0.0);
+        let matte = c.seen()[0][0];
+        c.wet.lat[0] = mixbox::linear_float_rgb_to_latent(&[0.1; 3]);
+        c.wet.vol[0] = 0.1;
+        c.wet.cover[0] = 1.0;
+        let full = c.seen()[0][0];
+        c.wet.cover[0] = 0.01;
+        let partial = c.seen()[0][0];
+        assert!((partial - matte).abs() < (full - matte).abs() * 0.05,
+            "1% wet coverage cannot remove the matte veil from the whole pixel: {matte}, {partial}, {full}");
+    }
 
     /// Setting a paint's hiding changes its scattering and nothing else: a
     /// slow-drying paint stays slow whichever builder comes first.

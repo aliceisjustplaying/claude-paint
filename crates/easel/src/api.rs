@@ -749,8 +749,8 @@ pub struct PileU {
 
 impl UserData for PileU {
     fn add_fields<F: mlua::UserDataFields<Self>>(f: &mut F) {
-        f.add_field_method_get("medium", |_, p| Ok(p.medium));
-        f.add_field_method_get("thinner", |_, p| Ok(p.thinner));
+        f.add_field_method_get("medium", |_, p| Ok(p.current().medium));
+        f.add_field_method_get("thinner", |_, p| Ok(p.current().thinner));
     }
     fn add_methods<M: UserDataMethods<Self>>(m: &mut M) {
         // p:add{{"tube name", parts}, ..., medium=}: knife more tube paint into this
@@ -775,16 +775,22 @@ impl UserData for PileU {
         });
         m.add_method("parts", |lua, p, ()| {
             let t = lua.create_table()?;
-            for (name, k) in &p.parts {
+            for (name, k) in &p.current().parts {
                 t.push(lua.create_sequence_from([Value::String(lua.create_string(name)?), Value::Number(*k as f64)])?)?;
             }
             Ok(t)
         });
-        m.add_meta_method(MetaMethod::ToString, |_, p, ()| Ok(p.recipe()));
+        m.add_meta_method(MetaMethod::ToString, |_, p, ()| Ok(p.current().recipe()));
     }
 }
 
 impl PileU {
+    fn current(&self) -> Self {
+        match &self.st {
+            Some(st) => resolve(st, self.clone(), None),
+            None => self.clone(),
+        }
+    }
     /// What `print(p)` shows: `pile(lead white 6, smalt 1; medium 0.2)`,
     /// and `, thinner 0.3` after the medium when the pile is thinned.
     pub fn recipe(&self) -> String {
@@ -886,11 +892,12 @@ pub(crate) fn resolve(st: &S, p: PileU, visit: Option<f32>) -> PileU {
     if !h.changed {
         return p;
     }
-    let (fr, medium, solvent, oil_rate) = (h.fractions(), h.medium, h.solvent, h.oil_rate);
+    let (fr, medium, solvent, oil_rate, thinner) = (h.fractions(), h.medium, h.solvent, h.oil_rate, h.thinner);
+    let parts = h.parts.iter().map(|&(i, v)| (s.tubes.tubes[i].name.to_string(), v * h.given_sum)).collect();
     let mut mix = s.tubes.pile(fr);
     mix.solvent = solvent;
     mix.oil_rate = oil_rate;
-    PileU { mix, medium, ..p }
+    PileU { mix, medium, parts, thinner: p.thinner.map(|_| thinner), ..p }
 }
 
 /// Tubes in parts as given, `{{"tube name", parts}, ...}`, not normalised.
@@ -1774,6 +1781,7 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
             let name = t.get::<Option<String>>("name")?;
             let given_sum: f32 = given.iter().map(|g| g.1).sum();
             let heap = st.borrow_mut().board.knife(parts.clone(), given_sum, medium, turps, oil_rate, name);
+            st.borrow_mut().board.heap_mut(heap).unwrap().thinner = thinner.unwrap_or(0.0);
             // knifing it takes the hand a while
             time::knife(&st, mix.color);
             Ok(PileU { mix, medium, thinner, parts: given, heap, st: Some(st.clone()) })
@@ -1792,7 +1800,6 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
             }
             let mut parts: Vec<(usize, f32)> = Vec::new();
             let (mut wsum, mut medium, mut solvent, mut thinner, mut oil) = (0.0f32, 0.0f32, 0.0f32, 0.0f32, 0.0f32);
-            let mut given = Vec::new();
             for e in t.sequence_values::<Table>() {
                 let e = e?;
                 let p = resolve(&st, pile_of(&e.get::<Value>(1)?, "mix")?, Some(0.35));
@@ -1811,7 +1818,6 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
                 thinner += p.thinner() * w;
                 oil += p.mix.oil_rate * w;
                 wsum += w;
-                given.extend(p.parts.iter().map(|(n, k)| (n.clone(), k * w)));
             }
             if wsum <= 0.0 {
                 return err("mix: give the heaps to knife together: mix{{p1, 1}, {p2, 0.5}}");
@@ -1819,11 +1825,13 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
             parts.iter_mut().for_each(|q| q.1 /= wsum);
             let (medium, solvent, thinner, oil) = (medium / wsum, solvent / wsum, thinner / wsum, oil / wsum);
             let tubes = st.borrow().tubes.clone();
+            let given = parts.iter().map(|&(i, v)| (tubes.tubes[i].name.to_string(), v)).collect();
             let mut mix = tubes.pile(parts.clone());
             mix.solvent = solvent;
             mix.oil_rate = oil;
             let name = t.get::<Option<String>>("name")?;
             let heap = st.borrow_mut().board.knife(parts, 1.0, medium, solvent, oil, name);
+            st.borrow_mut().board.heap_mut(heap).unwrap().thinner = thinner;
             time::knife(&st, mix.color);
             Ok(PileU { mix, medium, thinner: Some(thinner), parts: given, heap, st: Some(st.clone()) })
         })?)?;

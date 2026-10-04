@@ -10,5 +10,5 @@ local G3 = pile({{"ultramarine blue",1}, medium=0.8})
 for i, g in ipairs({G1, G2, G3}) do work(rect(30 + (i-1)*210, 30, 200, 600), {hand="glaze", pile=g, coverage=1.2, angle=math.pi/2, clip=rect(30 + (i-1)*210, 30, 200, 600)}) end
 local S = pile{{"lead white",6},{"cobalt blue",0.5},{"carmine lake",0.15}}
 -- a dry, half-empty brush of light paint dragged over the dried texture: it catches the ridges
-work(rect(680, 200, 290, 260), {hand="body", pile=S, coverage=0.9, angle=0.1, length={60,140}, load=0.25, pressure={0.15, 0.3}, tool={kind="filbert", width=16, stiffness=0.9}, clip=rect(680, 30, 290, 600)})
+work(rect(680, 200, 290, 260), {hand="scumble", pile=S, coverage=0.9, load=0.25, pressure={0.15, 0.3}, tool={kind="filbert", width=16, stiffness=0.9}, clip=rect(680, 30, 290, 600)})
 print(wait(60))

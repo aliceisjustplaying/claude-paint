@@ -84,6 +84,9 @@ pub(crate) fn install(lua: &Lua, st: S) -> Result<()> {
                 (num(o, "coats")?.unwrap_or(0.4), num(o, "vary")?.unwrap_or(0.12), o.get::<Option<u32>>("seed")?.unwrap_or(98))
             }
         };
+        if coats < 0.0 || vary < 0.0 {
+            return err("varnish: coats and vary must be nonnegative");
+        }
         // brushed over the whole canvas once it is dry
         needs_dry(&st1, "varnish")?;
         time::verb(&st1, Verb::Pass, |s| {
@@ -167,6 +170,11 @@ mod tests {
         s.run(r#"b = brush("flat", 60); b:load(pile{{"bone black",1}, blot=0.5}); b:stroke({100,500,900,500}); wait(90*24*60)"#).unwrap();
         let seen = |s: &Session| -> Vec<u32> { s.canvas().unwrap().seen().iter().flat_map(|p| p.map(f32::to_bits)).collect() };
         let before = seen(&s);
+        for options in ["coats=0, vary=-1", "coats=-2, vary=0.5"] {
+            let e = s.run(&format!("varnish{{{options}}}")).unwrap_err();
+            assert!(e.contains("must be nonnegative"), "{e}");
+            assert_eq!(before, seen(&s));
+        }
         s.run("varnish{coats=0, vary=0}").unwrap();
         assert_eq!(before, seen(&s));
         s.run("varnish()").unwrap();

@@ -40,6 +40,7 @@ pub struct Heap {
     pub medium: f32,
     pub solvent: f32,
     pub oil_rate: f32,
+    pub thinner: f32,
     /// Paint other brushes left in it: (tube, volume).
     pub dirt: Vec<(usize, f32)>,
     /// Knifed into or dirtied since it was knifed: its mixture is computed again.
@@ -113,7 +114,7 @@ impl Board {
     pub fn knife(&mut self, parts: Vec<(usize, f32)>, given_sum: f32, medium: f32, solvent: f32, oil_rate: f32, name: Option<String>) -> u64 {
         self.next_id += 1;
         let id = self.next_id;
-        let mut h = Heap { id, name, parts, given_sum, medium, solvent, oil_rate, dirt: Vec::new(), changed: false, added: false, scraped: false };
+        let mut h = Heap { id, name, parts, given_sum, medium, solvent, oil_rate, thinner: 0.0, dirt: Vec::new(), changed: false, added: false, scraped: false };
         if self.dirty > 0.0 && self.residue_amount > 0.0 {
             let v = SEEP * self.dirty * self.residue_amount;
             h.dirt = self.residue.iter().map(|&(i, f)| (i, f * v)).collect();
@@ -138,19 +139,8 @@ impl Board {
                 }
             }
         }
-        // the record of scraped heaps is kept only while something could name them
-        if self.heaps.len() > 4 * LIVE {
-            let n = self.heaps.len() - 4 * LIVE;
-            let mut k = 0;
-            self.heaps.retain(|h| {
-                if h.scraped && k < n {
-                    k += 1;
-                    false
-                } else {
-                    true
-                }
-            });
-        }
+        // Lua can retain any pile, including one scraped off long ago.
+        // Keep its recipe so a later load or add can knife it fresh again.
     }
 
     pub fn heap(&self, id: u64) -> Option<&Heap> {
@@ -160,25 +150,24 @@ impl Board {
         self.heaps.iter_mut().find(|h| h.id == id)
     }
 
+    fn reknife(&mut self, id: u64) {
+        if let Some(pos) = self.heaps.iter().position(|h| h.id == id && h.scraped) {
+            let mut h = self.heaps.remove(pos);
+            h.scraped = false;
+            h.dirt.clear();
+            h.changed = h.added;
+            self.heaps.push(h);
+            self.scrape_old();
+        }
+    }
+
     /// The hand goes to heap `id` with a brush that carries `carry` (0..1) of
     /// the last paint: on a dirty board it leaves some of that paint in the
     /// heap; the hand then carries this heap's paint, and the mixing area's
     /// smears follow it. A scraped heap is knifed again, fresh. Nothing
     /// happens on a clean board.
     pub fn visit(&mut self, id: u64, carry: f32) {
-        if let Some(h) = self.heap_mut(id)
-            && h.scraped
-        {
-            h.scraped = false;
-            // knifed again fresh: its own paint (and what was added to it), no dirt
-            h.dirt.clear();
-            h.changed = h.added;
-            // it goes back on the board as the newest heap
-            let pos = self.heaps.iter().position(|h| h.id == id).unwrap();
-            let h = self.heaps.remove(pos);
-            self.heaps.push(h);
-            self.scrape_old();
-        }
+        self.reknife(id);
         if self.dirty <= 0.0 {
             return;
         }
@@ -213,6 +202,11 @@ impl Board {
     /// Knife more tube paint into heap `id`: `add` in the heap's own parts
     /// (as its recipe was given), with the added paint's `medium` (0: from the tube).
     pub fn add(&mut self, id: u64, add: &[(usize, f32)], medium: f32) -> Result<(), String> {
+        if self.heap(id).is_none() {
+            return Err("p:add: that pile is no longer on the palette".into());
+        }
+        // An add re-knifes a scraped heap fresh, at the newest position.
+        self.reknife(id);
         let h = self.heap_mut(id).ok_or("p:add: that pile is no longer on the palette")?;
         let k = 1.0 / h.given_sum.max(1e-9);
         let before = h.volume();
@@ -226,6 +220,10 @@ impl Board {
             }
         }
         h.medium = (h.medium * before + medium * added) / (before + added).max(1e-9);
+        let retained = before / (before + added).max(1e-9);
+        h.solvent *= retained;
+        h.thinner *= retained;
+        h.oil_rate = h.oil_rate * retained + (1.0 - retained);
         h.changed = true;
         h.added = true;
         h.scraped = false;

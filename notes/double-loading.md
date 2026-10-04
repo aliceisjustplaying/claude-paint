@@ -7,7 +7,8 @@ pull through an unevenly knifed pile that leaves the hair streaked. The colors
 then come off side by side within one stroke and mingle as it goes.
 
 `Held::load_part(paint, amount, &Part)` dips only part of the brush. Each
-bristle takes `amount × full × weight` of the paint, mixed into what it
+bristle takes `amount × full × weight × variation` of the paint, where
+`variation` is the engine's usual per-bristle loading factor, mixed into what it
 already holds, as `load` does:
 
 - `side` (-1 or 1) and `share` (0..1): which edge of the wide axis goes into

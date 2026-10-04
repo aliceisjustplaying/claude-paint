@@ -7,6 +7,10 @@ notes/thinner/baseline/
 crates/paint/src/state_dump.rs
 crates/easel/src/state_dump.rs
 notes/golden_paths.txt
+# Option B goldens of the shrunk tests (decision 2): computed by af49348's
+# unchanged release easel, approved by a reviewer who isn't their builder.
+crates/easel/tests/old_logs/
+scripts/tests/old_logs.sh
 # Thinner acceptance tests, helpers and answers: the thinner agent names them
 # here (each addition needs approval like any other change to this file).
 # <thinner acceptance paths go here>

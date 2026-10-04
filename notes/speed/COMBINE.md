@@ -33,3 +33,16 @@ Checks after the merge:
   `crates/easel/src/thinner_tests.rs` (`e167e7f16bb193420b991033feb3299d0e26619897dc3ee1f1aadf3c10508f99`)
   and `crates/paint/tests/thinner_physics.rs` (`57371c2e8ddc9d5471f3ea87d623f91c48fb99264a80ebcfe85814a9f3b5cad6`).
 - Nothing of the thinner's was edited.
+
+## After the merge (phase 6)
+
+| commit | what |
+|---|---|
+| `07db3a0` | this file |
+| `1f78173` | `scripts/test`: known failures (list columns 8 to 10) and two phases |
+| `e5f2023` | lists: the thinner's acceptance checks; `cargo_tests.sh` leaves the thinner's tests to their release runner |
+| `b78605e`, `eafb6d0` | the gate (helper, `codex/gate-next`, fast-forwarded): two phases, known failures, receipt v3 |
+| `05ac82f` | `safeguards` step: least 140 (**the tested combined commit**) |
+
+No conflict anywhere, and no thinner file, production code, baseline or
+`state_dump.rs` was edited by these commits.

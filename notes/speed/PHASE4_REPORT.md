@@ -158,3 +158,83 @@ How `scripts/test` should include the acceptance checks (a proposal, not done):
   change and builds twice. Either way this changes `scripts/test` and the
   gate tools (protected): it needs review, and then the approved gate copy
   must be updated.
+
+# Phase 6: the combine (branch `engine3-overnight`, `~/src/a/claude-paint-engine3`)
+
+1. **Merge.** `thinner2` at `ffef02e`, `git merge --no-ff`: **no conflicts**
+   (`notes/speed/COMBINE.md`). Four files changed on both sides merged
+   cleanly in separate hunks. Every thinner2 file is as on thinner2 except
+   `crates/paint/src/rag.rs`, which differs only by speed's two hunks inside
+   `mod tests`. Of the 22 frozen files, 20 match the b2a0e14 hashes; two
+   (`thinner_tests.rs`, `thinner_physics.rs`) are as on thinner2's head (its
+   round-4 corrections).
+2. **The thinner's tests** are left out of the test-profile cargo step
+   (`thinner_physics`, `thinner_pigments`, `--skip thinner_tests::`), with a
+   SKIPPED.md entry naming `scripts/test_thinner_acceptance`. A build step
+   builds their release test binaries; `--quick` is in `fast.tsv` (60 s),
+   `--all` in `all.tsv` (300 s, group "s") (`e5f2023`).
+3. **Check 13 (b).** A list row can name a known failure: exit code, regex
+   and text. `thinner-quick` and `thinner-all` name exit 3 and the runner's
+   "NOT ALL GREEN ... only check 13 (b)'s pre-existing failure remains"
+   line. That outcome, with nothing else wrong, makes the verdict
+   `known_failure`: "NOT ALL GREEN (known pre-existing failure: thinner check
+   13(b), user decision)", exit 4. Any other runner exit fails
+   (`test_runner.sh` case 16: also the exit without the line, and the known
+   one beside another failure). test_candidate writes that verdict into
+   receipt v3, and merge_candidate refuses it ("NOT ALL GREEN: known
+   pre-existing failure (...): not mergeable"). safeguards.sh checks 43–46
+   and 95 cover it.
+4. **Two phases.** `scripts/test` runs the build steps, then the others, as
+   two lockrun jobs of 600 s each (case 17: the check phase doesn't run after
+   a failed build). test_candidate runs `--phase build` and `--phase check`
+   itself under the pinned lockrun. Each phase is bound to its half of the
+   list, and the checkout is checked before, between and after; both phases
+   are in one receipt (v3). The proposed new gate copy is in
+   `~/src/a/claude-paint-tools/gate-next/` (from `b78605e`; README says it's a
+   proposal; `shasum -c` OK). `gate/` is untouched (`shasum -c` OK). The
+   approved `gate/` can't test the combined commit: it doesn't read
+   10-column lists or run phases.
+5. **`rag_study.png`.** test_candidate's after-run check records it but does
+   not fail on it. The receipt's checkout evidence "after" lists
+   `?? notes/thinner/rag_study.png` as untracked, but only tracked or index
+   changes fail a run. So it is visible in every receipt, but it doesn't
+   dirty-fail the candidate.
+6. **On the combined head**, all through lockrun:
+   - `scripts/tests/old_logs.sh`: all 11 cases replay as af49348 did.
+   - `scripts/tests/baseline_state.sh` (check 2's command): all 6 scenes equal
+     af49348 in state and PNG; `scripts/thinner_check2`: **PASS**.
+   - `scripts/test` (fast, at `e5f2023`): build phase PASS (3 steps, 149 s);
+     check phase **FAIL**. cargo-test 270/270, old-logs 11, baseline 1 + 6
+     passed; `thinner-quick` exit 1: 10 of 22 required tests passed, because
+     `c16_brush_rag_and_spreading_carry_solvent_in_the_local_ratio` fails
+     (`thinner_physics.rs:552`). The runner counts every test of that cargo run
+     as not passed, plus check 13 (b)'s expected failure. `notes/thinner/RESULTS.md`
+     on thinner2 records c16 failing too (row 16, "re-review 6"): a thinner
+     implementation result, not a combine effect.
+   - **`scripts/test --all --candidate 05ac82f208363d5fc06412fc6465c2a7f4b35d29`:
+     VERDICT FAIL** (receipt v3, `git notes --ref=test-receipts show 05ac82f`;
+     files in `~/src/a/claude-paint-receipts/05ac82f…/20261004T061911-13548/`).
+     Build phase: PASS, 151.1 s of 600. Check phase: FAIL, 347.8 s of 600;
+     every step passed but `thinner-all` (exit 1, 99.0 s: 15 of 27 required
+     tests passed; c16 fails, 12 other physics tests are counted not passed
+     because their cargo run exited 101, plus check 13 (b)'s expected
+     failure). Not `known_failure`, because the runner exited 1, not 3.
+     Other check-phase times (s): cargo-test 43 to 47 (270), slow tests,
+     thin_blend and painter in group "s", box-features 96.4, safeguards 102.3
+     (140), test-runner 66.6 (17). Time per phase fits with room: build 151 s,
+     check 348 s.
+   - `golden_approve check --candidate 05ac82f --base 3379b9f` (with the
+     approved `gate/golden_approve`): **13 unapproved**:
+     - thinner: `crates/easel/src/thinner_tests.rs`,
+       `crates/paint/tests/thinner_physics.rs`, `notes/thinner/ACCEPTANCE.md`,
+       `scripts/test_thinner_acceptance`,
+       `scripts/tests/thinner_acceptance_runner.sh`;
+     - `crates/paint/src/state_dump.rs`;
+     - speed: `notes/speed/test_lists/all.tsv`, `fast.tsv`, `scripts/test`,
+       `scripts/test_candidate`, `scripts/merge_candidate`,
+       `scripts/safeguards_lib.py`, `scripts/tests/safeguards.sh`.
+
+     The three thinner files besides the two round-4 ones match their b2a0e14
+     hashes, but `thinner-tests-APPROVED.md` now names a second hash for
+     each (`357c2095…`, `7c94dfe3…`, `74043432…`), and no approval note
+     covers the blobs at ffef02e.

@@ -2,7 +2,11 @@
 # requires-python = ">=3.11"
 # dependencies = ["pillow"]
 # ///
-"""Round 23: round 22.1's lane INNS again (one Claude Opus 5.5 painter, thinking xhigh, pi-black, in Inness's
+"""Round 24: round 23's lane INNS on engine 3 (one Claude Opus 5.5 painter, thinking high, pi-black), on the code
+of one tag on the final engine-3 commit (TAG, pending until freeze), checked out detached at claude-paint-r24run
+(BASE and H); main() starts only from a clean checkout of TAG. See CHANGES.md.
+
+Round 23: round 22.1's lane INNS again (one Claude Opus 5.5 painter, thinking xhigh, pi-black, in Inness's
 studio, MAX_SITTINGS 4, the same brief), on the code of the round-23 tag: the painter's look tool has
 palette: true (each pile a global holds, thick, thin and very thin over the ground, thin over a black and white
 card; notes/easel_guide.md "Looking"), its only painter-facing change. The session writes a save file at close
@@ -148,11 +152,21 @@ BASE = A / "claude-paint-r23"
 # scripts still round 21.5's (the inness easel is built in BASE's target/studio-build)
 BRANCH = "round-22.1"
 BRANCH = "round-23"
+# round 24 (engine 3): the code, harness, guide, export, check and finishing scripts of one tag on the final
+# engine-3 commit, checked out detached at claude-paint-r24run; the export builds the inness easel in its
+# target/studio-build, check and finishing build the replay easel in its target.
+# PENDING, set by the integration owner at freeze: TAG names that tag (proposed: round-24). Before launch:
+# `git tag -a <TAG> <commit>` in the shared repo and `git worktree add --detach ~/src/a/claude-paint-r24run <TAG>`.
+# main() refuses to start while BASE isn't a clean checkout of TAG (checkout_problems).
+TAG = "round-24"
+BRANCH = TAG
+BASE = A / "claude-paint-r24run"
 EXPORT = BASE / "scripts/export_r16_studio"      # honors R16_BRANCH
 FINISH = BASE / "scripts/finish_painting"
 CHECK = BASE / "scripts/check_painting"
 H = A / "claude-paint-r21.5" / "harness/painter"
 H = A / "claude-paint-r23" / "harness/painter"     # round 23: the look tool's palette
+H = BASE / "harness/painter"                      # round 24: the tag's harness
 BLACK = HOME / ".pi/agent/git/github.com/aliceisjustplaying/pi-black/extensions/pi-black.ts"
 HERE = Path(__file__).resolve().parent
 RUN = HERE / "run"
@@ -364,7 +378,8 @@ BUNNY = model("opencode-go", "space-bunny-free", "max")
 # auth.json, as round 21's FRDC chain) in Tonn's studio without the pictures. No reader.
 LANES = {
     # round 22.1 and round 23: one Opus 5.5 painter (thinking xhigh, through the Claude subscription: pi-black) in Inness's studio
-    "INNS": lane("inness", model("anthropic", "claude-opus-5-5", "xhigh", black=True), record_kind="none"),
+    # round 24: thinking high (the owner's choice for the engine-3 painting)
+    "INNS": lane("inness", model("anthropic", "claude-opus-5-5", "high", black=True), record_kind="none"),
 }
 DRY = False
 
@@ -1420,6 +1435,22 @@ def code_commit():
     return r.stdout.strip()
 
 
+def checkout_problems():
+    """Why BASE isn't a clean checkout of BRANCH (empty if it is): the export archives BRANCH, but the
+    harness (H), the check and the finishing run from BASE's files, so they must be the same commit."""
+    try:
+        want = code_commit()
+    except RuntimeError as e:
+        return [str(e)]
+    git = lambda *a: subprocess.run(["git", "-C", str(BASE), *a], capture_output=True, text=True).stdout.strip()
+    head = git("rev-parse", "HEAD")
+    if head != want:
+        return [f"{BASE} is at {head[:12] or 'no commit'}, not {BRANCH} ({want[:12]})"]
+    if git("status", "--porcelain", "--untracked-files=no"):
+        return [f"{BASE} has uncommitted changes to tracked files"]
+    return []
+
+
 TUBE_TABLE = "| tube | pigment | hiding | stiffness | tinting strength | drying |"
 
 
@@ -1668,7 +1699,7 @@ def main():
         mixed = mixed_records(l, LANES[l].get("record_kind", "free-text"))
         if mixed:
             raise SystemExit(mixed)
-    problems = preflight(lanes)
+    problems = preflight(lanes) + ([] if DRY else checkout_problems())
     if problems:
         raise SystemExit("can't start: " + "; ".join(problems))
     MY_LANES = lanes

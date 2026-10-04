@@ -663,6 +663,10 @@ pub(crate) struct Surf {
     solv: *mut f32,
     laid: *mut f32,
     laid_id: *mut u32,
+    /// EXPERIMENT (HANDOVER 6.2 (2)): how a thinned stroke's allowance at a
+    /// pixel depends on the wet liquid already there when it first reaches
+    /// it (`crate::thinner::wet_rule`).
+    wet_rule: u8,
 }
 // SAFETY: callers only run brushes concurrently on pixel sets that cannot
 // overlap (tiles separated by more than the largest stroke extent).
@@ -712,6 +716,26 @@ impl Surf {
     /// Lift `v` coats off pixel `i`. The paint left keeps its cure; a pixel
     /// left bare (as `wait` judges it) holds no film to have one.
     #[inline]
+    /// What a thinned stroke has already used of its ceiling `cap` at pixel
+    /// `i` (coats of liquid): what it laid there, or on its first touch,
+    /// the share of the ceiling the wet liquid already there takes away
+    /// (`wet_rule`; none today).
+    #[inline]
+    unsafe fn used(&self, i: usize, id: u32, cap: f32) -> f32 {
+        unsafe {
+            if *self.laid_id.add(i) == id {
+                return *self.laid.add(i);
+            }
+            let b = *self.vol.add(i) + if self.solv.is_null() { 0.0 } else { *self.solv.add(i) / COAT_UM };
+            let allow = match self.wet_rule {
+                1 => (cap - b).max(0.0),
+                2 => cap * cap / (cap + b.max(0.0)),
+                _ => cap,
+            };
+            cap - allow
+        }
+    }
+
     unsafe fn take(&self, i: usize, v: f32) {
         unsafe {
             let vol = &mut *self.vol.add(i);
@@ -771,6 +795,7 @@ impl Canvas {
             solv: if self.wet.solv.len() == n { self.wet.solv.as_mut_ptr() } else { std::ptr::null_mut() },
             laid: if self.wet.laid.len() == n { self.wet.laid.as_mut_ptr() } else { std::ptr::null_mut() },
             laid_id: if self.wet.laid_id.len() == n { self.wet.laid_id.as_mut_ptr() } else { std::ptr::null_mut() },
+            wet_rule: crate::thinner::wet_rule(),
         }
     }
 
@@ -1530,7 +1555,7 @@ unsafe fn exchange(
                     // its hairs (crate::thinner); the rest stays on the hair
                     let mut d = dep_per_w * wt;
                     if capped {
-                        let used = if *sf.laid_id.add(i) == id { *sf.laid.add(i) } else { 0.0 };
+                        let used = sf.used(i, id, cap);
                         d = d.min((cap - used).max(0.0));
                         *sf.laid_id.add(i) = id;
                         *sf.laid.add(i) = used + d;
@@ -1598,7 +1623,7 @@ unsafe fn exchange(
                                 let vi = *sf.vol.add(i);
                                 let ms = if sol > 0.0 && vi > 0.0 { (sol * m / vi).min(sol) } else { 0.0 };
                                 let (m, ms) = if capped && j != i && m > 0.0 {
-                                    let used = if *sf.laid_id.add(j) == id { *sf.laid.add(j) } else { 0.0 };
+                                    let used = sf.used(j, id, cap);
                                     let room = (cap - used).max(0.0);
                                     let f = if m + ms > room { room / (m + ms) } else { 1.0 };
                                     *sf.laid_id.add(j) = id;

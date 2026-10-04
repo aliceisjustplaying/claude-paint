@@ -109,10 +109,10 @@ fn bad(msg: &str) -> io::Error {
 
 fn write_soak(w: &mut impl Write, s: &crate::soak::Soak) -> io::Result<()> {
     let name = s.fabric.name.as_bytes();
-    // (a name the reader would refuse is an error here, not a save that
+    // (a fabric the reader would refuse is an error here, not a save that
     // can't be opened)
-    if name.len() > crate::soak::NAME_MAX {
-        return Err(io::Error::new(io::ErrorKind::InvalidInput, format!("the fabric's name is longer than {} bytes", crate::soak::NAME_MAX)));
+    if !s.fabric.is_valid() {
+        return Err(io::Error::new(io::ErrorKind::InvalidInput, format!("the raw canvas's fabric is invalid: {:?}", s.fabric)));
     }
     put_u64(w, SOAK_MARK)?;
     put_u64(w, SOAK_V)?;
@@ -150,14 +150,13 @@ fn read_soak(r: &mut impl Read, n: usize) -> io::Result<crate::soak::Soak> {
     let seed = get_u64(r)?;
     let weave = get_all(r, n)?;
     // (a corrupt file is an error here, not a panic or NaN pixels later)
+    // a cloth of the caller's own keeps its name, spelt as it was; its
+    // numbers come from the file, as a named one's do
+    let fabric = crate::soak::Fabric { name: crate::soak::keep_name(name), color: [v[0], v[1], v[2]], cap_um: v[3], warp_bias: v[4] };
     let amp = crate::soak::WEAVE_AMP;
-    if !(v.iter().all(|x| x.is_finite()) && v[..3].iter().all(|&c| c >= 0.0) && v[3] > 0.0 && v[4] > 0.0 && t0.is_finite() && weave.iter().all(|&q| (1.0 - amp..=1.0 + amp).contains(&q))) {
+    if !(fabric.is_valid() && t0.is_finite() && weave.iter().all(|&q| (1.0 - amp..=1.0 + amp).contains(&q))) {
         return Err(bad("checkpoint soak is invalid"));
     }
-    // a cloth of the caller's own keeps its name, spelt as it was (kept
-    // for good); its numbers come from the file, as a named one's do
-    let name = crate::soak::Fabric::all().into_iter().find(|f| f.name == name).map_or_else(|| &*Box::leak(name.into_boxed_str()), |f| f.name);
-    let fabric = crate::soak::Fabric { name, color: [v[0], v[1], v[2]], cap_um: v[3], warp_bias: v[4] };
     Ok(crate::soak::Soak::new(fabric, t0, seed, weave))
 }
 
@@ -195,6 +194,10 @@ impl Canvas {
     /// Write the complete canvas state (dries nothing: wet paint stays wet)
     /// after `header`.
     pub fn write_state(&self, w: &mut impl Write, header: &str) -> io::Result<()> {
+        // (a raw canvas is engine 3's: version 10 holds version 9's bytes)
+        if self.soak.is_some() && self.engine < 3 {
+            return Err(io::Error::new(io::ErrorKind::InvalidInput, "a raw canvas is engine 3's: this one is set to an older engine"));
+        }
         w.write_all(match (self.engine >= 3, self.soak.is_some()) {
             (_, true) => MAGIC10,
             (true, false) => MAGIC9,

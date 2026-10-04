@@ -22,6 +22,7 @@ use crate::canvas::Canvas;
 use crate::color::{Rgb, hex};
 use crate::pigment::layer1;
 use rayon::prelude::*;
+use std::sync::Mutex;
 
 /// Scattering of the dry cloth through its thickness (estimate: raw cotton
 /// duck lets some light through when held up, so not much over 5).
@@ -73,6 +74,30 @@ impl Fabric {
     pub fn names() -> &'static str {
         "\"cotton duck\" or \"linen\""
     }
+    /// A cloth a raw canvas can be woven from (and a checkpoint can keep):
+    /// a name of at most `NAME_MAX` bytes, a colour of finite channels not
+    /// below 0, a positive finite pore volume and warp bias.
+    pub fn is_valid(&self) -> bool {
+        let finite = |v: f32| v.is_finite();
+        self.name.len() <= NAME_MAX && self.color.iter().all(|&c| finite(c) && c >= 0.0) && finite(self.cap_um) && self.cap_um > 0.0 && finite(self.warp_bias) && self.warp_bias > 0.0
+    }
+}
+
+/// A fabric's name read back from a checkpoint, as a `Fabric` holds it: a
+/// named cloth's own, or else one kept for good, once for each name (loading
+/// the same cloth again keeps no new copy).
+pub(crate) fn keep_name(name: String) -> &'static str {
+    static KEPT: Mutex<Vec<&'static str>> = Mutex::new(Vec::new());
+    if let Some(f) = Fabric::all().into_iter().find(|f| f.name == name) {
+        return f.name;
+    }
+    let mut kept = KEPT.lock().unwrap_or_else(|e| e.into_inner());
+    if let Some(&n) = kept.iter().find(|&&n| n == name) {
+        return n;
+    }
+    let n: &'static str = Box::leak(name.into_boxed_str());
+    kept.push(n);
+    n
 }
 
 /// The cloth of a raw canvas, per pixel of its window.
@@ -135,13 +160,15 @@ impl Soak {
 }
 
 impl Canvas {
-    /// Leave the canvas raw: no ground, the bare `fabric`. Call it on a
-    /// engine-3 canvas with no ground. Panics on a crop render (`set_crop`):
-    /// the weave is measured over the whole cloth.
+    /// Leave the canvas raw: no ground, the bare `fabric`. Call it on a bare
+    /// engine-3 canvas (no ground, no paint yet) with a valid fabric
+    /// (`Fabric::is_valid`); panics otherwise, and on a crop render
+    /// (`set_crop`): the weave is measured over the whole cloth.
     pub fn raw_canvas(&mut self, fabric: Fabric, seed: u64) {
         assert!(self.f.is_whole(), "a raw canvas is painted whole, not as a crop render: the weave is measured over the whole cloth");
         assert!(self.engine >= 3, "a raw canvas is engine 3's");
-        assert!(fabric.name.len() <= NAME_MAX, "a fabric's name is at most {NAME_MAX} bytes");
+        assert!(fabric.is_valid(), "an invalid fabric: {fabric:?}");
+        assert!(self.ground_um == 0.0 && self.film.iter().chain(&self.wet.vol).all(|&v| v == 0.0), "a raw canvas is set up bare: no ground, no paint");
         let (w, h) = (self.f.w, self.f.h);
         let n = w * h;
         // the weave's relief: thread tops scatter more than the gaps
@@ -323,10 +350,40 @@ mod tests {
             let d = load(saved(&on(40, silk))).unwrap();
             assert_eq!(d.fabric(), Some(silk));
         }
-        // a name too long to read back can't be written either
+        // and loading the same cloth again keeps no new copy of its name
+        let silk = on(40, Fabric { name: "raw silk", ..Fabric::cotton_duck() });
+        let names: Vec<&'static str> = (0..2).map(|_| load(saved(&silk)).unwrap().fabric().unwrap().name).collect();
+        assert!(std::ptr::eq(names[0], names[1]));
+        // a fabric the reader would refuse can't be written either: a name
+        // too long, a number out of range
         let mut c = on(40, Fabric::cotton_duck());
         c.soak.as_mut().unwrap().fabric.name = "a cloth with a name much longer than any checkpoint will keep for it";
         assert!(c.write_state(&mut Vec::new(), "").is_err());
+        let mut c = on(40, Fabric::cotton_duck());
+        c.soak.as_mut().unwrap().fabric.cap_um = 0.0;
+        assert!(c.write_state(&mut Vec::new(), "").is_err());
+    }
+
+    // a raw canvas is engine 3's: set to an older engine, it won't write a
+    // checkpoint it couldn't read back
+    #[test]
+    fn a_raw_canvas_on_an_older_engine_is_not_written() {
+        let c = on(40, Fabric::cotton_duck()).with_engine(2);
+        assert!(c.write_state(&mut Vec::new(), "").is_err());
+    }
+
+    #[test]
+    #[should_panic(expected = "invalid fabric")]
+    fn an_invalid_fabric_is_refused() {
+        on(40, Fabric { cap_um: f32::NAN, ..Fabric::cotton_duck() });
+    }
+
+    #[test]
+    #[should_panic(expected = "set up bare")]
+    fn a_primed_canvas_cannot_be_made_raw() {
+        let mut c = Canvas::new_window(40, 1.0, [0.8; 3], None).with_size_mm(300.0);
+        c.film[7] = 2.0;
+        c.raw_canvas(Fabric::cotton_duck(), 3);
     }
 
     #[test]
@@ -339,10 +396,6 @@ mod tests {
         };
         assert!(!refused(&|_| {}));
         assert!(refused(&|s| s.t0 = f64::NAN));
-        assert!(refused(&|s| s.fabric.cap_um = 0.0));
-        assert!(refused(&|s| s.fabric.warp_bias = -1.0));
-        assert!(refused(&|s| s.fabric.color[1] = f32::NAN));
-        assert!(refused(&|s| s.fabric.color[2] = -0.5));
         assert!(refused(&|s| s.weave[5] = f32::NAN));
         assert!(refused(&|s| s.weave[5] = 0.0));
         assert!(refused(&|s| s.weave[5] = 1.0 + 2.0 * WEAVE_AMP));
@@ -354,6 +407,14 @@ mod tests {
         let section = 8 + 8 + 8 + "cotton duck".len() + 5 * 4 + 8 + 8 + 4 * n;
         let at = b.len() - section;
         assert_eq!(&b[at..at + 8], &0x4b414f53u64.to_le_bytes());
+        // the fabric's numbers (colour, pore volume, warp bias), which the
+        // writer won't write wrong, so here they are spoilt in the file
+        let nums = at + 24 + "cotton duck".len();
+        for (k, v) in [(1, f32::NAN), (2, -0.5), (3, 0.0), (4, -1.0), (4, f32::INFINITY)] {
+            let mut bad = b.clone();
+            bad[nums + 4 * k..nums + 4 * k + 4].copy_from_slice(&v.to_le_bytes());
+            assert!(err(bad).contains("soak is invalid"), "number {k} = {v}");
+        }
         let mut e2 = b.clone();
         e2[at - 4 * n - 8..at - 4 * n].copy_from_slice(&2u64.to_le_bytes());
         assert!(err(e2).contains("engine-1 or engine-2"));

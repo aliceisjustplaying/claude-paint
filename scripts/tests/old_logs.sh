@@ -1,19 +1,20 @@
 #!/usr/bin/env bash
 # Old logs replay as they did: tiny cases in crates/easel/tests/old_logs/cases.tsv (a
 # synthetic engine-1 log, the first chunks of two engine-1 studio logs and of the six
-# legacy easel3/easel4 logs, the round 19 log at 320 px), replayed by a release easel at
+# legacy easel3/easel4 logs, a synthetic log of the legacy verbs past those chunks, the
+# round 19 log at 320 px), replayed by a release easel at
 # a small width. Each case's PNG (sha256) and per-chunk state digests (secs= dropped)
 # must equal its golden, recorded with af49348's unchanged release easel
 # (crates/easel/tests/old_logs/golden/README.md). These replace the tests that replayed
 # whole paintings (notes/speed/SKIPPED.md); no whole painting is replayed here.
 #
-#   scripts/tests/old_logs.sh [<release easel>]          (default target/release/easel)
+#   scripts/tests/old_logs.sh [<release easel>]          (default $CARGO_TARGET_DIR or target, /release/easel)
 #   scripts/tests/old_logs.sh <easel> --record <dir>     write goldens (af49348 only)
 #
-# About 3 s (four cases at a time). A heavy job: run it inside scripts/lockrun.
+# About 5 s (four cases at a time). A heavy job: run it inside scripts/lockrun.
 set -euo pipefail
 repo=$(cd "$(dirname "$0")/../.." && pwd)
-easel=${1:-$repo/target/release/easel}
+easel=${1:-${CARGO_TARGET_DIR:-$repo/target}/release/easel}
 record=
 [ "${2:-}" = --record ] && record=${3:?--record needs a directory}
 cases=$repo/crates/easel/tests/old_logs

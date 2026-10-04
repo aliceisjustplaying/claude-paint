@@ -200,10 +200,10 @@ After an event connection failure, the page can continue displaying a picture wh
 
 ## Open questions and verification
 
-- Browser behavior is source-reviewed, not manually verified here. Picker focus, narrow layouts, image fallbacks, live updates and keyboard combinations need the [verification pass](../verification/README.md).
+- Browser behavior is source-reviewed, with selected [agent-driven browser probes](../verification/evidence/browser.md). The full human pass remains incomplete; narrow layouts, image fallbacks, live updates and keyboard combinations still need the [verification pass](../verification/README.md).
 - Suspected defect: if the initial session-list request fails, initialization rejects before polling timers are installed. A transient startup failure can leave the viewer inert until reload. Cause: unhandled `loadSessions()` inside the startup `Promise.all` at `studio/index.html:824`, with the fetch at `studio/index.html:376`.
 - Suspected defect: initial event network errors and missing painters share the same “hasn't started yet” message. After data exists, failures have no disconnected state. A viewer can mistake stale activity for a healthy connection. Cause: `studio/index.html:409` and activity-only status at `studio/index.html:510`.
-- Suspected defect: Home or End in an empty picker dereferences a nonexistent card. Arrow navigation has the same empty-list boundary. Cause: `studio/index.html:365`. Exact visible impact needs a browser check.
+- Confirmed defect: Home in an empty picker raises an uncaught browser exception; see the [browser probe](../verification/evidence/browser.md#empty-picker-probe). End and arrow navigation share the source-level empty-list boundary but remain untested. Cause: `studio/index.html:365–372`.
 - The differing picker and FINISHED activity cutoffs are a product consistency question, not proof that the painter process stopped. Their definitions are at `studio/index.html:272` and `studio/index.html:700`.
 
 Source-reviewed against `../claude-paint` commit `4e525e50897807e9b5f734071dfeb330f1a393d3`; runtime verification is recorded separately in [verification](../verification/README.md).

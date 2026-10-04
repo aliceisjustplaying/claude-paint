@@ -1896,4 +1896,52 @@ mod tests {
         b.run(&format!("{CANVAS}\n-- {SKETCH_MARK} (in a chunk it is a comment)")).unwrap();
         assert!(!logged_sketch(&b.program("sketchbook")));
     }
+
+    /// A double-loaded, streaky pass paints something else than the plain
+    /// pass, and the same again in a second session; a part-loaded brush too.
+    #[test]
+    #[cfg(tube_box)]
+    fn double_loads_and_streaks_paint_and_replay() {
+        let paint = |opts: &str| {
+            let mut s = Session::new(W).unwrap();
+            s.run(CANVAS).unwrap();
+            s.run(&format!(
+                r#"p = pile{{{{"lead white", 3}}, {{"cobalt blue", 1}}}}; q = pile{{{{"vermilion", 1}}}}
+                   work(rect(100, 100, 600, 300), {{pile=p{opts}}})
+                   b = brush("flat", 12); b:load(p, 0.8); b:load(q, 0.5, {{side=1, share=0.4, streak=0.5}}); b:stroke({{{{150, 500}}, {{700, 500}}}})"#
+            ))
+            .unwrap();
+            bits(&s)
+        };
+        let double = paint(", streak=0.8, second={pile=q, load=0.4, side=1, share=0.5}");
+        assert_eq!(double, paint(", streak=0.8, second={pile=q, load=0.4, side=1, share=0.5}"));
+        assert_ne!(double, paint(""));
+        let mut s = Session::new(W).unwrap();
+        s.run(CANVAS).unwrap();
+        let e = s.run(r#"b = brush("flat", 12); b:load(pile{{"vermilion", 1}}, 0.5, {side=2})"#).unwrap_err();
+        assert!(e.contains("side is -1..1"), "{e}");
+        let e = s.run(r#"work(everywhere(), {pile=pile{{"vermilion", 1}}, second={load=0.4}})"#).unwrap_err();
+        assert!(e.contains("work second"), "{e}");
+    }
+
+    /// A gesture's points are checked before its curve is sampled (a point
+    /// that is nowhere would be sampled without end), and its pressure keeps
+    /// a press that falls between its evenly spaced knots.
+    #[test]
+    #[cfg(tube_box)]
+    fn a_gesture_checks_its_points_and_keeps_a_press() {
+        let mut s = Session::new(W).unwrap();
+        s.run(CANVAS).unwrap();
+        s.run(r#"b = brush("round", 6); b:load(pile{{"bone black", 1}}, 0.9); full0 = b:fullness()"#).unwrap();
+        for bad in ["{{100, 300}, {math.huge, 300}}", "{{100, 300}, {0/0, 300}}", "{{100, 300}, {1e9, 300}}"] {
+            let e = s.run(&format!("b:gesture({bad})")).unwrap_err();
+            assert!(e.contains("not on or near the canvas"), "{bad}: {e}");
+        }
+        let bare = bits(&s);
+        // one pressed point among 33, the others lifted: it paints
+        s.run(r#"local pts = {}; for i = 0, 32 do pts[#pts + 1] = {100 + 20 * i, 300, i == 1 and 1 or 0} end
+                  b:gesture(pts, {ramps={0, 0}})
+                  assert(b:fullness() < full0, "the pressed point laid paint")"#).unwrap();
+        assert_ne!(bare, bits(&s));
+    }
 }

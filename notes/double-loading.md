@@ -1,0 +1,40 @@
+# Double-loaded and streaky brushes
+
+A dip used to fill every bristle of a brush alike, so a stroke laid one paint
+across its whole width and changed color only where it met wet paint. Painters
+load brushes unevenly all the time: one side or corner in a second pile, or a
+pull through an unevenly knifed pile that leaves the hair streaked. The colors
+then come off side by side within one stroke and mingle as it goes.
+
+`Held::load_part(paint, amount, &Part)` dips only part of the brush. Each
+bristle takes `amount × full × weight` of the paint, mixed into what it
+already holds, as `load` does:
+
+- `side` (-1 or 1) and `share` (0..1): which edge of the wide axis goes into
+  the pile and how much of the width, with a soft margin as hairs splay.
+  `side` 0 is the whole width, whatever `share` says.
+- `streak` (0..1): bristles take paint up in bands a few bristles wide
+  (neighbors share a band, plus each bristle's own variation). The weight
+  is `(1 - streak) + streak × 3.3 n²` with `n` in 0..1, so a dip's total stays
+  about that of an even one (tested: within 20% over 40 seeds).
+
+`Part::ALL` is exactly `load` (tested), and nothing draws new randomness unless
+the options are used, so existing logs replay as before.
+
+At the easel:
+
+```lua
+b:reload(p, 0.8)
+b:load(q, 0.5, {side=1, share=0.4})     -- one side in a second pile
+b:load(w, 0.4, {streak=0.9})            -- streaks of a third
+work(m, {pile=p, streak=0.6, second={pile=q, load=0.45, side=1, share=0.45}})
+```
+
+In `work`, `streak=` makes every dip into the pile streaky and `second=` dips
+part of the brush into a second pile after it (a second trip to the palette in
+hand time). Each dip gets its own streak pattern, seeded from where its stroke
+starts.
+
+`paintings/sampler/p1_loading.lua` (the sampler's brush-loading plate) shows
+double-loaded strokes, streaky strokes, three paints on one brush and the
+same as covering passes.

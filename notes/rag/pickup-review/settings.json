@@ -1,0 +1,50 @@
+{
+  "base_commit": "4e525e50897807e9b5f734071dfeb330f1a393d3",
+  "prototype": "../material-review/prototype.patch",
+  "profile": "iter",
+  "variable": "crates/paint/src/rag.rs: LIFT",
+  "settings": {
+    "current": 4.0,
+    "half": 2.0,
+    "quarter": 1.0
+  },
+  "fixed": {
+    "pressure": 0.8,
+    "dip_dry": 0.0,
+    "dip_damp": 0.5,
+    "width_units": 100,
+    "canvas_width_px": 2400,
+    "canvas_width_mm": 440,
+    "path": [
+      [
+        300,
+        340
+      ],
+      [
+        700,
+        340
+      ]
+    ],
+    "rag_seed": 7,
+    "wipe_seed": 19,
+    "refold_between_passes": false
+  },
+  "regions_units": {
+    "core": [
+      350,
+      310,
+      650,
+      370
+    ],
+    "envelope": [
+      250,
+      280,
+      750,
+      400
+    ]
+  },
+  "source_sha256": {
+    "notes/rag/material-review/prototype.patch": "5beba032775067d62f3c638840782a54ec2523a35fe142c80c034e016f772673",
+    "notes/rag/pickup-review/render.rs": "e19c0748daf39762e67786a7b9492c125d3687ff061a3d84c640475e091b4791"
+  }
+}

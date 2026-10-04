@@ -1,0 +1,867 @@
+diff --git a/crates/easel/src/session.rs b/crates/easel/src/session.rs
+index 94f586a..4358412 100644
+--- a/crates/easel/src/session.rs
++++ b/crates/easel/src/session.rs
+@@ -196,7 +196,7 @@ impl Session {
+             (b, h)
+         }).collect();
+         let rags = s.live_rags().into_iter().map(|r| {
+-            let v = *r.borrow();
++            let v = r.borrow().clone();
+             (r, v)
+         }).collect();
+         Ok(Snap { canvas: s.canvas.clone(), style: s.style.clone(), setup: s.setup.clone(), seed: s.seed, clock: s.clock, clock0: s.clock0, hand: s.hand.clone(), view: s.view.clone(), heap, brushes, rags })
+@@ -212,7 +212,7 @@ impl Session {
+             *b.borrow_mut() = h.clone();
+         }
+         for (r, v) in &snap.rags {
+-            *r.borrow_mut() = *v;
++            *r.borrow_mut() = v.clone();
+         }
+         let mut s = self.st.borrow_mut();
+         s.canvas = snap.canvas.clone();
+diff --git a/crates/paint/src/rag.rs b/crates/paint/src/rag.rs
+index 7100d54..72ddaeb 100644
+--- a/crates/paint/src/rag.rs
++++ b/crates/paint/src/rag.rs
+@@ -18,9 +18,10 @@
+ //!
+ //! Before engine 3 the rag's paint is not laid back down: a loaded face
+ //! lifts less, it doesn't smear what it carries onto the canvas. On engine
+-//! 3 a wiping face smears a little of what it has just lifted back over
+-//! its light-pressed rim, the wipe's frayed sides and trailing end
+-//! (`SMEAR`), and that comes off its load. Paint is taken off the
++//! 3 this experiment uses a deforming cloth mesh and a persistent paint
++//! map on its active face. Wet surface paint can transfer in a later wipe
++//! or blot; absorbed and set paint stays in the cloth. Deposits come off
++//! its load. Paint is taken off the
+ //! wet layer as `bristle::Surf::take` takes it (the same three steps), and
+ //! the cloth's load is kept in the `Rag` the caller holds.
+ //!
+@@ -35,6 +36,10 @@ use crate::smoothstep;
+ use crate::surface::COAT_UM;
+ use crate::tally::{Tally, pace as hand};
+ 
++mod cloth;
++mod face;
++pub mod probe;
++
+ /// Hand time of a rag. [E]: estimates.
+ pub mod pace {
+     /// How fast a pad pressed into wet paint is dragged (mm/s): slower than
+@@ -64,7 +69,7 @@ pub const PAD_MM: f32 = 40.0;
+ /// to 0.4 of that contact) and the pad's soft edge take less. Set so one
+ /// pass lifts about half of a thin fresh sky film, as in the table in
+ /// notes/rag/README.md [E].
+-const LIFT: f32 = 4.0;
++const LIFT: f32 = 1.0;
+ /// What a blot lifts, as a share of a full pass (no drag) [E].
+ const BLOT: f32 = 0.8;
+ /// The stain: coats of film the cloth can't take, pigment caught in the
+@@ -150,9 +155,9 @@ const END_MM: f32 = 8.0;
+ const SOAK: f32 = 0.35;
+ const SMEAR: f32 = 0.2;
+ 
+-/// Paint at the cloth's surface during one wipe (engine 3, `SMEAR`):
+-/// coats × pixels, its mean color, hiding and cure.
+-#[derive(Clone, Copy, Default)]
++/// A paint pool with mean color, properties and cure. The legacy smear
++/// pool uses coats × pixels; persistent `face` cells use physical mm³.
++#[derive(Clone, Copy, Debug, Default, PartialEq)]
+ struct Pool {
+     vol: f32,
+     lat: crate::wet::Latent,
+@@ -166,7 +171,7 @@ struct Pool {
+ /// 1 dipped well, as of `wet_at`; a refold turns out a dry face, and the
+ /// spirits evaporate, `DAMP_HALF_MIN`), the fold in use, and its own
+ /// randomness (the cloth's creases).
+-#[derive(Clone, Copy, Debug, PartialEq)]
++#[derive(Clone, Debug, PartialEq)]
+ pub struct Rag {
+     pub width: f32,
+     pub load: f32,
+@@ -177,12 +182,14 @@ pub struct Rag {
+     pub wet_at: f64,
+     pub fold: u32,
+     pub seed: u64,
++    cloth: Option<cloth::Cloth>,
++    face: Option<face::Face>,
+ }
+ 
+ impl Rag {
+     /// A clean rag bunched to a pad `width` units across.
+     pub fn new(width: f32, seed: u64) -> Self {
+-        Rag { width: width.max(0.1), load: 0.0, soaked: 0.0, damp: 0.0, wet_at: 0.0, fold: 0, seed }
++        Rag { width: width.max(0.1), load: 0.0, soaked: 0.0, damp: 0.0, wet_at: 0.0, fold: 0, seed, cloth: None, face: None }
+     }
+ 
+     /// Turn a cleaner, dry face outward. No face is cleaner than the paint
+@@ -190,6 +197,8 @@ impl Rag {
+     /// the hand time in `t`.
+     pub fn refold(&mut self, t: &mut Tally) {
+         self.fold = self.fold.wrapping_add(1);
++        self.cloth = None;
++        self.face = None;
+         self.load = self.soaked.clamp(0.0, 1.0);
+         self.damp = 0.0;
+         t.secs += pace::REFOLD;
+@@ -222,7 +231,7 @@ impl Rag {
+     /// How damp the face in use is at `now_min` (`evaporate`), without
+     /// changing the rag.
+     pub fn damp_at(&self, now_min: f64) -> f32 {
+-        let mut r = *self;
++        let mut r = self.clone();
+         r.evaporate(now_min);
+         r.damp
+     }
+@@ -236,6 +245,11 @@ impl Rag {
+     fn cloth_seed(&self, s: u64) -> u64 {
+         self.seed ^ (self.fold as u64).wrapping_mul(0x9E37_79B9_7F4A_7C15) ^ s.wrapping_mul(0xD6E8_FEB8_6659_FD93)
+     }
++
++    fn press_cloth(&mut self, mmu: f32, pressure: f32, travel: [f32; 2]) -> cloth::Contact {
++        let seed = self.cloth_seed(0);
++        self.cloth.get_or_insert_with(|| cloth::Cloth::new(self.width * mmu, seed)).press(pressure, travel)
++    }
+ }
+ 
+ impl Tally {
+@@ -356,13 +370,15 @@ impl Canvas {
+     /// paint, lays back some of the previous step's surface paint (`SMEAR`),
+     /// then takes this step's lift into the pool. Lifts the open
+     /// paint and loads the rag; returns the volume lifted (mm³).
++    /// With `material`, instead transfer through persistent cloth cells;
++    /// the third tuple entry is travel as a fraction of the pad width.
+     ///
+     /// The cloth bridges between the local peaks of the surface (the ground,
+     /// set paint and the wet film on it, within `BRIDGE_MM`) and sags into
+     /// the hollows by `SAG_UM` more as it is pressed: the wet paint above
+     /// that level is in reach; below it, in the hollows of the weave and
+     /// between ridges, the fibers wick only a share (`WICK`).
+-    fn rag_contact(&mut self, rag: &mut Rag, bbox: (f32, f32, f32, f32), pressure: f32, mut pool: Option<&mut Pool>, expo: impl Fn(f32, f32) -> (f32, f32, f32)) -> f64 {
++    fn rag_contact(&mut self, rag: &mut Rag, bbox: (f32, f32, f32, f32), pressure: f32, mut pool: Option<&mut Pool>, material: Option<(&cloth::Contact, [f32; 2], f32)>, expo: impl Fn(f32, f32) -> (f32, f32, f32)) -> f64 {
+         let f = self.f;
+         let s = f.scale;
+         let r = ((bbox.0 * s).floor().max(0.0) as usize, (bbox.1 * s).floor().max(0.0) as usize, ((bbox.2 * s).ceil().max(0.0) as usize + 1).min(f.full_w), ((bbox.3 * s).ceil().max(0.0) as usize + 1).min(f.full_h));
+@@ -372,6 +388,20 @@ impl Canvas {
+         let Some((x0, y0, x1, y1)) = f.clip(r) else { return 0.0 };
+         let p = pressure.clamp(0.0, 1.0);
+         let px_mm = self.px_mm();
++        let mut probe = probe::take();
++        let volume_mm3 = px_mm * px_mm * COAT_UM / 1000.0;
++        let mut face = material.map(|_| {
++            let mut f = rag.face.take().unwrap_or_else(|| face::Face::new(rag.width * self.mm_per_unit, rag.soaked, self.now_min()));
++            f.age(self.now_min());
++            f
++        });
++        let material_mmu = self.mm_per_unit;
++        let weights = |x: f32, y: f32| {
++            material.map(|(c, center, _)| c.weights((x-center[0]) * material_mmu, (y-center[1]) * material_mmu))
++                .unwrap_or([(0, 0.0); 4])
++        };
++        let mut picked = vec![Pool::default(); if face.is_some() { cloth::CELLS } else { 0 }];
++        let mut exposure = vec![0.0f64; picked.len()];
+         // the surface (µm) and its local peaks, over the box and a bridge's
+         // reach around it
+         let rb = ((BRIDGE_MM / px_mm).round() as usize).max(1);
+@@ -397,10 +427,17 @@ impl Canvas {
+             for x in x0..x1 {
+                 let i = y * f.w + x;
+                 let v = self.wet.vol[i];
++                let (pad, c, _) = expo(f.ux(x), f.uy(y));
++                if let Some(t) = probe.as_mut() { t.contact[i] += pad * c; }
++                let material_weights = weights(f.ux(x), f.uy(y));
++                if face.is_some() {
++                    for (j, w) in material_weights {
++                        exposure[j] += (w * pad * c * px_mm * px_mm) as f64;
++                    }
++                }
+                 if v <= 1e-6 {
+                     continue;
+                 }
+-                let (pad, c, _) = expo(f.ux(x), f.uy(y));
+                 let e = pad * c;
+                 if e <= 0.0 {
+                     continue;
+@@ -416,11 +453,19 @@ impl Canvas {
+                 let avail = near + wick * (v - near);
+                 // engine 3: the cloth's contact shares out what the pad's
+                 // rate takes, so its creases show however damp it is
+-                let frac = if e3 { (1.0 - (-k * fl * pad).exp()) * c } else { 1.0 - (-k * fl * e).exp() };
++                let local = face.as_ref().map_or(1.0, |f| f.thirst(material_weights));
++                let frac = if e3 { (1.0 - (-k * local * fl * pad).exp()) * c } else { 1.0 - (-k * fl * e).exp() };
+                 // the stain: more of it where the cloth didn't reach
+                 let floor = STAIN_COATS * (2.0 - near / v);
+                 let take = (avail * frac).min(v - floor);
+                 if take > 0.0 {
++                    if let Some(t) = probe.as_mut() { t.pickup[i] += take * COAT_UM; }
++                    if face.is_some() {
++                        let cure = if timed { self.wet.clock.px[i].cure } else { 0.0 };
++                        for (j, weight) in material_weights {
++                            face::mix(&mut picked[j], take * volume_mm3 * weight, &self.wet.lat[i], &self.wet.hide[i], cure);
++                        }
++                    }
+                     if pooled {
+                         let l = &self.wet.lat[i];
+                         for q in 0..l.len() {
+@@ -444,10 +489,37 @@ impl Canvas {
+         if let Some(pl) = pool.as_deref_mut() {
+             lifted -= self.rag_smear(pl, &got, (x0, y0, x1, y1), &expo);
+         }
++        if let Some(mut dirty) = face.take() {
++            // Budget each material cell once, then distribute that budget over
++            // its actual contacts. Newly lifted paint joins after depositing,
++            // so traversal order cannot move paint from one pixel to the next.
++            let budgets = dirty.budgets(&exposure);
++            let mut deposited = vec![0.0f64; cloth::CELLS];
++            for y in y0..y1 {
++                for x in x0..x1 {
++                    let (pad, c, _) = expo(f.ux(x), f.uy(y));
++                    if pad * c <= 0.0 { continue; }
++                    for (j, weight) in weights(f.ux(x), f.uy(y)) {
++                        if exposure[j] <= 0.0 || weight <= 0.0 { continue; }
++                        let amount = (budgets[j] * (weight * pad * c * px_mm * px_mm) as f64 / exposure[j])
++                            .min((budgets[j] - deposited[j]).max(0.0));
++                        if amount <= 0.0 { continue; }
++                        let coats = (amount / volume_mm3 as f64) as f32;
++                        if let Some(t) = probe.as_mut() { t.deposit[y*f.w+x] += coats * COAT_UM; }
++                        self.rag_lay(y * f.w + x, coats, &dirty.cells[j].paint);
++                        deposited[j] += coats as f64 * volume_mm3 as f64;
++                        lifted -= coats as f64;
++                    }
++                }
++            }
++            self.wet.touch(x0, y0, x1, y1);
++            dirty.finish(&picked, &deposited, material.unwrap().2);
++            rag.face = Some(dirty);
++        }
+         let mm3 = lifted * (px_mm as f64).powi(2) * (COAT_UM as f64 / 1000.0);
+         let w_mm = (rag.width * self.mm_per_unit) as f64;
+         let cap = w_mm * w_mm * (CAP_UM as f64 / 1000.0);
+-        if pooled {
++        if pooled || material.is_some() {
+             // (a step can lay back more than it lifts)
+             rag.load = (rag.load + (mm3 / cap) as f32).clamp(0.0, 1.0);
+             rag.soaked = (rag.soaked + (mm3 / (cap * FACES as f64)) as f32).clamp(0.0, 1.0);
+@@ -455,6 +527,7 @@ impl Canvas {
+             rag.load = (rag.load + (mm3 / cap) as f32).min(1.0);
+             rag.soaked = (rag.soaked + (mm3 / (cap * FACES as f64)) as f32).min(1.0);
+         }
++        probe::put(probe);
+         mm3
+     }
+ 
+@@ -556,7 +629,9 @@ impl Canvas {
+         let e3 = self.engine >= 3;
+         let w = rag.width;
+         let r0 = 0.5 * w;
+-        let step = 0.5 * r0;
++        // A persistent contact footprint must be swept at finer spacing than
++        // the old procedural exposure; otherwise individual stamps repeat.
++        let step = if e3 { (0.5 / mmu).min(0.5 * r0) } else { 0.5 * r0 };
+         let mut pool = Pool::default();
+         let mut total = 0.0;
+         let mut s_at = 0.0f32;
+@@ -586,13 +661,29 @@ impl Canvas {
+                 let p = pr(sm / len);
+                 let (ax, ay) = (a.0 + tx * l0, a.1 + ty * l0);
+                 let sl = l1 - l0;
++                if e3 {
++                    let contact = rag.press_cloth(mmu, p, [tx * sl * mmu, ty * sl * mmu]);
++                    let cx = ax + tx * sl * 0.5 - ty * off;
++                    let cy = ay + ty * sl * 0.5 + tx * off;
++                    let radius = contact.extent() / mmu;
++                    let bbox = (cx - radius, cy - radius, cx + radius, cy + radius);
++                    total += self.rag_contact(rag, bbox, p, None, Some((&contact, [cx, cy], sl / w)), |x, y| {
++                        let (dx, dy) = (x - cx, y - cy);
++                        let c = contact.at(dx * mmu, dy * mmu);
++                        let radial = dx.hypot(dy) / radius;
++                        let pad = sl / w * (1.0 - smoothstep(0.75, 1.0, radial));
++                        let rim = smoothstep(0.55, 1.0, radial) * c;
++                        (pad, c, rim)
++                    });
++                    continue;
++                }
+                 // Bound the shifted pad, so sideways hand wander cannot be
+                 // clipped into a straight edge by the contact rectangle.
+                 let (bx, by) = if e3 { (ax - ty * off, ay + tx * off) } else { (ax, ay) };
+                 let bbox = (bx.min(bx + tx * sl) - r - 1.0, by.min(by + ty * sl) - r - 1.0, bx.max(bx + tx * sl) + r + 1.0, by.max(by + ty * sl) + r + 1.0);
+                 let s0 = s_at + l0;
+                 let pl = if e3 { Some(&mut pool) } else { None };
+-                total += self.rag_contact(rag, bbox, p, pl, |x, y| {
++                total += self.rag_contact(rag, bbox, p, pl, None, |x, y| {
+                     let (qx, qy) = (x - ax, y - ay);
+                     let sp = qx * tx + qy * ty;
+                     let d = qx * -ty + qy * tx - off;
+@@ -632,6 +723,16 @@ impl Canvas {
+     /// the volume lifted (mm³).
+     pub fn rag_blot(&mut self, rag: &mut Rag, x: f32, y: f32, pressure: f32, seed: u64) -> f64 {
+         self.tally.rag_blot();
++        if self.engine >= 3 {
++            let mmu = self.mm_per_unit;
++            let contact = rag.press_cloth(mmu, pressure, [0.0, 0.0]);
++            let radius = contact.extent() / mmu;
++            return self.rag_contact(rag, (x - radius, y - radius, x + radius, y + radius), pressure, None, Some((&contact, [x, y], BLOT)), |px, py| {
++                let (dx, dy) = (px - x, py - y);
++                let pad = BLOT * (1.0 - smoothstep(0.75, 1.0, dx.hypot(dy) / radius));
++                (pad, contact.at(dx * mmu, dy * mmu), 0.0)
++            });
++        }
+         let cs = rag.cloth_seed(seed);
+         let mmu = self.mm_per_unit;
+         let r0 = 0.5 * rag.width;
+@@ -639,7 +740,7 @@ impl Canvas {
+         let (ct, st) = (turn.cos(), turn.sin());
+         let bbox = (x - 1.2 * r0 - 1.0, y - 1.2 * r0 - 1.0, x + 1.2 * r0 + 1.0, y + 1.2 * r0 + 1.0);
+         let e3 = self.engine >= 3;
+-        self.rag_contact(rag, bbox, pressure, None, |px, py| {
++        self.rag_contact(rag, bbox, pressure, None, None, |px, py| {
+             let (qx, qy) = (px - x, py - y);
+             let d = (qx * qx + qy * qy).sqrt();
+             // an irregular outline: the bunch is lumpier than a disc
+@@ -1091,6 +1192,55 @@ mod tests {
+         }
+     }
+ 
++    /// A used face transports different colors at different material
++    /// locations into a later contact. Existing repeated-wipe conservation
++    /// checks only touch an already-painted canvas; they cannot detect a
++    /// forgotten or homogenized paint map, or paint revived after drying.
++    #[test]
++    fn a_used_face_carries_local_color_until_refolded_or_dry() {
++        let mut source = blank(240).with_engine(3);
++        let m = Mask::from_fn(source.frame(), |x, y| if (100.0..900.0).contains(&x) && (120.0..550.0).contains(&y) { 1.0 } else { 0.0 });
++        let hd = Handling::new(Tool::filbert(22.0)).color(|_, y| if y < 340.0 { hex("#ad4e22") } else { hex("#244d9b") })
++            .paint(0.95, 0.75).coverage(1.0).load(0.6).angle(|_, _| 0.0).fill(true);
++        source.work(&m, &hd, 11);
++        let volume = |c: &Canvas| c.wet.vol.iter().map(|&v| v as f64).sum::<f64>() * (c.px_mm() as f64).powi(2) * COAT_UM as f64 / 1000.0;
++        let original = volume(&source);
++        let mut rag = Rag::new(100.0, 7);
++        source.rag_blot(&mut rag, 500.0, 340.0, 0.8, 19);
++        let mut target = blank(480).with_engine(3);
++        let ground = target.clone();
++        let mut refolded = rag.clone();
++        let mut aged = rag.clone();
++        target.rag_blot(&mut rag, 500.0, 340.0, 0.8, 19);
++        assert!(volume(&target) > 1e-4, "a separate later contact deposits carried paint");
++        let cap = (rag.width * source.mm_per_unit()) as f64;
++        let held = rag.load as f64 * cap * cap * CAP_UM as f64 / 1000.0;
++        assert!((volume(&source) + volume(&target) + held - original).abs() < original * 1e-5,
++            "paint stays conserved across canvases of different pixel resolutions");
++        let f = target.window();
++        let before = ground.seen();
++        let after = target.seen();
++        let mut red_blue = [0.0f64; 2];
++        for y in 0..f.h {
++            let uy = f.uy(y);
++            if !(310.0..370.0).contains(&uy) || (uy - 340.0).abs() < 5.0 { continue; }
++            for x in 0..f.w {
++                if !(480.0..520.0).contains(&f.ux(x)) { continue; }
++                let i = y * f.w + x;
++                red_blue[usize::from(uy > 340.0)] += ((after[i][0] - before[i][0]) - (after[i][2] - before[i][2])) as f64;
++            }
++        }
++        assert!(red_blue[0] > 0.01 && red_blue[1] < -0.01, "warm/cool pickup stays spatial, got {red_blue:?}");
++        let mut clean = ground.clone();
++        refolded.refold(&mut clean.tally);
++        clean.rag_blot(&mut refolded, 500.0, 340.0, 0.8, 19);
++        assert_eq!(volume(&clean), 0.0, "refolding retires the dirty surface");
++        let mut later = ground;
++        later.wait(7.0 * 24.0 * 60.0);
++        later.rag_blot(&mut aged, 500.0, 340.0, 0.8, 19);
++        assert_eq!(volume(&later), 0.0, "set paint in the rag cannot smear again");
++    }
++
+     /// Paint past its gel point has left the wet layer: no wipe, blot or
+     /// pressure lifts any of it, and the rag comes away clean. The hand
+     /// time is still spent.
+@@ -1141,10 +1291,10 @@ mod tests {
+         assert!(r.load > 0.1);
+         // the same face again: it lifts more, but less than a clean one does
+         let mut again = c.clone();
+-        let mut loaded = r;
++        let mut loaded = r.clone();
+         again.rag_region(&mut loaded, &wipe, &RagPass { seed: 101, ..pass(0.5) });
+         let mut clean = c.clone();
+-        let mut refolded = r;
++        let mut refolded = r.clone();
+         refolded.refold(&mut clean.tally);
+         assert!(refolded.load < r.load);
+         clean.rag_region(&mut refolded, &wipe, &RagPass { seed: 101, ..pass(0.5) });
+diff --git a/crates/paint/src/rag/cloth.rs b/crates/paint/src/rag/cloth.rs
+new file mode 100644
+index 0000000..e567757
+--- /dev/null
++++ b/crates/paint/src/rag/cloth.rs
+@@ -0,0 +1,233 @@
++//! A coarse, persistent mesh for the face of a bunched rag. Positions are
++//! millimeters relative to the hand, in canvas axes; z is clearance above
++//! the canvas. Distance constraints resist stretching and bending. A soft
++//! grip pulls toward the bunched rest shape, pressure lowers that grip and
++//! surface friction holds contacting nodes back as the hand moves.
++//!
++//! This is an overdamped position-based cloth approximation, not a fabric
++//! material calibration or a self-colliding simulation of the whole rag.
++//! See https://matthias-research.github.io/pages/publications/posBasedDyn.pdf.
++
++use super::{smoothstep, vn};
++
++const N: usize = 19;
++pub(super) const CELLS: usize = N * N;
++const MAP: usize = 97;
++const ITERATIONS: usize = 8;
++// All mechanical coefficients below are visual-model estimates.
++const GRIP: f32 = 0.045;
++const STATIC_FRICTION: f32 = 0.8;
++const SLIDING_FRICTION: f32 = 0.35;
++const FIBER_MM: f32 = 0.18;
++
++#[derive(Clone, Debug, PartialEq)]
++pub(super) struct Cloth {
++    rest: Vec<[f32; 3]>,
++    pos: Vec<[f32; 3]>,
++    links: Vec<(usize, usize, f32, f32)>,
++    width: f32,
++    seed: u64,
++    travel_mm: f32,
++}
++
++pub(super) struct Contact {
++    field: Vec<f32>,
++    material: Vec<[f32; 2]>,
++    extent: f32,
++}
++
++impl Cloth {
++    pub(super) fn new(width: f32, seed: u64) -> Self {
++        let mut rest = Vec::with_capacity(N * N);
++        for y in 0..N {
++            for x in 0..N {
++                let u = 2.0 * x as f32 / (N - 1) as f32 - 1.0;
++                let v = 2.0 * y as f32 / (N - 1) as f32 - 1.0;
++                // Square-to-disk mapping keeps the grid connected. Initial
++                // bunching is seeded once per fold, never once per stroke.
++                let px = u * (1.0 - 0.5 * v * v).sqrt();
++                let py = v * (1.0 - 0.5 * u * u).sqrt();
++                let edge = 0.85 + 0.3 * vn(px * 3.0, py * 3.0, seed ^ 0x12);
++                let px = px * 0.5 * width * edge;
++                let py = py * 0.5 * width * edge;
++                let crease = 0.65 * vn(px / 3.0, py / 8.0, seed)
++                    + 0.35 * vn(px / 9.0, py / 12.0, seed ^ 0x51ED);
++                let z = 4.0 * crease + 0.7 * (u * u + v * v);
++                rest.push([px, py, z]);
++            }
++        }
++        let mut links = Vec::new();
++        for y in 0..N {
++            for x in 0..N {
++                let a = y * N + x;
++                // Neighbors resist stretch and shear. Second neighbors
++                // resist bending weakly, preserving folds without rigidity.
++                for (dx, dy, stiffness) in [(1, 0, 0.85), (0, 1, 0.85), (1, 1, 0.6), (-1, 1, 0.6), (2, 0, 0.12), (0, 2, 0.12)] {
++                    let (xx, yy) = (x as i32 + dx, y as i32 + dy);
++                    if xx < 0 || xx >= N as i32 || yy >= N as i32 { continue; }
++                    let b = yy as usize * N + xx as usize;
++                    let length = (0..3).map(|k| (rest[a][k] - rest[b][k]).powi(2)).sum::<f32>().sqrt();
++                    links.push((a, b, length, stiffness));
++                }
++            }
++        }
++        Self { pos: rest.clone(), rest, links, width, seed, travel_mm: 0.0 }
++    }
++
++    /// Advance by physical travel, independent of canvas pixel resolution.
++    /// The plane is the coarse support surface; the paint engine separately
++    /// resolves linen peaks and the solvent's reach into its hollows.
++    pub(super) fn press(&mut self, pressure: f32, travel: [f32; 2]) -> Contact {
++        let distance = travel[0].hypot(travel[1]);
++        // Hold mechanical travel per substep constant when refining paint
++        // sampling; otherwise half-sized stamps double the relaxation rate.
++        let steps = if distance > 0.0 { (distance / 0.25).ceil().max(1.0) as usize } else { 4 };
++        let motion = [travel[0] / steps as f32, travel[1] / steps as f32];
++        let depression = 0.8 + 3.0 * pressure.clamp(0.0, 1.0);
++        for _ in 0..steps {
++            self.travel_mm += distance / steps as f32;
++            // Hand motion changes the grip, not the rendered contact mask.
++            // Persist its phase across wipes; refolding creates a new grip.
++            // These amplitudes are estimates, not measured hand mechanics.
++            let phase = self.travel_mm / self.width;
++            let drift = |channel| {
++                0.65 * (2.0 * vn(phase / 1.4, channel, self.seed ^ 0x4719) - 1.0)
++                    + 0.35 * (2.0 * vn(phase / 0.45, channel, self.seed ^ 0x82AB) - 1.0)
++            };
++            let angle = 0.55 * drift(1.3);
++            let (sin, cos) = angle.sin_cos();
++            let shift = [0.09 * self.width * drift(3.7), 0.09 * self.width * drift(7.1)];
++            let tilt = [1.6 * drift(11.3), 1.6 * drift(17.9)];
++            let targets: Vec<[f32; 3]> = self.rest.iter().map(|rest| {
++                let u = rest[0] / (0.5 * self.width);
++                let v = rest[1] / (0.5 * self.width);
++                [cos * rest[0] - sin * rest[1] + shift[0],
++                 sin * rest[0] + cos * rest[1] + shift[1],
++                 rest[2] - depression + tilt[0] * u + tilt[1] * v]
++            }).collect();
++            // Express the previous world-space positions in the moving hand
++            // frame. Contacting points stick there until tangential pull
++            // exceeds their normal-contact friction budget.
++            let previous: Vec<[f32; 3]> = self.pos.iter().map(|p| [p[0] - motion[0], p[1] - motion[1], p[2]]).collect();
++            self.pos.clone_from(&previous);
++            for iteration in 0..ITERATIONS {
++                for (p, target) in self.pos.iter_mut().zip(&targets) {
++                    for k in 0..3 {
++                        p[k] += GRIP * (target[k] - p[k]);
++                    }
++                }
++                // Alternate order to avoid a persistent solver-direction bias.
++                for j in 0..self.links.len() {
++                    let i = if iteration % 2 == 0 { j } else { self.links.len() - 1 - j };
++                    let (a, b, rest, stiffness) = self.links[i];
++                    let d: [f32; 3] = std::array::from_fn(|k| self.pos[b][k] - self.pos[a][k]);
++                    let length = d.iter().map(|x| x * x).sum::<f32>().sqrt();
++                    if length < 1e-6 { continue; }
++                    let amount = 0.5 * stiffness * (length - rest) / length;
++                    for (k, delta) in d.into_iter().enumerate() {
++                        self.pos[a][k] += amount * delta;
++                        self.pos[b][k] -= amount * delta;
++                    }
++                }
++                // Position-level Coulomb friction, Macklin et al. 2014,
++                // section 6.1, eq. 24: https://mmacklin.com/uppfrta_preprint.pdf
++                // Coefficients above remain uncalibrated estimates.
++                for (p, old) in self.pos.iter_mut().zip(&previous) {
++                    if p[2] >= 0.0 { continue; }
++                    let normal = -p[2];
++                    p[2] = 0.0;
++                    let delta = [p[0] - old[0], p[1] - old[1]];
++                    let tangent = delta[0].hypot(delta[1]);
++                    let fraction = if tangent <= STATIC_FRICTION * normal { 1.0 }
++                        else { (SLIDING_FRICTION * normal / tangent).min(1.0) };
++                    p[0] -= fraction * delta[0];
++                    p[1] -= fraction * delta[1];
++                }
++            }
++        }
++        super::probe::shape(&self.pos);
++        self.contact()
++    }
++
++    fn contact(&self) -> Contact {
++        let extent = self.pos.iter().flat_map(|p| [p[0].abs(), p[1].abs()]).fold(self.width * 0.5, f32::max) + 0.5;
++        let mut contact = Contact { field: vec![0.0; MAP * MAP], material: vec![[0.0; 2]; MAP * MAP], extent };
++        for y in 0..N - 1 {
++            for x in 0..N - 1 {
++                let a = y * N + x;
++                for ids in [[a, a + 1, a + N], [a + 1, a + N + 1, a + N]] {
++                    let p = ids.map(|i| self.pos[i]);
++                    contact.triangle(p, ids.map(|i| [(i % N) as f32, (i / N) as f32]));
++                }
++            }
++        }
++        contact
++    }
++}
++
++impl Contact {
++    pub(super) fn extent(&self) -> f32 { self.extent }
++
++    fn triangle(&mut self, p: [[f32; 3]; 3], uv: [[f32; 2]; 3]) {
++        let to_grid = |v: f32| (v / self.extent + 1.0) * 0.5 * (MAP - 1) as f32;
++        let q = p.map(|p| [to_grid(p[0]), to_grid(p[1])]);
++        let area = (q[1][0] - q[0][0]) * (q[2][1] - q[0][1]) - (q[1][1] - q[0][1]) * (q[2][0] - q[0][0]);
++        if area.abs() < 1e-6 { return; }
++        let lo = |k| q.iter().map(|p| p[k]).fold(f32::INFINITY, f32::min).floor().max(0.0) as usize;
++        let hi = |k| q.iter().map(|p| p[k]).fold(f32::NEG_INFINITY, f32::max).ceil().min((MAP - 1) as f32) as usize;
++        for y in lo(1)..=hi(1) {
++            for x in lo(0)..=hi(0) {
++                let dx = x as f32 - q[0][0];
++                let dy = y as f32 - q[0][1];
++                let b = (dx * (q[2][1] - q[0][1]) - dy * (q[2][0] - q[0][0])) / area;
++                let c = ((q[1][0] - q[0][0]) * dy - (q[1][1] - q[0][1]) * dx) / area;
++                let a = 1.0 - b - c;
++                if a < 0.0 || b < 0.0 || c < 0.0 { continue; }
++                let gap = a * p[0][2] + b * p[1][2] + c * p[2][2];
++                let touch = 1.0 - smoothstep(0.0, FIBER_MM, gap);
++                let i = y * MAP + x;
++                if touch > self.field[i] {
++                    self.field[i] = touch;
++                    self.material[i] = std::array::from_fn(|k| a * uv[0][k] + b * uv[1][k] + c * uv[2][k]);
++                }
++            }
++        }
++    }
++
++    pub(super) fn at(&self, x: f32, y: f32) -> f32 {
++        self.sample(x, y).0
++    }
++
++    /// Bilinear weights in the cloth's material coordinates. Paint stays on
++    /// those material locations when their projected positions deform.
++    pub(super) fn weights(&self, x: f32, y: f32) -> [(usize, f32); 4] {
++        let (contact, uv) = self.sample(x, y);
++        if contact <= 0.0 { return [(0, 0.0); 4]; }
++        let u = uv[0].clamp(0.0, (N - 1) as f32);
++        let v = uv[1].clamp(0.0, (N - 1) as f32);
++        let ix = (u as usize).min(N - 2);
++        let iy = (v as usize).min(N - 2);
++        let (fx, fy) = (u - ix as f32, v - iy as f32);
++        let i = iy * N + ix;
++        [(i, (1.0 - fx) * (1.0 - fy)), (i + 1, fx * (1.0 - fy)),
++         (i + N, (1.0 - fx) * fy), (i + N + 1, fx * fy)]
++    }
++
++    fn sample(&self, x: f32, y: f32) -> (f32, [f32; 2]) {
++        let gx = (x / self.extent + 1.0) * 0.5 * (MAP - 1) as f32;
++        let gy = (y / self.extent + 1.0) * 0.5 * (MAP - 1) as f32;
++        if gx < 0.0 || gy < 0.0 || gx >= (MAP - 1) as f32 || gy >= (MAP - 1) as f32 { return (0.0, [0.0; 2]); }
++        let (ix, iy) = (gx as usize, gy as usize);
++        let (fx, fy) = (gx - ix as f32, gy - iy as f32);
++        let i = iy * MAP + ix;
++        let mut c = 0.0;
++        let mut uv = [0.0; 2];
++        for (j, w) in [(i, (1.0-fx)*(1.0-fy)), (i+1, fx*(1.0-fy)), (i+MAP, (1.0-fx)*fy), (i+MAP+1, fx*fy)] {
++            let a = w * self.field[j];
++            c += a;
++            for k in 0..2 { uv[k] += a * self.material[j][k]; }
++        }
++        if c > 0.0 { for v in &mut uv { *v /= c; } }
++        (c, uv)
++    }
++}
+diff --git a/crates/paint/src/rag/face.rs b/crates/paint/src/rag/face.rs
+new file mode 100644
+index 0000000..0a6c487
+--- /dev/null
++++ b/crates/paint/src/rag/face.rs
+@@ -0,0 +1,71 @@
++//! Paint attached to material locations on the active cloth face. All stored
++//! volumes are mm³, independent of canvas resolution. Absorbed paint remains
++//! in `held`; only still-wet surface paint can return to the canvas.
++use super::{Pool, CAP_UM, COAT_UM, SMEAR, SOAK, cloth};
++use crate::{drying, wet::{Latent, Prop}};
++
++#[derive(Clone, Debug, Default, PartialEq)]
++pub(super) struct Cell {
++    pub paint: Pool,
++    held: f32,
++}
++
++#[derive(Clone, Debug, PartialEq)]
++pub(super) struct Face {
++    pub cells: Vec<Cell>,
++    area: f32,
++    at_min: f64,
++}
++
++impl Face {
++    pub fn new(width_mm: f32, soaked: f32, now: f64) -> Self {
++        let area = width_mm * width_mm / cloth::CELLS as f32;
++        let held = soaked * area * CAP_UM / 1000.0;
++        Self { cells: vec![Cell { held, ..Cell::default() }; cloth::CELLS], area, at_min: now }
++    }
++
++    pub fn age(&mut self, now: f64) {
++        let elapsed = (now - self.at_min).max(0.0) as f32;
++        for cell in &mut self.cells {
++            let p = &mut cell.paint;
++            if p.vol <= 0.0 { continue; }
++            let coats = p.vol / self.area * 1000.0 / COAT_UM;
++            p.cure += elapsed * drying::rate(coats, p.hide[1], p.hide[2]);
++            // Set paint is retained in the cloth; fresh pickup cannot revive it.
++            if p.cure >= drying::GEL { *p = Pool::default(); }
++        }
++        self.at_min = self.at_min.max(now);
++    }
++
++    pub fn thirst(&self, weights: [(usize, f32); 4]) -> f32 {
++        let capacity = self.area * CAP_UM / 1000.0;
++        weights.iter().map(|&(i, w)| w * (1.0 - (self.cells[i].held / capacity).clamp(0.0, 1.0).powi(2))).sum()
++    }
++
++    pub fn budgets(&self, exposure: &[f64]) -> Vec<f64> {
++        self.cells.iter().zip(exposure).map(|(cell, &area)| {
++            cell.paint.vol as f64 * drying::fluid(cell.paint.cure) as f64
++                * (1.0 - (-SMEAR as f64 * area / self.area as f64).exp())
++        }).collect()
++    }
++
++    pub fn finish(&mut self, picked: &[Pool], deposited: &[f64], travel_widths: f32) {
++        // Use physical travel, not stamp count, for soaking into the fibers.
++        let surface_left = (1.0 - SOAK).powf(4.0 * travel_widths);
++        for ((cell, got), &out) in self.cells.iter_mut().zip(picked).zip(deposited) {
++            cell.paint.vol = (cell.paint.vol - out as f32).max(0.0) * surface_left;
++            cell.held = (cell.held + got.vol - out as f32).max(0.0);
++            mix(&mut cell.paint, got.vol, &got.lat, &got.hide, got.cure);
++        }
++    }
++}
++
++pub(super) fn mix(p: &mut Pool, volume: f32, lat: &Latent, hide: &Prop, cure: f32) {
++    if volume <= 0.0 { return; }
++    let total = p.vol + volume;
++    let a = volume / total;
++    for k in 0..p.lat.len() { p.lat[k] += (lat[k] - p.lat[k]) * a; }
++    for k in 0..3 { p.hide[k] += (hide[k] - p.hide[k]) * a; }
++    p.cure += (cure - p.cure) * a;
++    p.vol = total;
++}
+diff --git a/crates/paint/src/rag/probe.rs b/crates/paint/src/rag/probe.rs
+new file mode 100644
+index 0000000..f596a94
+--- /dev/null
++++ b/crates/paint/src/rag/probe.rs
+@@ -0,0 +1,14 @@
++// Temporary research instrumentation; excluded from the candidate patch.
++use std::cell::RefCell;
++pub struct Trace { pub contact: Vec<f32>, pub pickup: Vec<f32>, pub deposit: Vec<f32>, pub shapes: Vec<Vec<[f32;3]>>, step: usize }
++thread_local! { static TRACE: RefCell<Option<Trace>> = const { RefCell::new(None) }; }
++pub fn begin(n: usize) { put(Some(Trace { contact: vec![0.0;n], pickup: vec![0.0;n], deposit: vec![0.0;n], shapes: vec![], step: 0 })); }
++pub fn take() -> Option<Trace> { TRACE.with(|s| s.borrow_mut().take()) }
++pub fn put(t: Option<Trace>) { TRACE.with(|s| *s.borrow_mut() = t); }
++// Diagnostic control: flatten only wet thickness, preserving all other fields.
++pub fn uniform_film(c: &mut crate::Canvas, um: f32) {
++    for v in &mut c.wet.vol { if *v > 0.0 { *v = um / crate::surface::COAT_UM; } }
++    let f=c.window(); c.wet.touch(0,0,f.w,f.h);
++}
++
++pub fn shape(nodes: &[[f32;3]]) { TRACE.with(|s| { if let Some(t)=s.borrow_mut().as_mut() { if t.step % 88==0 { t.shapes.push(nodes.to_vec()); } t.step+=1; } }); }
+diff --git a/crates/paint/examples/rag_cloth_review.rs b/crates/paint/examples/rag_cloth_review.rs
+new file mode 100644
+index 0000000..b55ab39
+--- /dev/null
++++ b/crates/paint/examples/rag_cloth_review.rs
+@@ -0,0 +1,67 @@
++// Same geometry, brush handling and seeds as the release wipe comparison.
++// Changes: 2400px canvas width and dark brown #3f2b22 paint.
++// Writes visible wet paint, without baking the canvas or changing its state.
++use paint::{Canvas, Crop, Handling, Linen, Mask, Tool, hex};
++use paint::rag::Rag;
++use std::path::Path;
++
++fn save(c: &Canvas, path: &Path) {
++    let f = c.window();
++    let pixels = c.seen().iter().flat_map(|p| p.map(|x|
++        (paint::color::linear_to_srgb(x).clamp(0.0, 1.0) * 255.0).round() as u8
++    )).collect();
++    image::RgbImage::from_raw(f.w as u32, f.h as u32, pixels).unwrap().save(path).unwrap();
++}
++
++fn main() {
++    let out = std::env::args().nth(1).expect("output directory");
++    let out = Path::new(&out);
++    std::fs::create_dir_all(out).unwrap();
++    let crop = Crop { units: [260.0, 190.0, 740.0, 490.0], margin: 30.0 };
++    let mut c = Canvas::new_window(2400, 1.5, hex("#b08060"), Some(crop))
++        .with_engine(3).with_size_mm(440.0)
++        .with_linen(Linen { warp_per_cm: 15.0, weft_per_cm: 15.0, ..Linen::fine(3) });
++    c.prime(hex("#e4dcc8"), 0.9, 25.0, 0.6, 0.3, 5);
++    c.set_hand_time(Some(15.0));
++    let m = Mask::from_fn(c.frame(), |x, y|
++        if (100.0..900.0).contains(&x) && (120.0..550.0).contains(&y) { 1.0 } else { 0.0 });
++    let hd = Handling::new(Tool::filbert(22.0)).color(|_, _| hex("#3f2b22"))
++        .paint(0.85, 0.75).coverage(1.0).load(0.3).angle(|_, _| 0.0).fill(true);
++    c.work(&m, &hd, 11);
++    c.clock_hand_min();
++    save(&c, &out.join("untouched.png"));
++    for damp in [false, true] {
++        let mut canvas = c.clone();
++        let mut rag = Rag::new(100.0, 7);
++        if damp { rag.dip(0.5, canvas.now_min(), canvas.tally_mut()); }
++        for pass in 1..=2 {
++            canvas.rag_wipe(&mut rag, &[(300.0, 340.0), (700.0, 340.0)], &[0.8], 19);
++            let name = format!("{}-{pass}.png", if damp { "damp" } else { "dry" });
++            save(&canvas, &out.join(name));
++        }
++    }
++    // A separate color-transfer witness: load opposite parts of one face
++    // with warm and cool paint, then use that face on an untouched ground.
++    let mut colored = c.clone();
++    let hd = Handling::new(Tool::filbert(22.0)).color(|_, y| if y < 340.0 { hex("#ad4e22") } else { hex("#244d9b") })
++        .paint(0.95, 0.75).coverage(1.0).load(0.6).angle(|_, _| 0.0).fill(true);
++    colored.work(&m, &hd, 11);
++    let mut used = Rag::new(100.0, 7);
++    used.dip(0.5, colored.now_min(), colored.tally_mut());
++    save(&colored, &out.join("pickup-before.png"));
++    colored.rag_wipe(&mut used, &[(300.0, 340.0), (700.0, 340.0)], &[0.8], 19);
++    save(&colored, &out.join("pickup-after.png"));
++    let mut clean = Canvas::new_window(2400, 1.5, hex("#b08060"), Some(Crop { units: [260.0, 190.0, 740.0, 490.0], margin: 30.0 }))
++        .with_engine(3).with_size_mm(440.0)
++        .with_linen(Linen { warp_per_cm: 15.0, weft_per_cm: 15.0, ..Linen::fine(3) });
++    clean.prime(hex("#e4dcc8"), 0.9, 25.0, 0.6, 0.3, 5);
++    clean.wait(colored.now_min() as f32);
++    let mut refolded = used.clone();
++    let mut control = clean.clone();
++    refolded.refold(control.tally_mut());
++    control.rag_wipe(&mut refolded, &[(300.0, 340.0), (700.0, 340.0)], &[0.8], 19);
++    save(&control, &out.join("refolded-on-clean.png"));
++    clean.rag_wipe(&mut used, &[(300.0, 340.0), (700.0, 340.0)], &[0.8], 19);
++    save(&clean, &out.join("used-on-clean.png"));
++    println!("Rendered identical starting paint at 2400px canvas width; pressure 0.8, width 100, dip 0 / 0.5, same seeds and paths; no refolding between wipes.");
++}
+diff --git a/crates/paint/examples/rag_trace.rs b/crates/paint/examples/rag_trace.rs
+new file mode 100644
+index 0000000..390c6ca
+--- /dev/null
++++ b/crates/paint/examples/rag_trace.rs
+@@ -0,0 +1,62 @@
++// Same geometry, brush handling and seeds as the release wipe comparison.
++// Changes: 2400px canvas width and dark brown #3f2b22 paint.
++// Writes visible wet paint, without baking the canvas or changing its state.
++use paint::{Canvas, Crop, Handling, Linen, Mask, Tool, hex};
++use paint::rag::Rag;
++use std::path::Path;
++
++fn save(c: &Canvas, path: &Path) {
++    let f = c.window();
++    let pixels = c.seen().iter().flat_map(|p| p.map(|x|
++        (paint::color::linear_to_srgb(x).clamp(0.0, 1.0) * 255.0).round() as u8
++    )).collect();
++    image::RgbImage::from_raw(f.w as u32, f.h as u32, pixels).unwrap().save(path).unwrap();
++}
++
++fn main() {
++    let out = std::env::args().nth(1).expect("output directory");
++    let out = Path::new(&out);
++    std::fs::create_dir_all(out).unwrap();
++    let crop = Crop { units: [260.0, 190.0, 740.0, 490.0], margin: 30.0 };
++    let mut c = Canvas::new_window(2400, 1.5, hex("#b08060"), Some(crop))
++        .with_engine(3).with_size_mm(440.0)
++        .with_linen(Linen { warp_per_cm: 15.0, weft_per_cm: 15.0, ..Linen::fine(3) });
++    c.prime(hex("#e4dcc8"), 0.9, 25.0, 0.6, 0.3, 5);
++    c.set_hand_time(Some(15.0));
++    let m = Mask::from_fn(c.frame(), |x, y|
++        if (100.0..900.0).contains(&x) && (120.0..550.0).contains(&y) { 1.0 } else { 0.0 });
++    let no_plough = std::env::args().nth(2).as_deref()==Some("no-plough");
++    let mut tool=Tool::filbert(22.0);
++    if no_plough { tool.push=0.0; }
++    let hd = Handling::new(tool).color(|_, _| hex("#3f2b22"))
++        .paint(0.85, 0.75).coverage(1.0).load(0.3).angle(|_, _| 0.0).fill(true);
++    let cache_path = std::env::args().nth(3).expect("scratch checkpoint path (third argument)");
++    let cache = std::path::Path::new(&cache_path);
++    if cache.exists() && !no_plough && std::env::args().nth(2).as_deref()!=Some("fresh") { c = Canvas::read_state(&mut std::fs::File::open(cache).unwrap()).unwrap().0; }
++    else { c.work(&m, &hd, 11); c.clock_hand_min(); if !no_plough && std::env::args().nth(2).as_deref()!=Some("fresh") { c.write_state(&mut std::fs::File::create(cache).unwrap(), "rag diagnostic").unwrap(); } }
++    if std::env::args().nth(2).as_deref()==Some("uniform") { paint::rag::probe::uniform_film(&mut c,69.294109); }
++    save(&c, &out.join("untouched.png"));
++    let f = c.window();
++    let initial: Vec<f32> = (0..f.h).flat_map(|y| (0..f.w).map(move |x| (x,y))).map(|(x,y)| c.wet_um(f.ux(x),f.uy(y))).collect();
++    std::fs::write(out.join("initial-film.f32"),initial.iter().flat_map(|v|v.to_le_bytes()).collect::<Vec<_>>()).unwrap();
++    image::GrayImage::from_raw(f.w as u32,f.h as u32,initial.iter().map(|v|(v/100.0*255.0).clamp(0.0,255.0).round() as u8).collect()).unwrap().save(out.join("initial-film.png")).unwrap();
++    let mut rag = Rag::new(100.0,7);
++    rag.dip(0.5,c.now_min(),c.tally_mut());
++    paint::rag::probe::begin(f.w*f.h);
++    c.rag_wipe(&mut rag, &[(300.0,340.0),(700.0,340.0)], &[0.8],19);
++    save(&c,&out.join("after.png"));
++    let t=paint::rag::probe::take().unwrap();
++    let mut nodes=String::from("frame,index,x_mm,y_mm,z_mm\n");
++    for (frame,shape) in t.shapes.iter().enumerate() { for (i,p) in shape.iter().enumerate() { nodes.push_str(&format!("{frame},{i},{},{},{}\n",p[0],p[1],p[2])); } }
++    std::fs::write(out.join("cloth-shape.csv"),nodes).unwrap();
++    let left: Vec<f32> = (0..f.h).flat_map(|y| (0..f.w).map(move |x| (x,y))).map(|(x,y)| c.wet_um(f.ux(x),f.uy(y))).collect();
++    let error = (0..left.len()).map(|i| (initial[i]-t.pickup[i]+t.deposit[i]-left[i]).abs()).fold(0.0,f32::max);
++    println!("Maximum per-pixel film accounting error: {error} um");
++    for (name,data,scale) in [("contact",&t.contact,1.0),("pickup",&t.pickup,100.0),("deposit",&t.deposit,5.0),("film",&left,100.0)] {
++        let bytes: Vec<u8> = data.iter().flat_map(|&v| v.to_le_bytes()).collect();
++        std::fs::write(out.join(format!("{name}.f32")),bytes).unwrap();
++        let pixels: Vec<u8> = data.iter().map(|v| (v/scale*255.0).clamp(0.0,255.0).round() as u8).collect();
++        image::GrayImage::from_raw(f.w as u32,f.h as u32,pixels).unwrap().save(out.join(format!("{name}.png"))).unwrap();
++    }
++    std::fs::write(out.join("accounting.txt"),format!("Maximum per-pixel error: {error} um\nDimensions: {} x {}\n",f.w,f.h)).unwrap();
++}

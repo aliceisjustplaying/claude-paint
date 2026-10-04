@@ -1,0 +1,467 @@
+diff -ruN engine3-rag-review/research/crates/paint/src/rag/cloth.rs work/research/crates/paint/src/rag/cloth.rs
+--- engine3-rag-review/research/crates/paint/src/rag/cloth.rs	2026-10-04 13:21:14
++++ work/research/crates/paint/src/rag/cloth.rs	2026-10-04 14:37:00
+@@ -23,7 +23,7 @@
+ #[derive(Clone, Debug, PartialEq)]
+ pub(super) struct Cloth {
+     rest: Vec<[f32; 3]>,
+-    pos: Vec<[f32; 3]>,
++    pub(super) pos: Vec<[f32; 3]>,
+     links: Vec<(usize, usize, f32, f32)>,
+     width: f32,
+     seed: u64,
+@@ -83,6 +83,7 @@
+         // sampling; otherwise half-sized stamps double the relaxation rate.
+         let steps = if distance > 0.0 { (distance / 0.25).ceil().max(1.0) as usize } else { 4 };
+         let motion = [travel[0] / steps as f32, travel[1] / steps as f32];
++        super::probe::bump(&super::probe::MECH_STEPS, steps as u64); super::probe::bump(&super::probe::PRESS_CALLS, 1);
+         let depression = 0.8 + 3.0 * pressure.clamp(0.0, 1.0);
+         for _ in 0..steps {
+             self.travel_mm += distance / steps as f32;
+@@ -157,10 +158,34 @@
+                 let a = y * N + x;
+                 for ids in [[a, a + 1, a + N], [a + 1, a + N + 1, a + N]] {
+                     let p = ids.map(|i| self.pos[i]);
++                    let r = ids.map(|i| self.rest[i]);
++                    let sa = |q: [[f32; 3]; 3]| (q[1][0] - q[0][0]) * (q[2][1] - q[0][1]) - (q[1][1] - q[0][1]) * (q[2][0] - q[0][0]);
++                    super::probe::bump(&super::probe::TRIS, 1);
++                    if sa(p) * sa(r) < 0.0 { super::probe::bump(&super::probe::INVERTED, 1); }
+                     contact.triangle(p, ids.map(|i| [(i % N) as f32, (i / N) as f32]));
+                 }
+             }
+         }
++        {
++            let mut h = super::probe::CHIST.with(|c| c.get());
++            let half = (MAP - 1) as f32 * 0.5;
++            for y in 0..MAP { for x in 0..MAP {
++                // inside the pad disk (rest radius = width/2), in raster units
++                let rr = ((x as f32 - half).hypot(y as f32 - half)) / half * extent / (0.5 * self.width);
++                if rr > 0.75 { continue; }
++                let v = contact.field[y * MAP + x];
++                let b = if v <= 0.0 { 0 } else if v >= 1.0 { 11 } else { 1 + (v * 10.0) as usize };
++                h[b] += 1;
++                if v > 0.0 && x + 1 < MAP && contact.field[y * MAP + x + 1] > 0.0 {
++                    super::probe::bump(&super::probe::TOUCHED, 1);
++                    let (m0, m1) = (contact.material[y * MAP + x], contact.material[y * MAP + x + 1]);
++                    // one raster cell is extent*2/96 mm; one mesh cell is ~width/18 mm: a jump of > 3 mesh cells between
++                    // adjacent raster cells means bilinear UV sampling blends two distant material locations
++                    if (m0[0] - m1[0]).hypot(m0[1] - m1[1]) > 3.0 { super::probe::bump(&super::probe::UVJUMP, 1); }
++                }
++            } }
++            super::probe::CHIST.with(|c| c.set(h));
++        }
+         contact
+     }
+ }
+@@ -186,6 +211,13 @@
+                 let gap = a * p[0][2] + b * p[1][2] + c * p[2][2];
+                 let touch = 1.0 - smoothstep(0.0, FIBER_MM, gap);
+                 let i = y * MAP + x;
++                // probe: a second triangle touching a raster cell that already has a touching owner
++                // whose material coordinate is more than 1.5 mesh cells away = overlapping sheets
++                if touch > 0.0 && self.field[i] > 0.0 {
++                    let uvn: [f32; 2] = std::array::from_fn(|k| a * uv[0][k] + b * uv[1][k] + c * uv[2][k]);
++                    let d = (uvn[0] - self.material[i][0]).hypot(uvn[1] - self.material[i][1]);
++                    if d > 1.5 { super::probe::bump(&super::probe::MULTI, 1); }
++                }
+                 if touch > self.field[i] {
+                     self.field[i] = touch;
+                     self.material[i] = std::array::from_fn(|k| a * uv[0][k] + b * uv[1][k] + c * uv[2][k]);
+diff -ruN engine3-rag-review/research/crates/paint/src/rag/face.rs work/research/crates/paint/src/rag/face.rs
+--- engine3-rag-review/research/crates/paint/src/rag/face.rs	2026-10-04 13:21:14
++++ work/research/crates/paint/src/rag/face.rs	2026-10-04 14:37:00
+@@ -7,13 +7,13 @@
+ #[derive(Clone, Debug, Default, PartialEq)]
+ pub(super) struct Cell {
+     pub paint: Pool,
+-    held: f32,
++    pub held: f32,
+ }
+ 
+ #[derive(Clone, Debug, PartialEq)]
+ pub(super) struct Face {
+     pub cells: Vec<Cell>,
+-    area: f32,
++    pub area: f32,
+     at_min: f64,
+ }
+ 
+diff -ruN engine3-rag-review/research/crates/paint/src/rag/probe.rs work/research/crates/paint/src/rag/probe.rs
+--- engine3-rag-review/research/crates/paint/src/rag/probe.rs	2026-10-04 13:21:14
++++ work/research/crates/paint/src/rag/probe.rs	2026-10-04 14:38:04
+@@ -1,8 +1,8 @@
+ // Temporary research instrumentation; excluded from the candidate patch.
+ use std::cell::RefCell;
+-pub struct Trace { pub contact: Vec<f32>, pub pickup: Vec<f32>, pub deposit: Vec<f32>, pub shapes: Vec<Vec<[f32;3]>>, step: usize }
++pub struct Trace { pub from_cloth: Vec<f32>, pub contact: Vec<f32>, pub pickup: Vec<f32>, pub deposit: Vec<f32>, pub shapes: Vec<Vec<[f32;3]>>, step: usize }
+ thread_local! { static TRACE: RefCell<Option<Trace>> = const { RefCell::new(None) }; }
+-pub fn begin(n: usize) { put(Some(Trace { contact: vec![0.0;n], pickup: vec![0.0;n], deposit: vec![0.0;n], shapes: vec![], step: 0 })); }
++pub fn begin(n: usize) { put(Some(Trace { from_cloth: vec![0.0;n], contact: vec![0.0;n], pickup: vec![0.0;n], deposit: vec![0.0;n], shapes: vec![], step: 0 })); }
+ pub fn take() -> Option<Trace> { TRACE.with(|s| s.borrow_mut().take()) }
+ pub fn put(t: Option<Trace>) { TRACE.with(|s| *s.borrow_mut() = t); }
+ // Diagnostic control: flatten only wet thickness, preserving all other fields.
+@@ -12,3 +12,35 @@
+ }
+ 
+ pub fn shape(nodes: &[[f32;3]]) { TRACE.with(|s| { if let Some(t)=s.borrow_mut().as_mut() { if t.step % 88==0 { t.shapes.push(nodes.to_vec()); } t.step+=1; } }); }
++
++// ---- review probes (scratch copy only) ----
++use std::cell::Cell;
++thread_local! {
++    static LIFT_O: Cell<Option<f32>> = const { Cell::new(None) };
++    static STEP_O: Cell<Option<f32>> = const { Cell::new(None) };
++    pub static MECH_STEPS: Cell<u64> = const { Cell::new(0) };
++    pub static PRESS_CALLS: Cell<u64> = const { Cell::new(0) };
++    pub static INVERTED: Cell<u64> = const { Cell::new(0) };
++    pub static TRIS: Cell<u64> = const { Cell::new(0) };
++    pub static MULTI: Cell<u64> = const { Cell::new(0) };
++    pub static TOUCHED: Cell<u64> = const { Cell::new(0) };
++    pub static UVJUMP: Cell<u64> = const { Cell::new(0) };
++    pub static CHIST: Cell<[u64; 12]> = const { Cell::new([0; 12]) };
++}
++pub fn set_lift(v: Option<f32>) { LIFT_O.with(|c| c.set(v)); }
++pub fn set_step(v: Option<f32>) { STEP_O.with(|c| c.set(v)); }
++pub fn lift(d: f32) -> f32 { LIFT_O.with(|c| c.get()).unwrap_or(d) }
++pub fn step_mm(d: f32) -> f32 { STEP_O.with(|c| c.get()).unwrap_or(d) }
++pub fn reset_counters() {
++    MECH_STEPS.with(|c| c.set(0)); PRESS_CALLS.with(|c| c.set(0)); INVERTED.with(|c| c.set(0)); TRIS.with(|c| c.set(0));
++    MULTI.with(|c| c.set(0)); TOUCHED.with(|c| c.set(0)); UVJUMP.with(|c| c.set(0)); CHIST.with(|c| c.set([0; 12]));
++}
++pub fn bump(c: &'static std::thread::LocalKey<Cell<u64>>, n: u64) { c.with(|c| c.set(c.get() + n)); }
++
++thread_local! {
++    pub static NO_GLOBAL: Cell<bool> = const { Cell::new(false) };
++    pub static NO_FLOOR: Cell<bool> = const { Cell::new(false) };
++    pub static NO_DEPOSIT: Cell<bool> = const { Cell::new(false) };
++}
++pub fn flag(c: &'static std::thread::LocalKey<Cell<bool>>) -> bool { c.with(|c| c.get()) }
++pub fn set_flags(no_global: bool, no_floor: bool, no_deposit: bool) { NO_GLOBAL.with(|c| c.set(no_global)); NO_FLOOR.with(|c| c.set(no_floor)); NO_DEPOSIT.with(|c| c.set(no_deposit)); }
+diff -ruN engine3-rag-review/research/crates/paint/src/rag.rs work/research/crates/paint/src/rag.rs
+--- engine3-rag-review/research/crates/paint/src/rag.rs	2026-10-04 13:21:14
++++ work/research/crates/paint/src/rag.rs	2026-10-04 14:38:04
+@@ -417,7 +417,7 @@
+         let e3 = self.engine >= 3;
+         // (engine 3: spirits reach deeper, `DAMP_REACH`)
+         let (reach, wick) = if e3 { (SAG_UM * (0.25 + 1.5 * p) * (1.0 + DAMP_REACH * d), WICK + (1.0 - WICK) * d) } else { (SAG_UM * (0.25 + 1.5 * p), WICK) };
+-        let k = LIFT * (0.7 + 0.6 * p) * rag.thirst() * (1.0 + DAMP_LIFT * d);
++        let k = probe::lift(LIFT) * (0.7 + 0.6 * p) * (if probe::flag(&probe::NO_GLOBAL) && material.is_some() { 1.0 } else { rag.thirst() }) * (1.0 + DAMP_LIFT * d);
+         let timed = self.wet.clock.px.len() == self.wet.vol.len();
+         let mut lifted = 0.0f64;
+         let mut got = Pool::default();
+@@ -456,10 +456,10 @@
+                 let local = face.as_ref().map_or(1.0, |f| f.thirst(material_weights));
+                 let frac = if e3 { (1.0 - (-k * local * fl * pad).exp()) * c } else { 1.0 - (-k * fl * e).exp() };
+                 // the stain: more of it where the cloth didn't reach
+-                let floor = STAIN_COATS * (2.0 - near / v);
++                let floor = if probe::flag(&probe::NO_FLOOR) { 0.0 } else { STAIN_COATS * (2.0 - near / v) };
+                 let take = (avail * frac).min(v - floor);
+                 if take > 0.0 {
+-                    if let Some(t) = probe.as_mut() { t.pickup[i] += take * COAT_UM; }
++                    if let Some(t) = probe.as_mut() { t.pickup[i] += take * COAT_UM; t.from_cloth[i] *= ((v - take) / v).max(0.0); }
+                     if face.is_some() {
+                         let cure = if timed { self.wet.clock.px[i].cure } else { 0.0 };
+                         for (j, weight) in material_weights {
+@@ -493,7 +493,8 @@
+             // Budget each material cell once, then distribute that budget over
+             // its actual contacts. Newly lifted paint joins after depositing,
+             // so traversal order cannot move paint from one pixel to the next.
+-            let budgets = dirty.budgets(&exposure);
++            let mut budgets = dirty.budgets(&exposure);
++            if probe::flag(&probe::NO_DEPOSIT) { budgets.iter_mut().for_each(|b| *b = 0.0); }
+             let mut deposited = vec![0.0f64; cloth::CELLS];
+             for y in y0..y1 {
+                 for x in x0..x1 {
+@@ -505,7 +506,7 @@
+                             .min((budgets[j] - deposited[j]).max(0.0));
+                         if amount <= 0.0 { continue; }
+                         let coats = (amount / volume_mm3 as f64) as f32;
+-                        if let Some(t) = probe.as_mut() { t.deposit[y*f.w+x] += coats * COAT_UM; }
++                        if let Some(t) = probe.as_mut() { t.deposit[y*f.w+x] += coats * COAT_UM; t.from_cloth[y*f.w+x] += coats * COAT_UM; }
+                         self.rag_lay(y * f.w + x, coats, &dirty.cells[j].paint);
+                         deposited[j] += coats as f64 * volume_mm3 as f64;
+                         lifted -= coats as f64;
+@@ -631,7 +632,7 @@
+         let r0 = 0.5 * w;
+         // A persistent contact footprint must be swept at finer spacing than
+         // the old procedural exposure; otherwise individual stamps repeat.
+-        let step = if e3 { (0.5 / mmu).min(0.5 * r0) } else { 0.5 * r0 };
++        let step = if e3 { (probe::step_mm(0.5) / mmu).min(0.5 * r0) } else { 0.5 * r0 };
+         let mut pool = Pool::default();
+         let mut total = 0.0;
+         let mut s_at = 0.0f32;
+@@ -1400,5 +1401,275 @@
+         assert!(dry_film.1 < wet_film.1, "a dry rag leaves more in the hollows: {dry_film:?} vs {wet_film:?}");
+         assert!(wet_film.1 < 1.0 && left_wet > 0.0, "a faint stain stays");
+         assert!(left_wet < left_dry, "spirits leave less color than a dry rag: {left_wet} vs {left_dry}");
++    }
++
++    // ================= review probes (scratch copy only) =================
++    fn rp_fixture() -> (Canvas, Canvas) {
++        let crop = Crop { units: [260.0, 190.0, 740.0, 490.0], margin: 30.0 };
++        let mut c = Canvas::new_window(2400, 1.5, hex("#b08060"), Some(crop)).with_engine(3).with_size_mm(440.0)
++            .with_linen(Linen { warp_per_cm: 15.0, weft_per_cm: 15.0, ..Linen::fine(3) });
++        c.prime(hex("#e4dcc8"), 0.9, 25.0, 0.6, 0.3, 5);
++        c.set_hand_time(Some(15.0));
++        let m = Mask::from_fn(c.frame(), |x, y| if (100.0..900.0).contains(&x) && (120.0..550.0).contains(&y) { 1.0 } else { 0.0 });
++        let hd = Handling::new(Tool::filbert(22.0)).color(|_, _| hex("#3f2b22")).paint(0.85, 0.75).coverage(1.0).load(0.3).angle(|_, _| 0.0).fill(true);
++        c.work(&m, &hd, 11);
++        c.clock_hand_min();
++        let brushed = c.clone();
++        probe::uniform_film(&mut c, 69.294109);
++        (brushed, c)
++    }
++    fn rp_field(c: &Canvas) -> Vec<f32> {
++        let f = c.window();
++        (0..f.h).flat_map(|y| (0..f.w).map(move |x| (x, y))).map(|(x, y)| c.wet_um(f.ux(x), f.uy(y))).collect()
++    }
++    fn rp_center_idx(c: &Canvas) -> Vec<usize> {
++        let f = c.window();
++        (0..f.h).flat_map(|y| (0..f.w).map(move |x| (x, y))).filter(|&(x, y)| (350.0..650.0).contains(&f.ux(x)) && (310.0..370.0).contains(&f.uy(y))).map(|(x, y)| y * f.w + x).collect()
++    }
++    fn rp_mean(v: &[f32], idx: &[usize]) -> f64 { idx.iter().map(|&i| v[i] as f64).sum::<f64>() / idx.len() as f64 }
++    struct Run { c: Canvas, rag: Rag, lifted: f64, trace: probe::Trace, mech: u64, press: u64 }
++    fn rp_run(c0: &Canvas, pts: &[(f32, f32)], lift: f32, step: f32, damp: f32, wipes: usize) -> Run {
++        let mut c = c0.clone();
++        probe::set_lift(Some(lift));
++        probe::set_step(Some(step));
++        probe::reset_counters();
++        let mut rag = Rag::new(100.0, 7);
++        if damp > 0.0 { rag.dip(damp, c.now_min(), c.tally_mut()); }
++        let f = c.window();
++        probe::begin(f.w * f.h);
++        let mut lifted = 0.0;
++        for _ in 0..wipes { lifted += c.rag_wipe(&mut rag, pts, &[0.8], 19); }
++        let trace = probe::take().unwrap();
++        let (mech, press) = (probe::MECH_STEPS.with(|c| c.get()), probe::PRESS_CALLS.with(|c| c.get()));
++        Run { c, rag, lifted, trace, mech, press }
++    }
++    fn rp_line(n: usize) -> Vec<(f32, f32)> { (0..n).map(|i| (300.0 + 400.0 * i as f32 / (n - 1) as f32, 340.0)).collect() }
++
++    #[test]
++    #[ignore = "review probe"]
++    fn review_probe() {
++        let t0 = std::time::Instant::now();
++        let (brushed, uniform) = rp_fixture();
++        eprintln!("fixture built in {:.1}s", t0.elapsed().as_secs_f64());
++        let idx = rp_center_idx(&brushed);
++        let (b0, u0) = (rp_field(&brushed), rp_field(&uniform));
++        eprintln!("center px {}; initial film: brushed {:.3} um, uniform {:.3} um", idx.len(), rp_mean(&b0, &idx), rp_mean(&u0, &idx));
++        let two = rp_line(2);
++
++        // ---- sanity: reproduce the packet's recorded numbers ----
++        eprintln!("\n[S] reproduce packet numbers (damp .5, p .8, step .5 mm, one wipe): center film left %");
++        for (name, c0, f0) in [("brushed", &brushed, &b0), ("uniform", &uniform, &u0)] {
++            for lift in [1.0f32, 2.0, 4.0] {
++                let r = rp_run(c0, &two, lift, 0.5, 0.5, 1);
++                eprintln!("  {name:8} LIFT {lift}: {:.3}% left ({:.3} um)", 100.0 * rp_mean(&rp_field(&r.c), &idx) / rp_mean(f0, &idx), rp_mean(&rp_field(&r.c), &idx));
++            }
++        }
++
++        // ---- R01: paint-stamp step dependence (mechanical substep is held at 0.25 mm by cloth.rs) ----
++        eprintln!("\n[R01] center film left % vs paint stamp step (uniform 69.29 um film, p .8, one wipe)");
++        eprintln!("  step_mm  stamps  | LIFT4 damp | LIFT4 dry | LIFT1 damp | LIFT1 dry");
++        for step in [8.0f32, 4.0, 2.0, 1.0, 0.5, 0.25, 0.125] {
++            let mut row = format!("  {step:7} ");
++            let mut stamps = 0;
++            for (lift, damp) in [(4.0f32, 0.5f32), (4.0, 0.0), (1.0, 0.5), (1.0, 0.0)] {
++                let r = rp_run(&uniform, &two, lift, step, damp, 1);
++                stamps = r.press;
++                row += &format!(" | {:9.3}", 100.0 * rp_mean(&rp_field(&r.c), &idx) / rp_mean(&u0, &idx));
++            }
++            eprintln!("{row}   (stamps {stamps})");
++        }
++
++        // ---- R01/R02: is the removal just a smooth function of accumulated contact? ----
++        eprintln!("\n[R01/R02] accumulated contact over the center, and how well ln(film left) follows it (uniform film)");
++        for (lift, damp) in [(1.0f32, 0.5f32), (1.0, 0.0), (4.0, 0.0)] {
++            let r = rp_run(&uniform, &two, lift, 0.5, damp, 1);
++            let left = rp_field(&r.c);
++            let mut cs: Vec<f32> = idx.iter().map(|&i| r.trace.contact[i]).collect();
++            cs.sort_by(f32::total_cmp);
++            let q = |p: f32| cs[((cs.len() - 1) as f32 * p) as usize];
++            let xs: Vec<f64> = idx.iter().map(|&i| r.trace.contact[i] as f64).collect();
++            let ys: Vec<f64> = idx.iter().map(|&i| ((left[i] / u0[i]).max(1e-6) as f64).ln()).collect();
++            let (mx, my) = (xs.iter().sum::<f64>() / xs.len() as f64, ys.iter().sum::<f64>() / ys.len() as f64);
++            let (mut sxy, mut sxx, mut syy) = (0.0, 0.0, 0.0);
++            for (x, y) in xs.iter().zip(&ys) { sxy += (x - mx) * (y - my); sxx += (x - mx).powi(2); syy += (y - my).powi(2); }
++            let zero = cs.iter().filter(|&&v| v < 0.02).count();
++            eprintln!("  LIFT {lift} damp {damp}: accumulated contact min {:.3} p05 {:.3} median {:.3} p95 {:.3} max {:.3}; px with <0.02: {} of {}; corr(ln left, contact) r = {:.3}",
++                q(0.0), q(0.05), q(0.5), q(0.95), q(1.0), zero, cs.len(), sxy / (sxx * syy).sqrt());
++        }
++
++        // ---- R02: what one stamp's contact field looks like inside the pad (r < 0.75) ----
++        {
++            let _ = rp_run(&uniform, &two, 1.0, 0.5, 0.5, 1);
++            let h = probe::CHIST.with(|c| c.get());
++            let n: u64 = h.iter().sum();
++            eprintln!("\n[R02] per-stamp contact value inside the pad (all stamps of one wipe): c=0 {:.1}%, 0<c<1 {:.1}%, c=1 {:.1}%",
++                100.0 * h[0] as f64 / n as f64, 100.0 * h[1..11].iter().sum::<u64>() as f64 / n as f64, 100.0 * h[11] as f64 / n as f64);
++            eprintln!("       histogram of 0<c<1 in tenths: {:?}", &h[1..11]);
++        }
++
++        // ---- R03: the same straight line with more vertices ----
++        eprintln!("\n[R03] same 176 mm line, different vertex counts (brushed film, LIFT 4, damp .5, p .8)");
++        let base = rp_run(&brushed, &two, 4.0, 0.5, 0.5, 1);
++        let bf = rp_field(&base.c);
++        let bpos = base.rag.cloth.as_ref().unwrap().pos.clone();
++        eprintln!("  points  stamps  mech_substeps  center_left%  mean|dfilm| um (center)  max|dfilm| um  cloth node rms shift mm  lifted mm3");
++        for n in [2usize, 3, 41, 401, 881, 1761, 3521] {
++            let r = rp_run(&brushed, &rp_line(n), 4.0, 0.5, 0.5, 1);
++            let lf = rp_field(&r.c);
++            let d: f64 = idx.iter().map(|&i| (lf[i] - bf[i]).abs() as f64).sum::<f64>() / idx.len() as f64;
++            let dmax = idx.iter().map(|&i| (lf[i] - bf[i]).abs()).fold(0.0f32, f32::max);
++            let pos = &r.rag.cloth.as_ref().unwrap().pos;
++            let rms = (pos.iter().zip(&bpos).map(|(a, b)| (0..3).map(|k| (a[k] - b[k]).powi(2)).sum::<f32>() as f64).sum::<f64>() / pos.len() as f64).sqrt();
++            eprintln!("  {n:6}  {:6}  {:13}  {:11.3}  {:22.4}  {:13.3}  {:22.4}  {:.3}", r.press, r.mech, 100.0 * rp_mean(&lf, &idx) / rp_mean(&b0, &idx), d, dmax, rms, r.lifted);
++        }
++        eprintln!("  (for scale: mean film left in the 2-point run is {:.3} um)", rp_mean(&bf, &idx));
++        // the same comparison at quarter rate, where more film is left to differ
++        let base1 = rp_run(&brushed, &two, 1.0, 0.5, 0.5, 1);
++        let bf1 = rp_field(&base1.c);
++        for n in [401usize, 1761] {
++            let r = rp_run(&brushed, &rp_line(n), 1.0, 0.5, 0.5, 1);
++            let lf = rp_field(&r.c);
++            let d: f64 = idx.iter().map(|&i| (lf[i] - bf1[i]).abs() as f64).sum::<f64>() / idx.len() as f64;
++            eprintln!("  LIFT 1, {n} points: center left {:.3}% (2 points: {:.3}%), mean|dfilm| {:.4} um of mean {:.3} um left", 100.0 * rp_mean(&lf, &idx) / rp_mean(&b0, &idx), 100.0 * rp_mean(&bf1, &idx) / rp_mean(&b0, &idx), d, rp_mean(&bf1, &idx));
++        }
++
++        // ---- R04: sideways wander the solver never sees ----
++        {
++            let rag = Rag::new(100.0, 7);
++            let cs = rag.cloth_seed(19);
++            let w = 100.0f32;
++            let off = |sm: f32| {
++                let side = 2.0 * vn(sm / (3.0 * w), 1.5, cs ^ 0xB2) - 1.0;
++                let side2 = 2.0 * vn(sm / (0.7 * w), 3.5, cs ^ 0xB8) - 1.0;
++                WANDER_OFF * w * (0.65 * side + 0.35 * side2)
++            };
++            let (mut mx, mut tot, mut lo, mut hi) = (0.0f32, 0.0f32, f32::MAX, f32::MIN);
++            let ds = 0.5 / 0.44;
++            let mut s = 0.0;
++            while s < 400.0 { let d = (off(s + ds) - off(s)).abs(); mx = mx.max(d / ds); tot += d; lo = lo.min(off(s)); hi = hi.max(off(s)); s += ds; }
++            eprintln!("\n[R04] image-space wander on this path: offset range {:.2}..{:.2} mm; sideways travel {:.1} mm over 176 mm forward ({:.1}%); peak sideways/forward speed {:.2}", lo * 0.44, hi * 0.44, tot * 0.44, 100.0 * tot / 400.0, mx);
++        }
++
++        // ---- R05: per-cell capacity ----
++        eprintln!("\n[R05] cloth cells after wiping the brushed 69 um film (step .5 mm, p .8)");
++        for (lift, damp, wipes) in [(4.0f32, 0.5f32, 1usize), (4.0, 0.5, 2), (4.0, 0.0, 1), (4.0, 0.0, 2), (1.0, 0.5, 1)] {
++            let r = rp_run(&brushed, &two, lift, 0.5, damp, wipes);
++            let face = r.rag.face.as_ref().unwrap();
++            let cap = face.area * CAP_UM / 1000.0;
++            let mut fill: Vec<f32> = face.cells.iter().map(|c| c.held / cap).collect();
++            let sum: f64 = face.cells.iter().map(|c| c.held as f64).sum();
++            let over = fill.iter().filter(|&&v| v > 1.0).count();
++            let used = fill.iter().filter(|&&v| v > 1e-4).count();
++            fill.sort_by(f32::total_cmp);
++            let over_vol: f64 = face.cells.iter().map(|c| (c.held - cap).max(0.0) as f64).sum();
++            eprintln!("  LIFT {lift} damp {damp} x{wipes}: cells used {used}/361, over capacity {over}, max fill {:.2}, median used fill {:.2}; held sum {:.1} mm3 (lifted {:.1}); volume above capacity {:.1} mm3; rag.load {:.3} (global face capacity {:.0} mm3)",
++                fill[fill.len() - 1], fill[fill.len() - 1 - used / 2], sum, r.lifted, over_vol, r.rag.load, face.area * 361.0 * CAP_UM / 1000.0);
++        }
++
++        // ---- R08: overlapping sheets ----
++        {
++            eprintln!("\n[R08] mesh overlap during one wipe (step .5 mm)");
++            for (damp, p) in [(0.5f32, 0.8f32), (0.0, 0.8)] {
++                let _ = p;
++                let _r = rp_run(&brushed, &two, 4.0, 0.5, damp, 2);
++                let g = |c: &'static std::thread::LocalKey<std::cell::Cell<u64>>| c.with(|c| c.get());
++                eprintln!("  damp {damp}, two wipes: triangles flipped over in xy {} of {} ({:.3}%); raster cells claimed by two touching triangles >1.5 mesh cells apart: {}; adjacent touching raster cells whose material coords differ by >3 mesh cells: {} of {} ({:.3}%)",
++                    g(&probe::INVERTED), g(&probe::TRIS), 100.0 * g(&probe::INVERTED) as f64 / g(&probe::TRIS) as f64, g(&probe::MULTI), g(&probe::UVJUMP), g(&probe::TOUCHED), 100.0 * g(&probe::UVJUMP) as f64 / g(&probe::TOUCHED).max(1) as f64);
++            }
++        }
++        eprintln!("\ntotal {:.1}s", t0.elapsed().as_secs_f64());
++    }
++
++    #[test]
++    #[ignore = "review probe"]
++    fn review_probe2() {
++        let (brushed, uniform) = rp_fixture();
++        let idx = rp_center_idx(&uniform);
++        let u0 = rp_field(&uniform);
++        let two = rp_line(2);
++        let f = uniform.window();
++        eprintln!("[F1] uniform 69.29 um film, one wipe, p .8, step .5 mm: center means (um) and where the film left comes from");
++        eprintln!("  LIFT damp | picked up  laid back  left | laid back as share of left | corr(left, laid back)  corr(left, contact) | left by eighths of the wipe, start -> end (um)");
++        for (lift, damp) in [(1.0f32, 0.5f32), (4.0, 0.5), (1.0, 0.0), (4.0, 0.0)] {
++            let r = rp_run(&uniform, &two, lift, 0.5, damp, 1);
++            let left = rp_field(&r.c);
++            let (pk, dp, lf) = (rp_mean(&r.trace.pickup, &idx), rp_mean(&r.trace.deposit, &idx), rp_mean(&left, &idx));
++            let corr = |a: &dyn Fn(usize) -> f64, b: &dyn Fn(usize) -> f64| {
++                let n = idx.len() as f64;
++                let (ma, mb) = (idx.iter().map(|&i| a(i)).sum::<f64>() / n, idx.iter().map(|&i| b(i)).sum::<f64>() / n);
++                let (mut sab, mut saa, mut sbb) = (0.0, 0.0, 0.0);
++                for &i in &idx { sab += (a(i) - ma) * (b(i) - mb); saa += (a(i) - ma).powi(2); sbb += (b(i) - mb).powi(2); }
++                sab / (saa * sbb).sqrt()
++            };
++            let c1 = corr(&|i| left[i] as f64, &|i| r.trace.deposit[i] as f64);
++            let c2 = corr(&|i| left[i] as f64, &|i| r.trace.contact[i] as f64);
++            let mut bins = [(0.0f64, 0usize); 8];
++            for &i in &idx { let x = f.ux(i % f.w); let b = (((x - 350.0) / 300.0 * 8.0) as usize).min(7); bins[b].0 += left[i] as f64; bins[b].1 += 1; }
++            let prof: Vec<String> = bins.iter().map(|b| format!("{:.1}", b.0 / b.1 as f64)).collect();
++            eprintln!("  {lift:4} {damp:4} | {pk:9.2}  {dp:9.2}  {lf:5.2} | {:25.0}% | {c1:21.3}  {c2:19.3} | {}", 100.0 * dp / lf, prof.join(" "));
++            let _ = u0.len();
++        }
++        // lanes: does any line along the travel direction stay out of contact?
++        {
++            let r = rp_run(&uniform, &two, 1.0, 0.5, 0.5, 1);
++            let mut rows: std::collections::BTreeMap<usize, (f64, usize)> = Default::default();
++            for &i in &idx { let e = rows.entry(i / f.w).or_default(); e.0 += r.trace.contact[i] as f64; e.1 += 1; }
++            let lane: Vec<f64> = rows.values().map(|v| v.0 / v.1 as f64).collect();
++            let (lo, hi) = (lane.iter().cloned().fold(f64::MAX, f64::min), lane.iter().cloned().fold(f64::MIN, f64::max));
++            eprintln!("[F3] accumulated contact averaged along the travel direction, per pixel row across the pad's middle ({} rows): lowest lane {:.3}, highest {:.3}", lane.len(), lo, hi);
++        }
++        eprintln!("[F2] mesh overlap on paths with a reversal and with corners (brushed film, LIFT 4, damp .5)");
++        for (name, pts) in [("there and back", vec![(300.0f32, 340.0f32), (700.0, 340.0), (300.0, 340.0)]),
++                            ("U with two right angles", vec![(320.0, 290.0), (680.0, 290.0), (680.0, 400.0), (320.0, 400.0)]),
++                            ("zigzag, 6 sharp turns", vec![(320.0, 300.0), (420.0, 380.0), (480.0, 300.0), (540.0, 380.0), (600.0, 300.0), (660.0, 380.0), (680.0, 300.0)])] {
++            let _r = rp_run(&brushed, &pts, 4.0, 0.5, 0.5, 1);
++            let g = |c: &'static std::thread::LocalKey<std::cell::Cell<u64>>| c.with(|c| c.get());
++            eprintln!("  {name}: triangles flipped {} of {} ({:.3}%); raster cells claimed by touching triangles >1.5 mesh cells apart: {}; adjacent touching raster cells with material coords >3 mesh cells apart: {} of {}",
++                g(&probe::INVERTED), g(&probe::TRIS), 100.0 * g(&probe::INVERTED) as f64 / g(&probe::TRIS) as f64, g(&probe::MULTI), g(&probe::UVJUMP), g(&probe::TOUCHED));
++        }
++    }
++
++    #[test]
++    #[ignore = "review probe"]
++    fn review_probe3() {
++        let (_brushed, uniform) = rp_fixture();
++        let idx = rp_center_idx(&uniform);
++        let two = rp_line(2);
++        let f = uniform.window();
++        eprintln!("[H1] uniform 69.29 um film, damp .5, p .8, one wipe: named ablations (center means, um)");
++        eprintln!("  LIFT  case                      | gross pickup  gross laid back  left | of the film left, share that came off the cloth | left by eighths, start -> end            | rag.load  fullest cell");
++        for lift in [1.0f32, 4.0] {
++            for (name, ng, nf, nd) in [("as is", false, false, false), ("no whole-face thirst", true, false, false), ("no laying back", false, false, true),
++                                       ("neither", true, false, true), ("no stain floor", false, true, false), ("no floor, no laying back", false, true, true)] {
++                probe::set_flags(ng, nf, nd);
++                let r = rp_run(&uniform, &two, lift, 0.5, 0.5, 1);
++                probe::set_flags(false, false, false);
++                let left = rp_field(&r.c);
++                let (pk, dp, lf, fc) = (rp_mean(&r.trace.pickup, &idx), rp_mean(&r.trace.deposit, &idx), rp_mean(&left, &idx), rp_mean(&r.trace.from_cloth, &idx));
++                let mut bins = [(0.0f64, 0usize); 8];
++                for &i in &idx { let x = f.ux(i % f.w); let b = (((x - 350.0) / 300.0 * 8.0) as usize).min(7); bins[b].0 += left[i] as f64; bins[b].1 += 1; }
++                let prof: Vec<String> = bins.iter().map(|b| format!("{:.1}", b.0 / b.1 as f64)).collect();
++                let face = r.rag.face.as_ref().unwrap();
++                let cap = face.area * CAP_UM / 1000.0;
++                let full = face.cells.iter().map(|c| c.held / cap).fold(0.0f32, f32::max);
++                eprintln!("  {lift:4}  {name:25} | {pk:12.2}  {dp:15.2}  {lf:5.2} | {:46.0}% | {:40} | {:8.3}  {full:.2}", 100.0 * fc / lf.max(1e-9), prof.join(" "), r.rag.load);
++            }
++        }
++        eprintln!("[H2] thin uniform films on the same linen ground, clean rag, p .8, LIFT 4 (the prototype's rate), one wipe: share of the center's film removed");
++        eprintln!("  film um | dry  damp .5 | dry, no floor  damp, no floor | most a 1 um floor allows");
++        for um in [0.5f32, 1.0, 1.5, 3.0, 10.0] {
++            let mut c = uniform.clone();
++            probe::uniform_film(&mut c, um);
++            let before = rp_mean(&rp_field(&c), &idx);
++            let mut row = format!("  {um:7} |");
++            for (damp, nf) in [(0.0f32, false), (0.5, false), (0.0, true), (0.5, true)] {
++                probe::set_flags(false, nf, false);
++                let r = rp_run(&c, &two, 4.0, 0.5, damp, 1);
++                probe::set_flags(false, false, false);
++                row += &format!(" {:6.1}%", 100.0 * (1.0 - rp_mean(&rp_field(&r.c), &idx) / before));
++                if damp > 0.0 && !nf { row += " |"; }
++            }
++            eprintln!("{row} | {:.1}%", 100.0 * ((um - 1.0).max(0.0) / um));
++        }
+     }
+ }

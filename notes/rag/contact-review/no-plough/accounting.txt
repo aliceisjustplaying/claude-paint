@@ -1,0 +1,2 @@
+Maximum per-pixel error: 0.00017738342 um
+Dimensions: 1296 x 864

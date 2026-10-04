@@ -1,0 +1,31 @@
+   Compiling paint v0.1.0 (~/src/a/claude-paint/crates/paint)
+    Finished `test` profile [optimized + debuginfo] target(s) in 13.02s
+     Running unittests src/lib.rs (target/debug/deps/paint-6d3c8d4e8dda60c4)
+
+running 6 tests
+test rag::tests::table ... ignored
+damp=false pass=1: paint left 83.9%, tone left 68.4%
+damp=false pass=2: paint left 81.0%, tone left 48.1%
+damp=true pass=1: paint left 79.4%, tone left 45.8%
+damp=true pass=2: paint left 78.5%, tone left 39.0%
+test rag::tests::repeated_wipes_conserve_paint_and_a_second_damp_wipe_clears_more ... ok
+test rag::tests::the_spirits_in_a_dipped_rag_evaporate ... ok
+tone 0.478; dry rag: tint 0.102 (21% of the tone), film off tops 98% hollows 92%; with spirits: tint 0.050 (10%), film off tops 99% hollows 98%
+test rag::tests::a_dry_rag_leaves_a_pale_tint_and_spirits_lift_nearly_to_the_ground ... ok
+test rag::tests::the_rag_lifts_open_paint_from_the_tops_first ... ok
+test rag::tests::nothing_is_lifted_past_the_gel_point ... ok
+
+test result: ok. 5 passed; 0 failed; 1 ignored; 0 measured; 178 filtered out; finished in 26.20s
+
+     Running tests/curved_drag_nan.rs (target/debug/deps/curved_drag_nan-c941d4d84174ffeb)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 2 filtered out; finished in 0.00s
+
+     Running tests/ground_grain.rs (target/debug/deps/ground_grain-05a8d06d95a504d2)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 4 filtered out; finished in 0.00s
+

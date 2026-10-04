@@ -1,0 +1,38 @@
+{
+  "bytes": 91223137,
+  "decimal_MB": 91.22,
+  "files": 1864,
+  "sha256": "dff466d0dbbdd784d91bef0ed30849ccd547ae50843892433fca8c944bb36f4c",
+  "zip_crc": "passed",
+  "scope": [
+    "rag",
+    "thinner/wash",
+    "sienna"
+  ],
+  "added_snapshots": {
+    "thinner": {
+      "head": "995fbab58fd94a2490ab99ebae425cda2e1ff065",
+      "branch": "thinner2",
+      "status": "",
+      "scope": "Current Cargo workspace, scripts and relevant experiment notes; excludes Git metadata and build outputs. Not merged by packaging.",
+      "text_redactions": [],
+      "file_count": 254
+    },
+    "look": {
+      "head": "196a673596ea2c5e9c037164f8ce01d90ef11a88",
+      "branch": "look-experiments",
+      "status": "?? notes/look/index.html",
+      "scope": "Current Cargo workspace, scripts and relevant experiment notes; excludes Git metadata and build outputs. Not merged by packaging.",
+      "text_redactions": [],
+      "file_count": 352
+    },
+    "engine3-integration": {
+      "head": "d6318d1e0e63b2d74181d930a1136a60ff9a575d",
+      "branch": "engine3-overnight",
+      "status": "",
+      "scope": "Current Cargo workspace, scripts and relevant experiment notes; excludes Git metadata and build outputs. Not merged by packaging.",
+      "text_redactions": [],
+      "file_count": 342
+    }
+  }
+}

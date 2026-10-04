@@ -1,0 +1,80 @@
+   Compiling paint v0.1.0 (~/src/a/claude-paint/crates/paint)
+   Compiling easel v0.1.0 (~/src/a/claude-paint/crates/easel)
+    Finished `test` profile [optimized + debuginfo] target(s) in 27.95s
+     Running unittests src/main.rs (target/debug/deps/easel-669d81a2acb2e5a0)
+
+running 6 tests
+test api::draw_rag::tests::a_dipped_rag_dries_as_time_passes ... ok
+test api::draw_rag::tests::the_rag_refuses_what_it_cannot_do ... ok
+test api::draw_rag::tests::the_cloth_can_t_be_cleaned_by_assignment ... ok
+test api::draw_rag::tests::an_older_log_sees_the_globals_it_saw ... ok
+test api::draw_rag::tests::the_rag_takes_hand_time ... ok
+test api::draw_rag::tests::a_failed_chunk_takes_back_the_rag ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 60 filtered out; finished in 9.33s
+
+     Running tests/boxes.rs (target/debug/deps/boxes-fb980a6b5cd4f00d)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 5 filtered out; finished in 0.00s
+
+     Running tests/delivery.rs (target/debug/deps/delivery-cd7e103fddd18a71)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 2 filtered out; finished in 0.00s
+
+     Running tests/determinism.rs (target/debug/deps/determinism-26a9da8a1470e795)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 4 filtered out; finished in 0.00s
+
+     Running tests/painter.rs (target/debug/deps/painter-f00c695b1eef8164)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/session_integrity.rs (target/debug/deps/session_integrity-0d7fdfe83587cc91)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 10 filtered out; finished in 0.00s
+
+     Running tests/smoke.rs (target/debug/deps/smoke-47872779c98d1503)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.00s
+
+     Running unittests src/lib.rs (target/debug/deps/paint-7f757239a2410b8e)
+
+running 6 tests
+test rag::tests::table ... ignored
+damp=false pass=1: paint left 83.8%, tone left 67.4%
+damp=false pass=2: paint left 80.7%, tone left 48.3%
+damp=true pass=1: paint left 79.1%, tone left 44.6%
+damp=true pass=2: paint left 78.0%, tone left 38.4%
+test rag::tests::repeated_wipes_conserve_paint_and_a_second_damp_wipe_clears_more ... ok
+test rag::tests::the_spirits_in_a_dipped_rag_evaporate ... ok
+tone 0.478; dry rag: tint 0.100 (21% of the tone), film off tops 98% hollows 93%; with spirits: tint 0.050 (10%), film off tops 99% hollows 98%
+test rag::tests::a_dry_rag_leaves_a_pale_tint_and_spirits_lift_nearly_to_the_ground ... ok
+test rag::tests::the_rag_lifts_open_paint_from_the_tops_first ... ok
+test rag::tests::nothing_is_lifted_past_the_gel_point ... ok
+
+test result: ok. 5 passed; 0 failed; 1 ignored; 0 measured; 178 filtered out; finished in 25.21s
+
+     Running tests/curved_drag_nan.rs (target/debug/deps/curved_drag_nan-a61dc85a043599aa)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 2 filtered out; finished in 0.00s
+
+     Running tests/ground_grain.rs (target/debug/deps/ground_grain-aa6d54466f68a0cf)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 4 filtered out; finished in 0.00s
+

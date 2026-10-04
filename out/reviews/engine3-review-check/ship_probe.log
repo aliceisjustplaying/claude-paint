@@ -1,0 +1,32 @@
+    Finished `release` profile [optimized] target(s) in 13.34s
+     Running tests/review_ship.rs (/var/folders/6k/24182wv136749r3p852rft740000gn/T//e3review/target/release/deps/review_ship-31eb366cd10fa0b0)
+
+running 1 test
+[main rag] engine 3, brushed dark film (69.29 um at center), pad 100 units (44 mm), p 0.8, same 176 mm straight line
+  damp  points  lifted mm3  center film left %
+     0       2      215.84  31.24
+     0       3      215.84  31.24
+     0       5      215.84  31.24
+     0       9      215.84  31.24
+     0      17      215.84  31.24
+     0      41      231.95  26.56
+     0     101      238.18  24.85
+     0     401      241.41  24.01
+     0    1761      242.27  23.79
+   0.5       2      343.62  6.79
+   0.5       3      343.62  6.79
+   0.5       5      343.62  6.79
+   0.5       9      343.62  6.79
+   0.5      17      343.62  6.79
+   0.5      41      352.61  5.09
+   0.5     101      356.99  4.37
+   0.5     401      359.37  4.02
+   0.5    1761      359.98  3.93
+[main rag] engine 2 control (the older transfer law), dry
+       2      295.92  25.83
+      17      295.92  25.83
+     401      327.67  20.04
+test review_main_rag_vertex_count ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 26.06s
+

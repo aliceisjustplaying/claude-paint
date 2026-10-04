@@ -1,0 +1,65 @@
+diff -ruN engine3-rag-review/shipping/crates/paint/tests/review_ship.rs work/shipping/crates/paint/tests/review_ship.rs
+--- engine3-rag-review/shipping/crates/paint/tests/review_ship.rs	1970-01-01 01:00:00
++++ work/shipping/crates/paint/tests/review_ship.rs	2026-10-04 14:07:49
+@@ -0,0 +1,61 @@
++//! Review probe (scratch copy only): main's released engine-3 rag, the same straight wipe with more vertices.
++use paint::rag::Rag;
++use paint::{Canvas, Crop, Handling, Linen, Mask, Tool, hex};
++
++fn center(c: &Canvas) -> f64 {
++    let f = c.window();
++    let (mut s, mut n) = (0.0f64, 0usize);
++    for y in 0..f.h {
++        for x in 0..f.w {
++            let (ux, uy) = (f.ux(x), f.uy(y));
++            if (350.0..650.0).contains(&ux) && (310.0..370.0).contains(&uy) {
++                s += c.wet_um(ux, uy) as f64;
++                n += 1;
++            }
++        }
++    }
++    s / n as f64
++}
++
++#[test]
++#[ignore = "review probe"]
++fn review_main_rag_vertex_count() {
++    let crop = Crop { units: [260.0, 190.0, 740.0, 490.0], margin: 30.0 };
++    let mut c = Canvas::new_window(2400, 1.5, hex("#b08060"), Some(crop)).with_engine(3).with_size_mm(440.0)
++        .with_linen(Linen { warp_per_cm: 15.0, weft_per_cm: 15.0, ..Linen::fine(3) });
++    c.prime(hex("#e4dcc8"), 0.9, 25.0, 0.6, 0.3, 5);
++    c.set_hand_time(Some(15.0));
++    let m = Mask::from_fn(c.frame(), |x, y| if (100.0..900.0).contains(&x) && (120.0..550.0).contains(&y) { 1.0 } else { 0.0 });
++    let hd = Handling::new(Tool::filbert(22.0)).color(|_, _| hex("#3f2b22")).paint(0.85, 0.75).coverage(1.0).load(0.3).angle(|_, _| 0.0).fill(true);
++    c.work(&m, &hd, 11);
++    c.clock_hand_min();
++    let before = center(&c);
++    println!("[main rag] engine 3, brushed dark film ({before:.2} um at center), pad 100 units (44 mm), p 0.8, same 176 mm straight line");
++    println!("  damp  points  lifted mm3  center film left %");
++    for damp in [0.0f32, 0.5] {
++        for n in [2usize, 3, 5, 9, 17, 41, 101, 401, 1761] {
++            let mut canvas = c.clone();
++            let mut rag = Rag::new(100.0, 7);
++            if damp > 0.0 { rag.dip(damp, canvas.now_min(), canvas.tally_mut()); }
++            let pts: Vec<(f32, f32)> = (0..n).map(|i| (300.0 + 400.0 * i as f32 / (n - 1) as f32, 340.0)).collect();
++            let lifted = canvas.rag_wipe(&mut rag, &pts, &[0.8], 19);
++            println!("  {damp:4}  {n:6}  {lifted:10.2}  {:.2}", 100.0 * center(&canvas) / before);
++        }
++    }
++    // engine 2 control: the pre-engine-3 law
++    let mut c2 = Canvas::new_window(2400, 1.5, hex("#b08060"), Some(crop)).with_engine(2).with_size_mm(440.0)
++        .with_linen(Linen { warp_per_cm: 15.0, weft_per_cm: 15.0, ..Linen::fine(3) });
++    c2.prime(hex("#e4dcc8"), 0.9, 25.0, 0.6, 0.3, 5);
++    c2.set_hand_time(Some(15.0));
++    c2.work(&m, &hd, 11);
++    c2.clock_hand_min();
++    let before2 = center(&c2);
++    println!("[main rag] engine 2 control (the older transfer law), dry");
++    for n in [2usize, 17, 401] {
++        let mut canvas = c2.clone();
++        let mut rag = Rag::new(100.0, 7);
++        let pts: Vec<(f32, f32)> = (0..n).map(|i| (300.0 + 400.0 * i as f32 / (n - 1) as f32, 340.0)).collect();
++        let lifted = canvas.rag_wipe(&mut rag, &pts, &[0.8], 19);
++        println!("  {n:6}  {lifted:10.2}  {:.2}", 100.0 * center(&canvas) / before2);
++    }
++}

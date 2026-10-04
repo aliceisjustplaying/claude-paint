@@ -1453,7 +1453,8 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
                 (v, _) => tool_of(v)?,
             };
             let seed = st1.borrow_mut().auto_seed();
-            let held = Rc::new(RefCell::new(Held::new(tool, seed)));
+            let engine = st1.borrow().tubes.engine;
+            let held = Rc::new(RefCell::new(Held::new(tool, seed).with_engine(engine)));
             st1.borrow_mut().brushes.push(Rc::downgrade(&held));
             Ok(Brush { held, st: st1.clone() })
         })?)?;

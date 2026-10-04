@@ -63,3 +63,19 @@
 **Harness.** The pi extensions that present painting tools and manage the painter's context.
 
 **Compaction.** Replacing older conversation context with a summary for later model requests.
+
+**Held brush.** A brush object with its own tool shape and retained paint. Reusing it continues that paint history; constructing another brush creates a separate holder.
+
+**Fullness.** Paint remaining in a brush relative to a nominal full load. Additive loading can make this value exceed one.
+
+**Stroke.** A brush mark following a submitted path of at least two points, with pressure and orientation controls.
+
+**Touch.** A pressed brush tip at a submitted position, optionally dragging or twisting during contact.
+
+**Ramps.** Fractions of a stroke used for pressing down and lifting off.
+
+**Swell.** Submitted pressure factors distributed along a stroke.
+
+**Orientation.** The brush's wide-axis direction: across travel, along travel or a fixed angle.
+
+**Pickup.** Existing canvas paint entering a brush and potentially affecting later marks.

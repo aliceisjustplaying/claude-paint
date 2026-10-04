@@ -1,16 +1,30 @@
 # Engine 3: handover 2, October 4, 2026 (evening)
 
-Follows HANDOVER.md section 6. Work is on branch `rag` (local, not pushed),
-11 commits on `main` (`cad5db0d`). Nothing here has been merged.
+Work is on local branch `rag`. This status supersedes the historical state
+in START_HERE.md and follows HANDOVER.md section 6.
 
-## Technical scope
-  
-  Behavior-changing defaults require review of the exact candidate.
-  The deposition experiment is finite-rate exchange between finite brush
-  and canvas reservoirs, specified in AGENT_BRIEF_V2.md section 4c and
-  REVIEW_RESPONSE.md section 5.
-  
-  ## Health
+## Current scope and starting point
+
+- Selected rag appearance: `6f31f790`; retain these choices.
+- Thin-film flow experiment `b72c3978` was reverted in `4e30c114`.
+  The 2 µm floor is back; its replacement remains open.
+- The strict/soft deposition code, probe and comparison choices from
+  `0acf8cfe` have been removed. The separate historical flow comparison
+  and `flow_pictures` probe remain. Default deposition is unchanged.
+- Next deposition work: finite-rate exchange between finite brush and
+  canvas reservoirs, per `AGENT_BRIEF_V2.md` §4c and
+  `REVIEW_RESPONSE.md` §5 under `notes/engine3/reviews/engine3-review-response/`.
+- Behavior-changing defaults require review of the exact candidate.
+
+### Existing uncommitted work (preserved, not part of this cleanup)
+
+`crates/paint/src/thinner.rs` already contained removal of `FLOW_MIN`
+and its early-return check, plus an ignored `fingerprint` diagnostic.
+These edits remain uncommitted and unvalidated here. Establish their
+status before further thinner edits; timings below predate their removal
+of the cutoff.
+
+## Health
 
 - `scripts/test --all` at `6f31f790`: red only on the three known steps
   (check 13 (b); the `rag` scene of `baseline-state` and thinner check 2).
@@ -21,7 +35,7 @@ Follows HANDOVER.md section 6. Work is on branch `rag` (local, not pushed),
   server quit while idle once and the next build hit the trap in
   HANDOVER 5.0.
 
-## Rag (HANDOVER 6.1): done, chosen by the owner
+## Rag (HANDOVER 6.1): appearance selected; correctness work remains
 
 `6f31f790`, engine 3 only (`crates/paint/src/rag.rs`):
 
@@ -63,19 +77,16 @@ is not done. 6.1 (2)-(4) were not started.
   is not recorded yet.
 - (4) The substep cap: no longer binds at 64 ticks (a tick needs a few
   substeps); not otherwise changed.
-- (3) Thin films: `b72c3978` replaced the 2 µm floor with Orchard's h³
-  slowing, mobility × h³ / (h³ + `WET_FILM_UM`³). One stroke at thinner
-  0.75 now flows 0.87% in 5 minutes (was 0), 0.9 flows 0.036%
-  (`thinner::tests::single_strokes`). Visual difference small (mean 0.35,
-  max 10 grey levels; `notes/thinner/wash-experiment/flow.jpg`). Committed
-  pending visual acceptance; selection or rollback remains open.
-- (2) A pass over a wet wash: not done. `0acf8cfe` holds a test-only
-  switch (`thinner::set_wet_rule`, `Surf::used` in `bristle.rs`; default
-  0 = today) with strict and soft stand-ins and pictures
-  (`notes/thinner/wash-experiment/index.html`). These candidates are not selected. Next: build the finite-rate exchange of
-  `AGENT_BRIEF_V2.md` §4c, compare it against today's rule on the same
-  fixtures, show the owner, then restate protected checks 7, 9, 14, 15 and
-  16 with approval. Remove the switch when done.
+- (3) Thin films: the experimental slowing law from `b72c3978` was
+  reverted in `4e30c114`. The hard 2 µm floor is current again. A reviewed
+  replacement is still needed. The historical flow images remain in
+  `notes/thinner/wash-experiment/`; they do not describe current behavior.
+- (2) A pass over a wet wash: not done. The strict/soft experiment from
+  `0acf8cfe` has been removed without changing default deposition. Next:
+  implement the finite-rate exchange experiment in `AGENT_BRIEF_V2.md`
+  §4c, compare against the required controls and show the exact candidate
+  before selecting default behavior. Protected expectation changes need
+  approval; do not assume every existing check needs rewriting.
 
 ## Then
 
@@ -88,9 +99,9 @@ is not done. 6.1 (2)-(4) were not started.
   studio viewer on the tailnet. The owner wants this once 6.2 (2) is done.
 - `description/` waits until after engine 3.
 
-## Probes and switches added (all `#[ignore]`)
+## Retained diagnostic probes (all `#[ignore]`)
 
 `rag::tests::thin::table`; `thinner::tests::{short_waits, wait_cost,
-single_strokes, wet_rules, flow_pictures}`. Sheet scripts:
+single_strokes, flow_pictures}`. Sheet scripts:
 `notes/rag/thin-experiment/*.py`, `notes/thinner/wash-experiment/sheets.py`
 (`uv run`).

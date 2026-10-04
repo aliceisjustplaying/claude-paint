@@ -133,22 +133,6 @@ pub fn spread_mm2_min(phi: f32) -> f32 {
 /// a physical constant. It ends the flow once the solvent left is a trace.
 const FLOW_MIN: f32 = 1e-4;
 
-// EXPERIMENT (HANDOVER 6.2 (2)), per thread: 0 today (every thinned
-// stroke may add its ceiling at a pixel), 1 absolute (no more than the
-// ceiling less the wet liquid already there), 2 soft (the ceiling ×
-// ceiling / (ceiling + the wet liquid there)).
-thread_local! {
-    static WET_RULE: std::cell::Cell<u8> = const { std::cell::Cell::new(0) };
-}
-
-pub fn set_wet_rule(r: u8) {
-    WET_RULE.with(|c| c.set(r));
-}
-
-pub fn wet_rule() -> u8 {
-    WET_RULE.with(|c| c.get())
-}
-
 /// Ticks a minute on the grid the solvent's loss and flow step on
 /// (`Canvas::wait`): a chosen numerical resolution, not a physical
 /// constant. A power of two, so quarter minutes fall on it exactly.
@@ -588,64 +572,6 @@ mod tests {
             let all: f64 = before.iter().map(|&v| v as f64).sum();
             println!("thinner {t}: wet film median {:.2} µm, p90 {:.2}; 5 min moved {:.4}% of the paint", l[l.len() / 2], l[l.len() * 9 / 10], 100.0 * moved / all);
         }
-    }
-
-
-    /// HANDOVER 6.2 (2): a thinned raw umber wash of overlapping strokes,
-    /// once, three times wet, and three times with the paint left to dry
-    /// between, under each wet rule (`set_wet_rule`). Prints the paint's
-    /// mean thickness and spread in the middle; with `THIN_EXP_DIR` saves
-    /// each canvas as PNG.
-    /// `THIN_EXP_DIR=/tmp/x cargo test --release -p paint --lib thinner::tests::wet_rules -- --ignored --nocapture`
-    #[test]
-    #[ignore]
-    fn wet_rules() {
-        use crate::canvas::Crop;
-        let pal = Palette::named_box("inness").unwrap();
-        let umber = pal.pile(vec![(pal.tubes.iter().position(|t| t.name == "raw umber").unwrap(), 1.0)]).laid(0.0).with_thinner(0.5);
-        let out = std::env::var("THIN_EXP_DIR").ok().map(std::path::PathBuf::from);
-        let base = || {
-            let mut c = Canvas::new_window(2400, 1.5, hex("#d8cdb8"), Some(Crop { units: [260.0, 190.0, 740.0, 490.0], margin: 30.0 })).with_engine(3).with_size_mm(440.0);
-            c.prime(hex("#e4dcc8"), 0.9, 40.0, 0.6, 0.0, 7);
-            c
-        };
-        let ground = base().film.clone();
-        let pass = |c: &mut Canvas, seed: u64| {
-            for k in 0..8 {
-                let y = 260.0 + 25.0 * k as f32;
-                let mut h = Held::new(Tool::hog_flat(40.0), seed + k);
-                h.load(umber, 0.9);
-                c.drag(&mut h, &Gesture::new(vec![(290.0, y), (710.0, y + 3.0)]).pressure(0.85, 0.85), None);
-            }
-        };
-        for rule in [0u8, 1, 2] {
-            super::set_wet_rule(rule);
-            for (name, n, dry_between) in [("1 pass", 1, false), ("3 wet", 3, false), ("3 dry", 3, true)] {
-                let mut c = base();
-                for p in 0..n {
-                    if p > 0 && dry_between {
-                        c.dry();
-                    }
-                    pass(&mut c, 100 * p as u64 + 1);
-                }
-                c.wait(5.0);
-                let fr = c.f;
-                let um: Vec<f32> = (0..fr.w * fr.h)
-                    .filter(|&i| {
-                        let (x, y) = (fr.ux(i % fr.w), fr.uy(i / fr.w));
-                        (350.0..650.0).contains(&x) && (290.0..410.0).contains(&y)
-                    })
-                    .map(|i| (c.wet.vol[i] + c.film[i] - ground[i]) * crate::surface::COAT_UM)
-                    .collect();
-                let mean = um.iter().map(|&v| v as f64).sum::<f64>() / um.len() as f64;
-                let sd = (um.iter().map(|&v| (v as f64 - mean).powi(2)).sum::<f64>() / um.len() as f64).sqrt();
-                println!("rule {rule} {name}: paint mean {mean:.2} µm, spread {:.2}", sd / mean);
-                if let Some(d) = &out {
-                    c.save(d.join(format!("r{rule}-{}.png", name.replace(' ', "")))).unwrap();
-                }
-            }
-        }
-        super::set_wet_rule(0);
     }
 
 

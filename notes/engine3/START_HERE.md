@@ -6,7 +6,7 @@ The consolidation is done. The work is in [HANDOVER.md](HANDOVER.md), section 6
 (rag, then thinner, then sienna, then the first engine-3 painting). Sections 2
 to 5 there describe the state before the consolidation; skip them.
 
-## State
+## Historical state at consolidation (superseded by HANDOVER-2.md)
 
 - One checkout, `~/src/a/claude-paint`, on `main`, pushed. No other worktrees or
   branches, local or remote. Everything from the engine-3 line is on main.

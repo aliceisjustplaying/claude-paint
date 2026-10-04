@@ -385,32 +385,41 @@ impl Canvas {
     }
 
     /// Wait `dt` minutes with solvent in the paint (engine 3,
-    /// `crate::thinner`): the solvent's loss, the flow it gives the paint
-    /// and the oil's drying all step on one clock, in steps that end on
-    /// whole minutes counted from the canvas's start (not from this wait),
-    /// so a wait split on whole minutes is exactly the wait in one, and
-    /// brushwork's hand time (which waits too) keeps the same grid. The
-    /// solvent's loss and the oil's drying run over every step, whole or
-    /// part (both exact in closed form); the flow runs once per whole
-    /// minute, as each minute of the grid ends. Once the last solvent is
-    /// gone the rest of the wait is the ordinary one.
+    /// `crate::thinner`). The solvent's loss and its flow step on a fine
+    /// grid of `FLOW_TICKS` ticks a minute counted from the canvas's start
+    /// (not from this wait): the loss over every step, whole or part (exact
+    /// in closed form), the flow over one whole tick as each tick of the
+    /// grid ends. So a wait's flow is off by at most one tick (under a
+    /// second), and a wait split on the grid is exactly the wait in one.
+    /// The oil's drying steps as before, in steps that end on whole minutes
+    /// (or the wait's end), and brushwork's hand time (which waits too)
+    /// keeps the same grid. Once the last solvent is gone the rest of the
+    /// wait is the ordinary one.
     fn wait_on_grid(&mut self, dt: f32) {
+        const TICKS: f64 = crate::thinner::FLOW_TICKS as f64;
         let start = self.wet.clock.now;
         let end = start + dt as f64;
         let mut t = start;
+        let mut aged = start;
         while t < end {
-            let next = (t.floor() + 1.0).min(end);
-            let step = (next - t) as f32;
-            self.evaporate(step);
-            self.age(step);
-            if next == next.floor() {
-                self.spread(1.0);
+            let tick = ((t * TICKS).floor() + 1.0) / TICKS;
+            let next = tick.min(end);
+            self.evaporate((next - t) as f32);
+            // the oil dries in the steps it always has: to each whole
+            // minute and to the wait's end
+            let minute = (aged.floor() + 1.0).min(end);
+            if next == minute {
+                self.age((next - aged) as f32);
+                aged = next;
+            }
+            if next == tick {
+                self.spread((1.0 / TICKS) as f32);
             }
             t = next;
             self.wet.clock.now = t;
             if !self.wet.has_solvent(self.f.w) {
-                if end > t {
-                    self.age((end - t) as f32);
+                if end > aged {
+                    self.age((end - aged) as f32);
                 }
                 break;
             }

@@ -127,6 +127,11 @@ pub fn spread_mm2_min(phi: f32) -> f32 {
     SPREAD_MM2_MIN * phi / (1.0 - phi)
 }
 
+/// Ticks a minute on the grid the solvent's loss and flow step on
+/// (`Canvas::wait`): a chosen numerical resolution, not a physical
+/// constant. A power of two, so quarter minutes fall on it exactly.
+pub const FLOW_TICKS: u32 = 64;
+
 /// Below this (µm) a pixel's solvent is gone. A chosen numerical cutoff
 /// (it lets a wait end with the solvent gone), not a physical constant.
 pub(crate) const SOLVENT_FLOOR: f32 = 1e-8;
@@ -465,4 +470,33 @@ mod tests {
         assert!(fresh > 0.0);
         assert!(reused >= 0.9 * fresh, "a reused id laid {reused}, a fresh one {fresh}");
     }
+
+    /// HANDOVER 6.2 (1): equal 0.02-minute waits from different places on
+    /// the clock should move about the same paint. Prints the share of the
+    /// paint each wait moves (half the summed |change| over the total).
+    /// `cargo test --release -p paint --lib thinner::tests::short_waits -- --ignored --nocapture`
+    #[test]
+    #[ignore]
+    fn short_waits() {
+        let mut c = Canvas::new(480, 1.0, hex("#d8cdb8")).with_engine(3);
+        c.prime(hex("#b9a98c"), 0.9, 40.0, 0.6, 0.0, 7);
+        for k in 0..6 {
+            let y = 300.0 + 25.0 * k as f32;
+            let mut h = Held::new(Tool::hog_flat(40.0), 10 + k);
+            h.load(sienna(0.5), 0.9);
+            c.drag(&mut h, &Gesture::new(vec![(250.0, y), (750.0, y + 3.0)]).pressure(0.85, 0.85), None);
+        }
+        let c0 = c;
+        for phase in [0.10f32, 0.50, 0.97, 0.99] {
+            let mut c = c0.clone();
+            let to = (c.clock().floor() + 1.0) as f32 + phase - c.clock() as f32;
+            c.wait(to);
+            let before = c.wet.vol.clone();
+            c.wait(0.02);
+            let moved: f64 = c.wet.vol.iter().zip(&before).map(|(a, b)| (a - b).abs() as f64).sum::<f64>() / 2.0;
+            let all: f64 = before.iter().map(|&v| v as f64).sum();
+            println!("0.02 min from phase {phase:.2}: moved {:.4}% of the paint", 100.0 * moved / all);
+        }
+    }
+
 }

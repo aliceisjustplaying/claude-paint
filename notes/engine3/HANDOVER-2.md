@@ -1,7 +1,8 @@
 # Engine 3: handover 2, October 4, 2026 (evening)
 
-Work is on local branch `rag`. This status supersedes the historical state
-in START_HERE.md and follows HANDOVER.md section 6.
+Historical status on branch `rag`. HANDOVER-3.md is the current parallel
+plan and done condition; its state supersedes this document. The selected
+rag settings below remain reference material.
 
 ## Goal and done condition
 

@@ -54,6 +54,13 @@ canvas{size=<mm>, aspect=<width / height>, linen={<warp>, <weft>}, seed=<seed>,
   crossing strokes, its striations stay). The ground is dry when painting
   starts.
 - `seed`: the randomness of the linen, the ground and everything after.
+- `raw` (engine 3), instead of `ground`: leave the canvas raw, the bare
+  cloth unprimed: `"cotton duck"` (creamy and absorbent) or `"linen"`
+  (browner, it holds less), as Frankenthaler and Morris Louis left theirs
+  for soak-staining (see `notes/research/soak_stain.md`). The cloth shows
+  its colour and its weave. A brush works on it as on a primed canvas: its
+  paint lies on the cloth. `soaked(x, y)` says in words what is in the
+  cloth there (`"raw"`), and whether paint lies on it.
 
 It sets `W` (1000) and `H` (`1000 / aspect`). The canvas is always 1000
 units wide, whatever its pixel width. The origin `(0, 0)` is the upper

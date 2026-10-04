@@ -49,6 +49,7 @@ export function registerEaselTools(pi: ExtensionAPI, studio: string): void {
 				"grid: true, or a spacing in canvas units. " +
 				"survey: true shows the whole canvas at full detail, as several tiles (with mode, not crop or size). " +
 				"compare: the path of an earlier look, shown left of the same view now. " +
+				"hold: the name of a knife (what is on it) or a pile (a fresh load), with at: \"x,y\" (canvas units): the loaded knife held up to the canvas there, its paint thick on the blade, seen in the same light and mode as the passage (crop sets the passage). It shows the paint on the knife, not how it would look laid. " +
 				"palette: true shows the palette board instead: each pile knifed out thick and smeared thin across a black stripe.",
 			parameters: Type.Object({
 				crop: Type.Optional(Type.String()),
@@ -56,6 +57,8 @@ export function registerEaselTools(pi: ExtensionAPI, studio: string): void {
 				light: Type.Optional(Type.String()),
 				survey: Type.Optional(Type.Boolean()),
 				compare: Type.Optional(Type.String()),
+				hold: Type.Optional(Type.String()),
+				at: Type.Optional(Type.String()),
 				palette: Type.Optional(Type.Boolean()),
 				size: Type.Optional(Type.Number()),
 				grid: Type.Optional(Type.Union([Type.Boolean(), Type.Number()])),

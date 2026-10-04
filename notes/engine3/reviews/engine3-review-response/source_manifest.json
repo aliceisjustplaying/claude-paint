@@ -1,0 +1,18 @@
+{
+  "wip/thinner/crates/paint/src/thinner.rs": "f772900571317662cbad7ae46c94e99ffe788657f07e57dd2802e95b545e0683",
+  "wip/thinner/crates/paint/src/rag.rs": "2c4cc01c9ba43d3713b8091d830326f94b246e72c8ee0a9c960d865f074ee40e",
+  "wip/thinner/crates/paint/src/surface.rs": "10949d67a21698071b3e81c22fb0347e4b0815fc732e3391fab7ceb84187bae9",
+  "shipping/crates/paint/src/rag.rs": "c4035386c542e0ed05db63e01b3da2dca03d7fa5254dab14be15b3a314ac7000",
+  "prototype/crates/paint/src/rag/face.rs": "0a2de74083051c8367a8e34edb51db583b9ae5f51664e7d3bb67e516534a13de",
+  "prototype/crates/paint/src/rag.rs": "e0242af63021738002d92ec77833c16fe513a42818b61e90848c1ed664f764a3",
+  "wip/look/crates/paint/src/pigment.rs": "9b57b84f722e72116d0fa972ecbd2e8fda9d5c420e6353ed5c6a1722c37382d5",
+  "wip/thinner/crates/paint/src/palette.rs": "23de3b6b5c80d5459ed0dca7254a9aaea2c79b3019d8065375ffe22e8644e271",
+  "wip/look/notes/look/REPORT.md": "643e239dbc6feef5713920e05adcde0132f2dc7a8257e6342dffa5eb1b36ee5d",
+  "wip/look/crates/paint/src/bristle.rs": "01cfbb6698b38227728b7885e458f9c38c003c531d0b36932603048eec82d80e",
+  "wip/look/notes/look/logs/sienna.txt": "066810020fffcf294f4e46c0734dfbbbb2e7a4ac774d8b2d69b2114006591f7d",
+  "wip/look/crates/paint/tests/look_sienna.rs": "4399eed9152223fd37126e3c988a64a90115416815d823db9a7ec61d1ec91eae",
+  "wip/thinner/crates/paint/tests/thinner_pigments.rs": "53924605cde088b16056fd31d69d57f96c5eae8d5c4674858326823bb0ca06cc",
+  "wip/thinner/crates/paint/src/drying.rs": "f4d0df02422cf403f4566fe96444b21a72144c3c2d897122e44060032be50531",
+  "wip/thinner/crates/paint/tests/thinner_physics.rs": "e0408f09dbccde323b4e525e17a355c5a705218c20af1e2577976b4bc59b7e04",
+  "wip/look/crates/paint/src/color.rs": "8aba2a75810b5016665dcf7d7e5a1fa9eb731bd5c913db0e0e2cc1cf918e3494"
+}

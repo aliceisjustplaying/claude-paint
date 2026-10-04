@@ -1,0 +1,159 @@
+{
+  "scope": "Equation-level Python calculations, not engine executions or physical measurements.",
+  "thresholds": {
+    "nominal_wash_reaches_minimum_rag_floor": 0.6666666666666666,
+    "nominal_wash_reaches_flow_floor": 0.75
+  },
+  "wash_table": [
+    {
+      "thinner": 0.5,
+      "nominal_total_liquid_um": 6.0,
+      "nominal_nonvolatile_paint_um": 3.0,
+      "most_rag_liftable_um": 2.0,
+      "flow_available_um": 4.0
+    },
+    {
+      "thinner": 0.6666666666666666,
+      "nominal_total_liquid_um": 3.0,
+      "nominal_nonvolatile_paint_um": 1.0,
+      "most_rag_liftable_um": 0.0,
+      "flow_available_um": 1.0
+    },
+    {
+      "thinner": 0.75,
+      "nominal_total_liquid_um": 2.0,
+      "nominal_nonvolatile_paint_um": 0.5,
+      "most_rag_liftable_um": 0.0,
+      "flow_available_um": 0.0
+    },
+    {
+      "thinner": 0.9,
+      "nominal_total_liquid_um": 0.6666666666666665,
+      "nominal_nonvolatile_paint_um": 0.06666666666666664,
+      "most_rag_liftable_um": 0.0,
+      "flow_available_um": 0.0
+    },
+    {
+      "thinner": 0.95,
+      "nominal_total_liquid_um": 0.31578947368421084,
+      "nominal_nonvolatile_paint_um": 0.015789473684210555,
+      "most_rag_liftable_um": 0.0,
+      "flow_available_um": 0.0
+    }
+  ],
+  "mixed_mobility_counterexample": {
+    "assumptions": "Frozen, post-evaporation coefficients; direct spread(dt=1); 440mm/2400px. An extra phi=.95 pixel below the wet-film floor cannot donate, but source includes it in m_max. No rendered transport is simulated.",
+    "active_phi_0p5_alone": {
+      "required_substeps": 9,
+      "used_substeps": 9,
+      "effective_dt_min": 1.0
+    },
+    "with_inactive_phi_0p95_in_same_dirty_region": {
+      "required_substeps": 170,
+      "used_substeps": 64,
+      "effective_dt_min": 0.3773879142300198
+    }
+  },
+  "double_throttle_example": [
+    {
+      "uniform_load": 0.0,
+      "one_thirst_factor": 1.0,
+      "two_identical_thirst_factors": 1.0
+    },
+    {
+      "uniform_load": 0.5,
+      "one_thirst_factor": 0.75,
+      "two_identical_thirst_factors": 0.5625
+    },
+    {
+      "uniform_load": 0.8,
+      "one_thirst_factor": 0.3599999999999999,
+      "two_identical_thirst_factors": 0.1295999999999999
+    },
+    {
+      "uniform_load": 0.95,
+      "one_thirst_factor": 0.09750000000000003,
+      "two_identical_thirst_factors": 0.009506250000000006
+    }
+  ],
+  "sienna_same_synthetic_substrates": [
+    {
+      "pigment": "raw",
+      "paint_um": 3.0,
+      "masstone_Y": 0.1735251096778783,
+      "input_scalar_hiding": 0.4,
+      "scatter_per_coat": 0.29607839279515946,
+      "actual_rgb_contrast_ratio": 0.04713663539353727,
+      "absolute_difference_retained": 0.7816365932154802
+    },
+    {
+      "pigment": "burnt",
+      "paint_um": 3.0,
+      "masstone_Y": 0.07967474466259794,
+      "input_scalar_hiding": 0.45,
+      "scatter_per_coat": 0.19887286740952156,
+      "actual_rgb_contrast_ratio": 0.035240831333959444,
+      "absolute_difference_retained": 0.659360863067798
+    },
+    {
+      "pigment": "raw",
+      "paint_um": 10.0,
+      "masstone_Y": 0.1735251096778783,
+      "input_scalar_hiding": 0.4,
+      "scatter_per_coat": 0.29607839279515946,
+      "actual_rgb_contrast_ratio": 0.16945297063385428,
+      "absolute_difference_retained": 0.49031151908646264
+    },
+    {
+      "pigment": "burnt",
+      "paint_um": 10.0,
+      "masstone_Y": 0.07967474466259794,
+      "input_scalar_hiding": 0.45,
+      "scatter_per_coat": 0.19887286740952156,
+      "actual_rgb_contrast_ratio": 0.15370883209855876,
+      "absolute_difference_retained": 0.2994769037116657
+    },
+    {
+      "pigment": "raw",
+      "paint_um": 25.0,
+      "masstone_Y": 0.1735251096778783,
+      "input_scalar_hiding": 0.4,
+      "scatter_per_coat": 0.29607839279515946,
+      "actual_rgb_contrast_ratio": 0.451625114019791,
+      "absolute_difference_retained": 0.19973511944994668
+    },
+    {
+      "pigment": "burnt",
+      "paint_um": 25.0,
+      "masstone_Y": 0.07967474466259794,
+      "input_scalar_hiding": 0.45,
+      "scatter_per_coat": 0.19887286740952156,
+      "actual_rgb_contrast_ratio": 0.43783591105093983,
+      "absolute_difference_retained": 0.1008082020755234
+    },
+    {
+      "pigment": "raw",
+      "paint_um": 30.0,
+      "masstone_Y": 0.1735251096778783,
+      "input_scalar_hiding": 0.4,
+      "scatter_per_coat": 0.29607839279515946,
+      "actual_rgb_contrast_ratio": 0.5365307941757645,
+      "absolute_difference_retained": 0.15177550892568553
+    },
+    {
+      "pigment": "burnt",
+      "paint_um": 30.0,
+      "masstone_Y": 0.07967474466259794,
+      "input_scalar_hiding": 0.45,
+      "scatter_per_coat": 0.19887286740952156,
+      "actual_rgb_contrast_ratio": 0.5117374491143389,
+      "absolute_difference_retained": 0.07871996158572277
+    }
+  ],
+  "reviewer_reported_arithmetic_only": {
+    "shipping_dry_film_difference_percentage_points": 7.399999999999999,
+    "shipping_damp_film_difference_percentage_points": 2.9,
+    "gross_redeposit_divided_by_remaining_film_NOT_provenance": 0.7180974477958237,
+    "stale_card_current_over_recorded_thickness": 3.2682926829268295
+  }
+}

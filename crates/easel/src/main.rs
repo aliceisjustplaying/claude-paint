@@ -16,6 +16,7 @@
 //! painting, `PAINTING`. See notes/easel_guide.md.
 
 mod api;
+mod board;
 mod check;
 mod depth;
 mod draw_edges;
@@ -29,6 +30,7 @@ mod frames;
 mod legacy;
 mod look;
 mod save;
+mod palette_look;
 mod session;
 #[cfg(feature = "replay")]
 mod state_dump;
@@ -74,7 +76,7 @@ const USAGE: &str = "easel: a live painting session (see notes/easel_guide.md)
   easel look [--crop x0,y0,x1,y1] [--mode value,squint,mirror,relief,gallery] [--grid [step]] [--size 1000]
              [--survey]   the whole canvas at full detail, in tiles
              [--compare <earlier look png>]   that look beside this one
-  easel look --palette   the piles the globals hold: thick, thin and very thin over the ground, thin over a card
+  easel look --palette   the palette board: every heap knifed out thick and smeared thin across a black stripe
   easel log           the painting so far (= paintings/lua/painting.lua)
   easel status        chunks, width, canvas
   easel globals       the painting's globals, one a line: chunk that last set it, name, what it holds
@@ -92,7 +94,7 @@ const USAGE: &str = "easel: a live painting session (see notes/easel_guide.md)
   easel look [--crop x0,y0,x1,y1] [--mode value,squint,mirror,relief,gallery] [--grid [step]] [--size 1000]
              [--survey]   the whole canvas at full detail, in tiles
              [--compare <earlier look png>]   that look beside this one
-  easel look --palette   the piles the globals hold: thick, thin and very thin over the ground, thin over a card
+  easel look --palette   the palette board: every heap knifed out thick and smeared thin across a black stripe
   easel log           the session so far (= paintings/lua/<name>.lua)
   easel status        chunks, width, canvas
   easel globals       the painting's globals, one a line: chunk that last set it, name, what it holds
@@ -902,6 +904,18 @@ impl Server {
         // --survey: the whole canvas at full detail, in tiles; --compare <png>: an
         // earlier look beside this one (taken out before the view's own arguments)
         let (mut survey, mut compare, mut rest) = (false, None::<PathBuf>, Vec::new());
+        if args.iter().any(|a| a == "--palette") {
+            // (it takes no other option: the view's own check)
+            look::View::parse(args)?;
+            // the palette board beside the easel (palette_look.rs)
+            let t0 = Instant::now();
+            let png = {
+                let st = self.s.st.borrow();
+                palette_look::render(&st.board, &st.tubes)?
+            };
+            let p = new_look(&session_dir(&self.name), &png.2)?;
+            return Ok(format!("{} ({}x{}, {:.2}s)\n", p.display(), png.0, png.1, t0.elapsed().as_secs_f64()));
+        }
         let mut i = 0;
         while i < args.len() {
             match args[i].as_str() {

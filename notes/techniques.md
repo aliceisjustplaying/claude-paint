@@ -19,6 +19,26 @@ the picture is yours.
   a crop with `grid: 10`) to read positions off a look before you aim a mask
   at something you saw.
 
+## Ground
+
+- An **oil ground** (the default) absorbs nothing: paint stays open and
+  glossy longer. An **absorbent ground** (`absorbent=true`) drinks the oil of
+  thin paint: matte, lean, quick to set, colors that sit on the surface;
+  thick paint is barely touched. Choose before you start: it is the
+  canvas's character.
+- A **toned ground** (a little ochre, umber or black in the white) sets the
+  middle value from the first stroke; a white ground keeps everything high
+  in key and lets thin paint glow.
+
+## Lay-in: lean, quick, thin
+
+- Thin the paint with turpentine (`pile{..., turps=0.6}`) for the first
+  drawing and masses: it flows, covers fast and leaves a thin film that
+  dries before the next sitting.
+- **Fat over lean.** Each layer should be at least as oily as the one under
+  it: lay-in lean (turpentine, blotted), body as from the tube, glazes rich
+  (medium). Lean over fat dries matte and patchy over a still-soft layer.
+
 ## The whole picture, every time
 
 - **Step back after every campaign** and ask whether the picture still says
@@ -79,6 +99,19 @@ the picture is yours.
   and keep it a different value and temperature from the object casting it.
 - **Distance lightens and cools**: far hills and trees paler and bluer than
   near ones, all of a range alike.
+
+## The palette
+
+- **Look at the board before the canvas.** `look --palette` shows each heap
+  thick and thinned over black: a chalky mix, a violet "grey", a glaze that
+  stains or one that hides show there, before they cost a passage.
+- **Steer a mix by eye**: `p:add{}` a touch at a time, looking between,
+  rather than knifing a new recipe blind.
+- **Set out a limited palette** for a picture that should hang together; a
+  few tubes mixed every way give related colors by themselves.
+- **A dirty board unifies.** `palette{dirty=0.2}` to `0.4` lets each heap
+  pick up a trace of the others through a sitting, as a working palette does;
+  clean it (`palette{clean=true}`) when a passage needs pure color.
 
 ## Color: broken, not mixed flat
 

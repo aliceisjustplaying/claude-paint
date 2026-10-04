@@ -366,8 +366,9 @@ def look_text(args):
 
 
 def is_whole(look):
-    """A look request that shows the whole canvas as it is: no crop, no mode (value, squint, mirror) and not the palette."""
-    return look is not None and not re.search(r"crop|mode|palette (?!False)", look)
+    """A look request that shows the whole canvas as it is: no crop, no mode (value, squint, mirror), no light,
+    not the palette, not a survey's tile and not a comparison."""
+    return look is not None and not re.search(r"crop|mode|light|compare|(?:palette|survey) (?!False)", look)
 
 
 # a closing reply that begins with the painting's title: "**The Silent Shore**", "### *Hünengrab im Abendlicht* (...)",
@@ -435,10 +436,10 @@ def _glance_file(path):
                     look, k = g["calls"].get(m.get("toolCallId")), 0
                     for x in content:
                         if x.get("type") == "image" and x.get("data"):
-                            if look is not REFERENCE:
+                            if look is None:
                                 g["last"] = (g["n"], at, k)
-                                if is_whole(look):
-                                    g["whole"] = g["last"]
+                            elif look is not REFERENCE and is_whole(look):
+                                g["whole"] = (g["n"], at, k)
                             g["n"] += 1
                             k += 1
         return g

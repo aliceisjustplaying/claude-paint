@@ -508,18 +508,36 @@ impl Canvas {
         let um_px = self.px_mm() * 1000.0;
         // the surface: dry height plus the wet film where paint is wet
         let surf = self.wet_surface();
-        let (az, el) = (azimuth.to_radians(), elevation.clamp(3.0, 89.0).to_radians());
+        // elevation as the easel takes it, 0 to 90 degrees
+        let elevation = elevation.clamp(0.0, 90.0);
+        let (az, el) = (azimuth.to_radians(), elevation.to_radians());
+        // overhead: no horizontal part (f32 cos(π/2) isn't quite 0) and no cast shadow;
+        // grazing (0°): the lamp lies in the canvas's plane, lz = 0 and the ray doesn't climb
+        let overhead = elevation >= 90.0;
+        let grazing = elevation <= 1e-3;
         // toward the light, in pixel axes (y runs down: light from the top is -y)
-        let (lx, ly, lz) = (el.cos() * az.cos(), -el.cos() * az.sin(), el.sin());
-        let k = 0.5 / um_px;
-        // µm the light ray climbs per pixel toward the light
-        let rise = el.tan() * um_px;
-        let (hi, lo) = surf.par_iter().fold(|| (f32::MIN, f32::MAX), |(a, b), &v| (a.max(v), b.min(v))).reduce(|| (f32::MIN, f32::MAX), |(a, b), (c, d)| (a.max(c), b.min(d)));
-        let steps = (((hi - lo) / rise).ceil() as usize).clamp(1, 64);
-        let (sx, sy) = {
-            let m = (lx * lx + ly * ly).sqrt().max(1e-6);
-            (lx / m, ly / m)
+        let (lx, ly, lz) = if overhead {
+            (0.0, 0.0, 1.0)
+        } else if grazing {
+            (az.cos(), -az.sin(), 0.0)
+        } else {
+            (el.cos() * az.cos(), -el.cos() * az.sin(), el.sin())
         };
+        let k = 0.5 / um_px;
+        // µm the light ray climbs per pixel toward the light (overhead and grazing, none)
+        let rise = if overhead || grazing { 0.0 } else { el.tan() * um_px };
+        let (hi, lo) = surf.par_iter().fold(|| (f32::MIN, f32::MAX), |(a, b), &v| (a.max(v), b.min(v))).reduce(|| (f32::MIN, f32::MAX), |(a, b), (c, d)| (a.max(c), b.min(d)));
+        let m = (lx * lx + ly * ly).sqrt();
+        let march = m > 1e-6 && rise.is_finite() && (rise > 0.0 || grazing);
+        // a low light's shadow may cross the whole canvas
+        let steps = if !march {
+            0
+        } else if grazing {
+            w.max(h)
+        } else {
+            (((hi - lo) / rise).ceil() as usize).min(w.max(h)).max(1)
+        };
+        let (sx, sy) = if march { (lx / m, ly / m) } else { (0.0, 0.0) };
         let at = |x: isize, y: isize| surf[(y.clamp(0, h as isize - 1) as usize) * w + x.clamp(0, w as isize - 1) as usize];
         // shadows are cast by the relief a pixel can resolve: bumps finer than
         // a pixel (a stroke's furrows) shade by their slope, above, and don't
@@ -549,15 +567,31 @@ impl Canvas {
                 let h0 = shade_surf[i];
                 let mut lit = 1.0f32;
                 for s in 1..=steps {
-                    let (px, py) = (x as f32 + sx * s as f32, y as f32 + sy * s as f32);
-                    let over = sat(px.round() as isize, py.round() as isize) - (h0 + rise * s as f32);
+                    let ray = h0 + rise * s as f32;
+                    // the ray is at or above the highest paint: nothing further shades it
+                    if ray >= hi {
+                        break;
+                    }
+                    let (px, py) = ((x as f32 + sx * s as f32).round() as isize, (y as f32 + sy * s as f32).round() as isize);
+                    // off the canvas: nothing beyond its edge shades it
+                    if px < 0 || py < 0 || px >= w as isize || py >= h as isize {
+                        break;
+                    }
+                    let over = sat(px, py) - ray;
                     if over > 0.0 {
-                        lit = lit.min(1.0 - (over / (0.5 * rise)).min(1.0));
+                        // (grazing, the ray doesn't climb: anything higher hides the lamp)
+                        lit = if grazing { 0.0 } else { lit.min(1.0 - (over / (0.5 * rise)).min(1.0)) };
+                        if lit <= 0.0 {
+                            break;
+                        }
                     }
                 }
                 // (a slope facing a low lamp is lit more than the flat canvas,
-                // 1; capped, so the lowest lights don't burn ridges out to white)
-                let diffuse = (ambient + (1.0 - ambient) * ndl * lit / lz).min(1.6);
+                // 1; capped, so the lowest lights don't burn ridges out to white;
+                // grazing, flat paint gets none and only slopes toward the lamp
+                // are lit, by n·l itself: lz is 0)
+                let direct = if grazing { ndl * lit } else { ndl * lit / lz };
+                let diffuse = (ambient + (1.0 - ambient) * direct).min(1.6);
                 let shade = (1.0 + strength * (diffuse - 1.0)).max(0.0);
                 // sheen: wet oil shines, dry paint barely
                 let wet = (self.wet.vol[i] * 4.0).min(1.0);

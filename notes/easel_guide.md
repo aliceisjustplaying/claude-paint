@@ -505,7 +505,7 @@ in canvas units, not a position and width/height.
 | `mode: "mirror"` | flipped left to right |
 | `mode: "relief"` | under a raking light from the upper left, so the paint's ridges, furrows and slabs show (wet paint shines) |
 | `mode: "gallery"` | as the picture hangs: lit from above and a little left at 55°, so impasto models softly |
-| `mode: "relief"`, `light: "45,15"` | the light from that azimuth (degrees: 0 from the right, 90 from the top) and elevation; the lower the light, the harsher |
+| `mode: "relief"`, `light: "45,15"` | the light from that azimuth (degrees: 0 from the right, 90 from the top) and elevation (0 to 90); the lower the light, the harsher; at 0 the lamp lies in the canvas's plane: flat paint is unlit, ridges lit on the lamp side |
 | `mode: "value,squint"`, `size: 600` | modes combine; `size` sets the long side |
 | `grid: true` | a squared grid in canvas units, labeled along the edges |
 | `crop: "300,200,500,350"`, `grid: 10` | a window with a grid every 10 units |
@@ -524,10 +524,11 @@ other option, and nothing on the canvas or the clock changes.
 | `look` with | shows |
 |---|---|
 | `survey: true` | the whole canvas at full detail, as several tiles of at most 500 units (2 × 2 for most canvases, 2 × 1 for one twice as wide as high), each a separate image; modes apply (`mode: "gallery"`) |
-| `compare: "<an earlier look's path>"` | that earlier look on the left and the same view now on the right, at the same height: what a change did |
+| `compare: "<an earlier look's path>"` | that earlier look on the left and the canvas now on the right, at the same height: what a change did. The right is the view the other options ask for (`size: 800` without `crop` or `size`); the earlier picture is only resized to its height, so repeat the earlier look's crop and mode |
 
-A whole view is the canvas scaled down to a fifth or less: small marks,
-beads of paint and stray strokes don't show in it. Survey the canvas after
+A whole view is at most 1000 pixels on its long side, about 42% of a
+2400-pixel canvas's width: small marks, beads of paint and stray strokes
+may not show in it. Survey the canvas after
 each campaign, and compare before and after.
 
 ## How chunks behave

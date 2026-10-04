@@ -322,6 +322,33 @@ def test_a_reference_picture_is_marked_and_is_never_the_painters_picture(home, s
     assert [bool(e.get("ref")) for e in events if e["kind"] == "read"] == [True, True, False]
 
 
+@pytest.mark.parametrize("via", ["live server", "static export"])
+def test_a_survey_tile_or_comparison_is_never_the_painters_picture(home, server, via):
+    # with no whole look, the picture is the last render read as a file (as before the look tool), never a look's
+    # survey tile or comparison
+    pytest.importorskip("PIL")
+    tmp_path, studio, log = home
+    out = tmp_path / "out"
+
+    def painter():
+        if via == "live server":
+            p = next(s for s in json.loads(server("/api/sessions")[1]) if s.get("p") == PAINTER)
+            code, picture = server(f"/api/glance?p={PAINTER}&i={p['look']}")
+            return p["look"], picture if code == 200 else None
+        r = export(tmp_path, out)
+        assert r.returncode == 0, r.stderr
+        p = next(s for s in json.loads((out / "data" / "sessions.json").read_text()) if s["p"] == PAINTER)
+        return p["look"], None if p["look"] is None else (out / "data" / PAINTER / "img" / f"{p['look']}.png").read_bytes()
+
+    log.write_text(start(str(studio)) + looks_at_once(("l1", {"survey": True}, png_of("green")),
+                                                      ("l2", {"compare": "out/easel/painting/a.png"}, png_of("blue"))))
+    assert painter() == (None, None)
+    with open(log, "a") as fh:
+        fh.write(read_picture("r1", "out/easel/look-0001.png", png_of("red"))
+                 + looks_at_once(("l3", {"survey": True}, png_of("green"))))
+    assert painter() == (2, png_of("red"))
+
+
 TONN = ("Compose and paint one original picture in the manner of Kendric Tonn, at\nthe easel, a simulator of oil paint "
         "on linen. {}, there with his permission: study {} for his\nmanner.")
 

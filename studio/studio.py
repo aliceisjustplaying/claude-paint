@@ -398,9 +398,10 @@ _glances = {}  # path -> what the picker needs from one session file, read incre
 
 def _glance_file(path):
     """One session file, scanned from where the last scan stopped: its image count, its newest whole look and its
-    last picture (each as (index in the file, byte offset of the line, which image in the line)) and its last words.
-    Images are counted as parse() counts them, so the indices match the stream's. Reference pictures (read from
-    the studio's reference/) are counted but are never the whole look or the last picture."""
+    last picture from before the look tool (each as (index in the file, byte offset of the line, which image in the
+    line)) and its last words. Images are counted as parse() counts them, so the indices match the stream's.
+    Reference pictures (read from the studio's reference/) are counted but are never the whole look or the last
+    picture; nor are a look's other pictures (a survey's tile, a comparison)."""
     with _lock("g:" + path):
         g = _glances.get(path)
         size = os.path.getsize(path)
@@ -436,10 +437,10 @@ def _glance_file(path):
                     look, k = g["calls"].get(m.get("toolCallId")), 0
                     for x in content:
                         if x.get("type") == "image" and x.get("data"):
-                            if look is not REFERENCE:
+                            if look is None:  # not a look's (a render read as a file, before the look tool)
                                 g["last"] = (g["n"], at, k)
-                                if is_whole(look):
-                                    g["whole"] = g["last"]
+                            elif look is not REFERENCE and is_whole(look):
+                                g["whole"] = (g["n"], at, k)
                             g["n"] += 1
                             k += 1
         return g
@@ -447,8 +448,8 @@ def _glance_file(path):
 
 def glance(files):
     """A painter's picture and title for the picker: {"look": its newest whole look (or, before the look tool, the
-    last picture it saw; never a reference picture; None if it has seen none of its own) as a stream image index,
-    "title": from its last words or None}, and where that look's bytes are, for /api/glance."""
+    last picture it read; never a reference picture or a look's other pictures; None if it has seen none of its own)
+    as a stream image index, "title": from its last words or None}, and where that look's bytes are, for /api/glance."""
     gs, base, look, src, last, lsrc = [_glance_file(f) for f in files], 0, None, None, None, None
     for f, g in zip(files, gs):
         if g["whole"]:

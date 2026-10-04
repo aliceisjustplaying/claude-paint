@@ -165,8 +165,9 @@ def main():
         # quiet run as in progress only then
         s["said"] = bool(ev) and ev[-1]["kind"] == "say"
         if s["look"] is None:  # painters from before the look tool read their renders as files: the last picture they
-            # saw (a reference picture, read from the studio's reference/, is never the painter's picture)
-            refs = {e["img"] for e in ev if e["kind"] == "image" and e.get("ref")}
+            # saw (a reference picture, read from the studio's reference/, is never the painter's picture, nor is a
+            # look's that isn't whole: a survey's tile, a comparison)
+            refs = {e["img"] for e in ev if e["kind"] == "image" and (e.get("ref") or "look" in e)}
             s["look"] = next((i for i in range(n - 1, -1, -1) if web[i] and i not in refs), None)
         text(os.path.join(out, "data", p, "events.json"),
              json.dumps({"events": ev, "total": len(ev), "epoch": st["epoch"], "sittings": len(files), "imgext": exts, "web": web}))

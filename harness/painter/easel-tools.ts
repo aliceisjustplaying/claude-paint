@@ -13,9 +13,11 @@ import { existsSync } from "node:fs";
 import { Type } from "@earendil-works/pi-ai";
 import { createReadToolDefinition, defineTool, type ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { reviseJournal } from "./journal.ts";
+import { LIMITS, type PruneLimits } from "./context-images.ts";
 import { atEasel, hideCounters, logReply, paintReply, renameLook, renameLooks, statusReply, studioPath, lookArgs, tail, text, toolWords } from "./easel-client.ts";
 
-export function registerEaselTools(pi: ExtensionAPI, studio: string): void {
+/** `limits`: the painter's image budget (painter.ts reads it from the environment, context-images.ts). */
+export function registerEaselTools(pi: ExtensionAPI, studio: string, limits: PruneLimits = LIMITS): void {
 	const read = createReadToolDefinition(studio);
 
 	pi.registerTool({
@@ -81,6 +83,14 @@ export function registerEaselTools(pi: ExtensionAPI, studio: string): void {
 				const reads = [];
 				for (const path of paths) reads.push(await read.execute(id, { path }, signal, onUpdate, ctx));
 				const images = reads.flatMap((r) => r.content.filter((c) => c.type === "image"));
+				// a survey's tiles must all stay in view: old images leave the request a step at a
+				// time (context-images.ts), so more than maxImages - step + 1 tiles could lose the first
+				if (paths.length > 1) {
+					const chars = images.reduce((n, c) => n + ((c as { data?: string }).data?.length ?? 0), 0);
+					if (images.length > limits.maxImages - limits.step + 1 || chars > limits.maxImageChars) {
+						throw new Error(`look: the survey is ${images.length} tiles, more than can stay in view at once; look at the canvas in parts with crop instead`);
+					}
+				}
 				return { ...reads[0], content: [{ type: "text" as const, text: said }, ...images] };
 			},
 		}),

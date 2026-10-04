@@ -1,12 +1,13 @@
 //! easel: a live Lua painting session over the claude-paint engine.
 //!
-//!   easel open [<name>]              start (or reattach to) a session
+//!   easel open [<name>]              start (or reattach to) a session (2400px, a sketch 600px)
 //!   easel do '<lua>' | -f chunk.lua | -            run a chunk on the live canvas
-//!   easel look [--crop x0,y0,x1,y1] [--mode value|squint|mirror] [--grid [step]] [--size N]
-//!   easel log | status | globals | save [path] | frames on|off | close
+//!   easel look [--crop x0,y0,x1,y1] [--mode value,squint,mirror,relief,gallery] [--light az,el] [--grid [step]] [--size N]
+//!   easel log | status | globals | save [path] [--light az,el | --gallery] | frames on|off | close
 //!   easel check                                    (replay build) replay the log, compare
 //!   easel note '<text>' | -                        append to notes/journal.md
-//!   easel run paintings/lua/<name>.lua [--out path] [--look] [--state-digest digests.txt]
+//!   easel run paintings/lua/<name>.lua [--out path] [--light az,el | --gallery] [--look] [--state-digest digests.txt]
+//!                                    (replay build) replay at the width it was painted at
 //!
 //! Two builds (see `USAGE`). The replay build (feature `replay`, on by
 //! default: developers, tests and the outside runner) has named sessions
@@ -71,7 +72,7 @@ const USAGE: &str = "easel: a live painting session (see notes/easel_guide.md)
 
   easel open          start or reattach; replays paintings/lua/painting.lua if it exists
   easel do '<lua>'  |  easel do -f chunk.lua  |  easel do - (stdin)     [--look] also looks afterwards
-  easel look [--crop x0,y0,x1,y1] [--mode value,squint,mirror,relief,gallery] [--grid [step]] [--size 1000]
+  easel look [--crop x0,y0,x1,y1] [--mode value,squint,mirror,relief,gallery] [--light az,el] [--grid [step]] [--size 1000]
              [--survey]   the whole canvas at full detail, in tiles
              [--compare <earlier look png>]   that look beside this one
   easel look --palette   the piles the globals hold: thick, thin and very thin over the ground, thin over a card
@@ -88,8 +89,9 @@ const USAGE: &str = "easel: a live painting session (see notes/easel_guide.md)
 const USAGE: &str = "easel: a live painting session (see notes/easel_guide.md)
 
   easel open <name>    start or reattach; replays paintings/lua/<name>.lua if it exists
+                      (2400px; a new session named sketch... is a sketch, 600px)
   easel do '<lua>'  |  easel do -f chunk.lua  |  easel do - (stdin)     [--look] also looks afterwards
-  easel look [--crop x0,y0,x1,y1] [--mode value,squint,mirror,relief,gallery] [--grid [step]] [--size 1000]
+  easel look [--crop x0,y0,x1,y1] [--mode value,squint,mirror,relief,gallery] [--light az,el] [--grid [step]] [--size 1000]
              [--survey]   the whole canvas at full detail, in tiles
              [--compare <earlier look png>]   that look beside this one
   easel look --palette   the piles the globals hold: thick, thin and very thin over the ground, thin over a card
@@ -101,7 +103,8 @@ const USAGE: &str = "easel: a live painting session (see notes/easel_guide.md)
   easel check         replay the log from scratch and compare with the live canvas
   easel close         end the session (the log stays)
   easel note '<text>' | easel note - (stdin)    append a dated entry to notes/journal.md
-  easel run <file.lua> [--out path.png] [--look] [--state-digest digests.txt]    replay at 2400px and write the PNG
+  easel run <file.lua> [--out path.png] [--light az,el | --gallery] [--look] [--state-digest digests.txt]
+                      replay at the width it was painted at (2400px, a sketch 600px) and write the PNG
       [--frames-every <s> --frames-dir <dir> [--frame-width 1000]]   and a frame per <s> of hand time
       [--width <px>]   replay narrower, a preview for development (not the painting)
   easel finish <save> <out.png> [--log painting.lua] [--coats C] [--no-varnish] [--no-cracks] [--relief]
@@ -413,7 +416,7 @@ fn open_name(args: &[String]) -> Result<String, String> {
     let name = args.first().filter(|a| !a.starts_with('-')).ok_or("open <name>")?.clone();
     valid_name(&name)?;
     if args.len() != 1 {
-        return Err("open: live sessions are fixed at 2400px; no width option".into());
+        return Err(format!("open: a session's width is fixed ({LIVE_WIDTH}px, a sketch {}px); no width option", session::SKETCH_WIDTH));
     }
     Ok(name)
 }
@@ -590,7 +593,7 @@ fn serve(args: &[String]) -> Result<(), String> {
         return Err(format!("easel: fatal: this studio has one painting, {PAINTING:?}"));
     }
     if args.len() != 1 {
-        return Err("easel: fatal: live sessions are fixed at 2400px".into());
+        return Err(format!("easel: fatal: a session's width is fixed ({LIVE_WIDTH}px, a sketch {}px)", session::SKETCH_WIDTH));
     }
     let _lock = serve_lock(&name).map_err(|e| format!("easel: fatal: {e}"))?;
     let mut srv = Server::resume(name.clone()).map_err(|e| format!("easel: fatal: {e}"))?;
@@ -907,7 +910,7 @@ impl Server {
             match args[i].as_str() {
                 "--survey" => survey = true,
                 "--compare" => {
-                    compare = Some(PathBuf::from(args.get(i + 1).ok_or("--compare needs an earlier look's png")?));
+                    compare = Some(PathBuf::from(args.get(i + 1).filter(|a| !a.starts_with("--")).ok_or("--compare needs an earlier look's png")?));
                     i += 1;
                 }
                 a => rest.push(a.to_string()),
@@ -980,6 +983,9 @@ impl Server {
     /// An earlier look (left) beside the same view of the canvas now (right), at
     /// the same height, for judging what a change did.
     fn compare(&mut self, args: &[String], prev: &Path) -> Result<String, String> {
+        if args.iter().any(|x| x == "--palette") {
+            return Err("look: compare works on canvas looks, not the palette".into());
+        }
         let mut a = args.to_vec();
         if !a.iter().any(|x| x == "--size" || x == "--crop") {
             a.extend(["--size".to_string(), "800".to_string()]);
@@ -998,6 +1004,10 @@ impl Server {
         let before = image::open(&real).map_err(|e| format!("--compare {}: {e}", prev.display()))?.to_rgb8();
         let h = now.height();
         let bw = ((before.width() as f64 * h as f64 / before.height() as f64).round() as u32).max(1);
+        // (an earlier look far wider at this height is of another crop)
+        if bw > 4 * now.width() {
+            return Err(format!("--compare {}: the earlier look's crop doesn't match this one's (it is far wider for its height); repeat its --crop", prev.display()));
+        }
         let before = image::imageops::resize(&before, bw, h, image::imageops::FilterType::Lanczos3);
         let gap = 12;
         let mut both = image::RgbImage::from_pixel(bw + gap + now.width(), h, image::Rgb([24, 24, 28]));
@@ -1110,14 +1120,17 @@ pub const GALLERY_LIGHT: (f32, f32) = (115.0, 55.0);
 /// `light az,el` (degrees) as a pair.
 pub(crate) fn light_of(s: &str) -> Result<(f32, f32), String> {
     let p: Vec<f32> = s.split(',').map(|t| t.trim().parse::<f32>()).collect::<Result<_, _>>().map_err(|_| format!("light {s}: want azimuth,elevation in degrees"))?;
-    if p.len() != 2 || !p[0].is_finite() || !(1.0..=90.0).contains(&p[1]) {
-        return Err(format!("light {s}: want azimuth,elevation in degrees (elevation 1 to 90)"));
+    if p.len() != 2 || !p[0].is_finite() || !(0.0..=90.0).contains(&p[1]) {
+        return Err(format!("light {s}: want azimuth,elevation in degrees (elevation 0 to 90)"));
     }
     Ok((p[0], p[1]))
 }
 
 /// `save`'s arguments: an optional path, then `--light az,el` or `--gallery`.
 fn save_args(args: &[String]) -> Result<(Option<PathBuf>, Option<(f32, f32)>), String> {
+    if args.iter().any(|a| a == "--gallery") && args.iter().any(|a| a == "--light") {
+        return Err("save: --light and --gallery are two lights; give one".into());
+    }
     let (mut path, mut light) = (None, None);
     let mut i = 0;
     while i < args.len() {
@@ -1189,6 +1202,9 @@ fn run(args: &[String]) -> Result<(), String> {
     // hand-time frames (frames.rs): only read the canvas, so the replay is
     // the same with or without them
     // --light or --gallery: the picture (and its frames) lit on the paint's relief
+    if args.iter().any(|a| a == "--gallery") && args.iter().any(|a| a == "--light") {
+        return Err(format!("run: --light and --gallery are two lights; give one ({RUN_USAGE})"));
+    }
     let light = if args.iter().any(|a| a == "--gallery") { Some(GALLERY_LIGHT) } else { flag(args, "--light").map(|l| light_of(&l)).transpose()? };
     let frames = match (flag(args, "--frames-every"), flag(args, "--frames-dir")) {
         (None, None) => false,
@@ -1530,7 +1546,7 @@ mod tests {
         assert_eq!(args(&["a.png"]), Ok((Some(PathBuf::from("a.png")), None)));
         assert_eq!(args(&["a.png", "--gallery"]), Ok((Some(PathBuf::from("a.png")), Some(GALLERY_LIGHT))));
         assert_eq!(args(&["--light", "135,25", "a.png"]), Ok((Some(PathBuf::from("a.png")), Some((135.0, 25.0)))));
-        for bad in [&["--light"][..], &["--light", "135"], &["--light", "135,91"], &["--light", "nan,25"], &["--light", "inf,25"], &["a.png", "b.png"], &["--lit"]] {
+        for bad in [&["--light"][..], &["--light", "135"], &["--light", "135,91"], &["--light", "nan,25"], &["--light", "inf,25"], &["a.png", "b.png"], &["--lit"], &["--gallery", "--light", "135,25"]] {
             assert!(args(bad).is_err(), "{bad:?}");
         }
     }

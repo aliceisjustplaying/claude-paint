@@ -23,7 +23,7 @@
 #                              others paint from the default tube box)
 #   bin/THIRD_PARTY_NOTICES.md the license notices the binary requires, shipped
 #                              next to it (not at the studio root, where painters browse)
-#   notes/easel_guide.md, notes/research/..., notes/journal.md (empty)
+#   notes/easel_guide.md, notes/techniques.md (rounds that have it), notes/research/..., notes/journal.md (empty)
 #   paintings/lua/             (empty; the session log goes here)
 #
 # The guide's tube table is the one the studio's easel prints for its box
@@ -138,6 +138,8 @@ mkdir -p "$dest/bin" "$dest/paintings/lua"
 cp "$built" "$dest/bin/easel"
 [ -z "$box" ] || echo "$box" > "$dest/bin/box"
 notes=(notes/easel_guide.md notes/research/oil_paint_physics.md)
+# (the techniques handbook came with engine 4: older rounds have none)
+! git -C "$repo" cat-file -e "$branch:notes/techniques.md" 2>/dev/null || notes+=(notes/techniques.md)
 [ -z "$materials" ] || notes+=("notes/research/$materials")
 git -C "$repo" archive --format=tar "$branch" -- "${notes[@]}" | tar -x -C "$dest"
 git -C "$repo" archive --format=tar "$branch" -- THIRD_PARTY_NOTICES.md | tar -x -C "$dest/bin"

@@ -7,4 +7,4 @@ cargo	cargo-test	60	271	-	scripts/tests/cargo_tests.sh -j 4
 script	old-logs	60	11	^old_logs: \S+ ok	scripts/tests/old_logs.sh "$CARGO_TARGET_DIR/release/easel"
 script	baseline-package	60	1	^verify_package: hashes ok	notes/thinner/baseline/tools/verify_package.sh
 script	baseline-state	60	6	^\S+: state equal on every baseline field	scripts/tests/baseline_state.sh "$CARGO_TARGET_DIR/release/easel"
-script	thinner-quick	60	1	^thinner acceptance --quick: \d+ of \d+ required tests passed	scripts/test_thinner_acceptance --quick	-	3	^thinner acceptance --quick: NOT ALL GREEN: every other required test passed; only check 13 \(b\)'s pre-existing failure remains$	thinner check 13(b), user decision
+script	thinner-quick	60	1	^thinner acceptance --quick: \d+ of \d+ required tests passed	scripts/test_thinner_acceptance --quick	-

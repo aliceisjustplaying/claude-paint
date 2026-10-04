@@ -4,16 +4,16 @@
 # so). Each case sets what the fake prints and how it exits, and checks the
 # runner's exit code and summary:
 #
-#   every test ok, check 13 (b) failing as expected   -> 3, NOT ALL GREEN (--quick, --card, --all)
+#   every test ok                                     -> 0, PASSED (--quick, --card, --all)
 #   ok lines but cargo exits nonzero                  -> 1
 #   a name missing / ignored / failed                 -> 1
 #   no output at all                                  -> 1
-#   check 13 (b) passing, or not running              -> 1
-#   check 13 (b) failing somewhere else (another panic) -> 1
+#   check 13 (b) failing, or not running              -> 1
+#   the sienna card's diagnostic failing (its fixture) -> 1
 #   check 2 failing                                   -> 1
 #   the rag study's sheet not written (--all)         -> 1
 #   THINNER_RAG_STUDY_DIR set (--all): the sheet goes there, not into the
-#   checkout                                          -> 3
+#   checkout                                          -> 0
 #
 #   scripts/tests/thinner_acceptance_runner.sh
 set -euo pipefail
@@ -40,26 +40,9 @@ for a in "$@"; do
   names+=("$a")
 done
 has() { [[ " $1 " == *" $2 "* ]]; }
-c13b=c13_burnt_sienna_shows_the_card_at_least_as_well_as_raw_sienna
 failed=0; code=0
 [ -n "${FAKE_EMPTY:-}" ] && exit 101
 for n in "${names[@]}"; do
-  if [ "$n" = $c13b ] && [ -z "${FAKE_13B_PASS:-}" ]; then
-    [ -n "${FAKE_13B_DROP:-}" ] && continue
-    echo "test $n ... FAILED"; failed=1
-    echo
-    echo "failures:"
-    echo
-    echo "---- $n stdout ----"
-    if [ -n "${FAKE_13B_OTHER:-}" ]; then
-      echo "thread '$n' panicked at crates/paint/tests/thinner_pigments.rs:116:5:"
-      echo "the strokes laid paint"
-    else
-      echo "thread '$n' panicked at crates/paint/tests/thinner_pigments.rs:119:5:"
-      echo "burnt sienna shows 9.85% of the card, raw sienna 17.91%: Field/Salter (§155) has burnt the more transparent"
-    fi
-    continue
-  fi
   if has "${FAKE_FAIL:-}" "$n"; then echo "test $n ... FAILED"; failed=1
   elif has "${FAKE_SKIP:-}" "$n"; then echo "test $n ... ignored, slow"
   elif has "${FAKE_DROP:-}" "$n"; then :
@@ -87,26 +70,29 @@ expect() {
   fi
 }
 
+c13b=c13_burnt_sienna_has_a_lower_contrast_ratio_than_raw_sienna_at_equal_film
+c13card=c13_diagnostic_sienna_card_retained_absolute_substrate_difference
 for m in --quick --card --all; do
-  expect 3 $m "NOT ALL GREEN" FAKE_=
+  expect 0 $m "PASSED" FAKE_=
 done
-expect 3 --all "EXPECTED FAIL (pre-existing; user decision, ACCEPTANCE.md check 13)" FAKE_=
 expect 1 --quick "cargo exited 101" FAKE_EXIT_ON=c05_an_emptying_brush_lays_less_and_a_fuller_load_lasts_farther
 expect 1 --card "printed ok, but cargo exited 101" FAKE_EXIT_ON=thinner_tests::c01_the_card_raw_sienna_thinned_half_keeps_half_the_contrast_at_2400px
 expect 1 --all "(did not run" FAKE_DROP=c06_more_pressure_lays_more_paint_up_to_the_stroke_limit
 expect 1 --all "(skipped)" FAKE_SKIP=thinner_tests::c01_the_card_raw_sienna_thinned_half_keeps_half_the_contrast_at_2400px
 expect 1 --all "(failed)" FAKE_FAIL=c09_the_solvent_evaporates_and_the_film_loses_its_volume
 expect 1 --all "FAILED" FAKE_EMPTY=1
-expect 1 --quick "passed unexpectedly" FAKE_13B_PASS=1
-expect 1 --card "the expected failure must run and fail" FAKE_13B_DROP=1
-expect 1 --quick "not at its ordering assertion" FAKE_13B_OTHER=1
+for m in --quick --card --all; do
+  expect 1 $m "$c13b (failed)" FAKE_FAIL=$c13b
+done
+expect 1 --card "$c13b (did not run" FAKE_DROP=$c13b
+expect 1 --quick "$c13card (failed)" FAKE_FAIL=$c13card
 expect 1 --quick "check 2 (scripts/thinner_check2" FAKE_CHECK2_FAIL=1
 expect 1 --all "rag study's sheet was not written" FAKE_NO_SHEET=1
 expect 2 --bogus - FAKE_=
 # the sheet's directory: given, it is used and the checkout stays clean
 rm -f "$work/repo/notes/thinner/rag_study.png"
 mkdir -p "$work/sheetdir"
-expect 3 --all "NOT ALL GREEN" THINNER_RAG_STUDY_DIR="$work/sheetdir"
+expect 0 --all "PASSED" THINNER_RAG_STUDY_DIR="$work/sheetdir"
 if [ -s "$work/sheetdir/rag_study.png" ] && [ ! -e "$work/repo/notes/thinner/rag_study.png" ]; then
   echo "ok:   --all THINNER_RAG_STUDY_DIR: the sheet is in that directory, none in the checkout"
 else

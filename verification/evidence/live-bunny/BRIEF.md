@@ -1,0 +1,3 @@
+Paint a small still life: a blue ceramic jug, an orange and folded cream cloth on a dark wooden table. Cool daylight comes from the upper left. Give the jug weight, the orange a convincing round form and the cloth a few clear folds. Keep the background quiet. Work from imagination using the studio's oil-paint tools.
+
+This painting will have several short sittings. Preserve useful palette and brush names as Lua globals and keep notes in your journal so you can continue it later. Read the easel guide before painting. Inspect the whole canvas and useful details as you work. Use masks and a rag where they serve the painting.

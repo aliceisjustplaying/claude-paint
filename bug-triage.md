@@ -26,6 +26,7 @@ These findings describe the inspected commit, not proposed source changes. “Co
 | B17 | low | Picker stays open when Tab leaves the document | confirmed browser boundary | fix or contract clarification |
 | B21 | low | Description treated aging threshold as exact scheduling | description corrected | resolved documentation |
 | B22 | low | Nonshrinking history rewrite can retain stale parsed prefix | confirmed; support scope unspecified | product call |
+| B23 | low | Painting clock stays absent without explicit timestamp output | isolated fix verified; not integrated or deployed | fix |
 
 ## B01 — Persistence failure can restrict every ordinary command
 
@@ -204,3 +205,11 @@ After a production studio server parsed a history, replacing an earlier result w
 > Technical note: `studio/studio.py:259–264` resets the parser only when file size falls below its saved offset. Equal-size or larger replacement files retain the old parsed prefix and are read only from the previous offset.
 
 Raised by [viewer verification](verification/viewer-space.md). Severity low for this unsupported-or-unspecified edit path. Decision: product call on supported history rewrites, with documentation that distinguishes appending, truncation and in-place replacement.
+
+## B23 — Painting clock can stay absent during painting
+
+A viewer can watch successful painting without seeing the painting's own clock. Expected: recorded painting time is visible during painting without requiring the model to print it explicitly. Reproduction: create a canvas and advance time without printing a timestamp, then inspect the viewer clock. The real Space Bunny run reproduced the absence; the follow-up probe verified an isolated fix. [Report and receipts](verification/evidence/live-bunny.md).
+
+> Technical note: At baseline `4e525e5`, `crates/easel/src/main.rs:928` returns successful Lua output without an automatic timestamp. `studio/index.html:449` searches successful paint output for a timestamp and `studio/index.html:524` hides the clock when none exists. The parser also did not expose clock metadata from compaction/recovery summaries. The [patch](verification/evidence/live-bunny/painting-clock.patch) changes these boundaries.
+
+Raised by the live viewer observation and [studio description](watching/studio.md#open-questions-and-verification). Severity low: missing status display, with no lost painting state observed. Decision: fix. Local commit `2a705f4` is preserved separately; no integration or deployment occurred. [Preservation record](verification/evidence/live-bunny/preservation.json).

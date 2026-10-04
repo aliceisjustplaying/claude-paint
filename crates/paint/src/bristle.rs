@@ -1018,10 +1018,27 @@ pub(crate) unsafe fn drag_on(
     let nsteps = ((total / step).ceil() as usize).max(1);
     let bend_len = tool.length * (0.25 + 0.75 * (1.0 - tool.stiffness));
     let lim = limit(footprint_checked(&tool, &g.pts, g.shake, s, sf.fw, sf.fh));
+    // (test only, `probe::Cont`: this call continues the last one's motion
+    // without a lift; always None outside tests)
+    let cont = probe::cont_in();
+    // the steps: at 0, `step`, 2·`step`, … and the path's end
+    let (d_first, d0) = cont.map_or((0.0, 0.0), |c| (c.phase, c.d0));
+    let open_end = cont.is_some_and(|c| c.open_end);
+    let n_iter = match cont {
+        None => nsteps + 1,
+        Some(_) => {
+            let on_grid = if total >= d_first { ((total - d_first) / step).floor() as usize + 1 } else { 0 };
+            let last = d_first + on_grid.saturating_sub(1) as f32 * step;
+            on_grid + usize::from(!open_end && (on_grid == 0 || last < total - 1e-4))
+        }
+    };
+    let d_at = |k: usize| if cont.is_none() { (k as f32 * step).min(total) } else { (d_first + k as f32 * step).min(total) };
 
-    for b in &mut held.bristles {
-        b.prev = [None, None];
-        b.bend = (0.0, 0.0);
+    if cont.is_none_or(|c| !c.keep) {
+        for b in &mut held.bristles {
+            b.prev = [None, None];
+            b.bend = (0.0, 0.0);
+        }
     }
     let mut seg = 0usize;
     let mut last_dir = (1.0f32, 0.0f32);
@@ -1040,8 +1057,13 @@ pub(crate) unsafe fn drag_on(
     // at the path's end (a lift-off draws down to the tip, it doesn't stop
     // short of the end where the pressure falls below the tip's own length)
     let tip = held.bristles.iter().enumerate().min_by(|a, b| a.1.thresh.total_cmp(&b.1.thresh)).map_or(0, |(i, _)| i);
-    for k in 0..=nsteps {
-        let d = (k as f32 * step).min(total);
+    let mut d_last = 0.0f32;
+    for k in 0..n_iter {
+        let d = d_at(k);
+        d_last = d;
+        // (where the motion is along the whole continued stroke: 0.0 + d
+        // is d, outside tests)
+        let dw = d0 + d;
         while seg + 1 < path.len() - 1 && arc[seg + 1] < d {
             seg += 1;
         }
@@ -1057,10 +1079,10 @@ pub(crate) unsafe fn drag_on(
         // pressure breathes, both slowly along the stroke
         let lw = (tool.width * 2.5 + 6.0) * s;
         let hs = id as u64 * 7919;
-        let off = g.shake * (0.05 * tool.width + 0.12) * s * (wander(d / lw, hs + 1) + 0.5 * wander(d / (lw * 0.37), hs + 2));
+        let off = g.shake * (0.05 * tool.width + 0.12) * s * (wander(dw / lw, hs + 1) + 0.5 * wander(dw / (lw * 0.37), hs + 2));
         let (hx, hy) = (hx - dir.1 * off, hy + dir.0 * off);
         let u = if total > 0.0 { d / total } else { 0.5 };
-        let p = (g.pressure_at(u) * (1.0 + g.shake * 0.14 * wander(d / (lw * 0.8), hs + 3))).clamp(0.0, 1.0);
+        let p = (g.pressure_at(u) * (1.0 + g.shake * 0.14 * wander(dw / (lw * 0.8), hs + 3))).clamp(0.0, 1.0);
         let theta = match g.orient {
             Orient::Across => dir.1.atan2(dir.0) + std::f32::consts::FRAC_PI_2,
             Orient::Along => dir.1.atan2(dir.0),
@@ -1082,7 +1104,7 @@ pub(crate) unsafe fn drag_on(
                 continue;
             }
             // bristles wander a little across the stroke
-            let wv = wander(d / s / tool.width.max(2.0) * 1.3, b.seed) * tool.ragged;
+            let wv = wander(dw / s / tool.width.max(2.0) * 1.3, b.seed) * tool.ragged;
             let (ox, oy) = ((b.rx + wv * 0.12) * half, (b.ry + wv * 0.05) * half);
             let root = (hx + ox * ct - oy * st, hy + ox * st + oy * ct);
             // tips trail behind the motion and splay outward under pressure
@@ -1127,7 +1149,7 @@ pub(crate) unsafe fn drag_on(
             let Some((cur, reach)) = contact[bi] else { continue };
             // a pointed tool's hair that has just come down lays its share
             // of the step it came down in (its neighbors' tracks tile with it)
-            let prev = b.prev[0].unwrap_or(if tool.point > 0.0 && k > 0 { (cur.0 - dir.0 * step, cur.1 - dir.1 * step) } else { cur });
+            let prev = b.prev[0].unwrap_or(if tool.point > 0.0 && (k > 0 || cont.is_some()) { (cur.0 - dir.0 * step, cur.1 - dir.1 * step) } else { cur });
             let (rk, sh) = if tool.point > 0.0 { (excl[bi], shift[bi]) } else { (rb, 0.0) };
             let (sx, sy) = (-dir.1 * sh, dir.0 * sh);
             unsafe { exchange(sf, b, &tool, (prev.0 + sx, prev.1 + sy), (cur.0 + sx, cur.1 + sy), rk, reach, full, None, 1.0, clip, id, scratch, &mut bounds, lim) };
@@ -1135,8 +1157,185 @@ pub(crate) unsafe fn drag_on(
         }
         feed(&mut held.bristles, feed_k);
     }
+    if open_end {
+        probe::cont_out(probe::Cont { d0: d0 + total, phase: d_last + step - total, open_end: false, keep: true });
+    }
     // whole-canvas pixels → buffer pixels
     bounds.map(|(x0, y0, x1, y1)| (x0 - sf.ox, y0 - sf.oy, x1 - sf.ox, y1 - sf.oy))
+}
+
+/// Test-only diagnostics of the brush/canvas exchange (AGENT_BRIEF_V2
+/// §4c; `crate::exchange_probes`). Outside tests every hook is a constant
+/// that leaves the brush exactly as it was.
+#[cfg(test)]
+pub(crate) mod probe {
+    use std::cell::Cell;
+
+    /// The deposition rule a thinned stroke follows when the exchange
+    /// experiment is off. `Today`: the committed per-stroke ceiling on wet
+    /// film added. The two others are RECONSTRUCTIONS of the 2026-10 look
+    /// experiments (`notes/engine3/HANDOVER.md` §4, commits `bd5addc` and
+    /// `abb5f75`, no longer in the repository), rebuilt from their
+    /// description in `notes/look/REPORT.md` §2 as quoted in the
+    /// independent review's EVIDENCE.md E08: the wet film (paint +
+    /// solvent) a pixel held when the stroke first reached it, `base`, is
+    /// recorded on first touch (contact or ploughed arrival); after that
+    /// the stroke may lay or plough liquid into it only up to
+    /// `HeldCap` (b): base + ceiling (paint lifted makes room again, paint
+    /// ploughed in counts against it; passes stack), or
+    /// `AbsCap` (B): max(base, ceiling) (wet passes don't stack).
+    #[derive(Clone, Copy, PartialEq, Eq, Debug)]
+    pub(crate) enum Control {
+        Today,
+        HeldCap,
+        AbsCap,
+    }
+
+    /// Gross exchange summed over every hair step, in the units of
+    /// `Held::carried` (coats × square units), and contact-weighted means
+    /// of what drives it.
+    #[derive(Clone, Copy, Default, Debug)]
+    pub(crate) struct Tally {
+        pub laid_paint: f64,
+        pub laid_solvent: f64,
+        pub lifted_paint: f64,
+        pub lifted_solvent: f64,
+        /// Σ hunger × contact weight (pickup's load factor)
+        pub hunger_w: f64,
+        /// Σ max(wick, reach) × contact weight (how deep into the weave)
+        pub wet_w: f64,
+        pub w: f64,
+        /// Σ touch × geometric cover (the share of a hair's track in contact)
+        pub touch_cov: f64,
+        pub cov: f64,
+    }
+
+    /// A stroke continued from the previous call without a lift: the hairs
+    /// keep their bend and last contact, the step grid and the wander go
+    /// on along the whole motion's arclength. `open_end`: this call stops
+    /// at its last grid step and leaves the next call its `Cont`.
+    #[derive(Clone, Copy, Debug)]
+    pub(crate) struct Cont {
+        /// arclength (pixels) the motion has already gone
+        pub d0: f32,
+        /// where this call's first step falls on its own path (pixels)
+        pub phase: f32,
+        pub open_end: bool,
+        /// keep the hairs' bend and last contact (false: set down afresh)
+        pub keep: bool,
+    }
+
+    thread_local! {
+        static CONTROL: Cell<Control> = const { Cell::new(Control::Today) };
+        static TALLY: Cell<Tally> = Cell::new(Tally::default());
+        static FILL: Cell<(Option<f32>, Option<f32>)> = const { Cell::new((None, None)) };
+        static CONT_IN: Cell<Option<Cont>> = const { Cell::new(None) };
+        static CONT_OUT: Cell<Option<Cont>> = const { Cell::new(None) };
+    }
+
+    pub(crate) fn set_control(c: Control) {
+        CONTROL.with(|x| x.set(c));
+    }
+    pub(crate) fn control() -> Control {
+        CONTROL.with(|x| x.get())
+    }
+    /// The most wet film (coats) the controls let a pixel hold.
+    pub(crate) fn held_limit(c: Control, base: f32, cap: f32) -> f32 {
+        match c {
+            Control::AbsCap => base.max(cap),
+            _ => base + cap,
+        }
+    }
+    pub(crate) fn tally(f: impl FnOnce(&mut Tally)) {
+        TALLY.with(|t| {
+            let mut v = t.get();
+            f(&mut v);
+            t.set(v);
+        });
+    }
+    /// The tally so far, and reset it.
+    pub(crate) fn take_tally() -> Tally {
+        TALLY.with(|t| t.replace(Tally::default()))
+    }
+    /// Hold the load (liquid ÷ full) that the contact (`wet`, `wick`) and
+    /// the pickup (`hunger`) read at a fixed value (None: the hair's own).
+    pub(crate) fn set_fix_fill(contact: Option<f32>, hunger: Option<f32>) {
+        FILL.with(|x| x.set((contact, hunger)));
+    }
+    pub(crate) fn fix_fill(fill: f32) -> (f32, f32) {
+        let (c, h) = FILL.with(|x| x.get());
+        (c.unwrap_or(fill), h.unwrap_or(fill))
+    }
+    pub(crate) fn cont_in() -> Option<Cont> {
+        CONT_IN.with(|x| x.take())
+    }
+    pub(crate) fn cont_out(c: Cont) {
+        CONT_OUT.with(|x| x.set(Some(c)));
+    }
+
+    /// Drag as `Canvas::drag` does, under stroke id `id` (None: the next),
+    /// optionally continuing a motion (`cont`); returns the id and what the
+    /// next call needs to continue this one.
+    pub(crate) fn drag(c: &mut super::Canvas, held: &mut super::Held, g: &super::Gesture, id: Option<u32>, cont: Option<Cont>) -> (u32, Option<Cont>) {
+        let id = id.unwrap_or_else(|| c.next_stroke_ids(1));
+        let surf = c.surf();
+        let mut scratch = Vec::new();
+        CONT_IN.with(|x| x.set(cont));
+        CONT_OUT.with(|x| x.set(None));
+        // SAFETY: exclusive &mut canvas, single brush.
+        let b = unsafe { super::drag_on(surf, held, g, None, id, &mut scratch) };
+        if let Some((x0, y0, x1, y1)) = b {
+            c.wet.touch(x0, y0, x1, y1);
+        }
+        (id, CONT_OUT.with(|x| x.take()))
+    }
+}
+
+#[cfg(not(test))]
+#[allow(dead_code)]
+mod probe {
+    #[derive(Clone, Copy, PartialEq, Eq)]
+    pub(crate) enum Control {
+        Today,
+    }
+    #[derive(Clone, Copy)]
+    pub(crate) struct Cont {
+        pub d0: f32,
+        pub phase: f32,
+        pub open_end: bool,
+        pub keep: bool,
+    }
+    pub(crate) struct Tally {
+        pub laid_paint: f64,
+        pub laid_solvent: f64,
+        pub lifted_paint: f64,
+        pub lifted_solvent: f64,
+        pub hunger_w: f64,
+        pub wet_w: f64,
+        pub w: f64,
+        pub touch_cov: f64,
+        pub cov: f64,
+    }
+    #[inline(always)]
+    pub(crate) fn control() -> Control {
+        Control::Today
+    }
+    #[inline(always)]
+    pub(crate) fn held_limit(_: Control, base: f32, cap: f32) -> f32 {
+        base + cap
+    }
+    #[inline(always)]
+    pub(crate) fn tally(_: impl FnOnce(&mut Tally)) {}
+    #[inline(always)]
+    pub(crate) fn fix_fill(fill: f32) -> (f32, f32) {
+        (fill, fill)
+    }
+    #[inline(always)]
+    pub(crate) fn cont_in() -> Option<Cont> {
+        None
+    }
+    #[inline(always)]
+    pub(crate) fn cont_out(_: Cont) {}
 }
 
 /// How much of a capsule's contact a bristle is assumed to make outside a
@@ -1357,8 +1556,16 @@ unsafe fn exchange(
         let exch = phi > 0.0 && !sf.laid.is_null() && crate::thinner::exchange();
         let capped = phi > 0.0 && !sf.laid.is_null() && !exch;
         let cap = if capped { crate::thinner::stroke_limit_um(phi) / COAT_UM } else { f32::INFINITY };
-        let wet = smoothstep(0.1, 0.8, liquid / full);
-        let wick = if tool.point > 0.0 { tool.point * smoothstep(0.02, 0.25, liquid / full) } else { 0.0 }.max(WET_REACH * wet);
+        // (test only: the reconstructed controls (b) and (B) bound the
+        // ceiling by what the pixel held when this stroke reached it,
+        // `probe::Control`; Today outside tests)
+        let ctl = probe::control();
+        let held_cap = capped && ctl != probe::Control::Today;
+        // (test only: `probe::fix_fill` holds the load the contact and the
+        // hunger read fixed, to separate them from the supply)
+        let (fill_c, fill_h) = probe::fix_fill(liquid / full);
+        let wet = smoothstep(0.1, 0.8, fill_c);
+        let wick = if tool.point > 0.0 { tool.point * smoothstep(0.02, 0.25, fill_c) } else { 0.0 }.max(WET_REACH * wet);
         let th = 1.0 - reach.max(wick) * 1.6;
 
         // pass 1: contact weights
@@ -1451,7 +1658,7 @@ unsafe fn exchange(
         let dep_per_w = dep_total * share.min(1.0) / sum_w / px_area;
         // film splitting: a bristle in wet paint always lifts some of it, even
         // when loaded; a spent bristle drinks more
-        let hunger = 0.35 + 0.65 * (1.0 - liquid / full).clamp(0.0, 1.0).powf(1.5);
+        let hunger = 0.35 + 0.65 * (1.0 - fill_h).clamp(0.0, 1.0).powf(1.5);
         // a moving hair ploughs aside the share `push` of the paint in its
         // own track, 2·`hair` wide, and lays it a hair's width away (shared
         // bilinearly, below): the same paint moved the same distance at any
@@ -1484,6 +1691,12 @@ unsafe fn exchange(
                     continue;
                 }
                 let i = (y - oy) * bw_buf + x - ox;
+                if held_cap && *sf.laid_id.add(i) != id {
+                    // (controls (b)/(B): the wet film the pixel held when
+                    // this stroke first reached it)
+                    *sf.laid_id.add(i) = id;
+                    *sf.laid.add(i) = *sf.vol.add(i) + *sf.solv.add(i) / COAT_UM;
+                }
                 let v = *sf.vol.add(i);
                 // paint that is setting is stiff: it comes up and moves less
                 let fl = if sf.dry.is_null() { 1.0 } else { crate::drying::fluid((*sf.dry.add(i)).cure) };
@@ -1540,7 +1753,10 @@ unsafe fn exchange(
                     // of this pixel's ceiling for this stroke, shared by all
                     // its hairs (crate::thinner); the rest stays on the hair
                     let mut d = dep_per_w * wt;
-                    if capped {
+                    if held_cap {
+                        let liq = *sf.vol.add(i) + *sf.solv.add(i) / COAT_UM;
+                        d = d.min((probe::held_limit(ctl, *sf.laid.add(i), cap) - liq).max(0.0));
+                    } else if capped {
                         let used = if *sf.laid_id.add(i) == id { *sf.laid.add(i) } else { 0.0 };
                         d = d.min((cap - used).max(0.0));
                         *sf.laid_id.add(i) = id;
@@ -1608,7 +1824,16 @@ unsafe fn exchange(
                                 let sol = if sf.solv.is_null() { 0.0 } else { *sf.solv.add(i) / COAT_UM };
                                 let vi = *sf.vol.add(i);
                                 let ms = if sol > 0.0 && vi > 0.0 { (sol * m / vi).min(sol) } else { 0.0 };
-                                let (m, ms) = if capped && j != i && m > 0.0 {
+                                let (m, ms) = if held_cap && j != i && m > 0.0 {
+                                    if *sf.laid_id.add(j) != id {
+                                        *sf.laid_id.add(j) = id;
+                                        *sf.laid.add(j) = *sf.vol.add(j) + *sf.solv.add(j) / COAT_UM;
+                                    }
+                                    let liq = *sf.vol.add(j) + *sf.solv.add(j) / COAT_UM;
+                                    let room = (probe::held_limit(ctl, *sf.laid.add(j), cap) - liq).max(0.0);
+                                    let f = if m + ms > room { room / (m + ms) } else { 1.0 };
+                                    (m * f, ms * f)
+                                } else if capped && j != i && m > 0.0 {
                                     let used = if *sf.laid_id.add(j) == id { *sf.laid.add(j) } else { 0.0 };
                                     let room = (cap - used).max(0.0);
                                     let f = if m + ms > room { room / (m + ms) } else { 1.0 };
@@ -1660,6 +1885,19 @@ unsafe fn exchange(
             br.cure = mix_cure(br.cure, br.vol, got_c / got_v, got_v);
             mix_into(&mut br.vol, &mut br.lat, &mut br.hide, got_v, &got_l, got_h);
         }
+        // (test only: gross exchange and what drove it, `probe::Tally`)
+        probe::tally(|t| {
+            let laid = if phi > 0.0 { laid_liq } else { dep_total };
+            t.laid_paint += (laid * (1.0 - phi)) as f64;
+            t.laid_solvent += (laid * phi) as f64;
+            t.lifted_paint += got_v as f64;
+            t.lifted_solvent += got_s as f64;
+            t.hunger_w += (hunger * sum_w) as f64;
+            t.wet_w += (wick.max(reach) * sum_w) as f64;
+            t.w += sum_w as f64;
+            t.touch_cov += (touch * sum_cov) as f64;
+            t.cov += sum_cov as f64;
+        });
         let pad = (off + 2.0) as usize;
         grow(bounds, x0.saturating_sub(pad).max(ox), y0.saturating_sub(pad).max(oy), (x1 + pad).min(ox + sf.w), (y1 + pad).min(oy + sf.h));
     }

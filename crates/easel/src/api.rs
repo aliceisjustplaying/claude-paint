@@ -944,12 +944,18 @@ pub(crate) fn resolve(st: &S, p: PileU, visit: Option<f32>) -> PileU {
     if let Some(carry) = visit {
         s.board.visit(p.heap, carry);
     }
-    let Some(h) = s.board.heap(p.heap) else { return p };
+    resolve_on(&s.board, &s.tubes, p)
+}
+
+/// The pile as its heap is on `board` (`resolve` without a visit; the board
+/// may be a copy, as a look's that changes nothing).
+pub(crate) fn resolve_on(board: &crate::board::Board, tubes: &Palette, p: PileU) -> PileU {
+    let Some(h) = board.heap(p.heap) else { return p };
     if !h.changed {
         return p;
     }
     let (fr, medium, solvent, oil_rate) = (h.fractions(), h.medium, h.solvent, h.oil_rate);
-    let mut mix = s.tubes.pile(fr);
+    let mut mix = tubes.pile(fr);
     mix.solvent = solvent;
     mix.oil_rate = oil_rate;
     PileU { mix, medium, ..p }

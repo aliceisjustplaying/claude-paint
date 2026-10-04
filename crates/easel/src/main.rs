@@ -833,8 +833,13 @@ fn hold_look(s: &Session, name: &str, at: (f32, f32), v: &look::View) -> Result<
     let (_, _, bpng) = look::render(&board, &seen_as([30.0, cy - wide / 2.0, 30.0 + len, cy + wide / 2.0]))?;
     let blade_img = image::load_from_memory(&bpng).map_err(|e| e.to_string())?.to_rgb8();
     // held over the passage: the blade's end at the point, its length to the right
-    let x = ((at.0 - crop[0]) * f.scale).round() as i64;
-    let y = ((at.1 - crop[1]) * f.scale).round() as i64 - blade_img.height() as i64 / 2;
+    // (from the passage's first pixel as look::render takes it: the crop's corner rounded and
+    // clamped to the window, so a crop past the canvas's edge doesn't shift the blade)
+    let win = c.window();
+    let cl = |u: f32, lo: usize, hi: usize| ((u * win.scale).round().max(0.0) as usize).clamp(lo, hi) as i64;
+    let (px0, py0) = (cl(crop[0], win.x0, win.x0 + win.w), cl(crop[1], win.y0, win.y0 + win.h));
+    let x = (at.0 * win.scale).round() as i64 - px0;
+    let y = (at.1 * win.scale).round() as i64 - py0 - blade_img.height() as i64 / 2;
     image::imageops::overlay(&mut passage, &blade_img, x, y);
     let (w, h) = (passage.width(), passage.height());
     let mut out = Vec::new();

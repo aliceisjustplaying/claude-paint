@@ -7,21 +7,22 @@ says what the tool would be, why it is not built, and what needs studying.
 
 **The tool:** `look --hold <knife or pile> --at x,y` (the look tool's `hold`
 and `at`): a passage of the canvas at full detail (240 units square around
-the point, or `--crop`) with a loaded knife held over it, the blade's end at
+the point, clipped at the canvas's edges, or `--crop`) with a loaded knife held over it, the blade's end at
 the point, the way a painter holds the knife up against the picture to
 compare a mix with a passage.
 
 - **What is held.** A knife (`k = knife{...}`) with what is on it, a mix
   scraped off the canvas included; or a pile by its global's name, as a
   fresh full load from its heap as it is on the board now (a dirty board's
-  heap with its dirt).
+  heap with its dirt; a heap scraped off as a fresh knife would knife it
+  again, clean).
 - **The blade is the engine's.** The paint is laid thick on a steel blade
   with the knife verb, at the painting's pixels to the unit, its
   millimetres and its engine, so it has the body, ridges and torn ends the
   paint would have on a real blade.
 - **One light, one surround.** The blade is seen exactly as the passage is:
   `mode: "value"` grays both, `squint` blurs both, `relief`, `gallery` and
-  `light` light both.
+  `light` light both. It takes no `mirror`, `grid`, `size` or `palette`.
 - **It only reads.** No hand time, nothing in the log, the knife keeps its
   load, the state digest is as it was (tested).
 

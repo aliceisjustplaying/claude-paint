@@ -453,20 +453,28 @@ impl Session {
 
     /// What the global `name` puts on a knife held up to the canvas (the look
     /// `--hold`): a knife's own load, with its blade's length and how full it
-    /// is, or a pile as its heap is on the board now, as a fresh full load on
-    /// a blade 30 units long. Reads only: no Lua runs and nothing changes.
+    /// is (as full as it is: a load past a full one lays a thicker slab), or a
+    /// pile as a fresh knife finds its heap on the board now (a scraped heap
+    /// knifed again, without its dirt: `Board::visit`, on a copy of the board),
+    /// as a fresh full load on a blade 30 units long. Reads only: no Lua runs
+    /// and nothing changes.
     pub fn held(&self, name: &str) -> Result<(paint::Paint, f32, f32), String> {
         let found = self.globals.get(name).filter(|(_, c)| *c > 0).map(|(v, _)| v);
         if let Some(Value::UserData(u)) = found {
             if let Ok(k) = u.borrow::<api::KnifeU>() {
                 let k = k.k.borrow();
                 return match k.paint() {
-                    Some(p) => Ok((p, k.width, k.fullness().clamp(0.05, 1.0))),
+                    Some(p) => Ok((p, k.width, k.fullness())),
                     None => Err(format!("look --hold {name}: the knife is clean; load it first (k:load(pile))")),
                 };
             }
             if let Ok(p) = u.borrow::<api::PileU>() {
-                return Ok((api::resolve(&self.st, p.clone(), None).paint(), 30.0, 1.0));
+                let st = self.st.borrow();
+                let mut board = st.board.clone();
+                if p.heap != 0 {
+                    board.visit(p.heap, 0.0);
+                }
+                return Ok((api::resolve_on(&board, &st.tubes, p.clone()).paint(), 30.0, 1.0));
             }
         }
         let mut names: Vec<&str> = self

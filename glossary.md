@@ -79,3 +79,12 @@
 **Orientation.** The brush's wide-axis direction: across travel, along travel or a fixed angle.
 
 **Pickup.** Existing canvas paint entering a brush and potentially affecting later marks.
+||||||| parent of a6d3826 (docs: add watching/studio.md)
+
+**Event.** In the studio viewer, one recorded item in a painter history, such as a thought, tool call, result-associated image or sitting boundary. An event is not necessarily a committed painting chunk.
+
+**Whole look.** A recorded untransformed, uncropped canvas look used as the studio viewer's main painting image and ordinary replay step. Palette and reference pictures are distinct.
+
+**Rewound.** The studio viewer is showing an earlier selected event without automatically advancing when new events arrive.
+
+**Static export.** A copy of the studio page, painter histories and pictures served as files. It can refresh when newer exported files arrive but does not call the live easel.

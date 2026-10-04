@@ -127,6 +127,12 @@ pub fn spread_mm2_min(phi: f32) -> f32 {
     SPREAD_MM2_MIN * phi / (1.0 - phi)
 }
 
+/// The flow skips a step in which even the most mobile film would move
+/// less than this share of its liquid difference to a neighbor (its
+/// mobility × the step ÷ the pixel's area): a chosen numerical cutoff, not
+/// a physical constant. It ends the flow once the solvent left is a trace.
+const FLOW_MIN: f32 = 1e-4;
+
 /// Ticks a minute on the grid the solvent's loss and flow step on
 /// (`Canvas::wait`): a chosen numerical resolution, not a physical
 /// constant. A power of two, so quarter minutes fall on it exactly.
@@ -203,20 +209,36 @@ impl Canvas {
             let fl = if timed { crate::drying::fluid(wet.clock.px[i].cure) } else { 1.0 };
             spread_mm2_min(s / (v + s)) * fl
         };
-        let mut m_max = 0.0f32;
-        for y in by0..by1.min(h) {
-            for x in bx0..bx1.min(w) {
-                m_max = m_max.max(mob(&self.wet, y * w + x));
-            }
-        }
+        // the largest mobility, and the box of the pixels that have any
+        // (only they can give liquid; each substep reaches one pixel further)
+        let wet = &self.wet;
+        type Acc = (f32, usize, usize, usize, usize);
+        let none: Acc = (0.0, usize::MAX, usize::MAX, 0, 0);
+        let join = |a: Acc, b: Acc| (a.0.max(b.0), a.1.min(b.1), a.2.min(b.2), a.3.max(b.3), a.4.max(b.4));
+        let (m_max, ax0, ay0, ax1, ay1) = (by0..by1.min(h))
+            .into_par_iter()
+            .map(|y| {
+                (bx0..bx1.min(w)).fold(none, |a, x| {
+                    let m = mob(wet, y * w + x);
+                    if m > 0.0 { join(a, (m, x, y, x + 1, y + 1)) } else { a }
+                })
+            })
+            .reduce(|| none, join);
         if m_max <= 0.0 {
             return;
         }
         let r_total = m_max * dt / (dx * dx);
+        // (a flow too slow to move a measurable share of a pixel's liquid
+        // in this step doesn't run, `FLOW_MIN`)
+        if r_total < FLOW_MIN {
+            return;
+        }
         let n = ((r_total / 0.2).ceil() as usize).clamp(1, MAX_SUBSTEPS);
         // the flow's rate per substep, per mm²/min of mobility
         let k = (dt / n as f32 / (dx * dx)).min(0.2 / m_max.max(1e-12));
-        let (mut x0, mut y0, mut x1, mut y1) = (bx0, by0, bx1.min(w), by1.min(h));
+        let (mut x0, mut y0, mut x1, mut y1) = (ax0, ay0, ax1, ay1);
+        // the box of the pixels the flow changed
+        let mut moved: Option<(usize, usize, usize, usize)> = None;
         for _ in 0..n {
             // liquid can reach one pixel further each substep
             (x0, y0, x1, y1) = (x0.saturating_sub(1), y0.saturating_sub(1), (x1 + 1).min(w), (y1 + 1).min(h));
@@ -312,6 +334,10 @@ impl Canvas {
                 }
                 let (x, y) = (x0 + k2 % rw, y0 + k2 / rw);
                 let i = y * w + x;
+                moved = Some(match moved {
+                    None => (x, y, x + 1, y + 1),
+                    Some((a, b, c, d)) => (a.min(x), b.min(y), c.max(x + 1), d.max(y + 1)),
+                });
                 let was_bare = self.wet.vol[i] < 1e-5;
                 self.wet.vol[i] = pv;
                 self.wet.solv[i] = ps * COAT_UM;
@@ -332,7 +358,9 @@ impl Canvas {
                 }
             }
         }
-        self.wet.touch(x0, y0, x1, y1);
+        if let Some((a, b, c, d)) = moved {
+            self.wet.touch(a, b, c, d);
+        }
     }
 
     /// Cure of the open film at a point (units): 0 fresh, `drying::GEL` at
@@ -496,6 +524,29 @@ mod tests {
             let moved: f64 = c.wet.vol.iter().zip(&before).map(|(a, b)| (a - b).abs() as f64).sum::<f64>() / 2.0;
             let all: f64 = before.iter().map(|&v| v as f64).sum();
             println!("0.02 min from phase {phase:.2}: moved {:.4}% of the paint", 100.0 * moved / all);
+        }
+    }
+
+
+    /// How long a wait with solvent takes (wall clock): a thinned patch at
+    /// 2400 px, then `wait(30)` and `wait(240)`.
+    /// `cargo test --release -p paint --lib thinner::tests::wait_cost -- --ignored --nocapture`
+    #[test]
+    #[ignore]
+    fn wait_cost() {
+        let mut c = Canvas::new(2400, 1.5, hex("#d8cdb8")).with_engine(3);
+        c.prime(hex("#b9a98c"), 0.9, 40.0, 0.6, 0.0, 7);
+        for k in 0..12 {
+            let y = 150.0 + 25.0 * k as f32;
+            let mut h = Held::new(Tool::hog_flat(40.0), 10 + k);
+            h.load(sienna(0.5), 0.9);
+            c.drag(&mut h, &Gesture::new(vec![(150.0, y), (850.0, y + 3.0)]).pressure(0.85, 0.85), None);
+        }
+        for m in [30.0f32, 240.0] {
+            let mut d = c.clone();
+            let t = std::time::Instant::now();
+            d.wait(m);
+            println!("wait({m}): {:.2} s", t.elapsed().as_secs_f64());
         }
     }
 

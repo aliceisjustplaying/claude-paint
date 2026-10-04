@@ -1,34 +1,49 @@
 # Round 24 launch: the Inness painter on the frozen engine-3 candidate
 
-## Current state (October 4, 2026, 22:00 BST onward)
+## Current state
 
-- The old three Pi agents and their child jobs were stopped. Their lane
-  worktrees are removed. Source is consolidated on `rag` at `ab4cca6`.
+- October 4, 2026: painting candidate `b0b2393`. The old Pi agents are
+  stopped and their lane worktrees removed. Development is on the M3.
 - Exchange stays off; lane A's experiment is retained on `e3/a-exchange`,
   not integrated. Flow is integrated from `fbe0d43`; rag path consistency
   and carryover from `7e08c5b`, with unused diagnostics removed in `ab4cca6`.
 - The owner authorized finishing carryover and concurrent checks. Earlier
   instructions to separate carryover and serialize checks are superseded.
-- Checks have not completed. macOS stalled before executing the Rust build
-  script, including with sccache disabled. Sample of PID 45022 at
-  22:00:42.866 BST: all 803 samples at `_dyld_start (in dyld) + 0`, footprint
-  96 KB, `Binary images description not available`. A fresh copy also
-  stalled. Signature verification and some process queries hung. The
-  underlying OS cause is unconfirmed; no security controls were changed.
-- The original rag test's >90% lift assertion is unchanged. An earlier
-  agent reported 89.9% in hollows; that result has not been reproduced on
-  this combined candidate. It remains unresolved, not a passing check.
-- The viewer returned HTTP 200 locally and from the M1. All development,
-  verification and the painting launch remain on the M3. No painter has
-  started, no `round-24` tag exists and public sync has not been changed.
+- After the M3 reboot, builds and tests execute normally. Both the Inness
+  export and replay easel built successfully.
+- Flow: 12 passed, including split waits ([log](readiness/flow.log)).
+  The final 2400px sienna card passed: 88.24% and 85.53% contrast retained
+  against the 50% minimum ([log](readiness/card-recheck.log)).
+- The connected 2400px paint/thinner/rag/carryover/refold/wait sequence
+  passed, including close/reopen and exact live-versus-replay canvas and
+  checkpoint bytes ([log](readiness/sequence.log), [image](readiness/sequence.png)).
+- Full checks completed with two known differences: the unchanged rag
+  hollow-lift assertion measures 89.934% against >90%, and the historical
+  engine-3 rag baseline differs after the rag changes. These are recorded
+  first-painting exceptions; tests and baseline remain unchanged.
+  Cargo recheck: 276 passed, 1 failed, 36 ignored
+  ([log](readiness/cargo-recheck.log)). The full wrapper hit two timeouts;
+  the affected cargo batch and final card completed on targeted reruns.
+  A generated Python cache caused the baseline-package check to fail;
+  removing that cache restored the unchanged package check
+  ([log](readiness/baseline-package-recheck.log)). Full results:
+  [summary](readiness/all.json), [logs](readiness/all-logs/).
+- Prompts reviewed against the current guide and bindings. Corrected old
+  drying times in studio notes, removed repeated viewing-cadence steering
+  and clarified Lua option types and pressure. The approved system prompt
+  and studio rules remain. Runner checks: 255 passed after these edits
+  ([log](readiness/prompts-recheck.log)).
+- The detached `claude-paint-r24run` checkout is clean at `b0b2393`.
+  Refreshed Inness export/probe and runner dry run passed; the copied
+  runner uses the revised prompts ([log](readiness/launch-refresh.log)). The private
+  viewer returns HTTP 200 at <http://m3p.tailec2dc.ts.net:8765/> from the M3;
+  this round did not access the M1. Public sync was restored unchanged
+  because no painting was launched. Stop it again before exporting a real
+  studio, as described below.
 
-Remaining: complete checks, resolve any actual failures, run the connected
-tool sequence and final card, then freeze and launch privately below.
-
-Prepared on lane E (branch `e3/e-painter`, from `d54b423`). The runner,
-guide and viewer are ready except for the final revision, which is still
-pending. The integration owner runs these steps at freeze. Nothing here has
-run yet: no tag, no `claude-paint-r24run` checkout and no painter launch.
+Ready to kick off. Not done yet: tag `round-24` at the painting candidate
+and start the painter. Launch remains held for the owner's go-ahead.
+Raw verification logs are local evidence, not publication files.
 
 ## What is set
 
@@ -42,8 +57,8 @@ run yet: no tag, no `claude-paint-r24run` checkout and no painter launch.
   `TAG`'s commit and has no changes to tracked files (`checkout_problems`).
   The export archives `TAG`, while the harness, the check and the finish
   run from `BASE`'s files. This check keeps them on the same commit.
-- `notes/easel_guide.md`, "The rag": updated to match the selected rag
-  (`6f31f79`). See "Guide statements to verify" below.
+- `notes/easel_guide.md`, "The rag": includes cross-wipe carryover and
+  refolding. Guide review notes below preserve the original checklist.
 
 ## At freeze
 
@@ -53,7 +68,8 @@ tagging it: the runner copied in step 4 comes from the tag.
 
 1. Tag the frozen commit in the shared repo:
    `git -C ~/src/a/claude-paint tag -a round-24 <commit> -m "round 24: engine-3 Inness painting"`
-2. Create the detached checkout:
+2. The detached checkout already exists. Confirm it is at the candidate
+   selected by the tag. For a fresh checkout:
    `git -C ~/src/a/claude-paint worktree add --detach ~/src/a/claude-paint-r24run round-24`
 3. Pre-build both easels under the lock. The runner's own builds then
    reuse them instead of compiling outside lockrun. Start sccache first
@@ -143,7 +159,12 @@ tagging it: the runner copied in step 4 comes from the tag.
   (`~/src/a/stillwet/sync-studio.sh`), so the round-24 painter will be
   published there unless it is added to the list.
 
-## Guide statements to verify on the final build
+## Original guide review checklist
+
+Reviewed against `b0b2393`: exchange remains off, thinner and drying
+contracts match the guide, flow and carryover checks pass. The existing
+blend figures describe the unchanged unthinned brush behavior; they were
+not remeasured in this run. The following is the original lane checklist.
 
 The rag statements were already wrong at `d54b423` and are now fixed:
 
@@ -173,7 +194,5 @@ needs checking against the frozen candidate:
 | Rag, l.374-379 | a loaded face lifts less; `refold`; `r.soaked` | C: dirty carryover and refolding |
 | Time, l.490 | "Thinner paint dries sooner and thicker paint later: twice a stroke's thickness takes 1.6 times as long" | B, if it changes `drying.rs` |
 
-Not verifiable until the final build: the export of the inness studio
-(build, tube table, names and box-tube checks), the replay build used by
-check/finish, the guide's numbers above against the candidate, and the
-runner's real (non-dry) start against the tag's checkout.
+The Inness export checks and replay build completed. The runner's real
+(non-dry) start remains part of launch.

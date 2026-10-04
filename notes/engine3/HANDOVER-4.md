@@ -1,8 +1,8 @@
 # Engine 3: handover 4, October 4, 2026 (~20:50 UTC)
 
 **Superseded status:** the lane work is consolidated and the old agents
-are stopped. Current state and the specific verification blocker are in
-[the launch note](../round24/LAUNCH.md#current-state-october-4-2026-2200-bst-onward).
+are stopped. Verification results, known exceptions and launch status are in
+[the launch note](../round24/LAUNCH.md#current-state).
 The owner subsequently authorized finishing rag carryover and concurrent
 checks, with all development and launch work on the M3.
 

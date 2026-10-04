@@ -699,6 +699,34 @@ mod tests {
         (c, t)
     }
 
+    /// Is any paint in the wet layer (open)?
+    fn any_open(c: &Canvas) -> bool {
+        c.wet.vol.iter().any(|&v| v > 0.0)
+    }
+
+    /// The canvas aged until no paint on it is open, stopping at most two
+    /// minutes after the last pixel sets, as `aged(.., 2.0)` over the whole
+    /// canvas does: hour-long waits while a copy aged one hour more still
+    /// has open paint, then two-minute waits. (`aged` waits two minutes at a
+    /// time from the start: over a thin film's day or two that took more
+    /// than a minute.)
+    fn aged_until_set(mut c: Canvas) -> Canvas {
+        let t0 = c.clock();
+        c.wait(0.0);
+        while c.clock() - t0 < 30.0 * 24.0 * 60.0 {
+            let mut ahead = c.clone();
+            ahead.wait(60.0);
+            if !any_open(&ahead) {
+                break;
+            }
+            c = ahead;
+        }
+        while any_open(&c) && c.clock() - t0 < 30.0 * 24.0 * 60.0 {
+            c.wait(2.0);
+        }
+        c
+    }
+
     /// The rag over the patch `n` times, refolding to a cleaner face
     /// before each pass and within a pass once a face is half loaded.
     fn wipe_n(c: &mut Canvas, wipe: &Mask, n: u32, pressure: f32) -> Rag {
@@ -860,8 +888,9 @@ mod tests {
     fn nothing_is_lifted_past_the_gel_point() {
         let c0 = sky(LIVE, 1.0, 0.3);
         let (wipe, read) = patch(&c0);
-        // aged until no paint on the canvas is open (the thickest dabs set last)
-        let (mut c, _) = aged(c0, &Mask::full(read.f), 2.0);
+        // aged until no paint on the canvas is open (the thickest dabs set last),
+        // within two minutes of the last one setting
+        let mut c = aged_until_set(c0);
         assert!(c.wet.vol.iter().all(|&v| v <= 0.0), "paint still open");
         let ground = blank(LIVE);
         let laid: f32 = (0..c.film.len()).filter(|&i| inside(&c, &read, i)).map(|i| c.film[i] - ground.film[i]).sum();

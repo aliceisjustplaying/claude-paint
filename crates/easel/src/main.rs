@@ -1311,12 +1311,30 @@ mod tests {
     }
 
     /// The palette's thick swatch is what `work` lays thick with that pile: within 2/255 of
-    /// the wet paint's mean in the middle of a heavily covered patch, for a few piles.
+    /// the wet paint's mean in the middle of a heavily covered patch, for a few piles (one
+    /// test each, so they run side by side: together they took 11 s).
     #[test]
     #[cfg(tube_box)]
     fn the_thick_swatch_matches_paint_laid_thick() {
+        thick_swatch_matches(r#"{"lead white", 6}, {"smalt", 1}, medium=0.2"#);
+    }
+
+    #[test]
+    #[cfg(tube_box)]
+    fn the_thick_swatch_matches_paint_laid_thick_dark() {
+        thick_swatch_matches(r#"{"raw umber", 2}, {"bone black", 1}"#);
+    }
+
+    #[test]
+    #[cfg(tube_box)]
+    fn the_thick_swatch_matches_paint_laid_thick_earths() {
+        thick_swatch_matches(r#"{"yellow ochre", 3}, {"red earth", 1}, {"lead white", 2}"#);
+    }
+
+    #[cfg(tube_box)]
+    fn thick_swatch_matches(recipe: &str) {
         let srgb = |c: paint::Rgb| c.map(|v| linear_to_srgb(v) * 255.0);
-        for recipe in [r#"{"lead white", 6}, {"smalt", 1}, medium=0.2"#, r#"{"raw umber", 2}, {"bone black", 1}"#, r#"{"yellow ochre", 3}, {"red earth", 1}, {"lead white", 2}"#] {
+        {
             let mut s = Session::new(320).unwrap();
             s.run(PALETTE_CANVAS).unwrap();
             s.run(&format!(r#"p = pile{{{recipe}}}; work(rect(200, 200, 800, 600), {{hand="body", pile=p, coverage=6}})"#)).unwrap();

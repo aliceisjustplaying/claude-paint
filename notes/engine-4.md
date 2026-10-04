@@ -88,6 +88,27 @@ painter never saw relief either: looks showed color only.
 - **The giverny and impressionist boxes**: see `notes/research/giverny_materials.md` and
   `notes/research/impressionist_materials.md` (from analyses of the paintings).
 
+## Two ways to thin paint
+
+`pile{thinner=}` (engine 3, upstream's `crate::thinner`) and `pile{turps=}`
+(engine 4, this note) both put solvent in a pile, and they model it
+differently. They are kept side by side, each as it was written:
+
+| | `thinner=` | `turps=` |
+|---|---|---|
+| the solvent is | a quantity beside the paint (on each bristle, in each pixel's open film) | a share among the paint's own properties |
+| a loaded brush holds | that much liquid, part paint and part solvent | that much paint, carrying its share |
+| one stroke lays | at most a ceiling of wet film (about 6 µm at 0.5) | what the brush lays, with no ceiling |
+| it evaporates | over painting time (minutes; longer from a thick film) | as the paint is laid: the film is thinner by its share |
+| on the canvas | it stays for a while, and the film flows and levels | none of it is ever on the canvas |
+| a brush or rag that lifts the paint | takes the solvent with it | has none to take |
+| on the brush | the hairs are as with unthinned paint | thinned paint doesn't clump the hairs, and spatters more readily |
+
+Where they meet, and nothing reconciles them:
+- A pile given both is thinned both ways (untested).
+- Clumping and spatter read only `turps=`'s share: paint thinned with
+  `thinner=` still clumps as its stiffness says.
+
 ## Engine 5: the knife tears
 
 A knife-laid slab parts from the blade raggedly: at its ends, along its

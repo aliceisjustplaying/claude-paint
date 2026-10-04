@@ -240,6 +240,14 @@ def say(text):
     return line({"type": "message", "message": {"role": "assistant", "content": [{"type": "text", "text": text}]}})
 
 
+def test_a_held_knife_is_never_the_picker_fallback(home):
+    pytest.importorskip("PIL")
+    _, studio, log = home
+    log.write_text(start(str(studio)) + looks_at_once(
+        ("hold", {"hold": "p", "at": "50,50"}, png_of("blue"))))
+    assert S.glance([str(log)])["look"] is None
+
+
 @pytest.mark.parametrize("via", ["live server", "static export"])
 def test_the_picker_gets_the_newest_whole_look_and_the_title_from_the_closing_reply(home, server, via):
     # a whole look, then a whole look and a squint asked for together: the picture is the second whole look,
@@ -377,6 +385,7 @@ def test_a_palette_look_is_not_the_painting():
     assert S.is_whole(S.look_text({"survey": False}))
     assert not S.is_whole(S.look_text({"compare": "out/easel/painting/a.png"}))
     assert not S.is_whole(S.look_text({"light": "45,15"}))
+    assert not S.is_whole(S.look_text({"hold": "skyP", "at": "400,320"}))
     assert not S.is_whole(S.look_text({"survey": True, "mode": "gallery"}))
 
 

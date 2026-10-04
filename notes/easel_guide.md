@@ -632,6 +632,7 @@ other option, and nothing on the canvas or the clock changes.
 |---|---|
 | `survey: true` | the whole canvas at full detail, as several tiles of at most 500 units (2 × 2 for most canvases, 2 × 1 for one twice as wide as high), each a separate image; modes apply (`mode: "gallery"`) |
 | `compare: "<an earlier look's path>"` | that earlier image on the left and the current view on the right, at the same height; repeat the earlier look's crop, modes, light and grid options to compare the same view |
+| `hold: "<a knife's or a pile's name>"`, `at: "x,y"` | (speculative) the loaded knife held up to the canvas: the passage around the point (240 units, or your `crop`) with the blade's end at it, the paint thick on the steel, seen in the same light and mode as the passage. A knife shows what is on it; a pile, a fresh load. It shows the paint on the knife, not how it would look laid |
 
 A survey can arrive in a partial batch to fit the painter's image budget.
 The reply lists the remaining tile paths; read them one at a time to inspect

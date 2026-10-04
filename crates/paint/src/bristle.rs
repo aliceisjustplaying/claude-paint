@@ -2910,6 +2910,16 @@ impl Knife {
         self.cure = mix_cure(self.cure, self.vol, 0.0, v);
         crate::wet::mix_into(&mut self.vol, &mut self.lat, &mut self.hide, v, &lat, paint.prop());
     }
+    /// The paint on the blade as one paint (what it has picked up, mixed by
+    /// volume), or None on a clean blade. For looking at it: nothing changes.
+    pub fn paint(&self) -> Option<Paint> {
+        if self.vol <= 1e-9 {
+            return None;
+        }
+        let color = mixbox::latent_to_linear_float_rgb(&self.lat);
+        let p = Paint::km(color, self.hide[0], self.hide[1].clamp(0.0, 1.0)).with_drying(self.hide[2]);
+        Some(Paint { solvent: self.hide[3], oil: self.hide[4], thinner: self.solvent / (self.vol + self.solvent), ..p })
+    }
     /// Wipe the blade clean on the rag.
     pub fn wipe(&mut self) {
         self.vol = 0.0;

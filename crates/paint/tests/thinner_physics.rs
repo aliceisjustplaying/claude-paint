@@ -37,12 +37,19 @@ fn c04_a_stroke_and_a_wipe_account_for_all_paint_and_solvent() {
     for (k, (name, p)) in cases.into_iter().enumerate() {
         let mut h = brush(Tool::filbert(20.0), 10 + k as u64, p, 0.6);
         let before = Totals::of(&c, &h);
+        let film0 = paint_um(&c);
         let y = 300.0 + 30.0 * k as f32;
         // across the thinned underlayer: the brush lays and picks up
         stroke(&mut c, &mut h, vec![(120.0, y - 60.0), (500.0, y), (880.0, y + 50.0)], 0.8);
         let after = Totals::of(&c, &h);
         assert_eq!(c.clock(), t0, "a stroke puts no time on the canvas's clock");
-        assert!(after.brush_paint < before.brush_paint, "{name}: the brush laid paint");
+        // the stroke moved paint (laid it, picked it up or both): the canvas's
+        // paint changed by more than a thousandth of all of it, pixel by
+        // pixel, either way. (A thin, solvent-heavy load can pick up more
+        // than its ceiling lets it lay, so the brush may end fuller.)
+        let moved: f64 = paint_um(&c).iter().zip(&film0).map(|(a, b)| (a - b).abs() as f64).sum();
+        let all: f64 = film0.iter().map(|&v| v as f64).sum();
+        assert!(moved > 1e-3 * all, "{name}: the stroke moved paint ({moved} of {all} µm·pixels)");
         assert_balances(&format!("{name}: paint"), before.canvas_paint + before.brush_paint, after.canvas_paint + after.brush_paint);
         assert_balances(&format!("{name}: solvent"), before.canvas_solvent + before.brush_solvent, after.canvas_solvent + after.brush_solvent);
         if k == 3 {
@@ -96,7 +103,13 @@ fn c04_control_a_wholly_unthinned_scene_balances() {
 /// than one loaded 0.3 at the same thinner (the same stroke limit). "Lays
 /// paint" = the mean paint across the stroke's middle is at least a
 /// quarter of the limit's paint (θ); "farther" = at least 30 units (a
-/// third of the filbert's run, so the margin isn't one 10-unit bin).
+/// third of the filbert's run, so the margin isn't one 10-unit bin). The
+/// stroke is one continuous zigzag over fresh ground, eight 960-unit rows
+/// 80 units apart (7680 units, no reload): long enough for a thinned
+/// brush, which keeps what it can't lay, to empty. Its pressure ramps up
+/// and lifts over as many units as the one 960-unit stroke's did (attack
+/// 0.08, release 0.15 of 960 units). Distances are along the rows, in
+/// order.
 #[test]
 fn c05_an_emptying_brush_lays_less_and_a_fuller_load_lasts_farther() {
     let t = 0.5;
@@ -107,16 +120,29 @@ fn c05_an_emptying_brush_lays_less_and_a_fuller_load_lasts_farther() {
     for load in [0.3f32, 0.6] {
         let mut c = canvas(600);
         let mut h = brush(Tool::filbert(8.0), 21, raw_sienna().with_thinner(t), load);
-        stroke(&mut c, &mut h, vec![(20.0, 500.0), (980.0, 500.0)], 0.7);
-        let p = profile(&c, 500.0, 2.0, 20.0, 980.0, 10.0);
+        let rows: Vec<f32> = (0..8).map(|k| 200.0 + 80.0 * k as f32).collect();
+        let path: Vec<(f32, f32)> = rows.iter().enumerate().flat_map(|(k, &y)| if k % 2 == 0 { [(20.0, y), (980.0, y)] } else { [(980.0, y), (20.0, y)] }).collect();
+        let len = 960.0 * rows.len() as f32 + 80.0 * (rows.len() - 1) as f32;
+        c.drag(&mut h, &paint::Gesture::new(path).pressure(0.7, 0.7).ramps(0.08 * 960.0 / len, 0.15 * 960.0 / len), None);
+        let p: Vec<f32> = rows
+            .iter()
+            .enumerate()
+            .flat_map(|(k, &y)| {
+                let mut r = profile(&c, y, 2.0, 20.0, 980.0, 10.0);
+                if k % 2 == 1 {
+                    r.reverse();
+                }
+                r
+            })
+            .collect();
         let early = p[1..6].iter().copied().fold(0.0, f32::max);
         let late = mean(&p[p.len() - 10..]) as f32;
         assert!(early > theta, "load {load}: the stroke starts laying paint ({early} µm, θ {theta} µm)");
         assert!(late < 0.5 * early, "load {load}: an emptying brush lays less ({early} µm early, {late} µm over the last 100 units)");
         let last = p.iter().rposition(|&v| v >= theta).expect("some paint above θ");
         assert!(last + 1 < p.len(), "load {load}: the brush ran out before the stroke's end");
-        reach.push(20.0 + 10.0 * (last + 1) as f32);
-        println!("load {load}: paint above θ to x = {} (profile {p:?})", reach[reach.len() - 1]);
+        reach.push(10.0 * (last + 1) as f32);
+        println!("load {load}: paint above θ for {} units of the rows (profile {p:?})", reach[reach.len() - 1]);
     }
     assert!(reach[1] >= reach[0] + 30.0, "load 0.6 lays paint farther than 0.3: to {} vs {}", reach[1], reach[0]);
 }
@@ -456,12 +482,22 @@ fn c16_brush_rag_and_spreading_carry_solvent_in_the_local_ratio() {
         }
         assert!(n >= 100);
     }
-    // (3) one minute of spreading across two ratios
+    // (3) one minute of spreading across two ratios. The ratio-1 film is
+    // eight thinned-0.5 passes (each stroke's ceiling keeps each pass
+    // thin), then the ratio-1/9 film is one light pass (thinner 0.1, load
+    // 0.05, pressure 0.3) beside it. The setup's precondition, asserted:
+    // the ratio-1 film is the thicker (its mean wet film just left of the
+    // boundary at least 1.5× the ratio-1/9 film's just right of it), so its
+    // liquid runs into the other
     let mut c = smooth_canvas(300);
-    for k in 0..4 {
+    for k in 0..8 {
         thinned_patch(&mut c, raw_sienna(), 0.5, (150.0, 500.0), (300.0, 700.0), 200 + 20 * k);
     }
-    patch_with(&mut c, raw_sienna().with_thinner(0.1), 0.3, 0.5, (505.0, 850.0), (300.0, 700.0), 300);
+    patch_with(&mut c, raw_sienna().with_thinner(0.1), 0.05, 0.3, (505.0, 850.0), (300.0, 700.0), 300);
+    let wet_mean = |c: &Canvas, r: (f32, f32, f32, f32)| -> f64 { mean(&in_rect(c, r).iter().map(|&(_, x, y)| c.wet_um(x, y) + c.solvent_um(x, y)).collect::<Vec<_>>()) };
+    let (thick_mean, thin_mean) = (wet_mean(&c, (400.0, 350.0, 500.0, 650.0)), wet_mean(&c, (540.0, 350.0, 640.0, 650.0)));
+    println!("spreading setup: ratio-1 film {thick_mean} µm, ratio-1/9 film {thin_mean} µm");
+    assert!(thick_mean >= 1.5 * thin_mean, "setup: the ratio-1 film ({thick_mean} µm wet) is at least 1.5× the ratio-1/9 film ({thin_mean} µm)");
     let (h0, s0) = (paint_um(&c), solvent_um(&c));
     let (tot0, ptot0) = (c.solvent_total(), c.wet_total());
     c.wait(1.0);

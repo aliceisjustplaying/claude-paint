@@ -198,3 +198,63 @@ What ran:
   add differences.
 
 I disagree with none of B1, B2 or S1.
+
+## Round 4 (proposed test corrections, for re-review)
+
+This commit touches only frozen test files and this report. It is on
+top of the production fix 0a661f6 (a brush's `Debug` text is af49348's
+before engine 3), and the thinner code is unchanged by it. Each change
+fixes a test-code bug or a setup; no assertion or limit is changed. The
+card test (c01), the 6 µm stroke limit and every other test are
+untouched.
+
+| test | change | where (in this commit) | why |
+|---|---|---|---|
+| `c03_af49348_engine_3_logs_still_replay` | count chunks with `log.lines().filter(\|l\| l.starts_with("--@ chunk"))` instead of `log.matches("--@ chunk")` | `crates/easel/src/thinner_tests.rs:84` | test bug: the log's header comment ("Each "--@ chunk" line starts one chunk") matched too, so it expected 2 chunks for 1 |
+| `c03_a_log_keeps_its_engine` | `linen=15` in the tiny log's `canvas{}` | `crates/easel/src/thinner_tests.rs:94` | test bug: `canvas{}` requires `linen=`, so the tiny log failed in chunk 1 before any engine was checked |
+| `c18_a_failed_chunk_after_thinned_paint_takes_everything_back` | three `let`s instead of one tuple | `crates/easel/src/thinner_tests.rs:254` | test bug: the tuple's temporaries (`s.canvas()`, `s.st.borrow()`) were still borrowed when `held(&s)` took `borrow_mut` ("RefCell already borrowed") |
+| `c04_a_stroke_and_a_wipe_account_for_all_paint_and_solvent` | the guard "the brush's paint fell" becomes a non-vacuity guard: the stroke changed the canvas's paint, pixel by pixel either way, by more than a thousandth of all of it. The two balances are unchanged | `crates/paint/tests/thinner_physics.rs:40`, `:46` | the old guard tested a direction, not that paint moved. At thinner 0.9 the brush lays at most 0.67 µm of wet film per pixel (0.07 µm of paint) and picks up to 18% of the thinned underlayer's paint, so it ends fuller. The balances never ran |
+| `c05_an_emptying_brush_lays_less_and_a_fuller_load_lasts_farther` | the setup's stroke becomes one continuous zigzag over fresh ground: eight 960-unit rows 80 units apart, 7680 units, no reload. The pressure ramps keep the 960-unit stroke's absolute lengths. The profile runs along the rows in order; distances are counted along them. Every assertion and limit (θ, half, 30 units) is unchanged | `crates/paint/tests/thinner_physics.rs:107` (doc), `:125` | the plan has the brush keep what it can't lay. At the 6 µm limit a thinned filbert 8 still holds 61-74% of its liquid after 960 units, so it couldn't run out within one row |
+| `c16_brush_rag_and_spreading_carry_solvent_in_the_local_ratio`, part (3) | the setup becomes eight ratio-1 passes, then one light ratio-1/9 pass (load 0.05, pressure 0.3), and the precondition is asserted: the ratio-1 film's mean wet film left of the boundary is at least 1.5× the other's right of it | `crates/paint/tests/thinner_physics.rs:485`, `:500` | the original setup's "thick" film (four passes, 9.6 µm) was thinner than the ratio-1/9 film (12 µm), so the flow ran the other way |
+
+Run on the current code, all through lockrun (`cargo test --release`):
+
+- `thinner_physics` with `--include-ignored`: 12 of 13 pass, including
+  c04, c05 and the slow gel/dry test.
+- The 8 quick easel thinner tests all pass, including both c03 tests and
+  c18.
+- **c16 still fails, at its redistribution assertion.** Its precondition
+  holds (11.8 µm against 2.7 µm), and its movement guard holds (30
+  pixels gained ≥ 1%). But the mean ratio rise among those pixels is
+  +0.11%, against the > 1% required.
+
+**c16 can't be fixed by setup alone.** The probes (scratch, deleted)
+found the cause. In one minute the flow moves liquid about one pixel
+(0.06 mm²/min against pixels of 0.6-2.3 mm). Check 9 bounds that
+mobility from above, so it can't be raised to suit c16. As a result
+every setup lands in one of two cases:
+
+- **Overlap:** the ratio-1 film's ploughed edge lies inside the measured
+  band (x 505-535). Its gainers then already have ratio 1, so their ratio
+  can't rise. The proposed setup is this case: before 1.0000, after
+  1.0011.
+- **No overlap:** the edge lies outside the band, and almost nothing in
+  the band gains 1% within the minute: 0-2 pixels at 300-600 px.
+
+Light low-ratio films land in the same two cases. Under the 0.5 µm
+floor they go on as dry brush. At 1200 and 2400 px, leveling inside the
+low-ratio film swamps the boundary pixels (thousands of gainers, rise
+about 0).
+
+Options for the reviewers, none taken here:
+
+1. Measure the rise at the actual boundary rather than over a fixed band:
+   the low-ratio film's pixels next to the higher film. That changes the
+   assertion's selection.
+2. Lengthen the spreading span. That changes what the assertion
+   measures, since its balance and local-ratio bounds use one minute's
+   evaporation.
+3. Raise the model's mobility. That conflicts with check 9, and with
+   "don't tune to a test".
+
+I recommend 1.

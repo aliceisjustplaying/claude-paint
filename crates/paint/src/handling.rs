@@ -41,6 +41,9 @@ pub struct Handling<'a> {
     /// set, the color field is not
     /// used: the paint is the pile's (`piled`).
     pub pile: Option<(&'a Palette, crate::palette::Mixture, f32)>,
+    /// Share of solvent knifed into that pile (`crate::thinner`; engine 3):
+    /// 0, none.
+    pub thinner: f32,
     /// Where the brush is loaded more or less (multiplies `load`,
     /// evaluated at each stroke's center): a glaze goes on deeper where the
     /// brush carries more.
@@ -157,6 +160,7 @@ impl<'a> Handling<'a> {
             shake: 1.0,
             mix_jitter: 0.08,
             pile: None,
+            thinner: 0.0,
             load_at: None,
             cut_in: None,
             curve: 0.05,
@@ -272,6 +276,11 @@ impl<'a> Handling<'a> {
     /// drying at its tubes' rate. Nothing is aimed or matched.
     pub fn piled(mut self, palette: &'a Palette, pile: crate::palette::Mixture, medium: f32) -> Self {
         self.pile = Some((palette, pile, medium.clamp(0.0, 1.0)));
+        self
+    }
+    /// The pile holds the share `t` of solvent (`crate::thinner`; engine 3).
+    pub fn thinner(mut self, t: f32) -> Self {
+        self.thinner = t;
         self
     }
     /// Cut the region's edges in with `tool` (see `cut_in`).
@@ -834,6 +843,7 @@ fn finish_plan(cv: &Canvas, hd: &Handling, tool: &Tool, c: (f32, f32), pts: Vec<
         // the pile on the palette, as knifed (its own mixing generator)
         let mut prng = Rng::new(rng.next_u64());
         let paint = pal.remix(pile, hd.mix_jitter, &mut prng).laid(*medium);
+        let paint = if hd.thinner > 0.0 { paint.with_thinner(hd.thinner) } else { paint };
         let load = hd.load * load_k;
         return (rect, Plan { pts, pressure, fade, dip: Some(paint), load, swell: Vec::new(), passage: 0, fresh: false, id: None, want: pile.color });
     }

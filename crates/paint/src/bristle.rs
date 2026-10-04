@@ -22,6 +22,7 @@ use crate::canvas::Canvas;
 use crate::mask::Mask;
 use crate::rng::Rng;
 use crate::smoothstep;
+use crate::surface::COAT_UM;
 use crate::wet::{LAT, Latent, Paint, Prop, mix_into};
 
 /// Relief (µm) that spans a bristle's contact range: a bristle pressed
@@ -340,6 +341,10 @@ pub(crate) struct Bristle {
     /// Cure of the paint in it (0 fresh from the palette; paint lifted off
     /// a drying film brings the film's).
     cure: f32,
+    /// Solvent it carries beside its paint (`vol`), in the same units
+    /// (`crate::thinner`; engine 3): from a thinned pile, or lifted with
+    /// the paint off a solvent-wet film. 0 for unthinned paint.
+    pub(crate) solvent: f32,
 }
 
 /// A brush in the hand, with paint in its bristles. (`Debug` is part of
@@ -411,6 +416,7 @@ impl Held {
                     lat: [0.0; LAT],
                     hide: [0.5, 0.5, 1.0],
                     cure: 0.0,
+                    solvent: 0.0,
                 }
             })
             .collect();
@@ -430,8 +436,19 @@ impl Held {
         let lat = paint.latent();
         let full = self.full();
         let scatter = paint.scatter();
+        let t = paint.thinner;
         for (i, b) in self.bristles.iter_mut().enumerate() {
             let k = 0.75 + 0.5 * crate::rng::hash2(i as i64, 17, 3);
+            if t > 0.0 {
+                // a thinned load: the hairs take up `amount` of liquid, the
+                // share `t` of it solvent (crate::thinner)
+                let v = amount * full * k;
+                let vp = v * (1.0 - t);
+                b.cure = mix_cure(b.cure, b.vol, 0.0, vp);
+                mix_into(&mut b.vol, &mut b.lat, &mut b.hide, vp, &lat, [scatter, paint.stiff, paint.drying]);
+                b.solvent += v * t;
+                continue;
+            }
             b.cure = mix_cure(b.cure, b.vol, 0.0, amount * full * k);
             mix_into(&mut b.vol, &mut b.lat, &mut b.hide, amount * full * k, &lat, [scatter, paint.stiff, paint.drying]);
         }
@@ -441,6 +458,7 @@ impl Held {
     pub fn wipe(&mut self, frac: f32) {
         for b in &mut self.bristles {
             b.vol *= 1.0 - frac.clamp(0.0, 1.0);
+            b.solvent *= 1.0 - frac.clamp(0.0, 1.0);
         }
     }
 
@@ -450,10 +468,17 @@ impl Held {
         self.load(paint, amount);
     }
 
-    /// Paint left in the brush, relative to a full load.
+    /// Paint (with any solvent in it) left in the brush, relative to a full
+    /// load.
     pub fn fullness(&self) -> f32 {
         let f = self.full();
-        self.bristles.iter().map(|b| b.vol).sum::<f32>() / (f * self.bristles.len() as f32)
+        self.bristles.iter().map(|b| b.vol + b.solvent).sum::<f32>() / (f * self.bristles.len() as f32)
+    }
+
+    /// The paint and the solvent the brush carries, in the units of
+    /// `Canvas::wet_total` (coats × square units).
+    pub fn carried(&self) -> (f64, f64) {
+        self.bristles.iter().fold((0.0, 0.0), |(p, s), b| (p + b.vol as f64, s + b.solvent as f64))
     }
 }
 
@@ -564,6 +589,12 @@ pub(crate) struct Surf {
     /// Paint laid or moved updates the film's cure at once (see `add`;
     /// engine 2). Engine 1 left it to the next `wait`.
     cure_now: bool,
+    /// Solvent in the open film, and each pixel's wet film laid by the
+    /// stroke `laid_id` against its ceiling (`Wet::solv`, `Wet::laid`):
+    /// null before engine 3.
+    solv: *mut f32,
+    laid: *mut f32,
+    laid_id: *mut u32,
 }
 // SAFETY: callers only run brushes concurrently on pixel sets that cannot
 // overlap (tiles separated by more than the largest stroke extent).
@@ -628,6 +659,9 @@ impl Canvas {
     pub(crate) fn surf(&mut self) -> Surf {
         // the raw views below index 0..w*h: every buffer must be that long
         let n = self.f.w * self.f.h;
+        if self.engine >= 3 {
+            self.wet.ensure_solvent();
+        }
         let wt = &self.wet;
         assert!(
             [self.height.len(), self.px.len(), self.film.len(), wt.vol.len(), wt.lat.len(), wt.hide.len(), wt.stroke.len(), wt.touched.len(), wt.floor.len(), wt.cover.len()].iter().all(|&l| l == n),
@@ -666,6 +700,9 @@ impl Canvas {
             base: self.base.as_ref().unwrap().1.as_ptr(),
             dry: if self.wet.clock.px.len() == n { self.wet.clock.px.as_mut_ptr() } else { std::ptr::null_mut() },
             cure_now: self.engine >= 2,
+            solv: if self.wet.solv.len() == n { self.wet.solv.as_mut_ptr() } else { std::ptr::null_mut() },
+            laid: if self.wet.laid.len() == n { self.wet.laid.as_mut_ptr() } else { std::ptr::null_mut() },
+            laid_id: if self.wet.laid_id.len() == n { self.wet.laid_id.as_mut_ptr() } else { std::ptr::null_mut() },
         }
     }
 
@@ -749,7 +786,7 @@ fn cohesion(held: &Held, full: f32) -> f32 {
         return 1.0;
     }
     let n = held.bristles.len().max(1) as f32;
-    let fill = held.bristles.iter().map(|b| b.vol).sum::<f32>() / (full * n);
+    let fill = held.bristles.iter().map(|b| b.vol + b.solvent).sum::<f32>() / (full * n);
     smoothstep(0.02, 0.2, fill)
 }
 
@@ -768,9 +805,10 @@ fn feed(bristles: &mut [Bristle], k: f32) {
     if k <= 0.0 || bristles.is_empty() {
         return;
     }
-    let (mut tv, mut lat, mut hide, mut cure) = (0.0f32, [0.0f32; LAT], [0.0f32; 3], 0.0f32);
+    let (mut tv, mut lat, mut hide, mut cure, mut ts) = (0.0f32, [0.0f32; LAT], [0.0f32; 3], 0.0f32, 0.0f32);
     for b in bristles.iter() {
         tv += b.vol;
+        ts += b.solvent;
         cure += b.cure * b.vol;
         for (l, bl) in lat.iter_mut().zip(&b.lat) {
             *l += bl * b.vol;
@@ -788,7 +826,11 @@ fn feed(bristles: &mut [Bristle], k: f32) {
     hide = [hide[0] / tv, hide[1] / tv, hide[2] / tv];
     cure /= tv;
     let share = k * tv / bristles.len() as f32;
+    let share_s = k * ts / bristles.len() as f32;
     for b in bristles.iter_mut() {
+        if ts > 0.0 {
+            b.solvent = b.solvent * (1.0 - k) + share_s;
+        }
         b.vol *= 1.0 - k;
         b.cure = mix_cure(b.cure, b.vol, cure, share);
         mix_into(&mut b.vol, &mut b.lat, &mut b.hide, share, &lat, hide);
@@ -1171,6 +1213,19 @@ unsafe fn exchange(
             // bristle touched and laid paint as usual (so it arrives in the
             // window about as spent as in a whole render), lifting none
             let travel = (seg / s).max(rb / s * 0.5);
+            if br.solvent > 0.0 {
+                // (a thinned load: its liquid runs down the same way, paint
+                // and solvent alike)
+                let l = br.vol + br.solvent;
+                let left = match dep {
+                    None => l * (1.0 - (1.0 - (-travel / tool.run).exp()) * GHOST_TOUCH),
+                    Some(v) => (l - v.min(l * 0.5) * GHOST_TOUCH).max(0.0),
+                };
+                let f = if l > 0.0 { left / l } else { 0.0 };
+                br.vol *= f;
+                br.solvent *= f;
+                return;
+            }
             br.vol = match dep {
                 None => br.vol * (1.0 - (1.0 - (-travel / tool.run).exp()) * GHOST_TOUCH),
                 Some(v) => (br.vol - v.min(br.vol * 0.5) * GHOST_TOUCH).max(0.0),
@@ -1201,8 +1256,17 @@ unsafe fn exchange(
         // a well-loaded blunt brush wets the shallow hollows too (up to half
         // the tooth's range); a nearly dry one drags over the peaks only
         // (dry brush, broken color)
-        let wet = smoothstep(0.1, 0.8, br.vol / full);
-        let wick = if tool.point > 0.0 { tool.point * smoothstep(0.02, 0.25, br.vol / full) } else { 0.0 }.max(WET_REACH * wet);
+        // what the hair carries: its paint, and with a thinned load the
+        // solvent in it too (crate::thinner): a thinned brush is a wet one.
+        // Unthinned (no solvent), exactly the paint, as before
+        let liquid = if br.solvent > 0.0 { br.vol + br.solvent } else { br.vol };
+        // the share of solvent in what it lays, and the most wet film this
+        // stroke may add to a pixel (coats; engine 3)
+        let phi = if br.solvent > 0.0 { br.solvent / liquid } else { 0.0 };
+        let capped = phi > 0.0 && !sf.laid.is_null();
+        let cap = if capped { crate::thinner::stroke_limit_um(phi) / COAT_UM } else { f32::INFINITY };
+        let wet = smoothstep(0.1, 0.8, liquid / full);
+        let wick = if tool.point > 0.0 { tool.point * smoothstep(0.02, 0.25, liquid / full) } else { 0.0 }.max(WET_REACH * wet);
         let th = 1.0 - reach.max(wick) * 1.6;
 
         // pass 1: contact weights
@@ -1274,17 +1338,17 @@ unsafe fn exchange(
         // bristle skimming the weave peaks keeps most of its load
         let touch = (sum_w / sum_cov.max(1e-6)).min(1.0);
         let dep_total = match dep {
-            None => br.vol * (1.0 - (-travel / tool.run).exp()) * touch,
-            Some(v) => v.min(br.vol * 0.5) * touch,
+            None => liquid * (1.0 - (-travel / tool.run).exp()) * touch,
+            Some(v) => v.min(liquid * 0.5) * touch,
         };
         let dep_total = if matches!(clip, Some(Clip::Fence { .. })) { dep_total * (sum_k / sum_w).min(1.0) } else { dep_total };
         let dep_total = if tack > 0.0 {
             let g = crate::drying::grab(tack) * crate::drying::stick(b.0, b.1, rb, br.seed, tack);
             let d = match dep {
-                None => br.vol * (1.0 - (-travel * g / tool.run).exp()) * touch,
+                None => liquid * (1.0 - (-travel * g / tool.run).exp()) * touch,
                 Some(_) => dep_total * g,
             };
-            d.min(br.vol * 0.9)
+            d.min(liquid * 0.9)
         } else {
             dep_total
         };
@@ -1293,7 +1357,7 @@ unsafe fn exchange(
         let dep_per_w = dep_total * share.min(1.0) / sum_w / px_area;
         // film splitting: a bristle in wet paint always lifts some of it, even
         // when loaded; a spent bristle drinks more
-        let hunger = 0.35 + 0.65 * (1.0 - br.vol / full).clamp(0.0, 1.0).powf(1.5);
+        let hunger = 0.35 + 0.65 * (1.0 - liquid / full).clamp(0.0, 1.0).powf(1.5);
         // a moving hair ploughs aside the share `push` of the paint in its
         // own track, 2·`hair` wide, and lays it a hair's width away (shared
         // bilinearly, below): the same paint moved the same distance at any
@@ -1315,6 +1379,9 @@ unsafe fn exchange(
         let mut got_l = [0.0f32; LAT];
         let mut got_h: Prop = [0.0; 3];
         let mut got_c = 0.0f32;
+        // solvent lifted with the paint, and wet film (paint + solvent) laid
+        let mut got_s = 0.0f32;
+        let mut laid_liq = 0.0f32;
         let (blat, bhide, bcure) = (br.lat, br.hide, br.cure);
         for y in y0..y1 {
             for x in x0..x1 {
@@ -1348,10 +1415,21 @@ unsafe fn exchange(
                         if !sf.dry.is_null() {
                             got_c += (*sf.dry.add(i)).cure * tv;
                         }
+                        // the solvent comes up with the paint, in the
+                        // film's own proportions
+                        if !sf.solv.is_null() {
+                            // (the canvas holds its solvent in µm)
+                            let sv = &mut *sf.solv.add(i);
+                            if *sv > 0.0 {
+                                let ts = (*sv * take / v).min(*sv);
+                                *sv -= ts;
+                                got_s += ts / COAT_UM * px_area;
+                            }
+                        }
                         sf.take(i, take);
                     }
                 }
-                if dep_per_w > 0.0 {
+                if dep_per_w > 0.0 && !capped && phi <= 0.0 {
                     // the share of the pixel this paint covers: its contact
                     // (a fine hair's own share of the tuft's width, where
                     // the hairs of a gathered point lie over each other)
@@ -1359,6 +1437,27 @@ unsafe fn exchange(
                     *cv = if fine { ((if *sf.vol.add(i) < 1e-6 { 0.0 } else { *cv }) + wt * excl).min(1.0) } else { 1.0 };
                     sf.add(i, dep_per_w * wt, &blat, bhide, bcure);
                     *sf.stroke.add(i) = id;
+                } else if dep_per_w > 0.0 {
+                    // a thinned load lays liquid: no more than what is left
+                    // of this pixel's ceiling for this stroke, shared by all
+                    // its hairs (crate::thinner); the rest stays on the hair
+                    let mut d = dep_per_w * wt;
+                    if capped {
+                        let used = if *sf.laid_id.add(i) == id { *sf.laid.add(i) } else { 0.0 };
+                        d = d.min((cap - used).max(0.0));
+                        *sf.laid_id.add(i) = id;
+                        *sf.laid.add(i) = used + d;
+                    }
+                    if d > 0.0 {
+                        let cv = &mut *sf.cover.add(i);
+                        *cv = if fine { ((if *sf.vol.add(i) < 1e-6 { 0.0 } else { *cv }) + wt * excl).min(1.0) } else { 1.0 };
+                        sf.add(i, d * (1.0 - phi), &blat, bhide, bcure);
+                        if !sf.solv.is_null() {
+                            *sf.solv.add(i) += d * phi * COAT_UM;
+                        }
+                        *sf.stroke.add(i) = id;
+                        laid_liq += d * px_area;
+                    }
                 }
                 // plough: move paint outward from the bristle's path, and ahead
                 if push_k > 0.0 {
@@ -1404,7 +1503,30 @@ unsafe fn exchange(
                                 // a clipped stroke can't push paint past its mask:
                                 // only the accepted share moves, the rest stays
                                 let m = m * share * clip.map_or(1.0, |c| c.at(ty * w + tx).0);
+                                // a thinned stroke adds no more wet film to the
+                                // pixel it ploughs into than its ceiling there
+                                // allows; the solvent goes with the paint
+                                // (solvent in µm, as the canvas holds it)
+                                let sol = if sf.solv.is_null() { 0.0 } else { *sf.solv.add(i) / COAT_UM };
+                                let vi = *sf.vol.add(i);
+                                let ms = if sol > 0.0 && vi > 0.0 { (sol * m / vi).min(sol) } else { 0.0 };
+                                let (m, ms) = if capped && j != i && m > 0.0 {
+                                    let used = if *sf.laid_id.add(j) == id { *sf.laid.add(j) } else { 0.0 };
+                                    let room = (cap - used).max(0.0);
+                                    let f = if m + ms > room { room / (m + ms) } else { 1.0 };
+                                    *sf.laid_id.add(j) = id;
+                                    *sf.laid.add(j) = used + (m + ms) * f;
+                                    (m * f, ms * f)
+                                } else {
+                                    (m, ms)
+                                };
                                 if j != i && m > 0.0 {
+                                    if ms > 0.0 {
+                                        let si = &mut *sf.solv.add(i);
+                                        let mu = (ms * COAT_UM).min(*si);
+                                        *si -= mu;
+                                        *sf.solv.add(j) += mu;
+                                    }
                                     let cure = if sf.dry.is_null() { 0.0 } else { (*sf.dry.add(i)).cure };
                                     // the paint moved covers its share of
                                     // the pixel it came from
@@ -1420,7 +1542,16 @@ unsafe fn exchange(
                 }
             }
         }
-        br.vol = (br.vol - dep_total).max(0.0);
+        if phi > 0.0 {
+            // the hair loses what it laid (and in a crop, the share laid
+            // outside the window), paint and solvent in its proportions
+            let gone = (laid_liq + dep_total * (1.0 - share.min(1.0))).min(liquid);
+            br.vol = (br.vol - gone * (1.0 - phi)).max(0.0);
+            br.solvent = (br.solvent - gone * phi).max(0.0);
+        } else {
+            br.vol = (br.vol - dep_total).max(0.0);
+        }
+        br.solvent += got_s;
         if got_v > 0.0 {
             for k in 0..LAT {
                 got_l[k] /= got_v;
@@ -1610,7 +1741,7 @@ pub(crate) unsafe fn touch_on(sf: Surf, held: &mut Held, t: &Touch, clip: Option
             let (ox, oy) = (b.rx * half * spread, b.ry * half * spread);
             let cur = (hx + ox * ct - oy * st, hy + ox * st + oy * ct);
             let prev = b.prev[0].unwrap_or(cur);
-            let fill = (b.vol / full).min(1.0);
+            let fill = ((b.vol + b.solvent) / full).min(1.0);
             let v = film * fill * reach / sums[bi].max(1e-6);
             unsafe { exchange(sf, b, &tool, prev, cur, rb, reach, full, Some(v), 1.0, clip, id, scratch, &mut bounds, lim) };
             b.prev[0] = Some(cur);

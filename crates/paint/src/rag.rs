@@ -128,12 +128,16 @@ pub struct Rag {
     pub wet_at: f64,
     pub fold: u32,
     pub seed: u64,
+    /// The solvent the cloth has taken off the canvas with the paint, mm³,
+    /// cumulative (`crate::thinner`; engine 3). Bookkeeping only: it isn't
+    /// the cloth's own dampness (`damp`) and lifts nothing.
+    pub solvent_mm3: f64,
 }
 
 impl Rag {
     /// A clean rag bunched to a pad `width` units across.
     pub fn new(width: f32, seed: u64) -> Self {
-        Rag { width: width.max(0.1), load: 0.0, soaked: 0.0, damp: 0.0, wet_at: 0.0, fold: 0, seed }
+        Rag { width: width.max(0.1), load: 0.0, soaked: 0.0, damp: 0.0, wet_at: 0.0, fold: 0, seed, solvent_mm3: 0.0 }
     }
 
     /// Turn a cleaner, dry face outward. No face is cleaner than the paint
@@ -277,14 +281,27 @@ pub struct RagPass {
 
 impl Canvas {
     /// The wet film under pixel `i` lifted by `take` coats, as
-    /// `bristle::Surf::take` does it: a film left bare holds no cure.
+    /// `bristle::Surf::take` does it: a film left bare holds no cure. The
+    /// solvent in the film comes away with the paint, in their proportions
+    /// there; returns how much (coats; the canvas holds it in µm).
     #[inline]
-    fn rag_take(&mut self, i: usize, take: f32) {
+    fn rag_take(&mut self, i: usize, take: f32) -> f32 {
+        let v0 = self.wet.vol[i];
+        let mut ts = 0.0;
+        if let Some(s) = self.wet.solv.get_mut(i)
+            && *s > 0.0
+            && v0 > 0.0
+        {
+            let tu = (*s * take / v0).min(*s);
+            *s -= tu;
+            ts = tu / COAT_UM;
+        }
         let v = &mut self.wet.vol[i];
         *v -= take;
         if self.engine >= 2 && *v < 1e-5 && self.wet.clock.px.len() == self.wet.vol.len() {
             self.wet.clock.px[i].cure = 0.0;
         }
+        ts
     }
 
     /// One contact of the rag over the pixels in `bbox` (units): `expo(x,
@@ -323,8 +340,10 @@ impl Canvas {
         let k = LIFT * (0.7 + 0.6 * p) * rag.thirst() * (1.0 + DAMP_LIFT * d);
         let timed = self.wet.clock.px.len() == self.wet.vol.len();
         let mut lifted = 0.0f64;
+        let mut lifted_s = 0.0f64;
         for y in y0..y1 {
             let mut row = 0.0f32;
+            let mut row_s = 0.0f32;
             for x in x0..x1 {
                 let i = y * f.w + x;
                 let v = self.wet.vol[i];
@@ -349,13 +368,15 @@ impl Canvas {
                 let floor = STAIN_COATS * (2.0 - near / v);
                 let take = (avail * frac).min(v - floor);
                 if take > 0.0 {
-                    self.rag_take(i, take);
+                    row_s += self.rag_take(i, take);
                     row += take;
                 }
             }
             lifted += row as f64;
+            lifted_s += row_s as f64;
         }
         let mm3 = lifted * (px_mm as f64).powi(2) * (COAT_UM as f64 / 1000.0);
+        rag.solvent_mm3 += lifted_s * (px_mm as f64).powi(2) * (COAT_UM as f64 / 1000.0);
         let w_mm = (rag.width * self.mm_per_unit) as f64;
         let cap = w_mm * w_mm * (CAP_UM as f64 / 1000.0);
         rag.load = (rag.load + (mm3 / cap) as f32).min(1.0);

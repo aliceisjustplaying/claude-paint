@@ -426,7 +426,7 @@ impl Session {
         g.sort_by_key(|(k, (_, c))| (*c, *k));
         g.into_iter()
             .filter_map(|(k, (v, _))| match v {
-                Value::UserData(u) => u.borrow::<api::PileU>().ok().map(|p| (k.clone(), p.recipe(), p.mix.laid(p.medium))),
+                Value::UserData(u) => u.borrow::<api::PileU>().ok().map(|p| (k.clone(), p.recipe(), p.paint())),
                 _ => None,
             })
             .collect()

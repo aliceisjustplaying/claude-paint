@@ -473,6 +473,9 @@ def main():
     os.makedirs(logdir, exist_ok=True)
     env = dict(os.environ)
     env.pop("EASEL_BOX", None)
+    # no __pycache__ beside the Python a step imports (the thinner's check 2 imports the
+    # baseline's tools, whose package check counts every file there)
+    env["PYTHONDONTWRITEBYTECODE"] = "1"
     target = target_dir()
     if target:
         env["CARGO_TARGET_DIR"] = target
@@ -509,7 +512,7 @@ def main():
                     r["tests_run"], r["failed"], ", %d ignored/skipped" % r["ignored"] if r["ignored"] else "")
                 if len(batch) > 1:
                     print("scripts/test:   %-32s ..." % r["name"], end="")
-                print(" %s %7.1f s%s%s" % ("ok  " if r["ok"] else "FAIL", r["seconds"], counts, "  (%s)" % r["why"] if r["why"] else ""), flush=True)
+                print(" %s %7.1f s%s%s" % ("ok  " if r["ok"] else "KNOWN" if r["known_failure"] else "FAIL", r["seconds"], counts, "  (%s)" % r["why"] if r["why"] else ""), flush=True)
     except Cancelled:
         interrupted = True
         print("\nscripts/test: cancelled; the running steps were stopped", flush=True)

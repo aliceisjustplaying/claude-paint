@@ -21,6 +21,7 @@ scripts/merge_candidate
 scripts/golden_approve
 scripts/safeguards_lib.py
 scripts/tests/safeguards.sh
+scripts/tests/test_runner.sh
 # The engine-against-baseline check run by scripts/test (thinner check 2's
 # command and the fast checks' baseline step).
 scripts/tests/baseline_state.sh

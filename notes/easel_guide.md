@@ -61,6 +61,18 @@ canvas{size=<mm>, aspect=<width / height>, linen={<warp>, <weft>}, seed=<seed>,
   its colour and its weave. A brush works on it as on a primed canvas: its
   paint lies on the cloth. `soaked(x, y)` says in words what is in the
   cloth there (`"raw"`), and whether paint lies on it.
+- A ground layer's `absorbent=true` (or 0..1) makes it a chalk and glue
+  ground: it draws oil out of the paint laid straight on it until its pores
+  are full, so thin paint there goes lean, stiff, quick to set and matte,
+  while thick paint barely notices. Paint that has dried over it seals it.
+  An oil ground (the default) absorbs nothing and is semi-matte.
+
+**Gloss.** Every dry surface is more or less glossy: oily paint (medium)
+dries glossy, lean paint (blotted, or drawn out by an absorbent ground)
+matte, a thin film shows the surface under it, a varnish makes all of it
+glossy. A matte surface scatters the light its first surface reflects back
+toward you, a faint veil of white over the colors that lifts the darks; a
+glossy one sends it away. The looks and the saved picture show it.
 
 It sets `W` (1000) and `H` (`1000 / aspect`). The canvas is always 1000
 units wide, whatever its pixel width. The origin `(0, 0)` is the upper
@@ -87,6 +99,45 @@ the canvas; you find out by painting with it and looking. A pile mixed by
 hand is a little uneven: each brushload takes slightly different
 proportions (about 6%). The palette has room for 16 piles; the oldest is
 scraped off to make room.
+
+`turps` thins the pile with that share of turpentine (0 to 0.9):
+`pile({{"<tube>", <parts>}, turps=0.6})`. It flows on the brush and
+evaporates as the paint is laid, so it leaves a film that much thinner, of
+the paint's own body: the lean, quick lay-in and wash. (`thinner`, below,
+is the other way to thin a pile: its solvent stays in the film for a while
+and leaves over painting time.) `oil` is what the paint is ground in: `"linseed"` (as the tubes come), `"walnut"` (dries a
+little slower) or `"poppy"` (dries much slower, yellows least).
+
+`blot` is the opposite of medium: the paint laid out on blotting paper
+first, which draws out that share of its own oil (0 to 0.5):
+`pile({{"<tube>", <parts>}, blot=0.3})`. Blotted paint is leaner, a little
+more opaque and much stiffer: it holds the ridges and furrows of the brush
+as it dries. A pile takes medium or blot, not both.
+
+**The palette board.** Every pile is a heap on the board beside the easel.
+
+- `pile{..., name="sky"}` names it.
+- `look --palette` (the `look` tool's `palette: true`) shows the board: each
+  heap knifed out thick (its masstone and body) with a smear dragged from
+  thick to thin across a black stripe (its tint as it thins, how much it
+  hides), lit as in the gallery view. Judge a mix there before it touches the
+  canvas.
+- `p:add{{"<tube>", <parts>}, ..., medium=}` knifes more tube paint into a
+  heap, in the units its recipe was given in (a pile knifed as
+  `{"lead white", 4}, {"cerulean blue", 0.35}` takes `{"cerulean blue", 0.1}`
+  as a tenth of a part more): look, adjust, look again. It returns the pile.
+- `mix{{p1, <share>}, {p2, <share>}, ..., name=}` knifes heaps together into a
+  new heap, as they are now.
+- `palette{set_out={"<tube>", ...}}` sets out only those tubes, a limited
+  palette: a pile of any other is an error.
+- `palette{dirty=<0..1>}` keeps the board as dirty as painters do. A brush
+  that comes to a heap carrying paint leaves a little of it there, more the
+  fuller it is (a `b:reload` wipes it first), and the smears of the mixing
+  area seep into each new heap, so the heaps drift toward each other through
+  a sitting. `palette{clean=true}` scrapes the mixing area and skims the
+  heaps. 0, the default, is a clean board: every heap stays as knifed.
+- `palette()` returns a line about each heap: its recipe now, and how much of
+  it is other paint.
 
 The tube box:
 
@@ -571,12 +622,10 @@ in canvas units, not a position and width/height.
 The grid is drawn on the PNG only, never on the canvas, like the squares
 ruled over a drawing to transfer it.
 
-`look` with `palette: true` shows the palette instead of the canvas: a row
-for each pile a global holds, labeled with the global's name and the pile
-(as `print` gives it). Each row shows the pile laid thick; one thin coat
-(12 µm) and a very thin coat (4 µm) over this canvas's ground color; and
-the thin coat over a white card with a black stripe across it. It shows
-the pile's own paint, before the unevenness of a brushload. It takes no
+`look` with `palette: true` shows the palette board instead of the canvas:
+each live heap's masstone and body paint, with a smear dragged across a
+black stripe. It shows the heap's paint before the unevenness of a
+brushload. It takes no
 other option, and nothing on the canvas or the clock changes.
 
 | `look` with | shows |

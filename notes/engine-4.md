@@ -33,6 +33,10 @@ painter never saw relief either: looks showed color only.
   ploughs aside its own width (up to 3 px) instead of a sub-pixel hair's, so
   walls rise along the stroke's edges. Each hair still moves only its own
   share of paint.
+- **Blotting** (`pile{..., blot=0..0.5}`): oil drawn out of the paint, a
+  negative medium in `Mixture::paint`: that share of the oil gone,
+  stiffness × (1+blot)² (capped at 1),
+  scattering × (1+blot).
 - **The knife** (`Canvas::knife`, Lua `knife{width=}`): a flexible steel blade
   (it follows relief over `FLEX_MM` 4 mm and bridges finer hollows) resting on
   the dry surface's high points, standing off them by a gap that closes with
@@ -59,8 +63,51 @@ painter never saw relief either: looks showed color only.
 - **Sketches**: a session whose name starts with `sketch` paints at 600 px
   instead of 2400 (about 16 times faster) for trying out a composition; its
   log says so (`--@ sketch`) and replays at the same width under any name.
+- **Materials** (`Paint::solvent`, `Paint::oil`, two more entries in the wet
+  paint's `Prop`, mixed by volume):
+  - `pile{turps=0..0.9}`: turpentine makes paint flow on the brush (it
+    doesn't clump) and evaporates as it is laid (`Surf::add`): the film is
+    that much thinner, of the paint's own body. (Engine 3's `thinner=` is
+    upstream's, beside it: its solvent stays in the open film and leaves
+    over painting time.)
+  - `pile{oil="linseed"|"walnut"|"poppy"}`: drying ×1, 0.8, 0.6.
+  - `canvas{ground={{..., absorbent=true}}}`: a chalk and glue ground holds
+    `ABSORB_COATS` (0.6 coats) of oil it draws out of paint laid on it
+    (`Surf::add`): the film loses that oil, gets stiffer and leaner. Dry
+    paint seals it.
+  - **Gloss** (`Canvas::gloss`): a baked film's gloss follows its oil
+    (smoothstep 0.15..1.3), blended with the surface under it for thin
+    films; varnish sets it to 1. Engine 4 shows a matte surface with the
+    first-surface reflection it scatters back (`SURFACE_REFLECTANCE` 4%,
+    `haze`) in looks and saved pictures. Checkpoint format 11 (`PAINTC11`), or 12 (`PAINTC12`) on raw cloth, for a painting of engine
+    4 or later: format 9 with the solvent and oil in the wet paint, the gloss
+    and the absorbency. An older engine's painting is written as it always was
+    (formats 8 and 9), byte for byte, and its state digests and state dumps
+    are the ones recorded for it.
+  - Not modeled: yellowing, fading of lakes, color change of chromates.
 - **The giverny and impressionist boxes**: see `notes/research/giverny_materials.md` and
   `notes/research/impressionist_materials.md` (from analyses of the paintings).
+
+## Two ways to thin paint
+
+`pile{thinner=}` (engine 3, upstream's `crate::thinner`) and `pile{turps=}`
+(engine 4, this note) both put solvent in a pile, and they model it
+differently. They are kept side by side, each as it was written:
+
+| | `thinner=` | `turps=` |
+|---|---|---|
+| the solvent is | a quantity beside the paint (on each bristle, in each pixel's open film) | a share among the paint's own properties |
+| a loaded brush holds | that much liquid, part paint and part solvent | that much paint, carrying its share |
+| one stroke lays | at most a ceiling of wet film (about 6 µm at 0.5) | what the brush lays, with no ceiling |
+| it evaporates | over painting time (minutes; longer from a thick film) | as the paint is laid: the film is thinner by its share |
+| on the canvas | it stays for a while, and the film flows and levels | none of it is ever on the canvas |
+| a brush or rag that lifts the paint | takes the solvent with it | has none to take |
+| on the brush | the hairs are as with unthinned paint | thinned paint doesn't clump the hairs, and spatters more readily |
+
+Where they meet, and nothing reconciles them:
+- A pile given both is thinned both ways (untested).
+- Clumping and spatter read only `turps=`'s share: paint thinned with
+  `thinner=` still clumps as its stiffness says.
 
 ## Engine 5: the knife tears
 

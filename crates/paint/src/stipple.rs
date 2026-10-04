@@ -124,10 +124,11 @@ impl<'a> Stipple<'a> {
         self
     }
     /// Load every trip from `pile` (parts of `palette`'s tubes), thinned
-    /// with `medium` (0..1), remixed a little per dip by `mix_jitter`,
+    /// with `medium` (0..1; below 0, down to -0.5, that share of its oil
+    /// blotted out), remixed a little per dip by `mix_jitter`,
     /// drying at its tubes' rate.
     pub fn piled(mut self, palette: &'a Palette, pile: crate::palette::Mixture, medium: f32) -> Self {
-        self.pile = Some((palette, pile, medium.clamp(0.0, 1.0)));
+        self.pile = Some((palette, pile, medium.clamp(-0.5, 1.0)));
         self
     }
     /// The pile holds the share `t` of solvent (`crate::thinner`; engine 3).

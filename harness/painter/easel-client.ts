@@ -149,7 +149,12 @@ function realOf(full: string): string {
 
 export function lookArgs(p: { crop?: string; mode?: string; size?: number; grid?: boolean | number; light?: string; palette?: boolean; survey?: boolean; compare?: string }): string[] {
 	const a: string[] = [];
-	if (p.palette === true) a.push("--palette");
+	if (p.palette) {
+		if (Object.entries(p).some(([key, value]) => key !== "palette" && value !== undefined && value !== false && value !== "")) {
+			throw new Error("look: palette takes no other option");
+		}
+		return ["--palette"];
+	}
 	if (p.survey) a.push("--survey");
 	if (p.compare) a.push("--compare", p.compare);
 	if (p.crop) a.push("--crop", p.crop);

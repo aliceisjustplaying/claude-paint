@@ -43,7 +43,7 @@ export function registerEaselTools(pi: ExtensionAPI, studio: string): void {
 			label: "look",
 			description:
 				"Look at the canvas as it is now. Without options: the whole canvas, scaled down. " +
-				"crop: \"x0,y0,x1,y1\" in canvas units (two opposite corners), shown at 1:1 pixels. " +
+				"crop: \"x0,y0,x1,y1\" in canvas units (two opposite corners), at most 500 units on each side, shown at 1:1 pixels. " +
 				"mode: \"value\", \"squint\", \"mirror\" or several, comma-separated. size: the long side in pixels. " +
 				"grid: true, or a spacing in canvas units. " +
 				"palette: true shows the palette instead: each pile a global holds, laid thick, as a thin and a very thin coat over the ground, and the thin coat over a black and white card.",

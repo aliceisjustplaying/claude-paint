@@ -285,6 +285,8 @@ m:at(x, y)   m:area()
 ```
 
 Points are `{{x, y}, ...}` or a flat `{x1, y1, x2, y2, ...}`.
+`below` selects larger y values, toward the bottom of the canvas;
+`above` selects smaller y values, toward the top.
 
 Numbers and randomness: `rand(a, b)`, `randn(mean, sd)`, `math.random`,
 `lerp(a, b, t)`, `clamp(x, lo, hi)`, `smoothstep(a, b, x)`;
@@ -294,6 +296,10 @@ passed to `coverage=` or `load_at=`); `worley{seed=, period=, jitter=}`
 (`c:at(x, y)` gives the distances to the nearest two cell points, how near
 a cell wall, and a stable 0..1 per cell); `uneven(n, lo, hi, irregular,
 clump, seed)` (n positions from lo to hi with uneven, clumped gaps).
+
+The nested `warp` and `stretch` tables use positional values, not named
+fields: for example, `noise{period=180, stretch={0, 3}}` stretches along
+angle 0 by a factor of 3. `stretch={angle=0, k=3}` is not accepted.
 
 **Drawn lines.** `outline{pts... or pts=, char=, seed=, closed=, open=,
 corners=, corner_angle=60, size=, amount=, lobe=, edge=}` turns a few

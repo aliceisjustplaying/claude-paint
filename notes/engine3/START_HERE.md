@@ -1,6 +1,6 @@
 # Start here (October 4, 2026)
 
-**Current: [HANDOVER-3.md](HANDOVER-3.md). Read it first.**
+**Current status: [HANDOVER-4.md](HANDOVER-4.md); plan and done condition: [HANDOVER-3.md](HANDOVER-3.md). Read both first.**
 
 **Previous: [HANDOVER-2.md](HANDOVER-2.md) (October 4, evening; branch `rag`). Historical status; HANDOVER-3.md supersedes it.**
 

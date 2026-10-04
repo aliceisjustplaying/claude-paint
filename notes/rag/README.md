@@ -32,6 +32,13 @@ The cloth parameters are estimates, not measured material constants.
 Spirits on the rag improve lift and reach; this release does not add thinner
 to paint piles or change brush deposition or drying rates.
 
+## Current wipe comparison
+
+Each row shows the same starting patch, then one and two wipes with the
+same face. Top: dry cloth. Bottom: cloth dipped in spirits.
+
+![First and second dry and damp wipes](release_wipes.jpg)
+
 ## Release checks
 
 The rag's physics checks cover dry and damp wiping, refolding, evaporation,

@@ -1,0 +1,64 @@
+{
+  "clock_scale": 1000,
+  "warning": "Scheduled budgets with accelerated external clock, not elapsed default-duration runs",
+  "results": [
+    {
+      "id": "ordinary",
+      "default_budgets": {
+        "do": 720000,
+        "other": 180000,
+        "rebuild": 1800000
+      },
+      "scheduled_ms": [
+        180000
+      ],
+      "elapsed_real_ms": 186,
+      "result": "Error: the easel isn't answering",
+      "calls": "status\n"
+    },
+    {
+      "id": "paint",
+      "default_budgets": {
+        "do": 720000,
+        "other": 180000,
+        "rebuild": 1800000
+      },
+      "scheduled_ms": [
+        720000
+      ],
+      "elapsed_real_ms": 725,
+      "result": "Error: the easel isn't answering",
+      "calls": "status\n"
+    },
+    {
+      "id": "rebuild",
+      "default_budgets": {
+        "do": 720000,
+        "other": 180000,
+        "rebuild": 1800000
+      },
+      "scheduled_ms": [
+        180000,
+        1699000
+      ],
+      "elapsed_real_ms": 1930,
+      "result": "Error: the easel rebuild stalled without progress",
+      "calls": "status\nstatus\n"
+    },
+    {
+      "id": "opening-included",
+      "default_budgets": {
+        "do": 720000,
+        "other": 180000,
+        "rebuild": 1800000
+      },
+      "scheduled_ms": [
+        180000,
+        24000
+      ],
+      "elapsed_real_ms": 183,
+      "result": "Error: the easel didn't open in time",
+      "calls": "status\nopen\n"
+    }
+  ]
+}

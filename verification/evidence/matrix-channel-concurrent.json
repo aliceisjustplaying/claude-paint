@@ -1,0 +1,21 @@
+{
+  "observation": {
+    "before": "  0:19.43\n",
+    "after": "  0:19.53\n",
+    "cli_output_pending": true
+  },
+  "helper_invoked": "invoked",
+  "cli_still_pending_when_helper_started": true,
+  "cli": {
+    "reply": "<studio>/out/easel/painting/look-0001.png (320x1600, 0.05s)\n",
+    "error": "",
+    "exit": 0
+  },
+  "harness_client": {
+    "reply": "{\"reply\":\"<studio>/out/easel/painting/look-0002.png (320x1600, 0.04s)\"}\n",
+    "error": "",
+    "exit": 0
+  },
+  "look-0001-achromatic": true,
+  "look-0002-achromatic": false
+}

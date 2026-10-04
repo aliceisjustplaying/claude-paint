@@ -101,6 +101,6 @@ The completed passage remains only if the entire chunk succeeds. A hundred strok
 
 ## Open questions and verification
 
-Selected found/lost edge images were inspected in the [runtime pass](../verification/evidence/runtime-passages.md); the complete edge-comparison matrix remains incomplete. Exact interactions among every tool, pressure, depth and mask variant are not covered by one smoke painting. Shared failure behavior is owned by [commands](../foundations/commands.md).
+The [agent matrix](../verification/evidence/matrix-passages.md) records edge, tool, pressure, depth and mask comparisons. Listed scenarios are verified separately; this is not every possible combination. Shared failure behavior is owned by [commands](../foundations/commands.md).
 
 Source-reviewed against `../claude-paint` commit `4e525e50897807e9b5f734071dfeb330f1a393d3`; see [verification](../verification/README.md).

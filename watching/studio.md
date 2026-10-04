@@ -200,9 +200,11 @@ After an event connection failure, the page can continue displaying a picture wh
 
 ## Open questions and verification
 
+- Nonshrinking in-place history rewrites can leave the running parser with stale events; a fresh parser sees the new text. Append-only history is the exercised normal path; broader rewrite support is a [product call](../bug-triage.md#b22--equal-size-or-growing-history-rewrites-can-stay-stale).
+
 - The [runtime pass](../verification/evidence/runtime-viewer.md#expanded-static-and-public-browser-pass) found stream-header overflow at 390 pixels; ordinary public mode fit. Phone support for broadcast layout remains a product call in [B15](../bug-triage.md#b15--stream-header-overflows-at-phone-width).
 
-- Browser behavior is source-reviewed, with selected [agent-driven browser probes](../verification/evidence/browser.md). The full human pass remains incomplete; narrow layouts, image fallbacks, live updates and keyboard combinations still need the [verification pass](../verification/README.md).
+- Browser behavior has [agent-driven matrix receipts](../verification/evidence/matrix-viewer.md), including narrow layouts, image fallbacks, live updates and keyboard combinations. Tab-away dismissal and rewound history replacement exposed additional defects in [triage](../bug-triage.md). The human pass remains incomplete.
 - Confirmed failure path: if the initial session-list request fails, initialization rejects before polling timers are installed. A transient startup failure can leave the viewer inert until reload. Cause: unhandled `loadSessions()` inside the startup `Promise.all` at `studio/index.html:824`, with the fetch at `studio/index.html:376`.
 - Confirmed failure path: initial event network errors and missing painters share the same “hasn't started yet” message. After data exists, failures have no disconnected state. A viewer can mistake stale activity for a healthy connection. Cause: `studio/index.html:409` and activity-only status at `studio/index.html:510`.
 - Confirmed defect: Home, End and all four arrow keys in an empty picker raise uncaught browser exceptions; see the [runtime probe](../verification/evidence/runtime-viewer.md#empty-picker-bug-09-reproduced-for-every-navigation-key). Cause: `studio/index.html:365–372`.

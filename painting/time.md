@@ -84,7 +84,7 @@ The successful chunk keeps paint aging and clock changes together. Failed chunks
 
 ## Edge cases
 
-- Long passes age in 15-minute hand-time slices.
+- Long passes age after crossing a 15-minute hand-time threshold at a completed work boundary; individual slices can exceed 15 minutes.
 - Individually submitted strokes accumulate hand time, flushed when a minute is owed, before a query/wait and at chunk completion.
 - Knifing a pile costs 20 seconds; a normal palette reload costs 2.5 seconds. Reusing a pile no longer in the recent palette ledger can incur mixing time again.
 - The recent palette ledger holds 16 entries. It tracks palette-trip cost, not deletion of Lua pile globals.
@@ -94,6 +94,6 @@ The successful chunk keeps paint aging and clock changes together. Failed chunks
 
 ## Open questions and verification
 
-The drying model is simulated material behavior, not a prediction of real pigment safety or conservation outcomes. Exhaustive pigment/thickness aging and ten-year waits are not part of the short probe pass. Palette guide wording is recorded in [triage](../bug-triage.md).
+The drying model is simulated material behavior, not a prediction of real pigment safety or conservation outcomes. Ten-year simulated waits, selected pigment/medium aging and exact clock flushing have [runtime receipts](../verification/evidence/matrix-passages.md). Exhaustive real-material calibration is outside this description. Palette guide wording is recorded in [triage](../bug-triage.md).
 
 Source-reviewed against `../claude-paint` commit `4e525e50897807e9b5f734071dfeb330f1a393d3`; see [verification](../verification/README.md).

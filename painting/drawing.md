@@ -167,9 +167,9 @@ A lost reply is not proof that the marks were discarded.
 ## Open questions and verification
 
 - This document is source-reviewed; no manual drawing pass is claimed.
-- Selected grades, pressure and chalk marks were inspected in the [runtime atlas](../verification/evidence/runtime-paint.md); the complete option matrix remains unverified.
+- Grades, pressure, chalk and option comparisons were exercised in the [agent matrix](../verification/evidence/matrix-marks.md).
 - Confirmed documentation mismatch in the [runtime probe](../verification/evidence/runtime-paint.md): `drawing_guide` is described as one on a line in the wrapper comment, while the engine explicitly preserves lighter coverage for light drawing. The guide's continuous geometry must not be mistaken for a uniformly full-strength selection.
 - The visible drawing and unfixed guide can diverge when erasing over paint. Whether this is the desired behavior needs a product decision; the engine erases the guide before checking whether paint protects visible drawing.
-- Exact hatch edge behavior and extreme or nonfinite input values remain unverified.
+- Hatch edges and extreme/nonfinite cases have [recorded agent results](../verification/evidence/matrix-marks.md); no human completion is claimed.
 
 Source-reviewed against `../claude-paint` commit `4e525e50897807e9b5f734071dfeb330f1a393d3`; runtime verification is recorded separately in [verification](../verification/README.md).

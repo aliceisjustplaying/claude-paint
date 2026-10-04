@@ -170,8 +170,8 @@ After ordinary rollback, preexisting geometry and paint remain as before the chu
 ## Open questions and verification
 
 - This document is source-reviewed, not manually verified.
-- Visual character differences, body joins, edge transformations and noise variation need a recorded viewing pass.
-- Nonfinite callback results and extreme geometry parameters remain unverified; the normal finite coverage contract does not settle those cases.
+- Visual character, body joins, edge transformations and noise variation have [recorded agent comparisons](../verification/evidence/matrix-marks.md).
+- Nonfinite callbacks and extreme geometry have separate [recorded cases](../verification/evidence/matrix-marks.md); finite coverage wording alone does not settle their behavior.
 - The guide's general 0–1 mask description needs qualification for `distance()` and unrestricted `map()` output. This document preserves the distinction rather than promising bounded values everywhere.
 
 Source-reviewed against `../claude-paint` commit `4e525e50897807e9b5f734071dfeb330f1a393d3`; runtime verification is recorded separately in [verification](../verification/README.md).

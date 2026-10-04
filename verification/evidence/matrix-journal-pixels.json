@@ -1,0 +1,18 @@
+{
+  "reply": "revised in <studio>/notes/journal.md\n",
+  "before": "- day 1, 09:00: UNIQUE_OLD\n  second line\n",
+  "after": "- day 1, 09:00: NEW_PASSAGE\n  second line\n",
+  "revision": {
+    "at": "2026-10-04T12:46:25.267Z",
+    "replaced": "UNIQUE_OLD",
+    "with": "NEW_PASSAGE",
+    "before": "- day 1, 09:00: UNIQUE_OLD\n  second line\n"
+  },
+  "prior_journal_exact": true,
+  "valid_wall_timestamp": true,
+  "png_before": "bc29972db349503cd7fc0991fe4b17990a1f652c2f7177a3f3e77bf70b288c92",
+  "png_after": "bc29972db349503cd7fc0991fe4b17990a1f652c2f7177a3f3e77bf70b288c92",
+  "successful_log_unchanged": true,
+  "status_before": "1 chunks · 2400px · size=100, aspect=5, linen={12, 12}, seed=1\n",
+  "status_after": "1 chunks · 2400px · size=100, aspect=5, linen={12, 12}, seed=1\n"
+}

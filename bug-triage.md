@@ -11,6 +11,10 @@ These findings describe the inspected commit, not proposed source changes. “Co
 | B05 | medium | Eraser can change a hidden drawing guide without changing sealed visible drawing | confirmed | product call |
 | B06 | medium | Journal revision history and rewrite are not one atomic update | confirmed | product call |
 | B14 | medium | Failed chunks change checkpoint counters and produce a false replay mismatch | confirmed | fix |
+| B16 | medium | Default studio export builds an incompatible historical easel | confirmed | fix |
+| B18 | medium | Infinite retry delay becomes immediate retries | confirmed | fix |
+| B19 | medium | Opening keeps polling after an integrity error during replay | confirmed bounded reproduction | fix |
+| B20 | medium | Rewound viewer position is invalid after history replacement | confirmed | fix |
 | B07 | low | Brush fullness can exceed the guide's stated 0–1 range | confirmed mismatch | product call |
 | B08 | low | Misspelled frame-capture option silently disables capture | confirmed | fix |
 | B09 | low | Empty picker keyboard navigation dereferences an absent card | confirmed for six keys | fix |
@@ -19,6 +23,9 @@ These findings describe the inspected commit, not proposed source changes. “Co
 | B12 | low | Drawing-guide comment promises full coverage on light lines | runtime-confirmed wording gap | fix documentation |
 | B13 | low | Palette-capacity wording obscures retained pile lifetime | runtime-confirmed wording gap | fix documentation |
 | B15 | low | Broadcast stream header overflows at phone width | confirmed layout; support scope open | product call |
+| B17 | low | Picker stays open when Tab leaves the document | confirmed browser boundary | fix or contract clarification |
+| B21 | low | Description treated aging threshold as exact scheduling | description corrected | resolved documentation |
+| B22 | low | Nonshrinking history rewrite can retain stale parsed prefix | confirmed; support scope unspecified | product call |
 
 ## B01 — Persistence failure can restrict every ordinary command
 
@@ -62,7 +69,7 @@ Raised by [drawing](painting/drawing.md#open-questions-and-verification). Severi
 
 ## B06 — Journal revision can record an edit that did not finish
 
-A harness revision records the old journal and intended replacement before overwriting the journal. Storage failure can leave the history record without the rewrite; a concurrent file edit after the read can be overwritten. Expected: clarify whether revisions are best-effort audit attempts or completed atomic edits. Reproduction requires an isolated journal with a controlled rewrite failure or concurrent edit. The [runtime probe](verification/evidence/runtime-harness.md#journal-history-before-denied-rewrite-bug06) denied the journal rewrite: EACCES left original bytes while the intended revision had already been appended. Simultaneous-writer behavior remains unrun.
+A harness revision records the old journal and intended replacement before overwriting the journal. Storage failure can leave the history record without the rewrite; a concurrent file edit after the read can be overwritten. Expected: clarify whether revisions are best-effort audit attempts or completed atomic edits. Reproduction requires an isolated journal with a controlled rewrite failure or concurrent edit. The [runtime probe](verification/evidence/runtime-harness.md#journal-history-before-denied-rewrite-bug06) denied the journal rewrite: EACCES left original bytes while the intended revision had already been appended. The [controlled production-helper interleaving](verification/evidence/matrix-harness.md#concurrent-journal-boundary) also lost a second revision and external append when the first revision rewrote its stale snapshot.
 
 > Technical note: Cause: `harness/painter/journal.ts:17` reads and matches, then appends history at line 29 and writes the journal at line 30, without an atomic cross-file transaction or conflict check.
 
@@ -122,7 +129,7 @@ Raised by [drawing](painting/drawing.md#open-questions-and-verification). Severi
 
 > Technical note: `notes/easel_guide.md:78`, `crates/paint/src/tally.rs:103`, `crates/easel/src/time.rs:104` and `crates/easel/src/api.rs:493` establish the two representations.
 
-Raised by [canvas](foundations/canvas.md#edge-cases) and [time](painting/time.md#edge-cases). Severity low. Decision: fix documentation. The [runtime probe](verification/evidence/runtime-paint.md) retained and loaded the first pile after 18 later mixture trips; exact ledger timing remains unmeasured.
+Raised by [canvas](foundations/canvas.md#edge-cases) and [time](painting/time.md#edge-cases). Severity low. Decision: fix documentation. The [runtime probe](verification/evidence/runtime-paint.md) retained and loaded the first pile after 18 later mixture trips; the additional [production ledger probe](verification/evidence/matrix-ledger.txt) measured2.5seconds for retained-color reload before eviction and22.5seconds after the17th distinct color (20seconds mixing plus2.5seconds reload).
 
 The viewer's separate “working now” and resting/finished timing thresholds remain an open product terminology question in its document, not a confirmed defect. No upstream issue or source change was made.
 
@@ -141,3 +148,59 @@ At a 390-pixel viewport with `stream=1`, the header's scroll width was 459 pixel
 > Technical note: `studio/stream.css:34–38` enlarges clock/painter text and adds a nonshrinking site label to the header. This is source support for the width pressure; no single-rule repair has been isolated.
 
 Raised by [studio](watching/studio.md#open-questions-and-verification). Severity low. Decision: product call on supported stream viewport widths.
+
+## B16 — Default studio export builds an incompatible historical easel
+
+The current export script without `R16_BRANCH` selects `round-16`, builds it then fails with `easel: no command "tubes"` and `the exported easel can't name its box`. It leaves a partial destination. Expected: the default invocation delivers a runnable studio or rejects an incompatible revision before assembling it. The actual default run resolved `round-16` to `f48e722f8c9a916d3d91b54bc8be0320d0bfd16f`; all seven explicit-current profiles exported successfully. [Runtime reproduction](verification/evidence/matrix-delivery.md#default-historical-export).
+
+> Technical note: `scripts/export_r16_studio:77` selects the historical default; line155 requires `tubes --markdown`, which that historical executable lacks.
+
+Raised by [delivery verification](verification/delivery.md). Severity medium: default export fails, with an explicit compatible revision working. Decision: fix the default revision or compatibility requirement.
+
+## B17 — Picker can stay open when Tab leaves the document
+
+With the picker open and the last painter card focused, native Tab moved focus out of the document. Subsequent Tab reached header and previous-look controls while the picker remained open with `aria-expanded=true`. Expected under the documented Tab-away behavior: dismissal when focus leaves the picker. Direct outside pointer dismissal worked. [Native browser reproduction](verification/evidence/matrix-viewer.md#picker-focus-boundary).
+
+> Technical note: `studio/index.html:375` checks a non-null `relatedTarget` before dismissing. Document-boundary focus loss can supply null, so this path remains open. This observation is specific to the exercised browser traversal, not all browsers.
+
+Raised by [studio verification](verification/viewer-space.md). Severity low. Decision: fix dismissal handling or narrow the documented keyboard contract.
+
+## B18 — Infinite retry delay becomes immediate retries
+
+`PAINTER_LIMIT_PROBE_S=Infinity` passes startup validation and prints “asking again in Infinity min”, but two real local-provider limit responses retried after approximately 18 and 5 ms. Expected: reject a nonfinite delay rather than silently make repeated requests. A successful third response ended this bounded probe; no unbounded request storm was run. [Actual pi reproduction](verification/evidence/matrix-harness.md#actual-pacing-and-setting-boundaries).
+
+> Technical note: `harness/painter/limits.ts:44–50` validates nonnegative numbers without checking finiteness. Passing the resulting infinite delay to the runtime timer does not preserve the advertised delay.
+
+Raised by [harness verification](verification/session.md). Severity medium because malformed configuration can repeatedly retry against a limit. Decision: fix finite-number validation.
+
+## B19 — Opening can keep polling after replay becomes integrity-restricted
+
+An external edit after replay captured the log allowed replay to finish, but the initial `open` did not return the resulting integrity error. The server kept answering unsuccessful status requests while the opening client waited. Expected: return the actionable readiness error rather than keep treating it as startup progress. The bounded reproduction observed 4.04 seconds, replay completion at 1.22 seconds and 27 unsuccessful status lines before terminating the opening client. [Raw reproduction](verification/evidence/matrix-open-error/root.json).
+
+> Technical note: `crates/easel/src/main.rs:498` accepts only successful status responses in the startup loop, discarding error bodies. Lines489–496 reset `last_progress` on any newly logged line, including the status failures generated by this polling. Thus the code's stall timer does not bound this repeating-error path. That unbounded implication is from source; the runtime observation was four seconds.
+
+Raised by [session verification](verification/session.md). Severity medium: the opening caller waits without the error already available to a separate status caller. Decision: return readiness errors and count replay progress separately from diagnostic traffic.
+
+## B20 — Rewound viewer position becomes stale when history changes
+
+While rewound to event 14 of 16, replacing the server history with a new two-event history cleared the image and changed the scrubber maximum to 1, but retained the old position text and threw while reading an absent event's timestamp. Expected: a valid position in the replacement history and a coherent rendered view. A simpler append while rewound updated the code/result and scrubber range but retained the old total in `2/15` after history grew to 16. [Actual browser receipts](verification/evidence/matrix-viewer.md#late-result-and-rebuilt-history).
+
+> Technical note: `studio/index.html:396` resets history, line415 handles the changed epoch and line432 only calls `show` when live-follow is enabled. The retained position reaches `events[pos].ts` at line521 without being reconciled to the shorter history.
+
+Raised by [studio verification](verification/viewer-space.md). Severity medium because a supported history rebuild while rewound produces an exception and an invalid display. Decision: reconcile the selection and counter on history replacement and append.
+
+## B21 — Description overstated exact aging-slice duration
+
+The product description originally said long passes age in15-minute slices. Actual intermediate frames occurred after about 950–978 seconds of additional handwork, because the 15-minute threshold is checked at completed work boundaries. Expected documentation: a threshold rather than exact 900-second scheduling. [Observed slice times](verification/evidence/matrix-passages.md#intermediate-aging-slices).
+
+> Technical note: `crates/easel/src/time.rs:21` sets the 15-minute threshold; production work reaches the threshold at mark boundaries. This is a defect in this description's precision, not an established product failure.
+
+Raised by [time row T058](verification/passages-time.md). Severity low. Decision: documentation corrected in [time](painting/time.md#edge-cases); the failed original claim remains recorded as provenance.
+
+## B22 — Equal-size or growing history rewrites can stay stale
+
+After a production studio server parsed a history, replacing an earlier result with longer text left that server returning the old result. A newly started production server reading the same file returned the replacement. [Recorded file/server comparison](verification/evidence/matrix-viewer-parser.json). Expected behavior depends on whether in-place history editing is supported; normal append-only history is unaffected by this finding.
+
+> Technical note: `studio/studio.py:259–264` resets the parser only when file size falls below its saved offset. Equal-size or larger replacement files retain the old parsed prefix and are read only from the previous offset.
+
+Raised by [viewer verification](verification/viewer-space.md). Severity low for this unsupported-or-unspecified edit path. Decision: product call on supported history rewrites, with documentation that distinguishes appending, truncation and in-place replacement.

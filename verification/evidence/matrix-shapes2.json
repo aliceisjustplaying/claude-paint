@@ -1,0 +1,602 @@
+[
+  {
+    "args": [
+      "open",
+      "shapes"
+    ],
+    "exit": 0,
+    "out": "easel \"shapes\" open: 0 chunks · 2400px · no canvas yet\n",
+    "err": "",
+    "seconds": 0.1181
+  },
+  {
+    "args": [
+      "do",
+      "canvas{size=100,aspect=5,linen=12,ground={{pile={{\"lead white\",1}},um=40,apply=\"knife\"}}}; p=pile{{\"red earth\",1}}; q=pile{{\"lead white\",1}}; m=rect(300,40,200,100); "
+    ],
+    "exit": 0,
+    "out": "ok · chunk 1 (0.62 s to compute)\n",
+    "err": "",
+    "seconds": 0.6669
+  },
+  {
+    "args": [
+      "save",
+      "<scratch-file>"
+    ],
+    "exit": 0,
+    "out": "<scratch-file>\n",
+    "err": "",
+    "seconds": 0.1333
+  },
+  {
+    "args": [
+      "do",
+      "a=below(function(x)return 80 end);z=above(function(x)return 80 end);r1=ribbon({{100,50},{200,80}},10);r2=ribbon({{100,50},{200,80}},{10,10});print(a:at(150,20),a:at(150,150),z:at(150,20),z:at(150,150),r1:area(),r2:area());m=rect(300,40,200,100);print(m:area());for _,n in ipairs{\"grow\",\"shrink\",\"offset\",\"rim\",\"blur\",\"soften\"} do local d=m[n](m,10);print(n,d:area(),m:area(),d:at(305,80),d:at(295,80)) end;d=m:distance();print(\"distance\",d:at(400,80),d:at(200,80),d:band(-5,5,0):area());e=mask(function(x,y)return x/1000 end);print(\"clamp\",e:at(-100,80),e:at(0,80),e:at(1001,80),e:at(10000,80));k=0.25;s=mask(function()return k end);k=0.75;t=mask(function()return k end);print(\"fixed\",s:at(400,80),t:at(400,80))"
+    ],
+    "exit": 0,
+    "out": "0.0\t1.0\t1.0\t0.0\t1122.2643452956202\t1122.2643452956202\n19999.9984105429\ngrow\t26310.500915010656\t19999.9984105429\t1.0\t1.0\nshrink\t14399.998855590888\t19999.9984105429\t0.0\t0.0\noffset\t26310.500915010656\t19999.9984105429\t1.0\t1.0\nrim\t5599.7140207451612\t19999.9984105429\t1.0\t0.0\nblur\t19999.996459998187\t19999.9984105429\t0.78676879405975342\t0.21323134005069733\nsoften\t20017.527672214535\t19999.9984105429\t0.99935799837112427\t0.00064199947519227862\ndistance\t40.0\t-99.999984741210938\t5976.3884139282018\nclamp\t0.00020833332382608205\t0.00020833332382608205\t0.99979162216186523\t0.99979162216186523\nfixed\t0.25\t0.75\nok · chunk 2 (1.12 s to compute)\n",
+    "err": "",
+    "seconds": 1.1497
+  },
+  {
+    "args": [
+      "do",
+      "pts={{200,30},{400,30},{450,140},{250,140}};for _,k in ipairs{false,true} do local o=outline{pts=pts,corners=k,seed=1};print(\"corners\",k,#o:corners()) end;for _,indices in ipairs{{1},{1,3}} do local o=outline{pts=pts,corners=indices,seed=1};print(\"indices\",#o:corners()) end;marked=outline{pts={{200,30,\"c\"},{400,30},{450,140},{250,140}},seed=1};print(\"marked\",#marked:corners());polyplain=poly(pts);polysmooth=poly(pts,true);print(\"polygon\",polyplain:area(),polysmooth:area())"
+    ],
+    "exit": 0,
+    "out": "corners\tfalse\t0\ncorners\ttrue\t4\nindices\t1\nindices\t2\nmarked\t1\npolygon\t22000.128971743979\t30059.874384092633\nok · chunk 3 (0.00 s to compute)\n",
+    "err": "",
+    "seconds": 0.0327
+  },
+  {
+    "args": [
+      "do",
+      "outline{pts=pts,corners={99}}"
+    ],
+    "exit": 1,
+    "out": "",
+    "err": "runtime error: corners: index 99 out of 1..4\n(the chunk failed and changed nothing)\n",
+    "seconds": 0.0258
+  },
+  {
+    "args": [
+      "do",
+      "for _,k in ipairs{\"firm\",\"searching\",\"broken\",\"soft\"} do local o=outline{pts=pts,char=k,seed=1};print(k,#o:path(),#o:paths(),#o:strokes(),#o:corners(),o:length(),o:mask():area(),o.closed,o.scale);local x,y,tx,ty,nx,ny=o:at(0.5);print(\"at\",x,y,tx,ty,nx,ny); _G[k]=o end;print(\"default\",outline{pts=pts,seed=1}:length(),firm:length());print(\"derived\",firm:below():area(),firm:above():area(),firm:band(5,1):area(),firm:inset(2):mask():area(),firm:offset(2):mask():area())"
+    ],
+    "exit": 0,
+    "out": "firm\t1272\t1\t8\t4\t642.94976806640625\t20429.65319942202\ttrue\t202.04988098144531\nat\t399.65127563476562\t29.23402214050293\t-0.98548263311386108\t-0.1697765588760376\t0.1697765588760376\t-0.98548263311386108\nsearching\t1272\t1\t31\t4\t645.204345703125\t20101.8454500074\ttrue\t202.04988098144531\nat\t399.92074584960938\t32.485431671142578\t-0.40711012482643127\t-0.91337907314300537\t0.91337907314300537\t-0.40711012482643127\nbroken\t1270\t1\t24\t4\t653.7069091796875\t20392.8544547564\ttrue\t202.04988098144531\nat\t402.24142456054688\t34.076210021972656\t-0.71718227863311768\t-0.69688564538955688\t0.69688564538955688\t-0.71718227863311768\nsoft\t1272\t1\t43\t4\t889.431884765625\t21221.265437948165\ttrue\t202.04988098144531\nat\t403.84063720703125\t37.064956665039062\t0.026879981160163879\t-0.99963867664337158\t0.99963867664337158\t0.026879981160163879\ndefault\t642.94976806640625\t642.94976806640625\nderived\t20429.65319942202\t20429.65319942202\t2594.8044008733373\t19073.04519149744\t21714.70007446517\nok · chunk 4 (0.66 s to compute)\n",
+    "err": "",
+    "seconds": 0.6842
+  },
+  {
+    "args": [
+      "do",
+      "blob=body_of{spine={{400,80}},widths=40};print(\"blob\",blob:mask():area());sp={{200,80},{500,80}};limb={pts={{350,80},{350,140}},widths={20,10}};for _,v in ipairs{0,0.8,1} do local b=body_of{spine=sp,widths={40,30},limbs={limb},blend=v};print(\"body\",v,b:mask():area()) end"
+    ],
+    "exit": 0,
+    "out": "blob\t1344.5575174792793\nbody\t0\t13721.485943568521\nbody\t0.8\t13244.201970203163\nbody\t1\t13483.059752038223\nok · chunk 5 (1.22 s to compute)\n",
+    "err": "",
+    "seconds": 1.2431
+  },
+  {
+    "args": [
+      "do",
+      "body_of{spine={},widths=1}"
+    ],
+    "exit": 1,
+    "out": "",
+    "err": "runtime error: body_of: needs spine={{x, y}, ...} (one point is a blob)\n(the chunk failed and changed nothing)\n",
+    "seconds": 0.0215
+  },
+  {
+    "args": [
+      "do",
+      "body_of{spine={{1,1},{2,2}}}"
+    ],
+    "exit": 1,
+    "out": "",
+    "err": "runtime error: body_of spine: needs widths (one per point, or one number)\n(the chunk failed and changed nothing)\n",
+    "seconds": 0.0182
+  },
+  {
+    "args": [
+      "do",
+      "body_of{spine={{1,1},{2,2},{3,3}},widths={1,2}}"
+    ],
+    "exit": 1,
+    "out": "",
+    "err": "runtime error: body_of spine: 2 widths for 3 points\n(the chunk failed and changed nothing)\n",
+    "seconds": 0.0198
+  },
+  {
+    "args": [
+      "do",
+      "body_of{spine={{1,1}},widths=20,limbs={{pts={{1,1}},widths=2}}}"
+    ],
+    "exit": 1,
+    "out": "",
+    "err": "runtime error: body_of limb 1: needs at least two points\n(the chunk failed and changed nothing)\n",
+    "seconds": 0.0181
+  },
+  {
+    "args": [
+      "do",
+      "for _,n in ipairs{0.9,1} do local ok,v=pcall(function()return outline{pts=pts,size=n}:length() end);print(\"size\",n,ok,v) end;for _,n in ipairs{0,0.49,0.5} do local ok,v=pcall(function()return outline{pts=pts,lobe=n}:length() end);print(\"lobe\",n,ok,v) end;print(\"zeroamount\",outline{pts=pts,amount=0,lobe=20}:length(),outline{pts=pts,amount=0,lobe=0}:length())"
+    ],
+    "exit": 0,
+    "out": "size\t0.9\tfalse\truntime error: size 0.9: want at least 1 (the hand's scale in units)\nstack traceback:\n\t[C]: in global 'outline'\n\t[string \"chunk 6\"]:1: in function <[string \"chunk 6\"]:1>\n\t[C]: in global 'pcall'\n\t[string \"chunk 6\"]:1: in main chunk\n\t[C]: in upvalue 'pcall'\n\t[string \"prelude.lua\"]:362: in function <[string \"prelude.lua\"]:361>\n\nsize\t1\ttrue\t642.87274169921875\nlobe\t0\ttrue\t642.51153564453125\nlobe\t0.49\tfalse\truntime error: lobe 0.49: want 0 (none) or at least 0.5 units\nstack traceback:\n\t[C]: in global 'outline'\n\t[string \"chunk 6\"]:1: in function <[string \"chunk 6\"]:1>\n\t[C]: in global 'pcall'\n\t[string \"chunk 6\"]:1: in main chunk\n\t[C]: in upvalue 'pcall'\n\t[string \"prelude.lua\"]:362: in function <[string \"prelude.lua\"]:361>\n\nlobe\t0.5\ttrue\t676.95404052734375\nzeroamount\t641.65960693359375\t641.65960693359375\nok · chunk 6 (0.00 s to compute)\n",
+    "err": "",
+    "seconds": 0.0206
+  },
+  {
+    "args": [
+      "do",
+      "print(\"helpers\",lerp(2,4,0.5),clamp(-1),clamp(2),smoothstep(0,1,0.5));for i=1,5 do print(\"random\",rand(),rand(4),rand(2,4),randn()) end;for _,k in ipairs{\"fbm\",\"ridged\",\"billow\",\"plain\"} do local ok,n=pcall(function()return noise{kind=k,seed=1} end);print(\"noise\",k,ok);if ok then print(n(100,80),n:at(100,80),n:at01(100,80)) end end;n=noise{seed=1};print(\"defaultnoise\",n(100,80),noise{seed=1,octaves=4,period=200}(100,80));print(\"warped\",noise{seed=1,warp={100,20,true},stretch={0.5,2}}(100,80));w=worley{seed=1};print(\"worley\",w(100,80));print(w:at(100,80));print(worley{seed=1,period=40}:at(100,80));print(\"uneven\",table.concat(uneven(10,100,900),\",\"),table.concat(uneven(10,100,900,0.6,0.3,1),\",\"),table.concat(uneven(10,100,900,0.6,0.3,2),\",\"))"
+    ],
+    "exit": 0,
+    "out": "helpers\t3.0\t0.0\t1.0\t0.5\nrandom\t0.66299533843994141\t0.054273366928100586\t2.5504107475280762\t1.1569309234619141\nrandom\t0.62743031978607178\t2.4098320007324219\t2.8841681480407715\t1.1129825115203857\nrandom\t0.9300849437713623\t2.6536602973937988\t3.45157527923584\t-0.48433476686477661\nrandom\t0.7526785135269165\t1.1867926120758057\t3.6811261177062988\t-0.1938844621181488\nrandom\t0.8076891303062439\t0.54926133155822754\t2.8612051010131836\t0.77254319190979\nnoise\tfbm\ttrue\n0.26827064156532288\t0.26827064156532288\t0.63413530588150024\nnoise\tridged\ttrue\n0.46656957268714905\t0.46656957268714905\t0.73328477144241333\nnoise\tbillow\ttrue\n0.32342121005058289\t0.32342121005058289\t0.66171061992645264\nnoise\tplain\ttrue\n-0.11522483825683594\t-0.11522483825683594\t0.44238758087158203\ndefaultnoise\t0.26827064156532288\t0.26827064156532288\nwarped\t0.4309161901473999\nworley\t0.86895197629928589\n0.86895197629928589\t0.96570438146591187\t0.096752405166625977\t0.6632925271987915\n0.86895197629928589\t0.96570438146591187\t0.096752405166625977\t0.6632925271987915\nuneven\t100.0,152.63076782226562,223.04640197753906,301.42263793945312,513.33001708984375,572.912841796875,683.462890625,775.28411865234375,837.636474609375,900.00006103515625\t100.0,152.63076782226562,223.04640197753906,301.42263793945312,513.33001708984375,572.912841796875,683.462890625,775.28411865234375,837.636474609375,900.00006103515625\t100.0,205.37506103515625,245.02032470703125,263.12603759765625,493.29547119140625,553.570068359375,589.712890625,805.767333984375,868.17333984375,899.99993896484375\nok · chunk 7 (0.00 s to compute)\n",
+    "err": "",
+    "seconds": 0.0246
+  },
+  {
+    "args": [
+      "save",
+      "<scratch-file>"
+    ],
+    "exit": 0,
+    "out": "<scratch-file>\n",
+    "err": "",
+    "seconds": 0.1665
+  },
+  {
+    "args": [
+      "close"
+    ],
+    "exit": 0,
+    "out": "the live canvas is in <root>/out/easel/shapes/live.png\nclosed; the session is in <root>/paintings/lua/shapes.lua\n",
+    "err": "",
+    "seconds": 0.1072
+  },
+  {
+    "args": [
+      "open",
+      "outline-firm"
+    ],
+    "exit": 0,
+    "out": "easel \"outline-firm\" open: 0 chunks · 2400px · no canvas yet\n",
+    "err": "",
+    "seconds": 0.1145
+  },
+  {
+    "args": [
+      "do",
+      "canvas{size=100,aspect=5,linen=12,ground={{pile={{\"lead white\",1}},um=40,apply=\"knife\"}}}; p=pile{{\"red earth\",1}}; q=pile{{\"lead white\",1}}; m=rect(300,40,200,100); pts={{200,30},{400,30},{450,140},{250,140}};b=brush(\"round\",4);"
+    ],
+    "exit": 0,
+    "out": "ok · chunk 1 (0.81 s to compute)\n",
+    "err": "",
+    "seconds": 0.8254
+  },
+  {
+    "args": [
+      "do",
+      "o=outline(pts,{char=\"firm\",seed=1});n=#o:strokes();len=o:length();print(o:paint(b,{dip={p,0.6},every=3}),b:fullness());print(n,#o:strokes(),len,o:length());work(o:mask(),{pile=p,hand=\"glaze\",coverage=0.2,seed=1})"
+    ],
+    "exit": 0,
+    "out": "6\t0.031589724123477936\n6\t6\t642.9666748046875\t642.9666748046875\nok · chunk 2 (0.51 s to compute)\n",
+    "err": "",
+    "seconds": 0.5393
+  },
+  {
+    "args": [
+      "save",
+      "<scratch-file>"
+    ],
+    "exit": 0,
+    "out": "<scratch-file>\n",
+    "err": "",
+    "seconds": 0.1289
+  },
+  {
+    "args": [
+      "close"
+    ],
+    "exit": 0,
+    "out": "the live canvas is in <root>/out/easel/outline-firm/live.png\nclosed; the session is in <root>/paintings/lua/outline-firm.lua\n",
+    "err": "",
+    "seconds": 0.1637
+  },
+  {
+    "args": [
+      "open",
+      "outline-searching"
+    ],
+    "exit": 0,
+    "out": "easel \"outline-searching\" open: 0 chunks · 2400px · no canvas yet\n",
+    "err": "",
+    "seconds": 0.1181
+  },
+  {
+    "args": [
+      "do",
+      "canvas{size=100,aspect=5,linen=12,ground={{pile={{\"lead white\",1}},um=40,apply=\"knife\"}}}; p=pile{{\"red earth\",1}}; q=pile{{\"lead white\",1}}; m=rect(300,40,200,100); pts={{200,30},{400,30},{450,140},{250,140}};b=brush(\"round\",4);"
+    ],
+    "exit": 0,
+    "out": "ok · chunk 1 (1.03 s to compute)\n",
+    "err": "",
+    "seconds": 1.0443
+  },
+  {
+    "args": [
+      "do",
+      "o=outline(pts,{char=\"searching\",seed=1});n=#o:strokes();len=o:length();print(o:paint(b,{dip={p,0.6},every=3}),b:fullness());print(n,#o:strokes(),len,o:length());work(o:mask(),{pile=p,hand=\"glaze\",coverage=0.2,seed=1})"
+    ],
+    "exit": 0,
+    "out": "6\t0.031589724123477936\n6\t6\t642.9666748046875\t642.9666748046875\nok · chunk 2 (0.52 s to compute)\n",
+    "err": "",
+    "seconds": 0.5589
+  },
+  {
+    "args": [
+      "save",
+      "<scratch-file>"
+    ],
+    "exit": 0,
+    "out": "<scratch-file>\n",
+    "err": "",
+    "seconds": 0.0475
+  },
+  {
+    "args": [
+      "close"
+    ],
+    "exit": 0,
+    "out": "the live canvas is in <root>/out/easel/outline-searching/live.png\nclosed; the session is in <root>/paintings/lua/outline-searching.lua\n",
+    "err": "",
+    "seconds": 0.2298
+  },
+  {
+    "args": [
+      "open",
+      "outline-broken"
+    ],
+    "exit": 0,
+    "out": "easel \"outline-broken\" open: 0 chunks · 2400px · no canvas yet\n",
+    "err": "",
+    "seconds": 0.121
+  },
+  {
+    "args": [
+      "do",
+      "canvas{size=100,aspect=5,linen=12,ground={{pile={{\"lead white\",1}},um=40,apply=\"knife\"}}}; p=pile{{\"red earth\",1}}; q=pile{{\"lead white\",1}}; m=rect(300,40,200,100); pts={{200,30},{400,30},{450,140},{250,140}};b=brush(\"round\",4);"
+    ],
+    "exit": 0,
+    "out": "ok · chunk 1 (0.65 s to compute)\n",
+    "err": "",
+    "seconds": 0.6714
+  },
+  {
+    "args": [
+      "do",
+      "o=outline(pts,{char=\"broken\",seed=1});n=#o:strokes();len=o:length();print(o:paint(b,{dip={p,0.6},every=3}),b:fullness());print(n,#o:strokes(),len,o:length());work(o:mask(),{pile=p,hand=\"glaze\",coverage=0.2,seed=1})"
+    ],
+    "exit": 0,
+    "out": "6\t0.031589724123477936\n6\t6\t642.9666748046875\t642.9666748046875\nok · chunk 2 (0.59 s to compute)\n",
+    "err": "",
+    "seconds": 0.6246
+  },
+  {
+    "args": [
+      "save",
+      "<scratch-file>"
+    ],
+    "exit": 0,
+    "out": "<scratch-file>\n",
+    "err": "",
+    "seconds": 0.0381
+  },
+  {
+    "args": [
+      "close"
+    ],
+    "exit": 0,
+    "out": "the live canvas is in <root>/out/easel/outline-broken/live.png\nclosed; the session is in <root>/paintings/lua/outline-broken.lua\n",
+    "err": "",
+    "seconds": 0.1653
+  },
+  {
+    "args": [
+      "open",
+      "outline-soft"
+    ],
+    "exit": 0,
+    "out": "easel \"outline-soft\" open: 0 chunks · 2400px · no canvas yet\n",
+    "err": "",
+    "seconds": 0.1114
+  },
+  {
+    "args": [
+      "do",
+      "canvas{size=100,aspect=5,linen=12,ground={{pile={{\"lead white\",1}},um=40,apply=\"knife\"}}}; p=pile{{\"red earth\",1}}; q=pile{{\"lead white\",1}}; m=rect(300,40,200,100); pts={{200,30},{400,30},{450,140},{250,140}};b=brush(\"round\",4);"
+    ],
+    "exit": 0,
+    "out": "ok · chunk 1 (0.35 s to compute)\n",
+    "err": "",
+    "seconds": 0.3768
+  },
+  {
+    "args": [
+      "do",
+      "o=outline(pts,{char=\"soft\",seed=1});n=#o:strokes();len=o:length();print(o:paint(b,{dip={p,0.6},every=3}),b:fullness());print(n,#o:strokes(),len,o:length());work(o:mask(),{pile=p,hand=\"glaze\",coverage=0.2,seed=1})"
+    ],
+    "exit": 0,
+    "out": "6\t0.031589724123477936\n6\t6\t642.9666748046875\t642.9666748046875\nok · chunk 2 (0.22 s to compute)\n",
+    "err": "",
+    "seconds": 0.2437
+  },
+  {
+    "args": [
+      "save",
+      "<scratch-file>"
+    ],
+    "exit": 0,
+    "out": "<scratch-file>\n",
+    "err": "",
+    "seconds": 0.048
+  },
+  {
+    "args": [
+      "close"
+    ],
+    "exit": 0,
+    "out": "the live canvas is in <root>/out/easel/outline-soft/live.png\nclosed; the session is in <root>/paintings/lua/outline-soft.lua\n",
+    "err": "",
+    "seconds": 0.1112
+  },
+  {
+    "args": [
+      "open",
+      "outline-amount"
+    ],
+    "exit": 0,
+    "out": "easel \"outline-amount\" open: 0 chunks · 2400px · no canvas yet\n",
+    "err": "",
+    "seconds": 0.1179
+  },
+  {
+    "args": [
+      "do",
+      "canvas{size=100,aspect=5,linen=12,ground={{pile={{\"lead white\",1}},um=40,apply=\"knife\"}}}; p=pile{{\"red earth\",1}}; q=pile{{\"lead white\",1}}; m=rect(300,40,200,100); pts={{200,30},{400,30},{450,140},{250,140}};"
+    ],
+    "exit": 0,
+    "out": "ok · chunk 1 (0.27 s to compute)\n",
+    "err": "",
+    "seconds": 0.2841
+  },
+  {
+    "args": [
+      "do",
+      "o=outline(pts,{amount=0});print(o:length(),o:mask():area());work(o:mask(),{pile=p,hand=\"detail\",clip=true,coverage=1,seed=1})"
+    ],
+    "exit": 0,
+    "out": "642.9666748046875\t20118.103659951965\nok · chunk 2 (0.43 s to compute)\n",
+    "err": "",
+    "seconds": 0.4592
+  },
+  {
+    "args": [
+      "save",
+      "<scratch-file>"
+    ],
+    "exit": 0,
+    "out": "<scratch-file>\n",
+    "err": "",
+    "seconds": 0.0341
+  },
+  {
+    "args": [
+      "close"
+    ],
+    "exit": 0,
+    "out": "the live canvas is in <root>/out/easel/outline-amount/live.png\nclosed; the session is in <root>/paintings/lua/outline-amount.lua\n",
+    "err": "",
+    "seconds": 0.1246
+  },
+  {
+    "args": [
+      "open",
+      "outline-size"
+    ],
+    "exit": 0,
+    "out": "easel \"outline-size\" open: 0 chunks · 2400px · no canvas yet\n",
+    "err": "",
+    "seconds": 0.1181
+  },
+  {
+    "args": [
+      "do",
+      "canvas{size=100,aspect=5,linen=12,ground={{pile={{\"lead white\",1}},um=40,apply=\"knife\"}}}; p=pile{{\"red earth\",1}}; q=pile{{\"lead white\",1}}; m=rect(300,40,200,100); pts={{200,30},{400,30},{450,140},{250,140}};"
+    ],
+    "exit": 0,
+    "out": "ok · chunk 1 (0.46 s to compute)\n",
+    "err": "",
+    "seconds": 0.4789
+  },
+  {
+    "args": [
+      "do",
+      "o=outline(pts,{size=20});print(o:length(),o:mask():area());work(o:mask(),{pile=p,hand=\"detail\",clip=true,coverage=1,seed=1})"
+    ],
+    "exit": 0,
+    "out": "642.9666748046875\t20118.103659951965\nok · chunk 2 (0.73 s to compute)\n",
+    "err": "",
+    "seconds": 0.7552
+  },
+  {
+    "args": [
+      "save",
+      "<scratch-file>"
+    ],
+    "exit": 0,
+    "out": "<scratch-file>\n",
+    "err": "",
+    "seconds": 0.0455
+  },
+  {
+    "args": [
+      "close"
+    ],
+    "exit": 0,
+    "out": "the live canvas is in <root>/out/easel/outline-size/live.png\nclosed; the session is in <root>/paintings/lua/outline-size.lua\n",
+    "err": "",
+    "seconds": 0.1004
+  },
+  {
+    "args": [
+      "open",
+      "outline-lobe"
+    ],
+    "exit": 0,
+    "out": "easel \"outline-lobe\" open: 0 chunks · 2400px · no canvas yet\n",
+    "err": "",
+    "seconds": 0.1171
+  },
+  {
+    "args": [
+      "do",
+      "canvas{size=100,aspect=5,linen=12,ground={{pile={{\"lead white\",1}},um=40,apply=\"knife\"}}}; p=pile{{\"red earth\",1}}; q=pile{{\"lead white\",1}}; m=rect(300,40,200,100); pts={{200,30},{400,30},{450,140},{250,140}};"
+    ],
+    "exit": 0,
+    "out": "ok · chunk 1 (0.43 s to compute)\n",
+    "err": "",
+    "seconds": 0.453
+  },
+  {
+    "args": [
+      "do",
+      "o=outline(pts,{lobe=20});print(o:length(),o:mask():area());work(o:mask(),{pile=p,hand=\"detail\",clip=true,coverage=1,seed=1})"
+    ],
+    "exit": 0,
+    "out": "642.9666748046875\t20118.103659951965\nok · chunk 2 (1.39 s to compute)\n",
+    "err": "",
+    "seconds": 1.4213
+  },
+  {
+    "args": [
+      "save",
+      "<scratch-file>"
+    ],
+    "exit": 0,
+    "out": "<scratch-file>\n",
+    "err": "",
+    "seconds": 0.196
+  },
+  {
+    "args": [
+      "close"
+    ],
+    "exit": 0,
+    "out": "the live canvas is in <root>/out/easel/outline-lobe/live.png\nclosed; the session is in <root>/paintings/lua/outline-lobe.lua\n",
+    "err": "",
+    "seconds": 0.1371
+  },
+  {
+    "args": [
+      "open",
+      "outline-edge"
+    ],
+    "exit": 0,
+    "out": "easel \"outline-edge\" open: 0 chunks · 2400px · no canvas yet\n",
+    "err": "",
+    "seconds": 0.1132
+  },
+  {
+    "args": [
+      "do",
+      "canvas{size=100,aspect=5,linen=12,ground={{pile={{\"lead white\",1}},um=40,apply=\"knife\"}}}; p=pile{{\"red earth\",1}}; q=pile{{\"lead white\",1}}; m=rect(300,40,200,100); pts={{200,30},{400,30},{450,140},{250,140}};"
+    ],
+    "exit": 0,
+    "out": "ok · chunk 1 (0.44 s to compute)\n",
+    "err": "",
+    "seconds": 0.4554
+  },
+  {
+    "args": [
+      "do",
+      "o=outline(pts,{edge=10});print(o:length(),o:mask():area());work(o:mask(),{pile=p,hand=\"detail\",clip=true,coverage=1,seed=1})"
+    ],
+    "exit": 0,
+    "out": "642.9666748046875\t20118.103659951965\nok · chunk 2 (1.22 s to compute)\n",
+    "err": "",
+    "seconds": 1.2563
+  },
+  {
+    "args": [
+      "save",
+      "<scratch-file>"
+    ],
+    "exit": 0,
+    "out": "<scratch-file>\n",
+    "err": "",
+    "seconds": 0.0558
+  },
+  {
+    "args": [
+      "close"
+    ],
+    "exit": 0,
+    "out": "the live canvas is in <root>/out/easel/outline-edge/live.png\nclosed; the session is in <root>/paintings/lua/outline-edge.lua\n",
+    "err": "",
+    "seconds": 0.1212
+  },
+  {
+    "args": [
+      "open",
+      "outline-seed"
+    ],
+    "exit": 0,
+    "out": "easel \"outline-seed\" open: 0 chunks · 2400px · no canvas yet\n",
+    "err": "",
+    "seconds": 0.1163
+  },
+  {
+    "args": [
+      "do",
+      "canvas{size=100,aspect=5,linen=12,ground={{pile={{\"lead white\",1}},um=40,apply=\"knife\"}}}; p=pile{{\"red earth\",1}}; q=pile{{\"lead white\",1}}; m=rect(300,40,200,100); pts={{200,30},{400,30},{450,140},{250,140}};"
+    ],
+    "exit": 0,
+    "out": "ok · chunk 1 (0.50 s to compute)\n",
+    "err": "",
+    "seconds": 0.5154
+  },
+  {
+    "args": [
+      "do",
+      "o=outline(pts,{seed=2});print(o:length(),o:mask():area());work(o:mask(),{pile=p,hand=\"detail\",clip=true,coverage=1,seed=1})"
+    ],
+    "exit": 0,
+    "out": "642.9666748046875\t20118.103659951965\nok · chunk 2 (1.11 s to compute)\n",
+    "err": "",
+    "seconds": 1.1426
+  },
+  {
+    "args": [
+      "save",
+      "<scratch-file>"
+    ],
+    "exit": 0,
+    "out": "<scratch-file>\n",
+    "err": "",
+    "seconds": 0.1309
+  },
+  {
+    "args": [
+      "close"
+    ],
+    "exit": 0,
+    "out": "the live canvas is in <root>/out/easel/outline-seed/live.png\nclosed; the session is in <root>/paintings/lua/outline-seed.lua\n",
+    "err": "",
+    "seconds": 0.2347
+  }
+]

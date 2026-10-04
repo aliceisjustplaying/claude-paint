@@ -1,0 +1,839 @@
+[
+  {
+    "id": "default-seed",
+    "source": "canvas{size=100,aspect=5,linen=12,ground={{pile={{\"lead white\",1}},um=40,apply=\"knife\"}}}",
+    "reply": {
+      "args": [
+        "do",
+        "canvas{size=100,aspect=5,linen=12,ground={{pile={{\"lead white\",1}},um=40,apply=\"knife\"}}};print(W,H);p=pile{{\"red earth\",1}};b=brush(\"round\",4);b:load(p);b:touch(100,80)"
+      ],
+      "out": "1000\t199.99998474121094\nok · chunk 1 (0.08 s to compute)\n",
+      "err": "",
+      "exit": 0
+    },
+    "status": {
+      "args": [
+        "status"
+      ],
+      "out": "1 chunks · 2400px · size=100, aspect=5, linen={12, 12}, seed=1\n",
+      "err": "",
+      "exit": 0
+    },
+    "look": {
+      "reply": "<root>/out/easel/default-seed/look-0001.png (400x80, 0.01s)\n",
+      "path": "verification/evidence/matrix-canvas/default-seed.png",
+      "sha": "f613b023214d894dea3adfc86f00cf756a653fc2bd1c006ed451d2ffa5aed685"
+    }
+  },
+  {
+    "id": "seed1",
+    "source": "canvas{size=100,aspect=5,linen=12,ground={{pile={{\"lead white\",1}},um=40,apply=\"knife\"}},seed=1}",
+    "reply": {
+      "args": [
+        "do",
+        "canvas{size=100,aspect=5,linen=12,ground={{pile={{\"lead white\",1}},um=40,apply=\"knife\"}},seed=1};print(W,H);p=pile{{\"red earth\",1}};b=brush(\"round\",4);b:load(p);b:touch(100,80)"
+      ],
+      "out": "1000\t199.99998474121094\nok · chunk 1 (0.08 s to compute)\n",
+      "err": "",
+      "exit": 0
+    },
+    "status": {
+      "args": [
+        "status"
+      ],
+      "out": "1 chunks · 2400px · size=100, aspect=5, linen={12, 12}, seed=1\n",
+      "err": "",
+      "exit": 0
+    },
+    "look": {
+      "reply": "<root>/out/easel/seed1/look-0001.png (400x80, 0.01s)\n",
+      "path": "verification/evidence/matrix-canvas/seed1.png",
+      "sha": "f613b023214d894dea3adfc86f00cf756a653fc2bd1c006ed451d2ffa5aed685"
+    }
+  },
+  {
+    "id": "seed2",
+    "source": "canvas{size=100,aspect=5,linen=12,ground={{pile={{\"lead white\",1}},um=40,apply=\"knife\"}},seed=2}",
+    "reply": {
+      "args": [
+        "do",
+        "canvas{size=100,aspect=5,linen=12,ground={{pile={{\"lead white\",1}},um=40,apply=\"knife\"}},seed=2};print(W,H);p=pile{{\"red earth\",1}};b=brush(\"round\",4);b:load(p);b:touch(100,80)"
+      ],
+      "out": "1000\t199.99998474121094\nok · chunk 1 (0.09 s to compute)\n",
+      "err": "",
+      "exit": 0
+    },
+    "status": {
+      "args": [
+        "status"
+      ],
+      "out": "1 chunks · 2400px · size=100, aspect=5, linen={12, 12}, seed=2\n",
+      "err": "",
+      "exit": 0
+    },
+    "look": {
+      "reply": "<root>/out/easel/seed2/look-0001.png (400x80, 0.01s)\n",
+      "path": "verification/evidence/matrix-canvas/seed2.png",
+      "sha": "acd70af0a81a95d555d97fae2c74572532680db183b62c0e3568f15850b9d8d4"
+    }
+  },
+  {
+    "id": "size50",
+    "source": "canvas{size=50,aspect=5,linen=12,ground={{pile={{\"lead white\",1}},um=40,apply=\"knife\"}},seed=1}",
+    "reply": {
+      "args": [
+        "do",
+        "canvas{size=50,aspect=5,linen=12,ground={{pile={{\"lead white\",1}},um=40,apply=\"knife\"}},seed=1};print(W,H);p=pile{{\"red earth\",1}};b=brush(\"round\",4);b:load(p);b:touch(100,80)"
+      ],
+      "out": "1000\t199.99998474121094\nok · chunk 1 (0.09 s to compute)\n",
+      "err": "",
+      "exit": 0
+    },
+    "status": {
+      "args": [
+        "status"
+      ],
+      "out": "1 chunks · 2400px · size=50, aspect=5, linen={12, 12}, seed=1\n",
+      "err": "",
+      "exit": 0
+    },
+    "look": {
+      "reply": "<root>/out/easel/size50/look-0001.png (400x80, 0.01s)\n",
+      "path": "verification/evidence/matrix-canvas/size50.png",
+      "sha": "b2da7ab5f1f514960030b216618a02a2fab012894fa374044d61fd9a279e9cec"
+    }
+  },
+  {
+    "id": "size5000",
+    "source": "canvas{size=5000,aspect=5,linen=12,ground={{pile={{\"lead white\",1}},um=40,apply=\"knife\"}},seed=1}",
+    "reply": {
+      "args": [
+        "do",
+        "canvas{size=5000,aspect=5,linen=12,ground={{pile={{\"lead white\",1}},um=40,apply=\"knife\"}},seed=1};print(W,H);p=pile{{\"red earth\",1}};b=brush(\"round\",4);b:load(p);b:touch(100,80)"
+      ],
+      "out": "1000\t199.99998474121094\nok · chunk 1 (0.32 s to compute)\n",
+      "err": "",
+      "exit": 0
+    },
+    "status": {
+      "args": [
+        "status"
+      ],
+      "out": "1 chunks · 2400px · size=5000, aspect=5, linen={12, 12}, seed=1\n",
+      "err": "",
+      "exit": 0
+    },
+    "look": {
+      "reply": "<root>/out/easel/size5000/look-0001.png (400x80, 0.01s)\n",
+      "path": "verification/evidence/matrix-canvas/size5000.png",
+      "sha": "ccb1fd7884de913b1315fc3c5f81fc9071862ac20d483e08b70547bdc059a9ce"
+    }
+  },
+  {
+    "id": "size49",
+    "source": "canvas{size=49,aspect=5,linen=12,ground={{pile={{\"lead white\",1}},um=40,apply=\"knife\"}},seed=1}",
+    "reply": {
+      "args": [
+        "do",
+        "canvas{size=49,aspect=5,linen=12,ground={{pile={{\"lead white\",1}},um=40,apply=\"knife\"}},seed=1};print(W,H);p=pile{{\"red earth\",1}};b=brush(\"round\",4);b:load(p);b:touch(100,80)"
+      ],
+      "out": "",
+      "err": "runtime error: canvas: size is the canvas width in mm, 50 to 5000\n(the chunk failed and changed nothing)\n",
+      "exit": 1
+    },
+    "status": {
+      "args": [
+        "status"
+      ],
+      "out": "0 chunks · 2400px · no canvas yet\n",
+      "err": "",
+      "exit": 0
+    }
+  },
+  {
+    "id": "size5001",
+    "source": "canvas{size=5001,aspect=5,linen=12,ground={{pile={{\"lead white\",1}},um=40,apply=\"knife\"}},seed=1}",
+    "reply": {
+      "args": [
+        "do",
+        "canvas{size=5001,aspect=5,linen=12,ground={{pile={{\"lead white\",1}},um=40,apply=\"knife\"}},seed=1};print(W,H);p=pile{{\"red earth\",1}};b=brush(\"round\",4);b:load(p);b:touch(100,80)"
+      ],
+      "out": "",
+      "err": "runtime error: canvas: size is the canvas width in mm, 50 to 5000\n(the chunk failed and changed nothing)\n",
+      "exit": 1
+    },
+    "status": {
+      "args": [
+        "status"
+      ],
+      "out": "0 chunks · 2400px · no canvas yet\n",
+      "err": "",
+      "exit": 0
+    }
+  },
+  {
+    "id": "aspect1",
+    "source": "canvas{size=100,aspect=1,linen=12,ground={{pile={{\"lead white\",1}},um=40,apply=\"knife\"}},seed=1}",
+    "reply": {
+      "args": [
+        "do",
+        "canvas{size=100,aspect=1,linen=12,ground={{pile={{\"lead white\",1}},um=40,apply=\"knife\"}},seed=1};print(W,H);p=pile{{\"red earth\",1}};b=brush(\"round\",4);b:load(p);b:touch(100,80)"
+      ],
+      "out": "1000\t999.99993896484375\nok · chunk 1 (0.41 s to compute)\n",
+      "err": "",
+      "exit": 0
+    },
+    "status": {
+      "args": [
+        "status"
+      ],
+      "out": "1 chunks · 2400px · size=100, aspect=1, linen={12, 12}, seed=1\n",
+      "err": "",
+      "exit": 0
+    },
+    "look": {
+      "reply": "<root>/out/easel/aspect1/look-0001.png (400x400, 0.02s)\n",
+      "path": "verification/evidence/matrix-canvas/aspect1.png",
+      "sha": "4f2ef534ac02c8156f47e2b599fd38be53876bdcf66866706a400b9c91030309"
+    }
+  },
+  {
+    "id": "aspect2",
+    "source": "canvas{size=100,aspect=2,linen=12,ground={{pile={{\"lead white\",1}},um=40,apply=\"knife\"}},seed=1}",
+    "reply": {
+      "args": [
+        "do",
+        "canvas{size=100,aspect=2,linen=12,ground={{pile={{\"lead white\",1}},um=40,apply=\"knife\"}},seed=1};print(W,H);p=pile{{\"red earth\",1}};b=brush(\"round\",4);b:load(p);b:touch(100,80)"
+      ],
+      "out": "1000\t499.99996948242188\nok · chunk 1 (0.21 s to compute)\n",
+      "err": "",
+      "exit": 0
+    },
+    "status": {
+      "args": [
+        "status"
+      ],
+      "out": "1 chunks · 2400px · size=100, aspect=2, linen={12, 12}, seed=1\n",
+      "err": "",
+      "exit": 0
+    },
+    "look": {
+      "reply": "<root>/out/easel/aspect2/look-0001.png (400x200, 0.02s)\n",
+      "path": "verification/evidence/matrix-canvas/aspect2.png",
+      "sha": "f2d38ee0ccbec20d7b96fbd23d210899db9801b123b7f6156666f0392df951d8"
+    }
+  },
+  {
+    "id": "aspect0_2",
+    "source": "canvas{size=100,aspect=0.2,linen=12,ground={{pile={{\"lead white\",1}},um=40,apply=\"knife\"}},seed=1}",
+    "reply": {
+      "args": [
+        "do",
+        "canvas{size=100,aspect=0.2,linen=12,ground={{pile={{\"lead white\",1}},um=40,apply=\"knife\"}},seed=1};print(W,H);p=pile{{\"red earth\",1}};b=brush(\"round\",4);b:load(p);b:touch(100,80)"
+      ],
+      "out": "1000\t5000\nok · chunk 1 (2.60 s to compute)\n",
+      "err": "",
+      "exit": 0
+    },
+    "status": {
+      "args": [
+        "status"
+      ],
+      "out": "1 chunks · 2400px · size=100, aspect=0.2, linen={12, 12}, seed=1\n",
+      "err": "",
+      "exit": 0
+    },
+    "look": {
+      "reply": "<root>/out/easel/aspect0_2/look-0001.png (80x400, 0.06s)\n",
+      "path": "verification/evidence/matrix-canvas/aspect0_2.png",
+      "sha": "cc5c6bda7dcb2816222ffb6a621f009f085d30f7b098fb3b8f61412086dc0b0f"
+    }
+  },
+  {
+    "id": "aspect0_19",
+    "source": "canvas{size=100,aspect=0.19,linen=12,ground={{pile={{\"lead white\",1}},um=40,apply=\"knife\"}},seed=1}",
+    "reply": {
+      "args": [
+        "do",
+        "canvas{size=100,aspect=0.19,linen=12,ground={{pile={{\"lead white\",1}},um=40,apply=\"knife\"}},seed=1};print(W,H);p=pile{{\"red earth\",1}};b=brush(\"round\",4);b:load(p);b:touch(100,80)"
+      ],
+      "out": "",
+      "err": "runtime error: canvas: aspect is width / height, between 0.2 and 5\n(the chunk failed and changed nothing)\n",
+      "exit": 1
+    },
+    "status": {
+      "args": [
+        "status"
+      ],
+      "out": "0 chunks · 2400px · no canvas yet\n",
+      "err": "",
+      "exit": 0
+    }
+  },
+  {
+    "id": "aspect5_01",
+    "source": "canvas{size=100,aspect=5.01,linen=12,ground={{pile={{\"lead white\",1}},um=40,apply=\"knife\"}},seed=1}",
+    "reply": {
+      "args": [
+        "do",
+        "canvas{size=100,aspect=5.01,linen=12,ground={{pile={{\"lead white\",1}},um=40,apply=\"knife\"}},seed=1};print(W,H);p=pile{{\"red earth\",1}};b=brush(\"round\",4);b:load(p);b:touch(100,80)"
+      ],
+      "out": "",
+      "err": "runtime error: canvas: aspect is width / height, between 0.2 and 5\n(the chunk failed and changed nothing)\n",
+      "exit": 1
+    },
+    "status": {
+      "args": [
+        "status"
+      ],
+      "out": "0 chunks · 2400px · no canvas yet\n",
+      "err": "",
+      "exit": 0
+    }
+  },
+  {
+    "id": "linen0",
+    "source": "canvas{size=100,aspect=5,linen=4,ground={{pile={{\"lead white\",1}},um=40,apply=\"knife\"}},seed=1}",
+    "reply": {
+      "args": [
+        "do",
+        "canvas{size=100,aspect=5,linen=4,ground={{pile={{\"lead white\",1}},um=40,apply=\"knife\"}},seed=1};print(W,H);p=pile{{\"red earth\",1}};b=brush(\"round\",4);b:load(p);b:touch(100,80)"
+      ],
+      "out": "1000\t199.99998474121094\nok · chunk 1 (0.10 s to compute)\n",
+      "err": "",
+      "exit": 0
+    },
+    "status": {
+      "args": [
+        "status"
+      ],
+      "out": "1 chunks · 2400px · size=100, aspect=5, linen={4, 4}, seed=1\n",
+      "err": "",
+      "exit": 0
+    },
+    "look": {
+      "reply": "<root>/out/easel/linen0/look-0001.png (400x80, 0.01s)\n",
+      "path": "verification/evidence/matrix-canvas/linen0.png",
+      "sha": "dadd7b547db7e0f2f7405900f0c282904dc6dfe4e5c4101f7ed50d5fb4670980"
+    }
+  },
+  {
+    "id": "linen1",
+    "source": "canvas{size=100,aspect=5,linen=60,ground={{pile={{\"lead white\",1}},um=40,apply=\"knife\"}},seed=1}",
+    "reply": {
+      "args": [
+        "do",
+        "canvas{size=100,aspect=5,linen=60,ground={{pile={{\"lead white\",1}},um=40,apply=\"knife\"}},seed=1};print(W,H);p=pile{{\"red earth\",1}};b=brush(\"round\",4);b:load(p);b:touch(100,80)"
+      ],
+      "out": "1000\t199.99998474121094\nok · chunk 1 (0.09 s to compute)\n",
+      "err": "",
+      "exit": 0
+    },
+    "status": {
+      "args": [
+        "status"
+      ],
+      "out": "1 chunks · 2400px · size=100, aspect=5, linen={60, 60}, seed=1\n",
+      "err": "",
+      "exit": 0
+    },
+    "look": {
+      "reply": "<root>/out/easel/linen1/look-0001.png (400x80, 0.01s)\n",
+      "path": "verification/evidence/matrix-canvas/linen1.png",
+      "sha": "579840f2453656a9f12dfb40b818b9fb052b932fb2aced4dab849f86678043fc"
+    }
+  },
+  {
+    "id": "linen2",
+    "source": "canvas{size=100,aspect=5,linen={4,60},ground={{pile={{\"lead white\",1}},um=40,apply=\"knife\"}},seed=1}",
+    "reply": {
+      "args": [
+        "do",
+        "canvas{size=100,aspect=5,linen={4,60},ground={{pile={{\"lead white\",1}},um=40,apply=\"knife\"}},seed=1};print(W,H);p=pile{{\"red earth\",1}};b=brush(\"round\",4);b:load(p);b:touch(100,80)"
+      ],
+      "out": "1000\t199.99998474121094\nok · chunk 1 (0.09 s to compute)\n",
+      "err": "",
+      "exit": 0
+    },
+    "status": {
+      "args": [
+        "status"
+      ],
+      "out": "1 chunks · 2400px · size=100, aspect=5, linen={4, 60}, seed=1\n",
+      "err": "",
+      "exit": 0
+    },
+    "look": {
+      "reply": "<root>/out/easel/linen2/look-0001.png (400x80, 0.01s)\n",
+      "path": "verification/evidence/matrix-canvas/linen2.png",
+      "sha": "33020230fa9f32ca6428a9cc53df82a9e0c918b5481bb97e9fbfba9c371f0f88"
+    }
+  },
+  {
+    "id": "linen3",
+    "source": "canvas{size=100,aspect=5,linen={12,16},ground={{pile={{\"lead white\",1}},um=40,apply=\"knife\"}},seed=1}",
+    "reply": {
+      "args": [
+        "do",
+        "canvas{size=100,aspect=5,linen={12,16},ground={{pile={{\"lead white\",1}},um=40,apply=\"knife\"}},seed=1};print(W,H);p=pile{{\"red earth\",1}};b=brush(\"round\",4);b:load(p);b:touch(100,80)"
+      ],
+      "out": "1000\t199.99998474121094\nok · chunk 1 (0.10 s to compute)\n",
+      "err": "",
+      "exit": 0
+    },
+    "status": {
+      "args": [
+        "status"
+      ],
+      "out": "1 chunks · 2400px · size=100, aspect=5, linen={12, 16}, seed=1\n",
+      "err": "",
+      "exit": 0
+    },
+    "look": {
+      "reply": "<root>/out/easel/linen3/look-0001.png (400x80, 0.01s)\n",
+      "path": "verification/evidence/matrix-canvas/linen3.png",
+      "sha": "ed7768cad8d90adac3f95cea4b10a6fc2bc4a9c03cae630d2e1e762a2b8856e3"
+    }
+  },
+  {
+    "id": "linen4",
+    "source": "canvas{size=100,aspect=5,linen=3,ground={{pile={{\"lead white\",1}},um=40,apply=\"knife\"}},seed=1}",
+    "reply": {
+      "args": [
+        "do",
+        "canvas{size=100,aspect=5,linen=3,ground={{pile={{\"lead white\",1}},um=40,apply=\"knife\"}},seed=1};print(W,H);p=pile{{\"red earth\",1}};b=brush(\"round\",4);b:load(p);b:touch(100,80)"
+      ],
+      "out": "",
+      "err": "runtime error: canvas: linen threads per cm, 4 to 60\n(the chunk failed and changed nothing)\n",
+      "exit": 1
+    },
+    "status": {
+      "args": [
+        "status"
+      ],
+      "out": "0 chunks · 2400px · no canvas yet\n",
+      "err": "",
+      "exit": 0
+    }
+  },
+  {
+    "id": "linen5",
+    "source": "canvas{size=100,aspect=5,linen=61,ground={{pile={{\"lead white\",1}},um=40,apply=\"knife\"}},seed=1}",
+    "reply": {
+      "args": [
+        "do",
+        "canvas{size=100,aspect=5,linen=61,ground={{pile={{\"lead white\",1}},um=40,apply=\"knife\"}},seed=1};print(W,H);p=pile{{\"red earth\",1}};b=brush(\"round\",4);b:load(p);b:touch(100,80)"
+      ],
+      "out": "",
+      "err": "runtime error: canvas: linen threads per cm, 4 to 60\n(the chunk failed and changed nothing)\n",
+      "exit": 1
+    },
+    "status": {
+      "args": [
+        "status"
+      ],
+      "out": "0 chunks · 2400px · no canvas yet\n",
+      "err": "",
+      "exit": 0
+    }
+  },
+  {
+    "id": "roller",
+    "source": "canvas{size=100,aspect=5,linen=12,ground={{pile={{\"lead white\",1}},um=40,apply=\"roller\"}},seed=1}",
+    "reply": {
+      "args": [
+        "do",
+        "canvas{size=100,aspect=5,linen=12,ground={{pile={{\"lead white\",1}},um=40,apply=\"roller\"}},seed=1};print(W,H);p=pile{{\"red earth\",1}};b=brush(\"round\",4);b:load(p);b:touch(100,80)"
+      ],
+      "out": "1000\t199.99998474121094\nok · chunk 1 (0.11 s to compute)\n",
+      "err": "",
+      "exit": 0
+    },
+    "status": {
+      "args": [
+        "status"
+      ],
+      "out": "1 chunks · 2400px · size=100, aspect=5, linen={12, 12}, seed=1\n",
+      "err": "",
+      "exit": 0
+    },
+    "look": {
+      "reply": "<root>/out/easel/roller/look-0001.png (400x80, 0.01s)\n",
+      "path": "verification/evidence/matrix-canvas/roller.png",
+      "sha": "f77267017a2267c90648b182b38d2533717ea1afd1fab3c953b3a4610176d01c"
+    }
+  },
+  {
+    "id": "brush",
+    "source": "canvas{size=100,aspect=5,linen=12,ground={{pile={{\"lead white\",1}},um=40,apply=\"brush\"}},seed=1}",
+    "reply": {
+      "args": [
+        "do",
+        "canvas{size=100,aspect=5,linen=12,ground={{pile={{\"lead white\",1}},um=40,apply=\"brush\"}},seed=1};print(W,H);p=pile{{\"red earth\",1}};b=brush(\"round\",4);b:load(p);b:touch(100,80)"
+      ],
+      "out": "1000\t199.99998474121094\nok · chunk 1 (9.77 s to compute)\n",
+      "err": "",
+      "exit": 0
+    },
+    "status": {
+      "args": [
+        "status"
+      ],
+      "out": "1 chunks · 2400px · size=100, aspect=5, linen={12, 12}, seed=1\n",
+      "err": "",
+      "exit": 0
+    },
+    "look": {
+      "reply": "<root>/out/easel/brush/look-0001.png (400x80, 0.01s)\n",
+      "path": "verification/evidence/matrix-canvas/brush.png",
+      "sha": "f2ed93cffe17073fea324f88bc1d5b45e02582a8ca6f399cfc74509ae54c872b"
+    }
+  },
+  {
+    "id": "ground5",
+    "source": "canvas{size=100,aspect=5,linen=12,ground={{pile={{\"lead white\",1}},um=5,apply=\"knife\"}},seed=1}",
+    "reply": {
+      "args": [
+        "do",
+        "canvas{size=100,aspect=5,linen=12,ground={{pile={{\"lead white\",1}},um=5,apply=\"knife\"}},seed=1};print(W,H);p=pile{{\"red earth\",1}};b=brush(\"round\",4);b:load(p);b:touch(100,80)"
+      ],
+      "out": "1000\t199.99998474121094\nok · chunk 1 (0.09 s to compute)\n",
+      "err": "",
+      "exit": 0
+    },
+    "status": {
+      "args": [
+        "status"
+      ],
+      "out": "1 chunks · 2400px · size=100, aspect=5, linen={12, 12}, seed=1\n",
+      "err": "",
+      "exit": 0
+    },
+    "look": {
+      "reply": "<root>/out/easel/ground5/look-0001.png (400x80, 0.01s)\n",
+      "path": "verification/evidence/matrix-canvas/ground5.png",
+      "sha": "8ea86c93a5145abc95a91b2b471ea3f6ba5b8148660e0f130cf17cb36a3daaf6"
+    }
+  },
+  {
+    "id": "ground400",
+    "source": "canvas{size=100,aspect=5,linen=12,ground={{pile={{\"lead white\",1}},um=400,apply=\"knife\"}},seed=1}",
+    "reply": {
+      "args": [
+        "do",
+        "canvas{size=100,aspect=5,linen=12,ground={{pile={{\"lead white\",1}},um=400,apply=\"knife\"}},seed=1};print(W,H);p=pile{{\"red earth\",1}};b=brush(\"round\",4);b:load(p);b:touch(100,80)"
+      ],
+      "out": "1000\t199.99998474121094\nok · chunk 1 (0.09 s to compute)\n",
+      "err": "",
+      "exit": 0
+    },
+    "status": {
+      "args": [
+        "status"
+      ],
+      "out": "1 chunks · 2400px · size=100, aspect=5, linen={12, 12}, seed=1\n",
+      "err": "",
+      "exit": 0
+    },
+    "look": {
+      "reply": "<root>/out/easel/ground400/look-0001.png (400x80, 0.01s)\n",
+      "path": "verification/evidence/matrix-canvas/ground400.png",
+      "sha": "ae1a91914c408ad6bb6c78c0d7f0909c00dc5cb7a682d08981656f9695977908"
+    }
+  },
+  {
+    "id": "ground4",
+    "source": "canvas{size=100,aspect=5,linen=12,ground={{pile={{\"lead white\",1}},um=4,apply=\"knife\"}},seed=1}",
+    "reply": {
+      "args": [
+        "do",
+        "canvas{size=100,aspect=5,linen=12,ground={{pile={{\"lead white\",1}},um=4,apply=\"knife\"}},seed=1};print(W,H);p=pile{{\"red earth\",1}};b=brush(\"round\",4);b:load(p);b:touch(100,80)"
+      ],
+      "out": "",
+      "err": "runtime error: canvas: a ground layer is 5 to 400 µm thick\n(the chunk failed and changed nothing)\n",
+      "exit": 1
+    },
+    "status": {
+      "args": [
+        "status"
+      ],
+      "out": "0 chunks · 2400px · no canvas yet\n",
+      "err": "",
+      "exit": 0
+    }
+  },
+  {
+    "id": "ground401",
+    "source": "canvas{size=100,aspect=5,linen=12,ground={{pile={{\"lead white\",1}},um=401,apply=\"knife\"}},seed=1}",
+    "reply": {
+      "args": [
+        "do",
+        "canvas{size=100,aspect=5,linen=12,ground={{pile={{\"lead white\",1}},um=401,apply=\"knife\"}},seed=1};print(W,H);p=pile{{\"red earth\",1}};b=brush(\"round\",4);b:load(p);b:touch(100,80)"
+      ],
+      "out": "",
+      "err": "runtime error: canvas: a ground layer is 5 to 400 µm thick\n(the chunk failed and changed nothing)\n",
+      "exit": 1
+    },
+    "status": {
+      "args": [
+        "status"
+      ],
+      "out": "0 chunks · 2400px · no canvas yet\n",
+      "err": "",
+      "exit": 0
+    }
+  },
+  {
+    "id": "coatorder1",
+    "source": "canvas{size=100,aspect=5,linen=12,ground={{pile={{\"lead white\",1}},um=40,apply=\"knife\"},{pile={{\"red earth\",1}},um=40,apply=\"brush\"}},seed=1}",
+    "reply": {
+      "args": [
+        "do",
+        "canvas{size=100,aspect=5,linen=12,ground={{pile={{\"lead white\",1}},um=40,apply=\"knife\"},{pile={{\"red earth\",1}},um=40,apply=\"brush\"}},seed=1};print(W,H);p=pile{{\"red earth\",1}};b=brush(\"round\",4);b:load(p);b:touch(100,80)"
+      ],
+      "out": "1000\t199.99998474121094\nok · chunk 1 (10.75 s to compute)\n",
+      "err": "",
+      "exit": 0
+    },
+    "status": {
+      "args": [
+        "status"
+      ],
+      "out": "1 chunks · 2400px · size=100, aspect=5, linen={12, 12}, seed=1\n",
+      "err": "",
+      "exit": 0
+    },
+    "look": {
+      "reply": "<root>/out/easel/coatorder1/look-0001.png (400x80, 0.01s)\n",
+      "path": "verification/evidence/matrix-canvas/coatorder1.png",
+      "sha": "6d8847f9905818e91c93597606f3b858290b393be722a943942a2a7947afc18d"
+    }
+  },
+  {
+    "id": "coatorder2",
+    "source": "canvas{size=100,aspect=5,linen=12,ground={{pile={{\"red earth\",1}},um=40,apply=\"knife\"},{pile={{\"lead white\",1}},um=40,apply=\"brush\"}},seed=1}",
+    "reply": {
+      "args": [
+        "do",
+        "canvas{size=100,aspect=5,linen=12,ground={{pile={{\"red earth\",1}},um=40,apply=\"knife\"},{pile={{\"lead white\",1}},um=40,apply=\"brush\"}},seed=1};print(W,H);p=pile{{\"red earth\",1}};b=brush(\"round\",4);b:load(p);b:touch(100,80)"
+      ],
+      "out": "1000\t199.99998474121094\nok · chunk 1 (11.03 s to compute)\n",
+      "err": "",
+      "exit": 0
+    },
+    "status": {
+      "args": [
+        "status"
+      ],
+      "out": "1 chunks · 2400px · size=100, aspect=5, linen={12, 12}, seed=1\n",
+      "err": "",
+      "exit": 0
+    },
+    "look": {
+      "reply": "<root>/out/easel/coatorder2/look-0001.png (400x80, 0.01s)\n",
+      "path": "verification/evidence/matrix-canvas/coatorder2.png",
+      "sha": "4e23978986c92039483829c491fa227369dde8a5135d7a8beea1350d85656899"
+    }
+  },
+  {
+    "id": "medium0",
+    "reply": {
+      "args": [
+        "do",
+        "p0=pile{{'red earth',1},medium=0};print(p0);b=brush('round',8);b:load(p0);b:touch(100,80)"
+      ],
+      "out": "pile(red earth 1; medium 0)\nok · chunk 2 (0.02 s to compute)\n",
+      "err": "",
+      "exit": 0
+    }
+  },
+  {
+    "id": "medium0.5",
+    "reply": {
+      "args": [
+        "do",
+        "p1=pile{{'red earth',1},medium=0.5};print(p1);b=brush('round',8);b:load(p1);b:touch(250,80)"
+      ],
+      "out": "pile(red earth 1; medium 0.5)\nok · chunk 3 (0.00 s to compute)\n",
+      "err": "",
+      "exit": 0
+    }
+  },
+  {
+    "id": "medium0.95",
+    "reply": {
+      "args": [
+        "do",
+        "p2=pile{{'red earth',1},medium=0.95};print(p2);b=brush('round',8);b:load(p2);b:touch(400,80)"
+      ],
+      "out": "pile(red earth 1; medium 0.95)\nok · chunk 4 (0.00 s to compute)\n",
+      "err": "",
+      "exit": 0
+    }
+  },
+  {
+    "id": "medium-0.01",
+    "reply": {
+      "args": [
+        "do",
+        "p3=pile{{'red earth',1},medium=-0.01};print(p3);b=brush('round',8);b:load(p3);b:touch(550,80)"
+      ],
+      "out": "",
+      "err": "runtime error: pile: medium is the share of oil medium mixed in, 0 (as from the tube) to 0.95\n(the chunk failed and changed nothing)\n",
+      "exit": 1
+    }
+  },
+  {
+    "id": "medium0.96",
+    "reply": {
+      "args": [
+        "do",
+        "p4=pile{{'red earth',1},medium=0.96};print(p4);b=brush('round',8);b:load(p4);b:touch(700,80)"
+      ],
+      "out": "",
+      "err": "runtime error: pile: medium is the share of oil medium mixed in, 0 (as from the tube) to 0.95\n(the chunk failed and changed nothing)\n",
+      "exit": 1
+    }
+  },
+  {
+    "id": "medium-palette",
+    "look": {
+      "reply": "<root>/out/easel/material/look-0001.png (1124x224, 0.01s)\n",
+      "path": "verification/evidence/matrix-canvas/medium-palette.png",
+      "sha": "8f1d31add6e734520f607f17b96ac695d9e47167bbe78293a180bb28f4df7793"
+    },
+    "canvas": {
+      "reply": "<root>/out/easel/material/look-0002.png (1000x200, 0.01s)\n",
+      "path": "verification/evidence/matrix-canvas/medium-strokes.png",
+      "sha": "096a453cbfe7a0dea6b08c012233ccd23afaf3980aac4eaf6ac713a038f35308"
+    }
+  },
+  {
+    "id": "duplicate-pile",
+    "reply": {
+      "args": [
+        "do",
+        "pA=pile{{\"red earth\",1},{\"red earth\",2}};pB=pile{{\"red earth\",3}};print(pA,pB)"
+      ],
+      "out": "pile(red earth 1, red earth 2; medium 0)\tpile(red earth 3; medium 0)\nok · chunk 5 (0.00 s to compute)\n",
+      "err": "",
+      "exit": 0
+    },
+    "look": {
+      "reply": "<root>/out/easel/material/look-0003.png (1124x352, 0.01s)\n",
+      "path": "verification/evidence/matrix-canvas/duplicate-palette.png",
+      "sha": "3eb218cebeec92c8f83a704b53efb7be26397229d881ddcf1b38a247980169d9"
+    }
+  },
+  {
+    "id": "replace",
+    "reply": {
+      "args": [
+        "do",
+        "canvas{size=100,aspect=5,linen=12,ground={{pile={{\"lead white\",1}},um=40,apply=\"knife\"}},seed=123}"
+      ],
+      "out": "",
+      "err": "runtime error: the canvas is already set up (canvas{} is the first chunk)\n(the chunk failed and changed nothing)\n",
+      "exit": 1
+    },
+    "reseed": {
+      "args": [
+        "do",
+        "math.randomseed(123);print(math.random());print(type(resize),type(clear),type(undo),type(layer))"
+      ],
+      "out": "0.713571310043335\nnil\tnil\tnil\tnil\nok · chunk 6 (0.00 s to compute)\n",
+      "err": "",
+      "exit": 0
+    },
+    "png_equal": true
+  },
+  {
+    "id": "container",
+    "reply": {
+      "args": [
+        "do",
+        "p=pile{{\"red earth\",1}};b=brush(\"round\",4);m=rect(100,40,80,80);o=outline{pts={{100,40},{200,40},{150,120}}};r=rag{width=20};f=form{{body.ellipsoid({400,100,0},{20,20,10})}}"
+      ],
+      "out": "ok · chunk 7 (0.00 s to compute)\n",
+      "err": "",
+      "exit": 0
+    },
+    "globals": {
+      "args": [
+        "globals"
+      ],
+      "out": "1\tH\tnumber 199.99998474121094\n1\tW\tnumber 1000\n2\tp0\tpile(red earth 1; medium 0)\n3\tp1\tpile(red earth 1; medium 0.5)\n4\tp2\tpile(red earth 1; medium 0.95)\n5\tpA\tpile(red earth 1, red earth 2; medium 0)\n5\tpB\tpile(red earth 3; medium 0)\n7\tb\tbrush(round 4, 0% full)\n7\tf\tform(1 parts)\n7\tm\tmask(6400 sq units)\n7\to\toutline(1 line(s), closed, length 288, 6 strokes, 3 corners, scale 119)\n7\tp\tpile(red earth 1; medium 0)\n7\tr\trag(width 20, load 0.00)\n",
+      "err": "",
+      "exit": 0
+    },
+    "reuse": {
+      "args": [
+        "do",
+        "b:load(p);b:touch(100,80);r:blot(100,80);print(m:area(),o:area(),f:parts_mask{1}:area())"
+      ],
+      "out": "",
+      "err": "runtime error: [string \"chunk 8\"]:1: attempt to call a nil value (method 'area')\n(the chunk failed and changed nothing)\n",
+      "exit": 1
+    }
+  },
+  {
+    "id": "pre-pile",
+    "reply": {
+      "args": [
+        "do",
+        "p=pile{{\"red earth\",1}}"
+      ],
+      "out": "",
+      "err": "runtime error: no canvas yet: the first chunk is canvas{size=, aspect=, linen=, ground=}\n(the chunk failed and changed nothing)\n",
+      "exit": 1
+    }
+  },
+  {
+    "id": "pre-rect",
+    "reply": {
+      "args": [
+        "do",
+        "m=rect(10,10,10,10)"
+      ],
+      "out": "",
+      "err": "runtime error: no canvas yet: the first chunk is canvas{size=, aspect=, linen=, ground=}\n(the chunk failed and changed nothing)\n",
+      "exit": 1
+    }
+  },
+  {
+    "id": "pre-rag",
+    "reply": {
+      "args": [
+        "do",
+        "r=rag{width=20}"
+      ],
+      "out": "",
+      "err": "runtime error: no canvas yet: call canvas{} first\n(the chunk failed and changed nothing)\n",
+      "exit": 1
+    }
+  },
+  {
+    "id": "pre-brush",
+    "reply": {
+      "args": [
+        "do",
+        "b=brush(\"round\",4);b:touch(10,10)"
+      ],
+      "out": "",
+      "err": "runtime error: no canvas yet: the first chunk is canvas{size=, aspect=, linen=, ground=}\n(the chunk failed and changed nothing. It had changed tables from earlier chunks, and though what they hold is back, how they are laid out (which decides the order `pairs` walks them in) can't be put back, so the easel now rebuilds the painting from its log, as a reopen does; status reports progress and other commands must retry after that)\n",
+      "exit": 1
+    }
+  },
+  {
+    "id": "unknown-image",
+    "reply": {
+      "args": [
+        "do",
+        "canvas{image=\"a.png\",size=100,aspect=5,linen=12,ground={{pile={{\"lead white\",1}},um=40,apply=\"knife\"}},seed=1}"
+      ],
+      "out": "",
+      "err": "runtime error: canvas: unknown option \"image\" (options: size, aspect, linen, ground, seed)\n(the chunk failed and changed nothing)\n",
+      "exit": 1
+    }
+  }
+]

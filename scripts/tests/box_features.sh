@@ -12,9 +12,10 @@
 #   scripts/tests/box_features.sh
 #
 # Builds paint and the easel once per configuration (several minutes); uses
-# CARGO_TARGET_DIR if set. BOX_FEATURES_PROFILE=test builds with the test
-# profile instead of release (which tubes a build holds doesn't depend on the
-# profile; it builds faster): scripts/test --all runs it so.
+# CARGO_TARGET_DIR if set. BOX_FEATURES_PROFILE=test or dev builds with that
+# profile instead of release (which tubes a build holds depends on the
+# features, not the profile; dev, unoptimized, builds fastest and the tests
+# it runs are table checks): scripts/test --all runs it with dev.
 set -euo pipefail
 repo=$(cd "$(dirname "$0")/../.." && pwd)
 cd "$repo"
@@ -22,7 +23,8 @@ unset EASEL_BOX
 case ${BOX_FEATURES_PROFILE:-release} in
   release) profile=--release ;;
   test) profile= ;;
-  *) echo "box_features: BOX_FEATURES_PROFILE is release or test" >&2; exit 2 ;;
+  dev) profile="--profile dev" ;;
+  *) echo "box_features: BOX_FEATURES_PROFILE is release, test or dev" >&2; exit 2 ;;
 esac
 
 # passes <n> <what> <cargo test args...>: the tests run and at least n pass

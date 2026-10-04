@@ -104,6 +104,10 @@ if mode == "lie_timedout": step["timed_out"] = True
 if mode == "nosteps": s["steps"] = []
 if mode == "badlist": s["list_sha256"] = "0" * 64
 if mode == "badlog": step["log_sha256"] = "f" * 64
+if mode in ("withbuild", "onlybuild"):
+    build = dict(name="build", kind="build", command="cargo build --release", exit=0, seconds=0.1, tests_run=None,
+                 passed=0, failed=0, ignored=0, timed_out=False, log=log, log_sha256=sha(log))
+    s["steps"] = [build, step] if mode == "withbuild" else [build]
 if mode != "nosummary": json.dump(s, open(out, "w"))
 sys.exit(rc)
 EOF
@@ -167,7 +171,7 @@ check "dirty dev clone (modified README, untracked leak.txt): the candidate was 
 for spec in "fail|step unit exited 1" "zero|ran no tests" "nosummary|wrote no summary" \
   "exit1pass|scripts/test (under lockrun) exited 1" "lie_timedout|timed out (timed_out=True)" \
   "nosteps|an empty test selection never passes" "badlist|list_sha256 is not the hash" \
-  "badlog|differs from the summary's"; do
+  "badlog|differs from the summary's" "onlybuild|only build steps"; do
   mode=${spec%%|*} want=${spec#*|}
   C=$(mkc "$M" fake_mode="$mode")
   eval "C_$mode=$C"
@@ -175,6 +179,10 @@ for spec in "fail|step unit exited 1" "zero|ran no tests" "nosummary|wrote no su
   check "$mode: exit 1, fail receipt saying \"$want\", worktree removed" \
     eval 'rc 1 && verdict_is $C fail && problem_has $C "$want" && cleaned'
 done
+
+C=$(mkc "$M" fake_mode=withbuild)
+tc "$C"
+check "a build step (kind build, no tests) before a step with tests: pass" eval 'rc 0 && verdict_is $C pass'
 
 C=$(mkc "$M" fake_mode=timeout)
 tc "$C" --timeout 2

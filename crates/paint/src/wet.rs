@@ -68,6 +68,10 @@ pub struct Paint {
 }
 
 impl Paint {
+    /// Its properties as they mix in a brush and on the canvas (`Prop`).
+    pub fn prop(&self) -> Prop {
+        [self.scatter(), self.stiff, self.drying]
+    }
     /// A paint of masstone `color` whose one coat hides `hiding` (contrast
     /// ratio: over black ÷ over white; 0.05 = glaze, 0.5 = scumble,
     /// 0.92 = body).

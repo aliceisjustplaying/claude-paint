@@ -372,7 +372,7 @@ qualifies:
 **Expected:**
 
 - The share of its solvent left equals `exp(-1 / τ(h))` within
-  1e-4 + 2δ, where δ is the paint's relative change: liquid moving with
+  2e-4 + 2δ (1e-4 until 2026-10-04; see "Decisions and open questions"), where δ is the paint's relative change: liquid moving with
   δ of the paint can move about that much solvent again. The same share
   every minute is the "equal intervals, equal fractions" rule.
 - Each film has at least 200 such pixel-minutes.
@@ -748,6 +748,14 @@ Decided by the owner on 2026-10-04 (may be revisited):
   exact: on the fine grid the closer one is off by 1.25e-4. The tolerance
   was loosened rather than the prediction rewritten on the same grid. The
   other bounds of check 16, and checks 9 and 17, are unchanged and pass.
+- **Check 9's per-pixel law: 2e-4 + 2δ, was 1e-4 + 2δ.** The flow no
+  longer stops below a numerical cutoff (`FLOW_MIN`, removed), so it keeps
+  moving trace liquid between pixels whose solvent ratios differ. Their
+  solvent can then move more than their paint does, which the 2δ term
+  assumes it doesn't. Measured (`thinner::tests::c09_probe`): 1 of 119,251
+  qualifying pixel-minutes missed the old bound, by 5.2e-6; evaporation
+  alone was within 1e-7 of the law there and the flow accounted for the
+  rest. The constant was loosened rather than the selection restated.
 
 For the user:
 
@@ -769,7 +777,7 @@ test:
 
 | sha256 | file |
 |---|---|
-| `c1f3b99905a1343fd1928af974fe236fdb11692abc431163cf5e8043ac433749` | `crates/paint/tests/thinner_physics.rs` |
+| `1417fdda18d15fe32e532ca43d63f6fa42d410aef041a51013975ae00e025e87` | `crates/paint/tests/thinner_physics.rs` |
 | `fe7d4e25e0e03a094d3c534dc2f8728c6ef4482e29f38a5b0b3ce01042d728ff` | `crates/paint/tests/thinner_support/mod.rs` |
 | `53924605cde088b16056fd31d69d57f96c5eae8d5c4674858326823bb0ca06cc` | `crates/paint/tests/thinner_pigments.rs` |
 | `542e25ab395446ea79c893640e5515702309b145f99a5da5ff7e617ea83e15c2` | `crates/paint/tests/thinner/tubes_af49348.txt` |

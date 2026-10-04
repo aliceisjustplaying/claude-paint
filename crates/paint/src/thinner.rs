@@ -127,12 +127,6 @@ pub fn spread_mm2_min(phi: f32) -> f32 {
     SPREAD_MM2_MIN * phi / (1.0 - phi)
 }
 
-/// The flow skips a step in which even the most mobile film would move
-/// less than this share of its liquid difference to a neighbor (its
-/// mobility × the step ÷ the pixel's area): a chosen numerical cutoff, not
-/// a physical constant. It ends the flow once the solvent left is a trace.
-const FLOW_MIN: f32 = 1e-4;
-
 /// Ticks a minute on the grid the solvent's loss and flow step on
 /// (`Canvas::wait`): a chosen numerical resolution, not a physical
 /// constant. A power of two, so quarter minutes fall on it exactly.
@@ -228,11 +222,6 @@ impl Canvas {
             return;
         }
         let r_total = m_max * dt / (dx * dx);
-        // (a flow too slow to move a measurable share of a pixel's liquid
-        // in this step doesn't run, `FLOW_MIN`)
-        if r_total < FLOW_MIN {
-            return;
-        }
         let n = ((r_total / 0.2).ceil() as usize).clamp(1, MAX_SUBSTEPS);
         // the flow's rate per substep, per mm²/min of mobility
         let k = (dt / n as f32 / (dx * dx)).min(0.2 / m_max.max(1e-12));
@@ -602,6 +591,159 @@ mod tests {
         }
         c.wait(5.0);
         c.save(d.join(format!("{tag}.png"))).unwrap();
+    }
+
+
+    /// Check 9 under the flow without `FLOW_MIN`: for every pixel-minute
+    /// check 9 examines, how much of the miss against exp(-1/τ) comes from
+    /// the flow (solvent in/out) and how much from evaporation alone.
+    /// `cargo test --release -p paint --lib thinner::tests::c09_probe -- --ignored --nocapture`
+    #[test]
+    #[ignore]
+    fn c09_probe() {
+        use super::evaporation_tau_min;
+        let pal = Palette::named_box("inness").unwrap();
+        let i = pal.tubes.iter().position(|t| t.name == "raw sienna").unwrap();
+        let rs = pal.pile(vec![(i, 1.0)]).laid(0.0).with_thinner(0.5);
+        let mut c = Canvas::new(300, 1.0, hex("#d8cdb8")).with_engine(3);
+        c.prime(hex("#b9a98c"), 0.9, 60.0, 0.6, 0.0, 7);
+        let patch = |c: &mut Canvas, x: (f32, f32), seed: u64| {
+            for k in 0..((700.0f32 - 300.0) / 25.0).ceil() as usize {
+                let yk = 300.0 + 400.0 * (k as f32 + 0.5) / 16.0;
+                let mut h = Held::new(Tool::hog_flat(40.0), seed + k as u64);
+                h.load(rs, 0.9);
+                c.drag(&mut h, &Gesture::new(vec![(x.0, yk), (x.1, yk + 3.0)]).pressure(0.85, 0.85), None);
+            }
+        };
+        patch(&mut c, (100.0, 450.0), 41);
+        for k in 0..5 {
+            patch(&mut c, (550.0, 900.0), 141 + 20 * k);
+        }
+        let f = c.frame();
+        let (w, hh) = (f.w, f.h);
+        let ids: Vec<usize> = (0..w * hh)
+            .filter(|&i| {
+                let (x, y) = (f.ux(i % w), f.uy(i / w));
+                (x >= 150.0 && x < 400.0 || x >= 600.0 && x < 850.0) && y >= 350.0 && y < 650.0
+            })
+            .collect();
+        let pu = |c: &Canvas| -> Vec<f32> { ids.iter().map(|&i| c.wet.vol[i] * super::COAT_UM).collect() };
+        let su = |c: &Canvas| -> Vec<f32> { ids.iter().map(|&i| c.wet.solv[i]).collect() };
+        let (mut examined, mut fails) = (0usize, 0usize);
+        let mut worst = (0.0f64, 0usize, 0usize, 0.0f64, 0.0f64, 0.0f64, 0.0f64);
+        let mut flow_abs = Vec::new();
+        let eps = [1e-3f64, 3e-3, 1e-2, 3e-2];
+        let mut sel = vec![(0usize, 0usize, [0usize; 2]); eps.len()];
+        for m in 1..=40 {
+            let (ph, ps) = (pu(&c), su(&c));
+            let ph_all: Vec<f32> = c.wet.vol.iter().map(|v| v * super::COAT_UM).collect();
+            let ps_all = c.wet.solv.clone();
+            // per pixel: product of evaporation-only keeps; net solvent the flow moved
+            let mut keep = vec![1.0f64; ids.len()];
+            let mut flow = vec![0.0f64; ids.len()];
+            for _ in 0..super::FLOW_TICKS {
+                let s0 = su(&c);
+                let mut d = c.clone();
+                d.evaporate(1.0 / super::FLOW_TICKS as f32);
+                let se = su(&d);
+                c.wait(1.0 / super::FLOW_TICKS as f32);
+                let s1 = su(&c);
+                for k in 0..ids.len() {
+                    if s0[k] > 0.0 {
+                        keep[k] *= se[k] as f64 / s0[k] as f64;
+                    }
+                    flow[k] += (s1[k] - se[k]) as f64;
+                }
+            }
+            let (h1, s1) = (pu(&c), su(&c));
+            for k in 0..ids.len() {
+                let (a, b) = (ps[k] as f64, s1[k] as f64);
+                let d = ((h1[k] - ph[k]) / ph[k].max(1e-6)).abs() as f64;
+                if ph[k] < 1.0 || d > 1e-3 || a < 0.01 {
+                    continue;
+                }
+                // the 4-neighborhood's solvent ÷ paint at the minute's start
+                let r = |j: usize| ps[j] as f64 / (ph[j] as f64).max(1e-9);
+                let (x, y) = (ids[k] % w, ids[k] / w);
+                let mut spread = 0.0f64;
+                for (dx, dy) in [(-1i64, 0i64), (1, 0), (0, -1), (0, 1)] {
+                    let j = ((y as i64 + dy) as usize) * w + (x as i64 + dx) as usize;
+                    let jr = ps_all[j] as f64 / (ph_all[j] as f64).max(1e-9);
+                    spread = spread.max((jr - r(k)).abs() / r(k));
+                }
+                for (e, cnt) in eps.iter().zip(sel.iter_mut()) {
+                    if spread <= *e {
+                        cnt.0 += 1;
+                        if (b / a - (-1.0f64 / evaporation_tau_min(ph[k])).exp()).abs() > 1e-4 + 2.0 * d {
+                            cnt.1 += 1;
+                        }
+                        cnt.2[if f.ux(ids[k] % w) < 500.0 { 0 } else { 1 }] += 1;
+                    }
+                }
+                examined += 1;
+                let want = (-1.0f64 / evaporation_tau_min(ph[k])).exp();
+                let got = b / a;
+                flow_abs.push((flow[k] / a).abs());
+                let miss = (got - want).abs() - (1e-4 + 2.0 * d);
+                if miss > 0.0 {
+                    fails += 1;
+                }
+                if miss > worst.0 || worst.1 == 0 {
+                    worst = (miss, m, ids[k], got - want, keep[k] - want, flow[k] / a, d);
+                }
+            }
+        }
+        for (e, cnt) in eps.iter().zip(&sel) {
+            println!("neighbors' ratio within {e:.0e}: {} pixel-minutes (thin {}, thick {}), {} over", cnt.0, cnt.2[0], cnt.2[1], cnt.1);
+        }
+        flow_abs.sort_by(|a, b| a.partial_cmp(b).unwrap());
+        let q = |p: f64| flow_abs[((flow_abs.len() - 1) as f64 * p) as usize];
+        println!("pixel-minutes examined {examined}, over check 9's tolerance {fails}");
+        println!("flow's net solvent / solvent at minute start, |.|: median {:.2e}, p99 {:.2e}, max {:.2e}", q(0.5), q(0.99), q(1.0));
+        println!("worst: margin {:.2e} at minute {}, pixel {}: got-law {:.3e} = evaporation-only {:.3e} + flow {:.3e} (paint change d {:.2e}, allowed {:.2e})",
+            worst.0, worst.1, worst.2, worst.3, worst.4, worst.5, worst.6, 1e-4 + 2.0 * worst.6);
+    }
+
+    /// Fingerprint of the thinner's state after thinned strokes and waits
+    /// (for checking that a refactor leaves results bit-identical).
+    #[test]
+    #[ignore]
+    fn fingerprint() {
+        fn h(acc: &mut u64, v: &[f32]) {
+            for x in v {
+                for b in x.to_bits().to_le_bytes() {
+                    *acc = (*acc ^ b as u64).wrapping_mul(0x100000001b3);
+                }
+            }
+        }
+        let mut c = Canvas::new(480, 1.0, hex("#d8cdb8")).with_engine(3);
+        c.prime(hex("#b9a98c"), 0.9, 40.0, 0.6, 0.0, 7);
+        for (k, t) in [0.5f32, 0.75, 0.9, 0.95].into_iter().enumerate() {
+            let y = 200.0 + 60.0 * k as f32;
+            let mut hd = Held::new(Tool::hog_flat(40.0), 10 + k as u64);
+            hd.load(sienna(t), 0.9);
+            hd.load(sienna(t), 0.9);
+            c.drag(&mut hd, &Gesture::new(vec![(250.0, y), (750.0, y + 3.0)]).pressure(0.85, 0.85), None);
+        }
+        for k in 0..6 {
+            let y = 520.0 + 20.0 * k as f32;
+            let mut hd = Held::new(Tool::hog_flat(40.0), 40 + k);
+            hd.load(sienna(0.5), 0.9);
+            c.drag(&mut hd, &Gesture::new(vec![(200.0, y), (800.0, y + 3.0)]).pressure(0.85, 0.85), None);
+        }
+        for (step, m) in [0.02f32, 0.37, 1.0, 3.0, 0.02, 10.0, 30.0].into_iter().enumerate() {
+            c.wait(m);
+            if step == 3 {
+                let mut hd = Held::new(Tool::hog_flat(30.0), 99);
+                hd.load(sienna(0.6), 0.9);
+                c.drag(&mut hd, &Gesture::new(vec![(300.0, 150.0), (320.0, 700.0)]).pressure(0.8, 0.8), None);
+            }
+            let mut acc = 0xcbf29ce484222325u64;
+            h(&mut acc, &c.wet.vol);
+            h(&mut acc, &c.wet.solv);
+            h(&mut acc, &c.film);
+            println!("FP step {step} wait {m}: {acc:016x}");
+        }
     }
 
 }

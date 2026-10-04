@@ -203,7 +203,7 @@ fn c08_a_hundredth_of_thinner_is_a_small_change() {
 /// Every minute, at every pixel whose paint changed by at most 1e-3 of
 /// itself (spreading barely touched it) and still holds ≥ 0.01 µm of
 /// solvent: the share of its solvent left equals exp(-1 min / τ(h)) within
-/// 1e-4 + 2 × the paint's relative change (a pixel whose paint moved by δ
+/// 2e-4 + 2 × the paint's relative change (a pixel whose paint moved by δ
 /// can have its solvent moved by about that much again). At least 200 such
 /// pixel-minutes in each film; the thick film loses a smaller share per
 /// minute. Immediate loss, linear loss or a wrong rate fail. Also: τ is
@@ -247,7 +247,9 @@ fn c09_the_solvent_evaporates_and_the_film_loses_its_volume() {
                 }
                 let want = (-1.0f64 / evaporation_tau_min(ph[i])).exp();
                 let got = b / a;
-                assert!((got - want).abs() <= 1e-4 + 2.0 * d, "minute {m}, pixel {i} ({} µm of paint): {got} of its solvent left, the law gives {want}", ph[i]);
+                // 2e-4, was 1e-4: the owner's decision of 2026-10-04 (ACCEPTANCE.md,
+                // "Decisions"), when the flow lost its FLOW_MIN cutoff
+                assert!((got - want).abs() <= 2e-4 + 2.0 * d, "minute {m}, pixel {i} ({} µm of paint): {got} of its solvent left, the law gives {want}", ph[i]);
                 loss[gi].push(1.0 - got);
             }
         }

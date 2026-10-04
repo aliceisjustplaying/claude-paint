@@ -119,7 +119,8 @@ fn direct_films() {
 /// (phi 0.5, 20 µm liquid with a ±50% 2 mm ripple) alone, and with a
 /// separate high-solvent below-floor patch (phi 0.95, 0.667 µm liquid) in the
 /// same dirty region; then the same thin patch touching the active one, so
-/// it receives liquid and can become active during the step. Each run as
+/// it receives liquid and can become active during the step; and a thick
+/// (10 µm) phi 0.95 patch, a real donor, separate. Each run as
 /// one direct `spread(1)` (the review's frozen-coefficient test) and as one
 /// minute on the 1/64-minute grid. Logged: the largest mobility, the largest
 /// donor-eligible mobility, requested/used substeps, scheduled minutes, the
@@ -131,27 +132,28 @@ fn mixed_field() {
     let act = (40, 60, 100, 120);
     let far = (160, 60, 220, 120);
     let near = (100, 60, 160, 120);
-    let cases: [(&str, Option<(usize, usize, usize, usize)>); 3] = [("active only", None), ("+ separate thin phi .95", Some(far)), ("+ adjacent thin phi .95", Some(near))];
+    let cases: [(&str, Option<(usize, usize, usize, usize)>, f32); 4] = [("active only", None, 0.0), ("+ separate thin phi .95", Some(far), 2.0 / 3.0), ("+ adjacent thin phi .95", Some(near), 2.0 / 3.0), ("+ separate 10 µm phi .95", Some(far), 10.0)];
     let mut ends: Vec<Vec<f32>> = Vec::new();
     for (how, ticks) in [("spread(1)", 1u32), ("64 x spread(1/64)", super::FLOW_TICKS)] {
         println!("-- {how}");
-        println!("case                      | m_max   m_donor | requested used | scheduled_min | active moved%  | max |Δ active| vs active-only (µm) | dpaint_rel dsolv_rel");
+        println!("case                      | m_max   m_donor m_peak | requested used | scheduled_min | active moved%  | max |Δ active| vs active-only (µm) | dpaint_rel dsolv_rel");
         ends.clear();
-        for (name, thin) in cases {
+        for (name, thin, thin_um) in cases {
             let mut c = smooth(260);
             lay(&mut c, act, 20.0, 0.5, 0.5, 1);
             if let Some(r) = thin {
-                lay(&mut c, r, 2.0 / 3.0, 0.95, 0.0, 2);
+                lay(&mut c, r, thin_um, 0.95, 0.0, 2);
             }
             c.wet.touch(0, 0, 260, 180);
             let w = c.f.w;
             let v0 = c.wet.vol.clone();
             let (p0, s0) = sums(&c);
-            let (mut m_max, mut m_don, mut req, mut used, mut sched) = (0.0f32, 0.0f32, 0usize, 0usize, 0.0f64);
+            let (mut m_max, mut m_don, mut m_peak, mut req, mut used, mut sched) = (0.0f32, 0.0f32, 0.0f32, 0usize, 0usize, 0.0f64);
             for _ in 0..ticks {
                 let f = c.spread(1.0 / ticks as f32);
                 m_max = m_max.max(f.m_max);
                 m_don = m_don.max(f.m_donor);
+                m_peak = m_peak.max(f.m_peak);
                 req = req.max(f.requested);
                 used += f.used;
                 sched += f.scheduled_min as f64;
@@ -163,7 +165,7 @@ fn mixed_field() {
             let a1: Vec<f32> = idx.iter().map(|&i| c.wet.vol[i]).collect();
             let dev = ends.first().map_or(0.0, |e: &Vec<f32>| e.iter().zip(&a1).map(|(p, q)| (p - q).abs() * COAT_UM).fold(0.0f32, f32::max));
             println!(
-                "{name:25} | {m_max:.4} {m_don:.4} | {req:9} {used:4} | {sched:13.4} | {:13.4} | {dev:.3e} | {:+.1e} {:+.1e}",
+                "{name:25} | {m_max:.4} {m_don:.4} {m_peak:.4} | {req:9} {used:4} | {sched:13.4} | {:13.4} | {dev:.3e} | {:+.1e} {:+.1e}",
                 100.0 * moved(&a0, &a1),
                 (p1 - p0) / p0,
                 (s1 - s0) / s0
@@ -287,6 +289,39 @@ fn brush_strokes() {
                 100.0 * moved(&v0, &c.wet.vol),
                 (c.wet_total() - p0) / p0
             );
+        }
+    }
+}
+
+/// Where `wait(30)`'s time goes on `thinner::tests::wait_cost`'s scene
+/// (12 strokes at thinner 0.5, 2400 px): the same 30 minutes as
+/// evaporate + spread on each 1/64-minute tick (no oil ageing), with the
+/// substeps used and the wall time of the flow, per 5 minutes.
+#[test]
+#[ignore]
+fn cost_split() {
+    let mut c = Canvas::new(2400, 1.5, hex("#d8cdb8")).with_engine(3);
+    c.prime(hex("#b9a98c"), 0.9, 40.0, 0.6, 0.0, 7);
+    for k in 0..12 {
+        let y = 150.0 + 25.0 * k as f32;
+        let mut h = Held::new(Tool::hog_flat(40.0), 10 + k);
+        h.load(paint().with_thinner(0.5), 0.9);
+        c.drag(&mut h, &Gesture::new(vec![(150.0, y), (850.0, y + 3.0)]).pressure(0.85, 0.85), None);
+    }
+    c.wait(0.0);
+    let dt = 1.0 / super::FLOW_TICKS as f32;
+    let (mut used, mut secs) = (0usize, 0.0f64);
+    for m in 0..30 {
+        for _ in 0..super::FLOW_TICKS {
+            c.evaporate(dt);
+            let t = std::time::Instant::now();
+            used += c.spread(dt).used;
+            secs += t.elapsed().as_secs_f64();
+        }
+        if m % 5 == 4 {
+            let thin = (0..c.wet.vol.len()).filter(|&i| c.wet.solv[i] > 0.0 && c.wet.vol[i] * COAT_UM + c.wet.solv[i] <= 2.0).count();
+            let any = c.wet.solv.iter().filter(|&&s| s > 0.0).count();
+            println!("to minute {:2}: substeps {used:5}, flow {secs:6.2} s; pixels with solvent {any}, of them liquid <= 2 µm {thin}", m + 1);
         }
     }
 }

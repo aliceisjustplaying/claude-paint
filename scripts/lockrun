@@ -19,15 +19,21 @@ How it works (Python standard library only; macOS and Linux):
   the lock never touches the previous job's record. Every start and finish is
   also appended to history.jsonl there.
 - The command runs in its own session and process group. It starts through a
-  small trampoline that blocks on a pipe: the helper first writes the record
-  (owner, command, process group, a unique token and the start time), then
-  sends the go byte. If the helper dies before that, the pipe reaches end of
-  file and the trampoline exits (code 125) without running the command.
-- The job's processes inherit the locked file descriptor, so the lock stays
-  held until the helper and every process that kept the descriptor have
-  exited. If the helper is killed while the job lives, a second lockrun keeps
-  waiting. As a second guard, a lockrun that gets the lock still waits while
-  the previous record says "running" and that record's process group exists.
+  small trampoline (the group's leader) that blocks on a pipe: the helper
+  first writes the record (owner, command, process group, a unique token and
+  the start time), then sends the go byte. If the helper dies before that,
+  the pipe reaches end of file and the trampoline exits (code 125) without
+  running the command.
+- The trampoline holds an inherited copy of the locked descriptor and runs
+  the command as its child without it. So if the helper is killed while the
+  job runs, the lock stays held until the command exits, and a daemon the job
+  starts (sccache's server: it inherited the lock in a first version and kept
+  it after the build) never holds the lock. As a second guard, a lockrun
+  that gets the lock still waits while the previous record says "running"
+  and live processes remain in that record's process group (a job's
+  leftovers, or a command whose trampoline was killed too). A process that
+  leaves the group (setsid: a daemon) is not the job's any more and is
+  neither waited for nor stopped.
 - --timeout (required) stops the whole process group (SIGTERM, then SIGKILL
   after --grace seconds, default 5), keeps the log, marks the record
   "timeout" and exits 124. SIGINT, SIGTERM or SIGHUP to the helper does the
@@ -69,11 +75,15 @@ EXIT_CANCELLED = 130
 EXIT_BUSY = 75
 EXIT_ERROR = 125
 
-# The trampoline: argv = [python, -c, TRAMPOLINE, <read fd>, CMD...]. It waits
-# for the go byte; end of file (the helper died) means exit without working.
+# The trampoline: argv = [python, -c, TRAMPOLINE, <read fd>, <lock fd>, CMD...].
+# It waits for the go byte (end of file: the helper died, so exit without
+# working), then runs CMD as its child in the same process group and holds
+# the locked descriptor until CMD exits. CMD and everything it starts never
+# get the descriptor, so a daemon the job starts (an sccache server, say)
+# can't keep the lock after the job ends.
 TRAMPOLINE = r"""
-import os, sys
-fd = int(sys.argv[1])
+import os, subprocess, sys
+fd, lock = int(sys.argv[1]), int(sys.argv[2])
 try:
     go = os.read(fd, 1)
 except OSError:
@@ -82,11 +92,19 @@ if go != b"G":
     sys.stderr.write("lockrun: the helper died before giving the job permission; not running it\n")
     os._exit(125)
 os.close(fd)
+os.set_inheritable(lock, False)
 try:
-    os.execvp(sys.argv[2], sys.argv[2:])
+    p = subprocess.Popen(sys.argv[3:], close_fds=True)
 except OSError as e:
-    sys.stderr.write("lockrun: cannot run %s: %s\n" % (sys.argv[2], e))
+    sys.stderr.write("lockrun: cannot run %s: %s\n" % (sys.argv[3], e))
     os._exit(127)
+while True:
+    try:
+        rc = p.wait()
+        break
+    except KeyboardInterrupt:
+        continue
+os._exit(rc if rc >= 0 else 128 - rc)
 """
 
 
@@ -391,12 +409,12 @@ def main():
     t0 = time.monotonic()
     try:
         r, w = os.pipe()  # both non-inheritable; r is passed to the trampoline only
-        env = dict(os.environ, LOCKRUN_TOKEN=token, LOCKRUN_LOCK_FD=str(lock_fd))
+        env = dict(os.environ, LOCKRUN_TOKEN=token)
         hold = env.pop("LOCKRUN_TEST_HOLD_BEFORE_GO", None)  # test hook (scripts/tests/lockrun.sh)
         logf = open(log, "ab")
         try:
             proc = subprocess.Popen(
-                [sys.executable, "-c", TRAMPOLINE, str(r)] + args.cmd,
+                [sys.executable, "-c", TRAMPOLINE, str(r), str(lock_fd)] + args.cmd,
                 stdin=subprocess.DEVNULL, stdout=logf, stderr=subprocess.STDOUT,
                 pass_fds=(r, lock_fd), start_new_session=True, env=env)
         finally:

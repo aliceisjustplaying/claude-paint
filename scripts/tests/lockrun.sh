@@ -2,15 +2,15 @@
 # scripts/lockrun with tiny dummy jobs (sleep, echo, python one-liners):
 # normal completion, the record written before work begins, timeout,
 # cancellation (SIGINT, SIGTERM), leftovers, waiting without erasing the
-# previous record, --lock-timeout, a helper killed while its job lives (with
-# and without the job keeping the lock descriptor), a helper killed before it
-# gives the job permission, nesting, a stale token, and an unrelated process
+# previous record, --lock-timeout, a helper killed while its job lives (and
+# with it the trampoline that holds the lock), a daemon leaving the job, a
+# helper killed before it gives the job permission, nesting, a stale token, and an unrelated process
 # that must survive all of it.
 #
 #   scripts/tests/lockrun.sh
 #
 # Each case uses its own lock directory (LOCKRUN_DIR) under a temporary
-# directory, never the machine's real lock. Takes about 40 s.
+# directory, never the machine's real lock. Takes about 20 s.
 set -euo pipefail
 repo=$(cd "$(dirname "$0")/../.." && pwd)
 L=$repo/scripts/lockrun
@@ -151,7 +151,8 @@ set -e
 wait "$a"
 ok "--lock-timeout: exit 75, nothing ran, record untouched"
 
-# 9. The helper is killed (SIGKILL) while its job lives: no second job starts until the job ends.
+# 9. The helper is killed (SIGKILL) while its job lives: no second job starts until the job ends
+#    (the trampoline still holds the lock).
 D=$(case_dir crash)
 LOCKRUN_DIR=$D "$L" --timeout 60 --owner A --quiet -- sleep 4 2>/dev/null &
 helper=$!
@@ -164,34 +165,49 @@ LOCKRUN_DIR=$D "$L" --timeout 20 --lock-timeout 1 --quiet -- touch "$D/b.ran" 2>
 code=$?
 set -e
 [ $code = 75 ] && [ ! -f "$D/b.ran" ] || fail "crash: a second job ran while the orphaned job lived (exit $code)"
-grep -q 'waiting for the lock held by A' "$D/b.err" || fail "crash: the flock itself was not held by the orphaned job"
+grep -q 'waiting for the lock held by A' "$D/b.err" || fail "crash: the flock itself was not held by the orphaned job's trampoline"
 wait_until 15 sh -c "! kill -0 $job 2>/dev/null" || fail "crash: the job did not end"
 LOCKRUN_DIR=$D "$L" --timeout 20 --lock-timeout 5 --quiet -- touch "$D/c.ran" 2>/dev/null || fail "crash: the lock stayed held after the job ended"
 [ -f "$D/c.ran" ] || fail "crash: C did not run"
 grep -q '"event": "abandoned"' "$D/history.jsonl" || fail "crash: the abandoned job was not noted"
-ok "helper killed with its job alive: the inherited lock keeps others out until the job ends"
+ok "helper killed with its job alive: the trampoline's lock keeps others out until the job ends"
 
-# 10. The same, but the job closed its copy of the lock descriptor: the record's group guard holds.
-D=$(case_dir crash_nofd)
-LOCKRUN_DIR=$D "$L" --timeout 60 --owner A --quiet -- python3 -c '
-import os, time
-os.close(int(os.environ["LOCKRUN_LOCK_FD"]))
-time.sleep(4)' 2>/dev/null &
+# 10. The helper and the trampoline (the lock holder) are both killed while the command
+#     lives on in the group: the record's process-group guard keeps others out.
+D=$(case_dir crash_both)
+LOCKRUN_DIR=$D "$L" --timeout 60 --owner A --quiet -- sh -c "echo \$\$ > '$D/pid.cmd'; exec sleep 4" 2>/dev/null &
 helper=$!
-wait_until 10 running "$D" || fail "crash_nofd: A did not start"
-job=$(rec "$D" pid)
-sleep 0.5  # let the job close its descriptor
-kill -9 "$helper"; wait "$helper" 2>/dev/null || true
-alive "$job" || fail "crash_nofd: the job died with its helper"
+wait_until 10 running "$D" && wait_until 10 test -s "$D/pid.cmd" || fail "crash_both: A did not start"
+tramp=$(rec "$D" pid)
+cmd=$(cat "$D/pid.cmd")
+kill -9 "$helper" "$tramp"; wait "$helper" 2>/dev/null || true
+alive "$cmd" || fail "crash_both: the command died with its helper"
 set +e
 LOCKRUN_DIR=$D "$L" --timeout 20 --lock-timeout 1 --quiet -- touch "$D/b.ran" 2>"$D/b.err"
 code=$?
 set -e
-[ $code = 75 ] && [ ! -f "$D/b.ran" ] || fail "crash_nofd: a second job ran (exit $code)"
-grep -q "helper is gone but its process group lives" "$D/b.err" || fail "crash_nofd: no guard message"
-wait_until 15 sh -c "! kill -0 $job 2>/dev/null" || fail "crash_nofd: the job did not end"
-LOCKRUN_DIR=$D "$L" --timeout 20 --lock-timeout 5 --quiet -- touch "$D/c.ran" 2>/dev/null || fail "crash_nofd: lock not free after the job ended"
-ok "helper killed, job dropped the descriptor: the process-group guard keeps others out"
+[ $code = 75 ] && [ ! -f "$D/b.ran" ] || fail "crash_both: a second job ran (exit $code)"
+grep -q "helper is gone but its process group lives" "$D/b.err" || fail "crash_both: no guard message"
+wait_until 15 sh -c "! kill -0 $cmd 2>/dev/null" || fail "crash_both: the command did not end"
+LOCKRUN_DIR=$D "$L" --timeout 20 --lock-timeout 5 --quiet -- touch "$D/c.ran" 2>/dev/null || fail "crash_both: lock not free after the command ended"
+ok "helper and lock holder killed, command alive: the process-group guard keeps others out"
+
+# 10b. A daemon the job starts (it leaves the group, as sccache's server does) neither
+#      keeps the lock after the job nor is stopped by lockrun.
+D=$(case_dir daemon)
+LOCKRUN_DIR=$D "$L" --timeout 20 --quiet -- sh -c "python3 -c '
+import os, sys, time
+os.setsid()
+open(sys.argv[1] + \".tmp\", \"w\").write(str(os.getpid()))
+os.rename(sys.argv[1] + \".tmp\", sys.argv[1])
+time.sleep(30)' '$D/pid.daemon' & while [ ! -s '$D/pid.daemon' ]; do sleep 0.05; done" 2>/dev/null || fail "daemon: the job failed"
+daemon=$(cat "$D/pid.daemon")
+alive "$daemon" || fail "daemon: lockrun stopped a process outside the job's group"
+LOCKRUN_DIR=$D "$L" --timeout 20 --lock-timeout 2 --quiet -- touch "$D/b.ran" 2>/dev/null || fail "daemon: the daemon kept the lock"
+[ -f "$D/b.ran" ] || fail "daemon: B did not run"
+alive "$daemon" || fail "daemon: the daemon was stopped"
+kill "$daemon"
+ok "a daemon that leaves the job's group doesn't hold the lock and isn't stopped"
 
 # 11. The helper dies before giving permission: the job exits without working; the lock frees.
 D=$(case_dir before_go)

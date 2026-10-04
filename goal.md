@@ -33,3 +33,7 @@ Scaffold; looking pilot; commands, canvas and sessions foundations; passages as 
 ## State ownership
 
 Commands owns transaction, client disconnect and persistence failure. Canvas owns setup and coordinates. Sessions owns process lifecycle and selection. Passages owns mask overrun, clipping and area handling. Brushes owns held brush state. Rags owns cloth state. Shapes owns mask construction. Space owns depth restrictions. Time owns aging. Looking owns rendered views. Delivery owns exported files and finishing. Harness owns model-request context and tool presentation. Studio owns browser state; it never changes a painting.
+
+- Live look size defaults to 1000 and clamps to 1–1600 pixels on the long side; it never enlarges the source. Crop limit is 1200 pixels per side (500 logical units live). Looking owns these numbers.
+- Painting time starts at day 1, 09:00. Time owns the wait limit, slice cadence and palette-trip timing. Ground preparation is outside the painting clock.
+- Runtime probe at aspect 5 printed H as 199.99998474121094: logical dimensions use floating-point arithmetic. The 1000/aspect model is mathematical, not a guarantee of exact decimal output.

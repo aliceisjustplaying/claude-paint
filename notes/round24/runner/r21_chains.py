@@ -184,7 +184,7 @@ SITTING_MESSAGE = ("You're back at the easel. The painting is as you left it. "
                    "Your brief is in BRIEF.md and your journal in notes/journal.md.")
 # A painter works in up to MAX_SITTINGS sittings (completed ones, and crashed ones that painted); it stops
 # earlier after a sitting it ends itself without adding paint
-MAX_SITTINGS = 4
+MAX_SITTINGS = 4                                 # default; run/max_sittings.txt is read between sittings
 MAX_CRASHES = 6                                   # crashed sittings (in all) before a painter is stopped
 # only after a usage limit that held for a day (painter.ts waits out shorter ones with nothing added)
 CONTINUE_MESSAGE = "Carry on where you left off."
@@ -907,8 +907,19 @@ def paint(name, n, d, rd):
         if s.get("status") == "limited" and "worked" not in s:      # an older runner didn't record it
             s["worked"] = session_worked(s.get("sessions") or [])
     save_sittings(rd, n, sittings)
+    sitting_cap = MAX_SITTINGS
+    cap_file = RUN / "max_sittings.txt"
     while True:
-        step, k = next_step(sittings)
+        try:
+            cap = int(cap_file.read_text().strip())
+            if cap < 1:
+                raise ValueError("expected a positive integer")
+            sitting_cap = cap
+        except FileNotFoundError:
+            pass
+        except (OSError, ValueError) as e:
+            log(f"{tag}: keeping sitting cap {sitting_cap}; {cap_file.name}: {e}")
+        step, k = next_step(sittings, max_sittings=sitting_cap)
         if step is None:
             why_done = k
             log(f"{tag}: {why_done}")

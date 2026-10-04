@@ -2,6 +2,14 @@
 
 ## Current state
 
+- **Launched October 4, 2026 at 22:56 BST.** `round-24` pins `d8a995b`.
+  `INNS1` is `paint-studio-ea8319`, running `claude-fable-5-1` with high
+  thinking through pi-black. The canvas is initialized on engine 3.
+  OBS is streaming the matching studio; [launch preview](readiness/obs-live.png).
+  Website publication is active at
+  <https://stillwet.art/studio/?p=paint-studio-ea8319>; the public session
+  list and event export include the new painter. Runner process was
+  detached with `caffeinate` and logs to the gallery's `run/runner.INNS.out`.
 - October 4, 2026: painting candidate is the `round-24` tag. The old Pi agents are
   stopped and their lane worktrees removed. Development is on the M3.
 - Exchange stays off; lane A's experiment is retained on `e3/a-exchange`,
@@ -54,7 +62,9 @@
 
 The owner authorized launch with `claude-fable-5-1`, website sync and OBS
 streaming. The model retains high thinking and pi-black.
-Raw verification logs are local evidence, not publication files.
+Committed verification logs have local identity paths redacted. Their
+original hashes remain in `all.json` alongside redacted hashes; the raw
+evidence archive stays local in `.git/round24-original-readiness.tgz`.
 
 ## What is set
 

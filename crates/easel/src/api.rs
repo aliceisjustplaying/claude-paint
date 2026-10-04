@@ -27,6 +27,8 @@ use std::rc::{Rc, Weak};
 mod draw_pencil;
 #[path = "draw_rag.rs"]
 mod draw_rag;
+#[path = "draw_soak.rs"]
+mod draw_soak;
 
 /// Grid spacing (units) that painter fields are sampled on.
 pub const FIELD_STEP: f32 = 2.0;
@@ -1229,7 +1231,7 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
         })?)?;
     }
 
-    // canvas{size=, aspect=, linen=, ground={...}, seed=}
+    // canvas{size=, aspect=, linen=, ground={...} or raw=, seed=}
     {
         let st = st.clone();
         g.set(
@@ -1241,7 +1243,8 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
                 if crate::legacy::asks(&o)? {
                     return crate::legacy::canvas(lua, &st, o);
                 }
-                check_keys(&o, &["size", "aspect", "linen", "ground", "seed"], "canvas")?;
+                let raw_ok = draw_soak::has_raw(st.borrow().tubes.engine);
+                check_keys(&o, if raw_ok { &["size", "aspect", "linen", "ground", "seed", "raw"] } else { &["size", "aspect", "linen", "ground", "seed"] }, "canvas")?;
                 if st.borrow().canvas.is_some() {
                     return err("the canvas is already set up (canvas{} is the first chunk)");
                 }
@@ -1258,11 +1261,19 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
                     return err("canvas: linen threads per cm, 4 to 60");
                 }
                 let tubes = st.borrow().tubes.clone();
-                let ground = ground_of(&tubes, &o.get::<Value>("ground")?)?;
+                // a raw canvas: no ground, the bare cloth
+                let fabric = if raw_ok { draw_soak::fabric_of(&o)? } else { None };
+                let ground = if fabric.is_some() { Vec::new() } else { ground_of(&tubes, &o.get::<Value>("ground")?)? };
                 let seed = o.get::<Option<u64>>("seed")?.unwrap_or(1);
-                let sty = Style { name: "oil", width_mm: mm, linen: Linen { warp_per_cm: warp, weft_per_cm: weft, ..Linen::fine(1) }, ground, ..Style::oil_with((*tubes).clone()) };
+                let mut sty = Style { name: "oil", width_mm: mm, linen: Linen { warp_per_cm: warp, weft_per_cm: weft, ..Linen::fine(1) }, ground, ..Style::oil_with((*tubes).clone()) };
+                if let Some(f) = fabric {
+                    sty.raw = f.color;
+                }
                 let width = st.borrow().width;
                 let mut c = sty.prepare(width, aspect, seed);
+                if let Some(f) = fabric {
+                    c.raw_canvas(f, seed);
+                }
                 let h = c.height();
                 {
                     let mut s = st.borrow_mut();
@@ -1275,7 +1286,10 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
                     s.hand = time::Hand::default();
                     s.canvas = Some(c);
                     s.style = Some(Rc::new(sty));
-                    s.setup = Some(format!("size={}, aspect={aspect}, linen={{{warp}, {weft}}}, seed={seed}", fmt_num(mm)));
+                    s.setup = Some(match fabric {
+                        None => format!("size={}, aspect={aspect}, linen={{{warp}, {weft}}}, seed={seed}", fmt_num(mm)),
+                        Some(f) => format!("size={}, aspect={aspect}, linen={{{warp}, {weft}}}, raw={:?}, seed={seed}", fmt_num(mm), f.name),
+                    });
                 }
                 let gl = lua.globals();
                 // whole numbers as Lua integers (so `print(H)` says 714, not 714.0)
@@ -1512,6 +1526,9 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
     if draw_rag::has_rag(st.borrow().tubes.engine) {
         draw_rag::install(lua, st.clone())?;
     }
+    if draw_soak::has_raw(st.borrow().tubes.engine) {
+        draw_soak::install(lua, st.clone())?;
+    }
     crate::draw_outline::install(lua, st.clone())?;
     crate::draw_edges::install(lua, st.clone())?;
     Ok(())
@@ -1520,7 +1537,7 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
 
 
 
-const CANVAS_HELP: &str = "canvas{size=<mm>, aspect=<width / height>, linen=<threads per cm>, ground={{pile={{\"<tube>\", <parts>}, ...}, um=<µm>, apply=\"<knife|roller|brush>\"}, ...}, seed=<n>}\n  size: width in mm; aspect: width / height; linen: threads per cm (or {warp, weft});\n  ground: layers bottom first, each a pile of tubes, a thickness in µm and how it is put on (\"knife\", \"roller\" or \"brush\"; a knife takes texture=0..1)";
+const CANVAS_HELP: &str = "canvas{size=<mm>, aspect=<width / height>, linen=<threads per cm>, ground={{pile={{\"<tube>\", <parts>}, ...}, um=<µm>, apply=\"<knife|roller|brush>\"}, ...}, seed=<n>}\n  size: width in mm; aspect: width / height; linen: threads per cm (or {warp, weft});\n  ground: layers bottom first, each a pile of tubes, a thickness in µm and how it is put on (\"knife\", \"roller\" or \"brush\"; a knife takes texture=0..1)\n  or raw=\"cotton duck\" (or \"linen\") and no ground: the bare cloth (engine 3)";
 
 /// Ground layers from `{{pile={{tube, parts}, ...}, um=, apply=, texture=}, ...}`,
 /// bottom first: each the paste its tubes make (masstone, hiding, stiffness).
@@ -1561,6 +1578,47 @@ mod tests {
 
     fn run(src: &str) -> Result<String, String> {
         Session::replay(200).unwrap().run(src).map(|r| r.out)
+    }
+
+    // a raw canvas takes no ground: an empty table is none, anything in it
+    // (in either part of the table) is refused
+    #[test]
+    fn a_raw_canvas_refuses_a_ground() {
+        if let Err(e) = run(r#"canvas{size=300, aspect=1, linen=15, raw="cotton duck", ground={}}"#) {
+            panic!("{e}");
+        }
+        for g in ["{um=50}", r#"{{pile={{"lead white", 1}}, um=50, apply="knife"}}"#] {
+            let e = run(&format!(r#"canvas{{size=300, aspect=1, linen=15, raw="cotton duck", ground={g}}}"#)).unwrap_err();
+            assert!(e.contains("a raw canvas has no ground"), "{g}: {e}");
+        }
+        let e = run(r#"canvas{size=300, aspect=1, linen=15, raw="burlap"}"#).unwrap_err();
+        assert!(e.contains("names the cloth"), "{e}");
+    }
+
+    // soaked(x, y) says what is in the cloth, on a raw canvas and a primed one
+    #[test]
+    fn soaked_says_what_is_in_the_cloth() {
+        let out = run(r#"canvas{size=300, aspect=1, linen=15, raw="linen"}
+            print(soaked(500, 500)); print(soaked(-5, 500))"#).unwrap();
+        assert_eq!(out, "raw\noutside the canvas\n");
+        let out = run(r#"canvas{size=300, aspect=1, linen=15, ground={{pile={{"lead white", 1}}, um=50, apply="knife"}}}
+            print(soaked(500, 500))"#).unwrap();
+        assert_eq!(out, "primed (nothing soaks in)\n");
+    }
+
+    // engines 1 and 2 keep their language: a raw canvas is engine 3's
+    #[test]
+    fn older_engines_have_no_raw_canvas() {
+        for e in [1u32, 2] {
+            let mut t = paint::Palette::tube_box();
+            t.engine = e;
+            let mut s = Session::replay_with(200, t).unwrap();
+            let err = s.run(r#"canvas{size=300, aspect=1, linen=15, raw="cotton duck"}"#).unwrap_err();
+            assert!(err.contains("raw"), "engine {e}: {err}");
+            let err = s.run(r#"canvas{size=300, aspect=1, linen=15, ground={{pile={{"lead white", 1}}, um=50, apply="knife"}}}
+                print(soaked(500, 500))"#).unwrap_err();
+            assert!(err.contains("soaked"), "engine {e}: {err}");
+        }
     }
 
     // math.random: stock Lua's errors, whole 64-bit ranges, and the draws

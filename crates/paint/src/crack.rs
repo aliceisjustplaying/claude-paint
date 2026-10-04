@@ -1353,7 +1353,19 @@ impl Canvas {
         // cracks are the same ones); only the window is rasterized
         let net = network(k, [f.full_w as f32 * px, f.full_h as f32 * px], pitch);
         let local = self.crack_local(k);
-        let r = raster_window(&net, k, &local, (f.x0, f.y0, f.w, f.h), px);
+        let mut r = raster_window(&net, k, &local, (f.x0, f.y0, f.w, f.h), px);
+        // a raw canvas (`crate::soak`) has no ground: the bare cloth has
+        // nothing brittle to break, so cracks run only through its paint
+        // and stop where the paint ends (fading out over the thinnest films)
+        if self.soak.is_some() {
+            let film = &self.film;
+            (&mut r.cover, &mut r.shoulder, &mut r.dz).into_par_iter().enumerate().for_each(|(i, (c, sh, dz))| {
+                let t = crate::smoothstep(0.0, RAW_FILM, film[i]);
+                *c *= t;
+                *sh *= t;
+                *dz *= t;
+            });
+        }
         self.surf_gen += 1;
         self.height.par_iter_mut().zip(&r.dz).for_each(|(z, d)| *z += d);
         // an open crack is a deep narrow slot: it traps light (its walls and
@@ -1500,6 +1512,9 @@ const WALL_THIN: f32 = 0.5;
 const WALL_THICK: f32 = 0.15;
 /// Reflectance left in an open crack (its shadowed slot) before grime.
 const SLOT: f32 = 0.35;
+/// On a raw canvas, the film (coats) over which cracks reach their full
+/// strength: they fade out over thinner paint and stop at the bare cloth.
+const RAW_FILM: f32 = 0.2;
 /// The color a crack's walls show where they cut the ground, a
 /// fixed value independent of the canvas's ground color: a yellowed lead
 /// white and chalk layer over warm ocher and red earth layers (an
@@ -1978,6 +1993,30 @@ mod tests {
     /// That includes the paint sampled under the cracks: its averaging grid
     /// is anchored to the canvas, not to the crop's corner, so the test crop
     /// deliberately does not start on a cell boundary.
+    /// A raw canvas cracks only through its paint: the bare cloth beside a
+    /// band of paint keeps its colour and relief, the band cracks as on any
+    /// canvas.
+    #[test]
+    fn a_raw_canvas_cracks_only_through_its_paint() {
+        let mut c = Canvas::new(300, 1.0, [0.8; 3]).with_size_mm(60.0);
+        c.raw_canvas(crate::soak::Fabric::cotton_duck(), 3);
+        let w = c.f.w;
+        let band = |i: usize| (100..200).contains(&(i / w));
+        for i in 0..c.px.len() {
+            if band(i) {
+                c.film[i] = 1.0;
+                c.px[i] = [0.3, 0.25, 0.2];
+            }
+        }
+        let (px0, h0) = (c.px.clone(), c.height.clone());
+        c.crack(&Cracks { vary: 0.0, veil: 0.0, patchy: 0.0, ..Cracks::aged(3) });
+        let changed = |i: usize| c.px[i] != px0[i] || c.height[i] != h0[i];
+        let bare = (0..c.px.len()).filter(|&i| !band(i)).filter(|&i| changed(i)).count();
+        let paint = (0..c.px.len()).filter(|&i| band(i)).filter(|&i| changed(i)).count();
+        assert_eq!(bare, 0, "the bare cloth cracked");
+        assert!(paint > 100 * w / 50, "the paint barely cracked: {paint} pixels");
+    }
+
     #[test]
     fn crop_cracks_like_the_whole() {
         let k = Cracks::aged(4);

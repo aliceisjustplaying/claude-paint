@@ -1,0 +1,65 @@
+    Finished `release` profile [optimized] target(s) in 42.52s
+     Running unittests src/lib.rs (/var/folders/6k/24182wv136749r3p852rft740000gn/T//e3review/target/release/deps/paint-8efe25c759618314)
+
+running 1 test
+fixture built in 3.3s
+center px 103680; initial film: brushed 69.294 um, uniform 69.294 um
+
+[S] reproduce packet numbers (damp .5, p .8, step .5 mm, one wipe): center film left %
+  brushed  LIFT 1: 12.381% left (8.579 um)
+  brushed  LIFT 2: 4.755% left (3.295 um)
+  brushed  LIFT 4: 1.991% left (1.380 um)
+  uniform  LIFT 1: 12.437% left (8.618 um)
+  uniform  LIFT 2: 5.021% left (3.479 um)
+  uniform  LIFT 4: 2.161% left (1.498 um)
+
+[R01] center film left % vs paint stamp step (uniform 69.29 um film, p .8, one wipe)
+  step_mm  stamps  | LIFT4 damp | LIFT4 dry | LIFT1 damp | LIFT1 dry
+        8  |     4.690 |    31.570 |    14.601 |    69.635   (stamps 22)
+        4  |     2.439 |    28.799 |    13.072 |    68.402   (stamps 44)
+        2  |     2.265 |    27.824 |    12.759 |    67.812   (stamps 88)
+        1  |     2.185 |    27.340 |    12.568 |    67.521   (stamps 176)
+      0.5  |     2.161 |    27.060 |    12.437 |    67.356   (stamps 352)
+     0.25  |     2.158 |    26.949 |    12.406 |    67.278   (stamps 704)
+test rag::tests::review_probe has been running for over 60 seconds
+    0.125  |     2.162 |    26.890 |    12.389 |    67.228   (stamps 1408)
+
+[R01/R02] accumulated contact over the center, and how well ln(film left) follows it (uniform film)
+  LIFT 1 damp 0.5: accumulated contact min 0.347 p05 0.552 median 0.700 p95 0.827 max 0.885; px with <0.02: 0 of 103680; corr(ln left, contact) r = -0.368
+  LIFT 1 damp 0: accumulated contact min 0.347 p05 0.552 median 0.700 p95 0.827 max 0.885; px with <0.02: 0 of 103680; corr(ln left, contact) r = -0.260
+  LIFT 4 damp 0: accumulated contact min 0.347 p05 0.552 median 0.700 p95 0.827 max 0.885; px with <0.02: 0 of 103680; corr(ln left, contact) r = -0.282
+
+[R02] per-stamp contact value inside the pad (all stamps of one wipe): c=0 11.0%, 0<c<1 10.1%, c=1 78.9%
+       histogram of 0<c<1 in tenths: [11834, 6090, 5370, 5363, 5299, 5748, 6452, 7649, 10479, 50170]
+
+[R03] same 176 mm line, different vertex counts (brushed film, LIFT 4, damp .5, p .8)
+  points  stamps  mech_substeps  center_left%  mean|dfilm| um (center)  max|dfilm| um  cloth node rms shift mm  lifted mm3
+       2     352            900        1.991                  0.0000          0.000                  0.0000  493.909
+       3     352            932        1.989                  0.0116          1.975                  0.0825  494.047
+      41     360            720        1.988                  0.0096          2.825                  0.0461  493.841
+     401     400            800        1.987                  0.0080          1.847                  0.0026  494.033
+     881     880            880        1.977                  0.0130          2.136                  0.0435  494.153
+    1761    1760           1760        1.991                  0.0185          3.070                  0.2213  495.322
+    3521    3520           3520        1.997                  0.0210          3.112                  0.2949  495.983
+  (for scale: mean film left in the 2-point run is 1.380 um)
+  LIFT 1, 401 points: center left 12.405% (2 points: 12.381%), mean|dfilm| 0.0614 um of mean 8.579 um left
+  LIFT 1, 1761 points: center left 12.311% (2 points: 12.381%), mean|dfilm| 0.1345 um of mean 8.579 um left
+
+[R04] image-space wander on this path: offset range -2.79..1.17 mm; sideways travel 6.1 mm over 176 mm forward (3.5%); peak sideways/forward speed 0.15
+
+[R05] cloth cells after wiping the brushed 69 um film (step .5 mm, p .8)
+  LIFT 4 damp 0.5 x1: cells used 359/361, over capacity 100, max fill 1.26, median used fill 0.79; held sum 493.9 mm3 (lifted 493.9); volume above capacity 13.6 mm3; rag.load 0.638 (global face capacity 774 mm3)
+  LIFT 4 damp 0.5 x2: cells used 359/361, over capacity 109, max fill 1.29, median used fill 0.87; held sum 522.0 mm3 (lifted 522.0); volume above capacity 17.4 mm3; rag.load 0.674 (global face capacity 774 mm3)
+  LIFT 4 damp 0 x1: cells used 360/361, over capacity 0, max fill 0.94, median used fill 0.44; held sum 320.1 mm3 (lifted 320.1); volume above capacity 0.0 mm3; rag.load 0.413 (global face capacity 774 mm3)
+  LIFT 4 damp 0 x2: cells used 360/361, over capacity 0, max fill 1.00, median used fill 0.59; held sum 402.9 mm3 (lifted 402.9); volume above capacity 0.0 mm3; rag.load 0.520 (global face capacity 774 mm3)
+  LIFT 1 damp 0.5 x1: cells used 359/361, over capacity 10, max fill 1.05, median used fill 0.61; held sum 412.9 mm3 (lifted 412.9); volume above capacity 0.5 mm3; rag.load 0.533 (global face capacity 774 mm3)
+
+[R08] mesh overlap during one wipe (step .5 mm)
+  damp 0.5, two wipes: triangles flipped over in xy 968 of 456192 (0.212%); raster cells claimed by two touching triangles >1.5 mesh cells apart: 0; adjacent touching raster cells whose material coords differ by >3 mesh cells: 0 of 2029706 (0.000%)
+  damp 0, two wipes: triangles flipped over in xy 968 of 456192 (0.212%); raster cells claimed by two touching triangles >1.5 mesh cells apart: 0; adjacent touching raster cells whose material coords differ by >3 mesh cells: 0 of 2029706 (0.000%)
+
+total 182.6s
+test rag::tests::review_probe ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 185 filtered out; finished in 182.61s
+

@@ -1,0 +1,11 @@
+untouched: identical pixels = True
+dry-1: identical pixels = True
+dry-2: identical pixels = True
+damp-1: identical pixels = True
+damp-2: identical pixels = True
+current/untouched: identical pixels to current = True
+current/ground: identical pixels to current = True
+half/untouched: identical pixels to current = True
+half/ground: identical pixels to current = True
+quarter/untouched: identical pixels to current = True
+quarter/ground: identical pixels to current = True

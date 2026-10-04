@@ -1,0 +1,202 @@
+diff -ruN engine3-rag-review/wip/thinner/crates/paint/src/thinner.rs work/thinner/crates/paint/src/thinner.rs
+--- engine3-rag-review/wip/thinner/crates/paint/src/thinner.rs	2026-10-04 13:21:14
++++ work/thinner/crates/paint/src/thinner.rs	2026-10-04 14:37:00
+@@ -142,6 +142,16 @@
+ /// cutoff, not a physical constant, as are `MAX_OUT` and the explicit
+ /// scheme's stability factor 0.2 in `spread`.
+ const MAX_SUBSTEPS: usize = 64;
++// ---- review probe (scratch copy only) ----
++pub mod probe {
++    use std::sync::atomic::{AtomicUsize, Ordering::Relaxed};
++    pub static MAX_SUB: AtomicUsize = AtomicUsize::new(64);
++    pub static CALLS: AtomicUsize = AtomicUsize::new(0);
++    pub static CAPPED: AtomicUsize = AtomicUsize::new(0);
++    pub static WORST_NEED: AtomicUsize = AtomicUsize::new(0);
++    pub fn reset(max_sub: usize) { MAX_SUB.store(max_sub, Relaxed); CALLS.store(0, Relaxed); CAPPED.store(0, Relaxed); WORST_NEED.store(0, Relaxed); }
++    pub fn read() -> (usize, usize, usize) { (CALLS.load(Relaxed), CAPPED.load(Relaxed), WORST_NEED.load(Relaxed)) }
++}
+ /// Most of a pixel's liquid that can leave it in one substep. A chosen
+ /// numerical cutoff.
+ const MAX_OUT: f32 = 0.5;
+@@ -208,7 +218,12 @@
+             return;
+         }
+         let r_total = m_max * dt / (dx * dx);
+-        let n = ((r_total / 0.2).ceil() as usize).clamp(1, MAX_SUBSTEPS);
++        let max_sub = probe::MAX_SUB.load(std::sync::atomic::Ordering::Relaxed);
++        let need = (r_total / 0.2).ceil() as usize;
++        probe::CALLS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
++        if need > max_sub { probe::CAPPED.fetch_add(1, std::sync::atomic::Ordering::Relaxed); }
++        probe::WORST_NEED.fetch_max(need, std::sync::atomic::Ordering::Relaxed);
++        let n = need.clamp(1, max_sub);
+         // the flow's rate per substep, per mm²/min of mobility
+         let k = (dt / n as f32 / (dx * dx)).min(0.2 / m_max.max(1e-12));
+         let (mut x0, mut y0, mut x1, mut y1) = (bx0, by0, bx1.min(w), by1.min(h));
+diff -ruN engine3-rag-review/wip/thinner/crates/paint/tests/review_thinner.rs work/thinner/crates/paint/tests/review_thinner.rs
+--- engine3-rag-review/wip/thinner/crates/paint/tests/review_thinner.rs	1970-01-01 01:00:00
++++ work/thinner/crates/paint/tests/review_thinner.rs	2026-10-04 14:38:04
+@@ -0,0 +1,164 @@
++//! Review probes (scratch copy only): the flow's clock phase (T05) and substep cap (T04).
++mod thinner_support;
++use paint::thinner::probe;
++use paint::{Canvas, Tool, hex};
++use thinner_support::*;
++
++fn l1(a: &[f32], b: &[f32]) -> f64 { a.iter().zip(b).map(|(x, y)| (x - y).abs() as f64).sum() }
++fn sum(a: &[f32]) -> f64 { a.iter().map(|&x| x as f64).sum() }
++
++/// T05: the same thinned patch, laid at different clock phases, then the same short wait.
++#[test]
++#[ignore = "review probe"]
++fn review_clock_phase() {
++    println!("[T05] same thinned patch (raw sienna, t 0.5, 300 px smooth canvas), laid at clock phase `start`, then wait 0.02 min");
++    println!("  start   clock_after_patch  flow calls in the 0.02 min  paint moved (L1 um-px)  share of all paint");
++    for start in [0.10f32, 0.50, 0.97, 0.99] {
++        let mut c = smooth_canvas(300);
++        c.wait(start);
++        thinned_patch(&mut c, raw_sienna(), 0.5, (150.0, 850.0), (300.0, 700.0), 51);
++        let t = c.clock();
++        let before = paint_um(&c);
++        probe::reset(64);
++        c.wait(0.02);
++        let after = paint_um(&c);
++        println!("  {start:5}   {t:17.4}  {:26}  {:22.3}  {:.4}%", probe::read().0, l1(&before, &after), 100.0 * l1(&before, &after) / sum(&before));
++    }
++    // how much the phase matters for the finished film: wait the solvent out from each phase
++    println!("[T05] the same patch after the solvent has gone (wait 40 min), against the patch laid at phase 0.01");
++    let run = |start: f32| {
++        let mut c = smooth_canvas(300);
++        c.wait(start);
++        thinned_patch(&mut c, raw_sienna(), 0.5, (150.0, 850.0), (300.0, 700.0), 51);
++        let laid = paint_um(&c);
++        c.wait(40.0);
++        (laid, paint_um(&c), c.solvent_total())
++    };
++    let (laid0, base, _) = run(0.01);
++    let flowed = l1(&laid0, &base);
++    println!("  (phase 0.01: the whole wait moved {:.2} um-px of paint, {:.3}% of it)", flowed, 100.0 * flowed / sum(&laid0));
++    for start in [0.25f32, 0.50, 0.75, 0.99] {
++        let (laid, end, solv) = run(start);
++        assert_eq!(laid, laid0, "the patch itself is laid alike at every phase");
++        let r = (250.0, 380.0, 750.0, 620.0);
++        let _ = r;
++        println!("  phase {start}: final paint differs from phase 0.01 by L1 {:.3} um-px = {:.2}% of all the flow that happened; solvent left {solv}", l1(&end, &base), 100.0 * l1(&end, &base) / flowed);
++    }
++}
++
++/// T04: does the 64-substep cap engage in a real thinned stroke at the painting's pixel size, and what does it change?
++#[test]
++#[ignore = "review probe"]
++fn review_substep_cap() {
++    println!("[T04] one thinned filbert stroke + 3 one-minute waits; canvas sized so one pixel is the painting's (440 mm / px)");
++    println!("  px_equiv  thinner  flow calls  capped calls  worst substeps needed  | paint L1 diff vs uncapped (um-px)  as share of what the uncapped flow moved");
++    for (px_equiv, px, mm) in [(2400usize, 600usize, 110.0f32), (3200, 800, 110.0), (4800, 1200, 110.0)] {
++        for t in [0.5f32, 0.8, 0.9, 0.95] {
++            let run = |max_sub: usize| {
++                let mut c = Canvas::new(px, 1.0, hex("#d8cdb8")).with_engine(3).with_size_mm(mm);
++                c.prime(hex("#b9a98c"), 0.9, 60.0, 0.6, 0.0, 7);
++                let mut h = brush(Tool::filbert(60.0), 71, raw_sienna().with_thinner(t), 0.8);
++                stroke(&mut c, &mut h, vec![(150.0, 480.0), (850.0, 520.0)], 0.8);
++                let laid = paint_um(&c);
++                probe::reset(max_sub);
++                for _ in 0..3 { c.wait(1.0); }
++                (laid, paint_um(&c), probe::read())
++            };
++            let (laid, capped, st) = run(64);
++            let (_, free, _) = run(1 << 20);
++            let moved = l1(&laid, &free);
++            println!("  {px_equiv:8}  {t:7}  {:10}  {:12}  {:21}  | {:33.4}  {:.1}%", st.0, st.1, st.2, l1(&capped, &free), if moved > 0.0 { 100.0 * l1(&capped, &free) / moved } else { 0.0 });
++        }
++    }
++}
++
++/// Follow-up: does a thinned stroke flow at all, and does the cap change anything when it does?
++#[test]
++#[ignore = "review probe"]
++fn review_flow_reach() {
++    println!("[G] 2400-px-equivalent pixels (110 mm canvas, 600 px), flat ground, filbert; `passes` strokes on the same path, then 3 one-minute waits");
++    println!("  thinner  passes  ceiling um  max liquid um  px above the 2 um wetting film  capped calls/3  paint moved by the flow (share of paint)  capped-vs-uncapped diff (share of moved)");
++    for (t, passes) in [(0.5f32, 1usize), (0.75, 1), (0.9, 1), (0.95, 1), (0.75, 5), (0.9, 5), (0.95, 5), (0.9, 12), (0.95, 12)] {
++        let run = |max_sub: usize| {
++            let mut c = Canvas::new(600, 1.0, hex("#d8cdb8")).with_engine(3).with_size_mm(110.0);
++            c.prime(hex("#b9a98c"), 0.9, 60.0, 0.6, 0.0, 7);
++            for k in 0..passes {
++                let mut h = brush(Tool::filbert(60.0), 71 + k as u64, raw_sienna().with_thinner(t), 0.8);
++                stroke(&mut c, &mut h, vec![(150.0, 480.0), (850.0, 520.0)], 0.8);
++            }
++            let laid = paint_um(&c);
++            let liquid = wet_film(&c);
++            probe::reset(max_sub);
++            for _ in 0..3 { c.wait(1.0); }
++            (laid, liquid, paint_um(&c), probe::read())
++        };
++        let (laid, liquid, capped, st) = run(64);
++        let (_, _, free, _) = run(1 << 20);
++        let moved = l1(&laid, &free);
++        let above = liquid.iter().filter(|&&v| v > 2.0).count();
++        println!("  {t:7}  {passes:6}  {:10.3}  {:13.3}  {above:30}  {:14}  {:39.4}%  {:.1}%", paint::thinner::stroke_limit_um(t), liquid.iter().cloned().fold(0.0, f32::max), st.1, 100.0 * moved / sum(&laid).max(1e-12), if moved > 0.0 { 100.0 * l1(&capped, &free) / moved } else { 0.0 });
++    }
++}
++
++/// The reviewer's new finding: the rag's stain floor against the thinned stroke's ceiling.
++#[test]
++#[ignore = "review probe"]
++fn review_rag_floor() {
++    use paint::rag::Rag;
++    println!("[J] wip/thinner as it stands; 2400-px-size pixels (110 mm, 600 px), flat ground; filbert 60, load .8; then a clean rag (150 units, dipped .5, p .8) wiped twice along the stroke");
++    println!("  thinner  passes | paint in the lane: mean um  median  max  px at or under 1 um | removed by 2 damp wipes | most a 1 um floor allows | paint lifted mm3");
++    for (t, passes) in [(0.0f32, 1usize), (0.5, 1), (2.0 / 3.0, 1), (0.75, 1), (0.9, 1), (0.5, 4), (0.75, 4), (0.9, 4)] {
++        let mut c = Canvas::new(600, 1.0, hex("#d8cdb8")).with_engine(3).with_size_mm(110.0);
++        c.prime(hex("#b9a98c"), 0.9, 60.0, 0.6, 0.0, 7);
++        for k in 0..passes {
++            let p = if t > 0.0 { raw_sienna().with_thinner(t) } else { raw_sienna() };
++            let mut h = brush(Tool::filbert(60.0), 71 + k as u64, p, 0.8);
++            stroke(&mut c, &mut h, vec![(150.0, 500.0), (850.0, 500.0)], 0.8);
++        }
++        let lane: Vec<(usize, f32, f32)> = in_rect(&c, (300.0, 470.0, 700.0, 530.0)).into_iter().filter(|&(_, x, y)| c.wet_um(x, y) > 0.01).collect();
++        let before: Vec<f32> = lane.iter().map(|&(_, x, y)| c.wet_um(x, y)).collect();
++        let mut sorted = before.clone();
++        sorted.sort_by(f32::total_cmp);
++        let under = before.iter().filter(|&&v| v <= 1.0).count();
++        let bound = before.iter().map(|&v| (v - 1.0).max(0.0) as f64).sum::<f64>() / sum(&before);
++        let mut rag = Rag::new(150.0, 7);
++        let now = c.now_min();
++        rag.dip(0.5, now, c.tally_mut());
++        let mut lifted = 0.0;
++        for _ in 0..2 { lifted += c.rag_wipe(&mut rag, &[(200.0, 500.0), (800.0, 500.0)], &[0.8], 19); }
++        let after: Vec<f32> = lane.iter().map(|&(_, x, y)| c.wet_um(x, y)).collect();
++        println!("  {t:7.3}  {passes:6} | {:26.3}  {:6.3}  {:5.2}  {:6} of {:6} | {:22.1}% | {:23.1}% | {lifted:.4}",
++            sum(&before) / before.len() as f64, sorted[sorted.len() / 2], sorted[sorted.len() - 1], under, before.len(), 100.0 * (1.0 - sum(&after) / sum(&before)), 100.0 * bound);
++    }
++}
++
++/// The reviewer's mixed-field test: does a thin high-solvent stroke elsewhere slow the flow of a thinner-0.5 patch?
++#[test]
++#[ignore = "review probe"]
++fn review_mixed_cap() {
++    println!("[K] patch A: raw sienna thinned .5 (x 150-600, y 200-500). Stroke B: thinned .95, far away (y 800). 2400-px-size pixels. Flow measured in A only (y < 620).");
++    let run = |with_b: bool, max_sub: usize, minutes: usize| {
++        let mut c = Canvas::new(600, 1.0, hex("#d8cdb8")).with_engine(3).with_size_mm(110.0);
++        c.prime(hex("#b9a98c"), 0.9, 60.0, 0.6, 0.0, 7);
++        thinned_patch(&mut c, raw_sienna(), 0.5, (150.0, 600.0), (200.0, 500.0), 51);
++        if with_b {
++            let mut h = brush(Tool::filbert(60.0), 99, raw_sienna().with_thinner(0.95), 0.8);
++            stroke(&mut c, &mut h, vec![(150.0, 800.0), (850.0, 800.0)], 0.8);
++        }
++        let a: Vec<(usize, f32, f32)> = in_rect(&c, (0.0, 0.0, 1000.0, 620.0));
++        let laid: Vec<f32> = a.iter().map(|&(_, x, y)| c.wet_um(x, y)).collect();
++        probe::reset(max_sub);
++        for _ in 0..minutes { c.wait(1.0); }
++        let end: Vec<f32> = a.iter().map(|&(_, x, y)| c.wet_um(x, y)).collect();
++        (laid, end, probe::read())
++    };
++    println!("  minutes | A alone: flow moved (share of A's paint)  capped calls | A with B, cap 64: capped calls  worst need | A's paint, with B vs alone (share of A's flow) | with B: cap 64 vs no cap (share of A's flow)");
++    for minutes in [1usize, 3, 10] {
++        let (laid, alone, st_a) = run(false, 64, minutes);
++        let (laid_b, with_b, st_b) = run(true, 64, minutes);
++        let (_, with_b_free, _) = run(true, 1 << 20, minutes);
++        assert_eq!(laid, laid_b, "A is laid alike with and without B");
++        let moved = l1(&laid, &alone);
++        println!("  {minutes:7} | {:39.3}%  {:12} | {:30}  {:10} | {:44.2}% | {:.2}%", 100.0 * moved / sum(&laid), st_a.1, st_b.1, st_b.2, 100.0 * l1(&with_b, &alone) / moved, 100.0 * l1(&with_b, &with_b_free) / moved);
++    }
++}

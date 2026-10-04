@@ -1,0 +1,19 @@
+   Compiling paint v0.1.0 (~/src/a/claude-paint/crates/paint)
+    Finished `test` profile [optimized + debuginfo] target(s) in 10.40s
+     Running unittests src/lib.rs (target/debug/deps/paint-6d3c8d4e8dda60c4)
+
+running 1 test
+
+thread 'rag::tests::a_used_face_carries_local_color_until_refolded_or_dry' (7660866) panicked at crates/paint/src/rag.rs:1151:9:
+a separate later contact deposits carried paint
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+test rag::tests::a_used_face_carries_local_color_until_refolded_or_dry ... FAILED
+
+failures:
+
+failures:
+    rag::tests::a_used_face_carries_local_color_until_refolded_or_dry
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 184 filtered out; finished in 0.15s
+
+error: test failed, to rerun pass `-p paint --lib`

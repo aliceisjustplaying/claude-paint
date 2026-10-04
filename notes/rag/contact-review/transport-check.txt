@@ -1,0 +1,1 @@
+Deferred brush transport experiment: visible islands persisted. Mean RGB difference from baseline (8-bit levels): [4.465306355738454e-05, 3.572245084590764e-05, 2.7684899405578417e-05]. Rejected and source restored.

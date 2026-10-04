@@ -1,0 +1,38 @@
+error: unexpected argument 'review_mixed_cap' found
+
+Usage: cargo test [OPTIONS] [TESTNAME] [-- [ARGS]...]
+
+For more information, try '--help'.
+warning: constant `MAX_SUBSTEPS` is never used
+   --> crates/paint/src/thinner.rs:144:7
+    |
+144 | const MAX_SUBSTEPS: usize = 64;
+    |       ^^^^^^^^^^^^
+    |
+    = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: `paint` (lib) generated 1 warning
+    Finished `release` profile [optimized] target(s) in 14.17s
+     Running tests/review_thinner.rs (/var/folders/6k/24182wv136749r3p852rft740000gn/T/tmp.zSR9ciI4r9/target/release/deps/review_thinner-120e42e8da176ce0)
+
+running 2 tests
+test review_mixed_cap ... [K] patch A: raw sienna thinned .5 (x 150-600, y 200-500). Stroke B: thinned .95, far away (y 800). 2400-px-size pixels. Flow measured in A only (y < 620).
+  minutes | A alone: flow moved (share of A's paint)  capped calls | A with B, cap 64: capped calls  worst need | A's paint, with B vs alone (share of A's flow) | with B: cap 64 vs no cap (share of A's flow)
+        1 |                                  29.964%             0 |                              1         103 |                                        16.12% | 13.13%
+        3 |                                  31.846%             0 |                              1         103 |                                         4.73% | 3.98%
+       10 |                                  32.179%             0 |                              1         103 |                                         3.28% | 2.93%
+ok
+test review_rag_floor ... [J] wip/thinner as it stands; 2400-px-size pixels (110 mm, 600 px), flat ground; filbert 60, load .8; then a clean rag (150 units, dipped .5, p .8) wiped twice along the stroke
+  thinner  passes | paint in the lane: mean um  median  max  px at or under 1 um | removed by 2 damp wipes | most a 1 um floor allows | paint lifted mm3
+    0.000       1 |                     58.501  55.788  151.06       0 of   8640 |                   98.3% |                    98.3% | 30.1126
+    0.500       1 |                      1.507   1.507   2.83     264 of   8640 |                   33.9% |                    33.9% | 0.2704
+    0.667       1 |                      0.530   0.532   0.97    8640 of   8640 |                    0.0% |                     0.0% | 0.0000
+    0.750       1 |                      0.271   0.272   0.49    8640 of   8640 |                    0.0% |                     0.0% | 0.0000
+    0.900       1 |                      0.037   0.038   0.07    8640 of   8640 |                    0.0% |                     0.0% | 0.0000
+    0.500       4 |                      3.299   3.220   6.73       0 of   8640 |                   69.7% |                    69.7% | 1.5149
+    0.750       4 |                      0.610   0.597   1.15    8574 of   8640 |                    0.1% |                     0.1% | 0.0076
+    0.900       4 |                      0.086   0.084   0.15    8640 of   8640 |                    0.0% |                     0.0% | 0.0000
+ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 3 filtered out; finished in 4.24s
+

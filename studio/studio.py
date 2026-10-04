@@ -279,6 +279,11 @@ def _parse(path):
         if d.get("type") == "model_change":
             c["events"].append({"ts": ts, "kind": "note", "text": "model " + d.get("modelId", "")})
             continue
+        if d.get("type") == "compaction":
+            clock = summary_clock(d.get("summary", ""))
+            if clock:
+                c["events"].append({"ts": ts, "kind": "clock", "clock": clock, "text": clock})
+            continue
         if d.get("type") != "message":
             continue
         m = d.get("message", {})
@@ -337,8 +342,22 @@ def _parse(path):
         elif role == "user":
             t = _text(content)
             if t.strip():
-                c["events"].append({"ts": ts, "kind": "user", "text": t[:2000]})
+                ev = {"ts": ts, "kind": "user", "text": t[:2000]}
+                clock = summary_clock(t)  # the recovery summary can be longer than the displayed text
+                if clock:
+                    ev["clock"] = clock
+                c["events"].append(ev)
     return c["events"], c["images"]
+
+
+def summary_clock(text):
+    """The latest recorded time in the painter harness's saved clock section."""
+    section = re.search(r"(?m)^## The canvas clock\n([\s\S]*?)(?=\n## |\Z)", text)
+    if not section:
+        return None
+    times = re.findall(r"(?m)^- Latest (?:painting time the easel printed|journal entry stamped): "
+                       r"(day ([1-9]\d*), ([01]\d|2[0-3]):([0-5]\d))[ \t]*$", section[1])
+    return max(times, key=lambda t: tuple(map(int, t[1:])))[0] if times else None
 
 
 def look_text(args):

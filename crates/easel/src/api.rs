@@ -61,11 +61,13 @@ pub struct Studio {
     pub hand: crate::time::Hand,
     /// The tubes piles are knifed from.
     pub tubes: Rc<Palette>,
+    /// The palette board: the heaps knifed out on it (board.rs).
+    pub board: crate::board::Board,
 }
 
 impl Studio {
     pub fn new(width: usize, tubes: Palette) -> Self {
-        Studio { width, canvas: None, style: None, setup: None, seed: 1, chunk: 0, calls: 0, clock: 0.0, clock0: 0.0, rng: Rng::new(1), brushes: Vec::new(), knives: Vec::new(), rags: Vec::new(), out: String::new(), field_secs: 0.0, view: None, hand: crate::time::Hand::default(), tubes: Rc::new(tubes) }
+        Studio { width, canvas: None, style: None, setup: None, seed: 1, chunk: 0, calls: 0, clock: 0.0, clock0: 0.0, rng: Rng::new(1), brushes: Vec::new(), knives: Vec::new(), rags: Vec::new(), out: String::new(), field_secs: 0.0, view: None, hand: crate::time::Hand::default(), tubes: Rc::new(tubes), board: Default::default() }
     }
     /// Start chunk `n`: its randomness depends only on the seed and `n`.
     pub fn begin(&mut self, n: u64) {
@@ -396,7 +398,8 @@ impl UserData for KnifeU {
     fn add_methods<M: UserDataMethods<Self>>(m: &mut M) {
         m.add_method("load", |_, k, (p, amount): (Value, Option<f32>)| {
             let amount = load_amount(amount, 0.6, "k:load")?;
-            let (paint, color) = brushload(&k.st, &p, &Value::Nil, "load")?;
+            let carry = 0.5 * k.k.borrow().fullness().min(1.0);
+            let (paint, color) = brushload(&k.st, &p, &Value::Nil, "load", carry)?;
             k.k.borrow_mut().load(paint, amount);
             time::trip(&k.st, color);
             Ok(())
@@ -458,19 +461,23 @@ impl UserData for Brush {
                 check_keys(t, PART_KEYS, "b:load")?;
                 let mut part = part_of(t, "b:load")?;
                 part.seed = b.st.borrow_mut().rng.next_u64();
-                let (paint, color) = brushload(&b.st, &p, &Value::Nil, "load")?;
+                let carry = b.held.borrow().fullness().min(1.0);
+                let (paint, color) = brushload(&b.st, &p, &Value::Nil, "load", carry)?;
                 b.held.borrow_mut().load_part(paint, amount, &part);
                 time::trip(&b.st, color);
                 return Ok(());
             }
-            let (paint, color) = brushload(&b.st, &p, &extra, "load")?;
+            let carry = b.held.borrow().fullness().min(1.0);
+            let (paint, color) = brushload(&b.st, &p, &extra, "load", carry)?;
             b.held.borrow_mut().load(paint, amount);
             time::trip(&b.st, color);
             Ok(())
         });
         // b:reload(pile, amount?): wipe most of the old paint off, then load
         m.add_method("reload", |_, b, (p, amount, extra): (Value, Option<f32>, Value)| {
-            let (paint, color) = brushload(&b.st, &p, &extra, "reload")?;
+            // it is wiped first: only what the rag left goes into the heap
+            let carry = 0.15 * b.held.borrow().fullness().min(1.0);
+            let (paint, color) = brushload(&b.st, &p, &extra, "reload", carry)?;
             b.held.borrow_mut().reload(paint, amount.unwrap_or(0.8));
             time::trip(&b.st, color);
             Ok(())
@@ -731,6 +738,9 @@ pub struct PileU {
     pub medium: f32,
     /// The parts as the painter gave them (for printing).
     parts: Vec<(String, f32)>,
+    /// Its heap on the palette board (0: none).
+    pub heap: u64,
+    st: Option<S>,
 }
 
 impl UserData for PileU {
@@ -738,6 +748,26 @@ impl UserData for PileU {
         f.add_field_method_get("medium", |_, p| Ok(p.medium));
     }
     fn add_methods<M: UserDataMethods<Self>>(m: &mut M) {
+        // p:add{{"tube name", parts}, ..., medium=}: knife more tube paint into this
+        // heap on the palette, in the units its recipe was given in; returns the pile
+        m.add_method("add", |_, p, t: Table| {
+            check_keys(&t, &["medium"], "p:add")?;
+            let st = p.st.clone().ok_or_else(|| mlua::Error::runtime("p:add: this pile isn't on a palette"))?;
+            if p.heap == 0 {
+                return err("p:add: this pile isn't on the palette board");
+            }
+            let medium = num(&t, "medium")?.unwrap_or(0.0);
+            if !(0.0..=0.95).contains(&medium) {
+                return err("p:add: medium is the share of oil medium in the added paint, 0 to 0.95");
+            }
+            let tubes = st.borrow().tubes.clone();
+            let add = tube_parts(&tubes, &t, "p:add")?;
+            check_set_out(&st, &add, "p:add")?;
+            st.borrow_mut().board.add(p.heap, &add, medium).map_err(mlua::Error::runtime)?;
+            let now = resolve(&st, p.clone(), None);
+            time::knife(&st, now.mix.color);
+            Ok(now)
+        });
         m.add_method("parts", |lua, p, ()| {
             let t = lua.create_table()?;
             for (name, k) in &p.parts {
@@ -810,9 +840,70 @@ pub(crate) fn pile_of(v: &Value, what: &str) -> Result<PileU> {
     }
 }
 
+/// The pile as its heap is on the board now, the hand having gone to it with a
+/// brush carrying `carry` of the last paint (board.rs). A heap untouched since
+/// it was knifed is the pile exactly as knifed.
+pub(crate) fn pile_now(st: &S, v: &Value, what: &str, carry: f32) -> Result<PileU> {
+    Ok(resolve(st, pile_of(v, what)?, Some(carry)))
+}
+
+/// The pile as its heap is on the board now; `visit`: the hand goes to it
+/// first, with a brush carrying that much of the last paint.
+pub(crate) fn resolve(st: &S, p: PileU, visit: Option<f32>) -> PileU {
+    if p.heap == 0 {
+        return p;
+    }
+    let mut s = st.borrow_mut();
+    if let Some(carry) = visit {
+        s.board.visit(p.heap, carry);
+    }
+    let Some(h) = s.board.heap(p.heap) else { return p };
+    if !h.changed {
+        return p;
+    }
+    let (fr, medium, solvent, oil_rate) = (h.fractions(), h.medium, h.solvent, h.oil_rate);
+    let mut mix = s.tubes.pile(fr);
+    mix.solvent = solvent;
+    mix.oil_rate = oil_rate;
+    PileU { mix, medium, ..p }
+}
+
+/// Tubes in parts as given, `{{"tube name", parts}, ...}`, not normalised.
+fn tube_parts(tubes: &Palette, t: &Table, what: &str) -> Result<Vec<(usize, f32)>> {
+    let mut out: Vec<(usize, f32)> = Vec::new();
+    for e in t.sequence_values::<Value>() {
+        let Value::Table(e) = e? else { return err(format!("{what}: each part is {{\"tube name\", parts}}")) };
+        let name: String = e.get::<Option<String>>(1)?.ok_or_else(|| mlua::Error::runtime(format!("{what}: each part is {{\"tube name\", parts}}")))?;
+        let k: f32 = e.get::<Option<f32>>(2)?.ok_or_else(|| mlua::Error::runtime(format!("{what}: {name:?} needs a number of parts")))?;
+        if !(k > 0.0 && k.is_finite()) {
+            return err(format!("{what}: {name:?}: parts > 0"));
+        }
+        let i = tubes.tubes.iter().position(|t| t.name == name).ok_or_else(|| mlua::Error::runtime(format!("{what}: no tube {name:?}")))?;
+        match out.iter_mut().find(|p| p.0 == i) {
+            Some(p) => p.1 += k,
+            None => out.push((i, k)),
+        }
+    }
+    if out.is_empty() {
+        return err(format!("{what}: needs at least one tube"));
+    }
+    Ok(out)
+}
+
+/// A limited palette: only the tubes set out can be knifed.
+fn check_set_out(st: &S, parts: &[(usize, f32)], what: &str) -> Result<()> {
+    let s = st.borrow();
+    if let Some(set) = &s.board.set_out
+        && let Some(&(i, _)) = parts.iter().find(|p| !set.contains(&p.0))
+    {
+        return err(format!("{what}: {:?} isn't set out on the palette (palette{{set_out={{...}}}} sets out the tubes)", s.tubes.tubes[i].name));
+    }
+    Ok(())
+}
+
 /// Paint for one brushload from a pile: the pile, remixed a little (a pile
 /// knifed by hand is uneven), and the pile's color (for the palette ledger).
-fn brushload(st: &S, p: &Value, extra: &Value, what: &str) -> Result<(paint::Paint, Rgb)> {
+fn brushload(st: &S, p: &Value, extra: &Value, what: &str, carry: f32) -> Result<(paint::Paint, Rgb)> {
     // a legacy canvas's brushes load colors (legacy.rs)
     #[cfg(feature = "replay")]
     if let Some(r) = crate::legacy::brushload(st, p, extra)? {
@@ -821,7 +912,7 @@ fn brushload(st: &S, p: &Value, extra: &Value, what: &str) -> Result<(paint::Pai
     if !extra.is_nil() {
         return err(format!("b:{what}(pile, amount): a pile carries its own medium; mix another pile for other paint"));
     }
-    let p = pile_of(p, &format!("b:{what}"))?;
+    let p = pile_now(st, p, &format!("b:{what}"), carry)?;
     let sty = style(st)?;
     let mut s = st.borrow_mut();
     let tubes = s.tubes.clone();
@@ -1106,7 +1197,7 @@ fn work(st: &S, mask: Rc<Mask>, o: Table, preset: Option<&str>) -> Result<()> {
             let mut v = Vec::new();
             for e in t.sequence_values::<Table>() {
                 let e = e?;
-                v.push((pile_of(&e.get::<Value>(1)?, "work piles")?, e.get::<Value>(2)?));
+                v.push((pile_now(st, &e.get::<Value>(1)?, "work piles", 0.5)?, e.get::<Value>(2)?));
             }
             if v.len() < 2 {
                 return err("work: piles={{pile, weight}, {pile, weight}, ...} takes two or more piles");
@@ -1120,7 +1211,7 @@ fn work(st: &S, mask: Rc<Mask>, o: Table, preset: Option<&str>) -> Result<()> {
         // a legacy canvas's passes paint colors (legacy.rs)
         #[cfg(feature = "replay")]
         Value::Nil if crate::legacy::on(st) => None,
-        v => Some(pile_of(&v, "work")?),
+        v => Some(pile_now(st, &v, "work", 0.5)?),
     };
     let tubes = st.borrow().tubes.clone();
     let mut h: Handling = match hand.as_str() {
@@ -1170,7 +1261,7 @@ fn work(st: &S, mask: Rc<Mask>, o: Table, preset: Option<&str>) -> Result<()> {
         if pile.is_none() {
             return err("work: second= is a second dip after the pile's; give pile= too");
         }
-        let p2 = pile_of(&t.get::<Value>("pile")?, "work second")?;
+        let p2 = pile_now(st, &t.get::<Value>("pile")?, "work second", 0.5)?;
         let part = part_of(&t, "work second")?;
         let load = t.get::<Option<f32>>("load")?.unwrap_or(0.4);
         h.second = Some(paint::handling::Second { palette: &tubes, pile: p2.mix.clone(), medium: p2.medium, load, part });
@@ -1377,7 +1468,7 @@ fn stipple(st: &S, mask: Rc<Mask>, o: Table) -> Result<()> {
     let mut sp = if legacy {
         Stipple::new(tool)
     } else {
-        let pile = pile_of(&o.get::<Value>("pile")?, "stipple")?;
+        let pile = pile_now(st, &o.get::<Value>("pile")?, "stipple", 0.5)?;
         Stipple::new(tool).piled(&tubes, pile.mix.clone(), pile.medium)
     };
     #[cfg(feature = "replay")]
@@ -1597,7 +1688,7 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
     {
         let st = st.clone();
         g.set("pile", lua.create_function(move |_, t: Table| {
-            check_keys(&t, &["medium", "blot", "turps", "oil"], "pile")?;
+            check_keys(&t, &["medium", "blot", "turps", "oil", "name"], "pile")?;
             let medium = num(&t, "medium")?.unwrap_or(0.0);
             if !(0.0..=0.95).contains(&medium) {
                 return err("pile: medium is the share of oil medium mixed in, 0 (as from the tube) to 0.95");
@@ -1631,15 +1722,98 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
                 return err(format!("pile: turps= needs engine 4; this painting is painted with engine {} (its log says so), where turpentine does nothing", tubes.engine));
             }
             let (parts, given) = parts_of(&tubes, &t, "pile")?;
-            let mut mix = tubes.pile(parts);
+            let mut mix = tubes.pile(parts.clone());
             mix.solvent = turps;
             mix.oil_rate = oil_rate;
             if st.borrow().canvas.is_none() {
                 return Err(no_canvas());
             }
+            check_set_out(&st, &parts, "pile")?;
+            let name = t.get::<Option<String>>("name")?;
+            let given_sum: f32 = given.iter().map(|g| g.1).sum();
+            let heap = st.borrow_mut().board.knife(parts.clone(), given_sum, medium, turps, oil_rate, name);
             // knifing it takes the hand a while
             time::knife(&st, mix.color);
-            Ok(PileU { mix, medium, parts: given })
+            Ok(PileU { mix, medium, parts: given, heap, st: Some(st.clone()) })
+        })?)?;
+    }
+
+    // mix{{p1, w1}, {p2, w2}, ..., name=}: knife heaps already on the palette
+    // together into a new one, in those proportions by volume (as they are now)
+    // (a global from engine 4, as the knife: an older log keeps the globals it had)
+    if st.borrow().tubes.engine >= 4 {
+        let st = st.clone();
+        g.set("mix", lua.create_function(move |_, t: Table| {
+            check_keys(&t, &["name"], "mix")?;
+            if st.borrow().canvas.is_none() {
+                return Err(no_canvas());
+            }
+            let mut parts: Vec<(usize, f32)> = Vec::new();
+            let (mut wsum, mut medium, mut solvent, mut oil) = (0.0f32, 0.0f32, 0.0f32, 0.0f32);
+            let mut given = Vec::new();
+            for e in t.sequence_values::<Table>() {
+                let e = e?;
+                let p = resolve(&st, pile_of(&e.get::<Value>(1)?, "mix")?, Some(0.35));
+                let w: f32 = e.get::<Option<f32>>(2)?.unwrap_or(1.0);
+                if !(w > 0.0 && w.is_finite()) {
+                    return err("mix: each heap's share is > 0");
+                }
+                for &(i, f) in &p.mix.parts {
+                    match parts.iter_mut().find(|q| q.0 == i) {
+                        Some(q) => q.1 += f * w,
+                        None => parts.push((i, f * w)),
+                    }
+                }
+                medium += p.medium * w;
+                solvent += p.mix.solvent * w;
+                oil += p.mix.oil_rate * w;
+                wsum += w;
+                given.extend(p.parts.iter().map(|(n, k)| (n.clone(), k * w)));
+            }
+            if wsum <= 0.0 {
+                return err("mix: give the heaps to knife together: mix{{p1, 1}, {p2, 0.5}}");
+            }
+            parts.iter_mut().for_each(|q| q.1 /= wsum);
+            let (medium, solvent, oil) = (medium / wsum, solvent / wsum, oil / wsum);
+            let tubes = st.borrow().tubes.clone();
+            let mut mix = tubes.pile(parts.clone());
+            mix.solvent = solvent;
+            mix.oil_rate = oil;
+            let name = t.get::<Option<String>>("name")?;
+            let heap = st.borrow_mut().board.knife(parts, 1.0, medium, solvent, oil, name);
+            time::knife(&st, mix.color);
+            Ok(PileU { mix, medium, parts: given, heap, st: Some(st.clone()) })
+        })?)?;
+    }
+    // palette{dirty=0..1, set_out={"tube name", ...}, clean=true}: how the board
+    // is kept; returns a description of the heaps on it (from engine 4)
+    if st.borrow().tubes.engine >= 4 {
+        let st = st.clone();
+        g.set("palette", lua.create_function(move |_, t: Option<Table>| {
+            if let Some(t) = &t {
+                check_keys(t, &["dirty", "set_out", "clean"], "palette")?;
+                if let Some(d) = num(t, "dirty")? {
+                    if !(0.0..=1.0).contains(&d) {
+                        return err("palette: dirty is how dirty the board is kept, 0 (clean) to 1");
+                    }
+                    st.borrow_mut().board.dirty = d;
+                }
+                if let Some(list) = t.get::<Option<Table>>("set_out")? {
+                    let tubes = st.borrow().tubes.clone();
+                    let mut set = Vec::new();
+                    for n in list.sequence_values::<String>() {
+                        let n = n?;
+                        let i = tubes.tubes.iter().position(|x| x.name == n).ok_or_else(|| mlua::Error::runtime(format!("palette: no tube {n:?} in the box")))?;
+                        set.push(i);
+                    }
+                    st.borrow_mut().board.set_out = if set.is_empty() { None } else { Some(set) };
+                }
+                if t.get::<Option<bool>>("clean")?.unwrap_or(false) {
+                    st.borrow_mut().board.clean();
+                }
+            }
+            let s = st.borrow();
+            Ok(s.board.describe(&s.tubes))
         })?)?;
     }
 

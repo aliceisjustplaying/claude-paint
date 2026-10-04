@@ -53,6 +53,7 @@ struct Snap {
     clock: f64,
     clock0: f64,
     hand: crate::time::Hand,
+    board: crate::board::Board,
     /// The last world view made (depth options resolve against it).
     view: Option<crate::world::ViewU>,
     /// The Lua heap (heap.lua's snapshot).
@@ -210,7 +211,7 @@ impl Session {
             let v = *r.borrow();
             (r, v)
         }).collect();
-        Ok(Snap { canvas: s.canvas.clone(), style: s.style.clone(), setup: s.setup.clone(), seed: s.seed, clock: s.clock, clock0: s.clock0, hand: s.hand.clone(), view: s.view.clone(), heap, brushes, knives, rags })
+        Ok(Snap { canvas: s.canvas.clone(), style: s.style.clone(), setup: s.setup.clone(), seed: s.seed, clock: s.clock, clock0: s.clock0, hand: s.hand.clone(), board: s.board.clone(), view: s.view.clone(), heap, brushes, knives, rags })
     }
 
     /// Put everything back as it was at `snap`. Returns how many Lua tables
@@ -236,6 +237,7 @@ impl Session {
         s.clock = snap.clock;
         s.clock0 = snap.clock0;
         s.hand = snap.hand.clone();
+        s.board = snap.board.clone();
         s.view = snap.view.clone();
         Ok(mismatches)
     }

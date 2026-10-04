@@ -106,6 +106,31 @@ first, which draws out that share of its own oil (0 to 0.5):
 more opaque and much stiffer: it holds the ridges and furrows of the brush
 as it dries. A pile takes medium or blot, not both.
 
+**The palette board.** Every pile is a heap on the board beside the easel.
+
+- `pile{..., name="sky"}` names it.
+- `look --palette` (the `look` tool's `palette: true`) shows the board: each
+  heap knifed out thick (its masstone and body) with a smear dragged from
+  thick to thin across a black stripe (its tint as it thins, how much it
+  hides), lit as in the gallery view. Judge a mix there before it touches the
+  canvas.
+- `p:add{{"<tube>", <parts>}, ..., medium=}` knifes more tube paint into a
+  heap, in the units its recipe was given in (a pile knifed as
+  `{"lead white", 4}, {"cerulean blue", 0.35}` takes `{"cerulean blue", 0.1}`
+  as a tenth of a part more): look, adjust, look again. It returns the pile.
+- `mix{{p1, <share>}, {p2, <share>}, ..., name=}` knifes heaps together into a
+  new heap, as they are now.
+- `palette{set_out={"<tube>", ...}}` sets out only those tubes, a limited
+  palette: a pile of any other is an error.
+- `palette{dirty=<0..1>}` keeps the board as dirty as painters do. A brush
+  that comes to a heap carrying paint leaves a little of it there, more the
+  fuller it is (a `b:reload` wipes it first), and the smears of the mixing
+  area seep into each new heap, so the heaps drift toward each other through
+  a sitting. `palette{clean=true}` scrapes the mixing area and skims the
+  heaps. 0, the default, is a clean board: every heap stays as knifed.
+- `palette()` returns a line about each heap: its recipe now, and how much of
+  it is other paint.
+
 The tube box:
 
 | tube | pigment | hiding | stiffness | tinting strength | drying |

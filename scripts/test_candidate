@@ -285,8 +285,10 @@ def main():
     receipt_root = os.environ.get("TEST_RECEIPT_DIR") or os.path.expanduser("~/src/a/claude-paint-receipts")
     receipt_dir = os.path.join(receipt_root, sha, time.strftime("%Y%m%dT%H%M%S") + "-%d" % os.getpid())
     # under /tmp, not a deep $TMPDIR: the easel's tests bind Unix sockets under the build
-    # dir's tmp/, and macOS refuses socket paths of 104 bytes or more
-    tmp = tempfile.mkdtemp(prefix="cpc.", dir="/tmp")
+    # dir's tmp/, and macOS refuses socket paths of 104 bytes or more. Resolved (/tmp is
+    # /private/tmp there): the easel prints resolved paths, and its tests compare them with
+    # CARGO_TARGET_TMPDIR, which cargo derives from the target dir as given
+    tmp = os.path.realpath(tempfile.mkdtemp(prefix="cpc.", dir="/tmp"))
     wt = os.path.join(tmp, "wt")
     summary_path = os.path.join(tmp, "summary.json")
     say("temporary working copy: %s" % wt)

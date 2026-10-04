@@ -74,16 +74,27 @@ pub fn stroke(c: &mut Canvas, h: &mut Held, pts: Vec<(f32, f32)>, pressure: f32)
     c.drag(h, &Gesture::new(pts).pressure(pressure, pressure), None);
 }
 
-/// A patch of open thinned paint: overlapping horizontal strokes of a
-/// broad flat 25 units apart (the flat is 40 wide), each from a freshly
-/// loaded brush, between `y.0` and `y.1`.
-pub fn thinned_patch(c: &mut Canvas, paint: Paint, t: f32, x: (f32, f32), y: (f32, f32), seed: u64) {
+/// A patch of open paint: overlapping horizontal strokes of a broad flat
+/// 25 units apart (the flat is 40 wide), each from a freshly loaded brush
+/// (`load`, `pressure`), between `y.0` and `y.1`. `paint` as given: no
+/// thinner call, so an unthinned patch is today's code path.
+pub fn patch_with(c: &mut Canvas, paint: Paint, load: f32, pressure: f32, x: (f32, f32), y: (f32, f32), seed: u64) {
     let rows = ((y.1 - y.0) / 25.0).ceil().max(1.0) as usize;
     for k in 0..rows {
         let yk = y.0 + (y.1 - y.0) * (k as f32 + 0.5) / rows as f32;
-        let mut h = brush(Tool::hog_flat(40.0), seed + k as u64, paint.with_thinner(t), 0.9);
-        stroke(c, &mut h, vec![(x.0, yk), (x.1, yk + 3.0)], 0.85);
+        let mut h = brush(Tool::hog_flat(40.0), seed + k as u64, paint, load);
+        stroke(c, &mut h, vec![(x.0, yk), (x.1, yk + 3.0)], pressure);
     }
+}
+
+/// `patch_with` at load 0.9, pressure 0.85.
+pub fn patch(c: &mut Canvas, paint: Paint, x: (f32, f32), y: (f32, f32), seed: u64) {
+    patch_with(c, paint, 0.9, 0.85, x, y, seed);
+}
+
+/// A patch of `paint` thinned `t`.
+pub fn thinned_patch(c: &mut Canvas, paint: Paint, t: f32, x: (f32, f32), y: (f32, f32), seed: u64) {
+    patch(c, paint.with_thinner(t), x, y, seed);
 }
 
 /// Every pixel of the canvas: (buffer index, center x, center y) in units.
@@ -178,15 +189,19 @@ pub fn state(c: &Canvas) -> Vec<u8> {
 }
 
 /// A copy of `c`, through its save, with the solvent at every pixel
-/// multiplied by `k` (the solvent is the save's last 4 × pixels bytes):
-/// the same paint in the same places with a different amount of solvent.
-/// Checks the copy holds exactly that.
+/// multiplied by `k`: the same paint in the same places, with the same
+/// pigment, stiffness, cure, clock and everything else, and a different
+/// amount of solvent. It relies on the PAINTCK9 format contract
+/// (ACCEPTANCE.md, "The interface"): the solvent is the save's last
+/// 4 × pixels bytes, one f32 µm per pixel. Checks the copy saves back to
+/// exactly the same bytes outside that block, and the scaled solvent in it.
 pub fn with_solvent_scaled(c: &Canvas, k: f32) -> Canvas {
-    let mut b = state(c);
-    assert_eq!(&b[..8], b"PAINTCK9", "an engine-3 canvas saves as PAINTCK9");
+    let orig = state(c);
+    assert_eq!(&orig[..8], b"PAINTCK9", "an engine-3 canvas saves as PAINTCK9");
     let n = c.pixels().len();
-    assert!(b.len() >= 8 + 4 * n, "the save is shorter than its solvent section");
-    let start = b.len() - 4 * n;
+    assert!(orig.len() >= 8 + 4 * n, "the save is shorter than its solvent section");
+    let start = orig.len() - 4 * n;
+    let mut b = orig.clone();
     for i in 0..n {
         let o = start + 4 * i;
         let v = f32::from_le_bytes(b[o..o + 4].try_into().unwrap());
@@ -194,12 +209,30 @@ pub fn with_solvent_scaled(c: &Canvas, k: f32) -> Canvas {
     }
     let mut r: &[u8] = &b;
     let (copy, _) = Canvas::read_state(&mut r).expect("read the edited save back");
+    let back = state(&copy);
+    assert_eq!(back.len(), b.len(), "the copy saves to the same length");
+    assert!(back[..start] == orig[..start], "the copy differs from the original outside the solvent block (first at byte {:?})", back[..start].iter().zip(&orig[..start]).position(|(x, y)| x != y));
+    assert!(back[start..] == b[start..], "the copy's solvent block is not the scaled solvent");
     let (s0, s1) = (solvent_um(c), solvent_um(&copy));
     for i in 0..n {
-        assert_eq!(s1[i].to_bits(), (s0[i] * k).to_bits(), "the save's last section is the solvent (pixel {i})");
+        assert_eq!(s1[i].to_bits(), (s0[i] * k).to_bits(), "the save's last block is the solvent the canvas reports (pixel {i})");
     }
-    assert_eq!(paint_um(c), paint_um(&copy), "the edit touched only the solvent");
     copy
+}
+
+/// The pixels within `r` pixels (a square) of buffer pixel `i`.
+pub fn around(c: &Canvas, i: usize, r: usize) -> Vec<usize> {
+    let f = c.frame();
+    let (x, y) = (i % f.w, i / f.w);
+    let (x0, x1, y0, y1) = (x.saturating_sub(r), (x + r + 1).min(f.w), y.saturating_sub(r), (y + r + 1).min(f.h));
+    (y0..y1).flat_map(|yy| (x0..x1).map(move |xx| yy * f.w + xx)).collect()
+}
+
+/// The `q`-quantile (0..1) of `v`.
+pub fn quantile(v: &[f32], q: f32) -> f32 {
+    let mut s: Vec<f32> = v.to_vec();
+    s.sort_by(f32::total_cmp);
+    if s.is_empty() { f32::NAN } else { s[((s.len() - 1) as f32 * q).round() as usize] }
 }
 
 pub fn mean(v: &[f32]) -> f64 {

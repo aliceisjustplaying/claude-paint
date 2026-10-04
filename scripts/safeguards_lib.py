@@ -19,7 +19,12 @@ GOLDEN_LIST = "notes/golden_paths.txt"
 # the reviewed check set: the list scripts/test --all runs, and the runner itself
 DEFAULT_LIST = "notes/speed/test_lists/all.tsv"
 RUNNER = "scripts/test"
-RECEIPT_FORMAT = "claude-paint test receipt v2"
+# v3: two phases (the build steps, then the others), each its own lockrun job of at most
+# PHASE_LIMIT seconds, and known failures (verdict "known_failure", never mergeable)
+RECEIPT_FORMAT = "claude-paint test receipt v3"
+PHASES = ("build", "check")
+# the plan's limit for the builds and for the final check batch: ten minutes each
+PHASE_LIMIT = 600.0
 # The approved job lock (scripts/lockrun as of 8b71762, and the lead's stable copy
 # ~/src/a/claude-paint-tools/lockrun). test_candidate runs only a lockrun with exactly this
 # sha256, never the candidate's own; merge_candidate refuses a receipt that names another.
@@ -32,7 +37,7 @@ HEX64 = re.compile(r"[0-9a-f]{64}")
 REGULAR_MODES = ("100644", "100755")
 STEP_KINDS = ("build", "cargo", "pytest", "script")
 # what a summary step must repeat from its list line, exactly
-STEP_KEYS = ("name", "kind", "command", "limit", "least", "group")
+STEP_KEYS = ("name", "kind", "command", "limit", "least", "group", "known")
 # The privacy hooks' protected text, stored encoded like scripts/pre-commit-anonymity.
 _PROTECTED = base64.b64decode("c2FyYWg=").decode()
 
@@ -176,10 +181,12 @@ def assert_publishable(text, what):
 # ---------------------------------------------------------------- the reviewed check set
 
 def parse_test_list(data, where):
-    """The steps of a scripts/test list file (bytes). Tab-separated lines: kind, name,
-    limit (s), least (minimum tests), regex ('-' for none), command, and an optional
-    group ('' or '-' for none). Blank lines and lines starting with '#' are skipped.
-    Refuse on anything malformed: a list that can't be read can't be bound."""
+    """The steps of a scripts/test list file (bytes). Tab-separated lines of 6, 7 or 10
+    fields: kind, name, limit (s), least (minimum tests), regex ('-' for none), command,
+    an optional group ('' or '-' for none) and an optional known failure: exit code,
+    regex and text (a non-build step, a nonzero exit, a regex that compiles and a
+    nonempty text). Blank lines and lines starting with '#' are skipped. Refuse on
+    anything malformed: a list that can't be read can't be bound."""
     try:
         text = data.decode("utf-8")
     except UnicodeDecodeError:
@@ -189,10 +196,10 @@ def parse_test_list(data, where):
         if not line.strip() or line.startswith("#"):
             continue
         f = line.split("\t")
-        if len(f) not in (6, 7):
-            raise Refuse("%s line %d: want 6 or 7 tab-separated fields, found %d" % (where, n, len(f)))
+        if len(f) not in (6, 7, 10):
+            raise Refuse("%s line %d: want 6, 7 or 10 tab-separated fields, found %d" % (where, n, len(f)))
         kind, name, limit, least, regex, cmd = f[:6]
-        group = f[6] if len(f) == 7 else ""
+        group = f[6] if len(f) >= 7 else ""
         if kind not in STEP_KINDS:
             raise Refuse("%s line %d: unknown kind %r" % (where, n, kind))
         if not name or not cmd.strip():
@@ -205,9 +212,21 @@ def parse_test_list(data, where):
             raise Refuse("%s line %d: bad time limit %r" % (where, n, limit))
         if not least.isdigit():
             raise Refuse("%s line %d: bad minimum test count %r" % (where, n, least))
+        known = None
+        if len(f) == 10:
+            code, kre, ktext = f[7], f[8], f[9]
+            try:
+                re.compile(kre)
+                ok = bool(re.fullmatch(r"-?[0-9]+", code)) and int(code) != 0 and bool(ktext.strip())
+            except re.error:
+                ok = False
+            if not ok or kind == "build":
+                raise Refuse("%s line %d: a known failure is a non-build step's nonzero exit code, a regex "
+                             "and a text (found %r, %r, %r for kind %s)" % (where, n, code, kre, ktext, kind))
+            known = {"exit": int(code), "regex": kre, "text": ktext}
         steps.append({"kind": kind, "name": name, "limit": lim, "least": int(least),
                       "regex": None if regex == "-" else regex, "command": cmd,
-                      "group": None if group in ("", "-") else group})
+                      "group": None if group in ("", "-") else group, "known": known})
     if not steps:
         raise Refuse("%s lists no steps" % where)
     names = [s["name"] for s in steps]
@@ -252,25 +271,39 @@ def _same(key, got, want):
         return _int(got) and got == want
     if key == "group":
         return (got is None and want is None) or (isinstance(got, str) and got == want)
+    if key == "known":
+        if want is None:
+            return got is None
+        return (isinstance(got, dict) and set(got) == {"exit", "regex", "text"} and _int(got["exit"])
+                and got == want)
     return isinstance(got, str) and got == want
 
 
-def binding_problems(manifest_steps, steps):
+def phase_steps(manifest_steps, phase):
+    """The list's steps a phase runs, in list order: the builds, or every other step."""
+    return [m for m in manifest_steps if (m["kind"] == "build") == (phase == "build")]
+
+
+def binding_problems(manifest_steps, steps, other=()):
     """Why the summary's steps are not exactly the list's steps ([] if they are):
-    same steps, same order, same name, kind, command, limit, least and group."""
+    same steps, same order, same name, kind, command, limit, least, group and known
+    failure. OTHER: the names the list gives the other phase (named as such)."""
     p = []
     got = [s.get("name") if isinstance(s, dict) else None for s in steps]
     want = [m["name"] for m in manifest_steps]
     missing = [n for n in want if n not in got]
-    extra = [n for n in got if n not in want]
+    foreign = [n for n in got if n not in want and n in other]
+    extra = [n for n in got if n not in want and n not in other]
     dup = sorted({str(n) for n in got if got.count(n) > 1})
     if missing:
         p.append("the summary omits listed step(s): %s" % ", ".join(missing))
+    if foreign:
+        p.append("the summary holds step(s) the list puts in the other phase: %s" % ", ".join(map(str, foreign)))
     if extra:
         p.append("the summary has step(s) the list does not: %s" % ", ".join(map(str, extra)))
     if dup:
         p.append("the summary reports step(s) more than once: %s" % ", ".join(dup))
-    if not missing and not extra and not dup and got != want:
+    if not missing and not extra and not foreign and not dup and got != want:
         p.append("the summary's step order (%s) is not the list's (%s)" % (", ".join(got), ", ".join(want)))
     by_name = {}
     for s in steps:
@@ -286,38 +319,86 @@ def binding_problems(manifest_steps, steps):
     return p
 
 
-def summary_problems(summary, manifest=None):
-    """Reasons a scripts/test summary is not a full pass ([] means pass). With
-    MANIFEST (manifest_at), the summary must also be a run of exactly that check set."""
-    if not isinstance(summary, dict):
-        return ["the summary is missing or not a JSON object"]
+def _tests_problems(s, name, least_of):
+    """A non-build step's test counts: it requires and ran at least its minimum (>= 1)."""
     p = []
+    least = s.get("least")
+    if not _int(least) or least < 1:
+        p.append("step %s requires %r tests: a non-build step must require at least 1" % (name, least))
+    if not _int(s.get("tests_run")) or s["tests_run"] < 1:
+        p.append("step %s ran no tests (tests_run=%r)" % (name, s.get("tests_run")))
+    elif s["tests_run"] < max(least_of.get(name, 1), least if _int(least) else 1):
+        p.append("step %s ran %d tests, fewer than its minimum %r"
+                 % (name, s["tests_run"], least_of.get(name, least)))
+    return p
+
+
+def phase_problems(summary, manifest, phase):
+    """Check one phase's scripts/test summary (`scripts/test --all --phase PHASE`)
+    against MANIFEST (manifest_at). Returns (problems, known): PROBLEMS are the
+    reasons it is neither a pass nor a listed known failure ([] if it is one);
+    KNOWN names the steps that are known failures exactly as the list names them
+    (the check phase only: the step's row names a known failure, the step reports
+    known_failure true, ok false, not timed out, the listed exit code and at least
+    its minimum of tests). The phase passes if both are empty."""
+    if phase not in PHASES:
+        raise ValueError(phase)
+    if not isinstance(summary, dict):
+        return ["the summary is missing or not a JSON object"], []
+    p, known = [], []
+    want = phase_steps(manifest["steps"], phase)
+    other = [m["name"] for m in manifest["steps"] if m not in want]
     if summary.get("mode") != "all":
         p.append("summary mode is %r, not 'all'" % summary.get("mode"))
-    if summary.get("verdict") != "pass":
-        p.append("summary verdict is %r, not 'pass'" % summary.get("verdict"))
+    if summary.get("phase") != phase:
+        p.append("summary phase is %r, not %r" % (summary.get("phase"), phase))
+    verdict = summary.get("verdict")
+    allowed = ("pass",) if phase == "build" else ("pass", "known_failure")
+    if verdict not in allowed:
+        p.append("summary verdict is %r, not %s" % (verdict, " or ".join(repr(v) for v in allowed)))
     for key in ("list_sha256", "runner_sha256"):
         if not HEX64.fullmatch(str(summary.get(key, ""))):
             p.append("summary has no valid %s" % key)
-    if manifest is not None:
-        if summary.get("list") != manifest["list"]:
-            p.append("the summary ran list %r, not %s" % (summary.get("list"), manifest["list"]))
-        if summary.get("list_sha256") != manifest["list_sha256"]:
-            p.append("the summary's list_sha256 is not the hash of %s in the commit" % manifest["list"])
-        if summary.get("runner_sha256") != manifest["runner_sha256"]:
-            p.append("the summary's runner_sha256 is not the hash of %s in the commit" % manifest["runner"])
+    if summary.get("list") != manifest["list"]:
+        p.append("the summary ran list %r, not %s" % (summary.get("list"), manifest["list"]))
+    if summary.get("list_sha256") != manifest["list_sha256"]:
+        p.append("the summary's list_sha256 is not the hash of %s in the commit" % manifest["list"])
+    if summary.get("runner_sha256") != manifest["runner_sha256"]:
+        p.append("the summary's runner_sha256 is not the hash of %s in the commit" % manifest["runner"])
     steps = summary.get("steps")
-    if not isinstance(steps, list) or not steps:
+    if not isinstance(steps, list):
+        p.append("summary has no step list")
+        return p, []
+    if not steps and want:
         p.append("summary has no steps: an empty test selection never passes")
-        return p
-    if manifest is not None:
-        p += binding_problems(manifest["steps"], steps)
-    least_of = {m["name"]: m["least"] for m in (manifest or {}).get("steps", [])}
+        return p, []
+    p += binding_problems(want, steps, other)
+    least_of = {m["name"]: m["least"] for m in manifest["steps"]}
+    known_of = {m["name"]: m["known"] for m in manifest["steps"]}
     for i, s in enumerate(steps):
         if not isinstance(s, dict):
             p.append("step %d is not an object" % i)
             continue
         name = s.get("name") or "step %d" % i
+        if s.get("known_failure") is True:
+            kn = known_of.get(name) if phase == "check" else None
+            q = []
+            if not isinstance(kn, dict):
+                q.append("step %s reports a known failure, but the list names no known failure for it" % name)
+            elif not _int(s.get("exit")) or s.get("exit") != kn["exit"]:
+                q.append("step %s reports a known failure with exit %r, not the listed exit %d"
+                         % (name, s.get("exit"), kn["exit"]))
+            if s.get("ok") is not False:
+                q.append("step %s reports a known failure and ok=%r" % (name, s.get("ok")))
+            if s.get("timed_out") is not False:
+                q.append("step %s timed out (timed_out=%r)" % (name, s.get("timed_out")))
+            q += _tests_problems(s, name, least_of)
+            p += q
+            if not q:
+                known.append(name)
+            continue
+        if s.get("known_failure") is not False:
+            p.append("step %s: known_failure is %r, not false" % (name, s.get("known_failure")))
         if s.get("exit") != 0 or not _int(s.get("exit")):
             p.append("step %s exited %r" % (name, s.get("exit")))
         if s.get("timed_out") is not False:
@@ -327,21 +408,21 @@ def summary_problems(summary, manifest=None):
         if s.get("ok") is not True:
             p.append("step %s is not ok (ok=%r, why=%r)" % (name, s.get("ok"), s.get("why")))
         # a build step (scripts/test kind "build") has no tests; every other step must run some
-        if s.get("kind") == "build":
-            continue
-        least = s.get("least")
-        if not _int(least) or least < 1:
-            p.append("step %s requires %r tests: a non-build step must require at least 1" % (name, least))
-        if not _int(s.get("tests_run")) or s["tests_run"] < 1:
-            p.append("step %s ran no tests (tests_run=%r)" % (name, s.get("tests_run")))
-        elif s["tests_run"] < max(least_of.get(name, 1), least if _int(least) else 1):
-            p.append("step %s ran %d tests, fewer than its minimum %r"
-                     % (name, s["tests_run"], least_of.get(name, least)))
-        if not _int(s.get("passed")) or s["passed"] < 1:
-            p.append("step %s passed no tests (passed=%r)" % (name, s.get("passed")))
-    if not any(isinstance(s, dict) and s.get("kind") != "build" for s in steps):
+        if s.get("kind") != "build":
+            p += _tests_problems(s, name, least_of)
+    if phase == "check" and not any(isinstance(s, dict) and s.get("kind") != "build" for s in steps):
         p.append("summary has only build steps: no tests ran")
-    return p
+    if verdict == "known_failure" and not known and not p:
+        p.append("summary verdict is 'known_failure', but no step is a listed known failure")
+    if verdict == "pass" and known:
+        p.append("summary verdict is 'pass', but step(s) %s are known failures" % ", ".join(known))
+    return p, known
+
+
+def known_text(manifest, names):
+    """The verdict text of a run whose only failures are the listed known failures NAMES."""
+    texts = [m["known"]["text"] for m in manifest["steps"] if m["name"] in names and m["known"]]
+    return "NOT ALL GREEN (known pre-existing failure: %s)" % "; ".join(texts)
 
 
 # ---------------------------------------------------------------- checkout evidence

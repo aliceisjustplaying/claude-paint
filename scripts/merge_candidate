@@ -8,19 +8,26 @@ notes. COMMIT must be an exact commit id. Before changing anything it checks
 ALL of the following and lists every problem it finds:
 
 1. A receipt exists (refs/notes/test-receipts on COMMIT) in the current
-   format, for exactly this commit and tree, with verdict pass, exit 0, no
-   cleanup errors and checkout evidence from before and after the test that
-   shows a full, unchanged checkout of COMMIT (HEAD, tree, index equal to the
-   commit's tree, not sparse, no skip-worktree/assume-unchanged flags, no
-   tracked changes). Missing or inconsistent evidence is refused. The
-   receipt's lockrun sha256 is the approved lockrun's pin (LOCKRUN_SHA256 in
-   safeguards_lib.py); a receipt without one is refused.
-2. The reviewed check set, re-derived from COMMIT's own blobs: the receipt's
+   format (v3), for exactly this commit and tree, with verdict pass, exit 0,
+   no cleanup errors and checkout evidence from before the test, after the
+   build phase and after both phases that shows a full, unchanged checkout
+   of COMMIT (HEAD, tree, index equal to the commit's tree, not sparse, no
+   skip-worktree/assume-unchanged flags, no tracked changes). Missing or
+   inconsistent evidence is refused. Any other verdict is refused; a
+   known_failure receipt ("NOT ALL GREEN (known pre-existing failure: ...)")
+   is not mergeable. The receipt's lockrun sha256 is the approved lockrun's
+   pin (LOCKRUN_SHA256 in safeguards_lib.py); a receipt without one is
+   refused.
+2. Both phases are present, in order (build, then check), each run under a
+   limit over 0 and at most 600 s, with lockrun exit 0 and verdict pass.
+   The reviewed check set, re-derived from COMMIT's own blobs: the receipt's
    list is notes/speed/test_lists/all.tsv; that list at COMMIT parses to
-   exactly the receipt's manifest and hashes to its list_sha256 (and the
-   summary's); scripts/test at COMMIT hashes to the manifest's runner_sha256
-   (and the summary's); the summary's steps are exactly the list's steps
-   (same order, name, kind, command, limit, least, group) and all passed.
+   exactly the receipt's manifest and hashes to its list_sha256 (and both
+   summaries'); scripts/test at COMMIT hashes to the manifest's runner_sha256
+   (and both summaries'); the build phase's steps are exactly the list's
+   build steps and the check phase's exactly its other steps (list order;
+   same name, kind, command, limit, least, group, known failure) and all
+   passed: no known failure either.
 3. The list and scripts/test are protected paths (notes/golden_paths.txt at
    the base or COMMIT), and golden_approve check passes between the
    receipt's recorded base main and COMMIT: every protected change, the
@@ -60,10 +67,10 @@ import subprocess
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from safeguards_lib import (DEFAULT_LIST, HEX64, LOCKRUN_SHA256, RECEIPT_FORMAT, RUNNER, Refuse,  # noqa: E402
-                            checkout_problems, describe_change, git, golden_check, is_ancestor,
-                            manifest_at, protected, resolve_exact_commit, run, summary_problems,
-                            toplevel, tree_of)
+from safeguards_lib import (DEFAULT_LIST, HEX64, LOCKRUN_SHA256, PHASE_LIMIT, PHASES,  # noqa: E402
+                            RECEIPT_FORMAT, RUNNER, Refuse, checkout_problems, describe_change, git,
+                            golden_check, is_ancestor, manifest_at, phase_problems, protected,
+                            resolve_exact_commit, run, toplevel, tree_of)
 
 
 def say(msg):
@@ -92,7 +99,13 @@ def receipt_problems(repo, sha, tree, r):
         p.append("the receipt is for another commit (%s), not %s" % (cand.get("commit"), sha))
     if cand.get("tree") != tree:
         p.append("the receipt's tree %s is not %s's tree %s" % (cand.get("tree"), sha[:12], tree))
-    if r.get("verdict") != "pass":
+    if r.get("verdict") == "known_failure":
+        text = str(r.get("verdict_text") or "")
+        mark = "known pre-existing failure: "
+        what = text[text.index(mark) + len(mark):].rstrip(")") if mark in text else "?"
+        p.append("NOT ALL GREEN: known pre-existing failure (%s): not mergeable (receipt verdict "
+                 "'known_failure')" % what)
+    elif r.get("verdict") != "pass":
         p.append("the receipt's verdict is %r, not pass" % r.get("verdict"))
     if r.get("exit") != 0:
         p.append("the receipt records exit %r" % r.get("exit"))
@@ -107,7 +120,8 @@ def receipt_problems(repo, sha, tree, r):
     if co.get("clean_before") is not True:
         p.append("the receipt does not record a clean checkout before the test")
     n_tree = len([x for x in git(repo, "ls-tree", "-r", "-z", "--name-only", sha).split("\0") if x])
-    for when, key in (("before the test", "before"), ("after the test", "after")):
+    for when, key in (("before the test", "before"), ("after the build phase", "between"),
+                      ("after the test", "after")):
         p += ["checkout evidence: " + x for x in checkout_problems(co.get(key), sha, tree, when)]
         if isinstance(co.get(key), dict) and co[key].get("files_tree") != n_tree:
             p.append("checkout evidence: %r files %s, but %s has %d"
@@ -128,7 +142,29 @@ def receipt_problems(repo, sha, tree, r):
                         sha[:12], _short(m.get(key)), _short(fresh[key])))
     if not HEX64.fullmatch(str(m.get("list_sha256", ""))):
         p.append("the receipt has no valid list hash")
-    p += ["receipt summary: " + s for s in summary_problems(r.get("summary"), fresh)]
+    # both phases, each limited to at most PHASE_LIMIT s, re-verified against the fresh list
+    phases = r.get("phases")
+    names = [e.get("phase") if isinstance(e, dict) else None for e in phases] if isinstance(phases, list) else None
+    if names != list(PHASES):
+        p.append("the receipt's phases are %r, not %s" % (names, " then ".join(PHASES)))
+    for e in phases if isinstance(phases, list) else []:
+        if not isinstance(e, dict) or e.get("phase") not in PHASES:
+            continue
+        ph = e["phase"]
+        lim = e.get("limit")
+        if type(lim) not in (int, float) or not 0 < lim <= PHASE_LIMIT:
+            p.append("the %s phase's limit is %r, not over 0 and at most %g s" % (ph, lim, PHASE_LIMIT))
+        if e.get("ran") is not True:
+            p.append("the %s phase did not run" % ph)
+        if e.get("exit") != 0 or type(e.get("exit")) is not int:
+            p.append("the %s phase's lockrun exit is %r, not 0" % (ph, e.get("exit")))
+        if e.get("verdict") != "pass":
+            p.append("the %s phase's verdict is %r, not pass" % (ph, e.get("verdict")))
+        bad, known = phase_problems(e.get("summary"), fresh, ph)
+        p += ["receipt %s phase summary: %s" % (ph, x) for x in bad]
+        if known:
+            p.append("receipt %s phase summary: known failure(s) %s: NOT ALL GREEN, not mergeable"
+                     % (ph, ", ".join(known)))
     return p
 
 

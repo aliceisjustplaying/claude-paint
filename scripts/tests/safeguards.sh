@@ -18,7 +18,7 @@ set -u
 S=$(cd "$(dirname "$0")/.." && pwd)
 T=$(mktemp -d "${TMPDIR:-/tmp}/safeguards-test.XXXXXX")
 trap 'chmod -R u+w "$T" 2>/dev/null; rm -rf "$T"' EXIT
-export LOCKRUN_DIR=$T/lock TEST_RECEIPT_DIR=$T/receipts
+export LOCKRUN_DIR=$T/lock TEST_RECEIPT_DIR=$T/receipts FAKE_PHASES=$T/phases
 unset LOCKRUN_TOKEN TEST_LIST_FILE
 # the approved lockrun (its sha256 is LOCKRUN_SHA256 in safeguards_lib.py)
 export LOCKRUN=$S/lockrun
@@ -36,6 +36,8 @@ hasnt() { ! grep -qF -- "$1" <<<"$OUT"; }
 rc() { [ "$RC" = "$1" ]; }
 g() { git -C "$DEV" "$@"; }
 
+# phases_ran COMMIT: the phases the fake runner ran for COMMIT, in order (e.g. "build check")
+phases_ran() { grep "^$1 " "$T/phases" | cut -d' ' -f2 | tr '\n' ' ' | sed 's/ $//'; }
 # the candidate's temporary directory, as test_candidate printed it (/tmp/cpc.*)
 cdir() { sed -n 's|^test_candidate: temporary working copy: \(.*\)/wt$|\1|p' <<<"$OUT"; }
 note_dir() { local d; d=$(cdir); [ -n "$d" ] && echo "$d" >>"$T/dirs"; }
@@ -94,7 +96,7 @@ import json, sys
 r = json.load(sys.stdin)
 c, t = sys.argv[1], sys.argv[2]
 r["candidate"]["commit"], r["candidate"]["tree"] = c, t
-for k in ("before", "after"):
+for k in ("before", "between", "after"):
     if isinstance(r.get("checkout", {}).get(k), dict):
         r["checkout"][k]["head"], r["checkout"][k]["tree"] = c, t
 exec(sys.argv[3])
@@ -109,22 +111,25 @@ mkdir -p "$SEED/scripts" "$SEED/answers" "$SEED/tests" "$SEED/notes/speed/test_l
 cp "$S/lockrun" "$SEED/scripts/lockrun"
 cat >"$SEED/scripts/test" <<'EOF'
 #!/usr/bin/env python3
-# Fake scripts/test following the summary contract; behavior from ./fake_mode.
+# Fake scripts/test following the summary contract (--all --phase build|check --summary F
+# [--list L]; 6, 7 or 10 columns); behavior from ./fake_mode.
 import hashlib, json, os, subprocess, sys, time
 a = sys.argv[1:]
-assert a[:2] == ["--all", "--summary"], a
-out, mode = a[2], open("fake_mode").read().strip()
+assert a[:4] in (["--all", "--phase", "build", "--summary"], ["--all", "--phase", "check", "--summary"]), a
+ph, out, mode = a[2], a[4], open("fake_mode").read().strip()
 lst = a[a.index("--list") + 1] if "--list" in a else "notes/speed/test_lists/all.tsv"
 tgt = os.environ["CARGO_TARGET_DIR"]
 sha = lambda p: hashlib.sha256(open(p, "rb").read()).hexdigest()
 G = lambda *x: subprocess.run(["git", *x], check=True, capture_output=True)
+if os.environ.get("FAKE_PHASES"):
+    with open(os.environ["FAKE_PHASES"], "a") as f: f.write("%s %s\n" % (G("rev-parse", "HEAD").stdout.decode().strip(), ph))
 bad = []
 if not os.environ.get("LOCKRUN_TOKEN"): bad.append("not run under lockrun")
 if not os.path.realpath(tgt).startswith(os.path.realpath(os.getcwd()) + "/"): bad.append("target dir outside")
 if not os.path.isfile("notes/pic.png"): bad.append("notes/pic.png missing: sparse checkout")
 if os.path.exists("leak.txt") or open("README").read() != "readme v2\n": bad.append("dev changes leaked")
 if os.environ.get("FAKE_TEST_STARTED"): open(os.environ["FAKE_TEST_STARTED"], "w").write("started\n")
-if mode in ("timeout", "slow"): time.sleep(60)
+if (mode in ("timeout", "slow") and ph == "build") or (mode == "timeout_check" and ph == "check"): time.sleep(60)
 os.makedirs(os.path.join(tgt, "test-logs"), exist_ok=True)
 steps = []
 for line in open(lst):
@@ -135,22 +140,29 @@ for line in open(lst):
     open(log, "w").write("$ %s\ntest result: ok\n%s" % (f[5], "".join(b + "\n" for b in bad)))
     steps.append(dict(name=f[1], kind=f[0], command=f[5], limit=float(f[2]), least=int(f[3]),
                       group=f[6] if len(f) > 6 and f[6] not in ("", "-") else None, exit=0, seconds=0.1,
-                      tests_run=n, passed=n or 0, failed=0, ignored=0, timed_out=False, ok=True, why="",
-                      log=log, log_sha256=sha(log)))
-s = dict(mode="all", verdict="pass", list=lst, list_sha256=sha(lst), runner_sha256=sha(os.path.abspath(__file__)),
-         wall_seconds=0.3, steps=steps)
+                      tests_run=n, passed=n or 0, failed=0, ignored=0, timed_out=False, ok=True,
+                      known_failure=False, known=dict(exit=int(f[7]), regex=f[8], text=f[9]) if len(f) == 10 else None,
+                      why="", log=log, log_sha256=sha(log)))
+full = list(steps)
+s = dict(mode="all", phase=ph, verdict="pass", verdict_text="PASS", list=lst, list_sha256=sha(lst),
+         runner_sha256=sha(os.path.abspath(__file__)), wall_seconds=0.3, steps=steps)
 u = steps[1]
 rc = 0
+mine = lambda: [x for x in s["steps"] if (x["kind"] == "build") == (ph == "build")]
+if ph == "build":
+    if bad or mode == "build_fail":
+        steps[0].update(exit=101, ok=False, why="exit 101"); s["verdict"] = "fail"; rc = 1
+    s["steps"] = mine()
+    if mode != "build_nosummary": json.dump(s, open(out, "w"))
+    sys.exit(rc)
 if bad or mode == "fail": u.update(exit=1, passed=2, failed=1, ok=False, why="1 failed"); s["verdict"] = "fail"; rc = 1
 if mode == "zero": u.update(tests_run=0, passed=0)
 if mode == "exit1pass": rc = 1
 if mode == "lie_timedout": u["timed_out"] = True
-if mode == "nosteps": s["steps"] = []
 if mode == "badlist": s["list_sha256"] = "0" * 64
 if mode == "badrunner": s["runner_sha256"] = "0" * 64
 if mode == "badlog": u["log_sha256"] = "f" * 64
 if mode == "badfield": u["command"] = 5
-if mode == "onlybuild": s["steps"] = steps[:1]
 if mode == "omit": s["steps"] = steps[:2]
 if mode == "extra": s["steps"] = steps + [dict(u, name="bonus")]
 if mode == "dup": s["steps"] = steps + [dict(u)]
@@ -160,8 +172,14 @@ if mode == "limit": u["limit"] = 999.0
 if mode == "least": u["least"] = 1
 if mode == "least0": steps[2]["least"] = 0
 if mode == "group": steps[2]["group"] = None
+if mode in ("known", "known_unlisted", "known_exit"):
+    # check 13 (b)'s way: exit 3, NOT ALL GREEN; listed (known), unlisted, or another exit
+    steps[2].update(exit=5 if mode == "known_exit" else 3, ok=False, known_failure=True,
+                    why="known pre-existing failure: %s" % (steps[2]["known"] or {}).get("text"))
+    s.update(verdict="known_failure", verdict_text="NOT ALL GREEN (known pre-existing failure: %s)"
+             % (steps[2]["known"] or {}).get("text")); rc = 4
 if mode == "unfinished":
-    steps[2].update(exit=-15, timed_out=True, ok=False, why="timed out after 30 s"); s["verdict"] = "unfinished"; rc = 1
+    steps[2].update(exit=-15, timed_out=True, ok=False, why="timed out after 30 s"); s["verdict"] = "unfinished"; rc = 3
 if mode == "mutate": open("README", "w").write("changed while testing\n")
 if mode == "unstage": G("rm", "--cached", "-q", "fake_mode")
 if mode == "headmove": G("checkout", "-q", "--detach", "HEAD^")
@@ -170,6 +188,8 @@ if mode == "sparse": G("sparse-checkout", "set", "--no-cone", "/*", "!/notes/")
 if mode == "stuck":
     os.makedirs(os.path.join(tgt, "stuck")); open(os.path.join(tgt, "stuck", "f"), "w").write("x\n")
     os.chmod(os.path.join(tgt, "stuck"), 0o500)
+s["steps"] = mine() if mode not in ("onlybuild", "checkbuild") else full[:1] + (mine() if mode == "checkbuild" else [])
+if mode == "nosteps": s["steps"] = []
 if mode != "nosummary": json.dump(s, open(out, "w"))
 sys.exit(rc)
 EOF
@@ -180,6 +200,8 @@ build${TAB}build${TAB}600${TAB}0${TAB}-${TAB}cargo build --release
 cargo${TAB}unit${TAB}60${TAB}3${TAB}-${TAB}cargo test --release -p paint
 script${TAB}second${TAB}30${TAB}1${TAB}^ok${TAB}scripts/tests/second.sh${TAB}slow"
 printf '%s\n' "$LIST_V1" >"$SEED/$LIST"
+# the same list with a known failure on "second" (check 13 (b)'s way: exit 3 and a NOT ALL GREEN line)
+LIST_KNOWN="${LIST_V1}${TAB}3${TAB}^NOT ALL GREEN${TAB}check 13 (b) awaits the decision"
 printf 'pass\n' >"$SEED/fake_mode"
 printf 'answer v1\n' >"$SEED/answers/a.txt"
 printf '#!/bin/sh\necho golden test v1\n' >"$SEED/tests/golden_test.sh"
@@ -224,9 +246,12 @@ LIST_CHANGED=${LIST_V1/second.sh/second.sh --quick}
 MODES_FAIL="fail zero nosummary exit1pass lie_timedout nosteps badlist badlog onlybuild"
 MODES_BIND="omit extra dup reorder cmd limit least least0 group badrunner"
 MODES_CO="mutate unstage headmove skipflag sparse"
-for mode in $MODES_FAIL $MODES_BIND $MODES_CO badfield stuck unfinished timeout; do
+MODES_PH="build_fail build_nosummary checkbuild known_unlisted"
+for mode in $MODES_FAIL $MODES_BIND $MODES_CO $MODES_PH badfield stuck unfinished timeout timeout_check; do
   C=$(mkc "$M" fake_mode="$mode"); eval "C_$mode=$C"
 done
+# known failures: the list names one for "second" (exit 3); known_exit exits 5 instead
+for mode in known known_exit; do C=$(mkc "$M" fake_mode="$mode" "$LIST=$LIST_KNOWN"); eval "C_$mode=$C"; done
 G2=$(mkc "$M" answers/a.txt=v2)
 LC=$(mkc "$M" "$LIST=$LIST_CHANGED")
 LU=$(mkc "$M" "$LIST=${LIST_V1/second.sh/second.sh --unapproved}")
@@ -253,7 +278,8 @@ rm -f "$T/started"
 ( cd "$DEV" && LOCKRUN_DIR=$T/lock-sig FAKE_TEST_STARTED=$T/started exec "$S/test_candidate" "$C_slow" >"$T/out.sig" 2>&1 ) &
 sigpid=$!
 tcbg timeout "$C_timeout" --timeout 2
-for mode in $MODES_FAIL $MODES_BIND $MODES_CO badfield stuck unfinished; do eval 'tcbg $mode "$C_'"$mode"'"'; done
+tcbg timeout_check "$C_timeout_check" --timeout 5
+for mode in $MODES_FAIL $MODES_BIND $MODES_CO $MODES_PH badfield stuck unfinished known known_exit; do eval 'tcbg $mode "$C_'"$mode"'"'; done
 tcbg G2 "$G2"
 tcbg LC "$LC"
 tcbg LU "$LU"
@@ -281,16 +307,16 @@ pass_receipt() {
     r['base_main']['is_ancestor'] is True and r['exit']==0 and r['cleanup_errors']==[]"
 }
 log_copied() {
-  local d f; d=$(rget "$P" 'r["receipt_dir"]'); f=$(rget "$P" 'r["logs"][1]["file"]')
+  local d f; d=$(rget "$P" 'r["receipt_dir"]'); f=$(rget "$P" 'r["phases"][1]["logs"][0]["file"]')
   d=${d/#\~/$HOME}
-  [ -f "$d/receipt.json" ] && [ "$(shasum -a 256 "$d/$f" | cut -d' ' -f1)" = "$(rget "$P" 'r["logs"][1]["sha256"]')" ]
+  [ -f "$d/receipt.json" ] && [ "$(shasum -a 256 "$d/$f" | cut -d' ' -f1)" = "$(rget "$P" 'r["phases"][1]["logs"][0]["sha256"]')" ]
 }
 check "pass: exit 0 and a pass receipt for the exact commit, tree and base main (an ancestor)" pass_receipt
 check "pass: the step logs were copied out before cleanup and their sha256 recorded" log_copied
 check "pass: receipt binds the check set: list, list and runner hashes of the commit's blobs, the 3 parsed steps (limit, least, group)" \
   rtrue "$P" "r['manifest']['list']=='$LIST' and r['manifest']['list_sha256']=='$(g show "$P:$LIST" | shasum -a 256 | cut -d' ' -f1)'
    and r['manifest']['runner_sha256']=='$(g show "$P:scripts/test" | shasum -a 256 | cut -d' ' -f1)'
-   and r['manifest']['runner_sha256']==r['summary']['runner_sha256'] and r['manifest']['list_sha256']==r['summary']['list_sha256']
+   and all(r['manifest']['runner_sha256']==e['summary']['runner_sha256'] and r['manifest']['list_sha256']==e['summary']['list_sha256'] for e in r['phases'])
    and [(s['name'], s['limit'], s['least'], s['group']) for s in r['manifest']['steps']]==[('build',600.0,0,None),('unit',60.0,3,None),('second',30.0,1,'slow')]"
 check "pass: receipt has checkout evidence before and after (HEAD, tree, index = commit tree, no flags, not sparse, no tracked changes)" \
   rtrue "$P" "all(r['checkout'][k]['head']=='$P' and r['checkout'][k]['index_matches_commit'] is True and r['checkout'][k]['flagged_count']==0
@@ -316,10 +342,10 @@ fail_case nosteps "an empty test selection never passes" "no steps"
 fail_case badlist "list_sha256 is not the hash" "a wrong list hash"
 fail_case badlog "differs from the summary's" "a wrong log hash"
 fail_case onlybuild "only build steps" "only the build step reported"
-fail_case omit "the summary omits listed step(s): second" "two listed test steps, only one reported (reviewer's case)"
+fail_case omit "check phase: the summary omits listed step(s): second" "two listed test steps, only one reported in the check phase (reviewer's case)"
 fail_case extra "step(s) the list does not: bonus" "an extra step"
 fail_case dup "more than once: unit" "a duplicated step"
-fail_case reorder "is not the list's (build, unit, second)" "reordered steps"
+fail_case reorder "is not the list's (unit, second)" "reordered steps"
 fail_case cmd "step unit: the summary's command is 'true'" "a changed step command"
 fail_case limit "step unit: the summary's limit is 999.0" "a changed step limit"
 fail_case least "step unit: the summary's least is 1" "a changed step minimum (least)"
@@ -336,20 +362,47 @@ check "the edited-file receipt records the evidence (tracked_changed true, the c
   rtrue "$C_mutate" "r['checkout']['after']['tracked_changed'] is True and any('README' in l for l in r['checkout']['after']['tracked_changes'])"
 
 tcget unfinished; C=$C_unfinished
-check "an inner step timeout (summary verdict unfinished, runner exit 1): unfinished receipt (exit 3), not fail, never pass" \
+check "an inner step timeout in the check phase (summary verdict unfinished, runner exit 3): unfinished receipt (exit 3), not fail, never pass" \
   eval 'rc 3 && verdict_is $C unfinished && problem_has $C "reported unfinished work (timed out: second)" && cleaned'
 tcget timeout; C=$C_timeout
-check "outer timeout: unfinished receipt (exit 3), never a pass, directory removed" \
-  eval 'rc 3 && verdict_is $C unfinished && problem_has $C "timed out after 2 s" && cleaned'
+check "build phase outer timeout: unfinished receipt (exit 3), never a pass, the check phase not run, directory removed" \
+  eval 'rc 3 && verdict_is $C unfinished && problem_has $C "build phase: timed out after 2 s" && [ "$(phases_ran $C)" = build ] && rtrue $C "r[\"phases\"][1][\"ran\"] is False and r[\"phases\"][0][\"verdict\"]==\"unfinished\"" && cleaned'
 OUT=$(cat "$T/out.sig"); RC=$(cat "$T/rc.sig"); note_dir; C=$C_slow
 check "SIGTERM mid-test: unfinished receipt, test stopped, directory removed" \
   eval 'rc 3 && verdict_is $C unfinished && problem_has $C "cancelled (SIGTERM)" && cleaned'
+tcget timeout_check; C=$C_timeout_check
+check "check phase outer timeout: unfinished receipt (exit 3), the build phase passed first, directory removed" \
+  eval 'rc 3 && verdict_is $C unfinished && problem_has $C "check phase: timed out after 5 s" && [ "$(phases_ran $C)" = "build check" ] && rtrue $C "[e[\"verdict\"] for e in r[\"phases\"]]==[\"pass\", \"unfinished\"] and r[\"phases\"][1][\"exit\"]==124" && cleaned'
+tcget build_fail; C=$C_build_fail
+check "a failing build phase: the check phase is not run, verdict fail (exit 1), directory removed" \
+  eval 'rc 1 && verdict_is $C fail && problem_has $C "build phase: step build exited 101" && problem_has $C "check phase: not run: the build phase did not pass" && [ "$(phases_ran $C)" = build ] && rtrue $C "r[\"phases\"][1][\"ran\"] is False and r[\"phases\"][1][\"exit\"] is None and r[\"phases\"][0][\"verdict\"]==\"fail\"" && cleaned'
+tcget build_nosummary; C=$C_build_nosummary
+check "a build phase that writes no summary: fail, the check phase not run" \
+  eval 'rc 1 && verdict_is $C fail && problem_has $C "build phase: scripts/test wrote no summary" && [ "$(phases_ran $C)" = build ]'
+tcget checkbuild; C=$C_checkbuild
+check "a check-phase summary that holds a build step: fail" \
+  eval 'rc 1 && verdict_is $C fail && problem_has $C "check phase: the summary holds step(s) the list puts in the other phase: build" && cleaned'
+tcget known; C=$C_known
+check "a listed known failure (exit 3 as listed): verdict known_failure, NOT ALL GREEN text, exit 4, directory removed" \
+  eval 'rc 4 && verdict_is $C known_failure && rtrue $C "r[\"verdict_text\"]==\"NOT ALL GREEN (known pre-existing failure: check 13 (b) awaits the decision)\" and r[\"exit\"]==4 and r[\"problems\"]==[]" && has "VERDICT: NOT ALL GREEN (known pre-existing failure: check 13 (b) awaits the decision)" && cleaned'
+check "that receipt: build phase pass, check phase known_failure (lockrun exit 4) naming the step; the manifest binds the known failure" \
+  rtrue "$C" "[(e['phase'], e['verdict'], e['exit']) for e in r['phases']]==[('build','pass',0),('check','known_failure',4)]
+   and r['phases'][1]['known_failures']==['second'] and r['manifest']['steps'][2]['known']=={'exit':3,'regex':'^NOT ALL GREEN','text':'check 13 (b) awaits the decision'}"
+fail_case known_unlisted "step second reports a known failure, but the list names no known failure for it" \
+  "a known failure on a row that names none"
+fail_case known_exit "step second reports a known failure with exit 5, not the listed exit 3" \
+  "a known failure with another exit than the listed one"
+check "pass: the receipt has two phases, build then check, each limited to 600 s, each its own lockrun log with its sha256" \
+  rtrue "$P" "[(e['phase'], e['limit'], e['ran'], e['exit'], e['verdict']) for e in r['phases']]==[('build',600.0,True,0,'pass'),('check',600.0,True,0,'pass')]
+   and all(e['lockrun_log'].endswith('/lockrun-%s.log' % e['phase']) and len(e['lockrun_log_sha256'])==64 and '--phase '+e['phase'] in e['command'] for e in r['phases'])
+   and r['checkout']['between']['index_matches_commit'] is True and r['verdict_text']=='PASS' and r['exit']==0"
+check "pass: the fake runner ran the build phase, then the check phase, once each" eval '[ "$(phases_ran $P)" = "build check" ]'
 tcget LC
 check "a candidate that changes the list is tested on its own list (the binding is to the commit's blobs; approval is merge's job)" \
   eval 'rc 0 && verdict_is $LC pass'
 tcget FL
 check "--list-file: another list in the commit is run with --list and bound (fast.tsv, 2 steps)" \
-  eval 'rc 0 && rtrue $FL "r[\"manifest\"][\"list\"]==\"notes/speed/test_lists/fast.tsv\" and len(r[\"summary\"][\"steps\"])==2"'
+  eval 'rc 0 && rtrue $FL "r[\"manifest\"][\"list\"]==\"notes/speed/test_lists/fast.tsv\" and [len(e[\"summary\"][\"steps\"]) for e in r[\"phases\"]]==[1, 1]"'
 check "pass: the receipt names the lockrun that ran: \$LOCKRUN (this checkout's scripts/lockrun), sha256 the pin" \
   rtrue "$P" "r['lockrun']['source']=='\$LOCKRUN' and r['lockrun']['sha256']=='$PIN' and r['lockrun']['pinned_sha256']=='$PIN'
    and r['lockrun']['path']=='$(sed "s|^$HOME|~|" <<<"$S/lockrun")' and len('$PIN')==64"
@@ -363,13 +416,13 @@ for k in G2 N PL; do tcget $k; done
 tcget LU
 all_receipts() {
   local c k
-  for k in P timeout $MODES_FAIL $MODES_BIND $MODES_CO badfield stuck unfinished slow forge; do
+  for k in P timeout timeout_check $MODES_FAIL $MODES_BIND $MODES_CO $MODES_PH badfield stuck unfinished slow forge known known_exit; do
     if [ "$k" = P ]; then c=$P; else eval 'c=$C_'"$k"; fi
     receipt "$c" | grep -q "\"commit\": \"$c\"" || return 1
   done
   for c in $G2 $LC $LU $FL $N $PL; do receipt "$c" | grep -q "\"commit\": \"$c\"" || return 1; done
 }
-check "the $(set -- P timeout $MODES_FAIL $MODES_BIND $MODES_CO badfield stuck unfinished slow forge G2 LC LU FL N PL; echo $#) concurrent runs each kept their own receipt note (writes serialized, read back)" all_receipts
+check "the $(set -- P timeout timeout_check $MODES_FAIL $MODES_BIND $MODES_CO $MODES_PH badfield stuck unfinished slow forge known known_exit G2 LC LU FL N PL; echo $#) concurrent runs each kept their own receipt note (writes serialized, read back)" all_receipts
 
 # ---------------------------------------------------------------- test_candidate refusals
 refused() { # COMMIT WANT DESCRIPTION [ARGS]
@@ -382,7 +435,9 @@ refused "$(mkc "$M" scripts/test="<delete>")" "scripts/test is not in" "a commit
 refused "$(mkc "$M" "$LIST=${LIST_V1/${TAB}3${TAB}/${TAB}0${TAB}}")" "every non-build step must require at least 1" \
   "a list whose non-build step requires 0 tests"
 refused "$(mkc "$M" "$LIST=$(head -2 <<<"$LIST_V1")")" "only build steps" "a list with no non-build step"
-refused "$(mkc "$M" "$LIST=${LIST_V1/${TAB}-${TAB}cargo test/ cargo test}")" "want 6 or 7 tab-separated fields" "a malformed list"
+refused "$(mkc "$M" "$LIST=${LIST_V1/${TAB}-${TAB}cargo test/ cargo test}")" "want 6, 7 or 10 tab-separated fields" "a malformed list"
+refused "$(mkc "$M" "$LIST=${LIST_KNOWN/${TAB}3${TAB}^NOT/${TAB}0${TAB}^NOT}")" "a known failure is a non-build step's nonzero exit code" \
+  "a list whose known failure names exit 0"
 refused "$(mkc "$M" "$LIST=<symlink:../../../README>")" "is not a regular file" "a list that is a symlink"
 forger "$T/ran.env" >"$T/bad-lockrun"; chmod +x "$T/bad-lockrun"
 LR=$(mkc "$M" extra.txt=from-LR)
@@ -512,6 +567,9 @@ mc "$G1"
 check "merge: missing receipt refused" eval 'rc 1 && has "no test receipt"'
 mc "$C_fail"
 check "merge: failed-test receipt refused" eval 'rc 1 && has "verdict is '"'"'fail'"'"'"'
+mc "$C_known"
+check "merge: a known_failure receipt refused: NOT ALL GREEN, not mergeable" \
+  eval 'rc 1 && has "NOT ALL GREEN: known pre-existing failure (check 13 (b) awaits the decision): not mergeable"'
 mc "$C_mutate"
 check "merge: the receipt of a run that edited a tracked file refused (verdict and evidence)" \
   eval 'rc 1 && has "verdict is '"'"'fail'"'"'" && has "checkout evidence: tracked files or the index changed after the test"'
@@ -552,14 +610,31 @@ check "merge: a pass receipt without a lockrun sha256 refused" eval 'rc 1 && one
 forge "$E1" "$P" 'del r["lockrun"]'
 mc "$E1"
 check "merge: a pass receipt without a lockrun record refused" eval 'rc 1 && one_problem && has "lockrun sha256 is None"'
-forge "$E1" "$P" 'r["summary"]["steps"] = r["summary"]["steps"][:2]'
+forge "$E1" "$P" 'r["phases"][1]["summary"]["steps"] = r["phases"][1]["summary"]["steps"][:1]'
 mc "$E1"
 check "merge: a forged pass receipt whose summary omits a listed step refused (re-verified against the commit's list)" \
   eval 'rc 1 && one_problem && has "omits listed step(s): second"'
-forge "$E1" "$P" 'r["manifest"]["steps"][1]["least"] = 1; r["summary"]["steps"][1]["least"] = 1'
+forge "$E1" "$P" 'r["manifest"]["steps"][1]["least"] = 1; r["phases"][1]["summary"]["steps"][0]["least"] = 1'
 mc "$E1"
 check "merge: a receipt whose manifest and summary agree on a weaker minimum than the commit's list refused" \
   eval 'rc 1 && has "manifest steps differs" && has "the summary'"'"'s least is 1"'
+forge "$E1" "$P" 'r["phases"] = r["phases"][1:]'
+mc "$E1"
+check "merge: a pass receipt edited to drop the build phase refused" eval 'rc 1 && one_problem && has "phases are ['"'"'check'"'"'], not build then check"'
+forge "$E1" "$P" 'r["phases"] = r["phases"][:1]'
+mc "$E1"
+check "merge: a pass receipt edited to drop the check phase refused" eval 'rc 1 && one_problem && has "phases are ['"'"'build'"'"'], not build then check"'
+forge "$E1" "$P" 'r["phases"][1]["limit"] = 900.0'
+mc "$E1"
+check "merge: a pass receipt whose check phase ran under a limit over 600 s refused" \
+  eval 'rc 1 && one_problem && has "the check phase'"'"'s limit is 900.0, not over 0 and at most 600 s"'
+forge "$E1" "$P" 'r["phases"][1]["summary"]["steps"].insert(0, r["phases"][0]["summary"]["steps"][0])'
+mc "$E1"
+check "merge: a forged pass receipt whose check-phase summary holds a build step refused" \
+  eval 'rc 1 && one_problem && has "check phase summary: the summary holds step(s) the list puts in the other phase: build"'
+forge "$E1" "$P" 'r["format"] = "claude-paint test receipt v2"'
+mc "$E1"
+check "merge: a receipt in the old format (v2) refused" eval 'rc 1 && one_problem && has "format is '"'"'claude-paint test receipt v2'"'"'"'
 forge "$RN" "$P"
 mc "$RN"
 check "merge: scripts/test changed after the test (runner hash mismatch) refused" \

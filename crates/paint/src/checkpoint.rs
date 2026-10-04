@@ -453,9 +453,13 @@ impl Canvas {
         // then the end
         let mut b = Vec::with_capacity(8);
         r.by_ref().take(8).read_to_end(&mut b)?;
-        match b.len() {
-            0 if !soaked => {}
-            8 if soaked && u64::from_le_bytes(b[..].try_into().unwrap()) == SOAK_MARK => {
+        match (soaked, b.len()) {
+            (false, 0) => {}
+            (false, _) => return Err(bad("checkpoint has trailing data")),
+            (true, 0) => return Err(bad("checkpoint soak is missing")),
+            (true, 1..8) => return Err(bad("checkpoint is cut off in its soak mark")),
+            (true, _) if u64::from_le_bytes(b[..].try_into().unwrap()) != SOAK_MARK => return Err(bad("checkpoint soak mark is wrong")),
+            (true, _) => {
                 if !c.f.is_whole() {
                     return Err(bad("checkpoint soak is on a crop render"));
                 }
@@ -467,13 +471,17 @@ impl Canvas {
                         return Err(bad("checkpoint soak box is invalid"));
                     }
                 }
+                // turpentine still there and oil still on its way lie in
+                // the box the clock keeps an eye on (`soak_tick`)
+                let watched = |i: usize| s.active.is_some_and(|(bx0, by0, bx1, by1)| (bx0..bx1).contains(&(i % w)) && (by0..by1).contains(&(i / w)));
+                if (0..n).any(|i| (s.solv[i] > 0.0 || s.oil_pend[i] > 0.0) && !watched(i)) {
+                    return Err(bad("checkpoint soak moves outside its active box"));
+                }
                 c.soak = Some(Box::new(s));
                 if r.read(&mut [0u8; 1])? != 0 {
                     return Err(bad("checkpoint has trailing data"));
                 }
             }
-            _ if soaked => return Err(bad("checkpoint soak is missing")),
-            _ => return Err(bad("checkpoint has trailing data")),
         }
         Ok((c, header))
     }

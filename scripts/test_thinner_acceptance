@@ -3,7 +3,7 @@
 # test name, in release builds.
 #
 #   scripts/test_thinner_acceptance --quick   ordinary edits: everything but the slow ones
-#   scripts/test_thinner_acceptance --card    check 1 only: the 2400 px card (#[ignore = "slow"])
+#   scripts/test_thinner_acceptance --card    the cards: check 1's 2400 px card (#[ignore = "slow"]) and check 13's sienna card
 #   scripts/test_thinner_acceptance --all     every agreed check, the slow ones and the card included
 #
 # A test counts as passed only if cargo exited 0 and printed `test NAME ...
@@ -14,15 +14,12 @@
 # the rag study's sheet, rag_study.png, to THINNER_RAG_STUDY_DIR (default
 # notes/thinner; set it to keep a checkout clean) and fails without it.
 #
-# Check 13 (b) is a known failure on unchanged code, awaiting the user's
-# decision (ACCEPTANCE.md, check 13). Every mode runs it and expects it to
-# fail at its ordering assertion (thinner_pigments.rs:119, with that
-# assertion's message). It is reported on its own line as EXPECTED FAIL; if
-# it passes, doesn't run or fails anywhere else, the run fails.
+# Every mode runs check 13 (b) (the siennas' contrast ratios at equal
+# films) and the sienna card's diagnostic, with their printed numbers in the
+# log (--show-output). The diagnostic checks only its own fixture.
 #
-# Exit: 1 if anything else failed; 3 if every other required test passed
-# and only check 13 (b)'s expected failure remains (NOT ALL GREEN); 2 on a
-# usage error. While check 13 (b) stands, 0 is never returned.
+# Exit: 0 if every required test passed; 1 if anything failed; 2 on a
+# usage error.
 #
 # Needs cargo, bash 5, python3 and xz. One heavy job at a time: run it
 # through ~/src/a/claude-paint-tools/lockrun with --timeout 60 (--quick,
@@ -60,11 +57,11 @@ PAINT_SLOW=(
 PIGMENTS=(
   c13_every_pigment_value_is_af49348s
 )
-EXPECTED_FAIL=c13_burnt_sienna_shows_the_card_at_least_as_well_as_raw_sienna
-# the known failure is the ordering assertion's own panic, nothing else
-# (crates/paint/tests/thinner_pigments.rs:119)
-EXPECTED_AT="panicked at crates/paint/tests/thinner_pigments.rs:119:"
-EXPECTED_MSG="Field/Salter (§155) has burnt the more transparent"
+# check 13 (b) and the sienna card's diagnostic, run with --show-output
+SIENNA=(
+  c13_burnt_sienna_has_a_lower_contrast_ratio_than_raw_sienna_at_equal_film
+  c13_diagnostic_sienna_card_retained_absolute_substrate_difference
+)
 # crates/easel/src/thinner_tests.rs (unit tests of the easel binary)
 EASEL_QUICK=(
   thinner_tests::c03_af49348_paintck8_saves_are_refused_naming_the_old_version
@@ -89,7 +86,6 @@ logs=$(mktemp -d "${TMPDIR:-/tmp}/thinner-acceptance.XXXXXX")
 required=0
 passed=0
 bad=()
-expected=""
 
 # cargo_test <label> <cargo args...> -- <libtest args...> ::: <names...>:
 # runs it, leaves the log in $logs/<label>.log and cargo's exit in $status
@@ -135,23 +131,6 @@ run() {
   done
 }
 
-# check 13 (b), the known pre-existing failure: it must run and fail at its
-# ordering assertion, with that assertion's message
-expected_fail() {
-  cargo_test check13b --release -p paint --test thinner_pigments -- --exact ::: "$EXPECTED_FAIL"
-  if grep -qF "test $EXPECTED_FAIL ... FAILED" "$log" && [ "$status" != 0 ]; then
-    if grep -qF "$EXPECTED_AT" "$log" && grep -qF "$EXPECTED_MSG" "$log"; then
-      expected="$EXPECTED_FAIL"
-    else
-      bad+=("$EXPECTED_FAIL (failed, but not at its ordering assertion (thinner_pigments.rs:119, \"$EXPECTED_MSG\"): a different failure, see $log)")
-    fi
-  elif grep -qxF "test $EXPECTED_FAIL ... ok" "$log"; then
-    bad+=("$EXPECTED_FAIL (passed unexpectedly: the pre-existing finding changed; review ACCEPTANCE.md check 13 before anything else)")
-  else
-    bad+=("$EXPECTED_FAIL (did not run: the expected failure must run and fail)")
-  fi
-}
-
 # check 2: the before-change baseline's own comparison (scripts/thinner_check2)
 check2() {
   local t0 t1 st
@@ -176,18 +155,18 @@ case "$mode" in
   --quick)
     check2
     run pigments --release -p paint --test thinner_pigments -- --exact ::: "${PIGMENTS[@]}"
-    expected_fail
+    run sienna --release -p paint --test thinner_pigments -- --exact --show-output ::: "${SIENNA[@]}"
     run paint --release -p paint --test thinner_physics -- --exact ::: "${PAINT_QUICK[@]}"
     run easel --release -p easel --bin easel -- --exact ::: "${EASEL_QUICK[@]}"
     ;;
   --card)
-    expected_fail
+    run sienna --release -p paint --test thinner_pigments -- --exact --show-output ::: "${SIENNA[@]}"
     run card --release -p easel --bin easel -- --exact --ignored --show-output ::: "${CARD[@]}"
     ;;
   --all)
     check2
     run pigments --release -p paint --test thinner_pigments -- --exact ::: "${PIGMENTS[@]}"
-    expected_fail
+    run sienna --release -p paint --test thinner_pigments -- --exact --show-output ::: "${SIENNA[@]}"
     run paint --release -p paint --test thinner_physics -- --exact ::: "${PAINT_QUICK[@]}"
     run paint-slow --release -p paint --test thinner_physics -- --exact --ignored --show-output ::: "${PAINT_SLOW[@]}"
     run easel --release -p easel --bin easel -- --exact ::: "${EASEL_QUICK[@]}"
@@ -203,13 +182,10 @@ esac
 
 echo
 echo "thinner acceptance $mode: $passed of $required required tests passed (logs: $logs)"
-if [ -n "$expected" ]; then
-  echo "  EXPECTED FAIL (pre-existing; user decision, ACCEPTANCE.md check 13): $expected"
-fi
 if [ ${#bad[@]} -gt 0 ]; then
   printf '  NOT PASSED: %s\n' "${bad[@]}"
   echo "thinner acceptance $mode: FAILED"
   exit 1
 fi
-echo "thinner acceptance $mode: NOT ALL GREEN: every other required test passed; only check 13 (b)'s pre-existing failure remains"
-exit 3
+echo "thinner acceptance $mode: PASSED"
+exit 0

@@ -87,16 +87,14 @@ dynamically. The live-width forms stay in `--all`.
 
 `scripts/tests/cargo_tests.sh` (the `cargo-test` step, test profile) leaves
 out the thinner's acceptance tests: the test binaries `thinner_physics` and
-`thinner_pigments` and the easel binary's `thinner_tests::` module (27 tests,
+`thinner_pigments` and the easel binary's `thinner_tests::` module (28 tests,
 7 of them `#[ignore]`d slow ones). Their approved command is a release build,
 `scripts/test_thinner_acceptance` (`notes/thinner/ACCEPTANCE.md`), which
 `scripts/test` runs: `--quick` in the fast checks (60 s) and `--all`, the
 2400 px card included, in `--all` (300 s). Their release test binaries are
-built by the build step `build-thinner-release-tests`. Check 13 (b)
-(`c13_burnt_sienna_shows_the_card_at_least_as_well_as_raw_sienna`) fails
-until the user decides; the runner then exits 3 and `scripts/test` reports
-the known failure: "NOT ALL GREEN (known pre-existing failure: thinner check
-13(b), user decision)", never a pass.
+built by the build step `build-thinner-release-tests`. Check 13 (b) was
+restated (`notes/thinner/sienna-13b/APPROVAL.md`); the steps no longer list
+a known failure.
 
 ### Doc examples (`ignore` code blocks)
 

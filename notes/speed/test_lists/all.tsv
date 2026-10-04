@@ -19,7 +19,7 @@ script	baseline-state	60	6	^\S+: state equal on every baseline field	scripts/tes
 cargo	slow-tests-by-name	240	4	-	cargo test -p easel --test boxes -- --ignored --exact a_round_19_log_replays_as_before >"$TMPDIR/slow-r19.out" 2>&1 & a=$!; cargo test -p easel --test determinism -- --ignored --exact hand_time_is_deterministic_across_thread_counts_at_the_live_width state_digests_are_the_same_in_every_replay_at_the_live_width the_rag_replays_the_same_at_the_live_width >"$TMPDIR/slow-det.out" 2>&1 & b=$!; wait $a; ra=$?; wait $b; rb=$?; cat "$TMPDIR/slow-r19.out" "$TMPDIR/slow-det.out"; [ $ra = 0 ] && [ $rb = 0 ]	s
 cargo	slow-thin-blend	180	1	-	cargo test -p paint --test ground_grain -- --ignored --exact thin_blend_bares_ground	s
 cargo	painter-build-inness	300	14	-	CARGO_TARGET_DIR="$CARGO_TARGET_DIR/p" cargo test -p easel --no-default-features --features box-inness	s
-script	thinner-all	300	1	^thinner acceptance --all: \d+ of \d+ required tests passed	THINNER_RAG_STUDY_DIR="$TMPDIR" scripts/test_thinner_acceptance --all	s	3	^thinner acceptance --all: NOT ALL GREEN: every other required test passed; only check 13 \(b\)'s pre-existing failure remains$	thinner check 13(b), user decision
+script	thinner-all	300	1	^thinner acceptance --all: \d+ of \d+ required tests passed	THINNER_RAG_STUDY_DIR="$TMPDIR" scripts/test_thinner_acceptance --all	s
 script	lockrun	60	17	^ok \d+ -	scripts/tests/lockrun.sh
 script	replay-env	60	1	^replay_env: check_painting, finish_painting and replay_clip replayed	scripts/tests/replay_env.sh
 script	check-live	60	1	^check_live: check_painting passed	scripts/tests/check_live.sh

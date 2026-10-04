@@ -26,8 +26,8 @@ approved lock, with these limits:
 
 | command | runs | limit |
 |---|---|---|
-| `~/src/a/claude-paint-tools/lockrun --timeout 60 --owner <you> -- scripts/test_thinner_acceptance --quick` | check 2, check 13 (a), check 13 (b) as an expected failure, and every test that isn't slow | 60 s once built |
-| `~/src/a/claude-paint-tools/lockrun --timeout 300 --owner <you> -- scripts/test_thinner_acceptance --card` | check 1, and check 13 (b) as an expected failure | 300 s |
+| `~/src/a/claude-paint-tools/lockrun --timeout 60 --owner <you> -- scripts/test_thinner_acceptance --quick` | check 2, check 13 (a) and (b), the sienna card's diagnostic, and every test that isn't slow | 60 s once built |
+| `~/src/a/claude-paint-tools/lockrun --timeout 300 --owner <you> -- scripts/test_thinner_acceptance --card` | check 1, check 13 (b) and the sienna card's diagnostic | 300 s |
 | `~/src/a/claude-paint-tools/lockrun --timeout 600 --owner <you> -- scripts/test_thinner_acceptance --all` | everything: the slow tests, the rag study's sheet and the card | 600 s (also a first build) |
 
 **What counts.** A test passes only if cargo exited 0 and printed
@@ -45,23 +45,15 @@ study's sheet, `rag_study.png`, to `THINNER_RAG_STUDY_DIR` (default
 `notes/thinner`; set it so a candidate checkout stays clean) and fails if
 the file isn't written.
 
-**Check 13 (b)** fails on unchanged code (below) and awaits the user.
-Every mode runs it and expects it to fail at its ordering assertion: the
-log must hold `panicked at crates/paint/tests/thinner_pigments.rs:119:` and
-that assertion's message, `Field/Salter (§155) has burnt the more
-transparent`. It is reported on its own line as
-`EXPECTED FAIL (pre-existing; user decision, ACCEPTANCE.md check 13)`.
-If it passes, doesn't run or fails anywhere else (a setup panic, another
-assertion), the run fails.
+**Check 13 (b)** and the sienna card's diagnostic run in every mode with
+`--show-output`, so their measured numbers are in the log. The diagnostic
+checks only its own fixture (below).
 
 **Exit codes:**
 
-- 1: anything else failed;
-- 3: every other required test passed and only 13 (b)'s expected failure
-  remains, printed as `NOT ALL GREEN`;
+- 0: every required test passed, printed as `PASSED`;
+- 1: anything failed;
 - 2: a usage error.
-
-While 13 (b) stands, 0 is never returned.
 
 **Dependencies:** cargo (rustc 1.97.1 here), bash 5 (the baseline's
 `run_scenes.sh` reads `EPOCHREALTIME`), python3 with only the standard
@@ -77,14 +69,14 @@ These cases must exit 1:
 - ok lines from a cargo that exits nonzero;
 - a name missing, ignored or failed;
 - empty output;
-- 13 (b) passing, not running, or failing with another panic;
+- 13 (b) failing (each mode) or not running;
+- the sienna card's diagnostic failing;
 - check 2 failing;
 - no rag sheet.
 
-Everything passing with 13 (b) failing at its assertion must exit 3 in all
-three modes, and a usage error exits 2. With `THINNER_RAG_STUDY_DIR` set,
-the sheet must land there and none in the checkout. It passes all 18
-cases.
+Everything passing must exit 0 in all three modes, and a usage error
+exits 2. With `THINNER_RAG_STUDY_DIR` set, the sheet must land there and
+none in the checkout. It passes all 19 cases.
 `scripts/tests/thinner_dump_fields_test.py` tests check 2's field checker
 on tiny fake dumps (6 cases, all pass), and
 `scripts/tests/thinner_clock_restart_fake.py` is check 17's demonstration
@@ -463,31 +455,77 @@ with only this test file added:
 `git show af49348:crates/paint/src/palette.rs`: 48 tubes and 6 boxes
 match. **Passes today.**
 
-**(b) `c13_burnt_sienna_shows_the_card_at_least_as_well_as_raw_sienna`.**
-Measured the card's way:
+**(b) `c13_burnt_sienna_has_a_lower_contrast_ratio_than_raw_sienna_at_equal_film`.**
+Field/Salter 1869 §155 calls burnt sienna "more transparent than the raw
+earth". Restated (approval: notes/thinner/sienna-13b/APPROVAL.md) as the
+paint industry's hiding measure, the contrast ratio (luminance of a film
+over a black ÷ over a white; lower = more see-through; ASTM D2805 /
+ISO 6504-3), of equal films on the same named substrates. The film is the
+engine's own uniform-film optics (`Paint::over`, Kubelka-Munk), with no
+brush involved, so brush deposition can't move it.
+
+- Tubes: raw and burnt sienna of the Sargent box, unthinned, so the whole
+  film is nonvolatile paint.
+- Films: 3, 10, 25 and 30 µm (25 µm is one coat), fixed in advance: the
+  thicknesses of the existing sienna diagnostic (`look_sienna.rs`,
+  notes/look/logs/sienna.txt).
+- Substrates: the black/80% white chart (RGB 0 and 0.8 in every channel)
+  and the Sargent box's bone black and lead white masstones (frozen by (a)).
+
+Expected: at each film on each substrate, burnt sienna's luminance contrast
+ratio is lower than raw sienna's by at least 1e-4. The margin is set from
+the arithmetic, not from the measured gap: the ratio comes from a few dozen
+f32 operations, and f32 rounding and libm's last-place differences between
+platforms stay near 1e-5; 1e-4 is ten times that and forty times smaller
+than one 8-bit display step. A tie inside it fails. Measured afterward: the
+f32 ratios differ from an f64 port of the same formulas by at most 9.2e-8
+(notes/thinner/sienna-13b/EVIDENCE.md).
+
+Printed, not checked: the substrates' RGB and luminance; each film's RGB
+over each; each channel's ratio (the channels need not rank alike: green
+ranks the other way from 10 µm up); the retained absolute substrate
+difference; and each tube's catalog hiding beside the rendered one-coat
+ratio.
+
+**The catalog's hiding (0.40 raw, 0.45 burnt) is an input calibration
+scalar.** `scatter_for` turns it into the paint's scattering through a
+grayscale surrogate: a gray paint of the masstone's luminance, one coat
+over black and white 1.0. The renderer then absorbs per RGB channel, so a
+rendered coat's luminance contrast ratio is another number: 0.3884 raw and
+0.3778 burnt over black/white 1.0, 0.4516 and 0.4378 over the black/80%
+white chart. The serialized values and (a) are unchanged.
+
+Measured on d54b423 (2026-10-04), luminance contrast ratio:
+
+| film | chart: raw | chart: burnt | masstones: raw | masstones: burnt |
+|---|---|---|---|---|
+| 3 µm | 0.0471 | 0.0352 | 0.0586 | 0.0474 |
+| 10 µm | 0.1695 | 0.1537 | 0.1748 | 0.1590 |
+| 25 µm | 0.4516 | 0.4378 | 0.4450 | 0.4270 |
+| 30 µm | 0.5365 | 0.5117 | 0.5273 | 0.4983 |
+
+**Diagnostic: `c13_diagnostic_sienna_card_retained_absolute_substrate_difference`.**
+Until the restatement this was (b), `c13_burnt_sienna_shows_the_card_at_least_as_well_as_raw_sienna`,
+which required burnt ≥ raw here. It measures the card's way:
 
 - a bone-black band and a lead-white band, laid thick and dried;
 - the same 20 filbert strokes of unthinned raw sienna, then of burnt
   sienna (Sargent box, load 0.5), across both, with the films equal pixel
   for pixel.
 
-Expected: burnt sienna lets at least as much of the black/white contrast
-show as raw sienna. Field/Salter 1869 §155 calls burnt "more transparent
-than the raw earth".
+It prints the share of the bands' absolute black/white luminance difference
+each sienna still shows (the retained absolute substrate difference, an
+underpainting-value measure) and the same bands' contrast ratio, per
+channel too. It depends on the brush's deposition, so its numbers belong
+to the code that ran it. It checks only its own fixture: the strokes laid
+paint, the two films are equal within 1e-3 µm, and both siennas go on the
+same card. It doesn't order the siennas.
 
-**PRE-EXISTING FINDING, for the user's decision: (b) fails on unchanged
-code** (paint sources equal af49348's, per (a); measured 2026-10-04):
-
-| | hiding (one coat's contrast ratio) | scattering per coat | masstone luminance | card contrast showing, equal 10.07 µm film |
-|---|---|---|---|---|
-| raw sienna | 0.40 | 0.296 | 0.174 | **17.91%** |
-| burnt sienna | 0.45 | 0.199 | 0.080 | **9.85%** |
-
-Burnt sienna scatters less, but its darker masstone absorbs much more, so
-on the card it hides more than raw sienna. The tube table agrees: hiding
-0.45 against 0.40. The test body stays as written. The runner accepts only
-this failure, at line 119 with its message, reports it as an expected
-failure and exits 3, never 0, while it stands. Pigments are not changed.
+Measured on d54b423, an equal film of 37.92 µm mean on the bands: retained
+absolute substrate difference raw 17.91%, burnt 9.85%; contrast ratio raw
+0.4998, burnt 0.4642. Burnt sienna's darker masstone absorbs more, so it
+keeps less of the absolute difference while its contrast ratio is lower.
+Pigments are not changed.
 
 ### 14. Stroke points
 
@@ -757,12 +795,16 @@ Decided by the owner on 2026-10-04 (may be revisited):
   alone was within 1e-7 of the law there and the flow accounted for the
   rest. The constant was loosened rather than the selection restated.
 
+- **Check 13 (b) restated** (notes/thinner/sienna-13b/APPROVAL.md): the
+  card's retained absolute difference ranked the siennas against
+  Field/Salter, because burnt sienna's darker masstone absorbs more. (b)
+  now compares contrast ratios of equal direct films on named substrates;
+  the card's measure stays as a diagnostic. Pigments, the catalog's hiding
+  and (a) are unchanged.
+
 For the user:
 
-1. **Check 13 (b) fails today.** The sienna order on the card is the
-   reverse of Field/Salter's. Is that a defect for a later pigment fix
-   (not tonight), or should the check be restated?
-2. Check 3's policy and check 8's allowance (above).
+1. Check 3's policy and check 8's allowance (above).
 
 Risks the builder may hit; a fix goes back to review, never into a weaker
 test:
@@ -779,7 +821,7 @@ test:
 |---|---|
 | `1417fdda18d15fe32e532ca43d63f6fa42d410aef041a51013975ae00e025e87` | `crates/paint/tests/thinner_physics.rs` |
 | `fe7d4e25e0e03a094d3c534dc2f8728c6ef4482e29f38a5b0b3ce01042d728ff` | `crates/paint/tests/thinner_support/mod.rs` |
-| `53924605cde088b16056fd31d69d57f96c5eae8d5c4674858326823bb0ca06cc` | `crates/paint/tests/thinner_pigments.rs` |
+| `257c3d828815642ec091a4d3e6ff5e90490914afdb450ae9bb5ce2362f2f85df` | `crates/paint/tests/thinner_pigments.rs` |
 | `542e25ab395446ea79c893640e5515702309b145f99a5da5ff7e617ea83e15c2` | `crates/paint/tests/thinner/tubes_af49348.txt` |
 | `a8a8c6668bf71626032de47578a9c0810fc42cf3505cdb200bae6067e340b060` | `crates/easel/src/thinner_tests.rs` |
 | `f94b50a428ef2e05285f2f4f6c634662eff85d945d2c0ab0c1033c06fd7cefd1` | `crates/easel/src/thinner_measure.rs` |
@@ -791,8 +833,8 @@ test:
 | `fc674bf8a45732cf52e56976279e2ecfd24ca2bba9fcecd43d7f31d3ef137a96` | `crates/easel/tests/thinner/failing.lua` |
 | `83a9244e38ef0eca10903a4d7a4761ac3f8dd6861d564526cfe6c2f8c9325259` | `crates/easel/tests/thinner/next.lua` |
 | `31e301b3f309913d55147c7c2a626bf3a8bb8ca57c8859b2884403e68d30919d` | `crates/easel/tests/thinner/thinned.lua` |
-| `7c94dfe3cccc81760acf1e313f590558e2696ddbc7819117c517c77c03ef285b` | `scripts/test_thinner_acceptance` |
-| `740434325f19204fb68ba3369c9f439076390ba4a83beb26ae6b93947866dc66` | `scripts/tests/thinner_acceptance_runner.sh` |
+| `e5509e4dd2be5196b007de5f650b27a1c7315b9e1bd0d569874122b41bf79487` | `scripts/test_thinner_acceptance` |
+| `b4df5e70bb5cf22602e755f2c7e636ae91286b7c9cd4a9c3a4dc414caa8a8341` | `scripts/tests/thinner_acceptance_runner.sh` |
 | `a6af467b6309d948790c0e460f9b06bb79b05a17a360fba01bbc9e859fdbe18f` | `scripts/tests/thinner_dump_fields_test.py` |
 | `93b580798dd2c21c464c382c8b5d4a00b3e069f7f4c51f5b8aa95e8c6ddebd6a` | `scripts/tests/thinner_clock_restart_fake.py` |
 | `d921054862c2ba41be635c80ef756e0097d81accbd2699756c90ea77e776abf1` | `scripts/thinner_check2` |

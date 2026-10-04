@@ -11,6 +11,8 @@ notes/golden_paths.txt
 # unchanged release easel, approved by a reviewer who isn't their builder.
 crates/easel/tests/old_logs/
 scripts/tests/old_logs.sh
+# an input of the old-log case r19 (cases.tsv names it as ../r19_default_box.lua)
+crates/easel/tests/r19_default_box.lua
 # Thinner acceptance tests, helpers and answers: the thinner agent names them
 # here (each addition needs approval like any other change to this file).
 # <thinner acceptance paths go here>

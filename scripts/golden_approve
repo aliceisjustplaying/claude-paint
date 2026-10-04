@@ -10,22 +10,26 @@ The protected set is listed in notes/golden_paths.txt (one path per line, or a
 directory prefix ending in /; # comments). The list file itself is always
 protected. `check` uses the union of the base's and the candidate's lists.
 
-record: approves the exact blobs of PATHS (default: every protected file at X)
-at commit X. Each approval is one JSON line appended to the git note on X in
-refs/notes/golden-approvals:
+record: approves the exact entries of PATHS (default: every protected path
+at X) at commit X. Each approval is one JSON line appended to the git note on
+X in refs/notes/golden-approvals:
     {"format", "commit", "approver", "builder", "reason", "method",
-     "approved_at", "paths": [{"path", "blob"}], "list_from", "tool_sha256"}
-blob is the file's blob id at X, or "deleted" when PATH does not exist at X
-(approving a deletion). Refused when approver equals builder
+     "approved_at", "paths": [{"path", "mode", "blob"}], "list_from", "tool_sha256"}
+blob is the entry's object id at X and mode its Git mode (100644, 100755;
+120000 symlink, 160000 submodule), or blob "deleted" (no mode) when PATH does
+not exist at X (approving a deletion). Refused when approver equals builder
 (case-insensitive). All agents share one Git identity, so this is a check on
 the declared role names; the rule is that only the lead or the user runs
 `record`.
 
 check: every protected path that differs between B and C (added, modified,
-deleted; a rename counts as a deletion plus an addition) must have its exact
-blob at C ("deleted" if gone) approved by a valid approval: the note sits on
-the commit it names, approver != builder, and the blob really is that path's
-blob at that commit. Prints what is unapproved; exit 1 if anything is.
+deleted, type changed; a rename counts as a deletion plus an addition) must
+have its exact entry at C ("deleted" if gone) approved by a valid approval:
+the note sits on the commit it names, approver != builder, and the entry
+really is that path's at that commit. A symlink, submodule or other
+non-regular entry at a protected path is refused as an unsupported type unless
+an approval names exactly its mode and object. Listed paths need not exist at
+either commit. Prints what is unapproved; exit 1 if anything is.
 
 Notes are not pushed or fetched with branches:
     git fetch origin refs/notes/golden-approvals:refs/notes/golden-approvals
@@ -39,8 +43,8 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from safeguards_lib import (APPROVAL_FORMAT, APPROVALS_REF, GOLDEN_LIST, Refuse,  # noqa: E402
-                            assert_publishable, blob_bytes, blob_id, git, golden_check,
-                            home_redact, now_iso, protected, protected_files, read_approvals,
+                            assert_publishable, blob_bytes, describe_change, entry_at, git,
+                            golden_check, home_redact, unsupported, now_iso, protected, protected_files, read_approvals,
                             read_patterns, resolve_exact_commit, run, sha256_bytes, toplevel,
                             tools_sha256)
 
@@ -79,13 +83,13 @@ def cmd_record(repo, a):
                 if not under:
                     raise Refuse("no files under %s at %s" % (p, x[:12]))
                 for n in under:
-                    entries[n] = blob_id(repo, x, n)
+                    entries[n] = entry_at(repo, x, n)
             else:
-                b = blob_id(repo, x, p)
-                if b is not None and git(repo, "cat-file", "-t", b) != "blob":
+                e = entry_at(repo, x, p)
+                if e is not None and e[0] == "040000":
                     raise Refuse("%s is a directory at %s; write it with a trailing /" % (p, x[:12]))
-                entries[p] = b or "deleted"
-                if b is None:
+                entries[p] = e
+                if e is None:
                     say("note: %s does not exist at %s: approving its DELETION" % (p, x[:12]))
             if not protected(p, patterns) and not p.endswith("/"):
                 say("note: %s is not in the protected list at %s" % (p, src[:12]))
@@ -93,7 +97,11 @@ def cmd_record(repo, a):
         if not patterns:
             raise Refuse("no %s at %s; pass --paths or --list-from" % (GOLDEN_LIST, src[:12]))
         for n in protected_files(repo, x, patterns):
-            entries[n] = blob_id(repo, x, n)
+            entries[n] = entry_at(repo, x, n)
+    for p, e in sorted(entries.items()):
+        if e is not None and unsupported(e[0]):
+            say("note: %s is not a regular file at %s (mode %s): approving exactly that mode and object"
+                % (p, x[:12], e[0]))
     if not entries:
         raise Refuse("nothing to approve")
     rec = {
@@ -104,7 +112,8 @@ def cmd_record(repo, a):
         "reason": a.reason,
         "method": a.method or "",
         "approved_at": now_iso(),
-        "paths": [{"path": p, "blob": entries[p]} for p in sorted(entries)],
+        "paths": [{"path": p, "blob": "deleted"} if entries[p] is None
+                  else {"path": p, "mode": entries[p][0], "blob": entries[p][1]} for p in sorted(entries)],
         "list_from": {"commit": src, "sha256": sha256_bytes(blob_bytes(repo, src, GOLDEN_LIST) or b"")},
         "tool_sha256": tools_sha256(*TOOL_FILES),
     }
@@ -112,7 +121,7 @@ def cmd_record(repo, a):
     assert_publishable(line, "the approval")
     print("approval for %s: %d path(s), approver %s, builder %s" % (x, len(entries), approver, builder))
     for e in rec["paths"]:
-        print("  %s %s" % (e["blob"], e["path"]))
+        print("  %s %s %s" % (e.get("mode", "-"), e["blob"], e["path"]))
     if a.dry_run:
         print("dry run: not recorded")
         return 0
@@ -129,13 +138,13 @@ def cmd_check(repo, a):
     if not patterns:
         say("warning: neither commit has %s; only the list file itself is protected" % GOLDEN_LIST)
     print("protected changes %s..%s: %d" % (base[:12], cand[:12], len(changes)))
-    for status, path, blob in changes:
+    for status, path, obj, mode in changes:
         if path in by:
             hit = by[path][0]
-            print("  approved   %s %s %s (by %s, builder %s, at %s)"
-                  % (status, blob[:12], path, hit["approver"], hit["builder"], hit["commit"][:12]))
-    for status, path, blob in unapproved:
-        print("  UNAPPROVED %s %s %s" % (status, blob[:12], path))
+            print("  approved   %s (by %s, builder %s, at %s)"
+                  % (describe_change(status, path, obj, mode), hit["approver"], hit["builder"], hit["commit"][:12]))
+    for change in unapproved:
+        print("  UNAPPROVED %s" % describe_change(*change))
     if unapproved:
         print("golden check FAILED: %d protected change(s) without approval" % len(unapproved))
         return 1

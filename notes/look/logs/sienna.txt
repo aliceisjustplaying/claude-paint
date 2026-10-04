@@ -6,6 +6,8 @@ burnt sienna: masstone Y 0.0797, scattering 0.1989 per coat, hiding of one coat 
      3 µm burnt sienna: contrast ratio on a black/80% white chart Y 0.035  R 0.030 G 0.036 B 0.059; on the card's bands Y 0.051  R 0.047 G 0.051 B 0.080; difference kept on the card 66.5%
     10 µm raw sienna  : contrast ratio on a black/80% white chart Y 0.169  R 0.143 G 0.177 B 0.798; on the card's bands Y 0.182  R 0.153 G 0.191 B 0.821; difference kept on the card 49.7%
     10 µm burnt sienna: contrast ratio on a black/80% white chart Y 0.154  R 0.104 G 0.192 B 0.661; on the card's bands Y 0.166  R 0.116 G 0.206 B 0.695; difference kept on the card 30.6%
+    25 µm raw sienna  : contrast ratio on a black/80% white chart Y 0.452  R 0.341 G 0.522 B 1.000; on the card's bands Y 0.457  R 0.342 G 0.532 B 1.000; difference kept on the card 20.5%
+    25 µm burnt sienna: contrast ratio on a black/80% white chart Y 0.438  R 0.277 G 0.761 B 0.999; on the card's bands Y 0.439  R 0.281 G 0.767 B 0.999; difference kept on the card 10.5%
     30 µm raw sienna  : contrast ratio on a black/80% white chart Y 0.537  R 0.403 G 0.631 B 1.000; on the card's bands Y 0.539  R 0.402 G 0.639 B 1.000; difference kept on the card 15.6%
     30 µm burnt sienna: contrast ratio on a black/80% white chart Y 0.512  R 0.337 G 0.877 B 1.000; on the card's bands Y 0.511  R 0.339 G 0.881 B 1.000; difference kept on the card 8.2%
 (2) the card painted as check 13 (b) paints it, twenty strokes at load 0.5:

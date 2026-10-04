@@ -76,8 +76,9 @@ fn siennas_by_contrast_ratio() {
         let p = sargent(name);
         println!("{name}: masstone Y {:.4}, scattering {:.4} per coat, hiding of one coat {:.4}", luminance(p.color), p.scatter, p.hiding());
     }
+    // (25 µm is one coat: the tubes' `hiding` is the contrast ratio of one coat on luminance alone)
     println!("\n(1) a uniform film, the engine's own optics (Kubelka-Munk), thinned or not alike (the solvent has no color):");
-    for um in [3.0f32, 10.0, 30.0] {
+    for um in [3.0f32, 10.0, 25.0, 30.0] {
         let x = um / paint::COAT_UM;
         for name in ["raw sienna", "burnt sienna"] {
             let p = sargent(name);

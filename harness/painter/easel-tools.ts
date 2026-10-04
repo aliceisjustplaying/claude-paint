@@ -62,6 +62,7 @@ export function registerEaselTools(pi: ExtensionAPI, studio: string): void {
 			}),
 			async execute(id, p, signal, onUpdate, ctx) {
 				let said: string;
+				lookArgs(p); // validate combinations before resolving compare paths
 				if (p.survey && p.compare) throw new Error("look: survey and compare are two looks; ask for one");
 				// compare: an earlier look of this studio, nothing outside it (as `read`)
 				let compare = p.compare || undefined; // (an empty path is none)

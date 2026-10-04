@@ -976,6 +976,37 @@ pub fn root() -> PathBuf {
 mod tests {
     use super::*;
 
+    #[test]
+    #[cfg(tube_box)]
+    fn palette_add_refreshes_recipe_and_dilutes_materials() {
+        let mut s = Session::new(48).unwrap();
+        s.run(CANVAS).unwrap();
+        s.run(r#"p = pile{{"lead white", 2}, oil="poppy", turps=0.6, thinner=0.4}
+            p = p:add{{"cobalt blue", 2}}
+            local parts = p:parts()
+            assert(#parts == 2 and parts[1][2] == 2 and parts[2][2] == 2)
+            assert(math.abs(p.thinner - 0.2) < 0.00001)
+            assert(tostring(p):find("cobalt blue 2", 1, true))"#).unwrap();
+        let p = s.globals["p"].0.as_userdata().unwrap().borrow::<api::PileU>().unwrap();
+        assert!((p.mix.solvent - 0.3).abs() < 1e-5);
+        assert!((p.mix.oil_rate - 0.8).abs() < 1e-5);
+    }
+
+    #[test]
+    #[cfg(tube_box)]
+    fn a_retained_palette_pile_can_be_added_after_many_new_heaps() {
+        let mut s = Session::new(48).unwrap();
+        s.run(CANVAS).unwrap();
+        s.run(r#"p = pile{{"lead white", 1}}
+            for i = 1, 100 do pile{{"cobalt blue", 1}} end
+            p = p:add{{"cobalt blue", 1}}
+            assert(#p:parts() == 2)"#).unwrap();
+        let st = s.st.borrow();
+        assert_eq!(st.board.live().len(), crate::board::LIVE);
+        let p = s.globals["p"].0.as_userdata().unwrap().borrow::<api::PileU>().unwrap();
+        assert_eq!(st.board.live().last().unwrap().id, p.heap);
+    }
+
     #[cfg(tube_box)]
     const W: usize = 160;
 

@@ -159,9 +159,9 @@ BRANCH = "round-23"
 # Round 24.1 keeps the engine and adds completion review and guide corrections. Before launch:
 # `git tag -a <TAG> <commit>` in the shared repo and `git worktree add --detach ~/src/a/claude-paint-r24run <TAG>`.
 # main() refuses to start while BASE isn't a clean checkout of TAG (checkout_problems).
-TAG = "round-24.1"
+TAG = "round-24.2"
 BRANCH = TAG
-BASE = A / "claude-paint-r24-1run"
+BASE = A / "claude-paint-r24-2run"
 EXPORT = BASE / "scripts/export_r16_studio"      # honors R16_BRANCH
 FINISH = BASE / "scripts/finish_painting"
 CHECK = BASE / "scripts/check_painting"
@@ -183,11 +183,11 @@ PAINTER_MSG = ("Your brief is in BRIEF.md in this folder. Your last message is y
                "painting's title if you give it one and a few sentences about the picture.")
 SITTING_MESSAGE = ("You're back at the easel. The painting is as you left it. "
                    "Your brief is in BRIEF.md and your journal in notes/journal.md. "
-                   "Make a fresh assessment of the painting: a signature or an earlier journal entry "
-                   "calling it finished is not a reason to stop. Look at the whole canvas and detail "
-                   "crops in normal color, including passages you previously considered weak. "
-                   "If you identify a change that would improve the intended painting, make it and "
-                   "inspect the result. Finish only when that review identifies no further improvement.")
+                   "Take your time with a fresh look at the whole canvas and detail crops in normal color. "
+                   "Is your heart happy with this? Is there something you would enjoy taking further? "
+                   "You can keep working for hours if you like, and the painting's simulated time is "
+                   "yours to use, whether that means days or years. Enjoy it. When you are happy with "
+                   "the painting, record your reflections in your journal and finish.")
 # A painter works in up to MAX_SITTINGS sittings (completed ones, and crashed ones that painted); it stops
 # earlier after a sitting that reviews whole and detail views without adding paint
 MAX_SITTINGS = 4                                 # default; run/max_sittings.txt is read between sittings
@@ -385,7 +385,7 @@ BUNNY = model("opencode-go", "space-bunny-free", "max")
 LANES = {
     # round 22.1 and round 23: one Opus 5.5 painter (thinking xhigh, through the Claude subscription: pi-black) in Inness's studio
     # round 24: thinking high (the owner's choice for the engine-3 painting)
-    "INNS": lane("inness", model("anthropic", "claude-fable-5-1", "high", black=True), record_kind="none"),
+    "INNS": lane("inness", OPUS, record_kind="none"),
 }
 DRY = False
 

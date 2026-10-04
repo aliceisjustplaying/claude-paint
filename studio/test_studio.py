@@ -391,6 +391,7 @@ def test_a_palette_look_is_not_the_painting():
     assert S.is_whole(S.look_text({"survey": False}))
     assert not S.is_whole(S.look_text({"compare": "out/easel/painting/a.png"}))
     assert not S.is_whole(S.look_text({"light": "45,15"}))
+    assert not S.is_whole(S.look_text({"hold": "skyP", "at": "400,320"}))
     assert not S.is_whole(S.look_text({"survey": True, "mode": "gallery"}))
 
 

@@ -387,7 +387,7 @@ pub struct Brush {
 /// A painting knife (`knife{width=}`): k:load(pile, amount), k:lay(points,
 /// {pressure=, angle=, lift=}), k:scrape(points, {pressure=, angle=}), k:wipe().
 pub struct KnifeU {
-    k: Rc<RefCell<paint::Knife>>,
+    pub(crate) k: Rc<RefCell<paint::Knife>>,
     st: S,
 }
 

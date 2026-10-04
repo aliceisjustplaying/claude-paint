@@ -1,6 +1,6 @@
-lockrun: job 3d46c18f started (process group 54551, timeout 600 s, log /tmp/lockrun-<uid>/logs/20261004-063345-3d46c18f.log)
+lockrun: job f324e8a6 started (process group 47809, timeout 600 s, log /tmp/lockrun-<uid>/logs/20261004-070058-f324e8a6.log)
    Compiling easel v0.1.0 (~/src/a/claude-paint-thinner2/crates/easel)
-    Finished `release` profile [optimized] target(s) in 0.67s
+    Finished `release` profile [optimized] target(s) in 0.69s
      Running tests/determinism.rs (target/release/deps/determinism-f4987ace5c3be9b5)
 
 running 4 tests
@@ -10,26 +10,26 @@ test the_rag_replays_the_same ... ok
 test hand_time_is_deterministic_across_thread_counts has been running for over 60 seconds
 test hand_time_is_deterministic_across_thread_counts ... ok
 
-test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 70.08s
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 70.33s
 
      Running tests/session_integrity.rs (target/release/deps/session_integrity-b8b1434d5849f66a)
 
 running 10 tests
 test replay_failure_is_fatal ... ok
-test journal_uses_the_selected_painting_clock ... ok
 test live_resolution_is_fixed ... ok
 test a_failed_look_after_a_chunk_still_reports_the_chunk ... ok
 test a_running_session_refuses_every_request_while_its_log_is_edited ... ok
 test a_look_never_overwrites_an_earlier_observation ... ok
+test journal_uses_the_selected_painting_clock ... ok
 test a_second_server_is_refused_and_a_dead_ones_socket_is_recovered ... ok
 test edited_or_truncated_logs_cannot_reopen ... ok
 test rebuilding_serves_progress_and_refuses_nonstatus_requests ... ok
 test racing_opens_start_one_server ... ok
 
-test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 10.84s
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 10.83s
 
-lockrun: finished: exit 0 in 82.3 s; log /tmp/lockrun-<uid>/logs/20261004-063345-3d46c18f.log
-lockrun: job 5353cd11 started (process group 59483, timeout 600 s, log /tmp/lockrun-<uid>/logs/20261004-063507-5353cd11.log)
+lockrun: finished: exit 0 in 82.4 s; log /tmp/lockrun-<uid>/logs/20261004-070058-f324e8a6.log
+lockrun: job e174c0b3 started (process group 53216, timeout 600 s, log /tmp/lockrun-<uid>/logs/20261004-070220-e174c0b3.log)
    Compiling paint v0.1.0 (~/src/a/claude-paint-thinner2/crates/paint)
     Finished `release` profile [optimized] target(s) in 0.89s
      Running tests/curved_drag_nan.rs (target/release/deps/curved_drag_nan-7495b342855ddb47)
@@ -38,7 +38,7 @@ running 2 tests
 test a_nan_point_is_an_error - should panic ... ok
 test the_same_curve_with_finite_points_lays_paint ... ok
 
-test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.04s
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.05s
 
      Running tests/ground_grain.rs (target/release/deps/ground_grain-4e0253e4cc2e9ae4)
 
@@ -50,4 +50,4 @@ test the_brushed_ground_has_no_horizontal_grain ... ok
 
 test result: ok. 1 passed; 0 failed; 3 ignored; 0 measured; 0 filtered out; finished in 3.53s
 
-lockrun: finished: exit 0 in 4.9 s; log /tmp/lockrun-<uid>/logs/20261004-063507-5353cd11.log
+lockrun: finished: exit 0 in 5.0 s; log /tmp/lockrun-<uid>/logs/20261004-070220-e174c0b3.log

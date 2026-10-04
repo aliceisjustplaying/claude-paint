@@ -418,6 +418,18 @@ impl Canvas {
         self.wet.clock.now = end;
     }
 
+    /// `wait` on the minute grid until no solvent is left: to the next
+    /// whole minute, then a whole minute at a time. Ends: each minute every
+    /// pixel keeps at most exp(-1 / τ) of its solvent, τ finite, and below
+    /// `SOLVENT_FLOOR` it is gone.
+    fn wait_out_solvent(&mut self) {
+        while self.wet.has_solvent(self.f.w) {
+            let now = self.wet.clock.now;
+            let step = (now.floor() + 1.0 - now) as f32;
+            self.wait_on_grid(if step > 0.0 { step } else { 1.0 });
+        }
+    }
+
     /// The open films age by `dt` minutes where they lie (the body of
     /// `wait`, without moving the clock).
     fn age(&mut self, dt: f32) {
@@ -557,7 +569,16 @@ impl Canvas {
     /// fluid (thin fluid paint pools in the hollows, stiff paint keeps its
     /// marks), then it is composited over the dry picture with Kubelka–Munk
     /// using the settled thickness, and the wet layer is cleared.
+    ///
+    /// With solvent in the paint (engine 3, `crate::thinner`), the clock
+    /// first runs on whole minutes, as `wait` does, until the last of it
+    /// has evaporated, so the film flows and loses its solvent as it would
+    /// have waiting; then the rest of the way to touch-dry is the shortcut
+    /// above.
     pub fn dry(&mut self) {
+        if self.engine >= 3 && self.wet.has_solvent(self.f.w) {
+            self.wait_out_solvent();
+        }
         if !self.wet.clock.px.is_empty() {
             self.absorb();
         }

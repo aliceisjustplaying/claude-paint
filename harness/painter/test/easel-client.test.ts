@@ -75,6 +75,7 @@ test("look's options become the easel's arguments", () => {
 	assert.deepEqual(lookArgs({ survey: true, mode: "gallery" }), ["--survey", "--mode", "gallery"]);
 	assert.deepEqual(lookArgs({ palette: true, mode: "gallery" }), ["--palette"]);
 	assert.deepEqual(lookArgs({ compare: "out/easel/painting/a.png" }), ["--compare", "out/easel/painting/a.png"]);
+	assert.deepEqual(lookArgs({ hold: "skyP", at: "400,320", mode: "value" }), ["--hold", "skyP", "--at", "400,320", "--mode", "value"]);
 });
 
 test("a long log keeps its end and says what was left out", () => {

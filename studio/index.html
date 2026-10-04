@@ -671,7 +671,7 @@ const plain = s => s.replace(/^\s*(#{1,6}\s+|[-*+•]\s+|\d{1,3}[.)]\s+|>\s*)/, 
 
 // ---- looks: the whole painting, and what the painter is studying
 // an image is a whole look if the look that made it asked for no crop, no mode, no light, and not the palette, a survey or a comparison (studio.py's is_whole)
-const isWhole = e => e.look !== undefined && !/crop|mode|light|compare|(?:palette|survey) (?!False)/.test(e.look);
+const isWhole = e => e.look !== undefined && !/crop|mode|light|compare|hold|(?:palette|survey) (?!False)/.test(e.look);
 const isPalette = e => e.kind === 'image' && /palette (?!False)/.test(e.look || '');
 // the newest palette look at or before event i (-1: none yet)
 function paletteAt(i) { for (let k = i; k >= 0; k--) if (isPalette(events[k])) return k; return -1; }
@@ -686,6 +686,7 @@ function lookWords(req) {
   if (req == null) return ['A picture it opened', 'an image file it looked at', 'looks at a picture'];
   if (/palette (?!False)/.test(req)) return ['Palette', 'the paints it has mixed, thick and thin', 'looks at its palette'];
   if (/survey (?!False)/.test(req)) return ['Survey', 'a part of the canvas at full detail, one of several', 'surveys the canvas up close'];
+  if (/hold/.test(req)) return ['Knife held up', 'the loaded knife held up to a passage of the canvas, to judge a mix against it', 'holds the loaded knife up to the canvas'];
   if (/compare/.test(req)) return ['Before and after', 'an earlier look beside the canvas now', 'compares the canvas with an earlier look'];
   const mode = (req.match(/mode\s+([a-z,]+)/) || [''])[0], crop = /crop/.test(req), sq = /squint|blur/.test(mode), val = /value|gray/.test(mode), mir = /mirror/.test(mode);
   // the light, as the easel takes it: a light given (it rakes, whatever the mode), else the first of relief/raking/gallery in the mode list

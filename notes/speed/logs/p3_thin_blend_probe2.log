@@ -1,0 +1,6 @@
+PROBE w 3200 crop [400.0, 100.0, 560.0, 260.0] seed 23: parallel 1779 style 1024 (30.7 s)
+PROBE w 3200 crop [400.0, 100.0, 560.0, 260.0] seed 1: parallel 1227 style 1698 (29.5 s)
+PROBE w 3200 crop [400.0, 100.0, 560.0, 260.0] seed 5: parallel 1769 style 1580 (29.9 s)
+PROBE w 2400 crop [400.0, 100.0, 560.0, 260.0] seed 23: parallel 886 style 950 (18.5 s)
+PROBE w 2400 crop [400.0, 100.0, 560.0, 260.0] seed 1: parallel 1053 style 1533 (18.1 s)
+PROBE w 2400 crop [400.0, 100.0, 560.0, 260.0] seed 5: parallel 1118 style 818 (18.4 s)

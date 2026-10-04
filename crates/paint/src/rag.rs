@@ -95,8 +95,8 @@ const DAMP_LIFT: f32 = 8.0;
 /// hand time included), and below `DRY_DAMP` the face is dry, some 17
 /// minutes after a dip at 0.5. "Pour a few drops on a sheet of white
 /// writing paper; if it is pure the mark will evaporate in a few minutes"
-/// (W. J. Pearce [Jennings], Paint & Colour Mixing, 1902, "To Test the
-/// Purity of Turpentine",
+/// (Arthur Seymour Jennings, Paint & Colour Mixing, 1902, "To Test the
+/// Purity of Turpentine", pp. 74-75,
 /// https://www.gutenberg.org/cache/epub/56738/pg56738-images.html); a
 /// bunched cloth holds more than a few drops and shields part of it, so
 /// it takes somewhat longer [E].

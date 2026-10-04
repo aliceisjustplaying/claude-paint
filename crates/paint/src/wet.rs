@@ -158,8 +158,10 @@ pub(crate) struct Wet {
     pub(crate) solv: Vec<f32>,
     /// The wet film (paint + solvent, coats) the stroke `laid_id` has added
     /// to each pixel, against its ceiling (`thinner::stroke_limit_um`).
-    /// Transient: a stroke id is never reused, so a stale entry is never
-    /// read; not saved. Empty until a thinned paint is laid.
+    /// Transient: an entry counts only for the stroke `laid_id`, and when
+    /// the stroke ids wrap (`Canvas::next_stroke_ids`) every entry is
+    /// forgotten, so a stale entry is never read; not saved. Empty before
+    /// engine 3 (allocated by `Canvas::surf`).
     pub(crate) laid: Vec<f32>,
     pub(crate) laid_id: Vec<u32>,
 }
@@ -180,6 +182,13 @@ impl Wet {
             self.laid = vec![0.0; n];
             self.laid_id = vec![0; n];
         }
+    }
+
+    /// Forget every stroke's ceiling (the stroke ids wrapped). 0 is no
+    /// stroke's id.
+    pub(crate) fn forget_laid(&mut self) {
+        self.laid.fill(0.0);
+        self.laid_id.fill(0);
     }
 
     /// Whether any open film holds solvent (within the dirty box; `w` is

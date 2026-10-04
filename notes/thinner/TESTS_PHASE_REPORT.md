@@ -258,3 +258,47 @@ Options for the reviewers, none taken here:
    "don't tune to a test".
 
 I recommend 1.
+
+## Round 5 (c16's redistribution check; the rag sheet's directory)
+
+Round 4's review (`~/src/a/claude-paint-reviews/thinner-tests-review-astra-r4.md`)
+approved the c03 count, c03 `linen=`, c18, c04 and c05 corrections in
+e135129. It accepted option 1 for c16 under set conditions, met here.
+This commit touches only frozen test files, ACCEPTANCE.md and this
+report; the thinner code is unchanged.
+
+| change | where (in this commit) |
+|---|---|
+| c16 (3), the setup: the ratio-1/9 film first (one light pass, x 400-850), then the ratio-1 film (eight thinned-0.5 passes, x 150-500) over its start, so the ratio-1 film ends in an edge with untouched low-ratio paint beside it. The precondition stays asserted (12.1 µm against 2.2 µm) | `crates/paint/tests/thinner_physics.rs:486` |
+| c16 (3), the selection: chosen from the state before the minute. Pixels of ratio ≤ 0.2 with ≥ 0.5 µm of paint and a pixel of ratio ≥ 0.5 within 2 px; of those, the ones that gained ≥ 1% paint, at least 20. The > 1% rise and the rest of c16 are unchanged | `:543`; doc `:443` |
+| the rag sheet's directory: `THINNER_RAG_STUDY_DIR`, default `notes/thinner`, so a candidate checkout can stay clean; a new self-test case (the sheet lands in that directory and none in the checkout) | `scripts/test_thinner_acceptance:86`; `scripts/tests/thinner_acceptance_runner.sh:106`; the rag study's doc `crates/easel/src/thinner_tests.rs:355` |
+| ACCEPTANCE.md: c04's guard, c05's and c16's setups and selection, the runner's directory, every changed hash | `notes/thinner/ACCEPTANCE.md` |
+
+**Why the round-4 setup couldn't work** (probes, scratch, deleted): with
+the ratio-1/9 film laid second, its strokes plough into the ratio-1 film's
+edge and leave a band of mixed ratio (0.2-0.5). No pure low-ratio pixel
+then sits within 2 px of a ratio-1 pixel, and boundary pixels gained at
+most 0.18% in the minute at 300 px. Laid first, the low film lies under
+the ratio-1 film's last strokes, which end in an edge. At 300 px, 225
+pixels then fit the selection, 49-92 of them gain ≥ 1%, and the ratio
+rises 6-10%.
+
+**Mutation demos** (`notes/thinner/logs/round5_mutations.txt`). Each
+mutation is a temporary edit to the flow in `crates/paint/src/thinner.rs`,
+reverted after its run; the file matches HEAD again. Each ran an
+isolated copy of c16 (3) (its setup and its redistribution check alone,
+with numbers printed) and then the real c16:
+
+| | isolated redistribution check | real c16 |
+|---|---|---|
+| (c) current code | **pass**: 92 pixels gained ≥ 1%, ratio 0.11158 → 0.12264 (+9.91%) | **pass** |
+| (a) the flow moves paint and leaves its solvent behind | **fails at the rise assertion**: 92 pixels, ratio 0.11158 → 0.10937 (−1.98%) | fails, first at the local-ratio bound (pixel 25558: 0.5985, outside 0.6084-0.6368) |
+| (b) the flow moves solvent without its paint | fails at the movement guard: 0 pixels gained ≥ 1% paint | fails, first at the local-ratio bound (pixel 25572: 0.6402, outside 0.6070-0.6333) |
+
+So (a) fails the redistribution assertion itself, as required.
+
+**On the current code, with this commit's tests:**
+
+- `thinner_physics` with `--include-ignored`: 13 of 13 pass.
+- The 8 quick easel thinner tests pass.
+- The runner's self-test passes 18 of 18 cases.

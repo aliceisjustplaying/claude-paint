@@ -12,6 +12,8 @@
 #   check 13 (b) failing somewhere else (another panic) -> 1
 #   check 2 failing                                   -> 1
 #   the rag study's sheet not written (--all)         -> 1
+#   THINNER_RAG_STUDY_DIR set (--all): the sheet goes there, not into the
+#   checkout                                          -> 3
 #
 #   scripts/tests/thinner_acceptance_runner.sh
 set -euo pipefail
@@ -101,5 +103,14 @@ expect 1 --quick "not at its ordering assertion" FAKE_13B_OTHER=1
 expect 1 --quick "check 2 (scripts/thinner_check2" FAKE_CHECK2_FAIL=1
 expect 1 --all "rag study's sheet was not written" FAKE_NO_SHEET=1
 expect 2 --bogus - FAKE_=
+# the sheet's directory: given, it is used and the checkout stays clean
+rm -f "$work/repo/notes/thinner/rag_study.png"
+mkdir -p "$work/sheetdir"
+expect 3 --all "NOT ALL GREEN" THINNER_RAG_STUDY_DIR="$work/sheetdir"
+if [ -s "$work/sheetdir/rag_study.png" ] && [ ! -e "$work/repo/notes/thinner/rag_study.png" ]; then
+  echo "ok:   --all THINNER_RAG_STUDY_DIR: the sheet is in that directory, none in the checkout"
+else
+  echo "FAIL: --all THINNER_RAG_STUDY_DIR: the sheet went to the wrong place"; fails=$((fails + 1))
+fi
 
 if [ $fails = 0 ]; then echo "thinner_acceptance_runner: all cases pass"; else echo "thinner_acceptance_runner: $fails cases FAILED"; exit 1; fi

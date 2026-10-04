@@ -931,6 +931,7 @@ impl Server {
                     let n = self.s.log.len();
                     let mut out = note;
                     out.push_str(&ran.out);
+                    out.push_str(&format!("{}\n", time::time_of_day(self.s.st.borrow().clock)));
                     out.push_str(&format!("ok · chunk {n} ({:.2} s to compute)\n", ran.secs));
                     // the chunk is in the log: a look that fails now is reported with it, not
                     // as a failed `do` (which would be sent again)

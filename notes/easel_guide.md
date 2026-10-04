@@ -22,7 +22,7 @@ The studio holds one painting, and the easel is open on it. Its tools:
 
 | tool | what it does |
 |---|---|
-| `paint` | runs a chunk of Lua. The reply is what the chunk printed, then `ok` |
+| `paint` | runs a chunk of Lua. The reply is what the chunk printed, the painting's current clock, then `ok` |
 | `look` | shows you the canvas as it is now, or your palette (see [Looking](#looking)) |
 | `note` | adds an entry to your journal (see [The journal](#the-journal)) |
 | `status` | the canvas's setup |
@@ -415,6 +415,9 @@ painting operations (strokes, touches, passes, trips to the palette) and
 `wait(minutes)` advance it. Real time between chunks does not: paint
 doesn't dry while you think. `wait(minutes)` passes painting time at once;
 it doesn't make you wait that many real minutes.
+
+Every successful paint reply reports the current painting time automatically,
+before `ok`. You do not need to print it yourself.
 
 - **Hand time.** Every stroke, touch, pass and trip to the palette takes
   the time a hand takes to make it: a stroke by its length and the

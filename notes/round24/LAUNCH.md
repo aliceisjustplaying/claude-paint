@@ -2,7 +2,7 @@
 
 ## Current state
 
-- October 4, 2026: painting candidate `d9dc678`. The old Pi agents are
+- October 4, 2026: painting candidate `f75e27f`. The old Pi agents are
   stopped and their lane worktrees removed. Development is on the M3.
 - Exchange stays off; lane A's experiment is retained on `e3/a-exchange`,
   not integrated. Flow is integrated from `fbe0d43`; rag path consistency
@@ -33,10 +33,12 @@
   and clarified Lua option types and pressure. The approved system prompt
   and studio rules remain. Runner checks: 255 passed after these edits
   ([log](readiness/prompts-recheck.log)).
-- The detached `claude-paint-r24run` checkout is clean at `d9dc678`.
+- The detached `claude-paint-r24run` checkout is clean at `f75e27f`.
   This adds the approved simplified thickness note; its research evidence
   stays in the repository and the existing export strips it successfully.
-  Engine code and runner are unchanged from the tested candidate.
+  Engine code is unchanged from the tested candidate. The runner now
+  rereads the sitting cap between sittings; all 258 runner checks pass
+  ([log](readiness/sitting-cap-after.log)).
   The owner-approved completion condition is in the brief: inspect the
   whole painting and details, continue while an improvement is identified
   and finish when judged resolved. The rendered brief and gallery runner
@@ -68,6 +70,13 @@ Raw verification logs are local evidence, not publication files.
   refolding. Guide review notes below preserve the original checklist.
 
 ## At freeze
+
+The live sitting cap is the positive integer in
+`~/tmp/gallery-fcf9c110/r24/run/max_sittings.txt` (currently 4).
+The runner rereads it between sittings; the current sitting completes
+normally. Missing or invalid contents retain the last valid cap (initially
+4). This file stays outside the painter's studio and messages. Changing it
+after the runner has stopped requires resuming the runner.
 
 Steps 1 and 2 must use the same name. If the tag is not `round-24`, change
 `TAG` in `notes/round24/runner/r21_chains.py` on the candidate before

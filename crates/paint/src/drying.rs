@@ -21,7 +21,10 @@
 //! lakes slow), thickness (thick films dry slower) and oil content (fat,
 //! medium-rich paint dries slower than lean). Fresh paint worked into an older
 //! film dilutes its cure by volume as it is laid (engine 1: at the next
-//! `wait`). When the film reaches the gel point it levels for as long as it
+//! `wait`). How much of its time to touch-dry a film spends open before its
+//! gel point, and how long it takes to touch-dry, depend on the engine
+//! version (`Pace`: 15% of a day for one coat of average paint in engines 1
+//! and 2, 60% of two and a half days in engine 3). When the film reaches the gel point it levels for as long as it
 //! was fluid, then it bakes into the dry picture: from then on it is part of
 //! the surface and its tack lives on in `sub` until it is touch-dry. So a pixel can hold new wet paint over a set layer.
 //!
@@ -36,17 +39,46 @@ use crate::{smoothstep, surface::vnoise};
 use rayon::prelude::*;
 
 /// Minutes to touch-dry for one lean 25 µm coat of average paint
-/// (`drying` 1). Thin-film touch-dry times run 1–2 days (umber, lead white)
-/// to 2–5 days (blacks) and 7–14 (alizarin); one coat here is thinner than
-/// those test films. Estimate from those ranges.
+/// (`drying` 1) in engines 1 and 2 (engine 3: `TOUCH_DRY_MIN_3`). Estimate
+/// from thin-film touch-dry times: 1–2 days (umber, lead white) to 2–5 days
+/// (blacks) and 7–14 (alizarin).
 pub const TOUCH_DRY_MIN: f32 = 24.0 * 60.0;
-/// Cure at the gel point: the film stops flowing and becomes tacky.
-/// Estimate: a lead-white-rich coat (`drying` 2) gels after ~1.8 h, an
-/// average one after ~3.6 h.
+/// The same in engine 3: two and a half days, so that a typical brushstroke
+/// (`STROKE`) of lead white tube paint (`drier::LEAD_WHITE`, stiffness 0.8)
+/// is touch-dry in 45 h, in the 1–2 days painters and makers give for lead
+/// white in linseed oil without driers (Winsor & Newton and Natural
+/// Pigments: fast, about 2 days; Golden: fast, 1–2 days). Each tube's
+/// source range is checked at `STROKE` too, and a tube takes an engine-3
+/// rate where its engine-2 rate misses it (`drier::engine3`). Titanium
+/// white (in no box) at 0.9, "average to slow" (Natural Pigments), takes
+/// 4.4 days (artists' guides: 3–5). Golden measured a titanium white without
+/// driers touch-dry by day 2 at 3 mil and at 4–6 days at 10 mil: their ratio
+/// checks `THICK`, but the days themselves are faster than these: such a
+/// paint here would be 16 days at 10 mil. That conflict is left standing.
+pub const TOUCH_DRY_MIN_3: f32 = 60.0 * 60.0;
+/// The thickness (coats) of a typical brushstroke, at which the painters'
+/// and makers' drying times are taken: a broad brush (filbert 40, flat 36)
+/// loaded 0.9 lays 1.2–1.9 coats (median film thickness of one stroke).
+pub const STROKE: f32 = 1.5;
+/// Cure (oxidation) at the gel point: the film stops flowing and becomes
+/// tacky. When a film reaches it depends on the engine (`Pace`).
 pub const GEL: f32 = 0.15;
+/// The share of its time to touch-dry a film spends before its gel point
+/// (engine 3; see `Pace`). It is open (lifts cleanly) for the first half of
+/// that. Drying oils take up oxygen only after an induction period, then
+/// fast (Tumosa and Mecklenburg 2005, "The influence of lead ions on the
+/// drying of oils"); a film begins to skin over as its oxygen uptake nears
+/// its peak, and is touch-dry at the peak (Golden, "Weighing In on the
+/// Drying of Oils"). Painters work into lead white 12–24 h after laying
+/// it, and it is tacky and skinning after about a day: with
+/// `TOUCH_DRY_MIN_3`, 0.6 keeps a stroke (`STROKE`) open for 13 h and gels
+/// it at 27 h.
+pub const OPEN_SHARE: f32 = 0.6;
 /// How much a film's thickness slows its drying: time ∝ (h / 1 coat)^THICK.
-/// Surface skinning is reaction-limited in thin films and increasingly
-/// oxygen-limited in thick ones (estimate).
+/// Golden's titanium white was touch-dry by day 2 at 3 mil and at 4–6 days at
+/// 10 mil (above): an exponent of 0.58–0.91. Surface skinning is
+/// reaction-limited in thin films and increasingly oxygen-limited in thick
+/// ones.
 const THICK: f32 = 0.7;
 /// How much a fat, medium-rich paint (stiff 0) dries slower than stiff tube
 /// paint (stiff 1) (estimate).
@@ -129,10 +161,101 @@ pub mod drier {
     /// Bitumen (asphaltum) slows the drying of linseed oil and never fully
     /// cures (MFA CAMEO, "Asphaltum"): the slowest tube, below madder lake.
     pub const BITUMEN: f32 = 0.15;
+
+    /// Engine 3's drying rates for the tubes whose own touch-dry range
+    /// called for another rate than their `Tube::drying` (which engines 1
+    /// and 2 keep); a tube carries its own as `Tube::drying_3`. A typical
+    /// stroke (`super::STROKE`) of each is touch-dry inside its range in
+    /// engine 3 (`super::TOUCH_DRY_MIN_3`): Winsor & Newton's Artists' Oil
+    /// Colour classes (fast, about 2 days: cobalt blues, Prussian blue, raw
+    /// sienna, umbers, lead whites; medium, about 5: cadmiums, ultramarines,
+    /// ochres, burnt sienna, Mars colors, ivory and lamp black; slow, over 5:
+    /// alizarin, quinacridones), Natural Pigments' (fast about 2 days, medium
+    /// 2–5, slow over 5; its bone black medium), Golden's (fast 1–2 days) and
+    /// alizarin's 7–14 days. Tubes without one have no source range or are
+    /// inside theirs already.
+    pub mod engine3 {
+        /// Bone black: medium, 2–5 days: 4.4 days (engine 2's 0.4: 9.8).
+        pub const BONE_BLACK: f32 = 0.9;
+        /// Cobalt blue: fast, about 2 days: 45 h (1.4: 71 h).
+        pub const COBALT_BLUE: f32 = 2.2;
+        /// Prussian blue: fast, about 2 days: 44 h (1.8: 59 h).
+        pub const PRUSSIAN_BLUE: f32 = 2.4;
+        /// Burnt sienna: dries better than raw sienna, as roasting improves
+        /// sienna's drying (Field, Chromatography, rev. Salter 1869, §§50 and
+        /// 155, https://www.gutenberg.org/files/20915/20915-h/20915-h.htm):
+        /// fast, about 2 days: 45 h (1.2: 86 h). Raw sienna keeps 1.2 (86 h,
+        /// medium). Modern makers (W&N) class raw sienna fast and burnt
+        /// medium; the box follows the historical order.
+        pub const BURNT_SIENNA: f32 = 2.3;
+        /// The cadmiums: medium, 2–5 days: 4.4–4.6 days (0.6: 6.5–6.9).
+        pub const CADMIUM: f32 = 0.9;
+        /// The ultramarines: medium, 2–5 days: 4.5 days (0.8: 5.4).
+        pub const ULTRAMARINE: f32 = 0.95;
+        /// Rose madder and permanent alizarin (a quinacridone): alizarin,
+        /// 7–14 days, and slow, over 5: 11–11.5 days (0.3: 14.7–15.4).
+        pub const ALIZARIN: f32 = 0.4;
+    }
+}
+
+/// How fast a film's cure advances before and after its gel point, as a
+/// multiple of its `rate`: the one place drying differs by engine version
+/// (`Canvas::engine`, `crate::ENGINE`).
+/// - engines 1 and 2: cure grows evenly, so a film gels after `GEL` (15%)
+///   of its time to touch-dry (`TOUCH_DRY_MIN`): one coat of lead white tube
+///   paint after 2 h, touch-dry after 13 h.
+/// - engine 3: a film takes 2.5 times as long to touch-dry
+///   (`TOUCH_DRY_MIN_3`), spends `OPEN_SHARE` of it before its gel point and
+///   the rest tacky: a stroke of lead white (`STROKE`) is open for 13 h,
+///   gels after 27 h and is touch-dry after 45 h.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct Pace {
+    /// Before the gel point.
+    open: f32,
+    /// After it.
+    set: f32,
+}
+
+impl Pace {
+    const EVEN: Pace = Pace { open: 1.0, set: 1.0 };
+
+    pub(crate) fn of(engine: u32) -> Pace {
+        if engine >= 3 {
+            let k = TOUCH_DRY_MIN / TOUCH_DRY_MIN_3;
+            Pace { open: k * GEL / OPEN_SHARE, set: k * (1.0 - GEL) / (1.0 - OPEN_SHARE) }
+        } else {
+            Pace::EVEN
+        }
+    }
+
+    /// The cure of an open film of cure `c` and rate `r` after `dt` minutes.
+    fn age(self, c: f32, dt: f32, r: f32) -> f32 {
+        if self == Pace::EVEN {
+            return c + dt * r;
+        }
+        if c >= GEL {
+            return c + dt * r * self.set;
+        }
+        let to_gel = (GEL - c) / (r * self.open);
+        if dt <= to_gel { c + dt * r * self.open } else { GEL + (dt - to_gel) * r * self.set }
+    }
+
+    /// Minutes until an open film of cure `c` and rate `r` is touch-dry.
+    fn to_dry(self, c: f32, r: f32) -> f32 {
+        if self == Pace::EVEN || c >= GEL {
+            return (1.0 - c).max(0.0) / (r * self.set);
+        }
+        (GEL - c) / (r * self.open) + (1.0 - GEL) / (r * self.set)
+    }
+
+    /// Cure per minute of a set film whose open film's rate was `r`.
+    fn set_rate(self, r: f32) -> f32 {
+        if self == Pace::EVEN { r } else { r * self.set }
+    }
 }
 
 /// Cure gained per minute by an open film `vol` coats thick, of stiffness
-/// `stiff` and pigment drying rate `drying`.
+/// `stiff` and pigment drying rate `drying` (before `Pace`).
 pub(crate) fn rate(vol: f32, stiff: f32, drying: f32) -> f32 {
     let thick = vol.max(0.0).powf(THICK).max(0.5);
     let fat = 1.0 + FAT * (1.0 - stiff.clamp(0.0, 1.0));
@@ -262,6 +385,63 @@ impl Canvas {
     pub fn wait(&mut self, minutes: f32) {
         let dt = minutes.max(0.0);
         assert!(dt.is_finite(), "Canvas::wait: minutes must be finite (got {minutes}); use dry() to wait until touch-dry");
+        if self.engine >= 3 && self.wet.has_solvent(self.f.w) {
+            self.wait_on_grid(dt);
+            return;
+        }
+        self.age(dt);
+        self.wet.clock.now += dt as f64;
+    }
+
+    /// Wait `dt` minutes with solvent in the paint (engine 3,
+    /// `crate::thinner`): the solvent's loss, the flow it gives the paint
+    /// and the oil's drying all step on one clock, in steps that end on
+    /// whole minutes counted from the canvas's start (not from this wait),
+    /// so a wait split on whole minutes is exactly the wait in one, and
+    /// brushwork's hand time (which waits too) keeps the same grid. The
+    /// solvent's loss and the oil's drying run over every step, whole or
+    /// part (both exact in closed form); the flow runs once per whole
+    /// minute, as each minute of the grid ends. Once the last solvent is
+    /// gone the rest of the wait is the ordinary one.
+    fn wait_on_grid(&mut self, dt: f32) {
+        let start = self.wet.clock.now;
+        let end = start + dt as f64;
+        let mut t = start;
+        while t < end {
+            let next = (t.floor() + 1.0).min(end);
+            let step = (next - t) as f32;
+            self.evaporate(step);
+            self.age(step);
+            if next == next.floor() {
+                self.spread(1.0);
+            }
+            t = next;
+            self.wet.clock.now = t;
+            if !self.wet.has_solvent(self.f.w) {
+                if end > t {
+                    self.age((end - t) as f32);
+                }
+                break;
+            }
+        }
+        self.wet.clock.now = end;
+    }
+
+    /// `wait` on the minute grid until no solvent is left: to the next
+    /// whole minute, then a whole minute at a time. Ends: each minute every
+    /// pixel keeps at most exp(-1 / τ) of its solvent, τ finite, and below
+    /// `SOLVENT_FLOOR` it is gone.
+    fn wait_out_solvent(&mut self) {
+        while self.wet.has_solvent(self.f.w) {
+            let now = self.wet.clock.now;
+            let step = (now.floor() + 1.0 - now) as f32;
+            self.wait_on_grid(if step > 0.0 { step } else { 1.0 });
+        }
+    }
+
+    /// The open films age by `dt` minutes where they lie (the body of
+    /// `wait`, without moving the clock).
+    fn age(&mut self, dt: f32) {
         let n = self.f.w * self.f.h;
         if self.wet.clock.px.len() != n {
             self.wet.clock.px = vec![Px::FRESH; n];
@@ -271,6 +451,7 @@ impl Canvas {
         // age the open films
         if let Some((x0, y0, x1, y1)) = self.wet.dirty {
             let (x1, y1) = (x1.min(w), y1.min(self.f.h));
+            let pace = Pace::of(self.engine);
             let wet = &mut self.wet;
             let (vol, hide) = (&wet.vol, &wet.hide);
             wet.clock.px[y0 * w..y1 * w].par_chunks_mut(w).enumerate().for_each(|(j, row)| {
@@ -278,7 +459,7 @@ impl Canvas {
                     let i = (y0 + j) * w + x;
                     if vol[i] >= 1e-5 {
                         let p = &mut row[x];
-                        p.cure += dt * rate(p.th, hide[i][1], hide[i][2]);
+                        p.cure = pace.age(p.cure, dt, rate(p.th, hide[i][1], hide[i][2]));
                     }
                 }
             });
@@ -307,7 +488,6 @@ impl Canvas {
         }
         // films past the gel point level and set
         self.bake(false);
-        self.wet.clock.now += dt as f64;
     }
 
     /// The open film's thickness (coats) as it dries, for each pixel of the
@@ -398,7 +578,16 @@ impl Canvas {
     /// fluid (thin fluid paint pools in the hollows, stiff paint keeps its
     /// marks), then it is composited over the dry picture with Kubelka–Munk
     /// using the settled thickness, and the wet layer is cleared.
+    ///
+    /// With solvent in the paint (engine 3, `crate::thinner`), the clock
+    /// first runs on whole minutes, as `wait` does, until the last of it
+    /// has evaporated, so the film flows and loses its solvent as it would
+    /// have waiting; then the rest of the way to touch-dry is the shortcut
+    /// above.
     pub fn dry(&mut self) {
+        if self.engine >= 3 && self.wet.has_solvent(self.f.w) {
+            self.wait_out_solvent();
+        }
         if !self.wet.clock.px.is_empty() {
             self.absorb();
         }
@@ -411,6 +600,7 @@ impl Canvas {
             // `wait` would)
             let th = if self.wet.clock.px.is_empty() { self.film_thickness((x0, y0, x1, y1)) } else { Vec::new() };
             let bw = x1 - x0;
+            let pace = Pace::of(self.engine);
             let (vol, hide, px) = (&self.wet.vol, &self.wet.hide, &self.wet.clock.px);
             left = (y0..y1)
                 .into_par_iter()
@@ -420,7 +610,7 @@ impl Canvas {
                         let i = y * w + x;
                         if vol[i] >= 1e-5 {
                             let (c, t) = px.get(i).map_or((0.0, th.get((y - y0) * bw + x - x0).copied().unwrap_or(0.0)), |p| (p.cure, p.th));
-                            m = m.max((1.0 - c).max(0.0) / rate(t, hide[i][1], hide[i][2]));
+                            m = m.max(pace.to_dry(c, rate(t, hide[i][1], hide[i][2])));
                         }
                     }
                     m
@@ -490,6 +680,23 @@ impl Canvas {
         wet.clock.mark = wet.current;
     }
 
+    /// A film baked into the dry picture holds no solvent any more (by then
+    /// it has long gone; `dry` takes the rest with it).
+    fn clear_bare_solvent(&mut self, ex: (usize, usize, usize, usize)) {
+        if self.wet.solv.is_empty() {
+            return;
+        }
+        let w = self.f.w;
+        for y in ex.1..ex.3 {
+            for x in ex.0..ex.2 {
+                let i = y * w + x;
+                if self.wet.vol[i] == 0.0 {
+                    self.wet.solv[i] = 0.0;
+                }
+            }
+        }
+    }
+
     /// Level and bake open films into the dry picture: every film (`all`,
     /// clearing the wet layer's residue too) or those past the gel point.
     fn bake(&mut self, all: bool) {
@@ -506,6 +713,7 @@ impl Canvas {
         // cure per minute of each film that bakes (for its tack afterwards)
         let mut rates = vec![0.0f32; if all { 0 } else { ew * eh }];
         let mut any = false;
+        let pace = Pace::of(self.engine);
         let cp = &self.wet.clock.px;
         for y in 0..eh {
             for x in 0..ew {
@@ -520,7 +728,7 @@ impl Canvas {
                         sets[k] = p.lev;
                     }
                     if !all && let Some(p) = cp.get(i) {
-                        rates[k] = rate(p.th, self.wet.hide[i][1], self.wet.hide[i][2]);
+                        rates[k] = pace.set_rate(rate(p.th, self.wet.hide[i][1], self.wet.hide[i][2]));
                     }
                     any = true;
                 }
@@ -538,6 +746,7 @@ impl Canvas {
                         }
                     }
                 }
+                self.clear_bare_solvent(ex);
             }
             return;
         }
@@ -619,6 +828,8 @@ impl Canvas {
                     cv[x] = 1.0;
                 }
             });
+        self.clear_bare_solvent(ex);
+        let wet = &mut self.wet;
         if wet.clock.px.is_empty() {
             return;
         }
@@ -683,17 +894,17 @@ mod tests {
     fn stages_follow_the_clock_and_the_pigment() {
         let mut c = canvas();
         band(&mut c, lead_white(), 300.0, 1);
-        band(&mut c, Paint::body(hex("#202020")).with_drying(drier::BONE_BLACK), 700.0, 2);
+        band(&mut c, Paint::body(hex("#202020")).with_drying(drier::engine3::BONE_BLACK), 700.0, 2);
         assert_eq!(c.drying_at(500.0, 300.0), Stage::Open);
-        c.wait(30.0);
-        assert_eq!((c.drying_at(500.0, 300.0), c.drying_at(500.0, 700.0)), (Stage::Open, Stage::Open));
-        c.wait(150.0);
-        assert_eq!(c.drying_at(500.0, 300.0), Stage::Tacky, "lead white sets within 3 h");
-        assert!(matches!(c.drying_at(500.0, 700.0), Stage::Open | Stage::Setting), "bone black is still wet at 3 h");
-        c.wait(21.0 * 60.0);
-        assert_eq!(c.drying_at(500.0, 300.0), Stage::Dry, "lead white is touch-dry the next day");
+        c.wait(12.0 * 60.0);
+        assert_eq!((c.drying_at(500.0, 300.0), c.drying_at(500.0, 700.0)), (Stage::Open, Stage::Open), "both are open after 12 h");
+        c.wait(24.0 * 60.0);
+        assert_eq!(c.drying_at(500.0, 300.0), Stage::Tacky, "lead white sets within 36 h");
+        assert!(matches!(c.drying_at(500.0, 700.0), Stage::Open | Stage::Setting), "bone black is still wet");
+        c.wait(36.0 * 60.0);
+        assert_eq!(c.drying_at(500.0, 300.0), Stage::Dry, "lead white is touch-dry in three days");
         assert_ne!(c.drying_at(500.0, 700.0), Stage::Dry, "bone black is not");
-        assert!((c.clock() - 24.0 * 60.0).abs() < 1e-3);
+        assert!((c.clock() - 72.0 * 60.0).abs() < 1e-3);
         c.dry();
         assert_eq!(c.drying_at(500.0, 700.0), Stage::Dry);
         assert_eq!(c.wet_total(), 0.0);
@@ -724,7 +935,7 @@ mod tests {
         paint(&mut b);
         b.wait(0.0);
         b.wait(10.0);
-        b.wait(3.0 * 24.0 * 60.0);
+        b.wait(10.0 * 24.0 * 60.0);
         b.dry();
         assert!(a.px == b.px && a.height == b.height && a.film == b.film);
     }
@@ -736,7 +947,7 @@ mod tests {
     fn fresh_paint_over_setting_paint_is_open_before_the_next_wait() {
         let mut a = canvas();
         band(&mut a, Paint::body(hex("#2040a0")), 500.0, 1);
-        a.wait(175.0);
+        a.wait(48.0 * 60.0);
         assert_eq!(a.drying_at(500.0, 500.0), Stage::Setting);
         let mut h = Held::new(Tool::filbert(40.0), 2);
         h.load(Paint::body(hex("#c02020")), 1.0);
@@ -770,7 +981,7 @@ mod tests {
     fn brushes_feel_the_stage() {
         let mut lifted = Vec::new();
         let mut laid = Vec::new();
-        for wait in [0.0, 60.0, 300.0, 36.0 * 60.0] {
+        for wait in [0.0, 360.0, 37.0 * 60.0, 5.0 * 24.0 * 60.0] {
             let mut c = canvas();
             band(&mut c, Paint::body(hex("#203050")).with_drying(drier::UMBER), 500.0, 1);
             c.wait(wait);
@@ -789,10 +1000,172 @@ mod tests {
             laid.push(early(&c) - before);
         }
         assert!(lifted[0] > 0.0 && lifted[1] < lifted[0], "setting paint lifts less: {lifted:?}");
-        // (at 5 h the umber has set: a tacky film, not open paint that fresh
+        // (at 37 h the umber has set: a tacky film, not open paint that fresh
         // paint thins)
         assert!(lifted[2] < 0.05 * lifted[0] && lifted[3] == 0.0, "nothing lifts from set paint: {lifted:?}");
         assert!(laid[2] > laid[3] * 1.2, "tack pulls paint off the brush: {laid:?}");
+    }
+
+    /// Engine 3 keeps paint open longer and dries it 2.5 times slower
+    /// than engines 1 and 2: one band of lead white, lifted with a clean
+    /// brush 12 h after it was laid, and left to dry.
+    #[test]
+    fn engine_3_keeps_paint_open_longer() {
+        let at_12h = |engine: u32| {
+            let mut c = canvas().with_engine(engine);
+            band(&mut c, lead_white(), 500.0, 1);
+            c.wait(12.0 * 60.0);
+            let stage = c.drying_at(500.0, 500.0);
+            let mut d = canvas_copy(&c);
+            let mut clean = Held::new(Tool::filbert(20.0), 8);
+            d.drag(&mut clean, &Gesture::new(vec![(200.0, 500.0), (800.0, 500.0)]).pressure(0.7, 0.7), None);
+            c.dry();
+            (stage, clean.bristles.iter().map(|b| b.vol).sum::<f32>(), c.clock())
+        };
+        let (old, new) = (at_12h(2), at_12h(3));
+        assert_eq!((old.0, new.0), (Stage::Tacky, Stage::Open), "at 12 h: engine 2 {old:?}, engine 3 {new:?}");
+        assert!(old.1 < 0.01 * new.1, "lifted at 12 h: engine 2 {}, engine 3 {}", old.1, new.1);
+        assert!((new.2 / old.2 - 2.5).abs() < 0.01, "touch-dry at {} min (engine 2), {} min (engine 3)", old.2, new.2);
+    }
+
+    /// Hours until an even film `coats` thick of paint of drying rate
+    /// `drying` and stiffness `stiff`, painted with engine `engine`, no
+    /// longer lifts cleanly (setting), gels (tacky) and is touch-dry, read
+    /// every 15 minutes of `wait`.
+    fn film(coats: f32, drying: f32, stiff: f32, engine: u32) -> [f32; 3] {
+        let mut c = Canvas::new(40, 1.0, [0.5; 3]).with_size_mm(40.0).with_engine(engine);
+        let lat = Paint::body([0.9; 3]).latent();
+        for i in 0..c.wet.vol.len() {
+            (c.wet.vol[i], c.wet.lat[i], c.wet.hide[i], c.wet.stroke[i]) = (coats, lat, [0.85, stiff, drying, 0.0, 1.0], 1);
+        }
+        c.wet.current = 1;
+        c.wet.dirty = Some((0, 0, c.f.w, c.f.h));
+        let mut at = [f32::NAN; 3];
+        for k in 1..=40 * 24 * 4 {
+            c.wait(15.0);
+            let s = c.drying_at(500.0, 500.0) as usize;
+            for (j, t) in at.iter_mut().enumerate() {
+                if s > j && t.is_nan() {
+                    *t = k as f32 / 4.0;
+                }
+            }
+            if s == Stage::Dry as usize {
+                break;
+            }
+        }
+        at
+    }
+
+    /// The tube called `name`, if this build has it: a painter's build for
+    /// one box holds only that box's tubes, and one with no box feature only
+    /// the default box's (palette.rs `catalog`). The build with every box
+    /// has every tube asked for, so there the measures cover them all.
+    fn tube(name: &str) -> Option<crate::palette::Tube> {
+        let t = crate::palette::catalog().into_iter().find(|t| t.name == name);
+        assert!(t.is_some() || !cfg!(feature = "all-boxes"), "no tube {name:?} in the build with every box");
+        t
+    }
+
+    /// Titanium white, in no box: stiffness 0.7, drying 0.9 ("average to
+    /// slow", Natural Pigments) in engine 3; engine 2 would have had no
+    /// other rate.
+    const TITANIUM: (f32, f32) = (0.7, 0.9);
+
+    /// One typical stroke (`STROKE`) of each tube paint whose touch-dry time
+    /// has a source range dries within it in engine 3 (see
+    /// `TOUCH_DRY_MIN_3`, `OPEN_SHARE`, `drier::engine3`), all on the one
+    /// basis of ordinary brushed paint: lead white workable for at least 12 h,
+    /// tacky around a day (18–30 h) and touch-dry in 1–2 days; fast pigments
+    /// touch-dry within 2 days, medium ones in 2–5, titanium white in 3–5,
+    /// alizarin in 7–14. (Set DRYING_TABLE to print every row, one coat and
+    /// one stroke, in both engines.)
+    #[test]
+    fn strokes_dry_within_the_sources_ranges() {
+        const D: f32 = 24.0;
+        // tube, touch-dry range (hours), source
+        let rows: &[(&str, f32, f32, &str)] = &[
+            ("lead white", 1.0 * D, 2.0 * D, "fast (W&N, NP, Golden); painters 1-2 days"),
+            ("raw umber", 1.0 * D, 2.0 * D, "fast (W&N, NP)"),
+            ("burnt sienna", 1.0 * D, 2.0 * D, "fast (Field/Salter 1869: roasting improves drying)"),
+            ("cobalt blue", 1.0 * D, 2.0 * D, "fast (W&N)"),
+            ("Prussian blue", 1.0 * D, 2.0 * D, "fast (W&N)"),
+            ("yellow ochre", 2.0 * D, 5.0 * D, "medium (W&N, NP)"),
+            ("red earth", 2.0 * D, 5.0 * D, "medium (W&N ochres)"),
+            ("Mars red", 2.0 * D, 5.0 * D, "medium (W&N)"),
+            ("raw sienna", 2.0 * D, 5.0 * D, "medium (slower than burnt: Field/Salter 1869)"),
+            ("cadmium red", 2.0 * D, 5.0 * D, "medium (W&N)"),
+            ("deep cadmium", 2.0 * D, 5.0 * D, "medium (W&N)"),
+            ("ultramarine blue", 2.0 * D, 5.0 * D, "medium (W&N)"),
+            ("cobalt violet", 2.0 * D, 5.0 * D, "medium (W&N)"),
+            ("bone black", 2.0 * D, 5.0 * D, "medium (NP, W&N ivory black)"),
+            ("titanium white", 3.0 * D, 5.0 * D, "artists' guides 3-5 days (not a tube)"),
+            ("rose madder", 7.0 * D, 14.0 * D, "alizarin 7-14 days"),
+            ("permanent alizarin", 7.0 * D, 14.0 * D, "slow (W&N quinacridones); alizarin 7-14 days"),
+        ];
+        let table = std::env::var_os("DRYING_TABLE").is_some();
+        for &(name, lo, hi, src) in rows {
+            let (stiff, d2, d3) = if name == "titanium white" {
+                (TITANIUM.0, TITANIUM.1, TITANIUM.1)
+            } else {
+                // a tube this build doesn't have (`tube`)
+                let Some(t) = tube(name) else { continue };
+                (t.stiff, t.drying, t.drying_3)
+            };
+            let at = film(STROKE, d3, stiff, 3);
+            if table {
+                let r = |c: f32, d: f32, e: u32| film(c, d, stiff, e).map(|h| (h * 4.0).round() / 4.0);
+                println!("TABLE | {name} | {d2} -> {d3} | 1 coat: e2 {:?} e3 {:?} | {STROKE} coats: e2 {:?} e3 {:?} | {lo}-{hi} h | {src}", r(1.0, d2, 2), r(1.0, d3, 3), r(STROKE, d2, 2), r(STROKE, d3, 3));
+            }
+            assert!((lo..=hi).contains(&at[2]), "{name}: setting, tacky, dry at {at:?} h; {src}: {lo}-{hi} h");
+        }
+        let lead = film(STROKE, drier::LEAD_WHITE, 0.8, 3);
+        assert!(lead[0] >= 12.0 && (18.0..=30.0).contains(&lead[1]), "a lead white stroke: workable until {} h, tacky at {} h", lead[0], lead[1]);
+    }
+
+    /// At equal thickness, lead white and raw umber are touch-dry before
+    /// titanium white and bone black, and alizarin (permanent alizarin, rose
+    /// madder) is the slowest of them (every source orders them so). Of the
+    /// tubes this build has (`tube`): lead white and bone black are in every
+    /// box, titanium white in none.
+    #[test]
+    fn fast_pigments_dry_before_slow_ones() {
+        fn dry(name: &'static str) -> Option<(&'static str, f32)> {
+            let (stiff, d) = if name == "titanium white" {
+                TITANIUM
+            } else {
+                let t = tube(name)?;
+                (t.stiff, t.drying_3)
+            };
+            Some((name, film(STROKE, d, stiff, 3)[2]))
+        }
+        let of = |names: &[&'static str]| names.iter().filter_map(|&n| dry(n)).collect::<Vec<_>>();
+        let (fast, medium, slow) = (of(&["lead white", "raw umber"]), of(&["titanium white", "bone black"]), of(&["permanent alizarin", "rose madder"]));
+        assert!(fast.iter().any(|f| f.0 == "lead white") && medium.len() == 2);
+        let first = |v: &[(&str, f32)]| v.iter().map(|x| x.1).fold(f32::MAX, f32::min);
+        let last = |v: &[(&str, f32)]| v.iter().map(|x| x.1).fold(f32::MIN, f32::max);
+        assert!(last(&fast) < first(&medium), "{fast:?} before {medium:?}");
+        if !slow.is_empty() {
+            assert!(first(&slow) > last(&medium), "{slow:?} the slowest, after {medium:?}");
+        }
+    }
+
+    /// Roasting improves sienna's drying (Field/Salter 1869, §§50 and 155):
+    /// in engine 3 burnt sienna is touch-dry before raw sienna.
+    #[test]
+    fn burnt_sienna_dries_before_raw_sienna() {
+        let (Some(raw), Some(burnt)) = (tube("raw sienna"), tube("burnt sienna")) else { return };
+        let (r, b) = (film(STROKE, raw.drying_3, raw.stiff, 3)[2], film(STROKE, burnt.drying_3, burnt.stiff, 3)[2]);
+        assert!(b < r, "burnt sienna touch-dry {b} min, raw sienna {r} min");
+    }
+
+    /// Golden's titanium white was touch-dry by day 2 at 3 mil and at 4–6
+    /// days at 10 mil: a 10-coat film takes 2–3 times as long as a 3-coat
+    /// one (`THICK`).
+    #[test]
+    fn thick_films_dry_as_much_slower_as_goldens() {
+        let (stiff, d) = TITANIUM;
+        let r = film(10.0, d, stiff, 3)[2] / film(3.0, d, stiff, 3)[2];
+        assert!((2.0..=3.0).contains(&r), "10 coats take {r} times as long as 3");
     }
 
     fn canvas_copy(c: &Canvas) -> Canvas {
@@ -908,16 +1281,16 @@ mod tests {
         c
     }
 
-    /// Checking back often doesn't change the physics: `wait(7000)` and 70
-    /// waits of 100 minutes dry a heterogeneous film to the same stages (a
+    /// Checking back often doesn't change the physics: `wait(21000)` and 70
+    /// waits of 300 minutes dry a heterogeneous film to the same stages (a
     /// thick stripe's drying thickness stays fixed while its thin neighbors
     /// set, see `Px::th`).
     #[test]
     fn splitting_a_wait_changes_nothing() {
         let (mut a, mut b) = (striped_film(), striped_film());
-        a.wait(7000.0);
+        a.wait(21000.0);
         for _ in 0..70 {
-            b.wait(100.0);
+            b.wait(300.0);
         }
         let i = 10 * 20 + 11;
         let (sa, sb) = (a.wet.clock.px[i].sub.min(1.0), b.wet.clock.px[i].sub.min(1.0));

@@ -1,0 +1,23 @@
+test_donor_and_receiver_limits (test_probes.BudgetReference.test_donor_and_receiver_limits) ... ok
+test_duplicate_edges_and_order (test_probes.BudgetReference.test_duplicate_edges_and_order) ... ok
+test_each_component_conserved (test_probes.BudgetReference.test_each_component_conserved) ... ok
+test_full_receiver_stays_full (test_probes.BudgetReference.test_full_receiver_stays_full) ... ok
+test_invalid_inputs_rejected (test_probes.BudgetReference.test_invalid_inputs_rejected) ... ok
+test_no_contact_no_transfer (test_probes.BudgetReference.test_no_contact_no_transfer) ... ok
+test_overdraw_rejected (test_probes.BudgetReference.test_overdraw_rejected) ... ok
+test_random_budget_and_conservation_properties (test_probes.BudgetReference.test_random_budget_and_conservation_properties) ... ok
+test_absolute_clock_phase (test_probes.ScalarProbes.test_absolute_clock_phase) ... ok
+test_blot_spatial_absorption_value (test_probes.ScalarProbes.test_blot_spatial_absorption_value) ... ok
+test_capped_flow_resolution_scaling (test_probes.ScalarProbes.test_capped_flow_resolution_scaling) ... ok
+test_continuous_limit (test_probes.ScalarProbes.test_continuous_limit) ... ok
+test_full_contact_exponential (test_probes.ScalarProbes.test_full_contact_exponential) ... ok
+test_partial_contact_can_clear_almost_all (test_probes.ScalarProbes.test_partial_contact_can_clear_almost_all) ... ok
+test_polyline_partition_changes_mechanics_count (test_probes.ScalarProbes.test_polyline_partition_changes_mechanics_count) ... ok
+test_thinner_cap_is_on_liquid (test_probes.ScalarProbes.test_thinner_cap_is_on_liquid) ... ok
+test_uncapped_flow_full_time (test_probes.ScalarProbes.test_uncapped_flow_full_time) ... ok
+test_zero_contact (test_probes.ScalarProbes.test_zero_contact) ... ok
+
+----------------------------------------------------------------------
+Ran 18 tests in 0.045s
+
+OK

@@ -1,0 +1,28 @@
+warning: constant `MAX_SUBSTEPS` is never used
+   --> crates/paint/src/thinner.rs:144:7
+    |
+144 | const MAX_SUBSTEPS: usize = 64;
+    |       ^^^^^^^^^^^^
+    |
+    = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: `paint` (lib) generated 1 warning
+    Finished `release` profile [optimized] target(s) in 1.00s
+     Running tests/review_thinner.rs (/var/folders/6k/24182wv136749r3p852rft740000gn/T//e3review/target/release/deps/review_thinner-120e42e8da176ce0)
+
+running 1 test
+test review_flow_reach ... [G] 2400-px-equivalent pixels (110 mm canvas, 600 px), flat ground, filbert; `passes` strokes on the same path, then 3 one-minute waits
+  thinner  passes  ceiling um  max liquid um  px above the 2 um wetting film  capped calls/3  paint moved by the flow (share of paint)  capped-vs-uncapped diff (share of moved)
+      0.5       1       6.000          5.829                           14770               0                                  16.2235%  0.0%
+     0.75       1       2.000          1.991                               0               0                                   0.0000%  0.0%
+      0.9       1       0.667          0.666                               0               0                                   0.0000%  0.0%
+     0.95       1       0.316          0.316                               0               1                                   0.0000%  0.0%
+     0.75       5       2.000          8.949                           15885               0                                  18.0365%  0.0%
+      0.9       5       0.667          3.074                             479               0                                   0.0000%  0.0%
+     0.95       5       0.316          1.504                               0               1                                   0.0000%  0.0%
+      0.9      12       0.667          5.910                            3635               0                                   9.8544%  0.0%
+     0.95      12       0.316          2.853                             489               1                                   0.0000%  0.0%
+ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 2 filtered out; finished in 3.01s
+

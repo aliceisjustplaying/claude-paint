@@ -12,7 +12,8 @@ knifed together from named tubes.
 
 ```sh
 cargo build --release -p easel        # the easel: target/release/easel
-cargo test --workspace                # the engine's and the easel's tests
+scripts/test                          # the fast checks (about a minute once built)
+scripts/test --all                    # every required check (notes/speed/SKIPPED.md: what neither runs)
 ```
 
 - `notes/easel_guide.md`: how to paint at the easel.
@@ -45,6 +46,9 @@ cargo test --workspace                # the engine's and the easel's tests
   `~/src/a/stillwet` (see its `DEPLOY.md`). Its studio pages are
   `studio/export_static.py`'s output from this checkout (`~/src/a/claude-paint`),
   exported and uploaded every minute by launchd (stillwet's `sync-studio.sh`).
+- Builder agents work from `notes/agent_brief_template.md`: the test
+  commands, the saved comparison results, the one-heavy-job rule
+  (`scripts/lockrun`) and the ban on painting replays in tests.
 - Working rules: never chain a commit or push after a merge in one command
   (a failed merge was once committed with conflict markers and pushed); create
   a worktree before spawning a subagent into it; a review subagent gets the

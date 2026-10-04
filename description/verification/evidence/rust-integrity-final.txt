@@ -1,0 +1,19 @@
+   Compiling paint v0.1.0 (<pinned-source>/crates/paint)
+   Compiling easel v0.1.0 (<pinned-source>/crates/easel)
+    Finished `test` profile [optimized + debuginfo] target(s) in 20.06s
+     Running tests/session_integrity.rs (target/debug/deps/session_integrity-0bdb089a493117f0)
+
+running 10 tests
+test replay_failure_is_fatal ... ok
+test live_resolution_is_fixed ... ok
+test a_failed_look_after_a_chunk_still_reports_the_chunk ... ok
+test journal_uses_the_selected_painting_clock ... ok
+test a_running_session_refuses_every_request_while_its_log_is_edited ... ok
+test a_look_never_overwrites_an_earlier_observation ... ok
+test a_second_server_is_refused_and_a_dead_ones_socket_is_recovered ... ok
+test edited_or_truncated_logs_cannot_reopen ... ok
+test rebuilding_serves_progress_and_refuses_nonstatus_requests ... ok
+test racing_opens_start_one_server ... ok
+
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 11.13s
+

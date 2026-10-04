@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { getEventListeners } from "node:events";
 import { join } from "node:path";
 import { test } from "node:test";
-import { atEasel, easel, lookArgs, WAIT_MS, studioPath, tail, toolWords } from "../easel-client.ts";
+import { atEasel, easel, lookArgs, WAIT_MS, studioPath, tail, toolWords, paintReply } from "../easel-client.ts";
 
 test("read opens only studio files, however the path is spelled", () => {
 	const top = realpathSync(mkdtempSync(join(tmpdir(), "studio-")));
@@ -93,13 +93,15 @@ test("paint, look, note and status at a real easel", { skip: !bin || !existsSync
 	try {
 		// no session yet: the first call opens one
 		const ok = await atEasel(studio, ["do", "-"], 'canvas{size=400, aspect=1.25, linen=15, ground={{pile={{"lead white", 1}}, um=100, apply="knife"}}}\nprint("hi")');
-		assert.match(ok, /^hi\nok · chunk 1/);
+		assert.equal(paintReply(ok), "hi\nday 1, 09:00\nok");
+		// No print(wait(...)): the successful tool reply supplies the current clock itself.
+		assert.equal(paintReply(await atEasel(studio, ["do", "-"], "wait(60)")), "day 1, 10:00\nok");
 		await assert.rejects(atEasel(studio, ["do", "-"], 'error("boom")'), /boom[\s\S]*changed nothing/);
 		const look = await atEasel(studio, ["look", ...lookArgs({ crop: "0,0,200,200" })], undefined);
 		assert.match(look, /look-0001\.png \(480x480/);
 		assert.match(await atEasel(studio, ["note", "-"], "first note"), /noted/);
 		assert.match(readFileSync(join(studio, "notes", "journal.md"), "utf8"), /first note/);
-		assert.match(await atEasel(studio, ["status"], undefined), /^1 chunks/);
+		assert.match(await atEasel(studio, ["status"], undefined), /^2 chunks/);
 	} finally {
 		await easel(studio, ["close"]);
 	}

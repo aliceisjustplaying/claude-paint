@@ -33,11 +33,13 @@ pub mod wet;
 pub mod bristle;
 pub mod handling;
 pub mod stipple;
+pub mod state_dump;
 pub mod tally;
 pub mod style;
 pub mod hand;
 pub mod outline;
 pub mod surface;
+pub mod thinner;
 
 pub use canvas::{Canvas, Crop, Frame, set_crop};
 pub use crack::Cracks;
@@ -71,7 +73,17 @@ pub use shape::Shape;
 ///   stroke right after it feels the film as it would after `wait(0)`); a
 ///   world's thin far bodies keep their depth (`World::add_body`), and rays
 ///   from far off (reflections) don't step over them (`World::trace`).
-/// - 3: the easel has a rag (`rag`, crates/easel/src/draw_rag.rs); an older
+/// - 3: oil paint dries 2.5 times slower and stays open for 60% of its
+///   time to touch-dry, not 15% (`drying::Pace`): a brushstroke of lead
+///   white is open for 13 h and gels after 27 h (engine 2: 1.4 h and 2.7 h),
+///   touch-dry after 45 h (18 h); bone black, cobalt blue, Prussian blue,
+///   raw sienna, the cadmiums, the ultramarines, rose madder and permanent
+///   alizarin dry at new rates (`Tube::drying_3`, `drying::drier::engine3`), and a box keeps
+///   its engine when tubes are added (`Palette::with`);
+///   and the easel's `pairs` and `next` walk every table in a fixed order, so
+///   a failed chunk is put back without a rebuild from the log (easel
+///   session.rs `canonical_tables`);
+///   and the easel has a rag (`rag`, crates/easel/src/draw_rag.rs); an older
 ///   log replays with exactly the globals it had.
 /// - 4: stiff paint holds its relief, hairs clump in it, films bridge the
 ///   weave; solvent, oil, absorbent grounds and gloss (notes/engine-4.md).

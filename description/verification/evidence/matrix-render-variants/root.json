@@ -1,0 +1,161 @@
+[
+  {
+    "id": "crop",
+    "options": [
+      "--crop",
+      "0,0,500,500"
+    ],
+    "observation": {
+      "cpu_before": "  0:19.49\n",
+      "cpu_after": "  0:19.63\n",
+      "pending": true
+    },
+    "second_pending": true,
+    "first": "ok\n<root>/out/easel/variants/look-0002.png (1200x1200, 0.05s)\n",
+    "second": "ok\n<root>/out/easel/variants/look-0003.png (100x500, 0.04s)\n",
+    "same_as_options_baseline": true
+  },
+  {
+    "id": "squint",
+    "options": [
+      "--mode",
+      "squint"
+    ],
+    "observation": {
+      "cpu_before": "  0:19.97\n",
+      "cpu_after": "  0:20.10\n",
+      "pending": true
+    },
+    "second_pending": true,
+    "first": "ok\n<root>/out/easel/variants/look-0005.png (200x1000, 0.04s)\n",
+    "second": "ok\n<root>/out/easel/variants/look-0006.png (100x500, 0.04s)\n",
+    "same_as_options_baseline": true
+  },
+  {
+    "id": "mirror",
+    "options": [
+      "--mode",
+      "mirror"
+    ],
+    "observation": {
+      "cpu_before": "  0:20.42\n",
+      "cpu_after": "  0:20.45\n",
+      "pending": true
+    },
+    "second_pending": true,
+    "first": "ok\n<root>/out/easel/variants/look-0008.png (200x1000, 0.04s)\n",
+    "second": "ok\n<root>/out/easel/variants/look-0009.png (100x500, 0.04s)\n",
+    "same_as_options_baseline": true
+  },
+  {
+    "id": "combined",
+    "options": [
+      "--mode",
+      "value,mirror"
+    ],
+    "observation": {
+      "cpu_before": "  0:20.87\n",
+      "cpu_after": "  0:21.00\n",
+      "pending": true
+    },
+    "second_pending": true,
+    "first": "ok\n<root>/out/easel/variants/look-0011.png (200x1000, 0.04s)\n",
+    "second": "ok\n<root>/out/easel/variants/look-0012.png (100x500, 0.04s)\n",
+    "same_as_options_baseline": true
+  },
+  {
+    "id": "grid",
+    "options": [
+      "--grid",
+      "50"
+    ],
+    "observation": {
+      "cpu_before": "  0:21.32\n",
+      "cpu_after": "  0:21.33\n",
+      "pending": true
+    },
+    "second_pending": true,
+    "first": "ok\n<root>/out/easel/variants/look-0014.png (200x1000, 0.04s)\n",
+    "second": "ok\n<root>/out/easel/variants/look-0015.png (100x500, 0.04s)\n",
+    "same_as_options_baseline": true
+  },
+  {
+    "id": "size",
+    "options": [
+      "--size",
+      "500"
+    ],
+    "observation": {
+      "cpu_before": "  0:21.78\n",
+      "cpu_after": "  0:21.80\n",
+      "pending": true
+    },
+    "second_pending": true,
+    "first": "ok\n<root>/out/easel/variants/look-0017.png (100x500, 0.04s)\n",
+    "second": "ok\n<root>/out/easel/variants/look-0018.png (100x500, 0.04s)\n",
+    "same_as_options_baseline": true
+  },
+  {
+    "id": "palette",
+    "options": [
+      "--palette"
+    ],
+    "observation": {
+      "cpu_before": "  0:22.14\n",
+      "cpu_after": "  0:22.16\n",
+      "pending": true
+    },
+    "second_pending": true,
+    "first": "ok\n<root>/out/easel/variants/look-0020.png (1124x1760, 0.04s)\n",
+    "second": "ok\n<root>/out/easel/variants/look-0021.png (100x500, 0.04s)\n",
+    "same_as_options_baseline": true
+  },
+  {
+    "id": "cli-stdout",
+    "observation": {
+      "cpu_before": "  0:22.33\n",
+      "cpu_after": "  0:22.36\n",
+      "pending": true
+    },
+    "no_bytes_while_render_pending": true,
+    "pending_at_seconds": 0.007908999999926891,
+    "completion_seconds": 0.08302099999855272,
+    "stdout": "<root>/out/easel/variants/look-0022.png (320x1600, 0.08s)\n",
+    "stderr": "",
+    "exit": 0
+  },
+  {
+    "id": "painter-selection-during",
+    "opening": {
+      "out": "easel \"painting\" open: 0 chunks · 2400px · no canvas yet\n",
+      "err": "",
+      "exit": 0
+    },
+    "pending": true,
+    "selection": {
+      "out": "",
+      "err": "easel: no option \"-s\": this studio has one painting, there are no sessions to pick\n\neasel: a live painting session (see notes/easel_guide.md)\n\n  easel open          start or reattach; replays paintings/lua/painting.lua if it exists\n  easel do '<lua>'  |  easel do -f chunk.lua  |  easel do - (stdin)     [--look] also looks afterwards\n  easel look [--crop x0,y0,x1,y1] [--mode value,squint,mirror] [--grid [step]] [--size 1000]\n  easel look --palette   the piles the globals hold: thick, thin and very thin over the ground, thin over a card\n  easel log           the painting so far (= paintings/lua/painting.lua)\n  easel status        chunks, width, canvas\n  easel globals       the painting's globals, one a line: chunk that last set it, name, what it holds\n  easel save [path]   the canvas as a PNG (default out/easel/painting/painting.png)\n  easel frames on|off save a look after every chunk\n  easel close         end the session (the log stays)\n  easel note '<text>' | easel note - (stdin)    append a dated entry to notes/journal.md\n  easel tubes [--markdown]   the tubes in the box (--markdown: as a table)\n",
+      "exit": 1
+    },
+    "named": {
+      "out": "",
+      "err": "open: this studio has one painting; easel open takes no name or option (got \"another\")\n",
+      "exit": 1
+    },
+    "original": {
+      "out": "ok · chunk 2 (1.19 s to compute)\n",
+      "err": "",
+      "exit": 0
+    },
+    "final": {
+      "out": "1\nok · chunk 3 (0.00 s to compute)\n",
+      "err": "",
+      "exit": 0
+    },
+    "close": {
+      "out": "closed; the session is in <root>/p/paintings/lua/painting.lua\n",
+      "err": "",
+      "exit": 0
+    }
+  }
+]

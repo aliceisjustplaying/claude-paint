@@ -67,7 +67,9 @@ painter never saw relief either: looks showed color only.
   paint's `Prop`, mixed by volume):
   - `pile{turps=0..0.9}`: turpentine makes paint flow on the brush (it
     doesn't clump) and evaporates as it is laid (`Surf::add`): the film is
-    that much thinner, of the paint's own body.
+    that much thinner, of the paint's own body. (Engine 3's `thinner=` is
+    upstream's, beside it: its solvent stays in the open film and leaves
+    over painting time.)
   - `pile{oil="linseed"|"walnut"|"poppy"}`: drying ×1, 0.8, 0.6.
   - `canvas{ground={{..., absorbent=true}}}`: a chalk and glue ground holds
     `ABSORB_COATS` (0.6 coats) of oil it draws out of paint laid on it
@@ -77,11 +79,11 @@ painter never saw relief either: looks showed color only.
     (smoothstep 0.15..1.3), blended with the surface under it for thin
     films; varnish sets it to 1. Engine 4 shows a matte surface with the
     first-surface reflection it scatters back (`SURFACE_REFLECTANCE` 4%,
-    `haze`) in looks and saved pictures. Checkpoint format 9 for a painting of engine 4 or later; an
-    older engine's painting is still written as format 8, byte for byte, and
-    its state digests are the ones recorded for it (`scripts/tests/old_logs.sh`).
-    A format 8 file is read as an oil ground with nothing absorbent and tube
-    paint's oil.
+    `haze`) in looks and saved pictures. Checkpoint format 10 (`PAINTC10`) for a painting of engine
+    4 or later: format 9 with the solvent and oil in the wet paint, the gloss
+    and the absorbency. An older engine's painting is written as it always was
+    (formats 8 and 9), byte for byte, and its state digests and state dumps
+    are the ones recorded for it.
   - Not modeled: yellowing, fading of lakes, color change of chromates.
 - **The giverny and impressionist boxes**: see `notes/research/giverny_materials.md` and
   `notes/research/impressionist_materials.md` (from analyses of the paintings).

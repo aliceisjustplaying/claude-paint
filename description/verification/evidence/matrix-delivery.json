@@ -1,0 +1,1804 @@
+[
+  {
+    "label": "open",
+    "args": [
+      "<binaries>/easel-default",
+      "open",
+      "painting"
+    ],
+    "output": "easel \"painting\" open: 0 chunks · 2400px · no canvas yet\n",
+    "exit": 0,
+    "seconds": 0.295
+  },
+  {
+    "label": "canvas",
+    "args": [
+      "<binaries>/easel-default",
+      "do",
+      "canvas{size=100,aspect=5,linen=12,ground={{pile={{\"lead white\",1}},um=40,apply=\"knife\"}}}"
+    ],
+    "output": "ok · chunk 1 (0.07 s to compute)\n",
+    "exit": 0,
+    "seconds": 0.085
+  },
+  {
+    "label": "paint",
+    "args": [
+      "<binaries>/easel-default",
+      "do",
+      "p=pile{{\"red earth\",1}};b=brush(\"round\",4);b:load(p,0.8);b:stroke({{100,80},{600,80}})"
+    ],
+    "output": "ok · chunk 2 (0.05 s to compute)\n",
+    "exit": 0,
+    "seconds": 0.07
+  },
+  {
+    "label": "save default",
+    "args": [
+      "<binaries>/easel-default",
+      "save"
+    ],
+    "output": "<fixture>/live/out/easel/painting/painting.png\n",
+    "exit": 0,
+    "seconds": 0.028
+  },
+  {
+    "label": "save explicit",
+    "args": [
+      "<binaries>/easel-default",
+      "save",
+      "<fixture>/wet.png"
+    ],
+    "output": "<fixture>/wet.png\n",
+    "exit": 0,
+    "seconds": 0.027
+  },
+  {
+    "label": "check",
+    "args": [
+      "<binaries>/easel-default",
+      "check"
+    ],
+    "output": "replay matches the live canvas exactly (2 chunks, 0.1s)\n",
+    "exit": 0,
+    "seconds": 0.132
+  },
+  {
+    "label": "close",
+    "args": [
+      "<binaries>/easel-default",
+      "close"
+    ],
+    "output": "the live canvas is in <fixture>/live/out/easel/painting/live.png\nclosed; the session is in <fixture>/live/paintings/lua/painting.lua\n",
+    "exit": 0,
+    "seconds": 0.094
+  },
+  {
+    "label": "replay ordered",
+    "args": [
+      "<binaries>/easel-default",
+      "run",
+      "<fixture>/live/paintings/lua/painting.lua",
+      "--out",
+      "<fixture>/replay.png",
+      "--state-digest",
+      "<fixture>/state.tsv",
+      "--dump-surface",
+      "<fixture>/surface.bin"
+    ],
+    "output": "  chunk   1     0.07s\n  chunk   2     0.05s\nwrote <fixture>/replay.png (2 chunks, painted in 0.4s, total 0.4s)\nsurface 2400x480 µm → <fixture>/surface.bin\n",
+    "exit": 0,
+    "seconds": 0.467
+  },
+  {
+    "label": "small replay",
+    "args": [
+      "<binaries>/easel-default",
+      "run",
+      "<fixture>/live/paintings/lua/painting.lua",
+      "--out",
+      "<fixture>/small.png",
+      "--width",
+      "160"
+    ],
+    "output": "  chunk   1     0.03s\n  chunk   2     0.00s\nwrote <fixture>/small.png (2 chunks, painted in 0.0s, total 0.0s)\n",
+    "exit": 0,
+    "seconds": 0.065
+  },
+  {
+    "label": "print finishing chunk",
+    "args": [
+      "<binaries>/easel-default",
+      "finish",
+      "--print-chunk"
+    ],
+    "output": "-- finishing, applied after the session by scripts/finish_painting\nlocal function when_dry(f)\n  for _ = 1, 120 do\n    local ok, e = pcall(f)\n    if ok then return end\n    if not tostring(e):find('not all dry', 1, true) then error(e, 0) end\n    wait(30 * 24 * 60)\n  end\n  error('still not dry after ten years', 0)\nend\nwhen_dry(function() varnish{coats=0.4} end)\nwhen_dry(function() cracks{} end)\n",
+    "exit": 0,
+    "seconds": 0.003
+  },
+  {
+    "label": "bounded finishing loop",
+    "args": [
+      "<binaries>/easel-default",
+      "run",
+      "<fixture>/bounded.lua"
+    ],
+    "output": "false\tstill not dry after ten years\t120\n  chunk   1     0.00s\nthe program never made a canvas\n",
+    "exit": 1,
+    "seconds": 0.004
+  },
+  {
+    "label": "direct finish default",
+    "args": [
+      "<binaries>/easel-default",
+      "finish",
+      "<fixture>/live/out/easel/painting/live.ckpt",
+      "<fixture>/finish-default.png",
+      "--log",
+      "<fixture>/live/paintings/lua/painting.lua"
+    ],
+    "output": "wrote <fixture>/finish-default.png (restored 2 chunks in 0.0s, finished in 0.2s, total 0.2s)\n",
+    "exit": 0,
+    "seconds": 0.231
+  },
+  {
+    "label": "direct finish no-varnish",
+    "args": [
+      "<binaries>/easel-default",
+      "finish",
+      "<fixture>/live/out/easel/painting/live.ckpt",
+      "<fixture>/finish-no-varnish.png",
+      "--log",
+      "<fixture>/live/paintings/lua/painting.lua",
+      "--no-varnish"
+    ],
+    "output": "wrote <fixture>/finish-no-varnish.png (restored 2 chunks in 0.0s, finished in 0.1s, total 0.1s)\n",
+    "exit": 0,
+    "seconds": 0.125
+  },
+  {
+    "label": "direct finish no-cracks",
+    "args": [
+      "<binaries>/easel-default",
+      "finish",
+      "<fixture>/live/out/easel/painting/live.ckpt",
+      "<fixture>/finish-no-cracks.png",
+      "--log",
+      "<fixture>/live/paintings/lua/painting.lua",
+      "--no-cracks"
+    ],
+    "output": "wrote <fixture>/finish-no-cracks.png (restored 2 chunks in 0.0s, finished in 0.1s, total 0.1s)\n",
+    "exit": 0,
+    "seconds": 0.107
+  },
+  {
+    "label": "direct finish relief",
+    "args": [
+      "<binaries>/easel-default",
+      "finish",
+      "<fixture>/live/out/easel/painting/live.ckpt",
+      "<fixture>/finish-relief.png",
+      "--log",
+      "<fixture>/live/paintings/lua/painting.lua",
+      "--relief"
+    ],
+    "output": "wrote <fixture>/finish-relief.png (restored 2 chunks in 0.0s, finished in 0.1s, total 0.2s)\n",
+    "exit": 0,
+    "seconds": 0.163
+  },
+  {
+    "label": "direct finish coats",
+    "args": [
+      "<binaries>/easel-default",
+      "finish",
+      "<fixture>/live/out/easel/painting/live.ckpt",
+      "<fixture>/finish-coats.png",
+      "--log",
+      "<fixture>/live/paintings/lua/painting.lua",
+      "--coats",
+      "1.2"
+    ],
+    "output": "wrote <fixture>/finish-coats.png (restored 2 chunks in 0.0s, finished in 0.1s, total 0.2s)\n",
+    "exit": 0,
+    "seconds": 0.163
+  },
+  {
+    "label": "reopen without checkpoint",
+    "args": [
+      "<binaries>/easel-default",
+      "open",
+      "painting"
+    ],
+    "output": "resuming chunk 1/2\nresumed chunk 1/2 0.07s\nresuming chunk 2/2\nresumed chunk 2/2 0.05s\nresumed 2 chunks from <fixture>/live/paintings/lua/painting.lua\neasel \"painting\" open: 2 chunks · 2400px · size=100, aspect=5, linen={12, 12}, seed=1\n",
+    "exit": 0,
+    "seconds": 0.229
+  },
+  {
+    "label": "save path A",
+    "args": [
+      "<binaries>/easel-default",
+      "save",
+      "<fixture>/a.png"
+    ],
+    "output": "<fixture>/a.png\n",
+    "exit": 0,
+    "seconds": 0.027
+  },
+  {
+    "label": "save overwrite",
+    "args": [
+      "<binaries>/easel-default",
+      "save",
+      "<fixture>/a.png"
+    ],
+    "output": "<fixture>/a.png\n",
+    "exit": 0,
+    "seconds": 0.027
+  },
+  {
+    "label": "save path B",
+    "args": [
+      "<binaries>/easel-default",
+      "save",
+      "<fixture>/b.png"
+    ],
+    "output": "<fixture>/b.png\n",
+    "exit": 0,
+    "seconds": 0.026
+  },
+  {
+    "label": "frames implicit",
+    "args": [
+      "<binaries>/easel-default",
+      "frames"
+    ],
+    "output": "frames on (<fixture>/live/out/easel/painting/frames)\n",
+    "exit": 0,
+    "seconds": 0.003
+  },
+  {
+    "label": "captured",
+    "args": [
+      "<binaries>/easel-default",
+      "do",
+      "print(\"frame one\")"
+    ],
+    "output": "frame one\nok · chunk 3 (0.00 s to compute)\n",
+    "exit": 0,
+    "seconds": 0.028
+  },
+  {
+    "label": "frames typo",
+    "args": [
+      "<binaries>/easel-default",
+      "frames",
+      "onn"
+    ],
+    "output": "frames off (<fixture>/live/out/easel/painting/frames)\n",
+    "exit": 0,
+    "seconds": 0.004
+  },
+  {
+    "label": "not captured",
+    "args": [
+      "<binaries>/easel-default",
+      "do",
+      "print(\"frame two\")"
+    ],
+    "output": "frame two\nok · chunk 4 (0.00 s to compute)\n",
+    "exit": 0,
+    "seconds": 0.015
+  },
+  {
+    "label": "frames on",
+    "args": [
+      "<binaries>/easel-default",
+      "frames",
+      "on"
+    ],
+    "output": "frames on (<fixture>/live/out/easel/painting/frames)\n",
+    "exit": 0,
+    "seconds": 0.003
+  },
+  {
+    "label": "captured again",
+    "args": [
+      "<binaries>/easel-default",
+      "do",
+      "print(\"frame three\")"
+    ],
+    "output": "frame three\nok · chunk 5 (0.00 s to compute)\n",
+    "exit": 0,
+    "seconds": 0.021
+  },
+  {
+    "label": "close capture",
+    "args": [
+      "<binaries>/easel-default",
+      "close"
+    ],
+    "output": "the live canvas is in <fixture>/live/out/easel/painting/live.png\nclosed; the session is in <fixture>/live/paintings/lua/painting.lua\n",
+    "exit": 0,
+    "seconds": 0.086
+  },
+  {
+    "label": "reopen capture reset",
+    "args": [
+      "<binaries>/easel-default",
+      "open",
+      "painting"
+    ],
+    "output": "resuming chunk 1/5\nresumed chunk 1/5 0.07s\nresuming chunk 2/5\nresumed chunk 2/5 0.05s\nresuming chunk 3/5\nresumed chunk 3/5 0.00s\nresuming chunk 4/5\nresumed chunk 4/5 0.00s\nresuming chunk 5/5\nresumed chunk 5/5 0.00s\nresumed 5 chunks from <fixture>/live/paintings/lua/painting.lua\neasel \"painting\" open: 5 chunks · 2400px · size=100, aspect=5, linen={12, 12}, seed=1\n",
+    "exit": 0,
+    "seconds": 0.224
+  },
+  {
+    "label": "no new capture",
+    "args": [
+      "<binaries>/easel-default",
+      "do",
+      "print(\"frame four\")"
+    ],
+    "output": "frame four\nok · chunk 6 (0.00 s to compute)\n",
+    "exit": 0,
+    "seconds": 0.022
+  },
+  {
+    "label": "close reset",
+    "args": [
+      "<binaries>/easel-default",
+      "close"
+    ],
+    "output": "the live canvas is in <fixture>/live/out/easel/painting/live.png\nclosed; the session is in <fixture>/live/paintings/lua/painting.lua\n",
+    "exit": 0,
+    "seconds": 0.082
+  },
+  {
+    "label": "frames exclude drying wait",
+    "args": [
+      "<binaries>/easel-default",
+      "run",
+      "<fixture>/wait.lua",
+      "--out",
+      "<fixture>/wait.png",
+      "--frames-every",
+      "0.2",
+      "--frames-dir",
+      "<fixture>/frames",
+      "--frame-width",
+      "160"
+    ],
+    "output": "  chunk   1     0.07s\n  chunk   2     0.07s\n  chunk   3     0.01s\n  chunk   4     0.07s\nframes: 7 written (151 hand-time intervals of 0.2s crossed, 4 chunks) over 0.5 min of hand time → <fixture>/frames\nwrote <fixture>/wait.png (4 chunks, painted in 0.3s, total 0.3s)\n",
+    "exit": 0,
+    "seconds": 0.348
+  },
+  {
+    "label": "default width second invocation",
+    "args": [
+      "<binaries>/easel-default",
+      "run",
+      "<fixture>/source.lua",
+      "--out",
+      "<fixture>/default-second.png"
+    ],
+    "output": "  chunk   1     0.07s\n  chunk   2     0.05s\nwrote <fixture>/default-second.png (2 chunks, painted in 0.1s, total 0.1s)\n",
+    "exit": 0,
+    "seconds": 0.155
+  },
+  {
+    "label": "export friedrich",
+    "args": [
+      "<source>/scripts/export_r16_studio",
+      "friedrich",
+      "<fixture>/export-friedrich"
+    ],
+    "output": "exported the friedrich studio from 4e525e50897807e9b5f734071dfeb330f1a393d3 (4e525e5) to <fixture>/export-friedrich\n  easel: <fixture>/export-friedrich/bin/easel (checked in $TMPDIR//studio-probe.KLMctW)\n  notices: <fixture>/export-friedrich/bin/THIRD_PARTY_NOTICES.md\n  box: the default tube box\n  notes: easel_guide.md journal.md research/friedrich_materials.md research/oil_paint_physics.md \n",
+    "exit": 0,
+    "seconds": 4.473
+  },
+  {
+    "label": "export sargent",
+    "args": [
+      "<source>/scripts/export_r16_studio",
+      "sargent",
+      "<fixture>/export-sargent"
+    ],
+    "output": "exported the sargent studio from 4e525e50897807e9b5f734071dfeb330f1a393d3 (4e525e5) to <fixture>/export-sargent\n  easel: <fixture>/export-sargent/bin/easel (checked in $TMPDIR//studio-probe.16u9Im)\n  notices: <fixture>/export-sargent/bin/THIRD_PARTY_NOTICES.md\n  box: sargent\n  notes: easel_guide.md journal.md research/oil_paint_physics.md research/sargent_materials.md \n",
+    "exit": 0,
+    "seconds": 92.434
+  },
+  {
+    "label": "export hopper",
+    "args": [
+      "<source>/scripts/export_r16_studio",
+      "hopper",
+      "<fixture>/export-hopper"
+    ],
+    "output": "exported the hopper studio from 4e525e50897807e9b5f734071dfeb330f1a393d3 (4e525e5) to <fixture>/export-hopper\n  easel: <fixture>/export-hopper/bin/easel (checked in $TMPDIR//studio-probe.utblaI)\n  notices: <fixture>/export-hopper/bin/THIRD_PARTY_NOTICES.md\n  box: hopper\n  notes: easel_guide.md journal.md research/hopper_materials.md research/oil_paint_physics.md \n",
+    "exit": 0,
+    "seconds": 92.618
+  },
+  {
+    "label": "export tonn",
+    "args": [
+      "<source>/scripts/export_r16_studio",
+      "tonn",
+      "<fixture>/export-tonn"
+    ],
+    "output": "exported the tonn studio from 4e525e50897807e9b5f734071dfeb330f1a393d3 (4e525e5) to <fixture>/export-tonn\n  easel: <fixture>/export-tonn/bin/easel (checked in $TMPDIR//studio-probe.LTl9z3)\n  notices: <fixture>/export-tonn/bin/THIRD_PARTY_NOTICES.md\n  box: tonn\n  notes: easel_guide.md journal.md research/oil_paint_physics.md research/tonn_materials.md \n",
+    "exit": 0,
+    "seconds": 92.622
+  },
+  {
+    "label": "export alma-tadema",
+    "args": [
+      "<source>/scripts/export_r16_studio",
+      "alma-tadema",
+      "<fixture>/export-alma-tadema"
+    ],
+    "output": "exported the alma-tadema studio from 4e525e50897807e9b5f734071dfeb330f1a393d3 (4e525e5) to <fixture>/export-alma-tadema\n  easel: <fixture>/export-alma-tadema/bin/easel (checked in $TMPDIR//studio-probe.1txIwy)\n  notices: <fixture>/export-alma-tadema/bin/THIRD_PARTY_NOTICES.md\n  box: alma-tadema\n  notes: easel_guide.md journal.md research/alma_tadema_materials.md research/oil_paint_physics.md \n",
+    "exit": 0,
+    "seconds": 92.725
+  },
+  {
+    "label": "export inness",
+    "args": [
+      "<source>/scripts/export_r16_studio",
+      "inness",
+      "<fixture>/export-inness"
+    ],
+    "output": "exported the inness studio from 4e525e50897807e9b5f734071dfeb330f1a393d3 (4e525e5) to <fixture>/export-inness\n  easel: <fixture>/export-inness/bin/easel (checked in $TMPDIR//studio-probe.6RCvEa)\n  notices: <fixture>/export-inness/bin/THIRD_PARTY_NOTICES.md\n  box: inness\n  notes: easel_guide.md journal.md research/inness_materials.md research/oil_paint_physics.md \n",
+    "exit": 0,
+    "seconds": 93.518
+  },
+  {
+    "label": "check valid",
+    "args": [
+      "<source>/scripts/check_painting",
+      "<fixture>/valid/paintings/lua/painting.lua",
+      "<fixture>/check-valid"
+    ],
+    "output": "<source>/scripts/check_painting: line 43: cd: <fixture>/valid/paintings/lua/painting.lua: Not a directory\n",
+    "exit": 1,
+    "seconds": 0.151
+  },
+  {
+    "label": "check stripped",
+    "args": [
+      "<source>/scripts/check_painting",
+      "<fixture>/stripped/paintings/lua/painting.lua",
+      "<fixture>/check-stripped"
+    ],
+    "output": "<source>/scripts/check_painting: line 43: cd: <fixture>/stripped/paintings/lua/painting.lua: Not a directory\n",
+    "exit": 1,
+    "seconds": 0.02
+  },
+  {
+    "label": "check swapped",
+    "args": [
+      "<source>/scripts/check_painting",
+      "<fixture>/swapped/paintings/lua/painting.lua",
+      "<fixture>/check-swapped"
+    ],
+    "output": "<source>/scripts/check_painting: line 43: cd: <fixture>/swapped/paintings/lua/painting.lua: Not a directory\n",
+    "exit": 1,
+    "seconds": 0.011
+  },
+  {
+    "label": "script finish valid",
+    "args": [
+      "<source>/scripts/finish_painting",
+      "<fixture>/valid/paintings/lua/painting.lua",
+      "<fixture>/valid-finished.png"
+    ],
+    "output": "wrote <fixture>/valid-finished.png (restored 6 chunks in 0.0s, finished in 1.4s, total 1.5s)\nfinished from the save: <fixture>/valid-finished.png (log: <fixture>/valid-finished.lua; save compressed)\n",
+    "exit": 0,
+    "seconds": 2.189
+  },
+  {
+    "label": "script finish corrupt",
+    "args": [
+      "<source>/scripts/finish_painting",
+      "<fixture>/corrupt/paintings/lua/painting.lua",
+      "<fixture>/corrupt-finished.png"
+    ],
+    "output": "<fixture>/corrupt/out/easel/painting/live.ckpt: not a canvas checkpoint (or an older format)\nfinish_painting: the save didn't finish (above); replaying the log instead\n  chunk   1     0.83s\n  chunk   2     0.51s\nframe one\n  chunk   3     0.00s\nframe two\n  chunk   4     0.00s\nframe three\n  chunk   5     0.00s\nframe four\n  chunk   6     0.00s\n  chunk   7     1.42s\nwrote <fixture>/corrupt-finished.png (7 chunks, painted in 2.8s, total 2.9s)\nfinished: <fixture>/corrupt-finished.png (log: <fixture>/corrupt-finished.lua)\n",
+    "exit": 0,
+    "seconds": 3.288
+  },
+  {
+    "label": "script relief only",
+    "args": [
+      "<source>/scripts/finish_painting",
+      "<fixture>/source.lua",
+      "<fixture>/relief-only.png",
+      "--no-varnish",
+      "--no-cracks",
+      "--relief"
+    ],
+    "output": "  chunk   1     0.56s\n  chunk   2     0.47s\n  chunk   3     0.46s\nwrote <fixture>/relief-only.png (3 chunks, painted in 1.5s, total 1.6s)\nfinished: <fixture>/relief-only.png (log: <fixture>/relief-only.lua)\n",
+    "exit": 0,
+    "seconds": 1.99
+  },
+  {
+    "label": "script coats 1.2",
+    "args": [
+      "<source>/scripts/finish_painting",
+      "<fixture>/source.lua",
+      "<fixture>/coats.png",
+      "--coats",
+      "1.2"
+    ],
+    "output": "  chunk   1     0.62s\n  chunk   2     0.26s\n  chunk   3     1.09s\nwrote <fixture>/coats.png (3 chunks, painted in 2.0s, total 2.1s)\nfinished: <fixture>/coats.png (log: <fixture>/coats.lua)\n",
+    "exit": 0,
+    "seconds": 2.504
+  },
+  {
+    "label": "script nothing",
+    "args": [
+      "<source>/scripts/finish_painting",
+      "<fixture>/source.lua",
+      "<fixture>/nothing.png",
+      "--no-varnish",
+      "--no-cracks"
+    ],
+    "output": "nothing to do\n",
+    "exit": 1,
+    "seconds": 0.026
+  },
+  {
+    "label": "numeric video",
+    "args": [
+      "<source>/scripts/replay_clip",
+      "<fixture>/source.lua",
+      "<fixture>/numeric.mp4",
+      "--reuse",
+      "--frames-dir",
+      "<fixture>/frames",
+      "--length",
+      "5",
+      "--max-hold",
+      "2",
+      "--width",
+      "160",
+      "--pace",
+      "1"
+    ],
+    "output": "3 moments, 0.5 min of hand time, pace 1: about 5.0 s of clip\nstream|width=160|height=32|nb_frames=120\nformat|duration=5.000000|size=5158\n",
+    "exit": 0,
+    "seconds": 18.384
+  },
+  {
+    "label": "dynamic video",
+    "args": [
+      "<source>/scripts/replay_clip",
+      "<fixture>/source.lua",
+      "<fixture>/dynamic.mp4",
+      "--reuse",
+      "--frames-dir",
+      "<fixture>/frames",
+      "--length",
+      "5",
+      "--max-hold",
+      "2",
+      "--width",
+      "160",
+      "--pace",
+      "dynamic",
+      "--floor",
+      ".3",
+      "--gamma",
+      ".8",
+      "--ramp",
+      "1.5",
+      "--ramp-span",
+      ".4",
+      "--open-hold",
+      ".2",
+      "--final-first",
+      ".5"
+    ],
+    "output": "3 moments, 3 shown, 0.5 min of hand time, pace dynamic (floor 0.3, gamma 0.8): about 4.5 s of clip\ndynamic    per tenth:  0.0  0.0  0.0  0.0  0.0  0.0  0.0  0.0  0.0 100.0   min 0.0 max 100.0 sd 30.0\nhand^0.6   per tenth:  0.0  0.0  0.0  0.0  0.0  0.0  0.0  0.0  0.0 100.0   min 0.0 max 100.0 sd 30.0\nstream|width=160|height=32|nb_frames=120\nformat|duration=5.000000|size=5084\n",
+    "exit": 0,
+    "seconds": 0.917
+  },
+  {
+    "label": "numeric ffprobe",
+    "args": [
+      "ffprobe",
+      "-v",
+      "error",
+      "-show_entries",
+      "format=duration:stream=codec_name,width,height",
+      "-of",
+      "json",
+      "<fixture>/numeric.mp4"
+    ],
+    "output": "{\n    \"programs\": [\n\n    ],\n    \"stream_groups\": [\n\n    ],\n    \"streams\": [\n        {\n            \"codec_name\": \"h264\",\n            \"width\": 160,\n            \"height\": 32\n        }\n    ],\n    \"format\": {\n        \"duration\": \"5.000000\"\n    }\n}\n",
+    "exit": 0,
+    "seconds": 0.095
+  },
+  {
+    "label": "dynamic ffprobe",
+    "args": [
+      "ffprobe",
+      "-v",
+      "error",
+      "-show_entries",
+      "format=duration:stream=codec_name,width,height",
+      "-of",
+      "json",
+      "<fixture>/dynamic.mp4"
+    ],
+    "output": "{\n    \"programs\": [\n\n    ],\n    \"stream_groups\": [\n\n    ],\n    \"streams\": [\n        {\n            \"codec_name\": \"h264\",\n            \"width\": 160,\n            \"height\": 32\n        }\n    ],\n    \"format\": {\n        \"duration\": \"5.000000\"\n    }\n}\n",
+    "exit": 0,
+    "seconds": 0.105
+  },
+  {
+    "label": "maximum width",
+    "args": [
+      "<binaries>/easel-default",
+      "run",
+      "<fixture>/wide.lua",
+      "--width",
+      "9600",
+      "--out",
+      "<fixture>/wide.png"
+    ],
+    "output": "  chunk   1     2.45s\nwrote <fixture>/wide.png (1 chunks, painted in 2.4s, total 3.1s)\n",
+    "exit": 0,
+    "seconds": 3.112
+  },
+  {
+    "label": "missing ffmpeg",
+    "args": [
+      "<source>/scripts/replay_clip",
+      "<fixture>/source.lua",
+      "<fixture>/missing.mp4"
+    ],
+    "output": "replay_clip: needs ffmpeg\n",
+    "exit": 1,
+    "seconds": 0.01
+  },
+  {
+    "label": "replay permission",
+    "args": [
+      "<binaries>/easel-default",
+      "run",
+      "<fixture>/source.lua",
+      "--out",
+      "<fixture>/denied/out.png"
+    ],
+    "output": "  chunk   1     0.85s\n  chunk   2     0.22s\n<fixture>/denied/out.png: Permission denied (os error 13)\n",
+    "exit": 1,
+    "seconds": 1.247
+  },
+  {
+    "label": "finish permission",
+    "args": [
+      "<source>/scripts/finish_painting",
+      "<fixture>/source.lua",
+      "<fixture>/denied/finished.png"
+    ],
+    "output": "<source>/scripts/finish_painting: line 66: <fixture>/denied/finished.lua.part: Permission denied\n",
+    "exit": 1,
+    "seconds": 0.322
+  },
+  {
+    "label": "concurrent open",
+    "args": [
+      "<binaries>/easel-default",
+      "open",
+      "painting"
+    ],
+    "output": "easel \"painting\" open: 0 chunks · 2400px · no canvas yet\n",
+    "exit": 0,
+    "seconds": 0.117
+  },
+  {
+    "label": "concurrent canvas",
+    "args": [
+      "<binaries>/easel-default",
+      "do",
+      "canvas{size=100,aspect=5,linen=12,ground={{pile={{\"lead white\",1}},um=40,apply=\"knife\"}}}"
+    ],
+    "output": "ok · chunk 1 (0.62 s to compute)\n",
+    "exit": 0,
+    "seconds": 0.64
+  },
+  {
+    "label": "concurrent slow source",
+    "args": [
+      "<binaries>/easel-default",
+      "do",
+      "local n=0;for i=1,500000000 do n=n+i end;print(\"completed\",n)"
+    ],
+    "output": "completed\t125000000250000000\nok · chunk 2 (6.84 s to compute)\n",
+    "exit": 0,
+    "seconds": 6.877
+  },
+  {
+    "label": "available during check",
+    "args": [
+      "<binaries>/easel-default",
+      "status"
+    ],
+    "output": "2 chunks · 2400px · size=100, aspect=5, linen={12, 12}, seed=1\n",
+    "exit": 0,
+    "seconds": 0.041
+  },
+  {
+    "label": "future paint during check",
+    "args": [
+      "<binaries>/easel-default",
+      "do",
+      "p=pile{{\"red earth\",1}};b=brush(\"round\",4);b:load(p,0.8);b:stroke({{100,80},{600,80}})"
+    ],
+    "output": "ok · chunk 3 (0.31 s to compute)\n",
+    "exit": 0,
+    "seconds": 0.337
+  },
+  {
+    "label": "captured check A",
+    "args": [
+      "<binaries>/easel-default",
+      "check"
+    ],
+    "output": "replay matches the live canvas exactly (2 chunks, 2.9s)\n",
+    "exit": 0,
+    "seconds": 2.979
+  },
+  {
+    "label": "superseded check",
+    "args": [
+      "<binaries>/easel-default",
+      "check"
+    ],
+    "output": "check stopped before chunk 2 of 3\n",
+    "exit": 1,
+    "seconds": 0.206
+  },
+  {
+    "label": "replacement check",
+    "args": [
+      "<binaries>/easel-default",
+      "check"
+    ],
+    "output": "replay matches the live canvas exactly (3 chunks, 3.9s)\n",
+    "exit": 0,
+    "seconds": 3.925
+  },
+  {
+    "label": "long ordinary source",
+    "args": [
+      "<binaries>/easel-default",
+      "do",
+      "local n=0;for i=1,500000000 do n=n+i end;print(\"completed\",n)"
+    ],
+    "output": "completed\t125000000250000000\nok · chunk 4 (3.56 s to compute)\n",
+    "exit": 0,
+    "seconds": 3.587
+  },
+  {
+    "label": "queued frames",
+    "args": [
+      "<binaries>/easel-default",
+      "frames",
+      "on"
+    ],
+    "output": "frames on (<fixture>/concurrent/out/easel/painting/frames)\n",
+    "exit": 0,
+    "seconds": 3.479
+  },
+  {
+    "label": "queued save",
+    "args": [
+      "<binaries>/easel-default",
+      "save",
+      "<fixture>/queued-save.png"
+    ],
+    "output": "<fixture>/queued-save.png\n",
+    "exit": 0,
+    "seconds": 3.566
+  },
+  {
+    "label": "parallel save parallel-b.png",
+    "args": [
+      "<binaries>/easel-default",
+      "save",
+      "<fixture>/parallel-b.png"
+    ],
+    "output": "<fixture>/parallel-b.png\n",
+    "exit": 0,
+    "seconds": 0.06
+  },
+  {
+    "label": "parallel save parallel-a.png",
+    "args": [
+      "<binaries>/easel-default",
+      "save",
+      "<fixture>/parallel-a.png"
+    ],
+    "output": "<fixture>/parallel-a.png\n",
+    "exit": 0,
+    "seconds": 0.166
+  },
+  {
+    "label": "collision source.lua",
+    "args": [
+      "<binaries>/easel-default",
+      "run",
+      "<fixture>/source.lua",
+      "--out",
+      "<fixture>/collision.png"
+    ],
+    "output": "  chunk   1     0.22s\n  chunk   2     0.10s\nwrote <fixture>/collision.png (2 chunks, painted in 0.3s, total 0.4s)\n",
+    "exit": 0,
+    "seconds": 0.384
+  },
+  {
+    "label": "collision wait.lua",
+    "args": [
+      "<binaries>/easel-default",
+      "run",
+      "<fixture>/wait.lua",
+      "--out",
+      "<fixture>/collision.png"
+    ],
+    "output": "  chunk   1     0.21s\n  chunk   2     0.12s\n  chunk   3     0.06s\n  chunk   4     0.17s\nwrote <fixture>/collision.png (4 chunks, painted in 0.6s, total 0.6s)\n",
+    "exit": 0,
+    "seconds": 0.604
+  },
+  {
+    "label": "killed save artifact",
+    "args": [
+      "ls",
+      "-l",
+      "<fixture>/killed-save.png"
+    ],
+    "output": "-rw-r--r-- 1 <user> wheel 333561 Oct  4 13:11 <fixture>/killed-save.png\n",
+    "exit": 0,
+    "seconds": 0.008
+  },
+  {
+    "label": "concurrent close",
+    "args": [
+      "<binaries>/easel-default",
+      "close"
+    ],
+    "output": "the live canvas is in <fixture>/concurrent/out/easel/painting/live.png\nclosed; the session is in <fixture>/concurrent/paintings/lua/painting.lua\n",
+    "exit": 0,
+    "seconds": 0.104
+  },
+  {
+    "label": "partial replay artifact",
+    "args": [
+      "ls",
+      "-l",
+      "<fixture>/partial.tsv"
+    ],
+    "output": "-rw-r--r-- 1 <user> wheel 103 Oct  4 13:11 <fixture>/partial.tsv\n",
+    "exit": 0,
+    "seconds": 0.011
+  },
+  {
+    "label": "fixed replay b",
+    "args": [
+      "<binaries>/easel-default",
+      "run",
+      "<fixture>/slow.lua",
+      "--width",
+      "320",
+      "--out",
+      "<fixture>/fixed-b.png",
+      "--state-digest",
+      "<fixture>/fixed-b.tsv",
+      "--dump-surface",
+      "<fixture>/fixed-b.bin",
+      "--frames-every",
+      "2",
+      "--frames-dir",
+      "<fixture>/fixed-b",
+      "--frame-width",
+      "320"
+    ],
+    "output": "  chunk   1     0.02s\n  chunk   2     0.04s\ncompleted\t125000000250000000\n  chunk   3     3.63s\nframes: 5 written (12 hand-time intervals of 2s crossed, 3 chunks) over 0.4 min of hand time → <fixture>/fixed-b\nwrote <fixture>/fixed-b.png (3 chunks, painted in 3.7s, total 3.7s)\nsurface 320x64 µm → <fixture>/fixed-b.bin\n",
+    "exit": 0,
+    "seconds": 3.723
+  },
+  {
+    "label": "fixed replay a",
+    "args": [
+      "<binaries>/easel-default",
+      "run",
+      "<fixture>/slow.lua",
+      "--width",
+      "160",
+      "--out",
+      "<fixture>/fixed-a.png",
+      "--state-digest",
+      "<fixture>/fixed-a.tsv",
+      "--dump-surface",
+      "<fixture>/fixed-a.bin",
+      "--frames-every",
+      "1",
+      "--frames-dir",
+      "<fixture>/fixed-a",
+      "--frame-width",
+      "160"
+    ],
+    "output": "  chunk   1     0.01s\n  chunk   2     0.01s\ncompleted\t125000000250000000\n  chunk   3     3.72s\nframes: 5 written (25 hand-time intervals of 1s crossed, 3 chunks) over 0.4 min of hand time → <fixture>/fixed-a\nwrote <fixture>/fixed-a.png (3 chunks, painted in 3.7s, total 3.7s)\nsurface 160x32 µm → <fixture>/fixed-a.bin\n",
+    "exit": 0,
+    "seconds": 3.752
+  },
+  {
+    "label": "check corrected valid",
+    "args": [
+      "<source>/scripts/check_painting",
+      "<fixture>/valid",
+      "<fixture>/check-valid"
+    ],
+    "output": "log: <fixture>/valid/paintings/lua/painting.lua (6 chunks); the studio's committed record equals its log\nresuming chunk 1/6\nresumed chunk 1/6 0.59s\nresuming chunk 2/6\nresumed chunk 2/6 0.09s\nresuming chunk 3/6\nresumed chunk 3/6 0.00s\nresuming chunk 4/6\nresumed chunk 4/6 0.00s\nresuming chunk 5/6\nresumed chunk 5/6 0.00s\nresuming chunk 6/6\nresumed chunk 6/6 0.00s\nresumed 6 chunks from <fixture>/check-valid/paintings/lua/painting.lua\neasel \"painting\" open: 6 chunks · 2400px · size=100, aspect=5, linen={12, 12}, seed=1\nthe replay equals the live canvas saved at close (the session had replayed 5 of its 6 chunks from the log)\nthe replay's canvas state equals the save written at close (the session had replayed 5 of its 6 chunks from the log)\nthe replay's PNG equals the painter's last save\ntimes: reopen 1 s, save and close 0 s\ncheck: ok: 6 chunks replay to the live canvas; the replay equals the live canvas saved at close (the session had replayed 5 of its 6 chunks from the log); the replay's canvas state equals the save written at close (the session had replayed 5 of its 6 chunks from the log); the replay's PNG equals the painter's last save; the studio's committed record equals its log\n",
+    "exit": 0,
+    "seconds": 7.426
+  },
+  {
+    "label": "check corrected stripped",
+    "args": [
+      "<source>/scripts/check_painting",
+      "<fixture>/stripped",
+      "<fixture>/check-stripped"
+    ],
+    "output": "log: <fixture>/stripped/paintings/lua/painting.lua (6 chunks); the studio's committed record equals its log\nresuming chunk 1/6\nresumed chunk 1/6 0.08s\nresuming chunk 2/6\nresumed chunk 2/6 0.06s\nresuming chunk 3/6\nresumed chunk 3/6 0.00s\nresuming chunk 4/6\nresumed chunk 4/6 0.00s\nresuming chunk 5/6\nresumed chunk 5/6 0.00s\nresuming chunk 6/6\nresumed chunk 6/6 0.00s\nresumed 6 chunks from <fixture>/check-stripped/paintings/lua/painting.lua\neasel \"painting\" open: 6 chunks · 2400px · size=100, aspect=5, linen={12, 12}, seed=1\nthe session saved no live canvas at close\nthe session wrote no save file at close\nthe replay's PNG equals the painter's last save\ntimes: reopen 1 s, save and close 0 s\ncheck: replay only: 6 chunks replay, but the session saved no live canvas at close; the session wrote no save file at close; the replay's PNG equals the painter's last save; the studio's committed record equals its log\n",
+    "exit": 0,
+    "seconds": 0.617
+  },
+  {
+    "label": "check corrected swapped",
+    "args": [
+      "<source>/scripts/check_painting",
+      "<fixture>/swapped",
+      "<fixture>/check-swapped"
+    ],
+    "output": "log: <fixture>/swapped/paintings/lua/painting.lua (6 chunks); the studio's committed record equals its log\nresuming chunk 1/6\nresumed chunk 1/6 0.10s\nresuming chunk 2/6\nresumed chunk 2/6 0.06s\nresuming chunk 3/6\nresumed chunk 3/6 0.00s\nresuming chunk 4/6\nresumed chunk 4/6 0.00s\nresuming chunk 5/6\nresumed chunk 5/6 0.00s\nresuming chunk 6/6\nresumed chunk 6/6 0.00s\nresumed 6 chunks from <fixture>/check-swapped/paintings/lua/painting.lua\neasel \"painting\" open: 6 chunks · 2400px · size=100, aspect=5, linen={12, 12}, seed=1\nthe replay DIFFERS from the live canvas saved at close (the session had replayed 5 of its 6 chunks from the log)\nthe replay's canvas state equals the save written at close (the session had replayed 5 of its 6 chunks from the log)\nthe replay's PNG equals the painter's last save\ntimes: reopen 0 s, save and close 0 s\ncheck: DIFFERS from the live canvas: the replay DIFFERS from the live canvas saved at close (the session had replayed 5 of its 6 chunks from the log); the replay's canvas state equals the save written at close (the session had replayed 5 of its 6 chunks from the log); the replay's PNG equals the painter's last save; the studio's committed record equals its log\n",
+    "exit": 1,
+    "seconds": 0.92
+  },
+  {
+    "label": "check sentinel guard",
+    "args": [
+      "<source>/scripts/check_painting",
+      "<fixture>/valid",
+      "<fixture>/sentinel"
+    ],
+    "output": "<fixture>/sentinel exists and isn't empty\n",
+    "exit": 2,
+    "seconds": 0.014
+  },
+  {
+    "label": "export sentinel guard",
+    "args": [
+      "<source>/scripts/export_r16_studio",
+      "blank",
+      "<fixture>/sentinel"
+    ],
+    "output": "<fixture>/sentinel exists and isn't empty\n",
+    "exit": 1,
+    "seconds": 0.046
+  },
+  {
+    "label": "default historical export",
+    "args": [
+      "<source>/scripts/export_r16_studio",
+      "blank",
+      "<fixture>/historical"
+    ],
+    "output": "easel: no command \"tubes\"\n\neasel: a live painting session (see notes/easel_guide.md)\n\n  easel open          start or reattach; replays paintings/lua/painting.lua if it exists\n  easel do '<lua>'  |  easel do -f chunk.lua  |  easel do - (stdin)     [--look] also looks afterwards\n  easel look [--crop x0,y0,x1,y1] [--mode value,squint,mirror] [--grid [step]] [--size 1000]\n  easel log           the painting so far (= paintings/lua/painting.lua)\n  easel status        chunks, width, canvas\n  easel save [path]   the canvas as a PNG (default out/easel/painting/painting.png)\n  easel frames on|off save a look after every chunk\n  easel check         replay the log from scratch and compare with the live canvas\n  easel close         end the session (the log stays)\n  easel note '<text>' | easel note - (stdin)    append a dated entry to notes/journal.md\nthe exported easel can't name its box\n",
+    "exit": 1,
+    "seconds": 50.568
+  },
+  {
+    "label": "stale open",
+    "args": [
+      "<binaries>/easel-default",
+      "open",
+      "painting"
+    ],
+    "output": "easel \"painting\" open: 0 chunks · 2400px · no canvas yet\n",
+    "exit": 0,
+    "seconds": 0.114
+  },
+  {
+    "label": "stale canvas",
+    "args": [
+      "<binaries>/easel-default",
+      "do",
+      "canvas{size=100,aspect=5,linen=12,ground={{pile={{\"lead white\",1}},um=40,apply=\"knife\"}}}"
+    ],
+    "output": "ok · chunk 1 (0.07 s to compute)\n",
+    "exit": 0,
+    "seconds": 0.079
+  },
+  {
+    "label": "stale save",
+    "args": [
+      "<binaries>/easel-default",
+      "save"
+    ],
+    "output": "<fixture>/stalesave/out/easel/painting/painting.png\n",
+    "exit": 0,
+    "seconds": 0.027
+  },
+  {
+    "label": "stale later paint",
+    "args": [
+      "<binaries>/easel-default",
+      "do",
+      "p=pile{{\"red earth\",1}};b=brush(\"round\",4);b:load(p,0.8);b:stroke({{100,80},{600,80}})"
+    ],
+    "output": "ok · chunk 2 (0.05 s to compute)\n",
+    "exit": 0,
+    "seconds": 0.074
+  },
+  {
+    "label": "stale close",
+    "args": [
+      "<binaries>/easel-default",
+      "close"
+    ],
+    "output": "the live canvas is in <fixture>/stalesave/out/easel/painting/live.png\nclosed; the session is in <fixture>/stalesave/paintings/lua/painting.lua\n",
+    "exit": 0,
+    "seconds": 0.142
+  },
+  {
+    "label": "stale explicit save comparison",
+    "args": [
+      "<source>/scripts/check_painting",
+      "<fixture>/stalesave",
+      "<fixture>/stalecheck"
+    ],
+    "output": "log: <fixture>/stalesave/paintings/lua/painting.lua (2 chunks); the studio's committed record equals its log\nresuming chunk 1/2\nresumed chunk 1/2 0.07s\nresuming chunk 2/2\nresumed chunk 2/2 0.05s\nresumed 2 chunks from <fixture>/stalecheck/paintings/lua/painting.lua\neasel \"painting\" open: 2 chunks · 2400px · size=100, aspect=5, linen={12, 12}, seed=1\nthe replay equals the live canvas saved at close\nthe replay's canvas state equals the save written at close\nthe replay's PNG differs from the painter's last save (saved before the log's last change)\ntimes: reopen 1 s, save and close 0 s\ncheck: ok: 2 chunks replay to the live canvas; the replay equals the live canvas saved at close; the replay's canvas state equals the save written at close; the replay's PNG differs from the painter's last save (saved before the log's last change); the studio's committed record equals its log\n",
+    "exit": 0,
+    "seconds": 1.037
+  },
+  {
+    "label": "absent checkpoint reopen",
+    "args": [
+      "<binaries>/easel-default",
+      "open",
+      "painting"
+    ],
+    "output": "resuming chunk 1/2\nresumed chunk 1/2 0.06s\nresuming chunk 2/2\nresumed chunk 2/2 0.08s\nresumed 2 chunks from <fixture>/stalesave/paintings/lua/painting.lua\neasel \"painting\" open: 2 chunks · 2400px · size=100, aspect=5, linen={12, 12}, seed=1\n",
+    "exit": 0,
+    "seconds": 0.22
+  },
+  {
+    "label": "reopened pixels",
+    "args": [
+      "<binaries>/easel-default",
+      "save",
+      "<fixture>/reopened.png"
+    ],
+    "output": "<fixture>/reopened.png\n",
+    "exit": 0,
+    "seconds": 0.028
+  },
+  {
+    "label": "reopen close",
+    "args": [
+      "<binaries>/easel-default",
+      "close"
+    ],
+    "output": "the live canvas is in <fixture>/stalesave/out/easel/painting/live.png\nclosed; the session is in <fixture>/stalesave/paintings/lua/painting.lua\n",
+    "exit": 0,
+    "seconds": 0.085
+  },
+  {
+    "label": "parallel direct finish",
+    "args": [
+      "<binaries>/easel-default",
+      "finish",
+      "<fixture>/live/out/easel/painting/live.ckpt",
+      "<fixture>/parallel-direct.png",
+      "--log",
+      "<fixture>/live/paintings/lua/painting.lua",
+      "--no-varnish"
+    ],
+    "output": "wrote <fixture>/parallel-direct.png (restored 6 chunks in 0.0s, finished in 0.1s, total 0.1s)\n",
+    "exit": 0,
+    "seconds": 0.123
+  },
+  {
+    "label": "parallel script finish",
+    "args": [
+      "<source>/scripts/finish_painting",
+      "<fixture>/live/paintings/lua/painting.lua",
+      "<fixture>/parallel-script.png",
+      "--coats",
+      "1.2",
+      "--relief"
+    ],
+    "output": "wrote <fixture>/parallel-script.png (restored 6 chunks in 0.0s, finished in 0.1s, total 0.2s)\nfinished from the save: <fixture>/parallel-script.png (log: <fixture>/parallel-script.lua; save compressed)\n",
+    "exit": 0,
+    "seconds": 0.475
+  },
+  {
+    "label": "parallel video a",
+    "args": [
+      "<source>/scripts/replay_clip",
+      "<fixture>/live/paintings/lua/painting.lua",
+      "<fixture>/parallel-a.mp4",
+      "--reuse",
+      "--frames-dir",
+      "<fixture>/frames",
+      "--length",
+      "4",
+      "--max-hold",
+      "2",
+      "--width",
+      "160",
+      "--pace",
+      "1"
+    ],
+    "output": "3 moments, 0.5 min of hand time, pace 1: about 4.0 s of clip\nstream|width=160|height=32|nb_frames=96\nformat|duration=4.000000|size=4346\n",
+    "exit": 0,
+    "seconds": 0.45
+  },
+  {
+    "label": "parallel video b",
+    "args": [
+      "<source>/scripts/replay_clip",
+      "<fixture>/live/paintings/lua/painting.lua",
+      "<fixture>/parallel-b.mp4",
+      "--reuse",
+      "--frames-dir",
+      "<fixture>/frames-b",
+      "--length",
+      "5",
+      "--max-hold",
+      "2",
+      "--width",
+      "160",
+      "--pace",
+      ".6"
+    ],
+    "output": "3 moments, 0.5 min of hand time, pace .6: about 5.0 s of clip\nstream|width=160|height=32|nb_frames=120\nformat|duration=5.000000|size=5165\n",
+    "exit": 0,
+    "seconds": 0.452
+  },
+  {
+    "label": "missing dynamic uv",
+    "args": [
+      "<source>/scripts/replay_clip",
+      "<fixture>/live/paintings/lua/painting.lua",
+      "<fixture>/missing-uv.mp4",
+      "--reuse",
+      "--frames-dir",
+      "<fixture>/frames-b",
+      "--length",
+      "5",
+      "--max-hold",
+      "2",
+      "--pace",
+      "dynamic"
+    ],
+    "output": "replay_clip: --pace dynamic needs uv\n",
+    "exit": 1,
+    "seconds": 0.006
+  },
+  {
+    "label": "offline replay",
+    "args": [
+      "/usr/bin/sandbox-exec",
+      "-p",
+      "(version 1)(allow default)(deny network*)",
+      "<binaries>/easel-default",
+      "run",
+      "<fixture>/source.lua",
+      "--out",
+      "<fixture>/offline.png"
+    ],
+    "output": "  chunk   1     0.09s\n  chunk   2     0.06s\nwrote <fixture>/offline.png (2 chunks, painted in 0.2s, total 0.2s)\n",
+    "exit": 0,
+    "seconds": 0.204
+  },
+  {
+    "label": "companion before render",
+    "args": [
+      "ls",
+      "-l",
+      "<fixture>/slow-finished.lua"
+    ],
+    "output": "-rw-r--r-- 1 <user> wheel 844 Oct  4 13:14 <fixture>/slow-finished.lua\n",
+    "exit": 0,
+    "seconds": 0.006
+  },
+  {
+    "label": "slow companion finish",
+    "args": [
+      "<source>/scripts/finish_painting",
+      "<fixture>/slow.lua",
+      "<fixture>/slow-finished.png"
+    ],
+    "output": "  chunk   1     0.10s\n  chunk   2     0.06s\ncompleted\t125000000250000000\n  chunk   3     2.23s\n  chunk   4     0.11s\nwrote <fixture>/slow-finished.png (4 chunks, painted in 2.5s, total 2.5s)\nfinished: <fixture>/slow-finished.png (log: <fixture>/slow-finished.lua)\n",
+    "exit": 0,
+    "seconds": 2.803
+  },
+  {
+    "label": "halfspace bounded16px",
+    "args": [
+      "<binaries>/easel-default",
+      "run",
+      "halfspace.lua",
+      "--width",
+      "16"
+    ],
+    "output": "still running at5sec=false\n  chunk   1     0.00s\n  chunk   2     0.14s\nwrote <fixture>/halfspace.png (2 chunks, painted in 0.1s, total 0.1s)\n",
+    "exit": null
+  },
+  {
+    "label": "unstarted abort",
+    "output": "completed artifact exists=false",
+    "exit": null
+  },
+  {
+    "label": "destination replacement during run",
+    "args": [
+      "<binaries>/easel-default",
+      "run",
+      "<fixture>/slow.lua",
+      "--out",
+      "<fixture>/changed-target.png"
+    ],
+    "output": "  chunk   1     0.26s\n  chunk   2     0.19s\ncompleted\t125000000250000000\n  chunk   3     3.56s\nwrote <fixture>/changed-target.png (3 chunks, painted in 4.0s, total 4.1s)\n",
+    "exit": 0,
+    "seconds": 4.064
+  },
+  {
+    "label": "destination final bytes",
+    "output": "89504e470d0a1a0a",
+    "exit": 0
+  },
+  {
+    "label": "independent exported files",
+    "output": "other journal unchanged=true",
+    "exit": 0
+  },
+  {
+    "label": "missing build cargo",
+    "args": [
+      "<source>/scripts/export_r16_studio",
+      "blank",
+      "<fixture>/no-cargo-export"
+    ],
+    "output": "<source>/scripts/export_r16_studio: line 120: grep: command not found\n<source>/scripts/export_r16_studio: line 118: cargo: command not found\n",
+    "exit": 1,
+    "seconds": 0.138
+  },
+  {
+    "label": "checkpoint source mismatch",
+    "args": [
+      "<binaries>/easel-default",
+      "finish",
+      "<fixture>/stalesave/out/easel/painting/live.ckpt",
+      "<fixture>/mismatch.png",
+      "--log",
+      "<fixture>/wait.lua"
+    ],
+    "output": "<fixture>/stalesave/out/easel/painting/live.ckpt is not a save of <fixture>/wait.lua (2 chunks in the save, 4 in the log, or the text differs)\n",
+    "exit": 1,
+    "seconds": 0.032
+  },
+  {
+    "label": "selected A",
+    "args": [
+      "<binaries>/easel-default",
+      "open",
+      "a"
+    ],
+    "output": "easel \"a\" open: 0 chunks · 2400px · no canvas yet\n",
+    "exit": 0,
+    "seconds": 0.113
+  },
+  {
+    "label": "selected A canvas",
+    "args": [
+      "<binaries>/easel-default",
+      "do",
+      "canvas{size=100,aspect=5,linen=12,ground={{pile={{\"lead white\",1}},um=40,apply=\"knife\"}}}"
+    ],
+    "output": "ok · chunk 1 (0.07 s to compute)\n",
+    "exit": 0,
+    "seconds": 0.087
+  },
+  {
+    "label": "selected B",
+    "args": [
+      "<binaries>/easel-default",
+      "open",
+      "b"
+    ],
+    "output": "easel \"b\" open: 0 chunks · 2400px · no canvas yet\n",
+    "exit": 0,
+    "seconds": 0.105
+  },
+  {
+    "label": "selected B canvas",
+    "args": [
+      "<binaries>/easel-default",
+      "do",
+      "canvas{size=100,aspect=5,linen=12,ground={{pile={{\"lead white\",1}},um=40,apply=\"knife\"}}};p=pile{{\"red earth\",1}};b=brush(\"round\",4);b:load(p,0.8);b:stroke({{100,80},{600,80}})"
+    ],
+    "output": "ok · chunk 1 (0.13 s to compute)\n",
+    "exit": 0,
+    "seconds": 0.139
+  },
+  {
+    "label": "explicit selected A save",
+    "args": [
+      "<binaries>/easel-default",
+      "-s",
+      "a",
+      "save",
+      "<fixture>/selected-a.png"
+    ],
+    "output": "<fixture>/selected-a.png\n",
+    "exit": 0,
+    "seconds": 0.028
+  },
+  {
+    "label": "default selected B save",
+    "args": [
+      "<binaries>/easel-default",
+      "save",
+      "<fixture>/selected-b.png"
+    ],
+    "output": "<fixture>/selected-b.png\n",
+    "exit": 0,
+    "seconds": 0.029
+  },
+  {
+    "label": "close A",
+    "args": [
+      "<binaries>/easel-default",
+      "-s",
+      "a",
+      "close"
+    ],
+    "output": "the live canvas is in <fixture>/selected/out/easel/a/live.png\nclosed; the session is in <fixture>/selected/paintings/lua/a.lua\n",
+    "exit": 0,
+    "seconds": 0.088
+  },
+  {
+    "label": "close B",
+    "args": [
+      "<binaries>/easel-default",
+      "-s",
+      "b",
+      "close"
+    ],
+    "output": "the live canvas is in <fixture>/selected/out/easel/b/live.png\nclosed; the session is in <fixture>/selected/paintings/lua/b.lua\n",
+    "exit": 0,
+    "seconds": 0.092
+  },
+  {
+    "label": "failed disposable replay",
+    "args": [
+      "<binaries>/easel-default",
+      "run",
+      "<fixture>/failed.lua",
+      "--out",
+      "<fixture>/failed.png"
+    ],
+    "output": "  chunk   1     0.07s\n  chunk   2     0.05s\nchunk 3 failed:\nruntime error: [string \"chunk 3\"]:1: late replay error\n",
+    "exit": 1,
+    "seconds": 0.133
+  },
+  {
+    "label": "failed replay no session",
+    "args": [
+      "<binaries>/easel-default",
+      "status"
+    ],
+    "output": "no session: easel open <name> first (or pass -s <name>)\n",
+    "exit": 1,
+    "seconds": 0.004
+  },
+  {
+    "label": "interrupted encoder partial",
+    "output": "bytes=41728",
+    "exit": null
+  },
+  {
+    "label": "impossible duration",
+    "args": [
+      "<source>/scripts/replay_clip",
+      "<fixture>/source.lua",
+      "<fixture>/impossible.mp4",
+      "--reuse",
+      "--frames-dir",
+      "<fixture>/frames",
+      "--length",
+      "1000",
+      "--max-hold",
+      "1"
+    ],
+    "output": "replay_clip: --length 1000 is longer than the clip can run: 2 moments held at most 1 s each (--max-hold) plus the 3 s final hold come to at most 5.00 s; raise --max-hold to at least 498.50 or lower --length\n",
+    "exit": 1,
+    "seconds": 0.015
+  },
+  {
+    "label": "peek whole",
+    "args": [
+      "<source>/scripts/peek",
+      "<fixture>/wet.png",
+      "<fixture>/peek.png"
+    ],
+    "output": "151729 <fixture>/peek.png\n",
+    "exit": 0,
+    "seconds": 0.365
+  },
+  {
+    "label": "peek crop",
+    "args": [
+      "<source>/scripts/peek",
+      "<fixture>/wet.png",
+      "<fixture>/peek-crop.png",
+      "100",
+      "200",
+      "0",
+      "0"
+    ],
+    "output": "4645 <fixture>/peek-crop.png\n",
+    "exit": 0,
+    "seconds": 0.069
+  },
+  {
+    "label": "independent field fall",
+    "args": [
+      "<binaries>/easel-default",
+      "run",
+      "<fixture>/field-only-fall.lua",
+      "--out",
+      "<fixture>/field-only-fall.png"
+    ],
+    "output": "  chunk   1     0.06s\n  chunk   2     0.00s\n  chunk   3     0.06s\nwrote <fixture>/field-only-fall.png (3 chunks, painted in 0.1s, total 0.2s)\n",
+    "exit": 0,
+    "seconds": 0.165
+  },
+  {
+    "label": "independent field across",
+    "args": [
+      "<binaries>/easel-default",
+      "run",
+      "<fixture>/field-only-across.lua",
+      "--out",
+      "<fixture>/field-only-across.png"
+    ],
+    "output": "  chunk   1     0.06s\n  chunk   2     0.00s\n  chunk   3     0.06s\nwrote <fixture>/field-only-across.png (3 chunks, painted in 0.1s, total 0.2s)\n",
+    "exit": 0,
+    "seconds": 0.165
+  },
+  {
+    "label": "independent field edge",
+    "args": [
+      "<binaries>/easel-default",
+      "run",
+      "<fixture>/field-only-edge.lua",
+      "--out",
+      "<fixture>/field-only-edge.png"
+    ],
+    "output": "  chunk   1     0.06s\n  chunk   2     0.00s\n  chunk   3     0.07s\nwrote <fixture>/field-only-edge.png (3 chunks, painted in 0.1s, total 0.2s)\n",
+    "exit": 0,
+    "seconds": 0.168
+  },
+  {
+    "label": "pure references image",
+    "args": [
+      "<binaries>/easel-default",
+      "run",
+      "<fixture>/pure-reference.lua",
+      "--out",
+      "<fixture>/pure-reference.png"
+    ],
+    "output": "  chunk   1     0.07s\n3769.444144875933\n  chunk   2     0.01s\nwrote <fixture>/pure-reference.png (2 chunks, painted in 0.1s, total 0.1s)\n",
+    "exit": 0,
+    "seconds": 0.111
+  },
+  {
+    "label": "artifact assertions",
+    "output": "{\n  \"save_equals_replay\": true,\n  \"save_replaced_and_paths\": true,\n  \"pure_reference_no_paint\": true,\n  \"reopen_equal\": true,\n  \"frames\": [\n    \"0003.png\",\n    \"0005.png\"\n  ]\n}",
+    "exit": 0
+  },
+  {
+    "label": "sargent open",
+    "args": [
+      "<fixture>/export-sargent/bin/easel",
+      "open"
+    ],
+    "output": "easel \"painting\" open: 0 chunks · 2400px · no canvas yet\n",
+    "exit": 0,
+    "seconds": 0.11
+  },
+  {
+    "label": "sargent canvas",
+    "args": [
+      "<fixture>/export-sargent/bin/easel",
+      "do",
+      "canvas{size=100,aspect=5,linen=12,ground={{pile={{\"lead white\",1}},um=40,apply=\"knife\"}}}"
+    ],
+    "output": "ok · chunk 1 (0.07 s to compute)\n",
+    "exit": 0,
+    "seconds": 0.081
+  },
+  {
+    "label": "sargent tube stroke",
+    "args": [
+      "<fixture>/export-sargent/bin/easel",
+      "do",
+      "b=brush(\"round\",4);b:load(pile{{\"Indian yellow\",1}});b:stroke({{100,80},{600,80}})"
+    ],
+    "output": "ok · chunk 2 (0.05 s to compute)\n",
+    "exit": 0,
+    "seconds": 0.068
+  },
+  {
+    "label": "sargent close",
+    "args": [
+      "<fixture>/export-sargent/bin/easel",
+      "close"
+    ],
+    "output": "the live canvas is in <fixture>/export-sargent/out/easel/painting/live.png\nclosed; the session is in <fixture>/export-sargent/paintings/lua/painting.lua\n",
+    "exit": 0,
+    "seconds": 0.098
+  },
+  {
+    "label": "recorded box replay",
+    "args": [
+      "<binaries>/easel-default",
+      "run",
+      "<fixture>/export-sargent/paintings/lua/painting.lua",
+      "--out",
+      "<fixture>/sargent-replay.png"
+    ],
+    "output": "  chunk   1     0.06s\n  chunk   2     0.05s\nwrote <fixture>/sargent-replay.png (2 chunks, painted in 0.1s, total 0.1s)\n",
+    "exit": 0,
+    "seconds": 0.147
+  },
+  {
+    "label": "conflicting recorded box",
+    "args": [
+      "<binaries>/easel-default",
+      "run",
+      "<fixture>/export-sargent/paintings/lua/painting.lua",
+      "--out",
+      "<fixture>/wrongbox.png"
+    ],
+    "output": "<fixture>/export-sargent/paintings/lua/painting.lua: the log was painted from the box \"sargent\" (its --@ box line), but EASEL_BOX says \"inness\": a painting is replayed with the box it was painted from; nothing ran\n",
+    "exit": 1,
+    "seconds": 0.003
+  },
+  {
+    "label": "unaffected open",
+    "args": [
+      "<binaries>/easel-default",
+      "open",
+      "painting"
+    ],
+    "output": "easel \"painting\" open: 0 chunks · 2400px · no canvas yet\n",
+    "exit": 0,
+    "seconds": 0.108
+  },
+  {
+    "label": "unaffected canvas",
+    "args": [
+      "<binaries>/easel-default",
+      "do",
+      "canvas{size=100,aspect=5,linen=12,ground={{pile={{\"lead white\",1}},um=40,apply=\"knife\"}}}"
+    ],
+    "output": "ok · chunk 1 (0.07 s to compute)\n",
+    "exit": 0,
+    "seconds": 0.079
+  },
+  {
+    "label": "unaffected before",
+    "args": [
+      "<binaries>/easel-default",
+      "save",
+      "<fixture>/unaffected-before.png"
+    ],
+    "output": "<fixture>/unaffected-before.png\n",
+    "exit": 0,
+    "seconds": 0.027
+  },
+  {
+    "label": "disposable replay with live other",
+    "args": [
+      "<binaries>/easel-default",
+      "run",
+      "<fixture>/source.lua",
+      "--out",
+      "<fixture>/other-replay.png"
+    ],
+    "output": "  chunk   1     0.06s\n  chunk   2     0.05s\nwrote <fixture>/other-replay.png (2 chunks, painted in 0.1s, total 0.1s)\n",
+    "exit": 0,
+    "seconds": 0.151
+  },
+  {
+    "label": "unaffected after",
+    "args": [
+      "<binaries>/easel-default",
+      "save",
+      "<fixture>/unaffected-after.png"
+    ],
+    "output": "<fixture>/unaffected-after.png\n",
+    "exit": 0,
+    "seconds": 0.027
+  },
+  {
+    "label": "unaffected close",
+    "args": [
+      "<binaries>/easel-default",
+      "close"
+    ],
+    "output": "the live canvas is in <fixture>/unaffected/out/easel/painting/live.png\nclosed; the session is in <fixture>/unaffected/paintings/lua/painting.lua\n",
+    "exit": 0,
+    "seconds": 0.082
+  },
+  {
+    "label": "box and live comparisons",
+    "output": "{\n  \"box_live_equals_replay\": true,\n  \"unaffected_live\": true\n}",
+    "exit": 0
+  },
+  {
+    "label": "close failure reopen",
+    "args": [
+      "<binaries>/easel-default",
+      "open",
+      "painting"
+    ],
+    "output": "resuming chunk 1/1\nresumed chunk 1/1 0.06s\nresumed 1 chunks from <fixture>/closefail/paintings/lua/painting.lua\neasel \"painting\" open: 1 chunks · 2400px · size=100, aspect=5, linen={12, 12}, seed=1\n",
+    "exit": 0,
+    "seconds": 0.11
+  },
+  {
+    "label": "close failure full reply",
+    "args": [
+      "<binaries>/easel-default",
+      "close"
+    ],
+    "output": "the live canvas couldn't be saved: <fixture>/closefail/out/easel/painting/live.png: Is a directory (os error 21)\nclosed; the session is in <fixture>/closefail/paintings/lua/painting.lua\n",
+    "exit": 0,
+    "seconds": 0.032
+  },
+  {
+    "label": "restricted final open",
+    "args": [
+      "<fixture>/export-blank/bin/easel",
+      "open"
+    ],
+    "output": "resuming chunk 1/1\nresumed chunk 1/1 0.06s\nresumed 1 chunks from <fixture>/export-blank/paintings/lua/painting.lua\neasel \"painting\" open: 1 chunks · 2400px · size=100, aspect=5, linen={12, 12}, seed=1\n",
+    "exit": 0,
+    "seconds": 0.113
+  },
+  {
+    "label": "restricted absent varnish{}",
+    "args": [
+      "<fixture>/export-blank/bin/easel",
+      "do",
+      "varnish{}"
+    ],
+    "output": "runtime error: [string \"chunk 2\"]:1: attempt to call a nil value (global 'varnish')\n(the chunk failed and changed nothing)\n",
+    "exit": 1,
+    "seconds": 0.014
+  },
+  {
+    "label": "restricted absent cracks{}",
+    "args": [
+      "<fixture>/export-blank/bin/easel",
+      "do",
+      "cracks{}"
+    ],
+    "output": "runtime error: [string \"chunk 2\"]:1: attempt to call a nil value (global 'cracks')\n(the chunk failed and changed nothing)\n",
+    "exit": 1,
+    "seconds": 0.008
+  },
+  {
+    "label": "restricted absent relief()",
+    "args": [
+      "<fixture>/export-blank/bin/easel",
+      "do",
+      "relief()"
+    ],
+    "output": "runtime error: [string \"chunk 2\"]:1: attempt to call a nil value (global 'relief')\n(the chunk failed and changed nothing)\n",
+    "exit": 1,
+    "seconds": 0.007
+  },
+  {
+    "label": "restricted final close",
+    "args": [
+      "<fixture>/export-blank/bin/easel",
+      "close"
+    ],
+    "output": "the live canvas is in <fixture>/export-blank/out/easel/painting/live.png\nclosed; the session is in <fixture>/export-blank/paintings/lua/painting.lua\n",
+    "exit": 0,
+    "seconds": 0.087
+  },
+  {
+    "label": "check permission denied",
+    "args": [
+      "<source>/scripts/check_painting",
+      "<fixture>/valid",
+      "<fixture>/check-denied/work"
+    ],
+    "output": "mkdir: cannot create directory ‘<fixture>/check-denied/work’: Permission denied\nmkdir: cannot create directory ‘<fixture>/check-denied/work’: Permission denied\nmkdir: cannot create directory ‘<fixture>/check-denied/work’: Permission denied\n",
+    "exit": 1,
+    "seconds": 0.015
+  },
+  {
+    "label": "concurrent selected ref past",
+    "args": [
+      "<source>/scripts/export_r16_studio",
+      "blank",
+      "<fixture>/ref-past"
+    ],
+    "output": "easel: no command \"tubes\"\n\neasel: a live painting session (see notes/easel_guide.md)\n\n  easel open          start or reattach; replays paintings/lua/painting.lua if it exists\n  easel do '<lua>'  |  easel do -f chunk.lua  |  easel do - (stdin)     [--look] also looks afterwards\n  easel look [--crop x0,y0,x1,y1] [--mode value,squint,mirror] [--grid [step]] [--size 1000]\n  easel log           the painting so far (= paintings/lua/painting.lua)\n  easel status        chunks, width, canvas\n  easel save [path]   the canvas as a PNG (default out/easel/painting/painting.png)\n  easel frames on|off save a look after every chunk\n  easel check         replay the log from scratch and compare with the live canvas\n  easel close         end the session (the log stays)\n  easel note '<text>' | easel note - (stdin)    append a dated entry to notes/journal.md\nthe exported easel can't name its box\n",
+    "exit": 1,
+    "seconds": 0.324
+  },
+  {
+    "label": "concurrent selected ref current",
+    "args": [
+      "<source>/scripts/export_r16_studio",
+      "blank",
+      "<fixture>/ref-current"
+    ],
+    "output": "exported the blank studio from 4e525e5 (4e525e5) to <fixture>/ref-current\n  easel: <fixture>/ref-current/bin/easel (checked in $TMPDIR//studio-probe.TOX7tQ)\n  notices: <fixture>/ref-current/bin/THIRD_PARTY_NOTICES.md\n  box: the default tube box\n  notes: easel_guide.md journal.md research/oil_paint_physics.md \n",
+    "exit": 0,
+    "seconds": 1.84
+  },
+  {
+    "label": "crop open",
+    "args": [
+      "<binaries>/easel-default",
+      "open",
+      "painting"
+    ],
+    "output": "resuming chunk 1/2\nresumed chunk 1/2 0.07s\nresuming chunk 2/2\nresumed chunk 2/2 0.05s\nresumed 2 chunks from <fixture>/stalesave/paintings/lua/painting.lua\neasel \"painting\" open: 2 chunks · 2400px · size=100, aspect=5, linen={12, 12}, seed=1\n",
+    "exit": 0,
+    "seconds": 0.213
+  },
+  {
+    "label": "cropped look",
+    "args": [
+      "<binaries>/easel-default",
+      "look",
+      "--crop",
+      "100,60,300,120"
+    ],
+    "output": "<fixture>/stalesave/out/easel/painting/look-0001.png (480x144, 0.01s)\n",
+    "exit": 0,
+    "seconds": 0.014
+  },
+  {
+    "label": "full save after crop",
+    "args": [
+      "<binaries>/easel-default",
+      "save",
+      "<fixture>/full-after-crop.png"
+    ],
+    "output": "<fixture>/full-after-crop.png\n",
+    "exit": 0,
+    "seconds": 0.026
+  },
+  {
+    "label": "crop close",
+    "args": [
+      "<binaries>/easel-default",
+      "close"
+    ],
+    "output": "the live canvas is in <fixture>/stalesave/out/easel/painting/live.png\nclosed; the session is in <fixture>/stalesave/paintings/lua/painting.lua\n",
+    "exit": 0,
+    "seconds": 0.098
+  }
+]

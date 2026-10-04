@@ -1,0 +1,200 @@
+lockrun: job d41dd87d started (process group 87746, timeout 60 s, log $TMPDIR/quick.lockrun.log)
+== check 2: cargo build --release -p easel, then scripts/thinner_check2
+    Finished `release` profile [optimized] target(s) in 0.03s
+== check 2, part 1: compare_build.sh --added-zero
+body: state equal on every baseline field (EQUAL (0 of 2 chunks differ))
+  png same as af49348's; printed output same; state digests different
+overlap: state equal on every baseline field (EQUAL (0 of 3 chunks differ))
+  png same as af49348's; printed output same; state digests different
+pickup: state equal on every baseline field (EQUAL (0 of 4 chunks differ))
+  png same as af49348's; printed output same; state digests different
+rag: state equal on every baseline field (EQUAL (0 of 8 chunks differ))
+  png same as af49348's; printed output same; state digests different
+stroke: state equal on every baseline field (EQUAL (0 of 3 chunks differ))
+  png same as af49348's; printed output same; state digests different
+wait: state equal on every baseline field (EQUAL (0 of 7 chunks differ))
+  png same as af49348's; printed output same; state digests different
+compare_build: EQUAL to the af49348 baseline on every field it has
+== check 2, part 2: the scenes with thinner=0 on every pile
+body (thinner=0): state equal on every baseline field (EQUAL (0 of 2 chunks differ))
+  png same as af49348's
+  printed output same (not a criterion)
+overlap (thinner=0): state equal on every baseline field (EQUAL (0 of 3 chunks differ))
+  png same as af49348's
+  printed output same (not a criterion)
+pickup (thinner=0): state equal on every baseline field (EQUAL (0 of 4 chunks differ))
+  png same as af49348's
+  printed output same (not a criterion)
+rag (thinner=0): state equal on every baseline field (EQUAL (0 of 8 chunks differ))
+  png same as af49348's
+  printed output same (not a criterion)
+stroke (thinner=0): state equal on every baseline field (EQUAL (0 of 3 chunks differ))
+  png same as af49348's
+  printed output same (not a criterion)
+wait (thinner=0): state equal on every baseline field (EQUAL (0 of 7 chunks differ))
+  png same as af49348's
+  printed output same (not a criterion)
+== check 2, part 3: the dumps declare the solvent
+thinner_dump_fields: 54 chunks declare the solvent (5640 bristle values, 16 rag values)
+== check 2, part 4: a thinned scene dumps nonzero solvent
+thinner_dump_fields: solvent shown: 1 chunks of wet.solvent, 120 bristle values, 1 rag values nonzero
+thinner_dump_fields: 2 chunks declare the solvent (120 bristle values, 1 rag values)
+check 2: PASS
+== check 2: exited 0 after 4 s
+== pigments: cargo test --release -p paint --test thinner_pigments -- --exact (1 tests)
+    Finished `release` profile [optimized] target(s) in 0.02s
+     Running tests/thinner_pigments.rs (target/release/deps/thinner_pigments-a25488fe715b8154)
+
+running 1 test
+test c13_every_pigment_value_is_af49348s ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 2 filtered out; finished in 0.00s
+
+== pigments: cargo exited 0 after 0 s
+== check13b: cargo test --release -p paint --test thinner_pigments -- --exact (1 tests)
+    Finished `release` profile [optimized] target(s) in 0.02s
+     Running tests/thinner_pigments.rs (target/release/deps/thinner_pigments-a25488fe715b8154)
+
+running 1 test
+test c13_burnt_sienna_shows_the_card_at_least_as_well_as_raw_sienna ... FAILED
+
+failures:
+
+---- c13_burnt_sienna_shows_the_card_at_least_as_well_as_raw_sienna stdout ----
+raw sienna: hiding 0.4 (contrast ratio of one coat), scattering 0.29607835 per coat, masstone luminance 0.17352512
+burnt sienna: hiding 0.45 (contrast ratio of one coat), scattering 0.19887283 per coat, masstone luminance 0.07967474
+card contrast showing: raw sienna 17.91%, burnt sienna 9.85% (films differ by at most 0 µm; raw's mean 10.071717 µm)
+
+thread 'c13_burnt_sienna_shows_the_card_at_least_as_well_as_raw_sienna' (3371662) panicked at crates/paint/tests/thinner_pigments.rs:119:5:
+burnt sienna shows 9.85% of the card, raw sienna 17.91%: Field/Salter (§155) has burnt the more transparent
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    c13_burnt_sienna_shows_the_card_at_least_as_well_as_raw_sienna
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 2 filtered out; finished in 0.94s
+
+error: test failed, to rerun pass `-p paint --test thinner_pigments`
+== check13b: cargo exited 101 after 1 s
+== paint: cargo test --release -p paint --test thinner_physics -- --exact (12 tests)
+    Finished `release` profile [optimized] target(s) in 0.02s
+     Running tests/thinner_physics.rs (target/release/deps/thinner_physics-9e578aac330da38d)
+
+running 12 tests
+test c04_control_a_wholly_unthinned_scene_balances ... ok
+test c04_a_stroke_and_a_wipe_account_for_all_paint_and_solvent ... FAILED
+test c19_the_same_paint_with_more_or_less_solvent_looks_the_same ... ok
+test c10_a_solvent_wet_film_spreads_more_than_after_the_solvent_has_gone ... ok
+test c06_more_pressure_lays_more_paint_up_to_the_stroke_limit ... ok
+test c05_an_emptying_brush_lays_less_and_a_fuller_load_lasts_farther ... FAILED
+test c08_a_hundredth_of_thinner_is_a_small_change ... ok
+test c15_solvent_does_not_slow_the_oil_cure ... ok
+test c09_the_solvent_evaporates_and_the_film_loses_its_volume ... ok
+test c14_more_points_on_the_same_path_lay_the_same_paint_and_one_stroke_shares_one_limit ... ok
+test c17_a_wait_split_on_the_minute_grid_is_exact_and_off_it_within_1e4 ... ok
+test c16_brush_rag_and_spreading_carry_solvent_in_the_local_ratio ... FAILED
+
+failures:
+
+---- c04_a_stroke_and_a_wipe_account_for_all_paint_and_solvent stdout ----
+
+thread 'c04_a_stroke_and_a_wipe_account_for_all_paint_and_solvent' (3372391) panicked at crates/paint/tests/thinner_physics.rs:45:9:
+lead white thinned 0.9: the brush laid paint
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+---- c05_an_emptying_brush_lays_less_and_a_fuller_load_lasts_farther stdout ----
+load 0.3: paint above θ to x = 930 (profile [0.16531353, 0.2822604, 1.3997471, 1.138876, 0.4420868, 0.31245282, 0.31934595, 0.31082067, 0.32604155, 0.32677725, 0.31484202, 0.3451201, 0.35690895, 0.35379553, 0.35665825, 0.36652046, 0.3428962, 0.32680863, 0.29060033, 0.32052007, 0.34942222, 0.3613909, 0.34752393, 0.33434325, 0.32628256, 0.3284232, 0.32430395, 0.2831771, 0.28972337, 0.30115554, 0.31709594, 0.32508776, 0.33932436, 0.344942, 0.3376325, 0.34380448, 0.32582012, 0.31114805, 0.27558655, 0.280182, 0.27449048, 0.27677488, 0.2599877, 0.28097454, 0.29319182, 0.31080073, 0.30933702, 0.2935176, 0.27125588, 0.27928042, 0.2819214, 0.27080578, 0.2509142, 0.25835449, 0.26854318, 0.27054515, 0.29181373, 0.24752535, 0.24901657, 0.28605098, 0.32351404, 0.31304383, 0.31482232, 0.29606527, 0.29371214, 0.3029095, 0.3169066, 0.29740041, 0.27572823, 0.2637417, 0.25752953, 0.27895817, 0.31602895, 0.3192424, 0.30380797, 0.30090904, 0.3084744, 0.29361865, 0.23891427, 0.23928536, 0.2623458, 0.26347357, 0.2505202, 0.23444952, 0.23820959, 0.27295715, 0.28109726, 0.5510676, 0.78717077, 1.4939651, 1.073892, 0.46096358, 0.086472206, 0.0015746744, 0.0, 0.0])
+
+thread 'c05_an_emptying_brush_lays_less_and_a_fuller_load_lasts_farther' (3372393) panicked at crates/paint/tests/thinner_physics.rs:115:9:
+load 0.6: an emptying brush lays less (1.2543904 µm early, 0.9713002 µm over the last 100 units)
+
+---- c16_brush_rag_and_spreading_carry_solvent_in_the_local_ratio stdout ----
+
+thread 'c16_brush_rag_and_spreading_carry_solvent_in_the_local_ratio' (3372400) panicked at crates/paint/tests/thinner_physics.rs:516:5:
+the thin film's ratio where the thick film's liquid came in: 0.5682686961022999 before, 0.5686309867325893 after (evaporation taken back)
+
+
+failures:
+    c04_a_stroke_and_a_wipe_account_for_all_paint_and_solvent
+    c05_an_emptying_brush_lays_less_and_a_fuller_load_lasts_farther
+    c16_brush_rag_and_spreading_carry_solvent_in_the_local_ratio
+
+test result: FAILED. 9 passed; 3 failed; 0 ignored; 0 measured; 1 filtered out; finished in 1.28s
+
+error: test failed, to rerun pass `-p paint --test thinner_physics`
+== paint: cargo exited 101 after 2 s
+== easel: cargo test --release -p easel --bin easel -- --exact (8 tests)
+    Finished `release` profile [optimized] target(s) in 0.02s
+     Running unittests src/main.rs (target/release/deps/easel-00eda35bf27fd053)
+
+running 8 tests
+test thinner_tests::c03_a_log_keeps_its_engine ... FAILED
+test thinner_tests::c03_af49348_engine_3_logs_still_replay ... FAILED
+test thinner_tests::c03_af49348_paintck8_saves_are_refused_naming_the_old_version ... ok
+test thinner_tests::c03_engines_1_and_2_have_no_thinner_and_engine_3_has ... ok
+test thinner_tests::c18_a_failed_chunk_after_thinned_paint_takes_everything_back ... FAILED
+test thinner_tests::c11_a_save_mid_evaporation_reopens_to_the_same_state_and_goes_on_the_same ... ok
+test thinner_tests::c07_two_overlapping_thinned_passes_leave_more_paint_than_one ... ok
+test thinner_tests::c12_the_same_log_saves_the_same_bytes_on_one_thread_and_four ... ok
+
+failures:
+
+---- thinner_tests::c03_a_log_keeps_its_engine stdout ----
+
+thread 'thinner_tests::c03_a_log_keeps_its_engine' (3373985) panicked at crates/easel/src/thinner_measure.rs:41:37:
+chunk 1: runtime error: canvas: linen= (threads per cm: one number, or {warp, weft})
+canvas{size=<mm>, aspect=<width / height>, linen=<threads per cm>, ground={{pile={{"<tube>", <parts>}, ...}, um=<µm>, apply="<knife|roller|brush>"}, ...}, seed=<n>}
+  size: width in mm; aspect: width / height; linen: threads per cm (or {warp, weft});
+  ground: layers bottom first, each a pile of tubes, a thickness in µm and how it is put on ("knife", "roller" or "brush"; a knife takes texture=0..1)
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+---- thinner_tests::c03_af49348_engine_3_logs_still_replay stdout ----
+
+thread 'thinner_tests::c03_af49348_engine_3_logs_still_replay' (3373986) panicked at crates/easel/src/thinner_tests.rs:84:9:
+assertion `left == right` failed: engine3_log_default_box.lua: every chunk ran
+  left: 1
+ right: 2
+
+---- thinner_tests::c18_a_failed_chunk_after_thinned_paint_takes_everything_back stdout ----
+
+thread 'thinner_tests::c18_a_failed_chunk_after_thinned_paint_takes_everything_back' (3373992) panicked at crates/easel/src/thinner_tests.rs:245:27:
+RefCell already borrowed
+
+
+failures:
+    thinner_tests::c03_a_log_keeps_its_engine
+    thinner_tests::c03_af49348_engine_3_logs_still_replay
+    thinner_tests::c18_a_failed_chunk_after_thinned_paint_takes_everything_back
+
+test result: FAILED. 5 passed; 3 failed; 0 ignored; 0 measured; 75 filtered out; finished in 1.95s
+
+error: test failed, to rerun pass `-p easel --bin easel`
+== easel: cargo exited 101 after 2 s
+
+thinner acceptance --quick: 2 of 22 required tests passed (logs: $TMPDIR//thinner-acceptance.JwgECq)
+  EXPECTED FAIL (pre-existing; user decision, ACCEPTANCE.md check 13): c13_burnt_sienna_shows_the_card_at_least_as_well_as_raw_sienna
+  NOT PASSED: paint: cargo exited 101
+  NOT PASSED: c04_a_stroke_and_a_wipe_account_for_all_paint_and_solvent (failed)
+  NOT PASSED: c04_control_a_wholly_unthinned_scene_balances (printed ok, but cargo exited 101)
+  NOT PASSED: c05_an_emptying_brush_lays_less_and_a_fuller_load_lasts_farther (failed)
+  NOT PASSED: c06_more_pressure_lays_more_paint_up_to_the_stroke_limit (printed ok, but cargo exited 101)
+  NOT PASSED: c08_a_hundredth_of_thinner_is_a_small_change (printed ok, but cargo exited 101)
+  NOT PASSED: c09_the_solvent_evaporates_and_the_film_loses_its_volume (printed ok, but cargo exited 101)
+  NOT PASSED: c10_a_solvent_wet_film_spreads_more_than_after_the_solvent_has_gone (printed ok, but cargo exited 101)
+  NOT PASSED: c14_more_points_on_the_same_path_lay_the_same_paint_and_one_stroke_shares_one_limit (printed ok, but cargo exited 101)
+  NOT PASSED: c15_solvent_does_not_slow_the_oil_cure (printed ok, but cargo exited 101)
+  NOT PASSED: c16_brush_rag_and_spreading_carry_solvent_in_the_local_ratio (failed)
+  NOT PASSED: c17_a_wait_split_on_the_minute_grid_is_exact_and_off_it_within_1e4 (printed ok, but cargo exited 101)
+  NOT PASSED: c19_the_same_paint_with_more_or_less_solvent_looks_the_same (printed ok, but cargo exited 101)
+  NOT PASSED: easel: cargo exited 101
+  NOT PASSED: thinner_tests::c03_af49348_paintck8_saves_are_refused_naming_the_old_version (printed ok, but cargo exited 101)
+  NOT PASSED: thinner_tests::c03_af49348_engine_3_logs_still_replay (failed)
+  NOT PASSED: thinner_tests::c03_a_log_keeps_its_engine (failed)
+  NOT PASSED: thinner_tests::c03_engines_1_and_2_have_no_thinner_and_engine_3_has (printed ok, but cargo exited 101)
+  NOT PASSED: thinner_tests::c07_two_overlapping_thinned_passes_leave_more_paint_than_one (printed ok, but cargo exited 101)
+  NOT PASSED: thinner_tests::c11_a_save_mid_evaporation_reopens_to_the_same_state_and_goes_on_the_same (printed ok, but cargo exited 101)
+  NOT PASSED: thinner_tests::c12_the_same_log_saves_the_same_bytes_on_one_thread_and_four (printed ok, but cargo exited 101)
+  NOT PASSED: thinner_tests::c18_a_failed_chunk_after_thinned_paint_takes_everything_back (failed)
+thinner acceptance --quick: FAILED
+lockrun: finished: exit 1 in 8.6 s; log $TMPDIR/quick.lockrun.log

@@ -1,0 +1,21 @@
+   Compiling either v1.18.0
+   Compiling paint v0.1.0 (/private/tmp/cm.B7260e/s/crates/paint)
+   Compiling rayon v1.12.0
+    Finished `test` profile [optimized + debuginfo] target(s) in 20.74s
+     Running unittests src/lib.rs (target/debug/deps/paint-6d3c8d4e8dda60c4)
+
+running 11 tests
+test tally::tests::fine_strokes_are_slower_per_mm ... ok
+test tally::tests::a_knifed_pile_is_on_the_palette ... ok
+test tally::tests::piles_reload_near_colors_and_mix_new_ones ... ok
+test tally::tests::since_is_the_difference ... ok
+test tally::tests::the_ledger_keeps_its_checkpoint_layout ... ok
+test tally::tests::touches_are_no_faster_than_tapping ... ok
+test tally::tests::the_slices_after_a_wait_are_fresh_work ... ok
+test tally::tests::the_ledger_is_the_same_at_any_thread_count_and_in_a_crop ... ok
+test tally::tests::a_checkpoint_keeps_hand_time_and_the_ledger ... ok
+test tally::tests::hand_time_ages_the_paint_as_it_goes_and_is_deterministic ... ok
+test tally::tests::hand_time_keeps_an_order_asked_for ... ok
+
+test result: ok. 11 passed; 0 failed; 0 ignored; 0 measured; 173 filtered out; finished in 8.09s
+

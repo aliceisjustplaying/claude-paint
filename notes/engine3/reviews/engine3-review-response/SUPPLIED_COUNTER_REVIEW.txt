@@ -1,0 +1,106 @@
+ The review holds up: its evidence is faithful, and my Rust runs reproduce the packet's own numbers (12.381% and 1.991% film left). Of the findings I
+ could run, most stand, three are real but small and one did not reproduce. It also misses four things, one of them in main's released rag.
+
+ Probes ran on scratch copies of the packet snapshots, and no project source changed. Patches and logs are in out/reviews/engine3-review-check/ (untracked). All
+ 17 hashes and 1,597 quoted lines in EVIDENCE.md match the packet, and the reviewer's Python reproduces exactly.
+
+ Rag findings
+
+ Line numbers are in the packet's prototype/crates/paint/src/.
+
+ ┌───────────────────────────┬───────────────────────┬─────────────────────────────────────────────────────────────────────────────────────────────────────────┐
+ │ Finding                   │ Verdict               │ Receipt                                                                                                 │
+ ├───────────────────────────┼───────────────────────┼─────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+ │ R01: partial contact      │ Stands                │ No pixel in the wipe's middle has accumulated contact under 0.35, and the lowest lane along the travel  │
+ │ protects nothing          │                       │ is 0.55 (rag_probe.log, rag_probe2.log). Finer stamps converge to the limit the reviewer derived: 4.69% │
+ │                           │                       │ left at 22 stamps, 2.16% at 352.                                                                        │
+ ├───────────────────────────┼───────────────────────┼─────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+ │ R02: contact is a gap     │ Stands                │ rag/cloth.rs:186. Per stamp, 79% of the pad is at contact 1 and 11% at 0.                               │
+ │ mask, not pressure        │                       │                                                                                                         │
+ ├───────────────────────────┼───────────────────────┼─────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+ │ R03: extra vertices       │ Stands, small here    │ Substeps range 720 to 3,520 for the same line, but mean film moves 0.008 to 0.021 µm of 1.38 µm. The    │
+ │ change the mechanics      │                       │ 2-point line takes 900 substeps, not 704 (f32 rounding, which the reviewer flagged).                    │
+ ├───────────────────────────┼───────────────────────┼─────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+ │ R04: solver and display   │ Stands, small         │ The unseen sideways wander is 6.1 mm over 176 mm, peaking at 0.15 of forward speed.                     │
+ │ travel differ             │                       │                                                                                                         │
+ ├───────────────────────────┼───────────────────────┼─────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+ │ R05: no hard cell         │ Stands                │ A damp wipe leaves 100 of 361 cells over capacity, the worst at 1.26×, with 13.6 of 494 mm³ above       │
+ │ capacity                  │                       │ capacity. A dry wipe leaves none.                                                                       │
+ ├───────────────────────────┼───────────────────────┼─────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+ │ R08: overlapping sheets   │ Not reproduced        │ About 0.2% of triangles flip, with zero material conflicts on straight, there-and-back, U and zigzag    │
+ │ pick the wrong material   │                       │ paths.                                                                                                  │
+ ├───────────────────────────┼───────────────────────┼─────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+ │ R09: one universal stain  │ Stands, stronger than │ The damp wipe at the original rate sits at exactly 1.0 µm for six eighths of its length                 │
+ │ floor                     │ stated                │ (rag_probe2.log).                                                                                       │
+ ├───────────────────────────┼───────────────────────┼─────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+ │ R06, R07, R10, R11        │ Stand as descriptions │ rag/face.rs:54, rag/face.rs:21-25; the prototype's rag.rs has no solvent code.                          │
+ │                           │ (by reading)          │                                                                                                         │
+ └───────────────────────────┴───────────────────────┴─────────────────────────────────────────────────────────────────────────────────────────────────────────┘
+
+ Thinner, sienna and release findings
+
+ ┌────────────────────────┬───────────────────────────┬────────────────────────────────────────────────────────────────────────────────────────────────────────┐
+ │ Finding                │ Verdict                   │ Receipt                                                                                                │
+ ├────────────────────────┼───────────────────────────┼────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+ │ T02: the net ceiling   │ Numbers reproduce         │ 3.00 / 2.99 / 2.97 µm for one stroke; the broad pass is 7.73 µm with sd/mean 0.49 (look_probe.log).    │
+ │ (b)                    │                           │                                                                                                        │
+ ├────────────────────────┼───────────────────────────┼────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+ │ T04: the 64-substep    │ Arithmetic right, reach   │ In 9 cases at 2400 px pixel size the cap changed nothing. It engaged only at thinner 0.95, where       │
+ │ cap                    │ narrow                    │ nothing flowed (thinner_probe2.log).                                                                   │
+ ├────────────────────────┼───────────────────────────┼────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+ │ T05: flow runs on      │ Stands                    │ A 0.02 min wait moves no paint from phases .10, .50 and .97, and 0.97% of all paint from .99. End      │
+ │ minute boundaries      │                           │ states differ by up to 60% of everything the flow moves (thinner_probe.log, 300 px canvas).            │
+ ├────────────────────────┼───────────────────────────┼────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+ │ T03, T06, T07, T08     │ Stand (by reading)        │ wip/thinner/crates/paint/src/thinner.rs:82-100, 117.                                                   │
+ ├────────────────────────┼───────────────────────────┼────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+ │ Sienna: two metrics,   │ Stands, but the bands     │ On the same card bands the ratios rank the same way: 0.182 raw against 0.166 burnt at 10 µm            │
+ │ different bands        │ point is immaterial       │ (look_probe.log).                                                                                      │
+ ├────────────────────────┼───────────────────────────┼────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+ │ Section 1 and section  │ Stand                     │ d4c9687 (engine-3 drying) is not an ancestor of main, and thinner2 branches from 3379b9f. The release  │
+ │ 8                      │                           │ facts match FINAL_REPORT.md.                                                                           │
+ └────────────────────────┴───────────────────────────┴────────────────────────────────────────────────────────────────────────────────────────────────────────┘
+
+ What the review misses
+
+ 1. Main's released rag depends on vertex count, more than the prototype does. For the same dry line, 31.2% of the film is left with up to 17 points and 23.8%
+    with 1,761; damp goes from 6.8% to 3.9% (ship_probe.log). Segments shorter than 11 mm add stamps (crates/paint/src/rag.rs:559,571), and the per-stamp shares
+    compound (:416-419).
+ 2. What is left after the rejected quarter-rate wipe is mostly a loading ramp, not contact. The film left runs from 2.3 µm at the start to 20.2 µm at the end.
+    Gross paint laid back is 6.19 µm against 8.62 µm left, and the correlation with contact is −0.29. Pickup is throttled by both whole-face load (rag.rs:418)
+    and cell load (:453).
+ 3. A single stroke at thinner 0.75 or more never flows. Its ceiling is at or below the 2 µm wetting film, so the flow moved 0.0000% of the paint, against 16.2%
+    at thinner 0.5.
+ 4. The look report's thinned sienna card is stale. It records 1.64 µm; the branch's final code gives 5.36 µm.
+
+ Where the review needs pushing back
+
+ - Work order. Packages B and C come first, but in the prototype they fix effects measured at 1% to 3% of the film. The rejected look comes from R01, R02, R09
+   and the loading ramp, which sit in package D. On main the path fix is worth 7 points of film.
+ - R07's retired-face ledger. A refolded face starts with held paint and no mobile paint (rag/face.rs:21-25,45-49), so retired color can never reach the canvas.
+   The ledger would track nothing visible.
+ - "Integrate (b)". By the report's own numbers, (b) trades the rim for a blotchy broad pass: 2.8 to 7.7 µm, and the card drops from 84.4% to 73.5%. A single
+   stroke becomes a flat 3.0 µm slab.
+ - Sienna neutrality. Field calls burnt sienna "richer, deeper, and more transparent than the raw earth" (§155, gutenberg.org/files/20915). A measure that
+   penalizes darkness cannot express that sentence; the contrast ratio can. The reviewer's other point stands: the catalog has burnt hiding at 0.45 against raw
+   at 0.40 (crates/paint/src/palette.rs:125,153).
+
+ Open choices
+
+ Thinned-stroke ceiling
+ - (b): no rim, but passes stack and the broad pass is blotchy.
+ - (B): an even veil, but checks 7, 9, 15 and 16 fail.
+ - Untested third option: an absolute ceiling only against film that still holds solvent. It conflicts with check 7 as written if the passes are laid back to
+   back.
+
+ Check 13 (b)
+ - Restate it as a contrast ratio. It passes today, narrowly (0.438 against 0.452 at one coat), while the catalog scalar says the opposite.
+ - Give burnt sienna an engine-3 hiding below raw's. This changes the values check 13 (a) pins.
+ - Leave it failing.
+
+ Rag order
+ - The reviewer's order: A, B, C, then D.
+ - Contact and transfer (D) first on a thin-film fixture, with B and C after.
+
+ Limits: one fixture (69 µm film, pressure 0.8, one seed), macOS, release profile, and no physical reference.
+
+ Not done yet: no fix is coded and none of the three choices is made.

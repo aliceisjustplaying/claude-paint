@@ -1,0 +1,42 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Engine 3 look experiments</title>
+<style>
+body{font:15px system-ui;background:#1b1b1b;color:#eee;max-width:1100px;margin:auto;padding:20px}
+img{max-width:100%;border:1px solid #444}
+figure{margin:0 0 32px}
+table{border-collapse:collapse;margin:8px 0 20px}td,th{border:1px solid #555;padding:4px 10px}
+</style>
+<h1>Engine 3 look experiments</h1>
+<p>Branch <code>look-experiments</code> (196a673). Full write-up: <a href="REPORT.md">REPORT.md</a>.</p>
+
+<h2>1. Siennas (measurement only, no paint changed)</h2>
+<p>By the standard contrast ratio (brightness over black ÷ brightness over white; lower = more see-through), burnt sienna is the more see-through at every thickness. The old check said the reverse only because burnt sienna is darker.</p>
+<table><tr><th></th><th>raw</th><th>burnt</th></tr>
+<tr><td>10 µm film</td><td>0.169</td><td>0.154</td></tr>
+<tr><td>card, unthinned</td><td>0.500</td><td>0.464</td></tr>
+<tr><td>card, thinned 0.5</td><td>0.040</td><td>0.033</td></tr></table>
+<figure><figcaption><b>siennas.jpg</b>: raw vs burnt sienna, thinned 0.5, equal film, over white / grey / black.</figcaption><img src="siennas.jpg"></figure>
+
+<h2>2. Thinned strokes: the outline</h2>
+<p>Cause confirmed: the bristles plough paint from the middle of the stroke to its edges.</p>
+<table><tr><th>variant</th><th>edges / inside (µm)</th><th>card kept, load 0.3 / 0.6</th><th>thinner checks</th></tr>
+<tr><td>today</td><td>2.25, 2.13 / 0.96</td><td>84.4% / 81.4%</td><td>all pass</td></tr>
+<tr><td>(a) less plough</td><td>1.56, 1.39 / 1.35</td><td>83.5% / 80.3%</td><td>one fails</td></tr>
+<tr><td>(b) cap on what a pixel holds (kept)</td><td>3.00, 2.99 / 2.97, no rim after 30 min</td><td>73.5% / 71.7%</td><td>all pass; overlaps stack (blotchy)</td></tr>
+<tr><td>(B) absolute cap (reverted)</td><td>3.00, 2.99 / 2.97</td><td>83.5% / 83.2%</td><td>four fail; passes don't build up</td></tr></table>
+<figure><figcaption><b>thinned_strokes.jpg</b>: rows = today, (a), (b), (B). Columns = one stroke, same after 30 min, broad pass on linen, broad pass on plain ground.</figcaption><img src="thinned_strokes.jpg"></figure>
+
+<h2>3. Rag: less tidy</h2>
+<p>Four changes: folds that miss, streaks that survive a damp cloth, ragged edge with more hand wander, a small smear back from the loaded face.</p>
+<table><tr><th>panel</th><th>today (removed / tone left)</th><th>new</th></tr>
+<tr><td>dry wipe, wet paint</td><td>90.5% / 47.6%</td><td>79.1% / 52.6%</td></tr>
+<tr><td>damp wipe, wet paint</td><td>97.2% / 20.8%</td><td>86.5% / 37.0%</td></tr>
+<tr><td>dry wipe, thinned paint</td><td>68.1%</td><td>73.2%</td></tr>
+<tr><td>damp wipe, thinned paint</td><td>68.3%</td><td>78.8%</td></tr></table>
+<p>Rows in both sheets: dry wipe, blot, damp wipe on wet paint; the same three on thinned paint; dry-paint control; a stroke over a wiped area. Left = before, right = after.</p>
+<figure><figcaption><b>rag_study_today.jpg</b>: today's rag.</figcaption><img src="rag_study_today.jpg"></figure>
+<figure><figcaption><b>rag_study_final.jpg</b>: with the four rag changes (thinned rows use variant b).</figcaption><img src="rag_study_final.jpg"></figure>
+
+<h2>Everything side by side</h2>
+<figure><figcaption><b>compare.jpg</b></figcaption><img src="compare.jpg"></figure>

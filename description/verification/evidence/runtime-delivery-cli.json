@@ -1,0 +1,145 @@
+[
+  {
+    "label": "open",
+    "status": 0,
+    "out": "easel \"painting\" open: 0 chunks · 2400px · no canvas yet\n",
+    "err": ""
+  },
+  {
+    "label": "save no canvas",
+    "status": 1,
+    "out": "",
+    "err": "no canvas yet\n"
+  },
+  {
+    "label": "paint",
+    "status": 0,
+    "out": "ok · chunk 1 (0.13 s to compute)\n",
+    "err": ""
+  },
+  {
+    "label": "save",
+    "status": 0,
+    "out": "<fixture>/wet.png\n",
+    "err": ""
+  },
+  {
+    "label": "wet varnish{}",
+    "status": 1,
+    "out": "",
+    "err": "runtime error: varnish: the paint is not all dry yet (1% of the canvas is still open, setting or tacky; drying(x, y) tells where): wait first\n(the chunk failed and changed nothing)\n"
+  },
+  {
+    "label": "wet cracks{}",
+    "status": 1,
+    "out": "",
+    "err": "runtime error: cracks: the paint is not all dry yet (1% of the canvas is still open, setting or tacky; drying(x, y) tells where): wait first\n(the chunk failed and changed nothing)\n"
+  },
+  {
+    "label": "wet relief()",
+    "status": 1,
+    "out": "",
+    "err": "runtime error: relief: the paint is not all dry yet (1% of the canvas is still open, setting or tacky; drying(x, y) tells where): wait first\n(the chunk failed and changed nothing)\n"
+  },
+  {
+    "label": "check",
+    "status": 0,
+    "out": "replay matches the live canvas exactly (1 chunks, 0.1s)\n",
+    "err": ""
+  },
+  {
+    "label": "close",
+    "status": 0,
+    "out": "the live canvas is in <fixture>/live/out/easel/painting/live.png\nclosed; the session is in <fixture>/live/paintings/lua/painting.lua\n",
+    "err": ""
+  },
+  {
+    "label": "independent check",
+    "status": 1,
+    "out": "log: <fixture>/live/paintings/lua/painting.lua (1 chunks); the studio's committed record equals its log\nresuming chunk 1/1\nresumed chunk 1/1 0.13s\nresumed 1 chunks from <fixture>/check-live/paintings/lua/painting.lua\neasel \"painting\" open: 1 chunks · 2400px · size=100, aspect=5, linen={12, 12}, seed=1\nthe replay equals the live canvas saved at close\nthe replay's canvas state DIFFERS from the save written at close\nthe painter saved no picture\ntimes: reopen 1 s, save and close 0 s\ncheck: DIFFERS from the live save: the replay's canvas state DIFFERS from the save written at close; the replay equals the live canvas saved at close; the painter saved no picture; the studio's committed record equals its log\n",
+    "err": ""
+  },
+  {
+    "label": "finished companion replay",
+    "status": 0,
+    "out": "table\ttable\ttable\ttable\tnil\tnil\tnil\tnil\tnil\tnil\tnil\n41\nbrush(round 4, 0% full)\n1000\t199.99998474121094\tday 1, 09:00\tdry\n0.075005307793617249\tday 1, 09:00\nday 1, 09:00\nday 2, 09:00\n",
+    "err": "  chunk   1     0.00s\n  chunk   2     0.00s\n  chunk   3     0.00s\n  chunk   4     0.00s\n  chunk   5     0.00s\n  chunk   6     0.00s\n  chunk   7     0.08s\n  chunk   8     0.00s\n  chunk   9     0.04s\n  chunk  10     0.00s\n  chunk  11     0.01s\n  chunk  12     0.03s\n  chunk  13     0.11s\nwrote <fixture>/companion.png (13 chunks, painted in 0.3s, total 0.3s)\n"
+  },
+  {
+    "label": "finished companion equality",
+    "same": true,
+    "sha256": "11cfd68324beb8bf9d14f1cc9e02a8d50ac1d79bf9b2b12198dcd8ab99b17f70"
+  },
+  {
+    "label": "unknown",
+    "status": 1,
+    "out": "",
+    "err": "run: unknown argument \"--nope\" (run <file.lua> [--out path.png] [--look] [--state-digest digests.txt] [--frames-every <s> --frames-dir <dir> [--frame-width 1000]] [--width <px>] (replays at the live width, 2400px, unless --width: a smaller preview for development, not the painting))\n"
+  },
+  {
+    "label": "missing",
+    "status": 1,
+    "out": "",
+    "err": "<fixture>/missing.lua: No such file or directory (os error 2)\n"
+  },
+  {
+    "label": "empty",
+    "status": 1,
+    "out": "",
+    "err": "<fixture>/empty.lua: no chunks (each starts with a line \"--@ chunk\")\n"
+  },
+  {
+    "label": "frame-dir-only",
+    "status": 1,
+    "out": "",
+    "err": "run: --frames-every and --frames-dir go together (run <file.lua> [--out path.png] [--look] [--state-digest digests.txt] [--frames-every <s> --frames-dir <dir> [--frame-width 1000]] [--width <px>] (replays at the live width, 2400px, unless --width: a smaller preview for development, not the painting))\n"
+  },
+  {
+    "label": "frame-every-only",
+    "status": 1,
+    "out": "",
+    "err": "run: --frames-every and --frames-dir go together (run <file.lua> [--out path.png] [--look] [--state-digest digests.txt] [--frames-every <s> --frames-dir <dir> [--frame-width 1000]] [--width <px>] (replays at the live width, 2400px, unless --width: a smaller preview for development, not the painting))\n"
+  },
+  {
+    "label": "width15",
+    "status": 1,
+    "out": "",
+    "err": "--width 15: want px, 16 to 9600\n"
+  },
+  {
+    "label": "width9601",
+    "status": 1,
+    "out": "",
+    "err": "--width 9601: want px, 16 to 9600\n"
+  },
+  {
+    "label": "width16",
+    "status": 0,
+    "out": "",
+    "err": "  chunk   1     0.00s\nwrote <fixture>/tiny.png (1 chunks, painted in 0.0s, total 0.0s)\n"
+  },
+  {
+    "label": "clip",
+    "status": 1,
+    "out": "",
+    "err": "frames: 3 written (25 hand-time intervals of 1s crossed, 1 chunks) over 0.4 min of hand time → <fixture>/clip.mp4.frames\nwrote <fixture>/clip.mp4.frames/final-full.png (1 chunks, painted in 0.2s, total 0.2s)\nreplay took 0 s\nreplay_clip: --length 4 is longer than the clip can run: 0 moments held at most 2 s each (--max-hold) plus the 3 s final hold come to at most 3.00 s; lower --length\n"
+  },
+  {
+    "label": "clip reuse",
+    "status": 1,
+    "out": "",
+    "err": "replay_clip: --length 4 is longer than the clip can run: 0 moments held at most 2 s each (--max-hold) plus the 3 s final hold come to at most 3.00 s; lower --length\n"
+  },
+  {
+    "label": "clip impossible",
+    "status": 1,
+    "out": "",
+    "err": "replay_clip: --length 1000 is longer than the clip can run: 0 moments held at most 1 s each (--max-hold) plus the 3 s final hold come to at most 3.00 s; lower --length\n"
+  },
+  {
+    "label": "clip details",
+    "status": 1,
+    "out": "{\n\n}\n",
+    "err": "<fixture>/clip.mp4: No such file or directory\n"
+  }
+]

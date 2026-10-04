@@ -1,0 +1,23 @@
+{
+  "mirror_exact": true,
+  "value_grayscale": true,
+  "normal_does_not_reset_value": true,
+  "reverse_crop_identical": true,
+  "grid_changes_view": true,
+  "crop_native_dimensions": [
+    480,
+    240
+  ],
+  "crop_size_ignored": [
+    480,
+    240
+  ],
+  "maximum_crop_dimensions": [
+    1200,
+    360
+  ],
+  "huge_size_clamped": [
+    1600,
+    320
+  ]
+}

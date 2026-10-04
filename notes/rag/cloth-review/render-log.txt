@@ -1,0 +1,4 @@
+   Compiling paint v0.1.0 (~/src/a/claude-paint/crates/paint)
+    Finished `iter` profile [optimized] target(s) in 4.00s
+     Running `target/iter/examples/rag_cloth_review notes/rag/cloth-review`
+Rendered identical starting paint at 2400px canvas width; pressure 0.8, width 100, dip 0 / 0.5, same seeds and paths; no refolding between wipes.

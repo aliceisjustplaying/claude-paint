@@ -55,6 +55,8 @@ pub struct Stipple<'a> {
     /// Dip into this pile (parts of the palette's tubes, thinned with this
     /// medium) on every trip; the raw color field is then not used.
     pub pile: Option<(&'a Palette, crate::palette::Mixture, f32)>,
+    /// Share of solvent knifed into that pile (`crate::thinner`; engine 3).
+    pub thinner: f32,
     /// Touches between trips to the palette, how much of a full load a dip
     /// takes and how much old paint is wiped off first. A stippler's tip
     /// carries paint for many touches; each lays a little less.
@@ -95,6 +97,7 @@ impl<'a> Stipple<'a> {
             jitter: (0.015, 0.004),
             mix_jitter: 0.05,
             pile: None,
+            thinner: 0.0,
             dip_every: 24,
             load: 0.5,
             wipe: 0.5,
@@ -126,6 +129,11 @@ impl<'a> Stipple<'a> {
     /// drying at its tubes' rate.
     pub fn piled(mut self, palette: &'a Palette, pile: crate::palette::Mixture, medium: f32) -> Self {
         self.pile = Some((palette, pile, medium.clamp(-0.5, 1.0)));
+        self
+    }
+    /// The pile holds the share `t` of solvent (`crate::thinner`; engine 3).
+    pub fn thinner(mut self, t: f32) -> Self {
+        self.thinner = t;
         self
     }
     /// A fixed paint (no palette mixing).
@@ -219,8 +227,12 @@ impl Canvas {
 
     /// `stipple`, dipping into the piles already on the palette (see
     /// `work_with`).
+    ///
+    /// Panics if `sp` is thinned (`Stipple::thinner`, which applies to a
+    /// pile, `Stipple::piled`) and the canvas's engine is before 3.
     pub fn stipple_with(&mut self, piles: &mut crate::tally::Piles, mask: &Mask, sp: &Stipple, seed: u64) {
         sp.tool.assert_valid();
+        self.assert_thinner_supported(sp.thinner > 0.0 && sp.pile.is_some(), "Canvas::stipple");
         self.check_mask(mask);
         // plan on the whole canvas (a crop render plans the same touches)
         let f = mask.f;
@@ -380,6 +392,9 @@ impl Canvas {
                     if let Some((pal, pile, medium)) = &sp.pile {
                         p.want = pile.color;
                         *d = pal.remix(pile, sp.mix_jitter, &mut Rng::new(prng.next_u64())).laid(*medium);
+                        if sp.thinner > 0.0 {
+                            *d = d.with_thinner(sp.thinner);
+                        }
                         continue;
                     }
                     let (x, y) = p.color_at;

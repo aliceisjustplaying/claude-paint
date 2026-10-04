@@ -36,12 +36,22 @@ pub struct Tube {
     /// Prussian blue very strong).
     pub strength: f32,
     /// How fast the paint dries in oil, relative to average paint (1):
-    /// `drying::drier`.
+    /// `drying::drier`. Engines 1 and 2.
     pub drying: f32,
+    /// The same in engine 3 (`drying::drier::engine3`): `drying` unless the
+    /// tube's own source range called for another.
+    pub drying_3: f32,
 }
 
 fn tube(name: &'static str, pigment: &'static str, color: &str, hiding: f32, stiff: f32, strength: f32, drying: f32) -> Tube {
-    Tube { name, pigment, color: hex(color), hiding, stiff, strength, drying }
+    Tube { name, pigment, color: hex(color), hiding, stiff, strength, drying, drying_3: drying }
+}
+
+impl Tube {
+    /// This tube drying at `rate` in engine 3 (`Tube::drying_3`).
+    fn engine3(self, rate: f32) -> Tube {
+        Tube { drying_3: rate, ..self }
+    }
 }
 
 /// Every tube the engine knows, each defined once: `tube(name, pigment,
@@ -77,16 +87,16 @@ pub fn catalog() -> Vec<Tube> {
         tube("raw umber", "iron and manganese oxide earth", "#5c4c3a", 0.8, 0.65, 0.9, drier::UMBER),
         // (every box but the giverny box, which has no black)
         #[cfg(any(tube_box, feature = "box-sargent", feature = "box-inness", feature = "box-alma-tadema", feature = "box-tonn", feature = "box-hopper", feature = "box-impressionist"))]
-        tube("bone black", "charred bone (carbon, calcium phosphate)", "#1e1b19", 0.9, 0.7, 1.1, drier::BONE_BLACK),
+        tube("bone black", "charred bone (carbon, calcium phosphate)", "#1e1b19", 0.9, 0.7, 1.1, drier::BONE_BLACK).engine3(drier::engine3::BONE_BLACK),
         #[cfg(any(tube_box, feature = "box-sargent", feature = "box-inness", feature = "box-alma-tadema", feature = "box-hopper", feature = "box-giverny", feature = "box-impressionist"))]
-        tube("cobalt blue", "cobalt aluminate", "#2f55a8", 0.55, 0.6, 0.8, drier::COBALT_BLUE),
+        tube("cobalt blue", "cobalt aluminate", "#2f55a8", 0.55, 0.6, 0.8, drier::COBALT_BLUE).engine3(drier::engine3::COBALT_BLUE),
         #[cfg(any(tube_box, feature = "box-sargent", feature = "box-impressionist"))]
         tube("chrome yellow", "lead chromate", "#e8b21c", 0.9, 0.7, 1.0, drier::CHROME_YELLOW),
         // Prussian blue transparent and very strong [AP3 pp.196–197]
         // (tinting strength 3, below the sourced "very high", because
         // Mixbox's latent already carries some of a dark pigment's strength)
         #[cfg(any(tube_box, feature = "box-impressionist"))]
-        tube("Prussian blue", "iron ferrocyanide", "#172440", 0.35, 0.45, 3.0, drier::PRUSSIAN_BLUE),
+        tube("Prussian blue", "iron ferrocyanide", "#172440", 0.35, 0.45, 3.0, drier::PRUSSIAN_BLUE).engine3(drier::engine3::PRUSSIAN_BLUE),
         // green earth translucent, weak, short of body [AP1 p.146; FIELD
         // p.129], its masstone from Munsell 7.5G/2.9/1.5 [AP1 Table 1]; its
         // drying rate is an estimate (an earth: medium)
@@ -110,11 +120,11 @@ pub fn catalog() -> Vec<Tube> {
         #[cfg(any(feature = "box-sargent", feature = "box-inness"))]
         tube("lemon chrome", "pale lead chromate with lead sulfate", "#eed83c", 0.8, 0.7, 0.8, drier::CHROME_YELLOW),
         #[cfg(any(feature = "box-alma-tadema", feature = "box-hopper", feature = "box-giverny", feature = "box-impressionist"))]
-        tube("pale cadmium", "cadmium sulfide, a pale grade", "#f0c63c", 0.85, 0.7, 1.1, drier::CADMIUM),
+        tube("pale cadmium", "cadmium sulfide, a pale grade", "#f0c63c", 0.85, 0.7, 1.1, drier::CADMIUM).engine3(drier::engine3::CADMIUM),
         #[cfg(any(feature = "box-alma-tadema", feature = "box-hopper", feature = "box-giverny", feature = "box-impressionist"))]
-        tube("deep cadmium", "cadmium sulfide, a deep grade", "#e8861e", 0.9, 0.6, 1.2, drier::CADMIUM),
+        tube("deep cadmium", "cadmium sulfide, a deep grade", "#e8861e", 0.9, 0.6, 1.2, drier::CADMIUM).engine3(drier::engine3::CADMIUM),
         #[cfg(any(feature = "box-sargent", feature = "box-inness", feature = "box-tonn", feature = "box-hopper", feature = "box-giverny", feature = "box-impressionist"))]
-        tube("cadmium yellow", "cadmium sulfide", "#e8a51f", 0.85, 0.7, 1.1, drier::CADMIUM),
+        tube("cadmium yellow", "cadmium sulfide", "#e8a51f", 0.85, 0.7, 1.1, drier::CADMIUM).engine3(drier::engine3::CADMIUM),
         #[cfg(any(feature = "box-sargent", feature = "box-impressionist"))]
         tube("Indian yellow", "magnesium and calcium euxanthate", "#e1a11e", 0.15, 0.4, 0.8, drier::INDIAN_YELLOW),
         #[cfg(feature = "box-sargent")]
@@ -138,21 +148,21 @@ pub fn catalog() -> Vec<Tube> {
         #[cfg(feature = "box-alma-tadema")]
         tube("Chinese vermilion", "mercuric sulfide, a deeper grade", "#b8282e", 0.9, 0.75, 1.0, drier::VERMILION),
         #[cfg(any(feature = "box-sargent", feature = "box-tonn"))]
-        tube("cadmium red", "cadmium sulfoselenide", "#c3321f", 0.9, 0.7, 1.1, drier::CADMIUM),
+        tube("cadmium red", "cadmium sulfoselenide", "#c3321f", 0.9, 0.7, 1.1, drier::CADMIUM).engine3(drier::engine3::CADMIUM),
         #[cfg(feature = "box-sargent")]
         tube("Mars red", "synthetic iron oxide", "#a33f2a", 0.9, 0.7, 1.2, drier::MARS),
         #[cfg(feature = "box-inness")]
         tube("Indian red", "nearly pure ferric oxide", "#7a3a33", 0.92, 0.7, 1.2, drier::RED_EARTH),
         #[cfg(any(feature = "box-sargent", feature = "box-alma-tadema", feature = "box-giverny", feature = "box-impressionist"))]
-        tube("rose madder", "madder lake on alumina", "#8e2238", 0.1, 0.35, 0.9, drier::MADDER_LAKE),
+        tube("rose madder", "madder lake on alumina", "#8e2238", 0.1, 0.35, 0.9, drier::MADDER_LAKE).engine3(drier::engine3::ALIZARIN),
         #[cfg(feature = "box-tonn")]
-        tube("permanent alizarin", "a quinacridone", "#5e1624", 0.15, 0.45, 1.3, drier::MADDER_LAKE),
+        tube("permanent alizarin", "a quinacridone", "#5e1624", 0.15, 0.45, 1.3, drier::MADDER_LAKE).engine3(drier::engine3::ALIZARIN),
         // an aniline dye laked on alumina: transparent, strong, at madder
         // lake's rate; it fades in light, which the engine doesn't model
         #[cfg(feature = "box-sargent")]
         tube("magenta", "fuchsine (aniline) lake on alumina", "#8f1650", 0.1, 0.35, 1.5, drier::MADDER_LAKE),
         #[cfg(any(feature = "box-sargent", feature = "box-alma-tadema", feature = "box-tonn", feature = "box-hopper", feature = "box-impressionist"))]
-        tube("burnt sienna", "roasted sienna earth", "#7c3f24", 0.45, 0.55, 0.9, drier::SIENNA),
+        tube("burnt sienna", "roasted sienna earth", "#7c3f24", 0.45, 0.55, 0.9, drier::SIENNA).engine3(drier::engine3::BURNT_SIENNA),
         // Mars brown at sienna's rate: iron oxides dry well but lack umber's
         // manganese (notes/r20/TUBES.md)
         #[cfg(feature = "box-sargent")]
@@ -164,11 +174,11 @@ pub fn catalog() -> Vec<Tube> {
         #[cfg(any(feature = "box-sargent", feature = "box-tonn", feature = "box-hopper", feature = "box-impressionist"))]
         tube("cerulean blue", "cobalt stannate", "#3f82b3", 0.8, 0.7, 0.6, drier::COBALT_BLUE),
         #[cfg(any(feature = "box-sargent", feature = "box-tonn", feature = "box-hopper", feature = "box-giverny", feature = "box-impressionist"))]
-        tube("ultramarine blue", "synthetic ultramarine", "#232a8c", 0.3, 0.5, 1.1, drier::ULTRAMARINE),
+        tube("ultramarine blue", "synthetic ultramarine", "#232a8c", 0.3, 0.5, 1.1, drier::ULTRAMARINE).engine3(drier::engine3::ULTRAMARINE),
         // the last, palest extraction of natural ultramarine: mostly
         // colorless matter, so weak and transparent
         #[cfg(feature = "box-sargent")]
-        tube("ultramarine ash", "natural ultramarine, a pale last extraction", "#7d8aa8", 0.15, 0.5, 0.3, drier::ULTRAMARINE),
+        tube("ultramarine ash", "natural ultramarine, a pale last extraction", "#7d8aa8", 0.15, 0.5, 0.3, drier::ULTRAMARINE).engine3(drier::engine3::ULTRAMARINE),
         #[cfg(feature = "box-inness")]
         tube("Antwerp blue", "Prussian blue on an alumina base", "#26406c", 0.4, 0.45, 1.6, drier::ANTWERP_BLUE),
         #[cfg(any(feature = "box-sargent", feature = "box-alma-tadema", feature = "box-hopper", feature = "box-giverny", feature = "box-impressionist"))]
@@ -192,10 +202,10 @@ pub fn catalog() -> Vec<Tube> {
         // cochineal lake: found with madder in late-19th-c. French paint
         // (Pozzi et al. 2014); fugitive. Estimates
         #[cfg(any(feature = "box-giverny", feature = "box-impressionist"))]
-        tube("carmine lake", "carminic acid (cochineal) on alumina", "#861c3c", 0.1, 0.3, 1.2, drier::MADDER_LAKE),
+        tube("carmine lake", "carminic acid (cochineal) on alumina", "#861c3c", 0.1, 0.3, 1.2, drier::MADDER_LAKE).engine3(drier::engine3::ALIZARIN),
         // flavonoid yellow lake (Butler 1984; NG TB 24); fugitive. Estimates
         #[cfg(feature = "box-impressionist")]
-        tube("yellow lake", "flavonoid dye (weld, quercitron) on alumina and chalk", "#9e7525", 0.08, 0.35, 0.5, drier::MADDER_LAKE),
+        tube("yellow lake", "flavonoid dye (weld, quercitron) on alumina and chalk", "#9e7525", 0.08, 0.35, 0.5, drier::MADDER_LAKE).engine3(drier::engine3::ALIZARIN),
         // charcoal black: bluish, weak, without bone's phosphate (Butler
         // 1984 found it in 9 of 10 paintings examined). Estimates
         #[cfg(feature = "box-impressionist")]
@@ -459,7 +469,7 @@ impl Palette {
     pub fn table(&self) -> String {
         let mut s = String::from("| tube | pigment | hiding | stiffness | tinting strength | drying |\n|---|---|---|---|---|---|\n");
         for t in &self.tubes {
-            s.push_str(&format!("| {} | {} | {:?} | {:?} | {:?} | {:?} |\n", t.name, t.pigment, t.hiding, t.stiff, t.strength, t.drying));
+            s.push_str(&format!("| {} | {} | {:?} | {:?} | {:?} | {:?} |\n", t.name, t.pigment, t.hiding, t.stiff, t.strength, self.drying_of(t)));
         }
         s
     }
@@ -468,7 +478,12 @@ impl Palette {
     pub fn with(&self, extra: Vec<Tube>) -> Palette {
         let mut t = self.tubes.clone();
         t.extend(extra);
-        Palette::new(self.name, t)
+        Palette { engine: self.engine, ..Palette::new(self.name, t) }
+    }
+
+    /// How fast the tube `t` dries in this box's engine version.
+    pub fn drying_of(&self, t: &Tube) -> f32 {
+        if self.engine >= 3 { t.drying_3 } else { t.drying }
     }
 
     /// Masstone, scattering per coat and stiffness of a mixture.
@@ -499,7 +514,7 @@ impl Palette {
 
     fn mixture(&self, parts: Vec<(usize, f32)>) -> Mixture {
         let (color, scatter, stiff) = self.eval(&parts);
-        let drying = parts.iter().map(|&(i, f)| self.tubes[i].drying * f).sum::<f32>() / parts.iter().map(|p| p.1).sum::<f32>().max(1e-9);
+        let drying = parts.iter().map(|&(i, f)| self.drying_of(&self.tubes[i]) * f).sum::<f32>() / parts.iter().map(|p| p.1).sum::<f32>().max(1e-9);
         Mixture { hiding: hiding_of(luminance(color), scatter), parts, color, scatter, stiff, drying, solvent: 0.0, oil_rate: 1.0 }
     }
 
@@ -549,20 +564,29 @@ impl Mixture {
 mod tests {
     use super::*;
 
-    /// A pile laid as knifed dries at its tubes' rate, mixed by volume: lead
-    /// white fast, bone black slow, half and half in between.
+    /// A pile laid as knifed dries at its tubes' rate in its box's engine,
+    /// mixed by volume: lead white fast, bone black slower (engine 2: its
+    /// `Tube::drying`; engine 3: `Tube::drying_3`), half and half in
+    /// between.
     #[test]
     #[cfg(tube_box)]
     fn a_pile_dries_at_its_tubes_rate() {
+        for (engine, bone_black) in [(2, drier::BONE_BLACK), (3, 0.9)] {
+            let mut pal = Palette::tube_box();
+            pal.engine = engine;
+            let at = |n: &str| pal.tubes.iter().position(|t| t.name == n).unwrap();
+            let (w, k) = (at("lead white"), at("bone black"));
+            let white = pal.pile(vec![(w, 1.0)]).laid(0.2);
+            let black = pal.pile(vec![(k, 1.0)]).laid(0.2);
+            let half = pal.pile(vec![(w, 0.5), (k, 0.5)]).laid(0.2);
+            assert_eq!((white.drying, black.drying), (drier::LEAD_WHITE, bone_black), "engine {engine}");
+            assert!((half.drying - 0.5 * (drier::LEAD_WHITE + bone_black)).abs() < 1e-6, "engine {engine}: {}", half.drying);
+            assert_eq!(pal.with(vec![]).engine, engine, "a box with more tubes keeps its engine");
+        }
         let pal = Palette::tube_box();
         let at = |n: &str| pal.tubes.iter().position(|t| t.name == n).unwrap();
         let (w, k) = (at("lead white"), at("bone black"));
-        let white = pal.pile(vec![(w, 1.0)]).laid(0.2);
-        let black = pal.pile(vec![(k, 1.0)]).laid(0.2);
         let half = pal.pile(vec![(w, 0.5), (k, 0.5)]).laid(0.2);
-        assert_eq!(white.drying, drier::LEAD_WHITE);
-        assert_eq!(black.drying, drier::BONE_BLACK);
-        assert!((half.drying - 0.5 * (drier::LEAD_WHITE + drier::BONE_BLACK)).abs() < 1e-6, "{}", half.drying);
         // the paint is otherwise the pile's own
         let p = pal.pile(vec![(w, 0.5), (k, 0.5)]);
         assert_eq!((half.color, half.scatter, half.stiff), (p.paint(0.2).color, p.paint(0.2).scatter, p.paint(0.2).stiff));
@@ -614,7 +638,7 @@ mod tests {
         names.dedup();
         assert_eq!(names.len(), cat.len(), "a tube is defined twice");
         for t in &cat {
-            assert!(t.hiding > 0.0 && t.hiding <= 1.0 && t.stiff > 0.0 && t.stiff <= 1.0 && t.strength > 0.0 && t.drying > 0.0, "{t:?}");
+            assert!(t.hiding > 0.0 && t.hiding <= 1.0 && t.stiff > 0.0 && t.stiff <= 1.0 && t.strength > 0.0 && t.drying > 0.0 && t.drying_3 > 0.0, "{t:?}");
             assert!(!t.pigment.is_empty(), "{}", t.name);
         }
     }
@@ -681,8 +705,8 @@ mod canvas_tests {
     #[test]
     fn mixture_to_paint_preserves_scattering() {
         let pal = Palette::new("opaque neutral tubes", vec![
-            Tube { name: "white", pigment: "", color: [0.99; 3], hiding: 0.99, stiff: 0.5, strength: 1.0, drying: 1.0 },
-            Tube { name: "black", pigment: "", color: [0.01; 3], hiding: 0.99, stiff: 0.5, strength: 1.0, drying: 1.0 },
+            Tube { name: "white", pigment: "", color: [0.99; 3], hiding: 0.99, stiff: 0.5, strength: 1.0, drying: 1.0, drying_3: 1.0 },
+            Tube { name: "black", pigment: "", color: [0.01; 3], hiding: 0.99, stiff: 0.5, strength: 1.0, drying: 1.0, drying_3: 1.0 },
         ]);
         for (white, medium) in [(0.1, 0.0), (0.1, 0.5), (0.6, 0.0), (0.6, 0.9)] {
             let m = pal.pile(vec![(0, white), (1, 1.0 - white)]);

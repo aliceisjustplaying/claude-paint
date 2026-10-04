@@ -22,6 +22,7 @@ use crate::canvas::Canvas;
 use crate::mask::Mask;
 use crate::rng::Rng;
 use crate::smoothstep;
+use crate::surface::COAT_UM;
 use crate::wet::{LAT, Latent, Paint, Prop, mix_into};
 
 /// Relief (µm) that spans a bristle's contact range: a bristle pressed
@@ -323,7 +324,7 @@ impl Tool {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub(crate) struct Bristle {
     /// Root offset in the brush frame (x along the wide axis), roughly −1..1.
     rx: f32,
@@ -340,37 +341,37 @@ pub(crate) struct Bristle {
     /// Cure of the paint in it (0 fresh from the palette; paint lifted off
     /// a drying film brings the film's).
     cure: f32,
+    /// Solvent it carries beside its paint (`vol`), in the same units
+    /// (`crate::thinner`; engine 3): from a thinned pile, or lifted with
+    /// the paint off a solvent-wet film. 0 for unthinned paint.
+    pub(crate) solvent: f32,
 }
 
 /// A brush in the hand, with paint in its bristles. (`Debug` is part of
-/// `easel run --state-digest`.)
-#[derive(Clone, Debug)]
+/// `easel run --state-digest`: see its impl.)
+#[derive(Clone)]
 pub struct Held {
     pub tool: Tool,
     pub(crate) bristles: Vec<Bristle>,
+    /// Painting with engine 3 (`with_engine`): its `Debug` names each
+    /// bristle's `solvent`. Not printed itself.
+    shows_solvent: bool,
+    /// Painting with engine 4 or later: its `Debug` gives each bristle's
+    /// paint its solvent and oil too. Not printed itself.
+    shows_oil: bool,
 }
 
-/// `Held`'s `Debug` as it was before engine 4, when a bristle's paint had
-/// three properties (`Held::debug_before_engine_4`).
-struct OldHeld<'a>(&'a Held);
-struct OldBristles<'a>(&'a [Bristle]);
-struct OldBristle<'a>(&'a Bristle);
+/// A bristle's `Debug`, as `#[derive(Debug)]` printed it before the
+/// thinner, field for field, plus `solvent` when `show` (engine 3); the
+/// paint's properties without solvent and oil unless `oil` (engine 4).
+struct BristleText<'a>(&'a Bristle, bool, bool);
 
-impl std::fmt::Debug for OldHeld<'_> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("Held").field("tool", &self.0.tool).field("bristles", &OldBristles(&self.0.bristles)).finish()
-    }
-}
-impl std::fmt::Debug for OldBristles<'_> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_list().entries(self.0.iter().map(OldBristle)).finish()
-    }
-}
-impl std::fmt::Debug for OldBristle<'_> {
+impl std::fmt::Debug for BristleText<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let b = self.0;
-        f.debug_struct("Bristle")
-            .field("rx", &b.rx)
+        let hide: &[f32] = if self.2 { &b.hide } else { &b.hide[..3] };
+        let mut d = f.debug_struct("Bristle");
+        d.field("rx", &b.rx)
             .field("ry", &b.ry)
             .field("len", &b.len)
             .field("thresh", &b.thresh)
@@ -379,21 +380,38 @@ impl std::fmt::Debug for OldBristle<'_> {
             .field("prev", &b.prev)
             .field("vol", &b.vol)
             .field("lat", &b.lat)
-            .field("hide", &&b.hide[..3])
-            .field("cure", &b.cure)
-            .finish()
+            .field("hide", &hide)
+            .field("cure", &b.cure);
+        if self.1 {
+            d.field("solvent", &b.solvent);
+        }
+        d.finish()
+    }
+}
+
+impl std::fmt::Debug for Bristle {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        BristleText(self, true, true).fmt(f)
+    }
+}
+
+/// The text of a brush (`easel run --state-digest` hashes it, and the
+/// state dump keeps it): exactly what `#[derive(Debug)]` printed before the
+/// thinner, so a painting from an engine before 3 digests as it did; an
+/// engine-3 brush (`with_engine`) names each bristle's `solvent` too.
+impl std::fmt::Debug for Held {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        struct List<'a>(&'a [Bristle], bool, bool);
+        impl std::fmt::Debug for List<'_> {
+            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                f.debug_list().entries(self.0.iter().map(|b| BristleText(b, self.1, self.2))).finish()
+            }
+        }
+        f.debug_struct("Held").field("tool", &self.tool).field("bristles", &List(&self.bristles, self.shows_solvent, self.shows_oil)).finish()
     }
 }
 
 impl Held {
-    /// `Debug`'s text as it was before engine 4 (three properties to a
-    /// bristle's paint: no solvent, no oil): what `easel run --state-digest`
-    /// hashes for a painting of an older engine, so its digests are the ones
-    /// recorded for it.
-    pub fn debug_before_engine_4(&self) -> String {
-        format!("{:?}", OldHeld(self))
-    }
-
     pub fn new(tool: Tool, seed: u64) -> Self {
         let mut rng = Rng::new(seed);
         let n = tool.bristles.max(1);
@@ -454,10 +472,20 @@ impl Held {
                     lat: [0.0; LAT],
                     hide: [0.5, 0.5, 1.0, 0.0, 1.0],
                     cure: 0.0,
+                    solvent: 0.0,
                 }
             })
             .collect();
-        Held { tool, bristles }
+        Held { tool, bristles, shows_solvent: false, shows_oil: false }
+    }
+
+    /// The brush of a painting with engine `v`: from engine 3 its `Debug`
+    /// names the solvent in each bristle (`crate::thinner`); before, it is
+    /// the text it always was.
+    pub fn with_engine(mut self, v: u32) -> Self {
+        self.shows_solvent = v >= 3;
+        self.shows_oil = v >= 4;
+        self
     }
 
     /// A full load's volume for one bristle.
@@ -467,14 +495,34 @@ impl Held {
         self.tool.lay.max(0.3) * track * self.tool.run / (self.tool.hair * self.tool.hair)
     }
 
+    /// Whether any bristle holds solvent (a thinned load, or solvent
+    /// picked up from a thinned film).
+    pub(crate) fn holds_solvent(&self) -> bool {
+        self.bristles.iter().any(|b| b.solvent > 0.0)
+    }
+
     /// Dip the brush: mix `amount` (0..1 of a full load) of `paint` into
     /// every bristle's reservoir. Bristles hold a little more or less.
+    /// Thinned paint (`Paint::with_thinner`) can be loaded here, but only a
+    /// canvas of engine 3 takes it: `Canvas::drag` and `touch` panic before
+    /// drawing otherwise.
     pub fn load(&mut self, paint: Paint, amount: f32) {
         let lat = paint.latent();
         let full = self.full();
         let scatter = paint.scatter();
+        let t = paint.thinner;
         for (i, b) in self.bristles.iter_mut().enumerate() {
             let k = 0.75 + 0.5 * crate::rng::hash2(i as i64, 17, 3);
+            if t > 0.0 {
+                // a thinned load: the hairs take up `amount` of liquid, the
+                // share `t` of it solvent (crate::thinner)
+                let v = amount * full * k;
+                let vp = v * (1.0 - t);
+                b.cure = mix_cure(b.cure, b.vol, 0.0, vp);
+                mix_into(&mut b.vol, &mut b.lat, &mut b.hide, vp, &lat, [scatter, paint.stiff, paint.drying, paint.solvent, paint.oil]);
+                b.solvent += v * t;
+                continue;
+            }
             b.cure = mix_cure(b.cure, b.vol, 0.0, amount * full * k);
             mix_into(&mut b.vol, &mut b.lat, &mut b.hide, amount * full * k, &lat, [scatter, paint.stiff, paint.drying, paint.solvent, paint.oil]);
         }
@@ -496,6 +544,15 @@ impl Held {
                 continue;
             }
             let k = (0.75 + 0.5 * crate::rng::hash2(i as i64, 17, 3)) * w;
+            if paint.thinner > 0.0 {
+                // (a thinned load, as `load`: part paint, part solvent)
+                let v = amount * full * k;
+                let vp = v * (1.0 - paint.thinner);
+                b.cure = mix_cure(b.cure, b.vol, 0.0, vp);
+                mix_into(&mut b.vol, &mut b.lat, &mut b.hide, vp, &lat, [scatter, paint.stiff, paint.drying, paint.solvent, paint.oil]);
+                b.solvent += v * paint.thinner;
+                continue;
+            }
             b.cure = mix_cure(b.cure, b.vol, 0.0, amount * full * k);
             mix_into(&mut b.vol, &mut b.lat, &mut b.hide, amount * full * k, &lat, [scatter, paint.stiff, paint.drying, paint.solvent, paint.oil]);
         }
@@ -505,6 +562,7 @@ impl Held {
     pub fn wipe(&mut self, frac: f32) {
         for b in &mut self.bristles {
             b.vol *= 1.0 - frac.clamp(0.0, 1.0);
+            b.solvent *= 1.0 - frac.clamp(0.0, 1.0);
         }
     }
 
@@ -514,10 +572,17 @@ impl Held {
         self.load(paint, amount);
     }
 
-    /// Paint left in the brush, relative to a full load.
+    /// Paint (with any solvent in it) left in the brush, relative to a full
+    /// load.
     pub fn fullness(&self) -> f32 {
         let f = self.full();
-        self.bristles.iter().map(|b| b.vol).sum::<f32>() / (f * self.bristles.len() as f32)
+        self.bristles.iter().map(|b| b.vol + b.solvent).sum::<f32>() / (f * self.bristles.len() as f32)
+    }
+
+    /// The paint and the solvent the brush carries, in the units of
+    /// `Canvas::wet_total` (coats × square units).
+    pub fn carried(&self) -> (f64, f64) {
+        self.bristles.iter().fold((0.0, 0.0), |(p, s), b| (p + b.vol as f64, s + b.solvent as f64))
     }
 }
 
@@ -686,6 +751,12 @@ pub(crate) struct Surf {
     /// The ground's remaining absorbency per pixel (coats of oil; null when
     /// none of it is absorbent or before engine 4).
     absorb: *mut f32,
+    /// Solvent in the open film, and each pixel's wet film laid by the
+    /// stroke `laid_id` against its ceiling (`Wet::solv`, `Wet::laid`):
+    /// null before engine 3.
+    solv: *mut f32,
+    laid: *mut f32,
+    laid_id: *mut u32,
 }
 // SAFETY: callers only run brushes concurrently on pixel sets that cannot
 // overlap (tiles separated by more than the largest stroke extent).
@@ -778,6 +849,9 @@ impl Canvas {
     pub(crate) fn surf(&mut self) -> Surf {
         // the raw views below index 0..w*h: every buffer must be that long
         let n = self.f.w * self.f.h;
+        if self.engine >= 3 {
+            self.wet.ensure_solvent();
+        }
         let wt = &self.wet;
         assert!(
             [self.height.len(), self.px.len(), self.film.len(), wt.vol.len(), wt.lat.len(), wt.hide.len(), wt.stroke.len(), wt.touched.len(), wt.floor.len(), wt.cover.len()].iter().all(|&l| l == n),
@@ -819,18 +893,40 @@ impl Canvas {
             clump: self.engine >= 4,
             lean: self.engine >= 4,
             absorb: if self.engine >= 4 && self.absorb_any { self.absorb.as_mut_ptr() } else { std::ptr::null_mut() },
+            solv: if self.wet.solv.len() == n { self.wet.solv.as_mut_ptr() } else { std::ptr::null_mut() },
+            laid: if self.wet.laid.len() == n { self.wet.laid.as_mut_ptr() } else { std::ptr::null_mut() },
+            laid_id: if self.wet.laid_id.len() == n { self.wet.laid_id.as_mut_ptr() } else { std::ptr::null_mut() },
         }
     }
 
     pub(crate) fn next_stroke_ids(&mut self, n: u32) -> u32 {
-        let first = self.wet.current.wrapping_add(1).max(1);
+        let old = self.wet.current;
+        let first = old.wrapping_add(1).max(1);
         self.wet.current = first.wrapping_add(n);
+        if first <= old || self.wet.current < first {
+            // the ids wrapped: a stroke's ceiling (`Wet::laid`) must not
+            // find an old stroke's entry under a reused id
+            self.wet.forget_laid();
+        }
         first
     }
 
+    /// Panics if solvent would go onto a canvas that can't hold it:
+    /// thinner is engine 3 only (`crate::thinner`), and before engine 3 the
+    /// film has no solvent buffer, so the brush's solvent would vanish.
+    pub(crate) fn assert_thinner_supported(&self, thinned: bool, what: &str) {
+        assert!(!thinned || self.engine >= 3, "{what}: thinned paint needs engine 3 (this canvas is engine {}, which has no solvent in its film)", self.engine);
+    }
+
     /// Drag a held brush through a gesture, working the wet paint.
+    ///
+    /// Panics if the brush holds solvent (a thinned load) and the canvas's
+    /// engine is before 3.
     pub fn drag(&mut self, held: &mut Held, g: &Gesture, clip: Option<&Mask>) {
         held.tool.assert_valid();
+        if self.engine < 3 {
+            self.assert_thinner_supported(held.holds_solvent(), "Canvas::drag");
+        }
         if let Some(m) = clip {
             self.check_mask(m);
         }
@@ -902,7 +998,7 @@ fn cohesion(held: &Held, full: f32) -> f32 {
         return 1.0;
     }
     let n = held.bristles.len().max(1) as f32;
-    let fill = held.bristles.iter().map(|b| b.vol).sum::<f32>() / (full * n);
+    let fill = held.bristles.iter().map(|b| b.vol + b.solvent).sum::<f32>() / (full * n);
     smoothstep(0.02, 0.2, fill)
 }
 
@@ -921,9 +1017,10 @@ fn feed(bristles: &mut [Bristle], k: f32) {
     if k <= 0.0 || bristles.is_empty() {
         return;
     }
-    let (mut tv, mut lat, mut hide, mut cure) = (0.0f32, [0.0f32; LAT], [0.0f32; 5], 0.0f32);
+    let (mut tv, mut lat, mut hide, mut cure, mut ts) = (0.0f32, [0.0f32; LAT], [0.0f32; 5], 0.0f32, 0.0f32);
     for b in bristles.iter() {
         tv += b.vol;
+        ts += b.solvent;
         cure += b.cure * b.vol;
         for (l, bl) in lat.iter_mut().zip(&b.lat) {
             *l += bl * b.vol;
@@ -941,7 +1038,11 @@ fn feed(bristles: &mut [Bristle], k: f32) {
     hide = [hide[0] / tv, hide[1] / tv, hide[2] / tv, hide[3] / tv, hide[4] / tv];
     cure /= tv;
     let share = k * tv / bristles.len() as f32;
+    let share_s = k * ts / bristles.len() as f32;
     for b in bristles.iter_mut() {
+        if ts > 0.0 {
+            b.solvent = b.solvent * (1.0 - k) + share_s;
+        }
         b.vol *= 1.0 - k;
         b.cure = mix_cure(b.cure, b.vol, cure, share);
         mix_into(&mut b.vol, &mut b.lat, &mut b.hide, share, &lat, hide);
@@ -1324,6 +1425,19 @@ unsafe fn exchange(
             // bristle touched and laid paint as usual (so it arrives in the
             // window about as spent as in a whole render), lifting none
             let travel = (seg / s).max(rb / s * 0.5);
+            if br.solvent > 0.0 {
+                // (a thinned load: its liquid runs down the same way, paint
+                // and solvent alike)
+                let l = br.vol + br.solvent;
+                let left = match dep {
+                    None => l * (1.0 - (1.0 - (-travel / tool.run).exp()) * GHOST_TOUCH),
+                    Some(v) => (l - v.min(l * 0.5) * GHOST_TOUCH).max(0.0),
+                };
+                let f = if l > 0.0 { left / l } else { 0.0 };
+                br.vol *= f;
+                br.solvent *= f;
+                return;
+            }
             br.vol = match dep {
                 None => br.vol * (1.0 - (1.0 - (-travel / tool.run).exp()) * GHOST_TOUCH),
                 Some(v) => (br.vol - v.min(br.vol * 0.5) * GHOST_TOUCH).max(0.0),
@@ -1354,8 +1468,17 @@ unsafe fn exchange(
         // a well-loaded blunt brush wets the shallow hollows too (up to half
         // the tooth's range); a nearly dry one drags over the peaks only
         // (dry brush, broken color)
-        let wet = smoothstep(0.1, 0.8, br.vol / full);
-        let wick = if tool.point > 0.0 { tool.point * smoothstep(0.02, 0.25, br.vol / full) } else { 0.0 }.max(WET_REACH * wet);
+        // what the hair carries: its paint, and with a thinned load the
+        // solvent in it too (crate::thinner): a thinned brush is a wet one.
+        // Unthinned (no solvent), exactly the paint, as before
+        let liquid = if br.solvent > 0.0 { br.vol + br.solvent } else { br.vol };
+        // the share of solvent in what it lays, and the most wet film this
+        // stroke may add to a pixel (coats; engine 3)
+        let phi = if br.solvent > 0.0 { br.solvent / liquid } else { 0.0 };
+        let capped = phi > 0.0 && !sf.laid.is_null();
+        let cap = if capped { crate::thinner::stroke_limit_um(phi) / COAT_UM } else { f32::INFINITY };
+        let wet = smoothstep(0.1, 0.8, liquid / full);
+        let wick = if tool.point > 0.0 { tool.point * smoothstep(0.02, 0.25, liquid / full) } else { 0.0 }.max(WET_REACH * wet);
         let th = 1.0 - reach.max(wick) * 1.6;
 
         // pass 1: contact weights
@@ -1427,17 +1550,17 @@ unsafe fn exchange(
         // bristle skimming the weave peaks keeps most of its load
         let touch = (sum_w / sum_cov.max(1e-6)).min(1.0);
         let dep_total = match dep {
-            None => br.vol * (1.0 - (-travel / tool.run).exp()) * touch,
-            Some(v) => v.min(br.vol * 0.5) * touch,
+            None => liquid * (1.0 - (-travel / tool.run).exp()) * touch,
+            Some(v) => v.min(liquid * 0.5) * touch,
         };
         let dep_total = if matches!(clip, Some(Clip::Fence { .. })) { dep_total * (sum_k / sum_w).min(1.0) } else { dep_total };
         let dep_total = if tack > 0.0 {
             let g = crate::drying::grab(tack) * crate::drying::stick(b.0, b.1, rb, br.seed, tack);
             let d = match dep {
-                None => br.vol * (1.0 - (-travel * g / tool.run).exp()) * touch,
+                None => liquid * (1.0 - (-travel * g / tool.run).exp()) * touch,
                 Some(_) => dep_total * g,
             };
-            d.min(br.vol * 0.9)
+            d.min(liquid * 0.9)
         } else {
             dep_total
         };
@@ -1468,7 +1591,7 @@ unsafe fn exchange(
         let dep_per_w = dep_total * share.min(1.0) / sum_w / px_area;
         // film splitting: a bristle in wet paint always lifts some of it, even
         // when loaded; a spent bristle drinks more
-        let hunger = 0.35 + 0.65 * (1.0 - br.vol / full).clamp(0.0, 1.0).powf(1.5);
+        let hunger = 0.35 + 0.65 * (1.0 - liquid / full).clamp(0.0, 1.0).powf(1.5);
         // a moving hair ploughs aside the share `push` of the paint in its
         // own track, 2·`hair` wide, and lays it a hair's width away (shared
         // bilinearly, below): the same paint moved the same distance at any
@@ -1501,6 +1624,9 @@ unsafe fn exchange(
         let mut got_l = [0.0f32; LAT];
         let mut got_h: Prop = [0.0; 5];
         let mut got_c = 0.0f32;
+        // solvent lifted with the paint, and wet film (paint + solvent) laid
+        let mut got_s = 0.0f32;
+        let mut laid_liq = 0.0f32;
         let (blat, bhide, bcure) = (br.lat, br.hide, br.cure);
         for y in y0..y1 {
             for x in x0..x1 {
@@ -1534,10 +1660,21 @@ unsafe fn exchange(
                         if !sf.dry.is_null() {
                             got_c += (*sf.dry.add(i)).cure * tv;
                         }
+                        // the solvent comes up with the paint, in the
+                        // film's own proportions
+                        if !sf.solv.is_null() {
+                            // (the canvas holds its solvent in µm)
+                            let sv = &mut *sf.solv.add(i);
+                            if *sv > 0.0 {
+                                let ts = (*sv * take / v).min(*sv);
+                                *sv -= ts;
+                                got_s += ts / COAT_UM * px_area;
+                            }
+                        }
                         sf.take(i, take);
                     }
                 }
-                if dep_per_w > 0.0 {
+                if dep_per_w > 0.0 && !capped && phi <= 0.0 {
                     // the share of the pixel this paint covers: its contact
                     // (a fine hair's own share of the tuft's width, where
                     // the hairs of a gathered point lie over each other)
@@ -1545,6 +1682,27 @@ unsafe fn exchange(
                     *cv = if fine { ((if *sf.vol.add(i) < 1e-6 { 0.0 } else { *cv }) + wt * excl).min(1.0) } else { 1.0 };
                     sf.add(i, dep_per_w * wt, &blat, bhide, bcure);
                     *sf.stroke.add(i) = id;
+                } else if dep_per_w > 0.0 {
+                    // a thinned load lays liquid: no more than what is left
+                    // of this pixel's ceiling for this stroke, shared by all
+                    // its hairs (crate::thinner); the rest stays on the hair
+                    let mut d = dep_per_w * wt;
+                    if capped {
+                        let used = if *sf.laid_id.add(i) == id { *sf.laid.add(i) } else { 0.0 };
+                        d = d.min((cap - used).max(0.0));
+                        *sf.laid_id.add(i) = id;
+                        *sf.laid.add(i) = used + d;
+                    }
+                    if d > 0.0 {
+                        let cv = &mut *sf.cover.add(i);
+                        *cv = if fine { ((if *sf.vol.add(i) < 1e-6 { 0.0 } else { *cv }) + wt * excl).min(1.0) } else { 1.0 };
+                        sf.add(i, d * (1.0 - phi), &blat, bhide, bcure);
+                        if !sf.solv.is_null() {
+                            *sf.solv.add(i) += d * phi * COAT_UM;
+                        }
+                        *sf.stroke.add(i) = id;
+                        laid_liq += d * px_area;
+                    }
                 }
                 // plough: move paint outward from the bristle's path, and ahead
                 if push_k > 0.0 {
@@ -1590,7 +1748,30 @@ unsafe fn exchange(
                                 // a clipped stroke can't push paint past its mask:
                                 // only the accepted share moves, the rest stays
                                 let m = m * share * clip.map_or(1.0, |c| c.at(ty * w + tx).0);
+                                // a thinned stroke adds no more wet film to the
+                                // pixel it ploughs into than its ceiling there
+                                // allows; the solvent goes with the paint
+                                // (solvent in µm, as the canvas holds it)
+                                let sol = if sf.solv.is_null() { 0.0 } else { *sf.solv.add(i) / COAT_UM };
+                                let vi = *sf.vol.add(i);
+                                let ms = if sol > 0.0 && vi > 0.0 { (sol * m / vi).min(sol) } else { 0.0 };
+                                let (m, ms) = if capped && j != i && m > 0.0 {
+                                    let used = if *sf.laid_id.add(j) == id { *sf.laid.add(j) } else { 0.0 };
+                                    let room = (cap - used).max(0.0);
+                                    let f = if m + ms > room { room / (m + ms) } else { 1.0 };
+                                    *sf.laid_id.add(j) = id;
+                                    *sf.laid.add(j) = used + (m + ms) * f;
+                                    (m * f, ms * f)
+                                } else {
+                                    (m, ms)
+                                };
                                 if j != i && m > 0.0 {
+                                    if ms > 0.0 {
+                                        let si = &mut *sf.solv.add(i);
+                                        let mu = (ms * COAT_UM).min(*si);
+                                        *si -= mu;
+                                        *sf.solv.add(j) += mu;
+                                    }
                                     let cure = if sf.dry.is_null() { 0.0 } else { (*sf.dry.add(i)).cure };
                                     // the paint moved covers its share of
                                     // the pixel it came from
@@ -1606,7 +1787,16 @@ unsafe fn exchange(
                 }
             }
         }
-        br.vol = (br.vol - dep_total).max(0.0);
+        if phi > 0.0 {
+            // the hair loses what it laid (and in a crop, the share laid
+            // outside the window), paint and solvent in its proportions
+            let gone = (laid_liq + dep_total * (1.0 - share.min(1.0))).min(liquid);
+            br.vol = (br.vol - gone * (1.0 - phi)).max(0.0);
+            br.solvent = (br.solvent - gone * phi).max(0.0);
+        } else {
+            br.vol = (br.vol - dep_total).max(0.0);
+        }
+        br.solvent += got_s;
         if got_v > 0.0 {
             for k in 0..LAT {
                 got_l[k] /= got_v;
@@ -1731,8 +1921,14 @@ fn touch_footprint_checked(tool: &Tool, t: &Touch, scale: f32, w: usize, h: usiz
 
 impl Canvas {
     /// Touch the canvas with the tip of a held brush (see `Touch`).
+    ///
+    /// Panics if the brush holds solvent and the canvas's engine is before
+    /// 3 (as `drag`).
     pub fn touch(&mut self, held: &mut Held, t: &Touch, clip: Option<&Mask>) {
         held.tool.assert_valid();
+        if self.engine < 3 {
+            self.assert_thinner_supported(held.holds_solvent(), "Canvas::touch");
+        }
         if let Some(m) = clip {
             self.check_mask(m);
         }
@@ -1796,7 +1992,7 @@ pub(crate) unsafe fn touch_on(sf: Surf, held: &mut Held, t: &Touch, clip: Option
             let (ox, oy) = (b.rx * half * spread, b.ry * half * spread);
             let cur = (hx + ox * ct - oy * st, hy + ox * st + oy * ct);
             let prev = b.prev[0].unwrap_or(cur);
-            let fill = (b.vol / full).min(1.0);
+            let fill = ((b.vol + b.solvent) / full).min(1.0);
             let v = film * fill * reach / sums[bi].max(1e-6);
             unsafe { exchange(sf, b, &tool, prev, cur, rb, reach, full, Some(v), 1.0, clip, id, scratch, &mut bounds, lim) };
             b.prev[0] = Some(cur);
@@ -2599,17 +2795,6 @@ mod part_tests {
 
     fn vols(h: &Held) -> Vec<(f32, f32)> {
         h.bristles.iter().map(|b| (b.rx, b.vol)).collect()
-    }
-
-    /// The text a state digest hashes for an older engine's brush is today's
-    /// without the two properties engine 4 added.
-    #[test]
-    fn the_older_debug_text_leaves_out_solvent_and_oil() {
-        let mut h = Held::new(Tool::filbert(6.0), 7);
-        h.load(Paint::body(hex("#445566")), 0.8);
-        let (new, old) = (format!("{h:?}"), h.debug_before_engine_4());
-        assert!(new.contains(", 0.0, 1.0], cure: ") && !old.contains(", 0.0, 1.0], cure: "));
-        assert_eq!(new.replace(", 0.0, 1.0], cure: ", "], cure: "), old);
     }
 
     #[test]

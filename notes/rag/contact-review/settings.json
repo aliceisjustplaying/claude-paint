@@ -1,0 +1,17 @@
+{
+  "base": "4e525e5",
+  "mode": "research only",
+  "lift": 1.0,
+  "dip": 0.5,
+  "pressure": 0.8,
+  "rag_seed": 7,
+  "wipe_seed": 19,
+  "uniform_um": 69.294109,
+  "controls": [
+    "original brush preparation",
+    "wet thickness only made uniform",
+    "preparing brush push only set to zero"
+  ],
+  "changed_rag_mechanics": false,
+  "shipping_source_restored": true
+}

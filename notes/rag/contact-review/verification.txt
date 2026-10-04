@@ -1,0 +1,3 @@
+Instrumented baseline matches previous quarter-rate wipe: True
+uniform: accumulated contact map identical to baseline: True
+no-plough: accumulated contact map identical to baseline: True

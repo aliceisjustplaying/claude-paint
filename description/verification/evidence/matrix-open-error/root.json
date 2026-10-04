@@ -1,0 +1,19 @@
+[
+  {
+    "id": "open-ignores-integrity-error",
+    "seconds": 4.040495000001101,
+    "opening_still_running": true,
+    "status": {
+      "args": [
+        "status"
+      ],
+      "out": "",
+      "err": "session integrity: <root>/paintings/lua/openerror.lua differs from the log the session wrote. The easel goes on only from the log it wrote; nothing ran.\n",
+      "exit": 1
+    },
+    "serverlog": "resuming chunk 1/1\nresumed chunk 1/1 1.22s\nresumed 1 chunks from <root>/paintings/lua/openerror.lua\nstatus 0.00s err\nstatus 0.00s err\nstatus 0.00s err\nstatus 0.00s err\nstatus 0.00s err\nstatus 0.00s err\nstatus 0.00s err\nstatus 0.00s err\nstatus 0.00s err\nstatus 0.00s err\nstatus 0.00s err\nstatus 0.00s err\nstatus 0.00s err\nstatus 0.00s err\nstatus 0.00s err\nstatus 0.00s err\nstatus 0.00s err\nstatus 0.00s err\nstatus 0.00s err\nstatus 0.00s err\nstatus 0.00s err\nstatus 0.00s err\nstatus 0.00s err\nstatus 0.00s err\nstatus 0.00s err\nstatus 0.00s err\nstatus 0.00s err\n",
+    "client_out": "resuming chunk 1/1\nresumed chunk 1/1 1.22s\nresumed 1 chunks from <root>/paintings/lua/openerror.lua\n",
+    "client_err": "",
+    "terminated_by_fixture": true
+  }
+]

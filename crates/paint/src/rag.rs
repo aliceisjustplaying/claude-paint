@@ -22,7 +22,8 @@
 //! its light-pressed rim, the wipe's frayed sides and trailing end
 //! (`SMEAR`), and that comes off its load. Paint is taken off the
 //! wet layer as `bristle::Surf::take` takes it (the same three steps), and
-//! the cloth's load is kept in the `Rag` the caller holds.
+//! nothing new is kept on the canvas: the rag's own state is the `Rag` the
+//! caller holds.
 //!
 //! In a crop render the rag sees only the window's paint, so its load (and
 //! what later strokes lift) can differ a little from the whole canvas's,
@@ -97,8 +98,8 @@ const DAMP_LIFT: f32 = 8.0;
 /// hand time included), and below `DRY_DAMP` the face is dry, some 17
 /// minutes after a dip at 0.5. "Pour a few drops on a sheet of white
 /// writing paper; if it is pure the mark will evaporate in a few minutes"
-/// (W. J. Pearce [Jennings], Paint & Colour Mixing, 1902, "To Test the
-/// Purity of Turpentine",
+/// (Arthur Seymour Jennings, Paint & Colour Mixing, 1902, "To Test the
+/// Purity of Turpentine", pp. 74-75,
 /// https://www.gutenberg.org/cache/epub/56738/pg56738-images.html); a
 /// bunched cloth holds more than a few drops and shields part of it, so
 /// it takes somewhat longer [E].
@@ -151,13 +152,15 @@ const SOAK: f32 = 0.35;
 const SMEAR: f32 = 0.2;
 
 /// Paint at the cloth's surface during one wipe (engine 3, `SMEAR`):
-/// coats × pixels, its mean color, hiding and cure.
+/// coats × pixels, its mean color, hiding and cure, and its solvent (µm ×
+/// pixels).
 #[derive(Clone, Copy, Default)]
 struct Pool {
     vol: f32,
     lat: crate::wet::Latent,
     hide: crate::wet::Prop,
     cure: f32,
+    solv: f32,
 }
 
 /// A rag in the hand: its pad width (units), how loaded the face in use is
@@ -177,12 +180,16 @@ pub struct Rag {
     pub wet_at: f64,
     pub fold: u32,
     pub seed: u64,
+    /// The solvent the cloth has taken off the canvas with the paint, mm³,
+    /// cumulative (`crate::thinner`; engine 3). Bookkeeping only: it isn't
+    /// the cloth's own dampness (`damp`) and lifts nothing.
+    pub solvent_mm3: f64,
 }
 
 impl Rag {
     /// A clean rag bunched to a pad `width` units across.
     pub fn new(width: f32, seed: u64) -> Self {
-        Rag { width: width.max(0.1), load: 0.0, soaked: 0.0, damp: 0.0, wet_at: 0.0, fold: 0, seed }
+        Rag { width: width.max(0.1), load: 0.0, soaked: 0.0, damp: 0.0, wet_at: 0.0, fold: 0, seed, solvent_mm3: 0.0 }
     }
 
     /// Turn a cleaner, dry face outward. No face is cleaner than the paint
@@ -338,23 +345,36 @@ pub struct RagPass {
 
 impl Canvas {
     /// The wet film under pixel `i` lifted by `take` coats, as
-    /// `bristle::Surf::take` does it: a film left bare holds no cure.
+    /// `bristle::Surf::take` does it: a film left bare holds no cure. The
+    /// solvent in the film comes away with the paint, in their proportions
+    /// there; returns how much (coats; the canvas holds it in µm).
     #[inline]
-    fn rag_take(&mut self, i: usize, take: f32) {
+    fn rag_take(&mut self, i: usize, take: f32) -> f32 {
+        let v0 = self.wet.vol[i];
+        let mut ts = 0.0;
+        if let Some(s) = self.wet.solv.get_mut(i)
+            && *s > 0.0
+            && v0 > 0.0
+        {
+            let tu = (*s * take / v0).min(*s);
+            *s -= tu;
+            ts = tu / COAT_UM;
+        }
         let v = &mut self.wet.vol[i];
         *v -= take;
         if self.engine >= 2 && *v < 1e-5 && self.wet.clock.px.len() == self.wet.vol.len() {
             self.wet.clock.px[i].cure = 0.0;
         }
+        ts
     }
 
     /// One contact of the rag over the pixels in `bbox` (units): `expo(x,
     /// y)` is how much of the pad passes over that point (1 = one pass
     /// through its middle), the cloth's contact there and how lightly the
     /// pad's rim presses there (0 in its middle, 1 at its edge or trailing
-    /// end; engine 3, `SMEAR`). With `pool` (engine 3), the face lifts
-    /// paint, lays back some of the previous step's surface paint (`SMEAR`),
-    /// then takes this step's lift into the pool. Lifts the open
+    /// end; engine 3, `SMEAR`). With `pool` (engine 3), the face first lays
+    /// back some of the paint at its surface (`SMEAR`), then takes this
+    /// step's lift into it. Lifts the open
     /// paint and loads the rag; returns the volume lifted (mm³).
     ///
     /// The cloth bridges between the local peaks of the surface (the ground,
@@ -390,10 +410,12 @@ impl Canvas {
         let k = LIFT * (0.7 + 0.6 * p) * rag.thirst() * (1.0 + DAMP_LIFT * d);
         let timed = self.wet.clock.px.len() == self.wet.vol.len();
         let mut lifted = 0.0f64;
+        let mut lifted_s = 0.0f64;
         let mut got = Pool::default();
         let pooled = pool.is_some();
         for y in y0..y1 {
             let mut row = 0.0f32;
+            let mut row_s = 0.0f32;
             for x in x0..x1 {
                 let i = y * f.w + x;
                 let v = self.wet.vol[i];
@@ -435,16 +457,22 @@ impl Canvas {
                         }
                         got.vol += take;
                     }
-                    self.rag_take(i, take);
+                    let ts = self.rag_take(i, take);
+                    got.solv += ts * COAT_UM;
+                    row_s += ts;
                     row += take;
                 }
             }
             lifted += row as f64;
+            lifted_s += row_s as f64;
         }
         if let Some(pl) = pool.as_deref_mut() {
-            lifted -= self.rag_smear(pl, &got, (x0, y0, x1, y1), &expo);
+            let (laid, laid_s) = self.rag_smear(pl, &got, (x0, y0, x1, y1), &expo);
+            lifted -= laid;
+            lifted_s -= laid_s;
         }
         let mm3 = lifted * (px_mm as f64).powi(2) * (COAT_UM as f64 / 1000.0);
+        rag.solvent_mm3 += lifted_s * (px_mm as f64).powi(2) * (COAT_UM as f64 / 1000.0);
         let w_mm = (rag.width * self.mm_per_unit) as f64;
         let cap = w_mm * w_mm * (CAP_UM as f64 / 1000.0);
         if pooled {
@@ -462,13 +490,14 @@ impl Canvas {
     /// paint at its surface (`pl`) over the pixels in `px` where its rim
     /// presses lightly (`expo`'s third value), then this step's lift (`got`,
     /// sums by volume) joins what is left after a share `SOAK` has soaked
-    /// in. Returns the paint laid back (coats × pixels).
-    fn rag_smear(&mut self, pl: &mut Pool, got: &Pool, px: (usize, usize, usize, usize), expo: &impl Fn(f32, f32) -> (f32, f32, f32)) -> f64 {
+    /// in. Returns the paint and solvent laid back (coats × pixels).
+    fn rag_smear(&mut self, pl: &mut Pool, got: &Pool, px: (usize, usize, usize, usize), expo: &impl Fn(f32, f32) -> (f32, f32, f32)) -> (f64, f64) {
         let f = self.f;
         let (x0, y0, x1, y1) = px;
         let mut out = 0.0f32;
         if pl.vol > 1e-9 {
             let rate = SMEAR * pl.vol / (((x1 - x0) * (y1 - y0)) as f32).max(1.0);
+            let per_s = pl.solv / pl.vol;
             let mut bounds: Option<(usize, usize, usize, usize)> = None;
             for y in y0..y1 {
                 for x in x0..x1 {
@@ -477,7 +506,7 @@ impl Canvas {
                     if pad <= 0.0 || rim <= 0.0 || a <= 0.0 {
                         continue;
                     }
-                    self.rag_lay(y * f.w + x, a, pl);
+                    self.rag_lay(y * f.w + x, a, pl, a * per_s);
                     out += a;
                     bounds = Some(match bounds {
                         None => (x, y, x + 1, y + 1),
@@ -489,6 +518,8 @@ impl Canvas {
                 self.wet.touch(a0, b0, c0, d0);
             }
         }
+        let laid_s = if pl.vol > 1e-9 { out * pl.solv / pl.vol } else { 0.0 };
+        pl.solv -= laid_s;
         pl.vol -= out;
         // what is left soaks in a little more; this step's lift joins it
         let v0 = pl.vol.max(0.0) * (1.0 - SOAK);
@@ -503,13 +534,14 @@ impl Canvas {
             pl.cure = (pl.cure * v0 + got.cure) / t;
         }
         pl.vol = t;
-        out as f64
+        pl.solv = pl.solv.max(0.0) * (1.0 - SOAK) + got.solv;
+        (out as f64, (laid_s / COAT_UM) as f64)
     }
 
-    /// Engine 3 (`SMEAR`): lay `v` coats of the rag's paint `pl`
-    /// at pixel `i`, mixing by volume as a brush's
+    /// Engine 3 (`SMEAR`): lay `v` coats of the rag's paint `pl` with
+    /// `solv_um` µm of solvent at pixel `i`, mixing by volume as a brush's
     /// paint does (`bristle::Surf::add`).
-    fn rag_lay(&mut self, i: usize, v: f32, pl: &Pool) {
+    fn rag_lay(&mut self, i: usize, v: f32, pl: &Pool, solv_um: f32) {
         let t = self.wet.vol[i] + v;
         let a = v / t;
         let l = &mut self.wet.lat[i];
@@ -526,6 +558,11 @@ impl Canvas {
         }
         self.wet.cover[i] = 1.0;
         self.wet.vol[i] = t;
+        if solv_um > 0.0
+            && let Some(sv) = self.wet.solv.get_mut(i)
+        {
+            *sv += solv_um;
+        }
     }
 
     /// Wipe the rag along `pts` (units) at `pressure` (one value, or values
@@ -890,6 +927,34 @@ mod tests {
         (c, t)
     }
 
+    /// Is any paint in the wet layer (open)?
+    fn any_open(c: &Canvas) -> bool {
+        c.wet.vol.iter().any(|&v| v > 0.0)
+    }
+
+    /// The canvas aged until no paint on it is open, stopping at most two
+    /// minutes after the last pixel sets, as `aged(.., 2.0)` over the whole
+    /// canvas does: hour-long waits while a copy aged one hour more still
+    /// has open paint, then two-minute waits. (`aged` waits two minutes at a
+    /// time from the start: over a thin film's day or two that took more
+    /// than a minute.)
+    fn aged_until_set(mut c: Canvas) -> Canvas {
+        let t0 = c.clock();
+        c.wait(0.0);
+        while c.clock() - t0 < 30.0 * 24.0 * 60.0 {
+            let mut ahead = c.clone();
+            ahead.wait(60.0);
+            if !any_open(&ahead) {
+                break;
+            }
+            c = ahead;
+        }
+        while any_open(&c) && c.clock() - t0 < 30.0 * 24.0 * 60.0 {
+            c.wait(2.0);
+        }
+        c
+    }
+
     /// The rag over the patch `n` times, refolding to a cleaner face
     /// before each pass and within a pass once a face is half loaded.
     fn wipe_n(c: &mut Canvas, wipe: &Mask, n: u32, pressure: f32) -> Rag {
@@ -1098,8 +1163,9 @@ mod tests {
     fn nothing_is_lifted_past_the_gel_point() {
         let c0 = sky(LIVE, 1.0, 0.3);
         let (wipe, read) = patch(&c0);
-        // aged until no paint on the canvas is open (the thickest dabs set last)
-        let (mut c, _) = aged(c0, &Mask::full(read.f), 2.0);
+        // aged until no paint on the canvas is open (the thickest dabs set last),
+        // within two minutes of the last one setting
+        let mut c = aged_until_set(c0);
         assert!(c.wet.vol.iter().all(|&v| v <= 0.0), "paint still open");
         let ground = blank(LIVE);
         let laid: f32 = (0..c.film.len()).filter(|&i| inside(&c, &read, i)).map(|i| c.film[i] - ground.film[i]).sum();

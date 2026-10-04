@@ -1,0 +1,40 @@
+From abb5f754b8bf661aac5e01926af227cdd77043b8 Mon Sep 17 00:00:00 2001
+From: alice <aliceisjustplaying@gmail.com>
+Date: Sun, 4 Oct 2026 10:41:59 +0100
+Subject: [PATCH] look experiment 2 (B, absolute): a thinned stroke leaves a
+ pixel holding at most the larger of its ceiling and what it held before. Even
+ broad pass (spread/mean 0.47 -> 0.13), but thinned passes no longer build up:
+ checks 7, 9, 15 and 16 fail. Reverted in the next commit; kept for the user
+ to see
+
+---
+ crates/paint/src/bristle.rs | 6 ++++--
+ 1 file changed, 4 insertions(+), 2 deletions(-)
+
+diff --git a/crates/paint/src/bristle.rs b/crates/paint/src/bristle.rs
+index 64dd746..7bd5856 100644
+--- a/crates/paint/src/bristle.rs
++++ b/crates/paint/src/bristle.rs
+@@ -1541,7 +1541,9 @@ unsafe fn exchange(
+                     let mut d = dep_per_w * wt;
+                     if capped {
+                         let now = *sf.vol.add(i) + *sf.solv.add(i) / COAT_UM;
+-                        d = d.min((cap - (now - *sf.laid.add(i))).max(0.0));
++                        // (absolute: at most the larger of the ceiling and
++                        // what it held before)
++                        d = d.min((cap.max(*sf.laid.add(i)) - now).max(0.0));
+                     }
+                     if d > 0.0 {
+                         let cv = &mut *sf.cover.add(i);
+@@ -1611,7 +1613,7 @@ unsafe fn exchange(
+                                         *sf.laid.add(j) = *sf.vol.add(j) + *sf.solv.add(j) / COAT_UM;
+                                     }
+                                     let now = *sf.vol.add(j) + *sf.solv.add(j) / COAT_UM;
+-                                    let room = (cap - (now - *sf.laid.add(j))).max(0.0);
++                                    let room = (cap.max(*sf.laid.add(j)) - now).max(0.0);
+                                     let f = if m + ms > room { room / (m + ms) } else { 1.0 };
+                                     (m * f, ms * f)
+                                 } else {
+-- 
+2.54.0 (Apple Git-157)
+

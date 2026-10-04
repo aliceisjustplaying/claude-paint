@@ -1,0 +1,191 @@
+{
+  "stroke-default/stroke-explicit": {
+    "changed": 0,
+    "bounds_px": [
+      2400,
+      480,
+      -1,
+      -1
+    ]
+  },
+  "touch-default/touch-explicit": {
+    "changed": 0,
+    "bounds_px": [
+      2400,
+      480,
+      -1,
+      -1
+    ]
+  },
+  "reload-reload/reload-wipe85": {
+    "changed": 0,
+    "bounds_px": [
+      2400,
+      480,
+      -1,
+      -1
+    ]
+  },
+  "retained-second/retained-wipe": {
+    "changed": 0,
+    "bounds_px": [
+      2400,
+      480,
+      -1,
+      -1
+    ]
+  },
+  "line-default/line-explicit": {
+    "changed": 0,
+    "bounds_px": [
+      2400,
+      480,
+      -1,
+      -1
+    ]
+  },
+  "line-default/line-smooth": {
+    "changed": 0,
+    "bounds_px": [
+      2400,
+      480,
+      -1,
+      -1
+    ]
+  },
+  "sketch-default/sketch-explicit": {
+    "changed": 0,
+    "bounds_px": [
+      2400,
+      480,
+      -1,
+      -1
+    ]
+  },
+  "hatch-default/hatch-explicit": {
+    "changed": 0,
+    "bounds_px": [
+      2400,
+      480,
+      -1,
+      -1
+    ]
+  },
+  "sketch-0/sketch-1": {
+    "changed": 0,
+    "bounds_px": [
+      2400,
+      480,
+      -1,
+      -1
+    ]
+  },
+  "sketch-12/sketch-99": {
+    "changed": 0,
+    "bounds_px": [
+      2400,
+      480,
+      -1,
+      -1
+    ]
+  },
+  "erase--1/erase-0": {
+    "changed": 0,
+    "bounds_px": [
+      2400,
+      480,
+      -1,
+      -1
+    ]
+  },
+  "erase-1/erase-2": {
+    "changed": 0,
+    "bounds_px": [
+      2400,
+      480,
+      -1,
+      -1
+    ]
+  },
+  "erase-mask-4/erase-mask-20": {
+    "changed": 0,
+    "bounds_px": [
+      2400,
+      480,
+      -1,
+      -1
+    ]
+  },
+  "rag-pressure--1/rag-pressure-0": {
+    "changed": 0,
+    "bounds_px": [
+      2400,
+      480,
+      -1,
+      -1
+    ]
+  },
+  "rag-pressure-1/rag-pressure-2": {
+    "changed": 0,
+    "bounds_px": [
+      2400,
+      480,
+      -1,
+      -1
+    ]
+  },
+  "rag-blot/rag-one": {
+    "changed": 0,
+    "bounds_px": [
+      2400,
+      480,
+      -1,
+      -1
+    ]
+  },
+  "rag-one/rag-short": {
+    "changed": 0,
+    "bounds_px": [
+      2400,
+      480,
+      -1,
+      -1
+    ]
+  },
+  "clip-stroke-0.png": {
+    "changed": 155671,
+    "bounds_px": [
+      452,
+      50,
+      1080,
+      332
+    ]
+  },
+  "clip-stroke-1.png": {
+    "changed": 23040,
+    "bounds_px": [
+      720,
+      96,
+      839,
+      287
+    ]
+  },
+  "clip-touch-0.png": {
+    "changed": 12701,
+    "bounds_px": [
+      660,
+      153,
+      876,
+      227
+    ]
+  },
+  "clip-touch-1.png": {
+    "changed": 7293,
+    "bounds_px": [
+      720,
+      153,
+      839,
+      227
+    ]
+  }
+}

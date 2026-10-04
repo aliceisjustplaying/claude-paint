@@ -1,0 +1,134 @@
+[
+  {
+    "label": "open",
+    "status": 0,
+    "out": "easel \"painting\" open: 0 chunks · 2400px · no canvas yet\n",
+    "err": ""
+  },
+  {
+    "label": "do",
+    "status": 0,
+    "out": "ok · chunk 1 (0.14 s to compute)\n",
+    "err": ""
+  },
+  {
+    "label": "do",
+    "status": 0,
+    "out": "ok · chunk 2 (0.09 s to compute)\n",
+    "err": ""
+  },
+  {
+    "label": "save",
+    "status": 0,
+    "out": "<fixture>/fresh/out/easel/painting/painting.png\n",
+    "err": ""
+  },
+  {
+    "label": "close",
+    "status": 0,
+    "out": "the live canvas is in <fixture>/fresh/out/easel/painting/live.png\nclosed; the session is in <fixture>/fresh/paintings/lua/painting.lua\n",
+    "err": ""
+  },
+  {
+    "label": "fresh check",
+    "status": 0,
+    "out": "log: <fixture>/fresh/paintings/lua/painting.lua (2 chunks); the studio's committed record equals its log\nresuming chunk 1/2\nresumed chunk 1/2 0.14s\nresuming chunk 2/2\nresumed chunk 2/2 0.28s\nresumed 2 chunks from <fixture>/fresh-check/paintings/lua/painting.lua\neasel \"painting\" open: 2 chunks · 2400px · size=100, aspect=5, linen={12, 12}, seed=1\nthe replay equals the live canvas saved at close\nthe replay's canvas state equals the save written at close\nthe replay's PNG equals the painter's last save\ntimes: reopen 1 s, save and close 0 s\ncheck: ok: 2 chunks replay to the live canvas; the replay equals the live canvas saved at close; the replay's canvas state equals the save written at close; the replay's PNG equals the painter's last save; the studio's committed record equals its log\n",
+    "err": ""
+  },
+  {
+    "label": "clip",
+    "status": 0,
+    "out": "",
+    "err": "frames: 4 written (125 hand-time intervals of 0.2s crossed, 2 chunks) over 0.4 min of hand time → <fixture>/clip.mp4.frames\nwrote <fixture>/clip.mp4.frames/final-full.png (2 chunks, painted in 0.3s, total 0.4s)\nreplay took 1 s\n2 moments, 0.4 min of hand time, pace 0.6: about 4.0 s of clip\nstream|width=160|height=32|nb_frames=96\nformat|duration=4.000000|size=4399\nsheet: <fixture>/sheet.jpg\n"
+  },
+  {
+    "label": "reuse",
+    "status": 0,
+    "out": "",
+    "err": "2 moments, 0.4 min of hand time, pace 0.6: about 4.0 s of clip\nstream|width=160|height=32|nb_frames=96\nformat|duration=4.000000|size=4399\n"
+  },
+  {
+    "label": "ffprobe",
+    "status": 0,
+    "out": "{\n    \"programs\": [\n\n    ],\n    \"stream_groups\": [\n\n    ],\n    \"streams\": [\n        {\n            \"codec_name\": \"h264\",\n            \"width\": 160,\n            \"height\": 32,\n            \"pix_fmt\": \"yuv420p\",\n            \"r_frame_rate\": \"24/1\",\n            \"nb_frames\": \"96\"\n        }\n    ],\n    \"format\": {\n        \"duration\": \"4.000000\"\n    }\n}\n",
+    "err": ""
+  },
+  {
+    "label": "finish fallback",
+    "status": 0,
+    "out": "finished from the save: <fixture>/fallback.png (log: <fixture>/fallback.lua; save compressed)\n",
+    "err": "wrote <fixture>/fallback.png (restored 2 chunks in 0.0s, finished in 0.2s, total 0.3s)\n"
+  },
+  {
+    "label": "collision",
+    "status": 1,
+    "out": "",
+    "err": "finish_painting: <fixture>/fresh/paintings/lua/painting.lua is the log itself; write the PNG under another name or folder\n"
+  },
+  {
+    "label": "failure companion",
+    "status": 1,
+    "out": "",
+    "err": "  chunk   1     0.13s\n  chunk   2     0.09s\nchunk 3 failed:\nruntime error: [string \"chunk 3\"]:1: deliberate replay error\n"
+  },
+  {
+    "label": "mismatch",
+    "status": 1,
+    "out": "",
+    "err": "<fixture>/fresh/out/easel/painting/live.ckpt: No such file or directory (os error 2)\n"
+  },
+  {
+    "label": "painter open",
+    "status": 0,
+    "out": "easel \"painting\" open: 0 chunks · 2400px · no canvas yet\n",
+    "err": ""
+  },
+  {
+    "label": "painter do canvas{size=100,aspect=5,linen=12,ground={{pile={{\"lead white\",1}},um=40,apply=\"knife\"}}}",
+    "status": 0,
+    "out": "ok · chunk 1 (0.12 s to compute)\n",
+    "err": ""
+  },
+  {
+    "label": "painter run",
+    "status": 1,
+    "out": "",
+    "err": "easel: no command \"run\"\n\neasel: a live painting session (see notes/easel_guide.md)\n\n  easel open          start or reattach; replays paintings/lua/painting.lua if it exists\n  easel do '<lua>'  |  easel do -f chunk.lua  |  easel do - (stdin)     [--look] also looks afterwards\n  easel look [--crop x0,y0,x1,y1] [--mode value,squint,mirror] [--grid [step]] [--size 1000]\n  easel look --palette   the piles the globals hold: thick, thin and very thin over the ground, thin over a card\n  easel log           the painting so far (= paintings/lua/painting.lua)\n  easel status        chunks, width, canvas\n  easel globals       the painting's globals, one a line: chunk that last set it, name, what it holds\n  easel save [path]   the canvas as a PNG (default out/easel/painting/painting.png)\n  easel frames on|off save a look after every chunk\n  easel close         end the session (the log stays)\n  easel note '<text>' | easel note - (stdin)    append a dated entry to notes/journal.md\n  easel tubes [--markdown]   the tubes in the box (--markdown: as a table)\n"
+  },
+  {
+    "label": "painter check",
+    "status": 1,
+    "out": "",
+    "err": "easel: no command \"check\"\n\neasel: a live painting session (see notes/easel_guide.md)\n\n  easel open          start or reattach; replays paintings/lua/painting.lua if it exists\n  easel do '<lua>'  |  easel do -f chunk.lua  |  easel do - (stdin)     [--look] also looks afterwards\n  easel look [--crop x0,y0,x1,y1] [--mode value,squint,mirror] [--grid [step]] [--size 1000]\n  easel look --palette   the piles the globals hold: thick, thin and very thin over the ground, thin over a card\n  easel log           the painting so far (= paintings/lua/painting.lua)\n  easel status        chunks, width, canvas\n  easel globals       the painting's globals, one a line: chunk that last set it, name, what it holds\n  easel save [path]   the canvas as a PNG (default out/easel/painting/painting.png)\n  easel frames on|off save a look after every chunk\n  easel close         end the session (the log stays)\n  easel note '<text>' | easel note - (stdin)    append a dated entry to notes/journal.md\n  easel tubes [--markdown]   the tubes in the box (--markdown: as a table)\n"
+  },
+  {
+    "label": "painter finish",
+    "status": 1,
+    "out": "",
+    "err": "easel: no command \"finish\"\n\neasel: a live painting session (see notes/easel_guide.md)\n\n  easel open          start or reattach; replays paintings/lua/painting.lua if it exists\n  easel do '<lua>'  |  easel do -f chunk.lua  |  easel do - (stdin)     [--look] also looks afterwards\n  easel look [--crop x0,y0,x1,y1] [--mode value,squint,mirror] [--grid [step]] [--size 1000]\n  easel look --palette   the piles the globals hold: thick, thin and very thin over the ground, thin over a card\n  easel log           the painting so far (= paintings/lua/painting.lua)\n  easel status        chunks, width, canvas\n  easel globals       the painting's globals, one a line: chunk that last set it, name, what it holds\n  easel save [path]   the canvas as a PNG (default out/easel/painting/painting.png)\n  easel frames on|off save a look after every chunk\n  easel close         end the session (the log stays)\n  easel note '<text>' | easel note - (stdin)    append a dated entry to notes/journal.md\n  easel tubes [--markdown]   the tubes in the box (--markdown: as a table)\n"
+  },
+  {
+    "label": "painter do print(type(varnish),type(cracks),type(relief))",
+    "status": 0,
+    "out": "nil\tnil\tnil\nok · chunk 2 (0.00 s to compute)\n",
+    "err": ""
+  },
+  {
+    "label": "painter close",
+    "status": 0,
+    "out": "the live canvas is in <fixture>/export/out/easel/painting/live.png\nclosed; the session is in <fixture>/export/paintings/lua/painting.lua\n",
+    "err": ""
+  },
+  {
+    "label": "nonempty export",
+    "status": 1,
+    "out": "",
+    "err": "<fixture>/export exists and isn't empty\n"
+  },
+  {
+    "label": "nonempty check",
+    "status": 2,
+    "out": "",
+    "err": "<fixture>/fresh-check exists and isn't empty\n"
+  }
+]

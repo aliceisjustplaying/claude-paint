@@ -32,8 +32,14 @@ mod look;
 mod save;
 mod palette_look;
 mod session;
+#[cfg(feature = "replay")]
+mod state_dump;
 mod time;
 mod world;
+#[cfg(all(test, feature = "replay"))]
+mod thinner_measure;
+#[cfg(all(test, feature = "replay"))]
+mod thinner_tests;
 
 use paint::Canvas;
 use paint::color::linear_to_srgb;
@@ -1050,6 +1056,7 @@ impl Server {
                     let n = self.s.log.len();
                     let mut out = note;
                     out.push_str(&ran.out);
+                    out.push_str(&format!("{}\n", time::time_of_day(self.s.st.borrow().clock)));
                     out.push_str(&format!("ok · chunk {n} ({:.2} s to compute)\n", ran.secs));
                     // the chunk is in the log: a look that fails now is reported with it, not
                     // as a failed `do` (which would be sent again)
@@ -1071,7 +1078,7 @@ impl Server {
                     "{e}\n(the chunk failed and is not in the log; status reports the rebuild's progress and other commands must retry after it)"
                 )),
                 Err(e) if self.s.stale => Err(format!(
-                    "{e}\n(the chunk failed and changed nothing. It had changed tables from earlier chunks, and though what they hold is back, how they are laid out (which decides the order `pairs` walks them in) can't be put back, so the easel now rebuilds the painting from its log, as a reopen does; status reports progress and other commands must retry after that)"
+                    "{e}\n(the chunk failed and changed nothing. It had changed tables from earlier chunks, and though what they hold is back, how they are laid out (which decides the order `pairs` walks them in, from engine 3 only the length `#` finds in a table with holes) can't be put back, so the easel now rebuilds the painting from its log, as a reopen does; status reports progress and other commands must retry after that)"
                 )),
                 Err(e) => Err(format!("{e}\n(the chunk failed and changed nothing)")),
             },
@@ -1172,7 +1179,7 @@ fn run(args: &[String]) -> Result<(), String> {
     let mut i = 1;
     while i < args.len() {
         match args[i].as_str() {
-            "--out" | "--dump-surface" | "--frames-every" | "--frames-dir" | "--frame-width" | "--state-digest" | "--width" | "--light" if i + 1 < args.len() => i += 2,
+            "--out" | "--dump-surface" | "--dump-state" | "--frames-every" | "--frames-dir" | "--frame-width" | "--state-digest" | "--width" | "--light" if i + 1 < args.len() => i += 2,
             "--look" | "--gallery" => i += 1,
             o => return Err(format!("run: unknown argument {o:?} ({RUN_USAGE})")),
         }
@@ -1218,11 +1225,18 @@ fn run(args: &[String]) -> Result<(), String> {
         if let Some(f) = digests.as_mut() {
             f.write_all(state_digest_line(&s, i + 1, r.secs).as_bytes()).map_err(|e| format!("--state-digest: {e}"))?;
         }
+        // --dump-state <dir>: every state value after the chunk (state_dump.rs; reads only)
+        if let Some(d) = flag(args, "--dump-state") {
+            state_dump::write_chunk(&s, i + 1, Path::new(&d))?;
+        }
         if frames && let Some(c) = s.canvas() {
             frames::chunk_end(&c, i + 1);
         }
     }
     let paint_secs = t0.elapsed().as_secs_f64();
+    if let Some(d) = flag(args, "--dump-state") {
+        state_dump::write_save(&s, &text, Path::new(&d))?;
+    }
     let c = s.canvas().ok_or("the program never made a canvas")?.clone();
     if frames {
         frames::finish(&c);
@@ -1368,9 +1382,7 @@ fn state_digest_line(s: &Session, n: usize, secs: f64) -> String {
         }
         None => 0,
     };
-    // (a painting of an engine before 4: the brushes as they were written then)
-    let old = st.tubes.engine < 4;
-    let brushes: Vec<String> = st.live_brushes().iter().map(|b| if old { b.borrow().debug_before_engine_4() } else { format!("{:?}", b.borrow()) }).collect();
+    let brushes: Vec<String> = st.live_brushes().iter().map(|b| format!("{:?}", b.borrow())).collect();
     // the rags in the hand after them (none: the same digest as before rags)
     let rags: Vec<String> = st.live_rags().iter().map(|r| format!("{:?}", r.borrow())).collect();
     let brushes_h = fnv1a(brushes.iter().chain(&rags).cloned().collect::<Vec<_>>().join("\n").as_bytes());
@@ -1473,12 +1485,30 @@ mod tests {
     }
 
     /// The palette's thick swatch is what `work` lays thick with that pile: within 2/255 of
-    /// the wet paint's mean in the middle of a heavily covered patch, for a few piles.
+    /// the wet paint's mean in the middle of a heavily covered patch, for a few piles (one
+    /// test each, so they run side by side: together they took 11 s).
     #[test]
     #[cfg(tube_box)]
     fn the_thick_swatch_matches_paint_laid_thick() {
+        thick_swatch_matches(r#"{"lead white", 6}, {"smalt", 1}, medium=0.2"#);
+    }
+
+    #[test]
+    #[cfg(tube_box)]
+    fn the_thick_swatch_matches_paint_laid_thick_dark() {
+        thick_swatch_matches(r#"{"raw umber", 2}, {"bone black", 1}"#);
+    }
+
+    #[test]
+    #[cfg(tube_box)]
+    fn the_thick_swatch_matches_paint_laid_thick_earths() {
+        thick_swatch_matches(r#"{"yellow ochre", 3}, {"red earth", 1}, {"lead white", 2}"#);
+    }
+
+    #[cfg(tube_box)]
+    fn thick_swatch_matches(recipe: &str) {
         let srgb = |c: paint::Rgb| c.map(|v| linear_to_srgb(v) * 255.0);
-        for recipe in [r#"{"lead white", 6}, {"smalt", 1}, medium=0.2"#, r#"{"raw umber", 2}, {"bone black", 1}"#, r#"{"yellow ochre", 3}, {"red earth", 1}, {"lead white", 2}"#] {
+        {
             let mut s = Session::new(320).unwrap();
             s.run(PALETTE_CANVAS).unwrap();
             s.run(&format!(r#"p = pile{{{recipe}}}; work(rect(200, 200, 800, 600), {{hand="body", pile=p, coverage=6}})"#)).unwrap();

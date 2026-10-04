@@ -1,0 +1,1 @@
+Diagnostic paint matches previous quarter-rate output pixel for pixel: True

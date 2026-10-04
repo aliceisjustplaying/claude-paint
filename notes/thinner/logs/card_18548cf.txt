@@ -1,0 +1,52 @@
+lockrun: job 205841db started (process group 88176, timeout 300 s, log $TMPDIR/cardr.lockrun.log)
+== check13b: cargo test --release -p paint --test thinner_pigments -- --exact (1 tests)
+    Finished `release` profile [optimized] target(s) in 0.02s
+     Running tests/thinner_pigments.rs (target/release/deps/thinner_pigments-a25488fe715b8154)
+
+running 1 test
+test c13_burnt_sienna_shows_the_card_at_least_as_well_as_raw_sienna ... FAILED
+
+failures:
+
+---- c13_burnt_sienna_shows_the_card_at_least_as_well_as_raw_sienna stdout ----
+raw sienna: hiding 0.4 (contrast ratio of one coat), scattering 0.29607835 per coat, masstone luminance 0.17352512
+burnt sienna: hiding 0.45 (contrast ratio of one coat), scattering 0.19887283 per coat, masstone luminance 0.07967474
+card contrast showing: raw sienna 17.91%, burnt sienna 9.85% (films differ by at most 0 µm; raw's mean 10.071717 µm)
+
+thread 'c13_burnt_sienna_shows_the_card_at_least_as_well_as_raw_sienna' (3374140) panicked at crates/paint/tests/thinner_pigments.rs:119:5:
+burnt sienna shows 9.85% of the card, raw sienna 17.91%: Field/Salter (§155) has burnt the more transparent
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    c13_burnt_sienna_shows_the_card_at_least_as_well_as_raw_sienna
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 2 filtered out; finished in 0.93s
+
+error: test failed, to rerun pass `-p paint --test thinner_pigments`
+== check13b: cargo exited 101 after 1 s
+== card: cargo test --release -p easel --bin easel -- --exact --ignored --show-output (1 tests)
+    Finished `release` profile [optimized] target(s) in 0.02s
+     Running unittests src/main.rs (target/release/deps/easel-00eda35bf27fd053)
+
+running 1 test
+test thinner_tests::c01_the_card_raw_sienna_thinned_half_keeps_half_the_contrast_at_2400px ... ok
+
+successes:
+
+---- thinner_tests::c01_the_card_raw_sienna_thinned_half_keeps_half_the_contrast_at_2400px stdout ----
+Cell { load: 0.3, thinner: 0.5, kept: 0.8897608, contrast_before: 0.8064066, solvent_after_pass: 0.006483697261216115, solvent_at_measure: 0.0, canvas_solvent_after_pass: 23.80915102485737, canvas_solvent_at_measure: 1.996134646897743e-5, tau_after_pass: 3.485170440673828, tau_at_measure: 3.485161437988281, waited: 36.0, paint: 1856742.1377086106 }
+Cell { load: 0.6, thinner: 0.5, kept: 0.8631497, contrast_before: 0.8063278, solvent_after_pass: 3406.98271118566, solvent_at_measure: 0.0028631038919879614, canvas_solvent_after_pass: 23.80915102485737, canvas_solvent_at_measure: 1.996134646897743e-5, tau_after_pass: 3.485170440673828, tau_at_measure: 3.485161437988281, waited: 36.0, paint: 2361879.667964058 }
+
+
+successes:
+    thinner_tests::c01_the_card_raw_sienna_thinned_half_keeps_half_the_contrast_at_2400px
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 82 filtered out; finished in 24.57s
+
+== card: cargo exited 0 after 24 s
+
+thinner acceptance --card: 1 of 1 required tests passed (logs: $TMPDIR//thinner-acceptance.DkR7Uz)
+  EXPECTED FAIL (pre-existing; user decision, ACCEPTANCE.md check 13): c13_burnt_sienna_shows_the_card_at_least_as_well_as_raw_sienna
+thinner acceptance --card: NOT ALL GREEN: every other required test passed; only check 13 (b)'s pre-existing failure remains
+lockrun: finished: exit 3 in 25.8 s; log $TMPDIR/cardr.lockrun.log

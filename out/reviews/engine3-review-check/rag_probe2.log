@@ -1,0 +1,19 @@
+    Finished `release` profile [optimized] target(s) in 24.78s
+     Running unittests src/lib.rs (/var/folders/6k/24182wv136749r3p852rft740000gn/T//e3review/target/release/deps/paint-8efe25c759618314)
+
+running 1 test
+[F1] uniform 69.29 um film, one wipe, p .8, step .5 mm: center means (um) and where the film left comes from
+  LIFT damp | picked up  laid back  left | laid back as share of left | corr(left, laid back)  corr(left, contact) | left by eighths of the wipe, start -> end (um)
+     1  0.5 |     66.86       6.19   8.62 |                        72% |                -0.212               -0.285 | 2.3 3.1 4.2 6.3 8.2 10.1 14.5 20.2
+     4  0.5 |     74.20       6.40   1.50 |                       428% |                 0.084               -0.116 | 1.0 1.0 1.0 1.0 1.0 1.0 1.3 4.7
+     1    0 |     24.89       2.27  46.67 |                         5% |                -0.144               -0.253 | 44.5 46.2 46.4 47.1 47.4 46.9 47.6 47.3
+     4    0 |     55.80       5.25  18.75 |                        28% |                -0.134               -0.235 | 12.2 14.5 15.5 17.6 19.4 20.4 23.7 26.7
+[F3] accumulated contact averaged along the travel direction, per pixel row across the pad's middle (144 rows): lowest lane 0.549, highest 0.794
+[F2] mesh overlap on paths with a reversal and with corners (brushed film, LIFT 4, damp .5)
+  there and back: triangles flipped 846 of 456192 (0.185%); raster cells claimed by touching triangles >1.5 mesh cells apart: 0; adjacent touching raster cells with material coords >3 mesh cells apart: 0 of 1953119
+  U with two right angles: triangles flipped 857 of 473688 (0.181%); raster cells claimed by touching triangles >1.5 mesh cells apart: 0; adjacent touching raster cells with material coords >3 mesh cells apart: 0 of 2023519
+  zigzag, 6 sharp turns: triangles flipped 816 of 348624 (0.234%); raster cells claimed by touching triangles >1.5 mesh cells apart: 0; adjacent touching raster cells with material coords >3 mesh cells apart: 0 of 1522718
+test rag::tests::review_probe2 ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 186 filtered out; finished in 26.92s
+

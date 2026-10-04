@@ -1,0 +1,163 @@
+# Glossary
+
+**Chunk.** One submitted Lua program. A successful chunk is one entry in the painting log; it can perform many painting operations.
+
+**Committed.** A chunk has finished successfully and its log update has been saved. A computed result whose log could not be saved is not a normal successful command.
+
+**Discarded.** A failed chunk's changes are not kept as part of the painting. A rebuild can be needed before the session is ready again.
+
+**Running.** The session is executing an accepted command. This is separate from the simulated painting clock.
+
+**Done.** The requested operation has returned its result. It does not mean the painting is artistically finished.
+
+**Saved.** Qualified by the object: the log records successful chunks; a PNG records an image; a checkpoint records state for finishing. These are not interchangeable.
+
+**Dirty.** Not a UI state in the easel. The product has no unsaved-document badge; persistence failure instead causes an integrity error.
+
+**Selected.** The session or painter targeted by subsequent commands or viewer actions, not a selected region on the painted canvas.
+
+**Explicit abort.** The caller interrupts its request. Stopping a client does not by itself prove the background server stopped an already running chunk.
+
+**Another action.** A second request or browser action starts while the first is pending.
+
+**Environment failure.** A process, connection or storage operation fails independently of the painting's Lua logic.
+
+**Target changed externally.** A log, session file or displayed stream changes outside the current action.
+
+**Input channel changed.** The same operation is requested through a different input form, keyboard route or tool surface.
+
+**Canvas.** The painting surface, including dry ground and paint films. Logical coordinates differ from output pixels.
+
+**Ground.** The prepared dry layers over linen present before painting begins.
+
+**Tube box.** The available named pigments for a painting. Its identity travels in the painting log.
+
+**Pile.** A mixture of named tube paint and optional oil medium, available to load a brush.
+
+**Medium.** Added oil in a pile, affecting transparency, flow and drying.
+
+**Mask.** A coverage map used to plan or restrict painting. It is not itself visible paint.
+
+**Passage.** An area painted with planned brush strokes or touches.
+
+**Hand.** A preset approach to laying strokes, such as body, broad or glaze.
+
+**Clipping.** Restricting a mark to a mask, distinct from merely planning a stroke inside a mask.
+
+**Look.** An image of the current painting or palette, without changing the painting.
+
+**Session.** The background easel state or, when explicitly called a pi session, the painter's conversation record.
+
+**Sitting.** One painter conversation within the viewer's combined history for a studio folder.
+
+**Replay.** Either executing a painting log again or playing recorded looks in the viewer. The document names which meaning applies.
+
+**Hand time.** Simulated time spent on painting operations. Wall-clock computation time is separate.
+
+**Open paint.** Paint still workable enough to blend or lift; setting, tacky and dry describe later stages.
+
+**Checkpoint.** Stored canvas state used for finishing, not a replacement for the replayable Lua log.
+
+**View.** In looking, a rendered image configuration; in space, a traced geometric reference for visibility and shadows.
+
+**Harness.** The pi extensions that present painting tools and manage the painter's context.
+
+**Compaction.** Replacing older conversation context with a summary for later model requests.
+
+**Held brush.** A brush object with its own tool shape and retained paint. Reusing it continues that paint history; constructing another brush creates a separate holder.
+
+**Fullness.** Paint remaining in a brush relative to a nominal full load. Additive loading can make this value exceed one.
+
+**Stroke.** A brush mark following a submitted path of at least two points, with pressure and orientation controls.
+
+**Touch.** A pressed brush tip at a submitted position, optionally dragging or twisting during contact.
+
+**Ramps.** Fractions of a stroke used for pressing down and lifting off.
+
+**Swell.** Submitted pressure factors distributed along a stroke.
+
+**Orientation.** The brush's wide-axis direction: across travel, along travel or a fixed angle.
+
+**Pickup.** Existing canvas paint entering a brush and potentially affecting later marks.
+
+**Event.** In the studio viewer, one recorded item in a painter history, such as a thought, tool call, result-associated image or sitting boundary. An event is not necessarily a committed painting chunk.
+
+**Whole look.** A recorded untransformed, uncropped canvas look used as the studio viewer's main painting image and ordinary replay step. Palette and reference pictures are distinct.
+
+**Rewound.** The studio viewer is showing an earlier selected event without automatically advancing when new events arrive.
+
+**Static export.** A copy of the studio page, painter histories and pictures served as files. It can refresh when newer exported files arrive but does not call the live easel.
+
+**Studio.** A painter's working directory, containing its brief, notes, easel executable and painting outputs. It is distinct from the studio browser that displays recorded activity.
+
+**Provider.** The service answering the painter's model requests. Provider availability and usage limits are separate from local easel availability.
+
+**Context.** The messages and images included in a model request. Stored conversation history can contain images or errors omitted from current context.
+
+**Pacing.** Delaying model requests according to recent input-token usage. It changes real elapsed time, not painting time.
+
+**Image pruning.** Replacing older image blocks in outgoing model context with text while keeping the stored session images.
+
+**Outline.** A constructed drawn boundary with paths, corners and planned brush strokes. It can produce masks or be painted with a held brush.
+
+**Character.** An outline's preset irregularity: firm, searching, broken or soft.
+
+**Spine.** The main sequence of points and widths used to construct a body silhouette; limbs add connected forms.
+
+**Field.** Position-dependent numeric values across the canvas. A distance field can contain negative values and is not ordinary mask coverage.
+
+**Noise.** A repeatable spatial pattern of numeric variation, used to vary geometry or painting parameters.
+
+**Worley pattern.** A seeded cellular pattern whose queries report distances to cell points and a stable value for each cell.
+
+**Lobe.** A rounded variation along an outline whose width is controlled in canvas units.
+
+**Tangent and normal.** Directions along a boundary and perpendicular outward from it, returned when sampling an outline.
+
+**Drawing.** Graphite or black-chalk marks deposited on the canvas, distinct from paint loaded from a pile.
+
+**Grade.** A graphite pencil's hardness or softness designation, from 9H through HB to 9B, with F between H and HB.
+
+**Wear.** Distance drawn by a pencil or chalk point since sharpening, measured in millimeters and used to widen subsequent marks.
+
+**Fixative.** An operation binding the currently present drawing and guide coverage so erasing cannot reduce them below that protected amount.
+
+**Drawing guide.** A mask of continuous drawn geometry, without the gaps caused by canvas grain. It can remain beneath covering paint.
+
+**Hatching.** Short, roughly parallel drawing marks laid within a supplied mask.
+
+**Tremor.** Small hand sway added to an unruled drawn line, controlled in canvas units.
+
+**Rag.** A held cloth pad that lifts open paint by wiping or blotting. Its face load, soaked paint, dampness and fold persist while the rag is held.
+
+**Face load.** How full the currently exposed part of a rag is, from zero clean to one full. A fuller face lifts less paint.
+
+**Soaked paint.** Paint accumulated through the whole rag. It limits how clean a newly refolded face can be.
+
+**Dampness.** Spirits remaining in a rag's exposed face, from zero dry to one fully dipped. It decreases with painting time and becomes zero after refolding.
+
+**Refold.** Turning another part of the same rag outward. It exposes a dry face whose load is limited by the paint already soaked through the cloth.
+
+**Blot.** Pressing a rag at one point and lifting it off, leaving an irregular cloth contact rather than dragging a wipe.
+
+**Gel point.** The drying boundary after which paint is no longer in the workable wet film. A rag cannot lift paint beyond this boundary.
+
+**Solid.** Reference geometry used to calculate a surface for lighting and masks. Bodies and sampled terrain are solids; neither deposits paint by itself.
+
+**Body.** A solid that can be shaped, combined and placed in a world. Its world body number can differ from its visible form-part number.
+
+**Form.** A calculated reference surface assembled from solids, with lighting queries, masks and stroke-direction fields.
+
+**Terrain.** A sampled height reference over a canvas rectangle, distinct from a world's meter-based ground surface and from the canvas's painted ground.
+
+**World.** A retained perspective reference containing a camera, supporting surface, sun and placed geometry. It calculates reference answers rather than painting a scene.
+
+**Spot.** A position on a world's supporting surface with the conversion from meters to canvas units at its depth.
+
+**Proxy.** A body omitted from visible form geometry but retained for world shadows and reflections.
+
+**Depth layer.** A named mask registered at a distance in a world to guide visibility and foreground protection. It is not an editable paint layer.
+
+**Part.** One numbered component of a form. World bodies map to form parts only when they are visible.
+
+**Direction field.** A reference that supplies a stroke angle at each canvas position, such as along or across a modeled surface.

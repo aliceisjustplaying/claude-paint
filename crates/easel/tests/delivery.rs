@@ -28,8 +28,10 @@ impl Drop for Closing {
 }
 
 const CANVAS: &str = r#"canvas{size=300, aspect=4, seed=5, linen=15, ground={{pile={{"lead white", 5}, {"yellow ochre", 1}}, um=80, apply="knife"}}}"#;
-// freshly laid, still open: drying it would change how it looks
-const WET: &str = r#"work(rect(0, 0, 1000, 250), {hand="broad", pile=pile{{"lead white", 2}, {"bone black", 1}, {"cobalt blue", 1}, medium=0.4}, coverage=4})"#;
+// freshly laid, still open: drying it would change how it looks. It covers the window the
+// look below reads (100..500 x 40..240) and a margin; over the whole width at coverage 4 it
+// took 7 s a replay at the live width, and the test replays it twice.
+const WET: &str = r#"work(rect(40, 0, 520, 250), {hand="broad", pile=pile{{"lead white", 2}, {"bone black", 1}, {"cobalt blue", 1}, medium=0.4}, coverage=2})"#;
 
 fn rgb(p: &Path) -> image::RgbImage {
     image::open(p).unwrap_or_else(|e| panic!("{}: {e}", p.display())).to_rgb8()

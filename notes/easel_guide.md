@@ -158,7 +158,7 @@ change:
 | `hatch` | round 2.6 | 5–12 units, nearly straight, side by side, clumped |
 | `glaze` | soft filbert 26 | 120–300 units, light pressure |
 | `scumble` | filbert 9 | 10–20 units, worked back and forth |
-| `blend` | badger 40 | a clean blender, crossing passes top to bottom, inside the mask |
+| `blend` | badger 40 | a clean blender, crossing passes top to bottom, inside the mask. It is wiped clean as it goes, so it lifts paint as well as moving it: one pass takes up about 15% of a thin wet film, three passes about 40% |
 
 | option | meaning |
 |---|---|
@@ -321,7 +321,8 @@ crumpled patch. Nothing it lifts goes back on the canvas.
 
 A rag dipped in spirits (`r:dip`, 0..1) lifts wet paint more readily.
 The part in use stays damp (`r.damp`) until a refold turns out a dry
-part.
+part or the spirits evaporate: half of it goes every 3 minutes of
+painting time, so dip again before wiping after a pause.
 
 What it lifts soaks into the cloth. `r.load` is how loaded the part in use
 is (0 clean, 1 full): the more loaded, the less it lifts. `r:refold()`
@@ -434,8 +435,8 @@ its oil. It is open for the first 30% of its time to touch-dry, setting
 until 60%, then tacky until it is touch-dry. A stroke of lead white or raw
 umber from a loaded broad brush is open for 12 to 14 hours, tacky after
 about a day and touch-dry in under two days. Cobalt blue, Prussian blue
-and raw sienna are about as fast. Ochres, earths, cadmiums, ultramarine
-and bone black are touch-dry in 3½ to 5 days, madder in about 11.
+and burnt sienna are about as fast. Raw sienna, ochres, earths, cadmiums,
+ultramarine and bone black are touch-dry in 3½ to 5 days, madder in about 11.
 Thinner paint dries sooner and thicker paint later: twice a stroke's
 thickness takes 1.6 times as long. Thick, oily paint of slow pigments can stay open for weeks. Wet paint
 under a new stroke comes up into it; paint laid over dry paint sits on
@@ -485,7 +486,11 @@ other option, and nothing on the canvas or the clock changes.
 - **Lua 5.5.** Numbers are integers or floats (`7 // 2` is 3, `7 / 2` is
   3.5). Bitwise operators are built in; there is no `unpack` (use
   `table.unpack`). Loop variables are read-only. Don't write `global`
-  declarations (one switches its chunk to strict mode).
+  declarations (one switches its chunk to strict mode). There is no
+  `math.atan2`: `math.atan(y, x)` takes two arguments. `%d` in
+  `string.format` needs an integer (`7.5` is an error): use `%.0f` or
+  `math.floor(x)`. Lists and tables are written with braces:
+  `{1, 2}`, `{x = 1}`, never `[1, 2]` or `{x: 1}`.
 - **`pairs` walks a table in the same order in every session and replay.**
   Every table walks in a fixed order: booleans, numbers, strings (each
   ascending), then other keys in the order they were made. (Paintings

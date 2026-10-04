@@ -147,7 +147,8 @@ impl Session {
         let dbg: Table = lua.globals().get("debug")?;
         lua.globals().raw_set("debug", Value::Nil)?;
         let canon = canonical_tables(tubes.engine);
-        let (snap_f, restore_f): (Function, Function) = lua.load(include_str!("heap.lua")).set_name("heap.lua").call((dbg.clone(), canon))?;
+        let probe = if canon { layout_probe(&lua)? } else { None };
+        let (snap_f, restore_f): (Function, Function) = lua.load(include_str!("heap.lua")).set_name("heap.lua").call((dbg.clone(), canon, probe))?;
         let id = serials.id_fn(&lua)?;
         let getmt: Function = dbg.get("getmetatable")?;
         let getinfo: Function = dbg.get("getinfo")?;
@@ -653,6 +654,66 @@ fn fixed_lua(libs: StdLib) -> mlua::Result<(Lua, *mut mlua::ffi::lua_State, Box<
         lua.load_std_libs(libs)?;
         Ok((lua, state, serials))
     }
+}
+
+/// The head of Lua 5.5's `Table` (lobject.h): what `#t` reads besides the
+/// entries is the array part's size and the length hint stored at `array`
+/// (ltable.h `lenhint`, ltable.c `luaH_getn`).
+#[repr(C)]
+struct TableHead {
+    next: *const c_void,
+    tt: u8,
+    marked: u8,
+    flags: u8,
+    lsizenode: u8,
+    asize: u32,
+    array: *const u32,
+}
+
+/// A table's array size and length hint, read without changing them (`#t`
+/// would move the hint): with its entries, all `#t` depends on. heap.lua
+/// compares them across a failed chunk for tables with more than one border.
+fn table_layout(t: &Table) -> (u32, u32) {
+    // SAFETY: for a table `lua_topointer` gives its `Table` (lapi.c), alive while `t` is;
+    // `array` points at the hint when the array part isn't empty (ltable.c `luaH_resize`).
+    unsafe {
+        let h = &*(t.to_pointer() as *const TableHead);
+        let hint = if h.asize > 0 && !h.array.is_null() { *h.array } else { 0 };
+        (h.asize, hint)
+    }
+}
+
+/// Whether `table_layout` reads this Lua's tables right, tried once in a
+/// Lua of its own: known array sizes and hints (ltable.c `luaH_resize` sets
+/// the hint to half the size; `#t` of a full array part sets it to the size).
+fn table_layout_reads_right() -> bool {
+    static OK: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *OK.get_or_init(|| {
+        let probe = || -> mlua::Result<bool> {
+            let (lua, state, _serials) = fixed_lua(StdLib::NONE)?;
+            let t: Table = lua.load("return {1, 2, 3, 4, 5, 6, 7, 8}").eval()?;
+            let before = table_layout(&t);
+            let n = t.raw_len();
+            let after = table_layout(&t);
+            let e = lua.create_table()?;
+            let empty = table_layout(&e);
+            drop((t, e));
+            drop(lua);
+            unsafe { mlua::ffi::lua_close(state) };
+            Ok((before, n, after, empty) == ((8, 4), 8, (8, 8), (0, 0)))
+        };
+        probe().unwrap_or(false)
+    })
+}
+
+/// `table_layout` for heap.lua, if it reads this Lua's tables right;
+/// otherwise none, and heap.lua takes every table with more than one border
+/// as moved by a failed chunk.
+fn layout_probe(lua: &Lua) -> mlua::Result<Option<Function>> {
+    if !table_layout_reads_right() {
+        return Ok(None);
+    }
+    Ok(Some(lua.create_function(|_, t: Table| Ok(table_layout(&t)))?))
 }
 
 /// The order a fresh Lua walks a table of string keys in: fixed when Lua
@@ -1250,6 +1311,36 @@ mod tests {
             b.set_replaying(true);
             let replayed: Vec<String> = s.log.iter().map(|c| b.run(&c.src).unwrap().out).collect();
             assert_eq!(live, replayed, "engine {engine}");
+        }
+    }
+
+    /// Engine 3: `#t` of a table with more than one border depends on its layout (array
+    /// size and length hint, ltable.c `luaH_getn`), which a failed chunk can move with
+    /// every entry, and the `next` order, put back: by adding keys and taking them out
+    /// again, or by `#t` itself. The session rebuilds, and goes on printing what a replay
+    /// of its log prints.
+    #[test]
+    #[cfg(tube_box)]
+    fn under_engine_3_a_failed_chunk_that_moved_a_border_rebuilds() {
+        for (setup, failed, after, want) in [
+            // grown into an array part and emptied again
+            ("t = {}; t[2] = 2; print(#t)", "t[1] = 1; t[3] = 3; t[1] = nil; t[3] = nil; error('stop')", "print(#t)", "0\n"),
+            // the same array part, another length hint
+            ("t = {1, nil, 3, 4}; print(#t)", "t[2] = 2; local n = #t; t[2] = nil; error('stop')", "print(#t)", "1\n"),
+        ] {
+            let mut s = with_engine(3);
+            let mut live = vec![s.run(setup).unwrap().out];
+            s.run(failed).unwrap_err();
+            assert!(s.stale, "{failed}: the border moved, so the session must rebuild");
+            live.push(s.run(after).unwrap().out);
+            assert_eq!(live[1], want, "{failed}");
+            let mut b = with_engine(3);
+            b.set_replaying(true);
+            let replayed: Vec<String> = s.log.iter().map(|c| b.run(&c.src).unwrap().out).collect();
+            assert_eq!(live, replayed, "{failed}");
+            // a failed chunk that leaves the layout alone still costs no rebuild
+            s.run("local n = t[2]; error('stop')").unwrap_err();
+            assert!(!s.stale, "{failed}: nothing moved");
         }
     }
 

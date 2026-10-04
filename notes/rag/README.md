@@ -38,7 +38,13 @@ r.load, r.soaked, r.damp, r.fold, r.width   -- read only (a write is an error)
   Nothing goes back on the canvas.
 - A face dipped in spirits (`r:dip(amount)`) lifts wet paint more
   readily: its lift rate is `1 + 8 × amount` times a dry face's. That is
-  its only effect. It stays damp until a refold turns out a dry face. Added
+  its only effect. It stays damp until a refold turns out a dry face or
+  the spirits evaporate: half of what is left goes every 3 minutes of
+  painting time (the clock, hand time included), dry some 17 minutes after
+  a dip at 0.5 (an estimate; Jennings, Paint & Colour Mixing, 1902, "To
+  Test the Purity of Turpentine": a few drops on paper "evaporate in a few
+  minutes", https://www.gutenberg.org/cache/epub/56738/pg56738-images.html).
+  Added
   because both sources wipe the lights with a rag dipped in spirits. It
   needs one more number on the rag (`damp`, the face in use): `soaked` is
   the whole cloth's soak and sets how clean a refolded face can be, so it

@@ -42,7 +42,7 @@ pub mod surface;
 pub use canvas::{Canvas, Crop, Frame, set_crop};
 pub use crack::Cracks;
 pub use color::{Mix, Rgb, gradient, hex, shift};
-pub use bristle::{Gesture, Held, Kind, Knife, Orient, Part, Tool, Touch};
+pub use bristle::{Gesture, Held, Kind, Knife, Orient, Part, Spatter, Tool, Touch};
 pub use wet::Paint;
 pub use drying::Stage;
 pub use palette::{Mixture, Palette, Tube};

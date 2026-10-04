@@ -75,6 +75,18 @@ the picture is yours.
   scattered flecks near you; big uniform dabs read as beads. Tie it to a
   light in the sky.
 
+## Spatter
+
+- **Flicked paint for what is scattered by nature**: spray, gravel, a field of
+  small flowers, lichen, the speckle of an old wall. `b:spatter{}` throws
+  droplets whose sizes, spacing and colors vary by themselves; aim it, don't
+  place each one.
+- **Thin the paint to make it fly**: a pile with medium or turpentine
+  spatters; blotted paint hardly does. A hard flick gives a fine spray, a
+  gentle one fat drops.
+- **Mask what must stay clean** with `clip=`: droplets fly past any edge.
+- A little goes a long way: a few flicks over a passage, then look.
+
 ## Forms and shadows
 
 - **A form is one mass.** Build a rounded thing (a stack, a tree, a figure)

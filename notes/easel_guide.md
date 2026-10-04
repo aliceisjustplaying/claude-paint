@@ -198,6 +198,18 @@ the share `lift` of the bead (0.1) stays where it lifts.
 `k:scrape(points, {pressure=})` scrapes wet paint off down to the blade
 (at full pressure, down to the dry paint) and keeps it on the blade.
 
+**Spatter.** `b:spatter{at={x, y}, toward={dx, dy}, spread=, force=, clip=}`
+flicks the loaded brush: the paint its hairs can't hold flies off in droplets
+toward `toward` (its length is how far the paint carries, in units), in a cone
+`spread` radians either side (0.45 by default), `force` 0..1 hard (0.6). Fluid
+paint (medium, turpentine) flies readily; blotted or stiff tube paint barely
+leaves the brush. A hard flick throws many small droplets, a gentle one fewer
+and bigger; heavier droplets carry farther, and those that land at a slant
+stretch along their flight. Each comes off one hair with that hair's paint (a
+double-loaded brush spatters both colors), and lands in the wet layer like
+any paint. It returns how many droplets landed; `b:fullness()` shows what is
+left on the brush.
+
 ## Covering an area
 
 ```lua

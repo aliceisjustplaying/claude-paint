@@ -682,6 +682,26 @@ impl UserData for Brush {
                 Ok(())
             })
         });
+        // b:spatter{at={x, y}, toward={dx, dy}, spread=, force=, clip=}: flick the loaded
+        // brush: the paint its hairs can't hold flies off in droplets toward `toward`
+        // (its length is how far the paint carries); returns how many droplets landed
+        m.add_method("spatter", |_, b, o: Table| {
+            check_keys(&o, &["at", "toward", "spread", "force", "clip"], "spatter")?;
+            let at = pair(&o, "at")?.ok_or_else(|| mlua::Error::runtime("spatter: at={x, y}, where the brush is flicked"))?;
+            let toward = pair(&o, "toward")?.ok_or_else(|| mlua::Error::runtime("spatter: toward={dx, dy}, the flick's direction and how far the paint carries (units)"))?;
+            let spread = num(&o, "spread")?.unwrap_or(0.45);
+            if !(0.0..=1.5).contains(&spread) {
+                return err("spatter: spread is half the cone's angle in radians, 0 to 1.5");
+            }
+            let force = num(&o, "force")?.unwrap_or(0.6);
+            if !(0.0..=1.0).contains(&force) {
+                return err("spatter: force is how hard the flick is, 0 to 1");
+            }
+            let clip = mask_opt(o.get("clip")?)?;
+            let seed = b.st.borrow_mut().rng.next_u64();
+            let sp = paint::Spatter { at, toward, spread, force, seed };
+            time::verb(&b.st, Verb::Marks, |s| Ok(s.canvas.as_mut().ok_or_else(no_canvas)?.spatter(&mut b.held.borrow_mut(), &sp, clip.as_deref())))
+        });
         m.add_meta_method(MetaMethod::ToString, |_, b, ()| {
             let h = b.held.borrow();
             Ok(format!("brush({:?} {}, {:.0}% full)", h.tool.kind, h.tool.width, 100.0 * h.fullness()).to_lowercase())

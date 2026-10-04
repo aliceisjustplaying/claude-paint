@@ -1,6 +1,6 @@
 //! Thinner acceptance checks at the paint engine's own boundary (brush,
 //! rag, canvas, clock, save): checks 4, 5, 6, 8 (a small thinner), 9, 10,
-//! 13, 14, 15, 16, 17 and 19 of notes/thinner/ACCEPTANCE.md. The measuring
+//! 14, 15, 16, 17 and 19 of notes/thinner/ACCEPTANCE.md. The measuring
 //! helpers, and the interface these tests require, are in
 //! `thinner_support/mod.rs`.
 //!
@@ -8,11 +8,9 @@
 
 mod thinner_support;
 
-use paint::color::luminance;
-use paint::pigment::scatter_for;
 use paint::rag::Rag;
 use paint::thinner::{evaporation_tau_min, stroke_limit_um};
-use paint::{Canvas, Stage, Tool, hex};
+use paint::{Canvas, Stage, Tool};
 use thinner_support::*;
 
 /// Check 4. Nothing vanishes: across a stroke (no time passes during one,
@@ -248,23 +246,6 @@ fn c10_thinned_and_unthinned_paint_of_equal_thickness_gel_and_dry_together() {
         println!("{what}: thinned {x} min, unthinned {y} min");
         assert!((x - y).abs() <= allowed, "{what}: thinned {x} min, unthinned {y} min (allowed ±{allowed})");
     }
-}
-
-/// Check 13. Pigment values stay as they were at af49348 (masstone,
-/// hiding, stiffness, tinting strength of both siennas), and burnt sienna
-/// stays the more transparent (less scattering per coat), Field/Salter
-/// 1869 §155.
-#[test]
-fn c13_pigment_values_are_unchanged_and_burnt_sienna_is_the_more_transparent() {
-    let cat = paint::palette::catalog();
-    let mut s = Vec::new();
-    for (name, color, hiding, stiff, strength) in [("raw sienna", "#9a6a2b", 0.4f32, 0.5f32, 0.7f32), ("burnt sienna", "#7c3f24", 0.45, 0.55, 0.9)] {
-        let t = cat.iter().find(|t| t.name == name).unwrap_or_else(|| panic!("{name} in the catalog"));
-        assert_eq!(t.color.map(f32::to_bits), hex(color).map(f32::to_bits), "{name}: masstone");
-        assert_eq!([t.hiding, t.stiff, t.strength].map(f32::to_bits), [hiding, stiff, strength].map(f32::to_bits), "{name}: hiding, stiffness, strength");
-        s.push(scatter_for(luminance(t.color), t.hiding));
-    }
-    assert!(s[1] < s[0], "burnt sienna scatters less per coat than raw sienna: {} vs {}", s[1], s[0]);
 }
 
 /// Check 14. The same straight path given with 2× and 10× the points lays

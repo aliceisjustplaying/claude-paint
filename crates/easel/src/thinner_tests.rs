@@ -1,6 +1,7 @@
 //! Thinner acceptance checks at the easel (Lua, sessions, saves, logs):
-//! checks 1, 2, 3, 7, 8 (the card at every thinner), 11, 12 and 18 of
-//! notes/thinner/ACCEPTANCE.md, and the rag study. Measuring helpers:
+//! checks 1, 3, 7, 8 (the card at every thinner), 11, 12 and 18 of
+//! notes/thinner/ACCEPTANCE.md, and the rag study. (Check 2 is
+//! scripts/thinner_check2, on the baseline's own comparison tools.) Measuring helpers:
 //! `thinner_measure.rs`; tiny inputs: crates/easel/tests/thinner/.
 //!
 //!   cargo test -p easel --release --bin easel thinner_tests::
@@ -41,58 +42,41 @@ fn c01_the_card_raw_sienna_thinned_half_keeps_half_the_contrast_at_2400px() {
     }
 }
 
-/// Check 2: with no thinner, and with thinner=0 on every pile, each
-/// before-change scene (notes/thinner/baseline/, from unchanged af49348)
-/// replays to exactly its saved paint state; the solvent is all zero.
+/// Check 3: the PAINTCK8 save unchanged af49348 wrote of an engine-3
+/// canvas (notes/thinner/baseline/old_files/) is refused, and so are its
+/// first 280 bytes alone (magic and header, no canvas): from the header,
+/// before anything is painted, naming the version that reads it (af49348).
+/// The canvas reader refuses the save's checkpoint the same way.
 #[test]
-fn c02_no_thinner_or_thinner_0_leaves_the_saved_paint_state_unchanged() {
-    let scenes = baseline_scenes();
-    assert!(!scenes.is_empty(), "no scenes in the baseline");
-    for sc in &scenes {
-        let zero = sc.log.replace("pile{", "pile{thinner=0, ");
-        for (variant, log) in [("as logged", &sc.log), ("thinner=0", &zero)] {
-            let s = replay(log, sc.width);
-            let c = s.canvas().unwrap();
-            assert_same_paint_state(&format!("{} ({variant})", sc.name), &sc.state, &state(&c), c.pixels().len());
-            assert_eq!(c.solvent_total(), 0.0, "{} ({variant})", sc.name);
-        }
+fn c03_af49348_paintck8_saves_are_refused_naming_the_old_version() {
+    let (header, full) = (old_file("paintck8_save_header.bin"), old_save());
+    for (what, path) in [("the header alone", &header), ("the whole save", &full)] {
+        let e = match crate::save::read(path) {
+            Ok(_) => panic!("{what}: a PAINTCK8 save of an engine-3 canvas was read"),
+            Err(e) => e,
+        };
+        assert!(e.contains("af49348"), "{what}: the refusal names the version to use: {e}");
+        assert!(!e.contains("fill whole buffer"), "{what}: refused from the header, not by running out of file: {e}");
     }
+    let bytes = std::fs::read(&full).unwrap();
+    let mut r: &[u8] = &bytes;
+    match paint::Canvas::read_state(&mut r) {
+        Ok(_) => panic!("the canvas reader read an af49348 checkpoint of an engine-3 canvas"),
+        Err(e) => assert!(e.to_string().contains("af49348"), "the canvas reader's refusal names the version to use: {e}"),
+    }
+    let _ = std::fs::remove_file(&full);
 }
 
-/// Check 3: a save an older easel wrote of an engine-3 canvas (PAINTCK8)
-/// is refused from its header alone, before anything is painted, and the
-/// refusal names the version that reads it (af49348).
+/// Check 3: the engine-3 logs unchanged af49348's live session wrote
+/// (old_files/, with and without a box line) are compatible: engine 3
+/// without thinner paints as it did (check 2), so they replay.
 #[test]
-fn c03_a_paintck8_save_of_an_engine_3_canvas_is_refused_by_its_header_naming_the_old_version() {
-    let head = "easel save 1\nlog_fnv=0000000000000000\nchunks=1\nbox=inness\nengine=3\nwidth=64\nseed=1\nchunk=1\ncalls=0\nclock=0000000000000000\nclock0=0000000000000000\npiles=\n";
-    let mut bytes = b"PAINTCK8".to_vec();
-    bytes.extend_from_slice(&(head.len() as u64).to_le_bytes());
-    bytes.extend_from_slice(head.as_bytes());
-    // no canvas after the header: a tiny file is enough to be refused
-    let path = std::env::temp_dir().join(format!("thinner-c03-{}.ckpt", std::process::id()));
-    std::fs::write(&path, &bytes).unwrap();
-    let r = crate::save::read(&path);
-    let _ = std::fs::remove_file(&path);
-    let e = match r {
-        Ok(_) => panic!("a PAINTCK8 save of an engine-3 canvas was read"),
-        Err(e) => e,
-    };
-    assert!(e.contains("af49348"), "the refusal names the version to use: {e}");
-    assert!(!e.contains("fill whole buffer"), "refused from the header, not by running out of file: {e}");
-}
-
-/// Check 3: the PAINTCK8 checkpoints unchanged af49348 wrote (the
-/// baseline's) are refused by the canvas reader, naming af49348.
-#[test]
-fn c03_a_baseline_paintck8_checkpoint_is_refused_naming_the_old_version() {
-    let scenes = baseline_scenes();
-    assert!(!scenes.is_empty(), "no scenes in the baseline");
-    for sc in &scenes {
-        let mut r: &[u8] = &sc.state;
-        match paint::Canvas::read_state(&mut r) {
-            Ok(_) => panic!("{}: an af49348 checkpoint of an engine-3 canvas was read", sc.name),
-            Err(e) => assert!(e.to_string().contains("af49348"), "{}: the refusal names the version to use: {e}", sc.name),
-        }
+fn c03_af49348_engine_3_logs_still_replay() {
+    for name in ["engine3_log_default_box.lua", "engine3_log_inness.lua"] {
+        let log = std::fs::read_to_string(old_file(name)).unwrap();
+        // (replay panics, naming the chunk, if one fails)
+        let s = replay(&log, 64);
+        assert_eq!(s.log.len(), log.matches("--@ chunk").count(), "{name}: every chunk ran");
     }
 }
 

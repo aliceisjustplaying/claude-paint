@@ -1,7 +1,7 @@
 //! Measuring helpers for the easel-level thinner acceptance tests
 //! (`thinner_tests.rs`, notes/thinner/ACCEPTANCE.md): sessions, the
-//! black-and-white card, sums over the canvas, saves, and the reader of
-//! the before-change baseline (notes/thinner/baseline/).
+//! black-and-white card, sums over the canvas, saves, and af49348's old
+//! files (notes/thinner/baseline/old_files/).
 //!
 //! The paint interface they read is listed in
 //! crates/paint/tests/thinner_support/mod.rs. The easel interface they
@@ -195,57 +195,21 @@ pub fn card(width: usize, parts: &str, cells: &[(f32, f32)]) -> Vec<Cell> {
         .collect()
 }
 
-// ---------------------------------------------------------------- the baseline
+// ---------------------------------------------------------------- old files
 
-/// A before-change scene: an engine-3 log and the canvas state unchanged
-/// af49348 left after it, replayed at `width` px.
-pub struct Scene {
-    pub name: String,
-    pub width: usize,
-    pub log: String,
-    /// `Canvas::write_state(.., "")` bytes (PAINTCK8).
-    pub state: Vec<u8>,
+/// A file of notes/thinner/baseline/old_files/ (made by unchanged af49348).
+pub fn old_file(name: &str) -> std::path::PathBuf {
+    std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../notes/thinner/baseline/old_files").join(name)
 }
 
-/// The scenes in notes/thinner/baseline/.
-///
-/// TODO(baseline): the baseline is the speed agent's (branch codex/speed,
-/// from unchanged af49348, release build). This reader assumes the format
-/// ACCEPTANCE.md (check 2) proposes: `scenes.txt`, one scene a line,
-/// `<name> <width px> <log file> <state file>`, the state file being the
-/// canvas's `write_state(.., "")` bytes. Adapt it, through review, to the
-/// format of the merged baseline commit; the test itself stays.
-pub fn baseline_scenes() -> Vec<Scene> {
-    let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../notes/thinner/baseline");
-    let list = std::fs::read_to_string(dir.join("scenes.txt")).unwrap_or_else(|e| panic!("no before-change baseline in this branch yet ({}: {e}); see notes/thinner/ACCEPTANCE.md, check 2", dir.display()));
-    list.lines()
-        .filter(|l| !l.trim().is_empty() && !l.starts_with('#'))
-        .map(|l| {
-            let f: Vec<&str> = l.split_whitespace().collect();
-            assert_eq!(f.len(), 4, "scenes.txt: want `<name> <width> <log> <state>`: {l:?}");
-            Scene {
-                name: f[0].to_string(),
-                width: f[1].parse().unwrap_or_else(|_| panic!("scenes.txt: width {:?}", f[1])),
-                log: std::fs::read_to_string(dir.join(f[2])).unwrap_or_else(|e| panic!("{}: {e}", f[2])),
-                state: std::fs::read(dir.join(f[3])).unwrap_or_else(|e| panic!("{}: {e}", f[3])),
-            }
-        })
-        .collect()
-}
-
-/// The new save holds exactly the old one's paint state: `PAINTCK9`, then
-/// every byte the old `PAINTCK8` save had after its magic, then the
-/// thinner's section, ending in the solvent (4 bytes a pixel), all zero.
-#[track_caller]
-pub fn assert_same_paint_state(name: &str, old: &[u8], new: &[u8], pixels: usize) {
-    assert_eq!(&old[..8], b"PAINTCK8", "{name}: the baseline is a PAINTCK8 save");
-    assert_eq!(&new[..8], b"PAINTCK9", "{name}: an engine-3 canvas saves as PAINTCK9");
-    assert!(new.len() >= old.len() + 4 * pixels, "{name}: the new save ({} bytes) is shorter than the old ({}) plus the solvent", new.len(), old.len());
-    if new[8..old.len()] != old[8..] {
-        let at = old[8..].iter().zip(&new[8..old.len()]).position(|(a, b)| a != b).map(|k| k + 8);
-        panic!("{name}: the paint state differs from the baseline's, first at byte {at:?} of {}", old.len());
-    }
-    assert!(new[new.len() - 4 * pixels..].iter().all(|&b| b == 0), "{name}: solvent left where no thinner was laid");
+/// old_files/paintck8_save_stroke.ckpt.xz, decompressed (`xz -dc`) to a
+/// temporary file: a genuine PAINTCK8 save of an engine-3 canvas.
+pub fn old_save() -> std::path::PathBuf {
+    let out = std::process::Command::new("xz").arg("-dc").arg(old_file("paintck8_save_stroke.ckpt.xz")).output().expect("xz (to read old_files/paintck8_save_stroke.ckpt.xz)");
+    assert!(out.status.success(), "xz -dc: {}", String::from_utf8_lossy(&out.stderr));
+    let path = std::env::temp_dir().join(format!("thinner-paintck8-{}.ckpt", std::process::id()));
+    std::fs::write(&path, &out.stdout).unwrap();
+    path
 }
 
 // ---------------------------------------------------------------- pictures

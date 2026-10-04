@@ -29,6 +29,7 @@
 - You make every artistic decision.
 - Keep a working journal with `note` as you go: your own working notes.
   You can revise them.
+- You may sign the painting.
 - Before finishing, inspect the whole painting and its details. Continue
   while you can identify a change that would improve the painting you
   intend to make. Finish when you judge it resolved.

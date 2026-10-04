@@ -227,7 +227,7 @@ mod tests {
     use crate::surface::Linen;
 
     fn on(width: usize, fabric: Fabric) -> Canvas {
-        let mut c = Canvas::new_window(width, 1.0, fabric.color, None).with_size_mm(300.0).with_linen(Linen { seed: 3, ..Linen::fine(3) });
+        let mut c = Canvas::new_window(width, 1.0, fabric.color, None).with_engine(3).with_size_mm(300.0).with_linen(Linen { seed: 3, ..Linen::fine(3) });
         c.raw_canvas(fabric, 3);
         c
     }

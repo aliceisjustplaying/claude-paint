@@ -21,7 +21,10 @@ is the known pre-existing finding.
 | df9058c | the thinner: solvent beside the paint, the per-stroke ceiling, evaporation on the minute grid, the flow, PAINTCK9, Lua, dumper field |
 | 18548cf | τ doubles at 100 µm, not 20 (the card's wait guard); the guide's Thinner section |
 | afc7898 | the flow leaves a wetting film (the 2400 px lattice defect); `scripts/thinner_sheet` |
-| (this commit) | RESULTS.md, the two sheets, logs |
+| 1e27682 | RESULTS.md, the two sheets, logs |
+| 0a661f6 | round 4: a brush's `Debug` text (the `brushes=` digest, the dump's `brushes.debug`) is af49348's byte for byte before engine 3 |
+| e135129 | round 4: PROPOSED test corrections, for re-review (`TESTS_PHASE_REPORT.md`, round 4) |
+| (this commit) | round 4: the rag study re-rendered after afc7898; this file |
 
 ## Commands, exit codes, logs
 
@@ -241,13 +244,16 @@ blocking.
 
 - **Engine 3 only.** On engines 1 and 2, `thinner=` is an error, and
   `p.thinner` is nil.
-- **Unthinned paint takes today's path** (check 2). One exception, the
-  engine-1/2 `--state-digest` `brushes=` value:
-  - every bristle's `Debug` now prints `solvent: 0.0`, so that value
-    changes for engines 1 and 2 too;
-  - their canvas, saves and pictures don't change;
-  - no recorded engine-1/2 digest exists;
-  - the protected dumper needs the field (check 2 part 3).
+- **Unthinned paint takes today's path** (check 2), digests included
+  since 0a661f6.
+  - Before engine 3, a brush's `Debug` text, which `--state-digest` hashes
+    as `brushes=`, is af49348's byte for byte.
+  - An engine-3 brush also names each bristle's `solvent`. The protected
+    dumper needs it (check 2 part 3).
+  - Checked with the speed branch's approved old-log answers, read-only,
+    against this build: `scripts/tests/old_logs.sh` replays all 11 cases
+    (engine 1, legacy and round 19) exactly as af49348 did, PNGs and
+    per-chunk digests. Check 2 still passes.
 - **Left out on purpose** (said in the guide):
   - solvent evaporating from the brush or the palette pile;
   - soaking into the ground;
@@ -276,7 +282,29 @@ blocking.
 
   The real post-evaporation measurement is the card above (35 min).
 - **`notes/thinner/rag_study.jpg`**: the rag study's sheet, as JPEG (the
-  test writes a 1 MB PNG; not committed).
+  test writes a 1 MB PNG; not committed). Re-rendered in round 4 with the
+  current code (after afc7898's wetting film); the numbers are those in
+  the table above, which `--all` at afc7898 printed too.
+
+## For the user
+
+- **Brush capacity.** A thinned brush lasts much longer than a loaded
+  one: it lays at most a thin film per stroke and keeps the rest.
+  - On its 7680-unit zigzag (round-4 c05), a filbert 8 thinned 0.5 lays
+    paint above a quarter of the ceiling for about 2,150 units at load
+    0.3 and 4,820 at load 0.6.
+  - Its liquid lasts about 3,000 units, roughly three canvas widths,
+    before it runs low.
+  - That follows from the plan's rule that unlaid paint stays on the
+    brush. Is it how a thinned brush should behave?
+- **The fine grain in thinned paint**, below (appearance 1).
+- **Damp rag about the same as a dry rag on thinned paint:** 68.3%
+  against 68.1% lifted (appearance 3).
+- **The stain:** a damp wipe over wet paint leaves 20.8% of the tone's
+  darkening (the earlier report said about 14%), and a dry wipe 47.6%.
+  The rag can't wipe back to the ground in one pass.
+- Also open: check 13 (b), check 3's old-file policy, check 8's 0.005
+  allowance, and the round-4 c16 question (TESTS_PHASE_REPORT.md).
 
 ## Appearance questions for the user
 

@@ -396,6 +396,7 @@ impl UserData for KnifeU {
     fn add_methods<M: UserDataMethods<Self>>(m: &mut M) {
         m.add_method("load", |_, k, (p, amount): (Value, Option<f32>)| {
             let amount = load_amount(amount, 0.6, "k:load")?;
+            if !(0.0..=1.0).contains(&amount) { return err("k:load: amount is a share of a full load (0..1)"); }
             let (paint, color) = brushload(&k.st, &p, &Value::Nil, "load")?;
             k.k.borrow_mut().load(paint, amount);
             time::trip(&k.st, color);
@@ -424,9 +425,15 @@ impl UserData for KnifeU {
                     }
                     angle = num(o, "angle")?;
                     if let Some(l) = num(o, "lift")? {
+                        if !l.is_finite() { return err(format!("k:{name}: lift must be finite")); }
                         lift = l.clamp(0.0, 1.0);
                     }
                 }
+                if !pressure.0.is_finite() || !pressure.1.is_finite() || angle.is_some_and(|a| !a.is_finite()) {
+                    return err(format!("k:{name}: pressure and angle must be finite"));
+                }
+                let scale = k.st.borrow().width as f32 / 1000.0;
+                if let Err(e) = paint::Knife::check_path(&pts, scale) { return err(format!("k:{name}: {e}")); }
                 time::verb(&k.st, Verb::Marks, |s| {
                     s.canvas.as_mut().ok_or_else(no_canvas)?.knife(&mut k.k.borrow_mut(), &pts, pressure, angle, lay, lift);
                     Ok(())

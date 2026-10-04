@@ -1539,7 +1539,7 @@ unsafe fn exchange(
             let h0 = crate::rng::hash2(b0 as i64, id as i64, 0x51C0);
             let h1 = crate::rng::hash2(b0 as i64 + 1, id as i64, 0x51C0);
             let band = h0 + (h1 - h0) * crate::smoothstep(0.0, 1.0, f);
-            (dep_total * (1.0 + 0.6 * stiffen * (2.0 * band - 1.0))).min(br.vol * 0.95)
+            (dep_total * (1.0 + 0.6 * stiffen * (2.0 * band - 1.0))).min(liquid * 0.95)
         } else {
             dep_total
         };
@@ -2812,14 +2812,29 @@ const FLEX_MM: f32 = 4.0;
 pub struct Knife {
     pub width: f32,
     vol: f32,
+    solvent: f32,
     lat: Latent,
     hide: Prop,
     cure: f32,
 }
 
 impl Knife {
+    /// Bound the work before resampling a knife path (pixel-space samples).
+    pub fn check_path(pts: &[(f32, f32)], scale: f32) -> Result<(), &'static str> {
+        if pts.is_empty() || pts.len() > 2000 || !(scale.is_finite() && scale > 0.0)
+            || pts.iter().any(|&(x, y)| !x.is_finite() || !y.is_finite() || x.abs() > 20_000.0 || y.abs() > 20_000.0)
+        {
+            return Err("points must be finite and on or near the canvas (at most 2000)");
+        }
+        let length = crate::path::length(pts) * scale;
+        if !length.is_finite() || length > 70_000.0 {
+            return Err("path is too long to sample");
+        }
+        Ok(())
+    }
+
     pub fn new(width: f32) -> Self {
-        Knife { width: if width.is_finite() { width.clamp(1.0, 1000.0) } else { 1.0 }, vol: 0.0, lat: [0.0; LAT], hide: [0.0; 3], cure: 0.0 }
+        Knife { width: if width.is_finite() { width.clamp(1.0, 1000.0) } else { 1.0 }, vol: 0.0, solvent: 0.0, lat: [0.0; LAT], hide: [0.0; 3], cure: 0.0 }
     }
     /// A full load: a bead along the blade twice its length deep and 12
     /// coats (300 µm) thick (about a millilitre on a 4 cm blade).
@@ -2829,10 +2844,12 @@ impl Knife {
     /// Pick up `amount` (0..1 of a full load) of `paint` onto the blade.
     pub fn load(&mut self, paint: Paint, amount: f32) {
         // (no amount that is not a number: it would leave the blade's paint NaN)
-        if !amount.is_finite() {
+        if !(0.0..=1.0).contains(&amount) || !self.width.is_finite() || !(1.0..=1000.0).contains(&self.width) {
             return;
         }
-        let v = amount.max(0.0) * self.full();
+        let liquid = amount * self.full();
+        let v = liquid * (1.0 - paint.thinner);
+        self.solvent += liquid * paint.thinner;
         let lat = paint.latent();
         self.cure = mix_cure(self.cure, self.vol, 0.0, v);
         crate::wet::mix_into(&mut self.vol, &mut self.lat, &mut self.hide, v, &lat, paint.prop());
@@ -2840,10 +2857,11 @@ impl Knife {
     /// Wipe the blade clean on the rag.
     pub fn wipe(&mut self) {
         self.vol = 0.0;
+        self.solvent = 0.0;
     }
     /// Paint on the blade, relative to a full load.
     pub fn fullness(&self) -> f32 {
-        self.vol / self.full()
+        (self.vol + self.solvent) / self.full()
     }
 }
 
@@ -2861,9 +2879,10 @@ impl Canvas {
     /// lifts, the share `lift` of the bead stays where it last was.
     pub fn knife(&mut self, k: &mut Knife, pts: &[(f32, f32)], pressure: (f32, f32), angle: Option<f32>, lay: bool, lift: f32) {
         // (the blade's length is a public field: nothing to pull with one that is no length)
-        if pts.is_empty() || !(k.width.is_finite() && (1.0..=1000.0).contains(&k.width)) {
+        if Knife::check_path(pts, self.f.scale).is_err() || !pressure.0.is_finite() || !pressure.1.is_finite() || angle.is_some_and(|a| !a.is_finite()) || !lift.is_finite() || !(k.width.is_finite() && (1.0..=1000.0).contains(&k.width)) {
             return;
         }
+        self.assert_thinner_supported(k.solvent > 0.0, "Canvas::knife");
         self.tally.stroke(&Tool::hog_flat(k.width), pts, self.mm_per_unit);
         let id = self.next_stroke_ids(1);
         // engine 5: knife-laid paint tears where it parts from the blade:
@@ -2871,7 +2890,7 @@ impl Canvas {
         // into the hollows runs out (`tn`, a noise along and across the blade)
         let tears = self.engine >= 5;
         // (the paint the tears held back under the blade: back on it at the end)
-        let mut held = 0.0f32;
+        let (mut held, mut held_solvent) = (0.0f32, 0.0f32);
         let tseed = (id as u64).wrapping_mul(0x9E37_79B9_7F4A_7C15) ^ 0x7EA2;
         let height: *const f32 = self.height.as_ptr();
         let sf = self.surf();
@@ -2961,17 +2980,21 @@ impl Canvas {
                 // SAFETY: exclusive &mut self; the knife is one tool on its own
                 unsafe {
                     let v = *sf.vol.add(i);
-                    let top = *height.add(i) + v * crate::surface::COAT_UM;
+                    let sol = if sf.solv.is_null() { 0.0 } else { *sf.solv.add(i) / crate::surface::COAT_UM };
+                    let top = *height.add(i) + (v + sol) * crate::surface::COAT_UM;
                     let fl = if sf.dry.is_null() { 1.0 } else { crate::drying::fluid((*sf.dry.add(i)).cure) };
                     if top > plane && v > 1e-6 {
                         // cut off what stands above the blade (setting paint resists)
-                        let ex = ((top - plane) / crate::surface::COAT_UM).min(v) * fl;
+                        let cut = ((top - plane) / crate::surface::COAT_UM).min(v + sol) * fl;
+                        let ex = cut * v / (v + sol);
+                        let ex_solvent = cut * sol / (v + sol);
                         if ex <= 1e-7 {
                             continue;
                         }
                         let (l, hd) = (*sf.lat.add(i), *sf.hide.add(i));
                         let cure = if sf.dry.is_null() { 0.0 } else { (*sf.dry.add(i)).cure };
                         sf.take(i, ex);
+                        if !sf.solv.is_null() { *sf.solv.add(i) -= ex_solvent * crate::surface::COAT_UM; }
                         // pressed out past the blade's end into a ridge (off
                         // the canvas's edge there is nowhere to press it: it
                         // stays on the blade)
@@ -2979,10 +3002,12 @@ impl Canvas {
                         let ridge = if u.abs() > 0.85 { pix(x + e.0 * o, y + e.1 * o) } else { None };
                         if let Some(jx) = ridge {
                             sf.add(jx, ex, &l, hd, cure);
+                            if !sf.solv.is_null() { *sf.solv.add(jx) += ex_solvent * crate::surface::COAT_UM; }
                             *sf.cover.add(jx) = 1.0;
                             grow(&mut bounds, (x + e.0 * o) as usize, (y + e.1 * o) as usize, (x + e.0 * o) as usize + 1, (y + e.1 * o) as usize + 1);
                         } else {
                             let tv = ex * px_area;
+                            k.solvent += ex_solvent * px_area;
                             k.cure = mix_cure(k.cure, k.vol, cure, tv);
                             crate::wet::mix_into(&mut k.vol, &mut k.lat, &mut k.hide, tv, &l, hd);
                         }
@@ -2997,7 +3022,12 @@ impl Canvas {
                         // bead, so a torn pull runs out where a whole one
                         // does and covers less (once for each pixel)
                         if k.vol > 1e-9 && *sf.stroke.add(i) != id {
-                            let hold = ((plane - top) / crate::surface::COAT_UM).min(k.vol / px_area * 0.25) * px_area;
+                            let liquid = k.vol + k.solvent;
+                            let hold = ((plane - top) / crate::surface::COAT_UM).min(liquid / px_area * 0.25) * px_area;
+                            let solvent = hold * k.solvent / liquid;
+                            k.solvent -= solvent;
+                            held_solvent += solvent;
+                            let hold = hold - solvent;
                             k.vol -= hold;
                             held += hold;
                         }
@@ -3008,11 +3038,15 @@ impl Canvas {
                         // hollows stay bare, so a light pull over dry
                         // impasto catches its ridges and skips its valleys
                         let want = (plane - top) / crate::surface::COAT_UM;
-                        let give = want.min(k.vol / px_area * 0.25);
+                        let liquid = k.vol + k.solvent;
+                        let give = want.min(liquid / px_area * 0.25);
+                        let phi = k.solvent / liquid;
                         if give > 1e-7 {
-                            sf.add(i, give, &k.lat, k.hide, k.cure);
+                            sf.add(i, give * (1.0 - phi), &k.lat, k.hide, k.cure);
+                            if !sf.solv.is_null() { *sf.solv.add(i) += give * phi * crate::surface::COAT_UM; }
                             *sf.cover.add(i) = 1.0;
-                            k.vol -= give * px_area;
+                            k.vol = (k.vol - give * (1.0 - phi) * px_area).max(0.0);
+                            k.solvent = (k.solvent - give * phi * px_area).max(0.0);
                         }
                     }
                     *sf.stroke.add(i) = id;
@@ -3027,7 +3061,8 @@ impl Canvas {
                 Some(a) => (a.cos(), a.sin()),
                 None => (-dir.1, dir.0),
             };
-            let leave = k.vol * lift.clamp(0.0, 1.0);
+            let phi = k.solvent / (k.vol + k.solvent);
+            let leave = (k.vol + k.solvent) * lift.clamp(0.0, 1.0);
             let nb = ((2.0 * half / 0.7).ceil() as usize).max(2);
             let mut cells = Vec::new();
             for q in 0..=nb {
@@ -3047,20 +3082,49 @@ impl Canvas {
                     let v = leave * wgt / tw / px_area;
                     // SAFETY: as above
                     unsafe {
-                        sf.add(i, v, &k.lat, k.hide, k.cure);
+                        sf.add(i, v * (1.0 - phi), &k.lat, k.hide, k.cure);
+                        if !sf.solv.is_null() { *sf.solv.add(i) += v * phi * crate::surface::COAT_UM; }
                         *sf.cover.add(i) = 1.0;
                         *sf.stroke.add(i) = id;
                     }
                     grow(&mut bounds, x as usize, y as usize, x as usize + 1, y as usize + 1);
                 }
-                k.vol -= leave;
+                k.vol = (k.vol - leave * (1.0 - phi)).max(0.0);
+                k.solvent = (k.solvent - leave * phi).max(0.0);
             }
         }
         k.vol += held;
+        k.solvent += held_solvent;
         // (the window's own pixels, as a brush's bounds: a crop's start at its corner)
         if let Some((x0, y0, x1, y1)) = bounds.map(|(x0, y0, x1, y1)| (x0 - sf.ox, y0 - sf.oy, x1 - sf.ox, y1 - sf.oy)) {
             self.wet.touch(x0, y0, x1, y1);
         }
+    }
+}
+
+#[cfg(test)]
+mod knife_tests {
+    use super::*;
+    use crate::hex;
+
+    #[test]
+    fn knife_preserves_thinner_when_loading_laying_and_scraping() {
+        let mut c = Canvas::new(120, 1.0, hex("#ffffff")).with_engine(4);
+        let mut k = Knife::new(30.0);
+        k.load(Paint::body(hex("#224466")).with_thinner(0.75), 0.5);
+        let liquid = k.full() * 0.5;
+        assert!((k.vol / liquid - 0.25).abs() < 1e-6, "the blade stores pigment separately from thinner");
+        c.knife(&mut k, &[(200.0, 300.0), (700.0, 300.0)], (0.4, 0.4), None, true, 0.1);
+        let paint: f32 = c.wet.vol.iter().sum();
+        let solvent: f32 = c.wet.solv.iter().sum::<f32>() / crate::surface::COAT_UM;
+        assert!(paint > 0.0 && solvent > 0.0, "a thinned knife lays both liquids");
+        assert!((solvent / paint - 3.0).abs() < 1e-3);
+        k.wipe();
+        c.knife(&mut k, &[(200.0, 300.0), (700.0, 300.0)], (1.0, 1.0), None, false, 0.0);
+        assert!(k.vol > 0.0);
+        let before = c.wet.solv.iter().sum::<f32>();
+        c.knife(&mut k, &[(200.0, 600.0), (700.0, 600.0)], (0.4, 0.4), None, true, 0.1);
+        assert!(c.wet.solv.iter().sum::<f32>() > before, "scraped thinner remains on the blade for the next pull");
     }
 }
 

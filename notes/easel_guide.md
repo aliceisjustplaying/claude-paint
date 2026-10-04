@@ -212,7 +212,7 @@ filling what lies under it to the blade's level in a slab with a flat top,
 or over dry impasto catching only the ridges; wet paint standing above the
 blade is cut off into its bead or pressed out at its ends in ridges, and
 the share `lift` of the bead (0.1) stays where it lifts.
-`k:scrape(points, {pressure=})` scrapes wet paint off down to the blade
+`k:scrape(points, {pressure=, angle=})` scrapes wet paint off down to the blade
 (at full pressure, down to the dry paint) and keeps it on the blade.
 
 **Spatter.** `b:spatter{at={x, y}, toward={dx, dy}, spread=, force=, clip=}`

@@ -60,3 +60,101 @@ The seven above. Integration must add the thinner's checks to `all.tsv`
 Commits in this phase: `120b0aa` (runner: items 1, 3, 4), helper `d4351ac`,
 `d4c77ad`, `8620b48` merged in `f8c3427` (item 2), `a6805e4` (safeguards step
 minimum 121; the tested commit), and this report.
+
+# Phase 5: the gate protects itself
+
+Commit `ace4a41`. The review round 3 (APPROVE) found the gate's own tools
+unprotected, so a candidate could supply its own gate.
+
+- `notes/golden_paths.txt` now lists `scripts/test_candidate`,
+  `scripts/merge_candidate`, `scripts/golden_approve`,
+  `scripts/safeguards_lib.py` (it holds the lockrun pin) and
+  `scripts/tests/safeguards.sh`. They import nothing else from the
+  repository (each imports only `safeguards_lib.py` beside it). They run only
+  the pinned lockrun and the candidate's `scripts/test`, both already
+  protected.
+- `notes/speed/SAFEGUARDS.md`, new section "Run the gate from the approved
+  copy": merges run the gate from `~/src/a/claude-paint-tools/gate/`, never
+  from a candidate's or a working copy's `scripts/`.
+- The copy is at `~/src/a/claude-paint-tools/gate/`: the four files from
+  `ace4a41` (unchanged since `800aa60`, the approved version), a README with
+  the source commit and sha256s, and `SHA256SUMS`. `shasum -a 256 -c
+  SHA256SUMS` reports OK for all four, and
+  `~/src/a/claude-paint-tools/gate/golden_approve check --candidate 800aa60
+  --base 3379b9f` run from the repository passes.
+  - test_candidate `7904db98b0157c2f2377e47bf01ac4ebdc993052a10e187ce1156b324de210a7`
+  - merge_candidate `a23e2bfe8542037d3bde864ada9428ce66d0e56f45c8cfcf6e8049b59f9c6755`
+  - golden_approve `e283ff70dd6d0b607baf2ef33c91bfa1015566655644affd7eab1be5c66a8891`
+  - safeguards_lib.py `7616dd6128e519fe486c44986f076970ffd0beb3b2800aab12ea0d6bcdcb199f`
+- `scripts/tests/safeguards.sh`: 123 checks (was 121). Checks 77 and 78: on a
+  dummy base that protects the gate files, a candidate that edits
+  `merge_candidate`, or `safeguards_lib.py`'s pin, is reported as an
+  unapproved protected change. Result `# 123 checks, 123 passed, 0 failed`,
+  70.7 s under lockrun. The `safeguards` step in `all.tsv` still requires at
+  least 121 checks: still true, and the list is approved, so it isn't
+  changed.
+- Needs approval (lead): the changed `notes/golden_paths.txt` and
+  `scripts/tests/safeguards.sh`.
+
+## Looking ahead to the combine (read only, `thinner2` at `ffef02e`)
+
+`git merge-tree` of `thinner2` and `codex/speed` (base `a97c3a6`) is
+textually clean. Four files are changed on both sides: `crates/easel/src/api.rs`,
+`main.rs`, `session.rs` and `crates/paint/src/rag.rs`. The hunks don't
+overlap: the thinner's pile and rag fields and its test modules; speed's
+test-module gates, swatch tests, ignore attributes and the rag test helper.
+`README`, `Cargo.toml` and `Cargo.lock` are changed on one side only, or not
+at all. The conflicts to expect are semantic:
+
+1. **Check 13 (b) fails by design.** `c13_burnt_sienna_shows_the_card_at_least_as_well_as_raw_sienna`
+   (`crates/paint/tests/thinner_pigments.rs:107`) is a plain `#[test]` that
+   fails until the user decides. `scripts/test`'s cargo step runs every
+   non-ignored test, so the fast and `--all` runs fail on it, and so does
+   `test_thinner_acceptance` (exit 3, "NOT ALL GREEN"). No candidate can
+   pass until the user decides. That is correct; I would not skip it.
+2. **The thinner's tests would run twice, once in the wrong profile.**
+   `cargo_tests.sh` runs every test binary in the test profile: `thinner_physics`,
+   `thinner_pigments` and the easel binary's `thinner_tests` module. Their
+   approved command is release (`test_thinner_acceptance`). I propose
+   `cargo_tests.sh` leaves them out (the two binaries by name,
+   `--skip thinner_tests::` for the easel binary), with an entry in
+   SKIPPED.md, and that they run only through their own runner.
+3. **Protected changes on the thinner side.** `crates/paint/src/state_dump.rs`
+   (+3 lines: `wet.solvent`, an added field, as the baseline rules allow)
+   and the 22 frozen files appear, with the round-4 corrections if those
+   change them. All need approval at the combine.
+4. **Old logs are probably unaffected.** Engines 1 and 2 keep `PAINTCK8`, and
+   the thinner keeps a bristle's `Debug` text as before for engines below 3
+   (`BristleText`), so the eleven old-log digests should hold. `old_logs.sh`
+   will show it. `baseline_state.sh` is check 2's command.
+5. **`--all` writes into the repository.** `test_thinner_acceptance --all`
+   writes `notes/thinner/rag_study.png`. In a candidate worktree that's an
+   untracked file (test_candidate refuses tracked changes, not untracked);
+   in a working copy it's litter. Better under `$TMPDIR` (a protected file:
+   its own review).
+6. **Lists and limits.** `fast.tsv` and `all.tsv` need thinner steps (a
+   protected change; review N2), and the card test needs 300 s.
+
+How `scripts/test` should include the acceptance checks (a proposal, not done):
+
+- `fast.tsv`: a build step `cargo test --release -p paint --test thinner_physics
+  --test thinner_pigments --no-run` plus the easel binary's release tests
+  (`--no-run`). Then a step `scripts/test_thinner_acceptance --quick` (60 s;
+  its runs took a few seconds once built).
+- `--all`: `scripts/test_thinner_acceptance --all`, which includes the card
+  (173 s inside lockrun once built, at `afc7898`; the card alone 24.6 s). As
+  one step it gets 300 s, so it fits the card's 300 s limit.
+- **It doesn't fit one 600 s batch.** Today's `--all` takes 423 s from a
+  fresh worktree, 100 s of it builds. The thinner adds release test builds
+  (about 35 s warm at `afc7898`; a fresh release build of the easel test
+  binary is likely 60–120 s) and about 170 s of checks, so roughly 650–700 s.
+  I propose splitting the candidate run into two separately limited
+  batches, each 600 s, matching the plan's "initial builds and final check
+  batches: ten minutes each": first every build step of the list, then every
+  check. Both run in one worktree, both limits and both results go in the
+  receipt, and it passes only if both pass. The check batch would be about
+  323 + 170 ≈ 490 s, less if the thinner's step joins group "s". The
+  alternative, a separately receipted thinner batch, needs the same gate
+  change and builds twice. Either way this changes `scripts/test` and the
+  gate tools (protected): it needs review, and then the approved gate copy
+  must be updated.

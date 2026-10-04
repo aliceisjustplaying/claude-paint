@@ -15,7 +15,7 @@ Exit: 0
 
 ## Save before failure
 
-Input: `easel save $TMPDIR/tmp.eZsHADmXJM/easel/before.png`
+Input: `easel save <isolated-root>/before.png`
 
 Exit: 0
 
@@ -50,7 +50,7 @@ ok · chunk 2 (0.00 s to compute)
 
 ## Save after failure
 
-Input: `easel save $TMPDIR/tmp.eZsHADmXJM/easel/after.png`
+Input: `easel save <isolated-root>/after.png`
 
 Exit: 0
 
@@ -68,7 +68,7 @@ Input: `easel look --crop 300,150,100,50 --mode value,mirror --grid 50`
 Exit: 0
 
 ```text
-/private<isolated-root>/out/easel/probe/look-0002.png (480x240, 0.01s)
+<isolated-root>/out/easel/probe/look-0002.png (480x240, 0.01s)
 
 ```
 
@@ -101,7 +101,7 @@ Input: `easel look --palette`
 Exit: 0
 
 ```text
-/private<isolated-root>/out/easel/probe/look-0003.png (1124x96, 0.01s)
+<isolated-root>/out/easel/probe/look-0003.png (1124x96, 0.01s)
 
 ```
 
@@ -136,7 +136,7 @@ Input: `easel look`
 Exit: 0
 
 ```text
-/private<isolated-root>/out/easel/probe/look-0004.png (1000x200, 0.01s)
+<isolated-root>/out/easel/probe/look-0004.png (1000x200, 0.01s)
 
 ```
 
@@ -147,7 +147,7 @@ Input: `easel note Documentation probe`
 Exit: 0
 
 ```text
-noted in /private<isolated-root>/notes/journal.md
+noted in <isolated-root>/notes/journal.md
 
 ```
 
@@ -186,8 +186,8 @@ Input: `easel close`
 Exit: 0
 
 ```text
-the live canvas is in /private<isolated-root>/out/easel/probe/live.png
-closed; the session is in /private<isolated-root>/paintings/lua/probe.lua
+the live canvas is in <isolated-root>/out/easel/probe/live.png
+closed; the session is in <isolated-root>/paintings/lua/probe.lua
 
 ```
 
@@ -204,7 +204,7 @@ resuming chunk 2/3
 resumed chunk 2/3 0.00s
 resuming chunk 3/3
 resumed chunk 3/3 0.05s
-resumed 3 chunks from /private<isolated-root>/paintings/lua/probe.lua
+resumed 3 chunks from <isolated-root>/paintings/lua/probe.lua
 easel "probe" open: 3 chunks · 2400px · size=100, aspect=5, linen={12, 12}, seed=1
 
 ```
@@ -227,7 +227,7 @@ Input: `easel close`
 Exit: 0
 
 ```text
-the live canvas is in /private<isolated-root>/out/easel/probe/live.png
-closed; the session is in /private<isolated-root>/paintings/lua/probe.lua
+the live canvas is in <isolated-root>/out/easel/probe/live.png
+closed; the session is in <isolated-root>/paintings/lua/probe.lua
 
 ```

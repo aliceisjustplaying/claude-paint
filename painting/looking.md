@@ -125,7 +125,7 @@ After an integrity error, normal commands remain restricted as described in [com
 
 ## Edge cases
 
-- Whole-view size defaults to 1000 pixels on the long side; the renderer clamps it to its supported range.
+- Whole-view size defaults to 1000 pixels on the long side; the renderer clamps it to 1–1600 pixels and never enlarges the source.
 - A live crop has 2.4 pixels per canvas unit and may span at most 500 units on either side.
 - Crop coordinates name corners, not width and height.
 - A grid's lines are never part of a later ungridded look or saved painting.
@@ -135,7 +135,7 @@ After an integrity error, normal commands remain restricted as described in [com
 - Removing older look files does not cause the next look to replace an existing numbered file.
 - Repeated looks can create many PNGs without changing the painting log.
 
-> Technical note: Numeric and crop ownership is here. Receipts: `crates/easel/src/look.rs` (`render`, `View::parse`) and `notes/easel_guide.md:440`. Exact clamp endpoints and palette enumeration are checked in the checklist rather than inferred from the guide.
+> Technical note: Numeric and crop ownership is here. Receipts: `crates/easel/src/look.rs` (`render`, `View::parse`) and `notes/easel_guide.md:440`. The size clamp is at `crates/easel/src/look.rs:370`; palette enumeration comes from retained global piles.
 
 ## Open questions and verification
 

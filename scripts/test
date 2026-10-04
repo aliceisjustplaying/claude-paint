@@ -150,11 +150,12 @@ def count(step, out):
 
 def table():
     """{pid: (ppid, pgid, zombie)} of every process (ps works on macOS and Linux)."""
-    out = subprocess.run(["ps", "-A", "-o", "pid=,ppid=,pgid=,stat="], capture_output=True, text=True).stdout
+    ps = subprocess.Popen(["ps", "-A", "-o", "pid=,ppid=,pgid=,stat="], stdout=subprocess.PIPE, text=True)
+    out = ps.communicate()[0]
     t = {}
     for line in out.splitlines():
         f = line.split()
-        if len(f) >= 3:
+        if len(f) >= 3 and int(f[0]) != ps.pid:  # (not ps itself)
             t[int(f[0])] = (int(f[1]), int(f[2]), len(f) >= 4 and f[3].startswith("Z"))
     return t
 

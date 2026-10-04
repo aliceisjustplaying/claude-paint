@@ -22,7 +22,7 @@ use crate::canvas::Canvas;
 use crate::color::{Rgb, hex};
 use crate::pigment::layer1;
 use rayon::prelude::*;
-use std::sync::Mutex;
+use std::borrow::Cow;
 
 /// Scattering of the dry cloth through its thickness (estimate: raw cotton
 /// duck lets some light through when held up, so not much over 5).
@@ -37,10 +37,10 @@ pub(crate) const WEAVE_AMP: f32 = 0.16;
 pub const NAME_MAX: usize = 64;
 
 /// The cloth a raw canvas is woven from.
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Fabric {
     /// At most `NAME_MAX` bytes.
-    pub name: &'static str,
+    pub name: Cow<'static, str>,
     /// The raw cloth's colour, linear RGB.
     pub color: Rgb,
     /// Pore volume: µm of liquid the cloth holds per area when saturated.
@@ -54,11 +54,11 @@ impl Fabric {
     /// Unbleached cotton duck, as Frankenthaler and Louis used: creamy,
     /// thick and absorbent (estimate: ~0.5 mm thick, porosity ~0.6).
     pub fn cotton_duck() -> Fabric {
-        Fabric { name: "cotton duck", color: hex("#e3d9c4"), cap_um: 300.0, warp_bias: 1.3 }
+        Fabric { name: "cotton duck".into(), color: hex("#e3d9c4"), cap_um: 300.0, warp_bias: 1.3 }
     }
     /// Raw linen: browner, denser and thinner, it holds less.
     pub fn linen() -> Fabric {
-        Fabric { name: "linen", color: hex("#a8966f"), cap_um: 220.0, warp_bias: 1.2 }
+        Fabric { name: "linen".into(), color: hex("#a8966f"), cap_um: 220.0, warp_bias: 1.2 }
     }
     /// The fabrics with names.
     pub fn all() -> [Fabric; 2] {
@@ -81,23 +81,6 @@ impl Fabric {
         let finite = |v: f32| v.is_finite();
         self.name.len() <= NAME_MAX && self.color.iter().all(|&c| finite(c) && c >= 0.0) && finite(self.cap_um) && self.cap_um > 0.0 && finite(self.warp_bias) && self.warp_bias > 0.0
     }
-}
-
-/// A fabric's name read back from a checkpoint, as a `Fabric` holds it: a
-/// named cloth's own, or else one kept for good, once for each name (loading
-/// the same cloth again keeps no new copy).
-pub(crate) fn keep_name(name: String) -> &'static str {
-    static KEPT: Mutex<Vec<&'static str>> = Mutex::new(Vec::new());
-    if let Some(f) = Fabric::all().into_iter().find(|f| f.name == name) {
-        return f.name;
-    }
-    let mut kept = KEPT.lock().unwrap_or_else(|e| e.into_inner());
-    if let Some(&n) = kept.iter().find(|&&n| n == name) {
-        return n;
-    }
-    let n: &'static str = Box::leak(name.into_boxed_str());
-    kept.push(n);
-    n
 }
 
 /// The cloth of a raw canvas, per pixel of its window.
@@ -194,7 +177,7 @@ impl Canvas {
 
     /// The raw fabric, if this is a raw canvas.
     pub fn fabric(&self) -> Option<Fabric> {
-        self.soak.as_ref().map(|s| s.fabric)
+        self.soak.as_ref().map(|s| s.fabric.clone())
     }
 
     /// Words for what is soaked into the cloth at (`x`, `y`) (units).
@@ -262,7 +245,7 @@ mod tests {
     #[test]
     fn the_raw_cloth_looks_its_colour() {
         for fabric in [Fabric::cotton_duck(), Fabric::linen()] {
-            let c = on(200, fabric);
+            let c = on(200, fabric.clone());
             let m = mean(&c);
             for k in 0..3 {
                 assert!((m[k] - fabric.color[k]).abs() < 0.03, "{}: {m:?} vs {:?}", fabric.name, fabric.color);
@@ -346,18 +329,14 @@ mod tests {
         // its numbers and its name, spelt as it was (even as a named
         // cloth's other spelling)
         for name in ["raw silk", "duck"] {
-            let silk = Fabric { name, color: hex("#efe6d2"), cap_um: 140.0, warp_bias: 1.1 };
-            let d = load(saved(&on(40, silk))).unwrap();
+            let silk = Fabric { name: name.into(), color: hex("#efe6d2"), cap_um: 140.0, warp_bias: 1.1 };
+            let d = load(saved(&on(40, silk.clone()))).unwrap();
             assert_eq!(d.fabric(), Some(silk));
         }
-        // and loading the same cloth again keeps no new copy of its name
-        let silk = on(40, Fabric { name: "raw silk", ..Fabric::cotton_duck() });
-        let names: Vec<&'static str> = (0..2).map(|_| load(saved(&silk)).unwrap().fabric().unwrap().name).collect();
-        assert!(std::ptr::eq(names[0], names[1]));
         // a fabric the reader would refuse can't be written either: a name
         // too long, a number out of range
         let mut c = on(40, Fabric::cotton_duck());
-        c.soak.as_mut().unwrap().fabric.name = "a cloth with a name much longer than any checkpoint will keep for it";
+        c.soak.as_mut().unwrap().fabric.name = "a cloth with a name much longer than any checkpoint will keep for it".into();
         assert!(c.write_state(&mut Vec::new(), "").is_err());
         let mut c = on(40, Fabric::cotton_duck());
         c.soak.as_mut().unwrap().fabric.cap_um = 0.0;

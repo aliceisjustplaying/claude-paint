@@ -1266,13 +1266,13 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
                 let ground = if fabric.is_some() { Vec::new() } else { ground_of(&tubes, &o.get::<Value>("ground")?)? };
                 let seed = o.get::<Option<u64>>("seed")?.unwrap_or(1);
                 let mut sty = Style { name: "oil", width_mm: mm, linen: Linen { warp_per_cm: warp, weft_per_cm: weft, ..Linen::fine(1) }, ground, ..Style::oil_with((*tubes).clone()) };
-                if let Some(f) = fabric {
+                if let Some(f) = &fabric {
                     sty.raw = f.color;
                 }
                 let width = st.borrow().width;
                 let mut c = sty.prepare(width, aspect, seed);
-                if let Some(f) = fabric {
-                    c.raw_canvas(f, seed);
+                if let Some(f) = &fabric {
+                    c.raw_canvas(f.clone(), seed);
                 }
                 let h = c.height();
                 {

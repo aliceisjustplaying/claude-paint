@@ -827,8 +827,10 @@ fn hold_look(s: &Session, name: &str, at: (f32, f32), v: &look::View) -> Result<
     let (_, _, bpng) = look::render(&board, &seen_as([30.0, cy - wide / 2.0, 30.0 + len, cy + wide / 2.0]))?;
     let blade_img = image::load_from_memory(&bpng).map_err(|e| e.to_string())?.to_rgb8();
     // held over the passage: the blade's end at the point, its length to the right
-    let x = ((at.0 - crop[0]) * f.scale).round() as i64;
-    let y = ((at.1 - crop[1]) * f.scale).round() as i64 - blade_img.height() as i64 / 2;
+    let x0 = ((crop[0] * f.scale).round().max(0.0) as usize).clamp(f.x0, f.x0 + f.w) as i64;
+    let y0 = ((crop[1] * f.scale).round().max(0.0) as usize).clamp(f.y0, f.y0 + f.h) as i64;
+    let x = (at.0 * f.scale).round() as i64 - x0;
+    let y = (at.1 * f.scale).round() as i64 - y0 - blade_img.height() as i64 / 2;
     image::imageops::overlay(&mut passage, &blade_img, x, y);
     let (w, h) = (passage.width(), passage.height());
     let mut out = Vec::new();
@@ -1571,6 +1573,12 @@ mod tests {
         assert!(darkest < 200, "the darkest of the blade's middle row sums to {darkest}");
         // a pile by its name is a fresh load; in grays the blade is gray too
         hold_look(&s, "skyP", at, &plain).unwrap();
+        // The render clamps an out-of-bounds crop; blade placement uses the
+        // same origin, so it matches the explicitly clamped crop exactly.
+        let edge = (100.0, 100.0);
+        let outside = hold_look(&s, "k", edge, &look::View { crop: Some([-50.0, -50.0, 200.0, 200.0]), ..look::View::default() }).unwrap();
+        let clamped = hold_look(&s, "k", edge, &look::View { crop: Some([0.0, 0.0, 200.0, 200.0]), ..look::View::default() }).unwrap();
+        assert!(outside == clamped, "crop clipping cannot move the held blade");
         let gray = rgb(&hold_look(&s, "k", at, &look::View { value: true, ..look::View::default() }).unwrap().2);
         assert!((mid..side as u32).all(|x| { let p = gray.get_pixel(x, mid).0; p[0] == p[1] && p[1] == p[2] }));
         // (kept for the eye: target/easel-look-test/held-knife.png)
@@ -1580,6 +1588,9 @@ mod tests {
         let after = (state_digest_line(&s, 2, 0.0), s.program("t"), s.globals(), s.st.borrow().clock);
         assert_eq!(before, after);
         s.run("assert(k:fullness() > 0)").unwrap();
+        s.run("k:wipe(); k:load(dk, 0.01)").unwrap();
+        assert!((s.held("k").unwrap().2 - 0.01).abs() < 1e-5,
+            "the preview must preserve a nearly empty knife's load");
         // what it refuses: a clean knife, a name that holds neither, a point off the canvas or the crop, a view of its own
         assert!(hold_look(&s, "clean", at, &plain).unwrap_err().contains("the knife is clean"));
         let e = hold_look(&s, "nope", at, &plain).unwrap_err();

@@ -1724,8 +1724,10 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
         })?)?;
     }
 
-    // knife{width=}: a painting knife, its blade that many units long
-    {
+    // knife{width=}: a painting knife, its blade that many units long (from
+    // engine 4: an older log replays with exactly the globals it had, as
+    // with the rag, `draw_rag::has_rag`)
+    if st.borrow().tubes.engine >= 4 {
         let st1 = st.clone();
         g.set("knife", lua.create_function(move |_, o: Option<Table>| {
             let width = match &o {

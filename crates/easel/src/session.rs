@@ -1610,6 +1610,8 @@ mod tests {
         s.run(CANVAS).unwrap();
         let e = s.run(r#"pile{{"lead white", 1}, turps=0.5}"#).unwrap_err();
         assert!(e.contains("turps= needs engine 4"), "{e}");
+        // (nor has it the knife: its globals are the ones it was painted with)
+        s.run("assert(knife == nil)").unwrap();
         let mut s = Session::new(W).unwrap();
         s.run(&CANVAS.replace(r#"apply="brush"}"#, r#"apply="brush", absorbent=true}"#)).unwrap();
         s.run(r#"pile{{"lead white", 1}, turps=0.5}"#).unwrap();

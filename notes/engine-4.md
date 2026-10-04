@@ -44,7 +44,8 @@ painter never saw relief either: looks showed color only.
   bead, or pressed out past its ends in ridges; below it, within the gap and
   `PRESS_IN_UM` (60 µm), the bead fills to the blade's level. Scraping keeps
   what it cuts. Knives are snapshotted with the brushes, so a failed chunk
-  leaves them as they were.
+  leaves them as they were. A log of an engine before 4 has no `knife`
+  global, as it had none when it was painted.
 - **The relief look** (`look --mode relief [--light az,el]`,
   `Canvas::seen_lit`): the dry relief plus the wet films (bridged as above)
   under a raking light (default from the upper left at 25°), with cast

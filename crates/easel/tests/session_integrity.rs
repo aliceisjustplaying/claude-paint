@@ -132,7 +132,8 @@ fn rebuilding_serves_progress_and_refuses_nonstatus_requests() {
     let name = "rebuild-boundary";
     let dir = root().join("out/easel").join(name);
     std::fs::create_dir_all(&dir).unwrap();
-    let socket = dir.join("sock");
+    let socket = sock_of(&dir);
+    let _ = std::fs::remove_file(&socket); // a previous run's, if the socket lives in the temp dir
     let mut server = Server(Command::new(env!("CARGO_BIN_EXE_easel"))
         .args(["serve", name])
         .env("EASEL_ROOT", root())
@@ -297,7 +298,7 @@ fn a_second_server_is_refused_and_a_dead_ones_socket_is_recovered() {
     let _reaper = Reaper(name);
     ok(&["open", name]);
     ok(&["-s", name, "do", "x = 1"]);
-    let sock = root().join("out/easel/owner/sock");
+    let sock = sock_of(&root().join("out/easel/owner"));
     let ino = std::fs::metadata(&sock).unwrap().ino();
     let o = Command::new(env!("CARGO_BIN_EXE_easel")).args(["serve", name]).env("EASEL_ROOT", root()).output().unwrap();
     assert!(!o.status.success() && String::from_utf8_lossy(&o.stderr).contains("another easel serves"), "{}", String::from_utf8_lossy(&o.stderr));
@@ -316,4 +317,19 @@ fn a_second_server_is_refused_and_a_dead_ones_socket_is_recovered() {
     assert_eq!(servers(name).len(), 1);
     ok(&["-s", name, "do", "assert(x == 1)"]);
     ok(&["-s", name, "close"]);
+}
+
+/// The server's socket for a session directory, by the rule in main.rs's
+/// short_sock: a long checkout path puts it in the temp dir.
+fn sock_of(dir: &std::path::Path) -> std::path::PathBuf {
+    let p = dir.join("sock");
+    if p.as_os_str().len() < 100 {
+        return p;
+    }
+    use std::hash::{Hash, Hasher};
+    // the server hashes its canonical root (session.rs's root())
+    std::fs::create_dir_all(dir).unwrap();
+    let mut h = std::hash::DefaultHasher::new();
+    dir.canonicalize().unwrap().hash(&mut h);
+    std::env::temp_dir().join(format!("easel-{:016x}.sock", h.finish()))
 }

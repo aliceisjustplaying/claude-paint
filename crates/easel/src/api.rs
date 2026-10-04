@@ -1512,7 +1512,8 @@ fn ground_of(tubes: &Palette, v: &Value) -> Result<Vec<Ground>> {
     Ok(out)
 }
 
-#[cfg(test)]
+// Default-box sessions (`Session::new`, `Session::replay`): not in a painter build for one box.
+#[cfg(all(test, tube_box))]
 mod tests {
     use crate::session::Session;
 

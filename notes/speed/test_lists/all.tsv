@@ -6,8 +6,7 @@ cargo	cargo-test	180	270	-	scripts/tests/cargo_tests.sh -j 4
 script	old-logs	60	10	^old_logs: \S+ ok	scripts/tests/old_logs.sh target/release/easel
 script	baseline-package	60	1	^verify_package: hashes ok	notes/thinner/baseline/tools/verify_package.sh
 script	baseline-state	60	6	^\S+: state equal on every baseline field	scripts/tests/baseline_state.sh target/release/easel
-cargo	slow-round-19-log	120	1	-	cargo test -p easel --test boxes -- --ignored --exact a_round_19_log_replays_as_before
-cargo	slow-determinism-live-width	300	3	-	cargo test -p easel --test determinism -- --ignored --exact hand_time_is_deterministic_across_thread_counts_at_the_live_width state_digests_are_the_same_in_every_replay_at_the_live_width the_rag_replays_the_same_at_the_live_width
+cargo	slow-tests-by-name	240	4	-	cargo test -p easel --test boxes -- --ignored --exact a_round_19_log_replays_as_before >"$TMPDIR/slow-r19.out" 2>&1 & a=$!; cargo test -p easel --test determinism -- --ignored --exact hand_time_is_deterministic_across_thread_counts_at_the_live_width state_digests_are_the_same_in_every_replay_at_the_live_width the_rag_replays_the_same_at_the_live_width >"$TMPDIR/slow-det.out" 2>&1 & b=$!; wait $a; ra=$?; wait $b; rb=$?; cat "$TMPDIR/slow-r19.out" "$TMPDIR/slow-det.out"; [ $ra = 0 ] && [ $rb = 0 ]
 cargo	painter-build-inness	300	14	-	cargo test -p easel --no-default-features --features box-inness
 script	box-features	600	14	^box_features: .*: (\d+ passed|refused)$	BOX_FEATURES_PROFILE=test scripts/tests/box_features.sh
 script	lockrun	120	17	^ok \d+ -	scripts/tests/lockrun.sh

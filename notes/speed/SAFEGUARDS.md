@@ -6,7 +6,35 @@ Three tools check a version before it reaches main:
 - `scripts/golden_approve` records and checks approvals of protected test answers.
 - `scripts/merge_candidate` adds a commit to main only if its receipt, approvals and main's position check out.
 
-`scripts/safeguards_lib.py` holds their shared code. `scripts/tests/safeguards.sh` tests them on dummy repositories (121 checks). First built on branch `codex/safeguards` (on `codex/speed` at `af5beb3`). The review fixes are on `codex/safeguards2`, from `codex/speed` at `a0b2c25` (see Failure history), and the pinned lockrun (review round 2, S2) on `codex/safeguards3`, from `codex/speed` at `0d802c2`. test_candidate has run for real: `c53d40a` passed (`notes/speed/PHASE2_REPORT.md`), with a local v1 receipt note. No approval has been recorded, merge_candidate has run only on dummy repositories, and main and the website are unchanged.
+`scripts/safeguards_lib.py` holds their shared code. `scripts/tests/safeguards.sh` tests them on dummy repositories (123 checks). First built on branch `codex/safeguards` (on `codex/speed` at `af5beb3`). The review fixes are on `codex/safeguards2`, from `codex/speed` at `a0b2c25` (see Failure history), and the pinned lockrun (review round 2, S2) on `codex/safeguards3`, from `codex/speed` at `0d802c2`. test_candidate has run for real: `c53d40a` passed (`notes/speed/PHASE2_REPORT.md`), with a local v1 receipt note. No approval has been recorded, merge_candidate has run only on dummy repositories, and main and the website are unchanged.
+
+## Run the gate from the approved copy
+
+The gate's own files are protected paths (`notes/golden_paths.txt`):
+`scripts/test_candidate`, `scripts/merge_candidate`, `scripts/golden_approve`,
+`scripts/safeguards_lib.py` (it holds the lockrun pin) and
+`scripts/tests/safeguards.sh`. A candidate that changes any of them shows it as
+an unapproved protected change (suite checks 77 and 78). But a check run by the
+candidate's own copy of the gate would be judged by the code under test. So
+every merge runs the gate from the separately approved copy in
+`~/src/a/claude-paint-tools/gate/` (as the lockrun copy is
+`~/src/a/claude-paint-tools/lockrun`), never from the candidate's or a working
+copy's `scripts/`:
+
+```sh
+G=~/src/a/claude-paint-tools/gate
+cd <a clone that has the candidate commit>
+$G/test_candidate <commit>
+$G/golden_approve check --candidate <commit> --base <main>
+$G/merge_candidate <commit> --local ~/src/a/claude-paint
+```
+
+`$G/README.md` names the commit the copy was taken from and each file's
+sha256; check them (`shasum -a 256 -c` with its list) before use. The copy
+changes only when the lead approves a new version of these files: copy them
+from the approved commit and update the README. test_candidate finds the
+pinned lockrun at `~/src/a/claude-paint-tools/lockrun` (the copy holds no
+lockrun of its own).
 
 ## Commands for the lead
 
@@ -206,7 +234,7 @@ scripts/tests/safeguards.sh
 
 It builds a bare origin, a published clone and a dev clone under `$TMPDIR`. The dev clone has the same sparse post-checkout hook as the real repository, and its working copy stays dirty throughout. The candidate commits are made with plumbing. They carry a fake `scripts/test`, a three-step dummy `notes/speed/test_lists/all.tsv` (build, cargo, script with a group) and a copy of `scripts/lockrun`. The suite sets `LOCKRUN` to this checkout's `scripts/lockrun` (its hash is the pin). Only the forger cases unset it. The fake runner reads the committed list and emits the full summary contract above. A committed `fake_mode` file makes it misbehave in one specific way. 37 test_candidate runs go in parallel, eight at a time, each with its own `LOCKRUN_DIR`. The fake test fails unless it runs under lockrun, with its target directory inside the worktree, with `notes/pic.png` present (a full checkout) and without the dev clone's changes. Receipts are "forged" (copied and edited) only to test merge_candidate's refusals. Every pass comes from a real test_candidate run. The suite does not test the real `scripts/test`'s process handling; the parent does that.
 
-Result on 2026-10-04 (macOS, Python 3.13, git 2.54): `# 111 checks, 111 passed, 0 failed`, exit 0, in each of three runs under `scripts/lockrun --timeout 600`: 64.5 s, then 67 s and 67 s (the last two after the fixture race fix). With the pinned lockrun (10 more checks): `# 121 checks, 121 passed, 0 failed`, exit 0, 69.9 s under `scripts/lockrun --timeout 600`. The hooks run on every Git command, and that accounts for most of the time.
+Result on 2026-10-04 (macOS, Python 3.13, git 2.54): `# 111 checks, 111 passed, 0 failed`, exit 0, in each of three runs under `scripts/lockrun --timeout 600`: 64.5 s, then 67 s and 67 s (the last two after the fixture race fix). With the pinned lockrun (10 more checks): `# 121 checks, 121 passed, 0 failed`, exit 0, 69.9 s under `scripts/lockrun --timeout 600`. With the gate's own tools protected (phase 5, 2 more checks, 77 and 78): `# 123 checks, 123 passed, 0 failed`, exit 0, 70.7 s under `scripts/lockrun --timeout 300`. The hooks run on every Git command, and that accounts for most of the time.
 
 The 121 checks:
 

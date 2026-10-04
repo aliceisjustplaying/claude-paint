@@ -485,6 +485,18 @@ ga check --candidate "$LC" --base "$M"
 check "a change to the test list (protected) needs approval" eval 'rc 1 && has "UNAPPROVED M $LIST"'
 ga check --candidate "$RN" --base "$M"
 check "a change to scripts/test (protected) needs approval" eval 'rc 1 && has "UNAPPROVED M scripts/test"'
+# the gate's own tools are protected (phase 5): a candidate that edits merge_candidate
+# or safeguards_lib.py is reported, never silently trusted
+GB=$(mkc "$M" notes/golden_paths.txt="$(printf '%s\nnotes/speed/test_lists/\nscripts/test\nscripts/test_candidate\nscripts/merge_candidate\nscripts/golden_approve\nscripts/safeguards_lib.py\n' "$GOLDEN0")" \
+  scripts/merge_candidate="<exec:#!/bin/sh
+echo merge v1>" scripts/safeguards_lib.py="PIN = 1")
+GM=$(mkc "$GB" scripts/merge_candidate="<exec:#!/bin/sh
+echo merge v2: no checks>")
+ga check --candidate "$GM" --base "$GB"
+check "a candidate that edits merge_candidate: an unapproved protected change" eval 'rc 1 && has "UNAPPROVED M scripts/merge_candidate"'
+GP=$(mkc "$GB" scripts/safeguards_lib.py="PIN = 2")
+ga check --candidate "$GP" --base "$GB"
+check "a candidate that edits safeguards_lib.py (the lockrun pin): an unapproved protected change" eval 'rc 1 && has "UNAPPROVED M scripts/safeguards_lib.py"'
 ga record --commit "$LC" --approver lead --builder speed --reason "reviewed list change" --paths "$LIST"
 ga check --candidate "$LC" --base "$M"
 check "an approval of the exact list blob covers that list" eval 'rc 0'

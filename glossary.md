@@ -97,3 +97,19 @@
 **Pacing.** Delaying model requests according to recent input-token usage. It changes real elapsed time, not painting time.
 
 **Image pruning.** Replacing older image blocks in outgoing model context with text while keeping the stored session images.
+
+**Outline.** A constructed drawn boundary with paths, corners and planned brush strokes. It can produce masks or be painted with a held brush.
+
+**Character.** An outline's preset irregularity: firm, searching, broken or soft.
+
+**Spine.** The main sequence of points and widths used to construct a body silhouette; limbs add connected forms.
+
+**Field.** Position-dependent numeric values across the canvas. A distance field can contain negative values and is not ordinary mask coverage.
+
+**Noise.** A repeatable spatial pattern of numeric variation, used to vary geometry or painting parameters.
+
+**Worley pattern.** A seeded cellular pattern whose queries report distances to cell points and a stable value for each cell.
+
+**Lobe.** A rounded variation along an outline whose width is controlled in canvas units.
+
+**Tangent and normal.** Directions along a boundary and perpendicular outward from it, returned when sampling an outline.

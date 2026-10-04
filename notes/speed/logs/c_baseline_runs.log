@@ -1,0 +1,4 @@
+run_scenes: 6 scenes -> $TMPDIR/cp-speed/runs/ref
+run_scenes: 6 scenes -> $TMPDIR/cp-speed/runs/dump
+run_scenes: 6 scenes -> $TMPDIR/cp-speed/runs/nodump
+run_scenes: 6 scenes -> $TMPDIR/cp-speed/runs/t1

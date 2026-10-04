@@ -1040,6 +1040,9 @@ mod tests {
     use crate::session::{Session, box_for, parse_program};
 
     /// Replay an old log to its end at a small width; the chunk that fails, if one does.
+    /// The six tests below replay whole paintings (20 to 38 chunks): no test command runs
+    /// them (the overnight plan of 2026-10-04 forbids painting replays in tests; see
+    /// notes/speed/SKIPPED.md for the coverage this leaves out).
     fn replays(log: &str) {
         let path = format!("{}/../../notes/{log}", env!("CARGO_MANIFEST_DIR"));
         let text = std::fs::read_to_string(&path).unwrap();
@@ -1053,26 +1056,32 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "replays whole paintings: never run"]
     fn easel3_free_replays() {
         replays("amnesia3/easel3_free.lua");
     }
     #[test]
+    #[ignore = "replays whole paintings: never run"]
     fn easel3_green_replays() {
         replays("amnesia3/easel3_green.lua");
     }
     #[test]
+    #[ignore = "replays whole paintings: never run"]
     fn easel3_near_replays() {
         replays("amnesia3/easel3_near.lua");
     }
     #[test]
+    #[ignore = "replays whole paintings: never run"]
     fn easel4_free_replays() {
         replays("amnesia4/easel4_free.lua");
     }
     #[test]
+    #[ignore = "replays whole paintings: never run"]
     fn easel4_green_replays() {
         replays("amnesia4/easel4_green.lua");
     }
     #[test]
+    #[ignore = "replays whole paintings: never run"]
     fn easel4_near_replays() {
         replays("amnesia4/easel4_near.lua");
     }

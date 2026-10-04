@@ -7,7 +7,7 @@ says what the tool would be, why it is not built, and what needs studying.
 
 **The tool:** `look --hold <knife or pile> --at x,y` (the look tool's `hold`
 and `at`): a passage of the canvas at full detail (240 units square around
-the point, or `--crop`) with a loaded knife held over it, the blade's end at
+the point, clipped to the canvas edges, or `--crop`) with a loaded knife held over it, the blade's end at
 the point, the way a painter holds the knife up against the picture to
 compare a mix with a passage.
 

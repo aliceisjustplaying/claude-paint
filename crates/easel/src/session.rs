@@ -461,12 +461,24 @@ impl Session {
             if let Ok(k) = u.borrow::<api::KnifeU>() {
                 let k = k.k.borrow();
                 return match k.paint() {
-                    Some(p) => Ok((p, k.width, k.fullness().clamp(0.05, 1.0))),
+                    Some(p) => Ok((p, k.width, k.fullness().clamp(0.0, 1.0))),
                     None => Err(format!("look --hold {name}: the knife is clean; load it first (k:load(pile))")),
                 };
             }
             if let Ok(p) = u.borrow::<api::PileU>() {
-                return Ok((api::resolve(&self.st, p.clone(), None).paint(), 30.0, 1.0));
+                // Project the same fresh visit as a knife load, without changing
+                // the live board's dirt, ordering or last-carried paint.
+                let st = self.st.borrow();
+                let mut board = st.board.clone();
+                board.visit(p.heap, 0.0);
+                let mut projected = p.clone();
+                if let Some(h) = board.heap(p.heap).filter(|h| h.changed) {
+                    projected.mix = st.tubes.pile(h.fractions());
+                    projected.mix.solvent = h.solvent;
+                    projected.mix.oil_rate = h.oil_rate;
+                    projected.medium = h.medium;
+                }
+                return Ok((projected.paint(), 30.0, 1.0));
             }
         }
         let mut names: Vec<&str> = self

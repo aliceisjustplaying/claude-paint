@@ -240,6 +240,15 @@ def say(text):
     return line({"type": "message", "message": {"role": "assistant", "content": [{"type": "text", "text": text}]}})
 
 
+def test_a_held_knife_is_never_the_picker_fallback(home):
+    pytest.importorskip("PIL")
+    _, studio, log = home
+    log.write_text(start(str(studio)) + looks_at_once(
+        ("crop", {"crop": "0,0,100,100"}, png_of("red")),
+        ("hold", {"hold": "p", "at": "50,50"}, png_of("blue"))))
+    assert S.glance([str(log)])["look"] == 0
+
+
 @pytest.mark.parametrize("via", ["live server", "static export"])
 def test_the_picker_gets_the_newest_whole_look_and_the_title_from_the_closing_reply(home, server, via):
     # a whole look, then a whole look and a squint asked for together: the picture is the second whole look,

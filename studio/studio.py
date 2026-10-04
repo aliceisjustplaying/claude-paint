@@ -436,7 +436,7 @@ def _glance_file(path):
                     look, k = g["calls"].get(m.get("toolCallId")), 0
                     for x in content:
                         if x.get("type") == "image" and x.get("data"):
-                            if look is not REFERENCE:
+                            if look is not REFERENCE and not (look and re.search(r"(?:^|, )hold ", look)):
                                 g["last"] = (g["n"], at, k)
                                 if is_whole(look):
                                     g["whole"] = g["last"]

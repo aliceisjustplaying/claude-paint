@@ -1,0 +1,296 @@
+[
+  {
+    "args": [
+      "open",
+      "oil-0"
+    ],
+    "exit": 0,
+    "out": "easel \"oil-0\" open: 0 chunks · 2400px · no canvas yet\n",
+    "err": "",
+    "seconds": 0.1083
+  },
+  {
+    "args": [
+      "do",
+      "canvas{size=100,aspect=5,linen=12,ground={{pile={{\"lead white\",1}},um=40,apply=\"knife\"}}}; p=pile{{\"red earth\",1}}; q=pile{{\"lead white\",1}}; m=rect(300,40,200,100); p=pile{{\"red earth\",1},medium=0};work(rect(350,50,100,60),{pile=p,hand=\"detail\",coverage=1,clip=true,seed=1});"
+    ],
+    "exit": 0,
+    "out": "ok · chunk 1 (0.20 s to compute)\n",
+    "err": "",
+    "seconds": 0.2144
+  },
+  {
+    "args": [
+      "do",
+      "print(p.medium,drying(400,80),wait(0));last=drying(400,80);for i=1,2000 do wait(5);local stage=drying(400,80);if stage~=last then print(stage,wait(0));last=stage end;if stage==\"dry\" then break end end"
+    ],
+    "exit": 0,
+    "out": "0.0\topen\tday 1, 09:08\nsetting\tday 1, 14:03\ntacky\tday 1, 18:58\ndry\tday 4, 03:33\nok · chunk 2 (0.29 s to compute)\n",
+    "err": "",
+    "seconds": 0.3054
+  },
+  {
+    "args": [
+      "close"
+    ],
+    "exit": 0,
+    "out": "the live canvas is in <root>/out/easel/oil-0/live.png\nclosed; the session is in <root>/paintings/lua/oil-0.lua\n",
+    "err": "",
+    "seconds": 0.0983
+  },
+  {
+    "args": [
+      "open",
+      "oil-0_5"
+    ],
+    "exit": 0,
+    "out": "easel \"oil-0_5\" open: 0 chunks · 2400px · no canvas yet\n",
+    "err": "",
+    "seconds": 0.1144
+  },
+  {
+    "args": [
+      "do",
+      "canvas{size=100,aspect=5,linen=12,ground={{pile={{\"lead white\",1}},um=40,apply=\"knife\"}}}; p=pile{{\"red earth\",1}}; q=pile{{\"lead white\",1}}; m=rect(300,40,200,100); p=pile{{\"red earth\",1},medium=0.5};work(rect(350,50,100,60),{pile=p,hand=\"detail\",coverage=1,clip=true,seed=1});"
+    ],
+    "exit": 0,
+    "out": "ok · chunk 1 (0.20 s to compute)\n",
+    "err": "",
+    "seconds": 0.2195
+  },
+  {
+    "args": [
+      "do",
+      "print(p.medium,drying(400,80),wait(0));last=drying(400,80);for i=1,2000 do wait(5);local stage=drying(400,80);if stage~=last then print(stage,wait(0));last=stage end;if stage==\"dry\" then break end end"
+    ],
+    "exit": 0,
+    "out": "0.5\topen\tday 1, 09:08\nsetting\tday 1, 15:23\ntacky\tday 1, 21:38\ndry\tday 4, 21:18\nok · chunk 2 (0.38 s to compute)\n",
+    "err": "",
+    "seconds": 0.4043
+  },
+  {
+    "args": [
+      "close"
+    ],
+    "exit": 0,
+    "out": "the live canvas is in <root>/out/easel/oil-0_5/live.png\nclosed; the session is in <root>/paintings/lua/oil-0_5.lua\n",
+    "err": "",
+    "seconds": 0.1032
+  },
+  {
+    "args": [
+      "open",
+      "oil-0_9"
+    ],
+    "exit": 0,
+    "out": "easel \"oil-0_9\" open: 0 chunks · 2400px · no canvas yet\n",
+    "err": "",
+    "seconds": 0.1143
+  },
+  {
+    "args": [
+      "do",
+      "canvas{size=100,aspect=5,linen=12,ground={{pile={{\"lead white\",1}},um=40,apply=\"knife\"}}}; p=pile{{\"red earth\",1}}; q=pile{{\"lead white\",1}}; m=rect(300,40,200,100); p=pile{{\"red earth\",1},medium=0.9};work(rect(350,50,100,60),{pile=p,hand=\"detail\",coverage=1,clip=true,seed=1});"
+    ],
+    "exit": 0,
+    "out": "ok · chunk 1 (0.21 s to compute)\n",
+    "err": "",
+    "seconds": 0.2201
+  },
+  {
+    "args": [
+      "do",
+      "print(p.medium,drying(400,80),wait(0));last=drying(400,80);for i=1,2000 do wait(5);local stage=drying(400,80);if stage~=last then print(stage,wait(0));last=stage end;if stage==\"dry\" then break end end"
+    ],
+    "exit": 0,
+    "out": "0.89999997615814209\topen\tday 1, 09:08\nsetting\tday 1, 15:48\ntacky\tday 1, 22:33\ndry\tday 5, 02:58\nok · chunk 2 (0.41 s to compute)\n",
+    "err": "",
+    "seconds": 0.4343
+  },
+  {
+    "args": [
+      "close"
+    ],
+    "exit": 0,
+    "out": "the live canvas is in <root>/out/easel/oil-0_9/live.png\nclosed; the session is in <root>/paintings/lua/oil-0_9.lua\n",
+    "err": "",
+    "seconds": 0.1081
+  },
+  {
+    "args": [
+      "open",
+      "rag-setting"
+    ],
+    "exit": 0,
+    "out": "easel \"rag-setting\" open: 0 chunks · 2400px · no canvas yet\n",
+    "err": "",
+    "seconds": 0.1115
+  },
+  {
+    "args": [
+      "do",
+      "canvas{size=100,aspect=5,linen=12,ground={{pile={{\"lead white\",1}},um=40,apply=\"knife\"}}}; p=pile{{\"red earth\",1}}; q=pile{{\"lead white\",1}}; m=rect(300,40,200,100); m=rect(350,50,100,60);work(m,{pile=p,hand=\"detail\",coverage=3,clip=true,seed=1});wait(960);r=rag{width=40,seed=1};r:dip(1);print(drying(400,80));"
+    ],
+    "exit": 0,
+    "out": "setting\nok · chunk 1 (0.47 s to compute)\n",
+    "err": "",
+    "seconds": 0.4837
+  },
+  {
+    "args": [
+      "do",
+      "r:wipe({{360,80},{440,80}},{pressure=1,seed=1});print(r.load,r.soaked,drying(400,80))"
+    ],
+    "exit": 0,
+    "out": "0.73891836404800415\t0.061576537787914276\tsetting\nok · chunk 2 (0.01 s to compute)\n",
+    "err": "",
+    "seconds": 0.031
+  },
+  {
+    "args": [
+      "close"
+    ],
+    "exit": 0,
+    "out": "the live canvas is in <root>/out/easel/rag-setting/live.png\nclosed; the session is in <root>/paintings/lua/rag-setting.lua\n",
+    "err": "",
+    "seconds": 0.1032
+  },
+  {
+    "args": [
+      "open",
+      "empty"
+    ],
+    "exit": 0,
+    "out": "easel \"empty\" open: 0 chunks · 2400px · no canvas yet\n",
+    "err": "",
+    "seconds": 0.114
+  },
+  {
+    "args": [
+      "do",
+      "brush(\"round\",4)"
+    ],
+    "exit": 0,
+    "out": "ok · chunk 1 (0.00 s to compute)\n",
+    "err": "",
+    "seconds": 0.0151
+  },
+  {
+    "args": [
+      "do",
+      "work(rect(0,0,10,10),{pile=7})"
+    ],
+    "exit": 1,
+    "out": "",
+    "err": "runtime error: no canvas yet: the first chunk is canvas{size=, aspect=, linen=, ground=}\n(the chunk failed and changed nothing)\n",
+    "seconds": 0.0033
+  },
+  {
+    "args": [
+      "do",
+      "wait(0)"
+    ],
+    "exit": 1,
+    "out": "",
+    "err": "runtime error: no canvas yet: the first chunk is canvas{size=, aspect=, linen=, ground=}\n(the chunk failed and changed nothing)\n",
+    "seconds": 0.0033
+  },
+  {
+    "args": [
+      "do",
+      "drying(0,0)"
+    ],
+    "exit": 1,
+    "out": "",
+    "err": "runtime error: no canvas yet: the first chunk is canvas{size=, aspect=, linen=, ground=}\n(the chunk failed and changed nothing)\n",
+    "seconds": 0.0032
+  },
+  {
+    "args": [
+      "do",
+      "rag()"
+    ],
+    "exit": 1,
+    "out": "",
+    "err": "runtime error: no canvas yet: call canvas{} first\n(the chunk failed and changed nothing)\n",
+    "seconds": 0.003
+  },
+  {
+    "args": [
+      "do",
+      "everywhere()"
+    ],
+    "exit": 1,
+    "out": "",
+    "err": "runtime error: no canvas yet: the first chunk is canvas{size=, aspect=, linen=, ground=}\n(the chunk failed and changed nothing)\n",
+    "seconds": 0.0031
+  },
+  {
+    "args": [
+      "close"
+    ],
+    "exit": 0,
+    "out": "closed; the session is in <root>/paintings/lua/empty.lua\n",
+    "err": "",
+    "seconds": 0.0126
+  },
+  {
+    "args": [
+      "open",
+      "effect-stage"
+    ],
+    "exit": 0,
+    "out": "easel \"effect-stage\" open: 0 chunks · 2400px · no canvas yet\n",
+    "err": "",
+    "seconds": 0.1113
+  },
+  {
+    "args": [
+      "do",
+      "canvas{size=100,aspect=5,linen=12,ground={{pile={{\"lead white\",1}},um=40,apply=\"knife\"}}}; p=pile{{\"red earth\",1}}; q=pile{{\"lead white\",1}}; m=rect(300,40,200,100); work(m,{pile=p,hand=\"detail\",coverage=2,clip=true,seed=1});print(drying(400,80));"
+    ],
+    "exit": 0,
+    "out": "open\nok · chunk 1 (0.62 s to compute)\n",
+    "err": "",
+    "seconds": 0.6372
+  },
+  {
+    "args": [
+      "do",
+      "varnish()"
+    ],
+    "exit": 1,
+    "out": "",
+    "err": "runtime error: varnish: the paint is not all dry yet (10% of the canvas is still open, setting or tacky; drying(x, y) tells where): wait first\n(the chunk failed and changed nothing)\n",
+    "seconds": 0.018
+  },
+  {
+    "args": [
+      "do",
+      "wait(43200);print(drying(400,80))"
+    ],
+    "exit": 0,
+    "out": "dry\nok · chunk 2 (0.01 s to compute)\n",
+    "err": "",
+    "seconds": 0.0246
+  },
+  {
+    "args": [
+      "do",
+      "varnish()"
+    ],
+    "exit": 0,
+    "out": "ok · chunk 3 (0.04 s to compute)\n",
+    "err": "",
+    "seconds": 0.0539
+  },
+  {
+    "args": [
+      "close"
+    ],
+    "exit": 0,
+    "out": "the live canvas is in <root>/out/easel/effect-stage/live.png\nclosed; the session is in <root>/paintings/lua/effect-stage.lua\n",
+    "err": "",
+    "seconds": 0.092
+  }
+]

@@ -1,0 +1,9 @@
+{
+  "servedPageSha256": "7fae625c0084b4203b0fcab6edb4d44bac1758084479326ac8b85bf927aada67",
+  "sourcePageSha256": "7fae625c0084b4203b0fcab6edb4d44bac1758084479326ac8b85bf927aada67",
+  "completedSuccessfulPaintEvents": 11,
+  "successfulPaintOutputsWithClock": 0,
+  "clockFunction": "studio/index.html:449",
+  "hideCondition": "studio/index.html:524",
+  "reason": "Clock display depends on a timestamp printed by a successful paint call; none has been printed in this snapshot."
+}

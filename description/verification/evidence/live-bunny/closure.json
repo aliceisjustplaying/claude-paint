@@ -1,0 +1,10 @@
+{
+  "temporary_root_removed": true,
+  "probe_easel_closed": true,
+  "viewer_url": "http://<tailscale-host>:18767/?p=paint-studio-babb1e",
+  "viewer_http_status": 200,
+  "documentation_check": "15 feature documents; 81 glossary terms; 0 structural/link errors",
+  "commits_created_during_closure": 0,
+  "integrated": false,
+  "deployed": false
+}

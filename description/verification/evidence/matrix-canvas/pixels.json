@@ -1,0 +1,30 @@
+{
+  "seed_default_equals_1": true,
+  "seed2_differs": true,
+  "dimensions": {
+    "aspect0_2.png": "80x400",
+    "aspect1.png": "400x400",
+    "aspect2.png": "400x200",
+    "brush.png": "400x80",
+    "coatorder1.png": "400x80",
+    "coatorder2.png": "400x80",
+    "default-seed.png": "400x80",
+    "duplicate-palette.png": "1124x352",
+    "ground400.png": "400x80",
+    "ground5.png": "400x80",
+    "linen0.png": "400x80",
+    "linen1.png": "400x80",
+    "linen2.png": "400x80",
+    "linen3.png": "400x80",
+    "medium-palette.png": "1124x224",
+    "medium-strokes.png": "1000x200",
+    "replacement-after.png": "2400x480",
+    "replacement-before.png": "2400x480",
+    "roller.png": "400x80",
+    "seed1.png": "400x80",
+    "seed2.png": "400x80",
+    "size50.png": "400x80",
+    "size5000.png": "400x80"
+  },
+  "textures_distinct": 11
+}

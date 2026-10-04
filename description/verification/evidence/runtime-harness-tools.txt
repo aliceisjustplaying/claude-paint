@@ -1,0 +1,21 @@
+exit 0 stdout done
+ stderr 
+initial {}
+{"role":"toolResult","toolCallId":"tool:1791113994135:fh5qnw14tpe","toolName":"read","content":[{"type":"text","text":"# Local fixture\n"}],"isError":false,"timestamp":1791113994137}
+{"role":"toolResult","toolCallId":"tool:1791113994135:qlnta0liwic","toolName":"read","content":[{"type":"text","text":"<studio>-outside.txt is outside the studio"}],"details":{},"isError":true,"timestamp":1791113994138}
+{"role":"toolResult","toolCallId":"tool:1791113994135:5ks8tp7hwr4","toolName":"read","content":[{"type":"text","text":"notes/outside is outside the studio"}],"details":{},"isError":true,"timestamp":1791113994138}
+{"role":"toolResult","toolCallId":"tool:1791113994135:6qu5pzg8xwn","toolName":"read","content":[{"type":"text","text":"missing.txt: no such file in the studio"}],"details":{},"isError":true,"timestamp":1791113994138}
+{"role":"toolResult","toolCallId":"tool:1791113994139:4rq1qo0xefp","toolName":"paint","content":[{"type":"text","text":"first\nok"}],"details":{},"isError":false,"timestamp":1791113994692}
+{"role":"toolResult","toolCallId":"tool:1791113994139:gccnp94uzh","toolName":"paint","content":[{"type":"text","text":"42\nok"}],"details":{},"isError":false,"timestamp":1791113994753}
+{"role":"toolResult","toolCallId":"tool:1791113994753:vn7pd5kciae","toolName":"look","content":[{"type":"text","text":"<studio>/out/easel/painting/d909fb9d-fee6-4929-813d-0b557f2e4c3a.png (80x80)"},{"type":"image","mimeType":"image/png","bytes":6764}],"isError":false,"timestamp":1791113994804}
+{"role":"toolResult","toolCallId":"tool:1791113994753:q9vzrghgng","toolName":"look","content":[{"type":"text","text":"<studio>/out/easel/painting/f444e1c4-06ab-41c9-9bfe-6ec796ba63e7.png (80x80)"},{"type":"image","mimeType":"image/png","bytes":6764}],"isError":false,"timestamp":1791113994851}
+{"role":"toolResult","toolCallId":"tool:1791113994753:8oazxe5mp8h","toolName":"note","content":[{"type":"text","text":"noted in <studio>/notes/journal.md"}],"details":{},"isError":false,"timestamp":1791113994857}
+{"role":"toolResult","toolCallId":"tool:1791113994753:gg4hpq2l7vv","toolName":"note","content":[{"type":"text","text":"revised in <studio>/notes/journal.md\n"}],"details":{},"isError":false,"timestamp":1791113994857}
+{"role":"toolResult","toolCallId":"tool:1791113994753:1k2krz4tjfn","toolName":"status","content":[{"type":"text","text":"size=100, aspect=1, linen={12, 12}, seed=1"}],"details":{},"isError":false,"timestamp":1791113994862}
+{"role":"toolResult","toolCallId":"tool:1791113994753:ej13w1zqw6","toolName":"log","content":[{"type":"text","text":"-- easel session \"painting\": a painting replayed chunk by chunk.\n-- Each \"--@ chunk\" line starts one chunk as it was run at the easel.\n--@ engine 3\n\n--@ chunk\ncanvas{size=100,aspect=1,linen=12,ground={{pile={{\"lead white\",1}},um=40,apply=\"knife\"}}}; marker=42; print(\"first\")\n\n--@ chunk\nprint(marker); marker=43"}],"details":{},"isError":false,"timestamp":1791113994866}
+after model ended 2 chunks · 2400px · size=100, aspect=1, linen={12, 12}, seed=1
+
+journal - day 1, 09:00: revised note
+
+history {"at":"2026-10-04T11:39:54.857Z","replaced":"first note","with":"revised note","before":"- day 1, 09:00: first note\n"}
+

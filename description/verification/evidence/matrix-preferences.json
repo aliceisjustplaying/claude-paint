@@ -1,0 +1,100 @@
+[
+  {
+    "args": [
+      "open",
+      "brush-plain"
+    ],
+    "exit": 0,
+    "out": "easel \"brush-plain\" open: 0 chunks · 2400px · no canvas yet\n",
+    "err": "",
+    "seconds": 0.1072
+  },
+  {
+    "args": [
+      "do",
+      "canvas{size=100,aspect=5,linen=12,ground={{pile={{\"lead white\",1}},um=40,apply=\"knife\"}}}; p=pile{{\"red earth\",1}}; q=pile{{\"lead white\",1}}; m=rect(300,40,200,100); custom=brush{kind=\"round\",width=12};b=brush(\"flat\",12);b:load(p);"
+    ],
+    "exit": 0,
+    "out": "ok · chunk 1 (0.07 s to compute)\n",
+    "err": "",
+    "seconds": 0.082
+  },
+  {
+    "args": [
+      "do",
+      "b:stroke({{200,80},{500,120},{800,80}});print(b)"
+    ],
+    "exit": 0,
+    "out": "brush(flat 12, 0% full)\nok · chunk 2 (0.09 s to compute)\n",
+    "err": "",
+    "seconds": 0.1125
+  },
+  {
+    "args": [
+      "save",
+      "<scratch-file>"
+    ],
+    "exit": 0,
+    "out": "<scratch-file>\n",
+    "err": "",
+    "seconds": 0.0266
+  },
+  {
+    "args": [
+      "close"
+    ],
+    "exit": 0,
+    "out": "the live canvas is in <root>/out/easel/brush-plain/live.png\nclosed; the session is in <root>/paintings/lua/brush-plain.lua\n",
+    "err": "",
+    "seconds": 0.0924
+  },
+  {
+    "args": [
+      "open",
+      "brush-custom"
+    ],
+    "exit": 0,
+    "out": "easel \"brush-custom\" open: 0 chunks · 2400px · no canvas yet\n",
+    "err": "",
+    "seconds": 0.1101
+  },
+  {
+    "args": [
+      "do",
+      "canvas{size=100,aspect=5,linen=12,ground={{pile={{\"lead white\",1}},um=40,apply=\"knife\"}}}; p=pile{{\"red earth\",1}}; q=pile{{\"lead white\",1}}; m=rect(300,40,200,100); custom=brush{kind=\"round\",width=12,stiffness=0.1,bristles=15};b=brush(\"flat\",12);b:load(p);"
+    ],
+    "exit": 0,
+    "out": "ok · chunk 1 (0.07 s to compute)\n",
+    "err": "",
+    "seconds": 0.0827
+  },
+  {
+    "args": [
+      "do",
+      "b:stroke({{200,80},{500,120},{800,80}});print(b)"
+    ],
+    "exit": 0,
+    "out": "brush(flat 12, 0% full)\nok · chunk 2 (0.09 s to compute)\n",
+    "err": "",
+    "seconds": 0.1133
+  },
+  {
+    "args": [
+      "save",
+      "<scratch-file>"
+    ],
+    "exit": 0,
+    "out": "<scratch-file>\n",
+    "err": "",
+    "seconds": 0.0253
+  },
+  {
+    "args": [
+      "close"
+    ],
+    "exit": 0,
+    "out": "the live canvas is in <root>/out/easel/brush-custom/live.png\nclosed; the session is in <root>/paintings/lua/brush-custom.lua\n",
+    "err": "",
+    "seconds": 0.0976
+  }
+]

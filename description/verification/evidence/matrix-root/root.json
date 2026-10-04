@@ -1,0 +1,541 @@
+[
+  {
+    "id": "empty",
+    "status": {
+      "args": [
+        "status"
+      ],
+      "out": "0 chunks · 2400px · no canvas yet\n",
+      "err": "",
+      "exit": 0
+    },
+    "log": {
+      "args": [
+        "log"
+      ],
+      "out": "-- easel session \"views\": a painting replayed chunk by chunk.\n-- Each \"--@ chunk\" line starts one chunk as it was run at the easel.\n--@ engine 3\n",
+      "err": "",
+      "exit": 0
+    },
+    "look": {
+      "args": [
+        "look"
+      ],
+      "out": "",
+      "err": "no canvas yet: the first chunk is canvas{...}\n",
+      "exit": 1
+    },
+    "globals": {
+      "args": [
+        "globals"
+      ],
+      "out": "",
+      "err": "",
+      "exit": 0
+    }
+  },
+  {
+    "id": "view-state",
+    "views": {
+      "plain": {
+        "reply": "<root>/out/easel/views/look-0001.png (1000x200, 0.01s)\n",
+        "path": "verification/evidence/matrix-root/plain.png",
+        "sha": "47ff827bf3ff75f0bf3f3247b05bb55f3d74094b85956e40725fe42e0b3d0c4f"
+      },
+      "value": {
+        "reply": "<root>/out/easel/views/look-0002.png (1000x200, 0.01s)\n",
+        "path": "verification/evidence/matrix-root/value.png",
+        "sha": "f673496bb3c6c069dc6535c61dea09badc53a9baf3cd358ef2ecf9a96633d909"
+      },
+      "gray": {
+        "reply": "<root>/out/easel/views/look-0003.png (1000x200, 0.01s)\n",
+        "path": "verification/evidence/matrix-root/gray.png",
+        "sha": "f673496bb3c6c069dc6535c61dea09badc53a9baf3cd358ef2ecf9a96633d909"
+      },
+      "squint": {
+        "reply": "<root>/out/easel/views/look-0004.png (1000x200, 0.02s)\n",
+        "path": "verification/evidence/matrix-root/squint.png",
+        "sha": "8f6f21c9e22ffe4f7fe5215fd8f9f3c0ad49dfe0c1611f802e8f7d59be755ba6"
+      },
+      "blur": {
+        "reply": "<root>/out/easel/views/look-0005.png (1000x200, 0.02s)\n",
+        "path": "verification/evidence/matrix-root/blur.png",
+        "sha": "8f6f21c9e22ffe4f7fe5215fd8f9f3c0ad49dfe0c1611f802e8f7d59be755ba6"
+      },
+      "mirror": {
+        "reply": "<root>/out/easel/views/look-0006.png (1000x200, 0.01s)\n",
+        "path": "verification/evidence/matrix-root/mirror.png",
+        "sha": "5536dc296a0bfaf904743884d6c7f85c0e4e8ef760be01e950d302c24cf17d6f"
+      },
+      "value-mirror": {
+        "reply": "<root>/out/easel/views/look-0007.png (1000x200, 0.01s)\n",
+        "path": "verification/evidence/matrix-root/value-mirror.png",
+        "sha": "8725baa249b981be5c4e604713e3ebeaa6ae11b1bee818c8bb5b9cee5f9bb1d0"
+      },
+      "squint-mirror": {
+        "reply": "<root>/out/easel/views/look-0008.png (1000x200, 0.02s)\n",
+        "path": "verification/evidence/matrix-root/squint-mirror.png",
+        "sha": "401b4a62fded5abe8e3271e56791c8acafd71cb95166c49100c7dbe9337db4bc"
+      },
+      "grid": {
+        "reply": "<root>/out/easel/views/look-0009.png (1000x200, 0.01s)\n",
+        "path": "verification/evidence/matrix-root/grid.png",
+        "sha": "2e43908f49108a7fd0a4a4855d309b7a726f216f87e3ca4cf8b6cfde123c6e3d"
+      },
+      "grid50": {
+        "reply": "<root>/out/easel/views/look-0010.png (1000x200, 0.01s)\n",
+        "path": "verification/evidence/matrix-root/grid50.png",
+        "sha": "519e2d3031b7b432a3e63b0656511d35ad49bf723b5fed5976f02a62bc333951"
+      },
+      "mirror-grid": {
+        "reply": "<root>/out/easel/views/look-0011.png (1000x200, 0.01s)\n",
+        "path": "verification/evidence/matrix-root/mirror-grid.png",
+        "sha": "a85994c592789a27f41b82ee28e9e191b21ccd0f6c535612965804554d2a157b"
+      },
+      "combined-crop": {
+        "reply": "<root>/out/easel/views/look-0012.png (480x240, 0.01s)\n",
+        "path": "verification/evidence/matrix-root/combined-crop.png",
+        "sha": "ea015916d5a158f00931cb3b992d5123a0b7cb7db21cedd80cb07371d5211172"
+      },
+      "palette": {
+        "reply": "<root>/out/easel/views/look-0013.png (1124x160, 0.01s)\n",
+        "path": "verification/evidence/matrix-root/palette.png",
+        "sha": "fefbf31a326da228b41c831fb18de6b3307f7c90b53ef2ca2b9e4eedee141b88"
+      },
+      "plain-again": {
+        "reply": "<root>/out/easel/views/look-0014.png (1000x200, 0.01s)\n",
+        "path": "verification/evidence/matrix-root/plain-again.png",
+        "sha": "47ff827bf3ff75f0bf3f3247b05bb55f3d74094b85956e40725fe42e0b3d0c4f"
+      }
+    },
+    "before": "day 1, 09:00\t0.76952660083770752\t0.0\t0.0\t0.49818515777587891\t0\nok · chunk 2 (0.00 s to compute)\n",
+    "after": "day 1, 09:00\t0.76952660083770752\t0.0\t0.0\t0.49818515777587891\t0\nok · chunk 3 (0.00 s to compute)\n",
+    "png_equal": true,
+    "log_unchanged": true,
+    "continuation": {
+      "args": [
+        "do",
+        "b:touch(700,100)"
+      ],
+      "out": "ok · chunk 4 (0.00 s to compute)\n",
+      "err": "",
+      "exit": 0
+    }
+  },
+  {
+    "id": "invalid-views",
+    "before": {
+      "args": [
+        "status"
+      ],
+      "out": "4 chunks · 2400px · size=100, aspect=5, linen={12, 12}, seed=1\n",
+      "err": "",
+      "exit": 0
+    },
+    "badmode": {
+      "args": [
+        "look",
+        "--mode",
+        "bad"
+      ],
+      "out": "",
+      "err": "--mode bad: normal, value, squint, mirror (comma-separated)\n",
+      "exit": 1
+    },
+    "badcrop": {
+      "args": [
+        "look",
+        "--crop",
+        "0,0,900,150"
+      ],
+      "out": "",
+      "err": "--crop exceeds 1200 pixels per side; choose a smaller crop (crops stay 1:1)\n",
+      "exit": 1
+    },
+    "after": {
+      "args": [
+        "status"
+      ],
+      "out": "4 chunks · 2400px · size=100, aspect=5, linen={12, 12}, seed=1\n",
+      "err": "",
+      "exit": 0
+    },
+    "undo": {
+      "args": [
+        "undo"
+      ],
+      "out": "",
+      "err": "easel: no command \"undo\"\n\neasel: a live painting session (see notes/easel_guide.md)\n\n  easel open <name>    start or reattach; replays paintings/lua/<name>.lua if it exists\n  easel do '<lua>'  |  easel do -f chunk.lua  |  easel do - (stdin)     [--look] also looks afterwards\n  easel look [--crop x0,y0,x1,y1] [--mode value,squint,mirror] [--grid [step]] [--size 1000]\n  easel look --palette   the piles the globals hold: thick, thin and very thin over the ground, thin over a card\n  easel log           the session so far (= paintings/lua/<name>.lua)\n  easel status        chunks, width, canvas\n  easel globals       the painting's globals, one a line: chunk that last set it, name, what it holds\n  easel save [path]   the canvas as a PNG (default out/easel/<name>/<name>.png)\n  easel frames on|off save a look after every chunk\n  easel check         replay the log from scratch and compare with the live canvas\n  easel close         end the session (the log stays)\n  easel note '<text>' | easel note - (stdin)    append a dated entry to notes/journal.md\n  easel run <file.lua> [--out path.png] [--look] [--state-digest digests.txt]    replay at 2400px and write the PNG\n      [--frames-every <s> --frames-dir <dir> [--frame-width 1000]]   and a frame per <s> of hand time\n      [--width <px>]   replay narrower, a preview for development (not the painting)\n  easel finish <save> <out.png> [--log painting.lua] [--coats C] [--no-varnish] [--no-cracks] [--relief]\n                      finish a closed session's save (out/easel/<name>/live.ckpt) without a replay\n  easel tubes [--markdown]   the tubes in the box a new painting takes (--markdown: as a table)\n\n  A new painting takes its box from a file `box` next to this executable, else EASEL_BOX,\n  else the default tube box; its log names the box (a line \"--@ box <name>\"), and every\n  replay of the log uses that box.\n\n  -s <name> (or EASEL_SESSION) picks the session; default: the last opened.\n",
+      "exit": 1
+    },
+    "restore": {
+      "args": [
+        "look",
+        "--restore",
+        "1"
+      ],
+      "out": "",
+      "err": "look: unknown argument \"--restore\" (--crop x0,y0,x1,y1 --mode value,squint,mirror --grid [step] --size N | --palette)\n",
+      "exit": 1
+    }
+  },
+  {
+    "id": "post-look",
+    "success": {
+      "args": [
+        "do",
+        "--look",
+        "b:touch(600,100)"
+      ],
+      "out": "ok · chunk 5 (0.00 s to compute)\n<root>/out/easel/views/look-0015.png (1000x200, 0.01s)\n",
+      "err": "",
+      "exit": 0
+    },
+    "failure": {
+      "args": [
+        "do",
+        "--look",
+        "b:touch(500,100);error(\"abort\")"
+      ],
+      "out": "",
+      "err": "runtime error: [string \"chunk 6\"]:1: abort\n(the chunk failed and changed nothing)\n",
+      "exit": 1
+    },
+    "later_plain": {
+      "args": [
+        "look"
+      ],
+      "out": "<root>/out/easel/views/look-0016.png (1000x200, 0.01s)\n",
+      "err": "",
+      "exit": 0
+    }
+  },
+  {
+    "id": "postcommit-file-fault",
+    "reply": {
+      "args": [
+        "do",
+        "--look",
+        "b:touch(800,100);postlookmarker=true"
+      ],
+      "out": "ok · chunk 6 (0.00 s to compute)\n(no look: <root>/out/easel/views/look-0017.png: Permission denied (os error 13))\n",
+      "err": "",
+      "exit": 0
+    },
+    "committed": {
+      "args": [
+        "do",
+        "assert(postlookmarker==true)"
+      ],
+      "out": "ok · chunk 7 (0.00 s to compute)\n",
+      "err": "",
+      "exit": 0
+    },
+    "freshlook": {
+      "args": [
+        "look"
+      ],
+      "out": "<root>/out/easel/views/look-0017.png (1000x200, 0.01s)\n",
+      "err": "",
+      "exit": 0
+    }
+  },
+  {
+    "id": "rollback",
+    "before": "day 1, 09:00\t0.76558655500411987\t0.0\t0.0\t0.49622491002082825\t0\nok · chunk 8 (0.00 s to compute)\n",
+    "failed": {
+      "args": [
+        "do",
+        "b:wipe();r:dip(1);r:blot(100,80);wait(123);error(\"rollback\")"
+      ],
+      "out": "",
+      "err": "runtime error: [string \"chunk 9\"]:1: rollback\n(the chunk failed and changed nothing)\n",
+      "exit": 1
+    },
+    "after": "day 1, 09:00\t0.76558655500411987\t0.0\t0.0\t0.49622491002082825\t0\nok · chunk 9 (0.00 s to compute)\n",
+    "log_unchanged": true,
+    "png_equal": true,
+    "caught": {
+      "args": [
+        "do",
+        "local yes,err=pcall(function()b:touch(0/0,1)end);print(yes,err);caught_marker=true"
+      ],
+      "out": "",
+      "err": "engine panic: Touch at.x is not finite: NaN\n(the chunk failed and changed nothing)\n",
+      "exit": 1
+    }
+  },
+  {
+    "id": "journal",
+    "status": {
+      "args": [
+        "status"
+      ],
+      "out": "9 chunks · 2400px · size=100, aspect=5, linen={12, 12}, seed=1\n",
+      "err": "",
+      "exit": 0
+    },
+    "globals": {
+      "args": [
+        "globals"
+      ],
+      "out": "1\tH\tnumber 199.99998474121094\n1\tW\tnumber 1000\n1\tb\tbrush(round 4, 77% full)\n1\th\ttable with 3 entries\n1\tm\tmask(6400 sq units)\n1\tp\tpile(red earth 1; medium 0)\n1\tq\tpile(cobalt blue 1; medium 0)\n1\tr\trag(width 20, load 0.00)\n6\tpostlookmarker\ttrue\n",
+      "err": "",
+      "exit": 0
+    },
+    "log": {
+      "args": [
+        "log"
+      ],
+      "out": "-- easel session \"views\": a painting replayed chunk by chunk.\n-- Each \"--@ chunk\" line starts one chunk as it was run at the easel.\n--@ engine 3\n\n--@ chunk 1\ncanvas{size=100,aspect=5,linen=12,ground={{pile={{\"lead white\",1}},um=40,apply=\"knife\"}},seed=1};p=pile{{\"red earth\",1}};q=pile{{\"cobalt blue\",1}};b=brush(\"round\",4);b:load(p,0.8);r=rag{width=20};r:dip(0.5);h=pencil(\"HB\");m=rect(100,40,80,80);b:touch(100,80);h:line({{300,40},{350,150}})\n\n--@ chunk 2\nprint(wait(0),b:fullness(),r.load,r.soaked,r.damp,r.fold)\n\n--@ chunk 3\nprint(wait(0),b:fullness(),r.load,r.soaked,r.damp,r.fold)\n\n--@ chunk 4\nb:touch(700,100)\n\n--@ chunk 5\nb:touch(600,100)\n\n--@ chunk 6\nb:touch(800,100);postlookmarker=true\n\n--@ chunk 7\nassert(postlookmarker==true)\n\n--@ chunk 8\nprint(wait(0),b:fullness(),r.load,r.soaked,r.damp,r.fold)\n\n--@ chunk 9\nprint(wait(0),b:fullness(),r.load,r.soaked,r.damp,r.fold)\n",
+      "err": "",
+      "exit": 0
+    },
+    "multiline": {
+      "args": [
+        "note",
+        "first\nsecond\n\nthird"
+      ],
+      "out": "noted in <root>/notes/journal.md\n",
+      "err": "",
+      "exit": 0
+    },
+    "text": "- day 1, 09:00: first\n  second\n\n  third\n",
+    "empty": {
+      "args": [
+        "note",
+        " \n "
+      ],
+      "out": "",
+      "err": "note: empty\n\n",
+      "exit": 1
+    },
+    "empty_unchanged": true,
+    "stdin": {
+      "args": [
+        "note",
+        "-"
+      ],
+      "out": "noted in <root>/notes/journal.md\n",
+      "err": "",
+      "exit": 0
+    },
+    "no_lf": {
+      "args": [
+        "note",
+        "next"
+      ],
+      "out": "noted in <root>/notes/journal.md\n",
+      "err": "",
+      "exit": 0
+    },
+    "no_lf_text": "without newline\n- day 1, 09:00: next\n",
+    "denied_before": "without newline\n- day 1, 09:00: next\n",
+    "denied": {
+      "args": [
+        "note",
+        "denied"
+      ],
+      "out": "",
+      "err": "<root>/notes/journal.md: Permission denied (os error 13)\n\n",
+      "exit": 1
+    },
+    "denied_unchanged": true,
+    "log_unchanged": true,
+    "png_equal": true
+  },
+  {
+    "id": "ordered-status",
+    "observation": {
+      "cpu_before": "  0:01.85\n",
+      "cpu_after": "  0:01.87\n",
+      "pending": true
+    },
+    "pending": true,
+    "first": "ok\nok · chunk 10 (1.17 s to compute)\n",
+    "second": "ok\n10 chunks · 2400px · size=100, aspect=5, linen={12, 12}, seed=1\n"
+  },
+  {
+    "id": "ordered-globals",
+    "observation": {
+      "cpu_before": "  0:03.03\n",
+      "cpu_after": "  0:03.05\n",
+      "pending": true
+    },
+    "pending": true,
+    "first": "ok\nok · chunk 11 (1.16 s to compute)\n",
+    "second": "ok\n1\tH\tnumber 199.99998474121094\n1\tW\tnumber 1000\n1\tb\tbrush(round 4, 77% full)\n1\th\ttable with 3 entries\n1\tm\tmask(6400 sq units)\n1\tp\tpile(red earth 1; medium 0)\n1\tq\tpile(cobalt blue 1; medium 0)\n1\tr\trag(width 20, load 0.00)\n6\tpostlookmarker\ttrue\n10\tordered_status\tnumber 42\n11\tordered_globals\tnumber 42\n"
+  },
+  {
+    "id": "ordered-log",
+    "observation": {
+      "cpu_before": "  0:04.20\n",
+      "cpu_after": "  0:04.21\n",
+      "pending": true
+    },
+    "pending": true,
+    "first": "ok\nok · chunk 12 (1.17 s to compute)\n",
+    "second": "ok\n-- easel session \"views\": a painting replayed chunk by chunk.\n-- Each \"--@ chunk\" line starts one chunk as it was run at the easel.\n--@ engine 3\n\n--@ chunk 1\ncanvas{size=100,aspect=5,linen=12,ground={{pile={{\"lead white\",1}},um=40,apply=\"knife\"}},seed=1};p=pile{{\"red earth\",1}};q=pile{{\"cobalt blue\",1}};b=brush(\"round\",4);b:load(p,0.8);r=rag{width=20};r:dip(0.5);h=pencil(\"HB\");m=rect(100,40,80,80);b:touch(100,80);h:line({{300,40},{350,150}})\n\n--@ chunk 2\nprint(wait(0),b:fullness(),r.load,r.soaked,r.damp,r.fold)\n\n--@ chunk 3\nprint(wait(0),b:fullness(),r.load,r.soaked,r.damp,r.fold)\n\n--@ chunk 4\nb:touch(700,100)\n\n--@ chunk 5\nb:touch(600,100)\n\n--@ chunk 6\nb:touch(800,100);postlookmarker=true\n\n--@ chunk 7\nassert(postlookmarker==true)\n\n--@ chunk 8\nprint(wait(0),b:fullness(),r.load,r.soaked,r.damp,r.fold)\n\n--@ chunk 9\nprint(wait(0),b:fullness(),r.load,r.soaked,r.damp,r.fold)\n\n--@ chunk 10\nlocal sum=0;for i=1,300000000 do sum=sum+i end;assert(sum>0);ordered_status=42\n\n--@ chunk 11\nlocal sum=0;for i=1,300000000 do sum=sum+i end;assert(sum>0);ordered_globals=42\n\n--@ chunk 12\nlocal sum=0;for i=1,300000000 do sum=sum+i end;assert(sum>0);ordered_log=42\n"
+  },
+  {
+    "id": "ordered-note",
+    "observation": {
+      "cpu_before": "  0:05.37\n",
+      "cpu_after": "  0:05.39\n",
+      "pending": true
+    },
+    "pending": true,
+    "first": "ok\nok · chunk 13 (1.17 s to compute)\n",
+    "second": "ok\nnoted in <root>/notes/journal.md\n"
+  },
+  {
+    "id": "queued-note-abort",
+    "observation": {
+      "cpu_before": "  0:06.54\n",
+      "cpu_after": "  0:06.56\n",
+      "pending": true
+    },
+    "absent": true
+  },
+  {
+    "id": "global-assignment-stamp",
+    "before": "1\tH\tnumber 199.99998474121094\n1\tW\tnumber 1000\n1\tb\tbrush(round 4, 77% full)\n1\th\ttable with 3 entries\n1\tm\tmask(6400 sq units)\n1\tp\tpile(red earth 1; medium 0)\n1\tq\tpile(cobalt blue 1; medium 0)\n1\tr\trag(width 20, load 0.00)\n6\tpostlookmarker\ttrue\n10\tordered_status\tnumber 42\n11\tordered_globals\tnumber 42\n12\tordered_log\tnumber 42\n13\tordered_note\tnumber 42\n14\tjournal_blocker\ttrue\n15\theldtable\ttable with 1 entry\n",
+    "after": "1\tH\tnumber 199.99998474121094\n1\tW\tnumber 1000\n1\tb\tbrush(round 4, 77% full)\n1\th\ttable with 3 entries\n1\tm\tmask(6400 sq units)\n1\tp\tpile(red earth 1; medium 0)\n1\tq\tpile(cobalt blue 1; medium 0)\n1\tr\trag(width 20, load 0.00)\n6\tpostlookmarker\ttrue\n10\tordered_status\tnumber 42\n11\tordered_globals\tnumber 42\n12\tordered_log\tnumber 42\n13\tordered_note\tnumber 42\n14\tjournal_blocker\ttrue\n15\theldtable\ttable with 1 entry\n"
+  },
+  {
+    "id": "note-not-paint",
+    "before": "16 chunks · 2400px · size=100, aspect=5, linen={12, 12}, seed=1\n",
+    "after": "16 chunks · 2400px · size=100, aspect=5, linen={12, 12}, seed=1\n"
+  },
+  {
+    "id": "missing",
+    "status": {
+      "args": [
+        "status"
+      ],
+      "out": "",
+      "err": "no easel session \"missing\" running: easel open missing\n",
+      "exit": 1
+    },
+    "look": {
+      "args": [
+        "look"
+      ],
+      "out": "",
+      "err": "no easel session \"missing\" running: easel open missing\n",
+      "exit": 1
+    },
+    "note": {
+      "args": [
+        "note",
+        "lost"
+      ],
+      "out": "",
+      "err": "no easel session \"missing\" running: easel open missing\n",
+      "exit": 1
+    },
+    "log": {
+      "args": [
+        "log"
+      ],
+      "out": "",
+      "err": "no easel session \"missing\" running: easel open missing\n",
+      "exit": 1
+    }
+  },
+  {
+    "id": "session-isolation",
+    "first": {
+      "args": [
+        "status"
+      ],
+      "out": "16 chunks · 2400px · size=100, aspect=5, linen={12, 12}, seed=1\n",
+      "err": "",
+      "exit": 0
+    },
+    "other": {
+      "args": [
+        "status"
+      ],
+      "out": "1 chunks · 2400px · size=100, aspect=5, linen={12, 12}, seed=1\n",
+      "err": "",
+      "exit": 0
+    },
+    "firstlook": {
+      "reply": "<root>/out/easel/views/look-0018.png (1000x200, 0.01s)\n",
+      "path": "verification/evidence/matrix-root/session-first.png",
+      "sha": "12cc6198c2c47da7652dd7e6bb5205bb4cd8449a73831f96f0fd3efd97683a77"
+    },
+    "otherlook": {
+      "reply": "<root>/out/easel/other/look-0001.png (1000x200, 0.01s)\n",
+      "path": "verification/evidence/matrix-root/session-other.png",
+      "sha": "31a8e49e368b95d92d0509c38e318ac07c359a7ece01f45ec3bf20329ebc482c"
+    },
+    "journal": "without newline\n- day 1, 09:00: next\n- day 1, 09:00: queued immutable note\n- day 1, 09:00: canvas size=999 different setup\n- day 1, 09:00: other session same journal\n",
+    "explicit": {
+      "args": [
+        "-s",
+        "views",
+        "status"
+      ],
+      "out": "16 chunks · 2400px · size=100, aspect=5, linen={12, 12}, seed=1\n",
+      "err": "",
+      "exit": 0
+    }
+  },
+  {
+    "id": "random-rollback",
+    "sessions": [
+      {
+        "name": "rand_a",
+        "failed": {
+          "args": [
+            "do",
+            "print(math.random());b:touch(math.random()*1000,80);error(\"random abort\")"
+          ],
+          "out": "",
+          "err": "0.12009149789810181\nruntime error: [string \"chunk 2\"]:1: random abort\n(the chunk failed and changed nothing)\n",
+          "exit": 1
+        },
+        "reply": "0.12009149789810181\t0.56650269031524658\nok · chunk 2 (0.00 s to compute)\n",
+        "png": "e9ac38e097012cc7b11c1aa5eadda42ba3a5d44ff32badde282e3ee7498c1367",
+        "seed_repeat": {
+          "args": [
+            "do",
+            "math.randomseed(77);local x=math.random();math.randomseed(77);assert(x==math.random());print(x)"
+          ],
+          "out": "0.76884549856185913\nok · chunk 3 (0.00 s to compute)\n",
+          "err": "",
+          "exit": 0
+        }
+      },
+      {
+        "name": "rand_b",
+        "failed": null,
+        "reply": "0.12009149789810181\t0.56650269031524658\nok · chunk 2 (0.00 s to compute)\n",
+        "png": "e9ac38e097012cc7b11c1aa5eadda42ba3a5d44ff32badde282e3ee7498c1367",
+        "seed_repeat": {
+          "args": [
+            "do",
+            "math.randomseed(77);local x=math.random();math.randomseed(77);assert(x==math.random());print(x)"
+          ],
+          "out": "0.76884549856185913\nok · chunk 3 (0.00 s to compute)\n",
+          "err": "",
+          "exit": 0
+        }
+      }
+    ]
+  },
+  {
+    "id": "sandbox",
+    "reply": {
+      "args": [
+        "do",
+        "print(type(os),type(io),type(require));os.execute(\"true\")"
+      ],
+      "out": "",
+      "err": "nil\tnil\tnil\nruntime error: [string \"chunk 17\"]:1: attempt to index a nil value (global 'os')\n(the chunk failed and changed nothing)\n",
+      "exit": 1
+    }
+  }
+]

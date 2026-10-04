@@ -1,0 +1,186 @@
+diff --git a/crates/easel/src/main.rs b/crates/easel/src/main.rs
+index 4dec5ed..9ed5a00 100644
+--- a/crates/easel/src/main.rs
++++ b/crates/easel/src/main.rs
+@@ -931,6 +931,7 @@ impl Server {
+                     let n = self.s.log.len();
+                     let mut out = note;
+                     out.push_str(&ran.out);
++                    out.push_str(&format!("{}\n", time::time_of_day(self.s.st.borrow().clock)));
+                     out.push_str(&format!("ok · chunk {n} ({:.2} s to compute)\n", ran.secs));
+                     // the chunk is in the log: a look that fails now is reported with it, not
+                     // as a failed `do` (which would be sent again)
+diff --git a/harness/painter/easel-tools.ts b/harness/painter/easel-tools.ts
+index 95e48e5..77c63db 100644
+--- a/harness/painter/easel-tools.ts
++++ b/harness/painter/easel-tools.ts
+@@ -23,7 +23,7 @@ export function registerEaselTools(pi: ExtensionAPI, studio: string): void {
+ 			name: "paint",
+ 			label: "paint",
+ 			description:
+-				"Run a chunk of Lua at the easel (notes/easel_guide.md). The reply is what the chunk printed, then `ok`. " +
++				"Run a chunk of Lua at the easel (notes/easel_guide.md). The reply is what the chunk printed, the painting's current clock, then `ok`. " +
+ 				"A chunk that stops with an error changes nothing.",
+ 			parameters: Type.Object({ lua: Type.String({ description: "the chunk" }) }),
+ 			async execute(_id, p, signal) {
+diff --git a/harness/painter/test/easel-client.test.ts b/harness/painter/test/easel-client.test.ts
+index 3e7df45..a641b92 100644
+--- a/harness/painter/test/easel-client.test.ts
++++ b/harness/painter/test/easel-client.test.ts
+@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
+ import { getEventListeners } from "node:events";
+ import { join } from "node:path";
+ import { test } from "node:test";
+-import { atEasel, easel, lookArgs, WAIT_MS, studioPath, tail, toolWords } from "../easel-client.ts";
++import { atEasel, easel, lookArgs, WAIT_MS, studioPath, tail, toolWords, paintReply } from "../easel-client.ts";
+ 
+ test("read opens only studio files, however the path is spelled", () => {
+ 	const top = realpathSync(mkdtempSync(join(tmpdir(), "studio-")));
+@@ -89,13 +89,15 @@ test("paint, look, note and status at a real easel", { skip: !bin || !existsSync
+ 	try {
+ 		// no session yet: the first call opens one
+ 		const ok = await atEasel(studio, ["do", "-"], 'canvas{size=400, aspect=1.25, linen=15, ground={{pile={{"lead white", 1}}, um=100, apply="knife"}}}\nprint("hi")');
+-		assert.match(ok, /^hi\nok · chunk 1/);
++		assert.equal(paintReply(ok), "hi\nday 1, 09:00\nok");
++		// No print(wait(...)): the successful tool reply supplies the current clock itself.
++		assert.equal(paintReply(await atEasel(studio, ["do", "-"], "wait(60)")), "day 1, 10:00\nok");
+ 		await assert.rejects(atEasel(studio, ["do", "-"], 'error("boom")'), /boom[\s\S]*changed nothing/);
+ 		const look = await atEasel(studio, ["look", ...lookArgs({ crop: "0,0,200,200" })], undefined);
+ 		assert.match(look, /look-0001\.png \(480x480/);
+ 		assert.match(await atEasel(studio, ["note", "-"], "first note"), /noted/);
+ 		assert.match(readFileSync(join(studio, "notes", "journal.md"), "utf8"), /first note/);
+-		assert.match(await atEasel(studio, ["status"], undefined), /^1 chunks/);
++		assert.match(await atEasel(studio, ["status"], undefined), /^2 chunks/);
+ 	} finally {
+ 		await easel(studio, ["close"]);
+ 	}
+diff --git a/notes/easel_guide.md b/notes/easel_guide.md
+index 2fcac22..c6577a1 100644
+--- a/notes/easel_guide.md
++++ b/notes/easel_guide.md
+@@ -22,7 +22,7 @@ The studio holds one painting, and the easel is open on it. Its tools:
+ 
+ | tool | what it does |
+ |---|---|
+-| `paint` | runs a chunk of Lua. The reply is what the chunk printed, then `ok` |
++| `paint` | runs a chunk of Lua. The reply is what the chunk printed, the painting's current clock, then `ok` |
+ | `look` | shows you the canvas as it is now, or your palette (see [Looking](#looking)) |
+ | `note` | adds an entry to your journal (see [The journal](#the-journal)) |
+ | `status` | the canvas's setup |
+@@ -416,6 +416,9 @@ painting operations (strokes, touches, passes, trips to the palette) and
+ doesn't dry while you think. `wait(minutes)` passes painting time at once;
+ it doesn't make you wait that many real minutes.
+ 
++Every successful paint reply reports the current painting time automatically,
++before `ok`. You do not need to print it yourself.
++
+ - **Hand time.** Every stroke, touch, pass and trip to the palette takes
+   the time a hand takes to make it: a stroke by its length and the
+   brush's width (broad sweeps are fast, fine lines slow per mm), a
+diff --git a/studio/index.html b/studio/index.html
+index f29aab6..3d81fd5 100644
+--- a/studio/index.html
++++ b/studio/index.html
+@@ -445,10 +445,10 @@ function ticks() {
+ }
+ // time spent painting up to event i (at time t): the sittings' durations summed, the gaps between them not counted
+ // the painting's own clock at event i: the easel's time of day ("day 3, 14:20"; it began at 09:00 on day 1), from the last
+-// chunk that printed it (wait() returns it and most painters print it). null before the first.
++// successful chunk or harness recovery summary. Older runs may have no recorded clock.
+ function easelClockAt(i) {
+-  for (let k = Math.min(i, events.length - 1); k >= 0; k--) { const e = events[k]; if (e.kind !== 'paint' || !e.out || e.err) continue;
+-    const m = [...e.out.matchAll(/day (\d+), (\d\d):(\d\d)/g)].pop(); if (m) return { text: m[0], min: (+m[1] - 1) * 1440 + +m[2] * 60 + +m[3] - 540 }; }
++  for (let k = Math.min(i, events.length - 1); k >= 0; k--) { const e = events[k], text = e.clock || (e.kind === 'paint' && e.out); if (!text || e.err) continue;
++    const m = [...text.matchAll(/day (\d+), (\d\d):(\d\d)/g)].pop(); if (m) return { text: m[0], min: (+m[1] - 1) * 1440 + +m[2] * 60 + +m[3] - 540 }; }
+   return null;
+ }
+ // a stretch of the painting's clock in words: minutes up to years
+@@ -486,6 +486,7 @@ function kindOf(e) {
+   if (e.kind === 'read') return e.ref && /\.(jpe?g|png|webp|gif)$/i.test(f) ? ['ref', '🖼', 'studies a reference picture'] : /\.(jpe?g|png)$/i.test(f) ? ['look', '👁', 'looks at the canvas'] : ['read', '📖', 'reads ' + f];
+   if (e.kind === 'image') return e.ref ? ['ref', '🖼', 'studies a reference picture'] : ['look', '👁', 'looks at ' + (f || 'the canvas')];
+   if (e.kind === 'look') return ['look', '👁', lookWords(e.text)[2]];
++  if (e.kind === 'clock') return ['notes', '◷', 'painting clock'];
+   if (e.kind === 'paint') { const ok = paintOK(e);
+     return [ok ? 'code' : e.err ? 'fail' : 'code', '🖌', ok ? 'paints' : (e.err ? 'paints, but its code has an error' : 'paints')]; }
+   if (e.kind === 'jnote') return ['notes', '📝', 'writes in the journal'];
+@@ -521,9 +522,10 @@ function status() {
+   const t = atLive && active ? Date.now() : Date.parse(events[pos].ts), n = sitStarts.length;
+   $('clock').textContent = fmt(paintedFor(pos, t)); $('clockbox').hidden = false;
+   $('clocklbl').textContent = (atLive ? (active ? 'painting for' : 'painted for') : 'at') + (n > 1 ? (atLive ? ` · ${n} sittings` : ` · sitting ${sittingAt(pos)} of ${n}`) : '');
+-  const ec = easelClockAt(pos), pc = $('pclock'); pc.hidden = !ec;
++  const ec = easelClockAt(pos), pc = $('pclock'); pc.hidden = false;
+   if (ec) { pc.querySelector('b').textContent = stretch(ec.min);  // (one figure: time passed, as the real clock beside it; the easel's own reading goes in the tooltip)
+-    pc.title = `The easel keeps its own clock: every stroke takes the time a hand would take, and the painter can let hours or months pass for paint to dry. This is how much of that time has passed, as the painter last read it (the easel said "${ec.text}"; it counts from 09:00 on day 1).`; }
++    pc.title = `The easel keeps its own clock: every stroke takes the time a hand would take, and the painter can let hours or months pass for paint to dry. This is the latest recorded time (${ec.text}; it counts from 09:00 on day 1).`; }
++  else { pc.querySelector('b').textContent = 'not recorded'; pc.title = 'This part of the session has no recorded painting time.'; }
+   $('clockbox').title = n > 1 ? `time spent painting, summed over ${n} sittings (the gaps between sittings don't count)` : 'time since the session began';
+   doing(atLive && active);
+ }
+diff --git a/studio/studio.py b/studio/studio.py
+index 4f5363f..7e03a69 100644
+--- a/studio/studio.py
++++ b/studio/studio.py
+@@ -279,6 +279,11 @@ def _parse(path):
+         if d.get("type") == "model_change":
+             c["events"].append({"ts": ts, "kind": "note", "text": "model " + d.get("modelId", "")})
+             continue
++        if d.get("type") == "compaction":
++            clock = summary_clock(d.get("summary", ""))
++            if clock:
++                c["events"].append({"ts": ts, "kind": "clock", "clock": clock, "text": clock})
++            continue
+         if d.get("type") != "message":
+             continue
+         m = d.get("message", {})
+@@ -337,10 +342,24 @@ def _parse(path):
+         elif role == "user":
+             t = _text(content)
+             if t.strip():
+-                c["events"].append({"ts": ts, "kind": "user", "text": t[:2000]})
++                ev = {"ts": ts, "kind": "user", "text": t[:2000]}
++                clock = summary_clock(t)  # the recovery summary can be longer than the displayed text
++                if clock:
++                    ev["clock"] = clock
++                c["events"].append(ev)
+     return c["events"], c["images"]
+ 
+ 
++def summary_clock(text):
++    """The latest recorded time in the painter harness's saved clock section."""
++    section = re.search(r"(?m)^## The canvas clock\n([\s\S]*?)(?=\n## |\Z)", text)
++    if not section:
++        return None
++    times = re.findall(r"(?m)^- Latest (?:painting time the easel printed|journal entry stamped): "
++                       r"(day ([1-9]\d*), ([01]\d|2[0-3]):([0-5]\d))[ \t]*$", section[1])
++    return max(times, key=lambda t: tuple(map(int, t[1:])))[0] if times else None
++
++
+ def look_text(args):
+     """A look call's request as one line: "crop 110,540,610,900, size 800", "mode squint" ("" for the plain look)."""
+     return ", ".join(f"{k} {v}" for k, v in args.items())
+diff --git a/studio/test_studio.py b/studio/test_studio.py
+index f15599c..4ac1729 100644
+--- a/studio/test_studio.py
++++ b/studio/test_studio.py
+@@ -94,6 +94,21 @@ def test_a_late_result_reaches_a_client_that_already_had_the_call(home, server):
+     assert r3["updates"] == []
+ 
+ 
++@pytest.mark.parametrize("entry", ["compaction", "recovery"])
++def test_saved_clock_survives_compaction_and_recovery_text_truncation(home, server, entry):
++    _, studio, log = home
++    summary = ("## Your journal\n" + "old notes\n" * 300
++               + "\n## The canvas clock\n\n"
++               "- Latest painting time the easel printed: day 1, 10:00\n"
++               "- Latest journal entry stamped: day 2, 12:34\n\n"
++               "## The canvas\nA picture.\n")
++    record = ({"type": "compaction", "summary": summary} if entry == "compaction" else
++              {"type": "message", "message": {"role": "user", "content": [{"type": "text", "text": summary}]}})
++    log.write_text(start(str(studio)) + line(record))
++    events = json.loads(server(f"/api/events?p={PAINTER}")[1])["events"]
++    assert [e["clock"] for e in events if "clock" in e] == ["day 2, 12:34"]
++
++
+ def test_a_painter_whose_folder_is_gone_is_served_from_the_archive(home, server):
+     # a round's worktree, removed: its painting's source is kept in archive/sources/<folder name>
+     tmp_path, _, log = home

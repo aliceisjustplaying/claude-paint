@@ -1,0 +1,41 @@
+[
+  {
+    "args": [
+      "open",
+      "closure"
+    ],
+    "exit": 0,
+    "out": "easel \"closure\" open: 0 chunks · 2400px · no canvas yet\n",
+    "err": "",
+    "seconds": 0.1143
+  },
+  {
+    "args": [
+      "do",
+      "canvas{size=100,aspect=5,linen=12,ground={{pile={{\"lead white\",1}},um=40,apply=\"knife\"}}}; p=pile{{\"red earth\",1}}; q=pile{{\"lead white\",1}}; m=rect(300,40,200,100); "
+    ],
+    "exit": 0,
+    "out": "ok · chunk 1 (0.07 s to compute)\n",
+    "err": "",
+    "seconds": 0.0823
+  },
+  {
+    "args": [
+      "do",
+      "pts={{100,20},{180,20},{150,80}};for _,o in ipairs{outline{pts=pts,seed=1},outline{pts=pts,open=true,seed=1},outline{pts=pts,closed=true,seed=1},outline{pts=pts,open=true,closed=true,seed=1}} do print(o.closed);print(pcall(function()return o:mask():area()end)) end;t=outline{pts={{100,20},{110,20},{110,30},{100,30}},amount=0}:inset(7);print(#t:paths(),t:mask():area());o=outline{pts=pts,seed=1};local p=o:path();print(\"ends\",p[1][1],p[1][2],p[#p][1],p[#p][2],o.ramps[1],o.ramps[2]);op=outline{pts={{100,80},{800,80}},seed=1};print(\"sides\",op:above():at(400,20),op:above():at(400,150),op:below():at(400,20),op:below():at(400,150))"
+    ],
+    "exit": 0,
+    "out": "true\ntrue\t2203.4073692302122\nfalse\nfalse\truntime error: outline:mask(): this line is open; use :below() or :above() (or closed=true)\nstack traceback:\n\t[C]: in method 'mask'\n\t[string \"chunk 2\"]:1: in function <[string \"chunk 2\"]:1>\n\t[C]: in global 'pcall'\n\t[string \"chunk 2\"]:1: in main chunk\n\t[C]: in upvalue 'pcall'\n\t[string \"prelude.lua\"]:362: in function <[string \"prelude.lua\"]:361>\n\ntrue\ntrue\t2203.4073692302122\ntrue\ntrue\t2203.4073692302122\n0\t0.0\nends\t149.98532104492188\t79.892013549804688\t149.88395690917969\t79.674484252929688\t0.079999998211860657\t0.20000000298023224\nsides\t1.0\t0.0\t0.0\t1.0\nok · chunk 2 (0.01 s to compute)\n",
+    "err": "",
+    "seconds": 0.0259
+  },
+  {
+    "args": [
+      "close"
+    ],
+    "exit": 0,
+    "out": "the live canvas is in <root>/out/easel/closure/live.png\nclosed; the session is in <root>/paintings/lua/closure.lua\n",
+    "err": "",
+    "seconds": 0.0953
+  }
+]

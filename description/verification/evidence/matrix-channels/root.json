@@ -1,0 +1,111 @@
+[
+  {
+    "id": "channels",
+    "runs": [
+      {
+        "channel": "inline",
+        "source": "canvas{size=50,aspect=5,linen=12,ground={{pile={{\"lead white\",1}},um=40,apply=\"knife\"}}}; p=pile{{\"red earth\",1}}; b=brush(\"round\",4);b:load(p,0.8);b:touch(100,60);m=rect(50,40,200,100);work(m,{pile=p,hand=\"detail\",coverage=.1}); h=pencil(\"HB\");h:line({{20,30},{200,30}});r=rag{width=20};r:dip(.5);r:blot(100,60); print(wait(0));f=form{{body.ellipsoid({400,100,0},{20,20,10})}};print(f:parts_mask{1}:area())",
+        "reply": {
+          "args": [
+            "do",
+            "canvas{size=50,aspect=5,linen=12,ground={{pile={{\"lead white\",1}},um=40,apply=\"knife\"}}}; p=pile{{\"red earth\",1}}; b=brush(\"round\",4);b:load(p,0.8);b:touch(100,60);m=rect(50,40,200,100);work(m,{pile=p,hand=\"detail\",coverage=.1}); h=pencil(\"HB\");h:line({{20,30},{200,30}});r=rag{width=20};r:dip(.5);r:blot(100,60); print(wait(0));f=form{{body.ellipsoid({400,100,0},{20,20,10})}};print(f:parts_mask{1}:area())"
+          ],
+          "out": "day 1, 09:03\n1255.5554557729711\nok · chunk 1 (0.14 s to compute)\n",
+          "err": "",
+          "exit": 0
+        },
+        "status": {
+          "args": [
+            "status"
+          ],
+          "out": "1 chunks · 2400px · size=50, aspect=5, linen={12, 12}, seed=1\n",
+          "err": "",
+          "exit": 0
+        },
+        "look": {
+          "reply": "<root>/out/easel/inline/look-0001.png (80x16, 0.01s)\n",
+          "path": "verification/evidence/matrix-channels/inline.png",
+          "sha": "8b31006d8dda548e21cf97af4aaf50844d899daff18b27ca38ddf433a610e357"
+        },
+        "log": {
+          "args": [
+            "log"
+          ],
+          "out": "-- easel session \"inline\": a painting replayed chunk by chunk.\n-- Each \"--@ chunk\" line starts one chunk as it was run at the easel.\n--@ engine 3\n\n--@ chunk 1\ncanvas{size=50,aspect=5,linen=12,ground={{pile={{\"lead white\",1}},um=40,apply=\"knife\"}}}; p=pile{{\"red earth\",1}}; b=brush(\"round\",4);b:load(p,0.8);b:touch(100,60);m=rect(50,40,200,100);work(m,{pile=p,hand=\"detail\",coverage=.1}); h=pencil(\"HB\");h:line({{20,30},{200,30}});r=rag{width=20};r:dip(.5);r:blot(100,60); print(wait(0));f=form{{body.ellipsoid({400,100,0},{20,20,10})}};print(f:parts_mask{1}:area())\n",
+          "err": "",
+          "exit": 0
+        }
+      },
+      {
+        "channel": "file",
+        "source": "canvas{size=50,aspect=5,linen=12,ground={{pile={{\"lead white\",1}},um=40,apply=\"knife\"}}}; p=pile{{\"red earth\",1}}; b=brush(\"round\",4);b:load(p,0.8);b:touch(100,60);m=rect(50,40,200,100);work(m,{pile=p,hand=\"detail\",coverage=.1}); h=pencil(\"HB\");h:line({{20,30},{200,30}});r=rag{width=20};r:dip(.5);r:blot(100,60); print(wait(0));f=form{{body.ellipsoid({400,100,0},{20,20,10})}};print(f:parts_mask{1}:area())",
+        "reply": {
+          "args": [
+            "do",
+            "-f",
+            "<root>/input.lua"
+          ],
+          "out": "day 1, 09:03\n1255.5554557729711\nok · chunk 1 (0.14 s to compute)\n",
+          "err": "",
+          "exit": 0
+        },
+        "status": {
+          "args": [
+            "status"
+          ],
+          "out": "1 chunks · 2400px · size=50, aspect=5, linen={12, 12}, seed=1\n",
+          "err": "",
+          "exit": 0
+        },
+        "look": {
+          "reply": "<root>/out/easel/file/look-0001.png (80x16, 0.01s)\n",
+          "path": "verification/evidence/matrix-channels/file.png",
+          "sha": "8b31006d8dda548e21cf97af4aaf50844d899daff18b27ca38ddf433a610e357"
+        },
+        "log": {
+          "args": [
+            "log"
+          ],
+          "out": "-- easel session \"file\": a painting replayed chunk by chunk.\n-- Each \"--@ chunk\" line starts one chunk as it was run at the easel.\n--@ engine 3\n\n--@ chunk 1\ncanvas{size=50,aspect=5,linen=12,ground={{pile={{\"lead white\",1}},um=40,apply=\"knife\"}}}; p=pile{{\"red earth\",1}}; b=brush(\"round\",4);b:load(p,0.8);b:touch(100,60);m=rect(50,40,200,100);work(m,{pile=p,hand=\"detail\",coverage=.1}); h=pencil(\"HB\");h:line({{20,30},{200,30}});r=rag{width=20};r:dip(.5);r:blot(100,60); print(wait(0));f=form{{body.ellipsoid({400,100,0},{20,20,10})}};print(f:parts_mask{1}:area())\n",
+          "err": "",
+          "exit": 0
+        }
+      },
+      {
+        "channel": "stdin",
+        "source": "canvas{size=50,aspect=5,linen=12,ground={{pile={{\"lead white\",1}},um=40,apply=\"knife\"}}}; p=pile{{\"red earth\",1}}; b=brush(\"round\",4);b:load(p,0.8);b:touch(100,60);m=rect(50,40,200,100);work(m,{pile=p,hand=\"detail\",coverage=.1}); h=pencil(\"HB\");h:line({{20,30},{200,30}});r=rag{width=20};r:dip(.5);r:blot(100,60); print(wait(0));f=form{{body.ellipsoid({400,100,0},{20,20,10})}};print(f:parts_mask{1}:area())",
+        "reply": {
+          "args": [
+            "do",
+            "-"
+          ],
+          "out": "day 1, 09:03\n1255.5554557729711\nok · chunk 1 (0.14 s to compute)\n",
+          "err": "",
+          "exit": 0
+        },
+        "status": {
+          "args": [
+            "status"
+          ],
+          "out": "1 chunks · 2400px · size=50, aspect=5, linen={12, 12}, seed=1\n",
+          "err": "",
+          "exit": 0
+        },
+        "look": {
+          "reply": "<root>/out/easel/stdin/look-0001.png (80x16, 0.01s)\n",
+          "path": "verification/evidence/matrix-channels/stdin.png",
+          "sha": "8b31006d8dda548e21cf97af4aaf50844d899daff18b27ca38ddf433a610e357"
+        },
+        "log": {
+          "args": [
+            "log"
+          ],
+          "out": "-- easel session \"stdin\": a painting replayed chunk by chunk.\n-- Each \"--@ chunk\" line starts one chunk as it was run at the easel.\n--@ engine 3\n\n--@ chunk 1\ncanvas{size=50,aspect=5,linen=12,ground={{pile={{\"lead white\",1}},um=40,apply=\"knife\"}}}; p=pile{{\"red earth\",1}}; b=brush(\"round\",4);b:load(p,0.8);b:touch(100,60);m=rect(50,40,200,100);work(m,{pile=p,hand=\"detail\",coverage=.1}); h=pencil(\"HB\");h:line({{20,30},{200,30}});r=rag{width=20};r:dip(.5);r:blot(100,60); print(wait(0));f=form{{body.ellipsoid({400,100,0},{20,20,10})}};print(f:parts_mask{1}:area())\n",
+          "err": "",
+          "exit": 0
+        }
+      }
+    ],
+    "tool_png_sha": "8b31006d8dda548e21cf97af4aaf50844d899daff18b27ca38ddf433a610e357"
+  }
+]

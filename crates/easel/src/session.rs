@@ -68,6 +68,7 @@ struct Snap {
     /// The Lua heap (heap.lua's snapshot).
     heap: Table,
     brushes: Vec<(Rc<RefCell<Held>>, Held)>,
+    knives: Vec<(Rc<RefCell<paint::Knife>>, paint::Knife)>,
     /// The rags in the hand, as the brushes.
     rags: Vec<(Rc<RefCell<paint::rag::Rag>>, paint::rag::Rag)>,
 }
@@ -216,11 +217,15 @@ impl Session {
             let h = b.borrow().clone();
             (b, h)
         }).collect();
+        let knives = s.live_knives().into_iter().map(|k| {
+            let h = k.borrow().clone();
+            (k, h)
+        }).collect();
         let rags = s.live_rags().into_iter().map(|r| {
             let v = *r.borrow();
             (r, v)
         }).collect();
-        Ok(Snap { canvas: s.canvas.clone(), style: s.style.clone(), setup: s.setup.clone(), seed: s.seed, clock: s.clock, clock0: s.clock0, hand: s.hand.clone(), view: s.view.clone(), heap, brushes, rags })
+        Ok(Snap { canvas: s.canvas.clone(), style: s.style.clone(), setup: s.setup.clone(), seed: s.seed, clock: s.clock, clock0: s.clock0, hand: s.hand.clone(), view: s.view.clone(), heap, brushes, knives, rags })
     }
 
     /// Put everything back as it was at `snap`. Returns how many Lua tables
@@ -231,6 +236,9 @@ impl Session {
         self.inject("restore")?;
         for (b, h) in &snap.brushes {
             *b.borrow_mut() = h.clone();
+        }
+        for (k, h) in &snap.knives {
+            *k.borrow_mut() = h.clone();
         }
         for (r, v) in &snap.rags {
             *r.borrow_mut() = *v;
@@ -1719,7 +1727,7 @@ mod tests {
         let mut a = Session::new(W).unwrap();
         a.run(CANVAS).unwrap();
         let prog = a.program("t");
-        let want = format!("-- easel session \"t\": a painting replayed chunk by chunk.\n-- Each \"--@ chunk\" line starts one chunk as it was run at the easel.\n--@ engine 3\n\n--@ chunk 1\n{CANVAS}\n");
+        let want = format!("-- easel session \"t\": a painting replayed chunk by chunk.\n-- Each \"--@ chunk\" line starts one chunk as it was run at the easel.\n--@ engine 5\n\n--@ chunk 1\n{CANVAS}\n");
         assert_eq!(prog, want);
         assert_eq!(logged_box(&prog).unwrap(), None);
         assert_eq!(box_for(Some(&prog)).map(|b| b.name), Ok(paint::palette::DEFAULT_BOX), "(EASEL_BOX set in the test's environment?)");
@@ -1844,6 +1852,115 @@ mod tests {
         }
     }
 
+    /// The knife lays paint from its bead and scrapes wet paint back onto it.
+    #[test]
+    #[cfg(tube_box)]
+    fn the_knife_lays_and_scrapes() {
+        let mut s = Session::new(W).unwrap();
+        s.run(CANVAS).unwrap();
+        let bare = bits(&s);
+        s.run(r#"k = knife{width=30}; k:load(pile{{"bone black", 1}}, 0.5); full0 = k:fullness()
+                  k:lay({{200, 300}, {600, 300}}, {pressure=0.4})
+                  assert(k:fullness() < full0, "laying takes paint off the blade")"#).unwrap();
+        assert_ne!(bare, bits(&s), "the knife laid paint");
+        s.run(r#"k:wipe(); assert(k:fullness() == 0)
+                  k:scrape({{200, 300}, {600, 300}})
+                  assert(k:fullness() > 0, "scraping takes wet paint onto the blade")"#).unwrap();
+        let e = s.run("knife{width=1}").unwrap_err();
+        assert!(e.contains("2 to 200"), "{e}");
+    }
+
+    #[test]
+    #[cfg(tube_box)]
+    fn knife_rejects_invalid_loads_and_paths_without_changing_state() {
+        let mut s = Session::new(W).unwrap();
+        s.run(CANVAS).unwrap();
+        s.run(r#"k = knife{width=30}; p = pile{{"bone black", 1}}; k:load(p, 0.5)"#).unwrap();
+        for call in ["k:load(p, 3.4e38)", "k:lay({{100, 300}, {0/0, 300}})", "k:scrape({{100, 300}, {1e9, 300}})", "k:lay({{100, 300}}, {angle=math.huge})", "local pts = {}; for i = 1, 24 do pts[i] = {i % 2 == 0 and 20000 or -20000, 300} end; k:lay(pts)"] {
+            let before = bits(&s);
+            let e = s.run(call).unwrap_err();
+            assert!(e.contains("k:"), "{call}: {e}");
+            assert_eq!(before, bits(&s), "{call}");
+        }
+    }
+
+    /// A failed chunk leaves a knife as it was, as it leaves a brush.
+    #[test]
+    #[cfg(tube_box)]
+    fn a_failed_chunk_leaves_the_knife_alone() {
+        let mut s = Session::new(W).unwrap();
+        s.run(CANVAS).unwrap();
+        s.run(r#"k = knife{width=30}; k:load(pile{{"bone black", 1}}, 0.5); full0 = k:fullness()"#).unwrap();
+        let before = bits(&s);
+        let e = s.run("k:lay({{200, 300}, {600, 300}}); error('stop')").unwrap_err();
+        assert!(e.contains("stop"), "{e}");
+        assert_eq!(before, bits(&s));
+        s.run("assert(k:fullness() == full0)").unwrap();
+    }
+
+    /// A double-loaded, streaky pass paints something else than the plain
+    /// pass, and the same again in a second session; a part-loaded brush too.
+    #[test]
+    #[cfg(tube_box)]
+    fn double_loads_and_streaks_paint_and_replay() {
+        let paint = |opts: &str| {
+            let mut s = Session::new(W).unwrap();
+            s.run(CANVAS).unwrap();
+            s.run(&format!(
+                r#"p = pile{{{{"lead white", 3}}, {{"cobalt blue", 1}}}}; q = pile{{{{"vermilion", 1}}}}
+                   work(rect(100, 100, 600, 300), {{pile=p{opts}}})
+                   b = brush("flat", 12); b:load(p, 0.8); b:load(q, 0.5, {{side=1, share=0.4, streak=0.5}}); b:stroke({{{{150, 500}}, {{700, 500}}}})"#
+            ))
+            .unwrap();
+            bits(&s)
+        };
+        let double = paint(", streak=0.8, second={pile=q, load=0.4, side=1, share=0.5}");
+        assert_eq!(double, paint(", streak=0.8, second={pile=q, load=0.4, side=1, share=0.5}"));
+        assert_ne!(double, paint(""));
+        let mut s = Session::new(W).unwrap();
+        s.run(CANVAS).unwrap();
+        let e = s.run(r#"b = brush("flat", 12); b:load(pile{{"vermilion", 1}}, 0.5, {side=2})"#).unwrap_err();
+        assert!(e.contains("side is -1..1"), "{e}");
+        let e = s.run(r#"work(everywhere(), {pile=pile{{"vermilion", 1}}, second={load=0.4}})"#).unwrap_err();
+        assert!(e.contains("work second"), "{e}");
+    }
+
+    /// A sketch's log says it is one, so it replays at its width under any
+    /// file name; a painting's log doesn't.
+    #[test]
+    #[cfg(tube_box)]
+    fn a_sketch_s_log_says_so() {
+        let mut a = Session::new(SKETCH_WIDTH).unwrap();
+        a.run(CANVAS).unwrap();
+        let prog = a.program("sketch-1");
+        assert!(prog.contains(&format!("\n{SKETCH_MARK}\n\n{MARK} 1\n")), "{prog}");
+        assert!(logged_sketch(&prog));
+        let mut b = Session::new(W).unwrap();
+        b.run(&format!("{CANVAS}\n-- {SKETCH_MARK} (in a chunk it is a comment)")).unwrap();
+        assert!(!logged_sketch(&b.program("sketchbook")));
+    }
+
+    /// A gesture's points are checked before its curve is sampled (a point
+    /// that is nowhere would be sampled without end), and its pressure keeps
+    /// a press that falls between its evenly spaced knots.
+    #[test]
+    #[cfg(tube_box)]
+    fn a_gesture_checks_its_points_and_keeps_a_press() {
+        let mut s = Session::new(W).unwrap();
+        s.run(CANVAS).unwrap();
+        s.run(r#"b = brush("round", 6); b:load(pile{{"bone black", 1}}, 0.9); full0 = b:fullness()"#).unwrap();
+        for bad in ["{{100, 300}, {math.huge, 300}}", "{{100, 300}, {0/0, 300}}", "{{100, 300}, {1e9, 300}}"] {
+            let e = s.run(&format!("b:gesture({bad})")).unwrap_err();
+            assert!(e.contains("not on or near the canvas"), "{bad}: {e}");
+        }
+        let bare = bits(&s);
+        // one pressed point among 33, the others lifted: it paints
+        s.run(r#"local pts = {}; for i = 0, 32 do pts[#pts + 1] = {100 + 20 * i, 300, i == 1 and 1 or 0} end
+                  b:gesture(pts, {ramps={0, 0}})
+                  assert(b:fullness() < full0, "the pressed point laid paint")"#).unwrap();
+        assert_ne!(bare, bits(&s));
+    }
+
     /// An engine-2 painting replays as engine 2, bit for bit as it did before
     /// engine 3 (recorded at 7b80cb0, round 23): a test sheet of lead white
     /// and bone black laid at different times over five days, lifted at
@@ -1880,68 +1997,5 @@ mod tests {
             h = h.wrapping_mul(0x100_0000_01b3);
         }
         format!("{h:016x}")
-    }
-
-    /// A sketch's log says it is one, so it replays at its width under any
-    /// file name; a painting's log doesn't.
-    #[test]
-    #[cfg(tube_box)]
-    fn a_sketch_s_log_says_so() {
-        let mut a = Session::new(SKETCH_WIDTH).unwrap();
-        a.run(CANVAS).unwrap();
-        let prog = a.program("sketch-1");
-        assert!(prog.contains(&format!("\n{SKETCH_MARK}\n\n{MARK} 1\n")), "{prog}");
-        assert!(logged_sketch(&prog));
-        let mut b = Session::new(W).unwrap();
-        b.run(&format!("{CANVAS}\n-- {SKETCH_MARK} (in a chunk it is a comment)")).unwrap();
-        assert!(!logged_sketch(&b.program("sketchbook")));
-    }
-
-    /// A double-loaded, streaky pass paints something else than the plain
-    /// pass, and the same again in a second session; a part-loaded brush too.
-    #[test]
-    #[cfg(tube_box)]
-    fn double_loads_and_streaks_paint_and_replay() {
-        let paint = |opts: &str| {
-            let mut s = Session::new(W).unwrap();
-            s.run(CANVAS).unwrap();
-            s.run(&format!(
-                r#"p = pile{{{{"lead white", 3}}, {{"cobalt blue", 1}}}}; q = pile{{{{"vermilion", 1}}}}
-                   work(rect(100, 100, 600, 300), {{pile=p{opts}}})
-                   b = brush("flat", 12); b:load(p, 0.8); b:load(q, 0.5, {{side=1, share=0.4, streak=0.5}}); b:stroke({{{{150, 500}}, {{700, 500}}}})"#
-            ))
-            .unwrap();
-            bits(&s)
-        };
-        let double = paint(", streak=0.8, second={pile=q, load=0.4, side=1, share=0.5}");
-        assert_eq!(double, paint(", streak=0.8, second={pile=q, load=0.4, side=1, share=0.5}"));
-        assert_ne!(double, paint(""));
-        let mut s = Session::new(W).unwrap();
-        s.run(CANVAS).unwrap();
-        let e = s.run(r#"b = brush("flat", 12); b:load(pile{{"vermilion", 1}}, 0.5, {side=2})"#).unwrap_err();
-        assert!(e.contains("side is -1..1"), "{e}");
-        let e = s.run(r#"work(everywhere(), {pile=pile{{"vermilion", 1}}, second={load=0.4}})"#).unwrap_err();
-        assert!(e.contains("work second"), "{e}");
-    }
-
-    /// A gesture's points are checked before its curve is sampled (a point
-    /// that is nowhere would be sampled without end), and its pressure keeps
-    /// a press that falls between its evenly spaced knots.
-    #[test]
-    #[cfg(tube_box)]
-    fn a_gesture_checks_its_points_and_keeps_a_press() {
-        let mut s = Session::new(W).unwrap();
-        s.run(CANVAS).unwrap();
-        s.run(r#"b = brush("round", 6); b:load(pile{{"bone black", 1}}, 0.9); full0 = b:fullness()"#).unwrap();
-        for bad in ["{{100, 300}, {math.huge, 300}}", "{{100, 300}, {0/0, 300}}", "{{100, 300}, {1e9, 300}}"] {
-            let e = s.run(&format!("b:gesture({bad})")).unwrap_err();
-            assert!(e.contains("not on or near the canvas"), "{bad}: {e}");
-        }
-        let bare = bits(&s);
-        // one pressed point among 33, the others lifted: it paints
-        s.run(r#"local pts = {}; for i = 0, 32 do pts[#pts + 1] = {100 + 20 * i, 300, i == 1 and 1 or 0} end
-                  b:gesture(pts, {ramps={0, 0}})
-                  assert(b:fullness() < full0, "the pressed point laid paint")"#).unwrap();
-        assert_ne!(bare, bits(&s));
     }
 }

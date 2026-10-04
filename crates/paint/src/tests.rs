@@ -88,7 +88,9 @@ fn dry_is_idempotent_and_clears_wet() {
 /// hog-flat pass, three held-brush drags, a glaze; then relief.
 #[cfg(tube_box)]
 fn fixture() -> Canvas {
-    let st = Style::oil();
+    // (the golden was recorded with engine 2: the scene stays that engine's)
+    let mut st = Style::oil();
+    st.palette.engine = 2;
     let mut c = st.prepare(240, 1.5, 7);
     let (w, h) = (c.width(), c.height());
     let upper = Mask::from_fn(c.f, |_, y| if y < h * 0.5 { 1.0 } else { 0.0 });
@@ -673,6 +675,30 @@ fn thick_paint_from_a_pointed_hatch_hides_the_ground_at_full_size() {
     }
     assert!(thick > 50_000, "{thick} pixels with a thick film");
     assert!(pale <= thick / 20_000, "{pale} of {thick} pixels under 30 µm or more of dark paint show more ground than paint");
+}
+
+/// Engine 5: a knife-laid slab tears where it parts from the blade, so it
+/// covers less than engine 4's whole slab from the same pull and load: on a
+/// short pull, on a long one that runs the knife dry (the torn paint stays
+/// under the blade, it doesn't feed the bead), and on a small canvas, whose
+/// pixels are wider than a tear. An engine 4 canvas keeps the whole slab.
+#[test]
+fn a_knife_laid_slab_tears_from_engine_4() {
+    let covered = |engine: u32, width: usize, to: f32| {
+        let mut c = Canvas::new(width, 3.0, [0.8; 3]).with_engine(engine);
+        let mut k = crate::Knife::new(60.0);
+        k.load(Paint::body(hex("#445566")), 1.0);
+        let before = k.fullness();
+        c.knife(&mut k, &[(200.0, 160.0), (to, 160.0)], (0.5, 0.5), None, true, 0.1);
+        assert!(k.fullness() <= before);
+        c.wet.vol.iter().filter(|&&v| v > 0.0).count()
+    };
+    for (what, width, to) in [("a short pull", 2400, 400.0), ("a pull that runs dry", 2400, 800.0), ("a sketch", 600, 400.0)] {
+        let (whole, torn) = (covered(4, width, to), covered(5, width, to));
+        assert!(whole > 1500, "{what}: engine 4 laid {whole} pixels");
+        assert!(torn > whole / 4 && torn < whole * 19 / 20, "{what}: engine 5 laid {torn} pixels of engine 4's {whole}");
+        assert_eq!(whole, covered(4, width, to), "{what}: the same pull lays the same slab");
+    }
 }
 
 /// Marks sized across a pass (`scale_at`) take the hand the time of the

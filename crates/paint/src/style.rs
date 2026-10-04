@@ -172,6 +172,10 @@ impl Style {
             .with_engine(self.palette.engine)
             .with_size_mm(self.width_mm)
             .with_linen(Linen { seed, ..self.linen });
+        // the canvas is prepared alike in every engine: engine 4's stiffer
+        // films and clumping hair are the painting's, not the primer's
+        let engine = c.engine;
+        c.engine = engine.min(3);
         for (k, g) in self.ground.iter().enumerate() {
             if g.um <= 0.0 {
                 continue;
@@ -187,6 +191,7 @@ impl Style {
                 }
             }
         }
+        c.engine = engine;
         c
     }
 }

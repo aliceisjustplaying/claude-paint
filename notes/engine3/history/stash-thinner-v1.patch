@@ -1,0 +1,149 @@
+# stash@{0} 'thinner v1 uncommitted (stopped 2026-10-03)', on 94712a42493c2743cc9a36f19d73b2a79f63db8f WIP thinner (option A, engine-3 gate)
+diff --git a/crates/easel/src/thinner_tests.rs b/crates/easel/src/thinner_tests.rs
+index 1981bab..2143848 100644
+--- a/crates/easel/src/thinner_tests.rs
++++ b/crates/easel/src/thinner_tests.rs
+@@ -270,20 +270,17 @@ fn a_thinned_pass_reads_as_thin() {
+     assert!(white.shows() <= 0.5, "lead white thinned half at load 0.6 is still a scumble: {:.2} of the card shows", white.shows());
+ }
+ 
+-/// Raw sienna, a transparent earth, thinned half with solvent and laid at
+-/// a wash's load (0.3) is an imprimatura: at least half the card's
+-/// black/white contrast shows through it. (50% is the project's own target,
+-/// not a measurement; an imprimatura is laid thin and rubbed out, so the
+-/// target is set at a light load, as the parent redefined it.) At load 0.6
+-/// the share is printed, not judged: a load-0.6 pass lays about three coats
+-/// of wet paint, and half of that as raw sienna (hiding 0.4, unchanged)
+-/// hides most of the card; see notes/thinner/README.md.
++/// Raw sienna, a transparent earth, thinned half with solvent is an
++/// imprimatura: at least half the card's black/white contrast shows
++/// through it at loads 0.3 and 0.6, at the painting's own width (2400).
++/// Load 0.6 is the original finding: unthinned paint went 80% of the way
++/// to masstone at load 0.3 and at 0.6.
+ #[test]
+ fn an_earth_thinned_half_is_an_imprimatura() {
+-    let rows = measure(600, "body", &[0.3, 0.6], &[0.0, 0.5]);
+-    let shows = |load: f32| rows[1].1.iter().find(|c| c.load == load && c.thinner == 0.5).unwrap().shows();
+-    println!("raw sienna thinned half: load 0.3 shows {:.2} of the card's contrast, load 0.6 (reported, not judged) {:.2}", shows(0.3), shows(0.6));
+-    assert!(shows(0.3) >= 0.5, "raw sienna thinned half at load 0.3 shows {:.2} of the card; an imprimatura shows at least 0.5", shows(0.3));
++    let rows = measure(2400, "body", &[0.3, 0.6], &[0.0, 0.5]);
++    let shows: Vec<(f32, f32)> = [0.3, 0.6].iter().map(|&load| (load, rows[1].1.iter().find(|c| c.load == load && c.thinner == 0.5).unwrap().shows())).collect();
++    println!("raw sienna thinned half, (load, share of the card's contrast showing): {shows:.2?}");
++    assert!(shows.iter().all(|&(_, v)| v >= 0.5), "raw sienna thinned half shows (load, share of the card's contrast) {shows:.2?}; an imprimatura shows at least 0.5");
+ }
+ 
+ /// The solvent evaporates, so the dry film is (1 - t) of the wet film: a
+diff --git a/crates/paint/src/palette.rs b/crates/paint/src/palette.rs
+index 2ef4812..cf801a9 100644
+--- a/crates/paint/src/palette.rs
++++ b/crates/paint/src/palette.rs
+@@ -41,10 +41,13 @@ pub struct Tube {
+     /// The same in engine 3 (`drying::drier::engine3`): `drying` unless the
+     /// tube's own source range called for another.
+     pub drying_3: f32,
++    /// Hiding in engine 3: `hiding` unless a source called for another
++    /// (`Tube::hiding3`).
++    pub hiding_3: f32,
+ }
+ 
+ fn tube(name: &'static str, pigment: &'static str, color: &str, hiding: f32, stiff: f32, strength: f32, drying: f32) -> Tube {
+-    Tube { name, pigment, color: hex(color), hiding, stiff, strength, drying, drying_3: drying }
++    Tube { name, pigment, color: hex(color), hiding, stiff, strength, drying, drying_3: drying, hiding_3: hiding }
+ }
+ 
+ impl Tube {
+@@ -52,6 +55,11 @@ impl Tube {
+     fn engine3(self, rate: f32) -> Tube {
+         Tube { drying_3: rate, ..self }
+     }
++
++    /// This tube hiding `hiding` in engine 3 (`Tube::hiding_3`).
++    fn hiding3(self, hiding: f32) -> Tube {
++        Tube { hiding_3: hiding, ..self }
++    }
+ }
+ 
+ /// Every tube the engine knows, each defined once: `tube(name, pigment,
+@@ -132,7 +140,12 @@ pub fn catalog() -> Vec<Tube> {
+         #[cfg(feature = "box-alma-tadema")]
+         tube("brown ochre", "iron oxide earth, a darker grade", "#86592e", 0.8, 0.7, 0.8, drier::OCHRE),
+         #[cfg(any(feature = "box-sargent", feature = "box-inness"))]
+-        tube("raw sienna", "sienna earth, unroasted", "#9a6a2b", 0.4, 0.5, 0.7, drier::SIENNA).engine3(drier::engine3::RAW_SIENNA),
++        // engine 3: transparent, hiding 0.2. Field (Chromatography, revised
++        // by Salter, 1869, §50): raw sienna "possesses more body and
++        // transparency than the ochres" (yellow ochre here hides 0.8). The
++        // number is an estimate: the catalog's transparent iron oxide's
++        // (transparent oxide yellow, 0.2). Engines 1 and 2 keep 0.4.
++        tube("raw sienna", "sienna earth, unroasted", "#9a6a2b", 0.4, 0.5, 0.7, drier::SIENNA).engine3(drier::engine3::RAW_SIENNA).hiding3(0.2),
+         #[cfg(feature = "box-inness")]
+         tube("orange chrome", "basic lead chromate", "#e0712a", 0.88, 0.75, 0.9, drier::CHROME_YELLOW),
+         // Mars orange: "much transparency" in the period account (Salter's
+@@ -293,6 +306,8 @@ pub struct Palette {
+     lat: Vec<[f32; mixbox::LATENT_SIZE]>,
+     /// Scattering per coat of each tube paint.
+     scat: Vec<f32>,
++    /// The same in engine 3 (from `Tube::hiding_3`).
++    scat_3: Vec<f32>,
+ }
+ 
+ impl Clone for Palette {
+@@ -311,7 +326,8 @@ impl Palette {
+     pub fn new(name: &'static str, tubes: Vec<Tube>) -> Self {
+         let lat = tubes.iter().map(|t| mixbox::linear_float_rgb_to_latent(&t.color)).collect();
+         let scat = tubes.iter().map(|t| scatter_for(luminance(t.color), t.hiding)).collect();
+-        Palette { name, tubes, engine: crate::ENGINE, lat, scat }
++        let scat_3 = tubes.iter().map(|t| scatter_for(luminance(t.color), t.hiding_3)).collect();
++        Palette { name, tubes, engine: crate::ENGINE, lat, scat, scat_3 }
+     }
+ 
+     /// Return a palette restricted to the named tubes. Unknown names panic.
+@@ -425,7 +441,7 @@ impl Palette {
+     pub fn table(&self) -> String {
+         let mut s = String::from("| tube | pigment | hiding | stiffness | tinting strength | drying |\n|---|---|---|---|---|---|\n");
+         for t in &self.tubes {
+-            s.push_str(&format!("| {} | {} | {:?} | {:?} | {:?} | {:?} |\n", t.name, t.pigment, t.hiding, t.stiff, t.strength, self.drying_of(t)));
++            s.push_str(&format!("| {} | {} | {:?} | {:?} | {:?} | {:?} |\n", t.name, t.pigment, self.hiding_of(t), t.stiff, t.strength, self.drying_of(t)));
+         }
+         s
+     }
+@@ -437,6 +453,11 @@ impl Palette {
+         Palette { engine: self.engine, ..Palette::new(self.name, t) }
+     }
+ 
++    /// How much one coat of the tube `t` hides in this box's engine version.
++    pub fn hiding_of(&self, t: &Tube) -> f32 {
++        if self.engine >= 3 { t.hiding_3 } else { t.hiding }
++    }
++
+     /// How fast the tube `t` dries in this box's engine version.
+     pub fn drying_of(&self, t: &Tube) -> f32 {
+         if self.engine >= 3 { t.drying_3 } else { t.drying }
+@@ -452,7 +473,7 @@ impl Palette {
+                 lat[k] += self.lat[i][k] * w;
+             }
+             wsum += w;
+-            sct += self.scat[i] * f;
++            sct += if self.engine >= 3 { self.scat_3[i] } else { self.scat[i] } * f;
+             stf += self.tubes[i].stiff * f;
+         }
+         for v in lat.iter_mut() {
+@@ -598,7 +619,7 @@ mod tests {
+         names.dedup();
+         assert_eq!(names.len(), cat.len(), "a tube is defined twice");
+         for t in &cat {
+-            assert!(t.hiding > 0.0 && t.hiding <= 1.0 && t.stiff > 0.0 && t.stiff <= 1.0 && t.strength > 0.0 && t.drying > 0.0 && t.drying_3 > 0.0, "{t:?}");
++            assert!(t.hiding > 0.0 && t.hiding <= 1.0 && t.stiff > 0.0 && t.stiff <= 1.0 && t.strength > 0.0 && t.drying > 0.0 && t.drying_3 > 0.0 && t.hiding_3 > 0.0 && t.hiding_3 <= 1.0, "{t:?}");
+             assert!(!t.pigment.is_empty(), "{}", t.name);
+         }
+     }
+@@ -665,8 +686,8 @@ mod canvas_tests {
+     #[test]
+     fn mixture_to_paint_preserves_scattering() {
+         let pal = Palette::new("opaque neutral tubes", vec![
+-            Tube { name: "white", pigment: "", color: [0.99; 3], hiding: 0.99, stiff: 0.5, strength: 1.0, drying: 1.0, drying_3: 1.0 },
+-            Tube { name: "black", pigment: "", color: [0.01; 3], hiding: 0.99, stiff: 0.5, strength: 1.0, drying: 1.0, drying_3: 1.0 },
++            Tube { name: "white", pigment: "", color: [0.99; 3], hiding: 0.99, stiff: 0.5, strength: 1.0, drying: 1.0, drying_3: 1.0, hiding_3: 0.99 },
++            Tube { name: "black", pigment: "", color: [0.01; 3], hiding: 0.99, stiff: 0.5, strength: 1.0, drying: 1.0, drying_3: 1.0, hiding_3: 0.99 },
+         ]);
+         for (white, medium) in [(0.1, 0.0), (0.1, 0.5), (0.6, 0.0), (0.6, 0.9)] {
+             let m = pal.pile(vec![(0, white), (1, 1.0 - white)]);

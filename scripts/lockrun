@@ -1,0 +1,465 @@
+#!/usr/bin/env python3
+"""Run one heavy job at a time, machine-wide, for this user.
+
+    scripts/lockrun --timeout SECONDS [--owner NAME] [--log FILE]
+                    [--lock-timeout SECONDS] [--grace SECONDS] [--quiet] -- CMD ARGS...
+    scripts/lockrun --status
+
+Every heavy build or test (cargo build/test, release builds, anything that
+keeps cores busy for more than a few seconds) goes through this helper, from
+every agent and every working copy. A second job waits until the first job
+and all of its processes have stopped.
+
+How it works (Python standard library only; macOS and Linux):
+
+- The lock is an fcntl.flock on one per-user file, /tmp/lockrun-<uid>/lock
+  (LOCKRUN_DIR overrides the directory). The lock file is never written.
+- The job record, record.json in the same directory, is written only after
+  the lock is held, atomically (temporary file, fsync, rename). Waiting for
+  the lock never touches the previous job's record. Every start and finish is
+  also appended to history.jsonl there.
+- The command runs in its own session and process group. It starts through a
+  small trampoline that blocks on a pipe: the helper first writes the record
+  (owner, command, process group, a unique token and the start time), then
+  sends the go byte. If the helper dies before that, the pipe reaches end of
+  file and the trampoline exits (code 125) without running the command.
+- The job's processes inherit the locked file descriptor, so the lock stays
+  held until the helper and every process that kept the descriptor have
+  exited. If the helper is killed while the job lives, a second lockrun keeps
+  waiting. As a second guard, a lockrun that gets the lock still waits while
+  the previous record says "running" and that record's process group exists.
+- --timeout (required) stops the whole process group (SIGTERM, then SIGKILL
+  after --grace seconds, default 5), keeps the log, marks the record
+  "timeout" and exits 124. SIGINT, SIGTERM or SIGHUP to the helper does the
+  same with the record marked "cancelled" (exit 130). When the command exits
+  on its own, any processes it left behind in its group are stopped too (the
+  exited leader is kept unreaped meanwhile, so its group id can't be reused).
+  Only that process group is ever signalled.
+- Output: the command's stdout and stderr go to the log (--log, default
+  logs/<time>-<token>.log under the lock directory), which the helper copies
+  to its own stdout as it grows (--quiet: don't copy).
+- Nesting: the job's environment has LOCKRUN_TOKEN set to its token. A
+  lockrun started inside the job (same token, record running, lock held)
+  runs its command directly, without the lock, in the outer job's process
+  group (so the outer timeout and cancellation still reach it). Its own
+  --timeout is applied by signalling the inner command's process only.
+
+Exit codes: the command's own exit code when it finishes; 124 timeout
+(unfinished); 130 cancelled; 75 the lock was not free within --lock-timeout
+(nothing ran); 125 lockrun's own error.
+"""
+
+import argparse
+import datetime
+import errno
+import fcntl
+import json
+import os
+import shlex
+import signal
+import socket
+import subprocess
+import sys
+import threading
+import time
+import uuid
+
+EXIT_TIMEOUT = 124
+EXIT_CANCELLED = 130
+EXIT_BUSY = 75
+EXIT_ERROR = 125
+
+# The trampoline: argv = [python, -c, TRAMPOLINE, <read fd>, CMD...]. It waits
+# for the go byte; end of file (the helper died) means exit without working.
+TRAMPOLINE = r"""
+import os, sys
+fd = int(sys.argv[1])
+try:
+    go = os.read(fd, 1)
+except OSError:
+    go = b""
+if go != b"G":
+    sys.stderr.write("lockrun: the helper died before giving the job permission; not running it\n")
+    os._exit(125)
+os.close(fd)
+try:
+    os.execvp(sys.argv[2], sys.argv[2:])
+except OSError as e:
+    sys.stderr.write("lockrun: cannot run %s: %s\n" % (sys.argv[2], e))
+    os._exit(127)
+"""
+
+
+def now_iso():
+    return datetime.datetime.now().astimezone().isoformat(timespec="seconds")
+
+
+def lock_dir():
+    d = os.environ.get("LOCKRUN_DIR") or os.path.join("/tmp", "lockrun-%d" % os.getuid())
+    os.makedirs(d, mode=0o700, exist_ok=True)
+    os.makedirs(os.path.join(d, "logs"), mode=0o700, exist_ok=True)
+    return d
+
+
+def read_record(d):
+    try:
+        with open(os.path.join(d, "record.json")) as f:
+            return json.load(f)
+    except (OSError, ValueError):
+        return None
+
+
+def write_record(d, rec):
+    path = os.path.join(d, "record.json")
+    tmp = "%s.tmp.%d" % (path, os.getpid())
+    with open(tmp, "w") as f:
+        json.dump(rec, f, indent=1, sort_keys=True)
+        f.write("\n")
+        f.flush()
+        os.fsync(f.fileno())
+    os.replace(tmp, path)
+
+
+def append_history(d, event, rec):
+    line = json.dumps(dict(rec, event=event), sort_keys=True) + "\n"
+    fd = os.open(os.path.join(d, "history.jsonl"), os.O_WRONLY | os.O_APPEND | os.O_CREAT, 0o600)
+    try:
+        os.write(fd, line.encode())
+    finally:
+        os.close(fd)
+
+
+def group_alive(pgid):
+    """True if a process group with this id exists and is ours to signal."""
+    try:
+        os.killpg(pgid, 0)
+        return True
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return False  # another user's group: the id was reused; not our job
+
+
+def describe(rec):
+    if not rec:
+        return "an unknown job"
+    return "%s (%s; started %s; process group %s)" % (
+        rec.get("owner"), rec.get("command_str"), rec.get("start"), rec.get("pgid"))
+
+
+def lock_held_by_someone(d):
+    """Try the lock without waiting from a fresh open file description."""
+    fd = os.open(os.path.join(d, "lock"), os.O_RDWR | os.O_CREAT, 0o600)
+    try:
+        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError:
+        return True
+    finally:
+        os.close(fd)  # closing releases the lock if we got it
+    return False
+
+
+def acquire(d, lock_timeout, say):
+    fd = os.open(os.path.join(d, "lock"), os.O_RDWR | os.O_CREAT, 0o600)
+    deadline = None if lock_timeout is None else time.monotonic() + lock_timeout
+    told = False
+    while True:
+        try:
+            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            break
+        except BlockingIOError:
+            pass
+        if not told:
+            say("waiting for the lock held by " + describe(read_record(d)))
+            told = True
+        if deadline is not None and time.monotonic() >= deadline:
+            os.close(fd)
+            return None
+        time.sleep(0.2)
+    # Second guard: the previous job's helper may have died while its process
+    # group lives on without the descriptor. Hold the lock and wait for it.
+    told = False
+    while True:
+        prev = read_record(d)
+        if not (prev and prev.get("state") == "running" and isinstance(prev.get("pgid"), int)
+                and group_alive(prev["pgid"]) and live_members(prev["pgid"])):
+            break
+        if not told:
+            say("the previous job's helper is gone but its process group lives; waiting for "
+                + describe(prev))
+            told = True
+        if deadline is not None and time.monotonic() >= deadline:
+            os.close(fd)
+            return None
+        time.sleep(0.2)
+    if prev and prev.get("state") == "running":
+        prev = dict(prev, state="abandoned", noticed=now_iso())
+        append_history(d, "abandoned", prev)
+    return fd
+
+
+class Relay(threading.Thread):
+    """Copy the log to our stdout as it grows."""
+
+    def __init__(self, path):
+        super().__init__(daemon=True)
+        self.path = path
+        self.stop = threading.Event()
+
+    def run(self):
+        out = sys.stdout.buffer
+        with open(self.path, "rb") as f:
+            while True:
+                chunk = f.read(65536)
+                if chunk:
+                    try:
+                        out.write(chunk)
+                        out.flush()
+                    except (BrokenPipeError, OSError):
+                        return
+                    continue
+                if self.stop.is_set():
+                    return
+                time.sleep(0.1)
+
+
+class Cancelled(Exception):
+    pass
+
+
+def wait_nowait(pid, deadline):
+    """Wait until pid exits without reaping it; False on deadline."""
+    while True:
+        try:
+            info = os.waitid(os.P_PID, pid, os.WEXITED | os.WNOHANG | os.WNOWAIT)
+        except ChildProcessError:
+            return True
+        except InterruptedError:
+            continue
+        if info is not None and info.si_pid == pid:
+            return True
+        if deadline is not None and time.monotonic() >= deadline:
+            return False
+        time.sleep(0.05)
+
+
+def live_members(pgid):
+    """Pids of the group's processes that are not zombies (ps works on macOS and Linux)."""
+    try:
+        out = subprocess.run(["ps", "-A", "-o", "pid=,pgid=,stat="], capture_output=True,
+                             text=True, check=True).stdout
+    except (OSError, subprocess.CalledProcessError):
+        return [-1] if group_alive(pgid) else []  # can't tell: fall back to kill(0)
+    pids = []
+    for line in out.splitlines():
+        parts = line.split()
+        # macOS can print an empty state column; only an explicit Z is a zombie
+        if len(parts) >= 2 and parts[1] == str(pgid) and not (len(parts) >= 3 and parts[2].startswith("Z")):
+            pids.append(int(parts[0]))
+    return pids
+
+
+def stop_group(pgid, grace, say, why):
+    """SIGTERM the group, SIGKILL after grace seconds, then wait until no live member is left.
+
+    Called only for the job's own group, whose leader we have not reaped: its
+    id can't be reused meanwhile, so no unrelated process is signalled."""
+    if not live_members(pgid):
+        return
+    say("%s: stopping process group %d (SIGTERM)" % (why, pgid))
+    for sig, wait in ((signal.SIGTERM, grace), (signal.SIGKILL, 10.0)):
+        try:
+            os.killpg(pgid, sig)
+        except ProcessLookupError:
+            return
+        end = time.monotonic() + wait
+        while live_members(pgid) and time.monotonic() < end:
+            time.sleep(0.05)
+        if not live_members(pgid):
+            return
+        if sig == signal.SIGTERM:
+            say("%s: process group %d still alive after %g s; SIGKILL" % (why, pgid, grace))
+    say("warning: process group %d still has processes after SIGKILL" % pgid)
+
+
+def run_nested(args, say):
+    """Inside an outer lockrun job: no lock, same process group."""
+    say("inside job %s: running without taking the lock again" % os.environ["LOCKRUN_TOKEN"][:8])
+    proc = subprocess.Popen(args.cmd)
+    try:
+        return proc.wait(timeout=args.timeout)
+    except subprocess.TimeoutExpired:
+        say("UNFINISHED: timed out after %g s; stopping the inner command (pid %d)"
+            % (args.timeout, proc.pid))
+        proc.terminate()
+        try:
+            proc.wait(timeout=args.grace)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+            proc.wait()
+        return EXIT_TIMEOUT
+    except KeyboardInterrupt:
+        proc.terminate()
+        proc.wait()
+        return EXIT_CANCELLED
+
+
+def status():
+    d = lock_dir()
+    held = lock_held_by_someone(d)
+    rec = read_record(d)
+    print("lock: %s (%s)" % ("held" if held else "free", os.path.join(d, "lock")))
+    print(json.dumps(rec, indent=1, sort_keys=True) if rec else "no record yet")
+    return 0
+
+
+def main():
+    p = argparse.ArgumentParser(prog="lockrun", description=__doc__.split("\n\n")[0])
+    p.add_argument("--status", action="store_true", help="show the lock and the last record")
+    p.add_argument("--timeout", type=float, help="seconds before the job is stopped (required)")
+    p.add_argument("--owner", default=os.environ.get("LOCKRUN_OWNER"),
+                   help="who runs it (default $LOCKRUN_OWNER, else user@host:cwd)")
+    p.add_argument("--log", help="log file (default under the lock directory)")
+    p.add_argument("--lock-timeout", type=float, help="give up waiting for the lock (exit 75)")
+    p.add_argument("--grace", type=float, default=5.0, help="seconds between SIGTERM and SIGKILL")
+    p.add_argument("--quiet", action="store_true", help="don't copy the log to stdout")
+    p.add_argument("cmd", nargs=argparse.REMAINDER)
+    args = p.parse_args()
+    if args.status:
+        return status()
+    if args.cmd and args.cmd[0] == "--":
+        args.cmd = args.cmd[1:]
+    if not args.cmd:
+        p.error("no command (put it after --)")
+    if args.timeout is None or args.timeout <= 0:
+        p.error("--timeout SECONDS is required (1 min for ordinary checks, 10 for builds)")
+
+    def say(msg):
+        sys.stderr.write("lockrun: %s\n" % msg)
+        sys.stderr.flush()
+
+    d = lock_dir()
+
+    token = os.environ.get("LOCKRUN_TOKEN")
+    if token:
+        rec = read_record(d)
+        if rec and rec.get("token") == token and rec.get("state") == "running" \
+                and lock_held_by_someone(d):
+            return run_nested(args, say)
+        say("ignoring a stale LOCKRUN_TOKEN (%s): it is not the running job's" % token[:8])
+
+    owner = args.owner or "%s@%s:%s" % (os.environ.get("USER", "?"), socket.gethostname(), os.getcwd())
+    # Signals while waiting for the lock: just leave (the record is untouched).
+    signal.signal(signal.SIGTERM, signal.default_int_handler)
+    signal.signal(signal.SIGHUP, signal.default_int_handler)
+    try:
+        lock_fd = acquire(d, args.lock_timeout, say)
+    except KeyboardInterrupt:
+        say("cancelled while waiting for the lock; nothing ran")
+        return EXIT_CANCELLED
+    if lock_fd is None:
+        say("the lock was not free within %g s; nothing ran" % args.lock_timeout)
+        return EXIT_BUSY
+
+    # From here on, a signal means: cancel the job.
+    cancel = {"sig": None}
+
+    def on_signal(signum, frame):
+        if cancel["sig"] is None:
+            cancel["sig"] = signum
+            raise Cancelled()
+
+    for s in (signal.SIGINT, signal.SIGTERM, signal.SIGHUP):
+        signal.signal(s, on_signal)
+
+    token = uuid.uuid4().hex
+    start_wall = now_iso()
+    log = args.log or os.path.join(
+        d, "logs", "%s-%s.log" % (time.strftime("%Y%m%d-%H%M%S"), token[:8]))
+    log = os.path.abspath(log)
+    os.makedirs(os.path.dirname(log), exist_ok=True)
+    rec = {
+        "token": token, "owner": owner, "command": args.cmd,
+        "command_str": shlex.join(args.cmd), "cwd": os.getcwd(),
+        "host": socket.gethostname(), "helper_pid": os.getpid(),
+        "start": start_wall, "start_epoch": time.time(), "timeout_s": args.timeout,
+        "log": log, "state": "starting",
+    }
+    proc = None
+    relay = None
+    outcome, code = None, EXIT_ERROR
+    t0 = time.monotonic()
+    try:
+        r, w = os.pipe()  # both non-inheritable; r is passed to the trampoline only
+        env = dict(os.environ, LOCKRUN_TOKEN=token, LOCKRUN_LOCK_FD=str(lock_fd))
+        hold = env.pop("LOCKRUN_TEST_HOLD_BEFORE_GO", None)  # test hook (scripts/tests/lockrun.sh)
+        logf = open(log, "ab")
+        try:
+            proc = subprocess.Popen(
+                [sys.executable, "-c", TRAMPOLINE, str(r)] + args.cmd,
+                stdin=subprocess.DEVNULL, stdout=logf, stderr=subprocess.STDOUT,
+                pass_fds=(r, lock_fd), start_new_session=True, env=env)
+        finally:
+            logf.close()
+            os.close(r)
+        rec.update(pgid=proc.pid, pid=proc.pid, state="running")
+        write_record(d, rec)  # the record exists before work can begin
+        append_history(d, "start", rec)
+        if hold:
+            time.sleep(float(hold))
+        os.write(w, b"G")
+        os.close(w)
+        if not args.quiet:
+            relay = Relay(log)
+            relay.start()
+        say("job %s started (process group %d, timeout %g s, log %s)"
+            % (token[:8], proc.pid, args.timeout, log))
+        finished = wait_nowait(proc.pid, t0 + args.timeout)
+        if finished:
+            outcome = "finished"
+            # leftovers in the group: the zombie leader pins the group id
+            if live_members(proc.pid):
+                stop_group(proc.pid, args.grace, say, "the command exited but left processes")
+                rec["leftovers_stopped"] = True
+            code = proc.wait()
+        else:
+            outcome = "timeout"
+            say("UNFINISHED: timed out after %g s" % args.timeout)
+            stop_group(proc.pid, args.grace, say, "timeout")
+            proc.wait()
+            code = EXIT_TIMEOUT
+    except Cancelled:
+        outcome = "cancelled"
+        signal.signal(signal.SIGINT, signal.SIG_IGN)
+        signal.signal(signal.SIGTERM, signal.SIG_IGN)
+        signal.signal(signal.SIGHUP, signal.SIG_IGN)
+        say("cancelled by signal %d" % cancel["sig"])
+        if proc is not None:
+            stop_group(proc.pid, args.grace, say, "cancelled")
+            proc.wait()
+        code = EXIT_CANCELLED
+    finally:
+        if relay is not None:
+            relay.stop.set()
+            relay.join(timeout=5)
+        if proc is not None:
+            if outcome is None:
+                outcome = "error"
+                stop_group(proc.pid, args.grace, say, "lockrun error")
+            rec.update(state=outcome, end=now_iso(), seconds=round(time.monotonic() - t0, 3),
+                       exit=code if outcome != "finished" else proc.returncode)
+            write_record(d, rec)
+            append_history(d, "finish", rec)
+        os.close(lock_fd)  # the job is gone; release
+    if outcome == "finished":
+        say("finished: exit %d in %.1f s; log %s" % (code, rec["seconds"], log))
+        return code if code >= 0 else 128 - code
+    if outcome == "timeout":
+        say("UNFINISHED (timeout): stopped after %.1f s; log kept at %s" % (rec["seconds"], log))
+    elif outcome == "cancelled":
+        say("UNFINISHED (cancelled) after %.1f s; log kept at %s" % (rec["seconds"], log))
+    return code
+
+
+if __name__ == "__main__":
+    sys.exit(main())

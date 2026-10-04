@@ -151,6 +151,65 @@ const END_MM: f32 = 8.0;
 const SOAK: f32 = 0.35;
 const SMEAR: f32 = 0.2;
 
+/// What a wipe leaves of a thin film (engine 3). EXPERIMENT (rag work, step
+/// 1): four rules side by side, chosen per thread by `set`; the default is
+/// today's stain floor. Thicknesses are coats; `hollow` is 1 where the
+/// cloth reaches all the film and 2 where it reaches none of it; `damp` is
+/// the face's spirits (0..1).
+pub mod residue {
+    use super::{DAMP_LIFT, STAIN_COATS};
+    use std::cell::Cell;
+
+    #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+    pub enum Rule {
+        /// Today: the cloth can't take the last `STAIN_COATS × hollow`.
+        Floor,
+        /// B: no stain; the wipe takes its share of any film.
+        Zero,
+        /// C: the ground's tooth holds up to `RETAIN × hollow`; a dry cloth
+        /// can't take that part, spirits lift it at the wipe's rate × damp.
+        Fixed,
+        /// D: no compartment; the take slows as the film thins, by `v / (v
+        /// + h)`, `h = SOFT × hollow`, and spirits shrink `h`.
+        Soft,
+    }
+
+    /// C's tooth, coats (0.5 \u{b5}m) [E].
+    pub const RETAIN: f32 = 0.02;
+    /// D's half-speed film, coats (1 \u{b5}m), dry [E].
+    pub const SOFT: f32 = STAIN_COATS;
+
+    thread_local! {
+        static RULE: Cell<Rule> = const { Cell::new(Rule::Floor) };
+    }
+
+    pub fn set(r: Rule) {
+        RULE.with(|c| c.set(r));
+    }
+
+    pub fn rule() -> Rule {
+        RULE.with(|c| c.get())
+    }
+
+    /// How much of a film `v` the wipe takes when its rate would take `want`.
+    #[inline]
+    pub(super) fn take(want: f32, v: f32, hollow: f32, damp: f32) -> f32 {
+        match rule() {
+            Rule::Floor => want.min(v - STAIN_COATS * hollow),
+            Rule::Zero => want.min(v),
+            Rule::Fixed => {
+                let held = (RETAIN * hollow).min(v);
+                let share = (want / v).clamp(0.0, 1.0);
+                want.min(v - held).max(0.0) + held * share * damp.clamp(0.0, 1.0)
+            }
+            Rule::Soft => {
+                let h = SOFT * hollow / (1.0 + DAMP_LIFT * damp.clamp(0.0, 1.0));
+                (want * v / (v + h)).min(v)
+            }
+        }
+    }
+}
+
 /// Paint at the cloth's surface during one wipe (engine 3, `SMEAR`):
 /// coats × pixels, its mean color, hiding and cure, and its solvent (µm ×
 /// pixels).
@@ -440,8 +499,8 @@ impl Canvas {
                 // rate takes, so its creases show however damp it is
                 let frac = if e3 { (1.0 - (-k * fl * pad).exp()) * c } else { 1.0 - (-k * fl * e).exp() };
                 // the stain: more of it where the cloth didn't reach
-                let floor = STAIN_COATS * (2.0 - near / v);
-                let take = (avail * frac).min(v - floor);
+                let hollow = 2.0 - near / v;
+                let take = if e3 { residue::take(avail * frac, v, hollow, d) } else { (avail * frac).min(v - STAIN_COATS * hollow) };
                 if take > 0.0 {
                     if pooled {
                         let l = &self.wet.lat[i];
@@ -1316,5 +1375,212 @@ mod tests {
         assert!(dry_film.1 < wet_film.1, "a dry rag leaves more in the hollows: {dry_film:?} vs {wet_film:?}");
         assert!(wet_film.1 < 1.0 && left_wet > 0.0, "a faint stain stays");
         assert!(left_wet < left_dry, "spirits leave less color than a dry rag: {left_wet} vs {left_dry}");
+    }
+
+    /// Thin films (rag work, step 1; HANDOVER 6.1 (1)).
+    mod thin {
+        use super::*;
+        use crate::Paint;
+        use crate::palette::Palette;
+
+        /// The probe's canvas: 480 px, 440 mm, engine 3, a smooth or a
+        /// linen canvas with a thin ground.
+        pub fn ground(linen: bool) -> Canvas {
+            let mut c = Canvas::new(480, 1.5, hex("#b08060")).with_engine(3).with_size_mm(440.0);
+            if linen {
+                c = c.with_linen(Linen { warp_per_cm: 15.0, weft_per_cm: 15.0, ..Linen::fine(3) });
+            }
+            c.prime(hex("#e4dcc8"), 0.9, 25.0, 0.6, if linen { 0.3 } else { 0.0 }, 5);
+            c
+        }
+
+        pub fn sienna() -> Paint {
+            let pal = Palette::named_box("inness").unwrap();
+            let i = pal.tubes.iter().position(|t| t.name == "raw sienna").unwrap();
+            pal.pile(vec![(i, 1.0)]).laid(0.0)
+        }
+
+        /// The band painted (units), and the band read: the middle of the
+        /// wipe, which the pad's full width reaches.
+        pub const PAINTED: (f32, f32, f32, f32) = (150.0, 240.0, 850.0, 440.0);
+        pub const READ: (f32, f32, f32, f32) = (330.0, 320.0, 670.0, 360.0);
+        pub const LINE: [(f32, f32); 2] = [(250.0, 340.0), (750.0, 340.0)];
+
+        /// Buffer pixels whose centers lie in `r`.
+        pub fn px_in(c: &Canvas, r: (f32, f32, f32, f32)) -> Vec<usize> {
+            let f = c.f;
+            (0..f.w * f.h).filter(|&i| {
+                let (x, y) = (f.ux(i % f.w), f.uy(i / f.w));
+                x >= r.0 && x < r.2 && y >= r.1 && y < r.3
+            }).collect()
+        }
+
+        /// Paint the band with heavy overlapping strokes of `paint`.
+        pub fn brushed(c: &mut Canvas, paint: Paint, load: f32) {
+            brushed_in(c, paint, load, PAINTED);
+        }
+
+        pub fn brushed_in(c: &mut Canvas, paint: Paint, load: f32, r: (f32, f32, f32, f32)) {
+            let rows = ((r.3 - r.1 - 20.0) / 22.5).round() as u64 + 1;
+            for k in 0..rows {
+                let y = r.1 + 10.0 + 22.5 * k as f32;
+                let mut h = Held::new(Tool::hog_flat(40.0), 40 + k);
+                h.load(paint, load);
+                c.drag(&mut h, &Gesture::new(vec![(r.0, y), (r.2, y + 3.0)]).pressure(0.85, 0.85), None);
+            }
+        }
+
+        /// A direct fixture: the band painted, then every pixel in it set to
+        /// exactly `um` µm of fresh, unthinned paint (the brush only supplies
+        /// the color), so neither a ridge nor a lateral pile hides the film's
+        /// thickness.
+        pub fn film(linen: bool, um: f32) -> Canvas {
+            let mut c = ground(linen);
+            set_film(&mut c, um, PAINTED);
+            c
+        }
+
+        /// `film`'s fixture on canvas `c`, over the rectangle `r`.
+        pub fn set_film(c: &mut Canvas, um: f32, r: (f32, f32, f32, f32)) {
+            brushed_in(c, sienna(), 0.9, r);
+            let lat = sienna().latent();
+            let mid = ((r.0 + r.2) / 2.0, (r.1 + r.3) / 2.0);
+            let hide = c.wet.hide[px_in(c, (mid.0, mid.1, mid.0 + 2.0, mid.1 + 2.0))[0]];
+            let n = c.wet.vol.len();
+            if c.wet.clock.px.len() != n {
+                c.wait(0.0);
+            }
+            for i in px_in(c, r) {
+                c.wet.vol[i] = um / COAT_UM;
+                c.wet.lat[i] = lat;
+                c.wet.hide[i] = hide;
+                c.wet.cover[i] = 1.0;
+                c.wet.clock.px[i].cure = 0.0;
+                if let Some(s) = c.wet.solv.get_mut(i) {
+                    *s = 0.0;
+                }
+            }
+        }
+
+        /// µm of open paint per pixel of `idx`.
+        pub fn film_um(c: &Canvas, idx: &[usize]) -> Vec<f32> {
+            idx.iter().map(|&i| c.wet.vol[i].max(0.0) * COAT_UM).collect()
+        }
+
+        pub fn total(v: &[f32]) -> f64 {
+            v.iter().map(|&x| x as f64).sum()
+        }
+
+        /// The paint on the canvas and in the rag (mm³).
+        pub fn on_canvas(c: &Canvas) -> f64 {
+            c.wet.vol.iter().map(|&v| v.max(0.0) as f64).sum::<f64>() * (c.px_mm() as f64).powi(2) * COAT_UM as f64 / 1000.0
+        }
+
+        /// `wipes` wipes along `LINE` with one face, dry or dipped at 0.5.
+        pub fn wiped(c: &mut Canvas, damp: bool, wipes: u32) -> (Rag, f64) {
+            let mut r = Rag::new(100.0, 7);
+            if damp {
+                r.dip(0.5, c.now_min(), &mut c.tally);
+            }
+            let mut lifted = 0.0;
+            for k in 0..wipes {
+                lifted += c.rag_wipe(&mut r, &LINE, &[0.8], 19 + k as u64);
+            }
+            (r, lifted)
+        }
+
+        /// The table behind step 1: share of a direct film removed by one and
+        /// two wipes, dry and damp, on the smooth and the linen ground, with
+        /// the thinnest film left and the material balance.
+        /// `cargo test --release -p paint --lib rag::tests::thin::table -- --ignored --nocapture`
+        #[test]
+        #[ignore]
+        fn table() {
+            for linen in [false, true] {
+                println!("--- {} ground", if linen { "linen" } else { "smooth" });
+                for um in [0.25f32, 0.5, 1.0, 3.0, 10.0, 69.0] {
+                    let c0 = film(linen, um);
+                    let idx = px_in(&c0, READ);
+                    let a = film_um(&c0, &idx);
+                    print!("{um:>5} µm:");
+                    for (damp, wipes) in [(false, 1), (false, 2), (true, 1), (true, 2)] {
+                        let mut c = c0.clone();
+                        let before = on_canvas(&c);
+                        let (_, lifted) = wiped(&mut c, damp, wipes);
+                        let b = film_um(&c, &idx);
+                        let off = 1.0 - total(&b) / total(&a);
+                        let min = b.iter().copied().fold(f32::MAX, f32::min);
+                        let bal = (before - on_canvas(&c) - lifted).abs() / before;
+                        print!("  {}{}: {:5.1}% off, min left {:.2} µm (bal {:.0e})", if damp { "damp" } else { "dry" }, wipes, 100.0 * off, min, bal);
+                    }
+                    println!();
+                }
+            }
+        }
+        /// The experiment (rag work, step 1): today's floor, B, C and D side
+        /// by side at the live width on linen, on direct 1 and 3 µm films and
+        /// a brush-laid wash at thinner 0.5; one dry wipe, three dry wipes,
+        /// one damp wipe. Prints the film left in the wipe's middle
+        /// (quantiles, µm, and the share of pixels on its most common value:
+        /// a plateau) and with `RAG_EXP_DIR` saves every state as PNG.
+        /// `RAG_EXP_DIR=/tmp/x cargo test --release -p paint --lib rag::tests::thin::experiment -- --ignored --nocapture`
+        #[test]
+        #[ignore]
+        fn experiment() {
+            use residue::Rule;
+            const AREA: (f32, f32, f32, f32) = (280.0, 245.0, 720.0, 435.0);
+            const MID: (f32, f32, f32, f32) = (360.0, 322.0, 640.0, 358.0);
+            const PATH: [(f32, f32); 2] = [(300.0, 340.0), (700.0, 340.0)];
+            let out = std::env::var("RAG_EXP_DIR").ok().map(std::path::PathBuf::from);
+            let save = |c: &Canvas, name: &str| {
+                if let Some(d) = &out {
+                    c.clone().save(d.join(format!("{name}.png"))).unwrap();
+                }
+            };
+            let starts: Vec<(&str, Canvas)> = vec![
+                ("film1", { let mut c = blank(LIVE); set_film(&mut c, 1.0, AREA); c }),
+                ("film3", { let mut c = blank(LIVE); set_film(&mut c, 3.0, AREA); c }),
+                ("wash05", { let mut c = blank(LIVE); brushed_in(&mut c, sienna().with_thinner(0.5), 0.9, AREA); c }),
+            ];
+            for (sname, c0) in &starts {
+                let idx = px_in(c0, MID);
+                let a = film_um(c0, &idx);
+                let q = |v: &[f32]| {
+                    let mut s = v.to_vec();
+                    s.sort_by(f32::total_cmp);
+                    let at = |p: f32| s[((s.len() - 1) as f32 * p) as usize];
+                    let bins = |x: f32| (x / 0.02).round() as i64;
+                    let mut counts = std::collections::HashMap::new();
+                    for &x in &s {
+                        *counts.entry(bins(x)).or_insert(0usize) += 1;
+                    }
+                    let top = counts.values().copied().max().unwrap_or(0) as f32 / s.len() as f32;
+                    format!("p5 {:.2} p25 {:.2} p50 {:.2} p75 {:.2} p95 {:.2} plateau {:.0}%", at(0.05), at(0.25), at(0.5), at(0.75), at(0.95), 100.0 * top)
+                };
+                println!("=== {sname}: start {}", q(&a));
+                save(c0, &format!("{sname}-start"));
+                for rule in [Rule::Floor, Rule::Zero, Rule::Fixed, Rule::Soft] {
+                    residue::set(rule);
+                    for (wname, damp, wipes) in [("dry1", false, 1u32), ("dry3", false, 3), ("damp1", true, 1)] {
+                        let mut c = c0.clone();
+                        let before = on_canvas(&c);
+                        let mut r = Rag::new(100.0, 7);
+                        if damp {
+                            r.dip(0.5, c.now_min(), &mut c.tally);
+                        }
+                        let mut lifted = 0.0;
+                        for k in 0..wipes {
+                            lifted += c.rag_wipe(&mut r, &PATH, &[0.8], 19 + k as u64);
+                        }
+                        let b = film_um(&c, &idx);
+                        let off = 1.0 - total(&b) / total(&a);
+                        let bal = (before - on_canvas(&c) - lifted).abs() / before;
+                        println!("{:>6?} {wname:>5}: {:5.1}% off, {} (bal {bal:.0e})", rule, 100.0 * off, q(&b));
+                        save(&c, &format!("{sname}-{rule:?}-{wname}"));
+                    }
+                }
+                residue::set(Rule::Floor);
+            }
+        }
     }
 }

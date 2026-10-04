@@ -23,8 +23,10 @@ is the known pre-existing finding.
 | afc7898 | the flow leaves a wetting film (the 2400 px lattice defect); `scripts/thinner_sheet` |
 | 1e27682 | RESULTS.md, the two sheets, logs |
 | 0a661f6 | round 4: a brush's `Debug` text (the `brushes=` digest, the dump's `brushes.debug`) is af49348's byte for byte before engine 3 |
-| e135129 | round 4: PROPOSED test corrections, for re-review (`TESTS_PHASE_REPORT.md`, round 4) |
-| (this commit) | round 4: the rag study re-rendered after afc7898; this file |
+| e135129 | round 4: PROPOSED test corrections (c03 ×2, c18, c04, c05 approved in round-4 review) |
+| 48be56a | round 5: PROPOSED c16 correction and the rag sheet's directory, for re-review (`TESTS_PHASE_REPORT.md`, round 5) |
+| 4c15082, ffef02e | round 4: the rag study re-rendered after afc7898; this file |
+| (this commit) | round 5: τ disclosure; `weave_or_brush.jpg` |
 
 ## Commands, exit codes, logs
 
@@ -303,8 +305,25 @@ blocking.
 - **The stain:** a damp wipe over wet paint leaves 20.8% of the tone's
   darkening (the earlier report said about 14%), and a dry wipe 47.6%.
   The rag can't wipe back to the ground in one pass.
+- **τ's thickness dependence was changed after a run: an estimate,
+  adjusted.** `TAU_DOUBLING_UM` went from 20 µm to 100 µm (18548cf).
+  - **Why:** check 1's guard. As thinned paint pooled in the weave's
+    hollows during the wait, the deepest film grew from 77 to 81 µm, so τ
+    at the measurement (10.07 min) exceeded a tenth of the 99 min waited.
+    At 20 µm, check 9 also had 5 of 1,661 qualifying pixels over its
+    limit in minute 1.
+  - **Effect on the card:** it barely moves, 88.9% kept at load 0.3 with
+    20 µm against 89.0% with 100 µm. A thicker film still holds its
+    solvent longer, just less so.
+  - Neither number has a source.
+- **The cross-hatch in thinned paint** (rag study rows 4-6) is the brush
+  marks, not the weave. `notes/thinner/weave_or_brush.jpg` shows the same
+  thinned broad pass with linen (left) and on a plain ground (right), and
+  they look alike: each stroke lays only up to its own thin ceiling, so
+  the overlaps of the strokes read as a hatch.
 - Also open: check 13 (b), check 3's old-file policy, check 8's 0.005
-  allowance, and the round-4 c16 question (TESTS_PHASE_REPORT.md).
+  allowance, and the c16 correction (TESTS_PHASE_REPORT.md, rounds 4 and
+  5).
 
 ## Appearance questions for the user
 

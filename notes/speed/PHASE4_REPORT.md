@@ -238,3 +238,44 @@ How `scripts/test` should include the acceptance checks (a proposal, not done):
      hashes, but `thinner-tests-APPROVED.md` now names a second hash for
      each (`357c2095…`, `7c94dfe3…`, `74043432…`), and no approval note
      covers the blobs at ffef02e.
+
+# Phase 7a: the final thinner (de5557c)
+
+- `git merge --no-ff de5557c`: `2fc10fa`, **no conflicts** (COMBINE.md, merge
+  2: 15 thinner files, each byte for byte as at de5557c; no file changed on
+  both sides). All 22 frozen files now have a sha256 named in
+  `thinner-tests-APPROVED.md`. Head with the notes: this commit.
+- Through lockrun on the merged head: `old_logs.sh` all 11 cases as af49348;
+  `baseline_state.sh` all 6 scenes equal af49348 in state and PNG;
+  `scripts/thinner_check2` **PASS**.
+- `scripts/test` (fast), first run: **FAIL, exit 1**. Build phase PASS (91 s);
+  check phase: cargo-test 270/270, old-logs 11, baseline-state 6 ok;
+  `thinner-quick` exactly the known failure; **`baseline-package` failed**:
+  "files and SHA256SUMS disagree: tools/__pycache__/state_compare.cpython-313.pyc".
+  Cause: the thinner's check 2 (`scripts/thinner_dump_fields.py`, frozen)
+  imports the baseline's `state_compare.py` and Python left bytecode beside
+  it, at 06:09 during the phase 6 fast run's `thinner-quick`. In one fresh
+  run the package check comes first and passes; a later run in the same
+  checkout fails. The directory is git-ignored, so a candidate's checkout
+  evidence doesn't show it.
+- Fix, **prepared, not committed** (`scripts/test` is protected; waiting for
+  the r4 review): every step gets `PYTHONDONTWRITEBYTECODE=1`. With it, and
+  that cache (made by my own earlier run) removed, the second fast run was
+  build PASS; check: cargo-test 270/270, old-logs 11, baseline-package ok,
+  baseline-state 6, `thinner-quick` 22 of 22 required tests passed plus 13 (b)
+  → **"NOT ALL GREEN (known pre-existing failure: thinner check 13(b), user
+  decision)", exit 4**, and no `__pycache__` was written.
+- Also **prepared, not committed**: `all.tsv`'s `thinner-all` runs with
+  `THINNER_RAG_STUDY_DIR="$TMPDIR"` (the step's own scratch directory), so
+  the rag study sheet no longer lands in the checkout. The scratch directory is
+  removed after the step, so the sheet is discarded; keeping it would need
+  the runner to give steps a lasting directory (a further runner change).
+  Both prepared changes: `git diff` in `~/src/a/claude-paint-engine3` (2 files,
+  6 lines).
+- Seen, not changed: the existing `frames.rs` unit test leaves an empty
+  `out/test/` in the checkout (it writes under the repository root when
+  `EASEL_ROOT` is unset). It is not ignored by `.gitignore`, but an empty
+  directory doesn't show in `git status`; harmless.
+- Cosmetic: the runner prints a known failure's line as "FAIL" with the
+  reason in brackets; the verdict line says NOT ALL GREEN. "KNOWN" there
+  would read better (also `scripts/test`).

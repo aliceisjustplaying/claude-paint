@@ -46,3 +46,13 @@ Checks after the merge:
 
 No conflict anywhere, and no thinner file, production code, baseline or
 `state_dump.rs` was edited by these commits.
+
+## Merge 2: the final thinner at de5557c
+
+`git merge --no-ff --no-edit de5557c`, commit `2fc10fa`. **No conflicts.**
+Since the first merge (base `ffef02e`) no file changed on both sides: 15
+thinner files (`thinner_tests.rs`, `thinner_physics.rs` with the approved
+round-5 tests from 48be56a, `ACCEPTANCE.md`, `scripts/test_thinner_acceptance`,
+`scripts/tests/thinner_acceptance_runner.sh`, the thinner's notes and logs).
+Every one of them is byte for byte as at de5557c. Nothing of the thinner's
+was edited.

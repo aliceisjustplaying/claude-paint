@@ -137,6 +137,15 @@ pub mod drier {
     pub const MARS: f32 = 1.1;
     /// Viridian: no drier action reported; average. Estimate.
     pub const VIRIDIAN: f32 = 1.0;
+    /// Strontium and barium chromates hold no lead, so none of lead
+    /// chromate's drier action, and are inert, nearly insoluble salts:
+    /// average. Estimate (materials research,
+    /// notes/research/impressionist_materials.md).
+    pub const CHROMATE: f32 = 1.0;
+    /// Zinc yellow (potassium zinc chromate) holds no lead either, and it
+    /// brings zinc into the film, which slows an oil's drying (see
+    /// `ZINC_WHITE`): a little below average. Estimate; no measured rate found.
+    pub const ZINC_YELLOW: f32 = 0.8;
     /// Indian yellow: an early account has it drying in oil "nearly as soon
     /// or sooner than" other colors (Artists' Pigments vol. 1 p.24); set near
     /// average. Uncertain.

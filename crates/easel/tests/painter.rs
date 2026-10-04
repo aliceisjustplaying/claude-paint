@@ -51,7 +51,9 @@ impl Drop for Closing {
 }
 
 const CANVAS: &str = r#"canvas{size=300, aspect=4, seed=5, linen=15, ground={{pile={{"lead white", 5}, {"yellow ochre", 1}}, um=80, apply="knife"}}}"#;
-const STROKE: &str = r#"b = brush("round", 4); b:load(pile{{"bone black", 1}}, 0.9); b:stroke({{100, 120}, {800, 140}})"#;
+// (bone black where the box has it; the giverny box has no black: its last tube)
+const STROKE: &str = r#"local dark = tubes()[#tubes()]; for _, n in ipairs(tubes()) do if n == "bone black" then dark = n end end
+b = brush("round", 4); b:load(pile{{dark, 1}}, 0.9); b:stroke({{100, 120}, {800, 140}})"#;
 
 #[test]
 fn the_shipped_easel_paints_its_one_painting_in_its_own_studio() {
@@ -130,6 +132,10 @@ const OWN_BOX: Option<&str> = if cfg!(feature = "box-sargent") {
     Some("tonn")
 } else if cfg!(feature = "box-hopper") {
     Some("hopper")
+} else if cfg!(feature = "box-giverny") {
+    Some("giverny")
+} else if cfg!(feature = "box-impressionist") {
+    Some("impressionist")
 } else {
     None
 };

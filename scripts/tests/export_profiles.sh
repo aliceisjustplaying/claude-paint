@@ -20,7 +20,7 @@ table_of() { awk -v head="$head" '$0 == head { on = 1 } on && !/^\|/ { exit } on
 committed=$(git -C "$repo" show "$R16_BRANCH:notes/easel_guide.md")
 # the profiles named on the command line, else all of them
 profiles=("$@")
-[ ${#profiles[@]} -gt 0 ] || profiles=(blank friedrich sargent inness alma-tadema tonn hopper)
+[ ${#profiles[@]} -gt 0 ] || profiles=(blank friedrich sargent inness alma-tadema tonn hopper giverny impressionist)
 for profile in "${profiles[@]}"; do
   dest=$work/$profile
   "$repo/scripts/export_r16_studio" "$profile" "$dest" >"$work/$profile.log" 2>&1 || { cat "$work/$profile.log" >&2; echo "$profile: the export failed" >&2; exit 1; }

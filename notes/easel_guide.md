@@ -357,15 +357,19 @@ print(r)                                 -- rag(width <units>, load <0..1>); als
 A rag lifts open paint. The cloth rests on the tops of the weave and of
 the paint, and reaches into the hollows as it is pressed harder
 (`pressure` 0..1): paint comes off the tops first and stays longer in the
-hollows, and a thin stain of the color always stays. Its folds and creases
-touch unevenly, so a wipe leaves streaks along its path and a blot a
-crumpled patch. During a wipe, a little freshly lifted paint smears back
-along the lightly pressed edges and trailing end.
+hollows. The last of a film comes away more and more slowly, so a dry rag
+leaves a pale tint of the color that more wiping thins. Toward its rim the
+pad presses lightly and reaches only the tops of the weave, so the edge of
+a wipe shows the weave. Its folds and creases touch unevenly, so a wipe
+leaves streaks along its path and a blot a crumpled patch. During a wipe,
+a little freshly lifted paint smears back along the lightly pressed edges
+and trailing end.
 
 A rag dipped in spirits (`r:dip`, 0..1) lifts wet paint more readily and
-reaches farther into the hollows. Its folds still leave streaks. Dampness
-(`r.damp`) halves every three minutes of painting time; a refold turns out
-a dry part, and another dip wets it again.
+reaches farther into the hollows. It works gradually: wipe after wipe
+takes the paint nearly to the ground. Its folds still leave streaks.
+Dampness (`r.damp`) halves every three minutes of painting time; a refold
+turns out a dry part, and another dip wets it again.
 
 What it lifts soaks into the cloth. `r.load` is how loaded the part in use
 is (0 clean, 1 full): the more loaded, the less it lifts. `r:refold()`
@@ -376,7 +380,7 @@ refolds whenever the load passes that value.
 
 Over a mask, `wipe` lays wipes side by side across it in `angle`'s
 direction, back and forth, each starting and stopping a little inside the
-mask. The pad's soft edge reaches the mask's edge, and in places past it:
+mask. The pad's rim reaches the mask's edge, and in places past it:
 the rag isn't clipped to the mask. `passes` goes over it again, each time
 a little turned. `seed=` fixes the cloth's folds.
 

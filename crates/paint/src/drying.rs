@@ -172,8 +172,13 @@ pub mod drier {
         pub const COBALT_BLUE: f32 = 2.2;
         /// Prussian blue: fast, about 2 days: 44 h (1.8: 59 h).
         pub const PRUSSIAN_BLUE: f32 = 2.4;
-        /// Raw sienna: fast, about 2 days: 45 h (1.2: 86 h).
-        pub const RAW_SIENNA: f32 = 2.3;
+        /// Burnt sienna: dries better than raw sienna, as roasting improves
+        /// sienna's drying (Field, Chromatography, rev. Salter 1869, §§50 and
+        /// 155, https://www.gutenberg.org/files/20915/20915-h/20915-h.htm):
+        /// fast, about 2 days: 45 h (1.2: 86 h). Raw sienna keeps 1.2 (86 h,
+        /// medium). Modern makers (W&N) class raw sienna fast and burnt
+        /// medium; the box follows the historical order.
+        pub const BURNT_SIENNA: f32 = 2.3;
         /// The cadmiums: medium, 2–5 days: 4.4–4.6 days (0.6: 6.5–6.9).
         pub const CADMIUM: f32 = 0.9;
         /// The ultramarines: medium, 2–5 days: 4.5 days (0.8: 5.4).
@@ -967,13 +972,13 @@ mod tests {
         let rows: &[(&str, f32, f32, &str)] = &[
             ("lead white", 1.0 * D, 2.0 * D, "fast (W&N, NP, Golden); painters 1-2 days"),
             ("raw umber", 1.0 * D, 2.0 * D, "fast (W&N, NP)"),
-            ("raw sienna", 1.0 * D, 2.0 * D, "fast (W&N)"),
+            ("burnt sienna", 1.0 * D, 2.0 * D, "fast (Field/Salter 1869: roasting improves drying)"),
             ("cobalt blue", 1.0 * D, 2.0 * D, "fast (W&N)"),
             ("Prussian blue", 1.0 * D, 2.0 * D, "fast (W&N)"),
             ("yellow ochre", 2.0 * D, 5.0 * D, "medium (W&N, NP)"),
             ("red earth", 2.0 * D, 5.0 * D, "medium (W&N ochres)"),
             ("Mars red", 2.0 * D, 5.0 * D, "medium (W&N)"),
-            ("burnt sienna", 2.0 * D, 5.0 * D, "medium (W&N)"),
+            ("raw sienna", 2.0 * D, 5.0 * D, "medium (slower than burnt: Field/Salter 1869)"),
             ("cadmium red", 2.0 * D, 5.0 * D, "medium (W&N)"),
             ("deep cadmium", 2.0 * D, 5.0 * D, "medium (W&N)"),
             ("ultramarine blue", 2.0 * D, 5.0 * D, "medium (W&N)"),
@@ -1028,6 +1033,15 @@ mod tests {
         if !slow.is_empty() {
             assert!(first(&slow) > last(&medium), "{slow:?} the slowest, after {medium:?}");
         }
+    }
+
+    /// Roasting improves sienna's drying (Field/Salter 1869, §§50 and 155):
+    /// in engine 3 burnt sienna is touch-dry before raw sienna.
+    #[test]
+    fn burnt_sienna_dries_before_raw_sienna() {
+        let (Some(raw), Some(burnt)) = (tube("raw sienna"), tube("burnt sienna")) else { return };
+        let (r, b) = (film(STROKE, raw.drying_3, raw.stiff, 3)[2], film(STROKE, burnt.drying_3, burnt.stiff, 3)[2]);
+        assert!(b < r, "burnt sienna touch-dry {b} min, raw sienna {r} min");
     }
 
     /// Golden's titanium white was touch-dry by day 2 at 3 mil and at 4–6

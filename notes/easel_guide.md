@@ -435,8 +435,8 @@ its oil. It is open for the first 30% of its time to touch-dry, setting
 until 60%, then tacky until it is touch-dry. A stroke of lead white or raw
 umber from a loaded broad brush is open for 12 to 14 hours, tacky after
 about a day and touch-dry in under two days. Cobalt blue, Prussian blue
-and raw sienna are about as fast. Ochres, earths, cadmiums, ultramarine
-and bone black are touch-dry in 3½ to 5 days, madder in about 11.
+and burnt sienna are about as fast. Raw sienna, ochres, earths, cadmiums,
+ultramarine and bone black are touch-dry in 3½ to 5 days, madder in about 11.
 Thinner paint dries sooner and thicker paint later: twice a stroke's
 thickness takes 1.6 times as long. Thick, oily paint of slow pigments can stay open for weeks. Wet paint
 under a new stroke comes up into it; paint laid over dry paint sits on

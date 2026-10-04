@@ -132,7 +132,7 @@ pub fn catalog() -> Vec<Tube> {
         #[cfg(feature = "box-alma-tadema")]
         tube("brown ochre", "iron oxide earth, a darker grade", "#86592e", 0.8, 0.7, 0.8, drier::OCHRE),
         #[cfg(any(feature = "box-sargent", feature = "box-inness"))]
-        tube("raw sienna", "sienna earth, unroasted", "#9a6a2b", 0.4, 0.5, 0.7, drier::SIENNA).engine3(drier::engine3::RAW_SIENNA),
+        tube("raw sienna", "sienna earth, unroasted", "#9a6a2b", 0.4, 0.5, 0.7, drier::SIENNA),
         #[cfg(feature = "box-inness")]
         tube("orange chrome", "basic lead chromate", "#e0712a", 0.88, 0.75, 0.9, drier::CHROME_YELLOW),
         // Mars orange: "much transparency" in the period account (Salter's
@@ -160,7 +160,7 @@ pub fn catalog() -> Vec<Tube> {
         #[cfg(feature = "box-sargent")]
         tube("magenta", "fuchsine (aniline) lake on alumina", "#8f1650", 0.1, 0.35, 1.5, drier::MADDER_LAKE),
         #[cfg(any(feature = "box-sargent", feature = "box-alma-tadema", feature = "box-tonn", feature = "box-hopper"))]
-        tube("burnt sienna", "roasted sienna earth", "#7c3f24", 0.45, 0.55, 0.9, drier::SIENNA),
+        tube("burnt sienna", "roasted sienna earth", "#7c3f24", 0.45, 0.55, 0.9, drier::SIENNA).engine3(drier::engine3::BURNT_SIENNA),
         // Mars brown at sienna's rate: iron oxides dry well but lack umber's
         // manganese (notes/r20/TUBES.md)
         #[cfg(feature = "box-sargent")]

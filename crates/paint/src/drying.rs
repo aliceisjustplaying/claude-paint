@@ -395,8 +395,17 @@ impl Canvas {
     /// substeps fall differently, within rounding of the same.
     /// The oil's drying steps as before, in steps that end on whole minutes
     /// (or the wait's end), and brushwork's hand time (which waits too)
-    /// keeps the same grid. Once the last solvent is gone the rest of the
-    /// wait is the ordinary one.
+    /// keeps the same grid; each drying step precedes that tick's flow. Once
+    /// the last solvent is gone the rest of the wait is the ordinary one.
+    ///
+    /// Paint the flow carries keeps the cure it had where it came from,
+    /// which is that film's cure at the last drying step, as every open
+    /// film's is until the next; so it dries over the whole step, wherever
+    /// it is when the step ends. That holds for the thinnest film too: in
+    /// this wait a film under `age`'s bare threshold (1e-5 coats) that the
+    /// flow brought keeps its cure and dries with the rest (`age_from`),
+    /// instead of starting fresh at each drying step, so how the drying
+    /// steps fall (a wait split off the grid) doesn't change it.
     fn wait_on_grid(&mut self, dt: f32) {
         const TICKS: f64 = crate::thinner::FLOW_TICKS as f64;
         let start = self.wet.clock.now;
@@ -411,7 +420,7 @@ impl Canvas {
             // minute and to the wait's end
             let minute = (aged.floor() + 1.0).min(end);
             if next == minute {
-                self.age((next - aged) as f32);
+                self.age_from((next - aged) as f32, true);
                 aged = next;
             }
             self.spread((next - t) as f32);
@@ -419,7 +428,7 @@ impl Canvas {
             self.wet.clock.now = t;
             if !self.wet.has_solvent(self.f.w) {
                 if end > aged {
-                    self.age((end - aged) as f32);
+                    self.age_from((end - aged) as f32, true);
                 }
                 break;
             }
@@ -442,11 +451,18 @@ impl Canvas {
     /// The open films age by `dt` minutes where they lie (the body of
     /// `wait`, without moving the clock).
     fn age(&mut self, dt: f32) {
+        self.age_from(dt, false);
+    }
+
+    /// `age`; with `flow` (`wait_on_grid`), a film under the bare
+    /// threshold that holds any paint keeps its cure and dries too.
+    fn age_from(&mut self, dt: f32, flow: bool) {
         let n = self.f.w * self.f.h;
         if self.wet.clock.px.len() != n {
             self.wet.clock.px = vec![Px::FRESH; n];
         }
-        self.absorb();
+        self.absorb_with(flow);
+        let low = if flow { f32::MIN_POSITIVE } else { 1e-5 };
         let w = self.f.w;
         // age the open films
         if let Some((x0, y0, x1, y1)) = self.wet.dirty {
@@ -457,7 +473,7 @@ impl Canvas {
             wet.clock.px[y0 * w..y1 * w].par_chunks_mut(w).enumerate().for_each(|(j, row)| {
                 for x in x0..x1 {
                     let i = (y0 + j) * w + x;
-                    if vol[i] >= 1e-5 {
+                    if vol[i] >= low {
                         let p = &mut row[x];
                         p.cure = pace.age(p.cure, dt, rate(p.th, hide[i][1], hide[i][2]));
                     }
@@ -638,6 +654,12 @@ impl Canvas {
     /// was laid, in `Surf::add`. Engine 1 diluted it here, so until the
     /// next wait a brush felt the film as it was before: see `ENGINE`.)
     fn absorb(&mut self) {
+        self.absorb_with(false);
+    }
+
+    /// `absorb`; with `flow` (`age_from`), a film under the bare threshold
+    /// that holds any paint keeps its drying state.
+    fn absorb_with(&mut self, flow: bool) {
         let Some((x0, y0, x1, y1)) = self.wet.dirty else {
             self.wet.clock.mark = self.wet.current;
             return;
@@ -661,7 +683,9 @@ impl Canvas {
                 let v = vol[i];
                 let p = &mut row[x];
                 if v < 1e-5 {
-                    (p.cure, p.lev, p.seen, p.th) = (0.0, SET_TIME, 0.0, 0.0);
+                    if !(flow && v > 0.0) {
+                        (p.cure, p.lev, p.seen, p.th) = (0.0, SET_TIME, 0.0, 0.0);
+                    }
                     continue;
                 }
                 let worked = touched[i] > mark || stroke[i] > mark || (now && p.seen != v);

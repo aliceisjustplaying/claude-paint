@@ -523,6 +523,15 @@ fn c16_brush_rag_and_spreading_carry_solvent_in_the_local_ratio() {
 ///   present throughout;
 /// - with a stroke between waits, on whole minutes (wait 3, stroke, wait
 ///   12 against 3 × 1, stroke, 12 × 1): exactly the same save;
+/// - from a fractional minute, the grid still counts from the canvas's
+///   start, not from each wait: `wait(0.25); wait(0.75); wait(14)` and
+///   `wait(0.25); wait(14.75)` leave exactly the same save (both: a quarter
+///   minute, the rest of minute 1, then 14 whole minutes). The same when
+///   hand time, not a wait, put the clock on the quarter minute (15 s of
+///   hand time clocked by `clock_hand_min`, the brushwork path). A clock
+///   that restarted at each wait would step 0.25, 0.75, 14 × 1 against
+///   0.25, 14 × 1, 0.75, and differ (ACCEPTANCE.md, check 17). All these
+///   durations are exact in binary;
 /// - 7.3 then 7.7 minutes agree with 15 within 1e-4 relative in paint,
 ///   solvent and cure at every pixel; and from a fractional start (0.4
 ///   min), 15 against 15 × 1 within the same.
@@ -577,6 +586,29 @@ fn c17_a_wait_split_on_the_minute_grid_is_exact_and_off_it_within_1e4() {
     }
     assert!(g.solvent_total() > 0.0);
     exact("wait 3, stroke, wait 12 against the same in one-minute waits", &g, &k);
+    let (mut p, mut q) = (copy(), copy());
+    p.wait(0.25);
+    p.wait(0.75);
+    p.wait(14.0);
+    q.wait(0.25);
+    q.wait(14.75);
+    assert!(p.solvent_total() > 0.0);
+    exact("from 0.25 min: 0.75 + 14 min against 14.75 min", &p, &q);
+    let by_hand = || {
+        let mut c = copy();
+        c.set_hand_time(Some(15.0));
+        // 15 s of hand time (marks made off the canvas, counted in its
+        // ledger), put on the clock as brushwork's is
+        c.tally_mut().secs += 15.0;
+        assert_eq!(c.clock_hand_min(), 0.25);
+        assert_eq!(c.clock(), base.clock() + 0.25, "hand time put the clock on the quarter minute");
+        c
+    };
+    let (mut hp, mut hq) = (by_hand(), by_hand());
+    hp.wait(0.75);
+    hp.wait(14.0);
+    hq.wait(14.75);
+    exact("after 15 s of hand time: 0.75 + 14 min against 14.75 min", &hp, &hq);
     let (mut u, mut v) = (copy(), copy());
     u.wait(0.4);
     v.wait(0.4);

@@ -15,8 +15,9 @@
 #
 # Check 13 (b) is a known failure on unchanged code, awaiting the user's
 # decision (ACCEPTANCE.md, check 13). Every mode runs it and expects it to
-# fail. It is reported on its own line as EXPECTED FAIL; if it passes or
-# doesn't run, the run fails.
+# fail at its ordering assertion (thinner_pigments.rs:119, with that
+# assertion's message). It is reported on its own line as EXPECTED FAIL; if
+# it passes, doesn't run or fails anywhere else, the run fails.
 #
 # Exit: 1 if anything else failed; 3 if every other required test passed
 # and only check 13 (b)'s expected failure remains (NOT ALL GREEN); 2 on a
@@ -59,6 +60,10 @@ PIGMENTS=(
   c13_every_pigment_value_is_af49348s
 )
 EXPECTED_FAIL=c13_burnt_sienna_shows_the_card_at_least_as_well_as_raw_sienna
+# the known failure is the ordering assertion's own panic, nothing else
+# (crates/paint/tests/thinner_pigments.rs:119)
+EXPECTED_AT="panicked at crates/paint/tests/thinner_pigments.rs:119:"
+EXPECTED_MSG="Field/Salter (§155) has burnt the more transparent"
 # crates/easel/src/thinner_tests.rs (unit tests of the easel binary)
 EASEL_QUICK=(
   thinner_tests::c03_af49348_paintck8_saves_are_refused_naming_the_old_version
@@ -129,11 +134,16 @@ run() {
   done
 }
 
-# check 13 (b), the known pre-existing failure: it must run and fail
+# check 13 (b), the known pre-existing failure: it must run and fail at its
+# ordering assertion, with that assertion's message
 expected_fail() {
   cargo_test check13b --release -p paint --test thinner_pigments -- --exact ::: "$EXPECTED_FAIL"
   if grep -qF "test $EXPECTED_FAIL ... FAILED" "$log" && [ "$status" != 0 ]; then
-    expected="$EXPECTED_FAIL"
+    if grep -qF "$EXPECTED_AT" "$log" && grep -qF "$EXPECTED_MSG" "$log"; then
+      expected="$EXPECTED_FAIL"
+    else
+      bad+=("$EXPECTED_FAIL (failed, but not at its ordering assertion (thinner_pigments.rs:119, \"$EXPECTED_MSG\"): a different failure, see $log)")
+    fi
   elif grep -qxF "test $EXPECTED_FAIL ... ok" "$log"; then
     bad+=("$EXPECTED_FAIL (passed unexpectedly: the pre-existing finding changed; review ACCEPTANCE.md check 13 before anything else)")
   else

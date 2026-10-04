@@ -9,6 +9,7 @@
 #   a name missing / ignored / failed                 -> 1
 #   no output at all                                  -> 1
 #   check 13 (b) passing, or not running              -> 1
+#   check 13 (b) failing somewhere else (another panic) -> 1
 #   check 2 failing                                   -> 1
 #   the rag study's sheet not written (--all)         -> 1
 #
@@ -43,7 +44,19 @@ failed=0; code=0
 for n in "${names[@]}"; do
   if [ "$n" = $c13b ] && [ -z "${FAKE_13B_PASS:-}" ]; then
     [ -n "${FAKE_13B_DROP:-}" ] && continue
-    echo "test $n ... FAILED"; failed=1; continue
+    echo "test $n ... FAILED"; failed=1
+    echo
+    echo "failures:"
+    echo
+    echo "---- $n stdout ----"
+    if [ -n "${FAKE_13B_OTHER:-}" ]; then
+      echo "thread '$n' panicked at crates/paint/tests/thinner_pigments.rs:116:5:"
+      echo "the strokes laid paint"
+    else
+      echo "thread '$n' panicked at crates/paint/tests/thinner_pigments.rs:119:5:"
+      echo "burnt sienna shows 9.85% of the card, raw sienna 17.91%: Field/Salter (§155) has burnt the more transparent"
+    fi
+    continue
   fi
   if has "${FAKE_FAIL:-}" "$n"; then echo "test $n ... FAILED"; failed=1
   elif has "${FAKE_SKIP:-}" "$n"; then echo "test $n ... ignored, slow"
@@ -84,6 +97,7 @@ expect 1 --all "(failed)" FAKE_FAIL=c09_the_solvent_evaporates_and_the_film_lose
 expect 1 --all "FAILED" FAKE_EMPTY=1
 expect 1 --quick "passed unexpectedly" FAKE_13B_PASS=1
 expect 1 --card "the expected failure must run and fail" FAKE_13B_DROP=1
+expect 1 --quick "not at its ordering assertion" FAKE_13B_OTHER=1
 expect 1 --quick "check 2 (scripts/thinner_check2" FAKE_CHECK2_FAIL=1
 expect 1 --all "rag study's sheet was not written" FAKE_NO_SHEET=1
 expect 2 --bogus - FAKE_=

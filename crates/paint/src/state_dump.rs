@@ -112,6 +112,9 @@ impl Canvas {
         v.push(Field { name: "drawing", shape: vec![drawing.len()], values: Values::F32(drawing) });
         v.push(Field { name: "hand_slice", shape: vec![2], values: Values::F32(self.hand_slice.map_or(vec![0.0, 0.0], |m| vec![1.0, m])) });
         v.push(Field { name: "tally", shape: vec![9], values: Values::U64(self.tally.to_words().to_vec()) });
+        // added with the thinner (engine 3): the solvent in the open film,
+        // µm per pixel (0 where there is none, and before engine 3)
+        v.push(Field { name: "wet.solvent", shape: px(1), values: Values::F32(if wt.solv.len() == h * w { wt.solv.clone() } else { vec![0.0; h * w] }) });
         v
     }
 }

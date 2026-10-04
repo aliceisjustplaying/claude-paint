@@ -1,0 +1,106 @@
+=== STROKE_FILM_UM 12.0
+lockrun: waiting for the lock held by speed:mutation-legacy-tiny (bash -c '
+sed -i '"'"''"'"' '"'"'s/                r = r.heights(a, b);/                r = r.heights(a, b * 1.1);/'"'"' crates/easel/src/legacy/mod.rs; echo '"'"'== MA ranges heights x1.1'"'"'; git diff --stat crates/easel/src/legacy/mod.rs; cargo build --release -p easel 2>&1 | tail -1; env -u CARGO_TARGET_DIR scripts/tests/old_logs.sh target/release/easel 2>&1 | grep -E '"'"'^old_logs: [a-z0-9_]+ (ok|DIFF)|FAILED|all '"'"'
+cp $TMPDIR//cp-speed/legacy.rs.keep2 crates/easel/src/legacy/mod.rs
+sed -i '"'"''"'"' '"'"'s/    over!(horizon, near, height, spacing, thin, smallest, fan, curl, flowers, patch, patch_size);/    over!(horizon, near, height, spacing, thin, smallest, fan, curl, flowers, patch, patch_size); sw.height *= 1.1;/'"'"' crates/easel/src/legacy/mod.rs; echo '"'"'== MB sward height x1.1'"'"'; git diff --stat crates/easel/src/legacy/mod.rs; cargo build --release -p easel 2>&1 | tail -1; env -u CARGO_TARGET_DIR scripts/tests/old_logs.sh target/release/easel 2>&1 | grep -E '"'"'^old_logs: [a-z0-9_]+ (ok|DIFF)|FAILED|all '"'"'
+cp $TMPDIR//cp-speed/legacy.rs.keep2 crates/easel/src/legacy/mod.rs; cargo build --release -p easel 2>&1 | tail -1; echo '"'"'== restored'"'"'; env -u CARGO_TARGET_DIR scripts/tests/old_logs.sh target/release/easel 2>&1 | tail -1'; started 2026-10-04T04:34:13+01:00; process group 15218)
+lockrun: job 7775a046 started (process group 17040, timeout 600 s, log /tmp/lockrun-501/logs/20261004-043605-7775a046.log)
+load 0.3: paint above θ to x = 920 (profile [0.16531353, 0.28221956, 1.8447312, 1.8428872, 0.77209467, 0.55137205, 0.5520077, 0.5486961, 0.56481886, 0.5489558, 0.5542081, 0.6027294, 0.6389745, 0.6411524, 0.6368363, 0.63837886, 0.6214646, 0.55804396, 0.486965, 0.52618814, 0.60092, 0.6449906, 0.621587
+
+thread 'c04_a_stroke_and_a_wipe_account_for_all_paint_and_solvent' (2405170) panicked at crates/paint/tests/thinner_physics.rs:45:9:
+lead white thinned 0.9: the brush laid paint
+--
+test c04_a_stroke_and_a_wipe_account_for_all_paint_and_solvent ... FAILED
+load 0.6: paint above θ to x = 950 (profile [3.811325, 2.5751805, 1.0986391, 0.8555919, 0.7830206, 0.8075124, 0.835323, 0.93084013, 0.9661147, 0.96928746, 0.9222596, 0.98891944, 1.0532743, 1.050883, 1.0589911, 1.0942175, 1.0216343, 0.9189809, 0.8318555, 0.8984084, 1.0275916, 1.0628844, 1.0178586, 0.
+test c05_an_emptying_brush_lays_less_and_a_fuller_load_lasts_farther ... ok
+test c06_more_pressure_lays_more_paint_up_to_the_stroke_limit ... ok
+roughness 1.6079342170440871 µm: falls 0.05649011054134623 with solvent, 0 without, over 3 min
+test c10_a_solvent_wet_film_spreads_more_than_after_the_solvent_has_gone ... ok
+test c14_more_points_on_the_same_path_lay_the_same_paint_and_one_stroke_shares_one_limit ... ok
+
+thread 'c09_the_solvent_evaporates_and_the_film_loses_its_volume' (2405173) panicked at crates/paint/tests/thinner_physics.rs:224:17:
+minute 2, pixel 32297 (10.688658 µm of paint): 0.6366772460952898 of its solvent left, the law gives 0.636533986806869
+test c09_the_solvent_evaporates_and_the_film_loses_its_volume ... FAILED
+
+thread 'c16_brush_rag_and_spreading_carry_solvent_in_the_local_ratio' (2405176) panicked at crates/paint/tests/thinner_physics.rs:516:5:
+the thin film's ratio where the thick film's liquid came in: 0.7154071362641317 before, 0.7160769590922296 after (evaporation taken back)
+test c16_brush_rag_and_spreading_carry_solvent_in_the_local_ratio ... FAILED
+
+--
+test result: FAILED. 4 passed; 3 failed; 0 ignored; 0 measured; 6 filtered out; finished in 1.02s
+
+lockrun: finished: exit 0 in 63.2 s; log /tmp/lockrun-501/logs/20261004-043605-7775a046.log
+test thinner_tests::c01_the_card_raw_sienna_thinned_half_keeps_half_the_contrast_at_2400px ... ok
+Cell { load: 0.3, thinner: 0.5, kept: 0.8313922, ... paint: 3305443.555847916 }
+Cell { load: 0.6, thinner: 0.5, kept: 0.78845096, ... paint: 4309342.75478858 }
+=== STROKE_FILM_UM 24.0
+lockrun: job deaf0a26 started (process group 18632, timeout 600 s, log /tmp/lockrun-501/logs/20261004-043734-deaf0a26.log)
+load 0.3: paint above θ to x = 60 (profile [0.16531353, 0.28221956, 1.9679916, 3.2540712, 1.2601798, 0.89674604, 0.84399897, 0.949927, 1.009537, 0.94161546, 0.88443834, 1.0201161, 1.1260171, 1.1344702, 1.1356126, 1.1131196, 1.0560123, 0.9743547, 0.8021242, 0.8698203, 1.0519092, 1.096837, 1.0847759, 
+
+thread 'c04_a_stroke_and_a_wipe_account_for_all_paint_and_solvent' (2408266) panicked at crates/paint/tests/thinner_physics.rs:45:9:
+lead white thinned 0.9: the brush laid paint
+--
+test c04_a_stroke_and_a_wipe_account_for_all_paint_and_solvent ... FAILED
+roughness 3.0468873244855983 µm: falls 0.1062228502451612 with solvent, 0 without, over 3 min
+test c10_a_solvent_wet_film_spreads_more_than_after_the_solvent_has_gone ... ok
+test c06_more_pressure_lays_more_paint_up_to_the_stroke_limit ... ok
+load 0.6: paint above θ to x = 930 (profile [7.6680994, 5.662978, 2.054908, 1.3806258, 1.3235766, 1.3832933, 1.455159, 1.6347511, 1.6775662, 1.6345584, 1.5933284, 1.7091322, 1.8353217, 1.8451656, 1.8148085, 1.8162112, 1.7869538, 1.5792099, 1.3491136, 1.4551909, 1.6924069, 1.8025633, 1.7490969, 1.663
+test c05_an_emptying_brush_lays_less_and_a_fuller_load_lasts_farther ... ok
+test c14_more_points_on_the_same_path_lay_the_same_paint_and_one_stroke_shares_one_limit ... ok
+
+thread 'c09_the_solvent_evaporates_and_the_film_loses_its_volume' (2408269) panicked at crates/paint/tests/thinner_physics.rs:224:17:
+minute 1, pixel 43712 (18.160456 µm of paint): 0.6551974827836209 of its solvent left, the law gives 0.654978143866437
+test c09_the_solvent_evaporates_and_the_film_loses_its_volume ... FAILED
+
+thread 'c16_brush_rag_and_spreading_carry_solvent_in_the_local_ratio' (2408272) panicked at crates/paint/tests/thinner_physics.rs:516:5:
+the thin film's ratio where the thick film's liquid came in: 0.7408826348955315 before, 0.7430354394823987 after (evaporation taken back)
+test c16_brush_rag_and_spreading_carry_solvent_in_the_local_ratio ... FAILED
+
+--
+test result: FAILED. 4 passed; 3 failed; 0 ignored; 0 measured; 6 filtered out; finished in 1.04s
+
+lockrun: finished: exit 0 in 62.9 s; log /tmp/lockrun-501/logs/20261004-043734-deaf0a26.log
+test thinner_tests::c01_the_card_raw_sienna_thinned_half_keeps_half_the_contrast_at_2400px ... ok
+Cell { load: 0.3, thinner: 0.5, kept: 0.7525463, ... paint: 5702537.665902904 }
+Cell { load: 0.6, thinner: 0.5, kept: 0.68719345, ... paint: 7621400.219857737 }
+=== STROKE_FILM_UM 36.0
+lockrun: waiting for the lock held by safeguards2:suite (bash scripts/tests/safeguards.sh; started 2026-10-04T04:50:44+01:00; process group 70611)
+lockrun: job 9ac3a0f2 started (process group 80305, timeout 600 s, log /tmp/lockrun-501/logs/20261004-045141-9ac3a0f2.log)
+thread 'c04_a_stroke_and_a_wipe_account_for_all_paint_and_solvent' (2708303) panicked at crates/paint/tests/thinner_physics.rs:45:9:
+lead white thinned 0.9: the brush laid paint
+--
+test c04_a_stroke_and_a_wipe_account_for_all_paint_and_solvent ... FAILED
+load 0.3: paint above θ to x = 60 (profile [0.16531353, 0.28221956, 1.9679916, 4.7628055, 1.7422965, 1.1157084, 1.1145464, 1.309708, 1.4176052, 1.310638, 1.2274504, 1.4390543, 1.5980569, 1.6121906, 1.6508116, 1.629146, 1.5597018, 1.3583862, 1.1170514, 1.2488592, 1.5927577, 1.6856741, 1.689638, 1.605
+roughness 4.355794746563079 µm: falls 0.1513063117323039 with solvent, 0 without, over 3 min
+test c10_a_solvent_wet_film_spreads_more_than_after_the_solvent_has_gone ... ok
+test c06_more_pressure_lays_more_paint_up_to_the_stroke_limit ... ok
+load 0.6: paint above θ to x = 40 (profile [8.2894945, 9.140412, 3.0628755, 1.7104464, 1.701243, 1.8351259, 1.9328697, 2.2477088, 2.3454185, 2.1762629, 2.0762234, 2.3066368, 2.490457, 2.528604, 2.456858, 2.4178388, 2.366017, 2.1472895, 1.7784288, 1.9113668, 2.2554996, 2.3061426, 2.348095, 2.2471406,
+
+thread 'c05_an_emptying_brush_lays_less_and_a_fuller_load_lasts_farther' (2708304) panicked at crates/paint/tests/thinner_physics.rs:121:5:
+load 0.6 lays paint farther than 0.3: to 40 vs 60
+test c05_an_emptying_brush_lays_less_and_a_fuller_load_lasts_farther ... FAILED
+
+thread 'c09_the_solvent_evaporates_and_the_film_loses_its_volume' (2708306) panicked at crates/paint/tests/thinner_physics.rs:224:17:
+minute 1, pixel 34719 (28.785604 µm of paint): 0.6784793477580259 of its solvent left, the law gives 0.6782480854516615
+test c09_the_solvent_evaporates_and_the_film_loses_its_volume ... FAILED
+test c14_more_points_on_the_same_path_lay_the_same_paint_and_one_stroke_shares_one_limit ... ok
+
+thread 'c16_brush_rag_and_spreading_carry_solvent_in_the_local_ratio' (2708309) panicked at crates/paint/tests/thinner_physics.rs:516:5:
+the thin film's ratio where the thick film's liquid came in: 0.7078721675406702 before, 0.7113864116896178 after (evaporation taken back)
+test c16_brush_rag_and_spreading_carry_solvent_in_the_local_ratio ... FAILED
+
+--
+test result: FAILED. 3 passed; 4 failed; 0 ignored; 0 measured; 6 filtered out; finished in 1.02s
+
+lockrun: finished: exit 0 in 63.6 s; log /tmp/lockrun-501/logs/20261004-045141-9ac3a0f2.log
+test thinner_tests::c01_the_card_raw_sienna_thinned_half_keeps_half_the_contrast_at_2400px ... ok
+Cell { load: 0.3, thinner: 0.5, kept: 0.69677246, ... paint: 7714755.856483662 }
+Cell { load: 0.6, thinner: 0.5, kept: 0.6154296, ... paint: 10475847.326047173 }
+STROKE_FILM_UM 12.0: Cell { load: 0.3, thinner: 0.5, kept: 0.8313922, contrast_before: 0.8064066, solvent_after_pass: 0.03472645688261, solvent_at_measure: 0.0, canvas_solvent_after_pass: 59.44112991114648, canvas_solvent_at_measure: 3.534914580727124e-5, tau_after_pass: 3.8183534240722654, tau_at_measure: 3.832869110107422, waited: 40.0, paint: 3305443.555847916 }
+STROKE_FILM_UM 12.0: Cell { load: 0.6, thinner: 0.5, kept: 0.78845096, contrast_before: 0.8063278, solvent_after_pass: 8505.808842098706, solvent_at_measure: 0.005074389631348097, canvas_solvent_after_pass: 59.44112991114648, canvas_solvent_at_measure: 3.534914580727124e-5, tau_after_pass: 3.8183534240722654, tau_at_measure: 3.832869110107422, waited: 40.0, paint: 4309342.75478858 }
+STROKE_FILM_UM 24.0: Cell { load: 0.3, thinner: 0.5, kept: 0.7525463, contrast_before: 0.8064066, solvent_after_pass: 0.18697310544627577, solvent_at_measure: 1.2765311474538521e-8, canvas_solvent_after_pass: 148.650173103312, canvas_solvent_at_measure: 8.182847767520832e-5, tau_after_pass: 4.248320617675781, tau_at_measure: 4.275325317382812, waited: 44.0, paint: 5702537.665902904 }
+STROKE_FILM_UM 24.0: Cell { load: 0.6, thinner: 0.5, kept: 0.68719345, contrast_before: 0.8063278, solvent_after_pass: 21273.423139972667, solvent_at_measure: 0.011756535157312342, canvas_solvent_after_pass: 148.650173103312, canvas_solvent_at_measure: 8.182847767520832e-5, tau_after_pass: 4.248320617675781, tau_at_measure: 4.275325317382812, waited: 44.0, paint: 7621400.219857737 }
+STROKE_FILM_UM 36.0: Cell { load: 0.3, thinner: 0.5, kept: 0.69677246, contrast_before: 0.8064066, solvent_after_pass: 0.4988815571406304, solvent_at_measure: 6.078085412752898e-8, canvas_solvent_after_pass: 253.61859329890999, canvas_solvent_at_measure: 0.0001229732052293183, tau_after_pass: 4.552800140380859, tau_at_measure: 4.589620666503906, waited: 47.0, paint: 7714755.856483662 }
+STROKE_FILM_UM 36.0: Cell { load: 0.6, thinner: 0.5, kept: 0.6154296, contrast_before: 0.8063278, solvent_after_pass: 36295.23205990954, solvent_at_measure: 0.017673596443432693, canvas_solvent_after_pass: 253.61859329890999, canvas_solvent_at_measure: 0.0001229732052293183, tau_after_pass: 4.552800140380859, tau_at_measure: 4.589620666503906, waited: 47.0, paint: 10475847.326047173 }
+STROKE_FILM_UM 6.0 (tau doubling 100, before the wetting film): Cell { load: 0.3, thinner: 0.5, kept: 0.8897608, contrast_before: 0.8064066, solvent_after_pass: 0.006483697261216115, solvent_at_measure: 0.0, canvas_solvent_after_pass: 23.80915102485737, canvas_solvent_at_measure: 1.996134646897743e-5, tau_after_pass: 3.485170440673828, tau_at_measure: 3.485161437988281, waited: 36.0, paint: 1856742.1377086106 }
+STROKE_FILM_UM 6.0 (tau doubling 100, before the wetting film): Cell { load: 0.6, thinner: 0.5, kept: 0.8631497, contrast_before: 0.8063278, solvent_after_pass: 3406.98271118566, solvent_at_measure: 0.0028631038919879614, canvas_solvent_after_pass: 23.80915102485737, canvas_solvent_at_measure: 1.996134646897743e-5, tau_after_pass: 3.485170440673828, tau_at_measure: 3.485161437988281, waited: 36.0, paint: 2361879.667964058 }

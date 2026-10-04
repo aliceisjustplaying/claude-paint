@@ -376,6 +376,51 @@ impl Canvas {
     pub fn wait(&mut self, minutes: f32) {
         let dt = minutes.max(0.0);
         assert!(dt.is_finite(), "Canvas::wait: minutes must be finite (got {minutes}); use dry() to wait until touch-dry");
+        if self.engine >= 3 && self.wet.has_solvent(self.f.w) {
+            self.wait_on_grid(dt);
+            return;
+        }
+        self.age(dt);
+        self.wet.clock.now += dt as f64;
+    }
+
+    /// Wait `dt` minutes with solvent in the paint (engine 3,
+    /// `crate::thinner`): the solvent's loss, the flow it gives the paint
+    /// and the oil's drying all step on one clock, in steps that end on
+    /// whole minutes counted from the canvas's start (not from this wait),
+    /// so a wait split on whole minutes is exactly the wait in one, and
+    /// brushwork's hand time (which waits too) keeps the same grid. The
+    /// solvent's loss and the oil's drying run over every step, whole or
+    /// part (both exact in closed form); the flow runs once per whole
+    /// minute, as each minute of the grid ends. Once the last solvent is
+    /// gone the rest of the wait is the ordinary one.
+    fn wait_on_grid(&mut self, dt: f32) {
+        let start = self.wet.clock.now;
+        let end = start + dt as f64;
+        let mut t = start;
+        while t < end {
+            let next = (t.floor() + 1.0).min(end);
+            let step = (next - t) as f32;
+            self.evaporate(step);
+            self.age(step);
+            if next == next.floor() {
+                self.spread(1.0);
+            }
+            t = next;
+            self.wet.clock.now = t;
+            if !self.wet.has_solvent(self.f.w) {
+                if end > t {
+                    self.age((end - t) as f32);
+                }
+                break;
+            }
+        }
+        self.wet.clock.now = end;
+    }
+
+    /// The open films age by `dt` minutes where they lie (the body of
+    /// `wait`, without moving the clock).
+    fn age(&mut self, dt: f32) {
         let n = self.f.w * self.f.h;
         if self.wet.clock.px.len() != n {
             self.wet.clock.px = vec![Px::FRESH; n];
@@ -422,7 +467,6 @@ impl Canvas {
         }
         // films past the gel point level and set
         self.bake(false);
-        self.wet.clock.now += dt as f64;
     }
 
     /// The open film's thickness (coats) as it dries, for each pixel of the
@@ -606,6 +650,23 @@ impl Canvas {
         wet.clock.mark = wet.current;
     }
 
+    /// A film baked into the dry picture holds no solvent any more (by then
+    /// it has long gone; `dry` takes the rest with it).
+    fn clear_bare_solvent(&mut self, ex: (usize, usize, usize, usize)) {
+        if self.wet.solv.is_empty() {
+            return;
+        }
+        let w = self.f.w;
+        for y in ex.1..ex.3 {
+            for x in ex.0..ex.2 {
+                let i = y * w + x;
+                if self.wet.vol[i] == 0.0 {
+                    self.wet.solv[i] = 0.0;
+                }
+            }
+        }
+    }
+
     /// Level and bake open films into the dry picture: every film (`all`,
     /// clearing the wet layer's residue too) or those past the gel point.
     fn bake(&mut self, all: bool) {
@@ -653,6 +714,7 @@ impl Canvas {
                         }
                     }
                 }
+                self.clear_bare_solvent(ex);
             }
             return;
         }
@@ -716,6 +778,8 @@ impl Canvas {
                     cv[x] = 1.0;
                 }
             });
+        self.clear_bare_solvent(ex);
+        let wet = &mut self.wet;
         if wet.clock.px.is_empty() {
             return;
         }

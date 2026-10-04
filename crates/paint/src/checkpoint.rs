@@ -16,8 +16,15 @@
 //! (length-prefixed; the caller's key=value lines), then the canvas. If you
 //! add state to `Canvas` or `Wet`, add it here and bump `MAGIC`.
 //!
-//! The format is version 8 (`MAGIC` is `PAINTCK8`); files of any other
-//! version are refused (re-run to checkpoint again). After the header the
+//! The format is version 8 (`MAGIC` is `PAINTCK8`) for engines 1 and 2 and
+//! version 9 (`PAINTCK9`) for engine 3; files of any other version are
+//! refused (re-run to checkpoint again). Version 9 is version 8's bytes
+//! after the magic, then the thinner's section: the solvent in the open
+//! film, one f32 (µm) per buffer pixel, row major, as the file's last 4 ×
+//! pixels bytes (`crate::thinner`; that it comes last is part of the
+//! format). An engine-3 canvas saved as version 8 (by the easel before the
+//! thinner, af49348) is refused, naming that version: it has no solvent
+//! section, and this easel doesn't convert old saves. After the header the
 //! writer stores, in order: the frame and crop window, the scale and mm per
 //! unit, the linen (if any), the surface generation, the stroke counter and
 //! dirty box, then per pixel the color, relief, film, wet volume, pigment
@@ -38,6 +45,11 @@ use crate::wet::LAT;
 use std::io::{self, Read, Write};
 
 const MAGIC: &[u8; 8] = b"PAINTCK8";
+/// Engine 3, with the thinner's section (`crate::thinner`).
+const MAGIC9: &[u8; 8] = b"PAINTCK9";
+
+/// Why an engine-3 PAINTCK8 file can't be read.
+const OLD_ENGINE3: &str = "an engine-3 canvas saved before the thinner (format PAINTCK8, by the easel at af49348): this easel saves engine 3 as PAINTCK9 and doesn't convert old saves; open it with that version (git af49348) or replay its log";
 
 fn put_u64(w: &mut impl Write, v: u64) -> io::Result<()> {
     w.write_all(&v.to_le_bytes())
@@ -81,9 +93,17 @@ fn bad(msg: &str) -> io::Error {
 
 /// Read just the header of a checkpoint (to validate it before loading).
 pub fn read_header(r: &mut impl Read) -> io::Result<String> {
+    read_magic_header(r).map(|(_, h)| h)
+}
+
+/// The magic (true: PAINTCK9) and the header. An engine-3 canvas in a
+/// PAINTCK8 file whose header says so (`engine=3`, as an easel save's
+/// does) is refused here, before anything else is read.
+fn read_magic_header(r: &mut impl Read) -> io::Result<(bool, String)> {
     let mut m = [0u8; 8];
     r.read_exact(&mut m)?;
-    if &m != MAGIC {
+    let nine = &m == MAGIC9;
+    if !nine && &m != MAGIC {
         return Err(bad("not a canvas checkpoint (or an older format)"));
     }
     let n = get_u64(r)? as usize;
@@ -92,14 +112,18 @@ pub fn read_header(r: &mut impl Read) -> io::Result<String> {
     }
     let mut h = vec![0u8; n];
     r.read_exact(&mut h)?;
-    String::from_utf8(h).map_err(|_| bad("checkpoint header is not UTF-8"))
+    let head = String::from_utf8(h).map_err(|_| bad("checkpoint header is not UTF-8"))?;
+    if !nine && head.lines().filter_map(|l| l.strip_prefix("engine=")).any(|v| v.trim().parse::<u32>().is_ok_and(|e| e >= 3)) {
+        return Err(bad(OLD_ENGINE3));
+    }
+    Ok((nine, head))
 }
 
 impl Canvas {
     /// Write the complete canvas state (dries nothing: wet paint stays wet)
     /// after `header`.
     pub fn write_state(&self, w: &mut impl Write, header: &str) -> io::Result<()> {
-        w.write_all(MAGIC)?;
+        w.write_all(if self.engine >= 3 { MAGIC9 } else { MAGIC })?;
         put_u64(w, header.len() as u64)?;
         w.write_all(header.as_bytes())?;
         let f = self.f;
@@ -175,12 +199,21 @@ impl Canvas {
             put_u64(w, v)?;
         }
         put_u64(w, self.engine as u64)?;
+        // the thinner's section (version 9), last: the solvent per pixel
+        if self.engine >= 3 {
+            let n = self.f.w * self.f.h;
+            if self.wet.solv.len() == n {
+                put_all(w, self.wet.solv.iter().copied())?;
+            } else {
+                put_all(w, std::iter::repeat_n(0.0f32, n))?;
+            }
+        }
         Ok(())
     }
 
     /// Read a canvas written by `write_state`; returns it and the header.
     pub fn read_state(r: &mut impl Read) -> io::Result<(Canvas, String)> {
-        let header = read_header(r)?;
+        let (nine, header) = read_magic_header(r)?;
         let mut u = [0usize; 10];
         for v in u.iter_mut() {
             *v = usize::try_from(get_u64(r)?).map_err(|_| bad("checkpoint frame is invalid"))?;
@@ -303,6 +336,20 @@ impl Canvas {
             v if (1..=crate::ENGINE as u64).contains(&v) => v as u32,
             _ => return Err(bad("checkpoint engine version is invalid")),
         };
+        match (nine, c.engine >= 3) {
+            (false, true) => return Err(bad(OLD_ENGINE3)),
+            (true, false) => return Err(bad("checkpoint version 9 holds an engine-1 or engine-2 canvas")),
+            (true, true) => {
+                let s = get_all(r, n)?;
+                if !s.iter().all(|v| v.is_finite() && *v >= 0.0) {
+                    return Err(bad("checkpoint solvent is invalid"));
+                }
+                // (an engine-3 canvas's buffers, as `surf` allocates them)
+                c.wet.ensure_solvent();
+                c.wet.solv = s;
+            }
+            (false, false) => {}
+        }
         Ok((c, header))
     }
 }

@@ -490,6 +490,10 @@ pub(crate) fn frame(st: &S) -> Result<Frame> {
 pub struct PileU {
     pub mix: Mixture,
     pub medium: f32,
+    /// Share of solvent knifed in (`paint::thinner`), engine 3: `Some` (0
+    /// when not given). `None` before engine 3, which has no thinner (so an
+    /// older log's `p.thinner` is nil, as it was).
+    pub thinner: Option<f32>,
     /// The parts as the painter gave them (for printing).
     parts: Vec<(String, f32)>,
 }
@@ -497,6 +501,7 @@ pub struct PileU {
 impl UserData for PileU {
     fn add_fields<F: mlua::UserDataFields<Self>>(f: &mut F) {
         f.add_field_method_get("medium", |_, p| Ok(p.medium));
+        f.add_field_method_get("thinner", |_, p| Ok(p.thinner));
     }
     fn add_methods<M: UserDataMethods<Self>>(m: &mut M) {
         m.add_method("parts", |lua, p, ()| {
@@ -511,11 +516,31 @@ impl UserData for PileU {
 }
 
 impl PileU {
-    /// What `print(p)` shows: `pile(lead white 6, smalt 1; medium 0.2)`.
+    /// What `print(p)` shows: `pile(lead white 6, smalt 1; medium 0.2)`,
+    /// and `, thinner 0.3` after the medium when the pile is thinned.
     pub fn recipe(&self) -> String {
         let parts: Vec<String> = self.parts.iter().map(|(n, k)| format!("{n} {}", fmt_num(*k))).collect();
-        format!("pile({}; medium {})", parts.join(", "), fmt_num(self.medium))
+        match self.thinner.filter(|&t| t > 0.0) {
+            Some(t) => format!("pile({}; medium {}, thinner {})", parts.join(", "), fmt_num(self.medium), fmt_num(t)),
+            None => format!("pile({}; medium {})", parts.join(", "), fmt_num(self.medium)),
+        }
     }
+
+    /// The share of solvent (0 unthinned, and before engine 3).
+    pub fn thinner(&self) -> f32 {
+        self.thinner.unwrap_or(0.0)
+    }
+
+    /// The paint a brush loads from this pile (before the hand's
+    /// unevenness): the mixture with its medium, thinned as knifed.
+    pub fn paint(&self) -> paint::Paint {
+        thinned(self.mix.laid(self.medium), self.thinner())
+    }
+}
+
+/// `p` thinned `t` (unchanged when `t` is 0).
+fn thinned(p: paint::Paint, t: f32) -> paint::Paint {
+    if t > 0.0 { p.with_thinner(t) } else { p }
 }
 
 fn fmt_num(v: f32) -> String {
@@ -581,7 +606,7 @@ fn brushload(st: &S, p: &Value, extra: &Value, what: &str) -> Result<(paint::Pai
     let tubes = s.tubes.clone();
     let seed = s.rng.next_u64();
     let m = tubes.remix(&p.mix, sty.mix_jitter, &mut Rng::new(seed));
-    Ok((m.laid(p.medium), p.mix.color))
+    Ok((thinned(m.laid(p.medium), p.thinner()), p.mix.color))
 }
 
 // ---------------------------------------------------------------- masks
@@ -866,7 +891,7 @@ fn work(st: &S, mask: Rc<Mask>, o: Table, preset: Option<&str>) -> Result<()> {
         h = h.hug(on);
     }
     if let Some(p) = &pile {
-        h = h.piled(&tubes, p.mix.clone(), p.medium);
+        h = h.piled(&tubes, p.mix.clone(), p.medium).thinner(p.thinner());
     }
     #[cfg(feature = "replay")]
     if pile.is_none() && crate::legacy::on(st) {
@@ -1055,7 +1080,7 @@ fn stipple(st: &S, mask: Rc<Mask>, o: Table) -> Result<()> {
         Stipple::new(tool)
     } else {
         let pile = pile_of(&o.get::<Value>("pile")?, "stipple")?;
-        Stipple::new(tool).piled(&tubes, pile.mix.clone(), pile.medium)
+        Stipple::new(tool).piled(&tubes, pile.mix.clone(), pile.medium).thinner(pile.thinner())
     };
     #[cfg(feature = "replay")]
     if legacy {
@@ -1273,11 +1298,27 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
     {
         let st = st.clone();
         g.set("pile", lua.create_function(move |_, t: Table| {
-            check_keys(&t, &["medium"], "pile")?;
+            // the thinner is engine 3's: an older log's pile takes no such key
+            let engine = st.borrow().tubes.engine;
+            check_keys(&t, if engine >= 3 { &["medium", "thinner"] } else { &["medium"] }, "pile")?;
             let medium = num(&t, "medium")?.unwrap_or(0.0);
             if !(0.0..=0.95).contains(&medium) {
                 return err("pile: medium is the share of oil medium mixed in, 0 (as from the tube) to 0.95");
             }
+            let thinner = if engine >= 3 {
+                let v = match t.get::<Value>("thinner")? {
+                    Value::Nil => 0.0,
+                    Value::Integer(i) => i as f32,
+                    Value::Number(x) => x as f32,
+                    o => return err(format!("pile: thinner is the share of solvent (turpentine, spirits) by volume, 0 to 0.9; got {}", o.type_name())),
+                };
+                if !(0.0..=0.9).contains(&v) {
+                    return err(format!("pile: thinner {v}: the share of solvent (turpentine, spirits) by volume, 0 (none) to 0.9"));
+                }
+                Some(v)
+            } else {
+                None
+            };
             let tubes = st.borrow().tubes.clone();
             let (parts, given) = parts_of(&tubes, &t, "pile")?;
             let mix = tubes.pile(parts);
@@ -1286,7 +1327,7 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
             }
             // knifing it takes the hand a while
             time::knife(&st, mix.color);
-            Ok(PileU { mix, medium, parts: given })
+            Ok(PileU { mix, medium, thinner, parts: given })
         })?)?;
     }
 
@@ -1412,7 +1453,8 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
                 (v, _) => tool_of(v)?,
             };
             let seed = st1.borrow_mut().auto_seed();
-            let held = Rc::new(RefCell::new(Held::new(tool, seed)));
+            let engine = st1.borrow().tubes.engine;
+            let held = Rc::new(RefCell::new(Held::new(tool, seed).with_engine(engine)));
             st1.borrow_mut().brushes.push(Rc::downgrade(&held));
             Ok(Brush { held, st: st1.clone() })
         })?)?;

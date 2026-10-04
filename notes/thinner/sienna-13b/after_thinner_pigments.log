@@ -1,0 +1,56 @@
+    Finished `release` profile [optimized] target(s) in 0.58s
+     Running tests/thinner_pigments.rs (target/release/deps/thinner_pigments-a25488fe715b8154)
+
+running 4 tests
+test print_tube_table ... ignored, prints the tube table; run on af49348 to make tests/thinner/tubes_af49348.txt
+test c13_burnt_sienna_has_a_lower_contrast_ratio_than_raw_sienna_at_equal_film ... ok
+test c13_every_pigment_value_is_af49348s ... ok
+test c13_diagnostic_sienna_card_retained_absolute_substrate_difference ... ok
+
+successes:
+
+---- c13_burnt_sienna_has_a_lower_contrast_ratio_than_raw_sienna_at_equal_film stdout ----
+raw sienna: catalog hiding 0.4 = an input calibration scalar: the one-coat contrast ratio of a gray paint of the masstone's luminance 0.1735 over black/white 1.0 (`hiding_of`, here 0.4000), which fixes the scattering 0.2961 per coat (`scatter_for`). The rendered RGB film (masstone [0.3231, 0.1441, 0.0242], scattering 0.2961): one coat's luminance contrast ratio over black/white 1.0 0.3884, over the black/80% white chart 0.4516
+burnt sienna: catalog hiding 0.45 = an input calibration scalar: the one-coat contrast ratio of a gray paint of the masstone's luminance 0.0797 over black/white 1.0 (`hiding_of`, here 0.4500), which fixes the scattering 0.1989 per coat (`scatter_for`). The rendered RGB film (masstone [0.2016, 0.0497, 0.0176], scattering 0.1989): one coat's luminance contrast ratio over black/white 1.0 0.3778, over the black/80% white chart 0.4378
+substrate black/80% white chart: black RGB [0.0000, 0.0000, 0.0000] Y 0.0000; white RGB [0.8000, 0.8000, 0.8000] Y 0.8000
+     3 µm raw sienna  : over black RGB [0.0335, 0.0314, 0.0186], over white RGB [0.7624, 0.6702, 0.2052]; contrast ratio Y 0.0471 (R 0.0439 G 0.0469 B 0.0907); retained absolute substrate difference 78.2% (diagnostic)
+     3 µm burnt sienna: over black RGB [0.0225, 0.0189, 0.0131], over white RGB [0.7431, 0.5212, 0.2221]; contrast ratio Y 0.0352 (R 0.0302 G 0.0363 B 0.0589); retained absolute substrate difference 65.9% (diagnostic)
+     3 µm: burnt - raw contrast ratio Y -0.0119; channels where burnt's is not lower (diagnostic): []
+    10 µm raw sienna  : over black RGB [0.0978, 0.0804, 0.0240], over white RGB [0.6839, 0.4540, 0.0300]; contrast ratio Y 0.1695 (R 0.1429 G 0.1771 B 0.7980); retained absolute substrate difference 49.0% (diagnostic)
+    10 µm burnt sienna: over black RGB [0.0654, 0.0397, 0.0174], over white RGB [0.6283, 0.2064, 0.0264]; contrast ratio Y 0.1537 (R 0.1040 G 0.1921 B 0.6612); retained absolute substrate difference 29.9% (diagnostic)
+    10 µm: burnt - raw contrast ratio Y -0.0157; channels where burnt's is not lower (diagnostic): ["G"]
+    25 µm raw sienna  : over black RGB [0.1896, 0.1252, 0.0242], over white RGB [0.5554, 0.2399, 0.0242]; contrast ratio Y 0.4516 (R 0.3414 G 0.5219 B 0.9998); retained absolute substrate difference 20.0% (diagnostic)
+    25 µm burnt sienna: over black RGB [0.1253, 0.0488, 0.0176], over white RGB [0.4531, 0.0641, 0.0177]; contrast ratio Y 0.4378 (R 0.2765 G 0.7612 B 0.9994); retained absolute substrate difference 10.1% (diagnostic)
+    25 µm: burnt - raw contrast ratio Y -0.0138; channels where burnt's is not lower (diagnostic): ["G"]
+    30 µm raw sienna  : over black RGB [0.2106, 0.1315, 0.0242], over white RGB [0.5228, 0.2085, 0.0242]; contrast ratio Y 0.5365 (R 0.4029 G 0.6307 B 1.0000); retained absolute substrate difference 15.2% (diagnostic)
+    30 µm burnt sienna: over black RGB [0.1386, 0.0493, 0.0176], over white RGB [0.4117, 0.0562, 0.0176]; contrast ratio Y 0.5117 (R 0.3368 G 0.8773 B 0.9999); retained absolute substrate difference 7.9% (diagnostic)
+    30 µm: burnt - raw contrast ratio Y -0.0248; channels where burnt's is not lower (diagnostic): ["G"]
+substrate bone black/lead white masstones: black RGB [0.0130, 0.0110, 0.0097] Y 0.0113; white RGB [0.8632, 0.8148, 0.7157] Y 0.8180
+     3 µm raw sienna  : over black RGB [0.0450, 0.0400, 0.0208], over white RGB [0.8216, 0.6824, 0.1853]; contrast ratio Y 0.0586 (R 0.0548 G 0.0586 B 0.1125); retained absolute substrate difference 78.9% (diagnostic)
+     3 µm burnt sienna: over black RGB [0.0339, 0.0257, 0.0156], over white RGB [0.8011, 0.5306, 0.1999]; contrast ratio Y 0.0474 (R 0.0424 G 0.0485 B 0.0780); retained absolute substrate difference 66.6% (diagnostic)
+     3 µm: burnt - raw contrast ratio Y -0.0113; channels where burnt's is not lower (diagnostic): []
+    10 µm raw sienna  : over black RGB [0.1065, 0.0852, 0.0241], over white RGB [0.7345, 0.4614, 0.0294]; contrast ratio Y 0.1748 (R 0.1451 G 0.1847 B 0.8181); retained absolute substrate difference 50.0% (diagnostic)
+    10 µm burnt sienna: over black RGB [0.0740, 0.0419, 0.0176], over white RGB [0.6754, 0.2096, 0.0254]; contrast ratio Y 0.1590 (R 0.1096 G 0.1998 B 0.6903); retained absolute substrate difference 30.8% (diagnostic)
+    10 µm: burnt - raw contrast ratio Y -0.0158; channels where burnt's is not lower (diagnostic): ["G"]
+    25 µm raw sienna  : over black RGB [0.1947, 0.1266, 0.0242], over white RGB [0.5900, 0.2422, 0.0242]; contrast ratio Y 0.4450 (R 0.3300 G 0.5227 B 0.9999); retained absolute substrate difference 20.7% (diagnostic)
+    25 µm burnt sienna: over black RGB [0.1301, 0.0490, 0.0176], over white RGB [0.4822, 0.0644, 0.0177]; contrast ratio Y 0.4270 (R 0.2698 G 0.7608 B 0.9995); retained absolute substrate difference 10.6% (diagnostic)
+    25 µm: burnt - raw contrast ratio Y -0.0180; channels where burnt's is not lower (diagnostic): ["G"]
+    30 µm raw sienna  : over black RGB [0.2149, 0.1324, 0.0242], over white RGB [0.5529, 0.2101, 0.0242]; contrast ratio Y 0.5273 (R 0.3886 G 0.6304 B 1.0000); retained absolute substrate difference 15.8% (diagnostic)
+    30 µm burnt sienna: over black RGB [0.1426, 0.0494, 0.0176], over white RGB [0.4361, 0.0563, 0.0176]; contrast ratio Y 0.4983 (R 0.3269 G 0.8768 B 0.9999); retained absolute substrate difference 8.4% (diagnostic)
+    30 µm: burnt - raw contrast ratio Y -0.0291; channels where burnt's is not lower (diagnostic): ["G"]
+
+---- c13_diagnostic_sienna_card_retained_absolute_substrate_difference stdout ----
+card bands before the strokes: black RGB [0.0152, 0.0121, 0.0102] Y 0.0126, white RGB [0.8286, 0.7891, 0.7022] Y 0.7912
+raw sienna: mean film on the bands 37.92 µm; over black RGB [0.2171, 0.1278, 0.0242], over white RGB [0.5256, 0.2309, 0.0245]; retained absolute substrate difference 17.91%; contrast ratio Y 0.4998 (R 0.4131 G 0.5532 B 0.9841)
+burnt sienna: mean film on the bands 37.92 µm; over black RGB [0.1432, 0.0485, 0.0176], over white RGB [0.4175, 0.0742, 0.0182]; retained absolute substrate difference 9.85%; contrast ratio Y 0.4642 (R 0.3431 G 0.6545 B 0.9680)
+(films differ by at most 0 µm at a pixel; raw's mean over the canvas 10.071717 µm)
+
+
+successes:
+    c13_burnt_sienna_has_a_lower_contrast_ratio_than_raw_sienna_at_equal_film
+    c13_diagnostic_sienna_card_retained_absolute_substrate_difference
+    c13_every_pigment_value_is_af49348s
+
+test result: ok. 3 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.96s
+
+cargo exit 0

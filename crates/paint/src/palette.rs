@@ -29,6 +29,15 @@ pub struct Tube {
     pub color: Rgb,
     /// Hiding power of one coat of the tube paint (0 transparent .. 1
     /// opaque): contrast ratio, see `pigment::hiding_of`.
+    ///
+    /// An input calibration scalar, not a measurement of the rendered
+    /// film: `scatter_for` turns it into the paint's scattering through a
+    /// grayscale surrogate (a gray paint of the masstone's luminance, one
+    /// coat over black and white 1.0). The renderer then absorbs per RGB
+    /// channel, so a rendered coat's luminance contrast ratio differs from
+    /// this number and two tubes can rank differently by the two (raw and
+    /// burnt sienna: 0.40 and 0.45 here, about 0.45 and 0.44 rendered over a
+    /// black/80% white chart; thinner check 13, notes/thinner/ACCEPTANCE.md).
     pub hiding: f32,
     /// Stiffness straight from the tube (0 fluid .. 1 stiff).
     pub stiff: f32,

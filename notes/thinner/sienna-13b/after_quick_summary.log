@@ -1,0 +1,19 @@
+== check 2: cargo build --release -p easel, then scripts/thinner_check2
+== check 2, part 1: compare_build.sh --added-zero
+== check 2, part 2: the scenes with thinner=0 on every pile
+== check 2, part 3: the dumps declare the solvent
+== check 2, part 4: a thinned scene dumps nonzero solvent
+== check 2: exited 1 after 5 s
+== pigments: cargo test --release -p paint --test thinner_pigments -- --exact (1 tests)
+== pigments: cargo exited 0 after 0 s
+== sienna: cargo test --release -p paint --test thinner_pigments -- --exact --show-output (2 tests)
+== sienna: cargo exited 0 after 1 s
+== paint: cargo test --release -p paint --test thinner_physics -- --exact (12 tests)
+== paint: cargo exited 0 after 6 s
+== easel: cargo test --release -p easel --bin easel -- --exact (8 tests)
+== easel: cargo exited 0 after 7 s
+thinner acceptance --quick: 23 of 24 required tests passed (logs: $TMPDIR/thinner-acceptance.dmW7TT)
+  NOT PASSED: check 2 (scripts/thinner_check2: see $TMPDIR/thinner-acceptance.dmW7TT/check2.log)
+thinner acceptance --quick: FAILED
+lockrun: finished: exit 1 in 19.1 s; log /tmp/lockrun-501/logs/20261004-203349-3ec36b69.log
+quick exit 1

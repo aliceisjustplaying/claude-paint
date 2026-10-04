@@ -1499,4 +1499,362 @@ mod tests {
             }
         }
     }
+
+    /// Path sampling and transfer receipts (AGENT_BRIEF_V2 §2-3). The
+    /// probes are diagnostics (`--ignored`); they print, they don't judge.
+    /// `cargo test --release -p paint --lib rag::tests::path -- --ignored --nocapture --test-threads 1`
+    mod path {
+        use super::*;
+        use super::thin::{PAINTED, READ, film_um, on_canvas, px_in, set_film, total};
+
+        /// `thin::ground` at engine `e`, `w` px wide.
+        pub fn ground_e(linen: bool, e: u32, w: usize) -> Canvas {
+            let mut c = Canvas::new(w, 1.5, hex("#b08060")).with_engine(e).with_size_mm(440.0);
+            if linen {
+                c = c.with_linen(Linen { warp_per_cm: 15.0, weft_per_cm: 15.0, ..Linen::fine(3) });
+            }
+            c.prime(hex("#e4dcc8"), 0.9, 25.0, 0.6, if linen { 0.3 } else { 0.0 }, 5);
+            c
+        }
+
+        pub fn fixture(linen: bool, e: u32, w: usize, um: f32) -> Canvas {
+            let mut c = ground_e(linen, e, w);
+            set_film(&mut c, um, PAINTED);
+            c
+        }
+
+        /// FNV-1a-64 over the canvas fields a rag can change and the rag.
+        pub fn fnv(c: &Canvas, r: &Rag) -> u64 {
+            let mut h = 0xcbf2_9ce4_8422_2325u64;
+            let mut eat = |b: &[u8]| {
+                for &x in b {
+                    h ^= x as u64;
+                    h = h.wrapping_mul(0x0100_0000_01b3);
+                }
+            };
+            for i in 0..c.wet.vol.len() {
+                eat(&c.wet.vol[i].to_bits().to_le_bytes());
+                eat(&c.film[i].to_bits().to_le_bytes());
+                eat(&c.height[i].to_bits().to_le_bytes());
+                eat(&c.wet.cover[i].to_bits().to_le_bytes());
+                for q in c.wet.lat[i] {
+                    eat(&q.to_bits().to_le_bytes());
+                }
+                for q in c.wet.hide[i] {
+                    eat(&q.to_bits().to_le_bytes());
+                }
+            }
+            for s in &c.wet.solv {
+                eat(&s.to_bits().to_le_bytes());
+            }
+            for p in &c.wet.clock.px {
+                eat(&p.cure.to_bits().to_le_bytes());
+            }
+            eat(format!("{r:?}").as_bytes());
+            h
+        }
+
+        /// `pts` with every segment cut into `n` equal collinear pieces.
+        pub fn dense(pts: &[(f32, f32)], n: usize) -> Vec<(f32, f32)> {
+            let mut out = vec![pts[0]];
+            for w in pts.windows(2) {
+                for k in 1..=n {
+                    let t = k as f32 / n as f32;
+                    out.push((w[0].0 + (w[1].0 - w[0].0) * t, w[0].1 + (w[1].1 - w[0].1) * t));
+                }
+            }
+            out
+        }
+
+        /// `pts` with `n` collinear points inserted at random places along
+        /// each segment (uneven pieces, some far shorter than a step).
+        pub fn uneven(pts: &[(f32, f32)], n: usize, seed: u64) -> Vec<(f32, f32)> {
+            let mut rng = Rng::new(seed);
+            let mut out = vec![pts[0]];
+            for w in pts.windows(2) {
+                let mut ts: Vec<f32> = (0..n).map(|_| rng.range(0.0, 1.0)).collect();
+                ts.sort_by(f32::total_cmp);
+                for t in ts.into_iter().chain([1.0]) {
+                    out.push((w[0].0 + (w[1].0 - w[0].0) * t, w[0].1 + (w[1].1 - w[0].1) * t));
+                }
+            }
+            out
+        }
+
+        pub const REVERSAL: [(f32, f32); 3] = [(250.0, 340.0), (750.0, 340.0), (300.0, 340.0)];
+        pub const CORNER: [(f32, f32); 3] = [(250.0, 300.0), (620.0, 300.0), (620.0, 430.0)];
+
+        /// The actions the digest replays: (name, damp, path or None for a
+        /// blot at the band's middle).
+        pub fn actions() -> Vec<(&'static str, bool, Option<Vec<(f32, f32)>>)> {
+            vec![
+                ("line2", false, Some(thin::LINE.to_vec())),
+                ("line51", false, Some(dense(&thin::LINE, 50))),
+                ("damp2", true, Some(thin::LINE.to_vec())),
+                ("reversal", false, Some(REVERSAL.to_vec())),
+                ("corner", false, Some(CORNER.to_vec())),
+                ("blot", false, None),
+            ]
+        }
+
+        /// A digest of each action on a 3 µm direct film at engines 1, 2 and
+        /// 3, and of a region pass with refolds: engine 1 and 2 must print
+        /// the same before and after a change to engine 3's rag.
+        #[test]
+        #[ignore]
+        fn digest() {
+            let w: usize = std::env::var("RAG_W").ok().and_then(|v| v.parse().ok()).unwrap_or(480);
+            for e in 1..=3u32 {
+                let c0 = fixture(true, e, w, 3.0);
+                for (name, damp, pts) in actions() {
+                    let mut c = c0.clone();
+                    let mut r = Rag::new(100.0, 7);
+                    if damp {
+                        r.dip(0.5, c.now_min(), &mut c.tally);
+                    }
+                    let lifted = match &pts {
+                        Some(p) => c.rag_wipe(&mut r, p, &[0.8], 19),
+                        None => c.rag_blot(&mut r, 500.0, 340.0, 0.8, 19),
+                    };
+                    println!("engine {e} {name:>9}: {:016x} lifted {lifted:.6e} mm3 load {:.6}", fnv(&c, &r), r.load);
+                }
+                let mut c = c0.clone();
+                let mut r = Rag::new(100.0, 7);
+                let m = Mask::from_fn(c.frame(), |x, y| if (200.0..800.0).contains(&x) && (250.0..430.0).contains(&y) { 1.0 } else { 0.0 });
+                c.rag_region(&mut r, &m, &RagPass { pressure: 0.7, angle: 0.1, passes: 2, refold: Some(0.3), seed: 3 });
+                println!("engine {e}    region: {:016x} load {:.6} fold {}", fnv(&c, &r), r.load, r.fold);
+            }
+        }
+
+        /// Largest and mean |difference| (µm) of open paint between two
+        /// canvases, and the larger total.
+        pub fn delta(a: &Canvas, b: &Canvas) -> (f32, f64) {
+            let (mut mx, mut s) = (0.0f32, 0.0f64);
+            for i in 0..a.wet.vol.len() {
+                let d = ((a.wet.vol[i] - b.wet.vol[i]) * COAT_UM).abs();
+                mx = mx.max(d);
+                s += d as f64;
+            }
+            (mx, s / a.wet.vol.len() as f64)
+        }
+
+        /// The same continuous motion given with 2 points, 51 evenly spaced
+        /// collinear points and 2 + 9 unevenly spaced ones, and a reversal
+        /// and a corner each given plain and densely subdivided: film left
+        /// in the read band, the largest per-pixel difference from the
+        /// plain path, the rag's load, and the material balance (canvas
+        /// change against what `rag_wipe` reports lifted).
+        #[test]
+        #[ignore]
+        fn partition() {
+            let w: usize = std::env::var("RAG_W").ok().and_then(|v| v.parse().ok()).unwrap_or(480);
+            let paths: Vec<(&str, Vec<Vec<(f32, f32)>>)> = vec![
+                ("line", vec![thin::LINE.to_vec(), dense(&thin::LINE, 50), uneven(&thin::LINE, 9, 5)]),
+                ("reversal", vec![REVERSAL.to_vec(), dense(&REVERSAL, 25), uneven(&REVERSAL, 9, 6)]),
+                ("corner", vec![CORNER.to_vec(), dense(&CORNER, 25), uneven(&CORNER, 9, 7)]),
+            ];
+            for linen in [false, true] {
+                for um in [1.0f32, 3.0, 69.0] {
+                    let c0 = fixture(linen, 3, w, um);
+                    let idx = px_in(&c0, READ);
+                    let a = total(&film_um(&c0, &idx));
+                    for damp in [false, true] {
+                        for (name, variants) in &paths {
+                            let mut first: Option<Canvas> = None;
+                            for (vi, pts) in variants.iter().enumerate() {
+                                let mut c = c0.clone();
+                                let mut r = Rag::new(100.0, 7);
+                                if damp {
+                                    r.dip(0.5, c.now_min(), &mut c.tally);
+                                }
+                                let before = on_canvas(&c);
+                                let lifted = c.rag_wipe(&mut r, pts, &[0.8], 19);
+                                let left = total(&film_um(&c, &idx)) / a;
+                                let bal = (before - on_canvas(&c) - lifted).abs() / before;
+                                let (mx, mean) = first.as_ref().map_or((0.0, 0.0), |f| delta(f, &c));
+                                println!("{} {um:>4} µm {} {name:>8} {:>3} pts: left {:6.2}% max|Δ| {mx:8.4} µm mean|Δ| {mean:.2e} µm load {:.5} bal {bal:.0e}",
+                                    if linen { "linen " } else { "smooth" }, if damp { "damp" } else { "dry " }, pts.len(), 100.0 * left, r.load);
+                                if vi == 0 {
+                                    first = Some(c);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        /// A tube of the inness box as fresh paint.
+        pub fn tube(name: &str) -> crate::Paint {
+            let pal = crate::palette::Palette::named_box("inness").unwrap();
+            let i = pal.tubes.iter().position(|t| t.name == name).unwrap();
+            pal.pile(vec![(i, 1.0)]).laid(0.0)
+        }
+
+        /// `thin::set_film` with paint `paint`: every pixel in `r` exactly
+        /// `um` µm of it, fresh and unthinned.
+        pub fn set_film_of(c: &mut Canvas, um: f32, r: (f32, f32, f32, f32), paint: crate::Paint) {
+            thin::brushed_in(c, paint, 0.9, r);
+            let lat = paint.latent();
+            let mid = ((r.0 + r.2) / 2.0, (r.1 + r.3) / 2.0);
+            let hide = c.wet.hide[px_in(c, (mid.0, mid.1, mid.0 + 2.0, mid.1 + 2.0))[0]];
+            if c.wet.clock.px.len() != c.wet.vol.len() {
+                c.wait(0.0);
+            }
+            for i in px_in(c, r) {
+                c.wet.vol[i] = um / COAT_UM;
+                c.wet.lat[i] = lat;
+                c.wet.hide[i] = hide;
+                c.wet.cover[i] = 1.0;
+                c.wet.clock.px[i].cure = 0.0;
+                if let Some(s) = c.wet.solv.get_mut(i) {
+                    *s = 0.0;
+                }
+            }
+        }
+
+        /// The face's capacity (mm³), as `rag_contact` computes it.
+        pub fn cap(c: &Canvas, r: &Rag) -> f64 {
+            let w = (r.width * c.mm_per_unit()) as f64;
+            w * w * CAP_UM as f64 / 1000.0
+        }
+
+        /// Bounded pickup: one face, never refolded, wiped back and forth
+        /// over a thick film until it is full: the face's load against what
+        /// the canvas has lost to it (the ledger, in faces), dry and dipped
+        /// at 1.0. A load stuck at 1 while the ledger passes it is overfill
+        /// the face can't hold.
+        #[test]
+        #[ignore]
+        fn capacity() {
+            let w: usize = std::env::var("RAG_W").ok().and_then(|v| v.parse().ok()).unwrap_or(480);
+            for um in [69.0f32, 300.0] {
+                for damp in [0.0f32, 1.0] {
+                    let c0 = fixture(false, 3, w, um);
+                    let mut c = c0.clone();
+                    let mut r = Rag::new(100.0, 7);
+                    let cap = cap(&c, &r);
+                    let start = on_canvas(&c);
+                    print!("{um:>5} µm damp {damp}:");
+                    for k in 0..12u64 {
+                        if damp > 0.0 {
+                            r.dip(damp, c.now_min(), &mut c.tally);
+                        }
+                        let pts = if k % 2 == 0 { thin::LINE.to_vec() } else { vec![thin::LINE[1], thin::LINE[0]] };
+                        c.rag_wipe(&mut r, &pts, &[0.9], 40 + k);
+                        if k % 3 == 2 {
+                            print!("  w{}: load {:.6} ledger {:.6}", k + 1, r.load, (start - on_canvas(&c)) / cap);
+                        }
+                    }
+                    println!("  soaked×FACES {:.6}", r.soaked * FACES);
+                }
+            }
+        }
+
+        /// Share of paint `a` (latent `la`) in a pixel of mixed `a` and `b`
+        /// paint, from its latent vector: mixing is linear by volume in
+        /// `rag_lay` and `bristle`, so the latent works as a tracer here.
+        /// It is not a pigment ledger.
+        pub fn share_of(l: &crate::wet::Latent, la: &crate::wet::Latent, lb: &crate::wet::Latent) -> f32 {
+            let (mut num, mut den) = (0.0f32, 0.0f32);
+            for q in 0..l.len() {
+                num += (l[q] - lb[q]) * (la[q] - lb[q]);
+                den += (la[q] - lb[q]).powi(2);
+            }
+            (num / den.max(1e-12)).clamp(0.0, 1.0)
+        }
+
+        /// Dirty two-color carryover and refolding on direct 3 µm films:
+        /// raw umber left of x = 500, lead white right of it. (a) one wipe
+        /// from the umber into the white; (b) the same face wiping the umber,
+        /// lifted, then wiping the white; (c) as (b) with a refold between;
+        /// (d) a clean face over the white alone. Umber laid on the white
+        /// (mm³, by the latent tracer), the white's film change and the
+        /// balance.
+        #[test]
+        #[ignore]
+        fn carry() {
+            let w: usize = std::env::var("RAG_W").ok().and_then(|v| v.parse().ok()).unwrap_or(480);
+            for linen in [false, true] {
+                let mut c0 = ground_e(linen, 3, w);
+                let (ua, wb) = (tube("raw umber"), tube("lead white"));
+                set_film_of(&mut c0, 3.0, (150.0, 240.0, 500.0, 440.0), ua);
+                set_film_of(&mut c0, 3.0, (500.0, 240.0, 850.0, 440.0), wb);
+                let (la, lb) = (ua.latent(), wb.latent());
+                let white = px_in(&c0, (520.0, 240.0, 850.0, 440.0));
+                let mm3 = (c0.px_mm() as f64).powi(2) * COAT_UM as f64 / 1000.0;
+                let umber_on_white = |c: &Canvas| white.iter().map(|&i| (c.wet.vol[i].max(0.0) * share_of(&c.wet.lat[i], &la, &lb)) as f64).sum::<f64>() * mm3;
+                let white_film = |c: &Canvas| white.iter().map(|&i| c.wet.vol[i].max(0.0) as f64).sum::<f64>() * mm3;
+                let (u0, f0) = (umber_on_white(&c0), white_film(&c0));
+                for case in ["a: umber->white, one wipe", "b: umber, lift, white", "c: umber, refold, white", "d: clean face, white only"] {
+                    let mut c = c0.clone();
+                    let mut r = Rag::new(100.0, 7);
+                    let before = on_canvas(&c);
+                    let mut lifted = 0.0;
+                    match &case[..1] {
+                        "a" => lifted += c.rag_wipe(&mut r, &[(250.0, 340.0), (750.0, 340.0)], &[0.8], 3),
+                        "d" => lifted += c.rag_wipe(&mut r, &[(560.0, 340.0), (750.0, 340.0)], &[0.8], 4),
+                        k => {
+                            lifted += c.rag_wipe(&mut r, &[(250.0, 340.0), (480.0, 340.0)], &[0.8], 3);
+                            if k == "c" {
+                                r.refold(&mut c.tally);
+                            }
+                            lifted += c.rag_wipe(&mut r, &[(560.0, 340.0), (750.0, 340.0)], &[0.8], 4);
+                        }
+                    }
+                    let bal = (before - on_canvas(&c) - lifted).abs() / before;
+                    println!("{} {case:<28}: umber on white {:+.4} mm3, white region film {:+.3} mm3, load {:.4}, bal {bal:.0e}",
+                        if linen { "linen " } else { "smooth" }, umber_on_white(&c) - u0, white_film(&c) - f0, r.load);
+                }
+            }
+        }
+
+        /// A blot on a 3 µm film: what it lifts, and the balance.
+        #[test]
+        #[ignore]
+        fn blot() {
+            let w: usize = std::env::var("RAG_W").ok().and_then(|v| v.parse().ok()).unwrap_or(480);
+            for linen in [false, true] {
+                for um in [0.25f32, 1.0, 3.0, 69.0] {
+                    let c0 = fixture(linen, 3, w, um);
+                    let mut c = c0.clone();
+                    let mut r = Rag::new(100.0, 7);
+                    let before = on_canvas(&c);
+                    let t0 = c.tally.secs;
+                    let lifted = c.rag_blot(&mut r, 500.0, 340.0, 0.8, 9);
+                    let bal = (before - on_canvas(&c) - lifted).abs() / before;
+                    println!("{} {um:>5} µm blot: lifted {lifted:.4} mm3 ({:.2}% of the film), load {:.5}, hand {:.2} s, bal {bal:.0e}",
+                        if linen { "linen " } else { "smooth" }, 100.0 * lifted / before, r.load, c.tally.secs - t0);
+                }
+            }
+        }
+
+        /// A dry underlayer under a fresh 1 µm film: a hard damp wipe and a
+        /// blot change only the wet layer; the set paint (`film`) and the
+        /// surface (`height`) stay bit for bit.
+        #[test]
+        #[ignore]
+        fn underlayer() {
+            let w: usize = std::env::var("RAG_W").ok().and_then(|v| v.parse().ok()).unwrap_or(480);
+            for linen in [false, true] {
+                let mut c = ground_e(linen, 3, w);
+                set_film_of(&mut c, 20.0, PAINTED, tube("raw umber"));
+                c.dry();
+                set_film_of(&mut c, 1.0, PAINTED, tube("raw sienna"));
+                let (film0, height0) = (c.film.clone(), c.height.clone());
+                let idx = px_in(&c, READ);
+                let a = total(&film_um(&c, &idx));
+                let mut r = Rag::new(100.0, 7);
+                r.dip(1.0, c.now_min(), &mut c.tally);
+                for k in 0..3 {
+                    c.rag_wipe(&mut r, &thin::LINE, &[1.0], 60 + k);
+                }
+                c.rag_blot(&mut r, 500.0, 340.0, 1.0, 9);
+                let same = c.film.iter().zip(&film0).all(|(a, b)| a.to_bits() == b.to_bits()) && c.height.iter().zip(&height0).all(|(a, b)| a.to_bits() == b.to_bits());
+                let neg = c.wet.vol.iter().filter(|&&v| v < 0.0).count();
+                println!("{} dry 20 µm under fresh 1 µm: film+height unchanged {same}, wet film left {:.2}%, negative wet pixels {neg}",
+                    if linen { "linen " } else { "smooth" }, 100.0 * total(&film_um(&c, &idx)) / a);
+            }
+        }
+    }
 }

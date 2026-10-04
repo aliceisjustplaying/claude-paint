@@ -96,7 +96,7 @@ scraped off to make room.
 `turps` thins the pile with that share of turpentine (0 to 0.9):
 `pile({{"<tube>", <parts>}, turps=0.6})`. It flows on the brush and
 evaporates as the paint is laid, so it leaves a film that much thinner, of
-the paint's own body: the lean, quick lay-in and wash. (`thinner`, above,
+the paint's own body: the lean, quick lay-in and wash. (`thinner`, below,
 is the other way to thin a pile: its solvent stays in the film for a while
 and leaves over painting time.) `oil` is what the paint is ground in: `"linseed"` (as the tubes come), `"walnut"` (dries a
 little slower) or `"poppy"` (dries much slower, yellows least).
@@ -118,7 +118,10 @@ as it dries. A pile takes medium or blot, not both.
 - `p:add{{"<tube>", <parts>}, ..., medium=}` knifes more tube paint into a
   heap, in the units its recipe was given in (a pile knifed as
   `{"lead white", 4}, {"cerulean blue", 0.35}` takes `{"cerulean blue", 0.1}`
-  as a tenth of a part more): look, adjust, look again. It returns the pile.
+  as a tenth of a part more): look, adjust, look again. It returns the pile,
+  its recipe with the added parts. The added paint is tube paint (linseed,
+  no turpentine), so it dilutes the heap's turpentine and oil; a pile's
+  `thinner` stays as it was.
 - `mix{{p1, <share>}, {p2, <share>}, ..., name=}` knifes heaps together into a
   new heap, as they are now.
 - `palette{set_out={"<tube>", ...}}` sets out only those tubes, a limited
@@ -616,13 +619,16 @@ in canvas units, not a position and width/height.
 The grid is drawn on the PNG only, never on the canvas, like the squares
 ruled over a drawing to transfer it.
 
-`look` with `palette: true` shows the palette instead of the canvas: a row
-for each pile a global holds, labeled with the global's name and the pile
-(as `print` gives it). Each row shows the pile laid thick; one thin coat
-(12 µm) and a very thin coat (4 µm) over this canvas's ground color; and
-the thin coat over a white card with a black stripe across it. It shows
-the pile's own paint, before the unevenness of a brushload. It takes no
-other option, and nothing on the canvas or the clock changes.
+`look` with `palette: true` shows the palette board instead of the canvas:
+each heap on it, oldest first (up to 16; the oldest are
+scraped off), four to a row. Each is knifed out thick (its masstone and
+body), with a smear dragged from thick to thin across a light board and a
+black stripe (its tint as it thins, and how much it hides), lit as in the
+gallery view. Each is labeled with its number and name (`name=`, or
+`pile <n>`), how much dirt it has taken from a dirty board, and its main
+tubes with their shares. It shows each heap as it is now, added to and
+dirtied, before the unevenness of a brushload. It takes no other option,
+and nothing on the canvas or the clock changes.
 
 | `look` with | shows |
 |---|---|

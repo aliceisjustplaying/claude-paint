@@ -15,8 +15,12 @@ plate 9 (a small study) is its three files in order, with its own canvas.
 
 See notes/techniques.md for what each technique is for.
 
-Plate 10 is plate 9 saved under six lights:
+Plate 10 is plate 9 saved under six views:
 
+    EASEL_BOX=giverny easel open demo-p9
+    easel -s demo-p9 do -f p9_study.lua
+    easel -s demo-p9 do -f p9_study2.lua
+    easel -s demo-p9 do -f p9_study3.lua
     easel -s demo-p9 save flat.png
     easel -s demo-p9 save gallery.png --gallery
     easel -s demo-p9 save 40.png --light 125,40

@@ -17,7 +17,7 @@ scripts/test --all                    # every required check (notes/speed/SKIPPE
 ```
 
 - `notes/easel_guide.md`: how to paint at the easel.
-- `notes/techniques.md`: the oil painter's techniques with these tools (planning, forms and shadows, broken color, impasto, the knife, glazing and scumbling, keeping control, drying time, finishing), and the traps.
+- `notes/techniques.md`: the oil painter's techniques with these tools (planning, the ground, a lean lay-in, forms and shadows, the palette, broken color, impasto, the knife, glazing and scumbling, keeping control, drying time, finishing), and the traps.
 - `notes/journal.md`: your working journal (`easel note '...'` adds to it).
 - `notes/research/`: sourced notes on materials and paint physics.
 - `crates/paint`: the engine (canvas, ground, bristles, wet paint, drying,

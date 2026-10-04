@@ -37,3 +37,7 @@ In `work`, `streak=` makes every dip into the pile streaky and `second=` dips
 part of the brush into a second pile after it (a second trip to the palette in
 hand time). Each dip gets its own streak pattern, seeded from where its stroke
 starts.
+
+`paintings/sampler/p1_loading.lua` (the sampler's brush-loading plate) shows
+double-loaded strokes, streaky strokes, three paints on one brush and the
+same as covering passes.

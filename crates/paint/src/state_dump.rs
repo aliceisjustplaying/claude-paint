@@ -6,7 +6,10 @@
 //! stores, value for value, plus the wet layer's film floors (`wet.floor`),
 //! which the checkpoint leaves out. A later engine that adds state (solvent,
 //! clock fields) adds fields here under new names; a comparison then checks
-//! the fields both sides have and lists the rest.
+//! the fields both sides have and lists the rest. (Engine 4's: `wet.hide`
+//! keeps its first three properties and `wet.turps_oil`, `gloss` and
+//! `absorb` hold the rest of version 10's state; an older engine's dump has
+//! none of the three.)
 //!
 //! Field names are fixed: `scripts/state_compare` matches them by name.
 //! Shapes are row major, `[h, w]` or `[h, w, k]` for per-pixel values.
@@ -84,9 +87,11 @@ impl Canvas {
             Field { name: "wet.vol", shape: px(1), values: Values::F32(wt.vol.clone()) },
             Field { name: "wet.lat", shape: px(LAT), values: Values::F32(wt.lat.iter().flat_map(|l| *l).collect()) },
             // (the paint's first three properties, as the shape says and as before: from
-            // engine 4 wet paint carries two more, solvent and oil, which this dump leaves
-            // out. A CHANGE TO A PROTECTED FILE, notes/golden_paths.txt: it needs the
-            // owner's approval. Without it the five values a pixel would not fit px(3).)
+            // engine 4 wet paint carries two more, solvent and oil, dumped as
+            // `wet.turps_oil` below with the surface's gloss and absorbency. A CHANGE TO
+            // A PROTECTED FILE, notes/golden_paths.txt, as are those three fields: it
+            // needs the owner's approval. Without it the five values a pixel would not
+            // fit px(3).)
             Field { name: "wet.hide", shape: px(3), values: Values::F32(wt.hide.iter().flat_map(|p| [p[0], p[1], p[2]]).collect()) },
             Field { name: "wet.stroke", shape: px(1), values: Values::U32(wt.stroke.clone()) },
             Field { name: "wet.touched", shape: px(1), values: Values::U32(wt.touched.clone()) },
@@ -119,6 +124,15 @@ impl Canvas {
         // added with the thinner (engine 3): the solvent in the open film,
         // µm per pixel (0 where there is none, and before engine 3)
         v.push(Field { name: "wet.solvent", shape: px(1), values: Values::F32(if wt.solv.len() == h * w { wt.solv.clone() } else { vec![0.0; h * w] }) });
+        // added with engine 4 (checkpoint version 10), and only from it, so an
+        // older engine's dump is as it was: the wet paint's turpentine and oil
+        // (its last two properties), the surface's gloss and the ground's
+        // remaining absorbency. (A PROTECTED-FILE CHANGE, as marked above.)
+        if self.engine >= 4 {
+            v.push(Field { name: "wet.turps_oil", shape: px(2), values: Values::F32(wt.hide.iter().flat_map(|p| [p[3], p[4]]).collect()) });
+            v.push(Field { name: "gloss", shape: px(1), values: Values::F32(self.gloss.clone()) });
+            v.push(Field { name: "absorb", shape: px(1), values: Values::F32(self.absorb.clone()) });
+        }
         v
     }
 }

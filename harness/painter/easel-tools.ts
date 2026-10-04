@@ -65,6 +65,8 @@ export function registerEaselTools(pi: ExtensionAPI, studio: string, limits: Pru
 			async execute(id, p, signal, onUpdate, ctx) {
 				let said: string;
 				if (p.survey && p.compare) throw new Error("look: survey and compare are two looks; ask for one");
+				// (lookArgs sends the palette alone: say so rather than drop them)
+				if (p.palette && (p.survey || p.compare)) throw new Error("look: palette shows the palette board, not the canvas; it takes no survey or compare");
 				// compare: an earlier look of this studio, nothing outside it (as `read`)
 				let compare = p.compare || undefined; // (an empty path is none)
 				if (compare !== undefined) {

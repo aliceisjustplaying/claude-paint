@@ -746,10 +746,11 @@ fn an_absorbent_ground_drinks_a_wash() {
     assert!(chalk.2 < oil.2 - 0.2, "gloss: oil ground {}, chalk {}", oil.2, chalk.2);
 }
 
-/// Poppy oil dries slower than linseed (walnut between).
+/// A pile's oil rate scales its drying rate (poppy's 0.6 dries at 0.6 of
+/// linseed's; the easel's pile{oil=} sets the rate).
 #[test]
 #[cfg(tube_box)]
-fn poppy_oil_dries_slower() {
+fn oil_rate_scales_drying() {
     use crate::palette::Palette;
     let pal = Palette::tube_box();
     let mut m = pal.pile(vec![(0, 1.0)]);

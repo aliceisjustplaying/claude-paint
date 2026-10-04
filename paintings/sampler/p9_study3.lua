@@ -15,7 +15,7 @@ end
 local sunL = pile({{"lead white",5},{"barium yellow",1},{"vermilion",0.06}, blot=0.3})
 local b = brush{kind="filbert", width=6, stiffness=0.85, lay=8}
 for i = 1, 30 do b:reload(sunL, 1.0); local x, y = randn(410, 55), horizon - rand(14, 60); b:stroke({{x, y}, {x + rand(12, 26), y + rand(-1.5, 1.5)}}, {pressure={1.0, 0.35}}) end
--- the sun's path on the water: thick horizontal dabs, narrowing toward us
+-- the sun's path on the water: thick horizontal dabs, widening toward us
 for i = 1, 70 do
   local y = math.min(horizon + 14 + rand(0, 1) ^ 1.6 * 300, H - 8)
   local spread = 40 + (y - horizon) * 0.18

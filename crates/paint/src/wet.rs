@@ -302,11 +302,17 @@ impl Canvas {
         use rayon::prelude::*;
         if self.engine >= 4 {
             // engine 4: a matte surface veils its colors (wet paint is oily, glossy)
+            let px_um = self.px_mm() * 1000.0;
             return (0..self.px.len())
                 .into_par_iter()
                 .map(|i| {
-                    // (the thinnest wet film lets the surface under it show: no edge where it ends)
-                    let g = crate::lerp(self.gloss[i], 1.0, crate::smoothstep(0.0, 0.1, self.wet.vol[i]));
+                    // (the thinnest wet film lets the surface under it show: no edge where it ends;
+                    // and only the share of the pixel the wet paint covers, as look_px covers it,
+                    // is glossy, its film that much thicker)
+                    let v = self.wet.vol[i];
+                    let cv = if v > 0.0 { bead_cover(self.wet.cover[i], v, px_um) } else { 0.0 };
+                    let wet = if cv > 0.0 { cv.min(1.0) * crate::smoothstep(0.0, 0.1, v / cv) } else { 0.0 };
+                    let g = crate::lerp(self.gloss[i], 1.0, wet);
                     crate::canvas::haze(self.look_px(i), g)
                 })
                 .collect();

@@ -153,6 +153,23 @@ impl Board {
         }
     }
 
+    /// A scraped heap `id` knifed again fresh: its own paint (and what was
+    /// added to it), no dirt, back on the board as the newest heap. Nothing
+    /// for a heap on the board.
+    fn revive(&mut self, id: u64) {
+        if let Some(h) = self.heap_mut(id)
+            && h.scraped
+        {
+            h.scraped = false;
+            h.dirt.clear();
+            h.changed = h.added;
+            let pos = self.heaps.iter().position(|h| h.id == id).unwrap();
+            let h = self.heaps.remove(pos);
+            self.heaps.push(h);
+            self.scrape_old();
+        }
+    }
+
     pub fn heap(&self, id: u64) -> Option<&Heap> {
         self.heaps.iter().find(|h| h.id == id)
     }
@@ -166,19 +183,7 @@ impl Board {
     /// smears follow it. A scraped heap is knifed again, fresh. Nothing
     /// happens on a clean board.
     pub fn visit(&mut self, id: u64, carry: f32) {
-        if let Some(h) = self.heap_mut(id)
-            && h.scraped
-        {
-            h.scraped = false;
-            // knifed again fresh: its own paint (and what was added to it), no dirt
-            h.dirt.clear();
-            h.changed = h.added;
-            // it goes back on the board as the newest heap
-            let pos = self.heaps.iter().position(|h| h.id == id).unwrap();
-            let h = self.heaps.remove(pos);
-            self.heaps.push(h);
-            self.scrape_old();
-        }
+        self.revive(id);
         if self.dirty <= 0.0 {
             return;
         }
@@ -212,7 +217,12 @@ impl Board {
 
     /// Knife more tube paint into heap `id`: `add` in the heap's own parts
     /// (as its recipe was given), with the added paint's `medium` (0: from the tube).
+    /// The added paint is tube paint: linseed, no turpentine. (A pile's
+    /// `thinner` is the pile's, not the heap's: the added paint is thinned
+    /// with the rest, so p:add keeps it.) A scraped heap is knifed again
+    /// first, as a brush finds it.
     pub fn add(&mut self, id: u64, add: &[(usize, f32)], medium: f32) -> Result<(), String> {
+        self.revive(id);
         let h = self.heap_mut(id).ok_or("p:add: that pile is no longer on the palette")?;
         let k = 1.0 / h.given_sum.max(1e-9);
         let before = h.volume();
@@ -225,10 +235,14 @@ impl Board {
                 None => h.parts.push((i, v)),
             }
         }
-        h.medium = (h.medium * before + medium * added) / (before + added).max(1e-9);
+        let whole = (before + added).max(1e-9);
+        h.medium = (h.medium * before + medium * added) / whole;
+        // (no turpentine and linseed's rate in the added paint; a pile of
+        // neither, as before engine 4, stays exactly 0 and 1)
+        h.solvent = h.solvent * before / whole;
+        h.oil_rate = (h.oil_rate * before + added) / whole;
         h.changed = true;
         h.added = true;
-        h.scraped = false;
         Ok(())
     }
 
@@ -320,6 +334,34 @@ mod tests {
         let f = b.heap(a).unwrap().fractions();
         let blue = f.iter().find(|p| p.0 == 1).unwrap().1;
         assert!((blue - 2.0 / 6.0).abs() < 1e-5, "4 white + 2 blue: a third blue ({blue})");
+    }
+
+    #[test]
+    fn added_tube_paint_dilutes_the_turps_and_the_oil() {
+        let mut b = Board::default();
+        let a = b.knife(vec![(0, 1.0)], 1.0, 0.0, 0.4, 0.6, None);
+        b.add(a, &[(0, 1.0)], 0.0).unwrap();
+        let h = b.heap(a).unwrap();
+        assert!((h.solvent - 0.2).abs() < 1e-6 && (h.oil_rate - 0.8).abs() < 1e-6, "{} {}", h.solvent, h.oil_rate);
+    }
+
+    #[test]
+    fn adding_to_a_scraped_heap_knifes_it_again() {
+        let mut b = Board { dirty: 1.0, ..Default::default() };
+        let first = b.knife(vec![(0, 1.0)], 1.0, 0.0, 0.0, 1.0, None);
+        let other = b.knife(vec![(1, 1.0)], 1.0, 0.0, 0.0, 1.0, None);
+        b.visit(other, 1.0);
+        b.visit(first, 1.0);
+        assert!(!b.heap(first).unwrap().dirt.is_empty());
+        for _ in 0..LIVE {
+            b.knife(vec![(1, 1.0)], 1.0, 0.0, 0.0, 1.0, None);
+        }
+        assert!(b.heap(first).unwrap().scraped);
+        b.add(first, &[(0, 1.0)], 0.0).unwrap();
+        let h = b.heap(first).unwrap();
+        assert!(!h.scraped && h.dirt.is_empty());
+        assert_eq!(b.heaps.last().unwrap().id, first, "back on the board as the newest heap");
+        assert_eq!(b.live().len(), LIVE);
     }
 
     #[test]

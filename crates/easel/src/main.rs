@@ -777,6 +777,9 @@ fn validate_log(name: &str, expected: &str) -> Result<(), String> {
 
 /// The palette look (look.rs `palette`): the piles the globals hold, over this canvas's
 /// ground. Only reads: no hand time, nothing in the log, the canvas and state untouched.
+/// (`look --palette` shows the board now, palette_look.rs; this older look is kept, and
+/// its test, which is all that calls it: allowed unused, so what it calls stays built.)
+#[allow(dead_code)]
 fn palette_look(s: &Session) -> Result<(usize, usize, Vec<u8>), String> {
     let ground = s.ground_color().ok_or("no canvas yet: the first chunk is canvas{...}")?;
     look::palette(&s.piles(), ground)
@@ -943,11 +946,6 @@ impl Server {
         let args = &rest[..];
         let v = look::View::parse(args)?;
         let t0 = Instant::now();
-        if v.palette {
-            let (w, h, png) = palette_look(&self.s)?;
-            let path = new_look(&session_dir(&self.name), &png)?;
-            return Ok(format!("{} ({w}x{h}, {:.2}s)\n", path.display(), t0.elapsed().as_secs_f64()));
-        }
         let c = self.s.canvas().ok_or("no canvas yet: the first chunk is canvas{...}")?;
         let (w, h, path) = match path {
             Some(p) => {

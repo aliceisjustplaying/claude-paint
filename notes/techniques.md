@@ -139,15 +139,16 @@ the picture is yours.
 
 ## Impasto
 
-- **Thick where it counts.** Most of a canvas is thin: the lay-in and the
-  shadows thin, the middle tones as from the tube. Keep the thick paint for
-  the lights and the accents. Impasto everywhere is as flat as impasto
-  nowhere. `load_at=` varies the load across a pass; `scale_at` gives
+- **Thick where it counts.** Most of a canvas is thin: lay-in and shadows
+  lean (turpentine), middle tones as from the tube. Keep the thick, blotted
+  paint for the lights and the accents. Impasto everywhere is as flat as
+  impasto nowhere. `load_at=` varies the load across a pass; `scale_at` gives
   ridges of different sizes.
 
-- Stiff paint holds the brush's marks: use it as it comes from the tube,
-  with no medium. A full brush lays more with `lay=4` to `lay=16`; a coarse
-  hog brush (larger `hair`) leaves coarser ridges.
+- Stiff paint holds the brush's marks: blot it (`pile{..., blot=0.3}`) or
+  use it as it comes from the tube, with no medium. A full brush lays more
+  with `lay=4` to `lay=16`; a coarse hog brush (larger `hair`) leaves coarser
+  ridges.
 - In stiff paint the hairs gather into clumps: strokes lie in ridges and
   furrows, walls rise along their sides, a bead where they end. Fluid paint
   levels flat: that is a glaze's job, not impasto's.
@@ -199,8 +200,8 @@ the picture is yours.
 ## Time
 
 - Time passes only as you paint or `wait`. Paint dries on its own clock:
-  lead white and umber fast, lakes and vermilion slow, thin paint faster
-  than thick.
+  lead white and umber fast, lakes and vermilion slow, poppy oil slower than
+  linseed, thin paint faster than thick, an absorbent ground faster still.
 - A painting can take months of painted time. Let layers dry between
   campaigns; that is what lets the next one sit on top.
 

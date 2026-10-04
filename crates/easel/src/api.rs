@@ -785,6 +785,9 @@ pub struct PileU {
     pub thinner: Option<f32>,
     /// The parts as the painter gave them (for printing).
     parts: Vec<(String, f32)>,
+    /// The parts' sum in the heap's units (`Heap::given_sum`, grown by
+    /// `p:add`): to knife the heap again if its record is gone.
+    given_sum: f32,
     /// Its heap on the palette board (0: none).
     pub heap: u64,
     st: Option<S>,
@@ -798,7 +801,7 @@ impl UserData for PileU {
     fn add_methods<M: UserDataMethods<Self>>(m: &mut M) {
         // p:add{{"tube name", parts}, ..., medium=}: knife more tube paint into this
         // heap on the palette, in the units its recipe was given in; returns the pile
-        m.add_method("add", |_, p, t: Table| {
+        m.add_method_mut("add", |_, p, t: Table| {
             check_keys(&t, &["medium"], "p:add")?;
             let st = p.st.clone().ok_or_else(|| mlua::Error::runtime("p:add: this pile isn't on a palette"))?;
             if p.heap == 0 {
@@ -811,8 +814,24 @@ impl UserData for PileU {
             let tubes = st.borrow().tubes.clone();
             let add = tube_parts(&tubes, &t, "p:add")?;
             check_set_out(&st, &add, "p:add")?;
+            // a heap whose record is gone (long scraped off) is knifed again
+            // from the pile, as it was last seen, and the pile follows it
+            if st.borrow().board.heap(p.heap).is_none() {
+                p.heap = st.borrow_mut().board.knife(p.mix.parts.clone(), p.given_sum, p.medium, p.mix.solvent, p.mix.oil_rate, None);
+            }
             st.borrow_mut().board.add(p.heap, &add, medium).map_err(mlua::Error::runtime)?;
-            let now = resolve(&st, p.clone(), None);
+            let mut now = resolve(&st, p.clone(), None);
+            // the pile's recipe reads as knifed and added to
+            for &(i, k) in &add {
+                let name = tubes.tubes[i].name;
+                match now.parts.iter_mut().find(|q| q.0 == name) {
+                    Some(q) => q.1 += k,
+                    None => now.parts.push((name.to_string(), k)),
+                }
+            }
+            if let Some(h) = st.borrow().board.heap(p.heap) {
+                now.given_sum = h.volume() * h.given_sum;
+            }
             time::knife(&st, now.mix.color);
             Ok(now)
         });
@@ -1833,7 +1852,7 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
             let heap = st.borrow_mut().board.knife(parts.clone(), given_sum, medium, turps, oil_rate, name);
             // knifing it takes the hand a while
             time::knife(&st, mix.color);
-            Ok(PileU { mix, medium, thinner, parts: given, heap, st: Some(st.clone()) })
+            Ok(PileU { mix, medium, thinner, parts: given, given_sum, heap, st: Some(st.clone()) })
         })?)?;
     }
 
@@ -1882,7 +1901,7 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
             let name = t.get::<Option<String>>("name")?;
             let heap = st.borrow_mut().board.knife(parts, 1.0, medium, solvent, oil, name);
             time::knife(&st, mix.color);
-            Ok(PileU { mix, medium, thinner: Some(thinner), parts: given, heap, st: Some(st.clone()) })
+            Ok(PileU { mix, medium, thinner: Some(thinner), parts: given, given_sum: 1.0, heap, st: Some(st.clone()) })
         })?)?;
     }
     // palette{dirty=0..1, set_out={"tube name", ...}, clean=true}: how the board

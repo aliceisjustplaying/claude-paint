@@ -151,6 +151,13 @@ const END_MM: f32 = 8.0;
 const SOAK: f32 = 0.35;
 const SMEAR: f32 = 0.2;
 
+/// How many of the paint's properties (`wet::Prop`) the rag carries and
+/// smears: engine 4 all of them (its turpentine and oil too), engine 3 the
+/// first three, as it always did.
+fn hide_mixed(engine: u32) -> usize {
+    if engine >= 4 { crate::wet::Prop::default().len() } else { 3 }
+}
+
 /// Paint at the cloth's surface during one wipe (engine 3, `SMEAR`):
 /// coats × pixels, its mean color, hiding and cure, and its solvent (µm ×
 /// pixels).
@@ -413,6 +420,7 @@ impl Canvas {
         let mut lifted_s = 0.0f64;
         let mut got = Pool::default();
         let pooled = pool.is_some();
+        let nh = hide_mixed(self.engine);
         for y in y0..y1 {
             let mut row = 0.0f32;
             let mut row_s = 0.0f32;
@@ -449,7 +457,7 @@ impl Canvas {
                             got.lat[q] += l[q] * take;
                         }
                         let h = &self.wet.hide[i];
-                        for q in 0..3 {
+                        for q in 0..nh {
                             got.hide[q] += h[q] * take;
                         }
                         if timed {
@@ -528,7 +536,7 @@ impl Canvas {
             for q in 0..pl.lat.len() {
                 pl.lat[q] = (pl.lat[q] * v0 + got.lat[q]) / t;
             }
-            for q in 0..3 {
+            for q in 0..hide_mixed(self.engine) {
                 pl.hide[q] = (pl.hide[q] * v0 + got.hide[q]) / t;
             }
             pl.cure = (pl.cure * v0 + got.cure) / t;
@@ -544,12 +552,13 @@ impl Canvas {
     fn rag_lay(&mut self, i: usize, v: f32, pl: &Pool, solv_um: f32) {
         let t = self.wet.vol[i] + v;
         let a = v / t;
+        let nh = hide_mixed(self.engine);
         let l = &mut self.wet.lat[i];
         for k in 0..l.len() {
             l[k] += (pl.lat[k] - l[k]) * a;
         }
         let hd = &mut self.wet.hide[i];
-        for k in 0..3 {
+        for k in 0..nh {
             hd[k] += (pl.hide[k] - hd[k]) * a;
         }
         if self.wet.clock.px.len() == self.wet.vol.len() {

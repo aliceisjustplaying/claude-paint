@@ -1,0 +1,39 @@
+   Compiling paint v0.1.0 (~/src/a/claude-paint/crates/paint)
+    Finished `release` profile [optimized] target(s) in 1.08s
+     Running tests/look_sienna.rs (target/release/deps/look_sienna-3a0ad958ef2bdf8d)
+
+running 2 tests
+card bands: black Y 0.0126, white Y 0.7912
+raw sienna: masstone Y 0.1735, scattering 0.2961 per coat, hiding of one coat 0.4000
+burnt sienna: masstone Y 0.0797, scattering 0.1989 per coat, hiding of one coat 0.4500
+
+(1) a uniform film, the engine's own optics (Kubelka-Munk), thinned or not alike (the solvent has no color):
+     3 µm raw sienna  : contrast ratio on a black/80% white chart Y 0.047  R 0.044 G 0.047 B 0.091; on the card's bands Y 0.062  R 0.060 G 0.062 B 0.115; difference kept on the card 78.8%
+     3 µm burnt sienna: contrast ratio on a black/80% white chart Y 0.035  R 0.030 G 0.036 B 0.059; on the card's bands Y 0.051  R 0.047 G 0.051 B 0.080; difference kept on the card 66.5%
+    10 µm raw sienna  : contrast ratio on a black/80% white chart Y 0.169  R 0.143 G 0.177 B 0.798; on the card's bands Y 0.182  R 0.153 G 0.191 B 0.821; difference kept on the card 49.7%
+    10 µm burnt sienna: contrast ratio on a black/80% white chart Y 0.154  R 0.104 G 0.192 B 0.661; on the card's bands Y 0.166  R 0.116 G 0.206 B 0.695; difference kept on the card 30.6%
+    25 µm raw sienna  : contrast ratio on a black/80% white chart Y 0.452  R 0.341 G 0.522 B 1.000; on the card's bands Y 0.457  R 0.342 G 0.532 B 1.000; difference kept on the card 20.5%
+    25 µm burnt sienna: contrast ratio on a black/80% white chart Y 0.438  R 0.277 G 0.761 B 0.999; on the card's bands Y 0.439  R 0.281 G 0.767 B 0.999; difference kept on the card 10.5%
+    30 µm raw sienna  : contrast ratio on a black/80% white chart Y 0.537  R 0.403 G 0.631 B 1.000; on the card's bands Y 0.539  R 0.402 G 0.639 B 1.000; difference kept on the card 15.6%
+    30 µm burnt sienna: contrast ratio on a black/80% white chart Y 0.512  R 0.337 G 0.877 B 1.000; on the card's bands Y 0.511  R 0.339 G 0.881 B 1.000; difference kept on the card 8.2%
+
+(2) the card painted as check 13 (b) paints it, twenty strokes at load 0.5:
+  thinner 0: raw sienna   mean paint 37.92 µm; contrast ratio Y 0.500  R 0.413 G 0.553 B 0.984; difference kept 17.9%
+  thinner 0: burnt sienna mean paint 37.92 µm; contrast ratio Y 0.464  R 0.343 G 0.655 B 0.968; difference kept 9.8%
+  thinner 0.5: raw sienna   mean paint 1.64 µm; contrast ratio Y 0.040  R 0.041 G 0.040 B 0.051; difference kept 87.3%
+  thinner 0.5: burnt sienna mean paint 1.64 µm; contrast ratio Y 0.033  R 0.034 G 0.033 B 0.039; difference kept 79.7%
+test siennas_by_contrast_ratio ... ok
+
+thread 'siennas_side_by_side' (37339) panicked at crates/paint/tests/look_sienna.rs:135:106:
+called `Result::unwrap()` on an `Err` value: IoError(Os { code: 2, kind: NotFound, message: "No such file or directory" })
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+test siennas_side_by_side ... FAILED
+
+failures:
+
+failures:
+    siennas_side_by_side
+
+test result: FAILED. 1 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.64s
+
+error: test failed, to rerun pass `-p paint --test look_sienna`

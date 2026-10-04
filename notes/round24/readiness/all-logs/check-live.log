@@ -1,0 +1,2 @@
+$ scripts/tests/check_live.sh
+check_live: check_painting passed the live canvas and save (also compressed), failed another canvas and another save, and said replay only without either (/tmp/cpt.w7epf5hu/cl.HvWvuE)

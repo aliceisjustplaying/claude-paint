@@ -2,7 +2,7 @@
 
 ## Current state
 
-- October 4, 2026: painting candidate `f75e27f`. The old Pi agents are
+- October 4, 2026: painting candidate is the `round-24` tag. The old Pi agents are
   stopped and their lane worktrees removed. Development is on the M3.
 - Exchange stays off; lane A's experiment is retained on `e3/a-exchange`,
   not integrated. Flow is integrated from `fbe0d43`; rag path consistency
@@ -33,7 +33,7 @@
   and clarified Lua option types and pressure. The approved system prompt
   and studio rules remain. Runner checks: 255 passed after these edits
   ([log](readiness/prompts-recheck.log)).
-- The detached `claude-paint-r24run` checkout is clean at `f75e27f`.
+- The detached `claude-paint-r24run` checkout is prepared for `round-24`.
   This adds the approved simplified thickness note; its research evidence
   stays in the repository and the existing export strips it successfully.
   Engine code is unchanged from the tested candidate. The runner now
@@ -43,6 +43,8 @@
   whole painting and details, continue while an improvement is identified
   and finish when judged resolved. The rendered brief and gallery runner
   copy were verified after this change.
+  The brief also includes the owner's requested optional invitation:
+  "You may sign the painting."
   Refreshed Inness export/probe and runner dry run passed; the copied
   runner uses the revised prompts ([log](readiness/launch-refresh.log)). The private
   viewer returns HTTP 200 at <http://m3p.tailec2dc.ts.net:8765/> from the M3;
@@ -50,15 +52,15 @@
   explicitly requested live website publication of this engine-3 painting;
   the new studio stays included in the regular export.
 
-Ready to kick off. Not done yet: tag `round-24` at the painting candidate
-and start the painter. Launch remains held for the owner's go-ahead.
+The owner authorized launch with `claude-fable-5-1`, website sync and OBS
+streaming. The model retains high thinking and pi-black.
 Raw verification logs are local evidence, not publication files.
 
 ## What is set
 
 - `notes/round24/runner/r21_chains.py`: lane `INNS` uses
-  `anthropic/claude-opus-5-5` with thinking `high`, and pi-black.
-  `TAG = "round-24"` is the one pending value. `BRANCH = TAG`, and
+  `anthropic/claude-fable-5-1` with thinking `high`, and pi-black.
+  `TAG = "round-24"`, `BRANCH = TAG`, and
   `BASE = ~/src/a/claude-paint-r24run`. `EXPORT`, `FINISH`, `CHECK`,
   `NAMES` and `strip_sources` resolve under `BASE/scripts/`, and
   `H = BASE/harness/painter`.
@@ -125,6 +127,12 @@ tagging it: the runner copied in step 4 comes from the tag.
    automatically. Preserve the three existing exclusions. The exporter's
    identity scrubbing and publication checks remain enabled. Once the
    painter starts, verify its entry and growing events on the public site.
+   Round 24's studio ID is reserved in the gallery runner's
+   `run/studios.json`: `INNS1` is `paint-studio-ea8319`.
+   OBS's `Live studio` browser source is already pointed to
+   `http://127.0.0.1:8766/?p=paint-studio-ea8319&stream=1` and waits for
+   the painter to begin. Preserve this mapping at launch.
+   The owner has authorized starting streaming before the painter.
 7. Launch, the same way as round 23:
    ```
    cd ~/tmp/gallery-fcf9c110/r24 && mkdir -p run && \
@@ -132,7 +140,7 @@ tagging it: the runner copied in step 4 comes from the tag.
    ```
 8. Confirm that the painter is using the easel. `run/chains.log` should
    show `INNS1: exporting inness studio from round-24`, then
-   `easel "painting" open`, then `sitting 1 (claude-opus-5-5, ...)`. The
+   `easel "painting" open`, then `sitting 1 (claude-fable-5-1, ...)`. The
    chunk count should then grow:
    ```
    s=$(python3 -c 'import json;print(json.load(open("run/studios.json"))["INNS1"])')

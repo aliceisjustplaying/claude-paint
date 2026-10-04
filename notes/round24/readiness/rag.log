@@ -1,0 +1,29 @@
+
+running 10 tests
+test rag::tests::contracts::a_dirty_face_carries_wet_paint_and_a_refolded_one_none ... ok
+test rag::tests::contracts::a_full_face_takes_no_more_and_loses_nothing ... ok
+test rag::tests::contracts::a_wipe_does_not_depend_on_how_many_points_give_its_path ... ok
+tone 0.478; dry rag: tint 0.206 (43% of the tone), film off tops 95% hollows 75%; with spirits: tint 0.111 (23%), film off tops 97% hollows 90%
+
+thread 'rag::tests::a_dry_rag_leaves_a_pale_tint_and_spirits_lift_nearly_to_the_ground' (28591) panicked at crates/paint/src/rag.rs:1611:9:
+spirits lift nearly all the film: (0.9744869296698226, 0.8993446396277543, 0.9429845376359838)
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+test rag::tests::a_dry_rag_leaves_a_pale_tint_and_spirits_lift_nearly_to_the_ground ... FAILED
+damp=false pass=1: paint left 91.2%, tone left 76.7%
+damp=false pass=2: paint left 89.3%, tone left 66.7%
+damp=true pass=1: paint left 89.9%, tone left 70.1%
+damp=true pass=2: paint left 88.3%, tone left 62.2%
+test rag::tests::repeated_wipes_conserve_paint_and_a_second_damp_wipe_clears_more ... ok
+test rag::tests::table ... ignored
+test rag::tests::the_rag_lifts_open_paint_from_the_tops_first ... ok
+test rag::tests::nothing_is_lifted_past_the_gel_point ... ok
+test rag::tests::thin::table ... ignored
+test rag::tests::the_spirits_in_a_dipped_rag_evaporate ... ok
+
+failures:
+
+failures:
+    rag::tests::a_dry_rag_leaves_a_pale_tint_and_spirits_lift_nearly_to_the_ground
+
+test result: FAILED. 7 passed; 1 failed; 2 ignored; 0 measured; 194 filtered out; finished in 26.29s
+

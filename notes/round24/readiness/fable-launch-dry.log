@@ -1,0 +1,16 @@
+2026-10-04 22:55:15 INNS1: export inness studio (then studio_notes.md, BRIEF.md as briefs/inness.md with this studio's path):
+    cd ~/src/a/claude-paint-r24run && R16_BRANCH=round-24 ~/src/a/claude-paint-r24run/scripts/export_r16_studio inness ~/src/a/paint-studio-34929a
+2026-10-04 22:55:15 INNS1: open the easel (~/src/a/paint-studio-34929a/bin/easel open); it stays open across sittings:
+    cd ~/src/a/paint-studio-34929a && ~/src/a/paint-studio-34929a/bin/easel open
+2026-10-04 22:55:15 INNS1: sitting 1 (painter):
+    cd ~/src/a/paint-studio-34929a && pi --print --no-extensions -e ~/src/a/claude-paint-r24run/harness/painter/painter.ts -e ~/src/a/claude-paint-r24run/harness/painter/compaction.ts --system-prompt ~/src/a/claude-paint-r24run/harness/painter/system_prompt.md --tools paint,look,note,status,log,read --no-context-files --no-skills --no-prompt-templates --no-approve -e ~/.pi/agent/git/github.com/aliceisjustplaying/pi-black/extensions/pi-black.ts --provider anthropic --model claude-fable-5-1 --thinking high 'Your brief is in BRIEF.md in this folder. Your last message is your reply: the painting'"'"'s title if you give it one and a few sentences about the picture.'
+2026-10-04 22:55:15 INNS1: after each sitting: count painting chunks;
+    more sittings until one the painter ends adds no painting chunks (safety cap 4; a usage limit continues its session),
+    at the same open easel (reopened, replaying the log, only if its server is gone); closed after the last:
+    cd ~/src/a/paint-studio-34929a && PAINTER_SITTING_RECOVERY=1 pi --print --no-extensions -e ~/src/a/claude-paint-r24run/harness/painter/painter.ts -e ~/src/a/claude-paint-r24run/harness/painter/compaction.ts --system-prompt ~/src/a/claude-paint-r24run/harness/painter/system_prompt.md --tools paint,look,note,status,log,read --no-context-files --no-skills --no-prompt-templates --no-approve -e ~/.pi/agent/git/github.com/aliceisjustplaying/pi-black/extensions/pi-black.ts --provider anthropic --model claude-fable-5-1 --thinking high 'You'"'"'re back at the easel. The painting is as you left it. Your brief is in BRIEF.md and your journal in notes/journal.md.'
+2026-10-04 22:55:15 INNS1: check (background, after the last sitting; result in the log):
+    cd ~/src/a/claude-paint/notes/round24/runner/run && nice ~/src/a/claude-paint-r24run/scripts/check_painting ~/src/a/paint-studio-34929a ~/src/a/claude-paint/notes/round24/runner/run/INNS/p1_check
+2026-10-04 22:55:15 INNS1: finishing (background, after the last sitting):
+    cd ~/src/a/claude-paint/notes/round24/runner/run && ~/src/a/claude-paint-r24run/scripts/finish_painting ~/src/a/paint-studio-34929a/paintings/lua/painting.lua ~/src/a/claude-paint/notes/round24/runner/run/INNS1_finished.png
+2026-10-04 22:55:15 lane INNS finished
+2026-10-04 22:55:15 all lanes finished

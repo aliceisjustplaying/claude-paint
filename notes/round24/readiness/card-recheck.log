@@ -1,0 +1,17 @@
+
+running 1 test
+test thinner_tests::c01_the_card_raw_sienna_thinned_half_keeps_half_the_contrast_at_2400px has been running for over 60 seconds
+test thinner_tests::c01_the_card_raw_sienna_thinned_half_keeps_half_the_contrast_at_2400px ... ok
+
+successes:
+
+---- thinner_tests::c01_the_card_raw_sienna_thinned_half_keeps_half_the_contrast_at_2400px stdout ----
+Cell { load: 0.3, thinner: 0.5, kept: 0.8823689, contrast_before: 0.8064066, solvent_after_pass: 0.0058400417609960065, solvent_at_measure: 0.0, canvas_solvent_after_pass: 23.335770127789004, canvas_solvent_at_measure: 1.851303102494373e-5, tau_after_pass: 3.466657257080078, tau_at_measure: 3.4666571044921874, waited: 36.0, paint: 1856252.0987421726 }
+Cell { load: 0.6, thinner: 0.5, kept: 0.8552541, contrast_before: 0.8063278, solvent_after_pass: 3339.616518805275, solvent_at_measure: 0.002656416662535802, canvas_solvent_after_pass: 23.335770127789004, canvas_solvent_at_measure: 1.851303102494373e-5, tau_after_pass: 3.466657257080078, tau_at_measure: 3.4666571044921874, waited: 36.0, paint: 2361620.3213754455 }
+
+
+successes:
+    thinner_tests::c01_the_card_raw_sienna_thinned_half_keeps_half_the_contrast_at_2400px
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 84 filtered out; finished in 127.13s
+

@@ -1,0 +1,19 @@
+$ scripts/tests/lockrun.sh
+ok 1 - normal completion: exit code, stdout, log and record
+ok 2 - record written before work: the job reads its own token, group and owner
+ok 3 - timeout: exit 124, group stopped, record 'timeout', log kept
+ok 4 - timeout with a job ignoring SIGTERM: SIGKILL after the grace period
+ok 5 - cancellation by SIGTERM: group stopped, record 'cancelled', exit 130
+ok 6 - cancellation by SIGINT: group stopped, record 'cancelled', exit 130
+ok 7 - leftovers stopped when the command exits
+ok 8 - waiting job leaves the record alone; B starts only after A ends; history kept
+ok 9 - --lock-timeout: exit 75, nothing ran, record untouched
+ok 10 - helper killed with its job alive: the trampoline's lock keeps others out until the job ends
+ok 11 - helper and lock holder killed, command alive: the process-group guard keeps others out
+ok 12 - a daemon that leaves the job's group doesn't hold the lock and isn't stopped
+ok 13 - helper killed before permission: the job exits without working; lock free
+ok 14 - nesting: inner calls run directly (no deadlock), inner timeout 124
+ok 15 - a stale LOCKRUN_TOKEN waits like anyone else
+ok 16 - usage: --timeout required; --status
+ok 17 - an unrelated process outside lockrun survived every case
+lockrun: all 17 checks passed

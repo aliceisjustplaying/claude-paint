@@ -1,0 +1,90 @@
+FF.                                                                      [100%]
+=================================== FAILURES ===================================
+_____________ test_sitting_cap_changes_during_painting[1-edits0-3] _____________
+
+tmp_path = PosixPath('/private/var/folders/6k/24182wv136749r3p852rft740000gn/T/pytest-of-user/pytest-2/test_sitting_cap_changes_durin0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x10900fbb0>
+initial = '1', edits = ['3', 'bad', '2'], expected = 3
+
+    @pytest.mark.parametrize("initial, edits, expected", [
+        ("1", ["3", "bad", "2"], 3),
+        ("4", ["1"], 1),
+        (None, ["-1", "", "4", "4"], 4),
+    ])
+    def test_sitting_cap_changes_during_painting(tmp_path, monkeypatch, initial, edits, expected):
+        monkeypatch.setattr(rc21, "RUN", tmp_path)
+        monkeypatch.setattr(rc21, "LANES", {"T": rc21.lane("inness", rc21.OPUS)})
+        messages = []
+        monkeypatch.setattr(rc21, "log", lambda *a: None)
+        monkeypatch.setattr(rc21, "stop_leftovers", lambda *a, **kw: None)
+        monkeypatch.setattr(rc21, "open_easel", lambda *a: True)
+        monkeypatch.setattr(rc21, "close_easel", lambda *a: None)
+        monkeypatch.setattr(rc21, "session_dir", lambda *a: tmp_path)
+        monkeypatch.setattr(rc21, "count_chunks", lambda *a: len(messages))
+        monkeypatch.setattr(rc21, "count_painting", lambda *a: len(messages))
+        cap = tmp_path / "max_sittings.txt"
+        if initial is not None:
+            cap.write_text(initial)
+    
+        def painter(cmd, cwd, out, err, env=None):
+            messages.append(cmd[-1])
+            if len(messages) <= len(edits):
+                cap.write_text(edits[len(messages) - 1])
+            out.write_text("A painting.")
+            err.write_text("")
+            return 0
+    
+        monkeypatch.setattr(rc21, "run", painter)
+        rc21.paint("T", 1, tmp_path / "studio", tmp_path)
+        records = json.loads((tmp_path / "p1_sittings.json").read_text())
+>       assert len(records) == expected
+E       AssertionError: assert 4 == 3
+E        +  where 4 = len([{'sitting': 1, 'part': 1, 'status': 'completed', 'start': '2026-10-04 22:42:54', ...}, {'sitting': 2, 'part': 1, 'sta...t': '2026-10-04 22:42:54', ...}, {'sitting': 4, 'part': 1, 'status': 'completed', 'start': '2026-10-04 22:42:54', ...}])
+
+notes/round24/runner/test_r21_chains.py:46: AssertionError
+_____________ test_sitting_cap_changes_during_painting[4-edits1-1] _____________
+
+tmp_path = PosixPath('/private/var/folders/6k/24182wv136749r3p852rft740000gn/T/pytest-of-user/pytest-2/test_sitting_cap_changes_durin1')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x10900f950>
+initial = '4', edits = ['1'], expected = 1
+
+    @pytest.mark.parametrize("initial, edits, expected", [
+        ("1", ["3", "bad", "2"], 3),
+        ("4", ["1"], 1),
+        (None, ["-1", "", "4", "4"], 4),
+    ])
+    def test_sitting_cap_changes_during_painting(tmp_path, monkeypatch, initial, edits, expected):
+        monkeypatch.setattr(rc21, "RUN", tmp_path)
+        monkeypatch.setattr(rc21, "LANES", {"T": rc21.lane("inness", rc21.OPUS)})
+        messages = []
+        monkeypatch.setattr(rc21, "log", lambda *a: None)
+        monkeypatch.setattr(rc21, "stop_leftovers", lambda *a, **kw: None)
+        monkeypatch.setattr(rc21, "open_easel", lambda *a: True)
+        monkeypatch.setattr(rc21, "close_easel", lambda *a: None)
+        monkeypatch.setattr(rc21, "session_dir", lambda *a: tmp_path)
+        monkeypatch.setattr(rc21, "count_chunks", lambda *a: len(messages))
+        monkeypatch.setattr(rc21, "count_painting", lambda *a: len(messages))
+        cap = tmp_path / "max_sittings.txt"
+        if initial is not None:
+            cap.write_text(initial)
+    
+        def painter(cmd, cwd, out, err, env=None):
+            messages.append(cmd[-1])
+            if len(messages) <= len(edits):
+                cap.write_text(edits[len(messages) - 1])
+            out.write_text("A painting.")
+            err.write_text("")
+            return 0
+    
+        monkeypatch.setattr(rc21, "run", painter)
+        rc21.paint("T", 1, tmp_path / "studio", tmp_path)
+        records = json.loads((tmp_path / "p1_sittings.json").read_text())
+>       assert len(records) == expected
+E       AssertionError: assert 4 == 1
+E        +  where 4 = len([{'sitting': 1, 'part': 1, 'status': 'completed', 'start': '2026-10-04 22:42:54', ...}, {'sitting': 2, 'part': 1, 'sta...t': '2026-10-04 22:42:54', ...}, {'sitting': 4, 'part': 1, 'status': 'completed', 'start': '2026-10-04 22:42:54', ...}])
+
+notes/round24/runner/test_r21_chains.py:46: AssertionError
+=========================== short test summary info ============================
+FAILED notes/round24/runner/test_r21_chains.py::test_sitting_cap_changes_during_painting[1-edits0-3]
+FAILED notes/round24/runner/test_r21_chains.py::test_sitting_cap_changes_during_painting[4-edits1-1]
+2 failed, 1 passed, 94 deselected in 0.09s

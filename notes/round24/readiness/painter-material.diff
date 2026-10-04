@@ -1,0 +1,356 @@
+# Previous Inness (round 23, paint-studio-496bb9) -> engine 3 (round-24)
+# Actual exported studio text compared, including the Inness tube table and stripped research notes.
+# Studio path normalized to <studio>. Journal starts empty in both; previous painter-generated entries excluded.
+# Future tool results, images, journal entries and state-dependent summaries cannot be compared before painting.
+# This is a supplied-material comparison, not a captured future provider request.
+
+# UNCHANGED: system_prompt.md
+
+# UNCHANGED: PAINTER_MSG
+
+# UNCHANGED: SITTING_MESSAGE
+
+# UNCHANGED: CONTINUE_MESSAGE
+
+--- round-23/BRIEF.md
++++ engine-3/BRIEF.md
+@@ -7,11 +7,10 @@
+ 
+ ## Your studio
+ - The folder ~/src/a/<studio>: this brief, your notes and the easel.
+-- You paint at the easel: paint a chunk, look at the canvas, paint the
+-  next. Its tools are `paint`, `look`, `note`, `status` and `log`;
++- The easel's tools are `paint`, `look`, `note`, `status` and `log`;
+   notes/easel_guide.md explains them.
+ - There is no undo. To change a passage, paint over it, or lift wet
+-  paint off with a brush.
++  paint with a rag or a brush.
+ - You mix your own paint on the palette, from the tubes, in the
+   proportions you choose.
+ - Time passes on the painting's own clock: every mark takes the time a
+@@ -33,10 +32,12 @@
+ 
+ ## Working
+ - You make every artistic decision.
+-- Look at your painting often, whole and close up.
+ - Keep a working journal with `note` as you go: your own working notes.
+   You can revise them.
+-- Develop the painting until you judge it complete.
++- You may sign the painting.
++- Before finishing, inspect the whole painting and its details. Continue
++  while you can identify a change that would improve the painting you
++  intend to make. Finish when you judge it resolved.
+ 
+ ## Your reply
+ When you stop working, reply with the painting's title if you give it one
+
+--- round-23/notes/easel_guide.md
++++ engine-3/notes/easel_guide.md
+@@ -1,14 +1,15 @@
+ # The easel
+ 
+-The easel is a live oil painting. You send it Lua chunks with its `paint`
+-tool, one at a time, and look at the canvas between them with `look`. Under it is a physical paint simulator: simulated
++The easel is a live oil painting. Its `paint` tool runs Lua chunks one at
++a time; `look` shows the canvas. Under it is a physical paint simulator: simulated
+ bristles carry wet paint over a primed linen canvas, the paint levels and
+ dries on a clock, and layers combine by Kubelka–Munk optics.
+ 
+ Three things hold for every session:
+ 
+ - **Every chunk that runs stays on the canvas.** There is no undo. To
+-  change something, paint over it, or lift wet paint off with a brush.
++  change something, paint over it, or lift wet paint off with a brush or
++  a rag.
+ - **A chunk that stops with an error changes nothing.** The canvas, your
+   variables, the paint on your brushes and the clock are as they were
+   before it, and it isn't written to the log.
+@@ -21,7 +22,7 @@
+ 
+ | tool | what it does |
+ |---|---|
+-| `paint` | runs a chunk of Lua. The reply is what the chunk printed, then `ok` |
++| `paint` | runs a chunk of Lua. The reply is what the chunk printed, the painting's current clock, then `ok` |
+ | `look` | shows you the canvas as it is now, or your palette (see [Looking](#looking)) |
+ | `note` | adds an entry to your journal (see [The journal](#the-journal)) |
+ | `status` | the canvas's setup |
+@@ -86,7 +87,7 @@
+ |---|---|---|---|---|---|
+ | lead white | basic lead carbonate | 0.82 | 0.8 | 1.0 | 2.0 |
+ | lemon chrome | pale lead chromate with lead sulfate | 0.8 | 0.7 | 0.8 | 1.8 |
+-| cadmium yellow | cadmium sulfide | 0.85 | 0.7 | 1.1 | 0.6 |
++| cadmium yellow | cadmium sulfide | 0.85 | 0.7 | 1.1 | 0.9 |
+ | yellow ochre | hydrated iron oxide earth | 0.8 | 0.7 | 0.8 | 0.8 |
+ | raw sienna | sienna earth, unroasted | 0.4 | 0.5 | 0.7 | 1.2 |
+ | orange chrome | basic lead chromate | 0.88 | 0.75 | 0.9 | 1.8 |
+@@ -94,8 +95,8 @@
+ | Indian red | nearly pure ferric oxide | 0.92 | 0.7 | 1.2 | 1.0 |
+ | raw umber | iron and manganese oxide earth | 0.8 | 0.65 | 0.9 | 2.4 |
+ | bitumen | asphaltum | 0.12 | 0.3 | 0.7 | 0.15 |
+-| bone black | charred bone (carbon, calcium phosphate) | 0.9 | 0.7 | 1.1 | 0.4 |
+-| cobalt blue | cobalt aluminate | 0.55 | 0.6 | 0.8 | 1.4 |
++| bone black | charred bone (carbon, calcium phosphate) | 0.9 | 0.7 | 1.1 | 0.9 |
++| cobalt blue | cobalt aluminate | 0.55 | 0.6 | 0.8 | 2.2 |
+ | Antwerp blue | Prussian blue on an alumina base | 0.4 | 0.45 | 1.6 | 1.6 |
+ 
+ Hiding is how much one coat of the tube paint hides what is under it (0
+@@ -104,6 +105,48 @@
+ pigment. Drying is the rate relative to average paint (higher dries
+ faster); a pile dries at its tubes' rates mixed by volume. These numbers
+ are estimates from the pigment literature, not measurements.
++
++### Thinner
++
++```lua
++w = pile{{"<tube>", <parts>}, thinner=0.5}          -- 0 (none) to 0.9
++print(w)                         -- pile(<tube> <parts>; medium 0, thinner 0.5)
++print(w.thinner)                 -- 0.5 (0.0 for a pile without it)
++```
++
++`thinner` is the share of solvent (turpentine, spirits) by volume knifed
++into the pile, 0 to 0.9. It is not `medium`: medium is oil and stays in
++the film; the solvent leaves it. What a pile is made of doesn't change
++with thinner: its pigments, oil, body and drying rate are the paint's own.
++
++What it does:
++
++- A brushload of thinned paint is liquid, part paint and part solvent.
++  One stroke of it lays only a thin film: each spot on the canvas takes
++  at most a set thickness of liquid from one stroke, however many hairs
++  or how many times the stroke passes over it. The more solvent, the
++  thinner that film (about 6 µm at thinner 0.5). What the stroke can't
++  lay stays in the brush, so a loaded brush goes a long way; another
++  stroke over the same spot lays more.
++- The solvent leaves over painting time, whether you wait or keep
++  painting: in a thin film a few minutes, longer in a thicker one. The
++  paint stays. Once it has gone, what is left is a thinner film
++  of the paint itself, and more of what is under it shows through.
++- While it is there the wet paint is more fluid: it levels and spreads a
++  little, carrying its solvent with it. As the solvent goes, the paint
++  firms up to its own body. The oil dries at its own rate all the while.
++- Solvent has no color: the picture shows the paint alone.
++- A brush or rag that lifts solvent-wet paint takes the solvent with it.
++
++What it doesn't do (left out on purpose): the solvent doesn't evaporate
++from the brush or the pile on the palette (a pile keeps its thinner), it
++doesn't soak into the ground, and it doesn't dissolve paint that has set
++or dried underneath. Solvent-wet paint comes up on a brush or rag no more
++readily than the same paint without it. The thickness limits and the
++evaporation times are estimates, not measurements.
++
++Thinner is new with this engine: a painting started on an older one
++doesn't have it.
+ 
+ ## Brushes and strokes
+ 
+@@ -125,7 +168,8 @@
+ Widths are in canvas units. A brush keeps its paint across strokes and
+ chunks, so strokes from one load run dry, and a brush that has been
+ through wet paint carries some of it. Pressure ranges from 0 (lifted)
+-to 1 (fully pressed); a stroke's `pressure` is `{start, end}`.
++to 1 (fully pressed); a stroke's `pressure` takes a number for constant
++pressure or `{start, end}`. A touch's `pressure` takes a number.
+ `ramps` gives the press-down and lift-off fractions, `swell` pressure factors
+ along the stroke, `orient` `"across"`, `"along"` or a fixed angle.
+ 
+@@ -156,7 +200,7 @@
+ | `hatch` | round 2.6 | 5–12 units, nearly straight, side by side, clumped |
+ | `glaze` | soft filbert 26 | 120–300 units, light pressure |
+ | `scumble` | filbert 9 | 10–20 units, worked back and forth |
+-| `blend` | badger 40 | a clean blender, crossing passes top to bottom, inside the mask |
++| `blend` | badger 40 | a clean blender, crossing passes top to bottom, inside the mask. It is wiped clean as it goes, so it lifts paint as well as moving it: one pass takes up about 15% of a thin wet film, three passes about 40% |
+ 
+ | option | meaning |
+ |---|---|
+@@ -297,6 +341,61 @@
+ hollows, and leaves a ghost. Once paint has gone over the drawing it is
+ sealed: thin paint lets it show through, body paint hides it.
+ 
++## The rag
++
++```lua
++r = rag()                                -- a clean cotton rag bunched into a pad, about 40 mm across
++r = rag{width=<units>}
++r:wipe(m, {pressure=0.5, angle=<radians>, passes=1, refold=<load>})   -- wiped over a mask
++r:wipe(pts, {pressure={0.4, 0.8}})       -- one wipe along a path
++r:blot(x, y, {pressure=0.6})             -- pressed straight down and lifted off
++r:refold()                               -- a cleaner, dry part of the cloth turned outward
++r:dip(0.5)                               -- the part in use dipped into spirits, 0..1
++print(r)                                 -- rag(width <units>, load <0..1>); also r.load, r.soaked, r.damp, r.fold
++```
++
++A rag lifts open paint. The cloth rests on the tops of the weave and of
++the paint, and reaches into the hollows as it is pressed harder
++(`pressure` 0..1): paint comes off the tops first and stays longer in the
++hollows. The last of a film comes away more and more slowly, so a dry rag
++leaves a pale tint of the color that more wiping thins. Toward its rim the
++pad presses lightly and reaches only the tops of the weave, so the edge of
++a wipe shows the weave. Its folds and creases touch unevenly, so a wipe
++leaves streaks along its path and a blot a crumpled patch. During a wipe,
++a little freshly lifted paint smears back along the lightly pressed edges
++and trailing end.
++
++Fresh paint at the face's surface can smear into the next wipe too. It
++gradually soaks into the cloth; refolding turns that paint inward.
++
++A rag dipped in spirits (`r:dip`, 0..1) lifts wet paint more readily and
++reaches farther into the hollows. It works gradually: wipe after wipe
++takes the paint nearly to the ground. Its folds still leave streaks.
++Dampness (`r.damp`) halves every three minutes of painting time; a refold
++turns out a dry part, and another dip wets it again.
++
++What it lifts soaks into the cloth. `r.load` is how loaded the part in use
++is (0 clean, 1 full): the more loaded, the less it lifts. `r:refold()`
++turns a cleaner part outward, but no part is cleaner than what has soaked
++through the whole cloth (`r.soaked`, 0..1) leaves it; `rag()` takes a
++fresh one. These numbers can be read, not set. Over a mask, `refold=`
++refolds whenever the load passes that value.
++
++Over a mask, `wipe` lays wipes side by side across it in `angle`'s
++direction, back and forth, each starting and stopping a little inside the
++mask. The pad's rim reaches the mask's edge, and in places past it:
++the rag isn't clipped to the mask. `passes` goes over it again, each time
++a little turned. `seed=` fixes the cloth's folds.
++
++**What it can't reach.** It lifts only open paint, and less the further
++the paint has set: paint that is `"setting"` comes away slowly, and paint
++past its gel point (`"tacky"` or `"dry"` under `drying(x, y)`) doesn't come
++off at all. Paint laid over a set film lifts down to that film.
++
++Hand time: a wipe takes the time to bring the pad down and drag it, at
++about 150 mm a second; a blot about a second; a refold 3 seconds; a dip
++2.5 seconds; a fresh rag 5 seconds.
++
+ ## Solids, light and space
+ 
+ These are scaffolds for shapes you give them: they answer where light
+@@ -365,6 +464,9 @@
+ `wait(minutes)` advance it. Real time between chunks does not: paint
+ doesn't dry while you think. `wait(minutes)` passes painting time at once;
+ it doesn't make you wait that many real minutes.
++
++Every successful paint reply reports the current painting time automatically,
++before `ok`.
+ 
+ - **Hand time.** Every stroke, touch, pass and trip to the palette takes
+   the time a hand takes to make it: a stroke by its length and the
+@@ -382,8 +484,14 @@
+   blends), `"tacky"` (set; it grabs the brush) or `"dry"` (touch-dry).
+ 
+ Each film dries at its own pace, set by its pigments, its thickness and
+-its oil. Thin lean paint of fast-drying pigments is touch-dry in a day;
+-thick, oily paint of slow pigments can stay open for weeks. Wet paint
++its oil. It is open for the first 30% of its time to touch-dry, setting
++until 60%, then tacky until it is touch-dry. A stroke of lead white or raw
++umber from a loaded broad brush is open for 12 to 14 hours, tacky after
++about a day and touch-dry in under two days. Cobalt blue, Prussian blue
++and burnt sienna are about as fast. Raw sienna, ochres, earths, cadmiums,
++ultramarine and bone black are touch-dry in 3½ to 5 days, madder in about 11.
++Thinner paint dries sooner and thicker paint later: twice a stroke's
++thickness takes 1.6 times as long. Thick, oily paint of slow pigments can stay open for weeks. Wet paint
+ under a new stroke comes up into it; paint laid over dry paint sits on
+ top of it.
+ 
+@@ -419,6 +527,9 @@
+ 
+ ## How chunks behave
+ 
++- **Option types.** Each option takes the type shown in this guide.
++  Options documented as `function(x, y)` accept a Lua function; numeric
++  options take the computed number.
+ - **Globals persist, locals don't.** Each chunk is its own Lua chunk:
+   `p = pile{...}` is there in later chunks, `local p = ...` is not.
+ - **Randomness is deterministic.** `math.random`, `rand` and `randn` are
+@@ -431,12 +542,16 @@
+ - **Lua 5.5.** Numbers are integers or floats (`7 // 2` is 3, `7 / 2` is
+   3.5). Bitwise operators are built in; there is no `unpack` (use
+   `table.unpack`). Loop variables are read-only. Don't write `global`
+-  declarations (one switches its chunk to strict mode).
++  declarations (one switches its chunk to strict mode). There is no
++  `math.atan2`: `math.atan(y, x)` takes two arguments. `%d` in
++  `string.format` needs an integer (`7.5` is an error): use `%.0f` or
++  `math.floor(x)`. Lists and tables are written with braces:
++  `{1, 2}`, `{x = 1}`, never `[1, 2]` or `{x: 1}`.
+ - **`pairs` walks a table in the same order in every session and replay.**
+-  Tables keyed by strings, numbers and booleans walk in Lua's order; a
+-  table with any other key walks in a fixed order (booleans, numbers,
+-  strings, then other keys in the order they were made). For a big list,
+-  `ipairs` is faster.
++  Every table walks in a fixed order: booleans, numbers, strings (each
++  ascending), then other keys in the order they were made. (Paintings
++  begun before engine 3 walk tables keyed by strings, numbers and booleans
++  in Lua's order.) For a big list, `ipairs` is faster.
+ - **No memory addresses.** A table, function or userdata without
+   `__tostring` prints as `table: (hidden)` (its `__name` for the type),
+   in `print`, `tostring`, `string.format`'s `%s` and errors alike, and
+
+# UNCHANGED: notes/research/inness_materials.md
+
+--- round-23/notes/research/oil_paint_physics.md
++++ engine-3/notes/research/oil_paint_physics.md
+@@ -62,6 +62,8 @@
+ ## 3. Film formation and drying
+ 
+ - **Mass and skin timeline.** A titanium white in alkali-refined linseed oil (10 mil ≈ 250 µm film) gained nearly **16%** of its oil weight in the first days. It "begins to skin over" as it nears the peak and is touch-dry at **4–6 days**. Cold-pressed and alkali-refined oils peak at **15–18%** and then slowly lose mass over a year or more[V].
++- **Thickness.** Thicker oil-paint films generally take longer to dry. Drying also depends on pigment, oil and additives. The easel guide describes drying in this studio.
++- **Induction.** Drying oils take up oxygen only after an induction period; driers shorten it or speed the uptake. Lead white alone barely speeds the oxidation of linseed oil, and its impurities (litharge, lead acetate) probably account for its reputation as a drier (Tumosa and Mecklenburg 2005, https://repository.si.edu/handle/10088/8140) [S].
+ - **Skinning and wrinkling.** Oxygen enters through the surface, so a crosslinked skin forms over mobile paint. Wrinkling is a compressive buckle of that skin. It is worse in thick, oil-rich or drier-heavy films[V]. Raising τ_y to about 3200 Pa suppressed wrinkling in model paints[V].
+ - **Long-term shrinkage and brittleness** (films 21–31 years old, cold-pressed linseed oil)[S]:
+ 
+
+# UNCHANGED: bin/THIRD_PARTY_NOTICES.md
+
+# UNCHANGED: bin/box
+
+--- round-23/notes/studio_notes.md
++++ engine-3/notes/studio_notes.md
+@@ -154,10 +154,9 @@
+ 
+ ## Drying and time
+ 
+-49. Paint goes from open (workable) to setting (stiff, barely blends) to
+-    tacky to touch-dry. Lead-white-rich paint gels in about 2 hours and
+-    average paint in about 3.5. A lean coat is touch-dry in about a day;
+-    bone black and lakes take days. Thick or oily paint dries slower.
++49. Paint goes from open (workable) to setting, tacky and touch-dry.
++    Drying depends on pigment, thickness and oil; the guide describes
++    the times at this easel.
+ 50. `wait` ages every point of the canvas at once. Which passages have set
+     depends on their pigment, thickness and oil, not on where you worked.
+ 51. A long pass is painted in 15-minute slices that age
+@@ -171,4 +170,3 @@
+     Thin paint lets a line show and body color hides it. Under a thin first
+     layer a firm line reads as a thin dark line until a fuller layer covers
+     it.
+-
+
+# UNCHANGED: notes/journal.md (initial)
+
+--- round-23/tool-definitions (source)
++++ engine-3/tool-definitions (source)
+@@ -23,7 +23,7 @@
+ 			name: "paint",
+ 			label: "paint",
+ 			description:
+-				"Run a chunk of Lua at the easel (notes/easel_guide.md). The reply is what the chunk printed, then `ok`. " +
++				"Run a chunk of Lua at the easel (notes/easel_guide.md). The reply is what the chunk printed, the painting's current clock, then `ok`. " +
+ 				"A chunk that stops with an error changes nothing.",
+ 			parameters: Type.Object({ lua: Type.String({ description: "the chunk" }) }),
+ 			async execute(_id, p, signal) {
+
+# UNCHANGED: harness/painter.ts
+
+# UNCHANGED: harness/compaction.ts
+
+# UNCHANGED: harness/summary.ts
+
+# UNCHANGED: harness/vision.ts
+
+# UNCHANGED: harness/context-images.ts
+
+# UNCHANGED: harness/easel-client.ts
+
+# RUNTIME: Successful paint replies now include the painting clock before ok.
+# RUNTIME: Tool images, material properties, state and errors come from the changed engine.
+# SETTINGS: Opus 5.5/xhigh changes to claude-fable-5-1/high through pi-black.
+# Framework-supplied read schema/environment metadata are not archived here as wire payloads.

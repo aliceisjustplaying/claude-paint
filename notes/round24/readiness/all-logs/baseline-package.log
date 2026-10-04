@@ -1,0 +1,4 @@
+$ notes/thinner/baseline/tools/verify_package.sh
+verify_package: files and SHA256SUMS disagree:
+79a80
+> tools/__pycache__/state_compare.cpython-313.pyc

@@ -1,0 +1,8 @@
+$ cargo test --release -p paint --test thinner_physics --test thinner_pigments --no-run && cargo test --release -p easel --bin easel --no-run
+   Compiling paint v0.1.0 (~/src/a/claude-paint/crates/paint)
+    Finished `release` profile [optimized] target(s) in 0.40s
+  Executable tests/thinner_physics.rs (target/release/deps/thinner_physics-9e578aac330da38d)
+  Executable tests/thinner_pigments.rs (target/release/deps/thinner_pigments-a25488fe715b8154)
+   Compiling easel v0.1.0 (~/src/a/claude-paint/crates/easel)
+    Finished `release` profile [optimized] target(s) in 36.41s
+  Executable unittests src/main.rs (target/release/deps/easel-00eda35bf27fd053)

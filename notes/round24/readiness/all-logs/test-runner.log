@@ -1,0 +1,19 @@
+$ scripts/tests/test_runner.sh
+ok 1 - normal completion: a TERM-resistant child and an orphaned grandchild are stopped
+ok 2 - a step past its limit inside a group: its TERM-resistant child is stopped at its timeout while the group's other step runs on; the run is unfinished
+ok 3 - the outer timeout (exit 124) stops every step process; the lock is free
+ok 4 - cancelling lockrun (exit 130) stops every step process; the lock is free
+ok 5 - SIGTERM to the coordinator stops the steps; summary unfinished, exit 130; the lock is free
+ok 6 - the coordinator killed: lockrun stops its steps before releasing the lock
+ok 7 - a stale LOCKRUN_TOKEN waits for the lock
+ok 8 - inside a real lockrun job: runs at once, without taking the lock again
+ok 9 - build-only, zero-minimum, uncountable and over-600-s lists are refused before taking the lock
+ok 10 - a target dir set only in Cargo's configuration reaches the steps (fresh easel, not stale)
+ok 11 - a group's steps run at the same time; the summary holds limit, least, group and the runner's hash
+ok 12 - nested in a batch: the step's leftover is stopped, the batch's sibling process is not
+ok 13 - a child that left the group is stopped (normal end and timeout); sccache is left alone
+ok 14 - --locked without the job's token, with another token or with another group's record is refused
+ok 15 - the header line naming the command doesn't count as a test
+ok 16 - a known failure: verdict known_failure (NOT ALL GREEN), exit 4; without its line, with another exit or beside a failure: fail
+ok 17 - two phases, two lockrun jobs; after a failed build the check phase doesn't run
+test_runner: all 17 checks passed

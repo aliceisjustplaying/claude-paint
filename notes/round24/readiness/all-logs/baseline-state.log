@@ -1,0 +1,177 @@
+$ scripts/tests/baseline_state.sh "$CARGO_TARGET_DIR/release/easel"
+compare_build: DIFFERENT from the af49348 baseline
+body: state equal on every baseline field (EQUAL (0 of 2 chunks differ))
+  png same as af49348's; printed output same; state digests different
+overlap: state equal on every baseline field (EQUAL (0 of 3 chunks differ))
+  png same as af49348's; printed output same; state digests different
+pickup: state equal on every baseline field (EQUAL (0 of 4 chunks differ))
+  png same as af49348's; printed output same; state digests different
+rag: STATE DIFFERS
+  chunk-004: DIFFERENT
+    wet.vol: 382 of 8192 values differ (largest |diff| 2.96356 at flat index 1310: 0.9863235950469971 -> 3.9498796463012695)
+    wet.lat: 1371 of 57344 values differ (largest |diff| 0.570469 at flat index 13819: 0.0 -> 0.570469081401825)
+    wet.hide: 572 of 24576 values differ (largest |diff| 0.302577 at flat index 5924: 1.0 -> 1.3025766611099243)
+    clock.cure: 380 of 8192 values differ (largest |diff| 2.72508e-05 at flat index 1974: 0.0 -> 2.7250818675383925e-05)
+    clock.lev: 101 of 8192 values differ (largest |diff| 0.000671387 at flat index 1463: 899.9993286132812 -> 900.0)
+    clock.seen: 382 of 8192 values differ (largest |diff| 2.96356 at flat index 1310: 0.9863235950469971 -> 3.9498796463012695)
+    clock.th: 382 of 8192 values differ (largest |diff| 1.43221 at flat index 1179: 1.9067631959915161 -> 3.3389711380004883)
+    rags.debug: rags[0].load 0.78475475 -> 0.5218438
+    rags.debug: rags[0].soaked 0.06539624 -> 0.043486986
+    rags.debug: added rags[0].mobile.mm3 is not zero (2.2489905)
+    rags.debug: added rags[0].mobile.lat[0] is not zero (0.1793119)
+    rags.debug: added rags[0].mobile.lat[1] is not zero (0.57050514)
+    rags.debug: added rags[0].mobile.lat[2] is not zero (0.23773676)
+    rags.debug: added rags[0].mobile.lat[3] is not zero (0.012446275)
+    rags.debug: added rags[0].mobile.lat[4] is not zero (6.2559266e-5)
+    rags.debug: added rags[0].mobile.lat[5] is not zero (6.785565e-5)
+    rags.debug: added rags[0].mobile.lat[6] is not zero (-0.0037391614)
+    rags.debug: added rags[0].mobile.hide[0] is not zero (0.29761848)
+    rags.debug: added rags[0].mobile.hide[1] is not zero (0.5128036)
+    rags.debug: added rags[0].mobile.hide[2] is not zero (1.3024291)
+    rags.debug: added rags[0].mobile.cure is not zero (1.7961986e-5)
+    rags.debug: added rags[0].mobile.at_min is not zero (7201.013505386982)
+    rags.debug: added rags[0].mobile.at_secs is not zero (60.81032385736012)
+  chunk-005: DIFFERENT
+    wet.vol: 429 of 8192 values differ (largest |diff| 2.96356 at flat index 1310: 0.9863235950469971 -> 3.9498796463012695)
+    wet.lat: 1371 of 57344 values differ (largest |diff| 0.570469 at flat index 13819: 0.0 -> 0.570469081401825)
+    wet.hide: 572 of 24576 values differ (largest |diff| 0.302577 at flat index 5924: 1.0 -> 1.3025766611099243)
+    clock.cure: 427 of 8192 values differ (largest |diff| 2.8848e-05 at flat index 1974: 0.0 -> 2.884795503632631e-05)
+    clock.lev: 101 of 8192 values differ (largest |diff| 0.000671387 at flat index 1463: 899.9993286132812 -> 900.0)
+    clock.seen: 429 of 8192 values differ (largest |diff| 2.96356 at flat index 1310: 0.9863235950469971 -> 3.9498796463012695)
+    clock.th: 429 of 8192 values differ (largest |diff| 1.43221 at flat index 1179: 1.9067631959915161 -> 3.3389711380004883)
+    rags.debug: rags[0].load 0.8446897 -> 0.6073741
+    rags.debug: rags[0].soaked 0.07039082 -> 0.05061451
+    rags.debug: added rags[0].mobile.mm3 is not zero (4.9265437)
+    rags.debug: added rags[0].mobile.lat[0] is not zero (0.16907716)
+    rags.debug: added rags[0].mobile.lat[1] is not zero (0.5853722)
+    rags.debug: added rags[0].mobile.lat[2] is not zero (0.2358846)
+    rags.debug: added rags[0].mobile.lat[3] is not zero (0.009666062)
+    rags.debug: added rags[0].mobile.lat[4] is not zero (0.00019196612)
+    rags.debug: added rags[0].mobile.lat[5] is not zero (0.00018575144)
+    rags.debug: added rags[0].mobile.lat[6] is not zero (-0.0038548547)
+    rags.debug: added rags[0].mobile.hide[0] is not zero (0.29670146)
+    rags.debug: added rags[0].mobile.hide[1] is not zero (0.5051803)
+    rags.debug: added rags[0].mobile.hide[2] is not zero (1.2414428)
+    rags.debug: added rags[0].mobile.cure is not zero (1.2373094e-5)
+    rags.debug: added rags[0].mobile.at_min is not zero (7201.029193304786)
+    rags.debug: added rags[0].mobile.at_secs is not zero (61.75159908493637)
+  chunk-006: DIFFERENT
+    wet.vol: 756 of 8192 values differ (largest |diff| 7.03836 at flat index 1884: 1.9533520936965942 -> 8.991713523864746)
+    wet.lat: 2523 of 57344 values differ (largest |diff| 0.570469 at flat index 13819: 0.0 -> 0.570469081401825)
+    wet.hide: 995 of 24576 values differ (largest |diff| 0.302577 at flat index 5924: 1.0 -> 1.3025766611099243)
+    clock.cure: 754 of 8192 values differ (largest |diff| 4.2914e-05 at flat index 1974: 0.0 -> 4.291399454814382e-05)
+    clock.lev: 120 of 8192 values differ (largest |diff| 0.000671387 at flat index 1463: 899.9993286132812 -> 900.0)
+    clock.seen: 756 of 8192 values differ (largest |diff| 7.03836 at flat index 1884: 1.9533520936965942 -> 8.991713523864746)
+    clock.th: 756 of 8192 values differ (largest |diff| 4.18917 at flat index 1642: 6.347689628601074 -> 2.1585168838500977)
+    rags.debug: rags[0].load 0.8446897 -> 0.6073741
+    rags.debug: rags[0].soaked 0.07039082 -> 0.05061451
+    rags.debug: rags[1].load 1.0 -> 0.825874
+    rags.debug: rags[1].soaked 0.08333334 -> 0.068822816
+    rags.debug: added rags[0].mobile.mm3 is not zero (4.9265437)
+    rags.debug: added rags[0].mobile.lat[0] is not zero (0.16907716)
+    rags.debug: added rags[0].mobile.lat[1] is not zero (0.5853722)
+    rags.debug: added rags[0].mobile.lat[2] is not zero (0.2358846)
+    rags.debug: added rags[0].mobile.lat[3] is not zero (0.009666062)
+    rags.debug: added rags[0].mobile.lat[4] is not zero (0.00019196612)
+    rags.debug: added rags[0].mobile.lat[5] is not zero (0.00018575144)
+    rags.debug: added rags[0].mobile.lat[6] is not zero (-0.0038548547)
+    rags.debug: added rags[0].mobile.hide[0] is not zero (0.29670146)
+    rags.debug: added rags[0].mobile.hide[1] is not zero (0.5051803)
+    rags.debug: added rags[0].mobile.hide[2] is not zero (1.2414428)
+    rags.debug: added rags[0].mobile.cure is not zero (1.2373094e-5)
+    rags.debug: added rags[0].mobile.at_min is not zero (7201.029193304786)
+    rags.debug: added rags[0].mobile.at_secs is not zero (61.75159908493637)
+    rags.debug: added rags[1].mobile.mm3 is not zero (2.334659)
+    rags.debug: added rags[1].mobile.lat[0] is not zero (0.16560286)
+    rags.debug: added rags[1].mobile.lat[1] is not zero (0.59041893)
+    rags.debug: added rags[1].mobile.lat[2] is not zero (0.23525585)
+    rags.debug: added rags[1].mobile.lat[3] is not zero (0.008722296)
+    rags.debug: added rags[1].mobile.lat[4] is not zero (0.00023589448)
+    rags.debug: added rags[1].mobile.lat[5] is not zero (0.00022577228)
+    rags.debug: added rags[1].mobile.lat[6] is not zero (-0.0038941295)
+    rags.debug: added rags[1].mobile.hide[0] is not zero (0.29639018)
+    rags.debug: added rags[1].mobile.hide[1] is not zero (0.5025925)
+    rags.debug: added rags[1].mobile.hide[2] is not zero (1.2207403)
+    rags.debug: added rags[1].mobile.cure is not zero (1.14708e-5)
+    rags.debug: added rags[1].mobile.at_min is not zero (7201.167357345594)
+    rags.debug: added rags[1].mobile.at_secs is not zero (70.04144155182068)
+  chunk-007: DIFFERENT
+    wet.vol: 1206 of 8192 values differ (largest |diff| 7.03836 at flat index 1884: 1.9533520936965942 -> 8.991713523864746)
+    wet.lat: 3470 of 57344 values differ (largest |diff| 0.592701 at flat index 19622: 0.0 -> 0.5927014350891113)
+    wet.hide: 1190 of 24576 values differ (largest |diff| 0.302577 at flat index 5924: 1.0 -> 1.3025766611099243)
+    clock.cure: 1204 of 8192 values differ (largest |diff| 5.19553e-05 at flat index 1974: 0.0 -> 5.195531412027776e-05)
+    clock.lev: 224 of 8192 values differ (largest |diff| 0.000671387 at flat index 1463: 899.9993286132812 -> 900.0)
+    clock.seen: 1206 of 8192 values differ (largest |diff| 7.03836 at flat index 1884: 1.9533520936965942 -> 8.991713523864746)
+    clock.th: 1206 of 8192 values differ (largest |diff| 4.18917 at flat index 1642: 6.347689628601074 -> 2.1585168838500977)
+    rags.debug: rags[0].load 0.07039082 -> 0.05061451
+    rags.debug: rags[0].soaked 0.07039082 -> 0.05061451
+    rags.debug: rags[1].load 1.0 -> 0.99999607
+    rags.debug: rags[1].soaked 0.08333334 -> 0.08333297
+    rags.debug: added rags[1].mobile.mm3 is not zero (0.0006138303)
+    rags.debug: added rags[1].mobile.lat[0] is not zero (0.1640375)
+    rags.debug: added rags[1].mobile.lat[1] is not zero (0.59269285)
+    rags.debug: added rags[1].mobile.lat[2] is not zero (0.2349726)
+    rags.debug: added rags[1].mobile.lat[3] is not zero (0.008297066)
+    rags.debug: added rags[1].mobile.lat[4] is not zero (0.00025568707)
+    rags.debug: added rags[1].mobile.lat[5] is not zero (0.00024380427)
+    rags.debug: added rags[1].mobile.lat[6] is not zero (-0.0039118244)
+    rags.debug: added rags[1].mobile.hide[0] is not zero (0.29625)
+    rags.debug: added rags[1].mobile.hide[1] is not zero (0.50142664)
+    rags.debug: added rags[1].mobile.hide[2] is not zero (1.2114125)
+    rags.debug: added rags[1].mobile.cure is not zero (1.2099133e-5)
+    rags.debug: added rags[1].mobile.at_min is not zero (7201.25616593439)
+    rags.debug: added rags[1].mobile.at_secs is not zero (75.36995674087741)
+  chunk-008: DIFFERENT
+    wet.vol: 1442 of 8192 values differ (largest |diff| 7.03836 at flat index 1884: 1.9533520936965942 -> 8.991713523864746)
+    wet.lat: 5784 of 57344 values differ (largest |diff| 0.592701 at flat index 19622: 0.0 -> 0.5927014350891113)
+    wet.hide: 2167 of 24576 values differ (largest |diff| 0.302577 at flat index 5924: 1.0 -> 1.3025766611099243)
+    wet.floor: 309 of 8192 values differ (largest |diff| 2.55556 at flat index 1310: 2.57045841217041 -> 5.126018047332764)
+    clock.cure: 1466 of 8192 values differ (largest |diff| 5.6876e-05 at flat index 1974: 0.0 -> 5.687604425475001e-05)
+    clock.lev: 207 of 8192 values differ (largest |diff| 0.000671387 at flat index 1463: 899.9993286132812 -> 900.0)
+    clock.seen: 1442 of 8192 values differ (largest |diff| 7.03836 at flat index 1884: 1.9533520936965942 -> 8.991713523864746)
+    clock.th: 1470 of 8192 values differ (largest |diff| 4.18917 at flat index 1642: 6.347689628601074 -> 2.1585168838500977)
+    brushes.debug: brushes[0].bristles[0].vol 3184.3684 -> 3183.319
+    brushes.debug: brushes[0].bristles[0].lat[0] 0.16357407 -> 0.16358873
+    brushes.debug: brushes[0].bristles[0].lat[1] 0.593366 -> 0.5933446
+    brushes.debug: brushes[0].bristles[0].lat[2] 0.23488869 -> 0.23489134
+    brushes.debug: brushes[0].bristles[0].lat[3] 0.008171172 -> 0.008175151
+    brushes.debug: brushes[0].bristles[0].lat[4] 0.00026154701 -> 0.0002613618
+    brushes.debug: brushes[0].bristles[0].lat[5] 0.00024914296 -> 0.00024897428
+    brushes.debug: brushes[0].bristles[0].lat[6] -0.0039170627 -> -0.003916897
+    brushes.debug: brushes[0].bristles[0].hide[0] 0.29620844 -> 0.2962098
+    brushes.debug: brushes[0].bristles[0].hide[1] 0.5010813 -> 0.50109214
+    brushes.debug: brushes[0].bristles[0].hide[2] 1.2086508 -> 1.2087384
+    brushes.debug: brushes[0].bristles[0].cure 7.8706597e-7 -> 7.886372e-7
+    brushes.debug: brushes[0].bristles[1].vol 2872.464 -> 2871.844
+    brushes.debug: brushes[0].bristles[1].lat[0] 0.16358042 -> 0.16359448
+    brushes.debug: brushes[0].bristles[1].lat[1] 0.59335697 -> 0.5933363
+    brushes.debug: brushes[0].bristles[1].lat[2] 0.23488985 -> 0.23489241
+    brushes.debug: brushes[0].bristles[1].lat[3] 0.008172892 -> 0.008176719
+    brushes.debug: brushes[0].bristles[1].lat[4] 0.0002614669 -> 0.00026128875
+    brushes.debug: brushes[0].bristles[1].lat[5] 0.00024907 -> 0.00024890772
+    brushes.debug: brushes[0].bristles[1].lat[6] -0.003916991 -> -0.003916832
+    brushes.debug: (more differences not listed)
+    rags.debug: rags[0].load 0.07039082 -> 0.05061451
+    rags.debug: rags[0].soaked 0.07039082 -> 0.05061451
+    rags.debug: rags[1].load 1.0 -> 0.99999607
+    rags.debug: rags[1].soaked 0.08333334 -> 0.08333297
+    rags.debug: added rags[1].mobile.mm3 is not zero (0.0006138303)
+    rags.debug: added rags[1].mobile.lat[0] is not zero (0.1640375)
+    rags.debug: added rags[1].mobile.lat[1] is not zero (0.59269285)
+    rags.debug: added rags[1].mobile.lat[2] is not zero (0.2349726)
+    rags.debug: added rags[1].mobile.lat[3] is not zero (0.008297066)
+    rags.debug: added rags[1].mobile.lat[4] is not zero (0.00025568707)
+    rags.debug: added rags[1].mobile.lat[5] is not zero (0.00024380427)
+    rags.debug: added rags[1].mobile.lat[6] is not zero (-0.0039118244)
+    rags.debug: added rags[1].mobile.hide[0] is not zero (0.29625)
+    rags.debug: added rags[1].mobile.hide[1] is not zero (0.50142664)
+    rags.debug: added rags[1].mobile.hide[2] is not zero (1.2114125)
+    rags.debug: added rags[1].mobile.cure is not zero (1.2099133e-5)
+    rags.debug: added rags[1].mobile.at_min is not zero (7201.25616593439)
+    rags.debug: added rags[1].mobile.at_secs is not zero (75.36995674087741)
+  state_compare: DIFFERENT (5 of 8 chunks differ)
+  png DIFFERENT as af49348's; printed output DIFFERENT; state digests different
+stroke: state equal on every baseline field (EQUAL (0 of 3 chunks differ))
+  png same as af49348's; printed output same; state digests different
+wait: state equal on every baseline field (EQUAL (0 of 7 chunks differ))
+  png same as af49348's; printed output same; state digests different

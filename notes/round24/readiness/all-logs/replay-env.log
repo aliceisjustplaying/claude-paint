@@ -1,0 +1,2 @@
+$ scripts/tests/replay_env.sh
+replay_env: check_painting, finish_painting and replay_clip replayed a sargent-box log with EASEL_BOX=inness set (/tmp/cpt.7nmro6sc/replay-env.f4bhxS)

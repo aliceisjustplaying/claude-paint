@@ -1,0 +1,29 @@
+$ cargo test --workspace --lib --bins --tests --no-run
+   Compiling paint v0.1.0 (~/src/a/claude-paint/crates/paint)
+   Compiling easel v0.1.0 (~/src/a/claude-paint/crates/easel)
+warning: variable does not need to be mutable
+   --> crates/paint/src/thinner.rs:872:21
+    |
+872 |                 let mut report = |name: &str, c: &mut Canvas, r: (f32, f32, f32, f32), brush: Option<f64>| {
+    |                     ----^^^^^^
+    |                     |
+    |                     help: remove this `mut`
+    |
+    = note: `#[warn(unused_mut)]` (part of `#[warn(unused)]`) on by default
+
+warning: `paint` (lib test) generated 1 warning (run `cargo fix --lib -p paint --tests` to apply 1 suggestion)
+    Finished `test` profile [optimized + debuginfo] target(s) in 33.52s
+  Executable unittests src/main.rs (target/debug/deps/easel-669d81a2acb2e5a0)
+  Executable tests/boxes.rs (target/debug/deps/boxes-fb980a6b5cd4f00d)
+  Executable tests/delivery.rs (target/debug/deps/delivery-cd7e103fddd18a71)
+  Executable tests/determinism.rs (target/debug/deps/determinism-26a9da8a1470e795)
+  Executable tests/painter.rs (target/debug/deps/painter-f00c695b1eef8164)
+  Executable tests/session_integrity.rs (target/debug/deps/session_integrity-0d7fdfe83587cc91)
+  Executable tests/smoke.rs (target/debug/deps/smoke-47872779c98d1503)
+  Executable unittests src/lib.rs (target/debug/deps/paint-7f757239a2410b8e)
+  Executable tests/curved_drag_nan.rs (target/debug/deps/curved_drag_nan-a61dc85a043599aa)
+  Executable tests/ground_grain.rs (target/debug/deps/ground_grain-aa6d54466f68a0cf)
+  Executable tests/look_rim.rs (target/debug/deps/look_rim-a1555b4fdcebed94)
+  Executable tests/look_sienna.rs (target/debug/deps/look_sienna-7dd910f0c8b01ac8)
+  Executable tests/thinner_physics.rs (target/debug/deps/thinner_physics-01c9d369659abb2b)
+  Executable tests/thinner_pigments.rs (target/debug/deps/thinner_pigments-f20cc81d4f9571b9)

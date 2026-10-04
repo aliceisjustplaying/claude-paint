@@ -1,0 +1,44 @@
+$ CARGO_TARGET_DIR="$CARGO_TARGET_DIR/ro" cargo test -p easel --no-default-features --features replay --test smoke
+   Compiling paint v0.1.0 (~/src/a/claude-paint/crates/paint)
+   Compiling easel v0.1.0 (~/src/a/claude-paint/crates/easel)
+warning: struct `Restored` is never constructed
+  --> crates/easel/src/save.rs:91:12
+   |
+91 | pub struct Restored {
+   |            ^^^^^^^^
+   |
+   = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: function `field` is never used
+  --> crates/easel/src/save.rs:98:4
+   |
+98 | fn field<'a>(h: &'a std::collections::BTreeMap<&str, &str>, k: &str) -> Result<&'a str, String> {
+   |    ^^^^^
+
+warning: function `parse` is never used
+   --> crates/easel/src/save.rs:103:4
+    |
+103 | fn parse<T: std::str::FromStr>(h: &std::collections::BTreeMap<&str, &str>, k: &str) -> Result<T, String> {
+    |    ^^^^^
+
+warning: function `hex64` is never used
+   --> crates/easel/src/save.rs:109:4
+    |
+109 | fn hex64(h: &std::collections::BTreeMap<&str, &str>, k: &str) -> Result<u64, String> {
+    |    ^^^^^
+
+warning: function `read` is never used
+   --> crates/easel/src/save.rs:118:8
+    |
+118 | pub fn read(path: &std::path::Path) -> Result<Restored, String> {
+    |        ^^^^
+
+warning: `easel` (bin "easel") generated 5 warnings
+    Finished `test` profile [optimized + debuginfo] target(s) in 28.19s
+     Running tests/smoke.rs (target/ro/debug/deps/smoke-42382841a5a1a09a)
+
+running 1 test
+test a_short_session_at_the_easel ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 14.01s
+

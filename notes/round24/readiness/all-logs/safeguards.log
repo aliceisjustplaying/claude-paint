@@ -1,0 +1,142 @@
+$ scripts/tests/safeguards.sh
+ok 1 - cleanup failure (a test leaves an undeletable directory): verdict fail (exit 1), never pass; problem and cleanup_errors recorded
+ok 2 - pass: exit 0 and a pass receipt for the exact commit, tree and base main (an ancestor)
+ok 3 - pass: the step logs were copied out before cleanup and their sha256 recorded
+ok 4 - pass: receipt binds the check set: list, list and runner hashes of the commit's blobs, the 3 parsed steps (limit, least, group)
+ok 5 - pass: receipt has checkout evidence before and after (HEAD, tree, index = commit tree, no flags, not sparse, no tracked changes)
+ok 6 - pass: receipt has build settings and the tool hash
+ok 7 - pass: its /tmp/cpc.* directory and worktree removed
+ok 8 - pass: the sparse post-checkout hook ran and the checkout was made full (fake test saw notes/pic.png)
+ok 9 - dirty dev clone (modified README, untracked leak.txt): the candidate was tested clean
+ok 10 - a failing step: exit 1, fail receipt saying "step unit exited 1", directory removed
+ok 11 - a step with zero tests: exit 1, fail receipt saying "ran no tests", directory removed
+ok 12 - no summary: exit 1, fail receipt saying "wrote no summary", directory removed
+ok 13 - exit 1 with a pass summary: exit 1, fail receipt saying "scripts/test (under lockrun) exited 1", directory removed
+ok 14 - a step marked timed out under a pass verdict: exit 1, fail receipt saying "timed out (timed_out=True)", directory removed
+ok 15 - no steps: exit 1, fail receipt saying "an empty test selection never passes", directory removed
+ok 16 - a wrong list hash: exit 1, fail receipt saying "list_sha256 is not the hash", directory removed
+ok 17 - a wrong log hash: exit 1, fail receipt saying "differs from the summary's", directory removed
+ok 18 - only the build step reported: exit 1, fail receipt saying "only build steps", directory removed
+ok 19 - two listed test steps, only one reported in the check phase (reviewer's case): exit 1, fail receipt saying "check phase: the summary omits listed step(s): second", directory removed
+ok 20 - an extra step: exit 1, fail receipt saying "step(s) the list does not: bonus", directory removed
+ok 21 - a duplicated step: exit 1, fail receipt saying "more than once: unit", directory removed
+ok 22 - reordered steps: exit 1, fail receipt saying "is not the list's (unit, second)", directory removed
+ok 23 - a changed step command: exit 1, fail receipt saying "step unit: the summary's command is 'true'", directory removed
+ok 24 - a changed step limit: exit 1, fail receipt saying "step unit: the summary's limit is 999.0", directory removed
+ok 25 - a changed step minimum (least): exit 1, fail receipt saying "step unit: the summary's least is 1", directory removed
+ok 26 - a non-build step with least 0 in the summary: exit 1, fail receipt saying "a non-build step must require at least 1", directory removed
+ok 27 - a changed step group: exit 1, fail receipt saying "step second: the summary's group is None", directory removed
+ok 28 - a runner hash that is not scripts/test's: exit 1, fail receipt saying "runner_sha256 is not the hash of scripts/test", directory removed
+ok 29 - a malformed summary field that crashes result reading (cleanup still runs): exit 1, fail receipt saying "reading the build settings failed", directory removed
+ok 30 - the test edits a tracked file (reviewer's case): exit 1, fail receipt saying "tracked files or the index changed after the test", directory removed
+ok 31 - the test changes the index: exit 1, fail receipt saying "the index was not the commit's tree after the test", directory removed
+ok 32 - the test moves HEAD: exit 1, fail receipt saying "HEAD after the test was", directory removed
+ok 33 - the test sets skip-worktree and hides an edit: exit 1, fail receipt saying "skip-worktree/assume-unchanged flags after the test", directory removed
+ok 34 - the test makes the checkout sparse: exit 1, fail receipt saying "sparse checkout after the test", directory removed
+ok 35 - the edited-file receipt records the evidence (tracked_changed true, the changed path)
+ok 36 - an inner step timeout in the check phase (summary verdict unfinished, runner exit 3): unfinished receipt (exit 3), not fail, never pass
+ok 37 - build phase outer timeout: unfinished receipt (exit 3), never a pass, the check phase not run, directory removed
+ok 38 - SIGTERM mid-test: unfinished receipt, test stopped, directory removed
+ok 39 - check phase outer timeout: unfinished receipt (exit 3), the build phase passed first, directory removed
+ok 40 - a failing build phase: the check phase is not run, verdict fail (exit 1), directory removed
+ok 41 - a build phase that writes no summary: fail, the check phase not run
+ok 42 - a check-phase summary that holds a build step: fail
+ok 43 - a listed known failure (exit 3 as listed): verdict known_failure, NOT ALL GREEN text, exit 4, directory removed
+ok 44 - that receipt: build phase pass, check phase known_failure (lockrun exit 4) naming the step; the manifest binds the known failure
+ok 45 - a known failure on a row that names none: exit 1, fail receipt saying "step second reports a known failure, but the list names no known failure for it", directory removed
+ok 46 - a known failure with another exit than the listed one: exit 1, fail receipt saying "step second reports a known failure with exit 5, not the listed exit 3", directory removed
+ok 47 - pass: the receipt has two phases, build then check, each limited to 600 s, each its own lockrun log with its sha256
+ok 48 - pass: the fake runner ran the build phase, then the check phase, once each
+ok 49 - a candidate that changes the list is tested on its own list (the binding is to the commit's blobs; approval is merge's job)
+ok 50 - --list-file: another list in the commit is run with --list and bound (fast.tsv, 2 steps)
+ok 51 - pass: the receipt names the lockrun that ran: $LOCKRUN (this checkout's scripts/lockrun), sha256 the pin
+ok 52 - a candidate whose scripts/lockrun forges a lock record ($LOCKRUN unset): the forger never runs, a pinned lockrun from outside the candidate does, pass
+ok 53 - that receipt: lockrun sha256 is the pin, its source is ~/src/a/claude-paint-tools/lockrun or the one beside test_candidate, never the candidate's
+ok 54 - the 44 concurrent runs each kept their own receipt note (writes serialized, read back)
+ok 55 - refuses a commit without the test list (exit 2, no receipt, no directory)
+ok 56 - refuses a commit without scripts/test (exit 2, no receipt, no directory)
+ok 57 - refuses a list whose non-build step requires 0 tests (exit 2, no receipt, no directory)
+ok 58 - refuses a list with no non-build step (exit 2, no receipt, no directory)
+ok 59 - refuses a malformed list (exit 2, no receipt, no directory)
+ok 60 - refuses a list whose known failure names exit 0 (exit 2, no receipt, no directory)
+ok 61 - refuses a list that is a symlink (exit 2, no receipt, no directory)
+ok 62 - refuses a $LOCKRUN that is not the pinned lockrun (exit 2): it is not run, no fallback, no receipt, no directory
+ok 63 - refuses a $LOCKRUN that does not exist (exit 2)
+ok 64 - without $LOCKRUN, a ~/src/a/claude-paint-tools/lockrun that is not pinned is skipped (with a message) for the pinned scripts/lockrun beside test_candidate
+ok 65 - without $LOCKRUN and with neither the tools copy nor the one beside test_candidate pinned: refused, nothing chosen
+ok 66 - refuses a branch name (it can move)
+ok 67 - refuses an unknown commit id
+ok 68 - refuses an id that is also a branch name
+ok 69 - refuses a hex prefix that is also a lightweight tag (reviewer's case)
+ok 70 - refuses a checkout that is not clean (a hook edited README); no receipt written; directory removed
+ok 71 - changed approved test without approval: refused
+ok 72 - unapproved answer change: refused
+ok 73 - self-approval (approver == builder, any case): refused and nothing recorded
+ok 74 - a hand-written self-approval note is ignored by check
+ok 75 - approval for a different blob of the same path: still refused
+ok 76 - that approval does cover its own blob
+ok 77 - deletion of a protected file needs approval
+ok 78 - an approved deletion passes
+ok 79 - dropping a path from the list and changing it: both refused; the list does not unprotect (reviewer's case)
+ok 80 - a protected file replaced by a submodule entry (gitlink): listed and refused as an unsupported type (reviewer's case)
+ok 81 - an approval naming the submodule's object but not its mode does not cover it
+ok 82 - an approval naming exactly mode 160000 and that object covers it
+ok 83 - a protected file replaced by a symlink: refused as an unsupported type
+ok 84 - a listed path absent at base and candidate (future/absent.txt) is fine
+ok 85 - when that listed path appears, it needs approval
+ok 86 - a change to the test list (protected) needs approval
+ok 87 - a change to scripts/test (protected) needs approval
+ok 88 - a candidate that edits merge_candidate: an unapproved protected change
+ok 89 - a candidate that edits safeguards_lib.py (the lockrun pin): an unapproved protected change
+ok 90 - an approval of the exact list blob covers that list
+ok 91 - the approval is tied to the exact blob: another edit of the list is refused
+ok 92 - default record covers every protected file at the commit (baseline style), with modes
+ok 93 - merge: missing receipt refused
+ok 94 - merge: failed-test receipt refused
+ok 95 - merge: a known_failure receipt refused: NOT ALL GREEN, not mergeable
+ok 96 - merge: the receipt of a run that edited a tracked file refused (verdict and evidence)
+ok 97 - merge: a receipt for another commit (proof for another version) refused
+ok 98 - merge: an unchanged receipt copied to a commit with the same tree refused (reviewer's case)
+ok 99 - merge: receipt tree mismatch refused
+ok 100 - merge: a pass receipt whose checkout evidence says tracked files changed refused
+ok 101 - merge: a pass receipt whose evidence shows skip-worktree flags refused
+ok 102 - merge: a pass receipt without checkout evidence after the test refused
+ok 103 - merge: a pass receipt that records a cleanup error refused
+ok 104 - merge: a pass receipt whose lockrun sha256 was edited to another lockrun's refused
+ok 105 - merge: a pass receipt without a lockrun sha256 refused
+ok 106 - merge: a pass receipt without a lockrun record refused
+ok 107 - merge: a forged pass receipt whose summary omits a listed step refused (re-verified against the commit's list)
+ok 108 - merge: a receipt whose manifest and summary agree on a weaker minimum than the commit's list refused
+ok 109 - merge: a pass receipt edited to drop the build phase refused
+ok 110 - merge: a pass receipt edited to drop the check phase refused
+ok 111 - merge: a pass receipt whose check phase ran under a limit over 600 s refused
+ok 112 - merge: a forged pass receipt whose check-phase summary holds a build step refused
+ok 113 - merge: a receipt in the old format (v2) refused
+ok 114 - merge: scripts/test changed after the test (runner hash mismatch) refused
+ok 115 - merge: a passing candidate that changed the list without approval refused
+ok 116 - merge: branch moved after the test (new tip has no receipt) refused
+ok 117 - merge: a branch name instead of an exact id refused
+ok 118 - merge: test list in the candidate differs from the tested list: refused
+ok 119 - merge: a receipt for another list than all.tsv refused
+ok 120 - merge: refused when the list and scripts/test are not protected paths at base or candidate
+ok 121 - merge: passing tests with an unapproved answer change refused
+ok 122 - merge: remote main moved after the test refused
+ok 123 - merge: published local main moved refused
+ok 124 - merge: published copy with a modified file refused
+ok 125 - merge: published copy with an untracked file refused
+ok 126 - merge: published copy with an assume-unchanged entry hiding an edit refused
+ok 127 - merge: published copy not on branch main refused
+ok 128 - merge: an ignored file the candidate would overwrite refused
+ok 129 - merge: an ignored file where the candidate needs a directory (parent-path collision) refused
+ok 130 - merge: candidate that does not contain main refused (tests passed, is_ancestor false)
+ok 131 - after all refusals: origin main and the published copy unchanged
+ok 132 - lease: main moved after the checks, before the push, to a commit the candidate contains (a plain push would fast-forward): rejected
+ok 133 - main moved during the push (pre-push hook): rejected, nothing overwritten
+ok 134 - local update fails after the remote update: exit 4, files untouched, recovery reports what it observed (remote at the candidate, local HEAD, the merge ran and failed, status) and no blanket assurance
+ok 135 - an ignored file created after the last check (during fetch) is not overwritten: merge --no-overwrite-ignore refuses, exit 4, recovery says the merge ran and failed
+ok 136 - the remote query fails after the push: exit 5, recovery printed with the remote state UNKNOWN
+ok 137 - main moved right after a successful push: exit 5 (not 'push failed'), recovery reports the remote at neither commit
+ok 138 - end to end: pushed with the lease, published copy fast-forwarded with its files updated
+ok 139 - end to end: the exact guarded push command was used
+ok 140 - every /tmp/cpc.* directory this suite's runs created is gone, and only the dev clone is a worktree
+# 140 checks, 140 passed, 0 failed

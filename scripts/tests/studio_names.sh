@@ -73,6 +73,11 @@ printf 'lead white\0C\303\251zanne\0bone black\0' > "$d/bin/easel"
 [ -z "$(strings "$d/bin/easel" | grep -i 'c.*zanne' || true)" ] || { echo "studio_names: strings kept the accented name; the fixture tests nothing" >&2; exit 1; }
 expect fail "$d" Tonn
 grep -q 'bin/easel: Cézanne' "$d.out" || { echo "studio_names: the accented name isn't reported" >&2; cat "$d.out" >&2; exit 1; }
+# a studio's own painter by the plain spelling of an accented name, in a note and in the binary
+d=$(studio own-accented "Cézanne's and Cezanne's whites")
+printf 'lead white\0C\303\251zanne\0Cezanne\0bone black\0' > "$d/bin/easel"
+expect pass "$d" Cézanne
+expect fail "$d" Tonn
 d=$(studio accented-velazquez "Nothing here.")
 printf 'lead white\0Vel\303\241zquez\0' > "$d/bin/easel"
 expect fail "$d" Tonn

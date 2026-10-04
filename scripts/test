@@ -12,29 +12,51 @@
              mode's), --only NAME (run the named steps of the list; the summary
              says so and its verdict is never "pass")
 
-The steps are in notes/speed/test_lists/fast.tsv and all.tsv (reviewed lists:
-notes/speed/SKIPPED.md says what neither runs, and why). No step replays a
-painting. Each line: kind, name, time limit (s), the least number of tests it
-must run, a regex whose matching output lines count as its tests ("-" for
-cargo and pytest, which report counts), and a bash command run from the
-repository root:
+The steps are in notes/speed/test_lists/fast.tsv and all.tsv (reviewed lists,
+protected in notes/golden_paths.txt; notes/speed/SKIPPED.md says what neither
+runs, and why). No step replays a painting. Each line: kind, name, time limit
+(s), the least number of tests it must run, a regex whose matching output
+lines count as its tests ("-" for cargo and pytest, which report counts), a
+bash command run from the repository root, and optionally a group:
+consecutive steps of one group run at the same time, each with its own time
+limit and its own TMPDIR (for steps that mostly wait, beside one that keeps the
+cores busy). Kinds:
 
     build   a build; it has no tests (its time is reported as build time)
     cargo   `cargo test ...`: counts from the "test result:" lines
     pytest  counts from pytest's last line
     script  counts the output lines that match the regex
 
-A step fails if its command fails, it runs past its time limit (its whole
-process group is stopped), or it runs fewer tests than its minimum: a test
-name that matches nothing fails. The run passes only if every step passes.
-The whole run holds the machine's heavy-job lock (scripts/lockrun) for at
-most 15 minutes; the lock is not taken again inside it.
+A list must hold at least one step that isn't a build, and every such step a
+minimum of at least one test. A step fails if its command fails, it runs past
+its time limit or it runs fewer tests than its minimum: a test name that
+matches nothing fails. The run passes only if every step passes.
+
+Locking and stopping. The whole run is one job of scripts/lockrun (600 s, the
+plan's limit for builds and final batches), which validates any LOCKRUN_TOKEN
+it inherits (a stale token waits for the lock like anyone). Every step runs in
+that job's process group, so the outer timeout, a cancellation of lockrun, and
+a crash of this coordinator all reach every step (lockrun stops the group and
+holds the lock until no process of it is left). A step past its own limit is
+stopped by this coordinator: SIGTERM to the step and every descendant it has
+been seen with (tracked by repeated `ps` scans, so a child that outlives its
+parent is still known), then SIGKILL until none is left. After every step or
+group, any process left in the job's group, other than this coordinator and
+its ancestors, is a leftover and is stopped the same way. SIGTERM, SIGHUP or
+SIGINT to the coordinator stops all running steps and ends the run
+"unfinished".
+
+Cargo's target directory is resolved once (`cargo metadata`: CARGO_TARGET_DIR
+and Cargo configuration) and exported as CARGO_TARGET_DIR to every step, so
+the steps that run `$CARGO_TARGET_DIR/release/easel` run the build just made.
 
 The summary (--summary) is JSON: mode, verdict ("pass", "fail" or
-"unfinished"), list (the list file, relative to the repository), its
-sha256, commit, whether the worktree was dirty, build and test seconds, and
-per step: name, kind, command, exit, seconds, tests_run, passed, failed,
-ignored, timed_out, ok, log and log_sha256. Exit 0 only on "pass".
+"unfinished"), list (the list file, relative to the repository), list_sha256,
+runner_sha256 (this file), target_dir, commit, whether the worktree was dirty,
+wall seconds, the steps' build and test seconds (summed: grouped steps
+overlap), and per step: name, kind, command, limit, least, group, exit,
+seconds, tests_run, passed, failed, ignored, timed_out, ok, why, log and
+log_sha256. Exit 0 only on "pass".
 """
 
 import argparse
@@ -52,11 +74,16 @@ import time
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 LISTS = {"fast": "notes/speed/test_lists/fast.tsv", "all": "notes/speed/test_lists/all.tsv"}
-OUTER_LIMIT = 900
+# the plan's limit for builds and final batches; scripts/tests/test_runner.sh may lower it
+OUTER_LIMIT = 600.0
 
 
 def git(*args):
     return subprocess.run(["git", "-C", REPO, *args], capture_output=True, text=True).stdout.strip()
+
+
+def sha256(path):
+    return hashlib.sha256(open(path, "rb").read()).hexdigest()
 
 
 def read_list(path):
@@ -65,18 +92,38 @@ def read_list(path):
         if not line.strip() or line.startswith("#"):
             continue
         f = line.rstrip("\n").split("\t")
-        if len(f) != 6:
-            raise SystemExit("scripts/test: %s line %d: want 6 tab-separated fields, found %d" % (path, n, len(f)))
-        kind, name, limit, least, regex, cmd = f
+        if len(f) not in (6, 7):
+            raise SystemExit("scripts/test: %s line %d: want 6 or 7 tab-separated fields, found %d" % (path, n, len(f)))
+        kind, name, limit, least, regex, cmd = f[:6]
+        group = f[6] if len(f) == 7 and f[6] not in ("", "-") else None
         if kind not in ("build", "cargo", "pytest", "script"):
             raise SystemExit("scripts/test: %s line %d: unknown kind %r" % (path, n, kind))
-        steps.append({"kind": kind, "name": name, "limit": float(limit), "least": int(least),
-                      "regex": None if regex == "-" else regex, "command": cmd})
-    if not steps:
-        raise SystemExit("scripts/test: %s lists no steps" % path)
+        try:
+            limit, least = float(limit), int(least)
+        except ValueError:
+            raise SystemExit("scripts/test: %s line %d: the limit and the minimum are numbers" % (path, n))
+        if not 0 < limit <= OUTER_LIMIT:
+            raise SystemExit("scripts/test: %s line %d: a step's limit is over 0 and at most %g s" % (path, n, OUTER_LIMIT))
+        if kind != "build" and least < 1:
+            raise SystemExit("scripts/test: %s line %d: step %s must run at least one test" % (path, n, name))
+        if kind == "script" and regex == "-":
+            raise SystemExit("scripts/test: %s line %d: a script step needs a regex to count its tests" % (path, n))
+        steps.append({"kind": kind, "name": name, "limit": limit, "least": least,
+                      "regex": None if regex == "-" else regex, "command": cmd, "group": group})
+    if not any(s["kind"] != "build" for s in steps):
+        raise SystemExit("scripts/test: %s lists no test step (only builds, or nothing)" % path)
     names = [s["name"] for s in steps]
     if len(set(names)) != len(names):
         raise SystemExit("scripts/test: %s names a step twice" % path)
+    # a group's steps must be listed together: they run at the same time
+    seen, last = set(), None
+    for s in steps:
+        g = s["group"]
+        if g is not None and g != last and g in seen:
+            raise SystemExit("scripts/test: %s: the steps of group %r are not listed together" % (path, g))
+        if g is not None:
+            seen.add(g)
+        last = g
     return steps
 
 
@@ -94,49 +141,180 @@ def count(step, out):
         p, f, e, s = get("passed"), get("failed"), get("errors?"), get("skipped")
         return p + f + e, p, f + e, s
     if step["kind"] == "script":
-        n = len(re.findall(step["regex"], out, re.M)) if step["regex"] else 0
+        n = len(re.findall(step["regex"], out, re.M))
         return n, n, 0, 0
     return 0, 0, 0, 0
 
 
-def run_step(step, logdir, env):
-    log = os.path.join(logdir, re.sub(r"[^A-Za-z0-9_.-]", "_", step["name"]) + ".log")
-    t0 = time.monotonic()
-    timed_out = False
-    with open(log, "wb") as lf:
-        lf.write(("$ %s\n" % step["command"]).encode())
-        lf.flush()
-        p = subprocess.Popen(["bash", "-c", step["command"]], cwd=REPO, stdout=lf, stderr=subprocess.STDOUT,
-                             stdin=subprocess.DEVNULL, env=env, start_new_session=True)
-        try:
-            p.wait(timeout=step["limit"])
-        except subprocess.TimeoutExpired:
-            timed_out = True
-            for sig, wait in ((signal.SIGTERM, 5), (signal.SIGKILL, 10)):
+# ---------------------------------------------------------------- processes
+
+def table():
+    """{pid: (ppid, pgid, zombie)} of every process (ps works on macOS and Linux)."""
+    out = subprocess.run(["ps", "-A", "-o", "pid=,ppid=,pgid=,stat="], capture_output=True, text=True).stdout
+    t = {}
+    for line in out.splitlines():
+        f = line.split()
+        if len(f) >= 3:
+            t[int(f[0])] = (int(f[1]), int(f[2]), len(f) >= 4 and f[3].startswith("Z"))
+    return t
+
+
+def descendants(root, t):
+    kids = {}
+    for pid, (ppid, _, _) in t.items():
+        kids.setdefault(ppid, []).append(pid)
+    out, todo = set(), [root]
+    while todo:
+        for k in kids.get(todo.pop(), []):
+            if k not in out:
+                out.add(k)
+                todo.append(k)
+    return out
+
+
+class Job:
+    """This coordinator's process group and its own ancestors in it."""
+
+    def __init__(self):
+        self.pgid = os.getpgid(0)
+        t = table()
+        self.keep = {os.getpid()}
+        p = os.getppid()
+        while p in t and t[p][1] == self.pgid:
+            self.keep.add(p)
+            p = t[p][0]
+
+    def live(self, pids, t=None):
+        """The pids still alive in this job's group (others: gone, or reused by another job)."""
+        t = table() if t is None else t
+        return {p for p in pids if p in t and t[p][1] == self.pgid and not t[p][2]}
+
+    def others(self):
+        """Live processes of the group other than this coordinator and its ancestors."""
+        t = table()
+        return {p for p, (_, g, z) in t.items() if g == self.pgid and not z and p not in self.keep}
+
+    def stop(self, pids, grace=5.0):
+        """SIGTERM, then SIGKILL until none of `pids` (or their descendants) is left."""
+        for sig, wait in ((signal.SIGTERM, grace), (signal.SIGKILL, 10.0)):
+            t = table()
+            alive = self.live(pids | set().union(*[descendants(p, t) for p in pids]) if pids else set(), t)
+            if not alive:
+                return True
+            pids = pids | alive
+            for p in alive:
                 try:
-                    os.killpg(p.pid, sig)
+                    os.kill(p, sig)
                 except ProcessLookupError:
-                    break
-                try:
-                    p.wait(timeout=wait)
-                    break
-                except subprocess.TimeoutExpired:
                     pass
-        except KeyboardInterrupt:
-            os.killpg(p.pid, signal.SIGKILL)
-            p.wait()
-            raise
-    secs = time.monotonic() - t0
+            end = time.monotonic() + wait
+            while time.monotonic() < end:
+                time.sleep(0.05)
+                t = table()
+                if not self.live(pids | set().union(*[descendants(p, t) for p in pids]), t):
+                    return True
+        return not self.live(pids)
+
+
+class Cancelled(Exception):
+    pass
+
+
+def start_step(step, logdir, env):
+    log = os.path.join(logdir, re.sub(r"[^A-Za-z0-9_.-]", "_", step["name"]) + ".log")
+    lf = open(log, "wb")
+    lf.write(("$ %s\n" % step["command"]).encode())
+    lf.flush()
+    # each step gets its own short scratch directory (socket paths must stay under
+    # 104 bytes; steps of a group run at once)
+    scratch = tempfile.mkdtemp(prefix="cpt.", dir="/tmp")
+    # no new session: the step stays in this job's process group
+    p = subprocess.Popen(["bash", "-c", step["command"]], cwd=REPO, stdout=lf, stderr=subprocess.STDOUT,
+                         stdin=subprocess.DEVNULL, env=dict(env, TMPDIR=scratch))
+    return {"step": step, "p": p, "lf": lf, "log": log, "t0": time.monotonic(), "timed_out": False,
+            "scratch": scratch, "seen": {p.pid}}
+
+
+def finish_step(r):
+    step, p = r["step"], r["p"]
+    r["lf"].close()
+    shutil.rmtree(r["scratch"], ignore_errors=True)
+    secs = r.get("t1", time.monotonic()) - r["t0"]
+    log = r["log"]
     out = open(log, "rb").read().decode("utf-8", "replace")
     run, passed, failed, ignored = count(step, out)
-    code = p.returncode
+    code, timed_out = p.returncode, r["timed_out"]
     ok = code == 0 and not timed_out and (step["kind"] == "build" or run >= step["least"]) and failed == 0
+    ok = ok and not r.get("unstoppable")
     why = ("timed out after %g s" % step["limit"] if timed_out else "exit %s" % code if code != 0
-           else "%d failed" % failed if failed else "ran %d tests, fewer than %d" % (run, step["least"]) if not ok else "")
+           else "%d failed" % failed if failed else "processes it left could not be stopped" if r.get("unstoppable")
+           else "ran %d tests, fewer than %d" % (run, step["least"]) if not ok else "")
+    if r.get("leftovers"):
+        why = (why + "; " if why else "") + "stopped %d leftover processes" % r["leftovers"]
     return {"name": step["name"], "kind": step["kind"], "command": step["command"], "limit": step["limit"],
-            "exit": code, "seconds": round(secs, 2), "tests_run": run if step["kind"] != "build" else None,
+            "least": step["least"], "group": step["group"], "exit": code, "seconds": round(secs, 2),
+            "tests_run": run if step["kind"] != "build" else None,
             "passed": passed, "failed": failed, "ignored": ignored, "timed_out": timed_out, "ok": ok, "why": why,
-            "log": log, "log_sha256": hashlib.sha256(open(log, "rb").read()).hexdigest()}
+            "log": log, "log_sha256": sha256(log)}
+
+
+def run_batch(job, batch, logdir, env):
+    """Run steps at the same time (one step: alone); each has its own time limit."""
+    running = []
+    try:
+        running = [start_step(s, logdir, env) for s in batch]
+        last_scan = 0.0
+        while True:
+            now = time.monotonic()
+            if now - last_scan > 0.25:
+                t = table()
+                for r in running:
+                    if "t1" not in r:
+                        r["seen"] |= descendants(r["p"].pid, t)
+                last_scan = now
+            for r in running:
+                if "t1" in r:
+                    continue
+                if r["p"].poll() is not None:
+                    r["t1"] = now
+                elif now - r["t0"] > r["step"]["limit"]:
+                    r["timed_out"] = True
+                    if not job.stop(r["seen"] | {r["p"].pid}):
+                        r["unstoppable"] = True
+                    r["p"].poll()
+                    r["t1"] = time.monotonic()
+            if all("t1" in r for r in running):
+                break
+            time.sleep(0.05)
+        # leftovers: whatever the batch's steps left in the group
+        left = job.others()
+        if left:
+            stopped = job.stop(left)
+            for r in running:
+                mine = left & r["seen"]
+                r["leftovers"] = len(mine) if len(running) > 1 else len(left)
+                if not stopped:
+                    r["unstoppable"] = True
+        for r in running:
+            if r["p"].returncode is None:
+                r["p"].wait()
+        return [finish_step(r) for r in running]
+    except Cancelled:
+        job.stop(set().union(*[r["seen"] | {r["p"].pid} for r in running]) | job.others() if running else job.others(), grace=2.0)
+        for r in running:
+            r["lf"].close()
+            shutil.rmtree(r["scratch"], ignore_errors=True)
+        raise
+
+
+def target_dir():
+    """Cargo's target directory as cargo resolves it (None if cargo can't say)."""
+    try:
+        out = subprocess.run(["cargo", "metadata", "--format-version", "1", "--no-deps"], cwd=REPO,
+                             capture_output=True, text=True, timeout=60)
+        return json.loads(out.stdout)["target_directory"] if out.returncode == 0 else None
+    except (OSError, ValueError, KeyError, subprocess.TimeoutExpired):
+        return None
 
 
 def main():
@@ -147,6 +325,7 @@ def main():
     ap.add_argument("--logs")
     ap.add_argument("--list")
     ap.add_argument("--only", action="append", default=[])
+    ap.add_argument("--locked", action="store_true", help=argparse.SUPPRESS)  # set when run by lockrun
     a, rest = ap.parse_known_args()
     if a.candidate:
         if not a.all:
@@ -156,13 +335,29 @@ def main():
     if rest:
         ap.error("unknown arguments: %s" % " ".join(rest))
     mode = "all" if a.all else "fast"
-    # one outer lock for the whole run (nested lockrun calls run directly)
-    if not os.environ.get("LOCKRUN_TOKEN"):
-        lockrun = os.path.join(REPO, "scripts", "lockrun")
-        os.execv(lockrun, [lockrun, "--timeout", str(OUTER_LIMIT), "--owner", "scripts/test %s (%s)" % (mode, REPO),
-                           "--", sys.executable, os.path.abspath(__file__), *sys.argv[1:]])
     listfile = a.list or os.path.join(REPO, LISTS[mode])
-    steps = read_list(listfile)
+    steps = read_list(listfile)  # (before taking the lock: a bad list costs nothing)
+    if not a.locked:
+        # one job of lockrun for the whole run. lockrun validates an inherited token
+        # (nested in a real enclosing job: it runs us directly in that job's group)
+        limit = OUTER_LIMIT
+        lower = os.environ.get("SCRIPTS_TEST_OUTER_LIMIT")  # tests only; never above OUTER_LIMIT
+        if lower:
+            limit = min(limit, float(lower))
+        lockrun = os.path.join(REPO, "scripts", "lockrun")
+        os.execv(lockrun, [lockrun, "--timeout", "%g" % limit, "--owner", "scripts/test %s (%s)" % (mode, REPO),
+                           "--", sys.executable, os.path.abspath(__file__), "--locked", *sys.argv[1:]])
+    # --locked: only inside the lockrun job that runs us (its record names this process
+    # group and our token): the leftover sweep stops every other process of the group
+    lockdir = os.environ.get("LOCKRUN_DIR") or "/tmp/lockrun-%d" % os.getuid()
+    try:
+        rec = json.load(open(os.path.join(lockdir, "record.json")))
+    except (OSError, ValueError):
+        rec = {}
+    if not (os.environ.get("LOCKRUN_TOKEN") and rec.get("token") == os.environ["LOCKRUN_TOKEN"]
+            and rec.get("state") == "running" and rec.get("pgid") == os.getpgid(0)):
+        raise SystemExit("scripts/test: --locked is for the lockrun job that runs scripts/test; run it without --locked")
+    job = Job()
     if a.only:
         missing = [n for n in a.only if n not in [s["name"] for s in steps]]
         if missing:
@@ -170,25 +365,45 @@ def main():
         steps = [s for s in steps if s["name"] in a.only]
     logdir = a.logs or tempfile.mkdtemp(prefix="claude-paint-test-%s-" % mode)
     os.makedirs(logdir, exist_ok=True)
-    # scripts' scratch: short (socket paths must stay under 104 bytes) and removed after
-    scratch = tempfile.mkdtemp(prefix="cpt.", dir="/tmp")
-    env = dict(os.environ, TMPDIR=scratch)
+    env = dict(os.environ)
     env.pop("EASEL_BOX", None)
+    target = target_dir()
+    if target:
+        env["CARGO_TARGET_DIR"] = target
     started = datetime.datetime.now().astimezone().isoformat(timespec="seconds")
+    wall0 = time.monotonic()
     results = []
     interrupted = False
+
+    def on_signal(signum, frame):
+        for s in (signal.SIGTERM, signal.SIGHUP, signal.SIGINT):
+            signal.signal(s, signal.SIG_IGN)
+        raise Cancelled()
+
+    for s in (signal.SIGTERM, signal.SIGHUP, signal.SIGINT):
+        signal.signal(s, on_signal)
+    batches = []
+    for s in steps:
+        if s["group"] is not None and batches and batches[-1][0]["group"] == s["group"]:
+            batches[-1].append(s)
+        else:
+            batches.append([s])
     try:
-        for s in steps:
-            print("scripts/test: %-34s ..." % s["name"], end="", flush=True)
-            r = run_step(s, logdir, env)
-            results.append(r)
-            counts = "" if r["kind"] == "build" else "  %d run, %d failed%s" % (
-                r["tests_run"], r["failed"], ", %d ignored/skipped" % r["ignored"] if r["ignored"] else "")
-            print(" %s %7.1f s%s%s" % ("ok  " if r["ok"] else "FAIL", r["seconds"], counts, "  (%s)" % r["why"] if r["why"] else ""), flush=True)
-    except KeyboardInterrupt:
+        for batch in batches:
+            if len(batch) > 1:
+                print("scripts/test: group %s: %s at the same time" % (batch[0]["group"], ", ".join(s["name"] for s in batch)), flush=True)
+            else:
+                print("scripts/test: %-34s ..." % batch[0]["name"], end="", flush=True)
+            for r in run_batch(job, batch, logdir, env):
+                results.append(r)
+                counts = "" if r["kind"] == "build" else "  %d run, %d failed%s" % (
+                    r["tests_run"], r["failed"], ", %d ignored/skipped" % r["ignored"] if r["ignored"] else "")
+                if len(batch) > 1:
+                    print("scripts/test:   %-32s ..." % r["name"], end="")
+                print(" %s %7.1f s%s%s" % ("ok  " if r["ok"] else "FAIL", r["seconds"], counts, "  (%s)" % r["why"] if r["why"] else ""), flush=True)
+    except Cancelled:
         interrupted = True
-    finally:
-        shutil.rmtree(scratch, ignore_errors=True)
+        print("\nscripts/test: cancelled; the running steps were stopped", flush=True)
     verdict = "pass" if len(results) == len(steps) and all(r["ok"] for r in results) and not a.only else (
         "unfinished" if interrupted or any(r["timed_out"] for r in results) or len(results) < len(steps) else "fail")
     if a.only and all(r["ok"] for r in results) and not interrupted:
@@ -197,19 +412,22 @@ def main():
     tests = sum(r["seconds"] for r in results if r["kind"] != "build")
     summary = {
         "mode": mode, "verdict": verdict, "list": os.path.relpath(listfile, REPO),
-        "list_sha256": hashlib.sha256(open(listfile, "rb").read()).hexdigest(),
-        "only": a.only, "commit": git("rev-parse", "HEAD"), "dirty": bool(git("status", "--porcelain")),
-        "started": started, "build_seconds": round(build, 1), "test_seconds": round(tests, 1),
-        "tests_run": sum(r["tests_run"] or 0 for r in results), "steps": results,
+        "list_sha256": sha256(listfile), "runner_sha256": sha256(os.path.abspath(__file__)),
+        "target_dir": target, "only": a.only, "commit": git("rev-parse", "HEAD"),
+        "dirty": bool(git("status", "--porcelain")), "started": started,
+        "wall_seconds": round(time.monotonic() - wall0, 1), "build_seconds": round(build, 1),
+        "test_seconds": round(tests, 1), "tests_run": sum(r["tests_run"] or 0 for r in results), "steps": results,
     }
     if a.summary:
         with open(a.summary, "w") as f:
             json.dump(summary, f, indent=1)
             f.write("\n")
     bad = [r["name"] for r in results if not r["ok"]]
-    print("scripts/test %s: %s. %d steps, %d tests; build %.0f s, tests %.0f s; logs in %s%s" % (
-        mode, verdict.upper(), len(results), summary["tests_run"], build, tests, logdir,
+    print("scripts/test %s: %s. %d steps, %d tests in %.0f s (steps: build %.0f s, tests %.0f s); logs in %s%s" % (
+        mode, verdict.upper(), len(results), summary["tests_run"], summary["wall_seconds"], build, tests, logdir,
         "; failed: " + ", ".join(bad) if bad else ""))
+    if interrupted:
+        return 130
     return 0 if verdict == "pass" else 1
 
 

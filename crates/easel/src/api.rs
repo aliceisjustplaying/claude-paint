@@ -49,6 +49,8 @@ pub struct Studio {
     pub clock0: f64,
     pub rng: Rng,
     pub brushes: Vec<Weak<RefCell<Held>>>,
+    /// The painting knives in hand (snapshotted with the brushes).
+    pub knives: Vec<Weak<RefCell<paint::Knife>>>,
     /// The rags in the hand (draw_rag.rs), held as the brushes are.
     pub rags: Vec<Weak<RefCell<paint::rag::Rag>>>,
     pub out: String,
@@ -65,7 +67,7 @@ pub struct Studio {
 
 impl Studio {
     pub fn new(width: usize, tubes: Palette) -> Self {
-        Studio { width, canvas: None, style: None, setup: None, seed: 1, chunk: 0, calls: 0, clock: 0.0, clock0: 0.0, rng: Rng::new(1), brushes: Vec::new(), rags: Vec::new(), out: String::new(), field_secs: 0.0, view: None, hand: crate::time::Hand::default(), tubes: Rc::new(tubes) }
+        Studio { width, canvas: None, style: None, setup: None, seed: 1, chunk: 0, calls: 0, clock: 0.0, clock0: 0.0, rng: Rng::new(1), brushes: Vec::new(), knives: Vec::new(), rags: Vec::new(), out: String::new(), field_secs: 0.0, view: None, hand: crate::time::Hand::default(), tubes: Rc::new(tubes) }
     }
     /// Start chunk `n`: its randomness depends only on the seed and `n`.
     pub fn begin(&mut self, n: u64) {
@@ -79,6 +81,11 @@ impl Studio {
     pub(crate) fn auto_seed(&mut self) -> u64 {
         self.calls += 1;
         mixseed(self.seed, self.chunk, self.calls)
+    }
+
+    pub fn live_knives(&mut self) -> Vec<Rc<RefCell<paint::Knife>>> {
+        self.knives.retain(|w| w.strong_count() > 0);
+        self.knives.iter().filter_map(|w| w.upgrade()).collect()
     }
 
     pub fn live_brushes(&mut self) -> Vec<Rc<RefCell<Held>>> {
@@ -375,6 +382,67 @@ fn orient_of(v: Value) -> Result<Option<Orient>> {
 pub struct Brush {
     held: Rc<RefCell<Held>>,
     st: S,
+}
+
+/// A painting knife (`knife{width=}`): k:load(pile, amount), k:lay(points,
+/// {pressure=, angle=, lift=}), k:scrape(points, {pressure=, angle=}), k:wipe().
+pub struct KnifeU {
+    k: Rc<RefCell<paint::Knife>>,
+    st: S,
+}
+
+impl UserData for KnifeU {
+    fn add_fields<F: mlua::UserDataFields<Self>>(f: &mut F) {
+        f.add_field_method_get("width", |_, k| Ok(k.k.borrow().width));
+    }
+    fn add_methods<M: UserDataMethods<Self>>(m: &mut M) {
+        m.add_method("load", |_, k, (p, amount): (Value, Option<f32>)| {
+            let amount = load_amount(amount, 0.6, "k:load")?;
+            if !(0.0..=1.0).contains(&amount) { return err("k:load: amount is a share of a full load (0..1)"); }
+            let (paint, color) = brushload(&k.st, &p, &Value::Nil, "load")?;
+            k.k.borrow_mut().load(paint, amount);
+            time::trip(&k.st, color);
+            Ok(())
+        });
+        m.add_method("wipe", |_, k, ()| {
+            k.k.borrow_mut().wipe();
+            // (a wipe on the rag takes the hand's time, as a brush's)
+            if let Some(c) = k.st.borrow_mut().canvas.as_mut() {
+                c.tally_mut().wipe();
+            }
+            Ok(())
+        });
+        m.add_method("fullness", |_, k, ()| Ok(k.k.borrow().fullness()));
+        for (name, lay) in [("lay", true), ("scrape", false)] {
+            m.add_method(name, move |_, k, (pts, o): (Value, Option<Table>)| {
+                let pts = points(&pts)?;
+                if pts.is_empty() {
+                    return err(format!("k:{name}: needs points"));
+                }
+                let (mut pressure, mut angle, mut lift) = (if lay { (0.5, 0.5) } else { (1.0, 1.0) }, None, if lay { 0.1 } else { 0.0 });
+                if let Some(o) = &o {
+                    check_keys(o, &["pressure", "angle", "lift"], &format!("k:{name}"))?;
+                    if let Some(p) = pair(o, "pressure")? {
+                        pressure = p;
+                    }
+                    angle = num(o, "angle")?;
+                    if let Some(l) = num(o, "lift")? {
+                        if !l.is_finite() { return err(format!("k:{name}: lift must be finite")); }
+                        lift = l.clamp(0.0, 1.0);
+                    }
+                }
+                if !pressure.0.is_finite() || !pressure.1.is_finite() || angle.is_some_and(|a| !a.is_finite()) {
+                    return err(format!("k:{name}: pressure and angle must be finite"));
+                }
+                let scale = k.st.borrow().width as f32 / 1000.0;
+                if let Err(e) = paint::Knife::check_path(&pts, scale) { return err(format!("k:{name}: {e}")); }
+                time::verb(&k.st, Verb::Marks, |s| {
+                    s.canvas.as_mut().ok_or_else(no_canvas)?.knife(&mut k.k.borrow_mut(), &pts, pressure, angle, lay, lift);
+                    Ok(())
+                })
+            });
+        }
+    }
 }
 
 impl UserData for Brush {
@@ -1734,6 +1802,28 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
             let held = Rc::new(RefCell::new(Held::new(tool, seed).with_engine(engine)));
             st1.borrow_mut().brushes.push(Rc::downgrade(&held));
             Ok(Brush { held, st: st1.clone() })
+        })?)?;
+    }
+
+    // knife{width=}: a painting knife, its blade that many units long (from
+    // engine 4: an older log replays with exactly the globals it had, as
+    // with the rag, `draw_rag::has_rag`)
+    if st.borrow().tubes.engine >= 4 {
+        let st1 = st.clone();
+        g.set("knife", lua.create_function(move |_, o: Option<Table>| {
+            let width = match &o {
+                Some(o) => {
+                    check_keys(o, &["width"], "knife")?;
+                    num(o, "width")?.unwrap_or(20.0)
+                }
+                None => 20.0,
+            };
+            if !(2.0..=200.0).contains(&width) {
+                return err("knife{width=}: the blade's length in units, 2 to 200");
+            }
+            let k = Rc::new(RefCell::new(paint::Knife::new(width)));
+            st1.borrow_mut().knives.push(Rc::downgrade(&k));
+            Ok(KnifeU { k, st: st1.clone() })
         })?)?;
     }
 

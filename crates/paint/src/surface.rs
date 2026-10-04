@@ -61,6 +61,23 @@ fn rheology(stiff: f32) -> (f32, f32) {
     (10f32.powf(0.3 + 3.0 * s), 5.0 * 60f32.powf(s))
 }
 
+/// Paint thickness (µm) over which a film bridges the fine relief under it
+/// (engine 4, `settle_for`): a 40 µm film keeps about a third of the weave on
+/// its surface, a 120 µm one a twentieth.
+const BRIDGE_UM: f32 = 40.0;
+
+/// `rheology` for a canvas of engine version `engine`. From engine 4 the
+/// yield stress spans what oil paint has: 5 Pa for medium-rich paint up to
+/// some 3000 Pa for stiff tube paint (notes/research/oil_paint_physics.md;
+/// engines 1 to 3 stopped at 300 Pa, so a stroke's furrows leveled flat).
+fn rheology_at(engine: u32, stiff: f32) -> (f32, f32) {
+    if engine < 4 {
+        return rheology(stiff);
+    }
+    let s = stiff.clamp(0.0, 1.0);
+    (10f32.powf(0.3 + 3.0 * s), 5.0 * 600f32.powf(s))
+}
+
 /// Decay factor and frozen amplitude (µm) for a band of wavelength λ (m) in
 /// a wet film of thickness h (m).
 fn level_band(lambda: f32, h: f32, eta: f32, tau_y: f32, set_time: f32) -> (f32, f32) {
@@ -242,18 +259,37 @@ impl Canvas {
     /// thin fluid paint gathers in the valleys and thins on the peaks.
     pub(crate) fn settle(&mut self, rect: (usize, usize, usize, usize), add: &[f32], stiff: &[f32]) -> Vec<f32> {
         let sets = vec![SET_TIME; add.len()];
-        self.settle_for(rect, add, stiff, &sets)
+        self.settle_for(rect, add, stiff, &sets, false)
     }
 
     /// The surface with the wet paint on it, as the painter's raking light
-    /// sees it (`seen_lit`): dry height plus wet paint and solvent thickness.
+    /// sees it (`seen_lit`): the dry height plus each wet film's paint and solvent thickness,
+    /// which bridges the fine relief under it as a set film does (engine 4,
+    /// `BRIDGE_UM`; before it, the weave shows through any film).
     pub(crate) fn wet_surface(&self) -> Vec<f32> {
-        self.height.par_iter().zip(&self.wet.vol).enumerate().map(|(i, (a, v))| a + v * COAT_UM + self.wet.solv.get(i).copied().unwrap_or(0.0)).collect()
+        let (w, h) = (self.f.w, self.f.h);
+        let wet: Vec<f32> = self.wet.vol.par_iter().enumerate().map(|(i, v)| v * COAT_UM + self.wet.solv.get(i).copied().unwrap_or(0.0)).collect();
+        if self.engine < 4 {
+            return self.height.par_iter().zip(&wet).map(|(a, b)| a + b).collect();
+        }
+        let Bands { r1, .. } = Bands::at(self.px_mm());
+        let fine = box_blur(&box_blur(&self.height, w, h, r1), w, h, r1);
+        (0..w * h)
+            .into_par_iter()
+            .map(|i| {
+                let a = wet[i];
+                if a <= 0.0 {
+                    return self.height[i];
+                }
+                let keep = (-a / BRIDGE_UM).exp();
+                fine[i] + (self.height[i] - fine[i]) * keep + a
+            })
+            .collect()
     }
 
     /// `settle`, with each pixel's paint leveling for its own time `sets`
     /// (s): how long it stayed fluid (see `drying`).
-    pub(crate) fn settle_for(&mut self, rect: (usize, usize, usize, usize), add: &[f32], stiff: &[f32], sets: &[f32]) -> Vec<f32> {
+    pub(crate) fn settle_for(&mut self, rect: (usize, usize, usize, usize), add: &[f32], stiff: &[f32], sets: &[f32], bridge: bool) -> Vec<f32> {
         // far below any film is nothing at all (see ADD_EPS_UM): zero it so
         // float residue can't pose as paint in the ratios below
         let clean: Vec<f32>;
@@ -267,6 +303,9 @@ impl Canvas {
         let (rw, rh) = (x1 - x0, y1 - y0);
         let w = self.f.w;
         let Bands { r1, r2, lam1, lam2 } = Bands::at(self.px_mm());
+        // (engine 4's stiffer paint is the painting's films; a ground is
+        // laid and leveled as it always was)
+        let engine = if bridge { self.engine } else { self.engine.min(3) };
         let mut old = vec![0.0f32; rw * rh];
         let mut s = vec![0.0f32; rw * rh];
         for y in 0..rh {
@@ -276,6 +315,7 @@ impl Canvas {
                 s[i] = old[i] + add[i];
             }
         }
+
         let l1 = box_blur(&box_blur(&s, rw, rh, r1), rw, rh, r1);
         let l2 = box_blur(&box_blur(&l1, rw, rh, r2), rw, rh, r2);
         let mut out = vec![0.0f32; rw * rh];
@@ -288,7 +328,7 @@ impl Canvas {
                     continue;
                 }
                 let hm = a * 1e-6;
-                let (eta, ty) = rheology(stiff[i]);
+                let (eta, ty) = rheology_at(engine, stiff[i]);
                 let (k1, c1) = level_band(lam1, hm, eta, ty, sets[i]);
                 let (k2, c2) = level_band(lam2, hm, eta, ty, sets[i]);
                 let d1 = shrink(s[i] - l1[i], k1, c1);
@@ -319,6 +359,24 @@ impl Canvas {
         });
         conserve_total(add, &mut out, |_| f32::NEG_INFINITY, |_| f32::INFINITY);
         self.raise(rect, &old, add, &out);
+        // engine 4: a thick film bridges the fine relief under it (the weave,
+        // the ground's brush marks): its top is shaped by the brush, not by
+        // what it covers, so the fine relief fades from its surface over
+        // some tens of µm of paint. Only the surface: the film's thickness
+        // (and so its color) is as leveled above.
+        if bridge {
+            let fine = box_blur(&box_blur(&old, rw, rh, r1), rw, rh, r1);
+            for y in 0..rh {
+                for x in 0..rw {
+                    let i = y * rw + x;
+                    if add[i] > 0.0 {
+                        // (by the film as it leveled here: thin on a peak it drained from)
+                        let keep = (-out[i].max(0.0) / BRIDGE_UM).exp();
+                        self.height[(y0 + y) * w + x0 + x] -= (old[i] - fine[i]) * (1.0 - keep);
+                    }
+                }
+            }
+        }
         out
     }
 
@@ -370,7 +428,7 @@ impl Canvas {
         // the relief's bands (convex > 0, concave < 0), µm
         let l1 = box_blur(&box_blur(&old, w, h, r1), w, h, r1);
         let l2 = box_blur(&box_blur(&l1, w, h, r2), w, h, r2);
-        let (eta, ty) = rheology(stiff);
+        let (eta, ty) = rheology_at(self.engine, stiff);
         // per pixel: the drainage rate 2 Σ (A/h₀)(T/τ₀) on convex bands and
         // the gathering weight on concave ones
         let (rate, gather): (Vec<f32>, Vec<f32>) = (0..n)

@@ -203,6 +203,37 @@ blunt one narrows at a light touch too (to about a third), but has no point.
 `wobble` (units) lets the hand drift sideways. Use gestures for the marks
 that carry the picture: the few decisive strokes a passage needs.
 
+**Thick paint.** `lay` (a brush option) sets how much paint a full brush
+lays down: 1 for an ordinary load, 4 to 16 for impasto. Stiff paint
+(blotted, or a stiff tube with no medium) holds what the brush leaves: in
+it the hairs gather into clumps that lay the stroke in ridges and furrows
+and push walls up along its edges, the coarser the hair (`hair`) the
+coarser the clumps. Fluid paint levels out.
+
+**The knife.** `k = knife{width=<units>}` is a painting knife, its blade
+that long. `k:load(p, amount)` picks up paint, `k:wipe()` cleans it.
+`k:lay(points, {pressure={a, b}, angle=, lift=})` drags it along the points
+with the blade across the path (or at a fixed `angle`): it rests on the
+surface's high points and stands off them by less the harder it is pressed,
+filling what lies under it to the blade's level in a slab with a flat top,
+or over dry impasto catching only the ridges; wet paint standing above the
+blade is cut off into its bead or pressed out at its ends in ridges, and
+the share `lift` of the bead (0.1) stays where it lifts.
+`k:scrape(points, {pressure=, angle=})` scrapes wet paint off down to the blade
+(at full pressure, down to the dry paint) and keeps it on the blade.
+
+**Spatter.** `b:spatter{at={x, y}, toward={dx, dy}, spread=, force=, clip=}`
+flicks the loaded brush: the paint its hairs can't hold flies off in droplets
+toward `toward` (its length is how far the paint carries, in units), in a cone
+`spread` radians either side (0.45 by default), `force` 0..1 hard (0.6). Fluid
+paint (medium, turpentine) flies readily; blotted or stiff tube paint barely
+leaves the brush. A hard flick throws many small droplets, a gentle one fewer
+and bigger; heavier droplets carry farther, and those that land at a slant
+stretch along their flight. Each comes off one hair with that hair's paint (a
+double-loaded brush spatters both colors), and lands in the wet layer like
+any paint. It returns how many droplets landed; `b:fullness()` shows what is
+left on the brush.
+
 ## Covering an area
 
 ```lua

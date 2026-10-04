@@ -1378,7 +1378,10 @@ fn state_digest_line(s: &Session, n: usize, secs: f64) -> String {
     let brushes_h = fnv1a(brushes.iter().chain(&rags).cloned().collect::<Vec<_>>().join("\n").as_bytes());
     let studio = format!("seed={} clock={:?} clock0={:?} chunk={} calls={} setup={:?} piles={:?} rng={:?}", st.seed, st.clock, st.clock0, st.chunk, st.calls, st.setup, st.hand.piles, st.rng);
     let studio_h = fnv1a(studio.as_bytes());
-    format!("chunk {n} secs={secs:.3} canvas={canvas:016x} brushes={brushes_h:016x} nbrushes={} studio={studio_h:016x}\n", brushes.len())
+    // (knives came with engine 4: a painting without one keeps the line it had)
+    let knives: Vec<String> = st.live_knives().iter().map(|k| format!("{:?}", k.borrow())).collect();
+    let knives_s = if knives.is_empty() { String::new() } else { format!(" knives={:016x} nknives={}", fnv1a(knives.join("\n").as_bytes()), knives.len()) };
+    format!("chunk {n} secs={secs:.3} canvas={canvas:016x} brushes={brushes_h:016x} nbrushes={} studio={studio_h:016x}{knives_s}\n", brushes.len())
 }
 
 #[cfg(test)]
@@ -1544,7 +1547,7 @@ mod tests {
     fn a_log_replays_at_the_width_it_was_painted_at() {
         assert_eq!(width_for("sketch-1", None), session::SKETCH_WIDTH);
         assert_eq!(width_for("painting", None), LIVE_WIDTH);
-        let head = |mark: &str| format!("-- easel session\n--@ engine 3\n{mark}\n--@ chunk 1\ncanvas{{}}\n");
+        let head = |mark: &str| format!("-- easel session\n--@ engine 4\n{mark}\n--@ chunk 1\ncanvas{{}}\n");
         assert_eq!(width_for("renamed", Some(&head(session::SKETCH_MARK))), session::SKETCH_WIDTH);
         assert_eq!(width_for("sketchbook", Some(&head(""))), LIVE_WIDTH);
     }

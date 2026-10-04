@@ -12,6 +12,42 @@ import r21_chains as rc21
 GO_LIMIT = '429: {"type":"GoUsageLimitError","message":"Go usage limit exceeded"}'      # round 19, KIMIF and MIMOF
 
 
+@pytest.mark.parametrize("initial, edits, expected", [
+    ("1", ["3", "bad", "2"], 3),
+    ("4", ["1"], 1),
+    (None, ["-1", "", "4", "4"], 4),
+])
+def test_sitting_cap_changes_during_painting(tmp_path, monkeypatch, initial, edits, expected):
+    monkeypatch.setattr(rc21, "RUN", tmp_path)
+    monkeypatch.setattr(rc21, "LANES", {"T": rc21.lane("inness", rc21.OPUS)})
+    messages = []
+    monkeypatch.setattr(rc21, "log", lambda *a: None)
+    monkeypatch.setattr(rc21, "stop_leftovers", lambda *a, **kw: None)
+    monkeypatch.setattr(rc21, "open_easel", lambda *a: True)
+    monkeypatch.setattr(rc21, "close_easel", lambda *a: None)
+    monkeypatch.setattr(rc21, "session_dir", lambda *a: tmp_path)
+    monkeypatch.setattr(rc21, "count_chunks", lambda *a: len(messages))
+    monkeypatch.setattr(rc21, "count_painting", lambda *a: len(messages))
+    cap = tmp_path / "max_sittings.txt"
+    if initial is not None:
+        cap.write_text(initial)
+
+    def painter(cmd, cwd, out, err, env=None):
+        messages.append(cmd[-1])
+        if len(messages) <= len(edits):
+            cap.write_text(edits[len(messages) - 1])
+        out.write_text("A painting.")
+        err.write_text("")
+        return 0
+
+    monkeypatch.setattr(rc21, "run", painter)
+    rc21.paint("T", 1, tmp_path / "studio", tmp_path)
+    records = json.loads((tmp_path / "p1_sittings.json").read_text())
+    assert len(records) == expected
+    assert all(s["status"] == "completed" for s in records)
+    assert messages == [rc21.PAINTER_MSG] + [rc21.SITTING_MESSAGE] * (expected - 1)
+
+
 def probe_waits(monkeypatch, tmp_path, *replies):
     """wait_out_limit against probe replies in turn (a CompletedProcess or an exception to raise):
     what it returned, and the log."""

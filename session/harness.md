@@ -42,7 +42,7 @@ stateDiagram-v2
 
 The supplied system prompt is retained, minus a leading HTML comment.
 Pi's added context files, skills and tool guidelines are removed; its working-directory section remains.
-The painter has no shell or general network tool.
+The configured runner selects only paint, look, note, status, log and read. With that launcher restriction, the painter has no shell or general network tool. Loading the extension alone can leave pi’s default tools available; the [runtime probe](../verification/evidence/runtime-harness.md#actual-painter-tools-through-pi) distinguishes these launch modes.
 The reader resolves paths and symbolic links, then refuses destinations outside the studio.
 This is a tool boundary, not a claim of operating-system sandboxing.
 
@@ -129,7 +129,7 @@ Unexpected summary failure produces a short fallback naming the brief and journa
 | Target changed externally | Reads and recovery inspect current studio material. | No atomic snapshot covers brief, journal, globals and image together. Cached summary images are not reread. |
 | Input channel changed | Input accepts text and images; tools take structured arguments. | A terminal call does not rewrite the pending tool. Recovery in a new sitting depends on the runner's recovery setting. |
 
-> Technical note: `harness/painter/easel-client.ts:25`, `painter.ts:63`, `painter.ts:111`, `painter.ts:140` and `summary.ts:121`. The unconditional usage-limit timer is a suspected responsiveness defect requiring runtime verification.
+> Technical note: `harness/painter/easel-client.ts:25`, `painter.ts:63`, `painter.ts:111`, `painter.ts:140` and `summary.ts:121`. The unconditional usage-limit timer caused delayed abort in the [runtime probe](../verification/evidence/runtime-harness.md#usage-limit-abort-bug04).
 
 ## Interactions with other systems
 
@@ -165,8 +165,7 @@ Unexpected summary failure produces a short fallback naming the brief and journa
 
 ## Open questions and verification
 
-Actual provider requests, full-duration waits, pi compaction and abort during a usage-limit wait are not exercised here.
-The usage-limit timer appears unable to respond promptly to a pi abort while waiting; this is a suspected defect.
+Actual external-provider requests and full-duration provider waits remain untested. Installed pi compaction, six-tool execution and usage-limit abort were exercised using local provider fixtures in the [runtime pass](../verification/evidence/runtime-harness.md). The usage-limit timer delayed abort until its configured three-second wait ended.
 Tool isolation is not a verified hostile-filesystem security boundary.
 Compaction depends on pi's settings interface; its documented fallback changes when compaction occurs.
 

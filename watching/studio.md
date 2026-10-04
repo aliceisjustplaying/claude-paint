@@ -200,10 +200,12 @@ After an event connection failure, the page can continue displaying a picture wh
 
 ## Open questions and verification
 
+- The [runtime pass](../verification/evidence/runtime-viewer.md#expanded-static-and-public-browser-pass) found stream-header overflow at 390 pixels; ordinary public mode fit. Phone support for broadcast layout remains a product call in [B15](../bug-triage.md#b15--stream-header-overflows-at-phone-width).
+
 - Browser behavior is source-reviewed, with selected [agent-driven browser probes](../verification/evidence/browser.md). The full human pass remains incomplete; narrow layouts, image fallbacks, live updates and keyboard combinations still need the [verification pass](../verification/README.md).
-- Suspected defect: if the initial session-list request fails, initialization rejects before polling timers are installed. A transient startup failure can leave the viewer inert until reload. Cause: unhandled `loadSessions()` inside the startup `Promise.all` at `studio/index.html:824`, with the fetch at `studio/index.html:376`.
-- Suspected defect: initial event network errors and missing painters share the same “hasn't started yet” message. After data exists, failures have no disconnected state. A viewer can mistake stale activity for a healthy connection. Cause: `studio/index.html:409` and activity-only status at `studio/index.html:510`.
-- Confirmed defect: Home in an empty picker raises an uncaught browser exception; see the [browser probe](../verification/evidence/browser.md#empty-picker-probe). End and arrow navigation share the source-level empty-list boundary but remain untested. Cause: `studio/index.html:365–372`.
+- Confirmed failure path: if the initial session-list request fails, initialization rejects before polling timers are installed. A transient startup failure can leave the viewer inert until reload. Cause: unhandled `loadSessions()` inside the startup `Promise.all` at `studio/index.html:824`, with the fetch at `studio/index.html:376`.
+- Confirmed failure path: initial event network errors and missing painters share the same “hasn't started yet” message. After data exists, failures have no disconnected state. A viewer can mistake stale activity for a healthy connection. Cause: `studio/index.html:409` and activity-only status at `studio/index.html:510`.
+- Confirmed defect: Home, End and all four arrow keys in an empty picker raise uncaught browser exceptions; see the [runtime probe](../verification/evidence/runtime-viewer.md#empty-picker-bug-09-reproduced-for-every-navigation-key). Cause: `studio/index.html:365–372`.
 - The differing picker and FINISHED activity cutoffs are a product consistency question, not proof that the painter process stopped. Their definitions are at `studio/index.html:272` and `studio/index.html:700`.
 
 Source-reviewed against `../claude-paint` commit `4e525e50897807e9b5f734071dfeb330f1a393d3`; runtime verification is recorded separately in [verification](../verification/README.md).

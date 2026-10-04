@@ -98,6 +98,6 @@ An append writes the entry and returns the journal path. A harness revision firs
 
 ## Open questions and verification
 
-Concurrent journal editing and interrupted replacement are source-identified risks, not reproduced data loss. [Triage](../bug-triage.md) distinguishes them from observed CLI results.
+Denied journal rewrite reproduced an appended history record with unchanged journal bytes in the [runtime pass](../verification/evidence/runtime-harness.md#journal-history-before-denied-rewrite-bug06). Concurrent editing and interruption during a write remain source-identified risks, not reproduced data loss. [Triage](../bug-triage.md) distinguishes them from observed CLI results.
 
 Source-reviewed against `../claude-paint` commit `4e525e50897807e9b5f734071dfeb330f1a393d3`; see [verification](../verification/README.md).

@@ -1,0 +1,31 @@
+[
+  {
+    "name": "none",
+    "status": 0,
+    "output": "log: <fixture>/isolate-none/paintings/lua/painting.lua (1 chunks); the studio's committed record equals its log\nresuming chunk 1/1\nresumed chunk 1/1 0.12s\nresumed 1 chunks from <fixture>/isolate-check-none/paintings/lua/painting.lua\neasel \"painting\" open: 1 chunks · 2400px · size=100, aspect=5, linen={12, 12}, seed=1\nthe replay equals the live canvas saved at close\nthe replay's canvas state equals the save written at close\nthe painter saved no picture\ntimes: reopen 0 s, save and close 0 s\ncheck: ok: 1 chunks replay to the live canvas; the replay equals the live canvas saved at close; the replay's canvas state equals the save written at close; the painter saved no picture; the studio's committed record equals its log\n"
+  },
+  {
+    "name": "varnish",
+    "failure": "runtime error: varnish: the paint is not all dry yet (1% of the canvas is still open, setting or tacky; drying(x, y) tells where): wait first\n(the chunk failed and changed nothing)\n",
+    "status": 1,
+    "output": "log: <fixture>/isolate-varnish/paintings/lua/painting.lua (1 chunks); the studio's committed record equals its log\nresuming chunk 1/1\nresumed chunk 1/1 0.13s\nresumed 1 chunks from <fixture>/isolate-check-varnish/paintings/lua/painting.lua\neasel \"painting\" open: 1 chunks · 2400px · size=100, aspect=5, linen={12, 12}, seed=1\nthe replay equals the live canvas saved at close\nthe replay's canvas state DIFFERS from the save written at close\nthe painter saved no picture\ntimes: reopen 1 s, save and close 0 s\ncheck: DIFFERS from the live save: the replay's canvas state DIFFERS from the save written at close; the replay equals the live canvas saved at close; the painter saved no picture; the studio's committed record equals its log\n"
+  },
+  {
+    "name": "cracks",
+    "failure": "runtime error: cracks: the paint is not all dry yet (1% of the canvas is still open, setting or tacky; drying(x, y) tells where): wait first\n(the chunk failed and changed nothing)\n",
+    "status": 1,
+    "output": "log: <fixture>/isolate-cracks/paintings/lua/painting.lua (1 chunks); the studio's committed record equals its log\nresuming chunk 1/1\nresumed chunk 1/1 0.12s\nresumed 1 chunks from <fixture>/isolate-check-cracks/paintings/lua/painting.lua\neasel \"painting\" open: 1 chunks · 2400px · size=100, aspect=5, linen={12, 12}, seed=1\nthe replay equals the live canvas saved at close\nthe replay's canvas state DIFFERS from the save written at close\nthe painter saved no picture\ntimes: reopen 1 s, save and close 0 s\ncheck: DIFFERS from the live save: the replay's canvas state DIFFERS from the save written at close; the replay equals the live canvas saved at close; the painter saved no picture; the studio's committed record equals its log\n"
+  },
+  {
+    "name": "relief",
+    "failure": "runtime error: relief: the paint is not all dry yet (1% of the canvas is still open, setting or tacky; drying(x, y) tells where): wait first\n(the chunk failed and changed nothing)\n",
+    "status": 1,
+    "output": "log: <fixture>/isolate-relief/paintings/lua/painting.lua (1 chunks); the studio's committed record equals its log\nresuming chunk 1/1\nresumed chunk 1/1 0.13s\nresumed 1 chunks from <fixture>/isolate-check-relief/paintings/lua/painting.lua\neasel \"painting\" open: 1 chunks · 2400px · size=100, aspect=5, linen={12, 12}, seed=1\nthe replay equals the live canvas saved at close\nthe replay's canvas state DIFFERS from the save written at close\nthe painter saved no picture\ntimes: reopen 0 s, save and close 0 s\ncheck: DIFFERS from the live save: the replay's canvas state DIFFERS from the save written at close; the replay equals the live canvas saved at close; the painter saved no picture; the studio's committed record equals its log\n"
+  },
+  {
+    "name": "lua-error",
+    "failure": "runtime error: [string \"chunk 2\"]:1: plain failure\n(the chunk failed and changed nothing)\n",
+    "status": 1,
+    "output": "log: <fixture>/isolate-lua-error/paintings/lua/painting.lua (1 chunks); the studio's committed record equals its log\nresuming chunk 1/1\nresumed chunk 1/1 0.13s\nresumed 1 chunks from <fixture>/isolate-check-lua-error/paintings/lua/painting.lua\neasel \"painting\" open: 1 chunks · 2400px · size=100, aspect=5, linen={12, 12}, seed=1\nthe replay equals the live canvas saved at close\nthe replay's canvas state DIFFERS from the save written at close\nthe painter saved no picture\ntimes: reopen 0 s, save and close 0 s\ncheck: DIFFERS from the live save: the replay's canvas state DIFFERS from the save written at close; the replay equals the live canvas saved at close; the painter saved no picture; the studio's committed record equals its log\n"
+  }
+]

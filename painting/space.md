@@ -210,9 +210,9 @@ A failure in a later chunk does not erase references committed by earlier chunks
 
 ## Open questions and verification
 
-- No runtime pass was performed for this document. Projection, body occlusion, masks, shadows, explicit-view selection and failed-chunk restoration need the [verification pass](../verification/README.md).
+- Selected runtime checks are recorded in the [verification pass](../verification/README.md); untested variants remain marked there.
 - Existing source tests cover hard shadow boundaries (`crates/easel/src/form.rs:494`), foreground protection and replay (`crates/easel/src/depth.rs:344`), mixed visibility targets (`crates/easel/src/depth.rs:387`) and current-view rollback (`crates/easel/src/depth.rs:412`). They establish intended behavior without substituting for a recorded run.
-- Suspected inconsistency: nested lists containing masks work for visibility but fail for passage `behind`, although ordinary nested named selections work. The visibility parser recursively extracts masks at `crates/easel/src/depth.rs:105`; `behind` partitions only its outer list at `crates/easel/src/depth.rs:272`, then sends nested masks to the names-only parser. Whether nesting should be supported consistently is a product call.
+- Confirmed inconsistency in the [runtime probe](../verification/evidence/runtime-paint.md): nested lists containing masks work for visibility but fail for passage `behind`, although ordinary nested named selections work. The visibility parser recursively extracts masks at `crates/easel/src/depth.rs:105`; `behind` partitions only its outer list at `crates/easel/src/depth.rs:272`, then sends nested masks to the names-only parser. Whether nesting should be supported consistently is a product call.
 - Extreme camera values, nonfinite geometry inputs and duplicate layer names are not fully specified by the guide. This description does not infer clean validation for every numeric input.
 
 Source-reviewed against `../claude-paint` commit `4e525e50897807e9b5f734071dfeb330f1a393d3`; runtime verification is recorded separately in [verification](../verification/README.md).

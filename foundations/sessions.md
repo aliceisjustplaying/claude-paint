@@ -93,6 +93,6 @@ The successful open selects the session and returns status. Close saves the live
 
 ## Open questions and verification
 
-The default build is exercised in isolation. Exported painter builds and historical logs require their own evidence; default-build probes must not be presented as proof of those variants.
+The default build and a pinned blank-profile painter export were exercised separately in the [runtime pass](../verification/runtime-pass.md). Other exported profiles and the full historical-log matrix remain incomplete.
 
 Source-reviewed against `../claude-paint` commit `4e525e50897807e9b5f734071dfeb330f1a393d3`; see [verification](../verification/README.md).

@@ -168,7 +168,7 @@ Ordinary Lua failure restores cloth state along with canvas state.
 
 ## Open questions and verification
 
-Visual streaking, mask-edge overrun, saturation, dip/refold sequences and interruption remain source-backed rather than manually verified here.
+Selected cloth state, dip/refold, wet/dry contact and rollback were exercised in the [runtime pass](../verification/evidence/runtime-paint.md). Complete streaking, mask-edge, saturation and interruption combinations remain unverified.
 No new suspected defect is established from this source pass.
 Exact artistic appearance is not reducible to one percentage of paint removed; the source tests use particular paint, ground and timing setups.
 

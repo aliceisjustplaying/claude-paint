@@ -1605,4 +1605,25 @@ mod tests {
         s.run(&CANVAS.replace(r#"apply="brush"}"#, r#"apply="brush", absorbent=true}"#)).unwrap();
         s.run(r#"pile{{"lead white", 1}, turps=0.5}"#).unwrap();
     }
+
+    /// A gesture's points are checked before its curve is sampled (a point
+    /// that is nowhere would be sampled without end), and its pressure keeps
+    /// a press that falls between its evenly spaced knots.
+    #[test]
+    #[cfg(tube_box)]
+    fn a_gesture_checks_its_points_and_keeps_a_press() {
+        let mut s = Session::new(W).unwrap();
+        s.run(CANVAS).unwrap();
+        s.run(r#"b = brush("round", 6); b:load(pile{{"bone black", 1}}, 0.9); full0 = b:fullness()"#).unwrap();
+        for bad in ["{{100, 300}, {math.huge, 300}}", "{{100, 300}, {0/0, 300}}", "{{100, 300}, {1e9, 300}}"] {
+            let e = s.run(&format!("b:gesture({bad})")).unwrap_err();
+            assert!(e.contains("not on or near the canvas"), "{bad}: {e}");
+        }
+        let bare = bits(&s);
+        // one pressed point among 33, the others lifted: it paints
+        s.run(r#"local pts = {}; for i = 0, 32 do pts[#pts + 1] = {100 + 20 * i, 300, i == 1 and 1 or 0} end
+                  b:gesture(pts, {ramps={0, 0}})
+                  assert(b:fullness() < full0, "the pressed point laid paint")"#).unwrap();
+        assert_ne!(bare, bits(&s));
+    }
 }

@@ -523,10 +523,19 @@ impl UserData for Brush {
                         return err("gesture: a point's pressure p is 0..1");
                     }
                 }
-                ctl.push((p.get(1)?, p.get(2)?, pr));
+                let (x, y): (f32, f32) = (p.get(1)?, p.get(2)?);
+                // (before the curve is sampled: a sample every unit or so of a
+                // point that is nowhere would never end)
+                if !(x.is_finite() && y.is_finite() && x.abs() <= GESTURE_REACH && y.abs() <= GESTURE_REACH) {
+                    return err(format!("gesture: the point {{{x}, {y}}} is not on or near the canvas (units, within {GESTURE_REACH} of its corner)"));
+                }
+                ctl.push((x, y, pr));
             }
             if ctl.len() < 2 {
                 return err("gesture: needs at least two points");
+            }
+            if ctl.len() > 2000 {
+                return err("gesture: one stroke, of at most 2000 points");
             }
             // pressures: missing ones from their neighbors, the ends 0.8 if none is given
             let given: Vec<(usize, f32)> = ctl.iter().enumerate().filter_map(|(i, c)| c.2.map(|p| (i, p))).collect();
@@ -561,7 +570,10 @@ impl UserData for Brush {
             let n = ctl.len();
             let at = |i: isize| { let i = i.clamp(0, n as isize - 1) as usize; (ctl[i].0, ctl[i].1, pres[i]) };
             let mut path: Vec<(f32, f32, f32)> = Vec::new();
+            // (where each point lies on the path)
+            let mut at_ctl: Vec<usize> = Vec::with_capacity(n);
             for i in 0..n - 1 {
+                at_ctl.push(path.len());
                 let (p0, p1, p2, p3) = (at(i as isize - 1), at(i as isize), at(i as isize + 1), at(i as isize + 2));
                 let seg = ((p2.0 - p1.0).powi(2) + (p2.1 - p1.1).powi(2)).sqrt();
                 let k = (seg / 1.5).ceil().max(2.0) as usize;
@@ -572,6 +584,7 @@ impl UserData for Brush {
                     path.push((cr(p0.0, p1.0, p2.0, p3.0), cr(p0.1, p1.1, p2.1, p3.1), p1.2 + (p2.2 - p1.2) * t));
                 }
             }
+            at_ctl.push(path.len());
             path.push(at(n as isize - 1));
             // a hand's wobble: a slow sideways drift, units
             if wobble > 0.0 {
@@ -595,15 +608,29 @@ impl UserData for Brush {
                 arc[i] = arc[i - 1] + ((path[i].0 - path[i - 1].0).powi(2) + (path[i].1 - path[i - 1].1).powi(2)).sqrt();
             }
             let total = arc[arc.len() - 1].max(1e-6);
-            let knots: Vec<f32> = (0..=16)
+            // (knots close enough to follow the closest points, 16 to 512 spans;
+            // and each point's own pressure, where it is a peak or a dip, kept
+            // at the knot nearest it: a press between two knots is not lost)
+            let closest = at_ctl.windows(2).map(|w| arc[w[1]] - arc[w[0]]).filter(|d| *d > 1e-3).fold(f32::MAX, f32::min);
+            let spans = if closest == f32::MAX { 16 } else { ((2.0 * total / closest).ceil() as usize).clamp(16, 512) };
+            let mut knots: Vec<f32> = (0..=spans)
                 .map(|q| {
-                    let d = total * q as f32 / 16.0;
+                    let d = total * q as f32 / spans as f32;
                     let j = arc.partition_point(|&a| a < d).clamp(1, arc.len() - 1);
                     let (a0, a1) = (arc[j - 1], arc[j]);
                     let f = if a1 > a0 { (d - a0) / (a1 - a0) } else { 0.0 };
                     (path[j - 1].2 + (path[j].2 - path[j - 1].2) * f).max(0.0)
                 })
                 .collect();
+            for i in 0..n {
+                let (p, before, after) = (pres[i], pres[i.saturating_sub(1)], pres[(i + 1).min(n - 1)]);
+                let q = ((arc[at_ctl[i]] / total * spans as f32).round() as usize).min(spans);
+                if p >= before && p >= after {
+                    knots[q] = knots[q].max(p);
+                } else if p <= before && p <= after {
+                    knots[q] = knots[q].min(p);
+                }
+            }
             let mut g = Gesture::new(path.iter().map(|p| (p.0, p.1)).collect()).pressure(1.0, 1.0).swell(knots);
             if let Some((a, z)) = ramps {
                 g = g.ramps(a, z);
@@ -962,6 +989,10 @@ const WORK_KEYS: &[&str] = &[
     "threshold", "ramps", "shake", "curve", "cross", "drift", "tail", "broken", "swell", "clump", "order", "mix_jitter", "seed", "ruler", "load", "hug",
     "fill", "visible", "behind", "at", "view", "edge", "streak", "second", "scale_at",
 ];
+
+/// How far from the canvas's corner a gesture's point may lie (units; the
+/// canvas is 1000 wide and at most 5000 high).
+const GESTURE_REACH: f32 = 20_000.0;
 
 const PART_KEYS: &[&str] = &["side", "share", "streak"];
 

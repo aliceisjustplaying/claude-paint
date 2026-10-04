@@ -344,6 +344,12 @@ def test_a_palette_look_is_not_the_painting():
     assert S.is_whole(S.look_text({"size": 800}))
     assert not S.is_whole(S.look_text({"palette": True}))
     assert S.is_whole(S.look_text({"palette": False}))
+    # nor is a survey's tile, a comparison or a lit look
+    assert not S.is_whole(S.look_text({"survey": True}))
+    assert S.is_whole(S.look_text({"survey": False}))
+    assert not S.is_whole(S.look_text({"compare": "out/easel/painting/a.png"}))
+    assert not S.is_whole(S.look_text({"light": "45,15"}))
+    assert not S.is_whole(S.look_text({"survey": True, "mode": "gallery"}))
 
 
 @pytest.mark.parametrize("ending, said", [

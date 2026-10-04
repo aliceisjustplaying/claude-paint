@@ -831,7 +831,8 @@ impl Canvas {
                 } else {
                     since = 1;
                 }
-                self.tally.stroke(tool, &p.pts, mpu);
+                // (timed with the brush it is painted with: its own, where marks are sized)
+                self.tally.stroke(p.tool.as_ref().unwrap_or(tool), &p.pts, mpu);
                 if p.dip.is_some() {
                     if hd.blender {
                         self.tally.wipe();

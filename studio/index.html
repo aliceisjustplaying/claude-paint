@@ -687,9 +687,9 @@ function lookWords(req) {
   if (/palette (?!False)/.test(req)) return ['Palette', 'the paints it has mixed, thick and thin', 'looks at its palette'];
   if (/survey (?!False)/.test(req)) return ['Survey', 'a part of the canvas at full detail, one of several', 'surveys the canvas up close'];
   if (/compare/.test(req)) return ['Before and after', 'an earlier look beside the canvas now', 'compares the canvas with an earlier look'];
-  const mode = (req.match(/mode\s+([a-z,]+)/) || [''])[0], crop = /crop/.test(req), sq = /squint|blur/.test(mode), val = /value|gray/.test(mode), mir = /mirror/.test(mode);
+  const mode = (req.match(/mode\s+([a-z]+(?:\s*,\s*[a-z]+)*)/) || [''])[0], crop = /crop/.test(req), sq = /squint|blur/.test(mode), val = /value|gray/.test(mode), mir = /mirror/.test(mode);
   // the light, as the easel takes it: a light given (it rakes, whatever the mode), else the first of relief/raking/gallery in the mode list
-  const lit = /light\s/.test(req) ? 'relief' : (mode.replace(/^mode\s+/, '').split(',').find(m => /^(relief|raking|gallery)$/.test(m)) || ''), gal = lit === 'gallery', rel = lit !== '' && !gal;
+  const lit = /light\s/.test(req) ? 'relief' : (mode.replace(/^mode\s+/, '').split(',').map(m => m.trim()).find(m => /^(relief|raking|gallery)$/.test(m)) || ''), gal = lit === 'gallery', rel = lit !== '' && !gal;
   const why = [crop && 'up close, at full detail', sq && 'blurred on purpose, as through half-closed eyes, to judge the big shapes',
                val && 'in grays, to judge light against dark', mir && 'flipped left to right, to see it with fresh eyes',
                rel && 'under a raking light, to see the ridges and furrows of the paint', gal && 'lit from above, as it would hang'].filter(Boolean);

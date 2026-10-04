@@ -384,9 +384,28 @@ impl UserData for Brush {
     }
     fn add_methods<M: UserDataMethods<Self>>(m: &mut M) {
         // b:load(pile, amount?): dip into a pile on the palette (amount 0..1 of a full load)
+        // b:load(pile, amount, {side=, share=, streak=}): only part of the brush goes in
         m.add_method("load", |_, b, (p, amount, extra): (Value, Option<f32>, Value)| {
+            // (before anything is drawn from the session's randomness: a refused load leaves it as it was)
+            let amount = load_amount(amount, 0.8, "b:load")?;
+            // (on a legacy canvas a table is its load's options: brushload's)
+            #[cfg(feature = "replay")]
+            let legacy = crate::legacy::on(&b.st);
+            #[cfg(not(feature = "replay"))]
+            let legacy = false;
+            if let Value::Table(t) = &extra
+                && !legacy
+            {
+                check_keys(t, PART_KEYS, "b:load")?;
+                let mut part = part_of(t, "b:load")?;
+                let (paint, color) = brushload(&b.st, &p, &Value::Nil, "load")?;
+                part.seed = b.st.borrow_mut().rng.next_u64();
+                b.held.borrow_mut().load_part(paint, amount, &part);
+                time::trip(&b.st, color);
+                return Ok(());
+            }
             let (paint, color) = brushload(&b.st, &p, &extra, "load")?;
-            b.held.borrow_mut().load(paint, amount.unwrap_or(0.8));
+            b.held.borrow_mut().load(paint, amount);
             time::trip(&b.st, color);
             Ok(())
         });
@@ -440,6 +459,153 @@ impl UserData for Brush {
                 Ok(())
             })
         });
+        // b:gesture({{x, y, p}, ...}, {wobble=, orient=, ramps=, shake=, clip=}): one deliberate
+        // stroke along a smooth curve through the points, its pressure following each
+        // point's p (0..1; a point without one takes its neighbors')
+        m.add_method("gesture", |_, b, (pts, o): (Value, Option<Table>)| {
+            let Value::Table(t) = &pts else { return err("gesture: want {{x, y, p}, ...}") };
+            let mut ctl: Vec<(f32, f32, Option<f32>)> = Vec::new();
+            for p in t.sequence_values::<Table>() {
+                let p = p?;
+                let pr: Option<f32> = p.get(3)?;
+                if let Some(v) = pr {
+                    if !(0.0..=1.0).contains(&v) {
+                        return err("gesture: a point's pressure p is 0..1");
+                    }
+                }
+                let (x, y): (f32, f32) = (p.get(1)?, p.get(2)?);
+                // (before the curve is sampled: a sample every unit or so of a
+                // point that is nowhere would never end)
+                if !(x.is_finite() && y.is_finite() && x.abs() <= GESTURE_REACH && y.abs() <= GESTURE_REACH) {
+                    return err(format!("gesture: the point {{{x}, {y}}} is not on or near the canvas (units, within {GESTURE_REACH} of its corner)"));
+                }
+                ctl.push((x, y, pr));
+            }
+            if ctl.len() < 2 {
+                return err("gesture: needs at least two points");
+            }
+            if ctl.len() > 2000 {
+                return err("gesture: one stroke, of at most 2000 points");
+            }
+            // pressures: missing ones from their neighbors, the ends 0.8 if none is given
+            let given: Vec<(usize, f32)> = ctl.iter().enumerate().filter_map(|(i, c)| c.2.map(|p| (i, p))).collect();
+            let pres: Vec<f32> = (0..ctl.len())
+                .map(|i| {
+                    if given.is_empty() {
+                        return 0.8;
+                    }
+                    let before = given.iter().rev().find(|g| g.0 <= i);
+                    let after = given.iter().find(|g| g.0 >= i);
+                    match (before, after) {
+                        (Some(a), Some(c)) if c.0 > a.0 => a.1 + (c.1 - a.1) * (i - a.0) as f32 / (c.0 - a.0) as f32,
+                        (Some(a), _) => a.1,
+                        (_, Some(c)) => c.1,
+                        _ => 0.8,
+                    }
+                })
+                .collect();
+            let mut wobble = 0.0f32;
+            let mut g_orient = None;
+            let (mut ramps, mut shake, mut clip) = (None, None, None);
+            if let Some(o) = &o {
+                check_keys(o, &["wobble", "orient", "ramps", "shake", "clip"], "gesture")?;
+                wobble = num(o, "wobble")?.unwrap_or(0.0).max(0.0);
+                g_orient = orient_of(o.get("orient")?)?;
+                ramps = pair(o, "ramps")?;
+                shake = num(o, "shake")?;
+                clip = mask_opt(o.get("clip")?)?;
+            }
+            // a Catmull-Rom curve through the points, a sample every unit or so,
+            // with the pressure carried along it
+            let n = ctl.len();
+            let at = |i: isize| { let i = i.clamp(0, n as isize - 1) as usize; (ctl[i].0, ctl[i].1, pres[i]) };
+            // Bound the whole sampled stroke before allocating its path and arc.
+            let samples: usize = ctl.windows(2).map(|p| {
+                let seg = ((p[1].0 - p[0].0).powi(2) + (p[1].1 - p[0].1).powi(2)).sqrt();
+                (seg / 1.5).ceil().max(2.0) as usize
+            }).sum();
+            if samples > 100_000 {
+                return err("gesture: the sampled stroke is too long (at most 100000 samples)");
+            }
+            let mut path: Vec<(f32, f32, f32)> = Vec::with_capacity(samples + 1);
+            // (where each point lies on the path)
+            let mut at_ctl: Vec<usize> = Vec::with_capacity(n);
+            for i in 0..n - 1 {
+                at_ctl.push(path.len());
+                let (p0, p1, p2, p3) = (at(i as isize - 1), at(i as isize), at(i as isize + 1), at(i as isize + 2));
+                let seg = ((p2.0 - p1.0).powi(2) + (p2.1 - p1.1).powi(2)).sqrt();
+                let k = (seg / 1.5).ceil().max(2.0) as usize;
+                for j in 0..k {
+                    let t = j as f32 / k as f32;
+                    let (t2, t3) = (t * t, t * t * t);
+                    let cr = |a: f32, b: f32, c: f32, d: f32| 0.5 * (2.0 * b + (-a + c) * t + (2.0 * a - 5.0 * b + 4.0 * c - d) * t2 + (-a + 3.0 * b - 3.0 * c + d) * t3);
+                    path.push((cr(p0.0, p1.0, p2.0, p3.0), cr(p0.1, p1.1, p2.1, p3.1), p1.2 + (p2.2 - p1.2) * t));
+                }
+            }
+            at_ctl.push(path.len());
+            path.push(at(n as isize - 1));
+            // a hand's wobble: a slow sideways drift, units
+            if wobble > 0.0 {
+                let seed = b.st.borrow_mut().rng.next_u64();
+                let nz = paint::Fbm::new(seed as u32, 2, 40.0);
+                let mut out = path.clone();
+                let mut s_len = 0.0f32;
+                for i in 1..path.len() - 1 {
+                    let (dx, dy) = (path[i + 1].0 - path[i - 1].0, path[i + 1].1 - path[i - 1].1);
+                    let m = (dx * dx + dy * dy).sqrt().max(1e-6);
+                    s_len += ((path[i].0 - path[i - 1].0).powi(2) + (path[i].1 - path[i - 1].1).powi(2)).sqrt();
+                    let w = wobble * nz.get(s_len, 0.0);
+                    out[i].0 += -dy / m * w;
+                    out[i].1 += dx / m * w;
+                }
+                path = out;
+            }
+            // pressure: evenly spaced knots along the curve
+            let mut arc = vec![0.0f32; path.len()];
+            for i in 1..path.len() {
+                arc[i] = arc[i - 1] + ((path[i].0 - path[i - 1].0).powi(2) + (path[i].1 - path[i - 1].1).powi(2)).sqrt();
+            }
+            let total = arc[arc.len() - 1].max(1e-6);
+            // (knots close enough to follow the closest points, 16 to 512 spans;
+            // and each point's own pressure, where it is a peak or a dip, kept
+            // at the knot nearest it: a press between two knots is not lost)
+            let closest = at_ctl.windows(2).map(|w| arc[w[1]] - arc[w[0]]).filter(|d| *d > 1e-3).fold(f32::MAX, f32::min);
+            let spans = if closest == f32::MAX { 16 } else { ((2.0 * total / closest).ceil() as usize).clamp(16, 512) };
+            let mut knots: Vec<f32> = (0..=spans)
+                .map(|q| {
+                    let d = total * q as f32 / spans as f32;
+                    let j = arc.partition_point(|&a| a < d).clamp(1, arc.len() - 1);
+                    let (a0, a1) = (arc[j - 1], arc[j]);
+                    let f = if a1 > a0 { (d - a0) / (a1 - a0) } else { 0.0 };
+                    (path[j - 1].2 + (path[j].2 - path[j - 1].2) * f).max(0.0)
+                })
+                .collect();
+            for i in 0..n {
+                let (p, before, after) = (pres[i], pres[i.saturating_sub(1)], pres[(i + 1).min(n - 1)]);
+                let q = ((arc[at_ctl[i]] / total * spans as f32).round() as usize).min(spans);
+                if p >= before && p >= after {
+                    knots[q] = knots[q].max(p);
+                } else if p <= before && p <= after {
+                    knots[q] = knots[q].min(p);
+                }
+            }
+            let mut g = Gesture::new(path.iter().map(|p| (p.0, p.1)).collect()).pressure(1.0, 1.0).swell(knots);
+            if let Some((a, z)) = ramps {
+                g = g.ramps(a, z);
+            } else {
+                g = g.ramps(0.02, 0.05);
+            }
+            if let Some(or) = g_orient {
+                g = g.orient(or);
+            }
+            if let Some(s) = shake {
+                g = g.shake(s);
+            }
+            time::verb(&b.st, Verb::Marks, |s| {
+                s.canvas.as_mut().ok_or_else(no_canvas)?.drag(&mut b.held.borrow_mut(), &g, clip.as_deref());
+                Ok(())
+            })
+        });
         // b:touch(x, y, {pressure=, drag={dx,dy}, twist=, angle=, clip=})
         m.add_method("touch", |_, b, (x, y, o): (f32, f32, Option<Table>)| {
             let mut t = Touch::at(x, y);
@@ -464,6 +630,26 @@ impl UserData for Brush {
                 s.canvas.as_mut().ok_or_else(no_canvas)?.touch(&mut b.held.borrow_mut(), &t, clip.as_deref());
                 Ok(())
             })
+        });
+        // b:spatter{at={x, y}, toward={dx, dy}, spread=, force=, clip=}: flick the loaded
+        // brush: the paint its hairs can't hold flies off in droplets toward `toward`
+        // (its length is how far the paint carries); returns how many droplets landed
+        m.add_method("spatter", |_, b, o: Table| {
+            check_keys(&o, &["at", "toward", "spread", "force", "clip"], "spatter")?;
+            let at = pair(&o, "at")?.ok_or_else(|| mlua::Error::runtime("spatter: at={x, y}, where the brush is flicked"))?;
+            let toward = pair(&o, "toward")?.ok_or_else(|| mlua::Error::runtime("spatter: toward={dx, dy}, the flick's direction and how far the paint carries (units)"))?;
+            let spread = num(&o, "spread")?.unwrap_or(0.45);
+            if !(0.0..=1.5).contains(&spread) {
+                return err("spatter: spread is half the cone's angle in radians, 0 to 1.5");
+            }
+            let force = num(&o, "force")?.unwrap_or(0.6);
+            if !(0.0..=1.0).contains(&force) {
+                return err("spatter: force is how hard the flick is, 0 to 1");
+            }
+            let clip = mask_opt(o.get("clip")?)?;
+            let seed = b.st.borrow_mut().rng.next_u64();
+            let sp = paint::Spatter { at, toward, spread, force, seed };
+            time::verb(&b.st, Verb::Marks, |s| Ok(s.canvas.as_mut().ok_or_else(no_canvas)?.spatter(&mut b.held.borrow_mut(), &sp, clip.as_deref())))
         });
         m.add_meta_method(MetaMethod::ToString, |_, b, ()| {
             let h = b.held.borrow();
@@ -797,8 +983,35 @@ impl UserData for WorleyU {
 const WORK_KEYS: &[&str] = &[
     "hand", "pile", "tool", "length", "coverage", "angle", "angle_jitter", "load_at", "cut_in", "pressure", "orient", "dips", "blender", "scrub", "clip",
     "threshold", "ramps", "shake", "curve", "cross", "drift", "tail", "broken", "swell", "clump", "order", "mix_jitter", "seed", "ruler", "load", "hug",
-    "fill", "visible", "behind", "at", "view", "edge",
+    "fill", "visible", "behind", "at", "view", "edge", "streak", "second", "scale_at", "piles",
 ];
+
+/// How far from the canvas's corner a gesture's point may lie (units; the
+/// canvas is 1000 wide and at most 5000 high).
+const GESTURE_REACH: f32 = 20_000.0;
+
+const PART_KEYS: &[&str] = &["side", "share", "streak"];
+
+/// A load's amount (a share of a full load; `default` if none is given): a
+/// number, not an infinity or a NaN, which would leave the tool's paint NaN.
+fn load_amount(amount: Option<f32>, default: f32, what: &str) -> Result<f32> {
+    match amount {
+        None => Ok(default),
+        Some(a) if a.is_finite() => Ok(a),
+        Some(a) => err(format!("{what}: the amount is a share of a full load (0..1), not {a}")),
+    }
+}
+
+/// The part of a brush a dip reaches: `{side=-1..1, share=0..1, streak=0..1}`.
+fn part_of(t: &Table, what: &str) -> Result<paint::Part> {
+    let side = t.get::<Option<f32>>("side")?.unwrap_or(0.0);
+    let share = t.get::<Option<f32>>("share")?.unwrap_or(if side != 0.0 { 0.5 } else { 1.0 });
+    let streak = t.get::<Option<f32>>("streak")?.unwrap_or(0.0);
+    if !(-1.0..=1.0).contains(&side) || !(0.0..=1.0).contains(&share) || !(0.0..=1.0).contains(&streak) {
+        return err(format!("{what}: side is -1..1 (which edge of the brush goes in), share 0..1 (how much of its width), streak 0..1 (how unevenly)"));
+    }
+    Ok(paint::Part { side, share, streak, seed: 0 })
+}
 
 const EDGE_KEYS: &[&str] = &["found", "soft", "lost", "period", "seed", "quality", "waver", "reach"];
 
@@ -853,7 +1066,23 @@ fn work(st: &S, mask: Rc<Mask>, o: Table, preset: Option<&str>) -> Result<()> {
     let f = frame(st)?;
     let hand: String = o.get::<Option<String>>("hand")?.unwrap_or_else(|| preset.unwrap_or("body").to_string());
     let blending = hand == "blend" || o.get::<Option<bool>>("blender")?.unwrap_or(false);
+    // piles={{pile, weight}, ...}: graded color, each weight a number or function(x, y)
+    let graded: Option<Vec<(PileU, Value)>> = match o.get::<Option<Table>>("piles")? {
+        None => None,
+        Some(t) => {
+            let mut v = Vec::new();
+            for e in t.sequence_values::<Table>() {
+                let e = e?;
+                v.push((pile_of(&e.get::<Value>(1)?, "work piles")?, e.get::<Value>(2)?));
+            }
+            if v.len() < 2 {
+                return err("work: piles={{pile, weight}, {pile, weight}, ...} takes two or more piles");
+            }
+            Some(v)
+        }
+    };
     let pile = match o.get::<Value>("pile")? {
+        Value::Nil if graded.is_some() => Some(graded.as_ref().unwrap()[0].0.clone()),
         Value::Nil if blending => None,
         // a legacy canvas's passes paint colors (legacy.rs)
         #[cfg(feature = "replay")]
@@ -895,6 +1124,24 @@ fn work(st: &S, mask: Rc<Mask>, o: Table, preset: Option<&str>) -> Result<()> {
     if let Some(p) = &pile {
         h = h.piled(&tubes, p.mix.clone(), p.medium).thinner(p.thinner());
     }
+    // streak=: each dip taken up unevenly, in streaks across the brush
+    if let Some(v) = num(&o, "streak")? {
+        if !(0.0..=1.0).contains(&v) {
+            return err("work: streak is 0..1 (how unevenly each dip loads the brush)");
+        }
+        h.part = paint::Part { streak: v, ..paint::Part::ALL };
+    }
+    // second={pile=, load=, side=, share=, streak=}: then part of the brush in a second pile
+    if let Some(t) = o.get::<Option<Table>>("second")? {
+        check_keys(&t, &["pile", "load", "side", "share", "streak"], "work second")?;
+        if pile.is_none() {
+            return err("work: second= is a second dip after the pile's; give pile= too");
+        }
+        let p2 = pile_of(&t.get::<Value>("pile")?, "work second")?;
+        let part = part_of(&t, "work second")?;
+        let load = load_amount(t.get::<Option<f32>>("load")?, 0.4, "work second")?;
+        h.second = Some(paint::handling::Second { palette: &tubes, pile: p2.mix.clone(), medium: p2.medium, thinner: p2.thinner(), load, part });
+    }
     #[cfg(feature = "replay")]
     if pile.is_none() && crate::legacy::on(st) {
         crate::legacy::work(st, &o, &mut h, &hand, blending, b)?;
@@ -904,6 +1151,22 @@ fn work(st: &S, mask: Rc<Mask>, o: Table, preset: Option<&str>) -> Result<()> {
     }
     if let Some(v) = o.get::<Option<Value>>("load_at")? {
         h.load_at = Some(scalar_field(st, &v, b, "load_at")?);
+    }
+    // scale_at=: the size of the marks across the area (a number or function(x, y)
+    // multiplying stroke length and brush width; more strokes where they are smaller)
+    if let Some(g) = &graded {
+        let mut ps = Vec::new();
+        for (p, w) in g {
+            let f: FieldBox<f32> = match w {
+                Value::Nil => return err("work piles: each entry is {pile, weight} (a number or function(x, y))"),
+                w => scalar_field(st, w, b, "work piles weight")?,
+            };
+            ps.push((p.mix.clone(), p.medium, p.thinner(), f));
+        }
+        h.piles_at = Some(ps);
+    }
+    if let Some(v) = o.get::<Option<Value>>("scale_at")? {
+        h.scale_at = Some(scalar_field(st, &v, b, "scale_at")?);
     }
     if let Some(t) = o.get::<Option<Value>>("cut_in")? {
         h = h.cut_in(tool_of(&t)?);
@@ -1579,6 +1842,42 @@ mod tests {
     fn run(src: &str) -> Result<String, String> {
         Session::replay(200).unwrap().run(src).map(|r| r.out)
     }
+    #[test]
+    fn review_secondary_piles_keep_their_thinner() {
+        for opts in ["pile=p, second={pile=q, load=0.8}", "piles={{p,0},{q,1}}"] {
+            let mut s = Session::replay(80).unwrap();
+            s.run(r#"canvas{size=300, aspect=1, linen=15, ground={{pile={{"lead white",1}}, um=50, apply="knife"}}}
+                p=pile{{"vermilion",1}}; q=pile{{"cobalt blue",1}, thinner=0.5}"#).unwrap();
+            s.run(&format!("work(rect(100,100,700,500), {{length={{50,50}}, coverage=0.5, {opts}}})")).unwrap();
+            assert!(s.canvas().unwrap().solvent_total() > 0.0, "{opts}: a dip into the thinned pile must lay solvent");
+        }
+    }
+
+    #[test]
+    fn review_invalid_second_loads_are_rejected() {
+        for load in ["math.huge", "0/0"] {
+            let e = run(&format!(r#"canvas{{size=300, aspect=1, linen=15, ground={{{{pile={{{{"lead white",1}}}}, um=50, apply="knife"}}}}}}
+                p = pile{{{{"vermilion", 1}}}}; q = pile{{{{"cobalt blue", 1}}}}
+                work(rect(100,100,200,200), {{pile=p, second={{pile=q, load={load}}}}})"#)).unwrap_err();
+            assert!(e.contains("work second: the amount"), "{e}");
+        }
+    }
+
+    #[test]
+    fn review_refused_part_load_preserves_randomness() {
+        let draw = |fail: &str| run(&format!(r#"canvas{{size=300, aspect=1, linen=15, ground={{{{pile={{{{"lead white",1}}}}, um=50, apply="knife"}}}}}}
+            b = brush("flat", 6); {fail}; print(math.random())"#)).unwrap();
+        assert_eq!(draw(""), draw(r#"assert(not pcall(function() b:load(nil, 0.5, {streak=0.5}) end))"#));
+    }
+
+    #[test]
+    fn review_gesture_rejects_excessive_sample_count() {
+        let e = run(r#"canvas{size=300, aspect=1, linen=15, ground={{pile={{"lead white",1}}, um=50, apply="knife"}}}; b = brush("round", 1)
+            local p = {}; for i=1,8 do local x = i%2 == 0 and 20000 or -20000; p[i] = {x, x, 0} end
+            b:gesture(p, {ramps={0,0}})"#).unwrap_err();
+        assert!(e.contains("sampled stroke is too long"), "{e}");
+    }
+
 
     // a raw canvas takes no ground: an empty table is none, anything in it
     // (in either part of the table) is refused

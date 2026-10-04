@@ -518,7 +518,7 @@ impl Canvas {
         // µm the light ray climbs per pixel toward the light
         let rise = el.tan() * um_px;
         let (hi, lo) = surf.par_iter().fold(|| (f32::MIN, f32::MAX), |(a, b), &v| (a.max(v), b.min(v))).reduce(|| (f32::MIN, f32::MAX), |(a, b), (c, d)| (a.max(c), b.min(d)));
-        let steps = (((hi - lo) / rise).ceil() as usize).clamp(1, 64);
+        let steps = (((hi - lo) / rise).ceil() as usize).max(1).min(w.saturating_add(h));
         let (sx, sy) = {
             let m = (lx * lx + ly * ly).sqrt().max(1e-6);
             (lx / m, ly / m)
@@ -559,6 +559,7 @@ impl Canvas {
                         break;
                     }
                     let (px, py) = (x as f32 + sx * s as f32, y as f32 + sy * s as f32);
+                    if px < 0.0 || py < 0.0 || px >= w as f32 || py >= h as f32 { break; }
                     let over = sat(px.round() as isize, py.round() as isize) - ray_height;
                     if over > 0.0 {
                         lit = lit.min(1.0 - (over / (0.5 * rise)).min(1.0));
@@ -752,5 +753,20 @@ mod tests {
         };
         let (thin, thicker) = (dark(0.045), dark(0.18));
         assert!(thin > 0.0 && thin > 0.2 * thicker, "a 0.34 µm veil darkens {thin}, 1.35 µm {thicker}");
+    }
+}
+
+#[cfg(test)]
+mod review_lighting_tests {
+    use super::*;
+
+    #[test]
+    fn review_tall_relief_casts_shadows_beyond_64_pixels() {
+        let mut c = Canvas::new(300, 1.0, [0.8; 3]).with_size_mm(300.0);
+        let plain = c.seen_lit(0.0, 3.0, 1.0);
+        for y in 0..300 { for x in 200..205 { c.height[y * 300 + x] += 8000.0; } }
+        let lit = c.seen_lit(0.0, 3.0, 1.0);
+        let i = 150 * 300 + 100;
+        assert!(lit[i][0] < plain[i][0] * 0.8, "a ridge 100 pixels toward the light must cast a shadow");
     }
 }

@@ -185,6 +185,24 @@ pointed round or rigger lays a hairline at light pressure and spreads to
 its belly when pressed, so its width follows the pressure and a stroke
 whose pressure falls to 0 ends in a point.
 
+**Loading part of the brush.** `b:load(p, amount, {side=, share=, streak=})`
+dips only part of it: `side` (-1 or 1) and `share` (0..1) put one edge of
+the brush in the pile (a double-loaded brush: two paints side by side in
+one stroke), `streak` (0..1) takes it up unevenly in bands a few hairs
+wide. In `work`, `streak=` does this on every dip and
+`second={pile=, load=, side=, share=, streak=}` dips part of the brush in a
+second pile after the first.
+
+**Gestures.** `b:gesture({{x, y, p}, ...}, {wobble=, orient=, ramps=, shake=, clip=})` is one
+deliberate stroke along a smooth curve through the points, its pressure
+following each point's `p` (0..1; a point without one takes its
+neighbors'): pressed hard at a root and lifted to nothing at a tip, swelling
+through a turn. A pointed brush (`point=`) widens as it is pressed, so its
+mark swells from a hairline and tapers back to one with the pressure; a
+blunt one narrows at a light touch too (to about a third), but has no point.
+`wobble` (units) lets the hand drift sideways. Use gestures for the marks
+that carry the picture: the few decisive strokes a passage needs.
+
 ## Covering an area
 
 ```lua
@@ -222,6 +240,8 @@ change:
 | `edge` | how the passage meets the mask's edge (below) |
 | `clip` | `true`: every bristle stops on the mask's edge; or a mask to clip to |
 | `hug` | `true` (default): strokes reach the mask's edges; `false` lets coverage thin there |
+| `piles` | graded color: `{{p1, w1}, {p2, w2}, ...}`, each weight a number or `function(x, y)`; each dip takes a mix of the piles by their weights at the stroke (the brush dipped into neighboring piles), so color changes continuously across one passage, with no seams between masks |
+| `scale_at` | the size of the marks across the area: a number or `function(x, y)` multiplying stroke length and brush width (smaller where things are far, larger near); the pass lays more strokes where they are smaller, so its coverage holds |
 | `fill` | `false` by default: gaps between strokes stay. Set `true` to follow the strokes with dabs into the gaps they left |
 | `order` | `"passages"` (default), `"scatter"`, `"down"`, `"across"` or a sweep angle |
 | `angle_jitter`, `curve` (`{bow, wave}`), `cross`, `drift` (`{amount, scale}`), `tail`, `broken`, `swell`, `clump`, `ruler` | how far the strokes depart from even ruler lines (`ruler=true` sets them straight and even) |

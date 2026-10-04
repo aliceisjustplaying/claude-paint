@@ -25,6 +25,12 @@ pub const BOX_MARK: &str = "--@ box";
 /// the head of its session file. A log without it was painted with engine 1:
 /// every log before the version was recorded.
 pub const ENGINE_MARK: &str = "--@ engine";
+/// Marks a sketch: a painting painted at `SKETCH_WIDTH`, not the live width.
+/// A log replays at the width it was painted at, whatever its file is named.
+pub const SKETCH_MARK: &str = "--@ sketch";
+/// A sketch's width (px): a quarter of the live width, some 16 times faster,
+/// for trying out a composition before the painting.
+pub const SKETCH_WIDTH: usize = 600;
 
 /// What the engine version (`paint::ENGINE`) changes in the easel's Lua: from
 /// engine 3, `pairs` and `next` walk every table in a fixed order, not only
@@ -380,6 +386,9 @@ impl Session {
         let engine = self.st.borrow().tubes.engine;
         if engine != 1 {
             let _ = writeln!(s, "{ENGINE_MARK} {engine}");
+        }
+        if self.st.borrow().width == SKETCH_WIDTH {
+            let _ = writeln!(s, "{SKETCH_MARK}");
         }
         for (i, c) in self.log.iter().enumerate() {
             let _ = writeln!(s, "\n{MARK} {}", i + 1);
@@ -827,6 +836,12 @@ pub fn logged_engine(text: &str) -> Result<u32, String> {
         }
     }
     Ok(found.unwrap_or(1))
+}
+
+/// Whether a session file's head marks it a sketch (a `SKETCH_MARK` line
+/// before the first chunk).
+pub fn logged_sketch(text: &str) -> bool {
+    text.lines().map(str::trim).take_while(|l| !l.starts_with(MARK)).any(|l| l == SKETCH_MARK)
 }
 
 /// Where the box of a new painting is set: a file `box` next to the easel's
@@ -1865,5 +1880,20 @@ mod tests {
             h = h.wrapping_mul(0x100_0000_01b3);
         }
         format!("{h:016x}")
+    }
+
+    /// A sketch's log says it is one, so it replays at its width under any
+    /// file name; a painting's log doesn't.
+    #[test]
+    #[cfg(tube_box)]
+    fn a_sketch_s_log_says_so() {
+        let mut a = Session::new(SKETCH_WIDTH).unwrap();
+        a.run(CANVAS).unwrap();
+        let prog = a.program("sketch-1");
+        assert!(prog.contains(&format!("\n{SKETCH_MARK}\n\n{MARK} 1\n")), "{prog}");
+        assert!(logged_sketch(&prog));
+        let mut b = Session::new(W).unwrap();
+        b.run(&format!("{CANVAS}\n-- {SKETCH_MARK} (in a chunk it is a comment)")).unwrap();
+        assert!(!logged_sketch(&b.program("sketchbook")));
     }
 }

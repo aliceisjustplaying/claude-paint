@@ -7,6 +7,11 @@ the picture is yours.
 
 ## Plan before you paint
 
+- **Sketch first.** A session named `sketch…` (`easel open sketch-1`) paints
+  at a quarter of the width, about 16 times faster. Try three or four
+  compositions as small, quick sketches before the painting: the big shapes,
+  the values, where the light is. A chunk of the painting that took two
+  minutes takes seconds there.
 - **Plan in values.** `look` with `mode: "value,squint"` shows the picture as
   big masses of light and dark. If the masses don't hold there, no detail
   will save them.

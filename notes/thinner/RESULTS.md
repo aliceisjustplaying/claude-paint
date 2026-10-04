@@ -27,57 +27,96 @@ it keeps 13% and 6% (DIAGNOSIS.md).
 | 4c15082, ffef02e | the rag study re-rendered after afc7898; RESULTS.md |
 | 48be56a | round 5 test corrections: c16, the rag sheet's directory (approved; the frozen set) |
 | 7687ad3 | τ disclosure; `weave_or_brush.jpg` |
-| (this commit) | the final run; `single_stroke_edge.jpg`; the mutation sources; this file |
+| de5557c | the first final run; `single_stroke_edge.jpg`; the mutation sources |
+| (this commit) | the final review's fixes (`~/src/a/claude-paint-reviews/thinner-final-review-astra.md`): sources corrected, thinned paint refused before engine 3 in the Rust API, `dry()` waits the solvent out, stroke-ceiling reset on id wrap; three unit tests; the final runs again; this file |
 
-The thinner's code last changed in 0a661f6. Every commit after it
-changes only tests, scripts or notes.
+The thinner's code last changed in this commit. Between 0a661f6 and
+it, commits changed only tests, scripts or notes.
+
+**The final review's fixes:**
+
+- **Sources** (finding 1). *Paint & Colour Mixing* is by Arthur Seymour
+  Jennings, and its "few minutes" is a purity test: drops of turpentine
+  on writing paper, pp. 74-75. It sets the scale of τ only. Orchard's
+  paper is dated July 1963 by its publisher (some secondary sources say
+  1962). "Orders of magnitude" is replaced by the model's qualitative
+  assumption. The σ, h, η and λ behind the mobility are labeled
+  estimates, and `SOLVENT_FLOOR`, `MAX_SUBSTEPS`, `MAX_OUT` and the 0.2
+  stability factor are labeled chosen numerical cutoffs. The guide says
+  "a thinner film", not "thinner, leaner". The same misattribution in
+  af49348's `rag.rs` comment is corrected too.
+- **Thinned paint before engine 3** (finding 2). `Canvas::drag`, `touch`,
+  `work` and `stipple` panic before drawing when a thinned brush or
+  piled pass meets an engine-1/2 canvas, rather than let its solvent
+  vanish. Lua already refused it. Unthinned paint never reaches the
+  check's message.
+- **`dry()` with solvent** (finding 2). On engine 3 it now runs the clock
+  on whole minutes, as `wait` does, until the solvent has gone, and only
+  then takes the bake shortcut. Before, it baked the film as it lay.
+  Without solvent, it is unchanged.
+- **Stroke ids wrapping** (finding 3). `next_stroke_ids` forgets every
+  stroke's ceiling when the ids wrap.
+- **Tests** (`crates/paint/src/thinner.rs`, `mod tests`, in the paint
+  lib). Each failed before its fix, run with that fix taken out:
+  - a thinned brush or pass is refused on engines 1 and 2 by all four
+    entry points, with nothing drawn (before the fix: no panic);
+  - `dry()` equals waiting the solvent out and then drying (before the
+    fix: a different picture);
+  - a stroke under a wrapped, reused id lays at least 90% of what it
+    lays under a fresh id (before the fix: −83 against 318; after: 302;
+    the gap left is `Wet::stroke`'s reused id, which predates the
+    thinner).
 
 ## The final runs
 
 Every command ran through `~/src/a/claude-paint-tools/lockrun` on this
-machine (rustc 1.97.1, release), at 7687ad3's code and tests.
+machine (rustc 1.97.1, release), at this commit's code and the frozen
+tests (48be56a).
 
 | command | result | exit | time | log (sha256) |
 |---|---|---|---|---|
-| `THINNER_RAG_STUDY_DIR=<temp dir> scripts/test_thinner_acceptance --all` (lockrun `--timeout 600`) | 27 of 27 required tests pass; 13 (b) the expected failure | **3** (NOT ALL GREEN) | 146 s in lockrun (431 s with waiting for the lock) | `logs/all_final.txt` (`6a88606e…aab1`) |
-| `cargo test --release -p paint --lib` (existing tests; lockrun `--timeout 600`, as are the next two) | 180 passed, 0 failed, 8 ignored | 0 | 146 s | `logs/paint_lib_final.txt` (`fd19bb27…c1eb`) |
-| `cargo test --release -p easel --bin easel -- --skip thinner_tests::` (existing tests) | 71 passed, 0 failed, 1 ignored | 0 | 49 s | `logs/easel_bin_final.txt` (`004914bc…d95c`) |
-| `cargo test --release -p easel --test determinism --test session_integrity`, then `-p paint --test curved_drag_nan --test ground_grain` | 4 + 10 + 2 + 1 passed, 0 failed (ground_grain's 3 ignored as before) | 0, 0 | 82 s + 5 s | `logs/integration_final.txt` (`00f49129…e0e9`) |
+| `THINNER_RAG_STUDY_DIR=<temp dir> scripts/test_thinner_acceptance --all` (lockrun `--timeout 600`, as is every command here) | 27 of 27 required tests pass; 13 (b) the expected failure | **3** (NOT ALL GREEN) | 78 s | `logs/all_final.txt` (`0fa5387a…6f05`) |
+| `scripts/test_thinner_acceptance --quick` | 22 of 22 required pass; 13 (b) the expected failure | **3** | 100 s (with the build) | `logs/quick_final.txt` (`1b9b8cc5…6ce6`) |
+| `cargo test --release -p paint --lib` (existing tests and the three new thinner unit tests) | 183 passed, 0 failed, 8 ignored | 0 | 141 s | `logs/paint_lib_final.txt` (`487226df…a61b`) |
+| `cargo test --release -p easel --bin easel -- --skip thinner_tests::` (existing tests) | 71 passed, 0 failed, 1 ignored | 0 | 56 s | `logs/easel_bin_final.txt` (`6efd6d5f…5b88`) |
+| `cargo test --release -p easel --test determinism --test session_integrity`, then `-p paint --test curved_drag_nan --test ground_grain` | 4 + 10 + 2 + 1 passed, 0 failed (ground_grain's 3 ignored as before) | 0, 0 | 82 s + 5 s | `logs/integration_final.txt` (`b20ae4d8…a523`) |
+| speed's `scripts/tests/old_logs.sh <this build's easel>`, read-only from `~/src/a/claude-paint-speed` | all 11 cases replay as af49348 did (PNGs and per-chunk digests) | 0 | 6 s | `logs/old_logs_final.txt` (`9b5e98af…9e08`) |
 
 `--all` runs the card. The earlier separate `--card` run
 (`logs/card_18548cf.txt`, exit 3) predates afc7898 and is superseded by
-this one.
+this one. Every number `--all` prints (the card, the sweep, the rag
+study) is the same as at de5557c, before the review's fixes.
 
 ## Each check (from `logs/all_final.txt`)
 
 Each test runs in one of `--all`'s cargo sections, so the time is the
-section's. Every check exits as its section did: 0, except 13 (b)'s (101).
+section's (the build was done by `--quick` before it). Every check exits as its section did: 0, except 13 (b)'s (101).
 
 | check | test | result | section, time |
 |---|---|---|---|
 | 1 | `c01_the_card_…_2400px` (slow) | **pass** (the card, below) | card, 23 s |
-| 2 | `scripts/thinner_check2` | **pass**: all 4 parts. Every scene and chunk is equal to af49348 on every baseline field, with and without `thinner=0`. The dumps declare the solvent, and the thinned scene dumps nonzero solvent | check 2, 36 s (with the build) |
-| 3 | `c03_af49348_paintck8_saves_are_refused_…`, `c03_engines_1_and_2_have_no_thinner_…`, `c03_af49348_engine_3_logs_still_replay`, `c03_a_log_keeps_its_engine` | **pass** (4 of 4) | easel, 37 s |
-| 4 | `c04_a_stroke_and_a_wipe_…`, `c04_control_…` | **pass** (2 of 2) | paint, 3 s |
-| 5 | `c05_an_emptying_brush_…` | **pass** | paint, 3 s |
-| 6 | `c06_more_pressure_…` | **pass** | paint, 3 s |
-| 7 | `c07_two_overlapping_thinned_passes_…` | **pass** | easel, 37 s |
-| 8 | `c08_a_hundredth_of_thinner_is_a_small_change` | **pass** | paint, 3 s |
-| 8 | `c08_more_thinner_never_hides_the_card_more` (slow) | **pass** (the sweep, below) | easel-slow, 45 s |
-| 9 | `c09_the_solvent_evaporates_…` | **pass** | paint, 3 s |
-| 10 | `c10_a_solvent_wet_film_spreads_more_…` | **pass** | paint, 3 s |
+| 2 | `scripts/thinner_check2` | **pass**: all 4 parts. Every scene and chunk is equal to af49348 on every baseline field, with and without `thinner=0`. The dumps declare the solvent, and the thinned scene dumps nonzero solvent | check 2, 4 s |
+| 3 | `c03_af49348_paintck8_saves_are_refused_…`, `c03_engines_1_and_2_have_no_thinner_…`, `c03_af49348_engine_3_logs_still_replay`, `c03_a_log_keeps_its_engine` | **pass** (4 of 4) | easel, 2 s |
+| 4 | `c04_a_stroke_and_a_wipe_…`, `c04_control_…` | **pass** (2 of 2) | paint, 1 s |
+| 5 | `c05_an_emptying_brush_…` | **pass** | paint, 1 s |
+| 6 | `c06_more_pressure_…` | **pass** | paint, 1 s |
+| 7 | `c07_two_overlapping_thinned_passes_…` | **pass** | easel, 2 s |
+| 8 | `c08_a_hundredth_of_thinner_is_a_small_change` | **pass** | paint, 1 s |
+| 8 | `c08_more_thinner_never_hides_the_card_more` (slow) | **pass** (the sweep, below) | easel-slow, 47 s |
+| 9 | `c09_the_solvent_evaporates_…` | **pass** | paint, 1 s |
+| 10 | `c10_a_solvent_wet_film_spreads_more_…` | **pass** | paint, 1 s |
 | 10 | `c10_thinned_and_unthinned_paint_…_gel_and_dry_together` (slow) | **pass** | paint-slow, under 1 s |
-| 11 | `c11_a_save_mid_evaporation_…` | **pass** | easel, 37 s |
-| 12 | `c12_the_same_log_saves_the_same_bytes_on_one_thread_and_four` | **pass** | easel, 37 s |
-| 13 (a) | `c13_every_pigment_value_is_af49348s` | **pass** | pigments, 1 s |
+| 11 | `c11_a_save_mid_evaporation_…` | **pass** | easel, 2 s |
+| 12 | `c12_the_same_log_saves_the_same_bytes_on_one_thread_and_four` | **pass** | easel, 2 s |
+| 13 (a) | `c13_every_pigment_value_is_af49348s` | **pass** | pigments, under 1 s |
 | 13 (b) | `c13_burnt_sienna_shows_the_card_…` | **expected fail** (pre-existing; the user decides) | check13b, 1 s, cargo exit 101 |
-| 14 | `c14_more_points_on_the_same_path_…` | **pass** | paint, 3 s |
-| 15 | `c15_solvent_does_not_slow_the_oil_cure` | **pass** | paint, 3 s |
-| 16 | `c16_brush_rag_and_spreading_…` | **pass** | paint, 3 s |
-| 17 | `c17_a_wait_split_on_the_minute_grid_…` | **pass** | paint, 3 s |
-| 18 | `c18_a_failed_chunk_after_thinned_paint_…` | **pass** | easel, 37 s |
-| 19 | `c19_the_same_paint_with_more_or_less_solvent_looks_the_same` | **pass** | paint, 3 s |
-| rag | `rag_study` (slow) | **pass**; sheet written (below) | easel-slow, 45 s |
+| 14 | `c14_more_points_on_the_same_path_…` | **pass** | paint, 1 s |
+| 15 | `c15_solvent_does_not_slow_the_oil_cure` | **pass** | paint, 1 s |
+| 16 | `c16_brush_rag_and_spreading_…` | **pass** | paint, 1 s |
+| 17 | `c17_a_wait_split_on_the_minute_grid_…` | **pass** | paint, 1 s |
+| 18 | `c18_a_failed_chunk_after_thinned_paint_…` | **pass** | easel, 2 s |
+| 19 | `c19_the_same_paint_with_more_or_less_solvent_looks_the_same` | **pass** | paint, 1 s |
+| rag | `rag_study` (slow) | **pass**; sheet written (below) | easel-slow, 47 s |
 
 Unfinished: none.
 
@@ -117,8 +156,8 @@ DIAGNOSIS.md found the same width dependence.
 | quantity | value | status | source |
 |---|---|---|---|
 | ceiling of wet film one stroke adds to a pixel | 6 µm at thinner 0.5; `6 × (1 − t)/t` µm, unbounded at t = 0 | ESTIMATE, set before measuring | qualitative: a thinner liquid leaves a thinner film (Landau and Levich 1942, film ∝ (ηU)^(2/3)) |
-| evaporation time τ | 2 min × (1 + h / 100 µm), h the pixel's paint | ESTIMATE; doubling changed from 20 to 100 µm (above) | "a few minutes" on paper (W. J. Pearce [Jennings], *Paint & Colour Mixing*, 1902, https://www.gutenberg.org/cache/epub/56738/pg56738-images.html); slower in thicker films (C. M. Hansen 1967, solvent retention). No source gives numbers for oil paint |
-| mobility of the flow | 0.06 mm²/min at half solvent; scales as φ/(1 − φ); slowed by the oil's cure | ESTIMATE | Orchard 1962 leveling rate, with σ, h and η assumed (thinner.rs) |
+| evaporation time τ | 2 min × (1 + h / 100 µm), h the pixel's paint | ESTIMATE; doubling changed from 20 to 100 µm (above) | sets the scale only: a few drops of pure turpentine on white writing paper evaporate "in a few minutes", a purity test, not solvent release from a paint film (Arthur Seymour Jennings, *Paint & Colour Mixing*, 1902, "To Test the Purity of Turpentine", pp. 74-75, https://www.gutenberg.org/cache/epub/56738/pg56738-images.html); slower in thicker films (C. M. Hansen 1967, solvent retention). No source gives numbers for oil paint |
+| mobility of the flow | 0.06 mm²/min at half solvent; scales as φ/(1 − φ); slowed by the oil's cure | ESTIMATE | Orchard's leveling rate (*Applied Scientific Research A* 11, 451-464, July 1963 per https://doi.org/10.1007/BF03184629; some secondary sources say 1962), matched at one wavelength, with σ, h, η and λ all estimates (thinner.rs) |
 | wetting film the flow leaves | 2 µm of liquid | ESTIMATE, added for the lattice defect | Orchard's h³: the last of a film barely moves |
 
 The ceiling was swept from 6 to 36 µm. Card at 2400 px, contrast kept
@@ -233,7 +272,12 @@ of it is within the cloth's reach either way. This passes the test's
   grid (check 17).
 - **Old files:** PAINTCK8 saves of engine-3 canvases are refused from
   the header, naming af49348. Engine-1/2 logs and saves (PAINTCK8) work
-  as before.
+  as before. Pre-thinner engine-3 logs are accepted, but not every one is
+  guaranteed to replay as before (for the user, below).
+- **Engines 1 and 2 have no thinner** in Lua (`thinner=` is an error) or
+  in Rust (a thinned brush or pass panics before drawing).
+- **`dry()`** with solvent present waits it out on the minute grid first,
+  then bakes; `Canvas::save` and `relief` call it.
 - **The palette look** shows a thinned pile's swatches as the paint left
   after the solvent: each coat scaled by 1 − thinner.
 
@@ -251,10 +295,10 @@ of it is within the cloth's reach either way. This passes the test's
   The real post-evaporation measurement is the card above (35 min).
 - **`notes/thinner/rag_study.jpg`**: the rag study's sheet, as JPEG (the
   test writes a 1 MB PNG; not committed). Rendered in round 4 with the
-  current code. The final run's sheet is the same: the code hasn't
-  changed since, the run printed the same numbers, and it differs from
-  the JPEG only by the JPEG's compression (PSNR 35.3 dB). So it was not
-  copied in again.
+  current code. The final run's sheet is the same: the run printed the
+  same numbers, and it differs from the JPEG only by the JPEG's
+  compression (PSNR 35.3 dB, as at de5557c). So it was not copied in
+  again.
 - **`notes/thinner/weave_or_brush.jpg`**: the same thinned broad pass with
   linen and on a plain ground (256 px).
 - **`notes/thinner/single_stroke_edge.jpg`**: one filbert stroke on a plain
@@ -301,6 +345,14 @@ of it is within the cloth's reach either way. This passes the test's
   are each stroke's own edges, not only the overlaps. The unthinned
   stroke (17-49 µm inside) shows no such rim. Diagnostic only; nothing
   was tuned, and I haven't traced the rim's cause.
+- **Old engine-3 logs aren't all guaranteed to replay as before**
+  (final review, finding 4). The log format has no revision marker for
+  the thinner. Engine-3 logs written before it are accepted, and the
+  ones checked replay unchanged (check 3). But Lua now has `pile.thinner`
+  and accepts the `thinner` key. So an old log that probes them, for
+  example a `pcall` that tries the key and branches on the error, can
+  take a different branch now. A revision marker or a compatibility mode
+  would close the gap; that is your call (check 3's old-file policy).
 - Also open: check 13 (b), check 3's old-file policy and check 8's 0.005
   allowance.
 
@@ -322,7 +374,8 @@ of it is within the cloth's reach either way. This passes the test's
 
 ## Existing tests (final run)
 
-- `cargo test --release -p paint --lib`: 180 passed, 0 failed (8 ignored, as before).
+- `cargo test --release -p paint --lib`: 183 passed, 0 failed (8 ignored, as before): the 180 existing and the three new thinner unit tests.
 - The easel binary's own tests (all but the thinner's): 71 passed, 0 failed, 1 ignored. These include the engine-1 and engine-2 fixture replays at 320 px and the checkpoint tests.
 - Integration tests: easel `determinism` (4) and `session_integrity` (10), paint `curved_drag_nan` (2) and `ground_grain` (1): all pass.
-- Not run, because they replay paintings or are the speed branch's: the easel `boxes` (a round-19 log), `painter`, `delivery` and `smoke` tests, and `scripts/tests/*.sh`. The plan forbids expensive replays. The speed agent's `scripts/test` is the reduced suite for the merged branch.
+- Speed's `scripts/tests/old_logs.sh`, read-only against this build: all 11 old-log cases replay as af49348 did.
+- Not run, because they replay paintings or are the speed branch's: the easel `boxes` (a round-19 log), `painter`, `delivery` and `smoke` tests, and the other `scripts/tests/*.sh` (old_logs.sh above is the exception). The plan forbids expensive replays. The speed agent's `scripts/test` is the reduced suite for the merged branch.

@@ -131,7 +131,7 @@ What it does:
   stroke over the same spot lays more.
 - The solvent leaves over painting time, whether you wait or keep
   painting: in a thin film a few minutes, longer in a thicker one. The
-  paint stays. Once it has gone, what is left is a thinner, leaner film
+  paint stays. Once it has gone, what is left is a thinner film
   of the paint itself, and more of what is under it shows through.
 - While it is there the wet paint is more fluid: it levels and spreads a
   little, carrying its solvent with it. As the solvent goes, the paint

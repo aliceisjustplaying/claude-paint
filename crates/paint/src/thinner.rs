@@ -17,35 +17,49 @@
 //!   film behind a moving surface than a thick one: the film drawn up by a
 //!   moving plate grows with viscosity as (ηU)^(2/3) (Landau and Levich,
 //!   "Dragging of a liquid by a moving plate", Acta Physicochimica URSS 17,
-//!   42-54, 1942). Turpentine cuts oil paint's viscosity by orders of
-//!   magnitude. The size of the ceiling is an ESTIMATE, set so that raw
+//!   42-54, 1942; a law for a plate drawn out of a liquid, used here only
+//!   qualitatively, not as a calibrated brush law). The model assumes that
+//!   turpentine, far more fluid than oil paint, makes the thinned paint
+//!   more fluid the more of it there is; no measurement of a paint's
+//!   viscosity against its thinner is used. The size of the ceiling is an
+//!   ESTIMATE, set so that raw
 //!   sienna thinned half lays an imprimatura (notes/thinner/RESULTS.md);
 //!   it fades out as thinner goes to 0, where today's paint path runs
 //!   unchanged.
 //! - **It evaporates** (`evaporation_tau_min`): at a fixed paint thickness
 //!   the same share leaves in each equal time step, solvent = s0 ×
-//!   exp(-t / τ). Turpentine on paper evaporates "in a few minutes" (W. J.
-//!   Pearce [Jennings], Paint & Colour Mixing, 1902, "To Test the Purity of
-//!   Turpentine", https://www.gutenberg.org/cache/epub/56738/pg56738-images.html);
-//!   in a paint film the solvent left in it has to diffuse out through the
+//!   exp(-t / τ). A few drops of pure turpentine on white writing paper
+//!   evaporate "in a few minutes" (Arthur Seymour Jennings, Paint & Colour
+//!   Mixing, 1902, "To Test the Purity of Turpentine", pp. 74-75,
+//!   https://www.gutenberg.org/cache/epub/56738/pg56738-images.html): a
+//!   purity test for the turpentine, not a measurement of its release from
+//!   an oil-paint film, so it only sets the scale of `TAU_MIN`. In a paint
+//!   film the solvent left in it has to diffuse out through the
 //!   film, so a thicker film holds it longer (C. M. Hansen, The Three
 //!   Dimensional Solubility Parameter and Solvent Diffusion Coefficient,
-//!   Danish Technical Press, 1967, on solvent retention in coatings). τ's
-//!   numbers are ESTIMATES: no source gives one for oil paint and
+//!   Danish Technical Press, 1967, §5.2: evaporation from the surface and
+//!   diffusion out of the film are separate stages, and a thicker film
+//!   releases its solvent more slowly). τ's numbers, and its linear growth
+//!   with thickness, are ESTIMATES: no source gives them for oil paint and
 //!   turpentine.
 //! - **It makes the wet paint flow** (`spread_mm2_min`): while it is there
 //!   the film levels, liquid running from higher to lower ground, carrying
 //!   paint and solvent in the proportions they have where it starts. A
 //!   surface-tension-driven film levels a ripple of wavelength λ at a rate
 //!   of about σh³(2π/λ)⁴ / 3η (S. E. Orchard, "On surface levelling in
-//!   viscous liquids and gels", Applied Scientific Research A 11, 451-464,
-//!   1962; notes/research/oil_paint_physics.md). The engine uses a
-//!   diffusion of the wet surface with one mobility, the ESTIMATE
-//!   `SPREAD_MM2_MIN` at thinner 0.5, that leaves a wetting film
-//!   (`WET_FILM_UM`) where it runs off: σ = 0.03 N/m, h = 10 µm, η = 0.1 Pa·s
-//!   (paint thinned half; the note gives 1 Pa·s for a medium-rich glaze)
-//!   and λ = 2 mm give 0.06 mm²/min. Unthinned paint doesn't flow here, as
-//!   before (it levels when it sets, `drying`).
+//!   viscous liquids and gels", Applied Scientific Research A 11, 451-464;
+//!   the publisher dates it July 1963, https://doi.org/10.1007/BF03184629,
+//!   while some secondary sources give 1962; notes/research/oil_paint_physics.md).
+//!   The engine uses a diffusion of the wet surface with one mobility, the
+//!   ESTIMATE `SPREAD_MM2_MIN` at thinner 0.5, that leaves a wetting film
+//!   (`WET_FILM_UM`) where it runs off. Matching Orchard's decay at one
+//!   wavelength, D = σh³(2π/λ)² / 3η, with these inputs, all ESTIMATES
+//!   (none measured for this paint): surface tension σ = 0.03 N/m, film
+//!   h = 10 µm, viscosity η = 0.1 Pa·s (paint thinned half; the note gives
+//!   1 Pa·s for a medium-rich glaze) and wavelength λ = 2 mm, gives about
+//!   0.06 mm²/min. That is a wavelength-specific estimate, not a measured
+//!   mobility. Unthinned paint doesn't flow here, as before (it levels when
+//!   it sets, `drying`).
 //!
 //! Not modeled, on purpose: solvent evaporating from the brush or the
 //! palette pile (the pile keeps its share), solvent soaking into the
@@ -94,7 +108,7 @@ pub fn evaporation_tau_min(paint_um: f32) -> f64 {
 }
 
 /// Mobility (mm²/min) of a wet film half solvent: how fast it levels.
-/// ESTIMATE (Orchard 1962, see the module notes).
+/// ESTIMATE (Orchard 1963, see the module notes).
 pub const SPREAD_MM2_MIN: f32 = 0.06;
 /// The flow doesn't drain a pixel below this much liquid (µm): a liquid
 /// that wets the paint under it leaves a film on the weave's tops, it
@@ -113,7 +127,8 @@ pub fn spread_mm2_min(phi: f32) -> f32 {
     SPREAD_MM2_MIN * phi / (1.0 - phi)
 }
 
-/// Below this (µm) a pixel's solvent is gone.
+/// Below this (µm) a pixel's solvent is gone. A chosen numerical cutoff
+/// (it lets a wait end with the solvent gone), not a physical constant.
 pub(crate) const SOLVENT_FLOOR: f32 = 1e-8;
 
 use crate::canvas::Canvas;
@@ -123,9 +138,12 @@ use rayon::prelude::*;
 
 /// Most substeps of the flow in one step of the clock; past it the flow
 /// is slowed to stay stable (a film that thin and that fine-grained flows a
-/// little less far per minute than its mobility says).
+/// little less far per minute than its mobility says). A chosen numerical
+/// cutoff, not a physical constant, as are `MAX_OUT` and the explicit
+/// scheme's stability factor 0.2 in `spread`.
 const MAX_SUBSTEPS: usize = 64;
-/// Most of a pixel's liquid that can leave it in one substep.
+/// Most of a pixel's liquid that can leave it in one substep. A chosen
+/// numerical cutoff.
 const MAX_OUT: f32 = 0.5;
 
 impl Canvas {
@@ -320,5 +338,131 @@ impl Canvas {
             return 0.0;
         }
         self.wet.clock.px.get(i).map_or(0.0, |p| p.cure)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::bristle::{Gesture, Held, Tool, Touch};
+    use crate::canvas::Canvas;
+    use crate::color::hex;
+    use crate::handling::Handling;
+    use crate::mask::Mask;
+    use crate::palette::Palette;
+    use crate::stipple::Stipple;
+    use crate::wet::Paint;
+
+    fn canvas(engine: u32) -> Canvas {
+        let mut c = Canvas::new(120, 1.0, hex("#d8cdb8")).with_engine(engine);
+        c.prime(hex("#b9a98c"), 0.9, 40.0, 0.6, 0.0, 7);
+        c
+    }
+
+    fn sienna(t: f32) -> Paint {
+        let p = Paint::new(hex("#9a5a2a"), 0.85, 0.8);
+        if t > 0.0 { p.with_thinner(t) } else { p }
+    }
+
+    fn thinned_brush(t: f32) -> Held {
+        let mut h = Held::new(Tool::filbert(30.0), 3);
+        h.load(sienna(t), 0.6);
+        h
+    }
+
+    fn total(c: &Canvas, f: impl Fn(&Canvas, f32, f32) -> f32) -> f64 {
+        let fr = c.frame();
+        (0..fr.w * fr.h).map(|i| f(c, fr.ux(i % fr.w), fr.uy(i / fr.w)) as f64).sum()
+    }
+
+    /// Thinner is engine 3 only: before it the film has no solvent, so every
+    /// way of putting a thinned brush or pass on such a canvas panics before
+    /// drawing, rather than letting the solvent vanish.
+    #[test]
+    fn thinned_paint_is_refused_before_engine_3() {
+        type Use = fn(&mut Canvas);
+        let uses: [(&str, Use); 4] = [
+            ("Canvas::drag", |c| c.drag(&mut thinned_brush(0.5), &Gesture::new(vec![(200.0, 500.0), (800.0, 500.0)]), None)),
+            ("Canvas::touch", |c| c.touch(&mut thinned_brush(0.5), &Touch::at(500.0, 500.0), None)),
+            ("Canvas::work", |c| {
+                let (m, pal) = (Mask::full(c.frame()), Palette::named_box("inness").unwrap());
+                c.work(&m, &Handling::new(Tool::filbert(30.0)).piled(&pal, pal.pile(vec![(0, 1.0)]), 0.0).thinner(0.5), 1)
+            }),
+            ("Canvas::stipple", |c| {
+                let (m, pal) = (Mask::full(c.frame()), Palette::named_box("inness").unwrap());
+                c.stipple(&m, &Stipple::new(Tool::stippler(20.0)).piled(&pal, pal.pile(vec![(0, 1.0)]), 0.0).thinner(0.5), 1)
+            }),
+        ];
+        for (name, f) in uses {
+            for engine in [1, 2] {
+                let mut c = canvas(engine);
+                let before = c.seen();
+                let r = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| f(&mut c)));
+                let msg = r.expect_err(name);
+                let msg = msg.downcast_ref::<String>().cloned().unwrap_or_default();
+                assert!(msg.contains(name) && msg.contains("needs engine 3"), "{name}, engine {engine}: {msg}");
+                assert!(c.seen() == before, "{name}, engine {engine}: drew before refusing");
+            }
+            // engine 3 takes it
+            let mut c = canvas(3);
+            f(&mut c);
+            assert!(total(&c, Canvas::solvent_um) > 0.0, "{name}: engine 3 laid no solvent");
+        }
+    }
+
+    /// `dry()` on a canvas with solvent in its paint is the same as waiting
+    /// on the minute grid until the solvent has gone, then drying: the film
+    /// flows and loses its solvent first, it isn't baked as it lies.
+    #[test]
+    fn dry_with_solvent_waits_it_out_first() {
+        let mut a = canvas(3);
+        for k in 0..6 {
+            let y = 300.0 + 80.0 * k as f32;
+            a.drag(&mut thinned_brush(0.6), &Gesture::new(vec![(150.0, y), (850.0, y + 30.0)]), None);
+        }
+        assert!(total(&a, Canvas::solvent_um) > 0.0);
+        let mut b = a.clone();
+        a.dry();
+        let mut minutes = 0;
+        while total(&b, Canvas::solvent_um) > 0.0 {
+            b.wait(1.0);
+            minutes += 1;
+            assert!(minutes < 10_000, "the solvent never went");
+        }
+        b.dry();
+        assert!(a.seen() == b.seen(), "dry() differs from waiting the solvent out, then drying");
+        assert_eq!(a.clock(), b.clock());
+    }
+
+    /// A stroke's ceiling counts only that stroke's own film: when the
+    /// stroke ids wrap and a new stroke gets an id an old one had, it still
+    /// lays about as much as a stroke under a fresh id. (Not exactly as
+    /// much: the reused id also marks the old stroke's film as the new
+    /// one's own in `Wet::stroke`, which predates the thinner; it costs
+    /// about 5% here. Before the ceilings were forgotten on a wrap, the
+    /// second stroke found its ceiling used up and took paint away: −83
+    /// against 318.)
+    #[test]
+    fn a_reused_stroke_id_starts_a_fresh_ceiling() {
+        let lay = |wrap: bool| -> f64 {
+            let mut c = canvas(3);
+            let g = Gesture::new(vec![(200.0, 500.0), (800.0, 520.0)]);
+            c.drag(&mut thinned_brush(0.5), &g, None);
+            // `current` is one past the last id handed out: the stroke was 1
+            let first = c.wet.current;
+            assert_eq!(first, 2, "the first stroke's id is 1");
+            if wrap {
+                // the next stroke's id wraps round to the first one's
+                c.wet.current = u32::MAX;
+            }
+            let before = total(&c, Canvas::wet_um);
+            c.drag(&mut thinned_brush(0.5), &g, None);
+            if wrap {
+                assert_eq!(c.wet.current, first, "the second stroke's id wrapped round to 1, the first one's");
+            }
+            total(&c, Canvas::wet_um) - before
+        };
+        let (fresh, reused) = (lay(false), lay(true));
+        assert!(fresh > 0.0);
+        assert!(reused >= 0.9 * fresh, "a reused id laid {reused}, a fresh one {fresh}");
     }
 }

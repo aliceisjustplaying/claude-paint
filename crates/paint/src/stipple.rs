@@ -226,8 +226,12 @@ impl Canvas {
 
     /// `stipple`, dipping into the piles already on the palette (see
     /// `work_with`).
+    ///
+    /// Panics if `sp` is thinned (`Stipple::thinner`, which applies to a
+    /// pile, `Stipple::piled`) and the canvas's engine is before 3.
     pub fn stipple_with(&mut self, piles: &mut crate::tally::Piles, mask: &Mask, sp: &Stipple, seed: u64) {
         sp.tool.assert_valid();
+        self.assert_thinner_supported(sp.thinner > 0.0 && sp.pile.is_some(), "Canvas::stipple");
         self.check_mask(mask);
         // plan on the whole canvas (a crop render plans the same touches)
         let f = mask.f;

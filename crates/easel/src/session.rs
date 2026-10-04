@@ -1815,7 +1815,12 @@ mod tests {
     /// before engine 2, at a small width to keep the test short): two
     /// studios' paintings (paint-studio-6399ad and -db6324), hand-timed, with
     /// paint worked over drying paint.
+    // Replays two studios' whole paintings: not run by any test command (the overnight
+    // plan of 2026-10-04 forbids painting replays in tests). scripts/tests/old_logs.sh
+    // checks the same rule on a tiny engine-1 log and on the first three chunks of each
+    // of these two logs, at 128 to 160 px; notes/speed/SKIPPED.md.
     #[test]
+    #[ignore = "replays whole paintings: never run"]
     #[cfg(feature = "replay")]
     fn logs_without_an_engine_line_replay_as_before() {
         for (name, want) in [("studio_6399ad", "4f3abae7eb080221"), ("studio_db6324", "009ec933d082a252")] {

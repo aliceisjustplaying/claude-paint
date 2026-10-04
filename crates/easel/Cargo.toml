@@ -34,6 +34,9 @@ path = "src/main.rs"
 
 [dependencies]
 paint = { path = "../paint", default-features = false }
+# Upgrading mlua/lua-src/Lua: session.rs `TableHead` reads Lua 5.5.1's
+# private table layout; recheck it first (notes/easel.md "Lua internals
+# read directly").
 mlua = { version = "0.12", features = ["lua55", "vendored"] }
 # the old logs' trees, sky and rocks (src/legacy; the replay build)
 rayon = { version = "1", optional = true }

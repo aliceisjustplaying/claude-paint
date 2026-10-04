@@ -243,7 +243,29 @@ copy of each table per undo level.
 
 Tests cover a failing chunk that mutates old tables, an upvalue, a
 metatable and `string`; undo of a table edit and an upvalue bump; and exact
-replay afterwards. The remaining limits are coroutines suspended across
+replay afterwards.
+
+**Lua internals read directly (engine 3, `c4bb131`).** Restoring every
+entry of a table is not enough to restore `#t`. For a table with gaps
+(more than one border), Lua 5.5's `#t` depends on two values Lua keeps
+hidden: the array part's size and a length hint that `#t` itself rewrites
+(`lua-5.5.1/ltable.c` `luaH_getn`; ltable.h `lenhint`). A failed chunk
+can move them with every entry put back, and then the live session and a
+replay of its log (which skips that chunk) answer `#t` differently. Lua
+has no API for these values, so `session.rs` `table_layout` reads them
+from Lua's private `Table` struct (`TableHead`, an unsafe copy of
+Lua 5.5.1's layout from lobject.h). `heap.lua` records them for tables
+with gaps, and if a failed chunk moved them, the session marks itself
+stale and rebuilds from the log.
+
+This ties the easel to Lua 5.5.1's memory layout (mlua 0.12.1, lua-src
+551.0.2 in Cargo.lock). `table_layout_reads_right` checks the read once
+per process on known tables. If it fails, the easel doesn't read the
+layout and treats every table with gaps as moved by a failed chunk: still
+correct, but slower. The test
+`under_engine_3_a_failed_chunk_that_moved_a_border_rebuilds` fails if that
+fallback is ever active. **Before upgrading mlua, lua-src or Lua, recheck
+`TableHead` against the new lobject.h/ltable.h and run that test.** The remaining limits are coroutines suspended across
 chunks, and `pairs` order over a table that was rewritten during a rollback.
 
 **Coverage (not this stream).** The example and rocks renders show bare

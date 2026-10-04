@@ -1,0 +1,58 @@
+# Round 5 mutation demos for c16's redistribution assertion (TESTS_PHASE_REPORT.md, round 5).
+# Each round: an isolated copy of c16 part (3)'s setup and redistribution assertion
+# (scratch crates/paint/tests/zz_probe.rs, deleted), then the real c16 at the proposed commit.
+# Mutations were temporary edits to crates/paint/src/thinner.rs (spread), reverted after each run.
+=== (c) current code
+lockrun: job 5ffc47ce started (process group 59333, timeout 600 s, log /tmp/lockrun-<uid>/logs/20261004-061030-5ffc47ce.log)
+REDISTRIBUTION: 92 low-ratio boundary pixels gained >= 1% paint; mean ratio 0.11158 before, 0.12264 after evaporation taken back (+9.91%)
+test redistribution_alone ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.67s
+
+test c16_brush_rag_and_spreading_carry_solvent_in_the_local_ratio ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 12 filtered out; finished in 0.86s
+
+lockrun: finished: exit 0 in 3.8 s; log /tmp/lockrun-<uid>/logs/20261004-061030-5ffc47ce.log
+=== (a) MUTATION: the flow moves paint and leaves its solvent behind (thinner.rs spread: source keeps all its solvent, none flows in)
+lockrun: job da8a1163 started (process group 59592, timeout 600 s, log /tmp/lockrun-<uid>/logs/20261004-061045-da8a1163.log)
+REDISTRIBUTION: 92 low-ratio boundary pixels gained >= 1% paint; mean ratio 0.11158 before, 0.10937 after evaporation taken back (-1.98%)
+
+thread 'redistribution_alone' (4199029) panicked at crates/paint/tests/zz_probe.rs:33:5:
+the thin film's ratio where the thick film's liquid came in: 0.11158447238200515 before, 0.1093743203568046 after (evaporation taken back)
+--
+test redistribution_alone ... FAILED
+
+--
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.67s
+
+test c16_brush_rag_and_spreading_carry_solvent_in_the_local_ratio ... FAILED
+
+--
+thread 'c16_brush_rag_and_spreading_carry_solvent_in_the_local_ratio' (4199216) panicked at crates/paint/tests/thinner_physics.rs:539:9:
+pixel 25558: ratio 0.5985170664849488 after one minute, outside its neighborhood's 0.6083634808530611..0.6367660228568987
+--
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 12 filtered out; finished in 0.83s
+
+lockrun: finished: exit 0 in 16.4 s; log /tmp/lockrun-<uid>/logs/20261004-061045-da8a1163.log
+=== (b) MUTATION: the flow moves solvent without its paint (thinner.rs spread: source keeps all its paint, none flows in)
+lockrun: job 60a2c812 started (process group 60019, timeout 600 s, log /tmp/lockrun-<uid>/logs/20261004-061114-60a2c812.log)
+REDISTRIBUTION: 0 low-ratio boundary pixels gained >= 1% paint; mean ratio 0.00000 before, 0.00000 after evaporation taken back (+0.00%)
+
+thread 'redistribution_alone' (4200277) panicked at crates/paint/tests/zz_probe.rs:32:5:
+the thick film spread into the thin one: 0 low-ratio pixels at the boundary gained ≥ 1% paint
+--
+test redistribution_alone ... FAILED
+
+--
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.66s
+
+test c16_brush_rag_and_spreading_carry_solvent_in_the_local_ratio ... FAILED
+
+--
+thread 'c16_brush_rag_and_spreading_carry_solvent_in_the_local_ratio' (4200475) panicked at crates/paint/tests/thinner_physics.rs:539:9:
+pixel 25572: ratio 0.6401502303750923 after one minute, outside its neighborhood's 0.6070035715815978..0.6332707701078875
+--
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 12 filtered out; finished in 0.84s
+
+lockrun: finished: exit 0 in 16.4 s; log /tmp/lockrun-<uid>/logs/20261004-061114-60a2c812.log

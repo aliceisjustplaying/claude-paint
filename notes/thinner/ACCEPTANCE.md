@@ -12,8 +12,10 @@ c692eae), then the before-change baseline a97c3a6 merged as 6cf9384. Round
 1 of review (2171f3c) asked for changes R1-R15
 (`~/src/a/claude-paint-reviews/thinner-tests-required-changes-round1.md`);
 round 2 (55ef93a) left B1, B2 and S1
-(`~/src/a/claude-paint-reviews/thinner-tests-review-astra-r2.md`); this is
-round 3. The tests commit is named in
+(`~/src/a/claude-paint-reviews/thinner-tests-review-astra-r2.md`); round 3
+(b2a0e14) was approved. Rounds 4 and 5 correct three test-code bugs and
+three setups found when the thinner was built (TESTS_PHASE_REPORT.md,
+rounds 4 and 5); no assertion or limit changed. The tests commit is named in
 `notes/thinner/TESTS_PHASE_REPORT.md`; the file hashes are at the end.
 
 ## How to run
@@ -39,8 +41,9 @@ fails. The slow tests are `#[ignore = "slow"]`, so an ordinary
 `cargo test` doesn't run them; the script runs them by exact name with
 `--ignored`. They are check 1, the check 8 card sweep, the check 10 gel
 and touch-dry comparison and the rag study. `--all` writes the rag
-study's sheet to `notes/thinner/rag_study.png` and fails if the file isn't
-written.
+study's sheet, `rag_study.png`, to `THINNER_RAG_STUDY_DIR` (default
+`notes/thinner`; set it so a candidate checkout stays clean) and fails if
+the file isn't written.
 
 **Check 13 (b)** fails on unchanged code (below) and awaits the user.
 Every mode runs it and expects it to fail at its ordering assertion: the
@@ -79,7 +82,9 @@ These cases must exit 1:
 - no rag sheet.
 
 Everything passing with 13 (b) failing at its assertion must exit 3 in all
-three modes, and a usage error exits 2. It passes all 16 cases.
+three modes, and a usage error exits 2. With `THINNER_RAG_STUDY_DIR` set,
+the sheet must land there and none in the checkout. It passes all 18
+cases.
 `scripts/tests/thinner_dump_fields_test.py` tests check 2's field checker
 on tiny fake dumps (6 cases, all pass), and
 `scripts/tests/thinner_clock_restart_fake.py` is check 17's demonstration
@@ -259,6 +264,11 @@ af49348. The real engine-1/2 painting logs aren't replayed here.
   - **Expected, per stroke:** canvas + brush paint is the same before and
     after, and so is canvas + brush solvent. The unthinned brush comes
     away carrying solvent: the pickup moved solvent with the paint.
+  - **Non-vacuity, per stroke:** the stroke moved paint. The canvas's
+    paint changed, pixel by pixel either way, by more than a thousandth
+    of all of it. (Round 4: this replaced a guard that the brush's paint
+    fell. A thin, solvent-heavy load at thinner 0.9 can pick up more than
+    its ceiling lets it lay, so it ends fuller.)
   - **The rag**, dry and then dipped in spirits. Expected: canvas paint
     before = after + what `rag_wipe` returned, and canvas solvent before
     = after + `Rag::solvent_mm3`.
@@ -279,9 +289,15 @@ brush.
 
 `c05_an_emptying_brush_lays_less_and_a_fuller_load_lasts_farther`.
 
-**Setup.** A filbert 8, raw sienna thinned 0.5, one 960-unit stroke at
-load 0.3 and one at 0.6. Paint is measured along the stroke's middle in
-10-unit bins. θ = `0.25 × stroke_limit_um(0.5) × 0.5`.
+**Setup.** A filbert 8, raw sienna thinned 0.5, at load 0.3 and at 0.6.
+Each makes one continuous zigzag over fresh ground: eight 960-unit rows,
+80 units apart, 7680 units, no reload. The pressure ramps keep a 960-unit
+stroke's absolute lengths. Paint is measured along each row's middle in
+10-unit bins, the rows in the order painted, and distances are counted
+along them. θ = `0.25 × stroke_limit_um(0.5) × 0.5`.
+
+Round 4: the setup was one 960-unit stroke. A thinned brush keeps what
+it can't lay, so it still held 61-74% of its liquid at that stroke's end.
 
 **Expected:**
 
@@ -536,9 +552,16 @@ its film's ratio within 1e-3.
    within 1e-3.
 2. **Rag.** A rag over each film takes that film's ratio within 1e-3, and
    leaves every pixel's ratio within 1e-4 of what it was.
-3. **Spreading.** On a flat ground, a thick film of ratio 1 (four
-   thinned-0.5 passes) sits beside a thin film of ratio 1/9 (one light
-   pass of thinner 0.1). After one minute:
+3. **Spreading.** On a flat ground there are two films:
+   - **The low film:** ratio 1/9, one light pass of thinner 0.1 (load
+     0.05, pressure 0.3) from x 400 to 850.
+   - **The thick film:** ratio 1, eight thinned-0.5 passes from 150 to
+     500. It goes on second, over the low film's start, so it ends in an
+     edge with untouched low-ratio paint beside it.
+
+   **Precondition, asserted:** the thick film's mean wet film left of the
+   edge is at least 1.5× the low film's right of it (12.1 against 2.2 µm).
+   After one minute:
    - **Balance.** The solvent left equals what the law leaves of the
      solvent before, computed per pixel, within 1e-4: either
      Σ s0·exp(-1/τ(h0)) (evaporation first) or Σ s1·exp(+1/τ(h1)) = S0
@@ -549,11 +572,21 @@ its film's ratio within 1e-3.
      thicknesses before and after (1e-4). Spreading mixes liquids; it
      doesn't separate paint from solvent. A uniform multiplier on the
      solvent fails this.
-   - **Redistribution across the two ratios.** At least 20 thin-film
-     pixels beside the thick film gained ≥ 1% paint. Their mean ratio,
-     with evaporation taken back, rose by more than 1%: they took in the
-     thick film's liquid, solvent and all. Paint moving without its
-     solvent would make it fall.
+   - **Redistribution across the two ratios.** Take the low film's pixels
+     at the edge, chosen from the state before the minute: ratio ≤ 0.2,
+     ≥ 0.5 µm of paint, and a pixel of ratio ≥ 0.5 within 2 px. At least
+     20 of them must have gained ≥ 1% paint. Their mean ratio, with
+     evaporation taken back, must rise by more than 1%: they took in the
+     thick film's liquid, solvent and all. On the current code 92 pixels
+     qualify, and the ratio rises 9.9%.
+
+     **Mutation demos** (`logs/round5_mutations.txt`):
+     - paint moving without its solvent makes the ratio fall 1.98%, and
+       the assertion fails;
+     - solvent moving without its paint leaves no pixel gaining paint, and
+       the movement guard fails.
+
+     In the full test, the local-ratio bound fails first in both.
 
 The movement guards (≥ 20 pixels gaining ≥ 1%) are model estimates.
 
@@ -652,7 +685,8 @@ Expected: `seen()` gives the same bits.
 ### The rag study
 
 `thinner_tests::rag_study`, slow. `--all` runs it with `THINNER_RAG_STUDY`
-set to `notes/thinner/rag_study.png` and fails if the sheet isn't written.
+set to `rag_study.png` in `THINNER_RAG_STUDY_DIR` (default
+`notes/thinner`), and fails if the sheet isn't written.
 
 **Panels.** Eight, 256 px each, before and after:
 
@@ -722,11 +756,11 @@ test:
 
 | sha256 | file |
 |---|---|
-| `f370ac3a49e7631bf201de0f909d271d514ff66a3fb9d052d990cad1be600042` | `crates/paint/tests/thinner_physics.rs` |
+| `e0408f09dbccde323b4e525e17a355c5a705218c20af1e2577976b4bc59b7e04` | `crates/paint/tests/thinner_physics.rs` |
 | `fe7d4e25e0e03a094d3c534dc2f8728c6ef4482e29f38a5b0b3ce01042d728ff` | `crates/paint/tests/thinner_support/mod.rs` |
 | `53924605cde088b16056fd31d69d57f96c5eae8d5c4674858326823bb0ca06cc` | `crates/paint/tests/thinner_pigments.rs` |
 | `542e25ab395446ea79c893640e5515702309b145f99a5da5ff7e617ea83e15c2` | `crates/paint/tests/thinner/tubes_af49348.txt` |
-| `77d987f32935818cca1468d0f93bcd2d5b59f8a99ee272609164e8390f69133c` | `crates/easel/src/thinner_tests.rs` |
+| `a8a8c6668bf71626032de47578a9c0810fc42cf3505cdb200bae6067e340b060` | `crates/easel/src/thinner_tests.rs` |
 | `f94b50a428ef2e05285f2f4f6c634662eff85d945d2c0ab0c1033c06fd7cefd1` | `crates/easel/src/thinner_measure.rs` |
 | `c3c9c40a29b19a5c4a2e42b6dd85871d1429160abea221000460d95f1caa73d9` | `crates/easel/tests/thinner/canvas.lua` |
 | `40674b768e1f79347749a09957d00fb74f57b207557aee2d919fe5f389e14796` | `crates/easel/tests/thinner/cloth_again.lua` |
@@ -736,11 +770,11 @@ test:
 | `fc674bf8a45732cf52e56976279e2ecfd24ca2bba9fcecd43d7f31d3ef137a96` | `crates/easel/tests/thinner/failing.lua` |
 | `83a9244e38ef0eca10903a4d7a4761ac3f8dd6861d564526cfe6c2f8c9325259` | `crates/easel/tests/thinner/next.lua` |
 | `31e301b3f309913d55147c7c2a626bf3a8bb8ca57c8859b2884403e68d30919d` | `crates/easel/tests/thinner/thinned.lua` |
-| `9a9ace82670aecac336eab0f62263684d920f69fbcd25e16d02f740a422c0630` | `scripts/test_thinner_acceptance` |
-| `b811f171b0d3e9ad029f07e0ff2b9642ee4b390636cde7addd791f752fc4c425` | `scripts/tests/thinner_acceptance_runner.sh` |
+| `7c94dfe3cccc81760acf1e313f590558e2696ddbc7819117c517c77c03ef285b` | `scripts/test_thinner_acceptance` |
+| `740434325f19204fb68ba3369c9f439076390ba4a83beb26ae6b93947866dc66` | `scripts/tests/thinner_acceptance_runner.sh` |
 | `a6af467b6309d948790c0e460f9b06bb79b05a17a360fba01bbc9e859fdbe18f` | `scripts/tests/thinner_dump_fields_test.py` |
 | `93b580798dd2c21c464c382c8b5d4a00b3e069f7f4c51f5b8aa95e8c6ddebd6a` | `scripts/tests/thinner_clock_restart_fake.py` |
 | `d921054862c2ba41be635c80ef756e0097d81accbd2699756c90ea77e776abf1` | `scripts/thinner_check2` |
 | `dceb4eb0116160788101626e0d06c65d3899adb308b63187181292762e5ca483` | `scripts/thinner_dump_fields.py` |
 
-`crates/easel/src/main.rs` gains only four test-only lines. The baseline's own files are listed in `notes/thinner/baseline/SHA256SUMS` (commit a97c3a6), unchanged.
+`crates/easel/src/main.rs` gains only four test-only lines. The baseline's own files are listed in `notes/thinner/baseline/SHA256SUMS` (commit a97c3a6), unchanged. Against the approved set (b2a0e14), rounds 4 and 5 change `thinner_physics.rs`, `thinner_tests.rs`, `scripts/test_thinner_acceptance`, `scripts/tests/thinner_acceptance_runner.sh` and this file.

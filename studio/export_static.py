@@ -166,8 +166,9 @@ def main():
         s["said"] = bool(ev) and ev[-1]["kind"] == "say"
         if s["look"] is None:  # painters from before the look tool read their renders as files: the last picture they
             # saw (a reference picture, read from the studio's reference/, is never the painter's picture)
-            refs = {e["img"] for e in ev if e["kind"] == "image" and e.get("ref")}
-            s["look"] = next((i for i in range(n - 1, -1, -1) if web[i] and i not in refs), None)
+            s["look"] = next((e["img"] for e in reversed(ev)
+                              if e["kind"] == "image" and "look" not in e and not e.get("ref")
+                              and 0 <= e["img"] < n and web[e["img"]]), None)
         text(os.path.join(out, "data", p, "events.json"),
              json.dumps({"events": ev, "total": len(ev), "epoch": st["epoch"], "sittings": len(files), "imgext": exts, "web": web}))
         # the painting's source, as the live server's /api/file gives it

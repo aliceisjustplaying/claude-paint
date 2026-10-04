@@ -1,0 +1,3 @@
+$ cd studio && PYTHONDONTWRITEBYTECODE=1 uv run --no-project --with pytest --with pillow python -m pytest -q -p no:cacheprovider -rs test_studio.py
+.........................                                                [100%]
+25 passed in 7.90s

@@ -1,0 +1,2 @@
+$ cargo build --release -p easel
+    Finished `release` profile [optimized] target(s) in 0.05s

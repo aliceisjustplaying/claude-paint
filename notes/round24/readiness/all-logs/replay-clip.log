@@ -1,0 +1,2 @@
+$ scripts/tests/replay_clip.sh
+replay_clip test: relative and absolute frames folders at numeric and dynamic pace, each clip 8 s to a frame; 75 s at --max-hold 1 refused (/tmp/cpt.ld62eqpz/replay-clip.KgfWTm)

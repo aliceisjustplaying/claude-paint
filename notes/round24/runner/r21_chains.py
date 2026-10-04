@@ -379,7 +379,7 @@ BUNNY = model("opencode-go", "space-bunny-free", "max")
 LANES = {
     # round 22.1 and round 23: one Opus 5.5 painter (thinking xhigh, through the Claude subscription: pi-black) in Inness's studio
     # round 24: thinking high (the owner's choice for the engine-3 painting)
-    "INNS": lane("inness", model("anthropic", "claude-opus-5-5", "high", black=True), record_kind="none"),
+    "INNS": lane("inness", model("anthropic", "claude-fable-5-1", "high", black=True), record_kind="none"),
 }
 DRY = False
 

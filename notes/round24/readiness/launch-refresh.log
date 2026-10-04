@@ -1,0 +1,21 @@
+exported the inness studio from b0b2393 (b0b2393) to /var/folders/6k/24182wv136749r3p852rft740000gn/T/tmp.7Po52OOcn9/studio
+  easel: /var/folders/6k/24182wv136749r3p852rft740000gn/T/tmp.7Po52OOcn9/studio/bin/easel (checked in /var/folders/6k/24182wv136749r3p852rft740000gn/T//studio-probe.m3e7AS)
+  notices: /var/folders/6k/24182wv136749r3p852rft740000gn/T/tmp.7Po52OOcn9/studio/bin/THIRD_PARTY_NOTICES.md
+  box: inness
+  notes: easel_guide.md journal.md research/inness_materials.md research/oil_paint_physics.md 
+2026-10-04 22:27:37 INNS1: export inness studio (then studio_notes.md, BRIEF.md as briefs/inness.md with this studio's path):
+    cd ~/src/a/claude-paint-r24run && R16_BRANCH=round-24 ~/src/a/claude-paint-r24run/scripts/export_r16_studio inness ~/src/a/paint-studio-6f8842
+2026-10-04 22:27:37 INNS1: open the easel (~/src/a/paint-studio-6f8842/bin/easel open); it stays open across sittings:
+    cd ~/src/a/paint-studio-6f8842 && ~/src/a/paint-studio-6f8842/bin/easel open
+2026-10-04 22:27:37 INNS1: sitting 1 (painter):
+    cd ~/src/a/paint-studio-6f8842 && pi --print --no-extensions -e ~/src/a/claude-paint-r24run/harness/painter/painter.ts -e ~/src/a/claude-paint-r24run/harness/painter/compaction.ts --system-prompt ~/src/a/claude-paint-r24run/harness/painter/system_prompt.md --tools paint,look,note,status,log,read --no-context-files --no-skills --no-prompt-templates --no-approve -e ~/.pi/agent/git/github.com/aliceisjustplaying/pi-black/extensions/pi-black.ts --provider anthropic --model claude-opus-5-5 --thinking high 'Your brief is in BRIEF.md in this folder. Your last message is your reply: the painting'"'"'s title if you give it one and a few sentences about the picture.'
+2026-10-04 22:27:37 INNS1: after each sitting: count painting chunks;
+    more sittings until one the painter ends adds no painting chunks (safety cap 4; a usage limit continues its session),
+    at the same open easel (reopened, replaying the log, only if its server is gone); closed after the last:
+    cd ~/src/a/paint-studio-6f8842 && PAINTER_SITTING_RECOVERY=1 pi --print --no-extensions -e ~/src/a/claude-paint-r24run/harness/painter/painter.ts -e ~/src/a/claude-paint-r24run/harness/painter/compaction.ts --system-prompt ~/src/a/claude-paint-r24run/harness/painter/system_prompt.md --tools paint,look,note,status,log,read --no-context-files --no-skills --no-prompt-templates --no-approve -e ~/.pi/agent/git/github.com/aliceisjustplaying/pi-black/extensions/pi-black.ts --provider anthropic --model claude-opus-5-5 --thinking high 'You'"'"'re back at the easel. The painting is as you left it. Your brief is in BRIEF.md and your journal in notes/journal.md.'
+2026-10-04 22:27:37 INNS1: check (background, after the last sitting; result in the log):
+    cd ~/tmp/gallery-fcf9c110/r24/run && nice ~/src/a/claude-paint-r24run/scripts/check_painting ~/src/a/paint-studio-6f8842 ~/tmp/gallery-fcf9c110/r24/run/INNS/p1_check
+2026-10-04 22:27:37 INNS1: finishing (background, after the last sitting):
+    cd ~/tmp/gallery-fcf9c110/r24/run && ~/src/a/claude-paint-r24run/scripts/finish_painting ~/src/a/paint-studio-6f8842/paintings/lua/painting.lua ~/tmp/gallery-fcf9c110/r24/run/INNS1_finished.png
+2026-10-04 22:27:37 lane INNS finished
+2026-10-04 22:27:37 all lanes finished

@@ -1,0 +1,33 @@
+$ cargo test -p easel --test boxes -- --ignored --exact a_round_19_log_replays_as_before >"$TMPDIR/slow-r19.out" 2>&1 & a=$!; cargo test -p easel --test determinism -- --ignored --exact hand_time_is_deterministic_across_thread_counts_at_the_live_width state_digests_are_the_same_in_every_replay_at_the_live_width the_rag_replays_the_same_at_the_live_width >"$TMPDIR/slow-det.out" 2>&1 & b=$!; wait $a; ra=$?; wait $b; rb=$?; cat "$TMPDIR/slow-r19.out" "$TMPDIR/slow-det.out"; [ $ra = 0 ] && [ $rb = 0 ]
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on build directory
+   Compiling paint v0.1.0 (~/src/a/claude-paint/crates/paint)
+   Compiling easel v0.1.0 (~/src/a/claude-paint/crates/easel)
+    Finished `test` profile [optimized + debuginfo] target(s) in 48.25s
+     Running tests/boxes.rs (target/debug/deps/boxes-30ca0bacca85491a)
+
+running 1 test
+test a_round_19_log_replays_as_before ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 4 filtered out; finished in 35.57s
+
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on build directory
+   Compiling easel v0.1.0 (~/src/a/claude-paint/crates/easel)
+    Finished `test` profile [optimized + debuginfo] target(s) in 48.72s
+     Running tests/determinism.rs (target/debug/deps/determinism-f24e4ca7a87f3f0a)
+
+running 3 tests
+test state_digests_are_the_same_in_every_replay_at_the_live_width ... ok
+test the_rag_replays_the_same_at_the_live_width ... ok
+test hand_time_is_deterministic_across_thread_counts_at_the_live_width has been running for over 60 seconds
+test hand_time_is_deterministic_across_thread_counts_at_the_live_width ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 4 filtered out; finished in 114.98s
+

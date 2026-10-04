@@ -1,0 +1,18 @@
+$ CARGO_TARGET_DIR="$CARGO_TARGET_DIR/bf" BOX_FEATURES_PROFILE=dev scripts/tests/box_features.sh
+box_features: paint no box: 3 passed
+box_features: easel no box (painter): 1 passed
+box_features: paint box-sargent: 3 passed
+box_features: easel box-sargent (painter): 1 passed
+box_features: paint box-inness: 3 passed
+box_features: easel box-inness (painter): 1 passed
+box_features: paint box-alma-tadema: 3 passed
+box_features: easel box-alma-tadema (painter): 1 passed
+box_features: paint box-tonn: 3 passed
+box_features: easel box-tonn (painter): 1 passed
+box_features: paint box-hopper: 3 passed
+box_features: easel box-hopper (painter): 1 passed
+box_features: paint box-sargent,box-inness: refused
+box_features: easel box-inness,box-tonn (painter): refused
+box_features: paint all-boxes (default): 3 passed
+box_features: easel replay (default): 1 passed
+box_features: no box, each box alone, two boxes and the replay build hold the boxes they should

@@ -1,0 +1,42 @@
+easel "painting" open: 0 chunks · 2400px · no canvas yet
+day 1, 09:00
+ok · chunk 1 (27.08 s to compute)
+rag(width 45, load 0.01)
+day 1, 09:00
+ok · chunk 2 (0.25 s to compute)
+day 1, 09:01
+ok · chunk 3 (1.67 s to compute)
+~/src/a/claude-paint/notes/round24/readiness/sequence.png
+/private/tmp/e3-smoke.dJgole/studio/out/easel/painting/look-0001.png (960x600, 0.06s)
+the live canvas is in /private/tmp/e3-smoke.dJgole/studio/out/easel/painting/live.png
+closed; the session is in /private/tmp/e3-smoke.dJgole/studio/paintings/lua/painting.lua
+resuming chunk 1/3
+resumed chunk 1/3 61.83s
+resuming chunk 2/3
+resumed chunk 2/3 1.21s
+resuming chunk 3/3
+resumed chunk 3/3 5.93s
+resumed 3 chunks from /private/tmp/e3-smoke.dJgole/studio/paintings/lua/painting.lua
+easel "painting" open: 3 chunks · 2400px · size=440, aspect=2, linen={15, 15}, seed=24
+rag(width 45, load 0.00)
+day 1, 09:01
+ok · chunk 4 (0.13 s to compute)
+~/src/a/claude-paint/notes/round24/readiness/sequence.png
+the live canvas is in /private/tmp/e3-smoke.dJgole/studio/out/easel/painting/live.png
+closed; the session is in /private/tmp/e3-smoke.dJgole/studio/paintings/lua/painting.lua
+log: /tmp/e3-smoke.dJgole/studio/paintings/lua/painting.lua (4 chunks); the studio's committed record equals its log
+resuming chunk 1/4
+resumed chunk 1/4 45.73s
+resuming chunk 2/4
+resumed chunk 2/4 0.48s
+resuming chunk 3/4
+resumed chunk 3/4 3.51s
+resuming chunk 4/4
+resumed chunk 4/4 0.05s
+resumed 4 chunks from /private/tmp/e3-smoke.dJgole/replay/paintings/lua/painting.lua
+easel "painting" open: 4 chunks · 2400px · size=440, aspect=2, linen={15, 15}, seed=24
+the replay equals the live canvas saved at close (the session had replayed 3 of its 4 chunks from the log)
+the replay's canvas state equals the save written at close (the session had replayed 3 of its 4 chunks from the log)
+the painter saved no picture
+times: reopen 50 s, save and close 1 s
+check: ok: 4 chunks replay to the live canvas; the replay equals the live canvas saved at close (the session had replayed 3 of its 4 chunks from the log); the replay's canvas state equals the save written at close (the session had replayed 3 of its 4 chunks from the log); the painter saved no picture; the studio's committed record equals its log

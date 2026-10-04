@@ -101,6 +101,7 @@ fn lose(lua: &Lua, st: &S, m: Value, o: Option<Table>) -> Result<usize> {
     for (pts, _from, _into) in plans {
         // a light load from the pile (remixed a little: a pile knifed by hand is uneven)
         let paint = tubes.remix(&pile.mix, jitter, &mut Rng::new(rng.next_u64())).laid(pile.medium);
+        let paint = if pile.thinner() > 0.0 { paint.with_thinner(pile.thinner()) } else { paint };
         let want = pile.mix.color;
         held.wipe(0.9);
         held.load(paint, load);

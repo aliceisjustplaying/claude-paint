@@ -61,6 +61,10 @@ pub struct Paint {
     /// film thickness and fat (low `stiff`) it sets how long the paint stays
     /// open (see `Canvas::wait`).
     pub drying: f32,
+    /// Share of solvent (turpentine, spirits) by volume in what the brush
+    /// takes up, 0 (none) to 0.95 (`crate::thinner`; engine 3). The other
+    /// fields stay the paint's own: solvent is never mixed into them.
+    pub thinner: f32,
 }
 
 impl Paint {
@@ -68,11 +72,11 @@ impl Paint {
     /// ratio: over black ÷ over white; 0.05 = glaze, 0.5 = scumble,
     /// 0.92 = body).
     pub fn new(color: Rgb, hiding: f32, stiff: f32) -> Self {
-        Paint { color, scatter: scatter_for(luminance(color), hiding), stiff, drying: 1.0 }
+        Paint { color, scatter: scatter_for(luminance(color), hiding), stiff, drying: 1.0, thinner: 0.0 }
     }
     /// A paint of masstone `color` that scatters `scatter` per coat.
     pub fn km(color: Rgb, scatter: f32, stiff: f32) -> Self {
-        Paint { color, scatter, stiff, drying: 1.0 }
+        Paint { color, scatter, stiff, drying: 1.0, thinner: 0.0 }
     }
     pub fn body(color: Rgb) -> Self {
         Paint::new(color, 0.92, 1.0)
@@ -93,6 +97,15 @@ impl Paint {
     /// `drying::drier`: lead white 2, bone black 0.4).
     pub fn with_drying(self, rate: f32) -> Self {
         Paint { drying: rate, ..self }
+    }
+    /// This paint thinned: `t` (0..0.95) of what the brush takes up is
+    /// solvent, the rest this paint, unchanged (`crate::thinner`; engine 3).
+    pub fn with_thinner(self, t: f32) -> Self {
+        Paint { thinner: if t.is_nan() { 0.0 } else { t.clamp(0.0, 0.95) }, ..self }
+    }
+    /// The share of solvent by volume (`with_thinner`).
+    pub fn thinner(&self) -> f32 {
+        self.thinner
     }
     /// Hiding power of one coat (contrast ratio), derived from the
     /// scattering; for reporting (it rounds to 1 for strong scatterers).
@@ -139,11 +152,46 @@ pub(crate) struct Wet {
     pub(crate) dirty: Option<(usize, usize, usize, usize)>,
     /// The painting's clock and how far each film has dried (`drying`).
     pub(crate) clock: crate::drying::Clock,
+    /// Solvent in the open film, µm (not coats: it is saved as µm, and a
+    /// save must restore it bit for bit), engine 3: empty before engine 3
+    /// (`crate::thinner`). Saved (PAINTCK9).
+    pub(crate) solv: Vec<f32>,
+    /// The wet film (paint + solvent, coats) the stroke `laid_id` has added
+    /// to each pixel, against its ceiling (`thinner::stroke_limit_um`).
+    /// Transient: a stroke id is never reused, so a stale entry is never
+    /// read; not saved. Empty until a thinned paint is laid.
+    pub(crate) laid: Vec<f32>,
+    pub(crate) laid_id: Vec<u32>,
 }
 
 impl Wet {
     pub fn new(n: usize) -> Self {
-        Wet { vol: vec![0.0; n], lat: vec![[0.0; LAT]; n], hide: vec![[0.0, 0.5, 1.0]; n], stroke: vec![0; n], touched: vec![0; n], floor: vec![0.0; n], cover: vec![1.0; n], current: 0, dirty: None, clock: Default::default() }
+        Wet { vol: vec![0.0; n], lat: vec![[0.0; LAT]; n], hide: vec![[0.0, 0.5, 1.0]; n], stroke: vec![0; n], touched: vec![0; n], floor: vec![0.0; n], cover: vec![1.0; n], current: 0, dirty: None, clock: Default::default(), solv: Vec::new(), laid: Vec::new(), laid_id: Vec::new() }
+    }
+
+    /// Allocate the solvent and the strokes' ceilings (a thinned paint is
+    /// about to be laid).
+    pub(crate) fn ensure_solvent(&mut self) {
+        let n = self.vol.len();
+        if self.solv.len() != n {
+            self.solv = vec![0.0; n];
+        }
+        if self.laid.len() != n {
+            self.laid = vec![0.0; n];
+            self.laid_id = vec![0; n];
+        }
+    }
+
+    /// Whether any open film holds solvent (within the dirty box; `w` is
+    /// the buffer's width).
+    pub(crate) fn has_solvent(&self, w: usize) -> bool {
+        let Some((x0, y0, x1, y1)) = self.dirty else { return false };
+        if self.solv.is_empty() {
+            return false;
+        }
+        let x1 = x1.min(w);
+        let h = self.solv.len() / w.max(1);
+        (y0..y1.min(h)).any(|y| self.solv[y * w + x0..y * w + x1].iter().any(|&s| s > 0.0))
     }
 
     pub fn touch(&mut self, x0: usize, y0: usize, x1: usize, y1: usize) {
@@ -270,6 +318,18 @@ impl Canvas {
     /// Total wet paint on the canvas (for tests / debugging).
     pub fn wet_total(&self) -> f64 {
         self.wet.vol.iter().map(|&v| v as f64).sum::<f64>() / (self.f.scale as f64 * self.f.scale as f64)
+    }
+
+    /// Solvent in the open film at a point (units), µm: 0 where there is
+    /// none (`crate::thinner`). `wet_um` is the paint alone.
+    pub fn solvent_um(&self, x: f32, y: f32) -> f32 {
+        self.wet.solv.get(self.f.index(x, y)).copied().unwrap_or(0.0)
+    }
+
+    /// Total solvent on the canvas, in `wet_total`'s units (coats × square
+    /// units).
+    pub fn solvent_total(&self) -> f64 {
+        self.wet.solv.iter().map(|&v| v as f64).sum::<f64>() / crate::surface::COAT_UM as f64 / (self.f.scale as f64 * self.f.scale as f64)
     }
 }
 

@@ -13,7 +13,7 @@ import { existsSync } from "node:fs";
 import { Type } from "@earendil-works/pi-ai";
 import { createReadToolDefinition, defineTool, type ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { reviseJournal } from "./journal.ts";
-import { atEasel, hideCounters, logReply, paintReply, renameLook, statusReply, studioPath, lookArgs, tail, text, toolWords } from "./easel-client.ts";
+import { atEasel, hideCounters, logReply, paintReply, renameLook, renameLooks, statusReply, studioPath, lookArgs, tail, text, toolWords } from "./easel-client.ts";
 
 export function registerEaselTools(pi: ExtensionAPI, studio: string): void {
 	const read = createReadToolDefinition(studio);
@@ -44,27 +44,44 @@ export function registerEaselTools(pi: ExtensionAPI, studio: string): void {
 			description:
 				"Look at the canvas as it is now. Without options: the whole canvas, scaled down. " +
 				"crop: \"x0,y0,x1,y1\" in canvas units (two opposite corners), shown at 1:1 pixels. " +
-				"mode: \"value\", \"squint\", \"mirror\" or several, comma-separated. size: the long side in pixels. " +
+				"mode: \"value\", \"squint\", \"mirror\", \"relief\" (a raking light on the paint's ridges and furrows), \"gallery\" (the light the picture hangs in) or several, comma-separated. " +
+				"light: \"azimuth,elevation\" in degrees for the relief light (default \"135,25\", from the upper left). size: the long side in pixels. " +
 				"grid: true, or a spacing in canvas units. " +
+				"survey: true shows the whole canvas at full detail, as several tiles (with mode, not crop or size). " +
+				"compare: the path of an earlier look, shown left of the same view now. " +
 				"palette: true shows the palette instead: each pile a global holds, laid thick, as a thin and a very thin coat over the ground, and the thin coat over a black and white card.",
 			parameters: Type.Object({
 				crop: Type.Optional(Type.String()),
 				mode: Type.Optional(Type.String()),
+				light: Type.Optional(Type.String()),
+				survey: Type.Optional(Type.Boolean()),
+				compare: Type.Optional(Type.String()),
+				palette: Type.Optional(Type.Boolean()),
 				size: Type.Optional(Type.Number()),
 				grid: Type.Optional(Type.Union([Type.Boolean(), Type.Number()])),
-				palette: Type.Optional(Type.Boolean()),
 			}),
 			async execute(id, p, signal, onUpdate, ctx) {
 				let said: string;
+				if (p.survey && p.compare) throw new Error("look: survey and compare are two looks; ask for one");
+				// compare: an earlier look of this studio, nothing outside it (as `read`)
+				let compare = p.compare || undefined; // (an empty path is none)
+				if (compare !== undefined) {
+					compare = studioPath(studio, compare);
+					if (compare === undefined) throw new Error("look: compare is the path of an earlier look in this studio");
+				}
 				try {
-					said = await atEasel(studio, ["look", ...lookArgs(p)], undefined, signal);
+					said = await atEasel(studio, ["look", ...lookArgs({ ...p, compare })], undefined, signal);
 				} catch (e) {
 					throw new Error(toolWords((e as Error).message)); // the easel's messages name its command-line flags
 				}
-				let path: string;
-				({ said, path } = renameLook(studio, said));
-				const img = await read.execute(id, { path }, signal, onUpdate, ctx);
-				return { ...img, content: [{ type: "text" as const, text: said }, ...img.content.filter((c) => c.type === "image")] };
+				let paths: string[];
+				({ said, paths } = renameLooks(studio, said));
+				if (paths.length === 0) throw new Error(said);
+				// (a survey names several looks: each is read, in order)
+				const reads = [];
+				for (const path of paths) reads.push(await read.execute(id, { path }, signal, onUpdate, ctx));
+				const images = reads.flatMap((r) => r.content.filter((c) => c.type === "image"));
+				return { ...reads[0], content: [{ type: "text" as const, text: said }, ...images] };
 			},
 		}),
 		executionMode: "sequential",

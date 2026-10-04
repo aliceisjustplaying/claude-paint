@@ -4,7 +4,7 @@
  */
 import { spawn } from "node:child_process";
 import { setTimeout as pause } from "node:timers/promises";
-import { realpathSync, renameSync } from "node:fs";
+import { realpathSync, renameSync, statSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 import { homedir } from "node:os";
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
@@ -146,11 +146,14 @@ function realOf(full: string): string {
 	}
 }
 
-export function lookArgs(p: { crop?: string; mode?: string; size?: number; grid?: boolean | number; palette?: boolean }): string[] {
+export function lookArgs(p: { crop?: string; mode?: string; size?: number; grid?: boolean | number; light?: string; palette?: boolean; survey?: boolean; compare?: string }): string[] {
 	const a: string[] = [];
 	if (p.palette === true) a.push("--palette");
+	if (p.survey) a.push("--survey");
+	if (p.compare) a.push("--compare", p.compare);
 	if (p.crop) a.push("--crop", p.crop);
 	if (p.mode) a.push("--mode", p.mode);
+	if (p.light) a.push("--light", p.light);
 	if (p.size !== undefined) a.push("--size", String(p.size));
 	if (p.grid === true) a.push("--grid");
 	else if (typeof p.grid === "number") a.push("--grid", String(p.grid));
@@ -197,6 +200,35 @@ export function statusReply(reply: string): string {
 /** The log with its chunk lines unnumbered: `--@ chunk 12` reads `--@ chunk`. */
 export function logReply(log: string): string {
 	return log.replace(/^--@ chunk \d+[ \t]*$/gm, "--@ chunk");
+}
+
+/** Whether `path` is a file that is there (false too where it can't be read). */
+function isFile(path: string): boolean {
+	try {
+		return statSync(path).isFile();
+	} catch {
+		return false;
+	}
+}
+
+/**
+ * `renameLook` for every look an answer names (a survey names several): each
+ * line that begins with a look's png path (a file that is there; its folders may
+ * have spaces, or ".png", in their names) gets a fresh name; the paths in order.
+ */
+export function renameLooks(studio: string, said: string): { said: string; paths: string[] } {
+	const paths: string[] = [];
+	const lines = said.split("\n").map((line) => {
+		// (the whole path, to its last ".png": a folder's name may hold one too)
+		const m = /^(.+\.png)( \(\d+x\d+.*)?$/.exec(line);
+		if (!m || !isFile(resolve(studio, m[1]))) return line;
+		const path = join(dirname(m[1]), `${randomUUID()}.png`);
+		renameSync(resolve(studio, m[1]), resolve(studio, path));
+		paths.push(path);
+		// (without the machine's seconds, as `renameLook`)
+		return path + (m[2] ?? "").replace(/^ \((\d+x\d+), \d+(?:\.\d+)?s\)/, " ($1)");
+	});
+	return { said: lines.join("\n"), paths };
 }
 
 /**

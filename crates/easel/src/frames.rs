@@ -27,6 +27,8 @@ pub struct Recorder {
     every: f64,
     dir: PathBuf,
     width: u32,
+    /// The light frames are seen in (azimuth, elevation), or None: color only.
+    light: Option<(f32, f32)>,
     /// `tally().secs` when hand time started (the ground is not hand time).
     base: Option<f64>,
     /// Hand time (s) of the next frame due.
@@ -57,7 +59,7 @@ pub enum Kind {
 
 /// Start recording on this thread: a frame every `every` seconds of hand
 /// time into `dir`, `width` px wide.
-pub fn start(every: f64, dir: PathBuf, width: u32) -> Result<(), String> {
+pub fn start(every: f64, dir: PathBuf, width: u32, light: Option<(f32, f32)>) -> Result<(), String> {
     if !(every.is_finite() && every > 0.0) {
         return Err(format!("--frames-every {every}: want seconds > 0"));
     }
@@ -67,7 +69,7 @@ pub fn start(every: f64, dir: PathBuf, width: u32) -> Result<(), String> {
     std::fs::create_dir_all(&dir).map_err(|e| format!("{}: {e}", dir.display()))?;
     let mut index = std::fs::File::create(dir.join("frames.tsv")).map_err(|e| e.to_string())?;
     writeln!(index, "file\thand_secs\tticks\tchunks_done\tkind").map_err(|e| e.to_string())?;
-    let rec = Recorder { every, dir, width, base: None, next: every, hand: 0.0, written: 0, ticks: 0, chunk: 0, index: Some(index), err: None };
+    let rec = Recorder { every, dir, width, light, base: None, next: every, hand: 0.0, written: 0, ticks: 0, chunk: 0, index: Some(index), err: None };
     REC.with(|r| *r.borrow_mut() = Some(rec));
     paint::tally::hand_hook::set(Some(Box::new(|c: &Canvas| observe(c, c.tally().clocked))));
     Ok(())
@@ -141,7 +143,11 @@ impl Recorder {
 
     fn try_write(&mut self, c: &Canvas, ticks: usize, kind: Kind) -> Result<(), String> {
         let f = c.window();
-        let buf: Vec<u8> = c.seen().iter().flat_map(|p| p.map(|v| (linear_to_srgb(v) * 255.0).round().clamp(0.0, 255.0) as u8)).collect();
+        let px = match self.light {
+            Some((az, el)) => c.seen_lit(az, el, 1.0),
+            None => c.seen(),
+        };
+        let buf: Vec<u8> = px.iter().flat_map(|p| p.map(|v| (linear_to_srgb(v) * 255.0).round().clamp(0.0, 255.0) as u8)).collect();
         let img = image::RgbImage::from_raw(f.w as u32, f.h as u32, buf).ok_or("frame: bad buffer")?;
         let w = self.width.min(f.w as u32);
         let h = ((f.h as f64 * w as f64 / f.w as f64).round() as u32).max(1);
@@ -176,7 +182,7 @@ mod tests {
 
     fn replay(frames: Option<(f64, &std::path::Path)>) -> (Vec<u32>, f64) {
         if let Some((every, dir)) = frames {
-            super::start(every, dir.to_path_buf(), 64).unwrap();
+            super::start(every, dir.to_path_buf(), 64, None).unwrap();
         }
         let mut s = Session::replay(160).unwrap();
         for (i, c) in CHUNKS.iter().enumerate() {

@@ -1,0 +1,54 @@
+   Compiling paint v0.1.0 (~/src/a/claude-paint-speed/crates/paint)
+   Compiling easel v0.1.0 (~/src/a/claude-paint-speed/crates/easel)
+    Finished `test` profile [optimized + debuginfo] target(s) in 19.41s
+     Running tests/determinism.rs (target/debug/deps/determinism-f24e4ca7a87f3f0a)
+
+running 7 tests
+test hand_time_is_deterministic_across_thread_counts_at_the_live_width ... ignored, slow
+test state_digests_are_the_same_in_every_replay_at_the_live_width ... ignored, slow
+test the_rag_replays_the_same_at_the_live_width ... ignored, slow
+test state_digests_are_the_same_in_every_replay ... FAILED
+test object_keyed_tables_replay_the_same_in_every_process ... FAILED
+test the_rag_replays_the_same ... FAILED
+test hand_time_is_deterministic_across_thread_counts ... FAILED
+
+failures:
+
+---- state_digests_are_the_same_in_every_replay stdout ----
+
+thread 'state_digests_are_the_same_in_every_replay' (1739467) panicked at crates/easel/tests/determinism.rs:155:5:
+assertion `left == right` failed: the state digests differ between two replays
+  left: ["chunk 1 canvas=216180bb000caec1 brushes=cbf29ce484222325 nbrushes=0 studio=081babfe0a1082d9", "chunk 2 canvas=20ff88f821d62ffa brushes=cbf29ce484222325 nbrushes=0 studio=961dd4afad85ab28", "chunk 3 canvas=9006ab03b6f5ee68 brushes=5a2c29c5f183c779 nbrushes=1 studio=e4882c4fc10b1e2a"]
+ right: ["chunk 1 canvas=216180bb000caec1 brushes=cbf29ce484222325 nbrushes=0 studio=081babfe0a1082d9", "chunk 2 canvas=2a8ed80c2e5af173 brushes=cbf29ce484222325 nbrushes=0 studio=961dd4afad85ab28", "chunk 3 canvas=353af49474ccc091 brushes=1e9c1d224d9f59ca nbrushes=1 studio=e4882c4fc10b1e2a"]
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+---- object_keyed_tables_replay_the_same_in_every_process stdout ----
+
+thread 'object_keyed_tables_replay_the_same_in_every_process' (1739466) panicked at crates/easel/tests/determinism.rs:65:9:
+the PNGs differ
+
+---- the_rag_replays_the_same stdout ----
+
+thread 'the_rag_replays_the_same' (1739468) panicked at crates/easel/tests/determinism.rs:207:5:
+day 1, 09:56
+rag(width 91, load 0.09)	0.0936945378780365	0.05389593169093132	1
+
+day 1, 09:56
+rag(width 91, load 0.09)	0.0938105434179306	0.054010964930057526	1
+
+
+---- hand_time_is_deterministic_across_thread_counts stdout ----
+
+thread 'hand_time_is_deterministic_across_thread_counts' (1739465) panicked at crates/easel/tests/determinism.rs:106:5:
+the pictures differ between replays
+
+
+failures:
+    hand_time_is_deterministic_across_thread_counts
+    object_keyed_tables_replay_the_same_in_every_process
+    state_digests_are_the_same_in_every_replay
+    the_rag_replays_the_same
+
+test result: FAILED. 0 passed; 4 failed; 3 ignored; 0 measured; 0 filtered out; finished in 7.45s
+
+error: test failed, to rerun pass `-p easel --test determinism`

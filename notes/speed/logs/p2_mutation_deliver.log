@@ -1,0 +1,24 @@
+   Compiling paint v0.1.0 (~/src/a/claude-paint-speed/crates/paint)
+   Compiling easel v0.1.0 (~/src/a/claude-paint-speed/crates/easel)
+    Finished `test` profile [optimized + debuginfo] target(s) in 19.37s
+     Running tests/delivery.rs (target/debug/deps/delivery-c36f29a522a23e19)
+
+running 2 tests
+test replays_render_at_the_live_width_unless_a_preview_width_is_given ... ok
+test save_delivers_the_wet_canvas_as_seen_and_replay_matches ... FAILED
+
+failures:
+
+---- save_delivers_the_wet_canvas_as_seen_and_replay_matches stdout ----
+
+thread 'save_delivers_the_wet_canvas_as_seen_and_replay_matches' (1748288) panicked at crates/easel/tests/delivery.rs:64:5:
+the saved PNG is not the canvas as seen (max difference 107 levels)
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    save_delivers_the_wet_canvas_as_seen_and_replay_matches
+
+test result: FAILED. 1 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 3.92s
+
+error: test failed, to rerun pass `-p easel --test delivery`

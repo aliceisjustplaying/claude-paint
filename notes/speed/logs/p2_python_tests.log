@@ -1,0 +1,214 @@
+........................................................................ [ 28%]
+............FFFF....FFF................................................. [ 56%]
+........................................................................ [ 85%]
+......................................                                   [100%]
+=================================== FAILURES ===================================
+_ test_a_tonn_studio_gets_his_pictures_and_a_brief_for_as_many[names0-None-A picture of one of his\npaintings is in reference/, there with his permission: study it for his\n] _
+
+tmp_path = PosixPath('$TMPDIR/pytest-of-USER/pytest-1/test_a_tonn_studio_gets_his_pi0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x10689d8d0>
+names = ['a.jpg'], readme = None
+opening = 'A picture of one of his\npaintings is in reference/, there with his permission: study it for his\n'
+
+    @pytest.mark.parametrize("names, readme, opening", [
+        (["a.jpg"], None, "A picture of one of his\npaintings is in reference/, there with his permission: study it for his\n"),
+        (["b.png", "a.jpg", "c.webp"], None, "Pictures of his paintings are\nin reference/, there with his permission: study them for his manner."),
+        (["a.jpeg", "b.JPG"], "# Two still lifes\n\n- a.jpeg: grapes, 2019\n- b.JPG: a jug\n", "Pictures of his paintings are\n"),
+    ])
+    def test_a_tonn_studio_gets_his_pictures_and_a_brief_for_as_many(tmp_path, monkeypatch, names, readme, opening):
+>       ref = pictures(tmp_path / "ref", *names)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+test_r21_chains.py:668: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+folder = PosixPath('$TMPDIR/pytest-of-USER/pytest-1/test_a_tonn_studio_gets_his_pi0/ref')
+size = (8, 6), names = ('a.jpg',)
+
+    def pictures(folder, *names, size=(8, 6)):
+        """Tiny pictures named names in folder (made with Pillow, in the format their suffix names)."""
+>       from PIL import Image
+E       ModuleNotFoundError: No module named 'PIL'
+
+test_r21_chains.py:638: ModuleNotFoundError
+_ test_a_tonn_studio_gets_his_pictures_and_a_brief_for_as_many[names1-None-Pictures of his paintings are\nin reference/, there with his permission: study them for his manner.] _
+
+tmp_path = PosixPath('$TMPDIR/pytest-of-USER/pytest-1/test_a_tonn_studio_gets_his_pi1')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x106c4be00>
+names = ['b.png', 'a.jpg', 'c.webp'], readme = None
+opening = 'Pictures of his paintings are\nin reference/, there with his permission: study them for his manner.'
+
+    @pytest.mark.parametrize("names, readme, opening", [
+        (["a.jpg"], None, "A picture of one of his\npaintings is in reference/, there with his permission: study it for his\n"),
+        (["b.png", "a.jpg", "c.webp"], None, "Pictures of his paintings are\nin reference/, there with his permission: study them for his manner."),
+        (["a.jpeg", "b.JPG"], "# Two still lifes\n\n- a.jpeg: grapes, 2019\n- b.JPG: a jug\n", "Pictures of his paintings are\n"),
+    ])
+    def test_a_tonn_studio_gets_his_pictures_and_a_brief_for_as_many(tmp_path, monkeypatch, names, readme, opening):
+>       ref = pictures(tmp_path / "ref", *names)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+test_r21_chains.py:668: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+folder = PosixPath('$TMPDIR/pytest-of-USER/pytest-1/test_a_tonn_studio_gets_his_pi1/ref')
+size = (8, 6), names = ('b.png', 'a.jpg', 'c.webp')
+
+    def pictures(folder, *names, size=(8, 6)):
+        """Tiny pictures named names in folder (made with Pillow, in the format their suffix names)."""
+>       from PIL import Image
+E       ModuleNotFoundError: No module named 'PIL'
+
+test_r21_chains.py:638: ModuleNotFoundError
+_ test_a_tonn_studio_gets_his_pictures_and_a_brief_for_as_many[names2-# Two still lifes\n\n- a.jpeg: grapes, 2019\n- b.JPG: a jug\n-Pictures of his paintings are\n] _
+
+tmp_path = PosixPath('$TMPDIR/pytest-of-USER/pytest-1/test_a_tonn_studio_gets_his_pi2')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x106c487c0>
+names = ['a.jpeg', 'b.JPG']
+readme = '# Two still lifes\n\n- a.jpeg: grapes, 2019\n- b.JPG: a jug\n'
+opening = 'Pictures of his paintings are\n'
+
+    @pytest.mark.parametrize("names, readme, opening", [
+        (["a.jpg"], None, "A picture of one of his\npaintings is in reference/, there with his permission: study it for his\n"),
+        (["b.png", "a.jpg", "c.webp"], None, "Pictures of his paintings are\nin reference/, there with his permission: study them for his manner."),
+        (["a.jpeg", "b.JPG"], "# Two still lifes\n\n- a.jpeg: grapes, 2019\n- b.JPG: a jug\n", "Pictures of his paintings are\n"),
+    ])
+    def test_a_tonn_studio_gets_his_pictures_and_a_brief_for_as_many(tmp_path, monkeypatch, names, readme, opening):
+>       ref = pictures(tmp_path / "ref", *names)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+test_r21_chains.py:668: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+folder = PosixPath('$TMPDIR/pytest-of-USER/pytest-1/test_a_tonn_studio_gets_his_pi2/ref')
+size = (8, 6), names = ('a.jpeg', 'b.JPG')
+
+    def pictures(folder, *names, size=(8, 6)):
+        """Tiny pictures named names in folder (made with Pillow, in the format their suffix names)."""
+>       from PIL import Image
+E       ModuleNotFoundError: No module named 'PIL'
+
+test_r21_chains.py:638: ModuleNotFoundError
+_ test_a_picture_pi_would_resize_or_show_turned_is_copied_to_fit_upright_and_hers_stays_as_it_is _
+
+tmp_path = PosixPath('$TMPDIR/pytest-of-USER/pytest-1/test_a_picture_pi_would_resize0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x106c4bcb0>
+
+    def test_a_picture_pi_would_resize_or_show_turned_is_copied_to_fit_upright_and_hers_stays_as_it_is(tmp_path, monkeypatch):
+>       from PIL import Image
+E       ModuleNotFoundError: No module named 'PIL'
+
+test_r21_chains.py:687: ModuleNotFoundError
+___ test_without_his_pictures_nothing_starts[<lambda>-name other painters0] ____
+
+tmp_path = PosixPath('$TMPDIR/pytest-of-USER/pytest-1/test_without_his_pictures_noth4')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x106c03690>
+make = <function <lambda> at 0x106e78220>, why = 'name other painters'
+
+    @pytest.mark.parametrize("make, why", [
+        (lambda ref: None, "there is no folder"),
+        (lambda ref: ref.mkdir(), "there is no picture in"),
+        (lambda ref: (ref.mkdir(), (ref / "README.md").write_text("# Tonn\n"), (ref / "notes.pdf").write_bytes(b"%PDF")),
+         "there is no picture in"),
+        (lambda ref: (ref.mkdir(), (ref / "a.jpg").write_bytes(b"\0\0\0\x18ftypheic")), "isn't a picture pi's read tool shows"),
+        (lambda ref: (pictures(ref, "a.jpg"), (ref / "README.md").write_text("A still life after Rembrandt.\n")),
+         "name other painters"),
+        (lambda ref: pictures(ref, "after-Vermeer.jpg"), "name other painters"),
+    ])
+    def test_without_his_pictures_nothing_starts(tmp_path, monkeypatch, make, why):
+        import sys
+        ref = tmp_path / "tonn-reference"
+>       make(ref)
+
+test_r21_chains.py:715: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+test_r21_chains.py:708: in <lambda>
+    (lambda ref: (pictures(ref, "a.jpg"), (ref / "README.md").write_text("A still life after Rembrandt.\n")),
+                  ^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+folder = PosixPath('$TMPDIR/pytest-of-USER/pytest-1/test_without_his_pictures_noth4/tonn-reference')
+size = (8, 6), names = ('a.jpg',)
+
+    def pictures(folder, *names, size=(8, 6)):
+        """Tiny pictures named names in folder (made with Pillow, in the format their suffix names)."""
+>       from PIL import Image
+E       ModuleNotFoundError: No module named 'PIL'
+
+test_r21_chains.py:638: ModuleNotFoundError
+___ test_without_his_pictures_nothing_starts[<lambda>-name other painters1] ____
+
+tmp_path = PosixPath('$TMPDIR/pytest-of-USER/pytest-1/test_without_his_pictures_noth5')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x106c020b0>
+make = <function <lambda> at 0x106e782c0>, why = 'name other painters'
+
+    @pytest.mark.parametrize("make, why", [
+        (lambda ref: None, "there is no folder"),
+        (lambda ref: ref.mkdir(), "there is no picture in"),
+        (lambda ref: (ref.mkdir(), (ref / "README.md").write_text("# Tonn\n"), (ref / "notes.pdf").write_bytes(b"%PDF")),
+         "there is no picture in"),
+        (lambda ref: (ref.mkdir(), (ref / "a.jpg").write_bytes(b"\0\0\0\x18ftypheic")), "isn't a picture pi's read tool shows"),
+        (lambda ref: (pictures(ref, "a.jpg"), (ref / "README.md").write_text("A still life after Rembrandt.\n")),
+         "name other painters"),
+        (lambda ref: pictures(ref, "after-Vermeer.jpg"), "name other painters"),
+    ])
+    def test_without_his_pictures_nothing_starts(tmp_path, monkeypatch, make, why):
+        import sys
+        ref = tmp_path / "tonn-reference"
+>       make(ref)
+
+test_r21_chains.py:715: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+test_r21_chains.py:710: in <lambda>
+    (lambda ref: pictures(ref, "after-Vermeer.jpg"), "name other painters"),
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+folder = PosixPath('$TMPDIR/pytest-of-USER/pytest-1/test_without_his_pictures_noth5/tonn-reference')
+size = (8, 6), names = ('after-Vermeer.jpg',)
+
+    def pictures(folder, *names, size=(8, 6)):
+        """Tiny pictures named names in folder (made with Pillow, in the format their suffix names)."""
+>       from PIL import Image
+E       ModuleNotFoundError: No module named 'PIL'
+
+test_r21_chains.py:638: ModuleNotFoundError
+_ test_a_tonn_studio_without_the_pictures_has_no_reference_folder_and_the_plain_brief _
+
+tmp_path = PosixPath('$TMPDIR/pytest-of-USER/pytest-1/test_a_tonn_studio_without_the0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x106c037e0>
+
+    def test_a_tonn_studio_without_the_pictures_has_no_reference_folder_and_the_plain_brief(tmp_path, monkeypatch):
+>       ref = pictures(tmp_path / "ref", "a.jpg", "b.jpg")               # there, and not for this studio
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+test_r21_chains.py:734: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+folder = PosixPath('$TMPDIR/pytest-of-USER/pytest-1/test_a_tonn_studio_without_the0/ref')
+size = (8, 6), names = ('a.jpg', 'b.jpg')
+
+    def pictures(folder, *names, size=(8, 6)):
+        """Tiny pictures named names in folder (made with Pillow, in the format their suffix names)."""
+>       from PIL import Image
+E       ModuleNotFoundError: No module named 'PIL'
+
+test_r21_chains.py:638: ModuleNotFoundError
+=========================== short test summary info ============================
+FAILED test_r21_chains.py::test_a_tonn_studio_gets_his_pictures_and_a_brief_for_as_many[names0-None-A picture of one of his\npaintings is in reference/, there with his permission: study it for his\n]
+FAILED test_r21_chains.py::test_a_tonn_studio_gets_his_pictures_and_a_brief_for_as_many[names1-None-Pictures of his paintings are\nin reference/, there with his permission: study them for his manner.]
+FAILED test_r21_chains.py::test_a_tonn_studio_gets_his_pictures_and_a_brief_for_as_many[names2-# Two still lifes\n\n- a.jpeg: grapes, 2019\n- b.JPG: a jug\n-Pictures of his paintings are\n]
+FAILED test_r21_chains.py::test_a_picture_pi_would_resize_or_show_turned_is_copied_to_fit_upright_and_hers_stays_as_it_is
+FAILED test_r21_chains.py::test_without_his_pictures_nothing_starts[<lambda>-name other painters0]
+FAILED test_r21_chains.py::test_without_his_pictures_nothing_starts[<lambda>-name other painters1]
+FAILED test_r21_chains.py::test_a_tonn_studio_without_the_pictures_has_no_reference_folder_and_the_plain_brief
+7 failed, 247 passed in 17.96s
+
+real	0m18.190s
+user	0m7.518s
+sys	0m9.137s
+.......sss.ss..........                                                  [100%]
+18 passed, 5 skipped in 6.11s
+
+real	0m6.211s
+user	0m0.543s
+sys	0m0.238s

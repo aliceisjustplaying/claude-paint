@@ -1,0 +1,4 @@
+a_log_without_a_box_line_is_the_default_box	ok	0.87
+a_new_painting_takes_the_studio_box_and_every_replay_uses_it	ok	1.71
+the_box_file_and_easel_box_must_agree_on_a_box_there_is	ok	0.31
+the_replay_build_holds_every_box	ok	0.01

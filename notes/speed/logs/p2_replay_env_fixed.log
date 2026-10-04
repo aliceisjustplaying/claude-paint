@@ -1,0 +1,5 @@
+replay_env: check_painting, finish_painting and replay_clip replayed a sargent-box log with EASEL_BOX=inness set (/tmp/cpre.u5qM/replay-env.ADUXmh)
+
+real	0m5.636s
+user	0m5.807s
+sys	0m0.838s

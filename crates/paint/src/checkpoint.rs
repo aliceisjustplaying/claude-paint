@@ -118,7 +118,7 @@ fn write_soak(w: &mut impl Write, s: &crate::soak::Soak) -> io::Result<()> {
     put_u64(w, SOAK_V)?;
     put_u64(w, name.len() as u64)?;
     w.write_all(name)?;
-    let f = s.fabric;
+    let f = &s.fabric;
     for v in [f.color[0], f.color[1], f.color[2], f.cap_um, f.warp_bias] {
         put_f32(w, v)?;
     }
@@ -152,7 +152,7 @@ fn read_soak(r: &mut impl Read, n: usize) -> io::Result<crate::soak::Soak> {
     // (a corrupt file is an error here, not a panic or NaN pixels later)
     // a cloth of the caller's own keeps its name, spelt as it was; its
     // numbers come from the file, as a named one's do
-    let fabric = crate::soak::Fabric { name: crate::soak::keep_name(name), color: [v[0], v[1], v[2]], cap_um: v[3], warp_bias: v[4] };
+    let fabric = crate::soak::Fabric { name: name.into(), color: [v[0], v[1], v[2]], cap_um: v[3], warp_bias: v[4] };
     let amp = crate::soak::WEAVE_AMP;
     if !(fabric.is_valid() && t0.is_finite() && weave.iter().all(|&q| (1.0 - amp..=1.0 + amp).contains(&q))) {
         return Err(bad("checkpoint soak is invalid"));

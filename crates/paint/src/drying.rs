@@ -387,10 +387,12 @@ impl Canvas {
     /// Wait `dt` minutes with solvent in the paint (engine 3,
     /// `crate::thinner`). The solvent's loss and its flow step on a fine
     /// grid of `FLOW_TICKS` ticks a minute counted from the canvas's start
-    /// (not from this wait): the loss over every step, whole or part (exact
-    /// in closed form), the flow over one whole tick as each tick of the
-    /// grid ends. So a wait's flow is off by at most one tick (under a
-    /// second), and a wait split on the grid is exactly the wait in one.
+    /// (not from this wait), each over every step, whole or part: the loss
+    /// exact in closed form, the flow over the time the step lasts. So a
+    /// wait's flow follows the time waited, a part of a tick included (it
+    /// is there before the next stroke or look), and a wait split on the
+    /// grid is exactly the wait in one; split off the grid, the flow's
+    /// substeps fall differently, within rounding of the same.
     /// The oil's drying steps as before, in steps that end on whole minutes
     /// (or the wait's end), and brushwork's hand time (which waits too)
     /// keeps the same grid. Once the last solvent is gone the rest of the
@@ -412,9 +414,7 @@ impl Canvas {
                 self.age((next - aged) as f32);
                 aged = next;
             }
-            if next == tick {
-                self.spread((1.0 / TICKS) as f32);
-            }
+            self.spread((next - t) as f32);
             t = next;
             self.wet.clock.now = t;
             if !self.wet.has_solvent(self.f.w) {

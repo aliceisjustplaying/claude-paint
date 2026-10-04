@@ -163,6 +163,25 @@ pub fn exchange_kj() -> (f32, f32) {
     EXCH_KJ.with(|c| c.get())
 }
 
+// EXPERIMENT, with the exchange on: whether a thinned hair keeps the
+// pickup rule unthinned paint has (true: one stroke lifts at most
+// `pickup` of the film a pixel held when it arrived, its own fresh paint
+// at 0.15 of the rate, as for tube paint), or lifts a share of the film
+// at every touch with no bound per stroke (false, the first checkpoint).
+// Keeping it makes a hundredth of thinner a small change (check 8):
+// without it, any thinner at all switched the pickup rule.
+thread_local! {
+    static EXCH_FLOOR: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+pub fn set_exchange_floor(keep: bool) {
+    EXCH_FLOOR.with(|c| c.set(keep));
+}
+
+pub fn exchange_floor() -> bool {
+    EXCH_FLOOR.with(|c| c.get())
+}
+
 /// Ticks a minute on the grid the solvent's loss and flow step on
 /// (`Canvas::wait`): a chosen numerical resolution, not a physical
 /// constant. A power of two, so quarter minutes fall on it exactly.

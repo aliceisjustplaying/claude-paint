@@ -1706,7 +1706,7 @@ unsafe fn exchange(
                     *sf.floor.add(i) = v * (1.0 - tool.pickup * fl);
                 }
                 if v > 1e-6 {
-                    let take = if exch {
+                    let take = if exch && !crate::thinner::exchange_floor() {
                         (v * tool.pickup * wt * hunger * fl).min(v)
                     } else {
                         let own = if *sf.stroke.add(i) == id { 0.15 } else { 1.0 };

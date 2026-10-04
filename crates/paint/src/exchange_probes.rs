@@ -6,7 +6,8 @@
 //! Settings (`EXCH_SETS`, `;`-separated): `today` (the committed per-stroke
 //! ceiling), `b` and `B` (the reconstructed look-experiment controls,
 //! `bristle::probe::Control`), `k,j` (the exchange experiment,
-//! `thinner::set_exchange_kj`).
+//! `thinner::set_exchange_kj`), `fk,j` (the same, keeping the pickup
+//! rule of unthinned paint, `thinner::set_exchange_floor`).
 //!
 //! Paint is measured as everything above the primed ground: the open film
 //! (`wet.vol`) plus what drying moved into the dry film (`film` minus its
@@ -28,6 +29,9 @@ enum Set {
     HeldCap,
     AbsCap,
     Exch(f32, f32),
+    /// the exchange keeping the pickup rule of unthinned paint
+    /// (`thinner::set_exchange_floor`)
+    ExchF(f32, f32),
 }
 
 impl Set {
@@ -37,8 +41,10 @@ impl Set {
             "b" => Set::HeldCap,
             "B" => Set::AbsCap,
             t => {
-                let (k, j) = t.split_once(',').expect("a setting is today, b, B or k,j");
-                Set::Exch(k.parse().unwrap(), j.parse().unwrap())
+                let (f, t) = t.strip_prefix('f').map_or((false, t), |r| (true, r));
+                let (k, j) = t.split_once(',').expect("a setting is today, b, B, k,j or fk,j");
+                let (k, j) = (k.parse().unwrap(), j.parse().unwrap());
+                if f { Set::ExchF(k, j) } else { Set::Exch(k, j) }
             }
         }
     }
@@ -48,11 +54,16 @@ impl Set {
             Set::HeldCap => "b".into(),
             Set::AbsCap => "B".into(),
             Set::Exch(k, j) => format!("k{k}j{j}"),
+            Set::ExchF(k, j) => format!("fk{k}j{j}"),
         }
     }
     fn apply(&self) {
-        crate::thinner::set_exchange(matches!(self, Set::Exch(..)));
-        let (k, j) = if let Set::Exch(k, j) = self { (*k, *j) } else { (0.0, 0.0) };
+        crate::thinner::set_exchange(matches!(self, Set::Exch(..) | Set::ExchF(..)));
+        crate::thinner::set_exchange_floor(matches!(self, Set::ExchF(..)));
+        let (k, j) = match self {
+            Set::Exch(k, j) | Set::ExchF(k, j) => (*k, *j),
+            _ => (0.0, 0.0),
+        };
         crate::thinner::set_exchange_kj(k, j);
         probe::set_control(match self {
             Set::HeldCap => Control::HeldCap,

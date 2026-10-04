@@ -1,0 +1,12 @@
+# Protected golden set: saved test answers, their inputs and the code that
+# measures them. A change to any of these between main and a candidate needs
+# an approval in refs/notes/golden-approvals by someone other than its
+# builder (scripts/golden_approve; notes/speed/SAFEGUARDS.md). One path per
+# line, or a directory prefix ending in /. This file is protected too.
+notes/thinner/baseline/
+crates/paint/src/state_dump.rs
+crates/easel/src/state_dump.rs
+notes/golden_paths.txt
+# Thinner acceptance tests, helpers and answers: the thinner agent names them
+# here (each addition needs approval like any other change to this file).
+# <thinner acceptance paths go here>

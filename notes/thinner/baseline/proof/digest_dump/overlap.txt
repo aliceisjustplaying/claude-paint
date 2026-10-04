@@ -1,0 +1,3 @@
+chunk 1 secs=0.004 canvas=907ef1487cc1a62d brushes=cbf29ce484222325 nbrushes=0 studio=e3aebc6b0238c872
+chunk 2 secs=0.004 canvas=fa7502d1638541f1 brushes=790f59f51d864005 nbrushes=1 studio=38f77c3afff33544
+chunk 3 secs=0.005 canvas=c57aefd91534f5ea brushes=dc275e446a7bd848 nbrushes=2 studio=963bf717b32b7583

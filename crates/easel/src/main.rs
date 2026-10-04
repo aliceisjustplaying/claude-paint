@@ -30,6 +30,8 @@ mod legacy;
 mod look;
 mod save;
 mod session;
+#[cfg(feature = "replay")]
+mod state_dump;
 mod time;
 mod world;
 #[cfg(all(test, feature = "replay"))]
@@ -1013,7 +1015,7 @@ fn run(args: &[String]) -> Result<(), String> {
     let mut i = 1;
     while i < args.len() {
         match args[i].as_str() {
-            "--out" | "--dump-surface" | "--frames-every" | "--frames-dir" | "--frame-width" | "--state-digest" | "--width" if i + 1 < args.len() => i += 2,
+            "--out" | "--dump-surface" | "--dump-state" | "--frames-every" | "--frames-dir" | "--frame-width" | "--state-digest" | "--width" if i + 1 < args.len() => i += 2,
             "--look" => i += 1,
             o => return Err(format!("run: unknown argument {o:?} ({RUN_USAGE})")),
         }
@@ -1056,11 +1058,18 @@ fn run(args: &[String]) -> Result<(), String> {
         if let Some(f) = digests.as_mut() {
             f.write_all(state_digest_line(&s, i + 1, r.secs).as_bytes()).map_err(|e| format!("--state-digest: {e}"))?;
         }
+        // --dump-state <dir>: every state value after the chunk (state_dump.rs; reads only)
+        if let Some(d) = flag(args, "--dump-state") {
+            state_dump::write_chunk(&s, i + 1, Path::new(&d))?;
+        }
         if frames && let Some(c) = s.canvas() {
             frames::chunk_end(&c, i + 1);
         }
     }
     let paint_secs = t0.elapsed().as_secs_f64();
+    if let Some(d) = flag(args, "--dump-state") {
+        state_dump::write_save(&s, &text, Path::new(&d))?;
+    }
     let c = s.canvas().ok_or("the program never made a canvas")?.clone();
     if frames {
         frames::finish(&c);

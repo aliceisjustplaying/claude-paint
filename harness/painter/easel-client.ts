@@ -202,6 +202,15 @@ export function logReply(log: string): string {
 	return log.replace(/^--@ chunk \d+[ \t]*$/gm, "--@ chunk");
 }
 
+/** Whether `path` is a file that is there (false too where it can't be read). */
+function isFile(path: string): boolean {
+	try {
+		return statSync(path).isFile();
+	} catch {
+		return false;
+	}
+}
+
 /**
  * `renameLook` for every look an answer names (a survey names several): each
  * line that begins with a look's png path (a file that is there; its folders may
@@ -212,7 +221,7 @@ export function renameLooks(studio: string, said: string): { said: string; paths
 	const lines = said.split("\n").map((line) => {
 		// (the whole path, to its last ".png": a folder's name may hold one too)
 		const m = /^(.+\.png)( \(\d+x\d+.*)?$/.exec(line);
-		if (!m || !statSync(resolve(studio, m[1]), { throwIfNoEntry: false })?.isFile()) return line;
+		if (!m || !isFile(resolve(studio, m[1]))) return line;
 		const path = join(dirname(m[1]), `${randomUUID()}.png`);
 		renameSync(resolve(studio, m[1]), resolve(studio, path));
 		paths.push(path);

@@ -10,7 +10,7 @@ paintings look like.*
 <!-- research: The research pass that gathered this recorded its sources for the note as a whole: a key is
 given where it tied a finding to one source; [AM] marks a finding it did not tie to one, which may come from
 any source in the list. The AIC catalogue pages were not reachable; their findings come from secondary summaries. The
-two National Gallery books were read through ColourLex. Page numbers are given for the passages that were read. Each finding should be
+two National Gallery books were read through ColourLex. Page numbers are given where they were recovered. Each finding should be
 checked against its source before it is relied on. -->
 
 ## Summary

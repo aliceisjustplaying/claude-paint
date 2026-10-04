@@ -9,7 +9,7 @@ paintings look like.*
 
 <!-- research: The research pass that gathered this recorded its sources for the note as a whole: a key is
 given where it tied a finding to one source, and a claim without a key was not tied to one. Page
-numbers are given for the passages that were read. Each finding should be checked against its source before it is relied on. -->
+numbers are given where they were recovered. Each finding should be checked against its source before it is relied on. -->
 
 ## Summary
 

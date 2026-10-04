@@ -436,6 +436,8 @@ impl UserData for Brush {
         // b:load(pile, amount?): dip into a pile on the palette (amount 0..1 of a full load)
         // b:load(pile, amount, {side=, share=, streak=}): only part of the brush goes in
         m.add_method("load", |_, b, (p, amount, extra): (Value, Option<f32>, Value)| {
+            // (before anything is drawn from the session's randomness: a refused load leaves it as it was)
+            let amount = load_amount(amount, 0.8, "b:load")?;
             // (on a legacy canvas a table is its load's options: brushload's)
             #[cfg(feature = "replay")]
             let legacy = crate::legacy::on(&b.st);
@@ -448,12 +450,12 @@ impl UserData for Brush {
                 let mut part = part_of(t, "b:load")?;
                 part.seed = b.st.borrow_mut().rng.next_u64();
                 let (paint, color) = brushload(&b.st, &p, &Value::Nil, "load")?;
-                b.held.borrow_mut().load_part(paint, load_amount(amount, 0.8, "b:load")?, &part);
+                b.held.borrow_mut().load_part(paint, amount, &part);
                 time::trip(&b.st, color);
                 return Ok(());
             }
             let (paint, color) = brushload(&b.st, &p, &extra, "load")?;
-            b.held.borrow_mut().load(paint, load_amount(amount, 0.8, "b:load")?);
+            b.held.borrow_mut().load(paint, amount);
             time::trip(&b.st, color);
             Ok(())
         });

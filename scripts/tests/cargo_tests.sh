@@ -10,6 +10,11 @@
 # doctests (all four are ignored) after them; this runs the same tests
 # (`--lib --bins --tests`: no doctests) in about half the time. -j: binaries
 # at once (default 4); each still runs its tests on all cores.
+#
+# Not run here: the thinner's acceptance tests (the test binaries
+# thinner_physics and thinner_pigments, and the easel binary's
+# thinner_tests:: module). Their approved command is a release build:
+# scripts/test_thinner_acceptance runs them (notes/speed/SKIPPED.md).
 set -euo pipefail
 repo=$(cd "$(dirname "$0")/../.." && pwd)
 cd "$repo"
@@ -33,7 +38,10 @@ for line in open(sys.argv[1]):
         t = m["target"]
         key = t["name"] + "/" + t["kind"][0] if t["kind"][0] in ("lib", "bin") else t["name"]
         bins.append((order.index(key) if key in order else len(order), key, os.path.dirname(m["manifest_path"]), m["executable"]))
+THINNER = {"thinner_physics", "thinner_pigments"}  # run by scripts/test_thinner_acceptance (release)
 for _, key, d, exe in sorted(bins):
+    if key in THINNER:
+        continue
     print("%s\t%s\t%s" % (key.replace("/", "-"), d, exe))
 EOF
 [ -s "$work/bins" ] || { echo "cargo_tests: no test binaries" >&2; exit 1; }
@@ -42,6 +50,8 @@ printf '%s\0' "$@" >"$work/args"
 run() {
   local name=$1 dir=$2 exe=$3 args=()
   [ -s "$work/args" ] && mapfile -d '' args <"$work/args"
+  # the easel binary's thinner_tests:: module: scripts/test_thinner_acceptance (release)
+  [ "$name" = easel-bin ] && args+=(--skip thinner_tests::)
   local t0=$EPOCHREALTIME
   if (cd "$dir" && "$exe" "${args[@]}") >"$work/$name.out" 2>&1; then echo 0 >"$work/$name.rc"; else echo $? >"$work/$name.rc"; fi
   awk -v a="$t0" -v b="$EPOCHREALTIME" 'BEGIN { printf "%.2f\n", b - a }' >"$work/$name.secs"

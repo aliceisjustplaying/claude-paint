@@ -1870,6 +1870,20 @@ mod tests {
         assert!(e.contains("2 to 200"), "{e}");
     }
 
+    #[test]
+    #[cfg(tube_box)]
+    fn knife_rejects_invalid_loads_and_paths_without_changing_state() {
+        let mut s = Session::new(W).unwrap();
+        s.run(CANVAS).unwrap();
+        s.run(r#"k = knife{width=30}; p = pile{{"bone black", 1}}; k:load(p, 0.5)"#).unwrap();
+        for call in ["k:load(p, 3.4e38)", "k:lay({{100, 300}, {0/0, 300}})", "k:scrape({{100, 300}, {1e9, 300}})", "k:lay({{100, 300}}, {angle=math.huge})", "local pts = {}; for i = 1, 24 do pts[i] = {i % 2 == 0 and 20000 or -20000, 300} end; k:lay(pts)"] {
+            let before = bits(&s);
+            let e = s.run(call).unwrap_err();
+            assert!(e.contains("k:"), "{call}: {e}");
+            assert_eq!(before, bits(&s), "{call}");
+        }
+    }
+
     /// A failed chunk leaves a knife as it was, as it leaves a brush.
     #[test]
     #[cfg(tube_box)]

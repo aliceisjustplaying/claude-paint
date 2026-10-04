@@ -356,15 +356,20 @@ pub struct Held {
     /// Painting with engine 3 (`with_engine`): its `Debug` names each
     /// bristle's `solvent`. Not printed itself.
     shows_solvent: bool,
+    /// Painting with engine 4 or later: its `Debug` gives each bristle's
+    /// paint its solvent and oil too. Not printed itself.
+    shows_oil: bool,
 }
 
 /// A bristle's `Debug`, as `#[derive(Debug)]` printed it before the
-/// thinner, field for field, plus `solvent` when `show` (engine 3).
-struct BristleText<'a>(&'a Bristle, bool);
+/// thinner, field for field, plus `solvent` when `show` (engine 3); the
+/// paint's properties without solvent and oil unless `oil` (engine 4).
+struct BristleText<'a>(&'a Bristle, bool, bool);
 
 impl std::fmt::Debug for BristleText<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let b = self.0;
+        let hide: &[f32] = if self.2 { &b.hide } else { &b.hide[..3] };
         let mut d = f.debug_struct("Bristle");
         d.field("rx", &b.rx)
             .field("ry", &b.ry)
@@ -375,7 +380,7 @@ impl std::fmt::Debug for BristleText<'_> {
             .field("prev", &b.prev)
             .field("vol", &b.vol)
             .field("lat", &b.lat)
-            .field("hide", &b.hide)
+            .field("hide", &hide)
             .field("cure", &b.cure);
         if self.1 {
             d.field("solvent", &b.solvent);
@@ -386,7 +391,7 @@ impl std::fmt::Debug for BristleText<'_> {
 
 impl std::fmt::Debug for Bristle {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        BristleText(self, true).fmt(f)
+        BristleText(self, true, true).fmt(f)
     }
 }
 
@@ -396,13 +401,13 @@ impl std::fmt::Debug for Bristle {
 /// engine-3 brush (`with_engine`) names each bristle's `solvent` too.
 impl std::fmt::Debug for Held {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        struct List<'a>(&'a [Bristle], bool);
+        struct List<'a>(&'a [Bristle], bool, bool);
         impl std::fmt::Debug for List<'_> {
             fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-                f.debug_list().entries(self.0.iter().map(|b| BristleText(b, self.1))).finish()
+                f.debug_list().entries(self.0.iter().map(|b| BristleText(b, self.1, self.2))).finish()
             }
         }
-        f.debug_struct("Held").field("tool", &self.tool).field("bristles", &List(&self.bristles, self.shows_solvent)).finish()
+        f.debug_struct("Held").field("tool", &self.tool).field("bristles", &List(&self.bristles, self.shows_solvent, self.shows_oil)).finish()
     }
 }
 
@@ -465,13 +470,13 @@ impl Held {
                     prev: [None, None],
                     vol: 0.0,
                     lat: [0.0; LAT],
-                    hide: [0.5, 0.5, 1.0],
+                    hide: [0.5, 0.5, 1.0, 0.0, 1.0],
                     cure: 0.0,
                     solvent: 0.0,
                 }
             })
             .collect();
-        Held { tool, bristles, shows_solvent: false }
+        Held { tool, bristles, shows_solvent: false, shows_oil: false }
     }
 
     /// The brush of a painting with engine `v`: from engine 3 its `Debug`
@@ -479,6 +484,7 @@ impl Held {
     /// the text it always was.
     pub fn with_engine(mut self, v: u32) -> Self {
         self.shows_solvent = v >= 3;
+        self.shows_oil = v >= 4;
         self
     }
 
@@ -513,12 +519,12 @@ impl Held {
                 let v = amount * full * k;
                 let vp = v * (1.0 - t);
                 b.cure = mix_cure(b.cure, b.vol, 0.0, vp);
-                mix_into(&mut b.vol, &mut b.lat, &mut b.hide, vp, &lat, [scatter, paint.stiff, paint.drying]);
+                mix_into(&mut b.vol, &mut b.lat, &mut b.hide, vp, &lat, [scatter, paint.stiff, paint.drying, paint.solvent, paint.oil]);
                 b.solvent += v * t;
                 continue;
             }
             b.cure = mix_cure(b.cure, b.vol, 0.0, amount * full * k);
-            mix_into(&mut b.vol, &mut b.lat, &mut b.hide, amount * full * k, &lat, [scatter, paint.stiff, paint.drying]);
+            mix_into(&mut b.vol, &mut b.lat, &mut b.hide, amount * full * k, &lat, [scatter, paint.stiff, paint.drying, paint.solvent, paint.oil]);
         }
     }
 
@@ -543,12 +549,12 @@ impl Held {
                 let v = amount * full * k;
                 let vp = v * (1.0 - paint.thinner);
                 b.cure = mix_cure(b.cure, b.vol, 0.0, vp);
-                mix_into(&mut b.vol, &mut b.lat, &mut b.hide, vp, &lat, [scatter, paint.stiff, paint.drying]);
+                mix_into(&mut b.vol, &mut b.lat, &mut b.hide, vp, &lat, [scatter, paint.stiff, paint.drying, paint.solvent, paint.oil]);
                 b.solvent += v * paint.thinner;
                 continue;
             }
             b.cure = mix_cure(b.cure, b.vol, 0.0, amount * full * k);
-            mix_into(&mut b.vol, &mut b.lat, &mut b.hide, amount * full * k, &lat, [scatter, paint.stiff, paint.drying]);
+            mix_into(&mut b.vol, &mut b.lat, &mut b.hide, amount * full * k, &lat, [scatter, paint.stiff, paint.drying, paint.solvent, paint.oil]);
         }
     }
 
@@ -739,6 +745,12 @@ pub(crate) struct Surf {
     /// Engine 4: bristles in stiff paint gather into clumps that lay it in
     /// ridges and furrows and plough it aside a clump's width (`exchange`).
     clump: bool,
+    /// Engine 4: paint laid loses its solvent at once (it evaporates in
+    /// minutes), and an absorbent ground draws oil out of it (`add`).
+    lean: bool,
+    /// The ground's remaining absorbency per pixel (coats of oil; null when
+    /// none of it is absorbent or before engine 4).
+    absorb: *mut f32,
     /// Solvent in the open film, and each pixel's wet film laid by the
     /// stroke `laid_id` against its ceiling (`Wet::solv`, `Wet::laid`):
     /// null before engine 3.
@@ -771,6 +783,16 @@ impl Surf {
             if v <= 0.0 {
                 return;
             }
+            // engine 4: the solvent in the paint evaporates as it is laid
+            // (in minutes: before anything else can work it), leaving a film
+            // of the paint's own body that much thinner
+            let (v, hide) = if self.lean && hide[3] > 0.0 {
+                let mut h = hide;
+                h[3] = 0.0;
+                (v * (1.0 - hide[3].clamp(0.0, 0.95)), h)
+            } else {
+                (v, hide)
+            };
             let vol = &mut *self.vol.add(i);
             let l = &mut *self.lat.add(i);
             let hd = &mut *self.hide.add(i);
@@ -788,6 +810,24 @@ impl Surf {
                 p.cure = if t < 1e-5 { 0.0 } else { p.cure + (cure - p.cure) * a };
             }
             *vol = t;
+            // engine 4: an absorbent ground under the film draws oil out of
+            // the paint just laid, until its pores are full: a thin wash goes
+            // lean (stiff, matte, quick to set), thick paint barely notices
+            if !self.absorb.is_null() {
+                let cap = &mut *self.absorb.add(i);
+                if *cap > 0.0 {
+                    let oil_in = v * OIL_SHARE * hd[4].max(0.0);
+                    let take = (*cap).min(0.8 * oil_in);
+                    if take > 0.0 {
+                        *cap -= take;
+                        let film_oil = (t * OIL_SHARE * hd[4].max(0.0)).max(1e-9);
+                        let lean = (take / film_oil).min(0.9);
+                        hd[4] *= 1.0 - lean;
+                        hd[1] = (hd[1] * (1.0 + lean) * (1.0 + lean)).min(1.0);
+                        *vol = (t - take).max(0.0);
+                    }
+                }
+            }
         }
     }
 
@@ -851,6 +891,8 @@ impl Canvas {
             dry: if self.wet.clock.px.len() == n { self.wet.clock.px.as_mut_ptr() } else { std::ptr::null_mut() },
             cure_now: self.engine >= 2,
             clump: self.engine >= 4,
+            lean: self.engine >= 4,
+            absorb: if self.engine >= 4 && self.absorb_any { self.absorb.as_mut_ptr() } else { std::ptr::null_mut() },
             solv: if self.wet.solv.len() == n { self.wet.solv.as_mut_ptr() } else { std::ptr::null_mut() },
             laid: if self.wet.laid.len() == n { self.wet.laid.as_mut_ptr() } else { std::ptr::null_mut() },
             laid_id: if self.wet.laid_id.len() == n { self.wet.laid_id.as_mut_ptr() } else { std::ptr::null_mut() },
@@ -975,7 +1017,7 @@ fn feed(bristles: &mut [Bristle], k: f32) {
     if k <= 0.0 || bristles.is_empty() {
         return;
     }
-    let (mut tv, mut lat, mut hide, mut cure, mut ts) = (0.0f32, [0.0f32; LAT], [0.0f32; 3], 0.0f32, 0.0f32);
+    let (mut tv, mut lat, mut hide, mut cure, mut ts) = (0.0f32, [0.0f32; LAT], [0.0f32; 5], 0.0f32, 0.0f32);
     for b in bristles.iter() {
         tv += b.vol;
         ts += b.solvent;
@@ -993,7 +1035,7 @@ fn feed(bristles: &mut [Bristle], k: f32) {
     for l in &mut lat {
         *l /= tv;
     }
-    hide = [hide[0] / tv, hide[1] / tv, hide[2] / tv];
+    hide = [hide[0] / tv, hide[1] / tv, hide[2] / tv, hide[3] / tv, hide[4] / tv];
     cure /= tv;
     let share = k * tv / bristles.len() as f32;
     let share_s = k * ts / bristles.len() as f32;
@@ -1527,7 +1569,8 @@ unsafe fn exchange(
         // gaps between clumps less, so the stroke lies in ridges and furrows
         // along its length (the variation averages out across the brush).
         // A pointed tip's few hairs lie together already.
-        let ps = br.hide[1].clamp(0.0, 1.0);
+        // (the paint as it is on the brush: solvent makes it flow)
+        let ps = (br.hide[1] * (1.0 - br.hide[3]).powi(2)).clamp(0.0, 1.0);
         // how far the paint is stiff enough to hold hairs together: none in
         // fluid paint, rising steeply in stiff
         let stiffen = ((ps - 0.4) / 0.6).clamp(0.0, 1.0);
@@ -1579,7 +1622,7 @@ unsafe fn exchange(
 
         let mut got_v = 0.0f32;
         let mut got_l = [0.0f32; LAT];
-        let mut got_h: Prop = [0.0; 3];
+        let mut got_h: Prop = [0.0; 5];
         let mut got_c = 0.0f32;
         // solvent lifted with the paint, and wet film (paint + solvent) laid
         let mut got_s = 0.0f32;
@@ -2019,7 +2062,7 @@ impl Canvas {
             .map(|b| {
                 let liquid = b.vol + b.solvent;
                 let stiff = (b.hide[1] * b.vol / liquid.max(1e-9)).clamp(0.0, 1.0);
-                let fluid = (1.0 - stiff).clamp(0.0, 1.5);
+                let fluid = ((1.0 - stiff) * (1.0 + b.hide[3].clamp(0.0, 0.9))).clamp(0.0, 1.5);
                 let hold = full * (0.2 + 0.6 * stiff);
                 let loose = (liquid - hold).max(0.0);
                 loose * (force.powf(0.8) * (0.15 + 0.6 * fluid)).clamp(0.0, 0.95)
@@ -2806,6 +2849,9 @@ mod part_tests {
     }
 }
 
+/// The share of a tube paint's volume that is oil (about 30–45%).
+const OIL_SHARE: f32 = 0.4;
+
 /// How far (µm) below the paint under a knife's blade it is pressed into the
 /// hollows of the surface (`Canvas::knife`).
 const PRESS_IN_UM: f32 = 60.0;
@@ -2844,7 +2890,7 @@ impl Knife {
     }
 
     pub fn new(width: f32) -> Self {
-        Knife { width: if width.is_finite() { width.clamp(1.0, 1000.0) } else { 1.0 }, vol: 0.0, solvent: 0.0, lat: [0.0; LAT], hide: [0.0; 3], cure: 0.0 }
+        Knife { width: if width.is_finite() { width.clamp(1.0, 1000.0) } else { 1.0 }, vol: 0.0, solvent: 0.0, lat: [0.0; LAT], hide: [0.0; 5], cure: 0.0 }
     }
     /// A full load: a bead along the blade twice its length deep and 12
     /// coats (300 µm) thick (about a millilitre on a 4 cm blade).

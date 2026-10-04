@@ -303,11 +303,12 @@ impl<'a> Handling<'a> {
         self
     }
     /// Dip every stroke into `pile` (parts of `palette`'s tubes), thinned
-    /// with `medium` (0..1): the pass lays that pile as knifed, remixed a
+    /// with `medium` (0..1; below 0, down to -0.5, that share of its oil
+    /// blotted out): the pass lays that pile as knifed, remixed a
     /// little per dip by `mix_jitter` (a pile mixed by hand is uneven),
     /// drying at its tubes' rate. Nothing is aimed or matched.
     pub fn piled(mut self, palette: &'a Palette, pile: crate::palette::Mixture, medium: f32) -> Self {
-        self.pile = Some((palette, pile, medium.clamp(0.0, 1.0)));
+        self.pile = Some((palette, pile, medium.clamp(-0.5, 1.0)));
         self
     }
     /// The pile holds the share `t` of solvent (`crate::thinner`; engine 3).
@@ -946,8 +947,7 @@ fn finish_plan(cv: &Canvas, hd: &Handling, tool: &Tool, c: (f32, f32), pts: Vec<
                 return None;
             }
             let mut parts: Vec<(usize, f32)> = Vec::new();
-            let mut med = 0.0f32;
-            let mut thinner = 0.0f32;
+            let (mut med, mut thinner, mut solv, mut oilr) = (0.0f32, 0.0f32, 0.0f32, 0.0f32);
             for (k, (m, md, th, _)) in ps.iter().enumerate() {
                 let wk = w[k] / tot;
                 if wk <= 0.0 {
@@ -962,8 +962,13 @@ fn finish_plan(cv: &Canvas, hd: &Handling, tool: &Tool, c: (f32, f32), pts: Vec<
                 }
                 med += wk * md;
                 thinner += wk * th;
+                solv += wk * m.solvent;
+                oilr += wk * m.oil_rate;
             }
-            Some((pal.pile(parts), med, thinner))
+            let mut mix = pal.pile(parts);
+            mix.solvent = solv;
+            mix.oil_rate = oilr;
+            Some((mix, med, thinner))
         });
         let (pile, medium, thinner) = match &graded {
             Some((m, md, th)) => (m, md, *th),

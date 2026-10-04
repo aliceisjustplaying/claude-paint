@@ -63,6 +63,7 @@ struct Snap {
     clock: f64,
     clock0: f64,
     hand: crate::time::Hand,
+    board: crate::board::Board,
     /// The last world view made (depth options resolve against it).
     view: Option<crate::world::ViewU>,
     /// The Lua heap (heap.lua's snapshot).
@@ -225,7 +226,7 @@ impl Session {
             let v = *r.borrow();
             (r, v)
         }).collect();
-        Ok(Snap { canvas: s.canvas.clone(), style: s.style.clone(), setup: s.setup.clone(), seed: s.seed, clock: s.clock, clock0: s.clock0, hand: s.hand.clone(), view: s.view.clone(), heap, brushes, knives, rags })
+        Ok(Snap { canvas: s.canvas.clone(), style: s.style.clone(), setup: s.setup.clone(), seed: s.seed, clock: s.clock, clock0: s.clock0, hand: s.hand.clone(), board: s.board.clone(), view: s.view.clone(), heap, brushes, knives, rags })
     }
 
     /// Put everything back as it was at `snap`. Returns how many Lua tables
@@ -251,6 +252,7 @@ impl Session {
         s.clock = snap.clock;
         s.clock0 = snap.clock0;
         s.hand = snap.hand.clone();
+        s.board = snap.board.clone();
         s.view = snap.view.clone();
         Ok(mismatches)
     }
@@ -973,6 +975,37 @@ pub fn root() -> PathBuf {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    #[cfg(tube_box)]
+    fn palette_add_refreshes_recipe_and_dilutes_materials() {
+        let mut s = Session::new(48).unwrap();
+        s.run(CANVAS).unwrap();
+        s.run(r#"p = pile{{"lead white", 2}, oil="poppy", turps=0.6, thinner=0.4}
+            p = p:add{{"cobalt blue", 2}}
+            local parts = p:parts()
+            assert(#parts == 2 and parts[1][2] == 2 and parts[2][2] == 2)
+            assert(math.abs(p.thinner - 0.2) < 0.00001)
+            assert(tostring(p):find("cobalt blue 2", 1, true))"#).unwrap();
+        let p = s.globals["p"].0.as_userdata().unwrap().borrow::<api::PileU>().unwrap();
+        assert!((p.mix.solvent - 0.3).abs() < 1e-5);
+        assert!((p.mix.oil_rate - 0.8).abs() < 1e-5);
+    }
+
+    #[test]
+    #[cfg(tube_box)]
+    fn a_retained_palette_pile_can_be_added_after_many_new_heaps() {
+        let mut s = Session::new(48).unwrap();
+        s.run(CANVAS).unwrap();
+        s.run(r#"p = pile{{"lead white", 1}}
+            for i = 1, 100 do pile{{"cobalt blue", 1}} end
+            p = p:add{{"cobalt blue", 1}}
+            assert(#p:parts() == 2)"#).unwrap();
+        let st = s.st.borrow();
+        assert_eq!(st.board.live().len(), crate::board::LIVE);
+        let p = s.globals["p"].0.as_userdata().unwrap().borrow::<api::PileU>().unwrap();
+        assert_eq!(st.board.live().last().unwrap().id, p.heap);
+    }
 
     #[cfg(tube_box)]
     const W: usize = 160;
@@ -1938,6 +1971,29 @@ mod tests {
         let mut b = Session::new(W).unwrap();
         b.run(&format!("{CANVAS}\n-- {SKETCH_MARK} (in a chunk it is a comment)")).unwrap();
         assert!(!logged_sketch(&b.program("sketchbook")));
+    }
+
+    /// What only engine 4 models is refused in a painting painted with an
+    /// older engine, where it would do nothing.
+    #[test]
+    #[cfg(tube_box)]
+    fn an_older_engine_s_painting_refuses_turps_and_absorbent_grounds() {
+        let old = || {
+            let mut tubes = Palette::tube_box();
+            tubes.engine = 2;
+            Session::with_box(W, tubes).unwrap()
+        };
+        let mut s = old();
+        let e = s.run(&CANVAS.replace(r#"apply="brush"}"#, r#"apply="brush", absorbent=true}"#)).unwrap_err();
+        assert!(e.contains("absorbent= needs engine 4"), "{e}");
+        s.run(CANVAS).unwrap();
+        let e = s.run(r#"pile{{"lead white", 1}, turps=0.5}"#).unwrap_err();
+        assert!(e.contains("turps= needs engine 4"), "{e}");
+        // (nor has it the knife: its globals are the ones it was painted with)
+        s.run("assert(knife == nil)").unwrap();
+        let mut s = Session::new(W).unwrap();
+        s.run(&CANVAS.replace(r#"apply="brush"}"#, r#"apply="brush", absorbent=true}"#)).unwrap();
+        s.run(r#"pile{{"lead white", 1}, turps=0.5}; pile{{"lead white", 1}, blot=0.3, oil="poppy"}; pile{{"lead white", 1}, thinner=0.5}"#).unwrap();
     }
 
     /// A gesture's points are checked before its curve is sampled (a point

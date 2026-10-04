@@ -50,7 +50,7 @@ export function registerEaselTools(pi: ExtensionAPI, studio: string, limits: Pru
 				"grid: true, or a spacing in canvas units. " +
 				"survey: true surveys the whole canvas at full detail, as several tiles (with mode, not crop or size); a partial reply lists remaining tiles to read in separate turns. " +
 				"compare: the path of an earlier look, shown left of the current view; supply matching crop, mode and light options explicitly. " +
-				"palette: true shows the palette instead: each pile a global holds, laid thick, as a thin and a very thin coat over the ground, and the thin coat over a black and white card.",
+				"palette: true shows the palette board instead: each pile knifed out thick and smeared thin across a black stripe.",
 			parameters: Type.Object({
 				crop: Type.Optional(Type.String()),
 				mode: Type.Optional(Type.String()),
@@ -63,6 +63,7 @@ export function registerEaselTools(pi: ExtensionAPI, studio: string, limits: Pru
 			}),
 			async execute(id, p, signal, onUpdate, ctx) {
 				let said: string;
+				lookArgs(p); // validate combinations before resolving compare paths
 				if (p.survey && p.compare) throw new Error("look: survey and compare are two looks; ask for one");
 				// compare: an earlier look of this studio, nothing outside it (as `read`)
 				let compare = p.compare || undefined; // (an empty path is none)

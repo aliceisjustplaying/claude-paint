@@ -88,7 +88,7 @@ pub use shape::Shape;
 ///   and the easel has a rag (`rag`, crates/easel/src/draw_rag.rs); an older
 ///   log replays with exactly the globals it had.
 /// - 4: stiff paint holds its relief, hairs clump in it, films bridge the
-///   weave (notes/engine-4.md); the easel has a painting knife.
+///   weave; solvent, oil, absorbent grounds and gloss (notes/engine-4.md).
 /// - 5: knife-laid paint tears where it parts from the blade (`Canvas::knife`).
 pub const ENGINE: u32 = 5;
 

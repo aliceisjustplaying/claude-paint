@@ -95,4 +95,4 @@ The successful open selects the session and returns status. Close saves the live
 
 The [matrix pass](../verification/runtime-pass.md) exercised both builds, all seven current export profiles and all 11 historical golden fixtures. The default historical export failed; a log edit during replay also exposed a waiting-open error path. These are recorded in [triage](../bug-triage.md).
 
-Source-reviewed against `../claude-paint` commit `4e525e50897807e9b5f734071dfeb330f1a393d3`; see [verification](../verification/README.md).
+Source-reviewed against the repository commit `4e525e50897807e9b5f734071dfeb330f1a393d3`; see [verification](../verification/README.md).

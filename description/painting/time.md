@@ -96,4 +96,4 @@ The successful chunk keeps paint aging and clock changes together. Failed chunks
 
 The drying model is simulated material behavior, not a prediction of real pigment safety or conservation outcomes. Ten-year simulated waits, selected pigment/medium aging and exact clock flushing have [runtime receipts](../verification/evidence/matrix-passages.md). Exhaustive real-material calibration is outside this description. Palette guide wording is recorded in [triage](../bug-triage.md).
 
-Source-reviewed against `../claude-paint` commit `4e525e50897807e9b5f734071dfeb330f1a393d3`; see [verification](../verification/README.md).
+Source-reviewed against the repository commit `4e525e50897807e9b5f734071dfeb330f1a393d3`; see [verification](../verification/README.md).

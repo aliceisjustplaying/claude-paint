@@ -215,4 +215,4 @@ A failure in a later chunk does not erase references committed by earlier chunks
 - Confirmed inconsistency in the [runtime probe](../verification/evidence/runtime-paint.md): nested lists containing masks work for visibility but fail for passage `behind`, although ordinary nested named selections work. The visibility parser recursively extracts masks at `crates/easel/src/depth.rs:105`; `behind` partitions only its outer list at `crates/easel/src/depth.rs:272`, then sends nested masks to the names-only parser. Whether nesting should be supported consistently is a product call.
 - Extreme camera values, nonfinite geometry inputs and duplicate layer names are not fully specified by the guide. This description does not infer clean validation for every numeric input.
 
-Source-reviewed against `../claude-paint` commit `4e525e50897807e9b5f734071dfeb330f1a393d3`; runtime verification is recorded separately in [verification](../verification/README.md).
+Source-reviewed against the repository commit `4e525e50897807e9b5f734071dfeb330f1a393d3`; runtime verification is recorded separately in [verification](../verification/README.md).

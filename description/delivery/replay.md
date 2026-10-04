@@ -112,4 +112,4 @@ Save and run write an 8-bit sRGB PNG. Close attempts live PNG, metadata and chec
 
 The [remaining delivery matrix](../verification/evidence/matrix-delivery.md) exercised all seven current profiles, alternate finish/video options, cancellation and disk exhaustion. The default historical export failed because its executable lacks a command required by the current exporter. Generated long finishing schedules were checked separately from physical aging execution. Diagnostic image scripts and maintenance scripts are inventoried as supporting workflows rather than independent painting features. Unexpected `frames` arguments silently disabling capture is recorded in [triage](../bug-triage.md).
 
-Source-reviewed against `../claude-paint` commit `4e525e50897807e9b5f734071dfeb330f1a393d3`; see [verification](../verification/README.md).
+Source-reviewed against the repository commit `4e525e50897807e9b5f734071dfeb330f1a393d3`; see [verification](../verification/README.md).

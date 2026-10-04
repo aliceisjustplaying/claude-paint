@@ -8,7 +8,7 @@ The painter uses line, rule, sketch or hatch methods, then can lift loose drawin
 A drawing guide exposes the drawn geometry as a mask for painting.
 These operations need a ready canvas, except creating or sharpening a pencil.
 
-> Technical note: [draw_pencil.rs](../../claude-paint/crates/easel/src/draw_pencil.rs):1–7 and :87–329 define the Lua surface. [graphite.rs](../../claude-paint/crates/paint/src/graphite.rs):1–24 describes the drawing model.
+> Technical note: [draw_pencil.rs](../../crates/easel/src/draw_pencil.rs):1–7 and :87–329 define the Lua surface. [graphite.rs](../../crates/paint/src/graphite.rs):1–24 describes the drawing model.
 
 ## The simple case
 
@@ -20,7 +20,7 @@ The painter can erase an unwanted region, leaving a faint remnant, or fix the dr
 Thin paint can let drawing show through; opaque body paint hides it.
 A [look](looking.md) shows the combined drawing and painting.
 
-> Technical note: [easel_guide.md](../../claude-paint/notes/easel_guide.md):281–302 describes the intended sequence. [graphite.rs](../../claude-paint/crates/paint/src/graphite.rs):959–1013 tests erasing, fixing and paint coverage.
+> Technical note: [easel_guide.md](../../notes/easel_guide.md):281–302 describes the intended sequence. [graphite.rs](../../crates/paint/src/graphite.rs):959–1013 tests erasing, fixing and paint coverage.
 
 ## The interaction, event by event
 
@@ -48,7 +48,7 @@ Graphite softness changes darkness, sheen and rate of point wear; chalk is broad
 No pile or color argument is required.
 A global pencil survives later chunks, and aliases refer to the same wear state.
 
-> Technical note: [draw_pencil.rs](../../claude-paint/crates/easel/src/draw_pencil.rs):20–31 and :228–263 validate constructors. [graphite.rs](../../claude-paint/crates/paint/src/graphite.rs):64–130 defines grades and physical width.
+> Technical note: [draw_pencil.rs](../../crates/easel/src/draw_pencil.rs):20–31 and :228–263 validate constructors. [graphite.rs](../../crates/paint/src/graphite.rs):64–130 defines grades and physical width.
 
 ### Ending at once
 
@@ -59,7 +59,7 @@ Hatching rejects spacing or length that is not positive.
 Printing a pencil reports its kind or grade and millimeters worn; `width()` reports its current nominal width in canvas units.
 `sharpen()` resets wear to zero and leaves the canvas unchanged.
 
-> Technical note: [draw_pencil.rs](../../claude-paint/crates/easel/src/draw_pencil.rs):38–53, :92–124, :139–142, :183–185 and :194–225 own validation and inspection.
+> Technical note: [draw_pencil.rs](../../crates/easel/src/draw_pencil.rs):38–53, :92–124, :139–142, :183–185 and :194–225 own validation and inspection.
 
 ### Becoming extended
 
@@ -79,7 +79,7 @@ Wet paint does not accept the graphite deposit; the drawing skips it.
 Drawing is a separate dry deposit, not a brush carrying pigment from a pile.
 The submitted options cannot be changed by another client while this chunk runs.
 
-> Technical note: [draw_pencil.rs](../../claude-paint/crates/easel/src/draw_pencil.rs):55–72 updates wear after drawing. [graphite.rs](../../claude-paint/crates/paint/src/graphite.rs):510–530 defines wet-paint skipping and width progression.
+> Technical note: [draw_pencil.rs](../../crates/easel/src/draw_pencil.rs):55–72 updates wear after drawing. [graphite.rs](../../crates/paint/src/graphite.rs):510–530 defines wet-paint skipping and width progression.
 
 ### Finishing
 
@@ -93,7 +93,7 @@ Fixing binds the currently present drawing over the whole canvas or where a mask
 Fixing does not prevent new drawing; it protects the existing amount from later erasing.
 A drawing guide returns a new mask of continuous line geometry, including areas later covered by paint.
 
-> Technical note: [draw_pencil.rs](../../claude-paint/crates/easel/src/draw_pencil.rs):1–7, :194–216 and :266–329 define wrapper state and finishing operations. [session.rs](../../claude-paint/crates/easel/src/session.rs):207–210 restores the Lua heap; :1198–1205 tests protected pencil methods. [graphite.rs](../../claude-paint/crates/paint/src/graphite.rs):663–717 defines fixative thresholds and the guide.
+> Technical note: [draw_pencil.rs](../../crates/easel/src/draw_pencil.rs):1–7, :194–216 and :266–329 define wrapper state and finishing operations. [session.rs](../../crates/easel/src/session.rs):207–210 restores the Lua heap; :1198–1205 tests protected pencil methods. [graphite.rs](../../crates/paint/src/graphite.rs):663–717 defines fixative thresholds and the guide.
 
 ## Modifiers
 
@@ -162,7 +162,7 @@ A lost reply is not proof that the marks were discarded.
 - Paint covering the drawing leaves its guide unchanged. Erasing can reduce unfixed guide geometry even where overlying paint prevents a visible erasure.
 - Fixative also protects existing guide coverage; later added drawing above that protected amount can still be lifted.
 
-> Technical note: [graphite.rs](../../claude-paint/crates/paint/src/graphite.rs):64–87, :623–681 and :700–717 define grade normalization, guide erasure and fixing. [draw_pencil.rs](../../claude-paint/crates/easel/src/draw_pencil.rs):75–83, :143–151, :177–185 and :266–315 own defaults and timing routes.
+> Technical note: [graphite.rs](../../crates/paint/src/graphite.rs):64–87, :623–681 and :700–717 define grade normalization, guide erasure and fixing. [draw_pencil.rs](../../crates/easel/src/draw_pencil.rs):75–83, :143–151, :177–185 and :266–315 own defaults and timing routes.
 
 ## Open questions and verification
 
@@ -172,4 +172,4 @@ A lost reply is not proof that the marks were discarded.
 - The visible drawing and unfixed guide can diverge when erasing over paint. Whether this is the desired behavior needs a product decision; the engine erases the guide before checking whether paint protects visible drawing.
 - Hatch edges and extreme/nonfinite cases have [recorded agent results](../verification/evidence/matrix-marks.md); no human completion is claimed.
 
-Source-reviewed against `../claude-paint` commit `4e525e50897807e9b5f734071dfeb330f1a393d3`; runtime verification is recorded separately in [verification](../verification/README.md).
+Source-reviewed against the repository commit `4e525e50897807e9b5f734071dfeb330f1a393d3`; runtime verification is recorded separately in [verification](../verification/README.md).

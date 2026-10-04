@@ -22,7 +22,7 @@ The passing production-module checks covered:
 
 The suite also launched the actual installed pi with local faux-provider fixtures: two usage-limit failures followed by success preserved the original model conversation while retaining errors in the stored session; later-sitting recovery inserted studio material and a canvas image; a resumed session compacted and inserted the summary-time image. These use executable easel fixtures and do not establish actual model-provider availability or painting appearance.
 
-Receipts: [client tests](../../../claude-paint/harness/painter/test/easel-client.test.ts), [image tests](../../../claude-paint/harness/painter/test/context-images.test.ts), [journal tests](../../../claude-paint/harness/painter/test/journal.test.ts), [limit tests](../../../claude-paint/harness/painter/test/limits.test.ts), [recovery tests](../../../claude-paint/harness/painter/test/recovery.test.ts), [summary tests](../../../claude-paint/harness/painter/test/summary.test.ts), [pacing tests](../../../claude-paint/harness/painter/test/pace.test.ts), [vision tests](../../../claude-paint/harness/painter/test/vision-payload.test.ts).
+Receipts: [client tests](../../../harness/painter/test/easel-client.test.ts), [image tests](../../../harness/painter/test/context-images.test.ts), [journal tests](../../../harness/painter/test/journal.test.ts), [limit tests](../../../harness/painter/test/limits.test.ts), [recovery tests](../../../harness/painter/test/recovery.test.ts), [summary tests](../../../harness/painter/test/summary.test.ts), [pacing tests](../../../harness/painter/test/pace.test.ts), [vision tests](../../../harness/painter/test/vision-payload.test.ts).
 
 ## Usage-limit abort: BUG04
 
@@ -36,7 +36,7 @@ Launched actual pi RPC with the production `painter.ts`, existing `faux-limit.ts
 
 The run remained unsettled for approximately 3.002 seconds after abort, matching the configured wait. No second provider request occurred after the abort. This confirms delayed cancellation of the usage-limit wait, not continued model work after cancellation. The check used real wall time, not an overridden timer. The 30-minute default was not waited out.
 
-Production receipt: [usage-limit settle hook](../../../claude-paint/harness/painter/painter.ts:134).
+Production receipt: [usage-limit settle hook](../../../harness/painter/painter.ts:134).
 
 ## Journal history before denied rewrite: BUG06
 
@@ -52,7 +52,7 @@ revision record: {"at":"2026-10-04T11:36:28.955Z","replaced":"unique","with":"ch
 
 Thus history recorded the attempted replacement even though the journal rewrite failed. Permissions were restored after inspection. This confirms the split-write observation, without deciding whether recording an attempted revision is intended product behavior. No disk-full or mid-write truncation was simulated.
 
-Production receipt: [revision append followed by rewrite](../../../claude-paint/harness/painter/journal.ts:29).
+Production receipt: [revision append followed by rewrite](../../../harness/painter/journal.ts:29).
 
 ## Additional journal cases
 
@@ -72,7 +72,7 @@ Full-duration 12-minute/3-minute client budgets, 30-minute rebuild stalls, 24-ho
 
 ## Actual painter tools through pi
 
-Built painter executable (`cargo build --release -p easel --no-default-features`) was copied to a disposable short-path studio's `bin/easel`. The installed pi loaded the unchanged painter extension and a local provider that emitted structured tool calls. The launch used `--tools paint,look,note,status,log,read`, matching [the runner](../../../claude-paint/notes/round21.1/runner/r21_chains.py:122). This restriction is a launcher requirement: an initial probe without `--tools` also exposed pi's default bash, edit and write tools. The extension alone does not remove them.
+Built painter executable (`cargo build --release -p easel --no-default-features`) was copied to a disposable short-path studio's `bin/easel`. The installed pi loaded the unchanged painter extension and a local provider that emitted structured tool calls. The launch used `--tools paint,look,note,status,log,read`, matching [the runner](../../../notes/round21.1/runner/r21_chains.py:122). This restriction is a launcher requirement: an initial probe without `--tools` also exposed pi's default bash, edit and write tools. The extension alone does not remove them.
 
 The stored system message in the correctly restricted run had exactly the six requested tool schemas. Its sections were `preamble` containing `Only the fixture prompt.\n` and `cwd` containing the disposable studio path. The leading HTML comment was absent. Global context injection was disabled with pi's launch flags; the probe did not deliberately configure extra global context to test filtering independently.
 

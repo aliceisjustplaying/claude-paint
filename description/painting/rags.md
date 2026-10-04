@@ -172,4 +172,4 @@ The [agent matrix](../verification/evidence/matrix-marks.md) exercises cloth sta
 No new suspected defect is established from this source pass.
 Exact artistic appearance is not reducible to one percentage of paint removed; the source tests use particular paint, ground and timing setups.
 
-Source-reviewed against `../claude-paint` commit `4e525e50897807e9b5f734071dfeb330f1a393d3`; runtime verification belongs in [verification](../verification/README.md).
+Source-reviewed against the repository commit `4e525e50897807e9b5f734071dfeb330f1a393d3`; runtime verification belongs in [verification](../verification/README.md).

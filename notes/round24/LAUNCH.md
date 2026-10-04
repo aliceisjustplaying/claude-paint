@@ -2,7 +2,7 @@
 
 ## Current state
 
-- October 4, 2026: painting candidate `b0b2393`. The old Pi agents are
+- October 4, 2026: painting candidate `d9dc678`. The old Pi agents are
   stopped and their lane worktrees removed. Development is on the M3.
 - Exchange stays off; lane A's experiment is retained on `e3/a-exchange`,
   not integrated. Flow is integrated from `fbe0d43`; rag path consistency
@@ -33,13 +33,20 @@
   and clarified Lua option types and pressure. The approved system prompt
   and studio rules remain. Runner checks: 255 passed after these edits
   ([log](readiness/prompts-recheck.log)).
-- The detached `claude-paint-r24run` checkout is clean at `b0b2393`.
+- The detached `claude-paint-r24run` checkout is clean at `d9dc678`.
+  This adds the approved simplified thickness note; its research evidence
+  stays in the repository and the existing export strips it successfully.
+  Engine code and runner are unchanged from the tested candidate.
+  The owner-approved completion condition is in the brief: inspect the
+  whole painting and details, continue while an improvement is identified
+  and finish when judged resolved. The rendered brief and gallery runner
+  copy were verified after this change.
   Refreshed Inness export/probe and runner dry run passed; the copied
   runner uses the revised prompts ([log](readiness/launch-refresh.log)). The private
   viewer returns HTTP 200 at <http://m3p.tailec2dc.ts.net:8765/> from the M3;
-  this round did not access the M1. Public sync was restored unchanged
-  because no painting was launched. Stop it again before exporting a real
-  studio, as described below.
+  this round did not access the M1. Public sync is enabled. The owner
+  explicitly requested live website publication of this engine-3 painting;
+  the new studio stays included in the regular export.
 
 Ready to kick off. Not done yet: tag `round-24` at the painting candidate
 and start the painter. Launch remains held for the owner's go-ahead.
@@ -103,22 +110,12 @@ tagging it: the runner copied in step 4 comes from the tag.
    launchctl bootout gui/$(id -u)/art.stillwet.studio.tailnet
    launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/art.stillwet.studio.tailnet.plist
    ```
-6. Keep the new studio off the public site. `art.stillwet.studio.sync`
-   publishes every painter studio not in the `--skip` list of
-   `~/src/a/stillwet/sync-studio.sh`, and the round-24 studio gets a new
-   random name at export. Stop the sync before launching:
-   ```
-   launchctl bootout gui/$(id -u)/art.stillwet.studio.sync
-   launchctl list | grep -c art.stillwet.studio.sync   # 0
-   ```
-   Once `run/studios.json` names the studio (step 8), append that name to
-   the `--skip` list in `sync-studio.sh`, then check that an export leaves
-   it out before restarting the sync:
-   ```
-   s=$(python3 -c 'import json;print(json.load(open("run/studios.json"))["INNS1"])')
-   d=$(mktemp -d) && (cd ~/src/a/stillwet && uv run --quiet ../claude-paint/studio/export_static.py $d --skip paint-studio-ebf843 paint-studio-496bb9 paint-studio-ba1453 $s >/dev/null) && ! grep -rq "$s" $d && echo private-ok; rm -rf $d
-   launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/art.stillwet.studio.sync.plist
-   ```
+6. Keep `art.stillwet.studio.sync` enabled for live publication at
+   <https://stillwet.art/studio/>. It exports every minute through
+   `~/src/a/stillwet/sync-studio.sh`; the new round-24 studio is included
+   automatically. Preserve the three existing exclusions. The exporter's
+   identity scrubbing and publication checks remain enabled. Once the
+   painter starts, verify its entry and growing events on the public site.
 7. Launch, the same way as round 23:
    ```
    cd ~/tmp/gallery-fcf9c110/r24 && mkdir -p run && \

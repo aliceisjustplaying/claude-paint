@@ -9,3 +9,4 @@ easel4_free	easel4_free.first3.lua	128	legacy easel4 verbs (replaces legacy::tes
 easel4_green	easel4_green.first3.lua	128	legacy easel4 verbs (replaces legacy::tests::easel4_green_replays)
 easel4_near	easel4_near.first3.lua	128	legacy easel4 verbs (replaces legacy::tests::easel4_near_replays)
 r19	../r19_default_box.lua	320	a round 19 log replays as before (quick form of boxes::a_round_19_log_replays_as_before)
+legacy_tiny	legacy_tiny.lua	128	legacy verbs past the logs' first chunks: sky and clouds, ranges and haze, to_ground and aerial, tree and foliage with gaps, proxies and shadows, a form with cuts, silhouette, lit, field, edges and part, cast and contact shadows, sward, dry, varnish and relief (synthetic)

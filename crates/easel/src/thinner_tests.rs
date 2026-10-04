@@ -351,8 +351,9 @@ fn rag_panel(name: &'static str, thinner: f32, setup: &str, action: &str) -> Pan
 }
 
 /// The rag study (`#[ignore = "slow"]`; scripts/test_thinner_acceptance
-/// --all runs it by exact name with THINNER_RAG_STUDY set to
-/// notes/thinner/rag_study.png and fails if the sheet isn't written): a dry
+/// --all runs it by exact name with THINNER_RAG_STUDY set to rag_study.png
+/// in THINNER_RAG_STUDY_DIR, default notes/thinner, and fails if the sheet
+/// isn't written): a dry
 /// cloth wiping and blotting wet paint, a cloth dipped in spirits wiping
 /// it, the same on thinned paint, a dry-paint control and a brush stroke
 /// over a wiped area, each a 256 px panel before and after. The picture is

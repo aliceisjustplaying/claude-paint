@@ -11,7 +11,8 @@
 # cargo run that exits nonzero, fails the run, so a skipped test never
 # counts as passed and a run that matches no tests fails. The slow tests
 # (#[ignore = "slow"]) run by exact name with --ignored. --all also writes
-# the rag study's sheet to notes/thinner/rag_study.png and fails without it.
+# the rag study's sheet, rag_study.png, to THINNER_RAG_STUDY_DIR (default
+# notes/thinner; set it to keep a checkout clean) and fails without it.
 #
 # Check 13 (b) is a known failure on unchanged code, awaiting the user's
 # decision (ACCEPTANCE.md, check 13). Every mode runs it and expects it to
@@ -82,7 +83,7 @@ EASEL_SLOW=(
 CARD=(
   thinner_tests::c01_the_card_raw_sienna_thinned_half_keeps_half_the_contrast_at_2400px
 )
-SHEET=notes/thinner/rag_study.png
+SHEET=${THINNER_RAG_STUDY_DIR:-$repo/notes/thinner}/rag_study.png
 
 logs=$(mktemp -d "${TMPDIR:-/tmp}/thinner-acceptance.XXXXXX")
 required=0
@@ -191,7 +192,7 @@ case "$mode" in
     run paint-slow --release -p paint --test thinner_physics -- --exact --ignored --show-output ::: "${PAINT_SLOW[@]}"
     run easel --release -p easel --bin easel -- --exact ::: "${EASEL_QUICK[@]}"
     rm -f "$SHEET"
-    export THINNER_RAG_STUDY="$repo/$SHEET"
+    export THINNER_RAG_STUDY="$SHEET"
     run easel-slow --release -p easel --bin easel -- --exact --ignored --show-output ::: "${EASEL_SLOW[@]}"
     unset THINNER_RAG_STUDY
     required=$((required + 1))

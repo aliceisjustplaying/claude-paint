@@ -278,6 +278,7 @@ for l in known noline otherexit plusfail; do
 done
 [ "$code_known" = 4 ] && [ "$(summary "$D/known.json" '(s["verdict"], s["verdict_text"], s["steps"][0]["known_failure"], s["steps"][0]["ok"])')" = "('known_failure', 'NOT ALL GREEN (known pre-existing failure: the known one)', True, False)" ] || fail "known: $code_known $(cat "$D/known.out")"
 grep -q 'NOT ALL GREEN (known pre-existing failure: the known one)' "$D/known.out" || fail "known: not printed"
+grep -Eq '^scripts/test: k +\.\.\. KNOWN ' "$D/known.out" || fail "known: the step line doesn't say KNOWN: $(cat "$D/known.out")"
 for l in noline otherexit plusfail; do
   eval "c=\$code_$l"
   [ "$c" = 1 ] && [ "$(summary "$D/$l.json" 's["verdict"]')" = fail ] || fail "known: $l gave exit $c, $(summary "$D/$l.json" 's["verdict"]')"

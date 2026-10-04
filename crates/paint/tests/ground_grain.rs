@@ -208,11 +208,11 @@ fn bare_after_blend(mut c: paint::Canvas, margin: f32) -> usize {
 /// ground (plus 20) over the style's brushed ground as over the parallel
 /// reference ground, across three seeds at 3200 px.
 /// What is left are thin spots in the pass's own strokes, not ridge crests
-/// (see `tests::diag_blend_bare_pixels`). Ignored: ~1 min in release, far
-/// longer in debug; run with
-/// `cargo test --release -p paint --test ground_grain -- --ignored thin_blend_bares --nocapture`.
+/// (see `tests::diag_blend_bare_pixels`). Slow: about 90 s in the test profile
+/// (three seeds of about 30 s); `scripts/test --all` runs it by exact name:
+/// `cargo test -p paint --test ground_grain -- --ignored --exact thin_blend_bares_ground`.
 #[test]
-#[ignore]
+#[ignore = "slow"]
 fn thin_blend_bares_ground() {
     let crop = Crop { units: [400.0, 100.0, 560.0, 260.0], margin: 40.0 };
     let st = Style::oil();
@@ -227,3 +227,4 @@ fn thin_blend_bares_ground() {
     eprintln!("total: parallel {parallel}, style {style}");
     assert!(style <= 2 * parallel + 20, "the thin blended pass leaves bare ground along the style ground's ridges: {style} px vs {parallel} on the parallel ground");
 }
+

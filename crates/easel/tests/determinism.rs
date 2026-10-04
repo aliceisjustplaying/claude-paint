@@ -14,11 +14,20 @@ fn dir() -> PathBuf {
     d
 }
 
-/// Replay `src` (at the live width); returns stdout and the PNG's bytes.
-fn replay(src: &Path, threads: Option<usize>, tag: &str) -> (String, Vec<u8>) {
-    let png = dir().join(format!("{tag}.png"));
+/// The width the quick tests replay at (`easel run --width`): smaller cases of
+/// the same invariance (one and four threads, and two runs at four, give the
+/// same picture), not the same concurrency. Tiles are mostly sized in canvas
+/// units, but their pixel margins depend on the width and rayon schedules the
+/// work dynamically. The live width (2400 px) runs in the slow tests below
+/// (`scripts/test --all`).
+const QUICK: usize = 480;
+const LIVE: usize = 2400;
+
+/// Replay `src` at `width` px; returns stdout and the PNG's bytes.
+fn replay(src: &Path, threads: Option<usize>, tag: &str, width: usize) -> (String, Vec<u8>) {
+    let png = dir().join(format!("{tag}-{width}.png"));
     let mut cmd = Command::new(env!("CARGO_BIN_EXE_easel"));
-    cmd.args(["run", src.to_str().unwrap(), "--out", png.to_str().unwrap()]);
+    cmd.args(["run", src.to_str().unwrap(), "--out", png.to_str().unwrap(), "--width", &width.to_string()]);
     if let Some(n) = threads {
         cmd.env("RAYON_NUM_THREADS", n.to_string());
     }
@@ -50,7 +59,7 @@ work(rect(0, 0, 10 * first.index, 1000), {{hand="broad", pile=pile{{{{"bone blac
     );
     let src = dir().join("object-pairs.lua");
     std::fs::write(&src, program).unwrap();
-    let runs: Vec<_> = (0..3).map(|i| replay(&src, None, &format!("object-pairs-{i}"))).collect();
+    let runs: Vec<_> = (0..3).map(|i| replay(&src, None, &format!("object-pairs-{i}"), LIVE)).collect();
     let want: String = (1..=32).map(|i| i.to_string()).chain((1..=8).map(|i| i.to_string())).collect::<Vec<_>>().join(",");
     assert!(runs[0].0.contains(&format!("first\t1\t{want}")), "creation order: {}", runs[0].0);
     for r in &runs[1..] {
@@ -63,6 +72,17 @@ work(rect(0, 0, 10 * first.index, 1000), {{hand="broad", pile=pile{{{{"bone blac
 /// paints the same picture at any thread count and on every replay.
 #[test]
 fn hand_time_is_deterministic_across_thread_counts() {
+    hand_time_at(QUICK);
+}
+
+/// The same at the live width (more than a minute: `scripts/test --all`).
+#[test]
+#[ignore = "slow"]
+fn hand_time_is_deterministic_across_thread_counts_at_the_live_width() {
+    hand_time_at(LIVE);
+}
+
+fn hand_time_at(width: usize) {
     let program = format!(
         r#"
 --@ chunk 1
@@ -79,11 +99,11 @@ for i = 1, 40 do b:stroke({{{{100 + 20 * i, 520}}, {{110 + 20 * i, 460}}}}) end
 print(drying(500, 200), drying(500, 490))
 "#
     );
-    let src = dir().join("hand-time.lua");
+    let src = dir().join(format!("hand-time-{width}.lua"));
     std::fs::write(&src, program).unwrap();
-    let (o1, p1) = replay(&src, Some(1), "hand-1");
-    let (o4, p4) = replay(&src, Some(4), "hand-4");
-    let (o4b, p4b) = replay(&src, Some(4), "hand-4b");
+    let (o1, p1) = replay(&src, Some(1), "hand-1", width);
+    let (o4, p4) = replay(&src, Some(4), "hand-4", width);
+    let (o4b, p4b) = replay(&src, Some(4), "hand-4b", width);
     assert!(o1 == o4 && o4 == o4b, "{o1}\n{o4}");
     assert!(p1 == p4 && p4 == p4b, "the pictures differ between replays");
     // the broad pass took the hand a while (later than 09:15 when it ended)
@@ -96,6 +116,17 @@ print(drying(500, 200), drying(500, 490))
 /// canvas (wet layer and drying state included), held brushes and studio.
 #[test]
 fn state_digests_are_the_same_in_every_replay() {
+    state_digests_at(QUICK);
+}
+
+/// The same at the live width (`scripts/test --all`).
+#[test]
+#[ignore = "slow"]
+fn state_digests_are_the_same_in_every_replay_at_the_live_width() {
+    state_digests_at(LIVE);
+}
+
+fn state_digests_at(width: usize) {
     let program = r#"
 --@ chunk 1
 canvas{size=440, aspect=5, linen=15, seed=5, ground={{pile={{"lead white", 3}, {"yellow ochre", 1}}, um=120, apply="knife"}}}
@@ -107,12 +138,12 @@ wait(30)
 b = brush("filbert", 5); b:load(pile{{"raw umber", 1}, {"bone black", 1}}, 0.8)
 for i = 1, 12 do b:stroke({{60 + 70 * i, 150}, {90 + 70 * i, 40}}) end
 "#;
-    let src = dir().join("digest.lua");
+    let src = dir().join(format!("digest-{width}.lua"));
     std::fs::write(&src, program).unwrap();
     let digests = |threads: &str, tag: &str| {
-        let (png, txt) = (dir().join(format!("{tag}.png")), dir().join(format!("{tag}.txt")));
+        let (png, txt) = (dir().join(format!("{tag}-{width}.png")), dir().join(format!("{tag}-{width}.txt")));
         let out = Command::new(env!("CARGO_BIN_EXE_easel"))
-            .args(["run", src.to_str().unwrap(), "--out", png.to_str().unwrap(), "--state-digest", txt.to_str().unwrap()])
+            .args(["run", src.to_str().unwrap(), "--out", png.to_str().unwrap(), "--state-digest", txt.to_str().unwrap(), "--width", &width.to_string()])
             .env("RAYON_NUM_THREADS", threads)
             .output()
             .unwrap();
@@ -141,6 +172,17 @@ for i = 1, 12 do b:stroke({{60 + 70 * i, 150}, {90 + 70 * i, 40}}) end
 /// load printed the same.
 #[test]
 fn the_rag_replays_the_same() {
+    rag_at(QUICK);
+}
+
+/// The same at the live width (`scripts/test --all`).
+#[test]
+#[ignore = "slow"]
+fn the_rag_replays_the_same_at_the_live_width() {
+    rag_at(LIVE);
+}
+
+fn rag_at(width: usize) {
     let program = format!(
         r#"--@ engine 3
 
@@ -159,11 +201,11 @@ r:blot(700, 380, {{pressure=0.9}})
 print(r, r.load, r.soaked, r.fold)
 "#
     );
-    let src = dir().join("rag.lua");
+    let src = dir().join(format!("rag-{width}.lua"));
     std::fs::write(&src, program).unwrap();
-    let (o1, p1) = replay(&src, Some(1), "rag-1");
-    let (o4, p4) = replay(&src, Some(4), "rag-4");
-    let (o4b, p4b) = replay(&src, Some(4), "rag-4b");
+    let (o1, p1) = replay(&src, Some(1), "rag-1", width);
+    let (o4, p4) = replay(&src, Some(4), "rag-4", width);
+    let (o4b, p4b) = replay(&src, Some(4), "rag-4b", width);
     assert!(o1 == o4 && o4 == o4b, "{o1}\n{o4}");
     assert!(p1 == p4 && p4 == p4b, "the pictures differ between replays");
     assert!(o1.contains("rag(width 91, load 0."), "{o1}");

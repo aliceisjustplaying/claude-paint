@@ -1,16 +1,35 @@
-# Rag release: existing physics and sessions, rag, live-width replay, painter build, old logs, and gate.
-build	release	600	0	-	cargo build --release -p easel
-build	test-binaries	600	0	-	cargo test --workspace --lib --bins --tests --no-run
-cargo	paint	180	170	-	cargo test -p paint --lib	rust
-cargo	easel	180	55	-	cargo test -p easel --bin easel -- --skip legacy::tests:: --skip session::tests::logs_without_an_engine_line_replay_as_before	rust
-cargo	paint-integration	180	2	-	cargo test -p paint --test curved_drag_nan --test ground_grain	rust
-cargo	boxes	240	5	-	cargo test -p easel --test boxes	rust
-cargo	delivery	240	2	-	cargo test -p easel --test delivery	rust
-cargo	determinism	240	4	-	cargo test -p easel --test determinism	rust
-cargo	smoke	240	1	-	cargo test -p easel --test smoke	rust
-cargo	session_integrity	240	10	-	cargo test -p easel --test session_integrity	rust
+# scripts/test --all: the fast checks, then every other required check. Same columns as fast.tsv.
+# Reviewed list: notes/speed/SKIPPED.md says what this doesn't run and why. No step replays a painting.
+# Groups: steps of one group run at the same time, each with its own limit. "s": the slow tests
+# (much of it single-threaded) and the thinner's acceptance checks beside the painter build. "w": box-features keeps the cores busy
+# compiling, the others mostly wait (git hooks, ffmpeg, Python). lockrun.sh (timing-sensitive) and
+# the easel scripts run alone. A step that builds another feature set builds into its own
+# directory under $CARGO_TARGET_DIR (short names: the easel tests bind sockets under it, and a
+# socket path must stay under 104 bytes): in one directory it would replace target/debug/easel, which
+# the tests running beside it execute (a first run's determinism tests found the painter's easel).
+# The thinner's --all writes its rag study sheet into THINNER_RAG_STUDY_DIR, here the step's own
+# scratch directory (TMPDIR): by default it would land in the checkout (notes/thinner/rag_study.png).
+build	build-release-easel	600	0	-	cargo build --release -p easel
+build	build-test-binaries	600	0	-	cargo test --workspace --lib --bins --tests --no-run
+build	build-thinner-release-tests	600	0	-	cargo test --release -p paint --test thinner_physics --test thinner_pigments --no-run && cargo test --release -p easel --bin easel --no-run
+cargo	cargo-test	60	271	-	scripts/tests/cargo_tests.sh -j 4
 script	old-logs	60	11	^old_logs: \S+ ok	scripts/tests/old_logs.sh "$CARGO_TARGET_DIR/release/easel"
-cargo	painter	300	1	-	cargo test -p easel --no-default-features --features box-inness --test painter
-script	test-runner	120	17	^ok \d+ -	scripts/tests/test_runner.sh
-script	safeguards	180	140	^ok \d+ -	scripts/tests/safeguards.sh
+script	baseline-package	60	1	^verify_package: hashes ok	notes/thinner/baseline/tools/verify_package.sh
+script	baseline-state	60	6	^\S+: state equal on every baseline field	scripts/tests/baseline_state.sh "$CARGO_TARGET_DIR/release/easel"
+cargo	slow-tests-by-name	240	4	-	cargo test -p easel --test boxes -- --ignored --exact a_round_19_log_replays_as_before >"$TMPDIR/slow-r19.out" 2>&1 & a=$!; cargo test -p easel --test determinism -- --ignored --exact hand_time_is_deterministic_across_thread_counts_at_the_live_width state_digests_are_the_same_in_every_replay_at_the_live_width the_rag_replays_the_same_at_the_live_width >"$TMPDIR/slow-det.out" 2>&1 & b=$!; wait $a; ra=$?; wait $b; rb=$?; cat "$TMPDIR/slow-r19.out" "$TMPDIR/slow-det.out"; [ $ra = 0 ] && [ $rb = 0 ]	s
+cargo	slow-thin-blend	180	1	-	cargo test -p paint --test ground_grain -- --ignored --exact thin_blend_bares_ground	s
+cargo	painter-build-inness	300	14	-	CARGO_TARGET_DIR="$CARGO_TARGET_DIR/p" cargo test -p easel --no-default-features --features box-inness	s
+script	thinner-all	300	1	^thinner acceptance --all: \d+ of \d+ required tests passed	THINNER_RAG_STUDY_DIR="$TMPDIR" scripts/test_thinner_acceptance --all	s	3	^thinner acceptance --all: NOT ALL GREEN: every other required test passed; only check 13 \(b\)'s pre-existing failure remains$	thinner check 13(b), user decision
 script	lockrun	60	17	^ok \d+ -	scripts/tests/lockrun.sh
+script	replay-env	60	1	^replay_env: check_painting, finish_painting and replay_clip replayed	scripts/tests/replay_env.sh
+script	check-live	60	1	^check_live: check_painting passed	scripts/tests/check_live.sh
+script	box-features	600	14	^box_features: .*: (\d+ passed|refused)$	CARGO_TARGET_DIR="$CARGO_TARGET_DIR/bf" BOX_FEATURES_PROFILE=dev scripts/tests/box_features.sh	w
+cargo	smoke-replay-without-finish	300	1	-	CARGO_TARGET_DIR="$CARGO_TARGET_DIR/ro" cargo test -p easel --no-default-features --features replay --test smoke	w
+script	test-runner	120	17	^ok \d+ -	scripts/tests/test_runner.sh	w
+script	safeguards	180	140	^ok \d+ -	scripts/tests/safeguards.sh	w
+pytest	runner-round24	60	250	-	cd notes/round24/runner && PYTHONDONTWRITEBYTECODE=1 uv run --no-project --with pytest --with pillow python -m pytest -q -p no:cacheprovider -rs .	w
+pytest	studio-viewer	60	24	-	cd studio && PYTHONDONTWRITEBYTECODE=1 uv run --no-project --with pytest --with pillow python -m pytest -q -p no:cacheprovider -rs test_studio.py	w
+script	replay-clip	60	1	^replay_clip test: 	scripts/tests/replay_clip.sh	w
+script	box-tubes	60	1	^box_tubes: \d+ fixture easels checked	scripts/tests/box_tubes.sh	w
+script	studio-names	60	1	^studio_names: all fixture studios	scripts/tests/studio_names.sh	w
+script	peek	60	1	^peek: whole PNG	sh scripts/tests/peek.sh	w

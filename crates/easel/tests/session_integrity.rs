@@ -139,7 +139,10 @@ fn rebuilding_serves_progress_and_refuses_nonstatus_requests() {
         .stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null())
         .spawn().unwrap());
     let start = Instant::now();
-    while !socket.exists() {
+    // ready when it accepts a connection, not when the socket file appears: the
+    // file exists from bind(), and a connect before listen() is refused (under
+    // load the gap is long enough: the full parallel suite hit it)
+    while UnixStream::connect(&socket).is_err() {
         assert!(server.0.try_wait().unwrap().is_none(), "server exited at startup");
         assert!(start.elapsed() < Duration::from_secs(10), "server did not bind");
         std::thread::sleep(Duration::from_millis(10));
@@ -156,7 +159,9 @@ fn rebuilding_serves_progress_and_refuses_nonstatus_requests() {
     };
     let normal = Duration::from_secs(60);
     let prompt = Duration::from_secs(1);
-    assert!(request("do", "t = {}; for i = 1, 30 do t['k' .. i] = i end", normal).starts_with("ok\n"));
+    // t has a hole before its last integer key: a failed chunk that changes it leaves `#t`
+    // to its layout, which forces a rebuild under every engine (heap.lua `holey`)
+    assert!(request("do", "t = {}; for i = 1, 30 do t['k' .. i] = i end; t[2] = 2", normal).starts_with("ok\n"));
     // CPU only, fixed bounds and constant memory. Three slow committed chunks
     // leave time to observe both zero and intermediate replay progress.
     for _ in 0..3 {
@@ -198,7 +203,7 @@ fn rebuilding_serves_progress_and_refuses_nonstatus_requests() {
     assert_eq!(std::fs::read(&log).unwrap(), original, "refused requests or failed chunk changed the log");
     assert_eq!(std::fs::read(dir.join("committed.lua")).unwrap(), original);
     assert!(!root().join("notes/journal.md").exists() || !std::fs::read_to_string(root().join("notes/journal.md")).unwrap().contains("must not be journaled"));
-    assert!(request("do", "assert(t.unexpected == nil); local n = 0; for _ in pairs(t) do n = n + 1 end; assert(n == 30)", normal).starts_with("ok\n"));
+    assert!(request("do", "assert(t.unexpected == nil); local n = 0; for _ in pairs(t) do n = n + 1 end; assert(n == 31)", normal).starts_with("ok\n"));
     assert!(request("close", "", normal).starts_with("ok\n"));
 }
 

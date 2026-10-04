@@ -1,0 +1,10 @@
+a_failed_look_after_a_chunk_still_reports_the_chunk	ok	0.15
+a_look_never_overwrites_an_earlier_observation	ok	0.38
+a_running_session_refuses_every_request_while_its_log_is_edited	ok	0.21
+a_second_server_is_refused_and_a_dead_ones_socket_is_recovered	ok	0.33
+edited_or_truncated_logs_cannot_reopen	ok	0.53
+journal_uses_the_selected_painting_clock	ok	0.16
+live_resolution_is_fixed	ok	0.15
+racing_opens_start_one_server	ok	10.91
+rebuilding_serves_progress_and_refuses_nonstatus_requests	ok	3.78
+replay_failure_is_fatal	ok	0.11

@@ -1,0 +1,11 @@
+easel: fatal: bind $TMPDIR/cp-speed/re/replay-env.1oTFcY/studio/out/easel/painting/sock: path must be shorter than SUN_LEN
+
+
+real	0m32.382s
+user	0m31.347s
+sys	0m0.343s
+replay_env: replay_clip failed (EASEL_BOX=inness in its environment); see /tmp/cpre.u5qM/replay-env.Tz7ZH9/clip.log
+
+real	0m4.935s
+user	0m5.537s
+sys	0m0.667s

@@ -1,0 +1,13 @@
+none PROBE w 1600 crop [400.0, 100.0, 560.0, 260.0] seed 23: parallel 93 style 156 (10.4 s)
+none PROBE w 1600 crop [400.0, 100.0, 560.0, 260.0] seed 1: parallel 214 style 219 (10.0 s)
+none PROBE w 1600 crop [400.0, 100.0, 560.0, 260.0] seed 5: parallel 215 style 121 (10.2 s)
+ crates/paint/src/style.rs | 2 +-
+M1 PROBE w 3200 crop [400.0, 100.0, 560.0, 260.0] seed 23: parallel 1779 style 2077 (30.3 s)
+M1 PROBE w 3200 crop [400.0, 100.0, 560.0, 260.0] seed 1: parallel 1227 style 3393 (29.1 s)
+M1 PROBE w 3200 crop [400.0, 100.0, 560.0, 260.0] seed 5: parallel 1769 style 2006 (29.8 s)
+M1 PROBE w 2400 crop [400.0, 100.0, 560.0, 260.0] seed 23: parallel 886 style 1126 (18.5 s)
+M1 PROBE w 2400 crop [400.0, 100.0, 560.0, 260.0] seed 1: parallel 1053 style 2024 (17.9 s)
+M1 PROBE w 2400 crop [400.0, 100.0, 560.0, 260.0] seed 5: parallel 1118 style 1100 (18.6 s)
+M1 PROBE w 1600 crop [400.0, 100.0, 560.0, 260.0] seed 23: parallel 93 style 275 (10.2 s)
+M1 PROBE w 1600 crop [400.0, 100.0, 560.0, 260.0] seed 1: parallel 214 style 276 (9.8 s)
+M1 PROBE w 1600 crop [400.0, 100.0, 560.0, 260.0] seed 5: parallel 215 style 165 (10.0 s)

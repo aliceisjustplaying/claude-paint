@@ -1,0 +1,215 @@
+#!/usr/bin/env bash
+# The thinner's acceptance checks (notes/thinner/ACCEPTANCE.md), by exact
+# test name, in release builds.
+#
+#   scripts/test_thinner_acceptance --quick   ordinary edits: everything but the slow ones
+#   scripts/test_thinner_acceptance --card    check 1 only: the 2400 px card (#[ignore = "slow"])
+#   scripts/test_thinner_acceptance --all     every agreed check, the slow ones and the card included
+#
+# A test counts as passed only if cargo exited 0 and printed `test NAME ...
+# ok` for it: a test that is missing, filtered out, ignored or failed, or a
+# cargo run that exits nonzero, fails the run, so a skipped test never
+# counts as passed and a run that matches no tests fails. The slow tests
+# (#[ignore = "slow"]) run by exact name with --ignored. --all also writes
+# the rag study's sheet, rag_study.png, to THINNER_RAG_STUDY_DIR (default
+# notes/thinner; set it to keep a checkout clean) and fails without it.
+#
+# Check 13 (b) is a known failure on unchanged code, awaiting the user's
+# decision (ACCEPTANCE.md, check 13). Every mode runs it and expects it to
+# fail at its ordering assertion (thinner_pigments.rs:119, with that
+# assertion's message). It is reported on its own line as EXPECTED FAIL; if
+# it passes, doesn't run or fails anywhere else, the run fails.
+#
+# Exit: 1 if anything else failed; 3 if every other required test passed
+# and only check 13 (b)'s expected failure remains (NOT ALL GREEN); 2 on a
+# usage error. While check 13 (b) stands, 0 is never returned.
+#
+# Needs cargo, bash 5, python3 and xz. One heavy job at a time: run it
+# through ~/src/a/claude-paint-tools/lockrun with --timeout 60 (--quick,
+# once built), 300 (--card) or 600 (--all, a first build). CARGO_TARGET_DIR
+# is honored. The self-test: scripts/tests/thinner_acceptance_runner.sh.
+set -euo pipefail
+
+usage() { sed -n '2,8p' "$0" | sed 's/^# \{0,1\}//' >&2; exit 2; }
+[ $# -eq 1 ] || usage
+mode=$1
+case "$mode" in --quick|--card|--all) ;; *) usage ;; esac
+
+repo=$(cd "$(dirname "$0")/.." && pwd)
+cd "$repo"
+
+# crates/paint/tests/thinner_physics.rs
+PAINT_QUICK=(
+  c04_a_stroke_and_a_wipe_account_for_all_paint_and_solvent
+  c04_control_a_wholly_unthinned_scene_balances
+  c05_an_emptying_brush_lays_less_and_a_fuller_load_lasts_farther
+  c06_more_pressure_lays_more_paint_up_to_the_stroke_limit
+  c08_a_hundredth_of_thinner_is_a_small_change
+  c09_the_solvent_evaporates_and_the_film_loses_its_volume
+  c10_a_solvent_wet_film_spreads_more_than_after_the_solvent_has_gone
+  c14_more_points_on_the_same_path_lay_the_same_paint_and_one_stroke_shares_one_limit
+  c15_solvent_does_not_slow_the_oil_cure
+  c16_brush_rag_and_spreading_carry_solvent_in_the_local_ratio
+  c17_a_wait_split_on_the_minute_grid_is_exact_and_off_it_within_1e4
+  c19_the_same_paint_with_more_or_less_solvent_looks_the_same
+)
+PAINT_SLOW=(
+  c10_thinned_and_unthinned_paint_of_equal_thickness_gel_and_dry_together
+)
+# crates/paint/tests/thinner_pigments.rs (check 13; runs on unchanged code too)
+PIGMENTS=(
+  c13_every_pigment_value_is_af49348s
+)
+EXPECTED_FAIL=c13_burnt_sienna_shows_the_card_at_least_as_well_as_raw_sienna
+# the known failure is the ordering assertion's own panic, nothing else
+# (crates/paint/tests/thinner_pigments.rs:119)
+EXPECTED_AT="panicked at crates/paint/tests/thinner_pigments.rs:119:"
+EXPECTED_MSG="Field/Salter (§155) has burnt the more transparent"
+# crates/easel/src/thinner_tests.rs (unit tests of the easel binary)
+EASEL_QUICK=(
+  thinner_tests::c03_af49348_paintck8_saves_are_refused_naming_the_old_version
+  thinner_tests::c03_af49348_engine_3_logs_still_replay
+  thinner_tests::c03_a_log_keeps_its_engine
+  thinner_tests::c03_engines_1_and_2_have_no_thinner_and_engine_3_has
+  thinner_tests::c07_two_overlapping_thinned_passes_leave_more_paint_than_one
+  thinner_tests::c11_a_save_mid_evaporation_reopens_to_the_same_state_and_goes_on_the_same
+  thinner_tests::c12_the_same_log_saves_the_same_bytes_on_one_thread_and_four
+  thinner_tests::c18_a_failed_chunk_after_thinned_paint_takes_everything_back
+)
+EASEL_SLOW=(
+  thinner_tests::c08_more_thinner_never_hides_the_card_more
+  thinner_tests::rag_study
+)
+CARD=(
+  thinner_tests::c01_the_card_raw_sienna_thinned_half_keeps_half_the_contrast_at_2400px
+)
+SHEET=${THINNER_RAG_STUDY_DIR:-$repo/notes/thinner}/rag_study.png
+
+logs=$(mktemp -d "${TMPDIR:-/tmp}/thinner-acceptance.XXXXXX")
+required=0
+passed=0
+bad=()
+expected=""
+
+# cargo_test <label> <cargo args...> -- <libtest args...> ::: <names...>:
+# runs it, leaves the log in $logs/<label>.log and cargo's exit in $status
+cargo_test() {
+  local label=$1; shift
+  local cargo_args=() test_args=() t0 t1
+  while [ "$1" != "--" ]; do cargo_args+=("$1"); shift; done; shift
+  while [ "$1" != ":::" ]; do test_args+=("$1"); shift; done; shift
+  log="$logs/$label.log"
+  t0=$(date +%s)
+  echo "== $label: cargo test ${cargo_args[*]} -- ${test_args[*]} ($# tests)"
+  set +e
+  cargo test "${cargo_args[@]}" -- "${test_args[@]}" "$@" 2>&1 | tee "$log"
+  status=${PIPESTATUS[0]}
+  set -e
+  t1=$(date +%s)
+  echo "== $label: cargo exited $status after $((t1 - t0)) s"
+}
+
+# run <label> <cargo args...> -- <libtest args...> ::: <names...>: every
+# name must print ok and cargo must exit 0
+run() {
+  local label=$1 names=() a seen=0
+  for a in "$@"; do
+    if [ $seen = 1 ]; then names+=("$a"); fi
+    if [ "$a" = ":::" ]; then seen=1; fi
+  done
+  cargo_test "$@"
+  if [ "$status" != 0 ]; then
+    bad+=("$label: cargo exited $status")
+  fi
+  for n in "${names[@]}"; do
+    required=$((required + 1))
+    if grep -qxF "test $n ... ok" "$log"; then
+      [ "$status" = 0 ] && passed=$((passed + 1)) || bad+=("$n (printed ok, but cargo exited $status)")
+    elif grep -qF "test $n ... ignored" "$log"; then
+      bad+=("$n (skipped)")
+    elif grep -qF "test $n ... FAILED" "$log"; then
+      bad+=("$n (failed)")
+    else
+      bad+=("$n (did not run: not found, not built or cut short)")
+    fi
+  done
+}
+
+# check 13 (b), the known pre-existing failure: it must run and fail at its
+# ordering assertion, with that assertion's message
+expected_fail() {
+  cargo_test check13b --release -p paint --test thinner_pigments -- --exact ::: "$EXPECTED_FAIL"
+  if grep -qF "test $EXPECTED_FAIL ... FAILED" "$log" && [ "$status" != 0 ]; then
+    if grep -qF "$EXPECTED_AT" "$log" && grep -qF "$EXPECTED_MSG" "$log"; then
+      expected="$EXPECTED_FAIL"
+    else
+      bad+=("$EXPECTED_FAIL (failed, but not at its ordering assertion (thinner_pigments.rs:119, \"$EXPECTED_MSG\"): a different failure, see $log)")
+    fi
+  elif grep -qxF "test $EXPECTED_FAIL ... ok" "$log"; then
+    bad+=("$EXPECTED_FAIL (passed unexpectedly: the pre-existing finding changed; review ACCEPTANCE.md check 13 before anything else)")
+  else
+    bad+=("$EXPECTED_FAIL (did not run: the expected failure must run and fail)")
+  fi
+}
+
+# check 2: the before-change baseline's own comparison (scripts/thinner_check2)
+check2() {
+  local t0 t1 st
+  log="$logs/check2.log"
+  required=$((required + 1))
+  t0=$(date +%s)
+  echo "== check 2: cargo build --release -p easel, then scripts/thinner_check2"
+  set +e
+  { cargo build --release -p easel && scripts/thinner_check2 "${CARGO_TARGET_DIR:-target}/release/easel"; } 2>&1 | tee "$log"
+  st=${PIPESTATUS[0]}
+  set -e
+  t1=$(date +%s)
+  echo "== check 2: exited $st after $((t1 - t0)) s"
+  if [ "$st" = 0 ] && grep -qx "check 2: PASS" "$log"; then
+    passed=$((passed + 1))
+  else
+    bad+=("check 2 (scripts/thinner_check2: see $log)")
+  fi
+}
+
+case "$mode" in
+  --quick)
+    check2
+    run pigments --release -p paint --test thinner_pigments -- --exact ::: "${PIGMENTS[@]}"
+    expected_fail
+    run paint --release -p paint --test thinner_physics -- --exact ::: "${PAINT_QUICK[@]}"
+    run easel --release -p easel --bin easel -- --exact ::: "${EASEL_QUICK[@]}"
+    ;;
+  --card)
+    expected_fail
+    run card --release -p easel --bin easel -- --exact --ignored --show-output ::: "${CARD[@]}"
+    ;;
+  --all)
+    check2
+    run pigments --release -p paint --test thinner_pigments -- --exact ::: "${PIGMENTS[@]}"
+    expected_fail
+    run paint --release -p paint --test thinner_physics -- --exact ::: "${PAINT_QUICK[@]}"
+    run paint-slow --release -p paint --test thinner_physics -- --exact --ignored --show-output ::: "${PAINT_SLOW[@]}"
+    run easel --release -p easel --bin easel -- --exact ::: "${EASEL_QUICK[@]}"
+    rm -f "$SHEET"
+    export THINNER_RAG_STUDY="$SHEET"
+    run easel-slow --release -p easel --bin easel -- --exact --ignored --show-output ::: "${EASEL_SLOW[@]}"
+    unset THINNER_RAG_STUDY
+    required=$((required + 1))
+    if [ -s "$SHEET" ]; then passed=$((passed + 1)); else bad+=("$SHEET (the rag study's sheet was not written)"); fi
+    run card --release -p easel --bin easel -- --exact --ignored --show-output ::: "${CARD[@]}"
+    ;;
+esac
+
+echo
+echo "thinner acceptance $mode: $passed of $required required tests passed (logs: $logs)"
+if [ -n "$expected" ]; then
+  echo "  EXPECTED FAIL (pre-existing; user decision, ACCEPTANCE.md check 13): $expected"
+fi
+if [ ${#bad[@]} -gt 0 ]; then
+  printf '  NOT PASSED: %s\n' "${bad[@]}"
+  echo "thinner acceptance $mode: FAILED"
+  exit 1
+fi
+echo "thinner acceptance $mode: NOT ALL GREEN: every other required test passed; only check 13 (b)'s pre-existing failure remains"
+exit 3

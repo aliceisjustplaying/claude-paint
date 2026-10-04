@@ -1,0 +1,15 @@
+rag::tests::nothing_is_lifted_past_the_gel_point                       ok         9.63
+tests::the_thick_swatch_matches_paint_laid_thick                       ok         3.83
+tests::the_thick_swatch_matches_paint_laid_thick_dark                  ok         3.76
+tests::the_thick_swatch_matches_paint_laid_thick_earths                ok         3.82
+a_short_session_at_the_easel                                           ok         7.70
+replays_render_at_the_live_width_unless_a_preview_width_is_given       ok         0.16
+save_delivers_the_wet_canvas_as_seen_and_replay_matches                ok         6.96
+hand_time_is_deterministic_across_thread_counts                        ok         6.69
+object_keyed_tables_replay_the_same_in_every_process                   ok         2.33
+state_digests_are_the_same_in_every_replay                             ok         0.63
+the_rag_replays_the_same                                               ok         2.94
+a_log_without_a_box_line_is_the_default_box                            ok         0.87
+a_new_painting_takes_the_studio_box_and_every_replay_uses_it           ok         1.71
+the_box_file_and_easel_box_must_agree_on_a_box_there_is                ok         0.31
+the_replay_build_holds_every_box                                       ok         0.01

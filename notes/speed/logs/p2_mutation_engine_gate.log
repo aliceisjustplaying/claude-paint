@@ -1,0 +1,85 @@
+    Finished `release` profile [optimized] target(s) in 44.92s
+old_logs: engine1_tiny DIFFERS from af49348:
+  1,6c1,6
+  < png_sha256 a0d58a9e1f252e63f4dbd2774043109b74e87ca2db1e6ef973ef11753a6d32a8
+  < chunk 1 canvas=a0ed72f87875b016 brushes=cbf29ce484222325 nbrushes=0 studio=cdb7470a7c86255c
+  < chunk 2 canvas=2f3475a23d6ac457 brushes=cbf29ce484222325 nbrushes=0 studio=b7d428d3e3b12984
+  < chunk 3 canvas=9dc03a6039096a22 brushes=cbf29ce484222325 nbrushes=0 studio=19311ea3a7bcf52c
+  < chunk 4 canvas=8fc8d4caf01ade07 brushes=345c176c9bc8a0c5 nbrushes=1 studio=60edc65640046d43
+  < chunk 5 canvas=52c57f7cf672c345 brushes=9d04d9bfbe2ce656 nbrushes=1 studio=aa9a19001fc401b5
+  ---
+  > png_sha256 d5b0ed38f444d5a25e81dfb707db4269a63d06e3bed0595bc2e303a4ea1c6e27
+  > chunk 1 canvas=66fa4efc55fb657b brushes=cbf29ce484222325 nbrushes=0 studio=8d7cd4b6c09e8590
+  > chunk 2 canvas=223c32a900618eb4 brushes=cbf29ce484222325 nbrushes=0 studio=2c40a5de1e0884ac
+  > chunk 3 canvas=16b5c58e8ab2b432 brushes=cbf29ce484222325 nbrushes=0 studio=ebc5b6fbb5b60b5c
+old_logs: engine1_tiny DIFFERS from af49348:
+  1,6c1,6
+  < png_sha256 a0d58a9e1f252e63f4dbd2774043109b74e87ca2db1e6ef973ef11753a6d32a8
+  < chunk 1 canvas=a0ed72f87875b016 brushes=cbf29ce484222325 nbrushes=0 studio=cdb7470a7c86255c
+  < chunk 2 canvas=2f3475a23d6ac457 brushes=cbf29ce484222325 nbrushes=0 studio=b7d428d3e3b12984
+  < chunk 3 canvas=9dc03a6039096a22 brushes=cbf29ce484222325 nbrushes=0 studio=19311ea3a7bcf52c
+  < chunk 4 canvas=8fc8d4caf01ade07 brushes=345c176c9bc8a0c5 nbrushes=1 studio=60edc65640046d43
+old_logs: studio_6399ad DIFFERS from af49348:
+  1,4c1,4
+  < png_sha256 b1dc00c54836e5fd3daf23984172e4e74dfdec7798d2ae3647def574586de7e0
+  < chunk 1 canvas=9b42e412d1aa9c6b brushes=cbf29ce484222325 nbrushes=0 studio=5173682afc3307b0
+  < chunk 2 canvas=0448c11c063b245f brushes=cbf29ce484222325 nbrushes=0 studio=4c133d51c383c2ed
+  < chunk 3 canvas=3a9f0fa614e00bfe brushes=cbf29ce484222325 nbrushes=0 studio=bd3436d4c872b250
+  ---
+old_logs: studio_db6324 DIFFERS from af49348:
+  1,4c1,4
+  < png_sha256 44f8cd8433881049548cade57cf0c16c95972ebec72c34db1c58dc8646a3b1bb
+  < chunk 1 canvas=1917ba7d47e6d82d brushes=cbf29ce484222325 nbrushes=0 studio=4984f7d1de24b7dc
+  < chunk 2 canvas=257d9faca4b63588 brushes=cbf29ce484222325 nbrushes=0 studio=3868553aa0ebac8e
+  < chunk 3 canvas=a7763183d47078f9 brushes=cbf29ce484222325 nbrushes=0 studio=5aaa3a2ad2f5c059
+  ---
+old_logs: easel3_free DIFFERS from af49348:
+  1,4c1,4
+  < png_sha256 2e9e37cd2b228121a71beeea9f0ca0719bca886e69be151941ee65b238aeb972
+  < chunk 1 canvas=108bcfe03103f777 brushes=cbf29ce484222325 nbrushes=0 studio=d23aba02957d612c
+  < chunk 2 canvas=108bcfe03103f777 brushes=cbf29ce484222325 nbrushes=0 studio=648c1ec4aded3ca6
+  < chunk 3 canvas=5d8bb30ed13828c3 brushes=cbf29ce484222325 nbrushes=0 studio=483c5fa8bfc71fdf
+  ---
+old_logs: easel3_green DIFFERS from af49348:
+  1,4c1,4
+  < png_sha256 29ae47c9c2064a080f2da74e22264be2a0bef5220ac7246be2444f37141a9efe
+  < chunk 1 canvas=108bcfe03103f777 brushes=cbf29ce484222325 nbrushes=0 studio=1d99537dc0b345eb
+  < chunk 2 canvas=108bcfe03103f777 brushes=cbf29ce484222325 nbrushes=0 studio=585fb2a6be9f7ad7
+  < chunk 3 canvas=4a8453e676108ac9 brushes=cbf29ce484222325 nbrushes=0 studio=b6db298f73290a16
+  ---
+old_logs: easel3_near DIFFERS from af49348:
+  1,3c1,3
+  < png_sha256 046f0e110afc1ef6fa110be9f2d82cfcb21b404744688af6bd4fd4f487bf3d46
+  < chunk 1 canvas=3618ad46c74f4a6d brushes=cbf29ce484222325 nbrushes=0 studio=8d0a50d207ce4e60
+  < chunk 2 canvas=62d4e6e4377147aa brushes=cbf29ce484222325 nbrushes=0 studio=1023688ba7a2aaab
+  ---
+  > png_sha256 fe87c774092ccf13e93867488fb2bc91500fa6d331f63daba0f03f5c0dc52438
+old_logs: easel4_free DIFFERS from af49348:
+  1,4c1,4
+  < png_sha256 6db971f8531ce7f4cc6c040b69b5cf9da335b7de9589db97637384d02ad70d3d
+  < chunk 1 canvas=7446da8f708623ed brushes=cbf29ce484222325 nbrushes=0 studio=184c2a924b13ae5e
+  < chunk 2 canvas=8ff4a902f2a43962 brushes=cbf29ce484222325 nbrushes=0 studio=7a5ce137c727753e
+  < chunk 3 canvas=927f8407affae751 brushes=cbf29ce484222325 nbrushes=0 studio=ca4dbb7f89eb84b5
+  ---
+old_logs: easel4_green DIFFERS from af49348:
+  2,4c2,4
+  < chunk 1 canvas=108bcfe03103f777 brushes=cbf29ce484222325 nbrushes=0 studio=1d99537dc0b345eb
+  < chunk 2 canvas=4d3f9b2999202758 brushes=cbf29ce484222325 nbrushes=0 studio=b0718e695dfda46f
+  < chunk 3 canvas=d109c8a5dff8595d brushes=cbf29ce484222325 nbrushes=0 studio=dfb8af0d743d314b
+  ---
+  > chunk 1 canvas=8ca7e099048be796 brushes=cbf29ce484222325 nbrushes=0 studio=c1b287c14d4cb04b
+old_logs: easel4_near DIFFERS from af49348:
+  2,4c2,4
+  < chunk 1 canvas=3618ad46c74f4a6d brushes=cbf29ce484222325 nbrushes=0 studio=8d0a50d207ce4e60
+  < chunk 2 canvas=3618ad46c74f4a6d brushes=cbf29ce484222325 nbrushes=0 studio=60057dbf5f8bd414
+  < chunk 3 canvas=64d87abadcacbf03 brushes=cbf29ce484222325 nbrushes=0 studio=d7db8db9a63e1132
+  ---
+  > chunk 1 canvas=64078638c21e6bba brushes=cbf29ce484222325 nbrushes=0 studio=d6e526cbf0d61157
+old_logs: r19 DIFFERS from af49348:
+  1,4c1,4
+  < png_sha256 d6bda85192b19814e1b274711003630a29813c69ecba6750a936996c21677586
+  < chunk 1 canvas=fa825fdca465d5e0 brushes=cbf29ce484222325 nbrushes=0 studio=f032ee1b5881c0ab
+  < chunk 2 canvas=6e63ae4f2226a731 brushes=cbf29ce484222325 nbrushes=0 studio=693e3c210647815b
+  < chunk 3 canvas=4802f452b08fcc75 brushes=d3fc58aac6ea5b73 nbrushes=1 studio=1bd95aa5e5675497
+  ---
+old_logs: FAILED

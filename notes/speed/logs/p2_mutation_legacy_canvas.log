@@ -1,0 +1,48 @@
+    Finished `release` profile [optimized] target(s) in 32.92s
+old_logs: engine1_tiny ok (engine1_tiny.lua at 160 px)
+old_logs: studio_6399ad ok (studio_6399ad.first3.lua at 128 px)
+old_logs: studio_db6324 ok (studio_db6324.first3.lua at 128 px)
+old_logs: easel3_free DIFFERS from af49348:
+  1,4c1,4
+  < png_sha256 2e9e37cd2b228121a71beeea9f0ca0719bca886e69be151941ee65b238aeb972
+  < chunk 1 canvas=108bcfe03103f777 brushes=cbf29ce484222325 nbrushes=0 studio=d23aba02957d612c
+  < chunk 2 canvas=108bcfe03103f777 brushes=cbf29ce484222325 nbrushes=0 studio=648c1ec4aded3ca6
+  < chunk 3 canvas=5d8bb30ed13828c3 brushes=cbf29ce484222325 nbrushes=0 studio=483c5fa8bfc71fdf
+  ---
+old_logs: easel3_green DIFFERS from af49348:
+  1,4c1,4
+  < png_sha256 29ae47c9c2064a080f2da74e22264be2a0bef5220ac7246be2444f37141a9efe
+  < chunk 1 canvas=108bcfe03103f777 brushes=cbf29ce484222325 nbrushes=0 studio=1d99537dc0b345eb
+  < chunk 2 canvas=108bcfe03103f777 brushes=cbf29ce484222325 nbrushes=0 studio=585fb2a6be9f7ad7
+  < chunk 3 canvas=4a8453e676108ac9 brushes=cbf29ce484222325 nbrushes=0 studio=b6db298f73290a16
+  ---
+old_logs: easel3_near DIFFERS from af49348:
+  1,3c1,3
+  < png_sha256 046f0e110afc1ef6fa110be9f2d82cfcb21b404744688af6bd4fd4f487bf3d46
+  < chunk 1 canvas=3618ad46c74f4a6d brushes=cbf29ce484222325 nbrushes=0 studio=8d0a50d207ce4e60
+  < chunk 2 canvas=62d4e6e4377147aa brushes=cbf29ce484222325 nbrushes=0 studio=1023688ba7a2aaab
+  ---
+  > png_sha256 7c6ec8600158437da9d62980bd494c5e61a2121c24a466ed116db3c796d43fff
+old_logs: easel4_free DIFFERS from af49348:
+  1,4c1,4
+  < png_sha256 6db971f8531ce7f4cc6c040b69b5cf9da335b7de9589db97637384d02ad70d3d
+  < chunk 1 canvas=7446da8f708623ed brushes=cbf29ce484222325 nbrushes=0 studio=184c2a924b13ae5e
+  < chunk 2 canvas=8ff4a902f2a43962 brushes=cbf29ce484222325 nbrushes=0 studio=7a5ce137c727753e
+  < chunk 3 canvas=927f8407affae751 brushes=cbf29ce484222325 nbrushes=0 studio=ca4dbb7f89eb84b5
+  ---
+old_logs: easel4_green DIFFERS from af49348:
+  1,4c1,4
+  < png_sha256 3929af1b6f1e16682c0ca481598091157d62a51c58661ee140a3e1924deb0700
+  < chunk 1 canvas=108bcfe03103f777 brushes=cbf29ce484222325 nbrushes=0 studio=1d99537dc0b345eb
+  < chunk 2 canvas=4d3f9b2999202758 brushes=cbf29ce484222325 nbrushes=0 studio=b0718e695dfda46f
+  < chunk 3 canvas=d109c8a5dff8595d brushes=cbf29ce484222325 nbrushes=0 studio=dfb8af0d743d314b
+  ---
+old_logs: easel4_near DIFFERS from af49348:
+  1,4c1,4
+  < png_sha256 3ac60db9dbb46c4d89b0b47be4aa0a4b3a07252af1c89ca19eafa37e2175451b
+  < chunk 1 canvas=3618ad46c74f4a6d brushes=cbf29ce484222325 nbrushes=0 studio=8d0a50d207ce4e60
+  < chunk 2 canvas=3618ad46c74f4a6d brushes=cbf29ce484222325 nbrushes=0 studio=60057dbf5f8bd414
+  < chunk 3 canvas=64d87abadcacbf03 brushes=cbf29ce484222325 nbrushes=0 studio=d7db8db9a63e1132
+  ---
+old_logs: r19 ok (../r19_default_box.lua at 320 px)
+old_logs: FAILED

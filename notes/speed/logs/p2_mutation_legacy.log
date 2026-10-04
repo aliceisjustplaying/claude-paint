@@ -1,0 +1,28 @@
+    Finished `release` profile [optimized] target(s) in 32.64s
+old_logs: engine1_tiny ok (engine1_tiny.lua at 160 px)
+old_logs: studio_6399ad ok (studio_6399ad.first3.lua at 128 px)
+old_logs: studio_db6324 ok (studio_db6324.first3.lua at 128 px)
+old_logs: easel3_free: the replay failed:
+    chunk   1     0.71s
+    chunk   2     0.03s
+  chunk 3 failed:
+  882.7314453125	301.73098754882812
+  runtime error: no tube "cobalt blue" (tubes: lead white, smalt, pale smalt, yellow ochre, red earth, vermilion, raw umber, bone black)
+old_logs: easel3_green: the replay failed:
+    chunk   1     0.70s
+    chunk   2     0.01s
+  chunk 3 failed:
+  runtime error: no tube "cobalt blue" (tubes: lead white, smalt, pale smalt, yellow ochre, red earth, vermilion, raw umber, bone black, Prussian blue, green earth)
+old_logs: easel3_near: the replay failed:
+    chunk   1     0.92s
+  chunk 2 failed:
+  runtime error: no tube "cobalt blue" (tubes: lead white, smalt, pale smalt, yellow ochre, red earth, vermilion, raw umber, bone black, Prussian blue, green earth)
+old_logs: easel4_free: the replay failed:
+    chunk   1     0.93s
+    chunk   2     0.03s
+  chunk 3 failed:
+  runtime error: no tube "cobalt blue" (tubes: lead white, smalt, pale smalt, yellow ochre, red earth, vermilion, raw umber, bone black)
+old_logs: easel4_green ok (easel4_green.first3.lua at 128 px)
+old_logs: easel4_near ok (easel4_near.first3.lua at 128 px)
+old_logs: r19 ok (../r19_default_box.lua at 320 px)
+old_logs: FAILED

@@ -1,0 +1,35 @@
+== MA ranges heights x1.1
+ crates/easel/src/legacy/mod.rs | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+    Finished `release` profile [optimized] target(s) in 31.41s
+old_logs: engine1_tiny ok (engine1_tiny.lua at 160 px)
+old_logs: studio_6399ad ok (studio_6399ad.first3.lua at 128 px)
+old_logs: studio_db6324 ok (studio_db6324.first3.lua at 128 px)
+old_logs: easel3_free ok (easel3_free.first3.lua at 128 px)
+old_logs: easel3_green ok (easel3_green.first3.lua at 128 px)
+old_logs: easel3_near ok (easel3_near.first2.lua at 128 px)
+old_logs: easel4_free ok (easel4_free.first3.lua at 128 px)
+old_logs: easel4_green ok (easel4_green.first3.lua at 128 px)
+old_logs: easel4_near ok (easel4_near.first3.lua at 128 px)
+old_logs: r19 ok (../r19_default_box.lua at 320 px)
+old_logs: legacy_tiny DIFFERS from af49348:
+old_logs: FAILED
+== MB sward height x1.1
+ crates/easel/src/legacy/mod.rs | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+    Finished `release` profile [optimized] target(s) in 31.60s
+old_logs: engine1_tiny ok (engine1_tiny.lua at 160 px)
+old_logs: studio_6399ad ok (studio_6399ad.first3.lua at 128 px)
+old_logs: studio_db6324 ok (studio_db6324.first3.lua at 128 px)
+old_logs: easel3_free ok (easel3_free.first3.lua at 128 px)
+old_logs: easel3_green ok (easel3_green.first3.lua at 128 px)
+old_logs: easel3_near ok (easel3_near.first2.lua at 128 px)
+old_logs: easel4_free ok (easel4_free.first3.lua at 128 px)
+old_logs: easel4_green ok (easel4_green.first3.lua at 128 px)
+old_logs: easel4_near ok (easel4_near.first3.lua at 128 px)
+old_logs: r19 ok (../r19_default_box.lua at 320 px)
+old_logs: legacy_tiny DIFFERS from af49348:
+old_logs: FAILED
+    Finished `release` profile [optimized] target(s) in 31.05s
+== restored
+old_logs: all 11 cases replay as af49348 did

@@ -36,7 +36,11 @@ impl Drop for Closing {
     }
 }
 
-const CANVAS: &str = r#"canvas{size=300, aspect=5, linen={16, 14}, seed=3, ground={{pile={{"lead white", 2}, {"red earth", 1}}, um=100, apply="knife"}, {pile={{"lead white", 6}, {"raw umber", 1}}, um=50, apply="brush"}}}"#;
+// Two grounds, the second rolled: a brushed one (a whole-canvas `work` pass at the live
+// width) made this test take a minute, run four times (live, check, run, reopen). Brushed
+// grounds are tested in paint (tests::brushed_ground_honors_thickness, ground_grain) and
+// replayed in boxes.rs (the round 19 log).
+const CANVAS: &str = r#"canvas{size=300, aspect=5, linen={16, 14}, seed=3, ground={{pile={{"lead white", 2}, {"red earth", 1}}, um=100, apply="knife"}, {pile={{"lead white", 6}, {"raw umber", 1}}, um=50, apply="roller"}}}"#;
 
 const PAINT: &str = r#"
 a = pile{{"lead white", 6}, {"yellow ochre", 2}, {"vermilion", 0.3}, medium=0.2}

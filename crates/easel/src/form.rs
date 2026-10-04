@@ -484,7 +484,8 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
     Ok(())
 }
 
-#[cfg(test)]
+// Default-box sessions (`Session::new`, `Session::replay`): not in a painter build for one box.
+#[cfg(all(test, tube_box))]
 mod tests {
     use crate::session::Session;
 

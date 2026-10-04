@@ -1,0 +1,37 @@
+lockrun: job 446b4ed1 started (process group 25812, timeout 600 s, log $TMPDIR/integ.lockrun.log)
+test object_keyed_tables_replay_the_same_in_every_process ... ok
+test state_digests_are_the_same_in_every_replay ... ok
+test the_rag_replays_the_same ... ok
+test hand_time_is_deterministic_across_thread_counts has been running for over 60 seconds
+test hand_time_is_deterministic_across_thread_counts ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 70.53s
+
+--
+test replay_failure_is_fatal ... ok
+test live_resolution_is_fixed ... ok
+test journal_uses_the_selected_painting_clock ... ok
+test a_failed_look_after_a_chunk_still_reports_the_chunk ... ok
+test a_running_session_refuses_every_request_while_its_log_is_edited ... ok
+test a_look_never_overwrites_an_earlier_observation ... ok
+test a_second_server_is_refused_and_a_dead_ones_socket_is_recovered ... ok
+test edited_or_truncated_logs_cannot_reopen ... ok
+test rebuilding_serves_progress_and_refuses_nonstatus_requests ... ok
+test racing_opens_start_one_server ... ok
+
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 10.87s
+
+test a_nan_point_is_an_error - should panic ... ok
+test the_same_curve_with_finite_points_lays_paint ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.04s
+
+--
+test print_ground_grain ... ignored
+test save_ground_crops ... ignored
+test thin_blend_bares_ground ... ignored
+test the_brushed_ground_has_no_horizontal_grain ... ok
+
+test result: ok. 1 passed; 0 failed; 3 ignored; 0 measured; 0 filtered out; finished in 3.52s
+
+lockrun: finished: exit 0 in 145.2 s; log $TMPDIR/integ.lockrun.log

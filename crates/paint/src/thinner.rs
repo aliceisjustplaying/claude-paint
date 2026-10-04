@@ -188,6 +188,7 @@ impl Canvas {
         let (w, h) = (self.f.w, self.f.h);
         let dx = self.px_mm();
         let timed = self.wet.clock.px.len() == w * h;
+        let fast = crate::rag::residue::flow_scale();
         // the mobility (mm²/min) of each pixel in the dirty box
         // (the canvas holds solvent in µm; the flow works in coats)
         let mob = |wet: &crate::wet::Wet, i: usize| -> f32 {
@@ -196,7 +197,7 @@ impl Canvas {
                 return 0.0;
             }
             let fl = if timed { crate::drying::fluid(wet.clock.px[i].cure) } else { 1.0 };
-            spread_mm2_min(s / (v + s)) * fl
+            spread_mm2_min(s / (v + s)) * fl * fast
         };
         let mut m_max = 0.0f32;
         for y in by0..by1.min(h) {

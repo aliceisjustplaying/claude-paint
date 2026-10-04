@@ -200,6 +200,35 @@ pub mod residue {
         EDGE_PRESS.with(|c| c.get())
     }
 
+    thread_local! {
+        static SPIRIT: Cell<f32> = const { Cell::new(0.0) };
+    }
+
+    /// EXPERIMENT: a face dipped fully leaves this much spirits (µm) in
+    /// the paint under one full pass of its contact (scaled by its
+    /// dampness); 0: none (as before).
+    pub fn set_spirit_um(um: f32) {
+        SPIRIT.with(|c| c.set(um));
+    }
+
+    pub fn spirit_um() -> f32 {
+        SPIRIT.with(|c| c.get())
+    }
+
+    thread_local! {
+        static FLOW: Cell<f32> = const { Cell::new(1.0) };
+    }
+
+    /// EXPERIMENT: every solvent-wet film flows this many times as fast
+    /// (`thinner::spread`); 1: as before.
+    pub fn set_flow_scale(k: f32) {
+        FLOW.with(|c| c.set(k));
+    }
+
+    pub fn flow_scale() -> f32 {
+        FLOW.with(|c| c.get())
+    }
+
     #[derive(Clone, Copy, Debug, PartialEq, Eq)]
     pub enum Rule {
         /// Today: the cloth can't take the last `STAIN_COATS × hollow`.
@@ -508,6 +537,12 @@ impl Canvas {
         let (reach, wick) = if e3 { { let dm = residue::damp(); (SAG_UM * (0.25 + 1.5 * p) * (1.0 + dm.reach * d), WICK + (1.0 - WICK) * (dm.wick * d).min(1.0)) } } else { (SAG_UM * (0.25 + 1.5 * p), WICK) };
         let k = LIFT * (0.7 + 0.6 * p) * rag.thirst() * (1.0 + if e3 { residue::damp().rate } else { DAMP_LIFT } * d);
         let timed = self.wet.clock.px.len() == self.wet.vol.len();
+        // EXPERIMENT: a damp face leaves spirits in the paint it touches
+        let spirit = if e3 && d > 0.0 { residue::spirit_um() * d } else { 0.0 };
+        if spirit > 0.0 {
+            self.wet.ensure_solvent();
+        }
+        let mut laid_spirit = 0.0f64;
         let mut lifted = 0.0f64;
         let mut lifted_s = 0.0f64;
         let mut got = Pool::default();
@@ -567,6 +602,11 @@ impl Canvas {
                     row_s += ts;
                     row += take;
                 }
+                if spirit > 0.0 && self.wet.vol[i] > 1e-6 {
+                    let add = spirit * pad.min(1.0) * c;
+                    self.wet.solv[i] += add;
+                    laid_spirit += add as f64;
+                }
             }
             lifted += row as f64;
             lifted_s += row_s as f64;
@@ -577,6 +617,8 @@ impl Canvas {
             lifted_s -= laid_s;
         }
         let mm3 = lifted * (px_mm as f64).powi(2) * (COAT_UM as f64 / 1000.0);
+        // (the spirits laid: µm × pixels; the cloth's own dampness isn't drawn down: EXPERIMENT)
+        rag.solvent_mm3 -= laid_spirit * (px_mm as f64).powi(2) / 1000.0;
         rag.solvent_mm3 += lifted_s * (px_mm as f64).powi(2) * (COAT_UM as f64 / 1000.0);
         let w_mm = (rag.width * self.mm_per_unit) as f64;
         let cap = w_mm * w_mm * (CAP_UM as f64 / 1000.0);
@@ -1653,6 +1695,44 @@ mod tests {
                     }
                 }
             }
+            residue::set_edge_press(false);
+            residue::set_damp(residue::DAMP0);
+            residue::set(Rule::Floor);
+        }
+
+        /// Spirits from a damp face running into the paint (rule D, mild
+        /// damp, light-pressed rim): one and three damp wipes, just after
+        /// and after a 3-minute wait, per amount of spirits laid.
+        #[test]
+        #[ignore]
+        fn spirit_render() {
+            use residue::{Damp, Rule};
+            const AREA: (f32, f32, f32, f32) = (280.0, 245.0, 720.0, 435.0);
+            const PATH: [(f32, f32); 2] = [(300.0, 340.0), (700.0, 340.0)];
+            let out = std::path::PathBuf::from(std::env::var("RAG_EXP_DIR").unwrap());
+            let mut c0 = blank(LIVE);
+            brushed_in(&mut c0, sienna().with_thinner(0.5), 0.9, AREA);
+            c0.wait(10.0);
+            c0.clone().save(out.join("start.png")).unwrap();
+            residue::set(Rule::Soft);
+            residue::set_damp(Damp { rate: 1.0, soft: 1.0, wick: 0.3, reach: 0.3 });
+            residue::set_edge_press(true);
+            for (um, flow) in [(0.0f32, 1.0f32), (10.0, 1.0), (10.0, 10.0), (10.0, 30.0), (0.0, 30.0)] {
+                residue::set_spirit_um(um);
+                residue::set_flow_scale(flow);
+                let mut c = c0.clone();
+                let mut r = Rag::new(100.0, 7);
+                r.dip(0.5, c.now_min(), &mut c.tally);
+                for k in 0..3u64 {
+                    c.rag_wipe(&mut r, &PATH, &[0.8], 19 + k);
+                    if k == 0 || k == 2 {
+                        // (save dries the paint first: the flow runs its course)
+                        c.clone().save(out.join(format!("s{um}-f{flow}-damp{}.png", k + 1))).unwrap();
+                    }
+                }
+            }
+            residue::set_flow_scale(1.0);
+            residue::set_spirit_um(0.0);
             residue::set_edge_press(false);
             residue::set_damp(residue::DAMP0);
             residue::set(Rule::Floor);

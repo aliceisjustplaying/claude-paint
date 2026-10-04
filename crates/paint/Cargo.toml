@@ -16,11 +16,13 @@ hand-hook = []
 # painter's build with only that box; two or more without all-boxes don't
 # compile (build.rs).
 default = ["all-boxes"]
-all-boxes = ["box-sargent", "box-inness", "box-alma-tadema", "box-tonn", "box-hopper"]
+all-boxes = ["box-sargent", "box-inness", "box-alma-tadema", "box-tonn", "box-hopper", "box-giverny", "box-impressionist"]
 box-sargent = []
 box-inness = []
 box-alma-tadema = []
 box-tonn = []
+box-giverny = []
+box-impressionist = []
 box-hopper = []
 
 [dependencies]

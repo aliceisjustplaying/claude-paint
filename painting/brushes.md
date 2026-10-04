@@ -159,7 +159,7 @@ A lost reply leaves the caller uncertain whether painting committed; resubmissio
 ## Open questions and verification
 
 - All behaviors here are source-reviewed; no manual brush pass is claimed.
-- Suspected documentation defect: the guide labels fullness as 0–1, but additive loading and the unclamped fullness calculation allow values above one. The intended upper bound needs a product decision.
+- Confirmed documentation mismatch: repeated loading produced fullness above one in the [CLI probe](../verification/evidence/additional.md), contradicting the guide’s 0–1 description. The intended upper bound needs a product decision; see [bug triage](../bug-triage.md).
 - Loading accepts its numeric amount without an explicit zero-through-one check. Negative, excessive and nonfinite values need focused verification before their resulting marks or errors can be described.
 - Visual comparisons of points, bristle options, clipping, pickup and dry-paint contact remain unverified.
 

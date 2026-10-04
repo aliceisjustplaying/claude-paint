@@ -33,9 +33,9 @@ The variant axes are build/surface, input options, existing painting state and s
 | [Rags](painting/rags.md) | Lifting paint, refolding and spirits | not started |
 | [Space and light](painting/space.md) | Forms, worlds, views and depth restrictions | not started |
 | [Painting time](painting/time.md) | Hand time, waiting and drying | not started |
-| [Journal and inspection](session/journal.md) | Notes, status, globals and log | not started |
+| [Journal and inspection](session/journal.md) | Notes, status, globals and log | drafted |
 | [Painter harness](session/harness.md) | Tools, image memory, pacing and compaction | not started |
-| [Replay and delivery](delivery/replay.md) | Save, frames, checks, replay, finishing and export scripts | not started |
+| [Replay and delivery](delivery/replay.md) | Save, frames, checks, replay, finishing and export scripts | drafted |
 | [Studio viewer](watching/studio.md) | Painter selection, live watching, replay and static export | not started |
 
 [goal.md](goal.md) is the drafting contract. [glossary.md](glossary.md) owns terms. [verification](verification/README.md) records checks and their limits. [bug-triage.md](bug-triage.md) collects suspected defects without modifying the product.

@@ -1,5 +1,30 @@
 # Round 24 launch: the Inness painter on the frozen engine-3 candidate
 
+## Current state (October 4, 2026, 22:00 BST onward)
+
+- The old three Pi agents and their child jobs were stopped. Their lane
+  worktrees are removed. Source is consolidated on `rag` at `ab4cca6`.
+- Exchange stays off; lane A's experiment is retained on `e3/a-exchange`,
+  not integrated. Flow is integrated from `fbe0d43`; rag path consistency
+  and carryover from `7e08c5b`, with unused diagnostics removed in `ab4cca6`.
+- The owner authorized finishing carryover and concurrent checks. Earlier
+  instructions to separate carryover and serialize checks are superseded.
+- Checks have not completed. macOS stalled before executing the Rust build
+  script, including with sccache disabled. Sample of PID 45022 at
+  22:00:42.866 BST: all 803 samples at `_dyld_start (in dyld) + 0`, footprint
+  96 KB, `Binary images description not available`. A fresh copy also
+  stalled. Signature verification and some process queries hung. The
+  underlying OS cause is unconfirmed; no security controls were changed.
+- The original rag test's >90% lift assertion is unchanged. An earlier
+  agent reported 89.9% in hollows; that result has not been reproduced on
+  this combined candidate. It remains unresolved, not a passing check.
+- The viewer returned HTTP 200 locally and from the M1. All development,
+  verification and the painting launch remain on the M3. No painter has
+  started, no `round-24` tag exists and public sync has not been changed.
+
+Remaining: complete checks, resolve any actual failures, run the connected
+tool sequence and final card, then freeze and launch privately below.
+
 Prepared on lane E (branch `e3/e-painter`, from `d54b423`). The runner,
 guide and viewer are ready except for the final revision, which is still
 pending. The integration owner runs these steps at freeze. Nothing here has

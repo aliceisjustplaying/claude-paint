@@ -27,15 +27,15 @@ The variant axes are build/surface, input options, existing painting state and s
 | [Canvas and materials](foundations/canvas.md) | Coordinates, setup, paint and persistent objects | drafted |
 | [Sessions and surfaces](foundations/sessions.md) | Build differences, opening, closing and session selection | drafted |
 | [Painting passages](painting/passages.md) | Area work, blending, stippling and edge handling | drafted |
-| [Brushes](painting/brushes.md) | Loading, wiping, strokes and touches | not started |
+| [Brushes](painting/brushes.md) | Loading, wiping, strokes and touches | drafted |
 | [Shapes](painting/shapes.md) | Masks, outlines and controlled variation | not started |
 | [Drawing](painting/drawing.md) | Pencil, chalk, erasing and fixing | not started |
 | [Rags](painting/rags.md) | Lifting paint, refolding and spirits | not started |
 | [Space and light](painting/space.md) | Forms, worlds, views and depth restrictions | not started |
-| [Painting time](painting/time.md) | Hand time, waiting and drying | not started |
+| [Painting time](painting/time.md) | Hand time, waiting and drying | drafted |
 | [Journal and inspection](session/journal.md) | Notes, status, globals and log | drafted |
-| [Painter harness](session/harness.md) | Tools, image memory, pacing and compaction | not started |
+| [Painter harness](session/harness.md) | Tools, image memory, pacing and compaction | drafted |
 | [Replay and delivery](delivery/replay.md) | Save, frames, checks, replay, finishing and export scripts | drafted |
-| [Studio viewer](watching/studio.md) | Painter selection, live watching, replay and static export | not started |
+| [Studio viewer](watching/studio.md) | Painter selection, live watching, replay and static export | drafted |
 
 [goal.md](goal.md) is the drafting contract. [glossary.md](glossary.md) owns terms. [verification](verification/README.md) records checks and their limits. [bug-triage.md](bug-triage.md) collects suspected defects without modifying the product.

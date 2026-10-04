@@ -88,3 +88,79 @@ These are also in `ACCEPTANCE.md`:
 This branch's `target/`, about the size of one release build. Phase 3
 needs it, and it gets deleted at the end. The scratch logs in `$TMPDIR`
 are deleted.
+
+## Round 2 (review round 1: APPROVE WITH REQUIRED CHANGES, R1-R15)
+
+**Tests commit: 55ef93a.** It is on top of 5ce3989 (the round-1 report).
+Required changes: `~/src/a/claude-paint-reviews/thinner-tests-required-changes-round1.md`.
+`notes/thinner/ACCEPTANCE.md` has the new limits, dependencies, decisions
+and hashes. The protected baseline and the dumper (`notes/thinner/baseline/`,
+`crates/{paint,easel}/src/state_dump.rs`) are untouched since a97c3a6:
+`git diff --quiet a97c3a6 HEAD -- …` is clean.
+
+What ran, all through lockrun:
+
+- **Compile, paint:** `thinner_physics` fails on 53 errors, every one
+  missing thinner API: `paint::thinner`, `with_thinner`, `solvent_total`,
+  `solvent_um`, `cure_at`, `carried`, `solvent_mm3`.
+- **Compile, easel:** the test binary fails on 10 errors, of the same kind.
+- **Check 13 (a)** still passes.
+- **The runner's self-test**
+  (`scripts/tests/thinner_acceptance_runner.sh`, a fake cargo, no build)
+  passes all 15 cases.
+- **`thinner_dump_fields.py`** rejects the baseline's own af49348 dumps,
+  as it must: no `wet.solvent` in 12 chunks, and bristles and rags without
+  solvent.
+
+| R | change | where (at 55ef93a) |
+|---|---|---|
+| R1 | A test counts as passed only if cargo exited 0 as well as printing `ok` for it; a nonzero exit fails the run. Self-test of the runner: ok lines with a nonzero exit, missing, ignored, failed, empty output, and more | `scripts/test_thinner_acceptance:116`, `:121`; `scripts/tests/thinner_acceptance_runner.sh` |
+| R2 | `#[ignore = "slow"]` on the check 8 card sweep, the rag study and the check 10 gel/dry comparison; `--all` runs them by exact name with `--ignored` | `crates/easel/src/thinner_tests.rs:146`, `:371`; `crates/paint/tests/thinner_physics.rs:277`; runner `:181`, `:184` |
+| R3 | 13 (b) runs in every mode as an expected failure, on its own line as `EXPECTED FAIL (pre-existing; user decision, ACCEPTANCE.md check 13)`; passing or not running fails the run; exit 3 = `NOT ALL GREEN`, never 0 while it stands. The test body is unchanged | runner `:133`, `:204` |
+| R4 | Check 9 tests the law: per pixel and per minute at fixed paint thickness, the share of solvent left = `exp(-1/τ(h))` within 1e-4 + 2δ; two films, the thick one asserted ≥ 1.5× thicker and asserted to lose a smaller share; ≥ 200 pixel-minutes each | `thinner_physics.rs:189`, law at `:222` |
+| R5 | Check 16 spreading: a thick ratio-1 film beside a thin ratio-1/9 film. Total solvent balance computed per pixel from the law (1e-4); every pixel's ratio within its neighborhood's ratios × evaporation (1e-4); the thin film's ratio rises where the thick film's liquid came in; movement guard kept (≥ 20 px gaining ≥ 1%) | `thinner_physics.rs:459`, `:485`, `:501`, `:516` |
+| R6 | Check 10 leveling: two copies with the same paint and cure, with and without solvent, the same span; the solvent copy levels > 2% and > 2× the other; paint balances in both | `thinner_physics.rs:248` |
+| R7 | Checks 11 and 12 compare whole session saves (`save::write`: canvas, seed, counters, studio clocks, piles, setup), and check 11 compares them right after reopening too. Boundary stated: no Lua globals or held tools in a save (save.rs:7-12) | `crates/easel/src/thinner_measure.rs:62`; `thinner_tests.rs:171`, `:216` |
+| R8 | Check 18: `cloth.lua` makes a rag holding paint and solvent (asserted) before the snapshot; the failed chunk dips, wipes and refolds it; `cloth_again.lua` reuses it, and both sessions must match | `thinner_tests.rs:237`; `crates/easel/tests/thinner/{cloth,failing,cloth_again}.lua` |
+| R9 | `--all` writes `notes/thinner/rag_study.png` and fails without it; ≥ 100 lifted pixels and a spread of ≥ 4 units² both ways before any shape is judged; the dry swatch must be there before its wipe. Visual approval is separate | `thinner_tests.rs:409`, `:414`; runner `:184` |
+| R10 | `scripts/thinner_dump_fields.py`: `wet.solvent` (f32, the shape of `wet.vol`) in every chunk, `solvent` on every bristle, `solvent_mm3` on every rag, at least one brush and one rag seen; check 2 part 3 runs it on both runs' dumps | `scripts/thinner_dump_fields.py`; `scripts/thinner_check2:61` |
+| R11 | ACCEPTANCE.md names cargo, bash 5, python3 and xz, the lockrun commands with 60/300/600 s, and this report | `notes/thinner/ACCEPTANCE.md`, "How to run" |
+| R12 | The PAINTCK9 layout is stated as a deliberate format contract; `with_solvent_scaled` checks that the copy saves back identical outside the solvent block, so pigment, stiffness, cure, clock and everything else are unchanged | ACCEPTANCE "The interface"; `crates/paint/tests/thinner_support/mod.rs:198`, `:214` |
+| R13 | Check 15: ≥ 12 µm (above the clamp, drying.rs:251), positive solvent, 10th/50th/90th percentiles. Check 4: a wholly unthinned control scene. Check 14: paint and solvent compared separately plus the total, positive deposits. Check 8: one card per setting, same place and seed. Check 17: a fractional start, and a stroke between waits | `thinner_physics.rs:381`, `:73`, `:327`; `thinner_tests.rs:148`; `thinner_physics.rs:579`, `:587` |
+| R14 | Check 1: guards for a finite, positive contrast before and for paint laid; also < 0.001 solvent left on the whole canvas, so spreading out of a strip can't pass for evaporating. Target unchanged | `thinner_tests.rs:38`, `:43` |
+| R15 | Tiny logs with no engine line, engine 2 and engine 3 replay as engines 1, 2 and 3 (studio and canvas); af49348's engine-3 logs replay as engine 3 | `thinner_tests.rs:92`, `:85` |
+
+### Choices the reviewers should check
+
+None of these weakens a requirement. Each is a choice the required change
+left open.
+
+1. **R7, `chunks=`.** A save's header counts the session's own log
+   (save.rs:47), which a reopened session restarts. So the save of a
+   reopened session differs from the original's in that one line by
+   design, thinner or not. `session_save` rewrites it to all the chunks
+   the painting has had (`chunks_before` + the log) in both sessions; every
+   other byte is compared as written. Without that, check 11 would fail on
+   existing save behavior unrelated to the thinner.
+2. **R5, the order within a minute.** The balance accepts either order of
+   evaporation and spreading within one step: Σ s0·e(h0), or Σ s1/e(h1) =
+   S0. Each is computed independently to 1e-4. The plan doesn't fix the
+   order. Unlike the round-1 slope test, a uniform error on the solvent
+   fails both, and so does the per-pixel bound.
+3. **R4, τ per pixel.** The law is tested at the pixel's own paint
+   thickness, and ACCEPTANCE.md now says τ takes the pixel's own paint. A
+   model that sets τ from a neighborhood's thickness (as drying does for
+   cure, `film_thickness`) would fail it. If the builder wants that, it
+   goes back to review.
+4. **Time budget, unknown.** `--all` now runs 20 cards at 480 px (R13),
+   the 20-day gel comparison, the rag study and the 2400 px card in one
+   600 s batch. The time is unknown until the thinner exists. If it runs
+   over, it is reported as unfinished and investigated small; the limit
+   isn't raised.
+5. **Risks in fixtures**, noted in ACCEPTANCE.md. Check 9 needs ≥ 200
+   pixel-minutes where the paint moved ≤ 1e-3 in a minute. Check 16 needs
+   visible spreading within one minute. If the model's leveling makes
+   either impossible, the fixture goes back to review; the test isn't
+   weakened.
+
+I disagree with none of R1-R15.

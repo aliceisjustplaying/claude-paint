@@ -30,8 +30,14 @@ mod legacy;
 mod look;
 mod save;
 mod session;
+#[cfg(feature = "replay")]
+mod state_dump;
 mod time;
 mod world;
+#[cfg(all(test, feature = "replay"))]
+mod thinner_measure;
+#[cfg(all(test, feature = "replay"))]
+mod thinner_tests;
 
 use paint::Canvas;
 use paint::color::linear_to_srgb;
@@ -953,7 +959,7 @@ impl Server {
                     "{e}\n(the chunk failed and is not in the log; status reports the rebuild's progress and other commands must retry after it)"
                 )),
                 Err(e) if self.s.stale => Err(format!(
-                    "{e}\n(the chunk failed and changed nothing. It had changed tables from earlier chunks, and though what they hold is back, how they are laid out (which decides the order `pairs` walks them in) can't be put back, so the easel now rebuilds the painting from its log, as a reopen does; status reports progress and other commands must retry after that)"
+                    "{e}\n(the chunk failed and changed nothing. It had changed tables from earlier chunks, and though what they hold is back, how they are laid out (which decides the order `pairs` walks them in, from engine 3 only the length `#` finds in a table with holes) can't be put back, so the easel now rebuilds the painting from its log, as a reopen does; status reports progress and other commands must retry after that)"
                 )),
                 Err(e) => Err(format!("{e}\n(the chunk failed and changed nothing)")),
             },
@@ -1010,7 +1016,7 @@ fn run(args: &[String]) -> Result<(), String> {
     let mut i = 1;
     while i < args.len() {
         match args[i].as_str() {
-            "--out" | "--dump-surface" | "--frames-every" | "--frames-dir" | "--frame-width" | "--state-digest" | "--width" if i + 1 < args.len() => i += 2,
+            "--out" | "--dump-surface" | "--dump-state" | "--frames-every" | "--frames-dir" | "--frame-width" | "--state-digest" | "--width" if i + 1 < args.len() => i += 2,
             "--look" => i += 1,
             o => return Err(format!("run: unknown argument {o:?} ({RUN_USAGE})")),
         }
@@ -1053,11 +1059,18 @@ fn run(args: &[String]) -> Result<(), String> {
         if let Some(f) = digests.as_mut() {
             f.write_all(state_digest_line(&s, i + 1, r.secs).as_bytes()).map_err(|e| format!("--state-digest: {e}"))?;
         }
+        // --dump-state <dir>: every state value after the chunk (state_dump.rs; reads only)
+        if let Some(d) = flag(args, "--dump-state") {
+            state_dump::write_chunk(&s, i + 1, Path::new(&d))?;
+        }
         if frames && let Some(c) = s.canvas() {
             frames::chunk_end(&c, i + 1);
         }
     }
     let paint_secs = t0.elapsed().as_secs_f64();
+    if let Some(d) = flag(args, "--dump-state") {
+        state_dump::write_save(&s, &text, Path::new(&d))?;
+    }
     let c = s.canvas().ok_or("the program never made a canvas")?.clone();
     if frames {
         frames::finish(&c);
@@ -1303,12 +1316,30 @@ mod tests {
     }
 
     /// The palette's thick swatch is what `work` lays thick with that pile: within 2/255 of
-    /// the wet paint's mean in the middle of a heavily covered patch, for a few piles.
+    /// the wet paint's mean in the middle of a heavily covered patch, for a few piles (one
+    /// test each, so they run side by side: together they took 11 s).
     #[test]
     #[cfg(tube_box)]
     fn the_thick_swatch_matches_paint_laid_thick() {
+        thick_swatch_matches(r#"{"lead white", 6}, {"smalt", 1}, medium=0.2"#);
+    }
+
+    #[test]
+    #[cfg(tube_box)]
+    fn the_thick_swatch_matches_paint_laid_thick_dark() {
+        thick_swatch_matches(r#"{"raw umber", 2}, {"bone black", 1}"#);
+    }
+
+    #[test]
+    #[cfg(tube_box)]
+    fn the_thick_swatch_matches_paint_laid_thick_earths() {
+        thick_swatch_matches(r#"{"yellow ochre", 3}, {"red earth", 1}, {"lead white", 2}"#);
+    }
+
+    #[cfg(tube_box)]
+    fn thick_swatch_matches(recipe: &str) {
         let srgb = |c: paint::Rgb| c.map(|v| linear_to_srgb(v) * 255.0);
-        for recipe in [r#"{"lead white", 6}, {"smalt", 1}, medium=0.2"#, r#"{"raw umber", 2}, {"bone black", 1}"#, r#"{"yellow ochre", 3}, {"red earth", 1}, {"lead white", 2}"#] {
+        {
             let mut s = Session::new(320).unwrap();
             s.run(PALETTE_CANVAS).unwrap();
             s.run(&format!(r#"p = pile{{{recipe}}}; work(rect(200, 200, 800, 600), {{hand="body", pile=p, coverage=6}})"#)).unwrap();

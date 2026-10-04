@@ -92,10 +92,10 @@ The tube box:
 | red earth | iron oxide earth | 0.85 | 0.7 | 0.9 | 1.0 |
 | vermilion | mercuric sulfide | 0.9 | 0.75 | 1.0 | 0.4 |
 | raw umber | iron and manganese oxide earth | 0.8 | 0.65 | 0.9 | 2.4 |
-| bone black | charred bone (carbon, calcium phosphate) | 0.9 | 0.7 | 1.1 | 0.4 |
-| cobalt blue | cobalt aluminate | 0.55 | 0.6 | 0.8 | 1.4 |
+| bone black | charred bone (carbon, calcium phosphate) | 0.9 | 0.7 | 1.1 | 0.9 |
+| cobalt blue | cobalt aluminate | 0.55 | 0.6 | 0.8 | 2.2 |
 | chrome yellow | lead chromate | 0.9 | 0.7 | 1.0 | 1.8 |
-| Prussian blue | iron ferrocyanide | 0.35 | 0.45 | 3.0 | 1.8 |
+| Prussian blue | iron ferrocyanide | 0.35 | 0.45 | 3.0 | 2.4 |
 | green earth | celadonite and glauconite clay | 0.2 | 0.35 | 0.3 | 0.8 |
 | Rinmann's green | cobalt-zinc oxide | 0.35 | 0.5 | 0.4 | 1.4 |
 | copper green | verdigris ground in oil | 0.25 | 0.4 | 1.0 | 1.6 |
@@ -106,6 +106,48 @@ tube (0 fluid, 1 stiff). Tinting strength is relative to an average
 pigment. Drying is the rate relative to average paint (higher dries
 faster); a pile dries at its tubes' rates mixed by volume. These numbers
 are estimates from the pigment literature, not measurements.
+
+### Thinner
+
+```lua
+w = pile{{"<tube>", <parts>}, thinner=0.5}          -- 0 (none) to 0.9
+print(w)                         -- pile(<tube> <parts>; medium 0, thinner 0.5)
+print(w.thinner)                 -- 0.5 (0.0 for a pile without it)
+```
+
+`thinner` is the share of solvent (turpentine, spirits) by volume knifed
+into the pile, 0 to 0.9. It is not `medium`: medium is oil and stays in
+the film; the solvent leaves it. What a pile is made of doesn't change
+with thinner: its pigments, oil, body and drying rate are the paint's own.
+
+What it does:
+
+- A brushload of thinned paint is liquid, part paint and part solvent.
+  One stroke of it lays only a thin film: each spot on the canvas takes
+  at most a set thickness of liquid from one stroke, however many hairs
+  or how many times the stroke passes over it. The more solvent, the
+  thinner that film (about 6 µm at thinner 0.5). What the stroke can't
+  lay stays in the brush, so a loaded brush goes a long way; another
+  stroke over the same spot lays more.
+- The solvent leaves over painting time, whether you wait or keep
+  painting: in a thin film a few minutes, longer in a thicker one. The
+  paint stays. Once it has gone, what is left is a thinner film
+  of the paint itself, and more of what is under it shows through.
+- While it is there the wet paint is more fluid: it levels and spreads a
+  little, carrying its solvent with it. As the solvent goes, the paint
+  firms up to its own body. The oil dries at its own rate all the while.
+- Solvent has no color: the picture shows the paint alone.
+- A brush or rag that lifts solvent-wet paint takes the solvent with it.
+
+What it doesn't do (left out on purpose): the solvent doesn't evaporate
+from the brush or the pile on the palette (a pile keeps its thinner), it
+doesn't soak into the ground, and it doesn't dissolve paint that has set
+or dried underneath. Solvent-wet paint comes up on a brush or rag no more
+readily than the same paint without it. The thickness limits and the
+evaporation times are estimates, not measurements.
+
+Thinner is new with this engine: a painting started on an older one
+doesn't have it.
 
 ## Brushes and strokes
 
@@ -158,7 +200,7 @@ change:
 | `hatch` | round 2.6 | 5–12 units, nearly straight, side by side, clumped |
 | `glaze` | soft filbert 26 | 120–300 units, light pressure |
 | `scumble` | filbert 9 | 10–20 units, worked back and forth |
-| `blend` | badger 40 | a clean blender, crossing passes top to bottom, inside the mask |
+| `blend` | badger 40 | a clean blender, crossing passes top to bottom, inside the mask. It is wiped clean as it goes, so it lifts paint as well as moving it: one pass takes up about 15% of a thin wet film, three passes about 40% |
 
 | option | meaning |
 |---|---|
@@ -435,8 +477,14 @@ before `ok`. You do not need to print it yourself.
   blends), `"tacky"` (set; it grabs the brush) or `"dry"` (touch-dry).
 
 Each film dries at its own pace, set by its pigments, its thickness and
-its oil. Thin lean paint of fast-drying pigments is touch-dry in a day;
-thick, oily paint of slow pigments can stay open for weeks. Wet paint
+its oil. It is open for the first 30% of its time to touch-dry, setting
+until 60%, then tacky until it is touch-dry. A stroke of lead white or raw
+umber from a loaded broad brush is open for 12 to 14 hours, tacky after
+about a day and touch-dry in under two days. Cobalt blue, Prussian blue
+and burnt sienna are about as fast. Raw sienna, ochres, earths, cadmiums,
+ultramarine and bone black are touch-dry in 3½ to 5 days, madder in about 11.
+Thinner paint dries sooner and thicker paint later: twice a stroke's
+thickness takes 1.6 times as long. Thick, oily paint of slow pigments can stay open for weeks. Wet paint
 under a new stroke comes up into it; paint laid over dry paint sits on
 top of it.
 
@@ -484,12 +532,16 @@ other option, and nothing on the canvas or the clock changes.
 - **Lua 5.5.** Numbers are integers or floats (`7 // 2` is 3, `7 / 2` is
   3.5). Bitwise operators are built in; there is no `unpack` (use
   `table.unpack`). Loop variables are read-only. Don't write `global`
-  declarations (one switches its chunk to strict mode).
+  declarations (one switches its chunk to strict mode). There is no
+  `math.atan2`: `math.atan(y, x)` takes two arguments. `%d` in
+  `string.format` needs an integer (`7.5` is an error): use `%.0f` or
+  `math.floor(x)`. Lists and tables are written with braces:
+  `{1, 2}`, `{x = 1}`, never `[1, 2]` or `{x: 1}`.
 - **`pairs` walks a table in the same order in every session and replay.**
-  Tables keyed by strings, numbers and booleans walk in Lua's order; a
-  table with any other key walks in a fixed order (booleans, numbers,
-  strings, then other keys in the order they were made). For a big list,
-  `ipairs` is faster.
+  Every table walks in a fixed order: booleans, numbers, strings (each
+  ascending), then other keys in the order they were made. (Paintings
+  begun before engine 3 walk tables keyed by strings, numbers and booleans
+  in Lua's order.) For a big list, `ipairs` is faster.
 - **No memory addresses.** A table, function or userdata without
   `__tostring` prints as `table: (hidden)` (its `__name` for the type),
   in `print`, `tostring`, `string.format`'s `%s` and errors alike, and

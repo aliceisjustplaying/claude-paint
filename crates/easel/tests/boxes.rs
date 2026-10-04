@@ -134,8 +134,11 @@ fn a_log_without_a_box_line_is_the_default_box() {
 
 /// A log from round 19 (no box line, the fourteen tubes) replays to the
 /// picture and surface round 19's easel made of it (recorded with r19-base,
-/// 5069814).
+/// 5069814). At the live width it takes about 27 s: `scripts/test --all` runs
+/// it; `scripts/test` runs the same log at 320 px against af49348's release
+/// replay (scripts/tests/old_logs.sh, case r19).
 #[test]
+#[ignore = "slow"]
 fn a_round_19_log_replays_as_before() {
     let dir = base("r19");
     let fixture = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/r19_default_box.lua");

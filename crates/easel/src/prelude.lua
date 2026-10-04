@@ -5,7 +5,9 @@
 -- `id(v)` is the session's creation serial of a table, closure, userdata or
 -- thread (nil for anything else): objects are numbered as Lua allocates them,
 -- so their order is the order the program made them, in every process.
-local id, getmt, getinfo, fail = ...
+-- `canon` (engine 3 on, session.rs `canonical_tables`): every table is walked
+-- in the fixed order below, not only tables with object keys.
+local id, getmt, getinfo, fail, canon = ...
 local rawnext, rawget, type, select, error, tostring = next, rawget, type, select, error, tostring
 local rawload, pcall = load, pcall
 local setmt = setmetatable
@@ -23,6 +25,13 @@ local gsub = string.gsub
 -- to process, and they also move the value keys around in the table. A table
 -- holding any such key is walked in a fixed order instead: booleans, numbers,
 -- strings (each ascending), then objects in the order they were created.
+--
+-- Even keyed by values only, a table's order depends on its layout: the
+-- sizes it grew to and the order its keys went in, which a failed chunk
+-- changes and a rollback can't put back (the entries, yes; the layout, no).
+-- From engine 3 (`canon`) every table is walked in the fixed order, so a
+-- rolled-back table walks as a replay's does and needs no rebuild (heap.lua).
+-- Engine 1 and 2 logs keep Lua's order for such tables: they were painted with it.
 
 -- light C functions (library functions) have no serial: they go by name
 local names = {}
@@ -42,12 +51,14 @@ local function less_bool(a, b) return not a and b end
 
 -- nil for a table walked by Lua's own `next`; else its keys in order
 local function ordered(t)
-  local k = rawnext(t)
-  while k ~= nil do
-    if not rank[type(k)] then break end
-    k = rawnext(t, k)
+  if not canon then
+    local k = rawnext(t)
+    while k ~= nil do
+      if not rank[type(k)] then break end
+      k = rawnext(t, k)
+    end
+    if k == nil then return nil end
   end
-  if k == nil then return nil end
   local groups = { {}, {}, {}, {}, {}, {} }
   local sizes = { 0, 0, 0, 0, 0, 0 }
   local ids, nms = {}, {}
@@ -134,7 +145,8 @@ local function det_pairs(...)
     local f, s, c, z = h(t)
     return f, s, c, z
   end
-  if type(t) ~= "table" then return rawnext, t, nil end
+  -- (from engine 3 Lua's own `next`, which walks in layout order, is handed out nowhere)
+  if type(t) ~= "table" then return canon and det_next or rawnext, t, nil end
   local keys = ordered(t)
   if not keys then return rawnext, t, nil end
   local i = 0

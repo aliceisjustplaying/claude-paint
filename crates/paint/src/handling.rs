@@ -41,6 +41,9 @@ pub struct Handling<'a> {
     /// set, the color field is not
     /// used: the paint is the pile's (`piled`).
     pub pile: Option<(&'a Palette, crate::palette::Mixture, f32)>,
+    /// Share of solvent knifed into that pile (`crate::thinner`; engine 3):
+    /// 0, none.
+    pub thinner: f32,
     /// Where the brush is loaded more or less (multiplies `load`,
     /// evaluated at each stroke's center): a glaze goes on deeper where the
     /// brush carries more.
@@ -157,6 +160,7 @@ impl<'a> Handling<'a> {
             shake: 1.0,
             mix_jitter: 0.08,
             pile: None,
+            thinner: 0.0,
             load_at: None,
             cut_in: None,
             curve: 0.05,
@@ -272,6 +276,11 @@ impl<'a> Handling<'a> {
     /// drying at its tubes' rate. Nothing is aimed or matched.
     pub fn piled(mut self, palette: &'a Palette, pile: crate::palette::Mixture, medium: f32) -> Self {
         self.pile = Some((palette, pile, medium.clamp(0.0, 1.0)));
+        self
+    }
+    /// The pile holds the share `t` of solvent (`crate::thinner`; engine 3).
+    pub fn thinner(mut self, t: f32) -> Self {
+        self.thinner = t;
         self
     }
     /// Cut the region's edges in with `tool` (see `cut_in`).
@@ -407,8 +416,12 @@ impl Canvas {
     /// new ones there: which trips to the palette are reloads and which are
     /// new mixes, in the hand's ledger (`tally`). `work` starts from a
     /// clean palette.
+    ///
+    /// Panics if `hd` is thinned (`Handling::thinner`, which applies to a
+    /// pile, `Handling::piled`) and the canvas's engine is before 3.
     pub fn work_with(&mut self, piles: &mut Piles, mask: &Mask, hd: &Handling, seed: u64) {
         hd.tool.assert_valid();
+        self.assert_thinner_supported(hd.thinner > 0.0 && hd.pile.is_some(), "Canvas::work");
         if let Some(t) = &hd.cut_in {
             t.assert_valid();
         }
@@ -834,6 +847,7 @@ fn finish_plan(cv: &Canvas, hd: &Handling, tool: &Tool, c: (f32, f32), pts: Vec<
         // the pile on the palette, as knifed (its own mixing generator)
         let mut prng = Rng::new(rng.next_u64());
         let paint = pal.remix(pile, hd.mix_jitter, &mut prng).laid(*medium);
+        let paint = if hd.thinner > 0.0 { paint.with_thinner(hd.thinner) } else { paint };
         let load = hd.load * load_k;
         return (rect, Plan { pts, pressure, fade, dip: Some(paint), load, swell: Vec::new(), passage: 0, fresh: false, id: None, want: pile.color });
     }
@@ -1461,11 +1475,12 @@ mod tests {
     /// A long hand-timed pass ages as it goes: its first slices can set (and
     /// bake into the dry film) before the look-and-fill. The look must see
     /// that paint as laid, not as a gap, so the pass lays at most about 1.5×
-    /// the fill dabs it does with hand time off.
+    /// the fill dabs it does with hand time off. (Engine 2, whose paint sets
+    /// within a pass of a few hours.)
     #[test]
     fn a_long_timed_pass_fills_only_its_gaps() {
         let run = |hand: Option<f32>, fill: bool| {
-            let mut c = Canvas::new(160, 1.4, crate::color::hex("#c8b89a")).with_size_mm(440.0);
+            let mut c = Canvas::new(160, 1.4, crate::color::hex("#c8b89a")).with_size_mm(440.0).with_engine(2);
             c.set_hand_time(hand);
             let all = Mask::from_fn(c.frame(), |_, _| 1.0);
             // thin, lean paint, one reload a stroke: hours of hand time

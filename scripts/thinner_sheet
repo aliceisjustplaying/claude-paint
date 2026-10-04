@@ -1,0 +1,70 @@
+#!/usr/bin/env bash
+# A sheet of thinned paint over the black-and-white card (notes/thinner/):
+# raw sienna and lead white, unthinned and thinned 0.5, at loads 0.1, 0.3
+# and 0.6, after the solvent has gone (40 min); and raw sienna thinned 0.5
+# at load 0.3, 0, 2, 5 and 15 minutes after its pass. Each panel is a 256 px
+# canvas (`easel run --width 256`), JPEG. A picture to look at: the
+# measurements are the tests' (notes/thinner/RESULTS.md).
+#
+#   scripts/thinner_sheet <release easel> <out.jpg>
+#
+# A heavy job: run it under lockrun (60 s once built). Needs ImageMagick and
+# a font for the labels (THINNER_SHEET_FONT, else the first of a few usual
+# paths; ImageMagick finds none of its own without fontconfig).
+set -euo pipefail
+[ $# -eq 2 ] || { echo "usage: thinner_sheet <easel> <out.jpg>" >&2; exit 2; }
+easel=$1
+out=$2
+work=$(mktemp -d "${TMPDIR:-/tmp}/thinner-sheet.XXXXXX")
+trap 'rm -rf "$work"' EXIT
+unset EASEL_BOX
+font=${THINNER_SHEET_FONT:-}
+for f in /Library/Fonts/Arial\ Unicode.ttf /System/Library/Fonts/Supplemental/Arial.ttf /usr/share/fonts/truetype/dejavu/DejaVuSans.ttf; do
+  [ -z "$font" ] && [ -f "$f" ] && font=$f
+done
+[ -n "$font" ] || { echo "thinner_sheet: no font for the labels; set THINNER_SHEET_FONT" >&2; exit 2; }
+
+panel() { # name, pile parts, thinner, load, minutes after the pass
+  local name=$1 parts=$2 t=$3 load=$4 wait=$5 th=""
+  [ "$t" != 0 ] && th=", thinner=$t"
+  cat >"$work/$name.lua" <<EOF
+-- easel session "$name": a painting replayed chunk by chunk.
+-- Each "--@ chunk" line starts one chunk as it was run at the easel.
+--@ box inness
+--@ engine 3
+
+--@ chunk 1
+canvas{size=400, aspect=1, linen=15, seed=5, ground={{pile={{"lead white", 3}, {"raw umber", 1}}, um=90, apply="knife"}}}
+
+--@ chunk 2
+local k, w = pile{{"bone black", 1}}, pile{{"lead white", 1}}
+work(rect(0, 250, 1000, 250), {hand="body", pile=k, load=1, coverage=5, clip=true, seed=1})
+work(rect(0, 500, 1000, 250), {hand="body", pile=w, load=1, coverage=5, clip=true, seed=2})
+wait(60 * 24 * 60)
+
+--@ chunk 3
+work(rect(200, 150, 600, 700), {hand="body", pile=pile{$parts$th}, load=$load, clip=true, seed=11})
+wait($wait)
+EOF
+  "$easel" run "$work/$name.lua" --width 256 --out "$work/$name.png" >/dev/null 2>"$work/$name.err" || { cat "$work/$name.err" >&2; exit 1; }
+  magick "$work/$name.png" -gravity south -background '#222' -fill '#ddd' -font "$font" -pointsize 13 -splice 0x18 -annotate +0+2 "$6" "$work/$name.l.png"
+}
+
+RS='{"raw sienna", 1}'
+LW='{"lead white", 1}'
+rows=()
+for spec in "rs0|$RS|0|raw sienna" "rs5|$RS|0.5|raw sienna, thinner 0.5" "lw0|$LW|0|lead white" "lw5|$LW|0.5|lead white, thinner 0.5"; do
+  IFS='|' read -r id parts t label <<<"$spec"
+  for load in 0.1 0.3 0.6; do
+    panel "${id}_$load" "$parts" "$t" "$load" 40 "$label, load $load"
+  done
+  magick "$work/${id}_0.1.l.png" "$work/${id}_0.3.l.png" "$work/${id}_0.6.l.png" +append "$work/row_$id.png"
+  rows+=("$work/row_$id.png")
+done
+for m in 0 2 5 15; do
+  panel "min_$m" "$RS" 0.5 0.3 "$m" "raw sienna 0.5, load 0.3, $m min"
+done
+magick "$work/min_0.l.png" "$work/min_2.l.png" "$work/min_5.l.png" "$work/min_15.l.png" +append "$work/row_min.png"
+rows+=("$work/row_min.png")
+magick "${rows[@]}" -background '#222' -gravity west -append -quality 85 "$out"
+echo "thinner_sheet: $out"

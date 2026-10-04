@@ -1,0 +1,149 @@
+# scripts/test_thinner_acceptance --quick, at the final review's fixes (commit after de5557c; frozen tests = 48be56a), via lockrun --timeout 600; exit 3, 100.2 s in lockrun
+lockrun: job 5622a781 started (process group 45056, timeout 600 s, log /tmp/lockrun-<uid>/logs/20261004-065443-5622a781.log)
+== check 2: cargo build --release -p easel, then scripts/thinner_check2
+   Compiling libc v0.2.189
+   Compiling shlex v2.0.1
+   Compiling find-msvc-tools v0.1.13
+   Compiling pkg-config v0.3.34
+   Compiling cfg-if v1.0.5
+   Compiling parking_lot_core v0.9.12
+   Compiling either v1.18.0
+   Compiling scopeguard v1.2.0
+   Compiling smallvec v1.16.1
+   Compiling paint v0.1.0 (~/src/a/claude-paint-thinner2/crates/paint)
+   Compiling memchr v2.8.3
+   Compiling rustc-hash v2.1.3
+   Compiling easel v0.1.0 (~/src/a/claude-paint-thinner2/crates/easel)
+   Compiling cc v1.4.7
+   Compiling lock_api v0.4.14
+   Compiling rayon v1.12.0
+   Compiling bstr v1.13.1
+   Compiling lua-src v551.0.2
+   Compiling which v8.0.6
+   Compiling luajit-src v210.7.3+1ee778a
+   Compiling parking_lot v0.12.5
+   Compiling mlua-sys v0.12.0
+   Compiling mlua v0.12.1
+    Finished `release` profile [optimized] target(s) in 42.78s
+== check 2, part 1: compare_build.sh --added-zero
+body: state equal on every baseline field (EQUAL (0 of 2 chunks differ))
+  png same as af49348's; printed output same; state digests different
+overlap: state equal on every baseline field (EQUAL (0 of 3 chunks differ))
+  png same as af49348's; printed output same; state digests different
+pickup: state equal on every baseline field (EQUAL (0 of 4 chunks differ))
+  png same as af49348's; printed output same; state digests different
+rag: state equal on every baseline field (EQUAL (0 of 8 chunks differ))
+  png same as af49348's; printed output same; state digests different
+stroke: state equal on every baseline field (EQUAL (0 of 3 chunks differ))
+  png same as af49348's; printed output same; state digests different
+wait: state equal on every baseline field (EQUAL (0 of 7 chunks differ))
+  png same as af49348's; printed output same; state digests different
+compare_build: EQUAL to the af49348 baseline on every field it has
+== check 2, part 2: the scenes with thinner=0 on every pile
+body (thinner=0): state equal on every baseline field (EQUAL (0 of 2 chunks differ))
+  png same as af49348's
+  printed output same (not a criterion)
+overlap (thinner=0): state equal on every baseline field (EQUAL (0 of 3 chunks differ))
+  png same as af49348's
+  printed output same (not a criterion)
+pickup (thinner=0): state equal on every baseline field (EQUAL (0 of 4 chunks differ))
+  png same as af49348's
+  printed output same (not a criterion)
+rag (thinner=0): state equal on every baseline field (EQUAL (0 of 8 chunks differ))
+  png same as af49348's
+  printed output same (not a criterion)
+stroke (thinner=0): state equal on every baseline field (EQUAL (0 of 3 chunks differ))
+  png same as af49348's
+  printed output same (not a criterion)
+wait (thinner=0): state equal on every baseline field (EQUAL (0 of 7 chunks differ))
+  png same as af49348's
+  printed output same (not a criterion)
+== check 2, part 3: the dumps declare the solvent
+thinner_dump_fields: 54 chunks declare the solvent (5640 bristle values, 16 rag values)
+== check 2, part 4: a thinned scene dumps nonzero solvent
+thinner_dump_fields: solvent shown: 1 chunks of wet.solvent, 120 bristle values, 1 rag values nonzero
+thinner_dump_fields: 2 chunks declare the solvent (120 bristle values, 1 rag values)
+check 2: PASS
+== check 2: exited 0 after 46 s
+== pigments: cargo test --release -p paint --test thinner_pigments -- --exact (1 tests)
+   Compiling paint v0.1.0 (~/src/a/claude-paint-thinner2/crates/paint)
+    Finished `release` profile [optimized] target(s) in 13.23s
+     Running tests/thinner_pigments.rs (target/release/deps/thinner_pigments-a25488fe715b8154)
+
+running 1 test
+test c13_every_pigment_value_is_af49348s ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 2 filtered out; finished in 0.00s
+
+== pigments: cargo exited 0 after 14 s
+== check13b: cargo test --release -p paint --test thinner_pigments -- --exact (1 tests)
+    Finished `release` profile [optimized] target(s) in 0.02s
+     Running tests/thinner_pigments.rs (target/release/deps/thinner_pigments-a25488fe715b8154)
+
+running 1 test
+test c13_burnt_sienna_shows_the_card_at_least_as_well_as_raw_sienna ... FAILED
+
+failures:
+
+---- c13_burnt_sienna_shows_the_card_at_least_as_well_as_raw_sienna stdout ----
+raw sienna: hiding 0.4 (contrast ratio of one coat), scattering 0.29607835 per coat, masstone luminance 0.17352512
+burnt sienna: hiding 0.45 (contrast ratio of one coat), scattering 0.19887283 per coat, masstone luminance 0.07967474
+card contrast showing: raw sienna 17.91%, burnt sienna 9.85% (films differ by at most 0 µm; raw's mean 10.071717 µm)
+
+thread 'c13_burnt_sienna_shows_the_card_at_least_as_well_as_raw_sienna' (6006977) panicked at crates/paint/tests/thinner_pigments.rs:119:5:
+burnt sienna shows 9.85% of the card, raw sienna 17.91%: Field/Salter (§155) has burnt the more transparent
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    c13_burnt_sienna_shows_the_card_at_least_as_well_as_raw_sienna
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 2 filtered out; finished in 0.92s
+
+error: test failed, to rerun pass `-p paint --test thinner_pigments`
+== check13b: cargo exited 101 after 1 s
+== paint: cargo test --release -p paint --test thinner_physics -- --exact (12 tests)
+   Compiling paint v0.1.0 (~/src/a/claude-paint-thinner2/crates/paint)
+    Finished `release` profile [optimized] target(s) in 1.39s
+     Running tests/thinner_physics.rs (target/release/deps/thinner_physics-9e578aac330da38d)
+
+running 12 tests
+test c04_control_a_wholly_unthinned_scene_balances ... ok
+test c19_the_same_paint_with_more_or_less_solvent_looks_the_same ... ok
+test c06_more_pressure_lays_more_paint_up_to_the_stroke_limit ... ok
+test c04_a_stroke_and_a_wipe_account_for_all_paint_and_solvent ... ok
+test c08_a_hundredth_of_thinner_is_a_small_change ... ok
+test c10_a_solvent_wet_film_spreads_more_than_after_the_solvent_has_gone ... ok
+test c15_solvent_does_not_slow_the_oil_cure ... ok
+test c14_more_points_on_the_same_path_lay_the_same_paint_and_one_stroke_shares_one_limit ... ok
+test c17_a_wait_split_on_the_minute_grid_is_exact_and_off_it_within_1e4 ... ok
+test c05_an_emptying_brush_lays_less_and_a_fuller_load_lasts_farther ... ok
+test c09_the_solvent_evaporates_and_the_film_loses_its_volume ... ok
+test c16_brush_rag_and_spreading_carry_solvent_in_the_local_ratio ... ok
+
+test result: ok. 12 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 1.58s
+
+== paint: cargo exited 0 after 3 s
+== easel: cargo test --release -p easel --bin easel -- --exact (8 tests)
+   Compiling easel v0.1.0 (~/src/a/claude-paint-thinner2/crates/easel)
+    Finished `release` profile [optimized] target(s) in 33.51s
+     Running unittests src/main.rs (target/release/deps/easel-00eda35bf27fd053)
+
+running 8 tests
+test thinner_tests::c03_af49348_engine_3_logs_still_replay ... ok
+test thinner_tests::c03_af49348_paintck8_saves_are_refused_naming_the_old_version ... ok
+test thinner_tests::c03_a_log_keeps_its_engine ... ok
+test thinner_tests::c03_engines_1_and_2_have_no_thinner_and_engine_3_has ... ok
+test thinner_tests::c11_a_save_mid_evaporation_reopens_to_the_same_state_and_goes_on_the_same ... ok
+test thinner_tests::c18_a_failed_chunk_after_thinned_paint_takes_everything_back ... ok
+test thinner_tests::c07_two_overlapping_thinned_passes_leave_more_paint_than_one ... ok
+test thinner_tests::c12_the_same_log_saves_the_same_bytes_on_one_thread_and_four ... ok
+
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 75 filtered out; finished in 1.93s
+
+== easel: cargo exited 0 after 36 s
+
+thinner acceptance --quick: 22 of 22 required tests passed (logs: $TMPDIR/thinner-acceptance.DEZdzb)
+  EXPECTED FAIL (pre-existing; user decision, ACCEPTANCE.md check 13): c13_burnt_sienna_shows_the_card_at_least_as_well_as_raw_sienna
+thinner acceptance --quick: NOT ALL GREEN: every other required test passed; only check 13 (b)'s pre-existing failure remains
+lockrun: finished: exit 3 in 100.2 s; log /tmp/lockrun-<uid>/logs/20261004-065443-5622a781.log

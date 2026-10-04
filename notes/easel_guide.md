@@ -365,6 +365,9 @@ leaves streaks along its path and a blot a crumpled patch. During a wipe,
 a little freshly lifted paint smears back along the lightly pressed edges
 and trailing end.
 
+Fresh paint at the face's surface can smear into the next wipe too. It
+gradually soaks into the cloth; refolding turns that paint inward.
+
 A rag dipped in spirits (`r:dip`, 0..1) lifts wet paint more readily and
 reaches farther into the hollows. It works gradually: wipe after wipe
 takes the paint nearly to the ground. Its folds still leave streaks.

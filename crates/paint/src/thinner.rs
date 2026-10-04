@@ -51,8 +51,8 @@
 //!   the publisher dates it July 1963, https://doi.org/10.1007/BF03184629,
 //!   while some secondary sources give 1962; notes/research/oil_paint_physics.md).
 //!   The engine uses a diffusion of the wet surface with one mobility, the
-//!   ESTIMATE `SPREAD_MM2_MIN` at thinner 0.5, that leaves a wetting film
-//!   (`WET_FILM_UM`) where it runs off. Matching Orchard's decay at one
+//!   ESTIMATE `SPREAD_MM2_MIN` at thinner 0.5, slowed in a thin film as
+//!   Orchard's h³ says (`WET_FILM_UM`). Matching Orchard's decay at one
 //!   wavelength, D = σh³(2π/λ)² / 3η, with these inputs, all ESTIMATES
 //!   (none measured for this paint): surface tension σ = 0.03 N/m, film
 //!   h = 10 µm, viscosity η = 0.1 Pa·s (paint thinned half; the note gives
@@ -110,11 +110,23 @@ pub fn evaporation_tau_min(paint_um: f32) -> f64 {
 /// Mobility (mm²/min) of a wet film half solvent: how fast it levels.
 /// ESTIMATE (Orchard 1963, see the module notes).
 pub const SPREAD_MM2_MIN: f32 = 0.06;
-/// The flow doesn't drain a pixel below this much liquid (µm): a liquid
-/// that wets the paint under it leaves a film on the weave's tops, it
-/// doesn't run off them bare (Orchard's leveling rate goes as the film's
-/// thickness cubed, so the last of a film barely moves). ESTIMATE.
+/// A thin film flows slowly: Orchard's leveling rate goes as the film's
+/// thickness h cubed, so the mobility is scaled by h³ / (h³ +
+/// `WET_FILM_UM`³): half at this much liquid (µm), a ninth at half of it,
+/// and all but 1% from 10 µm (the thickness `SPREAD_MM2_MIN` was estimated
+/// at) up. The last of a film barely moves, but no thickness stops it
+/// (HANDOVER 6.2 (3): until 2026-10-04 it was a hard floor the flow never
+/// drained below, so one stroke at thinner 0.75 or more never flowed).
+/// ESTIMATE.
 pub const WET_FILM_UM: f32 = 2.0;
+
+/// How much of a film's mobility its thickness `h_um` (liquid, µm) leaves
+/// it (`WET_FILM_UM`).
+#[inline]
+fn thin_film(h_um: f32) -> f32 {
+    let h3 = h_um.max(0.0).powi(3);
+    h3 / (h3 + WET_FILM_UM.powi(3))
+}
 
 /// Mobility of a film whose liquid holds the share `phi` of solvent: 0
 /// without solvent, `SPREAD_MM2_MIN` at one half, more the thinner it is
@@ -207,7 +219,7 @@ impl Canvas {
                 return 0.0;
             }
             let fl = if timed { crate::drying::fluid(wet.clock.px[i].cure) } else { 1.0 };
-            spread_mm2_min(s / (v + s)) * fl
+            spread_mm2_min(s / (v + s)) * fl * thin_film((v + s) * COAT_UM)
         };
         // the largest mobility, and the box of the pixels that have any
         // (only they can give liquid; each substep reaches one pixel further)
@@ -271,10 +283,8 @@ impl Canvas {
                             }
                         }
                     }
-                    // (down to the wetting film, no further)
-                    let avail = (l - WET_FILM_UM / COAT_UM).max(0.0);
-                    if sum > MAX_OUT * avail {
-                        let f = if sum > 0.0 { MAX_OUT * avail / sum } else { 0.0 };
+                    if sum > MAX_OUT * l {
+                        let f = MAX_OUT * l / sum;
                         for v in &mut q {
                             *v *= f;
                         }
@@ -547,6 +557,30 @@ mod tests {
             let t = std::time::Instant::now();
             d.wait(m);
             println!("wait({m}): {:.2} s", t.elapsed().as_secs_f64());
+        }
+    }
+
+
+    /// HANDOVER 6.2 (3): one stroke at thinner 0.5, 0.75 and 0.9 on a flat
+    /// ground, then five minutes: the share of its paint the flow moves.
+    /// `cargo test --release -p paint --lib thinner::tests::single_strokes -- --ignored --nocapture`
+    #[test]
+    #[ignore]
+    fn single_strokes() {
+        for t in [0.5f32, 0.75, 0.9] {
+            let mut c = Canvas::new(480, 1.0, hex("#d8cdb8")).with_engine(3);
+            c.prime(hex("#b9a98c"), 0.9, 40.0, 0.6, 0.0, 7);
+            let mut h = Held::new(Tool::hog_flat(40.0), 10);
+            h.load(sienna(t), 0.9);
+            c.drag(&mut h, &Gesture::new(vec![(250.0, 500.0), (750.0, 503.0)]).pressure(0.85, 0.85), None);
+            let before = c.wet.vol.clone();
+            let liquid: Vec<f32> = (0..before.len()).map(|i| before[i] * crate::surface::COAT_UM + c.wet.solv.get(i).copied().unwrap_or(0.0)).filter(|&l| l > 0.01).collect();
+            let mut l = liquid.clone();
+            l.sort_by(f32::total_cmp);
+            c.wait(5.0);
+            let moved: f64 = c.wet.vol.iter().zip(&before).map(|(a, b)| (a - b).abs() as f64).sum::<f64>() / 2.0;
+            let all: f64 = before.iter().map(|&v| v as f64).sum();
+            println!("thinner {t}: wet film median {:.2} µm, p90 {:.2}; 5 min moved {:.4}% of the paint", l[l.len() / 2], l[l.len() * 9 / 10], 100.0 * moved / all);
         }
     }
 

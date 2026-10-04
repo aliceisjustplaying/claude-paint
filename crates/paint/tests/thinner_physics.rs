@@ -440,10 +440,11 @@ fn c15_solvent_does_not_slow_the_oil_cure() {
 ///   (4 px) had before, times the evaporation factors that neighborhood's
 ///   thicknesses give (1e-4): spreading mixes liquids, it doesn't separate
 ///   paint from solvent;
-/// - the thin film's pixels beside the thick one that gained ≥ 1% paint
-///   (at least 20) end with a higher ratio, after evaporation is taken
-///   back, than they had: they took in the thick film's liquid, solvent
-///   and all.
+/// - the low-ratio film's pixels at the boundary (chosen before the
+///   minute: ratio ≤ 0.2, ≥ 0.5 µm of paint, a pixel of ratio ≥ 0.5 within
+///   2 px) that gained ≥ 1% paint (at least 20) end with a higher ratio,
+///   after evaporation is taken back, than they had: they took in the
+///   thick film's liquid, solvent and all.
 #[test]
 fn c16_brush_rag_and_spreading_carry_solvent_in_the_local_ratio() {
     let ratios = |c: &Canvas, r: (f32, f32, f32, f32)| -> Vec<(usize, f32)> {
@@ -482,18 +483,19 @@ fn c16_brush_rag_and_spreading_carry_solvent_in_the_local_ratio() {
         }
         assert!(n >= 100);
     }
-    // (3) one minute of spreading across two ratios. The ratio-1 film is
-    // eight thinned-0.5 passes (each stroke's ceiling keeps each pass
-    // thin), then the ratio-1/9 film is one light pass (thinner 0.1, load
-    // 0.05, pressure 0.3) beside it. The setup's precondition, asserted:
-    // the ratio-1 film is the thicker (its mean wet film just left of the
-    // boundary at least 1.5× the ratio-1/9 film's just right of it), so its
-    // liquid runs into the other
+    // (3) one minute of spreading across two ratios. The ratio-1/9 film is
+    // one light pass (thinner 0.1, load 0.05, pressure 0.3) from x 400 to
+    // 850; then the ratio-1 film, eight thinned-0.5 passes (each stroke's
+    // ceiling keeps each pass thin) from 150 to 500, over the low film's
+    // start, so the ratio-1 film ends in an edge with untouched low-ratio
+    // paint beside it. The setup's precondition, asserted: the ratio-1 film
+    // is the thicker (its mean wet film left of the edge at least 1.5× the
+    // other's right of it), so its liquid runs into the other
     let mut c = smooth_canvas(300);
+    patch_with(&mut c, raw_sienna().with_thinner(0.1), 0.05, 0.3, (400.0, 850.0), (300.0, 700.0), 300);
     for k in 0..8 {
         thinned_patch(&mut c, raw_sienna(), 0.5, (150.0, 500.0), (300.0, 700.0), 200 + 20 * k);
     }
-    patch_with(&mut c, raw_sienna().with_thinner(0.1), 0.05, 0.3, (505.0, 850.0), (300.0, 700.0), 300);
     let wet_mean = |c: &Canvas, r: (f32, f32, f32, f32)| -> f64 { mean(&in_rect(c, r).iter().map(|&(_, x, y)| c.wet_um(x, y) + c.solvent_um(x, y)).collect::<Vec<_>>()) };
     let (thick_mean, thin_mean) = (wet_mean(&c, (400.0, 350.0, 500.0, 650.0)), wet_mean(&c, (540.0, 350.0, 640.0, 650.0)));
     println!("spreading setup: ratio-1 film {thick_mean} µm, ratio-1/9 film {thin_mean} µm");
@@ -538,16 +540,24 @@ fn c16_brush_rag_and_spreading_carry_solvent_in_the_local_ratio() {
         checked += 1;
     }
     assert!(checked >= 1000, "{checked} pixels checked");
-    let f = c.frame();
+    // the low-ratio pixels at the boundary, chosen from the state before
+    // the minute: ratio ≤ 0.2 with ≥ 0.5 µm of paint, and a pixel of ratio
+    // ≥ 0.5 within 2 px; of those, the ones that gained ≥ 1% paint
+    let ratio0 = |j: usize| -> Option<f32> { if h0[j] >= 0.1 && s0[j] > 0.0 { Some(s0[j] / h0[j]) } else { None } };
     let mut rise = Vec::new();
     for i in 0..h1.len() {
-        let x = f.ux(i % f.w);
-        if !(505.0..535.0).contains(&x) || h0[i] < 0.5 || h1[i] < 1.01 * h0[i] || s0[i] <= 0.0 || s1[i] <= 0.0 {
+        if h0[i] < 0.5 || !ratio0(i).is_some_and(|q| q <= 0.2) {
+            continue;
+        }
+        if !around(&c, i, 2).into_iter().any(|j| ratio0(j).is_some_and(|q| q >= 0.5)) {
+            continue;
+        }
+        if h1[i] < 1.01 * h0[i] || s1[i] <= 0.0 {
             continue;
         }
         rise.push((s1[i] as f64 / h1[i] as f64 / e(h1[i]), s0[i] as f64 / h0[i] as f64));
     }
-    assert!(rise.len() >= 20, "the thick film spread into the thin one: {} thin-film pixels gained ≥ 1% paint", rise.len());
+    assert!(rise.len() >= 20, "the thick film spread into the thin one: {} low-ratio pixels at the boundary gained ≥ 1% paint", rise.len());
     let (after, before) = (rise.iter().map(|r| r.0).sum::<f64>() / rise.len() as f64, rise.iter().map(|r| r.1).sum::<f64>() / rise.len() as f64);
     assert!(after > 1.01 * before, "the thin film's ratio where the thick film's liquid came in: {before} before, {after} after (evaporation taken back)");
 }

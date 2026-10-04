@@ -59,6 +59,8 @@ struct Snap {
     heap: Table,
     brushes: Vec<(Rc<RefCell<Held>>, Held)>,
     knives: Vec<(Rc<RefCell<paint::Knife>>, paint::Knife)>,
+    /// The rags in the hand, as the brushes.
+    rags: Vec<(Rc<RefCell<paint::rag::Rag>>, paint::rag::Rag)>,
 }
 
 pub struct Session {
@@ -204,7 +206,11 @@ impl Session {
             let h = k.borrow().clone();
             (k, h)
         }).collect();
-        Ok(Snap { canvas: s.canvas.clone(), style: s.style.clone(), setup: s.setup.clone(), seed: s.seed, clock: s.clock, clock0: s.clock0, hand: s.hand.clone(), view: s.view.clone(), heap, brushes, knives })
+        let rags = s.live_rags().into_iter().map(|r| {
+            let v = *r.borrow();
+            (r, v)
+        }).collect();
+        Ok(Snap { canvas: s.canvas.clone(), style: s.style.clone(), setup: s.setup.clone(), seed: s.seed, clock: s.clock, clock0: s.clock0, hand: s.hand.clone(), view: s.view.clone(), heap, brushes, knives, rags })
     }
 
     /// Put everything back as it was at `snap`. Returns how many Lua tables
@@ -218,6 +224,9 @@ impl Session {
         }
         for (k, h) in &snap.knives {
             *k.borrow_mut() = h.clone();
+        }
+        for (r, v) in &snap.rags {
+            *r.borrow_mut() = *v;
         }
         let mut s = self.st.borrow_mut();
         s.canvas = snap.canvas.clone();

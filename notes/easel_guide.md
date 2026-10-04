@@ -8,7 +8,8 @@ dries on a clock, and layers combine by Kubelka–Munk optics.
 Three things hold for every session:
 
 - **Every chunk that runs stays on the canvas.** There is no undo. To
-  change something, paint over it, or lift wet paint off with a brush.
+  change something, paint over it, or lift wet paint off with a brush or
+  a rag.
 - **A chunk that stops with an error changes nothing.** The canvas, your
   variables, the paint on your brushes and the clock are as they were
   before it, and it isn't written to the log.
@@ -360,6 +361,54 @@ hollows. Soft leads lay darker, glossier lines, hard ones pale silver
 lines. The eraser lifts most of a line, more from the tops than the
 hollows, and leaves a ghost. Once paint has gone over the drawing it is
 sealed: thin paint lets it show through, body paint hides it.
+
+## The rag
+
+```lua
+r = rag()                                -- a clean cotton rag bunched into a pad, about 40 mm across
+r = rag{width=<units>}
+r:wipe(m, {pressure=0.5, angle=<radians>, passes=1, refold=<load>})   -- wiped over a mask
+r:wipe(pts, {pressure={0.4, 0.8}})       -- one wipe along a path
+r:blot(x, y, {pressure=0.6})             -- pressed straight down and lifted off
+r:refold()                               -- a cleaner, dry part of the cloth turned outward
+r:dip(0.5)                               -- the part in use dipped into spirits, 0..1
+print(r)                                 -- rag(width <units>, load <0..1>); also r.load, r.soaked, r.damp, r.fold
+```
+
+A rag lifts open paint. The cloth rests on the tops of the weave and of
+the paint, and reaches into the hollows as it is pressed harder
+(`pressure` 0..1): paint comes off the tops first and stays longer in the
+hollows, and a thin stain of the color always stays. Its folds and creases
+touch unevenly, so a wipe leaves streaks along its path and a blot a
+crumpled patch. During a wipe, a little freshly lifted paint smears back
+along the lightly pressed edges and trailing end.
+
+A rag dipped in spirits (`r:dip`, 0..1) lifts wet paint more readily and
+reaches farther into the hollows. Its folds still leave streaks. Dampness
+(`r.damp`) halves every three minutes of painting time; a refold turns out
+a dry part, and another dip wets it again.
+
+What it lifts soaks into the cloth. `r.load` is how loaded the part in use
+is (0 clean, 1 full): the more loaded, the less it lifts. `r:refold()`
+turns a cleaner part outward, but no part is cleaner than what has soaked
+through the whole cloth (`r.soaked`, 0..1) leaves it; `rag()` takes a
+fresh one. These numbers can be read, not set. Over a mask, `refold=`
+refolds whenever the load passes that value.
+
+Over a mask, `wipe` lays wipes side by side across it in `angle`'s
+direction, back and forth, each starting and stopping a little inside the
+mask. The pad's soft edge reaches the mask's edge, and in places past it:
+the rag isn't clipped to the mask. `passes` goes over it again, each time
+a little turned. `seed=` fixes the cloth's folds.
+
+**What it can't reach.** It lifts only open paint, and less the further
+the paint has set: paint that is `"setting"` comes away slowly, and paint
+past its gel point (`"tacky"` or `"dry"` under `drying(x, y)`) doesn't come
+off at all. Paint laid over a set film lifts down to that film.
+
+Hand time: a wipe takes the time to bring the pad down and drag it, at
+about 150 mm a second; a blot about a second; a refold 3 seconds; a dip
+2.5 seconds; a fresh rag 5 seconds.
 
 ## Solids, light and space
 

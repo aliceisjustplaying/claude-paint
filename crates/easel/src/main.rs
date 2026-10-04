@@ -1329,8 +1329,9 @@ use save::fnv1a;
 ///   the engine version. 0 before `canvas{}`.
 /// - `brushes`: FNV-1a-64 of the live held brushes' `Debug` text, one a line,
 ///   in the order they were made: tool and every bristle (load, pigment mix,
-///   bend). `nbrushes` counts them (a brush Lua has dropped counts until it
-///   is collected).
+///   bend), then the rags in the hand (`paint::rag::Rag`), each on its own
+///   line. `nbrushes` counts the brushes (a brush Lua has dropped counts
+///   until it is collected).
 /// - `studio`: FNV-1a-64 of the studio's seed, clocks, chunk and call
 ///   counters, `canvas{}` arguments, the piles on the palette and the
 ///   chunk's RNG, as `Debug` text.
@@ -1354,7 +1355,9 @@ fn state_digest_line(s: &Session, n: usize, secs: f64) -> String {
         None => 0,
     };
     let brushes: Vec<String> = st.live_brushes().iter().map(|b| format!("{:?}", b.borrow())).collect();
-    let brushes_h = fnv1a(brushes.join("\n").as_bytes());
+    // the rags in the hand after them (none: the same digest as before rags)
+    let rags: Vec<String> = st.live_rags().iter().map(|r| format!("{:?}", r.borrow())).collect();
+    let brushes_h = fnv1a(brushes.iter().chain(&rags).cloned().collect::<Vec<_>>().join("\n").as_bytes());
     let studio = format!("seed={} clock={:?} clock0={:?} chunk={} calls={} setup={:?} piles={:?} rng={:?}", st.seed, st.clock, st.clock0, st.chunk, st.calls, st.setup, st.hand.piles, st.rng);
     let studio_h = fnv1a(studio.as_bytes());
     // (knives came with engine 4: a painting without one keeps the line it had)

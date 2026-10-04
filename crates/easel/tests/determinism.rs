@@ -135,3 +135,37 @@ for i = 1, 12 do b:stroke({{60 + 70 * i, 150}, {90 + 70 * i, 40}}) end
     // the wait and the brush changed the canvas
     assert!(a[0][8..30] != a[1][8..30] && a[1][8..30] != a[2][8..30], "{a:?}");
 }
+
+/// The rag (a wipe over a region with refolds, a wipe along a path, a blot)
+/// paints the same picture on every replay and at any thread count, its
+/// load printed the same.
+#[test]
+fn the_rag_replays_the_same() {
+    let program = format!(
+        r#"--@ engine 3
+
+--@ chunk 1
+{CANVAS}
+--@ chunk 2
+p = pile{{{{"lead white", 4}}, {{"smalt", 2}}, {{"Prussian blue", 0.2}}}}
+work(rect(0, 0, 1000, 470), {{hand="broad", pile=p, angle=0, coverage=2.5}})
+r = rag()
+r:wipe(ellipse(300, 250, 160, 80), {{pressure=0.6, angle=0.1, passes=2, refold=0.5}})
+--@ chunk 3
+print(wait(40))
+r:wipe({{{{600, 150}}, {{750, 190}}, {{900, 170}}}}, {{pressure={{0.3, 0.8, 0.5}}}})
+r:refold()
+r:blot(700, 380, {{pressure=0.9}})
+print(r, r.load, r.soaked, r.fold)
+"#
+    );
+    let src = dir().join("rag.lua");
+    std::fs::write(&src, program).unwrap();
+    let (o1, p1) = replay(&src, Some(1), "rag-1");
+    let (o4, p4) = replay(&src, Some(4), "rag-4");
+    let (o4b, p4b) = replay(&src, Some(4), "rag-4b");
+    assert!(o1 == o4 && o4 == o4b, "{o1}\n{o4}");
+    assert!(p1 == p4 && p4 == p4b, "the pictures differ between replays");
+    assert!(o1.contains("rag(width 91, load 0."), "{o1}");
+}
+

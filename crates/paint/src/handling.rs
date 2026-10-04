@@ -416,8 +416,12 @@ impl Canvas {
     /// new ones there: which trips to the palette are reloads and which are
     /// new mixes, in the hand's ledger (`tally`). `work` starts from a
     /// clean palette.
+    ///
+    /// Panics if `hd` is thinned (`Handling::thinner`, which applies to a
+    /// pile, `Handling::piled`) and the canvas's engine is before 3.
     pub fn work_with(&mut self, piles: &mut Piles, mask: &Mask, hd: &Handling, seed: u64) {
         hd.tool.assert_valid();
+        self.assert_thinner_supported(hd.thinner > 0.0 && hd.pile.is_some(), "Canvas::work");
         if let Some(t) = &hd.cut_in {
             t.assert_valid();
         }

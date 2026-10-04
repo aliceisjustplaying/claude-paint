@@ -1,0 +1,15 @@
+# speed's scripts/tests/old_logs.sh, run read-only from the speed worktree against this build's target/release/easel, at the final review's fixes (commit after de5557c; frozen tests = 48be56a), via lockrun --timeout 600
+lockrun: job 1e786a3b started (process group 53295, timeout 600 s, log /tmp/lockrun-<uid>/logs/20261004-070225-1e786a3b.log)
+old_logs: engine1_tiny ok (engine1_tiny.lua at 160 px)
+old_logs: studio_6399ad ok (studio_6399ad.first3.lua at 128 px)
+old_logs: studio_db6324 ok (studio_db6324.first3.lua at 128 px)
+old_logs: easel3_free ok (easel3_free.first3.lua at 128 px)
+old_logs: easel3_green ok (easel3_green.first3.lua at 128 px)
+old_logs: easel3_near ok (easel3_near.first2.lua at 128 px)
+old_logs: easel4_free ok (easel4_free.first3.lua at 128 px)
+old_logs: easel4_green ok (easel4_green.first3.lua at 128 px)
+old_logs: easel4_near ok (easel4_near.first3.lua at 128 px)
+old_logs: r19 ok (../r19_default_box.lua at 320 px)
+old_logs: legacy_tiny ok (legacy_tiny.lua at 128 px)
+old_logs: all 11 cases replay as af49348 did
+lockrun: finished: exit 0 in 5.5 s; log /tmp/lockrun-<uid>/logs/20261004-070225-1e786a3b.log

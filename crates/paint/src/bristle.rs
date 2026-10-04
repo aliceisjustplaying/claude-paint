@@ -489,8 +489,17 @@ impl Held {
         self.tool.lay.max(0.3) * track * self.tool.run / (self.tool.hair * self.tool.hair)
     }
 
+    /// Whether any bristle holds solvent (a thinned load, or solvent
+    /// picked up from a thinned film).
+    pub(crate) fn holds_solvent(&self) -> bool {
+        self.bristles.iter().any(|b| b.solvent > 0.0)
+    }
+
     /// Dip the brush: mix `amount` (0..1 of a full load) of `paint` into
     /// every bristle's reservoir. Bristles hold a little more or less.
+    /// Thinned paint (`Paint::with_thinner`) can be loaded here, but only a
+    /// canvas of engine 3 takes it: `Canvas::drag` and `touch` panic before
+    /// drawing otherwise.
     pub fn load(&mut self, paint: Paint, amount: f32) {
         let lat = paint.latent();
         let full = self.full();
@@ -766,14 +775,33 @@ impl Canvas {
     }
 
     pub(crate) fn next_stroke_ids(&mut self, n: u32) -> u32 {
-        let first = self.wet.current.wrapping_add(1).max(1);
+        let old = self.wet.current;
+        let first = old.wrapping_add(1).max(1);
         self.wet.current = first.wrapping_add(n);
+        if first <= old || self.wet.current < first {
+            // the ids wrapped: a stroke's ceiling (`Wet::laid`) must not
+            // find an old stroke's entry under a reused id
+            self.wet.forget_laid();
+        }
         first
     }
 
+    /// Panics if solvent would go onto a canvas that can't hold it:
+    /// thinner is engine 3 only (`crate::thinner`), and before engine 3 the
+    /// film has no solvent buffer, so the brush's solvent would vanish.
+    pub(crate) fn assert_thinner_supported(&self, thinned: bool, what: &str) {
+        assert!(!thinned || self.engine >= 3, "{what}: thinned paint needs engine 3 (this canvas is engine {}, which has no solvent in its film)", self.engine);
+    }
+
     /// Drag a held brush through a gesture, working the wet paint.
+    ///
+    /// Panics if the brush holds solvent (a thinned load) and the canvas's
+    /// engine is before 3.
     pub fn drag(&mut self, held: &mut Held, g: &Gesture, clip: Option<&Mask>) {
         held.tool.assert_valid();
+        if self.engine < 3 {
+            self.assert_thinner_supported(held.holds_solvent(), "Canvas::drag");
+        }
         if let Some(m) = clip {
             self.check_mask(m);
         }
@@ -1735,8 +1763,14 @@ fn touch_footprint_checked(tool: &Tool, t: &Touch, scale: f32, w: usize, h: usiz
 
 impl Canvas {
     /// Touch the canvas with the tip of a held brush (see `Touch`).
+    ///
+    /// Panics if the brush holds solvent and the canvas's engine is before
+    /// 3 (as `drag`).
     pub fn touch(&mut self, held: &mut Held, t: &Touch, clip: Option<&Mask>) {
         held.tool.assert_valid();
+        if self.engine < 3 {
+            self.assert_thinner_supported(held.holds_solvent(), "Canvas::touch");
+        }
         if let Some(m) = clip {
             self.check_mask(m);
         }

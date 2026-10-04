@@ -324,7 +324,7 @@ impl Tool {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub(crate) struct Bristle {
     /// Root offset in the brush frame (x along the wide axis), roughly −1..1.
     rx: f32,
@@ -348,11 +348,62 @@ pub(crate) struct Bristle {
 }
 
 /// A brush in the hand, with paint in its bristles. (`Debug` is part of
-/// `easel run --state-digest`.)
-#[derive(Clone, Debug)]
+/// `easel run --state-digest`: see its impl.)
+#[derive(Clone)]
 pub struct Held {
     pub tool: Tool,
     pub(crate) bristles: Vec<Bristle>,
+    /// Painting with engine 3 (`with_engine`): its `Debug` names each
+    /// bristle's `solvent`. Not printed itself.
+    shows_solvent: bool,
+}
+
+/// A bristle's `Debug`, as `#[derive(Debug)]` printed it before the
+/// thinner, field for field, plus `solvent` when `show` (engine 3).
+struct BristleText<'a>(&'a Bristle, bool);
+
+impl std::fmt::Debug for BristleText<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let b = self.0;
+        let mut d = f.debug_struct("Bristle");
+        d.field("rx", &b.rx)
+            .field("ry", &b.ry)
+            .field("len", &b.len)
+            .field("thresh", &b.thresh)
+            .field("bend", &b.bend)
+            .field("seed", &b.seed)
+            .field("prev", &b.prev)
+            .field("vol", &b.vol)
+            .field("lat", &b.lat)
+            .field("hide", &b.hide)
+            .field("cure", &b.cure);
+        if self.1 {
+            d.field("solvent", &b.solvent);
+        }
+        d.finish()
+    }
+}
+
+impl std::fmt::Debug for Bristle {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        BristleText(self, true).fmt(f)
+    }
+}
+
+/// The text of a brush (`easel run --state-digest` hashes it, and the
+/// state dump keeps it): exactly what `#[derive(Debug)]` printed before the
+/// thinner, so a painting from an engine before 3 digests as it did; an
+/// engine-3 brush (`with_engine`) names each bristle's `solvent` too.
+impl std::fmt::Debug for Held {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        struct List<'a>(&'a [Bristle], bool);
+        impl std::fmt::Debug for List<'_> {
+            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                f.debug_list().entries(self.0.iter().map(|b| BristleText(b, self.1))).finish()
+            }
+        }
+        f.debug_struct("Held").field("tool", &self.tool).field("bristles", &List(&self.bristles, self.shows_solvent)).finish()
+    }
 }
 
 impl Held {
@@ -420,7 +471,15 @@ impl Held {
                 }
             })
             .collect();
-        Held { tool, bristles }
+        Held { tool, bristles, shows_solvent: false }
+    }
+
+    /// The brush of a painting with engine `v`: from engine 3 its `Debug`
+    /// names the solvent in each bristle (`crate::thinner`); before, it is
+    /// the text it always was.
+    pub fn with_engine(mut self, v: u32) -> Self {
+        self.shows_solvent = v >= 3;
+        self
     }
 
     /// A full load's volume for one bristle.

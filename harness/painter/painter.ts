@@ -152,6 +152,6 @@ export default function painter(pi: ExtensionAPI) {
 		return { entries: [{ type: "context_edit" as const, targetId: last.sourceEntry.id, replacement: null }], continue: true };
 	});
 
-	registerEaselTools(pi, process.cwd());
+	registerEaselTools(pi, process.cwd(), limits);
 	vision(pi);
 }

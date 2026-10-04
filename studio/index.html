@@ -670,8 +670,8 @@ function md(text) {
 const plain = s => s.replace(/^\s*(#{1,6}\s+|[-*+•]\s+|\d{1,3}[.)]\s+|>\s*)/, '').replace(/\*\*|__|`/g, '').replace(/(^|[^\w*])\*(?=\S)([^*]*?\S)\*(?!\w)/g, '$1$2');
 
 // ---- looks: the whole painting, and what the painter is studying
-// an image is a whole look if the look that made it asked for no crop, no mode and not the palette (studio.py's is_whole)
-const isWhole = e => e.look !== undefined && !/crop|mode|palette (?!False)/.test(e.look);
+// an image is a whole look if the look that made it asked for no crop, no mode, no light, and not the palette, a survey or a comparison (studio.py's is_whole)
+const isWhole = e => e.look !== undefined && !/crop|mode|light|compare|(?:palette|survey) (?!False)/.test(e.look);
 const isPalette = e => e.kind === 'image' && /palette (?!False)/.test(e.look || '');
 // the newest palette look at or before event i (-1: none yet)
 function paletteAt(i) { for (let k = i; k >= 0; k--) if (isPalette(events[k])) return k; return -1; }
@@ -685,12 +685,18 @@ function palette(k) {
 function lookWords(req) {
   if (req == null) return ['A picture it opened', 'an image file it looked at', 'looks at a picture'];
   if (/palette (?!False)/.test(req)) return ['Palette', 'the paints it has mixed, thick and thin', 'looks at its palette'];
+  if (/survey (?!False)/.test(req)) return ['Survey', 'a part of the canvas at full detail, one of several', 'surveys the canvas up close'];
+  if (/compare/.test(req)) return ['Before and after', 'an earlier look beside the canvas now', 'compares the canvas with an earlier look'];
   const mode = (req.match(/mode\s+([a-z,]+)/) || [''])[0], crop = /crop/.test(req), sq = /squint|blur/.test(mode), val = /value|gray/.test(mode), mir = /mirror/.test(mode);
+  // the light, as the easel takes it: a light given (it rakes, whatever the mode), else the first of relief/raking/gallery in the mode list
+  const lit = /light\s/.test(req) ? 'relief' : (mode.replace(/^mode\s+/, '').split(',').find(m => /^(relief|raking|gallery)$/.test(m)) || ''), gal = lit === 'gallery', rel = lit !== '' && !gal;
   const why = [crop && 'up close, at full detail', sq && 'blurred on purpose, as through half-closed eyes, to judge the big shapes',
-               val && 'in grays, to judge light against dark', mir && 'flipped left to right, to see it with fresh eyes'].filter(Boolean);
+               val && 'in grays, to judge light against dark', mir && 'flipped left to right, to see it with fresh eyes',
+               rel && 'under a raking light, to see the ridges and furrows of the paint', gal && 'lit from above, as it would hang'].filter(Boolean);
   if (!why.length) return ['The whole canvas', '', 'looks at the whole canvas'];
-  const title = [crop ? 'Close-up' : sq ? 'Squinting' : val ? 'Value check' : 'Mirrored', crop && sq && 'squinting', (crop || sq) && val && 'in grays', (crop || sq || val) && mir && 'mirrored'].filter(Boolean).join(', ');
-  return [title, why.join('; '), crop ? 'looks closer at a detail' : sq ? 'squints at the canvas' : val ? 'checks the picture in grays' : 'looks at it mirrored'];
+  const lw = rel ? 'raking light' : gal && 'gallery light', plain = crop || sq || val || mir;
+  const title = [crop ? 'Close-up' : sq ? 'Squinting' : val ? 'Value check' : mir ? 'Mirrored' : rel ? 'Raking light' : 'Gallery light', crop && sq && 'squinting', (crop || sq) && val && 'in grays', (crop || sq || val) && mir && 'mirrored', plain && lw].filter(Boolean).join(', ');
+  return [title, why.join('; '), crop ? 'looks closer at a detail' : sq ? 'squints at the canvas' : val ? 'checks the picture in grays' : mir ? 'looks at it mirrored' : rel ? 'looks at the paint under a raking light' : 'looks at it in gallery light'];
 }
 // a crop's window in canvas units [x0, y0, x1, y1] (two opposite corners; the canvas is 1000 units wide, y down: notes/easel_guide.md)
 function cropOf(req) {

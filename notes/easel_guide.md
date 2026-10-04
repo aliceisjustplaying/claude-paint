@@ -503,6 +503,9 @@ in canvas units, not a position and width/height.
 | `mode: "value"` | in grays |
 | `mode: "squint"` | blurred, as through half-closed eyes |
 | `mode: "mirror"` | flipped left to right |
+| `mode: "relief"` | under a raking light from the upper left, so the paint's ridges, furrows and slabs show (wet paint shines) |
+| `mode: "gallery"` | as the picture hangs: lit from above and a little left at 55°, so impasto models softly |
+| `mode: "relief"`, `light: "45,15"` | the light from that azimuth (degrees: 0 from the right, 90 from the top) and elevation; the lower the light, the harsher |
 | `mode: "value,squint"`, `size: 600` | modes combine; `size` sets the long side |
 | `grid: true` | a squared grid in canvas units, labeled along the edges |
 | `crop: "300,200,500,350"`, `grid: 10` | a window with a grid every 10 units |
@@ -517,6 +520,20 @@ for each pile a global holds, labeled with the global's name and the pile
 the thin coat over a white card with a black stripe across it. It shows
 the pile's own paint, before the unevenness of a brushload. It takes no
 other option, and nothing on the canvas or the clock changes.
+
+| `look` with | shows |
+|---|---|
+| `survey: true` | the whole canvas at full detail, as several tiles of at most 500 units (2 × 2 for most canvases, 2 × 1 for one twice as wide as high), each a separate image; modes apply (`mode: "gallery"`) |
+| `compare: "<an earlier look's path>"` | that earlier image on the left and the current view on the right, at the same height; repeat the earlier look's crop, modes, light and grid options to compare the same view |
+
+A survey can arrive in a partial batch to fit the painter's image budget.
+The reply lists the remaining tile paths; read them one at a time to inspect
+the rest of the canvas.
+
+A whole view defaults to 1000 pixels on its long side, reduced from the
+full-detail canvas: small marks, beads of paint and stray strokes can be
+hard to see in it. Survey the canvas after
+each campaign, and compare before and after.
 
 ## How chunks behave
 

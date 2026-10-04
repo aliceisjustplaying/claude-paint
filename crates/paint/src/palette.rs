@@ -206,10 +206,11 @@ pub fn catalog() -> Vec<Tube> {
         // flavonoid yellow lake (Butler 1984; NG TB 24); fugitive. Estimates
         #[cfg(feature = "box-impressionist")]
         tube("yellow lake", "flavonoid dye (weld, quercitron) on alumina and chalk", "#9e7525", 0.08, 0.35, 0.5, drier::MADDER_LAKE).engine3(drier::engine3::ALIZARIN),
+        // Engine-3 drying follows the medium carbon-black class; estimate.
         // charcoal black: bluish, weak, without bone's phosphate (Butler
         // 1984 found it in 9 of 10 paintings examined). Estimates
         #[cfg(feature = "box-impressionist")]
-        tube("vine black", "charcoal of vine twigs", "#323538", 0.75, 0.45, 0.6, drier::LAMP_BLACK),
+        tube("vine black", "charcoal of vine twigs", "#323538", 0.75, 0.45, 0.6, drier::LAMP_BLACK).engine3(drier::engine3::BONE_BLACK),
     ]
 }
 

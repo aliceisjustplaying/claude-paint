@@ -90,6 +90,19 @@ const CAP_UM: f32 = 400.0;
 /// the hollows as well as the tops (the test
 /// `a_dry_rag_leaves_a_pale_tint_and_spirits_lift_nearly_to_the_ground`) [E].
 const DAMP_LIFT: f32 = 8.0;
+/// Spirits evaporate from a damp face as the painting goes on: half of what
+/// is left goes every `DAMP_HALF_MIN` minutes of painting time (the clock,
+/// hand time included), and below `DRY_DAMP` the face is dry, some 17
+/// minutes after a dip at 0.5. "Pour a few drops on a sheet of white
+/// writing paper; if it is pure the mark will evaporate in a few minutes"
+/// (W. J. Pearce [Jennings], Paint & Colour Mixing, 1902, "To Test the
+/// Purity of Turpentine",
+/// https://www.gutenberg.org/cache/epub/56738/pg56738-images.html); a
+/// bunched cloth holds more than a few drops and shields part of it, so
+/// it takes somewhat longer [E].
+pub const DAMP_HALF_MIN: f64 = 3.0;
+/// A face this little damp is dry [E].
+const DRY_DAMP: f32 = 0.01;
 /// How many faces a rag can be refolded to before none is clean: a cloth
 /// about 30 cm square [E].
 const FACES: f32 = 12.0;
@@ -101,14 +114,18 @@ const SHIFT_MM: f32 = 25.0;
 /// A rag in the hand: its pad width (units), how loaded the face in use is
 /// (0 clean .. 1 full), how much the whole cloth has soaked up (0 .. 1, all
 /// `FACES` faces full), how damp with spirits the face in use is (0 dry ..
-/// 1 dipped well; a refold turns out a dry face), the fold in use, and its own randomness (the cloth's
-/// creases).
+/// 1 dipped well, as of `wet_at`; a refold turns out a dry face, and the
+/// spirits evaporate, `DAMP_HALF_MIN`), the fold in use, and its own
+/// randomness (the cloth's creases).
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Rag {
     pub width: f32,
     pub load: f32,
     pub soaked: f32,
     pub damp: f32,
+    /// When `damp` was last brought up to date: minutes of painting time
+    /// (`Canvas::now_min`).
+    pub wet_at: f64,
     pub fold: u32,
     pub seed: u64,
 }
@@ -116,7 +133,7 @@ pub struct Rag {
 impl Rag {
     /// A clean rag bunched to a pad `width` units across.
     pub fn new(width: f32, seed: u64) -> Self {
-        Rag { width: width.max(0.1), load: 0.0, soaked: 0.0, damp: 0.0, fold: 0, seed }
+        Rag { width: width.max(0.1), load: 0.0, soaked: 0.0, damp: 0.0, wet_at: 0.0, fold: 0, seed }
     }
 
     /// Turn a cleaner, dry face outward. No face is cleaner than the paint
@@ -129,12 +146,36 @@ impl Rag {
         t.secs += pace::REFOLD;
     }
 
-    /// Dip the face in use into spirits: `amount` 0..1 (a light dip about
-    /// 0.5). It stays damp until it is refolded. Counts the hand time in
-    /// `t`.
-    pub fn dip(&mut self, amount: f32, t: &mut Tally) {
+    /// Dip the face in use into spirits, the reach starting at `now_min`
+    /// (`Canvas::now_min`): `amount` 0..1 (a light dip about 0.5). It is
+    /// that damp when the hand is back (`pace::DIP` later), and stays damp
+    /// until it is refolded or the spirits evaporate (`evaporate`). Counts
+    /// the hand time in `t`.
+    pub fn dip(&mut self, amount: f32, now_min: f64, t: &mut Tally) {
+        self.evaporate(now_min + pace::DIP / 60.0);
         self.damp = self.damp.max(amount.clamp(0.0, 1.0));
         t.secs += pace::DIP;
+    }
+
+    /// The spirits in the face in use evaporated up to `now_min` minutes of
+    /// painting time (`Canvas::now_min`): `DAMP_HALF_MIN`.
+    pub fn evaporate(&mut self, now_min: f64) {
+        let dt = now_min - self.wet_at;
+        if dt > 0.0 && self.damp > 0.0 {
+            self.damp = (self.damp as f64 * (-dt * std::f64::consts::LN_2 / DAMP_HALF_MIN).exp()) as f32;
+            if self.damp < DRY_DAMP {
+                self.damp = 0.0;
+            }
+        }
+        self.wet_at = self.wet_at.max(now_min);
+    }
+
+    /// How damp the face in use is at `now_min` (`evaporate`), without
+    /// changing the rag.
+    pub fn damp_at(&self, now_min: f64) -> f32 {
+        let mut r = *self;
+        r.evaporate(now_min);
+        r.damp
     }
 
     /// How readily the face in use still takes paint (1 clean .. 0 full):
@@ -277,6 +318,7 @@ impl Canvas {
         }).collect();
         let peaks = local_max(&surf, bw, by1 - by0, rb);
         let reach = SAG_UM * (0.25 + 1.5 * p);
+        rag.evaporate(self.now_min());
         let d = rag.damp.clamp(0.0, 1.0);
         let k = LIFT * (0.7 + 0.6 * p) * rag.thirst() * (1.0 + DAMP_LIFT * d);
         let timed = self.wet.clock.px.len() == self.wet.vol.len();
@@ -753,6 +795,64 @@ mod tests {
         c.px.iter().flat_map(|p| p.map(f32::to_bits)).chain(c.height.iter().chain(&c.film).chain(&c.wet.vol).map(|v| v.to_bits())).collect()
     }
 
+    /// The spirits in a dipped face evaporate as the painting goes on: half
+    /// of them every `DAMP_HALF_MIN` minutes, none left within the half hour
+    /// (nor a week later), and a dip wets it again. A rag dipped and then
+    /// left half an hour lifts exactly what a dry one does; dipped just
+    /// before the wipe, it lifts more.
+    #[test]
+    fn the_spirits_in_a_dipped_rag_evaporate() {
+        let mut t = Tally::default();
+        let mut r = Rag::new(10.0, 1);
+        // dipped at 100 minutes, back with the hand 2.5 s later
+        r.dip(0.5, 100.0 - pace::DIP / 60.0, &mut t);
+        assert_eq!(r.damp_at(100.0), 0.5);
+        assert!((r.damp_at(100.0 + DAMP_HALF_MIN) - 0.25).abs() < 1e-6, "{}", r.damp_at(100.0 + DAMP_HALF_MIN));
+        assert!(r.damp_at(110.0) > 0.04 && r.damp_at(110.0) < 0.06, "{}", r.damp_at(110.0));
+        assert_eq!(r.damp_at(130.0), 0.0);
+        assert_eq!(r.damp_at(100.0 + 7.0 * 24.0 * 60.0), 0.0, "a week later");
+        // reading it changes nothing; using it at a later time brings it up to date
+        assert_eq!(r.damp, 0.5);
+        r.evaporate(103.0);
+        assert!((r.damp - 0.25).abs() < 1e-6 && r.wet_at == 103.0);
+        r.evaporate(200.0);
+        assert_eq!(r.damp, 0.0);
+        r.dip(0.5, 200.0, &mut t);
+        assert_eq!(r.damp_at(200.0 + pace::DIP / 60.0), 0.5, "dipped again");
+
+        let c0 = sky(LIVE, 1.0, 0.3);
+        let (wipe, read) = patch(&c0);
+        let gf = blank(LIVE).film;
+        let pass = RagPass { pressure: 0.6, angle: 0.0, passes: 1, refold: None, seed: 9 };
+        let fresh = || Rag::new(PAD_MM / c0.mm_per_unit(), 4);
+        let wiped = |dip_then_wait: Option<bool>| {
+            let mut c = c0.clone();
+            let mut r = fresh();
+            if dip_then_wait == Some(true) {
+                r.dip(0.5, c.now_min(), &mut c.tally);
+            }
+            c.wait(30.0);
+            if dip_then_wait == Some(false) {
+                r.dip(0.5, c.now_min(), &mut c.tally);
+            }
+            // the same hand time either way
+            if dip_then_wait.is_none() {
+                c.tally.secs += pace::DIP;
+            }
+            let before = paint_at(&c, &gf);
+            c.rag_region(&mut r, &wipe, &pass);
+            let after = paint_at(&c, &gf);
+            let off = shares(&mut c, &before, &after, &read).2;
+            (c, r, off)
+        };
+        let (dry, dry_r, dry_off) = wiped(None);
+        let (left, left_r, _) = wiped(Some(true));
+        let (_, _, damp_off) = wiped(Some(false));
+        assert!(dry_off > 0.05, "the paint is still open after half an hour: {dry_off}");
+        assert!(state_bits(&left) == state_bits(&dry) && (left_r.load, left_r.soaked, left_r.damp) == (dry_r.load, dry_r.soaked, 0.0), "a rag left to dry lifts as a dry one");
+        assert!(damp_off > dry_off + 0.05, "a fresh dip lifts more: {damp_off} vs {dry_off}");
+    }
+
     /// Paint past its gel point has left the wet layer: no wipe, blot or
     /// pressure lifts any of it, and the rag comes away clean. The hand
     /// time is still spent.
@@ -774,7 +874,7 @@ mod tests {
         c.rag_wipe(&mut r, &[(320.0, 300.0), (680.0, 360.0)], &[1.0], 2);
         c.rag_blot(&mut r, 500.0, 340.0, 1.0, 3);
         // nor a rag damp with spirits
-        r.dip(1.0, &mut c.tally);
+        r.dip(1.0, c.now_min(), &mut c.tally);
         c.rag_region(&mut r, &wipe, &RagPass { pressure: 1.0, angle: 0.0, passes: 1, refold: None, seed: 4 });
         assert!(state_bits(&c) == before, "the rag changed set paint");
         assert_eq!((r.load, r.soaked), (0.0, 0.0));
@@ -858,7 +958,7 @@ mod tests {
         let mut r = Rag::new(PAD_MM / c.mm_per_unit(), 3);
         let mut rng = Rng::new(31);
         if let Some(d) = dip {
-            r.dip(d, &mut c.tally);
+            r.dip(d, c.now_min(), &mut c.tally);
         }
         for pass in 0..passes {
             let plan = plan_region(wipe, r.width, 0.0, (pass % 2) as f32 * 0.5, &mut rng);
@@ -866,7 +966,7 @@ mod tests {
                 if r.load > 0.5 {
                     r.refold(&mut c.tally);
                     if let Some(d) = dip {
-                        r.dip(d, &mut c.tally);
+                        r.dip(d, c.now_min(), &mut c.tally);
                     }
                 }
                 c.rag_wipe(&mut r, pts, &[pressure], 500 + ((pass as u64) << 16) + k as u64);

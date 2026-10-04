@@ -2,7 +2,10 @@
 -- rollback (see session.rs). Loaded with a private copy of the debug
 -- library; painters never see it. `canon`: engine 3 on (session.rs
 -- `canonical_tables`), where prelude.lua walks every table in a fixed order.
-local dbg, canon = ...
+-- `layout` (engine 3; nil if the easel can't read this Lua's tables): a
+-- table's array size and length hint (session.rs `table_layout`), all `#t`
+-- depends on besides its entries, read without moving them.
+local dbg, canon, layout = ...
 local getupvalue, setupvalue, getinfo = dbg.getupvalue, dbg.setupvalue, dbg.getinfo
 local getmt, setmt = dbg.getmetatable, dbg.setmetatable
 local next, type, rawset, rawequal, rawlen, select = next, type, rawset, rawequal, rawlen, select
@@ -33,10 +36,15 @@ local function snap(skip, ...)
     n = n - 1
     if type(v) == "table" then
       local copy, order, m = {}, {}, 0
+      local ints, top = 0, 0
       for k, x in next, v do
         copy[k] = x
         m = m + 1
         order[m] = k
+        if canon and mtype(k) == "integer" and k > 0 then
+          ints = ints + 1
+          if k > top then top = k end
+        end
         push(k)
         push(x)
       end
@@ -44,7 +52,19 @@ local function snap(skip, ...)
       push(mt)
       -- (from engine 3 no `#`: it moves the table's length hint, which a
       -- replay, taking no snapshots, would not)
-      tabs[v] = { copy, mt, order, m, not canon and rawlen(v) or nil }
+      local rec = { copy, mt, order, m, not canon and rawlen(v) or nil }
+      -- From engine 3, a table with more than one border (positive integer
+      -- keys not 1..n, found without `rawget` or `#`): its layout, which a
+      -- failed chunk can move with every entry put back (`#` reads, or keys
+      -- added and taken out again), or true if the easel can't read it.
+      if canon and top > ints then
+        if layout then
+          rec[6], rec[7] = layout(v)
+        else
+          rec[6] = true
+        end
+      end
+      tabs[v] = rec
       ntab = ntab + 1
     else
       local info = getinfo(v, "Su")
@@ -110,7 +130,11 @@ end
 --   `pairs` walks tables keyed by values in layout order.
 -- - From engine 3 `pairs` walks every table in a fixed order (prelude.lua),
 --   so layout shows only in `#` of a table with more than one border: a
---   table the chunk changed (entries or layout) that is holey now.
+--   table the chunk changed (entries or layout) that is holey now, or one
+--   holey before whose array size or length hint is not as snapped (all
+--   `#t` reads besides its entries, ltable.c `luaH_getn`), even with every
+--   entry and the `next` order back: `t = {}; t[2] = 2` then a failed
+--   `t[1] = 1; t[3] = 3; t[1] = nil; t[3] = nil` leaves `#t` 2, not 0.
 local function restore(s)
   local changed = 0
   local touched, nt = canon and {} or nil, 0
@@ -140,8 +164,22 @@ local function restore(s)
     end
   end
   if canon then
+    local counted = {}
     for i = 1, nt do
-      if holey(touched[i]) then changed = changed + 1 end
+      if holey(touched[i]) then
+        changed = changed + 1
+        counted[touched[i]] = true
+      end
+    end
+    for t, rec in next, s[1] do
+      if rec[6] ~= nil and not counted[t] then
+        if rec[6] == true then
+          changed = changed + 1
+        else
+          local size, hint = layout(t)
+          if size ~= rec[6] or hint ~= rec[7] then changed = changed + 1 end
+        end
+      end
     end
     return changed
   end

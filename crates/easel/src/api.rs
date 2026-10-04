@@ -396,6 +396,9 @@ impl UserData for Brush {
             {
                 check_keys(t, PART_KEYS, "b:load")?;
                 let mut part = part_of(t, "b:load")?;
+                // (the pile checked as brushload checks it, before the streaks' seed is drawn)
+                pile_of(&p, "b:load")?;
+                style(&b.st)?;
                 part.seed = b.st.borrow_mut().rng.next_u64();
                 let (paint, color) = brushload(&b.st, &p, &Value::Nil, "load")?;
                 b.held.borrow_mut().load_part(paint, amount, &part);
@@ -484,6 +487,15 @@ impl UserData for Brush {
             }
             if ctl.len() > 2000 {
                 return err("gesture: one stroke, of at most 2000 points");
+            }
+            // (and before it is sampled: the samples the curve below takes, a
+            // few per 1.5 units of each span, kept within GESTURE_SAMPLES)
+            let samples: usize = ctl
+                .windows(2)
+                .map(|w| (((w[1].0 - w[0].0).powi(2) + (w[1].1 - w[0].1).powi(2)).sqrt() / 1.5).ceil().max(2.0) as usize)
+                .sum();
+            if samples > GESTURE_SAMPLES {
+                return err(format!("gesture: a curve of at most about {} units through its points, not {:.0}", GESTURE_SAMPLES as f32 * 1.5, samples as f32 * 1.5));
             }
             // pressures: missing ones from their neighbors, the ends 0.8 if none is given
             let given: Vec<(usize, f32)> = ctl.iter().enumerate().filter_map(|(i, c)| c.2.map(|p| (i, p))).collect();
@@ -628,6 +640,9 @@ impl UserData for Brush {
             check_keys(&o, &["at", "toward", "spread", "force", "clip"], "spatter")?;
             let at = pair(&o, "at")?.ok_or_else(|| mlua::Error::runtime("spatter: at={x, y}, where the brush is flicked"))?;
             let toward = pair(&o, "toward")?.ok_or_else(|| mlua::Error::runtime("spatter: toward={dx, dy}, the flick's direction and how far the paint carries (units)"))?;
+            if !(at.0.is_finite() && at.1.is_finite() && toward.0.is_finite() && toward.1.is_finite()) {
+                return err(format!("spatter: at and toward are numbers (units), not {{{}, {}}} and {{{}, {}}}", at.0, at.1, toward.0, toward.1));
+            }
             let spread = num(&o, "spread")?.unwrap_or(0.45);
             if !(0.0..=1.5).contains(&spread) {
                 return err("spatter: spread is half the cone's angle in radians, 0 to 1.5");
@@ -980,6 +995,10 @@ const WORK_KEYS: &[&str] = &[
 /// canvas is 1000 wide and at most 5000 high).
 const GESTURE_REACH: f32 = 20_000.0;
 
+/// The most samples a gesture's curve takes (one every 1.5 units or so:
+/// about 300 000 units of curve).
+const GESTURE_SAMPLES: usize = 200_000;
+
 const PART_KEYS: &[&str] = &["side", "share", "streak"];
 
 /// A load's amount (a share of a full load; `default` if none is given): a
@@ -1063,7 +1082,13 @@ fn work(st: &S, mask: Rc<Mask>, o: Table, preset: Option<&str>) -> Result<()> {
             let mut v = Vec::new();
             for e in t.sequence_values::<Table>() {
                 let e = e?;
-                v.push((pile_of(&e.get::<Value>(1)?, "work piles")?, e.get::<Value>(2)?));
+                let w = e.get::<Value>(2)?;
+                if let Value::Number(n) = &w
+                    && !n.is_finite()
+                {
+                    return err(format!("work piles: a weight is a number or function(x, y), not {n}"));
+                }
+                v.push((pile_of(&e.get::<Value>(1)?, "work piles")?, w));
             }
             if v.len() < 2 {
                 return err("work: piles={{pile, weight}, {pile, weight}, ...} takes two or more piles");
@@ -1129,8 +1154,8 @@ fn work(st: &S, mask: Rc<Mask>, o: Table, preset: Option<&str>) -> Result<()> {
         }
         let p2 = pile_of(&t.get::<Value>("pile")?, "work second")?;
         let part = part_of(&t, "work second")?;
-        let load = t.get::<Option<f32>>("load")?.unwrap_or(0.4);
-        h.second = Some(paint::handling::Second { palette: &tubes, pile: p2.mix.clone(), medium: p2.medium, load, part });
+        let load = load_amount(t.get::<Option<f32>>("load")?, 0.4, "work second")?;
+        h.second = Some(paint::handling::Second { palette: &tubes, pile: p2.mix.clone(), medium: p2.medium, thinner: p2.thinner(), load, part });
     }
     #[cfg(feature = "replay")]
     if pile.is_none() && crate::legacy::on(st) {

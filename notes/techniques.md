@@ -60,7 +60,8 @@ the picture is yours.
 ## Spatter
 
 - **Flicked paint for what is scattered by nature**: spray, gravel, a field of
-  small flowers, lichen, the speckle of an old wall. `b:spatter{}` throws
+  small flowers, lichen, the speckle of an old wall.
+  `b:spatter{at={x, y}, toward={dx, dy}}` throws
   droplets whose sizes, spacing and colors vary by themselves; aim it, don't
   place each one.
 - **Thin the paint to make it fly**: a pile with medium or turpentine
@@ -77,7 +78,7 @@ the picture is yours.
   hut). `form{}` and its solids give a single lit volume to paint by.
 - **Shadows take color from around them**: a shadow on a sunlit field is
   warmed near its base by light thrown up from the field, cooler where it
-  meets the sky's light. Grade it, don't fill it with one violet,
+  meets the sky's light. Grade it (`piles=`), don't fill it with one violet,
   and keep it a different value and temperature from the object casting it.
 - **Distance lightens and cools**: far hills and trees paler and bluer than
   near ones, all of a range alike.
@@ -88,7 +89,8 @@ the picture is yours.
   (warmer, cooler, lighter, darker) and lay them as separate strokes over
   the same area; the eye mixes them. `mix_jitter=` in `work` varies each
   dip; a pile is never perfectly even.
-- **Two colors on one brush.** `b:load(p2, 0.5, {side=1, share=0.4})`, or
+- **Two colors on one brush.** `b:load(p, 0.8)` then
+  `b:load(p2, 0.5, {side=1, share=0.4})`, or
   `work(m, {pile=p, second={pile=p2, side=1, share=0.45}})`: each stroke carries both,
   side by side, mingling as it goes. `streak=` loads unevenly, in bands.
 - **Wet into wet.** A stroke dragged through wet paint picks some of it up

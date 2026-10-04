@@ -677,7 +677,9 @@ fn thick_paint_from_a_pointed_hatch_hides_the_ground_at_full_size() {
 
 /// Marks sized across a pass (`scale_at`) take the hand the time of the
 /// brush they are painted with: a pass of a width-8 brush at twice the size
-/// is timed as the same pass of a width-16 brush.
+/// is timed as the same pass of a width-16 brush. (No tail of short dabs and
+/// no broken strokes: every stroke is one piece of the length asked, as the
+/// two passes draw their randomness differently.)
 #[test]
 #[cfg(tube_box)]
 fn sized_marks_are_timed_with_their_own_brush() {
@@ -685,7 +687,7 @@ fn sized_marks_are_timed_with_their_own_brush() {
     let pal = Palette::tube_box();
     let secs = |width: f32, len: f32, scale: Option<f32>| {
         let mut c = Canvas::new(160, 1.0, [0.8; 3]);
-        let mut hd = Handling::new(Tool::filbert(width)).piled(&pal, pal.pile(vec![(10, 1.0)]), 0.0).length(len, len).coverage(1.0);
+        let mut hd = Handling::new(Tool::filbert(width)).piled(&pal, pal.pile(vec![(10, 1.0)]), 0.0).length(len, len).tail(0.0).broken(0.0).coverage(1.0);
         if let Some(k) = scale {
             hd.scale_at = Some(Box::new(move |_, _| k));
         }

@@ -7,8 +7,8 @@ pull through an unevenly knifed pile that leaves the hair streaked. The colors
 then come off side by side within one stroke and mingle as it goes.
 
 `Held::load_part(paint, amount, &Part)` dips only part of the brush. Each
-bristle takes `amount × full × weight` of the paint, mixed into what it
-already holds, as `load` does:
+bristle takes `amount × full × weight` of the paint (× the usual per-bristle
+factor, as `load`), mixed into what it already holds, as `load` does:
 
 - `side` (-1 or 1) and `share` (0..1): which edge of the wide axis goes into
   the pile and how much of the width, with a soft margin as hairs splay.
@@ -27,6 +27,9 @@ At the easel:
 b:reload(p, 0.8)
 b:load(q, 0.5, {side=1, share=0.4})     -- one side in a second pile
 b:load(w, 0.4, {streak=0.9})            -- streaks of a third
+b:stroke({{150, 500}, {700, 500}})      -- all three in one stroke
+
+-- a pass, every dip streaky and then part of the brush in q
 work(m, {pile=p, streak=0.6, second={pile=q, load=0.45, side=1, share=0.45}})
 ```
 
@@ -34,7 +37,3 @@ In `work`, `streak=` makes every dip into the pile streaky and `second=` dips
 part of the brush into a second pile after it (a second trip to the palette in
 hand time). Each dip gets its own streak pattern, seeded from where its stroke
 starts.
-
-`paintings/sampler/p1_loading.lua` (the sampler's brush-loading plate) shows
-double-loaded strokes, streaky strokes, three paints on one brush and the
-same as covering passes.

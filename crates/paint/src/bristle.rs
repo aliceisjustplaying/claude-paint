@@ -1954,15 +1954,41 @@ fn load_mm3(width_mm: f32) -> f32 {
     0.08 * width_mm.max(0.5).powi(3)
 }
 
+impl Spatter {
+    /// Check that every number in the flick is finite (see `Gesture::validate`).
+    pub fn validate(&self) -> Result<(), String> {
+        let nums = [("at.x", self.at.0), ("at.y", self.at.1), ("toward.x", self.toward.0), ("toward.y", self.toward.1), ("spread", self.spread), ("force", self.force)];
+        match nums.iter().find(|(_, v)| !v.is_finite()) {
+            Some((name, v)) => Err(format!("Spatter {name} is not finite: {v}")),
+            None => Ok(()),
+        }
+    }
+
+    #[track_caller]
+    pub(crate) fn assert_valid(&self) {
+        if let Err(e) = self.validate() {
+            panic!("{e}");
+        }
+    }
+}
+
 impl Canvas {
     /// Flick a held brush (see `Spatter`); returns how many droplets landed.
+    ///
+    /// Panics if a number in `sp` is not finite, or if the brush holds
+    /// solvent and the canvas's engine is before 3 (as `drag`).
     pub fn spatter(&mut self, held: &mut Held, sp: &Spatter, clip: Option<&Mask>) -> usize {
         held.tool.assert_valid();
+        // (before any paint leaves the brush)
+        sp.assert_valid();
+        if self.engine < 3 {
+            self.assert_thinner_supported(held.holds_solvent(), "Canvas::spatter");
+        }
         if let Some(m) = clip {
             self.check_mask(m);
         }
         self.tally.touch();
-        let _id = self.next_stroke_ids(1);
+        let id = self.next_stroke_ids(1);
         let mm_per_px = self.px_mm();
         let sf = self.surf();
         let s = sf.scale;
@@ -1974,6 +2000,7 @@ impl Canvas {
         // mm³ of paint per unit of bristle volume
         let per_vol = load_mm3(width_mm) / (full * n);
         // each hair's loose paint, and the share of it the flick throws
+        // (with a thinned load, its liquid: paint and solvent, as `drag`)
         let mut budget: Vec<f32> = held
             .bristles
             .iter()
@@ -1981,7 +2008,8 @@ impl Canvas {
                 let stiff = b.hide[1].clamp(0.0, 1.0);
                 let fluid = (1.0 - stiff).clamp(0.0, 1.5);
                 let hold = full * (0.2 + 0.6 * stiff);
-                let loose = (b.vol - hold).max(0.0);
+                let liquid = if b.solvent > 0.0 { b.vol + b.solvent } else { b.vol };
+                let loose = (liquid - hold).max(0.0);
                 loose * (force.powf(0.8) * (0.15 + 0.6 * fluid)).clamp(0.0, 0.95)
             })
             .collect();
@@ -2023,7 +2051,14 @@ impl Canvas {
             left -= take;
             let vol_mm3 = take * per_vol;
             let b = &mut held.bristles[bi];
-            b.vol = (b.vol - take).max(0.0);
+            // the share of solvent in what flies, in the hair's own
+            // proportions (crate::thinner); unthinned, all paint
+            let liquid = if b.solvent > 0.0 { b.vol + b.solvent } else { b.vol };
+            let phi = if b.solvent > 0.0 { b.solvent / liquid } else { 0.0 };
+            b.vol = (b.vol - take * (1.0 - phi)).max(0.0);
+            if phi > 0.0 {
+                b.solvent = (b.solvent - take * phi).max(0.0);
+            }
             // flight: off the flick's line by the cone, farther for heavier drops
             let th = dir + (0.5 * spread * rng.normal()).clamp(-1.2 * spread, 1.2 * spread);
             let d = reach * (0.35 + 0.65 * rng.f()) * (r / r_med).powf(0.25).clamp(0.5, 1.6);
@@ -2076,7 +2111,18 @@ impl Canvas {
                 let i = (y - sf.oy) * sf.w + (x - sf.ox);
                 let v = coats_mean * area_px * w / wsum * m;
                 // SAFETY: exclusive &mut self; i is inside the buffer window.
-                unsafe { sf.add(i, v, &lat, hide, cure) };
+                if v > 0.0 {
+                    unsafe {
+                        // as `drag` lays a hair's paint: the pixel covered, the
+                        // stroke's own, and a thinned load's solvent into the film
+                        *sf.cover.add(i) = 1.0;
+                        sf.add(i, v * (1.0 - phi), &lat, hide, cure);
+                        if phi > 0.0 && !sf.solv.is_null() {
+                            *sf.solv.add(i) += v * phi * COAT_UM;
+                        }
+                        *sf.stroke.add(i) = id;
+                    }
+                }
                 grow(&mut bounds, x - sf.ox, y - sf.oy, x - sf.ox + 1, y - sf.oy + 1);
                 landed = true;
             }

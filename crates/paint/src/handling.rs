@@ -139,6 +139,8 @@ pub struct Second<'a> {
     pub palette: &'a Palette,
     pub pile: crate::palette::Mixture,
     pub medium: f32,
+    /// Its share of solvent (`Handling::thinner`; 0 unthinned).
+    pub thinner: f32,
     pub load: f32,
     pub part: crate::bristle::Part,
 }
@@ -459,7 +461,7 @@ impl Canvas {
     /// pile, `Handling::piled`) and the canvas's engine is before 3.
     pub fn work_with(&mut self, piles: &mut Piles, mask: &Mask, hd: &Handling, seed: u64) {
         hd.tool.assert_valid();
-        self.assert_thinner_supported(hd.thinner > 0.0 && hd.pile.is_some(), "Canvas::work");
+        self.assert_thinner_supported((hd.thinner > 0.0 && hd.pile.is_some()) || hd.second.as_ref().is_some_and(|s2| s2.thinner > 0.0), "Canvas::work");
         if let Some(t) = &hd.cut_in {
             t.assert_valid();
         }
@@ -479,8 +481,7 @@ impl Canvas {
         // marks sized across the canvas (`scale_at`): centers placed as densely
         // as the smallest marks need, then thinned where marks are larger, by
         // (smallest / here)², so each place gets the coverage asked
-        const SCALE_RANGE: (f32, f32) = (0.15, 6.0);
-        let scale_here = |x: f32, y: f32| hd.scale_at.as_ref().map_or(1.0, |sf| sf(x.clamp(0.0, f.width()), y.clamp(0.0, f.height())).clamp(SCALE_RANGE.0, SCALE_RANGE.1));
+        let scale_here = |x: f32, y: f32| scale_of(hd, f, x, y);
         let centers = match &hd.scale_at {
             None => place(hd, f, gap, mean_len, 1.0, seed, &mut rng),
             Some(_) => {
@@ -497,6 +498,17 @@ impl Canvas {
                         x += 2.0;
                     }
                     y += 2.0;
+                }
+                if kmin == f32::MAX {
+                    // (a region the probe missed, smaller than its step: its pixels)
+                    let mf = mask.f;
+                    for py in 0..mf.h {
+                        for px in 0..mf.w {
+                            if mask.data[py * mf.w + px] >= hd.threshold {
+                                kmin = kmin.min(scale_here(mf.ux(px), mf.uy(py)));
+                            }
+                        }
+                    }
                 }
                 let kmin = if kmin == f32::MAX { 1.0 } else { kmin };
                 let all = place(hd, f, gap * kmin, mean_len * kmin, kmin, seed, &mut rng);
@@ -524,7 +536,8 @@ impl Canvas {
             let (cx, cy) = if inside || hd.cut_in.is_some() || !hd.hug {
                 (cx, cy)
             } else {
-                match hug_edge(hd, mask, (cx, cy)) {
+                // (within half of this stroke's own brush, where marks are sized)
+                match hug_edge(hd, mask, (cx, cy), hd.tool.width * scale_here(cx, cy)) {
                     Some(p) => {
                         inside = true;
                         p
@@ -540,13 +553,14 @@ impl Canvas {
             let k = scale_here(cx, cy);
             let len = if hd.scale_at.is_some() { len0 * k } else { len0 };
             let stool = hd.scale_at.as_ref().map(|_| Tool { width: hd.tool.width * k, ..hd.tool.clone() });
+            let width = stool.as_ref().map_or(hd.tool.width, |t| t.width);
             let bend = rng.normal() * hd.angle_jitter;
             let pts: Vec<(f32, f32)> = if hd.scrub > 0 {
                 let a = (hd.angle)(cx, cy) + bend;
                 let (ca, sa) = (a.cos(), a.sin());
                 let (nx, ny) = (-sa, ca);
                 let amp = len * 0.5;
-                let adv = hd.tool.width * 0.35;
+                let adv = width * 0.35;
                 (0..=hd.scrub * 2)
                     .map(|k| {
                         let s = if k % 2 == 0 { -amp } else { amp };
@@ -569,16 +583,15 @@ impl Canvas {
             };
             // cutting in: the body strokes stop short of the edge
             // (by this stroke's own brush, where the marks are sized)
-            let width = stool.as_ref().map_or(hd.tool.width, |t| t.width);
             let pts = if hd.cut_in.is_some() { trim_inside(mask, &pts, (cx, cy), width) } else { pts };
             // carried in: from half a brush outside the edge, inward
             let pts = if carry && !inside { carry_in(mask, &pts, (cx, cy), width, hd.threshold) } else { pts };
             if pts.is_empty() {
                 continue;
             }
-            let pieces = if hd.scrub > 0 { vec![pts] } else { break_stroke(hd, pts, &mut rng) };
+            let pieces = if hd.scrub > 0 { vec![pts] } else { break_stroke(hd, pts, width, &mut rng) };
             for (kp, piece) in pieces.into_iter().enumerate() {
-                let n_knots = 2 + (len / (4.0 * hd.tool.width.max(1.0))).clamp(1.0, 4.0) as usize;
+                let n_knots = 2 + (len / (4.0 * width.max(1.0))).clamp(1.0, 4.0) as usize;
                 let (rect, mut plan) = finish_plan(self, hd, stool.as_ref().unwrap_or(&hd.tool), (cx, cy), piece, &mut rng);
                 if stool.is_some() {
                     plan.tool = stool.clone();
@@ -693,11 +706,27 @@ impl Canvas {
         let (bx0, by0, bx1, by1) = mask_cells(mask, thr, cell, cw, ch);
         let span = (bx1 + 1 - bx0) * (by1 + 1 - by0);
         let first = if bx1 >= bx0 && by1 >= by0 { self.next_stroke_ids(span as u32) } else { 0 };
+        // marks sized across the pass (`scale_at`): each dab its own length and
+        // brush from where it is, no larger than the largest at the region's
+        // cell centers (the tiles are sized for that, whatever a crop sees)
+        let kmax = match &hd.scale_at {
+            None => 1.0,
+            Some(_) => {
+                let mut m = SCALE_RANGE.0;
+                for ky in by0..=by1 {
+                    for kx in bx0..=bx1 {
+                        m = m.max(scale_of(hd, f, (kx as f32 + 0.5) * cell, (ky as f32 + 0.5) * cell));
+                    }
+                }
+                m
+            }
+        };
         let reach = {
             // a straight dab's footprint (units), plus room for its bow
             const X: f32 = 1.0e4;
-            let r = footprint(&hd.tool, &[(X - 0.5 * len, X), (X + 0.5 * len, X)], hd.shake, 1.0, 1 << 16, 1 << 16);
-            r.map_or(len, |r| (X - r.0 as f32).max(r.2 as f32 - X).max(X - r.1 as f32).max(r.3 as f32 - X)) + 0.15 * len
+            let (rtool, rlen) = (Tool { width: hd.tool.width * kmax, ..hd.tool.clone() }, len * kmax);
+            let r = footprint(&rtool, &[(X - 0.5 * rlen, X), (X + 0.5 * rlen, X)], hd.shake, 1.0, 1 << 16, 1 << 16);
+            r.map_or(rlen, |r| (X - r.0 as f32).max(r.2 as f32 - X).max(X - r.1 as f32).max(r.3 as f32 - X)) + 0.15 * rlen
         };
         let (mut plans, ex, ey) = (Vec::new(), reach, reach);
         for (key, (n, sx, sy)) in acc {
@@ -711,13 +740,18 @@ impl Canvas {
             let mut rng = Rng::new(seed ^ 0xF111_0F11 ^ (key as u64).wrapping_mul(0x9E37_79B9_7F4A_7C15));
             let c = (sx / n as f32, sy / n as f32);
             let bend = rng.normal() * hd.angle_jitter;
-            let pts = hand_trace(hd, &drift, c.0, c.1, len, bend, &mut rng);
-            let (rect, mut plan) = finish_plan(self, hd, &hd.tool, c, pts, &mut rng);
+            // (sized marks: this dab's length and brush, from where it is)
+            let k = scale_of(hd, f, c.0, c.1).min(kmax);
+            let dtool = hd.scale_at.as_ref().map(|_| Tool { width: hd.tool.width * k, ..hd.tool.clone() });
+            let pts = hand_trace(hd, &drift, c.0, c.1, len * k, bend, &mut rng);
+            let (rect, mut plan) = finish_plan(self, hd, dtool.as_ref().unwrap_or(&hd.tool), c, pts, &mut rng);
             // a dab takes a touch of paint (as in `work`), on a brush of its
             // own: what one fill dab leaves on the brush can't change
             // another's (a crop sees only some of them)
             plan.load *= (len / hd.length.0.max(1e-3)).clamp(0.25, 1.0);
             plan.fresh = true;
+            // (not `sized`: counted as a fill dab, a fraction of a reload)
+            plan.tool = dtool;
             // (its own passage: a trip to the palette for every dab)
             plan.passage = 0x8000_0000 | key as u32;
             plan.id = Some(first.wrapping_add(((ky - by0) * (bx1 + 1 - bx0) + kx - bx0) as u32));
@@ -743,11 +777,16 @@ impl Canvas {
         let f = mask.f;
         let step = (tool.width * 0.5).max(1.0 / f.scale);
         let inside = |p: (f32, f32)| p.0 >= 0.0 && p.1 >= 0.0 && p.0 < f.width() && p.1 < f.height() && mask.data[f.index(p.0, p.1)] >= 0.5;
-        // rings stepping inward from the edge until they meet the body
-        // strokes (which keep half their brush clear of the edge)
-        let reach = hd.tool.width * 0.5 + tool.width * 0.5;
-        let (mut plans, mut ex, mut ey) = (Vec::new(), 0.0f32, 0.0f32);
         let lines = crate::edge::contours(mask, step);
+        // rings stepping inward from the edge until they meet the body
+        // strokes (which keep half their brush clear of the edge; where marks
+        // are sized, the largest brush along the outline)
+        let kmax = match &hd.scale_at {
+            None => 1.0,
+            Some(_) => lines.iter().flatten().map(|&((x, y), _)| scale_of(hd, f, x, y)).fold(SCALE_RANGE.0, f32::max),
+        };
+        let reach = hd.tool.width * kmax * 0.5 + tool.width * 0.5;
+        let (mut plans, mut ex, mut ey) = (Vec::new(), 0.0f32, 0.0f32);
         let mut ring = 0;
         loop {
             let inset = tool.width * (0.45 + 0.8 * ring as f32);
@@ -855,7 +894,8 @@ impl Canvas {
                     if hd.blender {
                         self.tally.wipe();
                     } else if p.fresh && !p.sized {
-                        self.tally.reload(1.0 / crate::tally::pace::DABS_PER_RELOAD);
+                        // (and a double-loaded brush's second dip)
+                        self.tally.reload((1 + p.dip2.is_some() as u8) as f64 / crate::tally::pace::DABS_PER_RELOAD);
                     } else {
                         piles.trip(&mut self.tally, p.want);
                         if let Some((_, _, want2)) = p.dip2 {
@@ -939,9 +979,10 @@ fn finish_plan(cv: &Canvas, hd: &Handling, tool: &Tool, c: (f32, f32), pts: Vec<
     if let Some((pal, pile0, medium0)) = &hd.pile {
         // graded color: the piles mixed by their weights here
         let graded = hd.piles_at.as_ref().and_then(|ps| {
-            let w: Vec<f32> = ps.iter().map(|p| (p.2)(c.0, c.1).max(0.0)).collect();
+            // (a weight that is no number counts as none)
+            let w: Vec<f32> = ps.iter().map(|p| (p.2)(c.0, c.1)).map(|v| if v.is_finite() { v.max(0.0) } else { 0.0 }).collect();
             let tot: f32 = w.iter().sum();
-            if tot <= 1e-6 {
+            if tot <= 1e-6 || !tot.is_finite() {
                 return None;
             }
             let mut parts: Vec<(usize, f32)> = Vec::new();
@@ -974,7 +1015,9 @@ fn finish_plan(cv: &Canvas, hd: &Handling, tool: &Tool, c: (f32, f32), pts: Vec<
         // (its own generator, drawn only for a double-loaded brush: other passes plan as before)
         let dip2 = hd.second.as_ref().map(|s2| {
             let mut r2 = Rng::new(prng.next_u64() ^ 0x2D1F);
-            (s2.palette.remix(&s2.pile, hd.mix_jitter, &mut r2).laid(s2.medium), s2.load * load_k, s2.pile.color)
+            let p2 = s2.palette.remix(&s2.pile, hd.mix_jitter, &mut r2).laid(s2.medium);
+            let p2 = if s2.thinner > 0.0 { p2.with_thinner(s2.thinner) } else { p2 };
+            (p2, s2.load * load_k, s2.pile.color)
         });
         return (rect, Plan { pts, pressure, fade, dip: Some(paint), load, swell: Vec::new(), passage: 0, fresh: false, id: None, want: pile.color, dip2, tool: None, sized: false });
     }
@@ -1045,13 +1088,13 @@ fn trim_inside(mask: &Mask, pts: &[(f32, f32)], c: (f32, f32), width: f32) -> Ve
     dense[a..=b].iter().step_by(4).copied().chain(std::iter::once(dense[b])).collect()
 }
 
-/// A point on the region's edge within half a brush of `c` (across the
-/// stroke direction there), nearest first; None if the region isn't there.
-fn hug_edge(hd: &Handling, mask: &Mask, c: (f32, f32)) -> Option<(f32, f32)> {
+/// A point on the region's edge within half a brush (`w` wide) of `c`
+/// (across the stroke direction there), nearest first; None if the region
+/// isn't there.
+fn hug_edge(hd: &Handling, mask: &Mask, c: (f32, f32), w: f32) -> Option<(f32, f32)> {
     let f = mask.f;
     let a = (hd.angle)(c.0.clamp(0.0, f.width()), c.1.clamp(0.0, f.height()));
     let (nx, ny) = (-a.sin(), a.cos());
-    let w = hd.tool.width;
     let at = |p: (f32, f32)| p.0 >= 0.0 && p.1 >= 0.0 && p.0 < f.width() && p.1 < f.height() && mask_at(mask, p.0, p.1) >= hd.threshold;
     // the first offset that reaches the region; unclipped, a quarter brush
     // further in (a stroke on the very edge line bows and wanders out of it;
@@ -1167,6 +1210,15 @@ fn mask_cells(mask: &Mask, thr: f32, cell: f32, cw: usize, ch: usize) -> (usize,
     }
     let c = |px: usize, n: usize| (((px as f32 + 0.5) / mf.scale / cell) as usize).min(n - 1);
     (c(x0, cw), c(y0, ch), c(x1, cw), c(y1, ch))
+}
+
+/// The range a mark's size (`scale_at`) is held to.
+const SCALE_RANGE: (f32, f32) = (0.15, 6.0);
+
+/// The size of the marks at (`x`, `y`) (`Handling::scale_at`, held to
+/// `SCALE_RANGE`); 1 without it.
+fn scale_of(hd: &Handling, f: Frame, x: f32, y: f32) -> f32 {
+    hd.scale_at.as_ref().map_or(1.0, |sf| sf(x.clamp(0.0, f.width()), y.clamp(0.0, f.height())).clamp(SCALE_RANGE.0, SCALE_RANGE.1))
 }
 
 fn mask_at(mask: &Mask, x: f32, y: f32) -> f32 {
@@ -1637,8 +1689,9 @@ mod tests {
     }
 }
 
-/// Maybe lift the brush partway and put it down again a little off the line.
-fn break_stroke(hd: &Handling, pts: Vec<(f32, f32)>, rng: &mut Rng) -> Vec<Vec<(f32, f32)>> {
+/// Maybe lift the brush partway and put it down again a little off the line
+/// (by fractions of `w`, the stroke's brush width).
+fn break_stroke(hd: &Handling, pts: Vec<(f32, f32)>, w: f32, rng: &mut Rng) -> Vec<Vec<(f32, f32)>> {
     let n = pts.len();
     if n < 5 || hd.broken <= 0.0 || !rng.chance(hd.broken) {
         return vec![pts];
@@ -1647,7 +1700,6 @@ fn break_stroke(hd: &Handling, pts: Vec<(f32, f32)>, rng: &mut Rng) -> Vec<Vec<(
     let (dx, dy) = (pts[cut + 1].0 - pts[cut].0, pts[cut + 1].1 - pts[cut].1);
     let d = (dx * dx + dy * dy).sqrt().max(1e-6);
     let (tx, ty) = (dx / d, dy / d);
-    let w = hd.tool.width;
     // off the line by a fraction of the brush, a small gap or overlap, and
     // turned a little around the restart
     let off = rng.normal() * 0.3 * w;

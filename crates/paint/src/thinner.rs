@@ -54,8 +54,9 @@
 //! paint they lift, in the film's own proportions.
 
 /// One stroke of paint thinned half (`t` = 0.5) adds at most this much wet
-/// film (µm) to a pixel. ESTIMATE, calibrated on the card
-/// (notes/thinner/RESULTS.md).
+/// film (µm) to a pixel. ESTIMATE, set before measuring; the card keeps 89%
+/// (load 0.3) and 86% (load 0.6) of its contrast with it, and from 6 to 36
+/// µm it keeps 62-89% (notes/thinner/RESULTS.md, the sweep).
 pub const STROKE_FILM_UM: f32 = 6.0;
 
 /// The most wet film (paint + solvent, µm) one stroke may add to a pixel,
@@ -74,8 +75,14 @@ pub fn stroke_limit_um(t: f32) -> f32 {
 /// Evaporation time (minutes) of the solvent in a film too thin to hold it
 /// back. ESTIMATE ("a few minutes", Jennings 1902).
 pub const TAU_MIN: f64 = 2.0;
-/// The film thickness (µm of paint) that doubles it. ESTIMATE.
-pub const TAU_DOUBLING_UM: f64 = 20.0;
+/// The film thickness (µm of paint) that doubles it. ESTIMATE, with no
+/// source for its size. First set at 20 µm; at that, thinned paint flowing
+/// into the weave's hollows during the wait deepens the deepest film enough
+/// (77 → 81 µm on the card) that the time the card test waits (ten times τ
+/// after the pass) falls short of ten times τ at the end. 100 µm keeps the
+/// dependence (a thicker film still holds its solvent longer) with less
+/// sensitivity; notes/thinner/RESULTS.md.
+pub const TAU_DOUBLING_UM: f64 = 100.0;
 
 /// The solvent's evaporation time (minutes) at a pixel holding `paint_um`
 /// of paint (solvent-free): over `dt` minutes, `exp(-dt / τ)` of it stays.

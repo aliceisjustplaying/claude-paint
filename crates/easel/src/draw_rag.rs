@@ -6,7 +6,7 @@
 //! `r.soaked`, `r.damp` as evaporated by now, `r.fold`, `r.width`) and can't write it, so a cleaner face
 //! costs a refold and a clean cloth a fresh rag, each with its hand time.
 //! A failed chunk puts the rags back with the brushes (session.rs), and a
-//! replay loads them the same way. Nothing new is kept on the canvas.
+//! replay loads them the same way. The rag needs no extra canvas fields.
 
 use crate::api::{S, check_keys, err, mask_of, num, points, seed_of};
 use crate::time::{self, Verb};

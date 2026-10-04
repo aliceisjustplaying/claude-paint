@@ -317,11 +317,13 @@ the paint, and reaches into the hollows as it is pressed harder
 (`pressure` 0..1): paint comes off the tops first and stays longer in the
 hollows, and a thin stain of the color always stays. Its folds and creases
 touch unevenly, so a wipe leaves streaks along its path and a blot a
-crumpled patch. Nothing it lifts goes back on the canvas.
+crumpled patch. During a wipe, a little freshly lifted paint smears back
+along the lightly pressed edges and trailing end.
 
-A rag dipped in spirits (`r:dip`, 0..1) lifts wet paint more readily.
-The part in use stays damp (`r.damp`) until a refold turns out a dry
-part.
+A rag dipped in spirits (`r:dip`, 0..1) lifts wet paint more readily and
+reaches farther into the hollows. Its folds still leave streaks. Dampness
+(`r.damp`) halves every three minutes of painting time; a refold turns out
+a dry part, and another dip wets it again.
 
 What it lifts soaks into the cloth. `r.load` is how loaded the part in use
 is (0 clean, 1 full): the more loaded, the less it lifts. `r:refold()`

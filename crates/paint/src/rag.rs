@@ -586,7 +586,10 @@ impl Canvas {
                 let p = pr(sm / len);
                 let (ax, ay) = (a.0 + tx * l0, a.1 + ty * l0);
                 let sl = l1 - l0;
-                let bbox = (ax.min(ax + tx * sl) - r - 1.0, ay.min(ay + ty * sl) - r - 1.0, ax.max(ax + tx * sl) + r + 1.0, ay.max(ay + ty * sl) + r + 1.0);
+                // Bound the shifted pad, so sideways hand wander cannot be
+                // clipped into a straight edge by the contact rectangle.
+                let (bx, by) = if e3 { (ax - ty * off, ay + tx * off) } else { (ax, ay) };
+                let bbox = (bx.min(bx + tx * sl) - r - 1.0, by.min(by + ty * sl) - r - 1.0, bx.max(bx + tx * sl) + r + 1.0, by.max(by + ty * sl) + r + 1.0);
                 let s0 = s_at + l0;
                 let pl = if e3 { Some(&mut pool) } else { None };
                 total += self.rag_contact(rag, bbox, p, pl, |x, y| {
@@ -1077,7 +1080,7 @@ mod tests {
                 }
                 println!("damp={damp} pass={pass}: paint left {:.1}%, tone left {:.1}%", 100.0 * after / before, 100.0 * left / tone);
                 if let Ok(out) = std::env::var("RAG_REVIEW_DIR") {
-                    c.save(std::path::Path::new(&out).join(format!("{}-{pass}.png", if damp { "damp" } else { "dry" }))).unwrap();
+                    c.clone().save(std::path::Path::new(&out).join(format!("{}-{pass}.png", if damp { "damp" } else { "dry" }))).unwrap();
                 }
                 previous = after;
                 previous_tone = left;

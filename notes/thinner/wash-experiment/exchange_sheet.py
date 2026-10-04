@@ -43,5 +43,6 @@ for r, s in enumerate(sets):
         if f.exists():
             im = Image.open(f).convert("RGB").crop(box).resize((cw, ch), Image.LANCZOS)
             out.paste(im, (lw + c * (cw + gap), y))
-out.save(dst, optimize=True)
+# (256 colors: these tones quantize without visible banding, a fifth of the size)
+out.quantize(256, method=Image.Quantize.MEDIANCUT, dither=Image.Dither.NONE).save(dst, optimize=True)
 print(dst, out.size)

@@ -11,7 +11,9 @@ Branch `thinner2`: e39da64 (af49348 merged into the phase-1 diagnosis
 c692eae), then the before-change baseline a97c3a6 merged as 6cf9384. Round
 1 of review (2171f3c) asked for changes R1-R15
 (`~/src/a/claude-paint-reviews/thinner-tests-required-changes-round1.md`);
-this is round 2. The tests commit is named in
+round 2 (55ef93a) left B1, B2 and S1
+(`~/src/a/claude-paint-reviews/thinner-tests-review-astra-r2.md`); this is
+round 3. The tests commit is named in
 `notes/thinner/TESTS_PHASE_REPORT.md`; the file hashes are at the end.
 
 ## How to run
@@ -41,9 +43,13 @@ study's sheet to `notes/thinner/rag_study.png` and fails if the file isn't
 written.
 
 **Check 13 (b)** fails on unchanged code (below) and awaits the user.
-Every mode runs it and expects it to fail. It is reported on its own line
-as `EXPECTED FAIL (pre-existing; user decision, ACCEPTANCE.md check 13)`.
-If it passes or doesn't run, the run fails.
+Every mode runs it and expects it to fail at its ordering assertion: the
+log must hold `panicked at crates/paint/tests/thinner_pigments.rs:119:` and
+that assertion's message, `Field/Salter (§155) has burnt the more
+transparent`. It is reported on its own line as
+`EXPECTED FAIL (pre-existing; user decision, ACCEPTANCE.md check 13)`.
+If it passes, doesn't run or fails anywhere else (a setup panic, another
+assertion), the run fails.
 
 **Exit codes:**
 
@@ -68,12 +74,16 @@ These cases must exit 1:
 - ok lines from a cargo that exits nonzero;
 - a name missing, ignored or failed;
 - empty output;
-- 13 (b) passing or not running;
+- 13 (b) passing, not running, or failing with another panic;
 - check 2 failing;
 - no rag sheet.
 
-Everything passing with 13 (b) failing must exit 3 in all three modes,
-and a usage error exits 2. It passes all 15 cases.
+Everything passing with 13 (b) failing at its assertion must exit 3 in all
+three modes, and a usage error exits 2. It passes all 16 cases.
+`scripts/tests/thinner_dump_fields_test.py` tests check 2's field checker
+on tiny fake dumps (6 cases, all pass), and
+`scripts/tests/thinner_clock_restart_fake.py` is check 17's demonstration
+(below).
 
 Single tests, exactly:
 
@@ -98,6 +108,9 @@ Single tests, exactly:
 | `scripts/thinner_dump_fields.py` | check 2's field half: the dumps declare the solvent |
 | `scripts/test_thinner_acceptance` | the commands above |
 | `scripts/tests/thinner_acceptance_runner.sh` | the runner's self-test |
+| `scripts/tests/thinner_dump_fields_test.py` | the field checker's self-test, on fake dumps |
+| `scripts/tests/thinner_clock_restart_fake.py` | check 17: why a clock that restarts at each wait fails the exact cases |
+| `crates/easel/tests/thinner/dump_solvent.lua` | check 2's positive control: a tiny thinned scene |
 
 ## The interface the tests need
 
@@ -194,6 +207,13 @@ Three parts, all required:
    Without this, an unchanged dumper could leave the solvent out and pass
    `--added-zero` with nothing to hold to zero. The baseline's own dumps
    fail this part (no `wet.solvent` in 12 chunks of `pickup` and `rag`).
+4. The positive control. `crates/easel/tests/thinner/dump_solvent.lua` is
+   a tiny thinned scene of the thinner's own, not a baseline scene, at
+   128 px. It is a thinned stroke from a held brush, then a rag wiped
+   through it. Its dump must show nonzero solvent in `wet.solvent`, on a
+   bristle and on a rag (`thinner_dump_fields.py --nonzero`). Without
+   this, a dumper that writes the fields but always zero would pass parts
+   1-3.
 
 Not criteria, as the baseline's README says: the `canvas=` digest (PAINTCK9
 changes it by itself) and the printed output (reported).
@@ -449,9 +469,9 @@ code** (paint sources equal af49348's, per (a); measured 2026-10-04):
 
 Burnt sienna scatters less, but its darker masstone absorbs much more, so
 on the card it hides more than raw sienna. The tube table agrees: hiding
-0.45 against 0.40. The test body stays as written. The runner reports it
-as an expected failure and exits 3, never 0, while it stands. Pigments
-are not changed.
+0.45 against 0.40. The test body stays as written. The runner accepts only
+this failure, at line 119 with its message, reports it as an expected
+failure and exits 3, never 0, while it stands. Pigments are not changed.
 
 ### 14. Stroke points
 
@@ -551,9 +571,44 @@ patches, starting on a whole minute. Expected:
 - `wait(7.3)` then `wait(7.7)` (the same clock: 7.3f32 + 7.7f32 = 15
   exactly) agree with `wait(15)` at every pixel within 1e-4 relative in
   paint µm, solvent µm and cure.
+- From a fractional minute the grid still counts from the canvas's start,
+  not from each wait: `wait(0.25); wait(0.75); wait(14)` and
+  `wait(0.25); wait(14.75)` give the same save, byte for byte. Both step a
+  quarter minute, the rest of minute 1, then 14 whole minutes.
+- The same, byte for byte, when hand time puts the clock on the quarter
+  minute rather than a wait: 15 s of hand time in the canvas's ledger,
+  clocked by `clock_hand_min()`, the brushwork path
+  (`hand_pass` → `wait`, tally.rs:351-353). It is asserted to leave the
+  clock at exactly 0.25 min.
 - From a fractional start (`wait(0.4)` first), `wait(15)` and 15 ×
   `wait(1)` agree within the same 1e-4: each crosses the minute grid at
   different points, so exact equality isn't required off the grid.
+
+All durations in the exact cases are exact in binary: 0.25 + 0.75 = 1
+exactly, and 15 s / 60 = 0.25.
+
+**Why a clock that restarts at each wait fails the exact cases.**
+
+- On the shared grid both sides step 0.25, 0.75, 14 × 1.
+- A clock restarting at each wait steps the second side 0.25, 14 × 1,
+  0.75.
+- One closed-form step per wait steps 0.25, 0.75, 14 against 0.25, 14.75.
+
+The pixel states then differ in their last bits. Floating-point products
+aren't associative, and spreading and cure only add differences.
+`scripts/tests/thinner_clock_restart_fake.py` is a tiny fake: one pixel's
+solvent evaporating in f32 and nothing else, over 10,000 random
+(solvent, τ) pairs. Results:
+
+- shared grid: 0 bit-different;
+- restart at each wait: 7513 bit-different;
+- one step per wait: 4529 bit-different.
+
+A canvas has thousands of pixels with solvent, so its save differs. The
+earlier cases miss this: from 0.4, 15 against 15 × 1 is 15 whole steps
+either way on a restarting clock. In the paint crate a stroke adds no
+time, so the stroke-between-waits case is plain whole-minute waits; it is
+kept as a timing-independent check of brushwork on the grid.
 
 **Zero rule:** two values agree if they are equal, or both are no
 further from zero than a floor, or they are within 1e-4 of the larger in
@@ -667,7 +722,7 @@ test:
 
 | sha256 | file |
 |---|---|
-| `fa1bf2299b9307ceb0d74209c8a27772d75af93deb9681af240687db98612db5` | `crates/paint/tests/thinner_physics.rs` |
+| `f370ac3a49e7631bf201de0f909d271d514ff66a3fb9d052d990cad1be600042` | `crates/paint/tests/thinner_physics.rs` |
 | `fe7d4e25e0e03a094d3c534dc2f8728c6ef4482e29f38a5b0b3ce01042d728ff` | `crates/paint/tests/thinner_support/mod.rs` |
 | `53924605cde088b16056fd31d69d57f96c5eae8d5c4674858326823bb0ca06cc` | `crates/paint/tests/thinner_pigments.rs` |
 | `542e25ab395446ea79c893640e5515702309b145f99a5da5ff7e617ea83e15c2` | `crates/paint/tests/thinner/tubes_af49348.txt` |
@@ -677,12 +732,15 @@ test:
 | `40674b768e1f79347749a09957d00fb74f57b207557aee2d919fe5f389e14796` | `crates/easel/tests/thinner/cloth_again.lua` |
 | `436d362cffcb882ad8abad6e587e593ff833eb25e2a34abaf789fa4d07c4b084` | `crates/easel/tests/thinner/cloth.lua` |
 | `55ad4b849994870ef8c14a46e1c655bd60b32c4860e7d96916437331c5e89623` | `crates/easel/tests/thinner/determinism.lua` |
+| `ba840d0d3e15e61205b152a3a126d43d651f702992adc8a2136928a4767f5695` | `crates/easel/tests/thinner/dump_solvent.lua` |
 | `fc674bf8a45732cf52e56976279e2ecfd24ca2bba9fcecd43d7f31d3ef137a96` | `crates/easel/tests/thinner/failing.lua` |
 | `83a9244e38ef0eca10903a4d7a4761ac3f8dd6861d564526cfe6c2f8c9325259` | `crates/easel/tests/thinner/next.lua` |
 | `31e301b3f309913d55147c7c2a626bf3a8bb8ca57c8859b2884403e68d30919d` | `crates/easel/tests/thinner/thinned.lua` |
-| `447618bca8d6725db9497c304f0eaa2f8db20635dad5822b4a5b9ae914b8c0e9` | `scripts/test_thinner_acceptance` |
-| `f3e2bc44ee07005ff92c445728c8efb4ea241d6f7ed58ba34c16addbf2a3ce4b` | `scripts/tests/thinner_acceptance_runner.sh` |
-| `33000f5b75fd4cc175aab7a2cab8e19b7f450916f622326898e3076282811cff` | `scripts/thinner_check2` |
-| `991de2d0a61a076a304cc036127ee3ed70ac80c13ef29a5cb2c421cbbeee0030` | `scripts/thinner_dump_fields.py` |
+| `9a9ace82670aecac336eab0f62263684d920f69fbcd25e16d02f740a422c0630` | `scripts/test_thinner_acceptance` |
+| `b811f171b0d3e9ad029f07e0ff2b9642ee4b390636cde7addd791f752fc4c425` | `scripts/tests/thinner_acceptance_runner.sh` |
+| `a6af467b6309d948790c0e460f9b06bb79b05a17a360fba01bbc9e859fdbe18f` | `scripts/tests/thinner_dump_fields_test.py` |
+| `93b580798dd2c21c464c382c8b5d4a00b3e069f7f4c51f5b8aa95e8c6ddebd6a` | `scripts/tests/thinner_clock_restart_fake.py` |
+| `d921054862c2ba41be635c80ef756e0097d81accbd2699756c90ea77e776abf1` | `scripts/thinner_check2` |
+| `dceb4eb0116160788101626e0d06c65d3899adb308b63187181292762e5ca483` | `scripts/thinner_dump_fields.py` |
 
 `crates/easel/src/main.rs` gains only four test-only lines. The baseline's own files are listed in `notes/thinner/baseline/SHA256SUMS` (commit a97c3a6), unchanged.

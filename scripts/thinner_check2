@@ -14,6 +14,11 @@
 #    `wet.solvent` per pixel, `solvent` per bristle, `solvent_mm3` per rag),
 #    for the scenes as they are and with thinner=0, so --added-zero above
 #    can't pass by an unchanged dumper leaving the solvent out.
+# 4. The positive control: a tiny thinned scene of the thinner's own
+#    (crates/easel/tests/thinner/dump_solvent.lua, 128 px; not a baseline
+#    scene) dumps nonzero solvent in `wet.solvent`, on a bristle and on a
+#    rag (thinner_dump_fields.py --nonzero), so a dumper that writes the
+#    fields but always zero can't pass.
 # Needs bash 5, python3 (the baseline's tools) and the release easel.
 # The canvas= digest isn't a criterion: the new save format changes it by
 # itself. Prints "check 2: PASS" and exits 0 only if all of it holds.
@@ -60,5 +65,12 @@ done
 
 echo "== check 2, part 3: the dumps declare the solvent"
 python3 "$repo/scripts/thinner_dump_fields.py" "$work"/plain/* "$work"/state/* || fail=1
+
+echo "== check 2, part 4: a thinned scene dumps nonzero solvent"
+if "$easel" run "$repo/crates/easel/tests/thinner/dump_solvent.lua" --width 128 --out "$work/positive.png" --dump-state "$work/positive" >/dev/null 2>"$work/positive.err"; then
+  python3 "$repo/scripts/thinner_dump_fields.py" --nonzero "$work/positive" || fail=1
+else
+  echo "check 2: the thinned scene failed to replay:"; sed 's/^/  /' "$work/positive.err"; fail=1
+fi
 
 if [ $fail = 0 ]; then echo "check 2: PASS"; else echo "check 2: FAIL"; exit 1; fi

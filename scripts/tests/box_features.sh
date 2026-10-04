@@ -12,17 +12,24 @@
 #   scripts/tests/box_features.sh
 #
 # Builds paint and the easel once per configuration (several minutes); uses
-# CARGO_TARGET_DIR if set.
+# CARGO_TARGET_DIR if set. BOX_FEATURES_PROFILE=test builds with the test
+# profile instead of release (which tubes a build holds doesn't depend on the
+# profile; it builds faster): scripts/test --all runs it so.
 set -euo pipefail
 repo=$(cd "$(dirname "$0")/../.." && pwd)
 cd "$repo"
 unset EASEL_BOX
+case ${BOX_FEATURES_PROFILE:-release} in
+  release) profile=--release ;;
+  test) profile= ;;
+  *) echo "box_features: BOX_FEATURES_PROFILE is release or test" >&2; exit 2 ;;
+esac
 
 # passes <n> <what> <cargo test args...>: the tests run and at least n pass
 passes() {
   local n=$1 what=$2 out
   shift 2
-  out=$(cargo test --release "$@" 2>&1) || { echo "box_features: $what failed:" >&2; echo "$out" >&2; exit 1; }
+  out=$(cargo test $profile "$@" 2>&1) || { echo "box_features: $what failed:" >&2; echo "$out" >&2; exit 1; }
   local ran
   ran=$(sed -n 's/^test result: ok\. \([0-9]*\) passed.*/\1/p' <<<"$out" | awk '{s += $1} END {print s + 0}')
   [ "$ran" -ge "$n" ] || { echo "box_features: $what ran $ran tests, not $n or more:" >&2; echo "$out" >&2; exit 1; }

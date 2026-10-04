@@ -6,6 +6,12 @@
 #
 #   scripts/tests/replay_env.sh
 #
+# The clip is 5 s of a 2-chunk painting: since replay_clip's --max-hold (1 s by default)
+# its moments can't fill 5 s (it said "--length 5 is longer than the clip can run ... raise
+# --max-hold to at least 2.00"), which failed this test from 7b80cb0 on; --max-hold 2 lets
+# them. The session's socket lives under TMPDIR: keep TMPDIR short (macOS socket paths
+# must be under 104 bytes; /tmp/... works, a deep $TMPDIR/... may not).
+#
 # Requires a caller-provided persistent scratch directory (TMPDIR) and ffmpeg
 # (for replay_clip; without it the test fails before it starts). Uses the
 # replay build of this checkout, built if needed in the target directory
@@ -40,6 +46,6 @@ grep -q '^check: ok' "$work/check.log" || fail "check_painting didn't pass" "$wo
 grep -q "the replay's PNG equals the painter's last save" "$work/check.log" || fail "check_painting's replay differs from the save" "$work/check.log"
 "$repo/scripts/finish_painting" "$log" "$work/finished.png" --no-cracks >"$work/finish.log" 2>&1 || fail "finish_painting failed" "$work/finish.log"
 [ -s "$work/finished.png" ] || fail "finish_painting wrote no picture" "$work/finish.log"
-"$repo/scripts/replay_clip" "$log" "$work/clip.mp4" --every 1 --length 5 --width 300 >"$work/clip.log" 2>&1 || fail "replay_clip failed" "$work/clip.log"
+"$repo/scripts/replay_clip" "$log" "$work/clip.mp4" --every 1 --length 5 --max-hold 2 --width 300 >"$work/clip.log" 2>&1 || fail "replay_clip failed" "$work/clip.log"
 [ -s "$work/clip.mp4" ] || fail "replay_clip wrote no clip" "$work/clip.log"
 echo "replay_env: check_painting, finish_painting and replay_clip replayed a sargent-box log with EASEL_BOX=inness set ($work)"

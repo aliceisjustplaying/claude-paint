@@ -14,10 +14,11 @@
 # zero-minimum lists; a target dir from Cargo's configuration (two
 # distinguishable dummy easels); a group running at the same time; a batch's
 # sibling process left alone; a step child that left the group stopped (sccache
-# left alone); --locked validation; the log header not counted. Each case
+# left alone); --locked validation; the log header not counted; a known
+# failure; the build and check phases. Each case
 # uses its own lock directory (LOCKRUN_DIR), never the machine's lock, and
 # records the pid of every process it starts so it can check they are gone.
-# About 60 s.
+# About 70 s.
 set -euo pipefail
 repo=$(cd "$(dirname "$0")/../.." && pwd)
 R=$repo/scripts/test
@@ -69,7 +70,7 @@ D=$(case_dir step_timeout)
   step watch 20 1 '^child-gone$' "while [ ! -s $D/pid.child ]; do sleep 0.05; done; sleep 8; if kill -0 \$(cat $D/pid.child) 2>/dev/null; then echo child-alive; else echo child-gone; fi; echo \$\$ > $D/pid.watch" g
   step after 10 1 '^after' 'echo after'; } >"$D/l.tsv"
 set +e; LOCKRUN_DIR=$D/lk "$R" --list "$D/l.tsv" --summary "$D/s.json" --logs "$D/logs" >"$D/out" 2>&1; code=$?; set -e
-[ $code = 1 ] || fail "step timeout: exit $code: $(cat "$D/out")"
+[ $code = 3 ] || fail "step timeout: exit $code: $(cat "$D/out")"
 all_dead "$D" || fail "step timeout: a process of the step is alive"
 got=$(summary "$D/s.json" '[(x["name"], x["timed_out"], x["ok"]) for x in s["steps"]] + [s["verdict"]]')
 [ "$got" = "[('slow', True, False), ('watch', False, True), ('after', False, True), 'unfinished']" ] || fail "step timeout: $got; watch said $(tail -1 "$D/logs/watch.log")"
@@ -260,6 +261,42 @@ step quiet 10 1 'marker' ': marker' >"$D/l.tsv"
 set +e; LOCKRUN_DIR=$D/lk "$R" --list "$D/l.tsv" --summary "$D/s.json" --logs "$D/logs" >"$D/out" 2>&1; code=$?; set -e
 [ $code = 1 ] && [ "$(summary "$D/s.json" 's["steps"][0]["tests_run"]')" = 0 ] || fail "header: the command line was counted: $(cat "$D/out")"
 ok "the header line naming the command doesn't count as a test"
+fi
+
+# 16. A known failure (columns 8 to 10): exactly the listed exit and line, with
+#     nothing else wrong, makes the verdict known_failure, exit 4, never pass;
+#     another exit, the exit without the line, or another failing step: fail.
+if want 16; then
+D=$(case_dir known)
+kstep() { printf 'script%s%s%s10%s1%s^ran%s%s%s-%s3%s^ONLY KNOWN LEFT$%sthe known one\n' "$T" "$1" "$T" "$T" "$T" "$T" "$2" "$T" "$T" "$T" "$T"; }
+kstep k 'echo ran; echo ONLY KNOWN LEFT; exit 3' >"$D/known.tsv"
+kstep k 'echo ran; exit 3' >"$D/noline.tsv"
+kstep k 'echo ran; echo ONLY KNOWN LEFT; exit 5' >"$D/otherexit.tsv"
+{ kstep k 'echo ran; echo ONLY KNOWN LEFT; exit 3'; step bad 10 1 '^never' 'exit 1'; } >"$D/plusfail.tsv"
+for l in known noline otherexit plusfail; do
+  set +e; LOCKRUN_DIR=$D/lk "$R" --list "$D/$l.tsv" --summary "$D/$l.json" --logs "$D/logs-$l" >"$D/$l.out" 2>&1; eval "code_$l=\$?"; set -e
+done
+[ "$code_known" = 4 ] && [ "$(summary "$D/known.json" '(s["verdict"], s["verdict_text"], s["steps"][0]["known_failure"], s["steps"][0]["ok"])')" = "('known_failure', 'NOT ALL GREEN (known pre-existing failure: the known one)', True, False)" ] || fail "known: $code_known $(cat "$D/known.out")"
+grep -q 'NOT ALL GREEN (known pre-existing failure: the known one)' "$D/known.out" || fail "known: not printed"
+for l in noline otherexit plusfail; do
+  eval "c=\$code_$l"
+  [ "$c" = 1 ] && [ "$(summary "$D/$l.json" 's["verdict"]')" = fail ] || fail "known: $l gave exit $c, $(summary "$D/$l.json" 's["verdict"]')"
+done
+ok "a known failure: verdict known_failure (NOT ALL GREEN), exit 4; without its line, with another exit or beside a failure: fail"
+fi
+
+# 17. Two phases: the build steps as one lockrun job, the others as a second; the
+#     check phase doesn't run after a failed build.
+if want 17; then
+D=$(case_dir phases)
+{ printf 'build%sb%s10%s0%s-%secho built\n' "$T" "$T" "$T" "$T" "$T"; step t 10 1 '^tested' 'echo tested'; } >"$D/ok.tsv"
+{ printf 'build%sb%s10%s0%s-%sexit 1\n' "$T" "$T" "$T" "$T" "$T"; step t 10 1 '^tested' "echo tested > $D/tested; echo tested"; } >"$D/badbuild.tsv"
+LOCKRUN_DIR=$D/lk "$R" --list "$D/ok.tsv" --summary "$D/ok.json" --logs "$D/logs" >"$D/ok.out" 2>&1 || fail "phases: $(cat "$D/ok.out")"
+[ "$(summary "$D/ok.json" '(s["verdict"], sorted(s["phases"]), s["phases"]["build"]["limit"], s["phases"]["check"]["verdict"], [x["name"] for x in s["steps"]])')" = "('pass', ['build', 'check'], 600.0, 'pass', ['b', 't'])" ] || fail "phases: summary"
+[ "$(grep -c '"event": "start"' "$D/lk/history.jsonl")" = 2 ] || fail "phases: not two lockrun jobs"
+set +e; LOCKRUN_DIR=$D/lk2 "$R" --list "$D/badbuild.tsv" --summary "$D/bad.json" --logs "$D/logs2" >"$D/bad.out" 2>&1; code=$?; set -e
+[ $code = 1 ] && [ ! -f "$D/tested" ] && [ "$(summary "$D/bad.json" '(s["verdict"], sorted(s["phases"]))')" = "('fail', ['build'])" ] || fail "phases: a failed build: exit $code $(cat "$D/bad.out")"
+ok "two phases, two lockrun jobs; after a failed build the check phase doesn't run"
 fi
 
 echo "test_runner: all $passed checks passed"

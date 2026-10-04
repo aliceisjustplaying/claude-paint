@@ -396,8 +396,20 @@ impl UserData for KnifeU {
     fn add_methods<M: UserDataMethods<Self>>(m: &mut M) {
         m.add_method("load", |_, k, (p, amount): (Value, Option<f32>)| {
             let amount = load_amount(amount, 0.6, "k:load")?;
+            // (a knife lays what it carries as it is: thinned paint would go down as tube paint)
+            if let Value::UserData(u) = &p {
+                if u.borrow::<PileU>().is_ok_and(|pl| pl.thinner() > 0.0) {
+                    return err("k:load: a knife takes unthinned paint (a pile without thinner=)");
+                }
+            }
+            // (and an amount whose paint can't be counted, before anything is drawn from the session's randomness)
+            if !(amount.max(0.0) * k.k.borrow().full()).is_finite() {
+                return err(format!("k:load: {amount} full loads is more paint than can be counted"));
+            }
             let (paint, color) = brushload(&k.st, &p, &Value::Nil, "load")?;
-            k.k.borrow_mut().load(paint, amount);
+            if !k.k.borrow_mut().load(paint, amount) {
+                return err(format!("k:load: {amount} full loads is more paint than can be counted"));
+            }
             time::trip(&k.st, color);
             Ok(())
         });
@@ -415,6 +427,22 @@ impl UserData for KnifeU {
                 let pts = points(&pts)?;
                 if pts.is_empty() {
                     return err(format!("k:{name}: needs points"));
+                }
+                // (as gesture's: a point that is nowhere would be sampled without end)
+                for &(x, y) in &pts {
+                    if !(x.is_finite() && y.is_finite() && x.abs() <= GESTURE_REACH && y.abs() <= GESTURE_REACH) {
+                        return err(format!("k:{name}: the point {{{x}, {y}}} is not on or near the canvas (units, within {GESTURE_REACH} of its corner)"));
+                    }
+                }
+                // the samples the path is resampled into (paint's densify: a
+                // segment of `len` px takes ceil(len / 2), at least 1)
+                let sc = frame(&k.st)?.scale;
+                let samples: f64 = pts
+                    .windows(2)
+                    .map(|w| ((((w[1].0 - w[0].0) * sc).powi(2) + ((w[1].1 - w[0].1) * sc).powi(2)).sqrt() / 2.0).ceil().max(1.0) as f64)
+                    .sum();
+                if samples > PATH_SAMPLES as f64 {
+                    return err(format!("k:{name}: a path of at most {PATH_SAMPLES} samples (one every 2 px); this one is {samples}"));
                 }
                 let (mut pressure, mut angle, mut lift) = (if lay { (0.5, 0.5) } else { (1.0, 1.0) }, None, if lay { 0.1 } else { 0.0 });
                 if let Some(o) = &o {
@@ -1059,6 +1087,10 @@ const GESTURE_REACH: f32 = 20_000.0;
 /// The most samples a gesture's curve takes (one every 1.5 units or so:
 /// about 300 000 units of curve).
 const GESTURE_SAMPLES: usize = 200_000;
+
+/// The most samples a knife's path may be resampled into (one every 2 px):
+/// a path past it would take the knife minutes.
+const PATH_SAMPLES: usize = 200_000;
 
 const PART_KEYS: &[&str] = &["side", "share", "streak"];
 

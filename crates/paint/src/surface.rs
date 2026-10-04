@@ -273,6 +273,10 @@ impl Canvas {
         if self.engine < 4 {
             return self.height.par_iter().zip(&wet).map(|(a, b)| a + b).collect();
         }
+        // (no wet paint anywhere: every pixel is its dry height, without the blurs)
+        if wet.par_iter().all(|&a| a <= 0.0) {
+            return self.height.clone();
+        }
         let Bands { r1, .. } = Bands::at(self.px_mm());
         let fine = box_blur(&box_blur(&self.height, w, h, r1), w, h, r1);
         (0..w * h)

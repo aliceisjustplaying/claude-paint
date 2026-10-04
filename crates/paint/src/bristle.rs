@@ -1539,7 +1539,7 @@ unsafe fn exchange(
             let h0 = crate::rng::hash2(b0 as i64, id as i64, 0x51C0);
             let h1 = crate::rng::hash2(b0 as i64 + 1, id as i64, 0x51C0);
             let band = h0 + (h1 - h0) * crate::smoothstep(0.0, 1.0, f);
-            (dep_total * (1.0 + 0.6 * stiffen * (2.0 * band - 1.0))).min(br.vol * 0.95)
+            (dep_total * (1.0 + 0.6 * stiffen * (2.0 * band - 1.0))).min(liquid * 0.95)
         } else {
             dep_total
         };
@@ -2873,15 +2873,18 @@ impl Knife {
         self.width * self.width * 2.0 * 12.0
     }
     /// Pick up `amount` (0..1 of a full load) of `paint` onto the blade.
-    pub fn load(&mut self, paint: Paint, amount: f32) {
-        // (no amount that is not a number: it would leave the blade's paint NaN)
-        if !amount.is_finite() {
-            return;
-        }
+    /// False, and nothing picked up, for an amount whose volume is not a
+    /// number (NaN, or so large it overflows).
+    pub fn load(&mut self, paint: Paint, amount: f32) -> bool {
+        // (it would leave the blade's paint NaN; and NaN.max(0) is 0, so test the amount too)
         let v = amount.max(0.0) * self.full();
+        if !(amount.is_finite() && v.is_finite()) {
+            return false;
+        }
         let lat = paint.latent();
         self.cure = mix_cure(self.cure, self.vol, 0.0, v);
         crate::wet::mix_into(&mut self.vol, &mut self.lat, &mut self.hide, v, &lat, paint.prop());
+        true
     }
     /// Wipe the blade clean on the rag.
     pub fn wipe(&mut self) {
@@ -2906,8 +2909,9 @@ impl Canvas {
     /// top, or over dry impasto paint on its peaks only. When the blade
     /// lifts, the share `lift` of the bead stays where it last was.
     pub fn knife(&mut self, k: &mut Knife, pts: &[(f32, f32)], pressure: (f32, f32), angle: Option<f32>, lay: bool, lift: f32) {
-        // (the blade's length is a public field: nothing to pull with one that is no length)
-        if pts.is_empty() || !(k.width.is_finite() && (1.0..=1000.0).contains(&k.width)) {
+        // (the blade's length is a public field: nothing to pull with one that is no length;
+        // nor along a point that is nowhere)
+        if pts.is_empty() || pts.iter().any(|p| !(p.0.is_finite() && p.1.is_finite())) || !(k.width.is_finite() && (1.0..=1000.0).contains(&k.width)) {
             return;
         }
         self.tally.stroke(&Tool::hog_flat(k.width), pts, self.mm_per_unit);

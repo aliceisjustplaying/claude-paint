@@ -1,0 +1,14 @@
+{
+  "seconds": 600.0108439999967,
+  "exit": 1,
+  "stdout": "",
+  "stderr": "runtime error: the chunk ran longer than 10 minutes and was stopped; nothing it did was kept\n(the chunk failed and changed nothing)\n",
+  "after": [
+    "alive after timeout\nok · chunk 1 (0.00 s to compute)\n",
+    ""
+  ],
+  "close": [
+    "closed; the session is in <isolated-root>/paintings/lua/deadline.lua\n",
+    ""
+  ]
+}

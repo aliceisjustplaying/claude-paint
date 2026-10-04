@@ -1,0 +1,620 @@
+[
+  {
+    "id": "brush-queued-abort",
+    "observation": {
+      "before": "0:00.53",
+      "after": "0:00.57",
+      "reply_pending": true
+    },
+    "first_reply": "ok\nok · chunk 2 (2.68 s to compute)\n",
+    "check": "ok · chunk 3 (0.00 s to compute)\n",
+    "result": "pass"
+  },
+  {
+    "id": "brush-running-disconnect",
+    "observation": {
+      "before": "0:02.21",
+      "after": "0:02.40",
+      "reply_pending": true
+    },
+    "check": "ok · chunk 5 (0.00 s to compute)\n",
+    "result": "pass"
+  },
+  {
+    "id": "brush-serialization",
+    "observation": {
+      "before": "0:04.14",
+      "after": "0:04.18",
+      "reply_pending": true
+    },
+    "second_pending": true,
+    "first": "ok\nok · chunk 6 (2.50 s to compute)\n",
+    "second": "ok\nok · chunk 7 (0.13 s to compute)\n",
+    "result": "pass"
+  },
+  {
+    "id": "brush-file-capture",
+    "pending_when_file_changed": true,
+    "cpu_advanced": true,
+    "reply": {
+      "stdout": "ok · chunk 8 (2.34 s to compute)\n",
+      "stderr": "",
+      "exit": 0
+    },
+    "check": "ok · chunk 9 (0.00 s to compute)\n",
+    "result": "pass"
+  },
+  {
+    "id": "brush-external-before",
+    "reply": {
+      "stdout": "",
+      "stderr": "session integrity: <isolated-root>/paintings/lua/brush.lua differs from the log the session wrote. The easel goes on only from the log it wrote; nothing ran.\n",
+      "exit": 1
+    },
+    "result": "pass"
+  },
+  {
+    "id": "brush-external-during",
+    "observation": {
+      "before": "0:07.58",
+      "after": "0:07.62",
+      "reply_pending": true
+    },
+    "reply": "err\nsession integrity: <isolated-root>/paintings/lua/brush.lua differs from the log the session wrote. The easel goes on only from the log it wrote; nothing ran.\n",
+    "restricted": {
+      "stdout": "",
+      "stderr": "session integrity: <isolated-root>/paintings/lua/brush.lua differs from the log the session wrote. The easel goes on only from the log it wrote; nothing ran.\n",
+      "exit": 1
+    },
+    "baseline_reopen": "ok · chunk 10 (0.00 s to compute)\n",
+    "result": "pass"
+  },
+  {
+    "id": "brush-server-kill",
+    "observation": {
+      "before": "0:07.69",
+      "after": "0:07.73",
+      "reply_pending": true
+    },
+    "reply": "",
+    "baseline_reopen": "ok · chunk 11 (0.00 s to compute)\n",
+    "png_equal": true,
+    "result": "pass"
+  },
+  {
+    "id": "brush-persistence",
+    "reply": {
+      "stdout": "",
+      "stderr": "Is a directory (os error 21)\n",
+      "exit": 1
+    },
+    "log_witness_diverge": true,
+    "close": {
+      "stdout": "",
+      "stderr": "session integrity: <isolated-root>/paintings/lua/brush.lua differs from the log the session wrote. The easel goes on only from the log it wrote; nothing ran.\n",
+      "exit": 1
+    },
+    "result": "pass"
+  },
+  {
+    "id": "brush-cleanup",
+    "stdout": "the live canvas is in <isolated-root>/out/easel/brush/live.png\nclosed; the session is in <isolated-root>/paintings/lua/brush.lua\n",
+    "stderr": "",
+    "exit": 0
+  },
+  {
+    "id": "mask-queued-abort",
+    "observation": {
+      "before": "0:00.54",
+      "after": "0:00.55",
+      "reply_pending": true
+    },
+    "first_reply": "ok\nok · chunk 2 (2.10 s to compute)\n",
+    "check": "ok · chunk 3 (0.00 s to compute)\n",
+    "result": "pass"
+  },
+  {
+    "id": "mask-running-disconnect",
+    "observation": {
+      "before": "0:02.26",
+      "after": "0:02.30",
+      "reply_pending": true
+    },
+    "check": "ok · chunk 5 (0.00 s to compute)\n",
+    "result": "pass"
+  },
+  {
+    "id": "mask-serialization",
+    "observation": {
+      "before": "0:04.01",
+      "after": "0:04.02",
+      "reply_pending": true
+    },
+    "second_pending": true,
+    "first": "ok\nok · chunk 6 (2.06 s to compute)\n",
+    "second": "ok\nok · chunk 7 (0.00 s to compute)\n",
+    "result": "pass"
+  },
+  {
+    "id": "mask-file-capture",
+    "pending_when_file_changed": true,
+    "cpu_advanced": true,
+    "reply": {
+      "stdout": "ok · chunk 8 (2.68 s to compute)\n",
+      "stderr": "",
+      "exit": 0
+    },
+    "check": "ok · chunk 9 (0.00 s to compute)\n",
+    "result": "pass"
+  },
+  {
+    "id": "mask-external-before",
+    "reply": {
+      "stdout": "",
+      "stderr": "session integrity: <isolated-root>/paintings/lua/mask.lua differs from the log the session wrote. The easel goes on only from the log it wrote; nothing ran.\n",
+      "exit": 1
+    },
+    "result": "pass"
+  },
+  {
+    "id": "mask-external-during",
+    "observation": {
+      "before": "0:07.60",
+      "after": "0:07.64",
+      "reply_pending": true
+    },
+    "reply": "err\nsession integrity: <isolated-root>/paintings/lua/mask.lua differs from the log the session wrote. The easel goes on only from the log it wrote; nothing ran.\n",
+    "restricted": {
+      "stdout": "",
+      "stderr": "session integrity: <isolated-root>/paintings/lua/mask.lua differs from the log the session wrote. The easel goes on only from the log it wrote; nothing ran.\n",
+      "exit": 1
+    },
+    "baseline_reopen": "ok · chunk 10 (0.00 s to compute)\n",
+    "result": "pass"
+  },
+  {
+    "id": "mask-server-kill",
+    "observation": {
+      "before": "0:06.86",
+      "after": "0:06.89",
+      "reply_pending": true
+    },
+    "reply": "",
+    "baseline_reopen": "ok · chunk 11 (0.00 s to compute)\n",
+    "png_equal": true,
+    "result": "pass"
+  },
+  {
+    "id": "mask-persistence",
+    "reply": {
+      "stdout": "",
+      "stderr": "Is a directory (os error 21)\n",
+      "exit": 1
+    },
+    "log_witness_diverge": true,
+    "close": {
+      "stdout": "",
+      "stderr": "session integrity: <isolated-root>/paintings/lua/mask.lua differs from the log the session wrote. The easel goes on only from the log it wrote; nothing ran.\n",
+      "exit": 1
+    },
+    "result": "pass"
+  },
+  {
+    "id": "mask-cleanup",
+    "stdout": "the live canvas is in <isolated-root>/out/easel/mask/live.png\nclosed; the session is in <isolated-root>/paintings/lua/mask.lua\n",
+    "stderr": "",
+    "exit": 0
+  },
+  {
+    "id": "drawing-queued-abort",
+    "observation": {
+      "before": "0:00.55",
+      "after": "0:00.58",
+      "reply_pending": true
+    },
+    "first_reply": "ok\nok · chunk 2 (1.18 s to compute)\n",
+    "check": "ok · chunk 3 (0.00 s to compute)\n",
+    "result": "pass"
+  },
+  {
+    "id": "drawing-running-disconnect",
+    "observation": {
+      "before": "0:01.74",
+      "after": "0:01.77",
+      "reply_pending": true
+    },
+    "check": "ok · chunk 5 (0.00 s to compute)\n",
+    "result": "pass"
+  },
+  {
+    "id": "drawing-serialization",
+    "observation": {
+      "before": "0:02.93",
+      "after": "0:02.96",
+      "reply_pending": true
+    },
+    "second_pending": true,
+    "first": "ok\nok · chunk 6 (1.21 s to compute)\n",
+    "second": "ok\nok · chunk 7 (0.00 s to compute)\n",
+    "result": "pass"
+  },
+  {
+    "id": "drawing-file-capture",
+    "pending_when_file_changed": true,
+    "cpu_advanced": true,
+    "reply": {
+      "stdout": "ok · chunk 8 (1.18 s to compute)\n",
+      "stderr": "",
+      "exit": 0
+    },
+    "check": "ok · chunk 9 (0.00 s to compute)\n",
+    "result": "pass"
+  },
+  {
+    "id": "drawing-external-before",
+    "reply": {
+      "stdout": "",
+      "stderr": "session integrity: <isolated-root>/paintings/lua/drawing.lua differs from the log the session wrote. The easel goes on only from the log it wrote; nothing ran.\n",
+      "exit": 1
+    },
+    "result": "pass"
+  },
+  {
+    "id": "drawing-external-during",
+    "observation": {
+      "before": "0:05.34",
+      "after": "0:05.38",
+      "reply_pending": true
+    },
+    "reply": "err\nsession integrity: <isolated-root>/paintings/lua/drawing.lua differs from the log the session wrote. The easel goes on only from the log it wrote; nothing ran.\n",
+    "restricted": {
+      "stdout": "",
+      "stderr": "session integrity: <isolated-root>/paintings/lua/drawing.lua differs from the log the session wrote. The easel goes on only from the log it wrote; nothing ran.\n",
+      "exit": 1
+    },
+    "baseline_reopen": "ok · chunk 10 (0.00 s to compute)\n",
+    "result": "pass"
+  },
+  {
+    "id": "drawing-server-kill",
+    "observation": {
+      "before": "0:05.72",
+      "after": "0:05.76",
+      "reply_pending": true
+    },
+    "reply": "",
+    "baseline_reopen": "ok · chunk 11 (0.00 s to compute)\n",
+    "png_equal": true,
+    "result": "pass"
+  },
+  {
+    "id": "drawing-persistence",
+    "reply": {
+      "stdout": "",
+      "stderr": "Is a directory (os error 21)\n",
+      "exit": 1
+    },
+    "log_witness_diverge": true,
+    "close": {
+      "stdout": "",
+      "stderr": "session integrity: <isolated-root>/paintings/lua/drawing.lua differs from the log the session wrote. The easel goes on only from the log it wrote; nothing ran.\n",
+      "exit": 1
+    },
+    "result": "pass"
+  },
+  {
+    "id": "drawing-cleanup",
+    "stdout": "the live canvas is in <isolated-root>/out/easel/drawing/live.png\nclosed; the session is in <isolated-root>/paintings/lua/drawing.lua\n",
+    "stderr": "",
+    "exit": 0
+  },
+  {
+    "id": "rag-queued-abort",
+    "observation": {
+      "before": "0:00.56",
+      "after": "0:00.59",
+      "reply_pending": true
+    },
+    "first_reply": "ok\nok · chunk 2 (1.24 s to compute)\n",
+    "check": "ok · chunk 3 (0.00 s to compute)\n",
+    "result": "pass"
+  },
+  {
+    "id": "rag-running-disconnect",
+    "observation": {
+      "before": "0:01.79",
+      "after": "0:01.80",
+      "reply_pending": true
+    },
+    "check": "ok · chunk 5 (0.00 s to compute)\n",
+    "result": "pass"
+  },
+  {
+    "id": "rag-serialization",
+    "observation": {
+      "before": "0:03.02",
+      "after": "0:03.07",
+      "reply_pending": true
+    },
+    "second_pending": true,
+    "first": "ok\nok · chunk 6 (1.29 s to compute)\n",
+    "second": "ok\nok · chunk 7 (0.00 s to compute)\n",
+    "result": "pass"
+  },
+  {
+    "id": "rag-file-capture",
+    "pending_when_file_changed": true,
+    "cpu_advanced": true,
+    "reply": {
+      "stdout": "ok · chunk 8 (1.22 s to compute)\n",
+      "stderr": "",
+      "exit": 0
+    },
+    "check": "ok · chunk 9 (0.00 s to compute)\n",
+    "result": "pass"
+  },
+  {
+    "id": "rag-external-before",
+    "reply": {
+      "stdout": "",
+      "stderr": "session integrity: <isolated-root>/paintings/lua/rag.lua differs from the log the session wrote. The easel goes on only from the log it wrote; nothing ran.\n",
+      "exit": 1
+    },
+    "result": "pass"
+  },
+  {
+    "id": "rag-external-during",
+    "observation": {
+      "before": "0:05.51",
+      "after": "0:05.53",
+      "reply_pending": true
+    },
+    "reply": "err\nsession integrity: <isolated-root>/paintings/lua/rag.lua differs from the log the session wrote. The easel goes on only from the log it wrote; nothing ran.\n",
+    "restricted": {
+      "stdout": "",
+      "stderr": "session integrity: <isolated-root>/paintings/lua/rag.lua differs from the log the session wrote. The easel goes on only from the log it wrote; nothing ran.\n",
+      "exit": 1
+    },
+    "baseline_reopen": "ok · chunk 10 (0.00 s to compute)\n",
+    "result": "pass"
+  },
+  {
+    "id": "rag-server-kill",
+    "observation": {
+      "before": "0:05.55",
+      "after": "0:05.56",
+      "reply_pending": true
+    },
+    "reply": "",
+    "baseline_reopen": "ok · chunk 11 (0.00 s to compute)\n",
+    "png_equal": true,
+    "result": "pass"
+  },
+  {
+    "id": "rag-persistence",
+    "reply": {
+      "stdout": "",
+      "stderr": "Is a directory (os error 21)\n",
+      "exit": 1
+    },
+    "log_witness_diverge": true,
+    "close": {
+      "stdout": "",
+      "stderr": "session integrity: <isolated-root>/paintings/lua/rag.lua differs from the log the session wrote. The easel goes on only from the log it wrote; nothing ran.\n",
+      "exit": 1
+    },
+    "result": "pass"
+  },
+  {
+    "id": "rag-cleanup",
+    "stdout": "the live canvas is in <isolated-root>/out/easel/rag/live.png\nclosed; the session is in <isolated-root>/paintings/lua/rag.lua\n",
+    "stderr": "",
+    "exit": 0
+  },
+  {
+    "id": "passage-queued-abort",
+    "observation": {
+      "before": "0:00.59",
+      "after": "0:00.60",
+      "reply_pending": true
+    },
+    "first_reply": "ok\nok · chunk 2 (1.16 s to compute)\n",
+    "check": "ok · chunk 3 (0.00 s to compute)\n",
+    "result": "pass"
+  },
+  {
+    "id": "passage-running-disconnect",
+    "observation": {
+      "before": "0:01.76",
+      "after": "0:01.98",
+      "reply_pending": true
+    },
+    "check": "ok · chunk 5 (0.00 s to compute)\n",
+    "result": "pass"
+  },
+  {
+    "id": "passage-serialization",
+    "observation": {
+      "before": "0:03.18",
+      "after": "0:03.22",
+      "reply_pending": true
+    },
+    "second_pending": true,
+    "first": "ok\nok · chunk 6 (1.22 s to compute)\n",
+    "second": "ok\nok · chunk 7 (0.04 s to compute)\n",
+    "result": "pass"
+  },
+  {
+    "id": "passage-file-capture",
+    "pending_when_file_changed": true,
+    "cpu_advanced": true,
+    "reply": {
+      "stdout": "ok · chunk 8 (1.22 s to compute)\n",
+      "stderr": "",
+      "exit": 0
+    },
+    "check": "ok · chunk 9 (0.00 s to compute)\n",
+    "result": "pass"
+  },
+  {
+    "id": "passage-external-before",
+    "reply": {
+      "stdout": "",
+      "stderr": "session integrity: <isolated-root>/paintings/lua/passage.lua differs from the log the session wrote. The easel goes on only from the log it wrote; nothing ran.\n",
+      "exit": 1
+    },
+    "result": "pass"
+  },
+  {
+    "id": "passage-external-during",
+    "observation": {
+      "before": "0:05.72",
+      "after": "0:05.76",
+      "reply_pending": true
+    },
+    "reply": "err\nsession integrity: <isolated-root>/paintings/lua/passage.lua differs from the log the session wrote. The easel goes on only from the log it wrote; nothing ran.\n",
+    "restricted": {
+      "stdout": "",
+      "stderr": "session integrity: <isolated-root>/paintings/lua/passage.lua differs from the log the session wrote. The easel goes on only from the log it wrote; nothing ran.\n",
+      "exit": 1
+    },
+    "baseline_reopen": "ok · chunk 10 (0.00 s to compute)\n",
+    "result": "pass"
+  },
+  {
+    "id": "passage-server-kill",
+    "observation": {
+      "before": "0:05.86",
+      "after": "0:05.88",
+      "reply_pending": true
+    },
+    "reply": "",
+    "baseline_reopen": "ok · chunk 11 (0.00 s to compute)\n",
+    "png_equal": true,
+    "result": "pass"
+  },
+  {
+    "id": "passage-persistence",
+    "reply": {
+      "stdout": "",
+      "stderr": "Is a directory (os error 21)\n",
+      "exit": 1
+    },
+    "log_witness_diverge": true,
+    "close": {
+      "stdout": "",
+      "stderr": "session integrity: <isolated-root>/paintings/lua/passage.lua differs from the log the session wrote. The easel goes on only from the log it wrote; nothing ran.\n",
+      "exit": 1
+    },
+    "result": "pass"
+  },
+  {
+    "id": "passage-cleanup",
+    "stdout": "the live canvas is in <isolated-root>/out/easel/passage/live.png\nclosed; the session is in <isolated-root>/paintings/lua/passage.lua\n",
+    "stderr": "",
+    "exit": 0
+  },
+  {
+    "id": "time-queued-abort",
+    "observation": {
+      "before": "0:00.62",
+      "after": "0:00.63",
+      "reply_pending": true
+    },
+    "first_reply": "ok\nok · chunk 2 (1.21 s to compute)\n",
+    "check": "ok · chunk 3 (0.00 s to compute)\n",
+    "result": "pass"
+  },
+  {
+    "id": "time-running-disconnect",
+    "observation": {
+      "before": "0:01.84",
+      "after": "0:01.88",
+      "reply_pending": true
+    },
+    "check": "ok · chunk 5 (0.00 s to compute)\n",
+    "result": "pass"
+  },
+  {
+    "id": "time-serialization",
+    "observation": {
+      "before": "0:03.07",
+      "after": "0:03.10",
+      "reply_pending": true
+    },
+    "second_pending": true,
+    "first": "ok\nok · chunk 6 (1.16 s to compute)\n",
+    "second": "ok\nok · chunk 7 (0.00 s to compute)\n",
+    "result": "pass"
+  },
+  {
+    "id": "time-file-capture",
+    "pending_when_file_changed": true,
+    "cpu_advanced": true,
+    "reply": {
+      "stdout": "ok · chunk 8 (1.23 s to compute)\n",
+      "stderr": "",
+      "exit": 0
+    },
+    "check": "ok · chunk 9 (0.00 s to compute)\n",
+    "result": "pass"
+  },
+  {
+    "id": "time-external-before",
+    "reply": {
+      "stdout": "",
+      "stderr": "session integrity: <isolated-root>/paintings/lua/time.lua differs from the log the session wrote. The easel goes on only from the log it wrote; nothing ran.\n",
+      "exit": 1
+    },
+    "result": "pass"
+  },
+  {
+    "id": "time-external-during",
+    "observation": {
+      "before": "0:05.47",
+      "after": "0:05.51",
+      "reply_pending": true
+    },
+    "reply": "err\nsession integrity: <isolated-root>/paintings/lua/time.lua differs from the log the session wrote. The easel goes on only from the log it wrote; nothing ran.\n",
+    "restricted": {
+      "stdout": "",
+      "stderr": "session integrity: <isolated-root>/paintings/lua/time.lua differs from the log the session wrote. The easel goes on only from the log it wrote; nothing ran.\n",
+      "exit": 1
+    },
+    "baseline_reopen": "ok · chunk 10 (0.00 s to compute)\n",
+    "result": "pass"
+  },
+  {
+    "id": "time-server-kill",
+    "observation": {
+      "before": "0:05.28",
+      "after": "0:05.31",
+      "reply_pending": true
+    },
+    "reply": "",
+    "baseline_reopen": "ok · chunk 11 (0.00 s to compute)\n",
+    "png_equal": true,
+    "result": "pass"
+  },
+  {
+    "id": "time-persistence",
+    "reply": {
+      "stdout": "",
+      "stderr": "Is a directory (os error 21)\n",
+      "exit": 1
+    },
+    "log_witness_diverge": true,
+    "close": {
+      "stdout": "",
+      "stderr": "session integrity: <isolated-root>/paintings/lua/time.lua differs from the log the session wrote. The easel goes on only from the log it wrote; nothing ran.\n",
+      "exit": 1
+    },
+    "result": "pass"
+  },
+  {
+    "id": "time-cleanup",
+    "stdout": "the live canvas is in <isolated-root>/out/easel/time/live.png\nclosed; the session is in <isolated-root>/paintings/lua/time.lua\n",
+    "stderr": "",
+    "exit": 0
+  }
+]

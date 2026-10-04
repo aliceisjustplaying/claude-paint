@@ -1,0 +1,672 @@
+[
+  {
+    "args": [
+      "open",
+      "finish-marks"
+    ],
+    "exit": 0,
+    "out": "easel \"finish-marks\" open: 0 chunks · 2400px · no canvas yet\n",
+    "err": "",
+    "seconds": 0.1065
+  },
+  {
+    "args": [
+      "do",
+      "canvas{size=100,aspect=5,linen=12,ground={{pile={{\"lead white\",1}},um=40,apply=\"knife\"}}}; p=pile{{\"red earth\",1}}; q=pile{{\"lead white\",1}}; m=rect(300,40,200,100); b=brush(\"round\",4);b:load(p);h=pencil();"
+    ],
+    "exit": 0,
+    "out": "ok · chunk 1 (0.07 s to compute)\n",
+    "err": "",
+    "seconds": 0.0798
+  },
+  {
+    "args": [
+      "do",
+      "print(b:fullness(),h.worn,m:area());b:stroke({{100,80},{300,80}});b:wipe(1);h:line({{400,80},{600,80}});h:sharpen();m=m:grow(5);print(b:fullness(),h.worn,m:area())"
+    ],
+    "exit": 0,
+    "out": "0.77146703004837036\t0.0\t19999.9984105429\n0.0\t0.0\t23076.724668869036\nok · chunk 2 (0.08 s to compute)\n",
+    "err": "",
+    "seconds": 0.0954
+  },
+  {
+    "args": [
+      "save",
+      "<scratch-file>"
+    ],
+    "exit": 0,
+    "out": "<root>inal/history-before.png\n",
+    "err": "",
+    "seconds": 0.0314
+  },
+  {
+    "args": [
+      "do",
+      "b:load(p);b:touch(400,80);h:line({{100,100},{800,100}});h:sharpen();m=m:grow(10);error(\"rollback\")"
+    ],
+    "exit": 1,
+    "out": "",
+    "err": "runtime error: [string \"chunk 3\"]:1: rollback\n(the chunk failed and changed nothing)\n",
+    "seconds": 0.0362
+  },
+  {
+    "args": [
+      "do",
+      "print(b:fullness(),h.worn,m:area())"
+    ],
+    "exit": 0,
+    "out": "0.0\t0.0\t23076.724668869036\nok · chunk 3 (0.00 s to compute)\n",
+    "err": "",
+    "seconds": 0.0176
+  },
+  {
+    "args": [
+      "save",
+      "<scratch-file>"
+    ],
+    "exit": 0,
+    "out": "<root>inal/history-after.png\n",
+    "err": "",
+    "seconds": 0.0256
+  },
+  {
+    "args": [
+      "do",
+      "print(m,outline{pts={{100,40},{200,40},{200,100}},seed=1});alias=m;derived=m:grow(5)"
+    ],
+    "exit": 0,
+    "out": "mask(23077 sq units)\toutline(1 line(s), closed, length 277, 8 strokes, 3 corners, scale 111)\nok · chunk 4 (0.01 s to compute)\n",
+    "err": "",
+    "seconds": 0.0212
+  },
+  {
+    "args": [
+      "do",
+      "print(m:area(),alias:area(),derived:area());mask(\"image.png\")"
+    ],
+    "exit": 1,
+    "out": "",
+    "err": "23076.724668869036\t23076.724668869036\t26315.085111187382\nbad argument #1: error converting Lua string to function\n(the chunk failed and changed nothing)\n",
+    "seconds": 0.013
+  },
+  {
+    "args": [
+      "do",
+      "r=rag{width=20};r:wipe(\"image.png\")"
+    ],
+    "exit": 1,
+    "out": "",
+    "err": "runtime error: wipe: want a mask or points, got string\n(the chunk failed and changed nothing)\n",
+    "seconds": 0.0099
+  },
+  {
+    "args": [
+      "do",
+      "local sum,sq,lo,hi=0,0,1,-1;for i=1,10000 do local v=rand();sum=sum+v;sq=sq+v*v;lo=math.min(lo,v);hi=math.max(hi,v) end;print(\"uniform\",sum/10000,sq/10000-(sum/10000)^2,lo,hi);sum=0;sq=0;for i=1,10000 do local v=randn();sum=sum+v;sq=sq+v*v end;print(\"normal\",sum/10000,sq/10000-(sum/10000)^2)"
+    ],
+    "exit": 0,
+    "out": "uniform\t0.49789781754016876\t0.084220988126030655\t6.1392784118652344e-06\t0.99994820356369019\nnormal\t0.0020001413037552991\t0.99859923522298821\nok · chunk 5 (0.00 s to compute)\n",
+    "err": "",
+    "seconds": 0.0177
+  },
+  {
+    "args": [
+      "close"
+    ],
+    "exit": 0,
+    "out": "the live canvas is in <root>/out/easel/finish-marks/live.png\nclosed; the session is in <root>/paintings/lua/finish-marks.lua\n",
+    "err": "",
+    "seconds": 0.1111
+  },
+  {
+    "args": [
+      "open",
+      "outline-paint-default"
+    ],
+    "exit": 0,
+    "out": "easel \"outline-paint-default\" open: 0 chunks · 2400px · no canvas yet\n",
+    "err": "",
+    "seconds": 0.1051
+  },
+  {
+    "args": [
+      "do",
+      "canvas{size=100,aspect=5,linen=12,ground={{pile={{\"lead white\",1}},um=40,apply=\"knife\"}}}; p=pile{{\"red earth\",1}}; q=pile{{\"lead white\",1}}; m=rect(300,40,200,100); o=outline{pts={{200,30},{400,30},{450,140},{250,140}},seed=1};b=brush(\"flat\",10);"
+    ],
+    "exit": 0,
+    "out": "ok · chunk 1 (0.09 s to compute)\n",
+    "err": "",
+    "seconds": 0.1028
+  },
+  {
+    "args": [
+      "do",
+      "print(o:paint(b,{dip={p,0.6},}));print(b:fullness())"
+    ],
+    "exit": 0,
+    "out": "8\n0.18122996389865875\nok · chunk 2 (0.09 s to compute)\n",
+    "err": "",
+    "seconds": 0.1129
+  },
+  {
+    "args": [
+      "save",
+      "<scratch-file>"
+    ],
+    "exit": 0,
+    "out": "<root>inal/outline-paint-default.png\n",
+    "err": "",
+    "seconds": 0.0273
+  },
+  {
+    "args": [
+      "close"
+    ],
+    "exit": 0,
+    "out": "the live canvas is in <root>/out/easel/outline-paint-default/live.png\nclosed; the session is in <root>/paintings/lua/outline-paint-default.lua\n",
+    "err": "",
+    "seconds": 0.0928
+  },
+  {
+    "args": [
+      "open",
+      "outline-paint-explicit"
+    ],
+    "exit": 0,
+    "out": "easel \"outline-paint-explicit\" open: 0 chunks · 2400px · no canvas yet\n",
+    "err": "",
+    "seconds": 0.1144
+  },
+  {
+    "args": [
+      "do",
+      "canvas{size=100,aspect=5,linen=12,ground={{pile={{\"lead white\",1}},um=40,apply=\"knife\"}}}; p=pile{{\"red earth\",1}}; q=pile{{\"lead white\",1}}; m=rect(300,40,200,100); o=outline{pts={{200,30},{400,30},{450,140},{250,140}},seed=1};b=brush(\"flat\",10);"
+    ],
+    "exit": 0,
+    "out": "ok · chunk 1 (0.07 s to compute)\n",
+    "err": "",
+    "seconds": 0.0827
+  },
+  {
+    "args": [
+      "do",
+      "print(o:paint(b,{dip={p,0.6},pressure=1,shake=0.3,every=3}));print(b:fullness())"
+    ],
+    "exit": 0,
+    "out": "8\n0.18122996389865875\nok · chunk 2 (0.09 s to compute)\n",
+    "err": "",
+    "seconds": 0.1144
+  },
+  {
+    "args": [
+      "save",
+      "<scratch-file>"
+    ],
+    "exit": 0,
+    "out": "<root>inal/outline-paint-explicit.png\n",
+    "err": "",
+    "seconds": 0.0273
+  },
+  {
+    "args": [
+      "close"
+    ],
+    "exit": 0,
+    "out": "the live canvas is in <root>/out/easel/outline-paint-explicit/live.png\nclosed; the session is in <root>/paintings/lua/outline-paint-explicit.lua\n",
+    "err": "",
+    "seconds": 0.1048
+  },
+  {
+    "args": [
+      "open",
+      "outline-paint-pressure"
+    ],
+    "exit": 0,
+    "out": "easel \"outline-paint-pressure\" open: 0 chunks · 2400px · no canvas yet\n",
+    "err": "",
+    "seconds": 0.1081
+  },
+  {
+    "args": [
+      "do",
+      "canvas{size=100,aspect=5,linen=12,ground={{pile={{\"lead white\",1}},um=40,apply=\"knife\"}}}; p=pile{{\"red earth\",1}}; q=pile{{\"lead white\",1}}; m=rect(300,40,200,100); o=outline{pts={{200,30},{400,30},{450,140},{250,140}},seed=1};b=brush(\"flat\",10);"
+    ],
+    "exit": 0,
+    "out": "ok · chunk 1 (0.07 s to compute)\n",
+    "err": "",
+    "seconds": 0.0833
+  },
+  {
+    "args": [
+      "do",
+      "print(o:paint(b,{dip={p,0.6},pressure=0.2}));print(b:fullness())"
+    ],
+    "exit": 0,
+    "out": "8\n0.678879976272583\nok · chunk 2 (0.06 s to compute)\n",
+    "err": "",
+    "seconds": 0.0855
+  },
+  {
+    "args": [
+      "save",
+      "<scratch-file>"
+    ],
+    "exit": 0,
+    "out": "<root>inal/outline-paint-pressure.png\n",
+    "err": "",
+    "seconds": 0.0271
+  },
+  {
+    "args": [
+      "close"
+    ],
+    "exit": 0,
+    "out": "the live canvas is in <root>/out/easel/outline-paint-pressure/live.png\nclosed; the session is in <root>/paintings/lua/outline-paint-pressure.lua\n",
+    "err": "",
+    "seconds": 0.0881
+  },
+  {
+    "args": [
+      "open",
+      "outline-paint-shake"
+    ],
+    "exit": 0,
+    "out": "easel \"outline-paint-shake\" open: 0 chunks · 2400px · no canvas yet\n",
+    "err": "",
+    "seconds": 0.1142
+  },
+  {
+    "args": [
+      "do",
+      "canvas{size=100,aspect=5,linen=12,ground={{pile={{\"lead white\",1}},um=40,apply=\"knife\"}}}; p=pile{{\"red earth\",1}}; q=pile{{\"lead white\",1}}; m=rect(300,40,200,100); o=outline{pts={{200,30},{400,30},{450,140},{250,140}},seed=1};b=brush(\"flat\",10);"
+    ],
+    "exit": 0,
+    "out": "ok · chunk 1 (0.07 s to compute)\n",
+    "err": "",
+    "seconds": 0.0833
+  },
+  {
+    "args": [
+      "do",
+      "print(o:paint(b,{dip={p,0.6},shake=4}));print(b:fullness())"
+    ],
+    "exit": 0,
+    "out": "8\n0.19426153600215912\nok · chunk 2 (0.09 s to compute)\n",
+    "err": "",
+    "seconds": 0.1195
+  },
+  {
+    "args": [
+      "save",
+      "<scratch-file>"
+    ],
+    "exit": 0,
+    "out": "<root>inal/outline-paint-shake.png\n",
+    "err": "",
+    "seconds": 0.0267
+  },
+  {
+    "args": [
+      "close"
+    ],
+    "exit": 0,
+    "out": "the live canvas is in <root>/out/easel/outline-paint-shake/live.png\nclosed; the session is in <root>/paintings/lua/outline-paint-shake.lua\n",
+    "err": "",
+    "seconds": 0.112
+  },
+  {
+    "args": [
+      "open",
+      "outline-paint-ramps"
+    ],
+    "exit": 0,
+    "out": "easel \"outline-paint-ramps\" open: 0 chunks · 2400px · no canvas yet\n",
+    "err": "",
+    "seconds": 0.1141
+  },
+  {
+    "args": [
+      "do",
+      "canvas{size=100,aspect=5,linen=12,ground={{pile={{\"lead white\",1}},um=40,apply=\"knife\"}}}; p=pile{{\"red earth\",1}}; q=pile{{\"lead white\",1}}; m=rect(300,40,200,100); o=outline{pts={{200,30},{400,30},{450,140},{250,140}},seed=1};b=brush(\"flat\",10);"
+    ],
+    "exit": 0,
+    "out": "ok · chunk 1 (0.07 s to compute)\n",
+    "err": "",
+    "seconds": 0.0841
+  },
+  {
+    "args": [
+      "do",
+      "print(o:paint(b,{dip={p,0.6},ramps={0.4,0.4}}));print(b:fullness())"
+    ],
+    "exit": 0,
+    "out": "8\n0.23193170130252838\nok · chunk 2 (0.09 s to compute)\n",
+    "err": "",
+    "seconds": 0.1076
+  },
+  {
+    "args": [
+      "save",
+      "<scratch-file>"
+    ],
+    "exit": 0,
+    "out": "<root>inal/outline-paint-ramps.png\n",
+    "err": "",
+    "seconds": 0.0273
+  },
+  {
+    "args": [
+      "close"
+    ],
+    "exit": 0,
+    "out": "the live canvas is in <root>/out/easel/outline-paint-ramps/live.png\nclosed; the session is in <root>/paintings/lua/outline-paint-ramps.lua\n",
+    "err": "",
+    "seconds": 0.1078
+  },
+  {
+    "args": [
+      "open",
+      "outline-paint-clip"
+    ],
+    "exit": 0,
+    "out": "easel \"outline-paint-clip\" open: 0 chunks · 2400px · no canvas yet\n",
+    "err": "",
+    "seconds": 0.108
+  },
+  {
+    "args": [
+      "do",
+      "canvas{size=100,aspect=5,linen=12,ground={{pile={{\"lead white\",1}},um=40,apply=\"knife\"}}}; p=pile{{\"red earth\",1}}; q=pile{{\"lead white\",1}}; m=rect(300,40,200,100); o=outline{pts={{200,30},{400,30},{450,140},{250,140}},seed=1};b=brush(\"flat\",10);"
+    ],
+    "exit": 0,
+    "out": "ok · chunk 1 (0.07 s to compute)\n",
+    "err": "",
+    "seconds": 0.0846
+  },
+  {
+    "args": [
+      "do",
+      "print(o:paint(b,{dip={p,0.6},clip=rect(250,40,100,80)}));print(b:fullness())"
+    ],
+    "exit": 0,
+    "out": "8\n1.7455120086669922\nok · chunk 2 (0.05 s to compute)\n",
+    "err": "",
+    "seconds": 0.0659
+  },
+  {
+    "args": [
+      "save",
+      "<scratch-file>"
+    ],
+    "exit": 0,
+    "out": "<root>inal/outline-paint-clip.png\n",
+    "err": "",
+    "seconds": 0.0263
+  },
+  {
+    "args": [
+      "close"
+    ],
+    "exit": 0,
+    "out": "the live canvas is in <root>/out/easel/outline-paint-clip/live.png\nclosed; the session is in <root>/paintings/lua/outline-paint-clip.lua\n",
+    "err": "",
+    "seconds": 0.0956
+  },
+  {
+    "args": [
+      "open",
+      "brush-pref-plain"
+    ],
+    "exit": 0,
+    "out": "easel \"brush-pref-plain\" open: 0 chunks · 2400px · no canvas yet\n",
+    "err": "",
+    "seconds": 0.1142
+  },
+  {
+    "args": [
+      "do",
+      "canvas{size=100,aspect=5,linen=12,ground={{pile={{\"lead white\",1}},um=40,apply=\"knife\"}}}; p=pile{{\"red earth\",1}}; q=pile{{\"lead white\",1}}; m=rect(300,40,200,100); b=brush(\"flat\",12);b:load(p);"
+    ],
+    "exit": 0,
+    "out": "ok · chunk 1 (0.07 s to compute)\n",
+    "err": "",
+    "seconds": 0.0816
+  },
+  {
+    "args": [
+      "do",
+      "b:stroke({{200,80},{500,120},{800,80}});print(b)"
+    ],
+    "exit": 0,
+    "out": "brush(flat 12, 0% full)\nok · chunk 2 (0.10 s to compute)\n",
+    "err": "",
+    "seconds": 0.1179
+  },
+  {
+    "args": [
+      "save",
+      "<scratch-file>"
+    ],
+    "exit": 0,
+    "out": "<root>inal/brush-pref-plain.png\n",
+    "err": "",
+    "seconds": 0.0278
+  },
+  {
+    "args": [
+      "close"
+    ],
+    "exit": 0,
+    "out": "the live canvas is in <root>/out/easel/brush-pref-plain/live.png\nclosed; the session is in <root>/paintings/lua/brush-pref-plain.lua\n",
+    "err": "",
+    "seconds": 0.1465
+  },
+  {
+    "args": [
+      "open",
+      "brush-pref-custom"
+    ],
+    "exit": 0,
+    "out": "easel \"brush-pref-custom\" open: 0 chunks · 2400px · no canvas yet\n",
+    "err": "",
+    "seconds": 0.1238
+  },
+  {
+    "args": [
+      "do",
+      "canvas{size=100,aspect=5,linen=12,ground={{pile={{\"lead white\",1}},um=40,apply=\"knife\"}}}; p=pile{{\"red earth\",1}}; q=pile{{\"lead white\",1}}; m=rect(300,40,200,100); custom=brush{kind=\"round\",width=12,stiffness=0.1,bristles=15};b=brush(\"flat\",12);b:load(p);"
+    ],
+    "exit": 0,
+    "out": "ok · chunk 1 (0.09 s to compute)\n",
+    "err": "",
+    "seconds": 0.1101
+  },
+  {
+    "args": [
+      "do",
+      "b:stroke({{200,80},{500,120},{800,80}});print(b)"
+    ],
+    "exit": 0,
+    "out": "brush(flat 12, 0% full)\nok · chunk 2 (0.14 s to compute)\n",
+    "err": "",
+    "seconds": 0.158
+  },
+  {
+    "args": [
+      "save",
+      "<scratch-file>"
+    ],
+    "exit": 0,
+    "out": "<root>inal/brush-pref-custom.png\n",
+    "err": "",
+    "seconds": 0.0276
+  },
+  {
+    "args": [
+      "close"
+    ],
+    "exit": 0,
+    "out": "the live canvas is in <root>/out/easel/brush-pref-custom/live.png\nclosed; the session is in <root>/paintings/lua/brush-pref-custom.lua\n",
+    "err": "",
+    "seconds": 0.1643
+  },
+  {
+    "args": [
+      "open",
+      "sealed-0_02"
+    ],
+    "exit": 0,
+    "out": "easel \"sealed-0_02\" open: 0 chunks · 2400px · no canvas yet\n",
+    "err": "",
+    "seconds": 0.1146
+  },
+  {
+    "args": [
+      "do",
+      "canvas{size=100,aspect=5,linen=12,ground={{pile={{\"lead white\",1}},um=40,apply=\"knife\"}}}; p=pile{{\"red earth\",1}}; q=pile{{\"lead white\",1}}; m=rect(300,40,200,100); h=pencil(\"9B\");h:rule({100,80},{800,80},{pressure=1});"
+    ],
+    "exit": 0,
+    "out": "ok · chunk 1 (0.16 s to compute)\n",
+    "err": "",
+    "seconds": 0.1767
+  },
+  {
+    "args": [
+      "do",
+      "work(m,{pile=q,hand=\"detail\",coverage=0.02,clip=true,seed=1});print(drawing_guide():at(400,80));erase(m);print(drawing_guide():at(400,80))"
+    ],
+    "exit": 0,
+    "out": "1.0\n0.43240004777908325\nok · chunk 2 (0.04 s to compute)\n",
+    "err": "",
+    "seconds": 0.0633
+  },
+  {
+    "args": [
+      "save",
+      "<scratch-file>"
+    ],
+    "exit": 0,
+    "out": "<root>inal/sealed-0.02.png\n",
+    "err": "",
+    "seconds": 0.0285
+  },
+  {
+    "args": [
+      "close"
+    ],
+    "exit": 0,
+    "out": "the live canvas is in <root>/out/easel/sealed-0_02/live.png\nclosed; the session is in <root>/paintings/lua/sealed-0_02.lua\n",
+    "err": "",
+    "seconds": 0.1137
+  },
+  {
+    "args": [
+      "open",
+      "sealed-2"
+    ],
+    "exit": 0,
+    "out": "easel \"sealed-2\" open: 0 chunks · 2400px · no canvas yet\n",
+    "err": "",
+    "seconds": 0.1077
+  },
+  {
+    "args": [
+      "do",
+      "canvas{size=100,aspect=5,linen=12,ground={{pile={{\"lead white\",1}},um=40,apply=\"knife\"}}}; p=pile{{\"red earth\",1}}; q=pile{{\"lead white\",1}}; m=rect(300,40,200,100); h=pencil(\"9B\");h:rule({100,80},{800,80},{pressure=1});"
+    ],
+    "exit": 0,
+    "out": "ok · chunk 1 (0.16 s to compute)\n",
+    "err": "",
+    "seconds": 0.1737
+  },
+  {
+    "args": [
+      "do",
+      "work(m,{pile=q,hand=\"detail\",coverage=2,clip=true,seed=1});print(drawing_guide():at(400,80));erase(m);print(drawing_guide():at(400,80))"
+    ],
+    "exit": 0,
+    "out": "1.0\n0.43240004777908325\nok · chunk 2 (0.57 s to compute)\n",
+    "err": "",
+    "seconds": 0.5966
+  },
+  {
+    "args": [
+      "save",
+      "<scratch-file>"
+    ],
+    "exit": 0,
+    "out": "<root>inal/sealed-2.png\n",
+    "err": "",
+    "seconds": 0.0279
+  },
+  {
+    "args": [
+      "close"
+    ],
+    "exit": 0,
+    "out": "the live canvas is in <root>/out/easel/sealed-2/live.png\nclosed; the session is in <root>/paintings/lua/sealed-2.lua\n",
+    "err": "",
+    "seconds": 0.1173
+  },
+  {
+    "args": [
+      "open",
+      "rag-long"
+    ],
+    "exit": 0,
+    "out": "easel \"rag-long\" open: 0 chunks · 2400px · no canvas yet\n",
+    "err": "",
+    "seconds": 0.1105
+  },
+  {
+    "args": [
+      "do",
+      "canvas{size=100,aspect=5,linen=12,ground={{pile={{\"lead white\",1}},um=40,apply=\"knife\"}}}; p=pile{{\"red earth\",1}}; q=pile{{\"lead white\",1}}; m=rect(300,40,200,100); m=rect(350,50,100,60);work(m,{pile=p,hand=\"detail\",coverage=3,clip=true,seed=1});r=rag{width=1,seed=1};r:dip(1);print(wait(0),drying(400,80));"
+    ],
+    "exit": 0,
+    "out": "day 1, 09:23\topen\nok · chunk 1 (0.45 s to compute)\n",
+    "err": "",
+    "seconds": 0.4627
+  },
+  {
+    "args": [
+      "do",
+      "r:wipe(m,{passes=20,refold=0.01});print(wait(0),drying(400,80),r.load,r.soaked,r.fold)"
+    ],
+    "exit": 0,
+    "out": "day 1, 11:49\topen\t0.99999964237213135\t0.99999880790710449\t2288\nok · chunk 2 (28.51 s to compute)\n",
+    "err": "",
+    "seconds": 28.5287
+  },
+  {
+    "args": [
+      "save",
+      "<scratch-file>"
+    ],
+    "exit": 0,
+    "out": "<root>inal/rag-long.png\n",
+    "err": "",
+    "seconds": 0.0262
+  },
+  {
+    "args": [
+      "close"
+    ],
+    "exit": 0,
+    "out": "the live canvas is in <root>/out/easel/rag-long/live.png\nclosed; the session is in <root>/paintings/lua/rag-long.lua\n",
+    "err": "",
+    "seconds": 0.0963
+  },
+  {
+    "args": [
+      "run",
+      "<scratch-file>",
+      "--out",
+      "<scratch-file>"
+    ],
+    "exit": 1,
+    "out": "nil\n",
+    "err": "  chunk   1     0.00s\nthe program never made a canvas\n",
+    "seconds": 0.0041
+  }
+]

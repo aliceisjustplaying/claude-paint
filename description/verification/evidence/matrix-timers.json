@@ -1,0 +1,106 @@
+{
+  "started": "2026-10-04T12:08:38Z",
+  "source_commit": "4e525e50897807e9b5f734071dfeb330f1a393d3",
+  "cases": {
+    "stalled": {
+      "start": "2026-10-04T12:09:02Z",
+      "pauses": [
+        {
+          "chunk": 1,
+          "at_seconds": 0.018
+        }
+      ],
+      "status": "complete",
+      "seconds": 1800.184,
+      "exit": 1,
+      "stdout": "resuming chunk 1/1\n",
+      "stderr": "session made no replay progress for 30 minutes; see <isolated-root>/out/easel/stalled/server.log\n"
+    },
+    "progressing": {
+      "start": "2026-10-04T12:09:02Z",
+      "pauses": [
+        {
+          "chunk": 1,
+          "at_seconds": 0.015
+        },
+        {
+          "chunk": 2,
+          "at_seconds": 106.332
+        },
+        {
+          "chunk": 3,
+          "at_seconds": 212.123
+        },
+        {
+          "chunk": 4,
+          "at_seconds": 318.09
+        },
+        {
+          "chunk": 5,
+          "at_seconds": 423.979
+        },
+        {
+          "chunk": 6,
+          "at_seconds": 529.799
+        },
+        {
+          "chunk": 7,
+          "at_seconds": 635.592
+        },
+        {
+          "chunk": 8,
+          "at_seconds": 741.42
+        },
+        {
+          "chunk": 9,
+          "at_seconds": 847.239
+        },
+        {
+          "chunk": 10,
+          "at_seconds": 953.079
+        },
+        {
+          "chunk": 11,
+          "at_seconds": 1058.898
+        },
+        {
+          "chunk": 12,
+          "at_seconds": 1164.727
+        },
+        {
+          "chunk": 13,
+          "at_seconds": 1270.532
+        },
+        {
+          "chunk": 14,
+          "at_seconds": 1376.717
+        },
+        {
+          "chunk": 15,
+          "at_seconds": 1482.546
+        },
+        {
+          "chunk": 16,
+          "at_seconds": 1588.37
+        },
+        {
+          "chunk": 17,
+          "at_seconds": 1694.189
+        },
+        {
+          "chunk": 18,
+          "at_seconds": 1800.025
+        },
+        {
+          "chunk": 19,
+          "at_seconds": 1905.843
+        }
+      ],
+      "status": "complete",
+      "seconds": 2011.715,
+      "exit": 0,
+      "stdout": "resuming chunk 1/19\nresumed chunk 1/19 106.31s\nresuming chunk 2/19\nresumed chunk 2/19 105.79s\nresuming chunk 3/19\nresumed chunk 3/19 105.97s\nresuming chunk 4/19\nresumed chunk 4/19 105.89s\nresuming chunk 5/19\nresumed chunk 5/19 105.82s\nresuming chunk 6/19\nresumed chunk 6/19 105.79s\nresuming chunk 7/19\nresumed chunk 7/19 105.82s\nresuming chunk 8/19\nresumed chunk 8/19 105.83s\nresuming chunk 9/19\nresumed chunk 9/19 105.84s\nresuming chunk 10/19\nresumed chunk 10/19 105.82s\nresuming chunk 11/19\nresumed chunk 11/19 105.82s\nresuming chunk 12/19\nresumed chunk 12/19 105.80s\nresuming chunk 13/19\nresumed chunk 13/19 106.19s\nresuming chunk 14/19\nresumed chunk 14/19 105.83s\nresuming chunk 15/19\nresumed chunk 15/19 105.83s\nresuming chunk 16/19\nresumed chunk 16/19 105.82s\nresuming chunk 17/19\nresumed chunk 17/19 105.82s\nresuming chunk 18/19\nresumed chunk 18/19 105.83s\nresuming chunk 19/19\nresumed chunk 19/19 105.78s\nresumed 19 chunks from <isolated-root>/paintings/lua/progressing.lua\neasel \"progressing\" open: 19 chunks · 2400px · no canvas yet\n",
+      "stderr": ""
+    }
+  }
+}

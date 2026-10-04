@@ -1,0 +1,2683 @@
+[
+  {
+    "id": "open",
+    "args": [
+      "open",
+      "painting"
+    ],
+    "exit": 0,
+    "stdout": "easel \"painting\" open: 0 chunks · 2400px · no canvas yet\n",
+    "stderr": "",
+    "seconds": 0.112,
+    "expected_exit": 0,
+    "expected_text": "2400px",
+    "result": "pass"
+  },
+  {
+    "id": "reattach",
+    "args": [
+      "open",
+      "painting"
+    ],
+    "exit": 0,
+    "stdout": "reattached to \"painting\": 0 chunks · 2400px · no canvas yet\n",
+    "stderr": "",
+    "seconds": 0.005,
+    "expected_exit": 0,
+    "expected_text": "no canvas yet",
+    "result": "pass"
+  },
+  {
+    "id": "empty-save",
+    "args": [
+      "save",
+      "<isolated-root>/empty.png"
+    ],
+    "exit": 1,
+    "stdout": "",
+    "stderr": "no canvas yet\n",
+    "seconds": 0.004,
+    "expected_exit": "error",
+    "expected_text": "no canvas",
+    "result": "pass"
+  },
+  {
+    "id": "missing-source",
+    "args": [
+      "do"
+    ],
+    "exit": 1,
+    "stdout": "",
+    "stderr": "do: give a chunk: easel do '<lua>' | -f file.lua | - (stdin)\n",
+    "seconds": 0.003,
+    "expected_exit": "error",
+    "expected_text": null,
+    "result": "pass"
+  },
+  {
+    "id": "missing-file",
+    "args": [
+      "do",
+      "-f",
+      "<isolated-root>/absent.lua"
+    ],
+    "exit": 1,
+    "stdout": "",
+    "stderr": "No such file or directory (os error 2)\n",
+    "seconds": 0.003,
+    "expected_exit": "error",
+    "expected_text": null,
+    "result": "pass"
+  },
+  {
+    "id": "syntax",
+    "args": [
+      "do",
+      "this is not Lua"
+    ],
+    "exit": 1,
+    "stdout": "",
+    "stderr": "syntax error: [string \"chunk 1\"]:1: syntax error near 'is'\n(the chunk failed and changed nothing)\n",
+    "seconds": 0.004,
+    "expected_exit": "error",
+    "expected_text": null,
+    "result": "pass"
+  },
+  {
+    "id": "empty",
+    "args": [
+      "do",
+      ""
+    ],
+    "exit": 1,
+    "stdout": "",
+    "stderr": "empty chunk\n(the chunk failed and changed nothing)\n",
+    "seconds": 0.003,
+    "expected_exit": 0,
+    "expected_text": null,
+    "result": "fail"
+  },
+  {
+    "id": "libraries",
+    "args": [
+      "do",
+      "print(type(table),type(string),type(math),type(utf8),type(io),type(os),type(require),type(dofile),type(loadfile),type(debug),type(collectgarbage))"
+    ],
+    "exit": 0,
+    "stdout": "table\ttable\ttable\ttable\tnil\tnil\tnil\tnil\tnil\tnil\tnil\nok · chunk 1 (0.00 s to compute)\n",
+    "stderr": "",
+    "seconds": 0.013,
+    "expected_exit": 0,
+    "expected_text": "table\ttable\ttable\ttable\tnil\tnil\tnil\tnil\tnil\tnil\tnil",
+    "result": "pass"
+  },
+  {
+    "id": "global-local",
+    "args": [
+      "do",
+      "persist=41; local hidden=7"
+    ],
+    "exit": 0,
+    "stdout": "ok · chunk 2 (0.00 s to compute)\n",
+    "stderr": "",
+    "seconds": 0.012,
+    "expected_exit": 0,
+    "expected_text": null,
+    "result": "pass"
+  },
+  {
+    "id": "retention",
+    "args": [
+      "do",
+      "assert(persist==41 and hidden==nil); print(persist)"
+    ],
+    "exit": 0,
+    "stdout": "41\nok · chunk 3 (0.00 s to compute)\n",
+    "stderr": "",
+    "seconds": 0.012,
+    "expected_exit": 0,
+    "expected_text": "41",
+    "result": "pass"
+  },
+  {
+    "id": "assignment-failure",
+    "args": [
+      "do",
+      "persist=42; error(\"rollback marker\")"
+    ],
+    "exit": 1,
+    "stdout": "",
+    "stderr": "runtime error: [string \"chunk 4\"]:1: rollback marker\n(the chunk failed and changed nothing)\n",
+    "seconds": 0.003,
+    "expected_exit": "error",
+    "expected_text": "changed nothing",
+    "result": "pass"
+  },
+  {
+    "id": "assignment-restored",
+    "args": [
+      "do",
+      "assert(persist==41)"
+    ],
+    "exit": 0,
+    "stdout": "ok · chunk 4 (0.00 s to compute)\n",
+    "stderr": "",
+    "seconds": 0.011,
+    "expected_exit": 0,
+    "expected_text": null,
+    "result": "pass"
+  },
+  {
+    "id": "precanvas-brush",
+    "args": [
+      "do",
+      "b=brush(\"round\",4); print(b)"
+    ],
+    "exit": 0,
+    "stdout": "brush(round 4, 0% full)\nok · chunk 5 (0.00 s to compute)\n",
+    "stderr": "",
+    "seconds": 0.012,
+    "expected_exit": 0,
+    "expected_text": null,
+    "result": "pass"
+  },
+  {
+    "id": "precanvas-load",
+    "args": [
+      "do",
+      "p=pile{{\"red earth\",1}}; b:load(p)"
+    ],
+    "exit": 1,
+    "stdout": "",
+    "stderr": "runtime error: no canvas yet: the first chunk is canvas{size=, aspect=, linen=, ground=}\n(the chunk failed and changed nothing)\n",
+    "seconds": 0.004,
+    "expected_exit": "error",
+    "expected_text": "canvas",
+    "result": "pass"
+  },
+  {
+    "id": "precanvas-look-after-commit",
+    "args": [
+      "do",
+      "committed_without_canvas=true",
+      "--look"
+    ],
+    "exit": 0,
+    "stdout": "ok · chunk 6 (0.00 s to compute)\n(no look: no canvas yet: the first chunk is canvas{...})\n",
+    "stderr": "",
+    "seconds": 0.012,
+    "expected_exit": 0,
+    "expected_text": "no canvas",
+    "result": "pass"
+  },
+  {
+    "id": "setup",
+    "args": [
+      "do",
+      "canvas{size=100,aspect=5,linen=12,ground={{pile={{\"lead white\",1}},um=40,apply=\"knife\"}},seed=1}"
+    ],
+    "exit": 0,
+    "stdout": "ok · chunk 7 (0.07 s to compute)\n",
+    "stderr": "",
+    "seconds": 0.082,
+    "expected_exit": 0,
+    "expected_text": null,
+    "result": "pass"
+  },
+  {
+    "id": "dimensions",
+    "args": [
+      "do",
+      "print(W,H,wait(0),drying(500,100))"
+    ],
+    "exit": 0,
+    "stdout": "1000\t199.99998474121094\tday 1, 09:00\tdry\nok · chunk 8 (0.00 s to compute)\n",
+    "stderr": "",
+    "seconds": 0.02,
+    "expected_exit": 0,
+    "expected_text": "day 1, 09:00",
+    "result": "pass"
+  },
+  {
+    "id": "second-canvas",
+    "args": [
+      "do",
+      "canvas{size=100,aspect=5,linen=12,ground={{pile={{\"lead white\",1}},um=40,apply=\"knife\"}},seed=1}"
+    ],
+    "exit": 1,
+    "stdout": "",
+    "stderr": "runtime error: the canvas is already set up (canvas{} is the first chunk)\n(the chunk failed and changed nothing)\n",
+    "seconds": 0.013,
+    "expected_exit": "error",
+    "expected_text": "already set up",
+    "result": "pass"
+  },
+  {
+    "id": "paint",
+    "args": [
+      "do",
+      "p=pile{{\"red earth\",1}}; b=brush(\"round\",4); b:load(p,0.8); b:stroke({{100,100},{300,80}}); print(b:fullness(),wait(0))"
+    ],
+    "exit": 0,
+    "stdout": "0.075005307793617249\tday 1, 09:00\nok · chunk 9 (0.04 s to compute)\n",
+    "stderr": "",
+    "seconds": 0.051,
+    "expected_exit": 0,
+    "expected_text": null,
+    "result": "pass"
+  },
+  {
+    "id": "baseline-save",
+    "args": [
+      "save",
+      "<isolated-root>/before.png"
+    ],
+    "exit": 0,
+    "stdout": "<isolated-root>/before.png\n",
+    "stderr": "",
+    "seconds": 0.026,
+    "expected_exit": 0,
+    "expected_text": null,
+    "result": "pass"
+  },
+  {
+    "id": "two-marks-failure",
+    "args": [
+      "do",
+      "b:touch(400,80); b:touch(600,80); error(\"two marks fail\")"
+    ],
+    "exit": 1,
+    "stdout": "",
+    "stderr": "runtime error: [string \"chunk 10\"]:1: two marks fail\n(the chunk failed and changed nothing)\n",
+    "seconds": 0.009,
+    "expected_exit": "error",
+    "expected_text": null,
+    "result": "pass"
+  },
+  {
+    "id": "after-failure-save",
+    "args": [
+      "save",
+      "<isolated-root>/after.png"
+    ],
+    "exit": 0,
+    "stdout": "<isolated-root>/after.png\n",
+    "stderr": "",
+    "seconds": 0.026,
+    "expected_exit": 0,
+    "expected_text": null,
+    "result": "pass"
+  },
+  {
+    "id": "rollback-image",
+    "result": "pass",
+    "observation": "Before and after PNG SHA256 equality"
+  },
+  {
+    "id": "look-plain",
+    "args": [
+      "look"
+    ],
+    "exit": 0,
+    "stdout": "/private<isolated-root>/out/easel/painting/look-0001.png (1000x200, 0.01s)\n",
+    "stderr": "",
+    "seconds": 0.014,
+    "expected_exit": 0,
+    "expected_text": null,
+    "result": "pass"
+  },
+  {
+    "id": "png-plain",
+    "result": "pass",
+    "observation": "1000x200; bit depth 8; color type 2"
+  },
+  {
+    "id": "look-small",
+    "args": [
+      "look",
+      "--size",
+      "64"
+    ],
+    "exit": 0,
+    "stdout": "/private<isolated-root>/out/easel/painting/look-0002.png (64x13, 0.01s)\n",
+    "stderr": "",
+    "seconds": 0.01,
+    "expected_exit": 0,
+    "expected_text": null,
+    "result": "pass"
+  },
+  {
+    "id": "png-small",
+    "result": "pass",
+    "observation": "64x13; bit depth 8; color type 2"
+  },
+  {
+    "id": "look-oversize",
+    "args": [
+      "look",
+      "--size",
+      "2000"
+    ],
+    "exit": 0,
+    "stdout": "/private<isolated-root>/out/easel/painting/look-0003.png (1600x320, 0.02s)\n",
+    "stderr": "",
+    "seconds": 0.02,
+    "expected_exit": 0,
+    "expected_text": null,
+    "result": "pass"
+  },
+  {
+    "id": "png-oversize",
+    "result": "pass",
+    "observation": "1600x320; bit depth 8; color type 2"
+  },
+  {
+    "id": "look-minimum",
+    "args": [
+      "look",
+      "--size",
+      "0"
+    ],
+    "exit": 0,
+    "stdout": "/private<isolated-root>/out/easel/painting/look-0004.png (1x1, 0.01s)\n",
+    "stderr": "",
+    "seconds": 0.01,
+    "expected_exit": 0,
+    "expected_text": null,
+    "result": "pass"
+  },
+  {
+    "id": "png-minimum",
+    "result": "pass",
+    "observation": "1x1; bit depth 8; color type 2"
+  },
+  {
+    "id": "look-crop",
+    "args": [
+      "look",
+      "--crop",
+      "300,150,100,50"
+    ],
+    "exit": 0,
+    "stdout": "/private<isolated-root>/out/easel/painting/look-0005.png (480x240, 0.01s)\n",
+    "stderr": "",
+    "seconds": 0.011,
+    "expected_exit": 0,
+    "expected_text": null,
+    "result": "pass"
+  },
+  {
+    "id": "png-crop",
+    "result": "pass",
+    "observation": "480x240; bit depth 8; color type 2"
+  },
+  {
+    "id": "look-modes",
+    "args": [
+      "look",
+      "--mode",
+      "value,squint,mirror"
+    ],
+    "exit": 0,
+    "stdout": "/private<isolated-root>/out/easel/painting/look-0006.png (1000x200, 0.02s)\n",
+    "stderr": "",
+    "seconds": 0.023,
+    "expected_exit": 0,
+    "expected_text": null,
+    "result": "pass"
+  },
+  {
+    "id": "png-modes",
+    "result": "pass",
+    "observation": "1000x200; bit depth 8; color type 2"
+  },
+  {
+    "id": "look-grid",
+    "args": [
+      "look",
+      "--grid",
+      "50"
+    ],
+    "exit": 0,
+    "stdout": "/private<isolated-root>/out/easel/painting/look-0007.png (1000x200, 0.01s)\n",
+    "stderr": "",
+    "seconds": 0.014,
+    "expected_exit": 0,
+    "expected_text": null,
+    "result": "pass"
+  },
+  {
+    "id": "png-grid",
+    "result": "pass",
+    "observation": "1000x200; bit depth 8; color type 2"
+  },
+  {
+    "id": "look-palette",
+    "args": [
+      "look",
+      "--palette"
+    ],
+    "exit": 0,
+    "stdout": "/private<isolated-root>/out/easel/painting/look-0008.png (1124x96, 0.01s)\n",
+    "stderr": "",
+    "seconds": 0.01,
+    "expected_exit": 0,
+    "expected_text": null,
+    "result": "pass"
+  },
+  {
+    "id": "png-palette",
+    "result": "pass",
+    "observation": "1124x96; bit depth 8; color type 2"
+  },
+  {
+    "id": "palette-conflict-0",
+    "args": [
+      "look",
+      "--palette",
+      "--grid",
+      "50"
+    ],
+    "exit": 1,
+    "stdout": "",
+    "stderr": "look: --palette takes no other option\n",
+    "seconds": 0.003,
+    "expected_exit": "error",
+    "expected_text": null,
+    "result": "pass"
+  },
+  {
+    "id": "palette-conflict-1",
+    "args": [
+      "look",
+      "--palette",
+      "--crop",
+      "100,50,300,150"
+    ],
+    "exit": 1,
+    "stdout": "",
+    "stderr": "look: --palette takes no other option\n",
+    "seconds": 0.003,
+    "expected_exit": "error",
+    "expected_text": null,
+    "result": "pass"
+  },
+  {
+    "id": "palette-conflict-2",
+    "args": [
+      "look",
+      "--palette",
+      "--mode",
+      "mirror"
+    ],
+    "exit": 1,
+    "stdout": "",
+    "stderr": "look: --palette takes no other option\n",
+    "seconds": 0.003,
+    "expected_exit": "error",
+    "expected_text": null,
+    "result": "pass"
+  },
+  {
+    "id": "palette-conflict-3",
+    "args": [
+      "look",
+      "--palette",
+      "--size",
+      "500"
+    ],
+    "exit": 1,
+    "stdout": "",
+    "stderr": "look: --palette takes no other option\n",
+    "seconds": 0.003,
+    "expected_exit": "error",
+    "expected_text": null,
+    "result": "pass"
+  },
+  {
+    "id": "crop-too-large",
+    "args": [
+      "look",
+      "--crop",
+      "0,0,900,150"
+    ],
+    "exit": 1,
+    "stdout": "",
+    "stderr": "--crop exceeds 1200 pixels per side; choose a smaller crop (crops stay 1:1)\n",
+    "seconds": 0.003,
+    "expected_exit": "error",
+    "expected_text": null,
+    "result": "pass"
+  },
+  {
+    "id": "unknown-mode",
+    "args": [
+      "look",
+      "--mode",
+      "invented"
+    ],
+    "exit": 1,
+    "stdout": "",
+    "stderr": "--mode invented: normal, value, squint, mirror (comma-separated)\n",
+    "seconds": 0.003,
+    "expected_exit": "error",
+    "expected_text": null,
+    "result": "pass"
+  },
+  {
+    "id": "look-no-paint-change-save",
+    "args": [
+      "save",
+      "<isolated-root>/after-looks.png"
+    ],
+    "exit": 0,
+    "stdout": "<isolated-root>/after-looks.png\n",
+    "stderr": "",
+    "seconds": 0.025,
+    "expected_exit": 0,
+    "expected_text": null,
+    "result": "pass"
+  },
+  {
+    "id": "looks-preserve-image",
+    "result": "pass",
+    "observation": "PNG equality after all look variants"
+  },
+  {
+    "id": "zero-wait",
+    "args": [
+      "do",
+      "print(wait(0))"
+    ],
+    "exit": 0,
+    "stdout": "day 1, 09:00\nok · chunk 10 (0.00 s to compute)\n",
+    "stderr": "",
+    "seconds": 0.015,
+    "expected_exit": 0,
+    "expected_text": null,
+    "result": "pass"
+  },
+  {
+    "id": "negative-wait",
+    "args": [
+      "do",
+      "wait(-1)"
+    ],
+    "exit": 1,
+    "stdout": "",
+    "stderr": "runtime error: wait(-1): want minutes from 0 to 5259600 (10 years); days are fine: wait(3 * 24 * 60)\n(the chunk failed and changed nothing)\n",
+    "seconds": 0.009,
+    "expected_exit": "error",
+    "expected_text": null,
+    "result": "pass"
+  },
+  {
+    "id": "infinite-wait",
+    "args": [
+      "do",
+      "wait(math.huge)"
+    ],
+    "exit": 1,
+    "stdout": "",
+    "stderr": "runtime error: wait(inf): want minutes from 0 to 5259600 (10 years); days are fine: wait(3 * 24 * 60)\n(the chunk failed and changed nothing)\n",
+    "seconds": 0.009,
+    "expected_exit": "error",
+    "expected_text": null,
+    "result": "pass"
+  },
+  {
+    "id": "nan-wait",
+    "args": [
+      "do",
+      "wait(0/0)"
+    ],
+    "exit": 1,
+    "stdout": "",
+    "stderr": "runtime error: wait(NaN): want minutes from 0 to 5259600 (10 years); days are fine: wait(3 * 24 * 60)\n(the chunk failed and changed nothing)\n",
+    "seconds": 0.009,
+    "expected_exit": "error",
+    "expected_text": null,
+    "result": "pass"
+  },
+  {
+    "id": "over-limit-wait",
+    "args": [
+      "do",
+      "wait(5259601)"
+    ],
+    "exit": 1,
+    "stdout": "",
+    "stderr": "runtime error: wait(5259601): want minutes from 0 to 5259600 (10 years); days are fine: wait(3 * 24 * 60)\n(the chunk failed and changed nothing)\n",
+    "seconds": 0.008,
+    "expected_exit": "error",
+    "expected_text": null,
+    "result": "pass"
+  },
+  {
+    "id": "one-day",
+    "args": [
+      "do",
+      "print(wait(1440))"
+    ],
+    "exit": 0,
+    "stdout": "day 2, 09:00\nok · chunk 11 (0.00 s to compute)\n",
+    "stderr": "",
+    "seconds": 0.019,
+    "expected_exit": 0,
+    "expected_text": "day 2",
+    "result": "pass"
+  },
+  {
+    "id": "frames-on",
+    "args": [
+      "frames",
+      "on"
+    ],
+    "exit": 0,
+    "stdout": "frames on (/private<isolated-root>/out/easel/painting/frames)\n",
+    "stderr": "",
+    "seconds": 0.004,
+    "expected_exit": 0,
+    "expected_text": null,
+    "result": "pass"
+  },
+  {
+    "id": "frame-mark",
+    "args": [
+      "do",
+      "b:touch(500,100)"
+    ],
+    "exit": 0,
+    "stdout": "ok · chunk 12 (0.02 s to compute)\n",
+    "stderr": "",
+    "seconds": 0.043,
+    "expected_exit": 0,
+    "expected_text": null,
+    "result": "pass"
+  },
+  {
+    "id": "frame-created",
+    "result": "pass",
+    "observation": "Paths: <root>/out/easel/painting/frames/0012.png, <root>/out/easel/painting/look-0001.png, <root>/out/easel/painting/look-0002.png, <root>/out/easel/painting/look-0003.png, <root>/out/easel/painting/look-0004.png, <root>/out/easel/painting/look-0005.png, <root>/out/easel/painting/look-0006.png, <root>/out/easel/painting/look-0007.png, <root>/out/easel/painting/look-0008.png"
+  },
+  {
+    "id": "frames-off",
+    "args": [
+      "frames",
+      "off"
+    ],
+    "exit": 0,
+    "stdout": "frames off (/private<isolated-root>/out/easel/painting/frames)\n",
+    "stderr": "",
+    "seconds": 0.004,
+    "expected_exit": 0,
+    "expected_text": null,
+    "result": "pass"
+  },
+  {
+    "id": "check",
+    "args": [
+      "check"
+    ],
+    "exit": 0,
+    "stdout": "replay matches the live canvas exactly (12 chunks, 0.1s)\n",
+    "stderr": "",
+    "seconds": 0.136,
+    "expected_exit": 0,
+    "expected_text": "match",
+    "result": "pass"
+  },
+  {
+    "id": "status",
+    "args": [
+      "status"
+    ],
+    "exit": 0,
+    "stdout": "12 chunks · 2400px · size=100, aspect=5, linen={12, 12}, seed=1\n",
+    "stderr": "",
+    "seconds": 0.004,
+    "expected_exit": 0,
+    "expected_text": null,
+    "result": "pass"
+  },
+  {
+    "id": "globals",
+    "args": [
+      "globals"
+    ],
+    "exit": 0,
+    "stdout": "2\tpersist\tnumber 41\n6\tcommitted_without_canvas\ttrue\n7\tH\tnumber 199.99998474121094\n7\tW\tnumber 1000\n9\tb\tbrush(round 4, 7% full)\n9\tp\tpile(red earth 1; medium 0)\n",
+    "stderr": "",
+    "seconds": 0.003,
+    "expected_exit": 0,
+    "expected_text": null,
+    "result": "pass"
+  },
+  {
+    "id": "close",
+    "args": [
+      "close"
+    ],
+    "exit": 0,
+    "stdout": "the live canvas is in /private<isolated-root>/out/easel/painting/live.png\nclosed; the session is in /private<isolated-root>/paintings/lua/painting.lua\n",
+    "stderr": "",
+    "seconds": 0.099,
+    "expected_exit": 0,
+    "expected_text": null,
+    "result": "pass"
+  },
+  {
+    "id": "close-artifacts",
+    "result": "pass",
+    "observation": "live.png, live.txt, live.ckpt and committed.lua exist"
+  },
+  {
+    "id": "socket-removed",
+    "result": "pass",
+    "observation": "Session socket absent after close"
+  },
+  {
+    "id": "replay",
+    "args": [
+      "run",
+      "<isolated-root>/paintings/lua/painting.lua",
+      "--out",
+      "<isolated-root>/replay.png"
+    ],
+    "exit": 0,
+    "stdout": "table\ttable\ttable\ttable\tnil\tnil\tnil\tnil\tnil\tnil\tnil\n41\nbrush(round 4, 0% full)\n1000\t199.99998474121094\tday 1, 09:00\tdry\n0.075005307793617249\tday 1, 09:00\nday 1, 09:00\nday 2, 09:00\n",
+    "stderr": "  chunk   1     0.00s\n  chunk   2     0.00s\n  chunk   3     0.00s\n  chunk   4     0.00s\n  chunk   5     0.00s\n  chunk   6     0.00s\n  chunk   7     0.07s\n  chunk   8     0.00s\n  chunk   9     0.03s\n  chunk  10     0.00s\n  chunk  11     0.00s\n  chunk  12     0.02s\nwrote <isolated-root>/replay.png (12 chunks, painted in 0.1s, total 0.2s)\n",
+    "seconds": 0.165,
+    "expected_exit": 0,
+    "expected_text": null,
+    "result": "pass"
+  },
+  {
+    "id": "replay-image",
+    "result": "pass",
+    "observation": "Live and replay PNG SHA256 equality"
+  },
+  {
+    "id": "reopen",
+    "args": [
+      "open",
+      "painting"
+    ],
+    "exit": 0,
+    "stdout": "resuming chunk 1/12\nresumed chunk 1/12 0.00s\nresuming chunk 2/12\nresumed chunk 2/12 0.00s\nresuming chunk 3/12\nresumed chunk 3/12 0.00s\nresuming chunk 4/12\nresumed chunk 4/12 0.00s\nresuming chunk 5/12\nresumed chunk 5/12 0.00s\nresuming chunk 6/12\nresumed chunk 6/12 0.00s\nresuming chunk 7/12\nresumed chunk 7/12 0.07s\nresuming chunk 8/12\nresumed chunk 8/12 0.00s\nresuming chunk 9/12\nresumed chunk 9/12 0.03s\nresuming chunk 10/12\nresumed chunk 10/12 0.00s\nresuming chunk 11/12\nresumed chunk 11/12 0.01s\nresuming chunk 12/12\nresumed chunk 12/12 0.03s\nresumed 12 chunks from /private<isolated-root>/paintings/lua/painting.lua\neasel \"painting\" open: 12 chunks · 2400px · size=100, aspect=5, linen={12, 12}, seed=1\n",
+    "stderr": "",
+    "seconds": 0.212,
+    "expected_exit": 0,
+    "expected_text": "resumed",
+    "result": "pass"
+  },
+  {
+    "id": "reclose",
+    "args": [
+      "close"
+    ],
+    "exit": 0,
+    "stdout": "the live canvas is in /private<isolated-root>/out/easel/painting/live.png\nclosed; the session is in /private<isolated-root>/paintings/lua/painting.lua\n",
+    "stderr": "",
+    "seconds": 0.108,
+    "expected_exit": 0,
+    "expected_text": null,
+    "result": "pass"
+  },
+  {
+    "id": "fault-open",
+    "args": [
+      "open",
+      "fault"
+    ],
+    "exit": 0,
+    "stdout": "easel \"fault\" open: 0 chunks · 2400px · no canvas yet\n",
+    "stderr": "",
+    "seconds": 0.114,
+    "expected_exit": 0,
+    "expected_text": null,
+    "result": "pass"
+  },
+  {
+    "id": "fault-baseline",
+    "args": [
+      "-s",
+      "fault",
+      "do",
+      "x=1"
+    ],
+    "exit": 0,
+    "stdout": "ok · chunk 1 (0.00 s to compute)\n",
+    "stderr": "",
+    "seconds": 0.014,
+    "expected_exit": 0,
+    "expected_text": null,
+    "result": "pass"
+  },
+  {
+    "id": "witness-write-failure",
+    "args": [
+      "-s",
+      "fault",
+      "do",
+      "x=2"
+    ],
+    "exit": 1,
+    "stdout": "",
+    "stderr": "Is a directory (os error 21)\n",
+    "seconds": 0.009,
+    "expected_exit": "error",
+    "expected_text": "directory",
+    "result": "pass"
+  },
+  {
+    "id": "witness-divergence",
+    "result": "pass",
+    "observation": "Log contains second assignment; witness still contains first: -- easel session \"fault\": a painting replayed chunk by chunk.\n-- Each \"--@ chunk\" line starts one chunk as it was run at the easel.\n--@ engine 3\n\n--@ chunk 1\nx=1\n\n--@ chunk 2\nx=2\n"
+  },
+  {
+    "id": "restricted-status",
+    "args": [
+      "-s",
+      "fault",
+      "status"
+    ],
+    "exit": 1,
+    "stdout": "",
+    "stderr": "session integrity: /private<isolated-root>/paintings/lua/fault.lua differs from the log the session wrote. The easel goes on only from the log it wrote; nothing ran.\n",
+    "seconds": 0.003,
+    "expected_exit": "error",
+    "expected_text": "integrity",
+    "result": "pass"
+  },
+  {
+    "id": "restricted-close",
+    "args": [
+      "-s",
+      "fault",
+      "close"
+    ],
+    "exit": 1,
+    "stdout": "",
+    "stderr": "session integrity: /private<isolated-root>/paintings/lua/fault.lua differs from the log the session wrote. The easel goes on only from the log it wrote; nothing ran.\n",
+    "seconds": 0.003,
+    "expected_exit": "error",
+    "expected_text": "integrity",
+    "result": "pass"
+  },
+  {
+    "id": "restricted-log",
+    "args": [
+      "-s",
+      "fault",
+      "log"
+    ],
+    "exit": 1,
+    "stdout": "",
+    "stderr": "session integrity: /private<isolated-root>/paintings/lua/fault.lua differs from the log the session wrote. The easel goes on only from the log it wrote; nothing ran.\n",
+    "seconds": 0.003,
+    "expected_exit": "error",
+    "expected_text": "integrity",
+    "result": "pass"
+  },
+  {
+    "id": "restricted-paint",
+    "args": [
+      "-s",
+      "fault",
+      "do",
+      "x=3"
+    ],
+    "exit": 1,
+    "stdout": "",
+    "stderr": "session integrity: /private<isolated-root>/paintings/lua/fault.lua differs from the log the session wrote. The easel goes on only from the log it wrote; nothing ran.\n",
+    "seconds": 0.003,
+    "expected_exit": "error",
+    "expected_text": "integrity",
+    "result": "pass"
+  },
+  {
+    "id": "restored-log-still-uncommitted",
+    "args": [
+      "-s",
+      "fault",
+      "status"
+    ],
+    "exit": 1,
+    "stdout": "",
+    "stderr": "session integrity: uncommitted state; restart required\n",
+    "seconds": 0.003,
+    "expected_exit": "error",
+    "expected_text": "uncommitted",
+    "result": "pass"
+  },
+  {
+    "id": "restart-original-log",
+    "args": [
+      "open",
+      "fault"
+    ],
+    "exit": 0,
+    "stdout": "resuming chunk 1/1\nresumed chunk 1/1 0.00s\nresumed 1 chunks from /private<isolated-root>/paintings/lua/fault.lua\neasel \"fault\" open: 1 chunks · 2400px · no canvas yet\n",
+    "stderr": "",
+    "seconds": 0.114,
+    "expected_exit": 0,
+    "expected_text": "resumed",
+    "result": "pass"
+  },
+  {
+    "id": "restart-original-state",
+    "args": [
+      "-s",
+      "fault",
+      "do",
+      "assert(x==1); print(x)"
+    ],
+    "exit": 0,
+    "stdout": "1\nok · chunk 2 (0.00 s to compute)\n",
+    "stderr": "",
+    "seconds": 0.014,
+    "expected_exit": 0,
+    "expected_text": "1",
+    "result": "pass"
+  },
+  {
+    "id": "fault-close",
+    "args": [
+      "-s",
+      "fault",
+      "close"
+    ],
+    "exit": 0,
+    "stdout": "closed; the session is in /private<isolated-root>/paintings/lua/fault.lua\n",
+    "stderr": "",
+    "seconds": 0.012,
+    "expected_exit": 0,
+    "expected_text": null,
+    "result": "pass"
+  },
+  {
+    "id": "external-open",
+    "args": [
+      "open",
+      "external"
+    ],
+    "exit": 0,
+    "stdout": "easel \"external\" open: 0 chunks · 2400px · no canvas yet\n",
+    "stderr": "",
+    "seconds": 0.114,
+    "expected_exit": 0,
+    "expected_text": null,
+    "result": "pass"
+  },
+  {
+    "id": "external-baseline",
+    "args": [
+      "-s",
+      "external",
+      "do",
+      "x=1"
+    ],
+    "exit": 0,
+    "stdout": "ok · chunk 1 (0.00 s to compute)\n",
+    "stderr": "",
+    "seconds": 0.013,
+    "expected_exit": 0,
+    "expected_text": null,
+    "result": "pass"
+  },
+  {
+    "id": "external-status",
+    "args": [
+      "-s",
+      "external",
+      "status"
+    ],
+    "exit": 1,
+    "stdout": "",
+    "stderr": "session integrity: /private<isolated-root>/paintings/lua/external.lua differs from the log the session wrote. The easel goes on only from the log it wrote; nothing ran.\n",
+    "seconds": 0.003,
+    "expected_exit": "error",
+    "expected_text": "integrity",
+    "result": "pass"
+  },
+  {
+    "id": "external-close",
+    "args": [
+      "-s",
+      "external",
+      "close"
+    ],
+    "exit": 1,
+    "stdout": "",
+    "stderr": "session integrity: /private<isolated-root>/paintings/lua/external.lua differs from the log the session wrote. The easel goes on only from the log it wrote; nothing ran.\n",
+    "seconds": 0.003,
+    "expected_exit": "error",
+    "expected_text": "integrity",
+    "result": "pass"
+  },
+  {
+    "id": "external-restored",
+    "args": [
+      "-s",
+      "external",
+      "do",
+      "assert(x==1)"
+    ],
+    "exit": 0,
+    "stdout": "ok · chunk 2 (0.00 s to compute)\n",
+    "stderr": "",
+    "seconds": 0.012,
+    "expected_exit": 0,
+    "expected_text": null,
+    "result": "pass"
+  },
+  {
+    "id": "external-close",
+    "args": [
+      "-s",
+      "external",
+      "close"
+    ],
+    "exit": 0,
+    "stdout": "closed; the session is in /private<isolated-root>/paintings/lua/external.lua\n",
+    "stderr": "",
+    "seconds": 0.012,
+    "expected_exit": 0,
+    "expected_text": null,
+    "result": "pass"
+  },
+  {
+    "id": "selection-a",
+    "args": [
+      "open",
+      "a"
+    ],
+    "exit": 0,
+    "stdout": "easel \"a\" open: 0 chunks · 2400px · no canvas yet\n",
+    "stderr": "",
+    "seconds": 0.106,
+    "expected_exit": 0,
+    "expected_text": null,
+    "result": "pass"
+  },
+  {
+    "id": "selection-a-value",
+    "args": [
+      "-s",
+      "a",
+      "do",
+      "marker=\"A\""
+    ],
+    "exit": 0,
+    "stdout": "ok · chunk 1 (0.00 s to compute)\n",
+    "stderr": "",
+    "seconds": 0.012,
+    "expected_exit": 0,
+    "expected_text": null,
+    "result": "pass"
+  },
+  {
+    "id": "selection-b",
+    "args": [
+      "open",
+      "b"
+    ],
+    "exit": 0,
+    "stdout": "easel \"b\" open: 0 chunks · 2400px · no canvas yet\n",
+    "stderr": "",
+    "seconds": 0.114,
+    "expected_exit": 0,
+    "expected_text": null,
+    "result": "pass"
+  },
+  {
+    "id": "selection-b-value",
+    "args": [
+      "-s",
+      "b",
+      "do",
+      "marker=\"B\""
+    ],
+    "exit": 0,
+    "stdout": "ok · chunk 1 (0.00 s to compute)\n",
+    "stderr": "",
+    "seconds": 0.014,
+    "expected_exit": 0,
+    "expected_text": null,
+    "result": "pass"
+  },
+  {
+    "id": "explicit-over-env",
+    "args": [
+      "-s",
+      "a",
+      "do",
+      "print(marker)"
+    ],
+    "exit": 0,
+    "stdout": "A\nok · chunk 2 (0.00 s to compute)\n",
+    "stderr": "",
+    "seconds": 0.012,
+    "expected_exit": 0,
+    "expected_text": "A",
+    "result": "pass"
+  },
+  {
+    "id": "env-over-remembered",
+    "args": [
+      "do",
+      "print(marker)"
+    ],
+    "exit": 0,
+    "stdout": "A\nok · chunk 3 (0.00 s to compute)\n",
+    "stderr": "",
+    "seconds": 0.012,
+    "expected_exit": 0,
+    "expected_text": "A",
+    "result": "pass"
+  },
+  {
+    "id": "remembered",
+    "args": [
+      "do",
+      "print(marker)"
+    ],
+    "exit": 0,
+    "stdout": "B\nok · chunk 2 (0.00 s to compute)\n",
+    "stderr": "",
+    "seconds": 0.012,
+    "expected_exit": 0,
+    "expected_text": "B",
+    "result": "pass"
+  },
+  {
+    "id": "invalid-name",
+    "args": [
+      "open",
+      "../bad"
+    ],
+    "exit": 1,
+    "stdout": "",
+    "stderr": "session name \"../bad\": letters, digits, _ and - only\n",
+    "seconds": 0.003,
+    "expected_exit": "error",
+    "expected_text": null,
+    "result": "pass"
+  },
+  {
+    "id": "selection-close-a",
+    "args": [
+      "-s",
+      "a",
+      "close"
+    ],
+    "exit": 0,
+    "stdout": "closed; the session is in /private<isolated-root>/paintings/lua/a.lua\n",
+    "stderr": "",
+    "seconds": 0.012,
+    "expected_exit": 0,
+    "expected_text": null,
+    "result": "pass"
+  },
+  {
+    "id": "selection-close-b",
+    "args": [
+      "-s",
+      "b",
+      "close"
+    ],
+    "exit": 0,
+    "stdout": "closed; the session is in /private<isolated-root>/paintings/lua/b.lua\n",
+    "stderr": "",
+    "seconds": 0.012,
+    "expected_exit": 0,
+    "expected_text": null,
+    "result": "pass"
+  },
+  {
+    "id": "concurrent-open",
+    "args": [
+      "open",
+      "concurrent"
+    ],
+    "exit": 0,
+    "stdout": "easel \"concurrent\" open: 0 chunks · 2400px · no canvas yet\n",
+    "stderr": "",
+    "seconds": 0.15,
+    "expected_exit": 0,
+    "expected_text": null,
+    "result": "pass"
+  },
+  {
+    "id": "no-partial-output",
+    "result": "pass",
+    "observation": "No socket response while bounded chunk is still running, despite first print"
+  },
+  {
+    "id": "first-completed",
+    "result": "pass",
+    "observation": "ok\nbefore\nafter\nok · chunk 1 (1.67 s to compute)\n"
+  },
+  {
+    "id": "queued-cancel-skipped",
+    "args": [
+      "-s",
+      "concurrent",
+      "do",
+      "assert(first_finished==true and queued_should_not_run==nil)"
+    ],
+    "exit": 0,
+    "stdout": "ok · chunk 2 (0.00 s to compute)\n",
+    "stderr": "",
+    "seconds": 0.012,
+    "expected_exit": 0,
+    "expected_text": null,
+    "result": "pass"
+  },
+  {
+    "id": "running-observed",
+    "result": "fail",
+    "observation": "Server CPU time %cpu %mem acflag acflg args blocked comm command cpu cputime etime f flags gid\ngroup inblk inblock jobc ktrace ktracep lim login logname lstart majflt minflt\nmsgrcv msgsnd ni nice nivcsw nsignals nsigs nswap nvcsw nwchan oublk oublock\np_ru paddr pagein pcpu pending pgid pid pmem ppid pri prsna pstime putime re\nrgid rgroup rss ruid ruser sess sig sigmask sl start stat state stime svgid\nsvuid tdev time tpgid tsess tsiz tt tty ucomm uid upr user usrpri utime vsize\nvsz wchan wq wqb wql wqr xstat -> %cpu %mem acflag acflg args blocked comm command cpu cputime etime f flags gid\ngroup inblk inblock jobc ktrace ktracep lim login logname lstart majflt minflt\nmsgrcv msgsnd ni nice nivcsw nsignals nsigs nswap nvcsw nwchan oublk oublock\np_ru paddr pagein pcpu pending pgid pid pmem ppid pri prsna pstime putime re\nrgid rgroup rss ruid ruser sess sig sigmask sl start stat state stime svgid\nsvuid tdev time tpgid tsess tsiz tt tty ucomm uid upr user usrpri utime vsize\nvsz wchan wq wqb wql wqr xstat, no reply yet"
+  },
+  {
+    "id": "running-cancel-commits",
+    "args": [
+      "-s",
+      "concurrent",
+      "do",
+      "assert(survived_disconnect==true); print(\"retained\")"
+    ],
+    "exit": 0,
+    "stdout": "retained\nok · chunk 4 (0.00 s to compute)\n",
+    "stderr": "",
+    "seconds": 1.067,
+    "expected_exit": 0,
+    "expected_text": "retained",
+    "result": "pass"
+  },
+  {
+    "id": "file-request-completed",
+    "result": "pass",
+    "observation": "ok · chunk 5 (1.70 s to compute)\n"
+  },
+  {
+    "id": "file-captured",
+    "args": [
+      "-s",
+      "concurrent",
+      "do",
+      "assert(file_marker==\"original\")"
+    ],
+    "exit": 0,
+    "stdout": "ok · chunk 6 (0.00 s to compute)\n",
+    "stderr": "",
+    "seconds": 0.013,
+    "expected_exit": 0,
+    "expected_text": null,
+    "result": "pass"
+  },
+  {
+    "id": "concurrent-close",
+    "args": [
+      "-s",
+      "concurrent",
+      "close"
+    ],
+    "exit": 0,
+    "stdout": "closed; the session is in /private<isolated-root>/paintings/lua/concurrent.lua\n",
+    "stderr": "",
+    "seconds": 0.012,
+    "expected_exit": 0,
+    "expected_text": null,
+    "result": "pass"
+  },
+  {
+    "id": "input-open-inline",
+    "args": [
+      "open",
+      "inline"
+    ],
+    "exit": 0,
+    "stdout": "easel \"inline\" open: 0 chunks · 2400px · no canvas yet\n",
+    "stderr": "",
+    "seconds": 0.115,
+    "expected_exit": 0,
+    "expected_text": null,
+    "result": "pass"
+  },
+  {
+    "id": "input-inline",
+    "args": [
+      "-s",
+      "inline",
+      "do",
+      "marker=17; print(marker)"
+    ],
+    "exit": 0,
+    "stdout": "17\nok · chunk 1 (0.00 s to compute)\n",
+    "stderr": "",
+    "seconds": 0.014,
+    "expected_exit": 0,
+    "expected_text": "17",
+    "result": "pass"
+  },
+  {
+    "id": "input-close-inline",
+    "args": [
+      "-s",
+      "inline",
+      "close"
+    ],
+    "exit": 0,
+    "stdout": "closed; the session is in /private<isolated-root>/paintings/lua/inline.lua\n",
+    "stderr": "",
+    "seconds": 0.013,
+    "expected_exit": 0,
+    "expected_text": null,
+    "result": "pass"
+  },
+  {
+    "id": "input-open-file",
+    "args": [
+      "open",
+      "file"
+    ],
+    "exit": 0,
+    "stdout": "easel \"file\" open: 0 chunks · 2400px · no canvas yet\n",
+    "stderr": "",
+    "seconds": 0.107,
+    "expected_exit": 0,
+    "expected_text": null,
+    "result": "pass"
+  },
+  {
+    "id": "input-file",
+    "args": [
+      "-s",
+      "file",
+      "do",
+      "-f",
+      "<isolated-root>/input.lua"
+    ],
+    "exit": 0,
+    "stdout": "17\nok · chunk 1 (0.00 s to compute)\n",
+    "stderr": "",
+    "seconds": 0.014,
+    "expected_exit": 0,
+    "expected_text": "17",
+    "result": "pass"
+  },
+  {
+    "id": "input-close-file",
+    "args": [
+      "-s",
+      "file",
+      "close"
+    ],
+    "exit": 0,
+    "stdout": "closed; the session is in /private<isolated-root>/paintings/lua/file.lua\n",
+    "stderr": "",
+    "seconds": 0.013,
+    "expected_exit": 0,
+    "expected_text": null,
+    "result": "pass"
+  },
+  {
+    "id": "input-open-stdin",
+    "args": [
+      "open",
+      "stdin"
+    ],
+    "exit": 0,
+    "stdout": "easel \"stdin\" open: 0 chunks · 2400px · no canvas yet\n",
+    "stderr": "",
+    "seconds": 0.115,
+    "expected_exit": 0,
+    "expected_text": null,
+    "result": "pass"
+  },
+  {
+    "id": "input-stdin",
+    "args": [
+      "-s",
+      "stdin",
+      "do",
+      "-"
+    ],
+    "exit": 0,
+    "stdout": "17\nok · chunk 1 (0.00 s to compute)\n",
+    "stderr": "",
+    "seconds": 0.014,
+    "expected_exit": 0,
+    "expected_text": "17",
+    "result": "pass"
+  },
+  {
+    "id": "input-close-stdin",
+    "args": [
+      "-s",
+      "stdin",
+      "close"
+    ],
+    "exit": 0,
+    "stdout": "closed; the session is in /private<isolated-root>/paintings/lua/stdin.lua\n",
+    "stderr": "",
+    "seconds": 0.013,
+    "expected_exit": 0,
+    "expected_text": null,
+    "result": "pass"
+  },
+  {
+    "id": "c2-open",
+    "args": [
+      "open",
+      "c2"
+    ],
+    "exit": 0,
+    "stdout": "easel \"c2\" open: 0 chunks · 2400px · no canvas yet\n",
+    "stderr": "",
+    "seconds": 0.118,
+    "expected_exit": 0,
+    "expected_text": null,
+    "result": "pass"
+  },
+  {
+    "id": "no-partial-output",
+    "result": "pass",
+    "observation": "No socket response while bounded chunk is still running, despite first print"
+  },
+  {
+    "id": "first-completed",
+    "result": "pass",
+    "observation": "ok\nbefore\nafter\nok · chunk 1 (2.13 s to compute)\n"
+  },
+  {
+    "id": "queued-cancel-skipped",
+    "args": [
+      "-s",
+      "c2",
+      "do",
+      "assert(first_finished==true and queued_should_not_run==nil)"
+    ],
+    "exit": 0,
+    "stdout": "ok · chunk 2 (0.00 s to compute)\n",
+    "stderr": "",
+    "seconds": 0.016,
+    "expected_exit": 0,
+    "expected_text": null,
+    "result": "pass"
+  },
+  {
+    "id": "running-observed",
+    "result": "pass",
+    "observation": "Server CPU time 0:02.02 -> 0:02.32, no reply yet"
+  },
+  {
+    "id": "running-cancel-commits",
+    "args": [
+      "-s",
+      "c2",
+      "do",
+      "assert(survived_disconnect==true); print(\"retained\")"
+    ],
+    "exit": 0,
+    "stdout": "retained\nok · chunk 4 (0.00 s to compute)\n",
+    "stderr": "",
+    "seconds": 2.528,
+    "expected_exit": 0,
+    "expected_text": "retained",
+    "result": "pass"
+  },
+  {
+    "id": "file-request-completed",
+    "result": "pass",
+    "observation": "ok · chunk 5 (2.56 s to compute)\n"
+  },
+  {
+    "id": "file-captured",
+    "args": [
+      "-s",
+      "c2",
+      "do",
+      "assert(file_marker==\"original\")"
+    ],
+    "exit": 0,
+    "stdout": "ok · chunk 6 (0.00 s to compute)\n",
+    "stderr": "",
+    "seconds": 0.015,
+    "expected_exit": 0,
+    "expected_text": null,
+    "result": "pass"
+  },
+  {
+    "id": "c2-close",
+    "args": [
+      "-s",
+      "c2",
+      "close"
+    ],
+    "exit": 0,
+    "stdout": "closed; the session is in /private<isolated-root>/paintings/lua/c2.lua\n",
+    "stderr": "",
+    "seconds": 0.018,
+    "expected_exit": 0,
+    "expected_text": null,
+    "result": "pass"
+  },
+  {
+    "id": "input-open-inline",
+    "args": [
+      "open",
+      "inline"
+    ],
+    "exit": 0,
+    "stdout": "resuming chunk 1/1\nresumed chunk 1/1 0.00s\nresumed 1 chunks from /private<isolated-root>/paintings/lua/inline.lua\neasel \"inline\" open: 1 chunks · 2400px · no canvas yet\n",
+    "stderr": "",
+    "seconds": 0.109,
+    "expected_exit": 0,
+    "expected_text": null,
+    "result": "pass"
+  },
+  {
+    "id": "input-inline",
+    "args": [
+      "-s",
+      "inline",
+      "do",
+      "marker=17; print(marker)"
+    ],
+    "exit": 0,
+    "stdout": "17\nok · chunk 2 (0.00 s to compute)\n",
+    "stderr": "",
+    "seconds": 0.017,
+    "expected_exit": 0,
+    "expected_text": "17",
+    "result": "pass"
+  },
+  {
+    "id": "input-close-inline",
+    "args": [
+      "-s",
+      "inline",
+      "close"
+    ],
+    "exit": 0,
+    "stdout": "closed; the session is in /private<isolated-root>/paintings/lua/inline.lua\n",
+    "stderr": "",
+    "seconds": 0.015,
+    "expected_exit": 0,
+    "expected_text": null,
+    "result": "pass"
+  },
+  {
+    "id": "input-open-file",
+    "args": [
+      "open",
+      "file"
+    ],
+    "exit": 0,
+    "stdout": "resuming chunk 1/1\nresumed chunk 1/1 0.00s\nresumed 1 chunks from /private<isolated-root>/paintings/lua/file.lua\neasel \"file\" open: 1 chunks · 2400px · no canvas yet\n",
+    "stderr": "",
+    "seconds": 0.111,
+    "expected_exit": 0,
+    "expected_text": null,
+    "result": "pass"
+  },
+  {
+    "id": "input-file",
+    "args": [
+      "-s",
+      "file",
+      "do",
+      "-f",
+      "<isolated-root>/input.lua"
+    ],
+    "exit": 0,
+    "stdout": "17\nok · chunk 2 (0.00 s to compute)\n",
+    "stderr": "",
+    "seconds": 0.018,
+    "expected_exit": 0,
+    "expected_text": "17",
+    "result": "pass"
+  },
+  {
+    "id": "input-close-file",
+    "args": [
+      "-s",
+      "file",
+      "close"
+    ],
+    "exit": 0,
+    "stdout": "closed; the session is in /private<isolated-root>/paintings/lua/file.lua\n",
+    "stderr": "",
+    "seconds": 0.013,
+    "expected_exit": 0,
+    "expected_text": null,
+    "result": "pass"
+  },
+  {
+    "id": "input-open-stdin",
+    "args": [
+      "open",
+      "stdin"
+    ],
+    "exit": 0,
+    "stdout": "resuming chunk 1/1\nresumed chunk 1/1 0.00s\nresumed 1 chunks from /private<isolated-root>/paintings/lua/stdin.lua\neasel \"stdin\" open: 1 chunks · 2400px · no canvas yet\n",
+    "stderr": "",
+    "seconds": 0.117,
+    "expected_exit": 0,
+    "expected_text": null,
+    "result": "pass"
+  },
+  {
+    "id": "input-stdin",
+    "args": [
+      "-s",
+      "stdin",
+      "do",
+      "-"
+    ],
+    "exit": 0,
+    "stdout": "17\nok · chunk 2 (0.00 s to compute)\n",
+    "stderr": "",
+    "seconds": 0.013,
+    "expected_exit": 0,
+    "expected_text": "17",
+    "result": "pass"
+  },
+  {
+    "id": "input-close-stdin",
+    "args": [
+      "-s",
+      "stdin",
+      "close"
+    ],
+    "exit": 0,
+    "stdout": "closed; the session is in /private<isolated-root>/paintings/lua/stdin.lua\n",
+    "stderr": "",
+    "seconds": 0.014,
+    "expected_exit": 0,
+    "expected_text": null,
+    "result": "pass"
+  },
+  {
+    "id": "canvas-open",
+    "args": [
+      "open",
+      "canvas"
+    ],
+    "exit": 0,
+    "stdout": "easel \"canvas\" open: 0 chunks · 2400px · no canvas yet\n",
+    "stderr": "",
+    "seconds": 0.114,
+    "expected_exit": 0,
+    "expected_text": null,
+    "result": "pass"
+  },
+  {
+    "id": "missing-size",
+    "args": [
+      "-s",
+      "canvas",
+      "do",
+      "canvas{aspect=5,linen=12,ground={{pile={{\"lead white\",1}},um=40,apply=\"knife\"}}}"
+    ],
+    "exit": 1,
+    "stdout": "",
+    "stderr": "runtime error: canvas: size= (the width in mm)\ncanvas{size=<mm>, aspect=<width / height>, linen=<threads per cm>, ground={{pile={{\"<tube>\", <parts>}, ...}, um=<µm>, apply=\"<knife|roller|brush>\"}, ...}, seed=<n>}\n  size: width in mm; aspect: width / height; linen: threads per cm (or {warp, weft});\n  ground: layers bottom first, each a pile of tubes, a thickness in µm and how it is put on (\"knife\", \"roller\" or \"brush\"; a knife takes texture=0..1)\n(the chunk failed and changed nothing)\n",
+    "seconds": 0.004,
+    "expected_exit": "error",
+    "expected_text": "size",
+    "result": "pass"
+  },
+  {
+    "id": "missing-aspect",
+    "args": [
+      "-s",
+      "canvas",
+      "do",
+      "canvas{size=100,linen=12,ground={{pile={{\"lead white\",1}},um=40,apply=\"knife\"}}}"
+    ],
+    "exit": 1,
+    "stdout": "",
+    "stderr": "runtime error: canvas: aspect= (width / height)\ncanvas{size=<mm>, aspect=<width / height>, linen=<threads per cm>, ground={{pile={{\"<tube>\", <parts>}, ...}, um=<µm>, apply=\"<knife|roller|brush>\"}, ...}, seed=<n>}\n  size: width in mm; aspect: width / height; linen: threads per cm (or {warp, weft});\n  ground: layers bottom first, each a pile of tubes, a thickness in µm and how it is put on (\"knife\", \"roller\" or \"brush\"; a knife takes texture=0..1)\n(the chunk failed and changed nothing)\n",
+    "seconds": 0.003,
+    "expected_exit": "error",
+    "expected_text": "aspect",
+    "result": "pass"
+  },
+  {
+    "id": "missing-linen",
+    "args": [
+      "-s",
+      "canvas",
+      "do",
+      "canvas{size=100,aspect=5,ground={{pile={{\"lead white\",1}},um=40,apply=\"knife\"}}}"
+    ],
+    "exit": 1,
+    "stdout": "",
+    "stderr": "runtime error: canvas: linen= (threads per cm: one number, or {warp, weft})\ncanvas{size=<mm>, aspect=<width / height>, linen=<threads per cm>, ground={{pile={{\"<tube>\", <parts>}, ...}, um=<µm>, apply=\"<knife|roller|brush>\"}, ...}, seed=<n>}\n  size: width in mm; aspect: width / height; linen: threads per cm (or {warp, weft});\n  ground: layers bottom first, each a pile of tubes, a thickness in µm and how it is put on (\"knife\", \"roller\" or \"brush\"; a knife takes texture=0..1)\n(the chunk failed and changed nothing)\n",
+    "seconds": 0.003,
+    "expected_exit": "error",
+    "expected_text": "linen",
+    "result": "pass"
+  },
+  {
+    "id": "missing-ground",
+    "args": [
+      "-s",
+      "canvas",
+      "do",
+      "canvas{size=100,aspect=5,linen=12}"
+    ],
+    "exit": 1,
+    "stdout": "",
+    "stderr": "runtime error: canvas: ground= (the layers, bottom first)\ncanvas{size=<mm>, aspect=<width / height>, linen=<threads per cm>, ground={{pile={{\"<tube>\", <parts>}, ...}, um=<µm>, apply=\"<knife|roller|brush>\"}, ...}, seed=<n>}\n  size: width in mm; aspect: width / height; linen: threads per cm (or {warp, weft});\n  ground: layers bottom first, each a pile of tubes, a thickness in µm and how it is put on (\"knife\", \"roller\" or \"brush\"; a knife takes texture=0..1)\n(the chunk failed and changed nothing)\n",
+    "seconds": 0.003,
+    "expected_exit": "error",
+    "expected_text": "ground",
+    "result": "pass"
+  },
+  {
+    "id": "invalid-size-49",
+    "args": [
+      "-s",
+      "canvas",
+      "do",
+      "canvas{size=49,aspect=5,linen=12,ground={{pile={{\"lead white\",1}},um=40,apply=\"knife\"}}}"
+    ],
+    "exit": 1,
+    "stdout": "",
+    "stderr": "runtime error: canvas: size is the canvas width in mm, 50 to 5000\n(the chunk failed and changed nothing)\n",
+    "seconds": 0.003,
+    "expected_exit": "error",
+    "expected_text": "size",
+    "result": "pass"
+  },
+  {
+    "id": "invalid-size-5001",
+    "args": [
+      "-s",
+      "canvas",
+      "do",
+      "canvas{size=5001,aspect=5,linen=12,ground={{pile={{\"lead white\",1}},um=40,apply=\"knife\"}}}"
+    ],
+    "exit": 1,
+    "stdout": "",
+    "stderr": "runtime error: canvas: size is the canvas width in mm, 50 to 5000\n(the chunk failed and changed nothing)\n",
+    "seconds": 0.003,
+    "expected_exit": "error",
+    "expected_text": "size",
+    "result": "pass"
+  },
+  {
+    "id": "invalid-aspect-0.19",
+    "args": [
+      "-s",
+      "canvas",
+      "do",
+      "canvas{size=100,aspect=0.19,linen=12,ground={{pile={{\"lead white\",1}},um=40,apply=\"knife\"}}}"
+    ],
+    "exit": 1,
+    "stdout": "",
+    "stderr": "runtime error: canvas: aspect is width / height, between 0.2 and 5\n(the chunk failed and changed nothing)\n",
+    "seconds": 0.003,
+    "expected_exit": "error",
+    "expected_text": "aspect",
+    "result": "pass"
+  },
+  {
+    "id": "invalid-aspect-5.01",
+    "args": [
+      "-s",
+      "canvas",
+      "do",
+      "canvas{size=100,aspect=5.01,linen=12,ground={{pile={{\"lead white\",1}},um=40,apply=\"knife\"}}}"
+    ],
+    "exit": 1,
+    "stdout": "",
+    "stderr": "runtime error: canvas: aspect is width / height, between 0.2 and 5\n(the chunk failed and changed nothing)\n",
+    "seconds": 0.003,
+    "expected_exit": "error",
+    "expected_text": "aspect",
+    "result": "pass"
+  },
+  {
+    "id": "invalid-linen-3",
+    "args": [
+      "-s",
+      "canvas",
+      "do",
+      "canvas{size=100,aspect=5,linen=3,ground={{pile={{\"lead white\",1}},um=40,apply=\"knife\"}}}"
+    ],
+    "exit": 1,
+    "stdout": "",
+    "stderr": "runtime error: canvas: linen threads per cm, 4 to 60\n(the chunk failed and changed nothing)\n",
+    "seconds": 0.003,
+    "expected_exit": "error",
+    "expected_text": "linen",
+    "result": "pass"
+  },
+  {
+    "id": "invalid-linen-61",
+    "args": [
+      "-s",
+      "canvas",
+      "do",
+      "canvas{size=100,aspect=5,linen=61,ground={{pile={{\"lead white\",1}},um=40,apply=\"knife\"}}}"
+    ],
+    "exit": 1,
+    "stdout": "",
+    "stderr": "runtime error: canvas: linen threads per cm, 4 to 60\n(the chunk failed and changed nothing)\n",
+    "seconds": 0.003,
+    "expected_exit": "error",
+    "expected_text": "linen",
+    "result": "pass"
+  },
+  {
+    "id": "unknown-canvas",
+    "args": [
+      "-s",
+      "canvas",
+      "do",
+      "canvas{size=100,aspect=5,linen=12,ground={{pile={{\"lead white\",1}},um=40,apply=\"knife\"}},mystery=1}"
+    ],
+    "exit": 1,
+    "stdout": "",
+    "stderr": "runtime error: canvas: unknown option \"mystery\" (options: size, aspect, linen, ground, seed)\n(the chunk failed and changed nothing)\n",
+    "seconds": 0.003,
+    "expected_exit": "error",
+    "expected_text": "mystery",
+    "result": "pass"
+  },
+  {
+    "id": "invalid-ground-4",
+    "args": [
+      "-s",
+      "canvas",
+      "do",
+      "canvas{size=100,aspect=5,linen=12,ground={{pile={{\"lead white\",1}},um=4,apply=\"knife\"}}}"
+    ],
+    "exit": 1,
+    "stdout": "",
+    "stderr": "runtime error: canvas: a ground layer is 5 to 400 µm thick\n(the chunk failed and changed nothing)\n",
+    "seconds": 0.004,
+    "expected_exit": "error",
+    "expected_text": "ground",
+    "result": "pass"
+  },
+  {
+    "id": "invalid-ground-401",
+    "args": [
+      "-s",
+      "canvas",
+      "do",
+      "canvas{size=100,aspect=5,linen=12,ground={{pile={{\"lead white\",1}},um=401,apply=\"knife\"}}}"
+    ],
+    "exit": 1,
+    "stdout": "",
+    "stderr": "runtime error: canvas: a ground layer is 5 to 400 µm thick\n(the chunk failed and changed nothing)\n",
+    "seconds": 0.003,
+    "expected_exit": "error",
+    "expected_text": "ground",
+    "result": "pass"
+  },
+  {
+    "id": "invalid-tube-ground",
+    "args": [
+      "-s",
+      "canvas",
+      "do",
+      "canvas{size=100,aspect=5,linen=12,ground={{pile={{\"unavailable tube\",1}},um=40,apply=\"knife\"}}}"
+    ],
+    "exit": 1,
+    "stdout": "",
+    "stderr": "runtime error: ground: no tube \"unavailable tube\" (tubes: lead white, smalt, pale smalt, yellow ochre, red earth, vermilion, raw umber, bone black, cobalt blue, chrome yellow, Prussian blue, green earth, Rinmann's green, copper green)\n(the chunk failed and changed nothing)\n",
+    "seconds": 0.003,
+    "expected_exit": "error",
+    "expected_text": "tube",
+    "result": "pass"
+  },
+  {
+    "id": "rejected-setups-still-empty",
+    "args": [
+      "-s",
+      "canvas",
+      "status"
+    ],
+    "exit": 0,
+    "stdout": "0 chunks · 2400px · no canvas yet\n",
+    "stderr": "",
+    "seconds": 0.003,
+    "expected_exit": 0,
+    "expected_text": "0 chunks · 2400px · no canvas",
+    "result": "pass"
+  },
+  {
+    "id": "setup-rollback",
+    "args": [
+      "-s",
+      "canvas",
+      "do",
+      "canvas{size=100,aspect=5,linen=12,ground={{pile={{\"lead white\",1}},um=40,apply=\"knife\"}}}; error(\"setup rollback\")"
+    ],
+    "exit": 1,
+    "stdout": "",
+    "stderr": "runtime error: [string \"chunk 1\"]:1: setup rollback\n(the chunk failed and changed nothing)\n",
+    "seconds": 0.074,
+    "expected_exit": "error",
+    "expected_text": "changed nothing",
+    "result": "pass"
+  },
+  {
+    "id": "rolled-back-setup-empty",
+    "args": [
+      "-s",
+      "canvas",
+      "status"
+    ],
+    "exit": 0,
+    "stdout": "0 chunks · 2400px · no canvas yet\n",
+    "stderr": "",
+    "seconds": 0.004,
+    "expected_exit": 0,
+    "expected_text": "0 chunks · 2400px · no canvas",
+    "result": "pass"
+  },
+  {
+    "id": "rolled-back-dimensions",
+    "args": [
+      "-s",
+      "canvas",
+      "do",
+      "assert(W==nil and H==nil)"
+    ],
+    "exit": 0,
+    "stdout": "ok · chunk 1 (0.00 s to compute)\n",
+    "stderr": "",
+    "seconds": 0.019,
+    "expected_exit": 0,
+    "expected_text": null,
+    "result": "pass"
+  },
+  {
+    "id": "two-coat-canvas",
+    "args": [
+      "-s",
+      "canvas",
+      "do",
+      "canvas{size=100,aspect=2,linen={12,16},ground={{pile={{\"red earth\",1}},um=80,apply=\"knife\"},{pile={{\"lead white\",1}},um=40,apply=\"brush\"}},seed=7}"
+    ],
+    "exit": 0,
+    "stdout": "ok · chunk 2 (26.50 s to compute)\n",
+    "stderr": "",
+    "seconds": 26.519,
+    "expected_exit": 0,
+    "expected_text": null,
+    "result": "pass"
+  },
+  {
+    "id": "aspect-two-dimensions",
+    "args": [
+      "-s",
+      "canvas",
+      "do",
+      "assert(W==1000 and H==500);print(W,H,wait(0),drying(500,100))"
+    ],
+    "exit": 1,
+    "stdout": "",
+    "stderr": "runtime error: [string \"chunk 3\"]:1: assertion failed!\n(the chunk failed and changed nothing)\n",
+    "seconds": 0.027,
+    "expected_exit": 0,
+    "expected_text": "day 1, 09:00",
+    "result": "fail"
+  },
+  {
+    "id": "two-coat-status",
+    "args": [
+      "-s",
+      "canvas",
+      "status"
+    ],
+    "exit": 0,
+    "stdout": "2 chunks · 2400px · size=100, aspect=2, linen={12, 16}, seed=7\n",
+    "stderr": "",
+    "seconds": 0.004,
+    "expected_exit": 0,
+    "expected_text": "seed=7",
+    "result": "pass"
+  },
+  {
+    "id": "two-coat-look",
+    "args": [
+      "-s",
+      "canvas",
+      "look",
+      "--size",
+      "200"
+    ],
+    "exit": 0,
+    "stdout": "/private<isolated-root>/out/easel/canvas/look-0001.png (200x100, 0.01s)\n",
+    "stderr": "",
+    "seconds": 0.013,
+    "expected_exit": 0,
+    "expected_text": null,
+    "result": "pass"
+  },
+  {
+    "id": "invalid-pile-0",
+    "args": [
+      "-s",
+      "canvas",
+      "do",
+      "pile{{\"red earth\",0}}"
+    ],
+    "exit": 1,
+    "stdout": "",
+    "stderr": "runtime error: pile: \"red earth\": parts > 0\n(the chunk failed and changed nothing)\n",
+    "seconds": 0.016,
+    "expected_exit": "error",
+    "expected_text": "parts",
+    "result": "pass"
+  },
+  {
+    "id": "invalid-pile--1",
+    "args": [
+      "-s",
+      "canvas",
+      "do",
+      "pile{{\"red earth\",-1}}"
+    ],
+    "exit": 1,
+    "stdout": "",
+    "stderr": "runtime error: pile: \"red earth\": parts > 0\n(the chunk failed and changed nothing)\n",
+    "seconds": 0.014,
+    "expected_exit": "error",
+    "expected_text": "parts",
+    "result": "pass"
+  },
+  {
+    "id": "invalid-pile-math.huge",
+    "args": [
+      "-s",
+      "canvas",
+      "do",
+      "pile{{\"red earth\",math.huge}}"
+    ],
+    "exit": 1,
+    "stdout": "",
+    "stderr": "runtime error: pile: \"red earth\": parts > 0\n(the chunk failed and changed nothing)\n",
+    "seconds": 0.014,
+    "expected_exit": "error",
+    "expected_text": "parts",
+    "result": "pass"
+  },
+  {
+    "id": "invalid-pile-0/0",
+    "args": [
+      "-s",
+      "canvas",
+      "do",
+      "pile{{\"red earth\",0/0}}"
+    ],
+    "exit": 1,
+    "stdout": "",
+    "stderr": "runtime error: pile: \"red earth\": parts > 0\n(the chunk failed and changed nothing)\n",
+    "seconds": 0.014,
+    "expected_exit": "error",
+    "expected_text": "parts",
+    "result": "pass"
+  },
+  {
+    "id": "invalid-pile-tube",
+    "args": [
+      "-s",
+      "canvas",
+      "do",
+      "pile{{\"unavailable tube\",1}}"
+    ],
+    "exit": 1,
+    "stdout": "",
+    "stderr": "runtime error: pile: no tube \"unavailable tube\" (tubes: lead white, smalt, pale smalt, yellow ochre, red earth, vermilion, raw umber, bone black, cobalt blue, chrome yellow, Prussian blue, green earth, Rinmann's green, copper green)\n(the chunk failed and changed nothing)\n",
+    "seconds": 0.014,
+    "expected_exit": "error",
+    "expected_text": "tube",
+    "result": "pass"
+  },
+  {
+    "id": "invalid-medium--0.1",
+    "args": [
+      "-s",
+      "canvas",
+      "do",
+      "pile{{\"red earth\",1},medium=-0.1}"
+    ],
+    "exit": 1,
+    "stdout": "",
+    "stderr": "runtime error: pile: medium is the share of oil medium mixed in, 0 (as from the tube) to 0.95\n(the chunk failed and changed nothing)\n",
+    "seconds": 0.013,
+    "expected_exit": "error",
+    "expected_text": "medium",
+    "result": "pass"
+  },
+  {
+    "id": "invalid-medium-0.96",
+    "args": [
+      "-s",
+      "canvas",
+      "do",
+      "pile{{\"red earth\",1},medium=0.96}"
+    ],
+    "exit": 1,
+    "stdout": "",
+    "stderr": "runtime error: pile: medium is the share of oil medium mixed in, 0 (as from the tube) to 0.95\n(the chunk failed and changed nothing)\n",
+    "seconds": 0.013,
+    "expected_exit": "error",
+    "expected_text": "medium",
+    "result": "pass"
+  },
+  {
+    "id": "medium-endpoints",
+    "args": [
+      "-s",
+      "canvas",
+      "do",
+      "p0=pile{{\"red earth\",1},medium=0};p95=pile{{\"red earth\",1},medium=0.95};print(p0.medium,p95.medium);assert(p0.medium==0 and math.abs(p95.medium-0.95)<0.000001)"
+    ],
+    "exit": 0,
+    "stdout": "0.0\t0.949999988079071\nok · chunk 3 (0.00 s to compute)\n",
+    "stderr": "",
+    "seconds": 0.021,
+    "expected_exit": 0,
+    "expected_text": null,
+    "result": "pass"
+  },
+  {
+    "id": "local-pile",
+    "args": [
+      "-s",
+      "canvas",
+      "do",
+      "p=pile{{\"red earth\",1}};local q=pile{{\"lead white\",1}}"
+    ],
+    "exit": 0,
+    "stdout": "ok · chunk 4 (0.00 s to compute)\n",
+    "stderr": "",
+    "seconds": 0.023,
+    "expected_exit": 0,
+    "expected_text": null,
+    "result": "pass"
+  },
+  {
+    "id": "local-pile-gone",
+    "args": [
+      "-s",
+      "canvas",
+      "do",
+      "assert(p~=nil and q==nil)"
+    ],
+    "exit": 0,
+    "stdout": "ok · chunk 5 (0.00 s to compute)\n",
+    "stderr": "",
+    "seconds": 0.019,
+    "expected_exit": 0,
+    "expected_text": null,
+    "result": "pass"
+  },
+  {
+    "id": "pile-rollback",
+    "args": [
+      "-s",
+      "canvas",
+      "do",
+      "p=pile{{\"lead white\",1}};newvalue=42;error(\"pile rollback\")"
+    ],
+    "exit": 1,
+    "stdout": "",
+    "stderr": "runtime error: [string \"chunk 6\"]:1: pile rollback\n(the chunk failed and changed nothing)\n",
+    "seconds": 0.022,
+    "expected_exit": "error",
+    "expected_text": "changed nothing",
+    "result": "pass"
+  },
+  {
+    "id": "pile-restored",
+    "args": [
+      "-s",
+      "canvas",
+      "do",
+      "assert(tostring(p):find(\"red earth\") and newvalue==nil);print(p)"
+    ],
+    "exit": 0,
+    "stdout": "pile(red earth 1; medium 0)\nok · chunk 6 (0.00 s to compute)\n",
+    "stderr": "",
+    "seconds": 0.025,
+    "expected_exit": 0,
+    "expected_text": null,
+    "result": "pass"
+  },
+  {
+    "id": "canvas-close",
+    "args": [
+      "-s",
+      "canvas",
+      "close"
+    ],
+    "exit": 0,
+    "stdout": "the live canvas is in /private<isolated-root>/out/easel/canvas/live.png\nclosed; the session is in /private<isolated-root>/paintings/lua/canvas.lua\n",
+    "stderr": "",
+    "seconds": 0.192,
+    "expected_exit": 0,
+    "expected_text": null,
+    "result": "pass"
+  },
+  {
+    "id": "views-open",
+    "args": [
+      "open",
+      "painting"
+    ],
+    "exit": 0,
+    "stdout": "resuming chunk 1/12\nresumed chunk 1/12 0.00s\nresuming chunk 2/12\nresumed chunk 2/12 0.00s\nresuming chunk 3/12\nresumed chunk 3/12 0.00s\nresuming chunk 4/12\nresumed chunk 4/12 0.00s\nresuming chunk 5/12\nresumed chunk 5/12 0.00s\nresuming chunk 6/12\nresumed chunk 6/12 0.00s\nresuming chunk 7/12\nresumed chunk 7/12 0.11s\nresuming chunk 8/12\nresumed chunk 8/12 0.00s\nresuming chunk 9/12\nresumed chunk 9/12 0.04s\nresuming chunk 10/12\nresumed chunk 10/12 0.00s\nresuming chunk 11/12\nresumed chunk 11/12 0.01s\nresuming chunk 12/12\nresumed chunk 12/12 0.03s\nresumed 12 chunks from /private<isolated-root>/paintings/lua/painting.lua\neasel \"painting\" open: 12 chunks · 2400px · size=100, aspect=5, linen={12, 12}, seed=1\n",
+    "stderr": "",
+    "seconds": 0.211,
+    "expected_exit": 0,
+    "expected_text": null,
+    "result": "pass"
+  },
+  {
+    "id": "view-plain",
+    "args": [
+      "look"
+    ],
+    "exit": 0,
+    "stdout": "/private<isolated-root>/out/easel/painting/look-0009.png (1000x200, 0.02s)\n",
+    "stderr": "",
+    "seconds": 0.02,
+    "expected_exit": 0,
+    "expected_text": null,
+    "result": "pass"
+  },
+  {
+    "id": "view-value",
+    "args": [
+      "look",
+      "--mode",
+      "value"
+    ],
+    "exit": 0,
+    "stdout": "/private<isolated-root>/out/easel/painting/look-0010.png (1000x200, 0.01s)\n",
+    "stderr": "",
+    "seconds": 0.014,
+    "expected_exit": 0,
+    "expected_text": null,
+    "result": "pass"
+  },
+  {
+    "id": "view-value-normal",
+    "args": [
+      "look",
+      "--mode",
+      "value,normal"
+    ],
+    "exit": 0,
+    "stdout": "/private<isolated-root>/out/easel/painting/look-0011.png (1000x200, 0.01s)\n",
+    "stderr": "",
+    "seconds": 0.014,
+    "expected_exit": 0,
+    "expected_text": null,
+    "result": "pass"
+  },
+  {
+    "id": "view-mirror",
+    "args": [
+      "look",
+      "--mode",
+      "mirror"
+    ],
+    "exit": 0,
+    "stdout": "/private<isolated-root>/out/easel/painting/look-0012.png (1000x200, 0.01s)\n",
+    "stderr": "",
+    "seconds": 0.015,
+    "expected_exit": 0,
+    "expected_text": null,
+    "result": "pass"
+  },
+  {
+    "id": "view-grid",
+    "args": [
+      "look",
+      "--grid",
+      "50"
+    ],
+    "exit": 0,
+    "stdout": "/private<isolated-root>/out/easel/painting/look-0013.png (1000x200, 0.01s)\n",
+    "stderr": "",
+    "seconds": 0.014,
+    "expected_exit": 0,
+    "expected_text": null,
+    "result": "pass"
+  },
+  {
+    "id": "view-plain-again",
+    "args": [
+      "look"
+    ],
+    "exit": 0,
+    "stdout": "/private<isolated-root>/out/easel/painting/look-0014.png (1000x200, 0.01s)\n",
+    "stderr": "",
+    "seconds": 0.015,
+    "expected_exit": 0,
+    "expected_text": null,
+    "result": "pass"
+  },
+  {
+    "id": "view-crop-forward",
+    "args": [
+      "look",
+      "--crop",
+      "100,50,300,150"
+    ],
+    "exit": 0,
+    "stdout": "/private<isolated-root>/out/easel/painting/look-0015.png (480x240, 0.01s)\n",
+    "stderr": "",
+    "seconds": 0.012,
+    "expected_exit": 0,
+    "expected_text": null,
+    "result": "pass"
+  },
+  {
+    "id": "view-crop-reverse",
+    "args": [
+      "look",
+      "--crop",
+      "300,150,100,50"
+    ],
+    "exit": 0,
+    "stdout": "/private<isolated-root>/out/easel/painting/look-0016.png (480x240, 0.01s)\n",
+    "stderr": "",
+    "seconds": 0.011,
+    "expected_exit": 0,
+    "expected_text": null,
+    "result": "pass"
+  },
+  {
+    "id": "view-crop-limit",
+    "args": [
+      "look",
+      "--crop",
+      "0,0,500,150"
+    ],
+    "exit": 0,
+    "stdout": "/private<isolated-root>/out/easel/painting/look-0017.png (1200x360, 0.01s)\n",
+    "stderr": "",
+    "seconds": 0.018,
+    "expected_exit": 0,
+    "expected_text": null,
+    "result": "pass"
+  },
+  {
+    "id": "view-crop-sized",
+    "args": [
+      "look",
+      "--crop",
+      "100,50,300,150",
+      "--size",
+      "200"
+    ],
+    "exit": 0,
+    "stdout": "/private<isolated-root>/out/easel/painting/look-0018.png (480x240, 0.01s)\n",
+    "stderr": "",
+    "seconds": 0.012,
+    "expected_exit": 0,
+    "expected_text": null,
+    "result": "pass"
+  },
+  {
+    "id": "view-huge-size",
+    "args": [
+      "look",
+      "--size",
+      "100000"
+    ],
+    "exit": 0,
+    "stdout": "/private<isolated-root>/out/easel/painting/look-0019.png (1600x320, 0.02s)\n",
+    "stderr": "",
+    "seconds": 0.021,
+    "expected_exit": 0,
+    "expected_text": null,
+    "result": "pass"
+  },
+  {
+    "id": "view-palette",
+    "args": [
+      "look",
+      "--palette"
+    ],
+    "exit": 0,
+    "stdout": "/private<isolated-root>/out/easel/painting/look-0020.png (1124x96, 0.01s)\n",
+    "stderr": "",
+    "seconds": 0.009,
+    "expected_exit": 0,
+    "expected_text": null,
+    "result": "pass"
+  },
+  {
+    "id": "crop-over-limit",
+    "args": [
+      "look",
+      "--crop",
+      "0,0,501,150"
+    ],
+    "exit": 1,
+    "stdout": "",
+    "stderr": "--crop exceeds 1200 pixels per side; choose a smaller crop (crops stay 1:1)\n",
+    "seconds": 0.003,
+    "expected_exit": "error",
+    "expected_text": "crop",
+    "result": "pass"
+  },
+  {
+    "id": "crop-malformed",
+    "args": [
+      "look",
+      "--crop",
+      "1,2,3"
+    ],
+    "exit": 1,
+    "stdout": "",
+    "stderr": "--crop 1,2,3: want x0,y0,x1,y1 in units\n",
+    "seconds": 0.003,
+    "expected_exit": "error",
+    "expected_text": "crop",
+    "result": "pass"
+  },
+  {
+    "id": "option-unknown",
+    "args": [
+      "look",
+      "--invented"
+    ],
+    "exit": 1,
+    "stdout": "",
+    "stderr": "look: unknown argument \"--invented\" (--crop x0,y0,x1,y1 --mode value,squint,mirror --grid [step] --size N | --palette)\n",
+    "seconds": 0.003,
+    "expected_exit": "error",
+    "expected_text": "unknown",
+    "result": "pass"
+  },
+  {
+    "id": "grid-too-fine",
+    "args": [
+      "look",
+      "--grid",
+      "0.01"
+    ],
+    "exit": 1,
+    "stdout": "",
+    "stderr": "--grid 0.01: lines closer than a pixel of this look; want at least 1.00 units\n",
+    "seconds": 0.006,
+    "expected_exit": "error",
+    "expected_text": null,
+    "result": "pass"
+  },
+  {
+    "id": "views-log-unchanged",
+    "result": "pass",
+    "observation": "All looks and invalid view requests left log bytes identical"
+  },
+  {
+    "id": "view-after-gap",
+    "args": [
+      "look"
+    ],
+    "exit": 0,
+    "stdout": "/private<isolated-root>/out/easel/painting/look-0021.png (1000x200, 0.01s)\n",
+    "stderr": "",
+    "seconds": 0.015,
+    "expected_exit": 0,
+    "expected_text": null,
+    "result": "pass"
+  },
+  {
+    "id": "view-gap-preserves",
+    "result": "pass",
+    "observation": "Earlier surviving look kept exact bytes; new path differs"
+  },
+  {
+    "id": "look-denied-write",
+    "args": [
+      "look"
+    ],
+    "exit": 1,
+    "stdout": "",
+    "stderr": "/private<isolated-root>/out/easel/painting/look-0022.png: Permission denied (os error 13)\n",
+    "seconds": 0.01,
+    "expected_exit": "error",
+    "expected_text": "Permission denied",
+    "result": "pass"
+  },
+  {
+    "id": "after-denied-save",
+    "args": [
+      "save",
+      "<isolated-root>/after-denied.png"
+    ],
+    "exit": 0,
+    "stdout": "<isolated-root>/after-denied.png\n",
+    "stderr": "",
+    "seconds": 0.027,
+    "expected_exit": 0,
+    "expected_text": null,
+    "result": "pass"
+  },
+  {
+    "id": "look-denied-preserves",
+    "result": "pass",
+    "observation": "Saved painting matches baseline after denied look write"
+  },
+  {
+    "id": "views-close",
+    "args": [
+      "close"
+    ],
+    "exit": 0,
+    "stdout": "the live canvas is in /private<isolated-root>/out/easel/painting/live.png\nclosed; the session is in /private<isolated-root>/paintings/lua/painting.lua\n",
+    "stderr": "",
+    "seconds": 0.084,
+    "expected_exit": 0,
+    "expected_text": null,
+    "result": "pass"
+  },
+  {
+    "id": "dimension-open",
+    "args": [
+      "open",
+      "dim2"
+    ],
+    "exit": 0,
+    "stdout": "easel \"dim2\" open: 0 chunks · 2400px · no canvas yet\n",
+    "stderr": "",
+    "seconds": 0.109,
+    "expected_exit": 0,
+    "expected_text": null,
+    "result": "pass"
+  },
+  {
+    "id": "dimension-setup",
+    "args": [
+      "-s",
+      "dim2",
+      "do",
+      "canvas{size=100,aspect=2,linen=12,ground={{pile={{\"lead white\",1}},um=40,apply=\"knife\"}}}; print(W,H,wait(0)); assert(math.abs(W-1000)<0.001 and math.abs(H-500)<0.001)"
+    ],
+    "exit": 0,
+    "stdout": "1000\t499.99996948242188\tday 1, 09:00\nok · chunk 1 (0.19 s to compute)\n",
+    "stderr": "",
+    "seconds": 0.204,
+    "expected_exit": 0,
+    "expected_text": "day 1, 09:00",
+    "result": "pass"
+  },
+  {
+    "id": "dimension-close",
+    "args": [
+      "-s",
+      "dim2",
+      "close"
+    ],
+    "exit": 0,
+    "stdout": "the live canvas is in /private<isolated-root>/out/easel/dim2/live.png\nclosed; the session is in /private<isolated-root>/paintings/lua/dim2.lua\n",
+    "stderr": "",
+    "seconds": 0.187,
+    "expected_exit": 0,
+    "expected_text": null,
+    "result": "pass"
+  },
+  {
+    "id": "whitespace-open",
+    "args": [
+      "open",
+      "whitespace"
+    ],
+    "exit": 0,
+    "stdout": "easel \"whitespace\" open: 0 chunks · 2400px · no canvas yet\n",
+    "stderr": "",
+    "seconds": 0.113,
+    "expected_exit": 0,
+    "expected_text": null,
+    "result": "pass"
+  },
+  {
+    "id": "whitespace-rejected",
+    "args": [
+      "-s",
+      "whitespace",
+      "do",
+      "  \n\t"
+    ],
+    "exit": 1,
+    "stdout": "",
+    "stderr": "empty chunk\n(the chunk failed and changed nothing)\n",
+    "seconds": 0.004,
+    "expected_exit": "error",
+    "expected_text": "empty chunk",
+    "result": "pass"
+  },
+  {
+    "id": "whitespace-close",
+    "args": [
+      "-s",
+      "whitespace",
+      "close"
+    ],
+    "exit": 0,
+    "stdout": "closed; the session is in /private<isolated-root>/paintings/lua/whitespace.lua\n",
+    "stderr": "",
+    "seconds": 0.03,
+    "expected_exit": 0,
+    "expected_text": null,
+    "result": "pass"
+  }
+]

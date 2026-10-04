@@ -1,0 +1,125 @@
+[
+  {
+    "id": "render-concurrent0",
+    "observation": {
+      "cpu_before": "  0:03.66\n",
+      "cpu_after": "  0:03.70\n",
+      "pending": true
+    },
+    "second_pending": true,
+    "first": "ok\n<root>/out/easel/render/look-0001.png (1600x1600, 0.07s)\n",
+    "second": "ok\n<root>/out/easel/render/look-0002.png (1600x1600, 0.07s)\n",
+    "later": {
+      "reply": "<root>/out/easel/render/look-0003.png (1600x1600, 0.07s)\n",
+      "path": "verification/evidence/matrix-concurrent/concurrent0.png",
+      "sha": "3492c1675c96bb45b6990f2853d4ba5a092a482e6852fbfb8b12de19c784904f"
+    }
+  },
+  {
+    "id": "render-concurrent1",
+    "observation": {
+      "cpu_before": "  0:03.95\n",
+      "cpu_after": "  0:03.98\n",
+      "pending": true
+    },
+    "second_pending": true,
+    "first": "ok\n<root>/out/easel/render/look-0004.png (1600x1600, 0.07s)\n",
+    "second": "ok\nok · chunk 2 (0.00 s to compute)\n",
+    "later": {
+      "reply": "<root>/out/easel/render/look-0005.png (1600x1600, 0.07s)\n",
+      "path": "verification/evidence/matrix-concurrent/concurrent1.png",
+      "sha": "cfe95560e8c090d586dbaff4efb37b4b28c2351c84df92e4f9c6e1caca0b0181"
+    }
+  },
+  {
+    "id": "look-disconnect",
+    "observation": {
+      "cpu_before": "  0:04.21\n",
+      "cpu_after": "  0:04.22\n",
+      "pending": true
+    },
+    "status": {
+      "args": [
+        "status"
+      ],
+      "out": "2 chunks · 2400px · size=100, aspect=1, linen={12, 12}, seed=1\n",
+      "err": "",
+      "exit": 0
+    },
+    "look": {
+      "args": [
+        "look",
+        "--size",
+        "80"
+      ],
+      "out": "<root>/out/easel/render/look-0007.png (80x80, 0.01s)\n",
+      "err": "",
+      "exit": 0
+    }
+  },
+  {
+    "id": "queued-look-disconnect",
+    "observation": {
+      "cpu_before": "  0:04.33\n",
+      "cpu_after": "  0:04.35\n",
+      "pending": true
+    },
+    "no_new_images": true
+  },
+  {
+    "id": "look-integrity-before",
+    "look": {
+      "args": [
+        "look"
+      ],
+      "out": "",
+      "err": "session integrity: <root>/paintings/lua/render.lua differs from the log the session wrote. The easel goes on only from the log it wrote; nothing ran.\n",
+      "exit": 1
+    },
+    "paint": {
+      "args": [
+        "do",
+        "marker=true"
+      ],
+      "out": "",
+      "err": "session integrity: <root>/paintings/lua/render.lua differs from the log the session wrote. The easel goes on only from the log it wrote; nothing ran.\n",
+      "exit": 1
+    }
+  },
+  {
+    "id": "look-integrity-during",
+    "observation": {
+      "cpu_before": "  0:05.57\n",
+      "cpu_after": "  0:05.60\n",
+      "pending": true
+    },
+    "reply": "ok\n<root>/out/easel/render/look-0008.png (1600x1600, 0.07s)\n",
+    "next": {
+      "args": [
+        "status"
+      ],
+      "out": "",
+      "err": "session integrity: <root>/paintings/lua/render.lua differs from the log the session wrote. The easel goes on only from the log it wrote; nothing ran.\n",
+      "exit": 1
+    }
+  },
+  {
+    "id": "kill-render",
+    "observation": {
+      "cpu_before": "  0:05.66\n",
+      "cpu_after": "  0:05.69\n",
+      "pending": true
+    },
+    "reply": "",
+    "log_equal": true,
+    "reopen": {
+      "args": [
+        "open",
+        "render"
+      ],
+      "out": "resuming chunk 1/3\nresumed chunk 1/3 0.52s\nresuming chunk 2/3\nresumed chunk 2/3 0.00s\nresuming chunk 3/3\nresumed chunk 3/3 1.93s\nresumed 3 chunks from <root>/paintings/lua/render.lua\neasel \"render\" open: 3 chunks · 2400px · size=100, aspect=1, linen={12, 12}, seed=1\n",
+      "err": "",
+      "exit": 0
+    }
+  }
+]

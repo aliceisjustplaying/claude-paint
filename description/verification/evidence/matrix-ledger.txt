@@ -1,0 +1,19 @@
+mix 1 seconds 20 retained 1
+mix 2 seconds 20 retained 2
+mix 3 seconds 20 retained 3
+mix 4 seconds 20 retained 4
+mix 5 seconds 20 retained 5
+mix 6 seconds 20 retained 6
+mix 7 seconds 20 retained 7
+mix 8 seconds 20 retained 8
+mix 9 seconds 20 retained 9
+mix 10 seconds 20 retained 10
+mix 11 seconds 20 retained 11
+mix 12 seconds 20 retained 12
+mix 13 seconds 20 retained 13
+mix 14 seconds 20 retained 14
+mix 15 seconds 20 retained 15
+mix 16 seconds 20 retained 16
+oldest at16 seconds 2.5
+oldest after17 seconds 22.5 retained 16
+newest seconds 2.5

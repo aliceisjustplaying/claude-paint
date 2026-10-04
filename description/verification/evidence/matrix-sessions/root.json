@@ -1,0 +1,368 @@
+[
+  {
+    "id": "painter",
+    "calls": [
+      {
+        "args": [
+          "open",
+          "named"
+        ],
+        "out": "",
+        "err": "open: this studio has one painting; easel open takes no name or option (got \"named\")\n",
+        "exit": 1
+      },
+      {
+        "args": [
+          "-s",
+          "elsewhere",
+          "status"
+        ],
+        "out": "",
+        "err": "easel: no option \"-s\": this studio has one painting, there are no sessions to pick\n\neasel: a live painting session (see notes/easel_guide.md)\n\n  easel open          start or reattach; replays paintings/lua/painting.lua if it exists\n  easel do '<lua>'  |  easel do -f chunk.lua  |  easel do - (stdin)     [--look] also looks afterwards\n  easel look [--crop x0,y0,x1,y1] [--mode value,squint,mirror] [--grid [step]] [--size 1000]\n  easel look --palette   the piles the globals hold: thick, thin and very thin over the ground, thin over a card\n  easel log           the painting so far (= paintings/lua/painting.lua)\n  easel status        chunks, width, canvas\n  easel globals       the painting's globals, one a line: chunk that last set it, name, what it holds\n  easel save [path]   the canvas as a PNG (default out/easel/painting/painting.png)\n  easel frames on|off save a look after every chunk\n  easel close         end the session (the log stays)\n  easel note '<text>' | easel note - (stdin)    append a dated entry to notes/journal.md\n  easel tubes [--markdown]   the tubes in the box (--markdown: as a table)\n",
+        "exit": 1
+      },
+      {
+        "args": [
+          "open"
+        ],
+        "out": "easel \"painting\" open: 0 chunks · 2400px · no canvas yet\n",
+        "err": "",
+        "exit": 0
+      },
+      {
+        "args": [
+          "do",
+          "canvas{size=100,aspect=5,linen=12,ground={{pile={{\"lead white\",1}},um=40,apply=\"knife\"}},seed=1};p=pile{{\"red earth\",1}};q=pile{{\"cobalt blue\",1}};b=brush(\"round\",4);b:load(p,0.8);r=rag{width=20};r:dip(0.5);h=pencil(\"HB\");m=rect(100,40,80,80);b:touch(100,80);h:line({{300,40},{350,150}})"
+        ],
+        "out": "ok · chunk 1 (0.11 s to compute)\n",
+        "err": "",
+        "exit": 0
+      },
+      {
+        "args": [
+          "status"
+        ],
+        "out": "1 chunks · 2400px · size=100, aspect=5, linen={12, 12}, seed=1\n",
+        "err": "",
+        "exit": 0
+      },
+      {
+        "args": [
+          "run",
+          "x.lua"
+        ],
+        "out": "",
+        "err": "easel: no command \"run\"\n\neasel: a live painting session (see notes/easel_guide.md)\n\n  easel open          start or reattach; replays paintings/lua/painting.lua if it exists\n  easel do '<lua>'  |  easel do -f chunk.lua  |  easel do - (stdin)     [--look] also looks afterwards\n  easel look [--crop x0,y0,x1,y1] [--mode value,squint,mirror] [--grid [step]] [--size 1000]\n  easel look --palette   the piles the globals hold: thick, thin and very thin over the ground, thin over a card\n  easel log           the painting so far (= paintings/lua/painting.lua)\n  easel status        chunks, width, canvas\n  easel globals       the painting's globals, one a line: chunk that last set it, name, what it holds\n  easel save [path]   the canvas as a PNG (default out/easel/painting/painting.png)\n  easel frames on|off save a look after every chunk\n  easel close         end the session (the log stays)\n  easel note '<text>' | easel note - (stdin)    append a dated entry to notes/journal.md\n  easel tubes [--markdown]   the tubes in the box (--markdown: as a table)\n",
+        "exit": 1
+      },
+      {
+        "args": [
+          "check"
+        ],
+        "out": "",
+        "err": "easel: no command \"check\"\n\neasel: a live painting session (see notes/easel_guide.md)\n\n  easel open          start or reattach; replays paintings/lua/painting.lua if it exists\n  easel do '<lua>'  |  easel do -f chunk.lua  |  easel do - (stdin)     [--look] also looks afterwards\n  easel look [--crop x0,y0,x1,y1] [--mode value,squint,mirror] [--grid [step]] [--size 1000]\n  easel look --palette   the piles the globals hold: thick, thin and very thin over the ground, thin over a card\n  easel log           the painting so far (= paintings/lua/painting.lua)\n  easel status        chunks, width, canvas\n  easel globals       the painting's globals, one a line: chunk that last set it, name, what it holds\n  easel save [path]   the canvas as a PNG (default out/easel/painting/painting.png)\n  easel frames on|off save a look after every chunk\n  easel close         end the session (the log stays)\n  easel note '<text>' | easel note - (stdin)    append a dated entry to notes/journal.md\n  easel tubes [--markdown]   the tubes in the box (--markdown: as a table)\n",
+        "exit": 1
+      },
+      {
+        "args": [
+          "close"
+        ],
+        "out": "the live canvas is in <root>/p/out/easel/painting/live.png\nclosed; the session is in <root>/p/paintings/lua/painting.lua\n",
+        "err": "",
+        "exit": 0
+      }
+    ],
+    "logs": [
+      "<root>/p/paintings/lua/painting.lua"
+    ]
+  },
+  {
+    "id": "roots",
+    "open": {
+      "args": [
+        "open",
+        "a"
+      ],
+      "out": "easel \"a\" open: 0 chunks · 2400px · no canvas yet\n",
+      "err": "",
+      "exit": 0
+    },
+    "do": {
+      "args": [
+        "do",
+        "rootmarker=\"B\""
+      ],
+      "out": "ok · chunk 1 (0.00 s to compute)\n",
+      "err": "",
+      "exit": 0
+    },
+    "a": {
+      "args": [
+        "globals"
+      ],
+      "out": "1\trootmarker\tstring \"A\"\n",
+      "err": "",
+      "exit": 0
+    },
+    "b": {
+      "args": [
+        "globals"
+      ],
+      "out": "1\trootmarker\tstring \"B\"\n",
+      "err": "",
+      "exit": 0
+    }
+  },
+  {
+    "id": "selected-during",
+    "observation": {
+      "cpu_before": "  0:00.00\n",
+      "cpu_after": "  0:00.01\n",
+      "pending": true
+    },
+    "first": "ok\nok · chunk 2 (1.18 s to compute)\n",
+    "second": {
+      "args": [
+        "do",
+        "bsecond=true"
+      ],
+      "out": "ok · chunk 2 (0.00 s to compute)\n",
+      "err": "",
+      "exit": 0
+    },
+    "aglobals": {
+      "args": [
+        "globals"
+      ],
+      "out": "1\trootmarker\tstring \"A\"\n2\tamarker\ttrue\n",
+      "err": "",
+      "exit": 0
+    },
+    "bglobals": {
+      "args": [
+        "globals"
+      ],
+      "out": "1\tbmarker\ttrue\n2\tbsecond\ttrue\n",
+      "err": "",
+      "exit": 0
+    },
+    "changed_environment": {
+      "args": [
+        "status"
+      ],
+      "out": "2 chunks · 2400px · no canvas yet\n",
+      "err": "",
+      "exit": 0
+    }
+  },
+  {
+    "id": "boxes",
+    "calls": [
+      {
+        "args": [
+          "open",
+          "default"
+        ],
+        "out": "easel \"default\" open: 0 chunks · 2400px · no canvas yet\n",
+        "err": "",
+        "exit": 0
+      },
+      {
+        "args": [
+          "close"
+        ],
+        "out": "closed; the session is in <root>/boxroot/paintings/lua/default.lua\n",
+        "err": "",
+        "exit": 0
+      },
+      {
+        "args": [
+          "open",
+          "env"
+        ],
+        "out": "easel \"env\" open: 0 chunks · 2400px · no canvas yet\n",
+        "err": "",
+        "exit": 0
+      },
+      {
+        "args": [
+          "do",
+          "print(type(canvas))"
+        ],
+        "out": "function\nok · chunk 1 (0.00 s to compute)\n",
+        "err": "",
+        "exit": 0
+      },
+      {
+        "args": [
+          "close"
+        ],
+        "out": "closed; the session is in <root>/boxroot/paintings/lua/env.lua\n",
+        "err": "",
+        "exit": 0
+      },
+      {
+        "args": [
+          "open",
+          "file"
+        ],
+        "out": "easel \"file\" open: 0 chunks · 2400px · no canvas yet\n",
+        "err": "",
+        "exit": 0
+      },
+      {
+        "args": [
+          "close"
+        ],
+        "out": "closed; the session is in <root>/boxroot/paintings/lua/file.lua\n",
+        "err": "",
+        "exit": 0
+      },
+      {
+        "args": [
+          "open",
+          "conflict"
+        ],
+        "out": "",
+        "err": "easel: fatal: <root>/boxbin/box says box \"sargent\" but EASEL_BOX says \"tube box\": set one, or both the same\n\n",
+        "exit": 1
+      },
+      {
+        "args": [
+          "open",
+          "env"
+        ],
+        "out": "",
+        "err": "easel: fatal: the log was painted from the box \"sargent\" (its --@ box line), but <root>/boxbin/box says \"tube box\": a painting is replayed with the box it was painted from; nothing ran\n\n",
+        "exit": 1
+      },
+      {
+        "args": [
+          "open",
+          "env"
+        ],
+        "out": "resuming chunk 1/1\nresumed chunk 1/1 0.00s\nresumed 1 chunks from <root>/boxroot/paintings/lua/env.lua\neasel \"env\" open: 1 chunks · 2400px · no canvas yet\n",
+        "err": "",
+        "exit": 0
+      },
+      {
+        "args": [
+          "status"
+        ],
+        "out": "1 chunks · 2400px · no canvas yet\n",
+        "err": "",
+        "exit": 0
+      },
+      {
+        "args": [
+          "close"
+        ],
+        "out": "closed; the session is in <root>/boxroot/paintings/lua/env.lua\n",
+        "err": "",
+        "exit": 0
+      }
+    ],
+    "recorded": "-- easel session \"env\": a painting replayed chunk by chunk.\n-- Each \"--@ chunk\" line starts one chunk as it was run at the easel.\n--@ box sargent\n--@ engine 3\n\n--@ chunk 1\nprint(type(canvas))\n"
+  },
+  {
+    "id": "open-abort-concurrent",
+    "client_output": "",
+    "client_error": "",
+    "ordinary": {
+      "args": [
+        "status"
+      ],
+      "out": "",
+      "err": "no easel session \"replayabort\" running: easel open replayabort\n",
+      "exit": 1
+    },
+    "second_open": {
+      "args": [
+        "open",
+        "replayabort"
+      ],
+      "out": "resuming chunk 1/1\nresumed chunk 1/1 1.16s\nresumed 1 chunks from <root>/paintings/lua/replayabort.lua\neasel \"replayabort\" open: 1 chunks · 2400px · no canvas yet\n",
+      "err": "",
+      "exit": 0
+    },
+    "final": {
+      "args": [
+        "status"
+      ],
+      "out": "1 chunks · 2400px · no canvas yet\n",
+      "err": "",
+      "exit": 0
+    }
+  },
+  {
+    "id": "replay-edit",
+    "opening": {
+      "out": "resuming chunk 1/1\nresumed chunk 1/1 1.22s\nresumed 1 chunks from <root>/paintings/lua/replayedit.lua\n",
+      "err": "",
+      "exit": null
+    },
+    "status": {
+      "args": [
+        "status"
+      ],
+      "out": "",
+      "err": "session integrity: <root>/paintings/lua/replayedit.lua differs from the log the session wrote. The easel goes on only from the log it wrote; nothing ran.\n",
+      "exit": 1
+    }
+  },
+  {
+    "id": "closed-edit",
+    "open": {
+      "args": [
+        "open",
+        "closededit"
+      ],
+      "out": "",
+      "err": "easel: fatal: session integrity: <root>/out/easel/closededit/committed.lua differs from the log the session wrote. The easel goes on only from the log it wrote; nothing ran.\n\n",
+      "exit": 1
+    }
+  },
+  {
+    "id": "width",
+    "reply": {
+      "args": [
+        "open",
+        "width",
+        "--width",
+        "64"
+      ],
+      "out": "",
+      "err": "open: live sessions are fixed at 2400px; no width option\n",
+      "exit": 1
+    }
+  },
+  {
+    "id": "legacy-current",
+    "open": {
+      "args": [
+        "open",
+        "current"
+      ],
+      "out": "",
+      "err": "File exists (os error 17)\n",
+      "exit": 1
+    },
+    "reply": {
+      "args": [
+        "do",
+        "canvas{style=\"friedrich\",palette=\"friedrich_1820_greens\",aspect=1.4,seed=23}"
+      ],
+      "out": "",
+      "err": "no easel session \"current\" running: easel open current\n",
+      "exit": 1
+    },
+    "close": {
+      "args": [
+        "close"
+      ],
+      "out": "",
+      "err": "no easel session \"current\" running: easel open current\n",
+      "exit": 1
+    }
+  }
+]

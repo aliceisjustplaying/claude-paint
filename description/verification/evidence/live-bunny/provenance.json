@@ -1,0 +1,17 @@
+{
+  "sourceCommit": "4e525e50897807e9b5f734071dfeb330f1a393d3",
+  "sourceBranch": "main",
+  "round23IsAncestor": true,
+  "exporter": "scripts/export_r16_studio",
+  "exportRevisionOverride": "4e525e50897807e9b5f734071dfeb330f1a393d3",
+  "profile": "blank",
+  "easelSha256": "7a25e252800a8c51709a9678e0937efb0e99c448eb196f0ecbb8b945ac6bb4fa",
+  "provider": "opencode-go",
+  "model": "space-bunny-free",
+  "thinking": "xhigh",
+  "providerEndpoint": "https://opencode.ai/zen/go/v1",
+  "tools": ["paint", "look", "note", "status", "log", "read"],
+  "extensions": ["harness/painter/painter.ts", "harness/painter/compaction.ts"],
+  "preview": "http://<tailscale-host>:18767/?p=paint-studio-babb1e",
+  "remoteMacReachability": "not checked"
+}

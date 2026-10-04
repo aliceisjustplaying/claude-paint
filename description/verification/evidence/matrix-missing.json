@@ -1,0 +1,81 @@
+[
+  {
+    "args": [
+      "open",
+      "closed"
+    ],
+    "exit": 0,
+    "out": "easel \"closed\" open: 0 chunks · 2400px · no canvas yet\n",
+    "err": "",
+    "seconds": 0.1053
+  },
+  {
+    "args": [
+      "close"
+    ],
+    "exit": 0,
+    "out": "closed; the session is in <root>/paintings/lua/closed.lua\n",
+    "err": "",
+    "seconds": 0.0132
+  },
+  {
+    "args": [
+      "do",
+      "b:touch(100,80)"
+    ],
+    "exit": 1,
+    "out": "",
+    "err": "no easel session \"closed\" running: easel open closed\n",
+    "seconds": 0.0031
+  },
+  {
+    "args": [
+      "do",
+      "m=rect(1,1,10,10)"
+    ],
+    "exit": 1,
+    "out": "",
+    "err": "no easel session \"closed\" running: easel open closed\n",
+    "seconds": 0.0029
+  },
+  {
+    "args": [
+      "do",
+      "h:line({{1,1},{2,2}})"
+    ],
+    "exit": 1,
+    "out": "",
+    "err": "no easel session \"closed\" running: easel open closed\n",
+    "seconds": 0.0028
+  },
+  {
+    "args": [
+      "do",
+      "r:blot(100,80)"
+    ],
+    "exit": 1,
+    "out": "",
+    "err": "no easel session \"closed\" running: easel open closed\n",
+    "seconds": 0.0029
+  },
+  {
+    "args": [
+      "do",
+      "work(m,{pile=p})"
+    ],
+    "exit": 1,
+    "out": "",
+    "err": "no easel session \"closed\" running: easel open closed\n",
+    "seconds": 0.0031
+  },
+  {
+    "args": [
+      "do",
+      "wait(1)"
+    ],
+    "exit": 1,
+    "out": "",
+    "err": "no easel session \"closed\" running: easel open closed\n",
+    "seconds": 0.0029
+  }
+]

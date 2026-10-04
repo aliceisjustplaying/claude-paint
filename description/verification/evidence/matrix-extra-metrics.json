@@ -1,0 +1,11 @@
+{
+  "idle-before.png/idle-after.png": "0 (0)",
+  "rag-rollback-before.png/rag-rollback-after.png": "0 (0)",
+  "shapes-before.png/shapes-after.png": "0 (0)",
+  "physical-100-default.png/physical-100-explicit.png": "0 (0)",
+  "physical-400-default.png/physical-400-explicit.png": "0 (0)",
+  "line-repeat.png/defaults-retained.png": "0 (0)",
+  "rag-variant-default.png/rag-variant-explicit.png": "0 (0)",
+  "rag-variant-foldminus.png/rag-variant-foldzero.png": "0 (0)",
+  "rag-variant-foldone.png/rag-variant-foldtwo.png": "0 (0)"
+}

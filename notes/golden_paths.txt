@@ -20,6 +20,10 @@ scripts/tests/baseline_state.sh
 # the exact list and runner of its commit (safeguards review B3).
 scripts/test
 notes/speed/test_lists/
+# The approved job lock and its tests; its hash is pinned in
+# scripts/safeguards_lib.py (LOCKRUN_SHA256; safeguards review S2).
+scripts/lockrun
+scripts/tests/lockrun.sh
 # The thinner acceptance tests, helpers, inputs and rules frozen at b2a0e14
 # (~/src/a/claude-paint-reviews/thinner-tests-APPROVED.md, 22 files). Most
 # don't exist on codex/speed yet: listed in advance, each needs approval when

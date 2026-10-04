@@ -12,7 +12,9 @@ ALL of the following and lists every problem it finds:
    cleanup errors and checkout evidence from before and after the test that
    shows a full, unchanged checkout of COMMIT (HEAD, tree, index equal to the
    commit's tree, not sparse, no skip-worktree/assume-unchanged flags, no
-   tracked changes). Missing or inconsistent evidence is refused.
+   tracked changes). Missing or inconsistent evidence is refused. The
+   receipt's lockrun sha256 is the approved lockrun's pin (LOCKRUN_SHA256 in
+   safeguards_lib.py); a receipt without one is refused.
 2. The reviewed check set, re-derived from COMMIT's own blobs: the receipt's
    list is notes/speed/test_lists/all.tsv; that list at COMMIT parses to
    exactly the receipt's manifest and hashes to its list_sha256 (and the
@@ -58,7 +60,7 @@ import subprocess
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from safeguards_lib import (DEFAULT_LIST, HEX64, RECEIPT_FORMAT, RUNNER, Refuse,  # noqa: E402
+from safeguards_lib import (DEFAULT_LIST, HEX64, LOCKRUN_SHA256, RECEIPT_FORMAT, RUNNER, Refuse,  # noqa: E402
                             checkout_problems, describe_change, git, golden_check, is_ancestor,
                             manifest_at, protected, resolve_exact_commit, run, summary_problems,
                             toplevel, tree_of)
@@ -96,6 +98,10 @@ def receipt_problems(repo, sha, tree, r):
         p.append("the receipt records exit %r" % r.get("exit"))
     if r.get("cleanup_errors") != []:
         p.append("the receipt records cleanup errors (or none recorded): %r" % r.get("cleanup_errors"))
+    lr = r.get("lockrun") if isinstance(r.get("lockrun"), dict) else {}
+    if lr.get("sha256") != LOCKRUN_SHA256:
+        p.append("the receipt's lockrun sha256 is %r, not the approved lockrun's %s (safeguards_lib.py)"
+                 % (lr.get("sha256"), LOCKRUN_SHA256))
     # checkout evidence: a full clean checkout of exactly SHA before and after the test
     co = r.get("checkout") if isinstance(r.get("checkout"), dict) else {}
     if co.get("clean_before") is not True:

@@ -22,9 +22,17 @@
   included). Otherwise it refuses (exit 2).
 - Inside it, one outer `lockrun --timeout SECONDS` runs
   `scripts/test --all --summary FILE` (plus `--list LIST` for a non-default
-  list) with CARGO_TARGET_DIR inside the temporary working copy. lockrun:
-  $LOCKRUN if set, else the candidate's own scripts/lockrun, else
-  ~/src/a/claude-paint-tools/lockrun.
+  list) with CARGO_TARGET_DIR inside the temporary working copy.
+- lockrun is never the candidate's own: only a file whose sha256 is the pin
+  LOCKRUN_SHA256 in safeguards_lib.py is used. If $LOCKRUN is set, it must be
+  such a file, or the run is refused (exit 2): an explicit choice is never
+  replaced silently. Otherwise the first pinned one of
+  ~/src/a/claude-paint-tools/lockrun and the scripts/lockrun beside this
+  tool (its own checkout, not the candidate) is used; one that is missing or
+  differs is skipped with a message. None: refused (exit 2), nothing run.
+  The chosen bytes are hashed once and copied to the temporary directory,
+  outside the working copy, and that copy is what runs. The receipt records
+  its path, source and sha256.
 - After the run the same checkout checks are repeated (HEAD, tree, index,
   sparse, flags, tracked changes): any difference fails the run. The
   evidence from before and after goes into the receipt.
@@ -68,11 +76,11 @@ import time
 import tomllib
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from safeguards_lib import (DEFAULT_LIST, RECEIPT_FORMAT, RECEIPTS_REF, Refuse,  # noqa: E402
-                            assert_publishable, checkout_problems, checkout_state, git,
-                            home_redact, is_ancestor, manifest_at, manifest_problems, now_iso,
-                            resolve_exact_commit, run, sha256_file, summary_problems, toplevel,
-                            tools_sha256, tree_of)
+from safeguards_lib import (DEFAULT_LIST, LOCKRUN_SHA256, RECEIPT_FORMAT, RECEIPTS_REF,  # noqa: E402
+                            TOOLS_LOCKRUN, Refuse, assert_publishable, checkout_problems,
+                            checkout_state, git, home_redact, is_ancestor, manifest_at,
+                            manifest_problems, now_iso, resolve_exact_commit, run, sha256_bytes,
+                            sha256_file, summary_problems, toplevel, tools_sha256, tree_of)
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 TOOL_FILES = [os.path.abspath(__file__), os.path.join(HERE, "safeguards_lib.py")]
@@ -106,17 +114,37 @@ def resolve_base(repo, args):
 
 
 
-def pick_lockrun(wt):
+def _read(path):
+    try:
+        with open(path, "rb") as f:
+            return f.read()
+    except OSError:
+        return None
+
+
+def pick_lockrun():
+    """(path, source, bytes) of the approved lockrun (sha256 == LOCKRUN_SHA256); Refuse if none.
+    Never the candidate's: the candidate's working copy does not exist yet."""
     env = os.environ.get("LOCKRUN")
     if env:
-        return os.path.abspath(env), "$LOCKRUN"
-    own = os.path.join(wt, "scripts", "lockrun")
-    if os.access(own, os.X_OK):
-        return own, "candidate's scripts/lockrun"
-    tools = os.path.expanduser("~/src/a/claude-paint-tools/lockrun")
-    if os.access(tools, os.X_OK):
-        return tools, "~/src/a/claude-paint-tools/lockrun"
-    raise Refuse("no lockrun found (candidate scripts/lockrun, $LOCKRUN or ~/src/a/claude-paint-tools/lockrun)")
+        path = os.path.abspath(env)
+        data = _read(path)
+        got = "unreadable" if data is None else "sha256 " + sha256_bytes(data)
+        if data is None or sha256_bytes(data) != LOCKRUN_SHA256:
+            raise Refuse("$LOCKRUN=%s is not the approved lockrun (%s, pinned %s in safeguards_lib.py)"
+                         % (home_redact(path), got, LOCKRUN_SHA256))
+        return path, "$LOCKRUN", data
+    skipped = []
+    for path, source in ((os.path.expanduser(TOOLS_LOCKRUN), TOOLS_LOCKRUN),
+                         (os.path.join(HERE, "lockrun"), "scripts/lockrun beside test_candidate")):
+        data = _read(path)
+        if data is not None and sha256_bytes(data) == LOCKRUN_SHA256:
+            return path, source, data
+        why = "%s (%s): %s" % (source, home_redact(path), "missing or unreadable" if data is None
+                                else "sha256 %s is not the pin" % sha256_bytes(data))
+        say("skipping lockrun %s" % why)
+        skipped.append(why)
+    raise Refuse("no approved lockrun (sha256 %s): %s" % (LOCKRUN_SHA256, "; ".join(skipped)))
 
 
 def _toml(path):
@@ -310,6 +338,7 @@ def main():
         bad = manifest_problems(manifest["steps"])
         if bad:
             raise Refuse("the test list %s at %s can't pass: %s" % (args.list_file, sha[:12], "; ".join(bad)))
+        lockrun_path, lockrun_src, lockrun_bytes = pick_lockrun()
     except Refuse as e:
         say("REFUSED: %s" % e)
         return EXIT_REFUSED
@@ -328,6 +357,7 @@ def main():
     wt = os.path.join(tmp, "wt")
     summary_path = os.path.join(tmp, "summary.json")
     say("temporary working copy: %s" % wt)
+    lockrun = os.path.join(tmp, "lockrun")
 
     for s in (signal.SIGTERM, signal.SIGHUP):
         signal.signal(s, on_signal)
@@ -343,6 +373,13 @@ def main():
     try:
         try:
             try:
+                # the approved lockrun's checked bytes, outside the working copy: what runs is
+                # exactly what was hashed, and the candidate can't replace it
+                with open(lockrun, "wb") as f:
+                    f.write(lockrun_bytes)
+                os.chmod(lockrun, 0o500)
+                say("lockrun: %s from %s (sha256 %s), run as a copy at %s"
+                    % (home_redact(lockrun_path), lockrun_src, LOCKRUN_SHA256[:12], lockrun))
                 p = run(["git", "-C", repo, "worktree", "add", "--detach", wt, sha], check=False)
                 sys.stderr.write(p.stderr)
                 if p.returncode != 0:
@@ -350,7 +387,6 @@ def main():
                 run(["git", "-C", wt, "sparse-checkout", "disable"], check=False)
                 checkout["before"] = verify_full_clean_checkout(wt, sha, tree)
                 checkout["clean_before"] = True
-                lockrun, lockrun_src = pick_lockrun(wt)
             except Refuse as e:
                 refused = str(e)
             if refused is None:
@@ -364,7 +400,9 @@ def main():
                 if args.list_file != DEFAULT_LIST:
                     cmd += ["--list", args.list_file]
                 env = dict(os.environ, CARGO_TARGET_DIR=os.path.join(wt, "target"))
-                lockrun_info = {"path": lockrun_src, "sha256": sha256_file(lockrun),
+                lockrun_info = {"path": home_redact(lockrun_path), "source": lockrun_src,
+                                "sha256": sha256_file(lockrun), "pinned_sha256": LOCKRUN_SHA256,
+                                "ran": "a copy in the temporary directory, outside the working copy",
                                 "command": home_redact(shlex.join(["lockrun"] + cmd[1:]))}
                 if not os.access(os.path.join(wt, "scripts", "test"), os.X_OK):
                     problems.append("the commit has no executable scripts/test")

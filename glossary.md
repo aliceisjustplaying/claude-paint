@@ -113,3 +113,17 @@
 **Lobe.** A rounded variation along an outline whose width is controlled in canvas units.
 
 **Tangent and normal.** Directions along a boundary and perpendicular outward from it, returned when sampling an outline.
+
+**Drawing.** Graphite or black-chalk marks deposited on the canvas, distinct from paint loaded from a pile.
+
+**Grade.** A graphite pencil's hardness or softness designation, from 9H through HB to 9B, with F between H and HB.
+
+**Wear.** Distance drawn by a pencil or chalk point since sharpening, measured in millimeters and used to widen subsequent marks.
+
+**Fixative.** An operation binding the currently present drawing and guide coverage so erasing cannot reduce them below that protected amount.
+
+**Drawing guide.** A mask of continuous drawn geometry, without the gaps caused by canvas grain. It can remain beneath covering paint.
+
+**Hatching.** Short, roughly parallel drawing marks laid within a supplied mask.
+
+**Tremor.** Small hand sway added to an unruled drawn line, controlled in canvas units.

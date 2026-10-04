@@ -952,6 +952,7 @@ impl Server {
             None => c.seen(),
         };
         let (wu, hu) = (c.width(), c.height());
+        // (a tile is at most 500 units: 1200 px of a live canvas, the most a crop takes)
         let cols = (wu / 500.0).ceil().max(1.0) as usize;
         let rows = (hu / 500.0).ceil().max(1.0) as usize;
         let (tw, th) = (wu / cols as f32, hu / rows as f32);

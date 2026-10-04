@@ -466,6 +466,8 @@ impl Canvas {
         let centers = match &hd.scale_at {
             None => place(hd, f, gap, mean_len, 1.0, seed, &mut rng),
             Some(_) => {
+                // (the smallest marks in the mask, looked for every 2 units,
+                // as a field is sampled: a small passage of small marks counts)
                 let mut kmin = f32::MAX;
                 let mut y = 0.0;
                 while y <= f.height() {
@@ -474,9 +476,9 @@ impl Canvas {
                         if mask_at(mask, x, y) >= hd.threshold {
                             kmin = kmin.min(scale_here(x, y));
                         }
-                        x += 8.0;
+                        x += 2.0;
                     }
-                    y += 8.0;
+                    y += 2.0;
                 }
                 let kmin = if kmin == f32::MAX { 1.0 } else { kmin };
                 let all = place(hd, f, gap * kmin, mean_len * kmin, kmin, seed, &mut rng);

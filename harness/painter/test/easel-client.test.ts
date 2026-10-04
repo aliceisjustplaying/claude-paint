@@ -299,4 +299,11 @@ test("every look a survey names is renamed, in order", async () => {
 	assert.equal(spaced.paths.length, 1);
 	assert.equal(readFileSync(join(s, spaced.paths[0]), "utf8"), "0007");
 	assert.ok(spaced.said.endsWith("\nno such look.png"));
+	// a folder named like a picture: the look inside it is renamed, not the folder
+	mkdirSync(join(s, "archive.png (old)"));
+	writeFileSync(join(s, "archive.png (old)", "look-0008.png"), "0008");
+	const nested = renameLooks(s, "archive.png (old)/look-0008.png (1000x714, 0.04s)");
+	assert.equal(nested.paths.length, 1);
+	assert.equal(readFileSync(join(s, nested.paths[0]), "utf8"), "0008");
+	assert.ok(nested.paths[0].startsWith(join("archive.png (old)", "")));
 });

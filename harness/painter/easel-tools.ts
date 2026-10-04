@@ -64,7 +64,7 @@ export function registerEaselTools(pi: ExtensionAPI, studio: string): void {
 				let said: string;
 				if (p.survey && p.compare) throw new Error("look: survey and compare are two looks; ask for one");
 				// compare: an earlier look of this studio, nothing outside it (as `read`)
-				let compare = p.compare;
+				let compare = p.compare || undefined; // (an empty path is none)
 				if (compare !== undefined) {
 					compare = studioPath(studio, compare);
 					if (compare === undefined) throw new Error("look: compare is the path of an earlier look in this studio");

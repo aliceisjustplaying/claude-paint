@@ -4,7 +4,7 @@
  */
 import { spawn } from "node:child_process";
 import { setTimeout as pause } from "node:timers/promises";
-import { existsSync, realpathSync, renameSync } from "node:fs";
+import { realpathSync, renameSync, statSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 import { homedir } from "node:os";
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
@@ -205,13 +205,14 @@ export function logReply(log: string): string {
 /**
  * `renameLook` for every look an answer names (a survey names several): each
  * line that begins with a look's png path (a file that is there; its folders may
- * have spaces in their names) gets a fresh name; the paths in order.
+ * have spaces, or ".png", in their names) gets a fresh name; the paths in order.
  */
 export function renameLooks(studio: string, said: string): { said: string; paths: string[] } {
 	const paths: string[] = [];
 	const lines = said.split("\n").map((line) => {
-		const m = /^(.+?\.png)( \(.*)?$/.exec(line);
-		if (!m || !existsSync(resolve(studio, m[1]))) return line;
+		// (the whole path, to its last ".png": a folder's name may hold one too)
+		const m = /^(.+\.png)( \(\d+x\d+.*)?$/.exec(line);
+		if (!m || !statSync(resolve(studio, m[1]), { throwIfNoEntry: false })?.isFile()) return line;
 		const path = join(dirname(m[1]), `${randomUUID()}.png`);
 		renameSync(resolve(studio, m[1]), resolve(studio, path));
 		paths.push(path);

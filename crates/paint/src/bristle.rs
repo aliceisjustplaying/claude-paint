@@ -2467,6 +2467,10 @@ impl Knife {
     }
     /// Pick up `amount` (0..1 of a full load) of `paint` onto the blade.
     pub fn load(&mut self, paint: Paint, amount: f32) {
+        // (no amount that is not a number: it would leave the blade's paint NaN)
+        if !amount.is_finite() {
+            return;
+        }
         let v = amount.max(0.0) * self.full();
         let lat = paint.latent();
         self.cure = mix_cure(self.cure, self.vol, 0.0, v);

@@ -114,7 +114,13 @@ impl Canvas {
     /// Write the complete canvas state (dries nothing: wet paint stays wet)
     /// after `header`.
     pub fn write_state(&self, w: &mut impl Write, header: &str) -> io::Result<()> {
-        w.write_all(MAGIC)?;
+        self.write_version(w, header, 9)
+    }
+
+    /// `write_state` in format `version`: 9, or 8 as it was (the tests' way
+    /// to an old file: no gloss, no absorbency, three properties of wet paint).
+    fn write_version(&self, w: &mut impl Write, header: &str, version: u32) -> io::Result<()> {
+        w.write_all(if version >= 9 { MAGIC } else { MAGIC_8 })?;
         put_u64(w, header.len() as u64)?;
         w.write_all(header.as_bytes())?;
         let f = self.f;
@@ -148,11 +154,17 @@ impl Canvas {
         put_all(w, self.px.iter().flat_map(|p| *p))?;
         put_all(w, self.height.iter().copied())?;
         put_all(w, self.film.iter().copied())?;
-        put_all(w, self.gloss.iter().copied())?;
-        put_all(w, self.absorb.iter().copied())?;
+        if version >= 9 {
+            put_all(w, self.gloss.iter().copied())?;
+            put_all(w, self.absorb.iter().copied())?;
+        }
         put_all(w, wt.vol.iter().copied())?;
         put_all(w, wt.lat.iter().flat_map(|l| *l))?;
-        put_all(w, wt.hide.iter().flat_map(|h| *h))?;
+        if version >= 9 {
+            put_all(w, wt.hide.iter().flat_map(|h| *h))?;
+        } else {
+            put_all(w, wt.hide.iter().flat_map(|h| [h[0], h[1], h[2]]))?;
+        }
         put_all(w, wt.stroke.iter().map(|&v| f32::from_bits(v)))?;
         put_all(w, wt.touched.iter().map(|&v| f32::from_bits(v)))?;
         let ck = &wt.clock;
@@ -370,6 +382,29 @@ mod tests {
         let mut b = Vec::new();
         c.write_state(&mut b, "").unwrap();
         b
+    }
+
+    /// A version 8 file (a save from before engine 3) is read: an oil
+    /// ground's gloss, nothing absorbent, no solvent and a tube paint's oil.
+    #[test]
+    fn a_version_8_file_is_read() {
+        let mut c = Canvas::new_window(2, 1.0, [0.1; 3], None);
+        c.gloss.iter_mut().for_each(|g| *g = 0.9);
+        c.absorb.iter_mut().for_each(|a| *a = 0.3);
+        c.wet.vol[0] = 1.5;
+        c.wet.hide[0] = [0.7, 0.6, 1.2, 0.4, 0.5];
+        let mut b = Vec::new();
+        c.write_version(&mut b, "x=1\n", 8).unwrap();
+        assert_eq!(&b[..8], b"PAINTCK8");
+        let (d, h) = Canvas::read_state(&mut Cursor::new(b)).unwrap();
+        assert_eq!(h, "x=1\n");
+        assert!(d.gloss.iter().all(|&g| g == crate::canvas::OIL_GROUND_GLOSS) && d.absorb.iter().all(|&a| a == 0.0) && !d.absorb_any);
+        assert_eq!((d.wet.vol[0], d.wet.hide[0]), (1.5, [0.7, 0.6, 1.2, 0.0, 1.0]));
+        // and a version 9 file keeps what it holds
+        let mut b = Vec::new();
+        c.write_state(&mut b, "").unwrap();
+        let d = load(b).unwrap();
+        assert_eq!((d.gloss[0], d.absorb[0], d.wet.hide[0]), (0.9, 0.3, [0.7, 0.6, 1.2, 0.4, 0.5]));
     }
 
     #[test]

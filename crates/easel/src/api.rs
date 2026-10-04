@@ -386,8 +386,9 @@ impl UserData for KnifeU {
     }
     fn add_methods<M: UserDataMethods<Self>>(m: &mut M) {
         m.add_method("load", |_, k, (p, amount): (Value, Option<f32>)| {
+            let amount = load_amount(amount, 0.6, "k:load")?;
             let (paint, color) = brushload(&k.st, &p, &Value::Nil, "load")?;
-            k.k.borrow_mut().load(paint, amount.unwrap_or(0.6));
+            k.k.borrow_mut().load(paint, amount);
             time::trip(&k.st, color);
             Ok(())
         });
@@ -447,12 +448,12 @@ impl UserData for Brush {
                 let mut part = part_of(t, "b:load")?;
                 part.seed = b.st.borrow_mut().rng.next_u64();
                 let (paint, color) = brushload(&b.st, &p, &Value::Nil, "load")?;
-                b.held.borrow_mut().load_part(paint, amount.unwrap_or(0.8), &part);
+                b.held.borrow_mut().load_part(paint, load_amount(amount, 0.8, "b:load")?, &part);
                 time::trip(&b.st, color);
                 return Ok(());
             }
             let (paint, color) = brushload(&b.st, &p, &extra, "load")?;
-            b.held.borrow_mut().load(paint, amount.unwrap_or(0.8));
+            b.held.borrow_mut().load(paint, load_amount(amount, 0.8, "b:load")?);
             time::trip(&b.st, color);
             Ok(())
         });
@@ -961,6 +962,16 @@ const WORK_KEYS: &[&str] = &[
 ];
 
 const PART_KEYS: &[&str] = &["side", "share", "streak"];
+
+/// A load's amount (a share of a full load; `default` if none is given): a
+/// number, not an infinity or a NaN, which would leave the tool's paint NaN.
+fn load_amount(amount: Option<f32>, default: f32, what: &str) -> Result<f32> {
+    match amount {
+        None => Ok(default),
+        Some(a) if a.is_finite() => Ok(a),
+        Some(a) => err(format!("{what}: the amount is a share of a full load (0..1), not {a}")),
+    }
+}
 
 /// The part of a brush a dip reaches: `{side=-1..1, share=0..1, streak=0..1}`.
 fn part_of(t: &Table, what: &str) -> Result<paint::Part> {

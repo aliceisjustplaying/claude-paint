@@ -79,7 +79,6 @@
 **Orientation.** The brush's wide-axis direction: across travel, along travel or a fixed angle.
 
 **Pickup.** Existing canvas paint entering a brush and potentially affecting later marks.
-||||||| parent of a6d3826 (docs: add watching/studio.md)
 
 **Event.** In the studio viewer, one recorded item in a painter history, such as a thought, tool call, result-associated image or sitting boundary. An event is not necessarily a committed painting chunk.
 
@@ -88,3 +87,13 @@
 **Rewound.** The studio viewer is showing an earlier selected event without automatically advancing when new events arrive.
 
 **Static export.** A copy of the studio page, painter histories and pictures served as files. It can refresh when newer exported files arrive but does not call the live easel.
+
+**Studio.** A painter's working directory, containing its brief, notes, easel executable and painting outputs. It is distinct from the studio browser that displays recorded activity.
+
+**Provider.** The service answering the painter's model requests. Provider availability and usage limits are separate from local easel availability.
+
+**Context.** The messages and images included in a model request. Stored conversation history can contain images or errors omitted from current context.
+
+**Pacing.** Delaying model requests according to recent input-token usage. It changes real elapsed time, not painting time.
+
+**Image pruning.** Replacing older image blocks in outgoing model context with text while keeping the stored session images.

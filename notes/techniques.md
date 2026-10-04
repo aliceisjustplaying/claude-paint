@@ -7,11 +7,10 @@ the picture is yours.
 
 ## Plan before you paint
 
-- **Sketch first.** A session named `sketch…` (`easel open sketch-1`) paints
-  at a quarter of the width, about 16 times faster. Try three or four
-  compositions as small, quick sketches before the painting: the big shapes,
-  the values, where the light is. A chunk of the painting that took two
-  minutes takes seconds there.
+- **Sketch sessions (developer replay build).** A session named `sketch…`
+  (`easel open sketch-1`) paints at a quarter of the width, with one
+  sixteenth as many pixels. The painter's studio has one painting and does
+  not expose separate sketch sessions.
 - **Plan in values.** `look` with `mode: "value,squint"` shows the picture as
   big masses of light and dark. If the masses don't hold there, no detail
   will save them.
@@ -46,8 +45,9 @@ the picture is yours.
   hut). `form{}` and its solids give a single lit volume to paint by.
 - **Shadows take color from around them**: a shadow on a sunlit field is
   warmed near its base by light thrown up from the field, cooler where it
-  meets the sky's light. Grade it (`piles=`), don't fill it with one violet,
-  and keep it a different value and temperature from the object casting it.
+  meets the sky's light. Grade it with separate passes using different
+  `pile=` values, don't fill it with one violet, and keep it a different
+  value and temperature from the object casting it.
 - **Distance lightens and cools**: far hills and trees paler and bluer than
   near ones, all of a range alike.
 
@@ -81,8 +81,9 @@ the picture is yours.
 ## Time
 
 - Time passes only as you paint or `wait`. Paint dries on its own clock:
-  lead white and umber fast, lakes and vermilion slow, poppy oil slower than
-  linseed, thin paint faster than thick, an absorbent ground faster still.
+  lead white and umber fast, lakes and vermilion slow, thin paint faster than
+  thick. Added medium slows drying; oil species and ground absorbency are
+  not drying controls in this easel.
 - A painting can take months of painted time. Let layers dry between
   campaigns; that is what lets the next one sit on top.
 

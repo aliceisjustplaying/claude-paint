@@ -246,9 +246,9 @@ impl Canvas {
     }
 
     /// The surface with the wet paint on it, as the painter's raking light
-    /// sees it (`seen_lit`): the dry height plus each wet film's thickness.
+    /// sees it (`seen_lit`): dry height plus wet paint and solvent thickness.
     pub(crate) fn wet_surface(&self) -> Vec<f32> {
-        self.height.par_iter().zip(&self.wet.vol).map(|(a, v)| a + v * COAT_UM).collect()
+        self.height.par_iter().zip(&self.wet.vol).enumerate().map(|(i, (a, v))| a + v * COAT_UM + self.wet.solv.get(i).copied().unwrap_or(0.0)).collect()
     }
 
     /// `settle`, with each pixel's paint leveling for its own time `sets`

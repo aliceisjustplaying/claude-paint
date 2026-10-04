@@ -138,7 +138,7 @@ mkdir -p "$dest/bin" "$dest/paintings/lua"
 cp "$built" "$dest/bin/easel"
 [ -z "$box" ] || echo "$box" > "$dest/bin/box"
 notes=(notes/easel_guide.md notes/research/oil_paint_physics.md)
-# (the techniques handbook came with engine 4: older rounds have none)
+# Older rounds may not have the techniques handbook.
 ! git -C "$repo" cat-file -e "$branch:notes/techniques.md" 2>/dev/null || notes+=(notes/techniques.md)
 [ -z "$materials" ] || notes+=("notes/research/$materials")
 git -C "$repo" archive --format=tar "$branch" -- "${notes[@]}" | tar -x -C "$dest"

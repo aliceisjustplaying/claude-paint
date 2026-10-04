@@ -47,7 +47,7 @@ from this painting-readiness milestone (brief §6).
 ## Current scope and starting point
 
 - Selected rag appearance: `6f31f790`; retain these choices.
-- Thin-film flow experiment `b72c3978` was reverted in `4e30c114`.
+- Thin-film flow experiment `b72c3978` was reverted in `f69b7967`.
   The 2 µm floor is back; its replacement remains open.
 - The strict/soft deposition code, probe and comparison choices from
   `0acf8cfe` have been removed. The separate historical flow comparison
@@ -119,7 +119,7 @@ is not done. 6.1 (2)-(4) were not started.
 - (4) The substep cap: no longer binds at 64 ticks (a tick needs a few
   substeps); not otherwise changed.
 - (3) Thin films: the experimental slowing law from `b72c3978` was
-  reverted in `4e30c114`. The hard 2 µm floor is current again. A reviewed
+  reverted in `f69b7967`. The hard 2 µm floor is current again. A reviewed
   replacement is still needed. The historical flow images remain in
   `notes/thinner/wash-experiment/`; they do not describe current behavior.
 - (2) A pass over a wet wash: not done. The strict/soft experiment from

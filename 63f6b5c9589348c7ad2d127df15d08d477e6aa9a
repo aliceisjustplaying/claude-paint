@@ -1,0 +1,557 @@
+{
+ "base_main": {
+  "commit": "3379b9f1a046c0496e83ef0647441689501449e3",
+  "is_ancestor": true,
+  "source": "local branch main (refs/heads/main)"
+ },
+ "build": {
+  "cargo": "cargo 1.97.1 (c980f4866 2026-06-30)",
+  "cargo_target_dir": "<temporary working copy>/target",
+  "cflags": "-Dluai_makeseed()=0x5eedu",
+  "cflags_env_override": null,
+  "configs": [
+   {
+    "path": "<candidate>/.cargo/config.toml",
+    "sha256": "c6736fa631aad4e52a07870378b51e548aa00a75d66ac3edeb1aa2af563d4736"
+   },
+   {
+    "path": "~/.cargo/config.toml",
+    "sha256": "4c77965f00844c4a19a90adcba6cadb336eeb0f4c44f9bd39eff8201b6600879"
+   }
+  ],
+  "profiles_declared": [
+   "dev",
+   "iter",
+   "release",
+   "test"
+  ],
+  "profiles_used": [
+   "default (dev/test)",
+   "release"
+  ],
+  "rustc": "rustc 1.97.1 (8bab26f4f 2026-07-14)",
+  "rustc_wrapper": "sccache",
+  "rustc_wrapper_source": "~/.cargo/config.toml",
+  "rustflags_env": null
+ },
+ "candidate": {
+  "commit": "63f6b5c9589348c7ad2d127df15d08d477e6aa9a",
+  "requested": "63f6b5c9589348c7ad2d127df15d08d477e6aa9a",
+  "tree": "344deb249c49b4ca47ca852840c57bd3f6638531"
+ },
+ "checkout": {
+  "clean_before": true,
+  "files": 1552,
+  "full": true,
+  "head_after": "63f6b5c9589348c7ad2d127df15d08d477e6aa9a",
+  "tracked_changes_after": false
+ },
+ "cleanup_errors": [],
+ "ended_at": "2026-10-04T03:59:05+01:00",
+ "exit": 1,
+ "format": "claude-paint test receipt v1",
+ "lockrun": {
+  "command": "lockrun --timeout 600 --log ~/src/a/claude-paint-receipts/63f6b5c9589348c7ad2d127df15d08d477e6aa9a/20261004T034927-14268/lockrun.log --owner 'test_candidate 63f6b5c95893' -- scripts/test --all --summary /tmp/cpc.xlcn10wi/summary.json",
+  "path": "candidate's scripts/lockrun",
+  "sha256": "cfcc8e51e276fb8692a7a74cff58a3ee0e7c5ac1afcdbb38d7843e9b02105185"
+ },
+ "lockrun_log_sha256": "8af4e12dbb9229e4b63f32fbcd50e2155d3fb13380b56de8361ade2795f5895b",
+ "logs": [
+  {
+   "file": "logs/00-build-release-easel.log",
+   "sha256": "983401fe6e8759ae4b450acdce0f36ef1a9f2ee9c7a523151a83f84cda1c9553",
+   "step": "build-release-easel",
+   "summary_log_sha256": "983401fe6e8759ae4b450acdce0f36ef1a9f2ee9c7a523151a83f84cda1c9553"
+  },
+  {
+   "file": "logs/01-build-test-binaries.log",
+   "sha256": "5b599241157f5b18894a1e98530b57de52e640982bd07f275e5b0163029dc2a1",
+   "step": "build-test-binaries",
+   "summary_log_sha256": "5b599241157f5b18894a1e98530b57de52e640982bd07f275e5b0163029dc2a1"
+  },
+  {
+   "file": "logs/02-cargo-test.log",
+   "sha256": "2a6e7e97591efcbdf79c52db174cd7ece06b71bbfcb0e8638a9b2b44a285181c",
+   "step": "cargo-test",
+   "summary_log_sha256": "2a6e7e97591efcbdf79c52db174cd7ece06b71bbfcb0e8638a9b2b44a285181c"
+  },
+  {
+   "file": "logs/03-old-logs.log",
+   "sha256": "18f8f6e0ab6d44bc8662662e54d8b8fb7d83687254768662b130267467e70ee6",
+   "step": "old-logs",
+   "summary_log_sha256": "18f8f6e0ab6d44bc8662662e54d8b8fb7d83687254768662b130267467e70ee6"
+  },
+  {
+   "file": "logs/04-baseline-package.log",
+   "sha256": "dfd6b0c10dce766d7449050b5ef5bcf43d318786e04992bc764e07237c791e77",
+   "step": "baseline-package",
+   "summary_log_sha256": "dfd6b0c10dce766d7449050b5ef5bcf43d318786e04992bc764e07237c791e77"
+  },
+  {
+   "file": "logs/05-baseline-state.log",
+   "sha256": "9609d429afe5d50d5dc16a9b5e96c61a6038b7c62dff4253902a88cc0a3fa999",
+   "step": "baseline-state",
+   "summary_log_sha256": "9609d429afe5d50d5dc16a9b5e96c61a6038b7c62dff4253902a88cc0a3fa999"
+  },
+  {
+   "file": "logs/06-slow-round-19-log.log",
+   "sha256": "7fe6fe505f9861c39cc326e077d26ec171080ef132aac4d25cbf7b3d65fd625f",
+   "step": "slow-round-19-log",
+   "summary_log_sha256": "7fe6fe505f9861c39cc326e077d26ec171080ef132aac4d25cbf7b3d65fd625f"
+  },
+  {
+   "file": "logs/07-slow-determinism-live-width.log",
+   "sha256": "fd3367c8432880797ed1120b436b41a7978f8fe8ab87f1f0bb043bd1d78ac9fb",
+   "step": "slow-determinism-live-width",
+   "summary_log_sha256": "fd3367c8432880797ed1120b436b41a7978f8fe8ab87f1f0bb043bd1d78ac9fb"
+  },
+  {
+   "file": "logs/08-painter-build-inness.log",
+   "sha256": "46e8d44680c930737980e98ba7f1ba2593e2ffca761715cf9f64c947917513d6",
+   "step": "painter-build-inness",
+   "summary_log_sha256": "46e8d44680c930737980e98ba7f1ba2593e2ffca761715cf9f64c947917513d6"
+  },
+  {
+   "file": "logs/09-box-features.log",
+   "sha256": "73a219b041965d1f8ae7ab3342d8f1a8dce104c0d5d7a53be06b16964ae2dcc5",
+   "step": "box-features",
+   "summary_log_sha256": "73a219b041965d1f8ae7ab3342d8f1a8dce104c0d5d7a53be06b16964ae2dcc5"
+  },
+  {
+   "file": "logs/10-lockrun.log",
+   "sha256": "c58d25faac1aee27ca13bbaac6905cec118673abb40e28114cf0528ec5619016",
+   "step": "lockrun",
+   "summary_log_sha256": "c58d25faac1aee27ca13bbaac6905cec118673abb40e28114cf0528ec5619016"
+  },
+  {
+   "file": "logs/11-safeguards.log",
+   "sha256": "a2287b6cb238f063bd93abe54739bbfc5ee34f2885fcd3db949e4c264ea205e4",
+   "step": "safeguards",
+   "summary_log_sha256": "a2287b6cb238f063bd93abe54739bbfc5ee34f2885fcd3db949e4c264ea205e4"
+  },
+  {
+   "file": "logs/12-replay-env.log",
+   "sha256": "b00a85e23419df511cbef3f384be00414158f17cc5d5f5b990ef8c99074bef96",
+   "step": "replay-env",
+   "summary_log_sha256": "b00a85e23419df511cbef3f384be00414158f17cc5d5f5b990ef8c99074bef96"
+  },
+  {
+   "file": "logs/13-check-live.log",
+   "sha256": "f16afa14d446569faaa7f665f7ebbd762fbfe2074191a6e44af11fd52d7ca38b",
+   "step": "check-live",
+   "summary_log_sha256": "f16afa14d446569faaa7f665f7ebbd762fbfe2074191a6e44af11fd52d7ca38b"
+  },
+  {
+   "file": "logs/14-replay-clip.log",
+   "sha256": "4cae0ba5d8d3375691e026669a1136e902cbea743b6bd9b65cccb4d469c6aad3",
+   "step": "replay-clip",
+   "summary_log_sha256": "4cae0ba5d8d3375691e026669a1136e902cbea743b6bd9b65cccb4d469c6aad3"
+  },
+  {
+   "file": "logs/15-box-tubes.log",
+   "sha256": "431392c2eeaa5d76daf05b8c7c8b5068946fe5a602cd33e1e7501eec738a3f30",
+   "step": "box-tubes",
+   "summary_log_sha256": "431392c2eeaa5d76daf05b8c7c8b5068946fe5a602cd33e1e7501eec738a3f30"
+  },
+  {
+   "file": "logs/16-studio-names.log",
+   "sha256": "86f01a32d7db9605b8e3955940d18f4f34b29450af102fb9a174caaf2b26c2f0",
+   "step": "studio-names",
+   "summary_log_sha256": "86f01a32d7db9605b8e3955940d18f4f34b29450af102fb9a174caaf2b26c2f0"
+  },
+  {
+   "file": "logs/17-peek.log",
+   "sha256": "d4fb672846226d08c29e5dbe615f0538163828c093420909d6cc18bac0f83e64",
+   "step": "peek",
+   "summary_log_sha256": "d4fb672846226d08c29e5dbe615f0538163828c093420909d6cc18bac0f83e64"
+  },
+  {
+   "file": "logs/18-runner-round24.log",
+   "sha256": "8de23939e412a44f22486e206daf436741c20849d965e6b54e7294b7e0974813",
+   "step": "runner-round24",
+   "summary_log_sha256": "8de23939e412a44f22486e206daf436741c20849d965e6b54e7294b7e0974813"
+  },
+  {
+   "file": "logs/19-studio-viewer.log",
+   "sha256": "0a87839e089953a20bcd97f1b7cf3394d5db96946e2fb99a7060302b4c24cfcd",
+   "step": "studio-viewer",
+   "summary_log_sha256": "0a87839e089953a20bcd97f1b7cf3394d5db96946e2fb99a7060302b4c24cfcd"
+  }
+ ],
+ "problems": [
+  "scripts/test (under lockrun) exited 1",
+  "summary verdict is 'fail', not 'pass'",
+  "step cargo-test exited 1",
+  "step cargo-test has failures (failed=1)"
+ ],
+ "receipt_dir": "~/src/a/claude-paint-receipts/63f6b5c9589348c7ad2d127df15d08d477e6aa9a/20261004T034927-14268",
+ "seconds": 577.948,
+ "started_at": "2026-10-04T03:49:27+01:00",
+ "summary": {
+  "build_seconds": 100.4,
+  "commit": "63f6b5c9589348c7ad2d127df15d08d477e6aa9a",
+  "dirty": false,
+  "list": "notes/speed/test_lists/all.tsv",
+  "list_sha256": "2f2ce6bfb4f35e71314e0af04eb60466334e3427d18819513e31ccd466165b2b",
+  "mode": "all",
+  "only": [],
+  "started": "2026-10-04T03:49:33+01:00",
+  "steps": [
+   {
+    "command": "cargo build --release -p easel",
+    "exit": 0,
+    "failed": 0,
+    "ignored": 0,
+    "kind": "build",
+    "limit": 600.0,
+    "log": "/var/folders/6k/24182wv136749r3p852rft740000gn/T/claude-paint-test-all-lee6bfl4/build-release-easel.log",
+    "log_sha256": "983401fe6e8759ae4b450acdce0f36ef1a9f2ee9c7a523151a83f84cda1c9553",
+    "name": "build-release-easel",
+    "ok": true,
+    "passed": 0,
+    "seconds": 64.08,
+    "tests_run": null,
+    "timed_out": false,
+    "why": ""
+   },
+   {
+    "command": "cargo test --workspace --lib --bins --tests --no-run",
+    "exit": 0,
+    "failed": 0,
+    "ignored": 0,
+    "kind": "build",
+    "limit": 600.0,
+    "log": "/var/folders/6k/24182wv136749r3p852rft740000gn/T/claude-paint-test-all-lee6bfl4/build-test-binaries.log",
+    "log_sha256": "5b599241157f5b18894a1e98530b57de52e640982bd07f275e5b0163029dc2a1",
+    "name": "build-test-binaries",
+    "ok": true,
+    "passed": 0,
+    "seconds": 36.35,
+    "tests_run": null,
+    "timed_out": false,
+    "why": ""
+   },
+   {
+    "command": "scripts/tests/cargo_tests.sh -j 4",
+    "exit": 1,
+    "failed": 1,
+    "ignored": 23,
+    "kind": "cargo",
+    "limit": 180.0,
+    "log": "/var/folders/6k/24182wv136749r3p852rft740000gn/T/claude-paint-test-all-lee6bfl4/cargo-test.log",
+    "log_sha256": "2a6e7e97591efcbdf79c52db174cd7ece06b71bbfcb0e8638a9b2b44a285181c",
+    "name": "cargo-test",
+    "ok": false,
+    "passed": 269,
+    "seconds": 43.0,
+    "tests_run": 270,
+    "timed_out": false,
+    "why": "exit 1"
+   },
+   {
+    "command": "scripts/tests/old_logs.sh target/release/easel",
+    "exit": 0,
+    "failed": 0,
+    "ignored": 0,
+    "kind": "script",
+    "limit": 60.0,
+    "log": "/var/folders/6k/24182wv136749r3p852rft740000gn/T/claude-paint-test-all-lee6bfl4/old-logs.log",
+    "log_sha256": "18f8f6e0ab6d44bc8662662e54d8b8fb7d83687254768662b130267467e70ee6",
+    "name": "old-logs",
+    "ok": true,
+    "passed": 10,
+    "seconds": 5.39,
+    "tests_run": 10,
+    "timed_out": false,
+    "why": ""
+   },
+   {
+    "command": "notes/thinner/baseline/tools/verify_package.sh",
+    "exit": 0,
+    "failed": 0,
+    "ignored": 0,
+    "kind": "script",
+    "limit": 60.0,
+    "log": "/var/folders/6k/24182wv136749r3p852rft740000gn/T/claude-paint-test-all-lee6bfl4/baseline-package.log",
+    "log_sha256": "dfd6b0c10dce766d7449050b5ef5bcf43d318786e04992bc764e07237c791e77",
+    "name": "baseline-package",
+    "ok": true,
+    "passed": 1,
+    "seconds": 3.19,
+    "tests_run": 1,
+    "timed_out": false,
+    "why": ""
+   },
+   {
+    "command": "scripts/tests/baseline_state.sh target/release/easel",
+    "exit": 0,
+    "failed": 0,
+    "ignored": 0,
+    "kind": "script",
+    "limit": 60.0,
+    "log": "/var/folders/6k/24182wv136749r3p852rft740000gn/T/claude-paint-test-all-lee6bfl4/baseline-state.log",
+    "log_sha256": "9609d429afe5d50d5dc16a9b5e96c61a6038b7c62dff4253902a88cc0a3fa999",
+    "name": "baseline-state",
+    "ok": true,
+    "passed": 6,
+    "seconds": 1.36,
+    "tests_run": 6,
+    "timed_out": false,
+    "why": ""
+   },
+   {
+    "command": "cargo test -p easel --test boxes -- --ignored --exact a_round_19_log_replays_as_before",
+    "exit": 0,
+    "failed": 0,
+    "ignored": 0,
+    "kind": "cargo",
+    "limit": 120.0,
+    "log": "/var/folders/6k/24182wv136749r3p852rft740000gn/T/claude-paint-test-all-lee6bfl4/slow-round-19-log.log",
+    "log_sha256": "7fe6fe505f9861c39cc326e077d26ec171080ef132aac4d25cbf7b3d65fd625f",
+    "name": "slow-round-19-log",
+    "ok": true,
+    "passed": 1,
+    "seconds": 46.2,
+    "tests_run": 1,
+    "timed_out": false,
+    "why": ""
+   },
+   {
+    "command": "cargo test -p easel --test determinism -- --ignored --exact hand_time_is_deterministic_across_thread_counts_at_the_live_width state_digests_are_the_same_in_every_replay_at_the_live_width the_rag_replays_the_same_at_the_live_width",
+    "exit": 0,
+    "failed": 0,
+    "ignored": 0,
+    "kind": "cargo",
+    "limit": 300.0,
+    "log": "/var/folders/6k/24182wv136749r3p852rft740000gn/T/claude-paint-test-all-lee6bfl4/slow-determinism-live-width.log",
+    "log_sha256": "fd3367c8432880797ed1120b436b41a7978f8fe8ab87f1f0bb043bd1d78ac9fb",
+    "name": "slow-determinism-live-width",
+    "ok": true,
+    "passed": 3,
+    "seconds": 88.4,
+    "tests_run": 3,
+    "timed_out": false,
+    "why": ""
+   },
+   {
+    "command": "cargo test -p easel --no-default-features --features box-inness",
+    "exit": 0,
+    "failed": 0,
+    "ignored": 1,
+    "kind": "cargo",
+    "limit": 300.0,
+    "log": "/var/folders/6k/24182wv136749r3p852rft740000gn/T/claude-paint-test-all-lee6bfl4/painter-build-inness.log",
+    "log_sha256": "46e8d44680c930737980e98ba7f1ba2593e2ffca761715cf9f64c947917513d6",
+    "name": "painter-build-inness",
+    "ok": true,
+    "passed": 14,
+    "seconds": 17.03,
+    "tests_run": 14,
+    "timed_out": false,
+    "why": ""
+   },
+   {
+    "command": "BOX_FEATURES_PROFILE=test scripts/tests/box_features.sh",
+    "exit": 0,
+    "failed": 0,
+    "ignored": 0,
+    "kind": "script",
+    "limit": 600.0,
+    "log": "/var/folders/6k/24182wv136749r3p852rft740000gn/T/claude-paint-test-all-lee6bfl4/box-features.log",
+    "log_sha256": "73a219b041965d1f8ae7ab3342d8f1a8dce104c0d5d7a53be06b16964ae2dcc5",
+    "name": "box-features",
+    "ok": true,
+    "passed": 16,
+    "seconds": 129.99,
+    "tests_run": 16,
+    "timed_out": false,
+    "why": ""
+   },
+   {
+    "command": "scripts/tests/lockrun.sh",
+    "exit": 0,
+    "failed": 0,
+    "ignored": 0,
+    "kind": "script",
+    "limit": 120.0,
+    "log": "/var/folders/6k/24182wv136749r3p852rft740000gn/T/claude-paint-test-all-lee6bfl4/lockrun.log",
+    "log_sha256": "c58d25faac1aee27ca13bbaac6905cec118673abb40e28114cf0528ec5619016",
+    "name": "lockrun",
+    "ok": true,
+    "passed": 17,
+    "seconds": 21.44,
+    "tests_run": 17,
+    "timed_out": false,
+    "why": ""
+   },
+   {
+    "command": "scripts/tests/safeguards.sh",
+    "exit": 0,
+    "failed": 0,
+    "ignored": 0,
+    "kind": "script",
+    "limit": 180.0,
+    "log": "/var/folders/6k/24182wv136749r3p852rft740000gn/T/claude-paint-test-all-lee6bfl4/safeguards.log",
+    "log_sha256": "a2287b6cb238f063bd93abe54739bbfc5ee34f2885fcd3db949e4c264ea205e4",
+    "name": "safeguards",
+    "ok": true,
+    "passed": 53,
+    "seconds": 53.48,
+    "tests_run": 53,
+    "timed_out": false,
+    "why": ""
+   },
+   {
+    "command": "scripts/tests/replay_env.sh",
+    "exit": 0,
+    "failed": 0,
+    "ignored": 0,
+    "kind": "script",
+    "limit": 120.0,
+    "log": "/var/folders/6k/24182wv136749r3p852rft740000gn/T/claude-paint-test-all-lee6bfl4/replay-env.log",
+    "log_sha256": "b00a85e23419df511cbef3f384be00414158f17cc5d5f5b990ef8c99074bef96",
+    "name": "replay-env",
+    "ok": true,
+    "passed": 1,
+    "seconds": 6.68,
+    "tests_run": 1,
+    "timed_out": false,
+    "why": ""
+   },
+   {
+    "command": "scripts/tests/check_live.sh",
+    "exit": 0,
+    "failed": 0,
+    "ignored": 0,
+    "kind": "script",
+    "limit": 180.0,
+    "log": "/var/folders/6k/24182wv136749r3p852rft740000gn/T/claude-paint-test-all-lee6bfl4/check-live.log",
+    "log_sha256": "f16afa14d446569faaa7f665f7ebbd762fbfe2074191a6e44af11fd52d7ca38b",
+    "name": "check-live",
+    "ok": true,
+    "passed": 1,
+    "seconds": 21.39,
+    "tests_run": 1,
+    "timed_out": false,
+    "why": ""
+   },
+   {
+    "command": "scripts/tests/replay_clip.sh",
+    "exit": 0,
+    "failed": 0,
+    "ignored": 0,
+    "kind": "script",
+    "limit": 120.0,
+    "log": "/var/folders/6k/24182wv136749r3p852rft740000gn/T/claude-paint-test-all-lee6bfl4/replay-clip.log",
+    "log_sha256": "4cae0ba5d8d3375691e026669a1136e902cbea743b6bd9b65cccb4d469c6aad3",
+    "name": "replay-clip",
+    "ok": true,
+    "passed": 1,
+    "seconds": 3.26,
+    "tests_run": 1,
+    "timed_out": false,
+    "why": ""
+   },
+   {
+    "command": "scripts/tests/box_tubes.sh",
+    "exit": 0,
+    "failed": 0,
+    "ignored": 0,
+    "kind": "script",
+    "limit": 60.0,
+    "log": "/var/folders/6k/24182wv136749r3p852rft740000gn/T/claude-paint-test-all-lee6bfl4/box-tubes.log",
+    "log_sha256": "431392c2eeaa5d76daf05b8c7c8b5068946fe5a602cd33e1e7501eec738a3f30",
+    "name": "box-tubes",
+    "ok": true,
+    "passed": 1,
+    "seconds": 0.78,
+    "tests_run": 1,
+    "timed_out": false,
+    "why": ""
+   },
+   {
+    "command": "scripts/tests/studio_names.sh",
+    "exit": 0,
+    "failed": 0,
+    "ignored": 0,
+    "kind": "script",
+    "limit": 60.0,
+    "log": "/var/folders/6k/24182wv136749r3p852rft740000gn/T/claude-paint-test-all-lee6bfl4/studio-names.log",
+    "log_sha256": "86f01a32d7db9605b8e3955940d18f4f34b29450af102fb9a174caaf2b26c2f0",
+    "name": "studio-names",
+    "ok": true,
+    "passed": 1,
+    "seconds": 1.42,
+    "tests_run": 1,
+    "timed_out": false,
+    "why": ""
+   },
+   {
+    "command": "sh scripts/tests/peek.sh",
+    "exit": 0,
+    "failed": 0,
+    "ignored": 0,
+    "kind": "script",
+    "limit": 60.0,
+    "log": "/var/folders/6k/24182wv136749r3p852rft740000gn/T/claude-paint-test-all-lee6bfl4/peek.log",
+    "log_sha256": "d4fb672846226d08c29e5dbe615f0538163828c093420909d6cc18bac0f83e64",
+    "name": "peek",
+    "ok": true,
+    "passed": 1,
+    "seconds": 2.89,
+    "tests_run": 1,
+    "timed_out": false,
+    "why": ""
+   },
+   {
+    "command": "cd notes/round24/runner && PYTHONDONTWRITEBYTECODE=1 uv run --no-project --with pytest --with pillow python -m pytest -q -p no:cacheprovider -rs .",
+    "exit": 0,
+    "failed": 0,
+    "ignored": 0,
+    "kind": "pytest",
+    "limit": 120.0,
+    "log": "/var/folders/6k/24182wv136749r3p852rft740000gn/T/claude-paint-test-all-lee6bfl4/runner-round24.log",
+    "log_sha256": "8de23939e412a44f22486e206daf436741c20849d965e6b54e7294b7e0974813",
+    "name": "runner-round24",
+    "ok": true,
+    "passed": 254,
+    "seconds": 18.5,
+    "tests_run": 254,
+    "timed_out": false,
+    "why": ""
+   },
+   {
+    "command": "cd studio && PYTHONDONTWRITEBYTECODE=1 uv run --no-project --with pytest python -m pytest -q -p no:cacheprovider -rs test_studio.py",
+    "exit": 0,
+    "failed": 0,
+    "ignored": 5,
+    "kind": "pytest",
+    "limit": 60.0,
+    "log": "/var/folders/6k/24182wv136749r3p852rft740000gn/T/claude-paint-test-all-lee6bfl4/studio-viewer.log",
+    "log_sha256": "0a87839e089953a20bcd97f1b7cf3394d5db96946e2fb99a7060302b4c24cfcd",
+    "name": "studio-viewer",
+    "ok": true,
+    "passed": 18,
+    "seconds": 6.37,
+    "tests_run": 18,
+    "timed_out": false,
+    "why": ""
+   }
+  ],
+  "test_seconds": 470.8,
+  "tests_run": 669,
+  "verdict": "fail"
+ },
+ "summary_sha256": "907ccf7fa335b5fb43af118a7080145c05a8bbce8a3012a711cfa622d16c73ce",
+ "test_list": {
+  "file": "notes/speed/test_lists/all.tsv",
+  "sha256": "2f2ce6bfb4f35e71314e0af04eb60466334e3427d18819513e31ccd466165b2b",
+  "summary_list_sha256": "2f2ce6bfb4f35e71314e0af04eb60466334e3427d18819513e31ccd466165b2b"
+ },
+ "timeout_s": 600.0,
+ "tool": {
+  "name": "scripts/test_candidate",
+  "sha256": "52d496147a9c66d9b69458baa58c6ac1d5178bf7c77b72984600850128eb8627"
+ },
+ "verdict": "fail"
+}

@@ -33,6 +33,7 @@ pub mod wet;
 pub mod bristle;
 pub mod handling;
 pub mod stipple;
+pub mod state_dump;
 pub mod tally;
 pub mod style;
 pub mod hand;

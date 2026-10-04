@@ -1,0 +1,8 @@
+day 6, 09:00
+dry
+rag(width 60, load 0.78)
+rag(width 60, load 0.84)
+rag(width 60, load 1.00)	0.59817785024642944
+rag(width 60, load 0.07)
+rag(width 60, load 1.00)	0.5860288143157959
+1.1744306087493896

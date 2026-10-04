@@ -520,7 +520,10 @@ fn c16_brush_rag_and_spreading_carry_solvent_in_the_local_ratio() {
     let sum0: f64 = s0.iter().map(|&v| v as f64).sum();
     assert!(tot1 < tot0 && sum1 > 0.0);
     let (a, b) = ((evap_first / sum1 - 1.0).abs(), (back / sum0 - 1.0).abs());
-    assert!(a.min(b) <= 1e-4, "the solvent left ({sum1}) is what the law leaves of what was there ({sum0}): evaporating first predicts {evap_first}, spreading first needs {back} before");
+    // 5e-4, not 1e-4 (2026-10-04, owner's decision; ACCEPTANCE.md "Decisions"):
+    // the solvent's loss and flow now step on a 1/64-minute grid, so neither
+    // one-minute prediction is exact. May be revisited.
+    assert!(a.min(b) <= 5e-4, "the solvent left ({sum1}) is what the law leaves of what was there ({sum0}): evaporating first predicts {evap_first}, spreading first needs {back} before");
     let q = |h: &[f32], s: &[f32], i: usize| -> Option<f64> { if h[i] >= 0.1 && s[i] > 0.0 { Some(s[i] as f64 / h[i] as f64) } else { None } };
     let mut checked = 0;
     for i in 0..h1.len() {

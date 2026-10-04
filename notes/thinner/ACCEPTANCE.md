@@ -563,7 +563,8 @@ its film's ratio within 1e-3.
    edge is at least 1.5× the low film's right of it (12.1 against 2.2 µm).
    After one minute:
    - **Balance.** The solvent left equals what the law leaves of the
-     solvent before, computed per pixel, within 1e-4: either
+     solvent before, computed per pixel, within 5e-4 (1e-4 until
+     2026-10-04; see "Decisions and open questions"): either
      Σ s0·exp(-1/τ(h0)) (evaporation first) or Σ s1·exp(+1/τ(h1)) = S0
      (spreading first). Paint balances within 1e-4.
    - **Local ratios.** Every pixel with ≥ 1 µm of paint (at least 1000
@@ -736,6 +737,18 @@ Settled in round 1 (lead and reviewer):
 - Check 8's 0.005 allowance. Flagged to the user.
 - The PAINTCK9 layout is a deliberate format contract (above).
 
+Decided by the owner on 2026-10-04 (may be revisited):
+
+- **Check 16's solvent balance: 5e-4, was 1e-4.** The solvent's loss and
+  its flow now step on a grid of 64 ticks a minute (`FLOW_TICKS`,
+  `Canvas::wait`), so a wait's flow follows the time waited instead of one
+  burst per whole minute (HANDOVER 6.2 (1)). Solvent that flows during the
+  minute into film of another thickness evaporates at that film's rate, so
+  neither one-minute prediction (evaporation first, spreading first) is
+  exact: on the fine grid the closer one is off by 1.25e-4. The tolerance
+  was loosened rather than the prediction rewritten on the same grid. The
+  other bounds of check 16, and checks 9 and 17, are unchanged and pass.
+
 For the user:
 
 1. **Check 13 (b) fails today.** The sienna order on the card is the
@@ -756,7 +769,7 @@ test:
 
 | sha256 | file |
 |---|---|
-| `e0408f09dbccde323b4e525e17a355c5a705218c20af1e2577976b4bc59b7e04` | `crates/paint/tests/thinner_physics.rs` |
+| `c1f3b99905a1343fd1928af974fe236fdb11692abc431163cf5e8043ac433749` | `crates/paint/tests/thinner_physics.rs` |
 | `fe7d4e25e0e03a094d3c534dc2f8728c6ef4482e29f38a5b0b3ce01042d728ff` | `crates/paint/tests/thinner_support/mod.rs` |
 | `53924605cde088b16056fd31d69d57f96c5eae8d5c4674858326823bb0ca06cc` | `crates/paint/tests/thinner_pigments.rs` |
 | `542e25ab395446ea79c893640e5515702309b145f99a5da5ff7e617ea83e15c2` | `crates/paint/tests/thinner/tubes_af49348.txt` |

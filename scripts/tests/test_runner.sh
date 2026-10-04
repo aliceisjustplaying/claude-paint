@@ -7,14 +7,17 @@
 #   scripts/tests/test_runner.sh [case number...]     (default: all)
 #
 # Cases: a step's leftovers (a TERM-resistant child, an orphaned grandchild) on
-# normal completion; a step past its limit whose leader exits on SIGTERM before
-# its TERM-resistant child; the outer timeout; lockrun cancelled; SIGTERM to the
-# coordinator; the coordinator killed (SIGKILL); a stale LOCKRUN_TOKEN; nesting
-# inside a real job; build-only and zero-minimum lists; Cargo's target directory
-# (two distinguishable dummy easels); a group running at the same time. Each case
+# normal completion; a step past its limit inside a group (its TERM-resistant
+# child stopped at its own timeout while the other step goes on); the outer
+# timeout; lockrun cancelled; SIGTERM to the coordinator; the coordinator killed
+# (SIGKILL); a stale LOCKRUN_TOKEN; nesting inside a real job; build-only and
+# zero-minimum lists; a target dir from Cargo's configuration (two
+# distinguishable dummy easels); a group running at the same time; a batch's
+# sibling process left alone; a step child that left the group stopped (sccache
+# left alone); --locked validation; the log header not counted. Each case
 # uses its own lock directory (LOCKRUN_DIR), never the machine's lock, and
 # records the pid of every process it starts so it can check they are gone.
-# About 40 s.
+# About 60 s.
 set -euo pipefail
 repo=$(cd "$(dirname "$0")/../.." && pwd)
 R=$repo/scripts/test
@@ -55,19 +58,23 @@ ok "normal completion: a TERM-resistant child and an orphaned grandchild are sto
 
 fi
 
-# 2. A step past its limit whose leader exits on SIGTERM before its TERM-resistant child.
+# 2. A step past its limit, inside a group: its leader exits on SIGTERM, its
+#    TERM-resistant child must be stopped at the step's own timeout, while the
+#    other step of the group goes on (it checks the child is gone at about 8 s:
+#    after the 1 s limit and the 5 s grace before SIGKILL, before the group ends
+#    and any sweep could run).
 if want 2; then
 D=$(case_dir step_timeout)
-# (the next step checks the child is gone when it starts: stopped by the step's timeout,
-# not only by lockrun when the whole run ends)
-{ step slow 1 1 '^never' "$(stubborn "$D/pid.child") & echo \$\$ > $D/pid.leader; sleep 60"; step after 10 1 '^after' "kill -0 \$(cat $D/pid.child) 2>/dev/null && echo still-alive || echo after"; } >"$D/l.tsv"
+{ step slow 1 1 '^never' "$(stubborn "$D/pid.child") & echo \$\$ > $D/pid.leader; sleep 60" g
+  step watch 20 1 '^child-gone$' "while [ ! -s $D/pid.child ]; do sleep 0.05; done; sleep 8; if kill -0 \$(cat $D/pid.child) 2>/dev/null; then echo child-alive; else echo child-gone; fi; echo \$\$ > $D/pid.watch" g
+  step after 10 1 '^after' 'echo after'; } >"$D/l.tsv"
 set +e; LOCKRUN_DIR=$D/lk "$R" --list "$D/l.tsv" --summary "$D/s.json" --logs "$D/logs" >"$D/out" 2>&1; code=$?; set -e
 [ $code = 1 ] || fail "step timeout: exit $code: $(cat "$D/out")"
 all_dead "$D" || fail "step timeout: a process of the step is alive"
-[ "$(summary "$D/s.json" 's["verdict"], s["steps"][0]["timed_out"], s["steps"][1]["ok"]')" = "('unfinished', True, True)" ] || fail "step timeout: summary $(cat "$D/s.json")"
+got=$(summary "$D/s.json" '[(x["name"], x["timed_out"], x["ok"]) for x in s["steps"]] + [s["verdict"]]')
+[ "$got" = "[('slow', True, False), ('watch', False, True), ('after', False, True), 'unfinished']" ] || fail "step timeout: $got; watch said $(tail -1 "$D/logs/watch.log")"
 lock_free "$D" || fail "step timeout: the lock is held"
-ok "a step past its limit: its leader and its TERM-resistant child are stopped before the next step; the run is unfinished"
-
+ok "a step past its limit inside a group: its TERM-resistant child is stopped at its timeout while the group's other step runs on; the run is unfinished"
 fi
 
 # 3. The outer timeout (lowered for the test) stops the run and every step process.
@@ -174,19 +181,17 @@ ok "build-only, zero-minimum, uncountable and over-600-s lists are refused befor
 
 fi
 
-# 10. Cargo's target directory: the steps get the one cargo resolves, so a stale
+# 10. Cargo's target directory comes from Cargo's configuration alone (a
+#     config.toml in CARGO_HOME, CARGO_TARGET_DIR unset): the steps get it, so the
+#     step runs the "fresh" dummy easel there, not the "stale" one in target/.
 if want 10; then
-#     executable elsewhere is never the one run.
 D=$(case_dir target)
 for t in stale fresh; do mkdir -p "$D/$t/release"; printf '#!/bin/sh\necho %s easel\n' "$t" >"$D/$t/release/easel"; chmod +x "$D/$t/release/easel"; done
-step which 10 1 '^fresh easel$' '"$CARGO_TARGET_DIR/release/easel"' >"$D/l.tsv"
-CARGO_TARGET_DIR=$D/fresh LOCKRUN_DIR=$D/lk "$R" --list "$D/l.tsv" --summary "$D/s.json" --logs "$D/logs" >"$D/out" 2>&1 || fail "target: $(cat "$D/out")"
+mkdir -p "$D/cargohome"; printf '[build]\ntarget-dir = "%s"\n' "$D/fresh" >"$D/cargohome/config.toml"
+step which 10 1 '^fresh easel$' '"${CARGO_TARGET_DIR:-'"$D"'/stale}/release/easel"' >"$D/l.tsv"
+env -u CARGO_TARGET_DIR CARGO_HOME=$D/cargohome LOCKRUN_DIR=$D/lk "$R" --list "$D/l.tsv" --summary "$D/s.json" --logs "$D/logs" >"$D/out" 2>&1 || fail "target: $(cat "$D/out")"
 [ "$(summary "$D/s.json" 's["target_dir"]')" = "$D/fresh" ] || fail "target: summary $(summary "$D/s.json" 's["target_dir"]')"
-want=$(cd "$repo" && env -u CARGO_TARGET_DIR cargo metadata --format-version 1 --no-deps | python3 -c 'import json,sys; print(json.load(sys.stdin)["target_directory"])')
-env -u CARGO_TARGET_DIR LOCKRUN_DIR=$D/lk "$R" --list "$D/l.tsv" --summary "$D/s2.json" --logs "$D/logs2" >/dev/null 2>&1 || true
-[ "$(summary "$D/s2.json" 's["target_dir"]')" = "$want" ] || fail "target: unset CARGO_TARGET_DIR resolved to $(summary "$D/s2.json" 's["target_dir"]'), not $want"
-ok "steps run \$CARGO_TARGET_DIR/release/easel from the directory cargo resolves (fresh, not stale)"
-
+ok "a target dir set only in Cargo's configuration reaches the steps (fresh easel, not stale)"
 fi
 
 # 11. A group runs at the same time; the summary carries each step's list fields.
@@ -200,4 +205,61 @@ LOCKRUN_DIR=$D/lk "$R" --list "$D/l.tsv" --summary "$D/s.json" --logs "$D/logs" 
 ok "a group's steps run at the same time; the summary holds limit, least, group and the runner's hash"
 
 fi
+# 12. Nested in a batch (an outer lockrun job): the run stops its own steps'
+#     leftovers but not the batch's other processes (review S1).
+if want 12; then
+D=$(case_dir nested_sibling)
+step one 10 1 '^one' "( $(stubborn "$D/pid.left") & ); while [ ! -s $D/pid.left ]; do sleep 0.05; done; echo one" >"$D/l.tsv"
+LOCKRUN_DIR=$D/lk "$repo/scripts/lockrun" --timeout 60 --quiet -- bash -c "sleep 30 & echo \$! > $D/sibling; '$R' --list '$D/l.tsv' --logs '$D/logs' >'$D/out' 2>&1; echo runner=\$? > $D/result; if kill -0 \$(cat $D/sibling) 2>/dev/null; then echo sibling=alive >> $D/result; else echo sibling=killed >> $D/result; fi; kill \$(cat $D/sibling)" 2>/dev/null || true
+[ "$(cat "$D/result" | tr '\n' ' ')" = "runner=0 sibling=alive " ] || fail "nested sibling: $(cat "$D/result") $(cat "$D/out")"
+alive "$(cat "$D/pid.left")" && fail "nested sibling: the step's own leftover survived"
+ok "nested in a batch: the step's leftover is stopped, the batch's sibling process is not"
+fi
+
+# 13. A step's child that leaves the process group (setpgid, as the easel's
+#     session server does), TERM-resistant: stopped when the step ends normally,
+#     and when a step times out; a shared daemon (sccache: it detaches as the real
+#     server does) is left alone (review S3).
+if want 13; then
+D=$(case_dir detached)
+detach() { echo "python3 -c 'import os, signal, sys, time; os.setpgid(0, 0); signal.signal(signal.SIGTERM, signal.SIG_IGN); open(sys.argv[1], \"w\").write(str(os.getpid())); time.sleep(60)' $1 & while [ ! -s $1 ]; do sleep 0.05; done"; }
+ln -s /bin/sleep "$D/sccache"  # (named sccache; a copy of a system binary would not run)
+{ step ends 20 1 '^ends' "$(detach "$D/pid.ends"); python3 -c 'import os, sys; os.setsid(); open(sys.argv[1], \"w\").write(str(os.getpid())); os.execv(sys.argv[2], sys.argv[2:])' $D/daemon '$D/sccache' 60 & while [ ! -s $D/daemon ]; do sleep 0.05; done; echo ends"
+  step times 1 1 '^never' "$(detach "$D/pid.times"); sleep 60"; } >"$D/l.tsv"
+set +e; LOCKRUN_DIR=$D/lk "$R" --list "$D/l.tsv" --summary "$D/s.json" --logs "$D/logs" >"$D/out" 2>&1; code=$?; set -e
+for f in ends times; do alive "$(cat "$D/pid.$f")" && fail "detached: the $f step's detached child survived"; done
+alive "$(cat "$D/daemon")" || fail "detached: the shared daemon (sccache) was stopped"
+kill "$(cat "$D/daemon")"
+[ "$(summary "$D/s.json" '[(x["name"], x["ok"], x["timed_out"]) for x in s["steps"]]')" = "[('ends', True, False), ('times', False, True)]" ] || fail "detached: summary"
+ok "a child that left the group is stopped (normal end and timeout); sccache is left alone"
+fi
+
+# 14. --locked is accepted only inside the lockrun job whose record names this
+#     group and token (review R3): no token, a stale token, a record of another
+#     group are all refused before anything runs.
+if want 14; then
+D=$(case_dir locked)
+step x 10 1 '^ran' "echo ran > $D/ran" >"$D/l.tsv"
+mkdir -p "$D/lk"
+pg=$(ps -o pgid= -p $$ | tr -d ' ')
+rec() { printf '{"token": "%s", "state": "running", "pgid": %s, "pid": 1, "command": []}\n' "$1" "$2" >"$D/lk/record.json"; }
+rec aaaa "$pg"
+for env in "LOCKRUN_TOKEN=" "LOCKRUN_TOKEN=bbbb" "LOCKRUN_TOKEN=aaaa PGID_OTHER=1"; do
+  [ "$env" = "LOCKRUN_TOKEN=aaaa PGID_OTHER=1" ] && rec aaaa 1
+  set +e; env $env LOCKRUN_DIR=$D/lk python3 "$R" --locked --list "$D/l.tsv" >"$D/out" 2>&1; code=$?; set -e
+  [ $code != 0 ] && grep -q -- '--locked is for the lockrun job' "$D/out" || fail "locked: $env was accepted: $(cat "$D/out")"
+  [ ! -f "$D/ran" ] || fail "locked: a step ran ($env)"
+done
+ok "--locked without the job's token, with another token or with another group's record is refused"
+fi
+
+# 15. A script step's count never includes the runner's "$ <command>" header line (review R5).
+if want 15; then
+D=$(case_dir header)
+step quiet 10 1 'marker' ': marker' >"$D/l.tsv"
+set +e; LOCKRUN_DIR=$D/lk "$R" --list "$D/l.tsv" --summary "$D/s.json" --logs "$D/logs" >"$D/out" 2>&1; code=$?; set -e
+[ $code = 1 ] && [ "$(summary "$D/s.json" 's["steps"][0]["tests_run"]')" = 0 ] || fail "header: the command line was counted: $(cat "$D/out")"
+ok "the header line naming the command doesn't count as a test"
+fi
+
 echo "test_runner: all $passed checks passed"

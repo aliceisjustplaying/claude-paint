@@ -16,7 +16,7 @@
 //! (length-prefixed; the caller's key=value lines), then the canvas. If you
 //! add state to `Canvas` or `Wet`, add it here and bump `MAGIC`.
 //!
-//! The format is version 9 (`MAGIC` is `PAINTCK9`: engine 3's wet paint carries
+//! The format is version 9 (`MAGIC` is `PAINTCK9`: engine 4's wet paint carries
 //! solvent and oil, and the canvas its gloss and the ground's absorbency). A version 8
 //! file is still read (an oil ground's gloss, nothing absorbent, no solvent, a
 //! tube paint's oil); files of any other version are refused (re-run to
@@ -384,7 +384,7 @@ mod tests {
         b
     }
 
-    /// A version 8 file (a save from before engine 3) is read: an oil
+    /// A version 8 file (a save from before engine 4) is read: an oil
     /// ground's gloss, nothing absorbent, no solvent and a tube paint's oil.
     #[test]
     fn a_version_8_file_is_read() {

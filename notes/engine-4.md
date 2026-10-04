@@ -1,8 +1,8 @@
-# Engine 3: impasto, the knife, the relief look
+# Engine 4: impasto, the knife, the relief look
 
-Engine 3 brought the changes below; a new painting is painted with engine 4
-(`--@ engine 4` in its log), which adds the knife's tears (at the end).
-A log that names engine 1 or 2 replays exactly as before: every change below
+Engine 4 brought the changes below; a new painting is painted with engine 5
+(`--@ engine 5` in its log), which adds the knife's tears (at the end).
+A log that names engine 1, 2 or 3 replays exactly as before: every change below
 is gated on the canvas's engine, or is a new option an old log never uses.
 Checked: an engine 2 painting of 17 chunks replays to a PNG byte-identical to
 the one saved when it was painted.
@@ -18,7 +18,7 @@ painter never saw relief either: looks showed color only.
 
 ## What changed
 
-- **Yield stress** (`surface.rs`, `rheology_at`): engine 3 spans 5 to
+- **Yield stress** (`surface.rs`, `rheology_at`): engine 4 spans 5 to
   3000 Pa (`5·600^stiff`; was `5·60^stiff`). Lead white from the tube
   (stiffness 0.8) now holds about 835 Pa.
 - **Films bridge fine relief** (`settle_for`, `BRIDGE_UM` 40 µm): a thick
@@ -74,7 +74,7 @@ painter never saw relief either: looks showed color only.
     paint seals it.
   - **Gloss** (`Canvas::gloss`): a baked film's gloss follows its oil
     (smoothstep 0.15..1.3), blended with the surface under it for thin
-    films; varnish sets it to 1. Engine 3 shows a matte surface with the
+    films; varnish sets it to 1. Engine 4 shows a matte surface with the
     first-surface reflection it scatters back (`SURFACE_REFLECTANCE` 4%,
     `haze`) in looks and saved pictures. Checkpoint format 9; a format 8
     file (a save from before) is still read, as an oil ground with nothing
@@ -83,12 +83,12 @@ painter never saw relief either: looks showed color only.
 - **The giverny and impressionist boxes**: see `notes/research/giverny_materials.md` and
   `notes/research/impressionist_materials.md` (from analyses of the paintings).
 
-## Engine 4: the knife tears
+## Engine 5: the knife tears
 
 A knife-laid slab parts from the blade raggedly: at its ends, along its
 leading edge (up to 8 mm in), where the blade's reach into the hollows runs
 out, and in the ridge left where the blade lifts (`Canvas::knife`, a value
-noise along and across the blade, gated on engine 4). Engine 3 logs keep the
+noise along and across the blade, gated on engine 5). Engine 4 logs keep the
 clean-edged knife and replay as they were.
 The torn paint stays under the blade, out of the bead, so a torn pull runs
 dry where a whole one does and covers less. The tears are about a millimetre
@@ -104,4 +104,4 @@ light).
   dries over a soft interior) are still not modeled.
 - The relief light in `finish`/`relief()` still uses its fixed light; a
   finished painting is best shown with `look --mode relief` at a gentle
-  elevation, or `relief()` once it is retuned for engine 3's thicker paint.
+  elevation, or `relief()` once it is retuned for engine 4's thicker paint.

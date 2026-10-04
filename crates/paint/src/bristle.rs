@@ -634,14 +634,14 @@ pub(crate) struct Surf {
     /// Paint laid or moved updates the film's cure at once (see `add`;
     /// engine 2). Engine 1 left it to the next `wait`.
     cure_now: bool,
-    /// Engine 3: bristles in stiff paint gather into clumps that lay it in
+    /// Engine 4: bristles in stiff paint gather into clumps that lay it in
     /// ridges and furrows and plough it aside a clump's width (`exchange`).
     clump: bool,
-    /// Engine 3: paint laid loses its solvent at once (it evaporates in
+    /// Engine 4: paint laid loses its solvent at once (it evaporates in
     /// minutes), and an absorbent ground draws oil out of it (`add`).
     lean: bool,
     /// The ground's remaining absorbency per pixel (coats of oil; null when
-    /// none of it is absorbent or before engine 3).
+    /// none of it is absorbent or before engine 4).
     absorb: *mut f32,
 }
 // SAFETY: callers only run brushes concurrently on pixel sets that cannot
@@ -669,7 +669,7 @@ impl Surf {
             if v <= 0.0 {
                 return;
             }
-            // engine 3: the solvent in the paint evaporates as it is laid
+            // engine 4: the solvent in the paint evaporates as it is laid
             // (in minutes: before anything else can work it), leaving a film
             // of the paint's own body that much thinner
             let (v, hide) = if self.lean && hide[3] > 0.0 {
@@ -696,7 +696,7 @@ impl Surf {
                 p.cure = if t < 1e-5 { 0.0 } else { p.cure + (cure - p.cure) * a };
             }
             *vol = t;
-            // engine 3: an absorbent ground under the film draws oil out of
+            // engine 4: an absorbent ground under the film draws oil out of
             // the paint just laid, until its pores are full: a thin wash goes
             // lean (stiff, matte, quick to set), thick paint barely notices
             if !self.absorb.is_null() {
@@ -773,9 +773,9 @@ impl Canvas {
             base: self.base.as_ref().unwrap().1.as_ptr(),
             dry: if self.wet.clock.px.len() == n { self.wet.clock.px.as_mut_ptr() } else { std::ptr::null_mut() },
             cure_now: self.engine >= 2,
-            clump: self.engine >= 3,
-            lean: self.engine >= 3,
-            absorb: if self.engine >= 3 && self.absorb_any { self.absorb.as_mut_ptr() } else { std::ptr::null_mut() },
+            clump: self.engine >= 4,
+            lean: self.engine >= 4,
+            absorb: if self.engine >= 4 && self.absorb_any { self.absorb.as_mut_ptr() } else { std::ptr::null_mut() },
         }
     }
 
@@ -1398,7 +1398,7 @@ unsafe fn exchange(
         } else {
             dep_total
         };
-        // engine 3: in stiff paint the hairs gather into clumps, a few hairs
+        // engine 4: in stiff paint the hairs gather into clumps, a few hairs
         // to a clump, more the stiffer the paint; a clump lays more and the
         // gaps between clumps less, so the stroke lies in ridges and furrows
         // along its length (the variation averages out across the brush).
@@ -1440,7 +1440,7 @@ unsafe fn exchange(
         // (see `touch_rb`): its contact is its track.
         let hair = if fine || dep.is_some() { rb } else { (tool.hair_radius() * s).min(rb) };
         let push_k = tool.push * (seg / (2.0 * hair)).clamp(0.0, 1.0) * (hair / rb);
-        // (engine 3: each hair still moves only its own share of paint, but a
+        // (engine 4: each hair still moves only its own share of paint, but a
         // clump of hairs in stiff paint throws it aside the clump's width,
         // up to a few pixels: walls along the stroke's edges, a bead ahead)
         // (only the hairs along the brush's sides: inside it, a clump's
@@ -2505,10 +2505,10 @@ impl Canvas {
         }
         self.tally.stroke(&Tool::hog_flat(k.width), pts, self.mm_per_unit);
         let id = self.next_stroke_ids(1);
-        // engine 4: knife-laid paint tears where it parts from the blade:
+        // engine 5: knife-laid paint tears where it parts from the blade:
         // at the slab's ends, its leading edge, and where the blade's reach
         // into the hollows runs out (`tn`, a noise along and across the blade)
-        let tears = self.engine >= 4;
+        let tears = self.engine >= 5;
         // (the paint the tears held back under the blade: back on it at the end)
         let mut held = 0.0f32;
         let tseed = (id as u64).wrapping_mul(0x9E37_79B9_7F4A_7C15) ^ 0x7EA2;

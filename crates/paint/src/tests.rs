@@ -678,7 +678,7 @@ fn thick_paint_from_a_pointed_hatch_hides_the_ground_at_full_size() {
     assert!(pale <= thick / 20_000, "{pale} of {thick} pixels under 30 µm or more of dark paint show more ground than paint");
 }
 
-/// Engine 3: a lean (blotted) film dries matte and a matte surface reads a
+/// Engine 4: a lean (blotted) film dries matte and a matte surface reads a
 /// little lighter in the darks than an oily one (its first-surface veil).
 #[test]
 #[cfg(tube_box)]
@@ -687,7 +687,7 @@ fn a_lean_film_dries_matte() {
     let pal = Palette::tube_box();
     let dark = pal.pile(vec![(10, 1.0)]); // Prussian blue
     let mut c = Canvas::new(400, 1.0, [0.8; 3]);
-    assert!(c.engine() >= 3);
+    assert!(c.engine() >= 4);
     for (y, medium) in [(300.0, 0.0f32), (700.0, -0.4)] {
         let mut h = Held::new(Tool::filbert(60.0), 3);
         h.load(dark.laid(medium), 1.0);
@@ -703,7 +703,7 @@ fn a_lean_film_dries_matte() {
     assert!(lift(s_lean, c.px[i_lean]) > 2.0 * lift(s_oil, c.px[i_oil]), "veil: lean {:?} oily {:?}", s_lean, s_oil);
 }
 
-/// Engine 3: turpentine evaporates as the paint is laid: a stroke of paint
+/// Engine 4: turpentine evaporates as the paint is laid: a stroke of paint
 /// thinned half with it leaves about half the film.
 #[test]
 #[cfg(tube_box)]
@@ -723,7 +723,7 @@ fn turpentine_leaves_a_thinner_film() {
     assert!((thinned / neat - 0.5).abs() < 0.08, "neat {neat} thinned {thinned}");
 }
 
-/// Engine 3: an absorbent ground draws oil out of a thin wash laid on it:
+/// Engine 4: an absorbent ground draws oil out of a thin wash laid on it:
 /// the film is thinner, stiffer and dries matte; on an oil ground it doesn't.
 #[test]
 #[cfg(tube_box)]
@@ -774,11 +774,11 @@ fn a_pass_keeps_a_blotted_pile_blotted() {
     assert!(stiff(-0.4) > stiff(0.0) + 0.2, "blotted {} plain {}", stiff(-0.4), stiff(0.0));
 }
 
-/// Engine 4: a knife-laid slab tears where it parts from the blade, so it
-/// covers less than engine 3's whole slab from the same pull and load: on a
+/// Engine 5: a knife-laid slab tears where it parts from the blade, so it
+/// covers less than engine 4's whole slab from the same pull and load: on a
 /// short pull, on a long one that runs the knife dry (the torn paint stays
 /// under the blade, it doesn't feed the bead), and on a small canvas, whose
-/// pixels are wider than a tear. An engine 3 canvas keeps the whole slab.
+/// pixels are wider than a tear. An engine 4 canvas keeps the whole slab.
 #[test]
 fn a_knife_laid_slab_tears_from_engine_4() {
     let covered = |engine: u32, width: usize, to: f32| {
@@ -791,10 +791,10 @@ fn a_knife_laid_slab_tears_from_engine_4() {
         c.wet.vol.iter().filter(|&&v| v > 0.0).count()
     };
     for (what, width, to) in [("a short pull", 2400, 400.0), ("a pull that runs dry", 2400, 800.0), ("a sketch", 600, 400.0)] {
-        let (whole, torn) = (covered(3, width, to), covered(4, width, to));
-        assert!(whole > 1500, "{what}: engine 3 laid {whole} pixels");
-        assert!(torn > whole / 4 && torn < whole * 19 / 20, "{what}: engine 4 laid {torn} pixels of engine 3's {whole}");
-        assert_eq!(whole, covered(3, width, to), "{what}: the same pull lays the same slab");
+        let (whole, torn) = (covered(4, width, to), covered(5, width, to));
+        assert!(whole > 1500, "{what}: engine 4 laid {whole} pixels");
+        assert!(torn > whole / 4 && torn < whole * 19 / 20, "{what}: engine 5 laid {torn} pixels of engine 4's {whole}");
+        assert_eq!(whole, covered(4, width, to), "{what}: the same pull lays the same slab");
     }
 }
 

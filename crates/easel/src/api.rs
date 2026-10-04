@@ -1558,7 +1558,7 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
             }
             let medium = if blot > 0.0 { -blot } else { medium };
             // turps=: thinned with that share of turpentine, which flows on
-            // the brush and evaporates as the paint is laid (engine 3)
+            // the brush and evaporates as the paint is laid (engine 4)
             let turps = num(&t, "turps")?.unwrap_or(0.0);
             if !(0.0..=0.9).contains(&turps) {
                 return err("pile: turps is the share of turpentine the paint is thinned with, 0 to 0.9");
@@ -1571,8 +1571,8 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
                 Some(o) => return err(format!("pile: oil {o:?}: \"linseed\", \"walnut\" or \"poppy\"")),
             };
             let tubes = st.borrow().tubes.clone();
-            if turps > 0.0 && tubes.engine < 3 {
-                return err(format!("pile: turps= needs engine 3; this painting is painted with engine {} (its log says so), where turpentine does nothing", tubes.engine));
+            if turps > 0.0 && tubes.engine < 4 {
+                return err(format!("pile: turps= needs engine 4; this painting is painted with engine {} (its log says so), where turpentine does nothing", tubes.engine));
             }
             let (parts, given) = parts_of(&tubes, &t, "pile")?;
             let mut mix = tubes.pile(parts);
@@ -1827,8 +1827,8 @@ fn ground_of(tubes: &Palette, v: &Value) -> Result<Vec<Ground>> {
             Value::Integer(n) => (n as f32).clamp(0.0, 1.0),
             _ => return err("canvas: a ground layer's absorbent= is true or 0..1"),
         };
-        if absorbent > 0.0 && tubes.engine < 3 {
-            return err(format!("canvas: a ground layer's absorbent= needs engine 3; this painting is painted with engine {} (its log says so), where a ground absorbs nothing", tubes.engine));
+        if absorbent > 0.0 && tubes.engine < 4 {
+            return err(format!("canvas: a ground layer's absorbent= needs engine 4; this painting is painted with engine {} (its log says so), where a ground absorbs nothing", tubes.engine));
         }
         out.push(Ground { color: m.color, hiding: m.hiding, um, stiff: m.stiff, apply, absorbent });
     }

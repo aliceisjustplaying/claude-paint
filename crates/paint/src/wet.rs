@@ -30,7 +30,7 @@ pub type Latent = [f32; LAT];
 /// coat, stiffness, drying rate, solvent, oil].
 /// Stiffness 0 = fluid, medium-rich glaze; 1 = stiff tube paint. Drying rate
 /// relative to average paint (see `drying::drier`). Solvent and oil are
-/// engine 3's (see `Paint`).
+/// engine 4's (see `Paint`).
 pub type Prop = [f32; 5];
 
 #[inline]
@@ -65,11 +65,11 @@ pub struct Paint {
     /// The share of the paint's volume that is volatile solvent (turpentine,
     /// 0..0.9): it makes the paint flow on the brush and evaporates as it is
     /// laid, leaving a film of the paint's own body, that much thinner
-    /// (engine 3).
+    /// (engine 4).
     pub solvent: f32,
     /// How rich in oil the paint is, relative to tube paint (1): more with
     /// medium, less blotted or drawn into an absorbent ground. A film's gloss
-    /// follows it (engine 3).
+    /// follows it (engine 4).
     pub oil: f32,
 }
 
@@ -242,8 +242,8 @@ impl Canvas {
     /// picture with any wet paint on it (at its laid thickness).
     pub fn seen(&self) -> Vec<Rgb> {
         use rayon::prelude::*;
-        if self.engine >= 3 {
-            // engine 3: a matte surface veils its colors (wet paint is oily, glossy)
+        if self.engine >= 4 {
+            // engine 4: a matte surface veils its colors (wet paint is oily, glossy)
             return (0..self.px.len())
                 .into_par_iter()
                 .map(|i| {

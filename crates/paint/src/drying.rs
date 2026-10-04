@@ -541,11 +541,11 @@ impl Canvas {
             }
             return;
         }
-        let t = self.settle_for(ex, &add, &stiff, &sets, self.engine >= 3);
-        // engine 3: the film's surface is as glossy as it is rich in oil (a
+        let t = self.settle_for(ex, &add, &stiff, &sets, self.engine >= 4);
+        // engine 4: the film's surface is as glossy as it is rich in oil (a
         // thin one shows the surface under it through), and dry paint seals
         // an absorbent ground's pores
-        if self.engine >= 3 {
+        if self.engine >= 4 {
             for y in 0..ex.3 - ex.1 {
                 for x in 0..ew {
                     let k = y * ew + x;

@@ -10,7 +10,7 @@ use crate::surface::{COAT_UM, Linen, vnoise};
 pub(crate) const OIL_GROUND_GLOSS: f32 = 0.5;
 /// The share of light a paint surface reflects at its first surface (oil,
 /// n ≈ 1.5: about 4%). A glossy surface sends it away from the viewer; a
-/// matte one scatters it back, a veil of white over the colors (engine 3).
+/// matte one scatters it back, a veil of white over the colors (engine 4).
 pub(crate) const SURFACE_REFLECTANCE: f32 = 0.04;
 /// The oil a fresh absorbent (chalk and glue) ground can draw out of the
 /// paint laid on it, coats per unit of `absorbent` (about 15 µm of oil).
@@ -200,11 +200,11 @@ pub struct Canvas {
     /// Accumulated paint film in coats (bookkeeping).
     pub(crate) film: Vec<f32>,
     /// How glossy the dry surface is, 0 (matte: lean paint, an absorbent
-    /// ground) to 1 (oily paint, varnish). Engine 3 shows a matte surface
+    /// ground) to 1 (oily paint, varnish). Engine 4 shows a matte surface
     /// with the light its first surface scatters (`haze`).
     pub(crate) gloss: Vec<f32>,
     /// The oil an absorbent ground can still draw out of paint laid on it,
-    /// coats (0: an oil ground, or one sealed by paint). Engine 3.
+    /// coats (0: an oil ground, or one sealed by paint). Engine 4.
     pub(crate) absorb: Vec<f32>,
     /// Whether any of the ground is absorbent (so the brushes look).
     pub(crate) absorb_any: bool,
@@ -631,7 +631,7 @@ impl Canvas {
         buf.par_chunks_mut(w * 3).enumerate().for_each(|(y, row)| {
             for x in 0..w {
                 let i = (y + ky0) * bw + x + kx0;
-                let p = if self.engine >= 3 { haze(self.px[i], self.gloss[i]) } else { self.px[i] };
+                let p = if self.engine >= 4 { haze(self.px[i], self.gloss[i]) } else { self.px[i] };
                 let (gx, gy) = ((x + ox) as i64, (y + oy) as i64);
                 for c in 0..3 {
                     let d = hash2(gx, gy, c as u64 * 7 + 1) - hash2(gx, gy, c as u64 * 7 + 2);

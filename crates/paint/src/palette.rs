@@ -229,7 +229,7 @@ pub struct Mixture {
     /// laid as knifed carries this rate (`Mixture::laid`).
     pub drying: f32,
     /// The share of turpentine (volatile solvent) the pile is thinned with
-    /// (engine 3, see `Paint::solvent`).
+    /// (engine 4, see `Paint::solvent`).
     pub solvent: f32,
     /// The drying of the oil the paint is ground in, relative to linseed
     /// (1): walnut about 0.8, poppy about 0.6 (it also yellows least).

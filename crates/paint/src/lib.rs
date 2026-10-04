@@ -70,10 +70,10 @@ pub use shape::Shape;
 ///   stroke right after it feels the film as it would after `wait(0)`); a
 ///   world's thin far bodies keep their depth (`World::add_body`), and rays
 ///   from far off (reflections) don't step over them (`World::trace`).
-/// - 3: stiff paint holds its relief, hairs clump in it, films bridge the
-///   weave; solvent, oil, absorbent grounds and gloss (notes/engine-3.md).
-/// - 4: knife-laid paint tears where it parts from the blade (`Canvas::knife`).
-pub const ENGINE: u32 = 4;
+/// - 4: stiff paint holds its relief, hairs clump in it, films bridge the
+///   weave; solvent, oil, absorbent grounds and gloss (notes/engine-4.md).
+/// - 5: knife-laid paint tears where it parts from the blade (`Canvas::knife`).
+pub const ENGINE: u32 = 5;
 
 /// Hermite smoothstep.
 #[inline]

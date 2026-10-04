@@ -90,7 +90,7 @@ pub(crate) fn install(lua: &Lua, st: S) -> Result<()> {
             let var = Fbm::new(s.seed as u32 + seed, 3, 400.0);
             let c = s.canvas.as_mut().ok_or_else(no_canvas)?;
             c.glaze(&Pigment::varnish(hex(MASTIC)), None, |x, y| coats + vary * var.get(x, y));
-            // (a varnished surface is glossy: engine 3 shows no matte veil;
+            // (a varnished surface is glossy: engine 4 shows no matte veil;
             // no coats, no varnish)
             // (nor the hand's time for brushing it)
             if coats > 0.0 || vary > 0.0 {

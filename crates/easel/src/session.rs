@@ -1381,7 +1381,7 @@ mod tests {
         let mut a = Session::new(W).unwrap();
         a.run(CANVAS).unwrap();
         let prog = a.program("t");
-        let want = format!("-- easel session \"t\": a painting replayed chunk by chunk.\n-- Each \"--@ chunk\" line starts one chunk as it was run at the easel.\n--@ engine 4\n\n--@ chunk 1\n{CANVAS}\n");
+        let want = format!("-- easel session \"t\": a painting replayed chunk by chunk.\n-- Each \"--@ chunk\" line starts one chunk as it was run at the easel.\n--@ engine 5\n\n--@ chunk 1\n{CANVAS}\n");
         assert_eq!(prog, want);
         assert_eq!(logged_box(&prog).unwrap(), None);
         assert_eq!(box_for(Some(&prog)).map(|b| b.name), Ok(paint::palette::DEFAULT_BOX), "(EASEL_BOX set in the test's environment?)");
@@ -1585,7 +1585,7 @@ mod tests {
         assert!(!logged_sketch(&b.program("sketchbook")));
     }
 
-    /// What only engine 3 models is refused in a painting painted with an
+    /// What only engine 4 models is refused in a painting painted with an
     /// older engine, where it would do nothing.
     #[test]
     #[cfg(tube_box)]
@@ -1597,10 +1597,10 @@ mod tests {
         };
         let mut s = old();
         let e = s.run(&CANVAS.replace(r#"apply="brush"}"#, r#"apply="brush", absorbent=true}"#)).unwrap_err();
-        assert!(e.contains("absorbent= needs engine 3"), "{e}");
+        assert!(e.contains("absorbent= needs engine 4"), "{e}");
         s.run(CANVAS).unwrap();
         let e = s.run(r#"pile{{"lead white", 1}, turps=0.5}"#).unwrap_err();
-        assert!(e.contains("turps= needs engine 3"), "{e}");
+        assert!(e.contains("turps= needs engine 4"), "{e}");
         let mut s = Session::new(W).unwrap();
         s.run(&CANVAS.replace(r#"apply="brush"}"#, r#"apply="brush", absorbent=true}"#)).unwrap();
         s.run(r#"pile{{"lead white", 1}, turps=0.5}"#).unwrap();

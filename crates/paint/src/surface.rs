@@ -62,16 +62,16 @@ fn rheology(stiff: f32) -> (f32, f32) {
 }
 
 /// Paint thickness (µm) over which a film bridges the fine relief under it
-/// (engine 3, `settle_for`): a 40 µm film keeps about a third of the weave on
+/// (engine 4, `settle_for`): a 40 µm film keeps about a third of the weave on
 /// its surface, a 120 µm one a twentieth.
 const BRIDGE_UM: f32 = 40.0;
 
-/// `rheology` for a canvas of engine version `engine`. From engine 3 the
+/// `rheology` for a canvas of engine version `engine`. From engine 4 the
 /// yield stress spans what oil paint has: 5 Pa for medium-rich paint up to
 /// some 3000 Pa for stiff tube paint (notes/research/oil_paint_physics.md;
-/// engine 1 and 2 stopped at 300 Pa, so a stroke's furrows leveled flat).
+/// engines 1 to 3 stopped at 300 Pa, so a stroke's furrows leveled flat).
 fn rheology_at(engine: u32, stiff: f32) -> (f32, f32) {
-    if engine < 3 {
+    if engine < 4 {
         return rheology(stiff);
     }
     let s = stiff.clamp(0.0, 1.0);
@@ -264,12 +264,12 @@ impl Canvas {
 
     /// The surface with the wet paint on it, as the painter's raking light
     /// sees it (`seen_lit`): the dry height plus each wet film's thickness,
-    /// which bridges the fine relief under it as a set film does (engine 3,
+    /// which bridges the fine relief under it as a set film does (engine 4,
     /// `BRIDGE_UM`; before it, the weave shows through any film).
     pub(crate) fn wet_surface(&self) -> Vec<f32> {
         let (w, h) = (self.f.w, self.f.h);
         let wet: Vec<f32> = self.wet.vol.par_iter().map(|v| v * COAT_UM).collect();
-        if self.engine < 3 {
+        if self.engine < 4 {
             return self.height.par_iter().zip(&wet).map(|(a, b)| a + b).collect();
         }
         let Bands { r1, .. } = Bands::at(self.px_mm());
@@ -303,9 +303,9 @@ impl Canvas {
         let (rw, rh) = (x1 - x0, y1 - y0);
         let w = self.f.w;
         let Bands { r1, r2, lam1, lam2 } = Bands::at(self.px_mm());
-        // (engine 3's stiffer paint is the painting's films; a ground is
+        // (engine 4's stiffer paint is the painting's films; a ground is
         // laid and leveled as it always was)
-        let engine = if bridge { self.engine } else { self.engine.min(2) };
+        let engine = if bridge { self.engine } else { self.engine.min(3) };
         let mut old = vec![0.0f32; rw * rh];
         let mut s = vec![0.0f32; rw * rh];
         for y in 0..rh {
@@ -359,7 +359,7 @@ impl Canvas {
         });
         conserve_total(add, &mut out, |_| f32::NEG_INFINITY, |_| f32::INFINITY);
         self.raise(rect, &old, add, &out);
-        // engine 3: a thick film bridges the fine relief under it (the weave,
+        // engine 4: a thick film bridges the fine relief under it (the weave,
         // the ground's brush marks): its top is shaped by the brush, not by
         // what it covers, so the fine relief fades from its surface over
         // some tens of µm of paint. Only the surface: the film's thickness

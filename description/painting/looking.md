@@ -145,4 +145,4 @@ Actual render interruption, postcommit look-write permission failure and filesys
 The retained-pile and production-ledger probes confirm variable lifetime and the extra mixing cost after ledger eviction. See [triage](../bug-triage.md).
 No human completion of the P1/P2 checklist is claimed.
 
-Source-reviewed against `../claude-paint` commit `4e525e50897807e9b5f734071dfeb330f1a393d3`; runtime verification is recorded separately in [verification](../verification/README.md).
+Source-reviewed against the repository commit `4e525e50897807e9b5f734071dfeb330f1a393d3`; runtime verification is recorded separately in [verification](../verification/README.md).

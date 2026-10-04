@@ -1,12 +1,14 @@
 # Claude Paint product description
 
-This describes Claude Paint from a painter's, runner's and viewer's point of view: what an action changes, what survives failure and what can be observed afterward. The source is read-only at commit `4e525e50897807e9b5f734071dfeb330f1a393d3` in `../claude-paint`.
+> Not yet updated for engine 3. Everything here describes main at `4e525e5`, before the engine-3 merge (drying, repaints, thinner, the textured rag and the painting-clock fix). It needs a revision pass against the current main.
+
+This describes Claude Paint from a painter's, runner's and viewer's point of view: what an action changes, what survives failure and what can be observed afterward. The source is read-only at commit `4e525e50897807e9b5f734071dfeb330f1a393d3` in the repository.
 
 ## Scope
 
 The primary surface is the current tube-based easel. The default developer build includes replay and finishing; the exported painter build has one painting and omits those capabilities. The painter harness and studio browser are included because they are the other user-facing surfaces in this project. Historical scene helpers are covered as replay compatibility, not as current painting tools. Research notes, archived rounds, engine internals without a user action and the separately maintained stillwet gallery are outside this description.
 
-The source map is [the guide](../claude-paint/notes/easel_guide.md), [command handling](../claude-paint/crates/easel/src/main.rs), [chunk state](../claude-paint/crates/easel/src/session.rs), [painting operations](../claude-paint/crates/easel/src/api.rs), [harness](../claude-paint/harness/painter/painter.ts) and [viewer](../claude-paint/studio/index.html). Behavior evidence lives in `crates/easel/tests`, `crates/paint/tests`, `harness/painter/test`, `studio/test_studio.py` and `scripts/tests`. Defaults live beside their operations, especially `look.rs`, `time.rs`, `paint/src/style.rs` and `paint/src/handling.rs`.
+The source map is [the guide](../notes/easel_guide.md), [command handling](../crates/easel/src/main.rs), [chunk state](../crates/easel/src/session.rs), [painting operations](../crates/easel/src/api.rs), [harness](../harness/painter/painter.ts) and [viewer](../studio/index.html). Behavior evidence lives in `crates/easel/tests`, `crates/paint/tests`, `harness/painter/test`, `studio/test_studio.py` and `scripts/tests`. Defaults live beside their operations, especially `look.rs`, `time.rs`, `paint/src/style.rs` and `paint/src/handling.rs`.
 
 ## Shared skeleton
 

@@ -212,4 +212,4 @@ After an event connection failure, the page can continue displaying a picture wh
 - Confirmed defect: Home, End and all four arrow keys in an empty picker raise uncaught browser exceptions; see the [runtime probe](../verification/evidence/runtime-viewer.md#empty-picker-bug-09-reproduced-for-every-navigation-key). Cause: `studio/index.html:365–372`.
 - The differing picker and FINISHED activity cutoffs are a product consistency question, not proof that the painter process stopped. Their definitions are at `studio/index.html:272` and `studio/index.html:700`.
 
-Source-reviewed against `../claude-paint` commit `4e525e50897807e9b5f734071dfeb330f1a393d3`; runtime verification is recorded separately in [verification](../verification/README.md).
+Source-reviewed against the repository commit `4e525e50897807e9b5f734071dfeb330f1a393d3`; runtime verification is recorded separately in [verification](../verification/README.md).

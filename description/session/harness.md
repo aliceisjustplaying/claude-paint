@@ -169,4 +169,4 @@ Actual external-provider requests and full-duration provider waits remain untest
 Tool isolation is not a verified hostile-filesystem security boundary.
 Compaction depends on pi's settings interface; its documented fallback changes when compaction occurs.
 
-Source-reviewed against `../claude-paint` commit `4e525e50897807e9b5f734071dfeb330f1a393d3`; runtime evidence belongs in [verification](../verification/README.md).
+Source-reviewed against the repository commit `4e525e50897807e9b5f734071dfeb330f1a393d3`; runtime evidence belongs in [verification](../verification/README.md).

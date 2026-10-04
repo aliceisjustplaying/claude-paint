@@ -8,7 +8,7 @@ Creating either leaves the visible canvas unchanged.
 The painter reaches them through Lua constructors, combines or transforms them and passes the result to painting, clipping or drawing.
 There is no shape-selection overlay or interactive point editor.
 
-> Technical note: [api.rs](../../claude-paint/crates/easel/src/api.rs):637–690 and :1358–1403 construct mask values. [draw_outline.rs](../../claude-paint/crates/easel/src/draw_outline.rs):169–179 and :200–232 construct outlines separately from :305–340 painting them.
+> Technical note: [api.rs](../../crates/easel/src/api.rs):637–690 and :1358–1403 construct mask values. [draw_outline.rs](../../crates/easel/src/draw_outline.rs):169–179 and :200–232 construct outlines separately from :305–340 painting them.
 
 ## The simple case
 
@@ -45,7 +45,7 @@ A ribbon follows points with one width or a width per point.
 `mask(function)` evaluates coverage at every canvas pixel center.
 Outline construction takes points and character options; `body_of` instead takes a spine, widths and optional limbs.
 
-> Technical note: [api.rs](../../claude-paint/crates/easel/src/api.rs):680–705 and :1358–1403 define geometry forms. [draw_outline.rs](../../claude-paint/crates/easel/src/draw_outline.rs):200–232 builds bodies.
+> Technical note: [api.rs](../../crates/easel/src/api.rs):680–705 and :1358–1403 define geometry forms. [draw_outline.rs](../../crates/easel/src/draw_outline.rs):200–232 builds bodies.
 
 ### Ending at once
 
@@ -56,7 +56,7 @@ Invalid option names in outline, body, noise and outline painting calls fail.
 Requesting an inside mask from an open outline fails with guidance to use above, below or a closed outline.
 No paint is committed merely because geometry construction succeeded.
 
-> Technical note: [api.rs](../../claude-paint/crates/easel/src/api.rs):1370–1402 and [draw_outline.rs](../../claude-paint/crates/easel/src/draw_outline.rs):169–225, :244–249 own these checks.
+> Technical note: [api.rs](../../crates/easel/src/api.rs):1370–1402 and [draw_outline.rs](../../crates/easel/src/draw_outline.rs):169–225, :244–249 own these checks.
 
 ### Becoming extended
 
@@ -80,7 +80,7 @@ Roughen shifts the boundary unevenly using a seeded pattern.
 That result is a field, not ordinary coverage; `band` or `map` can turn it back into coverage.
 `band` selects stored values between two levels, so its meaning depends on whether the input contains distance or coverage.
 
-> Technical note: [api.rs](../../claude-paint/crates/easel/src/api.rs):637–678 exposes transformations. [mask.rs](../../claude-paint/crates/paint/src/mask.rs):123–223 defines combination, distance and edge operations.
+> Technical note: [api.rs](../../crates/easel/src/api.rs):637–678 exposes transformations. [mask.rs](../../crates/paint/src/mask.rs):123–223 defines combination, distance and edge operations.
 
 ### Finishing
 
@@ -92,7 +92,7 @@ Outline painting executes planned brush strokes and returns their count.
 Optional dipping loads the brush before the first stroke and then at the requested interval; it does not wipe between dips.
 An error in later painting discards the chunk's earlier changes according to [commands](../foundations/commands.md).
 
-> Technical note: [api.rs](../../claude-paint/crates/easel/src/api.rs):650–659 calculates area. [draw_outline.rs](../../claude-paint/crates/easel/src/draw_outline.rs):264–340 implements inspection, offsets and painting.
+> Technical note: [api.rs](../../crates/easel/src/api.rs):650–659 calculates area. [draw_outline.rs](../../crates/easel/src/draw_outline.rs):264–340 implements inspection, offsets and painting.
 
 ## Modifiers
 
@@ -113,7 +113,7 @@ An error in later painting discards the chunk's earlier changes according to [co
 | Dip and every | Load a pile during outline painting at the requested stroke interval. | Changes brush state in the submitted sequence. |
 | Noise, cellular pattern or uneven spacing | Supply repeatable values for position-dependent variation. | Queries use that object's configured pattern. |
 
-> Technical note: [draw_outline.rs](../../claude-paint/crates/easel/src/draw_outline.rs):61–97, :102–179 and :305–340 own options; character descriptions are in [easel_guide.md](../../claude-paint/notes/easel_guide.md):267–276.
+> Technical note: [draw_outline.rs](../../crates/easel/src/draw_outline.rs):61–97, :102–179 and :305–340 own options; character descriptions are in [easel_guide.md](../../notes/easel_guide.md):267–276.
 
 ## Cancel and interrupt
 
@@ -146,7 +146,7 @@ After ordinary rollback, preexisting geometry and paint remain as before the chu
 
 **Preferences.** Seeds and character settings belong to constructed objects. They are not a global drawing-style preference.
 
-> Technical note: [api.rs](../../claude-paint/crates/easel/src/api.rs):675–678 and [draw_outline.rs](../../claude-paint/crates/easel/src/draw_outline.rs):342–353 define printed summaries. Shared lifecycle facts belong to [commands](../foundations/commands.md).
+> Technical note: [api.rs](../../crates/easel/src/api.rs):675–678 and [draw_outline.rs](../../crates/easel/src/draw_outline.rs):342–353 define printed summaries. Shared lifecycle facts belong to [commands](../foundations/commands.md).
 
 ## Edge cases
 
@@ -165,7 +165,7 @@ After ordinary rollback, preexisting geometry and paint remain as before the chu
 - `uneven` returns positions with irregular, clumped gaps. Its default irregularity is 0.6, clumping 0.3 and seed 1.
 - Outline painting defaults to pressure multiplier 1, shake 0.3, loading every three strokes and load amount 0.6 when a dip is supplied. An interval of zero is treated as one.
 
-> Technical note: [draw_outline.rs](../../claude-paint/crates/easel/src/draw_outline.rs):379–425 tests consumed insets, minimum sizes and zero irregularity. [mask.rs](../../claude-paint/crates/paint/src/mask.rs):147–160 owns sampling. [api.rs](../../claude-paint/crates/easel/src/api.rs):662–667, :747–765, :1137–1205 and :1293–1356 define mapping and numeric helpers.
+> Technical note: [draw_outline.rs](../../crates/easel/src/draw_outline.rs):379–425 tests consumed insets, minimum sizes and zero irregularity. [mask.rs](../../crates/paint/src/mask.rs):147–160 owns sampling. [api.rs](../../crates/easel/src/api.rs):662–667, :747–765, :1137–1205 and :1293–1356 define mapping and numeric helpers.
 
 ## Open questions and verification
 
@@ -174,4 +174,4 @@ After ordinary rollback, preexisting geometry and paint remain as before the chu
 - Nonfinite callbacks and extreme geometry have separate [recorded cases](../verification/evidence/matrix-marks.md); finite coverage wording alone does not settle their behavior.
 - The guide's general 0–1 mask description needs qualification for `distance()` and unrestricted `map()` output. This document preserves the distinction rather than promising bounded values everywhere.
 
-Source-reviewed against `../claude-paint` commit `4e525e50897807e9b5f734071dfeb330f1a393d3`; runtime verification is recorded separately in [verification](../verification/README.md).
+Source-reviewed against the repository commit `4e525e50897807e9b5f734071dfeb330f1a393d3`; runtime verification is recorded separately in [verification](../verification/README.md).

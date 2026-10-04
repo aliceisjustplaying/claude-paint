@@ -2,7 +2,7 @@
 
 ## Source and reading order
 
-Source: `../claude-paint`, commit `4e525e50897807e9b5f734071dfeb330f1a393d3`. Read README, glossary, the looking pilot and foundations before drafting. Then read `notes/easel_guide.md`, the relevant command in `crates/easel/src/main.rs`, `session.rs`, the relevant operation implementation and its behavior tests. For viewing, read `studio/index.html`, `studio/studio.py` and `studio/export_static.py`. For the harness, read its current TypeScript rather than assuming its README is current.
+Source: the repository, commit `4e525e50897807e9b5f734071dfeb330f1a393d3`. Read README, glossary, the looking pilot and foundations before drafting. Then read `notes/easel_guide.md`, the relevant command in `crates/easel/src/main.rs`, `session.rs`, the relevant operation implementation and its behavior tests. For viewing, read `studio/index.html`, `studio/studio.py` and `studio/export_static.py`. For the harness, read its current TypeScript rather than assuming its README is current.
 
 The source repository is read-only. Documentation belongs here. Existing untracked `notes/rag/dark-review/` belongs to the user. Runtime probes use an isolated EASEL_ROOT outside the source. No publishing or production service changes are part of this task.
 

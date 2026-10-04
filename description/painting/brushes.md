@@ -8,7 +8,7 @@ It has no on-canvas selection outline or live cursor.
 Printing the brush reports its kind, width and fullness; a look reveals the mark.
 Painting requires the [canvas](../foundations/canvas.md) and a ready [session](../foundations/sessions.md).
 
-> Technical note: [api.rs](../../claude-paint/crates/easel/src/api.rs):371–470 defines held brush operations and their printed form; :1406–1419 creates brushes.
+> Technical note: [api.rs](../../crates/easel/src/api.rs):371–470 defines held brush operations and their printed form; :1406–1419 creates brushes.
 
 ## The simple case
 
@@ -19,7 +19,7 @@ A later stroke from that brush therefore continues its material history.
 Reloading removes most remaining paint before adding another load.
 After the chunk succeeds, the painter can inspect the result with a [look](looking.md).
 
-> Technical note: [easel_guide.md](../../claude-paint/notes/easel_guide.md):110–138 describes the public brush behavior. [smoke.rs](../../claude-paint/crates/easel/tests/smoke.rs):41–64 exercises loading and repeated strokes in a successful session.
+> Technical note: [easel_guide.md](../../notes/easel_guide.md):110–138 describes the public brush behavior. [smoke.rs](../../crates/easel/tests/smoke.rs):41–64 exercises loading and repeated strokes in a successful session.
 
 ## The interaction, event by event
 
@@ -48,7 +48,7 @@ A global brush remains available for later chunks.
 Two variables referring to the same brush share its paint.
 Creating a new brush from an existing brush copies its tool shape into a new empty brush.
 
-> Technical note: [api.rs](../../claude-paint/crates/easel/src/api.rs):309–353 accepts tool forms and aliases; :371–375 shares held state; :1409–1417 creates a fresh holder. [bristle.rs](../../claude-paint/crates/paint/src/bristle.rs):348–419 initializes empty reservoirs.
+> Technical note: [api.rs](../../crates/easel/src/api.rs):309–353 accepts tool forms and aliases; :371–375 shares held state; :1409–1417 creates a fresh holder. [bristle.rs](../../crates/paint/src/bristle.rs):348–419 initializes empty reservoirs.
 
 ### Ending at once
 
@@ -59,7 +59,7 @@ A stroke with fewer than two points fails.
 Unknown stroke or touch option names fail, rather than silently altering the mark.
 Any uncaught error follows the whole-chunk [rollback rules](../foundations/commands.md).
 
-> Technical note: [api.rs](../../claude-paint/crates/easel/src/api.rs):404–418 and :445–446 define inspection and rejection; [bristle.rs](../../claude-paint/crates/paint/src/bristle.rs):289–311 defines width estimation.
+> Technical note: [api.rs](../../crates/easel/src/api.rs):404–418 and :445–446 define inspection and rejection; [bristle.rs](../../crates/paint/src/bristle.rs):289–311 defines width estimation.
 
 ### Becoming extended
 
@@ -79,7 +79,7 @@ Orientation holds the brush across the path, along it or at a fixed angle.
 A touch can drag and twist as it presses.
 No intermediate image arrives automatically; the painter receives the command result when the chunk finishes.
 
-> Technical note: [api.rs](../../claude-paint/crates/easel/src/api.rs):409–465 maps mark options to canvas operations. [bristle.rs](../../claude-paint/crates/paint/src/bristle.rs):473–520 and :1455–1490 define stroke and touch parameters.
+> Technical note: [api.rs](../../crates/easel/src/api.rs):409–465 maps mark options to canvas operations. [bristle.rs](../../crates/paint/src/bristle.rs):473–520 and :1455–1490 define stroke and touch parameters.
 
 ### Finishing
 
@@ -89,7 +89,7 @@ An error later in that chunk restores earlier brush changes along with the paint
 There is no undo step for an individual mark.
 The next stroke uses the retained brush unless the painter explicitly loads, reloads, wipes or replaces it.
 
-> Technical note: [determinism.rs](../../claude-paint/crates/easel/tests/determinism.rs):95–137 includes held brushes in replay state checks. Transaction ownership and failure receipts are in [commands](../foundations/commands.md).
+> Technical note: [determinism.rs](../../crates/easel/tests/determinism.rs):95–137 includes held brushes in replay state checks. Transaction ownership and failure receipts are in [commands](../foundations/commands.md).
 
 ## Modifiers
 
@@ -139,7 +139,7 @@ A lost reply leaves the caller uncertain whether painting committed; resubmissio
 
 **Preferences.** Tool choices are stored on each brush. They do not become default tools for every later brush.
 
-> Technical note: [api.rs](../../claude-paint/crates/easel/src/api.rs):569–586 rejects extra loading arguments and remixes the pile using canvas style. Session-wide concerns follow [commands](../foundations/commands.md).
+> Technical note: [api.rs](../../crates/easel/src/api.rs):569–586 rejects extra loading arguments and remixes the pile using canvas style. Session-wide concerns follow [commands](../foundations/commands.md).
 
 ## Edge cases
 
@@ -154,7 +154,7 @@ A lost reply leaves the caller uncertain whether painting committed; resubmissio
 - Tool aliases include sable for round, hog for flat, liner for rigger and blender for badger.
 - A pile carries its medium. An extra loading argument for medium is rejected.
 
-> Technical note: [bristle.rs](../../claude-paint/crates/paint/src/bristle.rs):426–458 defines additive loading, clamped wiping and fullness; :488–490 and :1468–1470 own defaults. [api.rs](../../claude-paint/crates/easel/src/api.rs):398–402 wipes without a rag object; :576–585 handles medium and mixture variation.
+> Technical note: [bristle.rs](../../crates/paint/src/bristle.rs):426–458 defines additive loading, clamped wiping and fullness; :488–490 and :1468–1470 own defaults. [api.rs](../../crates/easel/src/api.rs):398–402 wipes without a rag object; :576–585 handles medium and mixture variation.
 
 ## Open questions and verification
 
@@ -163,4 +163,4 @@ A lost reply leaves the caller uncertain whether painting committed; resubmissio
 - Loading accepts its numeric amount without an explicit zero-through-one check. A negative-load probe left an empty brush and no deposited paint in the [runtime pass](../verification/evidence/runtime-paint.md#negative-loading). Nonfinite and excessive-value cases are recorded in the [matrix evidence](../verification/evidence/matrix-marks.md).
 - The [agent matrix](../verification/evidence/matrix-marks.md) records point, bristle, pickup, dry-contact and rollback comparisons; it does not replace the human P1/P2 pass.
 
-Source-reviewed against `../claude-paint` commit `4e525e50897807e9b5f734071dfeb330f1a393d3`; runtime verification is recorded separately in [verification](../verification/README.md).
+Source-reviewed against the repository commit `4e525e50897807e9b5f734071dfeb330f1a393d3`; runtime verification is recorded separately in [verification](../verification/README.md).

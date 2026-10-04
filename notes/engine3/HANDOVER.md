@@ -17,6 +17,10 @@ named beside it.
 
 The owner asked for this to be done carefully.
 
+## Status, October 4, later
+
+The consolidation below is done: `engine3-consolidation` merged `fix/painting-clock` and `engine3-overnight`, took the sienna measurement and `notes/look/`, and imported `description/`; main was fast-forwarded to it. Sections 2 to 5 describe the state before that. As expected, `scripts/test --all` is red only on 13 (b) and the `rag` scene of `baseline-state` and thinner check 2.
+
 ## 2. State at handover
 
 Created today by the previous agent, all local, nothing pushed:
@@ -329,7 +333,7 @@ reopen and replay.
 
 ## 7. Not known
 
-- Whether the merged tree builds and what its tests say.
+- `description/` (the product description, imported from its own repo) still describes main at `4e525e5`, before the engine-3 merge (`description/goal.md` pins that commit). It needs a revision pass against the new main: drying, repaints, thinner, the textured rag and the painting clock.
 - The size of the retained capacity for any ground, and how a real wash builds
   in thickness. Neither has a measured source.
 - Whether (B) meets the owner's rule once passes dry. It was not rerun.

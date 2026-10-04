@@ -95,4 +95,4 @@ Success retains the canvas and makes its dimensions available as globals. The wh
 
 Live aspect 0.2/5 and physical size 50/5000 boundaries were exercised in the [matrix pass](../verification/evidence/matrix-root.md#canvas-boundaries). Material appearance depends on thickness, ground and lighting of the rendered model; this document does not claim physical calibration.
 
-Source-reviewed against `../claude-paint` commit `4e525e50897807e9b5f734071dfeb330f1a393d3`; see [verification](../verification/README.md).
+Source-reviewed against the repository commit `4e525e50897807e9b5f734071dfeb330f1a393d3`; see [verification](../verification/README.md).

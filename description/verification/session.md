@@ -1,6 +1,6 @@
 # Session verification
 
-Source: `../claude-paint` commit `4e525e50897807e9b5f734071dfeb330f1a393d3`. These scenarios cover commands, session selection, journals and the painter harness. All destructive or failure scenarios use disposable roots and fixture copies, never the user's painting.
+Source: the repository commit `4e525e50897807e9b5f734071dfeb330f1a393d3`. These scenarios cover commands, session selection, journals and the painter harness. All destructive or failure scenarios use disposable roots and fixture copies, never the user's painting.
 
 `CLI` means the default developer easel in an isolated root. `pi` means a disposable exported studio with painter and compaction extensions loaded as appropriate. A recording provider or controlled client captures requests without publishing them. Fault injection, controlled clocks and concurrent-writer barriers are prerequisites, not claims that such fixtures were built in this pass. Full-duration checks remain unrun unless their real timing is recorded.
 

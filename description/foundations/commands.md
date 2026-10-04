@@ -102,4 +102,4 @@ Successful execution is followed by persistence of the log and its integrity wit
 
 Storage failure after execution is a recoverability concern recorded in [triage](../bug-triage.md). The actual [ten-minute Lua deadline](../verification/evidence/runtime-deadline.json) was exercised; crash timing and native-operation interruption boundaries remain incomplete. Runtime evidence is separate from source reading.
 
-Source-reviewed against `../claude-paint` commit `4e525e50897807e9b5f734071dfeb330f1a393d3`; see [verification](../verification/README.md).
+Source-reviewed against the repository commit `4e525e50897807e9b5f734071dfeb330f1a393d3`; see [verification](../verification/README.md).

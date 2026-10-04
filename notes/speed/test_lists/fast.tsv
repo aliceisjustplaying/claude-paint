@@ -2,7 +2,7 @@
 # Reviewed list: notes/speed/SKIPPED.md says what this doesn't run and why. No step replays a painting.
 build	build-release-easel	600	0	-	cargo build --release -p easel
 build	build-test-binaries	600	0	-	cargo test --workspace --lib --bins --tests --no-run
-cargo	cargo-test	180	270	-	scripts/tests/cargo_tests.sh -j 4
-script	old-logs	60	10	^old_logs: \S+ ok	scripts/tests/old_logs.sh target/release/easel
+cargo	cargo-test	60	270	-	scripts/tests/cargo_tests.sh -j 4
+script	old-logs	60	11	^old_logs: \S+ ok	scripts/tests/old_logs.sh "$CARGO_TARGET_DIR/release/easel"
 script	baseline-package	60	1	^verify_package: hashes ok	notes/thinner/baseline/tools/verify_package.sh
-script	baseline-state	60	6	^\S+: state equal on every baseline field	scripts/tests/baseline_state.sh target/release/easel
+script	baseline-state	60	6	^\S+: state equal on every baseline field	scripts/tests/baseline_state.sh "$CARGO_TARGET_DIR/release/easel"

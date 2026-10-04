@@ -50,6 +50,33 @@ pub fn state(c: &Canvas) -> Vec<u8> {
     v
 }
 
+/// The session's complete save (`save::write`: the canvas with, in its
+/// header, the seed, chunk and call counters, studio clocks, the palette's
+/// piles, the setup and style, the box and engine, and the log's hash), as
+/// bytes, written for the log `program`. Not in a save, by design
+/// (save.rs:7-12): the Lua globals, the held brushes and rags, the world
+/// view. Its `chunks=` line counts the session's own log (save.rs:47),
+/// which a session reopened from a save restarts, so it is written here as
+/// all the chunks the painting has had (`chunks_before` + the log): the
+/// same for a session and its reopened copy.
+pub fn session_save(s: &Session, program: &str) -> Vec<u8> {
+    let path = std::env::temp_dir().join(format!("thinner-save-{}-{:p}.ckpt", std::process::id(), s));
+    assert!(crate::save::write(s, program, &path).expect("save::write"), "the session has a canvas to save");
+    let b = std::fs::read(&path).unwrap();
+    let _ = std::fs::remove_file(&path);
+    let n = u64::from_le_bytes(b[8..16].try_into().unwrap()) as usize;
+    let head = std::str::from_utf8(&b[16..16 + n]).expect("a UTF-8 header");
+    let total = s.chunks_before + s.log.len();
+    let lines: Vec<String> = head.lines().map(|l| if l.starts_with("chunks=") { format!("chunks={total}") } else { l.to_string() }).collect();
+    assert!(lines.iter().any(|l| l.starts_with("chunks=")), "the save's header counts chunks");
+    let head = lines.join("\n") + "\n";
+    let mut out = b[..8].to_vec();
+    out.extend_from_slice(&(head.len() as u64).to_le_bytes());
+    out.extend_from_slice(head.as_bytes());
+    out.extend_from_slice(&b[16 + n..]);
+    out
+}
+
 /// The pixel centers (units) inside `r`.
 pub fn centers_in(c: &Canvas, r: Rect) -> Vec<(f32, f32)> {
     let f = c.frame();
@@ -120,11 +147,18 @@ pub struct Cell {
     /// The share of the card's black/white contrast (luminance of the
     /// white band's mean minus the black band's) still showing.
     pub kept: f32,
+    /// The card's contrast under the strip before the pass.
+    pub contrast_before: f32,
     /// Solvent in the strip (sum of µm over its pixels) right after the
     /// pass: no more than the pass added (some evaporated during it).
     pub solvent_after_pass: f64,
     /// The same when `kept` is measured.
     pub solvent_at_measure: f64,
+    /// All the solvent on the canvas (`solvent_total`) right after the
+    /// passes and when measured: solvent that spread out of a strip is still
+    /// counted here.
+    pub canvas_solvent_after_pass: f64,
+    pub canvas_solvent_at_measure: f64,
     /// The evaporation time (min) of the thickest paint on the card, right
     /// after the passes and when measured.
     pub tau_after_pass: f64,
@@ -174,6 +208,7 @@ pub fn card(width: usize, parts: &str, cells: &[(f32, f32)]) -> Vec<Cell> {
     };
     let solvent_after: Vec<f64> = (0..n).map(|c| sum_in(&s.canvas().unwrap(), strip(c), solvent_um)).collect();
     let tau_after = tau_now(&s);
+    let canvas_after = s.canvas().unwrap().solvent_total();
     let waited = (10.0 * tau_after).ceil() + 1.0;
     run(&mut s, &format!("wait({waited})"));
     let tau_at = tau_now(&s);
@@ -184,8 +219,11 @@ pub fn card(width: usize, parts: &str, cells: &[(f32, f32)]) -> Vec<Cell> {
                 load: cells[c].0,
                 thinner: cells[c].1,
                 kept: contrast(&s, c) / before[c],
+                contrast_before: before[c],
                 solvent_after_pass: solvent_after[c],
                 solvent_at_measure: sum_in(&cv, strip(c), solvent_um),
+                canvas_solvent_after_pass: canvas_after,
+                canvas_solvent_at_measure: cv.solvent_total(),
                 tau_after_pass: tau_after,
                 tau_at_measure: tau_at,
                 waited,

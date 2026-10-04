@@ -6,8 +6,8 @@
 //!
 //!   cargo test -p easel --release --bin easel thinner_tests::
 //!
-//! Check 1 is `#[ignore = "slow"]` and runs only by its exact name
-//! (scripts/test_thinner_acceptance --all).
+//! Checks 1 and 8 (the card) and the rag study are `#[ignore = "slow"]`
+//! and run only by exact name (scripts/test_thinner_acceptance --all).
 
 use crate::session::Session;
 use crate::thinner_measure::*;
@@ -19,6 +19,8 @@ const THINNED: &str = include_str!("../tests/thinner/thinned.lua");
 const NEXT: &str = include_str!("../tests/thinner/next.lua");
 const FAILING: &str = include_str!("../tests/thinner/failing.lua");
 const DETERMINISM: &str = include_str!("../tests/thinner/determinism.lua");
+const CLOTH: &str = include_str!("../tests/thinner/cloth.lua");
+const CLOTH_AGAIN: &str = include_str!("../tests/thinner/cloth_again.lua");
 
 /// Check 1, the locked target: raw sienna thinned 0.5, one `body` pass at
 /// load 0.3 and one at 0.6, over the black-and-white card at 2400 px.
@@ -33,9 +35,12 @@ fn c01_the_card_raw_sienna_thinned_half_keeps_half_the_contrast_at_2400px() {
     let cells = card(2400, RAW_SIENNA, &[(0.3, 0.5), (0.6, 0.5)]);
     for c in &cells {
         println!("{c:?}");
+        assert!(c.contrast_before.is_finite() && c.contrast_before > 0.0, "load {}: the card has a contrast to keep ({})", c.load, c.contrast_before);
+        assert!(c.paint > 0.0, "load {}: the pass laid paint", c.load);
         assert!(c.solvent_after_pass > 0.0, "load {}: the pass laid solvent", c.load);
         assert!(c.waited >= 10.0 * c.tau_after_pass && c.waited >= 10.0 * c.tau_at_measure, "load {}: waited {} min; τ {} min after the pass, {} min at the measurement", c.load, c.waited, c.tau_after_pass, c.tau_at_measure);
         assert!(c.solvent_at_measure < 1e-3 * c.solvent_after_pass, "load {}: {} of {} solvent left", c.load, c.solvent_at_measure, c.solvent_after_pass);
+        assert!(c.canvas_solvent_at_measure < 1e-3 * c.canvas_solvent_after_pass, "load {}: {} of {} solvent left on the whole canvas", c.load, c.canvas_solvent_at_measure, c.canvas_solvent_after_pass);
     }
     for c in &cells {
         assert!(c.kept >= 0.5, "load {}: {:.1}% of the card's contrast shows (target 50%)", c.load, 100.0 * c.kept);
@@ -69,7 +74,7 @@ fn c03_af49348_paintck8_saves_are_refused_naming_the_old_version() {
 
 /// Check 3: the engine-3 logs unchanged af49348's live session wrote
 /// (old_files/, with and without a box line) are compatible: engine 3
-/// without thinner paints as it did (check 2), so they replay.
+/// without thinner paints as it did (check 2), so they replay, as engine 3.
 #[test]
 fn c03_af49348_engine_3_logs_still_replay() {
     for name in ["engine3_log_default_box.lua", "engine3_log_inness.lua"] {
@@ -77,6 +82,19 @@ fn c03_af49348_engine_3_logs_still_replay() {
         // (replay panics, naming the chunk, if one fails)
         let s = replay(&log, 64);
         assert_eq!(s.log.len(), log.matches("--@ chunk").count(), "{name}: every chunk ran");
+        assert_eq!(s.st.borrow().tubes.engine, 3, "{name}: replayed as engine 3");
+    }
+}
+
+/// Check 3: a log keeps the engine it names: none (engine 1), 2 or 3. Tiny
+/// logs, a 64 px canvas each.
+#[test]
+fn c03_a_log_keeps_its_engine() {
+    for (head, want) in [("", 1u32), ("--@ engine 2\n", 2), ("--@ engine 3\n", 3)] {
+        let log = format!("-- easel session \"tiny\": a painting replayed chunk by chunk.\n{head}\n--@ chunk 1\ncanvas{{size=100, aspect=2, seed=1, ground={{{{pile={{{{\"lead white\", 1}}}}, um=40, apply=\"knife\"}}}}}}\n");
+        let s = replay(&log, 64);
+        assert_eq!(s.st.borrow().tubes.engine, want, "{head:?}");
+        assert_eq!(s.canvas().unwrap().engine(), want, "{head:?}: the canvas");
     }
 }
 
@@ -117,18 +135,21 @@ fn c07_two_overlapping_thinned_passes_leave_more_paint_than_one() {
 }
 
 /// Check 8: more thinner never hides the card more. Raw sienna, loads 0.3
-/// and 0.6, thinner 0, 0.1, ..., 0.9, each measured after its solvent has
-/// gone: the contrast showing never falls from one step to the next by
-/// more than half a percentage point (measurement noise), and thinner 0.9
-/// shows more than none.
+/// and 0.6, thinner 0, 0.1, ..., 0.9, each its own card (480 px) with the
+/// strip in the same place and the same seed, so only the thinner changes;
+/// each measured after its solvent has gone. The contrast showing never
+/// falls from one step to the next by more than half a percentage point
+/// (measurement noise; lead-approved, flagged to the user), and thinner
+/// 0.9 shows more than none.
 #[test]
+#[ignore = "slow"]
 fn c08_more_thinner_never_hides_the_card_more() {
     for load in [0.3f32, 0.6] {
-        let cells: Vec<(f32, f32)> = (0..10).map(|k| (load, k as f32 / 10.0)).collect();
-        let r = card(960, RAW_SIENNA, &cells);
+        let r: Vec<Cell> = (0..10).map(|k| card(480, RAW_SIENNA, &[(load, k as f32 / 10.0)]).remove(0)).collect();
         let kept: Vec<f32> = r.iter().map(|c| c.kept).collect();
         println!("load {load}: kept {kept:?}");
         for c in &r {
+            assert!(c.paint > 0.0 && c.contrast_before > 0.0, "load {load}, thinner {}: paint {}, contrast {}", c.thinner, c.paint, c.contrast_before);
             assert!(c.solvent_at_measure <= 1e-3 * c.solvent_after_pass, "load {load}, thinner {}: solvent left", c.thinner);
         }
         for k in 1..kept.len() {
@@ -139,9 +160,13 @@ fn c08_more_thinner_never_hides_the_card_more() {
 }
 
 /// Check 11: a session saved halfway through the solvent's evaporation,
-/// between whole minutes, reopens to exactly the same canvas; the same
-/// next chunk then gives exactly the same canvas in both; and a replay of
-/// the whole log from scratch gives that canvas too.
+/// between whole minutes, reopens to exactly the same saved state; the
+/// same next chunk then leaves exactly the same save in both; and a
+/// replay of the whole log from scratch leaves that save too. "Save" is
+/// the session's whole save (`session_save`: canvas, seed, counters,
+/// studio clocks, piles, setup), not the canvas alone. Not in a save, by
+/// design (save.rs:7-12): Lua globals and held brushes and rags, so the
+/// next chunk makes its own.
 #[test]
 fn c11_a_save_mid_evaporation_reopens_to_the_same_state_and_goes_on_the_same() {
     const W: usize = 200;
@@ -165,31 +190,35 @@ fn c11_a_save_mid_evaporation_reopens_to_the_same_state_and_goes_on_the_same() {
         let f = c.clock().fract();
         assert!(f > 1e-6 && f < 1.0 - 1e-6, "between whole minutes: clock {}", c.clock());
     }
+    let program = a.program("t");
     let path = std::env::temp_dir().join(format!("thinner-c11-{}.ckpt", std::process::id()));
-    crate::save::write(&a, &a.program("t"), &path).unwrap();
+    crate::save::write(&a, &program, &path).unwrap();
     let restored = crate::save::read(&path);
     let _ = std::fs::remove_file(&path);
     let mut b = match restored {
         Ok(r) => r.session,
         Err(e) => panic!("reopening the save: {e}"),
     };
-    assert!(state(&a.canvas().unwrap()) == state(&b.canvas().unwrap()), "the reopened canvas differs from the saved one");
+    assert!(session_save(&a, &program) == session_save(&b, &program), "the reopened session saves differently from the one saved");
     run(&mut a, NEXT);
     run(&mut b, NEXT);
-    assert!(state(&a.canvas().unwrap()) == state(&b.canvas().unwrap()), "going on from the save differs from going on without closing");
-    let r = replay(&a.program("t"), W);
-    assert!(state(&r.canvas().unwrap()) == state(&a.canvas().unwrap()), "the replayed log differs from the live session");
+    let program = a.program("t");
+    let sa = session_save(&a, &program);
+    assert!(sa == session_save(&b, &program), "going on from the save differs from going on without closing");
+    let r = replay(&program, W);
+    assert!(session_save(&r, &program) == sa, "the replayed log differs from the live session");
 }
 
 /// Check 12: the same tiny log (thinned strokes and passes, waits, a damp
-/// rag) saves exactly the same bytes painted on one thread and on four.
+/// rag) leaves exactly the same session save painted on one thread and on
+/// four.
 #[test]
 fn c12_the_same_log_saves_the_same_bytes_on_one_thread_and_four() {
     let on = |n: usize| -> (Vec<u8>, f64) {
         rayon::ThreadPoolBuilder::new().num_threads(n).build().unwrap().install(|| {
             let s = replay(DETERMINISM, 240);
-            let c = s.canvas().unwrap();
-            (state(&c), c.solvent_total())
+            let solvent = s.canvas().unwrap().solvent_total();
+            (session_save(&s, DETERMINISM), solvent)
         })
     };
     let (a, solvent) = on(1);
@@ -199,31 +228,42 @@ fn c12_the_same_log_saves_the_same_bytes_on_one_thread_and_four() {
 }
 
 /// Check 18: a chunk that fails after thinned strokes, a thinned pass, a
-/// wait and a damp rag is taken back whole (canvas with its solvent,
-/// clock, brushes, rags), and the next chunk paints exactly as in a
-/// session where the failed chunk never ran.
+/// wait and work with a rag the painter already held (`cloth`, loaded with
+/// paint and solvent before the chunk) is taken back whole: canvas with its
+/// solvent, clock, brushes, rags. The next chunks (`next.lua`, then
+/// `cloth_again.lua`, which uses the same rag and brush) paint exactly as
+/// in a session where the failed chunk never ran.
 #[test]
 fn c18_a_failed_chunk_after_thinned_paint_takes_everything_back() {
     let (mut s, mut t) = (inness(160), inness(160));
     for x in [&mut s, &mut t] {
         run(x, CANVAS);
         run(x, THINNED);
+        run(x, CLOTH);
     }
     let held = |s: &Session| -> (Vec<String>, Vec<String>) {
         let mut st = s.st.borrow_mut();
         (st.live_brushes().iter().map(|b| format!("{:?}", b.borrow())).collect(), st.live_rags().iter().map(|r| format!("{:?}", r.borrow())).collect())
     };
+    {
+        let rags = s.st.borrow_mut().live_rags();
+        assert_eq!(rags.len(), 1, "the painter holds one rag");
+        let g = rags[0].borrow();
+        assert!(g.load > 0.0 && g.solvent_mm3 > 0.0 && g.damp > 0.0, "the rag holds paint and solvent and is damp: {g:?}");
+    }
     let (bytes0, clock0, hand0) = (state(&s.canvas().unwrap()), s.st.borrow().clock, held(&s));
     assert!(s.canvas().unwrap().solvent_total() > 0.0);
     let e = s.run(FAILING).unwrap_err();
     assert!(e.contains("stop"), "{e}");
     assert!(state(&s.canvas().unwrap()) == bytes0, "the canvas (paint, solvent, clock) is as before the failed chunk");
     assert_eq!(s.st.borrow().clock, clock0);
-    assert_eq!(held(&s), hand0, "the brushes and rags are as before");
-    run(&mut s, NEXT);
-    run(&mut t, NEXT);
-    assert!(state(&s.canvas().unwrap()) == state(&t.canvas().unwrap()), "the next chunk saw a different state than if the failed chunk had never run");
-    assert_eq!(held(&s), held(&t));
+    assert_eq!(held(&s), hand0, "the brushes and the rag are as before");
+    for chunk in [NEXT, CLOTH_AGAIN] {
+        run(&mut s, chunk);
+        run(&mut t, chunk);
+        assert!(state(&s.canvas().unwrap()) == state(&t.canvas().unwrap()), "the next chunk saw a different state than if the failed chunk had never run");
+        assert_eq!(held(&s), held(&t));
+    }
 }
 
 // ---------------------------------------------------------------- the rag study
@@ -249,6 +289,10 @@ struct Panel {
     outside: f64,
     /// Elongation of the lifted patch (sqrt of its second moments' ratio).
     elongation: f32,
+    /// The lifted patch (open paint down by more than 30%): its pixel count
+    /// and its second moments' two eigenvalues (units²).
+    lifted_px: usize,
+    spread: (f32, f32),
     /// Mean open paint in the band, µm, before and after.
     paint: (f64, f64),
     /// The same in the column a vertical stroke at x = 450 crosses the band.
@@ -279,20 +323,23 @@ fn rag_panel(name: &'static str, thinner: f32, setup: &str, action: &str) -> Pan
     run(&mut s, action);
     let (after, pa, oa, la, _, film1, _, ca) = snap(&s);
     let lifted: Vec<(f32, f32)> = film0.iter().zip(&film1).filter(|(a, b)| a.2 >= 1.0 && b.2 < 0.7 * a.2).map(|(a, _)| (a.0, a.1)).collect();
-    let elongation = {
+    let spread = {
         let n = lifted.len().max(1) as f32;
         let (mx, my) = (lifted.iter().map(|p| p.0).sum::<f32>() / n, lifted.iter().map(|p| p.1).sum::<f32>() / n);
         let (a, b, c) = lifted.iter().fold((0.0f32, 0.0f32, 0.0f32), |(a, b, c), p| (a + (p.0 - mx).powi(2), b + (p.0 - mx) * (p.1 - my), c + (p.1 - my).powi(2)));
         let (a, b, c) = (a / n, b / n, c / n);
         let d = (((a - c) / 2.0).powi(2) + b * b).sqrt();
-        (((a + c) / 2.0 + d) / ((a + c) / 2.0 - d).max(1e-6)).sqrt()
+        ((a + c) / 2.0 + d, (a + c) / 2.0 - d)
     };
+    let elongation = (spread.0 / spread.1.max(1e-6)).sqrt();
     Panel {
         name,
         removed: if pb > 0.0 { 1.0 - pa / pb } else { 0.0 },
         tone_left: (lg - la) / (lg - lb),
         outside: if ob > 0.0 { (oa - ob).abs() / ob } else { 0.0 },
         elongation,
+        lifted_px: lifted.len(),
+        spread,
         paint: (pb / nb.max(1) as f64, pa / nb.max(1) as f64),
         column: (cb, ca),
         before,
@@ -301,11 +348,17 @@ fn rag_panel(name: &'static str, thinner: f32, setup: &str, action: &str) -> Pan
     }
 }
 
-/// The rag study: a dry cloth wiping and blotting wet paint, a cloth
-/// dipped in spirits wiping it, the same on thinned paint, a dry-paint
-/// control and a brush stroke over a wiped area, each a 256 px panel
-/// before and after. The picture is written to $THINNER_RAG_STUDY (PNG)
-/// when that is set; the numbers are printed. Expected, from what a rag
+/// The rag study (`#[ignore = "slow"]`; scripts/test_thinner_acceptance
+/// --all runs it by exact name with THINNER_RAG_STUDY set to
+/// notes/thinner/rag_study.png and fails if the sheet isn't written): a dry
+/// cloth wiping and blotting wet paint, a cloth dipped in spirits wiping
+/// it, the same on thinned paint, a dry-paint control and a brush stroke
+/// over a wiped area, each a 256 px panel before and after. The picture is
+/// written to $THINNER_RAG_STUDY (PNG) when that is set; the numbers are
+/// printed. Its look is approved by people, separately, not by this test.
+/// Before a shape is judged, the lifted patch has at least 100 pixels and
+/// a spread of at least 4 units² both ways; the dry control's swatch is
+/// there (its band at most 80% of the ground's luminance) before the wipe. Expected, from what a rag
 /// does (limits in ACCEPTANCE.md): the wipe lifts where it went (at least
 /// a quarter of the paint along its middle, under 1% change well outside
 /// it) and the ground shows (under 90% of the tone left); spirits lift
@@ -314,6 +367,7 @@ fn rag_panel(name: &'static str, thinner: f32, setup: &str, action: &str) -> Pan
 /// over a wiped area lays paint there (at least 5 µm more on average where
 /// it crosses the wipe).
 #[test]
+#[ignore = "slow"]
 fn rag_study() {
     let wet = rag_panel("dry cloth wipe, wet paint", 0.0, "", WIPE);
     let blot = rag_panel("blot, wet paint", 0.0, "", BLOT);
@@ -341,6 +395,7 @@ fn rag_study() {
             }
         }
         sheet.save(&out).unwrap_or_else(|e| panic!("{out}: {e}"));
+        assert!(std::fs::metadata(&out).map(|m| m.len() > 0).unwrap_or(false), "{out}: the sheet was not written");
         println!("rag study written to {out}");
     }
     for p in [&wet, &damp, &t_wet, &t_damp] {
@@ -350,9 +405,13 @@ fn rag_study() {
     }
     assert!(damp.removed > wet.removed && t_damp.removed > t_wet.removed, "spirits lift more: {} vs {}, thinned {} vs {}", damp.removed, wet.removed, t_damp.removed, t_wet.removed);
     for (w, b) in [(&wet, &blot), (&t_wet, &t_blot)] {
+        for p in [w, b] {
+            assert!(p.lifted_px >= 100 && p.spread.1 >= 4.0, "{}: a lifted patch to judge ({} pixels, spread {:?} units²)", p.name, p.lifted_px, p.spread);
+        }
         assert!(w.elongation >= 2.5 && b.elongation <= 1.6, "a wipe lifts a long streak ({:.2}), a blot a round patch ({:.2})", w.elongation, b.elongation);
         assert!(b.removed > 0.0, "{}: the blot lifted paint", b.name);
     }
+    assert!(dry.lum.0 <= 0.8 * dry.lum.2, "the dry control's swatch is there before the wipe: band {}, ground {}", dry.lum.0, dry.lum.2);
     assert!(dry.paint.0 == 0.0 && (dry.lum.1 - dry.lum.0).abs() <= 1e-6, "dry paint doesn't come up: paint {:?}, luminance {} -> {}", dry.paint, dry.lum.0, dry.lum.1);
     assert!(over.column.1 > over.column.0 + 5.0, "the stroke laid paint over the wiped area: {:?} µm where it crossed the wipe", over.column);
 }

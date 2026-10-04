@@ -10,6 +10,11 @@
 #    (solvent) zero. It must pass, and every scene's PNG must be af49348's.
 # 2. The same six scenes with `thinner=0` written into every `pile{`: the
 #    same field comparison (state_compare.py --added-zero) and the same PNGs.
+# 3. The dumps declare the solvent (scripts/thinner_dump_fields.py:
+#    `wet.solvent` per pixel, `solvent` per bristle, `solvent_mm3` per rag),
+#    for the scenes as they are and with thinner=0, so --added-zero above
+#    can't pass by an unchanged dumper leaving the solvent out.
+# Needs bash 5, python3 (the baseline's tools) and the release easel.
 # The canvas= digest isn't a criterion: the new save format changes it by
 # itself. Prints "check 2: PASS" and exits 0 only if all of it holds.
 # A heavy job: run it under lockrun (60 s once built).
@@ -38,6 +43,9 @@ for lua in "$base"/scenes/*.lua; do
   s=$(basename "$lua" .lua)
   sed 's/pile{/pile{thinner=0, /g' "$lua" >"$work/$s.lua"
   grep -q 'pile{thinner=0, ' "$work/$s.lua" || { echo "check 2: $s has no pile{ to set thinner=0 on"; fail=1; continue; }
+  if ! "$easel" run "$lua" --width 128 --out "$work/plain-$s.png" --dump-state "$work/plain/$s" >/dev/null 2>"$work/plain-$s.err"; then
+    echo "check 2: $s failed to replay:"; sed 's/^/  /' "$work/plain-$s.err"; fail=1
+  fi
   if ! "$easel" run "$work/$s.lua" --width 128 --out "$work/$s.png" --dump-state "$work/state/$s" >"$work/$s.out" 2>"$work/$s.err"; then
     echo "check 2: $s with thinner=0 failed to replay:"; sed 's/^/  /' "$work/$s.err"; fail=1; continue
   fi
@@ -49,5 +57,8 @@ for lua in "$base"/scenes/*.lua; do
   if cmp -s "$base/ref/png/$s.png" "$work/$s.png"; then echo "  png same as af49348's"; else echo "  png DIFFERENT"; fail=1; fi
   cmp -s "$base/ref/out/$s.txt" "$work/$s.out" && echo "  printed output same (not a criterion)" || echo "  printed output differs (not a criterion)"
 done
+
+echo "== check 2, part 3: the dumps declare the solvent"
+python3 "$repo/scripts/thinner_dump_fields.py" "$work"/plain/* "$work"/state/* || fail=1
 
 if [ $fail = 0 ]; then echo "check 2: PASS"; else echo "check 2: FAIL"; exit 1; fi

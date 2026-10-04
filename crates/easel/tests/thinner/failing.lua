@@ -1,0 +1,8 @@
+b:load(sienna, 0.9)
+b:stroke({{120, 380}, {880, 420}}, {pressure={0.9, 0.9}})
+work(rect(100, 100, 800, 300), {hand="body", pile=veil, load=0.6, seed=9})
+wait(1.5)
+local r = rag()
+r:dip(0.5)
+r:wipe({{150, 200}, {800, 220}}, {pressure=0.7})
+error("stop")

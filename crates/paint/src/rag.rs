@@ -231,47 +231,6 @@ struct Seg {
     side: (f32, f32),
 }
 
-/// Diagnostics of engine 3's wipes (tests only): gross paint taken up and
-/// laid back (mm³), steps, steps the face's room limited, and the paint
-/// still at the cloth's surface when the last wipe lifted off (mm³).
-#[cfg(test)]
-#[derive(Clone, Copy, Debug, Default)]
-pub(crate) struct Diag {
-    pub picked: f64,
-    pub laid: f64,
-    pub steps: u64,
-    pub capped: u64,
-    pub mobile: f64,
-}
-
-#[cfg(test)]
-thread_local! {
-    pub(crate) static DIAG: std::cell::Cell<Diag> = std::cell::Cell::new(Diag::default());
-    /// The step along a wipe as a share of the usual (tests only: the
-    /// timestep refinement check).
-    pub(crate) static STEP_SCALE: std::cell::Cell<f32> = const { std::cell::Cell::new(1.0) };
-}
-
-#[cfg(test)]
-fn diag(f: impl FnOnce(&mut Diag)) {
-    DIAG.with(|d| {
-        let mut v = d.get();
-        f(&mut v);
-        d.set(v);
-    });
-}
-
-fn step_scale() -> f32 {
-    #[cfg(test)]
-    {
-        STEP_SCALE.with(|c| c.get())
-    }
-    #[cfg(not(test))]
-    {
-        1.0
-    }
-}
-
 /// A rag in the hand: its pad width (units), how loaded the face in use is
 /// (0 clean .. 1 full), how much the whole cloth has soaked up (0 .. 1, all
 /// `FACES` faces full), how damp with spirits the face in use is (0 dry ..
@@ -642,13 +601,6 @@ impl Canvas {
         } else {
             1.0
         };
-        #[cfg(test)]
-        if e3 {
-            diag(|g| {
-                g.steps += 1;
-                g.capped += (scale < 1.0) as u64;
-            });
-        }
         let mut k0 = 0;
         for &k1 in &rows {
             let mut row = 0.0f32;
@@ -680,16 +632,10 @@ impl Canvas {
             lifted_s += row_s as f64;
             k0 = k1;
         }
-        #[cfg(test)]
-        if e3 {
-            diag(|g| g.picked += lifted * unit);
-        }
         if let Some(pl) = pool.as_deref_mut() {
             let (laid, laid_s) = self.rag_smear(pl, &got, (x0, y0, x1, y1), touch, 0.25 * w_mm as f32, &expo);
             lifted -= laid;
             lifted_s -= laid_s;
-            #[cfg(test)]
-            diag(|g| g.laid += laid * unit);
         }
         let mm3 = lifted * unit;
         rag.solvent_mm3 += lifted_s * unit;
@@ -918,7 +864,7 @@ impl Canvas {
         let mmu = self.mm_per_unit;
         let w = rag.width;
         let r0 = 0.5 * w;
-        let step = 0.5 * r0 * step_scale();
+        let step = 0.5 * r0;
         let mut segs: Vec<Seg> = Vec::with_capacity(pts.len());
         let mut s = 0.0f32;
         for p in pts.windows(2) {
@@ -998,8 +944,6 @@ impl Canvas {
         // what is still at the cloth's surface goes with the face as the
         // pad lifts off (it is in `load` already)
         self.rag_keep(rag, &pool);
-        #[cfg(test)]
-        diag(|g| g.mobile = rag.mobile.mm3 as f64);
         total
     }
 
@@ -1038,8 +982,6 @@ impl Canvas {
         });
         if let Some(pl) = &pool {
             self.rag_keep(rag, pl);
-            #[cfg(test)]
-            diag(|g| g.mobile = rag.mobile.mm3 as f64);
         }
         got
     }
@@ -1640,7 +1582,7 @@ mod tests {
     /// half of the tone's color goes, but a tint stays (a fifth of it at
     /// least, well above a just-noticeable difference). With spirits, three
     /// times over: nearly all the film goes, from the tops of the weave and
-    /// from the hollows (90% and 89%), more than a dry rag takes from the
+    /// from the hollows (90% of each), more than a dry rag takes from the
     /// hollows, and a faint stain stays. (What the eye sees doesn't fall as
     /// far: the stain the cloth can't take is the same, dry or damp; see
     /// notes/rag/README.md.)
@@ -1665,11 +1607,8 @@ mod tests {
             100.0 * left_dry / tone, 100.0 * dry_film.0, 100.0 * dry_film.1, 100.0 * left_wet / tone, 100.0 * wet_film.0, 100.0 * wet_film.1);
         assert!(left_dry < 0.5 * tone, "a dry rag lifts the tone: {left_dry} of {tone}");
         assert!(left_dry > 0.2 * tone && left_dry > 0.02, "a dry rag leaves a pale tint: {left_dry} of {tone}");
-        // (engine 3: spirits work gradually, `DAMP_LIFT3`; 89%, not 90%,
-        // since the wipe's steps no longer multiply with its points: the
-        // hollows went from 90.2% to 89.9% with the path fix and the face's
-        // mobile paint carried between wipes, notes/rag/path-fix)
-        assert!(wet_film.0 > 0.9 && wet_film.1 > 0.89, "spirits lift nearly all the film: {wet_film:?}");
+        // (engine 3: spirits work gradually, `DAMP_LIFT3`)
+        assert!(wet_film.0 > 0.9 && wet_film.1 > 0.9, "spirits lift nearly all the film: {wet_film:?}");
         assert!(dry_film.1 < wet_film.1, "a dry rag leaves more in the hollows: {dry_film:?} vs {wet_film:?}");
         assert!(wet_film.1 < 1.0 && left_wet > 0.0, "a faint stain stays");
         assert!(left_wet < left_dry, "spirits leave less color than a dry rag: {left_wet} vs {left_dry}");
@@ -1941,22 +1880,6 @@ mod tests {
             }
         }
 
-        /// With `RAG_PNG` set, the canvas as `<name>.png` (dried, as `save`
-        /// shows it) and its open paint as `<name>.vol` (u32 width, u32
-        /// height, then µm per pixel, f32, little-endian) in that directory.
-        pub fn dump(c: &Canvas, name: &str) {
-            let Ok(dir) = std::env::var("RAG_PNG") else { return };
-            let dir = std::path::Path::new(&dir);
-            c.clone().save(dir.join(format!("{name}.png"))).unwrap();
-            let mut b = Vec::with_capacity(8 + 4 * c.wet.vol.len());
-            b.extend((c.f.w as u32).to_le_bytes());
-            b.extend((c.f.h as u32).to_le_bytes());
-            for &v in &c.wet.vol {
-                b.extend((v.max(0.0) * COAT_UM).to_le_bytes());
-            }
-            std::fs::write(dir.join(format!("{name}.vol")), b).unwrap();
-        }
-
         /// Largest and mean |difference| (µm) of open paint between two
         /// canvases, and the larger total.
         pub fn delta(a: &Canvas, b: &Canvas) -> (f32, f64) {
@@ -2005,9 +1928,6 @@ mod tests {
                                 let (mx, mean) = first.as_ref().map_or((0.0, 0.0), |f| delta(f, &c));
                                 println!("{} {um:>4} µm {} {name:>8} {:>3} pts: left {:6.2}% max|Δ| {mx:8.4} µm mean|Δ| {mean:.2e} µm load {:.5} bal {bal:.0e}",
                                     if linen { "linen " } else { "smooth" }, if damp { "damp" } else { "dry " }, pts.len(), 100.0 * left, r.load);
-                                if um == 3.0 && !damp {
-                                    dump(&c, &format!("part-{}-{name}-{}", if linen { "linen" } else { "smooth" }, pts.len()));
-                                }
                                 if vi == 0 {
                                     first = Some(c);
                                 }
@@ -2191,189 +2111,6 @@ mod tests {
             }
         }
     }
-
-    /// Receipts that read engine 3's wipe diagnostics (`Diag`,
-    /// `STEP_SCALE`): they exist from the path fix on.
-    /// `cargo test --release -p paint --lib rag::tests::path3 -- --ignored --nocapture --test-threads 1`
-    mod path3 {
-        use super::path::*;
-        use super::thin::{PAINTED, READ, film_um, on_canvas, px_in, total};
-        use super::*;
-
-        fn reset() -> Diag {
-            DIAG.with(|d| d.replace(Diag::default()))
-        }
-
-        fn got() -> Diag {
-            DIAG.with(|d| d.get())
-        }
-
-        /// Timestep refinement, a separate question from the partition: the
-        /// same 2-point line with steps 2, 1, 1/2 and 1/4 times the usual
-        /// (a quarter of the pad's width), on linen. Film left in the read
-        /// band and the largest per-pixel difference from the usual step.
-        #[test]
-        #[ignore]
-        fn steps() {
-            let w: usize = std::env::var("RAG_W").ok().and_then(|v| v.parse().ok()).unwrap_or(480);
-            for um in [1.0f32, 3.0, 69.0] {
-                let c0 = fixture(true, 3, w, um);
-                let idx = px_in(&c0, READ);
-                let a = total(&film_um(&c0, &idx));
-                for damp in [false, true] {
-                    let mut usual: Option<Canvas> = None;
-                    for sc in [1.0f32, 2.0, 0.5, 0.25] {
-                        STEP_SCALE.with(|c| c.set(sc));
-                        let mut c = c0.clone();
-                        let mut r = Rag::new(100.0, 7);
-                        if damp {
-                            r.dip(0.5, c.now_min(), &mut c.tally);
-                        }
-                        reset();
-                        c.rag_wipe(&mut r, &thin::LINE, &[0.8], 19);
-                        let g = got();
-                        let left = total(&film_um(&c, &idx)) / a;
-                        let (mx, mean) = usual.as_ref().map_or((0.0, 0.0), |u| delta(u, &c));
-                        println!("linen {um:>4} µm {} step ×{sc:<4}: {:3} steps, left {:6.2}%, max|Δ| {mx:7.4} µm mean|Δ| {mean:.2e} µm, picked {:.3} laid {:.3} mm3",
-                            if damp { "damp" } else { "dry " }, g.steps, 100.0 * left, g.picked, g.laid);
-                        if sc == 1.0 {
-                            usual = Some(c);
-                        }
-                    }
-                    STEP_SCALE.with(|c| c.set(1.0));
-                }
-            }
-        }
-
-        /// Bounded pickup with the diagnostics: as `path::capacity`, with the
-        /// steps the face's room cut short.
-        #[test]
-        #[ignore]
-        fn capped() {
-            let w: usize = std::env::var("RAG_W").ok().and_then(|v| v.parse().ok()).unwrap_or(480);
-            for um in [69.0f32, 300.0] {
-                for damp in [0.0f32, 1.0] {
-                    let mut c = fixture(false, 3, w, um);
-                    let mut r = Rag::new(100.0, 7);
-                    let cap = cap(&c, &r);
-                    let start = on_canvas(&c);
-                    reset();
-                    for k in 0..12u64 {
-                        if damp > 0.0 {
-                            r.dip(damp, c.now_min(), &mut c.tally);
-                        }
-                        let pts = if k % 2 == 0 { thin::LINE.to_vec() } else { vec![thin::LINE[1], thin::LINE[0]] };
-                        c.rag_wipe(&mut r, &pts, &[0.9], 40 + k);
-                    }
-                    let g = got();
-                    println!("{um:>5} µm damp {damp}: 12 wipes, {} steps, {} cut short by the face's room; load {:.6}, ledger {:.6} faces, gross picked {:.2} laid {:.2} mm3",
-                        g.steps, g.capped, r.load, (start - on_canvas(&c)) / cap, g.picked, g.laid);
-                }
-            }
-        }
-
-        /// Mean µm of open paint over the start, middle and end thirds of
-        /// the read band (along x).
-        fn thirds(c: &Canvas) -> [f64; 3] {
-            let (x0, x1) = (READ.0, READ.2);
-            let d = (x1 - x0) / 3.0;
-            [0, 1, 2].map(|k| {
-                let idx = px_in(c, (x0 + d * k as f32, READ.1, x0 + d * (k + 1) as f32, READ.3));
-                total(&film_um(c, &idx)) / idx.len() as f64
-            })
-        }
-
-        /// The §2 receipt on controlled films: start/middle/end film, gross
-        /// pickup and lay-back, net removal, the face's load, the cloth's
-        /// aggregate (`soaked` × `FACES` faces), what was still mobile at
-        /// the cloth's surface when it lifted, and the balance. With
-        /// `RAG_PNG`, each result's picture and field (`dump`).
-        #[test]
-        #[ignore]
-        fn ledger() {
-            let w: usize = std::env::var("RAG_W").ok().and_then(|v| v.parse().ok()).unwrap_or(480);
-            let line = thin::LINE.to_vec();
-            for linen in [false, true] {
-                let g = if linen { "linen" } else { "smooth" };
-                let two = || {
-                    let mut c = ground_e(linen, 3, w);
-                    set_film_of(&mut c, 3.0, (150.0, 240.0, 500.0, 440.0), tube("raw umber"));
-                    set_film_of(&mut c, 3.0, (500.0, 240.0, 850.0, 440.0), tube("lead white"));
-                    c
-                };
-                let cases: Vec<(&str, Canvas)> = vec![
-                    ("film0.25-dry", fixture(linen, 3, w, 0.25)),
-                    ("film1-dry", fixture(linen, 3, w, 1.0)),
-                    ("film1-damp", fixture(linen, 3, w, 1.0)),
-                    ("film3-dry", fixture(linen, 3, w, 3.0)),
-                    ("film10-dry", fixture(linen, 3, w, 10.0)),
-                    ("film69-dry", fixture(linen, 3, w, 69.0)),
-                    ("film3-reversal", fixture(linen, 3, w, 3.0)),
-                    ("film3-corner", fixture(linen, 3, w, 3.0)),
-                    ("film3-blot", fixture(linen, 3, w, 3.0)),
-                    ("two-dirty", two()),
-                    ("two-lifted", two()),
-                    ("two-refold", two()),
-                    ("under-damp", {
-                        let mut c = ground_e(linen, 3, w);
-                        set_film_of(&mut c, 20.0, PAINTED, tube("raw umber"));
-                        c.dry();
-                        set_film_of(&mut c, 1.0, PAINTED, tube("raw sienna"));
-                        c
-                    }),
-                ];
-                for (name, c0) in cases {
-                    dump(&c0, &format!("ledger-{g}-{name}-start"));
-                    let mut c = c0.clone();
-                    let mut r = Rag::new(100.0, 7);
-                    let cap = cap(&c, &r);
-                    let (before, t0) = (on_canvas(&c), thirds(&c));
-                    let (film0, height0) = (c.film.clone(), c.height.clone());
-                    reset();
-                    let mut lifted = 0.0;
-                    let mut mobile = 0.0;
-                    let mut wipe = |c: &mut Canvas, r: &mut Rag, pts: &[(f32, f32)], seed: u64| {
-                        let l = c.rag_wipe(r, pts, &[0.8], seed);
-                        mobile = got().mobile;
-                        l
-                    };
-                    match name {
-                        "film1-damp" => {
-                            r.dip(0.5, c.now_min(), &mut c.tally);
-                            lifted += wipe(&mut c, &mut r, &line, 19);
-                        }
-                        "film3-reversal" => lifted += wipe(&mut c, &mut r, &REVERSAL, 19),
-                        "film3-corner" => lifted += wipe(&mut c, &mut r, &CORNER, 19),
-                        "film3-blot" => {
-                            lifted += c.rag_blot(&mut r, 500.0, 340.0, 0.8, 19);
-                            mobile = got().mobile;
-                        }
-                        "two-dirty" => lifted += wipe(&mut c, &mut r, &line, 3),
-                        "two-lifted" | "two-refold" => {
-                            lifted += wipe(&mut c, &mut r, &[(250.0, 340.0), (480.0, 340.0)], 3);
-                            if name == "two-refold" {
-                                r.refold(&mut c.tally);
-                            }
-                            lifted += wipe(&mut c, &mut r, &[(520.0, 340.0), (750.0, 340.0)], 4);
-                        }
-                        "under-damp" => {
-                            r.dip(1.0, c.now_min(), &mut c.tally);
-                            lifted += wipe(&mut c, &mut r, &line, 19);
-                        }
-                        _ => lifted += wipe(&mut c, &mut r, &line, 19),
-                    }
-                    let d = got();
-                    let t1 = thirds(&c);
-                    let bal = (before - on_canvas(&c) - lifted).abs() / before;
-                    let kept = c.film.iter().zip(&film0).all(|(a, b)| a.to_bits() == b.to_bits()) && c.height.iter().zip(&height0).all(|(a, b)| a.to_bits() == b.to_bits());
-                    println!("{g:<6} {name:<15} film start/mid/end {:.3}/{:.3}/{:.3} -> {:.3}/{:.3}/{:.3} µm; picked {:.4} laid {:.4} net {:.4} mm3; face load {:.5} ({:.3} mm3), cloth {:.3} mm3, mobile at lift {:.4} mm3; capped {}; set paint kept {kept}; bal {bal:.0e}",
-                        t0[0], t0[1], t0[2], t1[0], t1[1], t1[2], d.picked, d.laid, d.picked - d.laid, r.load, r.load as f64 * cap, r.soaked as f64 * FACES as f64 * cap, mobile, d.capped);
-                    dump(&c, &format!("ledger-{g}-{name}-end"));
-                }
-            }
-        }
-    }
-
 
     /// Engine 3's path and transfer contracts (AGENT_BRIEF_V2 §2-3), on
     /// direct 3 µm films at 480 px.

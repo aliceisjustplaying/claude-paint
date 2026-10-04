@@ -81,7 +81,7 @@ fn c03_af49348_engine_3_logs_still_replay() {
         let log = std::fs::read_to_string(old_file(name)).unwrap();
         // (replay panics, naming the chunk, if one fails)
         let s = replay(&log, 64);
-        assert_eq!(s.log.len(), log.matches("--@ chunk").count(), "{name}: every chunk ran");
+        assert_eq!(s.log.len(), log.lines().filter(|l| l.starts_with("--@ chunk")).count(), "{name}: every chunk ran");
         assert_eq!(s.st.borrow().tubes.engine, 3, "{name}: replayed as engine 3");
     }
 }
@@ -91,7 +91,7 @@ fn c03_af49348_engine_3_logs_still_replay() {
 #[test]
 fn c03_a_log_keeps_its_engine() {
     for (head, want) in [("", 1u32), ("--@ engine 2\n", 2), ("--@ engine 3\n", 3)] {
-        let log = format!("-- easel session \"tiny\": a painting replayed chunk by chunk.\n{head}\n--@ chunk 1\ncanvas{{size=100, aspect=2, seed=1, ground={{{{pile={{{{\"lead white\", 1}}}}, um=40, apply=\"knife\"}}}}}}\n");
+        let log = format!("-- easel session \"tiny\": a painting replayed chunk by chunk.\n{head}\n--@ chunk 1\ncanvas{{size=100, aspect=2, linen=15, seed=1, ground={{{{pile={{{{\"lead white\", 1}}}}, um=40, apply=\"knife\"}}}}}}\n");
         let s = replay(&log, 64);
         assert_eq!(s.st.borrow().tubes.engine, want, "{head:?}");
         assert_eq!(s.canvas().unwrap().engine(), want, "{head:?}: the canvas");
@@ -251,7 +251,9 @@ fn c18_a_failed_chunk_after_thinned_paint_takes_everything_back() {
         let g = rags[0].borrow();
         assert!(g.load > 0.0 && g.solvent_mm3 > 0.0 && g.damp > 0.0, "the rag holds paint and solvent and is damp: {g:?}");
     }
-    let (bytes0, clock0, hand0) = (state(&s.canvas().unwrap()), s.st.borrow().clock, held(&s));
+    let bytes0 = state(&s.canvas().unwrap());
+    let clock0 = s.st.borrow().clock;
+    let hand0 = held(&s);
     assert!(s.canvas().unwrap().solvent_total() > 0.0);
     let e = s.run(FAILING).unwrap_err();
     assert!(e.contains("stop"), "{e}");

@@ -139,7 +139,10 @@ fn rebuilding_serves_progress_and_refuses_nonstatus_requests() {
         .stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null())
         .spawn().unwrap());
     let start = Instant::now();
-    while !socket.exists() {
+    // ready when it accepts a connection, not when the socket file appears: the
+    // file exists from bind(), and a connect before listen() is refused (under
+    // load the gap is long enough: the full parallel suite hit it)
+    while UnixStream::connect(&socket).is_err() {
         assert!(server.0.try_wait().unwrap().is_none(), "server exited at startup");
         assert!(start.elapsed() < Duration::from_secs(10), "server did not bind");
         std::thread::sleep(Duration::from_millis(10));

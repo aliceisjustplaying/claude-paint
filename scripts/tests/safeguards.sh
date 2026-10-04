@@ -4,9 +4,11 @@
 # a bare "origin", a published local clone (PUB) and a dev clone (DEV). The
 # candidate commits carry a fake scripts/test that follows the summary contract
 # (it reads the committed list notes/speed/test_lists/all.tsv; its behavior
-# comes from the committed file fake_mode) and a copy of scripts/lockrun (run
-# with isolated LOCKRUN_DIRs). No cargo, no real repo. Most test_candidate runs
-# go in parallel, each with its own lock directory.
+# comes from the committed file fake_mode) and a copy of scripts/lockrun. The
+# lockrun that runs is this checkout's scripts/lockrun (LOCKRUN, whose sha256
+# is the pin), with isolated LOCKRUN_DIRs; the candidates' copies only matter
+# to the forger cases. No cargo, no real repo. Most test_candidate runs go in
+# parallel, each with its own lock directory.
 #
 #     scripts/tests/safeguards.sh
 #
@@ -17,7 +19,10 @@ S=$(cd "$(dirname "$0")/.." && pwd)
 T=$(mktemp -d "${TMPDIR:-/tmp}/safeguards-test.XXXXXX")
 trap 'chmod -R u+w "$T" 2>/dev/null; rm -rf "$T"' EXIT
 export LOCKRUN_DIR=$T/lock TEST_RECEIPT_DIR=$T/receipts
-unset LOCKRUN_TOKEN LOCKRUN TEST_LIST_FILE
+unset LOCKRUN_TOKEN TEST_LIST_FILE
+# the approved lockrun (its sha256 is LOCKRUN_SHA256 in safeguards_lib.py)
+export LOCKRUN=$S/lockrun
+PIN=$(sed -n 's/^LOCKRUN_SHA256 = "\([0-9a-f]*\)"$/\1/p' "$S/safeguards_lib.py")
 ORIGIN=$T/origin.git PUB=$T/pub DEV=$T/dev
 LIST=notes/speed/test_lists/all.tsv
 n=0 fails=0 OUT= RC=
@@ -57,7 +62,7 @@ one_problem() { has "REFUSED: 1 problem(s)"; }
 origin_main() { git --git-dir="$ORIGIN" rev-parse refs/heads/main; }
 set_origin_main() { git --git-dir="$ORIGIN" update-ref refs/heads/main "$1"; }
 
-# mkc PARENT [path=content | path=<delete> | path=<gitlink:ID> | path=<symlink:TARGET>]...:
+# mkc PARENT [path=content | path=<delete> | path=<gitlink:ID> | path=<symlink:TARGET> | path=<exec:CONTENT>]...:
 # a commit without touching any working copy
 mkc() {
   local parent=$1 idx=$T/idx kv p v b t; shift
@@ -70,6 +75,8 @@ mkc() {
       "<gitlink:"*) v=${v#<gitlink:}; GIT_INDEX_FILE=$idx g update-index --add --cacheinfo "160000,${v%>},$p" ;;
       "<symlink:"*) v=${v#<symlink:}; b=$(printf '%s' "${v%>}" | g hash-object -w --stdin)
                     GIT_INDEX_FILE=$idx g update-index --add --cacheinfo "120000,$b,$p" ;;
+      "<exec:"*) v=${v#<exec:}; b=$(printf '%s\n' "${v%>}" | g hash-object -w --stdin)
+                 GIT_INDEX_FILE=$idx g update-index --add --cacheinfo "100755,$b,$p" ;;
       *) b=$(printf '%s\n' "$v" | g hash-object -w --stdin)
          GIT_INDEX_FILE=$idx g update-index --add --cacheinfo "100644,$b,$p" ;;
     esac
@@ -229,6 +236,15 @@ MID=$(mkc "$M" mid.txt=mid)
 g push -q origin "$MID:refs/heads/side2" 2>/dev/null
 PL=$(mkc "$MID" extra.txt=from-PL)
 C_slow=$(mkc "$M" fake_mode=slow)
+# forger MARKER: a lockrun that touches MARKER, writes a record.json naming the caller's
+# process group and token (as the reviewer's r2b driver did) and runs the command with no lock
+forger() {
+  printf '%s\n' '#!/bin/sh' "touch '$1'" 'while [ "$1" != -- ]; do shift; done; shift' 'mkdir -p "$LOCKRUN_DIR"' \
+    'pg=$(ps -o pgid= -p $$ | tr -d " ")' \
+    'printf '"'"'{"token":"forged","state":"running","pgid":%s}'"'"' "$pg" >"$LOCKRUN_DIR/record.json"' \
+    'LOCKRUN_TOKEN=forged exec "$@"'
+}
+C_forge=$(mkc "$M" "scripts/lockrun=<exec:$(forger "$T/ran.candidate")>")
 
 # P alone first: in the parallel batch the sparse post-checkout hook can lose the race for
 # the shared .git/config lock, and check 8 needs to see that it ran
@@ -244,6 +260,9 @@ tcbg LU "$LU"
 tcbg FL "$FL" --list-file notes/speed/test_lists/fast.tsv
 tcbg N "$N" --base-main "$M"
 tcbg PL "$PL" --base-main "$M"
+# the candidate's lockrun is a forger and $LOCKRUN is unset: a pinned lockrun outside it must run
+( cd "$DEV" && unset LOCKRUN && LOCKRUN_DIR=$T/lock-forge "$S/test_candidate" "$C_forge" >"$T/out.forge" 2>&1
+  echo $? >"$T/rc.forge" ) &
 for _ in $(seq 200); do [ -f "$T/started" ] && break; sleep 0.05; done
 kill -TERM "$sigpid"; wait "$sigpid"; echo $? >"$T/rc.sig"
 wait
@@ -331,17 +350,26 @@ check "a candidate that changes the list is tested on its own list (the binding 
 tcget FL
 check "--list-file: another list in the commit is run with --list and bound (fast.tsv, 2 steps)" \
   eval 'rc 0 && rtrue $FL "r[\"manifest\"][\"list\"]==\"notes/speed/test_lists/fast.tsv\" and len(r[\"summary\"][\"steps\"])==2"'
+check "pass: the receipt names the lockrun that ran: \$LOCKRUN (this checkout's scripts/lockrun), sha256 the pin" \
+  rtrue "$P" "r['lockrun']['source']=='\$LOCKRUN' and r['lockrun']['sha256']=='$PIN' and r['lockrun']['pinned_sha256']=='$PIN'
+   and r['lockrun']['path']=='$(sed "s|^$HOME|~|" <<<"$S/lockrun")' and len('$PIN')==64"
+tcget forge; C=$C_forge
+check "a candidate whose scripts/lockrun forges a lock record (\$LOCKRUN unset): the forger never runs, a pinned lockrun from outside the candidate does, pass" \
+  eval 'rc 0 && verdict_is $C pass && [ ! -e "$T/ran.candidate" ] && has "lockrun: " && cleaned'
+check "that receipt: lockrun sha256 is the pin, its source is ~/src/a/claude-paint-tools/lockrun or the one beside test_candidate, never the candidate's" \
+  rtrue "$C" "r['lockrun']['sha256']=='$PIN' and r['lockrun']['source'] in ('~/src/a/claude-paint-tools/lockrun', 'scripts/lockrun beside test_candidate')
+   and '/wt/' not in r['lockrun']['path'] and 'cpc.' not in r['lockrun']['path']"
 for k in G2 N PL; do tcget $k; done
 tcget LU
 all_receipts() {
   local c k
-  for k in P timeout $MODES_FAIL $MODES_BIND $MODES_CO badfield stuck unfinished slow; do
+  for k in P timeout $MODES_FAIL $MODES_BIND $MODES_CO badfield stuck unfinished slow forge; do
     if [ "$k" = P ]; then c=$P; else eval 'c=$C_'"$k"; fi
     receipt "$c" | grep -q "\"commit\": \"$c\"" || return 1
   done
   for c in $G2 $LC $LU $FL $N $PL; do receipt "$c" | grep -q "\"commit\": \"$c\"" || return 1; done
 }
-check "the $(set -- P timeout $MODES_FAIL $MODES_BIND $MODES_CO badfield stuck unfinished slow G2 LC LU FL N PL; echo $#) concurrent runs each kept their own receipt note (writes serialized, read back)" all_receipts
+check "the $(set -- P timeout $MODES_FAIL $MODES_BIND $MODES_CO badfield stuck unfinished slow forge G2 LC LU FL N PL; echo $#) concurrent runs each kept their own receipt note (writes serialized, read back)" all_receipts
 
 # ---------------------------------------------------------------- test_candidate refusals
 refused() { # COMMIT WANT DESCRIPTION [ARGS]
@@ -356,6 +384,36 @@ refused "$(mkc "$M" "$LIST=${LIST_V1/${TAB}3${TAB}/${TAB}0${TAB}}")" "every non-
 refused "$(mkc "$M" "$LIST=$(head -2 <<<"$LIST_V1")")" "only build steps" "a list with no non-build step"
 refused "$(mkc "$M" "$LIST=${LIST_V1/${TAB}-${TAB}cargo test/ cargo test}")" "want 6 or 7 tab-separated fields" "a malformed list"
 refused "$(mkc "$M" "$LIST=<symlink:../../../README>")" "is not a regular file" "a list that is a symlink"
+forger "$T/ran.env" >"$T/bad-lockrun"; chmod +x "$T/bad-lockrun"
+LR=$(mkc "$M" extra.txt=from-LR)
+OUT=$(cd "$DEV" && LOCKRUN=$T/bad-lockrun "$S/test_candidate" "$LR" 2>&1); RC=$?
+check "refuses a \$LOCKRUN that is not the pinned lockrun (exit 2): it is not run, no fallback, no receipt, no directory" \
+  eval 'rc 2 && has "is not the approved lockrun" && has "$PIN" && [ ! -e "$T/ran.env" ] && ! receipt $LR >/dev/null && nodir && cleaned'
+OUT=$(cd "$DEV" && LOCKRUN=$T/no-such-lockrun "$S/test_candidate" "$LR" 2>&1); RC=$?
+check "refuses a \$LOCKRUN that does not exist (exit 2)" eval 'rc 2 && has "is not the approved lockrun (unreadable" && nodir'
+# The order without \$LOCKRUN, in-process with a fake HOME (no git runs, so the hooks are untouched).
+mkdir -p "$T/home/src/a/claude-paint-tools" "$T/tools2"
+forger "$T/ran.tools" >"$T/home/src/a/claude-paint-tools/lockrun"
+cp "$S/test_candidate" "$S/safeguards_lib.py" "$T/tools2/"; cp "$T/bad-lockrun" "$T/tools2/lockrun"
+pick() { # TOOL_DIR: print pick_lockrun()'s source, or REFUSED: message
+  HOME=$T/home python3 - "$1/test_candidate" <<'PY' 2>&1
+import importlib.machinery, importlib.util, os, sys
+os.environ.pop("LOCKRUN", None)
+spec = importlib.util.spec_from_loader("tc", importlib.machinery.SourceFileLoader("tc", sys.argv[1]))
+tc = importlib.util.module_from_spec(spec); spec.loader.exec_module(tc)
+try:
+    path, source, data = tc.pick_lockrun()
+    print("source=%s path=%s pinned=%s" % (source, path, tc.sha256_bytes(data) == tc.LOCKRUN_SHA256))
+except tc.Refuse as e:
+    print("REFUSED: %s" % e)
+PY
+}
+OUT=$(pick "$S")
+check "without \$LOCKRUN, a ~/src/a/claude-paint-tools/lockrun that is not pinned is skipped (with a message) for the pinned scripts/lockrun beside test_candidate" \
+  eval 'has "skipping lockrun ~/src/a/claude-paint-tools/lockrun" && has "source=scripts/lockrun beside test_candidate path=$S/lockrun pinned=True"'
+OUT=$(pick "$T/tools2")
+check "without \$LOCKRUN and with neither the tools copy nor the one beside test_candidate pinned: refused, nothing chosen" \
+  eval 'has "REFUSED: no approved lockrun (sha256 $PIN)" && hasnt "source=" && [ ! -e "$T/ran.tools" ] && [ ! -e "$T/ran.env" ]'
 tc main
 check "refuses a branch name (it can move)" eval 'rc 2 && has "give an exact commit id" && cleaned'
 tc deadbeefdeadbeef
@@ -472,6 +530,16 @@ check "merge: a pass receipt without checkout evidence after the test refused" e
 forge "$E1" "$P" 'r["cleanup_errors"] = ["/tmp/cpc.x still exists"]'
 mc "$E1"
 check "merge: a pass receipt that records a cleanup error refused" eval 'rc 1 && one_problem && has "cleanup errors"'
+forge "$E1" "$P" 'r["lockrun"]["sha256"] = "'"$(shasum -a 256 "$T/bad-lockrun" | cut -d' ' -f1)"'"'
+mc "$E1"
+check "merge: a pass receipt whose lockrun sha256 was edited to another lockrun's refused" \
+  eval 'rc 1 && one_problem && has "lockrun sha256 is" && has "not the approved lockrun'"'"'s $PIN"'
+forge "$E1" "$P" 'del r["lockrun"]["sha256"]'
+mc "$E1"
+check "merge: a pass receipt without a lockrun sha256 refused" eval 'rc 1 && one_problem && has "lockrun sha256 is None"'
+forge "$E1" "$P" 'del r["lockrun"]'
+mc "$E1"
+check "merge: a pass receipt without a lockrun record refused" eval 'rc 1 && one_problem && has "lockrun sha256 is None"'
 forge "$E1" "$P" 'r["summary"]["steps"] = r["summary"]["steps"][:2]'
 mc "$E1"
 check "merge: a forged pass receipt whose summary omits a listed step refused (re-verified against the commit's list)" \

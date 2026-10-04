@@ -86,8 +86,6 @@ The submitted options cannot be changed by another client while this chunk runs.
 Drawing methods return millimeters drawn and retain the updated wear after chunk success.
 Several marks in one chunk still create one log entry.
 Ordinary chunk rollback restores both canvas changes and the pencil's state.
-The actual pencil wrapper is a Lua table containing grade, kind and worn, so its wear is restored through the table snapshot rather than a held-brush snapshot.
-The shared method table is protected from ordinary metatable replacement.
 Persistence failures and rebuilds retain the distinctions in [commands](../foundations/commands.md).
 
 Erasing lifts loose drawing within a mask or a soft path-shaped footprint.

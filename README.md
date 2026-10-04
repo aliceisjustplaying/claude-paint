@@ -28,10 +28,10 @@ The variant axes are build/surface, input options, existing painting state and s
 | [Sessions and surfaces](foundations/sessions.md) | Build differences, opening, closing and session selection | drafted |
 | [Painting passages](painting/passages.md) | Area work, blending, stippling and edge handling | drafted |
 | [Brushes](painting/brushes.md) | Loading, wiping, strokes and touches | drafted |
-| [Shapes](painting/shapes.md) | Masks, outlines and controlled variation | not started |
-| [Drawing](painting/drawing.md) | Pencil, chalk, erasing and fixing | not started |
-| [Rags](painting/rags.md) | Lifting paint, refolding and spirits | not started |
-| [Space and light](painting/space.md) | Forms, worlds, views and depth restrictions | not started |
+| [Shapes](painting/shapes.md) | Masks, outlines and controlled variation | drafted |
+| [Drawing](painting/drawing.md) | Pencil, chalk, erasing and fixing | drafted |
+| [Rags](painting/rags.md) | Lifting paint, refolding and spirits | drafted |
+| [Space and light](painting/space.md) | Forms, worlds, views and depth restrictions | drafted |
 | [Painting time](painting/time.md) | Hand time, waiting and drying | drafted |
 | [Journal and inspection](session/journal.md) | Notes, status, globals and log | drafted |
 | [Painter harness](session/harness.md) | Tools, image memory, pacing and compaction | drafted |
@@ -39,3 +39,11 @@ The variant axes are build/surface, input options, existing painting state and s
 | [Studio viewer](watching/studio.md) | Painter selection, live watching, replay and static export | drafted |
 
 [goal.md](goal.md) is the drafting contract. [glossary.md](glossary.md) owns terms. [verification](verification/README.md) records checks and their limits. [bug-triage.md](bug-triage.md) collects suspected defects without modifying the product.
+
+## Verification status
+
+All 15 documents are drafted. [Recorded probes](verification/README.md#checklists-and-evidence) cover selected CLI and browser behavior; the coverage labels remain drafted because the human P1/P2 pass is not complete. [Triage](bug-triage.md) distinguishes reproduced mismatches from source-backed suspicions. The [private studio preview](http://<tailscale-host>:18765/?p=paint-studio-decafe) uses synthetic conversation records and real probe images; the other Mac's access has not been tested.
+
+## Source coverage boundary
+
+The easel commands and current painting verbs map to foundations, painting, session and delivery. The paint engine is described through the effects those verbs expose, not as a Rust library reference. The harness maps to its tool/context document and journal. The studio server, browser and static export map to the viewer document. Runner save/check/finish/video/studio export scripts map to delivery. Repository maintenance scripts such as candidate merging, test orchestration, source stripping and diagnostic image analysis are excluded because they maintain the project rather than define the painting or watching experience. Historical experiments and archived sources are context for compatibility, not additional current product surfaces.

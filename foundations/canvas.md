@@ -84,7 +84,7 @@ Success retains the canvas and makes its dimensions available as globals. The wh
 
 ## Edge cases
 
-- Logical width is 1000 units and height is `1000 / aspect`; live output is 2400 pixels wide.
+- Logical width is 1000 units and height is `1000 / aspect`; live output is 2400 pixels wide. Floating-point arithmetic can make printed H slightly different from the exact decimal result, as in [the probe](../verification/evidence/cli.md).
 - The upper-left is `(0,0)`; x increases rightward and y downward. Angles use radians, with zero rightward and π/2 downward.
 - Ground thickness is 5 through 400 µm per layer; knife, roller and brush application leave different textures.
 - Pile parts must be positive finite numbers and name an available tube. Repeated tube entries are combined for mixing.

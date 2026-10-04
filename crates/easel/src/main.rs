@@ -998,6 +998,10 @@ impl Server {
         let before = image::open(&real).map_err(|e| format!("--compare {}: {e}", prev.display()))?.to_rgb8();
         let h = now.height();
         let bw = ((before.width() as f64 * h as f64 / before.height() as f64).round() as u32).max(1);
+        let total_width = bw.checked_add(12).and_then(|w| w.checked_add(now.width()));
+        if total_width.is_none_or(|w| w > 16384 || u64::from(w) * u64::from(h) > 32_000_000) {
+            return Err("--compare: the combined picture is too large".into());
+        }
         let before = image::imageops::resize(&before, bw, h, image::imageops::FilterType::Lanczos3);
         let gap = 12;
         let mut both = image::RgbImage::from_pixel(bw + gap + now.width(), h, image::Rgb([24, 24, 28]));
@@ -1110,8 +1114,8 @@ pub const GALLERY_LIGHT: (f32, f32) = (115.0, 55.0);
 /// `light az,el` (degrees) as a pair.
 pub(crate) fn light_of(s: &str) -> Result<(f32, f32), String> {
     let p: Vec<f32> = s.split(',').map(|t| t.trim().parse::<f32>()).collect::<Result<_, _>>().map_err(|_| format!("light {s}: want azimuth,elevation in degrees"))?;
-    if p.len() != 2 || !p[0].is_finite() || !(1.0..=90.0).contains(&p[1]) {
-        return Err(format!("light {s}: want azimuth,elevation in degrees (elevation 1 to 90)"));
+    if p.len() != 2 || !p[0].is_finite() || !(3.0..=89.0).contains(&p[1]) {
+        return Err(format!("light {s}: want azimuth,elevation in degrees (elevation 3 to 89)"));
     }
     Ok((p[0], p[1]))
 }

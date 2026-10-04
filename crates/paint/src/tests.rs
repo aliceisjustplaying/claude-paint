@@ -674,3 +674,24 @@ fn thick_paint_from_a_pointed_hatch_hides_the_ground_at_full_size() {
     assert!(thick > 50_000, "{thick} pixels with a thick film");
     assert!(pale <= thick / 20_000, "{pale} of {thick} pixels under 30 µm or more of dark paint show more ground than paint");
 }
+
+/// Marks sized across a pass (`scale_at`) take the hand the time of the
+/// brush they are painted with: a pass of a width-8 brush at twice the size
+/// is timed as the same pass of a width-16 brush.
+#[test]
+#[cfg(tube_box)]
+fn sized_marks_are_timed_with_their_own_brush() {
+    use crate::palette::Palette;
+    let pal = Palette::tube_box();
+    let secs = |width: f32, len: f32, scale: Option<f32>| {
+        let mut c = Canvas::new(160, 1.0, [0.8; 3]);
+        let mut hd = Handling::new(Tool::filbert(width)).piled(&pal, pal.pile(vec![(10, 1.0)]), 0.0).length(len, len).coverage(1.0).ruler().angle_jitter(0.0).shake(0.0);
+        if let Some(k) = scale {
+            hd.scale_at = Some(Box::new(move |_, _| k));
+        }
+        c.work(&Mask::full(c.frame()), &hd, 5);
+        c.tally().secs
+    };
+    let (sized, plain) = (secs(8.0, 50.0, Some(2.0)), secs(16.0, 100.0, None));
+    assert!(sized > 0.0 && (sized - plain).abs() <= 0.01 * plain, "sized {sized} s, a brush of that size {plain} s");
+}

@@ -522,6 +522,36 @@ impl Held {
         }
     }
 
+    /// Dip only part of the brush: `amount` of `paint` goes into the bristles
+    /// `part` reaches, as much as each one takes. A painter double-loads a
+    /// brush this way (one side or corner in a second pile), and a brush
+    /// pulled through an unevenly knifed pile takes paint up in streaks; the
+    /// colors then come off side by side within one stroke and mingle as they
+    /// go. With `Part::ALL` this is `load`.
+    pub fn load_part(&mut self, paint: Paint, amount: f32, part: &Part) {
+        let lat = paint.latent();
+        let full = self.full();
+        let scatter = paint.scatter();
+        for (i, b) in self.bristles.iter_mut().enumerate() {
+            let w = part.weight(b.rx, i);
+            if w <= 0.0 {
+                continue;
+            }
+            let k = (0.75 + 0.5 * crate::rng::hash2(i as i64, 17, 3)) * w;
+            if paint.thinner > 0.0 {
+                // (a thinned load, as `load`: part paint, part solvent)
+                let v = amount * full * k;
+                let vp = v * (1.0 - paint.thinner);
+                b.cure = mix_cure(b.cure, b.vol, 0.0, vp);
+                mix_into(&mut b.vol, &mut b.lat, &mut b.hide, vp, &lat, [scatter, paint.stiff, paint.drying]);
+                b.solvent += v * paint.thinner;
+                continue;
+            }
+            b.cure = mix_cure(b.cure, b.vol, 0.0, amount * full * k);
+            mix_into(&mut b.vol, &mut b.lat, &mut b.hide, amount * full * k, &lat, [scatter, paint.stiff, paint.drying]);
+        }
+    }
+
     /// Wipe the brush on a rag: remove `frac` of the paint in it.
     pub fn wipe(&mut self, frac: f32) {
         for b in &mut self.bristles {
@@ -547,6 +577,55 @@ impl Held {
     /// `Canvas::wet_total` (coats × square units).
     pub fn carried(&self) -> (f64, f64) {
         self.bristles.iter().fold((0.0, 0.0), |(p, s), b| (p + b.vol as f64, s + b.solvent as f64))
+    }
+}
+
+/// Which of a brush's bristles a dip reaches, and how much each takes up
+/// (see `Held::load_part`).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Part {
+    /// The edge of the brush's wide axis that goes into the pile: -1 one
+    /// edge, 1 the other, 0 the whole width alike.
+    pub side: f32,
+    /// The share of the width, from that edge, that reaches the paint (1 all).
+    pub share: f32,
+    /// How unevenly the bristles take it up: 0 alike, 1 in streaks (bands a
+    /// few bristles wide take much more, others little or none).
+    pub streak: f32,
+    /// The streaks' randomness (a new one for every dip).
+    pub seed: u64,
+}
+
+impl Part {
+    pub const ALL: Part = Part { side: 0.0, share: 1.0, streak: 0.0, seed: 0 };
+
+    /// How much of the dip bristle `i` (root offset `rx` across the wide
+    /// axis, about -1..1) takes, relative to an even dip (about 1 on
+    /// average over the part reached).
+    pub fn weight(&self, rx: f32, i: usize) -> f32 {
+        let mut w = 1.0;
+        if self.side != 0.0 && self.share < 1.0 {
+            // 0 at the far edge .. 1 at the dipped edge; a soft margin, as hairs splay
+            let t = (rx * self.side.signum() + 1.0) * 0.5;
+            let lo = 1.0 - self.share.clamp(0.0, 1.0);
+            w *= crate::smoothstep(lo - 0.08, lo + 0.08, t);
+        }
+        if self.streak > 0.0 {
+            // bands: neighboring bristles share a streak (a clump of hair goes in together)
+            let bands = 7.0;
+            let u = (rx + 1.0) * 0.5 * bands;
+            let (b0, f) = (u.floor(), u - u.floor());
+            let s = self.seed;
+            let a = crate::rng::hash2(b0 as i64, 91, s);
+            let c = crate::rng::hash2(b0 as i64 + 1, 91, s);
+            let band = a + (c - a) * crate::smoothstep(0.0, 1.0, f);
+            let own = crate::rng::hash2(i as i64, 92, s);
+            let n = 0.75 * band + 0.25 * own; // 0..1, mean 0.5
+            // n² has a mean of about 0.3: 3.3 n² keeps the dip's total about the same
+            let st = self.streak.clamp(0.0, 1.0);
+            w *= (1.0 - st) + st * (3.3 * n * n);
+        }
+        w.max(0.0)
     }
 }
 
@@ -1844,6 +1923,184 @@ pub(crate) unsafe fn touch_on(sf: Surf, held: &mut Held, t: &Touch, clip: Option
     bounds.map(|(x0, y0, x1, y1)| (x0 - sf.ox, y0 - sf.oy, x1 - sf.ox, y1 - sf.oy))
 }
 
+/// A flick of a loaded brush (spatter): the paint the hairs can't hold by
+/// capillarity flies off in droplets and lands in a cone toward the flick.
+///
+/// What flies is physical: only the loose paint beyond what each hair holds,
+/// more of it the harder the flick and the more fluid the paint (medium and
+/// turpentine thin it; blotted or stiff tube paint barely leaves the brush).
+/// A harder flick breaks it into more, smaller droplets. Each droplet comes
+/// off one hair and carries that hair's paint, so a double-loaded brush
+/// spatters both colors. Heavier droplets carry farther; those arriving at a
+/// slant stretch into ovals along their flight. They land in the wet layer
+/// like any paint: they mix into wet paint under them and dry with it.
+#[derive(Clone, Debug)]
+pub struct Spatter {
+    /// Where the brush is when it is flicked (canvas units).
+    pub at: (f32, f32),
+    /// The flick: its direction, and its length how far the paint carries
+    /// (canvas units).
+    pub toward: (f32, f32),
+    /// Half the angle of the cone the droplets fly in (radians).
+    pub spread: f32,
+    /// How hard the flick is, 0..1.
+    pub force: f32,
+    pub seed: u64,
+}
+
+/// A full load of a brush, in mm³ of paint, for its width in mm (a 10 mm
+/// brush holds about 0.08 ml).
+fn load_mm3(width_mm: f32) -> f32 {
+    0.08 * width_mm.max(0.5).powi(3)
+}
+
+impl Canvas {
+    /// Flick a held brush (see `Spatter`); returns how many droplets landed.
+    pub fn spatter(&mut self, held: &mut Held, sp: &Spatter, clip: Option<&Mask>) -> usize {
+        held.tool.assert_valid();
+        if self.engine < 3 {
+            self.assert_thinner_supported(held.holds_solvent(), "Canvas::spatter");
+        }
+        if let Some(m) = clip {
+            self.check_mask(m);
+        }
+        self.tally.touch();
+        let _id = self.next_stroke_ids(1);
+        let mm_per_px = self.px_mm();
+        let sf = self.surf();
+        let s = sf.scale;
+        let mut rng = Rng::new(sp.seed);
+        let force = sp.force.clamp(0.0, 1.0);
+        let full = held.full();
+        let n = held.bristles.len().max(1) as f32;
+        let width_mm = held.tool.width * s * mm_per_px;
+        // mm³ of paint per unit of bristle volume
+        let per_vol = load_mm3(width_mm) / (full * n);
+        // each hair's loose paint, and the share of it the flick throws
+        let mut budget: Vec<f32> = held
+            .bristles
+            .iter()
+            .map(|b| {
+                let liquid = b.vol + b.solvent;
+                let stiff = (b.hide[1] * b.vol / liquid.max(1e-9)).clamp(0.0, 1.0);
+                let fluid = (1.0 - stiff).clamp(0.0, 1.5);
+                let hold = full * (0.2 + 0.6 * stiff);
+                let loose = (liquid - hold).max(0.0);
+                loose * (force.powf(0.8) * (0.15 + 0.6 * fluid)).clamp(0.0, 0.95)
+            })
+            .collect();
+        let total: f32 = budget.iter().sum();
+        if total <= 0.0 {
+            return 0;
+        }
+        let stiff_mean = held.bristles.iter().map(|b| b.hide[1] * b.vol / (b.vol + b.solvent).max(1e-9)).sum::<f32>() / n;
+        // droplet sizes (radius in flight, mm): log-normal, smaller the harder the flick
+        let r_med = (0.32 * (1.25 - force) * (0.6 + 0.8 * stiff_mean)).clamp(0.04, 1.2);
+        let reach = (sp.toward.0 * sp.toward.0 + sp.toward.1 * sp.toward.1).sqrt().max(1e-3);
+        let dir = sp.toward.1.atan2(sp.toward.0);
+        let spread = sp.spread.clamp(0.0, 1.5);
+        let px_mm2 = mm_per_px * mm_per_px;
+        let (cx0, cy0) = (sp.at.0 * s, sp.at.1 * s);
+        let mut bounds: Bounds = None;
+        let mut count = 0usize;
+        let mut left = total;
+        let mut cum: Vec<f32> = Vec::with_capacity(budget.len());
+        let mut guard = 0;
+        while left > total * 0.002 && guard < 40000 {
+            guard += 1;
+            // the hair it comes off: by how much loose paint each still has
+            cum.clear();
+            let mut acc = 0.0;
+            for &v in &budget {
+                acc += v;
+                cum.push(acc);
+            }
+            if acc <= 0.0 {
+                break;
+            }
+            let pick = rng.f() * acc;
+            let bi = cum.iter().position(|&c| c >= pick).unwrap_or(budget.len() - 1);
+            let r = (r_med * (0.55 * rng.normal()).exp()).clamp(0.03, 2.5);
+            let want = (4.0 / 3.0) * std::f32::consts::PI * r * r * r / per_vol;
+            let take = want.min(budget[bi]);
+            budget[bi] -= take;
+            left -= take;
+            let vol_mm3 = take * per_vol;
+            let b = &mut held.bristles[bi];
+            let solvent_share = b.solvent / (b.vol + b.solvent).max(1e-9);
+            b.vol = (b.vol - take * (1.0 - solvent_share)).max(0.0);
+            b.solvent = (b.solvent - take * solvent_share).max(0.0);
+            // flight: off the flick's line by the cone, farther for heavier drops
+            let th = dir + (0.5 * spread * rng.normal()).clamp(-1.2 * spread, 1.2 * spread);
+            let d = reach * (0.35 + 0.65 * rng.f()) * (r / r_med).powf(0.25).clamp(0.5, 1.6);
+            let (px, py) = (cx0 + th.cos() * d * s, cy0 + th.sin() * d * s);
+            // on impact it spreads, less for stiff paint; a slanting arrival stretches it
+            let stiff = (b.hide[1] * (1.0 - solvent_share)).clamp(0.0, 1.0);
+            let r_land = r * (2.2 - 0.9 * stiff) / mm_per_px;
+            let stretch = 1.0 + 1.2 * force * (d / reach) * rng.f();
+            let (ra, rb) = ((r_land * stretch.sqrt()).max(0.35), (r_land / stretch.sqrt()).max(0.35));
+            let area_px = std::f32::consts::PI * ra * rb;
+            let coats_mean = vol_mm3 / (area_px * px_mm2).max(1e-9) * 1000.0 / crate::surface::COAT_UM;
+            let (ct, st) = (th.cos(), th.sin());
+            let ext = ra.max(rb) + 1.0;
+            let (x0, x1) = ((px - ext).floor() as i64, (px + ext).ceil() as i64);
+            let (y0, y1) = ((py - ext).floor() as i64, (py + ext).ceil() as i64);
+            let lat = b.lat;
+            let hide = b.hide;
+            let cure = b.cure;
+            // dome-shaped: thickest in the middle; weights normalised so the droplet's volume lands
+            let mut cells: Vec<(usize, usize, f32)> = Vec::new();
+            let mut wsum = 0.0;
+            for y in y0..=y1 {
+                for x in x0..=x1 {
+                    if x < 0 || y < 0 || x as usize >= sf.fw || y as usize >= sf.fh {
+                        continue;
+                    }
+                    let (dx, dy) = (x as f32 + 0.5 - px, y as f32 + 0.5 - py);
+                    let (u, v) = ((dx * ct + dy * st) / ra, (-dx * st + dy * ct) / rb);
+                    let q = u * u + v * v;
+                    let w = if q < 1.0 { (1.0 - q).sqrt() } else if ra < 1.0 && q < 2.0 { 0.15 * (2.0 - q) } else { 0.0 };
+                    if w <= 0.0 {
+                        continue;
+                    }
+                    wsum += w;
+                    cells.push((x as usize, y as usize, w));
+                }
+            }
+            if wsum <= 0.0 {
+                continue;
+            }
+            let mut landed = false;
+            for (x, y, w) in cells {
+                if x < sf.ox || y < sf.oy || x >= sf.ox + sf.w || y >= sf.oy + sf.h {
+                    continue;
+                }
+                let m = clip.map(|m| m.data[y * sf.fw + x]).unwrap_or(1.0);
+                if m <= 0.0 {
+                    continue;
+                }
+                let i = (y - sf.oy) * sf.w + (x - sf.ox);
+                let v = coats_mean * area_px * w / wsum * m;
+                // SAFETY: exclusive &mut self; i is inside the buffer window.
+                unsafe {
+                    *sf.cover.add(i) = 1.0;
+                    sf.add(i, v * (1.0 - solvent_share), &lat, hide, cure);
+                    if !sf.solv.is_null() { *sf.solv.add(i) += v * solvent_share * crate::surface::COAT_UM; }
+                };
+                grow(&mut bounds, x - sf.ox, y - sf.oy, x - sf.ox + 1, y - sf.oy + 1);
+                landed = true;
+            }
+            if landed {
+                count += 1;
+            }
+        }
+        if let Some((x0, y0, x1, y1)) = bounds {
+            self.wet.touch(x0, y0, x1, y1);
+        }
+        count
+    }
+}
+
 #[cfg(test)]
 mod tip_tests {
     use super::*;
@@ -2459,5 +2716,105 @@ mod kernel_traps {
         }
         assert!(differ > 0, "the cropped blur is bit-identical here: box_blur no longer keeps a running sum?");
         eprintln!("cropped box blur: {differ} of 1600 pixels differ, by up to {max:e}");
+    }
+}
+
+#[cfg(test)]
+mod part_tests {
+    use super::*;
+    use crate::color::hex;
+
+    fn vols(h: &Held) -> Vec<(f32, f32)> {
+        h.bristles.iter().map(|b| (b.rx, b.vol)).collect()
+    }
+
+    #[test]
+    fn whole_part_is_an_ordinary_load() {
+        let mut a = Held::new(Tool::filbert(12.0), 7);
+        let mut b = Held::new(Tool::filbert(12.0), 7);
+        a.load(Paint::body(hex("#445566")), 0.8);
+        b.load_part(Paint::body(hex("#445566")), 0.8, &Part::ALL);
+        assert_eq!(vols(&a), vols(&b));
+    }
+
+    #[test]
+    fn a_side_dip_reaches_only_that_side() {
+        let mut h = Held::new(Tool::filbert(12.0), 7);
+        h.load_part(Paint::body(hex("#c04040")), 0.8, &Part { side: 1.0, share: 0.4, streak: 0.0, seed: 1 });
+        for (rx, v) in vols(&h) {
+            if rx < -0.1 {
+                assert_eq!(v, 0.0, "bristle at {rx} took paint");
+            }
+            if rx > 0.6 {
+                assert!(v > 0.0, "bristle at {rx} took none");
+            }
+        }
+    }
+
+    #[test]
+    fn streaks_keep_about_the_same_paint() {
+        let mut even = Held::new(Tool::filbert(12.0), 7);
+        even.load(Paint::body(hex("#445566")), 0.8);
+        let mut sum = 0.0;
+        for seed in 0..40 {
+            let mut h = Held::new(Tool::filbert(12.0), 7);
+            h.load_part(Paint::body(hex("#445566")), 0.8, &Part { streak: 1.0, seed, ..Part::ALL });
+            sum += h.fullness() / even.fullness();
+            // and the bristles take it unevenly
+            let v: Vec<f32> = h.bristles.iter().map(|b| b.vol).collect();
+            let (lo, hi) = v.iter().fold((f32::MAX, 0f32), |(l, m), &x| (l.min(x), m.max(x)));
+            assert!(hi > 3.0 * lo.max(1e-9), "seed {seed}: {lo}..{hi}");
+        }
+        let mean = sum / 40.0;
+        assert!((0.8..1.2).contains(&mean), "mean {mean}");
+    }
+}
+
+#[cfg(test)]
+mod spatter_tests {
+    use super::*;
+    use crate::color::hex;
+
+    #[test]
+    fn review_spatter_transfers_solvent_and_covers_its_drops() {
+        let mut c = Canvas::new(200, 1.0, hex("#e8e0d0")).with_size_mm(300.0);
+        c.wet.cover.fill(0.1);
+        let mut h = Held::new(Tool::round_sable(12.0), 3);
+        h.load(Paint::new(hex("#b03020"), 0.9, 0.1).with_thinner(0.5), 1.0);
+        let before: f32 = h.bristles.iter().map(|b| b.solvent).sum();
+        assert!(c.spatter(&mut h, &Spatter { at: (300.0, 400.0), toward: (100.0, 0.0), spread: 0.2, force: 0.9, seed: 9 }, None) > 0);
+        let after: f32 = h.bristles.iter().map(|b| b.solvent).sum();
+        assert!(after < before && c.solvent_total() > 0.0, "spatter must transfer the load's solvent");
+        assert!(c.wet.vol.iter().zip(&c.wet.cover).filter(|(v,_)| **v > 0.0).all(|(_,cover)| *cover == 1.0));
+    }
+
+    fn flick(stiff: f32, force: f32) -> (usize, f32, f32) {
+        let mut c = Canvas::new(400, 2.0, hex("#e8e0d0")).with_size_mm(300.0);
+        let mut h = Held::new(Tool::round_sable(8.0), 3);
+        h.load(Paint::new(hex("#b03020"), 0.9, stiff), 1.0);
+        let before = h.fullness();
+        let n = c.spatter(&mut h, &Spatter { at: (100.0, 150.0), toward: (150.0, 0.0), spread: 0.4, force, seed: 9 }, None);
+        let laid: f32 = c.wet.vol.iter().sum();
+        (n, before - h.fullness(), laid)
+    }
+
+    /// Fluid paint flies; stiff paint mostly stays on the brush; a harder
+    /// flick throws more; what leaves the brush lands on the canvas.
+    #[test]
+    fn fluid_paint_flies_and_stiff_paint_stays() {
+        let (n_fluid, out_fluid, laid_fluid) = flick(0.1, 0.9);
+        let (_, out_stiff, _) = flick(0.95, 0.9);
+        let (_, out_soft, _) = flick(0.1, 0.2);
+        assert!(n_fluid > 20, "a hard flick of fluid paint throws many droplets ({n_fluid})");
+        assert!(out_fluid > 2.0 * out_stiff, "stiff paint stays on the brush ({out_fluid} vs {out_stiff})");
+        assert!(out_fluid > out_soft, "a harder flick throws more ({out_fluid} vs {out_soft})");
+        assert!(laid_fluid > 0.0, "the droplets land in the wet layer");
+    }
+
+    /// Same seed, same spatter.
+    #[test]
+    fn spatter_is_deterministic() {
+        assert_eq!(flick(0.2, 0.7).0, flick(0.2, 0.7).0);
+        assert_eq!(flick(0.2, 0.7).2.to_bits(), flick(0.2, 0.7).2.to_bits());
     }
 }

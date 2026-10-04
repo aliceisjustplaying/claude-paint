@@ -37,6 +37,35 @@ the picture is yours.
 - **Composition**: avoid a centered target. Unequal masses, a dominant side,
   one place that is clearly the most important.
 
+## Marks
+
+- **A hierarchy of marks.** A few large decisive strokes (`b:gesture`), many
+  middle ones, some small accents. One stroke size and one shape over a whole
+  area reads as texture, not as the thing.
+- **Marks get smaller with distance.** Sea, field, flower beds: give the pass
+  a `scale_at` that shrinks toward the horizon or the far end, so the
+  brushwork itself recedes.
+- **Marks follow the form.** Leaves along the branch, water level, grass up
+  the slope. Strokes that wander in every direction read as noise.
+- **Light is soft and quiet.** Glare and sunlit openings have soft edges and
+  little texture; busy, outlined strokes turn light into an object (a disc,
+  a moon). Don't paint strokes circling a center inside the light.
+- **Glitter** on water is small, sharp and dense far off, breaking into
+  scattered flecks near you; big uniform dabs read as beads. Tie it to a
+  light in the sky.
+
+## Spatter
+
+- **Flicked paint for what is scattered by nature**: spray, gravel, a field of
+  small flowers, lichen, the speckle of an old wall. `b:spatter{}` throws
+  droplets whose sizes, spacing and colors vary by themselves; aim it, don't
+  place each one.
+- **Thin the paint to make it fly**: a pile with medium or turpentine
+  spatters; blotted paint hardly does. A hard flick gives a fine spray, a
+  gentle one fat drops.
+- **Mask what must stay clean** with `clip=`: droplets fly past any edge.
+- A little goes a long way: a few flicks over a passage, then look.
+
 ## Forms and shadows
 
 - **A form is one mass.** Build a rounded thing (a stack, a tree, a figure)
@@ -50,6 +79,26 @@ the picture is yours.
   value and temperature from the object casting it.
 - **Distance lightens and cools**: far hills and trees paler and bluer than
   near ones, all of a range alike.
+
+## Color: broken, not mixed flat
+
+- **Many close piles.** Knife three to five piles of neighboring colors
+  (warmer, cooler, lighter, darker) and lay them as separate strokes over
+  the same area; the eye mixes them. `mix_jitter=` in `work` varies each
+  dip; a pile is never perfectly even.
+- **Two colors on one brush.** `b:load(p, 0.8); b:load(p2, 0.5, {side=1, share=0.4})`, or
+  `work(m, {pile=p, second={pile=p2, side=1, share=0.45}})`: each stroke carries both,
+  side by side, mingling as it goes. `streak=` loads unevenly, in bands.
+- **Wet into wet.** A stroke dragged through wet paint picks some of it up
+  and carries it along: color changes within the stroke. Work an area while
+  it is open (`drying(x, y)` says "open") for soft transitions; wait for it
+  to set for crisp, separate strokes on top.
+- **Watch the white.** Every pile with much lead white is chalky. Keep white
+  for the lights; let the darks and middles be pigment.
+- **Vary the touch.** One stroke length and one brush over a whole canvas
+  reads as a mechanical texture, however good the colors. Change brush size,
+  stroke length, direction and pressure from passage to passage; leave some
+  passages quiet.
 
 ## Glazing and scumbling (over dry paint)
 

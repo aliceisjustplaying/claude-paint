@@ -94,6 +94,21 @@ def test_a_late_result_reaches_a_client_that_already_had_the_call(home, server):
     assert r3["updates"] == []
 
 
+@pytest.mark.parametrize("entry", ["compaction", "recovery"])
+def test_saved_clock_survives_compaction_and_recovery_text_truncation(home, server, entry):
+    _, studio, log = home
+    summary = ("## Your journal\n" + "old notes\n" * 300
+               + "\n## The canvas clock\n\n"
+               "- Latest painting time the easel printed: day 1, 10:00\n"
+               "- Latest journal entry stamped: day 2, 12:34\n\n"
+               "## The canvas\nA picture.\n")
+    record = ({"type": "compaction", "summary": summary} if entry == "compaction" else
+              {"type": "message", "message": {"role": "user", "content": [{"type": "text", "text": summary}]}})
+    log.write_text(start(str(studio)) + line(record))
+    events = json.loads(server(f"/api/events?p={PAINTER}")[1])["events"]
+    assert [e["clock"] for e in events if "clock" in e] == ["day 2, 12:34"]
+
+
 def test_a_painter_whose_folder_is_gone_is_served_from_the_archive(home, server):
     # a round's worktree, removed: its painting's source is kept in archive/sources/<folder name>
     tmp_path, _, log = home

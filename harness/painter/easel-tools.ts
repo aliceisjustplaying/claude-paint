@@ -23,7 +23,7 @@ export function registerEaselTools(pi: ExtensionAPI, studio: string): void {
 			name: "paint",
 			label: "paint",
 			description:
-				"Run a chunk of Lua at the easel (notes/easel_guide.md). The reply is what the chunk printed, then `ok`. " +
+				"Run a chunk of Lua at the easel (notes/easel_guide.md). The reply is what the chunk printed, the painting's current clock, then `ok`. " +
 				"A chunk that stops with an error changes nothing.",
 			parameters: Type.Object({ lua: Type.String({ description: "the chunk" }) }),
 			async execute(_id, p, signal) {

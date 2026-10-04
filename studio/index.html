@@ -445,10 +445,10 @@ function ticks() {
 }
 // time spent painting up to event i (at time t): the sittings' durations summed, the gaps between them not counted
 // the painting's own clock at event i: the easel's time of day ("day 3, 14:20"; it began at 09:00 on day 1), from the last
-// chunk that printed it (wait() returns it and most painters print it). null before the first.
+// successful chunk or harness recovery summary. Older runs may have no recorded clock.
 function easelClockAt(i) {
-  for (let k = Math.min(i, events.length - 1); k >= 0; k--) { const e = events[k]; if (e.kind !== 'paint' || !e.out || e.err) continue;
-    const m = [...e.out.matchAll(/day (\d+), (\d\d):(\d\d)/g)].pop(); if (m) return { text: m[0], min: (+m[1] - 1) * 1440 + +m[2] * 60 + +m[3] - 540 }; }
+  for (let k = Math.min(i, events.length - 1); k >= 0; k--) { const e = events[k], text = e.clock || (e.kind === 'paint' && e.out); if (!text || e.err) continue;
+    const m = [...text.matchAll(/day (\d+), (\d\d):(\d\d)/g)].pop(); if (m) return { text: m[0], min: (+m[1] - 1) * 1440 + +m[2] * 60 + +m[3] - 540 }; }
   return null;
 }
 // a stretch of the painting's clock in words: minutes up to years
@@ -486,6 +486,7 @@ function kindOf(e) {
   if (e.kind === 'read') return e.ref && /\.(jpe?g|png|webp|gif)$/i.test(f) ? ['ref', '🖼', 'studies a reference picture'] : /\.(jpe?g|png)$/i.test(f) ? ['look', '👁', 'looks at the canvas'] : ['read', '📖', 'reads ' + f];
   if (e.kind === 'image') return e.ref ? ['ref', '🖼', 'studies a reference picture'] : ['look', '👁', 'looks at ' + (f || 'the canvas')];
   if (e.kind === 'look') return ['look', '👁', lookWords(e.text)[2]];
+  if (e.kind === 'clock') return ['notes', '◷', 'painting clock'];
   if (e.kind === 'paint') { const ok = paintOK(e);
     return [ok ? 'code' : e.err ? 'fail' : 'code', '🖌', ok ? 'paints' : (e.err ? 'paints, but its code has an error' : 'paints')]; }
   if (e.kind === 'jnote') return ['notes', '📝', 'writes in the journal'];
@@ -521,9 +522,10 @@ function status() {
   const t = atLive && active ? Date.now() : Date.parse(events[pos].ts), n = sitStarts.length;
   $('clock').textContent = fmt(paintedFor(pos, t)); $('clockbox').hidden = false;
   $('clocklbl').textContent = (atLive ? (active ? 'painting for' : 'painted for') : 'at') + (n > 1 ? (atLive ? ` · ${n} sittings` : ` · sitting ${sittingAt(pos)} of ${n}`) : '');
-  const ec = easelClockAt(pos), pc = $('pclock'); pc.hidden = !ec;
+  const ec = easelClockAt(pos), pc = $('pclock'); pc.hidden = false;
   if (ec) { pc.querySelector('b').textContent = stretch(ec.min);  // (one figure: time passed, as the real clock beside it; the easel's own reading goes in the tooltip)
-    pc.title = `The easel keeps its own clock: every stroke takes the time a hand would take, and the painter can let hours or months pass for paint to dry. This is how much of that time has passed, as the painter last read it (the easel said "${ec.text}"; it counts from 09:00 on day 1).`; }
+    pc.title = `The easel keeps its own clock: every stroke takes the time a hand would take, and the painter can let hours or months pass for paint to dry. This is the latest recorded time (${ec.text}; it counts from 09:00 on day 1).`; }
+  else { pc.querySelector('b').textContent = 'not recorded'; pc.title = 'This part of the session has no recorded painting time.'; }
   $('clockbox').title = n > 1 ? `time spent painting, summed over ${n} sittings (the gaps between sittings don't count)` : 'time since the session began';
   doing(atLive && active);
 }

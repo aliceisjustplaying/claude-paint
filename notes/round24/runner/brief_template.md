@@ -4,8 +4,7 @@
 
 ## Your studio
 - The folder {STUDIO}: this brief, your notes and the easel.
-- You paint at the easel: paint a chunk, look at the canvas, paint the
-  next. Its tools are `paint`, `look`, `note`, `status` and `log`;
+- The easel's tools are `paint`, `look`, `note`, `status` and `log`;
   notes/easel_guide.md explains them.
 - There is no undo. To change a passage, paint over it, or lift wet
   paint with a rag or a brush.
@@ -28,7 +27,6 @@
 
 ## Working
 - You make every artistic decision.
-- Look at your painting often, whole and close up.
 - Keep a working journal with `note` as you go: your own working notes.
   You can revise them.
 - Develop the painting until you judge it complete.

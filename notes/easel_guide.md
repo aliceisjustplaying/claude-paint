@@ -1,7 +1,7 @@
 # The easel
 
-The easel is a live oil painting. You send it Lua chunks with its `paint`
-tool, one at a time, and look at the canvas between them with `look`. Under it is a physical paint simulator: simulated
+The easel is a live oil painting. Its `paint` tool runs Lua chunks one at
+a time; `look` shows the canvas. Under it is a physical paint simulator: simulated
 bristles carry wet paint over a primed linen canvas, the paint levels and
 dries on a clock, and layers combine by Kubelka–Munk optics.
 
@@ -169,7 +169,8 @@ b:pressure_for(0.5)                      -- the pressure for a 0.5-unit line
 Widths are in canvas units. A brush keeps its paint across strokes and
 chunks, so strokes from one load run dry, and a brush that has been
 through wet paint carries some of it. Pressure ranges from 0 (lifted)
-to 1 (fully pressed); a stroke's `pressure` is `{start, end}`.
+to 1 (fully pressed); a stroke's `pressure` takes a number for constant
+pressure or `{start, end}`. A touch's `pressure` takes a number.
 `ramps` gives the press-down and lift-off fractions, `swell` pressure factors
 along the stroke, `orient` `"across"`, `"along"` or a fixed angle.
 
@@ -466,7 +467,7 @@ doesn't dry while you think. `wait(minutes)` passes painting time at once;
 it doesn't make you wait that many real minutes.
 
 Every successful paint reply reports the current painting time automatically,
-before `ok`. You do not need to print it yourself.
+before `ok`.
 
 - **Hand time.** Every stroke, touch, pass and trip to the palette takes
   the time a hand takes to make it: a stroke by its length and the
@@ -527,6 +528,9 @@ other option, and nothing on the canvas or the clock changes.
 
 ## How chunks behave
 
+- **Option types.** Each option takes the type shown in this guide.
+  Options documented as `function(x, y)` accept a Lua function; numeric
+  options take the computed number.
 - **Globals persist, locals don't.** Each chunk is its own Lua chunk:
   `p = pile{...}` is there in later chunks, `local p = ...` is not.
 - **Randomness is deterministic.** `math.random`, `rand` and `randn` are

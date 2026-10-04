@@ -1,5 +1,7 @@
 # Start here (October 4, 2026)
 
+**Newer: [HANDOVER-2.md](HANDOVER-2.md) (October 4, evening; branch `rag`). Read it first.**
+
 The consolidation is done. The work is in [HANDOVER.md](HANDOVER.md), section 6
 (rag, then thinner, then sienna, then the first engine-3 painting). Sections 2
 to 5 there describe the state before the consolidation; skip them.

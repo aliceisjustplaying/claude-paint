@@ -104,6 +104,38 @@ the picture is yours.
   stroke length, direction and pressure from passage to passage; leave some
   passages quiet.
 
+## Impasto
+
+- **Thick where it counts.** Most of a canvas is thin: lay-in and shadows
+  lean (turpentine), middle tones as from the tube. Keep the thick, blotted
+  paint for the lights and the accents. Impasto everywhere is as flat as
+  impasto nowhere. `load_at=` varies the load across a pass; `scale_at` gives
+  ridges of different sizes.
+
+- Stiff paint holds the brush's marks: blot it (`blot=0.3`) or use it as it
+  comes from the tube, with no medium. A full brush lays more with `lay=4`
+  to `lay=16`; a coarse hog brush (larger `hair`) leaves coarser ridges.
+- In stiff paint the hairs gather into clumps: strokes lie in ridges and
+  furrows, walls rise along their sides, a bead where they end. Fluid paint
+  levels flat: that is a glaze's job, not impasto's.
+- Check it with `look` and `mode: "relief"` (raking light from the upper
+  left at 25°: it exaggerates, as a raking lamp does) and with
+  `mode: "gallery"` (55°, as the picture is seen on a wall). Judge the
+  picture under the gallery light; use raking light to inspect the surface.
+- Let impasto set before painting into it, unless you want the new stroke
+  to drag the old one along.
+
+## The knife
+
+- `k = knife{width=30}; k:load(p, 1.0); k:lay(points, {pressure={0.5, 0.5}})`
+  lays a slab with a flat top, torn where it parts from the blade (its ends,
+  its leading edge): light pressure lays it thick, and the paint runs out
+  sooner; firm pressure thin, and it goes further. The points set its path.
+- Pulled lightly over **dry** impasto, it catches only the ridges: broken
+  color over a textured underlayer, a sparkle of light paint on dark.
+- `k:scrape(points, {pressure=1})` takes wet paint off down to what is dry:
+  to restate a passage, or to leave a ghost of it.
+
 ## Glazing and scumbling (over dry paint)
 
 - **Glaze**: a transparent paint (lakes, viridian, ultramarine, a little of

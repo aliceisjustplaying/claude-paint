@@ -7,8 +7,9 @@ named tests, with commands, expected results and error limits. Written
 before the thinner exists, for review. After approval these files are
 frozen: the program changes to pass them, not the other way round.
 
-Branch `thinner2`, on top of e39da64 (af49348 merged into the phase-1
-diagnosis c692eae). The file hashes are at the end.
+Branch `thinner2`: e39da64 (af49348 merged into the phase-1 diagnosis
+c692eae), then the before-change baseline a97c3a6 merged as 6cf9384. The
+file hashes are at the end.
 
 ## How to run
 
@@ -18,7 +19,7 @@ command in `scripts/lockrun` once the lead approves it.
 
 | command | runs | time limit |
 |---|---|---|
-| `scripts/test_thinner_acceptance --quick` | every check below except the four slow ones | 60 s once built |
+| `scripts/test_thinner_acceptance --quick` | check 2 and every test below except the four slow ones | 60 s once built |
 | `scripts/test_thinner_acceptance --card` | check 1 only | 300 s |
 | `scripts/test_thinner_acceptance --all` | everything, check 1 included | 600 s |
 
@@ -30,6 +31,8 @@ It needs only cargo and bash (nothing from `codex/speed`). Check 1 is
 
 Single tests, exactly:
 
+- check 2: `cargo build --release -p easel && scripts/thinner_check2 target/release/easel`
+- check 13: `cargo test --release -p paint --test thinner_pigments -- --exact <name>`
 - paint: `cargo test --release -p paint --test thinner_physics -- --exact <name>`
 - easel: `cargo test --release -p easel --bin easel -- --exact thinner_tests::<name>`
 - check 1: `cargo test --release -p easel --bin easel -- --exact --ignored --nocapture thinner_tests::c01_the_card_raw_sienna_thinned_half_keeps_half_the_contrast_at_2400px`
@@ -38,10 +41,13 @@ Single tests, exactly:
 
 | file | what |
 |---|---|
-| `crates/paint/tests/thinner_physics.rs` | checks 4, 5, 6, 8 (small thinner), 9, 10, 13, 14, 15, 16, 17, 19 against the paint engine's public API |
+| `crates/paint/tests/thinner_physics.rs` | checks 4, 5, 6, 8 (small thinner), 9, 10, 14, 15, 16, 17, 19 against the paint engine's public API |
+| `crates/paint/tests/thinner_pigments.rs` | check 13, on af49348's API only (it runs today) |
+| `crates/paint/tests/thinner/tubes_af49348.txt` | check 13's answer: the tube table printed by unchanged af49348 |
+| `scripts/thinner_check2` | check 2, on the baseline's own tools |
 | `crates/paint/tests/thinner_support/mod.rs` | their measuring helpers, and the list of the interface they need |
-| `crates/easel/src/thinner_tests.rs` | checks 1, 2, 3, 7, 8 (the card), 11, 12, 18 and the rag study, at the easel (Lua, sessions, saves, logs) |
-| `crates/easel/src/thinner_measure.rs` | their helpers: the card, sums, the baseline reader, pictures |
+| `crates/easel/src/thinner_tests.rs` | checks 1, 3, 7, 8 (the card), 11, 12, 18 and the rag study, at the easel (Lua, sessions, saves, logs) |
+| `crates/easel/src/thinner_measure.rs` | their helpers: the card, sums, af49348's old files, pictures |
 | `crates/easel/tests/thinner/*.lua` | tiny inputs: a canvas, thinned strokes, a next chunk, a failing chunk, a four-chunk log |
 | `crates/easel/src/main.rs` | two test-only lines that compile the easel modules (`#[cfg(all(test, feature = "replay"))]`) |
 | `scripts/test_thinner_acceptance` | the commands above |
@@ -62,6 +68,7 @@ What exists at af49348 is used as it is. New, for the builder to provide
 - The engine-3 save starts `PAINTCK9`, keeps every byte of the PAINTCK8 layout after the magic, and ends with the solvent: one little-endian f32 (µm) per buffer pixel, row major, as the file's last 4 × pixels bytes. Anything else new goes between the two.
 - Lua, engine 3: `pile{..., thinner = t}`, `p.thinner` (0.0 when not given), and `print(p)` showing `, thinner t` after the medium only when `t > 0`. Engines 1 and 2: the key is an error, `p.thinner` is nil and `print(p)` is unchanged.
 - `save::read` refuses a PAINTCK8 save of an engine-3 canvas from its header, naming af49348; `Canvas::read_state` refuses a PAINTCK8 checkpoint of an engine-3 canvas, naming af49348.
+- The state dumper (`easel run --dump-state`, `crates/{paint,easel}/src/state_dump.rs`, part of the protected baseline) gains the solvent and any new clock fields under new names; no existing field is renamed or redefined.
 
 The last-bytes rule lets four tests (10 drying, 15, 17, 19) make "the same
 paint with a different amount of solvent" through the save, without a
@@ -70,8 +77,8 @@ setter only tests would use.
 ## The checks
 
 "Rounding" below means float error, not tolerance for different behavior.
-Every limit was chosen before any thinner code exists and without running
-the tests (no heavy-job turn yet); where a limit could be wrong for
+Every limit was chosen before any thinner code exists, so none was fitted
+to a run; where a limit could be wrong for
 today's code, the test carries an unthinned control on today's code path
 that must pass the same limit.
 
@@ -98,37 +105,47 @@ Measured on the open paint once the solvent has gone, not after drying.
 
 ### 2. No thinner
 
-`thinner_tests::c02_no_thinner_or_thinner_0_leaves_the_saved_paint_state_unchanged`.
+`scripts/thinner_check2 <release easel>`, which `--quick` and `--all` run
+after `cargo build --release -p easel`. The answers are the before-change
+baseline, `notes/thinner/baseline/` (commit a97c3a6, made by the speed agent
+from unchanged af49348 in a release build and checked independently by the
+lead). Its README gives the format. Two parts, both required:
 
-Each before-change scene in `notes/thinner/baseline/` is replayed twice:
-its log as it is, and with `thinner=0` added to every `pile{`. Expected:
-the new save starts `PAINTCK9`; bytes 8 to the end of the old save are the
-same as the old PAINTCK8 save's (every existing paint-state value,
-exactly); the solvent section is all zero; `solvent_total() == 0`.
+1. `notes/thinner/baseline/tools/compare_build.sh <easel> --added-zero`.
+   It replays the six scenes (stroke, body, overlap, pickup, rag, wait;
+   128×64 px, 27 chunks). It compares every field of the full state after
+   every chunk bit for bit: canvas per pixel, clock, brushes' bristles,
+   rags, studio. Every field the new engine adds (solvent) must be zero.
+   It must exit 0, and all six PNGs must be af49348's.
+2. The same six scenes with `thinner=0` written into every `pile{`. The
+   same state comparison with `--added-zero` (`state_compare.py`), and the
+   same PNGs.
 
-**TODO (baseline).** The baseline is the speed agent's, from unchanged
-af49348 on `codex/speed`; it isn't in this branch yet. The reader,
-`thinner_measure::baseline_scenes`, assumes `scenes.txt` with one scene a
-line (`<name> <width px> <log file> <state file>`), the state file being
-`Canvas::write_state(.., "")` bytes. When the lead names the baseline
-commit and it is merged, the reader is adapted to its real format and
-reviewed again; the test and its rule stay. Until then the test fails with
-"no before-change baseline in this branch yet".
+Not criteria, as the baseline's README says: the `canvas=` digest (PAINTCK9
+changes it by itself) and the printed output (reported).
 
 ### 3. Old files
 
-- `thinner_tests::c03_a_paintck8_save_of_an_engine_3_canvas_is_refused_by_its_header_naming_the_old_version`.
-  The input is a tiny file: `PAINTCK8`, a save header saying `engine=3`, and
-  no canvas after it. `save::read` must return an error that contains
-  `af49348`, not the "failed to fill whole buffer" of running out of file.
-- `thinner_tests::c03_a_baseline_paintck8_checkpoint_is_refused_naming_the_old_version`:
-  the baseline's real PAINTCK8 checkpoints. `Canvas::read_state` must
-  refuse each one with an error that contains `af49348` (same TODO as check 2).
-- `thinner_tests::c03_engines_1_and_2_have_no_thinner_and_engine_3_has`:
-  on engines 1 and 2, `thinner=` is an error and a pile prints
-  `nil	pile(raw sienna 1; medium 0)`. On engine 3: `0.0	pile(raw sienna 1; medium 0)`
-  without it and `0.5	pile(raw sienna 1; medium 0, thinner 0.5)` with it;
-  0.95, -0.1 and a string are errors.
+The inputs are the baseline's `old_files/`, made by unchanged af49348.
+
+- `thinner_tests::c03_af49348_paintck8_saves_are_refused_naming_the_old_version`.
+  The genuine PAINTCK8 save of an engine-3 canvas (`paintck8_save_stroke.ckpt.xz`,
+  decompressed with `xz`) and its first 280 bytes alone (magic and header,
+  no canvas, `paintck8_save_header.bin`). Expected:
+  - `save::read` refuses both with an error that contains `af49348`;
+  - the error isn't the "failed to fill whole buffer" of running out of
+    file, so the refusal comes from the header, before anything is painted;
+  - `Canvas::read_state` refuses the save's checkpoint, naming `af49348`.
+- `thinner_tests::c03_af49348_engine_3_logs_still_replay`. The two engine-3
+  logs af49348's live session wrote, with and without a box line. They are
+  compatible (with no thinner, engine 3 paints as before: check 2), so
+  every chunk replays.
+- `thinner_tests::c03_engines_1_and_2_have_no_thinner_and_engine_3_has`.
+  - Engines 1 and 2: `thinner=` is an error, and a pile prints
+    `nil	pile(raw sienna 1; medium 0)`.
+  - Engine 3: `0.0	pile(raw sienna 1; medium 0)` without it, and
+    `0.5	pile(raw sienna 1; medium 0, thinner 0.5)` with it.
+  - 0.95, -0.1 and a string are errors.
 
 The engine-1/2 replays themselves stay covered by the existing tests
 (`engine_2_logs_replay_as_before`, `logs_without_an_engine_line_replay_as_before`).
@@ -282,13 +299,42 @@ with solvent on the canvas at the end.
 
 ### 13. Pigment ordering
 
-`c13_pigment_values_are_unchanged_and_burnt_sienna_is_the_more_transparent`.
+`crates/paint/tests/thinner_pigments.rs`. It uses only af49348's API, so it
+runs on today's code.
 
-Expected:
+- (a) `c13_every_pigment_value_is_af49348s`. The whole tube table must
+  equal `crates/paint/tests/thinner/tubes_af49348.txt`, byte for byte: the
+  catalog (each tube's name, pigment, masstone, hiding, stiffness,
+  strength and both drying rates, floats in shortest exact form) and every
+  box with its tubes and engine. The file is the output of the ignored
+  `print_tube_table` test, run on a detached worktree of af49348
+  (`af49348239421791509f7b7c36e9dc39305b26fe`) with only this test file
+  added. Command:
+  `TUBE_TABLE_OUT=<file> cargo test --release -p paint --test thinner_pigments -- --exact --ignored print_tube_table`
+  (rustc 1.97.1, release; sha256 `542e25ab…5e15c2`). **Passes today.**
+- (b) `c13_burnt_sienna_shows_the_card_at_least_as_well_as_raw_sienna`.
+  Measured the card's way. A bone-black and a lead-white band are laid
+  thick and dried. The same 20 filbert strokes of unthinned raw sienna,
+  then of burnt sienna (Sargent box, load 0.5), go across both bands, and
+  the test asserts the films are equal pixel for pixel. Expected: burnt
+  sienna lets at least as much of the black/white contrast show as raw
+  sienna (Field/Salter 1869 §155: burnt is "more transparent than the raw
+  earth").
 
-- raw sienna (`#9a6a2b`, hiding 0.4, stiffness 0.5, strength 0.7) and
-  burnt sienna (`#7c3f24`, 0.45, 0.55, 0.9) keep af49348's values bit for bit;
-- burnt sienna scatters less per coat (Field/Salter 1869 §155).
+  **PRE-EXISTING FINDING, for the user's decision. (b) fails on unchanged
+  code.** These are this branch's paint sources, which equal af49348's
+  (see (a)); measured on 2026-10-04:
+
+  | | hiding (one coat's contrast ratio) | scattering per coat | masstone luminance | card contrast showing, equal 10.07 µm film |
+  |---|---|---|---|---|
+  | raw sienna | 0.40 | 0.296 | 0.174 | **17.91%** |
+  | burnt sienna | 0.45 | 0.199 | 0.080 | **9.85%** |
+
+  Burnt sienna scatters less, but its darker masstone absorbs much more,
+  so on the card it hides more than raw sienna. The tube table's hiding
+  says the same: 0.45 against 0.40. The test stays as written, an expected
+  failure, labeled. Pigments are not changed (the plan forbids it, and
+  passing check 1 must not depend on it).
 
 ### 14. Stroke points
 
@@ -439,11 +485,16 @@ needs the reviewer's eyes as well.
    level measurably within one τ, and to change thickness by >1% at 50+
    pixels within one minute. That is a modeling commitment ("solvent
    makes wet paint flow more"); its size is an estimate.
-5. **Limits chosen without a run.** No heavy-job turn was available. The
-   unthinned controls (checks 4, 8, 14) hold today's code to the same
-   limits; if a control fails, the limit is wrong and goes back to review.
+5. **Limits chosen without a run.** No thinner code exists, so no limit
+   was checked against a run. The unthinned controls (checks 4, 8, 14)
+   hold today's code to the same limits; if a control fails, the limit is
+   wrong and goes back to review.
 6. **Check 1 measures open paint** after the solvent has gone, as the
    plan says, not dried paint.
+7. **Check 13 (b) fails today** (above): the sienna order in the code is
+   the reverse of Field/Salter's on the card. Is that a defect to fix
+   later in the tube values (not tonight), or should the check be
+   restated? Not the thinner agent's call.
 
 ## File hashes (sha256)
 
@@ -452,15 +503,18 @@ for the commit.
 
 | sha256 | file |
 |---|---|
-| `416736d1dbc5e2e8c907922f1127565d1cfa781b39d09ade1e506cd3778ee5f0` | `crates/paint/tests/thinner_physics.rs` |
+| `162386aa11117a8737b743d1d4cf9926d64480514d4f114f2561fbf2701cf8c8` | `crates/paint/tests/thinner_physics.rs` |
 | `8a2477dd336aa76918b8ed617caf8fe8bd2ef48dcb1778117696807d12941a7e` | `crates/paint/tests/thinner_support/mod.rs` |
-| `9c45436c95853bff24146e24f9985fbb9f66d7ac79f7fbbb64ac632a90e3c3f1` | `crates/easel/src/thinner_tests.rs` |
-| `a75ef7bdac6a359e7d0aee3524130410e39851e72a2495041f31f8009ea25beb` | `crates/easel/src/thinner_measure.rs` |
+| `53924605cde088b16056fd31d69d57f96c5eae8d5c4674858326823bb0ca06cc` | `crates/paint/tests/thinner_pigments.rs` |
+| `542e25ab395446ea79c893640e5515702309b145f99a5da5ff7e617ea83e15c2` | `crates/paint/tests/thinner/tubes_af49348.txt` |
+| `f0c5fd6f5cae03ecd3bfb51af29d7ca55cb40760472541fb563134cd1947bbd2` | `crates/easel/src/thinner_tests.rs` |
+| `d68be6f845ee8f20b2f8274a20f197b627b9bb1e60a56f0df23730aa5d009053` | `crates/easel/src/thinner_measure.rs` |
 | `c3c9c40a29b19a5c4a2e42b6dd85871d1429160abea221000460d95f1caa73d9` | `crates/easel/tests/thinner/canvas.lua` |
 | `31e301b3f309913d55147c7c2a626bf3a8bb8ca57c8859b2884403e68d30919d` | `crates/easel/tests/thinner/thinned.lua` |
 | `83a9244e38ef0eca10903a4d7a4761ac3f8dd6861d564526cfe6c2f8c9325259` | `crates/easel/tests/thinner/next.lua` |
 | `e140d15e4e0d93f9e522aa85a10cece5dcbe66ba8d4d16ea9bd6ddc4649b5527` | `crates/easel/tests/thinner/failing.lua` |
 | `55ad4b849994870ef8c14a46e1c655bd60b32c4860e7d96916437331c5e89623` | `crates/easel/tests/thinner/determinism.lua` |
-| `2d8c04f031a0d3fec77a69ba50a22f2b7584123363617ffc193d3dc03c35071f` | `scripts/test_thinner_acceptance` |
+| `693d4a44518f5d3db3aed518d75c3dd700bb9dc80923bbe0a878746108415f7e` | `scripts/test_thinner_acceptance` |
+| `0e7177407c4a0f30876df8e95e4b02ee1e6d9495c9c4c750df77b62499516964` | `scripts/thinner_check2` |
 
-`crates/easel/src/main.rs` gains only the four test-only lines shown in the tests commit's diff (it changes for other reasons, so its hash isn't recorded).
+`crates/easel/src/main.rs` gains only the four test-only lines shown in the tests commit's diff (it changes for other reasons, so its hash isn't recorded). The baseline's own files are listed in `notes/thinner/baseline/SHA256SUMS` (commit a97c3a6).

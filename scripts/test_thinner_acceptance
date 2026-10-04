@@ -31,21 +31,24 @@ PAINT_QUICK=(
   c08_a_hundredth_of_thinner_is_a_small_change
   c09_the_solvent_evaporates_and_the_film_loses_its_volume
   c10_a_solvent_wet_film_spreads_more_than_after_the_solvent_has_gone
-  c13_pigment_values_are_unchanged_and_burnt_sienna_is_the_more_transparent
   c14_more_points_on_the_same_path_lay_the_same_paint_and_one_stroke_shares_one_limit
   c15_solvent_does_not_slow_the_oil_cure
   c16_brush_rag_and_spreading_carry_solvent_in_the_local_ratio
   c17_a_wait_split_on_the_minute_grid_is_exact_and_off_it_within_1e4
   c19_the_same_paint_with_more_or_less_solvent_looks_the_same
 )
+# crates/paint/tests/thinner_pigments.rs (check 13; runs on unchanged code too)
+PIGMENTS=(
+  c13_every_pigment_value_is_af49348s
+  c13_burnt_sienna_shows_the_card_at_least_as_well_as_raw_sienna
+)
 PAINT_SLOW=(
   c10_thinned_and_unthinned_paint_of_equal_thickness_gel_and_dry_together
 )
 # crates/easel/src/thinner_tests.rs (unit tests of the easel binary)
 EASEL_QUICK=(
-  thinner_tests::c02_no_thinner_or_thinner_0_leaves_the_saved_paint_state_unchanged
-  thinner_tests::c03_a_paintck8_save_of_an_engine_3_canvas_is_refused_by_its_header_naming_the_old_version
-  thinner_tests::c03_a_baseline_paintck8_checkpoint_is_refused_naming_the_old_version
+  thinner_tests::c03_af49348_paintck8_saves_are_refused_naming_the_old_version
+  thinner_tests::c03_af49348_engine_3_logs_still_replay
   thinner_tests::c03_engines_1_and_2_have_no_thinner_and_engine_3_has
   thinner_tests::c07_two_overlapping_thinned_passes_leave_more_paint_than_one
   thinner_tests::c11_a_save_mid_evaporation_reopens_to_the_same_state_and_goes_on_the_same
@@ -96,8 +99,29 @@ run() {
   done
 }
 
+# check 2: the before-change baseline's own comparison (scripts/thinner_check2)
+check2() {
+  local log="$logs/check2.log" t0 t1 status
+  required=$((required + 1))
+  t0=$(date +%s)
+  echo "== check 2: cargo build --release -p easel, then scripts/thinner_check2"
+  set +e
+  { cargo build --release -p easel && scripts/thinner_check2 "${CARGO_TARGET_DIR:-target}/release/easel"; } 2>&1 | tee "$log"
+  status=${PIPESTATUS[0]}
+  set -e
+  t1=$(date +%s)
+  echo "== check 2: exited $status after $((t1 - t0)) s"
+  if [ "$status" = 0 ] && grep -qx "check 2: PASS" "$log"; then
+    passed=$((passed + 1))
+  else
+    bad+=("check 2 (scripts/thinner_check2: see $log)")
+  fi
+}
+
 case "$mode" in
   --quick)
+    check2
+    run pigments --release -p paint --test thinner_pigments -- --exact ::: "${PIGMENTS[@]}"
     run paint --release -p paint --test thinner_physics -- --exact ::: "${PAINT_QUICK[@]}"
     run easel --release -p easel --bin easel -- --exact ::: "${EASEL_QUICK[@]}"
     ;;
@@ -105,6 +129,8 @@ case "$mode" in
     run card --release -p easel --bin easel -- --exact --ignored --nocapture ::: "${CARD[@]}"
     ;;
   --all)
+    check2
+    run pigments --release -p paint --test thinner_pigments -- --exact ::: "${PIGMENTS[@]}"
     run paint --release -p paint --test thinner_physics -- --exact ::: "${PAINT_QUICK[@]}" "${PAINT_SLOW[@]}"
     run easel --release -p easel --bin easel -- --exact --nocapture ::: "${EASEL_QUICK[@]}" "${EASEL_SLOW[@]}"
     run card --release -p easel --bin easel -- --exact --ignored --nocapture ::: "${CARD[@]}"

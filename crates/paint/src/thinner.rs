@@ -127,6 +127,42 @@ pub fn spread_mm2_min(phi: f32) -> f32 {
     SPREAD_MM2_MIN * phi / (1.0 - phi)
 }
 
+// EXPERIMENT (AGENT_BRIEF_V2 §4c), per thread: false today (a thinned
+// stroke adds at most `stroke_limit_um` of wet film to a pixel, per stroke
+// id, and lifts at most its share of the film there once per stroke id);
+// true exchange (no ceiling and no per-stroke allowance: the hair lays a
+// share of what it carries and lifts a share of the wet film it touches,
+// every segment, so what stays on the canvas follows the brush's actual
+// supply).
+thread_local! {
+    static EXCHANGE: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+pub fn set_exchange(on: bool) {
+    EXCHANGE.with(|c| c.set(on));
+}
+
+pub fn exchange() -> bool {
+    EXCHANGE.with(|c| c.get())
+}
+
+// EXPERIMENT, with the exchange on: a thinned hair lets go of its liquid
+// at (1 - t)^k of the rate tube paint does (runnier paint leaves a thinner
+// film behind a moving surface, Landau-Levich, qualitatively), and a
+// brush dipped in thinned paint holds (1 - t)^j of the liquid (runny
+// paint drains off the hairs). k and j are chosen estimates; 0 is off.
+thread_local! {
+    static EXCH_KJ: std::cell::Cell<(f32, f32)> = const { std::cell::Cell::new((0.0, 0.0)) };
+}
+
+pub fn set_exchange_kj(k: f32, j: f32) {
+    EXCH_KJ.with(|c| c.set((k, j)));
+}
+
+pub fn exchange_kj() -> (f32, f32) {
+    EXCH_KJ.with(|c| c.get())
+}
+
 /// Ticks a minute on the grid the solvent's loss and flow step on
 /// (`Canvas::wait`): a chosen numerical resolution, not a physical
 /// constant. A power of two, so quarter minutes fall on it exactly.
@@ -702,6 +738,206 @@ mod tests {
         println!("flow's net solvent / solvent at minute start, |.|: median {:.2e}, p99 {:.2e}, max {:.2e}", q(0.5), q(0.99), q(1.0));
         println!("worst: margin {:.2e} at minute {}, pixel {}: got-law {:.3e} = evaporation-only {:.3e} + flow {:.3e} (paint change d {:.2e}, allowed {:.2e})",
             worst.0, worst.1, worst.2, worst.3, worst.4, worst.5, worst.6, 1e-4 + 2.0 * worst.6);
+    }
+
+    /// AGENT_BRIEF_V2 §4c: today's rule against the exchange experiment
+    /// (`set_exchange`), raw umber thinned 0.5, on linen and on a smooth
+    /// ground. Scenes: one stroke; a broad pass (8 overlapping strokes,
+    /// each freshly loaded); three such passes wet; three with the paint
+    /// dried between; one load scrubbed 4 times over a band (lifted between,
+    /// no reload); one exact stroke against the same stroke in two calls.
+    /// Prints paint (µm) mean and relative spread in the middle, solvent,
+    /// and the brush's paint left, right after and after 5 minutes. With
+    /// `EXCH_DIR`, saves each canvas as PNG.
+    /// `EXCH_DIR=/tmp/x cargo test --release -p paint --lib thinner::tests::exchange_scenes -- --ignored --nocapture`
+    #[test]
+    #[ignore]
+    fn exchange_scenes() {
+        use crate::Linen;
+        let pal = Palette::named_box("inness").unwrap();
+        let umber = pal.pile(vec![(pal.tubes.iter().position(|t| t.name == "raw umber").unwrap(), 1.0)]).laid(0.0).with_thinner(0.5);
+        let out = std::env::var("EXCH_DIR").ok().map(std::path::PathBuf::from);
+        let base = |linen: bool| {
+            let mut c = Canvas::new(1200, 0.7, hex("#d8cdb8")).with_engine(3);
+            if linen {
+                c = c.with_linen(Linen::fine(3));
+            }
+            c.prime(hex("#e4dcc8"), 0.9, 60.0, 0.6, if linen { 0.2 } else { 0.0 }, 7);
+            c
+        };
+        let g = |pts: Vec<(f32, f32)>| Gesture::new(pts).pressure(0.85, 0.85);
+        let pass = |c: &mut Canvas, seed: u64| {
+            for k in 0..8 {
+                let y = 250.0 + 25.0 * k as f32;
+                let mut h = Held::new(Tool::hog_flat(40.0), seed + k);
+                h.load(umber, 0.9);
+                c.drag(&mut h, &g(vec![(250.0, y), (750.0, y + 3.0)]), None);
+            }
+        };
+        // (paint µm mean, relative spread, solvent µm mean) in a rectangle
+        let stats = |c: &Canvas, r: (f32, f32, f32, f32)| {
+            let f = c.f;
+            let (mut n, mut sp, mut sp2, mut ss) = (0.0f64, 0.0f64, 0.0f64, 0.0f64);
+            for i in 0..f.w * f.h {
+                let (x, y) = (f.ux(i % f.w), f.uy(i / f.w));
+                if x >= r.0 && x < r.2 && y >= r.1 && y < r.3 {
+                    let p = (c.wet.vol[i] * super::COAT_UM) as f64;
+                    n += 1.0;
+                    sp += p;
+                    sp2 += p * p;
+                    ss += c.wet.solv[i] as f64;
+                }
+            }
+            let m = sp / n;
+            (m, (sp2 / n - m * m).max(0.0).sqrt() / m.max(1e-9), ss / n)
+        };
+        let mid = (350.0, 280.0, 650.0, 420.0);
+        for linen in [true, false] {
+            let sets: Vec<(bool, f32, f32)> = std::env::var("EXCH_SETS").ok().map_or(vec![(false, 0.0, 0.0), (true, 0.0, 0.0)], |v| {
+                v.split(';').map(|t| if t == "today" { (false, 0.0, 0.0) } else { let (k, j) = t.split_once(',').unwrap(); (true, k.parse().unwrap(), j.parse().unwrap()) }).collect()
+            });
+            if !linen && std::env::var("EXCH_LINEN_ONLY").is_ok() {
+                continue;
+            }
+            for (ex, kk, jj) in sets {
+                super::set_exchange(ex);
+                super::set_exchange_kj(kk, jj);
+                let tag = format!("{}-{}", if linen { "linen" } else { "smooth" }, if ex { format!("k{kk}j{jj}") } else { "today".into() });
+                let mut report = |name: &str, c: &mut Canvas, r: (f32, f32, f32, f32), brush: Option<f64>| {
+                    let a = stats(c, r);
+                    let mut d = c.clone();
+                    d.wait(5.0);
+                    let b = stats(&d, r);
+                    println!(
+                        "{tag:>16} {name:<14} paint {:6.2} µm (spread {:.2}) solvent {:5.2} | after 5 min paint {:6.2} (spread {:.2}) solvent {:5.2}{}",
+                        a.0, a.1, a.2, b.0, b.1, b.2,
+                        brush.map_or(String::new(), |p| format!(" | brush paint left {:.0}%", 100.0 * p))
+                    );
+                    if let Some(o) = &out {
+                        std::fs::create_dir_all(o).unwrap();
+                        c.save(o.join(format!("{tag}-{}.png", name.replace(' ', "_")))).unwrap();
+                    }
+                };
+                // one stroke
+                let mut c = base(linen);
+                let mut h = Held::new(Tool::hog_flat(40.0), 5);
+                h.load(umber, 0.9);
+                let p0 = h.carried().0;
+                c.drag(&mut h, &g(vec![(250.0, 350.0), (750.0, 353.0)]), None);
+                report("1 stroke", &mut c, (350.0, 340.0, 650.0, 362.0), Some(h.carried().0 / p0));
+                // a broad pass, three wet, three dried between
+                for (name, n, dry) in [("broad pass", 1, false), ("3 passes wet", 3, false), ("3 passes dry", 3, true)] {
+                    let mut c = base(linen);
+                    for p in 0..n {
+                        if p > 0 && dry {
+                            c.dry();
+                        }
+                        pass(&mut c, 100 * p as u64 + 1);
+                    }
+                    report(name, &mut c, mid, None);
+                }
+                // one load scrubbed back and forth 4 times
+                let mut c = base(linen);
+                let mut h = Held::new(Tool::hog_flat(40.0), 9);
+                h.load(umber, 0.9);
+                let p0 = h.carried().0;
+                for k in 0..4 {
+                    let (a, b) = if k % 2 == 0 { (250.0, 750.0) } else { (750.0, 250.0) };
+                    c.drag(&mut h, &g(vec![(a, 350.0), (b, 352.0)]), None);
+                    if k == 0 || k == 3 {
+                        report(&format!("scrub {}", k + 1), &mut c, (350.0, 340.0, 650.0, 362.0), Some(h.carried().0 / p0));
+                    }
+                }
+                // one exact stroke, whole and in two calls
+                let exact = |pts: Vec<(f32, f32)>| {
+                    let mut g = g(pts);
+                    (g.attack, g.release, g.shake) = (0.0, 0.0, 0.0);
+                    g
+                };
+                let mut whole = base(linen);
+                let mut h = Held::new(Tool::hog_flat(40.0), 13);
+                h.load(umber, 0.9);
+                whole.drag(&mut h, &exact(vec![(250.0, 350.0), (750.0, 350.0)]), None);
+                let mut split = base(linen);
+                let mut h2 = Held::new(Tool::hog_flat(40.0), 13);
+                h2.load(umber, 0.9);
+                split.drag(&mut h2, &exact(vec![(250.0, 350.0), (500.0, 350.0)]), None);
+                split.drag(&mut h2, &exact(vec![(500.0, 350.0), (750.0, 350.0)]), None);
+                let (a, b) = (stats(&whole, (350.0, 340.0, 650.0, 362.0)), stats(&split, (350.0, 340.0, 650.0, 362.0)));
+                let maxd = whole.wet.vol.iter().zip(&split.wet.vol).map(|(x, y)| ((x - y) * super::COAT_UM).abs()).fold(0.0f32, f32::max);
+                println!("{tag:>16} whole/2 calls  paint {:.2} / {:.2} µm, largest pixel difference {:.2} µm", a.0, b.0, maxd);
+            }
+        }
+        super::set_exchange(false);
+        super::set_exchange_kj(0.0, 0.0);
+    }
+
+    /// Side checks for `exchange_scenes`: linen against smooth at light
+    /// pressure; where a stroke in two calls differs from it whole.
+    #[test]
+    #[ignore]
+    fn exchange_side() {
+        use crate::Linen;
+        let pal = Palette::named_box("inness").unwrap();
+        let umber = pal.pile(vec![(pal.tubes.iter().position(|t| t.name == "raw umber").unwrap(), 1.0)]).laid(0.0).with_thinner(0.5);
+        let base = |linen: bool| {
+            let mut c = Canvas::new(1200, 0.7, hex("#d8cdb8")).with_engine(3);
+            if linen {
+                c = c.with_linen(Linen::fine(3));
+            }
+            c.prime(hex("#e4dcc8"), 0.9, 60.0, 0.6, if linen { 0.2 } else { 0.0 }, 7);
+            c
+        };
+        for p in [0.85f32, 0.5, 0.3] {
+            for load in [0.9f32, 0.3] {
+                let mut m = [0.0f64; 2];
+                for (k, linen) in [true, false].into_iter().enumerate() {
+                    let mut c = base(linen);
+                    let mut h = Held::new(Tool::hog_flat(40.0), 5);
+                    h.load(umber, load);
+                    c.drag(&mut h, &Gesture::new(vec![(250.0, 350.0), (750.0, 353.0)]).pressure(p, p), None);
+                    m[k] = c.wet.vol.iter().map(|v| *v as f64).sum::<f64>() * super::COAT_UM as f64;
+                }
+                println!("pressure {p} load {load}: paint laid linen {:.0} smooth {:.0} (µm·px)", m[0], m[1]);
+            }
+        }
+        for ex in [false, true] {
+            super::set_exchange(ex);
+            let exact = |pts: Vec<(f32, f32)>| {
+                let mut g = Gesture::new(pts).pressure(0.85, 0.85);
+                (g.attack, g.release, g.shake) = (0.0, 0.0, 0.0);
+                g
+            };
+            let mut whole = base(true);
+            let mut h = Held::new(Tool::hog_flat(40.0), 13);
+            h.load(umber, 0.9);
+            whole.drag(&mut h, &exact(vec![(250.0, 350.0), (750.0, 350.0)]), None);
+            let mut split = base(true);
+            let mut h2 = Held::new(Tool::hog_flat(40.0), 13);
+            h2.load(umber, 0.9);
+            split.drag(&mut h2, &exact(vec![(250.0, 350.0), (500.0, 350.0)]), None);
+            split.drag(&mut h2, &exact(vec![(500.0, 350.0), (750.0, 350.0)]), None);
+            // the same line in one call with 51 points
+            let mut dense = base(true);
+            let mut h3 = Held::new(Tool::hog_flat(40.0), 13);
+            h3.load(umber, 0.9);
+            dense.drag(&mut h3, &exact((0..=50).map(|k| (250.0 + 10.0 * k as f32, 350.0)).collect()), None);
+            let dd = whole.wet.vol.iter().zip(&dense.wet.vol).map(|(x, y)| ((x - y) * super::COAT_UM).abs()).fold(0.0f32, f32::max);
+            println!("exchange {ex}: 2 points against 51 in one call: largest difference {dd:.3} µm");
+            let f = whole.f;
+            // the difference by x band (units), largest and mean
+            let mut bands = vec![(0.0f32, 0.0f64, 0usize); 20];
+            for i in 0..f.w * f.h {
+                let d = ((whole.wet.vol[i] - split.wet.vol[i]) * super::COAT_UM).abs();
+                let b = ((f.ux(i % f.w) / 50.0) as usize).min(19);
+                bands[b].0 = bands[b].0.max(d);
+                bands[b].1 += d as f64;
+                bands[b].2 += 1;
+            }
+            let row: Vec<String> = bands.iter().enumerate().filter(|(_, b)| b.0 > 0.0).map(|(k, b)| format!("x{}:{:.1}", k * 50, b.0)).collect();
+            println!("exchange {ex}: largest difference by 50-unit band: {}", row.join(" "));
+        }
+        super::set_exchange(false);
     }
 
     /// Fingerprint of the thinner's state after thinned strokes and waits

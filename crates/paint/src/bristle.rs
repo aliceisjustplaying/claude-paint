@@ -510,7 +510,7 @@ impl Held {
             if t > 0.0 {
                 // a thinned load: the hairs take up `amount` of liquid, the
                 // share `t` of it solvent (crate::thinner)
-                let v = amount * full * k;
+                let v = amount * full * k * if crate::thinner::exchange() { (1.0 - t).powf(crate::thinner::exchange_kj().1) } else { 1.0 };
                 let vp = v * (1.0 - t);
                 b.cure = mix_cure(b.cure, b.vol, 0.0, vp);
                 mix_into(&mut b.vol, &mut b.lat, &mut b.hide, vp, &lat, [scatter, paint.stiff, paint.drying]);
@@ -1304,6 +1304,8 @@ unsafe fn exchange(
                 // (a thinned load: its liquid runs down the same way, paint
                 // and solvent alike)
                 let l = br.vol + br.solvent;
+                // (the exchange experiment: a thinned hair lets go more slowly)
+                let travel = if crate::thinner::exchange() && !sf.laid.is_null() { travel * (1.0 - br.solvent / l).powf(crate::thinner::exchange_kj().0) } else { travel };
                 let left = match dep {
                     None => l * (1.0 - (1.0 - (-travel / tool.run).exp()) * GHOST_TOUCH),
                     Some(v) => (l - v.min(l * 0.5) * GHOST_TOUCH).max(0.0),
@@ -1350,7 +1352,10 @@ unsafe fn exchange(
         // the share of solvent in what it lays, and the most wet film this
         // stroke may add to a pixel (coats; engine 3)
         let phi = if br.solvent > 0.0 { br.solvent / liquid } else { 0.0 };
-        let capped = phi > 0.0 && !sf.laid.is_null();
+        // (the exchange experiment drops the ceiling and the per-stroke
+        // allowance for a thinned hair, `crate::thinner::set_exchange`)
+        let exch = phi > 0.0 && !sf.laid.is_null() && crate::thinner::exchange();
+        let capped = phi > 0.0 && !sf.laid.is_null() && !exch;
         let cap = if capped { crate::thinner::stroke_limit_um(phi) / COAT_UM } else { f32::INFINITY };
         let wet = smoothstep(0.1, 0.8, liquid / full);
         let wick = if tool.point > 0.0 { tool.point * smoothstep(0.02, 0.25, liquid / full) } else { 0.0 }.max(WET_REACH * wet);
@@ -1421,6 +1426,8 @@ unsafe fn exchange(
 
         // deposit: a share of the load, proportional to distance traveled
         let travel = (seg / s).max(rb / s * 0.5);
+        // (the exchange experiment: a thinned hair lets go more slowly)
+        let travel = if exch { travel * (1.0 - phi).powf(crate::thinner::exchange_kj().0) } else { travel };
         // only the part of the footprint actually in contact takes paint: a
         // bristle skimming the weave peaks keeps most of its load
         let touch = (sum_w / sum_cov.max(1e-6)).min(1.0);
@@ -1486,8 +1493,12 @@ unsafe fn exchange(
                     *sf.floor.add(i) = v * (1.0 - tool.pickup * fl);
                 }
                 if v > 1e-6 {
-                    let own = if *sf.stroke.add(i) == id { 0.15 } else { 1.0 };
-                    let take = (v * tool.pickup * wt * hunger * own * fl).min((v - *sf.floor.add(i)).max(0.0));
+                    let take = if exch {
+                        (v * tool.pickup * wt * hunger * fl).min(v)
+                    } else {
+                        let own = if *sf.stroke.add(i) == id { 0.15 } else { 1.0 };
+                        (v * tool.pickup * wt * hunger * own * fl).min((v - *sf.floor.add(i)).max(0.0))
+                    };
                     if take > 0.0 {
                         let tv = take * px_area;
                         got_v += tv;

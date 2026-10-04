@@ -56,3 +56,15 @@ round-5 tests from 48be56a, `ACCEPTANCE.md`, `scripts/test_thinner_acceptance`,
 `scripts/tests/thinner_acceptance_runner.sh`, the thinner's notes and logs).
 Every one of them is byte for byte as at de5557c. Nothing of the thinner's
 was edited.
+
+## Merge 3: the final thinner at 995fbab
+
+`git merge --no-ff --no-edit 995fbab`, commit `781531e`. **No conflicts.**
+Since de5557c the thinner changed 15 files: production code (`bristle.rs`,
+`drying.rs`, `handling.rs`, `rag.rs`, `stipple.rs`, `thinner.rs`, `wet.rs`),
+`notes/easel_guide.md`, its notes and logs. One of them, `rag.rs`, had also
+changed on the speed side. Git merged it cleanly: the thinner's change is 2
+lines of production code, and speed's are the two hunks inside `mod tests`
+(from line 616: lines 723 and 912). Every thinner file is byte for byte as at
+995fbab except those two test-module hunks in `rag.rs`. Nothing of the
+thinner's was edited.

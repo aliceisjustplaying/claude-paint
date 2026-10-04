@@ -125,6 +125,9 @@ are in canvas units (the canvas is 1000 units wide).
     set or dry paint.
 39. `blend` stays inside its mask by default. Unclipped, it drags wet paint
     across the mask's edge.
+    A local blend can leave a seam where lifted or moved paint meets the
+    untouched paint outside that mask. A soft mask does not prevent wet
+    dark and light passages inside it from mixing.
 40. Touches stippled into a wet layer and then blended fuse into it. Only
     the strongest contrasts survive, as thin traces. Touches laid after the
     blending pass stay on top as a lacy texture.

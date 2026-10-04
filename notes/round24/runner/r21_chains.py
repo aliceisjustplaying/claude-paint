@@ -55,8 +55,9 @@ settings file in the studio.
 Sittings: the painter works in sittings, each a new pi session (same harness and studio),
 until it decides it's done. Sitting 1 gets PAINTER_MSG, later ones SITTING_MESSAGE. After each
 sitting the chunks of the painting's log that put marks on the canvas are counted
-(painting_chunks.py). The painter stops after a sitting it ended itself that added no such
-chunks. MAX_SITTINGS completed sittings is only a safety cap (logged as NOT FINISHED).
+(painting_chunks.py). The painter finishes after a sitting it ended itself that added no such
+chunks and delivered whole-canvas and detail looks. MAX_SITTINGS completed sittings is only
+a safety cap (logged as NOT FINISHED).
 A sitting that crashes (pi exits non-zero, or its session ends on a provider error) is no
 judgment and counts for nothing: the runner waits (CRASH_WAITS, or longer if the error says
 "retry in Ns") and starts another sitting; after MAX_CRASHES crashes the painter stops (NOT
@@ -155,12 +156,12 @@ BRANCH = "round-23"
 # round 24 (engine 3): the code, harness, guide, export, check and finishing scripts of one tag on the final
 # engine-3 commit, checked out detached at claude-paint-r24run; the export builds the inness easel in its
 # target/studio-build, check and finishing build the replay easel in its target.
-# PENDING, set by the integration owner at freeze: TAG names that tag (proposed: round-24). Before launch:
+# Round 24.1 keeps the engine and adds completion review and guide corrections. Before launch:
 # `git tag -a <TAG> <commit>` in the shared repo and `git worktree add --detach ~/src/a/claude-paint-r24run <TAG>`.
 # main() refuses to start while BASE isn't a clean checkout of TAG (checkout_problems).
-TAG = "round-24"
+TAG = "round-24.1"
 BRANCH = TAG
-BASE = A / "claude-paint-r24run"
+BASE = A / "claude-paint-r24-1run"
 EXPORT = BASE / "scripts/export_r16_studio"      # honors R16_BRANCH
 FINISH = BASE / "scripts/finish_painting"
 CHECK = BASE / "scripts/check_painting"
@@ -181,9 +182,14 @@ HARNESS = ["--no-extensions", "-e", str(H / "painter.ts"), "-e", str(H / "compac
 PAINTER_MSG = ("Your brief is in BRIEF.md in this folder. Your last message is your reply: the "
                "painting's title if you give it one and a few sentences about the picture.")
 SITTING_MESSAGE = ("You're back at the easel. The painting is as you left it. "
-                   "Your brief is in BRIEF.md and your journal in notes/journal.md.")
+                   "Your brief is in BRIEF.md and your journal in notes/journal.md. "
+                   "Make a fresh assessment of the painting: a signature or an earlier journal entry "
+                   "calling it finished is not a reason to stop. Look at the whole canvas and detail "
+                   "crops in normal color, including passages you previously considered weak. "
+                   "If you identify a change that would improve the intended painting, make it and "
+                   "inspect the result. Finish only when that review identifies no further improvement.")
 # A painter works in up to MAX_SITTINGS sittings (completed ones, and crashed ones that painted); it stops
-# earlier after a sitting it ends itself without adding paint
+# earlier after a sitting that reviews whole and detail views without adding paint
 MAX_SITTINGS = 4                                 # default; run/max_sittings.txt is read between sittings
 MAX_CRASHES = 6                                   # crashed sittings (in all) before a painter is stopped
 # only after a usage limit that held for a day (painter.ts waits out shorter ones with nothing added)
@@ -611,8 +617,8 @@ def next_step(sittings, max_sittings=MAX_SITTINGS, max_crashes=MAX_CRASHES):
     sittings: the records so far, in order ({'sitting', 'painting_before', 'painting_after',
     'chunks_before', 'chunks_after', 'status', 'worked'}); a continued sitting's later parts
     repeat its number and carry its painting_before, so a record's counts cover the whole sitting.
-    The painter stops after a sitting it ended itself (status 'completed') that added no painting
-    chunks (this includes a first sitting that painted nothing), or after max_sittings sittings:
+    The painter finishes after a sitting it ended itself (status 'completed') that added no painting
+    chunks and reviewed whole and detail views, or stops unfinished after max_sittings sittings:
     completed ones, and crashed ones that added painting (cut off after it painted, not judged).
     Sittings cut off by a usage limit ('limited') or the runner stopping ('interrupted') count for
     nothing; if the painter had worked in one (a reply that wasn't an error: 'worked'), its session
@@ -623,12 +629,12 @@ def next_step(sittings, max_sittings=MAX_SITTINGS, max_crashes=MAX_CRASHES):
     if not sittings:
         return ("new", 1)
     done = [s for s in sittings if s.get("status") == "completed"]
-    if done and not added_painting(done[-1]):
-        return (None, f"the painter is done: sitting {done[-1]['sitting']} added no painting")
+    if done and not added_painting(done[-1]) and done[-1].get("reviewed"):
+        return (None, f"the painter is done: sitting {done[-1]['sitting']} reviewed whole and detail views and added no painting")
     counted = {s["sitting"] for s in sittings if s.get("status") == "completed"
                or (s.get("status") == "crashed" and added_painting(s))}
     if max_sittings and len(counted) >= max_sittings:
-        return (None, f"stopped after {max_sittings} sittings (MAX_SITTINGS)")
+        return (None, f"NOT FINISHED: stopped after {max_sittings} sittings (MAX_SITTINGS)")
     if sum(1 for s in sittings if s.get("status") == "crashed") >= max_crashes:
         return (None, f"NOT FINISHED: {max_crashes} crashes (MAX_CRASHES)")
     last = sittings[-1]
@@ -650,6 +656,45 @@ def session_worked(files):
         except (OSError, ValueError):
             continue
     return False
+
+
+def session_reviewed(files):
+    """A normal whole-canvas look and detail crop delivered after the latest successful paint call.
+
+    Count returned images, not requested views, palette charts or the recovery snapshot.
+    Missing or unreadable evidence cannot establish completion.
+    """
+    whole = detail = False
+    for f in files:
+        calls = {}
+        try:
+            with open(f, errors="replace") as stream:
+                for line in stream:
+                    m = json.loads(line).get("message") or {}
+                    content = m.get("content") or []
+                    if not isinstance(content, list):
+                        continue
+                    if m.get("role") == "assistant":
+                        for c in content:
+                            if c.get("type") == "toolCall":
+                                calls[c.get("id")] = c
+                    if m.get("role") != "toolResult" or m.get("isError") is not False:
+                        continue
+                    if m.get("toolName") == "paint":
+                        whole = detail = False
+                    call = calls.pop(m.get("toolCallId"), {})
+                    if call.get("name") != "look" or not any(c.get("type") == "image" for c in content):
+                        continue
+                    args = call.get("arguments") or {}
+                    if args.get("palette") or args.get("mode"):
+                        continue
+                    if args.get("crop"):
+                        detail = True
+                    else:
+                        whole = True
+        except (OSError, ValueError):
+            return False
+    return whole and detail
 
 
 def session_reply(files):
@@ -972,11 +1017,13 @@ def paint(name, n, d, rd):
         rec.update(status="limited" if limited else "crashed" if crashed else "completed", end=time.strftime("%F %T"),
                    chunks_after=count_chunks(d), painting_after=count_painting(d), exit=rc,
                    sessions=[str(f) for f in new], error=why[-4000:] if crashed else None,
-                   worked=session_worked(new), final=final_reply)
+                   worked=session_worked(new), reviewed=session_reviewed(new), final=final_reply)
         save_sittings(rd, n, sittings)
         log(f"{tag}: sitting {k} ended (exit {rc}{', USAGE LIMIT' if limited else ', CRASHED' if crashed else ''}) after {(time.time() - t0) / 60:.0f} min: "
             f"chunks {rec['chunks_before']} -> {rec['chunks_after']} "
             f"(painting {rec['painting_before']} -> {rec['painting_after']}), {len(new)} session file(s)")
+        if not crashed and not added_painting(rec) and not rec["reviewed"]:
+            log(f"{tag}: completion not established: missing successful whole-canvas or detail review")
         if limited:
             log(f"{tag}: sitting {k} ended on a usage limit ({gist(why)}): not a crash; the painter waits it out")
         elif crashed:
@@ -1323,7 +1370,7 @@ def chain(name):
             show(tag, f"open the easel ({d / 'bin/easel'} open); it stays open across sittings", [str(d / "bin/easel"), "open"], d)
             show(tag, "sitting 1 (painter)", painter_cmd(t["model"]), d, t["model"]["env"])
             show(tag, f"after each sitting: count painting chunks;\n"
-                      f"    more sittings until one the painter ends adds no painting chunks (safety cap {MAX_SITTINGS}; a usage limit continues its session),\n"
+                      f"    more sittings until one reviews whole and detail views and adds no painting chunks (safety cap {MAX_SITTINGS}; a usage limit continues its session),\n"
                       f"    at the same open easel (reopened, replaying the log, only if its server is gone); closed after the last",
                  painter_cmd(t["model"], SITTING_MESSAGE), d, painter_env(t["model"], SITTING_MESSAGE))
             show(tag, "check (background, after the last sitting; result in the log)", check_cmd(d, name, n), RUN)

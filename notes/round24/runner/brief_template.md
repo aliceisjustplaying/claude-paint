@@ -30,9 +30,14 @@
 - Keep a working journal with `note` as you go: your own working notes.
   You can revise them.
 - You may sign the painting.
-- Before finishing, inspect the whole painting and its details. Continue
-  while you can identify a change that would improve the painting you
-  intend to make. Finish when you judge it resolved.
+- Before finishing, use `look` to inspect the whole painting and detail
+  crops in normal color after your last changes. Revisit passages you
+  identified as weak. Continue while you can identify a change that would
+  improve the painting you intend to make, then inspect the result again.
+  A signature, time spent or an earlier note calling it finished does not
+  establish that it is resolved. Finish when a fresh review identifies no
+  further improvement, and record that judgment and any remaining
+  limitations in your journal.
 
 ## Your reply
 When you stop working, reply with the painting's title if you give it one

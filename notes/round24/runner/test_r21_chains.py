@@ -12,6 +12,34 @@ import r21_chains as rc21
 GO_LIMIT = '429: {"type":"GoUsageLimitError","message":"Go usage limit exceeded"}'      # round 19, KIMIF and MIMOF
 
 
+@pytest.mark.parametrize("views, finished", [
+    ([({}, False)], False),  # the first engine-3 painter's second sitting
+    ([({}, False), ({"crop": "0,0,300,300"}, False)], True),
+    ([({}, False), ({"crop": "0,0,600,600"}, True)], False),
+    ([({"palette": True}, False), ({"crop": "0,0,300,300"}, False)], False),
+    ([({"mode": "value"}, False), ({"crop": "0,0,300,300"}, False)], False),
+])
+def test_completion_requires_successful_whole_and_detail_review(tmp_path, views, finished):
+    session = tmp_path / "session.jsonl"
+    messages = []
+    for i, (args, failed) in enumerate(views):
+        messages += [
+            {"role": "assistant", "content": [{"type": "toolCall", "id": str(i),
+              "name": "look", "arguments": args}]},
+            {"role": "toolResult", "toolCallId": str(i), "toolName": "look",
+             "isError": failed, "content": [{"type": "text", "text": "crop too large"}]
+             if failed else [{"type": "image", "data": "fixture", "mimeType": "image/png"}]},
+        ]
+    session.write_text("\n".join(json.dumps({"message": m}) for m in messages))
+    sitting = dict(sitting=2, status="completed", painting_before=99, painting_after=99,
+                   reviewed=rc21.session_reviewed([session]))
+    step, reason = rc21.next_step([sitting])
+    assert (step is None) is finished
+    if not finished:
+        assert (step, reason) == ("new", 3)
+        assert "NOT FINISHED" in rc21.next_step([sitting], max_sittings=1)[1]
+
+
 @pytest.mark.parametrize("initial, edits, expected", [
     ("1", ["3", "bad", "2"], 3),
     ("4", ["1"], 1),

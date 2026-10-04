@@ -4,7 +4,8 @@
 # (much of it single-threaded) beside the painter build. "w": box-features keeps the cores busy
 # compiling, the others mostly wait (git hooks, ffmpeg, Python). lockrun.sh (timing-sensitive) and
 # the easel scripts run alone. A step that builds another feature set builds into its own
-# directory under $CARGO_TARGET_DIR: in one directory it would replace target/debug/easel, which
+# directory under $CARGO_TARGET_DIR (short names: the easel tests bind sockets under it, and a
+# socket path must stay under 104 bytes): in one directory it would replace target/debug/easel, which
 # the tests running beside it execute (a first run's determinism tests found the painter's easel).
 build	build-release-easel	600	0	-	cargo build --release -p easel
 build	build-test-binaries	600	0	-	cargo test --workspace --lib --bins --tests --no-run
@@ -14,12 +15,12 @@ script	baseline-package	60	1	^verify_package: hashes ok	notes/thinner/baseline/t
 script	baseline-state	60	6	^\S+: state equal on every baseline field	scripts/tests/baseline_state.sh "$CARGO_TARGET_DIR/release/easel"
 cargo	slow-tests-by-name	240	4	-	cargo test -p easel --test boxes -- --ignored --exact a_round_19_log_replays_as_before >"$TMPDIR/slow-r19.out" 2>&1 & a=$!; cargo test -p easel --test determinism -- --ignored --exact hand_time_is_deterministic_across_thread_counts_at_the_live_width state_digests_are_the_same_in_every_replay_at_the_live_width the_rag_replays_the_same_at_the_live_width >"$TMPDIR/slow-det.out" 2>&1 & b=$!; wait $a; ra=$?; wait $b; rb=$?; cat "$TMPDIR/slow-r19.out" "$TMPDIR/slow-det.out"; [ $ra = 0 ] && [ $rb = 0 ]	s
 cargo	slow-thin-blend	180	1	-	cargo test -p paint --test ground_grain -- --ignored --exact thin_blend_bares_ground	s
-cargo	painter-build-inness	300	14	-	CARGO_TARGET_DIR="$CARGO_TARGET_DIR/painter-inness" cargo test -p easel --no-default-features --features box-inness	s
+cargo	painter-build-inness	300	14	-	CARGO_TARGET_DIR="$CARGO_TARGET_DIR/p" cargo test -p easel --no-default-features --features box-inness	s
 script	lockrun	120	17	^ok \d+ -	scripts/tests/lockrun.sh
 script	replay-env	120	1	^replay_env: check_painting, finish_painting and replay_clip replayed	scripts/tests/replay_env.sh
 script	check-live	180	1	^check_live: check_painting passed	scripts/tests/check_live.sh
-script	box-features	600	14	^box_features: .*: (\d+ passed|refused)$	CARGO_TARGET_DIR="$CARGO_TARGET_DIR/box-features" BOX_FEATURES_PROFILE=dev scripts/tests/box_features.sh	w
-cargo	smoke-replay-without-finish	300	1	-	CARGO_TARGET_DIR="$CARGO_TARGET_DIR/replay-only" cargo test -p easel --no-default-features --features replay --test smoke	w
+script	box-features	600	14	^box_features: .*: (\d+ passed|refused)$	CARGO_TARGET_DIR="$CARGO_TARGET_DIR/bf" BOX_FEATURES_PROFILE=dev scripts/tests/box_features.sh	w
+cargo	smoke-replay-without-finish	300	1	-	CARGO_TARGET_DIR="$CARGO_TARGET_DIR/ro" cargo test -p easel --no-default-features --features replay --test smoke	w
 script	test-runner	120	11	^ok \d+ -	scripts/tests/test_runner.sh	w
 script	safeguards	180	53	^ok \d+ -	scripts/tests/safeguards.sh	w
 pytest	runner-round24	120	250	-	cd notes/round24/runner && PYTHONDONTWRITEBYTECODE=1 uv run --no-project --with pytest --with pillow python -m pytest -q -p no:cacheprovider -rs .	w

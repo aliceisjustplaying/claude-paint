@@ -1,0 +1,12 @@
+# Rag release: existing physics and sessions, rag, live-width replay, painter build, old logs, and gate.
+build	release	600	0	-	cargo build --release -p easel
+build	test-binaries	600	0	-	cargo test --workspace --lib --bins --tests --no-run
+cargo	paint	180	170	-	cargo test -p paint --lib	rust
+cargo	easel	180	55	-	cargo test -p easel --bin easel -- --skip legacy::tests:: --skip session::tests::logs_without_an_engine_line_replay_as_before	rust
+cargo	paint-integration	180	2	-	cargo test -p paint --test curved_drag_nan --test ground_grain	rust
+cargo	easel-integration	240	10	-	cargo test -p easel --test boxes --test delivery --test determinism --test smoke --test session_integrity	rust
+script	old-logs	60	11	^old_logs: \S+ ok	scripts/tests/old_logs.sh "$CARGO_TARGET_DIR/release/easel"
+cargo	painter	300	1	-	cargo test -p easel --no-default-features --features box-inness --test painter
+script	test-runner	120	17	^ok \d+ -	scripts/tests/test_runner.sh
+script	safeguards	180	140	^ok \d+ -	scripts/tests/safeguards.sh
+script	lockrun	60	17	^ok \d+ -	scripts/tests/lockrun.sh

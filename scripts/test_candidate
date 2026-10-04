@@ -1,0 +1,628 @@
+#!/usr/bin/env python3
+"""Test one exact commit in a fresh, clean, temporary working copy and record a receipt.
+
+    scripts/test_candidate COMMIT [--base-main COMMIT] [--remote origin]
+                           [--timeout 600] [--lock-timeout SECONDS] [--list-file PATH]
+
+--timeout is each phase's lockrun limit: over 0 and at most 600 seconds.
+
+- COMMIT must be a commit id (hex). Branch names, tags, unknown ids, ambiguous
+  prefixes and ids that are also ref names are refused: a name can move
+  between test and merge.
+- The reviewed check set is read from the commit itself before anything
+  runs: the list file (--list-file, default notes/speed/test_lists/all.tsv)
+  is parsed from `git show COMMIT:LIST`, and scripts/test is hashed as
+  committed. Refused (exit 2) if either is missing or not a regular file, the
+  list is malformed, a non-build step requires fewer than 1 test, or no step
+  is a non-build step.
+- The commit is checked out with `git worktree add --detach` into a new
+  directory under /tmp, made a FULL checkout (the repository's post-checkout
+  hook makes new worktrees sparse; this undoes it) and verified: HEAD and tree
+  are the commit's, the index is exactly the commit's tree (`git ls-files -s`
+  equals `git ls-tree -r`), not sparse, no skip-worktree/assume-unchanged
+  flags, and `git status` shows nothing (untracked or ignored files
+  included). Otherwise it refuses (exit 2).
+- Inside it, two phases, each one job of the pinned lockrun limited to
+  SECONDS (at most 600: the plan's builds and final check batch, ten
+  minutes each): `scripts/test --all --phase build --summary B`, then, only
+  if the build phase passed, `scripts/test --all --phase check --summary C`
+  (plus `--list LIST` for a non-default list), with CARGO_TARGET_DIR inside
+  the temporary working copy.
+- lockrun is never the candidate's own: only a file whose sha256 is the pin
+  LOCKRUN_SHA256 in safeguards_lib.py is used. If $LOCKRUN is set, it must be
+  such a file, or the run is refused (exit 2): an explicit choice is never
+  replaced silently. Otherwise the first pinned one of
+  ~/src/a/claude-paint-tools/lockrun and the scripts/lockrun beside this
+  tool (its own checkout, not the candidate) is used; one that is missing or
+  differs is skipped with a message. None: refused (exit 2), nothing run.
+  The chosen bytes are hashed once and copied to the temporary directory,
+  outside the working copy, and that copy is what runs. The receipt records
+  its path, source and sha256.
+- After the build phase and again after both phases, the same checkout checks
+  are repeated (HEAD, tree, index, sparse, flags, tracked changes): any
+  difference fails the run. The evidence from before, between and after goes
+  into the receipt.
+- Each phase is bound to the list: B's steps must be exactly the list's build
+  steps, C's exactly its other steps, each in list order with the same name,
+  kind, command, limit, least, group and known failure (exit, regex, text, or
+  none); both summaries have mode "all", their phase, list LIST, list_sha256
+  the list's hash in the commit and runner_sha256 the hash of scripts/test in
+  the commit. The build phase passes with lockrun exit 0, verdict "pass" and
+  every step exit 0, ok, timed_out false and failed 0. The check phase
+  passes the same way, and every non-build step needs tests_run >= its
+  least >= 1; every step's log must be present with the sha256 its summary
+  claims.
+- Verdicts. "pass": both phases pass, the checkout is unchanged and the
+  cleanup succeeded. "known_failure": the same, except that the check phase's
+  verdict is "known_failure" (lockrun exit 4) and every step that isn't ok is
+  a known failure exactly as the list names it (its row names one, the step
+  reports known_failure true and exits the listed code). A known failure is
+  never mergeable: its verdict text is "NOT ALL GREEN (known pre-existing
+  failure: ...)". "unfinished": a timeout (lockrun's, 124, or a step's:
+  summary verdict "unfinished"), a cancellation or a busy lock in either
+  phase. Anything else is "fail", also a known failure on a row that names
+  none or with another exit. After a failed build phase the check phase
+  does not run and the verdict is "fail"; after an unfinished one,
+  "unfinished".
+- The temporary working copy and its build directory are always removed
+  (worktree remove --force, rm -rf, worktree prune) in a finally of its own,
+  also on failure, timeout, Ctrl-C, SIGTERM, SIGHUP and errors while reading
+  the results. A failed removal makes the verdict "fail".
+- Receipt: JSON in a git note on the commit, ref refs/notes/test-receipts
+  (`git notes --ref=test-receipts add -f`: the latest run replaces the
+  previous note; every run's receipt also stays in the receipt directory).
+  Logs, summary and receipt.json go to $TEST_RECEIPT_DIR (default
+  ~/src/a/claude-paint-receipts)/<commit>/<time>/. Notes are not pushed or
+  fetched with branches:
+      git fetch origin refs/notes/test-receipts:refs/notes/test-receipts
+      git push origin refs/notes/test-receipts
+
+Exit: 0 pass, 1 fail, 2 refused before testing (no receipt written), 3
+unfinished (timeout, cancelled, lock busy), 4 known_failure (NOT ALL GREEN: a
+listed pre-existing failure and nothing else wrong; not mergeable).
+"""
+
+import argparse
+import json
+import os
+import shlex
+import shutil
+import signal
+import subprocess
+import sys
+import tempfile
+import time
+import tomllib
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from safeguards_lib import (DEFAULT_LIST, LOCKRUN_SHA256, PHASE_LIMIT, PHASES, RECEIPT_FORMAT,  # noqa: E402
+                            RECEIPTS_REF, TOOLS_LOCKRUN, Refuse, assert_publishable, checkout_problems,
+                            checkout_state, git, home_redact, is_ancestor, known_text, manifest_at,
+                            manifest_problems, now_iso, phase_problems, resolve_exact_commit, run,
+                            sha256_bytes, sha256_file, toplevel, tools_sha256, tree_of)
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+TOOL_FILES = [os.path.abspath(__file__), os.path.join(HERE, "safeguards_lib.py")]
+EXIT_PASS, EXIT_FAIL, EXIT_REFUSED, EXIT_UNFINISHED, EXIT_KNOWN = 0, 1, 2, 3, 4
+EXIT = {"pass": EXIT_PASS, "fail": EXIT_FAIL, "unfinished": EXIT_UNFINISHED, "known_failure": EXIT_KNOWN}
+# scripts/test's exit for each phase verdict test_candidate accepts
+RUNNER_EXIT = {"pass": 0, "known_failure": 4}
+
+
+def say(msg):
+    sys.stderr.write("test_candidate: %s\n" % msg)
+    sys.stderr.flush()
+
+
+class Stop(Exception):
+    pass
+
+
+def on_signal(signum, frame):
+    raise Stop(signum)
+
+
+def resolve_base(repo, args):
+    if args.base_main:
+        return resolve_exact_commit(repo, args.base_main, "--base-main"), "argument --base-main"
+    for ref, source in (("refs/heads/main", "local branch main (refs/heads/main)"),
+                        ("refs/remotes/%s/main" % args.remote,
+                         "remote-tracking branch refs/remotes/%s/main (as last fetched)" % args.remote)):
+        p = run(["git", "-C", repo, "rev-parse", "--verify", "-q", ref + "^{commit}"], check=False)
+        if p.returncode == 0:
+            return p.stdout.strip(), source
+    raise Refuse("no main found (refs/heads/main or refs/remotes/%s/main); pass --base-main" % args.remote)
+
+
+
+
+def _read(path):
+    try:
+        with open(path, "rb") as f:
+            return f.read()
+    except OSError:
+        return None
+
+
+def pick_lockrun():
+    """(path, source, bytes) of the approved lockrun (sha256 == LOCKRUN_SHA256); Refuse if none.
+    Never the candidate's: the candidate's working copy does not exist yet."""
+    env = os.environ.get("LOCKRUN")
+    if env:
+        path = os.path.abspath(env)
+        data = _read(path)
+        got = "unreadable" if data is None else "sha256 " + sha256_bytes(data)
+        if data is None or sha256_bytes(data) != LOCKRUN_SHA256:
+            raise Refuse("$LOCKRUN=%s is not the approved lockrun (%s, pinned %s in safeguards_lib.py)"
+                         % (home_redact(path), got, LOCKRUN_SHA256))
+        return path, "$LOCKRUN", data
+    skipped = []
+    for path, source in ((os.path.expanduser(TOOLS_LOCKRUN), TOOLS_LOCKRUN),
+                         (os.path.join(HERE, "lockrun"), "scripts/lockrun beside test_candidate")):
+        data = _read(path)
+        if data is not None and sha256_bytes(data) == LOCKRUN_SHA256:
+            return path, source, data
+        why = "%s (%s): %s" % (source, home_redact(path), "missing or unreadable" if data is None
+                                else "sha256 %s is not the pin" % sha256_bytes(data))
+        say("skipping lockrun %s" % why)
+        skipped.append(why)
+    raise Refuse("no approved lockrun (sha256 %s): %s" % (LOCKRUN_SHA256, "; ".join(skipped)))
+
+
+def _toml(path):
+    try:
+        with open(path, "rb") as f:
+            return tomllib.load(f)
+    except (OSError, tomllib.TOMLDecodeError):
+        return None
+
+
+def _version(cmd, cwd):
+    try:
+        p = subprocess.run(cmd, cwd=cwd, capture_output=True, text=True, timeout=60)
+        return p.stdout.strip() if p.returncode == 0 else None
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+
+
+def build_settings(wt, summary):
+    s = {"rustc": _version(["rustc", "-V"], wt), "cargo": _version(["cargo", "-V"], wt),
+         "cargo_target_dir": "<temporary working copy>/target", "configs": []}
+    cargo_home = os.environ.get("CARGO_HOME") or os.path.expanduser("~/.cargo")
+    cflags = wrapper = wrapper_src = None
+    profiles = set()
+    for label, path in (("<candidate>/.cargo/config.toml", os.path.join(wt, ".cargo", "config.toml")),
+                        ("<candidate>/.cargo/config", os.path.join(wt, ".cargo", "config")),
+                        (os.path.join(cargo_home, "config.toml"), os.path.join(cargo_home, "config.toml")),
+                        (os.path.join(cargo_home, "config"), os.path.join(cargo_home, "config"))):
+        if not os.path.isfile(path):
+            continue
+        data = _toml(path) or {}
+        s["configs"].append({"path": label, "sha256": sha256_file(path)})
+        env = data.get("env", {})
+        if cflags is None and "CFLAGS" in env:
+            v = env["CFLAGS"]
+            cflags = v.get("value") if isinstance(v, dict) else v
+        w = data.get("build", {}).get("rustc-wrapper")
+        if wrapper is None and w is not None:
+            wrapper, wrapper_src = w, label
+        profiles.update(data.get("profile", {}).keys())
+    cargo_toml = _toml(os.path.join(wt, "Cargo.toml")) or {}
+    profiles.update(cargo_toml.get("profile", {}).keys())
+    for var in ("RUSTC_WRAPPER", "CARGO_BUILD_RUSTC_WRAPPER"):
+        if os.environ.get(var) is not None:
+            wrapper, wrapper_src = os.environ[var], "$" + var
+    s["cflags"] = cflags
+    s["cflags_env_override"] = os.environ.get("CFLAGS")
+    s["rustflags_env"] = os.environ.get("RUSTFLAGS")
+    s["rustc_wrapper"] = wrapper
+    s["rustc_wrapper_source"] = wrapper_src
+    s["profiles_declared"] = sorted(profiles)
+    used = set()
+    for step in (summary or {}).get("steps") or []:
+        cmd = step.get("command") if isinstance(step, dict) else None
+        toks = shlex.split(cmd) if isinstance(cmd, str) else [str(t) for t in (cmd or [])]
+        if "cargo" not in " ".join(toks):
+            continue
+        prof = None
+        for i, t in enumerate(toks):
+            if t == "--release":
+                prof = "release"
+            elif t == "--profile" and i + 1 < len(toks):
+                prof = toks[i + 1]
+            elif t.startswith("--profile="):
+                prof = t.split("=", 1)[1]
+        used.add(prof or "default (dev/test)")
+    s["profiles_used"] = sorted(used)
+    return s
+
+
+
+
+def verify_full_clean_checkout(wt, sha, tree):
+    """Refuse unless the worktree is exactly COMMIT, complete and clean. Returns its state."""
+    state = checkout_state(wt, sha)
+    bad = checkout_problems(state, sha, tree, "after checkout")
+    if bad:
+        raise Refuse("the temporary working copy is not a full checkout of the commit: " + "; ".join(bad))
+    status = git(wt, "status", "--porcelain=v1", "--untracked-files=all", "--ignored")
+    if status:
+        raise Refuse("the temporary working copy is not clean after checkout:\n" + status)
+    return state
+
+
+def collect(wt, summary_path, receipt_dir, manifest, phase):
+    """Parse one phase's summary, copy its logs out, check it against the manifest.
+    Returns (summary, logs, problems, known)."""
+    problems = []
+    summary = None
+    if not os.path.isfile(summary_path):
+        problems.append("scripts/test wrote no summary")
+    else:
+        raw = open(summary_path, "rb").read()
+        shutil.copyfile(summary_path, os.path.join(receipt_dir, "summary-%s.json" % phase))
+        try:
+            summary = json.loads(raw)
+        except ValueError:
+            problems.append("the summary is not valid JSON")
+    more, known = phase_problems(summary, manifest, phase)
+    problems += more
+    logs = []
+    steps = summary.get("steps") if isinstance(summary, dict) else None
+    os.makedirs(os.path.join(receipt_dir, "logs"), exist_ok=True)
+    for i, step in enumerate(steps if isinstance(steps, list) else []):
+        if not isinstance(step, dict):
+            continue
+        name = str(step.get("name") or "step%d" % i)
+        log = step.get("log")
+        if not log or not isinstance(log, str):
+            problems.append("step %s names no log" % name)
+            continue
+        src = log if os.path.isabs(log) else os.path.join(wt, log)
+        if not os.path.isfile(src):
+            problems.append("step %s: log %s is missing" % (name, log))
+            continue
+        safe = "".join(c if c.isalnum() or c in "-_." else "_" for c in name)[:60]
+        dst_name = "logs/%s-%02d-%s.log" % (phase, i, safe)
+        shutil.copyfile(src, os.path.join(receipt_dir, dst_name))
+        h = sha256_file(os.path.join(receipt_dir, dst_name))
+        if step.get("log_sha256") != h:
+            problems.append("step %s: log sha256 %s differs from the summary's %r"
+                            % (name, h, step.get("log_sha256")))
+        logs.append({"step": name, "file": dst_name, "sha256": h,
+                     "summary_log_sha256": step.get("log_sha256")})
+    return summary, logs, problems, known
+
+
+def remove_worktree(repo, wt, tmp):
+    """Remove the temporary working copy and its directory. Returns the errors ([] = removed)."""
+    errors = []
+    try:
+        if os.path.exists(wt):
+            p = run(["git", "-C", repo, "worktree", "remove", "--force", "--force", wt], check=False)
+            if p.returncode != 0:
+                errors.append("git worktree remove: " + p.stderr.strip())
+        shutil.rmtree(tmp, ignore_errors=True)
+        run(["git", "-C", repo, "worktree", "prune"], check=False)
+        if os.path.exists(tmp):
+            errors.append("%s still exists" % tmp)
+        listed = git(repo, "worktree", "list", "--porcelain")
+        if any(l == "worktree " + wt or l == "worktree " + os.path.realpath(wt) for l in listed.splitlines()):
+            errors.append("git still lists the worktree")
+    except Exception as e:  # noqa: BLE001 - any failure here is a cleanup failure, reported
+        errors.append("cleanup raised %s: %s" % (type(e).__name__, e))
+    return errors
+
+
+def add_note(repo, sha, text):
+    """Write TEXT as SHA's receipt note and read it back. Writers are serialized by an
+    exclusive lock in the repository's common git directory: concurrent `git notes add`
+    runs can otherwise each rewrite refs/notes/test-receipts from the same parent and
+    silently drop one another's receipts."""
+    import fcntl
+    common = git(repo, "rev-parse", "--path-format=absolute", "--git-common-dir")
+    with open(os.path.join(common, "test-receipts.lock"), "a") as lock:
+        deadline = time.monotonic() + 60
+        while True:
+            try:
+                fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                break
+            except BlockingIOError:
+                if time.monotonic() > deadline:
+                    raise Refuse("another receipt writer held the notes lock for 60 s")
+                time.sleep(0.05)
+        p = run(["git", "-C", repo, "notes", "--ref=test-receipts", "add", "-f", "-m", text, sha], check=False)
+        if p.returncode != 0:
+            raise Refuse("git notes add failed: %s" % p.stderr.strip())
+        back = run(["git", "-C", repo, "notes", "--ref=test-receipts", "show", sha], check=False)
+        if back.returncode != 0 or back.stdout.strip() != text.strip():
+            raise Refuse("the receipt note did not read back as written")
+
+
+def main():
+    ap = argparse.ArgumentParser(prog="test_candidate", description=__doc__.split("\n\n")[0])
+    ap.add_argument("commit")
+    ap.add_argument("--base-main", help="main commit the candidate is based on (default: refs/heads/main, "
+                    "else refs/remotes/REMOTE/main)")
+    ap.add_argument("--remote", default="origin")
+    ap.add_argument("--timeout", type=float, default=PHASE_LIMIT,
+                    help="each phase's lockrun --timeout (seconds, at most %g)" % PHASE_LIMIT)
+    ap.add_argument("--lock-timeout", type=float, help="give up if the lock is not free in time")
+    ap.add_argument("--list-file", default=DEFAULT_LIST,
+                    help="the test list in the commit (default %s)" % DEFAULT_LIST)
+    args = ap.parse_args()
+
+    t_start, started_at = time.monotonic(), now_iso()
+    try:
+        if not 0 < args.timeout <= PHASE_LIMIT:
+            raise Refuse("--timeout %g: each phase's limit is over 0 and at most %g s" % (args.timeout, PHASE_LIMIT))
+        repo = toplevel(".")
+        sha = resolve_exact_commit(repo, args.commit)
+        tree = tree_of(repo, sha)
+        base, base_source = resolve_base(repo, args)
+        manifest = manifest_at(repo, sha, args.list_file)
+        bad = manifest_problems(manifest["steps"])
+        if bad:
+            raise Refuse("the test list %s at %s can't pass: %s" % (args.list_file, sha[:12], "; ".join(bad)))
+        lockrun_path, lockrun_src, lockrun_bytes = pick_lockrun()
+    except Refuse as e:
+        say("REFUSED: %s" % e)
+        return EXIT_REFUSED
+    say("candidate %s (tree %s); base main %s from %s" % (sha, tree, base, base_source))
+    say("check set: %s (%d steps, sha256 %s), %s sha256 %s" % (
+        manifest["list"], len(manifest["steps"]), manifest["list_sha256"][:12],
+        manifest["runner"], manifest["runner_sha256"][:12]))
+
+    receipt_root = os.environ.get("TEST_RECEIPT_DIR") or os.path.expanduser("~/src/a/claude-paint-receipts")
+    receipt_dir = os.path.join(receipt_root, sha, time.strftime("%Y%m%dT%H%M%S") + "-%d" % os.getpid())
+    # under /tmp, not a deep $TMPDIR: the easel's tests bind Unix sockets under the build
+    # dir's tmp/, and macOS refuses socket paths of 104 bytes or more. Resolved (/tmp is
+    # /private/tmp there): the easel prints resolved paths, and its tests compare them with
+    # CARGO_TARGET_TMPDIR, which cargo derives from the target dir as given
+    tmp = os.path.realpath(tempfile.mkdtemp(prefix="cpc.", dir="/tmp"))
+    wt = os.path.join(tmp, "wt")
+    say("temporary working copy: %s" % wt)
+    lockrun = os.path.join(tmp, "lockrun")
+
+    for s in (signal.SIGTERM, signal.SIGHUP):
+        signal.signal(s, on_signal)
+    proc = None
+    tested = False
+    refused = None
+    cancelled = None
+    problems, settings = [], {}
+    # one entry per phase, in order; "verdict" is test_candidate's judgment of the phase
+    phases = [{"phase": ph, "limit": args.timeout, "ran": False, "exit": None, "verdict": "not run",
+               "verdict_text": "NOT RUN", "summary_verdict": None, "summary_verdict_text": None,
+               "wall_seconds": None, "seconds": None, "command": None, "lockrun_log": None,
+               "lockrun_log_sha256": None, "summary": None, "summary_sha256": None, "logs": [],
+               "known_failures": [], "problems": []} for ph in PHASES]
+    checkout = {}
+    lockrun_info = {}
+    cleanup_errors = ["cleanup did not run"]
+
+    def read_phase(e, code):
+        """Judge phase entry E after its lockrun exited CODE (None: no exit seen)."""
+        if e.get("_read"):
+            return
+        e["_read"] = True
+        ph = e["phase"]
+        e["exit"] = code
+        e["seconds"] = round(time.monotonic() - e.pop("_t0", time.monotonic()), 3)
+        log = os.path.join(receipt_dir, "lockrun-%s.log" % ph)
+        if os.path.isfile(log):
+            e["lockrun_log"], e["lockrun_log_sha256"] = home_redact(log), sha256_file(log)
+        pr, summary, known = [], None, []
+        try:
+            summary, e["logs"], more, known = collect(wt, os.path.join(tmp, "summary-%s.json" % ph),
+                                                      receipt_dir, manifest, ph)
+            pr += more
+        except Exception as ex:  # noqa: BLE001 - a crash while reading is a failure, not a skip
+            pr.append("reading the results failed: %s: %s" % (type(ex).__name__, ex))
+        copy = os.path.join(receipt_dir, "summary-%s.json" % ph)
+        e["summary"] = summary
+        e["summary_sha256"] = sha256_file(copy) if os.path.isfile(copy) else None
+        if isinstance(summary, dict):
+            e["summary_verdict"] = summary.get("verdict")
+            e["summary_verdict_text"] = summary.get("verdict_text")
+            e["wall_seconds"] = summary.get("wall_seconds")
+        sv = e["summary_verdict"]
+        if code is not None and code != RUNNER_EXIT.get(sv, 0):
+            pr.insert(0, "scripts/test (under lockrun) exited %d" % code)
+        unfinished = code in (124, 130, 75) or sv == "unfinished" or e.get("_cancelled")
+        if sv == "unfinished":
+            timed = [st.get("name") for st in summary.get("steps") or [] if isinstance(st, dict) and st.get("timed_out")]
+            pr.insert(0, "scripts/test reported unfinished work (timed out: %s)" % (", ".join(map(str, timed)) or "?"))
+        if e.get("_cancelled"):
+            pr.insert(0, "cancelled (%s)" % e["_cancelled"])
+        if code == 124:
+            pr.insert(0, "timed out after %g s (lockrun exit 124)" % args.timeout)
+        if code == 75:
+            pr.insert(0, "the lock was not free within --lock-timeout; nothing ran")
+        e["problems"] = pr
+        e["known_failures"] = known if not pr else []
+        e["verdict"] = ("unfinished" if unfinished else "fail" if pr
+                        else "known_failure" if known else "pass")
+        e["verdict_text"] = known_text(manifest, known) if e["verdict"] == "known_failure" else e["verdict"].upper()
+        problems.extend("%s phase: %s" % (ph, x) for x in pr)
+
+    current = None
+    try:
+        try:
+            try:
+                # the approved lockrun's checked bytes, outside the working copy: what runs is
+                # exactly what was hashed, and the candidate can't replace it
+                with open(lockrun, "wb") as f:
+                    f.write(lockrun_bytes)
+                os.chmod(lockrun, 0o500)
+                say("lockrun: %s from %s (sha256 %s), run as a copy at %s"
+                    % (home_redact(lockrun_path), lockrun_src, LOCKRUN_SHA256[:12], lockrun))
+                p = run(["git", "-C", repo, "worktree", "add", "--detach", wt, sha], check=False)
+                sys.stderr.write(p.stderr)
+                if p.returncode != 0:
+                    raise Refuse("git worktree add failed")
+                run(["git", "-C", wt, "sparse-checkout", "disable"], check=False)
+                checkout["before"] = verify_full_clean_checkout(wt, sha, tree)
+                checkout["clean_before"] = True
+            except Refuse as e:
+                refused = str(e)
+            if refused is None:
+                os.makedirs(receipt_dir, exist_ok=True)
+                env = dict(os.environ, CARGO_TARGET_DIR=os.path.join(wt, "target"))
+                lockrun_info = {"path": home_redact(lockrun_path), "source": lockrun_src,
+                                "sha256": sha256_file(lockrun), "pinned_sha256": LOCKRUN_SHA256,
+                                "ran": "a copy in the temporary directory, outside the working copy, "
+                                       "once per phase"}
+                if not os.access(os.path.join(wt, "scripts", "test"), os.X_OK):
+                    problems.append("the commit has no executable scripts/test")
+                for e in phases if not problems else []:
+                    ph = e["phase"]
+                    if ph == "check":
+                        build = phases[0]
+                        between = checkout_problems(checkout.get("between"), sha, tree, "after the build phase")
+                        if build["verdict"] != "pass" or between:
+                            why = ("the build phase was unfinished" if build["verdict"] == "unfinished"
+                                   else "the build phase did not pass" if build["verdict"] != "pass"
+                                   else "the checkout changed during the build phase")
+                            e["why_not_run"] = why
+                            if build["verdict"] != "unfinished":
+                                problems.append("check phase: not run: %s" % why)
+                            say("not running the check phase: %s" % why)
+                            break
+                    cmd = [lockrun, "--timeout", "%g" % args.timeout, "--log",
+                           os.path.join(receipt_dir, "lockrun-%s.log" % ph), "--owner",
+                           "test_candidate %s %s" % (sha[:12], ph)]
+                    if args.lock_timeout is not None:
+                        cmd += ["--lock-timeout", "%g" % args.lock_timeout]
+                    cmd += ["--", "scripts/test", "--all", "--phase", ph,
+                            "--summary", os.path.join(tmp, "summary-%s.json" % ph)]
+                    if args.list_file != DEFAULT_LIST:
+                        cmd += ["--list", args.list_file]
+                    e["command"] = home_redact(shlex.join(["lockrun"] + cmd[1:]))
+                    e["ran"], e["_t0"], current, tested = True, time.monotonic(), e, True
+                    say("%s phase: running: %s" % (ph, shlex.join(cmd)))
+                    proc = subprocess.Popen(cmd, cwd=wt, env=env, stdin=subprocess.DEVNULL)
+                    code = proc.wait()
+                    proc = None
+                    read_phase(e, code)
+                    current = None
+                    say("%s phase: %s (lockrun exit %d)" % (ph, e["verdict_text"], code))
+                    if ph == "build":
+                        try:
+                            checkout["between"] = checkout_state(wt, sha)
+                        except Exception as ex:  # noqa: BLE001 - no evidence is itself the failure
+                            checkout["between"] = None
+                            checkout["between_error"] = "%s: %s" % (type(ex).__name__, ex)
+                        problems += checkout_problems(checkout["between"], sha, tree, "after the build phase")
+        except (KeyboardInterrupt, Stop) as e:
+            cancelled = "SIGINT" if isinstance(e, KeyboardInterrupt) else signal.Signals(e.args[0]).name
+            say("cancelled (%s); stopping the test and cleaning up" % cancelled)
+        finally:
+            for s in (signal.SIGINT, signal.SIGTERM, signal.SIGHUP):
+                signal.signal(s, signal.SIG_IGN)
+            code = None
+            if proc is not None:
+                code = proc.poll()
+                if code is None:
+                    try:
+                        proc.send_signal(signal.SIGTERM)  # lockrun stops the job's process group
+                        code = proc.wait(timeout=60)
+                    except subprocess.TimeoutExpired:
+                        proc.kill()
+                        code = proc.wait()
+            if current is not None:
+                if cancelled:
+                    current["_cancelled"] = cancelled
+                read_phase(current, code)
+            if tested:
+                try:
+                    checkout["after"] = checkout_state(wt, sha)
+                except Exception as e:  # noqa: BLE001 - no evidence is itself the failure
+                    checkout["after"] = None
+                    checkout["after_error"] = "%s: %s" % (type(e).__name__, e)
+                problems += checkout_problems(checkout["after"], sha, tree, "after the test")
+                try:
+                    steps = []
+                    for e in phases:
+                        if isinstance(e["summary"], dict) and isinstance(e["summary"].get("steps"), list):
+                            steps += e["summary"]["steps"]
+                    settings = build_settings(wt, {"steps": steps})
+                except Exception as e:  # noqa: BLE001
+                    problems.append("reading the build settings failed: %s: %s" % (type(e).__name__, e))
+    finally:
+        for s in (signal.SIGINT, signal.SIGTERM, signal.SIGHUP):
+            signal.signal(s, signal.SIG_IGN)
+        cleanup_errors = remove_worktree(repo, wt, tmp)
+        for err in cleanup_errors:
+            say("CLEANUP FAILED: %s" % err)
+        if not cleanup_errors:
+            say("removed the temporary working copy and its build directory")
+        if os.path.isdir(receipt_dir) and not os.listdir(receipt_dir):
+            os.rmdir(receipt_dir)
+
+    if refused is not None and not cancelled:
+        say("REFUSED: %s" % refused)
+        if cleanup_errors:
+            say("and the temporary working copy could not be removed (see above)")
+        return EXIT_REFUSED
+    if not tested and not problems:
+        return EXIT_UNFINISHED if cancelled else EXIT_REFUSED
+    if cancelled and not any(e.get("_cancelled") for e in phases):
+        problems.insert(0, "cancelled (%s)" % cancelled)
+    problems += ["cleanup failed: %s" % e for e in cleanup_errors]
+    build, check = phases
+    if cancelled or any(e["verdict"] == "unfinished" for e in phases):
+        verdict = "unfinished"
+    elif problems or build["verdict"] != "pass" or check["verdict"] not in ("pass", "known_failure"):
+        verdict = "fail"
+    else:
+        verdict = check["verdict"]
+    for e in phases:
+        for k in [k for k in e if k.startswith("_")]:
+            del e[k]
+
+    os.makedirs(receipt_dir, exist_ok=True)
+    receipt = {
+        "format": RECEIPT_FORMAT,
+        "verdict": verdict,
+        "verdict_text": check["verdict_text"] if verdict == "known_failure" else verdict.upper(),
+        "problems": problems,
+        "candidate": {"commit": sha, "tree": tree, "requested": args.commit},
+        "base_main": {"commit": base, "source": base_source, "is_ancestor": is_ancestor(repo, base, sha)},
+        "exit": EXIT[verdict],
+        "phase_limit_s": args.timeout,
+        "started_at": started_at,
+        "ended_at": now_iso(),
+        "seconds": round(time.monotonic() - t_start, 3),
+        "tool": {"name": "scripts/test_candidate", "sha256": tools_sha256(*TOOL_FILES)},
+        "lockrun": lockrun_info,
+        "checkout": checkout,
+        "cleanup_errors": cleanup_errors,
+        "build": settings,
+        "manifest": manifest,
+        "phases": phases,
+        "receipt_dir": home_redact(receipt_dir),
+    }
+    text = home_redact(json.dumps(receipt, indent=1, sort_keys=True)) + "\n"
+    with open(os.path.join(receipt_dir, "receipt.json"), "w") as f:
+        f.write(text)
+    try:
+        assert_publishable(text, "the receipt")
+        add_note(repo, sha, text)
+        say("receipt recorded: git notes --ref=test-receipts show %s" % sha[:12])
+    except Refuse as e:
+        say("RECEIPT NOT RECORDED: %s (local copy: %s)" % (e, home_redact(receipt_dir)))
+        verdict = "fail" if verdict in ("pass", "known_failure") else verdict
+    say("receipt files: %s" % home_redact(receipt_dir))
+    for prob in problems:
+        say("  - %s" % prob)
+    for e in phases:
+        say("%s phase: %s%s" % (e["phase"], e["verdict_text"],
+                                " (lockrun exit %s, %s s)" % (e["exit"], e["seconds"]) if e["ran"] else ""))
+    say("VERDICT: %s for %s" % (receipt["verdict_text"] if verdict == receipt["verdict"] else verdict.upper(), sha))
+    say("notes are not pushed with branches: git push %s %s" % (args.remote, RECEIPTS_REF))
+    return EXIT[verdict]
+
+
+if __name__ == "__main__":
+    sys.exit(main())

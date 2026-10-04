@@ -1,0 +1,657 @@
+#!/usr/bin/env python3
+"""The test commands.
+
+    scripts/test                      the fast checks (about a minute once built)
+    scripts/test --all                every required check: the fast ones, the slow
+                                      tests by exact name, the scripts' tests, the
+                                      painter builds and the Python tests
+    scripts/test --all --candidate C  test commit C in a fresh clean worktree and
+                                      record a receipt (scripts/test_candidate)
+    options: --summary FILE (JSON summary), --logs DIR (step logs; default a new
+             directory under $TMPDIR), --list FILE (a step list other than the
+             mode's), --only NAME (run the named steps of the list; the summary
+             says so and its verdict is never "pass"), --phase build|check
+             (only the build steps, or only the others; default both)
+
+Two phases. The build steps run first, as one lockrun job of 600 s, then the
+other steps as a second job of 600 s (the plan: builds and final check
+batches, ten minutes each); the second runs only if every build passed. One
+summary covers both, with each phase's limit, exit, verdict and time.
+test_candidate runs the two phases itself (`--phase build`, `--phase check`)
+under its pinned lockrun.
+
+The steps are in notes/speed/test_lists/fast.tsv and all.tsv (reviewed lists,
+protected in notes/golden_paths.txt; notes/speed/SKIPPED.md says what neither
+runs, and why). No step replays a painting. Each line: kind, name, time limit
+(s), the least number of tests it must run, a regex whose matching output
+lines count as its tests ("-" for cargo and pytest, which report counts), a
+bash command run from the repository root, optionally a group (or "-"), and
+optionally a known failure in three more columns: an exit code, a regex and a
+text. A step that exits with exactly that code, prints a line matching the
+regex and has nothing else wrong is a known failure, not a pass: the run's
+verdict is then "known_failure", shown as "NOT ALL GREEN (known pre-existing
+failure: <text>)", exit 4 (the thinner's check 13 (b) awaits the user's
+decision). Any other exit fails the step. A group:
+consecutive steps of one group run at the same time, each with its own time
+limit and its own TMPDIR (for steps that mostly wait, beside one that keeps the
+cores busy). Kinds:
+
+    build   a build; it has no tests (its time is reported as build time)
+    cargo   `cargo test ...`: counts from the "test result:" lines
+    pytest  counts from pytest's last line
+    script  counts the output lines that match the regex
+
+A list must hold at least one step that isn't a build, and every such step a
+minimum of at least one test. A step fails if its command fails, it runs past
+its time limit or it runs fewer tests than its minimum: a test name that
+matches nothing fails. The run passes only if every step passes.
+
+Locking and stopping. The whole run is one job of scripts/lockrun (600 s, the
+plan's limit for builds and final batches), which validates any LOCKRUN_TOKEN
+it inherits (a stale token waits for the lock like anyone). Every step runs in
+that job's process group, so the outer timeout, a cancellation of lockrun and
+a crash of this coordinator all reach every step still in the group (lockrun
+stops the group and holds the lock until no process of it is left).
+
+This coordinator stops only its own steps' processes. Each step runs with
+CLAUDE_PAINT_TEST_RUN in its environment (the run's id and the step's); its
+processes keep it when they leave the process group (the easel's session
+server starts its own group), and no unrelated process has it. A step past
+its limit is stopped with every process marked with its id, and every
+descendant seen with it that is still in the group (repeated `ps` scans: a
+child that outlives its parent is still known): SIGTERM, then SIGKILL until
+none is left; the other steps of its group go on. After every step or group,
+the run's leftovers are stopped the same way. When lockrun started this run
+as its own job, any other process left in the job's group is a leftover too;
+nested in another job (a batch, or test_candidate's lockrun) its other
+processes are left alone. SIGTERM, SIGHUP or SIGINT to the coordinator stops
+the running steps' processes and ends the run "unfinished" (exit 130). Not
+stopped: shared daemons a step starts (sccache's server, which other jobs use);
+a process that clears its environment and leaves the group; and, if this
+coordinator is killed (SIGKILL), a marked process that left the group (lockrun
+stops only the group).
+
+Cargo's target directory is resolved once (`cargo metadata`: CARGO_TARGET_DIR
+and Cargo configuration) and exported as CARGO_TARGET_DIR to every step, so
+the steps that run `$CARGO_TARGET_DIR/release/easel` run the build just made.
+
+Exit: 0 pass; 1 fail; 3 unfinished (a step timed out, or a partial run); 4 a
+known failure and nothing else wrong; 124 a phase's lockrun timed out; 130
+cancelled.
+
+The summary (--summary) is JSON: mode, phase, verdict ("pass", "fail",
+"unfinished" or "known_failure") and verdict_text, phases (when both ran), list (the list file, relative to the repository), list_sha256,
+runner_sha256 (this file), target_dir, commit, whether the worktree was dirty,
+wall seconds, the steps' build and test seconds (summed: grouped steps
+overlap), and per step: name, kind, command, limit, least, group, exit,
+seconds, tests_run, passed, failed, ignored, timed_out, ok, known_failure, known, why, log
+and log_sha256. Exit 0 only on "pass".
+"""
+
+import argparse
+import datetime
+import hashlib
+import json
+import os
+import re
+import shutil
+import signal
+import subprocess
+import sys
+import tempfile
+import time
+import uuid
+
+REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+LISTS = {"fast": "notes/speed/test_lists/fast.tsv", "all": "notes/speed/test_lists/all.tsv"}
+# the plan's limit for builds and final batches; scripts/tests/test_runner.sh may lower it
+OUTER_LIMIT = 600.0
+
+
+def git(*args):
+    return subprocess.run(["git", "-C", REPO, *args], capture_output=True, text=True).stdout.strip()
+
+
+def sha256(path):
+    return hashlib.sha256(open(path, "rb").read()).hexdigest()
+
+
+def read_list(path):
+    steps = []
+    for n, line in enumerate(open(path), 1):
+        if not line.strip() or line.startswith("#"):
+            continue
+        f = line.rstrip("\n").split("\t")
+        if len(f) not in (6, 7, 10):
+            raise SystemExit("scripts/test: %s line %d: want 6, 7 or 10 tab-separated fields, found %d" % (path, n, len(f)))
+        kind, name, limit, least, regex, cmd = f[:6]
+        group = f[6] if len(f) >= 7 and f[6] not in ("", "-") else None
+        known = None
+        if len(f) == 10:
+            try:
+                known = {"exit": int(f[7]), "regex": f[8], "text": f[9]}
+                re.compile(f[8])
+            except (ValueError, re.error):
+                raise SystemExit("scripts/test: %s line %d: a known failure is an exit code, a regex and a text" % (path, n))
+            if kind == "build" or known["exit"] == 0 or not f[9].strip():
+                raise SystemExit("scripts/test: %s line %d: a known failure needs a test step, a nonzero exit and a text" % (path, n))
+        if kind not in ("build", "cargo", "pytest", "script"):
+            raise SystemExit("scripts/test: %s line %d: unknown kind %r" % (path, n, kind))
+        try:
+            limit, least = float(limit), int(least)
+        except ValueError:
+            raise SystemExit("scripts/test: %s line %d: the limit and the minimum are numbers" % (path, n))
+        if not 0 < limit <= OUTER_LIMIT:
+            raise SystemExit("scripts/test: %s line %d: a step's limit is over 0 and at most %g s" % (path, n, OUTER_LIMIT))
+        if kind != "build" and least < 1:
+            raise SystemExit("scripts/test: %s line %d: step %s must run at least one test" % (path, n, name))
+        if kind == "script" and regex == "-":
+            raise SystemExit("scripts/test: %s line %d: a script step needs a regex to count its tests" % (path, n))
+        steps.append({"kind": kind, "name": name, "limit": limit, "least": least,
+                      "regex": None if regex == "-" else regex, "command": cmd, "group": group, "known": known})
+    if not any(s["kind"] != "build" for s in steps):
+        raise SystemExit("scripts/test: %s lists no test step (only builds, or nothing)" % path)
+    names = [s["name"] for s in steps]
+    if len(set(names)) != len(names):
+        raise SystemExit("scripts/test: %s names a step twice" % path)
+    # a group's steps must be listed together: they run at the same time
+    seen, last = set(), None
+    for s in steps:
+        g = s["group"]
+        if g is not None and g != last and g in seen:
+            raise SystemExit("scripts/test: %s: the steps of group %r are not listed together" % (path, g))
+        if g is not None:
+            seen.add(g)
+        last = g
+    return steps
+
+
+def count(step, out):
+    """(tests_run, passed, failed, ignored) from a step's output."""
+    if step["kind"] == "cargo":
+        p = f = i = 0
+        for m in re.finditer(r"^test result: \w+\. (\d+) passed; (\d+) failed; (\d+) ignored", out, re.M):
+            p, f, i = p + int(m.group(1)), f + int(m.group(2)), i + int(m.group(3))
+        return p + f, p, f, i
+    if step["kind"] == "pytest":
+        last = [l for l in out.splitlines() if re.search(r"\d+ (passed|failed|error)", l)]
+        line = last[-1] if last else ""
+        get = lambda w: sum(int(x) for x in re.findall(r"(\d+) %s" % w, line))
+        p, f, e, s = get("passed"), get("failed"), get("errors?"), get("skipped")
+        return p + f + e, p, f + e, s
+    if step["kind"] == "script":
+        n = len(re.findall(step["regex"], out, re.M))
+        return n, n, 0, 0
+    return 0, 0, 0, 0
+
+
+# ---------------------------------------------------------------- processes
+
+# Every step runs with this variable in its environment: the run's id and the
+# step's (inherited ids first, colon-separated). Its processes keep it whatever
+# group or session they move to (the easel's session server leaves the group),
+# unless they clear their environment; an unrelated process never has it, so a
+# reused pid is never mistaken for a step's.
+MARK = "CLAUDE_PAINT_TEST_RUN"
+# Shared daemons a step may start but must not stop: other jobs use them too.
+SHARED = {"sccache"}
+
+
+def table():
+    """{pid: (ppid, pgid, zombie)} of every process (ps works on macOS and Linux)."""
+    ps = subprocess.Popen(["ps", "-A", "-o", "pid=,ppid=,pgid=,stat="], stdout=subprocess.PIPE, text=True)
+    out = ps.communicate()[0]
+    t = {}
+    for line in out.splitlines():
+        f = line.split()
+        if len(f) >= 3 and int(f[0]) != ps.pid:  # (not ps itself)
+            t[int(f[0])] = (int(f[1]), int(f[2]), len(f) >= 4 and f[3].startswith("Z"))
+    return t
+
+
+def marks():
+    """{pid: (run and step ids in its MARK, its program's name)} of the processes that have MARK."""
+    out = {}
+    if os.path.isdir("/proc/self"):
+        for d in os.listdir("/proc"):
+            if not d.isdigit():
+                continue
+            try:
+                env = open("/proc/%s/environ" % d, "rb").read().split(b"\0")
+                argv0 = open("/proc/%s/cmdline" % d, "rb").read().split(b"\0")[0].decode("utf-8", "replace")
+            except OSError:
+                continue
+            for e in env:
+                if e.startswith(MARK.encode() + b"="):
+                    out[int(d)] = (set(e[len(MARK) + 1:].decode("utf-8", "replace").split(":")), argv0)
+        return out
+    # macOS: ps -E appends each process's environment to its command line
+    ps = subprocess.Popen(["ps", "-A", "-E", "-ww", "-o", "pid=,command="], stdout=subprocess.PIPE, text=True,
+                          errors="replace")
+    txt = ps.communicate()[0]
+    pat = re.compile(r"(?:^|\s)%s=([0-9a-f.:]+)(?=\s|$)" % MARK)
+    for line in txt.splitlines():
+        m = pat.search(line)
+        f = line.split(None, 2)
+        if m and len(f) >= 2 and int(f[0]) != ps.pid:
+            out[int(f[0])] = (set(m.group(1).split(":")), f[1])
+    return out
+
+
+def descendants(root, t):
+    kids = {}
+    for pid, (ppid, _, _) in t.items():
+        kids.setdefault(ppid, []).append(pid)
+    out, todo = set(), [root]
+    while todo:
+        for k in kids.get(todo.pop(), []):
+            if k not in out:
+                out.add(k)
+                todo.append(k)
+    return out
+
+
+class Job:
+    """What this run may stop: its steps' processes, found by MARK (in or out
+    of the process group) and, for one that cleared its environment, as a
+    descendant of a step seen while it ran and still in the group. When this
+    run owns its process group (lockrun started it as its job, not nested in
+    another job), also any other process left in the group."""
+
+    def __init__(self, run_id, owns_group):
+        self.run = run_id
+        self.pgid = os.getpgid(0)
+        self.owns_group = owns_group
+        t = table()
+        self.keep = {os.getpid()}
+        p = os.getppid()
+        while p in t:  # this coordinator's ancestors are never stopped
+            self.keep.add(p)
+            p = t[p][0]
+            if p in self.keep or p <= 1:
+                break
+
+    def targets(self, token, seen):
+        """Live processes to stop for `token` (the run's or a step's id), with `seen` pids."""
+        t, m = table(), marks()
+        out = {p for p, (ids, argv0) in m.items()
+               if token in ids and os.path.basename(argv0) not in SHARED and p in t and not t[p][2]}
+        out |= {p for p in seen if p in t and t[p][1] == self.pgid and not t[p][2]}
+        if self.owns_group and token == self.run:
+            out |= {p for p, (_, g, z) in t.items() if g == self.pgid and not z}
+        return out - self.keep
+
+    def stop(self, token, seen=frozenset(), grace=5.0):
+        """SIGTERM, then SIGKILL, until no target is left. True if none is."""
+        for sig, wait in ((signal.SIGTERM, grace), (signal.SIGKILL, 10.0)):
+            alive = self.targets(token, seen)
+            if not alive:
+                return True
+            for p in alive:
+                try:
+                    os.kill(p, sig)
+                except ProcessLookupError:
+                    pass
+            end = time.monotonic() + wait
+            while time.monotonic() < end:
+                time.sleep(0.05)
+                if not self.targets(token, seen):
+                    return True
+        return not self.targets(token, seen)
+
+
+class Cancelled(Exception):
+    pass
+
+
+def start_step(job, step, index, logdir, env):
+    log = os.path.join(logdir, re.sub(r"[^A-Za-z0-9_.-]", "_", step["name"]) + ".log")
+    lf = open(log, "wb")
+    lf.write(("$ %s\n" % step["command"]).encode())
+    lf.flush()
+    # each step gets its own short scratch directory (socket paths must stay under
+    # 104 bytes; steps of a group run at once)
+    scratch = tempfile.mkdtemp(prefix="cpt.", dir="/tmp")
+    token = "%s.%d" % (job.run, index)
+    ids = [x for x in env.get(MARK, "").split(":") if x] + [job.run, token]
+    # no new session: the step stays in this job's process group
+    p = subprocess.Popen(["bash", "-c", step["command"]], cwd=REPO, stdout=lf, stderr=subprocess.STDOUT,
+                         stdin=subprocess.DEVNULL, env=dict(env, TMPDIR=scratch, **{MARK: ":".join(ids)}))
+    return {"step": step, "p": p, "lf": lf, "log": log, "t0": time.monotonic(), "timed_out": False,
+            "scratch": scratch, "seen": {p.pid}, "token": token}
+
+
+def finish_step(r):
+    step, p = r["step"], r["p"]
+    r["lf"].close()
+    shutil.rmtree(r["scratch"], ignore_errors=True)
+    secs = r.get("t1", time.monotonic()) - r["t0"]
+    log = r["log"]
+    out = open(log, "rb").read().decode("utf-8", "replace")
+    # (counted without the "$ <command>" header line this runner wrote)
+    body = out.split("\n", 1)[1] if "\n" in out else ""
+    run, passed, failed, ignored = count(step, body)
+    code, timed_out = p.returncode, r["timed_out"]
+    ok = code == 0 and not timed_out and (step["kind"] == "build" or run >= step["least"]) and failed == 0
+    ok = ok and not r.get("unstoppable")
+    # a known failure: exactly the listed exit and the listed line, nothing else wrong
+    kn = step.get("known")
+    known_failure = bool(kn and code == kn["exit"] and not timed_out and not r.get("unstoppable")
+                         and re.search(kn["regex"], body, re.M) and run >= step["least"])
+    why = ("known pre-existing failure: %s" % kn["text"]) if known_failure else ("timed out after %g s" % step["limit"] if timed_out else "exit %s" % code if code != 0
+           else "%d failed" % failed if failed else "processes it left could not be stopped" if r.get("unstoppable")
+           else "ran %d tests, fewer than %d" % (run, step["least"]) if not ok else "")
+    if r.get("leftovers"):
+        why = (why + "; " if why else "") + "stopped %d leftover processes" % r["leftovers"]
+    return {"name": step["name"], "kind": step["kind"], "command": step["command"], "limit": step["limit"],
+            "least": step["least"], "group": step["group"], "exit": code, "seconds": round(secs, 2),
+            "tests_run": run if step["kind"] != "build" else None,
+            "passed": passed, "failed": failed, "ignored": ignored, "timed_out": timed_out, "ok": ok,
+            "known_failure": known_failure, "known": kn, "why": why, "log": log, "log_sha256": sha256(log)}
+
+
+def run_batch(job, batch, first, logdir, env):
+    """Run steps at the same time (one step: alone); each has its own time limit."""
+    running = []
+    try:
+        running = [start_step(job, s, first + i, logdir, env) for i, s in enumerate(batch)]
+        last_scan = 0.0
+        while True:
+            now = time.monotonic()
+            if now - last_scan > 0.25:
+                t = table()
+                for r in running:
+                    if "t1" not in r:
+                        r["seen"] |= descendants(r["p"].pid, t)
+                last_scan = now
+            for r in running:
+                if "t1" in r:
+                    continue
+                if r["p"].poll() is not None:
+                    r["t1"] = now
+                elif now - r["t0"] > r["step"]["limit"]:
+                    # this step's processes only: the others of its group go on
+                    r["timed_out"] = True
+                    if not job.stop(r["token"], r["seen"]):
+                        r["unstoppable"] = True
+                    r["p"].poll()
+                    r["t1"] = time.monotonic()
+            if all("t1" in r for r in running):
+                break
+            time.sleep(0.05)
+        # leftovers: whatever the batch's steps left (marked, seen in the group, or
+        # anything in a group this run owns)
+        seen = set().union(*[r["seen"] for r in running])
+        left = job.targets(job.run, seen)
+        if left:
+            stopped = job.stop(job.run, seen)
+            for r in running:
+                r["leftovers"] = len(left & r["seen"]) if len(running) > 1 else len(left)
+                if not stopped:
+                    r["unstoppable"] = True
+        for r in running:
+            if r["p"].returncode is None:
+                r["p"].wait()
+        return [finish_step(r) for r in running]
+    except Cancelled:
+        job.stop(job.run, set().union(*[r["seen"] for r in running]) if running else set(), grace=2.0)
+        for r in running:
+            r["lf"].close()
+            shutil.rmtree(r["scratch"], ignore_errors=True)
+        raise
+
+
+def target_dir():
+    """Cargo's target directory as cargo resolves it (None if cargo can't say)."""
+    try:
+        out = subprocess.run(["cargo", "metadata", "--format-version", "1", "--no-deps"], cwd=REPO,
+                             capture_output=True, text=True, timeout=60)
+        return json.loads(out.stdout)["target_directory"] if out.returncode == 0 else None
+    except (OSError, ValueError, KeyError, subprocess.TimeoutExpired):
+        return None
+
+
+def main():
+    ap = argparse.ArgumentParser(prog="scripts/test", description=__doc__.split("\n\n")[0])
+    ap.add_argument("--all", action="store_true")
+    ap.add_argument("--candidate")
+    ap.add_argument("--summary")
+    ap.add_argument("--logs")
+    ap.add_argument("--list")
+    ap.add_argument("--only", action="append", default=[])
+    ap.add_argument("--phase", choices=("build", "check", "both"), default="both",
+                    help="the build steps, the other steps, or both (default: two lockrun jobs, builds first)")
+    ap.add_argument("--locked", action="store_true", help=argparse.SUPPRESS)  # set when run by lockrun
+    a, rest = ap.parse_known_args()
+    if a.candidate:
+        if not a.all:
+            ap.error("--candidate goes with --all")
+        tool = os.path.join(REPO, "scripts", "test_candidate")
+        os.execv(tool, [tool, a.candidate, *rest])
+    if rest:
+        ap.error("unknown arguments: %s" % " ".join(rest))
+    mode = "all" if a.all else "fast"
+    listfile = a.list or os.path.join(REPO, LISTS[mode])
+    steps = read_list(listfile)  # (before taking the lock: a bad list costs nothing)
+    if not a.locked and a.phase == "both":
+        return run_both(a, mode, listfile, steps)
+    if not a.locked:
+        # one job of lockrun for the whole run. lockrun validates an inherited token
+        # (nested in a real enclosing job: it runs us directly in that job's group)
+        limit = OUTER_LIMIT
+        lower = os.environ.get("SCRIPTS_TEST_OUTER_LIMIT")  # tests only; never above OUTER_LIMIT
+        if lower:
+            limit = min(limit, float(lower))
+        lockrun = os.path.join(REPO, "scripts", "lockrun")
+        os.execv(lockrun, [lockrun, "--timeout", "%g" % limit, "--owner", "scripts/test %s (%s)" % (mode, REPO),
+                           "--", sys.executable, os.path.abspath(__file__), "--locked", *sys.argv[1:]])
+    # --locked: only inside the lockrun job that runs us (its record names this process
+    # group and our token): the leftover sweep stops every other process of the group
+    lockdir = os.environ.get("LOCKRUN_DIR") or "/tmp/lockrun-%d" % os.getuid()
+    try:
+        rec = json.load(open(os.path.join(lockdir, "record.json")))
+    except (OSError, ValueError):
+        rec = {}
+    if not (os.environ.get("LOCKRUN_TOKEN") and rec.get("token") == os.environ["LOCKRUN_TOKEN"]
+            and rec.get("state") == "running" and rec.get("pgid") == os.getpgid(0)):
+        raise SystemExit("scripts/test: --locked is for the lockrun job that runs scripts/test; run it without --locked")
+    # the job is ours alone if lockrun started it for this run: its leader (the trampoline)
+    # is our parent and its command is this runner. Nested in another job (a batch, or
+    # test_candidate's lockrun), the group holds that job's other processes too
+    cmd = rec.get("command") or []
+    owns = rec.get("pid") == os.getppid() and "--locked" in cmd and any(
+        c.endswith("scripts/test") or os.path.abspath(c) == os.path.abspath(__file__) for c in cmd)
+    job = Job(uuid.uuid4().hex[:16], owns)
+    if a.phase != "both":
+        steps = [st for st in steps if (st["kind"] == "build") == (a.phase == "build")]
+    if a.only:
+        missing = [n for n in a.only if n not in [s["name"] for s in steps]]
+        if missing:
+            raise SystemExit("scripts/test: no step named %s in %s" % (", ".join(missing), listfile))
+        steps = [s for s in steps if s["name"] in a.only]
+    logdir = a.logs or tempfile.mkdtemp(prefix="claude-paint-test-%s-" % mode)
+    os.makedirs(logdir, exist_ok=True)
+    env = dict(os.environ)
+    env.pop("EASEL_BOX", None)
+    # no __pycache__ beside the Python a step imports (the thinner's check 2 imports the
+    # baseline's tools, whose package check counts every file there)
+    env["PYTHONDONTWRITEBYTECODE"] = "1"
+    target = target_dir()
+    if target:
+        env["CARGO_TARGET_DIR"] = target
+    started = datetime.datetime.now().astimezone().isoformat(timespec="seconds")
+    wall0 = time.monotonic()
+    results = []
+    interrupted = False
+
+    def on_signal(signum, frame):
+        for s in (signal.SIGTERM, signal.SIGHUP, signal.SIGINT):
+            signal.signal(s, signal.SIG_IGN)
+        raise Cancelled()
+
+    for s in (signal.SIGTERM, signal.SIGHUP, signal.SIGINT):
+        signal.signal(s, on_signal)
+    batches = []
+    for s in steps:
+        if s["group"] is not None and batches and batches[-1][0]["group"] == s["group"]:
+            batches[-1].append(s)
+        else:
+            batches.append([s])
+    try:
+        first = 0
+        for batch in batches:
+            if len(batch) > 1:
+                print("scripts/test: group %s: %s at the same time" % (batch[0]["group"], ", ".join(s["name"] for s in batch)), flush=True)
+            else:
+                print("scripts/test: %-34s ..." % batch[0]["name"], end="", flush=True)
+            done = run_batch(job, batch, first, logdir, env)
+            first += len(batch)
+            for r in done:
+                results.append(r)
+                counts = "" if r["kind"] == "build" else "  %d run, %d failed%s" % (
+                    r["tests_run"], r["failed"], ", %d ignored/skipped" % r["ignored"] if r["ignored"] else "")
+                if len(batch) > 1:
+                    print("scripts/test:   %-32s ..." % r["name"], end="")
+                print(" %s %7.1f s%s%s" % ("ok  " if r["ok"] else "KNOWN" if r["known_failure"] else "FAIL", r["seconds"], counts, "  (%s)" % r["why"] if r["why"] else ""), flush=True)
+    except Cancelled:
+        interrupted = True
+        print("\nscripts/test: cancelled; the running steps were stopped", flush=True)
+    good = all(r["ok"] or r["known_failure"] for r in results)
+    verdict = ("unfinished" if interrupted or any(r["timed_out"] for r in results) or len(results) < len(steps)
+               else "fail" if not good else "known_failure" if any(r["known_failure"] for r in results) else "pass")
+    if a.only and verdict in ("pass", "known_failure"):
+        verdict = "unfinished"  # a partial run is never a pass
+    build = sum(r["seconds"] for r in results if r["kind"] == "build")
+    tests = sum(r["seconds"] for r in results if r["kind"] != "build")
+    summary = {
+        "mode": mode, "phase": a.phase, "verdict": verdict, "verdict_text": verdict_text(verdict, results),
+        "list": os.path.relpath(listfile, REPO),
+        "list_sha256": sha256(listfile), "runner_sha256": sha256(os.path.abspath(__file__)),
+        "target_dir": target, "only": a.only, "commit": git("rev-parse", "HEAD"),
+        "dirty": bool(git("status", "--porcelain")), "started": started,
+        "wall_seconds": round(time.monotonic() - wall0, 1), "build_seconds": round(build, 1),
+        "test_seconds": round(tests, 1), "tests_run": sum(r["tests_run"] or 0 for r in results), "steps": results,
+    }
+    if a.summary:
+        with open(a.summary, "w") as f:
+            json.dump(summary, f, indent=1)
+            f.write("\n")
+    report(summary, logdir, "" if a.phase == "both" else " (%s phase)" % a.phase)
+    if interrupted:
+        return 130
+    return EXIT[verdict]
+
+
+# exit codes: pass 0; fail 1; a known pre-existing failure and nothing else wrong 4;
+# unfinished 3 (a step timed out, or a partial run); cancelled 130; lockrun's timeout 124
+EXIT = {"pass": 0, "fail": 1, "unfinished": 3, "known_failure": 4}
+
+
+def verdict_text(verdict, results):
+    if verdict == "known_failure":
+        return "NOT ALL GREEN (known pre-existing failure: %s)" % "; ".join(
+            r["known"]["text"] for r in results if r.get("known_failure"))
+    return verdict.upper()
+
+
+def report(summary, logdir, what=""):
+    results = summary["steps"]
+    bad = [r["name"] for r in results if not r["ok"]]
+    print("scripts/test %s%s: %s. %d steps, %d tests in %.0f s (steps: build %.0f s, tests %.0f s); logs in %s%s" % (
+        summary["mode"], what, summary["verdict_text"], len(results), summary["tests_run"], summary["wall_seconds"],
+        summary["build_seconds"], summary["test_seconds"], logdir, "; not ok: " + ", ".join(bad) if bad else ""), flush=True)
+
+
+def run_both(a, mode, listfile, steps):
+    """The build steps, then the others: two lockrun jobs of OUTER_LIMIT each (the
+    plan: builds and final check batches, ten minutes each). The check job runs only if
+    every build passed. One summary for both, its steps in list order."""
+    limit = OUTER_LIMIT
+    lower = os.environ.get("SCRIPTS_TEST_OUTER_LIMIT")  # tests only; never above OUTER_LIMIT
+    if lower:
+        limit = min(limit, float(lower))
+    lockrun = os.path.join(REPO, "scripts", "lockrun")
+    logdir = a.logs or tempfile.mkdtemp(prefix="claude-paint-test-%s-" % mode)
+    work = tempfile.mkdtemp(prefix="claude-paint-test-phases-")
+    rest = [x for x in sys.argv[1:]]
+    for flag in ("--summary", "--logs"):
+        while flag in rest:
+            i = rest.index(flag)
+            del rest[i:i + 2]
+    rest = [x for x in rest if not x.startswith("--summary=") and not x.startswith("--logs=")]
+    phases, parts = {}, []
+    current, cancelled = [None], [False]
+
+    def forward(signum, frame):  # cancelling this run cancels the lockrun job running now
+        cancelled[0] = True
+        if current[0] is not None and current[0].poll() is None:
+            try:
+                os.kill(current[0].pid, signum)
+            except ProcessLookupError:
+                pass
+
+    for sg in (signal.SIGTERM, signal.SIGHUP, signal.SIGINT):
+        signal.signal(sg, forward)
+    for ph in ("build", "check"):
+        if cancelled[0]:
+            break
+        out = os.path.join(work, ph + ".json")
+        cmd = [lockrun, "--timeout", "%g" % limit, "--owner", "scripts/test %s %s (%s)" % (mode, ph, REPO), "--",
+               sys.executable, os.path.abspath(__file__), "--locked", "--phase", ph, "--summary", out,
+               "--logs", logdir, *rest]
+        current[0] = subprocess.Popen(cmd)
+        while True:
+            try:
+                code = current[0].wait()
+                break
+            except InterruptedError:
+                continue
+        current[0] = None
+        if cancelled[0] and code == 0:
+            code = 130
+        try:
+            part = json.load(open(out))
+        except (OSError, ValueError):
+            part = None
+        phases[ph] = {"limit": limit, "exit": code, "verdict": part["verdict"] if part else "unfinished",
+                      "wall_seconds": part["wall_seconds"] if part else None}
+        if part:
+            parts.append(part)
+        if code == 130 or not part or part["verdict"] not in ("pass", "known_failure"):
+            break
+    shutil.rmtree(work, ignore_errors=True)
+    by_name = {r["name"]: r for p in parts for r in p["steps"]}
+    results = [by_name[s["name"]] for s in steps if s["name"] in by_name]
+    vs = [phases[ph]["verdict"] for ph in phases]
+    verdict = ("unfinished" if "unfinished" in vs or len(phases) < 2 and vs[-1] != "fail" else "fail" if "fail" in vs
+               else "known_failure" if "known_failure" in vs else "pass")
+    if cancelled[0] or any(ph["exit"] == 130 for ph in phases.values()):
+        verdict = "unfinished"
+    if a.only and verdict in ("pass", "known_failure"):
+        verdict = "unfinished"
+    base = parts[0] if parts else {}
+    summary = {
+        "mode": mode, "phase": "both", "verdict": verdict, "verdict_text": verdict_text(verdict, results),
+        "list": os.path.relpath(listfile, REPO), "list_sha256": sha256(listfile),
+        "runner_sha256": sha256(os.path.abspath(__file__)), "target_dir": base.get("target_dir"), "only": a.only,
+        "commit": git("rev-parse", "HEAD"), "dirty": bool(git("status", "--porcelain")),
+        "started": base.get("started"), "phases": phases,
+        "wall_seconds": round(sum(p["wall_seconds"] or 0 for p in phases.values()), 1),
+        "build_seconds": round(sum(r["seconds"] for r in results if r["kind"] == "build"), 1),
+        "test_seconds": round(sum(r["seconds"] for r in results if r["kind"] != "build"), 1),
+        "tests_run": sum(r["tests_run"] or 0 for r in results), "steps": results,
+    }
+    if a.summary:
+        with open(a.summary, "w") as f:
+            json.dump(summary, f, indent=1)
+            f.write("\n")
+    report(summary, logdir, " (build and check phases)")
+    if cancelled[0] or any(ph["exit"] == 130 for ph in phases.values()):
+        return 130
+    if any(ph["exit"] == 124 for ph in phases.values()):
+        return 124
+    return EXIT[verdict]
+
+
+if __name__ == "__main__":
+    sys.exit(main())

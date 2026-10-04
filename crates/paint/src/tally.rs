@@ -331,6 +331,11 @@ impl Canvas {
         if self.hand_slice.is_none() { 0.0 } else { (self.tally.secs - self.tally.clocked).max(0.0) }
     }
 
+    /// Minutes of painting time: the clock and the hand time owed to it.
+    pub fn now_min(&self) -> f64 {
+        self.clock() + self.hand_owed_secs() / 60.0
+    }
+
     /// Put the owed hand time on the clock: the paint ages by it. Returns
     /// the minutes. With hand time off, nothing.
     pub fn clock_hand_min(&mut self) -> f64 {

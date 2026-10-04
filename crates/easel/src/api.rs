@@ -996,7 +996,7 @@ impl UserData for WorleyU {
 const WORK_KEYS: &[&str] = &[
     "hand", "pile", "tool", "length", "coverage", "angle", "angle_jitter", "load_at", "cut_in", "pressure", "orient", "dips", "blender", "scrub", "clip",
     "threshold", "ramps", "shake", "curve", "cross", "drift", "tail", "broken", "swell", "clump", "order", "mix_jitter", "seed", "ruler", "load", "hug",
-    "fill", "visible", "behind", "at", "view", "edge", "streak", "second", "scale_at",
+    "fill", "visible", "behind", "at", "view", "edge", "streak", "second", "scale_at", "piles",
 ];
 
 /// How far from the canvas's corner a gesture's point may lie (units; the
@@ -1079,7 +1079,23 @@ fn work(st: &S, mask: Rc<Mask>, o: Table, preset: Option<&str>) -> Result<()> {
     let f = frame(st)?;
     let hand: String = o.get::<Option<String>>("hand")?.unwrap_or_else(|| preset.unwrap_or("body").to_string());
     let blending = hand == "blend" || o.get::<Option<bool>>("blender")?.unwrap_or(false);
+    // piles={{pile, weight}, ...}: graded color, each weight a number or function(x, y)
+    let graded: Option<Vec<(PileU, Value)>> = match o.get::<Option<Table>>("piles")? {
+        None => None,
+        Some(t) => {
+            let mut v = Vec::new();
+            for e in t.sequence_values::<Table>() {
+                let e = e?;
+                v.push((pile_of(&e.get::<Value>(1)?, "work piles")?, e.get::<Value>(2)?));
+            }
+            if v.len() < 2 {
+                return err("work: piles={{pile, weight}, {pile, weight}, ...} takes two or more piles");
+            }
+            Some(v)
+        }
+    };
     let pile = match o.get::<Value>("pile")? {
+        Value::Nil if graded.is_some() => Some(graded.as_ref().unwrap()[0].0.clone()),
         Value::Nil if blending => None,
         // a legacy canvas's passes paint colors (legacy.rs)
         #[cfg(feature = "replay")]
@@ -1151,6 +1167,17 @@ fn work(st: &S, mask: Rc<Mask>, o: Table, preset: Option<&str>) -> Result<()> {
     }
     // scale_at=: the size of the marks across the area (a number or function(x, y)
     // multiplying stroke length and brush width; more strokes where they are smaller)
+    if let Some(g) = &graded {
+        let mut ps = Vec::new();
+        for (p, w) in g {
+            let f: FieldBox<f32> = match w {
+                Value::Nil => return err("work piles: each entry is {pile, weight} (a number or function(x, y))"),
+                w => scalar_field(st, w, b, "work piles weight")?,
+            };
+            ps.push((p.mix.clone(), p.medium, f));
+        }
+        h.piles_at = Some(ps);
+    }
     if let Some(v) = o.get::<Option<Value>>("scale_at")? {
         h.scale_at = Some(scalar_field(st, &v, b, "scale_at")?);
     }

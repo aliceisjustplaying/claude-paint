@@ -50,6 +50,11 @@ pub struct Handling<'a> {
     /// things are far away, larger near. The pass lays more strokes where they
     /// are smaller, so its coverage stays as asked (`scale_at`).
     pub scale_at: Option<Field<'a, f32>>,
+    /// Graded color: several piles, each with its weight across the area;
+    /// every dip takes a mix of them by the weights at the stroke's center
+    /// (the brush dipped into neighboring piles on the palette). Their tubes
+    /// and medium mix as knifed (`piles_at`); `pile` gives the palette.
+    pub piles_at: Option<Vec<(crate::palette::Mixture, f32, Field<'a, f32>)>>,
     /// Cut in the region's edges with this brush instead of clipping: body
     /// strokes stop short of the edge, then short strokes follow the outline.
     pub cut_in: Option<Tool>,
@@ -181,6 +186,7 @@ impl<'a> Handling<'a> {
             pile: None,
             load_at: None,
             scale_at: None,
+            piles_at: None,
             cut_in: None,
             curve: 0.05,
             wave: 0.25,
@@ -918,7 +924,41 @@ fn finish_plan(cv: &Canvas, hd: &Handling, tool: &Tool, c: (f32, f32), pts: Vec<
     let pressure = rng.range(hd.pressure.0, hd.pressure.1);
     let fade = rng.range(0.75, 1.05);
     let load_k = hd.load_at.as_ref().map_or(1.0, |f| f(c.0, c.1).max(0.0));
-    if let Some((pal, pile, medium)) = &hd.pile {
+    if let Some((pal, pile0, medium0)) = &hd.pile {
+        // graded color: the piles mixed by their weights here
+        let graded = hd.piles_at.as_ref().and_then(|ps| {
+            let w: Vec<f32> = ps.iter().map(|p| (p.2)(c.0, c.1).max(0.0)).collect();
+            let tot: f32 = w.iter().sum();
+            if tot <= 1e-6 {
+                return None;
+            }
+            let mut parts: Vec<(usize, f32)> = Vec::new();
+            let (mut med, mut solv, mut oilr) = (0.0f32, 0.0f32, 0.0f32);
+            for (k, (m, md, _)) in ps.iter().enumerate() {
+                let wk = w[k] / tot;
+                if wk <= 0.0 {
+                    continue;
+                }
+                let ms: f32 = m.parts.iter().map(|p| p.1).sum::<f32>().max(1e-9);
+                for &(i, f) in &m.parts {
+                    match parts.iter_mut().find(|p| p.0 == i) {
+                        Some(p) => p.1 += wk * f / ms,
+                        None => parts.push((i, wk * f / ms)),
+                    }
+                }
+                med += wk * md;
+                solv += wk * m.solvent;
+                oilr += wk * m.oil_rate;
+            }
+            let mut mix = pal.pile(parts);
+            mix.solvent = solv;
+            mix.oil_rate = oilr;
+            Some((mix, med))
+        });
+        let (pile, medium) = match &graded {
+            Some((m, md)) => (m, md),
+            None => (pile0, medium0),
+        };
         // the pile on the palette, as knifed (its own mixing generator)
         let mut prng = Rng::new(rng.next_u64());
         let paint = pal.remix(pile, hd.mix_jitter, &mut prng).laid(*medium);

@@ -75,6 +75,19 @@ the picture is yours.
   scattered flecks near you; big uniform dabs read as beads. Tie it to a
   light in the sky.
 
+## Forms and shadows
+
+- **A form is one mass.** Build a rounded thing (a stack, a tree, a figure)
+  as one shape whose parts flow into each other, modeled from light to
+  shadow, not as parts placed on parts (a body with a roof on top reads as a
+  hut). `form{}` and its solids give a single lit volume to paint by.
+- **Shadows take color from around them**: a shadow on a sunlit field is
+  warmed near its base by light thrown up from the field, cooler where it
+  meets the sky's light. Grade it (`piles=`), don't fill it with one violet,
+  and keep it a different value and temperature from the object casting it.
+- **Distance lightens and cools**: far hills and trees paler and bluer than
+  near ones, all of a range alike.
+
 ## Color: broken, not mixed flat
 
 - **Many close piles.** Knife three to five piles of neighboring colors

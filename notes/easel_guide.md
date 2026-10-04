@@ -235,6 +235,7 @@ change:
 | `edge` | how the passage meets the mask's edge (below) |
 | `clip` | `true`: every bristle stops on the mask's edge; or a mask to clip to |
 | `hug` | `true` (default): strokes reach the mask's edges; `false` lets coverage thin there |
+| `piles` | graded color: `{{p1, w1}, {p2, w2}, ...}`, each weight a number or `function(x, y)`; each dip takes a mix of the piles by their weights at the stroke (the brush dipped into neighboring piles), so color changes continuously across one passage, with no seams between masks |
 | `scale_at` | the size of the marks across the area: a number or `function(x, y)` multiplying stroke length and brush width (smaller where things are far, larger near); the pass lays more strokes where they are smaller, so its coverage holds |
 | `fill` | `false` by default: gaps between strokes stay. Set `true` to follow the strokes with dabs into the gaps they left |
 | `order` | `"passages"` (default), `"scatter"`, `"down"`, `"across"` or a sweep angle |

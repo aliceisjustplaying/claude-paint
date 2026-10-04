@@ -190,7 +190,21 @@ fn session_dir(name: &str) -> PathBuf {
     root().join("out/easel").join(name)
 }
 fn sock_path(name: &str) -> PathBuf {
-    session_dir(name).join("sock")
+    short_sock(&session_dir(name))
+}
+/// The session's socket, in its directory when the path fits a sockaddr_un
+/// (104 bytes on macOS, 108 on Linux), else in the temp dir under a name
+/// hashed from the directory: a studio checked out deep in a tree fails to
+/// bind with "path must be shorter than SUN_LEN" otherwise.
+fn short_sock(dir: &Path) -> PathBuf {
+    let p = dir.join("sock");
+    if p.as_os_str().len() < 100 {
+        return p;
+    }
+    use std::hash::{Hash, Hasher};
+    let mut h = std::hash::DefaultHasher::new();
+    dir.hash(&mut h);
+    std::env::temp_dir().join(format!("easel-{:016x}.sock", h.finish()))
 }
 fn log_path(name: &str) -> PathBuf {
     root().join("paintings/lua").join(format!("{name}.lua"))
@@ -1379,6 +1393,16 @@ fn state_digest_line(s: &Session, n: usize, secs: f64) -> String {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn a_long_session_dir_gets_a_short_socket() {
+        let short = std::path::Path::new("/s/out/easel/p");
+        assert_eq!(super::short_sock(short), short.join("sock"));
+        let long = std::path::PathBuf::from(format!("/{}/out/easel/p", "d".repeat(120)));
+        let s = super::short_sock(&long);
+        assert!(s.as_os_str().len() < 100 || s.starts_with(std::env::temp_dir()));
+        assert_ne!(s, long.join("sock"));
+        assert_eq!(s, super::short_sock(&long), "the same directory, the same socket");
+    }
     use super::*;
 
     /// A stray look numbered at the top of u64 leaves no number above it: the look is

@@ -51,7 +51,7 @@ export function registerEaselTools(pi: ExtensionAPI, studio: string, limits: Pru
 				"grid: true, or a spacing in canvas units. " +
 				"survey: true shows the whole canvas at full detail, as several tiles (with mode, not crop or size). " +
 				"compare: the path of an earlier look, shown left of the same view now. " +
-				"palette: true shows the palette instead: each pile a global holds, laid thick, as a thin and a very thin coat over the ground, and the thin coat over a black and white card.",
+				"palette: true shows the palette board instead: each pile knifed out thick and smeared thin across a black stripe.",
 			parameters: Type.Object({
 				crop: Type.Optional(Type.String()),
 				mode: Type.Optional(Type.String()),

@@ -90,7 +90,13 @@ pub(crate) fn install(lua: &Lua, st: S) -> Result<()> {
             let var = Fbm::new(s.seed as u32 + seed, 3, 400.0);
             let c = s.canvas.as_mut().ok_or_else(no_canvas)?;
             c.glaze(&Pigment::varnish(hex(MASTIC)), None, |x, y| coats + vary * var.get(x, y));
-            brushed(c, None);
+            // (a varnished surface is glossy: engine 4 shows no matte veil;
+            // no coats, no varnish)
+            // (nor the hand's time for brushing it)
+            if coats > 0.0 || vary > 0.0 {
+                c.varnished();
+                brushed(c, None);
+            }
             Ok(())
         })
     })?)?;
@@ -149,5 +155,21 @@ mod tests {
             assert!(e.contains("not all dry yet") && e.contains("wait first"), "{verb}: {e}");
         }
         s.run("wait(90*24*60); varnish()").unwrap();
+    }
+
+    // A varnish of no coats lays nothing: the picture is seen as it was; a
+    // varnish makes a lean, matte passage glossy, and it is seen deeper.
+    #[test]
+    fn a_varnish_of_no_coats_changes_nothing() {
+        let mut s = Session::new(100).unwrap();
+        s.run(r#"canvas{size=300, aspect=1, linen=15,
+                ground={{pile={{"lead white",1}},um=100,apply="knife"}}}"#).unwrap();
+        s.run(r#"b = brush("flat", 60); b:load(pile{{"bone black",1}, blot=0.5}); b:stroke({100,500,900,500}); wait(90*24*60)"#).unwrap();
+        let seen = |s: &Session| -> Vec<u32> { s.canvas().unwrap().seen().iter().flat_map(|p| p.map(f32::to_bits)).collect() };
+        let before = seen(&s);
+        s.run("varnish{coats=0, vary=0}").unwrap();
+        assert_eq!(before, seen(&s));
+        s.run("varnish()").unwrap();
+        assert_ne!(before, seen(&s));
     }
 }

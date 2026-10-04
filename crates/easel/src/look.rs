@@ -352,6 +352,22 @@ pub fn look(c: &Canvas, v: &View, out: &Path) -> std::result::Result<(usize, usi
 }
 
 /// `look`'s PNG bytes and size, written nowhere.
+/// Labels written on a rendered look: (x, y as fractions of the image, text),
+/// light text on a dark plate.
+pub(crate) fn label(png: &[u8], labels: &[(f32, f32, String)]) -> std::result::Result<Vec<u8>, String> {
+    let im = image::load_from_memory(png).map_err(|e| e.to_string())?.to_rgb8();
+    let (w, h) = (im.width() as usize, im.height() as usize);
+    let mut img = Img { w, h, px: im.pixels().map(|p| [p[0] as f32 / 255.0, p[1] as f32 / 255.0, p[2] as f32 / 255.0]).collect() };
+    let fs = ((w / 520) as i64).max(1);
+    for (fx, fy, s) in labels {
+        img.text((fx * w as f32) as i64 + 2, (fy * h as f32) as i64, s, fs, [0.96, 0.95, 0.9]);
+    }
+    let buf: Vec<u8> = img.px.iter().flat_map(|c| c.iter().map(|v| (v.clamp(0.0, 1.0) * 255.0).round() as u8)).collect();
+    let mut out = Vec::new();
+    image::codecs::png::PngEncoder::new(&mut out).write_image(&buf, w as u32, h as u32, image::ExtendedColorType::Rgb8).map_err(|e| e.to_string())?;
+    Ok(out)
+}
+
 pub fn render(c: &Canvas, v: &View) -> std::result::Result<(usize, usize, Vec<u8>), String> {
     render_seen(c, v, None)
 }
@@ -674,7 +690,7 @@ mod tests {
 
     #[test]
     fn crops_keep_native_pixels_and_reject_either_oversize_axis() {
-        let mut c = Canvas::new_window(1300, 1.0, [0.0; 3], None);
+        let mut c = Canvas::new_window(1300, 1.0, [0.0; 3], None).with_engine(2); // (pure colors: no engine-4 matte veil)
         c.apply(|x, y, _| if x < 500.0 && y < 500.0 { [1.0, 0.0, 0.0] } else { [0.0, 0.0, 1.0] });
         let out = out_dir().join("native-crop.png");
         for size in [None, Some(40), Some(9999)] {

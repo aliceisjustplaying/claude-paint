@@ -83,7 +83,11 @@ impl Canvas {
             Field { name: "film", shape: px(1), values: Values::F32(self.film.clone()) },
             Field { name: "wet.vol", shape: px(1), values: Values::F32(wt.vol.clone()) },
             Field { name: "wet.lat", shape: px(LAT), values: Values::F32(wt.lat.iter().flat_map(|l| *l).collect()) },
-            Field { name: "wet.hide", shape: px(3), values: Values::F32(wt.hide.iter().flat_map(|p| *p).collect()) },
+            // (the paint's first three properties, as the shape says and as before: from
+            // engine 4 wet paint carries two more, solvent and oil, which this dump leaves
+            // out. A CHANGE TO A PROTECTED FILE, notes/golden_paths.txt: it needs the
+            // owner's approval. Without it the five values a pixel would not fit px(3).)
+            Field { name: "wet.hide", shape: px(3), values: Values::F32(wt.hide.iter().flat_map(|p| [p[0], p[1], p[2]]).collect()) },
             Field { name: "wet.stroke", shape: px(1), values: Values::U32(wt.stroke.clone()) },
             Field { name: "wet.touched", shape: px(1), values: Values::U32(wt.touched.clone()) },
             Field { name: "wet.floor", shape: px(1), values: Values::F32(wt.floor.clone()) },

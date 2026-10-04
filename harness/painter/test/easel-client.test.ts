@@ -73,6 +73,7 @@ test("look's options become the easel's arguments", () => {
 	assert.deepEqual(lookArgs({ palette: false }), []);
 	assert.equal(toolWords("look: --palette takes no other option"), "look: palette takes no other option");
 	assert.deepEqual(lookArgs({ survey: true, mode: "gallery" }), ["--survey", "--mode", "gallery"]);
+	assert.deepEqual(lookArgs({ palette: true, mode: "gallery" }), ["--palette"]);
 	assert.deepEqual(lookArgs({ compare: "out/easel/painting/a.png" }), ["--compare", "out/easel/painting/a.png"]);
 });
 

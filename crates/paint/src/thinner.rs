@@ -55,9 +55,9 @@
 //! paint they lift, in the film's own proportions.
 
 /// One stroke of paint thinned half (`t` = 0.5) adds at most this much wet
-/// film (µm) to a pixel. ESTIMATE, set before measuring; the card keeps 89%
-/// (load 0.3) and 86% (load 0.6) of its contrast with it, and from 6 to 36
-/// µm it keeps 62-89% (notes/thinner/RESULTS.md, the sweep).
+/// film (µm) to a pixel. ESTIMATE, set before measuring; the card keeps 84%
+/// (load 0.3) and 81% (load 0.6) of its contrast with it, and from 6 to 36
+/// µm it kept 62-89% (notes/thinner/RESULTS.md, the sweep).
 pub const STROKE_FILM_UM: f32 = 6.0;
 
 /// The most wet film (paint + solvent, µm) one stroke may add to a pixel,

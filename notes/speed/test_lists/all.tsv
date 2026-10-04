@@ -24,7 +24,7 @@ script	check-live	60	1	^check_live: check_painting passed	scripts/tests/check_li
 script	box-features	600	14	^box_features: .*: (\d+ passed|refused)$	CARGO_TARGET_DIR="$CARGO_TARGET_DIR/bf" BOX_FEATURES_PROFILE=dev scripts/tests/box_features.sh	w
 cargo	smoke-replay-without-finish	300	1	-	CARGO_TARGET_DIR="$CARGO_TARGET_DIR/ro" cargo test -p easel --no-default-features --features replay --test smoke	w
 script	test-runner	120	17	^ok \d+ -	scripts/tests/test_runner.sh	w
-script	safeguards	180	121	^ok \d+ -	scripts/tests/safeguards.sh	w
+script	safeguards	180	140	^ok \d+ -	scripts/tests/safeguards.sh	w
 pytest	runner-round24	60	250	-	cd notes/round24/runner && PYTHONDONTWRITEBYTECODE=1 uv run --no-project --with pytest --with pillow python -m pytest -q -p no:cacheprovider -rs .	w
 pytest	studio-viewer	60	23	-	cd studio && PYTHONDONTWRITEBYTECODE=1 uv run --no-project --with pytest --with pillow python -m pytest -q -p no:cacheprovider -rs test_studio.py	w
 script	replay-clip	60	1	^replay_clip test: 	scripts/tests/replay_clip.sh	w

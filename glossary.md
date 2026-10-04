@@ -141,3 +141,23 @@
 **Blot.** Pressing a rag at one point and lifting it off, leaving an irregular cloth contact rather than dragging a wipe.
 
 **Gel point.** The drying boundary after which paint is no longer in the workable wet film. A rag cannot lift paint beyond this boundary.
+
+**Solid.** Reference geometry used to calculate a surface for lighting and masks. Bodies and sampled terrain are solids; neither deposits paint by itself.
+
+**Body.** A solid that can be shaped, combined and placed in a world. Its world body number can differ from its visible form-part number.
+
+**Form.** A calculated reference surface assembled from solids, with lighting queries, masks and stroke-direction fields.
+
+**Terrain.** A sampled height reference over a canvas rectangle, distinct from a world's meter-based ground surface and from the canvas's painted ground.
+
+**World.** A retained perspective reference containing a camera, supporting surface, sun and placed geometry. It calculates reference answers rather than painting a scene.
+
+**Spot.** A position on a world's supporting surface with the conversion from meters to canvas units at its depth.
+
+**Proxy.** A body omitted from visible form geometry but retained for world shadows and reflections.
+
+**Depth layer.** A named mask registered at a distance in a world to guide visibility and foreground protection. It is not an editable paint layer.
+
+**Part.** One numbered component of a form. World bodies map to form parts only when they are visible.
+
+**Direction field.** A reference that supplies a stroke angle at each canvas position, such as along or across a modeled surface.

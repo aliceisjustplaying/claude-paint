@@ -187,6 +187,23 @@ const MAX_SUBSTEPS: usize = 64;
 /// numerical cutoff.
 const MAX_OUT: f32 = 0.5;
 
+/// What one `spread` did: for the diagnostics, which the flow ignores.
+#[derive(Clone, Copy, Debug, Default)]
+pub(crate) struct FlowStep {
+    /// The largest mobility (mm²/min) in the dirty box, which sets the
+    /// substeps.
+    pub(crate) m_max: f32,
+    /// The largest mobility of a pixel that can give liquid.
+    pub(crate) m_donor: f32,
+    /// Substeps the stability bound asks for, before the cap.
+    pub(crate) requested: usize,
+    /// Substeps run (the flow stops early where nothing moves).
+    pub(crate) used: usize,
+    /// Minutes of flow the scheduled substeps cover (the call's `dt`
+    /// unless the cap cut it short).
+    pub(crate) scheduled_min: f32,
+}
+
 impl Canvas {
     /// `dt` minutes of the solvent's loss: each pixel keeps
     /// `exp(-dt / τ(h))` of it, h its paint.
@@ -224,8 +241,9 @@ impl Canvas {
     /// substep computes every pixel's outflow from the state before it,
     /// then every pixel gathers its inflow: the result doesn't depend on
     /// the order pixels are visited in (or the threads).
-    pub(crate) fn spread(&mut self, dt: f32) {
-        let Some((bx0, by0, bx1, by1)) = self.wet.dirty else { return };
+    pub(crate) fn spread(&mut self, dt: f32) -> FlowStep {
+        let mut log = FlowStep::default();
+        let Some((bx0, by0, bx1, by1)) = self.wet.dirty else { return log };
         let (w, h) = (self.f.w, self.f.h);
         let dx = self.px_mm();
         let timed = self.wet.clock.px.len() == w * h;
@@ -242,25 +260,33 @@ impl Canvas {
         // the largest mobility, and the box of the pixels that have any
         // (only they can give liquid; each substep reaches one pixel further)
         let wet = &self.wet;
-        type Acc = (f32, usize, usize, usize, usize);
-        let none: Acc = (0.0, usize::MAX, usize::MAX, 0, 0);
-        let join = |a: Acc, b: Acc| (a.0.max(b.0), a.1.min(b.1), a.2.min(b.2), a.3.max(b.3), a.4.max(b.4));
-        let (m_max, ax0, ay0, ax1, ay1) = (by0..by1.min(h))
+        // (the largest mobility of a pixel above the wetting film, which
+        // alone can give liquid: diagnostics only)
+        type Acc = (f32, usize, usize, usize, usize, f32);
+        let none: Acc = (0.0, usize::MAX, usize::MAX, 0, 0, 0.0);
+        let join = |a: Acc, b: Acc| (a.0.max(b.0), a.1.min(b.1), a.2.min(b.2), a.3.max(b.3), a.4.max(b.4), a.5.max(b.5));
+        let (m_max, ax0, ay0, ax1, ay1, m_donor) = (by0..by1.min(h))
             .into_par_iter()
             .map(|y| {
                 (bx0..bx1.min(w)).fold(none, |a, x| {
-                    let m = mob(wet, y * w + x);
-                    if m > 0.0 { join(a, (m, x, y, x + 1, y + 1)) } else { a }
+                    let i = y * w + x;
+                    let m = mob(wet, i);
+                    let donor = if wet.vol[i] + wet.solv[i] / COAT_UM > WET_FILM_UM / COAT_UM { m } else { 0.0 };
+                    if m > 0.0 { join(a, (m, x, y, x + 1, y + 1, donor)) } else { a }
                 })
             })
             .reduce(|| none, join);
+        log.m_max = m_max;
+        log.m_donor = m_donor;
         if m_max <= 0.0 {
-            return;
+            return log;
         }
         let r_total = m_max * dt / (dx * dx);
+        log.requested = (r_total / 0.2).ceil() as usize;
         let n = ((r_total / 0.2).ceil() as usize).clamp(1, MAX_SUBSTEPS);
         // the flow's rate per substep, per mm²/min of mobility
         let k = (dt / n as f32 / (dx * dx)).min(0.2 / m_max.max(1e-12));
+        log.scheduled_min = n as f32 * k * dx * dx;
         let (mut x0, mut y0, mut x1, mut y1) = (ax0, ay0, ax1, ay1);
         // the box of the pixels the flow changed
         let mut moved: Option<(usize, usize, usize, usize)> = None;
@@ -310,6 +336,7 @@ impl Canvas {
             if out.iter().all(|q| q.iter().all(|&v| v <= 0.0)) {
                 break;
             }
+            log.used += 1;
             // pass 2: each pixel keeps what didn't leave and gathers what came
             // in, each part with the paint and solvent of where it came from
             let cure_of = |i: usize| if timed { wet.clock.px[i].cure } else { 0.0 };
@@ -386,6 +413,7 @@ impl Canvas {
         if let Some((a, b, c, d)) = moved {
             self.wet.touch(a, b, c, d);
         }
+        log
     }
 
     /// Cure of the open film at a point (units): 0 fresh, `drying::GEL` at
@@ -983,3 +1011,6 @@ mod tests {
     }
 
 }
+
+#[cfg(test)]
+mod flow_probes;

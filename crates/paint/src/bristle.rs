@@ -350,7 +350,50 @@ pub struct Held {
     pub(crate) bristles: Vec<Bristle>,
 }
 
+/// `Held`'s `Debug` as it was before engine 4, when a bristle's paint had
+/// three properties (`Held::debug_before_engine_4`).
+struct OldHeld<'a>(&'a Held);
+struct OldBristles<'a>(&'a [Bristle]);
+struct OldBristle<'a>(&'a Bristle);
+
+impl std::fmt::Debug for OldHeld<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Held").field("tool", &self.0.tool).field("bristles", &OldBristles(&self.0.bristles)).finish()
+    }
+}
+impl std::fmt::Debug for OldBristles<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_list().entries(self.0.iter().map(OldBristle)).finish()
+    }
+}
+impl std::fmt::Debug for OldBristle<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let b = self.0;
+        f.debug_struct("Bristle")
+            .field("rx", &b.rx)
+            .field("ry", &b.ry)
+            .field("len", &b.len)
+            .field("thresh", &b.thresh)
+            .field("bend", &b.bend)
+            .field("seed", &b.seed)
+            .field("prev", &b.prev)
+            .field("vol", &b.vol)
+            .field("lat", &b.lat)
+            .field("hide", &&b.hide[..3])
+            .field("cure", &b.cure)
+            .finish()
+    }
+}
+
 impl Held {
+    /// `Debug`'s text as it was before engine 4 (three properties to a
+    /// bristle's paint: no solvent, no oil): what `easel run --state-digest`
+    /// hashes for a painting of an older engine, so its digests are the ones
+    /// recorded for it.
+    pub fn debug_before_engine_4(&self) -> String {
+        format!("{:?}", OldHeld(self))
+    }
+
     pub fn new(tool: Tool, seed: u64) -> Self {
         let mut rng = Rng::new(seed);
         let n = tool.bristles.max(1);
@@ -2388,6 +2431,17 @@ mod part_tests {
 
     fn vols(h: &Held) -> Vec<(f32, f32)> {
         h.bristles.iter().map(|b| (b.rx, b.vol)).collect()
+    }
+
+    /// The text a state digest hashes for an older engine's brush is today's
+    /// without the two properties engine 4 added.
+    #[test]
+    fn the_older_debug_text_leaves_out_solvent_and_oil() {
+        let mut h = Held::new(Tool::filbert(6.0), 7);
+        h.load(Paint::body(hex("#445566")), 0.8);
+        let (new, old) = (format!("{h:?}"), h.debug_before_engine_4());
+        assert!(new.contains(", 0.0, 1.0], cure: ") && !old.contains(", 0.0, 1.0], cure: "));
+        assert_eq!(new.replace(", 0.0, 1.0], cure: ", "], cure: "), old);
     }
 
     #[test]

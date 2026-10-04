@@ -1354,7 +1354,9 @@ fn state_digest_line(s: &Session, n: usize, secs: f64) -> String {
         }
         None => 0,
     };
-    let brushes: Vec<String> = st.live_brushes().iter().map(|b| format!("{:?}", b.borrow())).collect();
+    // (a painting of an engine before 4: the brushes as they were written then)
+    let old = st.tubes.engine < 4;
+    let brushes: Vec<String> = st.live_brushes().iter().map(|b| if old { b.borrow().debug_before_engine_4() } else { format!("{:?}", b.borrow()) }).collect();
     // the rags in the hand after them (none: the same digest as before rags)
     let rags: Vec<String> = st.live_rags().iter().map(|r| format!("{:?}", r.borrow())).collect();
     let brushes_h = fnv1a(brushes.iter().chain(&rags).cloned().collect::<Vec<_>>().join("\n").as_bytes());

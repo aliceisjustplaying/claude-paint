@@ -77,9 +77,11 @@ painter never saw relief either: looks showed color only.
     (smoothstep 0.15..1.3), blended with the surface under it for thin
     films; varnish sets it to 1. Engine 4 shows a matte surface with the
     first-surface reflection it scatters back (`SURFACE_REFLECTANCE` 4%,
-    `haze`) in looks and saved pictures. Checkpoint format 9; a format 8
-    file (a save from before) is still read, as an oil ground with nothing
-    absorbent and tube paint's oil.
+    `haze`) in looks and saved pictures. Checkpoint format 9 for a painting of engine 4 or later; an
+    older engine's painting is still written as format 8, byte for byte, and
+    its state digests are the ones recorded for it (`scripts/tests/old_logs.sh`).
+    A format 8 file is read as an oil ground with nothing absorbent and tube
+    paint's oil.
   - Not modeled: yellowing, fading of lakes, color change of chromates.
 - **The giverny and impressionist boxes**: see `notes/research/giverny_materials.md` and
   `notes/research/impressionist_materials.md` (from analyses of the paintings).

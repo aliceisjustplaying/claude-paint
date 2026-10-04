@@ -17,7 +17,9 @@
 //! add state to `Canvas` or `Wet`, add it here and bump `MAGIC`.
 //!
 //! The format is version 9 (`MAGIC` is `PAINTCK9`: engine 4's wet paint carries
-//! solvent and oil, and the canvas its gloss and the ground's absorbency). A version 8
+//! solvent and oil, and the canvas its gloss and the ground's absorbency), written for
+//! a canvas of engine 4 or later; an older engine's canvas is written as version 8,
+//! byte for byte as before. A version 8
 //! file is still read (an oil ground's gloss, nothing absorbent, no solvent, a
 //! tube paint's oil); files of any other version are refused (re-run to
 //! checkpoint again). After the header the
@@ -114,7 +116,10 @@ impl Canvas {
     /// Write the complete canvas state (dries nothing: wet paint stays wet)
     /// after `header`.
     pub fn write_state(&self, w: &mut impl Write, header: &str) -> io::Result<()> {
-        self.write_version(w, header, 9)
+        // a painting of an engine before 4 has no gloss, absorbency, solvent
+        // or oil to keep: its state is written as it always was (format 8),
+        // so its saves and state digests are the ones an older easel wrote
+        self.write_version(w, header, if self.engine >= 4 { 9 } else { 8 })
     }
 
     /// `write_state` in format `version`: 9, or 8 as it was (the tests' way

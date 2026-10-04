@@ -62,12 +62,28 @@ tagging it: the runner copied in step 4 comes from the tag.
    launchctl bootout gui/$(id -u)/art.stillwet.studio.tailnet
    launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/art.stillwet.studio.tailnet.plist
    ```
-6. Launch, the same way as round 23:
+6. Keep the new studio off the public site. `art.stillwet.studio.sync`
+   publishes every painter studio not in the `--skip` list of
+   `~/src/a/stillwet/sync-studio.sh`, and the round-24 studio gets a new
+   random name at export. Stop the sync before launching:
+   ```
+   launchctl bootout gui/$(id -u)/art.stillwet.studio.sync
+   launchctl list | grep -c art.stillwet.studio.sync   # 0
+   ```
+   Once `run/studios.json` names the studio (step 8), append that name to
+   the `--skip` list in `sync-studio.sh`, then check that an export leaves
+   it out before restarting the sync:
+   ```
+   s=$(python3 -c 'import json;print(json.load(open("run/studios.json"))["INNS1"])')
+   d=$(mktemp -d) && (cd ~/src/a/stillwet && uv run --quiet ../claude-paint/studio/export_static.py $d --skip paint-studio-ebf843 paint-studio-496bb9 paint-studio-ba1453 $s >/dev/null) && ! grep -rq "$s" $d && echo private-ok; rm -rf $d
+   launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/art.stillwet.studio.sync.plist
+   ```
+7. Launch, the same way as round 23:
    ```
    cd ~/tmp/gallery-fcf9c110/r24 && mkdir -p run && \
      (nohup caffeinate -i uv run r21_chains.py --only INNS > run/runner.INNS.out 2>&1 < /dev/null & disown)
    ```
-7. Confirm that the painter is using the easel. `run/chains.log` should
+8. Confirm that the painter is using the easel. `run/chains.log` should
    show `INNS1: exporting inness studio from round-24`, then
    `easel "painting" open`, then `sitting 1 (claude-opus-5-5, ...)`. The
    chunk count should then grow:

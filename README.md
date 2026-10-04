@@ -22,11 +22,11 @@ The variant axes are build/surface, input options, existing painting state and s
 
 | Document | Purpose | Coverage |
 |---|---|---|
-| [Looking](painting/looking.md) | Pilot: canvas views, crops, modes and palette | not started |
-| [Commands and chunks](foundations/commands.md) | Invocation, commit, rollback and interruption | not started |
-| [Canvas and materials](foundations/canvas.md) | Coordinates, setup, paint and persistent objects | not started |
-| [Sessions and surfaces](foundations/sessions.md) | Build differences, opening, closing and session selection | not started |
-| [Painting passages](painting/passages.md) | Area work, blending, stippling and edge handling | not started |
+| [Looking](painting/looking.md) | Pilot: canvas views, crops, modes and palette | drafted |
+| [Commands and chunks](foundations/commands.md) | Invocation, commit, rollback and interruption | drafted |
+| [Canvas and materials](foundations/canvas.md) | Coordinates, setup, paint and persistent objects | drafted |
+| [Sessions and surfaces](foundations/sessions.md) | Build differences, opening, closing and session selection | drafted |
+| [Painting passages](painting/passages.md) | Area work, blending, stippling and edge handling | drafted |
 | [Brushes](painting/brushes.md) | Loading, wiping, strokes and touches | not started |
 | [Shapes](painting/shapes.md) | Masks, outlines and controlled variation | not started |
 | [Drawing](painting/drawing.md) | Pencil, chalk, erasing and fixing | not started |

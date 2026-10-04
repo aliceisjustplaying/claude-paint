@@ -290,11 +290,11 @@ blocking.
 
 - **Brush capacity.** A thinned brush lasts much longer than a loaded
   one: it lays at most a thin film per stroke and keeps the rest.
-  - On its 7680-unit zigzag (round-4 c05), a filbert 8 thinned 0.5 lays
-    paint above a quarter of the ceiling for about 2,150 units at load
-    0.3 and 4,820 at load 0.6.
-  - Its liquid lasts about 3,000 units, roughly three canvas widths,
-    before it runs low.
+  - On its 7680-unit zigzag (round-4 c05), a filbert 8 thinned 0.5 keeps
+    laying paint above a quarter of the stroke's ceiling for about 2,150
+    units at load 0.3 (about two canvas widths) and 4,820 at load 0.6
+    (about five), then runs out.
+  - Unthinned, the same brush is nearly empty after one width.
   - That follows from the plan's rule that unlaid paint stays on the
     brush. Is it how a thinned brush should behave?
 - **The fine grain in thinned paint**, below (appearance 1).

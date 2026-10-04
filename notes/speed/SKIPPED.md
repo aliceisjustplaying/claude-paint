@@ -72,7 +72,8 @@ In `scripts/test --all`: `box_features.sh` (with `BOX_FEATURES_PROFILE=test`),
 `lockrun.sh`, `safeguards.sh`, `replay_env.sh`, `check_live.sh`,
 `replay_clip.sh`, `box_tubes.sh`, `studio_names.sh`, `peek.sh`, the round 24
 runner's pytest suite and `studio/test_studio.py`, plus the painter build's
-tests (`cargo test -p easel --no-default-features --features box-inness`).
+tests (`cargo test -p easel --no-default-features --features box-inness`: 14 tests;
+the rest are default-box tests, compiled only with the default box).
 In `scripts/test`: `old_logs.sh`, `baseline_state.sh` and the baseline
 package's `verify_package.sh`. None replays a painting: `replay_env.sh` and
 `check_live.sh` paint a 2-chunk test log (a canvas and one stroke).

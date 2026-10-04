@@ -160,7 +160,7 @@ A lost reply leaves the caller uncertain whether painting committed; resubmissio
 
 - All behaviors here are source-reviewed; no manual brush pass is claimed.
 - Confirmed documentation mismatch: repeated loading produced fullness above one in the [CLI probe](../verification/evidence/additional.md), contradicting the guide’s 0–1 description. The intended upper bound needs a product decision; see [bug triage](../bug-triage.md).
-- Loading accepts its numeric amount without an explicit zero-through-one check. Negative, excessive and nonfinite values need focused verification before their resulting marks or errors can be described.
-- Visual comparisons of points, bristle options, clipping, pickup and dry-paint contact remain unverified.
+- Loading accepts its numeric amount without an explicit zero-through-one check. A negative-load probe left an empty brush and no deposited paint in the [runtime pass](../verification/evidence/runtime-paint.md#negative-loading). Nonfinite and further excessive-value behavior remain unverified.
+- Selected brush marks and rollback were checked in the [runtime pass](../verification/evidence/runtime-paint.md); the full point, bristle, pickup and dry-contact comparison matrix remains unverified.
 
 Source-reviewed against `../claude-paint` commit `4e525e50897807e9b5f734071dfeb330f1a393d3`; runtime verification is recorded separately in [verification](../verification/README.md).

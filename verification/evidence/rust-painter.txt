@@ -1,0 +1,12 @@
+   Compiling paint v0.1.0 (<pinned-source>/crates/paint)
+   Compiling easel v0.1.0 (<pinned-source>/crates/easel)
+    Finished `test` profile [optimized + debuginfo] target(s) in 15.40s
+     Running tests/painter.rs (target/debug/deps/painter-2d1b5da51b2e4a10)
+
+running 3 tests
+test the_build_holds_only_its_box_s_tubes ... ok
+test the_studio_box_file_sets_the_box ... ok
+test the_shipped_easel_paints_its_one_painting_in_its_own_studio ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.71s
+

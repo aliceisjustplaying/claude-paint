@@ -167,8 +167,8 @@ A lost reply is not proof that the marks were discarded.
 ## Open questions and verification
 
 - This document is source-reviewed; no manual drawing pass is claimed.
-- Visual differences among grades, pressure profiles, chalk and grain remain to be verified with recorded looks.
-- Suspected documentation mismatch: `drawing_guide` is described as one on a line in the wrapper comment, while the engine explicitly preserves lighter coverage for light drawing. The guide's continuous geometry must not be mistaken for a uniformly full-strength selection.
+- Selected grades, pressure and chalk marks were inspected in the [runtime atlas](../verification/evidence/runtime-paint.md); the complete option matrix remains unverified.
+- Confirmed documentation mismatch in the [runtime probe](../verification/evidence/runtime-paint.md): `drawing_guide` is described as one on a line in the wrapper comment, while the engine explicitly preserves lighter coverage for light drawing. The guide's continuous geometry must not be mistaken for a uniformly full-strength selection.
 - The visible drawing and unfixed guide can diverge when erasing over paint. Whether this is the desired behavior needs a product decision; the engine erases the guide before checking whether paint protects visible drawing.
 - Exact hatch edge behavior and extreme or nonfinite input values remain unverified.
 

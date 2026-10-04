@@ -108,6 +108,8 @@ Save and run write an 8-bit sRGB PNG. Close attempts live PNG, metadata and chec
 
 ## Open questions and verification
 
-Full video encoding, every historical source ref, every exported profile and long finishing waits are outside the short runtime pass. Diagnostic image scripts and maintenance scripts are inventoried as supporting workflows rather than independent painting features. Unexpected `frames` arguments silently disabling capture is recorded in [triage](../bug-triage.md).
+- Confirmed: a failed chunk can cause a later checkpoint comparison to report DIFFERS despite matching canvas pixels and successful source. The [controlled pass](../verification/evidence/runtime-delivery.md#isolated-failed-chunk-checkpoint-discrepancy) isolated retained chunk/call counters; see [B14](../bug-triage.md#b14--failed-chunks-cause-checkpoint-comparison-failures).
+
+A complete four-second video, checkpoint/replay finishing and pinned blank-profile export passed in the [runtime pass](../verification/evidence/runtime-delivery.md). Other source refs, profiles, video/finish options and long finishing waits remain incomplete. Diagnostic image scripts and maintenance scripts are inventoried as supporting workflows rather than independent painting features. Unexpected `frames` arguments silently disabling capture is recorded in [triage](../bug-triage.md).
 
 Source-reviewed against `../claude-paint` commit `4e525e50897807e9b5f734071dfeb330f1a393d3`; see [verification](../verification/README.md).

@@ -33,7 +33,7 @@ The client selects a session and supplies source inline, from a file or from std
 
 ### Ending at once
 
-A missing source, unreadable input file or unavailable session returns an error. Invalid Lua fails without adding a successful chunk. Empty or nonpainting Lua can still succeed and become a chunk; success is not conditional on leaving a visible mark.
+A missing source, unreadable input file or unavailable session returns an error. Invalid Lua fails without adding a successful chunk. Empty or whitespace-only Lua is rejected. Nonempty Lua that does not paint can succeed and become a chunk; success is not conditional on leaving a visible mark. The [runtime probe](../verification/evidence/runtime-cli.json) records both paths.
 
 ### Becoming extended
 
@@ -98,6 +98,8 @@ Successful execution is followed by persistence of the log and its integrity wit
 
 ## Open questions and verification
 
-Storage failure after execution is a recoverability concern recorded in [triage](../bug-triage.md). Crash timing and the full deadline are not exercised by short smoke probes. Runtime evidence is separate from source reading.
+- The [runtime pass](../verification/evidence/runtime-delivery.md#isolated-failed-chunk-checkpoint-discrepancy) found that failed chunks leave internal checkpoint counters changed. Paint pixels and successful logs rolled back, but runner checkpoint comparison reported a mismatch; see [B14](../bug-triage.md#b14--failed-chunks-cause-checkpoint-comparison-failures).
+
+Storage failure after execution is a recoverability concern recorded in [triage](../bug-triage.md). The actual [ten-minute Lua deadline](../verification/evidence/runtime-deadline.json) was exercised; crash timing and native-operation interruption boundaries remain incomplete. Runtime evidence is separate from source reading.
 
 Source-reviewed against `../claude-paint` commit `4e525e50897807e9b5f734071dfeb330f1a393d3`; see [verification](../verification/README.md).

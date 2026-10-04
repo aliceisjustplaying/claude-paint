@@ -159,9 +159,9 @@ BRANCH = "round-23"
 # Round 24.1 keeps the engine and adds completion review and guide corrections. Before launch:
 # `git tag -a <TAG> <commit>` in the shared repo and `git worktree add --detach ~/src/a/claude-paint-r24run <TAG>`.
 # main() refuses to start while BASE isn't a clean checkout of TAG (checkout_problems).
-TAG = "round-24.2"
+TAG = "round-24.3"
 BRANCH = TAG
-BASE = A / "claude-paint-r24-2run"
+BASE = A / "claude-paint-r24-3run"
 EXPORT = BASE / "scripts/export_r16_studio"      # honors R16_BRANCH
 FINISH = BASE / "scripts/finish_painting"
 CHECK = BASE / "scripts/check_painting"
@@ -227,10 +227,16 @@ OPENING = {
         "notes in your studio; don't use reference images, image models or pictures\n"
         "of his work."),
     "inness": (
-        "Compose and paint one original landscape in the manner of George Inness,\n"
-        "at the easel, a simulator of oil paint on linen. The place, subject and\n"
-        "composition are yours to invent. Work from knowledge and the notes in your\n"
-        "studio; don't use reference images, image models or pictures of his work."),
+        "Invent a place you would enjoy painting. First imagine what is happening\n"
+        "there, what draws your attention and where you are standing. Choose the\n"
+        "composition and canvas proportions that suit that imagined place, and\n"
+        "describe your idea in your journal.\n\n"
+        "Then explore George Inness's materials and paint handling in the studio\n"
+        "notes, and use them to paint the landscape you have invented at the easel,\n"
+        "a simulator of oil paint on linen. Let your imagined place lead the\n"
+        "picture and his methods inform how you paint it. Work from imagination,\n"
+        "knowledge and the studio notes; don't use reference images, image models\n"
+        "or pictures of his work."),
     "alma-tadema": (
         "Compose and paint one original scene from Roman antiquity in the manner of\n"
         "Lawrence Alma-Tadema, at the easel, a simulator of oil paint on linen. The\n"

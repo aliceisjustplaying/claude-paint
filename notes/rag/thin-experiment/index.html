@@ -1,15 +1,12 @@
-<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Rag round 2: the damp rag</title>
-<style>body{max-width:1650px;margin:24px auto;padding:0 20px;background:#1e1e1e;color:#eee;font:18px/1.55 system-ui}a{color:#c9defa}img{max-width:100%;display:block;margin:8px 0}h1{font-size:30px}h2{font-size:24px;margin:0 0 6px}.card{background:#2a2a2a;border-radius:10px;padding:18px 22px;margin:26px 0}.what{background:#25313d}p{max-width:1000px;margin:6px 0}.n{display:inline-block;background:#c9defa;color:#111;border-radius:50%;width:32px;height:32px;text-align:center;line-height:32px;font-weight:700;margin-right:8px}</style>
-<h1>Round 2: how strong should a damp rag be?</h1>
-<p>Version 4 from <a href="first.html">round 1</a> for the dry rag. Same thin raw umber wash, same rag, same path. Only the damp rag changes. The close-ups show the bottom edge of the wipe near its right end.</p>
-<div class="card what"><h2>What the painting guides say</h2>
-<p>• With spirits on the rag you rub the paint off <b>gradually</b>, over a few passes, until the canvas looks white.<br>
-• Keep the rag <b>barely damp</b>: too much spirits makes the paint run and leaves <b>soft, muddy edges</b>.<br>
-• Canvas weave holds pigment, so canvas takes more passes than a smooth panel.</p></div>
-<div class="card"><h2>For reference: the dry rag (version 4)</h2><p>Paint removed: 63% after 1 wipe, 81% after 3.</p><a href="damp-dry.jpg"><img src="damp-dry.jpg"></a></div>
-<div class="card"><h2><span class="n">A</span>Round 1's damp rag (too strong)</h2><p>Removed: 97% after 1 wipe, 99% after 3. Almost everything in one go, with a hard, lumpy edge.</p><a href="damp-today.jpg"><img src="damp-today.jpg"></a></div>
-<div class="card"><h2><span class="n">B</span>Mild</h2><p>Removed: 81% after 1 wipe, 93% after 3.</p><a href="damp-mild.jpg"><img src="damp-mild.jpg"></a></div>
-<div class="card"><h2><span class="n">C</span>Medium, spirits mostly make the rag grab faster</h2><p>Removed: 85% after 1 wipe, 95% after 3.</p><a href="damp-medium.jpg"><img src="damp-medium.jpg"></a></div>
-<div class="card"><h2><span class="n">D</span>Medium, spirits mostly loosen paint in the weave's dips</h2><p>Removed: 86% after 1 wipe, 95% after 3.</p><a href="damp-medium2.jpg"><img src="damp-medium2.jpg"></a></div>
-<p style="opacity:.7">Not modeled yet: spirits running into the paint beside the wipe (the "muddy edge"). All numbers are guesses to compare by eye. The code and settings: rag::tests::thin::damp_render.</p>
+<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Rag round 3: the edges</title>
+<style>body{max-width:1650px;margin:24px auto;padding:0 20px;background:#1e1e1e;color:#eee;font:18px/1.55 system-ui}a{color:#c9defa}img{max-width:100%;display:block;margin:8px 0}h1{font-size:30px}h2{font-size:24px;margin:0 0 6px}.card{background:#2a2a2a;border-radius:10px;padding:18px 22px;margin:26px 0}p{max-width:1000px;margin:6px 0}.n{display:inline-block;background:#c9defa;color:#111;border-radius:50%;width:32px;height:32px;text-align:center;line-height:32px;font-weight:700;margin-right:8px}</style>
+<h1>Round 3: the edges of the wipe</h1>
+<p>Dry rag: version 4 from <a href="first.html">round 1</a>. Damp rag: B (mild) from <a href="round2.html">round 2</a>. Same wash, rag and path. The close-ups show the bottom edge of the wipe near its right end.</p>
+<div class="card"><h2><span class="n">1</span>As in round 2: the rag's grip fades out toward its rim</h2>
+<p>Toward the edge the rag simply takes less, evenly. That gives the "cloud" look: a soft haze laid over the weave.</p>
+<a href="edge-mild-dry.jpg"><img src="edge-mild-dry.jpg"></a><a href="edge-mild-damp.jpg"><img src="edge-mild-damp.jpg"></a></div>
+<div class="card"><h2><span class="n">2</span>New: the rim presses lightly</h2>
+<p>The cloth's outline stays sharper, but near its rim it presses lightly, so there it only touches the raised threads of the canvas. The weave's pattern carries through the edge instead of a haze. It also takes a little less paint overall.</p>
+<a href="edge-mild-press-dry.jpg"><img src="edge-mild-press-dry.jpg"></a><a href="edge-mild-press-damp.jpg"><img src="edge-mild-press-damp.jpg"></a></div>
+<p style="opacity:.7">Still not modeled: spirits running into the paint beside the wipe. Code: rag::tests::thin::damp_render.</p>
 </html>

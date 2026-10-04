@@ -303,7 +303,7 @@ const ACTIVE = 1800, RECENT = 6 * 3600;  // working now: an action in the last h
 // the website lists the paintings in progress (working now, or between sittings) and the finished ones (in the gallery,
 // or signed off with a title), not the aborted or cut-off runs; the local studio lists every run. The same at every screen size.
 const listed = s => !STATIC || isLive(s) || ageOf(s) < RECENT && s.said || !!s.title || !!(GALLERY && GALLERY[s.p]) || qOf(s) === Q;
-const ageOf = s => Date.now() / 1000 - s.mtime, isLive = s => ageOf(s) < ACTIVE;
+const ageOf = s => Date.now() / 1000 - s.mtime, isLive = s => ageOf(s) < (s.said ? 120 : ACTIVE);
 const SUBJ = {Friedrich:'after Friedrich', free:'free subject', 'self-portrait':'self-portrait'};
 const subj = s => s.subject ? SUBJ[s.subject] || 'after ' + (s.artist || s.subject) : '';  // (the artist in full when the brief names one: 'after Kendric Tonn')
 const models = s => (s.model || '').split(' → ').map(modelName).join(' → ');

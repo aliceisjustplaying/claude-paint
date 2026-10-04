@@ -19,7 +19,7 @@ The owner asked for this to be done carefully.
 
 ## Status, October 4, later
 
-The consolidation below is done: `engine3-consolidation` merged `fix/painting-clock` and `engine3-overnight`, took the sienna measurement and `notes/look/`, and imported `description/`; main was fast-forwarded to it. Sections 2 to 5 describe the state before that. As expected, `scripts/test --all` is red only on 13 (b) and the `rag` scene of `baseline-state` and thinner check 2.
+The consolidation below is done: `engine3-consolidation` merged `fix/painting-clock` and `engine3-overnight`, took the sienna measurement and `notes/look/`, and imported `description/`; main was fast-forwarded to it. Sections 2 to 5 describe the state before that. As expected, `scripts/test --all` is red only on 13 (b) and the `rag` scene of `baseline-state` and thinner check 2. The rag scene is not listed as a known failure, so the verdict is a plain FAIL (exit 1), not NOT ALL GREEN; the owner chose to leave it red until the rag work (6.1).
 
 ## 2. State at handover
 
@@ -252,8 +252,8 @@ backup branch.
 
 Two external reviews and the previous agent's checks agree on this order.
 The reviews are `REVIEW.md`, `AGENT_BRIEF.md`, `REVIEW_RESPONSE.md` and
-`AGENT_BRIEF_V2.md` inside the zips in
-`~/src/a/claude-paint-reviews/engine3-rag-review-2026-10-04/`.
+`AGENT_BRIEF_V2.md`, unpacked in `notes/engine3/reviews/` (the zips are in
+`~/src/a/claude-paint-reviews/engine3-rag-review-2026-10-04/`).
 
 ### 6.1 Rag
 

@@ -1,0 +1,17 @@
+test_high_thinner_nonvolatile_and_liquid_units_are_distinct (test_model_probes.ModelProbeTests.test_high_thinner_nonvolatile_and_liquid_units_are_distinct) ... ok
+test_inactive_high_mobility_can_set_shared_time_coefficient (test_model_probes.ModelProbeTests.test_inactive_high_mobility_can_set_shared_time_coefficient) ... ok
+test_invalid_geometry_is_rejected (test_model_probes.ModelProbeTests.test_invalid_geometry_is_rejected) ... ok
+test_nominal_flow_threshold (test_model_probes.ModelProbeTests.test_nominal_flow_threshold) ... ok
+test_nominal_rag_threshold (test_model_probes.ModelProbeTests.test_nominal_rag_threshold) ... ok
+test_same_substrates_still_give_opposite_metric_rankings (test_model_probes.ModelProbeTests.test_same_substrates_still_give_opposite_metric_rankings) ... ok
+test_scalar_hiding_input_is_inverted_by_source_equations (test_model_probes.ModelProbeTests.test_scalar_hiding_input_is_inverted_by_source_equations) ... ok
+test_source_stain_floor_is_one_micrometre (test_model_probes.ModelProbeTests.test_source_stain_floor_is_one_micrometre) ... ok
+test_submicron_paint_cannot_be_lifted_under_floor_rule (test_model_probes.ModelProbeTests.test_submicron_paint_cannot_be_lifted_under_floor_rule) ... ok
+test_synthetic_one_coat_ratios_match_packet_rounding (test_model_probes.ModelProbeTests.test_synthetic_one_coat_ratios_match_packet_rounding) ... ok
+test_unclipped_active_mobility_advances_one_minute (test_model_probes.ModelProbeTests.test_unclipped_active_mobility_advances_one_minute) ... ok
+test_uniform_loading_is_double_throttled_in_example (test_model_probes.ModelProbeTests.test_uniform_loading_is_double_throttled_in_example) ... ok
+
+----------------------------------------------------------------------
+Ran 12 tests in 0.001s
+
+OK

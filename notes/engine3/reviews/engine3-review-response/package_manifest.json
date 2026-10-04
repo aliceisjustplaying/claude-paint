@@ -1,0 +1,15 @@
+{
+  "AGENT_BRIEF_V2.md": "343f74ada4e6d933596284c3c26b3890de2a25e837c6d509af3b41f4e297e772",
+  "README.md": "81a92cd9f5abeffd26ae32bfe768fcc72ada9d928185a3136d817db5f2287ccd",
+  "REVIEW_RESPONSE.md": "1bd769ceee8ef8dbad804293092ea648b69122572450db559e502e4cb42c3faf",
+  "SOURCE_RECEIPTS.md": "462541e1cc5f59c2a0599cc9553bf935b3e77a8a27b819fc3ed59b8ddb9fa10f",
+  "SUPPLIED_COUNTER_REVIEW.txt": "652f2a045efef03e6bdb547650e448a7ab24e6a157bab0f8eca3bef53348e2f9",
+  "environment.json": "fa002ced6e4d26fe88286a387649ddf1e3d83d1b4991c273a1b849927e1f218b",
+  "model_probes.py": "875228f5ab56e7e4b507233c3f61e0369233518a102654639d373d43c44a8b0b",
+  "probe_results.json": "25bd78793aa747d42e286751c4fcc131b115f82e293cffcd5521cef69e9fd0db",
+  "source_manifest.json": "26aedd585384776fba5debe11beb6d381deb7d301b81bba341fc8dd934f296b6",
+  "source_verification.txt": "46bd43146def45f4991d22799f1349126891f2cdcad7bb4222f27b8136a2ebcf",
+  "test_model_probes.py": "6f511c990c19951f67c09ea317e928edb2c85f2abc42ce3ab1b4189db9d75bb8",
+  "test_results.txt": "608a75e44654ceddedd8e75e3e01d21476ecddde53178a339ec3057d1c679d6b",
+  "verify_source_manifest.py": "122191eca0567470d9ea041067a195e08508589fe37258e720ad85b3f28c232a"
+}

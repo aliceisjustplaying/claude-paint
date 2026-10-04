@@ -1,0 +1,236 @@
+{
+  "scope": "Independent Python math/source-structure probes; NOT Rust execution or physical validation",
+  "pickup": {
+    "k": 23.599999999999998,
+    "total_normalized_exposure": 1.0,
+    "assumptions": "clean face, fresh fluid paint, full reach, fixed contact, no floor or redeposition",
+    "cases": [
+      {
+        "contact": 0.05,
+        "remaining_by_stamps": {
+          "1": 0.9500000000028159,
+          "22": 0.4790790080700651,
+          "88": 0.35304756079122557,
+          "176": 0.33028937857622864,
+          "10000": 0.30768518169865366
+        },
+        "continuous_limit": 0.30727873860113125
+      },
+      {
+        "contact": 0.2,
+        "remaining_by_stamps": {
+          "1": 0.8000000000112637,
+          "22": 0.04487448221379149,
+          "88": 0.014398598292773764,
+          "176": 0.01140612108705638,
+          "10000": 0.00895497152736618
+        },
+        "continuous_limit": 0.008915178548439553
+      },
+      {
+        "contact": 0.5,
+        "remaining_by_stamps": {
+          "1": 0.5000000000281593,
+          "22": 0.0001543208172716987,
+          "88": 1.6515303013297512e-05,
+          "176": 1.1142679574749278e-05,
+          "10000": 7.556986928740668e-06
+        },
+        "continuous_limit": 7.504557915076872e-06
+      },
+      {
+        "contact": 1.0,
+        "remaining_by_stamps": {
+          "1": 5.631839439246278e-11,
+          "22": 5.631838950074292e-11,
+          "88": 5.6318389500742895e-11,
+          "176": 5.6318389500742934e-11,
+          "10000": 5.63183895007512e-11
+        },
+        "continuous_limit": 5.631838950074292e-11
+      }
+    ]
+  },
+  "path_partition": {
+    "one_176mm_segment": {
+      "paint_stamps": 352,
+      "mechanical_steps": 704
+    },
+    "1760_segments_of_point1mm": {
+      "paint_stamps": 1760,
+      "mechanical_steps": 1760
+    }
+  },
+  "flow_cfl": [
+    {
+      "pixels": 480,
+      "post_evaporation_phi": 0.5,
+      "mobility_mm2_min": 0.06,
+      "requested_minutes": 1.0,
+      "required_substeps": 1,
+      "actual_substeps": 1,
+      "effective_flow_minutes": 0.9999999999999999,
+      "fraction_of_requested_flow_time": 0.9999999999999999
+    },
+    {
+      "pixels": 480,
+      "post_evaporation_phi": 0.9,
+      "mobility_mm2_min": 0.5400000000000001,
+      "requested_minutes": 1.0,
+      "required_substeps": 4,
+      "actual_substeps": 4,
+      "effective_flow_minutes": 0.9999999999999999,
+      "fraction_of_requested_flow_time": 0.9999999999999999
+    },
+    {
+      "pixels": 480,
+      "post_evaporation_phi": 0.95,
+      "mobility_mm2_min": 1.1399999999999988,
+      "requested_minutes": 1.0,
+      "required_substeps": 7,
+      "actual_substeps": 7,
+      "effective_flow_minutes": 0.9999999999999999,
+      "fraction_of_requested_flow_time": 0.9999999999999999
+    },
+    {
+      "pixels": 2400,
+      "post_evaporation_phi": 0.5,
+      "mobility_mm2_min": 0.06,
+      "requested_minutes": 1.0,
+      "required_substeps": 9,
+      "actual_substeps": 9,
+      "effective_flow_minutes": 1.0,
+      "fraction_of_requested_flow_time": 1.0
+    },
+    {
+      "pixels": 2400,
+      "post_evaporation_phi": 0.9,
+      "mobility_mm2_min": 0.5400000000000001,
+      "requested_minutes": 1.0,
+      "required_substeps": 81,
+      "actual_substeps": 64,
+      "effective_flow_minutes": 0.7967078189300408,
+      "fraction_of_requested_flow_time": 0.7967078189300408
+    },
+    {
+      "pixels": 2400,
+      "post_evaporation_phi": 0.95,
+      "mobility_mm2_min": 1.1399999999999988,
+      "requested_minutes": 1.0,
+      "required_substeps": 170,
+      "actual_substeps": 64,
+      "effective_flow_minutes": 0.3773879142300198,
+      "fraction_of_requested_flow_time": 0.3773879142300198
+    },
+    {
+      "pixels": 4800,
+      "post_evaporation_phi": 0.5,
+      "mobility_mm2_min": 0.06,
+      "requested_minutes": 1.0,
+      "required_substeps": 36,
+      "actual_substeps": 36,
+      "effective_flow_minutes": 1.0,
+      "fraction_of_requested_flow_time": 1.0
+    },
+    {
+      "pixels": 4800,
+      "post_evaporation_phi": 0.9,
+      "mobility_mm2_min": 0.5400000000000001,
+      "requested_minutes": 1.0,
+      "required_substeps": 322,
+      "actual_substeps": 64,
+      "effective_flow_minutes": 0.1991769547325102,
+      "fraction_of_requested_flow_time": 0.1991769547325102
+    },
+    {
+      "pixels": 4800,
+      "post_evaporation_phi": 0.95,
+      "mobility_mm2_min": 1.1399999999999988,
+      "requested_minutes": 1.0,
+      "required_substeps": 679,
+      "actual_substeps": 64,
+      "effective_flow_minutes": 0.09434697855750496,
+      "fraction_of_requested_flow_time": 0.09434697855750496
+    }
+  ],
+  "clock_phase": [
+    {
+      "start_min": 0.1,
+      "actual_elapsed_min": 0.02,
+      "scheduled_flow_minutes": 0
+    },
+    {
+      "start_min": 0.99,
+      "actual_elapsed_min": 0.02,
+      "scheduled_flow_minutes": 1
+    }
+  ],
+  "prior_mobile_paint_absorbed_by_one_blot": 0.748045139243092,
+  "weighted_capacity_counterexample": {
+    "capacity_each": 1.0,
+    "held_before": [
+      1.0,
+      0.0
+    ],
+    "weights": [
+      0.5,
+      0.5
+    ],
+    "weighted_thirst": 0.5,
+    "assumed_total_pickup": 0.2,
+    "held_after_without_receiver_budget": [
+      1.1,
+      0.1
+    ],
+    "note": "Any positive weighted pickup overfills the already full cell; .2 is illustrative"
+  },
+  "film_caps": [
+    {
+      "thinner_share": 0.1,
+      "liquid_cap_um": 54.0,
+      "nonvolatile_cap_if_same_composition_um": 48.6
+    },
+    {
+      "thinner_share": 0.25,
+      "liquid_cap_um": 18.0,
+      "nonvolatile_cap_if_same_composition_um": 13.5
+    },
+    {
+      "thinner_share": 0.5,
+      "liquid_cap_um": 6.0,
+      "nonvolatile_cap_if_same_composition_um": 3.0
+    },
+    {
+      "thinner_share": 0.75,
+      "liquid_cap_um": 2.0,
+      "nonvolatile_cap_if_same_composition_um": 0.5
+    },
+    {
+      "thinner_share": 0.9,
+      "liquid_cap_um": 0.6666666666666665,
+      "nonvolatile_cap_if_same_composition_um": 0.06666666666666664
+    },
+    {
+      "thinner_share": 0.95,
+      "liquid_cap_um": 0.31578947368421084,
+      "nonvolatile_cap_if_same_composition_um": 0.015789473684210555
+    }
+  ],
+  "ideal_dark_absorber_counterexample": {
+    "uncoated_black_Y": 0.0,
+    "uncoated_white_Y": 1.0,
+    "coated_black_Y": 0.0,
+    "coated_white_Y": 0.001,
+    "contrast_ratio": 0.0,
+    "absolute_difference_retained": 0.001,
+    "note": "Ratio alone does not quantify surviving absolute substrate modulation"
+  },
+  "pigment_source_sha256": {
+    "shipping": "9b57b84f722e72116d0fa972ecbd2e8fda9d5c420e6353ed5c6a1722c37382d5",
+    "prototype": "9b57b84f722e72116d0fa972ecbd2e8fda9d5c420e6353ed5c6a1722c37382d5",
+    "research": "9b57b84f722e72116d0fa972ecbd2e8fda9d5c420e6353ed5c6a1722c37382d5",
+    "wip/thinner": "9b57b84f722e72116d0fa972ecbd2e8fda9d5c420e6353ed5c6a1722c37382d5",
+    "wip/look": "9b57b84f722e72116d0fa972ecbd2e8fda9d5c420e6353ed5c6a1722c37382d5",
+    "wip/engine3-integration": "9b57b84f722e72116d0fa972ecbd2e8fda9d5c420e6353ed5c6a1722c37382d5"
+  }
+}

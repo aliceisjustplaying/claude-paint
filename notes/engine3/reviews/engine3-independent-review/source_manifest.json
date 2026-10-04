@@ -1,0 +1,221 @@
+[
+  {
+    "id": "E01",
+    "file": "README.md",
+    "sha256": "180ff754cb0a813e8bd6abbc2162ce34d4fc3cd4144c1fd2ab95a3d8fb42f5cb",
+    "ranges": [
+      [
+        1,
+        118
+      ]
+    ]
+  },
+  {
+    "id": "E02",
+    "file": "prototype/crates/paint/src/rag.rs",
+    "sha256": "e0242af63021738002d92ec77833c16fe513a42818b61e90848c1ed664f764a3",
+    "ranges": [
+      [
+        370,
+        525
+      ]
+    ]
+  },
+  {
+    "id": "E03",
+    "file": "prototype/crates/paint/src/rag.rs",
+    "sha256": "e0242af63021738002d92ec77833c16fe513a42818b61e90848c1ed664f764a3",
+    "ranges": [
+      [
+        600,
+        672
+      ]
+    ]
+  },
+  {
+    "id": "E04",
+    "file": "prototype/crates/paint/src/rag/cloth.rs",
+    "sha256": "f57db9eb6b823990f29c15213246986ae2ed52835c67eedb136d29a19f63ad48",
+    "ranges": [
+      [
+        13,
+        230
+      ]
+    ]
+  },
+  {
+    "id": "E05",
+    "file": "prototype/crates/paint/src/rag/face.rs",
+    "sha256": "0a2de74083051c8367a8e34edb51db583b9ae5f51664e7d3bb67e516534a13de",
+    "ranges": [
+      [
+        1,
+        71
+      ]
+    ]
+  },
+  {
+    "id": "E06",
+    "file": "prototype/crates/paint/src/rag.rs",
+    "sha256": "e0242af63021738002d92ec77833c16fe513a42818b61e90848c1ed664f764a3",
+    "ranges": [
+      [
+        62,
+        114
+      ],
+      [
+        194,
+        227
+      ],
+      [
+        238,
+        250
+      ],
+      [
+        718,
+        728
+      ]
+    ]
+  },
+  {
+    "id": "E07",
+    "file": "wip/thinner/crates/paint/src/thinner.rs",
+    "sha256": "f772900571317662cbad7ae46c94e99ffe788657f07e57dd2802e95b545e0683",
+    "ranges": [
+      [
+        1,
+        128
+      ],
+      [
+        139,
+        147
+      ],
+      [
+        176,
+        225
+      ]
+    ]
+  },
+  {
+    "id": "E08",
+    "file": "wip/look/notes/look/REPORT.md",
+    "sha256": "643e239dbc6feef5713920e05adcde0132f2dc7a8257e6342dffa5eb1b36ee5d",
+    "ranges": [
+      [
+        104,
+        205
+      ]
+    ]
+  },
+  {
+    "id": "E08b",
+    "file": "wip/look/crates/paint/src/bristle.rs",
+    "sha256": "01cfbb6698b38227728b7885e458f9c38c003c531d0b36932603048eec82d80e",
+    "ranges": [
+      [
+        1478,
+        1489
+      ],
+      [
+        1535,
+        1556
+      ],
+      [
+        1598,
+        1621
+      ]
+    ]
+  },
+  {
+    "id": "E09",
+    "file": "wip/thinner/crates/paint/src/drying.rs",
+    "sha256": "f4d0df02422cf403f4566fe96444b21a72144c3c2d897122e44060032be50531",
+    "ranges": [
+      [
+        376,
+        429
+      ]
+    ]
+  },
+  {
+    "id": "E09b",
+    "file": "wip/thinner/notes/thinner/RESULTS.md",
+    "sha256": "376a14e6a5674aec8f0ee34d4d851a1ff75eb30e5e3af6551059d4b13b7cc96d",
+    "ranges": [
+      [
+        1,
+        85
+      ]
+    ]
+  },
+  {
+    "id": "E10",
+    "file": "notes/rag/contact-review/measurements.json",
+    "sha256": "23e260310f1ba8d5f8b61b0551ea2ff5f53c908a7b662cd74346e44e25a61532",
+    "ranges": [
+      [
+        1,
+        220
+      ]
+    ]
+  },
+  {
+    "id": "E11",
+    "file": "wip/look/notes/look/REPORT.md",
+    "sha256": "643e239dbc6feef5713920e05adcde0132f2dc7a8257e6342dffa5eb1b36ee5d",
+    "ranges": [
+      [
+        41,
+        102
+      ]
+    ]
+  },
+  {
+    "id": "E11b",
+    "file": "wip/look/crates/paint/tests/look_sienna.rs",
+    "sha256": "4399eed9152223fd37126e3c988a64a90115416815d823db9a7ec61d1ec91eae",
+    "ranges": [
+      [
+        67,
+        110
+      ]
+    ]
+  },
+  {
+    "id": "E11c",
+    "file": "wip/look/crates/paint/src/pigment.rs",
+    "sha256": "9b57b84f722e72116d0fa972ecbd2e8fda9d5c420e6353ed5c6a1722c37382d5",
+    "ranges": [
+      [
+        22,
+        54
+      ],
+      [
+        108,
+        121
+      ]
+    ]
+  },
+  {
+    "id": "E12",
+    "file": "prototype/Cargo.toml",
+    "sha256": "75a64c7dd3bb643922d175f45db13d6ce995400d05330740051d65abc17f9f2d",
+    "ranges": [
+      [
+        1,
+        40
+      ]
+    ]
+  },
+  {
+    "id": "E13",
+    "file": "wip/engine3-integration/notes/speed/FINAL_REPORT.md",
+    "sha256": "44e90dcde055590104db64932a4398e8235294eadd44e8685a443f81754fb504",
+    "ranges": [
+      [
+        1,
+        200
+      ]
+    ]
+  }
+]

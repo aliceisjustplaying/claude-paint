@@ -1,0 +1,8 @@
+{
+  "python": "3.13.5 (main, Jul 15 2026, 20:25:40) [GCC 14.2.0]",
+  "platform": "Linux-6.18.44-x86_64-with-glibc2.41",
+  "cargo_found": null,
+  "rustc_found": null,
+  "original_archive_sha256": "dff466d0dbbdd784d91bef0ed30849ccd547ae50843892433fca8c944bb36f4c",
+  "scope": "Rust not executed. Python probes and budget tests executed."
+}

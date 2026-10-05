@@ -1,0 +1,11 @@
+{
+  "verified_at": "2026-10-05T17:03:09.664584+00:00",
+  "syntax": "valid",
+  "original_hashes_verified": true,
+  "historical_workflow_hashes_verified": true,
+  "active_batch_script_sha256": "aaa789707650c2d9c41c222fb4af7d9a92bf88479ee611501ac342df5253233f",
+  "active_batch_queue_sha256": "37ea0a01b8f154faf90e4938617e865bbd965a76495744d1a5bfba20621ce3e9",
+  "followup_script_sha256": "cace8f8bc2cb48a9ea93e330979f5d38bd9069077e23d1e7c445789495133df7",
+  "build_or_replay_started": false,
+  "free_bytes": 78525972480
+}

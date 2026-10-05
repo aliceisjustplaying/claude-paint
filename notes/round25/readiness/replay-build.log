@@ -1,0 +1,3 @@
+lockrun: job 8cdd8838 started (process group 58233, timeout 1800 s, log /tmp/lockrun-501/logs/20261005-124010-8cdd8838.log)
+~/src/a/claude-paint-r25run/target/release/easel
+lockrun: finished: exit 0 in 57.1 s; log /tmp/lockrun-501/logs/20261005-124010-8cdd8838.log

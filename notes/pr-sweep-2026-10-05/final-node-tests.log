@@ -1,0 +1,210 @@
+✔ under both limits nothing is dropped (0.500208ms)
+✔ the count limit drops in steps, so the cut moves once every step images (0.383333ms)
+✔ the size limit drops enough old images (in steps) to fit (0.098ms)
+✔ the newest image is kept when it fits the size limit, and dropped when it alone is over it (0.051916ms)
+✔ an image alone over the size limit leaves the request, and a line says so and why (0.223ms)
+✔ old looks become a line naming the file; the newest stay; the input is untouched (0.280041ms)
+✔ an image without a matching read call gets a generic line (0.095041ms)
+✔ an image from the look tool gets a line saying it was a look (0.314958ms)
+✔ the same messages give the same request (0.279583ms)
+✔ a fresh multi-image look that fits is delivered whole despite step rounding (0.377ms)
+✔ a survey larger than the request budget delivers a complete first batch and names every unread tile (0.714208ms)
+✔ the limits come from PAINTER_MAX_IMAGES and PAINTER_MAX_IMAGE_MB, else the defaults (0.210666ms)
+✔ read opens only studio files, however the path is spelled (2.589375ms)
+✔ a name that only begins with two dots is a studio file; a '..' folder step out is not (1.3165ms)
+✔ look's options become the easel's arguments (0.997125ms)
+✔ a long log keeps its end and says what was left out (0.127ms)
+﹣ paint, look, note and status at a real easel (0.047792ms) # SKIP
+✔ a client that hangs is stopped and reported, not waited on forever (306.006291ms)
+✔ a tool's opening status keeps to the tool's time limit, and a busy easel isn't opened again (308.392583ms)
+✔ an abort stops the tool's chain: nothing after it runs, and no listener is left behind (479.074125ms)
+✔ look's errors name the tool's options, not the easel's flags (0.735875ms)
+✔ advancing rebuilds outlive the tool budget and leave a fresh budget for the command (3152.642083ms)
+✔ a rebuild returned by open is polled and a stalled count is bounded (389.492834ms)
+✔ abort during rebuild polling stops admission and removes listeners (253.182084ms)
+✔ invalid rebuild replies never admit a command or open another session (949.357167ms)
+✔ an easel that exits before reading a large chunk is the tool's error, with its words (130.279917ms)
+✔ the easel gets the operator's RAYON_NUM_THREADS and nothing else of the painter's environment (128.091708ms)
+✔ no reply counts the painter's work or times the machine (0.511959ms)
+✔ a look is renamed at random and shown without the machine's seconds (0.776875ms)
+✔ every look a survey names is renamed, in order (1.256833ms)
+✔ a revision replaces one passage and keeps what was there in the revisions log (9.289125ms)
+✔ a passage that isn't there, is there twice or is empty changes nothing (0.781958ms)
+✔ a usage limit is the runner's: Go's and Zen's limit errors, not an empty balance (0.521958ms)
+✔ the wait is the reset time the error names plus a minute, else the probe interval (1.00575ms)
+✔ after a day of limits in a row the run settles on the error (0.075583ms)
+✔ PAINTER_LIMIT_PROBE_S and PAINTER_LIMIT_GIVE_UP_H set the waits; nonsense is refused (0.582375ms)
+✖ a run cut off by usage limits goes on when they lift, asking with the conversation as it was (4.355375ms)
+✔ requests wait until the last minute's input tokens plus the next fit the budget (4.187417ms)
+✔ a request's input tokens are new plus cached (0.112292ms)
+✔ a per-minute quota 429 becomes a rate limit pi's retry takes (0.349666ms)
+✔ daily quotas, billing errors and other errors are left alone (0.081167ms)
+✔ a request over the whole budget goes at once when the window is empty (0.067667ms)
+✖ a later sitting opens with the brief, journal, globals, clock and a fresh look at the canvas (13.896875ms)
+✖ a first sitting's message is left as it is (7.375334ms)
+✖ after a compaction the painter sees the canvas as it was when the summary was written (4.371208ms)
+✔ the summary lists the globals the easel reports, not names read off the log (171.83875ms)
+✔ when the easel can't answer, the summary says so and guesses nothing (162.287041ms)
+✔ the painting time comes only from paint results that succeeded, and only a valid time (0.313125ms)
+✔ the journal is quoted as the painter's own notes: its headings can't pass for the summary's (149.022708ms)
+✔ a carriage return in the journal starts a new quoted line, not an unquoted one (47.005292ms)
+✔ a journal stamp counts only when it is a valid time of day (0.128667ms)
+✔ a Gemini tool result's image moves to a user turn after it, at the ultra-high resolution (1.11975ms)
+✔ every OpenAI input_image gets the detail, wherever it sits (0.08725ms)
+✔ an Anthropic payload is left as it is (0.073083ms)
+ℹ tests 54
+ℹ suites 0
+ℹ pass 49
+ℹ fail 4
+ℹ cancelled 0
+ℹ skipped 1
+ℹ todo 0
+ℹ duration_ms 6325.19
+
+✖ failing tests:
+
+test at harness/painter/test/limits.test.ts:39:1
+✖ a run cut off by usage limits goes on when they lift, asking with the conversation as it was (4.355375ms)
+  Error: spawnSync pi ENOENT
+      at Object.spawnSync (node:internal/child_process:1175:20)
+      at spawnSync (node:child_process:929:24)
+      at execFileSync (node:child_process:972:15)
+      at TestContext.<anonymous> (file:///private/tmp/paint-sweep.TZI3E9/pr10/harness/painter/test/limits.test.ts:47:16)
+      at Test.runInAsyncScope (node:async_hooks:226:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    errno: -2,
+    code: 'ENOENT',
+    syscall: 'spawnSync pi',
+    path: 'pi',
+    spawnargs: [ '--print', '--no-extensions', '-e', '/private/tmp/paint-sweep.TZI3E9/pr10/harness/painter/painter.ts', '-e', '/private/tmp/paint-sweep.TZI3E9/pr10/harness/painter/test/fixtures/faux-limit.ts', '--no-context-files', '--no-skills', '--no-prompt-templates', '--no-approve', '--session-dir', '/var/folders/6k/24182wv136749r3p852rft740000gn/T/limits-test-jc1xTS/sessions', '--provider', 'faux', '--model', 'm', 'hello' ],
+    error: Error: spawnSync pi ENOENT
+        at Object.spawnSync (node:internal/child_process:1175:20)
+        at spawnSync (node:child_process:929:24)
+        at execFileSync (node:child_process:972:15)
+        at TestContext.<anonymous> (file:///private/tmp/paint-sweep.TZI3E9/pr10/harness/painter/test/limits.test.ts:47:16)
+        at Test.runInAsyncScope (node:async_hooks:226:14)
+        at Test.run (node:internal/test_runner/test:1402:25)
+        at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+        at Test.postRun (node:internal/test_runner/test:1542:19)
+        at Test.run (node:internal/test_runner/test:1467:12)
+        at async Test.processPendingSubtests (node:internal/test_runner/test:974:7),
+    status: null,
+    signal: null,
+    output: null,
+    pid: 0,
+    stdout: undefined,
+    stderr: undefined
+  }
+
+test at harness/painter/test/recovery.test.ts:46:1
+✖ a later sitting opens with the brief, journal, globals, clock and a fresh look at the canvas (13.896875ms)
+  Error: spawnSync pi ENOENT
+      at Object.spawnSync (node:internal/child_process:1175:20)
+      at spawnSync (node:child_process:929:24)
+      at execFileSync (node:child_process:972:15)
+      at run (file:///private/tmp/paint-sweep.TZI3E9/pr10/harness/painter/test/recovery.test.ts:39:16)
+      at TestContext.<anonymous> (file:///private/tmp/paint-sweep.TZI3E9/pr10/harness/painter/test/recovery.test.ts:47:30)
+      at Test.runInAsyncScope (node:async_hooks:226:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.start (node:internal/test_runner/test:1262:17)
+      at startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17) {
+    errno: -2,
+    code: 'ENOENT',
+    syscall: 'spawnSync pi',
+    path: 'pi',
+    spawnargs: [ '--print', '--no-extensions', '-e', '/private/tmp/paint-sweep.TZI3E9/pr10/harness/painter/painter.ts', '-e', '/private/tmp/paint-sweep.TZI3E9/pr10/harness/painter/compaction.ts', '-e', '/private/tmp/paint-sweep.TZI3E9/pr10/harness/painter/test/fixtures/faux-record.ts', '--no-context-files', '--no-skills', '--no-prompt-templates', '--no-approve', '--session-dir', '/var/folders/6k/24182wv136749r3p852rft740000gn/T/recovery-test-uMtm2b/sessions', '--provider', 'faux', '--model', 'm', "You're back at the easel." ],
+    error: Error: spawnSync pi ENOENT
+        at Object.spawnSync (node:internal/child_process:1175:20)
+        at spawnSync (node:child_process:929:24)
+        at execFileSync (node:child_process:972:15)
+        at run (file:///private/tmp/paint-sweep.TZI3E9/pr10/harness/painter/test/recovery.test.ts:39:16)
+        at TestContext.<anonymous> (file:///private/tmp/paint-sweep.TZI3E9/pr10/harness/painter/test/recovery.test.ts:47:30)
+        at Test.runInAsyncScope (node:async_hooks:226:14)
+        at Test.run (node:internal/test_runner/test:1402:25)
+        at Test.start (node:internal/test_runner/test:1262:17)
+        at startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17),
+    status: null,
+    signal: null,
+    output: null,
+    pid: 0,
+    stdout: undefined,
+    stderr: undefined
+  }
+
+test at harness/painter/test/recovery.test.ts:59:1
+✖ a first sitting's message is left as it is (7.375334ms)
+  Error: spawnSync pi ENOENT
+      at Object.spawnSync (node:internal/child_process:1175:20)
+      at spawnSync (node:child_process:929:24)
+      at execFileSync (node:child_process:972:15)
+      at run (file:///private/tmp/paint-sweep.TZI3E9/pr10/harness/painter/test/recovery.test.ts:39:16)
+      at TestContext.<anonymous> (file:///private/tmp/paint-sweep.TZI3E9/pr10/harness/painter/test/recovery.test.ts:60:23)
+      at Test.runInAsyncScope (node:async_hooks:226:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12) {
+    errno: -2,
+    code: 'ENOENT',
+    syscall: 'spawnSync pi',
+    path: 'pi',
+    spawnargs: [ '--print', '--no-extensions', '-e', '/private/tmp/paint-sweep.TZI3E9/pr10/harness/painter/painter.ts', '-e', '/private/tmp/paint-sweep.TZI3E9/pr10/harness/painter/compaction.ts', '-e', '/private/tmp/paint-sweep.TZI3E9/pr10/harness/painter/test/fixtures/faux-record.ts', '--no-context-files', '--no-skills', '--no-prompt-templates', '--no-approve', '--session-dir', '/var/folders/6k/24182wv136749r3p852rft740000gn/T/recovery-test-ZrkdbB/sessions', '--provider', 'faux', '--model', 'm', 'Your brief is in BRIEF.md.' ],
+    error: Error: spawnSync pi ENOENT
+        at Object.spawnSync (node:internal/child_process:1175:20)
+        at spawnSync (node:child_process:929:24)
+        at execFileSync (node:child_process:972:15)
+        at run (file:///private/tmp/paint-sweep.TZI3E9/pr10/harness/painter/test/recovery.test.ts:39:16)
+        at TestContext.<anonymous> (file:///private/tmp/paint-sweep.TZI3E9/pr10/harness/painter/test/recovery.test.ts:60:23)
+        at Test.runInAsyncScope (node:async_hooks:226:14)
+        at Test.run (node:internal/test_runner/test:1402:25)
+        at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+        at Test.postRun (node:internal/test_runner/test:1542:19)
+        at Test.run (node:internal/test_runner/test:1467:12),
+    status: null,
+    signal: null,
+    output: null,
+    pid: 0,
+    stdout: undefined,
+    stderr: undefined
+  }
+
+test at harness/painter/test/recovery.test.ts:64:1
+✖ after a compaction the painter sees the canvas as it was when the summary was written (4.371208ms)
+  Error: spawnSync pi ENOENT
+      at Object.spawnSync (node:internal/child_process:1175:20)
+      at spawnSync (node:child_process:929:24)
+      at execFileSync (node:child_process:972:15)
+      at run (file:///private/tmp/paint-sweep.TZI3E9/pr10/harness/painter/test/recovery.test.ts:39:16)
+      at TestContext.<anonymous> (file:///private/tmp/paint-sweep.TZI3E9/pr10/harness/painter/test/recovery.test.ts:68:16)
+      at Test.runInAsyncScope (node:async_hooks:226:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12) {
+    errno: -2,
+    code: 'ENOENT',
+    syscall: 'spawnSync pi',
+    path: 'pi',
+    spawnargs: [ '--print', '--no-extensions', '-e', '/private/tmp/paint-sweep.TZI3E9/pr10/harness/painter/painter.ts', '-e', '/private/tmp/paint-sweep.TZI3E9/pr10/harness/painter/compaction.ts', '-e', '/private/tmp/paint-sweep.TZI3E9/pr10/harness/painter/test/fixtures/faux-record.ts', '--no-context-files', '--no-skills', '--no-prompt-templates', '--no-approve', '--session-dir', '/var/folders/6k/24182wv136749r3p852rft740000gn/T/recovery-test-R2UlMc/sessions', '--provider', 'faux', '--model', 'm', 'paint' ],
+    error: Error: spawnSync pi ENOENT
+        at Object.spawnSync (node:internal/child_process:1175:20)
+        at spawnSync (node:child_process:929:24)
+        at execFileSync (node:child_process:972:15)
+        at run (file:///private/tmp/paint-sweep.TZI3E9/pr10/harness/painter/test/recovery.test.ts:39:16)
+        at TestContext.<anonymous> (file:///private/tmp/paint-sweep.TZI3E9/pr10/harness/painter/test/recovery.test.ts:68:16)
+        at Test.runInAsyncScope (node:async_hooks:226:14)
+        at Test.run (node:internal/test_runner/test:1402:25)
+        at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+        at Test.postRun (node:internal/test_runner/test:1542:19)
+        at Test.run (node:internal/test_runner/test:1467:12),
+    status: null,
+    signal: null,
+    output: null,
+    pid: 0,
+    stdout: undefined,
+    stderr: undefined
+  }

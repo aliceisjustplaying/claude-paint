@@ -1,0 +1,109 @@
+PR sweep, 2026-10-05
+
+All six requested PRs were checked out and reviewed in isolated worktrees,
+then fixed and merged locally, including later fixes in the integration worktree.
+All are merged locally on codex/pr-sweep-integration at
+48f899c3bee5491cc04c440bc0cecb2e03082a79, based on main
+6b8ec1823150f5eae3c135c927df332c8d5c1056. No pushes or GitHub merges were performed.
+
+PR 5 https://github.com/aliceisjustplaying/claude-paint/pull/5
+review/pr5 de2671e30ea0e77fce03eb200e8a22cab072ba86
+Replaced leaked custom Fabric names with owned Cow strings. Preserved legacy checkpoint layout.
+Standalone checks: paint library 196 passed/8 ignored, soak 10 passed, raw easel 14 passed/1 ignored and soaked query passed.
+Local integration merge: 143bd42. Code review complete.
+
+PR 7 https://github.com/aliceisjustplaying/claude-paint/pull/7
+review/pr7 17c3927c5e2ac841322f685d5471fc59a7d28838
+Fixed gesture/comparison budgets, rejected-load RNG changes, secondary/graded thinner,
+scaled scumble parameters, double-load accounting and solvent spatter. Preserved PR 6 survey fixes.
+Focused API, paint, spatter, part-load, sizing, double-load, gesture and relief regressions passed.
+Local integration merge: c268f5b. Code review complete.
+
+PR 8 https://github.com/aliceisjustplaying/claude-paint/pull/8
+codex/pr8-reviewed aaeb80bb92d771add064d4044146b958e21a4cbb
+Corrected estimated vine-black drying and material provenance. Verified MM22 title/DOI;
+recorded conflicting dates in the paper. Kept cochineal as a period proxy rather than a Monet attribution.
+Fixed branch-aware test profile selection and the two NEW vine-black fixture rows, preserving all 145 existing tube rows.
+Palette, both new boxes, feature tests and studio names passed. Exact pigment fixture passed after correction.
+Local integration merge: 630f4e2. Protected tube fixture still lacks lead approval.
+
+PR 9 https://github.com/aliceisjustplaying/claude-paint/pull/9
+codex/pr9-reviewed 12c28cdd8b675a064941023e2a169ded41b0aa1d
+Preserved knife solvent through load/lay/scrape/lift/tears, validated loads/options/paths,
+bounded aggregate path length and counted liquid in clumped-brush caps.
+Knife, Lua knife, thinner, surface, drag, golden and kernel checks passed.
+Local integration merge: 7e4b8ec. Code review complete.
+
+PR 10 https://github.com/aliceisjustplaying/claude-paint/pull/10
+review/pr10 e10b24be291eae7bc4b68bed16bc6e44e2ca374f
+Retained live Lua pile recipes after board scraping, refreshed recipe/material getters,
+diluted p:add materials consistently, preserved rag turps/oil, weighted wet gloss by coverage,
+rejected negative varnish and incompatible palette-look options and repaired sampler programs/docs.
+Palette, board, finish, rag, gloss, checkpoint and client regressions passed.
+Local integration merge: 6dc4566. Protected state dump still lacks lead approval.
+
+PR 11 https://github.com/aliceisjustplaying/claude-paint/pull/11
+review/pr11 f2a2e2b3a6377d3ee5ed266361c5a59fb75516e9
+Corrected clipped blade origin, projected scraped piles fresh without mutation, retained actual
+knife fullness and excluded held previews from whole-canvas thumbnails. Preserved PR 6 stronger fallback rules.
+Held preview and studio viewer checks passed. Fixed replay-only test feature guard; box-inness build/tests passed.
+Local integration merge: f1bf422. Code review complete.
+
+Final candidate Rust batch: 332 passed, 0 failed, 27 ignored (final-cargo-tests.log).
+The slow thin-blend check passed separately (slow-thin-blend.log).
+The no-default-features box-inness tests passed 22 tests with 1 ignored.
+The client suite passed 17 tests with 1 skipped.
+All nine sampler programs replayed without Lua errors using the final candidate
+release easel, engine 4, giverny box and --width 120. Each of plates 1–8 used
+common.lua then its plate chunk; plate 9 used its three study chunks. Logs are
+in sampler/. This establishes executable examples, not visual or physical accuracy.
+Full Node suite: 53 passed, 0 failed, 1 skipped (final-node-with-pi.log).
+The initial run's four recovery failures were caused by a missing local-bin PATH
+entry; rerunning with the already-installed pi executable resolved them without code changes.
+
+Integration-specific fixes: separate legacy raw PAINTC10 from material PAINTC11/12 formats;
+copy current pile thinner into held previews; expose knife solvent as thinner; use immutable
+borrows for read-only pile metadata; let clear solvent add relief height without suppressing linen.
+Existing raw-format, checkpoint, held-preview, rollback and lighting regressions passed.
+Client timing fixture has larger scheduling margins; two deliberately faulty deadline
+variants still fail the regression checks.
+
+First exact approved gate: 66f465f3f86d16138b78c0873e622572eb769835, UNFINISHED.
+Receipt: first-gate-receipt.json and refs/notes/test-receipts.
+Build passed; checks ran 503 tests. Cargo and slow-thin-blend hit configured time limits.
+New pigment fixture and feature-test compile failures were subsequently fixed and focused checks passed.
+Legacy rag baseline failure is byte-identical to clean main: main-baseline-comparison.txt.
+Existing documentation preserves that red result: notes/engine3/START_HERE.md:11–14,
+notes/engine3/HANDOVER.md:22,198–202. The existing thinner check 13(b) also remains red.
+The approved gate is unchanged. Candidate is not eligible for guarded main promotion.
+
+Final exact gate: 48f899c3bee5491cc04c440bc0cecb2e03082a79, UNFINISHED.
+Receipt: final-gate-receipt.json and refs/notes/test-receipts on that exact SHA.
+Build passed. Checks ran 525 tests; feature-only build, pigment fixture and all
+remaining ordinary checks passed. Cargo batch hit 60 seconds and slow blend hit
+180 seconds under the gate; both passed in the separate complete runs above.
+Legacy rag baseline/check 2 and the existing expected check 13(b) remain red.
+Protected approval check still reports state_dump.rs blob 84530af6a5ec and
+tubes_af49348.txt blob eb4dc3fbaf4c unapproved (protected-approval-check.txt).
+Local merge judgment: all six corrected PRs were suitable for local integration.
+Guarded main promotion is not ready for the stated gate/approval reasons.
+
+PR 6 was excluded from edits and confirmed merged at 2026-10-04T23:33:45Z:
+https://github.com/aliceisjustplaying/claude-paint/pull/6
+The integration includes its merged main SHA.
+
+Private preview: http://100.82.115.34:8766/ (m3p Tailscale IP), HTTP 200 verified.
+Candidate studio files are retained in notes/pr-sweep-preview/studio; the server remains running.
+Other-Mac HTTP verification was blocked by SSH host-key verification.
+Own temporary worktrees, build directories and sampler PNGs were removed.
+Durable review branches, commits, logs and preview sources remain; final-worktrees.txt
+shows only the preexisting main and round-24 worktrees.
+
+Remote PR 7–11 heads changed independently during the sweep. Latest fetched heads were
+7 acd9221676edd9c308fb2840a6396989d64e1727,
+8 5628eca151d4ae4647afba5b6812e41d73ff1ac7,
+9 823d3588495c05154535273dd8a7a2251846a47f,
+10 049ea365c342c7ad230d11f0250882d249aa27f2,
+11 730fff3bcdb3af143ffecccb07649c1eb363c64f.
+Required new source/profile fixes were incorporated. Upstream thinned-knife rejection
+and stale scraped-pile behavior were superseded by solvent preservation and live recipes.

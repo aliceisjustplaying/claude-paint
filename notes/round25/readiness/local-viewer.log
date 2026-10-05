@@ -1,0 +1,13 @@
+Local studio viewer: http://m3p.tailec2dc.ts.net:8768/
+HTTP check from serving M3: 200.
+Serving Tailscale IP: 100.82.115.34; DNS name m3p.tailec2dc.ts.net.
+Persistent submitted launchd service: art.stillwet.studio.r25preview.
+Listener: 100.82.115.34:8768 only, process 95223.
+Backend: current project studio/studio.py, source commit 25f1b8d.
+Historical outcome checks: paint-studio-24be5f = cap_reached; paint-studio-ea8319 = finished.
+Browser: Helium accessibility state showed The studio · stillwet at the exact private URL.
+T3 preview_status: explicitly unavailable (no connected preview automation host).
+R25: no runner/provider process, no sitting/outcome markers and prepared painting folder empty.
+Existing ports 8765–8767 preserved. No Funnel or Serve route was created.
+Remote M1 check: SSH to m1p timed out; M1 access not verified.
+Prepared R25 appears after its first real session; no placeholder session was fabricated.

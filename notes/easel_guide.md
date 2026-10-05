@@ -8,8 +8,8 @@ dries on a clock, and layers combine by Kubelka–Munk optics.
 Three things hold for every session:
 
 - **Every chunk that runs stays on the canvas.** There is no undo. To
-  change something, paint over it, or lift wet paint off with a brush or
-  a rag.
+  change something, paint over it, lift wet paint off with a brush or
+  a rag or scrape it off with a knife.
 - **A chunk that stops with an error changes nothing.** The canvas, your
   variables, the paint on your brushes and the clock are as they were
   before it, and it isn't written to the log.
@@ -620,7 +620,7 @@ r = rag{width=<units>}
 r:wipe(m, {pressure=0.5, angle=<radians>, passes=1, refold=<load>})   -- wiped over a mask
 r:wipe(pts, {pressure={0.4, 0.8}})       -- one wipe along a path
 r:blot(x, y, {pressure=0.6})             -- pressed straight down and lifted off
-r:refold()                               -- a cleaner, dry part of the cloth turned outward
+r:refold()                               -- a cleaner part of the cloth turned outward; retains dampness
 r:dip(0.5)                               -- the part in use dipped into spirits, 0..1
 print(r)                                 -- rag(width <units>, load <0..1>); also r.load, r.soaked, r.damp, r.fold
 ```
@@ -642,8 +642,8 @@ gradually soaks into the cloth; refolding turns that paint inward.
 A rag dipped in spirits (`r:dip`, 0..1) lifts wet paint more readily and
 reaches farther into the hollows. It works gradually: wipe after wipe
 takes the paint nearly to the ground. Its folds still leave streaks.
-Dampness (`r.damp`) halves every three minutes of painting time; a refold
-turns out a dry part, and another dip wets it again.
+Dampness (`r.damp`) halves every three minutes of painting time. Refolding
+retains the cloth's dampness; another dip adds spirits.
 
 What it lifts soaks into the cloth. `r.load` is how loaded the part in use
 is (0 clean, 1 full): the more loaded, the less it lifts. `r:refold()`

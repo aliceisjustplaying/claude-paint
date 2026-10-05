@@ -1,0 +1,8 @@
+open sketch-socket-review exit 0
+easel "sketch-socket-review" open: 0 chunks · 600px · no canvas yet
+ 
+-s sketch-socket-review status exit 0
+0 chunks · 600px · no canvas yet
+ 
+actual session directory path bytes 200
+close exit 0

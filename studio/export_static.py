@@ -8,6 +8,7 @@
 
 Writes <out>/index.html (the viewer, reading files instead of the live API), <out>/stream.css (its livestream
 layout, loaded with ?stream=1), <out>/data/sessions.json and,
+per-painter share/<painter>.html (the same viewer with crawler-visible metadata, served by Caddy for ?p= links),
 per painter, data/<painter>/events.json (with the image extensions), data/<painter>/img/<i>.<ext> and
 data/<painter>/file/<the painting's source> (from archive/sources/ once the painter's folder is gone). Every text response is scrubbed like the public server's
 (home folder -> ~, account name -> user); the export stops if a scrubbed file still names either.
@@ -21,12 +22,13 @@ deletes only the listed files it didn't write again. It won't write into a folde
 except an export from before the list (index.html with the static switch, data/sessions.json, nothing else
 at the top), which it adopts, owning all of data/ as the old exporter did.
 """
-import argparse, base64, io, json, os, re, sys
+import argparse, base64, glob, hashlib, html, io, json, os, re, shutil, subprocess, sys, time
 from concurrent.futures import ThreadPoolExecutor
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import studio as S
 try:
     from PIL import Image
+    from palette_board import palette_board
 except ImportError:  # the web copies are an optimization: without Pillow the viewer shows the originals
     Image = None
 
@@ -35,11 +37,103 @@ PLAUSIBLE = (b'<script async src="/v/app.js"></script><script>window.plausible=w
              b'plausible.init=plausible.init||function(i){plausible.o=i||{}};plausible.init({endpoint:"/v/e"})</script>')
 THUMB = (168, 120)  # the look-strip shows 81x58: twice that, for sharp screens
 VIEW = 1600         # the main view's copy, long side
+SITE = "https://stillwet.art"
+DEFAULT_IMAGE = {"url": SITE + "/img/og-card.jpg", "width": 1200, "height": 630}
+
+
+def working_studios():
+    """Actual Pi process working directories, not persistent easel servers or saved running records."""
+    try:
+        ps = subprocess.run(["ps", "-Ao", "pid=,comm="], capture_output=True, text=True, check=True, timeout=10)
+        pids = [parts[0] for row in ps.stdout.splitlines()
+                if len(parts := row.split()) == 2 and os.path.basename(parts[1]) == "pi"]
+        lsof = shutil.which("lsof") or "/usr/sbin/lsof"
+        if not pids:
+            return set()
+        r = subprocess.run([lsof, "-a", "-p", ",".join(pids), "-d", "cwd", "-Fn"],
+                           capture_output=True, text=True, timeout=10)
+        return {os.path.basename(row[1:]) for row in r.stdout.splitlines() if row.startswith("n")}
+    except (OSError, subprocess.SubprocessError):
+        return set()  # no execution evidence: never claim live
+
+
+def runner_states(sessions, working, now):
+    """Require a running sitting, a live Pi in that studio and recent session activity. Completion
+    comes only from the runner outcome, never a title, quiet session or exported render."""
+    records = {}
+    for path in glob.glob(S.RUNS):
+        try:
+            with open(path) as fh:
+                names = json.load(fh)
+            for key, painter in names.items():
+                lane, number = re.match(r"^(.*?)(\d*)$", key).groups()
+                rd = os.path.join(os.path.dirname(path), lane)
+                stem = os.path.join(rd, "p" + (number or "0"))
+                running = False
+                try:
+                    with open(stem + "_sittings.json") as fh:
+                        sittings = json.load(fh)
+                    running = bool(sittings) and sittings[-1].get("status") == "running"
+                except (OSError, ValueError, AttributeError, TypeError, KeyError):
+                    pass
+                completed = next((os.path.getmtime(f) for f in (stem + ".painted", stem + "_outcome.json")
+                                  if os.path.isfile(f)), 0)
+                records[painter] = (running, completed)
+        except (OSError, ValueError, AttributeError, TypeError):
+            continue
+    for s in sessions:
+        running, completed = records.get(s["p"], (False, 0))
+        s["active"] = bool(not s.get("outcome") and running and s["p"] in working and 0 <= now - s["mtime"] < 1800)
+        s["completed_at"] = (completed or s["mtime"]) if (s.get("outcome") or {}).get("status") == "finished" else None
+
+
+def featured(sessions):
+    active = [s for s in sessions if s.get("active")]
+    if active:
+        return max(active, key=lambda s: s["mtime"])
+    completed = [s for s in sessions if s.get("completed_at") is not None]
+    return max(completed, key=lambda s: s["completed_at"]) if completed else None
+
+
+def card_page(page, painter, homepage=False):
+    """Crawler-visible metadata in the returned HTML. Every attribute and title is escaped."""
+    url = SITE + "/studio/" + ("?p=" + painter["p"] if painter and not homepage else "")
+    image = (painter or {}).get("og_image") or DEFAULT_IMAGE
+    title, description = "The studio · stillwet", "AI models painting in a simulation of oil paint. Watch every brushstroke and how the picture grows."
+    if painter:
+        state = "Live" if painter["active"] else {
+            "finished": "Finished", "cap_reached": "Sitting limit reached", "crash_limit_reached": "Stopped after errors"
+        }.get((painter.get("outcome") or {}).get("status"), "Not currently painting")
+        name = painter.get("title") or "Untitled"
+        model = painter.get("model") or "AI painter"
+        subject = painter.get("artist") or painter.get("subject")
+        subject = (" after " + subject) if subject and subject not in ("free", "self-portrait") else ""
+        title = f"{name} · {model} · {state} · stillwet studio"
+        description = f"{state}: {model} painting{subject} in a simulation of oil paint. Latest canvas snapshot; watch every brushstroke in the studio."
+    esc = lambda value: html.escape(str(value), quote=True)
+    tags = [f"<title>{esc(title)}</title>", '<base href="/studio/">',
+            f'<link rel="canonical" href="{esc(url)}">']
+    for key, value in (("description", description), ("og:title", title), ("og:description", description),
+                       ("og:type", "website"), ("og:url", url), ("og:image", image["url"]),
+                       ("og:image:width", image["width"]), ("og:image:height", image["height"]),
+                       ("og:image:type", "image/jpeg"), ("og:image:alt", title),
+                       ("twitter:card", "summary_large_image"), ("twitter:title", title),
+                       ("twitter:description", description), ("twitter:image", image["url"]), ("twitter:image:alt", title)):
+        attr = "property" if key.startswith("og:") else "name"
+        tags.append(f'<meta {attr}="{key}" content="{esc(value)}">')
+    # The default selection also opens the painting on direct access to a generated page.
+    tags.append('<script>window.STUDIO_FEATURED=' + json.dumps(painter["p"] if painter else None) + ';</script>')
+    start, end = b"<!-- STUDIO_META_START -->", b"<!-- STUDIO_META_END -->"
+    before, rest = page.split(start, 1)
+    _, after = rest.split(end, 1)
+    return before + start + ("\n" + "\n".join(tags) + "\n").encode() + end + after
 
 
 def palette_chips(data, names):
     """Match look.rs chart glyphs before browser color processing or canvas protections."""
     im = Image.open(io.BytesIO(data)).convert("RGB")
+    if im.width == 1000:
+        return palette_board(data)
     if im.width != 1124:
         return None
     px, rows = im.load(), []
@@ -170,6 +264,7 @@ def main():
     out = os.path.abspath(a.out)
     before = owned(out)
     ss = [{k: v for k, v in s.items() if k != "files"} for s in S.list_sessions() if s.get("painter") and s["p"] not in a.skip]
+    runner_states(ss, working_studios(), time.time())
     n_img = n_web = 0
     pool = ThreadPoolExecutor(os.cpu_count() or 4) if Image else None
     for s in ss:
@@ -222,6 +317,15 @@ def main():
             s["look"] = next((e["img"] for e in reversed(ev)
                               if e["kind"] == "image" and "look" not in e and not e.get("ref")
                               and 0 <= e["img"] < n and web[e["img"]]), None)
+        # Reuse the latest whole snapshot's web copy, re-encoded without source metadata. The content
+        # version changes even if a session rewrites the same image index.
+        s["og_image"] = None
+        if Image and s["look"] is not None:
+            with open(os.path.join(out, "data", p, "v", f'{s["look"]}.jpg'), "rb") as fh:
+                data = fh.read()
+            rel = f'data/{p}/v/{s["look"]}.jpg?v=' + hashlib.sha256(data).hexdigest()
+            with Image.open(io.BytesIO(data)) as im:
+                s["og_image"] = {"url": SITE + "/studio/" + rel, "width": im.width, "height": im.height}
         text(os.path.join(out, "data", p, "events.json"),
              json.dumps({"events": ev, "total": len(ev), "epoch": st["epoch"], "sittings": len(files), "imgext": exts, "web": web}))
         # the painting's source, as the live server's /api/file gives it
@@ -239,9 +343,12 @@ def main():
     assert b"STUDIO_STATIC = true" in page, "index.html changed: the static switch didn't go in"
     # the gallery's page-view counter (Plausible, served from stillwet.art/v/), on the public copy only
     page = page.replace(b"</head>", PLAUSIBLE + b"</head>", 1)
-    text(os.path.join(out, "index.html"), page)
-    with open(os.path.join(S.HERE, "stream.css"), "rb") as fh:  # the livestream's layout, for ?stream=1
-        text(os.path.join(out, "stream.css"), fh.read())
+    text(os.path.join(out, "index.html"), card_page(page, featured(ss), homepage=True))
+    for s in ss:
+        text(inside(out, "share", s["p"] + ".html"), card_page(page, s))
+    for asset in S.VIEWER_ASSETS:
+        with open(os.path.join(S.HERE, asset), "rb") as fh:
+            write(os.path.join(out, asset), fh.read())
     now = sorted(os.path.relpath(f, out) for f in WRITTEN)
     stale = 0
     for rel in set(before) - set(now):

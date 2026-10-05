@@ -1,0 +1,69 @@
+Candidate owner and sibling tests (offline, no provider):
+
+Command: cargo test -p easel --profile iter --bin easel draw_outline::tests -- --nocapture
+   Compiling easel v0.1.0 (/Users/alice/src/a/claude-paint/crates/easel)
+    Finished `iter` profile [optimized] target(s) in 13.25s
+     Running unittests src/main.rs (target/iter/deps/easel-f59f14deaf8ad19f)
+
+running 4 tests
+test draw_outline::tests::amount_zero_is_clean_even_with_explicit_lobes ... ok
+local m = o - other: runtime error: outline arithmetic needs masks: use o:mask() - other:mask() for closed outlines; open outlines use o:below(), o:above() or o:band(10)
+test draw_outline::tests::an_inset_that_consumes_the_shape_masks_nothing ... ok
+test draw_outline::tests::tiny_lobes_and_sizes_are_refused ... ok
+local m = rect(0,0,300,300) - o: runtime error: want a mask, got userdata; use rect(100,100,200,200) or convert a drawn outline with o:mask() (closed), o:below()/o:above() (open), or o:band(10). Call the method: o.mask is not a mask
+blend(nil, {}): runtime error: want a mask, got nil; use rect(100,100,200,200) or convert a drawn outline with o:mask() (closed), o:below()/o:above() (open), or o:band(10). Call the method: o.mask is not a mask
+blend(o, {}): runtime error: want a mask, got userdata; use rect(100,100,200,200) or convert a drawn outline with o:mask() (closed), o:below()/o:above() (open), or o:band(10). Call the method: o.mask is not a mask
+r:wipe(nil): runtime error: wipe: want a mask or points, got nil; use r:wipe(rect(100,100,200,200)) or r:wipe(o:mask()) for a closed outline; an open outline uses o:below(), o:above() or o:band(10)
+test draw_outline::tests::invalid_outline_masks_explain_executable_recovery ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 116 filtered out; finished in 0.32s
+
+
+Exit: 0
+
+Command: cargo test -p easel --profile iter --bin easel look::tests -- --nocapture
+    Finished `iter` profile [optimized] target(s) in 0.03s
+     Running unittests src/main.rs (target/iter/deps/easel-f59f14deaf8ad19f)
+
+running 7 tests
+--crop 100,100,wide,200: want four numeric canvas-unit coordinates x0,y0,x1,y1 (opposite corners, not width/height or pixels); example: --crop 100,100,200,200
+--crop 100,100,200: want four numeric canvas-unit coordinates x0,y0,x1,y1 (opposite corners, not width/height or pixels); example: --crop 100,100,200,200
+--crop NaN,100,200,200: want four numeric canvas-unit coordinates x0,y0,x1,y1 (opposite corners, not width/height or pixels); example: --crop 100,100,200,200
+test look::tests::the_relief_and_gallery_looks_take_a_light ... ok
+test look::tests::grids_finer_than_a_pixel_are_refused ... ok
+test look::tests::looks_draw_the_grid_without_touching_the_canvas ... ok
+test look::tests::whole_looks_are_bounded_pngs_without_enlargement ... ok
+--crop exceeds 1200 pixels per side (crops stay 1:1); coordinates are canvas units, x0,y0,x1,y1 (opposite corners). At this canvas resolution each side may span at most 923.08 units; example: --crop 0.00,0.00,461.00,461.00
+--crop exceeds 1200 pixels per side (crops stay 1:1); coordinates are canvas units, x0,y0,x1,y1 (opposite corners). At this canvas resolution each side may span at most 923.08 units; example: --crop 0.00,0.00,461.00,461.00
+test look::tests::crops_keep_native_pixels_and_reject_either_oversize_axis ... ok
+test look::tests::whole_pngs_reduce_dimensions_to_meet_the_byte_budget ... ok
+test look::tests::the_relief_look_lights_the_paint_and_changes_nothing ... ok
+
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 113 filtered out; finished in 0.94s
+
+
+Exit: 0
+
+Command: cargo test -p easel --profile iter --bin easel draw_rag::tests::the_rag_refuses_what_it_cannot_do -- --nocapture
+    Finished `iter` profile [optimized] target(s) in 0.02s
+     Running unittests src/main.rs (target/iter/deps/easel-f59f14deaf8ad19f)
+
+running 1 test
+test api::draw_rag::tests::the_rag_refuses_what_it_cannot_do ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 119 filtered out; finished in 1.39s
+
+
+Exit: 0
+
+Command: cargo test -p easel --profile iter --bin easel session::tests::rollback_restores_tables_and_upvalues_exactly -- --nocapture
+    Finished `iter` profile [optimized] target(s) in 0.03s
+     Running unittests src/main.rs (target/iter/deps/easel-f59f14deaf8ad19f)
+
+running 1 test
+test session::tests::rollback_restores_tables_and_upvalues_exactly ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 119 filtered out; finished in 1.96s
+
+
+Exit: 0

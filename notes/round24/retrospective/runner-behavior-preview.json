@@ -1,0 +1,13 @@
+{
+  "evidence_kind": "Offline synthetic painter subprocess, no provider or painting launched",
+  "old_cap_file": "1 (ignored)",
+  "sittings": 6,
+  "outcome": {
+    "status": "finished",
+    "reason": "the painter is done: sitting 6 reviewed whole and detail views and added no painting"
+  },
+  "six_crash_decision": [
+    null,
+    "NOT FINISHED: 6 crashes (MAX_CRASHES)"
+  ]
+}

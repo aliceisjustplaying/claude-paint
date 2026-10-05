@@ -1,0 +1,10 @@
+   Compiling paint v0.1.0 (/private/tmp/paint-sweep.KHTpId/worktree/crates/paint)
+   Compiling easel v0.1.0 (/private/tmp/paint-sweep.KHTpId/worktree/crates/easel)
+    Finished `test` profile [optimized + debuginfo] target(s) in 35.62s
+     Running unittests src/main.rs (target/debug/deps/easel-88791cd408c752e5)
+
+running 1 test
+test finish::tests::a_varnish_of_no_coats_changes_nothing ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 118 filtered out; finished in 0.02s
+

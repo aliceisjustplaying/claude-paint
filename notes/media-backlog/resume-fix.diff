@@ -1,0 +1,57 @@
+--- notes/media-backlog/render_batch.py (before)
++++ notes/media-backlog/render_batch.py (after)
+@@ -123,6 +123,30 @@
+     p["atoms"] = atoms
+     p["sha256"] = digest(path)
+     return p
++
++
++def verify_checkout(item):
++    checkout = Path(item["checkout"]).expanduser()
++    engine = Path(item["engine"]).expanduser()
++    head = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=checkout, text=True).strip()
++    if head != item["source_commit"] or digest(engine) != item["engine_sha256"]:
++        raise RuntimeError("pinned checkout or binary changed")
++    allowed = item.get("verified_untracked_files", {})
++    entries = subprocess.check_output(
++        ["git", "status", "--porcelain=v1", "-z", "--untracked-files=all"], cwd=checkout)
++    seen = set()
++    for entry in entries.split(b"\0"):
++        if not entry:
++            continue
++        name = entry[3:].decode()
++        if entry[:3] != b"?? " or name not in allowed:
++            raise RuntimeError(f"unverified pinned checkout change: {scrub(name)}")
++        if digest(checkout / name) != allowed[name]:
++            raise RuntimeError(f"verified untracked output changed: {scrub(name)}")
++        seen.add(name)
++    if seen != set(allowed):
++        raise RuntimeError("verified untracked output inventory changed")
++    return head
+ 
+ 
+ def process(item):
+@@ -164,12 +188,10 @@
+         return receipt
+     engine = Path(item["engine"]).expanduser()
+     checkout = Path(item["checkout"]).expanduser()
+-    head = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=checkout, text=True).strip()
+-    if head != item["source_commit"] or digest(engine) != item["engine_sha256"]:
+-        raise RuntimeError("pinned checkout or binary changed")
+-    if subprocess.check_output(["git", "status", "--porcelain"], cwd=checkout).strip():
+-        raise RuntimeError("pinned checkout has changes")
++    head = verify_checkout(item)
+     receipt.update(source_commit=head, engine_sha256=digest(engine))
++    if item.get("verified_untracked_files"):
++        receipt["verified_untracked_files"] = item["verified_untracked_files"]
+     video = out / f"{ident}.mp4"
+     old = out / "receipt.json"
+     if old.exists():
+@@ -245,6 +267,7 @@
+             ident = item["id"]
+             print(f"START {ident} {stamp()}", flush=True)
+             state.update(status="running", current=ident, updated_at=stamp())
++            state.pop("error", None)
+             write_json(STATE, state)
+             try:
+                 free = disk()

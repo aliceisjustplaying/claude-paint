@@ -32,6 +32,15 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
+## StyLua
+
+The studio's display-only Lua formatter bundles unmodified WebAssembly and
+browser bindings from `@johnnymorganz/stylua` 2.5.2, published at
+https://registry.npmjs.org/@johnnymorganz/stylua/-/stylua-2.5.2.tgz.
+Source: https://github.com/JohnnyMorganz/StyLua/tree/v2.5.2.
+License: MPL-2.0, included in `studio/vendor/stylua/LICENSE.md`.
+These assets load locally only when the code view is opened.
+
 ## Mixbox
 
 The paint engine (`crates/paint`) mixes pigments with Mixbox 2.0.0, used

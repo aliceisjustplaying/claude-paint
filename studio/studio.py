@@ -1,6 +1,6 @@
 # /// script
 # requires-python = ">=3.10"
-# dependencies = []
+# dependencies = ["pillow"]
 # ///
 """The studio: watch a painter paint, live or replayed.
 
@@ -25,6 +25,7 @@ import re
 import threading
 import urllib.parse
 from datetime import datetime
+from palette_board import palette_board
 
 SESSIONS = os.path.expanduser("~/.pi/agent/sessions")
 # --public: painters only, nothing that names this machine's owner (for a link shown to others)
@@ -37,6 +38,14 @@ def scrub(body):
     """The home folder as ~ and the account name as `user`, in a response's text."""
     return re.sub(re.escape(USER.encode()), b"user", body.replace(HOME.encode(), b"~"), flags=re.I)
 HERE = os.path.dirname(os.path.abspath(__file__))
+VIEWER_ASSETS = {
+    "stream.css": "text/css; charset=utf-8",
+    "code-display.js": "text/javascript; charset=utf-8",
+    "code-format.js": "text/javascript; charset=utf-8",
+    "vendor/stylua/stylua_lib_web.js": "text/javascript; charset=utf-8",
+    "vendor/stylua/stylua_lib_bg.wasm": "application/wasm",
+    "vendor/stylua/LICENSE.md": "text/plain; charset=utf-8",
+}
 _cache = {}  # path -> {"offset", "events", "images", "calls"}: one session file, parsed so far
 _streams = {}  # key -> a stitched stream of session files (see stream())
 _locks = {}
@@ -112,7 +121,7 @@ _lanes = {"at": 0.0, "map": {}}
 
 
 def lanes():
-    """paint-studio-... -> (round, lane, painter number, painters in the lane), from the runners'
+    """paint-studio-... -> (round, lane, painter number, painters in the lane, outcome), from the runners'
     studio lists (reread every 30 s)."""
     import time
     if time.time() - _lanes["at"] > 30:
@@ -127,7 +136,29 @@ def lanes():
             for k, studio in names.items():
                 lane, n = keys[k]
                 size = sum(1 for l, _ in keys.values() if l == lane)
-                m[studio] = (rnd, lane, int(n) if n else 0, size)
+                number = int(n) if n else 0
+                rd = os.path.join(os.path.dirname(f), lane)
+                outcome = None
+                try:
+                    with open(os.path.join(rd, f"p{number}_outcome.json")) as fh:
+                        candidate = json.load(fh)
+                    if (isinstance(candidate, dict) and candidate.get("status") in
+                            ("finished", "cap_reached", "crash_limit_reached") and
+                            isinstance(candidate.get("reason"), str)):
+                        outcome = candidate
+                except (OSError, ValueError):
+                    pass
+                if outcome is None:
+                    try:
+                        with open(os.path.join(rd, f"p{number}.painted")) as fh:
+                            reason = fh.read()
+                        if "NOT FINISHED" in reason and "MAX_SITTINGS" in reason:
+                            outcome = {"status": "cap_reached", "reason": reason.strip()}
+                        elif re.search(r"the painter is done: sitting \d+ added no painting", reason):
+                            outcome = {"status": "finished", "reason": reason.strip()}
+                    except OSError:
+                        pass
+                m[studio] = (rnd, lane, number, size, outcome)
         _lanes.update(at=time.time(), map=m)
     return _lanes["map"]
 
@@ -220,10 +251,11 @@ def list_sessions():
             for i in info:
                 if i["model"] and i["model"] not in models:
                     models.append(i["model"])
-            rnd, lane, n, size = lanes().get(name, ("", "", 0, 0))
+            rnd, lane, n, size, outcome = lanes().get(name, ("", "", 0, 0, None))
             out.append({"p": name, "folder": name, "painter": True, "model": " → ".join(models), "sittings": len(fs),
                         "thinking": session_thinking(fs[-1]), **about_brief(name),
                         "round": rnd, "lane": lane, "n": n, "chain": size if size > 1 else 0,
+                        "outcome": outcome,
                         "files": fs, "mtime": max(i["mtime"] for i in info), "size": sum(i["size"] for i in info)})
         else:
             out += [dict(i, s=i["path"], folder=name, painter=False) for i in info]
@@ -336,6 +368,10 @@ def _parse(path):
                     ev = {"ts": ts, "kind": "image", "img": idx, "path": src}
                     if parent is not None and c["events"][parent]["kind"] == "look":
                         ev["look"] = c["events"][parent]["text"]  # what the painter asked to see (see is_whole)
+                    if re.search(r"palette (?!False)", ev.get("look", "")):
+                        chips = palette_board(base64.b64decode(x["data"]))
+                        if chips:
+                            ev["palette"] = chips
                     if parent is not None and c["events"][parent].get("ref"):
                         ev["ref"] = True  # a reference picture: never the painting
                     c["events"].append(ev)
@@ -567,14 +603,14 @@ class H(http.server.BaseHTTPRequestHandler):
         pass
 
     def _send(self, code, body, ctype):
-        if PUBLIC and not ctype.startswith("image/"):
+        if PUBLIC and not ctype.startswith("image/") and ctype != "application/wasm":
             body = scrub(body)
         self.send_response(code)
         self.send_header("Content-Type", ctype)
         # a look never changes: the browser keeps it (and asks again for everything else)
         self.send_header("Cache-Control", "private, max-age=86400, immutable" if ctype.startswith("image/") else "no-store")
         if PUBLIC:
-            self.send_header("Content-Security-Policy", "default-src 'self'; script-src 'self' 'unsafe-inline'; "
+            self.send_header("Content-Security-Policy", "default-src 'self'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval'; "
                              "style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:")
         self.end_headers()
         self.wfile.write(body)
@@ -594,9 +630,10 @@ class H(http.server.BaseHTTPRequestHandler):
             if PUBLIC:
                 page = page.replace(b'<label id="allwrap"', b'<label id="allwrap" hidden')
             return self._send(200, page, "text/html; charset=utf-8")
-        if u.path == "/stream.css":  # the livestream's layout: the page loads it itself with ?stream=1
-            with open(os.path.join(HERE, "stream.css"), "rb") as fh:
-                return self._send(200, fh.read(), "text/css; charset=utf-8")
+        asset = u.path.lstrip("/")
+        if asset in VIEWER_ASSETS:
+            with open(os.path.join(HERE, asset), "rb") as fh:
+                return self._send(200, fh.read(), VIEWER_ASSETS[asset])
         if u.path == "/api/sessions":
             ss = list_sessions()
             for s in ss:

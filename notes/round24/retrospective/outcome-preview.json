@@ -1,0 +1,59 @@
+{
+  "evidence_kind": "Offline synthetic fixtures, no painting launched",
+  "results": [
+    {
+      "fixture": "finished",
+      "live_session_outcome": {
+        "status": "finished",
+        "reason": "offline fixture stop reason"
+      },
+      "static_session_outcome": {
+        "status": "finished",
+        "reason": "offline fixture stop reason"
+      },
+      "render_marker_present": true
+    },
+    {
+      "fixture": "cap_reached",
+      "live_session_outcome": {
+        "status": "cap_reached",
+        "reason": "offline fixture stop reason"
+      },
+      "static_session_outcome": {
+        "status": "cap_reached",
+        "reason": "offline fixture stop reason"
+      },
+      "render_marker_present": true
+    },
+    {
+      "fixture": "crash_limit_reached",
+      "live_session_outcome": {
+        "status": "crash_limit_reached",
+        "reason": "offline fixture stop reason"
+      },
+      "static_session_outcome": {
+        "status": "crash_limit_reached",
+        "reason": "offline fixture stop reason"
+      },
+      "render_marker_present": true
+    },
+    {
+      "fixture": "legacy cap",
+      "live_session_outcome": {
+        "status": "cap_reached",
+        "reason": "NOT FINISHED: stopped after 4 sittings (MAX_SITTINGS)"
+      },
+      "static_session_outcome": {
+        "status": "cap_reached",
+        "reason": "NOT FINISHED: stopped after 4 sittings (MAX_SITTINGS)"
+      },
+      "render_marker_present": true
+    },
+    {
+      "fixture": "render only",
+      "live_session_outcome": null,
+      "static_session_outcome": null,
+      "render_marker_present": true
+    }
+  ]
+}

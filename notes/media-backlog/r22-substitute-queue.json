@@ -1,0 +1,42 @@
+{
+  "authorization": "User explicitly requested rendering with the closest engine; substitute opt-in is confined to r22.1-inns.",
+  "launch_only_after_job2_exit": true,
+  "minimum_free_bytes": 21474836480,
+  "items": [
+    {
+      "id": "r22.1-inns",
+      "studio": "paint-studio-33a5bf",
+      "run": "~/src/a/claude-paint/notes/round22.1/runner/run",
+      "source_log": "~/src/a/paint-studio-33a5bf/paintings/lua/painting.lua",
+      "finished_log": "~/src/a/claude-paint/notes/round22.1/runner/run/INNS1_finished.lua",
+      "finished_png": "~/src/a/claude-paint/notes/round22.1/runner/run/INNS1_finished.png",
+      "normal_png": "~/src/a/paint-studio-33a5bf/out/easel/painting/live.png",
+      "check_png": "~/src/a/claude-paint/notes/round22.1/runner/run/INNS/p1_check/replayed.png",
+      "check_log": "~/src/a/claude-paint/notes/round22.1/runner/run/INNS/p1_check.log",
+      "output_dir": "~/src/a/claude-paint/notes/media-backlog/assets/r22.1-inns",
+      "allow_substitute": true,
+      "source_commit": "f334aef11d0c069b083371d2cb8ceb4865664e83",
+      "repo": "~/src/a/claude-paint",
+      "source_build_inputs": {
+        "crates": "31a597ce72b6469eea9abcbc8ffaba15f737c14e",
+        ".cargo": "5c84b761634ef22c668dae552223290c2409a635",
+        "Cargo.toml": "ce974d34b0d54916251d9b4e9dd52231f7ab964b",
+        "Cargo.lock": "e6b2577e4593707170116ac3f32c587fc1d362ff"
+      },
+      "substitute_png": "r22.1-inns-substitute-f334aef.png",
+      "substitute_video": "r22.1-inns-substitute-f334aef.mp4",
+      "workflow_sha256": {
+        "scripts/replay_clip": "dc9a2ad00979449c116dbf66c21c597b069907751708aba7954b0fed1a94ca4a",
+        "scripts/replay_pace.py": "432d8968c3d1c80e16b10aa6f66f62cbcf5d20bff86ba3466357e8196f70cc7b"
+      },
+      "original_sha256": {
+        "source_log": "1d6858a926a1661e33588874331e50d06349bd8ea6e7d5ef49a81a7d92d57c60",
+        "finished_log": "2605f98a8066fff1a664ae10b6d4b7cd3582a6a7dfaa8b0e7b551bbf26fb830b",
+        "finished_png": "22257ee33b47d8261cfe39f75a2379f44478a068f6e7b461fa6cc57e85a36ebd",
+        "normal_png": "96a9eb41d3db541b249c2868b788f71a5ba16c485d9198d0d34631567918d97f",
+        "check_png": "96a9eb41d3db541b249c2868b788f71a5ba16c485d9198d0d34631567918d97f",
+        "check_log": "0c3555834e895f452343d6dcc1b292104e12b376890669df90d8299a1115ee05"
+      }
+    }
+  ]
+}

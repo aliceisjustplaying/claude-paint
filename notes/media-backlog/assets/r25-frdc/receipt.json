@@ -1,0 +1,154 @@
+{
+  "id": "r25-frdc",
+  "source_log_sha256": "ccbe3a92144f8e6b998e8cc9c81e78fb45b436eef176b35e5c19e9a7b4e0426d",
+  "chunks": 234,
+  "finished_log_sha256": "25b79362bd9b40afad0b56f9984740172de05b41a644d410079b7084ebd004b1",
+  "finished_chunks": 235,
+  "existing_replay_check": "check: ok: 234 chunks replay to the live canvas; the replay equals the live canvas saved at close; the replay's canvas state equals the save written at close; the painter saved no picture; the studio's committed record equals its log",
+  "finished_png": {
+    "width": 2400,
+    "height": 1714,
+    "chunks": [
+      "IHDR",
+      "IDAT",
+      "IEND"
+    ],
+    "text": [],
+    "sha256": "0c61ee8468224ec2e4a39bc930693bda624d23a4ad3f55a51411d6e0e1c2a969",
+    "bytes": 4281256
+  },
+  "normal_png": {
+    "width": 2400,
+    "height": 1714,
+    "chunks": [
+      "IHDR",
+      "IDAT",
+      "IEND"
+    ],
+    "text": [],
+    "sha256": "ed6442a2e1b8d29baaebc3967b79347cdd892179f2f4f8d1cce787d42a8d7225",
+    "bytes": 2565430
+  },
+  "finishing": "automatic drying, 0.4 varnish coats and cracks; no relief",
+  "privacy": "PNG text metadata inspected; visible image/video review required before publication",
+  "source_commit": "e017df8e0394fbe520b41ddac112e69e46621cd2",
+  "engine_sha256": "90bec4d5eeee73578b0d3ba9fb2dd59ef77ba56e806041c58324f8ee8760fe57",
+  "verified_untracked_files": {
+    "prepared/friedrich/BRIEF.md": "024bdf86f606ec5f59e48b72f9f0e3d8fc7827d8902a81a3fe9a7d144e9a4886",
+    "prepared/friedrich/bin/THIRD_PARTY_NOTICES.md": "69e9c1c6c5c18148794bb9b1d33c2c196e24ced8496e4319ade6453d1425e7aa",
+    "prepared/friedrich/bin/box": "3d86f9da0ece02876db7be03bb82165d008f9d278d52a2bc410e3006d67ec31f",
+    "prepared/friedrich/bin/easel": "49ee4696fc80c62581d8f057c73cedffa57fae6603ac3cd3d38a40727f953e53",
+    "prepared/friedrich/notes/easel_guide.md": "14f3457d6e544d8fc5db813dced5387c68696d77812d29716a3b8c60af61bdbb",
+    "prepared/friedrich/notes/journal.md": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "prepared/friedrich/notes/research/friedrich_materials.md": "c959f9ad2f01ce51b0a5b3ac2c3590c3318e63d03cb4a4ba2069e35064952fb5",
+    "prepared/friedrich/notes/research/friedrich_painter.md": "6e75a53cec56aefb1f3a269be82b87d059d2aeb3ff886987d7e848855caa2d08",
+    "prepared/friedrich/notes/research/oil_paint_physics.md": "0d7a357766ad6cbf9df01a6ee0b16ae1307f472517044a25b3f5d5ddd055493a",
+    "prepared/friedrich/notes/research/trees.md": "b80977c8538992a87d14d4b8623cb8eae5fa4328f6f571c06b8ee52afd18dfa0",
+    "prepared/friedrich/notes/studio_notes.md": "fcf2cf49bce4d6a1015455324a220a115356828016fdbf9f34667eba7929bff9",
+    "prepared/friedrich/notes/techniques.md": "fe0e7d3eaab207d6db30ba0b9dbc4f5e7107c070f48a1b0d155dfecb2981f0dd"
+  },
+  "status": "ready",
+  "video": {
+    "streams": [
+      {
+        "index": 0,
+        "codec_name": "h264",
+        "codec_long_name": "H.264 / AVC / MPEG-4 AVC / MPEG-4 part 10",
+        "profile": "High",
+        "codec_type": "video",
+        "codec_tag_string": "avc1",
+        "codec_tag": "0x31637661",
+        "mime_codec_string": "avc1.640032",
+        "width": 1920,
+        "height": 1372,
+        "coded_width": 1920,
+        "coded_height": 1372,
+        "has_b_frames": 2,
+        "pix_fmt": "yuv420p",
+        "level": 50,
+        "chroma_location": "left",
+        "field_order": "progressive",
+        "is_avc": "true",
+        "nal_length_size": "4",
+        "id": "0x1",
+        "r_frame_rate": "24/1",
+        "avg_frame_rate": "24/1",
+        "time_base": "1/12288",
+        "start_pts": 0,
+        "start_time": "0.000000",
+        "duration_ts": 245760,
+        "duration": "20.000000",
+        "bit_rate": "922329",
+        "bits_per_raw_sample": "8",
+        "nb_frames": "480",
+        "extradata_size": 47,
+        "disposition": {
+          "default": 1,
+          "dub": 0,
+          "original": 0,
+          "comment": 0,
+          "lyrics": 0,
+          "karaoke": 0,
+          "forced": 0,
+          "hearing_impaired": 0,
+          "visual_impaired": 0,
+          "clean_effects": 0,
+          "attached_pic": 0,
+          "timed_thumbnails": 0,
+          "non_diegetic": 0,
+          "captions": 0,
+          "descriptions": 0,
+          "metadata": 0,
+          "dependent": 0,
+          "still_image": 0,
+          "multilayer": 0
+        },
+        "tags": {
+          "language": "und",
+          "handler_name": "VideoHandler",
+          "encoder": "Lavc63.1.101 libx264"
+        }
+      }
+    ],
+    "format": {
+      "nb_streams": 1,
+      "nb_programs": 0,
+      "nb_stream_groups": 0,
+      "format_name": "mov,mp4,m4a,3gp,3g2,mj2",
+      "format_long_name": "QuickTime / MOV",
+      "start_time": "0.000000",
+      "duration": "20.000000",
+      "size": "2312423",
+      "bit_rate": "924969",
+      "probe_score": 100,
+      "tags": {
+        "major_brand": "isom",
+        "minor_version": "512",
+        "compatible_brands": "isomiso2avc1mp41",
+        "encoder": "Lavf63.1.101"
+      }
+    },
+    "atoms": {
+      "ftyp": 0,
+      "moov": 32,
+      "free": 6583,
+      "mdat": 6591
+    },
+    "sha256": "d30ef79b094421b9dd8bc89926d525564dccd3b507140a3ac090994342416dfa"
+  },
+  "frame_count": 1076,
+  "replay_seconds": 848.155,
+  "full_finished_replay_byte_exact": true,
+  "verified_at": "2026-10-05T16:36:46.828857+00:00",
+  "clip_options": {
+    "every": 60,
+    "pace": "dynamic",
+    "gamma": 0.4,
+    "ramp": 0.3,
+    "length": 20,
+    "open_hold": 0.25,
+    "width": 1920,
+    "crf": 23,
+    "fps": 24
+  }
+}

@@ -1,0 +1,4 @@
+protected changes 6b8ec1823150..48f899c3bee5: 2
+  UNAPPROVED M crates/paint/src/state_dump.rs (mode 100644, object 84530af6a5ec)
+  UNAPPROVED M crates/paint/tests/thinner/tubes_af49348.txt (mode 100644, object eb4dc3fbaf4c)
+golden check FAILED: 2 protected change(s) without approval

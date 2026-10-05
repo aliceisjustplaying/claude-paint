@@ -1,0 +1,74 @@
+{
+  "state": "prepared, not started",
+  "source_commit": "4b9bef6a5872803f4f20623c15b7677a152db70c",
+  "bug_fix_ancestor": "840583587f0663fa361bace67da8c6c9d5fe9438",
+  "studio": "paint-studio-7c4dd1",
+  "runtime": "~/tmp/gallery-fcf9c110/r27",
+  "runtime_checkout": "~/src/a/claude-paint-r27run",
+  "model": "claude-opus-5-5",
+  "provider": "anthropic",
+  "thinking": "high",
+  "transport": "pi-black",
+  "engine": 5,
+  "live_width_px": 2400,
+  "box": {
+    "name": "hopper",
+    "tubes_sha256": "305c884abb995acc4e0437b2b698fb1701af068297ec2fa56b669717530d0f0e"
+  },
+  "tube_count": 13,
+  "tubes": [
+    "lead white",
+    "zinc white",
+    "pale cadmium",
+    "cadmium yellow",
+    "deep cadmium",
+    "yellow ochre",
+    "red earth",
+    "burnt sienna",
+    "bone black",
+    "cerulean blue",
+    "cobalt blue",
+    "ultramarine blue",
+    "viridian"
+  ],
+  "reader": false,
+  "sitting_limit": null,
+  "support_and_proportions": "painter chosen",
+  "tools": [
+    "paint",
+    "look",
+    "note",
+    "status",
+    "log",
+    "read"
+  ],
+  "pile_checks": [
+    {
+      "call": "pile({{\"lead white\",1}}, {turps=0.2})",
+      "rejected": true,
+      "message": "pile: expected exactly one table; put tube parts and options in the same table"
+    },
+    {
+      "call": "pile({{\"lead white\",1}}, nil)",
+      "rejected": true,
+      "message": "pile: expected exactly one table; put tube parts and options in the same table"
+    }
+  ],
+  "valid_single_table_recipe": true,
+  "classifier_gesture_wipe_helper_wait_verified": true,
+  "reviewed_no_paint_confirmation_verified": true,
+  "reference_directory_present": false,
+  "finisher": "original defaults: dry, 0.4 coats varnish, cracks, no relief",
+  "sha256": {
+    "binary": "0c515b6a3419aa59083545ea4914dc7a3916ae211abd19a077b365d173b5b3aa",
+    "brief": "90ce6a61d36646bb764a7211e726fe6304fe019cf74dbcd814b7deee2b87a8da",
+    "runner": "d63f45214b002e95ab480ed4a80141df58045eb802af357c21ee775a47617d5b",
+    "classifier": "8a9d17da0ff63da89fb513ab7d9b43524853a4f6fdba74cf544c7c0e74fb70e3",
+    "template": "f4ec31d761dd86441d8b3ec413d0eccc72e22b2f9e4eaebe52645a4c5008ce70",
+    "studio_notes": "fcf2cf49bce4d6a1015455324a220a115356828016fdbf9f34667eba7929bff9",
+    "exported_guide": "c09d4c9ae39aaa2500a34fb79330b851abc80c56f9eda7fc39ade9bbe3dd7060",
+    "exported_materials": "1f5de23ecdd7bee4daf27567fa35f7fba57902157cb3fd9a0d1df479c4507898",
+    "finish_script": "23d3fcdaf1140f44c4354aa96555e3d312dc68a97f415e625b71507afc33b4e1"
+  },
+  "bug_fix_ancestry_verified": true
+}

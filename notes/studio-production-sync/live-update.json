@@ -1,0 +1,88 @@
+{
+  "checks": [
+    {
+      "stream": false,
+      "snapshot": {
+        "pos": 353,
+        "total": 354,
+        "cachedSource": 45765
+      },
+      "result": {
+        "closedWhileLivePrepared": true,
+        "sameDOM": true,
+        "live": true,
+        "pos": 353,
+        "total": 354,
+        "formatted": "formatted · display only"
+      },
+      "images": {
+        "whole": {
+          "src": "https://stillwet.art/studio/data/paint-studio-7c4dd1/v/73.jpg",
+          "width": 1000,
+          "height": 625
+        },
+        "paletteNames": [
+          "BRICK_A",
+          "BRICK_B",
+          "BRICK_C",
+          "LETTER_P",
+          "GLASS_REF",
+          "GLAZE_DK",
+          "GLASS_LO",
+          "GLASS2",
+          "GLASS_D",
+          "GREEN_SUN2",
+          "JOINT",
+          "DKGREEN",
+          "GREEN_SUN",
+          "SKY_TOP",
+          "SKY_MID",
+          "SKY_LOW"
+        ],
+        "brokenLoadedImages": []
+      }
+    },
+    {
+      "stream": true,
+      "snapshot": {
+        "pos": 384,
+        "total": 385,
+        "cachedSource": 51239
+      },
+      "result": {
+        "closedWhileLivePrepared": true,
+        "sameDOM": true,
+        "live": true,
+        "pos": 384,
+        "total": 385,
+        "formatted": "formatted · display only"
+      },
+      "images": {
+        "whole": {
+          "src": "https://stillwet.art/studio/data/paint-studio-7c4dd1/v/80.jpg",
+          "width": 1000,
+          "height": 625
+        },
+        "paletteNames": [
+          "BRICK_A",
+          "BRICK_B",
+          "BRICK_C",
+          "LETTER_P",
+          "GLASS_REF",
+          "GLAZE_DK",
+          "GLASS_LO",
+          "GLASS2",
+          "GLASS_D",
+          "GREEN_SUN2",
+          "JOINT",
+          "DKGREEN",
+          "GREEN_SUN",
+          "SKY_TOP",
+          "SKY_MID",
+          "SKY_LOW"
+        ],
+        "brokenLoadedImages": []
+      }
+    }
+  ]
+}

@@ -1,0 +1,189 @@
+{
+  "checked_at": "2026-10-05T15:55:40.317603+00:00",
+  "crawler_user_agent": "facebookexternalhit/1.1",
+  "javascript_executed": false,
+  "painters": 80,
+  "cards": [
+    {
+      "page": "https://stillwet.art/studio/",
+      "http": 200,
+      "painter": "paint-studio-7c4dd1",
+      "title": "Barber Shop, Late Afternoon \u00b7 claude-opus-5-5 \u00b7 Finished \u00b7 stillwet studio",
+      "description": "Finished: claude-opus-5-5 painting after Edward Hopper in a simulation of oil paint. Latest canvas snapshot; watch every brushstroke in the studio.",
+      "image": "https://stillwet.art/studio/data/paint-studio-7c4dd1/v/140.jpg?v=29301674f50d4aff08ae7e76387ef8f7bd2ddad37345d647f8340e1169825821",
+      "image_http": 200,
+      "image_type": "image/jpeg",
+      "dimensions": [
+        1000,
+        625
+      ],
+      "cache_control": "public, max-age=60",
+      "canonical": "https://stillwet.art/studio/"
+    },
+    {
+      "page": "https://stillwet.art/studio/?p=paint-studio-7c4dd1",
+      "http": 200,
+      "painter": "paint-studio-7c4dd1",
+      "title": "Barber Shop, Late Afternoon \u00b7 claude-opus-5-5 \u00b7 Finished \u00b7 stillwet studio",
+      "description": "Finished: claude-opus-5-5 painting after Edward Hopper in a simulation of oil paint. Latest canvas snapshot; watch every brushstroke in the studio.",
+      "image": "https://stillwet.art/studio/data/paint-studio-7c4dd1/v/140.jpg?v=29301674f50d4aff08ae7e76387ef8f7bd2ddad37345d647f8340e1169825821",
+      "image_http": 200,
+      "image_type": "image/jpeg",
+      "dimensions": [
+        1000,
+        625
+      ],
+      "cache_control": "public, max-age=60",
+      "canonical": "https://stillwet.art/studio/?p=paint-studio-7c4dd1"
+    },
+    {
+      "page": "https://stillwet.art/studio/?p=paint-studio-12e572",
+      "http": 200,
+      "painter": "paint-studio-12e572",
+      "title": "Untitled \u00b7 claude-opus-5-5 \u00b7 Finished \u00b7 stillwet studio",
+      "description": "Finished: claude-opus-5-5 painting in a simulation of oil paint. Latest canvas snapshot; watch every brushstroke in the studio.",
+      "image": "https://stillwet.art/studio/data/paint-studio-12e572/v/155.jpg?v=2bf3b5399efde9374fdcb2e5f7e337786625777700274415f719c2fce4d4b7cd",
+      "image_http": 200,
+      "image_type": "image/jpeg",
+      "dimensions": [
+        1000,
+        1000
+      ],
+      "cache_control": "public, max-age=60",
+      "canonical": "https://stillwet.art/studio/?p=paint-studio-12e572"
+    }
+  ],
+  "tests": {
+    "baseline_og_cases_failed": 3,
+    "studio_passed": 49
+  },
+  "deployment_scope": [
+    "studio static files",
+    "stillwet Caddy query routing"
+  ],
+  "platform_cache_limit": "Image URLs are content-versioned. External platforms control their own cached cards.",
+  "browser": {
+    "deep_links": [
+      {
+        "url": "https://stillwet.art/studio/?p=paint-studio-7c4dd1",
+        "http": 200,
+        "painter": "paint-studio-7c4dd1",
+        "events": 629,
+        "image": {
+          "url": "https://stillwet.art/studio/data/paint-studio-7c4dd1/v/140.jpg",
+          "width": 1000
+        },
+        "stream": false,
+        "codeWidth": 720,
+        "codeTextLength": 88324,
+        "codeFormat": "formatted \u00b7 display only",
+        "worker": true,
+        "canonical": "https://stillwet.art/studio/?p=paint-studio-7c4dd1",
+        "streamStyle": false,
+        "errors": []
+      },
+      {
+        "url": "https://stillwet.art/studio/?p=paint-studio-7c4dd1&stream=1",
+        "http": 200,
+        "painter": "paint-studio-7c4dd1",
+        "events": 629,
+        "image": {
+          "url": "https://stillwet.art/studio/data/paint-studio-7c4dd1/v/140.jpg",
+          "width": 1000
+        },
+        "stream": true,
+        "codeWidth": 720,
+        "codeTextLength": 88324,
+        "codeFormat": "formatted \u00b7 display only",
+        "worker": true,
+        "canonical": "https://stillwet.art/studio/?p=paint-studio-7c4dd1",
+        "streamStyle": true,
+        "errors": []
+      },
+      {
+        "url": "https://stillwet.art/studio/?p=paint-studio-12e572",
+        "http": 200,
+        "painter": "paint-studio-12e572",
+        "events": 702,
+        "image": {
+          "url": "https://stillwet.art/studio/data/paint-studio-12e572/v/155.jpg",
+          "width": 1000
+        },
+        "stream": false,
+        "codeWidth": 720,
+        "codeTextLength": 87660,
+        "codeFormat": "formatted \u00b7 display only",
+        "worker": true,
+        "canonical": "https://stillwet.art/studio/?p=paint-studio-12e572",
+        "streamStyle": false,
+        "errors": []
+      },
+      {
+        "url": "https://stillwet.art/studio/?p=paint-studio-12e572&stream=1",
+        "http": 200,
+        "painter": "paint-studio-12e572",
+        "events": 702,
+        "image": {
+          "url": "https://stillwet.art/studio/data/paint-studio-12e572/v/155.jpg",
+          "width": 1000
+        },
+        "stream": true,
+        "codeWidth": 720,
+        "codeTextLength": 87660,
+        "codeFormat": "formatted \u00b7 display only",
+        "worker": true,
+        "canonical": "https://stillwet.art/studio/?p=paint-studio-12e572",
+        "streamStyle": true,
+        "errors": []
+      }
+    ],
+    "homepage": {
+      "painter": "paint-studio-7c4dd1",
+      "image": "https://stillwet.art/studio/data/paint-studio-7c4dd1/v/140.jpg"
+    }
+  },
+  "privacy": {
+    "protected_identity_matches": 0,
+    "text_files_checked": 239,
+    "jpeg_metadata_checked": 21018,
+    "filenames_checked": 29770,
+    "outgoing_og_images_visually_checked": true,
+    "existing_export_and_push_guards_used": true
+  },
+  "status_test_contracts": [
+    "running sitting plus process and recent activity selects active painter",
+    "dead process or stale session falls back to latest completed",
+    "runner completion overrides leftover process and running sitting",
+    "no inventory or no snapshot uses default card",
+    "changed image bytes at same index change URL version"
+  ],
+  "routing": {
+    "source_commit": "https://github.com/aliceisjustplaying/nixfiles/commit/2bc643d",
+    "deployment_checkout_commit": "be0d0c2",
+    "activation": "Only the Nix-generated Caddy config was activated and Caddy reloaded. No full system activation.",
+    "config": "/nix/store/ldvi204gqp6cb4bzzin1yrbq8ld0djfz-Caddyfile-formatted/Caddyfile",
+    "gc_root": "/nix/var/nix/gcroots/stillwet-og-caddy",
+    "diff_scope": "Only the nine-line studio routing and cache block differed from the prior Caddy config.",
+    "caddy_validation": "Valid configuration",
+    "caddy_service": "active"
+  },
+  "recurring_sync": {
+    "label": "art.stillwet.studio.sync",
+    "interval_seconds": 60,
+    "last_exit_code": 0,
+    "latest_observed_success": "2026-10-05 16:58:30",
+    "upload_path": "/var/lib/stillwet/studio/"
+  },
+  "gallery_preservation": {
+    "index_mtime": 1790957636,
+    "paintings_json_mtime": 1790957636,
+    "media_directory_mtime": 1790623743,
+    "studio_only_rsync": true
+  },
+  "private_preview": {
+    "url": "http://100.82.115.34:8774/studio/?p=paint-studio-7c4dd1",
+    "verified_from": "VPS",
+    "http": 200,
+    "server_session": 88175
+  }
+}

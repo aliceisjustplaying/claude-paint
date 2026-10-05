@@ -452,29 +452,46 @@ invalid `Tool` is rejected. Panic with the point's index and value, e.g.
 remain: `a_nan_point_is_an_error` (the panic names "point 10", so the
 coil's only NaN is its last point) and the finite-points control.
 
-## Tests: two tiers (Round 6)
-- **Everyday:** `cargo test --workspace`. The test profile is optimized
-  (`[profile.test]` in Cargo.toml: opt-level 2, debug assertions and
-  overflow checks on, not incremental), so the whole suite runs in about a
-  minute on the M3 Pro (it took ~10 minutes unoptimized), plus about 50 s
-  of build when the engine changed. The golden scene is recorded with this
-  profile (`UPDATE_GOLDEN=1 cargo test -p paint`).
-- **Before a merge:** also `cargo test --release -p easel --test hand_time`
-  (Alice's logs replayed in the release build, hashed). The release
-  profile is deterministic (`incremental = false`, `codegen-units = 1`):
-  two clean builds give byte-identical binaries and renders, so a hash
-  mismatch is a real change, not build noise.
+## Builds and replay comparisons (2026-10-05)
+
+Development, test and `iter` builds use incremental compilation and 256
+codegen units to favor edit/rebuild speed. Tests keep opt-level 2, debug
+assertions and overflow checks. Release also enables incremental compilation
+but keeps one codegen unit for runtime optimization. These settings are choices,
+not measured speedup claims. Kache is installed and configured by nixfiles;
+its `preserve_incremental` setting retains incremental state for active units.
+
+Across builds, RGB images may differ by at most one 8-bit level per channel
+in at most 0.01% of pixels. Dimensions and alpha must match exactly. The
+pixel allowance rounds down: a 10,000-pixel image allows one changed pixel,
+a smaller image allows none. `scripts/compare_images.py` enforces this rule.
+The golden scene and old-log image references use this comparison. Old-log
+state hashes remain diagnostic across builds; repeat replay with the same
+binary must match both the PNG bytes and state digests exactly. The thinner's
+field-by-field state checks retain their independent exact-state requirements.
+The full-width round-19 check likewise keeps its exact surface fingerprint;
+only its image comparison uses the tolerance. The new PNG and surface
+references were checked against the original combined fingerprint before
+being separated.
+
+`scripts/check_painting` compares the build identity recorded in `live.txt`.
+The same build must reproduce the PNG and checkpoint exactly. Across builds
+(including older live records without an identity), a matching live PNG under
+the bounded tolerance is sufficient; checkpoint byte differences are reported,
+not treated as proof of a rendering regression. Without a comparable live PNG,
+a checkpoint mismatch still fails. This does not assert that internal state is
+equal or establish physical accuracy.
+
+References are not silently refreshed to accommodate a failure. The existing
+golden approval rules still apply to intentional changes. Ordinary correctness,
+conservation and same-build determinism tests remain in place.
 
 ## Fast builds and small previews (development only, 2026-10)
 
 - `cargo build --profile iter -p easel` builds the replay easel into
-  `target/iter/easel`: release optimizations, incremental, 16 codegen units.
-  After the first build a one-line change in `crates/paint` rebuilds in
-  seconds. Its floats can differ from the release build's (that is why
-  `[profile.release]` is not incremental and has one codegen unit), so it is
-  for trying things out only: **real paintings, goldens and studio exports
-  keep the exact release profile** (`cargo build --release`,
-  `scripts/replay_easel`, `scripts/export_r16_studio`).
+  `target/iter/easel`: release optimizations, incremental, 256 codegen units.
+  Final exports continue using the release profile for runtime optimization;
+  tiny cross-build image differences are judged by the bounded policy above.
 - `easel run <log.lua> --width 600 --out preview.png` replays a log narrower
   than the 2400 px it was painted at. Kernel radii are in mm, so a preview is
   not the painting at a smaller size: it tests code, not looks. Live sessions

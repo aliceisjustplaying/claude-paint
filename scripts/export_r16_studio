@@ -4,7 +4,7 @@
 #
 #   scripts/export_r16_studio <profile> <dest>
 #
-# profile: friedrich    the guide, the materials note
+# profile: friedrich    its 16-tube box, the guide, the materials note
 #                       (notes/research/friedrich_materials.md) and the physics note
 #          blank        the guide and the physics note; nothing a painter can
 #                       read names a painter (checked below)
@@ -56,7 +56,7 @@ dest=$2
 # painter's names the studio may hold (its own artist's)
 case "$profile" in
   blank) box=; materials=; own=() ;;
-  friedrich) box=; materials=friedrich_materials.md; own=(Friedrich) ;;
+  friedrich) box=friedrich; materials=friedrich_materials.md; own=(Friedrich) ;;
   sargent) box=sargent; materials=sargent_materials.md; own=(Sargent) ;;
   inness) box=inness; materials=inness_materials.md; own=(Inness) ;;
   alma-tadema) box=alma-tadema; materials=alma_tadema_materials.md; own=(Alma-Tadema Tadema) ;;

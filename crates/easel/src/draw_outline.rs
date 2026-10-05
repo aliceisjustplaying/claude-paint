@@ -241,6 +241,11 @@ impl UserData for OutlineU {
         f.add_field_method_get("ramps", |_, o| Ok(vec![o.o.ch.ramps.0, o.o.ch.ramps.1]));
     }
     fn add_methods<M: UserDataMethods<Self>>(m: &mut M) {
+        for op in [MetaMethod::Add, MetaMethod::Sub, MetaMethod::Mul] {
+            m.add_meta_function(op, |_, _: (Value, Value)| -> Result<()> {
+                err("outline arithmetic needs masks: use o:mask() - other:mask() for closed outlines; open outlines use o:below(), o:above() or o:band(10)")
+            });
+        }
         m.add_method("mask", |_, o, ()| {
             // an inset that ate the shape is not open: its mask is empty
             if o.o.is_open() {
@@ -373,6 +378,29 @@ mod tests {
         let mut s = Session::replay(200).unwrap();
         s.run(r#"canvas{size=440, aspect=1.4, linen=15, seed=11, ground={{pile={{"lead white", 3}, {"yellow ochre", 1}}, um=120, apply="knife"}}}"#).unwrap();
         s.run(src).map(|r| r.out)
+    }
+
+    #[test]
+    fn invalid_outline_masks_explain_executable_recovery() {
+        let setup = r#"local o = outline{{100,100},{200,100},{200,200},{100,200}, amount=0, seed=1}; local other = o:inset(10); local r = rag()"#;
+        for (bad, recovery) in [
+            (
+                "local m = o - other",
+                "local m = o:mask() - other:mask(); assert(m:area() > 0)",
+            ),
+            (
+                "local m = rect(0,0,300,300) - o",
+                "local m = rect(0,0,300,300) - o:mask(); assert(m:area() > 0)",
+            ),
+            ("blend(nil, {})", "blend(o:mask(), {coverage=0})"),
+            ("blend(o, {})", "blend(o:mask(), {coverage=0})"),
+            ("r:wipe(nil)", "r:wipe(o:mask())"),
+        ] {
+            let e = run(&format!("{setup}; {bad}")).unwrap_err();
+            assert!(e.contains("o:mask()"), "{bad}: {e}");
+            println!("{bad}: {e}");
+            run(&format!("{setup}; {recovery}")).unwrap();
+        }
     }
 
     // an inset that eats a closed shape is an empty outline, and its mask is empty (so a rim keeps the whole shape)

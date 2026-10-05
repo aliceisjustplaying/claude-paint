@@ -1,0 +1,45 @@
+   Compiling paint v0.1.0 (/private/tmp/paint-sweep.KHTpId/worktree/crates/paint)
+    Finished `test` profile [optimized + debuginfo] target(s) in 15.43s
+     Running unittests src/lib.rs (target/debug/deps/paint-152efb23d426f6b2)
+
+running 1 test
+test rag::tests::a_rag_smear_preserves_the_paint_oil_and_turps ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 222 filtered out; finished in 0.01s
+
+     Running tests/curved_drag_nan.rs (target/debug/deps/curved_drag_nan-7dc95b148d0e9b0d)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 2 filtered out; finished in 0.00s
+
+     Running tests/ground_grain.rs (target/debug/deps/ground_grain-6f95a3efb4b31fa7)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 4 filtered out; finished in 0.00s
+
+     Running tests/look_rim.rs (target/debug/deps/look_rim-8486fe44ddb805e1)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 2 filtered out; finished in 0.00s
+
+     Running tests/look_sienna.rs (target/debug/deps/look_sienna-6ed6be8c18460d19)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 2 filtered out; finished in 0.00s
+
+     Running tests/thinner_physics.rs (target/debug/deps/thinner_physics-2212f4361de9e032)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 13 filtered out; finished in 0.00s
+
+     Running tests/thinner_pigments.rs (target/debug/deps/thinner_pigments-c2b158dac1c4fa73)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 3 filtered out; finished in 0.00s
+

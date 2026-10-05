@@ -1033,8 +1033,8 @@ pub struct M(pub Rc<Mask>);
 
 pub(crate) fn mask_of(v: &Value) -> Result<Rc<Mask>> {
     match v {
-        Value::UserData(u) => Ok(u.borrow::<M>()?.0.clone()),
-        o => err(format!("want a mask, got {} (make one with mask(fn), ellipse, poly, rect, below, above, ribbon, everywhere)", o.type_name())),
+        Value::UserData(u) if u.is::<M>() => Ok(u.borrow::<M>()?.0.clone()),
+        o => err(format!("want a mask, got {}; use rect(100,100,200,200) or convert a drawn outline with o:mask() (closed), o:below()/o:above() (open), or o:band(10). Call the method: o.mask is not a mask", o.type_name())),
     }
 }
 fn mask_opt(v: Value) -> Result<Option<Rc<Mask>>> {
@@ -1843,7 +1843,10 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
     // blot=0.3: that share of its oil drawn out)
     {
         let st = st.clone();
-        g.set("pile", lua.create_function(move |_, t: Table| {
+        g.set("pile", lua.create_function(move |_, (t, extra): (Table, Variadic<Value>)| {
+            if !extra.is_empty() {
+                return err(r#"pile: expected exactly one table; put tube parts and options in the same table: pile{{"lead white", 1}, medium=0.2}; not pile(recipe, options)"#);
+            }
             // the thinner is engine 3's, blotting, turpentine, the oil and a heap's name engine 4's:
             // an older log's pile takes no such key
             let engine = st.borrow().tubes.engine;
@@ -2325,6 +2328,39 @@ mod tests {
     fn run(src: &str) -> Result<String, String> {
         Session::replay(200).unwrap().run(src).map(|r| r.out)
     }
+    #[test]
+    fn pile_rejects_extra_arguments_and_keeps_single_table_recipes() {
+        for engine in 1..=5 {
+            let mut tubes = paint::Palette::tube_box();
+            tubes.engine = engine;
+            let mut s = Session::replay_with(80, tubes).unwrap();
+            s.run(r#"canvas{size=300, aspect=1, linen=15, ground={{pile={{"lead white",1}}, um=50, apply="knife"}}}"#).unwrap();
+            for extra in ["{turps=0.5}", "nil", "nil, {medium=0.2}", "0.5", "{}, {}"] {
+                let e = s.run(&format!(r#"pile({{{{"lead white",1}}}}, {extra})"#)).unwrap_err();
+                assert!(e.contains("pile: expected exactly one table"), "engine {engine}: {e}");
+                assert!(e.contains(r#"pile{{"lead white", 1}, medium=0.2}"#), "{e}");
+            }
+            for (minimum_engine, options, medium, thinner) in [
+                (1, "", 0.0, 0.0),
+                (1, ", medium=0.2", 0.2, 0.0),
+                (3, ", thinner=0.3", 0.0, 0.3),
+                (4, ", blot=0.2", -0.2, 0.0),
+                (4, ", turps=0.3, oil=\"walnut\", name=\"sky\"", 0.0, 0.0),
+            ] {
+                if engine < minimum_engine { continue; }
+                let recipe = format!(r#"{{{{"lead white",2}},{{"cobalt blue",1}}{options}}}"#);
+                for call in [format!("pile{recipe}"), format!("pile({recipe})")] {
+                    let thinner_check = if engine < 3 { "p.thinner == nil".into() }
+                        else { format!("math.abs(p.thinner - {thinner}) < 1e-6") };
+                    s.run(&format!(r#"local p = {call}; assert(math.abs(p.medium - {medium}) < 1e-6); assert({thinner_check});
+                        local parts = p:parts(); assert(#parts == 2);
+                        assert(parts[1][1] == "lead white" and parts[1][2] == 2);
+                        assert(parts[2][1] == "cobalt blue" and parts[2][2] == 1)"#)).unwrap();
+                }
+            }
+        }
+    }
+
     #[test]
     fn review_secondary_piles_keep_their_thinner() {
         for opts in ["pile=p, second={pile=q, load=0.8}", "piles={{p,0},{q,1}}"] {

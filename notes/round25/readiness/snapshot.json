@@ -1,0 +1,29 @@
+{
+  "source_commit": "e017df8e0394fbe520b41ddac112e69e46621cd2",
+  "runtime_checkout": "~/src/a/claude-paint-r25run",
+  "candidate_studio": "~/src/a/claude-paint-r25run/prepared/friedrich",
+  "model": [
+    "--provider",
+    "anthropic",
+    "--model",
+    "claude-opus-5-5",
+    "--thinking",
+    "high"
+  ],
+  "preflight_problems": [],
+  "checkout_problems": [],
+  "engine": 5,
+  "box": "friedrich",
+  "tubes": 16,
+  "state": "prepared, not started",
+  "candidate_has_painting": false,
+  "provider_invoked": false,
+  "sha256": {
+    "bin/easel": "49ee4696fc80c62581d8f057c73cedffa57fae6603ac3cd3d38a40727f953e53",
+    "bin/box": "3d86f9da0ece02876db7be03bb82165d008f9d278d52a2bc410e3006d67ec31f",
+    "BRIEF.md": "024bdf86f606ec5f59e48b72f9f0e3d8fc7827d8902a81a3fe9a7d144e9a4886",
+    "notes/easel_guide.md": "14f3457d6e544d8fc5db813dced5387c68696d77812d29716a3b8c60af61bdbb",
+    "notes/research/friedrich_materials.md": "c959f9ad2f01ce51b0a5b3ac2c3590c3318e63d03cb4a4ba2069e35064952fb5",
+    "notes/research/friedrich_painter.md": "6e75a53cec56aefb1f3a269be82b87d059d2aeb3ff886987d7e848855caa2d08"
+  }
+}

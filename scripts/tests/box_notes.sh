@@ -9,7 +9,7 @@
 #
 #   scripts/tests/box_notes.sh [<studio>...]
 #
-# With no studios, exports sargent, inness, alma-tadema, tonn, hopper, giverny and impressionist from
+# With no studios, exports friedrich, sargent, inness, alma-tadema, tonn, hopper, giverny and impressionist from
 # R16_BRANCH (scripts/export_r16_studio) and checks those; giverny and impressionist only if that
 # branch has their materials notes (an older branch lacks them). The catalog's
 # tube names come from R16_BRANCH's palette.rs (HEAD if unset).
@@ -22,7 +22,7 @@ unset EASEL_BOX
 work=$(mktemp -d "$TMPDIR/box-notes.XXXXXX")
 if [ $# -eq 0 ]; then
   : "${R16_BRANCH:?set R16_BRANCH to the branch to export, or name exported studios}"
-  for profile in sargent inness alma-tadema tonn hopper giverny impressionist; do
+  for profile in friedrich sargent inness alma-tadema tonn hopper giverny impressionist; do
     # (only the two newest boxes may be missing, from an older branch; a missing note of the others fails the export)
     case $profile in
       giverny|impressionist) git -C "$repo" cat-file -e "$R16_BRANCH:notes/research/${profile}_materials.md" 2>/dev/null || continue ;;

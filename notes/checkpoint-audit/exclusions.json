@@ -1,0 +1,45 @@
+{
+  "verified_at_utc": "2026-10-05T20:49:36.005Z",
+  "groups": {
+    "images-and-videos": {
+      "files": 48,
+      "bytes": 81326138,
+      "examples": [
+        "notes/external-session-681960c8/visuals/falaise-early-L1980.png",
+        "notes/external-session-681960c8/visuals/falaise-final-gallery-L2278.png",
+        "notes/external-session-681960c8/visuals/falaise-final-seen-L2081.png"
+      ]
+    },
+    "raw-original-backups": {
+      "files": 10,
+      "bytes": 764942,
+      "examples": [
+        "notes/local-checkpoint-evidence/raw/notes/external-session-681960c8/materials-receipts.md",
+        "notes/local-checkpoint-evidence/raw/notes/external-session-681960c8/metrics.json",
+        "notes/local-checkpoint-evidence/raw/notes/round28/readiness/dry-run.log"
+      ]
+    },
+    "generated-logs-and-frame-indices": {
+      "files": 21,
+      "bytes": 177295,
+      "examples": [
+        "notes/media-backlog/assets/r22.1-inns/substitute-build.log",
+        "notes/media-backlog/assets/r22.1-inns/substitute-frames.tsv",
+        "notes/media-backlog/assets/r22.1-inns/substitute-full-replay.log"
+      ]
+    }
+  },
+  "hook_block": {
+    "file": "notes/media-backlog/render_batch.py",
+    "line": 88,
+    "reason": "pre-commit rejected the literal protected-name privacy regex",
+    "resolution": "Resolved by the explicitly authorized removal of the literal name check from this script; home-path checks remain. Git privacy hooks are unchanged. The source is included in the local checkpoint.",
+    "state": "resolved"
+  },
+  "publication": "No push or external publication performed.",
+  "feature_checkpoint": {
+    "branch": "scratch-canvas",
+    "commit": "79621d5",
+    "state": "paused, incomplete, unvalidated and unmerged"
+  }
+}

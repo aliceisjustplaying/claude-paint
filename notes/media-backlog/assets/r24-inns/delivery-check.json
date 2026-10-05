@@ -1,0 +1,47 @@
+{
+  "verified_at": "2026-10-05T17:21:25.048761+00:00",
+  "id": "r24-inns",
+  "status": "verified for delivery",
+  "file_sha256": {
+    "r24-inns-finished.png": "35c949ea52677e53f4640bb79641ad6de9b50845e710794ec61163760118b9da",
+    "r24-inns-normal.png": "6799556281331a80a45c59042279fcb8e8604df1f30ff5ac3780658399df00fb",
+    "r24-inns.mp4": "367b343b918f144dea6a0f7917b5b86ed0100032af0e3a5717799e6c432a7255",
+    "video-review.png": "e210cc2da8105b0be41af02d22fff5731a857d9cc81681d74c906f1cd5b173ae"
+  },
+  "visual_review": {
+    "final_png": "Inspected exact finished deliverable: Dusk meadow and pool painting. Whole painting retained, automatic varnish/cracks visible and no protected identity or home paths visible.",
+    "video_contact_sheet": "Inspected exact extracted MP4 frames at 0, 6, 12 and 19.5 seconds. Painting progression reaches finished painting with no crop or protected identity visible."
+  },
+  "privacy": {
+    "protected_literals_in_deliverable_bytes": 0,
+    "embedded_metadata": "Inspected PNG chunks and ffprobe tags. PNGs contain IHDR/IDAT/IEND only. MP4 has encoder/container/language/handler tags, no protected identity or home paths."
+  },
+  "video": {
+    "width": 1920,
+    "height": 1280,
+    "duration_seconds": 20,
+    "codec": "h264",
+    "pixel_format": "yuv420p",
+    "fps": 24,
+    "frames": 480,
+    "crop": false,
+    "aspect_rounding": "Height rounded to even pixels for yuv420p.",
+    "faststart": true,
+    "atoms": {
+      "ftyp": 0,
+      "moov": 32,
+      "free": 6582,
+      "mdat": 6590
+    },
+    "full_decode": "Passed in render workflow."
+  },
+  "replay": {
+    "source_commit": "d8a995b8796051da773fff5325708cd974c5a4ee",
+    "engine_sha256": "6dd3db358684bfbbef34fbfb705285916304b63447aecb2b3bd4deca90a4298e",
+    "original_chunks": 119,
+    "automatic_finishing_chunks": 1,
+    "full_finished_replay_byte_exact": true,
+    "recorded_frames": 630
+  },
+  "public_links": null
+}

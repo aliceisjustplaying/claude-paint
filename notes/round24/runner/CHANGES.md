@@ -1,3 +1,12 @@
+# Current retrospective fixes
+
+No sitting-count cap: `max_sittings.txt` no longer controls this runner. A reviewed no-paint sitting
+establishes completion; the six-crash safeguard remains separate. Launch and return messages request
+a painter-owned handoff of unresolved passages and practical lessons, carried verbatim from the
+previous reply on return. Accepted imperfection is allowed after inspection and explicit judgment.
+`p<n>_outcome.json` records completion independently of the final-render marker.
+The configurations below describe historical runs.
+
 # Round 24: round 23's Inness lane on engine 3 (rag, realistic drying, no rebuilds after a failed chunk)
 
 A copy of round 23's runner (its tracked files, not its `run/` data). Lane `INNS` as before: one Claude Opus 5.5 painter in Inness's studio, `MAX_SITTINGS = 4`, `record_kind="none"`.

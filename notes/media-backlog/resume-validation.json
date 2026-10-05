@@ -1,0 +1,34 @@
+{
+  "verified_at": "2026-10-05T16:21:37.379231+00:00",
+  "syntax": "valid",
+  "checkout_preflight": [
+    {
+      "id": "r27-hopr",
+      "source_commit": "4b9bef6a5872803f4f20623c15b7677a152db70c",
+      "engine_sha256": "45dba24fdcd932de5fe340320d89b9d1593d24237c9fc258f61885c5bb5c4e21",
+      "allowed_untracked_file_count": 0
+    },
+    {
+      "id": "r26-mont",
+      "source_commit": "3c7bf92d3f046bf64db863916487c0fa703d1e19",
+      "engine_sha256": "3f92b305fba96b5c32646407b081457f5186200740bbeed78156dab987090d55",
+      "allowed_untracked_file_count": 0
+    },
+    {
+      "id": "r25-frdc",
+      "source_commit": "e017df8e0394fbe520b41ddac112e69e46621cd2",
+      "engine_sha256": "90bec4d5eeee73578b0d3ba9fb2dd59ef77ba56e806041c58324f8ee8760fe57",
+      "allowed_untracked_file_count": 12
+    },
+    {
+      "id": "r24-inns",
+      "source_commit": "d8a995b8796051da773fff5325708cd974c5a4ee",
+      "engine_sha256": "6dd3db358684bfbbef34fbfb705285916304b63447aecb2b3bd4deca90a4298e",
+      "allowed_untracked_file_count": 0
+    }
+  ],
+  "script_sha256": "aaa789707650c2d9c41c222fb4af7d9a92bf88479ee611501ac342df5253233f",
+  "render_started": false,
+  "files_in_r25_modified_or_deleted": false,
+  "free_bytes": 85216600064
+}

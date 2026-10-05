@@ -1,0 +1,83 @@
+{
+  "stopped_at_utc": "2026-10-05T19:42:06.636Z",
+  "state": "stopped on explicit user switch to Monet; preserved canvas and session",
+  "studio": "paint-studio-002de5",
+  "source_commit": "f2b324457e36fe762cb65dc30aefd0428b735d79",
+  "launchd": "art.stillwet.painter.r28 removed",
+  "last_tool": {
+    "tool": "note",
+    "timestamp": "2026-10-05T19:41:08.158Z",
+    "isError": false
+  },
+  "successful_tools": [
+    {
+      "tool": "read",
+      "timestamp": "2026-10-05T19:39:47.139Z",
+      "isError": false
+    },
+    {
+      "tool": "status",
+      "timestamp": "2026-10-05T19:39:47.151Z",
+      "isError": false
+    },
+    {
+      "tool": "read",
+      "timestamp": "2026-10-05T19:39:49.690Z",
+      "isError": false
+    },
+    {
+      "tool": "read",
+      "timestamp": "2026-10-05T19:39:49.692Z",
+      "isError": false
+    },
+    {
+      "tool": "read",
+      "timestamp": "2026-10-05T19:39:49.694Z",
+      "isError": false
+    },
+    {
+      "tool": "read",
+      "timestamp": "2026-10-05T19:39:55.721Z",
+      "isError": false
+    },
+    {
+      "tool": "log",
+      "timestamp": "2026-10-05T19:39:55.749Z",
+      "isError": false
+    },
+    {
+      "tool": "paint",
+      "timestamp": "2026-10-05T19:40:40.678Z",
+      "isError": false
+    },
+    {
+      "tool": "paint",
+      "timestamp": "2026-10-05T19:40:46.876Z",
+      "isError": false
+    },
+    {
+      "tool": "look",
+      "timestamp": "2026-10-05T19:40:46.961Z",
+      "isError": false
+    },
+    {
+      "tool": "paint",
+      "timestamp": "2026-10-05T19:41:01.271Z",
+      "isError": false
+    },
+    {
+      "tool": "look",
+      "timestamp": "2026-10-05T19:41:01.354Z",
+      "isError": false
+    },
+    {
+      "tool": "note",
+      "timestamp": "2026-10-05T19:41:08.158Z",
+      "isError": false
+    }
+  ],
+  "saved_canvas": "paint-studio-002de5/out/easel/painting/live.png",
+  "saved_lua": "paint-studio-002de5/paintings/lua/painting.lua",
+  "session_basename": "2026-10-05T19-39-43-161Z_01a10d94-44b8-760c-9d8c-03b9d10a86ab.jsonl",
+  "no_auto_restart": true
+}

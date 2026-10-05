@@ -1,0 +1,19 @@
+{
+  "comparison": "Original finished PNG versus full-resolution substitute finished replay",
+  "width": 2400,
+  "height": 1600,
+  "pixels": 3840000,
+  "rgb_byte_range": [
+    0,
+    255
+  ],
+  "mean_absolute_channel_difference": 0.0,
+  "root_mean_square_channel_difference": 0.0,
+  "maximum_channel_difference": 0,
+  "changed_channels": 0,
+  "changed_pixels": 0,
+  "changed_pixel_percent": 0.0,
+  "png_byte_exact": true,
+  "rgb_pixel_exact": true,
+  "interpretation": "Measured image difference; not proof of exact source or physical equivalence."
+}

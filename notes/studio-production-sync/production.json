@@ -1,0 +1,558 @@
+{
+  "base": "https://stillwet.art/studio/",
+  "browser": "154.0.8037.98",
+  "checks": [
+    {
+      "painter": "paint-studio-12e572",
+      "mode": "regular",
+      "cold": {
+        "time": 1444.5,
+        "disabled": true,
+        "open": false
+      },
+      "prepared": {
+        "time": 3006.1999999955297,
+        "label": "formatted · display only",
+        "lines": 3164,
+        "closed": true,
+        "labels": [
+          {
+            "time": 2914.5,
+            "label": "formatted · display only",
+            "open": false
+          }
+        ],
+        "workerStarts": [
+          1431.5
+        ],
+        "workerReplies": [
+          {
+            "time": 2799.39999999851,
+            "formatted": true,
+            "lines": 3159
+          },
+          {
+            "time": 2905.89999999851,
+            "formatted": true,
+            "lines": 3164
+          }
+        ],
+        "fileRequests": [
+          2335.7999999970198
+        ]
+      },
+      "open": {
+        "handlerMs": 1.1000000014901161,
+        "paintOpportunityMs": 59.70000000298023,
+        "sameDOM": true,
+        "filesTriggered": 0,
+        "workerRepliesTriggered": 0,
+        "width": 720,
+        "right": 732,
+        "scrollWidth": 718,
+        "clientWidth": 718,
+        "wrappedRows": 6,
+        "label": "formatted · display only",
+        "inert": false
+      },
+      "replay": {
+        "sameDOM": true,
+        "highlighted": 4,
+        "label": "formatted · display only"
+      },
+      "responses": [
+        {
+          "url": "https://stillwet.art/studio/code-display.js",
+          "status": 200,
+          "type": "text/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://stillwet.art/studio/code-format.js",
+          "status": 200,
+          "type": "text/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://stillwet.art/studio/code-display.js",
+          "status": 200,
+          "type": "text/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://stillwet.art/studio/vendor/stylua/stylua_lib_web.js",
+          "status": 200,
+          "type": "text/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://stillwet.art/studio/vendor/stylua/stylua_lib_bg.wasm",
+          "status": 200,
+          "type": "application/wasm"
+        },
+        {
+          "url": "https://stillwet.art/studio/data/paint-studio-12e572/file/paintings/lua/painting.lua?t=1791214415013",
+          "status": 200,
+          "type": "text/plain; charset=utf-8"
+        }
+      ],
+      "errors": []
+    },
+    {
+      "painter": "paint-studio-12e572",
+      "mode": "stream",
+      "cold": {
+        "time": 1074.7999999970198,
+        "disabled": true,
+        "open": false
+      },
+      "prepared": {
+        "time": 2605.89999999851,
+        "label": "formatted · display only",
+        "lines": 3164,
+        "closed": true,
+        "labels": [
+          {
+            "time": 2548.6999999955297,
+            "label": "formatted · display only",
+            "open": false
+          }
+        ],
+        "workerStarts": [
+          1065.6999999955297
+        ],
+        "workerReplies": [
+          {
+            "time": 2433.89999999851,
+            "formatted": true,
+            "lines": 3159
+          },
+          {
+            "time": 2540.5,
+            "formatted": true,
+            "lines": 3164
+          }
+        ],
+        "fileRequests": [
+          1985.2999999970198
+        ]
+      },
+      "open": {
+        "handlerMs": 0.30000000447034836,
+        "paintOpportunityMs": 91.10000000149012,
+        "sameDOM": true,
+        "filesTriggered": 0,
+        "workerRepliesTriggered": 0,
+        "width": 720,
+        "right": 732,
+        "scrollWidth": 718,
+        "clientWidth": 718,
+        "wrappedRows": 6,
+        "label": "formatted · display only",
+        "inert": false
+      },
+      "replay": {
+        "sameDOM": true,
+        "highlighted": 4,
+        "label": "formatted · display only"
+      },
+      "responses": [
+        {
+          "url": "https://stillwet.art/studio/code-display.js",
+          "status": 200,
+          "type": "text/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://stillwet.art/studio/code-format.js",
+          "status": 200,
+          "type": "text/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://stillwet.art/studio/code-display.js",
+          "status": 200,
+          "type": "text/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://stillwet.art/studio/vendor/stylua/stylua_lib_web.js",
+          "status": 200,
+          "type": "text/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://stillwet.art/studio/vendor/stylua/stylua_lib_bg.wasm",
+          "status": 200,
+          "type": "application/wasm"
+        },
+        {
+          "url": "https://stillwet.art/studio/data/paint-studio-12e572/file/paintings/lua/painting.lua?t=1791214418298",
+          "status": 200,
+          "type": "text/plain; charset=utf-8"
+        }
+      ],
+      "errors": []
+    },
+    {
+      "painter": "paint-studio-12e572",
+      "mode": "narrow",
+      "cold": {
+        "time": 938.1000000014901,
+        "disabled": true,
+        "open": false
+      },
+      "prepared": {
+        "time": 2502.10000000149,
+        "label": "formatted · display only",
+        "lines": 3164,
+        "closed": true,
+        "labels": [
+          {
+            "time": 2435.5,
+            "label": "formatted · display only",
+            "open": false
+          }
+        ],
+        "workerStarts": [
+          926.1999999955297
+        ],
+        "workerReplies": [
+          {
+            "time": 2321.10000000149,
+            "formatted": true,
+            "lines": 3159
+          },
+          {
+            "time": 2427.39999999851,
+            "formatted": true,
+            "lines": 3164
+          }
+        ],
+        "fileRequests": [
+          1706
+        ]
+      },
+      "open": {
+        "handlerMs": 0.29999999701976776,
+        "paintOpportunityMs": 42.899999998509884,
+        "sameDOM": true,
+        "filesTriggered": 0,
+        "workerRepliesTriggered": 0,
+        "width": 378,
+        "right": 384,
+        "scrollWidth": 376,
+        "clientWidth": 376,
+        "wrappedRows": 13,
+        "label": "formatted · display only",
+        "inert": false
+      },
+      "replay": {
+        "sameDOM": true,
+        "highlighted": 4,
+        "label": "formatted · display only"
+      },
+      "responses": [
+        {
+          "url": "https://stillwet.art/studio/code-display.js",
+          "status": 200,
+          "type": "text/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://stillwet.art/studio/code-format.js",
+          "status": 200,
+          "type": "text/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://stillwet.art/studio/code-display.js",
+          "status": 200,
+          "type": "text/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://stillwet.art/studio/vendor/stylua/stylua_lib_web.js",
+          "status": 200,
+          "type": "text/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://stillwet.art/studio/vendor/stylua/stylua_lib_bg.wasm",
+          "status": 200,
+          "type": "application/wasm"
+        },
+        {
+          "url": "https://stillwet.art/studio/data/paint-studio-12e572/file/paintings/lua/painting.lua?t=1791214421165",
+          "status": 200,
+          "type": "text/plain; charset=utf-8"
+        }
+      ],
+      "errors": []
+    },
+    {
+      "painter": "paint-studio-7c4dd1",
+      "mode": "regular",
+      "cold": {
+        "time": 913.2999999970198,
+        "disabled": true,
+        "open": false
+      },
+      "prepared": {
+        "time": 3032.5,
+        "label": "formatted · display only",
+        "lines": 1809,
+        "closed": true,
+        "labels": [
+          {
+            "time": 2988.10000000149,
+            "label": "formatted · display only",
+            "open": false
+          }
+        ],
+        "workerStarts": [
+          901.5
+        ],
+        "workerReplies": [
+          {
+            "time": 2919.89999999851,
+            "formatted": true,
+            "lines": 1804
+          },
+          {
+            "time": 2983.2000000029802,
+            "formatted": true,
+            "lines": 1809
+          }
+        ],
+        "fileRequests": [
+          1490.7000000029802
+        ]
+      },
+      "open": {
+        "handlerMs": 0.20000000298023224,
+        "paintOpportunityMs": 91,
+        "sameDOM": true,
+        "filesTriggered": 0,
+        "workerRepliesTriggered": 0,
+        "width": 720,
+        "right": 732,
+        "scrollWidth": 718,
+        "clientWidth": 718,
+        "wrappedRows": 5,
+        "label": "formatted · display only",
+        "inert": false
+      },
+      "replay": {
+        "sameDOM": true,
+        "highlighted": 5,
+        "label": "formatted · display only"
+      },
+      "responses": [
+        {
+          "url": "https://stillwet.art/studio/code-display.js",
+          "status": 200,
+          "type": "text/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://stillwet.art/studio/code-format.js",
+          "status": 200,
+          "type": "text/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://stillwet.art/studio/code-display.js",
+          "status": 200,
+          "type": "text/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://stillwet.art/studio/vendor/stylua/stylua_lib_web.js",
+          "status": 200,
+          "type": "text/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://stillwet.art/studio/vendor/stylua/stylua_lib_bg.wasm",
+          "status": 200,
+          "type": "application/wasm"
+        },
+        {
+          "url": "https://stillwet.art/studio/data/paint-studio-7c4dd1/file/paintings/lua/painting.lua?t=1791214423892",
+          "status": 200,
+          "type": "text/plain; charset=utf-8"
+        }
+      ],
+      "errors": []
+    },
+    {
+      "painter": "paint-studio-7c4dd1",
+      "mode": "stream",
+      "cold": {
+        "time": 1056.2000000029802,
+        "disabled": true,
+        "open": false
+      },
+      "prepared": {
+        "time": 2937.7000000029802,
+        "label": "formatted · display only",
+        "lines": 1809,
+        "closed": true,
+        "labels": [
+          {
+            "time": 2901.10000000149,
+            "label": "formatted · display only",
+            "open": false
+          }
+        ],
+        "workerStarts": [
+          1048.5
+        ],
+        "workerReplies": [
+          {
+            "time": 2832.89999999851,
+            "formatted": true,
+            "lines": 1804
+          },
+          {
+            "time": 2895.89999999851,
+            "formatted": true,
+            "lines": 1809
+          }
+        ],
+        "fileRequests": [
+          1620.8999999985099
+        ]
+      },
+      "open": {
+        "handlerMs": 0.20000000298023224,
+        "paintOpportunityMs": 122.79999999701977,
+        "sameDOM": true,
+        "filesTriggered": 0,
+        "workerRepliesTriggered": 0,
+        "width": 720,
+        "right": 732,
+        "scrollWidth": 718,
+        "clientWidth": 718,
+        "wrappedRows": 5,
+        "label": "formatted · display only",
+        "inert": false
+      },
+      "replay": {
+        "sameDOM": true,
+        "highlighted": 5,
+        "label": "formatted · display only"
+      },
+      "responses": [
+        {
+          "url": "https://stillwet.art/studio/code-display.js",
+          "status": 200,
+          "type": "text/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://stillwet.art/studio/code-format.js",
+          "status": 200,
+          "type": "text/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://stillwet.art/studio/code-display.js",
+          "status": 200,
+          "type": "text/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://stillwet.art/studio/vendor/stylua/stylua_lib_web.js",
+          "status": 200,
+          "type": "text/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://stillwet.art/studio/vendor/stylua/stylua_lib_bg.wasm",
+          "status": 200,
+          "type": "application/wasm"
+        },
+        {
+          "url": "https://stillwet.art/studio/data/paint-studio-7c4dd1/file/paintings/lua/painting.lua?t=1791214427672",
+          "status": 200,
+          "type": "text/plain; charset=utf-8"
+        }
+      ],
+      "errors": []
+    },
+    {
+      "painter": "paint-studio-7c4dd1",
+      "mode": "narrow",
+      "cold": {
+        "time": 912.1000000014901,
+        "disabled": true,
+        "open": false
+      },
+      "prepared": {
+        "time": 4536.70000000298,
+        "label": "formatted · display only",
+        "lines": 1809,
+        "closed": true,
+        "labels": [
+          {
+            "time": 4460.60000000149,
+            "label": "formatted · display only",
+            "open": false
+          }
+        ],
+        "workerStarts": [
+          897.3000000044703
+        ],
+        "workerReplies": [
+          {
+            "time": 4394.5,
+            "formatted": true,
+            "lines": 1804
+          },
+          {
+            "time": 4455.89999999851,
+            "formatted": true,
+            "lines": 1809
+          }
+        ],
+        "fileRequests": [
+          1669.8000000044703
+        ]
+      },
+      "open": {
+        "handlerMs": 0.30000000447034836,
+        "paintOpportunityMs": 14.700000002980232,
+        "sameDOM": true,
+        "filesTriggered": 0,
+        "workerRepliesTriggered": 0,
+        "width": 378,
+        "right": 384,
+        "scrollWidth": 376,
+        "clientWidth": 376,
+        "wrappedRows": 30,
+        "label": "formatted · display only",
+        "inert": false
+      },
+      "replay": {
+        "sameDOM": true,
+        "highlighted": 5,
+        "label": "formatted · display only"
+      },
+      "responses": [
+        {
+          "url": "https://stillwet.art/studio/code-display.js",
+          "status": 200,
+          "type": "text/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://stillwet.art/studio/code-format.js",
+          "status": 200,
+          "type": "text/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://stillwet.art/studio/code-display.js",
+          "status": 200,
+          "type": "text/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://stillwet.art/studio/vendor/stylua/stylua_lib_web.js",
+          "status": 200,
+          "type": "text/javascript; charset=utf-8"
+        },
+        {
+          "url": "https://stillwet.art/studio/vendor/stylua/stylua_lib_bg.wasm",
+          "status": 200,
+          "type": "application/wasm"
+        },
+        {
+          "url": "https://stillwet.art/studio/data/paint-studio-7c4dd1/file/paintings/lua/painting.lua?t=1791214431268",
+          "status": 200,
+          "type": "text/plain; charset=utf-8"
+        }
+      ],
+      "errors": []
+    }
+  ]
+}

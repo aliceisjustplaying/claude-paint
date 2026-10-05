@@ -1,0 +1,26 @@
+[
+  {
+    "pid": 26375,
+    "ppid": 23140,
+    "pgid": 23137,
+    "cmd": "pi"
+  },
+  {
+    "pid": 23140,
+    "ppid": 23137,
+    "pgid": 23137,
+    "cmd": "/Users/local-user/tmp/gallery-fcf9c110/r28/.venv/bin/python /Users/local-user/tmp/gallery-fcf9c110/r28/r21_chains.py --only HOPR"
+  },
+  {
+    "pid": 23139,
+    "ppid": 23137,
+    "pgid": 23137,
+    "cmd": "/usr/bin/caffeinate -i /etc/profiles/per-user/local-user/bin/uv run --no-project --python /Users/local-user/tmp/gallery-fcf9c110/r28/.venv/bin/python python /Users/local-user/tmp/gallery-fcf9c110/r28/r21_chains.py --only HOPR"
+  },
+  {
+    "pid": 23137,
+    "ppid": 1,
+    "pgid": 23137,
+    "cmd": "/etc/profiles/per-user/local-user/bin/uv run --no-project --python /Users/local-user/tmp/gallery-fcf9c110/r28/.venv/bin/python python /Users/local-user/tmp/gallery-fcf9c110/r28/r21_chains.py --only HOPR"
+  }
+]

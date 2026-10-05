@@ -1,0 +1,528 @@
+{
+  "base": "http://100.82.115.34:8769/",
+  "browser": "154.0.8037.98",
+  "checks": [
+    {
+      "painter": "paint-studio-12e572",
+      "mode": "regular",
+      "cold": {
+        "time": 52.80000000447035,
+        "disabled": true,
+        "open": false
+      },
+      "prepared": {
+        "time": 792.8000000044703,
+        "label": "formatted · display only",
+        "lines": 3164,
+        "closed": true,
+        "labels": [
+          {
+            "time": 744.6000000014901,
+            "label": "formatted · display only",
+            "open": false
+          }
+        ],
+        "workerStarts": [
+          18.80000000447035
+        ],
+        "workerReplies": [
+          {
+            "time": 608,
+            "formatted": true,
+            "lines": 3159
+          },
+          {
+            "time": 736.5,
+            "formatted": true,
+            "lines": 3164
+          }
+        ],
+        "fileRequests": [
+          149.10000000149012
+        ]
+      },
+      "open": {
+        "handlerMs": 0.8999999985098839,
+        "paintOpportunityMs": 71.80000000447035,
+        "sameDOM": true,
+        "filesTriggered": 0,
+        "workerRepliesTriggered": 0,
+        "width": 720,
+        "right": 732,
+        "scrollWidth": 718,
+        "clientWidth": 718,
+        "wrappedRows": 6,
+        "label": "formatted · display only",
+        "inert": false
+      },
+      "replay": {
+        "sameDOM": true,
+        "highlighted": 4,
+        "label": "formatted · display only"
+      },
+      "responses": [
+        {
+          "url": "http://100.82.115.34:8769/code-display.js",
+          "status": 200,
+          "type": "text/javascript; charset=utf-8"
+        },
+        {
+          "url": "http://100.82.115.34:8769/code-format.js",
+          "status": 200,
+          "type": "text/javascript; charset=utf-8"
+        },
+        {
+          "url": "http://100.82.115.34:8769/code-display.js",
+          "status": 200,
+          "type": "text/javascript; charset=utf-8"
+        },
+        {
+          "url": "http://100.82.115.34:8769/vendor/stylua/stylua_lib_web.js",
+          "status": 200,
+          "type": "text/javascript; charset=utf-8"
+        },
+        {
+          "url": "http://100.82.115.34:8769/vendor/stylua/stylua_lib_bg.wasm",
+          "status": 200,
+          "type": "application/wasm"
+        }
+      ],
+      "errors": []
+    },
+    {
+      "painter": "paint-studio-12e572",
+      "mode": "stream",
+      "cold": {
+        "time": 38.70000000298023,
+        "disabled": true,
+        "open": false
+      },
+      "prepared": {
+        "time": 820.5,
+        "label": "formatted · display only",
+        "lines": 3164,
+        "closed": true,
+        "labels": [
+          {
+            "time": 793.2000000029802,
+            "label": "formatted · display only",
+            "open": false
+          }
+        ],
+        "workerStarts": [
+          32.20000000298023
+        ],
+        "workerReplies": [
+          {
+            "time": 638.4000000059605,
+            "formatted": true,
+            "lines": 3159
+          },
+          {
+            "time": 785,
+            "formatted": true,
+            "lines": 3164
+          }
+        ],
+        "fileRequests": [
+          159.30000000447035
+        ]
+      },
+      "open": {
+        "handlerMs": 0.19999999552965164,
+        "paintOpportunityMs": 72.19999999552965,
+        "sameDOM": true,
+        "filesTriggered": 0,
+        "workerRepliesTriggered": 0,
+        "width": 720,
+        "right": 732,
+        "scrollWidth": 718,
+        "clientWidth": 718,
+        "wrappedRows": 6,
+        "label": "formatted · display only",
+        "inert": false
+      },
+      "replay": {
+        "sameDOM": true,
+        "highlighted": 4,
+        "label": "formatted · display only"
+      },
+      "responses": [
+        {
+          "url": "http://100.82.115.34:8769/code-display.js",
+          "status": 200,
+          "type": "text/javascript; charset=utf-8"
+        },
+        {
+          "url": "http://100.82.115.34:8769/code-format.js",
+          "status": 200,
+          "type": "text/javascript; charset=utf-8"
+        },
+        {
+          "url": "http://100.82.115.34:8769/vendor/stylua/stylua_lib_web.js",
+          "status": 200,
+          "type": "text/javascript; charset=utf-8"
+        },
+        {
+          "url": "http://100.82.115.34:8769/code-display.js",
+          "status": 200,
+          "type": "text/javascript; charset=utf-8"
+        },
+        {
+          "url": "http://100.82.115.34:8769/vendor/stylua/stylua_lib_bg.wasm",
+          "status": 200,
+          "type": "application/wasm"
+        }
+      ],
+      "errors": []
+    },
+    {
+      "painter": "paint-studio-12e572",
+      "mode": "narrow",
+      "cold": {
+        "time": 45.600000001490116,
+        "disabled": true,
+        "open": false
+      },
+      "prepared": {
+        "time": 1119,
+        "label": "formatted · display only",
+        "lines": 3164,
+        "closed": true,
+        "labels": [
+          {
+            "time": 1098.6000000014901,
+            "label": "formatted · display only",
+            "open": false
+          }
+        ],
+        "workerStarts": [
+          36.80000000447035
+        ],
+        "workerReplies": [
+          {
+            "time": 966.7000000029802,
+            "formatted": true,
+            "lines": 3159
+          },
+          {
+            "time": 1089,
+            "formatted": true,
+            "lines": 3164
+          }
+        ],
+        "fileRequests": [
+          587.4000000059605
+        ]
+      },
+      "open": {
+        "handlerMs": 0.10000000149011612,
+        "paintOpportunityMs": 53.20000000298023,
+        "sameDOM": true,
+        "filesTriggered": 0,
+        "workerRepliesTriggered": 0,
+        "width": 378,
+        "right": 384,
+        "scrollWidth": 376,
+        "clientWidth": 376,
+        "wrappedRows": 13,
+        "label": "formatted · display only",
+        "inert": false
+      },
+      "replay": {
+        "sameDOM": true,
+        "highlighted": 4,
+        "label": "formatted · display only"
+      },
+      "responses": [
+        {
+          "url": "http://100.82.115.34:8769/code-display.js",
+          "status": 200,
+          "type": "text/javascript; charset=utf-8"
+        },
+        {
+          "url": "http://100.82.115.34:8769/code-format.js",
+          "status": 200,
+          "type": "text/javascript; charset=utf-8"
+        },
+        {
+          "url": "http://100.82.115.34:8769/code-display.js",
+          "status": 200,
+          "type": "text/javascript; charset=utf-8"
+        },
+        {
+          "url": "http://100.82.115.34:8769/vendor/stylua/stylua_lib_web.js",
+          "status": 200,
+          "type": "text/javascript; charset=utf-8"
+        },
+        {
+          "url": "http://100.82.115.34:8769/vendor/stylua/stylua_lib_bg.wasm",
+          "status": 200,
+          "type": "application/wasm"
+        }
+      ],
+      "errors": []
+    },
+    {
+      "painter": "paint-studio-7c4dd1",
+      "mode": "regular",
+      "cold": {
+        "time": 35,
+        "disabled": true,
+        "open": false
+      },
+      "prepared": {
+        "time": 504,
+        "label": "formatted · display only",
+        "lines": 1610,
+        "closed": true,
+        "labels": [
+          {
+            "time": 482,
+            "label": "formatted · display only",
+            "open": false
+          }
+        ],
+        "workerStarts": [
+          29.100000001490116
+        ],
+        "workerReplies": [
+          {
+            "time": 394.1000000014901,
+            "formatted": true,
+            "lines": 1605
+          },
+          {
+            "time": 476.30000000447035,
+            "formatted": true,
+            "lines": 1610
+          }
+        ],
+        "fileRequests": [
+          147
+        ]
+      },
+      "open": {
+        "handlerMs": 0.09999999403953552,
+        "paintOpportunityMs": 117.29999999701977,
+        "sameDOM": true,
+        "filesTriggered": 0,
+        "workerRepliesTriggered": 0,
+        "width": 720,
+        "right": 732,
+        "scrollWidth": 718,
+        "clientWidth": 718,
+        "wrappedRows": 5,
+        "label": "formatted · display only",
+        "inert": false
+      },
+      "replay": {
+        "sameDOM": true,
+        "highlighted": 27,
+        "label": "formatted · display only"
+      },
+      "responses": [
+        {
+          "url": "http://100.82.115.34:8769/code-display.js",
+          "status": 200,
+          "type": "text/javascript; charset=utf-8"
+        },
+        {
+          "url": "http://100.82.115.34:8769/code-format.js",
+          "status": 200,
+          "type": "text/javascript; charset=utf-8"
+        },
+        {
+          "url": "http://100.82.115.34:8769/code-display.js",
+          "status": 200,
+          "type": "text/javascript; charset=utf-8"
+        },
+        {
+          "url": "http://100.82.115.34:8769/vendor/stylua/stylua_lib_web.js",
+          "status": 200,
+          "type": "text/javascript; charset=utf-8"
+        },
+        {
+          "url": "http://100.82.115.34:8769/vendor/stylua/stylua_lib_bg.wasm",
+          "status": 200,
+          "type": "application/wasm"
+        }
+      ],
+      "errors": []
+    },
+    {
+      "painter": "paint-studio-7c4dd1",
+      "mode": "stream",
+      "cold": {
+        "time": 56.29999999701977,
+        "disabled": true,
+        "open": false
+      },
+      "prepared": {
+        "time": 605.2999999970198,
+        "label": "formatted · display only",
+        "lines": 1610,
+        "closed": true,
+        "labels": [
+          {
+            "time": 588.7999999970198,
+            "label": "formatted · display only",
+            "open": false
+          }
+        ],
+        "workerStarts": [
+          11.5
+        ],
+        "workerReplies": [
+          {
+            "time": 494.1000000014901,
+            "formatted": true,
+            "lines": 1605
+          },
+          {
+            "time": 582,
+            "formatted": true,
+            "lines": 1610
+          }
+        ],
+        "fileRequests": [
+          144.20000000298023
+        ]
+      },
+      "open": {
+        "handlerMs": 0.10000000149011612,
+        "paintOpportunityMs": 68.79999999701977,
+        "sameDOM": true,
+        "filesTriggered": 0,
+        "workerRepliesTriggered": 0,
+        "width": 720,
+        "right": 732,
+        "scrollWidth": 718,
+        "clientWidth": 718,
+        "wrappedRows": 5,
+        "label": "formatted · display only",
+        "inert": false
+      },
+      "replay": {
+        "sameDOM": true,
+        "highlighted": 27,
+        "label": "formatted · display only"
+      },
+      "responses": [
+        {
+          "url": "http://100.82.115.34:8769/code-display.js",
+          "status": 200,
+          "type": "text/javascript; charset=utf-8"
+        },
+        {
+          "url": "http://100.82.115.34:8769/code-format.js",
+          "status": 200,
+          "type": "text/javascript; charset=utf-8"
+        },
+        {
+          "url": "http://100.82.115.34:8769/vendor/stylua/stylua_lib_web.js",
+          "status": 200,
+          "type": "text/javascript; charset=utf-8"
+        },
+        {
+          "url": "http://100.82.115.34:8769/code-display.js",
+          "status": 200,
+          "type": "text/javascript; charset=utf-8"
+        },
+        {
+          "url": "http://100.82.115.34:8769/vendor/stylua/stylua_lib_bg.wasm",
+          "status": 200,
+          "type": "application/wasm"
+        }
+      ],
+      "errors": []
+    },
+    {
+      "painter": "paint-studio-7c4dd1",
+      "mode": "narrow",
+      "cold": {
+        "time": 35.599999994039536,
+        "disabled": true,
+        "open": false
+      },
+      "prepared": {
+        "time": 442.69999999552965,
+        "label": "formatted · display only",
+        "lines": 1610,
+        "closed": true,
+        "labels": [
+          {
+            "time": 416.8999999985099,
+            "label": "formatted · display only",
+            "open": false
+          }
+        ],
+        "workerStarts": [
+          30
+        ],
+        "workerReplies": [
+          {
+            "time": 351.59999999403954,
+            "formatted": true,
+            "lines": 1605
+          },
+          {
+            "time": 412.5,
+            "formatted": true,
+            "lines": 1610
+          }
+        ],
+        "fileRequests": [
+          147.69999999552965
+        ]
+      },
+      "open": {
+        "handlerMs": 0.20000000298023224,
+        "paintOpportunityMs": 71,
+        "sameDOM": true,
+        "filesTriggered": 0,
+        "workerRepliesTriggered": 0,
+        "width": 378,
+        "right": 384,
+        "scrollWidth": 376,
+        "clientWidth": 376,
+        "wrappedRows": 30,
+        "label": "formatted · display only",
+        "inert": false
+      },
+      "replay": {
+        "sameDOM": true,
+        "highlighted": 27,
+        "label": "formatted · display only"
+      },
+      "responses": [
+        {
+          "url": "http://100.82.115.34:8769/code-display.js",
+          "status": 200,
+          "type": "text/javascript; charset=utf-8"
+        },
+        {
+          "url": "http://100.82.115.34:8769/code-format.js",
+          "status": 200,
+          "type": "text/javascript; charset=utf-8"
+        },
+        {
+          "url": "http://100.82.115.34:8769/code-display.js",
+          "status": 200,
+          "type": "text/javascript; charset=utf-8"
+        },
+        {
+          "url": "http://100.82.115.34:8769/vendor/stylua/stylua_lib_web.js",
+          "status": 200,
+          "type": "text/javascript; charset=utf-8"
+        },
+        {
+          "url": "http://100.82.115.34:8769/vendor/stylua/stylua_lib_bg.wasm",
+          "status": 200,
+          "type": "application/wasm"
+        }
+      ],
+      "errors": []
+    }
+  ]
+}

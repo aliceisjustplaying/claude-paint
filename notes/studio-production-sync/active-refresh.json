@@ -1,0 +1,38 @@
+{
+  "checks": [
+    {
+      "stream": false,
+      "initial": {
+        "events": 385,
+        "sourceBytes": 51239
+      },
+      "update": {
+        "closedDuringUpdate": true,
+        "cachedDOMReused": true,
+        "events": 400,
+        "sourceBytes": 53602,
+        "elapsedMs": 61404,
+        "label": "formatted · display only",
+        "width": 720
+      },
+      "errors": []
+    },
+    {
+      "stream": true,
+      "initial": {
+        "events": 385,
+        "sourceBytes": 51239
+      },
+      "update": {
+        "closedDuringUpdate": true,
+        "cachedDOMReused": true,
+        "events": 400,
+        "sourceBytes": 53602,
+        "elapsedMs": 61309,
+        "label": "formatted · display only",
+        "width": 720
+      },
+      "errors": []
+    }
+  ]
+}

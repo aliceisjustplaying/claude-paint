@@ -1,0 +1,15 @@
+{
+  "verified_at": "2026-10-05T19:47:45.332Z",
+  "website_url": "https://stillwet.art/studio/?p=paint-studio-aef22d",
+  "stream_layout_url": "https://stillwet.art/studio/?p=paint-studio-aef22d&stream=1",
+  "studio": "paint-studio-aef22d",
+  "page_status": 200,
+  "events_total": 48,
+  "images": 7,
+  "whole_canvas_image_status": 200,
+  "whole_canvas_image_type": "image/png",
+  "public_identity_scan": "no matches",
+  "existing_sync": "art.stillwet.studio.sync runs existing sync-studio.sh every60s; last observed sync20:47:25BST",
+  "obs_receipt": "obs-status.json",
+  "obs_preview": "obs-monet-preview.png"
+}

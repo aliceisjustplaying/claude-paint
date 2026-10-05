@@ -247,7 +247,7 @@ neighbors'): pressed hard at a root and lifted to nothing at a tip, swelling
 through a turn. A pointed brush (`point=`) widens as it is pressed, so its
 mark swells from a hairline and tapers back to one with the pressure; a
 blunt one narrows at a light touch too (to about a third), but has no point.
-`wobble` (units) lets the hand drift sideways. Use gestures for the marks
+`wobble` (units, up to 100) lets the hand drift sideways. Use gestures for the marks
 that carry the picture: the few decisive strokes a passage needs.
 
 **Thick paint.** `lay` (a brush option) sets how much paint a full brush

@@ -2077,6 +2077,7 @@ impl Canvas {
         self.tally.touch();
         let _id = self.next_stroke_ids(1);
         let mm_per_px = self.px_mm();
+        let id = self.next_stroke_ids(1);
         let sf = self.surf();
         let s = sf.scale;
         let mut rng = Rng::new(sp.seed);
@@ -2912,7 +2913,7 @@ mod part_tests {
 }
 
 /// The share of a tube paint's volume that is oil (about 30–45%).
-const OIL_SHARE: f32 = 0.4;
+pub(crate) const OIL_SHARE: f32 = 0.4;
 
 /// How far (µm) below the paint under a knife's blade it is pressed into the
 /// hollows of the surface (`Canvas::knife`).

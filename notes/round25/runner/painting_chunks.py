@@ -7,7 +7,8 @@ or only mixed piles and loaded brushes counted as painting and earned another si
 A chunk paints if its code (comments and strings removed) refers to a mark-making verb of
 the easel (notes/easel_guide.md): the globals `canvas work blend stipple lose erase fix` (and the finishing verbs of older
 builds), or
-the methods `stroke touch paint sketch line rule hatch` (brush, outline and pencil marks).
+the methods `stroke gesture touch spatter paint sketch line rule hatch lay scrape wipe blot`
+(brush, outline, pencil, knife and rag marks).
 Painters wrap verbs in helpers (`function dab(x, y) b:touch(x, y) end`), so every function a
 painting chunk defines, and every alias it makes of a painting name, becomes a painting name
 for the chunks after it. It errs toward "paints": a chunk that only defines a helper around a
@@ -18,7 +19,8 @@ import re
 
 VERBS = {"canvas", "work", "blend", "stipple", "lose", "erase", "fix",
          "varnish", "cracks", "relief"}   # finishing verbs of older builds (not in the painter build)
-METHODS = {"stroke", "touch", "paint", "sketch", "line", "rule", "hatch"}
+METHODS = {"stroke", "gesture", "touch", "spatter", "paint", "sketch", "line", "rule", "hatch",
+           "lay", "scrape", "wipe", "blot"}
 
 _CHUNK = re.compile(r"^--@ chunk (\d+)", re.M)
 # Long comments/strings first, then comments, then quoted strings (with escapes).

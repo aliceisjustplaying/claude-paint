@@ -550,16 +550,27 @@ impl Canvas {
     /// `solv_um` µm of solvent at pixel `i`, mixing by volume as a brush's
     /// paint does (`bristle::Surf::add`).
     fn rag_lay(&mut self, i: usize, v: f32, pl: &Pool, solv_um: f32) {
+        let nh = hide_mixed(self.engine);
+        // engine 4: smeared paint lies on the canvas as a brush's does
+        // (`Surf::add`): its turpentine evaporates as it is laid, leaving a
+        // film of the paint's own body that much thinner
+        let mut ph = pl.hide;
+        let v = if self.engine >= 4 && ph[3] > 0.0 {
+            let v = v * (1.0 - ph[3].clamp(0.0, 0.95));
+            ph[3] = 0.0;
+            v
+        } else {
+            v
+        };
         let t = self.wet.vol[i] + v;
         let a = v / t;
-        let nh = hide_mixed(self.engine);
         let l = &mut self.wet.lat[i];
         for k in 0..l.len() {
             l[k] += (pl.lat[k] - l[k]) * a;
         }
         let hd = &mut self.wet.hide[i];
         for k in 0..nh {
-            hd[k] += (pl.hide[k] - hd[k]) * a;
+            hd[k] += (ph[k] - hd[k]) * a;
         }
         if self.wet.clock.px.len() == self.wet.vol.len() {
             let p = &mut self.wet.clock.px[i];
@@ -567,6 +578,21 @@ impl Canvas {
         }
         self.wet.cover[i] = 1.0;
         self.wet.vol[i] = t;
+        // and an absorbent ground under it draws oil out of the paint just
+        // laid until its pores are full (as `Surf::add`)
+        if self.engine >= 4 && self.absorb_any && self.absorb[i] > 0.0 {
+            let hd = &mut self.wet.hide[i];
+            let oil_in = v * crate::bristle::OIL_SHARE * hd[4].max(0.0);
+            let take = self.absorb[i].min(0.8 * oil_in);
+            if take > 0.0 {
+                self.absorb[i] -= take;
+                let film_oil = (t * crate::bristle::OIL_SHARE * hd[4].max(0.0)).max(1e-9);
+                let lean = (take / film_oil).min(0.9);
+                hd[4] *= 1.0 - lean;
+                hd[1] = (hd[1] * (1.0 + lean) * (1.0 + lean)).min(1.0);
+                self.wet.vol[i] = (t - take).max(0.0);
+            }
+        }
         if solv_um > 0.0
             && let Some(sv) = self.wet.solv.get_mut(i)
         {

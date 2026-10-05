@@ -2941,7 +2941,7 @@ mod part_tests {
 }
 
 /// The share of a tube paint's volume that is oil (about 30–45%).
-const OIL_SHARE: f32 = 0.4;
+pub(crate) const OIL_SHARE: f32 = 0.4;
 
 /// How far (µm) below the paint under a knife's blade it is pressed into the
 /// hollows of the surface (`Canvas::knife`).

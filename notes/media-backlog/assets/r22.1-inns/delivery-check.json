@@ -1,0 +1,105 @@
+{
+  "verified_at": "2026-10-05T17:50:37.949763+00:00",
+  "id": "r22.1-inns",
+  "status": "verified for delivery: authorized substitute",
+  "file_sha256": {
+    "r22.1-inns-finished.png": "22257ee33b47d8261cfe39f75a2379f44478a068f6e7b461fa6cc57e85a36ebd",
+    "r22.1-inns-normal.png": "96a9eb41d3db541b249c2868b788f71a5ba16c485d9198d0d34631567918d97f",
+    "r22.1-inns-substitute-f334aef.png": "22257ee33b47d8261cfe39f75a2379f44478a068f6e7b461fa6cc57e85a36ebd",
+    "r22.1-inns-substitute-f334aef.mp4": "006632b23900f200af0743b46018d9e51bf37d9ca46914b357abe137b532a9e6",
+    "substitute-video-review.png": "f4abf7397c0758a69b25bc7e8d7c3bd0ed49e1ac1882607f8e9109a7ca7470e6"
+  },
+  "visual_review": {
+    "final_png": "Inspected exact substitute PNG: meadow, trees and small figure, full painting retained, varnish/cracks visible; no protected identity or home paths visible.",
+    "video_contact_sheet": "Inspected exact frames at 0, 6, 12 and 19.5 seconds: painting progression reaches finished painting; whole painting retained with no protected identity visible."
+  },
+  "privacy": {
+    "protected_literals_in_deliverable_bytes": 0,
+    "png_chunks": {
+      "r22.1-inns-finished.png": [
+        "IDAT",
+        "IEND",
+        "IHDR"
+      ],
+      "r22.1-inns-normal.png": [
+        "IDAT",
+        "IEND",
+        "IHDR"
+      ],
+      "r22.1-inns-substitute-f334aef.png": [
+        "IDAT",
+        "IEND",
+        "IHDR"
+      ],
+      "substitute-video-review.png": [
+        "IDAT",
+        "IEND",
+        "IHDR",
+        "pHYs"
+      ]
+    },
+    "video_tags": {
+      "stream": {
+        "language": "und",
+        "handler_name": "VideoHandler",
+        "encoder": "Lavc63.1.101 libx264"
+      },
+      "format": {
+        "major_brand": "isom",
+        "minor_version": "512",
+        "compatible_brands": "isomiso2avc1mp41",
+        "encoder": "Lavf63.1.101"
+      }
+    }
+  },
+  "video": {
+    "width": 1920,
+    "height": 1280,
+    "duration_seconds": 20,
+    "codec": "h264",
+    "pixel_format": "yuv420p",
+    "fps": 24,
+    "frames": 480,
+    "crop": false,
+    "faststart": true,
+    "atoms": {
+      "ftyp": 0,
+      "moov": 32,
+      "free": 6590,
+      "mdat": 6598
+    },
+    "full_decode": "Passed in substitute render workflow."
+  },
+  "replay": {
+    "source_commit": "f334aef11d0c069b083371d2cb8ceb4865664e83",
+    "engine_sha256": "38c4fc4c8614a05863207f379b69fea3394ab25754a4749c43b82ad26c7af7df",
+    "original_source_unverified": "0e00118",
+    "original_chunks": 311,
+    "automatic_finishing_chunks": 1,
+    "full_replay_success": true,
+    "sampled_frames": 1404,
+    "finished_png_byte_exact_to_original": true,
+    "rgb_pixel_exact": true,
+    "difference_metrics": {
+      "comparison": "Original finished PNG versus full-resolution substitute finished replay",
+      "width": 2400,
+      "height": 1600,
+      "pixels": 3840000,
+      "rgb_byte_range": [
+        0,
+        255
+      ],
+      "mean_absolute_channel_difference": 0.0,
+      "root_mean_square_channel_difference": 0.0,
+      "maximum_channel_difference": 0,
+      "changed_channels": 0,
+      "changed_pixels": 0,
+      "changed_pixel_percent": 0.0,
+      "png_byte_exact": true,
+      "rgb_pixel_exact": true,
+      "interpretation": "Measured image difference; not proof of exact source or physical equivalence."
+    },
+    "provenance": "Authorized historical substitute. Matching final output does not establish original source identity or exact intermediate states."
+  },
+  "public_links": null
+}

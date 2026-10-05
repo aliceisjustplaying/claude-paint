@@ -1,0 +1,46 @@
+{
+  "verified_at": "2026-10-05T16:03:46.682500+00:00",
+  "id": "r27-hopr",
+  "status": "verified for delivery",
+  "finished_png_sha256": "dd801495d9a593285bec2b93cc7251c27cbda6d2822ffe6be252572be0ab0916",
+  "normal_png_sha256": "4d25be443e113a83546d57334794517b653478965635cd657e20161c52c1ab7c",
+  "video_sha256": "83e7e5c8bf0573478071206b6661ca5ede28d6648cd727d8d0f19e2369bc03b3",
+  "visual_review": {
+    "final_png": "Inspected exact deliverable; full painting present, automatic varnish/crack surface visible, signature reads Claude; no protected identity or home paths visible.",
+    "video_contact_sheet": "Inspected exact video-review.png extracted from MP4 at 0, 6, 12 and 19.5 seconds; progression from bare canvas to completed finished painting; whole painting retained."
+  },
+  "metadata_and_file_scan": {
+    "png_text_chunks": false,
+    "protected_literals_found": 0,
+    "files": [
+      "r27-hopr-finished.png",
+      "r27-hopr-normal.png",
+      "r27-hopr.mp4",
+      "video-review.png"
+    ],
+    "video_embedded_tags": "Inspected ffprobe tags; only encoder/container/language/handler metadata, no protected names or home paths.",
+    "sha256_matches_receipt": true
+  },
+  "video": {
+    "width": 1920,
+    "height": 1200,
+    "duration_seconds": 20.0,
+    "codec": "h264",
+    "pixel_format": "yuv420p",
+    "fps": 24,
+    "frames": 480,
+    "aspect_ratio": 1.6,
+    "crop": false,
+    "faststart_moov_before_mdat": true,
+    "full_decode": "Succeeded in render workflow; replay-clip.log records ffmpeg decode to null."
+  },
+  "replay": {
+    "source_commit": "4b9bef6a5872803f4f20623c15b7677a152db70c",
+    "original_chunks": 137,
+    "automatic_finishing_chunks": 1,
+    "full_finished_replay_byte_exact": true,
+    "recorded_frames": 409
+  },
+  "public_links": null,
+  "hosting": "Local durable delivery authorized; no new hosting architecture or gallery entries."
+}

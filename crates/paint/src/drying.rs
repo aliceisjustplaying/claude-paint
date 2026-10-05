@@ -1158,8 +1158,9 @@ mod tests {
     /// At equal thickness, lead white and raw umber are touch-dry before
     /// titanium white and bone black, and alizarin (permanent alizarin, rose
     /// madder) is the slowest of them (every source orders them so). Of the
-    /// tubes this build has (`tube`): lead white and bone black are in every
-    /// box, titanium white in none.
+    /// tubes this build has (`tube`): lead white is in every box, bone black
+    /// in every box but the giverny box (which has no black), titanium white
+    /// in none (its numbers are given here).
     #[test]
     fn fast_pigments_dry_before_slow_ones() {
         fn dry(name: &'static str) -> Option<(&'static str, f32)> {
@@ -1173,7 +1174,7 @@ mod tests {
         }
         let of = |names: &[&'static str]| names.iter().filter_map(|&n| dry(n)).collect::<Vec<_>>();
         let (fast, medium, slow) = (of(&["lead white", "raw umber"]), of(&["titanium white", "bone black"]), of(&["permanent alizarin", "rose madder"]));
-        assert!(fast.iter().any(|f| f.0 == "lead white") && medium.len() == 2);
+        assert!(fast.iter().any(|f| f.0 == "lead white") && medium.iter().any(|m| m.0 == "titanium white"));
         let first = |v: &[(&str, f32)]| v.iter().map(|x| x.1).fold(f32::MAX, f32::min);
         let last = |v: &[(&str, f32)]| v.iter().map(|x| x.1).fold(f32::MIN, f32::max);
         assert!(last(&fast) < first(&medium), "{fast:?} before {medium:?}");

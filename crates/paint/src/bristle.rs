@@ -2095,8 +2095,12 @@ impl Spatter {
 
 impl Canvas {
     /// Flick a held brush (see `Spatter`); returns how many droplets landed.
+    ///
+    /// Panics if a number in `sp` is not finite, or if the brush holds
+    /// solvent and the canvas's engine is before 3 (as `drag`).
     pub fn spatter(&mut self, held: &mut Held, sp: &Spatter, clip: Option<&Mask>) -> usize {
         held.tool.assert_valid();
+        // (before any paint leaves the brush)
         sp.assert_valid();
         if self.engine < 3 {
             self.assert_thinner_supported(held.holds_solvent(), "Canvas::spatter");

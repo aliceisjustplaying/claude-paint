@@ -1132,9 +1132,6 @@ impl Server {
         let before = image::open(&real).map_err(|e| format!("--compare {}: {e}", prev.display()))?.to_rgb8();
         let h = now.height();
         let bw = ((before.width() as f64 * h as f64 / before.height() as f64).round() as u32).max(1);
-        if u64::from(bw) > 4 * u64::from(now.width()) || 4 * u64::from(bw) < u64::from(now.width()) {
-            return Err("--compare: the earlier look crop has a different shape".into());
-        }
         let total_width = bw.checked_add(12).and_then(|w| w.checked_add(now.width()));
         if total_width.is_none_or(|w| w > 16384 || u64::from(w) * u64::from(h) > 32_000_000) {
             return Err("--compare: the combined picture is too large".into());

@@ -85,7 +85,7 @@ pub(crate) fn install(lua: &Lua, st: S) -> Result<()> {
             }
         };
         if !(coats.is_finite() && vary.is_finite() && coats >= 0.0 && vary >= 0.0) {
-            return err("varnish: coats and vary must be finite and nonnegative");
+            return err("varnish: coats and vary must be nonnegative and finite");
         }
         // brushed over the whole canvas once it is dry
         needs_dry(&st1, "varnish")?;

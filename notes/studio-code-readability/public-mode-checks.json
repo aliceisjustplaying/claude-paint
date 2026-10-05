@@ -1,0 +1,15 @@
+{
+  "checkedAt": "2026-10-05T13:37:43.912Z",
+  "publicModeWithCSP": "pass",
+  "localAssets": true,
+  "noJavaScriptEvalAllowance": true,
+  "missingWorkerRawFallback": "pass",
+  "missingWorkerCloseButton": "pass",
+  "pageErrors": [],
+  "studioTests": {
+    "command": "PYTHONDONTWRITEBYTECODE=1 uv run --no-project --with pytest --with pillow python -m pytest -q -p no:cacheprovider studio/test_studio.py",
+    "passed": 46,
+    "failed": 0,
+    "seconds": 17.93
+  }
+}

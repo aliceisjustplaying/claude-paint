@@ -38,6 +38,13 @@ def scrub(body):
     """The home folder as ~ and the account name as `user`, in a response's text."""
     return re.sub(re.escape(USER.encode()), b"user", body.replace(HOME.encode(), b"~"), flags=re.I)
 HERE = os.path.dirname(os.path.abspath(__file__))
+VIEWER_ASSETS = {
+    "stream.css": "text/css; charset=utf-8",
+    "code-format.js": "text/javascript; charset=utf-8",
+    "vendor/stylua/stylua_lib_web.js": "text/javascript; charset=utf-8",
+    "vendor/stylua/stylua_lib_bg.wasm": "application/wasm",
+    "vendor/stylua/LICENSE.md": "text/plain; charset=utf-8",
+}
 _cache = {}  # path -> {"offset", "events", "images", "calls"}: one session file, parsed so far
 _streams = {}  # key -> a stitched stream of session files (see stream())
 _locks = {}
@@ -593,14 +600,14 @@ class H(http.server.BaseHTTPRequestHandler):
         pass
 
     def _send(self, code, body, ctype):
-        if PUBLIC and not ctype.startswith("image/"):
+        if PUBLIC and not ctype.startswith("image/") and ctype != "application/wasm":
             body = scrub(body)
         self.send_response(code)
         self.send_header("Content-Type", ctype)
         # a look never changes: the browser keeps it (and asks again for everything else)
         self.send_header("Cache-Control", "private, max-age=86400, immutable" if ctype.startswith("image/") else "no-store")
         if PUBLIC:
-            self.send_header("Content-Security-Policy", "default-src 'self'; script-src 'self' 'unsafe-inline'; "
+            self.send_header("Content-Security-Policy", "default-src 'self'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval'; "
                              "style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:")
         self.end_headers()
         self.wfile.write(body)
@@ -620,9 +627,10 @@ class H(http.server.BaseHTTPRequestHandler):
             if PUBLIC:
                 page = page.replace(b'<label id="allwrap"', b'<label id="allwrap" hidden')
             return self._send(200, page, "text/html; charset=utf-8")
-        if u.path == "/stream.css":  # the livestream's layout: the page loads it itself with ?stream=1
-            with open(os.path.join(HERE, "stream.css"), "rb") as fh:
-                return self._send(200, fh.read(), "text/css; charset=utf-8")
+        asset = u.path.lstrip("/")
+        if asset in VIEWER_ASSETS:
+            with open(os.path.join(HERE, asset), "rb") as fh:
+                return self._send(200, fh.read(), VIEWER_ASSETS[asset])
         if u.path == "/api/sessions":
             ss = list_sessions()
             for s in ss:

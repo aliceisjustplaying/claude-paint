@@ -5,6 +5,7 @@
 import http.server
 import json
 import os
+import shutil
 import subprocess
 import sys
 import threading
@@ -167,10 +168,15 @@ def test_runner_outcome_reaches_viewer_without_treating_export_as_completion(hom
 
 
 def old_export(tmp_path, out):
-    """out as the exporter before the list left it: index.html and data/, no .studio-export (and no stream.css)."""
+    """An export before asset files and the ownership list: only index.html and data/."""
     assert export(tmp_path, out).returncode == 0
-    (out / ".studio-export").unlink()
-    (out / "stream.css").unlink()
+    for p in out.iterdir():
+        if p.name in ("index.html", "data"):
+            continue
+        if p.is_dir():
+            shutil.rmtree(p)
+        else:
+            p.unlink()
 
 
 @pytest.mark.parametrize("old", [False, True], ids=["other folder", "old export plus a stray file"])
@@ -306,20 +312,26 @@ def test_the_picker_gets_the_newest_whole_look_and_the_title_from_the_closing_re
     assert picture == png_of("blue")
 
 
-def test_the_stream_layout_is_beside_the_page_on_the_public_server_and_in_the_export(home, server, monkeypatch):
-    # the page asks for stream.css next to itself when its address has ?stream=1 (the livestream runs --public);
-    # a browser only applies it as a stylesheet if it is served as text/css
+@pytest.mark.parametrize("asset,ctype", [
+    ("stream.css", "text/css"),
+    ("code-format.js", "text/javascript"),
+    ("vendor/stylua/stylua_lib_web.js", "text/javascript"),
+    ("vendor/stylua/stylua_lib_bg.wasm", "application/wasm"),
+    ("vendor/stylua/LICENSE.md", "text/plain"),
+])
+def test_viewer_assets_load_on_the_public_server_and_in_the_export(home, server, monkeypatch, asset, ctype):
+    # Styles, module workers and WASM need the correct MIME types and unmodified bytes.
     tmp_path, studio, log = home
     log.write_text(start(str(studio)) + call("c1", "canvas{}") + result("c1", "ok · chunk 1"))
-    with open(os.path.join(HERE, "stream.css"), "rb") as fh:
-        css = fh.read()
+    with open(os.path.join(HERE, asset), "rb") as fh:
+        body = fh.read()
     monkeypatch.setattr(S, "PUBLIC", True)
-    with urllib.request.urlopen(server.base + "/stream.css") as r:
-        assert (r.status, r.headers.get_content_type(), r.read()) == (200, "text/css", css)
+    with urllib.request.urlopen(server.base + "/" + asset) as r:
+        assert (r.status, r.headers.get_content_type(), r.read()) == (200, ctype, body)
     out = tmp_path / "out"
     r = export(tmp_path, out)
     assert r.returncode == 0, r.stderr
-    assert (out / "stream.css").read_bytes() == css
+    assert (out / asset).read_bytes() == body
 
 
 def read_picture(i, path, png):

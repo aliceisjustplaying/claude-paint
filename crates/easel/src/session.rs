@@ -59,7 +59,7 @@ struct Snap {
     canvas: Option<Canvas>,
     style: Option<Rc<Style>>,
     setup: Option<String>,
-    fabric: Option<paint::Fabric>,
+    canvas_src: Option<String>,
     seed: u64,
     clock: f64,
     clock0: f64,
@@ -82,7 +82,6 @@ pub struct Session {
     state: *mut mlua::ffi::lua_State,
     pub st: Rc<RefCell<Studio>>,
     pub log: Vec<Chunk>,
-    pub scratch: Option<Box<Session>>,
     /// A disposable replay (`easel run`, `check`): no snapshot, since a
     /// failure ends it. A live session snapshots before every chunk so a
     /// failure can roll back.
@@ -178,7 +177,7 @@ impl Session {
         })?;
         let own = global_values(&lua)?;
         let globals = own.iter().map(|(k, v)| (k.clone(), (v.clone(), 0))).collect();
-        Ok(Session { lua: ManuallyDrop::new(lua), state, st, log: Vec::new(), scratch: None, replay: false, deadline, chunk_limit: CHUNK_LIMIT, heap: Some((snap_f, restore_f)), prelude: Some(prelude), stale: false, unrestored: false, globals, own, chunks_before: 0, _serials: serials, #[cfg(test)] fail_at: Cell::new(None) })
+        Ok(Session { lua: ManuallyDrop::new(lua), state, st, log: Vec::new(), replay: false, deadline, chunk_limit: CHUNK_LIMIT, heap: Some((snap_f, restore_f)), prelude: Some(prelude), stale: false, unrestored: false, globals, own, chunks_before: 0, _serials: serials, #[cfg(test)] fail_at: Cell::new(None) })
     }
 
     /// A session that replays a program from the default box (tests;
@@ -208,7 +207,6 @@ impl Session {
     /// the reopen anyway, and no time limit. Off again once the log is in.
     pub fn set_replaying(&mut self, on: bool) {
         self.replay = on;
-        if let Some(s) = &mut self.scratch { s.set_replaying(on); }
     }
 
     fn snap(&mut self) -> mlua::Result<Snap> {
@@ -229,7 +227,7 @@ impl Session {
             let v = *r.borrow();
             (r, v)
         }).collect();
-        Ok(Snap { canvas: s.canvas.clone(), style: s.style.clone(), setup: s.setup.clone(), fabric: s.fabric.clone(), seed: s.seed, clock: s.clock, clock0: s.clock0, hand: s.hand.clone(), board: s.board.clone(), view: s.view.clone(), heap, brushes, knives, rags })
+        Ok(Snap { canvas: s.canvas.clone(), style: s.style.clone(), setup: s.setup.clone(), canvas_src: s.canvas_src.clone(), seed: s.seed, clock: s.clock, clock0: s.clock0, hand: s.hand.clone(), board: s.board.clone(), view: s.view.clone(), heap, brushes, knives, rags })
     }
 
     /// Put everything back as it was at `snap`. Returns how many Lua tables
@@ -251,7 +249,7 @@ impl Session {
         s.canvas = snap.canvas.clone();
         s.style = snap.style.clone();
         s.setup = snap.setup.clone();
-        s.fabric = snap.fabric.clone();
+        s.canvas_src = snap.canvas_src.clone();
         s.seed = snap.seed;
         s.clock = snap.clock;
         s.clock0 = snap.clock0;
@@ -2005,6 +2003,28 @@ mod tests {
 
     /// A sketch's log says it is one, so it replays at its width under any
     /// file name; a painting's log doesn't.
+    /// The scratch canvas is set up with the painting's `canvas{...}` as the easel wrote it
+    /// back (`Studio::canvas_src`): run in a fresh session it makes the same canvas, every
+    /// option kept (a two-layer ground with texture and absorbent, and a raw canvas).
+    #[test]
+    #[cfg(tube_box)]
+    fn a_canvas_written_back_sets_up_the_same_canvas() {
+        for call in [
+            r#"canvas{size=320, aspect=1.25, linen={14, 17}, seed=9, ground={{pile={{"lead white", 3}, {"yellow ochre", 0.5}}, um=90, apply="brush"}, {pile={{"lead white", 1}}, um=40.5, apply="knife", texture=0.7, absorbent=0.6}}}"#,
+            r#"canvas{size=300, aspect=1, linen=20, seed=4, raw="cotton duck"}"#,
+        ] {
+            let mut a = Session::new(160).unwrap();
+            a.run(call).unwrap();
+            let src = a.st.borrow().canvas_src.clone().expect("canvas{} writes itself back");
+            let mut b = Session::new(160).unwrap();
+            b.run(&src).unwrap_or_else(|e| panic!("{src}: {e}"));
+            let (ca, cb) = (a.canvas().unwrap(), b.canvas().unwrap());
+            let bits = |c: &Canvas| c.seen().iter().flat_map(|p| p.map(f32::to_bits)).collect::<Vec<_>>();
+            assert!(bits(&ca) == bits(&cb), "{call}\nwritten back as {src}: another canvas");
+            assert_eq!(a.st.borrow().setup, b.st.borrow().setup, "{src}");
+        }
+    }
+
     #[test]
     #[cfg(tube_box)]
     fn a_sketch_s_log_says_so() {

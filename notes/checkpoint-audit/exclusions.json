@@ -1,5 +1,5 @@
 {
-  "verified_at_utc": "2026-10-05T20:40:41.402Z",
+  "verified_at_utc": "2026-10-05T20:49:36.005Z",
   "groups": {
     "images-and-videos": {
       "files": 48,
@@ -27,20 +27,14 @@
         "notes/media-backlog/assets/r22.1-inns/substitute-frames.tsv",
         "notes/media-backlog/assets/r22.1-inns/substitute-full-replay.log"
       ]
-    },
-    "authored-source-hook-blocked": {
-      "files": 1,
-      "bytes": 13719,
-      "examples": [
-        "notes/media-backlog/render_batch.py"
-      ]
     }
   },
   "hook_block": {
     "file": "notes/media-backlog/render_batch.py",
     "line": 88,
     "reason": "pre-commit rejected the literal protected-name privacy regex",
-    "resolution": "File retained unchanged; no hook bypass or regex weakening. Other staged authored files committed."
+    "resolution": "Resolved by the explicitly authorized removal of the literal name check from this script; home-path checks remain. Git privacy hooks are unchanged. The source is included in the local checkpoint.",
+    "state": "resolved"
   },
   "publication": "No push or external publication performed.",
   "feature_checkpoint": {

@@ -441,6 +441,9 @@ struct Plan {
     tool: Option<Tool>,
     /// Sized by `scale_at`: a fresh brush of its size that always dips.
     sized: bool,
+    /// Graded color (`piles_at`): the second pile the brush picks a little
+    /// up from, after its main pile (`want`), when it weighs enough.
+    pickup: Option<Rgb>,
 }
 
 impl Canvas {
@@ -558,7 +561,7 @@ impl Canvas {
             // (sized marks: this stroke's length and brush, from where it is)
             let k = scale_here(cx, cy);
             let len = if hd.scale_at.is_some() { len0 * k } else { len0 };
-            let stool = hd.scale_at.as_ref().map(|_| Tool { width: hd.tool.width * k, ..hd.tool.clone() });
+            let stool = hd.scale_at.as_ref().map(|_| sized(&hd.tool, k));
             let width = stool.as_ref().map_or(hd.tool.width, |t| t.width);
             let bend = rng.normal() * hd.angle_jitter;
             let pts: Vec<(f32, f32)> = if hd.scrub > 0 {
@@ -730,7 +733,7 @@ impl Canvas {
         let reach = {
             // a straight dab's footprint (units), plus room for its bow
             const X: f32 = 1.0e4;
-            let (rtool, rlen) = (Tool { width: hd.tool.width * kmax, ..hd.tool.clone() }, len * kmax);
+            let (rtool, rlen) = (sized(&hd.tool, kmax), len * kmax);
             let r = footprint(&rtool, &[(X - 0.5 * rlen, X), (X + 0.5 * rlen, X)], hd.shake, 1.0, 1 << 16, 1 << 16);
             r.map_or(rlen, |r| (X - r.0 as f32).max(r.2 as f32 - X).max(X - r.1 as f32).max(r.3 as f32 - X)) + 0.15 * rlen
         };
@@ -748,7 +751,7 @@ impl Canvas {
             let bend = rng.normal() * hd.angle_jitter;
             // (sized marks: this dab's length and brush, from where it is)
             let k = scale_of(hd, f, c.0, c.1).min(kmax);
-            let dtool = hd.scale_at.as_ref().map(|_| Tool { width: hd.tool.width * k, ..hd.tool.clone() });
+            let dtool = hd.scale_at.as_ref().map(|_| sized(&hd.tool, k));
             let pts = hand_trace(hd, &drift, c.0, c.1, len * k, bend, &mut rng);
             let (rect, mut plan) = finish_plan(self, hd, dtool.as_ref().unwrap_or(&hd.tool), c, pts, &mut rng);
             // a dab takes a touch of paint (as in `work`), on a brush of its
@@ -901,11 +904,15 @@ impl Canvas {
                         self.tally.wipe();
                     } else if p.fresh && !p.sized {
                         // (and a double-loaded brush's second dip)
-                        self.tally.reload((1 + p.dip2.is_some() as u8) as f64 / crate::tally::pace::DABS_PER_RELOAD);
+                        self.tally.reload((1 + p.dip2.is_some() as u8 + p.pickup.is_some() as u8) as f64 / crate::tally::pace::DABS_PER_RELOAD);
                     } else {
                         piles.trip(&mut self.tally, p.want);
                         if let Some((_, _, want2)) = p.dip2 {
                             piles.trip(&mut self.tally, want2);
+                        }
+                        // (a graded dip's pickup from the next pile)
+                        if let Some(c) = p.pickup {
+                            piles.trip(&mut self.tally, c);
                         }
                     }
                 }
@@ -993,6 +1000,13 @@ fn finish_plan(cv: &Canvas, hd: &Handling, tool: &Tool, c: (f32, f32), pts: Vec<
             }
             let mut parts: Vec<(usize, f32)> = Vec::new();
             let (mut med, mut thin) = (0.0f32, 0.0f32);
+            // the piles a painter goes to for this mix: the one that weighs
+            // most, and the next if it weighs a fifth or more (picked up on
+            // the brush, as a gradient is painted, not mixed afresh each time)
+            let mut order: Vec<usize> = (0..ps.len()).filter(|&k| w[k] > 0.0).collect();
+            order.sort_by(|&a, &b| w[b].total_cmp(&w[a]).then(a.cmp(&b)));
+            let main = ps[order[0]].0.color;
+            let next = order.get(1).filter(|&&k| w[k] / tot >= 0.2).map(|&k| ps[k].0.color);
             for (k, (m, md, _)) in ps.iter().enumerate() {
                 let wk = w[k] / tot;
                 if wk <= 0.0 {
@@ -1008,11 +1022,16 @@ fn finish_plan(cv: &Canvas, hd: &Handling, tool: &Tool, c: (f32, f32), pts: Vec<
                 med += wk * md;
                 thin += wk * hd.piles_thinner.get(k).copied().unwrap_or(hd.thinner);
             }
-            Some((pal.pile(parts), med, thin))
+            Some((pal.pile(parts), med, thin, main, next))
         });
         let (pile, medium, thinner) = match &graded {
-            Some((m, md, t)) => (m, md, *t),
+            Some((m, md, t, _, _)) => (m, md, *t),
             None => (pile0, medium0, hd.thinner),
+        };
+        // the palette trips: a graded dip goes to its main pile and picks up the next
+        let (want, pickup) = match &graded {
+            Some((_, _, _, main, next)) => (*main, *next),
+            None => (pile.color, None),
         };
         // the pile on the palette, as knifed (its own mixing generator)
         let mut prng = Rng::new(rng.next_u64());
@@ -1026,7 +1045,7 @@ fn finish_plan(cv: &Canvas, hd: &Handling, tool: &Tool, c: (f32, f32), pts: Vec<
             let p2 = if s2.thinner > 0.0 { p2.with_thinner(s2.thinner) } else { p2 };
             (p2, s2.load * load_k, s2.pile.color)
         });
-        return (rect, Plan { pts, pressure, fade, dip: Some(paint), load, swell: Vec::new(), passage: 0, fresh: false, id: None, want: pile.color, dip2, tool: None, sized: false });
+        return (rect, Plan { pts, pressure, fade, dip: Some(paint), load, swell: Vec::new(), passage: 0, fresh: false, id: None, want, dip2, tool: None, sized: false, pickup });
     }
     let target = (hd.color)(c.0, c.1);
     let lab = to_oklab(target);
@@ -1037,7 +1056,7 @@ fn finish_plan(cv: &Canvas, hd: &Handling, tool: &Tool, c: (f32, f32), pts: Vec<
     ]);
     let paint = Paint::new(col, hd.hiding, hd.stiff);
     let load = hd.load * load_k;
-    (rect, Plan { pts, pressure, fade, dip: Some(paint), load, swell: Vec::new(), passage: 0, fresh: false, id: None, want: target, dip2: None, tool: None, sized: false })
+    (rect, Plan { pts, pressure, fade, dip: Some(paint), load, swell: Vec::new(), passage: 0, fresh: false, id: None, want: target, dip2: None, tool: None, sized: false, pickup: None })
 }
 
 /// The part of a stroke through `c` that stays inside `mask` (≥ 0.5), pulled
@@ -1217,6 +1236,16 @@ fn mask_cells(mask: &Mask, thr: f32, cell: f32, cw: usize, ch: usize) -> (usize,
     }
     let c = |px: usize, n: usize| (((px as f32 + 0.5) / mf.scale / cell) as usize).min(n - 1);
     (c(x0, cw), c(y0, ch), c(x1, cw), c(y1, ch))
+}
+
+/// The brush for marks `k` times the size (`scale_at`): the same brush made
+/// `k` times larger, its hairs as much longer as it is wider. Its trail
+/// (`length`) and the stroke length over which a load runs down (`run`)
+/// grow with it, so it holds `k`² the paint (`k` times wider hairs, each `k`
+/// times the run) for a mark of `k`² the area: a mark lays the same film
+/// whatever its size, as a large brush does a small one's.
+fn sized(t: &Tool, k: f32) -> Tool {
+    Tool { width: t.width * k, length: t.length * k, run: t.run * k, ..t.clone() }
 }
 
 /// The range a mark's size (`scale_at`) is held to.

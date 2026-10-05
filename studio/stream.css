@@ -5,7 +5,7 @@
 body { background-color: var(--bg) !important }  /* (OBS's default custom CSS makes the body transparent) */
 #transport { display: none !important }
 footer { padding: 8px 14px !important }
-body.nocode main { grid-template-columns: minmax(0,54fr) minmax(0,46fr) !important }
+main { grid-template-columns: minmax(0,54fr) minmax(0,46fr) !important }
 #view .pic img { filter: none !important }
 /* what the painter is studying now (a close-up, a squint, a check in grays, a reference picture) is part of the show: as big as the painting, under its label */
 #view.two { grid-template-rows: minmax(0,1fr) minmax(0,1fr) !important; gap: 14px !important }

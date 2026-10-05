@@ -243,8 +243,9 @@ def main():
     # the gallery's page-view counter (Plausible, served from stillwet.art/v/), on the public copy only
     page = page.replace(b"</head>", PLAUSIBLE + b"</head>", 1)
     text(os.path.join(out, "index.html"), page)
-    with open(os.path.join(S.HERE, "stream.css"), "rb") as fh:  # the livestream's layout, for ?stream=1
-        text(os.path.join(out, "stream.css"), fh.read())
+    for asset in S.VIEWER_ASSETS:
+        with open(os.path.join(S.HERE, asset), "rb") as fh:
+            write(os.path.join(out, asset), fh.read())
     now = sorted(os.path.relpath(f, out) for f in WRITTEN)
     stale = 0
     for rel in set(before) - set(now):

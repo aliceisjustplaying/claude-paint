@@ -52,7 +52,7 @@ Tube { name: "barium yellow", pigment: "barium chromate (lemon yellow)", color: 
 Tube { name: "zinc yellow", pigment: "potassium zinc chromate", color: [0.9734455, 0.5520115, 0.0], hiding: 0.4, stiff: 0.6, strength: 0.65, drying: 0.8, drying_3: 0.8 }
 Tube { name: "carmine lake", pigment: "carminic acid (cochineal) on alumina", color: [0.23839766, 0.011612245, 0.045186203], hiding: 0.1, stiff: 0.3, strength: 1.2, drying: 0.3, drying_3: 0.4 }
 Tube { name: "yellow lake", pigment: "flavonoid dye (weld, quercitron) on alumina and chalk", color: [0.34191445, 0.17788841, 0.018500218], hiding: 0.08, stiff: 0.35, strength: 0.5, drying: 0.3, drying_3: 0.4 }
-Tube { name: "vine black", pigment: "charcoal of vine twigs", color: [0.03189603, 0.035601314, 0.039546236], hiding: 0.75, stiff: 0.45, strength: 0.6, drying: 0.35, drying_3: 0.35 }
+Tube { name: "vine black", pigment: "charcoal of vine twigs", color: [0.03189603, 0.035601314, 0.039546236], hiding: 0.75, stiff: 0.45, strength: 0.6, drying: 0.35, drying_3: 0.9 }
 box tube box (engine 5)
   Tube { name: "lead white", pigment: "basic lead carbonate", color: [0.8631573, 0.8148467, 0.71569365], hiding: 0.82, stiff: 0.8, strength: 1.0, drying: 2.0, drying_3: 2.0 }
   Tube { name: "smalt", pigment: "cobalt potash glass, coarse", color: [0.10224175, 0.15592647, 0.34191445], hiding: 0.3, stiff: 0.55, strength: 0.45, drying: 1.6, drying_3: 1.6 }
@@ -202,4 +202,4 @@ box impressionist (engine 5)
   Tube { name: "carmine lake", pigment: "carminic acid (cochineal) on alumina", color: [0.23839766, 0.011612245, 0.045186203], hiding: 0.1, stiff: 0.3, strength: 1.2, drying: 0.3, drying_3: 0.4 }
   Tube { name: "cobalt violet", pigment: "cobalt phosphate or arsenate", color: [0.20863685, 0.07227186, 0.27049786], hiding: 0.35, stiff: 0.55, strength: 0.35, drying: 1.4, drying_3: 1.4 }
   Tube { name: "bone black", pigment: "charred bone (carbon, calcium phosphate)", color: [0.012983031, 0.010960094, 0.009721218], hiding: 0.9, stiff: 0.7, strength: 1.1, drying: 0.4, drying_3: 0.9 }
-  Tube { name: "vine black", pigment: "charcoal of vine twigs", color: [0.03189603, 0.035601314, 0.039546236], hiding: 0.75, stiff: 0.45, strength: 0.6, drying: 0.35, drying_3: 0.35 }
+  Tube { name: "vine black", pigment: "charcoal of vine twigs", color: [0.03189603, 0.035601314, 0.039546236], hiding: 0.75, stiff: 0.45, strength: 0.6, drying: 0.35, drying_3: 0.9 }

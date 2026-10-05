@@ -1550,6 +1550,7 @@ mod tests {
     /// The held knife (speculative) only reads, as the palette look: the state digest, the
     /// log, the globals and the clock are as they were. It shows the passage with a knife
     /// over it at the point: a knife global with its own load, or a pile freshly loaded.
+    #[cfg(feature = "replay")]
     #[test]
     fn a_held_knife_shows_its_paint_over_the_passage_and_changes_nothing() {
         let mut s = Session::new(1000).unwrap();

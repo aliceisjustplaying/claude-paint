@@ -1,0 +1,10 @@
+   Compiling paint v0.1.0 (/private/tmp/paint-sweep.KHTpId/worktree/crates/paint)
+    Finished `test` profile [optimized + debuginfo] target(s) in 0.80s
+     Running tests/ground_grain.rs (target/debug/deps/ground_grain-6f95a3efb4b31fa7)
+
+running 1 test
+test thin_blend_bares_ground has been running for over 60 seconds
+test thin_blend_bares_ground ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 3 filtered out; finished in 110.30s
+

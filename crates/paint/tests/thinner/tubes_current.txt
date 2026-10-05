@@ -47,7 +47,13 @@ Tube { name: "Antwerp blue", pigment: "Prussian blue on an alumina base", color:
 Tube { name: "viridian", pigment: "hydrated chromium oxide", color: [0.011612245, 0.06847818, 0.051269468], hiding: 0.3, stiff: 0.5, strength: 0.9, drying: 1.0, drying_3: 1.0 }
 Tube { name: "emerald green", pigment: "copper aceto-arsenite", color: [0.016807375, 0.37626222, 0.19461781], hiding: 0.6, stiff: 0.6, strength: 0.6, drying: 1.6, drying_3: 1.6 }
 Tube { name: "cobalt violet", pigment: "cobalt phosphate or arsenate", color: [0.20863685, 0.07227186, 0.27049786], hiding: 0.35, stiff: 0.55, strength: 0.35, drying: 1.4, drying_3: 1.4 }
-box tube box (engine 3)
+Tube { name: "strontium yellow", pigment: "strontium chromate", color: [0.8879232, 0.73791057, 0.086500466], hiding: 0.55, stiff: 0.65, strength: 0.8, drying: 1.0, drying_3: 1.0 }
+Tube { name: "barium yellow", pigment: "barium chromate (lemon yellow)", color: [0.8631573, 0.67954254, 0.10702311], hiding: 0.45, stiff: 0.7, strength: 0.9, drying: 1.0, drying_3: 1.0 }
+Tube { name: "zinc yellow", pigment: "potassium zinc chromate", color: [0.9734455, 0.5520115, 0.0], hiding: 0.4, stiff: 0.6, strength: 0.65, drying: 0.8, drying_3: 0.8 }
+Tube { name: "carmine lake", pigment: "carminic acid (cochineal) on alumina", color: [0.23839766, 0.011612245, 0.045186203], hiding: 0.1, stiff: 0.3, strength: 1.2, drying: 0.3, drying_3: 0.4 }
+Tube { name: "yellow lake", pigment: "flavonoid dye (weld, quercitron) on alumina and chalk", color: [0.34191445, 0.17788841, 0.018500218], hiding: 0.08, stiff: 0.35, strength: 0.5, drying: 0.3, drying_3: 0.4 }
+Tube { name: "vine black", pigment: "charcoal of vine twigs", color: [0.03189603, 0.035601314, 0.039546236], hiding: 0.75, stiff: 0.45, strength: 0.6, drying: 0.35, drying_3: 0.9 }
+box tube box (engine 5)
   Tube { name: "lead white", pigment: "basic lead carbonate", color: [0.8631573, 0.8148467, 0.71569365], hiding: 0.82, stiff: 0.8, strength: 1.0, drying: 2.0, drying_3: 2.0 }
   Tube { name: "smalt", pigment: "cobalt potash glass, coarse", color: [0.10224175, 0.15592647, 0.34191445], hiding: 0.3, stiff: 0.55, strength: 0.45, drying: 1.6, drying_3: 1.6 }
   Tube { name: "pale smalt", pigment: "a paler grade of smalt", color: [0.26635566, 0.32777813, 0.47932023], hiding: 0.35, stiff: 0.55, strength: 0.35, drying: 1.6, drying_3: 1.6 }
@@ -62,7 +68,7 @@ box tube box (engine 3)
   Tube { name: "green earth", pigment: "celadonite and glauconite clay", color: [0.04231141, 0.06480328, 0.056128494], hiding: 0.2, stiff: 0.35, strength: 0.3, drying: 0.8, drying_3: 0.8 }
   Tube { name: "Rinmann's green", pigment: "cobalt-zinc oxide", color: [0.11443538, 0.27467737, 0.18116423], hiding: 0.35, stiff: 0.5, strength: 0.4, drying: 1.4, drying_3: 1.4 }
   Tube { name: "copper green", pigment: "verdigris ground in oil", color: [0.049706563, 0.21223073, 0.14412849], hiding: 0.25, stiff: 0.4, strength: 1.0, drying: 1.6, drying_3: 1.6 }
-box sargent (engine 3)
+box sargent (engine 5)
   Tube { name: "lead white", pigment: "basic lead carbonate", color: [0.8631573, 0.8148467, 0.71569365], hiding: 0.82, stiff: 0.8, strength: 1.0, drying: 2.0, drying_3: 2.0 }
   Tube { name: "zinc white", pigment: "zinc oxide", color: [0.8962694, 0.8962694, 0.8631573], hiding: 0.6, stiff: 0.6, strength: 1.0, drying: 0.35, drying_3: 0.35 }
   Tube { name: "lemon chrome", pigment: "pale lead chromate with lead sulfate", color: [0.8549927, 0.68668544, 0.045186203], hiding: 0.8, stiff: 0.7, strength: 0.8, drying: 1.8, drying_3: 1.8 }
@@ -91,7 +97,7 @@ box sargent (engine 3)
   Tube { name: "viridian", pigment: "hydrated chromium oxide", color: [0.011612245, 0.06847818, 0.051269468], hiding: 0.3, stiff: 0.5, strength: 0.9, drying: 1.0, drying_3: 1.0 }
   Tube { name: "emerald green", pigment: "copper aceto-arsenite", color: [0.016807375, 0.37626222, 0.19461781], hiding: 0.6, stiff: 0.6, strength: 0.6, drying: 1.6, drying_3: 1.6 }
   Tube { name: "cobalt violet", pigment: "cobalt phosphate or arsenate", color: [0.20863685, 0.07227186, 0.27049786], hiding: 0.35, stiff: 0.55, strength: 0.35, drying: 1.4, drying_3: 1.4 }
-box inness (engine 3)
+box inness (engine 5)
   Tube { name: "lead white", pigment: "basic lead carbonate", color: [0.8631573, 0.8148467, 0.71569365], hiding: 0.82, stiff: 0.8, strength: 1.0, drying: 2.0, drying_3: 2.0 }
   Tube { name: "lemon chrome", pigment: "pale lead chromate with lead sulfate", color: [0.8549927, 0.68668544, 0.045186203], hiding: 0.8, stiff: 0.7, strength: 0.8, drying: 1.8, drying_3: 1.8 }
   Tube { name: "cadmium yellow", pigment: "cadmium sulfide", color: [0.80695236, 0.37626222, 0.013702081], hiding: 0.85, stiff: 0.7, strength: 1.1, drying: 0.6, drying_3: 0.9 }
@@ -105,7 +111,7 @@ box inness (engine 3)
   Tube { name: "bone black", pigment: "charred bone (carbon, calcium phosphate)", color: [0.012983031, 0.010960094, 0.009721218], hiding: 0.9, stiff: 0.7, strength: 1.1, drying: 0.4, drying_3: 0.9 }
   Tube { name: "cobalt blue", pigment: "cobalt aluminate", color: [0.028426038, 0.09084173, 0.39157256], hiding: 0.55, stiff: 0.6, strength: 0.8, drying: 1.4, drying_3: 2.2 }
   Tube { name: "Antwerp blue", pigment: "Prussian blue on an alumina base", color: [0.019382361, 0.051269468, 0.1499598], hiding: 0.4, stiff: 0.45, strength: 1.6, drying: 1.6, drying_3: 1.6 }
-box alma-tadema (engine 3)
+box alma-tadema (engine 5)
   Tube { name: "lead white", pigment: "basic lead carbonate", color: [0.8631573, 0.8148467, 0.71569365], hiding: 0.82, stiff: 0.8, strength: 1.0, drying: 2.0, drying_3: 2.0 }
   Tube { name: "Naples yellow", pigment: "lead antimonate", color: [0.76052463, 0.48514998, 0.1274377], hiding: 0.85, stiff: 0.75, strength: 0.6, drying: 1.6, drying_3: 1.6 }
   Tube { name: "pale cadmium", pigment: "cadmium sulfide, a pale grade", color: [0.8713672, 0.56471163, 0.045186203], hiding: 0.85, stiff: 0.7, strength: 1.1, drying: 0.6, drying_3: 0.9 }
@@ -121,7 +127,7 @@ box alma-tadema (engine 3)
   Tube { name: "bone black", pigment: "charred bone (carbon, calcium phosphate)", color: [0.012983031, 0.010960094, 0.009721218], hiding: 0.9, stiff: 0.7, strength: 1.1, drying: 0.4, drying_3: 0.9 }
   Tube { name: "cobalt blue", pigment: "cobalt aluminate", color: [0.028426038, 0.09084173, 0.39157256], hiding: 0.55, stiff: 0.6, strength: 0.8, drying: 1.4, drying_3: 2.2 }
   Tube { name: "viridian", pigment: "hydrated chromium oxide", color: [0.011612245, 0.06847818, 0.051269468], hiding: 0.3, stiff: 0.5, strength: 0.9, drying: 1.0, drying_3: 1.0 }
-box tonn (engine 3)
+box tonn (engine 5)
   Tube { name: "lead white", pigment: "basic lead carbonate", color: [0.8631573, 0.8148467, 0.71569365], hiding: 0.82, stiff: 0.8, strength: 1.0, drying: 2.0, drying_3: 2.0 }
   Tube { name: "lead-tin yellow", pigment: "lead-tin oxide", color: [0.7681513, 0.6038274, 0.14412849], hiding: 0.85, stiff: 0.75, strength: 0.6, drying: 2.0, drying_3: 2.0 }
   Tube { name: "cadmium yellow", pigment: "cadmium sulfide", color: [0.80695236, 0.37626222, 0.013702081], hiding: 0.85, stiff: 0.7, strength: 1.1, drying: 0.6, drying_3: 0.9 }
@@ -136,7 +142,7 @@ box tonn (engine 3)
   Tube { name: "cerulean blue", pigment: "cobalt stannate", color: [0.049706563, 0.22322798, 0.45078585], hiding: 0.8, stiff: 0.7, strength: 0.6, drying: 1.4, drying_3: 1.4 }
   Tube { name: "green earth", pigment: "celadonite and glauconite clay", color: [0.04231141, 0.06480328, 0.056128494], hiding: 0.2, stiff: 0.35, strength: 0.3, drying: 0.8, drying_3: 0.8 }
   Tube { name: "cobalt violet", pigment: "cobalt phosphate or arsenate", color: [0.20863685, 0.07227186, 0.27049786], hiding: 0.35, stiff: 0.55, strength: 0.35, drying: 1.4, drying_3: 1.4 }
-box hopper (engine 3)
+box hopper (engine 5)
   Tube { name: "lead white", pigment: "basic lead carbonate", color: [0.8631573, 0.8148467, 0.71569365], hiding: 0.82, stiff: 0.8, strength: 1.0, drying: 2.0, drying_3: 2.0 }
   Tube { name: "zinc white", pigment: "zinc oxide", color: [0.8962694, 0.8962694, 0.8631573], hiding: 0.6, stiff: 0.6, strength: 1.0, drying: 0.35, drying_3: 0.35 }
   Tube { name: "pale cadmium", pigment: "cadmium sulfide, a pale grade", color: [0.8713672, 0.56471163, 0.045186203], hiding: 0.85, stiff: 0.7, strength: 1.1, drying: 0.6, drying_3: 0.9 }
@@ -150,3 +156,50 @@ box hopper (engine 3)
   Tube { name: "cobalt blue", pigment: "cobalt aluminate", color: [0.028426038, 0.09084173, 0.39157256], hiding: 0.55, stiff: 0.6, strength: 0.8, drying: 1.4, drying_3: 2.2 }
   Tube { name: "ultramarine blue", pigment: "synthetic ultramarine", color: [0.016807375, 0.023153365, 0.26225072], hiding: 0.3, stiff: 0.5, strength: 1.1, drying: 0.8, drying_3: 0.95 }
   Tube { name: "viridian", pigment: "hydrated chromium oxide", color: [0.011612245, 0.06847818, 0.051269468], hiding: 0.3, stiff: 0.5, strength: 0.9, drying: 1.0, drying_3: 1.0 }
+box giverny (engine 5)
+  Tube { name: "lead white", pigment: "basic lead carbonate", color: [0.8631573, 0.8148467, 0.71569365], hiding: 0.82, stiff: 0.8, strength: 1.0, drying: 2.0, drying_3: 2.0 }
+  Tube { name: "zinc white", pigment: "zinc oxide", color: [0.8962694, 0.8962694, 0.8631573], hiding: 0.6, stiff: 0.6, strength: 1.0, drying: 0.35, drying_3: 0.35 }
+  Tube { name: "cobalt blue", pigment: "cobalt aluminate", color: [0.028426038, 0.09084173, 0.39157256], hiding: 0.55, stiff: 0.6, strength: 0.8, drying: 1.4, drying_3: 2.2 }
+  Tube { name: "ultramarine blue", pigment: "synthetic ultramarine", color: [0.016807375, 0.023153365, 0.26225072], hiding: 0.3, stiff: 0.5, strength: 1.1, drying: 0.8, drying_3: 0.95 }
+  Tube { name: "cobalt violet", pigment: "cobalt phosphate or arsenate", color: [0.20863685, 0.07227186, 0.27049786], hiding: 0.35, stiff: 0.55, strength: 0.35, drying: 1.4, drying_3: 1.4 }
+  Tube { name: "viridian", pigment: "hydrated chromium oxide", color: [0.011612245, 0.06847818, 0.051269468], hiding: 0.3, stiff: 0.5, strength: 0.9, drying: 1.0, drying_3: 1.0 }
+  Tube { name: "pale cadmium", pigment: "cadmium sulfide, a pale grade", color: [0.8713672, 0.56471163, 0.045186203], hiding: 0.85, stiff: 0.7, strength: 1.1, drying: 0.6, drying_3: 0.9 }
+  Tube { name: "cadmium yellow", pigment: "cadmium sulfide", color: [0.80695236, 0.37626222, 0.013702081], hiding: 0.85, stiff: 0.7, strength: 1.1, drying: 0.6, drying_3: 0.9 }
+  Tube { name: "deep cadmium", pigment: "cadmium sulfide, a deep grade", color: [0.80695236, 0.23839766, 0.012983031], hiding: 0.9, stiff: 0.6, strength: 1.2, drying: 0.6, drying_3: 0.9 }
+  Tube { name: "barium yellow", pigment: "barium chromate (lemon yellow)", color: [0.8631573, 0.67954254, 0.10702311], hiding: 0.45, stiff: 0.7, strength: 0.9, drying: 1.0, drying_3: 1.0 }
+  Tube { name: "zinc yellow", pigment: "potassium zinc chromate", color: [0.9734455, 0.5520115, 0.0], hiding: 0.4, stiff: 0.6, strength: 0.65, drying: 0.8, drying_3: 0.8 }
+  Tube { name: "vermilion", pigment: "mercuric sulfide", color: [0.62396044, 0.04231141, 0.017641952], hiding: 0.9, stiff: 0.75, strength: 1.0, drying: 0.4, drying_3: 0.4 }
+  Tube { name: "rose madder", pigment: "madder lake on alumina", color: [0.27049786, 0.015996292, 0.039546236], hiding: 0.1, stiff: 0.35, strength: 0.9, drying: 0.3, drying_3: 0.4 }
+  Tube { name: "carmine lake", pigment: "carminic acid (cochineal) on alumina", color: [0.23839766, 0.011612245, 0.045186203], hiding: 0.1, stiff: 0.3, strength: 1.2, drying: 0.3, drying_3: 0.4 }
+  Tube { name: "yellow ochre", pigment: "hydrated iron oxide earth", color: [0.48514998, 0.25415218, 0.036889445], hiding: 0.8, stiff: 0.7, strength: 0.8, drying: 0.8, drying_3: 0.8 }
+box impressionist (engine 5)
+  Tube { name: "lead white", pigment: "basic lead carbonate", color: [0.8631573, 0.8148467, 0.71569365], hiding: 0.82, stiff: 0.8, strength: 1.0, drying: 2.0, drying_3: 2.0 }
+  Tube { name: "zinc white", pigment: "zinc oxide", color: [0.8962694, 0.8962694, 0.8631573], hiding: 0.6, stiff: 0.6, strength: 1.0, drying: 0.35, drying_3: 0.35 }
+  Tube { name: "cobalt blue", pigment: "cobalt aluminate", color: [0.028426038, 0.09084173, 0.39157256], hiding: 0.55, stiff: 0.6, strength: 0.8, drying: 1.4, drying_3: 2.2 }
+  Tube { name: "ultramarine blue", pigment: "synthetic ultramarine", color: [0.016807375, 0.023153365, 0.26225072], hiding: 0.3, stiff: 0.5, strength: 1.1, drying: 0.8, drying_3: 0.95 }
+  Tube { name: "cerulean blue", pigment: "cobalt stannate", color: [0.049706563, 0.22322798, 0.45078585], hiding: 0.8, stiff: 0.7, strength: 0.6, drying: 1.4, drying_3: 1.4 }
+  Tube { name: "Prussian blue", pigment: "iron ferrocyanide", color: [0.008568125, 0.017641952, 0.051269468], hiding: 0.35, stiff: 0.45, strength: 3.0, drying: 1.8, drying_3: 2.4 }
+  Tube { name: "emerald green", pigment: "copper aceto-arsenite", color: [0.016807375, 0.37626222, 0.19461781], hiding: 0.6, stiff: 0.6, strength: 0.6, drying: 1.6, drying_3: 1.6 }
+  Tube { name: "viridian", pigment: "hydrated chromium oxide", color: [0.011612245, 0.06847818, 0.051269468], hiding: 0.3, stiff: 0.5, strength: 0.9, drying: 1.0, drying_3: 1.0 }
+  Tube { name: "chrome yellow", pigment: "lead chromate", color: [0.80695236, 0.44520125, 0.011612245], hiding: 0.9, stiff: 0.7, strength: 1.0, drying: 1.8, drying_3: 1.8 }
+  Tube { name: "orange chrome", pigment: "basic lead chromate", color: [0.74540436, 0.16513222, 0.023153365], hiding: 0.88, stiff: 0.75, strength: 0.9, drying: 1.8, drying_3: 1.8 }
+  Tube { name: "barium yellow", pigment: "barium chromate (lemon yellow)", color: [0.8631573, 0.67954254, 0.10702311], hiding: 0.45, stiff: 0.7, strength: 0.9, drying: 1.0, drying_3: 1.0 }
+  Tube { name: "strontium yellow", pigment: "strontium chromate", color: [0.8879232, 0.73791057, 0.086500466], hiding: 0.55, stiff: 0.65, strength: 0.8, drying: 1.0, drying_3: 1.0 }
+  Tube { name: "zinc yellow", pigment: "potassium zinc chromate", color: [0.9734455, 0.5520115, 0.0], hiding: 0.4, stiff: 0.6, strength: 0.65, drying: 0.8, drying_3: 0.8 }
+  Tube { name: "pale cadmium", pigment: "cadmium sulfide, a pale grade", color: [0.8713672, 0.56471163, 0.045186203], hiding: 0.85, stiff: 0.7, strength: 1.1, drying: 0.6, drying_3: 0.9 }
+  Tube { name: "cadmium yellow", pigment: "cadmium sulfide", color: [0.80695236, 0.37626222, 0.013702081], hiding: 0.85, stiff: 0.7, strength: 1.1, drying: 0.6, drying_3: 0.9 }
+  Tube { name: "deep cadmium", pigment: "cadmium sulfide, a deep grade", color: [0.80695236, 0.23839766, 0.012983031], hiding: 0.9, stiff: 0.6, strength: 1.2, drying: 0.6, drying_3: 0.9 }
+  Tube { name: "Naples yellow", pigment: "lead antimonate", color: [0.76052463, 0.48514998, 0.1274377], hiding: 0.85, stiff: 0.75, strength: 0.6, drying: 1.6, drying_3: 1.6 }
+  Tube { name: "Indian yellow", pigment: "magnesium and calcium euxanthate", color: [0.7529423, 0.35640025, 0.012983031], hiding: 0.15, stiff: 0.4, strength: 0.8, drying: 0.8, drying_3: 0.8 }
+  Tube { name: "yellow lake", pigment: "flavonoid dye (weld, quercitron) on alumina and chalk", color: [0.34191445, 0.17788841, 0.018500218], hiding: 0.08, stiff: 0.35, strength: 0.5, drying: 0.3, drying_3: 0.4 }
+  Tube { name: "yellow ochre", pigment: "hydrated iron oxide earth", color: [0.48514998, 0.25415218, 0.036889445], hiding: 0.8, stiff: 0.7, strength: 0.8, drying: 0.8, drying_3: 0.8 }
+  Tube { name: "red earth", pigment: "iron oxide earth", color: [0.33245158, 0.06847818, 0.029556833], hiding: 0.85, stiff: 0.7, strength: 0.9, drying: 1.0, drying_3: 1.0 }
+  Tube { name: "raw sienna", pigment: "sienna earth, unroasted", color: [0.32314324, 0.14412849, 0.02415763], hiding: 0.4, stiff: 0.5, strength: 0.7, drying: 1.2, drying_3: 1.2 }
+  Tube { name: "burnt sienna", pigment: "roasted sienna earth", color: [0.20155624, 0.049706563, 0.017641952], hiding: 0.45, stiff: 0.55, strength: 0.9, drying: 1.2, drying_3: 2.3 }
+  Tube { name: "vermilion", pigment: "mercuric sulfide", color: [0.62396044, 0.04231141, 0.017641952], hiding: 0.9, stiff: 0.75, strength: 1.0, drying: 0.4, drying_3: 0.4 }
+  Tube { name: "red lead", pigment: "lead tetroxide", color: [0.74540436, 0.088655606, 0.02415763], hiding: 0.85, stiff: 0.8, strength: 0.8, drying: 2.2, drying_3: 2.2 }
+  Tube { name: "rose madder", pigment: "madder lake on alumina", color: [0.27049786, 0.015996292, 0.039546236], hiding: 0.1, stiff: 0.35, strength: 0.9, drying: 0.3, drying_3: 0.4 }
+  Tube { name: "carmine lake", pigment: "carminic acid (cochineal) on alumina", color: [0.23839766, 0.011612245, 0.045186203], hiding: 0.1, stiff: 0.3, strength: 1.2, drying: 0.3, drying_3: 0.4 }
+  Tube { name: "cobalt violet", pigment: "cobalt phosphate or arsenate", color: [0.20863685, 0.07227186, 0.27049786], hiding: 0.35, stiff: 0.55, strength: 0.35, drying: 1.4, drying_3: 1.4 }
+  Tube { name: "bone black", pigment: "charred bone (carbon, calcium phosphate)", color: [0.012983031, 0.010960094, 0.009721218], hiding: 0.9, stiff: 0.7, strength: 1.1, drying: 0.4, drying_3: 0.9 }
+  Tube { name: "vine black", pigment: "charcoal of vine twigs", color: [0.03189603, 0.035601314, 0.039546236], hiding: 0.75, stiff: 0.45, strength: 0.6, drying: 0.35, drying_3: 0.9 }

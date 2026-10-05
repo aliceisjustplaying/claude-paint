@@ -1,0 +1,124 @@
+{
+  "url": "http://m3p.tailec2dc.ts.net:8769/?p=paint-studio-12e572",
+  "browser": "154.0.8037.98",
+  "checks": [
+    {
+      "mode": "regular",
+      "width": 1440,
+      "height": 900,
+      "open": {
+        "handlerMs": 0.10000000149011612,
+        "paintMs": 40.70000000298023,
+        "sameDOM": true
+      },
+      "geometry": {
+        "paneWidth": 720,
+        "left": 12,
+        "right": 732,
+        "scrollWidth": 718,
+        "clientWidth": 718,
+        "lines": 3164,
+        "formatted": "formatted · display only",
+        "gutterMap": true,
+        "wrappedRows": 6,
+        "inert": false
+      },
+      "replay": {
+        "pos": 697,
+        "total": 702,
+        "highlighted": 2,
+        "formatted": "formatted · display only"
+      }
+    },
+    {
+      "mode": "stream",
+      "width": 1920,
+      "height": 1080,
+      "open": {
+        "handlerMs": 0.20000000298023224,
+        "paintMs": 53.100000001490116,
+        "sameDOM": true
+      },
+      "geometry": {
+        "paneWidth": 720,
+        "left": 12,
+        "right": 732,
+        "scrollWidth": 718,
+        "clientWidth": 718,
+        "lines": 3164,
+        "formatted": "formatted · display only",
+        "gutterMap": true,
+        "wrappedRows": 6,
+        "inert": false
+      },
+      "replay": null
+    },
+    {
+      "mode": "narrow",
+      "width": 390,
+      "height": 844,
+      "open": {
+        "handlerMs": 0.30000000447034836,
+        "paintMs": 38.80000000447035,
+        "sameDOM": true
+      },
+      "geometry": {
+        "paneWidth": 378,
+        "left": 6,
+        "right": 384,
+        "scrollWidth": 376,
+        "clientWidth": 376,
+        "lines": 3164,
+        "formatted": "formatted · display only",
+        "gutterMap": true,
+        "wrappedRows": 13,
+        "inert": false
+      },
+      "replay": null
+    },
+    {
+      "mode": "narrow-stream",
+      "width": 390,
+      "height": 844,
+      "open": {
+        "handlerMs": 0.20000000298023224,
+        "paintMs": 60.20000000298023,
+        "sameDOM": true
+      },
+      "geometry": {
+        "paneWidth": 378,
+        "left": 6,
+        "right": 384,
+        "scrollWidth": 376,
+        "clientWidth": 376,
+        "lines": 3164,
+        "formatted": "formatted · display only",
+        "gutterMap": true,
+        "wrappedRows": 13,
+        "inert": false
+      },
+      "replay": null
+    },
+    {
+      "mode": "invalid-lua",
+      "rawRetained": true,
+      "htmlEscaped": true
+    },
+    {
+      "mode": "worker-unavailable",
+      "rawRetained": true,
+      "htmlEscaped": true
+    },
+    {
+      "mode": "rust-and-stale-reply",
+      "rawRetained": true,
+      "staleReplyIgnored": true
+    },
+    {
+      "mode": "literals-and-highlights",
+      "literalContentsPreserved": true,
+      "changedDisplayLines": 1
+    }
+  ],
+  "pageErrors": []
+}

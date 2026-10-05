@@ -191,7 +191,8 @@ const BOX_GRIND: &[BoxGrind] = &[
     // walnut oil, no resin (Mills & White 1988). Bladder colours took more
     // oil (Fernbach 1834): lead white 0.14 est., the others bought ground
     // at its ratio, 1.63 × their oil absorption est.; cobalt blue mixed by
-    // him, 1.2 × est.
+    // him, 1.2 × est. (The default box and the named Friedrich box, which
+    // adds Naples yellow and rose madder, bought ground too.)
     BoxGrind {
         name: "tube box",
         oil: Oil::Walnut,
@@ -206,6 +207,8 @@ const BOX_GRIND: &[BoxGrind] = &[
             ("chrome yellow", Some(0.25), None),
             ("Prussian blue", Some(0.42), None),
             ("green earth", Some(0.45), None),
+            ("Naples yellow", Some(0.29), None),
+            ("rose madder", Some(0.53), None),
         ],
     },
     // Inness's red earth is Venetian red (Uebele 1913 p. 231: 75 : 25);
@@ -340,7 +343,9 @@ const BOX_GRIND: &[BoxGrind] = &[
 ];
 
 fn box_grind(box_name: &str) -> Option<&'static BoxGrind> {
-    BOX_GRIND.iter().find(|b| b.name == box_name)
+    // (the named Friedrich box is the default box with two more tubes)
+    let name = if box_name == "friedrich" { "tube box" } else { box_name };
+    BOX_GRIND.iter().find(|b| b.name == name)
 }
 
 /// The oil a tube of `name` is ground in in the box `box_name`, and
@@ -369,12 +374,13 @@ pub enum Period {
     Modern,
 }
 
-/// A box's period: the default box is the early 19th century's (smalt,
-/// verdigris, Rinmann's green); the painters' boxes their painters' working
-/// years. A palette of another name is a 19th-century tube box.
+/// A box's period: the default box and Friedrich's are the early 19th
+/// century's (smalt, verdigris, Rinmann's green); the painters' boxes their
+/// painters' working years. A palette of another name is a 19th-century tube box.
 pub fn period_of(box_name: &str) -> Period {
     match box_name {
         _ if Some(box_name) == default_box() => Period::Bladder,
+        "friedrich" => Period::Bladder,
         "hopper" => Period::Tube20,
         "tonn" => Period::Modern,
         _ => Period::Tube19,
@@ -582,48 +588,48 @@ pub fn catalog() -> Vec<Tube> {
         // ---- the tube box (round 19)
         tube("lead white", "basic lead carbonate", "#efe9dc", 0.82, 0.8, 1.0, drier::LEAD_WHITE),
         // semi-transparent cobalt glass, weak
-        #[cfg(tube_box)]
+        #[cfg(any(tube_box, feature = "box-friedrich"))]
         tube("smalt", "cobalt potash glass, coarse", "#5a6e9e", 0.3, 0.55, 0.45, drier::SMALT),
-        #[cfg(tube_box)]
+        #[cfg(any(tube_box, feature = "box-friedrich"))]
         tube("pale smalt", "a paler grade of smalt", "#8d9bb8", 0.35, 0.55, 0.35, drier::SMALT),
         tube("yellow ochre", "hydrated iron oxide earth", "#b98a36", 0.8, 0.7, 0.8, drier::OCHRE),
-        #[cfg(any(tube_box, feature = "box-sargent", feature = "box-inness", feature = "box-alma-tadema", feature = "box-hopper", feature = "box-impressionist"))]
+        #[cfg(any(tube_box, feature = "box-sargent", feature = "box-inness", feature = "box-alma-tadema", feature = "box-hopper", feature = "box-impressionist", feature = "box-friedrich"))]
         tube("red earth", "iron oxide earth", "#9c4a30", 0.85, 0.7, 0.9, drier::RED_EARTH),
-        #[cfg(any(tube_box, feature = "box-sargent", feature = "box-giverny", feature = "box-impressionist"))]
+        #[cfg(any(tube_box, feature = "box-sargent", feature = "box-giverny", feature = "box-impressionist", feature = "box-friedrich"))]
         tube("vermilion", "mercuric sulfide", "#cf3a24", 0.9, 0.75, 1.0, drier::VERMILION),
-        #[cfg(any(tube_box, feature = "box-inness", feature = "box-alma-tadema", feature = "box-tonn"))]
+        #[cfg(any(tube_box, feature = "box-inness", feature = "box-alma-tadema", feature = "box-tonn", feature = "box-friedrich"))]
         tube("raw umber", "iron and manganese oxide earth", "#5c4c3a", 0.8, 0.65, 0.9, drier::UMBER),
         // (every box but the giverny box, which has no black)
-        #[cfg(any(tube_box, feature = "box-sargent", feature = "box-inness", feature = "box-alma-tadema", feature = "box-tonn", feature = "box-hopper", feature = "box-impressionist"))]
+        #[cfg(any(tube_box, feature = "box-sargent", feature = "box-inness", feature = "box-alma-tadema", feature = "box-tonn", feature = "box-hopper", feature = "box-impressionist", feature = "box-friedrich"))]
         tube("bone black", "charred bone (carbon, calcium phosphate)", "#1e1b19", 0.9, 0.7, 1.1, drier::BONE_BLACK).engine3(drier::engine3::BONE_BLACK),
-        #[cfg(any(tube_box, feature = "box-sargent", feature = "box-inness", feature = "box-alma-tadema", feature = "box-hopper", feature = "box-giverny", feature = "box-impressionist"))]
+        #[cfg(any(tube_box, feature = "box-sargent", feature = "box-inness", feature = "box-alma-tadema", feature = "box-hopper", feature = "box-giverny", feature = "box-impressionist", feature = "box-friedrich"))]
         tube("cobalt blue", "cobalt aluminate", "#2f55a8", 0.55, 0.6, 0.8, drier::COBALT_BLUE).engine3(drier::engine3::COBALT_BLUE),
-        #[cfg(any(tube_box, feature = "box-sargent", feature = "box-impressionist"))]
+        #[cfg(any(tube_box, feature = "box-sargent", feature = "box-impressionist", feature = "box-friedrich"))]
         tube("chrome yellow", "lead chromate", "#e8b21c", 0.9, 0.7, 1.0, drier::CHROME_YELLOW),
         // Prussian blue transparent and very strong [AP3 pp.196–197]
         // (tinting strength 3, below the sourced "very high", because
         // Mixbox's latent already carries some of a dark pigment's strength)
-        #[cfg(any(tube_box, feature = "box-impressionist"))]
+        #[cfg(any(tube_box, feature = "box-impressionist", feature = "box-friedrich"))]
         tube("Prussian blue", "iron ferrocyanide", "#172440", 0.35, 0.45, 3.0, drier::PRUSSIAN_BLUE).engine3(drier::engine3::PRUSSIAN_BLUE),
         // green earth translucent, weak, short of body [AP1 p.146; FIELD
         // p.129], its masstone from Munsell 7.5G/2.9/1.5 [AP1 Table 1]; its
         // drying rate is an estimate (an earth: medium)
-        #[cfg(any(tube_box, feature = "box-tonn"))]
+        #[cfg(any(tube_box, feature = "box-tonn", feature = "box-friedrich"))]
         tube("green earth", "celadonite and glauconite clay", "#3a4843", 0.2, 0.35, 0.3, drier::OCHRE),
         // cobalt-zinc oxide: semi-transparent, weak, permanent [WEB-co];
         // drying estimated as cobalt's
-        #[cfg(tube_box)]
+        #[cfg(any(tube_box, feature = "box-friedrich"))]
         tube("Rinmann's green", "cobalt-zinc oxide", "#5f8f76", 0.35, 0.5, 0.4, drier::COBALT_BLUE),
         // verdigris ground in oil: "poor hiding power in oil" [AP2 p.132];
         // copper is a drier (drying rate estimated as smalt's)
-        #[cfg(tube_box)]
+        #[cfg(any(tube_box, feature = "box-friedrich"))]
         tube("copper green", "verdigris ground in oil", "#3f7f6a", 0.25, 0.4, 1.0, drier::SMALT),
         // ---- round 20 (notes/r20/TUBES.md)
         #[cfg(any(feature = "box-sargent", feature = "box-hopper", feature = "box-giverny", feature = "box-impressionist"))]
         tube("zinc white", "zinc oxide", "#f3f3ef", 0.6, 0.6, 1.0, drier::ZINC_WHITE),
         #[cfg(feature = "box-tonn")]
         tube("lead-tin yellow", "lead-tin oxide", "#e3cc6a", 0.85, 0.75, 0.6, drier::LEAD_WHITE),
-        #[cfg(any(feature = "box-alma-tadema", feature = "box-impressionist"))]
+        #[cfg(any(feature = "box-alma-tadema", feature = "box-impressionist", feature = "box-friedrich"))]
         tube("Naples yellow", "lead antimonate", "#e2b964", 0.85, 0.75, 0.6, drier::NAPLES_YELLOW),
         #[cfg(any(feature = "box-sargent", feature = "box-inness"))]
         tube("lemon chrome", "pale lead chromate with lead sulfate", "#eed83c", 0.8, 0.7, 0.8, drier::CHROME_YELLOW),
@@ -661,7 +667,7 @@ pub fn catalog() -> Vec<Tube> {
         tube("Mars red", "synthetic iron oxide", "#a33f2a", 0.9, 0.7, 1.2, drier::MARS),
         #[cfg(feature = "box-inness")]
         tube("Indian red", "nearly pure ferric oxide", "#7a3a33", 0.92, 0.7, 1.2, drier::RED_EARTH),
-        #[cfg(any(feature = "box-sargent", feature = "box-alma-tadema", feature = "box-giverny", feature = "box-impressionist"))]
+        #[cfg(any(feature = "box-sargent", feature = "box-alma-tadema", feature = "box-giverny", feature = "box-impressionist", feature = "box-friedrich"))]
         tube("rose madder", "madder lake on alumina", "#8e2238", 0.1, 0.35, 0.9, drier::MADDER_LAKE).engine3(drier::engine3::ALIZARIN),
         #[cfg(feature = "box-tonn")]
         tube("permanent alizarin", "a quinacridone", "#5e1624", 0.15, 0.45, 1.3, drier::MADDER_LAKE).engine3(drier::engine3::ALIZARIN),
@@ -803,6 +809,13 @@ const TUBE_BOX: &[&str] = &[
 /// documents (notes/r20/TUBES.md). Each is in the build only with its
 /// `box-*` feature, so a painter's build names no other studio's box.
 const BOXES: &[(&str, &[&str])] = &[
+    #[cfg(feature = "box-friedrich")]
+    (
+        "friedrich",
+        &[
+            "lead white", "smalt", "pale smalt", "yellow ochre", "red earth", "vermilion", "raw umber", "bone black", "cobalt blue", "chrome yellow", "Prussian blue", "green earth", "Rinmann's green", "copper green", "Naples yellow", "rose madder",
+        ],
+    ),
     #[cfg(feature = "box-sargent")]
     (
         "sargent",
@@ -1272,7 +1285,7 @@ mod tests {
         }
         assert!(Palette::named_box("no such box").is_none());
         #[cfg(feature = "all-boxes")]
-        assert_eq!(Palette::box_names(), [DEFAULT_BOX, "sargent", "inness", "alma-tadema", "tonn", "hopper", "giverny", "impressionist"]);
+        assert_eq!(Palette::box_names(), [DEFAULT_BOX, "friedrich", "sargent", "inness", "alma-tadema", "tonn", "hopper", "giverny", "impressionist"]);
     }
 
     /// Engine 6: each box's tubes hold their own oil: the default box's
@@ -1352,6 +1365,7 @@ mod tests {
     #[cfg(feature = "all-boxes")]
     fn tubes_come_in_their_colourmen_s_oils() {
         assert_eq!(grind_of(DEFAULT_BOX, "lead white"), (Oil::Walnut, false));
+        assert_eq!((grind_of("friedrich", "rose madder"), period_of("friedrich")), ((Oil::Walnut, false), Period::Bladder));
         assert_eq!(grind_of("impressionist", "cobalt blue"), (Oil::Poppy, true));
         assert_eq!(grind_of("impressionist", "vermilion"), (Oil::Linseed, true));
         assert_eq!(grind_of("giverny", "lead white"), (Oil::Linseed, false));

@@ -138,7 +138,7 @@ impl UserData for RagU {
                         Ok(())
                     })
                 }
-                o => err(format!("wipe: want a mask or points, got {}", o.type_name())),
+                o => err(format!("wipe: want a mask or points, got {}; use r:wipe(rect(100,100,200,200)) or r:wipe(o:mask()) for a closed outline; an open outline uses o:below(), o:above() or o:band(10)", o.type_name())),
             }
         });
         // r:blot(x, y, {pressure=, seed=}): the pad pressed straight down and lifted off

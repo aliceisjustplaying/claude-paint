@@ -1,0 +1,78 @@
+{
+  "created_at_utc": "2026-10-05T20:38:52.797Z",
+  "source_repository": "aliceisjustplaying/claude-paint",
+  "repository_verified_public": true,
+  "method": "Keep byte-identical raw originals outside the source checkpoint, replace local identifying account names in portable copies and record both hashes. Source content outside local-account/path redaction is unchanged except the source-attachment link explanation.",
+  "files": [
+    {
+      "file": "notes/external-session-681960c8/materials-receipts.md",
+      "raw_copy": "notes/local-checkpoint-evidence/raw/notes/external-session-681960c8/materials-receipts.md",
+      "original_sha256": "5dcbd90480f6079ea6cdc58fe2d254712a1169778348c6250b1f8eee1607fe78",
+      "portable_sha256": "1390d1c7f8aa1c1d2bbc804c43a6c84f86f247db7ca396c8444a6ab4da35b439",
+      "redaction": "Local account name replaced by local-user; quoted local paths are privacy-redacted, not exact source strings."
+    },
+    {
+      "file": "notes/external-session-681960c8/metrics.json",
+      "raw_copy": "notes/local-checkpoint-evidence/raw/notes/external-session-681960c8/metrics.json",
+      "original_sha256": "77e361f5f40183a14a819b779badc2a7582f30fd72f8044089daa0321ed4dc7e",
+      "portable_sha256": "f60edf5a0b5611d4139c4aad70f61238626373473c91031955497ade23d30558",
+      "redaction": "Local account name replaced by local-user; quoted local paths are privacy-redacted, not exact source strings."
+    },
+    {
+      "file": "notes/round28/readiness/dry-run.log",
+      "raw_copy": "notes/local-checkpoint-evidence/raw/notes/round28/readiness/dry-run.log",
+      "original_sha256": "21766c955ab16a896ac31949d47430c4933051ffdf9c680c71dc9cf21f7c290f",
+      "portable_sha256": "20cd1f86527024b55353c7ac6464fbc9332f074e97b3ead2fa292640c8ca0953",
+      "redaction": "Local account name replaced by local-user; quoted local paths are privacy-redacted, not exact source strings."
+    },
+    {
+      "file": "notes/round28/readiness/export.log",
+      "raw_copy": "notes/local-checkpoint-evidence/raw/notes/round28/readiness/export.log",
+      "original_sha256": "c28d3a8c5d46d68db73e07fd6d436e576a95695c5fe7bc933e36ef5183678dc9",
+      "portable_sha256": "c75946c8e301e3700cbc5f631aa32d69c576bdac9d4490cf58dc2f094c9c823a",
+      "redaction": "Local account name replaced by local-user; quoted local paths are privacy-redacted, not exact source strings."
+    },
+    {
+      "file": "notes/round28/readiness/stopped-processes.json",
+      "raw_copy": "notes/local-checkpoint-evidence/raw/notes/round28/readiness/stopped-processes.json",
+      "original_sha256": "c117e93d36ce613bb29ee6804ccde464cb455a8297020bf5eed4013ae095df8a",
+      "portable_sha256": "c0e7722b1e3ef79f6cb65dd5cc842490fa984c6363cc22a1e05c0c57548b941f",
+      "redaction": "Local account name replaced by local-user; quoted local paths are privacy-redacted, not exact source strings."
+    },
+    {
+      "file": "notes/round28/readiness/viewer-sessions.json",
+      "raw_copy": "notes/local-checkpoint-evidence/raw/notes/round28/readiness/viewer-sessions.json",
+      "original_sha256": "b4df8182b26e0ccc9ae2355ff8b8606465c77d1bc063de6abdf5196f1c7d660d",
+      "portable_sha256": "a96cb2b3d2b5f37ee6fdfd82a04393102f13fa66e7d12647a3303503c8eb873b",
+      "redaction": "Local account name replaced by local-user; quoted local paths are privacy-redacted, not exact source strings."
+    },
+    {
+      "file": "notes/round29/readiness/dry-run.log",
+      "raw_copy": "notes/local-checkpoint-evidence/raw/notes/round29/readiness/dry-run.log",
+      "original_sha256": "eb5a2f9b2b779c39f455327bcb9ac64cb460b0c8b5056ae4d6484973cd790694",
+      "portable_sha256": "2c8861b60519d0ad2f784be2f0826db39924507f93f5341872c57a9a4fa5e6d0",
+      "redaction": "Local account name replaced by local-user; quoted local paths are privacy-redacted, not exact source strings."
+    },
+    {
+      "file": "notes/round29/readiness/export.log",
+      "raw_copy": "notes/local-checkpoint-evidence/raw/notes/round29/readiness/export.log",
+      "original_sha256": "7d7d1860fde1f0845b31f503275bd26ea220f83d00154d702877255cfdff0269",
+      "portable_sha256": "3dae0379fabb53202025fbc9f126edab1adbba28bbe974a58cc99873e31d5fd6",
+      "redaction": "Local account name replaced by local-user; quoted local paths are privacy-redacted, not exact source strings."
+    },
+    {
+      "file": "notes/round29/readiness/ten-minute-check.json",
+      "raw_copy": "notes/local-checkpoint-evidence/raw/notes/round29/readiness/ten-minute-check.json",
+      "original_sha256": "e4185988e308832fec81683b24b9a6c2e7851b96be4ef32dfd0e71b40659b430",
+      "portable_sha256": "aeaea03bf2c4f776cf86eae2c664e9dbd21f08943c147e71fb5dd53c15d337e0",
+      "redaction": "Local account name replaced by local-user; quoted local paths are privacy-redacted, not exact source strings."
+    },
+    {
+      "file": "notes/round29/readiness/viewer-sessions.json",
+      "raw_copy": "notes/local-checkpoint-evidence/raw/notes/round29/readiness/viewer-sessions.json",
+      "original_sha256": "194b87807cd73330c3c797b7937b4d22ddd5bd31a9e3f710b03f8fa0dd7be1a9",
+      "portable_sha256": "8ec670bd3a5eafa708f53f960dea1b491b21db350eca95de5318db3cb462e330",
+      "redaction": "Local account name replaced by local-user; quoted local paths are privacy-redacted, not exact source strings."
+    }
+  ]
+}

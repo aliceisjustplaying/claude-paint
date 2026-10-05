@@ -122,7 +122,9 @@ fn the_shipped_easel_paints_its_one_painting_in_its_own_studio() {
 }
 
 /// The box this painter build was built with (a `box-*` feature), if any.
-const OWN_BOX: Option<&str> = if cfg!(feature = "box-sargent") {
+const OWN_BOX: Option<&str> = if cfg!(feature = "box-friedrich") {
+    Some("friedrich")
+} else if cfg!(feature = "box-sargent") {
     Some("sargent")
 } else if cfg!(feature = "box-inness") {
     Some("inness")
@@ -180,11 +182,18 @@ fn the_studio_box_file_sets_the_box() {
     }
     let _close = Close(&run);
     let tubes = String::from_utf8(run(&["tubes"]).stdout).unwrap();
-    assert!(tubes.lines().count() > 5 && !tubes.lines().any(|l| l == "smalt"), "{tubes}");
+    assert!(tubes.lines().count() > 5 && (own == "friedrich" || !tubes.lines().any(|l| l == "smalt")), "{tubes}");
     assert!(run(&["open"]).status.success());
     // a tube of the box's
     let o = run(&["do", r#"local t = tubes(); canvas{size=300, aspect=4, seed=5, linen=15, ground={{pile={{"lead white", 5}, {t[#t - 1], 1}}, um=80, apply="knife"}}}"#]);
     assert!(o.status.success(), "{}", String::from_utf8_lossy(&o.stderr));
+    if own == "friedrich" {
+        assert_eq!(tubes.lines().count(), 16, "{tubes}");
+        let o = run(&["do", r#"local p = pile{{"Naples yellow", 1}, {"rose madder", 1}}; assert(p ~= nil); print(p)"#]);
+        assert!(o.status.success(), "{}", String::from_utf8_lossy(&o.stderr));
+        let output = String::from_utf8(o.stdout).unwrap();
+        assert!(output.contains("Naples yellow") && output.contains("rose madder"), "{output}");
+    }
     assert!(run(&["close"]).status.success());
     let log = std::fs::read_to_string(dir.join("paintings/lua/painting.lua")).unwrap();
     assert_eq!(log.lines().nth(2), Some(format!("--@ box {own}").as_str()), "{log}");

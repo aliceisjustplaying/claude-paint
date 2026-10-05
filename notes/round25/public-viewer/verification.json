@@ -1,0 +1,15 @@
+{
+  "verified_at": "2026-10-05T12:59:16.987Z",
+  "url": "https://near-range-ips-fighter.trycloudflare.com/",
+  "scope": "all paintings",
+  "private_count": 84,
+  "public_count": 84,
+  "matching_paintings": true,
+  "monet_events": 172,
+  "monet_image": 34,
+  "monet_image_status": 200,
+  "monet_image_type": "image/png",
+  "identity_and_credential_scan": "all84 sanitized event streams no actual identity or credential matches; wildcard paths only",
+  "tunnel_pid": 52891,
+  "link_lifetime": "URL changes if cloudflared restarts"
+}

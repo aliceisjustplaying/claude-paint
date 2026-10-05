@@ -1,0 +1,42 @@
+{
+  "verified_at": "2026-10-05T17:02:11.985025+00:00",
+  "chosen_source_commit": "f334aef11d0c069b083371d2cb8ceb4865664e83",
+  "chosen_source_date": "2026-10-02 21:14:50 +0100",
+  "choice": "Closest available historical source: round-22.1 tag; matches the round-21 base engine source tree and build inputs named by the original runner.",
+  "original_source_receipt": "notes/round22.1/runner/run/INNS/p1_export.log",
+  "unavailable_original_commit": "0e00118",
+  "original_engine_marker": 2,
+  "matching_round_21_build_inputs": {
+    "crates": "31a597ce72b6469eea9abcbc8ffaba15f737c14e",
+    ".cargo": "5c84b761634ef22c668dae552223290c2409a635",
+    "Cargo.toml": "ce974d34b0d54916251d9b4e9dd52231f7ab964b",
+    "Cargo.lock": "e6b2577e4593707170116ac3f32c587fc1d362ff"
+  },
+  "matching_available_tags": [
+    "round-21",
+    "round-21.5",
+    "round-22",
+    "round-22.1"
+  ],
+  "round_23_crates_tree": "99524d44917186ad8ef64cba222e29d367700c6c",
+  "later_engine_changes": "Later code includes the engine-3 rag and thinner integration, then brushwork, optics and drying/flow changes; choosing current code would add changes absent from the historical source.",
+  "later_change_receipts": [
+    "e017df8 Prepare round 25 winter Friedrich studio and 16-tube box",
+    "8dba826 Preserve pending painting improvements and redacted review evidence",
+    "78599dc Enable incremental builds with bounded cross-build image checks",
+    "8fe61fc Integrate reviewed PR sweep into rag candidate",
+    "5059b1a Preserve brushwork fixes while deferring rag deposition changes",
+    "a411633 Physical fixes: the rag's smear lies on the canvas as a brush's paint does",
+    "c21f3aa Physical fixes: sized brushes scale whole, thinned spatter keeps the film limit, graded dips' palette trips, diagonal shadows",
+    "7d2f8f5 Review fixes (third round): wobble's range, compare's crop shape, graded piles' thinner",
+    "48f899c Preserve read borrows and clear solvent relief during integration",
+    "66f465f Keep legacy raw checkpoint fixtures on engine three",
+    "f1bf422 Integrate reviewed held knife preview PR 11",
+    "6dc4566 Integrate reviewed palette materials PR 10",
+    "7e4b8ec Integrate reviewed impasto and knife PR 9",
+    "630f4e2 Integrate reviewed painting boxes PR 8",
+    "c268f5b Integrate reviewed brushwork PR 7"
+  ],
+  "provenance_label": "Authorized substitute engine; exact original source identity is unverified even if image pixels match.",
+  "metrics": "Full-resolution original finished PNG versus substitute finished replay: RGB-byte MAE, RMSE, maximum channel difference and fraction of pixels with any channel changed. These are image differences, not proof of physical equivalence."
+}

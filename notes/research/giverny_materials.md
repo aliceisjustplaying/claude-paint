@@ -36,8 +36,12 @@ Véronèse*) [TB28 p.66].
 
 ## 2. Grounds
 
-- **A ground of lead white and calcite** (in oil) under a painting of
-  about 1897–99 [MM22].
+- **A ground of lead white and calcite** (in oil), over animal-glue sizing,
+  under a painting of about 1897–99 [MM22].
+- **A slightly off-white lead-white oil ground**, probably commercially
+  prepared, under the first of the two paintings of 1899 to 1926 that were
+  analyzed; **two lead-white ground layers**, a creamy lower one and a
+  cooler upper one, under the second [TB28 p.61].
 - Commercial oil grounds of the period were white, off-white, cream, pale
   gray (white with a little black) or beige [AM]. *Uncertain* (not tied to
   one source), and for any one canvas.
@@ -78,6 +82,10 @@ analyzed.
   five, the grounds in linseed in four (the fifth ground is given as
   another oil, queried) [TB14]. Linseed dries fastest and yellows most,
   then walnut, then poppy [AM]. *Uncertain* (not tied to one source).
+- **Lean or blotted paint.** The analysis found no sign of depleted binder
+  or of blotting, despite the dry-looking surfaces [TB28 p.62].
+- **Layers.** Broader, thinner passages underneath, then more broken,
+  thicker paint over partly dry layers [TB28 pp.61–62].
 - **Varnish.** The painters of his circle preferred their pictures
   unvarnished: matte, and reading lighter than varnished [AM]. *Uncertain*
   (not tied to one source).
@@ -123,7 +131,7 @@ estimates.
 
 - **[AM]** Bomford, D. et al., *Art in the Making: Impressionism* (London: National Gallery, 1990). Read through ColourLex; its section on paint media (p.72 and the table after it) through full-text search excerpts only.
 - **[TB24]** Kirby, J., Stonor, K., Roy, A., Burnstock, A., Grout, R. and White, R., "Seurat's Painting Practice: Theory, Development and Technology", *National Gallery Technical Bulletin* 24 (2003), pp. 4–37. The pages on pigments and media (pp.21–27) read. https://www.nationalgallery.org.uk/upload/pdf/kirby_stonor_roy_burnstock_grout_white2003.pdf
-- **[TB28]** Roy, A., "Monet's Palette in the Twentieth Century: Water-Lilies and Irises", *National Gallery Technical Bulletin* 28 (2007). The passage on the medium (pp.61–62) and the pages on the palette (pp.62–66) read. https://www.nationalgallery.org.uk/upload/pdf/roy2007.pdf
+- **[TB28]** Roy, A., "Monet's Palette in the Twentieth Century: Water-Lilies and Irises", *National Gallery Technical Bulletin* 28 (2007). The passages on the grounds and the medium (pp.61–62) and the pages on the palette (pp.62–66) read. https://www.nationalgallery.org.uk/upload/pdf/roy2007.pdf
 - **[TB14]** White, R. and Pilc, J., "Analyses of Paint Media", *National Gallery Technical Bulletin* 14 (1993), table pp.89–91. Read (page scans). https://www.nationalgallery.org.uk/upload/pdf/white_pilc1993.pdf
 - **[MM22]** Germinario, G., Talarico, F. and Torre, M., "Microanalyses and Spectroscopic Techniques for the
   Identification of Pigments and Pictorial Materials in Monet's *Pink Water Lilies* Painting",

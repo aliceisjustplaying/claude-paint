@@ -1,0 +1,63 @@
+{
+  "state": "running; provider responded and studio tools succeeded",
+  "studio": "paint-studio-12e572",
+  "viewer": "http://m3p.tailec2dc.ts.net:8768/?p=paint-studio-12e572",
+  "source_commit": "3c7bf92d3f046bf64db863916487c0fa703d1e19",
+  "provider": "anthropic",
+  "model": "claude-opus-5-5",
+  "thinking": "high",
+  "engine": 5,
+  "box": "giverny",
+  "tubes": 15,
+  "sitting_limit": null,
+  "max_crashes": 6,
+  "launcher": "launchd art.stillwet.painter.r26",
+  "runner_pid": 17918,
+  "session": "~/.pi/agent/sessions/--HOME-src-a-paint-studio-12e572--/2026-10-05T12-43-05-462Z_01a10c16-d575-7442-9ee0-e9fcc9f5cc77.jsonl",
+  "runner_log": "~/tmp/gallery-fcf9c110/r26/run/runner.MONT.out",
+  "successful_tools": [
+    {
+      "tool": "read",
+      "timestamp": "2026-10-05T12:45:26.728Z",
+      "isError": false
+    },
+    {
+      "tool": "read",
+      "timestamp": "2026-10-05T12:45:26.730Z",
+      "isError": false
+    },
+    {
+      "tool": "status",
+      "timestamp": "2026-10-05T12:45:26.750Z",
+      "isError": false
+    },
+    {
+      "tool": "read",
+      "timestamp": "2026-10-05T12:45:29.326Z",
+      "isError": false
+    },
+    {
+      "tool": "read",
+      "timestamp": "2026-10-05T12:45:29.328Z",
+      "isError": false
+    },
+    {
+      "tool": "read",
+      "timestamp": "2026-10-05T12:45:33.159Z",
+      "isError": false
+    },
+    {
+      "tool": "paint",
+      "timestamp": "2026-10-05T12:47:11.029Z",
+      "isError": false
+    },
+    {
+      "tool": "note",
+      "timestamp": "2026-10-05T12:47:15.297Z",
+      "isError": false
+    }
+  ],
+  "first_paint_pending": false,
+  "binary_sha256": "bb8edee5ce08ebeaee5fbd8126f479d60be22017d25a13ec6b8b359e7eb8a2d7",
+  "verification": "Private URL HTTP200 and API session listing verified on serving Mac. Native browser action paused when user changed Helium."
+}

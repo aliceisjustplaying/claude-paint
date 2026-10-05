@@ -1,0 +1,23 @@
+(•‿•) The painter was struggling to repair its upper branches. The rag successfully removed dark branch paint, but the repairs left conspicuous pale tracks. The largest pale shapes existed before the final rag pass. This is visible in [before removal](rag-live/39.png), [after removal](rag-live/41.png), [before the final wipe](rag-live/65.png) and [after it](rag-live/66.png). This check read existing logs, code and saved images only; the painter continued uninterrupted.
+
+The actual sequence was:
+
+| UTC result time | Logged chunk | Operation and observed result |
+|---|---|---|
+| 12:04:15 / 12:04:22 | 35 / 36 | Remove a lower stub: dry rag, then dip 0.6; two mask passes, pressures 0.7 / 0.8. Both succeeded; the sampled passage was `open`. |
+| 12:04:56 / 12:05:06 | 39 / 40 | Remove four upper branches: new 9-unit / 12-unit rags, dips 0.5 / 0.8, three / four wipes per path, pressures 0.75 / 0.9 and manual refolding. Dark branch interiors visibly lift, leaving pale tracks and some brown edge residue. |
+| 12:05 onward | 41–52 | Repaint those tracks with body paint, increase load/coverage, blend and glaze. A three-day wait separates repair stages. The broad pale replacement shapes are visible before later wiping. |
+| 12:07:56 / 12:08:13 | 54 / 56 | Wipe a horizontal dark smudge: eight path wipes with dip 0.7, then fifteen with repeated dip 0.8. The dark smudge recedes but the pale stripe remains/widens. Nearby diagnostics report `dry`, `setting` and `open` at different points. |
+| 12:09:15 / 12:09:35 | 58 / 59 | After a four-day wait, repaint a 21-unit ribbon with full-load body paint, then five broad mask passes with fresh rags and dips 0.8 / 0.9. Large pale shapes already exist before this rag call; the final call changes their surface only slightly. |
+
+These calls and results are captured in [viewer events](rag-live/events.json). The authoritative generated code is `~/src/a/paint-studio-d95ea6/paintings/lua/painting.lua`: rag operations start at lines 353, 373, 387, 492, 502 and 530. There was no rag API failure. One diagnostic using unavailable Lua `io` failed without changing the canvas, then succeeded using `print`.
+
+The strongest supported explanation is a repair-method mismatch: the painter tries to recover a thin blended sky with opaque, white-rich paint along branch-shaped masks, then tries to wipe or glaze those replacements. Body paint hides what lies beneath; a rag lifts open paint and stops at set film. Wiping does not reconstruct the original sky color and texture. The mask width also crossed the main leader. [Rag limits](../../../notes/easel_guide.md), [removal governed by cure](../../../crates/paint/src/rag.rs), [visible repairs](rag-live/65.png).
+
+The painter independently recorded these failures in its ordinary journal at simulated day 12, 22:47: pale opaque patches, little effect from a glaze, sideways dark smearing and a repair mask crossing the main limb. It recorded practical lessons, then chose to dry and repaint the whole upper sky and redraw the crown. It subsequently waited six plus three days and received `dry` at the sampled repair and sky points. The journal is `~/src/a/paint-studio-d95ea6/notes/journal.md`; this report does not quote private reasoning.
+
+The active binary hash still matches the [verified startup binary](startup.json). Its [refold implementation](../../../crates/paint/src/rag.rs) preserves dampness. Dampness evaporates with a three-minute half-life during simulated hand time, while loading and soaked cloth reduce lift. The painter repeatedly dipped/refolded and replaced rags, but did not print their damp/load/soaked values; this observation cannot measure how much evaporation or cloth saturation limited a particular wipe. The final five mask passes consumed sixteen simulated minutes, so renewed dips do not imply constant wetness throughout each pass.
+
+No new rag engine defect is established by these observations. The earlier round's marginal hollow-lift assertion is a different experiment and does not diagnose this painting. An isolated reproduction would be needed to distinguish an unexpected removal defect from the documented set-film limit. No reproduction or live intervention was performed.
+
+The broader log check found an active first sitting, no provider failure and no sitting cap. At the check there were five API misuse errors: an unknown edge option, an oversized crop, two held-pile labels instead of variable names and unavailable `io`. Their responses were actionable and later calls recovered. The painter used the new box, graded work, held-pile comparisons, ordinary looks, drawing, simulated waits and rags. The separate palette-layout issue is documented by the visual check; it is unrelated to this rag sequence.

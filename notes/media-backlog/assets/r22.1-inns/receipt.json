@@ -1,0 +1,37 @@
+{
+  "id": "r22.1-inns",
+  "source_log_sha256": "1d6858a926a1661e33588874331e50d06349bd8ea6e7d5ef49a81a7d92d57c60",
+  "chunks": 311,
+  "finished_log_sha256": "2605f98a8066fff1a664ae10b6d4b7cd3582a6a7dfaa8b0e7b551bbf26fb830b",
+  "finished_chunks": 312,
+  "existing_replay_check": "check: ok: 311 chunks replay to the live canvas; the replay equals the live canvas saved at close; the painter saved no picture; the studio's committed record equals its log",
+  "finished_png": {
+    "width": 2400,
+    "height": 1600,
+    "chunks": [
+      "IHDR",
+      "IDAT",
+      "IEND"
+    ],
+    "text": [],
+    "sha256": "22257ee33b47d8261cfe39f75a2379f44478a068f6e7b461fa6cc57e85a36ebd",
+    "bytes": 3444825
+  },
+  "normal_png": {
+    "width": 2400,
+    "height": 1600,
+    "chunks": [
+      "IHDR",
+      "IDAT",
+      "IEND"
+    ],
+    "text": [],
+    "sha256": "96a9eb41d3db541b249c2868b788f71a5ba16c485d9198d0d34631567918d97f",
+    "bytes": 2203001
+  },
+  "finishing": "automatic drying, 0.4 varnish coats and cracks; no relief",
+  "privacy": "PNG text metadata inspected; visible image/video review required before publication",
+  "status": "video blocked",
+  "blocker": "Actual export receipt names source 0e00118, which is unavailable in the current Git object database. The round-22.1 tag currently resolves to f334aef11d0c069b083371d2cb8ceb4865664e83. The original replay checkout was removed. Exact historical engine provenance is unresolved; no substitute engine replay is authorized.",
+  "verified_at": "2026-10-05T17:16:22.399653+00:00"
+}

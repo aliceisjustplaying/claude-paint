@@ -1,0 +1,90 @@
+compare_build: DIFFERENT from the af49348 baseline
+body: state equal on every baseline field (EQUAL (0 of 2 chunks differ))
+  png same as af49348's; printed output same; state digests different
+overlap: state equal on every baseline field (EQUAL (0 of 3 chunks differ))
+  png same as af49348's; printed output same; state digests different
+pickup: state equal on every baseline field (EQUAL (0 of 4 chunks differ))
+  png same as af49348's; printed output same; state digests different
+rag: STATE DIFFERS
+  chunk-004: DIFFERENT
+    wet.vol: 382 of 8192 values differ (largest |diff| 2.67131 at flat index 1310: 0.9863235950469971 -> 3.6576344966888428)
+    wet.lat: 1375 of 57344 values differ (largest |diff| 0.570467 at flat index 13819: 0.0 -> 0.5704674124717712)
+    wet.hide: 579 of 24576 values differ (largest |diff| 0.302583 at flat index 5924: 1.0 -> 1.3025829792022705)
+    clock.cure: 380 of 8192 values differ (largest |diff| 2.84113e-05 at flat index 1974: 0.0 -> 2.8411284802132286e-05)
+    clock.lev: 103 of 8192 values differ (largest |diff| 0.000671387 at flat index 1463: 899.9993286132812 -> 900.0)
+    clock.seen: 382 of 8192 values differ (largest |diff| 2.67131 at flat index 1310: 0.9863235950469971 -> 3.6576344966888428)
+    clock.th: 382 of 8192 values differ (largest |diff| 1.43221 at flat index 1179: 1.9067631959915161 -> 3.3389711380004883)
+    rags.debug: rags[0].load 0.78475475 -> 0.5963985
+    rags.debug: rags[0].soaked 0.06539624 -> 0.049699873
+  chunk-005: DIFFERENT
+    wet.vol: 429 of 8192 values differ (largest |diff| 2.67131 at flat index 1310: 0.9863235950469971 -> 3.6576344966888428)
+    wet.lat: 1375 of 57344 values differ (largest |diff| 0.570467 at flat index 13819: 0.0 -> 0.5704674124717712)
+    wet.hide: 579 of 24576 values differ (largest |diff| 0.302583 at flat index 5924: 1.0 -> 1.3025829792022705)
+    clock.cure: 427 of 8192 values differ (largest |diff| 3.01853e-05 at flat index 1974: 0.0 -> 3.0185256036929786e-05)
+    clock.lev: 103 of 8192 values differ (largest |diff| 0.000671387 at flat index 1463: 899.9993286132812 -> 900.0)
+    clock.seen: 429 of 8192 values differ (largest |diff| 2.67131 at flat index 1310: 0.9863235950469971 -> 3.6576344966888428)
+    clock.th: 429 of 8192 values differ (largest |diff| 1.43221 at flat index 1179: 1.9067631959915161 -> 3.3389711380004883)
+    rags.debug: rags[0].load 0.8446897 -> 0.67887026
+    rags.debug: rags[0].soaked 0.07039082 -> 0.05657252
+  chunk-006: DIFFERENT
+    wet.vol: 751 of 8192 values differ (largest |diff| 7.26584 at flat index 1884: 1.9533520936965942 -> 9.219192504882812)
+    wet.lat: 2514 of 57344 values differ (largest |diff| 0.570467 at flat index 13819: 0.0 -> 0.5704674124717712)
+    wet.hide: 1011 of 24576 values differ (largest |diff| 0.302583 at flat index 5924: 1.0 -> 1.3025829792022705)
+    clock.cure: 741 of 8192 values differ (largest |diff| 4.58087e-05 at flat index 1974: 0.0 -> 4.5808672439306974e-05)
+    clock.lev: 125 of 8192 values differ (largest |diff| 0.000671387 at flat index 1463: 899.9993286132812 -> 900.0)
+    clock.seen: 751 of 8192 values differ (largest |diff| 7.26584 at flat index 1884: 1.9533520936965942 -> 9.219192504882812)
+    clock.th: 756 of 8192 values differ (largest |diff| 3.1438 at flat index 1508: 4.7880401611328125 -> 1.6442406177520752)
+    rags.debug: rags[0].load 0.8446897 -> 0.67887026
+    rags.debug: rags[0].soaked 0.07039082 -> 0.05657252
+    rags.debug: rags[1].load 1.0 -> 0.9994828
+    rags.debug: rags[1].soaked 0.08333334 -> 0.08329023
+  chunk-007: DIFFERENT
+    wet.vol: 1012 of 8192 values differ (largest |diff| 7.26584 at flat index 1884: 1.9533520936965942 -> 9.219192504882812)
+    wet.lat: 2603 of 57344 values differ (largest |diff| 0.592698 at flat index 19622: 0.0 -> 0.5926977396011353)
+    wet.hide: 1044 of 24576 values differ (largest |diff| 0.302583 at flat index 5924: 1.0 -> 1.3025829792022705)
+    clock.cure: 962 of 8192 values differ (largest |diff| 5.5851e-05 at flat index 1974: 0.0 -> 5.585103644989431e-05)
+    clock.lev: 176 of 8192 values differ (largest |diff| 0.000671387 at flat index 1463: 899.9993286132812 -> 900.0)
+    clock.seen: 1001 of 8192 values differ (largest |diff| 7.26584 at flat index 1884: 1.9533520936965942 -> 9.219192504882812)
+    clock.th: 1006 of 8192 values differ (largest |diff| 3.1438 at flat index 1508: 4.7880401611328125 -> 1.6442406177520752)
+    rags.debug: rags[0].load 0.07039082 -> 0.05657252
+    rags.debug: rags[0].soaked 0.07039082 -> 0.05657252
+    rags.debug: rags[1].soaked 0.08333334 -> 0.083333515
+  chunk-008: DIFFERENT
+    wet.vol: 1248 of 8192 values differ (largest |diff| 7.26584 at flat index 1884: 1.9533520936965942 -> 9.219192504882812)
+    wet.lat: 4916 of 57344 values differ (largest |diff| 0.592698 at flat index 19622: 0.0 -> 0.5926977396011353)
+    wet.hide: 2017 of 24576 values differ (largest |diff| 0.302583 at flat index 5924: 1.0 -> 1.3025829792022705)
+    wet.floor: 309 of 8192 values differ (largest |diff| 2.31592 at flat index 1310: 2.57045841217041 -> 4.886377334594727)
+    clock.cure: 1226 of 8192 values differ (largest |diff| 6.13166e-05 at flat index 1974: 0.0 -> 6.1316583014559e-05)
+    clock.lev: 159 of 8192 values differ (largest |diff| 0.000671387 at flat index 1463: 899.9993286132812 -> 900.0)
+    clock.seen: 1237 of 8192 values differ (largest |diff| 7.26584 at flat index 1884: 1.9533520936965942 -> 9.219192504882812)
+    clock.th: 1270 of 8192 values differ (largest |diff| 3.1438 at flat index 1508: 4.7880401611328125 -> 1.6442406177520752)
+    brushes.debug: brushes[0].bristles[0].vol 3184.3684 -> 3182.0576
+    brushes.debug: brushes[0].bristles[0].lat[0] 0.16357407 -> 0.1635803
+    brushes.debug: brushes[0].bristles[0].lat[1] 0.593366 -> 0.59335685
+    brushes.debug: brushes[0].bristles[0].lat[2] 0.23488869 -> 0.23488982
+    brushes.debug: brushes[0].bristles[0].lat[3] 0.008171172 -> 0.008172872
+    brushes.debug: brushes[0].bristles[0].lat[4] 0.00026154701 -> 0.00026146797
+    brushes.debug: brushes[0].bristles[0].lat[5] 0.00024914296 -> 0.000249071
+    brushes.debug: brushes[0].bristles[0].lat[6] -0.0039170627 -> -0.003916993
+    brushes.debug: brushes[0].bristles[0].hide[0] 0.29620844 -> 0.296209
+    brushes.debug: brushes[0].bristles[0].hide[1] 0.5010813 -> 0.501086
+    brushes.debug: brushes[0].bristles[0].hide[2] 1.2086508 -> 1.2086881
+    brushes.debug: brushes[0].bristles[0].cure 7.8706597e-7 -> 7.767315e-7
+    brushes.debug: brushes[0].bristles[1].vol 2872.464 -> 2870.6917
+    brushes.debug: brushes[0].bristles[1].lat[0] 0.16358042 -> 0.16358614
+    brushes.debug: brushes[0].bristles[1].lat[1] 0.59335697 -> 0.5933486
+    brushes.debug: brushes[0].bristles[1].lat[2] 0.23488985 -> 0.23489091
+    brushes.debug: brushes[0].bristles[1].lat[3] 0.008172892 -> 0.00817444
+    brushes.debug: brushes[0].bristles[1].lat[4] 0.0002614669 -> 0.0002613948
+    brushes.debug: brushes[0].bristles[1].lat[5] 0.00024907 -> 0.0002490044
+    brushes.debug: brushes[0].bristles[1].lat[6] -0.003916991 -> -0.003916927
+    brushes.debug: (more differences not listed)
+    rags.debug: rags[0].load 0.07039082 -> 0.05657252
+    rags.debug: rags[0].soaked 0.07039082 -> 0.05657252
+    rags.debug: rags[1].soaked 0.08333334 -> 0.083333515
+  state_compare: DIFFERENT (5 of 8 chunks differ)
+  png DIFFERENT as af49348's; printed output DIFFERENT; state digests different
+stroke: state equal on every baseline field (EQUAL (0 of 3 chunks differ))
+  png same as af49348's; printed output same; state digests different
+wait: state equal on every baseline field (EQUAL (0 of 7 chunks differ))
+  png same as af49348's; printed output same; state digests different

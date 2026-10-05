@@ -1,0 +1,17 @@
+User request: merge rag to main.
+Local main before: cad5db0db3d1201252c5094b228a29a1ba416e2c
+Remote main before (fresh fetch): 6b8ec1823150f5eae3c135c927df332c8d5c1056
+Rag before: f522ca69e7f7da1642f0412e6aff8e0e383ac81e
+Remote main is an ancestor of rag; ancestry check exit 0.
+Public repo verified through gh API: private false; owner aliceisjustplaying.
+Privacy scan origin/main..rag: 1115 objects, 480 blobs, zero identity violations.
+Local main updated in a temporary worktree using git merge --ff-only --no-overwrite-ignore f522ca69e7f7da1642f0412e6aff8e0e383ac81e.
+Normal git push origin main:main succeeded with existing privacy hook intact.
+Push output: 6b8ec18..f522ca6 main -> main.
+Remote refs independently verified using git ls-remote after push:
+main f522ca69e7f7da1642f0412e6aff8e0e383ac81e
+rag  f522ca69e7f7da1642f0412e6aff8e0e383ac81e
+Local main and rag equal f522ca69e7f7da1642f0412e6aff8e0e383ac81e.
+Current checkout remains rag. Temporary worktree removed; two preexisting R24 worktrees preserved.
+No force push, no disabled hooks, no modified gate and no code changes.
+Main promotion uses the owner's documented direct-fast-forward choice (notes/engine3/HANDOVER.md section 5.6), under the explicit request after the known rag failure was deferred. The all-green promotion gate was not claimed to pass.

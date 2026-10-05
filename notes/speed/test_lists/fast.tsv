@@ -5,6 +5,7 @@ build	build-test-binaries	600	0	-	cargo test --workspace --lib --bins --tests --
 build	build-thinner-release-tests	600	0	-	cargo test --release -p paint --test thinner_physics --test thinner_pigments --no-run && cargo test --release -p easel --bin easel --no-run
 cargo	cargo-test	60	271	-	scripts/tests/cargo_tests.sh -j 4
 script	old-logs	60	11	^old_logs: \S+ ok	scripts/tests/old_logs.sh "$CARGO_TARGET_DIR/release/easel"
+script	image-tolerance	60	1	^image_tolerance: 8 cases passed	uv run --script scripts/tests/image_tolerance.py
 script	baseline-package	60	1	^verify_package: hashes ok	notes/thinner/baseline/tools/verify_package.sh
 script	baseline-state	60	6	^\S+: state equal on every baseline field	scripts/tests/baseline_state.sh "$CARGO_TARGET_DIR/release/easel"
 script	thinner-quick	60	1	^thinner acceptance --quick: \d+ of \d+ required tests passed	scripts/test_thinner_acceptance --quick	-

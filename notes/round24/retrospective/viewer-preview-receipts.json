@@ -1,0 +1,21 @@
+{
+  "evidence_kind": "Read-only historical paintings on isolated candidate backend, no painting launched",
+  "results": [
+    {
+      "painter": "opus",
+      "url": "http://100.82.115.34:8768/?p=paint-studio-24be5f",
+      "http_status": 200,
+      "badge": "Sitting limit reached",
+      "badge_reason": "2026-10-05 03:14:20 4 record(s): NOT FINISHED: stopped after 4 sittings (MAX_SITTINGS)",
+      "screenshot": "viewer-opus-outcome.png"
+    },
+    {
+      "painter": "fable",
+      "url": "http://100.82.115.34:8768/?p=paint-studio-ea8319",
+      "http_status": 200,
+      "badge": "Finished",
+      "badge_reason": "2026-10-04 23:44:51 2 record(s): the painter is done: sitting 2 added no painting",
+      "screenshot": "viewer-fable-outcome.png"
+    }
+  ]
+}

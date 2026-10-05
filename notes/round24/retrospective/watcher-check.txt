@@ -1,0 +1,10 @@
+✔ exported pixels do not imply completion and unchanged exports refresh outcomes (75.069958ms)
+ℹ {"evidence_kind":"Offline synthetic export files, no painting launched","watcher_output":["2026-10-05T09:51:52.275Z Watching Opus final render export; OBS remains live until 15 minutes afterward","2026-10-05T09:51:52.278Z fable: painter finished; final render exported","2026-10-05T09:51:52.279Z opus: painter cap_reached; final render exported"],"exported_metadata":{"sha256":"6126b6adba19db26beb95822b8d370153b8be75a6e669d6adc8f325b0b8da777","preservedAt":"original preservation","painterOutcome":{"status":"cap_reached","reason":"NOT FINISHED: stopped after 4 sittings (MAX_SITTINGS)"},"renderExported":true}}
+ℹ tests 1
+ℹ suites 0
+ℹ pass 1
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 116.957041

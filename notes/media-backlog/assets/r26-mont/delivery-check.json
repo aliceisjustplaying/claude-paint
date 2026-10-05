@@ -1,0 +1,35 @@
+{
+  "verified_at": "2026-10-05T16:21:37.379760+00:00",
+  "id": "r26-mont",
+  "status": "verified for delivery",
+  "finished_png_sha256": "8cb3ac61cc3a1b447047d1066017abfe8f1f4ad3da9c11a0a37790dab4c86077",
+  "normal_png_sha256": "5396c28f0ea4633e022ba976783b67a09631b33eb67f8843723c41fcaa58559a",
+  "video_sha256": "5ccf787148fb0cf2b6e38f187e06c2fce439dee788aec8e71ab8c8ba908d8693",
+  "visual_review": {
+    "final_png": "Inspected exact finished deliverable, full square painting and Claude signature visible; no protected identity or home paths.",
+    "video_contact_sheet": "Inspected exact extracted MP4 frames at 0, 6, 12 and 19.5 seconds, from bare canvas through painting progression to finished version; no crop."
+  },
+  "privacy": {
+    "protected_literals_in_deliverable_bytes": 0,
+    "embedded_metadata": "Inspected; PNGs contain only IHDR/IDAT/IEND, MP4 contains encoder/container/language/handler tags; no protected identity or home paths."
+  },
+  "video": {
+    "width": 1920,
+    "height": 1920,
+    "duration_seconds": 20.0,
+    "codec": "h264",
+    "pixel_format": "yuv420p",
+    "fps": 24,
+    "frames": 480,
+    "faststart": true,
+    "full_decode": "Passed in render workflow."
+  },
+  "replay": {
+    "source_commit": "3c7bf92d3f046bf64db863916487c0fa703d1e19",
+    "original_chunks": 147,
+    "automatic_finishing_chunks": 1,
+    "full_finished_replay_byte_exact": true,
+    "recorded_frames": 490
+  },
+  "public_links": null
+}

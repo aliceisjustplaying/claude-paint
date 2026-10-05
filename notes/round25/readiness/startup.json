@@ -1,0 +1,41 @@
+{
+  "state": "launched, first successful tools verified",
+  "started_local": "2026-10-05 12:52:33 BST",
+  "studio": "paint-studio-d95ea6",
+  "viewer": "http://m3p.tailec2dc.ts.net:8768/?p=paint-studio-d95ea6",
+  "source_commit": "e017df8e0394fbe520b41ddac112e69e46621cd2",
+  "provider": "anthropic",
+  "model": "claude-opus-5-5",
+  "thinking": "high",
+  "engine": 5,
+  "box": "friedrich",
+  "sitting_limit": null,
+  "max_crashes": 6,
+  "launcher": "launchd art.stillwet.painter.r25 with caffeinate",
+  "runner_pid": 2031,
+  "painter_pid": 2343,
+  "session": "~/.pi/agent/sessions/<studio-session-folder>/2026-10-05T11-52-34-042Z_01a10be8-93fa-748b-b2c5-1b03214b7969.jsonl",
+  "generated_code": "~/src/a/paint-studio-d95ea6/paintings/lua/painting.lua",
+  "runner_log": "~/tmp/gallery-fcf9c110/r25/run/runner.FRDC.out",
+  "successful_tools": [
+    {
+      "tool": "paint",
+      "timestamp": "2026-10-05T11:53:55.207Z",
+      "isError": false
+    },
+    {
+      "tool": "look",
+      "timestamp": "2026-10-05T11:53:57.168Z",
+      "isError": false
+    },
+    {
+      "tool": "note",
+      "timestamp": "2026-10-05T11:54:08.327Z",
+      "isError": false
+    }
+  ],
+  "actual_binary_sha256": "49ee4696fc80c62581d8f057c73cedffa57fae6603ac3cd3d38a40727f953e53",
+  "current_sitting": 1,
+  "current_outcome": null,
+  "M1_verification": "SSH timed out; verified HTTP and native browser on serving M3"
+}

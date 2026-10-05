@@ -1,0 +1,58 @@
+[
+  {
+    "number": 5,
+    "url": "https://github.com/aliceisjustplaying/claude-paint/pull/5",
+    "comment_url": "https://github.com/aliceisjustplaying/claude-paint/pull/5#issuecomment-5991310781",
+    "before_state": "OPEN",
+    "final_state": "CLOSED"
+  },
+  {
+    "number": 6,
+    "url": "https://github.com/aliceisjustplaying/claude-paint/pull/6",
+    "comment_url": "https://github.com/aliceisjustplaying/claude-paint/pull/6#issuecomment-5991311531",
+    "before_state": "MERGED",
+    "final_state": "MERGED"
+  },
+  {
+    "number": 7,
+    "url": "https://github.com/aliceisjustplaying/claude-paint/pull/7",
+    "comment_url": "https://github.com/aliceisjustplaying/claude-paint/pull/7#issuecomment-5991312049",
+    "before_state": "OPEN",
+    "final_state": "CLOSED"
+  },
+  {
+    "number": 8,
+    "url": "https://github.com/aliceisjustplaying/claude-paint/pull/8",
+    "comment_url": "https://github.com/aliceisjustplaying/claude-paint/pull/8#issuecomment-5991312892",
+    "before_state": "OPEN",
+    "final_state": "CLOSED"
+  },
+  {
+    "number": 9,
+    "url": "https://github.com/aliceisjustplaying/claude-paint/pull/9",
+    "comment_url": "https://github.com/aliceisjustplaying/claude-paint/pull/9#issuecomment-5991313688",
+    "before_state": "OPEN",
+    "final_state": "CLOSED"
+  },
+  {
+    "number": 10,
+    "url": "https://github.com/aliceisjustplaying/claude-paint/pull/10",
+    "comment_url": "https://github.com/aliceisjustplaying/claude-paint/pull/10#issuecomment-5991314554",
+    "before_state": "OPEN",
+    "final_state": "CLOSED"
+  },
+  {
+    "number": 11,
+    "url": "https://github.com/aliceisjustplaying/claude-paint/pull/11",
+    "comment_url": "https://github.com/aliceisjustplaying/claude-paint/pull/11#issuecomment-5991315338",
+    "before_state": "OPEN",
+    "final_state": "CLOSED"
+  },
+  {
+    "number": 12,
+    "url": "https://github.com/aliceisjustplaying/claude-paint/pull/12",
+    "comment_url": "https://github.com/aliceisjustplaying/claude-paint/pull/12#issuecomment-5991316171",
+    "before_state": "OPEN",
+    "final_state": "CLOSED"
+  }
+]

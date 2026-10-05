@@ -1,0 +1,47 @@
+{
+  "verified_at": "2026-10-05T17:21:24.889421+00:00",
+  "id": "r25-frdc",
+  "status": "verified for delivery",
+  "file_sha256": {
+    "r25-frdc-finished.png": "0c61ee8468224ec2e4a39bc930693bda624d23a4ad3f55a51411d6e0e1c2a969",
+    "r25-frdc-normal.png": "ed6442a2e1b8d29baaebc3967b79347cdd892179f2f4f8d1cce787d42a8d7225",
+    "r25-frdc.mp4": "d30ef79b094421b9dd8bc89926d525564dccd3b507140a3ac090994342416dfa",
+    "video-review.png": "5b16225b214109252211458b2cf99ebd9e3db8daecef81a5ef29674caf4d9cdc"
+  },
+  "visual_review": {
+    "final_png": "Inspected exact finished deliverable: Winter tree and snow painting. Whole painting retained, automatic varnish/cracks visible and no protected identity or home paths visible.",
+    "video_contact_sheet": "Inspected exact extracted MP4 frames at 0, 6, 12 and 19.5 seconds. Painting progression reaches finished painting with no crop or protected identity visible."
+  },
+  "privacy": {
+    "protected_literals_in_deliverable_bytes": 0,
+    "embedded_metadata": "Inspected PNG chunks and ffprobe tags. PNGs contain IHDR/IDAT/IEND only. MP4 has encoder/container/language/handler tags, no protected identity or home paths."
+  },
+  "video": {
+    "width": 1920,
+    "height": 1372,
+    "duration_seconds": 20,
+    "codec": "h264",
+    "pixel_format": "yuv420p",
+    "fps": 24,
+    "frames": 480,
+    "crop": false,
+    "aspect_rounding": "Height rounded to even pixels for yuv420p.",
+    "faststart": true,
+    "atoms": {
+      "ftyp": 0,
+      "moov": 32,
+      "free": 6583,
+      "mdat": 6591
+    },
+    "full_decode": "Passed in render workflow."
+  },
+  "replay": {
+    "source_commit": "e017df8e0394fbe520b41ddac112e69e46621cd2",
+    "engine_sha256": "90bec4d5eeee73578b0d3ba9fb2dd59ef77ba56e806041c58324f8ee8760fe57",
+    "original_chunks": 234,
+    "automatic_finishing_chunks": 1,
+    "full_finished_replay_byte_exact": true,
+    "recorded_frames": 1076
+  },
+  "public_links": null
+}

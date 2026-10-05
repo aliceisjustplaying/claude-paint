@@ -1,0 +1,28 @@
+{
+  "tests": {
+    "command": "uv run --with pytest --with pillow --python .venv/bin/python pytest studio -q",
+    "passed": 47,
+    "durationSeconds": 19.12
+  },
+  "production": {
+    "url": "https://stillwet.art/studio/",
+    "beforeSHA256": "c148597e411767d426524b642b2efbe1b7bb9c164c75a28e5baa428ee6dfe358",
+    "afterSHA256": "c148597e411767d426524b642b2efbe1b7bb9c164c75a28e5baa428ee6dfe358",
+    "deployed": false,
+    "isolation": "Candidate studio files live on a separate branch; studio/ in the main checkout used by the minute-by-minute exporter is unchanged."
+  },
+  "tailnet": {
+    "url": "http://100.82.115.34:8769/?p=paint-studio-12e572",
+    "verifiedFrom": "VPS over the private tailnet",
+    "httpStatus": 200
+  },
+  "screenshot": {
+    "requested": "T3 preview_snapshot with save=true",
+    "blocker": "preview_status and preview_open both returned No preview automation host is available",
+    "fallback": "Playwright Chromium PNG captures"
+  },
+  "limits": [
+    "Source loading and background preparation still take time after navigation; the measured instant opening is after the one-second viewing interval.",
+    "The two-frame measurement is a browser paint opportunity, not a hardware display timestamp."
+  ]
+}

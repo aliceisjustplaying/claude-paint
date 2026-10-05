@@ -1,0 +1,32 @@
+{
+  "items": {
+    "r27-hopr": {
+      "status": "ready",
+      "free_bytes_before": 85212823552,
+      "receipt": "~/src/a/claude-paint/notes/round27/social/receipt.json"
+    },
+    "r26-mont": {
+      "status": "ready",
+      "free_bytes_before": 85212819456,
+      "receipt": "~/src/a/claude-paint/notes/media-backlog/assets/r26-mont/receipt.json"
+    },
+    "r25-frdc": {
+      "status": "ready",
+      "free_bytes_before": 85212811264,
+      "receipt": "~/src/a/claude-paint/notes/media-backlog/assets/r25-frdc/receipt.json"
+    },
+    "r24-inns": {
+      "status": "ready",
+      "free_bytes_before": 85045567488,
+      "receipt": "~/src/a/claude-paint/notes/media-backlog/assets/r24-inns/receipt.json"
+    },
+    "r22.1-inns": {
+      "status": "video blocked",
+      "free_bytes_before": 80071880704,
+      "receipt": "~/src/a/claude-paint/notes/media-backlog/assets/r22.1-inns/receipt.json"
+    }
+  },
+  "status": "completed with recorded blockers",
+  "current": null,
+  "updated_at": "2026-10-05T17:16:22.400174+00:00"
+}

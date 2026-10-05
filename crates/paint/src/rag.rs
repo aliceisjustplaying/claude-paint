@@ -234,7 +234,7 @@ struct Seg {
 /// A rag in the hand: its pad width (units), how loaded the face in use is
 /// (0 clean .. 1 full), how much the whole cloth has soaked up (0 .. 1, all
 /// `FACES` faces full), how damp with spirits the face in use is (0 dry ..
-/// 1 dipped well, as of `wet_at`; a refold turns out a dry face, and the
+/// 1 dipped well, as of `wet_at`; refolding preserves this dampness, and
 /// spirits evaporate, `DAMP_HALF_MIN`), the fold in use, and its own
 /// randomness (the cloth's creases).
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -264,13 +264,13 @@ impl Rag {
         Rag { width: width.max(0.1), load: 0.0, soaked: 0.0, damp: 0.0, wet_at: 0.0, fold: 0, seed, solvent_mm3: 0.0, mobile: Mobile::default() }
     }
 
-    /// Turn a cleaner, dry face outward. No face is cleaner than the paint
+    /// Turn a cleaner face outward, retaining the cloth's dampness.
+    /// No face is cleaner than the paint
     /// soaked through the whole cloth so far (`soaked`) leaves it. Counts
     /// the hand time in `t`.
     pub fn refold(&mut self, t: &mut Tally) {
         self.fold = self.fold.wrapping_add(1);
         self.load = self.soaked.clamp(0.0, 1.0);
-        self.damp = 0.0;
         // (what was wet at the old face's surface is folded inside, in
         // `soaked`)
         self.mobile = Mobile::default();
@@ -280,7 +280,7 @@ impl Rag {
     /// Dip the face in use into spirits, the reach starting at `now_min`
     /// (`Canvas::now_min`): `amount` 0..1 (a light dip about 0.5). It is
     /// that damp when the hand is back (`pace::DIP` later), and stays damp
-    /// until it is refolded or the spirits evaporate (`evaporate`). Counts
+    /// until the spirits evaporate (`evaporate`). Counts
     /// the hand time in `t`.
     pub fn dip(&mut self, amount: f32, now_min: f64, t: &mut Tally) {
         self.evaporate(now_min + pace::DIP / 60.0);
@@ -1421,6 +1421,30 @@ mod tests {
     /// wet layer.
     fn state_bits(c: &Canvas) -> Vec<u32> {
         c.px.iter().flat_map(|p| p.map(f32::to_bits)).chain(c.height.iter().chain(&c.film).chain(&c.wet.vol).map(|v| v.to_bits())).collect()
+    }
+
+    #[test]
+    fn manual_and_automatic_refolding_preserve_spirits() {
+        for engine in [3, 4, 5] {
+            let mut c = path::fixture(false, engine, 480, 300.0);
+            c.set_hand_time(Some(1.0));
+            let mut r = Rag::new(100.0, 7);
+            c.rag_wipe(&mut r, &thin::LINE, &[0.8], 3);
+            assert!(r.load > r.soaked && r.mobile.mm3 > 0.0);
+            r.dip(0.5, c.now_min(), &mut c.tally);
+            let (damp, wet_at, solvent) = (r.damp, r.wet_at, r.solvent_mm3);
+            r.refold(&mut c.tally);
+            assert_eq!((r.damp, r.wet_at, r.solvent_mm3), (damp, wet_at, solvent), "manual fold, engine {engine}");
+            assert_eq!(r.load, r.soaked);
+            assert_eq!(r.mobile, Mobile::default());
+
+            let fold = r.fold;
+            let mask = Mask::from_fn(c.frame(), |x, y| if (250.0..750.0).contains(&x) && (280.0..400.0).contains(&y) { 1.0 } else { 0.0 });
+            let strokes = c.rag_region(&mut r, &mask, &RagPass { pressure: 0.0, angle: 0.0, passes: 1, refold: Some(0.0), seed: 9 });
+            assert!(strokes > 1 && r.fold > fold, "automatic folds actually occur");
+            let expected = damp as f64 * (-(c.now_min() - wet_at).max(0.0) * std::f64::consts::LN_2 / DAMP_HALF_MIN).exp();
+            assert!((r.damp_at(c.now_min()) as f64 - expected).abs() < 1e-6, "automatic folds retain spirits while time evaporates them, engine {engine}");
+        }
     }
 
     /// The spirits in a dipped face evaporate as the painting goes on: half

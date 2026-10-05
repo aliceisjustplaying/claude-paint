@@ -1,0 +1,51 @@
+/* stillwet stream: the livestream's layout, laid over the studio page (index.html), same DOM. The page loads this
+   file itself when its address has ?stream=1 (OBS browser source: http://127.0.0.1:<port>/?p=<painter>&stream=1,
+   with OBS's custom CSS left at its default); nothing to paste into OBS.
+   The painting and its thinking big; the strip of looks kept, the playback controls hidden */
+body { background-color: var(--bg) !important }  /* (OBS's default custom CSS makes the body transparent) */
+#transport { display: none !important }
+footer { padding: 8px 14px !important }
+body.nocode main { grid-template-columns: minmax(0,54fr) minmax(0,46fr) !important }
+#view .pic img { filter: none !important }
+/* what the painter is studying now (a close-up, a squint, a check in grays, a reference picture) is part of the show: as big as the painting, under its label */
+#view.two { grid-template-rows: minmax(0,1fr) minmax(0,1fr) !important; gap: 14px !important }
+#other:not([hidden]) { display: flex !important; flex-direction: column !important; align-items: stretch !important; gap: 6px !important }
+#other img { object-position: center !important }
+#cap2 { order: 0 !important; font-size: 19px !important; text-align: center !important; white-space: nowrap; overflow: hidden; text-overflow: ellipsis }
+#cap2 b { display: inline !important; font-size: 19px !important; margin-right: 10px }
+/* a tall canvas (portrait, square or nearly: #view.tall): side by side, each the pane's full height, instead of two half-height rows */
+#view.two.tall { grid-template-rows: minmax(0,1fr) !important; grid-template-columns: minmax(0,1fr) minmax(0,1fr) !important }
+#view.two.tall .pic img { object-position: center top !important }
+/* their labels above them, ending on one line so the two pictures start level */
+#view.two.tall #cap, #view.two.tall #cap2 { order: -1 !important; min-height: 84px; display: flex !important; flex-direction: column; justify-content: flex-end; white-space: normal !important }
+#cropbox { border-width: 3px !important }
+#reftag { font-size: 17px !important; padding: 3px 12px !important }
+#strip .refthumb b { font-size: 11px !important }
+#nopic, .jempty { font-size: 26px !important }
+#finished { display: none !important }
+.th { font-size: 28px !important; line-height: 1.5 !important; padding-left: 18px !important; border-left: 3px solid #5e5e6d !important }
+.say { font-size: 27px !important; margin: 18px 0 !important }
+.chip { font-size: 21px !important; padding: 2px 10px !important }
+.tm { font-size: 17px !important }
+.pane > h4 { font-size: 16px !important }
+#jbody { padding: 16px 26px 20px !important }
+#doing .what { font-size: 28px !important }
+#doing .detail { font-size: 19px !important }
+#badge { font-size: 17px !important; padding: 4px 14px !important }
+#clock { font-size: 28px !important } #clocklbl { font-size: 15px !important } #pclock { font-size: 15px !important } #pclock b { font-size: 22px !important }
+#who { max-width: 820px !important } #who .t { font-size: 24px !important } #who .m { font-size: 18px !important } #who .caret { display: none !important }
+#cap { font-size: 17px !important }
+/* the site's address in the header, right of the clock */
+header::after { content: "stillwet.art"; flex: none; margin-left: 18px; padding-left: 18px; border-left: 1px solid var(--line); font: 600 26px -apple-system, system-ui, sans-serif; color: var(--acc); letter-spacing: .01em }
+#allwrap { display: none !important }
+/* the palette (its newest palette look): its own place, beside what the painter studies now (or alone under the painting) */
+#view.pal { grid-template-rows: minmax(0,1fr) minmax(0,1fr) !important; gap: 14px !important }
+#pal:not([hidden]) { display: flex !important; flex-direction: column !important; align-items: stretch !important; gap: 6px !important }
+#pal img { object-position: center !important }
+#cap3 { order: 0 !important; font-size: 19px !important; text-align: center !important; white-space: nowrap; overflow: hidden; text-overflow: ellipsis }
+#cap3 b { display: inline !important; font-size: 19px !important; margin-right: 10px }
+#view.two.pal { grid-template-rows: minmax(0,1fr) minmax(0,1fr) !important; grid-template-columns: minmax(0,1fr) minmax(0,1fr) !important }
+/* a tall canvas: the painting on the left, full height; the look and the palette stacked on the right */
+#view.pal.tall { grid-template-rows: minmax(0,1fr) !important; grid-template-columns: minmax(0,1fr) minmax(0,1fr) !important; grid-template-areas: 'w p' !important }
+#view.two.pal.tall { grid-template-rows: minmax(0,1fr) minmax(0,1fr) !important; grid-template-areas: 'w o' 'w p' !important }
+#view.two.pal.tall #cap, #view.two.pal.tall #cap2 { min-height: 0 !important }

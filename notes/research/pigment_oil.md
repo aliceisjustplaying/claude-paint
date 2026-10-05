@@ -307,7 +307,8 @@ in, and wax. Oil and wax set how fast the tube dries; wax also dulls it.
   one painting [MW88; NG89]. Bladder colours took more oil than a painter's
   own grind [FERN]: lead white 0.14 **est.** (between Watin's 0.125 and the
   1901 tubes), the other bought-ground colours at its ratio, 1.63 × OA
-  **est.**; cobalt blue at 1.2 × OA **est.**, as smalt.
+  **est.** (the named Friedrich box's Naples yellow and rose madder too);
+  cobalt blue at 1.2 × OA **est.**, as smalt.
 - **Inness.** No source names his colourman; British paint is the proxy
   (American grinders copied Winsor & Newton [UEB p.158]). His red earth is
   Venetian red, 25% oil [UEB p.231]; Antwerp blue as Church's Prussian

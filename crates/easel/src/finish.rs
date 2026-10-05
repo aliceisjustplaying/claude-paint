@@ -84,8 +84,8 @@ pub(crate) fn install(lua: &Lua, st: S) -> Result<()> {
                 (num(o, "coats")?.unwrap_or(0.4), num(o, "vary")?.unwrap_or(0.12), o.get::<Option<u32>>("seed")?.unwrap_or(98))
             }
         };
-        if coats < 0.0 || vary < 0.0 {
-            return err("varnish: coats and vary must be nonnegative");
+        if !(coats.is_finite() && vary.is_finite() && coats >= 0.0 && vary >= 0.0) {
+            return err("varnish: coats and vary must be finite and nonnegative");
         }
         // brushed over the whole canvas once it is dry
         needs_dry(&st1, "varnish")?;

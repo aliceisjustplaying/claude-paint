@@ -1004,9 +1004,9 @@ impl Server {
         let before = image::open(&real).map_err(|e| format!("--compare {}: {e}", prev.display()))?.to_rgb8();
         let h = now.height();
         let bw = ((before.width() as f64 * h as f64 / before.height() as f64).round() as u32).max(1);
-        // (an earlier look far wider at this height is of another crop)
-        if bw > 4 * now.width() {
-            return Err(format!("--compare {}: the earlier look's crop doesn't match this one's (it is far wider for its height); repeat its --crop", prev.display()));
+        // (an earlier look far wider or far narrower at this height is of another crop)
+        if bw > 4 * now.width() || 4 * bw < now.width() {
+            return Err(format!("--compare {}: the earlier look's crop doesn't match this one's (its shape is far from this one's); repeat its --crop", prev.display()));
         }
         let before = image::imageops::resize(&before, bw, h, image::imageops::FilterType::Lanczos3);
         let gap = 12;

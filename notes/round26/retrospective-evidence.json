@@ -1,0 +1,349 @@
+{
+  "sittings": [
+    {
+      "s": 1,
+      "file": "2026-10-05T12-43-05-462Z_01a10c16-d575-7442-9ee0-e9fcc9f5cc77.jsonl",
+      "sha256": "5c70b255e032e7388fece8c730f968cad8f0fd728cb03c5330b874bf68e03737",
+      "records": 622,
+      "start": "2026-10-05T12:43:05.462Z",
+      "end": "2026-10-05T13:20:49.903Z",
+      "success": {
+        "read": 5,
+        "status": 1,
+        "paint": 106,
+        "note": 13,
+        "look": 90
+      },
+      "errors": [
+        {
+          "ref": "S1:R52",
+          "id": "158052bf",
+          "tool": "paint",
+          "text": "runtime error: want a mask, got integer; use rect(100,100,200,200) or convert a drawn outline with o:mask() (closed), o:below()/o:above() (open), or o:band(10). Call the method: o.mask is not a mask\n(the chunk failed and changed nothing)"
+        },
+        {
+          "ref": "S1:R110",
+          "id": "580a08d3",
+          "tool": "look",
+          "text": "crop exceeds 1200 pixels per side (crops stay 1:1); coordinates are canvas units, x0,y0,x1,y1 (opposite corners). At this canvas resolution each side may span at most 500.00 units; example: crop 0.00,0.00,249.00,249.00"
+        },
+        {
+          "ref": "S1:R173",
+          "id": "eba2b17a",
+          "tool": "paint",
+          "text": "233503.0655137295\nruntime error: want a mask, got integer; use rect(100,100,200,200) or convert a drawn outline with o:mask() (closed), o:below()/o:above() (open), or o:band(10). Call the method: o.mask is not a mask\n(the chunk failed and changed nothing)"
+        },
+        {
+          "ref": "S1:R222",
+          "id": "74218930",
+          "tool": "paint",
+          "text": "runtime error: work: unknown option \"lay\" (options: hand, pile, tool, length, coverage, angle, angle_jitter, load_at, cut_in, pressure, orient, dips, blender, scrub, clip, threshold, ramps, shake, curve, cross, drift, tail, broken, swell, clump, order, mix_jitter, seed, ruler, load, hug, fill, visible, behind, at, view, edge, streak, second, scale_at, piles)\n(the chunk failed and changed nothing)"
+        }
+      ],
+      "apiCalls": 132,
+      "apiStatuses": {
+        "200": 132
+      },
+      "waits": [
+        {
+          "ref": "S1:R73",
+          "chunk": 7,
+          "expr": "24*60",
+          "minutes": 1440
+        },
+        {
+          "ref": "S1:R77",
+          "chunk": 8,
+          "expr": "2*24*60",
+          "minutes": 2880
+        },
+        {
+          "ref": "S1:R81",
+          "chunk": 9,
+          "expr": "2*24*60",
+          "minutes": 2880
+        },
+        {
+          "ref": "S1:R128",
+          "chunk": 16,
+          "expr": "3*24*60",
+          "minutes": 4320
+        },
+        {
+          "ref": "S1:R132",
+          "chunk": 17,
+          "expr": "4*24*60",
+          "minutes": 5760
+        },
+        {
+          "ref": "S1:R161",
+          "chunk": 23,
+          "expr": "24*60",
+          "minutes": 1440
+        },
+        {
+          "ref": "S1:R165",
+          "chunk": 24,
+          "expr": "3*24*60",
+          "minutes": 4320
+        },
+        {
+          "ref": "S1:R169",
+          "chunk": 25,
+          "expr": "3*24*60",
+          "minutes": 4320
+        },
+        {
+          "ref": "S1:R209",
+          "chunk": 32,
+          "expr": "5*24*60",
+          "minutes": 7200
+        },
+        {
+          "ref": "S1:R237",
+          "chunk": 36,
+          "expr": "5*24*60",
+          "minutes": 7200
+        },
+        {
+          "ref": "S1:R255",
+          "chunk": 39,
+          "expr": "6*24*60",
+          "minutes": 8640
+        },
+        {
+          "ref": "S1:R300",
+          "chunk": 48,
+          "expr": "7*24*60",
+          "minutes": 10080
+        },
+        {
+          "ref": "S1:R320",
+          "chunk": 52,
+          "expr": "4*24*60",
+          "minutes": 5760
+        },
+        {
+          "ref": "S1:R334",
+          "chunk": 55,
+          "expr": "5*24*60",
+          "minutes": 7200
+        },
+        {
+          "ref": "S1:R338",
+          "chunk": 56,
+          "expr": "4*24*60",
+          "minutes": 5760
+        },
+        {
+          "ref": "S1:R352",
+          "chunk": 59,
+          "expr": "6*24*60",
+          "minutes": 8640
+        },
+        {
+          "ref": "S1:R377",
+          "chunk": 63,
+          "expr": "8*24*60",
+          "minutes": 11520
+        },
+        {
+          "ref": "S1:R396",
+          "chunk": 67,
+          "expr": "8*24*60",
+          "minutes": 11520
+        },
+        {
+          "ref": "S1:R444",
+          "chunk": 75,
+          "expr": "12*24*60",
+          "minutes": 17280
+        },
+        {
+          "ref": "S1:R469",
+          "chunk": 80,
+          "expr": "9*24*60",
+          "minutes": 12960
+        },
+        {
+          "ref": "S1:R473",
+          "chunk": 81,
+          "expr": "6*24*60",
+          "minutes": 8640
+        },
+        {
+          "ref": "S1:R477",
+          "chunk": 82,
+          "expr": "6*24*60",
+          "minutes": 8640
+        },
+        {
+          "ref": "S1:R512",
+          "chunk": 89,
+          "expr": "14*24*60",
+          "minutes": 20160
+        },
+        {
+          "ref": "S1:R539",
+          "chunk": 93,
+          "expr": "14*24*60",
+          "minutes": 20160
+        },
+        {
+          "ref": "S1:R568",
+          "chunk": 98,
+          "expr": "20*24*60",
+          "minutes": 28800
+        },
+        {
+          "ref": "S1:R582",
+          "chunk": 101,
+          "expr": "12*24*60",
+          "minutes": 17280
+        }
+      ],
+      "waitMinutes": 244800,
+      "imageBlocks": 96,
+      "imageRequestPolicyEvents": 132,
+      "requestsDroppingHistoricalImages": 98,
+      "peakHistoricalImageBlocks": 96,
+      "reportedUsage": {
+        "input": 262,
+        "output": 68325,
+        "cacheRead": 6575592,
+        "cacheWrite": 1257634,
+        "cost": 8.970836399999998
+      },
+      "providerErrors": [
+        {
+          "record": 7,
+          "id": "74e9f9b8",
+          "role": "assistant",
+          "error": "{\"type\":\"error\",\"error\":{\"details\":null,\"type\":\"overloaded_error\",\"message\":\"Overloaded\"},\"request_id\":\"req_011Cfj7Js2m86uvKsUrntjMy\"              }",
+          "content": []
+        },
+        {
+          "record": 11,
+          "id": "c5dddfce",
+          "role": "assistant",
+          "error": "{\"type\":\"error\",\"error\":{\"details\":null,\"type\":\"overloaded_error\",\"message\":\"Overloaded\"},\"request_id\":\"req_011Cfj7PXsj4ZPogw9Jg9JTc\"             }",
+          "content": []
+        }
+      ]
+    },
+    {
+      "s": 2,
+      "file": "2026-10-05T13-20-50-734Z_01a10c39-662d-7443-a3da-d7e2b6d6fa54.jsonl",
+      "sha256": "a73eff48ccbe86d3d487f5409e846695030f83f6498cb4919507456843e24f1b",
+      "records": 256,
+      "start": "2026-10-05T13:20:50.734Z",
+      "end": "2026-10-05T13:31:30.146Z",
+      "success": {
+        "read": 5,
+        "look": 46,
+        "paint": 35,
+        "note": 1
+      },
+      "errors": [
+        {
+          "ref": "S2:R88",
+          "id": "3dd90b0d",
+          "tool": "look",
+          "text": "crop exceeds 1200 pixels per side (crops stay 1:1); coordinates are canvas units, x0,y0,x1,y1 (opposite corners). At this canvas resolution each side may span at most 500.00 units; example: crop 0.00,0.00,249.00,249.00"
+        },
+        {
+          "ref": "S2:R202",
+          "id": "4a01a79f",
+          "tool": "look",
+          "text": "crop exceeds 1200 pixels per side (crops stay 1:1); coordinates are canvas units, x0,y0,x1,y1 (opposite corners). At this canvas resolution each side may span at most 500.00 units; example: crop 0.00,0.00,249.00,249.00"
+        }
+      ],
+      "apiCalls": 54,
+      "apiStatuses": {
+        "200": 54
+      },
+      "waits": [
+        {
+          "ref": "S2:R36",
+          "chunk": 108,
+          "expr": "10*24*60",
+          "minutes": 14400
+        },
+        {
+          "ref": "S2:R106",
+          "chunk": 119,
+          "expr": "12*24*60",
+          "minutes": 17280
+        },
+        {
+          "ref": "S2:R248",
+          "chunk": 141,
+          "expr": "14*24*60",
+          "minutes": 20160
+        }
+      ],
+      "waitMinutes": 51840,
+      "imageBlocks": 47,
+      "imageRequestPolicyEvents": 54,
+      "requestsDroppingHistoricalImages": 42,
+      "peakHistoricalImageBlocks": 47,
+      "reportedUsage": {
+        "input": 110,
+        "output": 28420,
+        "cacheRead": 2460217,
+        "cacheWrite": 470506,
+        "cost": 3.4134134000000005
+      },
+      "providerErrors": []
+    },
+    {
+      "s": 3,
+      "file": "2026-10-05T13-31-30-759Z_01a10c43-2a46-76d4-8342-849fd04a09bd.jsonl",
+      "sha256": "5732e8ca921438f8bad00ece01f0032c65d0d296cbc9fbda4496d373c092983d",
+      "records": 72,
+      "start": "2026-10-05T13:31:30.759Z",
+      "end": "2026-10-05T13:33:57.756Z",
+      "success": {
+        "read": 1,
+        "look": 14,
+        "paint": 6,
+        "note": 1
+      },
+      "errors": [],
+      "apiCalls": 15,
+      "apiStatuses": {
+        "200": 15
+      },
+      "waits": [
+        {
+          "ref": "S3:R60",
+          "chunk": 147,
+          "expr": "5*24*60",
+          "minutes": 7200
+        }
+      ],
+      "waitMinutes": 7200,
+      "imageBlocks": 15,
+      "imageRequestPolicyEvents": 15,
+      "requestsDroppingHistoricalImages": 4,
+      "peakHistoricalImageBlocks": 15,
+      "reportedUsage": {
+        "input": 32,
+        "output": 7146,
+        "cacheRead": 492042,
+        "cacheWrite": 83408,
+        "cost": 0.6584964000000001
+      },
+      "providerErrors": []
+    }
+  ],
+  "totalRecords": 950,
+  "elapsedSeconds": 3052.294,
+  "totalWaitMinutes": 303840,
+  "totalWaitDays": 211,
+  "finalClock": "day 213, 05:31",
+  "clockElapsedMinutes": 305071,
+  "operationMinutesByRoundedClock": 1231,
+  "referenceConvention": "S1:R52 means sitting 1, JSONL record 52, counting every nonempty line from one. Original files are identified by basename and SHA-256 below; no original session records were changed.",
+  "costMeaning": "Sum of message usage.cost.total as recorded by the harness; not an invoice or a forecast. Subscription transport is configured in runner/r21_chains.py:205-208 and 252."
+}

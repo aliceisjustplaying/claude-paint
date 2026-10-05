@@ -263,9 +263,9 @@ impl Canvas {
     }
 
     /// The surface with the wet paint on it, as the painter's raking light
-    /// sees it (`seen_lit`): the dry height plus each wet film's paint and solvent thickness,
-    /// which bridges the fine relief under it as a set film does (engine 4,
-    /// `BRIDGE_UM`; before it, the weave shows through any film).
+    /// sees it (`seen_lit`): the dry height plus each wet film's paint and solvent thickness.
+    /// Paint bridges the fine relief under it as a set film does (engine 4,
+    /// `BRIDGE_UM`); clear solvent adds height without changing the underlying relief.
     pub(crate) fn wet_surface(&self) -> Vec<f32> {
         let (w, h) = (self.f.w, self.f.h);
         let wet: Vec<f32> = self.wet.vol.par_iter().enumerate().map(|(i, v)| v * COAT_UM + self.wet.solv.get(i).copied().unwrap_or(0.0)).collect();
@@ -281,7 +281,7 @@ impl Canvas {
                 if a <= 0.0 {
                     return self.height[i];
                 }
-                let keep = (-a / BRIDGE_UM).exp();
+                let keep = (-self.wet.vol[i] * COAT_UM / BRIDGE_UM).exp();
                 fine[i] + (self.height[i] - fine[i]) * keep + a
             })
             .collect()

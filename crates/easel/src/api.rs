@@ -901,10 +901,10 @@ pub(crate) fn resolve(st: &S, p: PileU, visit: Option<f32>) -> PileU {
     if p.heap == 0 {
         return p;
     }
-    let mut s = st.borrow_mut();
     if let Some(carry) = visit {
-        s.board.visit(p.heap, carry);
+        st.borrow_mut().board.visit(p.heap, carry);
     }
+    let s = st.borrow();
     let Some(h) = s.board.heap(p.heap) else { return p };
     if !h.changed {
         return p;

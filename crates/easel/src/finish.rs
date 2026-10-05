@@ -84,10 +84,10 @@ pub(crate) fn install(lua: &Lua, st: S) -> Result<()> {
                 (num(o, "coats")?.unwrap_or(0.4), num(o, "vary")?.unwrap_or(0.12), o.get::<Option<u32>>("seed")?.unwrap_or(98))
             }
         };
-        // a negative coat would scrape varnish off (engine 4 refuses it; older
-        // logs replay as they ran)
-        if st1.borrow().tubes.engine >= 4 && (coats < 0.0 || vary < 0.0) {
-            return err(format!("varnish: coats and vary can't be negative (coats={coats}, vary={vary})"));
+        // a negative coat would scrape varnish off, and one that is no number
+        // lays NaN (engine 4 refuses both; older logs replay as they ran)
+        if st1.borrow().tubes.engine >= 4 && !(coats.is_finite() && vary.is_finite() && coats >= 0.0 && vary >= 0.0) {
+            return err(format!("varnish: coats and vary are numbers, not negative (coats={coats}, vary={vary})"));
         }
         // brushed over the whole canvas once it is dry
         needs_dry(&st1, "varnish")?;

@@ -714,6 +714,10 @@ impl UserData for Brush {
             check_keys(&o, &["at", "toward", "spread", "force", "clip"], "spatter")?;
             let at = pair(&o, "at")?.ok_or_else(|| mlua::Error::runtime("spatter: at={x, y}, where the brush is flicked"))?;
             let toward = pair(&o, "toward")?.ok_or_else(|| mlua::Error::runtime("spatter: toward={dx, dy}, the flick's direction and how far the paint carries (units)"))?;
+            // (refused here, as numbers, before the engine would panic on them)
+            if !(at.0.is_finite() && at.1.is_finite() && toward.0.is_finite() && toward.1.is_finite()) {
+                return err(format!("spatter: at and toward are numbers (units), not {{{}, {}}} and {{{}, {}}}", at.0, at.1, toward.0, toward.1));
+            }
             let spread = num(&o, "spread")?.unwrap_or(0.45);
             if !(0.0..=1.5).contains(&spread) {
                 return err("spatter: spread is half the cone's angle in radians, 0 to 1.5");
@@ -1247,7 +1251,14 @@ fn work(st: &S, mask: Rc<Mask>, o: Table, preset: Option<&str>) -> Result<()> {
             let mut v = Vec::new();
             for e in t.sequence_values::<Table>() {
                 let e = e?;
-                v.push((pile_now(st, &e.get::<Value>(1)?, "work piles", 0.5)?, e.get::<Value>(2)?));
+                // (a weight that is no number is refused, not quietly counted as none)
+                let w = e.get::<Value>(2)?;
+                if let Value::Number(n) = &w
+                    && !n.is_finite()
+                {
+                    return err(format!("work piles: a weight is a number or function(x, y), not {n}"));
+                }
+                v.push((pile_now(st, &e.get::<Value>(1)?, "work piles", 0.5)?, w));
             }
             if v.len() < 2 {
                 return err("work: piles={{pile, weight}, {pile, weight}, ...} takes two or more piles");

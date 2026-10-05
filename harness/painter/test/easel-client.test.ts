@@ -163,6 +163,8 @@ test("look's errors name the tool's options, not the easel's flags", () => {
 	assert.equal(toolWords("--crop exceeds 1200 pixels per side; choose a smaller crop (crops stay 1:1)"), "a crop may be at most 500 units on either side; choose a smaller crop");
 	assert.equal(toolWords("--mode x: normal, value, squint, mirror"), "mode x: normal, value, squint, mirror");
 	assert.equal(toolWords("look: --survey and --compare are two looks; --light needs --mode relief"), "look: survey and compare are two looks; light needs mode relief");
+	assert.equal(toolWords("look: --hold is a look of its own: no --survey or --compare"), "look: hold is a look of its own: no survey or compare");
+	assert.equal(toolWords("look --hold: --at 1,2 lies outside the --crop"), "look hold: at 1,2 lies outside the crop");
 });
 
 // These client-boundary regressions protect command admission, progress liveness and

@@ -795,6 +795,8 @@ impl Canvas {
         let rt = (0.35 / (self.mm_per_unit / f.scale)).round().max(1.0) as isize;
         let (w, h) = (f.w as isize, f.h as isize);
         let height = &self.height;
+        // engine 7: what the eraser lifts leaves the tooth with it
+        let lifts_loose = self.engine >= 7;
         for i in 0..self.px.len() {
             let mv = m.data[f.whole_index(i)];
             let c = &mut d.cells[i];
@@ -812,6 +814,9 @@ impl Canvas {
             let reach = 1.0 - ((top - height[i]) / 10.0).clamp(0.0, 1.0);
             let take = (strength.clamp(0.0, 1.0) * mv.min(1.0) * c.lift * (0.55 + 0.4 * reach)).min(0.97);
             let a1 = (c.a * (1.0 - take)).max(c.floor.min(c.a));
+            if lifts_loose && c.a > 0.0 {
+                c.loose *= a1 / c.a;
+            }
             let under = uncover(self.px[i], c.a, c.r);
             c.a = a1;
             self.px[i] = cover(under, c.a, c.r);

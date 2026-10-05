@@ -523,7 +523,21 @@ impl Palette {
     /// scattering in oil and refractive index.
     pub fn dry_color(&self, parts: &[(usize, f32)]) -> crate::Rgb {
         let white = self.tubes.iter().position(|t| t.name == "lead white").map_or_else(|| self.scat.iter().cloned().fold(0.0, f32::max), |i| self.scat[i]);
-        let list: Vec<(crate::Rgb, f32, f32, f32)> = parts.iter().map(|&(i, f)| (self.tubes[i].color, self.scat[i], crate::pastel::refractive_index(self.tubes[i].name), f)).collect();
+        let list: Vec<(crate::Rgb, f32, f32, f32)> = parts
+            .iter()
+            .map(|&(i, f)| {
+                let name = self.tubes[i].name;
+                // engine 7: a black's colour comes from its carbon, which
+                // stays on the particles it coats: its scattering rises in air
+                // by the measured air/oil ratio (`pastel::carbon_ratio`), not
+                // to a white's
+                let n = match crate::pastel::carbon_ratio(name) {
+                    Some(r) if self.engine >= 7 => -r,
+                    _ => crate::pastel::refractive_index(name),
+                };
+                (self.tubes[i].color, self.scat[i], n, f)
+            })
+            .collect();
         crate::pastel::dry_color(&list, white)
     }
 

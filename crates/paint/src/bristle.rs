@@ -2122,9 +2122,10 @@ impl Canvas {
                         }
                         *sf.stroke.add(i) = id;
                     }
+                    grow(&mut bounds, x - sf.ox, y - sf.oy, x - sf.ox + 1, y - sf.oy + 1);
+                    // (a droplet has landed only where it laid paint: not under a mask's zero)
+                    landed = true;
                 }
-                grow(&mut bounds, x - sf.ox, y - sf.oy, x - sf.ox + 1, y - sf.oy + 1);
-                landed = true;
             }
             if landed {
                 count += 1;

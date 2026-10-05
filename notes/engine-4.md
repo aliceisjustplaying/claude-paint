@@ -27,7 +27,7 @@ painter never saw relief either: looks showed color only.
   printed through even millimetre impasto before).
 - **Clumping hair** (`bristle.rs` `exchange`, `Surf::clump`): in stiff paint
   the hairs gather into clumps, `hair · (1 + 4·s²)` across, where `s` runs from 0 at a stiffness of 0.4 (as
-  on the brush, thinned by any solvent) to 1 at 1. A clump lays
+  on the brush, thinned by its turpentine: `turps=`, not engine 3's `thinner=`) to 1 at 1. A clump lays
   more paint and the gaps between clumps less (furrows along the stroke,
   averaging out across the brush), and a clump throws the paint each hair
   ploughs aside its own width (up to 3 px) instead of a sub-pixel hair's, so

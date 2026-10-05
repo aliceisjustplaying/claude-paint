@@ -128,7 +128,10 @@ as it dries. A pile takes medium or blot, not both.
 - `p:add{{"<tube>", <parts>}, ..., medium=}` knifes more tube paint into a
   heap, in the units its recipe was given in (a pile knifed as
   `{"lead white", 4}, {"cerulean blue", 0.35}` takes `{"cerulean blue", 0.1}`
-  as a tenth of a part more): look, adjust, look again. It returns the pile.
+  as a tenth of a part more): look, adjust, look again. It returns the pile,
+  its recipe with the added parts. The added paint is tube paint (linseed,
+  unthinned), so it dilutes the heap's turpentine, its `thinner` and its oil;
+  a scraped heap is knifed fresh first.
 - `mix{{p1, <share>}, {p2, <share>}, ..., name=}` knifes heaps together into a
   new heap, as they are now.
 - `palette{set_out={"<tube>", ...}}` sets out only those tubes, a limited
@@ -274,8 +277,9 @@ filling what lies under it to the blade's level in a slab with a flat top,
 or over dry impasto catching only the ridges; wet paint standing above the
 blade is cut off into its bead or pressed out at its ends in ridges, and
 the share `lift` of the bead (0.1) stays where it lifts.
-`k:scrape(points, {pressure=, angle=})` scrapes wet paint off down to the blade
-(at full pressure, down to the dry paint) and keeps it on the blade.
+`k:scrape(points, {pressure=, angle=, lift=})` scrapes wet paint off down
+to the blade (at full pressure, down to the dry paint) and keeps it on the
+blade, but for the share `lift` (0) it leaves where it lifts.
 
 **Spatter.** `b:spatter{at={x, y}, toward={dx, dy}, spread=, force=, clip=}`
 flicks the loaded brush: the paint its hairs can't hold flies off in droplets
@@ -650,16 +654,16 @@ other option, and nothing on the canvas or the clock changes.
 | `look` with | shows |
 |---|---|
 | `survey: true` | the whole canvas at full detail, as several tiles of at most 500 units (2 × 2 for most canvases, 2 × 1 for one twice as wide as high), each a separate image; modes apply (`mode: "gallery"`) |
-| `compare: "<an earlier look's path>"` | that earlier image on the left and the current view on the right, at the same height; repeat the earlier look's crop, modes, light and grid options to compare the same view |
-| `hold: "<a knife's or a pile's name>"`, `at: "x,y"` | (speculative) the loaded knife held up to the canvas: the passage around the point (240 units, or your `crop`) with the blade's end at it, the paint thick on the steel, seen in the same light and mode as the passage. A knife shows what is on it; a pile, a fresh load. It shows the paint on the knife, not how it would look laid |
+| `compare: "<an earlier look's path>"` | that earlier image on the left and the current view on the right, at the same height. The right is the view the other options ask for (`size: 800` without `crop` or `size`); the earlier picture is only resized to its height, so repeat the earlier look's crop, modes, light and grid options to compare the same view |
+| `hold: "<a knife's or a pile's name>"`, `at: "x,y"` | (speculative) the loaded knife held up to the canvas: the passage around the point (240 units square, clipped at the canvas's edges, or your `crop`) with the blade's end at it, the paint thick on the steel, seen in the same light and mode as the passage (`mode` value, squint, relief or gallery, and `light`; not mirror, `grid`, `size`, `palette`, `survey` or `compare`). A knife shows what is on it, as full as it is up to a full load; a pile, a fresh full load. It shows the paint on the knife, not how it would look laid |
 
 A survey can arrive in a partial batch to fit the painter's image budget.
 The reply lists the remaining tile paths; read them one at a time to inspect
 the rest of the canvas.
 
-A whole view defaults to 1000 pixels on its long side, reduced from the
-full-detail canvas: small marks, beads of paint and stray strokes can be
-hard to see in it. Survey the canvas after
+A whole view defaults to 1000 pixels on its long side (`size` up to 1600),
+about 42% of a 2400-pixel canvas's width: small marks, beads of paint and
+stray strokes can be hard to see in it. Survey the canvas after
 each campaign, and compare before and after.
 
 ## How chunks behave

@@ -1140,6 +1140,11 @@ impl Server {
         if total_width.is_none_or(|w| w > 16384 || u64::from(w) * u64::from(h) > 32_000_000) {
             return Err("--compare: the combined picture is too large".into());
         }
+        // (an earlier look far wider or far narrower at this height is of another
+        // crop: side by side, the two would pass for the same view)
+        if bw > 4 * now.width() || 4 * bw < now.width() {
+            return Err(format!("--compare {}: the earlier look's crop doesn't match this one's (its shape is far from this one's); repeat its --crop", prev.display()));
+        }
         let before = image::imageops::resize(&before, bw, h, image::imageops::FilterType::Lanczos3);
         let gap = 12;
         let mut both = image::RgbImage::from_pixel(bw + gap + now.width(), h, image::Rgb([24, 24, 28]));

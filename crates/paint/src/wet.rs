@@ -305,6 +305,9 @@ impl Canvas {
             return (0..self.px.len())
                 .into_par_iter()
                 .map(|i| {
+                    if let Some(c) = self.sheet_seen(i) {
+                        return c;
+                    }
                     // (the thinnest wet film lets the surface under it show: no edge where it ends)
                     let g = crate::lerp(self.gloss[i], 1.0, crate::smoothstep(0.0, 0.1, self.wet.vol[i]));
                     crate::canvas::haze(self.look_px(i), g)

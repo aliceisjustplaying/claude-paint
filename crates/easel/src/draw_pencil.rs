@@ -113,7 +113,7 @@ fn is_stick(p: &Table) -> Result<bool> {
 }
 
 /// The stick a stick table holds.
-fn stick_of(p: &Table) -> Result<paint::pastel::Stick> {
+pub(crate) fn stick_of(p: &Table) -> Result<paint::pastel::Stick> {
     use paint::pastel::{Section, Stick};
     let section: String = p.get("section")?;
     let size: f32 = p.get("size")?;
@@ -192,7 +192,7 @@ fn stick_stroke(lua: &Lua, st: &S, p: &Table, pts: &[(f32, f32)], force: &[f32],
             }
         })
         .collect();
-    let laid = crate::time::verb(st, crate::time::Verb::Pass, |s| {
+    let laid = crate::time::verb_dry(st, crate::time::Verb::Pass, |s| {
         let c = s.canvas.as_mut().ok_or_else(|| mlua::Error::runtime("no canvas yet: call canvas{} first"))?;
         let l = c.stick_stroke(&mut stick, &sp);
         c.tally_mut().secs += l.secs as f64 + 0.25;
@@ -655,7 +655,7 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
                 if !(0.05..=10.0).contains(&force) || pad.is_some_and(|p| !(0.5..=400.0).contains(&p)) {
                     return err("smudge: force is newtons (0.05 to 10); pad, the contact in mm² (a stump: 2–10; a fingertip: about 135 at 1 N)");
                 }
-                return crate::time::verb(&st1, crate::time::Verb::Pass, |s| {
+                return crate::time::verb_dry(&st1, crate::time::Verb::Pass, |s| {
                     let c = s.canvas.as_mut().ok_or_else(|| mlua::Error::runtime("no canvas yet: call canvas{} first"))?;
                     let secs = c.rub(&pts, force, pad, speed);
                     c.tally_mut().secs += secs as f64 + 0.5;
@@ -739,6 +739,48 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
                 // a light spray wets about 0.15 of the particles (pastel.rs `fix_pastel`)
                 c.fix_pastel(m.as_deref(), 0.15);
             }
+            Ok(())
+        })?)?;
+    }
+    // lay_sheet(mask, {grammage=120, tone=}): a sheet of paper laid over the
+    // mask to keep it clean (engine 7, paint's sheet.rs); lift_sheet() takes
+    // it away with what it caught. It must be lifted in the chunk that laid it.
+    {
+        let st1 = st.clone();
+        g.set("lay_sheet", lua.create_function(move |_, (a, o): (Value, Option<Table>)| {
+            if let Some(o) = &o {
+                check_keys(o, &["grammage", "tone"], "lay_sheet")?;
+            }
+            let m = mask_of(&a)?;
+            let grammage = o.as_ref().map(|o| num(o, "grammage")).transpose()?.flatten().unwrap_or(120.0);
+            if !(40.0..=400.0).contains(&grammage) {
+                return err("lay_sheet: grammage is g/m² (40 to 400; a mask is usually 80–160)");
+            }
+            let mut s = st1.borrow_mut();
+            let tone = match o.as_ref().map(|o| o.get::<Value>("tone")).transpose()?.unwrap_or(Value::Nil) {
+                Value::Nil => paint::hex("#ece6d8"),
+                Value::Table(t) => {
+                    let parts = crate::api::parts_of(&s.tubes, &t, "lay_sheet tone")?.0;
+                    s.tubes.dry_color(&parts)
+                }
+                v => return err(format!("lay_sheet: tone is parts of tubes, {{{{\"lead white\", 3}}, ...}}, not a {}", v.type_name())),
+            };
+            let c = s.canvas.as_mut().ok_or_else(|| mlua::Error::runtime("no canvas yet: call canvas{} first"))?;
+            // the sheet's thickness and pores: a drawing paper of that grammage (paper.rs)
+            let paper = paint::paper::Paper { grammage, ..paint::paper::Paper::drawing(0) };
+            let mu = c.mean_micro_um().unwrap_or(8.0);
+            c.lay_sheet(&m, paper.caliper_um(), mu, tone).map_err(mlua::Error::runtime)?;
+            c.tally_mut().secs += 4.0;
+            Ok(())
+        })?)?;
+        let st1 = st.clone();
+        g.set("lift_sheet", lua.create_function(move |_, ()| {
+            let mut s = st1.borrow_mut();
+            let c = s.canvas.as_mut().ok_or_else(|| mlua::Error::runtime("no canvas yet: call canvas{} first"))?;
+            if !c.lift_sheet() {
+                return err("lift_sheet: no sheet lies on the picture");
+            }
+            c.tally_mut().secs += 2.0;
             Ok(())
         })?)?;
     }

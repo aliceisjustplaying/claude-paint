@@ -28,6 +28,7 @@ pub mod paper;
 pub mod pastel;
 pub mod pigment;
 pub mod rng;
+pub mod sheet;
 mod sched;
 pub mod shape;
 pub mod spectral;

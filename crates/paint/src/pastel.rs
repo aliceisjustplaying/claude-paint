@@ -89,7 +89,7 @@ pub const LIFT_S: f32 = 0.04;
 pub const SHED: f32 = 1.0 - 1.0 / 6.6;
 /// Engine 7: crumbs settle where the face passes within a crumb's size of
 /// the surface, µm (soft pastel crumbs on toothy paper: a few µm to 100–300).
-const CRUMB_UM: f32 = 150.0;
+pub const CRUMB_UM: f32 = 150.0;
 /// Engine 7: the smallest crumb counted, µm across (finer grains go with it).
 const CRUMB_MIN_UM: f32 = 5.0;
 /// Engine 7: how far a crumb rides under the face before it settles, mm (an
@@ -265,6 +265,14 @@ pub struct StrokePoint {
     pub speed: f32,
 }
 
+/// A stick come down on the surface (`Canvas::seat_stick`).
+pub(crate) struct Seated {
+    pub under: Vec<(usize, f32)>,
+    pub surf: Vec<(f32, f32, f32)>,
+    pub delta: f32,
+    pub nb: [f32; 3],
+}
+
 /// What a stroke did.
 #[derive(Clone, Copy, Debug, Default)]
 pub struct Laid {
@@ -342,6 +350,12 @@ fn bearing(o: f32, mu: f32) -> f32 {
     if o <= 0.0 { 0.0 } else { 1.0 - (-o / mu.max(1e-3)).exp() }
 }
 
+/// The overlap left in the micro-relief at a pixel once the surface has
+/// given (`seat`'s second value): above 0 the stick touches there.
+pub(crate) fn seat_overlap(o: f32, mu: f32, k: f32, hard: f32) -> f32 {
+    seat(o, mu, k, hard).1
+}
+
 /// A pixel where the stick overlaps the surface by `o` µm: the surface
 /// gives (a Winkler spring, `k` MPa/µm) by u while the stick yields on the
 /// micro-asperities it meets (pressure `hard` × the material ratio at the
@@ -375,7 +389,6 @@ impl Canvas {
         if pts.len() < 2 {
             return out;
         }
-        let f = self.f;
         let mmu = self.mm_per_unit;
         let px = self.px_mm();
         let a_px_mm2 = px * px;
@@ -418,12 +431,12 @@ impl Canvas {
                 speed: l(a.speed, b.speed).max(1.0),
             }
         };
-        let rmax = stick.radius();
         let crumbs = self.engine >= 7;
         // the crumbs riding under the face: volume (µm over a pixel) and where
         // the face last was over the paper (pixels and their gaps, µm)
         let mut carried = 0.0f32;
         let mut last_bed: Vec<(usize, f32, bool)> = Vec::new();
+        let mut last_sheet_bed: Vec<(usize, f32)> = Vec::new();
         let settle = 1.0 - (-ds / SETTLE_MM).exp();
         // the crumbs' sizes: a power law in area, P(A) ∝ A^(-3/2) (measured
         // over four decades), its upper cut-off larger for a softer stick
@@ -443,78 +456,16 @@ impl Canvas {
             if sp.pose.force <= 1e-4 {
                 continue;
             }
-            let fr = frame(&sp.pose);
-            // the stick's tip in the world, mm
-            let (ox, oy) = (sp.x * mmu, sp.y * mmu);
-            // where its low part can be: the end and as far up the stick as
-            // lies within a few mm of the paper (the whole length, laid flat)
-            let reach_up = if sp.pose.alt.sin() < 1e-3 { stick.length_mm } else { (3.0 / sp.pose.alt.sin()).min(stick.length_mm) };
-            let mut bb = [f32::MAX, f32::MAX, f32::MIN, f32::MIN];
-            for zb in [0.0, reach_up] {
-                for (cx, cy) in [(-1.0f32, -1.0f32), (1.0, -1.0), (-1.0, 1.0), (1.0, 1.0)] {
-                    let (xb, yb) = (cx * rmax, cy * rmax);
-                    let wx = ox + xb * fr[0][0] + yb * fr[1][0] + zb * fr[2][0];
-                    let wy = oy + xb * fr[0][1] + yb * fr[1][1] + zb * fr[2][1];
-                    bb = [bb[0].min(wx), bb[1].min(wy), bb[2].max(wx), bb[3].max(wy)];
-                }
-            }
-            let to_px = |v: f32, o: usize, n: usize| ((v / px).floor() as isize - o as isize).clamp(0, n as isize) as usize;
-            let (px0, px1) = (to_px(bb[0], f.x0, f.w), (to_px(bb[2], f.x0, f.w) + 1).min(f.w));
-            let (py0, py1) = (to_px(bb[1], f.y0, f.h), (to_px(bb[3], f.y0, f.h) + 1).min(f.h));
-            if px0 >= px1 || py0 >= py1 {
-                continue;
-            }
-            // the world's up, and the stick's downward normal, in its frame
-            let e = [fr[0][2], fr[1][2], fr[2][2]];
-            let nb = [-e[0], -e[1], -e[2]];
-            // the stick's underside over each pixel (mm above the tip's level)
-            let mut under: Vec<(usize, f32)> = Vec::with_capacity((px1 - px0) * (py1 - py0));
-            for py in py0..py1 {
-                let wy = (py + f.y0) as f32 * px + 0.5 * px - oy;
-                for pxx in px0..px1 {
-                    let wx = (pxx + f.x0) as f32 * px + 0.5 * px - ox;
-                    let q0 = [wx * fr[0][0] + wy * fr[0][1], wx * fr[1][0] + wy * fr[1][1], wx * fr[2][0] + wy * fr[2][1]];
-                    if let Some(b) = stick.ray(q0, e) {
-                        under.push((py * f.w + pxx, b));
-                    }
-                }
-            }
-            if under.is_empty() {
-                continue;
-            }
-            // the surface it comes down on: µm, the pores' mean depth, and how
-            // stiffly it gives
-            let surf: Vec<(f32, f32, f32)> = under.iter().map(|&(i, _)| (self.height[i], self.micro_um(i), self.give_mpa_per_um(i))).collect();
-            // sink until the surface, giving, and the stick, yielding on what
-            // it meets, carry the force between them
-            let load = |delta: f32| -> f32 {
-                let mut p = 0.0;
-                for (j, &(_, b)) in under.iter().enumerate() {
-                    let (hs, mu, k) = surf[j];
-                    p += seat(hs - b * 1000.0 + delta, mu, k, stick.hardness).0;
-                }
-                p * a_px_mm2
-            };
-            let first = under.iter().zip(&surf).map(|(&(_, b), &(hs, _, _))| b * 1000.0 - hs).fold(f32::MAX, f32::min);
-            let (mut lo, mut hi) = (first, first + 50.0);
-            while load(hi) < sp.pose.force && hi - first < 5000.0 {
-                hi = first + 2.0 * (hi - first);
-            }
-            for _ in 0..40 {
-                let m = 0.5 * (lo + hi);
-                if load(m) < sp.pose.force {
-                    lo = m;
-                } else {
-                    hi = m;
-                }
-            }
-            let delta = 0.5 * (lo + hi);
+            let Some(Seated { under, surf, delta, nb }) = self.seat_stick(stick, &sp) else { continue };
             // what it abrades where it touches, and lays there
             let ds_um = ds * 1000.0;
             self.drawing_mut();
             let film = std::mem::take(&mut self.film);
             let mut pxs = std::mem::take(&mut self.px);
             let wetv: Vec<bool> = under.iter().map(|&(i, _)| self.wet.vol[i] > 1e-5).collect();
+            // engine 7: where a sheet lies, what lands is the sheet's
+            let onsheet: Vec<bool> = under.iter().map(|&(i, _)| self.sheet_over(i)).collect();
+            let mut caught: Vec<(usize, f32)> = Vec::new();
             let mut worn_um3 = 0.0f32;
             let mut wet_um3 = 0.0f32;
             {
@@ -525,6 +476,20 @@ impl Canvas {
                     // the overlap left in the micro-relief once the surface has given
                     let o = seat(hs - b * 1000.0 + delta, mu, k, stick.hardness).1;
                     if o <= 0.0 {
+                        continue;
+                    }
+                    if onsheet[j] {
+                        // on the sheet: it files the stick as fresh paper does, and keeps what it gets
+                        let mut dv = ds_um * stick.wear * bearing(o, mu);
+                        if dv <= 0.0 {
+                            continue;
+                        }
+                        worn_um3 += dv;
+                        if crumbs {
+                            carried += dv * SHED;
+                            dv *= 1.0 - SHED;
+                        }
+                        caught.push((i, dv));
                         continue;
                     }
                     let c = &mut d.cells[i];
@@ -568,19 +533,32 @@ impl Canvas {
                     // the bed the crumbs can settle in: the paper under the
                     // face, not in contact, within a crumb's size of it
                     last_bed.clear();
+                    last_sheet_bed.clear();
                     for (j, &(i, b)) in under.iter().enumerate() {
                         let gap = b * 1000.0 - delta - surf[j].0;
                         if gap > 0.0 && gap < CRUMB_UM {
-                            last_bed.push((i, gap, wetv[j]));
+                            if onsheet[j] {
+                                last_sheet_bed.push((i, gap));
+                            } else {
+                                last_bed.push((i, gap, wetv[j]));
+                            }
                         }
                     }
                     let give = carried * settle;
-                    wet_um3 += lay_crumbs(d, &film, &mut pxs, &last_bed, give, stick.color, &mut rng, crumb_max, px_um2);
+                    let (gp, gs) = (last_bed.iter().map(|b| b.1).sum::<f32>(), last_sheet_bed.iter().map(|b| b.1).sum::<f32>());
+                    let to_sheet = if gp + gs > 0.0 { give * gs / (gp + gs) } else { 0.0 };
+                    wet_um3 += lay_crumbs(d, &film, &mut pxs, &last_bed, give - to_sheet, stick.color, &mut rng, crumb_max, px_um2);
+                    for &(i, g) in &last_sheet_bed {
+                        caught.push((i, to_sheet * g / gs));
+                    }
                     carried -= give;
                 }
             }
             self.px = pxs;
             self.film = film;
+            if !caught.is_empty() {
+                self.sheet_catch(&caught, stick.color);
+            }
             // (µm of volume per area over mm² of pixel: 10⁻³ mm³)
             let worn_mm3 = worn_um3 * a_px_mm2 * 1e-3;
             out.volume_mm3 += worn_mm3 - wet_um3 * a_px_mm2 * 1e-3;
@@ -589,6 +567,14 @@ impl Canvas {
             let bmin = under.iter().map(|&(_, b)| b).fold(f32::MAX, f32::min);
             let face = under.iter().filter(|&&(_, b)| b - bmin < FACE_MM).count().max(1) as f32 * a_px_mm2;
             stick.wear_face(nb, -bmin, worn_mm3 / face);
+        }
+        if crumbs && carried > 0.0 && !last_sheet_bed.is_empty() {
+            // (the share that falls on the sheet, by the beds' depths)
+            let (gp, gs) = (last_bed.iter().map(|b| b.1).sum::<f32>(), last_sheet_bed.iter().map(|b| b.1).sum::<f32>());
+            let to_sheet = carried * gs / (gp + gs).max(1e-9);
+            let caught: Vec<(usize, f32)> = last_sheet_bed.iter().map(|&(i, g)| (i, to_sheet * g / gs.max(1e-9))).collect();
+            self.sheet_catch(&caught, stick.color);
+            carried -= to_sheet;
         }
         if crumbs && carried > 0.0 && !last_bed.is_empty() {
             // lifted off: what the face still carried drops where it was
@@ -607,6 +593,86 @@ impl Canvas {
         out
     }
 
+    /// Where `stick`, held at `sp` (its pose at full force), comes down on
+    /// the surface: the pixels under its low part with the stick's
+    /// underside over each (mm above its tip), the surface there (height µm,
+    /// pore depth µm, give MPa/µm), how far it sank (µm) to carry the force,
+    /// and its downward normal in its own frame. `None` off the canvas.
+    pub(crate) fn seat_stick(&self, stick: &Stick, sp: &StrokePoint) -> Option<Seated> {
+        let f = self.f;
+        let mmu = self.mm_per_unit;
+        let px = self.px_mm();
+        let a_px_mm2 = px * px;
+        let rmax = stick.radius();
+        let fr = frame(&sp.pose);
+        // the stick's tip in the world, mm
+        let (ox, oy) = (sp.x * mmu, sp.y * mmu);
+        // where its low part can be: the end and as far up the stick as
+        // lies within a few mm of the paper (the whole length, laid flat)
+        let reach_up = if sp.pose.alt.sin() < 1e-3 { stick.length_mm } else { (3.0 / sp.pose.alt.sin()).min(stick.length_mm) };
+        let mut bb = [f32::MAX, f32::MAX, f32::MIN, f32::MIN];
+        for zb in [0.0, reach_up] {
+            for (cx, cy) in [(-1.0f32, -1.0f32), (1.0, -1.0), (-1.0, 1.0), (1.0, 1.0)] {
+                let (xb, yb) = (cx * rmax, cy * rmax);
+                let wx = ox + xb * fr[0][0] + yb * fr[1][0] + zb * fr[2][0];
+                let wy = oy + xb * fr[0][1] + yb * fr[1][1] + zb * fr[2][1];
+                bb = [bb[0].min(wx), bb[1].min(wy), bb[2].max(wx), bb[3].max(wy)];
+            }
+        }
+        let to_px = |v: f32, o: usize, n: usize| ((v / px).floor() as isize - o as isize).clamp(0, n as isize) as usize;
+        let (px0, px1) = (to_px(bb[0], f.x0, f.w), (to_px(bb[2], f.x0, f.w) + 1).min(f.w));
+        let (py0, py1) = (to_px(bb[1], f.y0, f.h), (to_px(bb[3], f.y0, f.h) + 1).min(f.h));
+        if px0 >= px1 || py0 >= py1 {
+            return None;
+        }
+        // the world's up, and the stick's downward normal, in its frame
+        let e = [fr[0][2], fr[1][2], fr[2][2]];
+        let nb = [-e[0], -e[1], -e[2]];
+        // the stick's underside over each pixel (mm above the tip's level)
+        let mut under: Vec<(usize, f32)> = Vec::with_capacity((px1 - px0) * (py1 - py0));
+        for py in py0..py1 {
+            let wy = (py + f.y0) as f32 * px + 0.5 * px - oy;
+            for pxx in px0..px1 {
+                let wx = (pxx + f.x0) as f32 * px + 0.5 * px - ox;
+                let q0 = [wx * fr[0][0] + wy * fr[0][1], wx * fr[1][0] + wy * fr[1][1], wx * fr[2][0] + wy * fr[2][1]];
+                if let Some(b) = stick.ray(q0, e) {
+                    under.push((py * f.w + pxx, b));
+                }
+            }
+        }
+        if under.is_empty() {
+            return None;
+        }
+        // the surface it comes down on: µm, the pores' mean depth, and how
+        // stiffly it gives
+        let surf: Vec<(f32, f32, f32)> = under.iter().map(|&(i, _)| self.surface_point(i)).collect();
+        // sink until the surface, giving, and the stick, yielding on what
+        // it meets, carry the force between them
+        let load = |delta: f32| -> f32 {
+            let mut p = 0.0;
+            for (j, &(_, b)) in under.iter().enumerate() {
+                let (hs, mu, k) = surf[j];
+                p += seat(hs - b * 1000.0 + delta, mu, k, stick.hardness).0;
+            }
+            p * a_px_mm2
+        };
+        let first = under.iter().zip(&surf).map(|(&(_, b), &(hs, _, _))| b * 1000.0 - hs).fold(f32::MAX, f32::min);
+        let (mut lo, mut hi) = (first, first + 50.0);
+        while load(hi) < sp.pose.force && hi - first < 5000.0 {
+            hi = first + 2.0 * (hi - first);
+        }
+        for _ in 0..40 {
+            let m = 0.5 * (lo + hi);
+            if load(m) < sp.pose.force {
+                lo = m;
+            } else {
+                hi = m;
+            }
+        }
+        let delta = 0.5 * (lo + hi);
+        Some(Seated { under, surf, delta, nb })
+    }
+
     /// Fixative over `m` (coverage 0..1, or all), engine 6: the loose
     /// pastel bound (a crust the next stroke files again), and darkened as
     /// the resin wets the particles: their scattering falls by the share
@@ -616,8 +682,9 @@ impl Canvas {
         let f = self.f;
         let w = wet.clamp(0.0, 1.0);
         let Some(d) = self.drawing.as_mut() else { return };
+        let sheet = self.sheet.as_ref();
         for (i, c) in d.cells.iter_mut().enumerate() {
-            if m.is_some_and(|m| m.data[f.whole_index(i)] <= 0.5) || self.film[i] > c.film + 1e-4 {
+            if m.is_some_and(|m| m.data[f.whole_index(i)] <= 0.5) || self.film[i] > c.film + 1e-4 || sheet.is_some_and(|s| s.over[i]) {
                 continue;
             }
             c.floor = c.a;
@@ -663,6 +730,8 @@ impl Canvas {
         let mut pxs = std::mem::take(&mut self.px);
         {
             let wet: Vec<bool> = self.wet.vol.iter().map(|&v| v > 1e-5).collect();
+            // (the sheet, where it lies, keeps the finger off the picture)
+            let shv: Option<Vec<bool>> = self.sheet.as_ref().map(|s| s.over.clone());
             let d = self.drawing_mut();
             for w in path.windows(2) {
                 let (a, b) = ((w[0].0 * mmu, w[0].1 * mmu), (w[1].0 * mmu, w[1].1 * mmu));
@@ -680,7 +749,9 @@ impl Canvas {
                         for x in x0..x1 {
                             let (wx, wy) = ((x as f32 + 0.5) * px, (y as f32 + 0.5) * px);
                             if (wx - c.0).powi(2) + (wy - c.1).powi(2) <= r_mm * r_mm {
-                                under.push((y - f.y0) * f.w + (x - f.x0));
+                                if !shv.as_ref().is_some_and(|s| s[(y - f.y0) * f.w + (x - f.x0)]) {
+                                    under.push((y - f.y0) * f.w + (x - f.x0));
+                                }
                             }
                         }
                     }

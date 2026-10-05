@@ -838,6 +838,63 @@ fn hold_look(s: &Session, name: &str, at: (f32, f32), v: &look::View) -> Result<
     Ok((w as usize, h as usize, out))
 }
 
+/// Engine 6 on: a pastel stick held over the canvas (`look --hold <stick> --at
+/// x,y [--pose force,alt,azimuth[,roll] | --side direction]`): the passage at
+/// full detail with, seen from above, the stick's low part as a light shadow,
+/// the band where its crumbs would settle tinted with its colour, and where it
+/// rests on the tooth at that force in its colour: where a stroke from there
+/// would lay. `--side` lays it flat across a stroke going that way (degrees).
+/// Only reads: no hand time, nothing in the log, the canvas and its wear untouched.
+fn stick_hold_look(s: &Session, name: &str, at: (f32, f32), pose: [f32; 4], v: &look::View) -> Result<(usize, usize, Vec<u8>, String), String> {
+    use image::ImageEncoder;
+    if v.size.is_some() || v.grid.is_some() || v.mirror || v.palette {
+        return Err("look --hold takes --at, --pose or --side, --crop, --mode value, squint, relief or gallery and --light, nothing else".into());
+    }
+    let (stick, turned) = s.held_stick(name)?;
+    let c = s.canvas().ok_or("no canvas yet: the first chunk is canvas{...}")?;
+    let (wu, hu) = (c.width(), c.height());
+    if !(at.0.is_finite() && at.1.is_finite() && (0.0..=wu).contains(&at.0) && (0.0..=hu).contains(&at.1)) {
+        return Err(format!("look --hold: --at {},{} is not on the canvas ({wu} x {hu} units)", at.0, at.1));
+    }
+    let half = 60.0f32;
+    let crop = v.crop.unwrap_or([(at.0 - half).max(0.0), (at.1 - half).max(0.0), (at.0 + half).min(wu), (at.1 + half).min(hu)]);
+    let seen_as = look::View { crop: Some(crop), value: v.value, squint: v.squint, light: v.light, ..look::View::default() };
+    let (_, _, png) = look::render(&c, &seen_as)?;
+    let mut img = image::load_from_memory(&png).map_err(|e| e.to_string())?.to_rgb8();
+    let p = paint::pastel::Pose { force: pose[0], alt: pose[1].to_radians(), az: pose[2].to_radians(), roll: (turned + pose[3]).to_radians() };
+    let cells = c.stick_contact(&stick, at.0, at.1, p);
+    let f = c.window();
+    let (cx0, cy0) = ((crop[0] * f.scale).round() as i64, (crop[1] * f.scale).round() as i64);
+    let col = stick.color.map(|v| (paint::color::linear_to_srgb(v) * 255.0).round() as f32);
+    let (mut touch, mut bed) = (0usize, 0usize);
+    for &(i, k) in &cells {
+        let (x, y) = ((i % f.w + f.x0) as i64 - cx0, (i / f.w + f.y0) as i64 - cy0);
+        if x < 0 || y < 0 || x >= img.width() as i64 || y >= img.height() as i64 {
+            continue;
+        }
+        let q = img.get_pixel_mut(x as u32, y as u32);
+        let (share, to): (f32, [f32; 3]) = match k {
+            2 => (1.0, col),
+            1 => (0.45, col),
+            _ => (0.22, [20.0, 20.0, 20.0]),
+        };
+        for ch in 0..3 {
+            q[ch] = (q[ch] as f32 * (1.0 - share) + to[ch] * share).round() as u8;
+        }
+        match k {
+            2 => touch += 1,
+            1 => bed += 1,
+            _ => {}
+        }
+    }
+    let mm2 = c.px_mm() * c.px_mm();
+    let note = format!("touching {:.1} mm², crumbs settle over {:.1} mm² more", touch as f32 * mm2, bed as f32 * mm2);
+    let (w, h) = (img.width(), img.height());
+    let mut out = Vec::new();
+    image::codecs::png::PngEncoder::new(&mut out).write_image(img.as_raw(), w, h, image::ExtendedColorType::Rgb8).map_err(|e| e.to_string())?;
+    Ok((w as usize, h as usize, out, note))
+}
+
 /// Write a look as `dir/look-NNNN.png`, NNNN one above the highest there, never over a file
 /// that exists (a pruned look or a stray look-prefixed file doesn't make it reuse a name).
 fn new_look(dir: &Path, png: &[u8]) -> Result<PathBuf, String> {
@@ -976,7 +1033,7 @@ impl Server {
             let p = new_look(&session_dir(&self.name), &png.2)?;
             return Ok(format!("{} ({}x{}, {:.2}s)\n", p.display(), png.0, png.1, t0.elapsed().as_secs_f64()));
         }
-        let (mut hold, mut at) = (None::<String>, None::<String>);
+        let (mut hold, mut at, mut pose, mut side) = (None::<String>, None::<String>, None::<String>, None::<String>);
         let mut i = 0;
         while i < args.len() {
             match args[i].as_str() {
@@ -986,6 +1043,14 @@ impl Server {
                 }
                 "--at" => {
                     at = Some(args.get(i + 1).ok_or("--at needs a point on the canvas: x,y in units")?.clone());
+                    i += 1;
+                }
+                "--pose" => {
+                    pose = Some(args.get(i + 1).ok_or("--pose needs force,alt,azimuth[,roll] (N, degrees)")?.clone());
+                    i += 1;
+                }
+                "--side" => {
+                    side = Some(args.get(i + 1).ok_or("--side needs the stroke's direction in degrees")?.clone());
                     i += 1;
                 }
                 "--survey" => survey = true,
@@ -1022,6 +1087,31 @@ impl Server {
             }
             let v = look::View::parse(&rest)?;
             let t0 = Instant::now();
+            if self.s.held_stick(&pile).is_ok() {
+                let nums = |t: &str| -> Result<Vec<f32>, String> { t.split(',').map(|x| x.trim().parse::<f32>()).collect::<Result<_, _>>().map_err(|_| format!("{t}: want numbers separated by commas")) };
+                let ps = match (&pose, &side) {
+                    (Some(_), Some(_)) => return Err("look --hold: --pose or --side, not both".into()),
+                    (Some(t), None) => {
+                        let n = nums(t)?;
+                        if !(3..=4).contains(&n.len()) {
+                            return Err("--pose force,alt,azimuth[,roll]: newtons and degrees".into());
+                        }
+                        [n[0], n[1], n[2], n.get(3).copied().unwrap_or(0.0)]
+                    }
+                    // laid flat across a stroke going that way (as p:side holds it)
+                    (None, Some(t)) => [2.0, 0.0, nums(t)?.first().copied().unwrap_or(0.0) + 90.0, 0.0],
+                    (None, None) => [1.5, 60.0, 45.0, 0.0],
+                };
+                if !(0.0..=20.0).contains(&ps[0]) || !(0.0..=90.0).contains(&ps[1]) {
+                    return Err("--pose: force 0 to 20 N, alt 0 to 90 degrees".into());
+                }
+                let (w, h, png, note) = stick_hold_look(&self.s, &pile, (p[0], p[1]), ps, &v)?;
+                let path = new_look(&session_dir(&self.name), &png)?;
+                return Ok(format!("{} ({w}x{h}, {:.2}s): {pile} held at {},{}: {note}\n", path.display(), t0.elapsed().as_secs_f64(), p[0], p[1]));
+            }
+            if pose.is_some() || side.is_some() {
+                return Err(format!("look --hold {pile}: --pose and --side are a pastel stick's"));
+            }
             let (w, h, png) = hold_look(&self.s, &pile, (p[0], p[1]), &v)?;
             let path = new_look(&session_dir(&self.name), &png)?;
             return Ok(format!("{} ({w}x{h}, {:.2}s): {pile} held up to the canvas at {},{}\n", path.display(), t0.elapsed().as_secs_f64(), p[0], p[1]));

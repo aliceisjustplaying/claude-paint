@@ -533,6 +533,38 @@ feel(x, y)                     -- what a fingertip feels there
   far it has set) and the pastel in the tooth (loose or fixed; a little, the
   tooth taking it, half full and more, full).
 
+**Pastel tools in engine 7.** Four more, each a physical process
+(paint's sheet.rs; the research behind them in notes/research/):
+
+```lua
+lay_sheet(m, {grammage=120, tone={{"lead white", 3}}})   -- a sheet of paper laid over the mask
+lift_sheet()                                              -- taken away, with what it caught
+b:dust(pts, {pressure=0.6, tip=50})   -- a dry brush over pastel: lifts what its tips reach
+k:scrape(pts, {pressure=})            -- the blade also takes pastel heaped above the paper
+```
+
+- **The sheet** keeps what it covers clean. It lies a paper's thickness
+  above the picture, so a stick rests on it like any surface; near its
+  edge the stick bridges from sheet to picture, and the edge left behind is
+  as sharp as the stick's angle and force make it (a stick laid flat leaves
+  a wider margin than its point). Strokes and crumbs that land on the sheet
+  stay on it; the finger, the eraser and fixative don't reach under it. Lay
+  and lift it in one chunk. While it is down, only pastel, the finger, a dry
+  brush, the eraser and fixative work: wet paint and graphite aren't modelled
+  under a sheet and refuse.
+- **A dry brush** (`b:dust`, the brush wiped clean) lifts loose pastel as
+  far as its bristles' tips reach into the tooth and no deeper: a hog's tip
+  (about 50 µm) reaches only the top micrometres of the pores, so what fills
+  them stays as a ghost; a finer `tip` reaches further. Fixed pastel stays.
+  What it lifts it sweeps along ahead of it and leaves
+  as a darker lip where it lifts. It doesn't give the tooth back the way
+  fixative does: brushing out a correction leaves its ghost.
+- **The blade** (`k:scrape`) rides on the paper's high points and takes the
+  pastel heaped above them, a built-up layer or a fixed crust, the loose
+  first. What fills the pores lies below the blade and stays.
+- **Holding a stick up to the picture:** `look` with `hold: "<stick>"` and
+  `at: "x,y"` (see Looking).
+
 **Paper (engine 6).** `canvas{size=, aspect=, paper={...}}` instead of
 `linen=`: a sheet laid from its fibres (a random fibre network, with flocs),
 pressed on a felt (its grain) and calendered. Every key has a default (a
@@ -739,6 +771,7 @@ other option, and nothing on the canvas or the clock changes.
 | `compare: "<an earlier look's path>"` | that earlier look on the left and the same view now on the right, at the same height: what a change did |
 | `ref: "<a picture in the studio>"` | the motif (a photograph, a study) pinned beside the easel: fitted to the canvas's shape, on the left, beside the same view of the canvas: the same crop, size, mode and grid |
 | `hold: "<a knife's or a pile's name>"`, `at: "x,y"` | (speculative) the loaded knife held up to the canvas: the passage around the point (240 units, or your `crop`) with the blade's end at it, the paint thick on the steel, seen in the same light and mode as the passage. A knife shows what is on it; a pile, a fresh load. It shows the paint on the knife, not how it would look laid |
+| `hold: "<a pastel stick>"`, `at: "x,y"`, `pose: "force,alt,azimuth"` or `side: "<direction>"` | (engine 6 on) the stick held there, seen from above over the passage (120 units around the point, or your `crop`): its low end as a light shadow, where it rests on the tooth at that force in its colour, and (engine 7) the band where its crumbs would settle, tinted; `side` lays it flat across a stroke going that way. The reply says how much it touches and how much its crumbs would reach, in mm². The stick can be a field of a table (`P.glow`). It shows where a stroke from there would lay, not what it would leave |
 
 A whole view is the canvas scaled down to a fifth or less: small marks,
 beads of paint and stray strokes don't show in it. Survey the canvas after

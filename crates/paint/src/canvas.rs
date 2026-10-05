@@ -238,6 +238,8 @@ pub struct Canvas {
     pub(crate) hand_slice: Option<f32>,
     /// The engine version it is painted with (`crate::ENGINE`).
     pub(crate) engine: u32,
+    /// A sheet of paper laid over part of the picture (engine 7, `sheet.rs`).
+    pub(crate) sheet: Option<crate::sheet::Sheet>,
 }
 
 impl Canvas {
@@ -286,6 +288,7 @@ impl Canvas {
             tally: crate::tally::Tally::default(),
             hand_slice: None,
             engine: crate::ENGINE,
+            sheet: None,
         }
     }
 

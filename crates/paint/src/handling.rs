@@ -192,7 +192,6 @@ impl<'a> Handling<'a> {
             load_at: None,
             scale_at: None,
             piles_at: None,
-            piles_thinner: Vec::new(),
             cut_in: None,
             curve: 0.05,
             wave: 0.25,
@@ -555,7 +554,6 @@ impl Canvas {
             let k = scale_here(cx, cy);
             let len = if hd.scale_at.is_some() { len0 * k } else { len0 };
             let stool = hd.scale_at.as_ref().map(|_| sized(&hd.tool, k));
-            let width = stool.as_ref().map_or(hd.tool.width, |t| t.width);
             let bend = rng.normal() * hd.angle_jitter;
             let pts: Vec<(f32, f32)> = if hd.scrub > 0 {
                 let a = (hd.angle)(cx, cy) + bend;
@@ -592,7 +590,7 @@ impl Canvas {
             if pts.is_empty() {
                 continue;
             }
-            let pieces = if hd.scrub > 0 { vec![pts] } else { break_stroke(hd, pts, &mut rng) };
+            let pieces = if hd.scrub > 0 { vec![pts] } else { break_stroke(hd, pts, width, &mut rng) };
             for (kp, piece) in pieces.into_iter().enumerate() {
                 let n_knots = 2 + (len / (4.0 * stool.as_ref().unwrap_or(&hd.tool).width.max(1.0))).clamp(1.0, 4.0) as usize;
                 let (rect, mut plan) = finish_plan(self, hd, stool.as_ref().unwrap_or(&hd.tool), (cx, cy), piece, &mut rng);
@@ -1720,7 +1718,7 @@ mod tests {
 }
 
 /// Maybe lift the brush partway and put it down again a little off the line.
-fn break_stroke(hd: &Handling, pts: Vec<(f32, f32)>, rng: &mut Rng) -> Vec<Vec<(f32, f32)>> {
+fn break_stroke(hd: &Handling, pts: Vec<(f32, f32)>, w: f32, rng: &mut Rng) -> Vec<Vec<(f32, f32)>> {
     let n = pts.len();
     if n < 5 || hd.broken <= 0.0 || !rng.chance(hd.broken) {
         return vec![pts];
@@ -1729,7 +1727,6 @@ fn break_stroke(hd: &Handling, pts: Vec<(f32, f32)>, rng: &mut Rng) -> Vec<Vec<(
     let (dx, dy) = (pts[cut + 1].0 - pts[cut].0, pts[cut + 1].1 - pts[cut].1);
     let d = (dx * dx + dy * dy).sqrt().max(1e-6);
     let (tx, ty) = (dx / d, dy / d);
-    let w = hd.tool.width;
     // off the line by a fraction of the brush, a small gap or overlap, and
     // turned a little around the restart
     let off = rng.normal() * 0.3 * w;

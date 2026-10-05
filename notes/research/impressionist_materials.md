@@ -42,7 +42,7 @@ turpentine.
 | painter | pigments found | source |
 |---|---|---|
 | Monet, 1869–77 | lead white, cobalt blue, Prussian blue, artificial ultramarine, cerulean, emerald green, viridian, chrome yellow, barium (lemon) yellow, vermilion, red lake, cobalt violet, red and yellow ochre, ivory black, a manufacturer's chrome green; about 1880 no black and no earths | [AM] |
-| Monet, about 1897–99 | zinc white mixed into the colors, cobalt blue and violet, cadmium yellow, vermilion, on a lead white ground | [MM22] |
+| Monet, about 1897–99 (the museum's date) | zinc white mixed into the colors, cobalt blue and violet, cadmium yellow, vermilion, on a lead white ground | [MM22] |
 | Monet, 1899–1926 | lead white, cobalt blue, French ultramarine, cobalt violet, viridian, cadmium yellows and orange, zinc and barium yellow together, vermilion, a madder lake, yellow ochre; no chrome yellow, no emerald green, no other earths | [TB28] |
 | Renoir | lead white; cobalt blue, then French ultramarine by about 1885; chrome, strontium, barium and zinc yellows, Naples yellow after about 1885; vermilion, madder and cochineal lakes; emerald green, viridian; ivory and bone black; iron oxides | [KEE; AM] |
 | Pissarro | ultramarine, cobalt blue, vermilion, red lake, viridian, emerald green, chrome and cadmium yellow; ochres and a little black in the 1870s, earths largely given up later; zinc white with lead white | [NEW; AM] |
